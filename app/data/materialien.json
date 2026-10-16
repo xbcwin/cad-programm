@@ -1,0 +1,231 @@
+{
+  "materialien": [
+    {
+      "name": "CFK-Platte (Kohlefaser, gewebt, ca. 60 % Faser)",
+      "kurzname": "CFK",
+      "dichte_g_cm3": 1.55,
+      "e_modul_gpa": 70.0,
+      "zugfestigkeit_mpa": 600,
+      "bereich": {
+        "dichte_g_cm3": "1.50–1.60",
+        "e_modul_gpa": "55.0–85.0",
+        "zugfestigkeit_mpa": "500–800"
+      },
+      "typische_verwendung": "Extrem leichte und steife Rahmen für Drohnen, Modellbau und Rennsport.",
+      "farbe_hex": "#2B2B2B"
+    },
+    {
+      "name": "GFK (Glasfaserverstärkter Kunststoff, Gewebe)",
+      "kurzname": "GFK",
+      "dichte_g_cm3": 1.85,
+      "e_modul_gpa": 22.0,
+      "zugfestigkeit_mpa": 350,
+      "bereich": {
+        "dichte_g_cm3": "1.80–1.95",
+        "e_modul_gpa": "18.0–26.0",
+        "zugfestigkeit_mpa": "250–450"
+      },
+      "typische_verwendung": "Robuste, elektrisch isolierende Platten, Platinen (FR4) und Gehäuse.",
+      "farbe_hex": "#7A9A8B"
+    },
+    {
+      "name": "Aluminium 6061-T6 (EN AW-6061)",
+      "kurzname": "Alu 6061",
+      "dichte_g_cm3": 2.70,
+      "e_modul_gpa": 68.9,
+      "zugfestigkeit_mpa": 310,
+      "typische_verwendung": "Standard-Aluminium für gut fräsbare und schweißbare Konstruktionsteile.",
+      "farbe_hex": "#C0C5CA"
+    },
+    {
+      "name": "Aluminium 7075-T6 (EN AW-7075)",
+      "kurzname": "Alu 7075",
+      "dichte_g_cm3": 2.81,
+      "e_modul_gpa": 71.7,
+      "zugfestigkeit_mpa": 572,
+      "typische_verwendung": "Hochfestes Luftfahrt-Aluminium für stark belastete Zahnräder und Fahrwerksteile.",
+      "farbe_hex": "#A6AEB5"
+    },
+    {
+      "name": "Titan Grade 5 (Ti6Al4V)",
+      "kurzname": "Titan Gr. 5",
+      "dichte_g_cm3": 4.43,
+      "e_modul_gpa": 114.0,
+      "zugfestigkeit_mpa": 950,
+      "bereich": {
+        "zugfestigkeit_mpa": "900–1050"
+      },
+      "typische_verwendung": "Hochfeste, korrosionsbeständige High-End-Bauteile bei geringem Gewicht.",
+      "farbe_hex": "#8B8E94"
+    },
+    {
+      "name": "Stahl (Baustahl S235JR)",
+      "kurzname": "Baustahl",
+      "dichte_g_cm3": 7.85,
+      "e_modul_gpa": 210.0,
+      "zugfestigkeit_mpa": 410,
+      "bereich": {
+        "zugfestigkeit_mpa": "360–510"
+      },
+      "typische_verwendung": "Klassischer, günstiger Stahl für geschweißte Rahmen, Achsen und Halterungen.",
+      "farbe_hex": "#5C636A"
+    },
+    {
+      "name": "Edelstahl 1.4301 (V2A / AISI 304)",
+      "kurzname": "V2A Edelstahl",
+      "dichte_g_cm3": 7.90,
+      "e_modul_gpa": 200.0,
+      "zugfestigkeit_mpa": 600,
+      "bereich": {
+        "zugfestigkeit_mpa": "500–700"
+      },
+      "typische_verwendung": "Rostfreie Schrauben, Bleche sowie Teile für Küche und Außenbereich.",
+      "farbe_hex": "#B4BBC2"
+    },
+    {
+      "name": "Messing (CuZn39Pb3 / CW614N)",
+      "kurzname": "Messing",
+      "dichte_g_cm3": 8.47,
+      "e_modul_gpa": 100.0,
+      "zugfestigkeit_mpa": 430,
+      "bereich": {
+        "e_modul_gpa": "97.0–110.0",
+        "zugfestigkeit_mpa": "360–500"
+      },
+      "typische_verwendung": "Sehr gut drehbare Buchsen, Gewindeeinsätze, Kontakte und Dekorteile.",
+      "farbe_hex": "#D4AF37"
+    },
+    {
+      "name": "PLA (Polylactid)",
+      "kurzname": "PLA",
+      "dichte_g_cm3": 1.24,
+      "e_modul_gpa": 3.5,
+      "zugfestigkeit_mpa": 55,
+      "bereich": {
+        "e_modul_gpa": "3.0–3.8",
+        "zugfestigkeit_mpa": "45–65"
+      },
+      "typische_verwendung": "Standard-Filament im 3D-Druck für Prototypen, Figuren und Deko ohne Hitzebelastung.",
+      "farbe_hex": "#3B82F6"
+    },
+    {
+      "name": "PETG (Polyethylenterephthalat-Glykol)",
+      "kurzname": "PETG",
+      "dichte_g_cm3": 1.27,
+      "e_modul_gpa": 2.1,
+      "zugfestigkeit_mpa": 50,
+      "bereich": {
+        "e_modul_gpa": "2.0–2.3",
+        "zugfestigkeit_mpa": "45–55"
+      },
+      "typische_verwendung": "Zähes, wasserfestes 3D-Druck-Material für mechanische Halter und Funktionsteile.",
+      "farbe_hex": "#10B981"
+    },
+    {
+      "name": "ABS (Acrylnitril-Butadien-Styrol)",
+      "kurzname": "ABS",
+      "dichte_g_cm3": 1.04,
+      "e_modul_gpa": 2.2,
+      "zugfestigkeit_mpa": 42,
+      "bereich": {
+        "e_modul_gpa": "1.8–2.6",
+        "zugfestigkeit_mpa": "35–50"
+      },
+      "typische_verwendung": "Schlagfeste und temperaturbeständige Gehäuse (bekannt von Klemmbausteinen).",
+      "farbe_hex": "#EF4444"
+    },
+    {
+      "name": "ASA (Acrylnitril-Styrol-Acrylat)",
+      "kurzname": "ASA",
+      "dichte_g_cm3": 1.07,
+      "e_modul_gpa": 2.2,
+      "zugfestigkeit_mpa": 45,
+      "bereich": {
+        "e_modul_gpa": "1.9–2.5",
+        "zugfestigkeit_mpa": "40–50"
+      },
+      "typische_verwendung": "Wie ABS, aber extrem UV- und wetterfest für langlebige Teile im Freien.",
+      "farbe_hex": "#F59E0B"
+    },
+    {
+      "name": "TPU 95A (Thermoplastisches Polyurethan)",
+      "kurzname": "TPU 95A",
+      "dichte_g_cm3": 1.21,
+      "e_modul_gpa": 0.04,
+      "zugfestigkeit_mpa": 35,
+      "bereich": {
+        "dichte_g_cm3": "1.18–1.24",
+        "e_modul_gpa": "0.02–0.07",
+        "zugfestigkeit_mpa": "25–45"
+      },
+      "typische_verwendung": "Gummiartiges, biegsames Material für Reifen, Dämpfer, Dichtungen und Schutzhüllen.",
+      "farbe_hex": "#8B5CF6"
+    },
+    {
+      "name": "Nylon PA12 (Polyamid 12)",
+      "kurzname": "PA12",
+      "dichte_g_cm3": 1.02,
+      "e_modul_gpa": 1.6,
+      "zugfestigkeit_mpa": 50,
+      "bereich": {
+        "e_modul_gpa": "1.4–1.8",
+        "zugfestigkeit_mpa": "45–55"
+      },
+      "typische_verwendung": "Abriebfeste Zahnräder, Gelenke und extrem belastbare SLS-3D-Druckteile.",
+      "farbe_hex": "#E5E7EB"
+    },
+    {
+      "name": "Polycarbonat (PC)",
+      "kurzname": "PC",
+      "dichte_g_cm3": 1.20,
+      "e_modul_gpa": 2.4,
+      "zugfestigkeit_mpa": 65,
+      "bereich": {
+        "zugfestigkeit_mpa": "60–70"
+      },
+      "typische_verwendung": "Nahezu unzerbrechliche Schutzscheiben, Abdeckungen und hochhitzefeste Bauteile.",
+      "farbe_hex": "#A5F3FC"
+    },
+    {
+      "name": "POM (Polyoxymethylen / Delrin)",
+      "kurzname": "POM",
+      "dichte_g_cm3": 1.41,
+      "e_modul_gpa": 2.9,
+      "zugfestigkeit_mpa": 65,
+      "bereich": {
+        "e_modul_gpa": "2.7–3.1",
+        "zugfestigkeit_mpa": "60–70"
+      },
+      "typische_verwendung": "Reibungsarmer technischer Kunststoff zum Fräsen und Drehen von Gleitlagern und Rollen.",
+      "farbe_hex": "#F3F4F6"
+    },
+    {
+      "name": "Holz Buche (getrocknet, ca. 12 % Holzfeuchte)",
+      "kurzname": "Buche",
+      "dichte_g_cm3": 0.69,
+      "e_modul_gpa": 14.0,
+      "zugfestigkeit_mpa": 120,
+      "bereich": {
+        "dichte_g_cm3": "0.65–0.73",
+        "e_modul_gpa": "12.0–16.0",
+        "zugfestigkeit_mpa": "100–135"
+      },
+      "typische_verwendung": "Hartes, stabiles Massivholz für Werkbänke, Möbel, Griffe und Holzspielzeug.",
+      "farbe_hex": "#C89D70"
+    },
+    {
+      "name": "Sperrholz Pappel",
+      "kurzname": "Pappel-Sperrholz",
+      "dichte_g_cm3": 0.42,
+      "e_modul_gpa": 4.5,
+      "zugfestigkeit_mpa": 35,
+      "bereich": {
+        "dichte_g_cm3": "0.38–0.46",
+        "e_modul_gpa": "3.5–5.5",
+        "zugfestigkeit_mpa": "25–45"
+      },
+      "typische_verwendung": "Sehr leichtes Bastelholz, ideal für den Lasercutter, Architekturmodelle und Laubsägearbeiten.",
+      "farbe_hex": "#E6D2B5"
+    }
+  ]
+}

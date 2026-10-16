@@ -29,6 +29,7 @@ Stand: 16.10.2026 · nach Sitzung 4 von 14
 - [x] Neues (leeres) Bauteil anlegen
 - [x] Isolieren: nur ein Teil zeigen
 - [x] Zahleneingabe beim Ziehen: Verschieben, Größe, Höhe und Drehung exakt eintippen
+- [x] Materialtabelle mit 18 Materialien (Gemini, geprüft); Gewicht des ganzen Projekts im Panel „Projekt“
 - [x] Neuer Name: Tracery (englisch für Maßwerk)
 - [x] Logo (Variante 1 von Gemini, eingepasst) in Kopfzeile, Startseite und als Browser-Symbol
 - [x] Hilfetexte für 47 Werkzeuge (Gemini, angepasst): kurz drauf bleiben zeigt Anleitung und Tipp
@@ -47,7 +48,7 @@ Fertig.
 ### Stufe 3 – Features und Ansichten
 - [ ] Bohrungs-Assistent, Wandstärke, Muster, Spiegeln, Boolesch, Teilen (Sitzung 8)
 - [ ] Explosionsansicht, Fokus-Vorschau, Schnitt, Röntgen (Sitzung 9)
-- [ ] Messen mit Masse, Push/Pull, „ähnliche auswählen“, Versionen (Sitzung 10)
+- [ ] Messen, Material pro Teil, Push/Pull, „ähnliche auswählen“, Versionen (Sitzung 10)
 
 ### Stufe 4 – Drohnen-Modul
 - [ ] 5"-Vorlage (Sitzung 11)

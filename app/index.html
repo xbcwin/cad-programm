@@ -836,6 +836,9 @@ function icon(name, extra = '') {
 }
 function iconEl(name) { return svgEl(icon(name)); }
 
+// ---------- Materialien (Dichte in g/cm³; Quelle: app/data/materialien.json, Entwurf Gemini, geprüft) ----------
+const MATERIALS = [{"k": "CFK", "name": "CFK-Platte (Kohlefaser, gewebt, ca. 60 % Faser)", "rho": 1.55, "col": "#2B2B2B"}, {"k": "GFK", "name": "GFK (Glasfaserverstärkter Kunststoff, Gewebe)", "rho": 1.85, "col": "#7A9A8B"}, {"k": "Alu 6061", "name": "Aluminium 6061-T6 (EN AW-6061)", "rho": 2.7, "col": "#C0C5CA"}, {"k": "Alu 7075", "name": "Aluminium 7075-T6 (EN AW-7075)", "rho": 2.81, "col": "#A6AEB5"}, {"k": "Titan Gr. 5", "name": "Titan Grade 5 (Ti6Al4V)", "rho": 4.43, "col": "#8B8E94"}, {"k": "Baustahl", "name": "Stahl (Baustahl S235JR)", "rho": 7.85, "col": "#5C636A"}, {"k": "V2A Edelstahl", "name": "Edelstahl 1.4301 (V2A / AISI 304)", "rho": 7.9, "col": "#B4BBC2"}, {"k": "Messing", "name": "Messing (CuZn39Pb3 / CW614N)", "rho": 8.47, "col": "#D4AF37"}, {"k": "PLA", "name": "PLA (Polylactid)", "rho": 1.24, "col": "#3B82F6"}, {"k": "PETG", "name": "PETG (Polyethylenterephthalat-Glykol)", "rho": 1.27, "col": "#10B981"}, {"k": "ABS", "name": "ABS (Acrylnitril-Butadien-Styrol)", "rho": 1.04, "col": "#EF4444"}, {"k": "ASA", "name": "ASA (Acrylnitril-Styrol-Acrylat)", "rho": 1.07, "col": "#F59E0B"}, {"k": "TPU 95A", "name": "TPU 95A (Thermoplastisches Polyurethan)", "rho": 1.21, "col": "#8B5CF6"}, {"k": "PA12", "name": "Nylon PA12 (Polyamid 12)", "rho": 1.02, "col": "#E5E7EB"}, {"k": "PC", "name": "Polycarbonat (PC)", "rho": 1.2, "col": "#A5F3FC"}, {"k": "POM", "name": "POM (Polyoxymethylen / Delrin)", "rho": 1.41, "col": "#F3F4F6"}, {"k": "Buche", "name": "Holz Buche (getrocknet, ca. 12 % Holzfeuchte)", "rho": 0.69, "col": "#C89D70"}, {"k": "Pappel-Sperrholz", "name": "Sperrholz Pappel", "rho": 0.42, "col": "#E6D2B5"}];
+
 // ---------- Hilfetexte für Werkzeuge (Entwurf Gemini, an Tracery angepasst) ----------
 // tip: kurz, hilfe: wie benutzen, tipp: typischer Fehler oder Trick. Erscheinen beim längeren Überfahren.
 const HELP = {
@@ -4136,8 +4139,31 @@ const Panels = (() => {
       h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Objekte'), h('b', { class: 'mono' }, String(Model.countItems(App.doc)))),
       h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Größe gesamt'), h('b', { class: 'mono' }, st ? `${fmt(st.x, 1)} × ${fmt(st.y, 1)} × ${fmt(st.z, 1)} mm` : '–'))));
     w.append(info);
+    // Material und Gewicht des ganzen Projekts (exaktes Volumen aus dem CAD-Kern)
+    const curMat = App.doc.settings.material || 'CFK';
+    const ms = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Material und Gewicht'));
+    ms.append(UI.selectField({ id: 'proj-mat', label: 'Material', value: curMat, options: MATERIALS.map((m) => [m.k, `${m.k} · ${String(m.rho).replace('.', ',')} g/cm³`]), onChange: (v) => App.change('Material gewählt', (doc) => { doc.settings.material = v; }) }));
+    const vRow = h('b', { class: 'mono' }, '…'), gRow = h('b', { class: 'mono' }, '…');
+    ms.append(h('div', { class: 'mini-list', style: { marginTop: '8px' } },
+      h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Volumen'), vRow),
+      h('div', { class: 'mini-row', 'data-help': 'massProps' }, h('span', { class: 'grow' }, 'Gewicht'), gRow)));
+    w.append(ms);
+    massOf().then((r) => {
+      if (!r) { vRow.textContent = gRow.textContent = '–'; return; }
+      const mat = MATERIALS.find((m) => m.k === curMat) || MATERIALS[0];
+      const cm3 = r.volume / 1000;
+      vRow.textContent = `${fmt(cm3, 3)} cm³`; gRow.textContent = `${fmt(cm3 * mat.rho, cm3 * mat.rho < 10 ? 2 : 1)} g`;
+    });
     w.append(h('div', { class: 'hint-box', html: '<b>So geht’s:</b> Körper anklicken und ziehen. Die Pfeile ändern die Größe, die Zahlen kannst du anklicken und genau eintippen. <span class="kbd">Entf</span> löscht, <span class="kbd">Strg Z</span> macht rückgängig.' }));
     body.append(w);
+  }
+  // Volumen wird pro Projektstand nur einmal berechnet
+  let massCache = { rev: -1, p: null };
+  function massOf() {
+    if (!Kernel.ready || !App.doc.items.length) return Promise.resolve(null);
+    if (massCache.rev === App.revision && massCache.p) return massCache.p;
+    massCache = { rev: App.revision, p: Kernel.call('measure', { scene: Model.kernelScene(App.doc) }).catch(() => null) };
+    return massCache.p;
   }
   function renderMulti(body, found) {
     const w = h('div', { class: 'props' });
