@@ -25,6 +25,7 @@ Stand: 16.10.2026 · nach Sitzung 3 von 14
 - [x] Einstellungen-Fenster: Design hell / dunkel / System, Nachkommastellen, Qualität
 - [x] Projektdatei speichern / öffnen auch außerhalb von Claude, per Ziehen ins Fenster
 - [x] Zeitleiste, Marker und Unterdrücken bleiben in der Projektdatei erhalten
+- [x] Logo (Variante 1 von Gemini, eingepasst) in Kopfzeile, Startseite und als Browser-Symbol
 - [x] Hilfetexte für 47 Werkzeuge (Gemini, angepasst): kurz drauf bleiben zeigt Anleitung und Tipp
 
 ## Offen

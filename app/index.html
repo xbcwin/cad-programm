@@ -1,5 +1,6 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>Maßwerk</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2264%22%20height%3D%2264%22%20viewBox%3D%220%200%2064%2064%22%20fill%3D%22none%22%3E%20%20%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2214%22%20fill%3D%22%230c7a70%22/%3E%20%20%3Cg%20transform%3D%22translate%2810%2C%2010%29%20scale%281.8333%29%22%20stroke%3D%22%23ffffff%22%20stroke-width%3D%221.7%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cg%20transform%3D%22translate%2812%2012%29%20scale%28.885%29%20translate%28-12%20-10.2%29%22%20stroke-width%3D%221.92%22%3E%3Cpolygon%20points%3D%2212%202%2021%207%2021%2017%2012%2022%203%2017%203%207%22%20/%3E%3Cpath%20d%3D%22M12%2022V12%22%20/%3E%3Cpath%20d%3D%22M12%2012L21%207%22%20/%3E%3Cpath%20d%3D%22M12%2012L3%207%22%20/%3E%3Cpath%20d%3D%22M3%207A9%209%200%200%201%2021%207%22%20/%3E%3Cpath%20d%3D%22M21%207A9%209%200%200%201%2012%2022%22%20/%3E%3Cpath%20d%3D%22M12%2022A9%209%200%200%201%203%207%22%20/%3E%3C/g%3E%3C/g%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -502,7 +503,7 @@ body.sketching .timeline{display:none}
   <header class="topbar">
     <button class="icon-btn panel-toggle" id="btn-left" type="button" aria-label="Verlauf zeigen" data-tip="Verlauf"></button>
     <a class="brand" href="#" id="brand" aria-label="Maßwerk – Startseite">
-      <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 11.5 16 5l11 6.5v11L16 29 5 22.5z" fill="var(--accent)" opacity=".16"/><path d="M5 11.5 16 5l11 6.5v11L16 29 5 22.5zM5 11.5 16 18l11-6.5M16 18v11" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/><path d="M2.5 14v9M2.2 18.5h-.2" stroke="var(--ink)" stroke-width="1.4" stroke-linecap="round"/></svg>
+      <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="var(--accent)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><g transform="translate(12 12) scale(.885) translate(-12 -10.2)" stroke-width="1.92"><polygon points="12 2 21 7 21 17 12 22 3 17 3 7" /><path d="M12 22V12" /><path d="M12 12L21 7" /><path d="M12 12L3 7" /><path d="M3 7A9 9 0 0 1 21 7" /><path d="M21 7A9 9 0 0 1 12 22" /><path d="M12 22A9 9 0 0 1 3 7" /></g></svg>
       <b>Maßwerk</b>
     </a>
     <div class="seg" role="group" aria-label="Arbeitsbereich">
@@ -754,6 +755,7 @@ const IC = {
   cursor: '<path d="M6 3v15l4-4 3 7 2-1-3-7h6z" />',
   play: '<path d="M8 5v14l11-7z" />',
   box3: '<path d="M3 8 12 3l9 5-9 5z M3 8v8l9 5 9-5V8 M12 13v8" />',
+  logo: '<g transform="translate(12 12) scale(.885) translate(-12 -10.2)" stroke-width="1.92"><polygon points="12 2 21 7 21 17 12 22 3 17 3 7" /><path d="M12 22V12" /><path d="M12 12L21 7" /><path d="M12 12L3 7" /><path d="M3 7A9 9 0 0 1 21 7" /><path d="M21 7A9 9 0 0 1 12 22" /><path d="M12 22A9 9 0 0 1 3 7" /></g>',
   // --- Icon-Set v2 (Entwurf Gemini, überarbeitet) ---
   originPlanes: '<path d="M12 13 4 17l8 4 8-4z" fill="currentColor" opacity=".25"/><path d="M12 13V4L4 8v9l8 4 8-4V8l-8-4M4 17l8-4 8 4" />',
   planeXY: '<path d="M12 3v18M4 8l16 8M4 16 20 8" opacity=".4"/><path d="M3 12l9-4.5 9 4.5-9 4.5z" fill="currentColor" opacity=".25"/><path d="M3 12l9-4.5 9 4.5-9 4.5z" />',
