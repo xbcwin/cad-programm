@@ -30,6 +30,7 @@ Stand: 16.10.2026 · nach Sitzung 4 von 14
 - [x] Isolieren: nur ein Teil zeigen
 - [x] Zahleneingabe beim Ziehen: Verschieben, Größe, Höhe und Drehung exakt eintippen
 - [x] Materialtabelle mit 18 Materialien (Gemini, geprüft); Gewicht des ganzen Projekts im Panel „Projekt“
+- [x] Fehlermeldungen in Alltagssprache (Gemini, angepasst): 16 Fälle, 3 schon mit dem CAD-Kern verbunden
 - [x] Neuer Name: Tracery (englisch für Maßwerk)
 - [x] Logo (Variante 1 von Gemini, eingepasst) in Kopfzeile, Startseite und als Browser-Symbol
 - [x] Hilfetexte für 47 Werkzeuge (Gemini, angepasst): kurz drauf bleiben zeigt Anleitung und Tipp
