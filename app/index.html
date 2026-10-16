@@ -262,6 +262,8 @@ body.sketching .viewcube{display:none}
 .view-btns{position:absolute;right:12px;bottom:12px;display:grid;gap:6px;z-index:12}
 .view-btns button{width:38px;height:38px;border-radius:10px;border:1px solid var(--line);background:var(--surface);display:grid;place-items:center;color:var(--ink-2);box-shadow:var(--shadow-1)}
 .view-btns button:hover{color:var(--ink);border-color:var(--line-strong)}
+.view-btns button.on{color:var(--accent);border-color:var(--accent-line);background:var(--accent-soft)}
+.view-btns .sep{height:4px}
 .view-btns svg{width:19px;height:19px}
 .axis-gizmo{position:absolute;left:12px;bottom:12px;width:64px;height:64px;pointer-events:none;z-index:11}
 .sketchbar{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:16;display:flex;align-items:center;gap:2px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-2);padding:5px;max-width:calc(100% - 140px);overflow-x:auto;scrollbar-width:none}
@@ -497,7 +499,7 @@ body.sketching .viewcube{display:none}
         <button class="go" id="cmd-go" type="button" aria-label="Ausführen" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       </div>
     </div>
-    <div class="ampel-wrap"><button class="ampel" id="ampel" type="button"><i class="dot"></i><span class="t">Wird geprüft …</span></button></div>
+    <div class="ampel-wrap"><button class="ampel" id="ampel" type="button"><i class="dot"></i><span class="t">Wird geladen …</span></button></div>
   </footer>
 </div>
 <div class="toasts" id="toasts" aria-live="polite"></div>
@@ -1515,7 +1517,7 @@ const Viewer = (() => {
   let needsRender = true;
   const nodes = new Map(); // id -> { obj, mesh, edges, data, role, color }
   const ghosts = new Map();
-  let plate, gridMinor, gridMajor, gridOuter, axes, volumeBox, overhangMesh = null;
+  let gridMinor = null, gridMajor = null, axes = null;
   const groups = {};
   const raycaster = new THREE.Raycaster();
   const theme = {};
@@ -1531,25 +1533,26 @@ const Viewer = (() => {
     theme.edge = theme.dark ? '#0b0f13' : '#1c2630';
   }
 
-  function makePlateTexture() {
-    // strukturierte PEI-Druckplatte: gleichmäßiger Grundton mit feiner, kachelbarer Körnung
-    const N = 256, c = document.createElement('canvas'); c.width = c.height = N;
-    const g = c.getContext('2d');
-    g.fillStyle = '#c29a5c'; g.fillRect(0, 0, N, N);
-    const img = g.getImageData(0, 0, N, N); const d = img.data;
-    let s = 1234567; const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
-    for (let i = 0; i < d.length; i += 4) { const n = (rnd() - 0.5) * 16; d[i] += n; d[i + 1] += n * 0.9; d[i + 2] += n * 0.7; }
-    g.putImageData(img, 0, 0);
-    for (let i = 0; i < 700; i++) { g.fillStyle = rnd() > 0.5 ? 'rgba(255,240,210,0.10)' : 'rgba(80,50,15,0.08)'; const x = rnd() * N, y = rnd() * N, r = rnd() * 1.1 + 0.3; for (const ox of [-N, 0, N]) for (const oy of [-N, 0, N]) { g.beginPath(); g.arc(x + ox, y + oy, r, 0, Math.PI * 2); g.fill(); } }
-    const tex = new THREE.CanvasTexture(c);
-    tex.colorSpace = THREE.SRGBColorSpace; tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.anisotropy = 4;
-    return tex;
+  // ---------- Kamera: Perspektive oder orthografisch ----------
+  // Die Steuerung arbeitet immer mit der Perspektiv-Kamera. Im Ortho-Modus folgt eine
+  // orthografische Kamera exakt ihrer Richtung, der Ausschnitt ergibt sich aus dem Abstand.
+  let orthoCam = null, ortho = false;
+  function orthoHalfH() { return camera.position.distanceTo(controls.target) * Math.tan((camera.fov * Math.PI) / 360); }
+  function syncOrtho() {
+    const hh = orthoHalfH(), hw = hh * camera.aspect;
+    orthoCam.left = -hw; orthoCam.right = hw; orthoCam.top = hh; orthoCam.bottom = -hh;
+    const dir = camera.position.clone().sub(controls.target).normalize();
+    orthoCam.position.copy(controls.target).addScaledVector(dir, 20000);
+    orthoCam.quaternion.copy(camera.quaternion); orthoCam.up.copy(camera.up);
+    orthoCam.updateProjectionMatrix(); orthoCam.updateMatrixWorld();
   }
-  let plateTex = null;
+  function cam() { if (ortho) { syncOrtho(); return orthoCam; } return camera; }
+  function setOrtho(on) { ortho = !!on; needsRender = true; listeners.emit('camera'); }
   function inView(box, margin = 0.08) {
     if (!box || box.isEmpty()) return true;
+    const c = cam();
     for (let i = 0; i < 8; i++) {
-      const p = new THREE.Vector3(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z).project(camera);
+      const p = new THREE.Vector3(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z).project(c);
       if (p.z > 1 || Math.abs(p.x) > 1 - margin || Math.abs(p.y) > 1 - margin) return false;
     }
     return true;
@@ -1557,62 +1560,116 @@ const Viewer = (() => {
   // Anteil der Bildhöhe, den eine Box auf dem Bildschirm einnimmt
   function screenFraction(box) {
     if (!box || box.isEmpty()) return 0;
+    const c = cam();
     let y0 = Infinity, y1 = -Infinity, x0 = Infinity, x1 = -Infinity;
     for (let i = 0; i < 8; i++) {
-      const p = new THREE.Vector3(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z).project(camera);
+      const p = new THREE.Vector3(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z).project(c);
       x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y);
     }
     return Math.max((y1 - y0) / 2, (x1 - x0) / 2);
   }
-  function buildPlate(w, d) {
-    plateSize = [w, d];
-    if (plate) { groups.plate.remove(plate); plate.geometry.dispose(); }
-    if (gridMinor) { groups.plate.remove(gridMinor, gridMajor); gridMinor.geometry.dispose(); gridMajor.geometry.dispose(); }
-    plateTex = plateTex || makePlateTexture();
-    plateTex.repeat.set(w / 60, d / 60);
-    const shape = new THREE.Shape();
-    const r = 6, x0 = -w / 2, y0 = -d / 2, x1 = w / 2, y1 = d / 2;
-    shape.moveTo(x0 + r, y0); shape.lineTo(x1 - r, y0); shape.quadraticCurveTo(x1, y0, x1, y0 + r); shape.lineTo(x1, y1 - r); shape.quadraticCurveTo(x1, y1, x1 - r, y1);
-    shape.lineTo(x0 + r, y1); shape.quadraticCurveTo(x0, y1, x0, y1 - r); shape.lineTo(x0, y0 + r); shape.quadraticCurveTo(x0, y0, x0 + r, y0);
-    const geo = new THREE.ExtrudeGeometry(shape, { depth: 1.2, bevelEnabled: false, curveSegments: 6 });
-    geo.translate(0, 0, -1.25);
-    const uv = geo.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) / w + 0.5, uv.getY(i) / d + 0.5);
-    plate = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: plateTex, roughness: 0.92, metalness: 0.05, polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 2 }));
-    plate.renderOrder = -2; plate.userData.plate = true;
-    groups.plate.add(plate);
+
+  // ---------- Raster auf der XY-Ebene ----------
+  // Feste Weite (z. B. 1 mm) oder automatisch: passt sich beim Zoomen in Zehnerschritten an.
+  const view = { grid: 'auto', gridOn: true, planes: true, axes: true };
+  let gridStep = 10;
+  function autoStep() {
+    const d = camera.position.distanceTo(controls.target);
+    return Math.pow(10, Math.round(Math.log10(Math.max(0.05, d / 45))));
+  }
+  // Linien werden in kurze Stücke geteilt: Grafiktreiber verwerfen sonst manchmal ganze Linien,
+  // die hinter der Kamera vorbeilaufen (dann fehlen genau die nahen Rasterlinien).
+  let gridCenter = [0, 0], gridHalf = 600;
+  function pushSplit(arr, a, b, piece) {
+    const L = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]); const k = Math.max(1, Math.ceil(L / piece));
+    for (let i = 0; i < k; i++) {
+      const t0 = i / k, t1 = (i + 1) / k;
+      arr.push(a[0] + (b[0] - a[0]) * t0, a[1] + (b[1] - a[1]) * t0, a[2] + (b[2] - a[2]) * t0, a[0] + (b[0] - a[0]) * t1, a[1] + (b[1] - a[1]) * t1, a[2] + (b[2] - a[2]) * t1);
+    }
+  }
+  function buildGrid(step) {
+    gridStep = step;
+    for (const g of [gridMinor, gridMajor]) if (g) { groups.ground.remove(g); g.geometry.dispose(); g.material.dispose(); }
+    const n = Math.min(250, Math.max(50, Math.ceil(600 / step)));   // Linien je Richtung und Seite
+    const S = n * step, M = step * 10, piece = M;
+    // Raster folgt dem Blickpunkt (auf ganze Hauptlinien gerundet), damit es nie „zu Ende“ ist
+    const t = controls ? controls.target : { x: 0, y: 0 };
+    const cx = Math.round(t.x / M) * M, cy = Math.round(t.y / M) * M;
+    gridCenter = [cx, cy]; gridHalf = S;
     const minor = [], major = [];
-    const addL = (arr, a, b) => arr.push(a[0], a[1], 0.02, b[0], b[1], 0.02);
-    for (let x = Math.ceil(x0 / 10) * 10; x <= x1; x += 10) addL(x % 50 === 0 ? major : minor, [x, y0], [x, y1]);
-    for (let y = Math.ceil(y0 / 10) * 10; y <= y1; y += 10) addL(y % 50 === 0 ? major : minor, [x0, y], [x1, y]);
+    for (let i = -n; i <= n; i++) {
+      const vx = cx + i * step, vy = cy + i * step;
+      const ix = Math.round(vx / step), iy = Math.round(vy / step);
+      if (ix !== 0) pushSplit(ix % 10 === 0 ? major : minor, [vx, cy - S, 0], [vx, cy + S, 0], piece);   // die Achsen zeichnen die Nulllinien
+      if (iy !== 0) pushSplit(iy % 10 === 0 ? major : minor, [cx - S, vy, 0], [cx + S, vy, 0], piece);
+    }
     const lg = (arr) => { const g2 = new THREE.BufferGeometry(); g2.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3)); return g2; };
-    gridMinor = new THREE.LineSegments(lg(minor), new THREE.LineBasicMaterial({ color: 0x4a2e0e, transparent: true, opacity: 0.2, depthWrite: false }));
-    gridMajor = new THREE.LineSegments(lg(major), new THREE.LineBasicMaterial({ color: 0x4a2e0e, transparent: true, opacity: 0.38, depthWrite: false }));
-    gridMinor.renderOrder = gridMajor.renderOrder = -1;
-    groups.plate.add(gridMinor, gridMajor);
+    const col = theme.dark ? 0xa9b8c6 : 0x4d5d6d;
+    gridMinor = new THREE.LineSegments(lg(minor), new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.12, depthWrite: false }));
+    gridMajor = new THREE.LineSegments(lg(major), new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.26, depthWrite: false }));
+    gridMinor.renderOrder = gridMajor.renderOrder = -2;
+    gridMinor.visible = gridMajor.visible = view.gridOn;
+    groups.ground.add(gridMinor, gridMajor);
+    buildAxes(Math.max(S + Math.hypot(cx, cy), 50), M);
     needsRender = true;
+    listeners.emit('grid', step);
   }
-  function buildOuterGrid() {
-    const arr = []; const S = 1200;
-    for (let v = -S; v <= S; v += 10) { arr.push(v, -S, -0.02, v, S, -0.02, -S, v, -0.02, S, v, -0.02); }
-    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3));
-    gridOuter = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: theme.dark ? 0x9fb0c0 : 0x5b6b7b, transparent: true, opacity: theme.dark ? 0.07 : 0.1, depthWrite: false }));
-    gridOuter.renderOrder = -3;
-    groups.plate.add(gridOuter);
-  }
-  function buildAxes() {
-    const mk = (color, a, b) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute([...a, ...b], 3)); return new THREE.Line(g, new THREE.LineBasicMaterial({ color, depthTest: false, transparent: true, opacity: 0.9 })); };
+  function buildAxes(S, piece) {
+    if (axes) { groups.ground.remove(axes); axes.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); }
+    const mk = (color, a, b, op) => { const arr = []; pushSplit(arr, a, b, piece); const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3)); return new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color, transparent: true, opacity: op, depthWrite: false })); };
     axes = new THREE.Group();
-    axes.add(mk(0xd24a3c, [0, 0, 0.05], [18, 0, 0.05]), mk(0x3a9a3f, [0, 0, 0.05], [0, 18, 0.05]), mk(0x3067d0, [0, 0, 0], [0, 0, 18]));
-    axes.renderOrder = 5;
-    groups.plate.add(axes);
+    axes.add(mk(0xd24a3c, [0, 0, 0], [S, 0, 0], 0.85), mk(0xd24a3c, [-S, 0, 0], [0, 0, 0], 0.35),
+      mk(0x3a9a3f, [0, 0, 0], [0, S, 0], 0.85), mk(0x3a9a3f, [0, -S, 0], [0, 0, 0], 0.35),
+      mk(0x3067d0, [0, 0, 0], [0, 0, S], 0.85), mk(0x3067d0, [0, 0, -S], [0, 0, 0], 0.35));
+    axes.renderOrder = -1; axes.visible = view.axes;
+    groups.ground.add(axes);
   }
-  function showVolume(dims) {
-    if (volumeBox) { groups.plate.remove(volumeBox); volumeBox.geometry.dispose(); volumeBox = null; }
-    if (!dims) { needsRender = true; return; }
-    const g = new THREE.BoxGeometry(dims.x, dims.y, dims.z); g.translate(0, 0, dims.z / 2);
-    volumeBox = new THREE.LineSegments(new THREE.EdgesGeometry(g), new THREE.LineDashedMaterial({ color: 0x8d6a3c, dashSize: 4, gapSize: 3, transparent: true, opacity: 0.7 }));
-    volumeBox.computeLineDistances();
-    groups.plate.add(volumeBox); needsRender = true;
+  // ---------- Ursprungsebenen XY, XZ, YZ ----------
+  // Größe folgt dem Zoom, damit sie immer gut sichtbar, aber nie im Weg sind.
+  const planeObjs = {};
+  function buildOrigin() {
+    const defs = { XY: [0x3067d0, [0, 0, 0]], XZ: [0x3a9a3f, [Math.PI / 2, 0, 0]], YZ: [0xd24a3c, [0, Math.PI / 2, 0]] };
+    for (const [k, [color, rot]] of Object.entries(defs)) {
+      const g = new THREE.Group();
+      const fill = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.06, side: THREE.DoubleSide, depthWrite: false }));
+      const eg = new THREE.BufferGeometry(); eg.setAttribute('position', new THREE.Float32BufferAttribute([-.5, -.5, 0, .5, -.5, 0, .5, -.5, 0, .5, .5, 0, .5, .5, 0, -.5, .5, 0, -.5, .5, 0, -.5, -.5, 0], 3));
+      const edge = new THREE.LineSegments(eg, new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.5, depthWrite: false }));
+      g.add(fill, edge); g.rotation.set(...rot); g.renderOrder = -1; fill.renderOrder = edge.renderOrder = -1;
+      g.userData.originPlane = k; g.visible = view.planes;
+      groups.origin.add(g); planeObjs[k] = g;
+    }
+    const dot = new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 12), new THREE.MeshBasicMaterial({ color: theme.dark ? 0xe8eef4 : 0x1c2630 }));
+    dot.userData.originDot = true; groups.origin.add(dot);
+  }
+  function updateViewAids() {
+    const dist = camera.position.distanceTo(controls.target);
+    // Nah- und Fernebene mitführen: erlaubt tiefes Hineinzoomen ohne Flimmern
+    const nr = clamp(dist * 0.01, 0.002, 2), fr = dist * 60 + 8000;
+    if (Math.abs(camera.near - nr) > nr * 0.2 || Math.abs(camera.far - fr) > fr * 0.2) { camera.near = nr; camera.far = fr; camera.updateProjectionMatrix(); }
+    if (view.grid === 'auto') { const st = autoStep(); if (st !== gridStep) buildGrid(st); }
+    const tg = controls.target;
+    if (Math.abs(tg.x - gridCenter[0]) > gridHalf * 0.3 || Math.abs(tg.y - gridCenter[1]) > gridHalf * 0.3) buildGrid(gridStep);
+    // Raster blendet weich aus, wenn die Linien zu dicht werden
+    const px = (gridStep / (2 * orthoHalfH())) * (container.clientHeight || 1);
+    if (gridMinor) gridMinor.material.opacity = clamp((px - 4) / 24, 0, 1) * (theme.dark ? 0.16 : 0.24);
+    if (gridMajor) gridMajor.material.opacity = theme.dark ? 0.3 : 0.42;
+    const size = clamp(dist * 0.09, 0.3, 3000);
+    for (const g of Object.values(planeObjs)) {
+      const k = g.userData.originPlane;
+      g.scale.set(size, size, size);
+      // Ebene sitzt im positiven Quadranten, wie in Fusion
+      g.position.set(k === 'YZ' ? 0 : size / 2, k === 'XZ' ? 0 : size / 2, k === 'XY' ? 0 : size / 2);
+    }
+    for (const o of groups.origin.children) if (o.userData.originDot) o.scale.setScalar(Math.max(0.02, dist * 0.004));
+  }
+  function setViewOptions(opts) {
+    Object.assign(view, opts);
+    if (view.grid !== 'auto') { const st = +view.grid; if (st !== gridStep) buildGrid(st); }
+    else buildGrid(autoStep());
+    if (gridMinor) gridMinor.visible = gridMajor.visible = view.gridOn;
+    if (axes) axes.visible = view.axes;
+    for (const g of Object.values(planeObjs)) g.visible = view.planes;
+    needsRender = true;
   }
 
   function init(el) {
@@ -1627,27 +1684,28 @@ const Viewer = (() => {
     camera = new THREE.PerspectiveCamera(32, 1, 0.5, 30000);
     camera.up.set(0, 0, 1);
     camera.position.set(170, -250, 190);
-    for (const k of ['plate', 'nodes', 'ghosts', 'overlay', 'handles', 'sketch']) { groups[k] = new THREE.Group(); scene.add(groups[k]); }
+    for (const k of ['ground', 'origin', 'nodes', 'ghosts', 'overlay', 'handles', 'sketch']) { groups[k] = new THREE.Group(); scene.add(groups[k]); }
+    orthoCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 60000);
     scene.add(new THREE.HemisphereLight(0xffffff, 0x6f6252, 1.55));
     const key = new THREE.DirectionalLight(0xffffff, 2.1); key.position.set(0.55, -0.8, 1.25); scene.add(key);
     const fill = new THREE.DirectionalLight(0xdfe8ff, 0.8); fill.position.set(-1, 0.7, 0.35); scene.add(fill);
     const rim = new THREE.DirectionalLight(0xffffff, 0.45); rim.position.set(0.2, 1, -0.6); scene.add(rim);
     // Lichter folgen der Kamera leicht
     camera.add(new THREE.PointLight(0xffffff, 0, 0));
-    buildOuterGrid(); buildPlate(220, 220); buildAxes();
     controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true; controls.dampingFactor = 0.14;
     controls.screenSpacePanning = true; controls.zoomToCursor = true;
     controls.rotateSpeed = 0.85; controls.zoomSpeed = 1.1; controls.panSpeed = 0.9;
-    controls.minDistance = 5; controls.maxDistance = 6000;
+    controls.minDistance = 0.2; controls.maxDistance = 12000;
     controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
     controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
     controls.target.set(0, 0, 10);
     controls.addEventListener('change', () => { needsRender = true; listeners.emit('camera'); });
+    buildGrid(autoStep()); buildOrigin();
     const ro = new ResizeObserver(resize); ro.observe(el);
     resize();
     const mq = matchMedia('(prefers-color-scheme: dark)');
-    const onTheme = () => { readTheme(); if (gridOuter) { groups.plate.remove(gridOuter); gridOuter.geometry.dispose(); buildOuterGrid(); } for (const [id, n] of nodes) styleNode(n); needsRender = true; listeners.emit('theme'); };
+    const onTheme = () => { readTheme(); buildGrid(gridStep); for (const [id, n] of nodes) styleNode(n); needsRender = true; listeners.emit('theme'); };
     mq.addEventListener ? mq.addEventListener('change', onTheme) : mq.addListener(onTheme);
     new MutationObserver(onTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
     loop();
@@ -1675,16 +1733,11 @@ const Viewer = (() => {
     if (moved) listeners.emit('camera');
     if (needsRender || moved) {
       needsRender = false;
-      updateGridFade();
+      updateViewAids();
       listeners.emit('beforeRender');
-      renderer.render(scene, camera);
+      renderer.render(scene, cam());
       listeners.emit('afterRender');
     }
-  }
-  function updateGridFade() {
-    const dist = camera.position.distanceTo(controls.target);
-    if (gridMinor) gridMinor.material.opacity = clamp(0.26 - dist / 3200, 0.06, 0.2);
-    if (gridMajor) gridMajor.material.opacity = clamp(0.44 - dist / 7000, 0.18, 0.38);
   }
   function requestRender() { needsRender = true; }
 
@@ -1841,7 +1894,7 @@ const Viewer = (() => {
   function setRay(cx, cy) {
     const r = rect();
     _ndc.set(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
-    raycaster.setFromCamera(_ndc, camera);
+    raycaster.setFromCamera(_ndc, cam());
     return raycaster;
   }
   function pick(cx, cy, opts = {}) {
@@ -1882,9 +1935,9 @@ const Viewer = (() => {
     const r = rect(); const lines = n.data.lines; const M = n.obj.matrixWorld;
     const px = cx - r.left, py = cy - r.top;
     let best = null, bd = maxPx;
-    const toS = (v) => { const p = v.clone().project(camera); return [(p.x + 1) / 2 * r.width, (1 - p.y) / 2 * r.height, p.z]; };
+    const C = cam(); const toS = (v) => { const p = v.clone().project(C); return [(p.x + 1) / 2 * r.width, (1 - p.y) / 2 * r.height, p.z]; };
     const camPos = camera.position;
-    const tol = Math.max(0.3, (isFinite(hitDist) ? hitDist : 0) * 0.004);
+    const tol = ortho ? Math.max(0.3, (8 * orthoHalfH()) / (container.clientHeight || 1)) : Math.max(0.3, (isFinite(hitDist) ? hitDist : 0) * 0.004);
     for (const g of n.data.edgeGroups) {
       for (let i = g[0]; i < g[0] + g[1]; i += 2) {
         _a.set(lines[i * 3], lines[i * 3 + 1], lines[i * 3 + 2]).applyMatrix4(M);
@@ -1924,12 +1977,13 @@ const Viewer = (() => {
     return raycaster.ray.intersectPlane(pl, p) ? p : null;
   }
   function toScreen(v) {
-    const r = rect(); const p = v.clone().project(camera);
+    const r = rect(); const p = v.clone().project(cam());
     return { x: (p.x + 1) / 2 * r.width, y: (1 - p.y) / 2 * r.height, behind: p.z > 1 };
   }
   function pixelSizeAt(point) {
-    const d = camera.position.distanceTo(point);
     const hgt = container.clientHeight || 1;
+    if (ortho) return (2 * orthoHalfH()) / hgt;
+    const d = camera.position.distanceTo(point);
     return (2 * d * Math.tan((camera.fov * Math.PI) / 360)) / hgt;
   }
 
@@ -1944,8 +1998,7 @@ const Viewer = (() => {
     }
     return box;
   }
-  let plateSize = [220, 220];
-  function emptyBox() { return new THREE.Box3(new THREE.Vector3(-plateSize[0] / 2, -plateSize[1] / 2, 0), new THREE.Vector3(plateSize[0] / 2, plateSize[1] / 2, 10)); }
+  function emptyBox() { return new THREE.Box3(new THREE.Vector3(-40, -40, 0), new THREE.Vector3(40, 40, 20)); }
   function fit(ids, animate = true) {
     let box = sceneBox(ids);
     if (box.isEmpty()) box = emptyBox();
@@ -1982,66 +2035,11 @@ const Viewer = (() => {
   function saveCamera() { return { p: camera.position.clone(), t: controls.target.clone(), up: camera.up.clone() }; }
   function restoreCamera(s, animate = true) { if (s) moveCamera(s.p, s.t, s.up, animate); }
 
-  // ---------- Überhänge ----------
-  function showOverhangs(on, angle = 45) {
-    if (overhangMesh) { groups.overlay.remove(overhangMesh); overhangMesh.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); overhangMesh = null; }
-    if (!on) { needsRender = true; return 0; }
-    const lim = Math.sin((angle * Math.PI) / 180);
-    const grp = new THREE.Group(); let area = 0;
-    let zmin = Infinity;
-    for (const n of nodes.values()) if (n.role !== 'hole' && n.obj.visible) { const b = n.mesh.geometry.boundingBox.clone().applyMatrix4(n.obj.matrix); zmin = Math.min(zmin, b.min.z); }
-    for (const n of nodes.values()) {
-      if (n.role === 'hole' || !n.obj.visible) continue;
-      const pos = n.data.vertices, idx = n.data.triangles, M = n.obj.matrix;
-      const out = [];
-      const A = new THREE.Vector3(), B = new THREE.Vector3(), C = new THREE.Vector3(), N = new THREE.Vector3(), E1 = new THREE.Vector3(), E2 = new THREE.Vector3();
-      for (let i = 0; i < idx.length; i += 3) {
-        A.set(pos[idx[i] * 3], pos[idx[i] * 3 + 1], pos[idx[i] * 3 + 2]).applyMatrix4(M);
-        B.set(pos[idx[i + 1] * 3], pos[idx[i + 1] * 3 + 1], pos[idx[i + 1] * 3 + 2]).applyMatrix4(M);
-        C.set(pos[idx[i + 2] * 3], pos[idx[i + 2] * 3 + 1], pos[idx[i + 2] * 3 + 2]).applyMatrix4(M);
-        E1.subVectors(B, A); E2.subVectors(C, A); N.crossVectors(E1, E2);
-        const a2 = N.length(); if (a2 < 1e-9) continue; N.divideScalar(a2);
-        if (-N.z <= lim) continue;
-        const zc = (A.z + B.z + C.z) / 3;
-        if (zc < zmin + 0.25) continue; // liegt auf dem Druckbett
-        out.push(A.x, A.y, A.z, B.x, B.y, B.z, C.x, C.y, C.z); area += a2 / 2;
-      }
-      if (out.length) {
-        const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(out, 3));
-        const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0xff3b30, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }));
-        m.renderOrder = 7; grp.add(m);
-      }
-    }
-    overhangMesh = grp; groups.overlay.add(grp); needsRender = true;
-    return area;
-  }
-  function overhangArea(angle = 45) {
-    const lim = Math.sin((angle * Math.PI) / 180);
-    let area = 0, zmin = Infinity;
-    for (const n of nodes.values()) if (n.role !== 'hole' && n.obj.visible) { const b = n.mesh.geometry.boundingBox.clone().applyMatrix4(n.obj.matrix); zmin = Math.min(zmin, b.min.z); }
-    const A = new THREE.Vector3(), B = new THREE.Vector3(), C = new THREE.Vector3(), N = new THREE.Vector3(), E1 = new THREE.Vector3(), E2 = new THREE.Vector3();
-    for (const n of nodes.values()) {
-      if (n.role === 'hole' || !n.obj.visible) continue;
-      const pos = n.data.vertices, idx = n.data.triangles, M = n.obj.matrix;
-      for (let i = 0; i < idx.length; i += 3) {
-        A.set(pos[idx[i] * 3], pos[idx[i] * 3 + 1], pos[idx[i] * 3 + 2]).applyMatrix4(M);
-        B.set(pos[idx[i + 1] * 3], pos[idx[i + 1] * 3 + 1], pos[idx[i + 1] * 3 + 2]).applyMatrix4(M);
-        C.set(pos[idx[i + 2] * 3], pos[idx[i + 2] * 3 + 1], pos[idx[i + 2] * 3 + 2]).applyMatrix4(M);
-        E1.subVectors(B, A); E2.subVectors(C, A); N.crossVectors(E1, E2);
-        const a2 = N.length(); if (a2 < 1e-9) continue; N.divideScalar(a2);
-        if (-N.z <= lim) continue;
-        if ((A.z + B.z + C.z) / 3 < zmin + 0.25) continue;
-        area += a2 / 2;
-      }
-    }
-    return area;
-  }
-
   // Bild der Szene für Vorschaubilder
   function snapshot(w = 480, hgt = 300) {
     const old = renderer.getSize(new THREE.Vector2());
     renderer.setSize(w, hgt, false); camera.aspect = w / hgt; camera.updateProjectionMatrix();
-    renderer.render(scene, camera);
+    renderer.render(scene, cam());
     const url = renderer.domElement.toDataURL('image/png');
     renderer.setSize(old.x, old.y, false); camera.aspect = old.x / old.y; camera.updateProjectionMatrix(); needsRender = true;
     return url;
@@ -2049,8 +2047,8 @@ const Viewer = (() => {
 
   return {
     init, requestRender, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, setSelectedEdges, clearHover,
-    pick, pickGhost, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, buildPlate, showVolume, showOverhangs, overhangArea, sceneBox, snapshot, makeFat, disposeFat,
-    get camera() { return camera; }, get controls() { return controls; }, get scene() { return scene; }, get groups() { return groups; }, get nodes() { return nodes; }, get canvas() { return renderer.domElement; }, get theme() { return theme; }, get container() { return container; },
+    pick, pickGhost, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, sceneBox, snapshot, makeFat, disposeFat,
+    get camera() { return camera; }, get activeCamera() { return cam(); }, get ortho() { return ortho; }, get gridStep() { return gridStep; }, get controls() { return controls; }, get scene() { return scene; }, get groups() { return groups; }, get nodes() { return nodes; }, get canvas() { return renderer.domElement; }, get theme() { return theme; }, get container() { return container; },
     on: listeners.on,
   };
 })();
@@ -2521,7 +2519,7 @@ const LIB = [
   { lib: 'snapHook', label: 'Schnapphaken', role: 'solid', icon: 'snap', desc: 'Federnder Haken zum Einrasten', params: [
     { k: 'length', label: 'Länge', type: 'num', def: 12 }, { k: 'w', label: 'Breite', type: 'num', def: 8 }, { k: 't', label: 'Dicke', type: 'num', def: 1.6 }, { k: 'hook', label: 'Hakentiefe', type: 'num', def: 1.2 },
   ] },
-  { lib: 'hinge', label: 'Scharnier', role: 'solid', icon: 'hinge', desc: 'Scharnier, das am Stück gedruckt wird', params: [
+  { lib: 'hinge', label: 'Scharnier', role: 'solid', icon: 'hinge', desc: 'Scharnier mit Spiel, aus einem Stück', params: [
     { k: 'len', label: 'Länge', type: 'num', def: 40 }, { k: 'w', label: 'Flügelbreite', type: 'num', def: 15 }, { k: 't', label: 'Dicke', type: 'num', def: 2.4 }, { k: 'gap', label: 'Spiel', type: 'num', def: 0.4 },
   ] },
   { lib: 'gear', label: 'Zahnrad', role: 'solid', icon: 'gear', desc: 'Stirnrad mit Evolventen-Zähnen', params: [
@@ -2785,8 +2783,8 @@ const Actions = (() => {
       const it = App.doc.items.find((x) => x.id === id);
       if (Math.abs(b.min.z) > 1e-4) { it.t.z = round(Model.tnum(it, 'z') - b.min.z, 4); changed++; }
     }
-    if (changed) { App.pushUndo('Aufs Druckbett gelegt', before); App.touched(); if (!quiet) UI.toast('Liegt jetzt auf dem Druckbett.', { icon: 'check' }); }
-    else if (!quiet) UI.toast('Liegt schon auf dem Druckbett.', { icon: 'check' });
+    if (changed) { App.pushUndo('Auf die XY-Ebene gesetzt', before); App.touched(); if (!quiet) UI.toast('Liegt jetzt auf der XY-Ebene.', { icon: 'check' }); }
+    else if (!quiet) UI.toast('Liegt schon auf der XY-Ebene.', { icon: 'check' });
   }
   function align(ids, mode) {
     ids = ids || App.sel; if (ids.length < 2) return;
@@ -2890,6 +2888,24 @@ const Actions = (() => {
     return { targetId, t: { x: sn(p.x, 0), y: sn(p.y, 1), z: sn(p.z, 2), rx: r(e.x), ry: r(e.y), rz: r(e.z) } };
   }
   return { addPrimitive, addPart, remove, duplicate, setRole, toggleRole, group, ungroup, rotate90, mirror, dropToPlate, align, addFinish, finishAll, setFinish, removeFinish, faceFrame, selectedFace, onFaceTransform, attach, worldBox, selBox, cuttersOf, viewCenter };
+})();
+
+// ---- 48-viewprefs.js ----
+// ================= Ansicht: Raster, Ursprungsebenen, Achsen, Projektion =================
+// Persönliche Einstellung (nicht im Projekt gespeichert), gilt für alle Projekte in diesem Browser.
+const ViewPrefs = (() => {
+  const KEY = 'masswerk.view';
+  const DEF = { grid: 'auto', gridOn: true, planes: true, axes: true, ortho: false };
+  let v = { ...DEF };
+  try { const raw = storageGet(KEY); if (raw) v = { ...DEF, ...JSON.parse(raw) }; } catch (_) {}
+  const ev = makeEmitter();
+  function apply() { Viewer.setViewOptions({ grid: v.grid, gridOn: v.gridOn, planes: v.planes, axes: v.axes }); Viewer.setOrtho(v.ortho); ev.emit('change', v); }
+  function set(patch, msg) { Object.assign(v, patch); storageSet(KEY, JSON.stringify(v)); apply(); if (msg) UI.toast(msg, { icon: 'check', ms: 1600 }); }
+  function toggle(k) {
+    const labels = { ortho: ['Orthografische Ansicht', 'Perspektivische Ansicht'], gridOn: ['Raster an', 'Raster aus'], planes: ['Ursprungsebenen an', 'Ursprungsebenen aus'], axes: ['Achsen an', 'Achsen aus'] }[k];
+    set({ [k]: !v[k] }, labels ? labels[v[k] ? 1 : 0] : null);
+  }
+  return { get: () => ({ ...v }), set, toggle, apply, on: ev.on };
 })();
 
 // ---- 50-ui-core.js ----
@@ -3122,7 +3138,7 @@ const Panels = (() => {
       btn('t-parts', 'parts', 'Bauteile', 'Schraubenlöcher, Mutternfallen, Scharniere, Zahnräder …', 'B', (e) => toggleFlyout('parts', e.currentTarget));
       btn('t-measure', 'measure', 'Messen', 'Abstände und Durchmesser messen', 'M', () => Measure.toggle());
       el.append(h('div', { class: 'sep' }));
-      btn('t-export', 'export', 'Für 3D-Druck speichern', 'Als STL und 3MF speichern (ZIP)', 'Strg E', () => Print.exportDialog(), 'primary', 'Speichern');
+      btn('t-export', 'export', 'Exportieren', 'Als STEP, STL oder 3MF speichern (ZIP)', 'Strg E', () => Print.exportDialog(), 'primary', 'Export');
     } else {
       btn('t-sheet', 'sheet', 'Blatt', 'Blattgröße, Maßstab und Ansichten', '', (e) => Drawing.sheetMenu(e.currentTarget));
       btn('t-dim', 'dim', 'Maß', 'Bemaßung hinzufügen: zwei Punkte oder einen Kreis anklicken', 'D', () => Drawing.tool('dim'));
@@ -3341,17 +3357,15 @@ const Panels = (() => {
     const nameF = h('div', { class: 'field' }, h('label', { for: 'proj-name' }, 'Projektname'), h('div', { class: 'inp' }, h('input', { id: 'proj-name', value: App.doc.name, style: { fontFamily: 'var(--font)' } })));
     nameF.querySelector('input').addEventListener('change', (e) => { const v = e.target.value.trim() || 'Neues Projekt'; App.change('Projekt umbenannt', (doc) => { doc.name = v; }); });
     w.append(nameF);
-    const pr = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Drucker'));
-    pr.append(UI.selectField({ id: 'printer', value: App.doc.settings.printer, options: PRINTERS.map((p) => [p.id, p.name]), onChange: (v) => App.change('Drucker gewählt', (doc) => { doc.settings.printer = v; }) }));
-    if (App.doc.settings.printer === 'custom') {
-      const c = App.doc.settings.custom; const f = h('div', { class: 'fields three' });
-      for (const k of ['x', 'y', 'z']) f.append(UI.numField({ id: 'cp-' + k, label: k.toUpperCase(), value: c[k], expr: false, min: 20, onCommit: (v) => App.change('Druckraum geändert', (doc) => { doc.settings.custom[k] = v; }) }));
-      pr.append(f);
-    }
-    w.append(pr);
-    const gr = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Raster'));
+    const pv = ViewPrefs.get();
+    const va = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Ansicht'));
+    va.append(UI.selectField({ id: 'view-grid', label: 'Rasterweite', value: String(pv.grid), options: [['auto', 'Automatisch (folgt dem Zoom)'], ['0.01', '0,01 mm'], ['0.1', '0,1 mm'], ['1', '1 mm'], ['10', '10 mm'], ['100', '100 mm']], onChange: (val) => ViewPrefs.set({ grid: val === 'auto' ? 'auto' : parseFloat(val) }) }));
+    const chk = (k, label) => { const l = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'view-' + k, checked: !!pv[k] }), label); l.querySelector('input').onchange = (e) => ViewPrefs.set({ [k]: e.target.checked }); return l; };
+    va.append(h('div', { style: { display: 'grid', gap: '6px', marginTop: '8px' } }, chk('gridOn', 'Raster zeigen'), chk('planes', 'Ursprungsebenen zeigen'), chk('axes', 'Achsen zeigen'), chk('ortho', 'Orthografisch (ohne Perspektive)')));
+    w.append(va);
+    const gr = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Fangen beim Verschieben'));
     const f2 = h('div', { class: 'fields' });
-    f2.append(UI.selectField({ id: 'grid', label: 'Schrittweite', value: App.doc.settings.grid, options: [[0.1, '0,1 mm'], [0.5, '0,5 mm'], [1, '1 mm'], [2, '2 mm'], [5, '5 mm'], [10, '10 mm']], onChange: (v) => App.change('Raster geändert', (doc) => { doc.settings.grid = parseFloat(v); }) }));
+    f2.append(UI.selectField({ id: 'grid', label: 'Schrittweite', value: App.doc.settings.grid, options: [[0.01, '0,01 mm'], [0.05, '0,05 mm'], [0.1, '0,1 mm'], [0.5, '0,5 mm'], [1, '1 mm'], [2, '2 mm'], [5, '5 mm'], [10, '10 mm']], onChange: (v) => App.change('Raster geändert', (doc) => { doc.settings.grid = parseFloat(v); }) }));
     const snap = h('label', { class: 'check', style: { alignSelf: 'end', paddingBottom: '8px' } }, h('input', { type: 'checkbox', id: 'snap', checked: App.doc.settings.snap !== false }), 'Einrasten');
     snap.querySelector('input').onchange = (e) => App.change('Einrasten geändert', (doc) => { doc.settings.snap = e.target.checked; });
     f2.append(snap); gr.append(f2); w.append(gr);
@@ -3460,7 +3474,7 @@ const Panels = (() => {
     for (const k of ['rx', 'ry', 'rz']) fr.append(UI.numField({ id: 't-' + k, value: it.t[k], axis: k[1], unit: '°', onCommit: (v) => setT(k, v) }));
     pos.append(h('div', { class: 'field' }, h('label', null, 'Position (mm)'), fp), h('div', { class: 'field' }, h('label', null, 'Drehung (°)'), fr));
     const qa = h('div', { class: 'btn-row' });
-    const drop = h('button', { type: 'button', class: 'btn small', 'data-tip': 'Unterkante auf Höhe 0 setzen' }); drop.innerHTML = icon('push') + 'Aufs Druckbett';
+    const drop = h('button', { type: 'button', class: 'btn small', 'data-tip': 'Unterkante auf Höhe 0 setzen' }); drop.innerHTML = icon('push') + 'Auf XY-Ebene';
     drop.onclick = () => Actions.dropToPlate([it.id]);
     const rz = h('button', { type: 'button', class: 'btn small', 'data-tip': 'Um 90° drehen (um Z)', 'data-kbd': 'R' }); rz.innerHTML = icon('rotate') + '90°';
     rz.onclick = () => Actions.rotate90([it.id], 'z');
@@ -3590,7 +3604,13 @@ const Panels = (() => {
     const vb = h('div', { class: 'view-btns' });
     const b1 = h('button', { type: 'button', 'aria-label': 'Alles zeigen', 'data-tip': 'Alles zeigen', 'data-kbd': 'F' }); b1.innerHTML = icon('fit'); b1.onclick = () => Viewer.fit();
     const b2 = h('button', { type: 'button', 'aria-label': 'Schräge Ansicht', 'data-tip': 'Schräge Ansicht' }); b2.innerHTML = icon('home'); b2.onclick = () => Viewer.setView('iso');
-    vb.append(b1, b2); $('#overlay').append(vb);
+    const tg = (k, ic, tip, kbd) => { const b = h('button', { type: 'button', 'aria-label': tip, 'data-tip': tip, 'data-kbd': kbd || null }); b.innerHTML = icon(ic); b.onclick = () => ViewPrefs.toggle(k); b.dataset.pref = k; return b; };
+    const bO = tg('ortho', 'viewOrtho', 'Orthografisch / Perspektive', 'O');
+    const bG = tg('gridOn', 'grid', 'Raster ein/aus', 'G');
+    const bP = tg('planes', 'originPlanes', 'Ursprungsebenen ein/aus');
+    const syncBtns = (pv) => { for (const b of [bO, bG, bP]) b.classList.toggle('on', !!pv[b.dataset.pref]); bO.innerHTML = icon(pv.ortho ? 'viewOrtho' : 'viewPersp'); };
+    ViewPrefs.on('change', syncBtns); syncBtns(ViewPrefs.get());
+    vb.append(bO, bG, bP, h('div', { class: 'sep' }), b1, b2); $('#overlay').append(vb);
     gizmo = svgEl('<svg class="axis-gizmo" viewBox="0 0 64 64" aria-hidden="true"></svg>');
     $('#overlay').append(gizmo);
     Viewer.on('camera', syncCube); syncCube();
@@ -4522,10 +4542,13 @@ const Commands = (() => {
     for (const d of LIB) add('lib-' + d.lib, d.label + ' hinzufügen', d.icon, 'bauteil ' + d.desc, () => Actions.addPart(d, libDefaults(d)), { group: 'Bauteile' });
     add('sketch', 'Skizze zeichnen', 'sketch', 'zeichnen 2d profil umriss extrudieren', () => Sketch.chooseAndStart(), { group: 'Werkzeuge', kbd: 'S' });
     add('measure', 'Messen', 'measure', 'abstand länge durchmesser lineal', () => Measure.toggle(), { group: 'Werkzeuge', kbd: 'M' });
-    add('export', 'Für 3D-Druck speichern', 'export', 'stl 3mf drucken exportieren speichern download step', () => Print.exportDialog(), { group: 'Werkzeuge', kbd: 'Strg E' });
-    add('checks', 'Druck prüfen', 'printer', 'ampel prüfen drucker druckbett', () => $('#ampel').click(), { group: 'Werkzeuge' });
-    add('overhangs', 'Überhänge anzeigen', 'warn', 'stützmaterial support überhang', () => Print.toggleOverhangs(), { group: 'Werkzeuge' });
-    add('drop', 'Aufs Druckbett legen', 'push', 'boden platte unten absetzen', () => Actions.dropToPlate(null), { group: 'Werkzeuge' });
+    add('export', 'Exportieren (STEP, STL, 3MF)', 'export', 'step stl 3mf exportieren speichern download', () => Print.exportDialog(), { group: 'Werkzeuge', kbd: 'Strg E' });
+    add('status', 'Modell-Status', 'info', 'status prüfen größe fehler', () => $('#ampel').click(), { group: 'Werkzeuge' });
+    add('drop', 'Auf die XY-Ebene setzen', 'push', 'boden unten absetzen z null ebene', () => Actions.dropToPlate(null), { group: 'Werkzeuge' });
+    add('ortho', 'Orthografisch / Perspektive', 'viewOrtho', 'ortho perspektive projektion kamera', () => ViewPrefs.toggle('ortho'), { group: 'Ansicht', kbd: 'O' });
+    add('gridtoggle', 'Raster ein/aus', 'grid', 'raster gitter grid', () => ViewPrefs.toggle('gridOn'), { group: 'Ansicht', kbd: 'G' });
+    add('planes', 'Ursprungsebenen ein/aus', 'originPlanes', 'ursprung ebenen xy xz yz origin', () => ViewPrefs.toggle('planes'), { group: 'Ansicht' });
+    add('axes', 'Achsen ein/aus', 'axes', 'achsen x y z', () => ViewPrefs.toggle('axes'), { group: 'Ansicht' });
     add('drawing', 'Technische Zeichnung öffnen', 'sheet', 'zeichnung ansichten bemaßung pdf dreitafel', () => setMode('drawing'), { group: 'Werkzeuge' });
     add('model', 'Zurück zum Modell', 'cube', 'modell 3d', () => setMode('model'), { group: 'Werkzeuge' });
     add('params', 'Maße mit Namen festlegen', 'sliders', 'parameter variable formel maß', () => Panels.showParams(), { group: 'Werkzeuge' });
@@ -4636,6 +4659,9 @@ const Commands = (() => {
     if (k === 'r' && App.sel.length) { Actions.rotate90(null, 'z'); return; }
     if (k === 's') { Sketch.chooseAndStart(); return; }
     if (k === 'm') { Measure.toggle(); return; }
+    if (k === 'o') { ViewPrefs.toggle('ortho'); return; }
+    if (k === 'g') { ViewPrefs.toggle('gridOn'); return; }
+    if (['1', '3', '7', '0'].includes(k) && !e.shiftKey) { Viewer.setView({ 1: 'front', 3: 'right', 7: 'top', 0: 'iso' }[k]); return; }
     if (k === 'k') { Panels.toggleFlyout('bodies', $('#t-body')); return; }
     if (k === 'b') { Panels.toggleFlyout('parts', $('#t-parts')); return; }
     if (['arrowleft', 'arrowright', 'arrowup', 'arrowdown', 'pageup', 'pagedown'].includes(k) && App.sel.length) {
@@ -4646,7 +4672,7 @@ const Commands = (() => {
     }
   }
   function showKeys() {
-    const rows = [['Klicken', 'Körper, Fläche oder Kante wählen'], ['Umschalt + Klick', 'Mehrere wählen'], ['Ziehen', 'Körper verschieben'], ['Linke Maustaste ziehen', 'Ansicht drehen'], ['Rechte Maustaste ziehen', 'Ansicht verschieben'], ['Mausrad', 'Zoomen'], ['Entf', 'Löschen'], ['Strg Z / Strg Y', 'Rückgängig / Wiederholen'], ['Strg D', 'Duplizieren'], ['Strg G', 'Gruppieren'], ['H', 'Körper ↔ Loch'], ['R', 'Um 90° drehen'], ['Pfeiltasten', 'Um einen Rasterschritt verschieben (Umschalt: 10)'], ['Bild ↑ / Bild ↓', 'Anheben / Absenken'], ['F', 'Alles zeigen'], ['S', 'Skizze'], ['M', 'Messen'], ['K / B', 'Körper / Bauteile'], ['/ oder Strg K', 'Eingabezeile'], ['Strg S', 'Projekt speichern'], ['Strg E', 'Für 3D-Druck speichern']];
+    const rows = [['Klicken', 'Körper, Fläche oder Kante wählen'], ['Umschalt + Klick', 'Mehrere wählen'], ['Ziehen', 'Körper verschieben'], ['Linke Maustaste ziehen', 'Ansicht drehen'], ['Rechte Maustaste ziehen', 'Ansicht verschieben'], ['O', 'Orthografisch / Perspektive'], ['G', 'Raster ein/aus'], ['1 · 3 · 7 · 0', 'Ansicht vorne · rechts · oben · schräg'], ['Mausrad', 'Zoomen'], ['Entf', 'Löschen'], ['Strg Z / Strg Y', 'Rückgängig / Wiederholen'], ['Strg D', 'Duplizieren'], ['Strg G', 'Gruppieren'], ['H', 'Körper ↔ Loch'], ['R', 'Um 90° drehen'], ['Pfeiltasten', 'Um einen Rasterschritt verschieben (Umschalt: 10)'], ['Bild ↑ / Bild ↓', 'Anheben / Absenken'], ['F', 'Alles zeigen'], ['S', 'Skizze'], ['M', 'Messen'], ['K / B', 'Körper / Bauteile'], ['/ oder Strg K', 'Eingabezeile'], ['Strg S', 'Projekt speichern'], ['Strg E', 'Für 3D-Druck speichern']];
     const t = h('div', { class: 'mini-list' });
     for (const [a, b] of rows) t.append(h('div', { class: 'mini-row' }, h('span', { class: 'kbd' }, a), h('span', { class: 'grow' }, b)));
     UI.modal({ title: 'Tastenkürzel', body: t, actions: [{ label: 'Schließen', primary: true }] });
@@ -4669,23 +4695,9 @@ const Commands = (() => {
 })();
 
 // ---- 60-print.js ----
-// ================= 3D-Druck: Drucker, Prüfungen, Export =================
-const PRINTERS = [
-  { id: 'std', name: 'Standard (220 × 220 × 250 mm)', x: 220, y: 220, z: 250 },
-  { id: 'ender3', name: 'Creality Ender 3 (220 × 220 × 250 mm)', x: 220, y: 220, z: 250 },
-  { id: 'mk4', name: 'Prusa MK4 (250 × 210 × 220 mm)', x: 250, y: 210, z: 220 },
-  { id: 'mini', name: 'Prusa MINI (180 × 180 × 180 mm)', x: 180, y: 180, z: 180 },
-  { id: 'a1', name: 'Bambu Lab A1 (256 × 256 × 256 mm)', x: 256, y: 256, z: 256 },
-  { id: 'a1mini', name: 'Bambu Lab A1 mini (180 × 180 × 180 mm)', x: 180, y: 180, z: 180 },
-  { id: 'p1s', name: 'Bambu Lab P1S / X1C (256 × 256 × 256 mm)', x: 256, y: 256, z: 256 },
-  { id: 'custom', name: 'Eigener Drucker …', x: 220, y: 220, z: 250 },
-];
+// ================= Modell-Status und Export =================
+// (Der Name „Print“ ist historisch – hier gibt es keinen Drucker und keine Druckplatte mehr.)
 const Print = (() => {
-  let showOver = false, lastPlate = '';
-  function printer() {
-    const s = App.doc.settings; const p = PRINTERS.find((x) => x.id === s.printer) || PRINTERS[0];
-    return p.id === 'custom' ? { ...p, ...s.custom, name: 'Eigener Drucker' } : p;
-  }
   function solidBox() {
     const box = new THREE.Box3();
     for (const n of Viewer.nodes.values()) { if (n.role === 'hole' || !n.obj.visible) continue; box.union(n.mesh.geometry.boundingBox.clone().applyMatrix4(n.obj.matrix)); }
@@ -4698,168 +4710,37 @@ const Print = (() => {
   }
   function checks() {
     const out = [];
-    const st = stats(); const pr = printer();
-    if (!st) { out.push({ s: 'none', t: 'Noch nichts zum Drucken', d: 'Füge einen Körper hinzu, dann prüft Maßwerk ihn für den Drucker.' }); return out; }
-    const fitsXY = (st.x <= pr.x && st.y <= pr.y), fitsRot = (st.y <= pr.x && st.x <= pr.y);
-    if (st.z > pr.z) out.push({ s: 'bad', t: 'Zu hoch für den Drucker', d: `${fmt(st.z, 1)} mm hoch, der ${pr.name.split(' (')[0]} schafft ${pr.z} mm.` });
-    if (!fitsXY && !fitsRot) out.push({ s: 'bad', t: 'Zu groß für das Druckbett', d: `${fmt(st.x, 1)} × ${fmt(st.y, 1)} mm, das Bett hat ${pr.x} × ${pr.y} mm.` });
-    else if (!fitsXY && fitsRot) out.push({ s: 'warn', t: 'Passt nur gedreht', d: 'Dreh das Modell um 90°, dann passt es aufs Druckbett.' });
-    const b = st.box;
-    const outside = b.min.x < -pr.x / 2 - 0.01 || b.max.x > pr.x / 2 + 0.01 || b.min.y < -pr.y / 2 - 0.01 || b.max.y > pr.y / 2 + 0.01;
-    if (!fitsXY && fitsRot) out[out.length - 1].fix = { label: 'Um 90° drehen', run: () => rotateAll() };
-    if ((fitsXY || fitsRot) && outside) out.push({ s: 'warn', t: 'Ragt über das Druckbett', d: 'Schieb es in die Mitte der Platte – im Slicer geht das auch noch.', fix: { label: 'In die Mitte schieben', run: () => centerOnPlate() } });
-    if (b.min.z > 0.01) out.push({ s: 'warn', t: 'Schwebt über dem Druckbett', d: `Die Unterseite liegt ${fmt(b.min.z, 1)} mm hoch.`, fix: { label: 'Aufs Druckbett legen', run: () => Actions.dropToPlate(null) } });
-    if (b.min.z < -0.01) out.push({ s: 'warn', t: 'Ragt unter das Druckbett', d: `Ein Teil liegt ${fmt(-b.min.z, 1)} mm unter der Platte und würde abgeschnitten.`, fix: { label: 'Aufs Druckbett legen', run: () => Actions.dropToPlate(null) } });
-    const area = Viewer.overhangArea(45);
-    const ohFix = { label: showOver ? 'Überhänge ausblenden' : 'Überhänge zeigen', run: () => toggleOverhangs() };
-    if (area > 150) out.push({ s: 'warn', t: 'Braucht Stützmaterial', d: `Etwa ${fmt(area / 100, 1)} cm² hängen steiler als 45° über. Schalte im Slicer Stützmaterial ein oder dreh das Teil.`, fix: ohFix });
-    else if (area > 5) out.push({ s: 'ok', t: 'Kleine Überhänge', d: `Etwa ${fmt(area, 0)} mm² – das drucken die meisten Drucker ohne Stützmaterial.`, fix: ohFix });
-    const wr = wall.res && wall.key === resultsRev ? wall.res : null;
-    if (wr && wr.thinArea > Math.max(4, wr.area * 0.01)) out.push({ s: 'warn', t: 'Sehr dünne Stellen', d: `An manchen Stellen nur etwa ${fmt(wr.min, 1)} mm dick. Unter ${fmt(WALL_MIN, 1)} mm druckt es unsauber oder gar nicht – mach die Wand dort dicker.`, fix: { label: spotsOn ? 'Stellen ausblenden' : 'Stellen zeigen', run: () => showSpots(!spotsOn) } });
+    const st = stats();
+    if (!st) { out.push({ s: 'none', t: 'Noch leer', d: 'Füge einen Körper hinzu oder starte eine Skizze.' }); return out; }
     const errs = App.errors.length;
     if (errs) out.push({ s: 'warn', t: errs === 1 ? 'Ein Schritt hat ein Problem' : errs + ' Schritte haben Probleme', d: App.errors[0].message });
-    if (!out.some((c) => c.s !== 'ok')) out.unshift({ s: 'ok', t: 'Druckbereit', d: `${fmt(st.x, 1)} × ${fmt(st.y, 1)} × ${fmt(st.z, 1)} mm – passt auf den ${pr.name.split(' (')[0]}.` });
+    const bodies = App.doc.items.filter((x) => x.role !== 'hole' && !x.hidden).length;
+    if (!out.length) out.push({ s: 'ok', t: `${fmt(st.x, 2)} × ${fmt(st.y, 2)} × ${fmt(st.z, 2)} mm`, d: `${bodies} ${bodies === 1 ? 'Körper' : 'Körper'}, Ursprung bei (0 | 0 | 0). Abmessungen der Hüllbox.` });
     return out;
   }
-  function toggleOverhangs(force) {
-    showOver = force != null ? force : !showOver;
-    Viewer.showOverhangs(showOver, 45);
-    if (showOver) UI.toast('Rot markierte Flächen brauchen beim Drucken Stützmaterial.', { icon: 'printer' });
-    updateAmpel();
-  }
   function updateAmpel() {
-    scheduleWall();
-    const pr = printer();
-    const key = pr.x + 'x' + pr.y;
-    if (key !== lastPlate) { lastPlate = key; Viewer.buildPlate(pr.x, pr.y); }
     const cs = checks();
     const worst = cs.some((c) => c.s === 'bad') ? 'bad' : cs.some((c) => c.s === 'warn') ? 'warn' : cs.some((c) => c.s === 'none') ? 'none' : 'ok';
     const el = $('#ampel'); el.className = 'ampel ' + worst;
     const main = cs.find((c) => c.s === worst) || cs[0];
-    el.querySelector('.t').textContent = main ? main.t : 'Druckbereit';
-    el.setAttribute('data-tip', 'Prüfung für den 3D-Druck');
-    if (showOver) Viewer.showOverhangs(true, 45);
-    const st = stats();
-    Viewer.showVolume(st && (st.z > pr.z * 0.7 || cs.some((c) => c.s === 'bad')) ? pr : null);
+    el.querySelector('.t').textContent = main ? main.t : '';
+    el.setAttribute('data-tip', 'Modell-Status');
   }
   function openAmpel(anchor) {
-    const cs = checks(); const pr = printer();
+    const cs = checks();
     const box = h('div', { style: { display: 'grid', gap: '12px' } });
-    box.append(h('div', { class: 'section-h' }, 'Prüfung für den 3D-Druck'));
+    box.append(h('div', { class: 'section-h' }, 'Modell-Status'));
     const list = h('div', { class: 'check-list' });
     for (const c of cs) {
       const row = h('div', { class: 'check-row ' + c.s });
       const stI = h('span', { class: 'st' }); stI.innerHTML = icon(c.s === 'ok' ? 'check' : c.s === 'warn' ? 'warn' : c.s === 'none' ? 'info' : 'close');
-      const g = h('div', { class: 'grow' }, h('b', null, c.t), h('small', null, c.d));
-      if (c.fix) { const b = h('button', { type: 'button', class: 'btn small', style: { marginTop: '6px' } }, c.fix.label); b.onclick = () => { c.fix.run(); UI.closePop(); }; g.append(b); }
-      row.append(stI, g); list.append(row);
+      row.append(stI, h('div', { class: 'grow' }, h('b', null, c.t), h('small', null, c.d))); list.append(row);
     }
     box.append(list);
-    box.append(UI.selectField({ id: 'amp-printer', label: 'Drucker', value: App.doc.settings.printer, options: PRINTERS.map((p) => [p.id, p.name]), onChange: (v) => { App.change('Drucker gewählt', (doc) => { doc.settings.printer = v; }); UI.closePop(); } }));
-    const ov = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'amp-over', checked: showOver }), 'Überhänge rot anzeigen');
-    ov.querySelector('input').onchange = (e) => toggleOverhangs(e.target.checked);
-    box.append(ov);
-    const ex = h('button', { type: 'button', class: 'btn primary' }); ex.innerHTML = icon('export') + 'Für 3D-Druck speichern';
+    const ex = h('button', { type: 'button', class: 'btn primary' }); ex.innerHTML = icon('export') + 'Exportieren';
     ex.onclick = () => { UI.closePop(); exportDialog(); };
     box.append(ex);
     UI.pop(anchor, box, { up: true, alignRight: true });
-  }
-
-  // ---------- Ganze Szene verschieben oder drehen ----------
-  function shiftExpr(v, d) {
-    if (v == null || v === '') return round(-d, 4);
-    if (typeof v === 'number') return round(v - d, 4);
-    const n = parseNum(v); if (!isNaN(n)) return round(n - d, 4);
-    return `${v} ${d >= 0 ? '-' : '+'} ${round(Math.abs(d), 3)}`;   // Formeln bleiben erhalten
-  }
-  function centerOnPlate() {
-    const st = stats(); if (!st) return;
-    const c = st.box.getCenter(new THREE.Vector3());
-    if (Math.abs(c.x) < 0.01 && Math.abs(c.y) < 0.01) return;
-    App.change('In die Plattenmitte geschoben', (doc) => { for (const it of doc.items) { it.t.x = shiftExpr(it.t.x, c.x); it.t.y = shiftExpr(it.t.y, c.y); } });
-    UI.toast('Liegt jetzt in der Mitte des Druckbetts.', { icon: 'check' });
-  }
-  function rotateAll() {
-    const ids = App.doc.items.filter((x) => !x.locked).map((x) => x.id);
-    if (ids.length) Actions.rotate90(ids, 'z');
-    setTimeout(() => { const st = stats(); const pr = printer(); if (st && (st.box.min.x < -pr.x / 2 || st.box.max.x > pr.x / 2 || st.box.min.y < -pr.y / 2 || st.box.max.y > pr.y / 2)) centerOnPlate(); }, 400);
-  }
-
-  // ---------- Wandstärke: Stichproben mit Strahlen quer durchs Material ----------
-  const WALL_MIN = 0.8;
-  let resultsRev = 0, spotsOn = false, spotObjs = [];
-  const wall = { key: -1, res: null, timer: null };
-  function scheduleWall() {
-    if (wall.key === resultsRev) return;
-    clearTimeout(wall.timer);
-    wall.timer = setTimeout(function run() {
-      if (App.busy) { wall.timer = setTimeout(run, 400); return; }
-      const key = resultsRev;
-      try { wall.res = wallThickness(); wall.key = key; } catch (e) { console.error(e); wall.res = null; wall.key = key; }
-      if (spotsOn) drawSpots();
-      updateAmpel();
-    }, 700);
-  }
-  function wallThickness() {
-    const res = { min: Infinity, thinArea: 0, area: 0, spots: [] };
-    let seed = 20240917; const rnd = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
-    const W = new THREE.Vector3();
-    for (const n of Viewer.nodes.values()) {
-      if (n.role === 'hole' || !n.obj.visible || !n.data) continue;
-      const pos = n.data.vertices, idx = n.data.triangles, T = idx.length / 3; if (!T) continue;
-      const cum = new Float64Array(T); let tot = 0;
-      for (let t = 0; t < T; t++) {
-        const a = idx[3 * t] * 3, b = idx[3 * t + 1] * 3, c = idx[3 * t + 2] * 3;
-        const ux = pos[b] - pos[a], uy = pos[b + 1] - pos[a + 1], uz = pos[b + 2] - pos[a + 2], vx = pos[c] - pos[a], vy = pos[c + 1] - pos[a + 1], vz = pos[c + 2] - pos[a + 2];
-        tot += 0.5 * Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx); cum[t] = tot;
-      }
-      if (tot <= 0) continue;
-      res.area += tot;
-      const R = Math.max(24, Math.min(320, Math.floor(3e6 / T)));
-      let thin = 0;
-      for (let k = 0; k < R; k++) {
-        const target = ((k + rnd()) / R) * tot;
-        let lo = 0, hi = T - 1; while (lo < hi) { const mid = (lo + hi) >> 1; if (cum[mid] < target) lo = mid + 1; else hi = mid; }
-        const t0 = lo, a = idx[3 * t0] * 3, b = idx[3 * t0 + 1] * 3, c = idx[3 * t0 + 2] * 3;
-        let r1 = rnd(), r2 = rnd(); if (r1 + r2 > 1) { r1 = 1 - r1; r2 = 1 - r2; }
-        const e1x = pos[b] - pos[a], e1y = pos[b + 1] - pos[a + 1], e1z = pos[b + 2] - pos[a + 2], e2x = pos[c] - pos[a], e2y = pos[c + 1] - pos[a + 1], e2z = pos[c + 2] - pos[a + 2];
-        let nx = e1y * e2z - e1z * e2y, ny = e1z * e2x - e1x * e2z, nz = e1x * e2y - e1y * e2x; const nl = Math.hypot(nx, ny, nz); if (nl < 1e-12) continue; nx /= nl; ny /= nl; nz /= nl;
-        const px = pos[a] + r1 * e1x + r2 * e2x, py = pos[a + 1] + r1 * e1y + r2 * e2y, pz = pos[a + 2] + r1 * e1z + r2 * e2z;
-        // Strahl ins Material hinein (gegen die Außennormale), beidseitiger Dreieckstest
-        const ox = px - nx * 1e-3, oy = py - ny * 1e-3, oz = pz - nz * 1e-3, dx = -nx, dy = -ny, dz = -nz;
-        let best = Infinity;
-        for (let s2 = 0; s2 < T; s2++) {
-          if (s2 === t0) continue;
-          const A = idx[3 * s2] * 3, B = idx[3 * s2 + 1] * 3, C = idx[3 * s2 + 2] * 3;
-          const f1x = pos[B] - pos[A], f1y = pos[B + 1] - pos[A + 1], f1z = pos[B + 2] - pos[A + 2], f2x = pos[C] - pos[A], f2y = pos[C + 1] - pos[A + 1], f2z = pos[C + 2] - pos[A + 2];
-          const qx = dy * f2z - dz * f2y, qy = dz * f2x - dx * f2z, qz = dx * f2y - dy * f2x;
-          const det = f1x * qx + f1y * qy + f1z * qz; if (det > -1e-12 && det < 1e-12) continue;
-          const inv = 1 / det, tx = ox - pos[A], ty = oy - pos[A + 1], tz = oz - pos[A + 2];
-          const u = (tx * qx + ty * qy + tz * qz) * inv; if (u < 0 || u > 1) continue;
-          const rx = ty * f1z - tz * f1y, ry = tz * f1x - tx * f1z, rz = tx * f1y - ty * f1x;
-          const v = (dx * rx + dy * ry + dz * rz) * inv; if (v < 0 || u + v > 1) continue;
-          const dist = (f2x * rx + f2y * ry + f2z * rz) * inv;
-          if (dist > 1e-5 && dist < best) best = dist;
-        }
-        if (best < WALL_MIN) {
-          thin++; res.min = Math.min(res.min, best + 1e-3);
-          if (res.spots.length < 80) { W.set(px - nx * best / 2, py - ny * best / 2, pz - nz * best / 2).applyMatrix4(n.obj.matrix); res.spots.push(W.toArray()); }
-        }
-      }
-      res.thinArea += (thin / R) * tot;
-    }
-    return res;
-  }
-  function clearSpots() { for (const o of spotObjs) { Viewer.groups.overlay.remove(o); Viewer.disposeFat(o); } spotObjs = []; Viewer.requestRender(); }
-  function drawSpots() {
-    clearSpots();
-    if (spotsOn && wall.res && wall.key === resultsRev) for (const p of wall.res.spots) { const d = Viewer.makeFat([p[0], p[1], p[2], p[0], p[1], p[2] + 0.001], '#e5484d', 9, { depthTest: false }); Viewer.groups.overlay.add(d); spotObjs.push(d); }
-    Viewer.requestRender();
-  }
-  function showSpots(on) {
-    spotsOn = on; drawSpots();
-    if (on) UI.toast('Rote Punkte zeigen die dünnen Stellen.', { icon: 'printer' });
-    updateAmpel();
   }
 
   // ---------- Dateien bauen ----------
@@ -4926,7 +4807,13 @@ const Print = (() => {
   async function save(filename, data) {
     let dl = null;
     try { dl = await window.claude?.use('downloads'); } catch (_) {}
-    if (!dl) { UI.modal({ title: 'Speichern ist hier nicht möglich', body: 'Öffne Maßwerk in Claude, dann kannst du Dateien speichern.', actions: [{ label: 'OK', primary: true }] }); return false; }
+    if (!dl) {
+      // Außerhalb von Claude (lokal oder auf GitHub Pages): normaler Browser-Download
+      const blob = data instanceof Blob ? data : new Blob([data]);
+      const a = h('a', { href: URL.createObjectURL(blob), download: filename }); document.body.append(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      UI.toast('Gespeichert: ' + filename, { icon: 'check' }); return true;
+    }
     try { const r = await dl.save({ filename, data }); if (r && r.status === 'saved') UI.toast('Gespeichert: ' + filename, { icon: 'check' }); return true; }
     catch (e) {
       const code = e && e.code;
@@ -4942,19 +4829,19 @@ const Print = (() => {
     }
   }
   function exportDialog() {
-    if (!App.doc.items.some((x) => x.role !== 'hole' && !x.hidden)) { UI.toast('Es gibt noch nichts zum Speichern. Füge zuerst einen Körper hinzu.', { icon: 'info' }); return; }
-    const opts = { stl: true, mf: true, step: false };
+    if (!App.doc.items.some((x) => x.role !== 'hole' && !x.hidden)) { UI.toast('Es gibt noch nichts zu exportieren. Füge zuerst einen Körper hinzu.', { icon: 'info' }); return; }
+    const opts = { step: true, stl: false, mf: false };
     const body = h('div', { style: { display: 'grid', gap: '12px' } });
-    body.append(h('p', null, 'Die Dateien kommen zusammen als ZIP. Entpacken, dann die STL oder 3MF im Slicer öffnen (zum Beispiel PrusaSlicer, Bambu Studio, OrcaSlicer oder Cura).'));
+    body.append(h('p', null, 'Die Dateien kommen zusammen als ZIP.'));
     const mk = (k, label, sub) => { const l = h('label', { class: 'check', style: { alignItems: 'flex-start' } }, h('input', { type: 'checkbox', id: 'ex-' + k, checked: opts[k] }), h('span', null, h('b', null, label), h('br'), h('small', { style: { color: 'var(--muted)' } }, sub))); l.querySelector('input').onchange = (e) => { opts[k] = e.target.checked; }; return l; };
-    body.append(mk('stl', 'STL', 'Funktioniert mit jedem Slicer'), mk('mf', '3MF', 'Mit Farben und Maßeinheit, ideal für moderne Slicer'), mk('step', 'STEP', 'Für andere CAD-Programme wie Fusion oder FreeCAD'));
-    const cs = checks().filter((c) => c.s !== 'ok');
+    body.append(mk('step', 'STEP', 'Exakte Geometrie – für Fusion, FreeCAD, SolidWorks und Fertiger'), mk('stl', 'STL', 'Dreiecksnetz, z. B. für Renderings oder 3D-Druck'), mk('mf', '3MF', 'Dreiecksnetz mit Farben und Maßeinheit'));
+    const cs = checks().filter((c) => c.s === 'warn' || c.s === 'bad');
     if (cs.length) body.append(h('div', { class: 'hint-box', html: '<b>Hinweis:</b> ' + esc(cs[0].t) + ' – ' + esc(cs[0].d) }));
-    UI.modal({ title: 'Für 3D-Druck speichern', body, actions: [{ label: 'Abbrechen' }, { label: 'Als ZIP speichern', primary: true, run: () => { runExport(opts); } }] });
+    UI.modal({ title: 'Exportieren', body, actions: [{ label: 'Abbrechen' }, { label: 'Als ZIP speichern', primary: true, run: () => { runExport(opts); } }] });
   }
   async function runExport(opts) {
     if (!opts.stl && !opts.mf && !opts.step) { UI.toast('Wähle mindestens ein Format.', { kind: 'bad' }); return; }
-    const tst = UI.toast('Dateien werden erstellt …', { icon: 'printer', ms: 20000 });
+    const tst = UI.toast('Dateien werden erstellt …', { icon: 'export', ms: 20000 });
     try {
       const scene = Model.kernelScene(App.doc);
       const name = safeName(App.doc.name);
@@ -4966,17 +4853,17 @@ const Print = (() => {
         if (opts.mf) files.push({ name: name + '.3mf', data: await build3MF(res.objects, name) });
       }
       if (opts.step) { const r = await Kernel.call('exportSTEP', { scene }); files.push({ name: name + '.step', data: new Uint8Array(r.data) }); }
-      files.push({ name: 'LIESMICH.txt', data: new TextEncoder().encode(`${App.doc.name}\nErstellt mit Maßwerk am ${new Date().toLocaleString('de-DE')}\n\nSTL: für jeden Slicer\n3MF: mit Farben und Maßeinheit (Millimeter)\nSTEP: zum Weiterbearbeiten in anderen CAD-Programmen\n`) });
+      files.push({ name: 'LIESMICH.txt', data: new TextEncoder().encode(`${App.doc.name}\nErstellt mit Maßwerk am ${new Date().toLocaleString('de-DE')}\n\nSTEP: exakte Geometrie für andere CAD-Programme\nSTL / 3MF: Dreiecksnetz (Millimeter)\n`) });
       const zip = await Zip.make(files);
       tst.remove();
       await save(name + '.zip', new Blob([zip]));
     } catch (e) { tst.remove(); UI.toast('Export hat nicht geklappt: ' + e.message, { kind: 'bad' }); }
   }
   function init() {
-    App.on('results', () => { resultsRev++; clearSpots(); updateAmpel(); }); App.on('doc', debounce(updateAmpel, 200));
+    App.on('results', updateAmpel); App.on('doc', debounce(updateAmpel, 200));
     $('#ampel').addEventListener('click', (e) => openAmpel(e.currentTarget));
   }
-  return { init, printer, stats, checks, exportDialog, save, safeName, toggleOverhangs, updateAmpel, centerOnPlate, wallThickness, get wall() { return wall; } };
+  return { init, stats, checks, exportDialog, save, safeName, updateAmpel };
 })();
 
 // ---------- ZIP (mit Kompression, wenn der Browser sie kann) ----------
@@ -5888,7 +5775,7 @@ const Drawing = (() => {
 // ================= KI-Helfer (baut und ändert Modelle aus einer Beschreibung) =================
 const AI = (() => {
   let panel = null, ctl = null, history = [], off = false;
-  const RULES = `Du bist der CAD-Helfer in der Web-App „Maßwerk“. Du baust 3D-Modelle für den 3D-Druck aus Grundkörpern, Skizzen und Bauteilen. Einheiten: Millimeter. Z zeigt nach oben, das Druckbett ist die XY-Ebene bei z=0.
+  const RULES = `Du bist der CAD-Helfer in der Web-App „Maßwerk“. Du baust präzise technische 3D-Modelle, vor allem für FPV-/Speed-Drohnen, aus Grundkörpern, Skizzen und Bauteilen. Einheiten: Millimeter. Z zeigt nach oben, die XY-Ebene bei z=0 ist die Grundebene.
 
 Antworte NUR mit einem JSON-Objekt:
 {"antwort": "kurze Antwort auf Deutsch, 1–3 Sätze, per du", "aktionen": [ ... ]}
@@ -5920,7 +5807,7 @@ Parameter p (alle Grundkörper stehen mit der Unterseite auf z=0 ihres eigenen S
 Regeln:
 - Löcher auf oberster Ebene schneiden automatisch alle Körper, die sie berühren. Ein Teil mit Löchern baust du am saubersten als group.
 - Löcher sollen 0,5 mm über die Oberfläche hinausragen, damit sie sauber schneiden.
-- Für den 3D-Druck: Wände mindestens 1,2 mm, Teile flach auf z=0, möglichst ohne Überhänge über 45°. Für Schrauben nimm part screwHole.
+- Lege Teile auf z=0, sofern nichts anderes gewünscht ist. Maße exakt übernehmen, nicht runden. Für Schrauben nimm part screwHole.
 - Zahlenwerte dürfen Formeln mit Maß-Namen sein, z. B. "Breite/2+3". Lege bei neuen Teilen für die 2–4 wichtigsten Größen Maße an (op "mass") und nutze sie.
 - Neue Teile nicht in bestehende hineinsetzen: stelle sie daneben, außer der Wunsch ist ausdrücklich eine Änderung am Bestehenden.
 - Bei einer reinen Frage: "aktionen": [].
@@ -5940,14 +5827,13 @@ Beispiel – Wunsch „Platte 60 × 40 × 4 mit einem Loch in der Mitte“:
     return o;
   }
   function modelText() {
-    const st = Print.stats(); const pr = Print.printer();
+    const st = Print.stats();
     const obj = {
       projekt: App.doc.name,
       masse: (App.doc.params || []).map((p) => ({ name: p.name, wert: p.expr })),
       objekte: App.doc.items.map(compactItem),
       gesamtgroesse: st ? { x: +st.x.toFixed(2), y: +st.y.toFixed(2), z: +st.z.toFixed(2), min: st.box.min.toArray().map((v) => +v.toFixed(2)), max: st.box.max.toArray().map((v) => +v.toFixed(2)) } : null,
       auswahl: App.sel,
-      druckbett: { x: pr.x, y: pr.y, z: pr.z },
     };
     let s = JSON.stringify(obj);
     if (s.length > 40000) s = s.slice(0, 40000) + '…';
@@ -6214,7 +6100,7 @@ const Templates = (() => {
       svg: '<path d="M14 38 56 24l34 11-42 14z" class="a1"/><path d="M14 38V10l42-14v28z" class="a2"/><ellipse cx="44" cy="37" rx="4" ry="2" class="hole"/><ellipse cx="66" cy="31" rx="4" ry="2" class="hole"/><ellipse cx="30" cy="16" rx="2.4" ry="4" class="hole"/><ellipse cx="46" cy="11" rx="2.4" ry="4" class="hole"/>',
     },
     {
-      id: 'gear', name: 'Zahnradpaar', desc: 'Zwei passende Zahnräder mit Bohrung, direkt druckbar.',
+      id: 'gear', name: 'Zahnradpaar', desc: 'Zwei passende Zahnräder mit Bohrung.',
       build() {
         const d = Model.newDoc('Zahnräder');
         d.params = [param('Modul', 1.5)];
@@ -6226,7 +6112,7 @@ const Templates = (() => {
       svg: '<circle cx="42" cy="28" r="20" class="a2"/><circle cx="42" cy="28" r="4" class="hole"/><circle cx="78" cy="28" r="11" class="b2"/><circle cx="78" cy="28" r="3" class="hole"/>',
     },
     {
-      id: 'hinge', name: 'Scharnier', desc: 'Wird in einem Stück gedruckt und bewegt sich sofort.',
+      id: 'hinge', name: 'Scharnier', desc: 'Aus einem Stück, mit Spiel zwischen den Teilen.',
       build() {
         const d = Model.newDoc('Scharnier');
         d.items = [part('hinge', { len: 40, w: 15, t: 2.4, gap: 0.4 }, { color: '#3f7fd6' })];
@@ -6252,7 +6138,7 @@ const Start = (() => {
     const head = h('div', { class: 'start-head' });
     const brand = h('div', { class: 'start-brand' });
     brand.innerHTML = $('#brand svg').outerHTML;
-    brand.append(h('div', null, h('h1', null, 'Maßwerk'), h('p', null, 'Einfaches CAD für den 3D-Druck und technische Zeichnungen')));
+    brand.append(h('div', null, h('h1', null, 'Maßwerk'), h('p', null, 'Präzises CAD für Speed-Drohnen und technische Teile')));
     const acts = h('div', { class: 'btn-row' });
     const nb = h('button', { type: 'button', class: 'btn primary' }); nb.innerHTML = icon('newfile') + 'Neues Projekt'; nb.onclick = () => newProject();
     const ob = h('button', { type: 'button', class: 'btn' }); ob.innerHTML = icon('folder') + 'Datei öffnen'; ob.onclick = () => openFile();
@@ -6332,11 +6218,11 @@ const Start = (() => {
 const Tour = (() => {
   let box = null, ring = null, idx = 0, off = [];
   const STEPS = [
-    { title: 'Willkommen bei Maßwerk', text: 'In drei Minuten baust du ein Teil mit Loch und speicherst es für den Drucker. Links siehst du den Verlauf, rechts die Einstellungen, in der Mitte dein Modell.', target: null },
+    { title: 'Willkommen bei Maßwerk', text: 'In drei Minuten baust du ein Teil mit Loch und exportierst es. Links siehst du den Verlauf, rechts die Einstellungen, in der Mitte dein Modell.', target: null },
     { title: 'Leg einen Quader hin', text: 'Klick oben auf „Körper“ und dann auf „Quader“. Du kannst ihn auch direkt auf die Fläche ziehen.', target: '#t-body', until: () => App.doc.items.some((x) => x.kind === 'box') },
     { title: 'Mach ihn größer', text: 'Zieh an einem weißen Anfasser – oder klick auf eine der Zahlen am Quader und tipp zum Beispiel 40 ein.', target: '#viewport', until: (ev) => ev === 'size' },
     { title: 'Ein Loch einbauen', text: 'Klick wieder auf „Körper“ und unten auf „Zylinder als Loch“ – schon geht ein Loch durch den Quader. Jeder Körper kann übrigens mit einem Klick rechts auf „Loch“ zum Loch werden.', target: '#t-body', until: () => App.doc.items.some((x) => x.role === 'hole') || App.doc.items.some((x) => x.kind === 'group') },
-    { title: 'Prüfen und speichern', text: 'Unten rechts zeigt die Ampel, ob alles druckbereit ist. Mit „Für 3D-Druck speichern“ bekommst du STL und 3MF. Viel Spaß beim Bauen!', target: '#t-export', last: true },
+    { title: 'Prüfen und speichern', text: 'Unten rechts siehst du Größe und Status des Modells. Mit „Exportieren“ bekommst du STEP, STL oder 3MF. Viel Spaß beim Bauen!', target: '#t-export', last: true },
   ];
   let timer = null;
   function start() { stop(); idx = 0; show(); off.push(App.on('history', check), App.on('doc', check)); timer = setInterval(place, 350); }
@@ -6400,7 +6286,8 @@ const Tour = (() => {
   window.__masswerk = { App, Viewer, Model, Actions, Sketch, SK, THREE, Print, Drawing, Kernel, UI, Commands, Panels, Handles, Start, AI, Measure, Place };
   UI.initTips();
   Viewer.init($('#viewport'));
-  Panels.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Commands.init(); Print.init();
+  window.__V = Viewer; // für automatische Tests
+  Panels.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Commands.init(); Print.init(); ViewPrefs.apply();
 
   // Kopfzeile
   $('#btn-undo').onclick = () => App.undo();
@@ -6426,9 +6313,9 @@ const Tour = (() => {
     ...(innerWidth <= 900 ? [...projectItems(), '-'] : []),
     { label: 'Einführung starten', icon: 'play', run: () => Tour.start() },
     { label: 'Tastenkürzel', icon: 'help', run: () => Commands.showKeys() },
-    { label: 'Für 3D-Druck speichern', icon: 'export', run: () => Print.exportDialog() },
+    { label: 'Exportieren', icon: 'export', run: () => Print.exportDialog() },
     '-',
-    { label: 'Über Maßwerk', icon: 'info', run: () => UI.modal({ title: 'Über Maßwerk', body: h('div', { style: { display: 'grid', gap: '10px', color: 'var(--muted)', lineHeight: 1.55 } }, h('p', null, 'Maßwerk ist ein einfaches CAD im Browser für den 3D-Druck und für technische Zeichnungen.'), h('p', null, 'Gerechnet wird mit dem CAD-Kern OpenCascade (LGPL-2.1) über die Bibliothek replicad (MIT). Die 3D-Anzeige nutzt three.js (MIT), die PDF-Ausgabe jsPDF (MIT).'), h('p', null, 'Deine Projekte bleiben in deinem Browser. Der KI-Helfer nutzt dein Claude-Konto.')), actions: [{ label: 'Schließen', primary: true }] }) },
+    { label: 'Über Maßwerk', icon: 'info', run: () => UI.modal({ title: 'Über Maßwerk', body: h('div', { style: { display: 'grid', gap: '10px', color: 'var(--muted)', lineHeight: 1.55 } }, h('p', null, 'Maßwerk ist ein parametrisches CAD im Browser, spezialisiert auf FPV- und Speed-Drohnen, mit technischen Zeichnungen.'), h('p', null, 'Gerechnet wird mit dem CAD-Kern OpenCascade (LGPL-2.1) über die Bibliothek replicad (MIT). Die 3D-Anzeige nutzt three.js (MIT), die PDF-Ausgabe jsPDF (MIT).'), h('p', null, 'Deine Projekte bleiben in deinem Browser. Der KI-Helfer nutzt dein Claude-Konto.')), actions: [{ label: 'Schließen', primary: true }] }) },
   ], { alignRight: true });
   const ws = $('#workspace');
   $('#btn-left').onclick = () => { ws.classList.toggle('show-left'); ws.classList.remove('show-right'); };
