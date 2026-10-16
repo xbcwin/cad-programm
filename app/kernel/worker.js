@@ -33,6 +33,7 @@ self.onmessage = async (ev) => {
     else if (cmd === 'measure') result = kernel.measure(args.scene);
     else if (cmd === 'project') result = kernel.project(args.scene, args.views);
     else if (cmd === 'faceLoops') result = kernel.faceLoopsOf(args.key, args.faceIdx);
+    else if (cmd === 'remesh') result = kernel.remesh(args.key, args.tol);
     else throw new Error('Unbekannter Befehl: ' + cmd);
     const tl = [];
     // nur große Arrays übertragen (Kopien sind in der Nutzlast schon neu)

@@ -590,9 +590,10 @@ const uid = (p = 'i') => p + '_' + Math.random().toString(36).slice(2, 9);
 function debounce(fn, ms) { let t; const f = (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; f.flush = (...a) => { clearTimeout(t); fn(...a); }; f.cancel = () => clearTimeout(t); return f; }
 function throttle(fn, ms) { let last = 0, t = null; return (...a) => { const now = performance.now(); const run = () => { last = performance.now(); t = null; fn(...a); }; if (now - last >= ms) run(); else if (!t) t = setTimeout(run, ms - (now - last)); }; }
 function round(v, d = 3) { const f = Math.pow(10, d); return Math.round(v * f) / f; }
+const FMT = { min: 0 };   // Einstellung „Nachkommastellen“: Mindestgenauigkeit aller Anzeigen
 function fmt(v, d = 2) {
   if (typeof v !== 'number' || !isFinite(v)) return '–';
-  let r = round(v, d);
+  let r = round(v, Math.max(d, FMT.min));
   if (Object.is(r, -0)) r = 0;
   return String(r).replace('.', ',');
 }
@@ -1491,7 +1492,9 @@ const App = (() => {
     while (dirty) {
       dirty = false;
       const scene = Model.kernelScene(S.doc, S.extra);
-      const known = {}; for (const [id, r] of S.results) known[id] = r.key;
+      scene.quality = ViewPrefs.get().quality || 'normal';
+      const known = {}; if (!S.forceMesh) for (const [id, r] of S.results) known[id] = r.key;
+      S.forceMesh = false;
       let res;
       try { res = await Kernel.call('evaluate', { scene, known }); }
       catch (e) { console.error(e); UI.toast('Beim Berechnen ist ein Fehler passiert: ' + e.message, { kind: 'bad' }); break; }
@@ -1521,6 +1524,17 @@ const App = (() => {
     refreshSelectionVisuals();
     ev.emit('results');
     if (S.fitNext) { S.fitNext = false; Viewer.fit(); }
+  }
+  // Darstellungsqualität geändert: alle Teile neu vernetzen lassen
+  function requalify() { S.forceMesh = true; rebuild(); }
+  // feineres Netz für ein Teil einsetzen (gleiche Form, gleicher Schlüssel)
+  function replaceMesh(id, key, payload) {
+    const it = topItem(id); const r = S.results.get(id);
+    if (!it || !r || r.key !== key) return false;
+    Viewer.setNode(id, payload, { matrix: Model.localMatrix(it), role: it.role, color: it.color, key });
+    Viewer.updateNode(id, { visible: !it.hidden });
+    r.data = payload; refreshSelectionVisuals(); ev.emit('remeshed', id);
+    return true;
   }
   // nach dem nächsten Berechnen die Ansicht einpassen (erstes Teil in einem leeren Projekt)
   function fitAfterBuild() { S.fitNext = true; }
@@ -1580,7 +1594,7 @@ const App = (() => {
     get extra() { return S.extra; }, set extra(x) { S.extra = x; },
     get tool() { return S.tool; }, set tool(t) { S.tool = t; ev.emit('tool'); },
     get fileSavedRev() { return S.fileSavedRev; }, set fileSavedRev(v) { S.fileSavedRev = v; },
-    setDoc, snapshot, change, touched, pushUndo, restore, undo, redo, undoTo, rebuild, select, clearSelection, selectedItems, errorsFor, localBox, refreshSelectionVisuals,
+    setDoc, snapshot, change, touched, pushUndo, restore, undo, redo, undoTo, rebuild, requalify, replaceMesh, select, clearSelection, selectedItems, errorsFor, localBox, refreshSelectionVisuals,
     recentProjects, loadStored, deleteStored, autosave, fitAfterBuild, on: ev.on, emit: ev.emit,
   };
 })();
@@ -1623,6 +1637,8 @@ const Viewer = (() => {
   }
   function cam() { if (ortho) { syncOrtho(); return orthoCam; } return camera; }
   function setOrtho(on) { ortho = !!on; needsRender = true; listeners.emit('camera'); }
+  const _fr = new THREE.Frustum(), _pm = new THREE.Matrix4();
+  function boxVisible(box) { const c = cam(); c.updateMatrixWorld(); _pm.multiplyMatrices(c.projectionMatrix, c.matrixWorldInverse); _fr.setFromProjectionMatrix(_pm); return _fr.intersectsBox(box); }
   function inView(box, margin = 0.08) {
     if (!box || box.isEmpty()) return true;
     const c = cam();
@@ -2122,7 +2138,7 @@ const Viewer = (() => {
 
   return {
     init, requestRender, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, setSelectedEdges, clearHover,
-    pick, pickGhost, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, sceneBox, snapshot, makeFat, disposeFat,
+    pick, pickGhost, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, boxVisible, sceneBox, snapshot, makeFat, disposeFat,
     get camera() { return camera; }, get activeCamera() { return cam(); }, get ortho() { return ortho; }, get gridStep() { return gridStep; }, get controls() { return controls; }, get scene() { return scene; }, get groups() { return groups; }, get nodes() { return nodes; }, get canvas() { return renderer.domElement; }, get theme() { return theme; }, get container() { return container; },
     on: listeners.on,
   };
@@ -2970,17 +2986,81 @@ const Actions = (() => {
 // Persönliche Einstellung (nicht im Projekt gespeichert), gilt für alle Projekte in diesem Browser.
 const ViewPrefs = (() => {
   const KEY = 'masswerk.view';
-  const DEF = { grid: 'auto', gridOn: true, planes: true, axes: true, ortho: false };
+  const DEF = { grid: 'auto', gridOn: true, planes: true, axes: true, ortho: false, quality: 'normal', adaptive: true, theme: 'system', decimals: 0 };
   let v = { ...DEF };
   try { const raw = storageGet(KEY); if (raw) v = { ...DEF, ...JSON.parse(raw) }; } catch (_) {}
   const ev = makeEmitter();
-  function apply() { Viewer.setViewOptions({ grid: v.grid, gridOn: v.gridOn, planes: v.planes, axes: v.axes }); Viewer.setOrtho(v.ortho); ev.emit('change', v); }
-  function set(patch, msg) { Object.assign(v, patch); storageSet(KEY, JSON.stringify(v)); apply(); if (msg) UI.toast(msg, { icon: 'check', ms: 1600 }); }
+  function applyTheme() {
+    const r = document.documentElement;
+    if (v.theme === 'light' || v.theme === 'dark') r.setAttribute('data-theme', v.theme); else r.removeAttribute('data-theme');
+  }
+  function apply() { Viewer.setViewOptions({ grid: v.grid, gridOn: v.gridOn, planes: v.planes, axes: v.axes }); Viewer.setOrtho(v.ortho); applyTheme(); FMT.min = +v.decimals || 0; ev.emit('change', v); }
+  function set(patch, msg) {
+    const oldQ = v.quality, oldDec = v.decimals;
+    Object.assign(v, patch); storageSet(KEY, JSON.stringify(v)); apply();
+    if (v.quality !== oldQ) App.requalify();
+    if (v.decimals !== oldDec) { App.emit('doc'); Panels.renderRight(); }
+    if (msg) UI.toast(msg, { icon: 'check', ms: 1600 });
+  }
   function toggle(k) {
     const labels = { ortho: ['Orthografische Ansicht', 'Perspektivische Ansicht'], gridOn: ['Raster an', 'Raster aus'], planes: ['Ursprungsebenen an', 'Ursprungsebenen aus'], axes: ['Achsen an', 'Achsen aus'] }[k];
     set({ [k]: !v[k] }, labels ? labels[v[k] ? 1 : 0] : null);
   }
-  return { get: () => ({ ...v }), set, toggle, apply, on: ev.on };
+  // Einstellungen-Fenster (Menü ⋯ → Einstellungen)
+  function dialog() {
+    const body = h('div', { style: { display: 'grid', gap: '14px', minWidth: 'min(420px, 80vw)' } });
+    const sel = (id, label, val, opts, fn, hint) => { const f = UI.selectField({ id, label, value: String(val), options: opts, onChange: fn }); if (hint) f.append(h('small', { style: { color: 'var(--muted)', display: 'block', marginTop: '4px' } }, hint)); return f; };
+    const chk = (k, label, hint) => { const l = h('label', { class: 'check', style: { alignItems: 'flex-start' } }, h('input', { type: 'checkbox', id: 'set-' + k, checked: !!v[k] }), h('span', null, label, hint ? h('small', { style: { display: 'block', color: 'var(--muted)' } }, hint) : null)); l.querySelector('input').onchange = (e) => set({ [k]: e.target.checked }); return l; };
+    body.append(
+      sel('set-theme', 'Design', v.theme, [['system', 'Wie das System'], ['light', 'Hell'], ['dark', 'Dunkel']], (x) => set({ theme: x })),
+      sel('set-dec', 'Nachkommastellen in Anzeigen', v.decimals, [['0', 'Automatisch (2 Stellen)'], ['3', '3 Stellen (0,001 mm)'], ['4', '4 Stellen (0,0001 mm)']], (x) => set({ decimals: +x }), 'Eingaben werden immer exakt gespeichert, das betrifft nur die Anzeige.'),
+      sel('set-quality', 'Darstellungsqualität', v.quality, [['coarse', 'Grob – am schnellsten'], ['normal', 'Normal'], ['fine', 'Fein'], ['ultra', 'Sehr fein – braucht mehr Leistung']], (x) => set({ quality: x }), 'Wie glatt Rundungen auf dem Bildschirm aussehen. Die Geometrie selbst ist immer exakt.'),
+      chk('adaptive', 'Beim Hineinzoomen automatisch nachschärfen', 'Teile, die du von nah ansiehst, werden feiner dargestellt.'),
+    );
+    UI.modal({ title: 'Einstellungen', body, actions: [{ label: 'Fertig', primary: true }] });
+  }
+  return { get: () => ({ ...v }), set, toggle, apply, dialog, on: ev.on };
+})();
+
+// ---- 48-refine.js ----
+// ================= Nachschärfen: feineres Netz für Teile, die von nah angesehen werden =================
+const Refine = (() => {
+  const cur = new Map();   // id -> { key, tol }
+  let busy = false, again = false;
+  function wanted(n) {
+    const box = n.mesh.geometry.boundingBox.clone().applyMatrix4(n.obj.matrix);
+    if (!Viewer.boxVisible(box)) return null;
+    const size = box.getSize(new THREE.Vector3()); const diag = size.length();
+    const near = box.clampPoint(Viewer.controls.target, new THREE.Vector3());
+    const px = Viewer.pixelSizeAt(near);
+    return Math.max(px * 0.6, diag * 2e-5, 0.0005);
+  }
+  async function run() {
+    if (busy) { again = true; return; }
+    if (!ViewPrefs.get().adaptive || !Kernel.ready || App.busy || App.mode !== 'model') return;
+    busy = true;
+    try {
+      for (const [id, n] of Viewer.nodes) {
+        const r = App.results.get(id); if (!r || !r.key || !n.obj.visible) continue;
+        let c = cur.get(id);
+        if (!c || c.key !== r.key) { const b0 = (r.data && r.data.tol) || 0.05; c = { key: r.key, tol: b0, base: b0 }; cur.set(id, c); }
+        const base = c.base;
+        const w = wanted(n); if (w == null) continue;
+        let target = null;
+        if (w < c.tol * 0.5) target = w;                                   // näher dran: feiner
+        else if (c.tol < base && w > c.tol * 4) target = Math.min(base, w); // weit weg: Speicher sparen
+        if (target == null) continue;
+        try {
+          const payload = await Kernel.call('remesh', { key: r.key, tol: target });
+          if (App.replaceMesh(id, r.key, payload)) cur.set(id, { key: r.key, tol: payload.tol || target, base });
+        } catch (_) { cur.set(id, { key: r.key, tol: 0, base }); }   // Form nicht mehr im Speicher: bis zur nächsten Änderung nicht erneut versuchen
+      }
+    } finally { busy = false; }
+    if (again) { again = false; schedule(); }
+  }
+  const schedule = debounce(run, 450);
+  function init() { Viewer.on('camera', schedule); App.on('results', () => { for (const [id, c] of cur) { const r = App.results.get(id); if (!r || r.key !== c.key || (r.data && r.data.tol > c.tol && c.tol === c.base)) cur.delete(id); } schedule(); }); ViewPrefs.on('change', () => { cur.clear(); schedule(); }); }
+  return { init };
 })();
 
 // ---- 49-timeline.js ----
@@ -3599,7 +3679,8 @@ const Panels = (() => {
     const va = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Ansicht'));
     va.append(UI.selectField({ id: 'view-grid', label: 'Rasterweite', value: String(pv.grid), options: [['auto', 'Automatisch (folgt dem Zoom)'], ['0.01', '0,01 mm'], ['0.1', '0,1 mm'], ['1', '1 mm'], ['10', '10 mm'], ['100', '100 mm']], onChange: (val) => ViewPrefs.set({ grid: val === 'auto' ? 'auto' : parseFloat(val) }) }));
     const chk = (k, label) => { const l = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'view-' + k, checked: !!pv[k] }), label); l.querySelector('input').onchange = (e) => ViewPrefs.set({ [k]: e.target.checked }); return l; };
-    va.append(h('div', { style: { display: 'grid', gap: '6px', marginTop: '8px' } }, chk('gridOn', 'Raster zeigen'), chk('planes', 'Ursprungsebenen zeigen'), chk('axes', 'Achsen zeigen'), chk('ortho', 'Orthografisch (ohne Perspektive)')));
+    va.append(UI.selectField({ id: 'view-quality', label: 'Darstellungsqualität', value: pv.quality, options: [['coarse', 'Grob'], ['normal', 'Normal'], ['fine', 'Fein'], ['ultra', 'Sehr fein']], onChange: (val) => ViewPrefs.set({ quality: val }) }));
+    va.append(h('div', { style: { display: 'grid', gap: '6px', marginTop: '8px' } }, chk('adaptive', 'Beim Zoomen nachschärfen'), chk('gridOn', 'Raster zeigen'), chk('planes', 'Ursprungsebenen zeigen'), chk('axes', 'Achsen zeigen'), chk('ortho', 'Orthografisch (ohne Perspektive)')));
     w.append(va);
     const gr = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Fangen beim Verschieben'));
     const f2 = h('div', { class: 'fields' });
@@ -6432,26 +6513,34 @@ const Start = (() => {
     hide();
     if (!silent) UI.toast('Neues Projekt. Fang mit einem Körper an – oder beschreib unten, was du bauen willst.', { icon: 'newfile', ms: 4500 });
   }
+  async function openBlob(f) {
+    try {
+      const txt = await f.text(); const doc = JSON.parse(txt);
+      Model.migrate(doc);
+      if (App.loadStored(doc.id) && doc.id !== App.doc.id) doc.id = uid('p');
+      App.setDoc(doc); hide();
+      App.fileSavedRev = App.revision;
+      UI.toast(`„${doc.name}“ geöffnet.`, { icon: 'folder' });
+    } catch (e) { UI.toast('Die Datei kann ich nicht öffnen: ' + (e instanceof SyntaxError ? 'Sie ist keine gültige Projektdatei.' : e.message), { kind: 'bad' }); }
+  }
   function openFile() {
     const inp = h('input', { type: 'file', accept: '.json,application/json', style: { display: 'none' } });
-    inp.onchange = async () => {
-      const f = inp.files && inp.files[0]; inp.remove(); if (!f) return;
-      try {
-        const txt = await f.text(); const doc = JSON.parse(txt);
-        Model.migrate(doc);
-        if (App.loadStored(doc.id) && doc.id !== App.doc.id) doc.id = uid('p');
-        App.setDoc(doc); hide();
-        UI.toast(`„${doc.name}“ geöffnet.`, { icon: 'folder' });
-      } catch (e) { UI.toast('Die Datei kann ich nicht öffnen: ' + e.message, { kind: 'bad' }); }
-    };
+    inp.onchange = () => { const f = inp.files && inp.files[0]; inp.remove(); if (f) openBlob(f); };
     document.body.append(inp); inp.click();
   }
+  // Projektdatei einfach ins Fenster ziehen
+  addEventListener('dragover', (e) => { if (e.dataTransfer && [...e.dataTransfer.types].includes('Files')) e.preventDefault(); });
+  addEventListener('drop', (e) => {
+    const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (!f || !/\.json$/i.test(f.name)) return;
+    e.preventDefault(); openBlob(f);
+  });
   async function saveFile() {
     const name = Print.safeName(App.doc.name);
     const ok = await Print.save(name + '.masswerk.json', JSON.stringify(App.doc, null, 1));
     if (ok) App.fileSavedRev = App.revision;
   }
-  return { show, hide, newProject, openFile, saveFile, get open() { return !!el; } };
+  return { show, hide, newProject, openFile, openBlob, saveFile, get open() { return !!el; } };
 })();
 
 // ---------- Einführung ----------
@@ -6526,8 +6615,8 @@ const Tour = (() => {
   window.__masswerk = { App, Viewer, Model, Actions, Sketch, SK, THREE, Print, Drawing, Kernel, UI, Commands, Panels, Handles, Start, AI, Measure, Place };
   UI.initTips();
   Viewer.init($('#viewport'));
-  window.__V = Viewer; window.__M = { App, Actions, Model, Timeline }; // für automatische Tests
-  Panels.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init();
+  window.__V = Viewer; window.__M = { App, Actions, Model, Timeline, Start }; window.__S = Start; // für automatische Tests
+  Panels.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init(); Refine.init();
 
   // Kopfzeile
   $('#btn-undo').onclick = () => App.undo();
@@ -6552,6 +6641,7 @@ const Tour = (() => {
   $('#btn-menu').onclick = (e) => UI.menu(e.currentTarget, [
     ...(innerWidth <= 900 ? [...projectItems(), '-'] : []),
     { label: 'Einführung starten', icon: 'play', run: () => Tour.start() },
+    { label: 'Einstellungen', icon: 'gear', run: () => ViewPrefs.dialog() },
     { label: 'Tastenkürzel', icon: 'help', run: () => Commands.showKeys() },
     { label: 'Exportieren', icon: 'export', run: () => Print.exportDialog() },
     '-',

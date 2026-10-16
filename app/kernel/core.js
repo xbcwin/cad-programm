@@ -520,9 +520,13 @@ export function createKernel(R, oc) {
     return out;
   }
   // ---------- Netz & Infos für die Anzeige ----------
+  // Darstellungsqualität: Faktor auf die Sehnen-Toleranz und Winkel-Toleranz der Anzeige
+  const QUALITY = { coarse: { f: 2.2, ang: 0.35 }, normal: { f: 1, ang: 0.2 }, fine: { f: 0.35, ang: 0.1 }, ultra: { f: 0.12, ang: 0.05 } };
+  let Q = { level: 'normal', ...QUALITY.normal };
+  function setQuality(level) { if (QUALITY[level] && level !== Q.level) Q = { level, ...QUALITY[level] }; }
   function meshTol(b) {
     const diag = Math.hypot(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
-    return Math.min(0.2, Math.max(0.01, diag * 0.0006));
+    return Math.min(0.2, Math.max(0.01, diag * 0.0006)) * Q.f;
   }
   function faceInfo(face) {
     const type = face.geomType;
@@ -563,11 +567,13 @@ export function createKernel(R, oc) {
     }
     return loops;
   }
-  function meshPayload(shape) {
+  function meshPayload(shape, tolOverride) {
     const b = bboxOf(shape);
-    const tol = meshTol(b);
-    const m = shape.mesh({ tolerance: tol, angularTolerance: 0.2 });
-    const e = shape.meshEdges({ tolerance: tol, angularTolerance: 0.2 });
+    const base = meshTol(b);
+    const tol = tolOverride || base;
+    const ang = tol < base * 0.99 ? Math.min(Q.ang, 0.08) : Q.ang;   // nur beim Nachschärfen auch feinere Winkel
+    const m = shape.mesh({ tolerance: tol, angularTolerance: ang });
+    const e = shape.meshEdges({ tolerance: tol, angularTolerance: ang });
     const fl = topoList(shape, 'face'), el = topoList(shape, 'edge');
     const fIndex = new Map(fl.map((f, i) => [f.hc, i]));
     const eIndex = new Map(el.map((f, i) => [f.hc, i]));
@@ -585,7 +591,7 @@ export function createKernel(R, oc) {
     const ei = el.map((f) => edgeGeom(f.shape));
     for (const f of fl) f.shape.delete(); for (const x of el) x.shape.delete();
     return {
-      bbox: b,
+      bbox: b, tol,
       vertices: new Float32Array(m.vertices), normals: new Float32Array(m.normals), triangles: new Uint32Array(m.triangles),
       lines: new Float32Array(lines), faceGroups, edgeGroups, faces: fi, edges: ei,
     };
@@ -596,6 +602,7 @@ export function createKernel(R, oc) {
   // known = { id: resultKey } (was die Anzeige schon hat)
   function evaluate(scene, known = {}) {
     gen++;
+    if (scene.quality) setQuality(scene.quality);
     const errors = [];
     const tops = (scene.items || []).filter((it) => !it.hidden);
     const evald = tops.map((it) => {
@@ -635,9 +642,10 @@ export function createKernel(R, oc) {
         }
       }
       if (known[it.id] === resultKey) { nodes.push({ id: it.id, key: resultKey, same: true }); continue; }
-      let payload = meshCache.get(resultKey);
+      const mk = resultKey + '|' + Q.level;
+      let payload = meshCache.get(mk);
       if (!payload) {
-        try { payload = meshPayload(result); meshCache.set(resultKey, payload); }
+        try { payload = meshPayload(result); meshCache.set(mk, payload); }
         catch (err) { errors.push({ itemId: it.id, code: 'mesh', message: 'Die Form konnte nicht angezeigt werden.' }); nodes.push({ id: it.id, key: null, empty: true }); continue; }
       }
       nodes.push({ id: it.id, key: resultKey, ...clonePayload(payload) });
@@ -654,11 +662,21 @@ export function createKernel(R, oc) {
   function clonePayload(p) {
     // Typed Arrays werden übertragen: Kopien schicken, damit der Cache gültig bleibt
     return {
-      bbox: p.bbox, vertices: p.vertices.slice(), normals: p.normals.slice(), triangles: p.triangles.slice(), lines: p.lines.slice(),
+      bbox: p.bbox, tol: p.tol, vertices: p.vertices.slice(), normals: p.normals.slice(), triangles: p.triangles.slice(), lines: p.lines.slice(),
       faceGroups: p.faceGroups, edgeGroups: p.edgeGroups, faces: p.faces, edges: p.edges,
     };
   }
 
+  // Feinere Anzeige für ein schon berechnetes Teil (beim Hineinzoomen)
+  function remesh(key, tol) {
+    const e = cache.get(key); if (!e) throw new Error('Die Form ist nicht mehr im Speicher.');
+    e.gen = gen;
+    const t = Math.max(0.0002, tol);
+    const mk = key + '|t' + t.toPrecision(2);
+    let payload = meshCache.get(mk);
+    if (!payload) { payload = meshPayload(e.shape, t); meshCache.set(mk, payload); }
+    return clonePayload(payload);
+  }
   // Umriss einer ebenen Fläche (für „Skizze hierauf“ und „Hochziehen“)
   function faceLoopsOf(key, faceIdx) {
     const e = cache.get(key); if (!e) throw new Error('Die Form ist nicht mehr im Speicher. Bitte noch einmal anklicken.');
@@ -799,5 +817,5 @@ export function createKernel(R, oc) {
     return { views: out, axes, bbox, errors };
   }
 
-  return { evaluate, exportMeshes, exportSTEP, measure, project, faceLoopsOf, _cache: cache };
+  return { evaluate, remesh, exportMeshes, exportSTEP, measure, project, faceLoopsOf, _cache: cache };
 }

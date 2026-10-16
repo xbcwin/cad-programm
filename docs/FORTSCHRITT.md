@@ -1,6 +1,6 @@
 # Fortschritt
 
-Stand: 16.10.2026 · nach Sitzung 2 von 14
+Stand: 16.10.2026 · nach Sitzung 3 von 14
 
 ## Erledigt
 
@@ -20,13 +20,15 @@ Stand: 16.10.2026 · nach Sitzung 2 von 14
 - [x] Protokoll mit Uhrzeit, Filter, „Bis hierher zurück“
 - [x] Undo / Redo (300 Schritte)
 - [x] Parameter-Tabelle „Maße“ mit Formeln (war schon in Maßwerk)
+- [x] Darstellungsqualität Grob / Normal / Fein / Sehr fein
+- [x] Automatisches Nachschärfen beim Hineinzoomen (und Vergröbern beim Herauszoomen)
+- [x] Einstellungen-Fenster: Design hell / dunkel / System, Nachkommastellen, Qualität
+- [x] Projektdatei speichern / öffnen auch außerhalb von Claude, per Ziehen ins Fenster
+- [x] Zeitleiste, Marker und Unterdrücken bleiben in der Projektdatei erhalten
 
 ## Offen
 
 ### Stufe 1 – Fundament
-- [ ] Darstellungsqualität: Rundungen beim Zoomen feiner (Sitzung 3)
-- [ ] Projekt speichern / laden prüfen und ausbauen (Sitzung 3)
-- [ ] Einheiten, Nachkommastellen, Design in den Einstellungen (Sitzung 3)
 - [ ] Baugruppe: Bauteile mit eigener Zeitleiste, Bearbeiten im Kontext (Sitzung 4)
 - [ ] Gizmo mit Zahleneingabe beim Ziehen (Sitzung 4)
 
