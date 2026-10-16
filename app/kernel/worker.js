@@ -1,0 +1,45 @@
+import Module from './occ.js';
+import * as R from './replicad/index.js';
+import { createKernel } from './core.js';
+// Worker-Hülle: lädt den CAD-Kern und beantwortet Anfragen der Seite.
+let kernel = null;
+
+async function init(wasm) {
+  const t0 = performance.now();
+  const oc = await Module({ wasmBinary: wasm, locateFile: () => 'occ-kernel.wasm' });
+  R.setOC(oc);
+  kernel = createKernel(R, oc);
+  return { ms: Math.round(performance.now() - t0) };
+}
+
+function transferList(obj, list = []) {
+  if (!obj || typeof obj !== 'object') return list;
+  if (ArrayBuffer.isView(obj)) { list.push(obj.buffer); return list; }
+  if (obj instanceof ArrayBuffer) { list.push(obj); return list; }
+  if (Array.isArray(obj)) { for (const v of obj) if (v && typeof v === 'object') transferList(v, list); return list; }
+  for (const k in obj) { const v = obj[k]; if (v && typeof v === 'object') transferList(v, list); }
+  return list;
+}
+
+self.onmessage = async (ev) => {
+  const { id, cmd, args } = ev.data || {};
+  try {
+    let result;
+    if (cmd === 'init') result = await init(args.wasm);
+    else if (!kernel) throw new Error('Der CAD-Kern ist noch nicht bereit.');
+    else if (cmd === 'evaluate') result = kernel.evaluate(args.scene, args.known);
+    else if (cmd === 'exportMeshes') result = kernel.exportMeshes(args.scene, args.fine);
+    else if (cmd === 'exportSTEP') result = { data: await kernel.exportSTEP(args.scene).arrayBuffer() };
+    else if (cmd === 'measure') result = kernel.measure(args.scene);
+    else if (cmd === 'project') result = kernel.project(args.scene, args.views);
+    else if (cmd === 'faceLoops') result = kernel.faceLoopsOf(args.key, args.faceIdx);
+    else throw new Error('Unbekannter Befehl: ' + cmd);
+    const tl = [];
+    // nur große Arrays übertragen (Kopien sind in der Nutzlast schon neu)
+    transferList(result, tl);
+    self.postMessage({ id, ok: true, result }, [...new Set(tl)]);
+  } catch (err) {
+    self.postMessage({ id, ok: false, error: String((err && err.message) || err || 'Fehler') });
+  }
+};
+self.postMessage({ id: 0, ok: true, result: 'loaded' });
