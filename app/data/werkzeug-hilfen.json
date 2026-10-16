@@ -1,0 +1,237 @@
+{
+  "sketchFace": {
+    "tip": "Neue 2D-Zeichnung auf Fläche starten",
+    "hilfe": "Klicke auf eine flache Seite deines 3D-Bauteils oder auf eine Grundebene. Die Ansicht dreht sich automatisch passend hin.",
+    "tipp": "Eine Skizze geht nur auf flachen Ebenen, nicht auf gewölbten Rundungen."
+  },
+  "line": {
+    "tip": "Gerade Linien Punkt für Punkt",
+    "hilfe": "Klicke für den Startpunkt und noch einmal für den Endpunkt. Du kannst direkt weiterklicken, um eine Kette zu zeichnen.",
+    "tipp": "Drücke die Escape-Taste, um die Linienkette zu beenden, ohne die ganze Skizze zu schließen."
+  },
+  "rect": {
+    "tip": "Rechteck über zwei Ecken aufziehen",
+    "hilfe": "Klicke für die erste Ecke, ziehe die Maus schräg herüber und klicke für die gegenüberliegende Ecke.",
+    "tipp": "Tippe die Maße direkt nach dem ersten Klick auf der Tastatur ein und wechsle mit der Tab-Taste zwischen Breite und Höhe."
+  },
+  "circle": {
+    "tip": "Runden Kreis vom Mittelpunkt aufziehen",
+    "hilfe": "Setze den ersten Klick in die Mitte, ziehe den Kreis groß und klicke ein zweites Mal für den Rand.",
+    "tipp": "Maßwerk fragt nach dem Durchmesser (der ganzen Breite), nicht nach dem Radius."
+  },
+  "arc": {
+    "tip": "Gebogene Linie über drei Punkte",
+    "hilfe": "Klicke zuerst auf den Startpunkt, dann auf den Endpunkt und bestimme mit dem dritten Klick die Biegung.",
+    "tipp": "Wenn der Bogen in die falsche Richtung schnappt, ziehe den Mauszeiger einfach über die gedachte Verbindungslinie auf die andere Seite."
+  },
+  "slot": {
+    "tip": "Langloch für bewegliche Schrauben zeichnen",
+    "hilfe": "Klicke den ersten und zweiten Punkt für die Mittellinie und ziehe dann mit dem dritten Klick die Breite auf.",
+    "tipp": "Langlöcher sind perfekt, wenn du beim späteren Zusammenbauen noch etwas Spielraum zum Verschieben brauchst."
+  },
+  "polygon": {
+    "tip": "Vieleck wie Sechskant zeichnen",
+    "hilfe": "Klicke auf den Mittelpunkt, ziehe die Größe auf und tippe im Eingabefeld die Anzahl der Ecken ein.",
+    "tipp": "Für einen Sechskant-Schraubenkopf stellst du einfach die Eckenanzahl auf 6."
+  },
+  "spline": {
+    "tip": "Geschwungene Freihand-Kurve durch Punkte legen",
+    "hilfe": "Setze nacheinander mehrere Punkte, durch die sich die Linie weich schlängelt, und bestätige am Ende mit Enter.",
+    "tipp": "Setze so wenige Punkte wie möglich, dann wird die Kurve viel gleichmäßiger und glatter."
+  },
+  "trim": {
+    "tip": "Überstehende Linienstücke einfach wegschneiden",
+    "hilfe": "Fahre mit der Maus über ein Linienstück, das eine andere Linie kreuzt. Es leuchtet rot auf und verschwindet beim Klicken.",
+    "tipp": "Halte die Maustaste gedrückt und wische wie mit einem Radiergummi über mehrere Linien, um sie am Stück zu löschen."
+  },
+  "offset2d": {
+    "tip": "Parallele Kopie im Abstand erstellen",
+    "hilfe": "Klicke eine Linie oder eine geschlossene Form an und ziehe am Pfeil, um eine größere oder kleinere Kopie daneben zu legen.",
+    "tipp": "Damit erstellst du super schnell gleichmäßige Wandstärken für Rohre, Ringe oder Gehäuse."
+  },
+  "project": {
+    "tip": "Vorhandene 3D-Kanten in Skizze abpausen",
+    "hilfe": "Klicke auf Kanten oder Flächen von schon fertigen 3D-Körpern. Sie erscheinen als Hilfslinien in deiner aktuellen Skizze.",
+    "tipp": "Abgepauste Linien passen sich automatisch an, wenn sich das ursprüngliche 3D-Bauteil später in der Größe ändert."
+  },
+  "dimension": {
+    "tip": "Genaue Länge oder Winkel festlegen",
+    "hilfe": "Klicke eine Linie, einen Kreis oder zwei Punkte an, ziehe die Maßzahl an einen freien Platz und tippe deinen Wunschwert ein.",
+    "tipp": "Klicke nacheinander zwei schräge Linien an, um statt der Länge den Winkel zwischen ihnen einzustellen."
+  },
+  "cHoriz": {
+    "tip": "Linie exakt waagerecht ausrichten",
+    "hilfe": "Klicke eine schräge Linie oder zwei Punkte an. Sie richten sich sofort waagerecht aus, also parallel zur X-Richtung der Skizze.",
+    "tipp": "Wenn sich nichts bewegt, hat die Linie wahrscheinlich schon eine andere feste Regel, die du erst anklicken und löschen musst."
+  },
+  "cVert": {
+    "tip": "Linie exakt senkrecht ausrichten",
+    "hilfe": "Klicke eine Linie oder zwei Punkte an, damit sie kerzengerade von oben nach unten stehen.",
+    "tipp": "Nutze das für zwei Punkte, um sie exakt übereinander zu stapeln, ohne eine sichtbare Linie dazwischen zu zeichnen."
+  },
+  "cParallel": {
+    "tip": "Zwei Linien im gleichen Winkel",
+    "hilfe": "Klicke zuerst auf die Linie, die sich nicht bewegen soll, und danach auf die Linie, die sich anpassen soll.",
+    "tipp": "Die beiden Linien laufen danach exakt in dieselbe Richtung und treffen sich nie."
+  },
+  "cPerp": {
+    "tip": "Rechten Winkel (90 Grad) erzwingen",
+    "hilfe": "Klicke zwei Linien nacheinander an, damit sie exakt im 90-Grad-Winkel aufeinandertreffen.",
+    "tipp": "Die Linien müssen sich dafür nicht direkt berühren – auch ihre gedachten Verlängerungen stehen danach im rechten Winkel."
+  },
+  "cTangent": {
+    "tip": "Linie weich an Kreis anlegen",
+    "hilfe": "Klicke auf einen Kreis oder Bogen und danach auf eine Linie, damit sie nahtlos und ohne Knick ineinander übergehen.",
+    "tipp": "Unverzichtbar, wenn du Riemenscheiben oder runde Übergänge ohne scharfe Ecken zeichnen willst."
+  },
+  "cEqual": {
+    "tip": "Gleiche Größe für Elemente erzwingen",
+    "hilfe": "Klicke zwei Linien oder zwei Kreise nacheinander an. Beide bekommen sofort exakt dieselbe Länge oder denselben Durchmesser.",
+    "tipp": "Bemaße danach nur noch eines der beiden Teile – das andere ändert seine Größe automatisch mit."
+  },
+  "cSymmetric": {
+    "tip": "Gleichmäßig an einer Mittellinie ausrichten",
+    "hilfe": "Klicke erst den linken Punkt, dann den rechten Punkt und zum Schluss die Mittellinie dazwischen an.",
+    "tipp": "Ziehst du danach an einer Seite, bewegt sich die andere Seite wie vor einem Spiegel automatisch mit."
+  },
+  "cFix": {
+    "tip": "Punkt oder Linie festpinnen",
+    "hilfe": "Klicke auf ein Element in deiner Skizze, um es wie mit einer Reißzwecke festzupinnen, sodass es nicht mehr verrutscht.",
+    "tipp": "Nutze das sparsam: Es ist meistens besser, Teile mit Maßen zum Mittelpunkt festzulegen, statt sie einfach einzufrieren."
+  },
+  "cCoincident": {
+    "tip": "Punkte und Linien fest zusammenkleben",
+    "hilfe": "Klicke auf zwei Punkte, um sie zu verschmelzen, oder auf einen Punkt und eine Linie, um ihn auf ihr einzurasten.",
+    "tipp": "Wenn sich deine Skizze später nicht in 3D hochziehen lässt, ist oft eine Ecke offen – hiermit schließt du die Lücke."
+  },
+  "extrude": {
+    "tip": "Flache Skizze zu 3D-Körper hochziehen",
+    "hilfe": "Klicke in eine geschlossene Fläche deiner Skizze und ziehe am Pfeil, um ihr eine Höhe oder Dicke zu geben.",
+    "tipp": "Du kannst nur komplett geschlossene Formen hochziehen; bei Lücken im Umriss streikt das Werkzeug."
+  },
+  "cutExtrude": {
+    "tip": "Loch oder Form aus 3D-Körper stanzen",
+    "hilfe": "Wähle deine Skizzenfläche aus und ziehe den Pfeil mitten durch deinen vorhandenen 3D-Körper, um Material wegzuschneiden.",
+    "tipp": "Stelle die Tiefe im Menü auf 'Durch alles', damit das Loch garantiert offen bleibt, auch wenn das Bauteil später dicker wird."
+  },
+  "revolve": {
+    "tip": "Skizze im Kreis zu 3D-Körper drehen",
+    "hilfe": "Klicke zuerst auf deine gezeichnete Fläche und wähle dann eine gerade Linie als Drehachse aus.",
+    "tipp": "Zeichne für runde Dinge wie Räder, Flaschen oder Schüsseln immer nur die halbe Querschnittsform bis zur Mitte."
+  },
+  "sweep": {
+    "tip": "Form entlang einer Linie ziehen",
+    "hilfe": "Klicke erst auf die Fläche (das Profil) und danach auf die Linie (den Pfad), an der sie wie auf Schienen entlanggleiten soll.",
+    "tipp": "Wenn der Pfad zu enge Kurven macht, schneidet sich der Körper selbst und es gibt eine Fehlermeldung – mach die Kurven dann etwas weiter."
+  },
+  "loft": {
+    "tip": "Fließender Übergang zwischen zwei Formen",
+    "hilfe": "Klicke nacheinander zwei oder mehr Skizzenflächen an, die auf unterschiedlichen Ebenen liegen, um sie weich zu verbinden.",
+    "tipp": "Damit verbindest du problemlos einen eckigen Boden mit einer kreisrunden Öffnung weiter oben."
+  },
+  "holeWizard": {
+    "tip": "Passgenaues Loch für Schrauben bohren",
+    "hilfe": "Klicke auf eine Fläche oder einen Skizzenpunkt und wähle im Menü einfach die gewünschte Schraubengröße (z. B. M4) und Tiefe aus.",
+    "tipp": "Wähle „Durchgangsloch“, wenn die Schraube frei durchgehen soll – für M3-Schrauben sind das meist 3,2 mm."
+  },
+  "countersink": {
+    "tip": "Trichter-Rand für flache Schraubenköpfe",
+    "hilfe": "Klicke auf die obere Kante eines runden Lochs, damit der Rand schräg angeschnitten wird und eine Senkkopfschraube bündig verschwindet.",
+    "tipp": "So steht später kein Schraubenkopf mehr störend aus der Oberfläche deines Bauteils heraus."
+  },
+  "fillet": {
+    "tip": "Scharfe 3D-Kanten schön abrunden",
+    "hilfe": "Klicke eine oder mehrere Kanten deines 3D-Körpers an und schiebe den Pfeil, um die Rundung größer oder kleiner zu machen.",
+    "tipp": "Gerundete Ecken sehen besser aus und reißen bei Belastung seltener ein, zum Beispiel an den Armen eines Frames."
+  },
+  "chamfer": {
+    "tip": "Kante im Winkel schräg anschneiden",
+    "hilfe": "Klicke auf eine Kante und ziehe am Pfeil, um die scharfe Ecke durch eine gerade Schräge (Fase) zu ersetzen.",
+    "tipp": "Eine kleine Fase nimmt Kanten die Schärfe – an Carbonplatten schneiden sie dann keine Kabel mehr an."
+  },
+  "shell": {
+    "tip": "Körper aushöhlen wie eine Schachtel",
+    "hilfe": "Klicke die Fläche an, die komplett offen sein soll, und tippe ein, wie dick die restlichen Wände bleiben sollen.",
+    "tipp": "So wird aus einem massiven Klotz mit nur einem Klick eine fertige Box ohne Deckel."
+  },
+  "patternRect": {
+    "tip": "Elemente in geraden Reihen kopieren",
+    "hilfe": "Wähle deinen Körper oder ein Loch aus, klicke eine Kante für die Richtung an und tippe Abstand sowie Anzahl ein.",
+    "tipp": "Kopiere lieber fertige 3D-Schritte (wie Löcher oder Noppen) statt vieler einzelner Linien in der Skizze – das hält dein Projekt schnell."
+  },
+  "patternCirc": {
+    "tip": "Elemente gleichmäßig im Kreis kopieren",
+    "hilfe": "Klicke das Element an, das du vervielfältigen willst, wähle einen runden Kreis oder Zylinder als Mitte und gib die Anzahl ein.",
+    "tipp": "Perfekt für Lochkreise, Speichen oder Lüftungsschlitze, bei denen sich alles im Kreis wiederholt."
+  },
+  "mirror": {
+    "tip": "Bauteil auf andere Seite spiegeln",
+    "hilfe": "Wähle den Körper oder den Arbeitsschritt aus und klicke dann auf eine flache Seite oder Ebene, die als Spiegel dient.",
+    "tipp": "Bei symmetrischen Teilen – etwa einem Frame – baust du nur eine Hälfte fertig und spiegelst sie am Ende. Das spart die halbe Arbeit."
+  },
+  "boolUnion": {
+    "tip": "Mehrere Körper zu einem verschmelzen",
+    "hilfe": "Klicke nacheinander alle sich berührenden Einzelkörper an und bestätige, um sie fest zusammenzukleben.",
+    "tipp": "Teile, die am Ende ein einziges Bauteil sein sollen, verbindest du hiermit zu einem Körper."
+  },
+  "boolSubtract": {
+    "tip": "Einen Körper vom anderen abziehen",
+    "hilfe": "Klicke zuerst auf das Hauptbauteil, das bleiben soll, und danach auf den Körper, der wie eine Backform herausgestanzt wird.",
+    "tipp": "Damit kannst du passgenaue Abdrücke oder Halterungen für andere Gegenstände in dein Bauteil schneiden."
+  },
+  "boolIntersect": {
+    "tip": "Nur das gemeinsame Überlappungsstück behalten",
+    "hilfe": "Klicke zwei Körper an, die ineinander stecken. Alles verschwindet, außer dem Bereich, den beide gleichzeitig ausfüllen.",
+    "tipp": "Ideal, um aus zwei komplizierten Richtungen gleichzeitig die perfekte Mischform herauszuschneiden."
+  },
+  "split": {
+    "tip": "Körper an einer Fläche durchschneiden",
+    "hilfe": "Wähle zuerst den Körper aus, den du zerteilen willst, und klicke dann auf eine Ebene oder Fläche als Schneidemesser.",
+    "tipp": "Praktisch, um ein Teil in zwei Hälften zu zerlegen oder eine Platte aus einem Block herauszutrennen."
+  },
+  "section": {
+    "tip": "Bauteil virtuell aufschneiden zum Reinschauen",
+    "hilfe": "Klicke eine flache Seite oder Ebene an und ziehe am Pfeil, um das Modell wie im Röntgenschnitt von innen zu betrachten.",
+    "tipp": "Keine Sorge: Dein Bauteil geht dabei nicht wirklich kaputt, es ist nur ein Kameratrick zur Kontrolle."
+  },
+  "xray": {
+    "tip": "Körper halb durchsichtig machen",
+    "hilfe": "Klicke das Werkzeug an, um alle Wände wie aus Milchglas darzustellen, sodass du versteckte Innenteile siehst.",
+    "tipp": "Hilft enorm, wenn du im Inneren eines Gehäuses eine Kante anklicken willst, die sonst von der Außenwand verdeckt wird."
+  },
+  "explode": {
+    "tip": "Baugruppe für Übersicht auseinanderziehen",
+    "hilfe": "Ziehe am Schieberegler, damit alle Einzelteile deines Projekts wie in einer Bauanleitung auseinanderschweben.",
+    "tipp": "Schiebe den Regler wieder auf Null zurück, bevor du weiterbaust, damit alles wieder am richtigen Platz sitzt."
+  },
+  "measure": {
+    "tip": "Abstände, Längen und Durchmesser nachmessen",
+    "hilfe": "Klicke ein oder zwei Elemente (Punkte, Kanten, Flächen) an, um ihren genauen Abstand oder die Größe abzulesen.",
+    "tipp": "Wenn du auf einen runden Kreis klickst, zeigt dir das Werkzeug sofort den genauen Durchmesser an."
+  },
+  "massProps": {
+    "tip": "Gewicht und Volumen des Bauteils",
+    "hilfe": "Klicke auf deinen Körper und wähle ein Material (z. B. Carbon, Aluminium oder Kunststoff), um das Gewicht zu berechnen.",
+    "tipp": "So weißt du schon beim Konstruieren, wie schwer dein Teil wird – bei Speed-Drohnen zählt jedes Gramm."
+  },
+  "timeline": {
+    "tip": "Verlauf aller bisherigen Arbeitsschritte",
+    "hilfe": "Unten am Bildschirmrand siehst du jedes Werkzeug als kleines Symbol in der Reihenfolge, in der du es benutzt hast.",
+    "tipp": "Klick auf ein Symbol, um diesen Schritt zu bearbeiten. Ein Doppelklick schiebt den Marker genau hinter diesen Schritt."
+  },
+  "rollback": {
+    "tip": "Zeitreise zurück zu früheren Bauschritten",
+    "hilfe": "Fasse den farbigen Balken in der Zeitleiste an und schiebe ihn nach links vor einen bestimmten Schritt.",
+    "tipp": "Wenn du etwas vergessen hast, reise in der Zeit zurück, füge es ein und schiebe den Balken wieder ganz nach rechts."
+  },
+  "suppress": {
+    "tip": "Arbeitsschritt vorübergehend ausschalten",
+    "hilfe": "Rechtsklick auf einen Schritt in der Zeitleiste und „Unterdrücken“ wählen – oder im Verlauf links auf das durchgestrichene Symbol.",
+    "tipp": "Das ist viel besser als Löschen, wenn du nur mal schnell testen willst, wie dein Bauteil ohne ein bestimmtes Loch oder eine Rundung aussieht."
+  },
+  "params": {
+    "tip": "Maße zentral mit Variablen steuern",
+    "hilfe": "Lege im Tab „Maße“ eigene Namen an (z. B. wand = 3) und tippe beim Bemaßen einfach „wand“ statt einer Zahl ein.",
+    "tipp": "Änderst du später den Wert in der Tabelle, passen sich alle Wände im gesamten Modell auf einen Schlag gleichzeitig an."
+  }
+}
