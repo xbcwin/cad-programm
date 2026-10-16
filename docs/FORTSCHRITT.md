@@ -1,6 +1,6 @@
 # Fortschritt
 
-Stand: 16.10.2026 · nach Sitzung 3 von 14
+Stand: 16.10.2026 · nach Sitzung 4 von 14
 
 ## Erledigt
 
@@ -25,6 +25,10 @@ Stand: 16.10.2026 · nach Sitzung 3 von 14
 - [x] Einstellungen-Fenster: Design hell / dunkel / System, Nachkommastellen, Qualität
 - [x] Projektdatei speichern / öffnen auch außerhalb von Claude, per Ziehen ins Fenster
 - [x] Zeitleiste, Marker und Unterdrücken bleiben in der Projektdatei erhalten
+- [x] Bauteile: Gruppe „im Kontext“ bearbeiten – eigene Zeitleiste, Rest durchsichtig, neue Teile landen im Bauteil
+- [x] Neues (leeres) Bauteil anlegen
+- [x] Isolieren: nur ein Teil zeigen
+- [x] Zahleneingabe beim Ziehen: Verschieben, Größe, Höhe und Drehung exakt eintippen
 - [x] Neuer Name: Tracery (englisch für Maßwerk)
 - [x] Logo (Variante 1 von Gemini, eingepasst) in Kopfzeile, Startseite und als Browser-Symbol
 - [x] Hilfetexte für 47 Werkzeuge (Gemini, angepasst): kurz drauf bleiben zeigt Anleitung und Tipp
@@ -32,8 +36,7 @@ Stand: 16.10.2026 · nach Sitzung 3 von 14
 ## Offen
 
 ### Stufe 1 – Fundament
-- [ ] Baugruppe: Bauteile mit eigener Zeitleiste, Bearbeiten im Kontext (Sitzung 4)
-- [ ] Gizmo mit Zahleneingabe beim Ziehen (Sitzung 4)
+Fertig.
 
 ### Stufe 2 – Skizzen
 - [ ] Skizze auf Körperflächen (Sitzung 5)
@@ -58,4 +61,5 @@ Stand: 16.10.2026 · nach Sitzung 3 von 14
 ## Bekannte Punkte
 
 - Schritt hinter dem Marker auswählen zeigt noch die Werkzeugleiste im Modell
-- Vorlagen bestehen aus einer Gruppe, die Zeitleiste zeigt sie deshalb als einen Schritt (wird mit Baugruppen in Sitzung 4 feiner)
+- Vorlagen bestehen aus einer Gruppe: Über „Bearbeiten“ im Verlauf sieht man ihre einzelnen Schritte in der Zeitleiste
+- Im Bauteil-Modus lassen sich Unterteile im 3D-Bereich noch nicht direkt anklicken, nur über Zeitleiste und Verlauf (kommt mit Sitzung 5)

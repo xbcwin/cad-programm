@@ -1,6 +1,6 @@
 # Testliste
 
-Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 3.
+Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 4.
 
 Vorbereitung: `app/` über einen lokalen Server öffnen (siehe README), Seite neu laden.
 
@@ -51,6 +51,42 @@ Vorbereitung: `app/` über einen lokalen Server öffnen (siehe README), Seite ne
 - [ ] **Fehler wird rot**
   Schritte: 1. Quader anklicken. 2. Rechts unter „Kanten“ „Alle runden“. 3. Radius auf 50 setzen.
   Erwartet: Symbol in der Zeitleiste rot mit Punkt, Status unten rechts „Ein Schritt hat ein Problem“.
+
+## Bauteile
+
+- [ ] **Neues Bauteil**
+  Schritte: 1. Leeres Projekt, einen Quader hinzufügen. 2. Unten in die Suchzeile „Neues Bauteil“ tippen und Enter.
+  Erwartet: Oben grüner Balken „Bauteil bearbeiten: Bauteil 1“, der Quader ist durchsichtig, die Zeitleiste ist leer und grün umrandet.
+- [ ] **Teile landen im Bauteil**
+  Schritte: 1. Zylinder und Kugel hinzufügen.
+  Erwartet: Beide erscheinen in der Zeitleiste des Bauteils; im Verlauf links stehen sie unter „Bauteil 1“.
+- [ ] **Zeitleiste im Bauteil**
+  Schritte: 1. Marker vor die Kugel ziehen.
+  Erwartet: Die Kugel verschwindet, der Quader außerhalb bleibt unverändert.
+- [ ] **Fertig**
+  Schritte: 1. Oben auf „Fertig“ (oder Esc, wenn nichts gewählt ist).
+  Erwartet: Alles wieder normal sichtbar, Zeitleiste zeigt Quader und Bauteil als zwei Schritte.
+- [ ] **Vorlage als Bauteil bearbeiten**
+  Schritte: 1. Vorlage „Winkel zum Anschrauben“. 2. Im Verlauf beim Winkel auf das Stift-Symbol.
+  Erwartet: Die Zeitleiste zeigt die einzelnen Teile des Winkels.
+- [ ] **Isolieren**
+  Schritte: 1. Im Verlauf beim Quader auf das Fokus-Symbol.
+  Erwartet: Nur der Quader ist zu sehen, oben dunkler Balken „Isoliert“. „Alle zeigen“ holt alles zurück.
+
+## Zahleneingabe beim Ziehen
+
+- [ ] **Verschieben**
+  Schritte: 1. Quader anklicken und mit gedrückter Maus ziehen. 2. Währenddessen 25 tippen, Enter.
+  Erwartet: Feld mit X und Y erscheint; der Quader liegt danach genau 25 mm weiter in X.
+- [ ] **Größe**
+  Schritte: 1. Am weißen Anfasser für die Breite ziehen. 2. Währenddessen 42,5 tippen, Enter.
+  Erwartet: Breite ist genau 42,5 mm.
+- [ ] **Drehen**
+  Schritte: 1. Am grünen Punkt auf dem gestrichelten Kreis ziehen. 2. 30 tippen, Enter.
+  Erwartet: Drehung Z genau 30°.
+- [ ] **Formeln**
+  Schritte: 1. Unter „Maße“ ein Maß `breite = 30` anlegen. 2. Beim Ziehen eines Anfassers `breite/2` tippen, Enter.
+  Erwartet: 15 mm.
 
 ## Protokoll und Rückgängig
 

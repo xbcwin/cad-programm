@@ -292,6 +292,19 @@ body.sketching .timeline{display:none}
 .tl-marker:hover i,.tl-marker.drag i{background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 .tl-drop{flex:none;width:4px;height:34px;border-radius:2px;background:var(--accent);opacity:.45}
 .tl-info{flex:none;font:600 12px/1 var(--font-cond);color:var(--muted);letter-spacing:.03em;padding:0 4px;white-space:nowrap}
+.timeline.ctx{border-color:var(--accent-line);box-shadow:0 0 0 3px var(--accent-soft),var(--shadow-1)}
+.ctx-banner{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:13;display:flex;align-items:center;gap:10px;padding:6px 6px 6px 12px;border-radius:10px;background:var(--accent);color:#fff;font-weight:600;font-size:14px;box-shadow:var(--shadow-2);white-space:nowrap}
+.ctx-banner.iso{background:var(--ink);color:var(--surface)}
+.ctx-banner svg{width:16px;height:16px}
+.ctx-banner button{border:0;border-radius:7px;padding:5px 10px;background:rgba(255,255,255,.18);color:inherit;font-weight:600;cursor:pointer}
+.ctx-banner button:hover{background:rgba(255,255,255,.3)}
+.node.ctx-other{opacity:.4}
+.node .swatch.comp{display:grid;place-items:center;background:none!important;border:0;color:var(--accent)}
+.node .swatch.comp svg{width:14px;height:14px}
+.node.ctx-active{box-shadow:inset 3px 0 0 var(--accent)}
+.drag-input{position:absolute;z-index:30;display:flex;gap:6px;align-items:center;padding:5px 7px;border-radius:8px;background:var(--ink);color:var(--surface);box-shadow:var(--shadow-2);font:600 12px/1 var(--font-cond)}
+.drag-input input{width:64px;border:0;border-radius:5px;padding:4px 6px;font:500 13px var(--font-mono,monospace);background:var(--surface);color:var(--ink)}
+.drag-input small{opacity:.6;font-weight:500}
 .center.has-tl .view-btns{bottom:66px}
 .center.has-tl .axis-gizmo{bottom:62px}
 /* ---------- Protokoll ---------- */
@@ -1210,7 +1223,7 @@ const Model = (() => {
   function matArr(m) { return Array.from(m.elements); }
   function kernelItem(it, V) {
     const o = { id: it.id, kind: it.kind, role: it.role, hidden: !!it.hidden, m: matArr(localMatrix(it)) };
-    if (it.kind === 'group') o.children = (it.children || []).filter((c) => !c.suppressed).map((c) => kernelItem(c, V));
+    if (it.kind === 'group') { let kids = it.children || []; if (it.rollback != null) kids = kids.slice(0, clamp(it.rollback, 0, kids.length)); o.children = kids.filter((c) => !c.suppressed).map((c) => kernelItem(c, V)); }
     else if (it.kind === 'extrude' || it.kind === 'revolve') o.p = sketchParams(it, V);
     else o.p = resolveP(it.p, V);
     if (it.mir) o.mir = it.mir;
@@ -1624,6 +1637,7 @@ const App = (() => {
   const S = {
     doc: Model.newDoc(), sel: [], face: null, edges: [], mode: 'model', tool: null,
     results: new Map(), errors: [], undo: [], redo: [], extra: [], revision: 0, lastSavedRev: -1, fileSavedRev: -1,
+    ctx: null, iso: null,   // gerade bearbeitetes Bauteil / isoliertes Teil (nur Ansicht, nicht gespeichert)
   };
   const ev = makeEmitter();
   let dirty = false, busy = false, busyTimer = null;
@@ -1634,7 +1648,7 @@ const App = (() => {
     if (S.doc) { try { autosave.flush(); } catch (_) {} }
     S.doc = Model.migrate(doc);
     Model.useVars(Model.vars(S.doc).v);
-    S.sel = []; S.face = null; S.edges = []; S.undo = []; S.redo = []; S.extra = [];
+    S.sel = []; S.face = null; S.edges = []; S.undo = []; S.redo = []; S.extra = []; S.ctx = null; S.iso = null;
     for (const id of [...S.results.keys()]) Viewer.removeNode(id);
     S.results.clear(); S.errors = []; S.revision++;
     Viewer.clearGhosts();
@@ -1666,6 +1680,23 @@ const App = (() => {
   }
   // Ist die Zeitleiste zurückgerollt, landen neue Schritte am Marker statt am Ende
   function placeNewAtMarker(doc, topBefore) {
+    // Bauteil wird bearbeitet: neue Teile wandern hinein (an dessen Marker)
+    const comp = S.ctx ? doc.items.find((x) => x.id === S.ctx) : null;
+    if (comp) {
+      const fresh = doc.items.filter((x) => !topBefore.has(x.id) && x !== comp);
+      if (!fresh.length) return;
+      const inv = Model.worldMatrix(doc, comp.id).invert();
+      for (const it of fresh) {
+        const W = Model.worldMatrix(doc, it.id);
+        doc.items.splice(doc.items.indexOf(it), 1);
+        Model.setFromMatrix(it, inv.clone().multiply(W));
+        const k = comp.children || (comp.children = []);
+        const at = comp.rollback == null ? k.length : clamp(comp.rollback, 0, k.length);
+        k.splice(at, 0, it); if (comp.rollback != null) comp.rollback++;
+        if (comp.rollback != null && comp.rollback >= k.length) comp.rollback = null;
+      }
+      return;
+    }
     if (doc.rollback == null) return;
     const fresh = doc.items.filter((x) => !topBefore.has(x.id));
     for (const it of fresh) {
@@ -1768,11 +1799,27 @@ const App = (() => {
     const oldErr = new Set(S.errors.map((e) => e.itemId + '|' + e.code + '|' + e.message));
     S.errors = res.errors || [];
     for (const e of S.errors) if (!oldErr.has(e.itemId + '|' + e.code + '|' + e.message)) ev.emit('log', { kind: 'error', text: e.message, itemId: e.itemId, code: e.code });
-    for (const [id, n] of Viewer.nodes) { const it = topItem(id); if (it) Viewer.updateNode(id, { visible: !it.hidden }); }
+    applyView();
     refreshSelectionVisuals();
     ev.emit('results');
     if (S.fitNext) { S.fitNext = false; Viewer.fit(); }
   }
+  // Sichtbarkeit und Kontext-Darstellung aller Teile
+  function applyView() {
+    if (S.ctx && !S.doc.items.some((x) => x.id === S.ctx)) S.ctx = null;
+    if (S.iso && !S.doc.items.some((x) => x.id === S.iso)) S.iso = null;
+    for (const [id] of Viewer.nodes) {
+      const it = topItem(id); if (!it) continue;
+      Viewer.updateNode(id, { visible: !it.hidden && (!S.iso || S.iso === id), ctxDim: !!S.ctx && S.ctx !== id });
+    }
+  }
+  function setCtx(id) {
+    const it = id ? S.doc.items.find((x) => x.id === id) : null;
+    if (it && it.kind !== 'group') return;
+    S.ctx = it ? it.id : null; applyView(); ev.emit('ctx'); ev.emit('doc');
+    ev.emit('log', { kind: 'info', text: it ? `Bauteil bearbeiten: ${Model.label(it)}` : 'Bauteil-Bearbeitung beendet' });
+  }
+  function setIso(id) { S.iso = id || null; applyView(); ev.emit('ctx'); }
   // Darstellungsqualität geändert: alle Teile neu vernetzen lassen
   function requalify() { S.forceMesh = true; rebuild(); }
   // feineres Netz für ein Teil einsetzen (gleiche Form, gleicher Schlüssel)
@@ -1780,8 +1827,7 @@ const App = (() => {
     const it = topItem(id); const r = S.results.get(id);
     if (!it || !r || r.key !== key) return false;
     Viewer.setNode(id, payload, { matrix: Model.localMatrix(it), role: it.role, color: it.color, key });
-    Viewer.updateNode(id, { visible: !it.hidden });
-    r.data = payload; refreshSelectionVisuals(); ev.emit('remeshed', id);
+    r.data = payload; applyView(); refreshSelectionVisuals(); ev.emit('remeshed', id);
     return true;
   }
   // nach dem nächsten Berechnen die Ansicht einpassen (erstes Teil in einem leeren Projekt)
@@ -1840,6 +1886,7 @@ const App = (() => {
     get undoStack() { return S.undo; }, get redoStack() { return S.redo; }, get revision() { return S.revision; }, get busy() { return busy; },
     get mode() { return S.mode; }, set mode(m) { S.mode = m; ev.emit('mode'); },
     get extra() { return S.extra; }, set extra(x) { S.extra = x; },
+    get ctx() { return S.ctx; }, get iso() { return S.iso; }, setCtx, setIso, applyView,
     get tool() { return S.tool; }, set tool(t) { S.tool = t; ev.emit('tool'); },
     get fileSavedRev() { return S.fileSavedRev; }, set fileSavedRev(v) { S.fileSavedRev = v; },
     setDoc, snapshot, change, touched, pushUndo, restore, undo, redo, undoTo, rebuild, requalify, replaceMesh, select, clearSelection, selectedItems, errorsFor, localBox, refreshSelectionVisuals,
@@ -2089,6 +2136,11 @@ const Viewer = (() => {
     const sel = n.selected, hov = n.hover;
     if (n.mesh.material) n.mesh.material.dispose();
     n.mesh.material = makeMaterial(n.role, n.color);
+    if (n.ctxDim) {   // anderes Bauteil, während eines bearbeitet wird
+      n.mesh.material.transparent = true; n.mesh.material.opacity = n.role === 'hole' ? 0.06 : 0.16; n.mesh.material.depthWrite = false;
+      if (n.edges) { n.edges.material.dispose(); n.edges.material = new THREE.LineBasicMaterial({ color: new THREE.Color(theme.edge), transparent: true, opacity: 0.18 }); }
+      n.mesh.renderOrder = 4; needsRender = true; return;
+    }
     if (n.role !== 'hole') {
       const em = new THREE.Color(theme.accent);
       n.mesh.material.emissive = em; n.mesh.material.emissiveIntensity = sel ? 0.16 : hov ? 0.07 : 0;
@@ -2133,6 +2185,7 @@ const Viewer = (() => {
     if (info.selected !== undefined && info.selected !== n.selected) { n.selected = info.selected; restyle = true; }
     if (info.hover !== undefined && info.hover !== n.hover) { n.hover = info.hover; restyle = true; }
     if (info.dim !== undefined && info.dim !== n.dim) { n.dim = info.dim; restyle = true; }
+    if (info.ctxDim !== undefined && info.ctxDim !== !!n.ctxDim) { n.ctxDim = info.ctxDim; restyle = true; }
     if (info.visible !== undefined) n.obj.visible = info.visible;
     if (restyle) styleNode(n);
     needsRender = true;
@@ -2239,14 +2292,14 @@ const Viewer = (() => {
   function pick(cx, cy, opts = {}) {
     setRay(cx, cy);
     const meshes = [];
-    for (const n of nodes.values()) { if (!n.obj.visible) continue; if (opts.solidsOnly && n.role === 'hole') continue; if (opts.exclude && opts.exclude.has(n.id)) continue; meshes.push(n.mesh); }
+    for (const n of nodes.values()) { if (!n.obj.visible || n.ctxDim) continue; if (opts.solidsOnly && n.role === 'hole') continue; if (opts.exclude && opts.exclude.has(n.id)) continue; meshes.push(n.mesh); }
     const hits = raycaster.intersectObjects(meshes, false);
     if (!hits.length) {
       // am Umriss: Kante in der Nähe suchen, auch wenn der Strahl knapp vorbeigeht
       if (opts.noEdges) return null;
       let best = null;
       for (const n of nodes.values()) {
-        if (!n.obj.visible || (opts.solidsOnly && n.role === 'hole') || (opts.exclude && opts.exclude.has(n.id))) continue;
+        if (!n.obj.visible || n.ctxDim || (opts.solidsOnly && n.role === 'hole') || (opts.exclude && opts.exclude.has(n.id))) continue;
         const e = edgeNear(n, cx, cy, Infinity, opts.edgePx || 6);
         if (e && (!best || e.px < best.e.px)) best = { n, e };
       }
@@ -2675,7 +2728,26 @@ const Handles = (() => {
     if (App.snapshot() !== st.before) { App.pushUndo(label, st.before); App.touched(); }
     rebuild();
   }
-  return { init, rebuild, hitHandle, hover, start, move, end, get dragging() { return !!state; }, clear };
+  // Für die Zahleneingabe beim Ziehen: aktuelles Maß und wie ein getippter Wert angewendet wird
+  function inputSpec() {
+    if (!state) return null;
+    const st = state, { c, handle } = st, ud = handle.userData;
+    const fin = () => { if (liveEl) { liveEl.remove(); liveEl = null; } end(); };
+    if (st.kind === 'size') {
+      const V = Model.vars(App.doc).v; const cur = Model.num(c.it.p[ud.param], V, st.v0);
+      return { fields: [{ label: LABELS[ud.param] || ud.param, value: cur, unit: 'mm' }], apply: ([v]) => { c.it.t = { ...st.t0 }; c.it.p[ud.param] = st.v0; setDim(c, handle, round(Math.max(0.001, v), 6)); fin(); } };
+    }
+    if (st.kind === 'lift') return { fields: [{ label: 'Höhe', value: c.it.t.z, unit: 'mm' }], apply: ([v]) => { c.it.t = { ...st.t0, z: round(v, 6) }; fin(); } };
+    if (st.kind === 'rot') {
+      return { fields: [{ label: 'Drehung', value: 0, unit: '°' }], apply: ([deg]) => {
+        const R = new THREE.Matrix4().makeRotationZ((deg * Math.PI) / 180);
+        const T1 = new THREE.Matrix4().makeTranslation(st.center.x, st.center.y, st.center.z), T2 = new THREE.Matrix4().makeTranslation(-st.center.x, -st.center.y, -st.center.z);
+        Model.setFromMatrix(c.it, st.PW.clone().invert().multiply(T1.multiply(R).multiply(T2).multiply(st.W0))); fin();
+      } };
+    }
+    return null;
+  }
+  return { init, rebuild, hitHandle, hover, start, move, end, inputSpec, get dragging() { return !!state; }, clear };
 })();
 
 // ---------- Maus-Bedienung ----------
@@ -2689,6 +2761,8 @@ const Interact = (() => {
     cv.addEventListener('pointerleave', () => { if (!down) { Viewer.clearHover(); Handles.hover(null); } });
     cv.addEventListener('dblclick', onDbl);
     cv.addEventListener('contextmenu', (e) => e.preventDefault());
+    window.addEventListener('keydown', onKey, true);
+    window.addEventListener('pointermove', (e) => { lastPtr = { x: e.clientX, y: e.clientY }; }, { passive: true });
   }
   function modelActive() { return App.mode === 'model' && !Sketch.active && !Place.active && !Measure.active; }
   function onDown(e) {
@@ -2725,6 +2799,7 @@ const Interact = (() => {
   }
   function onMove(e) {
     if (!modelActive()) return;
+    if (down && down.kbd) return;
     if (down && down.handle) { Handles.move(e); return; }
     if (down && down.child && moving) { doMove(e); return; }
     if (down && down.hit && !moving) {
@@ -2796,6 +2871,7 @@ const Interact = (() => {
   }
   const liveRebuildChild = throttle(() => { App.rebuild(); App.refreshSelectionVisuals(); }, 120);
   function onUp(e) {
+    if (down && down.kbd) return;   // Wert wird gerade getippt
     if (down && down.handle) { Handles.end(); down = null; Viewer.controls.enabled = true; return; }
     if (moving) {
       const m = moving; moving = null;
@@ -2825,6 +2901,33 @@ const Interact = (() => {
     }
     if (additive) { App.select([id], { additive: true }); return; }
     App.select([id], { face: { id, faceIdx: hit.faceIdx, point: hit.point.toArray(), normal: hit.normal ? hit.normal.toArray() : null } });
+  }
+  // Zahl tippen während des Ziehens
+  let lastPtr = { x: 0, y: 0 };
+  function onKey(e) {
+    if (!/^[0-9.,-]$/.test(e.key) || e.ctrlKey || e.metaKey || e.altKey) return;
+    let sp = null;
+    if (down && down.handle && Handles.dragging) sp = Handles.inputSpec();
+    else if (moving && !moving.child) {
+      const m = moving, it0 = m.ids[0], t0 = m.t0.get(it0.id);
+      sp = { fields: [{ label: 'X', value: round(it0.t.x - t0.x, 4), unit: 'mm' }, { label: 'Y', value: round(it0.t.y - t0.y, 4), unit: 'mm' }],
+        apply: ([dx, dy]) => {
+          for (const it of m.ids) { const t = m.t0.get(it.id); it.t = { ...t, x: round(t.x + dx, 4), y: round(t.y + dy, 4) }; }
+          finishMove(m);
+        } };
+    }
+    if (!sp) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    // Ziehen anhalten, Wert per Tastatur übernehmen
+    const handleWas = down && down.handle;
+    down = { kbd: true }; if (!handleWas) moving = null;
+    DragInput.open({ fields: sp.fields, apply: (v) => { sp.apply(v); down = null; Viewer.controls.enabled = true; } }, e.key === ',' ? '0,' : e.key, lastPtr);
+  }
+  function finishMove(m) {
+    if (moveLabel) { moveLabel.remove(); moveLabel = null; }
+    Viewer.canvas.style.cursor = '';
+    if (App.snapshot() !== m.before) { App.pushUndo(m.ids && m.ids.length > 1 ? 'Objekte verschoben' : 'Verschoben', m.before); App.touched(); }
+    else App.emit('doc');
   }
   function onDbl(e) {
     if (!modelActive()) return;
@@ -3009,7 +3112,7 @@ const Actions = (() => {
   }
   function cleanupGroups(doc) {
     Model.walk(doc.items, (it, parent, depth, list, i) => {
-      if (it.kind === 'group' && (!it.children || !it.children.length)) list.splice(i, 1);
+      if (it.kind === 'group' && !it.comp && (!it.children || !it.children.length)) list.splice(i, 1);
     });
   }
   function duplicate(ids) {
@@ -3321,15 +3424,18 @@ const Timeline = (() => {
     if (it.kind === 'part') { const d = LIBMAP[(it.p || {}).lib]; return d && d.icon ? d.icon : 'bolt'; }
     return ({ box: 'cube', cylinder: 'circle', tube: 'circle', sphere: 'circle', hemisphere: 'circle', torus: 'circle', cone: 'polygon', pyramid: 'polygon', prism: 'hex', wedge: 'chamfer', extrude: 'extrude', revolve: 'revolve', group: 'group' })[it.kind] || 'cube';
   }
-  const markerPos = () => { const d = App.doc; return d.rollback == null ? d.items.length : d.rollback; };
+  // Zeitleiste des Projekts – oder des Bauteils, das gerade bearbeitet wird
+  function owner(doc = App.doc) { const c = App.ctx ? doc.items.find((x) => x.id === App.ctx) : null; return c || doc; }
+  const listOf = (o) => (o.items || o.children || []);
+  const markerPos = () => { const o = owner(); const n = listOf(o).length; return o.rollback == null ? n : clamp(o.rollback, 0, n); };
   function setMarker(k, label) {
-    const n = App.doc.items.length; k = clamp(Math.round(k), 0, n);
+    const n = listOf(owner()).length; k = clamp(Math.round(k), 0, n);
     if (k === markerPos()) return;
-    App.change(label || (k >= n ? 'Zeitleiste: ans Ende' : `Zeitleiste: Marker nach Schritt ${k}`), (doc) => { doc.rollback = k >= doc.items.length ? null : k; }, { merge: 'timeline' });
+    App.change(label || (k >= n ? 'Zeitleiste: ans Ende' : `Zeitleiste: Marker nach Schritt ${k}`), (doc) => { const o = owner(doc); o.rollback = k >= listOf(o).length ? null : k; }, { merge: 'timeline' });
   }
   function toggleSuppress(id) {
-    const it = App.doc.items.find((x) => x.id === id); if (!it) return;
-    App.change(it.suppressed ? `Aktiviert: ${Model.label(it)}` : `Unterdrückt: ${Model.label(it)}`, (doc) => { const t = doc.items.find((x) => x.id === id); t.suppressed = !t.suppressed; });
+    const f = Model.find(App.doc, id); if (!f) return;
+    App.change(f.item.suppressed ? `Aktiviert: ${Model.label(f.item)}` : `Unterdrückt: ${Model.label(f.item)}`, (doc) => { const t = Model.find(doc, id).item; t.suppressed = !t.suppressed; });
   }
   function chipTip(it, i, V) {
     const errs = App.errorsFor(it.id);
@@ -3338,11 +3444,12 @@ const Timeline = (() => {
   }
   function render() {
     if (!el) return;
-    const items = App.doc.items, n = items.length, mk = markerPos();
+    const own = owner(), items = listOf(own), n = items.length, mk = markerPos();
     const V = Model.vars(App.doc).v;
-    const selTop = new Set(App.sel.map((id) => (Model.topOf(App.doc, id) || {}).id));
+    const selTop = own === App.doc ? new Set(App.sel.map((id) => (Model.topOf(App.doc, id) || {}).id)) : new Set(App.sel);
+    el.classList.toggle('ctx', own !== App.doc);
     track.innerHTML = '';
-    if (!n) track.append(h('span', { class: 'tl-empty' }, 'Zeitleiste – jeder Schritt erscheint hier'));
+    if (!n) track.append(h('span', { class: 'tl-empty' }, own !== App.doc ? `„${Model.label(own)}“ ist noch leer – füge Körper hinzu` : 'Zeitleiste – jeder Schritt erscheint hier'));
     const marker = h('div', { class: 'tl-marker', role: 'slider', 'aria-label': 'Marker der Zeitleiste', 'aria-valuemin': 0, 'aria-valuemax': n, 'aria-valuenow': mk, tabindex: 0, 'data-tip': 'Ziehen: zurückrollen', 'data-help': 'rollback' }, h('i'));
     marker.addEventListener('pointerdown', startDrag);
     marker.addEventListener('keydown', (e) => { if (e.key === 'ArrowLeft') { e.preventDefault(); setMarker(mk - 1); } if (e.key === 'ArrowRight') { e.preventDefault(); setMarker(mk + 1); } });
@@ -3398,16 +3505,80 @@ const Timeline = (() => {
     bStart = bt('chevR', 'Zum Anfang', () => setMarker(0)); bStart.querySelector('svg').style.transform = 'scaleX(-1)';
     bPrev = bt('arrowR', 'Einen Schritt zurück', () => setMarker(markerPos() - 1)); bPrev.querySelector('svg').style.transform = 'scaleX(-1)';
     bNext = bt('arrowR', 'Einen Schritt vor', () => setMarker(markerPos() + 1));
-    bEnd = bt('chevR', 'Ans Ende', () => setMarker(App.doc.items.length));
+    bEnd = bt('chevR', 'Ans Ende', () => setMarker(listOf(owner()).length));
     track = h('div', { class: 'tl-track' }); info = h('div', { class: 'tl-info', 'data-help': 'timeline' });
     el.append(h('div', { class: 'tl-btns' }, bStart, bPrev), track, h('div', { class: 'tl-btns' }, bNext, bEnd), info);
     $('#center').append(el); $('#center').classList.add('has-tl');
     const r = debounce(render, 30);
-    App.on('doc', r); App.on('selection', r); App.on('results', r);
+    App.on('doc', r); App.on('selection', r); App.on('results', r); App.on('ctx', r);
     App.on('mode', () => { el.hidden = App.mode !== 'model'; $('#center').classList.toggle('has-tl', App.mode === 'model'); });
     render();
   }
   return { init, render, setMarker, toggleSuppress, markerPos };
+})();
+
+// ---- 49-components.js ----
+// ================= Bauteile: im Kontext bearbeiten, isolieren, neu anlegen =================
+const Comp = (() => {
+  let banner = null;
+  function render() {
+    if (banner) { banner.remove(); banner = null; }
+    if (App.mode !== 'model') return;
+    const ctx = App.ctx ? App.doc.items.find((x) => x.id === App.ctx) : null;
+    const iso = App.iso ? App.doc.items.find((x) => x.id === App.iso) : null;
+    if (!ctx && !iso) return;
+    banner = h('div', { class: 'ctx-banner' + (ctx ? '' : ' iso'), role: 'status' });
+    const ic = h('span'); ic.innerHTML = icon(ctx ? 'edit' : 'focusView');
+    banner.append(ic, h('span', null, ctx ? `Bauteil bearbeiten: ${Model.label(ctx)}` : `Isoliert: ${Model.label(iso)}`));
+    const b = h('button', { type: 'button' }, ctx ? 'Fertig' : 'Alle zeigen');
+    b.onclick = () => (ctx ? App.setCtx(null) : App.setIso(null));
+    banner.append(b);
+    $('#overlay').append(banner);
+  }
+  function newComponent() {
+    const n = App.doc.items.filter((x) => x.comp).length + 1;
+    const it = Model.newItem('group', {}, { name: `Bauteil ${n}` }); it.comp = true; it.children = [];
+    App.change(`Neues Bauteil: ${it.name}`, (doc) => { doc.items.push(it); });
+    App.setCtx(it.id);
+    UI.toast('Neues Bauteil angelegt. Alles, was du jetzt hinzufügst, landet darin.', { icon: 'parts', ms: 3200 });
+  }
+  function edit(id) { const it = App.doc.items.find((x) => x.id === id); if (it && it.kind === 'group') { App.setIso(null); App.setCtx(id); App.select([]); } }
+  function toggleIso(id) { App.setIso(App.iso === id ? null : id); if (App.iso) Viewer.fit([id]); }
+  function init() { App.on('ctx', render); App.on('mode', render); App.on('doc', debounce(render, 30)); }
+  return { init, newComponent, edit, toggleIso, render };
+})();
+
+// ---- 49-draginput.js ----
+// ================= Zahleneingabe beim Ziehen =================
+// Während man zieht, einfach eine Zahl tippen: Eingabefeld erscheint, Enter übernimmt den exakten Wert.
+const DragInput = (() => {
+  let el = null, spec = null;
+  function open(sp, firstChar, at) {
+    close(); spec = sp;
+    el = h('div', { class: 'drag-input', role: 'dialog', 'aria-label': 'Wert eingeben' });
+    const inputs = sp.fields.map((f, i) => {
+      const inp = h('input', { type: 'text', value: i === 0 && firstChar != null ? firstChar : fmt(f.value, 3), 'aria-label': f.label, inputmode: 'decimal' });
+      el.append(h('span', null, f.label), inp); if (f.unit) el.append(h('small', null, f.unit));
+      return inp;
+    });
+    el.append(h('small', null, '↵ übernehmen · Tab wechseln · Esc'));
+    const r = $('#overlay').getBoundingClientRect();
+    el.style.left = clamp(at.x - r.left + 14, 8, r.width - 340) + 'px'; el.style.top = clamp(at.y - r.top - 54, 8, r.height - 40) + 'px';
+    $('#overlay').append(el);
+    const first = inputs[0]; first.focus(); if (firstChar == null) first.select(); else first.setSelectionRange(first.value.length, first.value.length);
+    el.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Escape') { e.preventDefault(); close(); }
+      else if (e.key === 'Enter') {
+        e.preventDefault();
+        const V = Model.vars(App.doc).v;
+        const vals = inputs.map((inp, i) => { const t = inp.value.trim(); const n = parseNum(t); return isNaN(n) ? Model.num(t, V, sp.fields[i].value) : n; });
+        const s2 = spec; close(); s2.apply(vals);
+      }
+    });
+  }
+  function close() { if (el) { el.remove(); el = null; } spec = null; }
+  return { open, close, get open_() { return !!el; } };
 })();
 
 // ---- 49-log.js ----
@@ -3766,12 +3937,17 @@ const Panels = (() => {
     const rec = (list, parentUl) => {
       for (const it of list) {
         const li = h('li', { role: 'treeitem' });
-        const topIdx = App.doc.items.indexOf(it), mkr = Timeline.markerPos();
-        const row = h('div', { class: 'node' + (selSet.has(it.id) ? ' sel' : '') + (it.hidden ? ' hidden-item' : '') + (it.suppressed ? ' supp' : '') + (topIdx >= 0 && topIdx >= mkr ? ' rolled' : ''), draggable: 'true', dataset: { id: it.id } });
+        const topIdx = App.doc.items.indexOf(it);
+        const ctxTop = App.ctx ? App.doc.items.find((x) => x.id === App.ctx) : null;
+        const inCtx = !!ctxTop && Model.topOf(App.doc, it.id) === ctxTop;
+        const ownList = ctxTop ? ctxTop.children : App.doc.items, ownIdx = ownList.indexOf(it);
+        const rolled = ownIdx >= 0 && (!ctxTop || inCtx) && ownIdx >= Timeline.markerPos();
+        const row = h('div', { class: 'node' + (selSet.has(it.id) ? ' sel' : '') + (it.hidden ? ' hidden-item' : '') + (it.suppressed ? ' supp' : '') + (rolled ? ' rolled' : '') + (ctxTop && !inCtx ? ' ctx-other' : '') + (ctxTop === it ? ' ctx-active' : ''), draggable: 'true', dataset: { id: it.id } });
         const tw = h('button', { type: 'button', class: 'tw' + (expanded.has(it.id) ? ' open' : ''), 'aria-label': 'Aufklappen' });
         if (it.kind === 'group' || (it.finishes || []).length) { tw.innerHTML = icon('chevR'); tw.onclick = (e) => { e.stopPropagation(); expanded.has(it.id) ? expanded.delete(it.id) : expanded.add(it.id); renderLeft(); }; }
         else tw.style.visibility = 'hidden';
         const sw = h('span', { class: 'swatch' + (it.role === 'hole' ? ' hole' : ''), style: { background: it.color } });
+        if (it.comp) { sw.innerHTML = icon('parts'); sw.classList.add('comp'); }
         const nm = h('span', { class: 'nm', title: Model.label(it) }, Model.label(it));
         const sub = h('span', { class: 'sub mono' }, Model.sizeText(it, V));
         const acts = h('span', { class: 'acts' });
@@ -3779,7 +3955,9 @@ const Panels = (() => {
         eye.onclick = (e) => { e.stopPropagation(); App.change(it.hidden ? 'Eingeblendet' : 'Ausgeblendet', (doc) => { const f = Model.find(doc, it.id); f.item.hidden = !f.item.hidden; }); };
         const del = h('button', { type: 'button', 'aria-label': 'Löschen', 'data-tip': 'Löschen' }); del.innerHTML = icon('trash');
         del.onclick = (e) => { e.stopPropagation(); Actions.remove([it.id]); };
-        if (topIdx >= 0) { const sp = h('button', { type: 'button', 'aria-label': it.suppressed ? 'Aktivieren' : 'Unterdrücken', 'data-tip': it.suppressed ? 'Wieder aktivieren' : 'Unterdrücken (bleibt erhalten, zählt nicht mit)', 'data-help': 'suppress' }); sp.innerHTML = icon('suppress'); sp.onclick = (e) => { e.stopPropagation(); Timeline.toggleSuppress(it.id); }; acts.append(sp); }
+        if (topIdx >= 0 && it.kind === 'group') { const be = h('button', { type: 'button', 'aria-label': 'Bauteil bearbeiten', 'data-tip': App.ctx === it.id ? 'Bearbeitung beenden' : 'Als Bauteil bearbeiten (Rest wird durchsichtig)' }); be.innerHTML = icon(App.ctx === it.id ? 'check' : 'edit'); be.onclick = (e) => { e.stopPropagation(); App.ctx === it.id ? App.setCtx(null) : Comp.edit(it.id); }; acts.append(be); }
+        if (topIdx >= 0) { const io = h('button', { type: 'button', 'aria-label': 'Isolieren', 'data-tip': App.iso === it.id ? 'Alle wieder zeigen' : 'Nur dieses Teil zeigen' }); io.innerHTML = icon('focusView'); io.onclick = (e) => { e.stopPropagation(); Comp.toggleIso(it.id); }; acts.append(io); }
+        if (ownIdx >= 0 && (!ctxTop || inCtx)) { const sp = h('button', { type: 'button', 'aria-label': it.suppressed ? 'Aktivieren' : 'Unterdrücken', 'data-tip': it.suppressed ? 'Wieder aktivieren' : 'Unterdrücken (bleibt erhalten, zählt nicht mit)', 'data-help': 'suppress' }); sp.innerHTML = icon('suppress'); sp.onclick = (e) => { e.stopPropagation(); Timeline.toggleSuppress(it.id); }; acts.append(sp); }
         acts.append(eye, del);
         row.append(tw, sw, nm);
         const errs = App.errorsFor(it.id);
@@ -3834,7 +4012,7 @@ const Panels = (() => {
       if (mode === 'into') { targetList = d.item.children; parentW = Model.worldMatrix(doc, d.item.id); targetList.push(s.item); }
       else { targetList = d.list; parentW = d.parent ? Model.worldMatrix(doc, d.parent.id) : new THREE.Matrix4(); const i = targetList.indexOf(d.item); targetList.splice(mode === 'before' ? i : i + 1, 0, s.item); }
       Model.setFromMatrix(s.item, parentW.clone().invert().multiply(W));
-      Model.walk(doc.items, (it, parent, depth, list, i) => { if (it.kind === 'group' && !it.children.length) list.splice(i, 1); });
+      Model.walk(doc.items, (it, parent, depth, list, i) => { if (it.kind === 'group' && !it.comp && !it.children.length) list.splice(i, 1); });
     });
   }
   // ---------- Protokoll ----------
@@ -4219,6 +4397,7 @@ const Panels = (() => {
     $('#lt-tree').onclick = () => { leftTab = 'tree'; renderLeft(); };
     $('#lt-params').onclick = () => { leftTab = 'params'; renderLeft(); };
     $('#lt-log').onclick = () => { leftTab = 'log'; renderLeft(); };
+    App.on('ctx', () => renderLeft());
     Log.on('change', debounce(() => { if (leftTab === 'log') renderLeft(); }, 80));
     renderTools(); initViewCube();
     const rerender = debounce(() => { renderLeft(); renderRight(); renderCtx(); UI.renderHint(); }, 16);
@@ -5134,6 +5313,9 @@ const Commands = (() => {
     add('gridtoggle', 'Raster ein/aus', 'grid', 'raster gitter grid', () => ViewPrefs.toggle('gridOn'), { group: 'Ansicht', kbd: 'G' });
     add('planes', 'Ursprungsebenen ein/aus', 'originPlanes', 'ursprung ebenen xy xz yz origin', () => ViewPrefs.toggle('planes'), { group: 'Ansicht' });
     add('axes', 'Achsen ein/aus', 'axes', 'achsen x y z', () => ViewPrefs.toggle('axes'), { group: 'Ansicht' });
+    add('newcomp', 'Neues Bauteil', 'parts', 'bauteil komponente baugruppe component neu', () => Comp.newComponent(), { group: 'Werkzeuge' });
+    add('editcomp', 'Gewählte Gruppe als Bauteil bearbeiten', 'edit', 'bauteil bearbeiten kontext', () => { const t = App.sel.length ? Model.topOf(App.doc, App.sel[0]) : null; if (t && t.kind === 'group') Comp.edit(t.id); else UI.toast('Wähle zuerst eine Gruppe oder ein Bauteil aus.', { icon: 'info' }); }, { group: 'Werkzeuge' });
+    add('isolate', 'Gewähltes Teil isolieren', 'focusView', 'isolieren nur dieses zeigen', () => { const t = App.sel.length ? Model.topOf(App.doc, App.sel[0]) : null; if (t) Comp.toggleIso(t.id); }, { group: 'Ansicht' });
     add('drawing', 'Technische Zeichnung öffnen', 'sheet', 'zeichnung ansichten bemaßung pdf dreitafel', () => setMode('drawing'), { group: 'Werkzeuge' });
     add('model', 'Zurück zum Modell', 'cube', 'modell 3d', () => setMode('model'), { group: 'Werkzeuge' });
     add('params', 'Maße mit Namen festlegen', 'sliders', 'parameter variable formel maß', () => Panels.showParams(), { group: 'Werkzeuge' });
@@ -5233,7 +5415,7 @@ const Commands = (() => {
     if (mod && k === 'k') { e.preventDefault(); $('#cmd-input').focus(); return; }
     if (k === '/') { e.preventDefault(); $('#cmd-input').focus(); return; }
     if (App.mode !== 'model') return;
-    if (e.key === 'Escape') { if (Place.active) Place.cancel(); else if (Measure.active) Measure.stop(); else { Panels.closeFlyout(); App.clearSelection(); } return; }
+    if (e.key === 'Escape') { if (Place.active) Place.cancel(); else if (Measure.active) Measure.stop(); else if (!App.sel.length && App.ctx) App.setCtx(null); else if (!App.sel.length && App.iso) App.setIso(null); else { Panels.closeFlyout(); App.clearSelection(); } return; }
     if (mod && k === 'd') { e.preventDefault(); Actions.duplicate(); return; }
     if (mod && k === 'g') { e.preventDefault(); e.shiftKey ? Actions.ungroup() : Actions.group(); return; }
     if (mod && k === 'a') { e.preventDefault(); App.select(App.doc.items.map((x) => x.id)); return; }
@@ -6879,8 +7061,8 @@ const Tour = (() => {
   window.__masswerk = { App, Viewer, Model, Actions, Sketch, SK, THREE, Print, Drawing, Kernel, UI, Commands, Panels, Handles, Start, AI, Measure, Place };
   UI.initTips();
   Viewer.init($('#viewport'));
-  window.__V = Viewer; window.__M = { App, Actions, Model, Timeline, Start }; window.__S = Start; // für automatische Tests
-  Panels.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init(); Refine.init();
+  window.__V = Viewer; window.__M = { App, Actions, Model, Timeline, Start, Comp, Handles }; window.__S = Start; // für automatische Tests
+  Panels.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init(); Refine.init(); Comp.init();
 
   // Kopfzeile
   $('#btn-undo').onclick = () => App.undo();
