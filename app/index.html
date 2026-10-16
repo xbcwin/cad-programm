@@ -264,6 +264,53 @@ body.sketching .viewcube{display:none}
 .view-btns button:hover{color:var(--ink);border-color:var(--line-strong)}
 .view-btns button.on{color:var(--accent);border-color:var(--accent-line);background:var(--accent-soft)}
 .view-btns .sep{height:4px}
+/* ---------- Zeitleiste ---------- */
+.timeline{position:absolute;left:84px;right:62px;bottom:10px;height:46px;z-index:12;display:flex;align-items:center;gap:6px;padding:0 6px;border:1px solid var(--line);border-radius:12px;background:color-mix(in srgb,var(--surface) 94%,transparent);box-shadow:var(--shadow-1);user-select:none}
+.timeline[hidden]{display:none}
+body.sketching .timeline{display:none}
+.tl-btns{display:flex;gap:2px;flex:none}
+.tl-btns button{width:28px;height:28px;border:0;border-radius:7px;background:none;color:var(--ink-2);display:grid;place-items:center}
+.tl-btns button:hover:not(:disabled){background:var(--surface-3);color:var(--ink)}
+.tl-btns button:disabled{opacity:.35}
+.tl-btns svg{width:16px;height:16px}
+.tl-track{position:relative;flex:1;min-width:0;height:100%;display:flex;align-items:center;gap:4px;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;padding:0 4px}
+.tl-empty{color:var(--muted);font-size:13px;padding-left:4px;white-space:nowrap}
+.tl-chip{position:relative;flex:none;width:32px;height:32px;border-radius:8px;border:1.5px solid var(--line);background:var(--surface);display:grid;place-items:center;color:var(--ink-2);cursor:pointer;padding:0}
+.tl-chip svg{width:17px;height:17px}
+.tl-chip:hover{border-color:var(--line-strong);color:var(--ink)}
+.tl-chip .bar{position:absolute;left:5px;right:5px;bottom:2px;height:3px;border-radius:2px}
+.tl-chip.hole{color:var(--hole)}
+.tl-chip.sel{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+.tl-chip.off{opacity:.38;border-style:dashed}
+.tl-chip.sup{opacity:.5}
+.tl-chip.sup::after{content:"";position:absolute;left:4px;right:4px;top:50%;height:1.7px;background:var(--ink-2);transform:rotate(-40deg)}
+.tl-chip.err{border-color:var(--bad);color:var(--bad);background:var(--bad-soft)}
+.tl-chip.err::before{content:"";position:absolute;top:-3px;right:-3px;width:9px;height:9px;border-radius:50%;background:var(--bad);border:2px solid var(--surface)}
+.tl-marker{flex:none;width:12px;height:38px;cursor:ew-resize;display:grid;place-items:center;touch-action:none}
+.tl-marker i{display:block;width:4px;height:100%;border-radius:2px;background:var(--accent)}
+.tl-marker:hover i,.tl-marker.drag i{background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.tl-drop{flex:none;width:4px;height:34px;border-radius:2px;background:var(--accent);opacity:.45}
+.tl-info{flex:none;font:600 12px/1 var(--font-cond);color:var(--muted);letter-spacing:.03em;padding:0 4px;white-space:nowrap}
+.center.has-tl .view-btns{bottom:66px}
+.center.has-tl .axis-gizmo{bottom:62px}
+/* ---------- Protokoll ---------- */
+.log-tools{display:flex;gap:4px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
+.log-tools .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.log-tools .seg button{border:0;background:none;padding:5px 9px;font-size:12px;color:var(--ink-2)}
+.log-tools .seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.log-list{display:grid;gap:2px}
+.log-row{display:grid;grid-template-columns:auto 18px 1fr;gap:7px;align-items:start;padding:6px 6px;border-radius:7px;font-size:13px;line-height:1.35}
+.log-row:hover{background:var(--surface-3)}
+.log-row .tm{font:500 11px/1.6 var(--font-mono,monospace);color:var(--muted)}
+.log-row svg{width:15px;height:15px;margin-top:1px;color:var(--ink-2)}
+.log-row.error svg{color:var(--bad)}.log-row.error b{color:var(--bad)}
+.log-row.undo svg,.log-row.redo svg{color:var(--muted)}
+.log-row small{display:block;color:var(--muted);margin-top:2px}
+.log-row .lk{border:0;background:none;padding:0;color:var(--accent);font-size:12px;cursor:pointer;margin-top:3px;text-decoration:underline;text-underline-offset:2px}
+.log-row.gone{opacity:.45}
+.node.supp .nm{text-decoration:line-through;opacity:.6}
+.node.rolled{opacity:.42}
+
 .view-btns svg{width:19px;height:19px}
 .axis-gizmo{position:absolute;left:12px;bottom:12px;width:64px;height:64px;pointer-events:none;z-index:11}
 .sketchbar{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:16;display:flex;align-items:center;gap:2px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-2);padding:5px;max-width:calc(100% - 140px);overflow-x:auto;scrollbar-width:none}
@@ -473,6 +520,7 @@ body.sketching .viewcube{display:none}
         <div class="tabs" role="tablist">
           <button type="button" role="tab" id="lt-tree" aria-selected="true">Verlauf</button>
           <button type="button" role="tab" id="lt-params" aria-selected="false">Maße</button>
+          <button type="button" role="tab" id="lt-log" aria-selected="false">Protokoll</button>
         </div>
       </div>
       <div class="panel-body" id="left-body"></div>
@@ -913,7 +961,7 @@ const Model = (() => {
   function matArr(m) { return Array.from(m.elements); }
   function kernelItem(it, V) {
     const o = { id: it.id, kind: it.kind, role: it.role, hidden: !!it.hidden, m: matArr(localMatrix(it)) };
-    if (it.kind === 'group') o.children = (it.children || []).map((c) => kernelItem(c, V));
+    if (it.kind === 'group') o.children = (it.children || []).filter((c) => !c.suppressed).map((c) => kernelItem(c, V));
     else if (it.kind === 'extrude' || it.kind === 'revolve') o.p = sketchParams(it, V);
     else o.p = resolveP(it.p, V);
     if (it.mir) o.mir = it.mir;
@@ -930,9 +978,15 @@ const Model = (() => {
     else { out.angle = num(p.angle, V, 360); out.axis = p.axis || { a: [0, 0], b: [0, 1] }; }
     return out;
   }
+  // Zeitleiste: nur Schritte vor dem Marker zählen, unterdrückte Schritte werden übersprungen
+  function activeItems(doc) {
+    const end = doc.rollback == null ? doc.items.length : clamp(doc.rollback, 0, doc.items.length);
+    return doc.items.slice(0, end).filter((it) => !it.suppressed);
+  }
+  function isActive(doc, id) { const top = topOf(doc, id); if (!top) return false; return activeItems(doc).includes(top); }
   function kernelScene(doc, extra = []) {
     const { v } = vars(doc);
-    return { items: [...doc.items, ...extra].map((it) => kernelItem(it, v)) };
+    return { items: [...activeItems(doc), ...extra].map((it) => kernelItem(it, v)) };
   }
 
   // ---------- Größen ----------
@@ -976,10 +1030,11 @@ const Model = (() => {
     if (!doc || doc.format !== 'masswerk') throw new Error('Das ist keine Maßwerk-Projektdatei.');
     doc.params = doc.params || []; doc.items = doc.items || [];
     doc.settings = Object.assign({ printer: 'std', custom: { x: 220, y: 220, z: 250 }, grid: 1, snap: true }, doc.settings || {});
+    if (doc.rollback != null && !(doc.rollback >= 0 && doc.rollback < doc.items.length)) doc.rollback = null;
     walk(doc.items, (it) => { it.t = Object.assign(T0(), it.t || {}); it.p = it.p || {}; it.finishes = it.finishes || []; if (!it.role) it.role = 'solid'; if (!it.color) it.color = nextColor(); });
     return doc;
   }
-  return { useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  return { useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 
 // ---- 15-sketchcore.js ----
@@ -1342,20 +1397,33 @@ const App = (() => {
   function pushUndo(label, before) {
     const last = S.undo[S.undo.length - 1];
     S.undo.push({ label, before, t: Date.now() });
-    if (S.undo.length > 150) S.undo.shift();
+    if (S.undo.length > 300) S.undo.shift();
     S.redo = [];
     ev.emit('history');
+    ev.emit('log', { kind: 'change', text: label, depth: S.undo.length });
   }
   // Änderung mit Rückgängig-Schritt. merge: gleiche Schlüssel kurz hintereinander werden zu einem Schritt.
   function change(label, fn, opts = {}) {
     const before = opts.before || snapshot();
+    const topBefore = new Set(S.doc.items.map((x) => x.id));
     const res = fn(S.doc);
     if (res === false) return false;
+    placeNewAtMarker(S.doc, topBefore);
     const last = S.undo[S.undo.length - 1];
     if (opts.merge && last && last.merge === opts.merge && Date.now() - last.t < 1500) { last.t = Date.now(); }
     else { pushUndo(label, before); if (opts.merge) S.undo[S.undo.length - 1].merge = opts.merge; }
     touched();
     return res;
+  }
+  // Ist die Zeitleiste zurückgerollt, landen neue Schritte am Marker statt am Ende
+  function placeNewAtMarker(doc, topBefore) {
+    if (doc.rollback == null) return;
+    const fresh = doc.items.filter((x) => !topBefore.has(x.id));
+    for (const it of fresh) {
+      const i = doc.items.indexOf(it); if (i < doc.rollback) continue;
+      doc.items.splice(i, 1); doc.items.splice(doc.rollback, 0, it); doc.rollback++;
+    }
+    if (doc.rollback >= doc.items.length) doc.rollback = null;
   }
   function touched(noRebuild) {
     Model.useVars(Model.vars(S.doc).v);
@@ -1375,17 +1443,22 @@ const App = (() => {
     S.revision++;
     ev.emit('doc'); ev.emit('selection'); autosave(); rebuild();
   }
-  function undo() {
+  function undo(silent) {
     const step = S.undo.pop(); if (!step) return;
     S.redo.push({ label: step.label, before: snapshot() });
     restore(step.before); ev.emit('history');
-    UI.toast(`Rückgängig: ${step.label}`, { icon: 'undo', ms: 1600 });
+    if (!silent) { UI.toast(`Rückgängig: ${step.label}`, { icon: 'undo', ms: 1600 }); ev.emit('log', { kind: 'undo', text: step.label, depth: S.undo.length }); }
   }
-  function redo() {
+  function redo(silent) {
     const step = S.redo.pop(); if (!step) return;
     S.undo.push({ label: step.label, before: snapshot(), t: 0 });
     restore(step.before); ev.emit('history');
-    UI.toast(`Wiederholt: ${step.label}`, { icon: 'redo', ms: 1600 });
+    if (!silent) { UI.toast(`Wiederholt: ${step.label}`, { icon: 'redo', ms: 1600 }); ev.emit('log', { kind: 'redo', text: step.label, depth: S.undo.length }); }
+  }
+  // mehrere Schritte auf einmal zurück, z. B. aus dem Protokoll
+  function undoTo(depth) {
+    let n = 0; while (S.undo.length > depth && S.undo.length) { undo(true); n++; }
+    if (n) { UI.toast(n === 1 ? '1 Schritt rückgängig gemacht' : n + ' Schritte rückgängig gemacht', { icon: 'undo', ms: 1800 }); ev.emit('log', { kind: 'undo', text: `${n} ${n === 1 ? 'Schritt' : 'Schritte'} zurück`, depth: S.undo.length }); }
   }
 
   // ---------- Speichern im Browser ----------
@@ -1441,7 +1514,9 @@ const App = (() => {
       S.results.set(n.id, { key: n.key, data: n });
     }
     for (const id of [...S.results.keys()]) if (!seen.has(id)) { Viewer.removeNode(id); S.results.delete(id); }
+    const oldErr = new Set(S.errors.map((e) => e.itemId + '|' + e.code + '|' + e.message));
     S.errors = res.errors || [];
+    for (const e of S.errors) if (!oldErr.has(e.itemId + '|' + e.code + '|' + e.message)) ev.emit('log', { kind: 'error', text: e.message, itemId: e.itemId, code: e.code });
     for (const [id, n] of Viewer.nodes) { const it = topItem(id); if (it) Viewer.updateNode(id, { visible: !it.hidden }); }
     refreshSelectionVisuals();
     ev.emit('results');
@@ -1505,7 +1580,7 @@ const App = (() => {
     get extra() { return S.extra; }, set extra(x) { S.extra = x; },
     get tool() { return S.tool; }, set tool(t) { S.tool = t; ev.emit('tool'); },
     get fileSavedRev() { return S.fileSavedRev; }, set fileSavedRev(v) { S.fileSavedRev = v; },
-    setDoc, snapshot, change, touched, pushUndo, restore, undo, redo, rebuild, select, clearSelection, selectedItems, errorsFor, localBox, refreshSelectionVisuals,
+    setDoc, snapshot, change, touched, pushUndo, restore, undo, redo, undoTo, rebuild, select, clearSelection, selectedItems, errorsFor, localBox, refreshSelectionVisuals,
     recentProjects, loadStored, deleteStored, autosave, fitAfterBuild, on: ev.on, emit: ev.emit,
   };
 })();
@@ -2908,6 +2983,138 @@ const ViewPrefs = (() => {
   return { get: () => ({ ...v }), set, toggle, apply, on: ev.on };
 })();
 
+// ---- 49-timeline.js ----
+// ================= Zeitleiste: Schritte, Marker, Unterdrücken =================
+// Jeder oberste Eintrag im Verlauf ist ein Schritt. Der Marker legt fest, bis wohin gerechnet wird;
+// neue Schritte landen am Marker. Unterdrückte Schritte bleiben erhalten, zählen aber nicht mit.
+const Timeline = (() => {
+  let el, track, info, bStart, bPrev, bNext, bEnd, drag = null;
+  function iconFor(it) {
+    if (it.kind === 'part') { const d = LIBMAP[(it.p || {}).lib]; return d && d.icon ? d.icon : 'bolt'; }
+    return ({ box: 'cube', cylinder: 'circle', tube: 'circle', sphere: 'circle', hemisphere: 'circle', torus: 'circle', cone: 'polygon', pyramid: 'polygon', prism: 'hex', wedge: 'chamfer', extrude: 'extrude', revolve: 'revolve', group: 'group' })[it.kind] || 'cube';
+  }
+  const markerPos = () => { const d = App.doc; return d.rollback == null ? d.items.length : d.rollback; };
+  function setMarker(k, label) {
+    const n = App.doc.items.length; k = clamp(Math.round(k), 0, n);
+    if (k === markerPos()) return;
+    App.change(label || (k >= n ? 'Zeitleiste: ans Ende' : `Zeitleiste: Marker nach Schritt ${k}`), (doc) => { doc.rollback = k >= doc.items.length ? null : k; }, { merge: 'timeline' });
+  }
+  function toggleSuppress(id) {
+    const it = App.doc.items.find((x) => x.id === id); if (!it) return;
+    App.change(it.suppressed ? `Aktiviert: ${Model.label(it)}` : `Unterdrückt: ${Model.label(it)}`, (doc) => { const t = doc.items.find((x) => x.id === id); t.suppressed = !t.suppressed; });
+  }
+  function chipTip(it, i, V) {
+    const errs = App.errorsFor(it.id);
+    const st = it.suppressed ? ' · unterdrückt' : i >= markerPos() ? ' · nach dem Marker' : '';
+    return `${i + 1}. ${Model.label(it)}${Model.sizeText(it, V) ? ' · ' + Model.sizeText(it, V) : ''}${st}${errs.length ? ' · ' + errs[0].message : ''}`;
+  }
+  function render() {
+    if (!el) return;
+    const items = App.doc.items, n = items.length, mk = markerPos();
+    const V = Model.vars(App.doc).v;
+    const selTop = new Set(App.sel.map((id) => (Model.topOf(App.doc, id) || {}).id));
+    track.innerHTML = '';
+    if (!n) track.append(h('span', { class: 'tl-empty' }, 'Zeitleiste – jeder Schritt erscheint hier'));
+    const marker = h('div', { class: 'tl-marker', role: 'slider', 'aria-label': 'Marker der Zeitleiste', 'aria-valuemin': 0, 'aria-valuemax': n, 'aria-valuenow': mk, tabindex: 0, 'data-tip': 'Ziehen: zurückrollen' }, h('i'));
+    marker.addEventListener('pointerdown', startDrag);
+    marker.addEventListener('keydown', (e) => { if (e.key === 'ArrowLeft') { e.preventDefault(); setMarker(mk - 1); } if (e.key === 'ArrowRight') { e.preventDefault(); setMarker(mk + 1); } });
+    items.forEach((it, i) => {
+      if (i === mk) track.append(marker);
+      const errs = App.errorsFor(it.id);
+      const c = h('button', { type: 'button', class: 'tl-chip' + (it.role === 'hole' ? ' hole' : '') + (selTop.has(it.id) ? ' sel' : '') + (i >= mk ? ' off' : '') + (it.suppressed ? ' sup' : '') + (errs.length && i < mk && !it.suppressed ? ' err' : ''), 'data-tip': chipTip(it, i, V), 'aria-label': chipTip(it, i, V), dataset: { idx: i } });
+      c.innerHTML = icon(iconFor(it)); c.append(h('span', { class: 'bar', style: { background: it.role === 'hole' ? 'transparent' : it.color } }));
+      c.onclick = (e) => App.select([it.id], { additive: e.shiftKey || e.metaKey || e.ctrlKey });
+      c.ondblclick = (e) => { e.preventDefault(); setMarker(i + 1, `Zeitleiste: bis „${Model.label(it)}“`); };
+      c.oncontextmenu = (e) => { e.preventDefault(); menu(c, it, i); };
+      track.append(c);
+    });
+    if (mk >= n && n) track.append(marker);
+    info.textContent = n ? (mk >= n ? (n === 1 ? '1 Schritt' : `${n} Schritte`) : `${mk} / ${n}`) : '';
+    bStart.disabled = !n || mk === 0; bPrev.disabled = !n || mk === 0; bNext.disabled = mk >= n; bEnd.disabled = mk >= n;
+    // aktiven Bereich sichtbar halten
+    const m = track.querySelector('.tl-marker'); if (m && !drag) { const r = m.offsetLeft - track.clientWidth + 60; if (r > track.scrollLeft) track.scrollLeft = r; }
+  }
+  function menu(anchor, it, i) {
+    const box = h('div', { class: 'menu-list', style: { display: 'grid', gap: '2px', minWidth: '200px' } });
+    const add = (ic, label, fn) => { const b = h('button', { type: 'button', class: 'btn ghost', style: { justifyContent: 'flex-start' } }); b.innerHTML = icon(ic) + esc(label); b.onclick = () => { UI.closePop(); fn(); }; box.append(b); };
+    box.append(h('div', { class: 'section-h' }, `${i + 1}. ${Model.label(it)}`));
+    add('edit', 'Bearbeiten', () => App.select([it.id]));
+    add('rollback', 'Marker hinter diesen Schritt', () => setMarker(i + 1));
+    add('rollback', 'Marker vor diesen Schritt', () => setMarker(i));
+    add('suppress', it.suppressed ? 'Wieder aktivieren' : 'Unterdrücken', () => toggleSuppress(it.id));
+    add('trash', 'Löschen', () => Actions.remove([it.id]));
+    UI.pop(anchor, box, { up: true });
+  }
+  // Marker ziehen: Lücke zwischen den Schritten unter dem Mauszeiger finden
+  function gapAt(x) {
+    const chips = [...track.querySelectorAll('.tl-chip')];
+    for (let i = 0; i < chips.length; i++) { const r = chips[i].getBoundingClientRect(); if (x < r.left + r.width / 2) return i; }
+    return chips.length;
+  }
+  function startDrag(e) {
+    e.preventDefault(); const m = e.currentTarget; m.setPointerCapture(e.pointerId); m.classList.add('drag');
+    drag = { k: markerPos(), ind: null };
+    const move = (ev) => {
+      const k = gapAt(ev.clientX); if (k === drag.k && drag.ind) return; drag.k = k;
+      if (drag.ind) drag.ind.remove();
+      drag.ind = h('div', { class: 'tl-drop' });
+      const chips = track.querySelectorAll('.tl-chip');
+      if (k < chips.length) chips[k].before(drag.ind); else track.append(drag.ind);
+    };
+    const up = () => { m.removeEventListener('pointermove', move); m.removeEventListener('pointerup', up); m.removeEventListener('pointercancel', up); const k = drag.k; if (drag.ind) drag.ind.remove(); drag = null; m.classList.remove('drag'); setMarker(k); render(); };
+    m.addEventListener('pointermove', move); m.addEventListener('pointerup', up); m.addEventListener('pointercancel', up);
+  }
+  function init() {
+    el = h('div', { class: 'timeline', id: 'timeline', role: 'toolbar', 'aria-label': 'Zeitleiste' });
+    const bt = (ic, tip, fn) => { const b = h('button', { type: 'button', 'aria-label': tip, 'data-tip': tip }); b.innerHTML = icon(ic); b.onclick = fn; return b; };
+    bStart = bt('chevR', 'Zum Anfang', () => setMarker(0)); bStart.querySelector('svg').style.transform = 'scaleX(-1)';
+    bPrev = bt('arrowR', 'Einen Schritt zurück', () => setMarker(markerPos() - 1)); bPrev.querySelector('svg').style.transform = 'scaleX(-1)';
+    bNext = bt('arrowR', 'Einen Schritt vor', () => setMarker(markerPos() + 1));
+    bEnd = bt('chevR', 'Ans Ende', () => setMarker(App.doc.items.length));
+    track = h('div', { class: 'tl-track' }); info = h('div', { class: 'tl-info' });
+    el.append(h('div', { class: 'tl-btns' }, bStart, bPrev), track, h('div', { class: 'tl-btns' }, bNext, bEnd), info);
+    $('#center').append(el); $('#center').classList.add('has-tl');
+    const r = debounce(render, 30);
+    App.on('doc', r); App.on('selection', r); App.on('results', r);
+    App.on('mode', () => { el.hidden = App.mode !== 'model'; $('#center').classList.toggle('has-tl', App.mode === 'model'); });
+    render();
+  }
+  return { init, render, setMarker, toggleSuppress, markerPos };
+})();
+
+// ---- 49-log.js ----
+// ================= Protokoll: jede Änderung mit Uhrzeit, Fehler in normaler Sprache =================
+const Log = (() => {
+  const MAX = 300; const ev = makeEmitter();
+  const session = uid('s');          // Rückgängig-Sprünge gehen nur innerhalb dieser Sitzung
+  let docId = null, list = [];
+  const HINT = {
+    edges: 'Eine frühere Änderung hat die gewählten Kanten verändert. Körper anklicken und die Kanten für Rundung oder Fase neu auswählen.',
+    toobig: 'Den Radius kleiner machen oder die Kante länger.',
+    build: 'Die Maße dieses Schritts prüfen – z. B. ob eine Wand dünner als null wird.',
+    cut: 'Prüfen, ob das Loch den Körper überhaupt berührt.',
+    mesh: 'Ein Maß leicht ändern und erneut versuchen.',
+  };
+  const key = (id) => 'masswerk.log.' + id;
+  function load(id) { docId = id; try { list = JSON.parse(storageGet(key(id)) || '[]'); } catch (_) { list = []; } }
+  const save = debounce(() => { if (docId) storageSet(key(docId), JSON.stringify(list.slice(-MAX))); }, 600);
+  function add(e) {
+    if (App.doc.id !== docId) load(App.doc.id);
+    const it = e.itemId ? Model.find(App.doc, e.itemId) : null;
+    list.push({ t: Date.now(), s: session, ...e, name: it ? Model.label(it.item) : e.name });
+    if (list.length > MAX) list = list.slice(-MAX);
+    save(); ev.emit('change');
+  }
+  function entries() { if (App.doc.id !== docId) load(App.doc.id); return list; }
+  function clear() { list = []; save.flush(); ev.emit('change'); }
+  function hint(code) { return HINT[code] || ''; }
+  function init() {
+    App.on('log', add);
+    App.on('doc', () => { if (App.doc.id !== docId) { load(App.doc.id); add({ kind: 'info', text: `Projekt geöffnet: ${App.doc.name}` }); } });
+  }
+  return { init, entries, clear, hint, on: ev.on, get session() { return session; } };
+})();
+
 // ---- 50-ui-core.js ----
 // ================= Oberfläche: Grundbausteine =================
 const UI = (() => {
@@ -3199,8 +3406,8 @@ const Panels = (() => {
   // ---------- Verlauf (links) ----------
   function renderLeft() {
     const body = $('#left-body'); body.innerHTML = '';
-    $('#lt-tree').setAttribute('aria-selected', leftTab === 'tree'); $('#lt-params').setAttribute('aria-selected', leftTab === 'params');
-    if (leftTab === 'tree') renderTree(body); else renderParams(body);
+    $('#lt-tree').setAttribute('aria-selected', leftTab === 'tree'); $('#lt-params').setAttribute('aria-selected', leftTab === 'params'); $('#lt-log').setAttribute('aria-selected', leftTab === 'log');
+    if (leftTab === 'tree') renderTree(body); else if (leftTab === 'log') renderLog(body); else renderParams(body);
   }
   let dragId = null;
   function renderTree(body) {
@@ -3215,7 +3422,8 @@ const Panels = (() => {
     const rec = (list, parentUl) => {
       for (const it of list) {
         const li = h('li', { role: 'treeitem' });
-        const row = h('div', { class: 'node' + (selSet.has(it.id) ? ' sel' : '') + (it.hidden ? ' hidden-item' : ''), draggable: 'true', dataset: { id: it.id } });
+        const topIdx = App.doc.items.indexOf(it), mkr = Timeline.markerPos();
+        const row = h('div', { class: 'node' + (selSet.has(it.id) ? ' sel' : '') + (it.hidden ? ' hidden-item' : '') + (it.suppressed ? ' supp' : '') + (topIdx >= 0 && topIdx >= mkr ? ' rolled' : ''), draggable: 'true', dataset: { id: it.id } });
         const tw = h('button', { type: 'button', class: 'tw' + (expanded.has(it.id) ? ' open' : ''), 'aria-label': 'Aufklappen' });
         if (it.kind === 'group' || (it.finishes || []).length) { tw.innerHTML = icon('chevR'); tw.onclick = (e) => { e.stopPropagation(); expanded.has(it.id) ? expanded.delete(it.id) : expanded.add(it.id); renderLeft(); }; }
         else tw.style.visibility = 'hidden';
@@ -3227,6 +3435,7 @@ const Panels = (() => {
         eye.onclick = (e) => { e.stopPropagation(); App.change(it.hidden ? 'Eingeblendet' : 'Ausgeblendet', (doc) => { const f = Model.find(doc, it.id); f.item.hidden = !f.item.hidden; }); };
         const del = h('button', { type: 'button', 'aria-label': 'Löschen', 'data-tip': 'Löschen' }); del.innerHTML = icon('trash');
         del.onclick = (e) => { e.stopPropagation(); Actions.remove([it.id]); };
+        if (topIdx >= 0) { const sp = h('button', { type: 'button', 'aria-label': it.suppressed ? 'Aktivieren' : 'Unterdrücken', 'data-tip': it.suppressed ? 'Wieder aktivieren' : 'Unterdrücken (bleibt erhalten, zählt nicht mit)' }); sp.innerHTML = icon('suppress'); sp.onclick = (e) => { e.stopPropagation(); Timeline.toggleSuppress(it.id); }; acts.append(sp); }
         acts.append(eye, del);
         row.append(tw, sw, nm);
         const errs = App.errorsFor(it.id);
@@ -3283,6 +3492,35 @@ const Panels = (() => {
       Model.setFromMatrix(s.item, parentW.clone().invert().multiply(W));
       Model.walk(doc.items, (it, parent, depth, list, i) => { if (it.kind === 'group' && !it.children.length) list.splice(i, 1); });
     });
+  }
+  // ---------- Protokoll ----------
+  let logFilter = 'all';
+  function renderLog(body) {
+    const all = Log.entries();
+    const tools = h('div', { class: 'log-tools' });
+    const seg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Filter' });
+    for (const [k, l] of [['all', 'Alle'], ['change', 'Änderungen'], ['error', 'Fehler']]) { const b = h('button', { type: 'button', 'aria-pressed': logFilter === k }, l); b.onclick = () => { logFilter = k; renderLeft(); }; seg.append(b); }
+    const clr = h('button', { type: 'button', class: 'btn small ghost', style: { marginLeft: 'auto' } }, 'Leeren'); clr.onclick = () => Log.clear();
+    tools.append(seg, clr); body.append(tools);
+    const shown = all.filter((e) => logFilter === 'all' || (logFilter === 'error' ? e.kind === 'error' : e.kind !== 'error' && e.kind !== 'info')).slice().reverse();
+    if (!shown.length) { body.append(h('div', { class: 'empty-tree' }, logFilter === 'error' ? 'Keine Fehler – alles in Ordnung.' : 'Noch nichts passiert. Jede Änderung erscheint hier mit Uhrzeit.')); return; }
+    const ul = h('div', { class: 'log-list' });
+    const depthNow = App.undoStack.length;
+    const ic = { change: 'edit', undo: 'undo', redo: 'redo', error: 'warn', info: 'info' };
+    for (const e of shown.slice(0, 200)) {
+      const d = new Date(e.t); const tm = d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const reach = e.kind === 'change' && e.s === Log.session && e.depth != null && e.depth <= depthNow;
+      const row = h('div', { class: 'log-row ' + e.kind + (e.kind === 'change' && !reach && e.s === Log.session ? ' gone' : '') });
+      const ico = h('span'); ico.innerHTML = icon(ic[e.kind] || 'info');
+      const txt = h('div', null, e.kind === 'error' ? h('b', null, (e.name ? e.name + ': ' : '') + e.text) : h('span', null, e.kind === 'undo' ? 'Rückgängig: ' + e.text : e.kind === 'redo' ? 'Wiederholt: ' + e.text : e.text));
+      if (e.kind === 'error') {
+        if (Log.hint(e.code)) txt.append(h('small', null, Log.hint(e.code)));
+        if (e.itemId && Model.find(App.doc, e.itemId)) { const b = h('button', { type: 'button', class: 'lk' }, 'Schritt zeigen'); b.onclick = () => App.select([e.itemId]); txt.append(b); }
+      }
+      if (reach && e.depth < depthNow) { const b = h('button', { type: 'button', class: 'lk', 'data-tip': 'Alle späteren Änderungen rückgängig machen' }, 'Bis hierher zurück'); b.onclick = () => App.undoTo(e.depth); txt.append(b); }
+      row.append(h('span', { class: 'tm' }, tm), ico, txt); ul.append(row);
+    }
+    body.append(ul);
   }
   // ---------- Maße (Parameter) ----------
   function renderParams(body) {
@@ -3635,6 +3873,8 @@ const Panels = (() => {
   function init() {
     $('#lt-tree').onclick = () => { leftTab = 'tree'; renderLeft(); };
     $('#lt-params').onclick = () => { leftTab = 'params'; renderLeft(); };
+    $('#lt-log').onclick = () => { leftTab = 'log'; renderLeft(); };
+    Log.on('change', debounce(() => { if (leftTab === 'log') renderLeft(); }, 80));
     renderTools(); initViewCube();
     const rerender = debounce(() => { renderLeft(); renderRight(); renderCtx(); UI.renderHint(); }, 16);
     App.on('doc', rerender); App.on('selection', rerender); App.on('results', rerender); App.on('mode', () => { renderTools(); rerender(); });
@@ -6286,8 +6526,8 @@ const Tour = (() => {
   window.__masswerk = { App, Viewer, Model, Actions, Sketch, SK, THREE, Print, Drawing, Kernel, UI, Commands, Panels, Handles, Start, AI, Measure, Place };
   UI.initTips();
   Viewer.init($('#viewport'));
-  window.__V = Viewer; // für automatische Tests
-  Panels.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Commands.init(); Print.init(); ViewPrefs.apply();
+  window.__V = Viewer; window.__M = { App, Actions, Model, Timeline }; // für automatische Tests
+  Panels.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init();
 
   // Kopfzeile
   $('#btn-undo').onclick = () => App.undo();
