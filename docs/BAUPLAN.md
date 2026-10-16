@@ -50,7 +50,7 @@ Vorschlag: **Montag, Mittwoch, Samstag** bauen, dazwischen testen.
 
 **Sitzung 1 · Opus · Fundament Teil 1**
 ```
-Baue Maßwerk zum CAD-Programm aus unserem Plan um, ohne Druckplatte und ohne Slicer-Teile. Gerüst: OpenCascade über replicad im Web Worker, Three.js-Ansicht mit Ursprungsebenen XY/XZ/YZ, Ansichtswürfel, orthografisch/perspektivisch, Raster mit einstellbarer Weite. Test: Quader 20×20×5 mm mit runder Bohrung, exakt berechnet. Dateistruktur so, dass Zeitleiste, Baugruppe und Skizzen sauber dazukommen.
+Baue das bisherige Programm zum CAD-Programm aus unserem Plan um, ohne Druckplatte und ohne Slicer-Teile. Gerüst: OpenCascade über replicad im Web Worker, Three.js-Ansicht mit Ursprungsebenen XY/XZ/YZ, Ansichtswürfel, orthografisch/perspektivisch, Raster mit einstellbarer Weite. Test: Quader 20×20×5 mm mit runder Bohrung, exakt berechnet. Dateistruktur so, dass Zeitleiste, Baugruppe und Skizzen sauber dazukommen.
 ```
 
 **Sitzung 2 · Opus · Fundament Teil 2**

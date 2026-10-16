@@ -1,4 +1,4 @@
-// Maßwerk CAD-Kern: läuft im Web Worker (oder in Node für Tests).
+// Tracery CAD-Kern: läuft im Web Worker (oder in Node für Tests).
 // createKernel(R, oc) bekommt die replicad-Bibliothek und die OpenCascade-Instanz.
 
 export function createKernel(R, oc) {

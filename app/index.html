@@ -1,5 +1,5 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
-<title>Maßwerk</title>
+<title>Tracery</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2264%22%20height%3D%2264%22%20viewBox%3D%220%200%2064%2064%22%20fill%3D%22none%22%3E%20%20%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2214%22%20fill%3D%22%230c7a70%22/%3E%20%20%3Cg%20transform%3D%22translate%2810%2C%2010%29%20scale%281.8333%29%22%20stroke%3D%22%23ffffff%22%20stroke-width%3D%221.7%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cg%20transform%3D%22translate%2812%2012%29%20scale%28.885%29%20translate%28-12%20-10.2%29%22%20stroke-width%3D%221.92%22%3E%3Cpolygon%20points%3D%2212%202%2021%207%2021%2017%2012%2022%203%2017%203%207%22%20/%3E%3Cpath%20d%3D%22M12%2022V12%22%20/%3E%3Cpath%20d%3D%22M12%2012L21%207%22%20/%3E%3Cpath%20d%3D%22M12%2012L3%207%22%20/%3E%3Cpath%20d%3D%22M3%207A9%209%200%200%201%2021%207%22%20/%3E%3Cpath%20d%3D%22M21%207A9%209%200%200%201%2012%2022%22%20/%3E%3Cpath%20d%3D%22M12%2022A9%209%200%200%201%203%207%22%20/%3E%3C/g%3E%3C/g%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -502,9 +502,9 @@ body.sketching .timeline{display:none}
 <div id="app">
   <header class="topbar">
     <button class="icon-btn panel-toggle" id="btn-left" type="button" aria-label="Verlauf zeigen" data-tip="Verlauf"></button>
-    <a class="brand" href="#" id="brand" aria-label="Maßwerk – Startseite">
+    <a class="brand" href="#" id="brand" aria-label="Tracery – Startseite">
       <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="var(--accent)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><g transform="translate(12 12) scale(.885) translate(-12 -10.2)" stroke-width="1.92"><polygon points="12 2 21 7 21 17 12 22 3 17 3 7" /><path d="M12 22V12" /><path d="M12 12L21 7" /><path d="M12 12L3 7" /><path d="M3 7A9 9 0 0 1 21 7" /><path d="M21 7A9 9 0 0 1 12 22" /><path d="M12 22A9 9 0 0 1 3 7" /></g></svg>
-      <b>Maßwerk</b>
+      <b>Tracery</b>
     </a>
     <div class="seg" role="group" aria-label="Arbeitsbereich">
       <button type="button" id="tab-model" aria-pressed="true">Modell</button>
@@ -823,7 +823,7 @@ function icon(name, extra = '') {
 }
 function iconEl(name) { return svgEl(icon(name)); }
 
-// ---------- Hilfetexte für Werkzeuge (Entwurf Gemini, an Maßwerk angepasst) ----------
+// ---------- Hilfetexte für Werkzeuge (Entwurf Gemini, an Tracery angepasst) ----------
 // tip: kurz, hilfe: wie benutzen, tipp: typischer Fehler oder Trick. Erscheinen beim längeren Überfahren.
 const HELP = {
  "sketchFace": {
@@ -844,7 +844,7 @@ const HELP = {
  "circle": {
   "tip": "Runden Kreis vom Mittelpunkt aufziehen",
   "hilfe": "Setze den ersten Klick in die Mitte, ziehe den Kreis groß und klicke ein zweites Mal für den Rand.",
-  "tipp": "Maßwerk fragt nach dem Durchmesser (der ganzen Breite), nicht nach dem Radius."
+  "tipp": "Tracery fragt nach dem Durchmesser (der ganzen Breite), nicht nach dem Radius."
  },
  "arc": {
   "tip": "Gebogene Linie über drei Punkte",
@@ -1276,7 +1276,7 @@ const Model = (() => {
     return it;
   }
   function migrate(doc) {
-    if (!doc || doc.format !== 'masswerk') throw new Error('Das ist keine Maßwerk-Projektdatei.');
+    if (!doc || doc.format !== 'masswerk') throw new Error('Das ist keine Tracery-Projektdatei.');
     doc.params = doc.params || []; doc.items = doc.items || [];
     doc.settings = Object.assign({ printer: 'std', custom: { x: 220, y: 220, z: 250 }, grid: 1, snap: true }, doc.settings || {});
     if (doc.rollback != null && !(doc.rollback >= 0 && doc.rollback < doc.items.length)) doc.rollback = null;
@@ -1561,7 +1561,7 @@ const Kernel = (() => {
       bytes = new Uint8Array(got); let o = 0; for (const c of chunks) { bytes.set(c, o); o += c.length; }
     } else bytes = new Uint8Array(await resp.arrayBuffer());
     if (bytes[0] === 0x1f && bytes[1] === 0x8b) {
-      if (typeof DecompressionStream === 'undefined') throw new Error('Dieser Browser ist zu alt für Maßwerk. Bitte aktualisiere ihn.');
+      if (typeof DecompressionStream === 'undefined') throw new Error('Dieser Browser ist zu alt für Tracery. Bitte aktualisiere ihn.');
       const ds = new DecompressionStream('gzip');
       bytes = new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(ds)).arrayBuffer());
     }
@@ -3596,7 +3596,7 @@ const UI = (() => {
   function loading(show, pct, text) {
     if (!show) { if (loadingEl) { loadingEl.remove(); loadingEl = null; } return; }
     if (!loadingEl) {
-      loadingEl = h('div', { class: 'loading' }, h('div', { class: 'box' }, h('b', null, 'Maßwerk startet'), h('div', { class: 'bar' }, h('i')), h('span', { class: 'lt' }, 'Der CAD-Kern wird geladen …')));
+      loadingEl = h('div', { class: 'loading' }, h('div', { class: 'box' }, h('b', null, 'Tracery startet'), h('div', { class: 'bar' }, h('i')), h('span', { class: 'lt' }, 'Der CAD-Kern wird geladen …')));
       $('#center').append(loadingEl);
     }
     if (pct != null) loadingEl.querySelector('.bar i').style.width = Math.round(pct * 100) + '%';
@@ -5344,7 +5344,7 @@ const Print = (() => {
   function buildSTL(objects, name) {
     let count = 0; for (const o of objects) count += o.triangles.length / 3;
     const buf = new ArrayBuffer(84 + count * 50); const dv = new DataView(buf);
-    const head = ('Masswerk ' + name).slice(0, 79);
+    const head = ('Tracery ' + name).slice(0, 79);
     for (let i = 0; i < head.length; i++) dv.setUint8(i, head.charCodeAt(i) & 0x7f);
     dv.setUint32(80, count, true);
     let off = 84;
@@ -5366,7 +5366,7 @@ const Print = (() => {
     const colors = [...new Set(objects.map((o) => (o.color || '#2f9e91').toUpperCase()))];
     const parts = [];
     parts.push('<?xml version="1.0" encoding="UTF-8"?>\n<model unit="millimeter" xml:lang="de-DE" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">\n');
-    parts.push(`<metadata name="Title">${xmlEsc(name)}</metadata>\n<metadata name="Application">Maßwerk</metadata>\n<resources>\n<basematerials id="1">\n`);
+    parts.push(`<metadata name="Title">${xmlEsc(name)}</metadata>\n<metadata name="Application">Tracery</metadata>\n<resources>\n<basematerials id="1">\n`);
     for (const c of colors) parts.push(`<base name="${xmlEsc(c)}" displaycolor="${c}FF"/>\n`);
     parts.push('</basematerials>\n');
     let id = 2; const ids = [];
@@ -5388,7 +5388,7 @@ const Print = (() => {
     const rels = enc.encode('<?xml version="1.0" encoding="UTF-8"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Target="/3D/3dmodel.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships>');
     return Zip.make([{ name: '[Content_Types].xml', data: ct }, { name: '_rels/.rels', data: rels }, { name: '3D/3dmodel.model', data: model }]);
   }
-  function safeName(s) { return (String(s || 'Maßwerk').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim() || 'Maßwerk').slice(0, 80); }
+  function safeName(s) { return (String(s || 'Tracery').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim() || 'Tracery').slice(0, 80); }
   async function save(filename, data) {
     let dl = null;
     try { dl = await window.claude?.use('downloads'); } catch (_) {}
@@ -5438,7 +5438,7 @@ const Print = (() => {
         if (opts.mf) files.push({ name: name + '.3mf', data: await build3MF(res.objects, name) });
       }
       if (opts.step) { const r = await Kernel.call('exportSTEP', { scene }); files.push({ name: name + '.step', data: new Uint8Array(r.data) }); }
-      files.push({ name: 'LIESMICH.txt', data: new TextEncoder().encode(`${App.doc.name}\nErstellt mit Maßwerk am ${new Date().toLocaleString('de-DE')}\n\nSTEP: exakte Geometrie für andere CAD-Programme\nSTL / 3MF: Dreiecksnetz (Millimeter)\n`) });
+      files.push({ name: 'LIESMICH.txt', data: new TextEncoder().encode(`${App.doc.name}\nErstellt mit Tracery am ${new Date().toLocaleString('de-DE')}\n\nSTEP: exakte Geometrie für andere CAD-Programme\nSTL / 3MF: Dreiecksnetz (Millimeter)\n`) });
       const zip = await Zip.make(files);
       tst.remove();
       await save(name + '.zip', new Blob([zip]));
@@ -5976,7 +5976,7 @@ const Drawing = (() => {
       texts.push({ x: cC + 1.5, y: rows[0] + 10.5, t: clipText(l1, tw, ts), size: ts, anchor: 'start', cls: 'title' });
       texts.push({ x: cC + 1.5, y: rows[0] + 10.5 + ts * 1.25, t: clipText(l2, tw, ts), size: ts, anchor: 'start', cls: 'title' });
     } else texts.push({ x: cC + 1.5, y: rows[0] + 13.5, t: title, size: ts, anchor: 'start', cls: 'title' });
-    texts.push({ x: cC + 1.5, y: rows[3] + 5.4, t: 'Erstellt mit Maßwerk', size: 2, anchor: 'start', cls: 'lab' });
+    texts.push({ x: cC + 1.5, y: rows[3] + 5.4, t: 'Erstellt mit Tracery', size: 2, anchor: 'start', cls: 'lab' });
     // Projektionssymbol Methode 1 (ISO 5456-2): Kegelstumpf links mit schmalem Ende links, Ansicht von links rechts daneben
     lab(cD, rows[0], 'Projektion');
     const sx = cD + 4.5, cy = y0 + 11.5;
@@ -6263,7 +6263,7 @@ const Drawing = (() => {
       const lib = await loadJsPDF(); const { jsPDF } = lib;
       render();
       const [W, H] = sheetSize(); const pdf = new jsPDF({ orientation: W > H ? 'landscape' : 'portrait', unit: 'mm', format: [W, H] });
-      pdf.setProperties({ title: dwg().title.titel || App.doc.name, creator: 'Maßwerk' });
+      pdf.setProperties({ title: dwg().title.titel || App.doc.name, creator: 'Tracery' });
       const style = { frame: [0.7, null], thin: [0.25, null], vis: [0.5, null], hid: [0.25, [2.4, 1.2]], ctr: [0.25, [8, 1.2, 0.6, 1.2]], dim: [0.25, null] };
       for (const l of lastLines) {
         if (l.cls === 'paper' || l.cls === 'prev' || l.cls === 'snap') continue;
@@ -6360,7 +6360,7 @@ const Drawing = (() => {
 // ================= KI-Helfer (baut und ändert Modelle aus einer Beschreibung) =================
 const AI = (() => {
   let panel = null, ctl = null, history = [], off = false;
-  const RULES = `Du bist der CAD-Helfer in der Web-App „Maßwerk“. Du baust präzise technische 3D-Modelle, vor allem für FPV-/Speed-Drohnen, aus Grundkörpern, Skizzen und Bauteilen. Einheiten: Millimeter. Z zeigt nach oben, die XY-Ebene bei z=0 ist die Grundebene.
+  const RULES = `Du bist der CAD-Helfer in der Web-App „Tracery“. Du baust präzise technische 3D-Modelle, vor allem für FPV-/Speed-Drohnen, aus Grundkörpern, Skizzen und Bauteilen. Einheiten: Millimeter. Z zeigt nach oben, die XY-Ebene bei z=0 ist die Grundebene.
 
 Antworte NUR mit einem JSON-Objekt:
 {"antwort": "kurze Antwort auf Deutsch, 1–3 Sätze, per du", "aktionen": [ ... ]}
@@ -6447,7 +6447,7 @@ Beispiel – Wunsch „Platte 60 × 40 × 4 mit einem Loch in der Mitte“:
   async function ask(text) {
     let sample = null;
     try { sample = await window.claude?.use('sample'); } catch (_) {}
-    if (!sample) { UI.modal({ title: 'KI-Helfer nicht verfügbar', body: 'Der KI-Helfer funktioniert, wenn Maßwerk in Claude geöffnet ist. Hier kannst du alles andere wie gewohnt nutzen.', actions: [{ label: 'OK', primary: true }] }); return; }
+    if (!sample) { UI.modal({ title: 'KI-Helfer nicht verfügbar', body: 'Der KI-Helfer funktioniert, wenn Tracery in Claude geöffnet ist. Hier kannst du alles andere wie gewohnt nutzen.', actions: [{ label: 'OK', primary: true }] }); return; }
     if (ctl) ctl.abort();
     addMsg('me', text);
     const m = addMsg('ai', 'Denkt nach …');
@@ -6723,7 +6723,7 @@ const Start = (() => {
     const head = h('div', { class: 'start-head' });
     const brand = h('div', { class: 'start-brand' });
     brand.innerHTML = $('#brand svg').outerHTML;
-    brand.append(h('div', null, h('h1', null, 'Maßwerk'), h('p', null, 'Präzises CAD für Speed-Drohnen und technische Teile')));
+    brand.append(h('div', null, h('h1', null, 'Tracery'), h('p', null, 'Präzises CAD für Speed-Drohnen und technische Teile')));
     const acts = h('div', { class: 'btn-row' });
     const nb = h('button', { type: 'button', class: 'btn primary' }); nb.innerHTML = icon('newfile') + 'Neues Projekt'; nb.onclick = () => newProject();
     const ob = h('button', { type: 'button', class: 'btn' }); ob.innerHTML = icon('folder') + 'Datei öffnen'; ob.onclick = () => openFile();
@@ -6763,7 +6763,7 @@ const Start = (() => {
       cards.append(c);
     }
     tsec.append(cards); inner.append(tsec);
-    inner.append(h('div', { class: 'start-foot', html: 'Projekte werden automatisch in diesem Browser gesichert. Zum sicheren Aufbewahren und Teilen: <b>Projekt als Datei speichern</b>.<br>Maßwerk rechnet mit OpenCascade (LGPL-2.1) über replicad (MIT) und zeigt 3D mit three.js (MIT).' }));
+    inner.append(h('div', { class: 'start-foot', html: 'Projekte werden automatisch in diesem Browser gesichert. Zum sicheren Aufbewahren und Teilen: <b>Projekt als Datei speichern</b>.<br>Tracery rechnet mit OpenCascade (LGPL-2.1) über replicad (MIT) und zeigt 3D mit three.js (MIT).' }));
     el.append(inner);
     const close = h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Schließen', style: { position: 'fixed', top: '12px', right: '12px' } }); close.innerHTML = icon('close'); close.onclick = hide;
     if (App.doc.items.length) el.append(close);
@@ -6801,7 +6801,7 @@ const Start = (() => {
   });
   async function saveFile() {
     const name = Print.safeName(App.doc.name);
-    const ok = await Print.save(name + '.masswerk.json', JSON.stringify(App.doc, null, 1));
+    const ok = await Print.save(name + '.tracery.json', JSON.stringify(App.doc, null, 1));
     if (ok) App.fileSavedRev = App.revision;
   }
   return { show, hide, newProject, openFile, openBlob, saveFile, get open() { return !!el; } };
@@ -6811,7 +6811,7 @@ const Start = (() => {
 const Tour = (() => {
   let box = null, ring = null, idx = 0, off = [];
   const STEPS = [
-    { title: 'Willkommen bei Maßwerk', text: 'In drei Minuten baust du ein Teil mit Loch und exportierst es. Links siehst du den Verlauf, rechts die Einstellungen, in der Mitte dein Modell.', target: null },
+    { title: 'Willkommen bei Tracery', text: 'In drei Minuten baust du ein Teil mit Loch und exportierst es. Links siehst du den Verlauf, rechts die Einstellungen, in der Mitte dein Modell.', target: null },
     { title: 'Leg einen Quader hin', text: 'Klick oben auf „Körper“ und dann auf „Quader“. Du kannst ihn auch direkt auf die Fläche ziehen.', target: '#t-body', until: () => App.doc.items.some((x) => x.kind === 'box') },
     { title: 'Mach ihn größer', text: 'Zieh an einem weißen Anfasser – oder klick auf eine der Zahlen am Quader und tipp zum Beispiel 40 ein.', target: '#viewport', until: (ev) => ev === 'size' },
     { title: 'Ein Loch einbauen', text: 'Klick wieder auf „Körper“ und unten auf „Zylinder als Loch“ – schon geht ein Loch durch den Quader. Jeder Körper kann übrigens mit einem Klick rechts auf „Loch“ zum Loch werden.', target: '#t-body', until: () => App.doc.items.some((x) => x.role === 'hole') || App.doc.items.some((x) => x.kind === 'group') },
@@ -6869,7 +6869,7 @@ const Tour = (() => {
 // ================= Start der App =================
 (function boot() {
   let errShown = 0;
-  window.addEventListener('error', (e) => { console.error(e.error || e.message); if (Date.now() - errShown > 4000 && /Maßwerk|app|THREE|replicad/i.test(String(e.filename || '') + String(e.message || '')) === false) { errShown = Date.now(); } });
+  window.addEventListener('error', (e) => { console.error(e.error || e.message); if (Date.now() - errShown > 4000 && /Tracery|app|THREE|replicad/i.test(String(e.filename || '') + String(e.message || '')) === false) { errShown = Date.now(); } });
   window.addEventListener('unhandledrejection', (e) => { console.error(e.reason); if (Date.now() - errShown > 4000) { errShown = Date.now(); const m = (e.reason && e.reason.message) || String(e.reason || ''); if (m && !/abort|cancel/i.test(m)) UI.toast('Da ist etwas schiefgelaufen: ' + m.slice(0, 140), { kind: 'bad' }); } });
 
   // Symbole in die festen Knöpfe setzen
@@ -6887,7 +6887,7 @@ const Tour = (() => {
   $('#btn-redo').onclick = () => App.redo();
   const updHist = () => { $('#btn-undo').disabled = !App.undoStack.length; $('#btn-redo').disabled = !App.redoStack.length; const l = App.undoStack[App.undoStack.length - 1]; $('#btn-undo').dataset.tip = l ? 'Rückgängig: ' + l.label : 'Rückgängig'; };
   App.on('history', updHist); App.on('doc', updHist); updHist();
-  const updName = () => { $('#btn-project').textContent = App.doc.name; document.title = App.doc.name && App.doc.name !== 'Neues Projekt' ? App.doc.name + ' – Maßwerk' : 'Maßwerk'; };
+  const updName = () => { $('#btn-project').textContent = App.doc.name; document.title = App.doc.name && App.doc.name !== 'Neues Projekt' ? App.doc.name + ' – Tracery' : 'Tracery'; };
   App.on('doc', updName);
   $('#tab-model').onclick = () => Commands.setMode('model');
   $('#tab-drawing').onclick = () => Commands.setMode('drawing');
@@ -6909,7 +6909,7 @@ const Tour = (() => {
     { label: 'Tastenkürzel', icon: 'help', run: () => Commands.showKeys() },
     { label: 'Exportieren', icon: 'export', run: () => Print.exportDialog() },
     '-',
-    { label: 'Über Maßwerk', icon: 'info', run: () => UI.modal({ title: 'Über Maßwerk', body: h('div', { style: { display: 'grid', gap: '10px', color: 'var(--muted)', lineHeight: 1.55 } }, h('p', null, 'Maßwerk ist ein parametrisches CAD im Browser, spezialisiert auf FPV- und Speed-Drohnen, mit technischen Zeichnungen.'), h('p', null, 'Gerechnet wird mit dem CAD-Kern OpenCascade (LGPL-2.1) über die Bibliothek replicad (MIT). Die 3D-Anzeige nutzt three.js (MIT), die PDF-Ausgabe jsPDF (MIT).'), h('p', null, 'Deine Projekte bleiben in deinem Browser. Der KI-Helfer nutzt dein Claude-Konto.')), actions: [{ label: 'Schließen', primary: true }] }) },
+    { label: 'Über Tracery', icon: 'info', run: () => UI.modal({ title: 'Über Tracery', body: h('div', { style: { display: 'grid', gap: '10px', color: 'var(--muted)', lineHeight: 1.55 } }, h('p', null, 'Tracery ist ein parametrisches CAD im Browser, spezialisiert auf FPV- und Speed-Drohnen, mit technischen Zeichnungen.'), h('p', null, 'Der Name: „Tracery“ ist das englische Wort für Tracery – die filigranen, exakt konstruierten Ornamente in gotischen Kirchenfenstern. Genau so sollen deine Teile werden.'), h('p', null, 'Gerechnet wird mit dem CAD-Kern OpenCascade (LGPL-2.1) über die Bibliothek replicad (MIT). Die 3D-Anzeige nutzt three.js (MIT), die PDF-Ausgabe jsPDF (MIT).'), h('p', null, 'Deine Projekte bleiben in deinem Browser. Der KI-Helfer nutzt dein Claude-Konto.')), actions: [{ label: 'Schließen', primary: true }] }) },
   ], { alignRight: true });
   const ws = $('#workspace');
   $('#btn-left').onclick = () => { ws.classList.toggle('show-left'); ws.classList.remove('show-right'); };

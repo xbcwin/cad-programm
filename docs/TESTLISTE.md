@@ -1,0 +1,109 @@
+# Testliste
+
+Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 3.
+
+Vorbereitung: `app/` über einen lokalen Server öffnen (siehe README), Seite neu laden.
+
+## Start und Ansicht
+
+- [ ] **Startet ohne Fehler**
+  Schritte: 1. Seite neu laden.
+  Erwartet: Startseite mit Logo und Vorlagen, keine rote Fehlermeldung.
+- [ ] **Vorlage öffnen**
+  Schritte: 1. „Schild mit Loch“ anklicken.
+  Erwartet: Platte mit Loch erscheint, unten rechts steht „80 × 30 × 3 mm“.
+- [ ] **Ansichten per Taste**
+  Schritte: 1. In den 3D-Bereich klicken. 2. Nacheinander 1, 3, 7, 0 drücken.
+  Erwartet: Ansicht vorne, rechts, oben, schräg – jeweils weich animiert.
+- [ ] **Orthografisch**
+  Schritte: 1. O drücken. 2. Ansicht drehen.
+  Erwartet: Rasterlinien bleiben parallel (keine Fluchtpunkte). Nochmal O: Perspektive zurück.
+- [ ] **Raster**
+  Schritte: 1. G drücken. 2. Nochmal G. 3. Rechts unter „Ansicht“ Rasterweite auf 1 mm stellen.
+  Erwartet: Raster aus, wieder an, dann dichter.
+- [ ] **Raster automatisch**
+  Schritte: 1. Rasterweite „Automatisch“. 2. Weit hineinzoomen.
+  Erwartet: Das Raster wird in Zehnerschritten feiner, auch nah an der Kamera sind Linien zu sehen.
+- [ ] **Ursprungsebenen und Achsen**
+  Schritte: 1. Häkchen „Ursprungsebenen zeigen“ und „Achsen zeigen“ aus- und wieder einschalten.
+  Erwartet: Die drei farbigen Ebenen bzw. die roten/grünen/blauen Achsen verschwinden und erscheinen wieder.
+- [ ] **Tief hineinzoomen**
+  Schritte: 1. Ganz nah an den Lochrand zoomen und 1 Sekunde warten.
+  Erwartet: Kein Flimmern, der Lochrand wird glatt nachgeschärft.
+
+## Zeitleiste
+
+- [ ] **Schritte erscheinen**
+  Schritte: 1. Neues leeres Projekt. 2. Über „Körper“ Quader, Zylinder und Kugel hinzufügen.
+  Erwartet: Drei Symbole in der Zeitleiste, rechts „3 Schritte“.
+- [ ] **Marker ziehen**
+  Schritte: 1. Den farbigen Balken nach links vor das zweite Symbol ziehen.
+  Erwartet: Nur der Quader ist zu sehen, Zylinder und Kugel sind blass gestrichelt, rechts „1 / 3“.
+- [ ] **Einfügen am Marker**
+  Schritte: 1. Bei zurückgezogenem Marker einen Kegel hinzufügen.
+  Erwartet: Der Kegel erscheint direkt hinter dem Quader, nicht am Ende.
+- [ ] **Doppelklick**
+  Schritte: 1. Doppelklick auf das letzte Symbol.
+  Erwartet: Marker springt ans Ende, alles ist wieder sichtbar.
+- [ ] **Unterdrücken**
+  Schritte: 1. Rechtsklick auf ein Symbol → „Unterdrücken“.
+  Erwartet: Teil verschwindet, Symbol ist durchgestrichen, im Verlauf links ist der Name durchgestrichen. Nochmal → „Wieder aktivieren“.
+- [ ] **Fehler wird rot**
+  Schritte: 1. Quader anklicken. 2. Rechts unter „Kanten“ „Alle runden“. 3. Radius auf 50 setzen.
+  Erwartet: Symbol in der Zeitleiste rot mit Punkt, Status unten rechts „Ein Schritt hat ein Problem“.
+
+## Protokoll und Rückgängig
+
+- [ ] **Protokoll füllt sich**
+  Schritte: 1. Tab „Protokoll“ links öffnen.
+  Erwartet: Alle Änderungen mit Uhrzeit, der Fehler aus dem letzten Test rot mit Tipp.
+- [ ] **Filter**
+  Schritte: 1. „Fehler“ anklicken. 2. „Änderungen“ anklicken.
+  Erwartet: Jeweils nur die passenden Einträge.
+- [ ] **Bis hierher zurück**
+  Schritte: 1. Bei einem älteren Eintrag „Bis hierher zurück“ klicken.
+  Erwartet: Alle späteren Änderungen sind rückgängig gemacht, Hinweis „… Schritte rückgängig gemacht“.
+- [ ] **Strg/Cmd + Z und Y**
+  Schritte: 1. Etwas ändern. 2. Cmd+Z. 3. Cmd+Y.
+  Erwartet: Änderung weg, dann wieder da.
+
+## Einstellungen
+
+- [ ] **Design**
+  Schritte: 1. ⋯ → Einstellungen → Design „Dunkel“, dann „Hell“, dann „Wie das System“.
+  Erwartet: Oberfläche und 3D-Bereich wechseln sofort.
+- [ ] **Darstellungsqualität**
+  Schritte: 1. Qualität „Grob“, dann „Sehr fein“.
+  Erwartet: Rundungen werden sichtbar kantiger bzw. glatter.
+- [ ] **Hilfe-Tooltips**
+  Schritte: 1. Maus auf „Messen“ legen und 2 Sekunden warten.
+  Erwartet: Erst kurzer Text, dann ausführliche Anleitung mit „Tipp:“.
+
+## Dateien
+
+- [ ] **Projekt speichern**
+  Schritte: 1. Cmd+S.
+  Erwartet: Datei `<Projektname>.tracery.json` wird heruntergeladen.
+- [ ] **Projekt öffnen**
+  Schritte: 1. Neues Projekt. 2. Die gespeicherte Datei ins Fenster ziehen.
+  Erwartet: Projekt ist wieder da – inklusive Marker-Position und unterdrückter Schritte.
+- [ ] **Export**
+  Schritte: 1. „Exportieren“ → STEP angehakt → „Als ZIP speichern“.
+  Erwartet: ZIP mit `.step`-Datei und LIESMICH.txt.
+
+## Fiese Tests
+
+- [ ] Marker zurückziehen, dann einen Schritt **hinter** dem Marker löschen, dann Cmd+Z – der Schritt ist wieder da, Marker an derselben Stelle.
+- [ ] Alle Schritte unterdrücken – Status unten rechts zeigt „Noch leer“, kein Fehler.
+- [ ] Marker ganz an den Anfang, Projekt speichern, Seite neu laden – Zeitleiste steht immer noch am Anfang.
+- [ ] Während das Modell noch rechnet (direkt nach dem Öffnen einer Vorlage), schnell O, G und 7 drücken – keine Fehlermeldung.
+- [ ] Qualität „Sehr fein“, dann ganz nah an eine Rundung zoomen und herauszoomen – flüssig, kein Einfrieren.
+
+## Fehler melden
+
+```
+Was ich gemacht habe: …
+Was passieren sollte: …
+Was passiert ist: …
+Browser: …
+```

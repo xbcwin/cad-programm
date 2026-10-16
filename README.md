@@ -1,4 +1,6 @@
-# Maßwerk – CAD für Speed-Drohnen
+# Tracery – CAD für Speed-Drohnen
+
+*Tracery* ist das englische Wort für Maßwerk: die exakt konstruierten Ornamente gotischer Kirchenfenster. Bis Oktober 2026 hieß das Programm „Maßwerk“.
 
 Parametrisches CAD im Browser, spezialisiert auf FPV-/Speed-Drohnen. Exakte Geometrie mit OpenCascade (über replicad, als WebAssembly), Anzeige mit Three.js.
 
@@ -14,6 +16,8 @@ python3 -m http.server 8000
 Dann im Browser `http://localhost:8000` öffnen.
 
 Online geht es über **GitHub Pages**: Repository → Settings → Pages → Branch `main`, Ordner `/ (root)`. Die Startseite leitet auf `app/` weiter.
+
+Projektdateien heißen `*.tracery.json`; ältere `*.masswerk.json` lassen sich weiterhin öffnen.
 
 ## Ordner
 
