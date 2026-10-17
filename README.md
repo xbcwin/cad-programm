@@ -39,3 +39,13 @@ Projektdateien heißen `*.tracery.json`; ältere `*.masswerk.json` lassen sich w
 ## Lizenzen
 
 replicad (MIT), OpenCascade (LGPL 2.1 mit Ausnahme), Three.js (MIT).
+
+## Tests
+
+`tests/klicktest.py` klickt die Punkte aus `docs/TESTLISTE.md` automatisch in einem echten Browser durch (Playwright mit Chromium):
+
+```
+cd app && python3 -m http.server 8765 &
+cd .. && python3 tests/klicktest.py            # alles
+python3 tests/klicktest.py Skizze Zeitleiste   # nur passende Tests
+```

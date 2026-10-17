@@ -45,6 +45,7 @@ Stand: 17.10.2026 · nach Sitzung 5 von 14
 - [x] Neuer Name beim Maß (z. B. `breite`) wird automatisch unter „Maße“ angelegt
 - [x] Formel-Beispiele unter „Maße“ (Gemini, alle 12 mit Tracerys Rechner nachgeprüft), Beispiel-Maße per Klick
 - [x] Umbenennen / Entfernen eines Maßes wirkt jetzt auch auf Skizzen-Maße
+- [x] Automatischer Klicktest `tests/klicktest.py`: 35 Durchläufe, 52 von 55 Punkten der Testliste automatisch geprüft
 
 ## Offen
 
