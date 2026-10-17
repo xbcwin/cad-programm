@@ -142,7 +142,7 @@ const Model = (() => {
   }
   function sketchParams(it, V) {
     const p = it.p || {};
-    const regs = SK.regions(p.sketch ? SK.applyDims(p.sketch.ents, p.sketch.dims, V) : []);
+    const regs = SK.regions(p.sketch ? Solver.cached(p.sketch, V).ents : []);
     let chosen = regs;
     if (Array.isArray(p.sel) && p.sel.length) { const f = regs.filter((r) => p.sel.includes(r.key)); if (f.length) chosen = f; }
     const out = { plane: p.sketch ? p.sketch.plane : { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] }, regions: chosen.map((r) => ({ outer: r.outer.k, holes: r.holes.map((h) => h.k) })) };

@@ -33,7 +33,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,Viewer,Commands}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,Viewer,Commands,Solver,Notes}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -539,6 +539,91 @@ def t_notizen(p):
     return [ok1, ok2, ok3, ok4, ok5, ok6]
 
 
+PREP = """App.change('x', d=>{ const it=Model.newItem('extrude',{},{}); it.p={sketch:{plane:{o:[0,0,0],x:[1,0,0],n:[0,0,1]},ents:[
+  {id:'L1',type:'line',a:[-30,-20],b:[30,-18]},{id:'L2',type:'line',a:[-30,20],b:[-28,-10]},
+  {id:'C1',type:'circle',c:[-10,5],r:4},{id:'C2',type:'circle',c:[12,8],r:6},{id:'AX',type:'line',a:[0,-25],b:[1,25],con:true},
+  {id:'A1',type:'arc',a:[20,10],m:[26,16],b:[20,22]}],dims:[],cons:[]},dist:3,dir:'normal'}; d.items.push(it); })"""
+
+
+def t_regeln(p):
+    p.empty(); p.ev(PREP); p.wait(1500)
+    p.ev("Sketch.editItem(App.doc.items[0].id)"); p.wait(1500)
+    S = lambda js: p.ev("const S=Sketch.state; const E=(id)=>S.ents.find(e=>e.id===id); " + js)
+    def click_ent(eid, t=0.35):
+        e = S(f"return E('{eid}')")
+        u = (e['a'][0] * (1 - t) + e['b'][0] * t, e['a'][1] * (1 - t) + e['b'][1] * t) if e['type'] == 'line' else (e['c'][0], e['c'][1] + e['r']) if e['type'] == 'circle' else tuple(e['m'])
+        s = to_screen(p, *u); p.pg.mouse.click(s[0], s[1]); p.wait(250)
+    def tool(t):
+        p.pg.click(f'.consbar [data-tool="c:{t}"]'); p.wait(150)
+    tool('perpendicular'); click_ent('L1'); click_ent('L2')
+    ok1 = S("const a=E('L1'),c=E('L2'); const u=[a.b[0]-a.a[0],a.b[1]-a.a[1]], v=[c.b[0]-c.a[0],c.b[1]-c.a[1]]; return Math.abs(u[0]*v[0]+u[1]*v[1])/Math.hypot(...u)/Math.hypot(...v) < 1e-6")
+    tool('tangent'); click_ent('L1'); click_ent('C1')
+    ok2 = S("const l=E('L1'),c=E('C1'); const dx=l.b[0]-l.a[0],dy=l.b[1]-l.a[1]; return Math.abs(Math.abs((c.c[0]-l.a[0])*dy-(c.c[1]-l.a[1])*dx)/Math.hypot(dx,dy)-c.r) < 1e-6")
+    tool('equal'); click_ent('C1'); click_ent('C2')
+    ok3 = S("return Math.abs(E('C1').r-E('C2').r) < 1e-6")
+    tool('symmetric'); click_ent('C1'); click_ent('C2'); click_ent('AX', 0.8)
+    ok4 = S("const a=E('C1').c,b=E('C2').c,l=E('AX'); const m=[(a[0]+b[0])/2,(a[1]+b[1])/2]; const dx=l.b[0]-l.a[0],dy=l.b[1]-l.a[1],L=Math.hypot(dx,dy); return Math.abs(((m[0]-l.a[0])*dy-(m[1]-l.a[1])*dx)/L)<1e-5 && Math.abs(((b[0]-a[0])*dx+(b[1]-a[1])*dy)/L)<1e-5")
+    tool('coincident'); a1 = S("return E('A1').a"); s = to_screen(p, *a1); p.pg.mouse.click(s[0], s[1]); p.wait(200); click_ent('AX', 0.9)
+    ok5 = S("const q=E('A1').a,l=E('AX'); const dx=l.b[0]-l.a[0],dy=l.b[1]-l.a[1]; return Math.abs((q[0]-l.a[0])*dy-(q[1]-l.a[1])*dx)/Math.hypot(dx,dy) < 1e-6")
+    p.pg.keyboard.press('d'); click_ent('A1'); p.pg.keyboard.press('Control+a'); p.pg.keyboard.type('5'); p.pg.keyboard.press('Enter'); p.wait(400)
+    ok6 = abs(S("const e=E('A1'); return window.__M.SK.arcInfo(e.a,e.m,e.b).r") - 5) < 1e-4
+    p.pg.keyboard.press('d'); click_ent('AX', 0.8); click_ent('L2', 0.7); p.pg.keyboard.press('Control+a'); p.pg.keyboard.type('60'); p.pg.keyboard.press('Enter'); p.wait(400)
+    ok7 = abs(S("const a=E('AX'),c=E('L2'); const u=[a.b[0]-a.a[0],a.b[1]-a.a[1]], v=[c.b[0]-c.a[0],c.b[1]-c.a[1]]; return Math.atan2(Math.abs(u[0]*v[1]-u[1]*v[0]),u[0]*v[0]+u[1]*v[1])*180/Math.PI") - 60) < 1e-4
+    p.pg.keyboard.press('Enter'); p.wait(2500)
+    ok8 = p.ev("return App.doc.items[0].p.sketch.cons.length === 5 && App.errors.length === 0")
+    return [ok1, ok2, ok3, ok4, ok5, ok6, ok7, ok8]
+
+
+def t_regeln_bestimmt(p):
+    sketch_xy(p)
+    cx, cy = p.canvas_center()
+    S = lambda js: p.ev("const S=Sketch.state; " + js)
+    mid = lambda i, t=0.7: to_screen(p, *[S(f"return S.ents[{i}]")['a'][k] * (1 - t) + S(f"return S.ents[{i}]")['b'][k] * t for k in (0, 1)])
+    p.pg.keyboard.press('l')
+    for (x1, y1, x2, y2) in [(-120, -80, 60, -55), (-110, 40, 70, 90)]:
+        p.pg.keyboard.down('Shift'); p.pg.mouse.click(cx + x1, cy + y1); p.pg.mouse.click(cx + x2, cy + y2); p.pg.keyboard.up('Shift'); p.pg.keyboard.press('Enter'); p.wait(200)
+    p.pg.keyboard.press('v'); m = mid(0, 0.5); p.pg.mouse.click(m[0], m[1]); p.wait(200)
+    p.pg.click('.consbar [data-tool="c:horizontal"]'); p.wait(300)
+    p.pg.click('.consbar [data-tool="c:parallel"]')
+    for i in range(2):
+        m = mid(i, 0.4); p.pg.mouse.click(m[0], m[1]); p.wait(250)
+    p.pg.keyboard.press('d'); a = to_screen(p, *S("return S.ents[0].a")); p.pg.mouse.click(a[0], a[1]); p.wait(200)
+    m = mid(1, 0.5); p.pg.mouse.click(m[0], m[1]); p.wait(300)
+    p.pg.keyboard.press('Control+a'); p.pg.keyboard.type('25'); p.pg.keyboard.press('Enter'); p.wait(300)
+    for i in range(2):
+        p.pg.keyboard.press('v'); m = mid(i); p.pg.mouse.click(m[0], m[1]); p.wait(200)
+        p.pg.fill('#se-len', '40'); p.pg.press('#se-len', 'Enter'); p.wait(300)
+        p.pg.fill('#se-x', '0'); p.pg.press('#se-x', 'Enter'); p.wait(300)
+        if i == 0:
+            p.pg.fill('#se-y', '0'); p.pg.press('#se-y', 'Enter'); p.wait(300)
+    p.pg.mouse.click(cx + 300, cy + 250); p.wait(300)
+    ok1 = S("return S.status.dof === 0 && S.status.ok") and p.pg.get_by_text('Voll bestimmt').count() > 0
+    # Widerspruch wird abgelehnt
+    p.pg.keyboard.press('d'); a = to_screen(p, *S("return S.ents[0].a")); b2 = to_screen(p, *S("return S.ents[0].b")); p.pg.mouse.click(a[0], a[1]); p.wait(150); p.pg.mouse.click(b2[0], b2[1]); p.wait(300)
+    p.pg.keyboard.press('Control+a'); p.pg.keyboard.type('50'); p.pg.keyboard.press('Enter'); p.wait(500)
+    ok2 = p.pg.get_by_text('Zu viele Regeln in der Skizze').count() > 0 and S("return S.status.ok")
+    # Feste Linie lässt sich nicht wegziehen
+    p.pg.keyboard.press('v'); b0 = S("return S.ents[0].b"); s0 = to_screen(p, *b0)
+    p.pg.mouse.move(s0[0], s0[1]); p.pg.mouse.down(); p.pg.mouse.move(s0[0] + 40, s0[1] - 60, steps=5); p.pg.mouse.up(); p.wait(300)
+    ok3 = S("return S.ents[0].b") == b0
+    # Regel-Symbol löschen, Strg Z holt es zurück
+    p.pg.locator('.skcon').first.click(); p.wait(200); n0 = S("return S.cons.length"); p.pg.keyboard.press('Delete'); p.wait(300)
+    n1 = S("return S.cons.length"); p.pg.keyboard.press('Control+z'); p.wait(300)
+    ok4 = n1 == n0 - 1 and S("return S.cons.length") == n0
+    return [ok1, ok2, ok3, ok4]
+
+
+def t_kante(p):
+    p.pg.get_by_text('Schild mit Loch').first.click(); p.wait(8000)
+    p.ev("Viewer.setView('top', false)"); p.wait(1200)
+    cx, cy = p.canvas_center(); p.pg.mouse.click(cx - 60, cy); p.wait(500)
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('s'); p.wait(2500)
+    p.pg.click('.consbar [data-tool="c:project"]')
+    r = p.ev("return Sketch.state.refs.find(x=>x.type==='line')")
+    m = to_screen(p, (r['a'][0] + r['b'][0]) / 2, (r['a'][1] + r['b'][1]) / 2); p.pg.mouse.move(m[0], m[1]); p.wait(200); p.pg.mouse.click(m[0], m[1]); p.wait(400)
+    return p.ev("return Sketch.state.ents.length===1 && Sketch.state.cons[0].type==='fix' && Sketch.state.status.freeEnts.size===0")
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -554,6 +639,9 @@ TESTS = [
     ('Skizzen-Maße: beim Zeichnen / Maß-Werkzeug / Teil wächst mit / Doppelklick / Schildchen ändern', t_skizze_masse),
     ('Skizzen-Maße: hält beim Ziehen / lösen', t_mass_haelt), ('Kaputte Formel', t_kaputte_formel), ('Neuer Name', t_neuer_name),
     ('Notizstift: malen / Text / radieren / Rückgängig / ausblenden / nicht im Modell', t_notizen),
+    ('Regeln: rechtwinklig / tangential / gleich / symmetrisch / Punkt auf Linie / Radius / Winkel / gespeichert', t_regeln),
+    ('Regeln: voll bestimmt / Widerspruch abgelehnt / fest beim Ziehen / Symbol löschen', t_regeln_bestimmt),
+    ('Kante übernehmen', t_kante),
     ('Formel-Beispiele', t_formel_beispiele), ('Einführung „Erste Skizze“', t_einfuehrung), ('Schraubenlöcher', t_schrauben),
     ('Fies: Löschen hinter Marker + Undo', t_fies_loeschen), ('Fies: alles unterdrückt', t_fies_alle_aus),
     ('Fies: Marker am Anfang, neu laden', t_fies_reload), ('Fies: Tasten während Rechnen', t_fies_tasten),

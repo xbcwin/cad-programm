@@ -1,6 +1,6 @@
 # Testliste
 
-Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 5 (17.10.2026).
+Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 6 (17.10.2026).
 
 **[x]** = automatisch geprüft mit `tests/klicktest.py` (echter Browser, echte Klicks) · **[ ]** = noch von Hand ansehen
 
@@ -17,7 +17,8 @@ Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 5 (17.10.
 | Dateien | 3 | 3 | – |
 | Fiese Tests | 6 | 5 | „Sehr fein“ flüssig? |
 | Notizstift | 6 | 3 | Kleben beim Drehen, Farbe/Dicke, Doppelklick auf Textnotiz |
-| **Gesamt** | **61** | **55** | **6 Punkte, dazu ein Blick auf Animationen** |
+| Regeln in der Skizze | 11 | 9 | Blau/dunkel gut erkennbar? Ziehen flüssig? |
+| **Gesamt** | **72** | **64** | **8 Punkte, dazu ein Blick auf Animationen** |
 
 Wichtig: Automatisch geprüft heißt „funktioniert in Chromium unter Linux“. Safari auf dem Mac, Touch auf dem iPad und echte Grafikkarten sieht nur ein Test von Hand.
 
@@ -134,6 +135,42 @@ Vorbereitung: `app/` über einen lokalen Server öffnen (siehe README), Seite ne
 - [x] **Kaputte Formel**
   Schritte: 1. Auf ein Schildchen klicken und `breite/` eintippen.
   Erwartet: Hinweis „Das kann ich nicht ausrechnen“, nichts geht kaputt.
+
+## Regeln in der Skizze (neu in Sitzung 6)
+
+- [x] **Waagerecht per Schnellweg**
+  Schritte: 1. In einer Skizze eine schräge Linie zeichnen. 2. Anklicken. 3. In der Leiste „Regeln“ auf Waagerecht.
+  Erwartet: Die Linie liegt sofort waagerecht, daneben erscheint ein kleines Regel-Symbol.
+- [x] **Parallel, rechtwinklig, tangential, gleich, symmetrisch**
+  Schritte: 1. Regel-Knopf wählen. 2. Die Elemente nacheinander anklicken (siehe Hinweis unten links).
+  Erwartet: Die Elemente richten sich aus, ohne dass sich der Rest unnötig bewegt.
+- [x] **Punkt auf Linie (deckungsgleich)**
+  Schritte: 1. „Deckungsgleich“. 2. Erst einen Endpunkt, dann eine Linie anklicken.
+  Erwartet: Der Punkt springt auf die Linie (oder deren Verlängerung).
+- [x] **Abstand und Winkel zwischen zwei Elementen**
+  Schritte: 1. Maß-Werkzeug (D). 2. Punkt und Linie anklicken → Abstand. 3. Zwei Linien anklicken → Winkel.
+  Erwartet: Feld „Abstand“ bzw. „Winkel“; nach Enter stimmt der Wert genau.
+- [x] **Bogen-Radius**
+  Schritte: 1. Maß-Werkzeug, auf einen Bogen klicken, Zahl eintippen.
+  Erwartet: Schildchen „R …“, der Bogen hat genau diesen Radius.
+- [ ] **Blau und dunkel**
+  Schritte: 1. Zwei Linien zeichnen, Längen und Lage festlegen, bis rechts „Voll bestimmt“ steht.
+  Erwartet: Bewegliche Linien sind blau, feste Linien dunkel. Bitte von Hand ansehen, ob man den Unterschied gut erkennt.
+- [x] **Widerspruch wird abgelehnt**
+  Schritte: 1. In einer voll bestimmten Skizze noch ein Maß setzen, das nicht passt.
+  Erwartet: Roter Hinweis „Zu viele Regeln in der Skizze“, die Zeichnung bleibt, wie sie war.
+- [x] **Feste Teile bleiben beim Ziehen**
+  Schritte: 1. Eine feste (dunkle) Linie am Endpunkt ziehen.
+  Erwartet: Sie bewegt sich nicht. Blaue Linien folgen der Maus, Maße und Regeln bleiben erfüllt.
+- [x] **Regel löschen**
+  Schritte: 1. Ein Regel-Symbol anklicken, Entf. 2. Strg/Cmd+Z.
+  Erwartet: Regel weg, dann wieder da.
+- [x] **Kante übernehmen**
+  Schritte: 1. Auf eine Körperfläche klicken, S drücken. 2. In „Regeln“ das letzte Symbol, dann eine gestrichelte Kante anklicken.
+  Erwartet: Die Kante wird eine feste, dunkle Linie der Skizze.
+- [ ] **Ziehen fühlt sich flüssig an**
+  Schritte: 1. In einer Skizze mit vielen Regeln Punkte ziehen.
+  Erwartet: Kein Ruckeln. (Automatisch gemessen: Löser braucht etwa 3 ms – das Gefühl prüft nur ein Mensch.)
 
 ## Notizstift (neu)
 

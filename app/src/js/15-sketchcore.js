@@ -253,9 +253,9 @@ const SK = (() => {
   // Ein Maß ist { id, e: Element-ID, k: Größe, v: Zahl oder Formel }.
   const DIMKEYS = {
     line: ['len', 'ang', 'x', 'y'], rect: ['w', 'h', 'x', 'y'], circle: ['d', 'x', 'y'],
-    poly: ['d', 'n', 'x', 'y'], slot: ['len', 'w', 'x', 'y'], arc: ['x', 'y'],
+    poly: ['d', 'n', 'x', 'y'], slot: ['len', 'w', 'x', 'y'], arc: ['r', 'x', 'y'],
   };
-  const DIMNAME = { len: 'Länge', ang: 'Winkel', w: 'Breite', h: 'Höhe', d: 'Durchmesser', n: 'Ecken', x: 'Abstand X', y: 'Abstand Y' };
+  const DIMNAME = { len: 'Länge', ang: 'Winkel', w: 'Breite', h: 'Höhe', d: 'Durchmesser', n: 'Ecken', x: 'Abstand X', y: 'Abstand Y', r: 'Radius', dist: 'Abstand', distPL: 'Abstand', angLL: 'Winkel' };
   const anchorKey = (e) => (e.type === 'circle' || e.type === 'poly' ? 'c' : 'a');
   function measure(e, k) {
     switch (k) {
@@ -264,6 +264,7 @@ const SK = (() => {
       case 'w': return e.type === 'slot' ? 2 * e.r : Math.abs(e.b[0] - e.a[0]);
       case 'h': return Math.abs(e.b[1] - e.a[1]);
       case 'd': return 2 * e.r;
+      case 'r': { if (e.type === 'circle') return e.r; const ai = arcInfo(e.a, e.m, e.b); return ai ? ai.r : NaN; }
       case 'n': return e.n;
       case 'x': return e[anchorKey(e)][0];
       case 'y': return e[anchorKey(e)][1];
@@ -288,27 +289,10 @@ const SK = (() => {
     return false;
   }
   const ends = (e) => (e.type === 'line' || e.type === 'arc' ? [e.a, e.b] : []);
-  // Maße der Reihe nach anwenden. Verbundene Linien wandern mit, damit Umrisse geschlossen bleiben.
-  function applyDims(ents, dims, V, inPlace) {
-    const list = inPlace ? ents || [] : (ents || []).map((e) => JSON.parse(JSON.stringify(e)));
-    if (!dims || !dims.length) return list;
-    const byId = new Map(list.map((e) => [e.id, e]));
-    const bad = [];
-    for (const dm of dims) {
-      const e = byId.get(dm.e); if (!e) continue;
-      const v = Model.num(dm.v, V || {}, NaN);
-      if (!isFinite(v)) { bad.push(dm.id); continue; }
-      const before = ends(e).map((p) => p.slice());
-      if (!setMeasure(e, dm.k, v)) { bad.push(dm.id); continue; }
-      const after = ends(e);
-      before.forEach((p, i) => {
-        const q = after[i]; if (d2(p, q) < 1e-9) return;
-        const kp = qkey(p);
-        for (const o of list) { if (o === e) continue; for (const key of ['a', 'b']) if ((o.type === 'line' || o.type === 'arc') && qkey(o[key]) === kp) o[key] = q.slice(); }
-      });
-    }
-    list.badDims = bad;
-    return list;
+  // Maße (und ab Sitzung 6 auch Bedingungen) erfüllt jetzt der Löser – siehe 16-solver.js
+  function applyDims(ents, dims, V, inPlace, cons) {
+    const r = Solver.solve({ ents: ents || [], dims: dims || [], cons: cons || [] }, V, { inPlace });
+    return r.ents;
   }
   return { loops, regions, regionAt, segsOf, segPoints, arcInfo, arcPoints, circlePoints, rectCorners, polyCorners, hit, distEnt, snapPoints, faceLoopsToEnts, project3, openEnds, bounds, translateEnt, inPoly, d2, applyDims, measure, setMeasure, DIMKEYS, DIMNAME };
 })();

@@ -1,0 +1,346 @@
+// ================= Löser für Skizzen: Maße und Bedingungen gleichzeitig erfüllen =================
+// Jede Skizze wird in Zahlen (Variablen) und Gleichungen übersetzt. Ein gedämpftes Gauß-Newton-Verfahren
+// sucht die Lösung, die am wenigsten von der jetzigen Zeichnung abweicht – so bewegt sich nur, was muss.
+// Danach zeigt eine Rang-Analyse, welche Elemente noch beweglich sind (blau) und welche fest (schwarz).
+//
+// Bedingung:  { id, type, refs: [Bezug, …], mode?, at? }
+// Maß:        { id, k, e?, refs?, v }   (v: Zahl oder Formel)
+// Bezug:      { e: Element-ID }                    ganzes Element (Linie, Kreis …)
+//             { e, edge: i }                       Kante i eines Rechtecks
+//             { e, p: 'a'|'b'|'c'|'k0'…'k3'|'v0'…}  Punkt eines Elements
+//             { e: 'origin' } · { at: [x, y] }      Ursprung · fester Punkt (z. B. von einer Körperkante)
+const Solver = (() => {
+  const TAU = Math.PI * 2;
+  const EPS = 1e-12;
+  const qk = (p) => Math.round(p[0] * 1e4) + ',' + Math.round(p[1] * 1e4);
+  const hyp = Math.hypot;
+  const wrap = (a) => { a = ((a + Math.PI) % TAU + TAU) % TAU - Math.PI; return a; };
+
+  // ---------- Variablen je Element ----------
+  const VARS = {
+    line: ['a0', 'a1', 'b0', 'b1'], arc: ['a0', 'a1', 'b0', 'b1', 'm0', 'm1'], circle: ['c0', 'c1', 'r'],
+    rect: ['a0', 'a1', 'b0', 'b1'], slot: ['a0', 'a1', 'b0', 'b1', 'r'], poly: ['c0', 'c1', 'r'],
+  };
+  const getK = (e, k) => (k === 'r' ? e.r : e[k[0]][+k[1]]);
+  const setK = (e, k, v) => { if (k === 'r') e.r = v; else { e[k[0]] = e[k[0]].slice(); e[k[0]][+k[1]] = v; } };
+
+  function circum(ax, ay, bx, by, mx, my) {
+    const d = 2 * (ax * (by - my) + bx * (my - ay) + mx * (ay - by));
+    if (Math.abs(d) < 1e-12) return [(ax + bx) / 2, (ay + by) / 2, 1e6];
+    const a2 = ax * ax + ay * ay, b2 = bx * bx + by * by, m2 = mx * mx + my * my;
+    const ux = (a2 * (by - my) + b2 * (my - ay) + m2 * (ay - by)) / d;
+    const uy = (a2 * (mx - bx) + b2 * (ax - mx) + m2 * (bx - ax)) / d;
+    return [ux, uy, hyp(ax - ux, ay - uy)];
+  }
+
+  // ---------- Aufbau des Gleichungssystems ----------
+  function build(ents, V, opts = {}) {
+    const x = [], idx = new Map(), owner = [];
+    const byId = new Map(ents.map((e) => [e.id, e]));
+    for (const e of ents) {
+      const ks = VARS[e.type]; if (!ks) continue;
+      const m = {};
+      for (const k of ks) { m[k] = x.length; owner.push(e.id); x.push(getK(e, k)); }
+      idx.set(e.id, m);
+    }
+    const I = (e, k) => idx.get(e)[k];
+    // Punkt-Zugriff: Abhängigkeiten + Rechenvorschrift
+    function point(ref) {
+      if (!ref) return null;
+      if (ref.at) { const p = ref.at.slice(); return { deps: [], get: () => p }; }
+      if (ref.e === 'origin') return { deps: [], get: () => [0, 0] };
+      const e = byId.get(ref.e); if (!e) return null;
+      const p = ref.p || 'c';
+      const two = (k) => { const i = I(e.id, k + '0'), j = I(e.id, k + '1'); return { deps: [i, j], get: (X) => [X[i], X[j]] }; };
+      if (e.type === 'line' || e.type === 'slot') { if (p === 'a' || p === 'b') return two(p); if (p === 'mid' || p === 'c') { const A = two('a'), B = two('b'); return { deps: [...A.deps, ...B.deps], get: (X) => { const a = A.get(X), b = B.get(X); return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; } }; } }
+      if (e.type === 'arc') {
+        if (p === 'a' || p === 'b') return two(p);
+        const ks = ['a0', 'a1', 'b0', 'b1', 'm0', 'm1'].map((k) => I(e.id, k));
+        return { deps: ks, get: (X) => { const c = circum(X[ks[0]], X[ks[1]], X[ks[2]], X[ks[3]], X[ks[4]], X[ks[5]]); return [c[0], c[1]]; } };
+      }
+      if (e.type === 'circle' || e.type === 'poly') {
+        if (p === 'c') return two('c');
+        if (e.type === 'poly' && p[0] === 'v') {
+          const n = Math.max(3, Math.round(e.n || 6)), k = +p.slice(1), t = (e.rot || 0) + (k / n) * TAU + Math.PI / 2;
+          const i = I(e.id, 'c0'), j = I(e.id, 'c1'), r = I(e.id, 'r');
+          return { deps: [i, j, r], get: (X) => [X[i] + Math.cos(t) * X[r], X[j] + Math.sin(t) * X[r]] };
+        }
+      }
+      if (e.type === 'rect') {
+        const a0 = I(e.id, 'a0'), a1 = I(e.id, 'a1'), b0 = I(e.id, 'b0'), b1 = I(e.id, 'b1');
+        const map = { a: [a0, a1], k0: [a0, a1], k1: [b0, a1], b: [b0, b1], k2: [b0, b1], k3: [a0, b1] };
+        if (map[p]) { const [i, j] = map[p]; return { deps: [i, j], get: (X) => [X[i], X[j]] }; }
+        if (p === 'c') return { deps: [a0, a1, b0, b1], get: (X) => [(X[a0] + X[b0]) / 2, (X[a1] + X[b1]) / 2] };
+      }
+      return null;
+    }
+    // Linien-Zugriff: Linie, Achse eines Langlochs, Kante eines Rechtecks
+    function line(ref) {
+      if (!ref) return null;
+      const e = byId.get(ref.e); if (!e) return null;
+      if (e.type === 'line' || e.type === 'slot') return [point({ e: e.id, p: 'a' }), point({ e: e.id, p: 'b' })];
+      if (e.type === 'rect' && ref.edge != null) { const i = ((ref.edge % 4) + 4) % 4; return [point({ e: e.id, p: 'k' + i }), point({ e: e.id, p: 'k' + ((i + 1) % 4) })]; }
+      return null;
+    }
+    // Kreis-Zugriff: Mittelpunkt + Radius
+    function circle(ref) {
+      if (!ref) return null;
+      const e = byId.get(ref.e); if (!e) return null;
+      if (e.type === 'circle') { const c = point({ e: e.id, p: 'c' }), r = I(e.id, 'r'); return { deps: [...c.deps, r], c: c.get, r: (X) => X[r] }; }
+      if (e.type === 'arc') {
+        const ks = ['a0', 'a1', 'b0', 'b1', 'm0', 'm1'].map((k) => I(e.id, k));
+        const cc = (X) => circum(X[ks[0]], X[ks[1]], X[ks[2]], X[ks[3]], X[ks[4]], X[ks[5]]);
+        return { deps: ks, c: (X) => { const c = cc(X); return [c[0], c[1]]; }, r: (X) => cc(X)[2] };
+      }
+      return null;
+    }
+    const eqs = [];
+    const uniq = (a) => [...new Set(a)];
+    const add = (deps, f, tag, w = 1) => eqs.push({ deps: uniq(deps), f, tag, w });
+    const L = (X, P) => { const a = P[0].get(X), b = P[1].get(X); return [b[0] - a[0], b[1] - a[1], a, b]; };
+
+    // Bögen: Hilfspunkt m liegt immer in der Bogenmitte (sonst wäre er eine Schein-Freiheit)
+    for (const e of ents) if (e.type === 'arc') {
+      const [a0, a1, b0, b1, m0, m1] = ['a0', 'a1', 'b0', 'b1', 'm0', 'm1'].map((k) => I(e.id, k));
+      add([a0, a1, b0, b1, m0, m1], (X) => hyp(X[m0] - X[a0], X[m1] - X[a1]) - hyp(X[m0] - X[b0], X[m1] - X[b1]), { internal: true });
+    }
+    // Punkte, die genau aufeinanderliegen, bleiben verbunden (so bleiben Umrisse geschlossen)
+    if (!opts.noJoin) {
+      const groups = new Map();
+      const put = (ref, e) => { const P = point(ref); if (!P) return; const k = qk(P.get(x)); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(P); };
+      groups.set(qk([0, 0]), [point({ e: 'origin' })]);
+      for (const e of ents) {
+        if (e.type === 'line' || e.type === 'arc' || e.type === 'slot') { put({ e: e.id, p: 'a' }); put({ e: e.id, p: 'b' }); }
+        else if (e.type === 'rect') for (let i = 0; i < 4; i++) put({ e: e.id, p: 'k' + i });
+        else if (e.type === 'circle') put({ e: e.id, p: 'c' });
+        else if (e.type === 'poly') { put({ e: e.id, p: 'c' }); }
+      }
+      for (const g of groups.values()) for (let i = 1; i < g.length; i++) {
+        const A = g[0], B = g[i];
+        if (!A.deps.length && !B.deps.length) continue;
+        add([...A.deps, ...B.deps], (X) => B.get(X)[0] - A.get(X)[0], { join: true });
+        add([...A.deps, ...B.deps], (X) => B.get(X)[1] - A.get(X)[1], { join: true });
+      }
+    }
+    // ---------- Maße ----------
+    const badDims = [];
+    for (const dm of opts.dims || []) {
+      const v = Model.num(dm.v, V || {}, NaN);
+      if (!isFinite(v)) { badDims.push(dm.id); continue; }
+      const tag = { dim: dm.id };
+      const k = dm.k;
+      if (dm.refs) {
+        if (k === 'dist') { const A = point(dm.refs[0]), B = point(dm.refs[1]); if (!A || !B) continue; add([...A.deps, ...B.deps], (X) => { const a = A.get(X), b = B.get(X); return hyp(b[0] - a[0], b[1] - a[1]) - v; }, tag); }
+        else if (k === 'distPL') { const P = point(dm.refs[0]), Ln = line(dm.refs[1]); if (!P || !Ln) continue; add([...P.deps, ...Ln[0].deps, ...Ln[1].deps], (X) => { const p = P.get(X); const [dx, dy, a] = L(X, Ln); return Math.abs(((p[0] - a[0]) * dy - (p[1] - a[1]) * dx) / (hyp(dx, dy) + EPS)) - v; }, tag); }
+        else if (k === 'angLL') { const A = line(dm.refs[0]), B = line(dm.refs[1]); if (!A || !B) continue; add([...A[0].deps, ...A[1].deps, ...B[0].deps, ...B[1].deps], (X) => { const [ux, uy] = L(X, A), [vx, vy] = L(X, B); return (Math.atan2(Math.abs(ux * vy - uy * vx), ux * vx + uy * vy) - (v * Math.PI) / 180) * 10; }, tag); }
+        continue;
+      }
+      const e = byId.get(dm.e); if (!e || !idx.has(e.id)) continue;
+      const J = idx.get(e.id);
+      if (k === 'n') continue;   // Eckenzahl ist keine Lage, sie wird direkt gesetzt
+      if (k === 'len') add([J.a0, J.a1, J.b0, J.b1], (X) => hyp(X[J.b0] - X[J.a0], X[J.b1] - X[J.a1]) - v, tag);
+      else if (k === 'ang') add([J.a0, J.a1, J.b0, J.b1], (X) => wrap(Math.atan2(X[J.b1] - X[J.a1], X[J.b0] - X[J.a0]) - (v * Math.PI) / 180) * Math.max(1, hyp(X[J.b0] - X[J.a0], X[J.b1] - X[J.a1])), tag);
+      else if (k === 'w' && e.type === 'slot') add([J.r], (X) => 2 * X[J.r] - v, tag);
+      else if (k === 'w') { const s = x[J.b0] >= x[J.a0] ? 1 : -1; add([J.a0, J.b0], (X) => (X[J.b0] - X[J.a0]) * s - v, tag); }
+      else if (k === 'h') { const s = x[J.b1] >= x[J.a1] ? 1 : -1; add([J.a1, J.b1], (X) => (X[J.b1] - X[J.a1]) * s - v, tag); }
+      else if (k === 'd') add([J.r], (X) => 2 * X[J.r] - v, tag);
+      else if (k === 'r') { const C = circle({ e: e.id }); if (C) add(C.deps, (X) => C.r(X) - v, tag); }
+      else if (k === 'x' || k === 'y') { const key = (e.type === 'circle' || e.type === 'poly' ? 'c' : 'a') + (k === 'x' ? '0' : '1'); const i = J[key]; add([i], (X) => X[i] - v, tag); }
+    }
+    // ---------- Bedingungen ----------
+    for (const c of opts.cons || []) {
+      const tag = { con: c.id };
+      const R = c.refs || [];
+      const t = c.type;
+      if (t === 'horizontal' || t === 'vertical') {
+        const k = t === 'horizontal' ? 1 : 0;
+        let A, B;
+        if (R.length === 1) { const Ln = line(R[0]); if (!Ln) continue; [A, B] = Ln; } else { A = point(R[0]); B = point(R[1]); }
+        if (!A || !B) continue;
+        add([...A.deps, ...B.deps], (X) => B.get(X)[k] - A.get(X)[k], tag);
+      } else if (t === 'parallel' || t === 'perpendicular') {
+        const A = line(R[0]), B = line(R[1]); if (!A || !B) continue;
+        add([...A[0].deps, ...A[1].deps, ...B[0].deps, ...B[1].deps], (X) => {
+          const [ux, uy] = L(X, A), [vx, vy] = L(X, B); const n = hyp(ux, uy) * hyp(vx, vy) + EPS;
+          return (t === 'parallel' ? (ux * vy - uy * vx) : (ux * vx + uy * vy)) / n * 10;
+        }, tag);
+      } else if (t === 'equal') {
+        const A = line(R[0]), B = line(R[1]);
+        if (A && B) add([...A[0].deps, ...A[1].deps, ...B[0].deps, ...B[1].deps], (X) => { const [ux, uy] = L(X, A), [vx, vy] = L(X, B); return hyp(ux, uy) - hyp(vx, vy); }, tag);
+        else { const C = circle(R[0]), D = circle(R[1]); if (C && D) add([...C.deps, ...D.deps], (X) => C.r(X) - D.r(X), tag); }
+      } else if (t === 'tangent') {
+        let Ln = line(R[0]), C = circle(R[1]);
+        if (!Ln || !C) { Ln = line(R[1]); C = circle(R[0]); }
+        if (Ln && C) add([...Ln[0].deps, ...Ln[1].deps, ...C.deps], (X) => { const [dx, dy, a] = L(X, Ln); const c = C.c(X); return Math.abs(((c[0] - a[0]) * dy - (c[1] - a[1]) * dx) / (hyp(dx, dy) + EPS)) - C.r(X); }, tag);
+        else {
+          const A = circle(R[0]), B = circle(R[1]); if (!A || !B) continue;
+          const inner = c.mode === 'int';
+          add([...A.deps, ...B.deps], (X) => { const a = A.c(X), b = B.c(X); const d = hyp(b[0] - a[0], b[1] - a[1]); return inner ? d - Math.abs(A.r(X) - B.r(X)) : d - (A.r(X) + B.r(X)); }, tag);
+        }
+      } else if (t === 'coincident') {
+        const A = point(R[0]);
+        const Bp = R[1] && (R[1].p || R[1].at || R[1].e === 'origin') ? point(R[1]) : null;
+        if (A && Bp) { add([...A.deps, ...Bp.deps], (X) => Bp.get(X)[0] - A.get(X)[0], tag); add([...A.deps, ...Bp.deps], (X) => Bp.get(X)[1] - A.get(X)[1], tag); continue; }
+        const Ln = line(R[1]);
+        if (A && Ln) { add([...A.deps, ...Ln[0].deps, ...Ln[1].deps], (X) => { const p = A.get(X); const [dx, dy, a] = L(X, Ln); return ((p[0] - a[0]) * dy - (p[1] - a[1]) * dx) / (hyp(dx, dy) + EPS); }, tag); continue; }
+        const C = circle(R[1]);
+        if (A && C) add([...A.deps, ...C.deps], (X) => { const p = A.get(X), cc = C.c(X); return hyp(p[0] - cc[0], p[1] - cc[1]) - C.r(X); }, tag);
+      } else if (t === 'midpoint') {
+        const A = point(R[0]), Ln = line(R[1]); if (!A || !Ln) continue;
+        for (const k of [0, 1]) add([...A.deps, ...Ln[0].deps, ...Ln[1].deps], (X) => (Ln[0].get(X)[k] + Ln[1].get(X)[k]) / 2 - A.get(X)[k], tag);
+      } else if (t === 'symmetric') {
+        const A = point(R[0]), B = point(R[1]), Ln = line(R[2]); if (!A || !B || !Ln) continue;
+        const deps = [...A.deps, ...B.deps, ...Ln[0].deps, ...Ln[1].deps];
+        add(deps, (X) => { const a = A.get(X), b = B.get(X); const [dx, dy, p] = L(X, Ln); const mx = (a[0] + b[0]) / 2 - p[0], my = (a[1] + b[1]) / 2 - p[1]; return (mx * dy - my * dx) / (hyp(dx, dy) + EPS); }, tag);
+        add(deps, (X) => { const a = A.get(X), b = B.get(X); const [dx, dy] = L(X, Ln); return ((b[0] - a[0]) * dx + (b[1] - a[1]) * dy) / (hyp(dx, dy) + EPS); }, tag);
+      } else if (t === 'fix') {
+        const r0 = R[0]; if (!r0) continue;
+        if (r0.p) { const A = point(r0); if (!A || !c.at) continue; add(A.deps, (X) => A.get(X)[0] - c.at[0], tag); add(A.deps, (X) => A.get(X)[1] - c.at[1], tag); }
+        else if (idx.has(r0.e) && c.at) { const J = idx.get(r0.e); for (const k in c.at) if (J[k] != null) { const i = J[k], v = c.at[k]; add([i], (X) => X[i] - v, tag); } }
+      }
+    }
+    return { x, idx, owner, eqs, point, badDims };
+  }
+
+  // ---------- Rechnen ----------
+  function residuals(sys, X) { return sys.eqs.map((q) => q.f(X) * q.w); }
+  // Ableitungen numerisch; central = genauer (für die Beweglichkeits-Analyse)
+  function jacobian(sys, X, active, central) {
+    const m = sys.eqs.length; const J = [];
+    for (let i = 0; i < m; i++) {
+      const q = sys.eqs[i]; const row = new Map(); const f0 = central ? 0 : q.f(X) * q.w;
+      for (const j of q.deps) {
+        if (!active[j]) continue;
+        const o = X[j];
+        let d;
+        if (central) { const h = 1e-5 * (1 + Math.abs(o)); X[j] = o + h; const f1 = q.f(X); X[j] = o - h; const f2 = q.f(X); d = ((f1 - f2) / (2 * h)) * q.w; }
+        else { const h = 1e-7 * (1 + Math.abs(o)); X[j] = o + h; d = (q.f(X) * q.w - f0) / h; }
+        X[j] = o;
+        if (Math.abs(d) > 1e-12 && isFinite(d)) row.set(j, d);
+      }
+      J.push(row);
+    }
+    return J;
+  }
+  // löst A·y = b (dicht, mit Pivotsuche); A wird verändert
+  function linsolve(A, b) {
+    const n = b.length;
+    for (let c = 0; c < n; c++) {
+      let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r;
+      if (Math.abs(A[p][c]) < 1e-300) continue;
+      if (p !== c) { [A[p], A[c]] = [A[c], A[p]]; [b[p], b[c]] = [b[c], b[p]]; }
+      for (let r = c + 1; r < n; r++) { const f = A[r][c] / A[c][c]; if (!f) continue; for (let k = c; k < n; k++) A[r][k] -= f * A[c][k]; b[r] -= f * b[c]; }
+    }
+    const y = new Array(n).fill(0);
+    for (let r = n - 1; r >= 0; r--) { let s = b[r]; for (let k = r + 1; k < n; k++) s -= A[r][k] * y[k]; y[r] = Math.abs(A[r][r]) > 1e-300 ? s / A[r][r] : 0; }
+    return y;
+  }
+  function norm(r) { let s = 0; for (const v of r) s += v * v; return Math.sqrt(s); }
+  function iterate(sys, X, active, maxIt = 80) {
+    const cols = []; active.forEach((a, j) => { if (a) cols.push(j); });
+    let r = residuals(sys, X), err = norm(r), lam = 1e-6;
+    for (let it = 0; it < maxIt && err > 1e-10; it++) {
+      const J = jacobian(sys, X, active);
+      const m = J.length, n = cols.length; if (!n) break;
+      let dx;
+      if (m <= n) {
+        // kleinster Schritt: dx = -Jᵀ (J Jᵀ + λI)⁻¹ r
+        const A = Array.from({ length: m }, () => new Array(m).fill(0));
+        for (let i = 0; i < m; i++) for (let k = i; k < m; k++) { let s = 0; for (const [j, v] of J[i]) { const w = J[k].get(j); if (w) s += v * w; } A[i][k] = s; A[k][i] = s; }
+        for (let i = 0; i < m; i++) A[i][i] += lam;
+        const y = linsolve(A, r.slice());
+        dx = new Map(); for (let i = 0; i < m; i++) for (const [j, v] of J[i]) dx.set(j, (dx.get(j) || 0) - v * y[i]);
+      } else {
+        const ci = new Map(cols.map((j, t) => [j, t]));
+        const A = Array.from({ length: n }, () => new Array(n).fill(0)), g = new Array(n).fill(0);
+        for (let i = 0; i < m; i++) { const row = [...J[i]]; for (const [j, v] of row) { const a = ci.get(j); g[a] -= v * r[i]; for (const [k, w] of row) A[a][ci.get(k)] += v * w; } }
+        for (let t = 0; t < n; t++) A[t][t] += lam * (1 + A[t][t]);
+        const s = linsolve(A, g);
+        dx = new Map(cols.map((j, t) => [j, s[t]]));
+      }
+      const Xn = X.slice(); for (const [j, v] of dx) Xn[j] += v;
+      const rn = residuals(sys, Xn), en = norm(rn);
+      if (isFinite(en) && en < err) { for (let j = 0; j < X.length; j++) X[j] = Xn[j]; r = rn; err = en; lam = Math.max(lam / 10, 1e-12); }
+      else { lam *= 10; if (lam > 1e10) break; }
+    }
+    return err;
+  }
+
+  // ---------- Was ist noch beweglich? (Rang des Gleichungssystems) ----------
+  function analyze(sys, X) {
+    const n = X.length; const active = new Array(n).fill(true);
+    const eqs = sys.eqs.filter((q) => !(q.tag && q.tag.pull));
+    const J = jacobian({ eqs }, X, active, true);
+    const M = J.map((row) => { const a = new Array(n).fill(0); for (const [j, v] of row) a[j] = v; return a; });
+    let rank = 0; const pivCol = [];
+    const scale = Math.max(1e-12, ...M.map((r) => Math.max(0, ...r.map(Math.abs))));
+    const tol = 1e-8 * scale;
+    for (let c = 0; c < n && rank < M.length; c++) {
+      let p = rank; for (let r = rank + 1; r < M.length; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+      if (Math.abs(M[p][c]) < tol) continue;
+      [M[p], M[rank]] = [M[rank], M[p]];
+      const pv = M[rank][c]; for (let k = c; k < n; k++) M[rank][k] /= pv;
+      for (let r = 0; r < M.length; r++) if (r !== rank && Math.abs(M[r][c]) > 0) { const f = M[r][c]; for (let k = c; k < n; k++) M[r][k] -= f * M[rank][k]; }
+      pivCol.push(c); rank++;
+    }
+    const isPiv = new Set(pivCol);
+    const freeCols = []; for (let j = 0; j < n; j++) if (!isPiv.has(j)) freeCols.push(j);
+    const loose = new Set(freeCols);
+    pivCol.forEach((c, r) => { for (const f of freeCols) if (Math.abs(M[r][f]) > 1e-6) { loose.add(c); break; } });
+    const freeEnts = new Set(); for (const j of loose) freeEnts.add(sys.owner[j]);
+    return { rank, dof: n - rank, freeEnts, looseVars: loose };
+  }
+
+  // ---------- Öffentlich ----------
+  // sketch: { ents, dims, cons } · opts: { inPlace, analyze, pins: [[eid, key, value]], noJoin }
+  function solve(sketch, V, opts = {}) {
+    const ents = opts.inPlace ? sketch.ents : (sketch.ents || []).map((e) => JSON.parse(JSON.stringify(e)));
+    // Eckenzahl von Vielecken ist eine ganze Zahl und wird direkt gesetzt
+    for (const dm of sketch.dims || []) if (dm.k === 'n') { const e = ents.find((x) => x.id === dm.e); const n = Model.num(dm.v, V || {}, NaN); if (e && isFinite(n)) e.n = clamp(Math.round(n), 3, 64); }
+    const sys = build(ents, V, { dims: sketch.dims, cons: sketch.cons, noJoin: opts.noJoin });
+    const X = sys.x.slice();
+    const active = new Array(X.length).fill(true);
+    let err;
+    if (opts.pins && opts.pins.length) {
+      // erst versuchen, die gezogenen Werte genau zu halten …
+      const pinned = X.slice(); const act2 = active.slice();
+      for (const [eid, k, v] of opts.pins) { const m = sys.idx.get(eid); if (m && m[k] != null) { pinned[m[k]] = v; act2[m[k]] = false; } }
+      const e1 = iterate(sys, pinned, act2);
+      if (e1 < 1e-7) { for (let j = 0; j < X.length; j++) X[j] = pinned[j]; err = e1; }
+      else {
+        // … sonst vom gezogenen Stand aus den nächsten Zustand suchen, der alle Regeln erfüllt
+        const Y = pinned.slice();
+        const e2 = iterate(sys, Y, active);
+        if (e2 < 1e-7) { for (let j = 0; j < X.length; j++) X[j] = Y[j]; err = e2; } else err = iterate(sys, X, active);
+      }
+    } else err = iterate(sys, X, active);
+    // zurückschreiben
+    for (const e of ents) { const m = sys.idx.get(e.id); if (!m) continue; for (const k in m) setK(e, k, Math.round(X[m[k]] * 1e6) / 1e6); }
+    const res = residuals(sys, X);
+    const conflicts = new Set();
+    sys.eqs.forEach((q, i) => { if (Math.abs(res[i]) > 1e-5 && q.tag) { if (q.tag.con) conflicts.add(q.tag.con); if (q.tag.dim) conflicts.add(q.tag.dim); } });
+    const out = { ents, ok: err < 1e-6, err, badDims: sys.badDims, conflicts };
+    if (opts.analyze) Object.assign(out, analyze(sys, X), { nVars: X.length });
+    ents.badDims = sys.badDims;
+    return out;
+  }
+  // Probe: Würde diese neue Bedingung oder dieses Maß passen? (ohne etwas zu ändern)
+  function trial(sketch, V) {
+    const before = solve({ ...sketch, cons: sketch.consBefore || sketch.cons, dims: sketch.dimsBefore || sketch.dims }, V, { analyze: true });
+    const after = solve(sketch, V, { analyze: true });
+    return { ok: after.ok, redundant: after.ok && after.rank === before.rank && after.dof === before.dof, after, before };
+  }
+  // Zwischenspeicher für den CAD-Kern: dieselbe Skizze mit denselben Werten wird nur einmal gelöst
+  const memo = new Map();
+  function cached(sketch, V) {
+    const names = new Set();
+    for (const d of sketch.dims || []) if (typeof d.v === 'string') for (const n of Expr.names(d.v)) names.add(n);
+    const vv = [...names].map((n) => { const k = Object.keys(V || {}).find((x) => x.toLowerCase() === n.toLowerCase()); return k ? V[k] : null; });
+    const key = JSON.stringify([sketch.ents, sketch.dims || [], sketch.cons || [], vv]);
+    if (memo.has(key)) { const r = memo.get(key); memo.delete(key); memo.set(key, r); return r; }
+    const r = solve(sketch, V);
+    memo.set(key, r); if (memo.size > 60) memo.delete(memo.keys().next().value);
+    return r;
+  }
+  return { solve, trial, cached, VARS };
+})();

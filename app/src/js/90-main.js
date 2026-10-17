@@ -11,7 +11,7 @@
   window.__masswerk = { App, Viewer, Model, Actions, Sketch, SK, THREE, Print, Drawing, Kernel, UI, Commands, Panels, Handles, Start, AI, Measure, Place };
   UI.initTips();
   Viewer.init($('#viewport'));
-  window.__V = Viewer; window.__M = { App, Actions, Model, Timeline, Start, Comp, Handles, Sketch, SK, Viewer, Commands }; window.__S = Start; // für automatische Tests
+  window.__V = Viewer; window.__M = { App, Actions, Model, Timeline, Start, Comp, Handles, Sketch, SK, Viewer, Commands, Solver, Notes }; window.__S = Start; // für automatische Tests
   Panels.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Notes.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init(); Refine.init(); Comp.init();
 
   // Kopfzeile

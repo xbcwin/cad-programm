@@ -1,6 +1,6 @@
 # Bauplan CAD-Drohnen-Programm
 
-Stand: 12.10.2026 · Live-Version: https://claude.ai/code/artifact/115f4267-5b81-4cea-9a20-be366757c0b5
+Stand: 17.10.2026 · Live-Version: https://claude.ai/code/artifact/115f4267-5b81-4cea-9a20-be366757c0b5
 
 ## Überblick
 
@@ -82,7 +82,7 @@ Skizzen-Bedingungen mit Solver: horizontal, vertikal, parallel, senkrecht, tange
 
 ### Woche 3
 
-**Sitzung 7 · Sonnet · Skizzen Feinschliff** – gesammelte Fehler beheben, Spline, Fangen, Hilfslinien.
+**Sitzung 7 · Sonnet · Skizzen Feinschliff** – gesammelte Fehler beheben, Trimmen, Versatz, Spiegeln, Muster (aus Sitzung 6), Spline, Fangen, Hilfslinien.
 
 **Sitzung 8 · Sonnet · Features** – Bohrungs-Assistent (M2/M2.5/M3, Senkung), Fase, Verrundung, Wandstärke, Muster, Spiegeln, Boolesch, Körper teilen, Feature-Gruppen.
 

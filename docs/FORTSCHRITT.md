@@ -1,6 +1,6 @@
 # Fortschritt
 
-Stand: 17.10.2026 · nach Sitzung 5 von 14, Sitzung 6 läuft
+Stand: 17.10.2026 · nach Sitzung 6 von 14
 
 ## Erledigt
 
@@ -48,6 +48,13 @@ Stand: 17.10.2026 · nach Sitzung 5 von 14, Sitzung 6 läuft
 - [x] Automatischer Klicktest `tests/klicktest.py`: 35 Durchläufe, 52 von 55 Punkten der Testliste automatisch geprüft
 - [x] Aufgeräumt: Programm liegt jetzt in 28 Quelldateien unter `app/src/`, `tools/build.py` baut daraus `app/index.html`
 - [x] Notizstift (Taste N): freie Striche, die am Modell kleben, Textnotizen, 6 Farben, 3 Dicken, Radierer, ein-/ausblendbar – ohne technische Bedeutung
+- [x] Löser für Skizzen: Maße und Regeln werden gemeinsam erfüllt, verbundene Umrisse bleiben geschlossen
+- [x] 9 Regeln: waagerecht, senkrecht, parallel, rechtwinklig, tangential, gleich, symmetrisch, deckungsgleich, fixiert – als zweite Leiste in der Skizze
+- [x] Blau = noch beweglich, dunkel = voll bestimmt; rechts steht, wie viele Freiheiten noch fehlen
+- [x] Widersprüche werden abgelehnt („Zu viele Regeln in der Skizze“), überflüssige Regeln auch
+- [x] Neue Maße: Abstand Punkt–Punkt, Abstand Punkt–Linie, Winkel zwischen Linien, Radius von Bögen
+- [x] Ziehen in der Skizze über den Löser: feste Teile bleiben, Regeln bleiben erfüllt
+- [x] Kanten einer Körperfläche in die Skizze übernehmen
 
 ## Offen
 
@@ -57,7 +64,8 @@ Fertig.
 ### Stufe 2 – Skizzen
 - [x] Skizze auf Körperflächen (war schon da, in Sitzung 5 geprüft)
 - [x] Bemaßung mit Formeln, nachträglich bearbeiten (Sitzung 5)
-- [ ] Bedingungen mit Solver (Sitzung 6)
+- [x] Bedingungen mit Solver (Sitzung 6)
+- [ ] Trimmen, Versatz, Spiegeln, Muster in der Skizze (aus Sitzung 6 verschoben → Sitzung 7)
 - [ ] Spline, Fangen, Hilfslinien (Sitzung 7)
 
 ### Stufe 3 – Features und Ansichten
@@ -83,6 +91,6 @@ Fertig.
 
 - Schritt hinter dem Marker auswählen zeigt noch die Werkzeugleiste im Modell
 - Vorlagen bestehen aus einer Gruppe: Über „Bearbeiten“ im Verlauf sieht man ihre einzelnen Schritte in der Zeitleiste
-- Ohne Bedingungen kann ein Maß an einem geschlossenen Linienzug die Form verziehen – der Löser für Bedingungen kommt in Sitzung 6
-- Bögen haben noch kein eigenes Radius-Maß
-- Maß zwischen zwei Elementen (Abstand, Winkel zwischen Linien) kommt mit Sitzung 6
+- Übernommene Körperkanten passen sich noch nicht an, wenn sich der Körper später ändert
+- Vielecke lassen sich noch nicht drehen per Regel (nur über die Lage)
+- Schildchen „X 0“ und „Y 0“ am Ursprung liegen übereinander

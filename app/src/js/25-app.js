@@ -174,9 +174,11 @@ const App = (() => {
   function dimErrors() {
     const out = []; const { v } = Model.vars(S.doc);
     Model.walk(Model.activeItems(S.doc), (it) => {
-      if (it.suppressed || !it.p || !it.p.sketch || !(it.p.sketch.dims || []).length) return;
-      const r = SK.applyDims(it.p.sketch.ents, it.p.sketch.dims, v);
+      const sk = it.p && it.p.sketch;
+      if (it.suppressed || !sk || (!(sk.dims || []).length && !(sk.cons || []).length)) return;
+      const r = Solver.cached(sk, v);
       if (r.badDims && r.badDims.length) out.push({ itemId: it.id, code: 'dim', message: `${ERRORS.sketchDimBad.titel}: „${Model.label(it)}“` });
+      else if (!r.ok) out.push({ itemId: it.id, code: 'over', message: `${ERRORS.sketchOverConstrained.titel}: „${Model.label(it)}“` });
     });
     return out;
   }

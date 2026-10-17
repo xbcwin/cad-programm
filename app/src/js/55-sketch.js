@@ -19,8 +19,36 @@ const Sketch = (() => {
     arc: 'Startpunkt, Endpunkt, dann die Wölbung klicken.',
     slot: 'Ersten und zweiten Mittelpunkt klicken, dann die Breite.',
     poly: 'Mittelpunkt klicken, dann Größe. Anzahl der Ecken rechts einstellen.',
-    dim: 'Klick auf eine Linie, eine Rechteck-Seite oder einen Kreis und tipp das Maß ein – auch eine Formel wie <b>breite/2</b>. Feste Maße bleiben beim Ziehen erhalten. Ein neuer Name landet automatisch unter „Maße“.',
+    dim: 'Klick auf eine Linie, eine Rechteck-Seite, einen Kreis oder Bogen und tipp das Maß ein – auch eine Formel wie <b>breite/2</b>. Für einen <b>Abstand</b> klickst du zwei Punkte an (oder Punkt und Linie), für einen <b>Winkel</b> zwei Linien.',
   };
+  // Bedingungen (Regeln): zweite Leiste unter den Zeichenwerkzeugen
+  const CTOOLS = [
+    { id: 'horizontal', icon: 'cHoriz', label: 'Waagerecht', help: 'cHoriz' },
+    { id: 'vertical', icon: 'cVert', label: 'Senkrecht', help: 'cVert' },
+    { id: 'parallel', icon: 'cParallel', label: 'Parallel', help: 'cParallel' },
+    { id: 'perpendicular', icon: 'cPerp', label: 'Rechtwinklig', help: 'cPerp' },
+    { id: 'tangent', icon: 'cTangent', label: 'Tangential', help: 'cTangent' },
+    { id: 'equal', icon: 'cEqual', label: 'Gleich', help: 'cEqual' },
+    { id: 'symmetric', icon: 'cSymmetric', label: 'Symmetrisch', help: 'cSymmetric' },
+    { id: 'coincident', icon: 'cCoincident', label: 'Deckungsgleich', help: 'cCoincident' },
+    { id: 'fix', icon: 'cFix', label: 'Fixieren', help: 'cFix' },
+    { id: 'project', icon: 'project', label: 'Kante übernehmen', help: 'project' },
+  ];
+  const CNAME = Object.fromEntries(CTOOLS.map((t) => [t.id, t.label]));
+  const CICON = Object.fromEntries(CTOOLS.map((t) => [t.id, t.icon]));
+  const CHINTS = {
+    horizontal: 'Klick eine Linie an – oder zwei Punkte, die auf gleicher Höhe liegen sollen.',
+    vertical: 'Klick eine Linie an – oder zwei Punkte, die genau übereinander liegen sollen.',
+    parallel: 'Klick zwei Linien an, die parallel laufen sollen.',
+    perpendicular: 'Klick zwei Linien an, die einen rechten Winkel bilden sollen.',
+    tangent: 'Klick eine Linie und einen Kreis oder Bogen an – oder zwei Kreise, die sich berühren sollen.',
+    equal: 'Klick zwei Linien (gleich lang) oder zwei Kreise (gleich groß) an.',
+    symmetric: 'Klick zwei Punkte oder zwei Kreise an, dann die Linie, an der gespiegelt wird.',
+    coincident: 'Klick zwei Punkte an – oder einen Punkt und dann die Linie oder den Kreis, auf dem er liegen soll.',
+    fix: 'Klick ein Element oder einen Punkt an, das sich nicht mehr bewegen soll.',
+    project: 'Klick eine gestrichelte Kante der Fläche an – sie wird zu einer festen Linie deiner Skizze.',
+  };
+  for (const k in CHINTS) HINTS['c:' + k] = '<b>' + CNAME[k] + ':</b> ' + CHINTS[k];
   // ---------- Start ----------
   function chooseAndStart() {
     Panels.closeFlyout();
@@ -58,7 +86,7 @@ const Sketch = (() => {
   function editItem(id) {
     const f = Model.find(App.doc, id); if (!f || !f.item.p.sketch) return;
     const W = Model.worldMatrix(App.doc, id);
-    begin({ plane: deepClone(f.item.p.sketch.plane), W, ents: deepClone(f.item.p.sketch.ents), dims: deepClone(f.item.p.sketch.dims || []), refs: [], ctx: { mode: 'edit', editId: id } });
+    begin({ plane: deepClone(f.item.p.sketch.plane), W, ents: deepClone(f.item.p.sketch.ents), dims: deepClone(f.item.p.sketch.dims || []), cons: deepClone(f.item.p.sketch.cons || []), refs: [], ctx: { mode: 'edit', editId: id } });
     // Körper während des Bearbeitens ausblenden
     S.hiddenEdit = id;
     const top = Model.topOf(App.doc, id);
@@ -86,7 +114,7 @@ const Sketch = (() => {
     Panels.closeFlyout(); UI.closePop();
     const F = frameWorld(init.plane, init.W);
     S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' ? 'select' : 'rect', draft: null, sel: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, step: null, hover: null };
-    S.dims = init.dims || [];
+    S.dims = init.dims || []; S.cons = init.cons || []; S.picks = []; S.dimFirst = null; S.selCon = null;
     reapply();   // Maße mit den aktuellen Werten aus „Maße“ nachrechnen
     App.clearSelection();
     Viewer.controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
@@ -122,13 +150,25 @@ const Sketch = (() => {
     const ok = h('button', { type: 'button', class: 'tool primary', 'data-tip': 'Skizze fertig – weiter zum Hochziehen', 'data-kbd': 'Enter' }); ok.innerHTML = icon('check') + '<span>Fertig</span>'; ok.onclick = () => done();
     bar.append(un, cn, ok);
     $('#overlay').append(bar);
+    // zweite Leiste: Regeln
+    cbar = h('div', { class: 'consbar', role: 'toolbar', 'aria-label': 'Regeln' });
+    cbar.append(h('span', { class: 'title' }, 'Regeln'));
+    for (const t of CTOOLS) {
+      if (t.id === 'project' && !S.refs.length) continue;
+      const b = h('button', { type: 'button', class: 'tool' + (S.tool === 'c:' + t.id ? ' active' : ''), 'data-tip': t.label, 'aria-label': t.label, dataset: { tool: 'c:' + t.id, help: t.help } });
+      b.innerHTML = icon(t.icon);
+      b.onclick = () => quickOrTool(t.id);
+      cbar.append(b);
+    }
+    $('#overlay').append(cbar);
   }
-  function hideBar() { if (bar) { bar.remove(); bar = null; } }
+  let cbar = null;
+  function hideBar() { if (bar) { bar.remove(); bar = null; } if (cbar) { cbar.remove(); cbar = null; } }
   function setTool(id) {
     if (!S) return;
     commitDraftPolyline();
-    S.tool = id; S.draft = null; hideEntry(); hideDimBox();
-    if (bar) $$('.tool[data-tool]', bar).forEach((b) => b.classList.toggle('active', b.dataset.tool === id));
+    S.tool = id; S.draft = null; S.picks = []; S.dimFirst = null; hideEntry(); hideDimBox();
+    for (const el of [bar, cbar]) if (el) $$('.tool[data-tool]', el).forEach((b) => b.classList.toggle('active', b.dataset.tool === id));
     UI.hint(HINTS[id]); Panels.renderRight(); render();
   }
   // ---------- Umrechnung ----------
@@ -166,35 +206,67 @@ const Sketch = (() => {
     return { p: b, tip: null };
   }
   // ---------- Zeichnen ----------
-  function pushUndo() { S.undo.push(JSON.stringify({ ents: S.ents, dims: S.dims })); if (S.undo.length > 100) S.undo.shift(); }
+  function pushUndo() { S.undo.push(JSON.stringify({ ents: S.ents, dims: S.dims, cons: S.cons })); if (S.undo.length > 100) S.undo.shift(); }
   function sketchUndo() {
     if (S.draft && S.draft.pts && S.draft.pts.length > 1 && S.tool === 'line') { S.draft = null; render(); return; }
     const last = S.undo.pop(); if (last == null) return;
-    const st = JSON.parse(last); S.ents = st.ents; S.dims = st.dims || []; S.sel = null; S.draft = null; render(); Panels.renderRight();
+    const st = JSON.parse(last); S.ents = st.ents; S.dims = st.dims || []; S.cons = st.cons || []; S.sel = null; S.selCon = null; S.draft = null; S.picks = []; reapply(); render(); Panels.renderRight();
   }
   function addEnt(e) { pushUndo(); e.id = uid('e'); if (S.construction) e.con = true; S.ents.push(e); return e; }
-  // ---------- Maße ----------
+  // ---------- Maße und Regeln: der Löser rechnet alles gemeinsam ----------
   const vars = () => Model.vars(App.doc).v;
-  function reapply() { if (S) S.ents = SK.applyDims(S.ents, S.dims, vars(), true); }
-  function dimOf(eid, k) { return S.dims.find((d) => d.e === eid && d.k === k) || null; }
-  // Maß setzen (Zahl oder Formel); ohne Undo-Schritt, wenn quiet
-  function putDim(eid, k, v) {
-    const old = dimOf(eid, k);
-    if (old) old.v = v; else S.dims.push({ id: uid('m'), e: eid, k, v });
+  // fast: beim Ziehen ohne Beweglichkeits-Analyse (die kommt beim Loslassen)
+  function reapply(opts = {}) {
+    if (!S) return null;
+    const r = Solver.solve({ ents: S.ents, dims: S.dims, cons: S.cons }, vars(), { inPlace: true, analyze: !opts.fast, pins: opts.pins });
+    if (!opts.fast) S.status = r; else if (S.status) S.status.conflicts = r.conflicts;
+    return r;
   }
-  function setDim(eid, k, v) {
-    const en = S.ents.find((x) => x.id === eid); if (!en) return;
+  const ent = (id) => S.ents.find((x) => x.id === id);
+  const sameRefs = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const specMatch = (d, sp) => d.k === sp.k && (sp.e ? d.e === sp.e : !!d.refs && sameRefs(d.refs, sp.refs));
+  function dimFind(sp) { return S.dims.find((d) => specMatch(d, sp)) || null; }
+  function dimOf(eid, k) { return dimFind({ e: eid, k }); }
+  function putDimSpec(sp, v) {
+    const old = dimFind(sp);
+    if (old) old.v = v; else S.dims.push(sp.e ? { id: uid('m'), e: sp.e, k: sp.k, v } : { id: uid('m'), k: sp.k, refs: sp.refs, v });
+  }
+  function putDim(eid, k, v) { putDimSpec({ e: eid, k }, v); }
+  // Maß setzen (Zahl oder Formel) – vorher prüfen, ob es zu den anderen Regeln passt
+  function setDimSpec(sp, v) {
+    if (sp.e && !ent(sp.e)) return false;
     const n = Model.num(v, vars(), NaN);
-    if (!isFinite(n) || (k !== 'ang' && k !== 'x' && k !== 'y' && n <= 0)) { UI.toast('Dieser Wert passt hier nicht: ' + v, { kind: 'bad' }); return; }
+    const signed = sp.k === 'ang' || sp.k === 'x' || sp.k === 'y';
+    const zeroOk = sp.k === 'dist' || sp.k === 'distPL' || sp.k === 'angLL';
+    if (!isFinite(n) || (!signed && (zeroOk ? n < 0 : n <= 0)) || (sp.k === 'angLL' && n > 180)) { UI.toast('Dieser Wert passt hier nicht: ' + v, { kind: 'bad' }); return false; }
     if (typeof v === 'string' && !Expr.names(v).length) v = round(n, 4);   // reine Rechnung wie 10*3 → 30
-    pushUndo(); putDim(eid, k, v); reapply(); render(); Panels.renderRight();
+    if (sp.k !== 'n') {
+      const others = S.dims.filter((d) => !specMatch(d, sp));
+      const tr = Solver.trial({ ents: S.ents, cons: S.cons, dims: [...others, sp.e ? { id: '_neu', e: sp.e, k: sp.k, v } : { id: '_neu', k: sp.k, refs: sp.refs, v }], dimsBefore: others }, vars());
+      if (!tr.ok) { UI.toast(ERRORS.sketchOverConstrained.titel + ': Dieses Maß widerspricht den anderen Regeln. ' + ERRORS.sketchOverConstrained.loesung, { kind: 'bad', ms: 6000 }); return false; }
+      if (tr.redundant) { UI.toast('Das liegt schon fest – andere Maße oder Regeln bestimmen diesen Wert bereits.', { icon: 'info', ms: 4500 }); return false; }
+    }
+    pushUndo(); putDimSpec(sp, v); reapply(); render(); Panels.renderRight();
+    return true;
   }
-  function removeDim(eid, k) { pushUndo(); S.dims = S.dims.filter((d) => !(d.e === eid && d.k === k)); render(); Panels.renderRight(); }
-  function deleteEnt(id) { pushUndo(); S.ents = S.ents.filter((x) => x.id !== id); S.dims = S.dims.filter((d) => d.e !== id); if (S.sel === id) S.sel = null; render(); Panels.renderRight(); }
+  function setDim(eid, k, v) { return setDimSpec({ e: eid, k }, v); }
+  function removeDimSpec(sp) { pushUndo(); S.dims = S.dims.filter((d) => !specMatch(d, sp)); reapply(); render(); Panels.renderRight(); }
+  function removeDim(eid, k) { removeDimSpec({ e: eid, k }); }
+  const usesEnt = (r, id) => r && r.e === id;
+  function deleteEnt(id) {
+    pushUndo();
+    S.ents = S.ents.filter((x) => x.id !== id);
+    S.dims = S.dims.filter((d) => d.e !== id && !(d.refs || []).some((r) => usesEnt(r, id)));
+    S.cons = S.cons.filter((c) => !(c.refs || []).some((r) => usesEnt(r, id)));
+    if (S.sel === id) S.sel = null;
+    reapply(); render(); Panels.renderRight();
+  }
+  function removeCons(id) { pushUndo(); S.cons = S.cons.filter((c) => c.id !== id); if (S.selCon === id) S.selCon = null; reapply(); render(); Panels.renderRight(); }
   // Welches Maß meint ein Klick auf dieses Element?
   function dimKeyAt(en, uv) {
     if (en.type === 'line') return 'len';
     if (en.type === 'circle' || en.type === 'poly') return 'd';
+    if (en.type === 'arc') return 'r';
     if (en.type === 'slot') return 'len';
     if (en.type === 'rect') {
       const x0 = Math.min(en.a[0], en.b[0]), x1 = Math.max(en.a[0], en.b[0]), y0 = Math.min(en.a[1], en.b[1]), y1 = Math.max(en.a[1], en.b[1]);
@@ -203,16 +275,154 @@ const Sketch = (() => {
     }
     return null;
   }
+  // ---------- Punkte, Linien, Kreise anklicken ----------
+  function pointsOf(e) {
+    const out = []; const P = (p, xy) => out.push([{ e: e.id, p }, xy]);
+    if (e.type === 'line' || e.type === 'arc' || e.type === 'slot') { P('a', e.a); P('b', e.b); if (e.type === 'arc') { const ai = SK.arcInfo(e.a, e.m, e.b); if (ai) P('c', ai.c); } }
+    else if (e.type === 'circle') P('c', e.c);
+    else if (e.type === 'poly') { P('c', e.c); SK.polyCorners(e).forEach((q, i) => P('v' + i, q)); }
+    else if (e.type === 'rect') { SK.rectCorners(e).forEach((q, i) => P('k' + i, q)); P('c', [(e.a[0] + e.b[0]) / 2, (e.a[1] + e.b[1]) / 2]); }
+    return out;
+  }
+  function refPts(e) { if (e.type === 'line' || e.type === 'arc') return [e.a, e.b]; if (e.type === 'circle') return [e.c]; return []; }
+  function segDist(p, a, b) { const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy; const t = l2 ? clamp(((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2, 0, 1) : 0; return Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy); }
+  function rectEdgeAt(e, uv) { const c = SK.rectCorners(e); let bi = 0, bd = Infinity; for (let i = 0; i < 4; i++) { const d = segDist(uv, c[i], c[(i + 1) % 4]); if (d < bd) { bd = d; bi = i; } } return bi; }
+  const kindOf = (e) => (e.type === 'circle' || e.type === 'arc' ? 'circle' : e.type === 'line' || e.type === 'slot' || e.type === 'rect' ? 'line' : 'other');
+  function pickAt(uv, opts = {}) {
+    const tol = pxSize() * 9;
+    if (opts.points !== false) {
+      let best = null, bd = tol;
+      const tryP = (ref, q) => { const d = SK.d2(q, uv); if (d < bd) { bd = d; best = { ref, xy: q.slice(), kind: 'point' }; } };
+      for (const e of S.ents) for (const [ref, q] of pointsOf(e)) tryP(ref, q);
+      tryP({ e: 'origin' }, [0, 0]);
+      for (const e of S.refs) for (const q of refPts(e)) tryP({ at: q.slice() }, q);
+      // Ein Punkt gewinnt nur, wenn er nicht deutlich weiter weg ist als die Linie unter der Maus
+      // (sonst wäre der Rand eines kleinen Kreises nie anklickbar, nur sein Mittelpunkt)
+      const he = SK.hit(S.ents, uv, tol);
+      if (best && (!he || bd <= SK.distEnt(he, uv) + tol * 0.35)) return best;
+    }
+    const hit = SK.hit(S.ents, uv, tol);
+    if (hit) { const ref = { e: hit.id }; if (hit.type === 'rect') ref.edge = rectEdgeAt(hit, uv); return { ref, kind: kindOf(hit), ent: hit }; }
+    if (opts.refs) { const r = SK.hit(S.refs, uv, tol); if (r) return { ref: null, kind: 'refent', ent: r }; }
+    return null;
+  }
+  function refXY(ref) {
+    if (!ref) return null; if (ref.at) return ref.at; if (ref.e === 'origin') return [0, 0];
+    const e = ent(ref.e); if (!e) return null;
+    if (ref.p === 'mid' && e.a && e.b) return [(e.a[0] + e.b[0]) / 2, (e.a[1] + e.b[1]) / 2];
+    const m = pointsOf(e).find(([r]) => r.p === ref.p); return m ? m[1] : null;
+  }
+  function refLine(ref) {
+    const e = ref && ent(ref.e); if (!e) return null;
+    if (e.type === 'rect') { const c = SK.rectCorners(e); const i = ref.edge || 0; return [c[i], c[(i + 1) % 4]]; }
+    return e.a && e.b ? [e.a, e.b] : null;
+  }
+  function refCircle(ref) {
+    const e = ref && ent(ref.e); if (!e) return null;
+    if (e.type === 'circle') return { c: e.c, r: e.r };
+    if (e.type === 'arc') { const ai = SK.arcInfo(e.a, e.m, e.b); return ai ? { c: ai.c, r: ai.r } : null; }
+    return null;
+  }
+  function measureSpec(sp) {
+    if (sp.e) { const en = ent(sp.e); return en ? SK.measure(en, sp.k) : NaN; }
+    const [r0, r1] = sp.refs;
+    if (sp.k === 'dist') { const a = refXY(r0), b = refXY(r1); return a && b ? SK.d2(a, b) : NaN; }
+    if (sp.k === 'distPL') { const p = refXY(r0), L = refLine(r1); if (!p || !L) return NaN; const dx = L[1][0] - L[0][0], dy = L[1][1] - L[0][1]; return Math.abs((p[0] - L[0][0]) * dy - (p[1] - L[0][1]) * dx) / (Math.hypot(dx, dy) || 1); }
+    if (sp.k === 'angLL') { const A = refLine(r0), B = refLine(r1); if (!A || !B) return NaN; const ux = A[1][0] - A[0][0], uy = A[1][1] - A[0][1], vx = B[1][0] - B[0][0], vy = B[1][1] - B[0][1]; return (Math.atan2(Math.abs(ux * vy - uy * vx), ux * vx + uy * vy) * 180) / Math.PI; }
+    return NaN;
+  }
+  // ---------- Regeln hinzufügen ----------
+  function addCons(c) {
+    const cons2 = [...S.cons, c];
+    const tr = Solver.trial({ ents: S.ents, dims: S.dims, cons: cons2, consBefore: S.cons }, vars());
+    if (!tr.ok) { UI.toast(ERRORS.sketchOverConstrained.titel + ': Diese Regel widerspricht den anderen. ' + ERRORS.sketchOverConstrained.loesung, { kind: 'bad', ms: 6000 }); render(); return false; }
+    if (tr.redundant) { UI.toast('Das liegt schon fest – diese Regel würde nichts ändern.', { icon: 'info' }); render(); return false; }
+    pushUndo(); S.cons = cons2; reapply(); render(); Panels.renderRight();
+    return true;
+  }
+  // Regel-Knopf: ist schon eine passende Linie gewählt, gilt die Regel sofort
+  function quickOrTool(id) {
+    const sel = S.sel && ent(S.sel);
+    if (sel && (id === 'horizontal' || id === 'vertical') && (sel.type === 'line' || sel.type === 'slot')) { addCons({ id: uid('k'), type: id, refs: [{ e: sel.id }] }); return; }
+    if (sel && id === 'fix') { fixEnt(sel); return; }
+    setTool('c:' + id);
+  }
+  function fixEnt(e) {
+    const ks = Solver.VARS[e.type]; if (!ks) return;
+    const at = {}; for (const k of ks) at[k] = k === 'r' ? e.r : e[k[0]][+k[1]];
+    addCons({ id: uid('k'), type: 'fix', refs: [{ e: e.id }], at });
+  }
+  function consPick(pk, e) {
+    const t = S.tool.slice(2);
+    if (t === 'project') {
+      const p2 = pickAt(mouseUV(e), { points: false, refs: true });
+      if (!p2 || p2.kind !== 'refent') { UI.toast(CHINTS.project, { icon: 'info' }); return; }
+      const copy = deepClone(p2.ent); copy.id = uid('e'); delete copy.con;
+      pushUndo(); S.ents.push(copy);
+      const at = {}; for (const k of Solver.VARS[copy.type] || []) at[k] = k === 'r' ? copy.r : copy[k[0]][+k[1]];
+      S.cons.push({ id: uid('k'), type: 'fix', refs: [{ e: copy.id }], at });
+      reapply(); render(); Panels.renderRight();
+      return;
+    }
+    if (!pk) { S.picks = []; render(); return; }
+    S.picks.push(pk);
+    const P = S.picks, n = P.length, last = P[n - 1];
+    const isPt = (x) => x.kind === 'point';
+    const asPoint = (x) => (isPt(x) ? x.ref : x.ent && (x.ent.type === 'circle' || x.ent.type === 'arc' || x.ent.type === 'poly') ? { e: x.ent.id, p: 'c' } : null);
+    const fail = () => { UI.toast(CHINTS[t], { icon: 'info' }); S.picks = []; render(); };
+    const wait = () => { render(); };
+    let c = null;
+    if (t === 'horizontal' || t === 'vertical') {
+      if (n === 1 && last.kind === 'line' && last.ent.type !== 'rect') c = { refs: [last.ref] };
+      else if (n === 1 && isPt(last)) return wait();
+      else if (n === 2 && isPt(P[0]) && isPt(P[1])) c = { refs: [P[0].ref, P[1].ref] };
+      else return fail();
+    } else if (t === 'parallel' || t === 'perpendicular') {
+      if (last.kind !== 'line') return fail(); if (n < 2) return wait();
+      c = { refs: [P[0].ref, P[1].ref] };
+    } else if (t === 'equal') {
+      if (last.kind !== 'line' && last.kind !== 'circle') return fail(); if (n < 2) return wait();
+      if (P[0].kind !== P[1].kind) return fail();
+      c = { refs: [P[0].ref, P[1].ref] };
+    } else if (t === 'tangent') {
+      if (last.kind !== 'line' && last.kind !== 'circle') return fail(); if (n < 2) return wait();
+      if (P[0].kind === 'line' && P[1].kind === 'line') return fail();
+      c = { refs: [P[0].ref, P[1].ref] };
+      if (P[0].kind === 'circle' && P[1].kind === 'circle') { const A = refCircle(P[0].ref), B = refCircle(P[1].ref); c.mode = SK.d2(A.c, B.c) < Math.max(A.r, B.r) ? 'int' : 'ext'; }
+    } else if (t === 'coincident') {
+      if (n === 1) { if (isPt(last) || last.kind === 'line' || last.kind === 'circle') return wait(); return fail(); }
+      if (isPt(P[0]) && (isPt(P[1]) || P[1].kind === 'line' || P[1].kind === 'circle')) c = { refs: [P[0].ref, P[1].ref] };
+      else if (isPt(P[1]) && (P[0].kind === 'line' || P[0].kind === 'circle')) c = { refs: [P[1].ref, P[0].ref] };
+      else return fail();
+    } else if (t === 'symmetric') {
+      if (n <= 2) { if (!asPoint(last)) return fail(); return wait(); }
+      if (last.kind !== 'line') return fail();
+      c = { refs: [asPoint(P[0]), asPoint(P[1]), P[2].ref] };
+    } else if (t === 'fix') {
+      S.picks = [];
+      if (isPt(last)) { if (last.ref.e === 'origin' || last.ref.at) { UI.toast('Dieser Punkt liegt schon fest.', { icon: 'info' }); render(); return; } addCons({ id: uid('k'), type: 'fix', refs: [last.ref], at: last.xy.slice() }); }
+      else if (last.ent) fixEnt(last.ent);
+      return;
+    }
+    S.picks = [];
+    if (c) addCons({ id: uid('k'), type: t, ...c });
+  }
   // kleines Eingabefeld direkt im Bild
   let dimBox = null;
   function hideDimBox() { if (dimBox) { dimBox.remove(); dimBox = null; } }
-  function askDim(en, k, clientX, clientY) {
+  const DIMLABEL = (k) => SK.DIMNAME[k] || { dist: 'Abstand', distPL: 'Abstand', angLL: 'Winkel', r: 'Radius' }[k] || 'Maß';
+  function askDim(sp, clientX, clientY) {
     hideDimBox(); hideEntry();
-    const cur = dimOf(en.id, k);
-    const val = cur ? (typeof cur.v === 'number' ? fmt(cur.v, 4) : cur.v) : fmt(round(SK.measure(en, k), 4), 4);
+    const cur = dimFind(sp);
+    const val = cur ? (typeof cur.v === 'number' ? fmt(cur.v, 4) : cur.v) : fmt(round(measureSpec(sp), 4), 4);
     dimBox = h('div', { class: 'numentry dimask' });
-    const inp = h('input', { type: 'text', value: val, 'aria-label': SK.DIMNAME[k], spellcheck: 'false', autocomplete: 'off', style: { width: '120px' } });
-    dimBox.append(h('label', null, SK.DIMNAME[k], inp));
+    const inp = h('input', { type: 'text', value: val, 'aria-label': DIMLABEL(sp.k), spellcheck: 'false', autocomplete: 'off', style: { width: '120px' } });
+    dimBox.append(h('label', null, DIMLABEL(sp.k), inp));
+    if (cur) {
+      const del = h('button', { type: 'button', class: 'dimlock', 'data-tip': 'Maß löschen', 'aria-label': 'Maß löschen' }); del.innerHTML = icon('trash');
+      del.onclick = () => { hideDimBox(); removeDimSpec(sp); };
+      dimBox.append(del);
+    }
     const r = Viewer.canvas.getBoundingClientRect();
     dimBox.style.left = clientX - r.left + 'px'; dimBox.style.top = clientY - r.top + 'px';
     $('#overlay').append(dimBox);
@@ -223,13 +433,13 @@ const Sketch = (() => {
       const raw = inp.value.trim(); if (!raw) { hideDimBox(); return; }
       // ein neuer Name wie „breite“ wird unter „Maße“ mit dem jetzigen Wert angelegt
       if (/^[A-Za-zÄÖÜäöüß_][A-Za-zÄÖÜäöüß_0-9]*$/.test(raw) && !/^pi$/i.test(raw) && isNaN(Model.num(raw, vars(), NaN))) {
-        const cur = round(SK.measure(en, k), 4);
-        App.change(`Maß „${raw}“ angelegt`, (doc) => { doc.params.push({ id: uid('m'), name: raw, expr: cur }); });
-        UI.toast(`Neuer Name „${raw}“ = ${fmt(cur, 2)} – zu finden links unter „Maße“.`, { icon: 'check' });
+        const now = round(measureSpec(sp), 4);
+        App.change(`Maß „${raw}“ angelegt`, (doc) => { doc.params.push({ id: uid('m'), name: raw, expr: now }); });
+        UI.toast(`Neuer Name „${raw}“ = ${fmt(now, 2)} – zu finden links unter „Maße“.`, { icon: 'check' });
       }
       const n = parseNum(raw); const v = isNaN(n) ? raw : n;
       if (isNaN(Model.num(v, vars(), NaN))) { inp.parentElement.parentElement.classList.add('invalid'); UI.toast('Das kann ich nicht ausrechnen: „' + raw + '“. Prüf die Schreibweise – Beispiele findest du unter „Maße“.', { kind: 'bad' }); return; }
-      hideDimBox(); S.sel = en.id; setDim(en.id, k, v); Viewer.canvas.focus();
+      hideDimBox(); if (sp.e) S.sel = sp.e; setDimSpec(sp, v); Viewer.canvas.focus();
     };
     inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); commit(); } if (e.key === 'Escape') { hideDimBox(); Viewer.canvas.focus(); } });
   }
@@ -241,22 +451,36 @@ const Sketch = (() => {
     let p = sn.p;
     const t = S.tool;
     if (t === 'dim') {
-      const hit = SK.hit(S.ents, uv0, pxSize() * 9);
-      if (!hit) { UI.toast('Klick genau auf eine Linie oder einen Kreis.', { icon: 'info', ms: 1800 }); return; }
-      const k = dimKeyAt(hit, uv0);
-      if (!k) { UI.toast('Für Bögen kommt das Maß in einer späteren Version.', { icon: 'info' }); return; }
-      S.sel = hit.id; render(); Panels.renderRight();
-      askDim(hit, k, e.clientX, e.clientY); return;
+      const pk = pickAt(uv0);
+      if (!pk) { S.dimFirst = null; UI.toast('Klick genau auf eine Linie, einen Kreis oder einen Punkt.', { icon: 'info', ms: 1800 }); render(); return; }
+      const f = S.dimFirst;
+      if (f) {
+        // zweites Element: Abstand oder Winkel zwischen zwei Dingen
+        let k = null, refs = null;
+        const fp = f.kind === 'point', np = pk.kind === 'point';
+        if (fp && np && !sameRefs(f.ref, pk.ref)) { k = 'dist'; refs = [f.ref, pk.ref]; }
+        else if (fp && pk.kind === 'line') { k = 'distPL'; refs = [f.ref, pk.ref]; }
+        else if (f.kind === 'line' && np) { k = 'distPL'; refs = [pk.ref, f.ref]; }
+        else if (f.kind === 'line' && pk.kind === 'line' && !sameRefs(f.ref, pk.ref)) { k = 'angLL'; refs = [f.ref, pk.ref]; }
+        if (k) { S.dimFirst = null; askDim({ k, refs }, e.clientX, e.clientY); render(); return; }
+      }
+      if (pk.kind === 'point') { S.dimFirst = pk; hideDimBox(); UI.hint('Jetzt einen <b>zweiten Punkt</b> oder eine <b>Linie</b> anklicken – für den Abstand.'); render(); return; }
+      const k = dimKeyAt(pk.ent, uv0);
+      if (!k) { S.dimFirst = null; UI.toast('Dafür gibt es noch kein Maß.', { icon: 'info' }); return; }
+      S.sel = pk.ent.id; S.dimFirst = pk.kind === 'line' ? pk : null;
+      UI.hint(HINTS.dim); render(); Panels.renderRight();
+      askDim({ e: pk.ent.id, k }, e.clientX, e.clientY); return;
     }
+    if (t.startsWith('c:')) { consPick(t === 'c:project' ? null : pickAt(uv0), e); return; }
     if (t === 'select') {
-      // Endpunkt ziehen?
+      // Endpunkt ziehen? (alle Linien, die sich dort treffen, gehen mit)
       const tol = pxSize() * 9;
       const endHit = [];
       for (const en of S.ents) for (const k of ['a', 'b']) if ((en.type === 'line' || en.type === 'arc') && SK.d2(en[k], uv0) < tol) endHit.push([en, k]);
-      if (endHit.length) { pushUndo(); S.drag = { points: endHit, start: uv0 }; return; }
+      if (endHit.length) { pushUndo(); S.drag = { points: endHit, start: uv0 }; S.selCon = null; return; }
       const hit = SK.hit(S.ents, uv0, tol);
-      if (hit && (hit.type === 'circle' || hit.type === 'rect' || hit.type === 'poly' || hit.type === 'slot')) { pushUndo(); S.drag = { move: hit.id, start: uv0, orig: deepClone(hit) }; }
-      S.sel = hit ? hit.id : null; render(); Panels.renderRight(); return;
+      if (hit && (hit.type === 'circle' || hit.type === 'rect' || hit.type === 'poly' || hit.type === 'slot' || hit.type === 'line' || hit.type === 'arc')) { pushUndo(); S.drag = { move: hit.id, start: uv0, orig: deepClone(hit) }; }
+      S.sel = hit ? hit.id : null; S.selCon = null; render(); Panels.renderRight(); return;
     }
     if (t === 'line') {
       if (!S.draft) { S.draft = { pts: [p] }; }
@@ -287,7 +511,7 @@ const Sketch = (() => {
       else if (!S.draft.b) { if (SK.d2(S.draft.a, p) > 1e-6) S.draft.b = p; }
       else { const r = slotR(S.draft.a, S.draft.b, p); if (r > 1e-6) addEnt({ type: 'slot', a: S.draft.a, b: S.draft.b, r: round(r, 4) }); S.draft = null; hideEntry(); }
     }
-    render(); Panels.renderRight();
+    reapply(); render(); Panels.renderRight();
   }
   function slotR(a, b, p) { const L = SK.d2(a, b); if (L < 1e-9) return SK.d2(a, p); const ux = (b[0] - a[0]) / L, uy = (b[1] - a[1]) / L; return Math.abs((p[0] - a[0]) * -uy + (p[1] - a[1]) * ux); }
   function commitDraftPolyline() { if (S && S.draft && S.tool === 'line') S.draft = null; }
@@ -299,11 +523,17 @@ const Sketch = (() => {
     lastMouse = { e, uv: uv0 };
     if (S.drag) {
       const sn = snap(uv0, { fine: e.shiftKey, exclude: S.drag.move ? [S.drag.move] : S.drag.points.map(([en]) => en.id) });
-      if (S.drag.points) for (const [en, k] of S.drag.points) en[k] = sn.p.slice();
-      else { const en = S.ents.find((x) => x.id === S.drag.move); const o = S.drag.orig; const dx = sn.p[0] - S.drag.start[0], dy = sn.p[1] - S.drag.start[1]; Object.assign(en, SK.translateEnt(o, round(dx, 4), round(dy, 4))); }
-      reapply();   // feste Maße halten
-      render(); return;
+      // Wunschlage festhalten, der Löser bewegt den Rest – Maße und Regeln gehen vor
+      const pins = [];
+      if (S.drag.points) for (const [en, k] of S.drag.points) pins.push([en.id, k + '0', sn.p[0]], [en.id, k + '1', sn.p[1]]);
+      else {
+        const o = S.drag.orig; const moved = SK.translateEnt(o, round(sn.p[0] - S.drag.start[0], 4), round(sn.p[1] - S.drag.start[1], 4));
+        for (const k of Solver.VARS[o.type] || []) if (k !== 'r') pins.push([o.id, k, moved[k[0]][+k[1]]]);
+      }
+      S.dragPins = pins; S.dragged = true;
+      dragFrame(); return;
     }
+    if (S.tool === 'dim' || S.tool.startsWith('c:')) { S.hoverPick = pickAt(uv0, { refs: S.tool === 'c:project', points: S.tool !== 'c:project' }); S.cursor = null; render(); return; }
     S.cursor = snap(uv0, { fine: e.shiftKey });
     if (S.tool === 'line' && S.draft) {
       const a = S.draft.pts[S.draft.pts.length - 1];
@@ -311,7 +541,20 @@ const Sketch = (() => {
     }
     render();
   }
-  function onUp() { if (S && S.drag) { S.drag = null; render(); Panels.renderRight(); } }
+  // Beim Ziehen höchstens einmal pro Bildschirmbild rechnen und zeichnen
+  let dragRaf = 0;
+  function dragFrame() {
+    if (dragRaf) return;
+    dragRaf = requestAnimationFrame(() => { dragRaf = 0; if (!S || !S.dragPins) return; reapply({ fast: true, pins: S.dragPins }); render(); });
+  }
+  function onUp() {
+    if (!S || !S.drag) return;
+    if (dragRaf) { cancelAnimationFrame(dragRaf); dragRaf = 0; }
+    if (S.dragPins) { reapply({ fast: true, pins: S.dragPins }); S.dragPins = null; }
+    const moved = S.dragged; S.drag = null; S.dragged = false;
+    if (!moved) S.undo.pop();   // nur geklickt, nicht gezogen
+    reapply(); render(); Panels.renderRight();
+  }
   // ---------- Zahlen eintippen ----------
   let entry = null;
   function entryFields() {
@@ -389,8 +632,9 @@ const Sketch = (() => {
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return false;
     if (S.step) { if (e.key === 'Escape') { stepBack(); return true; } if (e.key === 'Enter') { stepOK(); return true; } return false; }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); sketchUndo(); return true; }
-    if (e.key === 'Escape') { if (S.draft) { S.draft = null; hideEntry(); render(); } else if (S.tool !== 'select') setTool('select'); else cancel(); return true; }
+    if (e.key === 'Escape') { if (S.draft) { S.draft = null; hideEntry(); render(); } else if (S.picks.length || S.dimFirst) { S.picks = []; S.dimFirst = null; UI.hint(HINTS[S.tool]); render(); } else if (S.tool !== 'select') setTool('select'); else cancel(); return true; }
     if (e.key === 'Enter') { if (S.draft && S.tool === 'line') { S.draft = null; render(); } else done(); return true; }
+    if ((e.key === 'Delete' || e.key === 'Backspace') && S.selCon) { removeCons(S.selCon); return true; }
     if ((e.key === 'Delete' || e.key === 'Backspace') && S.sel) { deleteEnt(S.sel); return true; }
     // Beim Zeichnen landet jede Zahl und jeder Buchstabe im Eingabefeld (Formeln wie „breite/2“)
     if (S.draft && !e.ctrlKey && !e.metaKey && !e.altKey && /^[0-9.,\-(A-Za-zÄÖÜäöüß_]$/.test(e.key)) { if (showEntry(e.key)) { e.preventDefault(); return true; } }
@@ -447,27 +691,59 @@ const Sketch = (() => {
       const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: new THREE.Color(acc), transparent: true, opacity: chosen ? (S.step ? 0.34 : 0.2) : 0.06, depthTest: false, side: THREE.DoubleSide }));
       m.renderOrder = 21; grp.add(m);
     }
-    // Elemente
+    // Elemente: blau = noch beweglich, dunkel = voll bestimmt
+    const free = th.dark ? '#5aa9ff' : '#1c6fd1';
+    const st = S.status;
+    const picked = new Set(S.picks.filter((p) => p.ent || (p.ref && p.ref.e && p.kind !== 'point')).map((p) => p.ref.e));
+    const hov = S.hoverPick;
     for (const e of S.ents) {
-      const sel = e.id === S.sel;
-      for (const p of entPts(e)) lineObj(p, sel ? acc : ink, sel ? 3.4 : 2.2, { dashed: e.con, order: 25 });
+      const sel = e.id === S.sel || picked.has(e.id);
+      const isFree = !st || !st.freeEnts || st.freeEnts.has(e.id);
+      const hot = hov && hov.kind !== 'point' && hov.ent && hov.ent.id === e.id;
+      const col = sel ? acc : isFree ? free : ink;
+      for (const p of entPts(e)) lineObj(p, col, sel ? 3.4 : hot ? 3 : 2.2, { dashed: e.con, order: 25, opacity: hot && !sel ? 0.8 : 1 });
+      if (hot && e.type === 'rect' && hov.ref && hov.ref.edge != null) { const c = SK.rectCorners(e); lineObj([c[hov.ref.edge], c[(hov.ref.edge + 1) % 4]], acc, 4, { order: 26 }); }
     }
+    // gewählte und überfahrene Punkte
+    const ring = (p, r, col, w = 2) => { const q = SK.circlePoints(p, r, 20); q.push(q[0]); lineObj(q, col, w, { order: 27 }); };
+    for (const p of S.picks) if (p.kind === 'point') ring(p.xy, pxSize() * 5, acc, 2.6);
+    if (S.dimFirst && S.dimFirst.kind === 'point') ring(S.dimFirst.xy, pxSize() * 5, acc, 2.6);
+    if (hov && hov.kind === 'point') ring(hov.xy, pxSize() * 4.5, acc, 1.8);
+    if (hov && hov.kind === 'refent') for (const p of entPts(hov.ent)) lineObj(p, acc, 3, { order: 26 });
     // feste Maße als Schildchen, anklicken zum Ändern
+    const conflicts = (st && st.conflicts) || new Set();
     if (!S.step) for (const dm of S.dims) {
-      const en = S.ents.find((x) => x.id === dm.e); if (!en) continue;
-      const pos = dimPos(en, dm.k); if (!pos) continue;
+      const sp = dm.refs ? { k: dm.k, refs: dm.refs } : { e: dm.e, k: dm.k };
+      const pos = dimPosSpec(dm); if (!pos) continue;
       if (pos.line) lineObj(pos.line, acc, 1, { dashed: true, opacity: 0.7, dash: 1.2, gap: 1.2 });
-      const val = SK.measure(en, dm.k);
+      const val = measureSpec(sp);
       const isF = typeof dm.v === 'string' && Model.isExpr(dm.v);
-      const bad = isNaN(Model.num(dm.v, vars(), NaN));
-      const pre = { d: 'Ø ', x: 'X ', y: 'Y ' }[dm.k] || '';
-      const unit = dm.k === 'ang' ? '°' : dm.k === 'n' ? ' Ecken' : '';
-      const el = h('div', { class: 'skdim' + (bad ? ' bad' : ''), 'data-tip': bad ? 'Formel lässt sich nicht ausrechnen – klicken zum Ändern' : SK.DIMNAME[dm.k] + ' – klicken zum Ändern', dataset: { dim: dm.id } });
+      const bad = isNaN(Model.num(dm.v, vars(), NaN)) || conflicts.has(dm.id);
+      const pre = { d: 'Ø ', x: 'X ', y: 'Y ', r: 'R ' }[dm.k] || '';
+      const unit = dm.k === 'ang' || dm.k === 'angLL' ? '°' : dm.k === 'n' ? ' Ecken' : '';
+      const el = h('div', { class: 'skdim' + (bad ? ' bad' : ''), 'data-tip': bad ? 'Dieses Maß geht nicht auf – klicken zum Ändern' : DIMLABEL(dm.k) + ' – klicken zum Ändern', dataset: { dim: dm.id } });
       el.innerHTML = (isF ? `<span class="fx">${esc(dm.v)}&nbsp;=</span>` : '') + esc(pre + fmt(val, 2) + unit);
       $('#overlay').append(el); labels.push(el);
-      const sp = Viewer.toScreen(toWorld(pos.p[0], pos.p[1])); el.style.left = sp.x + 'px'; el.style.top = sp.y + 'px';
+      const spx = Viewer.toScreen(toWorld(pos.p[0], pos.p[1])); el.style.left = spx.x + 'px'; el.style.top = spx.y + 'px';
       el.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); });
-      el.addEventListener('click', (e) => { S.sel = en.id; render(); Panels.renderRight(); askDim(en, dm.k, e.clientX, e.clientY); });
+      el.addEventListener('click', (e) => { if (sp.e) S.sel = sp.e; render(); Panels.renderRight(); askDim(sp, e.clientX, e.clientY); });
+    }
+    // Regeln als kleine Symbole neben den Elementen
+    if (!S.step) {
+      const slots = new Map();
+      for (const c of S.cons) {
+        for (const a of consAnchors(c)) {
+          const key = Math.round(a[0] / (pxSize() * 12)) + ',' + Math.round(a[1] / (pxSize() * 12));
+          const n = slots.get(key) || 0; slots.set(key, n + 1);
+          const spx = Viewer.toScreen(toWorld(a[0], a[1]));
+          const el = h('div', { class: 'skcon' + (S.selCon === c.id ? ' sel' : '') + (conflicts.has(c.id) ? ' bad' : ''), 'data-tip': (CNAME[c.type] || 'Regel') + ' – anklicken, dann Entf zum Löschen', dataset: { con: c.id } });
+          el.innerHTML = icon(CICON[c.type] || 'info');
+          el.style.left = spx.x + n * 19 + 'px'; el.style.top = spx.y + 'px';
+          el.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); });
+          el.addEventListener('click', () => { S.selCon = c.id; S.sel = null; render(); Panels.renderRight(); });
+          $('#overlay').append(el); labels.push(el);
+        }
+      }
     }
     // offene Enden markieren
     for (const p of SK.openEnds(S.ents)) { const w = toWorld(p[0], p[1]); const l = label('', p, 'snaptip'); l.style.transform = 'translate(-50%,-50%)'; l.style.width = '9px'; l.style.height = '9px'; l.style.padding = '0'; l.style.borderRadius = '50%'; l.style.background = th.hole; l.title = 'Offenes Ende'; }
@@ -493,6 +769,33 @@ const Sketch = (() => {
     }
     Viewer.requestRender();
   }
+  // Wo stehen die Symbole einer Regel? (Skizzen-Koordinaten)
+  function consAnchors(c) {
+    const px = pxSize(); const out = [];
+    const refs = c.type === 'symmetric' ? [c.refs[2]] : c.type === 'coincident' ? [c.refs[0]] : (c.type === 'horizontal' || c.type === 'vertical') && c.refs.length === 2 ? [c.refs[0]] : c.refs;
+    for (const r of refs || []) {
+      if (!r) continue;
+      if (r.p || r.at || r.e === 'origin') { const q = refXY(r); if (q) out.push([q[0] + px * 12, q[1] - px * 12]); continue; }
+      const e = ent(r.e); if (!e) continue;
+      const L = r.edge != null || e.type === 'line' || e.type === 'slot' ? refLine(r) : null;
+      if (L) { const [a, b] = L; const len = SK.d2(a, b) || 1; const nx = -(b[1] - a[1]) / len, ny = (b[0] - a[0]) / len; out.push([(a[0] + b[0]) / 2 - nx * px * 15 + (b[0] - a[0]) / len * px * 10, (a[1] + b[1]) / 2 - ny * px * 15 + (b[1] - a[1]) / len * px * 10]); continue; }
+      const C = refCircle(r); if (C) { const q = Math.SQRT1_2 * C.r + px * 10; out.push([C.c[0] - q, C.c[1] + q]); continue; }
+      const P = refXY({ e: e.id, p: 'c' }); if (P) out.push([P[0] + px * 12, P[1] - px * 12]);
+    }
+    return out;
+  }
+  function dimPosSpec(dm) {
+    if (!dm.refs) { const en = ent(dm.e); return en ? dimPos(en, dm.k) : null; }
+    const px = pxSize(); const [r0, r1] = dm.refs;
+    if (dm.k === 'dist') { const a = refXY(r0), b = refXY(r1); if (!a || !b) return null; const L = SK.d2(a, b) || 1; const nx = -(b[1] - a[1]) / L, ny = (b[0] - a[0]) / L; return { p: [(a[0] + b[0]) / 2 + nx * px * 14, (a[1] + b[1]) / 2 + ny * px * 14], line: [a, b] }; }
+    if (dm.k === 'distPL') { const p = refXY(r0), Ln = refLine(r1); if (!p || !Ln) return null; const [a, b] = Ln; const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy || 1; const t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2; const f = [a[0] + t * dx, a[1] + t * dy]; return { p: [(p[0] + f[0]) / 2 + px * 10, (p[1] + f[1]) / 2], line: [p, f] }; }
+    if (dm.k === 'angLL') {
+      const A = refLine(r0), B = refLine(r1); if (!A || !B) return null;
+      const ma = [(A[0][0] + A[1][0]) / 2, (A[0][1] + A[1][1]) / 2], mb = [(B[0][0] + B[1][0]) / 2, (B[0][1] + B[1][1]) / 2];
+      return { p: [(ma[0] + mb[0]) / 2, (ma[1] + mb[1]) / 2] };
+    }
+    return null;
+  }
   // Wo steht das Schildchen eines Maßes? (Skizzen-Koordinaten)
   function dimPos(en, k) {
     const px = pxSize();
@@ -512,6 +815,7 @@ const Sketch = (() => {
       if (k === 'w') return { p: [(x0 + x1) / 2, y0 - px * 16] };
       if (k === 'h') return { p: [x1 + px * 26, (y0 + y1) / 2] };
     }
+    if (en.type === 'arc' && k === 'r') { const ai = SK.arcInfo(en.a, en.m, en.b); if (!ai) return null; const d = SK.d2(en.m, ai.c) || 1; const q = px * 16; return { p: [en.m[0] + (en.m[0] - ai.c[0]) / d * q, en.m[1] + (en.m[1] - ai.c[1]) / d * q], line: [ai.c, en.m] }; }
     if (en.type === 'circle' || en.type === 'poly') {
       if (k === 'n') return { p: en.c.slice() };
       const q = Math.SQRT1_2 * en.r + px * 12; return { p: [en.c[0] + q, en.c[1] + q] };
@@ -526,6 +830,15 @@ const Sketch = (() => {
     const w = h('div', { class: 'props' });
     if (S.step) { w.append(h('div', { class: 'hint-box', html: S.step.revolve ? 'Wähle die Achse, um die gedreht wird. Klick im Bild auf Flächen, um sie ab- oder anzuwählen.' : 'Zieh am Pfeil im Bild oder tipp die Höhe ein. Klick auf Flächen, um sie ab- oder anzuwählen.' })); body.append(w); return; }
     const sel = S.ents.find((x) => x.id === S.sel);
+    const selCon = S.selCon && S.cons.find((c) => c.id === S.selCon);
+    if (selCon) {
+      w.append(h('div', { class: 'prop-title' }, h('b', { style: { fontSize: '17px' } }, 'Regel: ' + (CNAME[selCon.type] || selCon.type))));
+      w.append(h('div', { class: 'hint-box', html: CHINTS[selCon.type] || '' }));
+      const del = h('button', { type: 'button', class: 'btn danger' }); del.innerHTML = icon('trash') + 'Regel löschen';
+      del.onclick = () => removeCons(selCon.id);
+      w.append(h('div', { class: 'btn-row' }, del));
+      body.append(w); return;
+    }
     if (sel) {
       w.append(h('div', { class: 'prop-title' }, h('b', { style: { fontSize: '17px' } }, { line: 'Linie', rect: 'Rechteck', circle: 'Kreis', arc: 'Bogen', slot: 'Langloch', poly: 'Vieleck' }[sel.type])));
       const upd = (fn) => { pushUndo(); fn(sel); reapply(); render(); Panels.renderRight(); };
@@ -559,6 +872,20 @@ const Sketch = (() => {
       fp.append(dimField('x', ak + ' X'), dimField('y', ak + ' Y'));
       w.append(fp);
       if (S.dims.some((d) => d.e === sel.id)) w.append(h('div', { class: 'hint-box', html: 'Werte mit <b>Schloss</b> sind fest und bleiben beim Ziehen erhalten. Formeln wie <b>breite/2</b> rechnen mit den Namen aus „Maße“.' }));
+      // Regeln an diesem Element
+      const mine = S.cons.filter((c) => (c.refs || []).some((r) => r && r.e === sel.id));
+      if (mine.length) {
+        const list = h('div', { class: 'mini-list' });
+        for (const c of mine) {
+          const row = h('div', { class: 'mini-row' });
+          const ic = h('span', { class: 'con-ic' }); ic.innerHTML = icon(CICON[c.type] || 'info');
+          const x = h('button', { type: 'button', class: 'btn ghost small', 'data-tip': 'Regel löschen', 'aria-label': 'Regel löschen' }); x.innerHTML = icon('close'); x.onclick = () => removeCons(c.id);
+          row.append(ic, h('span', { class: 'grow' }, CNAME[c.type] || c.type), x); list.append(row);
+        }
+        w.append(h('div', { class: 'section-h' }, 'Regeln'), list);
+      }
+      const isFree = !S.status || !S.status.freeEnts || S.status.freeEnts.has(sel.id);
+      w.append(h('div', { class: isFree ? 'hint-box' : 'ok-box', html: isFree ? 'Dieses Element ist noch <b>beweglich</b> (blau).' : 'Dieses Element liegt <b>fest</b> – Maße und Regeln bestimmen es ganz.' }));
       const con = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'se-con', checked: !!sel.con }), 'Hilfslinie (zählt nicht zur Fläche)');
       con.querySelector('input').onchange = (e) => upd((x) => { x.con = e.target.checked; });
       w.append(con);
@@ -566,6 +893,13 @@ const Sketch = (() => {
       del.onclick = () => deleteEnt(sel.id);
       w.append(h('div', { class: 'btn-row' }, del));
     } else {
+      // Zustand der ganzen Skizze
+      const st = S.status;
+      if (st && S.ents.length) {
+        if (!st.ok) w.append(h('div', { class: 'err-box', html: '<b>' + ERRORS.sketchOverConstrained.titel + '</b><br>' + ERRORS.sketchOverConstrained.erklaerung + ' ' + ERRORS.sketchOverConstrained.loesung }));
+        else if (st.dof === 0) w.append(h('div', { class: 'ok-box', html: '<b>Voll bestimmt</b> – alles liegt fest. Dunkle Linien können nicht mehr verrutschen.' }));
+        else w.append(h('div', { class: 'hint-box', html: `<b>Noch ${st.dof} ${st.dof === 1 ? 'Freiheit' : 'Freiheiten'}</b> – <span style="color:${Viewer.theme.dark ? '#5aa9ff' : '#1c6fd1'};font-weight:600">blaue</span> Teile lassen sich noch verschieben. Mit Maßen und Regeln legst du sie fest.` }));
+      }
       w.append(h('div', { class: 'hint-box', html: HINTS[S.tool] }));
       if (S.tool === 'poly') w.append(UI.numField({ id: 'sk-n', label: 'Ecken', value: S.polySides, unit: '', expr: false, min: 3, int: true, onCommit: (v) => { S.polySides = clamp(v, 3, 64); } }));
       const con = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'sk-con', checked: S.construction }), 'Als Hilfslinien zeichnen');
@@ -586,8 +920,8 @@ const Sketch = (() => {
     const regs = SK.regions(S.ents);
     if (S.ctx.mode === 'edit') {
       if (!regs.length) { UI.toast('Die Skizze braucht mindestens eine geschlossene Fläche.', { kind: 'bad' }); return; }
-      const id = S.ctx.editId, ents = S.ents, dims = S.dims;
-      App.change('Skizze bearbeitet', (doc) => { const f = Model.find(doc, id); f.item.p.sketch.ents = ents; f.item.p.sketch.dims = dims; const keys = regs.map((r) => r.key); if (f.item.p.sel) f.item.p.sel = f.item.p.sel.filter((k) => keys.includes(k)); });
+      const id = S.ctx.editId, ents = S.ents, dims = S.dims, cons = S.cons;
+      App.change('Skizze bearbeitet', (doc) => { const f = Model.find(doc, id); f.item.p.sketch.ents = ents; f.item.p.sketch.dims = dims; f.item.p.sketch.cons = cons; const keys = regs.map((r) => r.key); if (f.item.p.sel) f.item.p.sel = f.item.p.sel.filter((k) => keys.includes(k)); });
       finishSession(); App.select([id]); return;
     }
     if (!regs.length) { UI.toast(S.ents.length ? 'Noch keine geschlossene Fläche. Schließe den Umriss oder zeichne ein Rechteck oder einen Kreis.' : 'Zeichne zuerst etwas, zum Beispiel ein Rechteck.', { kind: 'bad', icon: 'info' }); return; }
@@ -659,7 +993,7 @@ const Sketch = (() => {
     const kind = st.revolve ? 'revolve' : 'extrude';
     const target = S.ctx.targetId ? Model.find(App.doc, S.ctx.targetId) : null;
     const it = Model.newItem(kind, {}, { name: st.revolve ? 'Drehkörper' : role === 'hole' ? 'Aussparung' : S.ctx.targetId ? 'Erhöhung' : 'Skizzenkörper', role, color: st.color });
-    const p = { sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims) }, sel };
+    const p = { sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons) }, sel };
     if (kind === 'extrude') { p.dist = st.dist; p.dir = st.dir; if (role === 'hole') p.extra = 0.05; else if (S.ctx.targetId) p.extra = 0.02; }
     else {
       p.angle = st.angle;

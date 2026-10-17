@@ -60,7 +60,7 @@ const Handles = (() => {
     } else if (it.kind === 'extrude' && it.p && it.p.sketch) {
       const pl = it.p.sketch.plane; const n = new THREE.Vector3(...pl.n).normalize();
       const dirSign = it.p.dir === 'reverse' ? -1 : 1;
-      const rg = SK.regions(SK.applyDims(it.p.sketch.ents, it.p.sketch.dims, Model.vars(App.doc).v)); const lab = rg[0] ? rg[0].label : [0, 0];
+      const rg = SK.regions(Solver.cached(it.p.sketch, Model.vars(App.doc).v).ents); const lab = rg[0] ? rg[0].label : [0, 0];
       const x = new THREE.Vector3(...pl.x).normalize(), y = new THREE.Vector3().crossVectors(n, x);
       const o = new THREE.Vector3(...pl.o).addScaledVector(x, lab[0]).addScaledVector(y, lab[1]);
       const dist = Model.num(it.p.dist, Model.vars(App.doc).v, 10);

@@ -268,7 +268,7 @@ const MATERIALS = [{"k": "CFK", "name": "CFK-Platte (Kohlefaser, gewebt, ca. 60 
 // ---------- Fehlermeldungen (Quelle: app/data/fehlermeldungen.json, Entwurf Gemini, angepasst) ----------
 const ERRORS = {"sketchOverConstrained": {"titel": "Zu viele Regeln in der Skizze", "erklaerung": "Das neue Maß oder die neue Regel widerspricht deinen bisherigen Angaben, weshalb sich die Zeichnung nicht weiter anpassen kann.", "loesung": "Mache den letzten Schritt rückgängig oder lösche eines der rot markierten Maße, damit wieder Platz für Änderungen ist."}, "sketchUnderConstrained": {"titel": "Einige Linien sind noch lose", "erklaerung": "Manche Teile deiner Zeichnung haben noch keine festen Maße und können aus Versehen mit der Maus verschoben werden.", "loesung": "Du kannst problemlos weiterbauen oder die noch blauen Linien mit Maßen und Regeln festlegen, damit nichts mehr verrutscht."}, "sketchOpen": {"titel": "Umriss hat noch eine Lücke", "erklaerung": "Deine gezeichnete Form ist an mindestens einer Stelle offen, aber für einen 3D-Körper muss der Rand komplett geschlossen sein.", "loesung": "Zoome nah an die Ecken heran und verbinde offene Endpunkte miteinander oder schneide überstehende Linien ab."}, "sketchSelfIntersect": {"titel": "Linien kreuzen sich selbst", "erklaerung": "Die Linien deiner Form überkreuzen sich wie bei einer Acht, wodurch das Programm nicht weiß, wo innen und außen ist.", "loesung": "Ziehe die Eckpunkte auseinander oder nutze das Werkzeug „Trimmen“, um die sich kreuzenden Linienstücke wegzuschneiden."}, "extrudeZero": {"titel": "Höhe darf nicht null sein", "erklaerung": "Ohne eine eingegebene Höhe oder Dicke bleibt deine Zeichnung flach und kann kein 3D-Körper werden.", "loesung": "Ziehe am Pfeil im 3D-Fenster oder tippe im Eingabefeld eine Zahl größer als null ein."}, "cutNothing": {"titel": "Der Schnitt geht ins Leere", "erklaerung": "Dein Schneide-Werkzeug bewegt sich durch den freien Raum und trifft dabei auf kein einziges Bauteil.", "loesung": "Drehe die Richtung des Pfeils um oder ziehe den Schnitt tiefer, sodass er mitten durch deinen 3D-Körper geht."}, "revolveAxisCrosses": {"titel": "Drehachse läuft mitten durchs Profil", "erklaerung": "Die Linie, um die gedreht werden soll, schneidet deine gezeichnete Fläche, wodurch sich der Körper beim Drehen selbst durchdringen würde.", "loesung": "Wähle eine andere Linie am Rand als Drehachse aus oder zeichne deine Form nur auf einer Seite der Achse."}, "sweepSelfIntersect": {"titel": "Kurve ist zu eng fürs Profil", "erklaerung": "Deine Form ist zu breit für die engen Biegungen des Pfades und stößt in den Kurven mit sich selbst zusammen.", "loesung": "Mache die gezeichnete Fläche etwas kleiner oder gestalte die Kurven deiner Pfad-Linie weicher und weiter."}, "loftMismatch": {"titel": "Formen lassen sich nicht verbinden", "erklaerung": "Die ausgewählten Flächen sind zu unterschiedlich oder verdreht, sodass kein glatter Übergang zwischen ihnen berechnet werden kann.", "loesung": "Achte darauf, dass die Profile nicht über Kreuz verbunden sind, oder verwende Formen mit ähnlich vielen Ecken."}, "shellTooThick": {"titel": "Wandstärke ist zu dick gewählt", "erklaerung": "Die eingegebene Wanddicke ist größer als der Platz im Bauteil, sodass beim Aushöhlen im Inneren nichts mehr übrig bleibt.", "loesung": "Tippe einen deutlich kleineren Wert für die Wandstärke ein, beispielsweise 1 oder 2 Millimeter."}, "filletTooBig": {"titel": "Rundung passt nicht auf Kante", "erklaerung": "Der Radius für die Abrundung ist breiter als die angrenzenden Flächen deines Bauteils und hat dort keinen Platz.", "loesung": "Gib einen kleineren Radius ein – den größten möglichen Wert zeigt dir Tracery direkt im Panel rechts an."}, "booleanFailed": {"titel": "Körper konnten nicht verrechnet werden", "erklaerung": "Die Bauteile berühren sich entweder gar nicht oder treffen an einer winzigen Kante so ungünstig aufeinander, dass das Berechnen scheitert.", "loesung": "Schiebe die Körper ein kleines Stückchen weiter ineinander, damit sie sich klar und deutlich überschneiden."}, "patternOverlap": {"titel": "Kopien stecken fehlerhaft ineinander", "erklaerung": "Der Abstand zwischen deinen wiederholten Elementen ist zu klein, wodurch sich die Kopien gegenseitig im Weg stehen.", "loesung": "Vergrößere den Abstand im Menü oder verringere die Anzahl der Kopien, damit jedes Teil genug Platz hat."}, "referenceLost": {"titel": "Ursprüngliche Fläche oder Kante fehlt", "erklaerung": "Dieser Arbeitsschritt sucht nach einer Fläche oder Kante aus einem früheren Schritt, die durch eine Änderung verschwunden ist.", "loesung": "Klicke den Schritt in der Zeitleiste an und wähle die Fläche oder Kante am Bauteil einfach neu aus."}, "holeOutside": {"titel": "Bohrung landet neben dem Bauteil", "erklaerung": "Der Mittelpunkt für dein Loch liegt außerhalb des 3D-Körpers, weshalb in die Luft gebohrt wird.", "loesung": "Ziehe den Mittelpunkt der Bohrung mit der Maus direkt auf die Oberfläche deines Bauteils."}, "importFailed": {"titel": "Datei konnte nicht geöffnet werden", "erklaerung": "Die ausgewählte Datei ist entweder beschädigt oder hat ein Format, das dieses Programm nicht versteht.", "loesung": "Prüfe, ob es eine Tracery-Projektdatei (.tracery.json) oder eine unterstützte 3D-Datei ist, und exportiere sie im Ursprungsprogramm notfalls noch einmal neu."}};
 // Fehlercodes des CAD-Kerns → Eintrag oben
-const ERROR_FOR_CODE = { edges: 'referenceLost', toobig: 'filletTooBig', cut: 'booleanFailed', dim: 'sketchDimBad' };
+const ERROR_FOR_CODE = { edges: 'referenceLost', toobig: 'filletTooBig', cut: 'booleanFailed', dim: 'sketchDimBad', over: 'sketchOverConstrained' };
 ERRORS.sketchDimBad = { titel: 'Ein Skizzen-Maß geht nicht auf', erklaerung: 'Ein Maß in der Skizze benutzt einen Namen oder Wert, den es nicht (mehr) gibt.', loesung: 'Prüfe unter „Maße“, ob der Name noch da ist, oder öffne die Skizze per Doppelklick und ändere das rote Maß.' };
 
 // ---------- Hilfetexte für Werkzeuge (Entwurf Gemini, an Tracery angepasst) ----------
@@ -328,9 +328,9 @@ const HELP = {
   "tipp": "Damit erstellst du super schnell gleichmäßige Wandstärken für Rohre, Ringe oder Gehäuse."
  },
  "project": {
-  "tip": "Vorhandene 3D-Kanten in Skizze abpausen",
-  "hilfe": "Klicke auf Kanten oder Flächen von schon fertigen 3D-Körpern. Sie erscheinen als Hilfslinien in deiner aktuellen Skizze.",
-  "tipp": "Abgepauste Linien passen sich automatisch an, wenn sich das ursprüngliche 3D-Bauteil später in der Größe ändert."
+  "tip": "Kante der Fläche in die Skizze übernehmen",
+  "hilfe": "Geht in einer Skizze auf einer Körperfläche: Klicke eine gestrichelte Kante der Fläche an. Sie wird zu einer festen Linie deiner Skizze, die du zum Zeichnen und für Regeln mitbenutzen kannst.",
+  "tipp": "Die übernommene Linie ist fixiert. Ändert sich der Körper später, passt sie sich noch nicht von selbst an – dann einfach neu übernehmen."
  },
  "dimension": {
   "tip": "Genaue Länge oder Winkel festlegen",
@@ -349,8 +349,8 @@ const HELP = {
  },
  "cParallel": {
   "tip": "Zwei Linien im gleichen Winkel",
-  "hilfe": "Klicke zuerst auf die Linie, die sich nicht bewegen soll, und danach auf die Linie, die sich anpassen soll.",
-  "tipp": "Die beiden Linien laufen danach exakt in dieselbe Richtung und treffen sich nie."
+  "hilfe": "Klicke zwei Linien nacheinander an. Tracery dreht sie so wenig wie möglich, bis sie exakt parallel laufen.",
+  "tipp": "Soll eine der beiden sicher stehen bleiben, gib ihr vorher eine Regel wie „Waagerecht“ oder ein Maß."
  },
  "cPerp": {
   "tip": "Rechten Winkel (90 Grad) erzwingen",
@@ -359,7 +359,7 @@ const HELP = {
  },
  "cTangent": {
   "tip": "Linie weich an Kreis anlegen",
-  "hilfe": "Klicke auf einen Kreis oder Bogen und danach auf eine Linie, damit sie nahtlos und ohne Knick ineinander übergehen.",
+  "hilfe": "Klicke eine Linie und einen Kreis oder Bogen an – oder zwei Kreise. Danach berühren sie sich genau an einer Stelle, ohne Knick.",
   "tipp": "Unverzichtbar, wenn du Riemenscheiben oder runde Übergänge ohne scharfe Ecken zeichnen willst."
  },
  "cEqual": {
@@ -369,7 +369,7 @@ const HELP = {
  },
  "cSymmetric": {
   "tip": "Gleichmäßig an einer Mittellinie ausrichten",
-  "hilfe": "Klicke erst den linken Punkt, dann den rechten Punkt und zum Schluss die Mittellinie dazwischen an.",
+  "hilfe": "Klicke zwei Punkte oder zwei Kreise an und zum Schluss die Linie, an der gespiegelt wird.",
   "tipp": "Ziehst du danach an einer Seite, bewegt sich die andere Seite wie vor einem Spiegel automatisch mit."
  },
  "cFix": {

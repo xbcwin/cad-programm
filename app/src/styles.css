@@ -262,6 +262,16 @@ body.sketching .viewcube{display:none}
 .notesbar .swatch{width:22px;height:22px;border-radius:50%;border:2px solid var(--line-strong);background:var(--sw);margin:0 2px;cursor:pointer;flex:none;padding:0}
 .notesbar .swatch.active{box-shadow:0 0 0 2px var(--surface),0 0 0 4px var(--accent)}
 .notesbar .widthbtn svg{width:22px;height:22px}
+.consbar{position:absolute;top:66px;left:50%;transform:translateX(-50%);z-index:15;display:flex;align-items:center;gap:1px;background:var(--surface);border:1px solid var(--line);border-radius:11px;box-shadow:var(--shadow-1);padding:3px 5px;max-width:calc(100% - 140px);overflow-x:auto;scrollbar-width:none}
+.consbar .title{font:600 11px/1 var(--font-cond);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:0 8px 0 4px}
+.consbar .tool{padding:6px 7px}
+.consbar .tool svg{width:18px;height:18px}
+.skcon{position:absolute;transform:translate(-50%,-50%);width:18px;height:18px;border-radius:5px;background:var(--surface);border:1px solid var(--line-strong);color:var(--ink-2);display:grid;place-items:center;cursor:pointer;box-shadow:var(--shadow-1);z-index:2}
+.skcon svg{width:13px;height:13px}
+.skcon:hover,.skcon.sel{border-color:var(--accent);color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.skcon.bad{border-color:#d6574c;color:#d6574c}
+.con-ic svg{width:16px;height:16px;color:var(--accent);display:block}
+.ok-box{background:color-mix(in srgb,#2b8a3e 12%,transparent);border:1px solid color-mix(in srgb,#2b8a3e 35%,transparent);color:var(--ink);border-radius:9px;padding:9px 11px;font-size:13px;line-height:1.45}
 .dimlock{border:0;background:transparent;color:var(--accent);padding:0 6px;display:flex;align-items:center;cursor:pointer}
 .dimlock svg{width:15px;height:15px}
 .dimlock:hover{color:var(--bad,#c0392b)}

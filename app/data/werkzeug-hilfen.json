@@ -50,9 +50,9 @@
     "tipp": "Damit erstellst du super schnell gleichmäßige Wandstärken für Rohre, Ringe oder Gehäuse."
   },
   "project": {
-    "tip": "Vorhandene 3D-Kanten in Skizze abpausen",
-    "hilfe": "Klicke auf Kanten oder Flächen von schon fertigen 3D-Körpern. Sie erscheinen als Hilfslinien in deiner aktuellen Skizze.",
-    "tipp": "Abgepauste Linien passen sich automatisch an, wenn sich das ursprüngliche 3D-Bauteil später in der Größe ändert."
+    "tip": "Kante der Fläche in die Skizze übernehmen",
+    "hilfe": "Geht in einer Skizze auf einer Körperfläche: Klicke eine gestrichelte Kante der Fläche an. Sie wird zu einer festen Linie deiner Skizze, die du zum Zeichnen und für Regeln mitbenutzen kannst.",
+    "tipp": "Die übernommene Linie ist fixiert. Ändert sich der Körper später, passt sie sich noch nicht von selbst an – dann einfach neu übernehmen."
   },
   "dimension": {
     "tip": "Genaue Länge oder Winkel festlegen",
@@ -71,8 +71,8 @@
   },
   "cParallel": {
     "tip": "Zwei Linien im gleichen Winkel",
-    "hilfe": "Klicke zuerst auf die Linie, die sich nicht bewegen soll, und danach auf die Linie, die sich anpassen soll.",
-    "tipp": "Die beiden Linien laufen danach exakt in dieselbe Richtung und treffen sich nie."
+    "hilfe": "Klicke zwei Linien nacheinander an. Tracery dreht sie so wenig wie möglich, bis sie exakt parallel laufen.",
+    "tipp": "Soll eine der beiden sicher stehen bleiben, gib ihr vorher eine Regel wie „Waagerecht“ oder ein Maß."
   },
   "cPerp": {
     "tip": "Rechten Winkel (90 Grad) erzwingen",
@@ -81,7 +81,7 @@
   },
   "cTangent": {
     "tip": "Linie weich an Kreis anlegen",
-    "hilfe": "Klicke auf einen Kreis oder Bogen und danach auf eine Linie, damit sie nahtlos und ohne Knick ineinander übergehen.",
+    "hilfe": "Klicke eine Linie und einen Kreis oder Bogen an – oder zwei Kreise. Danach berühren sie sich genau an einer Stelle, ohne Knick.",
     "tipp": "Unverzichtbar, wenn du Riemenscheiben oder runde Übergänge ohne scharfe Ecken zeichnen willst."
   },
   "cEqual": {
@@ -91,7 +91,7 @@
   },
   "cSymmetric": {
     "tip": "Gleichmäßig an einer Mittellinie ausrichten",
-    "hilfe": "Klicke erst den linken Punkt, dann den rechten Punkt und zum Schluss die Mittellinie dazwischen an.",
+    "hilfe": "Klicke zwei Punkte oder zwei Kreise an und zum Schluss die Linie, an der gespiegelt wird.",
     "tipp": "Ziehst du danach an einer Seite, bewegt sich die andere Seite wie vor einem Spiegel automatisch mit."
   },
   "cFix": {
