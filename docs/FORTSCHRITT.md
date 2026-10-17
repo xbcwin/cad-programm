@@ -1,6 +1,6 @@
 # Fortschritt
 
-Stand: 17.10.2026 · nach Sitzung 5 von 14
+Stand: 17.10.2026 · nach Sitzung 5 von 14, Sitzung 6 läuft
 
 ## Erledigt
 
@@ -46,6 +46,8 @@ Stand: 17.10.2026 · nach Sitzung 5 von 14
 - [x] Formel-Beispiele unter „Maße“ (Gemini, alle 12 mit Tracerys Rechner nachgeprüft), Beispiel-Maße per Klick
 - [x] Umbenennen / Entfernen eines Maßes wirkt jetzt auch auf Skizzen-Maße
 - [x] Automatischer Klicktest `tests/klicktest.py`: 35 Durchläufe, 52 von 55 Punkten der Testliste automatisch geprüft
+- [x] Aufgeräumt: Programm liegt jetzt in 28 Quelldateien unter `app/src/`, `tools/build.py` baut daraus `app/index.html`
+- [x] Notizstift (Taste N): freie Striche, die am Modell kleben, Textnotizen, 6 Farben, 3 Dicken, Radierer, ein-/ausblendbar – ohne technische Bedeutung
 
 ## Offen
 
@@ -71,6 +73,11 @@ Fertig.
 ### Stufe 5 – KI und Feinschliff
 - [ ] KI-Helfer auf der Zeitleiste (Sitzung 14)
 - [ ] 3D-Skizzen, Sweep / Loft, Gelenke, Einsteiger-Oberfläche (ab Sitzung 15)
+
+### Stufe 6 – Konten und Zusammenarbeit (Idee, nach dem Drohnen-Modul)
+- [ ] A: Konto mit Name und Passwort, Projekte in der Cloud
+- [ ] B: Gruppen und Teilen
+- [ ] C: Gleichzeitig arbeiten
 
 ## Bekannte Punkte
 

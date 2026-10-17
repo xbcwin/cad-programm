@@ -1,0 +1,527 @@
+// ================= Hilfsfunktionen =================
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  if (attrs) {
+    for (const k in attrs) {
+      const v = attrs[k];
+      if (v == null || v === false) continue;
+      if (k === 'class') el.className = v;
+      else if (k === 'text') el.textContent = v;
+      else if (k === 'html') el.innerHTML = v;
+      else if (k === 'style' && typeof v === 'object') Object.assign(el.style, v);
+      else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2), v);
+      else if (k === 'dataset') Object.assign(el.dataset, v);
+      else if (v === true) el.setAttribute(k, '');
+      else el.setAttribute(k, v);
+    }
+  }
+  for (const c of kids.flat()) {
+    if (c == null || c === false) continue;
+    el.append(c instanceof Node ? c : document.createTextNode(String(c)));
+  }
+  return el;
+}
+function svgEl(markup) { const t = document.createElement('template'); t.innerHTML = markup.trim(); return t.content.firstChild; }
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const uid = (p = 'i') => p + '_' + Math.random().toString(36).slice(2, 9);
+function debounce(fn, ms) { let t; const f = (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; f.flush = (...a) => { clearTimeout(t); fn(...a); }; f.cancel = () => clearTimeout(t); return f; }
+function throttle(fn, ms) { let last = 0, t = null; return (...a) => { const now = performance.now(); const run = () => { last = performance.now(); t = null; fn(...a); }; if (now - last >= ms) run(); else if (!t) t = setTimeout(run, ms - (now - last)); }; }
+function round(v, d = 3) { const f = Math.pow(10, d); return Math.round(v * f) / f; }
+const FMT = { min: 0 };   // Einstellung „Nachkommastellen“: Mindestgenauigkeit aller Anzeigen
+function fmt(v, d = 2) {
+  if (typeof v !== 'number' || !isFinite(v)) return '–';
+  let r = round(v, Math.max(d, FMT.min));
+  if (Object.is(r, -0)) r = 0;
+  return String(r).replace('.', ',');
+}
+function parseNum(s) {
+  if (typeof s === 'number') return s;
+  const t = String(s).trim().replace(/\s/g, '').replace(',', '.');
+  if (!/^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i.test(t)) return NaN;
+  return parseFloat(t);
+}
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const normTxt = (s) => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ß/g, 'ss');
+function deepClone(o) { return JSON.parse(JSON.stringify(o)); }
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+function storageGet(k) { try { return localStorage.getItem(k); } catch (_) { return null; } }
+function storageSet(k, v) { try { localStorage.setItem(k, v); return true; } catch (_) { return false; } }
+function storageDel(k) { try { localStorage.removeItem(k); } catch (_) {} }
+
+// ---------- Formel-Rechner (für Parameter wie „Breite/2 + 3“) ----------
+const Expr = (() => {
+  const FN = {
+    min: Math.min, max: Math.max, abs: Math.abs, sqrt: Math.sqrt, wurzel: Math.sqrt,
+    round: Math.round, runden: Math.round, floor: Math.floor, ceil: Math.ceil,
+    sin: (d) => Math.sin((d * Math.PI) / 180), cos: (d) => Math.cos((d * Math.PI) / 180), tan: (d) => Math.tan((d * Math.PI) / 180),
+  };
+  function tokenize(src) {
+    const out = []; let i = 0;
+    while (i < src.length) {
+      const c = src[i];
+      if (/\s/.test(c)) { i++; continue; }
+      if (/[0-9]/.test(c) || ((c === '.' || c === ',') && /[0-9]/.test(src[i + 1] || ''))) {
+        let j = i; while (j < src.length && /[0-9.,]/.test(src[j])) j++;
+        const raw = src.slice(i, j).replace(',', '.');
+        if ((raw.match(/\./g) || []).length > 1) throw new Error('Zahl nicht lesbar: ' + src.slice(i, j));
+        out.push({ t: 'n', v: parseFloat(raw) }); i = j; continue;
+      }
+      if (/[A-Za-zÄÖÜäöüß_]/.test(c)) {
+        let j = i; while (j < src.length && /[A-Za-zÄÖÜäöüß_0-9]/.test(src[j])) j++;
+        out.push({ t: 'id', v: src.slice(i, j) }); i = j; continue;
+      }
+      if ('+-*/^();'.includes(c)) { out.push({ t: c }); i++; continue; }
+      throw new Error('Unbekanntes Zeichen: ' + c);
+    }
+    return out;
+  }
+  function parse(src, vars) {
+    const tk = tokenize(src); let p = 0;
+    const peek = () => tk[p], next = () => tk[p++];
+    const expect = (t) => { const x = next(); if (!x || x.t !== t) throw new Error('Erwartet: ' + t); };
+    function primary() {
+      const x = next();
+      if (!x) throw new Error('Formel unvollständig');
+      if (x.t === 'n') return x.v;
+      if (x.t === '(') { const v = expr(); expect(')'); return v; }
+      if (x.t === '-') return -factor();
+      if (x.t === '+') return factor();
+      if (x.t === 'id') {
+        const name = x.v;
+        if (peek() && peek().t === '(') {
+          next(); const args = [];
+          if (peek() && peek().t !== ')') { args.push(expr()); while (peek() && peek().t === ';') { next(); args.push(expr()); } }
+          expect(')');
+          const f = FN[name.toLowerCase()]; if (!f) throw new Error('Unbekannte Funktion: ' + name);
+          return f(...args);
+        }
+        if (/^pi$/i.test(name)) return Math.PI;
+        const key = Object.keys(vars).find((k) => k.toLowerCase() === name.toLowerCase());
+        if (key === undefined) throw new Error('Unbekannter Name: ' + name);
+        return vars[key];
+      }
+      throw new Error('Unerwartet: ' + x.t);
+    }
+    function factor() { let v = primary(); while (peek() && peek().t === '^') { next(); v = Math.pow(v, factor()); } return v; }
+    function term() { let v = factor(); while (peek() && (peek().t === '*' || peek().t === '/')) { const o = next().t; const r = factor(); v = o === '*' ? v * r : v / r; } return v; }
+    function expr() { let v = term(); while (peek() && (peek().t === '+' || peek().t === '-')) { const o = next().t; const r = term(); v = o === '+' ? v + r : v - r; } return v; }
+    const v = expr();
+    if (p < tk.length) throw new Error('Formel nicht lesbar');
+    if (!isFinite(v)) throw new Error('Ergebnis ist keine Zahl');
+    return v;
+  }
+  return { eval: parse, names(src) { try { return tokenize(src).filter((t) => t.t === 'id').map((t) => t.v); } catch (_) { return []; } } };
+})();
+
+// ---------- Symbole ----------
+const IC = {
+  cube: '<path d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5z M4 7.5 12 12l8-4.5 M12 12v9" />',
+  sketch: '<path d="M4 20h4L19 9l-4-4L4 16z M13 7l4 4" /><path d="M3 3h6M3 3v6" opacity=".55"/>',
+  parts: '<path d="M8.5 3.5h7L20 8v8l-4.5 4.5h-7L4 16V8z" /><circle cx="12" cy="12" r="3.2"/>',
+  measure: '<path d="M3 16.5 16.5 3 21 7.5 7.5 21z M7 12.5l2 2 M9.5 10l1.5 1.5 M12 7.5l2 2 M14.5 5l1.5 1.5" />',
+  export: '<path d="M12 3v12 M7 8l5-5 5 5 M5 14v5h14v-5" />',
+  undo: '<path d="M9 14 4 9l5-5 M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />',
+  redo: '<path d="m15 14 5-5-5-5 M20 9H9.5a5.5 5.5 0 0 0 0 11H13" />',
+  menu: '<circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none"/>',
+  list: '<path d="M8 6h12 M8 12h12 M8 18h12 M4 6h.01 M4 12h.01 M4 18h.01" />',
+  sliders: '<path d="M4 6h10 M18 6h2 M4 12h4 M12 12h8 M4 18h12 M20 18h0" /><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>',
+  eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3"/>',
+  // Notizstift (Platzhalter, bis die Gemini-Symbole da sind)
+  noteDraw: '<path d="M15 4l4 4-9.5 9.5L5 18.5l1-4.5z" /><path d="M13 6l4 4" /><path d="M3 21.5c2-1.6 3.6-1.6 5.4 0s3.4 1.6 5.4 0" opacity=".6"/>',
+  noteErase: '<path d="M7.5 19.5 3.8 15.8a1.6 1.6 0 0 1 0-2.3L12.5 4.8a1.6 1.6 0 0 1 2.3 0l4.4 4.4a1.6 1.6 0 0 1 0 2.3l-8.3 8z" /><path d="M8.5 9 15 15.5" /><path d="M11 19.5h10" />',
+  noteText: '<path d="M4 4.5h16v11.5H10l-6 4.5z" /><path d="M8 8.5h8M8 12h5" />',
+  notesShow: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3"/>',
+  notesHide: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3"/><path d="M4 4l16 16"/>',
+  eyeOff: '<path d="M3 3l18 18 M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.1 M6.6 6.6A17 17 0 0 0 2 12s3.5 7 10 7a9.6 9.6 0 0 0 5.4-1.6 M9.9 9.9a3 3 0 0 0 4.2 4.2" />',
+  lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3" />',
+  unlock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 7.5-2" />',
+  trash: '<path d="M4 7h16 M10 11v6 M14 11v6 M6 7l1 13h10l1-13 M9 7V4h6v3" />',
+  copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3" />',
+  group: '<rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/><path d="M11 7h4a2 2 0 0 1 2 2v4 M13 17H9a2 2 0 0 1-2-2v-4" />',
+  ungroup: '<rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/><path d="M15 7h2v2 M7 15v2h2" />',
+  mirror: '<path d="M12 3v18 M8 6 3 18h5z M16 6l5 12h-5z" />',
+  rotate: '<path d="M20 12a8 8 0 1 1-2.4-5.7 M20 4v5h-5" />',
+  solid: '<rect x="4" y="4" width="16" height="16" rx="2" fill="currentColor" opacity=".25"/><rect x="4" y="4" width="16" height="16" rx="2"/>',
+  hole: '<rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="3 2.5"/><path d="M8 16 16 8 M8 11l3-3 M13 16l3-3" opacity=".8"/>',
+  fillet: '<path d="M4 20V10a6 6 0 0 1 6-6h10" /><path d="M4 4h4 M4 4v4" opacity=".4"/>',
+  chamfer: '<path d="M4 20V9l5-5h11" /><path d="M4 4h4 M4 4v4" opacity=".4"/>',
+  plus: '<path d="M12 5v14 M5 12h14" />',
+  minus: '<path d="M5 12h14" />',
+  chevR: '<path d="m9 5 7 7-7 7" />',
+  chevD: '<path d="m5 9 7 7 7-7" />',
+  close: '<path d="M6 6l12 12 M18 6 6 18" />',
+  check: '<path d="M4.5 12.5 9.5 17.5 19.5 6.5" />',
+  warn: '<path d="M12 3 2 20h20z M12 10v4.5 M12 17.5h.01" />',
+  info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6 M12 7.5h.01" />',
+  help: '<circle cx="12" cy="12" r="9"/><path d="M9.3 9a2.8 2.8 0 0 1 5.4 1c0 2-2.7 2.3-2.7 4 M12 17.5h.01" />',
+  spark: '<path d="M12 2.5l1.9 5.2 5.2 1.9-5.2 1.9L12 16.7l-1.9-5.2-5.2-1.9 5.2-1.9z" fill="currentColor" stroke="none"/><path d="M19 14l.9 2.4 2.4.9-2.4.9L19 20.6l-.9-2.4-2.4-.9 2.4-.9z" fill="currentColor" stroke="none"/>',
+  printer: '<path d="M6 9V3h12v6 M6 18H4v-7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v7h-2 M7 14h10v7H7z" />',
+  sheet: '<path d="M4 4h16v16H4z M4 16h16 M13 16v4" /><path d="M7 8h6 M7 11h3" opacity=".6"/>',
+  dim: '<path d="M4 7v10 M20 7v10 M4 12h16 M7 9.5 4 12l3 2.5 M17 9.5l3 2.5-3 2.5" />',
+  line: '<path d="M5 19 19 5" /><circle cx="5" cy="19" r="1.6" fill="currentColor"/><circle cx="19" cy="5" r="1.6" fill="currentColor"/>',
+  rect: '<rect x="4" y="6" width="16" height="12" rx="1"/>',
+  circle: '<circle cx="12" cy="12" r="8"/><path d="M12 12h.01" />',
+  arc: '<path d="M4 18a9 9 0 0 1 16 0" /><circle cx="4" cy="18" r="1.6" fill="currentColor"/><circle cx="20" cy="18" r="1.6" fill="currentColor"/>',
+  slot: '<path d="M8 7h8a5 5 0 0 1 0 10H8A5 5 0 0 1 8 7z" />',
+  polygon: '<path d="M12 3.5 19.5 8v8L12 20.5 4.5 16V8z" />',
+  text: '<path d="M5 6h14 M12 6v13 M9 19h6" />',
+  construct: '<path d="M4 20 20 4" stroke-dasharray="3 3"/>',
+  pointer: '<path d="M5 3l14 7-6 2-2 6z" />',
+  fit: '<path d="M4 9V4h5 M20 9V4h-5 M4 15v5h5 M20 15v5h-5" /><rect x="8.5" y="8.5" width="7" height="7" rx="1"/>',
+  home: '<path d="M4 11 12 4l8 7 M6 9.5V20h12V9.5" />',
+  folder: '<path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2h8.5A1.5 1.5 0 0 1 21 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z" />',
+  save: '<path d="M5 3h11l3 3v15H5z M8 3v5h7V3 M8 21v-7h8v7" />',
+  file: '<path d="M6 3h8l4 4v14H6z M14 3v4h4" />',
+  newfile: '<path d="M6 3h8l4 4v14H6z M14 3v4h4 M12 11v6 M9 14h6" />',
+  edit: '<path d="M4 20h4L19 9l-4-4L4 16z" />',
+  layers: '<path d="M12 3 3 8l9 5 9-5z M3 13l9 5 9-5" />',
+  target: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3 M12 19v3 M2 12h3 M19 12h3"/>',
+  up: '<path d="M12 19V5 M6 11l6-6 6 6" />',
+  lift: '<path d="M12 20V6 M7 10l5-5 5 5 M5 20h14" />',
+  push: '<path d="M12 4v11 M7 10l5 5 5-5 M5 20h14" />',
+  bolt: '<path d="M9 3h6v4H9z M10 7v14 M14 7v14 M10 10h4 M10 13h4 M10 16h4" />',
+  hex: '<path d="M12 3 20 7.5v9L12 21l-8-4.5v-9z" /><circle cx="12" cy="12" r="3"/>',
+  gear: '<path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z M10.5 3h3l.5 2.5 2 1 2.3-1.3 2.1 2.1L19.1 9.6l1 2L22.5 12v3l-2.4.5-1 2 1.3 2.3-2.1 2.1-2.3-1.3-2 1-.5 2.4h-3l-.5-2.4-2-1-2.3 1.3-2.1-2.1 1.3-2.3-1-2L1.5 15v-3l2.4-.4 1-2L3.6 7.3l2.1-2.1L8 6.5l2-1z" />',
+  hinge: '<rect x="3" y="5" width="7" height="14" rx="1"/><rect x="14" y="5" width="7" height="14" rx="1"/><path d="M10 8h4 M10 12h4 M10 16h4" />',
+  snap: '<path d="M6 20V6h4v10l4-3 4 3" />',
+  ruler: '<path d="M3 16.5 16.5 3 21 7.5 7.5 21z" />',
+  arrowR: '<path d="M5 12h13 M13 6l6 6-6 6" />',
+  zoomIn: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.8-4.8 M10.5 7.5v6 M7.5 10.5h6" />',
+  zoomOut: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.8-4.8 M7.5 10.5h6" />',
+  stop: '<rect x="7" y="7" width="10" height="10" rx="1.5" fill="currentColor"/>',
+  cursor: '<path d="M6 3v15l4-4 3 7 2-1-3-7h6z" />',
+  play: '<path d="M8 5v14l11-7z" />',
+  box3: '<path d="M3 8 12 3l9 5-9 5z M3 8v8l9 5 9-5V8 M12 13v8" />',
+  logo: '<g transform="translate(12 12) scale(.885) translate(-12 -10.2)" stroke-width="1.92"><polygon points="12 2 21 7 21 17 12 22 3 17 3 7" /><path d="M12 22V12" /><path d="M12 12L21 7" /><path d="M12 12L3 7" /><path d="M3 7A9 9 0 0 1 21 7" /><path d="M21 7A9 9 0 0 1 12 22" /><path d="M12 22A9 9 0 0 1 3 7" /></g>',
+  // --- Icon-Set v2 (Entwurf Gemini, überarbeitet) ---
+  originPlanes: '<path d="M12 13 4 17l8 4 8-4z" fill="currentColor" opacity=".25"/><path d="M12 13V4L4 8v9l8 4 8-4V8l-8-4M4 17l8-4 8 4" />',
+  planeXY: '<path d="M12 3v18M4 8l16 8M4 16 20 8" opacity=".4"/><path d="M3 12l9-4.5 9 4.5-9 4.5z" fill="currentColor" opacity=".25"/><path d="M3 12l9-4.5 9 4.5-9 4.5z" />',
+  planeXZ: '<path d="M12 3v18M4 8l16 8M4 16 20 8" opacity=".4"/><path d="M5 9l14-6v12L5 21z" fill="currentColor" opacity=".25"/><path d="M5 9l14-6v12L5 21z" />',
+  planeYZ: '<path d="M12 3v18M4 8l16 8M4 16 20 8" opacity=".4"/><path d="M5 3l14 6v12L5 15z" fill="currentColor" opacity=".25"/><path d="M5 3l14 6v12L5 15z" />',
+  axes: '<path d="M12 13V3M9.5 5.5 12 3l2.5 2.5M12 13 3.5 18M4 14.5 3.5 18 7 18.5M12 13l8.5 5M20 14.5l.5 3.5-3.5.5" />',
+  viewOrtho: '<path d="M12 3 4 7.5v9L12 21l8-4.5v-9zM4 7.5 12 12l8-4.5M12 12v9" />',
+  viewPersp: '<path d="M12 3 3 7.5 6 17l6 4 6-4 3-9.5zM3 7.5 12 13l9-5.5M12 13v8" />',
+  grid: '<path d="M6 3v18M18 3v18M3 6h18M3 18h18" opacity=".4"/><path d="M12 3v18M3 12h18" />',
+  section: '<path d="M9 9.5 17 5.5v9l-8 4z" fill="currentColor" opacity=".25"/><path d="M12 3 4 7v9l5 2.5 8-4v-9zM4 7l5 2.5v9M9 9.5l8-4"/><path d="M9 18.5 13 21l8-4V8l-4-2.5" stroke-dasharray="3 2.5" opacity=".5"/>',
+  xray: '<path d="M13 3v10L4 17M13 13l7 4" stroke-dasharray="3 2.5" opacity=".5"/><path d="M13 3 4 7v10l7 4 9-4V7zM4 7l7 4 9-4M11 11v10" />',
+  explode: '<path d="M12 2 6 5l6 3 6-3zM3 10l6 3v7l-6-3zM21 10l-6 3v7l6-3z"/><path d="M12 8v4m-3 1.5 3-1.5 3 1.5" opacity=".5"/>',
+  focusView: '<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3" opacity=".5"/><path d="M12 7 7 9.5v5L12 17l5-2.5v-5zM7 9.5 12 12l5-2.5M12 12v5" />',
+  timeline: '<path d="M2 12h20" opacity=".4"/><rect x="3" y="8" width="4" height="8" rx="1"/><rect x="10" y="8" width="4" height="8" rx="1"/><rect x="17" y="8" width="4" height="8" rx="1" fill="currentColor" opacity=".25"/><rect x="17" y="8" width="4" height="8" rx="1"/>',
+  rollback: '<path d="M13 4v16M8 8 4 12l4 4M4 12h9"/><rect x="16" y="8" width="4" height="8" rx="1" opacity=".4"/>',
+  suppress: '<path d="M9 5h8a2 2 0 0 1 2 2v8M15 19H7a2 2 0 0 1-2-2V9" opacity=".5"/><path d="M3 3l18 18" />',
+  params: '<path d="M3 8h12M8 3v17M15 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h3" opacity=".5"/><path d="M12 20v-7a2 2 0 0 1 2-2h1M10.5 15h4M17 15l4 5M21 15l-4 5" />',
+  log: '<path d="M3 6h14M3 11h7M3 16h5"/><circle cx="16" cy="16" r="5"/><path d="M16 13.5V16l1.8 1.2" />',
+  sketchFace: '<path d="M4 8 9 3h11v11l-6 5M14 8l6-5" opacity=".4"/><rect x="4" y="8" width="10" height="11" rx="1"/><circle cx="9" cy="13.5" r="2.5"/>',
+  sketch3d: '<path d="M4 17 12 21l8-4" opacity=".4"/><path d="M6 8v8M12 12v9M18 5v11" stroke-dasharray="3 2.5" opacity=".5"/><path d="M6 8l6 4 6-7"/><circle cx="6" cy="8" r="1.8" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.8" fill="currentColor" stroke="none"/><circle cx="18" cy="5" r="1.8" fill="currentColor" stroke="none"/>',
+  spline: '<path d="M4 18 7 6l10 12 3-12" stroke-dasharray="3 2.5" opacity=".4"/><path d="M4 18C7 6 17 18 20 6"/><circle cx="4" cy="18" r="1.8" fill="currentColor" stroke="none"/><circle cx="20" cy="6" r="1.8" fill="currentColor" stroke="none"/>',
+  trim: '<path d="M9 12h6" stroke-dasharray="3 2.5" opacity=".5"/><path d="M11 4 7 20M3 12h6M17 10l4 4M21 10l-4 4" />',
+  offset2d: '<path d="M4 16h6M16 4v6" opacity=".4"/><path d="M4 20V11a7 7 0 0 1 7-7h9M10 20v-9a1 1 0 0 1 1-1h9" />',
+  project: '<path d="M3 16l6-3 12 2-6 4z" opacity=".4"/><path d="M7 5v11M17 7v11" stroke-dasharray="3 2.5" opacity=".5"/><path d="M7 5l10 2M7 16l10 2"/><circle cx="7" cy="5" r="1.6" fill="currentColor" stroke="none"/><circle cx="17" cy="7" r="1.6" fill="currentColor" stroke="none"/>',
+  cHoriz: '<path d="M6 8h12" stroke-dasharray="3 2.5" opacity=".4"/><path d="M4 12h16"/><circle cx="4" cy="12" r="2" fill="currentColor" stroke="none"/><circle cx="20" cy="12" r="2" fill="currentColor" stroke="none"/>',
+  cVert: '<path d="M16 6v12" stroke-dasharray="3 2.5" opacity=".4"/><path d="M12 4v16"/><circle cx="12" cy="4" r="2" fill="currentColor" stroke="none"/><circle cx="12" cy="20" r="2" fill="currentColor" stroke="none"/>',
+  cParallel: '<path d="M5 17 15 5M9 19 19 7" />',
+  cPerp: '<path d="M12 14h5v5" opacity=".5"/><path d="M4 19h16M12 19V5" />',
+  cTangent: '<circle cx="10" cy="14" r="6"/><path d="M5.6 3.2 20 14"/><circle cx="13.6" cy="9.2" r="1.8" fill="currentColor" stroke="none"/>',
+  cEqual: '<path d="M10 10h4M10 14h4" opacity=".6"/><path d="M4 19 9 5M15 19l5-14" />',
+  cSymmetric: '<path d="M12 3v18" stroke-dasharray="3 2.5" opacity=".5"/><path d="M8 7 4 12l4 5M16 7l4 5-4 5" />',
+  cFix: '<circle cx="12" cy="6" r="2"/><path d="M12 8v12M8 11h8M5 14a7 7 0 0 0 14 0" />',
+  cCoincident: '<circle cx="16" cy="8" r="4" opacity=".4"/><path d="M4 19 16 8M4 6l12 2"/><circle cx="16" cy="8" r="2" fill="currentColor" stroke="none"/>',
+  extrude: '<path d="M12 14 4 17.5 12 21l8-3.5z" fill="currentColor" opacity=".25"/><path d="M4 17.5V10l8 3.5 8-3.5v7.5L12 21z" opacity=".5"/><path d="M12 14 4 17.5 12 21l8-3.5zM12 14V3M8.5 6.5 12 3l3.5 3.5" />',
+  cutExtrude: '<path d="M3 11h5v5h8v-5h5v9H3z" fill="currentColor" opacity=".25"/><path d="M3 11h5v5h8v-5h5v9H3z" /><path d="M8 11h8" stroke-dasharray="3 2.5" opacity=".5"/><path d="M12 2.5v7 M9.5 7 12 9.5 14.5 7" />',
+  revolve: '<path d="M6 2v20" stroke-dasharray="3 2.5" opacity=".5"/><rect x="9" y="5" width="5" height="8" rx="1" fill="currentColor" opacity=".25"/><rect x="9" y="5" width="5" height="8" rx="1"/><path d="M3 17c0 2 4 3.5 9 3.5s9-1.5 9-3.5-2.7-3-6-3.3 M15 14.2l2.2-1.7 M15 14.2l2 1.9" />',
+  sweep: '<path d="M6 18C6 10 18 14 18 6" stroke-dasharray="3 2.5" opacity=".5"/><circle cx="6" cy="18" r="3" fill="currentColor" opacity=".25"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><path d="M3 18C3 9 15 13 15 6 M9 18C9 11 21 15 21 6" opacity=".75"/>',
+  loft: '<path d="M12 15 3 18l9 3 9-3z" fill="currentColor" opacity=".25"/><path d="M7 6 3 18M17 6l4 12" opacity=".5"/><path d="M7 6a5 2.5 0 1 0 10 0 5 2.5 0 1 0-10 0M12 15 3 18l9 3 9-3z" />',
+  shell: '<path d="M12 5.5 7.5 8 12 10.5 16.5 8z" fill="currentColor" opacity=".25"/><path d="M12 3 4 7.5v9L12 21l8-4.5v-9zM4 7.5 12 12l8-4.5M12 12v9M12 5.5 7.5 8 12 10.5 16.5 8z" />',
+  holeWizard: '<path d="M12 2.5v19" stroke-dasharray="3 2.5" opacity=".5"/><path d="M2 6h5v4h2.5v8H2z M22 6h-5v4h-2.5v8H22z" fill="currentColor" opacity=".25"/><path d="M2 6h5v4h2.5v8H2 M22 6h-5v4h-2.5v8H22" />',
+  countersink: '<path d="M12 2.5v19" stroke-dasharray="3 2.5" opacity=".5"/><path d="M2 6h5l2.5 4v8H2z M22 6h-5l-2.5 4v8H22z" fill="currentColor" opacity=".25"/><path d="M2 6h5l2.5 4v8H2 M22 6h-5l-2.5 4v8H22" />',
+  patternRect: '<rect x="4" y="4" width="6" height="6" rx="1" fill="currentColor" opacity=".25"/><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/>',
+  patternCirc: '<circle cx="12" cy="12" r="7" stroke-dasharray="3 2.5" opacity=".4"/><circle cx="12" cy="5" r="2.2" fill="currentColor" opacity=".25"/><circle cx="12" cy="5" r="2.2"/><circle cx="19" cy="12" r="2.2"/><circle cx="12" cy="19" r="2.2"/><circle cx="5" cy="12" r="2.2"/>',
+  boolUnion: '<path d="M3 3h11v6h6v11H9v-6H3z" fill="currentColor" opacity=".25"/><path d="M3 3h11v6h6v11H9v-6H3z" />',
+  boolSubtract: '<path d="M3 3h11v6H9v5H3z" fill="currentColor" opacity=".25"/><path d="M3 3h11v6H9v5H3z"/><path d="M14 9h6v11H9v-6" stroke-dasharray="3 2.5" opacity=".5"/>',
+  boolIntersect: '<rect x="9" y="9" width="5" height="5" fill="currentColor" opacity=".25"/><rect x="9" y="9" width="5" height="5"/><path d="M3 3h11v6M3 3v11h6M14 9h6v11H9v-6" stroke-dasharray="3 2.5" opacity=".5"/>',
+  split: '<path d="M3 21 21 3" stroke-dasharray="3 2.5" opacity=".6"/><path d="M4 15V4h11zM20 9v11H9z" />',
+  massProps: '<path d="M6 9h12l2 11H4z" fill="currentColor" opacity=".25"/><path d="M6 9h12l2 11H4zM9 9V6.5a3 3 0 0 1 6 0V9" />',
+  cog: '<path d="M12 12V6a6 6 0 0 1 6 6H6a6 6 0 0 0 6 6v-6z" fill="currentColor" opacity=".25"/><circle cx="12" cy="12" r="6"/><path d="M12 3v18M3 12h18" />',
+  clearance: '<rect x="2" y="5" width="4" height="14" rx="1"/><rect x="18" y="5" width="4" height="14" rx="1"/><path d="M6 12h12M9 9l-3 3 3 3M15 9l3 3-3 3" />',
+  drone: '<circle cx="6" cy="6" r="3.5"/><circle cx="18" cy="6" r="3.5"/><circle cx="6" cy="18" r="3.5"/><circle cx="18" cy="18" r="3.5"/><path d="M6 6l3.5 3.5M18 6l-3.5 3.5M6 18l3.5-3.5M18 18l-3.5-3.5"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/>',
+  frame: '<circle cx="5" cy="5" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><rect x="9" y="7" width="6" height="10" rx="1.5"/><path d="M6.5 6.5 9 9M17.5 6.5 15 9M6.5 17.5 9 15M17.5 17.5 15 15" />',
+  motor: '<path d="M9 10v3M12 10v3M15 10v3" opacity=".5"/><path d="M12 3v4M5 9l2-2h10l2 2v6H5zM8 15v4M16 15v4M4 19h16" />',
+  prop: '<circle cx="12" cy="12" r="2.5"/><path d="M13.8 10.2C16.5 5.5 20 3 21 4s-1.5 4.5-6.2 7.2M10.2 13.8C7.5 18.5 4 21 3 20s1.5-4.5 6.2-7.2" />',
+  stack: '<path d="M6 9v6M18 9v6M12 12v7" opacity=".5"/><path d="M12 3 3 7.5 12 12l9-4.5zM3 15 12 19.5 21 15"/><circle cx="12" cy="5.5" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="9.5" r="1" fill="currentColor" stroke="none"/><circle cx="7.5" cy="7.5" r="1" fill="currentColor" stroke="none"/><circle cx="16.5" cy="7.5" r="1" fill="currentColor" stroke="none"/>',
+  battery: '<path d="M7.5 8v10M12 8v10" opacity=".4"/><rect x="3" y="8" width="14" height="10" rx="2"/><path d="M17 12h2a2 2 0 0 0 2-2V6"/><rect x="19" y="3" width="3" height="3" rx=".5"/>',
+  fpvCam: '<rect x="5" y="5" width="14" height="14" rx="3"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/><path d="M2 12h3M19 12h3M2 9v6M22 9v6" />',
+  antenna: '<path d="M6 5.5a6.5 6.5 0 0 0 0 7M18 5.5a6.5 6.5 0 0 1 0 7" opacity=".5"/><circle cx="12" cy="9" r="3.5" fill="currentColor" opacity=".25"/><circle cx="12" cy="9" r="3.5"/><path d="M12 12.5V21M9 21h6" />',
+  standoff: '<path d="M10 3v4h4V3M10 21v-4h4v4" opacity=".5"/><rect x="8" y="3" width="8" height="18" rx="1"/><path d="M8 10h8M8 14h8" />',
+  strap: '<path d="M10 7v3M13 7v3" opacity=".5"/><rect x="3" y="7" width="4" height="10" rx="1"/><path d="M7 15h10a4 4 0 0 0 0-8H7M7 10h8V7" />',
+};
+function icon(name, extra = '') {
+  const body = IC[name] || IC.cube;
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${body}</svg>`;
+}
+function iconEl(name) { return svgEl(icon(name)); }
+
+// ---------- Materialien (Dichte in g/cm³; Quelle: app/data/materialien.json, Entwurf Gemini, geprüft) ----------
+const MATERIALS = [{"k": "CFK", "name": "CFK-Platte (Kohlefaser, gewebt, ca. 60 % Faser)", "rho": 1.55, "col": "#2B2B2B"}, {"k": "GFK", "name": "GFK (Glasfaserverstärkter Kunststoff, Gewebe)", "rho": 1.85, "col": "#7A9A8B"}, {"k": "Alu 6061", "name": "Aluminium 6061-T6 (EN AW-6061)", "rho": 2.7, "col": "#C0C5CA"}, {"k": "Alu 7075", "name": "Aluminium 7075-T6 (EN AW-7075)", "rho": 2.81, "col": "#A6AEB5"}, {"k": "Titan Gr. 5", "name": "Titan Grade 5 (Ti6Al4V)", "rho": 4.43, "col": "#8B8E94"}, {"k": "Baustahl", "name": "Stahl (Baustahl S235JR)", "rho": 7.85, "col": "#5C636A"}, {"k": "V2A Edelstahl", "name": "Edelstahl 1.4301 (V2A / AISI 304)", "rho": 7.9, "col": "#B4BBC2"}, {"k": "Messing", "name": "Messing (CuZn39Pb3 / CW614N)", "rho": 8.47, "col": "#D4AF37"}, {"k": "PLA", "name": "PLA (Polylactid)", "rho": 1.24, "col": "#3B82F6"}, {"k": "PETG", "name": "PETG (Polyethylenterephthalat-Glykol)", "rho": 1.27, "col": "#10B981"}, {"k": "ABS", "name": "ABS (Acrylnitril-Butadien-Styrol)", "rho": 1.04, "col": "#EF4444"}, {"k": "ASA", "name": "ASA (Acrylnitril-Styrol-Acrylat)", "rho": 1.07, "col": "#F59E0B"}, {"k": "TPU 95A", "name": "TPU 95A (Thermoplastisches Polyurethan)", "rho": 1.21, "col": "#8B5CF6"}, {"k": "PA12", "name": "Nylon PA12 (Polyamid 12)", "rho": 1.02, "col": "#E5E7EB"}, {"k": "PC", "name": "Polycarbonat (PC)", "rho": 1.2, "col": "#A5F3FC"}, {"k": "POM", "name": "POM (Polyoxymethylen / Delrin)", "rho": 1.41, "col": "#F3F4F6"}, {"k": "Buche", "name": "Holz Buche (getrocknet, ca. 12 % Holzfeuchte)", "rho": 0.69, "col": "#C89D70"}, {"k": "Pappel-Sperrholz", "name": "Sperrholz Pappel", "rho": 0.42, "col": "#E6D2B5"}];
+
+// ---------- Fehlermeldungen (Quelle: app/data/fehlermeldungen.json, Entwurf Gemini, angepasst) ----------
+const ERRORS = {"sketchOverConstrained": {"titel": "Zu viele Regeln in der Skizze", "erklaerung": "Das neue Maß oder die neue Regel widerspricht deinen bisherigen Angaben, weshalb sich die Zeichnung nicht weiter anpassen kann.", "loesung": "Mache den letzten Schritt rückgängig oder lösche eines der rot markierten Maße, damit wieder Platz für Änderungen ist."}, "sketchUnderConstrained": {"titel": "Einige Linien sind noch lose", "erklaerung": "Manche Teile deiner Zeichnung haben noch keine festen Maße und können aus Versehen mit der Maus verschoben werden.", "loesung": "Du kannst problemlos weiterbauen oder die noch blauen Linien mit Maßen und Regeln festlegen, damit nichts mehr verrutscht."}, "sketchOpen": {"titel": "Umriss hat noch eine Lücke", "erklaerung": "Deine gezeichnete Form ist an mindestens einer Stelle offen, aber für einen 3D-Körper muss der Rand komplett geschlossen sein.", "loesung": "Zoome nah an die Ecken heran und verbinde offene Endpunkte miteinander oder schneide überstehende Linien ab."}, "sketchSelfIntersect": {"titel": "Linien kreuzen sich selbst", "erklaerung": "Die Linien deiner Form überkreuzen sich wie bei einer Acht, wodurch das Programm nicht weiß, wo innen und außen ist.", "loesung": "Ziehe die Eckpunkte auseinander oder nutze das Werkzeug „Trimmen“, um die sich kreuzenden Linienstücke wegzuschneiden."}, "extrudeZero": {"titel": "Höhe darf nicht null sein", "erklaerung": "Ohne eine eingegebene Höhe oder Dicke bleibt deine Zeichnung flach und kann kein 3D-Körper werden.", "loesung": "Ziehe am Pfeil im 3D-Fenster oder tippe im Eingabefeld eine Zahl größer als null ein."}, "cutNothing": {"titel": "Der Schnitt geht ins Leere", "erklaerung": "Dein Schneide-Werkzeug bewegt sich durch den freien Raum und trifft dabei auf kein einziges Bauteil.", "loesung": "Drehe die Richtung des Pfeils um oder ziehe den Schnitt tiefer, sodass er mitten durch deinen 3D-Körper geht."}, "revolveAxisCrosses": {"titel": "Drehachse läuft mitten durchs Profil", "erklaerung": "Die Linie, um die gedreht werden soll, schneidet deine gezeichnete Fläche, wodurch sich der Körper beim Drehen selbst durchdringen würde.", "loesung": "Wähle eine andere Linie am Rand als Drehachse aus oder zeichne deine Form nur auf einer Seite der Achse."}, "sweepSelfIntersect": {"titel": "Kurve ist zu eng fürs Profil", "erklaerung": "Deine Form ist zu breit für die engen Biegungen des Pfades und stößt in den Kurven mit sich selbst zusammen.", "loesung": "Mache die gezeichnete Fläche etwas kleiner oder gestalte die Kurven deiner Pfad-Linie weicher und weiter."}, "loftMismatch": {"titel": "Formen lassen sich nicht verbinden", "erklaerung": "Die ausgewählten Flächen sind zu unterschiedlich oder verdreht, sodass kein glatter Übergang zwischen ihnen berechnet werden kann.", "loesung": "Achte darauf, dass die Profile nicht über Kreuz verbunden sind, oder verwende Formen mit ähnlich vielen Ecken."}, "shellTooThick": {"titel": "Wandstärke ist zu dick gewählt", "erklaerung": "Die eingegebene Wanddicke ist größer als der Platz im Bauteil, sodass beim Aushöhlen im Inneren nichts mehr übrig bleibt.", "loesung": "Tippe einen deutlich kleineren Wert für die Wandstärke ein, beispielsweise 1 oder 2 Millimeter."}, "filletTooBig": {"titel": "Rundung passt nicht auf Kante", "erklaerung": "Der Radius für die Abrundung ist breiter als die angrenzenden Flächen deines Bauteils und hat dort keinen Platz.", "loesung": "Gib einen kleineren Radius ein – den größten möglichen Wert zeigt dir Tracery direkt im Panel rechts an."}, "booleanFailed": {"titel": "Körper konnten nicht verrechnet werden", "erklaerung": "Die Bauteile berühren sich entweder gar nicht oder treffen an einer winzigen Kante so ungünstig aufeinander, dass das Berechnen scheitert.", "loesung": "Schiebe die Körper ein kleines Stückchen weiter ineinander, damit sie sich klar und deutlich überschneiden."}, "patternOverlap": {"titel": "Kopien stecken fehlerhaft ineinander", "erklaerung": "Der Abstand zwischen deinen wiederholten Elementen ist zu klein, wodurch sich die Kopien gegenseitig im Weg stehen.", "loesung": "Vergrößere den Abstand im Menü oder verringere die Anzahl der Kopien, damit jedes Teil genug Platz hat."}, "referenceLost": {"titel": "Ursprüngliche Fläche oder Kante fehlt", "erklaerung": "Dieser Arbeitsschritt sucht nach einer Fläche oder Kante aus einem früheren Schritt, die durch eine Änderung verschwunden ist.", "loesung": "Klicke den Schritt in der Zeitleiste an und wähle die Fläche oder Kante am Bauteil einfach neu aus."}, "holeOutside": {"titel": "Bohrung landet neben dem Bauteil", "erklaerung": "Der Mittelpunkt für dein Loch liegt außerhalb des 3D-Körpers, weshalb in die Luft gebohrt wird.", "loesung": "Ziehe den Mittelpunkt der Bohrung mit der Maus direkt auf die Oberfläche deines Bauteils."}, "importFailed": {"titel": "Datei konnte nicht geöffnet werden", "erklaerung": "Die ausgewählte Datei ist entweder beschädigt oder hat ein Format, das dieses Programm nicht versteht.", "loesung": "Prüfe, ob es eine Tracery-Projektdatei (.tracery.json) oder eine unterstützte 3D-Datei ist, und exportiere sie im Ursprungsprogramm notfalls noch einmal neu."}};
+// Fehlercodes des CAD-Kerns → Eintrag oben
+const ERROR_FOR_CODE = { edges: 'referenceLost', toobig: 'filletTooBig', cut: 'booleanFailed', dim: 'sketchDimBad' };
+ERRORS.sketchDimBad = { titel: 'Ein Skizzen-Maß geht nicht auf', erklaerung: 'Ein Maß in der Skizze benutzt einen Namen oder Wert, den es nicht (mehr) gibt.', loesung: 'Prüfe unter „Maße“, ob der Name noch da ist, oder öffne die Skizze per Doppelklick und ändere das rote Maß.' };
+
+// ---------- Hilfetexte für Werkzeuge (Entwurf Gemini, an Tracery angepasst) ----------
+// tip: kurz, hilfe: wie benutzen, tipp: typischer Fehler oder Trick. Erscheinen beim längeren Überfahren.
+// Formel-Beispiele für „Maße“ (Entwurf Gemini, mit Tracerys Rechner nachgeprüft)
+const FORMULA_EXAMPLES = [{"f": "breite / 2", "e": "Damit setzt du ein Loch oder eine Mittellinie immer automatisch genau in die Mitte deines Bauteils."}, {"f": "breite - 2 * wand", "e": "Berechnet den freien Innenraum einer Box, indem links und rechts die Wandstärke abgezogen wird."}, {"f": "schraube + 0,4", "e": "Gibt einem Bohrloch ein kleines bisschen Spielraum, damit die Schraube beim Zusammenbauen nicht klemmt."}, {"f": "breite / (anzahl + 1)", "e": "Verteilt mehrere Löcher in einer Reihe so, dass alle Abstände zueinander und zum Rand exakt gleich groß sind."}, {"f": "max(wand; schraube * 1,5)", "e": "Sorgt dafür, dass die Wand rund um eine Schraube immer mindestens anderthalbmal so dick ist wie die Schraube selbst."}, {"f": "breite * pi", "e": "Rechnet den äußeren Umfang eines Rades oder Rohres aus, wenn du die Breite als Durchmesser nimmst."}, {"f": "pi * (schraube / 2) ^ 2", "e": "Bestimmt die genaue Querschnittsfläche deines runden Schraubenlochs in Quadratmillimetern."}, {"f": "wurzel(breite ^ 2 + hoehe ^ 2)", "e": "Berechnet die exakte Länge einer schrägen Verstärkungsstrebe quer durch dein Rechteck von Ecke zu Ecke."}, {"f": "floor((breite - 2 * wand) / (schraube * 2,5))", "e": "Rundet auf eine ganze Zahl ab, um zu prüfen, wie viele Schraubenlöcher mit genug Abstand nebeneinander in deine Box passen."}, {"f": "(breite / 2) * tan(30)", "e": "Ergibt die genaue Dachhöhe, wenn du auf dein Bauteil eine dreieckige Spitze mit 30 Grad Schräge setzt."}, {"f": "(schraube + wand) / cos(30)", "e": "Rechnet eine Schlüsselweite (hier schraube + wand) in das Maß von Ecke zu Ecke um – so breit muss eine Sechskant-Tasche mindestens sein."}, {"f": "breite * sin(180 / anzahl) - schraube", "e": "Zeigt dir, wie viel Material zwischen zwei Nachbarlöchern übrig bleibt, wenn du sie im Kreis auf dem Durchmesser verteilst."}];
+const FORMULA_DEMO = { breite: 40, hoehe: 20, wand: 2, schraube: 3, anzahl: 4 };
+const HELP = {
+ "sketchFace": {
+  "tip": "Neue 2D-Zeichnung auf Fläche starten",
+  "hilfe": "Klicke auf eine flache Seite deines 3D-Bauteils oder auf eine Grundebene. Die Ansicht dreht sich automatisch passend hin.",
+  "tipp": "Eine Skizze geht nur auf flachen Ebenen, nicht auf gewölbten Rundungen."
+ },
+ "line": {
+  "tip": "Gerade Linien Punkt für Punkt",
+  "hilfe": "Klicke für den Startpunkt und noch einmal für den Endpunkt. Du kannst direkt weiterklicken, um eine Kette zu zeichnen.",
+  "tipp": "Drücke die Escape-Taste, um die Linienkette zu beenden, ohne die ganze Skizze zu schließen."
+ },
+ "rect": {
+  "tip": "Rechteck über zwei Ecken aufziehen",
+  "hilfe": "Klicke für die erste Ecke, ziehe die Maus schräg herüber und klicke für die gegenüberliegende Ecke.",
+  "tipp": "Tippe die Maße direkt nach dem ersten Klick auf der Tastatur ein und wechsle mit der Tab-Taste zwischen Breite und Höhe."
+ },
+ "circle": {
+  "tip": "Runden Kreis vom Mittelpunkt aufziehen",
+  "hilfe": "Setze den ersten Klick in die Mitte, ziehe den Kreis groß und klicke ein zweites Mal für den Rand.",
+  "tipp": "Tracery fragt nach dem Durchmesser (der ganzen Breite), nicht nach dem Radius."
+ },
+ "arc": {
+  "tip": "Gebogene Linie über drei Punkte",
+  "hilfe": "Klicke zuerst auf den Startpunkt, dann auf den Endpunkt und bestimme mit dem dritten Klick die Biegung.",
+  "tipp": "Wenn der Bogen in die falsche Richtung schnappt, ziehe den Mauszeiger einfach über die gedachte Verbindungslinie auf die andere Seite."
+ },
+ "slot": {
+  "tip": "Langloch für bewegliche Schrauben zeichnen",
+  "hilfe": "Klicke den ersten und zweiten Punkt für die Mittellinie und ziehe dann mit dem dritten Klick die Breite auf.",
+  "tipp": "Langlöcher sind perfekt, wenn du beim späteren Zusammenbauen noch etwas Spielraum zum Verschieben brauchst."
+ },
+ "polygon": {
+  "tip": "Vieleck wie Sechskant zeichnen",
+  "hilfe": "Klicke auf den Mittelpunkt, ziehe die Größe auf und tippe im Eingabefeld die Anzahl der Ecken ein.",
+  "tipp": "Für einen Sechskant-Schraubenkopf stellst du einfach die Eckenanzahl auf 6."
+ },
+ "spline": {
+  "tip": "Geschwungene Freihand-Kurve durch Punkte legen",
+  "hilfe": "Setze nacheinander mehrere Punkte, durch die sich die Linie weich schlängelt, und bestätige am Ende mit Enter.",
+  "tipp": "Setze so wenige Punkte wie möglich, dann wird die Kurve viel gleichmäßiger und glatter."
+ },
+ "trim": {
+  "tip": "Überstehende Linienstücke einfach wegschneiden",
+  "hilfe": "Fahre mit der Maus über ein Linienstück, das eine andere Linie kreuzt. Es leuchtet rot auf und verschwindet beim Klicken.",
+  "tipp": "Halte die Maustaste gedrückt und wische wie mit einem Radiergummi über mehrere Linien, um sie am Stück zu löschen."
+ },
+ "offset2d": {
+  "tip": "Parallele Kopie im Abstand erstellen",
+  "hilfe": "Klicke eine Linie oder eine geschlossene Form an und ziehe am Pfeil, um eine größere oder kleinere Kopie daneben zu legen.",
+  "tipp": "Damit erstellst du super schnell gleichmäßige Wandstärken für Rohre, Ringe oder Gehäuse."
+ },
+ "project": {
+  "tip": "Vorhandene 3D-Kanten in Skizze abpausen",
+  "hilfe": "Klicke auf Kanten oder Flächen von schon fertigen 3D-Körpern. Sie erscheinen als Hilfslinien in deiner aktuellen Skizze.",
+  "tipp": "Abgepauste Linien passen sich automatisch an, wenn sich das ursprüngliche 3D-Bauteil später in der Größe ändert."
+ },
+ "dimension": {
+  "tip": "Genaue Länge oder Winkel festlegen",
+  "hilfe": "Klicke eine Linie, eine Rechteck-Seite oder einen Kreis an und tippe deinen Wunschwert ein – auch eine Formel wie breite/2 mit Namen aus „Maße“.",
+  "tipp": "Feste Maße zeigen ein Schloss und bleiben beim Ziehen erhalten. Klick aufs Schloss, um ein Maß wieder zu lösen."
+ },
+ "cHoriz": {
+  "tip": "Linie exakt waagerecht ausrichten",
+  "hilfe": "Klicke eine schräge Linie oder zwei Punkte an. Sie richten sich sofort waagerecht aus, also parallel zur X-Richtung der Skizze.",
+  "tipp": "Wenn sich nichts bewegt, hat die Linie wahrscheinlich schon eine andere feste Regel, die du erst anklicken und löschen musst."
+ },
+ "cVert": {
+  "tip": "Linie exakt senkrecht ausrichten",
+  "hilfe": "Klicke eine Linie oder zwei Punkte an, damit sie kerzengerade von oben nach unten stehen.",
+  "tipp": "Nutze das für zwei Punkte, um sie exakt übereinander zu stapeln, ohne eine sichtbare Linie dazwischen zu zeichnen."
+ },
+ "cParallel": {
+  "tip": "Zwei Linien im gleichen Winkel",
+  "hilfe": "Klicke zuerst auf die Linie, die sich nicht bewegen soll, und danach auf die Linie, die sich anpassen soll.",
+  "tipp": "Die beiden Linien laufen danach exakt in dieselbe Richtung und treffen sich nie."
+ },
+ "cPerp": {
+  "tip": "Rechten Winkel (90 Grad) erzwingen",
+  "hilfe": "Klicke zwei Linien nacheinander an, damit sie exakt im 90-Grad-Winkel aufeinandertreffen.",
+  "tipp": "Die Linien müssen sich dafür nicht direkt berühren – auch ihre gedachten Verlängerungen stehen danach im rechten Winkel."
+ },
+ "cTangent": {
+  "tip": "Linie weich an Kreis anlegen",
+  "hilfe": "Klicke auf einen Kreis oder Bogen und danach auf eine Linie, damit sie nahtlos und ohne Knick ineinander übergehen.",
+  "tipp": "Unverzichtbar, wenn du Riemenscheiben oder runde Übergänge ohne scharfe Ecken zeichnen willst."
+ },
+ "cEqual": {
+  "tip": "Gleiche Größe für Elemente erzwingen",
+  "hilfe": "Klicke zwei Linien oder zwei Kreise nacheinander an. Beide bekommen sofort exakt dieselbe Länge oder denselben Durchmesser.",
+  "tipp": "Bemaße danach nur noch eines der beiden Teile – das andere ändert seine Größe automatisch mit."
+ },
+ "cSymmetric": {
+  "tip": "Gleichmäßig an einer Mittellinie ausrichten",
+  "hilfe": "Klicke erst den linken Punkt, dann den rechten Punkt und zum Schluss die Mittellinie dazwischen an.",
+  "tipp": "Ziehst du danach an einer Seite, bewegt sich die andere Seite wie vor einem Spiegel automatisch mit."
+ },
+ "cFix": {
+  "tip": "Punkt oder Linie festpinnen",
+  "hilfe": "Klicke auf ein Element in deiner Skizze, um es wie mit einer Reißzwecke festzupinnen, sodass es nicht mehr verrutscht.",
+  "tipp": "Nutze das sparsam: Es ist meistens besser, Teile mit Maßen zum Mittelpunkt festzulegen, statt sie einfach einzufrieren."
+ },
+ "cCoincident": {
+  "tip": "Punkte und Linien fest zusammenkleben",
+  "hilfe": "Klicke auf zwei Punkte, um sie zu verschmelzen, oder auf einen Punkt und eine Linie, um ihn auf ihr einzurasten.",
+  "tipp": "Wenn sich deine Skizze später nicht in 3D hochziehen lässt, ist oft eine Ecke offen – hiermit schließt du die Lücke."
+ },
+ "extrude": {
+  "tip": "Flache Skizze zu 3D-Körper hochziehen",
+  "hilfe": "Klicke in eine geschlossene Fläche deiner Skizze und ziehe am Pfeil, um ihr eine Höhe oder Dicke zu geben.",
+  "tipp": "Du kannst nur komplett geschlossene Formen hochziehen; bei Lücken im Umriss streikt das Werkzeug."
+ },
+ "cutExtrude": {
+  "tip": "Loch oder Form aus 3D-Körper stanzen",
+  "hilfe": "Wähle deine Skizzenfläche aus und ziehe den Pfeil mitten durch deinen vorhandenen 3D-Körper, um Material wegzuschneiden.",
+  "tipp": "Stelle die Tiefe im Menü auf 'Durch alles', damit das Loch garantiert offen bleibt, auch wenn das Bauteil später dicker wird."
+ },
+ "revolve": {
+  "tip": "Skizze im Kreis zu 3D-Körper drehen",
+  "hilfe": "Klicke zuerst auf deine gezeichnete Fläche und wähle dann eine gerade Linie als Drehachse aus.",
+  "tipp": "Zeichne für runde Dinge wie Räder, Flaschen oder Schüsseln immer nur die halbe Querschnittsform bis zur Mitte."
+ },
+ "sweep": {
+  "tip": "Form entlang einer Linie ziehen",
+  "hilfe": "Klicke erst auf die Fläche (das Profil) und danach auf die Linie (den Pfad), an der sie wie auf Schienen entlanggleiten soll.",
+  "tipp": "Wenn der Pfad zu enge Kurven macht, schneidet sich der Körper selbst und es gibt eine Fehlermeldung – mach die Kurven dann etwas weiter."
+ },
+ "loft": {
+  "tip": "Fließender Übergang zwischen zwei Formen",
+  "hilfe": "Klicke nacheinander zwei oder mehr Skizzenflächen an, die auf unterschiedlichen Ebenen liegen, um sie weich zu verbinden.",
+  "tipp": "Damit verbindest du problemlos einen eckigen Boden mit einer kreisrunden Öffnung weiter oben."
+ },
+ "holeWizard": {
+  "tip": "Passgenaues Loch für Schrauben bohren",
+  "hilfe": "Klicke auf eine Fläche oder einen Skizzenpunkt und wähle im Menü einfach die gewünschte Schraubengröße (z. B. M4) und Tiefe aus.",
+  "tipp": "Wähle „Durchgangsloch“, wenn die Schraube frei durchgehen soll – für M3-Schrauben sind das meist 3,2 mm."
+ },
+ "countersink": {
+  "tip": "Trichter-Rand für flache Schraubenköpfe",
+  "hilfe": "Klicke auf die obere Kante eines runden Lochs, damit der Rand schräg angeschnitten wird und eine Senkkopfschraube bündig verschwindet.",
+  "tipp": "So steht später kein Schraubenkopf mehr störend aus der Oberfläche deines Bauteils heraus."
+ },
+ "fillet": {
+  "tip": "Scharfe 3D-Kanten schön abrunden",
+  "hilfe": "Klicke eine oder mehrere Kanten deines 3D-Körpers an und schiebe den Pfeil, um die Rundung größer oder kleiner zu machen.",
+  "tipp": "Gerundete Ecken sehen besser aus und reißen bei Belastung seltener ein, zum Beispiel an den Armen eines Frames."
+ },
+ "chamfer": {
+  "tip": "Kante im Winkel schräg anschneiden",
+  "hilfe": "Klicke auf eine Kante und ziehe am Pfeil, um die scharfe Ecke durch eine gerade Schräge (Fase) zu ersetzen.",
+  "tipp": "Eine kleine Fase nimmt Kanten die Schärfe – an Carbonplatten schneiden sie dann keine Kabel mehr an."
+ },
+ "shell": {
+  "tip": "Körper aushöhlen wie eine Schachtel",
+  "hilfe": "Klicke die Fläche an, die komplett offen sein soll, und tippe ein, wie dick die restlichen Wände bleiben sollen.",
+  "tipp": "So wird aus einem massiven Klotz mit nur einem Klick eine fertige Box ohne Deckel."
+ },
+ "patternRect": {
+  "tip": "Elemente in geraden Reihen kopieren",
+  "hilfe": "Wähle deinen Körper oder ein Loch aus, klicke eine Kante für die Richtung an und tippe Abstand sowie Anzahl ein.",
+  "tipp": "Kopiere lieber fertige 3D-Schritte (wie Löcher oder Noppen) statt vieler einzelner Linien in der Skizze – das hält dein Projekt schnell."
+ },
+ "patternCirc": {
+  "tip": "Elemente gleichmäßig im Kreis kopieren",
+  "hilfe": "Klicke das Element an, das du vervielfältigen willst, wähle einen runden Kreis oder Zylinder als Mitte und gib die Anzahl ein.",
+  "tipp": "Perfekt für Lochkreise, Speichen oder Lüftungsschlitze, bei denen sich alles im Kreis wiederholt."
+ },
+ "mirror": {
+  "tip": "Bauteil auf andere Seite spiegeln",
+  "hilfe": "Wähle den Körper oder den Arbeitsschritt aus und klicke dann auf eine flache Seite oder Ebene, die als Spiegel dient.",
+  "tipp": "Bei symmetrischen Teilen – etwa einem Frame – baust du nur eine Hälfte fertig und spiegelst sie am Ende. Das spart die halbe Arbeit."
+ },
+ "boolUnion": {
+  "tip": "Mehrere Körper zu einem verschmelzen",
+  "hilfe": "Klicke nacheinander alle sich berührenden Einzelkörper an und bestätige, um sie fest zusammenzukleben.",
+  "tipp": "Teile, die am Ende ein einziges Bauteil sein sollen, verbindest du hiermit zu einem Körper."
+ },
+ "boolSubtract": {
+  "tip": "Einen Körper vom anderen abziehen",
+  "hilfe": "Klicke zuerst auf das Hauptbauteil, das bleiben soll, und danach auf den Körper, der wie eine Backform herausgestanzt wird.",
+  "tipp": "Damit kannst du passgenaue Abdrücke oder Halterungen für andere Gegenstände in dein Bauteil schneiden."
+ },
+ "boolIntersect": {
+  "tip": "Nur das gemeinsame Überlappungsstück behalten",
+  "hilfe": "Klicke zwei Körper an, die ineinander stecken. Alles verschwindet, außer dem Bereich, den beide gleichzeitig ausfüllen.",
+  "tipp": "Ideal, um aus zwei komplizierten Richtungen gleichzeitig die perfekte Mischform herauszuschneiden."
+ },
+ "split": {
+  "tip": "Körper an einer Fläche durchschneiden",
+  "hilfe": "Wähle zuerst den Körper aus, den du zerteilen willst, und klicke dann auf eine Ebene oder Fläche als Schneidemesser.",
+  "tipp": "Praktisch, um ein Teil in zwei Hälften zu zerlegen oder eine Platte aus einem Block herauszutrennen."
+ },
+ "section": {
+  "tip": "Bauteil virtuell aufschneiden zum Reinschauen",
+  "hilfe": "Klicke eine flache Seite oder Ebene an und ziehe am Pfeil, um das Modell wie im Röntgenschnitt von innen zu betrachten.",
+  "tipp": "Keine Sorge: Dein Bauteil geht dabei nicht wirklich kaputt, es ist nur ein Kameratrick zur Kontrolle."
+ },
+ "xray": {
+  "tip": "Körper halb durchsichtig machen",
+  "hilfe": "Klicke das Werkzeug an, um alle Wände wie aus Milchglas darzustellen, sodass du versteckte Innenteile siehst.",
+  "tipp": "Hilft enorm, wenn du im Inneren eines Gehäuses eine Kante anklicken willst, die sonst von der Außenwand verdeckt wird."
+ },
+ "explode": {
+  "tip": "Baugruppe für Übersicht auseinanderziehen",
+  "hilfe": "Ziehe am Schieberegler, damit alle Einzelteile deines Projekts wie in einer Bauanleitung auseinanderschweben.",
+  "tipp": "Schiebe den Regler wieder auf Null zurück, bevor du weiterbaust, damit alles wieder am richtigen Platz sitzt."
+ },
+ "measure": {
+  "tip": "Abstände, Längen und Durchmesser nachmessen",
+  "hilfe": "Klicke ein oder zwei Elemente (Punkte, Kanten, Flächen) an, um ihren genauen Abstand oder die Größe abzulesen.",
+  "tipp": "Wenn du auf einen runden Kreis klickst, zeigt dir das Werkzeug sofort den genauen Durchmesser an."
+ },
+ "massProps": {
+  "tip": "Gewicht und Volumen des Bauteils",
+  "hilfe": "Klicke auf deinen Körper und wähle ein Material (z. B. Carbon, Aluminium oder Kunststoff), um das Gewicht zu berechnen.",
+  "tipp": "So weißt du schon beim Konstruieren, wie schwer dein Teil wird – bei Speed-Drohnen zählt jedes Gramm."
+ },
+ "timeline": {
+  "tip": "Verlauf aller bisherigen Arbeitsschritte",
+  "hilfe": "Unten am Bildschirmrand siehst du jedes Werkzeug als kleines Symbol in der Reihenfolge, in der du es benutzt hast.",
+  "tipp": "Klick auf ein Symbol, um diesen Schritt zu bearbeiten. Ein Doppelklick schiebt den Marker genau hinter diesen Schritt."
+ },
+ "rollback": {
+  "tip": "Zeitreise zurück zu früheren Bauschritten",
+  "hilfe": "Fasse den farbigen Balken in der Zeitleiste an und schiebe ihn nach links vor einen bestimmten Schritt.",
+  "tipp": "Wenn du etwas vergessen hast, reise in der Zeit zurück, füge es ein und schiebe den Balken wieder ganz nach rechts."
+ },
+ "suppress": {
+  "tip": "Arbeitsschritt vorübergehend ausschalten",
+  "hilfe": "Rechtsklick auf einen Schritt in der Zeitleiste und „Unterdrücken“ wählen – oder im Verlauf links auf das durchgestrichene Symbol.",
+  "tipp": "Das ist viel besser als Löschen, wenn du nur mal schnell testen willst, wie dein Bauteil ohne ein bestimmtes Loch oder eine Rundung aussieht."
+ },
+ "params": {
+  "tip": "Maße zentral mit Variablen steuern",
+  "hilfe": "Lege im Tab „Maße“ eigene Namen an (z. B. wand = 3) und tippe beim Bemaßen einfach „wand“ statt einer Zahl ein.",
+  "tipp": "Änderst du später den Wert in der Tabelle, passen sich alle Wände im gesamten Modell auf einen Schlag gleichzeitig an."
+ }
+};
+
+
+// ---------- Einfache Ereignisse ----------
+function makeEmitter() {
+  const map = new Map();
+  return {
+    on(ev, fn) { if (!map.has(ev)) map.set(ev, new Set()); map.get(ev).add(fn); return () => map.get(ev).delete(fn); },
+    emit(ev, ...a) { const s = map.get(ev); if (s) for (const fn of [...s]) { try { fn(...a); } catch (e) { console.error(e); } } },
+  };
+}
+const Bus = makeEmitter();
+

@@ -514,6 +514,31 @@ def t_fies_umbenennen(p):
     return a == 'laenge' and b == 40 and abs(w - 40) < 1e-6
 
 
+def t_notizen(p):
+    p.pg.get_by_text('Schild mit Loch').first.click(); p.wait(8000)
+    p.pg.click('#t-notes'); p.wait(500)
+    cx, cy = p.canvas_center()
+    p.pg.mouse.move(cx - 150, cy); p.pg.mouse.down()
+    for i in range(30):
+        p.pg.mouse.move(cx - 150 + i * 10, cy + 30 * math.sin(i / 4))
+    p.pg.mouse.up(); p.wait(800)
+    ok1 = p.ev("return App.doc.notes.length===1 && App.doc.notes[0].kind==='stroke' && App.doc.items.length===1")
+    p.pg.click('.notesbar [data-ntool="text"]'); p.pg.mouse.click(cx + 100, cy - 120); p.wait(500)
+    p.pg.keyboard.type('Hier Kabel durch'); p.pg.keyboard.press('Enter'); p.wait(800)
+    ok2 = p.pg.locator('.note-label').all_inner_texts() == ['Hier Kabel durch']
+    pt = p.ev("const n=App.doc.notes[0]; const q=n.pts[Math.floor(n.pts.length/2)]; const s=Viewer.toScreen(Viewer.camera.position.clone().set(...q)); const r=Viewer.canvas.getBoundingClientRect(); return [s.x+r.left,s.y+r.top]")
+    p.pg.click('.notesbar [data-ntool="erase"]'); p.pg.mouse.move(pt[0] - 5, pt[1] - 5); p.pg.mouse.down(); p.pg.mouse.move(pt[0] + 5, pt[1] + 5, steps=4); p.pg.mouse.up(); p.wait(800)
+    ok3 = p.ev("return App.doc.notes.map(n=>n.kind).join()") == 'text'
+    p.pg.keyboard.press('Control+z'); p.wait(600)
+    ok4 = p.ev("return App.doc.notes.length") == 2
+    p.pg.keyboard.press('Escape'); p.wait(300)
+    p.pg.get_by_label('Notizen zeigen').uncheck(); p.wait(400)
+    ok5 = p.pg.locator('.note-label').count() == 0 and p.pg.locator('.notesbar').count() == 0
+    p.pg.get_by_label('Notizen zeigen').check(); p.wait(400)
+    ok6 = 'Kabel' not in p.ev("return JSON.stringify(Model.kernelScene(App.doc))") and p.pg.locator('.tl-chip').count() == 1
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -528,6 +553,7 @@ TESTS = [
     ('Dateien: Speichern / Öffnen / Export', t_dateien),
     ('Skizzen-Maße: beim Zeichnen / Maß-Werkzeug / Teil wächst mit / Doppelklick / Schildchen ändern', t_skizze_masse),
     ('Skizzen-Maße: hält beim Ziehen / lösen', t_mass_haelt), ('Kaputte Formel', t_kaputte_formel), ('Neuer Name', t_neuer_name),
+    ('Notizstift: malen / Text / radieren / Rückgängig / ausblenden / nicht im Modell', t_notizen),
     ('Formel-Beispiele', t_formel_beispiele), ('Einführung „Erste Skizze“', t_einfuehrung), ('Schraubenlöcher', t_schrauben),
     ('Fies: Löschen hinter Marker + Undo', t_fies_loeschen), ('Fies: alles unterdrückt', t_fies_alle_aus),
     ('Fies: Marker am Anfang, neu laden', t_fies_reload), ('Fies: Tasten während Rechnen', t_fies_tasten),

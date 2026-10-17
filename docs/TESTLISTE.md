@@ -16,7 +16,8 @@ Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 5 (17.10.
 | Einstellungen | 4 | 4 | – |
 | Dateien | 3 | 3 | – |
 | Fiese Tests | 6 | 5 | „Sehr fein“ flüssig? |
-| **Gesamt** | **55** | **52** | **3 Punkte, dazu ein Blick auf Animationen** |
+| Notizstift | 6 | 3 | Kleben beim Drehen, Farbe/Dicke, Doppelklick auf Textnotiz |
+| **Gesamt** | **61** | **55** | **6 Punkte, dazu ein Blick auf Animationen** |
 
 Wichtig: Automatisch geprüft heißt „funktioniert in Chromium unter Linux“. Safari auf dem Mac, Touch auf dem iPad und echte Grafikkarten sieht nur ein Test von Hand.
 
@@ -133,6 +134,27 @@ Vorbereitung: `app/` über einen lokalen Server öffnen (siehe README), Seite ne
 - [x] **Kaputte Formel**
   Schritte: 1. Auf ein Schildchen klicken und `breite/` eintippen.
   Erwartet: Hinweis „Das kann ich nicht ausrechnen“, nichts geht kaputt.
+
+## Notizstift (neu)
+
+- [ ] **Malen**
+  Schritte: 1. Oben „Notizen“ (oder Taste N). 2. Mit gedrückter Maus über ein Teil malen.
+  Erwartet: Roter Strich auf der Fläche; beim Drehen (rechte Maustaste) klebt er am Teil.
+- [ ] **Farbe und Dicke**
+  Schritte: 1. Blau und „Dick“ wählen, daneben ins Leere malen.
+  Erwartet: Dicker blauer Strich in der Luft neben dem Teil.
+- [ ] **Textnotiz**
+  Schritte: 1. Sprechblase wählen, ins Bild klicken, Text eintippen, Enter. 2. Doppelklick auf die Notiz.
+  Erwartet: Notiz steht im Bild; der Doppelklick lässt den Text ändern.
+- [x] **Radierer**
+  Schritte: 1. Radierer wählen, über einen Strich fahren. 2. Strg/Cmd+Z.
+  Erwartet: Strich weg, dann wieder da.
+- [x] **Ein- und ausblenden**
+  Schritte: 1. „Fertig“. 2. Rechts „Notizen zeigen“ abhaken.
+  Erwartet: Alle Notizen verschwinden und kommen mit dem Häkchen zurück.
+- [x] **Keine Technik**
+  Schritte: 1. Exportieren als STEP.
+  Erwartet: Die Notizen sind nicht in der Datei, die Zeitleiste zeigt keine Notiz-Schritte.
 
 ## Schraubenlöcher
 

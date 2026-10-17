@@ -23,7 +23,9 @@ Projektdateien heißen `*.tracery.json`; ältere `*.masswerk.json` lassen sich w
 
 | Pfad | Inhalt |
 | --- | --- |
-| `app/index.html` | Oberfläche und Programmlogik |
+| `app/index.html` | Fertig gebautes Programm (nicht von Hand ändern) |
+| `app/src/` | Quelldateien: `styles.css`, HTML-Gerüst, `js/` mit einem Teil pro Bereich |
+| `tools/build.py` | Baut `app/index.html` aus `app/src/` |
 | `app/kernel/` | CAD-Kern: Worker, replicad, OpenCascade-Anbindung |
 | `app/occ-kernel.wasm` | OpenCascade als WebAssembly |
 | `app/lib/three/` | Three.js für die 3D-Ansicht |
@@ -39,6 +41,10 @@ Projektdateien heißen `*.tracery.json`; ältere `*.masswerk.json` lassen sich w
 ## Lizenzen
 
 replicad (MIT), OpenCascade (LGPL 2.1 mit Ausnahme), Three.js (MIT).
+
+## Ändern und bauen
+
+Geändert wird in `app/src/`, danach `python3 tools/build.py`. Die Teile in `app/src/js/` teilen sich einen gemeinsamen Gültigkeitsbereich; ihre Reihenfolge steht in `tools/build.py`. `python3 tools/build.py --check` prüft, ob `app/index.html` zum Quelltext passt.
 
 ## Tests
 
