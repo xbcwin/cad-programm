@@ -1,6 +1,6 @@
 # Fortschritt
 
-Stand: 16.10.2026 · nach Sitzung 4 von 14
+Stand: 17.10.2026 · nach Sitzung 5 von 14
 
 ## Erledigt
 
@@ -34,6 +34,12 @@ Stand: 16.10.2026 · nach Sitzung 4 von 14
 - [x] Neuer Name: Tracery (englisch für Maßwerk)
 - [x] Logo (Variante 1 von Gemini, eingepasst) in Kopfzeile, Startseite und als Browser-Symbol
 - [x] Hilfetexte für 47 Werkzeuge (Gemini, angepasst): kurz drauf bleiben zeigt Anleitung und Tipp
+- [x] Skizzen-Maße: Werkzeug „Maß“ (D), eingetippte Werte werden feste Maße mit Schloss
+- [x] Maße als Formel (z. B. `breite/2`) – ändert man `breite` unter „Maße“, wächst das Teil mit
+- [x] Feste Maße bleiben beim Ziehen erhalten, verbundene Linien wandern mit
+- [x] Doppelklick auf einen Skizzenkörper öffnet seine Skizze
+- [x] Im Bauteil-Modus lassen sich Unterteile direkt im Bild anklicken
+- [x] Tastenkürzel-Übersicht mit `?`, neue Tasten E (bearbeiten) und I (isolieren)
 
 ## Offen
 
@@ -41,8 +47,8 @@ Stand: 16.10.2026 · nach Sitzung 4 von 14
 Fertig.
 
 ### Stufe 2 – Skizzen
-- [ ] Skizze auf Körperflächen (Sitzung 5)
-- [ ] Bemaßung mit Formeln, nachträglich bearbeiten (Sitzung 5)
+- [x] Skizze auf Körperflächen (war schon da, in Sitzung 5 geprüft)
+- [x] Bemaßung mit Formeln, nachträglich bearbeiten (Sitzung 5)
 - [ ] Bedingungen mit Solver (Sitzung 6)
 - [ ] Spline, Fangen, Hilfslinien (Sitzung 7)
 
@@ -64,4 +70,6 @@ Fertig.
 
 - Schritt hinter dem Marker auswählen zeigt noch die Werkzeugleiste im Modell
 - Vorlagen bestehen aus einer Gruppe: Über „Bearbeiten“ im Verlauf sieht man ihre einzelnen Schritte in der Zeitleiste
-- Im Bauteil-Modus lassen sich Unterteile im 3D-Bereich noch nicht direkt anklicken, nur über Zeitleiste und Verlauf (kommt mit Sitzung 5)
+- Ohne Bedingungen kann ein Maß an einem geschlossenen Linienzug die Form verziehen – der Löser für Bedingungen kommt in Sitzung 6
+- Bögen haben noch kein eigenes Radius-Maß
+- Maß zwischen zwei Elementen (Abstand, Winkel zwischen Linien) kommt mit Sitzung 6

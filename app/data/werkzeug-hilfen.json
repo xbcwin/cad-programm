@@ -56,8 +56,8 @@
   },
   "dimension": {
     "tip": "Genaue Länge oder Winkel festlegen",
-    "hilfe": "Klicke eine Linie, einen Kreis oder zwei Punkte an, ziehe die Maßzahl an einen freien Platz und tippe deinen Wunschwert ein.",
-    "tipp": "Klicke nacheinander zwei schräge Linien an, um statt der Länge den Winkel zwischen ihnen einzustellen."
+    "hilfe": "Klicke eine Linie, eine Rechteck-Seite oder einen Kreis an und tippe deinen Wunschwert ein – auch eine Formel wie breite/2 mit Namen aus „Maße“.",
+    "tipp": "Feste Maße zeigen ein Schloss und bleiben beim Ziehen erhalten. Klick aufs Schloss, um ein Maß wieder zu lösen."
   },
   "cHoriz": {
     "tip": "Linie exakt waagerecht ausrichten",

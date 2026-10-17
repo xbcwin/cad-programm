@@ -1,6 +1,6 @@
 # Testliste
 
-Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 4.
+Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 5.
 
 Vorbereitung: `app/` über einen lokalen Server öffnen (siehe README), Seite neu laden.
 
@@ -69,9 +69,39 @@ Vorbereitung: `app/` über einen lokalen Server öffnen (siehe README), Seite ne
 - [ ] **Vorlage als Bauteil bearbeiten**
   Schritte: 1. Vorlage „Winkel zum Anschrauben“. 2. Im Verlauf beim Winkel auf das Stift-Symbol.
   Erwartet: Die Zeitleiste zeigt die einzelnen Teile des Winkels.
+- [ ] **Unterteil anklicken**
+  Schritte: 1. Im Bauteil-Modus (grüner Balken) direkt im Bild auf ein Teil klicken.
+  Erwartet: Nur dieses Teil wird gewählt (Umriss leuchtet), nicht das ganze Bauteil. Ziehen auf dem Bauteil dreht die Ansicht.
 - [ ] **Isolieren**
   Schritte: 1. Im Verlauf beim Quader auf das Fokus-Symbol.
   Erwartet: Nur der Quader ist zu sehen, oben dunkler Balken „Isoliert“. „Alle zeigen“ holt alles zurück.
+
+## Skizzen-Maße (neu in Sitzung 5)
+
+- [ ] **Maß beim Zeichnen**
+  Schritte: 1. Unter „Maße“ ein Maß `breite = 40` anlegen. 2. Skizze → Arbeitsfläche. 3. Erste Ecke klicken, `breite` tippen, Tab, `20`, Enter.
+  Erwartet: Rechteck 40 × 20, darunter Schildchen „breite = 40“, rechts „20“.
+- [ ] **Maß-Werkzeug**
+  Schritte: 1. Kreis zeichnen. 2. D drücken, auf den Kreis klicken, `6` tippen, Enter.
+  Erwartet: Schildchen „Ø 6“, der Kreis hat genau 6 mm.
+- [ ] **Teil wächst mit**
+  Schritte: 1. Fertig, 3 mm hochziehen. 2. Unter „Maße“ `breite` auf 60 ändern.
+  Erwartet: Das Teil wird 60 mm breit, unten rechts steht „60 × 20 × 3 mm“.
+- [ ] **Doppelklick bearbeitet**
+  Schritte: 1. Doppelklick auf das Teil.
+  Erwartet: Die Skizze geht auf, mit allen Schildchen. Auswahl-Werkzeug ist aktiv.
+- [ ] **Schildchen ändern**
+  Schritte: 1. Auf „breite = 60“ klicken, `breite/2` eintippen, Enter. 2. Fertig.
+  Erwartet: Teil ist 30 mm breit.
+- [ ] **Maß hält beim Ziehen**
+  Schritte: 1. Linie zeichnen, anklicken, rechts Länge 25 eintippen. 2. Mit „Auswahl“ den Endpunkt woanders hinziehen.
+  Erwartet: Die Linie dreht sich, bleibt aber 25 mm lang.
+- [ ] **Maß lösen**
+  Schritte: 1. Rechts beim Feld „Länge“ aufs Schloss klicken.
+  Erwartet: Schildchen verschwindet, die Linie lässt sich wieder frei ziehen. Strg/Cmd+Z holt das Maß zurück.
+- [ ] **Falscher Name**
+  Schritte: 1. Auf ein Schildchen klicken und `hallo` eintippen.
+  Erwartet: Hinweis „Das kann ich nicht ausrechnen“, nichts geht kaputt.
 
 ## Zahleneingabe beim Ziehen
 
@@ -115,6 +145,10 @@ Vorbereitung: `app/` über einen lokalen Server öffnen (siehe README), Seite ne
   Schritte: 1. Maus auf „Messen“ legen und 2 Sekunden warten.
   Erwartet: Erst kurzer Text, dann ausführliche Anleitung mit „Tipp:“.
 
+- [ ] **Tastenkürzel**
+  Schritte: 1. `?` drücken.
+  Erwartet: Fenster mit allen Tasten, nach Bereichen sortiert.
+
 ## Dateien
 
 - [ ] **Projekt speichern**
@@ -133,6 +167,7 @@ Vorbereitung: `app/` über einen lokalen Server öffnen (siehe README), Seite ne
 - [ ] Alle Schritte unterdrücken – Status unten rechts zeigt „Noch leer“, kein Fehler.
 - [ ] Marker ganz an den Anfang, Projekt speichern, Seite neu laden – Zeitleiste steht immer noch am Anfang.
 - [ ] Während das Modell noch rechnet (direkt nach dem Öffnen einer Vorlage), schnell O, G und 7 drücken – keine Fehlermeldung.
+- [ ] Skizze mit Maß `breite` bauen, unter „Maße“ `breite` löschen – der Schritt wird in der Zeitleiste rot mit Hinweis, in der Skizze ist das Schildchen rot; Maß wieder anlegen, alles stimmt wieder.
 - [ ] Qualität „Sehr fein“, dann ganz nah an eine Rundung zoomen und herauszoomen – flüssig, kein Einfrieren.
 
 ## Fehler melden
