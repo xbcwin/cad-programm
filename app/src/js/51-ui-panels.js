@@ -577,7 +577,12 @@ const Panels = (() => {
     const bP = tg('planes', 'originPlanes', 'Ursprungsebenen ein/aus');
     const syncBtns = (pv) => { for (const b of [bO, bG, bP]) b.classList.toggle('on', !!pv[b.dataset.pref]); bO.innerHTML = icon(pv.ortho ? 'viewOrtho' : 'viewPersp'); };
     ViewPrefs.on('change', syncBtns); syncBtns(ViewPrefs.get());
-    vb.append(bO, bG, bP, h('div', { class: 'sep' }), b1, b2); $('#overlay').append(vb);
+    // Notizen ein/aus – nur sichtbar, wenn das Projekt Notizen hat
+    const bN = tg('notes', 'notesShow', 'Notizen ein/aus', 'N');
+    bN.removeAttribute('data-kbd');
+    const syncNotes = () => { const on = ViewPrefs.get().notes !== false; bN.hidden = !(App.doc.notes || []).length; bN.innerHTML = icon(on ? 'notesShow' : 'notesHide'); bN.classList.toggle('on', on); };
+    ViewPrefs.on('change', syncNotes); App.on('doc', syncNotes); syncNotes();
+    vb.append(bO, bG, bP, bN, h('div', { class: 'sep' }), b1, b2); $('#overlay').append(vb);
     gizmo = svgEl('<svg class="axis-gizmo" viewBox="0 0 64 64" aria-hidden="true"></svg>');
     $('#overlay').append(gizmo);
     Viewer.on('camera', syncCube); syncCube();

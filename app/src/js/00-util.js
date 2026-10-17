@@ -128,12 +128,12 @@ const IC = {
   list: '<path d="M8 6h12 M8 12h12 M8 18h12 M4 6h.01 M4 12h.01 M4 18h.01" />',
   sliders: '<path d="M4 6h10 M18 6h2 M4 12h4 M12 12h8 M4 18h12 M20 18h0" /><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>',
   eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3"/>',
-  // Notizstift (Platzhalter, bis die Gemini-Symbole da sind)
-  noteDraw: '<path d="M15 4l4 4-9.5 9.5L5 18.5l1-4.5z" /><path d="M13 6l4 4" /><path d="M3 21.5c2-1.6 3.6-1.6 5.4 0s3.4 1.6 5.4 0" opacity=".6"/>',
-  noteErase: '<path d="M7.5 19.5 3.8 15.8a1.6 1.6 0 0 1 0-2.3L12.5 4.8a1.6 1.6 0 0 1 2.3 0l4.4 4.4a1.6 1.6 0 0 1 0 2.3l-8.3 8z" /><path d="M8.5 9 15 15.5" /><path d="M11 19.5h10" />',
-  noteText: '<path d="M4 4.5h16v11.5H10l-6 4.5z" /><path d="M8 8.5h8M8 12h5" />',
-  notesShow: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3"/>',
-  notesHide: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3"/><path d="M4 4l16 16"/>',
+  // Notizstift (Entwurf Gemini, geprüft)
+  noteDraw: '<path d="M17.5 3.5a2.1 2.1 0 0 1 3 3L11 16l-4 1 1-4Z"/><path d="M15 6l3 3"/><path d="M3 20c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/>',
+  noteErase: '<path d="M8 21h4l9-9a2 2 0 0 0 0-3l-4-4a2 2 0 0 0-3 0l-9 9a2 2 0 0 0 0 3Z"/><path d="M10 9l7 7"/><line x1="3" y1="21" x2="21" y2="21"/>',
+  noteText: '<path d="M4 4h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H8l-4 4V6a2 2 0 0 1 2-2Z"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="13" x2="13" y2="13"/>',
+  notesShow: '<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/><path d="M15 4c1.5-1.5 3-1.5 4.5 0S21 5.5 22 4"/>',
+  notesHide: '<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/><path d="M15 4c1.5-1.5 3-1.5 4.5 0S21 5.5 22 4"/><line x1="3" y1="3" x2="21" y2="21"/>',
   eyeOff: '<path d="M3 3l18 18 M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.1 M6.6 6.6A17 17 0 0 0 2 12s3.5 7 10 7a9.6 9.6 0 0 0 5.4-1.6 M9.9 9.9a3 3 0 0 0 4.2 4.2" />',
   lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3" />',
   unlock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 7.5-2" />',

@@ -48,6 +48,7 @@ Stand: 17.10.2026 · nach Sitzung 6 von 14
 - [x] Automatischer Klicktest `tests/klicktest.py`: 35 Durchläufe, 52 von 55 Punkten der Testliste automatisch geprüft
 - [x] Aufgeräumt: Programm liegt jetzt in 28 Quelldateien unter `app/src/`, `tools/build.py` baut daraus `app/index.html`
 - [x] Notizstift (Taste N): freie Striche, die am Modell kleben, Textnotizen, 6 Farben, 3 Dicken, Radierer, ein-/ausblendbar – ohne technische Bedeutung
+- [x] Symbole für den Notizstift (Gemini, geprüft); Augen-Knopf rechts im Bild blendet Notizen aus, sobald es welche gibt
 - [x] Löser für Skizzen: Maße und Regeln werden gemeinsam erfüllt, verbundene Umrisse bleiben geschlossen
 - [x] 9 Regeln: waagerecht, senkrecht, parallel, rechtwinklig, tangential, gleich, symmetrisch, deckungsgleich, fixiert – als zweite Leiste in der Skizze
 - [x] Blau = noch beweglich, dunkel = voll bestimmt; rechts steht, wie viele Freiheiten noch fehlen
