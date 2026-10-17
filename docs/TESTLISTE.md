@@ -103,6 +103,15 @@ Vorbereitung: `app/` über einen lokalen Server öffnen (siehe README), Seite ne
   Schritte: 1. Auf ein Schildchen klicken und `hallo` eintippen.
   Erwartet: Hinweis „Das kann ich nicht ausrechnen“, nichts geht kaputt.
 
+## Schraubenlöcher
+
+- [ ] **Passung wählen**
+  Schritte: 1. „Bauteile“ → Schraubenloch. 2. Rechts „Loch“ auf „Eng“, dann „Kernloch für Gewinde“ stellen.
+  Erwartet: Bei M3 wird das Loch 3,2 mm bzw. 2,5 mm groß (mit „Messen“ prüfen).
+- [ ] **Neue Größe**
+  Schritte: 1. Schraube auf M1.6 stellen.
+  Erwartet: Kleines Loch mit Senkung, kein Fehler.
+
 ## Zahleneingabe beim Ziehen
 
 - [ ] **Verschieben**

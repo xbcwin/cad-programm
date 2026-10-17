@@ -3082,11 +3082,12 @@ const Interact = (() => {
 
 // ---- 40-library.js ----
 // ================= Bauteil-Bibliothek (Definitionen für die Oberfläche) =================
-const SIZES = ['M2', 'M2.5', 'M3', 'M4', 'M5', 'M6', 'M8'];
+const SIZES = ['M1.6', 'M2', 'M2.5', 'M3', 'M4', 'M5', 'M6', 'M8'];
 const LIB = [
   { lib: 'screwHole', label: 'Schraubenloch', role: 'hole', icon: 'bolt', desc: 'Durchgangsloch mit Senkung für Schrauben', params: [
     { k: 'size', label: 'Schraube', type: 'select', options: SIZES, def: 'M3' },
     { k: 'head', label: 'Kopf', type: 'select', options: [['countersunk', 'Senkkopf'], ['counterbore', 'Zylinderkopf'], ['none', 'ohne Senkung']], def: 'countersunk' },
+    { k: 'fit', label: 'Loch', type: 'select', options: [['medium', 'Mittel (Standard)'], ['fine', 'Eng (genau)'], ['coarse', 'Weit (mit Spiel)'], ['tap', 'Kernloch für Gewinde']], def: 'medium' },
     { k: 'length', label: 'Tiefe', type: 'num', def: 10 },
   ] },
   { lib: 'nutTrap', label: 'Mutternfalle', role: 'hole', icon: 'hex', desc: 'Sechskant-Tasche für eine Mutter, mit Schraubenloch', params: [

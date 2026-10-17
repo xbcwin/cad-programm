@@ -247,15 +247,20 @@ export function createKernel(R, oc) {
   }
 
   // ---------- Bauteil-Bibliothek ----------
+  // Maße aus app/data/schrauben.json (Entwurf Gemini, geprüft): Loch eng/mittel/weit nach ISO 273,
+  // Kernloch, Senkkopf ISO 10642 (klein: DIN 965), Senkbohrung DIN 974-1, Mutter ISO 4032. Einsätze: Richtwerte.
   const SCREW = {
-    M2: { hole: 2.4, csk: 4.4, cbD: 4.4, cbH: 2.2, nutSW: 4.0, nutH: 1.6, ins: 3.2, insL: 4.0 },
-    'M2.5': { hole: 2.9, csk: 5.5, cbD: 5.5, cbH: 2.7, nutSW: 5.0, nutH: 2.0, ins: 3.6, insL: 5.0 },
-    M3: { hole: 3.4, csk: 6.5, cbD: 6.5, cbH: 3.4, nutSW: 5.5, nutH: 2.4, ins: 4.0, insL: 6.7 },
-    M4: { hole: 4.5, csk: 8.8, cbD: 8.0, cbH: 4.4, nutSW: 7.0, nutH: 3.2, ins: 5.6, insL: 9.1 },
-    M5: { hole: 5.5, csk: 10.8, cbD: 10.0, cbH: 5.4, nutSW: 8.0, nutH: 4.7, ins: 6.4, insL: 10.5 },
-    M6: { hole: 6.6, csk: 12.8, cbD: 11.0, cbH: 6.4, nutSW: 10.0, nutH: 5.2, ins: 8.0, insL: 12.7 },
-    M8: { hole: 9.0, csk: 17.0, cbD: 15.0, cbH: 8.6, nutSW: 13.0, nutH: 6.8, ins: 9.7, insL: 12.7 },
+    'M1.6': { fine: 1.7, hole: 1.8, coarse: 2.0, tap: 1.25, csk: 3.0, cbD: 3.5, cbH: 1.8, nutSW: 3.2, nutH: 1.3, ins: null, insL: null },   // keine üblichen Einsätze
+    M2: { fine: 2.2, hole: 2.4, coarse: 2.6, tap: 1.6, csk: 3.8, cbD: 4.4, cbH: 2.4, nutSW: 4.0, nutH: 1.6, ins: 3.2, insL: 4.0 },
+    'M2.5': { fine: 2.7, hole: 2.9, coarse: 3.1, tap: 2.05, csk: 4.7, cbD: 5.5, cbH: 2.9, nutSW: 5.0, nutH: 2.0, ins: 3.6, insL: 5.0 },
+    M3: { fine: 3.2, hole: 3.4, coarse: 3.6, tap: 2.5, csk: 6.72, cbD: 6.5, cbH: 3.4, nutSW: 5.5, nutH: 2.4, ins: 4.0, insL: 6.7 },
+    M4: { fine: 4.3, hole: 4.5, coarse: 4.8, tap: 3.3, csk: 8.96, cbD: 8.0, cbH: 4.4, nutSW: 7.0, nutH: 3.2, ins: 5.6, insL: 9.1 },
+    M5: { fine: 5.3, hole: 5.5, coarse: 5.8, tap: 4.2, csk: 11.2, cbD: 10.0, cbH: 5.4, nutSW: 8.0, nutH: 4.7, ins: 6.4, insL: 10.5 },
+    M6: { fine: 6.4, hole: 6.6, coarse: 7.0, tap: 5.0, csk: 13.44, cbD: 11.0, cbH: 6.4, nutSW: 10.0, nutH: 5.2, ins: 8.0, insL: 12.7 },
+    M8: { fine: 8.4, hole: 9.0, coarse: 10.0, tap: 6.8, csk: 17.92, cbD: 15.0, cbH: 8.6, nutSW: 13.0, nutH: 6.8, ins: 9.7, insL: 12.7 },
   };
+  // Lochdurchmesser je nach Passung: eng, mittel (Standard), weit oder Kernloch zum Gewindeschneiden
+  const holeD = (s, fit) => (fit === 'fine' ? s.fine : fit === 'coarse' ? s.coarse : fit === 'tap' ? s.tap : s.hole);
   const LIFT = 0.2; // Löcher ragen ein wenig über die Fläche hinaus, damit sie sauber schneiden
   function hexPrism(sw, z0, z1) {
     const r = sw / Math.sqrt(3);
@@ -269,9 +274,10 @@ export function createKernel(R, oc) {
     const tol = num(p.tol, 0);
     if (lib === 'screwHole') {
       const L = pos(p.length, 10);
-      let shape = R.makeCylinder((s.hole + tol) / 2, L + LIFT, [0, 0, -L], [0, 0, 1]);
+      const hd = holeD(s, p.fit);
+      let shape = R.makeCylinder((hd + tol) / 2, L + LIFT, [0, 0, -L], [0, 0, 1]);
       if (p.head === 'countersunk') {
-        const rTop = (s.csk + tol) / 2, rBot = (s.hole + tol) / 2, h = rTop - rBot; // 90°-Senkung
+        const rTop = (s.csk + tol) / 2, rBot = (hd + tol) / 2, h = rTop - rBot; // 90°-Senkung
         const cone = revolveProfile([[0, -h], [rBot, -h], [rTop, 0], [rTop, LIFT], [0, LIFT]]);
         shape = shape.fuse(cone);
       } else if (p.head === 'counterbore') {
@@ -289,8 +295,9 @@ export function createKernel(R, oc) {
       return shape;
     }
     if (lib === 'insert') {
-      const L = pos(p.depth, s.insL + 1);
-      return R.makeCylinder((s.ins + tol) / 2, L + LIFT, [0, 0, -L], [0, 0, 1]);
+      const si = s.ins ? s : SCREW.M2;
+      const L = pos(p.depth, si.insL + 1);
+      return R.makeCylinder((si.ins + tol) / 2, L + LIFT, [0, 0, -L], [0, 0, 1]);
     }
     if (lib === 'slotHole') {
       const L = pos(p.len, 20), W = pos(p.w, 4), D = pos(p.depth, 10);

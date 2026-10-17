@@ -40,6 +40,7 @@ Stand: 17.10.2026 · nach Sitzung 5 von 14
 - [x] Doppelklick auf einen Skizzenkörper öffnet seine Skizze
 - [x] Im Bauteil-Modus lassen sich Unterteile direkt im Bild anklicken
 - [x] Tastenkürzel-Übersicht mit `?`, neue Tasten E (bearbeiten) und I (isolieren)
+- [x] Schrauben-Tabelle M1.6–M8 (Gemini, geprüft und korrigiert): Senkungen jetzt normgerecht, Loch eng / mittel / weit / Kernloch wählbar
 
 ## Offen
 
