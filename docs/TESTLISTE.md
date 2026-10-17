@@ -78,6 +78,13 @@ Vorbereitung: `app/` über einen lokalen Server öffnen (siehe README), Seite ne
 
 ## Skizzen-Maße (neu in Sitzung 5)
 
+- [ ] **Einführung „Erste Skizze“**
+  Schritte: 1. Startseite → „Erste Skizze (5 Minuten)“. 2. Einfach den Hinweisen folgen.
+  Erwartet: Jeder Schritt springt von selbst weiter, sobald er erledigt ist. Am Ende wächst das Teil auf 60 mm.
+- [ ] **Neuer Name**
+  Schritte: 1. In einer Skizze auf ein Maß-Schildchen klicken und einen neuen Namen wie `laenge` eintippen.
+  Erwartet: Hinweis „Neuer Name … unter „Maße““, das Maß behält seine Zahl und heißt jetzt so.
+
 - [ ] **Maß beim Zeichnen**
   Schritte: 1. Unter „Maße“ ein Maß `breite = 40` anlegen. 2. Skizze → Arbeitsfläche. 3. Erste Ecke klicken, `breite` tippen, Tab, `20`, Enter.
   Erwartet: Rechteck 40 × 20, darunter Schildchen „breite = 40“, rechts „20“.

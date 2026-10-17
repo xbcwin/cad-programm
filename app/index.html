@@ -4722,7 +4722,7 @@ const Sketch = (() => {
     arc: 'Startpunkt, Endpunkt, dann die Wölbung klicken.',
     slot: 'Ersten und zweiten Mittelpunkt klicken, dann die Breite.',
     poly: 'Mittelpunkt klicken, dann Größe. Anzahl der Ecken rechts einstellen.',
-    dim: 'Klick auf eine Linie, eine Rechteck-Seite oder einen Kreis und tipp das Maß ein – auch eine Formel wie <b>breite/2</b>. Feste Maße bleiben beim Ziehen erhalten.',
+    dim: 'Klick auf eine Linie, eine Rechteck-Seite oder einen Kreis und tipp das Maß ein – auch eine Formel wie <b>breite/2</b>. Feste Maße bleiben beim Ziehen erhalten. Ein neuer Name landet automatisch unter „Maße“.',
   };
   // ---------- Start ----------
   function chooseAndStart() {
@@ -4923,6 +4923,12 @@ const Sketch = (() => {
     grab(); setTimeout(grab, 0); setTimeout(grab, 60);
     const commit = () => {
       const raw = inp.value.trim(); if (!raw) { hideDimBox(); return; }
+      // ein neuer Name wie „breite“ wird unter „Maße“ mit dem jetzigen Wert angelegt
+      if (/^[A-Za-zÄÖÜäöüß_][A-Za-zÄÖÜäöüß_0-9]*$/.test(raw) && !/^pi$/i.test(raw) && isNaN(Model.num(raw, vars(), NaN))) {
+        const cur = round(SK.measure(en, k), 4);
+        App.change(`Maß „${raw}“ angelegt`, (doc) => { doc.params.push({ id: uid('m'), name: raw, expr: cur }); });
+        UI.toast(`Neuer Name „${raw}“ = ${fmt(cur, 2)} – zu finden links unter „Maße“.`, { icon: 'check' });
+      }
       const n = parseNum(raw); const v = isNaN(n) ? raw : n;
       if (isNaN(Model.num(v, vars(), NaN))) { inp.parentElement.parentElement.classList.add('invalid'); UI.toast('Das kann ich nicht ausrechnen: „' + raw + '“. Namen legst du unter „Maße“ an.', { kind: 'bad' }); return; }
       hideDimBox(); S.sel = en.id; setDim(en.id, k, v); Viewer.canvas.focus();
@@ -5499,7 +5505,7 @@ const Sketch = (() => {
     cv.addEventListener('pointermove', (e) => { if (S) onMove(e); });
     window.addEventListener('pointerup', (e) => { if (S) { onUp(e); stepUp(e); } });
   }
-  return { init, chooseAndStart, startOnPlane, startOnFace, editItem, pushPullFace, renderPanel, onKey, cancel, get active() { return !!S; } };
+  return { init, chooseAndStart, startOnPlane, startOnFace, editItem, pushPullFace, renderPanel, onKey, cancel, get active() { return !!S; }, get state() { return S; } };
 })();
 
 // ---- 57-measure.js ----
@@ -5620,6 +5626,7 @@ const Commands = (() => {
     add('save', 'Projekt als Datei speichern', 'save', 'sichern json datei', () => Start.saveFile(), { group: 'Projekt', kbd: 'Strg S' });
     add('start', 'Startseite und Vorlagen', 'home', 'vorlagen beispiele start', () => Start.show(), { group: 'Projekt' });
     add('tour', 'Einführung starten', 'play', 'hilfe tutorial einführung lernen', () => Tour.start(), { group: 'Hilfe' });
+    add('tour-sketch', 'Einführung: Deine erste Skizze', 'sketch', 'hilfe tutorial einführung lernen skizze maß formel', () => Tour.start('sketch'), { group: 'Hilfe' });
     add('keys', 'Tastenkürzel anzeigen', 'help', 'hilfe tasten kürzel', () => showKeys(), { group: 'Hilfe' });
   }
   function score(c, q) {
@@ -7213,7 +7220,8 @@ const Start = (() => {
     const nb = h('button', { type: 'button', class: 'btn primary' }); nb.innerHTML = icon('newfile') + 'Neues Projekt'; nb.onclick = () => newProject();
     const ob = h('button', { type: 'button', class: 'btn' }); ob.innerHTML = icon('folder') + 'Datei öffnen'; ob.onclick = () => openFile();
     const tb = h('button', { type: 'button', class: 'btn' }); tb.innerHTML = icon('play') + 'Einführung (3 Minuten)'; tb.onclick = () => { newProject(true); Tour.start(); };
-    acts.append(nb, ob, tb);
+    const ts = h('button', { type: 'button', class: 'btn' }); ts.innerHTML = icon('sketch') + 'Erste Skizze (5 Minuten)'; ts.onclick = () => { newProject(true); Tour.start('sketch'); };
+    acts.append(nb, ob, tb, ts);
     head.append(brand, acts);
     inner.append(head);
     const recent = App.recentProjects().filter((r) => r.n > 0 || r.id === App.doc.id);
@@ -7295,21 +7303,36 @@ const Start = (() => {
 // ---------- Einführung ----------
 const Tour = (() => {
   let box = null, ring = null, idx = 0, off = [];
-  const STEPS = [
+  const BASICS = [
     { title: 'Willkommen bei Tracery', text: 'In drei Minuten baust du ein Teil mit Loch und exportierst es. Links siehst du den Verlauf, rechts die Einstellungen, in der Mitte dein Modell.', target: null },
     { title: 'Leg einen Quader hin', text: 'Klick oben auf „Körper“ und dann auf „Quader“. Du kannst ihn auch direkt auf die Fläche ziehen.', target: '#t-body', until: () => App.doc.items.some((x) => x.kind === 'box') },
     { title: 'Mach ihn größer', text: 'Zieh an einem weißen Anfasser – oder klick auf eine der Zahlen am Quader und tipp zum Beispiel 40 ein.', target: '#viewport', until: (ev) => ev === 'size' },
     { title: 'Ein Loch einbauen', text: 'Klick wieder auf „Körper“ und unten auf „Zylinder als Loch“ – schon geht ein Loch durch den Quader. Jeder Körper kann übrigens mit einem Klick rechts auf „Loch“ zum Loch werden.', target: '#t-body', until: () => App.doc.items.some((x) => x.role === 'hole') || App.doc.items.some((x) => x.kind === 'group') },
     { title: 'Prüfen und speichern', text: 'Unten rechts siehst du Größe und Status des Modells. Mit „Exportieren“ bekommst du STEP, STL oder 3MF. Viel Spaß beim Bauen!', target: '#t-export', last: true },
   ];
+  // „Deine erste Skizze“ – Texte: Entwurf Gemini, an die Bedienung angepasst
+  const sk = () => Sketch.state;
+  const SKETCH = [
+    { title: 'Skizze starten', text: 'Jedes 3D-Teil beginnt als flache Zeichnung, wie auf einem Blatt Papier. Klick oben auf „Skizze“, um loszulegen.', target: '#t-sketch', until: () => Sketch.active || !!$('.pop') },
+    { title: 'Zeichenblatt wählen', text: 'Klick auf „Auf der Arbeitsfläche“. Die Ansicht dreht sich dann von oben auf dein Zeichenblatt.', target: '.pop', until: () => Sketch.active },
+    { title: 'Ein Rechteck zeichnen', text: 'Das Rechteck-Werkzeug ist schon an. Klick für die erste Ecke, tipp 40, dann Tab, dann 20 und Enter – fertig ist ein Rechteck von 40 mal 20 Millimetern.', target: '.sketchbar [data-tool="rect"]', until: () => sk() && sk().ents.some((e) => e.type === 'rect') },
+    { title: 'Kreis für das Loch', text: 'Nimm den Kreis, klick mitten in dein Rechteck und tipp 6 und Enter. Der Kreis ist dann genau 6 Millimeter breit.', target: '.sketchbar [data-tool="circle"]', until: () => sk() && sk().ents.some((e) => e.type === 'circle') },
+    { title: 'Dem Maß einen Namen geben', text: 'Klick auf das Schildchen mit der 40 an der langen Seite, tipp das Wort breite ein und drück Enter. Tracery merkt sich die Zahl jetzt unter diesem Namen.', target: '.skdim', until: () => sk() && sk().dims.some((d) => typeof d.v === 'string' && /breite/i.test(d.v)) },
+    { title: 'Zeichnung fertig', text: 'Super, deine flache Zeichnung ist komplett! Klick auf „Fertig“, um daraus ein echtes 3D-Teil zu machen.', target: '.sketchbar .tool.primary', until: () => !sk() || !!sk().step },
+    { title: 'In 3D hochziehen', text: 'Zieh den Pfeil nach oben oder tipp im Feld „Höhe“ eine 3 ein. Dann „Fertig“ – der Kreis bleibt von selbst als Loch frei!', target: '.stepbox', until: () => !Sketch.active && App.doc.items.some((x) => x.kind === 'extrude') },
+    { title: 'Zaubertrick mit „Maße“', text: 'Öffne links den Reiter „Maße“ und ändere die Zahl neben breite auf 60. Schau genau hin: Dein Teil wächst sofort mit!', target: '#lt-params', last: true },
+  ];
+  const TOURS = { basics: BASICS, sketch: SKETCH };
+  let STEPS = BASICS;
   let timer = null;
-  function start() { stop(); idx = 0; show(); off.push(App.on('history', check), App.on('doc', check)); timer = setInterval(place, 350); }
+  function start(name = 'basics') { stop(); STEPS = TOURS[name] || BASICS; idx = 0; show(); off.push(App.on('history', check), App.on('doc', check)); timer = setInterval(() => { place(); check(); }, 350); }
   function stop() { if (box) box.remove(); if (ring) ring.remove(); box = ring = null; off.forEach((f) => f()); off = []; clearInterval(timer); timer = null; }
   function check() {
     const s = STEPS[idx]; if (!s || !s.until) return;
     const last = App.undoStack[App.undoStack.length - 1];
     const ev = last && /Größe|Maß/.test(last.label) ? 'size' : null;
-    if (s.until(ev)) setTimeout(() => { if (STEPS[idx] === s) { idx++; show(); } }, 500);
+    if (s.done) return;
+    if (s.until(ev)) { s.done = true; setTimeout(() => { s.done = false; if (STEPS[idx] === s) { idx++; show(); } }, 500); }
   }
   function show() {
     if (box) box.remove(); if (ring) ring.remove(); box = ring = null;
@@ -7390,11 +7413,12 @@ const Tour = (() => {
   $('#btn-menu').onclick = (e) => UI.menu(e.currentTarget, [
     ...(innerWidth <= 900 ? [...projectItems(), '-'] : []),
     { label: 'Einführung starten', icon: 'play', run: () => Tour.start() },
+    { label: 'Einführung: Erste Skizze', icon: 'sketch', run: () => Tour.start('sketch') },
     { label: 'Einstellungen', icon: 'gear', run: () => ViewPrefs.dialog() },
     { label: 'Tastenkürzel', icon: 'help', run: () => Commands.showKeys() },
     { label: 'Exportieren', icon: 'export', run: () => Print.exportDialog() },
     '-',
-    { label: 'Über Tracery', icon: 'info', run: () => UI.modal({ title: 'Über Tracery', body: h('div', { style: { display: 'grid', gap: '10px', color: 'var(--muted)', lineHeight: 1.55 } }, h('p', null, 'Tracery ist ein parametrisches CAD im Browser, spezialisiert auf FPV- und Speed-Drohnen, mit technischen Zeichnungen.'), h('p', null, 'Der Name: „Tracery“ ist das englische Wort für Tracery – die filigranen, exakt konstruierten Ornamente in gotischen Kirchenfenstern. Genau so sollen deine Teile werden.'), h('p', null, 'Gerechnet wird mit dem CAD-Kern OpenCascade (LGPL-2.1) über die Bibliothek replicad (MIT). Die 3D-Anzeige nutzt three.js (MIT), die PDF-Ausgabe jsPDF (MIT).'), h('p', null, 'Deine Projekte bleiben in deinem Browser. Der KI-Helfer nutzt dein Claude-Konto.')), actions: [{ label: 'Schließen', primary: true }] }) },
+    { label: 'Über Tracery', icon: 'info', run: () => UI.modal({ title: 'Über Tracery', body: h('div', { style: { display: 'grid', gap: '10px', color: 'var(--muted)', lineHeight: 1.55 } }, h('p', null, 'Tracery ist ein parametrisches CAD im Browser, spezialisiert auf FPV- und Speed-Drohnen, mit technischen Zeichnungen.'), h('p', null, 'Der Name: „Tracery“ ist das englische Wort für Maßwerk – die filigranen, exakt konstruierten Ornamente in gotischen Kirchenfenstern. Genau so sollen deine Teile werden.'), h('p', null, 'Gerechnet wird mit dem CAD-Kern OpenCascade (LGPL-2.1) über die Bibliothek replicad (MIT). Die 3D-Anzeige nutzt three.js (MIT), die PDF-Ausgabe jsPDF (MIT).'), h('p', null, 'Deine Projekte bleiben in deinem Browser. Der KI-Helfer nutzt dein Claude-Konto.')), actions: [{ label: 'Schließen', primary: true }] }) },
   ], { alignRight: true });
   const ws = $('#workspace');
   $('#btn-left').onclick = () => { ws.classList.toggle('show-left'); ws.classList.remove('show-right'); };

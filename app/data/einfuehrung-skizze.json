@@ -1,0 +1,13 @@
+{
+  "_hinweis": "Entwurf Gemini (17.10.2026). In Tracery angepasst: einfacher Klick statt Doppelklick aufs Maß, Arbeitsfläche über den Knopf „Auf der Arbeitsfläche“, Höhe über Pfeil oder Feld. Die eingebaute Fassung steht in index.html unter Tour.",
+  "schritte": [
+    { "titel": "Los geht's: Skizze starten", "text": "Jedes 3D-Bauteil beginnt als flache Zeichnung, genau wie auf einem Blatt Papier. Klicke oben auf den Knopf für die Skizze, um loszulegen.", "wo": "Knopf Skizze" },
+    { "titel": "Zeichenblatt auswählen", "text": "Klicke jetzt einfach auf den flachen Boden in der Mitte. Schon dreht sich die Ansicht passend hin und du kannst zeichnen.", "wo": "Arbeitsfläche" },
+    { "titel": "Ein Rechteck zeichnen", "text": "Wähle das Rechteck-Werkzeug und ziehe mit zwei Klicks einen Kasten auf. Tippe 40 und 20 ein, damit dein Rechteck 40 mal 20 Millimeter groß wird.", "wo": "Werkzeug Rechteck" },
+    { "titel": "Kreis für das Loch", "text": "Schnapp dir das Kreis-Werkzeug und klicke mitten in dein Rechteck hinein. Ziehe den Kreis auf und tippe eine 6 ein, damit er genau 6 Millimeter breit ist.", "wo": "Werkzeug Kreis" },
+    { "titel": "Dem Maß Namen geben", "text": "Klicke doppelt auf die Zahl 40 an der langen Seite deines Rechtecks. Tippe dort das Wort breite ein, damit sich das Programm diese Seite merkt.", "wo": "Maß in der Skizze" },
+    { "titel": "Zeichnung fertigstellen", "text": "Super, deine flache Zeichnung ist komplett! Klicke jetzt auf Fertig, um aus den Linien ein echtes 3D-Teil zu machen.", "wo": "Knopf Fertig" },
+    { "titel": "In 3D hochziehen", "text": "Ziehe den Pfeil auf deinem Rechteck nach oben und tippe 3 für 3 Millimeter Dicke ein. Der Kreis in der Mitte bleibt dabei ganz von selbst als Loch frei!", "wo": "Pfeil Hochziehen" },
+    { "titel": "Zaubertrick in der Tabelle", "text": "Öffne die Tabelle Maße und ändere die Zahl neben dem Wort breite einfach auf 60. Schau genau hin: Dein 3D-Teil wächst sofort wie von Zauberhand mit!", "wo": "Tabelle Maße" }
+  ]
+}
