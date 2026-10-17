@@ -106,8 +106,11 @@ Vorbereitung: `app/` über einen lokalen Server öffnen (siehe README), Seite ne
 - [ ] **Maß lösen**
   Schritte: 1. Rechts beim Feld „Länge“ aufs Schloss klicken.
   Erwartet: Schildchen verschwindet, die Linie lässt sich wieder frei ziehen. Strg/Cmd+Z holt das Maß zurück.
-- [ ] **Falscher Name**
-  Schritte: 1. Auf ein Schildchen klicken und `hallo` eintippen.
+- [ ] **Formel-Beispiele**
+  Schritte: 1. Reiter „Maße“ → „Formel-Beispiele“. 2. „Beispiel-Maße anlegen“.
+  Erwartet: 12 Beispiele mit Ergebnis und Erklärung; danach stehen breite, hoehe, wand, schraube und anzahl in der Liste.
+- [ ] **Kaputte Formel**
+  Schritte: 1. Auf ein Schildchen klicken und `breite/` eintippen.
   Erwartet: Hinweis „Das kann ich nicht ausrechnen“, nichts geht kaputt.
 
 ## Schraubenlöcher
@@ -183,7 +186,7 @@ Vorbereitung: `app/` über einen lokalen Server öffnen (siehe README), Seite ne
 - [ ] Alle Schritte unterdrücken – Status unten rechts zeigt „Noch leer“, kein Fehler.
 - [ ] Marker ganz an den Anfang, Projekt speichern, Seite neu laden – Zeitleiste steht immer noch am Anfang.
 - [ ] Während das Modell noch rechnet (direkt nach dem Öffnen einer Vorlage), schnell O, G und 7 drücken – keine Fehlermeldung.
-- [ ] Skizze mit Maß `breite` bauen, unter „Maße“ `breite` löschen – der Schritt wird in der Zeitleiste rot mit Hinweis, in der Skizze ist das Schildchen rot; Maß wieder anlegen, alles stimmt wieder.
+- [ ] Skizze mit Maß `breite` bauen, unter „Maße“ `breite` in `laenge` umbenennen – das Schildchen heißt jetzt `laenge`. Dann entfernen – das Teil bleibt gleich groß, im Schildchen steht die Zahl.
 - [ ] Qualität „Sehr fein“, dann ganz nah an eine Rundung zoomen und herauszoomen – flüssig, kein Einfrieren.
 
 ## Fehler melden

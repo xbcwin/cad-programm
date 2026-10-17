@@ -258,6 +258,12 @@ body.sketching .viewcube{display:none}
 .keys-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:6px 22px;max-height:65vh;overflow:auto}
 .keys-sec .mini-row{gap:10px}
 .keys-sec .kbd{min-width:104px}
+.formula-list{display:grid;gap:8px;max-height:52vh;overflow:auto;padding-right:4px}
+.formula-row{border:1px solid var(--line);border-radius:9px;padding:8px 10px;display:grid;gap:4px}
+.formula-row p{margin:0;color:var(--muted);font-size:13px;line-height:1.45}
+.formula-top{display:flex;align-items:center;gap:10px}
+.formula-top code{font:500 13px/1.3 var(--font-mono);color:var(--ink);flex:1;word-break:break-word}
+.formula-top b{font-size:13px;color:var(--accent);white-space:nowrap}
 .dimlock{border:0;background:transparent;color:var(--accent);padding:0 6px;display:flex;align-items:center;cursor:pointer}
 .dimlock svg{width:15px;height:15px}
 .dimlock:hover{color:var(--bad,#c0392b)}
@@ -858,6 +864,9 @@ ERRORS.sketchDimBad = { titel: 'Ein Skizzen-Maß geht nicht auf', erklaerung: 'E
 
 // ---------- Hilfetexte für Werkzeuge (Entwurf Gemini, an Tracery angepasst) ----------
 // tip: kurz, hilfe: wie benutzen, tipp: typischer Fehler oder Trick. Erscheinen beim längeren Überfahren.
+// Formel-Beispiele für „Maße“ (Entwurf Gemini, mit Tracerys Rechner nachgeprüft)
+const FORMULA_EXAMPLES = [{"f": "breite / 2", "e": "Damit setzt du ein Loch oder eine Mittellinie immer automatisch genau in die Mitte deines Bauteils."}, {"f": "breite - 2 * wand", "e": "Berechnet den freien Innenraum einer Box, indem links und rechts die Wandstärke abgezogen wird."}, {"f": "schraube + 0,4", "e": "Gibt einem Bohrloch ein kleines bisschen Spielraum, damit die Schraube beim Zusammenbauen nicht klemmt."}, {"f": "breite / (anzahl + 1)", "e": "Verteilt mehrere Löcher in einer Reihe so, dass alle Abstände zueinander und zum Rand exakt gleich groß sind."}, {"f": "max(wand; schraube * 1,5)", "e": "Sorgt dafür, dass die Wand rund um eine Schraube immer mindestens anderthalbmal so dick ist wie die Schraube selbst."}, {"f": "breite * pi", "e": "Rechnet den äußeren Umfang eines Rades oder Rohres aus, wenn du die Breite als Durchmesser nimmst."}, {"f": "pi * (schraube / 2) ^ 2", "e": "Bestimmt die genaue Querschnittsfläche deines runden Schraubenlochs in Quadratmillimetern."}, {"f": "wurzel(breite ^ 2 + hoehe ^ 2)", "e": "Berechnet die exakte Länge einer schrägen Verstärkungsstrebe quer durch dein Rechteck von Ecke zu Ecke."}, {"f": "floor((breite - 2 * wand) / (schraube * 2,5))", "e": "Rundet auf eine ganze Zahl ab, um zu prüfen, wie viele Schraubenlöcher mit genug Abstand nebeneinander in deine Box passen."}, {"f": "(breite / 2) * tan(30)", "e": "Ergibt die genaue Dachhöhe, wenn du auf dein Bauteil eine dreieckige Spitze mit 30 Grad Schräge setzt."}, {"f": "(schraube + wand) / cos(30)", "e": "Rechnet eine Schlüsselweite (hier schraube + wand) in das Maß von Ecke zu Ecke um – so breit muss eine Sechskant-Tasche mindestens sein."}, {"f": "breite * sin(180 / anzahl) - schraube", "e": "Zeigt dir, wie viel Material zwischen zwei Nachbarlöchern übrig bleibt, wenn du sie im Kreis auf dem Durchmesser verteilst."}];
+const FORMULA_DEMO = { breite: 40, hoehe: 20, wand: 2, schraube: 3, anzahl: 4 };
 const HELP = {
  "sketchFace": {
   "tip": "Neue 2D-Zeichnung auf Fläche starten",
@@ -4217,8 +4226,30 @@ const Panels = (() => {
     wrap.append(list);
     const add = h('button', { type: 'button', class: 'btn' }); add.innerHTML = icon('plus') + 'Maß hinzufügen';
     add.onclick = () => { let n = 1; while ((App.doc.params || []).some((x) => x.name === 'Maß' + n)) n++; App.change('Maß hinzugefügt', (doc) => { doc.params.push({ id: uid('m'), name: 'Maß' + n, expr: 10 }); }); };
-    wrap.append(add);
+    const exb = h('button', { type: 'button', class: 'btn ghost' }); exb.innerHTML = icon('help') + 'Formel-Beispiele';
+    exb.onclick = () => formulaHelp();
+    wrap.append(h('div', { class: 'btn-row' }, add, exb));
     body.append(wrap);
+  }
+  // Fenster mit Schreibweise und 12 Beispielen zum Ausprobieren
+  function formulaHelp() {
+    const box = h('div', { style: { display: 'grid', gap: '12px' } });
+    box.append(h('div', { class: 'hint-box', html: 'Erlaubt sind <b>+ − * / ^</b>, Klammern, <b>pi</b> und die Funktionen <b>min, max, abs, wurzel, runden, floor, ceil, sin, cos, tan</b> (Winkel in Grad). Mehrere Werte in einer Funktion trennst du mit <b>;</b> – zum Beispiel <b>max(a; b)</b>. Dezimalzahlen gehen mit Komma oder Punkt.' }));
+    const demo = Object.entries(FORMULA_DEMO).map(([k, x]) => `${k} = ${x}`).join(', ');
+    box.append(h('p', { style: { margin: 0, color: 'var(--muted)', fontSize: '13.5px' } }, 'Die Ergebnisse gelten für ' + demo + '.'));
+    const list = h('div', { class: 'formula-list' });
+    for (const x of FORMULA_EXAMPLES) {
+      let val = '';
+      try { val = fmt(Expr.eval(x.f, FORMULA_DEMO), 2); } catch (_) {}
+      const cp = h('button', { type: 'button', class: 'btn ghost small', 'data-tip': 'Formel kopieren' }); cp.innerHTML = icon('copy');
+      cp.onclick = async () => { try { await navigator.clipboard.writeText(x.f); UI.toast('Kopiert: ' + x.f, { icon: 'check', ms: 1500 }); } catch (_) { UI.toast('Kopieren ging nicht – markier die Formel einfach.', { icon: 'info' }); } };
+      list.append(h('div', { class: 'formula-row' }, h('div', { class: 'formula-top' }, h('code', null, x.f), h('b', { class: 'mono' }, '= ' + val), cp), h('p', null, x.e)));
+    }
+    box.append(list);
+    const missing = Object.keys(FORMULA_DEMO).filter((k) => !(App.doc.params || []).some((p) => p.name.toLowerCase() === k));
+    const actions = [{ label: 'Schließen', primary: true }];
+    if (missing.length) actions.unshift({ label: 'Beispiel-Maße anlegen', run: () => { App.change('Beispiel-Maße angelegt', (doc) => { for (const k of missing) doc.params.push({ id: uid('m'), name: k, expr: FORMULA_DEMO[k] }); }); UI.toast(missing.length + ' Maße angelegt – jetzt kannst du die Formeln überall eintippen.', { icon: 'check' }); } });
+    UI.modal({ title: 'Formel-Beispiele', body: box, actions });
   }
   // ersetzt einen Maßnamen überall (Maße, Größen, Lage, Rundungen) – gibt zurück, ob er vorkam
   function replaceName(doc, old, repl) {
@@ -4226,7 +4257,7 @@ const Panels = (() => {
     let hit = false;
     const fix = (s) => { if (typeof s !== 'string') return s; const r = s.replace(re, (m, pre) => { hit = true; return pre + repl; }); return /^-?\d+(\.\d+)?$/.test(r.trim()) ? +r : r; };
     for (const q of doc.params) q.expr = fix(q.expr);
-    Model.walk(doc.items, (it) => { for (const k in it.p || {}) it.p[k] = fix(it.p[k]); for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) f.r = fix(f.r); });
+    Model.walk(doc.items, (it) => { for (const k in it.p || {}) it.p[k] = fix(it.p[k]); for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) f.r = fix(f.r); if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); });
     return hit;
   }
   function renameParam(id, nv) {
@@ -4930,7 +4961,7 @@ const Sketch = (() => {
         UI.toast(`Neuer Name „${raw}“ = ${fmt(cur, 2)} – zu finden links unter „Maße“.`, { icon: 'check' });
       }
       const n = parseNum(raw); const v = isNaN(n) ? raw : n;
-      if (isNaN(Model.num(v, vars(), NaN))) { inp.parentElement.parentElement.classList.add('invalid'); UI.toast('Das kann ich nicht ausrechnen: „' + raw + '“. Namen legst du unter „Maße“ an.', { kind: 'bad' }); return; }
+      if (isNaN(Model.num(v, vars(), NaN))) { inp.parentElement.parentElement.classList.add('invalid'); UI.toast('Das kann ich nicht ausrechnen: „' + raw + '“. Prüf die Schreibweise – Beispiele findest du unter „Maße“.', { kind: 'bad' }); return; }
       hideDimBox(); S.sel = en.id; setDim(en.id, k, v); Viewer.canvas.focus();
     };
     inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); commit(); } if (e.key === 'Escape') { hideDimBox(); Viewer.canvas.focus(); } });

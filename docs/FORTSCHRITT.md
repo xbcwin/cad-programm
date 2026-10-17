@@ -43,6 +43,8 @@ Stand: 17.10.2026 · nach Sitzung 5 von 14
 - [x] Schrauben-Tabelle M1.6–M8 (Gemini, geprüft und korrigiert): Senkungen jetzt normgerecht, Loch eng / mittel / weit / Kernloch wählbar
 - [x] Einführung „Deine erste Skizze“ in 8 Schritten (Gemini, angepasst) – Startseite, Menü ⋯ und Eingabezeile
 - [x] Neuer Name beim Maß (z. B. `breite`) wird automatisch unter „Maße“ angelegt
+- [x] Formel-Beispiele unter „Maße“ (Gemini, alle 12 mit Tracerys Rechner nachgeprüft), Beispiel-Maße per Klick
+- [x] Umbenennen / Entfernen eines Maßes wirkt jetzt auch auf Skizzen-Maße
 
 ## Offen
 

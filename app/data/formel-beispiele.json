@@ -1,0 +1,60 @@
+{
+  "_hinweis": "Entwurf Gemini (17.10.2026), alle Ergebnisse mit Tracerys Rechner nachgeprüft. Erklärung zur Sechskant-Formel angepasst. Eingebaut in index.html (FORMULA_EXAMPLES).",
+  "werte": {
+    "breite": 40,
+    "hoehe": 20,
+    "wand": 2,
+    "schraube": 3,
+    "anzahl": 4
+  },
+  "beispiele": [
+    {
+      "formel": "breite / 2",
+      "erklaerung": "Damit setzt du ein Loch oder eine Mittellinie immer automatisch genau in die Mitte deines Bauteils."
+    },
+    {
+      "formel": "breite - 2 * wand",
+      "erklaerung": "Berechnet den freien Innenraum einer Box, indem links und rechts die Wandstärke abgezogen wird."
+    },
+    {
+      "formel": "schraube + 0,4",
+      "erklaerung": "Gibt einem Bohrloch ein kleines bisschen Spielraum, damit die Schraube beim Zusammenbauen nicht klemmt."
+    },
+    {
+      "formel": "breite / (anzahl + 1)",
+      "erklaerung": "Verteilt mehrere Löcher in einer Reihe so, dass alle Abstände zueinander und zum Rand exakt gleich groß sind."
+    },
+    {
+      "formel": "max(wand; schraube * 1,5)",
+      "erklaerung": "Sorgt dafür, dass die Wand rund um eine Schraube immer mindestens anderthalbmal so dick ist wie die Schraube selbst."
+    },
+    {
+      "formel": "breite * pi",
+      "erklaerung": "Rechnet den äußeren Umfang eines Rades oder Rohres aus, wenn du die Breite als Durchmesser nimmst."
+    },
+    {
+      "formel": "pi * (schraube / 2) ^ 2",
+      "erklaerung": "Bestimmt die genaue Querschnittsfläche deines runden Schraubenlochs in Quadratmillimetern."
+    },
+    {
+      "formel": "wurzel(breite ^ 2 + hoehe ^ 2)",
+      "erklaerung": "Berechnet die exakte Länge einer schrägen Verstärkungsstrebe quer durch dein Rechteck von Ecke zu Ecke."
+    },
+    {
+      "formel": "floor((breite - 2 * wand) / (schraube * 2,5))",
+      "erklaerung": "Rundet auf eine ganze Zahl ab, um zu prüfen, wie viele Schraubenlöcher mit genug Abstand nebeneinander in deine Box passen."
+    },
+    {
+      "formel": "(breite / 2) * tan(30)",
+      "erklaerung": "Ergibt die genaue Dachhöhe, wenn du auf dein Bauteil eine dreieckige Spitze mit 30 Grad Schräge setzt."
+    },
+    {
+      "formel": "(schraube + wand) / cos(30)",
+      "erklaerung": "Rechnet eine Schlüsselweite (hier schraube + wand) in das Maß von Ecke zu Ecke um – so breit muss eine Sechskant-Tasche mindestens sein."
+    },
+    {
+      "formel": "breite * sin(180 / anzahl) - schraube",
+      "erklaerung": "Zeigt dir, wie viel Material zwischen zwei Nachbarlöchern übrig bleibt, wenn du sie im Kreis auf dem Durchmesser verteilst."
+    }
+  ]
+}
