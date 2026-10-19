@@ -22,6 +22,7 @@ const Actions = (() => {
     const found = Model.find(doc, targetId);
     if (!found) { doc.items.push(item); return item; }
     const T = found.item;
+    if (T.kind === 'group' && T.p && T.p.op) { Model.setFromMatrix(item, Model.worldMatrix(doc, targetId).multiply(Model.localMatrix(item))); doc.items.push(item); return item; }
     if (T.kind === 'group') { T.children.push(item); return T; }
     const G = Model.newItem('group', {}, { name: T.name, color: T.color, role: T.role });
     G.t = { ...T.t }; G.finishes = [];

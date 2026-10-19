@@ -268,7 +268,7 @@ const MATERIALS = [{"k": "CFK", "name": "CFK-Platte (Kohlefaser, gewebt, ca. 60 
 // ---------- Fehlermeldungen (Quelle: app/data/fehlermeldungen.json, Entwurf Gemini, angepasst) ----------
 const ERRORS = {"sketchOverConstrained": {"titel": "Zu viele Regeln in der Skizze", "erklaerung": "Das neue Maß oder die neue Regel widerspricht deinen bisherigen Angaben, weshalb sich die Zeichnung nicht weiter anpassen kann.", "loesung": "Mache den letzten Schritt rückgängig oder lösche eines der rot markierten Maße, damit wieder Platz für Änderungen ist."}, "sketchUnderConstrained": {"titel": "Einige Linien sind noch lose", "erklaerung": "Manche Teile deiner Zeichnung haben noch keine festen Maße und können aus Versehen mit der Maus verschoben werden.", "loesung": "Du kannst problemlos weiterbauen oder die noch blauen Linien mit Maßen und Regeln festlegen, damit nichts mehr verrutscht."}, "sketchOpen": {"titel": "Umriss hat noch eine Lücke", "erklaerung": "Deine gezeichnete Form ist an mindestens einer Stelle offen, aber für einen 3D-Körper muss der Rand komplett geschlossen sein.", "loesung": "Zoome nah an die Ecken heran und verbinde offene Endpunkte miteinander oder schneide überstehende Linien ab."}, "sketchSelfIntersect": {"titel": "Linien kreuzen sich selbst", "erklaerung": "Die Linien deiner Form überkreuzen sich wie bei einer Acht, wodurch das Programm nicht weiß, wo innen und außen ist.", "loesung": "Ziehe die Eckpunkte auseinander oder nutze das Werkzeug „Trimmen“, um die sich kreuzenden Linienstücke wegzuschneiden."}, "extrudeZero": {"titel": "Höhe darf nicht null sein", "erklaerung": "Ohne eine eingegebene Höhe oder Dicke bleibt deine Zeichnung flach und kann kein 3D-Körper werden.", "loesung": "Ziehe am Pfeil im 3D-Fenster oder tippe im Eingabefeld eine Zahl größer als null ein."}, "cutNothing": {"titel": "Der Schnitt geht ins Leere", "erklaerung": "Dein Schneide-Werkzeug bewegt sich durch den freien Raum und trifft dabei auf kein einziges Bauteil.", "loesung": "Drehe die Richtung des Pfeils um oder ziehe den Schnitt tiefer, sodass er mitten durch deinen 3D-Körper geht."}, "revolveAxisCrosses": {"titel": "Drehachse läuft mitten durchs Profil", "erklaerung": "Die Linie, um die gedreht werden soll, schneidet deine gezeichnete Fläche, wodurch sich der Körper beim Drehen selbst durchdringen würde.", "loesung": "Wähle eine andere Linie am Rand als Drehachse aus oder zeichne deine Form nur auf einer Seite der Achse."}, "sweepSelfIntersect": {"titel": "Kurve ist zu eng fürs Profil", "erklaerung": "Deine Form ist zu breit für die engen Biegungen des Pfades und stößt in den Kurven mit sich selbst zusammen.", "loesung": "Mache die gezeichnete Fläche etwas kleiner oder gestalte die Kurven deiner Pfad-Linie weicher und weiter."}, "loftMismatch": {"titel": "Formen lassen sich nicht verbinden", "erklaerung": "Die ausgewählten Flächen sind zu unterschiedlich oder verdreht, sodass kein glatter Übergang zwischen ihnen berechnet werden kann.", "loesung": "Achte darauf, dass die Profile nicht über Kreuz verbunden sind, oder verwende Formen mit ähnlich vielen Ecken."}, "shellTooThick": {"titel": "Wandstärke ist zu dick gewählt", "erklaerung": "Die eingegebene Wanddicke ist größer als der Platz im Bauteil, sodass beim Aushöhlen im Inneren nichts mehr übrig bleibt.", "loesung": "Tippe einen deutlich kleineren Wert für die Wandstärke ein, beispielsweise 1 oder 2 Millimeter."}, "filletTooBig": {"titel": "Rundung passt nicht auf Kante", "erklaerung": "Der Radius für die Abrundung ist breiter als die angrenzenden Flächen deines Bauteils und hat dort keinen Platz.", "loesung": "Gib einen kleineren Radius ein – den größten möglichen Wert zeigt dir Tracery direkt im Panel rechts an."}, "booleanFailed": {"titel": "Körper konnten nicht verrechnet werden", "erklaerung": "Die Bauteile berühren sich entweder gar nicht oder treffen an einer winzigen Kante so ungünstig aufeinander, dass das Berechnen scheitert.", "loesung": "Schiebe die Körper ein kleines Stückchen weiter ineinander, damit sie sich klar und deutlich überschneiden."}, "patternOverlap": {"titel": "Kopien stecken fehlerhaft ineinander", "erklaerung": "Der Abstand zwischen deinen wiederholten Elementen ist zu klein, wodurch sich die Kopien gegenseitig im Weg stehen.", "loesung": "Vergrößere den Abstand im Menü oder verringere die Anzahl der Kopien, damit jedes Teil genug Platz hat."}, "referenceLost": {"titel": "Ursprüngliche Fläche oder Kante fehlt", "erklaerung": "Dieser Arbeitsschritt sucht nach einer Fläche oder Kante aus einem früheren Schritt, die durch eine Änderung verschwunden ist.", "loesung": "Klicke den Schritt in der Zeitleiste an und wähle die Fläche oder Kante am Bauteil einfach neu aus."}, "holeOutside": {"titel": "Bohrung landet neben dem Bauteil", "erklaerung": "Der Mittelpunkt für dein Loch liegt außerhalb des 3D-Körpers, weshalb in die Luft gebohrt wird.", "loesung": "Ziehe den Mittelpunkt der Bohrung mit der Maus direkt auf die Oberfläche deines Bauteils."}, "importFailed": {"titel": "Datei konnte nicht geöffnet werden", "erklaerung": "Die ausgewählte Datei ist entweder beschädigt oder hat ein Format, das dieses Programm nicht versteht.", "loesung": "Prüfe, ob es eine Tracery-Projektdatei (.tracery.json) oder eine unterstützte 3D-Datei ist, und exportiere sie im Ursprungsprogramm notfalls noch einmal neu."}};
 // Fehlercodes des CAD-Kerns → Eintrag oben
-const ERROR_FOR_CODE = { edges: 'referenceLost', toobig: 'filletTooBig', cut: 'booleanFailed', dim: 'sketchDimBad', over: 'sketchOverConstrained' };
+const ERROR_FOR_CODE = { edges: 'referenceLost', toobig: 'filletTooBig', cut: 'booleanFailed', dim: 'sketchDimBad', over: 'sketchOverConstrained', shell: 'shellTooThick' };
 ERRORS.sketchDimBad = { titel: 'Ein Skizzen-Maß geht nicht auf', erklaerung: 'Ein Maß in der Skizze benutzt einen Namen oder Wert, den es nicht (mehr) gibt.', loesung: 'Prüfe unter „Maße“, ob der Name noch da ist, oder öffne die Skizze per Doppelklick und ändere das rote Maß.' };
 
 // ---------- Hilfetexte für Werkzeuge (Entwurf Gemini, an Tracery angepasst) ----------
@@ -433,9 +433,9 @@ const HELP = {
   "tipp": "Damit verbindest du problemlos einen eckigen Boden mit einer kreisrunden Öffnung weiter oben."
  },
  "holeWizard": {
-  "tip": "Passgenaues Loch für Schrauben bohren",
-  "hilfe": "Klicke auf eine Fläche oder einen Skizzenpunkt und wähle im Menü einfach die gewünschte Schraubengröße (z. B. M4) und Tiefe aus.",
-  "tipp": "Wähle „Durchgangsloch“, wenn die Schraube frei durchgehen soll – für M3-Schrauben sind das meist 3,2 mm."
+  "tip": "Schraubenloch, Gewinde, Einsatz oder Mutternfalle bohren",
+  "hilfe": "Klick auf eine Fläche und dann auf „Bohrung“. Wähle Art und Größe (zum Beispiel M3) und drück „Löcher setzen“. Jeder weitere Klick auf eine Fläche setzt noch ein Loch – „Fertig“ oder Esc beendet.",
+  "tipp": "„Durchgangsloch“ lässt die Schraube frei durchrutschen. „Gewinde schneiden“ macht das kleinere Kernloch, in das sich die Schraube selbst hineindreht."
  },
  "countersink": {
   "tip": "Trichter-Rand für flache Schraubenköpfe",
@@ -454,43 +454,43 @@ const HELP = {
  },
  "shell": {
   "tip": "Körper aushöhlen wie eine Schachtel",
-  "hilfe": "Klicke die Fläche an, die komplett offen sein soll, und tippe ein, wie dick die restlichen Wände bleiben sollen.",
-  "tipp": "So wird aus einem massiven Klotz mit nur einem Klick eine fertige Box ohne Deckel."
+  "hilfe": "Klick die Fläche an, die offen sein soll, und wähle „Aushöhlen“. Rechts unter „Wandstärke“ tippst du ein, wie dick die Wände bleiben.",
+  "tipp": "Klickst du eine zweite Fläche an und wieder „Aushöhlen“, wird auch sie offen – oder wieder zu."
  },
  "patternRect": {
-  "tip": "Elemente in geraden Reihen kopieren",
-  "hilfe": "Wähle deinen Körper oder ein Loch aus, klicke eine Kante für die Richtung an und tippe Abstand sowie Anzahl ein.",
-  "tipp": "Kopiere lieber fertige 3D-Schritte (wie Löcher oder Noppen) statt vieler einzelner Linien in der Skizze – das hält dein Projekt schnell."
+  "tip": "Körper in geraden Reihen kopieren",
+  "hilfe": "Wähle einen Körper und dann „Muster“ → „Rechteckmuster“. Rechts stellst du Anzahl und Abstand für X und Y ein – auch mit Formeln.",
+  "tipp": "Änderst du das Original, ziehen alle Kopien mit. „Auflösen“ macht das Muster wieder rückgängig."
  },
  "patternCirc": {
-  "tip": "Elemente gleichmäßig im Kreis kopieren",
-  "hilfe": "Klicke das Element an, das du vervielfältigen willst, wähle einen runden Kreis oder Zylinder als Mitte und gib die Anzahl ein.",
-  "tipp": "Perfekt für Lochkreise, Speichen oder Lüftungsschlitze, bei denen sich alles im Kreis wiederholt."
+  "tip": "Körper gleichmäßig im Kreis kopieren",
+  "hilfe": "Wähle einen Körper und dann „Muster“ → „Kreismuster“. Rechts stellst du Anzahl, Winkel und die Mitte ein, um die gedreht wird.",
+  "tipp": "Perfekt für Lochkreise und Speichen. 360° verteilt die Kopien ganz rundherum."
  },
  "mirror": {
-  "tip": "Bauteil auf andere Seite spiegeln",
-  "hilfe": "Wähle den Körper oder den Arbeitsschritt aus und klicke dann auf eine flache Seite oder Ebene, die als Spiegel dient.",
-  "tipp": "Bei symmetrischen Teilen – etwa einem Frame – baust du nur eine Hälfte fertig und spiegelst sie am Ende. Das spart die halbe Arbeit."
+  "tip": "Gespiegelte Kopie anlegen",
+  "hilfe": "Wähle einen Körper und dann „Muster“ → „Gespiegelte Kopie“. Rechts wählst du die Spiegelebene und wo sie liegt.",
+  "tipp": "Bei symmetrischen Teilen – etwa einem Frame – baust du nur eine Hälfte und spiegelst sie. Das spart die halbe Arbeit."
  },
  "boolUnion": {
   "tip": "Mehrere Körper zu einem verschmelzen",
-  "hilfe": "Klicke nacheinander alle sich berührenden Einzelkörper an und bestätige, um sie fest zusammenzukleben.",
+  "hilfe": "Klick mit gedrückter Umschalttaste mehrere Körper an und wähle „Boolesch“ → „Vereinigen“.",
   "tipp": "Teile, die am Ende ein einziges Bauteil sein sollen, verbindest du hiermit zu einem Körper."
  },
  "boolSubtract": {
   "tip": "Einen Körper vom anderen abziehen",
-  "hilfe": "Klicke zuerst auf das Hauptbauteil, das bleiben soll, und danach auf den Körper, der wie eine Backform herausgestanzt wird.",
-  "tipp": "Damit kannst du passgenaue Abdrücke oder Halterungen für andere Gegenstände in dein Bauteil schneiden."
+  "hilfe": "Klick zuerst das Teil an, das bleiben soll, dann mit Umschalttaste die Körper, die herausgeschnitten werden. Dann „Boolesch“ → „Abziehen“.",
+  "tipp": "Damit schneidest du passgenaue Abdrücke oder Halterungen für andere Gegenstände in dein Bauteil."
  },
  "boolIntersect": {
-  "tip": "Nur das gemeinsame Überlappungsstück behalten",
-  "hilfe": "Klicke zwei Körper an, die ineinander stecken. Alles verschwindet, außer dem Bereich, den beide gleichzeitig ausfüllen.",
-  "tipp": "Ideal, um aus zwei komplizierten Richtungen gleichzeitig die perfekte Mischform herauszuschneiden."
+  "tip": "Nur das gemeinsame Stück behalten",
+  "hilfe": "Klick mit Umschalttaste zwei Körper an, die ineinanderstecken, und wähle „Boolesch“ → „Schnittmenge“. Übrig bleibt nur, was beide zugleich ausfüllen.",
+  "tipp": "Ideal, um eine Form aus zwei Richtungen gleichzeitig zuzuschneiden."
  },
  "split": {
-  "tip": "Körper an einer Fläche durchschneiden",
-  "hilfe": "Wähle zuerst den Körper aus, den du zerteilen willst, und klicke dann auf eine Ebene oder Fläche als Schneidemesser.",
-  "tipp": "Praktisch, um ein Teil in zwei Hälften zu zerlegen oder eine Platte aus einem Block herauszutrennen."
+  "tip": "Körper an einer Ebene durchschneiden",
+  "hilfe": "Wähle einen Körper und dann „Teilen“. Rechts stellst du die Schnittebene ein, wo sie liegt und welche Hälfte bleibt.",
+  "tipp": "Mit „Spalt“ rücken die Hälften auseinander – praktisch, wenn ein Teil zu groß für den Drucker ist."
  },
  "section": {
   "tip": "Bauteil virtuell aufschneiden zum Reinschauen",

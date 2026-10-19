@@ -417,8 +417,26 @@ export function createKernel(R, oc) {
     const f = (e) => (matcher(e) ? r : 0);
     return type === 'chamfer' ? shape.chamfer(f) : shape.fillet(f);
   }
+  function applyShell(shape, fin, errors, itemId) {
+    const t = num(fin.r, 2);
+    const b = bboxOf(shape); const tol = 0.05 + 1e-3 * Math.max(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
+    const sigs = (fin.faces || []).filter((f) => f && f.c);
+    const pick = (f) => { const c = vec(f.center); return sigs.some((s) => Math.hypot(c[0] - s.c[0], c[1] - s.c[1], c[2] - s.c[2]) < tol); };
+    let count = 0; try { for (const f of shape.faces) if (pick(f)) count++; } catch (_) {}
+    if (!count) { errors.push({ itemId, finishId: fin.id, code: 'edges', message: 'Die offene Fläche für die Wandstärke gibt es nicht mehr.' }); return shape; }
+    const minDim = Math.min(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
+    if (!(t > 0) || 2 * t >= minDim - 1e-6) { errors.push({ itemId, finishId: fin.id, code: 'shell', message: `Die Wandstärke ist zu dick für dieses Teil – möglich sind weniger als ${String(Math.floor(minDim * 5) / 10).replace('.', ',')} mm.` }); return shape; }
+    try {
+      const res = shape.shell(t, (ff) => ff.when(({ element }) => pick(element)), 1e-3);
+      const rb = bboxOf(res);   // Unsinnige Ergebnisse (größer als vorher) als Fehler melden
+      if (rb[3] - rb[0] > b[3] - b[0] + 1e-3 || rb[4] - rb[1] > b[4] - b[1] + 1e-3 || rb[5] - rb[2] > b[5] - b[2] + 1e-3) { safeDelete(res); throw new Error('größer'); }
+      return res;
+    }
+    catch (_) { errors.push({ itemId, finishId: fin.id, code: 'shell', message: 'Die Wandstärke ist zu dick für dieses Teil – nimm einen kleineren Wert.' }); return shape; }
+  }
   function applyFinishes(shape, finishes, errors, itemId) {
     for (const fin of finishes || []) {
+      if (fin.type === 'shell') { shape = applyShell(shape, fin, errors, itemId); continue; }
       const r = num(fin.r, 1);
       if (!(r > 0)) continue;
       let matcher;
@@ -442,6 +460,50 @@ export function createKernel(R, oc) {
     return shape;
   }
 
+  // ---------- Muster, Spiegeln mit Kopie, Teilen ----------
+  function patternShape(base, p) {
+    const copies = [base];
+    if (p.pt === 'rect') {
+      const nx = Math.max(1, Math.min(60, Math.round(num(p.nx, 1)))), ny = Math.max(1, Math.min(60, Math.round(num(p.ny, 1))));
+      const dx = num(p.dx, 10), dy = num(p.dy, 10);
+      for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) if (i || j) copies.push(base.clone().translate([i * dx, j * dy, 0]));
+    } else if (p.pt === 'circ') {
+      const n = Math.max(1, Math.min(120, Math.round(num(p.n, 4)))), ang = num(p.ang, 360);
+      const step = Math.abs(Math.abs(ang) - 360) < 1e-9 ? 360 / n : n > 1 ? ang / (n - 1) : 0;
+      for (let k = 1; k < n; k++) copies.push(base.clone().rotate(k * step, [num(p.cx, 0), num(p.cy, 0), 0], [0, 0, 1]));
+    } else if (p.pt === 'mirror') {
+      const pl = ['XY', 'XZ', 'YZ'].includes(p.plane) ? p.plane : 'YZ';
+      const n = { YZ: [1, 0, 0], XZ: [0, 1, 0], XY: [0, 0, 1] }[pl], off = num(p.off, 0);
+      copies.push(base.clone().mirror(pl, [n[0] * off, n[1] * off, n[2] * off]));
+    }
+    if (copies.length === 1) return base;
+    return fuseAll(copies, true);
+  }
+  function splitBody(shape, p) {
+    // Halbraum als großer Quader: „positiv“ = größere Koordinate als die Ebene
+    const ax = { XY: 2, XZ: 1, YZ: 0 }[p.plane] ?? 2;
+    const off = num(p.off, 0), gap = Math.max(0, num(p.gap, 0)), keep = p.keep || 'both';
+    const b = bboxOf(shape); const m = 1 + Math.max(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
+    const lo = [b[0] - m, b[1] - m, b[2] - m], hi = [b[3] + m, b[4] + m, b[5] + m];
+    const half = (side) => {
+      if (side > 0 ? hi[ax] <= off : lo[ax] >= off) return null;
+      const a = lo.slice(), c = hi.slice(); if (side > 0) a[ax] = off; else c[ax] = off;
+      if (c[ax] - a[ax] < 1e-6) return null;
+      const box = R.makeBox(a, c);
+      try { const r = shape.intersect(box); return r; } catch (_) { return null; } finally { safeDelete(box); }
+    };
+    const pos = keep !== 'negative' ? half(1) : null;
+    const neg = keep !== 'positive' ? half(-1) : null;
+    const empty = (s) => { if (!s) return true; try { const bb = bboxOf(s); return !(bb[3] - bb[0] > 1e-6); } catch (_) { return true; } };
+    const A = empty(pos) ? null : pos, B = empty(neg) ? null : neg;
+    if (!A && !B) { const e = new Error('Die Schnittebene trifft den Körper nicht.'); e.code = 'split'; throw e; }
+    const d = [0, 0, 0]; d[ax] = gap / 2;
+    const a2 = A && gap ? A.translate(d) : A, b2 = B && gap ? B.translate(d.map((v) => -v)) : B;
+    safeDelete(shape);
+    if (a2 && b2) return R.makeCompound([a2, b2]);
+    return a2 || b2;
+  }
+
   // ---------- Objekte auswerten ----------
   function defKey(it) {
     // alles, was die eigene Form bestimmt (nicht die eigene Lage)
@@ -462,11 +524,18 @@ export function createKernel(R, oc) {
           const s = applyMatrix(r.shape, c.m);
           (c.role === 'hole' ? holes : solids).push(s);
         }
+        const op = it.p && it.p.op;
         if (solids.length) {
-          shape = fuseAll(solids, true);
+          if (op === 'intersect' && solids.length > 1) {
+            // Schnittmenge: nur, was in allen Körpern liegt
+            shape = solids[0];
+            for (let i = 1; i < solids.length; i++) { const nx = shape.intersect(solids[i]); safeDelete(shape); safeDelete(solids[i]); shape = nx; }
+          } else shape = fuseAll(solids, true);
           if (holes.length) { const tool = fuseAll(holes, true); const cut = shape.cut(tool); safeDelete(tool); safeDelete(shape); shape = cut; }
         } else if (holes.length) shape = fuseAll(holes, true);
         else shape = null;
+        if (shape && op === 'pattern') shape = patternShape(shape, it.p);
+        if (shape && op === 'split') shape = splitBody(shape, it.p);
       } else if (it.kind === 'extrude') shape = buildExtrude(it.p);
       else if (it.kind === 'revolve') shape = buildRevolve(it.p);
       else if (it.kind === 'part') shape = buildPart(it.p);
@@ -478,7 +547,7 @@ export function createKernel(R, oc) {
         if (it.mir[2] < 0) shape = shape.mirror('XY', [0, 0, 0]);
       }
     } catch (err) {
-      errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) });
+      errors.push({ itemId: it.id, code: err && err.code === 'split' ? 'split' : 'build', message: friendlyError(err) });
       shape = null;
     }
     if (shape) cachePut(key, shape);

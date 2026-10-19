@@ -880,7 +880,7 @@ const MATERIALS = [{"k": "CFK", "name": "CFK-Platte (Kohlefaser, gewebt, ca. 60 
 // ---------- Fehlermeldungen (Quelle: app/data/fehlermeldungen.json, Entwurf Gemini, angepasst) ----------
 const ERRORS = {"sketchOverConstrained": {"titel": "Zu viele Regeln in der Skizze", "erklaerung": "Das neue Maß oder die neue Regel widerspricht deinen bisherigen Angaben, weshalb sich die Zeichnung nicht weiter anpassen kann.", "loesung": "Mache den letzten Schritt rückgängig oder lösche eines der rot markierten Maße, damit wieder Platz für Änderungen ist."}, "sketchUnderConstrained": {"titel": "Einige Linien sind noch lose", "erklaerung": "Manche Teile deiner Zeichnung haben noch keine festen Maße und können aus Versehen mit der Maus verschoben werden.", "loesung": "Du kannst problemlos weiterbauen oder die noch blauen Linien mit Maßen und Regeln festlegen, damit nichts mehr verrutscht."}, "sketchOpen": {"titel": "Umriss hat noch eine Lücke", "erklaerung": "Deine gezeichnete Form ist an mindestens einer Stelle offen, aber für einen 3D-Körper muss der Rand komplett geschlossen sein.", "loesung": "Zoome nah an die Ecken heran und verbinde offene Endpunkte miteinander oder schneide überstehende Linien ab."}, "sketchSelfIntersect": {"titel": "Linien kreuzen sich selbst", "erklaerung": "Die Linien deiner Form überkreuzen sich wie bei einer Acht, wodurch das Programm nicht weiß, wo innen und außen ist.", "loesung": "Ziehe die Eckpunkte auseinander oder nutze das Werkzeug „Trimmen“, um die sich kreuzenden Linienstücke wegzuschneiden."}, "extrudeZero": {"titel": "Höhe darf nicht null sein", "erklaerung": "Ohne eine eingegebene Höhe oder Dicke bleibt deine Zeichnung flach und kann kein 3D-Körper werden.", "loesung": "Ziehe am Pfeil im 3D-Fenster oder tippe im Eingabefeld eine Zahl größer als null ein."}, "cutNothing": {"titel": "Der Schnitt geht ins Leere", "erklaerung": "Dein Schneide-Werkzeug bewegt sich durch den freien Raum und trifft dabei auf kein einziges Bauteil.", "loesung": "Drehe die Richtung des Pfeils um oder ziehe den Schnitt tiefer, sodass er mitten durch deinen 3D-Körper geht."}, "revolveAxisCrosses": {"titel": "Drehachse läuft mitten durchs Profil", "erklaerung": "Die Linie, um die gedreht werden soll, schneidet deine gezeichnete Fläche, wodurch sich der Körper beim Drehen selbst durchdringen würde.", "loesung": "Wähle eine andere Linie am Rand als Drehachse aus oder zeichne deine Form nur auf einer Seite der Achse."}, "sweepSelfIntersect": {"titel": "Kurve ist zu eng fürs Profil", "erklaerung": "Deine Form ist zu breit für die engen Biegungen des Pfades und stößt in den Kurven mit sich selbst zusammen.", "loesung": "Mache die gezeichnete Fläche etwas kleiner oder gestalte die Kurven deiner Pfad-Linie weicher und weiter."}, "loftMismatch": {"titel": "Formen lassen sich nicht verbinden", "erklaerung": "Die ausgewählten Flächen sind zu unterschiedlich oder verdreht, sodass kein glatter Übergang zwischen ihnen berechnet werden kann.", "loesung": "Achte darauf, dass die Profile nicht über Kreuz verbunden sind, oder verwende Formen mit ähnlich vielen Ecken."}, "shellTooThick": {"titel": "Wandstärke ist zu dick gewählt", "erklaerung": "Die eingegebene Wanddicke ist größer als der Platz im Bauteil, sodass beim Aushöhlen im Inneren nichts mehr übrig bleibt.", "loesung": "Tippe einen deutlich kleineren Wert für die Wandstärke ein, beispielsweise 1 oder 2 Millimeter."}, "filletTooBig": {"titel": "Rundung passt nicht auf Kante", "erklaerung": "Der Radius für die Abrundung ist breiter als die angrenzenden Flächen deines Bauteils und hat dort keinen Platz.", "loesung": "Gib einen kleineren Radius ein – den größten möglichen Wert zeigt dir Tracery direkt im Panel rechts an."}, "booleanFailed": {"titel": "Körper konnten nicht verrechnet werden", "erklaerung": "Die Bauteile berühren sich entweder gar nicht oder treffen an einer winzigen Kante so ungünstig aufeinander, dass das Berechnen scheitert.", "loesung": "Schiebe die Körper ein kleines Stückchen weiter ineinander, damit sie sich klar und deutlich überschneiden."}, "patternOverlap": {"titel": "Kopien stecken fehlerhaft ineinander", "erklaerung": "Der Abstand zwischen deinen wiederholten Elementen ist zu klein, wodurch sich die Kopien gegenseitig im Weg stehen.", "loesung": "Vergrößere den Abstand im Menü oder verringere die Anzahl der Kopien, damit jedes Teil genug Platz hat."}, "referenceLost": {"titel": "Ursprüngliche Fläche oder Kante fehlt", "erklaerung": "Dieser Arbeitsschritt sucht nach einer Fläche oder Kante aus einem früheren Schritt, die durch eine Änderung verschwunden ist.", "loesung": "Klicke den Schritt in der Zeitleiste an und wähle die Fläche oder Kante am Bauteil einfach neu aus."}, "holeOutside": {"titel": "Bohrung landet neben dem Bauteil", "erklaerung": "Der Mittelpunkt für dein Loch liegt außerhalb des 3D-Körpers, weshalb in die Luft gebohrt wird.", "loesung": "Ziehe den Mittelpunkt der Bohrung mit der Maus direkt auf die Oberfläche deines Bauteils."}, "importFailed": {"titel": "Datei konnte nicht geöffnet werden", "erklaerung": "Die ausgewählte Datei ist entweder beschädigt oder hat ein Format, das dieses Programm nicht versteht.", "loesung": "Prüfe, ob es eine Tracery-Projektdatei (.tracery.json) oder eine unterstützte 3D-Datei ist, und exportiere sie im Ursprungsprogramm notfalls noch einmal neu."}};
 // Fehlercodes des CAD-Kerns → Eintrag oben
-const ERROR_FOR_CODE = { edges: 'referenceLost', toobig: 'filletTooBig', cut: 'booleanFailed', dim: 'sketchDimBad', over: 'sketchOverConstrained' };
+const ERROR_FOR_CODE = { edges: 'referenceLost', toobig: 'filletTooBig', cut: 'booleanFailed', dim: 'sketchDimBad', over: 'sketchOverConstrained', shell: 'shellTooThick' };
 ERRORS.sketchDimBad = { titel: 'Ein Skizzen-Maß geht nicht auf', erklaerung: 'Ein Maß in der Skizze benutzt einen Namen oder Wert, den es nicht (mehr) gibt.', loesung: 'Prüfe unter „Maße“, ob der Name noch da ist, oder öffne die Skizze per Doppelklick und ändere das rote Maß.' };
 
 // ---------- Hilfetexte für Werkzeuge (Entwurf Gemini, an Tracery angepasst) ----------
@@ -1045,9 +1045,9 @@ const HELP = {
   "tipp": "Damit verbindest du problemlos einen eckigen Boden mit einer kreisrunden Öffnung weiter oben."
  },
  "holeWizard": {
-  "tip": "Passgenaues Loch für Schrauben bohren",
-  "hilfe": "Klicke auf eine Fläche oder einen Skizzenpunkt und wähle im Menü einfach die gewünschte Schraubengröße (z. B. M4) und Tiefe aus.",
-  "tipp": "Wähle „Durchgangsloch“, wenn die Schraube frei durchgehen soll – für M3-Schrauben sind das meist 3,2 mm."
+  "tip": "Schraubenloch, Gewinde, Einsatz oder Mutternfalle bohren",
+  "hilfe": "Klick auf eine Fläche und dann auf „Bohrung“. Wähle Art und Größe (zum Beispiel M3) und drück „Löcher setzen“. Jeder weitere Klick auf eine Fläche setzt noch ein Loch – „Fertig“ oder Esc beendet.",
+  "tipp": "„Durchgangsloch“ lässt die Schraube frei durchrutschen. „Gewinde schneiden“ macht das kleinere Kernloch, in das sich die Schraube selbst hineindreht."
  },
  "countersink": {
   "tip": "Trichter-Rand für flache Schraubenköpfe",
@@ -1066,43 +1066,43 @@ const HELP = {
  },
  "shell": {
   "tip": "Körper aushöhlen wie eine Schachtel",
-  "hilfe": "Klicke die Fläche an, die komplett offen sein soll, und tippe ein, wie dick die restlichen Wände bleiben sollen.",
-  "tipp": "So wird aus einem massiven Klotz mit nur einem Klick eine fertige Box ohne Deckel."
+  "hilfe": "Klick die Fläche an, die offen sein soll, und wähle „Aushöhlen“. Rechts unter „Wandstärke“ tippst du ein, wie dick die Wände bleiben.",
+  "tipp": "Klickst du eine zweite Fläche an und wieder „Aushöhlen“, wird auch sie offen – oder wieder zu."
  },
  "patternRect": {
-  "tip": "Elemente in geraden Reihen kopieren",
-  "hilfe": "Wähle deinen Körper oder ein Loch aus, klicke eine Kante für die Richtung an und tippe Abstand sowie Anzahl ein.",
-  "tipp": "Kopiere lieber fertige 3D-Schritte (wie Löcher oder Noppen) statt vieler einzelner Linien in der Skizze – das hält dein Projekt schnell."
+  "tip": "Körper in geraden Reihen kopieren",
+  "hilfe": "Wähle einen Körper und dann „Muster“ → „Rechteckmuster“. Rechts stellst du Anzahl und Abstand für X und Y ein – auch mit Formeln.",
+  "tipp": "Änderst du das Original, ziehen alle Kopien mit. „Auflösen“ macht das Muster wieder rückgängig."
  },
  "patternCirc": {
-  "tip": "Elemente gleichmäßig im Kreis kopieren",
-  "hilfe": "Klicke das Element an, das du vervielfältigen willst, wähle einen runden Kreis oder Zylinder als Mitte und gib die Anzahl ein.",
-  "tipp": "Perfekt für Lochkreise, Speichen oder Lüftungsschlitze, bei denen sich alles im Kreis wiederholt."
+  "tip": "Körper gleichmäßig im Kreis kopieren",
+  "hilfe": "Wähle einen Körper und dann „Muster“ → „Kreismuster“. Rechts stellst du Anzahl, Winkel und die Mitte ein, um die gedreht wird.",
+  "tipp": "Perfekt für Lochkreise und Speichen. 360° verteilt die Kopien ganz rundherum."
  },
  "mirror": {
-  "tip": "Bauteil auf andere Seite spiegeln",
-  "hilfe": "Wähle den Körper oder den Arbeitsschritt aus und klicke dann auf eine flache Seite oder Ebene, die als Spiegel dient.",
-  "tipp": "Bei symmetrischen Teilen – etwa einem Frame – baust du nur eine Hälfte fertig und spiegelst sie am Ende. Das spart die halbe Arbeit."
+  "tip": "Gespiegelte Kopie anlegen",
+  "hilfe": "Wähle einen Körper und dann „Muster“ → „Gespiegelte Kopie“. Rechts wählst du die Spiegelebene und wo sie liegt.",
+  "tipp": "Bei symmetrischen Teilen – etwa einem Frame – baust du nur eine Hälfte und spiegelst sie. Das spart die halbe Arbeit."
  },
  "boolUnion": {
   "tip": "Mehrere Körper zu einem verschmelzen",
-  "hilfe": "Klicke nacheinander alle sich berührenden Einzelkörper an und bestätige, um sie fest zusammenzukleben.",
+  "hilfe": "Klick mit gedrückter Umschalttaste mehrere Körper an und wähle „Boolesch“ → „Vereinigen“.",
   "tipp": "Teile, die am Ende ein einziges Bauteil sein sollen, verbindest du hiermit zu einem Körper."
  },
  "boolSubtract": {
   "tip": "Einen Körper vom anderen abziehen",
-  "hilfe": "Klicke zuerst auf das Hauptbauteil, das bleiben soll, und danach auf den Körper, der wie eine Backform herausgestanzt wird.",
-  "tipp": "Damit kannst du passgenaue Abdrücke oder Halterungen für andere Gegenstände in dein Bauteil schneiden."
+  "hilfe": "Klick zuerst das Teil an, das bleiben soll, dann mit Umschalttaste die Körper, die herausgeschnitten werden. Dann „Boolesch“ → „Abziehen“.",
+  "tipp": "Damit schneidest du passgenaue Abdrücke oder Halterungen für andere Gegenstände in dein Bauteil."
  },
  "boolIntersect": {
-  "tip": "Nur das gemeinsame Überlappungsstück behalten",
-  "hilfe": "Klicke zwei Körper an, die ineinander stecken. Alles verschwindet, außer dem Bereich, den beide gleichzeitig ausfüllen.",
-  "tipp": "Ideal, um aus zwei komplizierten Richtungen gleichzeitig die perfekte Mischform herauszuschneiden."
+  "tip": "Nur das gemeinsame Stück behalten",
+  "hilfe": "Klick mit Umschalttaste zwei Körper an, die ineinanderstecken, und wähle „Boolesch“ → „Schnittmenge“. Übrig bleibt nur, was beide zugleich ausfüllen.",
+  "tipp": "Ideal, um eine Form aus zwei Richtungen gleichzeitig zuzuschneiden."
  },
  "split": {
-  "tip": "Körper an einer Fläche durchschneiden",
-  "hilfe": "Wähle zuerst den Körper aus, den du zerteilen willst, und klicke dann auf eine Ebene oder Fläche als Schneidemesser.",
-  "tipp": "Praktisch, um ein Teil in zwei Hälften zu zerlegen oder eine Platte aus einem Block herauszutrennen."
+  "tip": "Körper an einer Ebene durchschneiden",
+  "hilfe": "Wähle einen Körper und dann „Teilen“. Rechts stellst du die Schnittebene ein, wo sie liegt und welche Hälfte bleibt.",
+  "tipp": "Mit „Spalt“ rücken die Hälften auseinander – praktisch, wenn ein Teil zu groß für den Drucker ist."
  },
  "section": {
   "tip": "Bauteil virtuell aufschneiden zum Reinschauen",
@@ -1298,11 +1298,11 @@ const Model = (() => {
   function matArr(m) { return Array.from(m.elements); }
   function kernelItem(it, V) {
     const o = { id: it.id, kind: it.kind, role: it.role, hidden: !!it.hidden, m: matArr(localMatrix(it)) };
-    if (it.kind === 'group') { let kids = it.children || []; if (it.rollback != null) kids = kids.slice(0, clamp(it.rollback, 0, kids.length)); o.children = kids.filter((c) => !c.suppressed).map((c) => kernelItem(c, V)); }
+    if (it.kind === 'group') { let kids = it.children || []; if (it.rollback != null) kids = kids.slice(0, clamp(it.rollback, 0, kids.length)); o.children = kids.filter((c) => !c.suppressed).map((c) => kernelItem(c, V)); if (it.p && it.p.op) o.p = resolveP(it.p, V); }
     else if (it.kind === 'extrude' || it.kind === 'revolve') o.p = sketchParams(it, V);
     else o.p = resolveP(it.p, V);
     if (it.mir) o.mir = it.mir;
-    if (it.finishes && it.finishes.length) o.finishes = it.finishes.filter((f) => !f.off).map((f) => ({ id: f.id, type: f.type, r: num(f.r, V, 1), edges: f.edges }));
+    if (it.finishes && it.finishes.length) o.finishes = it.finishes.filter((f) => !f.off).map((f) => ({ id: f.id, type: f.type, r: num(f.r, V, 1), edges: f.edges, faces: f.faces }));
     return o;
   }
   function sketchParams(it, V) {
@@ -1351,7 +1351,7 @@ const Model = (() => {
       case 'torus': return `Ø ${f(p.d)}`;
       case 'extrude': return `${f(p.dist)} hoch`;
       case 'revolve': return `${f(p.angle)}°`;
-      case 'group': return `${(it.children || []).length} Teile`;
+      case 'group': return (typeof Features !== 'undefined' && Features.sizeText(it, V)) || `${(it.children || []).length} Teile`;
       case 'part': return p.size || '';
     }
     return '';
@@ -4111,6 +4111,7 @@ const Actions = (() => {
     const found = Model.find(doc, targetId);
     if (!found) { doc.items.push(item); return item; }
     const T = found.item;
+    if (T.kind === 'group' && T.p && T.p.op) { Model.setFromMatrix(item, Model.worldMatrix(doc, targetId).multiply(Model.localMatrix(item))); doc.items.push(item); return item; }
     if (T.kind === 'group') { T.children.push(item); return T; }
     const G = Model.newItem('group', {}, { name: T.name, color: T.color, role: T.role });
     G.t = { ...T.t }; G.finishes = [];
@@ -4422,6 +4423,123 @@ const Actions = (() => {
   return { addPrimitive, addPart, remove, duplicate, setRole, toggleRole, group, ungroup, rotate90, mirror, dropToPlate, align, addFinish, finishAll, setFinish, removeFinish, faceFrame, selectedFace, onFaceTransform, attach, worldBox, selBox, cuttersOf, viewCenter };
 })();
 
+// ---- 46-features.js ----
+// ================= Features: Muster, Spiegeln mit Kopie, Teilen, Schnittmenge, Wandstärke =================
+// Muster, Spiegelung, Teilen und Schnittmenge sind Gruppen mit einer Rechenvorschrift (p.op).
+// Die Gruppe sitzt im Ursprung ihrer Ebene (oberste Ebene oder die umgebende Gruppe), ihre Teile behalten
+// ihre Lage. Der CAD-Kern rechnet die Vorschrift nach jeder Änderung neu – ändert man das Original,
+// ziehen alle Kopien mit. So lässt sich auch ein Loch in einer Platte im Kreis vervielfachen.
+const Features = (() => {
+  const NAMES = { rect: 'Rechteckmuster', circ: 'Kreismuster', mirror: 'Spiegelung', split: 'Geteilt', intersect: 'Schnittmenge' };
+  // gewählte Objekte, die alle auf derselben Ebene liegen (sonst leer)
+  function siblings(ids) {
+    const fs = (ids || App.sel).map((id) => Model.find(App.doc, id)).filter(Boolean);
+    if (!fs.length || fs.some((f) => f.list !== fs[0].list)) return [];
+    return fs.map((f) => f.item);
+  }
+  function need(ids) {
+    const items = siblings(ids);
+    if (!items.length) UI.toast((ids || App.sel).length ? 'Die gewählten Objekte müssen auf derselben Ebene liegen.' : 'Wähle zuerst einen Körper oder ein Loch.', { icon: 'info' });
+    return items;
+  }
+  // Objekte in eine Feature-Gruppe im Ursprung ihrer Ebene packen
+  function wrap(items, name, p) {
+    let G;
+    App.change(name + ' angelegt', (doc) => {
+      const list = Model.find(doc, items[0].id).list; const its = items.map((x) => list.find((y) => y.id === x.id)).filter(Boolean);
+      const first = its.find((x) => x.role !== 'hole') || its[0];
+      G = Model.newItem('group', {}, { name, color: first.color, role: its.every((x) => x.role === 'hole') ? 'hole' : 'solid' });
+      G.p = { ...p };
+      const at = Math.min(...its.map((x) => list.indexOf(x)));
+      for (const it of its) { list.splice(list.indexOf(it), 1); G.children.push(it); }
+      list.splice(at, 0, G);
+    });
+    App.select([G.id]);
+    return G;
+  }
+  function pattern(type, ids) {
+    const items = need(ids); if (!items.length) return null;
+    const b = Actions.selBox(items.map((x) => x.id));
+    const size = b.isEmpty() ? new THREE.Vector3(10, 10, 10) : b.getSize(new THREE.Vector3());
+    let G;
+    if (type === 'rect') G = wrap(items, NAMES.rect, { op: 'pattern', pt: 'rect', nx: 3, ny: 1, dx: round(size.x + 5, 1), dy: round(size.y + 5, 1) });
+    else if (type === 'circ') G = wrap(items, NAMES.circ, { op: 'pattern', pt: 'circ', n: 4, ang: 360, cx: 0, cy: 0 });
+    else G = wrap(items, NAMES.mirror, { op: 'pattern', pt: 'mirror', plane: 'YZ', off: 0 });
+    UI.toast(type === 'mirror' ? 'Gespiegelte Kopie angelegt. Rechts wählst du die Spiegelebene.' : 'Muster angelegt. Rechts stellst du Anzahl und Abstand ein – auch mit Formeln.', { icon: 'check' });
+    return G;
+  }
+  function split(ids) {
+    const items = need(ids); if (!items.length) return null;
+    const b = Actions.selBox(items.map((x) => x.id));
+    const z = b.isEmpty() ? 0 : round((b.min.z + b.max.z) / 2, 2);
+    const G = wrap(items, NAMES.split, { op: 'split', plane: 'XY', off: z, keep: 'both', gap: 0 });
+    UI.toast('Geteilt. Rechts wählst du die Schnittebene, ihre Lage und welche Hälfte bleibt.', { icon: 'check' });
+    return G;
+  }
+  // Boolesch: vereinigen, abziehen (der erste bleibt, die anderen schneiden), Schnittmenge
+  function boolean(mode, ids) {
+    ids = (ids || App.sel).slice();
+    if (ids.length < 2) { UI.toast('Wähle mindestens zwei Körper (mit Umschalt klicken).', { icon: 'info' }); return; }
+    const items = need(ids); if (items.length < 2) return;
+    if (mode === 'union') { App.change('Rollen gesetzt', (doc) => { for (const it of items) Model.find(doc, it.id).item.role = 'solid'; }); Actions.group(ids); return; }
+    if (mode === 'subtract') { App.change('Rollen gesetzt', (doc) => { items.forEach((it, i) => { Model.find(doc, it.id).item.role = i === 0 ? 'solid' : 'hole'; }); }); Actions.group(ids); return; }
+    if (mode === 'intersect') {
+      App.change('Rollen gesetzt', (doc) => { for (const it of items) Model.find(doc, it.id).item.role = 'solid'; });
+      wrap(siblings(ids), NAMES.intersect, { op: 'intersect' });
+      UI.toast('Schnittmenge: Übrig bleibt nur, was in allen Körpern zugleich liegt.', { icon: 'check' });
+    }
+  }
+  // Wandstärke: Körper aushöhlen, die gewählte Fläche wird zur Öffnung
+  function shell(face) {
+    const it = face && App.doc.items.find((x) => x.id === face.id);
+    if (!it || it.role === 'hole') { UI.toast('Klick auf eine Fläche eines Körpers.', { icon: 'info' }); return; }
+    const sig = { c: face.info.c.map((v) => round(v, 4)), n: face.info.n ? face.info.n.map((v) => round(v, 5)) : null };
+    const ex = (it.finishes || []).find((f) => f.type === 'shell');
+    App.change(ex ? 'Öffnung geändert' : 'Ausgehöhlt', (doc) => {
+      const T = Model.find(doc, it.id).item; T.finishes = T.finishes || [];
+      const s = T.finishes.find((f) => f.type === 'shell');
+      if (!s) { T.finishes.push({ id: uid('f'), type: 'shell', r: 2, faces: [sig] }); return; }
+      const i = s.faces.findIndex((f) => Math.hypot(f.c[0] - sig.c[0], f.c[1] - sig.c[1], f.c[2] - sig.c[2]) < 1e-3);
+      if (i >= 0) { if (s.faces.length > 1) s.faces.splice(i, 1); } else s.faces.push(sig);
+    });
+    App.select([it.id]);
+    UI.toast(ex ? 'Öffnung umgeschaltet. Jede Fläche, die du so anklickst, wird offen oder wieder zu.' : 'Ausgehöhlt mit 2 mm Wand. Rechts änderst du die Wandstärke.', { icon: 'check' });
+  }
+  // ---------- Rechte Leiste ----------
+  function renderOp(it, sec, setP) {
+    const p = it.p || {};
+    const f = h('div', { class: 'fields' });
+    const num = (k, label, unit = 'mm', o = {}) => UI.numField({ id: 'op-' + k, label, value: p[k], unit, int: o.int, min: o.min, onCommit: (v) => setP(k, v) });
+    const sel = (k, label, opts) => UI.selectField({ id: 'op-' + k, label, value: p[k], options: opts, onChange: (v) => setP(k, v) });
+    let hint = '';
+    if (p.op === 'pattern' && p.pt === 'rect') { f.append(num('nx', 'Anzahl X', '', { int: true, min: 1 }), num('ny', 'Anzahl Y', '', { int: true, min: 1 }), num('dx', 'Abstand X'), num('dy', 'Abstand Y')); hint = 'Die Anzahl zählt das Original mit. Abstände gehen von Mitte zu Mitte.'; }
+    else if (p.op === 'pattern' && p.pt === 'circ') { f.append(num('n', 'Anzahl', '', { int: true, min: 1 }), num('ang', 'Winkel', '°'), num('cx', 'Mitte X'), num('cy', 'Mitte Y')); hint = 'Gedreht wird um die senkrechte Achse durch die Mitte. 360° verteilt die Kopien rundherum.'; }
+    else if (p.op === 'pattern' && p.pt === 'mirror') { f.append(sel('plane', 'Spiegeln', [['YZ', 'Links ↔ rechts'], ['XZ', 'Vorne ↔ hinten'], ['XY', 'Oben ↔ unten']]), num('off', 'Lage der Ebene')); hint = 'Original und Spiegelbild werden ein Körper. Die Ebene geht durch den Nullpunkt, „Lage“ verschiebt sie.'; }
+    else if (p.op === 'split') {
+      const pl = p.plane || 'XY';
+      const sides = { XY: ['Oben', 'Unten'], XZ: ['Hinten', 'Vorne'], YZ: ['Rechts', 'Links'] }[pl];
+      f.append(sel('plane', 'Schnitt', [['XY', 'Waagerecht (XY)'], ['XZ', 'Von vorne (XZ)'], ['YZ', 'Von der Seite (YZ)']]), num('off', 'Lage der Ebene'), sel('keep', 'Behalten', [['both', 'Beide Hälften'], ['positive', sides[0]], ['negative', sides[1]]]), num('gap', 'Spalt'));
+      hint = 'Mit „Spalt“ rücken die Hälften auseinander – praktisch zum Drucken in zwei Teilen.';
+    } else if (p.op === 'intersect') hint = 'Übrig bleibt nur, was in allen Körpern dieser Gruppe zugleich liegt.';
+    sec.append(f);
+    if (hint) sec.append(h('div', { class: 'hint-box', html: hint }));
+    const ub = h('button', { type: 'button', class: 'btn' }); ub.innerHTML = icon('ungroup') + (p.op === 'pattern' ? 'Auflösen (nur Original behalten)' : 'Auflösen');
+    ub.onclick = () => Actions.ungroup(it.id);
+    sec.append(h('div', { class: 'btn-row' }, ub));
+  }
+  // Text für Verlauf und Statuszeile
+  function sizeText(it, V) {
+    const p = Model.resolveP(it.p || {}, V || {});
+    if (p.op === 'pattern' && p.pt === 'rect') return `${Math.max(1, Math.round(p.nx || 1))} × ${Math.max(1, Math.round(p.ny || 1))}`;
+    if (p.op === 'pattern' && p.pt === 'circ') return `${Math.max(1, Math.round(p.n || 1))}× ${fmt(p.ang ?? 360, 0)}°`;
+    if (p.op === 'pattern' && p.pt === 'mirror') return 'gespiegelt';
+    if (p.op === 'split') return { both: 'beide Hälften', positive: 'eine Hälfte', negative: 'eine Hälfte' }[p.keep] || '';
+    if (p.op === 'intersect') return 'Schnittmenge';
+    return null;
+  }
+  const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
+  return { pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
+})();
 // ---- 48-viewprefs.js ----
 // ================= Ansicht: Raster, Ursprungsebenen, Achsen, Projektion =================
 // Persönliche Einstellung (nicht im Projekt gespeichert), gilt für alle Projekte in diesem Browser.
@@ -4683,6 +4801,7 @@ const Log = (() => {
     build: 'Die Maße dieses Schritts prüfen – z. B. ob eine Wand dünner als null wird.',
     cut: 'Prüfen, ob das Loch den Körper überhaupt berührt.',
     mesh: 'Ein Maß leicht ändern und erneut versuchen.',
+    split: 'Rechts bei „Lage der Ebene“ einen Wert innerhalb des Körpers eintippen oder bei „Behalten“ die andere Hälfte wählen.',
   };
   const key = (id) => 'masswerk.log.' + id;
   function load(id) { docId = id; try { list = JSON.parse(storageGet(key(id)) || '[]'); } catch (_) { list = []; } }
@@ -5075,8 +5194,9 @@ const Panels = (() => {
           for (const fin of it.finishes || []) {
             const ferr = errs.find((x) => x.finishId === fin.id);
             const fr = h('div', { class: 'finish-row' + (ferr ? ' bad' : ''), title: ferr ? ferr.message : '' });
-            fr.innerHTML = icon(fin.type === 'chamfer' ? 'chamfer' : 'fillet');
-            fr.append(h('span', null, (fin.type === 'chamfer' ? 'Fase ' : 'Rundung ') + fmt(Model.num(fin.r, V, 1), 2) + ' mm' + (typeof fin.edges === 'string' ? ' · ' + ({ all: 'alle Kanten', top: 'oben', bottom: 'unten', vertical: 'senkrecht', horizontal: 'waagerecht' }[fin.edges] || '') : ' · ' + (fin.edges || []).length + ' Kante' + ((fin.edges || []).length === 1 ? '' : 'n'))));
+            fr.innerHTML = icon(fin.type === 'chamfer' ? 'chamfer' : fin.type === 'shell' ? 'shell' : 'fillet');
+            if (fin.type === 'shell') fr.append(h('span', null, 'Wandstärke ' + fmt(Model.num(fin.r, V, 2), 2) + ' mm'));
+            else fr.append(h('span', null, (fin.type === 'chamfer' ? 'Fase ' : 'Rundung ') + fmt(Model.num(fin.r, V, 1), 2) + ' mm' + (typeof fin.edges === 'string' ? ' · ' + ({ all: 'alle Kanten', top: 'oben', bottom: 'unten', vertical: 'senkrecht', horizontal: 'waagerecht' }[fin.edges] || '') : ' · ' + (fin.edges || []).length + ' Kante' + ((fin.edges || []).length === 1 ? '' : 'n'))));
             fr.onclick = () => App.select([it.id]);
             li.append(fr);
           }
@@ -5357,6 +5477,9 @@ const Panels = (() => {
       const eb = h('button', { type: 'button', class: 'btn' }); eb.innerHTML = icon('edit') + 'Skizze bearbeiten';
       eb.onclick = () => Sketch.editItem(it.id);
       sec.append(eb); w.append(sec);
+    } else if (Features.isOp(it)) {
+      sec.firstChild.textContent = Features.NAMES[it.p.op === 'pattern' ? it.p.pt : it.p.op] || 'Feature';
+      Features.renderOp(it, sec, setP); w.append(sec);
     } else if (it.kind === 'group') {
       sec.append(h('div', { class: 'hint-box', html: `Diese Gruppe besteht aus <b>${it.children.length} Teilen</b>. Löcher darin sind fest aus den Körpern geschnitten. Die Teile findest du links im Verlauf.` }));
       const ub = h('button', { type: 'button', class: 'btn' }); ub.innerHTML = icon('ungroup') + 'Gruppe lösen'; ub.onclick = () => Actions.ungroup(it.id);
@@ -5381,7 +5504,19 @@ const Panels = (() => {
     // Kanten
     if (it.role !== 'hole') {
       const ks = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Kanten'));
-      for (const fin of it.finishes || []) {
+      for (const fin of (it.finishes || []).filter((x) => x.type === 'shell')) {
+        const err = App.errorsFor(it.id).find((x) => x.finishId === fin.id);
+        const sh = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Wandstärke'));
+        const row = h('div', { class: 'fields', style: { gridTemplateColumns: '1fr auto', alignItems: 'end' } });
+        const nf = UI.numField({ id: 'fin-' + fin.id, label: `Wand · ${(fin.faces || []).length} Öffnung${(fin.faces || []).length === 1 ? '' : 'en'}`, value: fin.r, onCommit: (v) => Actions.setFinish(it.id, fin.id, { r: v }) });
+        if (err) nf.querySelector('.inp').classList.add('invalid');
+        const del = h('button', { type: 'button', class: 'btn ghost small', 'aria-label': 'Aushöhlen entfernen', 'data-tip': 'Aushöhlen entfernen' }); del.innerHTML = icon('trash');
+        del.onclick = () => Actions.removeFinish(it.id, fin.id);
+        row.append(nf, del); sh.append(row);
+        sh.append(h('div', { class: 'hint-box', html: 'Klick eine weitere Fläche an und wähle <b>Aushöhlen</b>, um sie zu öffnen oder wieder zu schließen.' }));
+        w.append(sh);
+      }
+      for (const fin of (it.finishes || []).filter((x) => x.type !== 'shell')) {
         const err = App.errorsFor(it.id).find((x) => x.finishId === fin.id);
         const row = h('div', { class: 'fields', style: { gridTemplateColumns: '1fr auto', alignItems: 'end' } });
         const lbl = (fin.type === 'chamfer' ? 'Fase' : 'Rundung') + (typeof fin.edges === 'string' ? ' · ' + ({ all: 'alle', top: 'oben', bottom: 'unten', vertical: 'senkrecht', horizontal: 'waagerecht' }[fin.edges] || '') : ` · ${(fin.edges || []).length} Kante${(fin.edges || []).length === 1 ? '' : 'n'}`);
@@ -5436,8 +5571,9 @@ const Panels = (() => {
     } else if (face && items.length === 1 && face.info.t === 'PLANE') {
       bar.append(h('span', { class: 'lbl' }, 'Fläche'));
       b('sketch', 'Skizze hierauf', () => Sketch.startOnFace(face), 'accent', 'Auf dieser Fläche zeichnen');
-      b('bolt', 'Loch hier', (e) => Place.holeHere(face, e.currentTarget), '', 'Schraubenloch genau hier setzen');
+      b('holeWizard', 'Bohrung', (e) => Place.holeHere(face, e.currentTarget), '', 'Bohrungs-Assistent: Schraubenloch, Gewinde, Einsatz oder Mutternfalle – hier und per Klick weitere');
       b('lift', 'Hochziehen', () => Sketch.pushPullFace(face), '', 'Die Fläche herausziehen oder hineindrücken');
+      if (items[0].item.role !== 'hole' && App.doc.items.some((x) => x.id === face.id)) b('shell', 'Aushöhlen', () => Features.shell(face), '', 'Körper aushöhlen – diese Fläche wird die Öffnung');
       sep();
     }
     if (items.length === 1) {
@@ -5448,9 +5584,12 @@ const Panels = (() => {
       b('rotate', 'Drehen', (e) => UI.menu(e.currentTarget, [{ label: 'Um 90° drehen (flach)', icon: 'rotate', kbd: 'R', run: () => Actions.rotate90(null, 'z') }, { label: 'Nach vorne kippen', icon: 'rotate', run: () => Actions.rotate90(null, 'x') }, { label: 'Zur Seite kippen', icon: 'rotate', run: () => Actions.rotate90(null, 'y') }]), '', 'Um 90° drehen oder kippen', true);
       b('mirror', 'Spiegeln', (e) => UI.menu(e.currentTarget, [{ label: 'Links ↔ rechts', icon: 'mirror', run: () => Actions.mirror(null, 'x') }, { label: 'Vorne ↔ hinten', icon: 'mirror', run: () => Actions.mirror(null, 'y') }, { label: 'Oben ↔ unten', icon: 'mirror', run: () => Actions.mirror(null, 'z') }]), '', 'Spiegeln', true);
       b('copy', 'Duplizieren', () => Actions.duplicate(), '', 'Duplizieren (Strg D)', true);
+      b('patternCirc', 'Muster', (e) => UI.menu(e.currentTarget, [{ label: 'Rechteckmuster', icon: 'patternRect', run: () => Features.pattern('rect') }, { label: 'Kreismuster', icon: 'patternCirc', run: () => Features.pattern('circ') }, { label: 'Gespiegelte Kopie', icon: 'mirror', run: () => Features.pattern('mirror') }]), '', hole ? 'Loch als Muster oder gespiegelt vervielfachen' : 'Muster oder gespiegelte Kopie', true);
+      if (!hole) b('split', 'Teilen', () => Features.split(), '', 'Körper an einer Ebene teilen', true);
       if (it.kind === 'group') b('ungroup', 'Gruppe lösen', () => Actions.ungroup(), '', 'Gruppe lösen', true);
     } else {
       b('group', 'Gruppieren', () => Actions.group(), 'accent', 'Zu einem Körper verbinden (Strg G)');
+      b('boolSubtract', 'Boolesch', (e) => UI.menu(e.currentTarget, [{ label: 'Vereinigen', icon: 'boolUnion', run: () => Features.boolean('union') }, { label: 'Abziehen (der zuerst gewählte bleibt)', icon: 'boolSubtract', run: () => Features.boolean('subtract') }, { label: 'Schnittmenge', icon: 'boolIntersect', run: () => Features.boolean('intersect') }]), '', 'Körper vereinigen, abziehen oder schneiden', true);
       b('layers', 'Ausrichten', (e) => UI.menu(e.currentTarget, [['left', 'Links bündig'], ['cx', 'Mittig (X)'], ['right', 'Rechts bündig'], ['front', 'Vorne bündig'], ['cy', 'Mittig (Y)'], ['back', 'Hinten bündig'], ['bottom', 'Unten bündig']].map(([m, l]) => ({ label: l, run: () => Actions.align(null, m) }))), '', 'Objekte aneinander ausrichten');
       b('copy', 'Duplizieren', () => Actions.duplicate(), '', 'Duplizieren (Strg D)', true);
     }
@@ -5639,39 +5778,129 @@ const Place = (() => {
     else Actions.addPart(s.spec.part, libDefaults(s.spec.part), s.onFace ? { onFace: s.onFace } : { pos: s.pos });
     if (s.onFace) UI.toast('Abgelegt – es ist jetzt Teil des Körpers darunter.', { icon: 'check' });
   }
-  function cancel() { cleanup(); }
+  function cancel() { cleanup(); stopHoles(); }
   function cleanup() {
     if (!st) return;
     Viewer.groups.overlay.remove(st.preview); st.preview.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
     st = null; document.body.style.cursor = ''; UI.hint(null); Viewer.highlightFace('hover', null, null); Viewer.requestRender();
   }
-  // „Loch hier“ auf einer gewählten Fläche
+  // ---------- Bohrungs-Assistent: Art, Größe, Tiefe wählen, dann Löcher per Klick setzen ----------
+  const HOLE_TYPES = [['through', 'Durchgangsloch für Schraube'], ['tap', 'Gewinde schneiden (Kernloch)'], ['insert', 'Gewindeeinsatz'], ['nut', 'Mutternfalle']];
+  let lastHole = { type: 'through', size: 'M3', head: 'countersunk', fit: 'medium', depth: 10, thru: true };
+  let hw = null;   // laufender Setz-Modus
   function holeHere(face, anchor) {
-    const def = LIBMAP.screwHole;
-    const p = libDefaults(def);
-    const box = h('div', { style: { display: 'grid', gap: '10px' } });
-    box.append(h('b', null, 'Schraubenloch setzen'));
-    const f = h('div', { class: 'fields' });
-    let size = p.size, head = p.head, length = p.length;
-    f.append(UI.selectField({ id: 'hh-size', label: 'Schraube', value: size, options: SIZES, onChange: (v) => { size = v; } }));
-    f.append(UI.selectField({ id: 'hh-head', label: 'Kopf', value: head, options: def.params[1].options, onChange: (v) => { head = v; } }));
-    box.append(f);
-    box.append(UI.numField({ id: 'hh-len', label: 'Tiefe', value: length, expr: true, onCommit: (v) => { length = v; } }));
-    const go = h('button', { type: 'button', class: 'btn primary' }); go.innerHTML = icon('check') + 'Loch setzen';
-    box.append(go);
-    const pt = face.point || face.info.c; const n = face.normal;
-    go.onclick = () => {
-      UI.closePop();
-      const W = Model.worldMatrix(App.doc, face.id);
-      const wp = face.point ? face.point : new THREE.Vector3(...face.info.c).applyMatrix4(W).toArray();
-      const wn = face.normal ? face.normal : new THREE.Vector3(...face.info.n).transformDirection(W).toArray();
-      const onFace = Actions.onFaceTransform(face.id, wp, wn);
-      Actions.addPart(def, { size, head, length }, { onFace });
-      UI.toast('Loch gesetzt. Ziehen verschiebt es auf der Fläche.', { icon: 'check' });
+    const o = { ...lastHole };
+    const box = h('div', { style: { display: 'grid', gap: '10px', minWidth: '260px' } });
+    box.append(h('b', null, 'Bohrungs-Assistent'));
+    const body = h('div', { style: { display: 'grid', gap: '10px' } });
+    const draw = () => {
+      body.innerHTML = '';
+      body.append(UI.selectField({ id: 'hw-type', label: 'Art', value: o.type, options: HOLE_TYPES, onChange: (v) => { o.type = v; draw(); } }));
+      const sizes = o.type === 'insert' ? SIZES.filter((x) => x !== 'M1.6') : SIZES;
+      if (!sizes.includes(o.size)) o.size = 'M3';
+      body.append(UI.selectField({ id: 'hw-size', label: o.type === 'nut' ? 'Mutter' : o.type === 'insert' ? 'Gewinde' : 'Schraube', value: o.size, options: sizes, onChange: (v) => { o.size = v; } }));
+      if (o.type === 'through') {
+        const f = h('div', { class: 'fields' });
+        f.append(UI.selectField({ id: 'hw-head', label: 'Kopf', value: o.head, options: LIBMAP.screwHole.params[1].options, onChange: (v) => { o.head = v; } }));
+        f.append(UI.selectField({ id: 'hw-fit', label: 'Loch', value: o.fit, options: [['medium', 'Mittel'], ['fine', 'Eng'], ['coarse', 'Weit']], onChange: (v) => { o.fit = v; } }));
+        body.append(f);
+      }
+      const thru = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'hw-thru', checked: !!o.thru }), o.type === 'insert' ? 'So tief wie der Körper' : 'Ganz durch den Körper');
+      thru.querySelector('input').onchange = (e) => { o.thru = e.target.checked; draw(); };
+      body.append(thru);
+      if (!o.thru) body.append(UI.numField({ id: 'hw-depth', label: 'Tiefe', value: o.depth, onCommit: (v) => { o.depth = v; } }));
     };
-    UI.pop(anchor, box);
+    draw(); box.append(body);
+    const go = h('button', { type: 'button', class: 'btn primary', id: 'hw-go' }); go.innerHTML = icon('check') + 'Löcher setzen';
+    go.onclick = () => {
+      UI.closePop(); lastHole = { ...o };
+      startHoles(o);
+      // aus einer gewählten Fläche: das erste Loch gleich dort setzen
+      if (face && face.point && face.normal) placeAt(face.id, new THREE.Vector3(...face.point), new THREE.Vector3(...face.normal));
+    };
+    box.append(go);
+    UI.pop(anchor || $('#t-parts'), box);
   }
-  return { bindTile, holeHere, cancel, get active() { return !!st; } };
+  // Dicke des Körpers entlang der Bohrrichtung
+  function thicknessAlong(id, n) {
+    const b = Actions.worldBox(id); if (!b || b.isEmpty()) return 20;
+    let lo = Infinity, hi = -Infinity;
+    for (let i = 0; i < 8; i++) { const p = new THREE.Vector3(i & 1 ? b.max.x : b.min.x, i & 2 ? b.max.y : b.min.y, i & 4 ? b.max.z : b.min.z); const d = p.dot(n); lo = Math.min(lo, d); hi = Math.max(hi, d); }
+    return round(hi - lo + 0.5, 1);
+  }
+  function specFor(o, thick) {
+    const depth = o.thru ? thick : o.depth;
+    if (o.type === 'insert') return [LIBMAP.insert, { size: o.size, depth: o.thru ? thick : depth }];
+    if (o.type === 'nut') return [LIBMAP.nutTrap, { size: o.size, depth: null, length: depth }];
+    if (o.type === 'tap') return [LIBMAP.screwHole, { size: o.size, head: 'none', fit: 'tap', length: depth }];
+    return [LIBMAP.screwHole, { size: o.size, head: o.head, fit: o.fit, length: depth }];
+  }
+  function placeAt(id, point, normal) {
+    if (!hw) return;
+    const [def, params] = specFor(hw.o, thicknessAlong(id, normal));
+    const onFace = Actions.onFaceTransform(id, point.toArray(), normal.toArray());
+    Actions.addPart(def, params, { onFace });
+    App.clearSelection(); Handles.clear();
+    hw.count++; holeBar();
+  }
+  function holeBar() {
+    if (hw.bar) hw.bar.remove();
+    const bar = h('div', { class: 'sketchbar holebar', role: 'toolbar', 'aria-label': 'Bohrungen' });
+    const name = { through: 'Durchgang', tap: 'Kernloch', insert: 'Einsatz', nut: 'Mutternfalle' }[hw.o.type];
+    bar.append(h('span', { class: 'title' }, 'Bohrungen'), h('span', { class: 'lbl', style: { padding: '0 8px', fontSize: '13px' } }, `${hw.o.size} · ${name} · ${hw.count} gesetzt`));
+    const ok = h('button', { type: 'button', class: 'tool primary', 'data-kbd': 'Esc' }); ok.innerHTML = icon('check') + '<span>Fertig</span>'; ok.onclick = () => stopHoles();
+    bar.append(ok); $('#overlay').append(bar); hw.bar = bar;
+  }
+  function ringObj(o) {
+    const r = (parseFloat(String(o.size).slice(1)) || 3) * (o.type === 'through' && o.head !== 'none' ? 1.1 : 0.6);
+    const pts = []; for (let i = 0; i <= 40; i++) { const t = (i / 40) * Math.PI * 2; pts.push(new THREE.Vector3(Math.cos(t) * r, Math.sin(t) * r, 0)); }
+    pts.push(new THREE.Vector3(-r * 1.4, 0, 0), new THREE.Vector3(r * 1.4, 0, 0));
+    const g = new THREE.BufferGeometry().setFromPoints(pts);
+    const l = new THREE.Line(g, new THREE.LineBasicMaterial({ color: new THREE.Color(Viewer.theme.hole), depthTest: false, transparent: true }));
+    l.renderOrder = 30; l.matrixAutoUpdate = false; l.visible = false;
+    Viewer.groups.overlay.add(l); return l;
+  }
+  function startHoles(o) {
+    stopHoles(true);
+    hw = { o, count: 0, ring: ringObj(o), down: null };
+    App.clearSelection(); Handles.clear(); Panels.renderCtx();
+    Viewer.controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+    Viewer.canvas.style.cursor = 'crosshair';
+    UI.hint('<b>Löcher setzen:</b> Jeder Klick auf eine Fläche setzt ein Loch. Ansicht drehen: <b>rechte Maustaste</b>. <b>Esc</b> beendet.');
+    const cv = Viewer.canvas;
+    hw.onDown = (e) => { if (e.button !== 0) return; e.preventDefault(); e.stopPropagation(); hw.down = { x: e.clientX, y: e.clientY }; };
+    hw.onUp = (e) => {
+      if (!hw || !hw.down || e.button !== 0) return;
+      const moved = Math.hypot(e.clientX - hw.down.x, e.clientY - hw.down.y) > 5; hw.down = null;
+      if (moved) return;
+      const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true, solidsOnly: true });
+      if (!hit || !hit.normal) { UI.toast('Klick auf eine Fläche eines Körpers.', { icon: 'info', ms: 1600 }); return; }
+      placeAt(hit.id, hit.point, hit.normal);
+    };
+    hw.onMove = (e) => {
+      const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true, solidsOnly: true });
+      if (!hit || !hit.normal) { hw.ring.visible = false; Viewer.requestRender(); return; }
+      const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), hit.normal);
+      hw.ring.matrix.compose(hit.point.clone().addScaledVector(hit.normal, 0.05), q, new THREE.Vector3(1, 1, 1));
+      hw.ring.matrixWorldNeedsUpdate = true; hw.ring.visible = true; Viewer.requestRender();
+    };
+    cv.addEventListener('pointerdown', hw.onDown, true);
+    window.addEventListener('pointerup', hw.onUp);
+    cv.addEventListener('pointermove', hw.onMove);
+    holeBar();
+  }
+  function stopHoles(silent) {
+    if (!hw) return;
+    const cv = Viewer.canvas;
+    cv.removeEventListener('pointerdown', hw.onDown, true); window.removeEventListener('pointerup', hw.onUp); cv.removeEventListener('pointermove', hw.onMove);
+    Viewer.groups.overlay.remove(hw.ring); hw.ring.geometry.dispose(); hw.ring.material.dispose();
+    if (hw.bar) hw.bar.remove();
+    const n = hw.count; hw = null;
+    Viewer.controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+    Viewer.canvas.style.cursor = ''; UI.hint(null); Viewer.requestRender(); Handles.rebuild(); Panels.renderCtx();
+    if (!silent && n) UI.toast(`${n} ${n === 1 ? 'Loch' : 'Löcher'} gesetzt. Ziehen verschiebt ein Loch auf der Fläche.`, { icon: 'check' });
+  }
+  return { bindTile, holeHere, holeWizard: (anchor) => holeHere(Actions.selectedFace(), anchor), stopHoles, cancel, get active() { return !!st || !!hw; }, get holes() { return !!hw; } };
 })();
 
 // ---- 55-sketch.js ----
@@ -7656,6 +7885,14 @@ const Commands = (() => {
     add('add-hole', 'Loch (Zylinder) hinzufügen', 'hole', 'bohrung loch rund ausschnitt', () => Actions.addPrimitive('cylinder', { role: 'hole', name: 'Loch', p: { d: 6, h: 30 } }), { group: 'Körper' });
     for (const d of LIB) add('lib-' + d.lib, d.label + ' hinzufügen', d.icon, 'bauteil ' + d.desc, () => Actions.addPart(d, libDefaults(d)), { group: 'Bauteile' });
     add('sketch', 'Skizze zeichnen', 'sketch', 'zeichnen 2d profil umriss extrudieren', () => Sketch.chooseAndStart(), { group: 'Werkzeuge', kbd: 'S' });
+    add('hole-wizard', 'Bohrungs-Assistent', 'holeWizard', 'bohrung loch schraube gewinde senkung einsatz mutter', () => Place.holeWizard($('#t-parts')), { group: 'Bearbeiten' });
+    add('pattern-rect', 'Rechteckmuster', 'patternRect', 'muster reihe raster kopien vervielfachen', () => Features.pattern('rect'), { group: 'Bearbeiten' });
+    add('pattern-circ', 'Kreismuster', 'patternCirc', 'muster kreis rund kopien motor löcher', () => Features.pattern('circ'), { group: 'Bearbeiten' });
+    add('mirror-copy', 'Gespiegelte Kopie', 'mirror', 'spiegeln kopie symmetrisch', () => Features.pattern('mirror'), { group: 'Bearbeiten' });
+    add('split', 'Körper teilen', 'split', 'teilen schneiden trennen hälfte', () => Features.split(), { group: 'Bearbeiten' });
+    add('bool-sub', 'Abziehen (Boolesch)', 'boolSubtract', 'boolesch abziehen differenz', () => Features.boolean('subtract'), { group: 'Bearbeiten' });
+    add('bool-int', 'Schnittmenge (Boolesch)', 'boolIntersect', 'boolesch schnittmenge', () => Features.boolean('intersect'), { group: 'Bearbeiten' });
+    add('shell', 'Aushöhlen / Wandstärke', 'shell', 'wandstärke aushöhlen schale hohl gehäuse', () => { const f = Actions.selectedFace(); if (f) Features.shell(f); else UI.toast('Klick zuerst die Fläche an, die offen sein soll.', { icon: 'info' }); }, { group: 'Bearbeiten' });
     add('measure', 'Messen', 'measure', 'abstand länge durchmesser lineal', () => Measure.toggle(), { group: 'Werkzeuge', kbd: 'M' });
     add('notes', 'Notizstift', 'noteDraw', 'notiz stift malen zeichnen kritzeln text markieren hinweis', () => Notes.toggle(), { group: 'Werkzeuge', kbd: 'N' });
     add('notes-show', 'Notizen ein- oder ausblenden', 'notesShow', 'notizen zeigen verstecken ausblenden', () => ViewPrefs.toggle('notes'), { group: 'Ansicht' });
@@ -9454,7 +9691,7 @@ const Tour = (() => {
   window.__masswerk = { App, Viewer, Model, Actions, Sketch, SK, THREE, Print, Drawing, Kernel, UI, Commands, Panels, Handles, Start, AI, Measure, Place };
   UI.initTips();
   Viewer.init($('#viewport'));
-  window.__V = Viewer; window.__M = { App, Actions, Model, Timeline, Start, Comp, Handles, Sketch, SK, Viewer, Commands, Solver, Notes, SKO }; window.__S = Start; // für automatische Tests
+  window.__V = Viewer; window.__M = { App, Actions, Model, Timeline, Start, Comp, Handles, Sketch, SK, Viewer, Commands, Solver, Notes, SKO, Features, Place }; window.__S = Start; // für automatische Tests
   Panels.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Notes.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init(); Refine.init(); Comp.init();
 
   // Kopfzeile

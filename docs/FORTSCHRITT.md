@@ -1,6 +1,6 @@
 # Fortschritt
 
-Stand: 17.10.2026 · nach Sitzung 7 von 14
+Stand: 19.10.2026 · nach Sitzung 8 von 14
 
 ## Erledigt
 
@@ -45,7 +45,7 @@ Stand: 17.10.2026 · nach Sitzung 7 von 14
 - [x] Neuer Name beim Maß (z. B. `breite`) wird automatisch unter „Maße“ angelegt
 - [x] Formel-Beispiele unter „Maße“ (Gemini, alle 12 mit Tracerys Rechner nachgeprüft), Beispiel-Maße per Klick
 - [x] Umbenennen / Entfernen eines Maßes wirkt jetzt auch auf Skizzen-Maße
-- [x] Automatischer Klicktest `tests/klicktest.py`: 49 Durchläufe (alle grün), 73 von 82 Punkten der Testliste automatisch geprüft
+- [x] Automatischer Klicktest `tests/klicktest.py`: 58 Durchläufe (alle grün), 82 von 94 Punkten der Testliste automatisch geprüft
 - [x] Aufgeräumt: Programm liegt jetzt in 28 Quelldateien unter `app/src/`, `tools/build.py` baut daraus `app/index.html`
 - [x] Notizstift (Taste N): freie Striche, die am Modell kleben, Textnotizen, 6 Farben, 3 Dicken, Radierer, ein-/ausblendbar – ohne technische Bedeutung
 - [x] Symbole für den Notizstift (Gemini, geprüft); Augen-Knopf rechts im Bild blendet Notizen aus, sobald es welche gibt
@@ -65,6 +65,13 @@ Stand: 17.10.2026 · nach Sitzung 7 von 14
 - [x] Hilfslinien (Taste X): neue Elemente als Hilfslinien zeichnen oder das gewählte umwandeln; zählen nicht zur Fläche
 - [x] Hilfetexte für Spline, Trimmen, Versatz angepasst; neu: Spiegeln, Rechteck- und Kreismuster, Hilfslinien (Datei und eingebettete Fassung gleich)
 - [x] Neues Bauteil `app/src/js/17-sketchops.js` (Schnittpunkte, Trimmen, Versatz, Spiegeln, Muster) – rechnet ohne Anzeige
+- [x] Bohrungs-Assistent: Fläche anklicken → „Bohrung“ → Durchgangsloch, Gewinde (Kernloch), Gewindeeinsatz oder Mutternfalle, Größe, Kopf, Passung, Tiefe oder „durch“; danach setzt jeder Klick ein weiteres Loch, Ring-Vorschau auf der Fläche, Esc beendet
+- [x] Rechteckmuster, Kreismuster und gespiegelte Kopie für Körper und Löcher (auch ein Loch innerhalb einer Platte → Lochkreis für Motoren); Anzahl, Abstand, Winkel, Mitte und Ebene rechts änderbar, auch mit Formeln; das Original bestimmt alle Kopien; „Auflösen“ behält nur das Original
+- [x] Teilen an einer Ebene (waagerecht / von vorne / von der Seite), Lage, welche Hälfte bleibt, Spalt zum Auseinanderrücken
+- [x] Boolesch für mehrere gewählte Körper: Vereinigen, Abziehen (der zuerst gewählte bleibt), Schnittmenge
+- [x] Wandstärke (Aushöhlen): Fläche anklicken → „Aushöhlen“, Wand rechts einstellbar, weitere Flächen per Klick öffnen/schließen; zu dicke Wand wird rot mit Höchstwert
+- [x] Hilfetexte für die Formen-Werkzeuge an das echte Verhalten angepasst
+- [x] Neues Bauteil `app/src/js/46-features.js`; der CAD-Kern rechnet Muster, Teilen, Schnittmenge und Aushöhlen selbst
 
 ## Offen
 
@@ -82,7 +89,9 @@ Fertig.
 - [ ] Spiegeln an der X- oder Y-Achse ohne eigene Linie
 
 ### Stufe 3 – Features und Ansichten
-- [ ] Bohrungs-Assistent, Wandstärke, Muster, Spiegeln, Boolesch, Teilen (Sitzung 8)
+- [x] Bohrungs-Assistent, Wandstärke, Muster, Spiegeln, Boolesch, Teilen (Sitzung 8)
+- [ ] Muster entlang einer Kante oder Kurve; Kreismuster um eine schräge Achse (heute immer um die Senkrechte)
+- [ ] Bohrung an einem Skizzenpunkt (heute per Klick auf eine Fläche)
 - [ ] Explosionsansicht, Fokus-Vorschau, Schnitt, Röntgen (Sitzung 9)
 - [ ] Messen, Material pro Teil, Push/Pull, „ähnliche auswählen“, Versionen (Sitzung 10)
 
@@ -107,3 +116,5 @@ Fertig.
 - Übernommene Körperkanten passen sich noch nicht an, wenn sich der Körper später ändert
 - Vielecke lassen sich noch nicht drehen per Regel (nur über die Lage)
 - Schildchen „X 0“ und „Y 0“ am Ursprung liegen übereinander
+- Teilen ergibt zwei Hälften in einem Schritt; einzeln verschieben geht erst nach „Auflösen“ (dann ist der Schnitt weg)
+- Feature-Gruppen (mehrere Schritte als einen benannten Block zusammenfassen) aus dem Bauplan sind noch nicht gebaut – Bauteile decken das heute teilweise ab

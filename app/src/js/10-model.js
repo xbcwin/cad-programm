@@ -133,11 +133,11 @@ const Model = (() => {
   function matArr(m) { return Array.from(m.elements); }
   function kernelItem(it, V) {
     const o = { id: it.id, kind: it.kind, role: it.role, hidden: !!it.hidden, m: matArr(localMatrix(it)) };
-    if (it.kind === 'group') { let kids = it.children || []; if (it.rollback != null) kids = kids.slice(0, clamp(it.rollback, 0, kids.length)); o.children = kids.filter((c) => !c.suppressed).map((c) => kernelItem(c, V)); }
+    if (it.kind === 'group') { let kids = it.children || []; if (it.rollback != null) kids = kids.slice(0, clamp(it.rollback, 0, kids.length)); o.children = kids.filter((c) => !c.suppressed).map((c) => kernelItem(c, V)); if (it.p && it.p.op) o.p = resolveP(it.p, V); }
     else if (it.kind === 'extrude' || it.kind === 'revolve') o.p = sketchParams(it, V);
     else o.p = resolveP(it.p, V);
     if (it.mir) o.mir = it.mir;
-    if (it.finishes && it.finishes.length) o.finishes = it.finishes.filter((f) => !f.off).map((f) => ({ id: f.id, type: f.type, r: num(f.r, V, 1), edges: f.edges }));
+    if (it.finishes && it.finishes.length) o.finishes = it.finishes.filter((f) => !f.off).map((f) => ({ id: f.id, type: f.type, r: num(f.r, V, 1), edges: f.edges, faces: f.faces }));
     return o;
   }
   function sketchParams(it, V) {
@@ -186,7 +186,7 @@ const Model = (() => {
       case 'torus': return `Ø ${f(p.d)}`;
       case 'extrude': return `${f(p.dist)} hoch`;
       case 'revolve': return `${f(p.angle)}°`;
-      case 'group': return `${(it.children || []).length} Teile`;
+      case 'group': return (typeof Features !== 'undefined' && Features.sizeText(it, V)) || `${(it.children || []).length} Teile`;
       case 'part': return p.size || '';
     }
     return '';

@@ -155,9 +155,9 @@
     "tipp": "Damit verbindest du problemlos einen eckigen Boden mit einer kreisrunden Öffnung weiter oben."
   },
   "holeWizard": {
-    "tip": "Passgenaues Loch für Schrauben bohren",
-    "hilfe": "Klicke auf eine Fläche oder einen Skizzenpunkt und wähle im Menü einfach die gewünschte Schraubengröße (z. B. M4) und Tiefe aus.",
-    "tipp": "Wähle „Durchgangsloch“, wenn die Schraube frei durchgehen soll – für M3-Schrauben sind das meist 3,2 mm."
+    "tip": "Schraubenloch, Gewinde, Einsatz oder Mutternfalle bohren",
+    "hilfe": "Klick auf eine Fläche und dann auf „Bohrung“. Wähle Art und Größe (zum Beispiel M3) und drück „Löcher setzen“. Jeder weitere Klick auf eine Fläche setzt noch ein Loch – „Fertig“ oder Esc beendet.",
+    "tipp": "„Durchgangsloch“ lässt die Schraube frei durchrutschen. „Gewinde schneiden“ macht das kleinere Kernloch, in das sich die Schraube selbst hineindreht."
   },
   "countersink": {
     "tip": "Trichter-Rand für flache Schraubenköpfe",
@@ -176,43 +176,43 @@
   },
   "shell": {
     "tip": "Körper aushöhlen wie eine Schachtel",
-    "hilfe": "Klicke die Fläche an, die komplett offen sein soll, und tippe ein, wie dick die restlichen Wände bleiben sollen.",
-    "tipp": "So wird aus einem massiven Klotz mit nur einem Klick eine fertige Box ohne Deckel."
+    "hilfe": "Klick die Fläche an, die offen sein soll, und wähle „Aushöhlen“. Rechts unter „Wandstärke“ tippst du ein, wie dick die Wände bleiben.",
+    "tipp": "Klickst du eine zweite Fläche an und wieder „Aushöhlen“, wird auch sie offen – oder wieder zu."
   },
   "patternRect": {
-    "tip": "Elemente in geraden Reihen kopieren",
-    "hilfe": "Wähle deinen Körper oder ein Loch aus, klicke eine Kante für die Richtung an und tippe Abstand sowie Anzahl ein.",
-    "tipp": "Kopiere lieber fertige 3D-Schritte (wie Löcher oder Noppen) statt vieler einzelner Linien in der Skizze – das hält dein Projekt schnell."
+    "tip": "Körper in geraden Reihen kopieren",
+    "hilfe": "Wähle einen Körper und dann „Muster“ → „Rechteckmuster“. Rechts stellst du Anzahl und Abstand für X und Y ein – auch mit Formeln.",
+    "tipp": "Änderst du das Original, ziehen alle Kopien mit. „Auflösen“ macht das Muster wieder rückgängig."
   },
   "patternCirc": {
-    "tip": "Elemente gleichmäßig im Kreis kopieren",
-    "hilfe": "Klicke das Element an, das du vervielfältigen willst, wähle einen runden Kreis oder Zylinder als Mitte und gib die Anzahl ein.",
-    "tipp": "Perfekt für Lochkreise, Speichen oder Lüftungsschlitze, bei denen sich alles im Kreis wiederholt."
+    "tip": "Körper gleichmäßig im Kreis kopieren",
+    "hilfe": "Wähle einen Körper und dann „Muster“ → „Kreismuster“. Rechts stellst du Anzahl, Winkel und die Mitte ein, um die gedreht wird.",
+    "tipp": "Perfekt für Lochkreise und Speichen. 360° verteilt die Kopien ganz rundherum."
   },
   "mirror": {
-    "tip": "Bauteil auf andere Seite spiegeln",
-    "hilfe": "Wähle den Körper oder den Arbeitsschritt aus und klicke dann auf eine flache Seite oder Ebene, die als Spiegel dient.",
-    "tipp": "Bei symmetrischen Teilen – etwa einem Frame – baust du nur eine Hälfte fertig und spiegelst sie am Ende. Das spart die halbe Arbeit."
+    "tip": "Gespiegelte Kopie anlegen",
+    "hilfe": "Wähle einen Körper und dann „Muster“ → „Gespiegelte Kopie“. Rechts wählst du die Spiegelebene und wo sie liegt.",
+    "tipp": "Bei symmetrischen Teilen – etwa einem Frame – baust du nur eine Hälfte und spiegelst sie. Das spart die halbe Arbeit."
   },
   "boolUnion": {
     "tip": "Mehrere Körper zu einem verschmelzen",
-    "hilfe": "Klicke nacheinander alle sich berührenden Einzelkörper an und bestätige, um sie fest zusammenzukleben.",
+    "hilfe": "Klick mit gedrückter Umschalttaste mehrere Körper an und wähle „Boolesch“ → „Vereinigen“.",
     "tipp": "Teile, die am Ende ein einziges Bauteil sein sollen, verbindest du hiermit zu einem Körper."
   },
   "boolSubtract": {
     "tip": "Einen Körper vom anderen abziehen",
-    "hilfe": "Klicke zuerst auf das Hauptbauteil, das bleiben soll, und danach auf den Körper, der wie eine Backform herausgestanzt wird.",
-    "tipp": "Damit kannst du passgenaue Abdrücke oder Halterungen für andere Gegenstände in dein Bauteil schneiden."
+    "hilfe": "Klick zuerst das Teil an, das bleiben soll, dann mit Umschalttaste die Körper, die herausgeschnitten werden. Dann „Boolesch“ → „Abziehen“.",
+    "tipp": "Damit schneidest du passgenaue Abdrücke oder Halterungen für andere Gegenstände in dein Bauteil."
   },
   "boolIntersect": {
-    "tip": "Nur das gemeinsame Überlappungsstück behalten",
-    "hilfe": "Klicke zwei Körper an, die ineinander stecken. Alles verschwindet, außer dem Bereich, den beide gleichzeitig ausfüllen.",
-    "tipp": "Ideal, um aus zwei komplizierten Richtungen gleichzeitig die perfekte Mischform herauszuschneiden."
+    "tip": "Nur das gemeinsame Stück behalten",
+    "hilfe": "Klick mit Umschalttaste zwei Körper an, die ineinanderstecken, und wähle „Boolesch“ → „Schnittmenge“. Übrig bleibt nur, was beide zugleich ausfüllen.",
+    "tipp": "Ideal, um eine Form aus zwei Richtungen gleichzeitig zuzuschneiden."
   },
   "split": {
-    "tip": "Körper an einer Fläche durchschneiden",
-    "hilfe": "Wähle zuerst den Körper aus, den du zerteilen willst, und klicke dann auf eine Ebene oder Fläche als Schneidemesser.",
-    "tipp": "Praktisch, um ein Teil in zwei Hälften zu zerlegen oder eine Platte aus einem Block herauszutrennen."
+    "tip": "Körper an einer Ebene durchschneiden",
+    "hilfe": "Wähle einen Körper und dann „Teilen“. Rechts stellst du die Schnittebene ein, wo sie liegt und welche Hälfte bleibt.",
+    "tipp": "Mit „Spalt“ rücken die Hälften auseinander – praktisch, wenn ein Teil zu groß für den Drucker ist."
   },
   "section": {
     "tip": "Bauteil virtuell aufschneiden zum Reinschauen",

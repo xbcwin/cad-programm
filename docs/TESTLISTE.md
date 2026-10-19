@@ -1,6 +1,6 @@
 # Testliste
 
-Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 7 (17.10.2026).
+Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 8 (19.10.2026).
 
 **[x]** = automatisch geprüft mit `tests/klicktest.py` (echter Browser, echte Klicks) · **[ ]** = noch von Hand ansehen
 
@@ -19,7 +19,8 @@ Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 7 (17.10.
 | Notizstift | 6 | 3 | Kleben beim Drehen, Farbe/Dicke, Doppelklick auf Textnotiz |
 | Regeln in der Skizze | 11 | 9 | Blau/dunkel gut erkennbar? Ziehen flüssig? |
 | Skizzen-Feinschliff | 10 | 9 | Fangmarkierungen gut erkennbar? |
-| **Gesamt** | **82** | **73** | **9 Punkte, dazu ein Blick auf Animationen** |
+| Formen-Werkzeuge | 12 | 9 | Bohrungs-Ring gut sichtbar? Muster-Kreis verständlich? Wand von innen |
+| **Gesamt** | **94** | **82** | **12 Punkte, dazu ein Blick auf Animationen** |
 
 Wichtig: Automatisch geprüft heißt „funktioniert in Chromium unter Linux“. Safari auf dem Mac, Touch auf dem iPad und echte Grafikkarten sieht nur ein Test von Hand.
 
@@ -208,6 +209,45 @@ Vorbereitung: `app/` über einen lokalen Server öffnen (siehe README), Seite ne
 - [ ] **Fangmarkierungen**
   Schritte: 1. Mit dem Linienwerkzeug über Endpunkt, Mitte, Schnittpunkt, Kreis-Viertelpunkt fahren.
   Erwartet: Jede Art hat ihre eigene Form (Quadrat, Dreieck, Kreuz, Raute …) und einen Hinweis. Ob man sie gut erkennt, sieht nur ein Mensch.
+
+## Formen-Werkzeuge (neu in Sitzung 8)
+
+- [x] **Bohrungs-Assistent**
+  Schritte: 1. Vorlage „Schild mit Loch“, von oben (Taste 7). 2. Auf die Platte klicken, oben „Bohrung“. 3. Art „Gewinde schneiden“, Größe M2, „Löcher setzen“. 4. Noch zweimal auf die Platte klicken. 5. „Fertig“ oder Esc.
+  Erwartet: Drei kleine Kernlöcher, so tief wie die Platte dick ist; oben zählt die Leiste „3 gesetzt“; nach Esc ist der Modus aus.
+- [x] **Lochkreis in einer Platte (Motorhalter)**
+  Schritte: 1. Quader 40 × 40 × 3. 2. Bei X = 8 eine M3-Bohrung setzen. 3. Doppelklick auf die Platte (Bauteil bearbeiten), das Loch anklicken. 4. „Muster“ → „Kreismuster“. 5. Rechts Anzahl 6.
+  Erwartet: Erst vier, dann sechs Löcher rund um die Plattenmitte; alle schneiden durch die Platte.
+- [x] **Kreismuster**
+  Schritte: 1. Zylinder bei X = 30. 2. Anklicken, „Muster“ → „Kreismuster“. 3. Rechts Anzahl 3. 4. Den Zylinder im Muster dicker machen. 5. „Auflösen“.
+  Erwartet: Vier, dann drei Zylinder rundherum; alle werden dicker; nach „Auflösen“ bleibt nur das Original. Im Verlauf steht „3× 360°“.
+- [x] **Rechteckmuster mit Formel**
+  Schritte: 1. Quader, „Muster“ → „Rechteckmuster“. 2. Anzahl Y = 2. 3. Unter „Maße“ ein Maß `Anzahl = 4` anlegen und bei Anzahl X `Anzahl` eintippen. 4. Das Maß auf 2 stellen. 5. Strg/Cmd+Z bis zum Anfang.
+  Erwartet: Erst 3 × 1, dann 3 × 2, dann 4 × 2, dann 2 × 2 Quader; am Ende wieder nur einer.
+- [x] **Gespiegelte Kopie**
+  Schritte: 1. Zylinder bei X = 20. 2. „Muster“ → „Gespiegelte Kopie“. 3. Rechts „Vorne ↔ hinten“, dann wieder „Links ↔ rechts“ und Lage 10.
+  Erwartet: Kopie bei X = −20; vorne/hinten fällt die Kopie mit dem Original zusammen; mit Lage 10 liegt die Kopie bei X = 0.
+- [x] **Teilen**
+  Schritte: 1. Quader, „Teilen“. 2. Spalt 4. 3. Behalten „Oben“. 4. Lage der Ebene 50. 5. Lage 5.
+  Erwartet: Zwei Hälften, mit Spalt 4 mm auseinander; dann nur die obere; bei 50 eine rote Meldung „Die Schnittebene trifft den Körper nicht“; bei 5 wieder in Ordnung.
+- [x] **Boolesch**
+  Schritte: 1. Zwei Quader, die sich halb überlappen, beide mit Umschalt anklicken. 2. „Boolesch“ → „Abziehen“. 3. Rückgängig, dann „Schnittmenge“. 4. Rückgängig, dann „Vereinigen“.
+  Erwartet: Vom ersten Quader bleibt die Hälfte; dann nur das Überlappungsstück; dann ein langer Körper.
+- [x] **Wandstärke**
+  Schritte: 1. Quader, von oben auf die Deckfläche klicken, „Aushöhlen“. 2. Rechts unter „Wandstärke“ 12 eintippen. 3. Dann 3.
+  Erwartet: Offene Schachtel mit 2 mm Wand; bei 12 wird das Feld rot mit „möglich sind weniger als 10 mm“; bei 3 wieder in Ordnung.
+- [x] **Hilfetexte der Formen-Werkzeuge**
+  Schritte: 1. Maus auf „Bohrung“, „Aushöhlen“, „Muster“, „Teilen“, „Boolesch“ legen.
+  Erwartet: Kurzer Text, dann Anleitung mit Tipp, passend zu dem, was der Knopf wirklich tut.
+- [ ] **Bohrungs-Vorschau**
+  Schritte: 1. Bohrungs-Assistent starten, Maus über schräge und senkrechte Flächen bewegen.
+  Erwartet: Der Ring liegt flach auf der Fläche unter der Maus und ist gut zu sehen.
+- [ ] **Muster-Kreis**
+  Schritte: 1. Ein Kreismuster anklicken.
+  Erwartet: Der gestrichelte Kreis und der Punkt in der Mitte machen klar, worum gedreht wird.
+- [ ] **Wand von innen**
+  Schritte: 1. Ausgehöhlten Quader schräg von oben ansehen.
+  Erwartet: Innenwände sind sauber, keine Löcher oder Flackern. (Schnittansicht kommt in Sitzung 9.)
 
 ## Notizstift (neu)
 

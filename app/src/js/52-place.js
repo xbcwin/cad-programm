@@ -88,38 +88,128 @@ const Place = (() => {
     else Actions.addPart(s.spec.part, libDefaults(s.spec.part), s.onFace ? { onFace: s.onFace } : { pos: s.pos });
     if (s.onFace) UI.toast('Abgelegt – es ist jetzt Teil des Körpers darunter.', { icon: 'check' });
   }
-  function cancel() { cleanup(); }
+  function cancel() { cleanup(); stopHoles(); }
   function cleanup() {
     if (!st) return;
     Viewer.groups.overlay.remove(st.preview); st.preview.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
     st = null; document.body.style.cursor = ''; UI.hint(null); Viewer.highlightFace('hover', null, null); Viewer.requestRender();
   }
-  // „Loch hier“ auf einer gewählten Fläche
+  // ---------- Bohrungs-Assistent: Art, Größe, Tiefe wählen, dann Löcher per Klick setzen ----------
+  const HOLE_TYPES = [['through', 'Durchgangsloch für Schraube'], ['tap', 'Gewinde schneiden (Kernloch)'], ['insert', 'Gewindeeinsatz'], ['nut', 'Mutternfalle']];
+  let lastHole = { type: 'through', size: 'M3', head: 'countersunk', fit: 'medium', depth: 10, thru: true };
+  let hw = null;   // laufender Setz-Modus
   function holeHere(face, anchor) {
-    const def = LIBMAP.screwHole;
-    const p = libDefaults(def);
-    const box = h('div', { style: { display: 'grid', gap: '10px' } });
-    box.append(h('b', null, 'Schraubenloch setzen'));
-    const f = h('div', { class: 'fields' });
-    let size = p.size, head = p.head, length = p.length;
-    f.append(UI.selectField({ id: 'hh-size', label: 'Schraube', value: size, options: SIZES, onChange: (v) => { size = v; } }));
-    f.append(UI.selectField({ id: 'hh-head', label: 'Kopf', value: head, options: def.params[1].options, onChange: (v) => { head = v; } }));
-    box.append(f);
-    box.append(UI.numField({ id: 'hh-len', label: 'Tiefe', value: length, expr: true, onCommit: (v) => { length = v; } }));
-    const go = h('button', { type: 'button', class: 'btn primary' }); go.innerHTML = icon('check') + 'Loch setzen';
-    box.append(go);
-    const pt = face.point || face.info.c; const n = face.normal;
-    go.onclick = () => {
-      UI.closePop();
-      const W = Model.worldMatrix(App.doc, face.id);
-      const wp = face.point ? face.point : new THREE.Vector3(...face.info.c).applyMatrix4(W).toArray();
-      const wn = face.normal ? face.normal : new THREE.Vector3(...face.info.n).transformDirection(W).toArray();
-      const onFace = Actions.onFaceTransform(face.id, wp, wn);
-      Actions.addPart(def, { size, head, length }, { onFace });
-      UI.toast('Loch gesetzt. Ziehen verschiebt es auf der Fläche.', { icon: 'check' });
+    const o = { ...lastHole };
+    const box = h('div', { style: { display: 'grid', gap: '10px', minWidth: '260px' } });
+    box.append(h('b', null, 'Bohrungs-Assistent'));
+    const body = h('div', { style: { display: 'grid', gap: '10px' } });
+    const draw = () => {
+      body.innerHTML = '';
+      body.append(UI.selectField({ id: 'hw-type', label: 'Art', value: o.type, options: HOLE_TYPES, onChange: (v) => { o.type = v; draw(); } }));
+      const sizes = o.type === 'insert' ? SIZES.filter((x) => x !== 'M1.6') : SIZES;
+      if (!sizes.includes(o.size)) o.size = 'M3';
+      body.append(UI.selectField({ id: 'hw-size', label: o.type === 'nut' ? 'Mutter' : o.type === 'insert' ? 'Gewinde' : 'Schraube', value: o.size, options: sizes, onChange: (v) => { o.size = v; } }));
+      if (o.type === 'through') {
+        const f = h('div', { class: 'fields' });
+        f.append(UI.selectField({ id: 'hw-head', label: 'Kopf', value: o.head, options: LIBMAP.screwHole.params[1].options, onChange: (v) => { o.head = v; } }));
+        f.append(UI.selectField({ id: 'hw-fit', label: 'Loch', value: o.fit, options: [['medium', 'Mittel'], ['fine', 'Eng'], ['coarse', 'Weit']], onChange: (v) => { o.fit = v; } }));
+        body.append(f);
+      }
+      const thru = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'hw-thru', checked: !!o.thru }), o.type === 'insert' ? 'So tief wie der Körper' : 'Ganz durch den Körper');
+      thru.querySelector('input').onchange = (e) => { o.thru = e.target.checked; draw(); };
+      body.append(thru);
+      if (!o.thru) body.append(UI.numField({ id: 'hw-depth', label: 'Tiefe', value: o.depth, onCommit: (v) => { o.depth = v; } }));
     };
-    UI.pop(anchor, box);
+    draw(); box.append(body);
+    const go = h('button', { type: 'button', class: 'btn primary', id: 'hw-go' }); go.innerHTML = icon('check') + 'Löcher setzen';
+    go.onclick = () => {
+      UI.closePop(); lastHole = { ...o };
+      startHoles(o);
+      // aus einer gewählten Fläche: das erste Loch gleich dort setzen
+      if (face && face.point && face.normal) placeAt(face.id, new THREE.Vector3(...face.point), new THREE.Vector3(...face.normal));
+    };
+    box.append(go);
+    UI.pop(anchor || $('#t-parts'), box);
   }
-  return { bindTile, holeHere, cancel, get active() { return !!st; } };
+  // Dicke des Körpers entlang der Bohrrichtung
+  function thicknessAlong(id, n) {
+    const b = Actions.worldBox(id); if (!b || b.isEmpty()) return 20;
+    let lo = Infinity, hi = -Infinity;
+    for (let i = 0; i < 8; i++) { const p = new THREE.Vector3(i & 1 ? b.max.x : b.min.x, i & 2 ? b.max.y : b.min.y, i & 4 ? b.max.z : b.min.z); const d = p.dot(n); lo = Math.min(lo, d); hi = Math.max(hi, d); }
+    return round(hi - lo + 0.5, 1);
+  }
+  function specFor(o, thick) {
+    const depth = o.thru ? thick : o.depth;
+    if (o.type === 'insert') return [LIBMAP.insert, { size: o.size, depth: o.thru ? thick : depth }];
+    if (o.type === 'nut') return [LIBMAP.nutTrap, { size: o.size, depth: null, length: depth }];
+    if (o.type === 'tap') return [LIBMAP.screwHole, { size: o.size, head: 'none', fit: 'tap', length: depth }];
+    return [LIBMAP.screwHole, { size: o.size, head: o.head, fit: o.fit, length: depth }];
+  }
+  function placeAt(id, point, normal) {
+    if (!hw) return;
+    const [def, params] = specFor(hw.o, thicknessAlong(id, normal));
+    const onFace = Actions.onFaceTransform(id, point.toArray(), normal.toArray());
+    Actions.addPart(def, params, { onFace });
+    App.clearSelection(); Handles.clear();
+    hw.count++; holeBar();
+  }
+  function holeBar() {
+    if (hw.bar) hw.bar.remove();
+    const bar = h('div', { class: 'sketchbar holebar', role: 'toolbar', 'aria-label': 'Bohrungen' });
+    const name = { through: 'Durchgang', tap: 'Kernloch', insert: 'Einsatz', nut: 'Mutternfalle' }[hw.o.type];
+    bar.append(h('span', { class: 'title' }, 'Bohrungen'), h('span', { class: 'lbl', style: { padding: '0 8px', fontSize: '13px' } }, `${hw.o.size} · ${name} · ${hw.count} gesetzt`));
+    const ok = h('button', { type: 'button', class: 'tool primary', 'data-kbd': 'Esc' }); ok.innerHTML = icon('check') + '<span>Fertig</span>'; ok.onclick = () => stopHoles();
+    bar.append(ok); $('#overlay').append(bar); hw.bar = bar;
+  }
+  function ringObj(o) {
+    const r = (parseFloat(String(o.size).slice(1)) || 3) * (o.type === 'through' && o.head !== 'none' ? 1.1 : 0.6);
+    const pts = []; for (let i = 0; i <= 40; i++) { const t = (i / 40) * Math.PI * 2; pts.push(new THREE.Vector3(Math.cos(t) * r, Math.sin(t) * r, 0)); }
+    pts.push(new THREE.Vector3(-r * 1.4, 0, 0), new THREE.Vector3(r * 1.4, 0, 0));
+    const g = new THREE.BufferGeometry().setFromPoints(pts);
+    const l = new THREE.Line(g, new THREE.LineBasicMaterial({ color: new THREE.Color(Viewer.theme.hole), depthTest: false, transparent: true }));
+    l.renderOrder = 30; l.matrixAutoUpdate = false; l.visible = false;
+    Viewer.groups.overlay.add(l); return l;
+  }
+  function startHoles(o) {
+    stopHoles(true);
+    hw = { o, count: 0, ring: ringObj(o), down: null };
+    App.clearSelection(); Handles.clear(); Panels.renderCtx();
+    Viewer.controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+    Viewer.canvas.style.cursor = 'crosshair';
+    UI.hint('<b>Löcher setzen:</b> Jeder Klick auf eine Fläche setzt ein Loch. Ansicht drehen: <b>rechte Maustaste</b>. <b>Esc</b> beendet.');
+    const cv = Viewer.canvas;
+    hw.onDown = (e) => { if (e.button !== 0) return; e.preventDefault(); e.stopPropagation(); hw.down = { x: e.clientX, y: e.clientY }; };
+    hw.onUp = (e) => {
+      if (!hw || !hw.down || e.button !== 0) return;
+      const moved = Math.hypot(e.clientX - hw.down.x, e.clientY - hw.down.y) > 5; hw.down = null;
+      if (moved) return;
+      const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true, solidsOnly: true });
+      if (!hit || !hit.normal) { UI.toast('Klick auf eine Fläche eines Körpers.', { icon: 'info', ms: 1600 }); return; }
+      placeAt(hit.id, hit.point, hit.normal);
+    };
+    hw.onMove = (e) => {
+      const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true, solidsOnly: true });
+      if (!hit || !hit.normal) { hw.ring.visible = false; Viewer.requestRender(); return; }
+      const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), hit.normal);
+      hw.ring.matrix.compose(hit.point.clone().addScaledVector(hit.normal, 0.05), q, new THREE.Vector3(1, 1, 1));
+      hw.ring.matrixWorldNeedsUpdate = true; hw.ring.visible = true; Viewer.requestRender();
+    };
+    cv.addEventListener('pointerdown', hw.onDown, true);
+    window.addEventListener('pointerup', hw.onUp);
+    cv.addEventListener('pointermove', hw.onMove);
+    holeBar();
+  }
+  function stopHoles(silent) {
+    if (!hw) return;
+    const cv = Viewer.canvas;
+    cv.removeEventListener('pointerdown', hw.onDown, true); window.removeEventListener('pointerup', hw.onUp); cv.removeEventListener('pointermove', hw.onMove);
+    Viewer.groups.overlay.remove(hw.ring); hw.ring.geometry.dispose(); hw.ring.material.dispose();
+    if (hw.bar) hw.bar.remove();
+    const n = hw.count; hw = null;
+    Viewer.controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+    Viewer.canvas.style.cursor = ''; UI.hint(null); Viewer.requestRender(); Handles.rebuild(); Panels.renderCtx();
+    if (!silent && n) UI.toast(`${n} ${n === 1 ? 'Loch' : 'Löcher'} gesetzt. Ziehen verschiebt ein Loch auf der Fläche.`, { icon: 'check' });
+  }
+  return { bindTile, holeHere, holeWizard: (anchor) => holeHere(Actions.selectedFace(), anchor), stopHoles, cancel, get active() { return !!st || !!hw; }, get holes() { return !!hw; } };
 })();
 

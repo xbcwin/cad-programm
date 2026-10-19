@@ -33,7 +33,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,Viewer,Commands,Solver,Notes,SKO}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,Viewer,Commands,Solver,Notes,SKO,Features,Place}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -826,6 +826,180 @@ def t_skizze_hilfen(p):
     return (neu and not fehlt), ('ohne Hilfetext: ' + ', '.join(fehlt)) if fehlt else ''
 
 
+# ---------- Formen-Werkzeuge: Muster, Spiegeln, Teilen, Boolesch, Wandstärke, Bohrung ----------
+def bbox(p, i=0):
+    return p.ev(f"const r=App.results.get(App.doc.items[{i}].id); return r && r.data.bbox.map(x=>Math.round(x*100)/100)")
+
+
+def wbox(p, i=0):   # Hüllquader in Weltlage (ohne Drehung): Ergebnis + Lage des Objekts
+    b = bbox(p, i); t = p.ev(f"const t=App.doc.items[{i}].t; return [t.x,t.y,t.z]")
+    return b and [round(b[k] + t[k % 3], 2) for k in range(6)]
+
+
+def near(a, b, tol=0.1):
+    return a is not None and b is not None and len(a) == len(b) and all(abs(x - y) <= tol for x, y in zip(a, b))
+
+
+def ctx(p, label, item=None):
+    p.pg.locator(f'.ctxbar button[aria-label="{label}"]').click(); p.wait(300)
+    if item:
+        p.pg.locator('.menu button, .menu [role=menuitem]').filter(has_text=item).first.click()
+    p.wait(2500)
+
+
+def world_screen(p, x, y, z):
+    return p.ev("const v=Viewer.camera.position.clone().set(arg[0],arg[1],arg[2]); const s=Viewer.toScreen(v); const r=Viewer.canvas.getBoundingClientRect(); return [s.x+r.left,s.y+r.top]", [x, y, z])
+
+
+def field(p, fid, val):
+    p.pg.fill(fid, str(val)); p.pg.press(fid, 'Enter'); p.wait(2500)
+
+
+def zylinder(p, x, d=10, h=5):
+    p.empty(); p.ev("Actions.addPrimitive('cylinder')"); p.wait(1500)
+    p.ev("App.change('x', d=>{ const it=d.items[0]; it.t.x=arg[0]; it.t.y=0; it.p.d=arg[1]; it.p.h=arg[2]; }); App.select([App.doc.items[0].id])", [x, d, h]); p.wait(1500)
+
+
+def t_kreismuster_3d(p):
+    zylinder(p, 30)
+    ctx(p, 'Muster', 'Kreismuster')
+    ok1 = near(bbox(p), [-35, -35, 0, 35, 35, 5]) and p.ev("return App.doc.items.length===1 && App.doc.items[0].p.n===4")
+    field(p, '#op-n', 3)
+    s = round(30 * math.sin(math.radians(120)) + 5, 2)
+    ok2 = near(bbox(p), [-20, -s, 0, 35, s, 5]) and p.ev("return Model.sizeText(App.doc.items[0], Model.vars(App.doc).v)") == '3× 360°'
+    p.ev("App.change('x', d=>{ d.items[0].children[0].p.d=20; })"); p.wait(2500)   # Original ändern
+    ok3 = near(bbox(p)[3:4], [40])
+    p.pg.get_by_text('Auflösen').first.click(); p.wait(2500)
+    ok4 = near(wbox(p), [20, -10, 0, 40, 10, 5]) and p.ev("return App.doc.items.length===1 && App.doc.items[0].kind==='cylinder'")
+    return [ok1, ok2, ok3, ok4]
+
+
+def t_rechteckmuster_3d(p):
+    p.empty(); p.ev("Actions.addPrimitive('box')"); p.wait(1500)
+    o = bbox(p); p.ev("App.select([App.doc.items[0].id])"); p.wait(300)
+    ctx(p, 'Muster', 'Rechteckmuster')
+    ok1 = near(bbox(p), [o[0], o[1], 0, o[3] + 50, o[4], 20])          # 3 × 1, Abstand 25
+    field(p, '#op-ny', 2)
+    ok2 = near(bbox(p)[4:5], [o[4] + 25])
+    p.ev("App.change('Maß', d=>{ d.params.push({id:'m_n',name:'Anzahl',expr:4}); })"); p.wait(800)
+    field(p, '#op-nx', 'Anzahl')
+    ok3 = near(bbox(p)[3:4], [o[3] + 75])
+    p.ev("App.change('x', d=>{ d.params[0].expr=2; })"); p.wait(2500)
+    ok4 = near(bbox(p)[3:4], [o[3] + 25]) and p.ev("return App.errors.length") == 0
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('Control+z'); p.wait(1200); p.pg.keyboard.press('Control+z'); p.wait(1200)
+    p.pg.keyboard.press('Control+z'); p.wait(1200); p.pg.keyboard.press('Control+z'); p.wait(1200); p.pg.keyboard.press('Control+z'); p.wait(2500)
+    ok5 = p.ev("return App.doc.items.length===1 && App.doc.items[0].kind==='box'")
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
+def t_spiegelkopie(p):
+    zylinder(p, 20, 10, 5)
+    ctx(p, 'Muster', 'Gespiegelte Kopie')
+    ok1 = near(bbox(p), [-25, -5, 0, 25, 5, 5])
+    p.pg.select_option('#op-plane', 'XZ'); p.wait(2500)            # vorne ↔ hinten: liegt schon symmetrisch, bleibt gleich
+    ok2 = near(bbox(p), [15, -5, 0, 25, 5, 5])
+    p.pg.select_option('#op-plane', 'YZ'); p.wait(1500); field(p, '#op-off', 10)
+    ok3 = near(bbox(p), [-5, -5, 0, 25, 5, 5])                      # Ebene bei x = 10: Kopie von −5 bis 5
+    return [ok1, ok2, ok3]
+
+
+def t_teilen(p):
+    p.empty(); p.ev("Actions.addPrimitive('box')"); p.wait(1500)
+    o = bbox(p); p.ev("App.select([App.doc.items[0].id])"); p.wait(300)
+    ctx(p, 'Teilen')
+    ok1 = near(bbox(p), o) and p.ev("return App.doc.items[0].p.off") == 10
+    field(p, '#op-gap', 4)
+    ok2 = near(bbox(p), [o[0], o[1], -2, o[3], o[4], 22])
+    p.pg.select_option('#op-keep', 'positive'); p.wait(2500)
+    ok3 = near(bbox(p), [o[0], o[1], 12, o[3], o[4], 22])
+    field(p, '#op-off', 50)
+    ok4 = p.ev("return App.errors.length>0 && JSON.stringify(App.errors).includes('trifft')")
+    field(p, '#op-off', 5)
+    ok5 = p.ev("return App.errors.length") == 0 and near(bbox(p), [o[0], o[1], 7, o[3], o[4], 22])
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
+def t_boolesch(p):
+    p.empty(); p.ev("Actions.addPrimitive('box'); Actions.addPrimitive('box')"); p.wait(2000)
+    p.ev("App.change('x', d=>{ d.items[0].t.x=0; d.items[0].t.y=0; d.items[1].t.x=10; d.items[1].t.y=0; })"); p.wait(2000)
+    p.ev("App.select(App.doc.items.map(x=>x.id))"); p.wait(400)
+    ctx(p, 'Boolesch', 'Abziehen')
+    ok1 = near(wbox(p), [-10, -10, 0, 0, 10, 20]) and p.ev("return App.doc.items[0].children.map(c=>c.role).join()") == 'solid,hole'
+    p.ev("Actions.ungroup(App.doc.items[0].id)"); p.wait(1500)
+    p.ev("App.change('x', d=>{ d.items.forEach(i=>i.role='solid'); }); App.select(App.doc.items.map(x=>x.id))"); p.wait(1500)
+    ctx(p, 'Boolesch', 'Schnittmenge')
+    ok2 = near(wbox(p), [0, -10, 0, 10, 10, 20]) and p.ev("return App.doc.items[0].p.op") == 'intersect'
+    p.ev("Actions.ungroup(App.doc.items[0].id)"); p.wait(1500)
+    p.ev("App.select(App.doc.items.map(x=>x.id))"); p.wait(400)
+    ctx(p, 'Boolesch', 'Vereinigen')
+    ok3 = near(wbox(p), [-10, -10, 0, 20, 10, 20]) and p.ev("return App.errors.length") == 0
+    return [ok1, ok2, ok3]
+
+
+def t_wandstaerke(p):
+    p.empty(); p.ev("Actions.addPrimitive('box')"); p.wait(1500)
+    p.ev("App.change('x', d=>{ d.items[0].t.x=0; d.items[0].t.y=0; })"); p.wait(1500)
+    p.ev("Viewer.setView('top', false)"); p.wait(1200)
+    s = world_screen(p, 3, 3, 20); p.pg.mouse.click(s[0], s[1]); p.wait(600)
+    ctx(p, 'Aushöhlen')
+    faces = p.ev("return App.results.get(App.doc.items[0].id).data.faces.length")
+    fin = p.ev("return App.doc.items[0].finishes[0]")
+    ok1 = faces == 11 and fin['type'] == 'shell' and fin['r'] == 2 and near(bbox(p), [-10, -10, 0, 10, 10, 20])
+    fid = '#fin-' + fin['id']
+    ok2 = p.pg.locator(fid).count() == 1 and p.pg.locator('.section-h').filter(has_text='Wandstärke').count() == 1
+    field(p, fid, 12)
+    ok3 = p.ev("return App.errors.some(e=>e.code==='shell')") and p.pg.locator('.inp.invalid ' + fid).count() == 1
+    field(p, fid, 3)
+    ok4 = p.ev("return App.errors.length") == 0 and p.ev("return App.results.get(App.doc.items[0].id).data.faces.length") == 11
+    return [ok1, ok2, ok3, ok4]
+
+
+def t_bohrung(p):
+    p.pg.get_by_text('Schild mit Loch').first.click(); p.wait(8000)
+    p.ev("Viewer.setView('top', false)"); p.wait(1200)
+    cx, cy = p.canvas_center(); p.pg.mouse.click(cx - 80, cy - 20); p.wait(600)
+    p.pg.locator('.ctxbar button[aria-label="Bohrung"]').click(); p.wait(400)
+    p.pg.select_option('#hw-type', 'tap'); p.wait(200); p.pg.select_option('#hw-size', 'M2'); p.wait(100)
+    p.pg.click('#hw-go'); p.wait(2500)
+    for dx in (40, 120):
+        p.pg.mouse.click(cx - 80 + dx, cy - 20); p.wait(2500)
+    ok1 = '3 gesetzt' in p.pg.locator('.holebar').inner_text()
+    p.pg.keyboard.press('Escape'); p.wait(800)
+    parts = p.ev("const out=[]; Model.walk(App.doc.items, it=>{ if(it.kind==='part') out.push([it.p.lib,it.p.size,it.p.fit]) }); return out")
+    ok2 = parts.count(['screwHole', 'M2', 'tap']) == 3 and p.ev("return App.errors.length") == 0
+    ok3 = p.ev("return !Place.active") and p.pg.locator('.holebar').count() == 0
+    return [ok1, ok2, ok3]
+
+
+def t_lochkreis(p):
+    # Drohnen-Fall: ein Loch in einer Platte, dann als Kreismuster um die Plattenmitte (Motorhalter)
+    p.empty(); p.ev("Actions.addPrimitive('box')"); p.wait(1500)
+    p.ev("App.change('x', d=>{ const it=d.items[0]; it.t.x=0; it.t.y=0; it.p.w=40; it.p.d=40; it.p.h=3; })"); p.wait(1500)
+    p.ev("Viewer.setView('top', false)"); p.wait(1200)
+    s = world_screen(p, 8, 0, 3); p.pg.mouse.click(s[0], s[1]); p.wait(600)
+    p.pg.locator('.ctxbar button[aria-label="Bohrung"]').click(); p.wait(400)
+    p.pg.select_option('#hw-type', 'through'); p.pg.select_option('#hw-size', 'M3'); p.wait(100)
+    p.pg.click('#hw-go'); p.wait(2500); p.pg.keyboard.press('Escape'); p.wait(800)
+    rund = lambda: p.ev("return App.results.get(App.doc.items[0].id).data.faces.filter(f=>f.t!=='PLANE').length")
+    n1 = rund()
+    p.ev("Comp.edit(App.doc.items[0].id)"); p.wait(2000)
+    p.ev("App.select([App.doc.items[0].children.find(c=>c.role==='hole').id])"); p.wait(600)
+    ctx(p, 'Muster', 'Kreismuster')
+    ok1 = p.ev("const c=App.doc.items[0].children; return c.length===2 && c[1].p.op==='pattern' && c[1].role==='hole'")
+    ok2 = n1 > 0 and rund() == 4 * n1 and p.ev("return App.errors.length") == 0
+    field(p, '#op-n', 6)
+    ok3 = rund() == 6 * n1
+    return [ok1, ok2, ok3]
+
+
+def t_formen_hilfen(p):
+    p.empty()
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    keys = ['holeWizard', 'shell', 'patternRect', 'patternCirc', 'mirror', 'split', 'boolUnion', 'boolSubtract', 'boolIntersect']
+    fehlt = [k for k in keys if k not in hilfen]
+    return not fehlt, ('ohne Hilfetext: ' + ', '.join(fehlt)) if fehlt else ''
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -850,6 +1024,15 @@ TESTS = [
     ('Rechteckmuster: Anzahl und Abstand / folgt dem Original', t_muster_rechteck), ('Kreismuster: Anzahl / Rechteck zerlegt / folgt dem Original', t_muster_kreis),
     ('Fangen: Schnittpunkt / ausschalten / Alt / Kreispunkt', t_fangen), ('Hilfslinien: Taste X / zählt nicht zur Fläche / umwandeln', t_hilfslinien),
     ('Skizzen-Werkzeuge haben Hilfetexte', t_skizze_hilfen),
+    ('Kreismuster: anlegen / Anzahl / folgt dem Original / Auflösen', t_kreismuster_3d),
+    ('Rechteckmuster: anlegen / zweite Reihe / Formel / Maß ändern / Rückgängig', t_rechteckmuster_3d),
+    ('Gespiegelte Kopie: anlegen / andere Ebene / Ebene verschieben', t_spiegelkopie),
+    ('Teilen: beide Hälften / Spalt / eine Hälfte / Ebene daneben / zurück', t_teilen),
+    ('Boolesch: Abziehen / Schnittmenge / Vereinigen', t_boolesch),
+    ('Wandstärke: aushöhlen / Feld rechts / zu dick wird rot / ändern', t_wandstaerke),
+    ('Bohrungs-Assistent: Gewinde M2 / mehrere Klicks / Esc beendet', t_bohrung),
+    ('Lochkreis in einer Platte: Loch als Kreismuster / Anzahl ändern', t_lochkreis),
+    ('Formen-Werkzeuge haben Hilfetexte', t_formen_hilfen),
     ('Formel-Beispiele', t_formel_beispiele), ('Einführung „Erste Skizze“', t_einfuehrung), ('Schraubenlöcher', t_schrauben),
     ('Fies: Löschen hinter Marker + Undo', t_fies_loeschen), ('Fies: alles unterdrückt', t_fies_alle_aus),
     ('Fies: Marker am Anfang, neu laden', t_fies_reload), ('Fies: Tasten während Rechnen', t_fies_tasten),

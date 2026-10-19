@@ -9,6 +9,7 @@ const Log = (() => {
     build: 'Die Maße dieses Schritts prüfen – z. B. ob eine Wand dünner als null wird.',
     cut: 'Prüfen, ob das Loch den Körper überhaupt berührt.',
     mesh: 'Ein Maß leicht ändern und erneut versuchen.',
+    split: 'Rechts bei „Lage der Ebene“ einen Wert innerhalb des Körpers eintippen oder bei „Behalten“ die andere Hälfte wählen.',
   };
   const key = (id) => 'masswerk.log.' + id;
   function load(id) { docId = id; try { list = JSON.parse(storageGet(key(id)) || '[]'); } catch (_) { list = []; } }
