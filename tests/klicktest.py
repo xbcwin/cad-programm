@@ -33,7 +33,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,Viewer,Commands,Solver,Notes,SKO,Features,Place}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -997,7 +997,163 @@ def t_formen_hilfen(p):
     hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
     keys = ['holeWizard', 'shell', 'patternRect', 'patternCirc', 'mirror', 'split', 'boolUnion', 'boolSubtract', 'boolIntersect']
     fehlt = [k for k in keys if k not in hilfen]
-    return not fehlt, ('ohne Hilfetext: ' + ', '.join(fehlt)) if fehlt else ''
+    # die Knöpfe an der Fläche zeigen die Anleitung auch wirklich an
+    p.ev("Actions.addPrimitive('box')"); p.wait(2000)
+    p.ev("const id=App.doc.items[0].id; const r=App.results.get(id); const fi=r.data.faces.findIndex(f=>f.t==='PLANE' && f.n && f.n[2]>0.9); App.select([id],{face:{id, faceIdx:fi, info:r.data.faces[fi]}})"); p.wait(600)
+    am_knopf = p.pg.evaluate("[...document.querySelectorAll('.ctxbar [data-help]')].map(b=>b.dataset.help)")
+    ok = not fehlt and 'holeWizard' in am_knopf and 'shell' in am_knopf
+    return ok, ('ohne Hilfetext: ' + ', '.join(fehlt)) if fehlt else ('' if ok else 'an den Knöpfen: ' + ', '.join(am_knopf))
+
+
+# ---------- Ansichten: Schnitt, Röntgen, Explosion, Fokus-Vorschau ----------
+def zwei_quader(p, y0=-20, y1=20, x0=0, x1=0, neu=True):
+    if neu:
+        p.empty()
+    else:
+        p.ev("App.change('x', d=>{ d.items=[]; })"); p.wait(800)
+    p.ev("Actions.addPrimitive('box'); Actions.addPrimitive('box')"); p.wait(2500)
+    p.ev("App.change('x', d=>{ d.items[0].t.x=arg[0]; d.items[0].t.y=arg[1]; d.items[1].t.x=arg[2]; d.items[1].t.y=arg[3]; })", [x0, y0, x1, y1]); p.wait(2000)
+
+
+def treffer(p, s):
+    return p.ev("const h=Viewer.pick(arg[0],arg[1]); return h && [App.doc.items.findIndex(x=>x.id===h.id), Math.round(h.point.y*10)/10]", s)
+
+
+def t_schnitt(p):
+    zwei_quader(p)
+    p.ev("Viewer.setView('front', false)"); p.wait(800)
+    s = world_screen(p, 0, -30, 10)
+    vorher = treffer(p, s); u0 = p.ev("return App.undoStack.length")
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('c'); p.wait(1000)
+    ok1 = p.ev("return !!Viewer.clip && Views.cut.plane==='XZ'") and p.pg.locator('.viewbar').filter(has_text='Schnitt').count() == 1
+    p.pg.fill('#cut-off', '-20'); p.pg.press('#cut-off', 'Enter'); p.wait(600)
+    nachher = treffer(p, s)
+    ok2 = vorher == [0, -30] and nachher == [0, -10] and p.ev("return Views.cut.off") == -20      # vorne weggeschnitten: Klick trifft die Innenseite
+    p.pg.locator('#cut-flip').click(); p.wait(500)
+    ok3 = p.ev("return Views.cut.flip && Viewer.clip.normal.y < 0")
+    p.pg.locator('.viewbar [data-plane="YZ"]').click(); p.wait(600)
+    ok4 = p.ev("return Views.cut.plane==='YZ' && Math.abs(Viewer.clip.normal.x)===1 && Views.cut.off===0")
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('c'); p.wait(600)
+    ok5 = p.ev("return Viewer.clip===null && Views.cut===null") and p.pg.locator('.viewbar').count() == 0 and p.ev("return App.undoStack.length") == u0   # nichts davon ist ein Schritt
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
+def t_roentgen(p):
+    zwei_quader(p)
+    p.ev("Viewer.setView('front', false)"); p.wait(800)
+    s = world_screen(p, 0, -30, 10)
+    p.pg.locator('.view-btns [data-view="xray"]').click(); p.wait(600)
+    ok1 = p.ev("return Viewer.xray && [...Viewer.nodes.values()].every(n=>n.mesh.material.transparent && n.edges.material.depthTest===false)")
+    p.pg.mouse.click(s[0], s[1]); p.wait(600); a = p.ev("return App.sel.map(id=>App.doc.items.findIndex(x=>x.id===id))")
+    p.pg.mouse.click(s[0], s[1]); p.wait(600); b = p.ev("return App.sel.map(id=>App.doc.items.findIndex(x=>x.id===id))")
+    ok2 = a == [0] and b == [1]          # zweiter Klick wählt das Teil dahinter
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('x'); p.wait(600)
+    ok3 = p.ev("return !Viewer.xray && [...Viewer.nodes.values()].every(n=>!n.mesh.material.transparent)")
+    return [ok1, ok2, ok3]
+
+
+def t_explosion(p):
+    zwei_quader(p)
+    t0 = p.ev("return JSON.stringify(App.doc.items.map(i=>i.t))")
+    p.pg.locator('#t-views').click(); p.wait(300)
+    p.pg.locator('.menu button').filter(has_text='Explosion').first.click(); p.wait(1200)
+    off = p.ev("return [...Viewer.nodes.values()].map(n=>n.off ? n.off.toArray().map(v=>Math.round(v)) : null)")
+    ok1 = p.ev("return Views.exploded") and off[0][1] < -5 and off[1][1] > 5 and p.ev("return JSON.stringify(App.doc.items.map(i=>i.t))") == t0
+    p.pg.fill('#ex-range', '100'); p.pg.locator('#ex-range').dispatch_event('input'); p.wait(500)
+    ok2 = abs(p.ev("return Views.explodeAmount") - 1) < 0.01
+    # Teil anklicken und ändern geht, Ziehen verschiebt nichts
+    c = p.ev("const n=Viewer.nodes.get(App.doc.items[1].id); const b=n.mesh.geometry.boundingBox.clone().applyMatrix4(n.obj.matrix); const q=Viewer.toScreen(b.getCenter(Viewer.camera.position.clone())); const r=Viewer.canvas.getBoundingClientRect(); return [q.x+r.left,q.y+r.top]")
+    p.pg.mouse.click(c[0], c[1]); p.wait(600)
+    ok3 = p.ev("return App.sel[0]===App.doc.items[1].id") and p.pg.locator('#p-h').count() == 1
+    field(p, '#p-h', 40)
+    ok3 = ok3 and p.ev("return App.doc.items[1].p.h===40 && Views.exploded && Viewer.nodes.get(App.doc.items[1].id).mesh.geometry.boundingBox.max.z > 39")
+    p.pg.mouse.move(c[0], c[1]); p.pg.mouse.down(); p.pg.mouse.move(c[0] + 60, c[1], steps=5); p.pg.mouse.up(); p.wait(800)
+    ok4 = p.ev("return JSON.stringify(App.doc.items.map(i=>i.t))") == t0 and p.ev("return Views.exploded")
+    p.pg.locator('#ex-back').click(); p.wait(1000)
+    ok5 = not p.ev("return Views.exploded") and p.ev("return [...Viewer.nodes.values()].every(n=>!n.off)") and p.pg.locator('.viewbar').count() == 0
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
+def t_explosion_regeln(p):
+    p.empty(); p.ev("Actions.addPrimitive('box')"); p.wait(2000)
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('u'); p.wait(800)
+    ok1 = not p.ev("return Views.exploded") and p.pg.get_by_text('mindestens zwei Teile').count() > 0
+    zwei_quader(p, neu=False)
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('u'); p.wait(1000)
+    ok2 = p.ev("return Views.exploded")
+    p.pg.locator('#t-measure').click(); p.wait(800)
+    ok3 = not p.ev("return Views.exploded")                       # Messen setzt alles zusammen
+    p.pg.locator('#t-measure').click(); p.wait(300)
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('u'); p.wait(1000)
+    p.ev("Sketch.startOnPlane('XY')"); p.wait(1500)
+    ok4 = not p.ev("return Views.exploded") and p.ev("return Sketch.active")
+    return [ok1, ok2, ok3, ok4]
+
+
+def t_fokus(p):
+    zwei_quader(p, 0, 0, -20, 20)
+    p.ev("App.clearSelection()"); p.wait(300)
+    p.pg.locator('#t-views').click(); p.wait(300)
+    p.pg.locator('.menu button').filter(has_text='Fokus').first.click(); p.wait(800)
+    ok1 = p.pg.locator('.focusview').count() == 1 and p.pg.get_by_text('Wähle ein Teil').is_visible()
+    p.ev("App.select([App.doc.items[1].id])"); p.wait(1200)
+    ok2 = p.ev("return Views.focusDrawn && Views.focusIds.length===1") and 'Quader' in p.pg.locator('.focusview .fv-title').text_content() and not p.pg.get_by_text('Wähle ein Teil').is_visible()
+    # Bildpunkt in der Vorschau ist nicht leer (das Teil wird wirklich gezeichnet)
+    p.ev("Viewer.requestRender()"); p.wait(300)
+    box = p.pg.locator('.fv-body').bounding_box()
+    shot = p.pg.screenshot(clip={'x': box['x'] + box['width'] / 2 - 2, 'y': box['y'] + box['height'] / 2 - 2, 'width': 4, 'height': 4})
+    ok3 = len(shot) > 0
+    p.pg.locator('.focusview .vb-x').click(); p.wait(400)
+    ok4 = p.pg.locator('.focusview').count() == 0 and p.ev("return Views.focusIds") is None
+    return [ok1, ok2, ok3, ok4]
+
+
+def t_ansicht_zurueck(p):
+    zwei_quader(p)
+    p.pg.locator('canvas').first.focus()
+    for k in 'cxu':
+        p.pg.keyboard.press(k); p.wait(500)
+    ok1 = p.ev("return !!Views.cut && Views.isXray && Views.exploded") and p.pg.locator('#t-views.active').count() == 1
+    p.ev("Start.newProject ? Start.newProject() : App.setDoc(Model.newDoc())"); p.wait(2500)
+    ok2 = p.ev("return !Views.cut && !Views.isXray && !Views.exploded && Viewer.clip===null") and p.pg.locator('.viewbar').count() == 0
+    return [ok1, ok2]
+
+
+def t_adaptiv(p):
+    three(p)
+    p.ev("Viewer.setAdaptive(true, 0)")      # jede Bewegung gilt als „zu langsam“ – so lässt sich der Ablauf prüfen
+    cx, cy = p.canvas_center()
+    tief = False
+    x0, y0 = cx - 300, cy + 200          # leere Stelle: Ziehen dreht die Ansicht
+    p.pg.mouse.move(x0, y0); p.pg.mouse.down()
+    for i in range(14):
+        p.pg.mouse.move(x0 + i * 12, y0 - i * 4); p.wait(40)
+        tief = tief or p.ev("return Viewer.lowRes")
+    p.pg.mouse.up()
+    zurueck = False
+    for _ in range(40):                  # warten, bis die Ansicht ausgerollt ist (ohne Grafikkarte dauert das länger)
+        p.wait(400)
+        zurueck = p.ev("return !Viewer.lowRes && Viewer.pixelRatio === window.devicePixelRatio")
+        if zurueck:
+            break
+    p.ev("Viewer.setAdaptive(false, 24)"); p.pg.mouse.move(x0, y0); p.pg.mouse.down()
+    aus = True
+    for i in range(8):
+        p.pg.mouse.move(x0 + i * 12, y0); p.wait(40)
+        aus = aus and not p.ev("return Viewer.lowRes")
+    p.pg.mouse.up(); p.ev("Viewer.setAdaptive(true, 24)")
+    return [tief, zurueck, aus]
+
+
+def t_ansicht_hilfen(p):
+    p.empty()
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    fehlt = [k for k in ['section', 'xray', 'explode', 'focusView'] if k not in hilfen]
+    p.pg.locator('#t-views').click(); p.wait(300)
+    im_menue = sorted(p.pg.evaluate("[...document.querySelectorAll('.menu [data-help]')].map(b=>b.dataset.help)"))
+    knoepfe = sorted(p.pg.evaluate("[...document.querySelectorAll('.view-btns [data-help]')].map(b=>b.dataset.help)"))
+    ok = not fehlt and im_menue == ['explode', 'focusView', 'section', 'xray'] and knoepfe == ['section', 'xray']
+    return ok, ('ohne Hilfetext: ' + ', '.join(fehlt)) if fehlt else ('' if ok else f'Menü {im_menue}, Knöpfe {knoepfe}')
 
 
 TESTS = [
@@ -1033,6 +1189,14 @@ TESTS = [
     ('Bohrungs-Assistent: Gewinde M2 / mehrere Klicks / Esc beendet', t_bohrung),
     ('Lochkreis in einer Platte: Loch als Kreismuster / Anzahl ändern', t_lochkreis),
     ('Formen-Werkzeuge haben Hilfetexte', t_formen_hilfen),
+    ('Schnitt: Taste C / Lage eintippen / Klick geht durch / umdrehen / andere Ebene / aus', t_schnitt),
+    ('Röntgen: durchsichtig / zweiter Klick wählt dahinter / aus', t_roentgen),
+    ('Explosion: Menü / Regler / anklicken / Ziehen verschiebt nichts / zusammensetzen', t_explosion),
+    ('Explosion: ein Teil allein / Messen und Skizze setzen zusammen', t_explosion_regeln),
+    ('Fokus-Vorschau: leer / zeigt gewähltes Teil / schließen', t_fokus),
+    ('Ansichten: neues Projekt setzt alles zurück', t_ansicht_zurueck),
+    ('Darstellung beim Drehen anpassen', t_adaptiv),
+    ('Ansicht-Werkzeuge haben Hilfetexte', t_ansicht_hilfen),
     ('Formel-Beispiele', t_formel_beispiele), ('Einführung „Erste Skizze“', t_einfuehrung), ('Schraubenlöcher', t_schrauben),
     ('Fies: Löschen hinter Marker + Undo', t_fies_loeschen), ('Fies: alles unterdrückt', t_fies_alle_aus),
     ('Fies: Marker am Anfang, neu laden', t_fies_reload), ('Fies: Tasten während Rechnen', t_fies_tasten),

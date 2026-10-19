@@ -1,6 +1,6 @@
 # Testliste
 
-Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 8 (19.10.2026).
+Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 9 (19.10.2026).
 
 **[x]** = automatisch geprüft mit `tests/klicktest.py` (echter Browser, echte Klicks) · **[ ]** = noch von Hand ansehen
 
@@ -20,7 +20,8 @@ Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 8 (19.10.
 | Regeln in der Skizze | 11 | 9 | Blau/dunkel gut erkennbar? Ziehen flüssig? |
 | Skizzen-Feinschliff | 10 | 9 | Fangmarkierungen gut erkennbar? |
 | Formen-Werkzeuge | 12 | 9 | Bohrungs-Ring gut sichtbar? Muster-Kreis verständlich? Wand von innen |
-| **Gesamt** | **94** | **82** | **12 Punkte, dazu ein Blick auf Animationen** |
+| Ansichten | 12 | 8 | Schraffur erkennbar? Explosion weich? Fokus drehen, Röntgen-Kanten |
+| **Gesamt** | **106** | **90** | **16 Punkte, dazu ein Blick auf Animationen** |
 
 Wichtig: Automatisch geprüft heißt „funktioniert in Chromium unter Linux“. Safari auf dem Mac, Touch auf dem iPad und echte Grafikkarten sieht nur ein Test von Hand.
 
@@ -248,6 +249,47 @@ Vorbereitung: `app/` über einen lokalen Server öffnen (siehe README), Seite ne
 - [ ] **Wand von innen**
   Schritte: 1. Ausgehöhlten Quader schräg von oben ansehen.
   Erwartet: Innenwände sind sauber, keine Löcher oder Flackern. (Schnittansicht kommt in Sitzung 9.)
+
+## Ansichten (neu in Sitzung 9)
+
+Nichts hiervon ändert das Modell – kein Schritt in der Zeitleiste, nichts in der Projektdatei.
+
+- [x] **Schnitt**
+  Schritte: 1. Zwei Quader hintereinander, Ansicht von vorne (Taste 1). 2. Taste C. 3. Lage −20 eintippen, Enter. 4. „Umdrehen“. 5. „Von der Seite“. 6. Nochmal C.
+  Erwartet: Vorne fehlt ein Stück, die Schnittfläche ist schraffiert; ein Klick dort trifft das Innere; „Umdrehen“ zeigt die andere Hälfte; nach C ist alles wieder ganz und es gibt keinen neuen Schritt.
+- [x] **Röntgen**
+  Schritte: 1. Rechts im Bild den Röntgen-Knopf (oder Taste X). 2. Zweimal auf dieselbe Stelle klicken, wo zwei Teile hintereinander liegen. 3. Nochmal X.
+  Erwartet: Körper wie Milchglas, alle Kanten sichtbar; erster Klick wählt das vordere, zweiter das hintere Teil; danach wieder normal.
+- [x] **Explosion**
+  Schritte: 1. Oben „Ansicht“ → „Explosion“. 2. Regler ganz nach rechts. 3. Ein Teil anklicken, rechts die Höhe ändern. 4. Versuchen, ein Teil zu ziehen. 5. „Zusammensetzen“.
+  Erwartet: Teile schweben auseinander, übereinanderliegende Teile nach oben; die Änderung wirkt sofort; Ziehen verschiebt nichts; danach sitzt alles wieder am alten Platz.
+- [x] **Explosion: Regeln**
+  Schritte: 1. Nur ein Körper, Taste U. 2. Mit zwei Körpern U, dann „Messen“. 3. U, dann eine Skizze anfangen.
+  Erwartet: Bei einem Körper ein Hinweis statt Explosion; Messen und Skizze setzen die Teile vorher wieder zusammen.
+- [x] **Fokus-Vorschau**
+  Schritte: 1. Nichts wählen, „Ansicht“ → „Fokus-Vorschau“. 2. Ein Teil anklicken. 3. Fenster schließen.
+  Erwartet: Erst der Hinweis „Wähle ein Teil“, dann links das gewählte Teil allein und groß, mit seinem Namen im Kopf.
+- [x] **Neues Projekt setzt zurück**
+  Schritte: 1. C, X und U drücken. 2. Neues Projekt.
+  Erwartet: Schnitt, Röntgen und Explosion sind aus.
+- [x] **Darstellung beim Drehen**
+  Schritte: 1. Großes Modell, schnell mit der Maus drehen.
+  Erwartet: Bleibt flüssig; während des Drehens darf es kurz etwas unschärfer sein, danach sofort wieder scharf. Abschaltbar unter „Darstellung anpassen“.
+- [x] **Hilfetexte der Ansichten**
+  Schritte: 1. Maus auf die Menüpunkte unter „Ansicht“ und die Knöpfe Röntgen und Schnitt rechts legen.
+  Erwartet: Kurzer Text, dann Anleitung mit Tipp. Auch „Bohrung“, „Aushöhlen“ und „Muster“ an einer Fläche zeigen jetzt ihre Anleitung.
+- [ ] **Schraffur**
+  Schritte: 1. Ausgehöhlten Quader schneiden.
+  Erwartet: Die Wände im Schnitt sind deutlich schraffiert und heben sich vom Rest ab.
+- [ ] **Explosion weich**
+  Schritte: 1. Explosion ein und aus.
+  Erwartet: Teile gleiten weich auseinander und zurück, nichts springt.
+- [ ] **Fokus drehen**
+  Schritte: 1. Im kleinen Fokus-Fenster ziehen. 2. Doppelklick hinein.
+  Erwartet: Nur die Vorschau dreht sich; der Doppelklick schaut wieder wie die große Ansicht.
+- [ ] **Röntgen-Kanten**
+  Schritte: 1. Röntgen bei einem Teil mit vielen Kanten.
+  Erwartet: Verdeckte Kanten sind zu sehen, das Bild bleibt trotzdem übersichtlich.
 
 ## Notizstift (neu)
 

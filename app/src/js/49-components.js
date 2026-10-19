@@ -22,7 +22,7 @@ const Comp = (() => {
     App.setCtx(it.id);
     UI.toast('Neues Bauteil angelegt. Alles, was du jetzt hinzufügst, landet darin.', { icon: 'parts', ms: 3200 });
   }
-  function edit(id) { const it = App.doc.items.find((x) => x.id === id); if (it && it.kind === 'group') { App.setIso(null); App.setCtx(id); App.select([]); } }
+  function edit(id) { const it = App.doc.items.find((x) => x.id === id); if (it && it.kind === 'group') { Views.collapse(); App.setIso(null); App.setCtx(id); App.select([]); } }
   function toggleIso(id) { App.setIso(App.iso === id ? null : id); if (App.iso) Viewer.fit([id]); }
   function init() { App.on('ctx', render); App.on('mode', render); App.on('doc', debounce(render, 30)); }
   return { init, newComponent, edit, toggleIso, render };

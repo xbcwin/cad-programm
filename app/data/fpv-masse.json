@@ -1,0 +1,244 @@
+{
+  "_hinweis": "FPV-Standardmaße (Entwurf Gemini, Prompt E; geprüft und ergänzt). Alle Maße in mm. 'ca': true heißt: Hersteller weichen spürbar ab – nur als Startwert verwenden. Stack-Lochbilder sind Quadrate (Kantenlänge), Motor-Lochbilder sind Lochkreise (Durchmesser, 4 Löcher im 90°-Abstand). Geprüft am 19.10.2026 u. a. mit Herstellerangaben (BetaFPV 1103, iFlight XING 2806.5).",
+  "stack": [
+    {
+      "name": "16×16",
+      "quadrat_mm": 16.0,
+      "schraube": "M2",
+      "daempfer_d_mm": 4.0,
+      "platine_mm": 21.0,
+      "ca": true
+    },
+    {
+      "name": "20×20",
+      "quadrat_mm": 20.0,
+      "schraube": "M2 oder M3",
+      "daempfer_d_mm": 5.5,
+      "platine_mm": 28.0,
+      "ca": true,
+      "notiz": "ältere Boards M2, viele neuere M3 – vor dem Bohren am Board nachsehen"
+    },
+    {
+      "name": "25,5×25,5 (Whoop-/Toothpick-AIO)",
+      "quadrat_mm": 25.5,
+      "schraube": "M2",
+      "daempfer_d_mm": 4.5,
+      "platine_mm": 32.0,
+      "ca": true
+    },
+    {
+      "name": "30,5×30,5",
+      "quadrat_mm": 30.5,
+      "schraube": "M3",
+      "daempfer_d_mm": 6.0,
+      "platine_mm": 36.0,
+      "ca": true,
+      "notiz": "Platinen meist 36–38 mm"
+    }
+  ],
+  "motoren": [
+    {
+      "stator": "1103",
+      "lochkreis_d_mm": [
+        8.5
+      ],
+      "loecher": null,
+      "schraube": "M1.6",
+      "glocke_d_mm": 14.0,
+      "welle_d_mm": 1.5,
+      "propeller_zoll": [
+        1.7,
+        3.0
+      ],
+      "ca": true,
+      "notiz": "BetaFPV 1103: M1.6 auf Ø 8,5 mm, Propeller 1735 bis 3020"
+    },
+    {
+      "stator": "1404",
+      "lochkreis_d_mm": [
+        9.0,
+        12.0
+      ],
+      "loecher": 4,
+      "schraube": "M2",
+      "glocke_d_mm": 18.0,
+      "welle_d_mm": 1.5,
+      "propeller_zoll": [
+        3.0,
+        4.0
+      ],
+      "ca": true
+    },
+    {
+      "stator": "2004",
+      "lochkreis_d_mm": [
+        12.0
+      ],
+      "loecher": 4,
+      "schraube": "M2",
+      "glocke_d_mm": 24.5,
+      "welle_d_mm": 1.5,
+      "propeller_zoll": [
+        3.5,
+        5.0
+      ],
+      "ca": true,
+      "notiz": "manche mit 5-mm-Welle (M5)"
+    },
+    {
+      "stator": "2207",
+      "lochkreis_d_mm": [
+        16.0
+      ],
+      "loecher": 4,
+      "schraube": "M3",
+      "glocke_d_mm": 27.5,
+      "welle_d_mm": 5.0,
+      "propeller_zoll": [
+        5.0,
+        5.0
+      ],
+      "ca": false
+    },
+    {
+      "stator": "2306",
+      "lochkreis_d_mm": [
+        16.0
+      ],
+      "loecher": 4,
+      "schraube": "M3",
+      "glocke_d_mm": 28.5,
+      "welle_d_mm": 5.0,
+      "propeller_zoll": [
+        5.0,
+        5.0
+      ],
+      "ca": false
+    },
+    {
+      "stator": "2806.5",
+      "lochkreis_d_mm": [
+        19.0
+      ],
+      "loecher": 4,
+      "schraube": "M3",
+      "glocke_d_mm": 35.0,
+      "welle_d_mm": 5.0,
+      "propeller_zoll": [
+        6.0,
+        7.0
+      ],
+      "ca": true,
+      "notiz": "Glocke je nach Hersteller 33–35 mm (iFlight XING 35,1 mm)"
+    }
+  ],
+  "kameras": [
+    {
+      "name": "Nano",
+      "breite_mm": 14.0,
+      "schraube_seitlich": "M1.4 oder M2",
+      "ca": true
+    },
+    {
+      "name": "Micro",
+      "breite_mm": 19.0,
+      "schraube_seitlich": "M2",
+      "ca": true
+    },
+    {
+      "name": "Mini",
+      "breite_mm": 21.8,
+      "schraube_seitlich": "M2",
+      "ca": true
+    },
+    {
+      "name": "Full Size",
+      "breite_mm": 28.0,
+      "schraube_seitlich": "M2 oder M2.5",
+      "ca": true
+    }
+  ],
+  "propeller": [
+    {
+      "zoll": 3,
+      "durchmesser_mm": 76.2,
+      "nabe_mm": [
+        1.5,
+        5.0
+      ],
+      "abstand_spitzen_mm": 3.0,
+      "ca": true,
+      "notiz": "1,5 mm (T-Mount) für kleine Motoren, 5 mm für M5-Wellen"
+    },
+    {
+      "zoll": 4,
+      "durchmesser_mm": 101.6,
+      "nabe_mm": [
+        5.0
+      ],
+      "abstand_spitzen_mm": 4.0,
+      "ca": true
+    },
+    {
+      "zoll": 5,
+      "durchmesser_mm": 127.0,
+      "nabe_mm": [
+        5.0
+      ],
+      "abstand_spitzen_mm": 5.0,
+      "ca": false
+    },
+    {
+      "zoll": 6,
+      "durchmesser_mm": 152.4,
+      "nabe_mm": [
+        5.0
+      ],
+      "abstand_spitzen_mm": 6.0,
+      "ca": false
+    },
+    {
+      "zoll": 7,
+      "durchmesser_mm": 177.8,
+      "nabe_mm": [
+        5.0
+      ],
+      "abstand_spitzen_mm": 8.0,
+      "ca": false
+    }
+  ],
+  "akkus": [
+    {
+      "typ": "4S 1300 mAh",
+      "l_mm": 75.0,
+      "b_mm": 35.0,
+      "h_mm": 28.0,
+      "gewicht_g": 155,
+      "ca": true
+    },
+    {
+      "typ": "4S 1500 mAh",
+      "l_mm": 76.0,
+      "b_mm": 36.0,
+      "h_mm": 32.0,
+      "gewicht_g": 178,
+      "ca": true
+    },
+    {
+      "typ": "6S 1300 mAh",
+      "l_mm": 75.0,
+      "b_mm": 38.0,
+      "h_mm": 39.0,
+      "gewicht_g": 215,
+      "ca": true
+    },
+    {
+      "typ": "6S 1500 mAh",
+      "l_mm": 78.0,
+      "b_mm": 39.0,
+      "h_mm": 43.0,
+      "gewicht_g": 250,
+      "ca": true
+    }
+  ]
+}

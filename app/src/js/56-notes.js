@@ -195,6 +195,7 @@ const Notes = (() => {
 
   // ---------- Ein / Aus ----------
   function start() {
+    Views.collapse();
     if (on) return;
     if (Sketch.active) Sketch.cancel(true);
     if (Measure.active) Measure.stop();

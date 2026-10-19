@@ -11,8 +11,8 @@
   window.__masswerk = { App, Viewer, Model, Actions, Sketch, SK, THREE, Print, Drawing, Kernel, UI, Commands, Panels, Handles, Start, AI, Measure, Place };
   UI.initTips();
   Viewer.init($('#viewport'));
-  window.__V = Viewer; window.__M = { App, Actions, Model, Timeline, Start, Comp, Handles, Sketch, SK, Viewer, Commands, Solver, Notes, SKO, Features, Place }; window.__S = Start; // für automatische Tests
-  Panels.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Notes.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init(); Refine.init(); Comp.init();
+  window.__V = Viewer; window.__M = { App, Actions, Model, Timeline, Start, Comp, Handles, Sketch, SK, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views }; window.__S = Start; // für automatische Tests
+  Panels.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Notes.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init(); Refine.init(); Comp.init(); Views.init();
 
   // Kopfzeile
   $('#btn-undo').onclick = () => App.undo();

@@ -20,7 +20,9 @@ const Panels = (() => {
       btn('t-parts', 'parts', 'Bauteile', 'Schraubenlöcher, Mutternfallen, Scharniere, Zahnräder …', 'B', (e) => toggleFlyout('parts', e.currentTarget));
       btn('t-measure', 'measure', 'Messen', 'Abstände und Durchmesser messen', 'M', () => Measure.toggle());
       btn('t-notes', 'noteDraw', 'Notizen', 'Notizstift: frei malen und Text hinschreiben – ohne technische Bedeutung', 'N', () => Notes.toggle());
+      btn('t-views', 'xray', 'Ansicht', 'Schnitt, Röntgen, Explosion und Fokus-Vorschau – ändert nur die Anzeige', '', (e) => Views.menu(e.currentTarget));
       el.append(h('div', { class: 'sep' }));
+      Views.sync();
       btn('t-export', 'export', 'Exportieren', 'Als STEP, STL oder 3MF speichern (ZIP)', 'Strg E', () => Print.exportDialog(), 'primary', 'Export');
     } else {
       btn('t-sheet', 'sheet', 'Blatt', 'Blattgröße, Maßstab und Ansichten', '', (e) => Drawing.sheetMenu(e.currentTarget));
@@ -306,7 +308,7 @@ const Panels = (() => {
     va.append(UI.selectField({ id: 'view-grid', label: 'Rasterweite', value: String(pv.grid), options: [['auto', 'Automatisch (folgt dem Zoom)'], ['0.01', '0,01 mm'], ['0.1', '0,1 mm'], ['1', '1 mm'], ['10', '10 mm'], ['100', '100 mm']], onChange: (val) => ViewPrefs.set({ grid: val === 'auto' ? 'auto' : parseFloat(val) }) }));
     const chk = (k, label) => { const l = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'view-' + k, checked: !!pv[k] }), label); l.querySelector('input').onchange = (e) => ViewPrefs.set({ [k]: e.target.checked }); return l; };
     va.append(UI.selectField({ id: 'view-quality', label: 'Darstellungsqualität', value: pv.quality, options: [['coarse', 'Grob'], ['normal', 'Normal'], ['fine', 'Fein'], ['ultra', 'Sehr fein']], onChange: (val) => ViewPrefs.set({ quality: val }) }));
-    va.append(h('div', { style: { display: 'grid', gap: '6px', marginTop: '8px' } }, chk('adaptive', 'Beim Zoomen nachschärfen'), chk('gridOn', 'Raster zeigen'), chk('planes', 'Ursprungsebenen zeigen'), chk('axes', 'Achsen zeigen'), chk('notes', 'Notizen zeigen'), chk('ortho', 'Orthografisch (ohne Perspektive)')));
+    va.append(h('div', { style: { display: 'grid', gap: '6px', marginTop: '8px' } }, chk('adaptive', 'Darstellung anpassen (Zoom, Drehen)'), chk('gridOn', 'Raster zeigen'), chk('planes', 'Ursprungsebenen zeigen'), chk('axes', 'Achsen zeigen'), chk('notes', 'Notizen zeigen'), chk('ortho', 'Orthografisch (ohne Perspektive)')));
     w.append(va);
     const gr = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Fangen beim Verschieben'));
     const f2 = h('div', { class: 'fields' });
@@ -511,7 +513,7 @@ const Panels = (() => {
     if (App.mode !== 'model' || Sketch.active || Place.active || Handles.dragging) return;
     const items = App.selectedItems(); if (!items.length) return;
     const bar = h('div', { class: 'ctxbar', role: 'toolbar', 'aria-label': 'Aktionen' });
-    const b = (ic, label, fn, cls = '', tip, iconOnly) => { const x = h('button', { type: 'button', class: cls, 'data-tip': tip || (iconOnly ? label : null), 'aria-label': label || tip }); x.innerHTML = icon(ic) + (label && !iconOnly ? `<span>${label}</span>` : ''); x.onclick = (e) => { e.stopPropagation(); fn(e); }; bar.append(x); return x; };
+    const b = (ic, label, fn, cls = '', tip, iconOnly) => { const x = h('button', { type: 'button', class: cls, 'data-tip': tip || (iconOnly ? label : null), 'aria-label': label || tip, 'data-help': HELP[ic] ? ic : null }); x.innerHTML = icon(ic) + (label && !iconOnly ? `<span>${label}</span>` : ''); x.onclick = (e) => { e.stopPropagation(); fn(e); }; bar.append(x); return x; };
     const sep = () => bar.append(h('span', { class: 'vsep' }));
     const face = Actions.selectedFace();
     if (App.edges.length) {
@@ -602,7 +604,9 @@ const Panels = (() => {
     bN.removeAttribute('data-kbd');
     const syncNotes = () => { const on = ViewPrefs.get().notes !== false; bN.hidden = !(App.doc.notes || []).length; bN.innerHTML = icon(on ? 'notesShow' : 'notesHide'); bN.classList.toggle('on', on); };
     ViewPrefs.on('change', syncNotes); App.on('doc', syncNotes); syncNotes();
-    vb.append(bO, bG, bP, bN, h('div', { class: 'sep' }), b1, b2); $('#overlay').append(vb);
+    const bX = h('button', { type: 'button', 'aria-label': 'Röntgen ein/aus', 'data-tip': 'Röntgen: Körper durchsichtig', 'data-kbd': 'X', 'data-view': 'xray', 'data-help': 'xray' }); bX.innerHTML = icon('xray'); bX.onclick = () => Views.xray();
+    const bC = h('button', { type: 'button', 'aria-label': 'Schnitt ein/aus', 'data-tip': 'Schnitt: Modell aufschneiden', 'data-kbd': 'C', 'data-view': 'cut', 'data-help': 'section' }); bC.innerHTML = icon('section'); bC.onclick = () => Views.section();
+    vb.append(bO, bG, bP, bN, bX, bC, h('div', { class: 'sep' }), b1, b2); $('#overlay').append(vb);
     gizmo = svgEl('<svg class="axis-gizmo" viewBox="0 0 64 64" aria-hidden="true"></svg>');
     $('#overlay').append(gizmo);
     Viewer.on('camera', syncCube); syncCube();

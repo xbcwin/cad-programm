@@ -493,19 +493,19 @@ const HELP = {
   "tipp": "Mit „Spalt“ rücken die Hälften auseinander – praktisch, wenn ein Teil zu groß für den Drucker ist."
  },
  "section": {
-  "tip": "Bauteil virtuell aufschneiden zum Reinschauen",
-  "hilfe": "Klicke eine flache Seite oder Ebene an und ziehe am Pfeil, um das Modell wie im Röntgenschnitt von innen zu betrachten.",
-  "tipp": "Keine Sorge: Dein Bauteil geht dabei nicht wirklich kaputt, es ist nur ein Kameratrick zur Kontrolle."
+  "tip": "Modell aufschneiden zum Hineinschauen",
+  "hilfe": "Oben „Ansicht“ → „Schnitt“ oder Taste C. Wähle die Richtung und schieb den Regler – alles vor der Ebene wird ausgeblendet, die Schnittfläche ist schraffiert.",
+  "tipp": "Keine Sorge: Dein Bauteil geht dabei nicht kaputt, es ist nur ein Blick ins Innere. „Umdrehen“ zeigt die andere Hälfte."
  },
  "xray": {
   "tip": "Körper halb durchsichtig machen",
-  "hilfe": "Klicke das Werkzeug an, um alle Wände wie aus Milchglas darzustellen, sodass du versteckte Innenteile siehst.",
-  "tipp": "Hilft enorm, wenn du im Inneren eines Gehäuses eine Kante anklicken willst, die sonst von der Außenwand verdeckt wird."
+  "hilfe": "Taste X oder der Knopf rechts im Bild: Alle Körper werden wie Milchglas, Kanten sieht man auch von hinten. Ein zweiter Klick auf dieselbe Stelle wählt das Teil dahinter.",
+  "tipp": "Hilft, wenn du ein Teil im Inneren eines Gehäuses anklicken willst, das sonst verdeckt ist."
  },
  "explode": {
-  "tip": "Baugruppe für Übersicht auseinanderziehen",
-  "hilfe": "Ziehe am Schieberegler, damit alle Einzelteile deines Projekts wie in einer Bauanleitung auseinanderschweben.",
-  "tipp": "Schiebe den Regler wieder auf Null zurück, bevor du weiterbaust, damit alles wieder am richtigen Platz sitzt."
+  "tip": "Teile für die Übersicht auseinanderziehen",
+  "hilfe": "Oben „Ansicht“ → „Explosion“ oder Taste U. Mit dem Regler stellst du ein, wie weit die Teile auseinanderschweben – wie in einer Bauanleitung.",
+  "tipp": "Anklicken und rechts ändern geht weiter. Zum Verschieben, Zeichnen oder Bohren setzt Tracery alles von selbst wieder zusammen."
  },
  "measure": {
   "tip": "Abstände, Längen und Durchmesser nachmessen",
@@ -536,6 +536,11 @@ const HELP = {
   "tip": "Maße zentral mit Variablen steuern",
   "hilfe": "Lege im Tab „Maße“ eigene Namen an (z. B. wand = 3) und tippe beim Bemaßen einfach „wand“ statt einer Zahl ein.",
   "tipp": "Änderst du später den Wert in der Tabelle, passen sich alle Wände im gesamten Modell auf einen Schlag gleichzeitig an."
+ },
+ "focusView": {
+  "tip": "Gewähltes Teil groß in einem zweiten Fenster",
+  "hilfe": "Oben „Ansicht“ → „Fokus-Vorschau“. Links erscheint ein kleines Fenster, das immer das gewählte Teil allein und formatfüllend zeigt.",
+  "tipp": "Im kleinen Fenster ziehen dreht nur die Vorschau, ein Doppelklick schaut wieder genauso wie die große Ansicht."
  }
 };
 

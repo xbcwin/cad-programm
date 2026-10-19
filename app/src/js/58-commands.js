@@ -24,6 +24,10 @@ const Commands = (() => {
     add('drop', 'Auf die XY-Ebene setzen', 'push', 'boden unten absetzen z null ebene', () => Actions.dropToPlate(null), { group: 'Werkzeuge' });
     add('ortho', 'Orthografisch / Perspektive', 'viewOrtho', 'ortho perspektive projektion kamera', () => ViewPrefs.toggle('ortho'), { group: 'Ansicht', kbd: 'O' });
     add('gridtoggle', 'Raster ein/aus', 'grid', 'raster gitter grid', () => ViewPrefs.toggle('gridOn'), { group: 'Ansicht', kbd: 'G' });
+    add('section', 'Schnitt ein/aus', 'section', 'schnitt aufschneiden querschnitt innen schnittebene', () => Views.section(), { group: 'Ansicht', kbd: 'C' });
+    add('xray', 'Röntgen ein/aus', 'xray', 'röntgen durchsichtig transparent glas innen', () => Views.xray(), { group: 'Ansicht', kbd: 'X' });
+    add('explode', 'Explosion: Teile auseinanderziehen', 'explode', 'explosion explosionsansicht auseinander zerlegen baugruppe', () => Views.explode(), { group: 'Ansicht', kbd: 'U' });
+    add('focus', 'Fokus-Vorschau ein/aus', 'focusView', 'fokus vorschau zweites fenster lupe groß', () => Views.focus(), { group: 'Ansicht' });
     add('planes', 'Ursprungsebenen ein/aus', 'originPlanes', 'ursprung ebenen xy xz yz origin', () => ViewPrefs.toggle('planes'), { group: 'Ansicht' });
     add('axes', 'Achsen ein/aus', 'axes', 'achsen x y z', () => ViewPrefs.toggle('axes'), { group: 'Ansicht' });
     add('newcomp', 'Neues Bauteil', 'parts', 'bauteil komponente baugruppe component neu', () => Comp.newComponent(), { group: 'Werkzeuge' });
@@ -137,6 +141,7 @@ const Commands = (() => {
     if (mod && k === 'a') { e.preventDefault(); App.select(App.doc.items.map((x) => x.id)); return; }
     if (mod) return;
     if (e.key === 'Delete' || e.key === 'Backspace') { if (App.sel.length) { e.preventDefault(); Actions.remove(); } return; }
+    if (Views.onKey(e)) { e.preventDefault(); return; }
     if (k === 'f') { Viewer.fit(App.sel.length ? App.sel.map((id) => (Model.topOf(App.doc, id) || {}).id).filter(Boolean) : null); return; }
     if (k === 'h' && App.sel.length) { Actions.toggleRole(); return; }
     if (k === 'r' && App.sel.length) { Actions.rotate90(null, 'z'); return; }
@@ -166,7 +171,7 @@ const Commands = (() => {
     const mac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
     const M = mac ? '⌘' : 'Strg';
     const groups = [
-      ['Ansicht', [['Linke Maustaste ziehen', 'Ansicht drehen'], ['Rechte Maustaste ziehen', 'Ansicht verschieben'], ['Mausrad', 'Zoomen'], ['F', 'Auswahl oder alles zeigen'], ['1 · 3 · 7 · 0', 'Ansicht vorne · rechts · oben · schräg'], ['O', 'Orthografisch / Perspektive'], ['G', 'Raster ein / aus'], ['I', 'Gewähltes Teil isolieren / alle zeigen']]],
+      ['Ansicht', [['Linke Maustaste ziehen', 'Ansicht drehen'], ['Rechte Maustaste ziehen', 'Ansicht verschieben'], ['Mausrad', 'Zoomen'], ['F', 'Auswahl oder alles zeigen'], ['1 · 3 · 7 · 0', 'Ansicht vorne · rechts · oben · schräg'], ['O', 'Orthografisch / Perspektive'], ['G', 'Raster ein / aus'], ['C', 'Schnitt ein / aus'], ['X', 'Röntgen ein / aus'], ['U', 'Explosion ein / aus'], ['I', 'Gewähltes Teil isolieren / alle zeigen']]],
       ['Modell', [['Klicken', 'Körper, Fläche oder Kante wählen'], ['Umschalt + Klick', 'Mehrere wählen'], ['Ziehen', 'Körper verschieben – dabei Zahl tippen für genaue Werte'], ['Doppelklick', 'Skizze eines Skizzenkörpers bearbeiten'], ['E', 'Skizze bzw. Bauteil bearbeiten'], ['Esc', 'Auswahl aufheben · Bauteil verlassen'], ['Entf', 'Löschen'], ['H', 'Körper ↔ Loch'], ['R', 'Um 90° drehen'], ['Pfeiltasten', 'Um einen Rasterschritt verschieben (Umschalt: 10)'], ['Bild ↑ / Bild ↓', 'Anheben / Absenken'], [M + ' D', 'Duplizieren'], [M + ' G', 'Gruppieren (Umschalt: lösen)'], [M + ' A', 'Alles wählen']]],
       ['Werkzeuge', [['S', 'Skizze'], ['M', 'Messen'], ['N', 'Notizstift (P Stift · T Text · E Radierer)'], ['K', 'Körper'], ['B', 'Bauteile'], ['/ oder ' + M + ' K', 'Eingabezeile']]],
       ['In der Skizze', [['V', 'Auswahl'], ['L · R · C · A', 'Linie · Rechteck · Kreis · Bogen'], ['G · P · S', 'Langloch · Vieleck · Spline'], ['T · F', 'Trimmen · Versatz'], ['M · Q · W', 'Spiegeln · Rechteckmuster · Kreismuster'], ['X', 'Hilfslinie (neue Elemente oder das gewählte)'], ['Alt halten', 'Nicht einrasten'], ['D', 'Maß festlegen (auch Formel)'], ['Zahl tippen', 'Genaue Länge beim Zeichnen'], ['Tab', 'Nächstes Eingabefeld'], ['Umschalt halten', 'Feiner einrasten'], ['Enter', 'Linienzug beenden · Skizze fertig'], ['Esc', 'Zeichnen abbrechen · Skizze verlassen']]],
@@ -189,7 +194,7 @@ const Commands = (() => {
     $('#tab-model').setAttribute('aria-pressed', m === 'model'); $('#tab-drawing').setAttribute('aria-pressed', m === 'drawing');
     $('#workspace').classList.toggle('drawing-mode', m === 'drawing');
     $('#viewport').hidden = m !== 'model'; $('#sheet').hidden = m !== 'drawing';
-    $$('#overlay > .viewcube, #overlay > .view-btns, #overlay > .axis-gizmo').forEach((el) => { if (m !== 'model') el.setAttribute('hidden', ''); else el.removeAttribute('hidden'); });
+    $$('#overlay > .viewcube, #overlay > .view-btns, #overlay > .axis-gizmo, #overlay > .viewbars').forEach((el) => { if (m !== 'model') el.setAttribute('hidden', ''); else el.removeAttribute('hidden'); });
     Handles.rebuild(); Panels.renderCtx();
     if (m === 'drawing') Drawing.open(); else Drawing.close();
     UI.renderHint();

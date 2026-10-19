@@ -57,7 +57,7 @@ const UI = (() => {
     for (const en of entries) {
       if (en === '-') { m.append(h('hr')); continue; }
       if (en.hidden) continue;
-      const b = h('button', { type: 'button', role: 'menuitem', disabled: en.disabled, onclick: () => { closeMenu(); en.run && en.run(); } });
+      const b = h('button', { type: 'button', role: 'menuitem', disabled: en.disabled, 'data-help': en.help || null, onclick: () => { closeMenu(); en.run && en.run(); } });
       b.innerHTML = en.icon ? icon(en.icon) : '';
       b.append(h('span', null, en.label));
       if (en.kbd) b.append(h('span', { class: 'k' }, en.kbd));

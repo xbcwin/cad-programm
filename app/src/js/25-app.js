@@ -17,7 +17,7 @@ const App = (() => {
     S.sel = []; S.face = null; S.edges = []; S.undo = []; S.redo = []; S.extra = []; S.ctx = null; S.iso = null;
     for (const id of [...S.results.keys()]) Viewer.removeNode(id);
     S.results.clear(); S.errors = []; S.revision++;
-    Viewer.clearGhosts();
+    Viewer.clearGhosts(); Views.reset();
     ev.emit('doc'); ev.emit('selection'); ev.emit('history');
     autosave();
     rebuild().then(() => { if (opts.fit !== false) Viewer.fit(null, false); });

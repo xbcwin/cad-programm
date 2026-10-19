@@ -354,6 +354,28 @@ body.sketching .timeline{display:none}
 .axis-gizmo{position:absolute;left:12px;bottom:12px;width:64px;height:64px;pointer-events:none;z-index:11}
 .sketchbar{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:16;display:flex;align-items:center;gap:2px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-2);padding:5px;max-width:calc(100% - 140px);overflow-x:auto;scrollbar-width:none}
 .sketchbar::-webkit-scrollbar{display:none}
+.viewbars{position:absolute;top:12px;left:12px;z-index:16;display:grid;gap:8px;width:300px;max-width:calc(100% - 24px)}
+.viewbar{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-2);padding:6px 8px 10px 10px;display:grid;gap:8px}
+.viewbar .vb-head{display:flex;align-items:center;justify-content:space-between}
+.viewbar .title,.focusview .fv-title{font:600 12px/1 var(--font-cond);letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+.vb-x{width:26px;height:26px;border-radius:7px;border:0;background:none;display:grid;place-items:center;color:var(--ink-2);flex:none}
+.vb-x:hover{background:var(--surface-2);color:var(--ink)}
+.vb-x svg{width:15px;height:15px}
+.viewbar .seg{display:grid;grid-template-columns:repeat(3,1fr)}
+.viewbar .seg button{padding:7px 4px;font-size:13px}
+.vb-row{display:flex;align-items:center;gap:8px;min-width:0}
+.vb-row input[type=range]{flex:1;min-width:0;accent-color:var(--accent)}
+.vb-l{font:600 12px/1 var(--font-cond);color:var(--muted);min-width:14px}
+.vb-num{width:64px;padding:5px 7px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink);font:13px var(--font-mono);text-align:right}
+.vb-u{font-size:12px;color:var(--muted)}
+.vb-hint{font-size:12px;color:var(--muted);line-height:1.3}
+.focusview{border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-2);overflow:hidden;display:grid;grid-template-rows:auto 200px}
+.focusview .fv-head{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:4px 4px 4px 10px;background:var(--surface);border-bottom:1px solid var(--line);min-width:0}
+.focusview .fv-title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fv-body{position:relative;cursor:grab;touch-action:none}
+.fv-body:active{cursor:grabbing}
+.fv-empty{position:absolute;inset:0;display:grid;place-items:center;padding:16px;text-align:center;font-size:13px;color:var(--muted);background:var(--surface)}
+@media (max-width: 640px){.focusview{grid-template-rows:auto 130px}.viewbars{width:auto;right:12px}}
 .sketchbar .tool{padding:7px 9px}
 .sketchbar .tool:not(.active):not(.primary):not(.labeled) span{display:none}
 .sketchbar .tool.active span{display:inline}

@@ -126,6 +126,7 @@ const Sketch = (() => {
     return { o, x, y, n };
   }
   function begin(init, skipDraw) {
+    Views.collapse();
     if (S) cancel(true);
     if (Notes.active) Notes.stop();
     Panels.closeFlyout(); UI.closePop();

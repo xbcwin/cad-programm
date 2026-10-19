@@ -1,6 +1,6 @@
 # Fortschritt
 
-Stand: 19.10.2026 · nach Sitzung 8 von 14
+Stand: 19.10.2026 · nach Sitzung 9 von 14
 
 ## Erledigt
 
@@ -45,7 +45,7 @@ Stand: 19.10.2026 · nach Sitzung 8 von 14
 - [x] Neuer Name beim Maß (z. B. `breite`) wird automatisch unter „Maße“ angelegt
 - [x] Formel-Beispiele unter „Maße“ (Gemini, alle 12 mit Tracerys Rechner nachgeprüft), Beispiel-Maße per Klick
 - [x] Umbenennen / Entfernen eines Maßes wirkt jetzt auch auf Skizzen-Maße
-- [x] Automatischer Klicktest `tests/klicktest.py`: 58 Durchläufe (alle grün), 82 von 94 Punkten der Testliste automatisch geprüft
+- [x] Automatischer Klicktest `tests/klicktest.py`: 66 Durchläufe (alle grün), 90 von 106 Punkten der Testliste automatisch geprüft
 - [x] Aufgeräumt: Programm liegt jetzt in 28 Quelldateien unter `app/src/`, `tools/build.py` baut daraus `app/index.html`
 - [x] Notizstift (Taste N): freie Striche, die am Modell kleben, Textnotizen, 6 Farben, 3 Dicken, Radierer, ein-/ausblendbar – ohne technische Bedeutung
 - [x] Symbole für den Notizstift (Gemini, geprüft); Augen-Knopf rechts im Bild blendet Notizen aus, sobald es welche gibt
@@ -72,6 +72,14 @@ Stand: 19.10.2026 · nach Sitzung 8 von 14
 - [x] Wandstärke (Aushöhlen): Fläche anklicken → „Aushöhlen“, Wand rechts einstellbar, weitere Flächen per Klick öffnen/schließen; zu dicke Wand wird rot mit Höchstwert
 - [x] Hilfetexte für die Formen-Werkzeuge an das echte Verhalten angepasst
 - [x] Neues Bauteil `app/src/js/46-features.js`; der CAD-Kern rechnet Muster, Teilen, Schnittmenge und Aushöhlen selbst
+- [x] Schnitt (Taste C): Ebene von vorne / von der Seite / waagerecht, Lage per Regler oder eintippen, umdrehen; Schnittfläche schraffiert; Klicks gehen durch den weggeschnittenen Teil
+- [x] Röntgen (Taste X, Knopf rechts im Bild): Körper durchsichtig, alle Kanten sichtbar, zweiter Klick wählt das Teil dahinter
+- [x] Explosion (Taste U): Teile weich auseinander, Schichten nach oben, Regler für die Weite; anklicken und rechts ändern geht weiter; Ziehen, Skizze, Bohren, Messen und Notizen setzen vorher zusammen
+- [x] Fokus-Vorschau: kleines zweites Fenster zeigt das gewählte Teil allein und groß, eigene Drehung per Ziehen
+- [x] Darstellung beim Drehen: Braucht ein Bild zu lange, wird während der Bewegung kurz gröber gezeichnet, in Ruhe sofort wieder scharf
+- [x] Neuer Knopf „Ansicht“ oben, neues Bauteil `app/src/js/53-views.js`; nichts davon ändert das Modell oder die Zeitleiste
+- [x] Anleitungen (Hilfetexte) erscheinen jetzt auch an den Knöpfen an einer Fläche (Bohrung, Aushöhlen, Muster …) und im Ansicht-Menü
+- [x] FPV-Standardmaße (Gemini Prompt E, geprüft und korrigiert: Motor-Lochkreis als eigene Zahl, 1103 mit M1.6, 2806.5-Glocke 35 mm, 20×20 mit M2 oder M3, 30,5er-Platine 36 mm, 3"-Nabe 1,5 oder 5 mm) in `app/data/fpv-masse.json` – für Sitzung 11 und 12
 
 ## Offen
 
@@ -92,7 +100,9 @@ Fertig.
 - [x] Bohrungs-Assistent, Wandstärke, Muster, Spiegeln, Boolesch, Teilen (Sitzung 8)
 - [ ] Muster entlang einer Kante oder Kurve; Kreismuster um eine schräge Achse (heute immer um die Senkrechte)
 - [ ] Bohrung an einem Skizzenpunkt (heute per Klick auf eine Fläche)
-- [ ] Explosionsansicht, Fokus-Vorschau, Schnitt, Röntgen (Sitzung 9)
+- [x] Explosionsansicht, Fokus-Vorschau, Schnitt, Röntgen (Sitzung 9)
+- [ ] Explosion auch für die Teile innerhalb einer Gruppe (heute nur oberste Ebene)
+- [ ] Schnitt an einer beliebigen Fläche statt nur an den drei Grundebenen
 - [ ] Messen, Material pro Teil, Push/Pull, „ähnliche auswählen“, Versionen (Sitzung 10)
 
 ### Stufe 4 – Drohnen-Modul

@@ -361,6 +361,28 @@ body.sketching .timeline{display:none}
 .axis-gizmo{position:absolute;left:12px;bottom:12px;width:64px;height:64px;pointer-events:none;z-index:11}
 .sketchbar{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:16;display:flex;align-items:center;gap:2px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-2);padding:5px;max-width:calc(100% - 140px);overflow-x:auto;scrollbar-width:none}
 .sketchbar::-webkit-scrollbar{display:none}
+.viewbars{position:absolute;top:12px;left:12px;z-index:16;display:grid;gap:8px;width:300px;max-width:calc(100% - 24px)}
+.viewbar{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-2);padding:6px 8px 10px 10px;display:grid;gap:8px}
+.viewbar .vb-head{display:flex;align-items:center;justify-content:space-between}
+.viewbar .title,.focusview .fv-title{font:600 12px/1 var(--font-cond);letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+.vb-x{width:26px;height:26px;border-radius:7px;border:0;background:none;display:grid;place-items:center;color:var(--ink-2);flex:none}
+.vb-x:hover{background:var(--surface-2);color:var(--ink)}
+.vb-x svg{width:15px;height:15px}
+.viewbar .seg{display:grid;grid-template-columns:repeat(3,1fr)}
+.viewbar .seg button{padding:7px 4px;font-size:13px}
+.vb-row{display:flex;align-items:center;gap:8px;min-width:0}
+.vb-row input[type=range]{flex:1;min-width:0;accent-color:var(--accent)}
+.vb-l{font:600 12px/1 var(--font-cond);color:var(--muted);min-width:14px}
+.vb-num{width:64px;padding:5px 7px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink);font:13px var(--font-mono);text-align:right}
+.vb-u{font-size:12px;color:var(--muted)}
+.vb-hint{font-size:12px;color:var(--muted);line-height:1.3}
+.focusview{border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-2);overflow:hidden;display:grid;grid-template-rows:auto 200px}
+.focusview .fv-head{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:4px 4px 4px 10px;background:var(--surface);border-bottom:1px solid var(--line);min-width:0}
+.focusview .fv-title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fv-body{position:relative;cursor:grab;touch-action:none}
+.fv-body:active{cursor:grabbing}
+.fv-empty{position:absolute;inset:0;display:grid;place-items:center;padding:16px;text-align:center;font-size:13px;color:var(--muted);background:var(--surface)}
+@media (max-width: 640px){.focusview{grid-template-rows:auto 130px}.viewbars{width:auto;right:12px}}
 .sketchbar .tool{padding:7px 9px}
 .sketchbar .tool:not(.active):not(.primary):not(.labeled) span{display:none}
 .sketchbar .tool.active span{display:inline}
@@ -1105,19 +1127,19 @@ const HELP = {
   "tipp": "Mit „Spalt“ rücken die Hälften auseinander – praktisch, wenn ein Teil zu groß für den Drucker ist."
  },
  "section": {
-  "tip": "Bauteil virtuell aufschneiden zum Reinschauen",
-  "hilfe": "Klicke eine flache Seite oder Ebene an und ziehe am Pfeil, um das Modell wie im Röntgenschnitt von innen zu betrachten.",
-  "tipp": "Keine Sorge: Dein Bauteil geht dabei nicht wirklich kaputt, es ist nur ein Kameratrick zur Kontrolle."
+  "tip": "Modell aufschneiden zum Hineinschauen",
+  "hilfe": "Oben „Ansicht“ → „Schnitt“ oder Taste C. Wähle die Richtung und schieb den Regler – alles vor der Ebene wird ausgeblendet, die Schnittfläche ist schraffiert.",
+  "tipp": "Keine Sorge: Dein Bauteil geht dabei nicht kaputt, es ist nur ein Blick ins Innere. „Umdrehen“ zeigt die andere Hälfte."
  },
  "xray": {
   "tip": "Körper halb durchsichtig machen",
-  "hilfe": "Klicke das Werkzeug an, um alle Wände wie aus Milchglas darzustellen, sodass du versteckte Innenteile siehst.",
-  "tipp": "Hilft enorm, wenn du im Inneren eines Gehäuses eine Kante anklicken willst, die sonst von der Außenwand verdeckt wird."
+  "hilfe": "Taste X oder der Knopf rechts im Bild: Alle Körper werden wie Milchglas, Kanten sieht man auch von hinten. Ein zweiter Klick auf dieselbe Stelle wählt das Teil dahinter.",
+  "tipp": "Hilft, wenn du ein Teil im Inneren eines Gehäuses anklicken willst, das sonst verdeckt ist."
  },
  "explode": {
-  "tip": "Baugruppe für Übersicht auseinanderziehen",
-  "hilfe": "Ziehe am Schieberegler, damit alle Einzelteile deines Projekts wie in einer Bauanleitung auseinanderschweben.",
-  "tipp": "Schiebe den Regler wieder auf Null zurück, bevor du weiterbaust, damit alles wieder am richtigen Platz sitzt."
+  "tip": "Teile für die Übersicht auseinanderziehen",
+  "hilfe": "Oben „Ansicht“ → „Explosion“ oder Taste U. Mit dem Regler stellst du ein, wie weit die Teile auseinanderschweben – wie in einer Bauanleitung.",
+  "tipp": "Anklicken und rechts ändern geht weiter. Zum Verschieben, Zeichnen oder Bohren setzt Tracery alles von selbst wieder zusammen."
  },
  "measure": {
   "tip": "Abstände, Längen und Durchmesser nachmessen",
@@ -1148,6 +1170,11 @@ const HELP = {
   "tip": "Maße zentral mit Variablen steuern",
   "hilfe": "Lege im Tab „Maße“ eigene Namen an (z. B. wand = 3) und tippe beim Bemaßen einfach „wand“ statt einer Zahl ein.",
   "tipp": "Änderst du später den Wert in der Tabelle, passen sich alle Wände im gesamten Modell auf einen Schlag gleichzeitig an."
+ },
+ "focusView": {
+  "tip": "Gewähltes Teil groß in einem zweiten Fenster",
+  "hilfe": "Oben „Ansicht“ → „Fokus-Vorschau“. Links erscheint ein kleines Fenster, das immer das gewählte Teil allein und formatfüllend zeigt.",
+  "tipp": "Im kleinen Fenster ziehen dreht nur die Vorschau, ein Doppelklick schaut wieder genauso wie die große Ansicht."
  }
 };
 
@@ -2676,7 +2703,7 @@ const App = (() => {
     S.sel = []; S.face = null; S.edges = []; S.undo = []; S.redo = []; S.extra = []; S.ctx = null; S.iso = null;
     for (const id of [...S.results.keys()]) Viewer.removeNode(id);
     S.results.clear(); S.errors = []; S.revision++;
-    Viewer.clearGhosts();
+    Viewer.clearGhosts(); Views.reset();
     ev.emit('doc'); ev.emit('selection'); ev.emit('history');
     autosave();
     rebuild().then(() => { if (opts.fit !== false) Viewer.fit(null, false); });
@@ -2964,6 +2991,9 @@ const Viewer = (() => {
   let hoverFace = null, hoverEdge = null, selFace = null, selEdges = [];
   let camAnim = null;
   const listeners = makeEmitter();
+  // Ansichts-Modi (Sitzung 9): Schnittebene, Röntgen, Verschiebung für die Explosionsansicht
+  const vis = { clip: null, xray: false };
+  const _off = new THREE.Matrix4();
 
   function readTheme() {
     const cs = getComputedStyle(document.documentElement);
@@ -2971,6 +3001,7 @@ const Viewer = (() => {
     theme.ink = g('--ink', '#16202b'); theme.accent = g('--accent', '#0c7a70'); theme.hole = g('--hole', '#d9483f');
     theme.dark = matchMedia('(prefers-color-scheme: dark)').matches && document.documentElement.getAttribute('data-theme') !== 'light' || document.documentElement.getAttribute('data-theme') === 'dark';
     theme.edge = theme.dark ? '#0b0f13' : '#1c2630';
+    theme.surface = g('--surface', theme.dark ? '#1a2027' : '#ffffff');
   }
 
   // ---------- Kamera: Perspektive oder orthografisch ----------
@@ -3119,6 +3150,8 @@ const Viewer = (() => {
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: false });
     renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
     renderer.setClearColor(0x000000, 0);
+    renderer.localClippingEnabled = true;
+    basePR = renderer.getPixelRatio();
     el.append(renderer.domElement);
     renderer.domElement.setAttribute('tabindex', '0');
     renderer.domElement.setAttribute('aria-label', '3D-Ansicht');
@@ -3173,20 +3206,55 @@ const Viewer = (() => {
     }
     const moved = controls.update();
     if (moved) listeners.emit('camera');
+    const now = performance.now();
+    if (camAnim) lastMotion = now;
+    else if (moved) {   // nur echte Bewegung zählt, nicht das lange Ausrollen der Dämpfung
+      const d = camera.position.distanceTo(_lastCam.p) / Math.max(1e-6, camera.position.distanceTo(controls.target)) + 2 * (1 - Math.abs(camera.quaternion.dot(_lastCam.q)));
+      if (d > 4e-4) lastMotion = now;
+    }
+    _lastCam.p.copy(camera.position); _lastCam.q.copy(camera.quaternion);
     if (needsRender || moved) {
       needsRender = false;
       updateViewAids();
       listeners.emit('beforeRender');
+      const t0 = performance.now();
       renderer.render(scene, cam());
+      frameMs = frameMs * 0.7 + (performance.now() - t0) * 0.3;
       listeners.emit('afterRender');
-    }
+      adaptRes(now);
+    } else if (lowRes && now - lastMotion > 220) adaptRes(now);
   }
+  // Beim Drehen und Zoomen kurz mit weniger Pixeln zeichnen, wenn ein Bild zu lange braucht;
+  // in Ruhe sofort wieder in voller Schärfe.
+  let basePR = 1, lowRes = false, frameMs = 0, lastMotion = 0, adaptive = true, slowMs = 24;
+  const _lastCam = { p: new THREE.Vector3(), q: new THREE.Quaternion() };
+  function setPR(r) { const w = container.clientWidth || 1, hgt = container.clientHeight || 1; renderer.setPixelRatio(r); renderer.setSize(w, hgt, false); }
+  function adaptRes(now) {
+    const moving = now - lastMotion < 200;
+    if (adaptive && moving && !lowRes && frameMs > slowMs && basePR > 0.8) { lowRes = true; setPR(Math.max(0.6, basePR * 0.55)); }
+    else if (lowRes && (!moving || !adaptive)) { lowRes = false; setPR(basePR); needsRender = true; }
+  }
+  function setAdaptive(on, ms) { adaptive = !!on; if (ms != null) slowMs = ms; if (!adaptive && lowRes) { lowRes = false; setPR(basePR); needsRender = true; } }
   function requestRender() { needsRender = true; }
 
   // ---------- Objekte ----------
   function makeMaterial(role, color) {
-    if (role === 'hole') return new THREE.MeshStandardMaterial({ color: new THREE.Color(theme.hole), transparent: true, opacity: 0.2, depthWrite: false, side: THREE.DoubleSide, roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
-    return new THREE.MeshStandardMaterial({ color: new THREE.Color(color || '#2f9e91'), roughness: 0.58, metalness: 0.03, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+    const clip = vis.clip ? [vis.clip] : null;
+    if (role === 'hole') return new THREE.MeshStandardMaterial({ color: new THREE.Color(theme.hole), transparent: true, opacity: 0.2, depthWrite: false, side: THREE.DoubleSide, roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1, clippingPlanes: clip });
+    const m = new THREE.MeshStandardMaterial({ color: new THREE.Color(color || '#2f9e91'), roughness: 0.58, metalness: 0.03, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1, clippingPlanes: clip });
+    if (clip) capShader(m, color);
+    return m;
+  }
+  // Schnittfläche: Durch den Schnitt sieht man die Innenseite der Hülle. Die wird als
+  // schraffierte Fläche in einem dunkleren Ton gemalt – das sieht aus wie ein voller Querschnitt.
+  function capShader(m, color) {
+    m.side = THREE.DoubleSide;
+    const c = new THREE.Color(color || '#2f9e91').lerp(new THREE.Color('#ffffff'), 0.3).multiplyScalar(0.8);
+    m.onBeforeCompile = (sh) => {
+      sh.uniforms.uCap = { value: c };
+      sh.fragmentShader = 'uniform vec3 uCap;\n' + sh.fragmentShader.replace(/}\s*$/, '  if (!gl_FrontFacing) { float hh = mod(gl_FragCoord.x + gl_FragCoord.y, 8.0) < 2.0 ? 0.62 : 1.0; gl_FragColor = vec4(uCap * hh, 1.0); }\n}');
+    };
+    m.customProgramCacheKey = () => 'cap';
   }
   function styleNode(n) {
     const sel = n.selected, hov = n.hover;
@@ -3203,14 +3271,37 @@ const Viewer = (() => {
     } else {
       n.mesh.material.opacity = sel ? 0.34 : hov ? 0.28 : n.dim ? 0.1 : 0.2;
     }
+    // Röntgen: Körper wie Milchglas, Kanten auch von hinten sichtbar; das gewählte Teil bleibt kräftig
+    const xr = vis.xray && n.role !== 'hole';
+    if (xr) { const mt = n.mesh.material; mt.transparent = true; mt.opacity = sel ? 0.55 : hov ? 0.3 : 0.18; mt.depthWrite = false; mt.side = THREE.DoubleSide; }
+    const clip = vis.clip ? [vis.clip] : null;
     if (n.edges) {
       n.edges.material.dispose();
-      if (n.role === 'hole') { n.edges.material = new THREE.LineDashedMaterial({ color: new THREE.Color(theme.hole), dashSize: 1.6, gapSize: 1.2, transparent: true, opacity: sel ? 1 : 0.75, depthTest: true }); n.edges.computeLineDistances(); }
-      else n.edges.material = new THREE.LineBasicMaterial({ color: new THREE.Color(sel ? theme.accent : theme.edge), transparent: true, opacity: sel ? 1 : 0.5 });
+      if (n.role === 'hole') { n.edges.material = new THREE.LineDashedMaterial({ color: new THREE.Color(theme.hole), dashSize: 1.6, gapSize: 1.2, transparent: true, opacity: sel ? 1 : 0.75, depthTest: !vis.xray, clippingPlanes: clip }); n.edges.computeLineDistances(); }
+      else n.edges.material = new THREE.LineBasicMaterial({ color: new THREE.Color(sel ? theme.accent : theme.edge), transparent: true, opacity: sel ? 1 : xr ? 0.42 : 0.5, depthTest: !xr, clippingPlanes: clip });
     }
-    n.mesh.renderOrder = n.role === 'hole' ? 3 : 0;
+    n.mesh.renderOrder = n.role === 'hole' ? 3 : xr ? (sel ? 2 : 1) : 0;
+    if (n.edges) n.edges.renderOrder = xr ? 5 : 0;
     needsRender = true;
   }
+  function restyleAll() { for (const n of nodes.values()) styleNode(n); }
+  function setClip(plane) { vis.clip = plane || null; restyleAll(); listeners.emit('viewmode'); }
+  function setXray(on) { vis.xray = !!on; restyleAll(); listeners.emit('viewmode'); }
+  // Anzeige-Verschiebung je Teil (Explosionsansicht) – das Modell selbst bleibt unverändert
+  function placeNode(n) {
+    if (n.off && n.off.lengthSq() > 1e-12) { _off.makeTranslation(n.off.x, n.off.y, n.off.z); n.obj.matrix.multiplyMatrices(_off, n.base); }
+    else n.obj.matrix.copy(n.base);
+    n.obj.matrixWorldNeedsUpdate = true;
+    // Hervorhebungen dieses Teils wandern mit
+    for (const f of [hoverFace, selFace]) if (f && f.id === n.id) f.mesh.matrix.copy(n.obj.matrix);
+    if (hoverEdge && hoverEdge.id === n.id) hoverEdge.line.matrix.copy(n.obj.matrix);
+    for (const e of selEdges) if (e.id === n.id) e.line.matrix.copy(n.obj.matrix);
+  }
+  function setOffsets(map) {
+    for (const [id, n] of nodes) { const v = map && map.get(id); n.off = v ? v.clone() : null; placeNode(n); }
+    needsRender = true; listeners.emit('camera');
+  }
+  function baseBox(id) { const n = nodes.get(id); return n ? n.mesh.geometry.boundingBox.clone().applyMatrix4(n.base) : null; }
   function setNode(id, data, info) {
     removeNode(id, true);
     const geo = new THREE.BufferGeometry();
@@ -3224,10 +3315,11 @@ const Viewer = (() => {
     const edges = new THREE.LineSegments(eg, new THREE.LineBasicMaterial());
     edges.userData.nodeId = id;
     const obj = new THREE.Group(); obj.add(mesh, edges); obj.matrixAutoUpdate = false;
-    obj.matrix.copy(info.matrix); obj.matrixWorldNeedsUpdate = true;
     obj.userData.nodeId = id;
     groups.nodes.add(obj);
-    const n = { id, obj, mesh, edges, data, role: info.role, color: info.color, selected: false, hover: false, key: info.key };
+    const old = nodes.get(id);
+    const n = { id, obj, mesh, edges, data, role: info.role, color: info.color, selected: false, hover: false, key: info.key, base: info.matrix.clone(), off: old && old.off ? old.off : null };
+    placeNode(n);
     nodes.set(id, n); styleNode(n);
     needsRender = true;
     return n;
@@ -3235,7 +3327,7 @@ const Viewer = (() => {
   function updateNode(id, info) {
     const n = nodes.get(id); if (!n) return;
     let restyle = false;
-    if (info.matrix) { n.obj.matrix.copy(info.matrix); n.obj.matrixWorldNeedsUpdate = true; }
+    if (info.matrix) { n.base.copy(info.matrix); placeNode(n); }
     if (info.role && info.role !== n.role) { n.role = info.role; restyle = true; }
     if (info.color && info.color !== n.color) { n.color = info.color; restyle = true; }
     if (info.selected !== undefined && info.selected !== n.selected) { n.selected = info.selected; restyle = true; }
@@ -3370,7 +3462,13 @@ const Viewer = (() => {
     setRay(cx, cy);
     const meshes = [];
     for (const n of nodes.values()) { if (!n.obj.visible || n.ctxDim) continue; if (opts.solidsOnly && n.role === 'hole') continue; if (opts.exclude && opts.exclude.has(n.id)) continue; meshes.push(n.mesh); }
-    const hits = raycaster.intersectObjects(meshes, false);
+    let hits = raycaster.intersectObjects(meshes, false);
+    if (vis.clip) hits = hits.filter((x) => vis.clip.distanceToPoint(x.point) >= -1e-6);
+    if (vis.xray && hits.length) {
+      // Röntgen: liegt das gewählte Teil vorne, gilt der Klick dem nächsten Teil dahinter
+      const first = nodes.get(hits[0].object.userData.nodeId);
+      if (first && first.selected && !opts.noCycle) { const nx = hits.find((x) => x.object.userData.nodeId !== first.id); if (nx) hits = [nx, ...hits.filter((x) => x !== nx)]; }
+    }
     if (!hits.length) {
       // am Umriss: Kante in der Nähe suchen, auch wenn der Strahl knapp vorbeigeht
       if (opts.noEdges) return null;
@@ -3394,7 +3492,7 @@ const Viewer = (() => {
     const normal = hit.face ? hit.face.normal.clone().transformDirection(n.obj.matrixWorld) : null;
     const res = { id: n.id, point: hit.point.clone(), faceIdx, normal, distance: hit.distance, node: n };
     if (!opts.noEdges) {
-      const e = edgeNear(n, cx, cy, hit.distance, opts.edgePx || 5);
+      const e = edgeNear(n, cx, cy, vis.xray ? Infinity : hit.distance, opts.edgePx || 5);
       if (e) { res.edgeIdx = e.edgeIdx; res.edgeDist = e.px; }
     }
     return res;
@@ -3411,6 +3509,7 @@ const Viewer = (() => {
       for (let i = g[0]; i < g[0] + g[1]; i += 2) {
         _a.set(lines[i * 3], lines[i * 3 + 1], lines[i * 3 + 2]).applyMatrix4(M);
         _b.set(lines[i * 3 + 3], lines[i * 3 + 4], lines[i * 3 + 5]).applyMatrix4(M);
+        if (vis.clip && vis.clip.distanceToPoint(_a) < 0 && vis.clip.distanceToPoint(_b) < 0) continue;
         const A = toS(_a), B = toS(_b);
         const dx = B[0] - A[0], dy = B[1] - A[1]; const l2 = dx * dx + dy * dy;
         let t = l2 ? ((px - A[0]) * dx + (py - A[1]) * dy) / l2 : 0; t = clamp(t, 0, 1);
@@ -3504,6 +3603,36 @@ const Viewer = (() => {
   function saveCamera() { return { p: camera.position.clone(), t: controls.target.clone(), up: camera.up.clone() }; }
   function restoreCamera(s, animate = true) { if (s) moveCamera(s.p, s.t, s.up, animate); }
 
+  // ---------- Zweites Bild in einer Ecke (Fokus-Vorschau) ----------
+  // r: Rechteck in CSS-Pixeln relativ zur Zeichenfläche; ids: Teile, die zu sehen sind; rot: [Gier, Neigung] in Grad
+  const insetCam = new THREE.PerspectiveCamera(28, 1, 0.1, 1000);
+  function renderInset(r, ids, rot = [0, 0], bg) {
+    const size = renderer.getSize(new THREE.Vector2());
+    const show = ids.map((id) => nodes.get(id)).filter(Boolean);
+    if (!show.length || r.w < 10 || r.h < 10) return false;
+    const box = new THREE.Box3(); for (const n of show) box.union(n.mesh.geometry.boundingBox.clone().applyMatrix4(n.obj.matrix));
+    const c = box.getCenter(new THREE.Vector3()); const R = Math.max(1, box.getSize(new THREE.Vector3()).length() / 2);
+    // Blickrichtung wie die Hauptkamera, dazu eigene Drehung
+    const dir = camera.position.clone().sub(controls.target).normalize();
+    const up = camera.up.clone();
+    if (rot[0]) dir.applyAxisAngle(up, (rot[0] * Math.PI) / 180);
+    if (rot[1]) { const side = new THREE.Vector3().crossVectors(up, dir).normalize(); const d2 = dir.clone().applyAxisAngle(side, (rot[1] * Math.PI) / 180); if (Math.abs(d2.dot(up)) < 0.995) dir.copy(d2); }
+    insetCam.aspect = r.w / r.h;
+    const dist = (R / Math.sin((insetCam.fov * Math.PI) / 360)) * 1.08 / Math.min(1, insetCam.aspect);
+    insetCam.position.copy(c).addScaledVector(dir, dist); insetCam.up.copy(up); insetCam.lookAt(c);
+    insetCam.near = Math.max(0.05, dist - R * 2); insetCam.far = dist + R * 2; insetCam.updateProjectionMatrix();
+    const before = new Map(); for (const n of nodes.values()) { before.set(n, n.obj.visible); n.obj.visible = show.includes(n); }
+    const gv = {}; for (const k of Object.keys(groups)) if (k !== 'nodes') { gv[k] = groups[k].visible; groups[k].visible = false; }
+    const y = size.y - r.y - r.h;
+    renderer.setScissorTest(true); renderer.setScissor(r.x, y, r.w, r.h); renderer.setViewport(r.x, y, r.w, r.h);
+    renderer.setClearColor(new THREE.Color(bg || theme.surface), 1);
+    renderer.render(scene, insetCam);
+    renderer.setScissorTest(false); renderer.setViewport(0, 0, size.x, size.y); renderer.setClearColor(0x000000, 0);
+    for (const [n, v] of before) n.obj.visible = v;
+    for (const k of Object.keys(gv)) groups[k].visible = gv[k];
+    return true;
+  }
+
   // Bild der Szene für Vorschaubilder
   function snapshot(w = 480, hgt = 300) {
     const old = renderer.getSize(new THREE.Vector2());
@@ -3515,9 +3644,10 @@ const Viewer = (() => {
   }
 
   return {
-    init, requestRender, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, setSelectedEdges, clearHover,
+    init, requestRender, setClip, setXray, setOffsets, baseBox, renderInset, setAdaptive, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, setSelectedEdges, clearHover,
     pick, pickGhost, pickProxy, setProxies, clearProxies, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, boxVisible, sceneBox, snapshot, makeFat, disposeFat,
     get camera() { return camera; }, get activeCamera() { return cam(); }, get ortho() { return ortho; }, get gridStep() { return gridStep; }, get controls() { return controls; }, get scene() { return scene; }, get groups() { return groups; }, get nodes() { return nodes; }, get canvas() { return renderer.domElement; }, get theme() { return theme; }, get container() { return container; },
+    get clip() { return vis.clip; }, get xray() { return vis.xray; }, get lowRes() { return lowRes; },  get pixelRatio() { return renderer.getPixelRatio(); },
     on: listeners.on,
   };
 })();
@@ -3566,7 +3696,7 @@ const Handles = (() => {
   };
   const LABELS = { w: 'Breite', d: 'Durchmesser', h: 'Höhe', d1: 'Durchmesser', t: 'Ringdicke', dist: 'Höhe' };
   function current() {
-    if (App.mode !== 'model' || Sketch.active || App.sel.length !== 1) return null;
+    if (App.mode !== 'model' || Sketch.active || App.sel.length !== 1 || Views.exploded) return null;
     const f = Model.find(App.doc, App.sel[0]); if (!f || f.item.locked) return null;
     const box = App.localBox(f.item.id); if (!box) return null;
     return { f, it: f.item, box, W: Model.worldMatrix(App.doc, f.item.id) };
@@ -3869,7 +3999,7 @@ const Interact = (() => {
     }
     const hit = Viewer.pick(e.clientX, e.clientY);
     down = { x: e.clientX, y: e.clientY, hit, t: performance.now(), shift: e.shiftKey || e.metaKey || e.ctrlKey };
-    if (hit && !(App.ctx && hit.id === App.ctx)) {   // im Bauteil-Modus nicht das ganze Bauteil verschieben
+    if (hit && !(App.ctx && hit.id === App.ctx) && !Views.exploded) {   // im Bauteil-Modus nicht das ganze Bauteil verschieben
       const top = App.doc.items.find((x) => x.id === hit.id);
       if (top && !top.locked) Viewer.controls.enabled = false; // Körper ziehen statt Ansicht drehen
     }
@@ -3879,7 +4009,7 @@ const Interact = (() => {
     if (down && down.kbd) return;
     if (down && down.handle) { Handles.move(e); return; }
     if (down && down.child && moving) { doMove(e); return; }
-    if (down && down.hit && !moving && !(App.ctx && down.hit.id === App.ctx)) {
+    if (down && down.hit && !moving && !(App.ctx && down.hit.id === App.ctx) && !Views.exploded) {
       if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > 4) startMove(e);
     }
     if (moving) { doMove(e); return; }
@@ -4553,7 +4683,7 @@ const ViewPrefs = (() => {
     const r = document.documentElement;
     if (v.theme === 'light' || v.theme === 'dark') r.setAttribute('data-theme', v.theme); else r.removeAttribute('data-theme');
   }
-  function apply() { Viewer.setViewOptions({ grid: v.grid, gridOn: v.gridOn, planes: v.planes, axes: v.axes }); Viewer.setOrtho(v.ortho); applyTheme(); FMT.min = +v.decimals || 0; ev.emit('change', v); }
+  function apply() { Viewer.setViewOptions({ grid: v.grid, gridOn: v.gridOn, planes: v.planes, axes: v.axes }); Viewer.setOrtho(v.ortho); Viewer.setAdaptive(v.adaptive !== false); applyTheme(); FMT.min = +v.decimals || 0; ev.emit('change', v); }
   function set(patch, msg) {
     const oldQ = v.quality, oldDec = v.decimals;
     Object.assign(v, patch); storageSet(KEY, JSON.stringify(v)); apply();
@@ -4574,7 +4704,7 @@ const ViewPrefs = (() => {
       sel('set-theme', 'Design', v.theme, [['system', 'Wie das System'], ['light', 'Hell'], ['dark', 'Dunkel']], (x) => set({ theme: x })),
       sel('set-dec', 'Nachkommastellen in Anzeigen', v.decimals, [['0', 'Automatisch (2 Stellen)'], ['3', '3 Stellen (0,001 mm)'], ['4', '4 Stellen (0,0001 mm)']], (x) => set({ decimals: +x }), 'Eingaben werden immer exakt gespeichert, das betrifft nur die Anzeige.'),
       sel('set-quality', 'Darstellungsqualität', v.quality, [['coarse', 'Grob – am schnellsten'], ['normal', 'Normal'], ['fine', 'Fein'], ['ultra', 'Sehr fein – braucht mehr Leistung']], (x) => set({ quality: x }), 'Wie glatt Rundungen auf dem Bildschirm aussehen. Die Geometrie selbst ist immer exakt.'),
-      chk('adaptive', 'Beim Hineinzoomen automatisch nachschärfen', 'Teile, die du von nah ansiehst, werden feiner dargestellt.'),
+      chk('adaptive', 'Darstellung automatisch anpassen', 'Teile, die du von nah ansiehst, werden feiner dargestellt. Beim Drehen eines großen Modells wird kurz gröber gezeichnet, damit es flüssig bleibt.'),
     );
     UI.modal({ title: 'Einstellungen', body, actions: [{ label: 'Fertig', primary: true }] });
   }
@@ -4750,7 +4880,7 @@ const Comp = (() => {
     App.setCtx(it.id);
     UI.toast('Neues Bauteil angelegt. Alles, was du jetzt hinzufügst, landet darin.', { icon: 'parts', ms: 3200 });
   }
-  function edit(id) { const it = App.doc.items.find((x) => x.id === id); if (it && it.kind === 'group') { App.setIso(null); App.setCtx(id); App.select([]); } }
+  function edit(id) { const it = App.doc.items.find((x) => x.id === id); if (it && it.kind === 'group') { Views.collapse(); App.setIso(null); App.setCtx(id); App.select([]); } }
   function toggleIso(id) { App.setIso(App.iso === id ? null : id); if (App.iso) Viewer.fit([id]); }
   function init() { App.on('ctx', render); App.on('mode', render); App.on('doc', debounce(render, 30)); }
   return { init, newComponent, edit, toggleIso, render };
@@ -4883,7 +5013,7 @@ const UI = (() => {
     for (const en of entries) {
       if (en === '-') { m.append(h('hr')); continue; }
       if (en.hidden) continue;
-      const b = h('button', { type: 'button', role: 'menuitem', disabled: en.disabled, onclick: () => { closeMenu(); en.run && en.run(); } });
+      const b = h('button', { type: 'button', role: 'menuitem', disabled: en.disabled, 'data-help': en.help || null, onclick: () => { closeMenu(); en.run && en.run(); } });
       b.innerHTML = en.icon ? icon(en.icon) : '';
       b.append(h('span', null, en.label));
       if (en.kbd) b.append(h('span', { class: 'k' }, en.kbd));
@@ -5069,7 +5199,9 @@ const Panels = (() => {
       btn('t-parts', 'parts', 'Bauteile', 'Schraubenlöcher, Mutternfallen, Scharniere, Zahnräder …', 'B', (e) => toggleFlyout('parts', e.currentTarget));
       btn('t-measure', 'measure', 'Messen', 'Abstände und Durchmesser messen', 'M', () => Measure.toggle());
       btn('t-notes', 'noteDraw', 'Notizen', 'Notizstift: frei malen und Text hinschreiben – ohne technische Bedeutung', 'N', () => Notes.toggle());
+      btn('t-views', 'xray', 'Ansicht', 'Schnitt, Röntgen, Explosion und Fokus-Vorschau – ändert nur die Anzeige', '', (e) => Views.menu(e.currentTarget));
       el.append(h('div', { class: 'sep' }));
+      Views.sync();
       btn('t-export', 'export', 'Exportieren', 'Als STEP, STL oder 3MF speichern (ZIP)', 'Strg E', () => Print.exportDialog(), 'primary', 'Export');
     } else {
       btn('t-sheet', 'sheet', 'Blatt', 'Blattgröße, Maßstab und Ansichten', '', (e) => Drawing.sheetMenu(e.currentTarget));
@@ -5355,7 +5487,7 @@ const Panels = (() => {
     va.append(UI.selectField({ id: 'view-grid', label: 'Rasterweite', value: String(pv.grid), options: [['auto', 'Automatisch (folgt dem Zoom)'], ['0.01', '0,01 mm'], ['0.1', '0,1 mm'], ['1', '1 mm'], ['10', '10 mm'], ['100', '100 mm']], onChange: (val) => ViewPrefs.set({ grid: val === 'auto' ? 'auto' : parseFloat(val) }) }));
     const chk = (k, label) => { const l = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'view-' + k, checked: !!pv[k] }), label); l.querySelector('input').onchange = (e) => ViewPrefs.set({ [k]: e.target.checked }); return l; };
     va.append(UI.selectField({ id: 'view-quality', label: 'Darstellungsqualität', value: pv.quality, options: [['coarse', 'Grob'], ['normal', 'Normal'], ['fine', 'Fein'], ['ultra', 'Sehr fein']], onChange: (val) => ViewPrefs.set({ quality: val }) }));
-    va.append(h('div', { style: { display: 'grid', gap: '6px', marginTop: '8px' } }, chk('adaptive', 'Beim Zoomen nachschärfen'), chk('gridOn', 'Raster zeigen'), chk('planes', 'Ursprungsebenen zeigen'), chk('axes', 'Achsen zeigen'), chk('notes', 'Notizen zeigen'), chk('ortho', 'Orthografisch (ohne Perspektive)')));
+    va.append(h('div', { style: { display: 'grid', gap: '6px', marginTop: '8px' } }, chk('adaptive', 'Darstellung anpassen (Zoom, Drehen)'), chk('gridOn', 'Raster zeigen'), chk('planes', 'Ursprungsebenen zeigen'), chk('axes', 'Achsen zeigen'), chk('notes', 'Notizen zeigen'), chk('ortho', 'Orthografisch (ohne Perspektive)')));
     w.append(va);
     const gr = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Fangen beim Verschieben'));
     const f2 = h('div', { class: 'fields' });
@@ -5560,7 +5692,7 @@ const Panels = (() => {
     if (App.mode !== 'model' || Sketch.active || Place.active || Handles.dragging) return;
     const items = App.selectedItems(); if (!items.length) return;
     const bar = h('div', { class: 'ctxbar', role: 'toolbar', 'aria-label': 'Aktionen' });
-    const b = (ic, label, fn, cls = '', tip, iconOnly) => { const x = h('button', { type: 'button', class: cls, 'data-tip': tip || (iconOnly ? label : null), 'aria-label': label || tip }); x.innerHTML = icon(ic) + (label && !iconOnly ? `<span>${label}</span>` : ''); x.onclick = (e) => { e.stopPropagation(); fn(e); }; bar.append(x); return x; };
+    const b = (ic, label, fn, cls = '', tip, iconOnly) => { const x = h('button', { type: 'button', class: cls, 'data-tip': tip || (iconOnly ? label : null), 'aria-label': label || tip, 'data-help': HELP[ic] ? ic : null }); x.innerHTML = icon(ic) + (label && !iconOnly ? `<span>${label}</span>` : ''); x.onclick = (e) => { e.stopPropagation(); fn(e); }; bar.append(x); return x; };
     const sep = () => bar.append(h('span', { class: 'vsep' }));
     const face = Actions.selectedFace();
     if (App.edges.length) {
@@ -5651,7 +5783,9 @@ const Panels = (() => {
     bN.removeAttribute('data-kbd');
     const syncNotes = () => { const on = ViewPrefs.get().notes !== false; bN.hidden = !(App.doc.notes || []).length; bN.innerHTML = icon(on ? 'notesShow' : 'notesHide'); bN.classList.toggle('on', on); };
     ViewPrefs.on('change', syncNotes); App.on('doc', syncNotes); syncNotes();
-    vb.append(bO, bG, bP, bN, h('div', { class: 'sep' }), b1, b2); $('#overlay').append(vb);
+    const bX = h('button', { type: 'button', 'aria-label': 'Röntgen ein/aus', 'data-tip': 'Röntgen: Körper durchsichtig', 'data-kbd': 'X', 'data-view': 'xray', 'data-help': 'xray' }); bX.innerHTML = icon('xray'); bX.onclick = () => Views.xray();
+    const bC = h('button', { type: 'button', 'aria-label': 'Schnitt ein/aus', 'data-tip': 'Schnitt: Modell aufschneiden', 'data-kbd': 'C', 'data-view': 'cut', 'data-help': 'section' }); bC.innerHTML = icon('section'); bC.onclick = () => Views.section();
+    vb.append(bO, bG, bP, bN, bX, bC, h('div', { class: 'sep' }), b1, b2); $('#overlay').append(vb);
     gizmo = svgEl('<svg class="axis-gizmo" viewBox="0 0 64 64" aria-hidden="true"></svg>');
     $('#overlay').append(gizmo);
     Viewer.on('camera', syncCube); syncCube();
@@ -5739,6 +5873,7 @@ const Place = (() => {
     });
   }
   function begin(spec) {
+    Views.collapse();
     st = { spec, preview: makePreview(spec), onFace: null, pos: null };
     Panels.closeFlyout();
     Panels.renderCtx();
@@ -5861,6 +5996,7 @@ const Place = (() => {
     Viewer.groups.overlay.add(l); return l;
   }
   function startHoles(o) {
+    Views.collapse();
     stopHoles(true);
     hw = { o, count: 0, ring: ringObj(o), down: null };
     App.clearSelection(); Handles.clear(); Panels.renderCtx();
@@ -5903,6 +6039,249 @@ const Place = (() => {
   return { bindTile, holeHere, holeWizard: (anchor) => holeHere(Actions.selectedFace(), anchor), stopHoles, cancel, get active() { return !!st || !!hw; }, get holes() { return !!hw; } };
 })();
 
+// ---- 53-views.js ----
+// ================= Ansichten: Schnitt, Röntgen, Explosion, Fokus-Vorschau =================
+// Alles hier ändert nur, wie das Modell gezeigt wird – nie das Modell selbst. Nichts davon landet
+// in der Zeitleiste oder in der Projektdatei.
+const Views = (() => {
+  const st = { cut: null, xray: false, ex: 0, exGoal: 0, exAnim: null, focus: null };
+  let wrap = null;   // Leisten links oben
+  function bars() {
+    if (!wrap || !wrap.isConnected) { wrap = h('div', { class: 'viewbars' }); $('#overlay').append(wrap); }
+    return wrap;
+  }
+  const AX = { XY: 2, XZ: 1, YZ: 0 };
+  const AXNAME = { XY: 'Z', XZ: 'Y', YZ: 'X' };
+  // Standard: der Teil zur Kamera hin (oben / vorne / rechts) wird weggeschnitten
+  const KEEP = { XY: -1, XZ: 1, YZ: -1 };
+  function modelBox() {
+    let b = new THREE.Box3();
+    for (const id of Viewer.nodes.keys()) { const x = Viewer.baseBox(id); if (x) b.union(x); }
+    if (b.isEmpty()) b = new THREE.Box3(new THREE.Vector3(-40, -40, 0), new THREE.Vector3(40, 40, 20));
+    return b;
+  }
+
+  // ---------- Schnitt ----------
+  function cutPlane() {
+    const c = st.cut; const n = new THREE.Vector3(); n.setComponent(AX[c.plane], KEEP[c.plane] * (c.flip ? -1 : 1));
+    return { n, k: -n.getComponent(AX[c.plane]) * c.off };
+  }
+  function applyCut() {
+    const c = st.cut;
+    if (!c) { Viewer.setClip(null); return; }
+    const { n, k } = cutPlane();
+    if (!c.obj) { c.obj = new THREE.Plane(n, k); Viewer.setClip(c.obj); } else { c.obj.normal.copy(n); c.obj.constant = k; Viewer.requestRender(); }
+    drawCutHelper();
+  }
+  function drawCutHelper() {
+    const c = st.cut; const g = Viewer.groups.overlay;
+    if (c.helper) { g.remove(c.helper); c.helper.traverse((o) => { o.geometry && o.geometry.dispose(); o.material && o.material.dispose(); }); c.helper = null; }
+    const b = modelBox(); const pad = Math.max(4, b.getSize(new THREE.Vector3()).length() * 0.08);
+    const ax = AX[c.plane]; const u = [0, 1, 2].filter((i) => i !== ax);
+    const lo = b.min.clone().subScalar(pad), hi = b.max.clone().addScalar(pad);
+    const P = (a, bb) => { const v = new THREE.Vector3(); v.setComponent(ax, c.off); v.setComponent(u[0], a); v.setComponent(u[1], bb); return v; };
+    const corners = [P(lo.getComponent(u[0]), lo.getComponent(u[1])), P(hi.getComponent(u[0]), lo.getComponent(u[1])), P(hi.getComponent(u[0]), hi.getComponent(u[1])), P(lo.getComponent(u[0]), hi.getComponent(u[1]))];
+    const col = new THREE.Color(Viewer.theme.accent);
+    const fill = new THREE.Mesh(new THREE.BufferGeometry().setFromPoints([corners[0], corners[1], corners[2], corners[0], corners[2], corners[3]]), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.07, side: THREE.DoubleSide, depthWrite: false }));
+    const line = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(corners), new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.8 }));
+    const grp = new THREE.Group(); grp.add(fill, line); grp.renderOrder = 20; fill.renderOrder = 20; line.renderOrder = 21;
+    g.add(grp); c.helper = grp; Viewer.requestRender();
+  }
+  function section(on = !st.cut, opts = {}) {
+    if (!on) {
+      if (!st.cut) return;
+      if (st.cut.helper) { Viewer.groups.overlay.remove(st.cut.helper); st.cut.helper.traverse((o) => { o.geometry && o.geometry.dispose(); o.material && o.material.dispose(); }); }
+      if (st.cut.bar) st.cut.bar.remove();
+      st.cut = null; applyCut(); sync(); return;
+    }
+    const plane = opts.plane || (st.cut && st.cut.plane) || 'XZ';
+    const b = modelBox(); const ax = AX[plane];
+    const off = opts.off != null ? opts.off : round((b.min.getComponent(ax) + b.max.getComponent(ax)) / 2, 2);
+    if (st.cut && st.cut.bar) st.cut.bar.remove();
+    if (st.cut && st.cut.helper) { Viewer.groups.overlay.remove(st.cut.helper); st.cut.helper.traverse((o) => { o.geometry && o.geometry.dispose(); o.material && o.material.dispose(); }); }
+    st.cut = { plane, off, flip: !!opts.flip, obj: st.cut && st.cut.obj };
+    applyCut(); cutBar(); sync();
+  }
+  function cutBar() {
+    const c = st.cut; if (c.bar) c.bar.remove();
+    const bar = h('div', { class: 'viewbar', role: 'toolbar', 'aria-label': 'Schnitt' });
+    const head = h('div', { class: 'vb-head' }, h('span', { class: 'title' }, 'Schnitt'));
+    const close = h('button', { type: 'button', class: 'vb-x', 'aria-label': 'Schnitt beenden', 'data-tip': 'Schnitt beenden (C)' }); close.innerHTML = icon('close'); close.onclick = () => section(false);
+    head.append(close);
+    const seg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Schnittebene' });
+    for (const [k, l, tip] of [['XZ', 'Von vorne', 'Senkrecht, von vorne nach hinten (XZ)'], ['YZ', 'Von der Seite', 'Senkrecht, von links nach rechts (YZ)'], ['XY', 'Waagerecht', 'Waagerecht (XY)']]) {
+      const x = h('button', { type: 'button', 'aria-pressed': c.plane === k ? 'true' : 'false', 'data-plane': k, 'data-tip': tip }, l);
+      x.onclick = () => section(true, { plane: k, flip: false });
+      seg.append(x);
+    }
+    const b = modelBox(); const ax = AX[c.plane];
+    const lo = Math.floor(b.min.getComponent(ax) - 1), hi = Math.ceil(b.max.getComponent(ax) + 1);
+    const range = h('input', { type: 'range', id: 'cut-range', min: lo, max: hi, step: 0.1, value: c.off, 'aria-label': 'Lage der Schnittebene' });
+    const num = h('input', { type: 'text', id: 'cut-off', class: 'vb-num', inputmode: 'decimal', value: fmt(c.off, 2), 'aria-label': 'Lage in mm' });
+    const set = (v) => { if (!isFinite(v)) return; c.off = v; applyCut(); range.value = v; if (document.activeElement !== num) num.value = fmt(v, 2); };
+    range.oninput = () => set(+range.value);
+    num.onkeydown = (e) => { if (e.key === 'Enter') { const v = parseNum(num.value); if (v != null) set(v); num.blur(); } e.stopPropagation(); };
+    num.onchange = () => { const v = parseNum(num.value); if (v != null) set(v); };
+    const flip = h('button', { type: 'button', class: 'btn small', id: 'cut-flip', 'data-tip': 'Die andere Hälfte zeigen' }); flip.innerHTML = icon('mirror') + 'Umdrehen';
+    flip.onclick = () => { c.flip = !c.flip; applyCut(); };
+    const row = h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, AXNAME[c.plane]), range, num, h('span', { class: 'vb-u' }, 'mm'));
+    bar.append(head, seg, row, h('div', { class: 'vb-row' }, flip, h('span', { class: 'vb-hint' }, 'Schraffiert = Schnittfläche')));
+    bars().prepend(bar); c.bar = bar;
+  }
+  function parseNum(s) { const v = parseFloat(String(s).replace(',', '.')); return isFinite(v) ? v : null; }
+
+  // ---------- Röntgen ----------
+  function xray(on = !st.xray) {
+    st.xray = !!on; Viewer.setXray(st.xray); sync();
+    if (st.xray) UI.toast('Röntgen an: Körper werden durchsichtig. Ein zweiter Klick wählt das Teil dahinter.', { icon: 'info', ms: 3200 });
+  }
+
+  // ---------- Explosion ----------
+  // Teile rücken waagerecht von der Mitte weg. Übereinanderliegende Schichten (gleiche Unterkante)
+  // werden nach oben auseinandergezogen, jede um die Höhe der Schichten darunter – wie in einer Bauanleitung.
+  function offsets(f) {
+    const ids = [...Viewer.nodes.keys()].filter((id) => { const it = App.doc.items.find((x) => x.id === id); return it && !it.hidden && it.role !== 'hole'; });
+    const boxes = ids.map((id) => [id, Viewer.baseBox(id)]).filter((x) => x[1]);
+    const all = new THREE.Box3(); for (const [, b] of boxes) all.union(b);
+    const C = all.getCenter(new THREE.Vector3()); const S = Math.max(10, all.getSize(new THREE.Vector3()).length());
+    // Schichten nach Unterkante
+    const sorted = boxes.slice().sort((a, b) => a[1].min.z - b[1].min.z);
+    const layerOf = new Map(); const layers = [];
+    for (const [id, b] of sorted) {
+      let L = layers[layers.length - 1];
+      if (!L || b.min.z - L.z > 0.5) { L = { z: b.min.z, h: 0 }; layers.push(L); }
+      L.h = Math.max(L.h, b.max.z - b.min.z); layerOf.set(id, layers.length - 1);
+    }
+    const lift = [0]; for (let i = 1; i < layers.length; i++) lift[i] = lift[i - 1] + layers[i - 1].h + S * 0.08;
+    const map = new Map();
+    for (const [id, b] of boxes) {
+      const c = b.getCenter(new THREE.Vector3());
+      map.set(id, new THREE.Vector3((c.x - C.x) * f * 1.2, (c.y - C.y) * f * 1.2, lift[layerOf.get(id)] * f));
+    }
+    // Löcher der obersten Ebene wandern mit dem Teil, das sie schneiden
+    for (const id of Viewer.nodes.keys()) {
+      if (map.has(id)) continue;
+      const hb = Viewer.baseBox(id); if (!hb) continue;
+      const host = boxes.find(([, b]) => b.intersectsBox(hb)); if (host) map.set(id, map.get(host[0]).clone());
+    }
+    return map;
+  }
+  function explodeCount() { return [...Viewer.nodes.keys()].filter((id) => { const it = App.doc.items.find((x) => x.id === id); return it && !it.hidden && it.role !== 'hole'; }).length; }
+  function explode(on = st.exGoal === 0, amount = 0.6) {
+    if (on && explodeCount() < 2) {
+      UI.toast('Zum Auseinanderziehen braucht es mindestens zwei Teile auf der obersten Ebene. Tipp: Eine Gruppe vorher mit „Gruppe lösen“ aufteilen.', { icon: 'info', ms: 4200 });
+      return;
+    }
+    animateTo(on ? amount : 0);
+    if (on) { exBar(); App.select(App.sel); }   // Griffe ausblenden
+  }
+  function animateTo(goal, ms = 450) {
+    st.exGoal = goal; const from = st.ex, t0 = performance.now();
+    cancelAnimationFrame(st.exAnim);
+    const step = () => {
+      const t = Math.min(1, (performance.now() - t0) / ms); const e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+      setEx(from + (goal - from) * e);
+      if (t < 1) st.exAnim = requestAnimationFrame(step);
+      else { st.exAnim = null; if (goal === 0) { Viewer.setOffsets(null); if (st.exBar) { st.exBar.remove(); st.exBar = null; } Handles.rebuild(); Panels.renderCtx(); } sync(); }
+    };
+    step();
+  }
+  function setEx(f) {
+    st.ex = f; Viewer.setOffsets(f > 1e-4 ? offsets(f) : null);
+    if (st.exBar) { const r = st.exBar.querySelector('#ex-range'); if (r && document.activeElement !== r) r.value = Math.round(f * 100); }
+  }
+  function exBar() {
+    if (st.exBar) return;
+    const bar = h('div', { class: 'viewbar', role: 'toolbar', 'aria-label': 'Explosion' });
+    const head = h('div', { class: 'vb-head' }, h('span', { class: 'title' }, 'Explosion'));
+    const close = h('button', { type: 'button', class: 'vb-x', 'aria-label': 'Wieder zusammensetzen', 'data-tip': 'Wieder zusammensetzen' }); close.innerHTML = icon('close'); close.onclick = () => explode(false);
+    head.append(close);
+    const range = h('input', { type: 'range', id: 'ex-range', min: 0, max: 100, step: 1, value: Math.round(st.exGoal * 100), 'aria-label': 'Wie weit auseinander' });
+    range.oninput = () => { cancelAnimationFrame(st.exAnim); st.exAnim = null; st.exGoal = +range.value / 100; setEx(st.exGoal); sync(); };
+    const back = h('button', { type: 'button', class: 'btn small', id: 'ex-back' }); back.innerHTML = icon('group') + 'Zusammensetzen';
+    back.onclick = () => explode(false);
+    bar.append(head, h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, 'Weit'), range), h('div', { class: 'vb-row' }, back, h('span', { class: 'vb-hint' }, 'Teile anklicken und rechts ändern geht weiter')));
+    const fv = bars().querySelector('.focusview'); fv ? bars().insertBefore(bar, fv) : bars().append(bar); st.exBar = bar;
+  }
+  // Zum Zeichnen, Bohren, Messen oder Ziehen muss alles wieder an seinem Platz sein
+  function collapse() { if (st.exGoal > 0 || st.ex > 0) animateTo(0, 250); }
+
+  // ---------- Fokus-Vorschau ----------
+  function focus(on = !st.focus) {
+    if (!on) { if (st.focus) { st.focus.el.remove(); st.focus.off(); st.focus = null; Viewer.requestRender(); } sync(); return; }
+    if (st.focus) return;
+    const el = h('div', { class: 'focusview', role: 'region', 'aria-label': 'Fokus-Vorschau' });
+    const head = h('div', { class: 'fv-head' }, h('span', { class: 'fv-title' }, 'Fokus'));
+    const close = h('button', { type: 'button', class: 'vb-x', 'aria-label': 'Fokus-Vorschau schließen' }); close.innerHTML = icon('close'); close.onclick = () => focus(false);
+    head.append(close);
+    const body = h('div', { class: 'fv-body', 'data-tip': 'Ziehen dreht nur diese Vorschau · Doppelklick: wie die große Ansicht' });
+    const empty = h('div', { class: 'fv-empty' }, 'Wähle ein Teil – es erscheint hier groß.');
+    body.append(empty); el.append(head, body);
+    bars().append(el);
+    const f = { el, body, empty, title: head.firstChild, rot: [0, 0], ids: [] };
+    let drag = null;
+    body.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY, r: f.rot.slice() }; body.setPointerCapture(e.pointerId); e.stopPropagation(); });
+    body.addEventListener('pointermove', (e) => { if (!drag) return; f.rot = [drag.r[0] - (e.clientX - drag.x) * 0.6, clamp(drag.r[1] + (e.clientY - drag.y) * 0.5, -80, 80)]; Viewer.requestRender(); });
+    body.addEventListener('pointerup', () => { drag = null; });
+    body.addEventListener('dblclick', () => { f.rot = [0, 0]; Viewer.requestRender(); });
+    body.addEventListener('wheel', (e) => e.stopPropagation(), { passive: true });
+    const offR = Viewer.on('afterRender', () => drawFocus());
+    const offS = App.on('selection', () => { refreshFocus(); Viewer.requestRender(); });
+    const offD = App.on('results', () => { refreshFocus(); Viewer.requestRender(); });
+    f.off = () => { offR && offR(); offS && offS(); offD && offD(); };
+    st.focus = f; refreshFocus(); Viewer.requestRender(); sync();
+  }
+  function refreshFocus() {
+    const f = st.focus; if (!f) return;
+    const ids = []; for (const id of App.sel) { const t = Model.topOf(App.doc, id); if (t && Viewer.nodes.has(t.id) && !ids.includes(t.id)) ids.push(t.id); }
+    f.ids = ids;
+    const name = ids.length === 1 ? Model.label(App.doc.items.find((x) => x.id === ids[0])) : ids.length ? ids.length + ' Teile' : '';
+    f.title.textContent = name ? 'Fokus · ' + name : 'Fokus';
+    f.empty.hidden = !!ids.length;
+  }
+  function drawFocus() {
+    const f = st.focus; if (!f || !f.ids.length) return;
+    const cr = Viewer.canvas.getBoundingClientRect(), br = f.body.getBoundingClientRect();
+    f.drawn = Viewer.renderInset({ x: br.left - cr.left, y: br.top - cr.top, w: br.width, h: br.height }, f.ids, f.rot);
+  }
+
+  // ---------- Menü und Zustand ----------
+  function menu(anchor) {
+    UI.menu(anchor, [
+      { label: (st.cut ? '✓ ' : '') + 'Schnitt', icon: 'section', kbd: 'C', help: 'section', run: () => section() },
+      { label: (st.xray ? '✓ ' : '') + 'Röntgen', icon: 'xray', kbd: 'X', help: 'xray', run: () => xray() },
+      { label: (st.exGoal > 0 ? '✓ ' : '') + 'Explosion', icon: 'explode', kbd: 'U', help: 'explode', run: () => explode() },
+      { label: (st.focus ? '✓ ' : '') + 'Fokus-Vorschau', icon: 'focusView', help: 'focusView', run: () => focus() },
+    ]);
+  }
+  function sync() {
+    const b = $('#t-views'); if (b) b.classList.toggle('active', !!(st.cut || st.xray || st.exGoal > 0 || st.focus));
+    const x = document.querySelector('.view-btns [data-view="xray"]'); if (x) x.classList.toggle('on', st.xray);
+    const c = document.querySelector('.view-btns [data-view="cut"]'); if (c) c.classList.toggle('on', !!st.cut);
+  }
+  function onKey(e) {
+    if (App.mode !== 'model' || Sketch.active || e.ctrlKey || e.metaKey || e.altKey) return false;
+    const k = e.key.toLowerCase();
+    if (k === 'c') { section(); return true; }
+    if (k === 'x') { xray(); return true; }
+    if (k === 'u') { explode(); return true; }
+    return false;
+  }
+  function init() {
+    App.on('mode', () => { if (App.mode !== 'model') reset(); });
+    App.on('results', () => {
+      if (st.ex > 1e-4) setEx(st.ex);
+      if (st.cut) { drawCutHelper(); const r = st.cut.bar && st.cut.bar.querySelector('#cut-range'); if (r) { const b = modelBox(); const ax = AX[st.cut.plane]; r.min = Math.floor(b.min.getComponent(ax) - 1); r.max = Math.ceil(b.max.getComponent(ax) + 1); } }
+    });
+  }
+  function reset() { section(false); if (st.xray) xray(false); if (st.exGoal > 0 || st.ex > 0) { cancelAnimationFrame(st.exAnim); st.exAnim = null; st.ex = st.exGoal = 0; Viewer.setOffsets(null); if (st.exBar) { st.exBar.remove(); st.exBar = null; } } focus(false); }
+  return {
+    init, section, xray, explode, collapse, focus, menu, onKey, reset, sync,
+    get cut() { return st.cut ? { plane: st.cut.plane, off: st.cut.off, flip: st.cut.flip } : null; },
+    get isXray() { return st.xray; }, get exploded() { return st.ex > 1e-4 || st.exGoal > 0; }, get explodeAmount() { return st.ex; },
+    get focusIds() { return st.focus ? st.focus.ids.slice() : null; }, get focusDrawn() { return !!(st.focus && st.focus.drawn); },
+  };
+})();
 // ---- 55-sketch.js ----
 // ================= Skizzen-Modus (Zeichnen auf einer Ebene) =================
 const Sketch = (() => {
@@ -6032,6 +6411,7 @@ const Sketch = (() => {
     return { o, x, y, n };
   }
   function begin(init, skipDraw) {
+    Views.collapse();
     if (S) cancel(true);
     if (Notes.active) Notes.stop();
     Panels.closeFlyout(); UI.closePop();
@@ -7754,6 +8134,7 @@ const Notes = (() => {
 
   // ---------- Ein / Aus ----------
   function start() {
+    Views.collapse();
     if (on) return;
     if (Sketch.active) Sketch.cancel(true);
     if (Measure.active) Measure.stop();
@@ -7804,6 +8185,7 @@ const Measure = (() => {
   let on = false, pts = [], objs = [], els = [];
   function toggle() { on ? stop() : start(); }
   function start() {
+    Views.collapse();
     if (Sketch.active) return;
     if (Notes.active) Notes.stop();
     on = true; pts = []; clearVis();
@@ -7901,6 +8283,10 @@ const Commands = (() => {
     add('drop', 'Auf die XY-Ebene setzen', 'push', 'boden unten absetzen z null ebene', () => Actions.dropToPlate(null), { group: 'Werkzeuge' });
     add('ortho', 'Orthografisch / Perspektive', 'viewOrtho', 'ortho perspektive projektion kamera', () => ViewPrefs.toggle('ortho'), { group: 'Ansicht', kbd: 'O' });
     add('gridtoggle', 'Raster ein/aus', 'grid', 'raster gitter grid', () => ViewPrefs.toggle('gridOn'), { group: 'Ansicht', kbd: 'G' });
+    add('section', 'Schnitt ein/aus', 'section', 'schnitt aufschneiden querschnitt innen schnittebene', () => Views.section(), { group: 'Ansicht', kbd: 'C' });
+    add('xray', 'Röntgen ein/aus', 'xray', 'röntgen durchsichtig transparent glas innen', () => Views.xray(), { group: 'Ansicht', kbd: 'X' });
+    add('explode', 'Explosion: Teile auseinanderziehen', 'explode', 'explosion explosionsansicht auseinander zerlegen baugruppe', () => Views.explode(), { group: 'Ansicht', kbd: 'U' });
+    add('focus', 'Fokus-Vorschau ein/aus', 'focusView', 'fokus vorschau zweites fenster lupe groß', () => Views.focus(), { group: 'Ansicht' });
     add('planes', 'Ursprungsebenen ein/aus', 'originPlanes', 'ursprung ebenen xy xz yz origin', () => ViewPrefs.toggle('planes'), { group: 'Ansicht' });
     add('axes', 'Achsen ein/aus', 'axes', 'achsen x y z', () => ViewPrefs.toggle('axes'), { group: 'Ansicht' });
     add('newcomp', 'Neues Bauteil', 'parts', 'bauteil komponente baugruppe component neu', () => Comp.newComponent(), { group: 'Werkzeuge' });
@@ -8014,6 +8400,7 @@ const Commands = (() => {
     if (mod && k === 'a') { e.preventDefault(); App.select(App.doc.items.map((x) => x.id)); return; }
     if (mod) return;
     if (e.key === 'Delete' || e.key === 'Backspace') { if (App.sel.length) { e.preventDefault(); Actions.remove(); } return; }
+    if (Views.onKey(e)) { e.preventDefault(); return; }
     if (k === 'f') { Viewer.fit(App.sel.length ? App.sel.map((id) => (Model.topOf(App.doc, id) || {}).id).filter(Boolean) : null); return; }
     if (k === 'h' && App.sel.length) { Actions.toggleRole(); return; }
     if (k === 'r' && App.sel.length) { Actions.rotate90(null, 'z'); return; }
@@ -8043,7 +8430,7 @@ const Commands = (() => {
     const mac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
     const M = mac ? '⌘' : 'Strg';
     const groups = [
-      ['Ansicht', [['Linke Maustaste ziehen', 'Ansicht drehen'], ['Rechte Maustaste ziehen', 'Ansicht verschieben'], ['Mausrad', 'Zoomen'], ['F', 'Auswahl oder alles zeigen'], ['1 · 3 · 7 · 0', 'Ansicht vorne · rechts · oben · schräg'], ['O', 'Orthografisch / Perspektive'], ['G', 'Raster ein / aus'], ['I', 'Gewähltes Teil isolieren / alle zeigen']]],
+      ['Ansicht', [['Linke Maustaste ziehen', 'Ansicht drehen'], ['Rechte Maustaste ziehen', 'Ansicht verschieben'], ['Mausrad', 'Zoomen'], ['F', 'Auswahl oder alles zeigen'], ['1 · 3 · 7 · 0', 'Ansicht vorne · rechts · oben · schräg'], ['O', 'Orthografisch / Perspektive'], ['G', 'Raster ein / aus'], ['C', 'Schnitt ein / aus'], ['X', 'Röntgen ein / aus'], ['U', 'Explosion ein / aus'], ['I', 'Gewähltes Teil isolieren / alle zeigen']]],
       ['Modell', [['Klicken', 'Körper, Fläche oder Kante wählen'], ['Umschalt + Klick', 'Mehrere wählen'], ['Ziehen', 'Körper verschieben – dabei Zahl tippen für genaue Werte'], ['Doppelklick', 'Skizze eines Skizzenkörpers bearbeiten'], ['E', 'Skizze bzw. Bauteil bearbeiten'], ['Esc', 'Auswahl aufheben · Bauteil verlassen'], ['Entf', 'Löschen'], ['H', 'Körper ↔ Loch'], ['R', 'Um 90° drehen'], ['Pfeiltasten', 'Um einen Rasterschritt verschieben (Umschalt: 10)'], ['Bild ↑ / Bild ↓', 'Anheben / Absenken'], [M + ' D', 'Duplizieren'], [M + ' G', 'Gruppieren (Umschalt: lösen)'], [M + ' A', 'Alles wählen']]],
       ['Werkzeuge', [['S', 'Skizze'], ['M', 'Messen'], ['N', 'Notizstift (P Stift · T Text · E Radierer)'], ['K', 'Körper'], ['B', 'Bauteile'], ['/ oder ' + M + ' K', 'Eingabezeile']]],
       ['In der Skizze', [['V', 'Auswahl'], ['L · R · C · A', 'Linie · Rechteck · Kreis · Bogen'], ['G · P · S', 'Langloch · Vieleck · Spline'], ['T · F', 'Trimmen · Versatz'], ['M · Q · W', 'Spiegeln · Rechteckmuster · Kreismuster'], ['X', 'Hilfslinie (neue Elemente oder das gewählte)'], ['Alt halten', 'Nicht einrasten'], ['D', 'Maß festlegen (auch Formel)'], ['Zahl tippen', 'Genaue Länge beim Zeichnen'], ['Tab', 'Nächstes Eingabefeld'], ['Umschalt halten', 'Feiner einrasten'], ['Enter', 'Linienzug beenden · Skizze fertig'], ['Esc', 'Zeichnen abbrechen · Skizze verlassen']]],
@@ -8066,7 +8453,7 @@ const Commands = (() => {
     $('#tab-model').setAttribute('aria-pressed', m === 'model'); $('#tab-drawing').setAttribute('aria-pressed', m === 'drawing');
     $('#workspace').classList.toggle('drawing-mode', m === 'drawing');
     $('#viewport').hidden = m !== 'model'; $('#sheet').hidden = m !== 'drawing';
-    $$('#overlay > .viewcube, #overlay > .view-btns, #overlay > .axis-gizmo').forEach((el) => { if (m !== 'model') el.setAttribute('hidden', ''); else el.removeAttribute('hidden'); });
+    $$('#overlay > .viewcube, #overlay > .view-btns, #overlay > .axis-gizmo, #overlay > .viewbars').forEach((el) => { if (m !== 'model') el.setAttribute('hidden', ''); else el.removeAttribute('hidden'); });
     Handles.rebuild(); Panels.renderCtx();
     if (m === 'drawing') Drawing.open(); else Drawing.close();
     UI.renderHint();
@@ -9691,8 +10078,8 @@ const Tour = (() => {
   window.__masswerk = { App, Viewer, Model, Actions, Sketch, SK, THREE, Print, Drawing, Kernel, UI, Commands, Panels, Handles, Start, AI, Measure, Place };
   UI.initTips();
   Viewer.init($('#viewport'));
-  window.__V = Viewer; window.__M = { App, Actions, Model, Timeline, Start, Comp, Handles, Sketch, SK, Viewer, Commands, Solver, Notes, SKO, Features, Place }; window.__S = Start; // für automatische Tests
-  Panels.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Notes.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init(); Refine.init(); Comp.init();
+  window.__V = Viewer; window.__M = { App, Actions, Model, Timeline, Start, Comp, Handles, Sketch, SK, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views }; window.__S = Start; // für automatische Tests
+  Panels.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Notes.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init(); Refine.init(); Comp.init(); Views.init();
 
   // Kopfzeile
   $('#btn-undo').onclick = () => App.undo();

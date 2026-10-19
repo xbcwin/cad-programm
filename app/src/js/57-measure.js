@@ -3,6 +3,7 @@ const Measure = (() => {
   let on = false, pts = [], objs = [], els = [];
   function toggle() { on ? stop() : start(); }
   function start() {
+    Views.collapse();
     if (Sketch.active) return;
     if (Notes.active) Notes.stop();
     on = true; pts = []; clearVis();

@@ -11,6 +11,9 @@ const Viewer = (() => {
   let hoverFace = null, hoverEdge = null, selFace = null, selEdges = [];
   let camAnim = null;
   const listeners = makeEmitter();
+  // Ansichts-Modi (Sitzung 9): Schnittebene, Röntgen, Verschiebung für die Explosionsansicht
+  const vis = { clip: null, xray: false };
+  const _off = new THREE.Matrix4();
 
   function readTheme() {
     const cs = getComputedStyle(document.documentElement);
@@ -18,6 +21,7 @@ const Viewer = (() => {
     theme.ink = g('--ink', '#16202b'); theme.accent = g('--accent', '#0c7a70'); theme.hole = g('--hole', '#d9483f');
     theme.dark = matchMedia('(prefers-color-scheme: dark)').matches && document.documentElement.getAttribute('data-theme') !== 'light' || document.documentElement.getAttribute('data-theme') === 'dark';
     theme.edge = theme.dark ? '#0b0f13' : '#1c2630';
+    theme.surface = g('--surface', theme.dark ? '#1a2027' : '#ffffff');
   }
 
   // ---------- Kamera: Perspektive oder orthografisch ----------
@@ -166,6 +170,8 @@ const Viewer = (() => {
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: false });
     renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
     renderer.setClearColor(0x000000, 0);
+    renderer.localClippingEnabled = true;
+    basePR = renderer.getPixelRatio();
     el.append(renderer.domElement);
     renderer.domElement.setAttribute('tabindex', '0');
     renderer.domElement.setAttribute('aria-label', '3D-Ansicht');
@@ -220,20 +226,55 @@ const Viewer = (() => {
     }
     const moved = controls.update();
     if (moved) listeners.emit('camera');
+    const now = performance.now();
+    if (camAnim) lastMotion = now;
+    else if (moved) {   // nur echte Bewegung zählt, nicht das lange Ausrollen der Dämpfung
+      const d = camera.position.distanceTo(_lastCam.p) / Math.max(1e-6, camera.position.distanceTo(controls.target)) + 2 * (1 - Math.abs(camera.quaternion.dot(_lastCam.q)));
+      if (d > 4e-4) lastMotion = now;
+    }
+    _lastCam.p.copy(camera.position); _lastCam.q.copy(camera.quaternion);
     if (needsRender || moved) {
       needsRender = false;
       updateViewAids();
       listeners.emit('beforeRender');
+      const t0 = performance.now();
       renderer.render(scene, cam());
+      frameMs = frameMs * 0.7 + (performance.now() - t0) * 0.3;
       listeners.emit('afterRender');
-    }
+      adaptRes(now);
+    } else if (lowRes && now - lastMotion > 220) adaptRes(now);
   }
+  // Beim Drehen und Zoomen kurz mit weniger Pixeln zeichnen, wenn ein Bild zu lange braucht;
+  // in Ruhe sofort wieder in voller Schärfe.
+  let basePR = 1, lowRes = false, frameMs = 0, lastMotion = 0, adaptive = true, slowMs = 24;
+  const _lastCam = { p: new THREE.Vector3(), q: new THREE.Quaternion() };
+  function setPR(r) { const w = container.clientWidth || 1, hgt = container.clientHeight || 1; renderer.setPixelRatio(r); renderer.setSize(w, hgt, false); }
+  function adaptRes(now) {
+    const moving = now - lastMotion < 200;
+    if (adaptive && moving && !lowRes && frameMs > slowMs && basePR > 0.8) { lowRes = true; setPR(Math.max(0.6, basePR * 0.55)); }
+    else if (lowRes && (!moving || !adaptive)) { lowRes = false; setPR(basePR); needsRender = true; }
+  }
+  function setAdaptive(on, ms) { adaptive = !!on; if (ms != null) slowMs = ms; if (!adaptive && lowRes) { lowRes = false; setPR(basePR); needsRender = true; } }
   function requestRender() { needsRender = true; }
 
   // ---------- Objekte ----------
   function makeMaterial(role, color) {
-    if (role === 'hole') return new THREE.MeshStandardMaterial({ color: new THREE.Color(theme.hole), transparent: true, opacity: 0.2, depthWrite: false, side: THREE.DoubleSide, roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
-    return new THREE.MeshStandardMaterial({ color: new THREE.Color(color || '#2f9e91'), roughness: 0.58, metalness: 0.03, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+    const clip = vis.clip ? [vis.clip] : null;
+    if (role === 'hole') return new THREE.MeshStandardMaterial({ color: new THREE.Color(theme.hole), transparent: true, opacity: 0.2, depthWrite: false, side: THREE.DoubleSide, roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1, clippingPlanes: clip });
+    const m = new THREE.MeshStandardMaterial({ color: new THREE.Color(color || '#2f9e91'), roughness: 0.58, metalness: 0.03, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1, clippingPlanes: clip });
+    if (clip) capShader(m, color);
+    return m;
+  }
+  // Schnittfläche: Durch den Schnitt sieht man die Innenseite der Hülle. Die wird als
+  // schraffierte Fläche in einem dunkleren Ton gemalt – das sieht aus wie ein voller Querschnitt.
+  function capShader(m, color) {
+    m.side = THREE.DoubleSide;
+    const c = new THREE.Color(color || '#2f9e91').lerp(new THREE.Color('#ffffff'), 0.3).multiplyScalar(0.8);
+    m.onBeforeCompile = (sh) => {
+      sh.uniforms.uCap = { value: c };
+      sh.fragmentShader = 'uniform vec3 uCap;\n' + sh.fragmentShader.replace(/}\s*$/, '  if (!gl_FrontFacing) { float hh = mod(gl_FragCoord.x + gl_FragCoord.y, 8.0) < 2.0 ? 0.62 : 1.0; gl_FragColor = vec4(uCap * hh, 1.0); }\n}');
+    };
+    m.customProgramCacheKey = () => 'cap';
   }
   function styleNode(n) {
     const sel = n.selected, hov = n.hover;
@@ -250,14 +291,37 @@ const Viewer = (() => {
     } else {
       n.mesh.material.opacity = sel ? 0.34 : hov ? 0.28 : n.dim ? 0.1 : 0.2;
     }
+    // Röntgen: Körper wie Milchglas, Kanten auch von hinten sichtbar; das gewählte Teil bleibt kräftig
+    const xr = vis.xray && n.role !== 'hole';
+    if (xr) { const mt = n.mesh.material; mt.transparent = true; mt.opacity = sel ? 0.55 : hov ? 0.3 : 0.18; mt.depthWrite = false; mt.side = THREE.DoubleSide; }
+    const clip = vis.clip ? [vis.clip] : null;
     if (n.edges) {
       n.edges.material.dispose();
-      if (n.role === 'hole') { n.edges.material = new THREE.LineDashedMaterial({ color: new THREE.Color(theme.hole), dashSize: 1.6, gapSize: 1.2, transparent: true, opacity: sel ? 1 : 0.75, depthTest: true }); n.edges.computeLineDistances(); }
-      else n.edges.material = new THREE.LineBasicMaterial({ color: new THREE.Color(sel ? theme.accent : theme.edge), transparent: true, opacity: sel ? 1 : 0.5 });
+      if (n.role === 'hole') { n.edges.material = new THREE.LineDashedMaterial({ color: new THREE.Color(theme.hole), dashSize: 1.6, gapSize: 1.2, transparent: true, opacity: sel ? 1 : 0.75, depthTest: !vis.xray, clippingPlanes: clip }); n.edges.computeLineDistances(); }
+      else n.edges.material = new THREE.LineBasicMaterial({ color: new THREE.Color(sel ? theme.accent : theme.edge), transparent: true, opacity: sel ? 1 : xr ? 0.42 : 0.5, depthTest: !xr, clippingPlanes: clip });
     }
-    n.mesh.renderOrder = n.role === 'hole' ? 3 : 0;
+    n.mesh.renderOrder = n.role === 'hole' ? 3 : xr ? (sel ? 2 : 1) : 0;
+    if (n.edges) n.edges.renderOrder = xr ? 5 : 0;
     needsRender = true;
   }
+  function restyleAll() { for (const n of nodes.values()) styleNode(n); }
+  function setClip(plane) { vis.clip = plane || null; restyleAll(); listeners.emit('viewmode'); }
+  function setXray(on) { vis.xray = !!on; restyleAll(); listeners.emit('viewmode'); }
+  // Anzeige-Verschiebung je Teil (Explosionsansicht) – das Modell selbst bleibt unverändert
+  function placeNode(n) {
+    if (n.off && n.off.lengthSq() > 1e-12) { _off.makeTranslation(n.off.x, n.off.y, n.off.z); n.obj.matrix.multiplyMatrices(_off, n.base); }
+    else n.obj.matrix.copy(n.base);
+    n.obj.matrixWorldNeedsUpdate = true;
+    // Hervorhebungen dieses Teils wandern mit
+    for (const f of [hoverFace, selFace]) if (f && f.id === n.id) f.mesh.matrix.copy(n.obj.matrix);
+    if (hoverEdge && hoverEdge.id === n.id) hoverEdge.line.matrix.copy(n.obj.matrix);
+    for (const e of selEdges) if (e.id === n.id) e.line.matrix.copy(n.obj.matrix);
+  }
+  function setOffsets(map) {
+    for (const [id, n] of nodes) { const v = map && map.get(id); n.off = v ? v.clone() : null; placeNode(n); }
+    needsRender = true; listeners.emit('camera');
+  }
+  function baseBox(id) { const n = nodes.get(id); return n ? n.mesh.geometry.boundingBox.clone().applyMatrix4(n.base) : null; }
   function setNode(id, data, info) {
     removeNode(id, true);
     const geo = new THREE.BufferGeometry();
@@ -271,10 +335,11 @@ const Viewer = (() => {
     const edges = new THREE.LineSegments(eg, new THREE.LineBasicMaterial());
     edges.userData.nodeId = id;
     const obj = new THREE.Group(); obj.add(mesh, edges); obj.matrixAutoUpdate = false;
-    obj.matrix.copy(info.matrix); obj.matrixWorldNeedsUpdate = true;
     obj.userData.nodeId = id;
     groups.nodes.add(obj);
-    const n = { id, obj, mesh, edges, data, role: info.role, color: info.color, selected: false, hover: false, key: info.key };
+    const old = nodes.get(id);
+    const n = { id, obj, mesh, edges, data, role: info.role, color: info.color, selected: false, hover: false, key: info.key, base: info.matrix.clone(), off: old && old.off ? old.off : null };
+    placeNode(n);
     nodes.set(id, n); styleNode(n);
     needsRender = true;
     return n;
@@ -282,7 +347,7 @@ const Viewer = (() => {
   function updateNode(id, info) {
     const n = nodes.get(id); if (!n) return;
     let restyle = false;
-    if (info.matrix) { n.obj.matrix.copy(info.matrix); n.obj.matrixWorldNeedsUpdate = true; }
+    if (info.matrix) { n.base.copy(info.matrix); placeNode(n); }
     if (info.role && info.role !== n.role) { n.role = info.role; restyle = true; }
     if (info.color && info.color !== n.color) { n.color = info.color; restyle = true; }
     if (info.selected !== undefined && info.selected !== n.selected) { n.selected = info.selected; restyle = true; }
@@ -417,7 +482,13 @@ const Viewer = (() => {
     setRay(cx, cy);
     const meshes = [];
     for (const n of nodes.values()) { if (!n.obj.visible || n.ctxDim) continue; if (opts.solidsOnly && n.role === 'hole') continue; if (opts.exclude && opts.exclude.has(n.id)) continue; meshes.push(n.mesh); }
-    const hits = raycaster.intersectObjects(meshes, false);
+    let hits = raycaster.intersectObjects(meshes, false);
+    if (vis.clip) hits = hits.filter((x) => vis.clip.distanceToPoint(x.point) >= -1e-6);
+    if (vis.xray && hits.length) {
+      // Röntgen: liegt das gewählte Teil vorne, gilt der Klick dem nächsten Teil dahinter
+      const first = nodes.get(hits[0].object.userData.nodeId);
+      if (first && first.selected && !opts.noCycle) { const nx = hits.find((x) => x.object.userData.nodeId !== first.id); if (nx) hits = [nx, ...hits.filter((x) => x !== nx)]; }
+    }
     if (!hits.length) {
       // am Umriss: Kante in der Nähe suchen, auch wenn der Strahl knapp vorbeigeht
       if (opts.noEdges) return null;
@@ -441,7 +512,7 @@ const Viewer = (() => {
     const normal = hit.face ? hit.face.normal.clone().transformDirection(n.obj.matrixWorld) : null;
     const res = { id: n.id, point: hit.point.clone(), faceIdx, normal, distance: hit.distance, node: n };
     if (!opts.noEdges) {
-      const e = edgeNear(n, cx, cy, hit.distance, opts.edgePx || 5);
+      const e = edgeNear(n, cx, cy, vis.xray ? Infinity : hit.distance, opts.edgePx || 5);
       if (e) { res.edgeIdx = e.edgeIdx; res.edgeDist = e.px; }
     }
     return res;
@@ -458,6 +529,7 @@ const Viewer = (() => {
       for (let i = g[0]; i < g[0] + g[1]; i += 2) {
         _a.set(lines[i * 3], lines[i * 3 + 1], lines[i * 3 + 2]).applyMatrix4(M);
         _b.set(lines[i * 3 + 3], lines[i * 3 + 4], lines[i * 3 + 5]).applyMatrix4(M);
+        if (vis.clip && vis.clip.distanceToPoint(_a) < 0 && vis.clip.distanceToPoint(_b) < 0) continue;
         const A = toS(_a), B = toS(_b);
         const dx = B[0] - A[0], dy = B[1] - A[1]; const l2 = dx * dx + dy * dy;
         let t = l2 ? ((px - A[0]) * dx + (py - A[1]) * dy) / l2 : 0; t = clamp(t, 0, 1);
@@ -551,6 +623,36 @@ const Viewer = (() => {
   function saveCamera() { return { p: camera.position.clone(), t: controls.target.clone(), up: camera.up.clone() }; }
   function restoreCamera(s, animate = true) { if (s) moveCamera(s.p, s.t, s.up, animate); }
 
+  // ---------- Zweites Bild in einer Ecke (Fokus-Vorschau) ----------
+  // r: Rechteck in CSS-Pixeln relativ zur Zeichenfläche; ids: Teile, die zu sehen sind; rot: [Gier, Neigung] in Grad
+  const insetCam = new THREE.PerspectiveCamera(28, 1, 0.1, 1000);
+  function renderInset(r, ids, rot = [0, 0], bg) {
+    const size = renderer.getSize(new THREE.Vector2());
+    const show = ids.map((id) => nodes.get(id)).filter(Boolean);
+    if (!show.length || r.w < 10 || r.h < 10) return false;
+    const box = new THREE.Box3(); for (const n of show) box.union(n.mesh.geometry.boundingBox.clone().applyMatrix4(n.obj.matrix));
+    const c = box.getCenter(new THREE.Vector3()); const R = Math.max(1, box.getSize(new THREE.Vector3()).length() / 2);
+    // Blickrichtung wie die Hauptkamera, dazu eigene Drehung
+    const dir = camera.position.clone().sub(controls.target).normalize();
+    const up = camera.up.clone();
+    if (rot[0]) dir.applyAxisAngle(up, (rot[0] * Math.PI) / 180);
+    if (rot[1]) { const side = new THREE.Vector3().crossVectors(up, dir).normalize(); const d2 = dir.clone().applyAxisAngle(side, (rot[1] * Math.PI) / 180); if (Math.abs(d2.dot(up)) < 0.995) dir.copy(d2); }
+    insetCam.aspect = r.w / r.h;
+    const dist = (R / Math.sin((insetCam.fov * Math.PI) / 360)) * 1.08 / Math.min(1, insetCam.aspect);
+    insetCam.position.copy(c).addScaledVector(dir, dist); insetCam.up.copy(up); insetCam.lookAt(c);
+    insetCam.near = Math.max(0.05, dist - R * 2); insetCam.far = dist + R * 2; insetCam.updateProjectionMatrix();
+    const before = new Map(); for (const n of nodes.values()) { before.set(n, n.obj.visible); n.obj.visible = show.includes(n); }
+    const gv = {}; for (const k of Object.keys(groups)) if (k !== 'nodes') { gv[k] = groups[k].visible; groups[k].visible = false; }
+    const y = size.y - r.y - r.h;
+    renderer.setScissorTest(true); renderer.setScissor(r.x, y, r.w, r.h); renderer.setViewport(r.x, y, r.w, r.h);
+    renderer.setClearColor(new THREE.Color(bg || theme.surface), 1);
+    renderer.render(scene, insetCam);
+    renderer.setScissorTest(false); renderer.setViewport(0, 0, size.x, size.y); renderer.setClearColor(0x000000, 0);
+    for (const [n, v] of before) n.obj.visible = v;
+    for (const k of Object.keys(gv)) groups[k].visible = gv[k];
+    return true;
+  }
+
   // Bild der Szene für Vorschaubilder
   function snapshot(w = 480, hgt = 300) {
     const old = renderer.getSize(new THREE.Vector2());
@@ -562,9 +664,10 @@ const Viewer = (() => {
   }
 
   return {
-    init, requestRender, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, setSelectedEdges, clearHover,
+    init, requestRender, setClip, setXray, setOffsets, baseBox, renderInset, setAdaptive, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, setSelectedEdges, clearHover,
     pick, pickGhost, pickProxy, setProxies, clearProxies, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, boxVisible, sceneBox, snapshot, makeFat, disposeFat,
     get camera() { return camera; }, get activeCamera() { return cam(); }, get ortho() { return ortho; }, get gridStep() { return gridStep; }, get controls() { return controls; }, get scene() { return scene; }, get groups() { return groups; }, get nodes() { return nodes; }, get canvas() { return renderer.domElement; }, get theme() { return theme; }, get container() { return container; },
+    get clip() { return vis.clip; }, get xray() { return vis.xray; }, get lowRes() { return lowRes; },  get pixelRatio() { return renderer.getPixelRatio(); },
     on: listeners.on,
   };
 })();

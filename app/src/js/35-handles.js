@@ -41,7 +41,7 @@ const Handles = (() => {
   };
   const LABELS = { w: 'Breite', d: 'Durchmesser', h: 'Höhe', d1: 'Durchmesser', t: 'Ringdicke', dist: 'Höhe' };
   function current() {
-    if (App.mode !== 'model' || Sketch.active || App.sel.length !== 1) return null;
+    if (App.mode !== 'model' || Sketch.active || App.sel.length !== 1 || Views.exploded) return null;
     const f = Model.find(App.doc, App.sel[0]); if (!f || f.item.locked) return null;
     const box = App.localBox(f.item.id); if (!box) return null;
     return { f, it: f.item, box, W: Model.worldMatrix(App.doc, f.item.id) };
@@ -344,7 +344,7 @@ const Interact = (() => {
     }
     const hit = Viewer.pick(e.clientX, e.clientY);
     down = { x: e.clientX, y: e.clientY, hit, t: performance.now(), shift: e.shiftKey || e.metaKey || e.ctrlKey };
-    if (hit && !(App.ctx && hit.id === App.ctx)) {   // im Bauteil-Modus nicht das ganze Bauteil verschieben
+    if (hit && !(App.ctx && hit.id === App.ctx) && !Views.exploded) {   // im Bauteil-Modus nicht das ganze Bauteil verschieben
       const top = App.doc.items.find((x) => x.id === hit.id);
       if (top && !top.locked) Viewer.controls.enabled = false; // Körper ziehen statt Ansicht drehen
     }
@@ -354,7 +354,7 @@ const Interact = (() => {
     if (down && down.kbd) return;
     if (down && down.handle) { Handles.move(e); return; }
     if (down && down.child && moving) { doMove(e); return; }
-    if (down && down.hit && !moving && !(App.ctx && down.hit.id === App.ctx)) {
+    if (down && down.hit && !moving && !(App.ctx && down.hit.id === App.ctx) && !Views.exploded) {
       if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > 4) startMove(e);
     }
     if (moving) { doMove(e); return; }

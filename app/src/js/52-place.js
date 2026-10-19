@@ -49,6 +49,7 @@ const Place = (() => {
     });
   }
   function begin(spec) {
+    Views.collapse();
     st = { spec, preview: makePreview(spec), onFace: null, pos: null };
     Panels.closeFlyout();
     Panels.renderCtx();
@@ -171,6 +172,7 @@ const Place = (() => {
     Viewer.groups.overlay.add(l); return l;
   }
   function startHoles(o) {
+    Views.collapse();
     stopHoles(true);
     hw = { o, count: 0, ring: ringObj(o), down: null };
     App.clearSelection(); Handles.clear(); Panels.renderCtx();
