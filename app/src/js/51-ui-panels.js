@@ -331,22 +331,23 @@ const Panels = (() => {
       h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Volumen'), vRow),
       h('div', { class: 'mini-row', 'data-help': 'massProps' }, h('span', { class: 'grow' }, 'Gewicht'), gRow)));
     w.append(ms);
-    massOf().then((r) => {
-      if (!r) { vRow.textContent = gRow.textContent = '–'; return; }
-      const mat = MATERIALS.find((m) => m.k === curMat) || MATERIALS[0];
+    const cRow = h('b', { class: 'mono' }, '…');
+    const ml = ms.querySelector('.mini-list');
+    ml.append(h('div', { class: 'mini-row', 'data-tip': 'Schwerpunkt aller Teile, nach Gewicht gemittelt' }, h('span', { class: 'grow' }, 'Schwerpunkt'), cRow));
+    const own = h('div', { class: 'hint-box', hidden: true });
+    const cog = h('label', { class: 'check', style: { marginTop: '8px' } }, h('input', { type: 'checkbox', id: 'proj-cog', checked: !!ViewPrefs.get().cog }), 'Schwerpunkt im Bild zeigen');
+    cog.querySelector('input').onchange = (e) => ViewPrefs.set({ cog: e.target.checked });
+    ms.append(cog, own);
+    Mass.measure().then((r) => {
+      if (!r) { vRow.textContent = gRow.textContent = cRow.textContent = '–'; return; }
       const cm3 = r.volume / 1000;
-      vRow.textContent = `${fmt(cm3, 3)} cm³`; gRow.textContent = `${fmt(cm3 * mat.rho, cm3 * mat.rho < 10 ? 2 : 1)} g`;
+      vRow.textContent = `${fmt(cm3, 3)} cm³`; gRow.textContent = Mass.gText(r.mass);
+      cRow.textContent = r.com ? r.com.map((v) => fmt(v, 1)).join(' · ') : '–';
+      const n = (r.parts || []).filter((p) => p.own).length;
+      if (n) { own.hidden = false; own.innerHTML = `${n} ${n === 1 ? 'Teil hat' : 'Teile haben'} ein eigenes Material – das Gewicht rechnet mit beidem.`; }
     });
     w.append(h('div', { class: 'hint-box', html: '<b>So geht’s:</b> Körper anklicken und ziehen. Die Pfeile ändern die Größe, die Zahlen kannst du anklicken und genau eintippen. <span class="kbd">Entf</span> löscht, <span class="kbd">Strg Z</span> macht rückgängig.' }));
     body.append(w);
-  }
-  // Volumen wird pro Projektstand nur einmal berechnet
-  let massCache = { rev: -1, p: null };
-  function massOf() {
-    if (!Kernel.ready || !App.doc.items.length) return Promise.resolve(null);
-    if (massCache.rev === App.revision && massCache.p) return massCache.p;
-    massCache = { rev: App.revision, p: Kernel.call('measure', { scene: Model.kernelScene(App.doc) }).catch(() => null) };
-    return massCache.p;
   }
   function renderMulti(body, found) {
     const w = h('div', { class: 'props' });
@@ -487,6 +488,16 @@ const Panels = (() => {
       w.append(ks);
     }
     w.append(colorSection((c) => App.change('Farbe geändert', (doc) => { Model.find(doc, it.id).item.color = c; }), it.color));
+    // Material und Gewicht dieses Teils (nur Teile der obersten Ebene)
+    if (!f.parent && it.role !== 'hole') {
+      const pm = Mass.projectMaterial();
+      const ms = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Material und Gewicht'));
+      ms.append(UI.selectField({ id: 'p-mat', label: 'Material', value: it.mat || '', options: [['', `Wie das Projekt (${pm.k})`], ...MATERIALS.map((m) => [m.k, `${m.k} · ${String(m.rho).replace('.', ',')} g/cm³`])], onChange: (v) => App.change('Material gewählt', (doc) => { const T = Model.find(doc, it.id).item; if (v) T.mat = v; else delete T.mat; }) }));
+      const vR = h('b', { class: 'mono' }, '…'), gR = h('b', { class: 'mono' }, '…');
+      ms.append(h('div', { class: 'mini-list', style: { marginTop: '8px' } }, h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Volumen'), vR), h('div', { class: 'mini-row', 'data-help': 'massProps' }, h('span', { class: 'grow' }, 'Gewicht'), gR)));
+      Mass.measure().then((r) => { const p = Mass.partOf(r, it.id); vR.textContent = p ? `${fmt(p.volume / 1000, 3)} cm³` : '–'; gR.textContent = p ? Mass.gText(p.mass) : '–'; vR.id = 'p-vol'; gR.id = 'p-mass'; });
+      w.append(ms);
+    }
     // Mehr
     const more = h('button', { type: 'button', class: 'more', 'aria-expanded': 'false' }); more.innerHTML = icon('chevR') + 'Mehr Optionen';
     const mbox = h('div', { class: 'section', hidden: true });
@@ -520,6 +531,7 @@ const Panels = (() => {
       bar.append(h('span', { class: 'lbl' }, App.edges.length > 1 ? App.edges.length + ' Kanten' : 'Kante'));
       b('fillet', 'Abrunden', () => Actions.addFinish('fillet', 1), 'accent', 'Kante abrunden (1 mm, danach änderbar)');
       b('chamfer', 'Abschrägen', () => Actions.addFinish('chamfer', 1), '', 'Kante abschrägen (1 mm, danach änderbar)');
+      b('similar', 'Ähnliche', () => Select.similar(), '', 'Alle gleich langen Kanten dazuwählen (A)', true);
       sep();
     } else if (face && items.length === 1 && face.info.t === 'PLANE') {
       bar.append(h('span', { class: 'lbl' }, 'Fläche'));
@@ -539,6 +551,7 @@ const Panels = (() => {
       b('copy', 'Duplizieren', () => Actions.duplicate(), '', 'Duplizieren (Strg D)', true);
       b('patternCirc', 'Muster', (e) => UI.menu(e.currentTarget, [{ label: 'Rechteckmuster', icon: 'patternRect', run: () => Features.pattern('rect') }, { label: 'Kreismuster', icon: 'patternCirc', run: () => Features.pattern('circ') }, { label: 'Gespiegelte Kopie', icon: 'mirror', run: () => Features.pattern('mirror') }]), '', hole ? 'Loch als Muster oder gespiegelt vervielfachen' : 'Muster oder gespiegelte Kopie', true);
       if (!hole) b('split', 'Teilen', () => Features.split(), '', 'Körper an einer Ebene teilen', true);
+      if (!App.edges.length) b('similar', 'Ähnliche', () => Select.similar(), '', 'Alle gleichen Teile wählen (A)', true);
       if (it.kind === 'group') b('ungroup', 'Gruppe lösen', () => Actions.ungroup(), '', 'Gruppe lösen', true);
     } else {
       b('group', 'Gruppieren', () => Actions.group(), 'accent', 'Zu einem Körper verbinden (Strg G)');
@@ -606,7 +619,8 @@ const Panels = (() => {
     ViewPrefs.on('change', syncNotes); App.on('doc', syncNotes); syncNotes();
     const bX = h('button', { type: 'button', 'aria-label': 'Röntgen ein/aus', 'data-tip': 'Röntgen: Körper durchsichtig', 'data-kbd': 'X', 'data-view': 'xray', 'data-help': 'xray' }); bX.innerHTML = icon('xray'); bX.onclick = () => Views.xray();
     const bC = h('button', { type: 'button', 'aria-label': 'Schnitt ein/aus', 'data-tip': 'Schnitt: Modell aufschneiden', 'data-kbd': 'C', 'data-view': 'cut', 'data-help': 'section' }); bC.innerHTML = icon('section'); bC.onclick = () => Views.section();
-    vb.append(bO, bG, bP, bN, bX, bC, h('div', { class: 'sep' }), b1, b2); $('#overlay').append(vb);
+    const bF = h('button', { type: 'button', 'aria-label': 'Auswahlfilter', 'data-tip': 'Wählen: Alles', 'data-view': 'filter', 'data-help': 'selectFilter' }); bF.innerHTML = icon('pointer'); bF.onclick = (e) => Select.menu(e.currentTarget);
+    vb.append(bO, bG, bP, bN, bX, bC, bF, h('div', { class: 'sep' }), b1, b2); $('#overlay').append(vb);
     gizmo = svgEl('<svg class="axis-gizmo" viewBox="0 0 64 64" aria-hidden="true"></svg>');
     $('#overlay').append(gizmo);
     Viewer.on('camera', syncCube); syncCube();

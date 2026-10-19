@@ -812,19 +812,23 @@ export function createKernel(R, oc) {
     const comp = solids.length === 1 ? solids[0].shape : R.makeCompound(solids.map((s) => s.shape));
     return comp.blobSTEP();
   }
+  // Volumen, Oberfläche und Schwerpunkt – je Teil der obersten Ebene und gesamt
   function measure(scene) {
     const errors = [];
     const solids = evaluateShapes(scene, errors);
     let volume = 0, area = 0;
-    let b = null;
+    let b = null; const parts = [];
     for (const s of solids) {
-      try { volume += R.measureVolume(s.shape); } catch (_) {}
-      try { area += R.measureArea(s.shape); } catch (_) {}
+      let v = 0, a = 0, com = null;
+      try { const pr = R.measureShapeVolumeProperties(s.shape); v = pr.volume; com = pr.centerOfMass; pr.delete && pr.delete(); } catch (_) {}
+      try { a = R.measureArea(s.shape); } catch (_) {}
+      volume += v; area += a;
       const bb = bboxOf(s.shape);
       b = b ? [Math.min(b[0], bb[0]), Math.min(b[1], bb[1]), Math.min(b[2], bb[2]), Math.max(b[3], bb[3]), Math.max(b[4], bb[4]), Math.max(b[5], bb[5])] : bb;
+      parts.push({ id: s.id, volume: v, area: a, com, bbox: bb });
       s.shape.delete();
     }
-    return { volume, area, bbox: b, count: solids.length };
+    return { volume, area, bbox: b, count: solids.length, parts, errors };
   }
 
   // ---------- Technische Zeichnung ----------

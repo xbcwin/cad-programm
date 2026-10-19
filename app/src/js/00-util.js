@@ -178,6 +178,7 @@ const IC = {
   edit: '<path d="M4 20h4L19 9l-4-4L4 16z" />',
   layers: '<path d="M12 3 3 8l9 5 9-5z M3 13l9 5 9-5" />',
   target: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3 M12 19v3 M2 12h3 M19 12h3"/>',
+  similar: '<rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5" fill="currentColor" opacity=".25"/><rect x="13" y="13" width="8" height="8" rx="1.5"/><path d="M14 7h4v3M10 17H6v-3" stroke-dasharray="2 2"/>',
   up: '<path d="M12 19V5 M6 11l6-6 6 6" />',
   lift: '<path d="M12 20V6 M7 10l5-5 5 5 M5 20h14" />',
   push: '<path d="M12 4v11 M7 10l5 5 5-5 M5 20h14" />',
@@ -508,14 +509,14 @@ const HELP = {
   "tipp": "Anklicken und rechts ändern geht weiter. Zum Verschieben, Zeichnen oder Bohren setzt Tracery alles von selbst wieder zusammen."
  },
  "measure": {
-  "tip": "Abstände, Längen und Durchmesser nachmessen",
-  "hilfe": "Klicke ein oder zwei Elemente (Punkte, Kanten, Flächen) an, um ihren genauen Abstand oder die Größe abzulesen.",
-  "tipp": "Wenn du auf einen runden Kreis klickst, zeigt dir das Werkzeug sofort den genauen Durchmesser an."
+  "tip": "Abstände, Winkel, Flächen und Durchmesser nachmessen",
+  "hilfe": "Oben „Messen“ (Taste M). Zwei Punkte an Kanten ergeben den Abstand, zwei Flächen den Abstand oder Winkel, ein Punkt und eine Fläche den senkrechten Abstand. Eine Fläche allein zeigt ihre Größe in mm².",
+  "tipp": "Klickst du auf eine runde Kante, siehst du sofort den Durchmesser."
  },
  "massProps": {
-  "tip": "Gewicht und Volumen des Bauteils",
-  "hilfe": "Klicke auf deinen Körper und wähle ein Material (z. B. Carbon, Aluminium oder Kunststoff), um das Gewicht zu berechnen.",
-  "tipp": "So weißt du schon beim Konstruieren, wie schwer dein Teil wird – bei Speed-Drohnen zählt jedes Gramm."
+  "tip": "Gewicht, Volumen und Schwerpunkt",
+  "hilfe": "Klick ein Teil an: Rechts unter „Material und Gewicht“ wählst du sein Material und siehst sein Gewicht. Ohne Auswahl steht dort das Gewicht des ganzen Projekts mit dem Schwerpunkt.",
+  "tipp": "Bei Speed-Drohnen zählt jedes Gramm – und der Schwerpunkt sollte in der Mitte zwischen den Motoren liegen. „Schwerpunkt im Bild zeigen“ macht ihn sichtbar."
  },
  "timeline": {
   "tip": "Verlauf aller bisherigen Arbeitsschritte",
@@ -541,6 +542,21 @@ const HELP = {
   "tip": "Gewähltes Teil groß in einem zweiten Fenster",
   "hilfe": "Oben „Ansicht“ → „Fokus-Vorschau“. Links erscheint ein kleines Fenster, das immer das gewählte Teil allein und formatfüllend zeigt.",
   "tipp": "Im kleinen Fenster ziehen dreht nur die Vorschau, ein Doppelklick schaut wieder genauso wie die große Ansicht."
+ },
+ "selectFilter": {
+  "tip": "Nur Körper, Flächen oder Kanten wählen",
+  "hilfe": "Der Pfeil-Knopf rechts im Bild: „Nur Kanten“ macht es leicht, dünne Kanten zu treffen, „Nur Körper“ wählt immer das ganze Teil.",
+  "tipp": "Vergiss nicht, den Filter wieder auf „Alles“ zu stellen – solange er an ist, leuchtet der Knopf."
+ },
+ "similar": {
+  "tip": "Alle gleichen Teile oder Kanten dazuwählen",
+  "hilfe": "Wähle ein Teil oder eine Kante und drück „Ähnliche“ oder Taste A. Gewählt wird alles mit derselben Art und denselben Maßen – zum Beispiel alle M3-Bohrungen.",
+  "tipp": "Mit ähnlichen Kanten rundest du alle gleich langen Kanten mit einem Klick ab."
+ },
+ "versions": {
+  "tip": "Stände speichern, vergleichen und zurückholen",
+  "hilfe": "Projektmenü → „Versionen …“: Speichere den jetzigen Stand mit Namen. Später zeigt „Vergleichen“, was sich geändert hat – auch im Bild als roter Umriss –, und „Zurückholen“ setzt das Projekt auf diese Version.",
+  "tipp": "Speichere eine Version, bevor du etwas Großes ausprobierst. Versionen kommen mit in die Projektdatei."
  }
 };
 

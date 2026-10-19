@@ -176,7 +176,9 @@ const Start = (() => {
     try {
       const txt = await f.text(); const doc = JSON.parse(txt);
       Model.migrate(doc);
+      const vers = Array.isArray(doc.versions) ? doc.versions : null; delete doc.versions;
       if (App.loadStored(doc.id) && doc.id !== App.doc.id) doc.id = uid('p');
+      if (vers) Versions.importList(doc.id, vers);
       App.setDoc(doc); hide();
       App.fileSavedRev = App.revision;
       UI.toast(`„${doc.name}“ geöffnet.`, { icon: 'folder' });
@@ -196,7 +198,8 @@ const Start = (() => {
   });
   async function saveFile() {
     const name = Print.safeName(App.doc.name);
-    const ok = await Print.save(name + '.tracery.json', JSON.stringify(App.doc, null, 1));
+    const vers = Versions.exportList();
+    const ok = await Print.save(name + '.tracery.json', JSON.stringify(vers.length ? { ...App.doc, versions: vers } : App.doc, null, 1));
     if (ok) App.fileSavedRev = App.revision;
   }
   return { show, hide, newProject, openFile, openBlob, saveFile, get open() { return !!el; } };

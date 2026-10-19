@@ -179,7 +179,7 @@ const Viewer = (() => {
     camera = new THREE.PerspectiveCamera(32, 1, 0.5, 30000);
     camera.up.set(0, 0, 1);
     camera.position.set(170, -250, 190);
-    for (const k of ['ground', 'origin', 'nodes', 'ghosts', 'overlay', 'handles', 'sketch']) { groups[k] = new THREE.Group(); scene.add(groups[k]); }
+    for (const k of ['ground', 'origin', 'nodes', 'compare', 'ghosts', 'overlay', 'handles', 'sketch']) { groups[k] = new THREE.Group(); scene.add(groups[k]); }
     orthoCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 60000);
     scene.add(new THREE.HemisphereLight(0xffffff, 0x6f6252, 1.55));
     const key = new THREE.DirectionalLight(0xffffff, 2.1); key.position.set(0.55, -0.8, 1.25); scene.add(key);
@@ -428,6 +428,26 @@ const Viewer = (() => {
     line.renderOrder = opts.order || 20;
     return line;
   }
+  // eine Fläche als eingefärbte Überlagerung (z. B. beim Messen)
+  function faceOverlay(id, faceIdx, color, opacity = 0.35) {
+    const n = nodes.get(id); if (!n) return null;
+    const geo = faceSubGeometry(n, faceIdx); if (!geo) return null;
+    const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: new THREE.Color(color || theme.accent), transparent: true, opacity, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, side: THREE.DoubleSide }));
+    mesh.matrixAutoUpdate = false; mesh.matrix.copy(n.obj.matrix); mesh.renderOrder = 7;
+    return mesh;
+  }
+  // Flächeninhalt einer Fläche aus dem Netz (bei ebenen Flächen mit geraden Kanten exakt)
+  function faceArea(id, faceIdx) {
+    const n = nodes.get(id); if (!n) return 0;
+    const g = n.data.faceGroups.find((x) => x[2] === faceIdx); if (!g) return 0;
+    const P = n.data.vertices, T = n.data.triangles; let a = 0;
+    const A = new THREE.Vector3(), B = new THREE.Vector3(), C = new THREE.Vector3();
+    for (let i = g[0]; i < g[0] + g[1]; i += 3) {
+      A.fromArray(P, T[i] * 3); B.fromArray(P, T[i + 1] * 3); C.fromArray(P, T[i + 2] * 3);
+      a += B.sub(A).cross(C.sub(A)).length() / 2;
+    }
+    return a;
+  }
   function disposeFat(obj) { if (!obj) return; obj.geometry.dispose(); fatMaterials.delete(obj.material); obj.material.dispose(); }
   function highlightFace(which, id, faceIdx) {
     const cur = which === 'hover' ? hoverFace : selFace;
@@ -653,6 +673,24 @@ const Viewer = (() => {
     return true;
   }
 
+  // ---------- Vergleich: älterer Stand als roter, gestrichelter Umriss ----------
+  function setCompare(list) {
+    for (const o of [...groups.compare.children]) { groups.compare.remove(o); o.traverse((x) => { x.geometry && x.geometry.dispose(); x.material && x.material.dispose(); }); }
+    for (const it of list || []) {
+      const d = it.data;
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(d.vertices, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(d.normals, 3)); geo.setIndex(new THREE.BufferAttribute(d.triangles, 1));
+      const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: new THREE.Color(theme.hole), transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide }));
+      const eg = new THREE.BufferGeometry(); eg.setAttribute('position', new THREE.BufferAttribute(d.lines, 3));
+      const edges = new THREE.LineSegments(eg, new THREE.LineDashedMaterial({ color: new THREE.Color(theme.hole), dashSize: 1.6, gapSize: 1.1, transparent: true, opacity: 0.95, depthTest: false }));
+      edges.computeLineDistances();
+      const obj = new THREE.Group(); obj.add(mesh, edges); obj.matrixAutoUpdate = false; obj.matrix.copy(it.matrix);
+      mesh.renderOrder = 8; edges.renderOrder = 9;
+      groups.compare.add(obj);
+    }
+    needsRender = true;
+  }
+
   // Bild der Szene für Vorschaubilder
   function snapshot(w = 480, hgt = 300) {
     const old = renderer.getSize(new THREE.Vector2());
@@ -664,8 +702,8 @@ const Viewer = (() => {
   }
 
   return {
-    init, requestRender, setClip, setXray, setOffsets, baseBox, renderInset, setAdaptive, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, setSelectedEdges, clearHover,
-    pick, pickGhost, pickProxy, setProxies, clearProxies, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, boxVisible, sceneBox, snapshot, makeFat, disposeFat,
+    init, requestRender, setClip, setXray, setOffsets, baseBox, renderInset, setAdaptive, setCompare, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, setSelectedEdges, clearHover,
+    pick, pickGhost, pickProxy, setProxies, clearProxies, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, boxVisible, sceneBox, snapshot, makeFat, disposeFat, faceOverlay, faceArea,
     get camera() { return camera; }, get activeCamera() { return cam(); }, get ortho() { return ortho; }, get gridStep() { return gridStep; }, get controls() { return controls; }, get scene() { return scene; }, get groups() { return groups; }, get nodes() { return nodes; }, get canvas() { return renderer.domElement; }, get theme() { return theme; }, get container() { return container; },
     get clip() { return vis.clip; }, get xray() { return vis.xray; }, get lowRes() { return lowRes; },  get pixelRatio() { return renderer.getPixelRatio(); },
     on: listeners.on,

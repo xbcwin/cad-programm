@@ -1,6 +1,6 @@
 # Testliste
 
-Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 9 (19.10.2026).
+Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 10 (19.10.2026).
 
 **[x]** = automatisch geprüft mit `tests/klicktest.py` (echter Browser, echte Klicks) · **[ ]** = noch von Hand ansehen
 
@@ -21,7 +21,8 @@ Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 9 (19.10.
 | Skizzen-Feinschliff | 10 | 9 | Fangmarkierungen gut erkennbar? |
 | Formen-Werkzeuge | 12 | 9 | Bohrungs-Ring gut sichtbar? Muster-Kreis verständlich? Wand von innen |
 | Ansichten | 12 | 8 | Schraffur erkennbar? Explosion weich? Fokus drehen, Röntgen-Kanten |
-| **Gesamt** | **106** | **90** | **16 Punkte, dazu ein Blick auf Animationen** |
+| Messen, Masse, Auswahl, Versionen | 11 | 8 | Schwerpunkt-Symbol gut sichtbar? Vergleichs-Umriss verständlich? |
+| **Gesamt** | **117** | **98** | **19 Punkte, dazu ein Blick auf Animationen** |
 
 Wichtig: Automatisch geprüft heißt „funktioniert in Chromium unter Linux“. Safari auf dem Mac, Touch auf dem iPad und echte Grafikkarten sieht nur ein Test von Hand.
 
@@ -290,6 +291,42 @@ Nichts hiervon ändert das Modell – kein Schritt in der Zeitleiste, nichts in 
 - [ ] **Röntgen-Kanten**
   Schritte: 1. Röntgen bei einem Teil mit vielen Kanten.
   Erwartet: Verdeckte Kanten sind zu sehen, das Bild bleibt trotzdem übersichtlich.
+
+## Messen, Masse, Auswahl, Versionen (neu in Sitzung 10)
+
+- [x] **Material je Teil**
+  Schritte: 1. Zwei Quader (20 mm). 2. Den zweiten anklicken, rechts unter „Material und Gewicht“ PLA wählen. 3. Auswahl aufheben. 4. „Schwerpunkt im Bild zeigen“.
+  Erwartet: Erst 8 cm³ und 12,4 g, mit PLA 9,92 g; das Projekt wiegt 22,3 g, der Schwerpunkt rückt zum schwereren Quader; ein schwarz-weißes Schwerpunkt-Symbol erscheint.
+- [x] **Messen: Flächen**
+  Schritte: 1. „Messen“. 2. Deckfläche eines Quaders 30 × 20 × 10 anklicken. 3. Dann eine Seitenfläche. 4. Deckfläche und eine untere Ecke. 5. Deckfläche und Deckfläche eines höheren Quaders.
+  Erwartet: „Fläche 600 mm²“, dann „Winkel 90°“, dann „Abstand 10 mm“, dann der Höhenunterschied als Abstand.
+- [x] **Ähnliche auswählen**
+  Schritte: 1. Platte mit drei M3- und einem M2-Loch. 2. Ein M3-Loch anklicken, „Ähnliche“. 3. Eine lange Kante anklicken, Taste A, „Abrunden“.
+  Erwartet: Alle drei M3-Löcher sind gewählt, das M2 nicht; alle vier langen Kanten werden zusammen abgerundet.
+- [x] **Auswahlfilter**
+  Schritte: 1. Pfeil-Knopf rechts im Bild → „Nur Körper“, auf eine Fläche klicken. 2. „Nur Kanten“: auf die Fläche, dann auf eine Kante klicken. 3. „Nur Flächen“: dicht neben eine Kante klicken. 4. „Alles“.
+  Erwartet: Nur der ganze Körper; nichts, dann die Kante; die Fläche statt der Kante; der Knopf leuchtet nur, solange ein Filter an ist.
+- [x] **Versionen**
+  Schritte: 1. Projektmenü → „Versionen …“ → speichern als „Erster Stand“. 2. Maß ändern, Teil dazu, Material ändern. 3. „Vergleichen“. 4. Häkchen „Alten Stand im Bild zeigen“ weg. 5. „Zurückholen“. 6. Strg/Cmd+Z.
+  Erwartet: Liste mit allen drei Änderungen und dem Gewicht vorher/nachher, alter Stand rot gestrichelt; nach dem Zurückholen ist alles wie vorher, Rückgängig bringt den neuen Stand wieder.
+- [x] **Versionen in der Datei**
+  Schritte: 1. Version speichern, als Datei speichern. 2. Datei auf einem anderen Rechner (oder nach dem Löschen der Browserdaten) öffnen.
+  Erwartet: Die Versionen sind wieder da.
+- [x] **Hilfetexte**
+  Schritte: 1. Maus auf „Messen“, „Ähnliche“, den Filter-Knopf und „Gewicht“ legen.
+  Erwartet: Anleitung mit Tipp.
+- [ ] **Schwerpunkt-Symbol**
+  Schritte: 1. Schwerpunkt anzeigen, Modell drehen und zoomen.
+  Erwartet: Das Symbol bleibt gleich groß, ist immer zu sehen und sitzt an der richtigen Stelle.
+- [ ] **Vergleichs-Umriss**
+  Schritte: 1. Eine Version vergleichen, bei der ein Teil verschoben wurde.
+  Erwartet: Alter und neuer Ort sind klar zu unterscheiden.
+- [x] **Gewicht im Projekt** (in „Material je Teil“ mitgeprüft)
+  Schritte: 1. Ohne Auswahl rechts „Material und Gewicht“ ansehen.
+  Erwartet: Volumen, Gewicht, Schwerpunkt; Hinweis, wenn Teile ein eigenes Material haben.
+- [ ] **Push/Pull**
+  Schritte: 1. Fläche anklicken, „Hochziehen“, Maus ziehen oder Zahl tippen.
+  Erwartet: Die Fläche wächst heraus oder drückt sich hinein.
 
 ## Notizstift (neu)
 

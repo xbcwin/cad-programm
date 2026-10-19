@@ -374,6 +374,10 @@ body.sketching .timeline{display:none}
 .focusview .fv-title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .fv-body{position:relative;cursor:grab;touch-action:none}
 .fv-body:active{cursor:grabbing}
+.cmp-list{margin:0;padding-left:18px;font-size:12.5px;line-height:1.45;max-height:190px;overflow:auto;color:var(--ink-2)}
+.cmp-list b{color:var(--ink)}
+.cmpbar .check{font-size:13px}
+.ver-row{gap:8px;align-items:center;padding:8px 0}
 .fv-empty{position:absolute;inset:0;display:grid;place-items:center;padding:16px;text-align:center;font-size:13px;color:var(--muted);background:var(--surface)}
 @media (max-width: 640px){.focusview{grid-template-rows:auto 130px}.viewbars{width:auto;right:12px}}
 .sketchbar .tool{padding:7px 9px}

@@ -1,6 +1,6 @@
 # Fortschritt
 
-Stand: 19.10.2026 · nach Sitzung 9 von 14
+Stand: 19.10.2026 · nach Sitzung 10 von 14
 
 ## Erledigt
 
@@ -45,7 +45,7 @@ Stand: 19.10.2026 · nach Sitzung 9 von 14
 - [x] Neuer Name beim Maß (z. B. `breite`) wird automatisch unter „Maße“ angelegt
 - [x] Formel-Beispiele unter „Maße“ (Gemini, alle 12 mit Tracerys Rechner nachgeprüft), Beispiel-Maße per Klick
 - [x] Umbenennen / Entfernen eines Maßes wirkt jetzt auch auf Skizzen-Maße
-- [x] Automatischer Klicktest `tests/klicktest.py`: 66 Durchläufe (alle grün), 90 von 106 Punkten der Testliste automatisch geprüft
+- [x] Automatischer Klicktest `tests/klicktest.py`: 73 Durchläufe (alle grün), 98 von 117 Punkten der Testliste automatisch geprüft
 - [x] Aufgeräumt: Programm liegt jetzt in 28 Quelldateien unter `app/src/`, `tools/build.py` baut daraus `app/index.html`
 - [x] Notizstift (Taste N): freie Striche, die am Modell kleben, Textnotizen, 6 Farben, 3 Dicken, Radierer, ein-/ausblendbar – ohne technische Bedeutung
 - [x] Symbole für den Notizstift (Gemini, geprüft); Augen-Knopf rechts im Bild blendet Notizen aus, sobald es welche gibt
@@ -80,6 +80,13 @@ Stand: 19.10.2026 · nach Sitzung 9 von 14
 - [x] Neuer Knopf „Ansicht“ oben, neues Bauteil `app/src/js/53-views.js`; nichts davon ändert das Modell oder die Zeitleiste
 - [x] Anleitungen (Hilfetexte) erscheinen jetzt auch an den Knöpfen an einer Fläche (Bohrung, Aushöhlen, Muster …) und im Ansicht-Menü
 - [x] FPV-Standardmaße (Gemini Prompt E, geprüft und korrigiert: Motor-Lochkreis als eigene Zahl, 1103 mit M1.6, 2806.5-Glocke 35 mm, 20×20 mit M2 oder M3, 30,5er-Platine 36 mm, 3"-Nabe 1,5 oder 5 mm) in `app/data/fpv-masse.json` – für Sitzung 11 und 12
+- [x] Material je Teil: rechts „Material und Gewicht“ mit Volumen und Gewicht des Teils; ohne Auswahl Gewicht des ganzen Projekts und Schwerpunkt (nach Gewicht gemittelt), „Schwerpunkt im Bild zeigen“
+- [x] Messen erweitert: Fläche allein → Größe in mm²; zwei Flächen → Abstand (parallel) oder Winkel; Punkt und Fläche → senkrechter Abstand; wie bisher Punkt–Punkt und Durchmesser
+- [x] Ähnliche auswählen (Taste A, Knopf „Ähnliche“): alle Teile gleicher Art und Größe (z. B. alle M3-Bohrungen) oder alle gleich langen Kanten – danach zusammen abrunden
+- [x] Auswahlfilter (Pfeil-Knopf rechts im Bild): Alles / nur Körper / nur Flächen / nur Kanten
+- [x] Versionen (Projektmenü → „Versionen …“): Stand mit Namen speichern, vergleichen (Liste der Änderungen, Gewicht vorher/nachher, alter Stand als roter Umriss), zurückholen (mit Rückgängig); Versionen kommen mit in die Projektdatei
+- [x] Push/Pull war schon da („Hochziehen“ an einer Fläche) und bleibt so
+- [x] Neue Bauteile `app/src/js/47-mass.js`, `54-select.js`, `59-versions.js`
 
 ## Offen
 
@@ -103,7 +110,8 @@ Fertig.
 - [x] Explosionsansicht, Fokus-Vorschau, Schnitt, Röntgen (Sitzung 9)
 - [ ] Explosion auch für die Teile innerhalb einer Gruppe (heute nur oberste Ebene)
 - [ ] Schnitt an einer beliebigen Fläche statt nur an den drei Grundebenen
-- [ ] Messen, Material pro Teil, Push/Pull, „ähnliche auswählen“, Versionen (Sitzung 10)
+- [x] Messen, Material pro Teil, Push/Pull, „ähnliche auswählen“, Versionen (Sitzung 10)
+- [ ] Versionen in der Cloud (mit Stufe 6 – Konten)
 
 ### Stufe 4 – Drohnen-Modul
 - [ ] 5"-Vorlage (Sitzung 11)

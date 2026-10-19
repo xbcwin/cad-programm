@@ -234,7 +234,7 @@ const Views = (() => {
   }
   function reset() { section(false); if (st.xray) xray(false); if (st.exGoal > 0 || st.ex > 0) { cancelAnimationFrame(st.exAnim); st.exAnim = null; st.ex = st.exGoal = 0; Viewer.setOffsets(null); if (st.exBar) { st.exBar.remove(); st.exBar = null; } } focus(false); }
   return {
-    init, section, xray, explode, collapse, focus, menu, onKey, reset, sync,
+    init, section, xray, explode, collapse, focus, menu, onKey, reset, sync, bars,
     get cut() { return st.cut ? { plane: st.cut.plane, off: st.cut.off, flip: st.cut.flip } : null; },
     get isXray() { return st.xray; }, get exploded() { return st.ex > 1e-4 || st.exGoal > 0; }, get explodeAmount() { return st.ex; },
     get focusIds() { return st.focus ? st.focus.ids.slice() : null; }, get focusDrawn() { return !!(st.focus && st.focus.drawn); },

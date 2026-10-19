@@ -2,7 +2,7 @@
 // Persönliche Einstellung (nicht im Projekt gespeichert), gilt für alle Projekte in diesem Browser.
 const ViewPrefs = (() => {
   const KEY = 'masswerk.view';
-  const DEF = { grid: 'auto', gridOn: true, planes: true, axes: true, ortho: false, quality: 'normal', adaptive: true, theme: 'system', decimals: 0, notes: true };
+  const DEF = { grid: 'auto', gridOn: true, planes: true, axes: true, ortho: false, quality: 'normal', adaptive: true, theme: 'system', decimals: 0, notes: true, cog: false };
   let v = { ...DEF };
   try { const raw = storageGet(KEY); if (raw) v = { ...DEF, ...JSON.parse(raw) }; } catch (_) {}
   const ev = makeEmitter();

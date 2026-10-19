@@ -33,7 +33,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -1152,8 +1152,131 @@ def t_ansicht_hilfen(p):
     p.pg.locator('#t-views').click(); p.wait(300)
     im_menue = sorted(p.pg.evaluate("[...document.querySelectorAll('.menu [data-help]')].map(b=>b.dataset.help)"))
     knoepfe = sorted(p.pg.evaluate("[...document.querySelectorAll('.view-btns [data-help]')].map(b=>b.dataset.help)"))
-    ok = not fehlt and im_menue == ['explode', 'focusView', 'section', 'xray'] and knoepfe == ['section', 'xray']
+    ok = not fehlt and im_menue == ['explode', 'focusView', 'section', 'xray'] and {'section', 'xray'} <= set(knoepfe)
     return ok, ('ohne Hilfetext: ' + ', '.join(fehlt)) if fehlt else ('' if ok else f'Menü {im_menue}, Knöpfe {knoepfe}')
+
+
+# ---------- Messen, Masse, Auswahl, Versionen ----------
+def t_masse_teil(p):
+    zwei_quader(p, 0, 0, -20, 20)
+    p.ev("App.select([App.doc.items[1].id])"); p.wait(1500)
+    ok1 = p.pg.locator('#p-vol').text_content() == '8 cm³' and p.pg.locator('#p-mass').text_content() == '12,4 g'
+    p.pg.select_option('#p-mat', 'PLA'); p.wait(2000)
+    ok2 = p.pg.locator('#p-mass').text_content() == '9,92 g' and p.ev("return App.doc.items[1].mat") == 'PLA'
+    p.ev("App.clearSelection()"); p.wait(1500)
+    sec = p.pg.locator('.section').filter(has_text='Schwerpunkt').inner_text()
+    ok3 = '22,3 g' in sec and '-2,2 · 0 · 10' in sec and 'eigenes Material' in sec
+    p.pg.locator('#proj-cog').check(); p.wait(1500)
+    pos = p.ev("return Mass.markerPos")
+    ok4 = p.ev("return Mass.markerShown") and pos and abs(pos[0] + 2.222) < 0.01 and abs(pos[2] - 10) < 0.01
+    p.pg.locator('#proj-cog').uncheck(); p.wait(800)
+    ok5 = not p.ev("return Mass.markerShown")
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
+def t_messen_flaechen(p):
+    p.empty(); p.ev("Actions.addPrimitive('box'); Actions.addPrimitive('box')"); p.wait(2500)
+    p.ev("App.change('x', d=>{ const a=d.items[0], b=d.items[1]; a.t.x=0; a.t.y=0; Object.assign(a.p,{w:30,d:20,h:10}); b.t.x=40; b.t.y=0; Object.assign(b.p,{w:20,d:20,h:25}); })"); p.wait(2500)
+    p.ev("App.clearSelection(); Viewer.setView('iso', false)"); p.wait(1000)
+    R = "return window.__masswerk.Measure.result"
+    p.pg.locator('#t-measure').click(); p.wait(400)
+    top, front, corner, top2 = world_screen(p, 3, 3, 10), world_screen(p, 3, -10, 4), world_screen(p, 15, -10, 0), world_screen(p, 42, 2, 25)
+    p.pg.mouse.click(*top); p.wait(500); r1 = p.ev(R)
+    p.pg.mouse.click(*front); p.wait(500); r2 = p.ev(R)
+    p.pg.mouse.click(*top); p.wait(500); p.pg.mouse.click(*corner); p.wait(500); r3 = p.ev(R)
+    p.pg.mouse.click(*top); p.wait(500); p.pg.mouse.click(*top2); p.wait(500); r4 = p.ev(R)
+    p.pg.keyboard.press('Escape'); p.wait(300)
+    ok = [r1 == 'Fläche 600 mm²', (r2 or '').startswith('Winkel 90°'), (r3 or '').startswith('Abstand 10 mm'), (r4 or '').startswith('Abstand 15 mm')]
+    return all(ok), ' '.join('✓' if x else '✗' for x in ok) + ('' if all(ok) else f' – {r1} / {r2} / {r3} / {r4}')
+
+
+def t_aehnliche(p):
+    p.empty()
+    p.ev("""App.change('x', d=>{ const P=Model.newItem('box',{w:60,d:30,h:3},{}); d.items.push(P);
+      for (const [x,s] of [[-20,'M3'],[0,'M3'],[20,'M3'],[10,'M2']]) { const h=Model.newItem('part',{lib:'screwHole',size:s,head:'none',fit:'medium',length:10},{role:'hole'}); h.t.x=x; h.t.z=-1; d.items.push(h); } })"""); p.wait(3000)
+    p.ev("App.select([App.doc.items[1].id])"); p.wait(800)
+    p.pg.locator('.ctxbar button[aria-label="Ähnliche"]').click(); p.wait(800)
+    ok1 = sorted(p.ev("return App.sel.map(id=>App.doc.items.findIndex(x=>x.id===id))")) == [1, 2, 3]
+    p.ev("const id=App.doc.items[0].id; const r=App.results.get(id); const i=r.data.edges.findIndex(e=>e.t==='LINE' && Math.abs(e.a[2]-3)<1e-6 && Math.abs(Math.hypot(e.a[0]-e.b[0],e.a[1]-e.b[1])-60)<1e-6); App.select([id],{edges:[{id,edgeIdx:i}]})"); p.wait(800)
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('a'); p.wait(800)
+    ok2 = p.ev("return App.edges.length") == 4
+    p.pg.locator('.ctxbar button[aria-label="Abrunden"]').click(); p.wait(2500)
+    ok3 = p.ev("const f=App.doc.items[0].finishes[0]; return f && f.type==='fillet' && f.edges.length===4") and p.ev("return App.errors.length") == 0
+    return [ok1, ok2, ok3]
+
+
+def t_auswahlfilter(p):
+    p.empty(); p.ev("Actions.addPrimitive('box')"); p.wait(2000)
+    p.ev("App.change('x', d=>{ const a=d.items[0]; a.t.x=0; a.t.y=0; Object.assign(a.p,{w:60,d:30,h:3}); })"); p.wait(2000)
+    p.ev("App.clearSelection(); Viewer.setView('top', false)"); p.wait(1000)
+    innen, kante, rand = world_screen(p, -10, 5, 3), world_screen(p, -10, 15, 3), world_screen(p, -10, 14.6, 3)
+    p.pg.locator('.view-btns [data-view="filter"]').click(); p.wait(300)
+    p.pg.locator('.menu button').filter(has_text='Nur Körper').first.click(); p.wait(300)
+    p.pg.mouse.click(*innen); p.wait(600)
+    ok1 = p.ev("return [App.sel.length, !!App.face, App.edges.length]") == [1, False, 0] and p.pg.locator('.view-btns [data-view="filter"].on').count() == 1
+    p.ev("Select.setFilter('edge')"); p.pg.mouse.click(*innen); p.wait(600)
+    a = p.ev("return [App.sel.length, App.edges.length]")
+    p.pg.mouse.click(*kante); p.wait(600)
+    ok2 = a == [0, 0] and p.ev("return App.edges.length") == 1
+    p.ev("Select.setFilter('face')"); p.pg.mouse.click(*rand); p.wait(600)
+    ok3 = p.ev("return [!!App.face, App.edges.length]") == [True, 0]
+    p.ev("Select.setFilter('all')"); p.pg.mouse.click(*rand); p.wait(600)
+    ok4 = p.ev("return App.edges.length") == 1 and p.pg.locator('.view-btns [data-view="filter"].on').count() == 0
+    return [ok1, ok2, ok3, ok4]
+
+
+def t_versionen(p):
+    p.empty(); p.ev("Actions.addPrimitive('box')"); p.wait(2000)
+    p.ev("App.change('Maß', d=>{ d.params.push({id:'m_b',name:'Breite',expr:20}); d.items[0].p.w='Breite'; })"); p.wait(1500)
+    p.pg.locator('#btn-project').click(); p.wait(300)
+    p.pg.locator('.menu button').filter(has_text='Versionen').first.click(); p.wait(500)
+    p.pg.locator('#ver-save').click(); p.wait(400)
+    p.pg.fill('#prompt-inp', 'Erster Stand'); p.pg.keyboard.press('Enter'); p.wait(600)
+    ok1 = p.pg.locator('.ver-row').count() == 1 and p.ev("return Versions.list().map(v=>v.name)") == ['Erster Stand']
+    p.pg.keyboard.press('Escape'); p.wait(300)
+    p.ev("App.change('x', d=>{ d.params[0].expr=40; })"); p.wait(1500)
+    p.ev("Actions.addPrimitive('cylinder')"); p.wait(2000)
+    p.ev("App.change('x', d=>{ d.items[0].mat='PLA'; })"); p.wait(1500)
+    p.pg.locator('#btn-project').click(); p.wait(300)
+    p.pg.locator('.menu button').filter(has_text='Versionen').first.click(); p.wait(500)
+    p.pg.locator('.ver-cmp').first.click(); p.wait(4000)
+    txt = p.pg.locator('.cmpbar').inner_text()
+    ok2 = 'Breite: 20 → 40' in txt and 'Zylinder hinzugekommen' in txt and 'Quader: Material' in txt and '12,4 g → 29,6 g' in txt
+    ok3 = p.ev("return Viewer.groups.compare.children.length") == 1
+    p.pg.locator('#cmp-show').uncheck(); p.wait(400)
+    ok3 = ok3 and p.ev("return Viewer.groups.compare.children.length") == 0
+    p.pg.locator('#btn-project').click(); p.wait(300)
+    p.pg.locator('.menu button').filter(has_text='Versionen').first.click(); p.wait(500)
+    p.pg.locator('.ver-restore').first.click(); p.wait(400)
+    p.pg.locator('.modal .btn.primary').filter(has_text='Zurückholen').click(); p.wait(2500)
+    ok4 = p.ev("return [App.doc.items.length, App.doc.params[0].expr, App.doc.items[0].mat||null]") == [1, 20, None] and p.pg.locator('.cmpbar').count() == 0
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('Control+z'); p.wait(2500)
+    ok5 = p.ev("return [App.doc.items.length, App.doc.params[0].expr]") == [2, 40]
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
+def t_versionen_datei(p):
+    p.empty(); p.ev("Actions.addPrimitive('box')"); p.wait(2000)
+    p.ev("Versions.save('Stand A')"); p.wait(300)
+    p.ev("App.change('x', d=>{ d.items[0].p.h=40; })"); p.wait(1500)
+    with p.pg.expect_download() as dl:
+        p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('Control+s')
+    d = dl.value; path = os.path.join(tempfile.gettempdir(), 'v-' + d.suggested_filename); d.save_as(path)
+    data = json.load(open(path, encoding='utf-8'))
+    ok1 = [v['name'] for v in data.get('versions', [])] == ['Stand A']
+    p.ev("localStorage.removeItem('masswerk.versions.'+App.doc.id); Start.newProject(true)"); p.wait(2000)
+    with p.pg.expect_file_chooser() as fc:
+        p.ev("Start.openFile()")
+    fc.value.set_files(path); p.wait(4000)
+    ok2 = p.ev("return Versions.list().map(v=>v.name)") == ['Stand A'] and p.ev("return App.doc.versions === undefined && App.doc.items[0].p.h") == 40
+    return [ok1, ok2]
+
+
+def t_neu10_hilfen(p):
+    p.empty()
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    fehlt = [k for k in ['selectFilter', 'similar', 'versions', 'measure', 'massProps'] if k not in hilfen]
+    return not fehlt, ('ohne Hilfetext: ' + ', '.join(fehlt)) if fehlt else ''
 
 
 TESTS = [
@@ -1197,6 +1320,13 @@ TESTS = [
     ('Ansichten: neues Projekt setzt alles zurück', t_ansicht_zurueck),
     ('Darstellung beim Drehen anpassen', t_adaptiv),
     ('Ansicht-Werkzeuge haben Hilfetexte', t_ansicht_hilfen),
+    ('Material je Teil: Volumen / Gewicht / PLA / Projekt-Summe und Schwerpunkt / Schwerpunkt im Bild', t_masse_teil),
+    ('Messen: Fläche / Winkel / Punkt zur Fläche / parallele Flächen', t_messen_flaechen),
+    ('Ähnliche auswählen: gleiche Löcher / gleiche Kanten / zusammen abrunden', t_aehnliche),
+    ('Auswahlfilter: Körper / Kanten / Flächen / alles', t_auswahlfilter),
+    ('Versionen: speichern / vergleichen / Umriss / zurückholen / Rückgängig', t_versionen),
+    ('Versionen kommen mit in die Projektdatei', t_versionen_datei),
+    ('Neue Werkzeuge haben Hilfetexte', t_neu10_hilfen),
     ('Formel-Beispiele', t_formel_beispiele), ('Einführung „Erste Skizze“', t_einfuehrung), ('Schraubenlöcher', t_schrauben),
     ('Fies: Löschen hinter Marker + Undo', t_fies_loeschen), ('Fies: alles unterdrückt', t_fies_alle_aus),
     ('Fies: Marker am Anfang, neu laden', t_fies_reload), ('Fies: Tasten während Rechnen', t_fies_tasten),

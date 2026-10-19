@@ -15,10 +15,10 @@ SRC = os.path.join(ROOT, 'src')
 
 JS = [
     '00-util.js', '10-model.js', '15-sketchcore.js', '16-solver.js', '17-sketchops.js', '20-kernel.js', '25-app.js',
-    '30-viewer.js', '35-handles.js', '40-library.js', '45-actions.js', '46-features.js',
+    '30-viewer.js', '35-handles.js', '40-library.js', '45-actions.js', '46-features.js', '47-mass.js',
     '48-viewprefs.js', '48-refine.js', '49-timeline.js', '49-components.js', '49-draginput.js', '49-log.js',
-    '50-ui-core.js', '51-ui-panels.js', '52-place.js', '53-views.js', '55-sketch.js', '56-notes.js', '57-measure.js',
-    '58-commands.js', '60-print.js', '70-drawing.js', '80-ai.js', '85-start.js', '90-main.js',
+    '50-ui-core.js', '51-ui-panels.js', '52-place.js', '53-views.js', '54-select.js', '55-sketch.js', '56-notes.js', '57-measure.js',
+    '58-commands.js', '59-versions.js', '60-print.js', '70-drawing.js', '80-ai.js', '85-start.js', '90-main.js',
 ]
 
 

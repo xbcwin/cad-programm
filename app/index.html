@@ -381,6 +381,10 @@ body.sketching .timeline{display:none}
 .focusview .fv-title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .fv-body{position:relative;cursor:grab;touch-action:none}
 .fv-body:active{cursor:grabbing}
+.cmp-list{margin:0;padding-left:18px;font-size:12.5px;line-height:1.45;max-height:190px;overflow:auto;color:var(--ink-2)}
+.cmp-list b{color:var(--ink)}
+.cmpbar .check{font-size:13px}
+.ver-row{gap:8px;align-items:center;padding:8px 0}
 .fv-empty{position:absolute;inset:0;display:grid;place-items:center;padding:16px;text-align:center;font-size:13px;color:var(--muted);background:var(--surface)}
 @media (max-width: 640px){.focusview{grid-template-rows:auto 130px}.viewbars{width:auto;right:12px}}
 .sketchbar .tool{padding:7px 9px}
@@ -812,6 +816,7 @@ const IC = {
   edit: '<path d="M4 20h4L19 9l-4-4L4 16z" />',
   layers: '<path d="M12 3 3 8l9 5 9-5z M3 13l9 5 9-5" />',
   target: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3 M12 19v3 M2 12h3 M19 12h3"/>',
+  similar: '<rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5" fill="currentColor" opacity=".25"/><rect x="13" y="13" width="8" height="8" rx="1.5"/><path d="M14 7h4v3M10 17H6v-3" stroke-dasharray="2 2"/>',
   up: '<path d="M12 19V5 M6 11l6-6 6 6" />',
   lift: '<path d="M12 20V6 M7 10l5-5 5 5 M5 20h14" />',
   push: '<path d="M12 4v11 M7 10l5 5 5-5 M5 20h14" />',
@@ -1142,14 +1147,14 @@ const HELP = {
   "tipp": "Anklicken und rechts ändern geht weiter. Zum Verschieben, Zeichnen oder Bohren setzt Tracery alles von selbst wieder zusammen."
  },
  "measure": {
-  "tip": "Abstände, Längen und Durchmesser nachmessen",
-  "hilfe": "Klicke ein oder zwei Elemente (Punkte, Kanten, Flächen) an, um ihren genauen Abstand oder die Größe abzulesen.",
-  "tipp": "Wenn du auf einen runden Kreis klickst, zeigt dir das Werkzeug sofort den genauen Durchmesser an."
+  "tip": "Abstände, Winkel, Flächen und Durchmesser nachmessen",
+  "hilfe": "Oben „Messen“ (Taste M). Zwei Punkte an Kanten ergeben den Abstand, zwei Flächen den Abstand oder Winkel, ein Punkt und eine Fläche den senkrechten Abstand. Eine Fläche allein zeigt ihre Größe in mm².",
+  "tipp": "Klickst du auf eine runde Kante, siehst du sofort den Durchmesser."
  },
  "massProps": {
-  "tip": "Gewicht und Volumen des Bauteils",
-  "hilfe": "Klicke auf deinen Körper und wähle ein Material (z. B. Carbon, Aluminium oder Kunststoff), um das Gewicht zu berechnen.",
-  "tipp": "So weißt du schon beim Konstruieren, wie schwer dein Teil wird – bei Speed-Drohnen zählt jedes Gramm."
+  "tip": "Gewicht, Volumen und Schwerpunkt",
+  "hilfe": "Klick ein Teil an: Rechts unter „Material und Gewicht“ wählst du sein Material und siehst sein Gewicht. Ohne Auswahl steht dort das Gewicht des ganzen Projekts mit dem Schwerpunkt.",
+  "tipp": "Bei Speed-Drohnen zählt jedes Gramm – und der Schwerpunkt sollte in der Mitte zwischen den Motoren liegen. „Schwerpunkt im Bild zeigen“ macht ihn sichtbar."
  },
  "timeline": {
   "tip": "Verlauf aller bisherigen Arbeitsschritte",
@@ -1175,6 +1180,21 @@ const HELP = {
   "tip": "Gewähltes Teil groß in einem zweiten Fenster",
   "hilfe": "Oben „Ansicht“ → „Fokus-Vorschau“. Links erscheint ein kleines Fenster, das immer das gewählte Teil allein und formatfüllend zeigt.",
   "tipp": "Im kleinen Fenster ziehen dreht nur die Vorschau, ein Doppelklick schaut wieder genauso wie die große Ansicht."
+ },
+ "selectFilter": {
+  "tip": "Nur Körper, Flächen oder Kanten wählen",
+  "hilfe": "Der Pfeil-Knopf rechts im Bild: „Nur Kanten“ macht es leicht, dünne Kanten zu treffen, „Nur Körper“ wählt immer das ganze Teil.",
+  "tipp": "Vergiss nicht, den Filter wieder auf „Alles“ zu stellen – solange er an ist, leuchtet der Knopf."
+ },
+ "similar": {
+  "tip": "Alle gleichen Teile oder Kanten dazuwählen",
+  "hilfe": "Wähle ein Teil oder eine Kante und drück „Ähnliche“ oder Taste A. Gewählt wird alles mit derselben Art und denselben Maßen – zum Beispiel alle M3-Bohrungen.",
+  "tipp": "Mit ähnlichen Kanten rundest du alle gleich langen Kanten mit einem Klick ab."
+ },
+ "versions": {
+  "tip": "Stände speichern, vergleichen und zurückholen",
+  "hilfe": "Projektmenü → „Versionen …“: Speichere den jetzigen Stand mit Namen. Später zeigt „Vergleichen“, was sich geändert hat – auch im Bild als roter Umriss –, und „Zurückholen“ setzt das Projekt auf diese Version.",
+  "tipp": "Speichere eine Version, bevor du etwas Großes ausprobierst. Versionen kommen mit in die Projektdatei."
  }
 };
 
@@ -2703,7 +2723,7 @@ const App = (() => {
     S.sel = []; S.face = null; S.edges = []; S.undo = []; S.redo = []; S.extra = []; S.ctx = null; S.iso = null;
     for (const id of [...S.results.keys()]) Viewer.removeNode(id);
     S.results.clear(); S.errors = []; S.revision++;
-    Viewer.clearGhosts(); Views.reset();
+    Viewer.clearGhosts(); Views.reset(); Versions.compareOff();
     ev.emit('doc'); ev.emit('selection'); ev.emit('history');
     autosave();
     rebuild().then(() => { if (opts.fit !== false) Viewer.fit(null, false); });
@@ -2808,7 +2828,7 @@ const App = (() => {
   }, 700);
   function recentProjects() { try { return JSON.parse(storageGet('masswerk.index') || '[]'); } catch (_) { return []; } }
   function loadStored(id) { try { const s = storageGet('masswerk.proj.' + id); return s ? JSON.parse(s) : null; } catch (_) { return null; } }
-  function deleteStored(id) { storageDel('masswerk.proj.' + id); const idx = recentProjects().filter((x) => x.id !== id); storageSet('masswerk.index', JSON.stringify(idx)); }
+  function deleteStored(id) { storageDel('masswerk.proj.' + id); storageDel('masswerk.versions.' + id); const idx = recentProjects().filter((x) => x.id !== id); storageSet('masswerk.index', JSON.stringify(idx)); }
 
   // ---------- Neuberechnung ----------
   function rebuild() {
@@ -3159,7 +3179,7 @@ const Viewer = (() => {
     camera = new THREE.PerspectiveCamera(32, 1, 0.5, 30000);
     camera.up.set(0, 0, 1);
     camera.position.set(170, -250, 190);
-    for (const k of ['ground', 'origin', 'nodes', 'ghosts', 'overlay', 'handles', 'sketch']) { groups[k] = new THREE.Group(); scene.add(groups[k]); }
+    for (const k of ['ground', 'origin', 'nodes', 'compare', 'ghosts', 'overlay', 'handles', 'sketch']) { groups[k] = new THREE.Group(); scene.add(groups[k]); }
     orthoCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 60000);
     scene.add(new THREE.HemisphereLight(0xffffff, 0x6f6252, 1.55));
     const key = new THREE.DirectionalLight(0xffffff, 2.1); key.position.set(0.55, -0.8, 1.25); scene.add(key);
@@ -3408,6 +3428,26 @@ const Viewer = (() => {
     line.renderOrder = opts.order || 20;
     return line;
   }
+  // eine Fläche als eingefärbte Überlagerung (z. B. beim Messen)
+  function faceOverlay(id, faceIdx, color, opacity = 0.35) {
+    const n = nodes.get(id); if (!n) return null;
+    const geo = faceSubGeometry(n, faceIdx); if (!geo) return null;
+    const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: new THREE.Color(color || theme.accent), transparent: true, opacity, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, side: THREE.DoubleSide }));
+    mesh.matrixAutoUpdate = false; mesh.matrix.copy(n.obj.matrix); mesh.renderOrder = 7;
+    return mesh;
+  }
+  // Flächeninhalt einer Fläche aus dem Netz (bei ebenen Flächen mit geraden Kanten exakt)
+  function faceArea(id, faceIdx) {
+    const n = nodes.get(id); if (!n) return 0;
+    const g = n.data.faceGroups.find((x) => x[2] === faceIdx); if (!g) return 0;
+    const P = n.data.vertices, T = n.data.triangles; let a = 0;
+    const A = new THREE.Vector3(), B = new THREE.Vector3(), C = new THREE.Vector3();
+    for (let i = g[0]; i < g[0] + g[1]; i += 3) {
+      A.fromArray(P, T[i] * 3); B.fromArray(P, T[i + 1] * 3); C.fromArray(P, T[i + 2] * 3);
+      a += B.sub(A).cross(C.sub(A)).length() / 2;
+    }
+    return a;
+  }
   function disposeFat(obj) { if (!obj) return; obj.geometry.dispose(); fatMaterials.delete(obj.material); obj.material.dispose(); }
   function highlightFace(which, id, faceIdx) {
     const cur = which === 'hover' ? hoverFace : selFace;
@@ -3633,6 +3673,24 @@ const Viewer = (() => {
     return true;
   }
 
+  // ---------- Vergleich: älterer Stand als roter, gestrichelter Umriss ----------
+  function setCompare(list) {
+    for (const o of [...groups.compare.children]) { groups.compare.remove(o); o.traverse((x) => { x.geometry && x.geometry.dispose(); x.material && x.material.dispose(); }); }
+    for (const it of list || []) {
+      const d = it.data;
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(d.vertices, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(d.normals, 3)); geo.setIndex(new THREE.BufferAttribute(d.triangles, 1));
+      const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: new THREE.Color(theme.hole), transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide }));
+      const eg = new THREE.BufferGeometry(); eg.setAttribute('position', new THREE.BufferAttribute(d.lines, 3));
+      const edges = new THREE.LineSegments(eg, new THREE.LineDashedMaterial({ color: new THREE.Color(theme.hole), dashSize: 1.6, gapSize: 1.1, transparent: true, opacity: 0.95, depthTest: false }));
+      edges.computeLineDistances();
+      const obj = new THREE.Group(); obj.add(mesh, edges); obj.matrixAutoUpdate = false; obj.matrix.copy(it.matrix);
+      mesh.renderOrder = 8; edges.renderOrder = 9;
+      groups.compare.add(obj);
+    }
+    needsRender = true;
+  }
+
   // Bild der Szene für Vorschaubilder
   function snapshot(w = 480, hgt = 300) {
     const old = renderer.getSize(new THREE.Vector2());
@@ -3644,8 +3702,8 @@ const Viewer = (() => {
   }
 
   return {
-    init, requestRender, setClip, setXray, setOffsets, baseBox, renderInset, setAdaptive, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, setSelectedEdges, clearHover,
-    pick, pickGhost, pickProxy, setProxies, clearProxies, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, boxVisible, sceneBox, snapshot, makeFat, disposeFat,
+    init, requestRender, setClip, setXray, setOffsets, baseBox, renderInset, setAdaptive, setCompare, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, setSelectedEdges, clearHover,
+    pick, pickGhost, pickProxy, setProxies, clearProxies, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, boxVisible, sceneBox, snapshot, makeFat, disposeFat, faceOverlay, faceArea,
     get camera() { return camera; }, get activeCamera() { return cam(); }, get ortho() { return ortho; }, get gridStep() { return gridStep; }, get controls() { return controls; }, get scene() { return scene; }, get groups() { return groups; }, get nodes() { return nodes; }, get canvas() { return renderer.domElement; }, get theme() { return theme; }, get container() { return container; },
     get clip() { return vis.clip; }, get xray() { return vis.xray; }, get lowRes() { return lowRes; },  get pixelRatio() { return renderer.getPixelRatio(); },
     on: listeners.on,
@@ -3997,7 +4055,7 @@ const Interact = (() => {
         }
       }
     }
-    const hit = Viewer.pick(e.clientX, e.clientY);
+    const hit = Select.adjust(Viewer.pick(e.clientX, e.clientY, Select.pickOpts()));
     down = { x: e.clientX, y: e.clientY, hit, t: performance.now(), shift: e.shiftKey || e.metaKey || e.ctrlKey };
     if (hit && !(App.ctx && hit.id === App.ctx) && !Views.exploded) {   // im Bauteil-Modus nicht das ganze Bauteil verschieben
       const top = App.doc.items.find((x) => x.id === hit.id);
@@ -4020,7 +4078,7 @@ const Interact = (() => {
       const hnd = Handles.hitHandle(e.clientX, e.clientY);
       Handles.hover(hnd);
       if (hnd) { Viewer.canvas.style.cursor = hnd.userData.kind === 'rot' ? 'grab' : 'pointer'; Viewer.clearHover(); return; }
-      const hit = Viewer.pick(e.clientX, e.clientY);
+      const hit = Select.adjust(Viewer.pick(e.clientX, e.clientY, Select.pickOpts()));
       if (hit && hit.edgeIdx != null) { Viewer.highlightEdge(hit.id, hit.edgeIdx); Viewer.highlightFace('hover', null, null); }
       else if (hit) { Viewer.highlightEdge(null, null); Viewer.highlightFace('hover', hit.id, hit.faceIdx); }
       else Viewer.clearHover();
@@ -4114,6 +4172,7 @@ const Interact = (() => {
       return;
     }
     if (additive) { App.select([id], { additive: true }); return; }
+    if (hit.bodyOnly || hit.faceIdx < 0) { App.select([id]); return; }
     App.select([id], { face: { id, faceIdx: hit.faceIdx, point: hit.point.toArray(), normal: hit.normal ? hit.normal.toArray() : null } });
   }
   // Zahl tippen während des Ziehens
@@ -4670,12 +4729,79 @@ const Features = (() => {
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
   return { pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
 })();
+// ---- 47-mass.js ----
+// ================= Masse: Volumen, Gewicht und Schwerpunkt =================
+// Der CAD-Kern rechnet je Teil der obersten Ebene das exakte Volumen und den Volumenschwerpunkt.
+// Jedes Teil kann ein eigenes Material haben (it.mat), sonst gilt das Material des Projekts.
+const Mass = (() => {
+  let cache = { rev: -1, p: null };
+  const ev = makeEmitter();
+  const matOf = (k) => MATERIALS.find((m) => m.k === k) || null;
+  function projectMaterial(doc = App.doc) { return matOf(doc.settings && doc.settings.material) || matOf('CFK') || MATERIALS[0]; }
+  function materialFor(it, doc = App.doc) { return (it && matOf(it.mat)) || projectMaterial(doc); }
+  function enrich(r, doc) {
+    if (!r) return null;
+    let mass = 0; const c = [0, 0, 0];
+    for (const p of r.parts || []) {
+      const it = doc.items.find((x) => x.id === p.id);
+      const m = materialFor(it, doc);
+      p.mat = m.k; p.rho = m.rho; p.own = !!(it && matOf(it.mat)); p.mass = (p.volume / 1000) * m.rho;
+      mass += p.mass;
+      if (p.com) for (let i = 0; i < 3; i++) c[i] += p.com[i] * p.mass;
+    }
+    r.mass = mass; r.com = mass > 0 ? c.map((v) => v / mass) : null;
+    return r;
+  }
+  // Messung eines beliebigen Projektstands (z. B. einer älteren Version)
+  function measureDoc(doc) {
+    if (!Kernel.ready || !doc.items.length) return Promise.resolve(null);
+    return Kernel.call('measure', { scene: Model.kernelScene(doc) }).then((r) => enrich(r, doc)).catch(() => null);
+  }
+  // Messung des aktuellen Stands – pro Stand nur einmal
+  function measure() {
+    if (!Kernel.ready || !App.doc.items.length) return Promise.resolve(null);
+    if (cache.rev === App.revision && cache.p) return cache.p;
+    const rev = App.revision;
+    cache = { rev, p: measureDoc(App.doc).then((r) => { if (cache.rev === rev) ev.emit('measured', r); return r; }) };
+    return cache.p;
+  }
+  function partOf(r, id) { return r && (r.parts || []).find((p) => p.id === id) || null; }
+  const gText = (g) => `${fmt(g, g < 10 ? 2 : 1)} g`;
+
+  // ---------- Schwerpunkt im Bild ----------
+  let marker = null;
+  function markerObj() {
+    const cv = document.createElement('canvas'); cv.width = cv.height = 64;
+    const g = cv.getContext('2d'); const r = 26;
+    g.translate(32, 32);
+    g.fillStyle = '#ffffff'; g.beginPath(); g.arc(0, 0, r, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#16202b';
+    for (const a of [0, Math.PI]) { g.beginPath(); g.moveTo(0, 0); g.arc(0, 0, r, a - Math.PI / 2, a); g.closePath(); g.fill(); }
+    g.lineWidth = 3.5; g.strokeStyle = '#16202b'; g.beginPath(); g.arc(0, 0, r, 0, Math.PI * 2); g.stroke();
+    const tex = new THREE.CanvasTexture(cv);
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true, sizeAttenuation: false }));
+    sp.scale.set(0.034, 0.034, 1); sp.renderOrder = 40;
+    return sp;
+  }
+  function showMarker(r) {
+    const on = ViewPrefs.get().cog && App.mode === 'model' && r && r.com;
+    if (!on) { if (marker) { Viewer.groups.overlay.remove(marker); marker.material.map.dispose(); marker.material.dispose(); marker = null; Viewer.requestRender(); } return; }
+    if (!marker) { marker = markerObj(); Viewer.groups.overlay.add(marker); }
+    marker.position.set(...r.com); Viewer.requestRender();
+  }
+  function refreshMarker() { if (!ViewPrefs.get().cog) { showMarker(null); return; } measure().then(showMarker); }
+  function init() {
+    App.on('results', refreshMarker); App.on('mode', refreshMarker);
+    ViewPrefs.on('change', refreshMarker);
+  }
+  return { init, measure, measureDoc, materialFor, projectMaterial, partOf, gText, on: ev.on, get markerShown() { return !!marker; }, get markerPos() { return marker ? marker.position.toArray() : null; } };
+})();
 // ---- 48-viewprefs.js ----
 // ================= Ansicht: Raster, Ursprungsebenen, Achsen, Projektion =================
 // Persönliche Einstellung (nicht im Projekt gespeichert), gilt für alle Projekte in diesem Browser.
 const ViewPrefs = (() => {
   const KEY = 'masswerk.view';
-  const DEF = { grid: 'auto', gridOn: true, planes: true, axes: true, ortho: false, quality: 'normal', adaptive: true, theme: 'system', decimals: 0, notes: true };
+  const DEF = { grid: 'auto', gridOn: true, planes: true, axes: true, ortho: false, quality: 'normal', adaptive: true, theme: 'system', decimals: 0, notes: true, cog: false };
   let v = { ...DEF };
   try { const raw = storageGet(KEY); if (raw) v = { ...DEF, ...JSON.parse(raw) }; } catch (_) {}
   const ev = makeEmitter();
@@ -5510,22 +5636,23 @@ const Panels = (() => {
       h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Volumen'), vRow),
       h('div', { class: 'mini-row', 'data-help': 'massProps' }, h('span', { class: 'grow' }, 'Gewicht'), gRow)));
     w.append(ms);
-    massOf().then((r) => {
-      if (!r) { vRow.textContent = gRow.textContent = '–'; return; }
-      const mat = MATERIALS.find((m) => m.k === curMat) || MATERIALS[0];
+    const cRow = h('b', { class: 'mono' }, '…');
+    const ml = ms.querySelector('.mini-list');
+    ml.append(h('div', { class: 'mini-row', 'data-tip': 'Schwerpunkt aller Teile, nach Gewicht gemittelt' }, h('span', { class: 'grow' }, 'Schwerpunkt'), cRow));
+    const own = h('div', { class: 'hint-box', hidden: true });
+    const cog = h('label', { class: 'check', style: { marginTop: '8px' } }, h('input', { type: 'checkbox', id: 'proj-cog', checked: !!ViewPrefs.get().cog }), 'Schwerpunkt im Bild zeigen');
+    cog.querySelector('input').onchange = (e) => ViewPrefs.set({ cog: e.target.checked });
+    ms.append(cog, own);
+    Mass.measure().then((r) => {
+      if (!r) { vRow.textContent = gRow.textContent = cRow.textContent = '–'; return; }
       const cm3 = r.volume / 1000;
-      vRow.textContent = `${fmt(cm3, 3)} cm³`; gRow.textContent = `${fmt(cm3 * mat.rho, cm3 * mat.rho < 10 ? 2 : 1)} g`;
+      vRow.textContent = `${fmt(cm3, 3)} cm³`; gRow.textContent = Mass.gText(r.mass);
+      cRow.textContent = r.com ? r.com.map((v) => fmt(v, 1)).join(' · ') : '–';
+      const n = (r.parts || []).filter((p) => p.own).length;
+      if (n) { own.hidden = false; own.innerHTML = `${n} ${n === 1 ? 'Teil hat' : 'Teile haben'} ein eigenes Material – das Gewicht rechnet mit beidem.`; }
     });
     w.append(h('div', { class: 'hint-box', html: '<b>So geht’s:</b> Körper anklicken und ziehen. Die Pfeile ändern die Größe, die Zahlen kannst du anklicken und genau eintippen. <span class="kbd">Entf</span> löscht, <span class="kbd">Strg Z</span> macht rückgängig.' }));
     body.append(w);
-  }
-  // Volumen wird pro Projektstand nur einmal berechnet
-  let massCache = { rev: -1, p: null };
-  function massOf() {
-    if (!Kernel.ready || !App.doc.items.length) return Promise.resolve(null);
-    if (massCache.rev === App.revision && massCache.p) return massCache.p;
-    massCache = { rev: App.revision, p: Kernel.call('measure', { scene: Model.kernelScene(App.doc) }).catch(() => null) };
-    return massCache.p;
   }
   function renderMulti(body, found) {
     const w = h('div', { class: 'props' });
@@ -5666,6 +5793,16 @@ const Panels = (() => {
       w.append(ks);
     }
     w.append(colorSection((c) => App.change('Farbe geändert', (doc) => { Model.find(doc, it.id).item.color = c; }), it.color));
+    // Material und Gewicht dieses Teils (nur Teile der obersten Ebene)
+    if (!f.parent && it.role !== 'hole') {
+      const pm = Mass.projectMaterial();
+      const ms = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Material und Gewicht'));
+      ms.append(UI.selectField({ id: 'p-mat', label: 'Material', value: it.mat || '', options: [['', `Wie das Projekt (${pm.k})`], ...MATERIALS.map((m) => [m.k, `${m.k} · ${String(m.rho).replace('.', ',')} g/cm³`])], onChange: (v) => App.change('Material gewählt', (doc) => { const T = Model.find(doc, it.id).item; if (v) T.mat = v; else delete T.mat; }) }));
+      const vR = h('b', { class: 'mono' }, '…'), gR = h('b', { class: 'mono' }, '…');
+      ms.append(h('div', { class: 'mini-list', style: { marginTop: '8px' } }, h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Volumen'), vR), h('div', { class: 'mini-row', 'data-help': 'massProps' }, h('span', { class: 'grow' }, 'Gewicht'), gR)));
+      Mass.measure().then((r) => { const p = Mass.partOf(r, it.id); vR.textContent = p ? `${fmt(p.volume / 1000, 3)} cm³` : '–'; gR.textContent = p ? Mass.gText(p.mass) : '–'; vR.id = 'p-vol'; gR.id = 'p-mass'; });
+      w.append(ms);
+    }
     // Mehr
     const more = h('button', { type: 'button', class: 'more', 'aria-expanded': 'false' }); more.innerHTML = icon('chevR') + 'Mehr Optionen';
     const mbox = h('div', { class: 'section', hidden: true });
@@ -5699,6 +5836,7 @@ const Panels = (() => {
       bar.append(h('span', { class: 'lbl' }, App.edges.length > 1 ? App.edges.length + ' Kanten' : 'Kante'));
       b('fillet', 'Abrunden', () => Actions.addFinish('fillet', 1), 'accent', 'Kante abrunden (1 mm, danach änderbar)');
       b('chamfer', 'Abschrägen', () => Actions.addFinish('chamfer', 1), '', 'Kante abschrägen (1 mm, danach änderbar)');
+      b('similar', 'Ähnliche', () => Select.similar(), '', 'Alle gleich langen Kanten dazuwählen (A)', true);
       sep();
     } else if (face && items.length === 1 && face.info.t === 'PLANE') {
       bar.append(h('span', { class: 'lbl' }, 'Fläche'));
@@ -5718,6 +5856,7 @@ const Panels = (() => {
       b('copy', 'Duplizieren', () => Actions.duplicate(), '', 'Duplizieren (Strg D)', true);
       b('patternCirc', 'Muster', (e) => UI.menu(e.currentTarget, [{ label: 'Rechteckmuster', icon: 'patternRect', run: () => Features.pattern('rect') }, { label: 'Kreismuster', icon: 'patternCirc', run: () => Features.pattern('circ') }, { label: 'Gespiegelte Kopie', icon: 'mirror', run: () => Features.pattern('mirror') }]), '', hole ? 'Loch als Muster oder gespiegelt vervielfachen' : 'Muster oder gespiegelte Kopie', true);
       if (!hole) b('split', 'Teilen', () => Features.split(), '', 'Körper an einer Ebene teilen', true);
+      if (!App.edges.length) b('similar', 'Ähnliche', () => Select.similar(), '', 'Alle gleichen Teile wählen (A)', true);
       if (it.kind === 'group') b('ungroup', 'Gruppe lösen', () => Actions.ungroup(), '', 'Gruppe lösen', true);
     } else {
       b('group', 'Gruppieren', () => Actions.group(), 'accent', 'Zu einem Körper verbinden (Strg G)');
@@ -5785,7 +5924,8 @@ const Panels = (() => {
     ViewPrefs.on('change', syncNotes); App.on('doc', syncNotes); syncNotes();
     const bX = h('button', { type: 'button', 'aria-label': 'Röntgen ein/aus', 'data-tip': 'Röntgen: Körper durchsichtig', 'data-kbd': 'X', 'data-view': 'xray', 'data-help': 'xray' }); bX.innerHTML = icon('xray'); bX.onclick = () => Views.xray();
     const bC = h('button', { type: 'button', 'aria-label': 'Schnitt ein/aus', 'data-tip': 'Schnitt: Modell aufschneiden', 'data-kbd': 'C', 'data-view': 'cut', 'data-help': 'section' }); bC.innerHTML = icon('section'); bC.onclick = () => Views.section();
-    vb.append(bO, bG, bP, bN, bX, bC, h('div', { class: 'sep' }), b1, b2); $('#overlay').append(vb);
+    const bF = h('button', { type: 'button', 'aria-label': 'Auswahlfilter', 'data-tip': 'Wählen: Alles', 'data-view': 'filter', 'data-help': 'selectFilter' }); bF.innerHTML = icon('pointer'); bF.onclick = (e) => Select.menu(e.currentTarget);
+    vb.append(bO, bG, bP, bN, bX, bC, bF, h('div', { class: 'sep' }), b1, b2); $('#overlay').append(vb);
     gizmo = svgEl('<svg class="axis-gizmo" viewBox="0 0 64 64" aria-hidden="true"></svg>');
     $('#overlay').append(gizmo);
     Viewer.on('camera', syncCube); syncCube();
@@ -6276,11 +6416,79 @@ const Views = (() => {
   }
   function reset() { section(false); if (st.xray) xray(false); if (st.exGoal > 0 || st.ex > 0) { cancelAnimationFrame(st.exAnim); st.exAnim = null; st.ex = st.exGoal = 0; Viewer.setOffsets(null); if (st.exBar) { st.exBar.remove(); st.exBar = null; } } focus(false); }
   return {
-    init, section, xray, explode, collapse, focus, menu, onKey, reset, sync,
+    init, section, xray, explode, collapse, focus, menu, onKey, reset, sync, bars,
     get cut() { return st.cut ? { plane: st.cut.plane, off: st.cut.off, flip: st.cut.flip } : null; },
     get isXray() { return st.xray; }, get exploded() { return st.ex > 1e-4 || st.exGoal > 0; }, get explodeAmount() { return st.ex; },
     get focusIds() { return st.focus ? st.focus.ids.slice() : null; }, get focusDrawn() { return !!(st.focus && st.focus.drawn); },
   };
+})();
+// ---- 54-select.js ----
+// ================= Auswahl: Filter und „Ähnliche auswählen“ =================
+const Select = (() => {
+  let filter = 'all';   // all · body · face · edge
+  const NAMES = { all: 'Alles', body: 'Nur Körper', face: 'Nur Flächen', edge: 'Nur Kanten' };
+  const ev = makeEmitter();
+  function setFilter(f) {
+    filter = NAMES[f] ? f : 'all';
+    const b = document.querySelector('.view-btns [data-view="filter"]');
+    if (b) { b.classList.toggle('on', filter !== 'all'); b.dataset.tip = 'Wählen: ' + NAMES[filter]; }
+    if (filter === 'body' && (App.face || App.edges.length)) App.select(App.sel);
+    if (filter === 'edge' && App.face) App.select(App.sel);
+    if (filter === 'face' && App.edges.length) App.select(App.sel);
+    ev.emit('change', filter);
+  }
+  // Optionen für Viewer.pick je nach Filter
+  function pickOpts() { return filter === 'body' || filter === 'face' ? { noEdges: true } : filter === 'edge' ? { edgePx: 9 } : {}; }
+  // Treffer passend zum Filter umbauen; null = Klick ignorieren
+  function adjust(hit) {
+    if (!hit) return hit;
+    if (filter === 'body') return { ...hit, edgeIdx: null, faceIdx: -1, bodyOnly: true };
+    if (filter === 'face') return { ...hit, edgeIdx: null };
+    if (filter === 'edge') return hit.edgeIdx != null ? hit : null;
+    return hit;
+  }
+  function menu(anchor) {
+    UI.menu(anchor, Object.keys(NAMES).map((k) => ({ label: (filter === k ? '✓ ' : '') + NAMES[k], icon: { all: 'pointer', body: 'cube', face: 'planeXY', edge: 'line' }[k], run: () => setFilter(k) })));
+  }
+
+  // ---------- Ähnliche auswählen ----------
+  const r3 = (v) => Math.round(v * 1000) / 1000;
+  function edgeSig(e) {
+    if (!e) return null;
+    if (e.t === 'CIRCLE') return 'C' + r3(e.r || 0) + (e.a && e.b && Math.hypot(e.a[0] - e.b[0], e.a[1] - e.b[1], e.a[2] - e.b[2]) < 1e-6 ? 'o' : 'a');
+    const L = e.a && e.b ? Math.hypot(e.a[0] - e.b[0], e.a[1] - e.b[1], e.a[2] - e.b[2]) : 0;
+    return (e.t || '?') + r3(L);
+  }
+  function itemSig(it, V) {
+    const p = Model.resolveP(it.p || {}, V);
+    const keep = {};
+    for (const k of Object.keys(p).sort()) if (k !== 'sketch') keep[k] = typeof p[k] === 'number' ? r3(p[k]) : p[k];
+    if (p.sketch) keep.sketch = JSON.stringify(p.sketch.ents);
+    return JSON.stringify([it.kind, it.role, keep, (it.finishes || []).map((f) => [f.type, f.r])]);
+  }
+  function similar() {
+    // Kanten: gleiche Art und Länge (bzw. gleicher Radius) im selben Körper
+    if (App.edges.length) {
+      const id = App.edges[0].id; const r = App.results.get(id); if (!r) return 0;
+      const want = new Set(App.edges.filter((x) => x.id === id).map((x) => edgeSig(r.data.edges[x.edgeIdx])));
+      const list = [];
+      r.data.edges.forEach((e, i) => { if (want.has(edgeSig(e))) list.push({ id, edgeIdx: i }); });
+      App.select([id], { edges: list });
+      UI.toast(`${list.length} gleiche Kanten gewählt – zum Beispiel alle zusammen abrunden.`, { icon: 'check' });
+      return list.length;
+    }
+    // Objekte: gleiche Art, gleiche Maße, gleiche Rolle – überall im Projekt (auch in Gruppen)
+    const items = App.selectedItems().map((f) => f.item); if (!items.length) { UI.toast('Wähle zuerst ein Teil oder eine Kante.', { icon: 'info' }); return 0; }
+    const V = Model.vars(App.doc).v;
+    const want = new Set(items.map((it) => itemSig(it, V)));
+    const ids = [];
+    Model.walk(Model.activeItems(App.doc), (it) => { if (!it.hidden && want.has(itemSig(it, V))) ids.push(it.id); });
+    App.select(ids);
+    const what = items[0].kind === 'part' && LIBMAP[items[0].p.lib] ? LIBMAP[items[0].p.lib].label : (KINDS[items[0].kind] || {}).label || 'Teile';
+    UI.toast(ids.length > 1 ? `${ids.length}× ${what} mit gleichen Maßen gewählt.` : 'Kein weiteres gleiches Teil gefunden.', { icon: ids.length > 1 ? 'check' : 'info' });
+    return ids.length;
+  }
+  return { setFilter, pickOpts, adjust, menu, similar, on: ev.on, get filter() { return filter; }, NAMES };
 })();
 // ---- 55-sketch.js ----
 // ================= Skizzen-Modus (Zeichnen auf einer Ebene) =================
@@ -8191,11 +8399,11 @@ const Measure = (() => {
     on = true; pts = []; clearVis();
     App.clearSelection(); Handles.clear();
     $('#t-measure') && $('#t-measure').classList.add('active');
-    UI.hint('<b>Messen:</b> Klick zwei Punkte an – oder eine runde Kante für den Durchmesser. <b>Esc</b> beendet.');
+    UI.hint('<b>Messen:</b> Klick zwei Punkte oder zwei Flächen an (Abstand, Winkel) – eine Fläche allein zeigt ihre Größe, eine runde Kante den Durchmesser. <b>Esc</b> beendet.');
     Viewer.canvas.style.cursor = 'crosshair';
   }
   function stop() {
-    on = false; pts = []; clearVis();
+    on = false; pts = []; last = null; clearVis();
     $('#t-measure') && $('#t-measure').classList.remove('active');
     UI.hint(null); Viewer.canvas.style.cursor = '';
     Handles.rebuild();
@@ -8216,30 +8424,73 @@ const Measure = (() => {
     }
     return { p: hit.point.clone() };
   }
+  // Was liegt unter der Maus? Punkt (an einer Kante gefangen) oder ebene Fläche
+  function entityAt(hit, cx, cy) {
+    if (hit.edgeIdx != null) { const sp = snapPoint(hit, cx, cy); return { kind: 'pt', p: sp.p, edge: sp.edge }; }
+    const f = hit.faceIdx >= 0 ? hit.node.data.faces[hit.faceIdx] : null;
+    if (f && f.t === 'PLANE' && f.n) {
+      const M = hit.node.obj.matrixWorld;
+      return { kind: 'face', id: hit.id, faceIdx: hit.faceIdx, c: new THREE.Vector3(...f.c).applyMatrix4(M), n: new THREE.Vector3(...f.n).transformDirection(M).normalize(), area: Viewer.faceArea(hit.id, hit.faceIdx), hitP: hit.point.clone() };
+    }
+    return { kind: 'pt', p: hit.point.clone() };
+  }
+  function dot(p) { const d = Viewer.makeFat([p.x, p.y, p.z, p.x, p.y, p.z + 0.001], Viewer.theme.accent, 10, { depthTest: false }); Viewer.groups.overlay.add(d); objs.push(d); }
+  function dash(a, b) { const l = Viewer.makeFat([a.x, a.y, a.z, b.x, b.y, b.z], Viewer.theme.accent, 3, { depthTest: false, dashed: true, dashSize: 2, gapSize: 1.2 }); Viewer.groups.overlay.add(l); objs.push(l); }
   function onDown(e) {
     if (!on || e.button !== 0) return false;
     const hit = Viewer.pick(e.clientX, e.clientY, { edgePx: 11 });
     if (!hit) return true;
-    const sp = snapPoint(hit, e.clientX, e.clientY);
-    if (pts.length === 0 && sp.edge && sp.edge.t === 'CIRCLE' && sp.edge.r && hit.edgeIdx != null) {
+    const ent = entityAt(hit, e.clientX, e.clientY);
+    if (pts.length === 0 && ent.edge && ent.edge.t === 'CIRCLE' && ent.edge.r && hit.edgeIdx != null) {
       clearVis();
       const W = hit.node.obj.matrixWorld;
-      const c = new THREE.Vector3(...sp.edge.c).applyMatrix4(W);
-      showLabel(`Ø ${fmt(sp.edge.r * 2, 2)} mm   (R ${fmt(sp.edge.r, 2)})`, c);
-      const pos = Viewer.makeFat(hit.node.data.lines.slice(hit.node.data.edgeGroups.find((g) => g[2] === hit.edgeIdx)[0] * 3, (hit.node.data.edgeGroups.find((g) => g[2] === hit.edgeIdx)[0] + hit.node.data.edgeGroups.find((g) => g[2] === hit.edgeIdx)[1]) * 3), Viewer.theme.accent, 4, { depthTest: false });
+      const c = new THREE.Vector3(...ent.edge.c).applyMatrix4(W);
+      showLabel(`Ø ${fmt(ent.edge.r * 2, 2)} mm   (R ${fmt(ent.edge.r, 2)})`, c);
+      const g = hit.node.data.edgeGroups.find((x) => x[2] === hit.edgeIdx);
+      const pos = Viewer.makeFat(hit.node.data.lines.slice(g[0] * 3, (g[0] + g[1]) * 3), Viewer.theme.accent, 4, { depthTest: false });
       pos.matrixAutoUpdate = false; pos.matrix.copy(W); Viewer.groups.overlay.add(pos); objs.push(pos);
+      last = { text: els[0].textContent };
       return true;
     }
     if (pts.length >= 2) { pts = []; clearVis(); }
-    pts.push(sp.p);
-    const dot = Viewer.makeFat([sp.p.x, sp.p.y, sp.p.z, sp.p.x, sp.p.y, sp.p.z + 0.001], Viewer.theme.accent, 10, { depthTest: false }); Viewer.groups.overlay.add(dot); objs.push(dot);
-    if (pts.length === 2) {
-      const [a, b] = pts; const d = a.distanceTo(b);
-      const l = Viewer.makeFat([a.x, a.y, a.z, b.x, b.y, b.z], Viewer.theme.accent, 3, { depthTest: false, dashed: true, dashSize: 2, gapSize: 1.2 }); Viewer.groups.overlay.add(l); objs.push(l);
-      showLabel(`${fmt(d, 2)} mm   ΔX ${fmt(Math.abs(b.x - a.x), 2)}  ΔY ${fmt(Math.abs(b.y - a.y), 2)}  ΔZ ${fmt(Math.abs(b.z - a.z), 2)}`, a.clone().lerp(b, 0.5));
-    }
+    if (!pts.length) last = null;
+    pts.push(ent);
+    if (ent.kind === 'face') { const m = Viewer.faceOverlay(ent.id, ent.faceIdx, Viewer.theme.accent, 0.32); if (m) { Viewer.groups.overlay.add(m); objs.push(m); } }
+    else dot(ent.p);
+    if (pts.length === 1 && ent.kind === 'face') { showLabel(`Fläche ${fmt(ent.area, ent.area < 100 ? 2 : 1)} mm²`, ent.hitP); last = { text: els[els.length - 1].textContent }; }
+    if (pts.length === 2) result(pts[0], pts[1]);
     Viewer.requestRender();
     return true;
+  }
+  let last = null;
+  function result(a, b) {
+    for (const e of els) e.remove(); els = [];
+    let text = '';
+    if (a.kind === 'pt' && b.kind === 'pt') {
+      const d = a.p.distanceTo(b.p); dash(a.p, b.p);
+      text = `${fmt(d, 2)} mm   ΔX ${fmt(Math.abs(b.p.x - a.p.x), 2)}  ΔY ${fmt(Math.abs(b.p.y - a.p.y), 2)}  ΔZ ${fmt(Math.abs(b.p.z - a.p.z), 2)}`;
+      showLabel(text, a.p.clone().lerp(b.p, 0.5));
+    } else if (a.kind === 'face' && b.kind === 'face') {
+      const cs = Math.abs(a.n.dot(b.n));
+      if (cs > 0.99995) {   // parallel: Abstand der Ebenen
+        const d = Math.abs(b.c.clone().sub(a.c).dot(a.n));
+        const from = a.hitP, to = from.clone().addScaledVector(a.n, b.c.clone().sub(from).dot(a.n));
+        dash(from, to);
+        text = d < 1e-6 ? 'Beide Flächen liegen in einer Ebene' : `Abstand ${fmt(d, 2)} mm   (parallel)`;
+        showLabel(text, from.clone().lerp(to, 0.5));
+      } else {
+        const ang = (Math.acos(clamp(cs, -1, 1)) * 180) / Math.PI;
+        text = `Winkel ${fmt(ang, 2)}°   (zwischen den Flächen)`;
+        showLabel(text, a.hitP.clone().lerp(b.hitP, 0.5));
+      }
+    } else {   // Punkt und Fläche: senkrechter Abstand zur Ebene
+      const f = a.kind === 'face' ? a : b, q = a.kind === 'face' ? b : a;
+      const s = q.p.clone().sub(f.c).dot(f.n); const foot = q.p.clone().addScaledVector(f.n, -s);
+      dash(q.p, foot);
+      text = `Abstand ${fmt(Math.abs(s), 2)} mm   (Punkt zur Fläche)`;
+      showLabel(text, q.p.clone().lerp(foot, 0.5));
+    }
+    last = { text };
   }
   let lastLabel = null;
   function showLabel(text, p) {
@@ -8253,7 +8504,7 @@ const Measure = (() => {
     Viewer.canvas.addEventListener('pointerup', (e) => { if (on && d0 && Math.hypot(e.clientX - d0.x, e.clientY - d0.y) < 5) onDown(e); d0 = null; });
     Viewer.on('camera', place);
   }
-  return { init, toggle, start, stop, get active() { return on; } };
+  return { init, toggle, start, stop, get active() { return on; }, get result() { return last ? last.text : (els[0] ? els[0].textContent : null); } };
 })();
 
 // ---- 58-commands.js ----
@@ -8286,6 +8537,13 @@ const Commands = (() => {
     add('section', 'Schnitt ein/aus', 'section', 'schnitt aufschneiden querschnitt innen schnittebene', () => Views.section(), { group: 'Ansicht', kbd: 'C' });
     add('xray', 'Röntgen ein/aus', 'xray', 'röntgen durchsichtig transparent glas innen', () => Views.xray(), { group: 'Ansicht', kbd: 'X' });
     add('explode', 'Explosion: Teile auseinanderziehen', 'explode', 'explosion explosionsansicht auseinander zerlegen baugruppe', () => Views.explode(), { group: 'Ansicht', kbd: 'U' });
+    add('versions', 'Versionen: speichern, vergleichen, zurückholen', 'rollback', 'version versionen stand vergleichen zurück sichern', () => Versions.dialog(), { group: 'Projekt' });
+    add('version-save', 'Jetzigen Stand als Version speichern', 'save', 'version speichern sichern stand', async () => { const n = await UI.prompt('Version speichern', 'Name der Version', 'Version ' + (Versions.list().length + 1), 'Speichern'); if (n != null) Versions.save(n); }, { group: 'Projekt' });
+    add('similar', 'Ähnliche auswählen', 'similar', 'ähnliche gleiche alle auswählen bohrungen kanten', () => Select.similar(), { group: 'Bearbeiten', kbd: 'A', needSel: true });
+    add('filter-body', 'Auswahlfilter: nur Körper', 'cube', 'filter auswahl körper', () => Select.setFilter('body'), { group: 'Ansicht' });
+    add('filter-face', 'Auswahlfilter: nur Flächen', 'planeXY', 'filter auswahl flächen', () => Select.setFilter('face'), { group: 'Ansicht' });
+    add('filter-edge', 'Auswahlfilter: nur Kanten', 'line', 'filter auswahl kanten', () => Select.setFilter('edge'), { group: 'Ansicht' });
+    add('filter-all', 'Auswahlfilter aus (alles wählen)', 'pointer', 'filter auswahl alles', () => Select.setFilter('all'), { group: 'Ansicht' });
     add('focus', 'Fokus-Vorschau ein/aus', 'focusView', 'fokus vorschau zweites fenster lupe groß', () => Views.focus(), { group: 'Ansicht' });
     add('planes', 'Ursprungsebenen ein/aus', 'originPlanes', 'ursprung ebenen xy xz yz origin', () => ViewPrefs.toggle('planes'), { group: 'Ansicht' });
     add('axes', 'Achsen ein/aus', 'axes', 'achsen x y z', () => ViewPrefs.toggle('axes'), { group: 'Ansicht' });
@@ -8403,6 +8661,7 @@ const Commands = (() => {
     if (Views.onKey(e)) { e.preventDefault(); return; }
     if (k === 'f') { Viewer.fit(App.sel.length ? App.sel.map((id) => (Model.topOf(App.doc, id) || {}).id).filter(Boolean) : null); return; }
     if (k === 'h' && App.sel.length) { Actions.toggleRole(); return; }
+    if (k === 'a' && (App.sel.length || App.edges.length)) { Select.similar(); return; }
     if (k === 'r' && App.sel.length) { Actions.rotate90(null, 'z'); return; }
     if (k === 's') { Sketch.chooseAndStart(); return; }
     if (k === 'm') { Measure.toggle(); return; }
@@ -8431,7 +8690,7 @@ const Commands = (() => {
     const M = mac ? '⌘' : 'Strg';
     const groups = [
       ['Ansicht', [['Linke Maustaste ziehen', 'Ansicht drehen'], ['Rechte Maustaste ziehen', 'Ansicht verschieben'], ['Mausrad', 'Zoomen'], ['F', 'Auswahl oder alles zeigen'], ['1 · 3 · 7 · 0', 'Ansicht vorne · rechts · oben · schräg'], ['O', 'Orthografisch / Perspektive'], ['G', 'Raster ein / aus'], ['C', 'Schnitt ein / aus'], ['X', 'Röntgen ein / aus'], ['U', 'Explosion ein / aus'], ['I', 'Gewähltes Teil isolieren / alle zeigen']]],
-      ['Modell', [['Klicken', 'Körper, Fläche oder Kante wählen'], ['Umschalt + Klick', 'Mehrere wählen'], ['Ziehen', 'Körper verschieben – dabei Zahl tippen für genaue Werte'], ['Doppelklick', 'Skizze eines Skizzenkörpers bearbeiten'], ['E', 'Skizze bzw. Bauteil bearbeiten'], ['Esc', 'Auswahl aufheben · Bauteil verlassen'], ['Entf', 'Löschen'], ['H', 'Körper ↔ Loch'], ['R', 'Um 90° drehen'], ['Pfeiltasten', 'Um einen Rasterschritt verschieben (Umschalt: 10)'], ['Bild ↑ / Bild ↓', 'Anheben / Absenken'], [M + ' D', 'Duplizieren'], [M + ' G', 'Gruppieren (Umschalt: lösen)'], [M + ' A', 'Alles wählen']]],
+      ['Modell', [['Klicken', 'Körper, Fläche oder Kante wählen'], ['Umschalt + Klick', 'Mehrere wählen'], ['Ziehen', 'Körper verschieben – dabei Zahl tippen für genaue Werte'], ['Doppelklick', 'Skizze eines Skizzenkörpers bearbeiten'], ['E', 'Skizze bzw. Bauteil bearbeiten'], ['Esc', 'Auswahl aufheben · Bauteil verlassen'], ['Entf', 'Löschen'], ['H', 'Körper ↔ Loch'], ['A', 'Ähnliche auswählen (gleiche Teile oder Kanten)'], ['R', 'Um 90° drehen'], ['Pfeiltasten', 'Um einen Rasterschritt verschieben (Umschalt: 10)'], ['Bild ↑ / Bild ↓', 'Anheben / Absenken'], [M + ' D', 'Duplizieren'], [M + ' G', 'Gruppieren (Umschalt: lösen)'], [M + ' A', 'Alles wählen']]],
       ['Werkzeuge', [['S', 'Skizze'], ['M', 'Messen'], ['N', 'Notizstift (P Stift · T Text · E Radierer)'], ['K', 'Körper'], ['B', 'Bauteile'], ['/ oder ' + M + ' K', 'Eingabezeile']]],
       ['In der Skizze', [['V', 'Auswahl'], ['L · R · C · A', 'Linie · Rechteck · Kreis · Bogen'], ['G · P · S', 'Langloch · Vieleck · Spline'], ['T · F', 'Trimmen · Versatz'], ['M · Q · W', 'Spiegeln · Rechteckmuster · Kreismuster'], ['X', 'Hilfslinie (neue Elemente oder das gewählte)'], ['Alt halten', 'Nicht einrasten'], ['D', 'Maß festlegen (auch Formel)'], ['Zahl tippen', 'Genaue Länge beim Zeichnen'], ['Tab', 'Nächstes Eingabefeld'], ['Umschalt halten', 'Feiner einrasten'], ['Enter', 'Linienzug beenden · Skizze fertig'], ['Esc', 'Zeichnen abbrechen · Skizze verlassen']]],
       ['Dateien und Verlauf', [[M + ' Z', 'Rückgängig'], [M + ' Y', 'Wiederholen'], [M + ' S', 'Projekt speichern'], [M + ' E', 'Exportieren (STEP und mehr)'], ['?', 'Diese Übersicht']]],
@@ -8462,6 +8721,145 @@ const Commands = (() => {
   return { init, search, setMode, showKeys, list: () => C };
 })();
 
+// ---- 59-versions.js ----
+// ================= Versionen: Stände speichern, vergleichen, zurückholen =================
+// Versionen liegen außerhalb des Projekts im Browser-Speicher (sonst würde jeder Rückgängig-Schritt
+// alle Versionen mitschleppen). Beim Speichern als Datei kommen sie mit in die Datei.
+const Versions = (() => {
+  const key = (id) => 'masswerk.versions.' + id;
+  function list(id = App.doc.id) { try { const a = JSON.parse(storageGet(key(id)) || '[]'); return Array.isArray(a) ? a : []; } catch (_) { return []; } }
+  function store(arr, id = App.doc.id) { return storageSet(key(id), JSON.stringify(arr)); }
+  function snapshotDoc() { const d = JSON.parse(App.snapshot()); delete d.versions; return d; }
+  function save(name) {
+    const arr = list();
+    const v = { id: uid('v'), name: (name || '').trim() || 'Version ' + (arr.length + 1), t: Date.now(), doc: snapshotDoc() };
+    arr.push(v);
+    if (!store(arr)) { UI.toast('Die Version passt nicht mehr in den Browser-Speicher. Lösche ältere Versionen oder speichere das Projekt als Datei.', { kind: 'bad', ms: 6000 }); arr.pop(); return null; }
+    UI.toast(`„${v.name}“ gespeichert.`, { icon: 'check' });
+    ev.emit('change');
+    return v;
+  }
+  function remove(vid) { store(list().filter((v) => v.id !== vid)); ev.emit('change'); }
+  function rename(vid, name) { const arr = list(); const v = arr.find((x) => x.id === vid); if (v && name.trim()) { v.name = name.trim(); store(arr); ev.emit('change'); } }
+  // Zurückholen ist ein normaler Schritt – Rückgängig bringt den Stand von eben zurück
+  function restore(vid) {
+    const v = list().find((x) => x.id === vid); if (!v) return;
+    compareOff();
+    App.change(`Version „${v.name}“ zurückgeholt`, (doc) => {
+      const keep = { id: doc.id, name: doc.name, created: doc.created };
+      const src = JSON.parse(JSON.stringify(v.doc));
+      for (const k of Object.keys(doc)) delete doc[k];
+      Object.assign(doc, src, keep);
+      Model.migrate(doc);
+    });
+    App.clearSelection();
+    UI.toast(`„${v.name}“ zurückgeholt. Strg/Cmd+Z macht das wieder rückgängig.`, { icon: 'rollback', ms: 4500 });
+  }
+  // Dateien: Versionen mitnehmen und wieder einlesen
+  function exportList() { return list(); }
+  function importList(id, arr) { if (Array.isArray(arr) && arr.length) store(arr.filter((v) => v && v.doc && v.doc.format === 'masswerk'), id); }
+
+  // ---------- Unterschiede ----------
+  const ev = makeEmitter();
+  function allItems(doc) { const m = new Map(); Model.walk(doc.items, (it) => { m.set(it.id, it); }); return m; }
+  function diff(oldDoc, newDoc) {
+    const out = { params: [], added: [], removed: [], changed: [] };
+    const po = new Map((oldDoc.params || []).map((p) => [p.name, p])), pn = new Map((newDoc.params || []).map((p) => [p.name, p]));
+    for (const [n, p] of pn) { const o = po.get(n); if (!o) out.params.push({ name: n, from: null, to: p.expr }); else if (String(o.expr) !== String(p.expr)) out.params.push({ name: n, from: o.expr, to: p.expr }); }
+    for (const [n, o] of po) if (!pn.has(n)) out.params.push({ name: n, from: o.expr, to: null });
+    const io = allItems(oldDoc), inew = allItems(newDoc);
+    for (const [id, it] of inew) {
+      const o = io.get(id);
+      if (!o) { out.added.push(Model.label(it)); continue; }
+      const what = [];
+      if (JSON.stringify(o.p) !== JSON.stringify(it.p)) what.push('Maße');
+      if (JSON.stringify(o.t) !== JSON.stringify(it.t)) what.push('Lage');
+      if (o.role !== it.role) what.push(it.role === 'hole' ? 'jetzt Loch' : 'jetzt Körper');
+      if (JSON.stringify(o.finishes || []) !== JSON.stringify(it.finishes || [])) what.push('Kanten');
+      if ((o.mat || '') !== (it.mat || '')) what.push('Material');
+      if (!!o.suppressed !== !!it.suppressed) what.push(it.suppressed ? 'unterdrückt' : 'wieder aktiv');
+      if (!!o.hidden !== !!it.hidden) what.push(it.hidden ? 'ausgeblendet' : 'eingeblendet');
+      if (o.color !== it.color) what.push('Farbe');
+      if ((o.name || '') !== (it.name || '')) what.push('Name');
+      if (what.length) out.changed.push({ name: Model.label(it), what });
+    }
+    for (const [id, o] of io) if (!inew.has(id)) out.removed.push(Model.label(o));
+    return out;
+  }
+
+  // ---------- Vergleich im Bild ----------
+  let cmp = null;   // { v, bar }
+  async function compare(vid) {
+    const v = list().find((x) => x.id === vid); if (!v) return;
+    compareOff();
+    const old = JSON.parse(JSON.stringify(v.doc)); Model.migrate(old);
+    const d = diff(old, App.doc);
+    const bar = h('div', { class: 'viewbar cmpbar', role: 'region', 'aria-label': 'Vergleich' });
+    const head = h('div', { class: 'vb-head' }, h('span', { class: 'title' }, 'Vergleich'));
+    const close = h('button', { type: 'button', class: 'vb-x', 'aria-label': 'Vergleich beenden' }); close.innerHTML = icon('close'); close.onclick = () => compareOff();
+    head.append(close);
+    const leg = h('div', { class: 'vb-hint', html: `Rot gestrichelt: <b>${esc(v.name)}</b> (${new Date(v.t).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })}). Farbig: jetzt.` });
+    const list2 = h('ul', { class: 'cmp-list' });
+    const li = (t) => list2.append(h('li', { html: t }));
+    for (const p of d.params) li(p.from == null ? `Maß <b>${esc(p.name)}</b> neu: ${esc(String(p.to))}` : p.to == null ? `Maß <b>${esc(p.name)}</b> entfernt` : `Maß <b>${esc(p.name)}</b>: ${esc(String(p.from))} → ${esc(String(p.to))}`);
+    for (const n of d.added) li(`<b>${esc(n)}</b> hinzugekommen`);
+    for (const n of d.removed) li(`<b>${esc(n)}</b> entfernt`);
+    for (const c of d.changed) li(`<b>${esc(c.name)}</b>: ${c.what.join(', ')}`);
+    if (!list2.children.length) li('Keine Unterschiede.');
+    const wt = h('div', { class: 'vb-hint', id: 'cmp-weight' }, 'Gewicht wird berechnet …');
+    const show = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'cmp-show', checked: true }), 'Alten Stand im Bild zeigen');
+    show.querySelector('input').onchange = (e) => Viewer.setCompare(e.target.checked && cmp ? cmp.nodes : null);
+    bar.append(head, leg, list2, wt, show);
+    Views.bars().append(bar);
+    cmp = { v, bar, diff: d, nodes: null };
+    // Gewicht vorher / nachher
+    Promise.all([Mass.measureDoc(old), Mass.measure()]).then(([a, b]) => {
+      if (!cmp || cmp.bar !== bar) return;
+      if (!a || !b) { wt.textContent = ''; return; }
+      const dg = b.mass - a.mass;
+      wt.innerHTML = `Gewicht: ${Mass.gText(a.mass)} → <b>${Mass.gText(b.mass)}</b> (${dg >= 0 ? '+' : '−'}${Mass.gText(Math.abs(dg))})`;
+    });
+    // Form des alten Stands als Umriss
+    try {
+      const res = await Kernel.call('evaluate', { scene: Model.kernelScene(old), known: {} });
+      if (!cmp || cmp.bar !== bar) return;
+      const tops = new Map(old.items.map((it) => [it.id, it]));
+      cmp.nodes = res.nodes.filter((n) => !n.empty && tops.has(n.id) && tops.get(n.id).role !== 'hole').map((n) => ({ id: n.id, data: n, matrix: Model.localMatrix(tops.get(n.id)) }));
+      Viewer.setCompare(cmp.nodes);
+    } catch (_) {}
+    ev.emit('compare');
+  }
+  function compareOff() { if (!cmp) return; cmp.bar.remove(); cmp = null; Viewer.setCompare(null); ev.emit('compare'); }
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  // ---------- Fenster ----------
+  function dialog() {
+    const body = h('div', { class: 'versions', style: { display: 'grid', gap: '12px', minWidth: 'min(460px, 82vw)' } });
+    const draw = () => {
+      body.innerHTML = '';
+      const row = h('div', { class: 'btn-row' });
+      const sv = h('button', { type: 'button', class: 'btn primary', id: 'ver-save' }); sv.innerHTML = icon('save') + 'Jetzigen Stand als Version speichern';
+      sv.onclick = async () => { const n = await UI.prompt('Version speichern', 'Name der Version', 'Version ' + (list().length + 1), 'Speichern'); if (n != null) { save(n); draw(); } };
+      row.append(sv); body.append(row);
+      const arr = list().slice().reverse();
+      if (!arr.length) { body.append(h('div', { class: 'hint-box', html: 'Noch keine Versionen. Speichere einen Stand, bevor du etwas ausprobierst – dann kannst du später vergleichen oder zurück.' })); return; }
+      const ul = h('div', { class: 'mini-list' });
+      for (const v of arr) {
+        const r = h('div', { class: 'mini-row ver-row', 'data-vid': v.id });
+        const nm = h('span', { class: 'grow' }, h('b', null, v.name), h('small', { style: { display: 'block', color: 'var(--muted)' } }, new Date(v.t).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' })));
+        const bc = h('button', { type: 'button', class: 'btn small ver-cmp' }, 'Vergleichen'); bc.onclick = () => { m.close(); compare(v.id); };
+        const br = h('button', { type: 'button', class: 'btn small ver-restore' }, 'Zurückholen'); br.onclick = async () => { if (await UI.confirm('Version zurückholen?', `Das Projekt wird auf „${v.name}“ gesetzt. Mit Rückgängig kommst du wieder hierher.`, 'Zurückholen')) { m.close(); restore(v.id); } };
+        const bd = h('button', { type: 'button', class: 'btn ghost small ver-del', 'aria-label': 'Version löschen', 'data-tip': 'Version löschen' }); bd.innerHTML = icon('trash'); bd.onclick = async () => { if (await UI.confirm('Version löschen?', `„${v.name}“ wird gelöscht.`, 'Löschen', true)) { remove(v.id); draw(); } };
+        r.append(nm, bc, br, bd); ul.append(r);
+      }
+      body.append(ul);
+    };
+    draw();
+    const m = UI.modal({ title: 'Versionen', body, actions: [{ label: 'Schließen', primary: true }] });
+  }
+  function init() { App.on('doc', () => { if (cmp && !App.doc) compareOff(); }); }
+  return { init, list, save, remove, rename, restore, compare, compareOff, diff, dialog, exportList, importList, on: ev.on, get comparing() { return cmp ? { name: cmp.v.name, diff: cmp.diff, shown: !!(cmp.nodes && cmp.nodes.length) } : null; } };
+})();
 // ---- 60-print.js ----
 // ================= Modell-Status und Export =================
 // (Der Name „Print“ ist historisch – hier gibt es keinen Drucker und keine Druckplatte mehr.)
@@ -9965,7 +10363,9 @@ const Start = (() => {
     try {
       const txt = await f.text(); const doc = JSON.parse(txt);
       Model.migrate(doc);
+      const vers = Array.isArray(doc.versions) ? doc.versions : null; delete doc.versions;
       if (App.loadStored(doc.id) && doc.id !== App.doc.id) doc.id = uid('p');
+      if (vers) Versions.importList(doc.id, vers);
       App.setDoc(doc); hide();
       App.fileSavedRev = App.revision;
       UI.toast(`„${doc.name}“ geöffnet.`, { icon: 'folder' });
@@ -9985,7 +10385,8 @@ const Start = (() => {
   });
   async function saveFile() {
     const name = Print.safeName(App.doc.name);
-    const ok = await Print.save(name + '.tracery.json', JSON.stringify(App.doc, null, 1));
+    const vers = Versions.exportList();
+    const ok = await Print.save(name + '.tracery.json', JSON.stringify(vers.length ? { ...App.doc, versions: vers } : App.doc, null, 1));
     if (ok) App.fileSavedRev = App.revision;
   }
   return { show, hide, newProject, openFile, openBlob, saveFile, get open() { return !!el; } };
@@ -10078,8 +10479,8 @@ const Tour = (() => {
   window.__masswerk = { App, Viewer, Model, Actions, Sketch, SK, THREE, Print, Drawing, Kernel, UI, Commands, Panels, Handles, Start, AI, Measure, Place };
   UI.initTips();
   Viewer.init($('#viewport'));
-  window.__V = Viewer; window.__M = { App, Actions, Model, Timeline, Start, Comp, Handles, Sketch, SK, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views }; window.__S = Start; // für automatische Tests
-  Panels.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Notes.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init(); Refine.init(); Comp.init(); Views.init();
+  window.__V = Viewer; window.__M = { App, Actions, Model, Timeline, Start, Comp, Handles, Sketch, SK, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views, Mass, Select, Versions }; window.__S = Start; // für automatische Tests
+  Panels.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Notes.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init(); Refine.init(); Comp.init(); Views.init(); Mass.init(); Versions.init();
 
   // Kopfzeile
   $('#btn-undo').onclick = () => App.undo();
@@ -10095,6 +10496,7 @@ const Tour = (() => {
     { label: 'Projekt umbenennen', icon: 'edit', run: async () => { const n = await UI.prompt('Projekt umbenennen', 'Name', App.doc.name, 'Umbenennen'); if (n && n.trim()) App.change('Projekt umbenannt', (doc) => { doc.name = n.trim(); }); } },
     { label: 'Als Datei speichern', icon: 'save', kbd: 'Strg S', run: () => Start.saveFile() },
     { label: 'Datei öffnen …', icon: 'folder', run: () => Start.openFile() },
+    { label: 'Versionen …', icon: 'rollback', help: 'versions', run: () => Versions.dialog() },
     '-',
     { label: 'Neues Projekt', icon: 'newfile', run: () => Start.newProject() },
     { label: 'Startseite und Vorlagen', icon: 'home', run: () => Start.show() },

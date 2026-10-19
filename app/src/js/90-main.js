@@ -11,8 +11,8 @@
   window.__masswerk = { App, Viewer, Model, Actions, Sketch, SK, THREE, Print, Drawing, Kernel, UI, Commands, Panels, Handles, Start, AI, Measure, Place };
   UI.initTips();
   Viewer.init($('#viewport'));
-  window.__V = Viewer; window.__M = { App, Actions, Model, Timeline, Start, Comp, Handles, Sketch, SK, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views }; window.__S = Start; // für automatische Tests
-  Panels.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Notes.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init(); Refine.init(); Comp.init(); Views.init();
+  window.__V = Viewer; window.__M = { App, Actions, Model, Timeline, Start, Comp, Handles, Sketch, SK, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views, Mass, Select, Versions }; window.__S = Start; // für automatische Tests
+  Panels.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Notes.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init(); Refine.init(); Comp.init(); Views.init(); Mass.init(); Versions.init();
 
   // Kopfzeile
   $('#btn-undo').onclick = () => App.undo();
@@ -28,6 +28,7 @@
     { label: 'Projekt umbenennen', icon: 'edit', run: async () => { const n = await UI.prompt('Projekt umbenennen', 'Name', App.doc.name, 'Umbenennen'); if (n && n.trim()) App.change('Projekt umbenannt', (doc) => { doc.name = n.trim(); }); } },
     { label: 'Als Datei speichern', icon: 'save', kbd: 'Strg S', run: () => Start.saveFile() },
     { label: 'Datei öffnen …', icon: 'folder', run: () => Start.openFile() },
+    { label: 'Versionen …', icon: 'rollback', help: 'versions', run: () => Versions.dialog() },
     '-',
     { label: 'Neues Projekt', icon: 'newfile', run: () => Start.newProject() },
     { label: 'Startseite und Vorlagen', icon: 'home', run: () => Start.show() },

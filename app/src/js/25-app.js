@@ -17,7 +17,7 @@ const App = (() => {
     S.sel = []; S.face = null; S.edges = []; S.undo = []; S.redo = []; S.extra = []; S.ctx = null; S.iso = null;
     for (const id of [...S.results.keys()]) Viewer.removeNode(id);
     S.results.clear(); S.errors = []; S.revision++;
-    Viewer.clearGhosts(); Views.reset();
+    Viewer.clearGhosts(); Views.reset(); Versions.compareOff();
     ev.emit('doc'); ev.emit('selection'); ev.emit('history');
     autosave();
     rebuild().then(() => { if (opts.fit !== false) Viewer.fit(null, false); });
@@ -122,7 +122,7 @@ const App = (() => {
   }, 700);
   function recentProjects() { try { return JSON.parse(storageGet('masswerk.index') || '[]'); } catch (_) { return []; } }
   function loadStored(id) { try { const s = storageGet('masswerk.proj.' + id); return s ? JSON.parse(s) : null; } catch (_) { return null; } }
-  function deleteStored(id) { storageDel('masswerk.proj.' + id); const idx = recentProjects().filter((x) => x.id !== id); storageSet('masswerk.index', JSON.stringify(idx)); }
+  function deleteStored(id) { storageDel('masswerk.proj.' + id); storageDel('masswerk.versions.' + id); const idx = recentProjects().filter((x) => x.id !== id); storageSet('masswerk.index', JSON.stringify(idx)); }
 
   // ---------- Neuberechnung ----------
   function rebuild() {

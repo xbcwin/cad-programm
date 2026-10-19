@@ -342,7 +342,7 @@ const Interact = (() => {
         }
       }
     }
-    const hit = Viewer.pick(e.clientX, e.clientY);
+    const hit = Select.adjust(Viewer.pick(e.clientX, e.clientY, Select.pickOpts()));
     down = { x: e.clientX, y: e.clientY, hit, t: performance.now(), shift: e.shiftKey || e.metaKey || e.ctrlKey };
     if (hit && !(App.ctx && hit.id === App.ctx) && !Views.exploded) {   // im Bauteil-Modus nicht das ganze Bauteil verschieben
       const top = App.doc.items.find((x) => x.id === hit.id);
@@ -365,7 +365,7 @@ const Interact = (() => {
       const hnd = Handles.hitHandle(e.clientX, e.clientY);
       Handles.hover(hnd);
       if (hnd) { Viewer.canvas.style.cursor = hnd.userData.kind === 'rot' ? 'grab' : 'pointer'; Viewer.clearHover(); return; }
-      const hit = Viewer.pick(e.clientX, e.clientY);
+      const hit = Select.adjust(Viewer.pick(e.clientX, e.clientY, Select.pickOpts()));
       if (hit && hit.edgeIdx != null) { Viewer.highlightEdge(hit.id, hit.edgeIdx); Viewer.highlightFace('hover', null, null); }
       else if (hit) { Viewer.highlightEdge(null, null); Viewer.highlightFace('hover', hit.id, hit.faceIdx); }
       else Viewer.clearHover();
@@ -459,6 +459,7 @@ const Interact = (() => {
       return;
     }
     if (additive) { App.select([id], { additive: true }); return; }
+    if (hit.bodyOnly || hit.faceIdx < 0) { App.select([id]); return; }
     App.select([id], { face: { id, faceIdx: hit.faceIdx, point: hit.point.toArray(), normal: hit.normal ? hit.normal.toArray() : null } });
   }
   // Zahl tippen während des Ziehens
