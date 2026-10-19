@@ -1,6 +1,6 @@
 # Testliste
 
-Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 6 (17.10.2026).
+Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 7 (17.10.2026).
 
 **[x]** = automatisch geprüft mit `tests/klicktest.py` (echter Browser, echte Klicks) · **[ ]** = noch von Hand ansehen
 
@@ -18,7 +18,8 @@ Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 6 (17.10.
 | Fiese Tests | 6 | 5 | „Sehr fein“ flüssig? |
 | Notizstift | 6 | 3 | Kleben beim Drehen, Farbe/Dicke, Doppelklick auf Textnotiz |
 | Regeln in der Skizze | 11 | 9 | Blau/dunkel gut erkennbar? Ziehen flüssig? |
-| **Gesamt** | **72** | **64** | **8 Punkte, dazu ein Blick auf Animationen** |
+| Skizzen-Feinschliff | 10 | 9 | Fangmarkierungen gut erkennbar? |
+| **Gesamt** | **82** | **73** | **9 Punkte, dazu ein Blick auf Animationen** |
 
 Wichtig: Automatisch geprüft heißt „funktioniert in Chromium unter Linux“. Safari auf dem Mac, Touch auf dem iPad und echte Grafikkarten sieht nur ein Test von Hand.
 
@@ -171,6 +172,42 @@ Vorbereitung: `app/` über einen lokalen Server öffnen (siehe README), Seite ne
 - [ ] **Ziehen fühlt sich flüssig an**
   Schritte: 1. In einer Skizze mit vielen Regeln Punkte ziehen.
   Erwartet: Kein Ruckeln. (Automatisch gemessen: Löser braucht etwa 3 ms – das Gefühl prüft nur ein Mensch.)
+
+## Skizzen-Feinschliff (neu in Sitzung 7)
+
+- [x] **Spline**
+  Schritte: 1. In der Skizze S drücken. 2. Vier Punkte klicken, Enter. 3. Neu: drei Punkte klicken, dann den ersten nochmal. 4. V, einen Punkt ziehen.
+  Erwartet: Weiche Kurve genau durch die Punkte; die zweite Kurve ist geschlossen und zählt als Fläche; beim Ziehen folgt die Kurve, Strg/Cmd+Z holt den Punkt zurück.
+- [x] **Trimmen**
+  Schritte: 1. Zwei sich kreuzende Linien, T drücken. 2. Über ein Stück fahren (rot), klicken. 3. Dasselbe an einem Kreis und an einem Rechteck.
+  Erwartet: Nur das Stück bis zum Schnittpunkt verschwindet; der Rest sitzt per Regel auf der anderen Linie. Ein Kreis wird zum Bogen. Das Rechteck wird in Linien zerlegt. Strg/Cmd+Z bringt alles zurück.
+- [x] **Versatz**
+  Schritte: 1. F drücken, Rechteckkante anklicken, Maus nach außen, `3` tippen, Enter. 2. Das Original auf 30 mm Breite stellen. 3. Einen Kreis anklicken und die Maus nach außen klicken.
+  Erwartet: Das neue Rechteck liegt genau 3 mm außen, wächst mit dem Original mit. Beim Kreis entsteht ein größerer, konzentrischer Kreis.
+- [x] **Versatz einer Kette**
+  Schritte: 1. Zwei Linien mit gemeinsamer Ecke. 2. F, eine Linie anklicken, Abstand 5 tippen.
+  Erwartet: Beide Linien werden versetzt, die Ecke bleibt sauber geschlossen.
+- [x] **Spiegeln**
+  Schritte: 1. Senkrechte Hilfslinie (X) als Achse, rechts ein Kreis und eine Linie. 2. M, Achse anklicken, Kreis und Linie anklicken, Enter. 3. Den Kreis im Original verschieben.
+  Erwartet: Spiegelbild auf der anderen Seite mit Symmetrie-Symbolen; wandert das Original, folgt das Spiegelbild.
+- [x] **Rechteckmuster**
+  Schritte: 1. Kreis zeichnen. 2. Q, Kreis anklicken, rechts 3 × 2 mit Abstand 10 / 8 einstellen, „Muster anlegen“. 3. Kreis-Durchmesser ändern.
+  Erwartet: Sechs Kreise im Raster; alle werden gleich groß, wenn man das Original ändert.
+- [x] **Kreismuster**
+  Schritte: 1. Kreis bei X = 20. 2. W, Kreis anklicken, Anzahl 4, „Muster anlegen“.
+  Erwartet: Vier Kreise rund um den Nullpunkt (Mitte wählbar über „Mittelpunkt wählen“). Rechtecke werden dabei in Linien zerlegt.
+- [x] **Fangen**
+  Schritte: 1. Zwei sich kreuzende Linien. 2. Neue Linie am Schnittpunkt beginnen. 3. Rechts bei „Fangen“ „Schnittpunkte“ abhaken und wiederholen. 4. Mit gedrückter Alt-Taste klicken.
+  Erwartet: Mit Fang liegt der Startpunkt genau im Schnittpunkt, ohne Fang nicht. Mit Alt wird gar nicht gefangen. Kreise werden an ihren Viertelpunkten gefangen.
+- [x] **Hilfslinien**
+  Schritte: 1. X drücken, Rechteck zeichnen. 2. X nochmal, zweites Rechteck. 3. Rechteck wählen, X.
+  Erwartet: Das erste Rechteck ist gestrichelt und zählt nicht zur Fläche; X auf einem gewählten Element wandelt es um.
+- [x] **Hilfetexte der neuen Werkzeuge**
+  Schritte: 1. Maus auf Spline, Trimmen, Versatz, Spiegeln, Muster oder die Hilfslinien-Taste legen.
+  Erwartet: Kurzer Text, dann Anleitung mit Tipp.
+- [ ] **Fangmarkierungen**
+  Schritte: 1. Mit dem Linienwerkzeug über Endpunkt, Mitte, Schnittpunkt, Kreis-Viertelpunkt fahren.
+  Erwartet: Jede Art hat ihre eigene Form (Quadrat, Dreieck, Kreuz, Raute …) und einen Hinweis. Ob man sie gut erkennt, sieht nur ein Mensch.
 
 ## Notizstift (neu)
 

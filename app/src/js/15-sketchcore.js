@@ -33,6 +33,38 @@ const SK = (() => {
     return pts;
   }
   function circlePoints(c, r, n = 72) { const pts = []; for (let i = 0; i < n; i++) { const t = (i / n) * TAU; pts.push([c[0] + Math.cos(t) * r, c[1] + Math.sin(t) * r]); } return pts; }
+  // Spline: weiche Kurve genau durch alle Punkte (Catmull-Rom, „centripetal“ – macht keine Schleifen und Überschwinger)
+  function splinePoints(pts, closed) {
+    const n = pts.length;
+    if (n < 2) return pts.slice();
+    if (n === 2 && !closed) return [pts[0], pts[1]];
+    const P = (i) => {
+      if (closed) return pts[((i % n) + n) % n];
+      if (i < 0) return [2 * pts[0][0] - pts[1][0], 2 * pts[0][1] - pts[1][1]];
+      if (i > n - 1) return [2 * pts[n - 1][0] - pts[n - 2][0], 2 * pts[n - 1][1] - pts[n - 2][1]];
+      return pts[i];
+    };
+    const out = [];
+    const spans = closed ? n : n - 1;
+    for (let i = 0; i < spans; i++) {
+      const p0 = P(i - 1), p1 = P(i), p2 = P(i + 1), p3 = P(i + 2);
+      const t0 = 0, t1 = t0 + Math.sqrt(Math.max(d2(p0, p1), 1e-9)), t2 = t1 + Math.sqrt(Math.max(d2(p1, p2), 1e-9)), t3 = t2 + Math.sqrt(Math.max(d2(p2, p3), 1e-9));
+      const N = Math.max(6, Math.min(48, Math.ceil(d2(p1, p2) / 0.8)));
+      for (let k = 0; k < N; k++) {
+        const t = t1 + ((t2 - t1) * k) / N;
+        const mix = (a, b, ta, tb) => [a[0] * ((tb - t) / (tb - ta)) + b[0] * ((t - ta) / (tb - ta)), a[1] * ((tb - t) / (tb - ta)) + b[1] * ((t - ta) / (tb - ta))];
+        const A1 = mix(p0, p1, t0, t1), A2 = mix(p1, p2, t1, t2), A3 = mix(p2, p3, t2, t3);
+        const B1 = mix(A1, A2, t0, t2), B2 = mix(A2, A3, t1, t3);
+        out.push(mix(B1, B2, t1, t2));
+      }
+    }
+    out.push(closed ? out[0] : pts[n - 1]);
+    return out;
+  }
+  const endA = (e) => (e.type === 'spline' ? e.pts[0] : e.a);
+  const endB = (e) => (e.type === 'spline' ? e.pts[e.pts.length - 1] : e.b);
+  // Linienstücke einer Punktfolge (für Flächen und den CAD-Kern: Splines gehen dort als feine Linienzüge hin)
+  function lineSegsOf(pts) { const o = []; for (let i = 0; i < pts.length - 1; i++) if (d2(pts[i], pts[i + 1]) > 1e-9) o.push({ t: 'line', a: pts[i], b: pts[i + 1] }); return o; }
   function rectCorners(e) { const [x0, y0] = e.a, [x1, y1] = e.b; return [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]; }
   function polyCorners(e) { const pts = []; const n = Math.max(3, Math.round(e.n || 6)); for (let i = 0; i < n; i++) { const t = (e.rot || 0) + (i / n) * TAU + Math.PI / 2; pts.push([e.c[0] + Math.cos(t) * e.r, e.c[1] + Math.sin(t) * e.r]); } return pts; }
   function slotSegs(e) {
@@ -57,6 +89,7 @@ const SK = (() => {
       case 'poly': { const c = polyCorners(e); return c.map((p, i) => ({ t: 'line', a: p, b: c[(i + 1) % c.length] })); }
       case 'slot': { if (d2(e.a, e.b) < 1e-9) return [{ t: 'circle', c: e.a, r: e.r }]; return slotSegs(e); }
       case 'circle': return [{ t: 'circle', c: e.c, r: e.r }];
+      case 'spline': return e.pts && e.pts.length >= 2 ? [{ t: 'spline', pts: e.pts, closed: !!e.closed }] : [];
     }
     return [];
   }
@@ -64,6 +97,7 @@ const SK = (() => {
     if (s.t === 'line') return [s.a, s.b];
     if (s.t === 'arc') return arcPoints(s.a, s.m, s.b);
     if (s.t === 'circle') { const p = circlePoints(s.c, s.r); p.push(p[0]); return p; }
+    if (s.t === 'spline') return splinePoints(s.pts, s.closed);
     return [];
   }
   function polyArea(pts) { let a = 0; for (let i = 0, n = pts.length; i < n; i++) { const p = pts[i], q = pts[(i + 1) % n]; a += p[0] * q[1] - q[0] * p[1]; } return a / 2; }
@@ -93,12 +127,18 @@ const SK = (() => {
         if (e.type === 'rect' && (Math.abs(e.a[0] - e.b[0]) < 1e-6 || Math.abs(e.a[1] - e.b[1]) < 1e-6)) continue;
         out.push(loopFromSegs(segs, e.id, [e.id])); continue;
       }
+      if (e.type === 'spline') {
+        if (!e.pts || e.pts.length < 2) continue;
+        if (e.closed) { if (e.pts.length >= 3) { const sp = splinePoints(e.pts, true); out.push(loopFromSegs(lineSegsOf(sp), e.id, [e.id])); } continue; }
+        if (d2(endA(e), endB(e)) > 1e-9) open.push(e);
+        continue;
+      }
       if (e.type === 'line' || e.type === 'arc') { if (d2(e.a, e.b) > 1e-9) open.push(e); }
     }
     // offene Linien und Bögen zu geschlossenen Zügen verbinden
     const adj = new Map();
     const addV = (p, e, end) => { const k = qkey(p); if (!adj.has(k)) adj.set(k, []); adj.get(k).push({ e, end }); };
-    for (const e of open) { addV(e.a, e, 'a'); addV(e.b, e, 'b'); }
+    for (const e of open) { addV(endA(e), e, 'a'); addV(endB(e), e, 'b'); }
     const used = new Set();
     for (const start of open) {
       if (used.has(start.id)) continue;
@@ -106,23 +146,24 @@ const SK = (() => {
       const comp = []; const stack = [start]; const seen = new Set([start.id]);
       while (stack.length) {
         const e = stack.pop(); comp.push(e);
-        for (const p of [e.a, e.b]) for (const n of adj.get(qkey(p)) || []) if (!seen.has(n.e.id)) { seen.add(n.e.id); stack.push(n.e); }
+        for (const p of [endA(e), endB(e)]) for (const n of adj.get(qkey(p)) || []) if (!seen.has(n.e.id)) { seen.add(n.e.id); stack.push(n.e); }
       }
       comp.forEach((e) => used.add(e.id));
-      const degOk = comp.every((e) => [e.a, e.b].every((p) => (adj.get(qkey(p)) || []).length === 2));
+      const degOk = comp.every((e) => [endA(e), endB(e)].every((p) => (adj.get(qkey(p)) || []).length === 2));
       if (!degOk || comp.length < 2) continue;
       // der Reihe nach durchlaufen
-      const segs = []; let cur = comp[0]; let from = cur.a; const visited = new Set();
+      const segs = []; let cur = comp[0]; let from = endA(cur); const visited = new Set();
       for (let guard = 0; guard < comp.length + 1 && cur && !visited.has(cur.id); guard++) {
         visited.add(cur.id);
-        const forward = qkey(cur.a) === qkey(from);
-        const a = forward ? cur.a : cur.b, b = forward ? cur.b : cur.a;
-        segs.push(cur.type === 'arc' ? { t: 'arc', a, m: cur.m, b } : { t: 'line', a, b });
+        const forward = qkey(endA(cur)) === qkey(from);
+        const a = forward ? endA(cur) : endB(cur), b = forward ? endB(cur) : endA(cur);
+        if (cur.type === 'spline') { const sp = splinePoints(cur.pts, false); segs.push(...lineSegsOf(forward ? sp : sp.slice().reverse())); }
+        else segs.push(cur.type === 'arc' ? { t: 'arc', a, m: cur.m, b } : { t: 'line', a, b });
         from = b;
         const nxt = (adj.get(qkey(b)) || []).find((n) => n.e.id !== cur.id && !visited.has(n.e.id));
         cur = nxt ? nxt.e : null;
       }
-      if (segs.length === comp.length && qkey(segs[segs.length - 1].b) === qkey(segs[0].a)) {
+      if (segs.length >= comp.length && qkey(segs[segs.length - 1].b) === qkey(segs[0].a) && visited.size === comp.length) {
         const ids = comp.map((e) => e.id).sort();
         out.push(loopFromSegs(segs, ids.join('+'), ids));
       }
@@ -132,7 +173,7 @@ const SK = (() => {
   function openEnds(ents) {
     // Endpunkte, die nur an einer Linie hängen (Hinweis „Umriss nicht geschlossen“)
     const cnt = new Map();
-    for (const e of ents || []) { if (e.con || (e.type !== 'line' && e.type !== 'arc')) continue; for (const p of [e.a, e.b]) { const k = qkey(p); cnt.set(k, { p, n: ((cnt.get(k) || {}).n || 0) + 1 }); } }
+    for (const e of ents || []) { if (e.con || (e.type !== 'line' && e.type !== 'arc' && !(e.type === 'spline' && !e.closed))) continue; for (const p of [endA(e), endB(e)]) { const k = qkey(p); cnt.set(k, { p, n: ((cnt.get(k) || {}).n || 0) + 1 }); } }
     return [...cnt.values()].filter((x) => x.n === 1).map((x) => x.p);
   }
   function labelPoint(poly, holes) {
@@ -209,6 +250,7 @@ const SK = (() => {
         else if (e.type === 'rect') { const c = rectCorners(e); c.forEach((q, i) => { add(q, 'end', r); add(lerp(q, c[(i + 1) % 4], 0.5), 'mid', r); }); add(lerp(e.a, e.b, 0.5), 'center', r); }
         else if (e.type === 'poly') { polyCorners(e).forEach((q) => add(q, 'end', r)); add(e.c, 'center', r); }
         else if (e.type === 'slot') { add(e.a, 'center', r); add(e.b, 'center', r); }
+        else if (e.type === 'spline') { e.pts.forEach((q) => add(q, 'end', r)); }
       }
     };
     each(ents, false); each(refs, true);
@@ -247,16 +289,18 @@ const SK = (() => {
     const mv = (p) => [p[0] + dx, p[1] + dy];
     const o = { ...e };
     for (const k of ['a', 'b', 'm', 'c']) if (o[k]) o[k] = mv(o[k]);
+    if (o.pts) o.pts = o.pts.map(mv);
     return o;
   }
   // ---------- Maße: feste Werte oder Formeln, die die Skizze steuern ----------
   // Ein Maß ist { id, e: Element-ID, k: Größe, v: Zahl oder Formel }.
   const DIMKEYS = {
     line: ['len', 'ang', 'x', 'y'], rect: ['w', 'h', 'x', 'y'], circle: ['d', 'x', 'y'],
-    poly: ['d', 'n', 'x', 'y'], slot: ['len', 'w', 'x', 'y'], arc: ['r', 'x', 'y'],
+    poly: ['d', 'n', 'x', 'y'], slot: ['len', 'w', 'x', 'y'], arc: ['r', 'x', 'y'], spline: ['x', 'y'],
   };
   const DIMNAME = { len: 'Länge', ang: 'Winkel', w: 'Breite', h: 'Höhe', d: 'Durchmesser', n: 'Ecken', x: 'Abstand X', y: 'Abstand Y', r: 'Radius', dist: 'Abstand', distPL: 'Abstand', angLL: 'Winkel' };
   const anchorKey = (e) => (e.type === 'circle' || e.type === 'poly' ? 'c' : 'a');
+  const anchorOf = (e) => (e.type === 'spline' ? e.pts[0] : e[anchorKey(e)]);
   function measure(e, k) {
     switch (k) {
       case 'len': return d2(e.a, e.b);
@@ -266,8 +310,8 @@ const SK = (() => {
       case 'd': return 2 * e.r;
       case 'r': { if (e.type === 'circle') return e.r; const ai = arcInfo(e.a, e.m, e.b); return ai ? ai.r : NaN; }
       case 'n': return e.n;
-      case 'x': return e[anchorKey(e)][0];
-      case 'y': return e[anchorKey(e)][1];
+      case 'x': return anchorOf(e)[0];
+      case 'y': return anchorOf(e)[1];
     }
     return NaN;
   }
@@ -281,7 +325,7 @@ const SK = (() => {
       case 'd': if (!(v > 0)) return false; e.r = v / 2; return true;
       case 'n': e.n = clamp(Math.round(v), 3, 64); return true;
       case 'x': case 'y': {
-        const p = e[anchorKey(e)]; const dv = v - p[k === 'x' ? 0 : 1];
+        const p = anchorOf(e); const dv = v - p[k === 'x' ? 0 : 1];
         if (Math.abs(dv) < 1e-9) return true;
         Object.assign(e, translateEnt(e, k === 'x' ? dv : 0, k === 'y' ? dv : 0)); return true;
       }
@@ -294,6 +338,6 @@ const SK = (() => {
     const r = Solver.solve({ ents: ents || [], dims: dims || [], cons: cons || [] }, V, { inPlace });
     return r.ents;
   }
-  return { loops, regions, regionAt, segsOf, segPoints, arcInfo, arcPoints, circlePoints, rectCorners, polyCorners, hit, distEnt, snapPoints, faceLoopsToEnts, project3, openEnds, bounds, translateEnt, inPoly, d2, applyDims, measure, setMeasure, DIMKEYS, DIMNAME };
+  return { loops, regions, regionAt, segsOf, segPoints, splinePoints, lineSegsOf, endA, endB, anchorOf, distSeg, arcInfo, arcPoints, circlePoints, rectCorners, polyCorners, hit, distEnt, snapPoints, faceLoopsToEnts, project3, openEnds, bounds, translateEnt, inPoly, d2, applyDims, measure, setMeasure, DIMKEYS, DIMNAME };
 })();
 

@@ -21,8 +21,16 @@ const Solver = (() => {
     line: ['a0', 'a1', 'b0', 'b1'], arc: ['a0', 'a1', 'b0', 'b1', 'm0', 'm1'], circle: ['c0', 'c1', 'r'],
     rect: ['a0', 'a1', 'b0', 'b1'], slot: ['a0', 'a1', 'b0', 'b1', 'r'], poly: ['c0', 'c1', 'r'],
   };
-  const getK = (e, k) => (k === 'r' ? e.r : e[k[0]][+k[1]]);
-  const setK = (e, k, v) => { if (k === 'r') e.r = v; else { e[k[0]] = e[k[0]].slice(); e[k[0]][+k[1]] = v; } };
+  // Splines haben beliebig viele Punkte: Schlüssel „p3_0“ = X des vierten Punkts, „p3_1“ = Y
+  const varsOf = (e) => (e.type === 'spline' ? (e.pts || []).flatMap((_, i) => ['p' + i + '_0', 'p' + i + '_1']) : VARS[e.type]);
+  const SPK = /^p(\d+)_([01])$/;
+  const getK = (e, k) => { if (k === 'r') return e.r; const m = SPK.exec(k); if (m) return e.pts[+m[1]][+m[2]]; return e[k[0]][+k[1]]; };
+  const setK = (e, k, v) => {
+    if (k === 'r') { e.r = v; return; }
+    const m = SPK.exec(k);
+    if (m) { e.pts = e.pts.slice(); e.pts[+m[1]] = e.pts[+m[1]].slice(); e.pts[+m[1]][+m[2]] = v; return; }
+    e[k[0]] = e[k[0]].slice(); e[k[0]][+k[1]] = v;
+  };
 
   function circum(ax, ay, bx, by, mx, my) {
     const d = 2 * (ax * (by - my) + bx * (my - ay) + mx * (ay - by));
@@ -38,7 +46,7 @@ const Solver = (() => {
     const x = [], idx = new Map(), owner = [];
     const byId = new Map(ents.map((e) => [e.id, e]));
     for (const e of ents) {
-      const ks = VARS[e.type]; if (!ks) continue;
+      const ks = varsOf(e); if (!ks) continue;
       const m = {};
       for (const k of ks) { m[k] = x.length; owner.push(e.id); x.push(getK(e, k)); }
       idx.set(e.id, m);
@@ -52,6 +60,13 @@ const Solver = (() => {
       const e = byId.get(ref.e); if (!e) return null;
       const p = ref.p || 'c';
       const two = (k) => { const i = I(e.id, k + '0'), j = I(e.id, k + '1'); return { deps: [i, j], get: (X) => [X[i], X[j]] }; };
+      if (e.type === 'spline') {
+        const n = e.pts.length;
+        const i = p === 'a' ? 0 : p === 'b' ? n - 1 : /^p\d+$/.test(p) ? +p.slice(1) : -1;
+        if (i < 0 || i >= n) return null;
+        const a = I(e.id, 'p' + i + '_0'), b = I(e.id, 'p' + i + '_1');
+        return { deps: [a, b], get: (X) => [X[a], X[b]] };
+      }
       if (e.type === 'line' || e.type === 'slot') { if (p === 'a' || p === 'b') return two(p); if (p === 'mid' || p === 'c') { const A = two('a'), B = two('b'); return { deps: [...A.deps, ...B.deps], get: (X) => { const a = A.get(X), b = B.get(X); return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; } }; } }
       if (e.type === 'arc') {
         if (p === 'a' || p === 'b') return two(p);
@@ -92,6 +107,7 @@ const Solver = (() => {
         const cc = (X) => circum(X[ks[0]], X[ks[1]], X[ks[2]], X[ks[3]], X[ks[4]], X[ks[5]]);
         return { deps: ks, c: (X) => { const c = cc(X); return [c[0], c[1]]; }, r: (X) => cc(X)[2] };
       }
+      if (e.type === 'poly' || e.type === 'slot') { const c = point({ e: e.id, p: e.type === 'poly' ? 'c' : 'a' }), r = I(e.id, 'r'); return { deps: [...c.deps, r], c: c.get, r: (X) => X[r] }; }
       return null;
     }
     const eqs = [];
@@ -110,7 +126,7 @@ const Solver = (() => {
       const put = (ref, e) => { const P = point(ref); if (!P) return; const k = qk(P.get(x)); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(P); };
       groups.set(qk([0, 0]), [point({ e: 'origin' })]);
       for (const e of ents) {
-        if (e.type === 'line' || e.type === 'arc' || e.type === 'slot') { put({ e: e.id, p: 'a' }); put({ e: e.id, p: 'b' }); }
+        if (e.type === 'line' || e.type === 'arc' || e.type === 'slot' || (e.type === 'spline' && !e.closed)) { put({ e: e.id, p: 'a' }); put({ e: e.id, p: 'b' }); }
         else if (e.type === 'rect') for (let i = 0; i < 4; i++) put({ e: e.id, p: 'k' + i });
         else if (e.type === 'circle') put({ e: e.id, p: 'c' });
         else if (e.type === 'poly') { put({ e: e.id, p: 'c' }); }
@@ -145,7 +161,7 @@ const Solver = (() => {
       else if (k === 'h') { const s = x[J.b1] >= x[J.a1] ? 1 : -1; add([J.a1, J.b1], (X) => (X[J.b1] - X[J.a1]) * s - v, tag); }
       else if (k === 'd') add([J.r], (X) => 2 * X[J.r] - v, tag);
       else if (k === 'r') { const C = circle({ e: e.id }); if (C) add(C.deps, (X) => C.r(X) - v, tag); }
-      else if (k === 'x' || k === 'y') { const key = (e.type === 'circle' || e.type === 'poly' ? 'c' : 'a') + (k === 'x' ? '0' : '1'); const i = J[key]; add([i], (X) => X[i] - v, tag); }
+      else if (k === 'x' || k === 'y') { const key = e.type === 'spline' ? 'p0_' + (k === 'x' ? '0' : '1') : (e.type === 'circle' || e.type === 'poly' ? 'c' : 'a') + (k === 'x' ? '0' : '1'); const i = J[key]; add([i], (X) => X[i] - v, tag); }
     }
     // ---------- Bedingungen ----------
     for (const c of opts.cons || []) {
@@ -165,7 +181,9 @@ const Solver = (() => {
           return (t === 'parallel' ? (ux * vy - uy * vx) : (ux * vx + uy * vy)) / n * 10;
         }, tag);
       } else if (t === 'equal') {
-        const A = line(R[0]), B = line(R[1]);
+        // { e, k: 'r' } meint den Radius (auch bei Vieleck und Langloch), sonst Länge bzw. Größe
+        const rad = R[0] && R[1] && (R[0].k === 'r' || R[1].k === 'r');
+        const A = rad ? null : line(R[0]), B = rad ? null : line(R[1]);
         if (A && B) add([...A[0].deps, ...A[1].deps, ...B[0].deps, ...B[1].deps], (X) => { const [ux, uy] = L(X, A), [vx, vy] = L(X, B); return hyp(ux, uy) - hyp(vx, vy); }, tag);
         else { const C = circle(R[0]), D = circle(R[1]); if (C && D) add([...C.deps, ...D.deps], (X) => C.r(X) - D.r(X), tag); }
       } else if (t === 'tangent') {
@@ -193,6 +211,56 @@ const Solver = (() => {
         const deps = [...A.deps, ...B.deps, ...Ln[0].deps, ...Ln[1].deps];
         add(deps, (X) => { const a = A.get(X), b = B.get(X); const [dx, dy, p] = L(X, Ln); const mx = (a[0] + b[0]) / 2 - p[0], my = (a[1] + b[1]) / 2 - p[1]; return (mx * dy - my * dx) / (hyp(dx, dy) + EPS); }, tag);
         add(deps, (X) => { const a = A.get(X), b = B.get(X); const [dx, dy] = L(X, Ln); return ((b[0] - a[0]) * dx + (b[1] - a[1]) * dy) / (hyp(dx, dy) + EPS); }, tag);
+      } else if (t === 'xform') {
+        // Muster: Kopien hängen an ihrem Original. Verschieben um (dx, dy) oder Drehen um einen Mittelpunkt.
+        // refs = [Original-Punkt, Kopie-Punkt, Original-Punkt, Kopie-Punkt, …] · req = [Original, Kopie, …] für gleiche Radien
+        const num = (x) => Model.num(x, V || {}, 0);
+        const dx = num(c.dx), dy = num(c.dy), th = (num(c.ang) * Math.PI) / 180;
+        const C0 = c.mode === 'rot' ? point(c.center) : null;
+        if (c.mode === 'rot' && !C0) continue;
+        const cs = Math.cos(th), sn = Math.sin(th);
+        for (let i = 0; i + 1 < R.length; i += 2) {
+          const A = point(R[i]), B = point(R[i + 1]); if (!A || !B) continue;
+          const deps = [...A.deps, ...B.deps, ...(C0 ? C0.deps : [])];
+          if (C0) {
+            add(deps, (X) => { const a = A.get(X), b = B.get(X), o = C0.get(X); return b[0] - (o[0] + cs * (a[0] - o[0]) - sn * (a[1] - o[1])); }, tag);
+            add(deps, (X) => { const a = A.get(X), b = B.get(X), o = C0.get(X); return b[1] - (o[1] + sn * (a[0] - o[0]) + cs * (a[1] - o[1])); }, tag);
+          } else {
+            add(deps, (X) => B.get(X)[0] - A.get(X)[0] - dx, tag);
+            add(deps, (X) => B.get(X)[1] - A.get(X)[1] - dy, tag);
+          }
+        }
+        const Q = c.req || [];
+        for (let i = 0; i + 1 < Q.length; i += 2) { const C1 = circle(Q[i]), D1 = circle(Q[i + 1]); if (C1 && D1) add([...C1.deps, ...D1.deps], (X) => D1.r(X) - C1.r(X), tag); }
+      } else if (t === 'offset') {
+        // Versatz: die Kopie liegt im Abstand v neben dem Original (sg = +1 links bzw. größer, −1 rechts bzw. kleiner)
+        const eS = byId.get((R[0] || {}).e), eN = byId.get((R[1] || {}).e); if (!eS || !eN) continue;
+        const v = Model.num(c.v, V || {}, NaN); if (!isFinite(v)) continue;
+        const sg = c.sg || 1;
+        if (eS.type === 'rect' && eN.type === 'rect' && R[0].edge == null) {
+          const sgs = c.sgs || [-1, -1, 1, 1];
+          [['a0', 0], ['a1', 1], ['b0', 2], ['b1', 3]].forEach(([k, i]) => { const s = idx.get(eS.id)[k], n = idx.get(eN.id)[k]; add([s, n], (X) => X[n] - X[s] - sgs[i] * v, tag); });
+        } else if (eS.type === 'slot' && eN.type === 'slot') {
+          for (const p of ['a', 'b']) { const A = point({ e: eS.id, p }), B = point({ e: eN.id, p }); add([...A.deps, ...B.deps], (X) => B.get(X)[0] - A.get(X)[0], tag); add([...A.deps, ...B.deps], (X) => B.get(X)[1] - A.get(X)[1], tag); }
+          const C1 = circle({ e: eS.id }), D1 = circle({ e: eN.id }); add([...C1.deps, ...D1.deps], (X) => D1.r(X) - C1.r(X) - sg * v, tag);
+        } else if (eS.type === 'poly' && eN.type === 'poly') {
+          const A = point({ e: eS.id, p: 'c' }), B = point({ e: eN.id, p: 'c' }), C1 = circle({ e: eS.id }), D1 = circle({ e: eN.id });
+          const k = Math.cos(Math.PI / Math.max(3, Math.round(eN.n || 6)));
+          add([...A.deps, ...B.deps], (X) => B.get(X)[0] - A.get(X)[0], tag); add([...A.deps, ...B.deps], (X) => B.get(X)[1] - A.get(X)[1], tag);
+          add([...C1.deps, ...D1.deps], (X) => (D1.r(X) - C1.r(X)) * k - sg * v, tag);
+        } else {
+          const LS = line(R[0]), LN = line(R[1]);
+          if (LS && LN) {
+            const deps = [...LS[0].deps, ...LS[1].deps, ...LN[0].deps, ...LN[1].deps];
+            add(deps, (X) => { const [ux, uy] = L(X, LS), [wx, wy] = L(X, LN); return ((ux * wy - uy * wx) / (hyp(ux, uy) * hyp(wx, wy) + EPS)) * 10; }, tag);
+            add(deps, (X) => { const [dx, dy, a] = L(X, LS); const p = LN[0].get(X); return (dx * (p[1] - a[1]) - dy * (p[0] - a[0])) / (hyp(dx, dy) + EPS) - sg * v; }, tag);
+          } else {
+            const C1 = circle(R[0]), D1 = circle(R[1]); if (!C1 || !D1) continue;
+            const deps = [...C1.deps, ...D1.deps];
+            add(deps, (X) => D1.c(X)[0] - C1.c(X)[0], tag); add(deps, (X) => D1.c(X)[1] - C1.c(X)[1], tag);
+            add(deps, (X) => D1.r(X) - C1.r(X) - sg * v, tag);
+          }
+        }
       } else if (t === 'fix') {
         const r0 = R[0]; if (!r0) continue;
         if (r0.p) { const A = point(r0); if (!A || !c.at) continue; add(A.deps, (X) => A.get(X)[0] - c.at[0], tag); add(A.deps, (X) => A.get(X)[1] - c.at[1], tag); }
@@ -342,5 +410,5 @@ const Solver = (() => {
     memo.set(key, r); if (memo.size > 60) memo.delete(memo.keys().next().value);
     return r;
   }
-  return { solve, trial, cached, VARS };
+  return { solve, trial, cached, VARS, varsOf, getK };
 })();

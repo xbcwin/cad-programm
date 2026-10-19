@@ -33,7 +33,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,Viewer,Commands,Solver,Notes}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,Viewer,Commands,Solver,Notes,SKO}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -624,6 +624,208 @@ def t_kante(p):
     return p.ev("return Sketch.state.ents.length===1 && Sketch.state.cons[0].type==='fix' && Sketch.state.status.freeEnts.size===0")
 
 
+# ---------- Skizzen-Feinschliff: Spline, Trimmen, Versatz, Spiegeln, Muster, Fangen, Hilfslinien ----------
+def scene(p, ents):
+    p.empty()
+    p.ev("App.change('x', d=>{ const it=Model.newItem('extrude',{},{}); it.p={sketch:{plane:{o:[0,0,0],x:[1,0,0],n:[0,0,1]},ents:arg,dims:[],cons:[]},dist:3,dir:'normal'}; d.items.push(it); })", ents)
+    p.wait(1500); p.ev("Sketch.editItem(App.doc.items[0].id)"); p.wait(1500)
+
+
+def SS(p, js):
+    return p.ev("const S=Sketch.state; const E=(id)=>S.ents.find(e=>e.id===id); " + js)
+
+
+def click_uv(p, u, v, alt=True):
+    s = to_screen(p, u, v)
+    if alt:
+        p.pg.keyboard.down('Alt')
+    p.pg.mouse.click(s[0], s[1])
+    if alt:
+        p.pg.keyboard.up('Alt')
+    p.wait(200)
+
+
+def t_spline(p):
+    sketch_xy(p)
+    p.pg.keyboard.press('s'); p.wait(200)
+    for u, v in [(-30, 0), (-10, 15), (10, -15), (30, 0)]:
+        click_uv(p, u, v)
+    p.pg.keyboard.press('Enter'); p.wait(300)
+    ok1 = SS(p, "return S.ents.length===1 && S.ents[0].type==='spline' && S.ents[0].pts.length===4 && !S.ents[0].closed")
+    # Kurve läuft genau durch die Punkte und ist fein genug aufgelöst
+    ok2 = SS(p, "const pl=SK.segPoints(SK.segsOf(S.ents[0])[0]); return pl.length>20 && S.ents[0].pts.every(q=>pl.some(r=>Math.hypot(r[0]-q[0],r[1]-q[1])<1e-6))")
+    # geschlossen: auf den ersten Punkt klicken
+    p.pg.keyboard.press('s')
+    for u, v in [(-20, -30), (20, -30), (0, -45)]:
+        click_uv(p, u, v)
+    click_uv(p, -20, -30)
+    ok3 = SS(p, "return S.ents.length===2 && S.ents[1].closed===true && S.ents[1].pts.length===3 && S.draft===null")
+    # Punkt ziehen
+    p.pg.keyboard.press('v'); a = to_screen(p, 10, -15); b = to_screen(p, 10, -25)
+    p.pg.mouse.move(a[0], a[1]); p.pg.mouse.down(); p.pg.mouse.move(b[0], b[1], steps=5); p.pg.mouse.up(); p.wait(300)
+    ok4 = SS(p, "return Math.abs(S.ents[0].pts[2][1]+25)<1.5")
+    # Strg Z holt den Punkt zurück
+    p.pg.keyboard.press('Control+z'); p.wait(300)
+    ok5 = SS(p, "return Math.abs(S.ents[0].pts[2][1]+15)<1e-3")
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
+def t_trimmen(p):
+    scene(p, [{'id': 'H', 'type': 'line', 'a': [-30, 0], 'b': [30, 0]}, {'id': 'V', 'type': 'line', 'a': [0, -20], 'b': [0, 20]},
+              {'id': 'C', 'type': 'circle', 'c': [60, 0], 'r': 10}, {'id': 'K', 'type': 'line', 'a': [40, 0], 'b': [80, 0]},
+              {'id': 'R', 'type': 'rect', 'a': [-10, 40], 'b': [10, 60]}, {'id': 'Q', 'type': 'line', 'a': [-20, 50], 'b': [20, 50]}])
+    p.pg.keyboard.press('t'); p.wait(200)
+    # Linie: rechtes Stück bis zum Schnittpunkt fällt weg, Rest sitzt per Regel auf der senkrechten Linie
+    s = to_screen(p, 20, 0); p.pg.mouse.move(s[0], s[1]); p.wait(200)
+    hover = SS(p, "return !!S.trimHover && S.trimHover.length>1")
+    p.pg.mouse.click(s[0], s[1]); p.wait(300)
+    ok1 = hover and SS(p, "const h=E('H'); return Math.abs(h.a[0]+30)<1e-6 && Math.abs(h.b[0])<1e-6 && S.cons.some(c=>c.type==='coincident' && c.refs[0].e==='H' && c.refs[1].e==='V')")
+    # Kreis: oberes Stück zwischen den beiden Schnitten fällt weg, der Rest wird ein Bogen
+    click_uv(p, 60, 10, alt=False)
+    ok2 = SS(p, "const arcs=S.ents.filter(e=>e.type==='arc'); return arcs.length===1 && Math.abs(SK.arcInfo(arcs[0].a,arcs[0].m,arcs[0].b).r-10)<1e-4")
+    # Rechteck: wird zerlegt, die obere Kante (kein Schnitt im Inneren) fällt ganz weg
+    click_uv(p, 0, 60, alt=False)
+    ok3 = SS(p, "return !E('R') && !S.ents.some(e=>e.type==='rect') && S.ents.filter(e=>e.type==='line').length>=6")
+    # Rückgängig bringt das Rechteck zurück
+    p.pg.keyboard.press('Control+z'); p.wait(200)
+    ok4 = SS(p, "return !!E('R')")
+    return [ok1, ok2, ok3, ok4]
+
+
+def t_versatz(p):
+    scene(p, [{'id': 'R', 'type': 'rect', 'a': [0, 0], 'b': [20, 10]}, {'id': 'C', 'type': 'circle', 'c': [34, 5], 'r': 6}])
+    p.pg.keyboard.press('f'); p.wait(200)
+    click_uv(p, 10, 0, alt=False)
+    p.pg.mouse.move(*to_screen(p, 10, -4)); p.wait(200)
+    s0 = SS(p, "return !!S.draft && !!S.draft.off")
+    p.pg.keyboard.type('3'); p.pg.keyboard.press('Enter'); p.wait(400)
+    ok1 = s0 and SS(p, "const n=S.ents.filter(e=>e.type==='rect'); const r=n.find(e=>e.id!=='R'); return n.length===2 && r && Math.abs(Math.min(r.a[0],r.b[0])+3)<1e-4 && Math.abs(Math.max(r.a[0],r.b[0])-23)<1e-4 && Math.abs(Math.min(r.a[1],r.b[1])+3)<1e-4 && Math.abs(Math.max(r.a[1],r.b[1])-13)<1e-4 && S.cons.some(c=>c.type==='offset')")
+    # Original ändern → Kopie folgt
+    p.pg.keyboard.press('v'); click_uv(p, 20, 5, alt=False); p.wait(300)
+    p.pg.fill('#se-w', '30'); p.pg.press('#se-w', 'Enter'); p.wait(400)
+    ok2 = SS(p, "const r=S.ents.find(e=>e.type==='rect'&&e.id!=='R'); return Math.abs(Math.abs(r.b[0]-r.a[0])-36)<1e-3")
+    # Kreis: Klick auf den Rand, Maus nach außen, Klick → größerer Kreis, über Regel verbunden
+    p.pg.keyboard.press('f'); click_uv(p, 40, 5, alt=False); click_uv(p, 46, 5, alt=False); p.wait(300)
+    ok3 = SS(p, "const c=S.ents.filter(e=>e.type==='circle'); return c.length===2 && Math.abs(Math.max(c[0].r,c[1].r)-12)<0.3 && S.cons.filter(x=>x.type==='offset').length===2")
+    return [ok1, ok2, ok3]
+
+
+def t_versatz_kette(p):
+    scene(p, [{'id': 'A', 'type': 'line', 'a': [0, 0], 'b': [40, 0]}, {'id': 'B', 'type': 'line', 'a': [40, 0], 'b': [40, 30]}])
+    p.pg.keyboard.press('f'); click_uv(p, 20, 0, alt=False)
+    p.pg.mouse.move(*to_screen(p, 20, 8)); p.wait(200); p.pg.keyboard.type('5'); p.pg.keyboard.press('Enter'); p.wait(400)
+    ok1 = SS(p, "const l=S.ents.filter(e=>e.type==='line'); const n=l.filter(e=>e.id!=='A'&&e.id!=='B'); return l.length===4 && n.length===2 && n.some(e=>Math.abs(e.a[1]-5)<1e-4&&Math.abs(e.b[1]-5)<1e-4) && n.some(e=>Math.abs(e.a[0]-35)<1e-4&&Math.abs(e.b[0]-35)<1e-4)")
+    return [ok1]
+
+
+def t_spiegeln(p):
+    scene(p, [{'id': 'AX', 'type': 'line', 'a': [0, -30], 'b': [0, 30], 'con': True}, {'id': 'C', 'type': 'circle', 'c': [20, 5], 'r': 4},
+              {'id': 'L', 'type': 'line', 'a': [10, 0], 'b': [25, 12]}])
+    p.pg.keyboard.press('m'); p.wait(200)
+    click_uv(p, 0, 20, alt=False)
+    ok0 = SS(p, "return !!S.mir && S.mir.axis==='AX'")
+    click_uv(p, 20, 9, alt=False); click_uv(p, 17, 7.2, alt=False)
+    p.pg.keyboard.press('Enter'); p.wait(400)
+    ok1 = SS(p, "const c=S.ents.filter(e=>e.type==='circle'); const l=S.ents.filter(e=>e.type==='line'&&!e.con); return c.length===2 && l.length===2 && c.some(e=>Math.abs(e.c[0]+20)<1e-4&&Math.abs(e.c[1]-5)<1e-4) && l.some(e=>Math.abs(e.a[0]+10)<1e-4)")
+    ok2 = SS(p, "return S.cons.filter(c=>c.type==='symmetric').length>=3 && S.cons.some(c=>c.type==='equal')")
+    # Original verschieben → Spiegelbild folgt
+    p.pg.keyboard.press('v'); click_uv(p, 20, 9, alt=False); p.wait(300)
+    p.pg.fill('#se-x', '30'); p.pg.press('#se-x', 'Enter'); p.wait(400)
+    ok3 = SS(p, "const c=S.ents.filter(e=>e.type==='circle'); const l=E('AX'); const dx=l.b[0]-l.a[0],dy=l.b[1]-l.a[1],L=Math.hypot(dx,dy); const a=c[0].c,b=c[1].c; const m=[(a[0]+b[0])/2,(a[1]+b[1])/2]; return S.status.ok && Math.abs(a[0]-b[0])>1 && Math.abs(((m[0]-l.a[0])*dy-(m[1]-l.a[1])*dx)/L)<1e-3 && Math.abs(((b[0]-a[0])*dx+(b[1]-a[1])*dy)/L)<1e-3")
+    return [ok0, ok1, ok2, ok3]
+
+
+def t_muster_rechteck(p):
+    scene(p, [{'id': 'C', 'type': 'circle', 'c': [2, 1], 'r': 3}])
+    p.pg.keyboard.press('q'); p.wait(200)
+    click_uv(p, 5, 1, alt=False)
+    for i, v in [('pt-nx', '3'), ('pt-dx', '10'), ('pt-ny', '2'), ('pt-dy', '8')]:
+        p.pg.fill('#' + i, v); p.pg.press('#' + i, 'Enter'); p.wait(150)
+    p.pg.click('#pt-make'); p.wait(500)
+    ok1 = SS(p, "const c=S.ents.filter(e=>e.type==='circle'); return c.length===6 && [2,12,22].every(x=>[1,9].every(y=>c.some(e=>Math.abs(e.c[0]-x)<1e-3&&Math.abs(e.c[1]-y)<1e-3)))")
+    ok2 = SS(p, "return S.cons.filter(c=>c.type==='xform').length===5")
+    # Original ändern → alle Kopien ziehen mit
+    p.pg.keyboard.press('v'); click_uv(p, 5, 1, alt=False); p.wait(300)
+    p.pg.fill('#se-d', '8'); p.pg.press('#se-d', 'Enter'); p.wait(400)
+    ok3 = SS(p, "return S.ents.every(e=>Math.abs(e.r-4)<1e-4)")
+    p.pg.fill('#se-x', '5'); p.pg.press('#se-x', 'Enter'); p.wait(400)
+    ok4 = SS(p, "const xs=S.ents.map(e=>e.c[0]).sort((a,b)=>a-b); return Math.abs(xs[0]-5)<1e-3 && Math.abs(xs[5]-25)<1e-3")
+    return [ok1, ok2, ok3, ok4]
+
+
+def t_muster_kreis(p):
+    scene(p, [{'id': 'C', 'type': 'circle', 'c': [20, 0], 'r': 2}, {'id': 'R', 'type': 'rect', 'a': [14, -2], 'b': [16, 2]}])
+    p.pg.keyboard.press('w'); p.wait(200)
+    click_uv(p, 22, 0, alt=False)
+    p.pg.fill('#pt-n', '4'); p.pg.press('#pt-n', 'Enter'); p.wait(150)
+    p.pg.click('#pt-make'); p.wait(500)
+    ok1 = SS(p, "const c=S.ents.filter(e=>e.type==='circle'); return c.length===4 && [[20,0],[0,20],[-20,0],[0,-20]].every(q=>c.some(e=>Math.hypot(e.c[0]-q[0],e.c[1]-q[1])<1e-3))")
+    # Rechteck wird beim Drehen zerlegt: drei Kopien mit je vier Linien
+    p.pg.keyboard.press('w'); click_uv(p, 15, 2, alt=False)
+    p.pg.fill('#pt-n', '3'); p.pg.press('#pt-n', 'Enter'); p.wait(150)
+    p.pg.click('#pt-make'); p.wait(500)
+    ok2 = SS(p, "return S.ents.filter(e=>e.type==='line').length===8 && S.cons.filter(c=>c.type==='xform'&&c.mode==='rot').length>=2")
+    # Original verschieben → Kreise drehen mit
+    p.pg.keyboard.press('v'); click_uv(p, 22, 0, alt=False); p.wait(300)
+    p.pg.fill('#se-x', '25'); p.pg.press('#se-x', 'Enter'); p.wait(400)
+    ok3 = SS(p, "const c=S.ents.filter(e=>e.type==='circle'); return c.some(e=>Math.hypot(e.c[0],e.c[1]-25)<1e-2)")
+    return [ok1, ok2, ok3]
+
+
+def t_fangen(p):
+    scene(p, [{'id': 'D1', 'type': 'line', 'a': [-30, -30], 'b': [30, 30]}, {'id': 'D2', 'type': 'line', 'a': [-30, 10], 'b': [30, -10]},
+              {'id': 'K', 'type': 'circle', 'c': [-25, -8], 'r': 4}])
+    # Schnittpunkt wird gefangen (7,5 / 7,5 liegt zwischen Rasterpunkten)
+    p.pg.keyboard.press('l'); p.wait(200)
+    s = to_screen(p, 7.4, 7.6); p.pg.mouse.click(s[0], s[1]); p.wait(200)
+    s2 = to_screen(p, 10, -25); p.pg.mouse.click(s2[0], s2[1]); p.wait(200); p.pg.keyboard.press('Enter'); p.wait(200)
+    ok1 = SS(p, "const l=S.ents[S.ents.length-1]; return Math.abs(l.a[0]-7.5)<1e-3 && Math.abs(l.a[1]-7.5)<1e-3")
+    # Schnittpunkt-Fang ausschalten: jetzt rastet es nicht mehr dort ein
+    p.pg.keyboard.press('Control+z'); p.wait(200)
+    p.pg.locator('summary:has-text("Fangen")').click(); p.pg.uncheck('#snap-cross'); p.pg.uncheck('#snap-curve'); p.wait(150); p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('l'); p.pg.mouse.click(s[0], s[1]); p.wait(200)
+    p.pg.mouse.click(*to_screen(p, 15, -25)); p.wait(200); p.pg.keyboard.press('Enter'); p.wait(200)
+    ok2 = SS(p, "const l=S.ents[S.ents.length-1]; return Math.abs(l.a[0]-7.5)>0.2 || Math.abs(l.a[1]-7.5)>0.2")
+    # Alt: gar nicht fangen
+    p.pg.check('#snap-cross'); p.pg.check('#snap-curve'); p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('l'); click_uv(p, 12.3, -22.7)
+    p.pg.mouse.click(*to_screen(p, 20, -25)); p.wait(200); p.pg.keyboard.press('Enter'); p.wait(200)
+    ok3 = SS(p, "const l=S.ents[S.ents.length-1]; return Math.abs(l.a[0]-12.3)<0.15 && Math.abs(l.a[1]+22.7)<0.15")
+    # Kreispunkt: der Kreis wird an seinem Viertelpunkt gefangen
+    p.pg.keyboard.press('l'); p.pg.mouse.click(*to_screen(p, -25.2, -3.9)); p.wait(200)
+    p.pg.mouse.click(*to_screen(p, -10, -25)); p.wait(200); p.pg.keyboard.press('Enter'); p.wait(200)
+    ok4 = SS(p, "const l=S.ents[S.ents.length-1]; return Math.abs(l.a[0]+25)<1e-3 && Math.abs(l.a[1]+4)<1e-3")
+    return [ok1, ok2, ok3, ok4]
+
+
+def t_hilfslinien(p):
+    sketch_xy(p)
+    cx, cy = p.canvas_center()
+    p.pg.keyboard.press('x'); p.wait(150)
+    on = SS(p, "return S.construction") and p.pg.locator('.tool.conmode.active').count() == 1
+    p.pg.keyboard.press('r'); p.pg.mouse.click(cx - 60, cy - 40); p.pg.mouse.click(cx + 60, cy + 40); p.wait(300)
+    ok1 = on and SS(p, "return S.ents.length===1 && S.ents[0].con===true && SK.regions(S.ents).length===0")
+    p.pg.keyboard.press('x'); p.wait(150)
+    p.pg.keyboard.press('r'); p.pg.mouse.click(cx - 200, cy - 100); p.pg.mouse.click(cx - 120, cy - 50); p.wait(300)
+    ok2 = SS(p, "return !S.construction && S.ents.length===2 && !S.ents[1].con && SK.regions(S.ents).length===1")
+    # gewähltes Element umwandeln
+    p.pg.keyboard.press('v'); click_uv(p, *SS(p, "const e=S.ents[1]; return [e.a[0], (e.a[1]+e.b[1])/2]"), alt=False); p.wait(200)
+    p.pg.keyboard.press('x'); p.wait(200)
+    ok3 = SS(p, "return S.ents[1].con===true && SK.regions(S.ents).length===0")
+    p.pg.keyboard.press('x'); p.wait(200)
+    ok4 = SS(p, "return !S.ents[1].con && SK.regions(S.ents).length===1")
+    return [ok1, ok2, ok3, ok4]
+
+
+def t_skizze_hilfen(p):
+    sketch_xy(p)
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    keys = p.pg.evaluate("[...document.querySelectorAll('[data-help]')].map(b=>b.dataset.help)")
+    fehlt = [k for k in set(keys) if k not in hilfen]
+    neu = all(k in hilfen for k in ['spline', 'trim', 'offset2d', 'mirror2d', 'patternRect2d', 'patternCirc2d', 'construct2d'])
+    return (neu and not fehlt), ('ohne Hilfetext: ' + ', '.join(fehlt)) if fehlt else ''
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -642,6 +844,12 @@ TESTS = [
     ('Regeln: rechtwinklig / tangential / gleich / symmetrisch / Punkt auf Linie / Radius / Winkel / gespeichert', t_regeln),
     ('Regeln: voll bestimmt / Widerspruch abgelehnt / fest beim Ziehen / Symbol löschen', t_regeln_bestimmt),
     ('Kante übernehmen', t_kante),
+    ('Spline: zeichnen / schließen / Punkt ziehen', t_spline), ('Trimmen: Linie / Kreis / Rechteck / Rückgängig', t_trimmen),
+    ('Versatz: Rechteck eintippen / folgt dem Original / Kreis', t_versatz), ('Versatz: Kette mit Ecke', t_versatz_kette),
+    ('Spiegeln: Achse / Kopien / Symmetrie-Regeln / folgt dem Original', t_spiegeln),
+    ('Rechteckmuster: Anzahl und Abstand / folgt dem Original', t_muster_rechteck), ('Kreismuster: Anzahl / Rechteck zerlegt / folgt dem Original', t_muster_kreis),
+    ('Fangen: Schnittpunkt / ausschalten / Alt / Kreispunkt', t_fangen), ('Hilfslinien: Taste X / zählt nicht zur Fläche / umwandeln', t_hilfslinien),
+    ('Skizzen-Werkzeuge haben Hilfetexte', t_skizze_hilfen),
     ('Formel-Beispiele', t_formel_beispiele), ('Einführung „Erste Skizze“', t_einfuehrung), ('Schraubenlöcher', t_schrauben),
     ('Fies: Löschen hinter Marker + Undo', t_fies_loeschen), ('Fies: alles unterdrückt', t_fies_alle_aus),
     ('Fies: Marker am Anfang, neu laden', t_fies_reload), ('Fies: Tasten während Rechnen', t_fies_tasten),

@@ -1,6 +1,6 @@
 # Fortschritt
 
-Stand: 17.10.2026 · nach Sitzung 6 von 14
+Stand: 17.10.2026 · nach Sitzung 7 von 14
 
 ## Erledigt
 
@@ -45,7 +45,7 @@ Stand: 17.10.2026 · nach Sitzung 6 von 14
 - [x] Neuer Name beim Maß (z. B. `breite`) wird automatisch unter „Maße“ angelegt
 - [x] Formel-Beispiele unter „Maße“ (Gemini, alle 12 mit Tracerys Rechner nachgeprüft), Beispiel-Maße per Klick
 - [x] Umbenennen / Entfernen eines Maßes wirkt jetzt auch auf Skizzen-Maße
-- [x] Automatischer Klicktest `tests/klicktest.py`: 35 Durchläufe, 52 von 55 Punkten der Testliste automatisch geprüft
+- [x] Automatischer Klicktest `tests/klicktest.py`: 49 Durchläufe (alle grün), 73 von 82 Punkten der Testliste automatisch geprüft
 - [x] Aufgeräumt: Programm liegt jetzt in 28 Quelldateien unter `app/src/`, `tools/build.py` baut daraus `app/index.html`
 - [x] Notizstift (Taste N): freie Striche, die am Modell kleben, Textnotizen, 6 Farben, 3 Dicken, Radierer, ein-/ausblendbar – ohne technische Bedeutung
 - [x] Symbole für den Notizstift (Gemini, geprüft); Augen-Knopf rechts im Bild blendet Notizen aus, sobald es welche gibt
@@ -56,6 +56,15 @@ Stand: 17.10.2026 · nach Sitzung 6 von 14
 - [x] Neue Maße: Abstand Punkt–Punkt, Abstand Punkt–Linie, Winkel zwischen Linien, Radius von Bögen
 - [x] Ziehen in der Skizze über den Löser: feste Teile bleiben, Regeln bleiben erfüllt
 - [x] Kanten einer Körperfläche in die Skizze übernehmen
+- [x] Spline (Taste S): weiche Kurve durch Punkte, offen oder geschlossen, Punkte einzeln ziehbar; zählt wie Linien zu Flächen
+- [x] Trimmen (T): rote Vorschau, Klick oder Wischen; Rechteck, Vieleck und Langloch werden dafür in Linien zerlegt; Schnittstellen werden per Regel „Punkt auf Linie“ verbunden
+- [x] Versatz (F): Linie, Kette mit Ecken, Bogen, Kreis, Rechteck, Vieleck, Langloch, Spline; Abstand per Maus oder eintippen (auch Formel); bleibt über die Regel „Versatz“ am Original, Abstand später änderbar
+- [x] Spiegeln (M): Achse anklicken, Elemente wählen, Enter; legt Symmetrie-Regeln (und gleiche Radien) an – das Spiegelbild folgt dem Original
+- [x] Rechteckmuster (Q) und Kreismuster (W): Anzahl, Abstand bzw. Winkel, Mittelpunkt wählbar; Kopien hängen über die Regel „Muster“ am Original
+- [x] Besseres Fangen: Endpunkte, Mitten, Mittelpunkte, Kreispunkte, Schnittpunkte, Lot, Tangente, „auf Linie“, Ausrichtung, Raster – je Art abschaltbar (rechts „Fangen“), Alt = nicht fangen, eigene Markierungsform je Art
+- [x] Hilfslinien (Taste X): neue Elemente als Hilfslinien zeichnen oder das gewählte umwandeln; zählen nicht zur Fläche
+- [x] Hilfetexte für Spline, Trimmen, Versatz angepasst; neu: Spiegeln, Rechteck- und Kreismuster, Hilfslinien (Datei und eingebettete Fassung gleich)
+- [x] Neues Bauteil `app/src/js/17-sketchops.js` (Schnittpunkte, Trimmen, Versatz, Spiegeln, Muster) – rechnet ohne Anzeige
 
 ## Offen
 
@@ -66,8 +75,11 @@ Fertig.
 - [x] Skizze auf Körperflächen (war schon da, in Sitzung 5 geprüft)
 - [x] Bemaßung mit Formeln, nachträglich bearbeiten (Sitzung 5)
 - [x] Bedingungen mit Solver (Sitzung 6)
-- [ ] Trimmen, Versatz, Spiegeln, Muster in der Skizze (aus Sitzung 6 verschoben → Sitzung 7)
-- [ ] Spline, Fangen, Hilfslinien (Sitzung 7)
+- [x] Trimmen, Versatz, Spiegeln, Muster in der Skizze (Sitzung 7)
+- [x] Spline, Fangen, Hilfslinien (Sitzung 7)
+- [ ] Spline als glatte Kurve im Kern (heute wird sie für das Hochziehen in kurze Linien zerlegt)
+- [ ] Muster und Versatz: Anzahl/Abstand nachträglich für das ganze Muster ändern (heute je Kopie über das Regel-Symbol)
+- [ ] Spiegeln an der X- oder Y-Achse ohne eigene Linie
 
 ### Stufe 3 – Features und Ansichten
 - [ ] Bohrungs-Assistent, Wandstärke, Muster, Spiegeln, Boolesch, Teilen (Sitzung 8)

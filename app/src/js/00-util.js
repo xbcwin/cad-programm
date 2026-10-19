@@ -287,6 +287,11 @@ const HELP = {
   "hilfe": "Klicke für den Startpunkt und noch einmal für den Endpunkt. Du kannst direkt weiterklicken, um eine Kette zu zeichnen.",
   "tipp": "Drücke die Escape-Taste, um die Linienkette zu beenden, ohne die ganze Skizze zu schließen."
  },
+ "select": {
+  "tip": "Elemente wählen und Punkte ziehen",
+  "hilfe": "Klicke ein Element an, um es rechts zu bearbeiten. Endpunkte und Spline-Punkte lassen sich ziehen, ganze Elemente an der Linie. Entf löscht das Gewählte.",
+  "tipp": "Feste Maße und Regeln bleiben beim Ziehen erhalten. Blaue Teile sind noch beweglich, dunkle liegen fest."
+ },
  "rect": {
   "tip": "Rechteck über zwei Ecken aufziehen",
   "hilfe": "Klicke für die erste Ecke, ziehe die Maus schräg herüber und klicke für die gegenüberliegende Ecke.",
@@ -314,18 +319,38 @@ const HELP = {
  },
  "spline": {
   "tip": "Geschwungene Freihand-Kurve durch Punkte legen",
-  "hilfe": "Setze nacheinander mehrere Punkte, durch die sich die Linie weich schlängelt, und bestätige am Ende mit Enter.",
-  "tipp": "Setze so wenige Punkte wie möglich, dann wird die Kurve viel gleichmäßiger und glatter."
+  "hilfe": "Klicke nacheinander die Punkte, durch die die Kurve laufen soll. Zum Beenden drückst du Enter oder klickst doppelt auf den letzten Punkt. Ein Klick auf den ersten Punkt schließt die Kurve zu einer Fläche.",
+  "tipp": "Setze so wenige Punkte wie möglich, dann wird die Kurve gleichmäßiger. Später kannst du jeden Punkt einzeln ziehen. Für das Hochziehen wird die Kurve in sehr kurze gerade Stücke zerlegt."
  },
  "trim": {
   "tip": "Überstehende Linienstücke einfach wegschneiden",
-  "hilfe": "Fahre mit der Maus über ein Linienstück, das eine andere Linie kreuzt. Es leuchtet rot auf und verschwindet beim Klicken.",
-  "tipp": "Halte die Maustaste gedrückt und wische wie mit einem Radiergummi über mehrere Linien, um sie am Stück zu löschen."
+  "hilfe": "Fahre mit der Maus über ein Stück zwischen zwei Schnittpunkten. Es leuchtet rot und verschwindet beim Klicken. Bei einem Rechteck, Vieleck oder Langloch wird die Form dafür in einzelne Linien zerlegt.",
+  "tipp": "Halte die Maustaste gedrückt und wische wie mit einem Radiergummi über mehrere Stücke. Ein Stück ohne Schnittpunkt wird ganz gelöscht."
  },
  "offset2d": {
   "tip": "Parallele Kopie im Abstand erstellen",
-  "hilfe": "Klicke eine Linie oder eine geschlossene Form an und ziehe am Pfeil, um eine größere oder kleinere Kopie daneben zu legen.",
-  "tipp": "Damit erstellst du super schnell gleichmäßige Wandstärken für Rohre, Ringe oder Gehäuse."
+  "hilfe": "Klicke eine Linie, einen Bogen, Kreis oder eine Form an. Bewege die Maus auf die Seite, auf der die Kopie liegen soll, und klicke. Oder tippe den Abstand ein und drücke Enter – auch eine Formel geht.",
+  "tipp": "Die Kopie bleibt über eine Regel mit dem Original verbunden. Ändert sich das Original, wandert sie mit. Klick auf das Regel-Symbol, um den Abstand später zu ändern."
+ },
+ "mirror2d": {
+  "tip": "Elemente an einer Linie spiegeln",
+  "hilfe": "Klicke zuerst die Linie an, an der gespiegelt wird. Dann klickst du die Elemente an, die ein Spiegelbild bekommen sollen, und drückst Enter. Ohne Auswahl wird alles gespiegelt.",
+  "tipp": "Das Spiegelbild hängt über Symmetrie-Regeln am Original: Zeichnest du nur eine Hälfte um, bleibt die andere automatisch deckungsgleich. Als Spiegelachse eignet sich eine Hilfslinie (Taste X)."
+ },
+ "patternRect2d": {
+  "tip": "Elemente in Reihen und Spalten vervielfachen",
+  "hilfe": "Klicke die Elemente an, die vervielfacht werden sollen. Rechts stellst du Anzahl und Abstand in X und Y ein. Mit dem Knopf „Muster anlegen“ oder Enter entstehen die Kopien.",
+  "tipp": "Die Kopien hängen am Original. Änderst du dort Größe oder Lage, ziehen alle Kopien mit. Zum Beispiel für ein Lochraster."
+ },
+ "patternCirc2d": {
+  "tip": "Elemente im Kreis vervielfachen",
+  "hilfe": "Klicke die Elemente an, die vervielfacht werden sollen. Rechts stellst du Anzahl und Gesamtwinkel ein und wählst bei Bedarf den Mittelpunkt (sonst gilt der Nullpunkt). Dann Enter.",
+  "tipp": "360° verteilt die Kopien rund herum. Bei weniger Grad liegt die letzte Kopie genau am Ende des Winkels. Typisch für Schraubenkreise an Motorträgern."
+ },
+ "construct2d": {
+  "tip": "Hilfslinien: zeichnen, aber nicht zur Fläche zählen",
+  "hilfe": "Mit Taste X schaltest du auf Hilfslinien um. Alles, was du dann zeichnest, ist gestrichelt und hilft nur beim Fangen, Spiegeln und Bemaßen. Ist ein Element gewählt, wandelt X dieses um.",
+  "tipp": "Hilfslinien werden beim Hochziehen ignoriert. Eine Mittellinie als Hilfslinie ist die beste Achse zum Spiegeln."
  },
  "project": {
   "tip": "Kante der Fläche in die Skizze übernehmen",
