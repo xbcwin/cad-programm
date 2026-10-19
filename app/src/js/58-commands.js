@@ -27,6 +27,8 @@ const Commands = (() => {
     add('section', 'Schnitt ein/aus', 'section', 'schnitt aufschneiden querschnitt innen schnittebene', () => Views.section(), { group: 'Ansicht', kbd: 'C' });
     add('xray', 'Röntgen ein/aus', 'xray', 'röntgen durchsichtig transparent glas innen', () => Views.xray(), { group: 'Ansicht', kbd: 'X' });
     add('explode', 'Explosion: Teile auseinanderziehen', 'explode', 'explosion explosionsansicht auseinander zerlegen baugruppe', () => Views.explode(), { group: 'Ansicht', kbd: 'U' });
+    add('frame-assist', 'Frame-Assistent: Drohnenrahmen bauen', 'frame', 'frame assistent drohne rahmen bauen quad zoll', () => DroneUI.assistant(), { group: 'Projekt' });
+    add('drone-lib', 'Drohnen-Teile: Motoren, Akkus, Videosender …', 'drone', 'motor akku videosender kamera empfänger gps kaufteil bibliothek', () => Panels.toggleFlyout('drone', $('#t-drone')), { group: 'Werkzeuge' });
     for (const t of DroneTpl.LIST) add('tpl-' + t.id, 'Drohnen-Vorlage: ' + t.name, 'drone', 'drohne vorlage rahmen frame quad ' + t.name.toLowerCase(), () => Start.openDrone(t), { group: 'Projekt' });
     add('versions', 'Versionen: speichern, vergleichen, zurückholen', 'rollback', 'version versionen stand vergleichen zurück sichern', () => Versions.dialog(), { group: 'Projekt' });
     add('version-save', 'Jetzigen Stand als Version speichern', 'save', 'version speichern sichern stand', async () => { const n = await UI.prompt('Version speichern', 'Name der Version', 'Version ' + (Versions.list().length + 1), 'Speichern'); if (n != null) Versions.save(n); }, { group: 'Projekt' });

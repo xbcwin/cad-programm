@@ -154,6 +154,10 @@ const Start = (() => {
       c.onclick = () => openDrone(t);
       dcards.append(c);
     }
+    const fa = h('button', { type: 'button', class: 'card drone', 'data-tpl': 'assist' });
+    const fth = h('div', { class: 'thumb' }); fth.innerHTML = icon('frame'); fa.append(fth, h('b', null, 'Frame-Assistent'), h('span', null, 'Größe, Rahmenform, Stack, Motor, Videosystem und Akku wählen – Tracery baut den passenden Rahmen.'));
+    fa.onclick = () => DroneUI.assistant();
+    dcards.prepend(fa);
     dsec.append(dcards); inner.append(dsec);
     const tsec = h('section', null, h('h2', null, 'Vorlagen'));
     const cards = h('div', { class: 'cards' });

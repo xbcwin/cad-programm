@@ -33,7 +33,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -1292,14 +1292,14 @@ def drohne(p, key='f5'):
 def t_drohne5(p):
     drohne(p, 'f5')
     names = p.ev("return App.doc.items.map(i=>i.name)")
-    ok1 = len(names) == 9 and names[0] == 'Unterteil' and p.ev("return App.errors.length") == 0 and p.ev("return App.doc.params.length") == 12
+    ok1 = len(names) == 10 and names[0] == 'Unterteil' and p.ev("return App.errors.length") == 0 and p.ev("return App.doc.params.length") == 13
     bb = bbox(p, 0)
     ok2 = near(bb, [-92.05, -92.05, 0, 92.05, 92.05, 5])               # Motormitte 79,55 + Auflage 12,5
     ok3 = p.ev("const r=App.results.get(App.doc.items[0].id); return r.data.faces.filter(f=>f.t!=='PLANE').length") == 32   # 4 Auflagen + 28 Löcher
-    cam = p.ev("return App.doc.items[5].t.y")
+    cam = p.ev("return App.doc.items.find(i=>i.name==='Kamera (Platzhalter)').t.y")
     ok4 = isinstance(cam, str) and cam.startswith('-')                   # Kamera vorne (−Y wie die Ansicht „Vorne“)
     m = p.ev("return Mass.measure().then(r=>[r.mass, r.parts.filter(x=>x.fixed).length, r.com])")
-    ok5 = 450 < m[0] < 560 and m[1] == 5 and abs(m[2][0]) < 0.5
+    ok5 = 450 < m[0] < 570 and m[1] == 6 and abs(m[2][0]) < 0.5
     return [ok1, ok2, ok3, ok4, ok5]
 
 
@@ -1312,7 +1312,7 @@ def t_drohne_masse(p):
         p.wait(1000)
         if p.ev("return !App.busy"): break
     ok1 = near(bbox(p, 0)[3:4], [round(125 * math.sin(math.radians(45)) + 12.5, 2)])
-    mot = p.ev("const id=App.doc.items[6].id; const r=App.results.get(id); return r && r.data.bbox.map(x=>Math.round(x*100)/100)")
+    mot = p.ev("const id=App.doc.items.find(i=>i.name.startsWith('Motor 2207')).id; const r=App.results.get(id); return r && r.data.bbox.map(x=>Math.round(x*100)/100)")
     ok2 = near(mot[3:4], [round(125 * math.sin(math.radians(45)) + 14.25, 2)])  # Motoren wandern mit
     p.ev("App.change('x', d=>{ d.params.find(x=>x.name==='Stack').expr=20; })"); p.wait(3000)
     for _ in range(30):
@@ -1325,7 +1325,7 @@ def t_drohne_masse(p):
 
 def t_drohne7(p):
     drohne(p, 'f7')
-    ok1 = p.ev("return App.doc.items.length===9 && App.errors.length===0")
+    ok1 = p.ev("return App.doc.items.length===10 && App.errors.length===0")
     mx = 147.5 * math.sin(math.radians(45))
     ok2 = near(bbox(p, 0), [-(mx + 14), -(mx + 14), 0, mx + 14, mx + 14, 6])
     m = p.ev("return Mass.measure().then(r=>r.mass)")
@@ -1356,6 +1356,94 @@ def t_festes_gewicht(p):
     p.pg.select_option('#p-mat', ''); p.wait(1500)
     ok4 = p.ev("return App.doc.items[1].massG === undefined") and p.pg.locator('#p-mass').text_content() == '12,4 g'
     return [ok1, ok2, ok3, ok4]
+
+
+# ---------- Frame-Assistent, Drohnen-Teile, Lochbilder ----------
+def warte_rechnen(p, n=60):
+    for _ in range(n):
+        p.wait(1000)
+        if p.ev("return !App.busy && App.results.size >= App.doc.items.filter(i=>!i.hidden).length"):
+            break
+    p.wait(800)
+
+
+def t_frame_assistent(p):
+    p.pg.locator('.card.drone[data-tpl="assist"]').click(); p.wait(600)
+    ok1 = p.pg.locator('.frame-assist').count() == 1 and '225 mm' in p.pg.locator('#fa-out').inner_text()
+    p.pg.select_option('#fa-zoll', '3'); p.wait(300)
+    p.pg.select_option('#fa-form', 'deadcat'); p.wait(300)
+    p.pg.select_option('#fa-video', 'o4'); p.wait(200)
+    gap = float(p.pg.locator('#fa-gap').text_content().split()[0].replace(',', '.'))
+    ok2 = gap >= 15 and p.pg.locator('#fa-warn').count() == 0
+    p.pg.locator('.modal .btn.primary').filter(has_text='Rahmen bauen').click(); warte_rechnen(p)
+    P = p.ev("return Object.fromEntries(App.doc.params.map(x=>[x.name,x.expr]))")
+    ok3 = P['Armwinkel'] == 60 and P['Armwinkel_hinten'] == 35 and P['Stack'] == 20 and P['Motorlochkreis'] == 12 and abs(P['Kamerabreite'] - 12.36) < 1e-6
+    names = p.ev("return App.doc.items.map(i=>i.name)")
+    ok4 = 'DJI O4 Air Unit Sender' in names and 'DJI O4 Air Unit Kamera' in names and not any(n.startswith('Akku') for n in names) and p.ev("return App.errors.length") == 0
+    # die vorderen Arme sind weiter gespreizt als die hinteren
+    xs = p.ev("const g=App.doc.items.find(i=>i.name.startsWith('Motor 1404')); const x=(n)=>Model.tNumeric(g.children.find(c=>c.name===n)).x; return [x('Motor vorne rechts'), x('Motor hinten rechts')]")
+    ok5 = xs[0] > xs[1] + 10                                             # Deadcat: vorne weiter gespreizt
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
+def t_frame_warnung(p):
+    p.pg.locator('.card.drone[data-tpl="assist"]').click(); p.wait(600)
+    p.pg.fill('#fa-a', '150'); p.pg.press('#fa-a', 'Enter'); p.wait(400)
+    ok1 = 'überlappen' in p.pg.locator('#fa-warn').inner_text()
+    p.pg.select_option('#fa-motor', '1103'); p.wait(300)
+    ok2 = 'passt eher' in p.pg.locator('#fa-warn').inner_text()
+    p.pg.keyboard.press('Escape'); p.wait(300)
+    return [ok1, ok2]
+
+
+def t_drohnen_teile(p):
+    p.empty()
+    p.pg.locator('#t-drone').click(); p.wait(400)
+    p.pg.locator('.flyout .chip[data-cat="akku"]').click(); p.wait(300)
+    ok1 = p.pg.locator('.flyout .tile').count() == 4
+    p.pg.locator('.flyout .tile').filter(has_text='6S 1300').first.click(); p.wait(2500)
+    ok2 = p.ev("const it=App.doc.items[0]; return it.massG===215 && it.name==='Akku 6S 1300 mAh'") and '(fest)' in (p.pg.locator('#p-mass').text_content() or '')
+    p.pg.locator('#t-drone').click(); p.wait(400)
+    p.pg.locator('.flyout .chip[data-cat="motor"]').click(); p.wait(300)
+    p.pg.locator('.flyout .tile').filter(has_text='Motor 1404').first.click(); p.wait(2500)
+    ok3 = p.ev("return App.doc.items[1].massG") == '' and p.pg.locator('.hint-box.warn').filter(has_text='Gewicht fehlt').count() == 1
+    p.ev("App.clearSelection()"); p.wait(1500)
+    ok4 = 'fehlt noch das Gewicht' in p.pg.locator('.section').filter(has_text='Schwerpunkt').inner_text()
+    p.pg.locator('#t-drone').click(); p.wait(400)
+    p.pg.locator('.flyout .chip[data-cat="video"]').click(); p.wait(300)
+    ok5 = p.pg.locator('.flyout .tile').filter(has_text='DJI O4 Air Unit Pro').count() >= 2
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
+def t_lochbild(p):
+    p.empty(); p.ev("Actions.addPrimitive('box')"); p.wait(2000)
+    p.ev("App.change('x', d=>{ const a=d.items[0]; a.t.x=0; a.t.y=0; Object.assign(a.p,{w:60,d:60,h:4}); })"); p.wait(2000)
+    p.ev("App.clearSelection(); Viewer.setView('top', false)"); p.wait(1000)
+    p.pg.locator('#t-drone').click(); p.wait(400)
+    p.pg.locator('.flyout .chip[data-cat="loch"]').click(); p.wait(300)
+    tile = p.pg.locator('.flyout .tile').filter(has_text='Motor 16').first.bounding_box()
+    tgt = world_screen(p, 0, 0, 4)
+    p.pg.mouse.move(tile['x'] + 20, tile['y'] + 20); p.pg.mouse.down()
+    p.pg.mouse.move(tgt[0], tgt[1], steps=12); p.wait(300); p.pg.mouse.move(tgt[0] + 1, tgt[1] + 1); p.wait(300); p.pg.mouse.up(); p.wait(3000)
+    rund = lambda: p.ev("return App.results.get(App.doc.items[0].id).data.faces.filter(f=>f.t!=='PLANE').length")
+    ok1 = p.ev("const c=App.doc.items[0].children; return !!c && c.some(x=>x.kind==='part' && x.p.lib==='holePattern' && x.p.pat==='motor16')") and rund() == 5
+    pid = p.ev("return App.doc.items[0].children.find(x=>x.p && x.p.lib==='holePattern').id")
+    p.ev("App.change('x', d=>{ Model.find(d, arg).item.p.pat='stack305'; })", pid); p.wait(2500)
+    ok2 = rund() == 4 and p.ev("return App.errors.length") == 0
+    p.ev("App.change('x', d=>{ const it=Model.newItem('part',{lib:'zipTie',w:3,t:1.6,gap:6,depth:10},{role:'hole', name:'Kabelbinder'}); it.t.x=20; it.t.z=4.2; Model.find(d, d.items[0].id).item.children.push(it); })"); p.wait(2500)
+    ok3 = p.ev("return App.errors.length") == 0 and p.ev("return App.results.get(App.doc.items[0].id).data.faces.length") > 14
+    return [ok1, ok2, ok3]
+
+
+def t_drohne_hilfen(p):
+    p.empty()
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    fehlt = [k for k in ['droneLib', 'frameAssist', 'holePattern', 'zipTie'] if k not in hilfen]
+    p.pg.locator('#t-drone').click(); p.wait(400)
+    p.pg.locator('.flyout .chip[data-cat="loch"]').click(); p.wait(300)
+    kacheln = set(p.pg.evaluate("[...document.querySelectorAll('.flyout .tile[data-help]')].map(t=>t.dataset.help)"))
+    ok = not fehlt and {'holePattern', 'zipTie'} <= kacheln
+    return ok, ('ohne Hilfetext: ' + ', '.join(fehlt)) if fehlt else ('' if ok else 'Kacheln: ' + ', '.join(kacheln))
 
 
 TESTS = [
@@ -1411,6 +1499,11 @@ TESTS = [
     ('Drohne 7": baut ohne Fehler / Größe / Gewicht', t_drohne7),
     ('Drohne: Explosion und Schnitt', t_drohne_ansichten),
     ('Kaufteil mit festem Gewicht', t_festes_gewicht),
+    ('Frame-Assistent: Startseite / 3" Deadcat mit DJI O4 / Werte / ohne Fehler', t_frame_assistent),
+    ('Frame-Assistent: Warnung bei zu kleinem Achsabstand und unpassendem Motor', t_frame_warnung),
+    ('Drohnen-Teile: Akku mit Gewicht / Motor ohne Gewicht wird angemahnt / Videosender', t_drohnen_teile),
+    ('Lochbild: auf Platte ziehen / Motor 16 → Stack 30,5 / Kabelbinder', t_lochbild),
+    ('Drohnen-Werkzeuge haben Hilfetexte', t_drohne_hilfen),
     ('Formel-Beispiele', t_formel_beispiele), ('Einführung „Erste Skizze“', t_einfuehrung), ('Schraubenlöcher', t_schrauben),
     ('Fies: Löschen hinter Marker + Undo', t_fies_loeschen), ('Fies: alles unterdrückt', t_fies_alle_aus),
     ('Fies: Marker am Anfang, neu laden', t_fies_reload), ('Fies: Tasten während Rechnen', t_fies_tasten),

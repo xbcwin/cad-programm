@@ -85,7 +85,7 @@ const Actions = (() => {
   }
   function addPart(def, params, opts = {}) {
     if (sceneEmpty() && !opts.onFace && def.role !== 'hole') App.fitAfterBuild();
-    const it = Model.newItem('part', { lib: def.lib, ...params }, { name: def.label, role: def.role });
+    const it = Model.newItem('part', { lib: def.lib, ...params }, { name: opts.name || def.label, role: def.role });
     const hole = def.role === 'hole';
     const spot = opts.pos || (hole ? viewCenter() : freeSpot(25, 25));
     // Loch per Klick: oben auf die Fläche unter der Bildmitte setzen, damit es gleich schneidet
@@ -100,6 +100,21 @@ const Actions = (() => {
     });
     App.select([it.id]);
     if (hole && !opts.onFace && topZ != null) UI.toast(`${def.label} sitzt oben auf der Fläche. Zieh es an die richtige Stelle – oder nimm „Loch hier“ auf einer Fläche.`, { icon: 'info', ms: 4200 });
+    return it;
+  }
+  // Kaufteil (Motor, Akku …) als eigener Platzhalter mit festem Gewicht – wird nie mit dem Körper darunter verschmolzen
+  function addBuyPart(spec, opts = {}) {
+    if (sceneEmpty() && !opts.onFace) App.fitAfterBuild();
+    const it = Model.newItem(spec.kind, { ...Model.newItem(spec.kind).p, ...spec.p }, { name: spec.name, color: spec.color });
+    it.massG = spec.massG == null ? '' : spec.massG;
+    const pb = Model.primitiveBox(spec.kind, Model.resolveP(it.p, V())) || [-10, -10, 0, 10, 10, 20];
+    App.change(`${spec.name} hinzugefügt`, (doc) => {
+      if (opts.onFace) Model.setFromMatrix(it, Model.worldMatrix(doc, opts.onFace.targetId).multiply(Model.localMatrix({ t: { ...Model.T0(), ...opts.onFace.t } })));
+      else { const [x, y] = opts.pos || freeSpot(Math.max(-pb[0], pb[3]), Math.max(-pb[1], pb[4])); it.t.x = x; it.t.y = y; }
+      doc.items.push(it);
+    });
+    App.select([it.id]);
+    UI.toast(it.massG === '' ? `${spec.name} eingefügt. Trag rechts das Gewicht aus dem Datenblatt ein.` : `${spec.name} eingefügt (${fmt(Model.num(it.massG, V(), 0), 1)} g).`, { icon: 'check', ms: 3500 });
     return it;
   }
   function remove(ids) {
@@ -331,6 +346,6 @@ const Actions = (() => {
     const r = (a) => round((a * 180) / Math.PI, 4);
     return { targetId, t: { x: sn(p.x, 0), y: sn(p.y, 1), z: sn(p.z, 2), rx: r(e.x), ry: r(e.y), rz: r(e.z) } };
   }
-  return { addPrimitive, addPart, remove, duplicate, setRole, toggleRole, group, ungroup, rotate90, mirror, dropToPlate, align, addFinish, finishAll, setFinish, removeFinish, faceFrame, selectedFace, onFaceTransform, attach, worldBox, selBox, cuttersOf, viewCenter };
+  return { addPrimitive, addPart, addBuyPart, remove, duplicate, setRole, toggleRole, group, ungroup, rotate90, mirror, dropToPlate, align, addFinish, finishAll, setFinish, removeFinish, faceFrame, selectedFace, onFaceTransform, attach, worldBox, selBox, cuttersOf, viewCenter };
 })();
 

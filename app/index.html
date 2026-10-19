@@ -184,6 +184,7 @@ body.sketching .viewcube{display:none}
 .btn:disabled{opacity:.45;cursor:default}
 .btn-row{display:flex;flex-wrap:wrap;gap:6px}
 .hint-box{font-size:13.5px;line-height:1.5;color:var(--muted);background:var(--surface-2);border-radius:var(--radius-s);padding:10px 12px}
+.hint-box.warn{color:var(--ink);background:var(--warn-soft);border-left:3px solid var(--warn)}
 .hint-box b{color:var(--ink)}
 .err-box{font-size:13.5px;line-height:1.45;color:var(--bad);background:var(--bad-soft);border-radius:var(--radius-s);padding:9px 11px;display:grid;gap:6px}
 .kbd{font:500 11.5px/1 var(--font-mono);border:1px solid var(--line-strong);border-bottom-width:2px;border-radius:4px;padding:2px 5px;color:var(--muted);background:var(--surface)}
@@ -237,6 +238,18 @@ body.sketching .viewcube{display:none}
 .tile .role{font:500 11px/1 var(--font);color:var(--faint);letter-spacing:0}
 .tile.hole-part .role{color:var(--hole)}
 .flyout .foot{font-size:12.5px;color:var(--faint)}
+.flyout.drone{width:min(560px,calc(100vw - 24px));max-height:calc(100% - 16px);overflow:auto}
+.flyout.drone .tiles{grid-template-columns:repeat(auto-fill,minmax(96px,1fr));max-height:320px;overflow:auto;padding-right:2px}
+.flyout.drone .tile svg{width:34px;height:34px}
+.flyout.drone .tile .lbl{font-size:12.5px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface-2);border-radius:999px;padding:5px 10px;font:600 12.5px/1 var(--font-cond);color:var(--ink-2)}
+.chip svg{width:15px;height:15px}
+.chip[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent)}
+.frame-assist{display:grid;gap:14px;min-width:min(560px,84vw)}
+.frame-assist .fields{grid-template-columns:1fr 1fr}
+.fa-out{display:grid;gap:10px}
+@media (max-width: 640px){.frame-assist .fields{grid-template-columns:1fr}}
 .ctxbar{position:absolute;z-index:15;display:flex;align-items:center;gap:2px;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-2);padding:4px;transform:translate(-50%,0);white-space:nowrap;max-width:calc(100% - 16px);overflow-x:auto;scrollbar-width:none}
 .ctxbar::-webkit-scrollbar{display:none}
 .ctxbar button{display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;border-radius:7px;padding:7px 9px;font:600 13.5px/1 var(--font-cond);letter-spacing:.02em;color:var(--ink-2);flex:none}
@@ -413,7 +426,7 @@ body.sketching .timeline{display:none}
 .toast.bad button{color:#fff}
 @keyframes toastIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 
-.modal-back{position:fixed;inset:0;background:rgba(10,16,22,.42);z-index:80;display:grid;place-items:center;padding:16px;animation:fadeIn .15s}
+.modal-back{position:fixed;inset:0;background:rgba(10,16,22,.42);z-index:90;display:grid;place-items:center;padding:16px;animation:fadeIn .15s}
 .modal{background:var(--surface);border-radius:14px;box-shadow:var(--shadow-2);width:min(520px,100%);max-height:calc(100% - 32px);overflow:auto;display:grid;gap:14px;padding:20px}
 .modal.wide{width:min(860px,100%)}
 .modal h2{margin:0;font:600 21px/1.2 var(--font);text-wrap:balance}
@@ -510,6 +523,9 @@ body.sketching .timeline{display:none}
 .zoom-btns{position:absolute;right:12px;bottom:12px;display:flex;gap:6px;z-index:12}
 .zoom-btns button{height:34px;min-width:34px;border-radius:9px;border:1px solid var(--line);background:var(--surface);display:grid;place-items:center;color:var(--ink-2);box-shadow:var(--shadow-1);padding:0 8px;font:600 13px/1 var(--font-mono)}
 
+/* Kopfzeile: bei weniger Platz zeigen erst die Nebenwerkzeuge, dann alle außer „Exportieren“ nur ihr Symbol */
+@media (max-width: 1500px) and (min-width: 901px){ .tool.minor span{display:none} .tool.minor{padding:7px 9px} }
+@media (max-width: 1240px) and (min-width: 901px){ .tool:not(.primary) span{display:none} .tool{padding:7px 9px} }
 @media (max-width: 1100px){
   .workspace{grid-template-columns:220px minmax(0,1fr) 270px}
   .tool .l-full{display:none}
@@ -1195,6 +1211,26 @@ const HELP = {
   "tip": "Stände speichern, vergleichen und zurückholen",
   "hilfe": "Projektmenü → „Versionen …“: Speichere den jetzigen Stand mit Namen. Später zeigt „Vergleichen“, was sich geändert hat – auch im Bild als roter Umriss –, und „Zurückholen“ setzt das Projekt auf diese Version.",
   "tipp": "Speichere eine Version, bevor du etwas Großes ausprobierst. Versionen kommen mit in die Projektdatei."
+ },
+ "droneLib": {
+  "tip": "Frame-Assistent, Kaufteile und Lochbilder für Drohnen",
+  "hilfe": "Oben „Drohne“: Der Frame-Assistent baut einen ganzen Rahmen. Darunter wählst du Motoren, Akkus, Videosender, Empfänger und mehr – anklicken oder auf eine Fläche ziehen. Unter „Lochbilder und Bausteine“ liegen Stack- und Motor-Lochbilder.",
+  "tipp": "Kaufteile sind Platzhalter mit dem Gewicht aus dem Datenblatt. So stimmt das Gesamtgewicht schon beim Konstruieren."
+ },
+ "frameAssist": {
+  "tip": "Drohnenrahmen in einem Schritt bauen",
+  "hilfe": "Wähle Propellergröße, Rahmenform, Stack, Motor, Videosystem und Akku. Tracery rechnet den Achsabstand so, dass zwischen den Propellern genug Luft bleibt, und warnt, wenn etwas nicht passt.",
+  "tipp": "Beim Deadcat sind die vorderen Arme weiter gespreizt – dann sind die Propeller nicht im Kamerabild."
+ },
+ "holePattern": {
+  "tip": "Vier Löcher für Stack oder Motor auf einmal",
+  "hilfe": "Zieh ein Lochbild auf eine Fläche. Rechts wählst du Stack 30,5 / 25,5 / 20 / 16 oder einen Motor-Lochkreis, die Schraube, die Drehung und das Mittelloch.",
+  "tipp": "Stack-Maße sind Quadrate, Motor-Maße sind Lochkreise – „Motor 16“ heißt: vier Löcher auf einem Kreis mit 16 mm Durchmesser."
+ },
+ "zipTie": {
+  "tip": "Zwei Schlitze für einen Kabelbinder",
+  "hilfe": "Zieh die Kabelbinder-Schlitze auf eine Fläche. Das Kabel liegt dazwischen, der Binder läuft unten durch.",
+  "tipp": "Praktisch für Antennen, Empfänger und den Akku-Stecker."
  }
 };
 
@@ -4237,6 +4273,17 @@ const LIB = [
   { lib: 'slotHole', label: 'Langloch', role: 'hole', icon: 'slot', desc: 'Längliches Loch zum Verstellen', params: [
     { k: 'len', label: 'Länge', type: 'num', def: 20 }, { k: 'w', label: 'Breite', type: 'num', def: 4.5 }, { k: 'depth', label: 'Tiefe', type: 'num', def: 10 },
   ] },
+  { lib: 'holePattern', label: 'Lochbild', role: 'hole', icon: 'stack', desc: 'Vier Schraubenlöcher für einen Stack oder einen Motor', params: [
+    { k: 'pat', label: 'Lochbild', type: 'select', options: [['stack305', 'Stack 30,5 × 30,5'], ['stack255', 'Stack 25,5 × 25,5'], ['stack20', 'Stack 20 × 20'], ['stack16', 'Stack 16 × 16'], ['motor19', 'Motor, Lochkreis 19'], ['motor16', 'Motor, Lochkreis 16'], ['motor12', 'Motor, Lochkreis 12'], ['motor9', 'Motor, Lochkreis 9'], ['square', 'Quadrat (eigenes Maß)'], ['circle', 'Lochkreis (eigenes Maß)']], def: 'stack305' },
+    { k: 'a', label: 'Eigenes Maß', type: 'num', def: 20 },
+    { k: 'size', label: 'Schraube', type: 'select', options: SIZES, def: 'M3' },
+    { k: 'center', label: 'Mittelloch Ø', type: 'num', def: null, auto: true },
+    { k: 'rot', label: 'Drehung', type: 'num', def: 0, unit: '°' },
+    { k: 'depth', label: 'Tiefe', type: 'num', def: 10 },
+  ] },
+  { lib: 'zipTie', label: 'Kabelbinder', role: 'hole', icon: 'strap', desc: 'Zwei Schlitze, um ein Kabel mit einem Kabelbinder festzumachen', params: [
+    { k: 'w', label: 'Binderbreite', type: 'num', def: 3 }, { k: 't', label: 'Schlitzbreite', type: 'num', def: 1.6 }, { k: 'gap', label: 'Abstand', type: 'num', def: 6 }, { k: 'depth', label: 'Tiefe', type: 'num', def: 10 },
+  ] },
   { lib: 'snapHook', label: 'Schnapphaken', role: 'solid', icon: 'snap', desc: 'Federnder Haken zum Einrasten', params: [
     { k: 'length', label: 'Länge', type: 'num', def: 12 }, { k: 'w', label: 'Breite', type: 'num', def: 8 }, { k: 't', label: 'Dicke', type: 'num', def: 1.6 }, { k: 'hook', label: 'Hakentiefe', type: 'num', def: 1.2 },
   ] },
@@ -4275,6 +4322,62 @@ function partSVG(def) {
   return `<svg viewBox="0 0 24 24" fill="none" stroke="${col}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[def.icon] || IC.parts}</svg>`;
 }
 
+// ---- 41-dronelib.js ----
+// ================= Drohnen-Bibliothek: Standardmaße und Kaufteile =================
+// Die Daten kommen beim Bauen aus app/data (fpv-masse.json, bauteile.json – Entwurf Gemini, geprüft).
+const FPV_DATA = {"_hinweis":"FPV-Standardmaße (Entwurf Gemini, Prompt E; geprüft und ergänzt). Alle Maße in mm. 'ca': true heißt: Hersteller weichen spürbar ab – nur als Startwert verwenden. Stack-Lochbilder sind Quadrate (Kantenlänge), Motor-Lochbilder sind Lochkreise (Durchmesser, 4 Löcher im 90°-Abstand). Geprüft am 19.10.2026 u. a. mit Herstellerangaben (BetaFPV 1103, iFlight XING 2806.5).","stack":[{"name":"16×16","quadrat_mm":16.0,"schraube":"M2","daempfer_d_mm":4.0,"platine_mm":21.0,"ca":true},{"name":"20×20","quadrat_mm":20.0,"schraube":"M2 oder M3","daempfer_d_mm":5.5,"platine_mm":28.0,"ca":true,"notiz":"ältere Boards M2, viele neuere M3 – vor dem Bohren am Board nachsehen"},{"name":"25,5×25,5 (Whoop-/Toothpick-AIO)","quadrat_mm":25.5,"schraube":"M2","daempfer_d_mm":4.5,"platine_mm":32.0,"ca":true},{"name":"30,5×30,5","quadrat_mm":30.5,"schraube":"M3","daempfer_d_mm":6.0,"platine_mm":36.0,"ca":true,"notiz":"Platinen meist 36–38 mm"}],"motoren":[{"stator":"1103","lochkreis_d_mm":[8.5],"loecher":null,"schraube":"M1.6","glocke_d_mm":14.0,"welle_d_mm":1.5,"propeller_zoll":[1.7,3.0],"ca":true,"notiz":"BetaFPV 1103: M1.6 auf Ø 8,5 mm, Propeller 1735 bis 3020"},{"stator":"1404","lochkreis_d_mm":[9.0,12.0],"loecher":4,"schraube":"M2","glocke_d_mm":18.0,"welle_d_mm":1.5,"propeller_zoll":[3.0,4.0],"ca":true},{"stator":"2004","lochkreis_d_mm":[12.0],"loecher":4,"schraube":"M2","glocke_d_mm":24.5,"welle_d_mm":1.5,"propeller_zoll":[3.5,5.0],"ca":true,"notiz":"manche mit 5-mm-Welle (M5)"},{"stator":"2207","lochkreis_d_mm":[16.0],"loecher":4,"schraube":"M3","glocke_d_mm":27.5,"welle_d_mm":5.0,"propeller_zoll":[5.0,5.0],"ca":false},{"stator":"2306","lochkreis_d_mm":[16.0],"loecher":4,"schraube":"M3","glocke_d_mm":28.5,"welle_d_mm":5.0,"propeller_zoll":[5.0,5.0],"ca":false},{"stator":"2806.5","lochkreis_d_mm":[19.0],"loecher":4,"schraube":"M3","glocke_d_mm":35.0,"welle_d_mm":5.0,"propeller_zoll":[6.0,7.0],"ca":true,"notiz":"Glocke je nach Hersteller 33–35 mm (iFlight XING 35,1 mm)"}],"kameras":[{"name":"Nano","breite_mm":14.0,"schraube_seitlich":"M1.4 oder M2","ca":true},{"name":"Micro","breite_mm":19.0,"schraube_seitlich":"M2","ca":true},{"name":"Mini","breite_mm":21.8,"schraube_seitlich":"M2","ca":true},{"name":"Full Size","breite_mm":28.0,"schraube_seitlich":"M2 oder M2.5","ca":true}],"propeller":[{"zoll":3,"durchmesser_mm":76.2,"nabe_mm":[1.5,5.0],"abstand_spitzen_mm":3.0,"ca":true,"notiz":"1,5 mm (T-Mount) für kleine Motoren, 5 mm für M5-Wellen"},{"zoll":4,"durchmesser_mm":101.6,"nabe_mm":[5.0],"abstand_spitzen_mm":4.0,"ca":true},{"zoll":5,"durchmesser_mm":127.0,"nabe_mm":[5.0],"abstand_spitzen_mm":5.0,"ca":false},{"zoll":6,"durchmesser_mm":152.4,"nabe_mm":[5.0],"abstand_spitzen_mm":6.0,"ca":false},{"zoll":7,"durchmesser_mm":177.8,"nabe_mm":[5.0],"abstand_spitzen_mm":8.0,"ca":false}],"akkus":[{"typ":"4S 1300 mAh","l_mm":75.0,"b_mm":35.0,"h_mm":28.0,"gewicht_g":155,"ca":true},{"typ":"4S 1500 mAh","l_mm":76.0,"b_mm":36.0,"h_mm":32.0,"gewicht_g":178,"ca":true},{"typ":"6S 1300 mAh","l_mm":75.0,"b_mm":38.0,"h_mm":39.0,"gewicht_g":215,"ca":true},{"typ":"6S 1500 mAh","l_mm":78.0,"b_mm":39.0,"h_mm":43.0,"gewicht_g":250,"ca":true}]};
+const BUY_DATA = {"_hinweis":"Kaufteile für die Bauteil-Bibliothek (Entwurf Gemini, Prompt F). Maße in mm, Gewicht in g. 'geprueft': am 19.10.2026 mit der Hersteller- oder Händlerseite verglichen. 'unsicher': Wert fehlt oder ist abgeleitet. Lochbild = Quadrat-Seitenlänge.","videosender":[{"name":"DJI O3 Air Unit (Sendeeinheit)","hersteller":"DJI","l_mm":32.5,"b_mm":30.5,"h_mm":14.5,"gewicht_g":28.0,"lochbild":"25,5×25,5","kamera_breite_mm":20.0,"quelle":"https://www.getfpv.com/dji-o3-air-unit.html","unsicher":false,"geprueft":true,"notiz":"Gesamt mit Kamera ca. 36,4 g; Schraubengröße nicht angegeben"},{"name":"DJI O3 Air Unit (Kameramodul)","hersteller":"DJI","l_mm":21.2,"b_mm":20.0,"h_mm":19.5,"gewicht_g":8.3,"lochbild":null,"kamera_breite_mm":20.0,"quelle":"https://www.getfpv.com/dji-o3-air-unit.html (inkl. Koaxialkabel)","unsicher":false,"geprueft":true},{"name":"DJI O4 Air Unit Pro (Sendeeinheit)","hersteller":"DJI","l_mm":33.5,"b_mm":33.5,"h_mm":13.0,"gewicht_g":15.6,"lochbild":null,"kamera_breite_mm":20.0,"quelle":"https://www.dji.com/o4-air-unit/specs","unsicher":false,"geprueft":true,"notiz":"Lochbild auf der Herstellerseite nicht angegeben"},{"name":"DJI O4 Air Unit Pro (Kameramodul)","hersteller":"DJI","l_mm":25.55,"b_mm":20.0,"h_mm":23.3,"gewicht_g":16.4,"lochbild":null,"kamera_breite_mm":20.0,"quelle":"https://www.dji.com/o4-air-unit/specs","unsicher":true,"geprueft":true,"notiz":"Gewicht abgeleitet: 32 g gesamt − 15,6 g Sendeeinheit"},{"name":"DJI O4 Air Unit (Sendeeinheit)","hersteller":"DJI","l_mm":30.0,"b_mm":30.0,"h_mm":6.0,"gewicht_g":5.1,"lochbild":null,"kamera_breite_mm":12.36,"quelle":"https://www.dji.com/o4-air-unit/specs","unsicher":false,"geprueft":true,"notiz":"Gemini hatte 8,2 g – das ist das Gesamtgewicht mit Kamera"},{"name":"DJI O4 Air Unit (Kameramodul)","hersteller":"DJI","l_mm":13.44,"b_mm":12.36,"h_mm":16.5,"gewicht_g":3.1,"lochbild":null,"kamera_breite_mm":12.36,"quelle":"https://www.dji.com/o4-air-unit/specs","unsicher":true,"geprueft":true,"notiz":"Gewicht abgeleitet: 8,2 g gesamt − 5,1 g Sendeeinheit"},{"name":"Walksnail Avatar HD V2 (Sendeeinheit, Pro Kit)","hersteller":"Caddx / Walksnail","l_mm":33.5,"b_mm":33.5,"h_mm":10.5,"gewicht_g":17.6,"lochbild":"25,5×25,5 oder 20×20","kamera_breite_mm":19.0,"quelle":"https://www.getfpv.com/walksnail-avatar-hd-pro-kit-32gb-w-gyro.html","unsicher":false,"geprueft":true},{"name":"Walksnail Avatar HD Pro Kamera","hersteller":"Caddx / Walksnail","l_mm":24.0,"b_mm":19.0,"h_mm":19.0,"gewicht_g":9.5,"lochbild":null,"kamera_breite_mm":19.0,"quelle":"https://www.getfpv.com/walksnail-avatar-hd-pro-kit-32gb-w-gyro.html (inkl. 140 mm Koaxialkabel)","unsicher":false,"geprueft":true},{"name":"HDZero Freestyle V2 (Sendeeinheit)","hersteller":"Divimath / HDZero","l_mm":29.0,"b_mm":30.0,"h_mm":14.0,"gewicht_g":22.3,"lochbild":"20×20 M2","kamera_breite_mm":19.0,"quelle":"https://www.getfpv.com/fpv/hd-fpv/hdzero-freestyle-v2-vtx.html","unsicher":false,"geprueft":true},{"name":"HDZero Micro V3 Kamera","hersteller":"Divimath / HDZero","l_mm":24.0,"b_mm":19.0,"h_mm":19.0,"gewicht_g":7.5,"lochbild":null,"kamera_breite_mm":19.0,"quelle":"https://docs.hd-zero.com/camera-micro-v3","unsicher":false,"geprueft":false},{"name":"TBS Unify Pro32 HV (analog)","hersteller":"Team BlackSheep","l_mm":37.0,"b_mm":25.0,"h_mm":5.8,"gewicht_g":8.7,"lochbild":null,"kamera_breite_mm":null,"quelle":"https://www.team-blacksheep.com/products/prod:unifypro32_hv","unsicher":false,"geprueft":false}],"empfaenger":[{"name":"RadioMaster RP1 (ELRS 2,4 GHz)","hersteller":"RadioMaster","l_mm":13.0,"b_mm":11.0,"h_mm":3.0,"gewicht_g":2.2,"lochbild":null,"kamera_breite_mm":null,"quelle":"https://radiomasterrc.com/products/rp1-expresslrs-2-4ghz-nano-receiver","unsicher":false,"geprueft":true,"notiz":"Gewicht mit Antenne"},{"name":"RadioMaster RP3 (ELRS 2,4 GHz, Diversity)","hersteller":"RadioMaster","l_mm":22.0,"b_mm":13.0,"h_mm":4.0,"gewicht_g":4.6,"lochbild":null,"kamera_breite_mm":null,"quelle":"https://www.radiomasterrc.com/products/rp3-expresslrs-2-4ghz-nano-receiver","unsicher":false,"geprueft":false,"notiz":"Gewicht mit zwei Antennen"}],"gps":[{"name":"Flywoo GOKU GM10 Mini V3","hersteller":"Flywoo","l_mm":18.0,"b_mm":18.0,"h_mm":4.8,"gewicht_g":4.7,"lochbild":null,"kamera_breite_mm":null,"quelle":"https://www.myfpvstore.com/fpv-electronics/flywoo-goku-gm10-mini-v3-gps","unsicher":false,"geprueft":true},{"name":"HGLRC M100 Mini","hersteller":"HGLRC","l_mm":15.0,"b_mm":15.0,"h_mm":5.2,"gewicht_g":2.7,"lochbild":null,"kamera_breite_mm":null,"quelle":"https://www.hglrc.com/products/hglrc-m100-mini-gps","unsicher":false,"geprueft":false},{"name":"GEPRC GEP-M10 Nano","hersteller":"GEPRC","l_mm":15.0,"b_mm":15.0,"h_mm":5.5,"gewicht_g":2.5,"lochbild":null,"kamera_breite_mm":null,"quelle":"https://geprc.com/product/gep-m10-nano-gps/","unsicher":false,"geprueft":false}],"actioncam":[{"name":"GoPro HERO12 Black","hersteller":"GoPro","l_mm":71.8,"b_mm":33.6,"h_mm":50.8,"gewicht_g":154.0,"lochbild":null,"kamera_breite_mm":null,"quelle":"https://gopro.com (mit Akku)","unsicher":false,"geprueft":false},{"name":"GEPRC Naked Camera GP11","hersteller":"GEPRC","l_mm":66.0,"b_mm":24.5,"h_mm":46.0,"gewicht_g":46.7,"lochbild":null,"kamera_breite_mm":null,"quelle":"https://geprc.com/product/geprc-naked-camera-gp11/","unsicher":false,"geprueft":false},{"name":"Insta360 GO 3 (nur Kamera)","hersteller":"Insta360","l_mm":25.6,"b_mm":23.2,"h_mm":54.4,"gewicht_g":35.5,"lochbild":null,"kamera_breite_mm":null,"quelle":"https://www.insta360.com/de/product/insta360-go3","unsicher":false,"geprueft":false}],"stecker":[{"name":"XT60H Stecker (male)","hersteller":"Amass","l_mm":21.5,"b_mm":15.5,"h_mm":8.1,"gewicht_g":3.5,"lochbild":null,"kamera_breite_mm":null,"quelle":"https://www.getfpv.com/amass-xt60h-power-connectors-male-female-5-sets-10-pcs.html","unsicher":true,"geprueft":false},{"name":"XT30U Stecker (male)","hersteller":"Amass","l_mm":12.0,"b_mm":11.0,"h_mm":6.0,"gewicht_g":0.7,"lochbild":null,"kamera_breite_mm":null,"quelle":"https://www.team-blacksheep.com/products/product:4818","unsicher":false,"geprueft":false}],"kondensator":[{"name":"Panasonic FR 35 V 1000 µF (12,5 × 20)","hersteller":"Panasonic","l_mm":20.0,"b_mm":12.5,"h_mm":12.5,"gewicht_g":null,"lochbild":null,"kamera_breite_mm":null,"quelle":"https://www.newark.com/panasonic/eeufr1v102/cap-alu-elec-1000uf-35v-20/dp/74R3452","unsicher":true,"geprueft":false,"notiz":"zylindrisch: Ø 12,5 mm, 20 mm lang"}]};
+const DroneLib = (() => {
+  // Motoren, deren Höhe und Gewicht aus einem Datenblatt stammen (sonst Schätzwerte, markiert)
+  const MOTOR_SHEET = { '2207': { d: 28.5, h: 19.7, g: 33.8, src: 'iFlight XING-E 2207' }, '2806.5': { d: 35.1, h: 21.3, g: 54, src: 'iFlight XING 2806.5' } };
+  function motors() {
+    return (FPV_DATA.motoren || []).map((m) => {
+      const s = MOTOR_SHEET[m.stator];
+      const d = s ? s.d : m.glocke_d_mm;
+      return { stator: m.stator, d, h: s ? s.h : round(d * 0.7, 1), g: s ? s.g : '', circle: m.lochkreis_d_mm[m.lochkreis_d_mm.length - 1], screw: m.schraube.split(' ')[0], props: m.propeller_zoll, sheet: !!s, src: s ? s.src : null };
+    });
+  }
+  function motor(stator) { return motors().find((m) => m.stator === stator) || motors().find((m) => m.stator === '2207'); }
+  function akkus() { return (FPV_DATA.akkus || []).map((a) => ({ name: 'Akku ' + a.typ, w: a.b_mm, l: a.l_mm, h: a.h_mm, g: a.gewicht_g })); }
+  function akku(typ) { return akkus().find((a) => a.name === typ || a.name === 'Akku ' + typ) || null; }
+  function stacks() { return (FPV_DATA.stack || []).map((s) => ({ name: s.name, a: s.quadrat_mm, screw: s.schraube.startsWith('M2') ? 'M2' : 'M3', board: s.platine_mm })); }
+  function cams() { return (FPV_DATA.kameras || []).map((c) => ({ name: c.name, w: c.breite_mm })); }
+  // Kaufteile als Platzhalter: Quader (oder Zylinder) mit festem Gewicht aus dem Datenblatt
+  const CATS = [
+    ['motor', 'Motoren', 'motor'], ['akku', 'Akkus', 'battery'], ['video', 'Video', 'fpvCam'], ['funk', 'Empfang und GPS', 'antenna'],
+    ['action', 'Action-Kameras', 'cube'], ['klein', 'Kleinteile', 'bolt'], ['loch', 'Lochbilder und Bausteine', 'stack'],
+  ];
+  const COL = { motor: '#b9c2cb', akku: '#e2b53a', video: '#16202b', funk: '#5b6470', action: '#3f7fd6', klein: '#d24a3c' };
+  function buyParts(cat) {
+    const out = [];
+    const box = (name, l, b, hgt, g, extra = {}) => ({ buy: true, kind: 'box', p: { w: b, d: l, h: hgt }, name, massG: g == null ? '' : g, color: COL[cat], ...extra });
+    if (cat === 'motor') for (const m of motors()) out.push({ buy: true, kind: 'cylinder', p: { d: m.d, h: m.h }, name: 'Motor ' + m.stator, massG: m.g, color: COL.motor, info: m.sheet ? `${m.src}: ${fmt(m.g, 1)} g` : 'Höhe geschätzt, Gewicht bitte eintragen' });
+    if (cat === 'akku') for (const a of akkus()) out.push(box(a.name, a.l, a.w, a.h, a.g, { info: `ca. ${a.g} g` }));
+    if (cat === 'video') {
+      for (const v of BUY_DATA.videosender || []) out.push(box(v.name, v.l_mm, v.b_mm, v.h_mm, v.gewicht_g, { info: v.gewicht_g != null ? `${fmt(v.gewicht_g, 1)} g` + (v.unsicher ? ' (abgeleitet)' : '') : 'Gewicht bitte eintragen' }));
+      for (const c of cams()) out.push(box(`Kamera ${c.name} (analog)`, c.w, c.w, c.w, '', { info: `${fmt(c.w, 1)} mm breit, Gewicht eintragen` }));
+    }
+    if (cat === 'funk') for (const v of [...(BUY_DATA.empfaenger || []), ...(BUY_DATA.gps || [])]) out.push(box(v.name, v.l_mm, v.b_mm, v.h_mm, v.gewicht_g, { info: `${fmt(v.gewicht_g, 1)} g` }));
+    if (cat === 'action') for (const v of BUY_DATA.actioncam || []) out.push(box(v.name, v.b_mm, v.l_mm, v.h_mm, v.gewicht_g, { info: `${fmt(v.gewicht_g, 1)} g` }));
+    if (cat === 'klein') {
+      for (const v of BUY_DATA.stecker || []) out.push(box(v.name, v.l_mm, v.b_mm, v.h_mm, v.gewicht_g, { info: `ca. ${fmt(v.gewicht_g, 1)} g` }));
+      for (const v of BUY_DATA.kondensator || []) out.push({ buy: true, kind: 'cylinder', p: { d: v.b_mm, h: v.l_mm }, name: 'Kondensator ' + v.name.replace(/^Panasonic /, ''), massG: '', color: COL.klein, info: 'Gewicht eintragen' });
+    }
+    return out;
+  }
+  // Lochbilder und Bausteine sind Bauteile aus der Bibliothek mit fertigen Einstellungen
+  function holeParts() {
+    const hp = LIBMAP.holePattern;
+    const mk = (label, p) => ({ part: hp, params: { ...libDefaults(hp), ...p }, name: label });
+    return [
+      mk('Stack 30,5', { pat: 'stack305', size: 'M3' }), mk('Stack 25,5', { pat: 'stack255', size: 'M2' }), mk('Stack 20', { pat: 'stack20', size: 'M2' }), mk('Stack 16', { pat: 'stack16', size: 'M2' }),
+      mk('Motor 19', { pat: 'motor19', size: 'M3' }), mk('Motor 16', { pat: 'motor16', size: 'M3' }), mk('Motor 12', { pat: 'motor12', size: 'M2' }), mk('Motor 9', { pat: 'motor9', size: 'M2' }),
+      { part: LIBMAP.zipTie, params: libDefaults(LIBMAP.zipTie), name: 'Kabelbinder' },
+      { part: LIBMAP.slotHole, params: { ...libDefaults(LIBMAP.slotHole), len: 21, w: 3 }, name: 'Gurtschlitz' },
+    ];
+  }
+  return { motors, motor, akkus, akku, stacks, cams, CATS, buyParts, holeParts };
+})();
 // ---- 45-actions.js ----
 // ================= Aktionen am Modell =================
 const Actions = (() => {
@@ -4363,7 +4466,7 @@ const Actions = (() => {
   }
   function addPart(def, params, opts = {}) {
     if (sceneEmpty() && !opts.onFace && def.role !== 'hole') App.fitAfterBuild();
-    const it = Model.newItem('part', { lib: def.lib, ...params }, { name: def.label, role: def.role });
+    const it = Model.newItem('part', { lib: def.lib, ...params }, { name: opts.name || def.label, role: def.role });
     const hole = def.role === 'hole';
     const spot = opts.pos || (hole ? viewCenter() : freeSpot(25, 25));
     // Loch per Klick: oben auf die Fläche unter der Bildmitte setzen, damit es gleich schneidet
@@ -4378,6 +4481,21 @@ const Actions = (() => {
     });
     App.select([it.id]);
     if (hole && !opts.onFace && topZ != null) UI.toast(`${def.label} sitzt oben auf der Fläche. Zieh es an die richtige Stelle – oder nimm „Loch hier“ auf einer Fläche.`, { icon: 'info', ms: 4200 });
+    return it;
+  }
+  // Kaufteil (Motor, Akku …) als eigener Platzhalter mit festem Gewicht – wird nie mit dem Körper darunter verschmolzen
+  function addBuyPart(spec, opts = {}) {
+    if (sceneEmpty() && !opts.onFace) App.fitAfterBuild();
+    const it = Model.newItem(spec.kind, { ...Model.newItem(spec.kind).p, ...spec.p }, { name: spec.name, color: spec.color });
+    it.massG = spec.massG == null ? '' : spec.massG;
+    const pb = Model.primitiveBox(spec.kind, Model.resolveP(it.p, V())) || [-10, -10, 0, 10, 10, 20];
+    App.change(`${spec.name} hinzugefügt`, (doc) => {
+      if (opts.onFace) Model.setFromMatrix(it, Model.worldMatrix(doc, opts.onFace.targetId).multiply(Model.localMatrix({ t: { ...Model.T0(), ...opts.onFace.t } })));
+      else { const [x, y] = opts.pos || freeSpot(Math.max(-pb[0], pb[3]), Math.max(-pb[1], pb[4])); it.t.x = x; it.t.y = y; }
+      doc.items.push(it);
+    });
+    App.select([it.id]);
+    UI.toast(it.massG === '' ? `${spec.name} eingefügt. Trag rechts das Gewicht aus dem Datenblatt ein.` : `${spec.name} eingefügt (${fmt(Model.num(it.massG, V(), 0), 1)} g).`, { icon: 'check', ms: 3500 });
     return it;
   }
   function remove(ids) {
@@ -4609,7 +4727,7 @@ const Actions = (() => {
     const r = (a) => round((a * 180) / Math.PI, 4);
     return { targetId, t: { x: sn(p.x, 0), y: sn(p.y, 1), z: sn(p.z, 2), rx: r(e.x), ry: r(e.y), rz: r(e.z) } };
   }
-  return { addPrimitive, addPart, remove, duplicate, setRole, toggleRole, group, ungroup, rotate90, mirror, dropToPlate, align, addFinish, finishAll, setFinish, removeFinish, faceFrame, selectedFace, onFaceTransform, attach, worldBox, selBox, cuttersOf, viewCenter };
+  return { addPrimitive, addPart, addBuyPart, remove, duplicate, setRole, toggleRole, group, ungroup, rotate90, mirror, dropToPlate, align, addFinish, finishAll, setFinish, removeFinish, faceFrame, selectedFace, onFaceTransform, attach, worldBox, selBox, cuttersOf, viewCenter };
 })();
 
 // ---- 46-features.js ----
@@ -4745,7 +4863,7 @@ const Mass = (() => {
     let mass = 0; const c = [0, 0, 0]; const V = Model.vars(doc).v;
     for (const p of r.parts || []) {
       const it = doc.items.find((x) => x.id === p.id);
-      if (fixedOf(it)) { p.fixed = true; p.own = true; p.mat = null; p.mass = Math.max(0, Model.num(it.massG, V, 0)); }
+      if (fixedOf(it)) { p.fixed = true; p.own = true; p.mat = null; p.missing = it.massG === ''; p.mass = Math.max(0, Model.num(it.massG, V, 0)); }
       else { const m = materialFor(it, doc); p.mat = m.k; p.rho = m.rho; p.own = !!(it && matOf(it.mat)); p.mass = (p.volume / 1000) * m.rho; }
       mass += p.mass;
       if (p.com) for (let i = 0; i < 3; i++) c[i] += p.com[i] * p.mass;
@@ -4766,7 +4884,8 @@ const Mass = (() => {
     cache = { rev, p: measureDoc(App.doc).then((r) => { if (cache.rev === rev) ev.emit('measured', r); return r; }) };
     return cache.p;
   }
-  function fixedOf(it) { return !!(it && it.massG != null && it.massG !== ''); }
+  // festes Gewicht – auch wenn es noch fehlt (leer): dann zählt es mit 0 g und wird angemahnt
+  function fixedOf(it) { return !!(it && it.massG != null); }
   function partOf(r, id) { return r && (r.parts || []).find((p) => p.id === id) || null; }
   const gText = (g) => `${fmt(g, g < 10 ? 2 : 1)} g`;
 
@@ -5173,12 +5292,12 @@ const UI = (() => {
   // ---------- Tooltips ----------
   let tipEl = null, tipTimer = 0, helpTimer = 0;
   // Hilfe-Schlüssel eines Elements: data-help, sonst nach id oder Beschriftung
-  const HELP_IDS = { 't-measure': 'measure', 't-sketch': 'sketchFace', 'lt-params': 'params', 'timeline': 'timeline' };
+  const HELP_IDS = { 't-measure': 'measure', 't-sketch': 'sketchFace', 'lt-params': 'params', 'timeline': 'timeline', 't-drone': 'droneLib', 'drone-assist': 'frameAssist' };
   const HELP_LABELS = { 'Spiegeln': 'mirror', 'Hochziehen': 'extrude', 'Skizze hierauf': 'sketchFace' };
   function helpKey(t) { const k = t.dataset.help || HELP_IDS[t.id] || HELP_LABELS[(t.textContent || '').trim()]; return k && HELP[k] ? k : null; }
   function initTips() {
     document.addEventListener('pointerover', (e) => {
-      const t = e.target.closest && e.target.closest('[data-tip],[data-help],#t-measure,#t-sketch,#lt-params');
+      const t = e.target.closest && e.target.closest('[data-tip],[data-help],#t-measure,#t-sketch,#lt-params,#t-drone,#drone-assist');
       clearTimeout(tipTimer); clearTimeout(helpTimer);
       if (!t) { hideTip(); return; }
       tipTimer = setTimeout(() => showTip(t), 420);
@@ -5325,9 +5444,10 @@ const Panels = (() => {
       btn('t-body', 'cube', 'Körper', 'Grundkörper hinzufügen – anklicken oder auf die Fläche ziehen', 'K', (e) => toggleFlyout('bodies', e.currentTarget));
       btn('t-sketch', 'sketch', 'Skizze', 'Eine 2D-Skizze zeichnen und daraus einen Körper machen', 'S', () => Sketch.chooseAndStart());
       btn('t-parts', 'parts', 'Bauteile', 'Schraubenlöcher, Mutternfallen, Scharniere, Zahnräder …', 'B', (e) => toggleFlyout('parts', e.currentTarget));
-      btn('t-measure', 'measure', 'Messen', 'Abstände und Durchmesser messen', 'M', () => Measure.toggle());
-      btn('t-notes', 'noteDraw', 'Notizen', 'Notizstift: frei malen und Text hinschreiben – ohne technische Bedeutung', 'N', () => Notes.toggle());
-      btn('t-views', 'xray', 'Ansicht', 'Schnitt, Röntgen, Explosion und Fokus-Vorschau – ändert nur die Anzeige', '', (e) => Views.menu(e.currentTarget));
+      btn('t-drone', 'drone', 'Drohne', 'Frame-Assistent, Kaufteile wie Motoren und Akkus, Lochbilder', '', (e) => toggleFlyout('drone', e.currentTarget));
+      btn('t-measure', 'measure', 'Messen', 'Messen: Abstände, Winkel, Flächen und Durchmesser', 'M', () => Measure.toggle(), 'minor');
+      btn('t-notes', 'noteDraw', 'Notizen', 'Notizstift: frei malen und Text hinschreiben – ohne technische Bedeutung', 'N', () => Notes.toggle(), 'minor');
+      btn('t-views', 'xray', 'Ansicht', 'Ansicht: Schnitt, Röntgen, Explosion und Fokus-Vorschau – ändert nur die Anzeige', '', (e) => Views.menu(e.currentTarget), 'minor');
       el.append(h('div', { class: 'sep' }));
       Views.sync();
       btn('t-export', 'export', 'Exportieren', 'Als STEP, STL oder 3MF speichern (ZIP)', 'Strg E', () => Print.exportDialog(), 'primary', 'Export');
@@ -5367,6 +5487,9 @@ const Panels = (() => {
       boxHole.onclick = () => { Actions.addPrimitive('box', { role: 'hole', name: 'Aussparung', p: { w: 10, d: 10, h: 30 } }); closeFlyout(); };
       row.append(holeBtn, boxHole); el.append(row);
       el.append(h('div', { class: 'foot' }, 'Tipp: Jeder Körper kann mit einem Klick zum Loch werden.'));
+    } else if (kind === 'drone') {
+      el.classList.add('drone');
+      DroneUI.flyout(el);
     } else {
       el.append(h('h3', null, 'Bauteile'));
       const tiles = h('div', { class: 'tiles' });
@@ -5654,6 +5777,8 @@ const Panels = (() => {
       const bits = [];
       if (n) bits.push(`${n} ${n === 1 ? 'Teil hat' : 'Teile haben'} ein eigenes Material`);
       if (nf) bits.push(`${nf} ${nf === 1 ? 'Kaufteil zählt' : 'Kaufteile zählen'} mit festem Gewicht`);
+      const nm = (r.parts || []).filter((p) => p.missing).length;
+      if (nm) bits.push(`<b>bei ${nm} ${nm === 1 ? 'Kaufteil fehlt' : 'Kaufteilen fehlt'} noch das Gewicht</b>`);
       if (bits.length) { own.hidden = false; own.innerHTML = bits.join(', ') + ' – das Gewicht rechnet alles zusammen.'; }
     });
     w.append(h('div', { class: 'hint-box', html: '<b>So geht’s:</b> Körper anklicken und ziehen. Die Pfeile ändern die Größe, die Zahlen kannst du anklicken und genau eintippen. <span class="kbd">Entf</span> löscht, <span class="kbd">Strg Z</span> macht rückgängig.' }));
@@ -5809,7 +5934,7 @@ const Panels = (() => {
       } }));
       if (fixed) {
         ms.append(h('div', { class: 'fields', style: { marginTop: '8px' } }, UI.numField({ id: 'p-massg', label: 'Gewicht (Datenblatt)', value: it.massG, unit: 'g', onCommit: (v) => App.change('Gewicht geändert', (doc) => { Model.find(doc, it.id).item.massG = v; }, { merge: 'massg:' + it.id }) })));
-        ms.append(h('div', { class: 'hint-box', html: 'Für gekaufte Teile wie Motoren oder Akkus: Das Gewicht kommt aus dem Datenblatt, nicht aus der Form. Auch Formeln gehen, z. B. <b>4*33,8</b>.' }));
+        ms.append(h('div', { class: 'hint-box' + (it.massG === '' ? ' warn' : ''), html: it.massG === '' ? '<b>Gewicht fehlt:</b> Trag das Gewicht aus dem Datenblatt ein – bis dahin zählt dieses Teil mit 0 g.' : 'Für gekaufte Teile wie Motoren oder Akkus: Das Gewicht kommt aus dem Datenblatt, nicht aus der Form. Auch Formeln gehen, z. B. <b>4*33,8</b>.' }));
       }
       const vR = h('b', { class: 'mono' }, '…'), gR = h('b', { class: 'mono' }, '…');
       ms.append(h('div', { class: 'mini-list', style: { marginTop: '8px' } }, h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Volumen'), vR), h('div', { class: 'mini-row', 'data-help': 'massProps' }, h('span', { class: 'grow' }, 'Gewicht'), gR)));
@@ -5979,8 +6104,10 @@ const Panels = (() => {
 const Place = (() => {
   let st = null; // { spec, preview, onFace, pos }
   function specBox(spec) {
-    if (spec.kind) return Model.primitiveBox(spec.kind, Model.newItem(spec.kind).p) || [-10, -10, 0, 10, 10, 20];
-    const d = spec.part; const p = libDefaults(d);
+    if (spec.kind) return Model.primitiveBox(spec.kind, spec.p ? { ...Model.newItem(spec.kind).p, ...spec.p } : Model.newItem(spec.kind).p) || [-10, -10, 0, 10, 10, 20];
+    const d = spec.part; const p = spec.params || libDefaults(d);
+    if (d.lib === 'holePattern') return [-17, -17, -(p.depth || 10), 17, 17, 0.2];
+    if (d.lib === 'zipTie') return [-5, -2, -(p.depth || 10), 5, 2, 0.2];
     if (d.lib === 'screwHole') return [-3.5, -3.5, -(p.length || 10), 3.5, 3.5, 0.2];
     if (d.lib === 'nutTrap') return [-3.5, -3.5, -12, 3.5, 3.5, 0.2];
     if (d.lib === 'insert') return [-2, -2, -7.7, 2, 2, 0.2];
@@ -6017,8 +6144,9 @@ const Place = (() => {
         if (st) { finish(ev.clientX, ev.clientY); return; }
         // einfacher Klick: in die Mitte setzen
         Panels.closeFlyout();
-        if (spec.kind) Actions.addPrimitive(spec.kind);
-        else Actions.addPart(spec.part, libDefaults(spec.part));
+        if (spec.buy) Actions.addBuyPart(spec);
+        else if (spec.kind) Actions.addPrimitive(spec.kind);
+        else Actions.addPart(spec.part, spec.params || libDefaults(spec.part), { name: spec.name });
         setTimeout(() => { const id = App.sel[0]; const b = id && Actions.worldBox(id); if (b && !Viewer.inView(b)) Viewer.fit(App.doc.items.map((x) => x.id)); }, 400);
       };
       const cancelIt = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', cancelIt); cancel(); };
@@ -6062,8 +6190,9 @@ const Place = (() => {
   function finish(x, y) {
     const s = st; cleanup();
     if (!inCanvas(x, y) || (!s.onFace && !s.pos)) return;
+    if (s.spec.buy) { Actions.addBuyPart(s.spec, s.onFace ? { onFace: s.onFace } : { pos: s.pos }); return; }
     if (s.spec.kind) Actions.addPrimitive(s.spec.kind, s.onFace ? { onFace: s.onFace } : { pos: s.pos });
-    else Actions.addPart(s.spec.part, libDefaults(s.spec.part), s.onFace ? { onFace: s.onFace } : { pos: s.pos });
+    else Actions.addPart(s.spec.part, s.spec.params || libDefaults(s.spec.part), { ...(s.onFace ? { onFace: s.onFace } : { pos: s.pos }), name: s.spec.name });
     if (s.onFace) UI.toast('Abgelegt – es ist jetzt Teil des Körpers darunter.', { icon: 'check' });
   }
   function cancel() { cleanup(); stopHoles(); }
@@ -8550,6 +8679,8 @@ const Commands = (() => {
     add('section', 'Schnitt ein/aus', 'section', 'schnitt aufschneiden querschnitt innen schnittebene', () => Views.section(), { group: 'Ansicht', kbd: 'C' });
     add('xray', 'Röntgen ein/aus', 'xray', 'röntgen durchsichtig transparent glas innen', () => Views.xray(), { group: 'Ansicht', kbd: 'X' });
     add('explode', 'Explosion: Teile auseinanderziehen', 'explode', 'explosion explosionsansicht auseinander zerlegen baugruppe', () => Views.explode(), { group: 'Ansicht', kbd: 'U' });
+    add('frame-assist', 'Frame-Assistent: Drohnenrahmen bauen', 'frame', 'frame assistent drohne rahmen bauen quad zoll', () => DroneUI.assistant(), { group: 'Projekt' });
+    add('drone-lib', 'Drohnen-Teile: Motoren, Akkus, Videosender …', 'drone', 'motor akku videosender kamera empfänger gps kaufteil bibliothek', () => Panels.toggleFlyout('drone', $('#t-drone')), { group: 'Werkzeuge' });
     for (const t of DroneTpl.LIST) add('tpl-' + t.id, 'Drohnen-Vorlage: ' + t.name, 'drone', 'drohne vorlage rahmen frame quad ' + t.name.toLowerCase(), () => Start.openDrone(t), { group: 'Projekt' });
     add('versions', 'Versionen: speichern, vergleichen, zurückholen', 'rollback', 'version versionen stand vergleichen zurück sichern', () => Versions.dialog(), { group: 'Projekt' });
     add('version-save', 'Jetzigen Stand als Version speichern', 'save', 'version speichern sichern stand', async () => { const n = await UI.prompt('Version speichern', 'Name der Version', 'Version ' + (Versions.list().length + 1), 'Speichern'); if (n != null) Versions.save(n); }, { group: 'Projekt' });
@@ -10199,10 +10330,12 @@ Beispiel – Wunsch „Platte 60 × 40 × 4 mit einem Loch in der Mitte“:
 })();
 
 // ---- 84-drone.js ----
-// ================= Drohnen-Vorlagen: parametrischer Freestyle-Rahmen =================
+// ================= Drohnen: Rahmen-Generator, Vorlagen, Frame-Assistent, Bibliothek =================
 // Ein vollständiger, veränderbarer Rohbau: Unterteil mit Armen, Abstandsbolzen, Oberplatte,
-// Kamerahalter und Platzhalter für Stack, Kamera, Motoren, Propeller und Akku.
-// Vorne ist −Y wie in der Ansicht „Vorne“ (Kamera), Motoren sitzen auf einem Kreis mit dem Achsabstand als Durchmesser.
+// Kamerahalter und Platzhalter für Stack, Videosender, Kamera, Motoren, Propeller und Akku.
+// Vorne ist −Y wie in der Ansicht „Vorne“ (Kamera). Die Motoren sitzen in Armlänge = Achsabstand/2
+// um die Mitte; „Armwinkel“ ist der Winkel der vorderen Arme zur Flugrichtung, „Armwinkel_hinten“
+// der der hinteren (bei X-Rahmen gleich, beim Deadcat vorne weiter gespreizt).
 // Alle Lagen hängen an Maßen (links unter „Maße“) – ändert man z. B. den Achsabstand, wandert alles mit.
 // Kaufteile tragen ein festes Gewicht (massG) aus Datenblättern, Rahmenteile ihr Material.
 const DroneTpl = (() => {
@@ -10213,7 +10346,6 @@ const DroneTpl = (() => {
     if (o.mat) x.mat = o.mat;
     if (o.massG != null) x.massG = o.massG;
     if (o.hidden) x.hidden = true;
-    if (o.fin) x.finishes = o.fin.map((f) => ({ id: uid('f'), ...f }));
     return x;
   };
   const group = (name, children, o = {}) => {
@@ -10221,64 +10353,111 @@ const DroneTpl = (() => {
     g.children = children;
     return g;
   };
-  const hole = (size, t, len = 'Armdicke + 2', name) => {
+  const hole = (size, t, len, name) => {
     const x = Model.newItem('part', { lib: 'screwHole', size, head: 'none', fit: 'medium', length: len }, { name: name || 'Loch ' + size, role: 'hole' });
     Object.assign(x.t, t); return x;
   };
   // vier Ecken: vorne rechts, vorne links, hinten rechts, hinten links
   const CORNERS = [['vorne rechts', 1, -1], ['vorne links', -1, -1], ['hinten rechts', 1, 1], ['hinten links', -1, 1]];
   const sg = (s, e) => (s > 0 ? `(${e})` : `-(${e})`);
-  const MX = 'Achsabstand/2*sin(Armwinkel)', MY = 'Achsabstand/2*cos(Armwinkel)';
-  const SX = 'Plattenbreite/2 - 4', SY = 'Plattenlänge/2 - 8';   // Abstandsbolzen
+  const W = (sy) => (sy < 0 ? 'Armwinkel' : 'Armwinkel_hinten');
+  const MX = (sy) => `Achsabstand/2*sin(${W(sy)})`, MY = (sy) => `Achsabstand/2*cos(${W(sy)})`;
+  const SX = 'Plattenbreite/2 - 4', SY = (sy) => (sy < 0 ? 'Plattenlänge/2 - 22' : 'Plattenlänge/2 - 8');   // Bolzen vorne hinter der Kamera
 
-  const PRESETS = {
-    f5: {
-      name: '5" Freestyle', doc: '5-Zoll-Freestyle',
-      desc: 'True-X mit 225 mm Achsabstand, 30,5er Stack, Micro-Kamera, 6S-Akku. Alles über Maße veränderbar.',
-      params: { Achsabstand: 225, Armwinkel: 45, Armbreite: 13, Armdicke: 5, Plattenbreite: 42, Plattenlänge: 130, Plattendicke: 2, Bolzenhöhe: 25, Stack: 30.5, Motorlochkreis: 16, Kamerabreite: 19, Propeller: 5 },
-      motorScrew: 'M3', motor: { name: 'Motor 2207', d: 28.5, h: 19.7, g: 33.8 }, prop: 4.5,
-      akku: { name: 'Akku 6S 1300', w: 38, l: 75, h: 39, g: 215 }, cam: 6, stack: 20,
-    },
-    f7: {
-      name: '7" Long Range', doc: '7-Zoll-Long-Range',
-      desc: 'Größerer True-X mit 295 mm Achsabstand und 19er Motoren für lange Flüge mit 6S 1500.',
-      params: { Achsabstand: 295, Armwinkel: 45, Armbreite: 15, Armdicke: 6, Plattenbreite: 45, Plattenlänge: 150, Plattendicke: 2.5, Bolzenhöhe: 30, Stack: 30.5, Motorlochkreis: 19, Kamerabreite: 19, Propeller: 7 },
-      motorScrew: 'M3', motor: { name: 'Motor 2806.5', d: 35.1, h: 21.3, g: 54 }, prop: 7,
-      akku: { name: 'Akku 6S 1500', w: 39, l: 78, h: 43, g: 250 }, cam: 6, stack: 20,
-    },
+  // ---------- Auswahl für den Frame-Assistenten ----------
+  const SIZES = {
+    3: { Armbreite: 8, Armdicke: 3, Plattenbreite: 30, Plattenlänge: 85, Plattendicke: 1.5, Bolzenhöhe: 20, stack: 20, motor: '1404', akku: null, prop: 2 },
+    4: { Armbreite: 10, Armdicke: 4, Plattenbreite: 34, Plattenlänge: 100, Plattendicke: 2, Bolzenhöhe: 22, stack: 20, motor: '2004', akku: null, prop: 3 },
+    5: { Armbreite: 13, Armdicke: 5, Plattenbreite: 42, Plattenlänge: 130, Plattendicke: 2, Bolzenhöhe: 25, stack: 30.5, motor: '2207', akku: '6S 1300 mAh', prop: 4.5 },
+    6: { Armbreite: 14, Armdicke: 5.5, Plattenbreite: 44, Plattenlänge: 140, Plattendicke: 2, Bolzenhöhe: 28, stack: 30.5, motor: '2306', akku: '6S 1500 mAh', prop: 6 },
+    7: { Armbreite: 15, Armdicke: 6, Plattenbreite: 45, Plattenlänge: 150, Plattendicke: 2.5, Bolzenhöhe: 30, stack: 30.5, motor: '2806.5', akku: '6S 1500 mAh', prop: 7 },
   };
+  const FORMS = { x: ['True-X', 45, 45], stretch: ['Stretched-X', 35, 35], wide: ['Wide-X', 55, 55], deadcat: ['Deadcat', 60, 35] };
+  // Videosysteme: Sendeeinheit und Kamera aus der Bauteil-Bibliothek
+  const VIDEO = {
+    analog: ['Analog (TBS Unify + Micro-Kamera)', 'TBS Unify Pro32 HV (analog)', null],
+    o3: ['DJI O3', 'DJI O3 Air Unit (Sendeeinheit)', 'DJI O3 Air Unit (Kameramodul)'],
+    o4pro: ['DJI O4 Pro', 'DJI O4 Air Unit Pro (Sendeeinheit)', 'DJI O4 Air Unit Pro (Kameramodul)'],
+    o4: ['DJI O4', 'DJI O4 Air Unit (Sendeeinheit)', 'DJI O4 Air Unit (Kameramodul)'],
+    walksnail: ['Walksnail Avatar HD Pro', 'Walksnail Avatar HD V2 (Sendeeinheit, Pro Kit)', 'Walksnail Avatar HD Pro Kamera'],
+    hdzero: ['HDZero Freestyle V2', 'HDZero Freestyle V2 (Sendeeinheit)', 'HDZero Micro V3 Kamera'],
+    none: ['Keiner', null, null],
+  };
+  const buy = (name) => name && (BUY_DATA.videosender || []).find((v) => v.name === name);
+  const R = (d) => (d * Math.PI) / 180;
+  // Achsabstand so, dass zwischen benachbarten Propellern ein Viertel Propeller Luft bleibt
+  function wheelbase(zoll, wv, wh) {
+    const D = zoll * 25.4;
+    const side = Math.hypot(Math.sin(R(wv)) - Math.sin(R(wh)), Math.cos(R(wv)) + Math.cos(R(wh)));
+    const L = (1.25 * D) / Math.min(2 * Math.sin(R(wv)), 2 * Math.sin(R(wh)), side);
+    return Math.round((2 * L) / 5) * 5;
+  }
+  // kleinster Abstand der Propellerspitzen benachbarter Motoren
+  function tipGap(A, zoll, wv, wh) {
+    const L = A / 2, D = zoll * 25.4;
+    const m = [[L * Math.sin(R(wv)), -L * Math.cos(R(wv))], [-L * Math.sin(R(wv)), -L * Math.cos(R(wv))], [L * Math.sin(R(wh)), L * Math.cos(R(wh))], [-L * Math.sin(R(wh)), L * Math.cos(R(wh))]];
+    const d = (a, b) => Math.hypot(m[a][0] - m[b][0], m[a][1] - m[b][1]);
+    return Math.min(d(0, 1), d(2, 3), d(0, 2), d(1, 3)) - D;
+  }
+  // vollständige Einstellung aus einer kurzen Auswahl
+  function config(o = {}) {
+    const zoll = o.zoll || 5, S = SIZES[zoll] || SIZES[5], F = FORMS[o.form] || FORMS.x;
+    const mot = DroneLib.motor(o.motor || S.motor);
+    const vid = VIDEO[o.video || 'analog'] || VIDEO.analog;
+    const vtx = buy(vid[1]), cam = buy(vid[2]);
+    const stack = o.stack || S.stack;
+    const A = o.A || wheelbase(zoll, F[1], F[2]);
+    const akkuName = o.akku === undefined ? S.akku : o.akku;
+    return {
+      name: o.name || `${zoll}" ${F[0]}`, doc: o.doc || `${zoll}-Zoll-${F[0]}`, zoll, form: o.form || 'x', video: o.video || 'analog',
+      params: { Achsabstand: A, Armwinkel: F[1], Armwinkel_hinten: F[1] === F[2] ? 'Armwinkel' : F[2], Armbreite: S.Armbreite, Armdicke: o.Armdicke || S.Armdicke, Plattenbreite: S.Plattenbreite, Plattenlänge: S.Plattenlänge, Plattendicke: S.Plattendicke, Bolzenhöhe: S.Bolzenhöhe, Stack: stack, Motorlochkreis: mot.circle, Kamerabreite: cam ? cam.kamera_breite_mm : o.cam || 19, Propeller: zoll },
+      stackScrew: stack >= 30 ? 'M3' : 'M2', motorScrew: mot.screw.startsWith('M1') ? 'M2' : mot.screw,
+      motor: { name: 'Motor ' + mot.stator, d: mot.d, h: mot.h, g: mot.g }, prop: S.prop,
+      akku: akkuName ? DroneLib.akku(akkuName) : null,
+      vtx: vtx ? { name: vtx.name.replace(/\s*\(Sendeeinheit.*\)/, '') + (vid[2] ? ' Sender' : ''), l: vtx.l_mm, b: vtx.b_mm, h: vtx.h_mm, g: vtx.gewicht_g ?? '' } : null,
+      cam: cam ? { name: cam.name.replace(/\s*\(Kameramodul\)/, ' Kamera'), l: cam.l_mm, b: cam.b_mm, h: cam.h_mm, g: cam.gewicht_g ?? '' } : { name: 'Kamera (Platzhalter)', g: 6 },
+      stackG: 20,
+    };
+  }
+  const PRESETS = {
+    f5: config({ zoll: 5, form: 'x', name: '5" Freestyle', doc: '5-Zoll-Freestyle' }),
+    f7: config({ zoll: 7, form: 'x', A: 295, name: '7" Long Range', doc: '7-Zoll-Long-Range' }),
+  };
+  PRESETS.f5.desc = 'True-X mit 225 mm Achsabstand, 30,5er Stack, Micro-Kamera, 6S-Akku. Alles über Maße veränderbar.';
+  PRESETS.f7.desc = 'Größerer True-X mit 295 mm Achsabstand und 19er Motoren für lange Flüge mit 6S 1500.';
 
   function build(key) {
-    const P = PRESETS[key] || PRESETS.f5;
+    const P = typeof key === 'object' ? key : PRESETS[key] || PRESETS.f5;
     const d = Model.newDoc(P.doc);
     d.params = Object.entries(P.params).map(([k, v]) => param(k, v));
     d.settings.material = 'CFK';
+    d.drone = { zoll: P.zoll, form: P.form, video: P.video };
     const CF = '#3b4148';
     // Unterteil: Mittelplatte, vier Arme, Motorauflagen, Löcher
     const kids = [item('box', { w: 'Plattenbreite', d: 'Plattenlänge', h: 'Armdicke' }, { name: 'Mittelplatte', color: CF })];
     for (const [n, sx, sy] of CORNERS) {
-      kids.push(item('box', { w: 'Armbreite', d: 'Achsabstand/2', h: 'Armdicke' }, { name: 'Arm ' + n, color: CF, t: { x: sg(sx, MX + '/2'), y: sg(sy, MY + '/2'), rz: sx * sy > 0 ? '-Armwinkel' : 'Armwinkel' } }));
-      kids.push(item('cylinder', { d: 'Motorlochkreis + 9', h: 'Armdicke' }, { name: 'Motorauflage ' + n, color: CF, t: { x: sg(sx, MX), y: sg(sy, MY) } }));
+      kids.push(item('box', { w: 'Armbreite', d: 'Achsabstand/2', h: 'Armdicke' }, { name: 'Arm ' + n, color: CF, t: { x: sg(sx, MX(sy) + '/2'), y: sg(sy, MY(sy) + '/2'), rz: sx * sy < 0 ? W(sy) : '-' + W(sy) } }));
+      kids.push(item('cylinder', { d: 'Motorlochkreis + 9', h: 'Armdicke' }, { name: 'Motorauflage ' + n, color: CF, t: { x: sg(sx, MX(sy)), y: sg(sy, MY(sy)) } }));
     }
-    for (const [, sx, sy] of CORNERS) kids.push(hole('M3', { x: sg(sx, 'Stack/2'), y: sg(sy, 'Stack/2'), z: 'Armdicke + 1' }, 'Armdicke + 2', 'Stack-Loch'));
-    for (const [, sx, sy] of CORNERS) kids.push(hole('M3', { x: sg(sx, SX), y: sg(sy, SY), z: 'Armdicke + 1' }, 'Armdicke + 2', 'Bolzen-Loch'));
+    for (const [, sx, sy] of CORNERS) kids.push(hole(P.stackScrew, { x: sg(sx, 'Stack/2'), y: sg(sy, 'Stack/2'), z: 'Armdicke + 1' }, 'Armdicke + 2', 'Stack-Loch'));
+    for (const [, sx, sy] of CORNERS) kids.push(hole('M3', { x: sg(sx, SX), y: sg(sy, SY(sy)), z: 'Armdicke + 1' }, 'Armdicke + 2', 'Bolzen-Loch'));
     for (const [n, sx, sy] of CORNERS) {
       // vier Motorschrauben als Kreismuster um die Motormitte (Lochkreis = Motorlochkreis)
       const g = Model.newItem('group', {}, { name: 'Motorlöcher ' + n, role: 'hole' });
-      g.p = { op: 'pattern', pt: 'circ', n: 4, ang: 360, cx: sg(sx, MX), cy: sg(sy, MY) };
-      g.children = [hole(P.motorScrew, { x: `${sg(sx, MX)} + Motorlochkreis/2`, y: sg(sy, MY), z: 'Armdicke + 1' }, 'Armdicke + 2', 'Motorschraube')];
+      g.p = { op: 'pattern', pt: 'circ', n: 4, ang: 360, cx: sg(sx, MX(sy)), cy: sg(sy, MY(sy)) };
+      g.children = [hole(P.motorScrew, { x: `${sg(sx, MX(sy))} + Motorlochkreis/2`, y: sg(sy, MY(sy)), z: 'Armdicke + 1' }, 'Armdicke + 2', 'Motorschraube')];
       kids.push(g);
-      kids.push(item('cylinder', { d: 7, h: 'Armdicke + 2' }, { name: 'Wellenloch ' + n, role: 'hole', t: { x: sg(sx, MX), y: sg(sy, MY), z: -1 } }));
+      kids.push(item('cylinder', { d: 7, h: 'Armdicke + 2' }, { name: 'Wellenloch ' + n, role: 'hole', t: { x: sg(sx, MX(sy)), y: sg(sy, MY(sy)), z: -1 } }));
     }
     const unten = group('Unterteil', kids, { color: CF });
     // Abstandsbolzen mit Gewinde
     const bk = [];
-    for (const [, sx, sy] of CORNERS) bk.push(item('cylinder', { d: 5, h: 'Bolzenhöhe' }, { name: 'Bolzen', color: '#9aa3ad', t: { x: sg(sx, SX), y: sg(sy, SY), z: 'Armdicke' } }));
-    for (const [, sx, sy] of CORNERS) bk.push(item('cylinder', { d: 2.5, h: 'Bolzenhöhe + 2' }, { name: 'Gewinde', role: 'hole', t: { x: sg(sx, SX), y: sg(sy, SY), z: 'Armdicke - 1' } }));
+    for (const [, sx, sy] of CORNERS) bk.push(item('cylinder', { d: 5, h: 'Bolzenhöhe' }, { name: 'Bolzen', color: '#9aa3ad', t: { x: sg(sx, SX), y: sg(sy, SY(sy)), z: 'Armdicke' } }));
+    for (const [, sx, sy] of CORNERS) bk.push(item('cylinder', { d: 2.5, h: 'Bolzenhöhe + 2' }, { name: 'Gewinde', role: 'hole', t: { x: sg(sx, SX), y: sg(sy, SY(sy)), z: 'Armdicke - 1' } }));
     const bolzen = group('Abstandsbolzen', bk, { color: '#9aa3ad', mat: 'Alu 7075' });
     // Oberplatte mit Schlitzen für den Akkugurt
     const ok = [item('box', { w: 'Plattenbreite', d: 'Plattenlänge', h: 'Plattendicke' }, { name: 'Platte', color: CF, t: { z: 'Armdicke + Bolzenhöhe' } })];
-    for (const [, sx, sy] of CORNERS) ok.push(hole('M3', { x: sg(sx, SX), y: sg(sy, SY), z: 'Armdicke + Bolzenhöhe + Plattendicke + 1' }, 'Plattendicke + 2', 'Bolzen-Loch'));
+    for (const [, sx, sy] of CORNERS) ok.push(hole('M3', { x: sg(sx, SX), y: sg(sy, SY(sy)), z: 'Armdicke + Bolzenhöhe + Plattendicke + 1' }, 'Plattendicke + 2', 'Bolzen-Loch'));
     for (const s of [1, -1]) ok.push(item('box', { w: 3, d: 21, h: 'Plattendicke + 2' }, { name: 'Gurtschlitz', role: 'hole', t: { x: sg(s, 'Plattenbreite/2 - 6'), z: 'Armdicke + Bolzenhöhe - 1' } }));
     const oben = group('Oberplatte', ok, { color: CF });
     // Kamerahalter: zwei Seitenwangen mit M2-Loch auf Kamerahöhe
@@ -10286,18 +10465,21 @@ const DroneTpl = (() => {
     for (const s of [1, -1]) kh.push(item('box', { w: 2, d: 12, h: 'Bolzenhöhe' }, { name: 'Wange', color: '#5b6470', t: { x: sg(s, 'Kamerabreite/2 + 1.2'), y: '-(Plattenlänge/2 - 8)', z: 'Armdicke' } }));
     kh.push(item('cylinder', { d: 2.2, h: 'Kamerabreite + 10' }, { name: 'Kameraschraube M2', role: 'hole', t: { x: '-(Kamerabreite/2 + 5)', y: '-(Plattenlänge/2 - 8)', z: 'Armdicke + Bolzenhöhe/2', ry: 90 } }));
     const halter = group('Kamerahalter', kh, { color: '#5b6470', mat: 'TPU 95A' });
-    // Platzhalter für Kaufteile (festes Gewicht, ca.-Werte)
-    const stack = item('box', { w: 'Stack + 5.5', d: 'Stack + 5.5', h: 12 }, { name: 'Stack (Platzhalter)', color: '#3a8f6a', t: { z: 'Armdicke + 4' }, massG: P.stack });
-    const cam = item('box', { w: 'Kamerabreite', d: 18, h: 'Kamerabreite' }, { name: 'Kamera (Platzhalter)', color: '#16202b', t: { y: '-(Plattenlänge/2 - 8)', z: 'Armdicke + Bolzenhöhe/2 - Kamerabreite/2' }, massG: P.cam });
+    // Platzhalter für Kaufteile (festes Gewicht)
+    const out = [unten, bolzen, oben, halter];
+    out.push(item('box', { w: 'Stack + 5.5', d: 'Stack + 5.5', h: 12 }, { name: 'Stack (Platzhalter)', color: '#3a8f6a', t: { z: 'Armdicke + 4' }, massG: P.stackG }));
+    if (P.vtx) out.push(item('box', { w: P.vtx.b, d: P.vtx.l, h: P.vtx.h }, { name: P.vtx.name, color: '#16202b', t: { z: 'Armdicke + 16' }, massG: P.vtx.g }));
+    const camD = P.cam.l || 18, camH = P.cam.h || 'Kamerabreite';
+    out.push(item('box', { w: P.cam.b || 'Kamerabreite', d: camD, h: camH }, { name: P.cam.name, color: '#16202b', t: { y: '-(Plattenlänge/2 - 8)', z: `Armdicke + Bolzenhöhe/2 - (${camH})/2` }, massG: P.cam.g }));
     const mk = [], pk = [];
     for (const [n, sx, sy] of CORNERS) {
-      mk.push(item('cylinder', { d: P.motor.d, h: P.motor.h }, { name: 'Motor ' + n, color: '#b9c2cb', t: { x: sg(sx, MX), y: sg(sy, MY), z: 'Armdicke' } }));
-      pk.push(item('tube', { d: 'Propeller*25.4', wall: 1.2, h: 1 }, { name: 'Propellerkreis ' + n, color: '#e8833a', t: { x: sg(sx, MX), y: sg(sy, MY), z: `Armdicke + ${P.motor.h + 3}` } }));
+      mk.push(item('cylinder', { d: P.motor.d, h: P.motor.h }, { name: 'Motor ' + n, color: '#b9c2cb', t: { x: sg(sx, MX(sy)), y: sg(sy, MY(sy)), z: 'Armdicke' } }));
+      pk.push(item('tube', { d: 'Propeller*25.4', wall: 1.2, h: 1 }, { name: 'Propellerkreis ' + n, color: '#e8833a', t: { x: sg(sx, MX(sy)), y: sg(sy, MY(sy)), z: `Armdicke + ${P.motor.h + 3}` } }));
     }
-    const motoren = group(P.motor.name + ' (4×, Platzhalter)', mk, { color: '#b9c2cb', massG: `4*${P.motor.g}` });
-    const props = group(`Propeller ${P.params.Propeller}" (Kreise)`, pk, { color: '#e8833a', massG: `4*${P.prop}` });
-    const akku = item('box', { w: P.akku.w, d: P.akku.l, h: P.akku.h }, { name: P.akku.name + ' (Platzhalter)', color: '#e2b53a', t: { z: 'Armdicke + Bolzenhöhe + Plattendicke' }, massG: P.akku.g });
-    d.items = [unten, bolzen, oben, halter, stack, cam, motoren, props, akku];
+    out.push(group(P.motor.name + ' (4×, Platzhalter)', mk, { color: '#b9c2cb', massG: P.motor.g === '' ? '' : `4*${P.motor.g}` }));
+    out.push(group(`Propeller ${P.zoll}" (Kreise)`, pk, { color: '#e8833a', massG: `4*${P.prop}` }));
+    if (P.akku) out.push(item('box', { w: P.akku.w, d: P.akku.l, h: P.akku.h }, { name: P.akku.name + ' (Platzhalter)', color: '#e2b53a', t: { z: 'Armdicke + Bolzenhöhe + Plattendicke' }, massG: P.akku.g }));
+    d.items = out;
     return d;
   }
   // Vorschaubild: Rahmen von oben
@@ -10309,7 +10491,92 @@ const DroneTpl = (() => {
       pts.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="5" class="a2"/><ellipse cx="${x}" cy="${y}" rx="${big ? 13 : 11}" ry="${big ? 7 : 6}" class="b1" fill-opacity=".15"/>`).join('');
   }
   const LIST = Object.entries(PRESETS).map(([k, P]) => ({ id: 'drone-' + k, name: P.name, desc: P.desc, build: () => build(k), svg: svg(k === 'f7'), drone: true }));
-  return { build, PRESETS, LIST };
+  return { build, config, wheelbase, tipGap, PRESETS, LIST, SIZES, FORMS, VIDEO };
+})();
+
+// ================= Frame-Assistent und Drohnen-Bibliothek in der Oberfläche =================
+const DroneUI = (() => {
+  // Frame-Assistent: Größe, Form, Stack, Motor, Video, Akku wählen – mit Vorschau der wichtigsten Werte
+  function assistant() {
+    const o = { zoll: 5, form: 'x', stack: 30.5, motor: '2207', video: 'analog', akku: '6S 1300 mAh', A: null };
+    const body = h('div', { class: 'frame-assist' });
+    const out = h('div', { class: 'fa-out', id: 'fa-out' });
+    const sel = (id, label, val, opts, fn) => UI.selectField({ id, label, value: String(val), options: opts, onChange: fn });
+    const motors = DroneLib.motors(), akkus = DroneLib.akkus();
+    let aField = null;
+    const draw = () => {
+      body.innerHTML = '';
+      const S = DroneTpl.SIZES[o.zoll], F = DroneTpl.FORMS[o.form];
+      const auto = DroneTpl.wheelbase(o.zoll, F[1], F[2]);
+      const A = o.A || auto;
+      const f = h('div', { class: 'fields' });
+      f.append(
+        sel('fa-zoll', 'Propeller', o.zoll, [3, 4, 5, 6, 7].map((z) => [String(z), `${z} Zoll (${fmt(z * 25.4, 1)} mm)`]), (v) => { o.zoll = +v; const s = DroneTpl.SIZES[o.zoll]; o.stack = s.stack; o.motor = s.motor; o.akku = s.akku; o.A = null; draw(); }),
+        sel('fa-form', 'Rahmenform', o.form, Object.entries(DroneTpl.FORMS).map(([k, v]) => [k, `${v[0]} (${v[1]}°${v[1] !== v[2] ? ' / ' + v[2] + '°' : ''})`]), (v) => { o.form = v; o.A = null; draw(); }),
+        sel('fa-stack', 'Stack', o.stack, DroneLib.stacks().map((s) => [String(s.a), `${s.name} · ${s.screw}`]), (v) => { o.stack = +v; draw(); }),
+        sel('fa-motor', 'Motor', o.motor, motors.map((m) => [m.stator, `${m.stator} · Lochkreis ${fmt(m.circle, 1)} · ${m.sheet ? fmt(m.g, 1) + ' g' : 'Gewicht eintragen'}`]), (v) => { o.motor = v; draw(); }),
+        sel('fa-video', 'Videosystem', o.video, Object.entries(DroneTpl.VIDEO).map(([k, v]) => [k, v[0]]), (v) => { o.video = v; draw(); }),
+        sel('fa-akku', 'Akku', o.akku || '', [['', 'Keiner'], ...akkus.map((a) => [a.name.replace(/^Akku /, ''), `${a.name.replace(/^Akku /, '')} · ca. ${a.g} g`])], (v) => { o.akku = v || null; draw(); }),
+      );
+      aField = UI.numField({ id: 'fa-a', label: 'Achsabstand', value: A, onCommit: (v) => { const n = parseFloat(String(v).replace(',', '.')); o.A = isFinite(n) && n > 0 ? n : null; draw(); } });
+      f.append(aField);
+      body.append(f);
+      // Vorschau der wichtigsten Werte
+      const gap = DroneTpl.tipGap(A, o.zoll, F[1], F[2]);
+      const m = motors.find((x) => x.stator === o.motor);
+      const warn = [];
+      if (gap < 0) warn.push('Die Propeller überlappen sich – größerer Achsabstand nötig.');
+      else if (gap < o.zoll * 25.4 * 0.08) warn.push('Sehr wenig Luft zwischen den Propellern.');
+      if (m && m.props && (o.zoll < m.props[0] - 0.01 || o.zoll > m.props[1] + 0.01)) warn.push(`Motor ${m.stator} passt eher zu ${fmt(m.props[0], 1)}–${fmt(m.props[1], 1)}"-Propellern.`);
+      out.innerHTML = `<div class="mini-list">
+        <div class="mini-row"><span class="grow">Achsabstand</span><b class="mono">${fmt(A, 0)} mm${o.A ? '' : ' (berechnet)'}</b></div>
+        <div class="mini-row"><span class="grow">Luft zwischen den Propellerspitzen</span><b class="mono" id="fa-gap">${fmt(gap, 1)} mm</b></div>
+        <div class="mini-row"><span class="grow">Motorlochkreis</span><b class="mono">${m ? fmt(m.circle, 1) + ' mm · ' + m.screw : '–'}</b></div></div>` +
+        (warn.length ? `<div class="hint-box warn" id="fa-warn">${warn.join('<br>')}</div>` : '<div class="hint-box">Alles passt. Nach dem Bauen änderst du jedes Maß links unter „Maße“.</div>');
+      body.append(out);
+    };
+    draw();
+    UI.modal({ title: 'Frame-Assistent', body, wide: true, actions: [{ label: 'Abbrechen' }, { label: 'Rahmen bauen', primary: true, run: () => { make(o); } }] });
+  }
+  function make(o) {
+    const cfg = DroneTpl.config(o);
+    App.setDoc(DroneTpl.build(cfg)); Start.hide();
+    UI.toast(`${cfg.name} gebaut. Links unter „Maße“ änderst du Achsabstand, Armwinkel, Stack und mehr.`, { icon: 'check', ms: 6000 });
+    return cfg;
+  }
+  // Drohnen-Bibliothek als Klappfenster: Kategorien, darunter Kacheln zum Klicken oder Ziehen
+  let cat = 'motor';
+  function flyout(el) {
+    el.append(h('h3', null, 'Drohne'));
+    const top = h('div', { class: 'btn-row' });
+    const fa = h('button', { type: 'button', class: 'btn primary small', id: 'drone-assist' }); fa.innerHTML = icon('frame') + 'Frame-Assistent';
+    fa.onclick = () => { Panels.closeFlyout(); assistant(); };
+    top.append(fa); el.append(top);
+    const chips = h('div', { class: 'chips', role: 'tablist' });
+    const tiles = h('div', { class: 'tiles' });
+    const fill = () => {
+      tiles.innerHTML = '';
+      for (const b of chips.children) b.setAttribute('aria-pressed', b.dataset.cat === cat ? 'true' : 'false');
+      const list = cat === 'loch' ? DroneLib.holeParts() : DroneLib.buyParts(cat);
+      for (const spec of list) {
+        const t = h('div', { class: 'tile' + (spec.part && spec.part.role === 'hole' ? ' hole-part' : ''), role: 'button', tabindex: '0', 'data-tip': spec.info || (spec.part ? spec.part.desc : ''), 'data-help': spec.part && HELP[spec.part.lib] ? spec.part.lib : null });
+        t.innerHTML = spec.part ? partSVG(spec.part) : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[DroneLib.CATS.find((c) => c[0] === cat)[2]] || IC.cube}</svg>`;
+        const m = spec.name.match(/^(.*?)\s*\((.*)\)\s*$/);   // Zusatz in Klammern klein darunter
+        t.append(h('span', { class: 'lbl' }, m ? m[1] : spec.name));
+        if (m) t.append(h('span', { class: 'role' }, m[2]));
+        Place.bindTile(t, spec);
+        tiles.append(t);
+      }
+    };
+    for (const [k, label, ic] of DroneLib.CATS) {
+      const b = h('button', { type: 'button', class: 'chip', 'data-cat': k, 'aria-pressed': 'false' }); b.innerHTML = icon(ic) + label;
+      b.onclick = () => { cat = k; fill(); };
+      chips.append(b);
+    }
+    el.append(chips, tiles, h('div', { class: 'foot' }, 'Kaufteile sind Platzhalter mit dem Gewicht aus dem Datenblatt. Auf eine Fläche ziehen legt sie dort ab.'));
+    fill();
+  }
+  return { assistant, make, flyout, get cat() { return cat; }, set cat(c) { cat = c; } };
 })();
 // ---- 85-start.js ----
 // ================= Startseite, Vorlagen, Dateien, Einführung =================
@@ -10468,6 +10735,10 @@ const Start = (() => {
       c.onclick = () => openDrone(t);
       dcards.append(c);
     }
+    const fa = h('button', { type: 'button', class: 'card drone', 'data-tpl': 'assist' });
+    const fth = h('div', { class: 'thumb' }); fth.innerHTML = icon('frame'); fa.append(fth, h('b', null, 'Frame-Assistent'), h('span', null, 'Größe, Rahmenform, Stack, Motor, Videosystem und Akku wählen – Tracery baut den passenden Rahmen.'));
+    fa.onclick = () => DroneUI.assistant();
+    dcards.prepend(fa);
     dsec.append(dcards); inner.append(dsec);
     const tsec = h('section', null, h('h2', null, 'Vorlagen'));
     const cards = h('div', { class: 'cards' });
@@ -10621,7 +10892,7 @@ const Tour = (() => {
   window.__masswerk = { App, Viewer, Model, Actions, Sketch, SK, THREE, Print, Drawing, Kernel, UI, Commands, Panels, Handles, Start, AI, Measure, Place };
   UI.initTips();
   Viewer.init($('#viewport'));
-  window.__V = Viewer; window.__M = { App, Actions, Model, Timeline, Start, Comp, Handles, Sketch, SK, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views, Mass, Select, Versions, DroneTpl }; window.__S = Start; // für automatische Tests
+  window.__V = Viewer; window.__M = { App, Actions, Model, Timeline, Start, Comp, Handles, Sketch, SK, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views, Mass, Select, Versions, DroneTpl, DroneUI, DroneLib }; window.__S = Start; // für automatische Tests
   Panels.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Notes.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init(); Refine.init(); Comp.init(); Views.init(); Mass.init(); Versions.init();
 
   // Kopfzeile

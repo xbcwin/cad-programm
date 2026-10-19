@@ -1,6 +1,6 @@
 # Testliste
 
-Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 11 (19.10.2026).
+Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 12 (20.10.2026).
 
 **[x]** = automatisch geprüft mit `tests/klicktest.py` (echter Browser, echte Klicks) · **[ ]** = noch von Hand ansehen
 
@@ -23,7 +23,8 @@ Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 11 (19.10
 | Ansichten | 12 | 8 | Schraffur erkennbar? Explosion weich? Fokus drehen, Röntgen-Kanten |
 | Messen, Masse, Auswahl, Versionen | 11 | 8 | Schwerpunkt-Symbol gut sichtbar? Vergleichs-Umriss verständlich? |
 | Drohnen-Vorlagen | 8 | 5 | Sieht es wie eine Drohne aus? Propellerkreise, STEP im anderen Programm |
-| **Gesamt** | **125** | **103** | **22 Punkte, dazu ein Blick auf Animationen** |
+| Frame-Assistent und Drohnen-Teile | 8 | 5 | Klappfenster übersichtlich? Deadcat richtig? Kopfzeile mit Symbolen |
+| **Gesamt** | **133** | **108** | **25 Punkte, dazu ein Blick auf Animationen** |
 
 Wichtig: Automatisch geprüft heißt „funktioniert in Chromium unter Linux“. Safari auf dem Mac, Touch auf dem iPad und echte Grafikkarten sieht nur ein Test von Hand.
 
@@ -355,6 +356,33 @@ Nichts hiervon ändert das Modell – kein Schritt in der Zeitleiste, nichts in 
 - [ ] **STEP in einem anderen Programm**
   Schritte: 1. Exportieren, die STEP-Datei z. B. in Fusion oder FreeCAD öffnen.
   Erwartet: Alle Teile kommen an, mit richtigen Maßen.
+
+## Frame-Assistent und Drohnen-Teile (neu in Sitzung 12)
+
+- [x] **Frame-Assistent**
+  Schritte: 1. Startseite → „Frame-Assistent“. 2. 3 Zoll, Deadcat, Videosystem DJI O4. 3. „Rahmen bauen“.
+  Erwartet: Erst 225 mm für 5"; dann mindestens 15 mm Luft zwischen den Propellern; der Rahmen hat Armwinkel 60° vorne und 35° hinten, Stack 20, Motorlochkreis 12, Kamerabreite 12,36 und Platzhalter für DJI-O4-Sender und -Kamera, keine Fehler.
+- [x] **Warnungen**
+  Schritte: 1. Im Assistenten Achsabstand 150 eintippen. 2. Motor 1103 wählen.
+  Erwartet: Erst „Die Propeller überlappen sich …“, dann „Motor 1103 passt eher zu …“.
+- [x] **Drohnen-Teile**
+  Schritte: 1. Oben „Drohne“ → „Akkus“ → „6S 1300“. 2. „Motoren“ → „Motor 1404“. 3. Auswahl aufheben. 4. „Video“.
+  Erwartet: Akku mit 215 g (fest); beim Motor ohne Datenblatt-Gewicht eine gelbe Mahnung, im Projekt „fehlt noch das Gewicht“; unter Video die DJI-, Walksnail- und HDZero-Teile.
+- [x] **Lochbild**
+  Schritte: 1. Platte 60 × 60 × 4, von oben. 2. „Drohne“ → „Lochbilder und Bausteine“ → „Motor 16“ auf die Platte ziehen. 3. Rechts auf „Stack 30,5“ stellen. 4. Kabelbinder dazu.
+  Erwartet: Vier Löcher auf einem 16er-Kreis plus Mittelloch; dann vier Löcher im 30,5er-Quadrat ohne Mittelloch; Kabelbinder-Schlitze ohne Fehler.
+- [x] **Hilfetexte**
+  Schritte: 1. Maus auf „Drohne“, „Frame-Assistent“ und die Lochbild-Kacheln.
+  Erwartet: Anleitung mit Tipp.
+- [ ] **Klappfenster „Drohne“**
+  Schritte: 1. Alle Gruppen durchklicken.
+  Erwartet: Namen gut lesbar, Zusatz klein darunter, nichts abgeschnitten.
+- [ ] **Deadcat sieht richtig aus**
+  Schritte: 1. Deadcat bauen, von oben ansehen.
+  Erwartet: Vorne (unten im Bild) sind die Arme weiter auseinander, die Propellerkreise berühren sich nicht.
+- [ ] **Kopfzeile mit Symbolen**
+  Schritte: 1. Fenster schmaler ziehen.
+  Erwartet: Erst zeigen Messen, Notizen, Ansicht nur ihr Symbol, dann alle außer „Exportieren“; nichts wird abgeschnitten.
 
 ## Notizstift (neu)
 

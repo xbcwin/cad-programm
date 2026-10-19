@@ -18,9 +18,10 @@ const Panels = (() => {
       btn('t-body', 'cube', 'Körper', 'Grundkörper hinzufügen – anklicken oder auf die Fläche ziehen', 'K', (e) => toggleFlyout('bodies', e.currentTarget));
       btn('t-sketch', 'sketch', 'Skizze', 'Eine 2D-Skizze zeichnen und daraus einen Körper machen', 'S', () => Sketch.chooseAndStart());
       btn('t-parts', 'parts', 'Bauteile', 'Schraubenlöcher, Mutternfallen, Scharniere, Zahnräder …', 'B', (e) => toggleFlyout('parts', e.currentTarget));
-      btn('t-measure', 'measure', 'Messen', 'Abstände und Durchmesser messen', 'M', () => Measure.toggle());
-      btn('t-notes', 'noteDraw', 'Notizen', 'Notizstift: frei malen und Text hinschreiben – ohne technische Bedeutung', 'N', () => Notes.toggle());
-      btn('t-views', 'xray', 'Ansicht', 'Schnitt, Röntgen, Explosion und Fokus-Vorschau – ändert nur die Anzeige', '', (e) => Views.menu(e.currentTarget));
+      btn('t-drone', 'drone', 'Drohne', 'Frame-Assistent, Kaufteile wie Motoren und Akkus, Lochbilder', '', (e) => toggleFlyout('drone', e.currentTarget));
+      btn('t-measure', 'measure', 'Messen', 'Messen: Abstände, Winkel, Flächen und Durchmesser', 'M', () => Measure.toggle(), 'minor');
+      btn('t-notes', 'noteDraw', 'Notizen', 'Notizstift: frei malen und Text hinschreiben – ohne technische Bedeutung', 'N', () => Notes.toggle(), 'minor');
+      btn('t-views', 'xray', 'Ansicht', 'Ansicht: Schnitt, Röntgen, Explosion und Fokus-Vorschau – ändert nur die Anzeige', '', (e) => Views.menu(e.currentTarget), 'minor');
       el.append(h('div', { class: 'sep' }));
       Views.sync();
       btn('t-export', 'export', 'Exportieren', 'Als STEP, STL oder 3MF speichern (ZIP)', 'Strg E', () => Print.exportDialog(), 'primary', 'Export');
@@ -60,6 +61,9 @@ const Panels = (() => {
       boxHole.onclick = () => { Actions.addPrimitive('box', { role: 'hole', name: 'Aussparung', p: { w: 10, d: 10, h: 30 } }); closeFlyout(); };
       row.append(holeBtn, boxHole); el.append(row);
       el.append(h('div', { class: 'foot' }, 'Tipp: Jeder Körper kann mit einem Klick zum Loch werden.'));
+    } else if (kind === 'drone') {
+      el.classList.add('drone');
+      DroneUI.flyout(el);
     } else {
       el.append(h('h3', null, 'Bauteile'));
       const tiles = h('div', { class: 'tiles' });
@@ -347,6 +351,8 @@ const Panels = (() => {
       const bits = [];
       if (n) bits.push(`${n} ${n === 1 ? 'Teil hat' : 'Teile haben'} ein eigenes Material`);
       if (nf) bits.push(`${nf} ${nf === 1 ? 'Kaufteil zählt' : 'Kaufteile zählen'} mit festem Gewicht`);
+      const nm = (r.parts || []).filter((p) => p.missing).length;
+      if (nm) bits.push(`<b>bei ${nm} ${nm === 1 ? 'Kaufteil fehlt' : 'Kaufteilen fehlt'} noch das Gewicht</b>`);
       if (bits.length) { own.hidden = false; own.innerHTML = bits.join(', ') + ' – das Gewicht rechnet alles zusammen.'; }
     });
     w.append(h('div', { class: 'hint-box', html: '<b>So geht’s:</b> Körper anklicken und ziehen. Die Pfeile ändern die Größe, die Zahlen kannst du anklicken und genau eintippen. <span class="kbd">Entf</span> löscht, <span class="kbd">Strg Z</span> macht rückgängig.' }));
@@ -502,7 +508,7 @@ const Panels = (() => {
       } }));
       if (fixed) {
         ms.append(h('div', { class: 'fields', style: { marginTop: '8px' } }, UI.numField({ id: 'p-massg', label: 'Gewicht (Datenblatt)', value: it.massG, unit: 'g', onCommit: (v) => App.change('Gewicht geändert', (doc) => { Model.find(doc, it.id).item.massG = v; }, { merge: 'massg:' + it.id }) })));
-        ms.append(h('div', { class: 'hint-box', html: 'Für gekaufte Teile wie Motoren oder Akkus: Das Gewicht kommt aus dem Datenblatt, nicht aus der Form. Auch Formeln gehen, z. B. <b>4*33,8</b>.' }));
+        ms.append(h('div', { class: 'hint-box' + (it.massG === '' ? ' warn' : ''), html: it.massG === '' ? '<b>Gewicht fehlt:</b> Trag das Gewicht aus dem Datenblatt ein – bis dahin zählt dieses Teil mit 0 g.' : 'Für gekaufte Teile wie Motoren oder Akkus: Das Gewicht kommt aus dem Datenblatt, nicht aus der Form. Auch Formeln gehen, z. B. <b>4*33,8</b>.' }));
       }
       const vR = h('b', { class: 'mono' }, '…'), gR = h('b', { class: 'mono' }, '…');
       ms.append(h('div', { class: 'mini-list', style: { marginTop: '8px' } }, h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Volumen'), vR), h('div', { class: 'mini-row', 'data-help': 'massProps' }, h('span', { class: 'grow' }, 'Gewicht'), gR)));

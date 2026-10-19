@@ -13,7 +13,7 @@ const Mass = (() => {
     let mass = 0; const c = [0, 0, 0]; const V = Model.vars(doc).v;
     for (const p of r.parts || []) {
       const it = doc.items.find((x) => x.id === p.id);
-      if (fixedOf(it)) { p.fixed = true; p.own = true; p.mat = null; p.mass = Math.max(0, Model.num(it.massG, V, 0)); }
+      if (fixedOf(it)) { p.fixed = true; p.own = true; p.mat = null; p.missing = it.massG === ''; p.mass = Math.max(0, Model.num(it.massG, V, 0)); }
       else { const m = materialFor(it, doc); p.mat = m.k; p.rho = m.rho; p.own = !!(it && matOf(it.mat)); p.mass = (p.volume / 1000) * m.rho; }
       mass += p.mass;
       if (p.com) for (let i = 0; i < 3; i++) c[i] += p.com[i] * p.mass;
@@ -34,7 +34,8 @@ const Mass = (() => {
     cache = { rev, p: measureDoc(App.doc).then((r) => { if (cache.rev === rev) ev.emit('measured', r); return r; }) };
     return cache.p;
   }
-  function fixedOf(it) { return !!(it && it.massG != null && it.massG !== ''); }
+  // festes Gewicht – auch wenn es noch fehlt (leer): dann zählt es mit 0 g und wird angemahnt
+  function fixedOf(it) { return !!(it && it.massG != null); }
   function partOf(r, id) { return r && (r.parts || []).find((p) => p.id === id) || null; }
   const gText = (g) => `${fmt(g, g < 10 ? 2 : 1)} g`;
 

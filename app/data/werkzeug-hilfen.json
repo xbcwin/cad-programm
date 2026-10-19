@@ -278,5 +278,25 @@
     "tip": "Stände speichern, vergleichen und zurückholen",
     "hilfe": "Projektmenü → „Versionen …“: Speichere den jetzigen Stand mit Namen. Später zeigt „Vergleichen“, was sich geändert hat – auch im Bild als roter Umriss –, und „Zurückholen“ setzt das Projekt auf diese Version.",
     "tipp": "Speichere eine Version, bevor du etwas Großes ausprobierst. Versionen kommen mit in die Projektdatei."
+  },
+  "droneLib": {
+    "tip": "Frame-Assistent, Kaufteile und Lochbilder für Drohnen",
+    "hilfe": "Oben „Drohne“: Der Frame-Assistent baut einen ganzen Rahmen. Darunter wählst du Motoren, Akkus, Videosender, Empfänger und mehr – anklicken oder auf eine Fläche ziehen. Unter „Lochbilder und Bausteine“ liegen Stack- und Motor-Lochbilder.",
+    "tipp": "Kaufteile sind Platzhalter mit dem Gewicht aus dem Datenblatt. So stimmt das Gesamtgewicht schon beim Konstruieren."
+  },
+  "frameAssist": {
+    "tip": "Drohnenrahmen in einem Schritt bauen",
+    "hilfe": "Wähle Propellergröße, Rahmenform, Stack, Motor, Videosystem und Akku. Tracery rechnet den Achsabstand so, dass zwischen den Propellern genug Luft bleibt, und warnt, wenn etwas nicht passt.",
+    "tipp": "Beim Deadcat sind die vorderen Arme weiter gespreizt – dann sind die Propeller nicht im Kamerabild."
+  },
+  "holePattern": {
+    "tip": "Vier Löcher für Stack oder Motor auf einmal",
+    "hilfe": "Zieh ein Lochbild auf eine Fläche. Rechts wählst du Stack 30,5 / 25,5 / 20 / 16 oder einen Motor-Lochkreis, die Schraube, die Drehung und das Mittelloch.",
+    "tipp": "Stack-Maße sind Quadrate, Motor-Maße sind Lochkreise – „Motor 16“ heißt: vier Löcher auf einem Kreis mit 16 mm Durchmesser."
+  },
+  "zipTie": {
+    "tip": "Zwei Schlitze für einen Kabelbinder",
+    "hilfe": "Zieh die Kabelbinder-Schlitze auf eine Fläche. Das Kabel liegt dazwischen, der Binder läuft unten durch.",
+    "tipp": "Praktisch für Antennen, Empfänger und den Akku-Stecker."
   }
 }

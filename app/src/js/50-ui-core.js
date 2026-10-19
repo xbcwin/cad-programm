@@ -89,12 +89,12 @@ const UI = (() => {
   // ---------- Tooltips ----------
   let tipEl = null, tipTimer = 0, helpTimer = 0;
   // Hilfe-Schlüssel eines Elements: data-help, sonst nach id oder Beschriftung
-  const HELP_IDS = { 't-measure': 'measure', 't-sketch': 'sketchFace', 'lt-params': 'params', 'timeline': 'timeline' };
+  const HELP_IDS = { 't-measure': 'measure', 't-sketch': 'sketchFace', 'lt-params': 'params', 'timeline': 'timeline', 't-drone': 'droneLib', 'drone-assist': 'frameAssist' };
   const HELP_LABELS = { 'Spiegeln': 'mirror', 'Hochziehen': 'extrude', 'Skizze hierauf': 'sketchFace' };
   function helpKey(t) { const k = t.dataset.help || HELP_IDS[t.id] || HELP_LABELS[(t.textContent || '').trim()]; return k && HELP[k] ? k : null; }
   function initTips() {
     document.addEventListener('pointerover', (e) => {
-      const t = e.target.closest && e.target.closest('[data-tip],[data-help],#t-measure,#t-sketch,#lt-params');
+      const t = e.target.closest && e.target.closest('[data-tip],[data-help],#t-measure,#t-sketch,#lt-params,#t-drone,#drone-assist');
       clearTimeout(tipTimer); clearTimeout(helpTimer);
       if (!t) { hideTip(); return; }
       tipTimer = setTimeout(() => showTip(t), 420);

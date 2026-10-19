@@ -1,6 +1,6 @@
 # Fortschritt
 
-Stand: 19.10.2026 · nach Sitzung 11 von 14
+Stand: 20.10.2026 · nach Sitzung 12 von 14
 
 ## Erledigt
 
@@ -45,7 +45,7 @@ Stand: 19.10.2026 · nach Sitzung 11 von 14
 - [x] Neuer Name beim Maß (z. B. `breite`) wird automatisch unter „Maße“ angelegt
 - [x] Formel-Beispiele unter „Maße“ (Gemini, alle 12 mit Tracerys Rechner nachgeprüft), Beispiel-Maße per Klick
 - [x] Umbenennen / Entfernen eines Maßes wirkt jetzt auch auf Skizzen-Maße
-- [x] Automatischer Klicktest `tests/klicktest.py`: 78 Durchläufe (alle grün), 103 von 125 Punkten der Testliste automatisch geprüft
+- [x] Automatischer Klicktest `tests/klicktest.py`: 83 Durchläufe (alle grün), 108 von 133 Punkten der Testliste automatisch geprüft
 - [x] Aufgeräumt: Programm liegt jetzt in 28 Quelldateien unter `app/src/`, `tools/build.py` baut daraus `app/index.html`
 - [x] Notizstift (Taste N): freie Striche, die am Modell kleben, Textnotizen, 6 Farben, 3 Dicken, Radierer, ein-/ausblendbar – ohne technische Bedeutung
 - [x] Symbole für den Notizstift (Gemini, geprüft); Augen-Knopf rechts im Bild blendet Notizen aus, sobald es welche gibt
@@ -95,6 +95,14 @@ Stand: 19.10.2026 · nach Sitzung 11 von 14
 - [x] Vorne ist bei den Drohnen −Y, passend zur Ansicht „Vorne“
 - [x] Neues Bauteil `app/src/js/84-drone.js`
 - [x] Kaufteil-Daten für die Bauteil-Bibliothek (Gemini, Prompt F): 22 Teile in `app/data/bauteile.json` – Videosender, Empfänger, GPS, Action-Kameras, Stecker, Kondensator; 11 mit Hersteller- oder Händlerangaben verglichen, 2 korrigiert (DJI O4: Sendeeinheit 5,1 g statt 8,2 g; Walksnail 33,5 mm)
+- [x] Frame-Assistent (Startseite, Knopf „Drohne“ oder Eingabezeile): Propeller 3–7", Rahmenform, Stack, Motor, Videosystem, Akku; rechnet den Achsabstand (ein Viertel Propeller Luft zwischen den Spitzen) und warnt bei überlappenden Propellern oder unpassendem Motor
+- [x] Rahmenformen über zwei Maße: „Armwinkel“ (vorne) und „Armwinkel_hinten“ – beim Deadcat vorne weiter gespreizt
+- [x] Knopf „Drohne“ oben: Kaufteile nach Gruppen (Motoren, Akkus, Video, Empfang und GPS, Action-Kameras, Kleinteile) – anklicken oder auf eine Fläche ziehen; sie bleiben eigene Teile mit festem Gewicht
+- [x] Kaufteil ohne bekanntes Gewicht: zählt mit 0 g und wird rechts und im Projekt-Gewicht angemahnt
+- [x] Lochbild als Bauteil: Stack 30,5 / 25,5 / 20 / 16, Motor-Lochkreis 19 / 16 / 12 / 9 oder eigenes Maß, mit Mittelloch und Drehung; Kabelbinder-Schlitze; Gurtschlitz
+- [x] Die Daten aus `app/data` (FPV-Maße, Kaufteile) baut `tools/build.py` direkt in die Seite ein
+- [x] Kopfzeile: Messen, Notizen und Ansicht zeigen bei weniger Platz nur ihr Symbol; Dialoge erscheinen jetzt auch über der Startseite
+- [x] Neues Bauteil `app/src/js/41-dronelib.js`
 
 ## Offen
 
@@ -123,8 +131,10 @@ Fertig.
 
 ### Stufe 4 – Drohnen-Modul
 - [x] 5"-Vorlage (Sitzung 11), dazu 7" Long Range
-- [ ] 3"-Vorlage und weitere Rahmenformen (Stretched-X, Deadcat, H) – mit dem Frame-Assistenten in Sitzung 12
-- [ ] Frame-Assistent, Lochbilder, Bauteil-Bibliothek (Sitzung 12)
+- [x] Frame-Assistent mit 3" bis 7" und Rahmenformen True-X, Stretched-X, Wide-X, Deadcat (Sitzung 12)
+- [x] Lochbilder, Bauteil-Bibliothek, erste Detail-Bausteine (Kabelbinder, Gurtschlitz) (Sitzung 12)
+- [ ] H-Rahmen und Rahmen mit getrennten Armen (Sandwich)
+- [ ] Weitere Detail-Bausteine: Antennenhalter, XT60-Halter, GoPro-Halter
 - [ ] Prüfungen, DXF-Export, Varianten (Sitzung 13)
 
 ### Stufe 5 – KI und Feinschliff

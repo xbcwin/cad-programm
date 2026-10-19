@@ -7,15 +7,16 @@ Die Teile werden in genau dieser Reihenfolge zusammengesetzt. Sie teilen sich ei
 gemeinsamen Gültigkeitsbereich (ein einziges <script type="module">), deshalb zählt
 die Reihenfolge: Was weiter unten steht, darf alles von weiter oben benutzen.
 Eine neue Datei muss hier in JS eingetragen werden.
+Daten aus app/data werden über /*JSON:name.json*/null beim Bauen eingesetzt.
 """
-import os, sys
+import json, os, re, sys
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'app')
 SRC = os.path.join(ROOT, 'src')
 
 JS = [
     '00-util.js', '10-model.js', '15-sketchcore.js', '16-solver.js', '17-sketchops.js', '20-kernel.js', '25-app.js',
-    '30-viewer.js', '35-handles.js', '40-library.js', '45-actions.js', '46-features.js', '47-mass.js',
+    '30-viewer.js', '35-handles.js', '40-library.js', '41-dronelib.js', '45-actions.js', '46-features.js', '47-mass.js',
     '48-viewprefs.js', '48-refine.js', '49-timeline.js', '49-components.js', '49-draginput.js', '49-log.js',
     '50-ui-core.js', '51-ui-panels.js', '52-place.js', '53-views.js', '54-select.js', '55-sketch.js', '56-notes.js', '57-measure.js',
     '58-commands.js', '59-versions.js', '60-print.js', '70-drawing.js', '80-ai.js', '84-drone.js', '85-start.js', '90-main.js',
@@ -30,13 +31,24 @@ def part(name):
     return txt.split('\n')
 
 
+DATA = os.path.join(ROOT, 'data')
+
+
+def inline_json(line):
+    # /*JSON:datei.json*/null  →  Inhalt der Datei aus app/data (kompakt), damit die Seite ohne Nachladen läuft
+    def rep(m):
+        with open(os.path.join(DATA, m.group(1)), encoding='utf-8') as f:
+            return json.dumps(json.load(f), ensure_ascii=False, separators=(',', ':'))
+    return re.sub(r'/\*JSON:([\w.-]+\.json)\*/null', rep, line)
+
+
 def build():
     out = part('head.html') + ['<style>'] + part('styles.css') + ['</style>'] + part('body.html')
     out += ['<script type="module">'] + part('js/imports.js')
     for name in JS:
         if not os.path.exists(os.path.join(SRC, 'js', name)):
             continue  # noch nicht angelegt
-        out += ['// ---- ' + name + ' ----'] + part('js/' + name)
+        out += ['// ---- ' + name + ' ----'] + [inline_json(l) for l in part('js/' + name)]
     out += ['</script>'] + part('tail.html')
     return '\n'.join(out)
 

@@ -2,8 +2,10 @@
 const Place = (() => {
   let st = null; // { spec, preview, onFace, pos }
   function specBox(spec) {
-    if (spec.kind) return Model.primitiveBox(spec.kind, Model.newItem(spec.kind).p) || [-10, -10, 0, 10, 10, 20];
-    const d = spec.part; const p = libDefaults(d);
+    if (spec.kind) return Model.primitiveBox(spec.kind, spec.p ? { ...Model.newItem(spec.kind).p, ...spec.p } : Model.newItem(spec.kind).p) || [-10, -10, 0, 10, 10, 20];
+    const d = spec.part; const p = spec.params || libDefaults(d);
+    if (d.lib === 'holePattern') return [-17, -17, -(p.depth || 10), 17, 17, 0.2];
+    if (d.lib === 'zipTie') return [-5, -2, -(p.depth || 10), 5, 2, 0.2];
     if (d.lib === 'screwHole') return [-3.5, -3.5, -(p.length || 10), 3.5, 3.5, 0.2];
     if (d.lib === 'nutTrap') return [-3.5, -3.5, -12, 3.5, 3.5, 0.2];
     if (d.lib === 'insert') return [-2, -2, -7.7, 2, 2, 0.2];
@@ -40,8 +42,9 @@ const Place = (() => {
         if (st) { finish(ev.clientX, ev.clientY); return; }
         // einfacher Klick: in die Mitte setzen
         Panels.closeFlyout();
-        if (spec.kind) Actions.addPrimitive(spec.kind);
-        else Actions.addPart(spec.part, libDefaults(spec.part));
+        if (spec.buy) Actions.addBuyPart(spec);
+        else if (spec.kind) Actions.addPrimitive(spec.kind);
+        else Actions.addPart(spec.part, spec.params || libDefaults(spec.part), { name: spec.name });
         setTimeout(() => { const id = App.sel[0]; const b = id && Actions.worldBox(id); if (b && !Viewer.inView(b)) Viewer.fit(App.doc.items.map((x) => x.id)); }, 400);
       };
       const cancelIt = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', cancelIt); cancel(); };
@@ -85,8 +88,9 @@ const Place = (() => {
   function finish(x, y) {
     const s = st; cleanup();
     if (!inCanvas(x, y) || (!s.onFace && !s.pos)) return;
+    if (s.spec.buy) { Actions.addBuyPart(s.spec, s.onFace ? { onFace: s.onFace } : { pos: s.pos }); return; }
     if (s.spec.kind) Actions.addPrimitive(s.spec.kind, s.onFace ? { onFace: s.onFace } : { pos: s.pos });
-    else Actions.addPart(s.spec.part, libDefaults(s.spec.part), s.onFace ? { onFace: s.onFace } : { pos: s.pos });
+    else Actions.addPart(s.spec.part, s.spec.params || libDefaults(s.spec.part), { ...(s.onFace ? { onFace: s.onFace } : { pos: s.pos }), name: s.spec.name });
     if (s.onFace) UI.toast('Abgelegt – es ist jetzt Teil des Körpers darunter.', { icon: 'check' });
   }
   function cancel() { cleanup(); stopHoles(); }

@@ -299,6 +299,25 @@ export function createKernel(R, oc) {
       const L = pos(p.depth, si.insL + 1);
       return R.makeCylinder((si.ins + tol) / 2, L + LIFT, [0, 0, -L], [0, 0, 1]);
     }
+    if (lib === 'holePattern') {
+      // Lochbild: vier Schraubenlöcher als Quadrat (Stack) oder auf einem Lochkreis (Motor), dazu ein Mittelloch
+      const PAT = { stack305: ['sq', 30.5], stack255: ['sq', 25.5], stack20: ['sq', 20], stack16: ['sq', 16], motor19: ['c', 19], motor16: ['c', 16], motor12: ['c', 12], motor9: ['c', 9] };
+      const def = PAT[p.pat] || [p.pat === 'circle' ? 'c' : 'sq', pos(p.a, 20)];
+      const L = pos(p.depth, 10), hd = holeD(s, p.fit || 'medium');
+      const r = def[0] === 'sq' ? def[1] / Math.SQRT2 : def[1] / 2;   // Abstand der Löcher von der Mitte
+      const rot = ((num(p.rot, 0) + 45) * Math.PI) / 180;
+      const parts = [];
+      for (let k = 0; k < 4; k++) { const a = rot + (k * Math.PI) / 2; parts.push(R.makeCylinder((hd + tol) / 2, L + LIFT, [r * Math.cos(a), r * Math.sin(a), -L], [0, 0, 1])); }
+      const cd = num(p.center, def[0] === 'c' ? 7 : 0);
+      if (cd > 0) parts.push(R.makeCylinder(cd / 2, L + LIFT, [0, 0, -L], [0, 0, 1]));
+      return fuseAll(parts, true);
+    }
+    if (lib === 'zipTie') {
+      // zwei Schlitze für einen Kabelbinder: das Kabel liegt dazwischen, der Binder läuft unten durch
+      const w = pos(p.w, 3) + 0.4, t = pos(p.t, 1.6), gap = pos(p.gap, 6), L = pos(p.depth, 10);
+      const slot = (x) => R.makeBox([x - t / 2, -w / 2, -L], [x + t / 2, w / 2, LIFT]);
+      return fuseAll([slot(-(gap + t) / 2), slot((gap + t) / 2)], true);
+    }
     if (lib === 'slotHole') {
       const L = pos(p.len, 20), W = pos(p.w, 4), D = pos(p.depth, 10);
       const r = W / 2, a = Math.max(0, L / 2 - r);
