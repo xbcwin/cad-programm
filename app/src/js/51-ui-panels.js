@@ -343,8 +343,11 @@ const Panels = (() => {
       const cm3 = r.volume / 1000;
       vRow.textContent = `${fmt(cm3, 3)} cm³`; gRow.textContent = Mass.gText(r.mass);
       cRow.textContent = r.com ? r.com.map((v) => fmt(v, 1)).join(' · ') : '–';
-      const n = (r.parts || []).filter((p) => p.own).length;
-      if (n) { own.hidden = false; own.innerHTML = `${n} ${n === 1 ? 'Teil hat' : 'Teile haben'} ein eigenes Material – das Gewicht rechnet mit beidem.`; }
+      const n = (r.parts || []).filter((p) => p.own && !p.fixed).length, nf = (r.parts || []).filter((p) => p.fixed).length;
+      const bits = [];
+      if (n) bits.push(`${n} ${n === 1 ? 'Teil hat' : 'Teile haben'} ein eigenes Material`);
+      if (nf) bits.push(`${nf} ${nf === 1 ? 'Kaufteil zählt' : 'Kaufteile zählen'} mit festem Gewicht`);
+      if (bits.length) { own.hidden = false; own.innerHTML = bits.join(', ') + ' – das Gewicht rechnet alles zusammen.'; }
     });
     w.append(h('div', { class: 'hint-box', html: '<b>So geht’s:</b> Körper anklicken und ziehen. Die Pfeile ändern die Größe, die Zahlen kannst du anklicken und genau eintippen. <span class="kbd">Entf</span> löscht, <span class="kbd">Strg Z</span> macht rückgängig.' }));
     body.append(w);
@@ -492,10 +495,18 @@ const Panels = (() => {
     if (!f.parent && it.role !== 'hole') {
       const pm = Mass.projectMaterial();
       const ms = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Material und Gewicht'));
-      ms.append(UI.selectField({ id: 'p-mat', label: 'Material', value: it.mat || '', options: [['', `Wie das Projekt (${pm.k})`], ...MATERIALS.map((m) => [m.k, `${m.k} · ${String(m.rho).replace('.', ',')} g/cm³`])], onChange: (v) => App.change('Material gewählt', (doc) => { const T = Model.find(doc, it.id).item; if (v) T.mat = v; else delete T.mat; }) }));
+      const fixed = Mass.fixedOf(it);
+      ms.append(UI.selectField({ id: 'p-mat', label: 'Material', value: fixed ? '__fix' : it.mat || '', options: [['', `Wie das Projekt (${pm.k})`], ['__fix', 'Kaufteil: festes Gewicht'], ...MATERIALS.map((m) => [m.k, `${m.k} · ${String(m.rho).replace('.', ',')} g/cm³`])], onChange: (v) => {
+        if (v === '__fix') { Mass.measure().then((r) => { const p = Mass.partOf(r, it.id); App.change('Festes Gewicht', (doc) => { const T = Model.find(doc, it.id).item; delete T.mat; T.massG = p ? round(p.mass, 1) : 10; }); }); return; }
+        App.change('Material gewählt', (doc) => { const T = Model.find(doc, it.id).item; delete T.massG; if (v) T.mat = v; else delete T.mat; });
+      } }));
+      if (fixed) {
+        ms.append(h('div', { class: 'fields', style: { marginTop: '8px' } }, UI.numField({ id: 'p-massg', label: 'Gewicht (Datenblatt)', value: it.massG, unit: 'g', onCommit: (v) => App.change('Gewicht geändert', (doc) => { Model.find(doc, it.id).item.massG = v; }, { merge: 'massg:' + it.id }) })));
+        ms.append(h('div', { class: 'hint-box', html: 'Für gekaufte Teile wie Motoren oder Akkus: Das Gewicht kommt aus dem Datenblatt, nicht aus der Form. Auch Formeln gehen, z. B. <b>4*33,8</b>.' }));
+      }
       const vR = h('b', { class: 'mono' }, '…'), gR = h('b', { class: 'mono' }, '…');
       ms.append(h('div', { class: 'mini-list', style: { marginTop: '8px' } }, h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Volumen'), vR), h('div', { class: 'mini-row', 'data-help': 'massProps' }, h('span', { class: 'grow' }, 'Gewicht'), gR)));
-      Mass.measure().then((r) => { const p = Mass.partOf(r, it.id); vR.textContent = p ? `${fmt(p.volume / 1000, 3)} cm³` : '–'; gR.textContent = p ? Mass.gText(p.mass) : '–'; vR.id = 'p-vol'; gR.id = 'p-mass'; });
+      Mass.measure().then((r) => { const p = Mass.partOf(r, it.id); vR.textContent = p ? `${fmt(p.volume / 1000, 3)} cm³` : '–'; gR.textContent = p ? Mass.gText(p.mass) + (p.fixed ? ' (fest)' : '') : '–'; vR.id = 'p-vol'; gR.id = 'p-mass'; });
       w.append(ms);
     }
     // Mehr

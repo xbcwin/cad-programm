@@ -1,6 +1,7 @@
 // ================= Masse: Volumen, Gewicht und Schwerpunkt =================
 // Der CAD-Kern rechnet je Teil der obersten Ebene das exakte Volumen und den Volumenschwerpunkt.
 // Jedes Teil kann ein eigenes Material haben (it.mat), sonst gilt das Material des Projekts.
+// Kaufteile (Motoren, Akku …) haben statt eines Materials ein festes Gewicht aus dem Datenblatt (it.massG, in g).
 const Mass = (() => {
   let cache = { rev: -1, p: null };
   const ev = makeEmitter();
@@ -9,11 +10,11 @@ const Mass = (() => {
   function materialFor(it, doc = App.doc) { return (it && matOf(it.mat)) || projectMaterial(doc); }
   function enrich(r, doc) {
     if (!r) return null;
-    let mass = 0; const c = [0, 0, 0];
+    let mass = 0; const c = [0, 0, 0]; const V = Model.vars(doc).v;
     for (const p of r.parts || []) {
       const it = doc.items.find((x) => x.id === p.id);
-      const m = materialFor(it, doc);
-      p.mat = m.k; p.rho = m.rho; p.own = !!(it && matOf(it.mat)); p.mass = (p.volume / 1000) * m.rho;
+      if (fixedOf(it)) { p.fixed = true; p.own = true; p.mat = null; p.mass = Math.max(0, Model.num(it.massG, V, 0)); }
+      else { const m = materialFor(it, doc); p.mat = m.k; p.rho = m.rho; p.own = !!(it && matOf(it.mat)); p.mass = (p.volume / 1000) * m.rho; }
       mass += p.mass;
       if (p.com) for (let i = 0; i < 3; i++) c[i] += p.com[i] * p.mass;
     }
@@ -33,6 +34,7 @@ const Mass = (() => {
     cache = { rev, p: measureDoc(App.doc).then((r) => { if (cache.rev === rev) ev.emit('measured', r); return r; }) };
     return cache.p;
   }
+  function fixedOf(it) { return !!(it && it.massG != null && it.massG !== ''); }
   function partOf(r, id) { return r && (r.parts || []).find((p) => p.id === id) || null; }
   const gText = (g) => `${fmt(g, g < 10 ? 2 : 1)} g`;
 
@@ -62,5 +64,5 @@ const Mass = (() => {
     App.on('results', refreshMarker); App.on('mode', refreshMarker);
     ViewPrefs.on('change', refreshMarker);
   }
-  return { init, measure, measureDoc, materialFor, projectMaterial, partOf, gText, on: ev.on, get markerShown() { return !!marker; }, get markerPos() { return marker ? marker.position.toArray() : null; } };
+  return { init, measure, measureDoc, materialFor, projectMaterial, partOf, gText, fixedOf, on: ev.on, get markerShown() { return !!marker; }, get markerPos() { return marker ? marker.position.toArray() : null; } };
 })();

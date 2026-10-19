@@ -33,7 +33,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -1279,6 +1279,85 @@ def t_neu10_hilfen(p):
     return not fehlt, ('ohne Hilfetext: ' + ', '.join(fehlt)) if fehlt else ''
 
 
+# ---------- Drohnen-Vorlagen ----------
+def drohne(p, key='f5'):
+    p.pg.locator(f'.card.drone[data-tpl="drone-{key}"]').click()
+    for _ in range(60):   # der Rahmen hat viele Löcher – warten, bis alles gerechnet ist
+        p.wait(1000)
+        if p.ev("return !App.busy && App.results.size === App.doc.items.length"):
+            break
+    p.wait(1000)
+
+
+def t_drohne5(p):
+    drohne(p, 'f5')
+    names = p.ev("return App.doc.items.map(i=>i.name)")
+    ok1 = len(names) == 9 and names[0] == 'Unterteil' and p.ev("return App.errors.length") == 0 and p.ev("return App.doc.params.length") == 12
+    bb = bbox(p, 0)
+    ok2 = near(bb, [-92.05, -92.05, 0, 92.05, 92.05, 5])               # Motormitte 79,55 + Auflage 12,5
+    ok3 = p.ev("const r=App.results.get(App.doc.items[0].id); return r.data.faces.filter(f=>f.t!=='PLANE').length") == 32   # 4 Auflagen + 28 Löcher
+    cam = p.ev("return App.doc.items[5].t.y")
+    ok4 = isinstance(cam, str) and cam.startswith('-')                   # Kamera vorne (−Y wie die Ansicht „Vorne“)
+    m = p.ev("return Mass.measure().then(r=>[r.mass, r.parts.filter(x=>x.fixed).length, r.com])")
+    ok5 = 450 < m[0] < 560 and m[1] == 5 and abs(m[2][0]) < 0.5
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
+def t_drohne_masse(p):
+    drohne(p, 'f5')
+    p.pg.locator('#lt-params').click(); p.wait(400)
+    pid = p.ev("return App.doc.params.find(x=>x.name==='Achsabstand').id")
+    field(p, '#pv-' + pid, 250); p.wait(4000)
+    for _ in range(30):
+        p.wait(1000)
+        if p.ev("return !App.busy"): break
+    ok1 = near(bbox(p, 0)[3:4], [round(125 * math.sin(math.radians(45)) + 12.5, 2)])
+    mot = p.ev("const id=App.doc.items[6].id; const r=App.results.get(id); return r && r.data.bbox.map(x=>Math.round(x*100)/100)")
+    ok2 = near(mot[3:4], [round(125 * math.sin(math.radians(45)) + 14.25, 2)])  # Motoren wandern mit
+    p.ev("App.change('x', d=>{ d.params.find(x=>x.name==='Stack').expr=20; })"); p.wait(3000)
+    for _ in range(30):
+        p.wait(1000)
+        if p.ev("return !App.busy"): break
+    st = p.ev("const id=App.doc.items[4].id; const r=App.results.get(id); return r && r.data.bbox.map(x=>Math.round(x*100)/100)")
+    ok3 = near(st[3:4], [12.75]) and p.ev("return App.errors.length") == 0      # Stack-Platzhalter 25,5 breit
+    return [ok1, ok2, ok3]
+
+
+def t_drohne7(p):
+    drohne(p, 'f7')
+    ok1 = p.ev("return App.doc.items.length===9 && App.errors.length===0")
+    mx = 147.5 * math.sin(math.radians(45))
+    ok2 = near(bbox(p, 0), [-(mx + 14), -(mx + 14), 0, mx + 14, mx + 14, 6])
+    m = p.ev("return Mass.measure().then(r=>r.mass)")
+    ok3 = 600 < m < 800
+    return [ok1, ok2, ok3]
+
+
+def t_drohne_ansichten(p):
+    drohne(p, 'f5')
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('u'); p.wait(1500)
+    ok1 = p.ev("return Views.exploded && [...Viewer.nodes.values()].filter(n=>n.off && n.off.length()>1).length>=6")
+    p.pg.keyboard.press('u'); p.wait(1200)
+    p.pg.keyboard.press('c'); p.wait(1200)
+    ok2 = p.ev("return !!Viewer.clip") and p.ev("return App.errors.length") == 0
+    return [ok1, ok2]
+
+
+def t_festes_gewicht(p):
+    zwei_quader(p, 0, 0, -20, 20)
+    p.ev("App.select([App.doc.items[1].id])"); p.wait(1500)
+    p.pg.select_option('#p-mat', '__fix'); p.wait(2000)
+    ok1 = p.pg.locator('#p-massg').count() == 1 and p.ev("return App.doc.items[1].massG") == 12.4
+    field(p, '#p-massg', 50); p.wait(1500)
+    ok2 = p.pg.locator('#p-mass').text_content() == '50 g (fest)'
+    p.ev("App.clearSelection()"); p.wait(1500)
+    ok3 = '62,4 g' in p.pg.locator('.section').filter(has_text='Schwerpunkt').inner_text()
+    p.ev("App.select([App.doc.items[1].id])"); p.wait(1200)
+    p.pg.select_option('#p-mat', ''); p.wait(1500)
+    ok4 = p.ev("return App.doc.items[1].massG === undefined") and p.pg.locator('#p-mass').text_content() == '12,4 g'
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -1327,6 +1406,11 @@ TESTS = [
     ('Versionen: speichern / vergleichen / Umriss / zurückholen / Rückgängig', t_versionen),
     ('Versionen kommen mit in die Projektdatei', t_versionen_datei),
     ('Neue Werkzeuge haben Hilfetexte', t_neu10_hilfen),
+    ('Drohne 5": Startseite / Maße / Unterteil / Löcher / Kamera vorne / Gewicht', t_drohne5),
+    ('Drohne 5": Achsabstand ändern / Motoren wandern mit / Stack 20×20', t_drohne_masse),
+    ('Drohne 7": baut ohne Fehler / Größe / Gewicht', t_drohne7),
+    ('Drohne: Explosion und Schnitt', t_drohne_ansichten),
+    ('Kaufteil mit festem Gewicht', t_festes_gewicht),
     ('Formel-Beispiele', t_formel_beispiele), ('Einführung „Erste Skizze“', t_einfuehrung), ('Schraubenlöcher', t_schrauben),
     ('Fies: Löschen hinter Marker + Undo', t_fies_loeschen), ('Fies: alles unterdrückt', t_fies_alle_aus),
     ('Fies: Marker am Anfang, neu laden', t_fies_reload), ('Fies: Tasten während Rechnen', t_fies_tasten),

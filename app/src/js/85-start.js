@@ -144,6 +144,17 @@ const Start = (() => {
       }
       sec.append(list); inner.append(sec);
     }
+    // Drohnen: vollständige, veränderbare Rahmen
+    const dsec = h('section', null, h('h2', null, 'Drohnen'));
+    const dcards = h('div', { class: 'cards' });
+    for (const t of DroneTpl.LIST) {
+      const c = h('button', { type: 'button', class: 'card drone', 'data-tpl': t.id });
+      const th = h('div', { class: 'thumb' }); th.innerHTML = tplThumb(t);
+      c.append(th, h('b', null, t.name), h('span', null, t.desc));
+      c.onclick = () => openDrone(t);
+      dcards.append(c);
+    }
+    dsec.append(dcards); inner.append(dsec);
     const tsec = h('section', null, h('h2', null, 'Vorlagen'));
     const cards = h('div', { class: 'cards' });
     const empty = h('button', { type: 'button', class: 'card new' });
@@ -167,6 +178,10 @@ const Start = (() => {
     document.addEventListener('keydown', onKey, { once: true });
   }
   function hide() { if (el) { el.remove(); el = null; } }
+  function openDrone(t) {
+    App.setDoc(t.build()); hide();
+    UI.toast(`${t.name} geladen. Links unter „Maße“ änderst du Achsabstand, Armbreite, Stack und mehr – alles wandert mit.`, { icon: 'check', ms: 6000 });
+  }
   function newProject(silent) {
     App.setDoc(Model.newDoc('Neues Projekt'));
     hide();
@@ -202,7 +217,7 @@ const Start = (() => {
     const ok = await Print.save(name + '.tracery.json', JSON.stringify(vers.length ? { ...App.doc, versions: vers } : App.doc, null, 1));
     if (ok) App.fileSavedRev = App.revision;
   }
-  return { show, hide, newProject, openFile, openBlob, saveFile, get open() { return !!el; } };
+  return { show, hide, newProject, openFile, openBlob, saveFile, openDrone, get open() { return !!el; } };
 })();
 
 // ---------- Einführung ----------

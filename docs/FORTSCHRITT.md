@@ -1,6 +1,6 @@
 # Fortschritt
 
-Stand: 19.10.2026 · nach Sitzung 10 von 14
+Stand: 19.10.2026 · nach Sitzung 11 von 14
 
 ## Erledigt
 
@@ -45,7 +45,7 @@ Stand: 19.10.2026 · nach Sitzung 10 von 14
 - [x] Neuer Name beim Maß (z. B. `breite`) wird automatisch unter „Maße“ angelegt
 - [x] Formel-Beispiele unter „Maße“ (Gemini, alle 12 mit Tracerys Rechner nachgeprüft), Beispiel-Maße per Klick
 - [x] Umbenennen / Entfernen eines Maßes wirkt jetzt auch auf Skizzen-Maße
-- [x] Automatischer Klicktest `tests/klicktest.py`: 73 Durchläufe (alle grün), 98 von 117 Punkten der Testliste automatisch geprüft
+- [x] Automatischer Klicktest `tests/klicktest.py`: 78 Durchläufe (alle grün), 103 von 125 Punkten der Testliste automatisch geprüft
 - [x] Aufgeräumt: Programm liegt jetzt in 28 Quelldateien unter `app/src/`, `tools/build.py` baut daraus `app/index.html`
 - [x] Notizstift (Taste N): freie Striche, die am Modell kleben, Textnotizen, 6 Farben, 3 Dicken, Radierer, ein-/ausblendbar – ohne technische Bedeutung
 - [x] Symbole für den Notizstift (Gemini, geprüft); Augen-Knopf rechts im Bild blendet Notizen aus, sobald es welche gibt
@@ -87,6 +87,13 @@ Stand: 19.10.2026 · nach Sitzung 10 von 14
 - [x] Versionen (Projektmenü → „Versionen …“): Stand mit Namen speichern, vergleichen (Liste der Änderungen, Gewicht vorher/nachher, alter Stand als roter Umriss), zurückholen (mit Rückgängig); Versionen kommen mit in die Projektdatei
 - [x] Push/Pull war schon da („Hochziehen“ an einer Fläche) und bleibt so
 - [x] Neue Bauteile `app/src/js/47-mass.js`, `54-select.js`, `59-versions.js`
+- [x] Drohnen-Vorlagen auf der Startseite (eigener Abschnitt „Drohnen“, auch in der Eingabezeile): 5" Freestyle und 7" Long Range
+- [x] Der Rahmen ist ein echter Rohbau aus Einzelteilen: Unterteil mit Armen und Motorauflagen, Abstandsbolzen, Oberplatte mit Gurtschlitzen, Kamerahalter mit M2-Loch; Löcher für Stack (30,5 × 30,5), Bolzen, Motoren (Lochkreis 16 bzw. 19 als Kreismuster) und Motorwellen
+- [x] 12 Maße steuern alles: Achsabstand, Armwinkel, Armbreite, Armdicke, Plattenbreite, -länge, -dicke, Bolzenhöhe, Stack, Motorlochkreis, Kamerabreite, Propeller
+- [x] Platzhalter für Stack, Kamera, Motoren, Propellerkreise und Akku – mit Gewicht aus Datenblättern (z. B. iFlight XING-E 2207: 33,8 g, Akku aus den FPV-Maßen)
+- [x] Kaufteil mit festem Gewicht: bei „Material“ „Kaufteil: festes Gewicht“ wählen, Gewicht eintippen (auch Formeln wie 4*33,8)
+- [x] Vorne ist bei den Drohnen −Y, passend zur Ansicht „Vorne“
+- [x] Neues Bauteil `app/src/js/84-drone.js`
 
 ## Offen
 
@@ -114,7 +121,8 @@ Fertig.
 - [ ] Versionen in der Cloud (mit Stufe 6 – Konten)
 
 ### Stufe 4 – Drohnen-Modul
-- [ ] 5"-Vorlage (Sitzung 11)
+- [x] 5"-Vorlage (Sitzung 11), dazu 7" Long Range
+- [ ] 3"-Vorlage und weitere Rahmenformen (Stretched-X, Deadcat, H) – mit dem Frame-Assistenten in Sitzung 12
 - [ ] Frame-Assistent, Lochbilder, Bauteil-Bibliothek (Sitzung 12)
 - [ ] Prüfungen, DXF-Export, Varianten (Sitzung 13)
 

@@ -1,6 +1,6 @@
 # Testliste
 
-Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 10 (19.10.2026).
+Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 11 (19.10.2026).
 
 **[x]** = automatisch geprüft mit `tests/klicktest.py` (echter Browser, echte Klicks) · **[ ]** = noch von Hand ansehen
 
@@ -22,7 +22,8 @@ Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 10 (19.10
 | Formen-Werkzeuge | 12 | 9 | Bohrungs-Ring gut sichtbar? Muster-Kreis verständlich? Wand von innen |
 | Ansichten | 12 | 8 | Schraffur erkennbar? Explosion weich? Fokus drehen, Röntgen-Kanten |
 | Messen, Masse, Auswahl, Versionen | 11 | 8 | Schwerpunkt-Symbol gut sichtbar? Vergleichs-Umriss verständlich? |
-| **Gesamt** | **117** | **98** | **19 Punkte, dazu ein Blick auf Animationen** |
+| Drohnen-Vorlagen | 8 | 5 | Sieht es wie eine Drohne aus? Propellerkreise, STEP im anderen Programm |
+| **Gesamt** | **125** | **103** | **22 Punkte, dazu ein Blick auf Animationen** |
 
 Wichtig: Automatisch geprüft heißt „funktioniert in Chromium unter Linux“. Safari auf dem Mac, Touch auf dem iPad und echte Grafikkarten sieht nur ein Test von Hand.
 
@@ -327,6 +328,33 @@ Nichts hiervon ändert das Modell – kein Schritt in der Zeitleiste, nichts in 
 - [ ] **Push/Pull**
   Schritte: 1. Fläche anklicken, „Hochziehen“, Maus ziehen oder Zahl tippen.
   Erwartet: Die Fläche wächst heraus oder drückt sich hinein.
+
+## Drohnen-Vorlagen (neu in Sitzung 11)
+
+- [x] **5" Freestyle**
+  Schritte: 1. Startseite → „Drohnen“ → „5" Freestyle“.
+  Erwartet: Neun Teile (Unterteil, Bolzen, Oberplatte, Kamerahalter, Stack, Kamera, Motoren, Propeller, Akku), keine Fehler, 12 Maße links; das Unterteil ist 184 mm breit, hat 28 Löcher, die Kamera sitzt vorne; das Ganze wiegt etwa ein halbes Kilo, der Schwerpunkt liegt in der Mitte.
+- [x] **Maße ändern**
+  Schritte: 1. Links „Maße“ → Achsabstand 250. 2. Stack 20.
+  Erwartet: Arme und Motoren rücken nach außen; die Stack-Löcher und der Stack werden kleiner (20 × 20).
+- [x] **7" Long Range**
+  Schritte: 1. Startseite → „7" Long Range“.
+  Erwartet: Größerer Rahmen (Achsabstand 295, Motorlochkreis 19), keine Fehler, etwa 600–800 g.
+- [x] **Explosion und Schnitt an der Drohne**
+  Schritte: 1. Taste U. 2. Nochmal U, dann C.
+  Erwartet: Die Teile schweben in Schichten auseinander; der Schnitt zeigt das Innere ohne Fehler.
+- [x] **Kaufteil mit festem Gewicht**
+  Schritte: 1. Einen Quader anklicken, Material → „Kaufteil: festes Gewicht“. 2. 50 eintippen. 3. Zurück auf „Wie das Projekt“.
+  Erwartet: Das Feld zeigt erst das berechnete Gewicht, dann „50 g (fest)“; das Projekt rechnet mit 50 g; danach wieder das Materialgewicht.
+- [ ] **Sieht aus wie eine Drohne**
+  Schritte: 1. 5"-Vorlage von schräg oben, von vorne (1) und von oben (7) ansehen.
+  Erwartet: Arme, Motoren, Stack, Kamera vorne, Akku oben – alles an einer sinnvollen Stelle.
+- [ ] **Propellerkreise**
+  Schritte: 1. Von oben ansehen.
+  Erwartet: Die orangefarbenen Kreise berühren sich nicht und ragen nicht in die Kamera.
+- [ ] **STEP in einem anderen Programm**
+  Schritte: 1. Exportieren, die STEP-Datei z. B. in Fusion oder FreeCAD öffnen.
+  Erwartet: Alle Teile kommen an, mit richtigen Maßen.
 
 ## Notizstift (neu)
 

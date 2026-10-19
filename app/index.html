@@ -4733,6 +4733,7 @@ const Features = (() => {
 // ================= Masse: Volumen, Gewicht und Schwerpunkt =================
 // Der CAD-Kern rechnet je Teil der obersten Ebene das exakte Volumen und den Volumenschwerpunkt.
 // Jedes Teil kann ein eigenes Material haben (it.mat), sonst gilt das Material des Projekts.
+// Kaufteile (Motoren, Akku …) haben statt eines Materials ein festes Gewicht aus dem Datenblatt (it.massG, in g).
 const Mass = (() => {
   let cache = { rev: -1, p: null };
   const ev = makeEmitter();
@@ -4741,11 +4742,11 @@ const Mass = (() => {
   function materialFor(it, doc = App.doc) { return (it && matOf(it.mat)) || projectMaterial(doc); }
   function enrich(r, doc) {
     if (!r) return null;
-    let mass = 0; const c = [0, 0, 0];
+    let mass = 0; const c = [0, 0, 0]; const V = Model.vars(doc).v;
     for (const p of r.parts || []) {
       const it = doc.items.find((x) => x.id === p.id);
-      const m = materialFor(it, doc);
-      p.mat = m.k; p.rho = m.rho; p.own = !!(it && matOf(it.mat)); p.mass = (p.volume / 1000) * m.rho;
+      if (fixedOf(it)) { p.fixed = true; p.own = true; p.mat = null; p.mass = Math.max(0, Model.num(it.massG, V, 0)); }
+      else { const m = materialFor(it, doc); p.mat = m.k; p.rho = m.rho; p.own = !!(it && matOf(it.mat)); p.mass = (p.volume / 1000) * m.rho; }
       mass += p.mass;
       if (p.com) for (let i = 0; i < 3; i++) c[i] += p.com[i] * p.mass;
     }
@@ -4765,6 +4766,7 @@ const Mass = (() => {
     cache = { rev, p: measureDoc(App.doc).then((r) => { if (cache.rev === rev) ev.emit('measured', r); return r; }) };
     return cache.p;
   }
+  function fixedOf(it) { return !!(it && it.massG != null && it.massG !== ''); }
   function partOf(r, id) { return r && (r.parts || []).find((p) => p.id === id) || null; }
   const gText = (g) => `${fmt(g, g < 10 ? 2 : 1)} g`;
 
@@ -4794,7 +4796,7 @@ const Mass = (() => {
     App.on('results', refreshMarker); App.on('mode', refreshMarker);
     ViewPrefs.on('change', refreshMarker);
   }
-  return { init, measure, measureDoc, materialFor, projectMaterial, partOf, gText, on: ev.on, get markerShown() { return !!marker; }, get markerPos() { return marker ? marker.position.toArray() : null; } };
+  return { init, measure, measureDoc, materialFor, projectMaterial, partOf, gText, fixedOf, on: ev.on, get markerShown() { return !!marker; }, get markerPos() { return marker ? marker.position.toArray() : null; } };
 })();
 // ---- 48-viewprefs.js ----
 // ================= Ansicht: Raster, Ursprungsebenen, Achsen, Projektion =================
@@ -5648,8 +5650,11 @@ const Panels = (() => {
       const cm3 = r.volume / 1000;
       vRow.textContent = `${fmt(cm3, 3)} cm³`; gRow.textContent = Mass.gText(r.mass);
       cRow.textContent = r.com ? r.com.map((v) => fmt(v, 1)).join(' · ') : '–';
-      const n = (r.parts || []).filter((p) => p.own).length;
-      if (n) { own.hidden = false; own.innerHTML = `${n} ${n === 1 ? 'Teil hat' : 'Teile haben'} ein eigenes Material – das Gewicht rechnet mit beidem.`; }
+      const n = (r.parts || []).filter((p) => p.own && !p.fixed).length, nf = (r.parts || []).filter((p) => p.fixed).length;
+      const bits = [];
+      if (n) bits.push(`${n} ${n === 1 ? 'Teil hat' : 'Teile haben'} ein eigenes Material`);
+      if (nf) bits.push(`${nf} ${nf === 1 ? 'Kaufteil zählt' : 'Kaufteile zählen'} mit festem Gewicht`);
+      if (bits.length) { own.hidden = false; own.innerHTML = bits.join(', ') + ' – das Gewicht rechnet alles zusammen.'; }
     });
     w.append(h('div', { class: 'hint-box', html: '<b>So geht’s:</b> Körper anklicken und ziehen. Die Pfeile ändern die Größe, die Zahlen kannst du anklicken und genau eintippen. <span class="kbd">Entf</span> löscht, <span class="kbd">Strg Z</span> macht rückgängig.' }));
     body.append(w);
@@ -5797,10 +5802,18 @@ const Panels = (() => {
     if (!f.parent && it.role !== 'hole') {
       const pm = Mass.projectMaterial();
       const ms = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Material und Gewicht'));
-      ms.append(UI.selectField({ id: 'p-mat', label: 'Material', value: it.mat || '', options: [['', `Wie das Projekt (${pm.k})`], ...MATERIALS.map((m) => [m.k, `${m.k} · ${String(m.rho).replace('.', ',')} g/cm³`])], onChange: (v) => App.change('Material gewählt', (doc) => { const T = Model.find(doc, it.id).item; if (v) T.mat = v; else delete T.mat; }) }));
+      const fixed = Mass.fixedOf(it);
+      ms.append(UI.selectField({ id: 'p-mat', label: 'Material', value: fixed ? '__fix' : it.mat || '', options: [['', `Wie das Projekt (${pm.k})`], ['__fix', 'Kaufteil: festes Gewicht'], ...MATERIALS.map((m) => [m.k, `${m.k} · ${String(m.rho).replace('.', ',')} g/cm³`])], onChange: (v) => {
+        if (v === '__fix') { Mass.measure().then((r) => { const p = Mass.partOf(r, it.id); App.change('Festes Gewicht', (doc) => { const T = Model.find(doc, it.id).item; delete T.mat; T.massG = p ? round(p.mass, 1) : 10; }); }); return; }
+        App.change('Material gewählt', (doc) => { const T = Model.find(doc, it.id).item; delete T.massG; if (v) T.mat = v; else delete T.mat; });
+      } }));
+      if (fixed) {
+        ms.append(h('div', { class: 'fields', style: { marginTop: '8px' } }, UI.numField({ id: 'p-massg', label: 'Gewicht (Datenblatt)', value: it.massG, unit: 'g', onCommit: (v) => App.change('Gewicht geändert', (doc) => { Model.find(doc, it.id).item.massG = v; }, { merge: 'massg:' + it.id }) })));
+        ms.append(h('div', { class: 'hint-box', html: 'Für gekaufte Teile wie Motoren oder Akkus: Das Gewicht kommt aus dem Datenblatt, nicht aus der Form. Auch Formeln gehen, z. B. <b>4*33,8</b>.' }));
+      }
       const vR = h('b', { class: 'mono' }, '…'), gR = h('b', { class: 'mono' }, '…');
       ms.append(h('div', { class: 'mini-list', style: { marginTop: '8px' } }, h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Volumen'), vR), h('div', { class: 'mini-row', 'data-help': 'massProps' }, h('span', { class: 'grow' }, 'Gewicht'), gR)));
-      Mass.measure().then((r) => { const p = Mass.partOf(r, it.id); vR.textContent = p ? `${fmt(p.volume / 1000, 3)} cm³` : '–'; gR.textContent = p ? Mass.gText(p.mass) : '–'; vR.id = 'p-vol'; gR.id = 'p-mass'; });
+      Mass.measure().then((r) => { const p = Mass.partOf(r, it.id); vR.textContent = p ? `${fmt(p.volume / 1000, 3)} cm³` : '–'; gR.textContent = p ? Mass.gText(p.mass) + (p.fixed ? ' (fest)' : '') : '–'; vR.id = 'p-vol'; gR.id = 'p-mass'; });
       w.append(ms);
     }
     // Mehr
@@ -8537,6 +8550,7 @@ const Commands = (() => {
     add('section', 'Schnitt ein/aus', 'section', 'schnitt aufschneiden querschnitt innen schnittebene', () => Views.section(), { group: 'Ansicht', kbd: 'C' });
     add('xray', 'Röntgen ein/aus', 'xray', 'röntgen durchsichtig transparent glas innen', () => Views.xray(), { group: 'Ansicht', kbd: 'X' });
     add('explode', 'Explosion: Teile auseinanderziehen', 'explode', 'explosion explosionsansicht auseinander zerlegen baugruppe', () => Views.explode(), { group: 'Ansicht', kbd: 'U' });
+    for (const t of DroneTpl.LIST) add('tpl-' + t.id, 'Drohnen-Vorlage: ' + t.name, 'drone', 'drohne vorlage rahmen frame quad ' + t.name.toLowerCase(), () => Start.openDrone(t), { group: 'Projekt' });
     add('versions', 'Versionen: speichern, vergleichen, zurückholen', 'rollback', 'version versionen stand vergleichen zurück sichern', () => Versions.dialog(), { group: 'Projekt' });
     add('version-save', 'Jetzigen Stand als Version speichern', 'save', 'version speichern sichern stand', async () => { const n = await UI.prompt('Version speichern', 'Name der Version', 'Version ' + (Versions.list().length + 1), 'Speichern'); if (n != null) Versions.save(n); }, { group: 'Projekt' });
     add('similar', 'Ähnliche auswählen', 'similar', 'ähnliche gleiche alle auswählen bohrungen kanten', () => Select.similar(), { group: 'Bearbeiten', kbd: 'A', needSel: true });
@@ -10184,6 +10198,119 @@ Beispiel – Wunsch „Platte 60 × 40 × 4 mit einem Loch in der Mitte“:
   return { ask, get available() { return !off; } };
 })();
 
+// ---- 84-drone.js ----
+// ================= Drohnen-Vorlagen: parametrischer Freestyle-Rahmen =================
+// Ein vollständiger, veränderbarer Rohbau: Unterteil mit Armen, Abstandsbolzen, Oberplatte,
+// Kamerahalter und Platzhalter für Stack, Kamera, Motoren, Propeller und Akku.
+// Vorne ist −Y wie in der Ansicht „Vorne“ (Kamera), Motoren sitzen auf einem Kreis mit dem Achsabstand als Durchmesser.
+// Alle Lagen hängen an Maßen (links unter „Maße“) – ändert man z. B. den Achsabstand, wandert alles mit.
+// Kaufteile tragen ein festes Gewicht (massG) aus Datenblättern, Rahmenteile ihr Material.
+const DroneTpl = (() => {
+  const param = (name, expr) => ({ id: uid('m'), name, expr });
+  const item = (kind, p, o = {}) => {
+    const x = Model.newItem(kind, p, { name: o.name, role: o.role, color: o.color });
+    Object.assign(x.t, o.t || {});
+    if (o.mat) x.mat = o.mat;
+    if (o.massG != null) x.massG = o.massG;
+    if (o.hidden) x.hidden = true;
+    if (o.fin) x.finishes = o.fin.map((f) => ({ id: uid('f'), ...f }));
+    return x;
+  };
+  const group = (name, children, o = {}) => {
+    const g = item('group', {}, { ...o, name, color: o.color || (children.find((c) => c.role !== 'hole') || children[0]).color });
+    g.children = children;
+    return g;
+  };
+  const hole = (size, t, len = 'Armdicke + 2', name) => {
+    const x = Model.newItem('part', { lib: 'screwHole', size, head: 'none', fit: 'medium', length: len }, { name: name || 'Loch ' + size, role: 'hole' });
+    Object.assign(x.t, t); return x;
+  };
+  // vier Ecken: vorne rechts, vorne links, hinten rechts, hinten links
+  const CORNERS = [['vorne rechts', 1, -1], ['vorne links', -1, -1], ['hinten rechts', 1, 1], ['hinten links', -1, 1]];
+  const sg = (s, e) => (s > 0 ? `(${e})` : `-(${e})`);
+  const MX = 'Achsabstand/2*sin(Armwinkel)', MY = 'Achsabstand/2*cos(Armwinkel)';
+  const SX = 'Plattenbreite/2 - 4', SY = 'Plattenlänge/2 - 8';   // Abstandsbolzen
+
+  const PRESETS = {
+    f5: {
+      name: '5" Freestyle', doc: '5-Zoll-Freestyle',
+      desc: 'True-X mit 225 mm Achsabstand, 30,5er Stack, Micro-Kamera, 6S-Akku. Alles über Maße veränderbar.',
+      params: { Achsabstand: 225, Armwinkel: 45, Armbreite: 13, Armdicke: 5, Plattenbreite: 42, Plattenlänge: 130, Plattendicke: 2, Bolzenhöhe: 25, Stack: 30.5, Motorlochkreis: 16, Kamerabreite: 19, Propeller: 5 },
+      motorScrew: 'M3', motor: { name: 'Motor 2207', d: 28.5, h: 19.7, g: 33.8 }, prop: 4.5,
+      akku: { name: 'Akku 6S 1300', w: 38, l: 75, h: 39, g: 215 }, cam: 6, stack: 20,
+    },
+    f7: {
+      name: '7" Long Range', doc: '7-Zoll-Long-Range',
+      desc: 'Größerer True-X mit 295 mm Achsabstand und 19er Motoren für lange Flüge mit 6S 1500.',
+      params: { Achsabstand: 295, Armwinkel: 45, Armbreite: 15, Armdicke: 6, Plattenbreite: 45, Plattenlänge: 150, Plattendicke: 2.5, Bolzenhöhe: 30, Stack: 30.5, Motorlochkreis: 19, Kamerabreite: 19, Propeller: 7 },
+      motorScrew: 'M3', motor: { name: 'Motor 2806.5', d: 35.1, h: 21.3, g: 54 }, prop: 7,
+      akku: { name: 'Akku 6S 1500', w: 39, l: 78, h: 43, g: 250 }, cam: 6, stack: 20,
+    },
+  };
+
+  function build(key) {
+    const P = PRESETS[key] || PRESETS.f5;
+    const d = Model.newDoc(P.doc);
+    d.params = Object.entries(P.params).map(([k, v]) => param(k, v));
+    d.settings.material = 'CFK';
+    const CF = '#3b4148';
+    // Unterteil: Mittelplatte, vier Arme, Motorauflagen, Löcher
+    const kids = [item('box', { w: 'Plattenbreite', d: 'Plattenlänge', h: 'Armdicke' }, { name: 'Mittelplatte', color: CF })];
+    for (const [n, sx, sy] of CORNERS) {
+      kids.push(item('box', { w: 'Armbreite', d: 'Achsabstand/2', h: 'Armdicke' }, { name: 'Arm ' + n, color: CF, t: { x: sg(sx, MX + '/2'), y: sg(sy, MY + '/2'), rz: sx * sy > 0 ? '-Armwinkel' : 'Armwinkel' } }));
+      kids.push(item('cylinder', { d: 'Motorlochkreis + 9', h: 'Armdicke' }, { name: 'Motorauflage ' + n, color: CF, t: { x: sg(sx, MX), y: sg(sy, MY) } }));
+    }
+    for (const [, sx, sy] of CORNERS) kids.push(hole('M3', { x: sg(sx, 'Stack/2'), y: sg(sy, 'Stack/2'), z: 'Armdicke + 1' }, 'Armdicke + 2', 'Stack-Loch'));
+    for (const [, sx, sy] of CORNERS) kids.push(hole('M3', { x: sg(sx, SX), y: sg(sy, SY), z: 'Armdicke + 1' }, 'Armdicke + 2', 'Bolzen-Loch'));
+    for (const [n, sx, sy] of CORNERS) {
+      // vier Motorschrauben als Kreismuster um die Motormitte (Lochkreis = Motorlochkreis)
+      const g = Model.newItem('group', {}, { name: 'Motorlöcher ' + n, role: 'hole' });
+      g.p = { op: 'pattern', pt: 'circ', n: 4, ang: 360, cx: sg(sx, MX), cy: sg(sy, MY) };
+      g.children = [hole(P.motorScrew, { x: `${sg(sx, MX)} + Motorlochkreis/2`, y: sg(sy, MY), z: 'Armdicke + 1' }, 'Armdicke + 2', 'Motorschraube')];
+      kids.push(g);
+      kids.push(item('cylinder', { d: 7, h: 'Armdicke + 2' }, { name: 'Wellenloch ' + n, role: 'hole', t: { x: sg(sx, MX), y: sg(sy, MY), z: -1 } }));
+    }
+    const unten = group('Unterteil', kids, { color: CF });
+    // Abstandsbolzen mit Gewinde
+    const bk = [];
+    for (const [, sx, sy] of CORNERS) bk.push(item('cylinder', { d: 5, h: 'Bolzenhöhe' }, { name: 'Bolzen', color: '#9aa3ad', t: { x: sg(sx, SX), y: sg(sy, SY), z: 'Armdicke' } }));
+    for (const [, sx, sy] of CORNERS) bk.push(item('cylinder', { d: 2.5, h: 'Bolzenhöhe + 2' }, { name: 'Gewinde', role: 'hole', t: { x: sg(sx, SX), y: sg(sy, SY), z: 'Armdicke - 1' } }));
+    const bolzen = group('Abstandsbolzen', bk, { color: '#9aa3ad', mat: 'Alu 7075' });
+    // Oberplatte mit Schlitzen für den Akkugurt
+    const ok = [item('box', { w: 'Plattenbreite', d: 'Plattenlänge', h: 'Plattendicke' }, { name: 'Platte', color: CF, t: { z: 'Armdicke + Bolzenhöhe' } })];
+    for (const [, sx, sy] of CORNERS) ok.push(hole('M3', { x: sg(sx, SX), y: sg(sy, SY), z: 'Armdicke + Bolzenhöhe + Plattendicke + 1' }, 'Plattendicke + 2', 'Bolzen-Loch'));
+    for (const s of [1, -1]) ok.push(item('box', { w: 3, d: 21, h: 'Plattendicke + 2' }, { name: 'Gurtschlitz', role: 'hole', t: { x: sg(s, 'Plattenbreite/2 - 6'), z: 'Armdicke + Bolzenhöhe - 1' } }));
+    const oben = group('Oberplatte', ok, { color: CF });
+    // Kamerahalter: zwei Seitenwangen mit M2-Loch auf Kamerahöhe
+    const kh = [];
+    for (const s of [1, -1]) kh.push(item('box', { w: 2, d: 12, h: 'Bolzenhöhe' }, { name: 'Wange', color: '#5b6470', t: { x: sg(s, 'Kamerabreite/2 + 1.2'), y: '-(Plattenlänge/2 - 8)', z: 'Armdicke' } }));
+    kh.push(item('cylinder', { d: 2.2, h: 'Kamerabreite + 10' }, { name: 'Kameraschraube M2', role: 'hole', t: { x: '-(Kamerabreite/2 + 5)', y: '-(Plattenlänge/2 - 8)', z: 'Armdicke + Bolzenhöhe/2', ry: 90 } }));
+    const halter = group('Kamerahalter', kh, { color: '#5b6470', mat: 'TPU 95A' });
+    // Platzhalter für Kaufteile (festes Gewicht, ca.-Werte)
+    const stack = item('box', { w: 'Stack + 5.5', d: 'Stack + 5.5', h: 12 }, { name: 'Stack (Platzhalter)', color: '#3a8f6a', t: { z: 'Armdicke + 4' }, massG: P.stack });
+    const cam = item('box', { w: 'Kamerabreite', d: 18, h: 'Kamerabreite' }, { name: 'Kamera (Platzhalter)', color: '#16202b', t: { y: '-(Plattenlänge/2 - 8)', z: 'Armdicke + Bolzenhöhe/2 - Kamerabreite/2' }, massG: P.cam });
+    const mk = [], pk = [];
+    for (const [n, sx, sy] of CORNERS) {
+      mk.push(item('cylinder', { d: P.motor.d, h: P.motor.h }, { name: 'Motor ' + n, color: '#b9c2cb', t: { x: sg(sx, MX), y: sg(sy, MY), z: 'Armdicke' } }));
+      pk.push(item('tube', { d: 'Propeller*25.4', wall: 1.2, h: 1 }, { name: 'Propellerkreis ' + n, color: '#e8833a', t: { x: sg(sx, MX), y: sg(sy, MY), z: `Armdicke + ${P.motor.h + 3}` } }));
+    }
+    const motoren = group(P.motor.name + ' (4×, Platzhalter)', mk, { color: '#b9c2cb', massG: `4*${P.motor.g}` });
+    const props = group(`Propeller ${P.params.Propeller}" (Kreise)`, pk, { color: '#e8833a', massG: `4*${P.prop}` });
+    const akku = item('box', { w: P.akku.w, d: P.akku.l, h: P.akku.h }, { name: P.akku.name + ' (Platzhalter)', color: '#e2b53a', t: { z: 'Armdicke + Bolzenhöhe + Plattendicke' }, massG: P.akku.g });
+    d.items = [unten, bolzen, oben, halter, stack, cam, motoren, props, akku];
+    return d;
+  }
+  // Vorschaubild: Rahmen von oben
+  function svg(big) {
+    const r = big ? 21 : 19;
+    const pts = [[55 + r, 28 - r * 0.62], [55 - r, 28 - r * 0.62], [55 + r, 28 + r * 0.62], [55 - r, 28 + r * 0.62]];
+    return pts.map(([x, y]) => `<path d="M55 28L${x} ${y}" class="line" stroke-width="5" stroke-linecap="round"/>`).join('') +
+      '<rect x="47" y="16" width="16" height="24" rx="2" class="a3"/>' +
+      pts.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="5" class="a2"/><ellipse cx="${x}" cy="${y}" rx="${big ? 13 : 11}" ry="${big ? 7 : 6}" class="b1" fill-opacity=".15"/>`).join('');
+  }
+  const LIST = Object.entries(PRESETS).map(([k, P]) => ({ id: 'drone-' + k, name: P.name, desc: P.desc, build: () => build(k), svg: svg(k === 'f7'), drone: true }));
+  return { build, PRESETS, LIST };
+})();
 // ---- 85-start.js ----
 // ================= Startseite, Vorlagen, Dateien, Einführung =================
 const Templates = (() => {
@@ -10331,6 +10458,17 @@ const Start = (() => {
       }
       sec.append(list); inner.append(sec);
     }
+    // Drohnen: vollständige, veränderbare Rahmen
+    const dsec = h('section', null, h('h2', null, 'Drohnen'));
+    const dcards = h('div', { class: 'cards' });
+    for (const t of DroneTpl.LIST) {
+      const c = h('button', { type: 'button', class: 'card drone', 'data-tpl': t.id });
+      const th = h('div', { class: 'thumb' }); th.innerHTML = tplThumb(t);
+      c.append(th, h('b', null, t.name), h('span', null, t.desc));
+      c.onclick = () => openDrone(t);
+      dcards.append(c);
+    }
+    dsec.append(dcards); inner.append(dsec);
     const tsec = h('section', null, h('h2', null, 'Vorlagen'));
     const cards = h('div', { class: 'cards' });
     const empty = h('button', { type: 'button', class: 'card new' });
@@ -10354,6 +10492,10 @@ const Start = (() => {
     document.addEventListener('keydown', onKey, { once: true });
   }
   function hide() { if (el) { el.remove(); el = null; } }
+  function openDrone(t) {
+    App.setDoc(t.build()); hide();
+    UI.toast(`${t.name} geladen. Links unter „Maße“ änderst du Achsabstand, Armbreite, Stack und mehr – alles wandert mit.`, { icon: 'check', ms: 6000 });
+  }
   function newProject(silent) {
     App.setDoc(Model.newDoc('Neues Projekt'));
     hide();
@@ -10389,7 +10531,7 @@ const Start = (() => {
     const ok = await Print.save(name + '.tracery.json', JSON.stringify(vers.length ? { ...App.doc, versions: vers } : App.doc, null, 1));
     if (ok) App.fileSavedRev = App.revision;
   }
-  return { show, hide, newProject, openFile, openBlob, saveFile, get open() { return !!el; } };
+  return { show, hide, newProject, openFile, openBlob, saveFile, openDrone, get open() { return !!el; } };
 })();
 
 // ---------- Einführung ----------
@@ -10479,7 +10621,7 @@ const Tour = (() => {
   window.__masswerk = { App, Viewer, Model, Actions, Sketch, SK, THREE, Print, Drawing, Kernel, UI, Commands, Panels, Handles, Start, AI, Measure, Place };
   UI.initTips();
   Viewer.init($('#viewport'));
-  window.__V = Viewer; window.__M = { App, Actions, Model, Timeline, Start, Comp, Handles, Sketch, SK, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views, Mass, Select, Versions }; window.__S = Start; // für automatische Tests
+  window.__V = Viewer; window.__M = { App, Actions, Model, Timeline, Start, Comp, Handles, Sketch, SK, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views, Mass, Select, Versions, DroneTpl }; window.__S = Start; // für automatische Tests
   Panels.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Notes.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init(); Refine.init(); Comp.init(); Views.init(); Mass.init(); Versions.init();
 
   // Kopfzeile
