@@ -94,6 +94,7 @@ Stand: 19.10.2026 · nach Sitzung 11 von 14
 - [x] Kaufteil mit festem Gewicht: bei „Material“ „Kaufteil: festes Gewicht“ wählen, Gewicht eintippen (auch Formeln wie 4*33,8)
 - [x] Vorne ist bei den Drohnen −Y, passend zur Ansicht „Vorne“
 - [x] Neues Bauteil `app/src/js/84-drone.js`
+- [x] Kaufteil-Daten für die Bauteil-Bibliothek (Gemini, Prompt F): 22 Teile in `app/data/bauteile.json` – Videosender, Empfänger, GPS, Action-Kameras, Stecker, Kondensator; 11 mit Hersteller- oder Händlerangaben verglichen, 2 korrigiert (DJI O4: Sendeeinheit 5,1 g statt 8,2 g; Walksnail 33,5 mm)
 
 ## Offen
 
