@@ -1,5 +1,5 @@
 {
-  "_hinweis": "Kaufteile für die Bauteil-Bibliothek (Entwurf Gemini, Prompt F). Maße in mm, Gewicht in g. 'geprueft': am 19.10.2026 mit der Hersteller- oder Händlerseite verglichen. 'unsicher': Wert fehlt oder ist abgeleitet. Lochbild = Quadrat-Seitenlänge.",
+  "_hinweis": "Kaufteile für die Bauteil-Bibliothek (Entwurf Gemini, Prompt F). Maße in mm, Gewicht in g. 'geprueft': am 19.10.2026 mit der Hersteller- oder Händlerseite verglichen. 'unsicher': Wert fehlt oder ist abgeleitet. Lochbild = Quadrat-Seitenlänge. Am 20.10.2026 mit Gemini Prompt K nachgeprüft: 9 weitere Teile bestätigt, 2 berichtigt (GPS); XT60H und XT30U ohne vollständige Herstellerangaben.",
   "videosender": [
     {
       "name": "DJI O3 Air Unit (Sendeeinheit)",
@@ -132,9 +132,10 @@
       "gewicht_g": 7.5,
       "lochbild": null,
       "kamera_breite_mm": 19.0,
-      "quelle": "https://docs.hd-zero.com/camera-micro-v3",
+      "quelle": "https://docs.hd-zero.com/de/camera-micro-v3",
       "unsicher": false,
-      "geprueft": false
+      "geprueft": true,
+      "notiz": "Hersteller: L19 × B19 × H24 mm (24 mm = Tiefe), 7,5 g"
     },
     {
       "name": "TBS Unify Pro32 HV (analog)",
@@ -147,7 +148,7 @@
       "kamera_breite_mm": null,
       "quelle": "https://www.team-blacksheep.com/products/prod:unifypro32_hv",
       "unsicher": false,
-      "geprueft": false
+      "geprueft": true
     }
   ],
   "empfaenger": [
@@ -174,10 +175,10 @@
       "gewicht_g": 4.6,
       "lochbild": null,
       "kamera_breite_mm": null,
-      "quelle": "https://www.radiomasterrc.com/products/rp3-expresslrs-2-4ghz-nano-receiver",
+      "quelle": "https://radiomasterrc.com/products/rp3-expresslrs-2-4ghz-nano-receiver",
       "unsicher": false,
-      "geprueft": false,
-      "notiz": "Gewicht mit zwei Antennen"
+      "geprueft": true,
+      "notiz": "4,6 g mit beiden Antennen"
     }
   ],
   "gps": [
@@ -200,25 +201,27 @@
       "l_mm": 15.0,
       "b_mm": 15.0,
       "h_mm": 5.2,
-      "gewicht_g": 2.7,
+      "gewicht_g": 2.6,
       "lochbild": null,
       "kamera_breite_mm": null,
-      "quelle": "https://www.hglrc.com/products/hglrc-m100-mini-gps",
+      "quelle": "https://www.hglrc.com/products/hglrc-m100_mini-gps",
       "unsicher": false,
-      "geprueft": false
+      "geprueft": true,
+      "notiz": "Gewicht von 2,7 auf 2,6 g berichtigt (Herstellerseite)"
     },
     {
       "name": "GEPRC GEP-M10 Nano",
       "hersteller": "GEPRC",
       "l_mm": 15.0,
       "b_mm": 15.0,
-      "h_mm": 5.5,
-      "gewicht_g": 2.5,
+      "h_mm": 7.5,
+      "gewicht_g": 4.1,
       "lochbild": null,
       "kamera_breite_mm": null,
-      "quelle": "https://geprc.com/product/gep-m10-nano-gps/",
+      "quelle": "https://geprc.com/product/gep-m10-series-gps-module/",
       "unsicher": false,
-      "geprueft": false
+      "geprueft": true,
+      "notiz": "Höhe 5,5 → 7,5 mm und Gewicht 2,5 → 4,1 g berichtigt (Herstellerseite)"
     }
   ],
   "actioncam": [
@@ -231,9 +234,10 @@
       "gewicht_g": 154.0,
       "lochbild": null,
       "kamera_breite_mm": null,
-      "quelle": "https://gopro.com (mit Akku)",
+      "quelle": "https://cliftoncameras.co.uk/uploads/downloads/Product%20Specifications/GoPro/GoPro%20Hero12%20Black%20Full%20Spec.pdf",
       "unsicher": false,
-      "geprueft": false
+      "geprueft": true,
+      "notiz": "71,8 × 50,8 × 33,6 mm, 154 g mit Halterung und Akku (GoPro-Datenblatt); Geminis 71,0 × 55,0 mm / 153 g nicht übernommen"
     },
     {
       "name": "GEPRC Naked Camera GP11",
@@ -246,7 +250,7 @@
       "kamera_breite_mm": null,
       "quelle": "https://geprc.com/product/geprc-naked-camera-gp11/",
       "unsicher": false,
-      "geprueft": false
+      "geprueft": true
     },
     {
       "name": "Insta360 GO 3 (nur Kamera)",
@@ -257,9 +261,9 @@
       "gewicht_g": 35.5,
       "lochbild": null,
       "kamera_breite_mm": null,
-      "quelle": "https://www.insta360.com/de/product/insta360-go3",
+      "quelle": "https://onlinemanual.insta360.com/go3/en-us/specs/hardware",
       "unsicher": false,
-      "geprueft": false
+      "geprueft": true
     }
   ],
   "stecker": [
@@ -274,7 +278,8 @@
       "kamera_breite_mm": null,
       "quelle": "https://www.getfpv.com/amass-xt60h-power-connectors-male-female-5-sets-10-pcs.html",
       "unsicher": true,
-      "geprueft": false
+      "geprueft": false,
+      "notiz": "Amass nennt im Datenblatt kein Gewicht und nicht alle Maße – Werte bleiben Schätzung"
     },
     {
       "name": "XT30U Stecker (male)",
@@ -287,7 +292,8 @@
       "kamera_breite_mm": null,
       "quelle": "https://www.team-blacksheep.com/products/product:4818",
       "unsicher": false,
-      "geprueft": false
+      "geprueft": false,
+      "notiz": "Amass nennt im Datenblatt kein Gewicht und nicht alle Maße – Werte bleiben Schätzung"
     }
   ],
   "kondensator": [
@@ -300,10 +306,10 @@
       "gewicht_g": null,
       "lochbild": null,
       "kamera_breite_mm": null,
-      "quelle": "https://www.newark.com/panasonic/eeufr1v102/cap-alu-elec-1000uf-35v-20/dp/74R3452",
+      "quelle": "https://industrial.panasonic.com/ww/products/pt/aluminum-cap-lead/models/EEUFR1V102",
       "unsicher": true,
-      "geprueft": false,
-      "notiz": "zylindrisch: Ø 12,5 mm, 20 mm lang"
+      "geprueft": true,
+      "notiz": "Maße vom Hersteller (Ø 12,5 × 20 mm); Panasonic nennt kein Gewicht"
     }
   ]
 }

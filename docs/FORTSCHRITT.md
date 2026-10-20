@@ -122,6 +122,8 @@ Stand: 20.10.2026 · nach Sitzung 15 (Bauplan mit 14 Sitzungen abgeschlossen)
 - [x] KI-Fenster liegt jetzt über der Zeitleiste statt darauf
 - [x] Erklärtexte je Schritt-Art (Gemini Prompt H, `app/data/schritt-erklaerungen.json`): was, wozu bei Drohnen, worauf achten – 32 Arten, gegen Tracery geprüft, 19 Sätze berichtigt (u. a. schneiden Löcher auf oberster Ebene ohne Gruppe, Kabelbinder sind zwei Schlitze, Prisma-Durchmesser von Ecke zu Ecke)
 - [x] Neues Bauteil `app/src/js/88-aihelp.js`
+- [x] Kaufteile nachgeprüft (Gemini Prompt K): 20 von 22 jetzt mit Hersteller- oder Händlerangabe verglichen; berichtigt: HGLRC M100 Mini 2,6 g, GEPRC GEP-M10 Nano 7,5 mm hoch und 4,1 g; Geminis GoPro-Maße waren falsch, die bisherigen (71,8 × 50,8 × 33,6 mm, 154 g) stimmen mit dem GoPro-Datenblatt; XT60H und XT30U ohne vollständige Herstellerangaben
+- [x] Schub 2306: iFlight XING2 2306 1755 KV, 1651 g mit Gemfan 51466 bei 24 V (Testtabelle beim Händler) – damit hat auch der 6"-Rahmen einen Richtwert
 - [x] Einfache Oberfläche für Einsteiger (Sitzung 15): Umschalter „Einfach / Profi“ oben rechts, auf der Startseite und in den Einstellungen; gilt für diesen Browser und bleibt nach dem Neuladen
 - [x] Einfach zeigt: Körper (Quader, Zylinder, Kugel, Kegel, Rohr, Halbkugel), Skizze, Bauteile (Schraubenloch, Mutternfalle, Langloch, Lochbild, Kabelbinder), Drohne, Exportieren; ausgeblendet sind Messen, Notizen, Ansicht, Zeichnung, Protokoll, Varianten, Material je Teil, Fangen, Ansichts-Einstellungen, Muster, Teilen, Boolesch, Ausrichten, Ähnliche, Aushöhlen, Röntgen, Schnitt und Auswahlfilter
 - [x] „Mehr“ in der einfachen Oberfläche: Messen, Notizstift, Ansicht, Schwachstellen und „Alle Werkzeuge zeigen“ – die Eingabezeile findet weiterhin jedes Werkzeug
@@ -158,7 +160,6 @@ Fertig.
 - [ ] H-Rahmen und Rahmen mit getrennten Armen (Sandwich)
 - [ ] Weitere Detail-Bausteine: Antennenhalter, XT60-Halter, GoPro-Halter
 - [x] Prüfungen, DXF-Export, Varianten (Sitzung 13)
-- [ ] Schubwert für 2306 aus einer belegbaren Schubtabelle (bisher nur als Bild beim Händler)
 - [ ] Drohnen-Check auch für Rahmen, die nicht aus dem Assistenten kommen (heute braucht er die Maße Achsabstand, Armwinkel, Propeller)
 
 ### Stufe 5 – KI und Feinschliff

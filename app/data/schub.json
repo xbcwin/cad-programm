@@ -1,5 +1,5 @@
 {
-  "_hinweis": "Entwurf Gemini (Prompt G), von Claude am 19.10.2026 auf den Herstellerseiten geprüft. Nur Einträge mit geprueft=true dienen als Vorgabe. Ergänzt am 20.10.2026 aus Prompt J: T-Motor F90 1300KV (Testtabelle bei ligpower.com, 100 % Gas bei etwa 23,5 V).",
+  "_hinweis": "Entwurf Gemini (Prompt G), von Claude am 19.10.2026 auf den Herstellerseiten geprüft. Nur Einträge mit geprueft=true dienen als Vorgabe. Ergänzt am 20.10.2026 aus Prompt J: T-Motor F90 1300KV (Testtabelle bei ligpower.com, 100 % Gas bei etwa 23,5 V). Ergänzt aus Prompt K: iFlight XING2 2306 1755KV (Testtabelle 24 V, Gemfan 51466); Emax-ECO-II-Wert stammt von einer SpeedyBee-Produktseite und bleibt ungeprüft.",
   "motoren": [
     {
       "motor": "SpeedyBee 1404 V2",
@@ -83,6 +83,30 @@
       "strom_bei_max_a": 41.7,
       "gewicht_motor_g": 33.7,
       "quelle": "https://www.t-hobby.com/products/tmotor-v2306-v3-brushless-racing-motor",
+      "geprueft": false
+    },
+    {
+      "motor": "iFlight XING2 2306",
+      "stator": "2306",
+      "kv": 1755,
+      "zellen": "6S",
+      "propeller": "Gemfan 51466",
+      "max_schub_g": 1651,
+      "strom_bei_max_a": null,
+      "gewicht_motor_g": 32.5,
+      "quelle": "https://www.thingbits.in/products/iflight-xing2-2306-unibell-fpv-brushless-motor",
+      "geprueft": true
+    },
+    {
+      "motor": "Emax ECO II 2306",
+      "stator": "2306",
+      "kv": 1900,
+      "zellen": "6S",
+      "propeller": "DALPROP Cyclone 5050",
+      "max_schub_g": 1990,
+      "strom_bei_max_a": null,
+      "gewicht_motor_g": null,
+      "quelle": "https://rcdrone.top/es/products/speedybee-max-eco-2306-1900kv-motor-fpv-sin-escobillas",
       "geprueft": false
     },
     {
