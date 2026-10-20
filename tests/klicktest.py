@@ -1319,7 +1319,7 @@ def t_drohne_masse(p):
         p.wait(1000)
         if p.ev("return !App.busy"): break
     st = p.ev("const id=App.doc.items[4].id; const r=App.results.get(id); return r && r.data.bbox.map(x=>Math.round(x*100)/100)")
-    ok3 = near(st[3:4], [12.75]) and p.ev("return App.errors.length") == 0      # Stack-Platzhalter 25,5 breit
+    ok3 = near(st[3:4], [12.75]) and p.ev("return App.errors.length") == 0      # Stack 20 × 20: Platinen 25,5 breit
     return [ok1, ok2, ok3]
 
 
@@ -1379,7 +1379,7 @@ def t_frame_assistent(p):
     P = p.ev("return Object.fromEntries(App.doc.params.map(x=>[x.name,x.expr]))")
     ok3 = P['Armwinkel'] == 60 and P['Armwinkel_hinten'] == 35 and P['Stack'] == 20 and P['Motorlochkreis'] == 12 and abs(P['Kamerabreite'] - 12.36) < 1e-6
     names = p.ev("return App.doc.items.map(i=>i.name)")
-    ok4 = 'DJI O4 Air Unit Sender' in names and 'DJI O4 Air Unit Kamera' in names and 'Akku 4S 450 mAh (Platzhalter)' in names and p.ev("return App.errors.length") == 0
+    ok4 = 'DJI O4 Air Unit Sender' in names and 'DJI O4 Air Unit Kamera' in names and 'Akku 4S 450 mAh' in names and p.ev("return App.errors.length") == 0
     # die vorderen Arme sind weiter gespreizt als die hinteren
     xs = p.ev("const g=App.doc.items.find(i=>i.name.startsWith('Motor 1404')); const x=(n)=>Model.tNumeric(g.children.find(c=>c.name===n)).x; return [x('Motor vorne rechts'), x('Motor hinten rechts')]")
     ok5 = xs[0] > xs[1] + 10                                             # Deadcat: vorne weiter gespreizt
@@ -1728,6 +1728,28 @@ def t_einfach(p):
     return [ok1, ok2, ok3, ok4, ok5, ok6, ok7]
 
 
+# ---------- Sitzung 16: Kaufteile in echter Form ----------
+def t_kaufteil_formen(p):
+    drohne(p, 'f5')
+    libs = p.ev("""const L=(i)=>i.kind==='part'?i.p.lib:i.kind; const f=(re)=>App.doc.items.find(i=>re.test(i.name));
+      return [L(f(/^Stack/)), L(f(/^Motor /).children[0]), L(f(/^Propeller/).children[0]), L(f(/^Akku/)), L(App.doc.items.find(i=>i.name==='Kamera (Platzhalter)')), L(f(/Unify/))]""")
+    ok1 = libs == ['buyStack', 'buyMotor', 'buyProp', 'buyBattery', 'buyCamera', 'buyPcb'] and p.ev("return App.errors.length") == 0
+    # echte Form: viel mehr Flächen als ein Zylinder (Glocke, Lüftungslöcher, Gewinde, Welle)
+    faces = p.ev("const g=App.doc.items.find(i=>/^Motor /.test(i.name)); const r=App.results.get(g.id); return r && r.data.faces.length")
+    ok2 = faces and faces > 4 * 20
+    # Maße bleiben die aus dem Datenblatt: Motor 28,5 breit, Akku 38 × 75 × 39
+    bb = p.ev("const a=App.doc.items.find(i=>/^Akku/.test(i.name)); const r=App.results.get(a.id).data.bbox; return [r[3]-r[0], r[4]-r[1], r[5]-r[2]].map(x=>Math.round(x*10)/10)")
+    ok3 = bb == [38, 75, 39]
+    # Kaufteil aus dem Klappfenster: Motor mit Form und Gewicht
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(1500)
+    p.pg.locator('#t-drone').click(); p.wait(400)
+    p.pg.locator('.flyout .chip[data-cat="motor"]').click(); p.wait(300)
+    p.pg.locator('.flyout .tile').filter(has_text='Motor 2207').first.click(); warte_rechnen(p, 20)
+    ok4 = p.ev("const it=App.doc.items[0]; return it.kind==='part' && it.p.lib==='buyMotor' && it.massG===33.8 && App.errors.length===0") and p.pg.locator('.kind-badge').first.text_content() == 'Motor'
+    ok5 = 'Kaufteil mit festem Gewicht' in p.ev("return Explain.local(App.doc.items[0].id).lines.map(l=>l.t).join(' ')")
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -1798,6 +1820,7 @@ TESTS = [
     ('Schwachstellen: Vorlage ok / Lochrand / Ringe / Armdicke / KI-Vorschlag umsetzen', t_schwachstellen),
     ('Sitzung-14-Werkzeuge haben Hilfetexte', t_neu14_hilfen),
     ('Einfache Oberfläche: Startseite / ausgeblendet / Grundkörper und Bauteile / Kontextleiste / Mehr / bleibt / zurück zu Profi', t_einfach),
+    ('Kaufteile in echter Form: Rahmen / Motor-Details / Datenblatt-Maße / Klappfenster / Erklären', t_kaufteil_formen),
     ('Formel-Beispiele', t_formel_beispiele), ('Einführung „Erste Skizze“', t_einfuehrung), ('Schraubenlöcher', t_schrauben),
     ('Fies: Löschen hinter Marker + Undo', t_fies_loeschen), ('Fies: alles unterdrückt', t_fies_alle_aus),
     ('Fies: Marker am Anfang, neu laden', t_fies_reload), ('Fies: Tasten während Rechnen', t_fies_tasten),

@@ -282,7 +282,7 @@
   "droneLib": {
     "tip": "Frame-Assistent, Kaufteile und Lochbilder für Drohnen",
     "hilfe": "Oben „Drohne“: Der Frame-Assistent baut einen ganzen Rahmen. Darunter wählst du Motoren, Akkus, Videosender, Empfänger und mehr – anklicken oder auf eine Fläche ziehen. Unter „Lochbilder und Bausteine“ liegen Stack- und Motor-Lochbilder.",
-    "tipp": "Kaufteile sind Platzhalter mit dem Gewicht aus dem Datenblatt. So stimmt das Gesamtgewicht schon beim Konstruieren."
+    "tipp": "Kaufteile haben ihre echte Form und die Maße und das Gewicht aus dem Datenblatt. So stimmen Platz, Gewicht und Schwerpunkt schon beim Konstruieren."
   },
   "frameAssist": {
     "tip": "Drohnenrahmen in einem Schritt bauen",

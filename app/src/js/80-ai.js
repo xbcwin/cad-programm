@@ -13,7 +13,7 @@ const AI = (() => {
 {"op":"spiegeln","id":"<id>","ebene":"YZ"|"XZ"|"XY","lage":0}   (Original plus Spiegelbild; YZ = links↔rechts, XZ = vorne↔hinten, XY = oben↔unten)
 {"op":"material","id":"<id>","material":"<Kürzel aus MATERIALIEN>"}
 {"op":"gewicht","id":"<id>","g":33.8}   (Kaufteil mit festem Gewicht aus dem Datenblatt)
-{"op":"kaufteil","name":"<Name aus KAUFTEILE>","t":{"x":0,"y":0,"z":0}}   (Platzhalter mit Maßen und Gewicht aus der Bibliothek)
+{"op":"kaufteil","name":"<Name aus KAUFTEILE>","t":{"x":0,"y":0,"z":0}}   (Kaufteil in echter Form mit Maßen und Gewicht aus der Bibliothek)
 {"op":"drohne","zoll":5,"form":"x"|"stretch"|"wide"|"deadcat","video":"analog"|"o3"|"o4"|"o4pro"|"walksnail"|"hdzero"|"none","motor":"2207","akku":"6S 1300 mAh"}   (baut mit dem Frame-Assistenten einen kompletten Rahmen als NEUES Projekt; nur wenn ausdrücklich ein neuer Rahmen gewünscht ist)
 {"op":"pruefen"}   (führt danach den Drohnen-Check aus: Propeller, Teile, Gewicht, Schwerpunkt, Schub)
 

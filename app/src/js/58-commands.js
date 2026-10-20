@@ -6,7 +6,7 @@ const Commands = (() => {
     C.length = 0;
     for (const k of PRIMITIVE_ORDER) add('add-' + k, KINDS[k].label + ' hinzufügen', 'cube', 'körper form grundkörper ' + ({ box: 'würfel kasten block platte', cylinder: 'rund stab säule scheibe', sphere: 'ball', cone: 'spitze', pyramid: 'spitze', wedge: 'rampe dach schräge', tube: 'röhre ring hohl', torus: 'donut kringel', prism: 'sechseck achteck polygon', hemisphere: 'kuppel halbkugel' }[k] || ''), () => Actions.addPrimitive(k), { group: 'Körper' });
     add('add-hole', 'Loch (Zylinder) hinzufügen', 'hole', 'bohrung loch rund ausschnitt', () => Actions.addPrimitive('cylinder', { role: 'hole', name: 'Loch', p: { d: 6, h: 30 } }), { group: 'Körper' });
-    for (const d of LIB) add('lib-' + d.lib, d.label + ' hinzufügen', d.icon, 'bauteil ' + d.desc, () => Actions.addPart(d, libDefaults(d)), { group: 'Bauteile' });
+    for (const d of LIB.filter((x) => !x.buy)) add('lib-' + d.lib, d.label + ' hinzufügen', d.icon, 'bauteil ' + d.desc, () => Actions.addPart(d, libDefaults(d)), { group: 'Bauteile' });
     add('sketch', 'Skizze zeichnen', 'sketch', 'zeichnen 2d profil umriss extrudieren', () => Sketch.chooseAndStart(), { group: 'Werkzeuge', kbd: 'S' });
     add('hole-wizard', 'Bohrungs-Assistent', 'holeWizard', 'bohrung loch schraube gewinde senkung einsatz mutter', () => Place.holeWizard($('#t-parts')), { group: 'Bearbeiten' });
     add('pattern-rect', 'Rechteckmuster', 'patternRect', 'muster reihe raster kopien vervielfachen', () => Features.pattern('rect'), { group: 'Bearbeiten' });

@@ -1,6 +1,6 @@
 # Testliste
 
-Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 15 (20.10.2026).
+Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 16 (21.10.2026).
 
 **[x]** = automatisch geprüft mit `tests/klicktest.py` (echter Browser, echte Klicks) · **[ ]** = noch von Hand ansehen
 
@@ -27,7 +27,8 @@ Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 15 (20.10
 | Drohnen-Check, DXF, Varianten | 11 | 9 | DXF in der Fräs-Software, Check-Fenster und Varianten-Tabelle bei schmalem Fenster |
 | KI-Schritte, Erklären, Schwachstellen | 12 | 9 | Echte KI in Claude, Ringe und KI-Fenster, Quellen-Links |
 | Einfache Oberfläche | 4 | 3 | Mit einem Kind ausprobieren |
-| **Gesamt** | **161** | **130** | **31 Punkte, dazu ein Blick auf Animationen** |
+| Kaufteile in echter Form | 3 | 2 | Sehen die Teile echt aus? |
+| **Gesamt** | **164** | **132** | **32 Punkte, dazu ein Blick auf Animationen** |
 
 Wichtig: Automatisch geprüft heißt „funktioniert in Chromium unter Linux“. Safari auf dem Mac, Touch auf dem iPad und echte Grafikkarten sieht nur ein Test von Hand.
 
@@ -478,6 +479,18 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [ ] **Mit einem Kind ausprobieren**
   Schritte: 1. Ein Kind (ab 10) mit „Einfach“ eine Platte mit vier Löchern bauen lassen, ohne zu helfen.
   Erwartet: Es findet Körper, Löcher und Exportieren allein; notieren, wo es hängen bleibt.
+
+## Kaufteile in echter Form (neu in Sitzung 16)
+
+- [x] **Rahmen mit echten Teilen**
+  Schritte: 1. Startseite → „5" Freestyle“.
+  Erwartet: Motoren mit Glocke und Welle, Propeller mit drei Blättern und Ring, Stack aus zwei Platinen, Kamera mit Objektiv nach vorne, Akku mit runden Kanten; keine Fehler; Akku 38 × 75 × 39 mm.
+- [x] **Kaufteil aus dem Klappfenster**
+  Schritte: 1. Leeres Projekt → „Drohne“ → „Motoren“ → „Motor 2207“. 2. Rechts das ?-Symbol.
+  Erwartet: Motor in echter Form mit 33,8 g; rechts „Glocke Ø“, „Höhe“, „Lochkreis“, „Schrauben“; die Erklärung nennt „Kaufteil mit festem Gewicht“.
+- [ ] **Sehen die Teile echt aus?**
+  Schritte: 1. Nah an Motor, Kamera, Stack und Propeller heranzoomen, auch mit „Röntgen“.
+  Erwartet: Erkennbar wie die echten Teile; Propeller drehen vorne links und hinten rechts andersherum.
 
 ## Notizstift (neu)
 

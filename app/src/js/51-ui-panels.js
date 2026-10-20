@@ -78,7 +78,7 @@ const Panels = (() => {
     } else {
       el.append(h('h3', null, 'Bauteile'));
       const tiles = h('div', { class: 'tiles' });
-      for (const d of LIB) {
+      for (const d of LIB.filter((x) => !x.buy)) {
         const t = h('div', { class: 'tile' + (d.role === 'hole' ? ' hole-part' : '') + (SIMPLE_PARTS.includes(d.lib) ? '' : ' pro'), role: 'button', tabindex: '0', 'data-tip': d.desc });
         t.innerHTML = partSVG(d); t.append(h('span', { class: 'lbl' }, hyph(d.label)), h('span', { class: 'role' }, d.role === 'hole' ? 'Loch' : 'Körper'));
         Place.bindTile(t, { part: d });

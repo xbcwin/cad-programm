@@ -102,7 +102,7 @@ const DroneTpl = (() => {
       stackScrew: stack >= 30 ? 'M3' : 'M2', motorScrew: mot.screw.startsWith('M1') ? 'M2' : mot.screw,
       motor: { name: 'Motor ' + mot.stator, d: mot.d, h: mot.h, g: mot.g }, prop: S.prop,
       akku: akkuName ? DroneLib.akku(akkuName) : null,
-      vtx: vtx ? { name: vtx.name.replace(/\s*\(Sendeeinheit.*\)/, '') + (vid[2] ? ' Sender' : ''), l: vtx.l_mm, b: vtx.b_mm, h: vtx.h_mm, g: vtx.gewicht_g ?? '' } : null,
+      vtx: vtx ? { name: vtx.name.replace(/\s*\(Sendeeinheit.*\)/, '') + (vid[2] ? ' Sender' : ''), src: vtx.name, lochbild: vtx.lochbild, l: vtx.l_mm, b: vtx.b_mm, h: vtx.h_mm, g: vtx.gewicht_g ?? '' } : null,
       cam: cam ? { name: cam.name.replace(/\s*\(Kameramodul\)/, ' Kamera'), l: cam.l_mm, b: cam.b_mm, h: cam.h_mm, g: cam.gewicht_g ?? '' } : { name: 'Kamera (Platzhalter)', g: 6 },
       stackG: 20, thrust: th ? th.g : null, thrustSrc: th ? th.src : null,
     };
@@ -154,20 +154,26 @@ const DroneTpl = (() => {
     for (const s of [1, -1]) kh.push(item('box', { w: 2, d: 12, h: 'Bolzenhöhe' }, { name: 'Wange', color: '#5b6470', t: { x: sg(s, 'Kamerabreite/2 + 1.2'), y: '-(Plattenlänge/2 - 8)', z: 'Armdicke' } }));
     kh.push(item('cylinder', { d: 2.2, h: 'Kamerabreite + 10' }, { name: 'Kameraschraube M2', role: 'hole', t: { x: '-(Kamerabreite/2 + 5)', y: '-(Plattenlänge/2 - 8)', z: 'Armdicke + Bolzenhöhe/2', ry: 90 } }));
     const halter = group('Kamerahalter', kh, { color: '#5b6470', mat: 'TPU 95A' });
-    // Platzhalter für Kaufteile (festes Gewicht)
+    // Kaufteile in ihrer echten Form (Kern: buildBuy) mit festem Gewicht aus dem Datenblatt
     const out = [unten, bolzen, oben, halter];
-    out.push(item('box', { w: 'Stack + 5.5', d: 'Stack + 5.5', h: 12 }, { name: 'Stack (Platzhalter)', color: '#3a8f6a', t: { z: 'Armdicke + 4' }, massG: P.stackG }));
-    if (P.vtx) out.push(item('box', { w: P.vtx.b, d: P.vtx.l, h: P.vtx.h }, { name: P.vtx.name, color: '#16202b', t: { z: 'Armdicke + 16' }, massG: P.vtx.g }));
+    const buyItem = (lib, p, o) => item('part', { lib, ...p }, o);
+    out.push(buyItem('buyStack', { a: 'Stack', h: 12, size: P.stackScrew }, { name: 'Stack (FC + ESC)', color: '#3a8f6a', t: { z: 'Armdicke + 4' }, massG: P.stackG }));
+    if (P.vtx) {
+      const vs = DroneLib.videoShape({ name: P.vtx.src, lochbild: P.vtx.lochbild });
+      out.push(vs.lib === 'buyVtx' ? buyItem('buyVtx', { w: P.vtx.b, d: P.vtx.l, h: P.vtx.h, a: vs.a }, { name: P.vtx.name, color: '#16202b', t: { z: 'Armdicke + 16' }, massG: P.vtx.g })
+        : buyItem('buyPcb', { w: P.vtx.b, d: P.vtx.l, h: P.vtx.h }, { name: P.vtx.name, color: '#16202b', t: { z: 'Armdicke + 16' }, massG: P.vtx.g }));
+    }
     const camD = P.cam.l || 18, camH = P.cam.h || 'Kamerabreite';
-    out.push(item('box', { w: P.cam.b || 'Kamerabreite', d: camD, h: camH }, { name: P.cam.name, color: '#16202b', t: { y: '-(Plattenlänge/2 - 8)', z: `Armdicke + Bolzenhöhe/2 - (${camH})/2` }, massG: P.cam.g }));
+    out.push(buyItem('buyCamera', { w: P.cam.b || 'Kamerabreite', d: camD, h: camH }, { name: P.cam.name, color: '#16202b', t: { y: '-(Plattenlänge/2 - 8)', z: `Armdicke + Bolzenhöhe/2 - (${camH})/2` }, massG: P.cam.g }));
     const mk = [], pk = [];
     for (const [n, sx, sy] of CORNERS) {
-      mk.push(item('cylinder', { d: P.motor.d, h: P.motor.h }, { name: 'Motor ' + n, color: '#b9c2cb', t: { x: sg(sx, MX(sy)), y: PY(sy), z: 'Armdicke' } }));
-      pk.push(item('tube', { d: 'Propeller*25.4', wall: 1.2, h: 1 }, { name: 'Propellerkreis ' + n, color: '#e8833a', t: { x: sg(sx, MX(sy)), y: PY(sy), z: `Armdicke + ${P.motor.h + 3}` } }));
+      mk.push(buyItem('buyMotor', { d: P.motor.d, h: P.motor.h, lk: 'Motorlochkreis', size: P.motorScrew }, { name: 'Motor ' + n, color: '#b9c2cb', t: { x: sg(sx, MX(sy)), y: PY(sy), z: 'Armdicke' } }));
+      // hinten rechts und vorne links drehen andersherum: gespiegelte Blätter
+      pk.push(buyItem('buyProp', { zoll: 'Propeller', blades: 3, pitch: sx * sy < 0 ? 13 : -13 }, { name: 'Propeller ' + n, color: '#e8833a', t: { x: sg(sx, MX(sy)), y: PY(sy), z: `Armdicke + ${P.motor.h}` } }));
     }
-    out.push(group(P.motor.name + ' (4×, Platzhalter)', mk, { color: '#b9c2cb', massG: P.motor.g === '' ? '' : `4*${P.motor.g}` }));
-    out.push(group(`Propeller ${P.zoll}" (Kreise)`, pk, { color: '#e8833a', massG: `4*${P.prop}` }));
-    if (P.akku) out.push(item('box', { w: P.akku.w, d: P.akku.l, h: P.akku.h }, { name: P.akku.name + ' (Platzhalter)', color: '#e2b53a', t: { z: 'Armdicke + Bolzenhöhe + Plattendicke' }, massG: P.akku.g }));
+    out.push(group(P.motor.name + ' (4×)', mk, { color: '#b9c2cb', massG: P.motor.g === '' ? '' : `4*${P.motor.g}` }));
+    out.push(group(`Propeller ${P.zoll}" (4×)`, pk, { color: '#e8833a', massG: `4*${P.prop}` }));
+    if (P.akku) out.push(buyItem('buyBattery', { w: P.akku.w, d: P.akku.l, h: P.akku.h }, { name: P.akku.name, color: '#e2b53a', t: { z: 'Armdicke + Bolzenhöhe + Plattendicke' }, massG: P.akku.g }));
     d.items = out;
     return d;
   }
@@ -264,7 +270,7 @@ const DroneUI = (() => {
       b.onclick = () => { cat = k; fill(); };
       chips.append(b);
     }
-    el.append(chips, tiles, h('div', { class: 'foot' }, 'Kaufteile sind Platzhalter mit dem Gewicht aus dem Datenblatt. Auf eine Fläche ziehen legt sie dort ab.'));
+    el.append(chips, tiles, h('div', { class: 'foot' }, 'Kaufteile haben ihre echte Form, Maße und Gewicht aus dem Datenblatt. Auf eine Fläche ziehen legt sie dort ab.'));
     fill();
   }
   return { assistant, make, flyout, get cat() { return cat; }, set cat(c) { cat = c; } };

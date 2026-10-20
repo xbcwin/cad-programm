@@ -357,7 +357,146 @@ export function createKernel(R, oc) {
     if (lib === 'gear') {
       return buildGear(p);
     }
+    if (typeof lib === 'string' && lib.startsWith('buy')) return buildBuy(lib, p);
     throw new Error('Unbekanntes Bauteil: ' + lib);
+  }
+  // ---------- Kaufteile mit ihrer echten Form ----------
+  // Alle stehen mitten auf z = 0 und bleiben in ihren Datenblatt-Maßen (Breite w, Tiefe d, Höhe h bzw. Durchmesser d).
+  // Vorne ist −Y (Objektive zeigen dorthin). Das Gewicht kommt weiter aus dem Datenblatt, nicht aus dem Volumen.
+  function cutAll(base, tools) {
+    tools = tools.filter(Boolean); if (!tools.length) return base;
+    const t = fuseAll(tools, true); let r = base;
+    try { r = base.cut(t); safeDelete(base); } catch (_) { r = base; }
+    safeDelete(t); return r;
+  }
+  function roundBox(w, d, h, r, x0 = 0, y0 = 0, z0 = 0, rTop = 0) {
+    let b = R.makeBox([x0 - w / 2, y0 - d / 2, z0], [x0 + w / 2, y0 + d / 2, z0 + h]);
+    const tol = 1e-4;
+    if (r > 0.05) { try { const n = b.fillet((e) => { const a = e.startPoint, c = e.endPoint; return e.geomType === 'LINE' && Math.abs(a.x - c.x) < tol && Math.abs(a.y - c.y) < tol ? Math.min(r, w / 2 - 0.05, d / 2 - 0.05) : 0; }); safeDelete(b); b = n; } catch (_) {} }
+    if (rTop > 0.05) { try { const n = b.fillet((e) => { const a = e.startPoint, c = e.endPoint, m = e.pointAt(0.5); return Math.abs(a.z - (z0 + h)) < tol && Math.abs(c.z - (z0 + h)) < tol && Math.abs(m.z - (z0 + h)) < tol ? rTop : 0; }); safeDelete(b); b = n; } catch (_) {} }
+    return b;
+  }
+  const cyl = (r, h, x, y, z, dir = [0, 0, 1]) => R.makeCylinder(r, h, [x, y, z], dir);
+  function buildBuy(lib, p) {
+    if (lib === 'buyMotor') {
+      // Außenläufer: Fuß mit Gewindelöchern, sichtbarer Stator-Spalt, Glocke mit Lüftungslöchern, Welle
+      const D = pos(p.d, 28.5), H = pos(p.h, 19.7), lk = num(p.lk, 16), s = SCREW[p.size] || SCREW.M3;
+      const hb = Math.max(1.5, H * 0.16), gap = Math.min(1.5, H * 0.08);
+      const shaftD = D >= 25 ? 5 : D >= 19 ? 3 : 1.5, shaftL = D >= 25 ? 9 : 5;
+      const parts = [
+        cyl(D / 2 - 0.6, hb, 0, 0, 0),
+        cyl(D / 2 - 1.8, gap + 0.2, 0, 0, hb - 0.1),
+        cyl(D / 2, H - hb - gap - 0.8, 0, 0, hb + gap),
+        cyl(D / 2 - 1.1, 0.9, 0, 0, H - 0.9),
+        cyl(shaftD / 2, shaftL + 0.5, 0, 0, H - 0.5),
+      ];
+      let m = fuseAll(parts, true);
+      const tools = [];
+      for (let k = 0; k < 6; k++) { const a = (k * Math.PI) / 3 + Math.PI / 6, rr = D * 0.29; tools.push(cyl(D * 0.075, 2.5, rr * Math.cos(a), rr * Math.sin(a), H - 1.6)); }
+      if (lk > 0 && lk / 2 + s.tap / 2 < D / 2 - 0.8) for (let k = 0; k < 4; k++) { const a = (k * Math.PI) / 2; tools.push(cyl(s.tap / 2, Math.min(hb - 0.4, 4) + 0.2, (lk / 2) * Math.cos(a), (lk / 2) * Math.sin(a), -0.2)); }
+      return cutAll(m, tools);
+    }
+    if (lib === 'buyBattery') {
+      // LiPo-Pack: abgerundete Kanten, Schrumpfschlauch-Kante oben
+      const w = pos(p.w, 35), d = pos(p.d, 75), h = pos(p.h, 30);
+      return roundBox(w, d, h, Math.min(3, w / 6, h / 4), 0, 0, 0, Math.min(1.5, h / 8));
+    }
+    if (lib === 'buyCamera') {
+      // FPV-Kamera: Gehäuse, Objektiv nach vorne (−Y), seitliche Gewinde M2
+      const w = pos(p.w, 19), d = pos(p.d, 20), h = pos(p.h, 19);
+      const lensL = Math.min(8, Math.max(2.5, d * 0.28)), lensD = Math.min(num(p.lens, Math.min(w, h) * 0.68), Math.min(w, h) - 0.6);
+      const bodyD = d - lensL;
+      let c = roundBox(w, bodyD, h, Math.min(1.5, w / 8), 0, d / 2 - bodyD / 2, 0);
+      const lens = cyl(lensD / 2, lensL + 0.5, 0, -d / 2 + lensL + 0.5, h / 2, [0, -1, 0]);
+      c = fuseAll([c, lens], true);
+      const tools = [cyl(lensD / 2 - 0.8, 0.8, 0, -d / 2 - 0.1, h / 2, [0, 1, 0])];
+      if (w >= 12) { const yc = d / 2 - bodyD / 2; tools.push(cyl(0.8, 3.2, -w / 2 - 0.2, yc, h / 2, [1, 0, 0]), cyl(0.8, 3.2, w / 2 + 0.2, yc, h / 2, [-1, 0, 0])); }
+      return cutAll(c, tools);
+    }
+    if (lib === 'buyStack') {
+      // Flugsteuerung über ESC: zwei Platinen, Gummi-Dämpfer, Bauteile, Befestigungslöcher
+      const a = pos(p.a, 30.5), S = a + 5.5, H = Math.max(6, pos(p.h, 12)), t = 1.6, s = SCREW[p.size] || SCREW.M3;
+      const top = H - 1;   // Oberkante der oberen Platine – Bauteile darauf reichen genau bis H
+      const parts = [R.makeBox([-S / 2, -S / 2, 0], [S / 2, S / 2, t]), R.makeBox([-S / 2, -S / 2, top - t], [S / 2, S / 2, top])];
+      for (const [x, y] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) parts.push(cyl(Math.min(2.6, S * 0.07), top - 2 * t + 0.2, (x * a) / 2, (y * a) / 2, t - 0.1));
+      const mos = Math.min(6, S * 0.17);
+      for (const [x, y] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) parts.push(R.makeBox([x * a * 0.28 - mos / 2, y * a * 0.28 - mos / 2, t - 0.05], [x * a * 0.28 + mos / 2, y * a * 0.28 + mos / 2, t + 1]));
+      const mcu = Math.min(7, S * 0.22);
+      parts.push(R.makeBox([-mcu / 2, -mcu / 2, top - 0.05], [mcu / 2, mcu / 2, H]));
+      parts.push(R.makeBox([S * 0.18, -S * 0.12, top - 0.05], [S * 0.18 + 3, -S * 0.12 + 3, H - 0.1]));
+      let st = fuseAll(parts, true);
+      const holes = [[1, 1], [-1, 1], [1, -1], [-1, -1]].map(([x, y]) => cyl(s.hole / 2, H + 2, (x * a) / 2, (y * a) / 2, -0.5));
+      return cutAll(st, holes);
+    }
+    if (lib === 'buyVtx') {
+      // Digitaler Videosender: Gehäuse mit Kühlrippen oben, Befestigungslöcher im Lochbild
+      const w = pos(p.w, 30), d = pos(p.d, 30), h = pos(p.h, 12), a = num(p.a, 0);
+      let v = roundBox(w, d, h, Math.min(2.5, w / 8));
+      const tools = [];
+      if (h >= 7) { const depth = Math.min(2, h * 0.18), n = Math.max(3, Math.floor((w - 6) / 2.6)); const span = (n - 1) * 2.6; for (let k = 0; k < n; k++) tools.push(R.makeBox([-span / 2 + k * 2.6 - 0.6, -d / 2 + 3, h - depth], [-span / 2 + k * 2.6 + 0.6, d / 2 - 3, h + 0.5])); }
+      if (a > 0 && a < Math.min(w, d)) for (const [x, y] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) tools.push(cyl(1.1, h + 1, (x * a) / 2, (y * a) / 2, -0.5));
+      return cutAll(v, tools);
+    }
+    if (lib === 'buyPcb') {
+      // kleine Platine (analoger Sender, Empfänger): Leiterplatte mit Abschirmblech und Bauteilen
+      const w = pos(p.w, 25), d = pos(p.d, 37), h = pos(p.h, 5), t = Math.min(1.2, h * 0.3);
+      const parts = [R.makeBox([-w / 2, -d / 2, 0], [w / 2, d / 2, t])];
+      const cw = w * 0.72, cd = d * 0.55;
+      parts.push(R.makeBox([-cw / 2, -d / 2 + 2, t - 0.05], [cw / 2, -d / 2 + 2 + cd, h]));
+      parts.push(R.makeBox([-w * 0.3, d / 2 - d * 0.22, t - 0.05], [w * 0.05, d / 2 - 1.5, t + Math.min(1.6, h - t)]));
+      return fuseAll(parts, true);
+    }
+    if (lib === 'buyGps') {
+      // GPS: Platine mit Keramik-Patchantenne oben
+      const w = pos(p.w, 15), d = pos(p.d, 15), h = pos(p.h, 5.2), t = Math.min(1, h * 0.2);
+      const pw = Math.min(w, d) * 0.82, ph = Math.max(0.6, h - t - 0.3);
+      const parts = [R.makeBox([-w / 2, -d / 2, 0], [w / 2, d / 2, t]), roundBox(pw, pw, ph, 0.6, 0, 0, t - 0.05, Math.min(0.4, ph / 3)), cyl(Math.max(0.5, pw * 0.06), 0.3 + 0.05, pw * 0.12, 0, t + ph - 0.05)];
+      return fuseAll(parts, true);
+    }
+    if (lib === 'buyActioncam') {
+      // Action-Kamera: abgerundetes Gehäuse, Objektiv vorne (−Y)
+      const w = pos(p.w, 70), d = pos(p.d, 33), h = pos(p.h, 50);
+      const lensL = Math.min(4, d * 0.15), bodyD = d - lensL;
+      const pill = h / w > 1.6;
+      let c = roundBox(w, bodyD, h, pill ? Math.min(w, bodyD) / 2 - 0.3 : Math.min(5, w / 8, bodyD / 4), 0, d / 2 - bodyD / 2, 0);
+      const lr = Math.min(w, h) * (pill ? 0.3 : 0.17), lx = pill ? 0 : w * 0.22, lz = pill ? h * 0.72 : h * 0.62;
+      c = fuseAll([c, cyl(lr, lensL + 0.5, lx, -d / 2 + lensL + 0.5, lz, [0, -1, 0])], true);
+      return cutAll(c, [cyl(lr * 0.72, 0.8, lx, -d / 2 - 0.1, lz, [0, 1, 0])]);
+    }
+    if (lib === 'buyPlug') {
+      // Akkustecker (XT60/XT30): Gehäuse mit zwei abgeschrägten Ecken und zwei Kontakten vorne
+      const w = pos(p.w, 15.5), d = pos(p.d, 21.5), h = pos(p.h, 8.1);
+      let b = R.makeBox([-w / 2, -d / 2, 0], [w / 2, d / 2, h]);
+      try { const c = Math.min(w, h) * 0.25; const n = b.chamfer((e) => { const a = e.startPoint, q = e.endPoint; return e.geomType === 'LINE' && Math.abs(a.y - q.y) > 1 && a.x > 0 && q.x > 0 && Math.abs(a.x - q.x) < 1e-4 && Math.abs(a.z - q.z) < 1e-4 ? c : 0; }); safeDelete(b); b = n; } catch (_) {}
+      const pr = Math.min(h * 0.22, w * 0.14);
+      return cutAll(b, [cyl(pr, 7, -w * 0.22, -d / 2 - 0.1, h / 2, [0, 1, 0]), cyl(pr, 7, w * 0.22, -d / 2 - 0.1, h / 2, [0, 1, 0])]);
+    }
+    if (lib === 'buyCap') {
+      // Elko: Becher mit Sicke und Sollbruchkreuz oben
+      const D = pos(p.d, 12.5), H = pos(p.h, 20);
+      let c = cyl(D / 2, H, 0, 0, 0);
+      const ring = cutAll(cyl(D / 2 + 0.5, 0.7, 0, 0, H - 2.2), [cyl(D / 2 - 0.35, 1, 0, 0, H - 2.4)]);
+      return cutAll(c, [ring, R.makeBox([-D * 0.3, -0.2, H - 0.3], [D * 0.3, 0.2, H + 0.5]), R.makeBox([-0.2, -D * 0.3, H - 0.3], [0.2, D * 0.3, H + 0.5])]);
+    }
+    if (lib === 'buyProp') {
+      // Propeller: Nabe mit Wellenloch, Blätter mit Anstellwinkel, dünner Ring für den Propellerkreis
+      const zoll = pos(p.zoll, 5), D = zoll * 25.4, Rr = D / 2, n = Math.max(2, Math.min(6, Math.round(num(p.blades, 3))));
+      const hubD = Math.max(7, zoll * 2.4), hubH = zoll * 1.2 + 0.5, t = Math.max(0.8, zoll * 0.22), pitch = num(p.pitch, 13);
+      const c = D * 0.115, r0 = hubD / 2 - 1.5;
+      const pts = [[r0, -c * 0.32], [Rr * 0.38, -c * 0.5], [Rr * 0.82, -c * 0.38], [Rr - c * 0.12, -c * 0.16], [Rr, 0], [Rr - c * 0.12, c * 0.16], [Rr * 0.82, c * 0.34], [Rr * 0.38, c * 0.46], [r0, c * 0.3]];
+      const parts = [cyl(hubD / 2, hubH, 0, 0, 0)];
+      for (let k = 0; k < n; k++) {
+        let b = R.basicFaceExtrusion(polygonFace(pts.map(([x, y]) => [x, y, -t / 2])), new R.Vector([0, 0, t]));
+        b = b.rotate(pitch, [0, 0, 0], [1, 0, 0]).translate([0, 0, hubH / 2]);
+        if (k) b = b.rotate((360 / n) * k, [0, 0, 0], [0, 0, 1]);
+        parts.push(b);
+      }
+      let pr = fuseAll(parts, true);
+      pr = cutAll(pr, [cyl(Math.min(2.6, hubD * 0.2), hubH + 2, 0, 0, -1)]);
+      const ring = cutAll(cyl(Rr, 0.6, 0, 0, hubH / 2 - 0.3), [cyl(Rr - 0.7, 1, 0, 0, hubH / 2 - 0.5)]);
+      return R.makeCompound([pr, ring]);
+    }
+    throw new Error('Unbekanntes Kaufteil: ' + lib);
   }
   function buildGear(p) {
     const z = Math.max(6, Math.min(120, Math.round(num(p.teeth, 20))));

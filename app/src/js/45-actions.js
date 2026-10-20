@@ -102,7 +102,7 @@ const Actions = (() => {
     if (hole && !opts.onFace && topZ != null) UI.toast(`${def.label} sitzt oben auf der Fläche. Zieh es an die richtige Stelle – oder nimm „Loch hier“ auf einer Fläche.`, { icon: 'info', ms: 4200 });
     return it;
   }
-  // Kaufteil (Motor, Akku …) als eigener Platzhalter mit festem Gewicht – wird nie mit dem Körper darunter verschmolzen
+  // Kaufteil (Motor, Akku …) in echter Form mit festem Gewicht – wird nie mit dem Körper darunter verschmolzen
   function addBuyPart(spec, opts = {}) {
     if (sceneEmpty() && !opts.onFace) App.fitAfterBuild();
     const it = Model.newItem(spec.kind, { ...Model.newItem(spec.kind).p, ...spec.p }, { name: spec.name, color: spec.color });

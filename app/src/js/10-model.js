@@ -172,6 +172,14 @@ const Model = (() => {
       case 'sphere': { const r = n('d', 20) / 2; return [-r, -r, 0, r, r, 2 * r]; }
       case 'hemisphere': { const r = n('d', 20) / 2; return [-r, -r, 0, r, r, r]; }
       case 'torus': { const r = n('d', 30) / 2; return [-r, -r, 0, r, r, n('t', 6)]; }
+      case 'part': {
+        const L = String(p.lib || '');
+        if (L === 'buyMotor' || L === 'buyCap') { const r = n('d', 20) / 2; return [-r, -r, 0, r, r, n('h', 20)]; }
+        if (L === 'buyProp') { const r = (n('zoll', 5) * 25.4) / 2; return [-r, -r, 0, r, r, n('zoll', 5) * 1.2 + 0.5]; }
+        if (L === 'buyStack') { const s = n('a', 30.5) + 5.5; return [-s / 2, -s / 2, 0, s / 2, s / 2, n('h', 12)]; }
+        if (L.startsWith('buy')) { const w = n('w', 20), d = n('d', 20), h = n('h', 10); return [-w / 2, -d / 2, 0, w / 2, d / 2, h]; }
+        return null;
+      }
     }
     return null;
   }
@@ -188,7 +196,14 @@ const Model = (() => {
       case 'extrude': return `${f(p.dist)} hoch`;
       case 'revolve': return `${f(p.angle)}°`;
       case 'group': return (typeof Features !== 'undefined' && Features.sizeText(it, V)) || `${(it.children || []).length} Teile`;
-      case 'part': return p.size || '';
+      case 'part': {
+        const L = String(p.lib || '');
+        if (L === 'buyMotor' || L === 'buyCap') return `Ø ${f(p.d)} × ${f(p.h)}`;
+        if (L === 'buyProp') return `${f(p.zoll)}"`;
+        if (L === 'buyStack') return `${f(p.a)} × ${f(p.a)}`;
+        if (L.startsWith('buy')) return `${f(p.w)} × ${f(p.d)} × ${f(p.h)}`;
+        return p.size || '';
+      }
     }
     return '';
   }

@@ -18,7 +18,7 @@ const DroneLib = (() => {
   function akku(typ) { return akkus().find((a) => a.name === typ || a.name === 'Akku ' + typ) || null; }
   function stacks() { return (FPV_DATA.stack || []).map((s) => ({ name: s.name, a: s.quadrat_mm, screw: s.schraube.startsWith('M2') ? 'M2' : 'M3', board: s.platine_mm })); }
   function cams() { return (FPV_DATA.kameras || []).map((c) => ({ name: c.name, w: c.breite_mm })); }
-  // Kaufteile als Platzhalter: Quader (oder Zylinder) mit festem Gewicht aus dem Datenblatt
+  // Kaufteile mit ihrer echten Form (Kern: buildBuy) und festem Gewicht aus dem Datenblatt
   const CATS = [
     ['motor', 'Motoren', 'motor'], ['akku', 'Akkus', 'battery'], ['video', 'Video', 'fpvCam'], ['funk', 'Empfang und GPS', 'antenna'],
     ['action', 'Action-Kameras', 'cube'], ['klein', 'Kleinteile', 'bolt'], ['loch', 'Lochbilder und Bausteine', 'stack'],
@@ -26,18 +26,26 @@ const DroneLib = (() => {
   const COL = { motor: '#b9c2cb', akku: '#e2b53a', video: '#16202b', funk: '#5b6470', action: '#3f7fd6', klein: '#d24a3c' };
   function buyParts(cat) {
     const out = [];
-    const box = (name, l, b, hgt, g, extra = {}) => ({ buy: true, kind: 'box', p: { w: b, d: l, h: hgt }, name, massG: g == null ? '' : g, color: COL[cat], ...extra });
-    if (cat === 'motor') for (const m of motors()) out.push({ buy: true, kind: 'cylinder', p: { d: m.d, h: m.h }, name: 'Motor ' + m.stator, massG: m.g, color: COL.motor, info: m.sheet ? `${m.src}: ${fmt(m.g, 1)} g` : 'Höhe geschätzt, Gewicht bitte eintragen' });
-    if (cat === 'akku') for (const a of akkus()) out.push(box(a.name, a.l, a.w, a.h, a.g, { info: a.produkt ? `${a.produkt}: ${fmt(a.g, 0)} g` : `ca. ${a.g} g` }));
+    const part = (lib, p, name, g, extra = {}) => ({ buy: true, kind: 'part', p: { lib, ...p }, name, massG: g == null ? '' : g, color: COL[cat], ...extra });
+    const box = (lib, name, l, b, hgt, g, extra = {}) => part(lib, { w: b, d: l, h: hgt }, name, g, extra);
+    if (cat === 'motor') for (const m of motors()) out.push(part('buyMotor', { d: m.d, h: m.h, lk: m.circle, size: motorScrew(m) }, 'Motor ' + m.stator, m.g, { color: COL.motor, info: m.sheet ? `${m.src}: ${fmt(m.g, 1)} g` : 'Höhe geschätzt, Gewicht bitte eintragen' }));
+    if (cat === 'akku') for (const a of akkus()) out.push(box('buyBattery', a.name, a.l, a.w, a.h, a.g, { info: a.produkt ? `${a.produkt}: ${fmt(a.g, 0)} g` : `ca. ${a.g} g` }));
     if (cat === 'video') {
-      for (const v of BUY_DATA.videosender || []) out.push(box(v.name, v.l_mm, v.b_mm, v.h_mm, v.gewicht_g, { info: v.gewicht_g != null ? `${fmt(v.gewicht_g, 1)} g` + (v.unsicher ? ' (abgeleitet)' : '') : 'Gewicht bitte eintragen' }));
-      for (const c of cams()) out.push(box(`Kamera ${c.name} (analog)`, c.w, c.w, c.w, '', { info: `${fmt(c.w, 1)} mm breit, Gewicht eintragen` }));
+      for (const v of BUY_DATA.videosender || []) {
+        const info = { info: v.gewicht_g != null ? `${fmt(v.gewicht_g, 1)} g` + (v.unsicher ? ' (abgeleitet)' : '') : 'Gewicht bitte eintragen' };
+        const t = videoShape(v);
+        out.push(t.lib === 'buyVtx' ? part('buyVtx', { w: v.b_mm, d: v.l_mm, h: v.h_mm, a: t.a }, v.name, v.gewicht_g, info) : box(t.lib, v.name, v.l_mm, v.b_mm, v.h_mm, v.gewicht_g, info));
+      }
+      for (const c of cams()) out.push(part('buyCamera', { w: c.w, d: 20, h: c.w }, `Kamera ${c.name} (analog)`, '', { info: `${fmt(c.w, 1)} mm breit, Gewicht eintragen` }));
     }
-    if (cat === 'funk') for (const v of [...(BUY_DATA.empfaenger || []), ...(BUY_DATA.gps || [])]) out.push(box(v.name, v.l_mm, v.b_mm, v.h_mm, v.gewicht_g, { info: `${fmt(v.gewicht_g, 1)} g` }));
-    if (cat === 'action') for (const v of BUY_DATA.actioncam || []) out.push(box(v.name, v.b_mm, v.l_mm, v.h_mm, v.gewicht_g, { info: `${fmt(v.gewicht_g, 1)} g` }));
+    if (cat === 'funk') {
+      for (const v of BUY_DATA.empfaenger || []) out.push(box('buyPcb', v.name, v.l_mm, v.b_mm, v.h_mm, v.gewicht_g, { info: `${fmt(v.gewicht_g, 1)} g` }));
+      for (const v of BUY_DATA.gps || []) out.push(box('buyGps', v.name, v.l_mm, v.b_mm, v.h_mm, v.gewicht_g, { info: `${fmt(v.gewicht_g, 1)} g` }));
+    }
+    if (cat === 'action') for (const v of BUY_DATA.actioncam || []) out.push(box('buyActioncam', v.name, v.b_mm, v.l_mm, v.h_mm, v.gewicht_g, { info: `${fmt(v.gewicht_g, 1)} g` }));
     if (cat === 'klein') {
-      for (const v of BUY_DATA.stecker || []) out.push(box(v.name, v.l_mm, v.b_mm, v.h_mm, v.gewicht_g, { info: `ca. ${fmt(v.gewicht_g, 1)} g` }));
-      for (const v of BUY_DATA.kondensator || []) out.push({ buy: true, kind: 'cylinder', p: { d: v.b_mm, h: v.l_mm }, name: 'Kondensator ' + v.name.replace(/^Panasonic /, ''), massG: '', color: COL.klein, info: 'Gewicht eintragen' });
+      for (const v of BUY_DATA.stecker || []) out.push(box('buyPlug', v.name, v.l_mm, v.b_mm, v.h_mm, v.gewicht_g, { info: `ca. ${fmt(v.gewicht_g, 1)} g` }));
+      for (const v of BUY_DATA.kondensator || []) out.push(part('buyCap', { d: v.b_mm, h: v.l_mm }, 'Kondensator ' + v.name.replace(/^Panasonic /, ''), '', { info: 'Maße vom Hersteller, Gewicht eintragen' }));
     }
     return out;
   }
@@ -57,5 +65,13 @@ const DroneLib = (() => {
     const m = (THRUST_DATA.motoren || []).find((x) => x.stator === stator && x.geprueft && x.max_schub_g);
     return m ? { g: m.max_schub_g, src: `${m.motor}${m.kv ? ' ' + m.kv + 'KV' : ''}, ${m.zellen}${m.propeller ? ', ' + m.propeller : ''}`, url: m.quelle } : null;
   }
-  return { motors, motor, akkus, akku, stacks, cams, CATS, buyParts, holeParts, thrust };
+  // welche Form ein Videoteil bekommt: Kamera, kleine Platine (analog) oder Sender mit Lochbild
+  function videoShape(v) {
+    if (/Kamera/i.test(v.name)) return { lib: 'buyCamera' };
+    if (/Unify|analog/i.test(v.name)) return { lib: 'buyPcb' };
+    const a = parseFloat(String(v.lochbild || '').replace(',', '.'));
+    return { lib: 'buyVtx', a: isFinite(a) ? a : 0 };
+  }
+  const motorScrew = (m) => (String(m.screw || 'M3').startsWith('M1') ? 'M2' : m.screw || 'M3');
+  return { motors, motor, akkus, akku, stacks, cams, CATS, buyParts, holeParts, thrust, videoShape };
 })();

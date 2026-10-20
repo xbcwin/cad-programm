@@ -10,8 +10,8 @@ const STEP_TEXT = /*JSON:schritt-erklaerungen.json*/null;
 const Explain = (() => {
   function keyOf(it) {
     if (Features.isOp(it)) { const p = it.p; return p.op === 'pattern' ? ({ rect: 'pattern_rect', circ: 'pattern_circ', mirror: 'mirror' }[p.pt] || 'group') : p.op; }
+    if (Mass.fixedOf(it) || String((it.p || {}).lib || '').startsWith('buy')) return 'buy';
     if (it.kind === 'part') return (it.p || {}).lib;
-    if (Mass.fixedOf(it)) return 'buy';
     if (it.kind === 'group') return 'group';
     if (it.role === 'hole') return 'hole';
     return it.kind;

@@ -1,6 +1,6 @@
 # Fortschritt
 
-Stand: 20.10.2026 · nach Sitzung 15 (Bauplan mit 14 Sitzungen abgeschlossen)
+Stand: 21.10.2026 · nach Sitzung 16 (Bauplan mit 14 Sitzungen abgeschlossen)
 
 ## Erledigt
 
@@ -45,7 +45,7 @@ Stand: 20.10.2026 · nach Sitzung 15 (Bauplan mit 14 Sitzungen abgeschlossen)
 - [x] Neuer Name beim Maß (z. B. `breite`) wird automatisch unter „Maße“ angelegt
 - [x] Formel-Beispiele unter „Maße“ (Gemini, alle 12 mit Tracerys Rechner nachgeprüft), Beispiel-Maße per Klick
 - [x] Umbenennen / Entfernen eines Maßes wirkt jetzt auch auf Skizzen-Maße
-- [x] Automatischer Klicktest `tests/klicktest.py`: 95 Durchläufe (alle grün), 130 von 161 Punkten der Testliste automatisch geprüft
+- [x] Automatischer Klicktest `tests/klicktest.py`: 96 Durchläufe (alle grün), 132 von 164 Punkten der Testliste automatisch geprüft
 - [x] Aufgeräumt: Programm liegt jetzt in 28 Quelldateien unter `app/src/`, `tools/build.py` baut daraus `app/index.html`
 - [x] Notizstift (Taste N): freie Striche, die am Modell kleben, Textnotizen, 6 Farben, 3 Dicken, Radierer, ein-/ausblendbar – ohne technische Bedeutung
 - [x] Symbole für den Notizstift (Gemini, geprüft); Augen-Knopf rechts im Bild blendet Notizen aus, sobald es welche gibt
@@ -127,6 +127,8 @@ Stand: 20.10.2026 · nach Sitzung 15 (Bauplan mit 14 Sitzungen abgeschlossen)
 - [x] Einfache Oberfläche für Einsteiger (Sitzung 15): Umschalter „Einfach / Profi“ oben rechts, auf der Startseite und in den Einstellungen; gilt für diesen Browser und bleibt nach dem Neuladen
 - [x] Einfach zeigt: Körper (Quader, Zylinder, Kugel, Kegel, Rohr, Halbkugel), Skizze, Bauteile (Schraubenloch, Mutternfalle, Langloch, Lochbild, Kabelbinder), Drohne, Exportieren; ausgeblendet sind Messen, Notizen, Ansicht, Zeichnung, Protokoll, Varianten, Material je Teil, Fangen, Ansichts-Einstellungen, Muster, Teilen, Boolesch, Ausrichten, Ähnliche, Aushöhlen, Röntgen, Schnitt und Auswahlfilter
 - [x] „Mehr“ in der einfachen Oberfläche: Messen, Notizstift, Ansicht, Schwachstellen und „Alle Werkzeuge zeigen“ – die Eingabezeile findet weiterhin jedes Werkzeug
+- [x] Kaufteile in echter Form (Sitzung 16): Motoren mit Fuß, Gewindelöchern im Lochkreis, Stator-Spalt, Glocke mit Lüftungslöchern und Welle; Propeller mit Nabe, drei angestellten Blättern (gegenläufig gespiegelt) und dünnem Ring für den Propellerkreis; Stack aus zwei Platinen auf Dämpfern mit Bauteilen und Löchern; FPV-Kamera mit Objektiv nach vorne und seitlichen M2-Gewinden; digitaler Sender mit Kühlrippen und Lochbild; analoger Sender und Empfänger als Platine mit Abschirmung; GPS mit Keramik-Antenne; Akku mit abgerundeten Kanten; Action-Kamera mit Objektiv; Akkustecker; Elko
+- [x] Alle Formen bleiben in den Datenblatt-Maßen; Maße lassen sich rechts ändern (z. B. Glocke Ø, Lochkreis), das Gewicht kommt weiter aus dem Datenblatt; der Frame-Assistent baut mit den echten Formen, alle 40 Kombinationen bestehen Check und Schwachstellen-Analyse
 
 ## Offen
 
