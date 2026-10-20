@@ -21,6 +21,7 @@
   App.on('history', updHist); App.on('doc', updHist); updHist();
   const updName = () => { $('#btn-project').textContent = App.doc.name; document.title = App.doc.name && App.doc.name !== 'Neues Projekt' ? App.doc.name + ' – Tracery' : 'Tracery'; };
   App.on('doc', updName);
+  $('#btn-level').onclick = () => ViewPrefs.setLevel(ViewPrefs.simple ? 'pro' : 'simple'); ViewPrefs.syncLevel();
   $('#tab-model').onclick = () => Commands.setMode('model');
   $('#tab-drawing').onclick = () => Commands.setMode('drawing');
   $('#brand').onclick = (e) => { e.preventDefault(); Start.show(); };

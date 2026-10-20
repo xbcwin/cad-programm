@@ -629,6 +629,13 @@ body.sketching .timeline{display:none}
 .props .chk-row{flex-wrap:wrap}
 .props .chk-btns{max-width:none;width:100%;justify-content:flex-start;padding-left:32px}
 .explain-list li.ex-achtung{color:var(--ink-2);list-style:none;margin-left:-18px;padding:6px 10px;border-left:3px solid var(--warn);background:var(--warn-soft);border-radius:0 6px 6px 0}
+/* Einfache Oberfläche: Profi-Werkzeuge ausblenden, „Mehr“ nur dort zeigen */
+body.simple .pro{display:none!important}
+body:not(.simple) .simple-only{display:none!important}
+.level-btn{border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:999px;padding:5px 11px;font:600 12.5px/1 var(--font);cursor:pointer;white-space:nowrap}
+.level-btn:hover{border-color:var(--line-strong);color:var(--ink)}
+.level-btn[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent)}
+.start-level{flex-basis:100%;display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;font-size:14px;color:var(--muted)}
 </style>
 <div id="app">
   <header class="topbar">
@@ -637,12 +644,13 @@ body.sketching .timeline{display:none}
       <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="var(--accent)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><g transform="translate(12 12) scale(.885) translate(-12 -10.2)" stroke-width="1.92"><polygon points="12 2 21 7 21 17 12 22 3 17 3 7" /><path d="M12 22V12" /><path d="M12 12L21 7" /><path d="M12 12L3 7" /><path d="M3 7A9 9 0 0 1 21 7" /><path d="M21 7A9 9 0 0 1 12 22" /><path d="M12 22A9 9 0 0 1 3 7" /></g></svg>
       <b>Tracery</b>
     </a>
-    <div class="seg" role="group" aria-label="Arbeitsbereich">
+    <div class="seg pro" role="group" aria-label="Arbeitsbereich">
       <button type="button" id="tab-model" aria-pressed="true">Modell</button>
       <button type="button" id="tab-drawing" aria-pressed="false">Zeichnung</button>
     </div>
     <div class="tools" id="tools"></div>
     <div class="right-tools">
+      <button class="level-btn" id="btn-level" type="button" data-help="levelSwitch" aria-pressed="false">Profi</button>
       <button class="icon-btn" id="btn-undo" type="button" aria-label="Rückgängig" data-tip="Rückgängig" data-kbd="Strg Z"></button>
       <button class="icon-btn" id="btn-redo" type="button" aria-label="Wiederholen" data-tip="Wiederholen" data-kbd="Strg Y"></button>
       <button class="proj-name" id="btn-project" type="button" data-tip="Projekt">Neues Projekt</button>
@@ -657,7 +665,7 @@ body.sketching .timeline{display:none}
         <div class="tabs" role="tablist">
           <button type="button" role="tab" id="lt-tree" aria-selected="true">Verlauf</button>
           <button type="button" role="tab" id="lt-params" aria-selected="false">Maße</button>
-          <button type="button" role="tab" id="lt-log" aria-selected="false">Protokoll</button>
+          <button type="button" role="tab" id="lt-log" class="pro" aria-selected="false">Protokoll</button>
         </div>
       </div>
       <div class="panel-body" id="left-body"></div>
@@ -1305,6 +1313,11 @@ const HELP = {
   "tip": "Schritte, die die KI gebaut hat",
   "hilfe": "Was der KI-Helfer baut, wird ein normaler Schritt in der Zeitleiste – mit einem kleinen Funken-Symbol. Überfahr ihn, dann siehst du, auf welche Bitte er entstand. Du kannst ihn wie jeden Schritt ändern, unterdrücken oder mit Strg Z zurücknehmen.",
   "tipp": "Schreib unten in die Zeile, was du willst, z. B. „Mach die Arme 6 mm dick“ oder „Bau mir einen 5-Zoll-Deadcat mit DJI O4“."
+ },
+ "levelSwitch": {
+  "tip": "Einfache Oberfläche oder alle Werkzeuge",
+  "hilfe": "Oben rechts (oder auf der Startseite) schaltest du zwischen „Einfach“ und „Profi“ um. Einfach zeigt nur die wichtigsten Werkzeuge: Körper, Skizze, Bauteile, Drohne und Exportieren – Messen, Notizen, Ansicht und Profi-Werkzeuge findest du dann unter „Mehr“. Dein Modell bleibt gleich, es ändert sich nur, was du siehst.",
+  "tipp": "Zum Anfangen ist „Einfach“ gut. Die Eingabezeile unten findet trotzdem jedes Werkzeug."
  }
 };
 
@@ -5004,7 +5017,7 @@ const Mass = (() => {
 // Persönliche Einstellung (nicht im Projekt gespeichert), gilt für alle Projekte in diesem Browser.
 const ViewPrefs = (() => {
   const KEY = 'masswerk.view';
-  const DEF = { grid: 'auto', gridOn: true, planes: true, axes: true, ortho: false, quality: 'normal', adaptive: true, theme: 'system', decimals: 0, notes: true, cog: false };
+  const DEF = { grid: 'auto', gridOn: true, planes: true, axes: true, ortho: false, quality: 'normal', adaptive: true, theme: 'system', decimals: 0, notes: true, cog: false, level: 'pro' };
   let v = { ...DEF };
   try { const raw = storageGet(KEY); if (raw) v = { ...DEF, ...JSON.parse(raw) }; } catch (_) {}
   const ev = makeEmitter();
@@ -5012,10 +5025,16 @@ const ViewPrefs = (() => {
     const r = document.documentElement;
     if (v.theme === 'light' || v.theme === 'dark') r.setAttribute('data-theme', v.theme); else r.removeAttribute('data-theme');
   }
-  function apply() { Viewer.setViewOptions({ grid: v.grid, gridOn: v.gridOn, planes: v.planes, axes: v.axes }); Viewer.setOrtho(v.ortho); Viewer.setAdaptive(v.adaptive !== false); applyTheme(); FMT.min = +v.decimals || 0; ev.emit('change', v); }
+  const simple = () => v.level === 'simple';
+  function apply() { document.body.classList.toggle('simple', simple()); Viewer.setViewOptions({ grid: v.grid, gridOn: v.gridOn, planes: v.planes, axes: v.axes }); Viewer.setOrtho(v.ortho); Viewer.setAdaptive(v.adaptive !== false); applyTheme(); FMT.min = +v.decimals || 0; ev.emit('change', v); }
   function set(patch, msg) {
-    const oldQ = v.quality, oldDec = v.decimals;
+    const oldQ = v.quality, oldDec = v.decimals, oldL = v.level;
     Object.assign(v, patch); storageSet(KEY, JSON.stringify(v)); apply();
+    if (v.level !== oldL) {
+      // Oberfläche gewechselt: Werkzeuge, Leisten und Kontextleiste neu aufbauen
+      if (simple() && App.mode !== 'model') Commands.setMode('model');
+      Panels.closeFlyout(); Panels.renderTools(); Panels.renderLeft(); Panels.renderRight(); Panels.renderCtx(); syncLevel();
+    }
     if (v.quality !== oldQ) App.requalify();
     if (v.decimals !== oldDec) { App.emit('doc'); Panels.renderRight(); }
     if (msg) UI.toast(msg, { icon: 'check', ms: 1600 });
@@ -5024,12 +5043,16 @@ const ViewPrefs = (() => {
     const labels = { ortho: ['Orthografische Ansicht', 'Perspektivische Ansicht'], gridOn: ['Raster an', 'Raster aus'], planes: ['Ursprungsebenen an', 'Ursprungsebenen aus'], axes: ['Achsen an', 'Achsen aus'], notes: ['Notizen eingeblendet', 'Notizen ausgeblendet'] }[k];
     set({ [k]: !v[k] }, labels ? labels[v[k] ? 1 : 0] : null);
   }
+  // Knopf oben rechts: Einfach ↔ Profi
+  function syncLevel() { const b = document.getElementById('btn-level'); if (b) { b.textContent = simple() ? 'Einfach' : 'Profi'; b.setAttribute('aria-pressed', simple() ? 'true' : 'false'); b.dataset.tip = simple() ? 'Einfache Oberfläche – klicken für alle Werkzeuge (Profi)' : 'Alle Werkzeuge – klicken für die einfache Oberfläche'; } }
+  function setLevel(l) { set({ level: l }, l === 'simple' ? 'Einfache Oberfläche: nur die wichtigsten Werkzeuge. Mehr unter „Mehr“.' : 'Profi: alle Werkzeuge.'); }
   // Einstellungen-Fenster (Menü ⋯ → Einstellungen)
   function dialog() {
     const body = h('div', { style: { display: 'grid', gap: '14px', minWidth: 'min(420px, 80vw)' } });
     const sel = (id, label, val, opts, fn, hint) => { const f = UI.selectField({ id, label, value: String(val), options: opts, onChange: fn }); if (hint) f.append(h('small', { style: { color: 'var(--muted)', display: 'block', marginTop: '4px' } }, hint)); return f; };
     const chk = (k, label, hint) => { const l = h('label', { class: 'check', style: { alignItems: 'flex-start' } }, h('input', { type: 'checkbox', id: 'set-' + k, checked: !!v[k] }), h('span', null, label, hint ? h('small', { style: { display: 'block', color: 'var(--muted)' } }, hint) : null)); l.querySelector('input').onchange = (e) => set({ [k]: e.target.checked }); return l; };
     body.append(
+      sel('set-level', 'Oberfläche', v.level, [['simple', 'Einfach – die wichtigsten Werkzeuge'], ['pro', 'Profi – alle Werkzeuge']], (x) => setLevel(x), 'Einfach blendet Messen, Notizen, Ansicht, Zeichnung und Profi-Werkzeuge aus. Über „Mehr“ kommst du trotzdem hin.'),
       sel('set-theme', 'Design', v.theme, [['system', 'Wie das System'], ['light', 'Hell'], ['dark', 'Dunkel']], (x) => set({ theme: x })),
       sel('set-dec', 'Nachkommastellen in Anzeigen', v.decimals, [['0', 'Automatisch (2 Stellen)'], ['3', '3 Stellen (0,001 mm)'], ['4', '4 Stellen (0,0001 mm)']], (x) => set({ decimals: +x }), 'Eingaben werden immer exakt gespeichert, das betrifft nur die Anzeige.'),
       sel('set-quality', 'Darstellungsqualität', v.quality, [['coarse', 'Grob – am schnellsten'], ['normal', 'Normal'], ['fine', 'Fein'], ['ultra', 'Sehr fein – braucht mehr Leistung']], (x) => set({ quality: x }), 'Wie glatt Rundungen auf dem Bildschirm aussehen. Die Geometrie selbst ist immer exakt.'),
@@ -5037,7 +5060,7 @@ const ViewPrefs = (() => {
     );
     UI.modal({ title: 'Einstellungen', body, actions: [{ label: 'Fertig', primary: true }] });
   }
-  return { get: () => ({ ...v }), set, toggle, apply, dialog, on: ev.on };
+  return { get: () => ({ ...v }), set, toggle, apply, dialog, setLevel, syncLevel, get simple() { return simple(); }, on: ev.on };
 })();
 
 // ---- 48-refine.js ----
@@ -5516,6 +5539,9 @@ const Panels = (() => {
   let flyout = null;
 
   // ---------- Werkzeugleiste ----------
+  // einfache Oberfläche: diese Grundkörper und Bauteile bleiben sichtbar
+  const SIMPLE_KINDS = ['box', 'cylinder', 'sphere', 'cone', 'tube', 'hemisphere'];
+  const SIMPLE_PARTS = ['screwHole', 'nutTrap', 'slotHole', 'holePattern', 'zipTie'];
   function renderTools() {
     const el = $('#tools'); el.innerHTML = '';
     const btn = (id, ic, label, tip, kbd, onClick, cls = '', short = '') => {
@@ -5530,9 +5556,17 @@ const Panels = (() => {
       btn('t-sketch', 'sketch', 'Skizze', 'Eine 2D-Skizze zeichnen und daraus einen Körper machen', 'S', () => Sketch.chooseAndStart());
       btn('t-parts', 'parts', 'Bauteile', 'Schraubenlöcher, Mutternfallen, Scharniere, Zahnräder …', 'B', (e) => toggleFlyout('parts', e.currentTarget));
       btn('t-drone', 'drone', 'Drohne', 'Frame-Assistent, Kaufteile wie Motoren und Akkus, Lochbilder', '', (e) => toggleFlyout('drone', e.currentTarget));
-      btn('t-measure', 'measure', 'Messen', 'Messen: Abstände, Winkel, Flächen und Durchmesser', 'M', () => Measure.toggle(), 'minor');
-      btn('t-notes', 'noteDraw', 'Notizen', 'Notizstift: frei malen und Text hinschreiben – ohne technische Bedeutung', 'N', () => Notes.toggle(), 'minor');
-      btn('t-views', 'xray', 'Ansicht', 'Ansicht: Schnitt, Röntgen, Explosion und Fokus-Vorschau – ändert nur die Anzeige', '', (e) => Views.menu(e.currentTarget), 'minor');
+      btn('t-measure', 'measure', 'Messen', 'Messen: Abstände, Winkel, Flächen und Durchmesser', 'M', () => Measure.toggle(), 'minor pro');
+      btn('t-notes', 'noteDraw', 'Notizen', 'Notizstift: frei malen und Text hinschreiben – ohne technische Bedeutung', 'N', () => Notes.toggle(), 'minor pro');
+      btn('t-views', 'xray', 'Ansicht', 'Ansicht: Schnitt, Röntgen, Explosion und Fokus-Vorschau – ändert nur die Anzeige', '', (e) => Views.menu(e.currentTarget), 'minor pro');
+      // einfache Oberfläche: die Profi-Werkzeuge stecken hinter „Mehr“
+      btn('t-more', 'menu', 'Mehr', 'Weitere Werkzeuge: Messen, Notizen, Ansicht – oder alle Werkzeuge zeigen', '', (e) => UI.menu(e.currentTarget, [
+        { label: 'Messen', icon: 'measure', kbd: 'M', run: () => Measure.toggle() },
+        { label: 'Notizstift', icon: 'noteDraw', kbd: 'N', run: () => Notes.toggle() },
+        { label: 'Ansicht: Schnitt, Röntgen, Explosion …', icon: 'xray', run: () => Views.menu($('#t-more')) },
+        { label: 'Schwachstellen suchen', icon: 'target', run: () => Weak.dialog() },
+        '-', { label: 'Alle Werkzeuge zeigen (Profi)', icon: 'sliders', help: 'levelSwitch', run: () => ViewPrefs.setLevel('pro') },
+      ]), 'simple-only');
       el.append(h('div', { class: 'sep' }));
       Views.sync();
       btn('t-export', 'export', 'Exportieren', 'Als STEP, STL, 3MF oder DXF speichern (ZIP)', 'Strg E', () => Print.exportDialog(), 'primary', 'Export');
@@ -5558,7 +5592,7 @@ const Panels = (() => {
       el.append(h('h3', null, 'Grundkörper'));
       const tiles = h('div', { class: 'tiles' });
       for (const k of PRIMITIVE_ORDER) {
-        const t = h('div', { class: 'tile', role: 'button', tabindex: '0', 'data-tip': 'Klicken fügt ihn ein, Ziehen setzt ihn genau hin' });
+        const t = h('div', { class: 'tile' + (SIMPLE_KINDS.includes(k) ? '' : ' pro'), role: 'button', tabindex: '0', 'data-tip': 'Klicken fügt ihn ein, Ziehen setzt ihn genau hin' });
         t.innerHTML = primitiveSVG(k); t.append(h('span', { class: 'lbl' }, hyph(KINDS[k].label)));
         Place.bindTile(t, { kind: k });
         t.addEventListener('keydown', (e) => { if (e.key === 'Enter') { Actions.addPrimitive(k); closeFlyout(); } });
@@ -5579,7 +5613,7 @@ const Panels = (() => {
       el.append(h('h3', null, 'Bauteile'));
       const tiles = h('div', { class: 'tiles' });
       for (const d of LIB) {
-        const t = h('div', { class: 'tile' + (d.role === 'hole' ? ' hole-part' : ''), role: 'button', tabindex: '0', 'data-tip': d.desc });
+        const t = h('div', { class: 'tile' + (d.role === 'hole' ? ' hole-part' : '') + (SIMPLE_PARTS.includes(d.lib) ? '' : ' pro'), role: 'button', tabindex: '0', 'data-tip': d.desc });
         t.innerHTML = partSVG(d); t.append(h('span', { class: 'lbl' }, hyph(d.label)), h('span', { class: 'role' }, d.role === 'hole' ? 'Loch' : 'Körper'));
         Place.bindTile(t, { part: d });
         t.addEventListener('keydown', (e) => { if (e.key === 'Enter') { Actions.addPart(d, libDefaults(d)); closeFlyout(); } });
@@ -5738,7 +5772,7 @@ const Panels = (() => {
     const { v, errors } = Model.vars(App.doc);
     const wrap = h('div', { class: 'props' });
     wrap.append(h('div', { class: 'hint-box', html: 'Lege hier Maße mit Namen fest, zum Beispiel <b>Wandstärke = 2</b>. In jedem Zahlenfeld kannst du dann den Namen oder eine Formel wie <b>Breite/2 + 3</b> eintippen. Änderst du das Maß hier, passt sich alles an.' }));
-    if ((App.doc.params || []).length) wrap.append(Variants.section());
+    if ((App.doc.params || []).length) { const vs = Variants.section(); vs.classList.add('pro'); wrap.append(vs); }
     const list = h('div', { class: 'mini-list' });
     (App.doc.params || []).forEach((p, i) => {
       const row = h('div', { class: 'section' });
@@ -5848,13 +5882,13 @@ const Panels = (() => {
       w.append(ps);
     }
     const pv = ViewPrefs.get();
-    const va = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Ansicht'));
+    const va = h('div', { class: 'section pro' }, h('div', { class: 'section-h' }, 'Ansicht'));
     va.append(UI.selectField({ id: 'view-grid', label: 'Rasterweite', value: String(pv.grid), options: [['auto', 'Automatisch (folgt dem Zoom)'], ['0.01', '0,01 mm'], ['0.1', '0,1 mm'], ['1', '1 mm'], ['10', '10 mm'], ['100', '100 mm']], onChange: (val) => ViewPrefs.set({ grid: val === 'auto' ? 'auto' : parseFloat(val) }) }));
     const chk = (k, label) => { const l = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'view-' + k, checked: !!pv[k] }), label); l.querySelector('input').onchange = (e) => ViewPrefs.set({ [k]: e.target.checked }); return l; };
     va.append(UI.selectField({ id: 'view-quality', label: 'Darstellungsqualität', value: pv.quality, options: [['coarse', 'Grob'], ['normal', 'Normal'], ['fine', 'Fein'], ['ultra', 'Sehr fein']], onChange: (val) => ViewPrefs.set({ quality: val }) }));
     va.append(h('div', { style: { display: 'grid', gap: '6px', marginTop: '8px' } }, chk('adaptive', 'Darstellung anpassen (Zoom, Drehen)'), chk('gridOn', 'Raster zeigen'), chk('planes', 'Ursprungsebenen zeigen'), chk('axes', 'Achsen zeigen'), chk('notes', 'Notizen zeigen'), chk('ortho', 'Orthografisch (ohne Perspektive)')));
     w.append(va);
-    const gr = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Fangen beim Verschieben'));
+    const gr = h('div', { class: 'section pro' }, h('div', { class: 'section-h' }, 'Fangen beim Verschieben'));
     const f2 = h('div', { class: 'fields' });
     f2.append(UI.selectField({ id: 'grid', label: 'Schrittweite', value: App.doc.settings.grid, options: [[0.01, '0,01 mm'], [0.05, '0,05 mm'], [0.1, '0,1 mm'], [0.5, '0,5 mm'], [1, '1 mm'], [2, '2 mm'], [5, '5 mm'], [10, '10 mm']], onChange: (v) => App.change('Raster geändert', (doc) => { doc.settings.grid = parseFloat(v); }) }));
     const snap = h('label', { class: 'check', style: { alignSelf: 'end', paddingBottom: '8px' } }, h('input', { type: 'checkbox', id: 'snap', checked: App.doc.settings.snap !== false }), 'Einrasten');
@@ -6042,7 +6076,7 @@ const Panels = (() => {
     // Material und Gewicht dieses Teils (nur Teile der obersten Ebene)
     if (!f.parent && it.role !== 'hole') {
       const pm = Mass.projectMaterial();
-      const ms = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Material und Gewicht'));
+      const ms = h('div', { class: 'section pro' }, h('div', { class: 'section-h' }, 'Material und Gewicht'));
       const fixed = Mass.fixedOf(it);
       ms.append(UI.selectField({ id: 'p-mat', label: 'Material', value: fixed ? '__fix' : it.mat || '', options: [['', `Wie das Projekt (${pm.k})`], ['__fix', 'Kaufteil: festes Gewicht'], ...MATERIALS.map((m) => [m.k, `${m.k} · ${String(m.rho).replace('.', ',')} g/cm³`])], onChange: (v) => {
         if (v === '__fix') { Mass.measure().then((r) => { const p = Mass.partOf(r, it.id); App.change('Festes Gewicht', (doc) => { const T = Model.find(doc, it.id).item; delete T.mat; T.massG = p ? round(p.mass, 1) : 10; }); }); return; }
@@ -6083,7 +6117,8 @@ const Panels = (() => {
     if (App.mode !== 'model' || Sketch.active || Place.active || Handles.dragging) return;
     const items = App.selectedItems(); if (!items.length) return;
     const bar = h('div', { class: 'ctxbar', role: 'toolbar', 'aria-label': 'Aktionen' });
-    const b = (ic, label, fn, cls = '', tip, iconOnly) => { const x = h('button', { type: 'button', class: cls, 'data-tip': tip || (iconOnly ? label : null), 'aria-label': label || tip, 'data-help': HELP[ic] ? ic : null }); x.innerHTML = icon(ic) + (label && !iconOnly ? `<span>${label}</span>` : ''); x.onclick = (e) => { e.stopPropagation(); fn(e); }; bar.append(x); return x; };
+    const PRO = ['similar', 'shell', 'patternCirc', 'split', 'boolSubtract', 'layers'];
+    const b = (ic, label, fn, cls = '', tip, iconOnly) => { const x = h('button', { type: 'button', class: cls + (PRO.includes(ic) ? ' pro' : ''), 'data-tip': tip || (iconOnly ? label : null), 'aria-label': label || tip, 'data-help': HELP[ic] ? ic : null }); x.innerHTML = icon(ic) + (label && !iconOnly ? `<span>${label}</span>` : ''); x.onclick = (e) => { e.stopPropagation(); fn(e); }; bar.append(x); return x; };
     const sep = () => bar.append(h('span', { class: 'vsep' }));
     const face = Actions.selectedFace();
     if (App.edges.length) {
@@ -6166,9 +6201,9 @@ const Panels = (() => {
     const b1 = h('button', { type: 'button', 'aria-label': 'Alles zeigen', 'data-tip': 'Alles zeigen', 'data-kbd': 'F' }); b1.innerHTML = icon('fit'); b1.onclick = () => Viewer.fit();
     const b2 = h('button', { type: 'button', 'aria-label': 'Schräge Ansicht', 'data-tip': 'Schräge Ansicht' }); b2.innerHTML = icon('home'); b2.onclick = () => Viewer.setView('iso');
     const tg = (k, ic, tip, kbd) => { const b = h('button', { type: 'button', 'aria-label': tip, 'data-tip': tip, 'data-kbd': kbd || null }); b.innerHTML = icon(ic); b.onclick = () => ViewPrefs.toggle(k); b.dataset.pref = k; return b; };
-    const bO = tg('ortho', 'viewOrtho', 'Orthografisch / Perspektive', 'O');
+    const bO = tg('ortho', 'viewOrtho', 'Orthografisch / Perspektive', 'O'); bO.classList.add('pro');
     const bG = tg('gridOn', 'grid', 'Raster ein/aus', 'G');
-    const bP = tg('planes', 'originPlanes', 'Ursprungsebenen ein/aus');
+    const bP = tg('planes', 'originPlanes', 'Ursprungsebenen ein/aus'); bP.classList.add('pro');
     const syncBtns = (pv) => { for (const b of [bO, bG, bP]) b.classList.toggle('on', !!pv[b.dataset.pref]); bO.innerHTML = icon(pv.ortho ? 'viewOrtho' : 'viewPersp'); };
     ViewPrefs.on('change', syncBtns); syncBtns(ViewPrefs.get());
     // Notizen ein/aus – nur sichtbar, wenn das Projekt Notizen hat
@@ -6179,6 +6214,7 @@ const Panels = (() => {
     const bX = h('button', { type: 'button', 'aria-label': 'Röntgen ein/aus', 'data-tip': 'Röntgen: Körper durchsichtig', 'data-kbd': 'X', 'data-view': 'xray', 'data-help': 'xray' }); bX.innerHTML = icon('xray'); bX.onclick = () => Views.xray();
     const bC = h('button', { type: 'button', 'aria-label': 'Schnitt ein/aus', 'data-tip': 'Schnitt: Modell aufschneiden', 'data-kbd': 'C', 'data-view': 'cut', 'data-help': 'section' }); bC.innerHTML = icon('section'); bC.onclick = () => Views.section();
     const bF = h('button', { type: 'button', 'aria-label': 'Auswahlfilter', 'data-tip': 'Wählen: Alles', 'data-view': 'filter', 'data-help': 'selectFilter' }); bF.innerHTML = icon('pointer'); bF.onclick = (e) => Select.menu(e.currentTarget);
+    for (const x of [bX, bC, bF]) x.classList.add('pro');
     vb.append(bO, bG, bP, bN, bX, bC, bF, h('div', { class: 'sep' }), b1, b2); $('#overlay').append(vb);
     gizmo = svgEl('<svg class="axis-gizmo" viewBox="0 0 64 64" aria-hidden="true"></svg>');
     $('#overlay').append(gizmo);
@@ -10947,7 +10983,12 @@ const Start = (() => {
     const tb = h('button', { type: 'button', class: 'btn' }); tb.innerHTML = icon('play') + 'Einführung (3 Minuten)'; tb.onclick = () => { newProject(true); Tour.start(); };
     const ts = h('button', { type: 'button', class: 'btn' }); ts.innerHTML = icon('sketch') + 'Erste Skizze (5 Minuten)'; ts.onclick = () => { newProject(true); Tour.start('sketch'); };
     acts.append(nb, ob, tb, ts);
-    head.append(brand, acts);
+    // Oberfläche wählen: einfach für Einsteiger oder alle Werkzeuge
+    const seg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Oberfläche' });
+    const lv = (id, l, label) => { const b = h('button', { type: 'button', id, 'aria-pressed': (ViewPrefs.get().level === l) ? 'true' : 'false' }, label); b.onclick = () => { ViewPrefs.setLevel(l); for (const x of seg.children) x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); }; return b; };
+    seg.append(lv('start-simple', 'simple', 'Einfach – für Einsteiger'), lv('start-pro', 'pro', 'Profi – alle Werkzeuge'));
+    const lvRow = h('div', { class: 'start-level', 'data-help': 'levelSwitch' }, h('span', null, 'Oberfläche:'), seg);
+    head.append(brand, acts, lvRow);
     inner.append(head);
     const recent = App.recentProjects().filter((r) => r.n > 0 || r.id === App.doc.id);
     if (recent.length) {
@@ -11700,6 +11741,7 @@ ${AI.modelText()}`;
   App.on('history', updHist); App.on('doc', updHist); updHist();
   const updName = () => { $('#btn-project').textContent = App.doc.name; document.title = App.doc.name && App.doc.name !== 'Neues Projekt' ? App.doc.name + ' – Tracery' : 'Tracery'; };
   App.on('doc', updName);
+  $('#btn-level').onclick = () => ViewPrefs.setLevel(ViewPrefs.simple ? 'pro' : 'simple'); ViewPrefs.syncLevel();
   $('#tab-model').onclick = () => Commands.setMode('model');
   $('#tab-drawing').onclick = () => Commands.setMode('drawing');
   $('#brand').onclick = (e) => { e.preventDefault(); Start.show(); };

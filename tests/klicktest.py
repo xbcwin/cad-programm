@@ -1693,6 +1693,41 @@ def t_neu14_hilfen(p):
     return ok, ('ohne Hilfetext: ' + ', '.join(fehlt)) if fehlt else ''
 
 
+# ---------- Sitzung 15: einfache Oberfläche ----------
+def sichtbar(p, sel):
+    return p.pg.locator(sel).first.is_visible() if p.pg.locator(sel).count() else False
+
+
+def t_einfach(p):
+    # Startseite: Oberfläche wählen
+    p.pg.locator('#start-simple').click(); p.wait(400)
+    ok1 = p.pg.evaluate("document.body.classList.contains('simple')") and p.pg.locator('#start-simple').get_attribute('aria-pressed') == 'true'
+    p.empty()
+    ok2 = not sichtbar(p, '#t-measure') and not sichtbar(p, '#tab-drawing') and not sichtbar(p, '#lt-log') and sichtbar(p, '#t-more') and sichtbar(p, '#t-body') and sichtbar(p, '#t-drone') and p.pg.locator('#btn-level').text_content() == 'Einfach'
+    p.pg.locator('#t-body').click(); p.wait(400)
+    n_body = p.pg.evaluate("[...document.querySelectorAll('.flyout .tile')].filter(t=>t.offsetParent).length")
+    p.pg.keyboard.press('Escape'); p.pg.locator('#t-parts').click(); p.wait(400)
+    n_parts = p.pg.evaluate("[...document.querySelectorAll('.flyout .tile')].filter(t=>t.offsetParent).length")
+    ok3 = n_body == 6 and n_parts == 5
+    p.pg.locator('#t-parts').click(); p.wait(200)
+    p.ev("Actions.addPrimitive('box')"); warte_rechnen(p, 20)
+    vis = p.pg.evaluate("[...document.querySelectorAll('.ctxbar button')].filter(b=>b.offsetParent).map(b=>b.getAttribute('aria-label'))")
+    ok4 = 'Drehen' in vis and 'Duplizieren' in vis and not any(x in vis for x in ['Muster', 'Teilen', 'Ähnliche']) and not sichtbar(p, '.view-btns [data-view="xray"]')
+    # „Mehr“ öffnet die versteckten Werkzeuge
+    p.pg.locator('#t-more').click(); p.wait(300)
+    labels = p.pg.evaluate("[...document.querySelectorAll('.menu button')].map(b=>b.textContent)")
+    ok5 = any(l.startswith('Messen') for l in labels) and any('Alle Werkzeuge' in l for l in labels)
+    p.pg.locator('.menu button', has_text='Messen').click(); p.wait(400)
+    ok5 = ok5 and p.pg.evaluate("window.__masswerk.Measure.active")
+    p.pg.keyboard.press('Escape'); p.wait(300)
+    # bleibt nach dem Neuladen
+    p.pg.reload(); p.wait(3000)
+    ok6 = p.pg.evaluate("document.body.classList.contains('simple')") and not sichtbar(p, '#t-measure')
+    p.pg.locator('#btn-level').click(); p.wait(600)
+    ok7 = sichtbar(p, '#t-measure') and sichtbar(p, '#tab-drawing') and not sichtbar(p, '#t-more') and p.pg.locator('#btn-level').text_content() == 'Profi'
+    return [ok1, ok2, ok3, ok4, ok5, ok6, ok7]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -1762,6 +1797,7 @@ TESTS = [
     ('Erklär diesen Schritt mit KI', t_erklaeren_ki),
     ('Schwachstellen: Vorlage ok / Lochrand / Ringe / Armdicke / KI-Vorschlag umsetzen', t_schwachstellen),
     ('Sitzung-14-Werkzeuge haben Hilfetexte', t_neu14_hilfen),
+    ('Einfache Oberfläche: Startseite / ausgeblendet / Grundkörper und Bauteile / Kontextleiste / Mehr / bleibt / zurück zu Profi', t_einfach),
     ('Formel-Beispiele', t_formel_beispiele), ('Einführung „Erste Skizze“', t_einfuehrung), ('Schraubenlöcher', t_schrauben),
     ('Fies: Löschen hinter Marker + Undo', t_fies_loeschen), ('Fies: alles unterdrückt', t_fies_alle_aus),
     ('Fies: Marker am Anfang, neu laden', t_fies_reload), ('Fies: Tasten während Rechnen', t_fies_tasten),

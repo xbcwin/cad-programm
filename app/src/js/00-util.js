@@ -607,6 +607,11 @@ const HELP = {
   "tip": "Schritte, die die KI gebaut hat",
   "hilfe": "Was der KI-Helfer baut, wird ein normaler Schritt in der Zeitleiste – mit einem kleinen Funken-Symbol. Überfahr ihn, dann siehst du, auf welche Bitte er entstand. Du kannst ihn wie jeden Schritt ändern, unterdrücken oder mit Strg Z zurücknehmen.",
   "tipp": "Schreib unten in die Zeile, was du willst, z. B. „Mach die Arme 6 mm dick“ oder „Bau mir einen 5-Zoll-Deadcat mit DJI O4“."
+ },
+ "levelSwitch": {
+  "tip": "Einfache Oberfläche oder alle Werkzeuge",
+  "hilfe": "Oben rechts (oder auf der Startseite) schaltest du zwischen „Einfach“ und „Profi“ um. Einfach zeigt nur die wichtigsten Werkzeuge: Körper, Skizze, Bauteile, Drohne und Exportieren – Messen, Notizen, Ansicht und Profi-Werkzeuge findest du dann unter „Mehr“. Dein Modell bleibt gleich, es ändert sich nur, was du siehst.",
+  "tipp": "Zum Anfangen ist „Einfach“ gut. Die Eingabezeile unten findet trotzdem jedes Werkzeug."
  }
 };
 

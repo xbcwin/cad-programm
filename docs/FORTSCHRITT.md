@@ -1,6 +1,6 @@
 # Fortschritt
 
-Stand: 20.10.2026 · nach Sitzung 14 von 14
+Stand: 20.10.2026 · nach Sitzung 15 (Bauplan mit 14 Sitzungen abgeschlossen)
 
 ## Erledigt
 
@@ -45,7 +45,7 @@ Stand: 20.10.2026 · nach Sitzung 14 von 14
 - [x] Neuer Name beim Maß (z. B. `breite`) wird automatisch unter „Maße“ angelegt
 - [x] Formel-Beispiele unter „Maße“ (Gemini, alle 12 mit Tracerys Rechner nachgeprüft), Beispiel-Maße per Klick
 - [x] Umbenennen / Entfernen eines Maßes wirkt jetzt auch auf Skizzen-Maße
-- [x] Automatischer Klicktest `tests/klicktest.py`: 94 Durchläufe (alle grün), 127 von 157 Punkten der Testliste automatisch geprüft
+- [x] Automatischer Klicktest `tests/klicktest.py`: 95 Durchläufe (alle grün), 130 von 161 Punkten der Testliste automatisch geprüft
 - [x] Aufgeräumt: Programm liegt jetzt in 28 Quelldateien unter `app/src/`, `tools/build.py` baut daraus `app/index.html`
 - [x] Notizstift (Taste N): freie Striche, die am Modell kleben, Textnotizen, 6 Farben, 3 Dicken, Radierer, ein-/ausblendbar – ohne technische Bedeutung
 - [x] Symbole für den Notizstift (Gemini, geprüft); Augen-Knopf rechts im Bild blendet Notizen aus, sobald es welche gibt
@@ -122,6 +122,9 @@ Stand: 20.10.2026 · nach Sitzung 14 von 14
 - [x] KI-Fenster liegt jetzt über der Zeitleiste statt darauf
 - [x] Erklärtexte je Schritt-Art (Gemini Prompt H, `app/data/schritt-erklaerungen.json`): was, wozu bei Drohnen, worauf achten – 32 Arten, gegen Tracery geprüft, 19 Sätze berichtigt (u. a. schneiden Löcher auf oberster Ebene ohne Gruppe, Kabelbinder sind zwei Schlitze, Prisma-Durchmesser von Ecke zu Ecke)
 - [x] Neues Bauteil `app/src/js/88-aihelp.js`
+- [x] Einfache Oberfläche für Einsteiger (Sitzung 15): Umschalter „Einfach / Profi“ oben rechts, auf der Startseite und in den Einstellungen; gilt für diesen Browser und bleibt nach dem Neuladen
+- [x] Einfach zeigt: Körper (Quader, Zylinder, Kugel, Kegel, Rohr, Halbkugel), Skizze, Bauteile (Schraubenloch, Mutternfalle, Langloch, Lochbild, Kabelbinder), Drohne, Exportieren; ausgeblendet sind Messen, Notizen, Ansicht, Zeichnung, Protokoll, Varianten, Material je Teil, Fangen, Ansichts-Einstellungen, Muster, Teilen, Boolesch, Ausrichten, Ähnliche, Aushöhlen, Röntgen, Schnitt und Auswahlfilter
+- [x] „Mehr“ in der einfachen Oberfläche: Messen, Notizstift, Ansicht, Schwachstellen und „Alle Werkzeuge zeigen“ – die Eingabezeile findet weiterhin jedes Werkzeug
 
 ## Offen
 
@@ -161,7 +164,9 @@ Fertig.
 ### Stufe 5 – KI und Feinschliff
 - [x] KI-Helfer auf der Zeitleiste, „Erklär diesen Schritt“, Schwachstellen-Analyse (Sitzung 14)
 - [ ] Schwachstellen auch für gedruckte Teile genauer: Wand um Schraubenlöcher, Überhänge
-- [ ] 3D-Skizzen, Sweep / Loft, Gelenke, Einsteiger-Oberfläche (ab Sitzung 15)
+- [x] Einsteiger-Oberfläche (Sitzung 15)
+- [ ] 3D-Skizzen, Sweep / Loft, Gelenke
+- [ ] Einsteiger-Oberfläche weiter vereinfachen: größere Knöpfe, geführte erste Schritte im leeren Projekt
 
 ### Stufe 6 – Konten und Zusammenarbeit (Idee, nach dem Drohnen-Modul)
 - [ ] A: Konto mit Name und Passwort, Projekte in der Cloud

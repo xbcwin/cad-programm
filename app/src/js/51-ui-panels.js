@@ -5,6 +5,9 @@ const Panels = (() => {
   let flyout = null;
 
   // ---------- Werkzeugleiste ----------
+  // einfache Oberfläche: diese Grundkörper und Bauteile bleiben sichtbar
+  const SIMPLE_KINDS = ['box', 'cylinder', 'sphere', 'cone', 'tube', 'hemisphere'];
+  const SIMPLE_PARTS = ['screwHole', 'nutTrap', 'slotHole', 'holePattern', 'zipTie'];
   function renderTools() {
     const el = $('#tools'); el.innerHTML = '';
     const btn = (id, ic, label, tip, kbd, onClick, cls = '', short = '') => {
@@ -19,9 +22,17 @@ const Panels = (() => {
       btn('t-sketch', 'sketch', 'Skizze', 'Eine 2D-Skizze zeichnen und daraus einen Körper machen', 'S', () => Sketch.chooseAndStart());
       btn('t-parts', 'parts', 'Bauteile', 'Schraubenlöcher, Mutternfallen, Scharniere, Zahnräder …', 'B', (e) => toggleFlyout('parts', e.currentTarget));
       btn('t-drone', 'drone', 'Drohne', 'Frame-Assistent, Kaufteile wie Motoren und Akkus, Lochbilder', '', (e) => toggleFlyout('drone', e.currentTarget));
-      btn('t-measure', 'measure', 'Messen', 'Messen: Abstände, Winkel, Flächen und Durchmesser', 'M', () => Measure.toggle(), 'minor');
-      btn('t-notes', 'noteDraw', 'Notizen', 'Notizstift: frei malen und Text hinschreiben – ohne technische Bedeutung', 'N', () => Notes.toggle(), 'minor');
-      btn('t-views', 'xray', 'Ansicht', 'Ansicht: Schnitt, Röntgen, Explosion und Fokus-Vorschau – ändert nur die Anzeige', '', (e) => Views.menu(e.currentTarget), 'minor');
+      btn('t-measure', 'measure', 'Messen', 'Messen: Abstände, Winkel, Flächen und Durchmesser', 'M', () => Measure.toggle(), 'minor pro');
+      btn('t-notes', 'noteDraw', 'Notizen', 'Notizstift: frei malen und Text hinschreiben – ohne technische Bedeutung', 'N', () => Notes.toggle(), 'minor pro');
+      btn('t-views', 'xray', 'Ansicht', 'Ansicht: Schnitt, Röntgen, Explosion und Fokus-Vorschau – ändert nur die Anzeige', '', (e) => Views.menu(e.currentTarget), 'minor pro');
+      // einfache Oberfläche: die Profi-Werkzeuge stecken hinter „Mehr“
+      btn('t-more', 'menu', 'Mehr', 'Weitere Werkzeuge: Messen, Notizen, Ansicht – oder alle Werkzeuge zeigen', '', (e) => UI.menu(e.currentTarget, [
+        { label: 'Messen', icon: 'measure', kbd: 'M', run: () => Measure.toggle() },
+        { label: 'Notizstift', icon: 'noteDraw', kbd: 'N', run: () => Notes.toggle() },
+        { label: 'Ansicht: Schnitt, Röntgen, Explosion …', icon: 'xray', run: () => Views.menu($('#t-more')) },
+        { label: 'Schwachstellen suchen', icon: 'target', run: () => Weak.dialog() },
+        '-', { label: 'Alle Werkzeuge zeigen (Profi)', icon: 'sliders', help: 'levelSwitch', run: () => ViewPrefs.setLevel('pro') },
+      ]), 'simple-only');
       el.append(h('div', { class: 'sep' }));
       Views.sync();
       btn('t-export', 'export', 'Exportieren', 'Als STEP, STL, 3MF oder DXF speichern (ZIP)', 'Strg E', () => Print.exportDialog(), 'primary', 'Export');
@@ -47,7 +58,7 @@ const Panels = (() => {
       el.append(h('h3', null, 'Grundkörper'));
       const tiles = h('div', { class: 'tiles' });
       for (const k of PRIMITIVE_ORDER) {
-        const t = h('div', { class: 'tile', role: 'button', tabindex: '0', 'data-tip': 'Klicken fügt ihn ein, Ziehen setzt ihn genau hin' });
+        const t = h('div', { class: 'tile' + (SIMPLE_KINDS.includes(k) ? '' : ' pro'), role: 'button', tabindex: '0', 'data-tip': 'Klicken fügt ihn ein, Ziehen setzt ihn genau hin' });
         t.innerHTML = primitiveSVG(k); t.append(h('span', { class: 'lbl' }, hyph(KINDS[k].label)));
         Place.bindTile(t, { kind: k });
         t.addEventListener('keydown', (e) => { if (e.key === 'Enter') { Actions.addPrimitive(k); closeFlyout(); } });
@@ -68,7 +79,7 @@ const Panels = (() => {
       el.append(h('h3', null, 'Bauteile'));
       const tiles = h('div', { class: 'tiles' });
       for (const d of LIB) {
-        const t = h('div', { class: 'tile' + (d.role === 'hole' ? ' hole-part' : ''), role: 'button', tabindex: '0', 'data-tip': d.desc });
+        const t = h('div', { class: 'tile' + (d.role === 'hole' ? ' hole-part' : '') + (SIMPLE_PARTS.includes(d.lib) ? '' : ' pro'), role: 'button', tabindex: '0', 'data-tip': d.desc });
         t.innerHTML = partSVG(d); t.append(h('span', { class: 'lbl' }, hyph(d.label)), h('span', { class: 'role' }, d.role === 'hole' ? 'Loch' : 'Körper'));
         Place.bindTile(t, { part: d });
         t.addEventListener('keydown', (e) => { if (e.key === 'Enter') { Actions.addPart(d, libDefaults(d)); closeFlyout(); } });
@@ -227,7 +238,7 @@ const Panels = (() => {
     const { v, errors } = Model.vars(App.doc);
     const wrap = h('div', { class: 'props' });
     wrap.append(h('div', { class: 'hint-box', html: 'Lege hier Maße mit Namen fest, zum Beispiel <b>Wandstärke = 2</b>. In jedem Zahlenfeld kannst du dann den Namen oder eine Formel wie <b>Breite/2 + 3</b> eintippen. Änderst du das Maß hier, passt sich alles an.' }));
-    if ((App.doc.params || []).length) wrap.append(Variants.section());
+    if ((App.doc.params || []).length) { const vs = Variants.section(); vs.classList.add('pro'); wrap.append(vs); }
     const list = h('div', { class: 'mini-list' });
     (App.doc.params || []).forEach((p, i) => {
       const row = h('div', { class: 'section' });
@@ -337,13 +348,13 @@ const Panels = (() => {
       w.append(ps);
     }
     const pv = ViewPrefs.get();
-    const va = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Ansicht'));
+    const va = h('div', { class: 'section pro' }, h('div', { class: 'section-h' }, 'Ansicht'));
     va.append(UI.selectField({ id: 'view-grid', label: 'Rasterweite', value: String(pv.grid), options: [['auto', 'Automatisch (folgt dem Zoom)'], ['0.01', '0,01 mm'], ['0.1', '0,1 mm'], ['1', '1 mm'], ['10', '10 mm'], ['100', '100 mm']], onChange: (val) => ViewPrefs.set({ grid: val === 'auto' ? 'auto' : parseFloat(val) }) }));
     const chk = (k, label) => { const l = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'view-' + k, checked: !!pv[k] }), label); l.querySelector('input').onchange = (e) => ViewPrefs.set({ [k]: e.target.checked }); return l; };
     va.append(UI.selectField({ id: 'view-quality', label: 'Darstellungsqualität', value: pv.quality, options: [['coarse', 'Grob'], ['normal', 'Normal'], ['fine', 'Fein'], ['ultra', 'Sehr fein']], onChange: (val) => ViewPrefs.set({ quality: val }) }));
     va.append(h('div', { style: { display: 'grid', gap: '6px', marginTop: '8px' } }, chk('adaptive', 'Darstellung anpassen (Zoom, Drehen)'), chk('gridOn', 'Raster zeigen'), chk('planes', 'Ursprungsebenen zeigen'), chk('axes', 'Achsen zeigen'), chk('notes', 'Notizen zeigen'), chk('ortho', 'Orthografisch (ohne Perspektive)')));
     w.append(va);
-    const gr = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Fangen beim Verschieben'));
+    const gr = h('div', { class: 'section pro' }, h('div', { class: 'section-h' }, 'Fangen beim Verschieben'));
     const f2 = h('div', { class: 'fields' });
     f2.append(UI.selectField({ id: 'grid', label: 'Schrittweite', value: App.doc.settings.grid, options: [[0.01, '0,01 mm'], [0.05, '0,05 mm'], [0.1, '0,1 mm'], [0.5, '0,5 mm'], [1, '1 mm'], [2, '2 mm'], [5, '5 mm'], [10, '10 mm']], onChange: (v) => App.change('Raster geändert', (doc) => { doc.settings.grid = parseFloat(v); }) }));
     const snap = h('label', { class: 'check', style: { alignSelf: 'end', paddingBottom: '8px' } }, h('input', { type: 'checkbox', id: 'snap', checked: App.doc.settings.snap !== false }), 'Einrasten');
@@ -531,7 +542,7 @@ const Panels = (() => {
     // Material und Gewicht dieses Teils (nur Teile der obersten Ebene)
     if (!f.parent && it.role !== 'hole') {
       const pm = Mass.projectMaterial();
-      const ms = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Material und Gewicht'));
+      const ms = h('div', { class: 'section pro' }, h('div', { class: 'section-h' }, 'Material und Gewicht'));
       const fixed = Mass.fixedOf(it);
       ms.append(UI.selectField({ id: 'p-mat', label: 'Material', value: fixed ? '__fix' : it.mat || '', options: [['', `Wie das Projekt (${pm.k})`], ['__fix', 'Kaufteil: festes Gewicht'], ...MATERIALS.map((m) => [m.k, `${m.k} · ${String(m.rho).replace('.', ',')} g/cm³`])], onChange: (v) => {
         if (v === '__fix') { Mass.measure().then((r) => { const p = Mass.partOf(r, it.id); App.change('Festes Gewicht', (doc) => { const T = Model.find(doc, it.id).item; delete T.mat; T.massG = p ? round(p.mass, 1) : 10; }); }); return; }
@@ -572,7 +583,8 @@ const Panels = (() => {
     if (App.mode !== 'model' || Sketch.active || Place.active || Handles.dragging) return;
     const items = App.selectedItems(); if (!items.length) return;
     const bar = h('div', { class: 'ctxbar', role: 'toolbar', 'aria-label': 'Aktionen' });
-    const b = (ic, label, fn, cls = '', tip, iconOnly) => { const x = h('button', { type: 'button', class: cls, 'data-tip': tip || (iconOnly ? label : null), 'aria-label': label || tip, 'data-help': HELP[ic] ? ic : null }); x.innerHTML = icon(ic) + (label && !iconOnly ? `<span>${label}</span>` : ''); x.onclick = (e) => { e.stopPropagation(); fn(e); }; bar.append(x); return x; };
+    const PRO = ['similar', 'shell', 'patternCirc', 'split', 'boolSubtract', 'layers'];
+    const b = (ic, label, fn, cls = '', tip, iconOnly) => { const x = h('button', { type: 'button', class: cls + (PRO.includes(ic) ? ' pro' : ''), 'data-tip': tip || (iconOnly ? label : null), 'aria-label': label || tip, 'data-help': HELP[ic] ? ic : null }); x.innerHTML = icon(ic) + (label && !iconOnly ? `<span>${label}</span>` : ''); x.onclick = (e) => { e.stopPropagation(); fn(e); }; bar.append(x); return x; };
     const sep = () => bar.append(h('span', { class: 'vsep' }));
     const face = Actions.selectedFace();
     if (App.edges.length) {
@@ -655,9 +667,9 @@ const Panels = (() => {
     const b1 = h('button', { type: 'button', 'aria-label': 'Alles zeigen', 'data-tip': 'Alles zeigen', 'data-kbd': 'F' }); b1.innerHTML = icon('fit'); b1.onclick = () => Viewer.fit();
     const b2 = h('button', { type: 'button', 'aria-label': 'Schräge Ansicht', 'data-tip': 'Schräge Ansicht' }); b2.innerHTML = icon('home'); b2.onclick = () => Viewer.setView('iso');
     const tg = (k, ic, tip, kbd) => { const b = h('button', { type: 'button', 'aria-label': tip, 'data-tip': tip, 'data-kbd': kbd || null }); b.innerHTML = icon(ic); b.onclick = () => ViewPrefs.toggle(k); b.dataset.pref = k; return b; };
-    const bO = tg('ortho', 'viewOrtho', 'Orthografisch / Perspektive', 'O');
+    const bO = tg('ortho', 'viewOrtho', 'Orthografisch / Perspektive', 'O'); bO.classList.add('pro');
     const bG = tg('gridOn', 'grid', 'Raster ein/aus', 'G');
-    const bP = tg('planes', 'originPlanes', 'Ursprungsebenen ein/aus');
+    const bP = tg('planes', 'originPlanes', 'Ursprungsebenen ein/aus'); bP.classList.add('pro');
     const syncBtns = (pv) => { for (const b of [bO, bG, bP]) b.classList.toggle('on', !!pv[b.dataset.pref]); bO.innerHTML = icon(pv.ortho ? 'viewOrtho' : 'viewPersp'); };
     ViewPrefs.on('change', syncBtns); syncBtns(ViewPrefs.get());
     // Notizen ein/aus – nur sichtbar, wenn das Projekt Notizen hat
@@ -668,6 +680,7 @@ const Panels = (() => {
     const bX = h('button', { type: 'button', 'aria-label': 'Röntgen ein/aus', 'data-tip': 'Röntgen: Körper durchsichtig', 'data-kbd': 'X', 'data-view': 'xray', 'data-help': 'xray' }); bX.innerHTML = icon('xray'); bX.onclick = () => Views.xray();
     const bC = h('button', { type: 'button', 'aria-label': 'Schnitt ein/aus', 'data-tip': 'Schnitt: Modell aufschneiden', 'data-kbd': 'C', 'data-view': 'cut', 'data-help': 'section' }); bC.innerHTML = icon('section'); bC.onclick = () => Views.section();
     const bF = h('button', { type: 'button', 'aria-label': 'Auswahlfilter', 'data-tip': 'Wählen: Alles', 'data-view': 'filter', 'data-help': 'selectFilter' }); bF.innerHTML = icon('pointer'); bF.onclick = (e) => Select.menu(e.currentTarget);
+    for (const x of [bX, bC, bF]) x.classList.add('pro');
     vb.append(bO, bG, bP, bN, bX, bC, bF, h('div', { class: 'sep' }), b1, b2); $('#overlay').append(vb);
     gizmo = svgEl('<svg class="axis-gizmo" viewBox="0 0 64 64" aria-hidden="true"></svg>');
     $('#overlay').append(gizmo);

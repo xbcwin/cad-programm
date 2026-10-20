@@ -1,6 +1,6 @@
 # Testliste
 
-Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 14 (20.10.2026).
+Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 15 (20.10.2026).
 
 **[x]** = automatisch geprüft mit `tests/klicktest.py` (echter Browser, echte Klicks) · **[ ]** = noch von Hand ansehen
 
@@ -26,7 +26,8 @@ Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 14 (20.10
 | Frame-Assistent und Drohnen-Teile | 8 | 5 | Klappfenster übersichtlich? Deadcat richtig? Kopfzeile mit Symbolen |
 | Drohnen-Check, DXF, Varianten | 11 | 9 | DXF in der Fräs-Software, Check-Fenster und Varianten-Tabelle bei schmalem Fenster |
 | KI-Schritte, Erklären, Schwachstellen | 12 | 9 | Echte KI in Claude, Ringe und KI-Fenster, Quellen-Links |
-| **Gesamt** | **157** | **127** | **30 Punkte, dazu ein Blick auf Animationen** |
+| Einfache Oberfläche | 4 | 3 | Mit einem Kind ausprobieren |
+| **Gesamt** | **161** | **130** | **31 Punkte, dazu ein Blick auf Animationen** |
 
 Wichtig: Automatisch geprüft heißt „funktioniert in Chromium unter Linux“. Safari auf dem Mac, Touch auf dem iPad und echte Grafikkarten sieht nur ein Test von Hand.
 
@@ -462,6 +463,21 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [ ] **Ringe und Fenster sehen gut aus**
   Schritte: 1. Schwachstelle „Zeigen“ bei dunklem und hellem Design. 2. KI-Fenster offen lassen und die Zeitleiste bedienen.
   Erwartet: Ring gut sichtbar, KI-Fenster verdeckt die Zeitleiste nicht.
+
+## Einfache Oberfläche (neu in Sitzung 15)
+
+- [x] **Umschalten auf der Startseite**
+  Schritte: 1. Startseite → „Oberfläche: Einfach – für Einsteiger“. 2. Leeres Projekt.
+  Erwartet: Oben nur Körper, Skizze, Bauteile, Drohne, Mehr und Exportieren; kein „Zeichnung“, links kein „Protokoll“; oben rechts steht „Einfach“.
+- [x] **Weniger Auswahl**
+  Schritte: 1. „Körper“ öffnen. 2. „Bauteile“ öffnen. 3. Einen Quader einfügen und anklicken.
+  Erwartet: 6 Grundkörper, 5 Bauteile; in der Leiste am Körper Drehen, Spiegeln, Duplizieren, aber kein Muster, Teilen oder Ähnliche.
+- [x] **„Mehr“ und zurück zu Profi**
+  Schritte: 1. „Mehr“ → „Messen“. 2. Seite neu laden. 3. Oben rechts auf „Einfach“ klicken.
+  Erwartet: Messen startet; nach dem Neuladen ist die einfache Oberfläche noch da; danach steht „Profi“ da und alle Werkzeuge sind zurück.
+- [ ] **Mit einem Kind ausprobieren**
+  Schritte: 1. Ein Kind (ab 10) mit „Einfach“ eine Platte mit vier Löchern bauen lassen, ohne zu helfen.
+  Erwartet: Es findet Körper, Löcher und Exportieren allein; notieren, wo es hängen bleibt.
 
 ## Notizstift (neu)
 

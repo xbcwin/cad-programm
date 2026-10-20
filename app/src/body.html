@@ -5,12 +5,13 @@
       <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="var(--accent)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><g transform="translate(12 12) scale(.885) translate(-12 -10.2)" stroke-width="1.92"><polygon points="12 2 21 7 21 17 12 22 3 17 3 7" /><path d="M12 22V12" /><path d="M12 12L21 7" /><path d="M12 12L3 7" /><path d="M3 7A9 9 0 0 1 21 7" /><path d="M21 7A9 9 0 0 1 12 22" /><path d="M12 22A9 9 0 0 1 3 7" /></g></svg>
       <b>Tracery</b>
     </a>
-    <div class="seg" role="group" aria-label="Arbeitsbereich">
+    <div class="seg pro" role="group" aria-label="Arbeitsbereich">
       <button type="button" id="tab-model" aria-pressed="true">Modell</button>
       <button type="button" id="tab-drawing" aria-pressed="false">Zeichnung</button>
     </div>
     <div class="tools" id="tools"></div>
     <div class="right-tools">
+      <button class="level-btn" id="btn-level" type="button" data-help="levelSwitch" aria-pressed="false">Profi</button>
       <button class="icon-btn" id="btn-undo" type="button" aria-label="Rückgängig" data-tip="Rückgängig" data-kbd="Strg Z"></button>
       <button class="icon-btn" id="btn-redo" type="button" aria-label="Wiederholen" data-tip="Wiederholen" data-kbd="Strg Y"></button>
       <button class="proj-name" id="btn-project" type="button" data-tip="Projekt">Neues Projekt</button>
@@ -25,7 +26,7 @@
         <div class="tabs" role="tablist">
           <button type="button" role="tab" id="lt-tree" aria-selected="true">Verlauf</button>
           <button type="button" role="tab" id="lt-params" aria-selected="false">Maße</button>
-          <button type="button" role="tab" id="lt-log" aria-selected="false">Protokoll</button>
+          <button type="button" role="tab" id="lt-log" class="pro" aria-selected="false">Protokoll</button>
         </div>
       </div>
       <div class="panel-body" id="left-body"></div>

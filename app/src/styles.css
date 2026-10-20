@@ -622,3 +622,10 @@ body.sketching .timeline{display:none}
 .props .chk-row{flex-wrap:wrap}
 .props .chk-btns{max-width:none;width:100%;justify-content:flex-start;padding-left:32px}
 .explain-list li.ex-achtung{color:var(--ink-2);list-style:none;margin-left:-18px;padding:6px 10px;border-left:3px solid var(--warn);background:var(--warn-soft);border-radius:0 6px 6px 0}
+/* Einfache Oberfläche: Profi-Werkzeuge ausblenden, „Mehr“ nur dort zeigen */
+body.simple .pro{display:none!important}
+body:not(.simple) .simple-only{display:none!important}
+.level-btn{border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:999px;padding:5px 11px;font:600 12.5px/1 var(--font);cursor:pointer;white-space:nowrap}
+.level-btn:hover{border-color:var(--line-strong);color:var(--ink)}
+.level-btn[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent)}
+.start-level{flex-basis:100%;display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;font-size:14px;color:var(--muted)}
