@@ -127,10 +127,20 @@ const Panels = (() => {
         if (ownIdx >= 0 && (!ctxTop || inCtx)) { const sp = h('button', { type: 'button', 'aria-label': it.suppressed ? 'Aktivieren' : 'Unterdrücken', 'data-tip': it.suppressed ? 'Wieder aktivieren' : 'Unterdrücken (bleibt erhalten, zählt nicht mit)', 'data-help': 'suppress' }); sp.innerHTML = icon('suppress'); sp.onclick = (e) => { e.stopPropagation(); Timeline.toggleSuppress(it.id); }; acts.append(sp); }
         acts.append(eye, del);
         row.append(tw, sw, nm);
+        if (it.ai) { const am = h('span', { class: 'ai-mark', 'data-tip': (it.ai.edit ? 'Von der KI geändert: „' : 'Von der KI gebaut: „') + it.ai.q + '“' }); am.innerHTML = icon('spark'); row.append(am); }
         const errs = App.errorsFor(it.id);
         if (errs.length) { const er = h('span', { class: 'err', 'data-tip': errs[0].message }); er.innerHTML = icon('warn'); row.append(er); }
         row.append(sub, acts);
         row.addEventListener('click', (e) => { App.select([it.id], { additive: e.shiftKey || e.metaKey || e.ctrlKey }); });
+        row.addEventListener('contextmenu', (e) => {
+          e.preventDefault(); if (!selSet.has(it.id)) App.select([it.id]);
+          UI.menu(row, [
+            { icon: 'help', label: 'Erklär diesen Schritt', help: 'explainStep', run: () => Explain.dialog(it.id) },
+            { icon: 'edit', label: 'Umbenennen', run: async () => { const n = await UI.prompt('Umbenennen', 'Name', Model.label(it), 'Umbenennen'); if (n && n.trim()) App.change('Umbenannt', (doc) => { Model.find(doc, it.id).item.name = n.trim(); }); } },
+            ...(ownIdx >= 0 ? [{ icon: 'suppress', label: it.suppressed ? 'Wieder aktivieren' : 'Unterdrücken', run: () => Timeline.toggleSuppress(it.id) }] : []),
+            '-', { icon: 'trash', label: 'Löschen', run: () => Actions.remove([it.id]) },
+          ]);
+        });
         row.addEventListener('dblclick', async (e) => { e.stopPropagation(); const n = await UI.prompt('Umbenennen', 'Name', Model.label(it), 'Umbenennen'); if (n && n.trim()) App.change('Umbenannt', (doc) => { Model.find(doc, it.id).item.name = n.trim(); }); });
         // Ziehen im Verlauf: umsortieren oder in eine Gruppe legen
         row.addEventListener('dragstart', (e) => { dragId = it.id; e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', it.id); } catch (_) {} });
@@ -317,6 +327,15 @@ const Panels = (() => {
       ds.append(h('div', { class: 'btn-row' }, b));
       w.append(ds);
     }
+    if (App.doc.items.length) {
+      const ps = h('div', { class: 'section', id: 'proj-weak-sec' }, h('div', { class: 'section-h' }, 'Schwachstellen'));
+      const wl = Weak.summary();
+      if (wl) ps.append(wl.length ? Weak.rows(wl.slice(0, 4), null, true) : h('div', { class: 'hint-box' }, 'Keine Schwachstellen gefunden.'), ...(wl.length > 4 ? [h('div', { class: 'hint-box' }, `… und ${wl.length - 4} weitere.`)] : []));
+      const wb = h('button', { type: 'button', class: 'btn small', id: 'proj-weak', 'data-help': 'weakSpots' }); wb.innerHTML = icon('target') + (wl ? 'Noch mal suchen' : 'Schwachstellen suchen');
+      wb.onclick = () => Weak.dialog();
+      ps.append(h('div', { class: 'btn-row' }, wb));
+      w.append(ps);
+    }
     const pv = ViewPrefs.get();
     const va = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Ansicht'));
     va.append(UI.selectField({ id: 'view-grid', label: 'Rasterweite', value: String(pv.grid), options: [['auto', 'Automatisch (folgt dem Zoom)'], ['0.01', '0,01 mm'], ['0.1', '0,1 mm'], ['1', '1 mm'], ['10', '10 mm'], ['100', '100 mm']], onChange: (val) => ViewPrefs.set({ grid: val === 'auto' ? 'auto' : parseFloat(val) }) }));
@@ -410,6 +429,8 @@ const Panels = (() => {
     const kindLabel = it.kind === 'part' ? (LIBMAP[it.p.lib] || {}).label || 'Bauteil' : KINDS[it.kind].label;
     title.append(nameInp);
     if (kindLabel && kindLabel !== Model.label(it)) title.append(h('span', { class: 'kind-badge' }, kindLabel));
+    const exb = h('button', { type: 'button', class: 'icon-btn', id: 'item-explain', 'aria-label': 'Erklär diesen Schritt', 'data-tip': 'Erklär diesen Schritt', 'data-help': 'explainStep' }); exb.innerHTML = icon('help');
+    exb.onclick = () => Explain.dialog(it.id); title.append(exb);
     w.append(title);
     for (const e of App.errorsFor(it.id)) {
       const box = h('div', { class: 'err-box' }, h('span', null, e.message));
@@ -677,7 +698,7 @@ const Panels = (() => {
     Log.on('change', debounce(() => { if (leftTab === 'log') renderLeft(); }, 80));
     renderTools(); initViewCube();
     const rerender = debounce(() => { renderLeft(); renderRight(); renderCtx(); UI.renderHint(); }, 16);
-    App.on('doc', rerender); App.on('selection', rerender); App.on('results', rerender); DroneCheck.on('checked', () => { if (!App.sel.length) rerender(); }); App.on('mode', () => { renderTools(); rerender(); });
+    App.on('doc', rerender); App.on('selection', rerender); App.on('results', rerender); DroneCheck.on('checked', () => { if (!App.sel.length) rerender(); }); Weak.on('analyzed', () => { if (!App.sel.length) rerender(); }); App.on('mode', () => { renderTools(); rerender(); });
     Viewer.on('camera', placeCtx);
   }
   return { init, renderLeft, renderRight, renderTools, renderCtx, closeFlyout, toggleFlyout, expand: (id) => { expanded.add(id); renderLeft(); }, showParams: () => { leftTab = 'params'; renderLeft(); } };

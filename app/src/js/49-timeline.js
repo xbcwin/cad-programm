@@ -23,7 +23,8 @@ const Timeline = (() => {
   function chipTip(it, i, V) {
     const errs = App.errorsFor(it.id);
     const st = it.suppressed ? ' · unterdrückt' : i >= markerPos() ? ' · nach dem Marker' : '';
-    return `${i + 1}. ${Model.label(it)}${Model.sizeText(it, V) ? ' · ' + Model.sizeText(it, V) : ''}${st}${errs.length ? ' · ' + errs[0].message : ''}`;
+    const ai = it.ai ? ` · ${it.ai.edit ? 'von der KI geändert' : 'von der KI'}: „${it.ai.q}“` : '';
+    return `${i + 1}. ${Model.label(it)}${Model.sizeText(it, V) ? ' · ' + Model.sizeText(it, V) : ''}${st}${ai}${errs.length ? ' · ' + errs[0].message : ''}`;
   }
   function render() {
     if (!el) return;
@@ -39,8 +40,9 @@ const Timeline = (() => {
     items.forEach((it, i) => {
       if (i === mk) track.append(marker);
       const errs = App.errorsFor(it.id);
-      const c = h('button', { type: 'button', class: 'tl-chip' + (it.role === 'hole' ? ' hole' : '') + (selTop.has(it.id) ? ' sel' : '') + (i >= mk ? ' off' : '') + (it.suppressed ? ' sup' : '') + (errs.length && i < mk && !it.suppressed ? ' err' : ''), 'data-tip': chipTip(it, i, V), 'aria-label': chipTip(it, i, V), dataset: { idx: i } });
+      const c = h('button', { type: 'button', class: 'tl-chip' + (it.role === 'hole' ? ' hole' : '') + (selTop.has(it.id) ? ' sel' : '') + (i >= mk ? ' off' : '') + (it.suppressed ? ' sup' : '') + (errs.length && i < mk && !it.suppressed ? ' err' : '') + (it.ai ? ' ai' : ''), 'data-tip': chipTip(it, i, V), 'aria-label': chipTip(it, i, V), 'data-help': it.ai ? 'aiSteps' : null, dataset: { idx: i } });
       c.innerHTML = icon(iconFor(it)); c.append(h('span', { class: 'bar', style: { background: it.role === 'hole' ? 'transparent' : it.color } }));
+      if (it.ai) { const b = h('span', { class: 'ai-badge', 'aria-hidden': 'true' }); b.innerHTML = icon('spark'); c.append(b); }
       c.onclick = (e) => App.select([it.id], { additive: e.shiftKey || e.metaKey || e.ctrlKey });
       c.ondblclick = (e) => { e.preventDefault(); setMarker(i + 1, `Zeitleiste: bis „${Model.label(it)}“`); };
       c.oncontextmenu = (e) => { e.preventDefault(); menu(c, it, i); };
@@ -57,6 +59,7 @@ const Timeline = (() => {
     const add = (ic, label, fn) => { const b = h('button', { type: 'button', class: 'btn ghost', style: { justifyContent: 'flex-start' } }); b.innerHTML = icon(ic) + esc(label); b.onclick = () => { UI.closePop(); fn(); }; box.append(b); };
     box.append(h('div', { class: 'section-h' }, `${i + 1}. ${Model.label(it)}`));
     add('edit', 'Bearbeiten', () => App.select([it.id]));
+    add('help', 'Erklär diesen Schritt', () => Explain.dialog(it.id));
     add('rollback', 'Marker hinter diesen Schritt', () => setMarker(i + 1));
     add('rollback', 'Marker vor diesen Schritt', () => setMarker(i));
     add('suppress', it.suppressed ? 'Wieder aktivieren' : 'Unterdrücken', () => toggleSuppress(it.id));

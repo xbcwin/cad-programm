@@ -592,6 +592,21 @@ const HELP = {
   "tip": "Mehrere Sätze von Maßen speichern und umschalten",
   "hilfe": "Unter „Maße“ ganz oben: „Neue Variante“ merkt sich alle Maße unter einem Namen, z. B. „5 Zoll“. Ändere dann Maße und speichere eine zweite Variante. Mit der Auswahl schaltest du um, „Vergleichen“ zeigt die Unterschiede mit Gewicht und Schub/Gewicht. Weichen die Maße ab, kannst du die aktive Variante überschreiben.",
   "tipp": "Varianten ändern nur die Maße. Neue Teile oder Löcher gelten für alle Varianten."
+ },
+ "explainStep": {
+  "tip": "Lass dir einen Schritt erklären",
+  "hilfe": "Rechtsklick auf einen Schritt in der Zeitleiste oder im Verlauf → „Erklär diesen Schritt“ (oder das ?-Symbol rechts neben dem Namen). Tracery sagt dir, was der Schritt baut, wie groß er ist, an welchen Maßen er hängt und welche Löcher er schneidet. In Claude kann die KI es noch genauer erklären.",
+  "tipp": "Hängt ein Schritt an einem Maß, wandert er mit, wenn du das Maß änderst – genau das zeigt dir die Erklärung."
+ },
+ "weakSpots": {
+  "tip": "Schwachstellen suchen: Lochrand, dünne Wände, Arme",
+  "hilfe": "Rechts unter „Projekt“ → „Schwachstellen suchen“: Tracery prüft mit Faustregeln, ob Löcher zu nah am Rand oder aneinander liegen, ob Wände für ihr Material zu dünn sind und ob die Arme einer Drohne dick genug sind. „Zeigen“ markiert die Stelle mit roten Ringen. In Claude erklärt die KI die Funde und schlägt Verbesserungen vor, die du mit „Umsetzen“ übernimmst.",
+  "tipp": "Faustregeln ersetzen keinen Test: Grün heißt nur, dass nichts Auffälliges gefunden wurde."
+ },
+ "aiSteps": {
+  "tip": "Schritte, die die KI gebaut hat",
+  "hilfe": "Was der KI-Helfer baut, wird ein normaler Schritt in der Zeitleiste – mit einem kleinen Funken-Symbol. Überfahr ihn, dann siehst du, auf welche Bitte er entstand. Du kannst ihn wie jeden Schritt ändern, unterdrücken oder mit Strg Z zurücknehmen.",
+  "tipp": "Schreib unten in die Zeile, was du willst, z. B. „Mach die Arme 6 mm dick“ oder „Bau mir einen 5-Zoll-Deadcat mit DJI O4“."
  }
 };
 

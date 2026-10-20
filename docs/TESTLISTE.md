@@ -1,6 +1,6 @@
 # Testliste
 
-Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 13 (20.10.2026).
+Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 14 (20.10.2026).
 
 **[x]** = automatisch geprüft mit `tests/klicktest.py` (echter Browser, echte Klicks) · **[ ]** = noch von Hand ansehen
 
@@ -25,7 +25,8 @@ Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 13 (20.10
 | Drohnen-Vorlagen | 8 | 5 | Sieht es wie eine Drohne aus? Propellerkreise, STEP im anderen Programm |
 | Frame-Assistent und Drohnen-Teile | 8 | 5 | Klappfenster übersichtlich? Deadcat richtig? Kopfzeile mit Symbolen |
 | Drohnen-Check, DXF, Varianten | 11 | 9 | DXF in der Fräs-Software, Check-Fenster und Varianten-Tabelle bei schmalem Fenster |
-| **Gesamt** | **145** | **118** | **27 Punkte, dazu ein Blick auf Animationen** |
+| KI-Schritte, Erklären, Schwachstellen | 12 | 9 | Echte KI in Claude, Ringe und KI-Fenster, Quellen-Links |
+| **Gesamt** | **157** | **127** | **30 Punkte, dazu ein Blick auf Animationen** |
 
 Wichtig: Automatisch geprüft heißt „funktioniert in Chromium unter Linux“. Safari auf dem Mac, Touch auf dem iPad und echte Grafikkarten sieht nur ein Test von Hand.
 
@@ -362,7 +363,7 @@ Nichts hiervon ändert das Modell – kein Schritt in der Zeitleiste, nichts in 
 
 - [x] **Frame-Assistent**
   Schritte: 1. Startseite → „Frame-Assistent“. 2. 3 Zoll, Deadcat, Videosystem DJI O4. 3. „Rahmen bauen“.
-  Erwartet: Erst 225 mm für 5"; dann mindestens 15 mm Luft zwischen den Propellern; der Rahmen hat Armwinkel 60° vorne und 35° hinten, Stack 20, Motorlochkreis 12, Kamerabreite 12,36 und Platzhalter für DJI-O4-Sender und -Kamera, keine Fehler.
+  Erwartet: Erst 225 mm für 5"; dann mindestens 15 mm Luft zwischen den Propellern; der Rahmen hat Armwinkel 60° vorne und 35° hinten, Stack 20, Motorlochkreis 12, Kamerabreite 12,36 und Platzhalter für DJI-O4-Sender und -Kamera sowie einen Akku 4S 450 mAh, keine Fehler.
 - [x] **Warnungen**
   Schritte: 1. Im Assistenten Achsabstand 150 eintippen. 2. Motor 1103 wählen.
   Erwartet: Erst „Die Propeller überlappen sich …“, dann „Motor 1103 passt eher zu …“.
@@ -404,7 +405,7 @@ Nichts hiervon ändert das Modell – kein Schritt in der Zeitleiste, nichts in 
   Erwartet: „Ineinander: Unterteil und Stack …“ gelb; „Zeigen“ wählt die beiden Teile aus.
 - [x] **Frame-Assistent besteht den Check**
   Schritte: 1. Frame-Assistent: 3" mit DJI O4 Pro, dann 5" Deadcat mit DJI O3, dann 7" mit Walksnail bauen. 2. Jeweils Check.
-  Erwartet: Keine roten oder gelben Zeilen bei Propellern, Teilen und Schwerpunkt (beim 3" ohne Akku nur ein Hinweis).
+  Erwartet: Keine roten oder gelben Zeilen bei Propellern, Teilen und Schwerpunkt (3" jetzt mit Akku 4S 450 mAh).
 - [x] **Platten als DXF**
   Schritte: 1. 5"-Vorlage → „Exportieren“. 2. STEP abhaken, „Platten als DXF“ anhaken. 3. „Als ZIP speichern“.
   Erwartet: Im ZIP der Ordner DXF mit „Unterteil – 5 mm.dxf“ und „Oberplatte – 2 mm.dxf“; das Unterteil hat 28 Löcher, das Wellenloch vorne rechts liegt bei X 79,55 / Y −79,55.
@@ -420,6 +421,47 @@ Nichts hiervon ändert das Modell – kein Schritt in der Zeitleiste, nichts in 
 - [ ] **Check-Fenster und Varianten sehen gut aus**
   Schritte: 1. Check bei schmalem Fenster öffnen. 2. Varianten mit langem Namen anlegen.
   Erwartet: Nichts abgeschnitten, Knöpfe in einer Reihe, Tabelle scrollt seitlich, wenn sie zu breit ist.
+
+## KI-Schritte, Erklären, Schwachstellen (neu in Sitzung 14)
+
+Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische Test spielt die KI mit vorbereiteten Antworten nach.
+
+- [x] **KI-Schritte sind markiert**
+  Schritte: 1. Leeres Projekt. 2. Unten eintippen: „Bau eine Platte 60 × 40 × 4 mit einem Loch“, Enter.
+  Erwartet: Ein Schritt in der Zeitleiste mit kleinem Funken; beim Überfahren steht „von der KI: …“ mit deiner Bitte; im Verlauf ebenfalls ein Funke.
+- [x] **KI: Muster und Material**
+  Schritte: 1. „Mach vier Löcher im Kreis und nimm PETG“. 2. Im KI-Fenster „Rückgängig“.
+  Erwartet: Vier Löcher im Kreis, Material PETG; nach „Rückgängig“ wieder ein Loch und das Projekt-Material.
+- [x] **KI baut einen Rahmen**
+  Schritte: 1. „Bau mir einen 5-Zoll-Deadcat mit DJI O4 und 6-mm-Armen und GPS“.
+  Erwartet: Neues Projekt mit Deadcat, Armdicke 6, GPS als Kaufteil; im KI-Fenster das Ergebnis des Drohnen-Checks ohne Rot.
+- [x] **KI-Fehler verständlich**
+  Schritte: 1. Viele Anfragen schnell hintereinander (oder Kontingent leer).
+  Erwartet: „Gerade sind zu viele Anfragen unterwegs …“, am Modell ändert sich nichts.
+- [x] **Erklär diesen Schritt**
+  Schritte: 1. 5"-Vorlage. 2. Rechtsklick auf den ersten Schritt der Zeitleiste → „Erklär diesen Schritt“. 3. Rechtsklick im Verlauf auf „Oberplatte“. 4. Akku anklicken, rechts das ?-Symbol.
+  Erwartet: „Schritt 1 von 10“, „Aus 9 Körpern werden 28 Löcher geschnitten“, die Maße (Achsabstand …), Material und Gewicht; beim Akku „Kaufteil mit festem Gewicht“.
+- [x] **Erklären mit KI**
+  Schritte: 1. Im Erklär-Fenster „Genauer von der KI erklären“.
+  Erwartet: Grüner Kasten mit Erklärung und Tipp.
+- [x] **Schwachstellen: Vorlage und fieses Loch**
+  Schritte: 1. 5"-Vorlage → rechts „Schwachstellen suchen“. 2. Ein M3-Loch 2 mm vom Rand der Oberplatte setzen, Armdicke 3. 3. Noch mal suchen, beim Loch „Zeigen“.
+  Erwartet: Erst „Keine Schwachstellen gefunden“; dann rot „Löcher nah am Rand – Oberplatte“ (0,3 mm Material) und gelb „Dünne Arme“; „Zeigen“ fährt heran und zeigt einen roten Ring.
+- [ ] **Quellen im Schwachstellen-Fenster**
+  Schritte: 1. Schwachstellen-Fenster öffnen, unten auf eine Quelle klicken.
+  Erwartet: Die Seite öffnet sich in einem neuen Tab.
+- [x] **Schwachstellen beheben**
+  Schritte: 1. „Armdicke auf 5 mm“. 2. „Von der KI erklären und verbessern lassen“ → „Umsetzen“.
+  Erwartet: Armdicke 5; der Vorschlag wird ein markierter KI-Schritt; danach keine Schwachstellen mehr.
+- [x] **Hilfetexte**
+  Schritte: 1. Maus länger auf das ?-Symbol am Namen, auf „Schwachstellen suchen“ und auf einen KI-Schritt.
+  Erwartet: Anleitung mit Tipp.
+- [ ] **Echte KI in Claude**
+  Schritte: 1. Tracery in Claude öffnen. 2. „Mach die Arme 6 mm dick und prüf die Drohne“. 3. „Erklär diesen Schritt“ mit KI. 4. Schwachstellen mit KI.
+  Erwartet: Sinnvolle Antworten auf Deutsch, Änderungen als markierte Schritte, nichts Erfundenes in der Erklärung.
+- [ ] **Ringe und Fenster sehen gut aus**
+  Schritte: 1. Schwachstelle „Zeigen“ bei dunklem und hellem Design. 2. KI-Fenster offen lassen und die Zeitleiste bedienen.
+  Erwartet: Ring gut sichtbar, KI-Fenster verdeckt die Zeitleiste nicht.
 
 ## Notizstift (neu)
 

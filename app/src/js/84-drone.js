@@ -35,13 +35,13 @@ const DroneTpl = (() => {
   const PY = (sy) => sg(sy, MY(sy)) + SHIFT, PY2 = (sy) => sg(sy, MY(sy) + '/2') + SHIFT;
   // Bolzen vorne hinter der Kamera (lange HD-Kameras schieben sie nach hinten), hinten aus dem Propellerkreis
   const frontOff = (camL) => Math.max(22, Math.ceil((8 + (camL || 18) / 2 + 3.5) * 2) / 2);
-  const SX = 'Plattenbreite/2 - 4';
+  const SX = 'Plattenbreite/2 - 4.5';   // Lochmitte 4,5 mm vom Rand: mehr als 1,2 × Lochdurchmesser (M3)
   const SYof = (fo) => (sy) => (sy < 0 ? `Plattenlänge/2 - ${fo}` : 'Plattenlänge/2 - 16');
 
   // ---------- Auswahl für den Frame-Assistenten ----------
   const SIZES = {
-    3: { Armbreite: 8, Armdicke: 3, Plattenbreite: 30, Plattenlänge: 90, Plattendicke: 1.5, Bolzenhöhe: 20, stack: 20, motor: '1404', akku: null, prop: 2 },
-    4: { Armbreite: 10, Armdicke: 4, Plattenbreite: 34, Plattenlänge: 100, Plattendicke: 2, Bolzenhöhe: 22, stack: 20, motor: '2004', akku: null, prop: 3 },
+    3: { Armbreite: 8, Armdicke: 3, Plattenbreite: 30, Plattenlänge: 90, Plattendicke: 1.5, Bolzenhöhe: 20, stack: 20, motor: '1404', akku: '4S 450 mAh', prop: 2 },
+    4: { Armbreite: 10, Armdicke: 4, Plattenbreite: 34, Plattenlänge: 100, Plattendicke: 2, Bolzenhöhe: 22, stack: 20, motor: '2004', akku: '4S 650 mAh', prop: 3 },
     5: { Armbreite: 13, Armdicke: 5, Plattenbreite: 42, Plattenlänge: 130, Plattendicke: 2, Bolzenhöhe: 25, stack: 30.5, motor: '2207', akku: '6S 1300 mAh', prop: 4.5 },
     6: { Armbreite: 14, Armdicke: 5.5, Plattenbreite: 44, Plattenlänge: 140, Plattendicke: 2, Bolzenhöhe: 28, stack: 30.5, motor: '2306', akku: '6S 1500 mAh', prop: 6 },
     7: { Armbreite: 15, Armdicke: 6, Plattenbreite: 45, Plattenlänge: 150, Plattendicke: 2.5, Bolzenhöhe: 30, stack: 30.5, motor: '2806.5', akku: '6S 1500 mAh', prop: 7 },
@@ -80,7 +80,7 @@ const DroneTpl = (() => {
   function bodyGap(A, zoll, wv, wh, S, camW, camL) {
     const L = A / 2, r = (zoll * 25.4) / 2, s = (A / 4) * (Math.cos(R(wv)) - Math.cos(R(wh)));
     const mot = [[L * Math.sin(R(wv)), -L * Math.cos(R(wv)) + s], [L * Math.sin(R(wh)), L * Math.cos(R(wh)) + s]];
-    const yc = -(S.Plattenlänge / 2 - 8), sx = S.Plattenbreite / 2 - 4;
+    const yc = -(S.Plattenlänge / 2 - 8), sx = S.Plattenbreite / 2 - 4.5;
     const pts = [[camW / 2, yc - camL / 2, 0], [camW / 2 + 2.2, yc - 6, 0], [sx, -(S.Plattenlänge / 2 - frontOff(camL)), 2.5], [sx, S.Plattenlänge / 2 - 16, 2.5]];
     return Math.min(...mot.flatMap(([x, y]) => pts.map(([px, py, pr]) => Math.hypot(x - px, y - py) - pr - r)));
   }

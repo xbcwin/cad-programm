@@ -1,0 +1,163 @@
+{
+  "_hinweis": "Entwurf Gemini (Prompt H), von Claude am 20.10.2026 gegen das Verhalten von Tracery geprüft; 19 Sätze angepasst.",
+  "box": {
+    "was": "Erstellt einen einfachen Kasten mit frei wählbarer Länge, Breite und Höhe.",
+    "wozu": "Super als Basis für eine Grundplatte aus Carbon oder eine einfache Akku-Auflage.",
+    "achtung": "Mach Platten nicht zu dünn, sonst brechen sie beim ersten Crash sofort durch."
+  },
+  "cylinder": {
+    "was": "Erzeugt eine runde Säule mit festem Durchmesser und beliebiger Höhe.",
+    "wozu": "Ideal für stabile Abstandshalter (Standoffs) zwischen zwei Frame-Platten.",
+    "achtung": "Prüfe, ob der Zylinder nicht den Platz für deine Propeller blockiert."
+  },
+  "tube": {
+    "was": "Erstellt ein rundes Rohr, das innen komplett hohl ist.",
+    "wozu": "Perfekt als leichtes Schutzröhrchen für deine Antennen oder dünne Motorkabel.",
+    "achtung": "Wähle Außendurchmesser und Wand so, dass innen das Kabel samt Stecker durchpasst."
+  },
+  "sphere": {
+    "was": "Formt einen komplett runden Ball in deiner gewünschten Größe.",
+    "wozu": "Nützlich für weiche Landefüße an den Armen oder als Gelenk für eine Kamerahalterung.",
+    "achtung": "Eine Kugel liegt nur auf einem Punkt auf – schneide sie zum Drucken unten etwas flach ab."
+  },
+  "hemisphere": {
+    "was": "Erstellt eine halbe Kugel mit einer flachen Unterseite.",
+    "wozu": "Wird oft als aerodynamische Kuppel (Canopy) über dem Stack oder der Kamera genutzt.",
+    "achtung": "Höhle sie mit „Wandstärke“ aus, sonst ist darunter kein Platz für die Elektronik."
+  },
+  "cone": {
+    "was": "Baut einen Kegel, der unten rund ist und nach oben spitz zuläuft.",
+    "wozu": "Gut für windschnittige Spitzen an schnellen Racern oder als Zentrierhilfe.",
+    "achtung": "Ganz spitze Enden brechen leicht ab, runde die Spitze oben lieber etwas ab."
+  },
+  "pyramid": {
+    "was": "Erzeugt einen eckigen Körper, der nach oben hin spitz zusammenläuft.",
+    "wozu": "Praktisch für kantige Schutzhauben oder coole Design-Elemente auf dem Frame.",
+    "achtung": "Achte darauf, dass innen genug Platz für die Ecken deiner Platinen bleibt."
+  },
+  "torus": {
+    "was": "Formt einen runden Ring, der aussieht wie ein kleiner Donut oder Reifen.",
+    "wozu": "Perfekt als runder Propellerschutz (Propguard) für kleine Whoop-Drohnen.",
+    "achtung": "Mach den Ring nicht zu dick, sonst wird deine Drohne schnell viel zu schwer."
+  },
+  "prism": {
+    "was": "Erstellt eine Säule mit mehreren Ecken, zum Beispiel ein Sechseck.",
+    "wozu": "Ideal für sechseckige Abstandshalter, die man mit einem Maulschlüssel festhalten kann.",
+    "achtung": "Der Durchmesser zählt hier von Ecke zu Ecke, nicht von Fläche zu Fläche – wichtig fürs Schlüsselmaß."
+  },
+  "wedge": {
+    "was": "Baut einen schrägen Keil wie eine kleine Sprungschanze.",
+    "wozu": "Gut als schräge Kamera-Halterung, um den Kamerawinkel einzustellen.",
+    "achtung": "Ist der Winkel zu steil, siehst du beim langsamen Schweben nur noch den Himmel."
+  },
+  "extrude": {
+    "was": "Zieht eine flache 2D-Zeichnung in die Höhe, sodass ein 3D-Körper entsteht.",
+    "wozu": "Damit machst du aus deiner flachen Zeichnung eine echte Carbon-Armplatte.",
+    "achtung": "Deine Skizze muss komplett geschlossen sein, sonst kann sie nicht hochgezogen werden."
+  },
+  "revolve": {
+    "was": "Dreht ein flaches Profil im Kreis um eine Achse und formt so einen runden Körper.",
+    "wozu": "Super für Propeller-Spinner, Hülsen oder runde Antennenhalter.",
+    "achtung": "Die Zeichnung darf die Drehachse nicht kreuzen, sonst überschneidet sich das Bauteil."
+  },
+  "group": {
+    "was": "Verschmilzt mehrere Einzelteile und zieht alle Loch-Körper davon ab.",
+    "wozu": "Verbindet einzelne Arme und die Mittelplatte zu einem fertigen, gelochten Drohnen-Frame.",
+    "achtung": "Löcher in einer Gruppe schneiden nur Körper derselben Gruppe – zieh fehlende Teile im Verlauf hinein."
+  },
+  "hole": {
+    "was": "Verwandelt einen Körper in ein Werkzeug zum Ausschneiden – du siehst ihn gestreift.",
+    "wozu": "Schneidet zum Beispiel große Fenster in die Deckplatte, um Gewicht zu sparen.",
+    "achtung": "Ein Loch schneidet nur, was es berührt: Lass es oben und unten etwas überstehen, damit es sauber durchgeht."
+  },
+  "pattern_rect": {
+    "was": "Kopiert ein Teil mehrfach in geraden Reihen und Spalten nebeneinander.",
+    "wozu": "Erstellt blitzschnell Lüftungsschlitze zur Kühlung über deinem heißen Video-Sender.",
+    "achtung": "Lass genug Material zwischen den Kopien stehen, sonst bricht das Gitter leicht durch."
+  },
+  "pattern_circ": {
+    "was": "Verteilt Kopien eines Bauteils gleichmäßig im Kreis um einen Mittelpunkt.",
+    "wozu": "Perfekt, um aus einem einzelnen Drohnenarm sofort vier oder sechs Arme zu machen.",
+    "achtung": "Leg den Mittelpunkt genau fest, sonst sitzen die Kopien schief zur Rahmenmitte."
+  },
+  "mirror": {
+    "was": "Erstellt eine spiegelverkehrte Kopie deines Bauteils auf der gegenüberliegenden Seite.",
+    "wozu": "Baue nur die linke Seite der Kamerahalterung und spiegle sie einfach nach rechts.",
+    "achtung": "Wähle die richtige Spiegelebene, sonst klebt die Kopie plötzlich am falschen Ort."
+  },
+  "split": {
+    "was": "Schneidet einen Körper an einer flachen Ebene in zwei getrennte Teile durch.",
+    "wozu": "Teilt eine komplexe Haube in Ober- und Unterteil, damit du sie einfacher drucken kannst.",
+    "achtung": "Überlege dir vorher, wie du die geteilten Hälften später wieder zusammenschraubst."
+  },
+  "intersect": {
+    "was": "Behält nur genau den Bereich übrig, in dem sich zwei Körper überschneiden.",
+    "wozu": "Formt einen runden Kamera-Schutz, der exakt in die schräge Front des Frames passt.",
+    "achtung": "Berühren sich die beiden Ausgangskörper gar nicht, bleibt am Ende nichts übrig."
+  },
+  "shell": {
+    "was": "Höhlt einen massiven Körper von innen aus und lässt nur eine bestimmte Wandstärke stehen.",
+    "wozu": "Macht aus einem schweren Klotz eine leichte Schutzhülle für deine Action-Cam.",
+    "achtung": "Prüf die Wand mit „Schwachstellen suchen“ – zu dünne Wände brechen beim ersten Crash."
+  },
+  "fillet": {
+    "was": "Rundet scharfe Kanten weich ab, damit Übergänge fließend werden.",
+    "wozu": "Macht die Innenecken an den Carbon-Armen viel stabiler gegen Brüche beim Absturz.",
+    "achtung": "Rundest du die Kante an einer dünnen Platte zu stark ab, entsteht ein Fehler."
+  },
+  "chamfer": {
+    "was": "Schneidet eine scharfe Kante schräg ab, sodass eine kleine flache Schräge entsteht.",
+    "wozu": "Entschärft die Kanten deiner Carbon-Platten, damit sie das Akku-Kabel nicht durchschneiden.",
+    "achtung": "Mach die Schräge bei dünnem Carbon nur ganz klein, sonst bleibt keine gerade Kante übrig."
+  },
+  "screwHole": {
+    "was": "Bohrt ein rundes Loch, das genau für eine bestimmte Schraubengröße wie M2 oder M3 passt.",
+    "wozu": "Unverzichtbar, um Motoren, Stack und Standoffs fest mit dem Frame zu verschrauben.",
+    "achtung": "Nimm die Passung „Mittel“: Das Loch ist dann etwas größer als die Schraube. „Eng“ klemmt leicht."
+  },
+  "nutTrap": {
+    "was": "Schneidet eine sechseckige Tasche aus, in der eine Mutter festsitzt.",
+    "wozu": "Hält die Muttern unter dem Stack fest, damit du beim Schrauben keinen Schlüssel brauchst.",
+    "achtung": "Mach die Tasche nicht zu weit, sonst dreht die Mutter beim Festziehen einfach durch."
+  },
+  "insert": {
+    "was": "Erstellt ein spezielles Loch, in das man ein Messing-Gewinde mit dem Lötkolben einschmilzt.",
+    "wozu": "Gibt dir super stabile Metallgewinde direkt in deinen 3D-gedruckten Kunststoffteilen.",
+    "achtung": "Das Loch muss etwas kleiner als der Einsatz sein, damit das Plastik ihn gut festhält."
+  },
+  "slotHole": {
+    "was": "Bohrt ein längliches Loch, in dem eine Schraube hin und her geschoben werden kann.",
+    "wozu": "Super für Motorhalterungen, damit verschiedene Motoren auf denselben Arm passen.",
+    "achtung": "Zieh die Schrauben im Langloch später gut fest und nutze Unterlegscheiben gegen Verrutschen."
+  },
+  "holePattern": {
+    "was": "Erzeugt automatisch vier passende Schraubenlöcher im Standard-Abstand für Drohnenteile.",
+    "wozu": "Bohrt mit einem Klick die exakten Löcher für einen 20x20mm-Stack oder einen Motor.",
+    "achtung": "Prüfe vorab genau, ob dein Flugcontroller 20x20 oder 30,5x30,5 Millimeter Lochabstand hat."
+  },
+  "zipTie": {
+    "was": "Schneidet zwei Schlitze für einen Kabelbinder in dein Bauteil.",
+    "wozu": "Ideal, um den kleinen Funk-Empfänger oder den Kondensator sicher am Frame festzuzurren.",
+    "achtung": "Setze Schlitze nicht zu nah an den Rand der Carbon-Platte, sonst reißt der Steg aus."
+  },
+  "snapHook": {
+    "was": "Baut einen kleinen federnden Haken, der an einer Kante einrasten kann.",
+    "wozu": "Perfekt für einen Akkuschacht oder eine Haube, die du ohne Werkzeug öffnen willst.",
+    "achtung": "Drucke den Haken liegend, damit die Schichten längs laufen – sonst bricht er beim ersten Biegen ab."
+  },
+  "hinge": {
+    "was": "Erzeugt ein bewegliches Gelenk, mit dem du zwei Bauteile klappbar verbindest.",
+    "wozu": "Nützlich für eine aufklappbare Haube oder einen Deckel am Akkufach.",
+    "achtung": "Lass im Gelenk etwas Spiel (Einstellung „Spalt“), sonst verschmilzt es beim Drucken."
+  },
+  "gear": {
+    "was": "Erstellt ein rundes Rad mit Zähnen am Rand, das in ein anderes Zahnrad greift.",
+    "wozu": "Brauchst du für coole Extras wie eine Kamera, die sich im Flug per Knopfdruck neigt.",
+    "achtung": "Beide Zahnräder brauchen exakt die gleiche Zahngröße (Modul), sonst klemmen sie sofort."
+  },
+  "buy": {
+    "was": "Fügt ein fertiges Teil wie Kamera, Motor oder Akku als Platzhalter mit echtem Gewicht aus dem Datenblatt ein.",
+    "wozu": "Zeigt dir sofort, ob alle Teile in den Frame passen und wo der Schwerpunkt der Drohne liegt.",
+    "achtung": "Beim DXF bleiben Kaufteile von selbst weg; für STL blende sie vor dem Export aus."
+  }
+}

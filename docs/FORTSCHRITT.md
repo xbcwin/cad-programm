@@ -1,6 +1,6 @@
 # Fortschritt
 
-Stand: 20.10.2026 · nach Sitzung 13 von 14
+Stand: 20.10.2026 · nach Sitzung 14 von 14
 
 ## Erledigt
 
@@ -45,7 +45,7 @@ Stand: 20.10.2026 · nach Sitzung 13 von 14
 - [x] Neuer Name beim Maß (z. B. `breite`) wird automatisch unter „Maße“ angelegt
 - [x] Formel-Beispiele unter „Maße“ (Gemini, alle 12 mit Tracerys Rechner nachgeprüft), Beispiel-Maße per Klick
 - [x] Umbenennen / Entfernen eines Maßes wirkt jetzt auch auf Skizzen-Maße
-- [x] Automatischer Klicktest `tests/klicktest.py`: 88 Durchläufe (alle grün), 118 von 145 Punkten der Testliste automatisch geprüft
+- [x] Automatischer Klicktest `tests/klicktest.py`: 94 Durchläufe (alle grün), 127 von 157 Punkten der Testliste automatisch geprüft
 - [x] Aufgeräumt: Programm liegt jetzt in 28 Quelldateien unter `app/src/`, `tools/build.py` baut daraus `app/index.html`
 - [x] Notizstift (Taste N): freie Striche, die am Modell kleben, Textnotizen, 6 Farben, 3 Dicken, Radierer, ein-/ausblendbar – ohne technische Bedeutung
 - [x] Symbole für den Notizstift (Gemini, geprüft); Augen-Knopf rechts im Bild blendet Notizen aus, sobald es welche gibt
@@ -110,6 +110,18 @@ Stand: 20.10.2026 · nach Sitzung 13 von 14
 - [x] Varianten (oben unter „Maße“): alle Maße unter einem Namen speichern, umschalten (mit Rückgängig), Abweichung wird angezeigt und lässt sich überschreiben; „Vergleichen“ zeigt die Maße, die sich unterscheiden, mit Gewicht, Schub/Gewicht und Luft zwischen den Propellern
 - [x] Behoben: Versionen-Vergleich und Varianten rechneten Lagen mit Formeln (z. B. Motorposition) mit den Maßen des aktuellen Stands statt des verglichenen
 - [x] Neues Bauteil `app/src/js/86-dronecheck.js`, Kern-Befehl `clashes`
+- [x] KI-Schritte: Was der KI-Helfer baut oder ändert, ist ein normaler Schritt in Zeitleiste und Verlauf mit Funken-Symbol; beim Überfahren steht die Bitte dabei, „Rückgängig“ im KI-Fenster oder Strg Z nimmt die ganze Antwort zurück
+- [x] Der KI-Helfer kann jetzt auch: Kreis- und Rechteckmuster, Spiegeln, Material, festes Gewicht, Kaufteile aus der Bibliothek, Lochbilder und Kabelbinder-Schlitze, einen kompletten Rahmen über den Frame-Assistenten („Bau mir einen 5-Zoll-Deadcat mit DJI O4“) und danach den Drohnen-Check; er kennt die Drohnen-Maße und das letzte Check-Ergebnis
+- [x] „Erklär diesen Schritt“ (Rechtsklick in Zeitleiste oder Verlauf, ?-Knopf am Namen, Eingabezeile): Art, Größe, wie viele Löcher geschnitten werden (Muster zählen mit), an welchen Maßen der Schritt hängt, Material und Gewicht, Rundungen, ob er unterdrückt ist oder hinter dem Marker liegt und ob er von der KI kommt – ohne KI; in Claude erklärt die KI zusätzlich mit Tipp
+- [x] Schwachstellen-Analyse (rechts unter „Projekt“ oder Eingabezeile): Löcher zu nah am Rand oder aneinander (von oben gesehen, je Platte), zu dünne Stellen je Material (Druck, Carbon, Metall, Holz), zu dünne Arme je Propellergröße, dazu die roten und gelben Punkte des Drohnen-Checks; „Zeigen“ markiert die Stelle mit roten Ringen und fährt heran; feste Verbesserungen mit einem Klick (Armdicke); in Claude erklärt die KI die Funde und schlägt bis zu drei Verbesserungen vor, die „Umsetzen“ als markierte Schritte übernimmt
+- [x] Faustregeln mit Quellen (Gemini Prompt I, 21 Angaben, an den Quellen geprüft, `app/data/faustregeln.json`): Armdicke je Größe – Freestyle 3″ 3 mm, 4″ 4 mm, 5″ 5 mm, 7″ 6 mm, Race eine Stufe dünner (fpvdroneframe.com, 6″ geschätzt); tragende Druckteile ab 1,5 mm, TPU ab 1,5 mm (3D-Demand); Wand um Gewindeeinsätze M2 1,5 mm, M3 2 mm (3Dbite); Lochrand: Hersteller empfehlen für Carbon 2,5 × Durchmesser und 4 × von Mitte zu Mitte (Yongxian) – FPV-Motorauflagen liegen darunter, deshalb meldet Tracery erst unter 1,2 × (Untergrenze aus dem Stahlbau) und nennt den Richtwert im Text; Quellen stehen im Schwachstellen-Fenster
+- [x] Arme zwischen Race-Untergrenze und Freestyle-Empfehlung erscheinen als Hinweis (blau), darunter gelb oder rot
+- [x] Kleine Akkus (Gemini Prompt J, 5 Typen an Shopseiten geprüft): 4S 450 / 550 / 650 / 850 mAh und 6S 850 mAh mit Maßen und Gewicht; 3″ bekommt jetzt 4S 450, 4″ 4S 650 – damit prüft der Schwerpunkt-Check auch dort mit Akku
+- [x] Schub 2806.5: T-Motor F90 1300 KV, 2360 g mit HQ 7040-3 (Testtabelle, Prompt J geprüft); für 2306, 1103 und 1202.5 fand sich keine belegbare Schubtabelle
+- [x] Rahmen-Generator: Abstandsbolzen 4,5 statt 4 mm vom Plattenrand (sonst knapp unter 1,2 × Lochdurchmesser); alle 40 Kombinationen bestehen Check und Schwachstellen-Analyse
+- [x] KI-Fenster liegt jetzt über der Zeitleiste statt darauf
+- [x] Erklärtexte je Schritt-Art (Gemini Prompt H, `app/data/schritt-erklaerungen.json`): was, wozu bei Drohnen, worauf achten – 32 Arten, gegen Tracery geprüft, 19 Sätze berichtigt (u. a. schneiden Löcher auf oberster Ebene ohne Gruppe, Kabelbinder sind zwei Schlitze, Prisma-Durchmesser von Ecke zu Ecke)
+- [x] Neues Bauteil `app/src/js/88-aihelp.js`
 
 ## Offen
 
@@ -143,12 +155,12 @@ Fertig.
 - [ ] H-Rahmen und Rahmen mit getrennten Armen (Sandwich)
 - [ ] Weitere Detail-Bausteine: Antennenhalter, XT60-Halter, GoPro-Halter
 - [x] Prüfungen, DXF-Export, Varianten (Sitzung 13)
-- [ ] Kleine Akkus (4S 450–850 mAh) für 3" und 4" in die FPV-Maße, dann prüft der Schwerpunkt-Check auch dort mit Akku
-- [ ] Schubwerte für 2306 und 2806.5 aus einer belegbaren Schubtabelle
+- [ ] Schubwert für 2306 aus einer belegbaren Schubtabelle (bisher nur als Bild beim Händler)
 - [ ] Drohnen-Check auch für Rahmen, die nicht aus dem Assistenten kommen (heute braucht er die Maße Achsabstand, Armwinkel, Propeller)
 
 ### Stufe 5 – KI und Feinschliff
-- [ ] KI-Helfer auf der Zeitleiste (Sitzung 14)
+- [x] KI-Helfer auf der Zeitleiste, „Erklär diesen Schritt“, Schwachstellen-Analyse (Sitzung 14)
+- [ ] Schwachstellen auch für gedruckte Teile genauer: Wand um Schraubenlöcher, Überhänge
 - [ ] 3D-Skizzen, Sweep / Loft, Gelenke, Einsteiger-Oberfläche (ab Sitzung 15)
 
 ### Stufe 6 – Konten und Zusammenarbeit (Idee, nach dem Drohnen-Modul)

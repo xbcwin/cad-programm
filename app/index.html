@@ -352,6 +352,7 @@ body.sketching .timeline{display:none}
 .drag-input small{opacity:.6;font-weight:500}
 .center.has-tl .view-btns{bottom:66px}
 .center.has-tl .axis-gizmo{bottom:62px}
+.center.has-tl .ai-panel{bottom:64px;max-height:min(42vh,360px)}
 /* ---------- Protokoll ---------- */
 .log-tools{display:flex;gap:4px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
 .log-tools .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
@@ -602,6 +603,32 @@ body.sketching .timeline{display:none}
 .vtable th{color:var(--muted);font-weight:600;font-size:12px}
 .vtable tr.on td{background:var(--surface-2)}
 .section.variants .btn-row{margin-top:8px;flex-wrap:wrap}
+/* KI-Schritte, Erklären, Schwachstellen */
+.tl-chip .ai-badge{position:absolute;top:-5px;left:-5px;width:15px;height:15px;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;border:2px solid var(--surface)}
+.tl-chip .ai-badge svg{width:9px;height:9px}
+.node .ai-mark{display:grid;place-items:center;color:var(--accent);flex:none}
+.node .ai-mark svg{width:13px;height:13px}
+.prop-title #item-explain{flex:none}
+.explain-where{font:600 11.5px/1 var(--font-cond);letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-bottom:6px}
+.explain-list{margin:0;padding-left:18px;display:grid;gap:6px;font-size:14px;line-height:1.5;color:var(--ink-2)}
+.explain-list li.ex-was{color:var(--ink);font-weight:600;list-style:none;margin-left:-18px}
+.explain-list li.ex-ki{color:var(--accent)}
+.explain-list li.ex-status{color:var(--warn)}
+.explain .btn-row,.weak .btn-row{margin-top:12px}
+.explain-ai{display:grid;gap:8px;margin-top:8px}
+.ai-say{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;background:var(--accent-soft);font-size:14px;line-height:1.5}
+.ai-say>svg{width:17px;height:17px;flex:none;color:var(--accent);margin-top:2px}
+.ai-say p{margin:0 0 6px}.ai-say p:last-child{margin:0}
+.ai-say .tip{color:var(--ink-2)}
+.ai-sug{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;font-size:14px}
+.chk-btns{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;flex:none;max-width:45%}
+.weak .hint-box{margin-top:10px}
+.ai-check{display:grid;gap:6px}
+#proj-weak-sec .chk-list{margin-bottom:8px}
+.chk-list.compact .grow>span{display:none}
+.props .chk-row{flex-wrap:wrap}
+.props .chk-btns{max-width:none;width:100%;justify-content:flex-start;padding-left:32px}
+.explain-list li.ex-achtung{color:var(--ink-2);list-style:none;margin-left:-18px;padding:6px 10px;border-left:3px solid var(--warn);background:var(--warn-soft);border-radius:0 6px 6px 0}
 </style>
 <div id="app">
   <header class="topbar">
@@ -1263,6 +1290,21 @@ const HELP = {
   "tip": "Mehrere Sätze von Maßen speichern und umschalten",
   "hilfe": "Unter „Maße“ ganz oben: „Neue Variante“ merkt sich alle Maße unter einem Namen, z. B. „5 Zoll“. Ändere dann Maße und speichere eine zweite Variante. Mit der Auswahl schaltest du um, „Vergleichen“ zeigt die Unterschiede mit Gewicht und Schub/Gewicht. Weichen die Maße ab, kannst du die aktive Variante überschreiben.",
   "tipp": "Varianten ändern nur die Maße. Neue Teile oder Löcher gelten für alle Varianten."
+ },
+ "explainStep": {
+  "tip": "Lass dir einen Schritt erklären",
+  "hilfe": "Rechtsklick auf einen Schritt in der Zeitleiste oder im Verlauf → „Erklär diesen Schritt“ (oder das ?-Symbol rechts neben dem Namen). Tracery sagt dir, was der Schritt baut, wie groß er ist, an welchen Maßen er hängt und welche Löcher er schneidet. In Claude kann die KI es noch genauer erklären.",
+  "tipp": "Hängt ein Schritt an einem Maß, wandert er mit, wenn du das Maß änderst – genau das zeigt dir die Erklärung."
+ },
+ "weakSpots": {
+  "tip": "Schwachstellen suchen: Lochrand, dünne Wände, Arme",
+  "hilfe": "Rechts unter „Projekt“ → „Schwachstellen suchen“: Tracery prüft mit Faustregeln, ob Löcher zu nah am Rand oder aneinander liegen, ob Wände für ihr Material zu dünn sind und ob die Arme einer Drohne dick genug sind. „Zeigen“ markiert die Stelle mit roten Ringen. In Claude erklärt die KI die Funde und schlägt Verbesserungen vor, die du mit „Umsetzen“ übernimmst.",
+  "tipp": "Faustregeln ersetzen keinen Test: Grün heißt nur, dass nichts Auffälliges gefunden wurde."
+ },
+ "aiSteps": {
+  "tip": "Schritte, die die KI gebaut hat",
+  "hilfe": "Was der KI-Helfer baut, wird ein normaler Schritt in der Zeitleiste – mit einem kleinen Funken-Symbol. Überfahr ihn, dann siehst du, auf welche Bitte er entstand. Du kannst ihn wie jeden Schritt ändern, unterdrücken oder mit Strg Z zurücknehmen.",
+  "tipp": "Schreib unten in die Zeile, was du willst, z. B. „Mach die Arme 6 mm dick“ oder „Bau mir einen 5-Zoll-Deadcat mit DJI O4“."
  }
 };
 
@@ -4359,9 +4401,9 @@ function partSVG(def) {
 // ---- 41-dronelib.js ----
 // ================= Drohnen-Bibliothek: Standardmaße und Kaufteile =================
 // Die Daten kommen beim Bauen aus app/data (fpv-masse.json, bauteile.json – Entwurf Gemini, geprüft).
-const FPV_DATA = {"_hinweis":"FPV-Standardmaße (Entwurf Gemini, Prompt E; geprüft und ergänzt). Alle Maße in mm. 'ca': true heißt: Hersteller weichen spürbar ab – nur als Startwert verwenden. Stack-Lochbilder sind Quadrate (Kantenlänge), Motor-Lochbilder sind Lochkreise (Durchmesser, 4 Löcher im 90°-Abstand). Geprüft am 19.10.2026 u. a. mit Herstellerangaben (BetaFPV 1103, iFlight XING 2806.5).","stack":[{"name":"16×16","quadrat_mm":16.0,"schraube":"M2","daempfer_d_mm":4.0,"platine_mm":21.0,"ca":true},{"name":"20×20","quadrat_mm":20.0,"schraube":"M2 oder M3","daempfer_d_mm":5.5,"platine_mm":28.0,"ca":true,"notiz":"ältere Boards M2, viele neuere M3 – vor dem Bohren am Board nachsehen"},{"name":"25,5×25,5 (Whoop-/Toothpick-AIO)","quadrat_mm":25.5,"schraube":"M2","daempfer_d_mm":4.5,"platine_mm":32.0,"ca":true},{"name":"30,5×30,5","quadrat_mm":30.5,"schraube":"M3","daempfer_d_mm":6.0,"platine_mm":36.0,"ca":true,"notiz":"Platinen meist 36–38 mm"}],"motoren":[{"stator":"1103","lochkreis_d_mm":[8.5],"loecher":null,"schraube":"M1.6","glocke_d_mm":14.0,"welle_d_mm":1.5,"propeller_zoll":[1.7,3.0],"ca":true,"notiz":"BetaFPV 1103: M1.6 auf Ø 8,5 mm, Propeller 1735 bis 3020"},{"stator":"1404","lochkreis_d_mm":[9.0,12.0],"loecher":4,"schraube":"M2","glocke_d_mm":18.0,"welle_d_mm":1.5,"propeller_zoll":[3.0,4.0],"ca":true},{"stator":"2004","lochkreis_d_mm":[12.0],"loecher":4,"schraube":"M2","glocke_d_mm":24.5,"welle_d_mm":1.5,"propeller_zoll":[3.5,5.0],"ca":true,"notiz":"manche mit 5-mm-Welle (M5)"},{"stator":"2207","lochkreis_d_mm":[16.0],"loecher":4,"schraube":"M3","glocke_d_mm":27.5,"welle_d_mm":5.0,"propeller_zoll":[5.0,5.0],"ca":false},{"stator":"2306","lochkreis_d_mm":[16.0],"loecher":4,"schraube":"M3","glocke_d_mm":28.5,"welle_d_mm":5.0,"propeller_zoll":[5.0,5.0],"ca":false},{"stator":"2806.5","lochkreis_d_mm":[19.0],"loecher":4,"schraube":"M3","glocke_d_mm":35.0,"welle_d_mm":5.0,"propeller_zoll":[6.0,7.0],"ca":true,"notiz":"Glocke je nach Hersteller 33–35 mm (iFlight XING 35,1 mm)"}],"kameras":[{"name":"Nano","breite_mm":14.0,"schraube_seitlich":"M1.4 oder M2","ca":true},{"name":"Micro","breite_mm":19.0,"schraube_seitlich":"M2","ca":true},{"name":"Mini","breite_mm":21.8,"schraube_seitlich":"M2","ca":true},{"name":"Full Size","breite_mm":28.0,"schraube_seitlich":"M2 oder M2.5","ca":true}],"propeller":[{"zoll":3,"durchmesser_mm":76.2,"nabe_mm":[1.5,5.0],"abstand_spitzen_mm":3.0,"ca":true,"notiz":"1,5 mm (T-Mount) für kleine Motoren, 5 mm für M5-Wellen"},{"zoll":4,"durchmesser_mm":101.6,"nabe_mm":[5.0],"abstand_spitzen_mm":4.0,"ca":true},{"zoll":5,"durchmesser_mm":127.0,"nabe_mm":[5.0],"abstand_spitzen_mm":5.0,"ca":false},{"zoll":6,"durchmesser_mm":152.4,"nabe_mm":[5.0],"abstand_spitzen_mm":6.0,"ca":false},{"zoll":7,"durchmesser_mm":177.8,"nabe_mm":[5.0],"abstand_spitzen_mm":8.0,"ca":false}],"akkus":[{"typ":"4S 1300 mAh","l_mm":75.0,"b_mm":35.0,"h_mm":28.0,"gewicht_g":155,"ca":true},{"typ":"4S 1500 mAh","l_mm":76.0,"b_mm":36.0,"h_mm":32.0,"gewicht_g":178,"ca":true},{"typ":"6S 1300 mAh","l_mm":75.0,"b_mm":38.0,"h_mm":39.0,"gewicht_g":215,"ca":true},{"typ":"6S 1500 mAh","l_mm":78.0,"b_mm":39.0,"h_mm":43.0,"gewicht_g":250,"ca":true}]};
+const FPV_DATA = {"_hinweis":"FPV-Standardmaße (Entwurf Gemini, Prompt E; geprüft und ergänzt). Alle Maße in mm. 'ca': true heißt: Hersteller weichen spürbar ab – nur als Startwert verwenden. Stack-Lochbilder sind Quadrate (Kantenlänge), Motor-Lochbilder sind Lochkreise (Durchmesser, 4 Löcher im 90°-Abstand). Geprüft am 19.10.2026 u. a. mit Herstellerangaben (BetaFPV 1103, iFlight XING 2806.5).","stack":[{"name":"16×16","quadrat_mm":16.0,"schraube":"M2","daempfer_d_mm":4.0,"platine_mm":21.0,"ca":true},{"name":"20×20","quadrat_mm":20.0,"schraube":"M2 oder M3","daempfer_d_mm":5.5,"platine_mm":28.0,"ca":true,"notiz":"ältere Boards M2, viele neuere M3 – vor dem Bohren am Board nachsehen"},{"name":"25,5×25,5 (Whoop-/Toothpick-AIO)","quadrat_mm":25.5,"schraube":"M2","daempfer_d_mm":4.5,"platine_mm":32.0,"ca":true},{"name":"30,5×30,5","quadrat_mm":30.5,"schraube":"M3","daempfer_d_mm":6.0,"platine_mm":36.0,"ca":true,"notiz":"Platinen meist 36–38 mm"}],"motoren":[{"stator":"1103","lochkreis_d_mm":[8.5],"loecher":null,"schraube":"M1.6","glocke_d_mm":14.0,"welle_d_mm":1.5,"propeller_zoll":[1.7,3.0],"ca":true,"notiz":"BetaFPV 1103: M1.6 auf Ø 8,5 mm, Propeller 1735 bis 3020"},{"stator":"1404","lochkreis_d_mm":[9.0,12.0],"loecher":4,"schraube":"M2","glocke_d_mm":18.0,"welle_d_mm":1.5,"propeller_zoll":[3.0,4.0],"ca":true},{"stator":"2004","lochkreis_d_mm":[12.0],"loecher":4,"schraube":"M2","glocke_d_mm":24.5,"welle_d_mm":1.5,"propeller_zoll":[3.5,5.0],"ca":true,"notiz":"manche mit 5-mm-Welle (M5)"},{"stator":"2207","lochkreis_d_mm":[16.0],"loecher":4,"schraube":"M3","glocke_d_mm":27.5,"welle_d_mm":5.0,"propeller_zoll":[5.0,5.0],"ca":false},{"stator":"2306","lochkreis_d_mm":[16.0],"loecher":4,"schraube":"M3","glocke_d_mm":28.5,"welle_d_mm":5.0,"propeller_zoll":[5.0,5.0],"ca":false},{"stator":"2806.5","lochkreis_d_mm":[19.0],"loecher":4,"schraube":"M3","glocke_d_mm":35.0,"welle_d_mm":5.0,"propeller_zoll":[6.0,7.0],"ca":true,"notiz":"Glocke je nach Hersteller 33–35 mm (iFlight XING 35,1 mm)"}],"kameras":[{"name":"Nano","breite_mm":14.0,"schraube_seitlich":"M1.4 oder M2","ca":true},{"name":"Micro","breite_mm":19.0,"schraube_seitlich":"M2","ca":true},{"name":"Mini","breite_mm":21.8,"schraube_seitlich":"M2","ca":true},{"name":"Full Size","breite_mm":28.0,"schraube_seitlich":"M2 oder M2.5","ca":true}],"propeller":[{"zoll":3,"durchmesser_mm":76.2,"nabe_mm":[1.5,5.0],"abstand_spitzen_mm":3.0,"ca":true,"notiz":"1,5 mm (T-Mount) für kleine Motoren, 5 mm für M5-Wellen"},{"zoll":4,"durchmesser_mm":101.6,"nabe_mm":[5.0],"abstand_spitzen_mm":4.0,"ca":true},{"zoll":5,"durchmesser_mm":127.0,"nabe_mm":[5.0],"abstand_spitzen_mm":5.0,"ca":false},{"zoll":6,"durchmesser_mm":152.4,"nabe_mm":[5.0],"abstand_spitzen_mm":6.0,"ca":false},{"zoll":7,"durchmesser_mm":177.8,"nabe_mm":[5.0],"abstand_spitzen_mm":8.0,"ca":false}],"akkus":[{"typ":"4S 450 mAh","l_mm":62.3,"b_mm":16.6,"h_mm":26.7,"gewicht_g":49,"produkt":"Tattu R-Line 450 mAh 4S 95C (XT30, lange Bauform)","quelle":"https://www.readymaderc.com/products/details/86005-tattu-450mah-4s-95c-15-2v-hv-lipo-battery-pack-with-xt30-plug-long-size"},{"typ":"4S 550 mAh","l_mm":49.0,"b_mm":25.0,"h_mm":28.0,"gewicht_g":57,"produkt":"GNB (Gaoneng) 550 mAh 4S 70C (XT30)","quelle":"https://www.gaoneng.shop/products/gaoneng-gnb-4s-14.8v-550mah-70c-xt30-lipo-battery"},{"typ":"4S 650 mAh","l_mm":60.0,"b_mm":31.0,"h_mm":25.0,"gewicht_g":80,"produkt":"Tattu R-Line 650 mAh 4S 95C (XT30)","quelle":"https://n-factory.de/Tattu-R-Line-4s-650mAh-95C-XT30"},{"typ":"4S 850 mAh","l_mm":58.0,"b_mm":30.0,"h_mm":33.0,"gewicht_g":108,"produkt":"Tattu R-Line 850 mAh 4S 95C (XT60)","quelle":"https://www.rotorama.de/product/tattu-r-line-850mah-4s-95c"},{"typ":"6S 850 mAh","l_mm":60.0,"b_mm":30.0,"h_mm":45.0,"gewicht_g":145,"produkt":"Tattu R-Line V5 850 mAh 6S 150C (XT30)","quelle":"https://www.rotorama.de/product/tattu-r-line-850mah-6s-150c-v5-xt30"},{"typ":"4S 1300 mAh","l_mm":75.0,"b_mm":35.0,"h_mm":28.0,"gewicht_g":155,"ca":true},{"typ":"4S 1500 mAh","l_mm":76.0,"b_mm":36.0,"h_mm":32.0,"gewicht_g":178,"ca":true},{"typ":"6S 1300 mAh","l_mm":75.0,"b_mm":38.0,"h_mm":39.0,"gewicht_g":215,"ca":true},{"typ":"6S 1500 mAh","l_mm":78.0,"b_mm":39.0,"h_mm":43.0,"gewicht_g":250,"ca":true}]};
 const BUY_DATA = {"_hinweis":"Kaufteile für die Bauteil-Bibliothek (Entwurf Gemini, Prompt F). Maße in mm, Gewicht in g. 'geprueft': am 19.10.2026 mit der Hersteller- oder Händlerseite verglichen. 'unsicher': Wert fehlt oder ist abgeleitet. Lochbild = Quadrat-Seitenlänge.","videosender":[{"name":"DJI O3 Air Unit (Sendeeinheit)","hersteller":"DJI","l_mm":32.5,"b_mm":30.5,"h_mm":14.5,"gewicht_g":28.0,"lochbild":"25,5×25,5","kamera_breite_mm":20.0,"quelle":"https://www.getfpv.com/dji-o3-air-unit.html","unsicher":false,"geprueft":true,"notiz":"Gesamt mit Kamera ca. 36,4 g; Schraubengröße nicht angegeben"},{"name":"DJI O3 Air Unit (Kameramodul)","hersteller":"DJI","l_mm":21.2,"b_mm":20.0,"h_mm":19.5,"gewicht_g":8.3,"lochbild":null,"kamera_breite_mm":20.0,"quelle":"https://www.getfpv.com/dji-o3-air-unit.html (inkl. Koaxialkabel)","unsicher":false,"geprueft":true},{"name":"DJI O4 Air Unit Pro (Sendeeinheit)","hersteller":"DJI","l_mm":33.5,"b_mm":33.5,"h_mm":13.0,"gewicht_g":15.6,"lochbild":null,"kamera_breite_mm":20.0,"quelle":"https://www.dji.com/o4-air-unit/specs","unsicher":false,"geprueft":true,"notiz":"Lochbild auf der Herstellerseite nicht angegeben"},{"name":"DJI O4 Air Unit Pro (Kameramodul)","hersteller":"DJI","l_mm":25.55,"b_mm":20.0,"h_mm":23.3,"gewicht_g":16.4,"lochbild":null,"kamera_breite_mm":20.0,"quelle":"https://www.dji.com/o4-air-unit/specs","unsicher":true,"geprueft":true,"notiz":"Gewicht abgeleitet: 32 g gesamt − 15,6 g Sendeeinheit"},{"name":"DJI O4 Air Unit (Sendeeinheit)","hersteller":"DJI","l_mm":30.0,"b_mm":30.0,"h_mm":6.0,"gewicht_g":5.1,"lochbild":null,"kamera_breite_mm":12.36,"quelle":"https://www.dji.com/o4-air-unit/specs","unsicher":false,"geprueft":true,"notiz":"Gemini hatte 8,2 g – das ist das Gesamtgewicht mit Kamera"},{"name":"DJI O4 Air Unit (Kameramodul)","hersteller":"DJI","l_mm":13.44,"b_mm":12.36,"h_mm":16.5,"gewicht_g":3.1,"lochbild":null,"kamera_breite_mm":12.36,"quelle":"https://www.dji.com/o4-air-unit/specs","unsicher":true,"geprueft":true,"notiz":"Gewicht abgeleitet: 8,2 g gesamt − 5,1 g Sendeeinheit"},{"name":"Walksnail Avatar HD V2 (Sendeeinheit, Pro Kit)","hersteller":"Caddx / Walksnail","l_mm":33.5,"b_mm":33.5,"h_mm":10.5,"gewicht_g":17.6,"lochbild":"25,5×25,5 oder 20×20","kamera_breite_mm":19.0,"quelle":"https://www.getfpv.com/walksnail-avatar-hd-pro-kit-32gb-w-gyro.html","unsicher":false,"geprueft":true},{"name":"Walksnail Avatar HD Pro Kamera","hersteller":"Caddx / Walksnail","l_mm":24.0,"b_mm":19.0,"h_mm":19.0,"gewicht_g":9.5,"lochbild":null,"kamera_breite_mm":19.0,"quelle":"https://www.getfpv.com/walksnail-avatar-hd-pro-kit-32gb-w-gyro.html (inkl. 140 mm Koaxialkabel)","unsicher":false,"geprueft":true},{"name":"HDZero Freestyle V2 (Sendeeinheit)","hersteller":"Divimath / HDZero","l_mm":29.0,"b_mm":30.0,"h_mm":14.0,"gewicht_g":22.3,"lochbild":"20×20 M2","kamera_breite_mm":19.0,"quelle":"https://www.getfpv.com/fpv/hd-fpv/hdzero-freestyle-v2-vtx.html","unsicher":false,"geprueft":true},{"name":"HDZero Micro V3 Kamera","hersteller":"Divimath / HDZero","l_mm":24.0,"b_mm":19.0,"h_mm":19.0,"gewicht_g":7.5,"lochbild":null,"kamera_breite_mm":19.0,"quelle":"https://docs.hd-zero.com/camera-micro-v3","unsicher":false,"geprueft":false},{"name":"TBS Unify Pro32 HV (analog)","hersteller":"Team BlackSheep","l_mm":37.0,"b_mm":25.0,"h_mm":5.8,"gewicht_g":8.7,"lochbild":null,"kamera_breite_mm":null,"quelle":"https://www.team-blacksheep.com/products/prod:unifypro32_hv","unsicher":false,"geprueft":false}],"empfaenger":[{"name":"RadioMaster RP1 (ELRS 2,4 GHz)","hersteller":"RadioMaster","l_mm":13.0,"b_mm":11.0,"h_mm":3.0,"gewicht_g":2.2,"lochbild":null,"kamera_breite_mm":null,"quelle":"https://radiomasterrc.com/products/rp1-expresslrs-2-4ghz-nano-receiver","unsicher":false,"geprueft":true,"notiz":"Gewicht mit Antenne"},{"name":"RadioMaster RP3 (ELRS 2,4 GHz, Diversity)","hersteller":"RadioMaster","l_mm":22.0,"b_mm":13.0,"h_mm":4.0,"gewicht_g":4.6,"lochbild":null,"kamera_breite_mm":null,"quelle":"https://www.radiomasterrc.com/products/rp3-expresslrs-2-4ghz-nano-receiver","unsicher":false,"geprueft":false,"notiz":"Gewicht mit zwei Antennen"}],"gps":[{"name":"Flywoo GOKU GM10 Mini V3","hersteller":"Flywoo","l_mm":18.0,"b_mm":18.0,"h_mm":4.8,"gewicht_g":4.7,"lochbild":null,"kamera_breite_mm":null,"quelle":"https://www.myfpvstore.com/fpv-electronics/flywoo-goku-gm10-mini-v3-gps","unsicher":false,"geprueft":true},{"name":"HGLRC M100 Mini","hersteller":"HGLRC","l_mm":15.0,"b_mm":15.0,"h_mm":5.2,"gewicht_g":2.7,"lochbild":null,"kamera_breite_mm":null,"quelle":"https://www.hglrc.com/products/hglrc-m100-mini-gps","unsicher":false,"geprueft":false},{"name":"GEPRC GEP-M10 Nano","hersteller":"GEPRC","l_mm":15.0,"b_mm":15.0,"h_mm":5.5,"gewicht_g":2.5,"lochbild":null,"kamera_breite_mm":null,"quelle":"https://geprc.com/product/gep-m10-nano-gps/","unsicher":false,"geprueft":false}],"actioncam":[{"name":"GoPro HERO12 Black","hersteller":"GoPro","l_mm":71.8,"b_mm":33.6,"h_mm":50.8,"gewicht_g":154.0,"lochbild":null,"kamera_breite_mm":null,"quelle":"https://gopro.com (mit Akku)","unsicher":false,"geprueft":false},{"name":"GEPRC Naked Camera GP11","hersteller":"GEPRC","l_mm":66.0,"b_mm":24.5,"h_mm":46.0,"gewicht_g":46.7,"lochbild":null,"kamera_breite_mm":null,"quelle":"https://geprc.com/product/geprc-naked-camera-gp11/","unsicher":false,"geprueft":false},{"name":"Insta360 GO 3 (nur Kamera)","hersteller":"Insta360","l_mm":25.6,"b_mm":23.2,"h_mm":54.4,"gewicht_g":35.5,"lochbild":null,"kamera_breite_mm":null,"quelle":"https://www.insta360.com/de/product/insta360-go3","unsicher":false,"geprueft":false}],"stecker":[{"name":"XT60H Stecker (male)","hersteller":"Amass","l_mm":21.5,"b_mm":15.5,"h_mm":8.1,"gewicht_g":3.5,"lochbild":null,"kamera_breite_mm":null,"quelle":"https://www.getfpv.com/amass-xt60h-power-connectors-male-female-5-sets-10-pcs.html","unsicher":true,"geprueft":false},{"name":"XT30U Stecker (male)","hersteller":"Amass","l_mm":12.0,"b_mm":11.0,"h_mm":6.0,"gewicht_g":0.7,"lochbild":null,"kamera_breite_mm":null,"quelle":"https://www.team-blacksheep.com/products/product:4818","unsicher":false,"geprueft":false}],"kondensator":[{"name":"Panasonic FR 35 V 1000 µF (12,5 × 20)","hersteller":"Panasonic","l_mm":20.0,"b_mm":12.5,"h_mm":12.5,"gewicht_g":null,"lochbild":null,"kamera_breite_mm":null,"quelle":"https://www.newark.com/panasonic/eeufr1v102/cap-alu-elec-1000uf-35v-20/dp/74R3452","unsicher":true,"geprueft":false,"notiz":"zylindrisch: Ø 12,5 mm, 20 mm lang"}]};
-const THRUST_DATA = {"_hinweis":"Entwurf Gemini (Prompt G), von Claude am 19.10.2026 auf den Herstellerseiten geprüft. Nur Einträge mit geprueft=true dienen als Vorgabe.","motoren":[{"motor":"SpeedyBee 1404 V2","stator":"1404","kv":4600,"zellen":"4S","propeller":"Gemfan 3016-3","max_schub_g":431.5,"strom_bei_max_a":12.85,"gewicht_motor_g":9.12,"quelle":"https://rcdrone.top/products/speedybee-1404-v2-4600kv-brushless-motor","geprueft":true},{"motor":"Flash Hobby Arthur A1404","stator":"1404","kv":2800,"zellen":"6S","propeller":null,"max_schub_g":343,"strom_bei_max_a":null,"gewicht_motor_g":9.3,"quelle":"https://www.flashhobby.com/a1404-brushless-dc-motor.html","geprueft":false},{"motor":"VCI SPARK 2004","stator":"2004","kv":3000,"zellen":"4S","propeller":"Gemfan D90-3","max_schub_g":768,"strom_bei_max_a":23.48,"gewicht_motor_g":16.5,"quelle":"https://rcdrone.top/products/vci-spark-2004-brushless-motor","geprueft":true},{"motor":"Flash Hobby King K2004","stator":"2004","kv":1900,"zellen":"6S","propeller":"HQ 5030","max_schub_g":844,"strom_bei_max_a":15.0,"gewicht_motor_g":17.4,"quelle":"https://www.flashhobby.com/k2004-brushless-dc-motor.html","geprueft":true},{"motor":"T-Motor F50","stator":"2207","kv":2150,"zellen":"6S","propeller":null,"max_schub_g":2136,"strom_bei_max_a":null,"gewicht_motor_g":28.56,"quelle":"https://www.t-hobby.com/products/tmotor-f50-2207-racing-motor","geprueft":true},{"motor":"RCINPOWER AOS Supernova 2207","stator":"2207","kv":1980,"zellen":"6S","propeller":"Gemfan 51466","max_schub_g":2547,"strom_bei_max_a":null,"gewicht_motor_g":null,"quelle":"https://rcdrone.top/products/rcinpower-aos-supernova-2207-1980kv-6s-brushless-motor","geprueft":false},{"motor":"T-Motor Velox V2306 V3","stator":"2306","kv":1950,"zellen":"6S","propeller":null,"max_schub_g":null,"strom_bei_max_a":41.7,"gewicht_motor_g":33.7,"quelle":"https://www.t-hobby.com/products/tmotor-v2306-v3-brushless-racing-motor","geprueft":false},{"motor":"T-Motor F90","stator":"2806.5","kv":1500,"zellen":"6S","propeller":null,"max_schub_g":2000,"strom_bei_max_a":47.4,"gewicht_motor_g":46.7,"quelle":"https://www.t-hobby.com/products/brushless-motor-x8-fpv-drones-f90-2806-5","geprueft":false},{"motor":"iFlight XING 2806.5","stator":"2806.5","kv":1300,"zellen":"6S","propeller":null,"max_schub_g":null,"strom_bei_max_a":48.33,"gewicht_motor_g":54.3,"quelle":"https://shop.iflight.com/xing-x2806-5-fpv-nextgen-motor-pro1001","geprueft":true}]};
+const THRUST_DATA = {"_hinweis":"Entwurf Gemini (Prompt G), von Claude am 19.10.2026 auf den Herstellerseiten geprüft. Nur Einträge mit geprueft=true dienen als Vorgabe. Ergänzt am 20.10.2026 aus Prompt J: T-Motor F90 1300KV (Testtabelle bei ligpower.com, 100 % Gas bei etwa 23,5 V).","motoren":[{"motor":"SpeedyBee 1404 V2","stator":"1404","kv":4600,"zellen":"4S","propeller":"Gemfan 3016-3","max_schub_g":431.5,"strom_bei_max_a":12.85,"gewicht_motor_g":9.12,"quelle":"https://rcdrone.top/products/speedybee-1404-v2-4600kv-brushless-motor","geprueft":true},{"motor":"Flash Hobby Arthur A1404","stator":"1404","kv":2800,"zellen":"6S","propeller":null,"max_schub_g":343,"strom_bei_max_a":null,"gewicht_motor_g":9.3,"quelle":"https://www.flashhobby.com/a1404-brushless-dc-motor.html","geprueft":false},{"motor":"VCI SPARK 2004","stator":"2004","kv":3000,"zellen":"4S","propeller":"Gemfan D90-3","max_schub_g":768,"strom_bei_max_a":23.48,"gewicht_motor_g":16.5,"quelle":"https://rcdrone.top/products/vci-spark-2004-brushless-motor","geprueft":true},{"motor":"Flash Hobby King K2004","stator":"2004","kv":1900,"zellen":"6S","propeller":"HQ 5030","max_schub_g":844,"strom_bei_max_a":15.0,"gewicht_motor_g":17.4,"quelle":"https://www.flashhobby.com/k2004-brushless-dc-motor.html","geprueft":true},{"motor":"T-Motor F50","stator":"2207","kv":2150,"zellen":"6S","propeller":null,"max_schub_g":2136,"strom_bei_max_a":null,"gewicht_motor_g":28.56,"quelle":"https://www.t-hobby.com/products/tmotor-f50-2207-racing-motor","geprueft":true},{"motor":"RCINPOWER AOS Supernova 2207","stator":"2207","kv":1980,"zellen":"6S","propeller":"Gemfan 51466","max_schub_g":2547,"strom_bei_max_a":null,"gewicht_motor_g":null,"quelle":"https://rcdrone.top/products/rcinpower-aos-supernova-2207-1980kv-6s-brushless-motor","geprueft":false},{"motor":"T-Motor Velox V2306 V3","stator":"2306","kv":1950,"zellen":"6S","propeller":null,"max_schub_g":null,"strom_bei_max_a":41.7,"gewicht_motor_g":33.7,"quelle":"https://www.t-hobby.com/products/tmotor-v2306-v3-brushless-racing-motor","geprueft":false},{"motor":"T-Motor F90","stator":"2806.5","kv":1500,"zellen":"6S","propeller":null,"max_schub_g":2000,"strom_bei_max_a":47.4,"gewicht_motor_g":46.7,"quelle":"https://www.t-hobby.com/products/brushless-motor-x8-fpv-drones-f90-2806-5","geprueft":false},{"motor":"T-Motor F90 2806.5","stator":"2806.5","kv":1300,"zellen":"6S","propeller":"HQ 7040-3","max_schub_g":2360.6,"strom_bei_max_a":45.11,"gewicht_motor_g":46.6,"quelle":"https://www.ligpower.com/product/f90-fpv-motor.html","geprueft":true},{"motor":"iFlight XING 2806.5","stator":"2806.5","kv":1300,"zellen":"6S","propeller":null,"max_schub_g":null,"strom_bei_max_a":48.33,"gewicht_motor_g":54.3,"quelle":"https://shop.iflight.com/xing-x2806-5-fpv-nextgen-motor-pro1001","geprueft":true}]};
 const DroneLib = (() => {
   // Motoren, deren Höhe und Gewicht aus einem Datenblatt stammen (sonst Schätzwerte, markiert)
   const MOTOR_SHEET = { '2207': { d: 28.5, h: 19.7, g: 33.8, src: 'iFlight XING-E 2207' }, '2806.5': { d: 35.1, h: 21.3, g: 54, src: 'iFlight XING 2806.5' } };
@@ -4373,7 +4415,7 @@ const DroneLib = (() => {
     });
   }
   function motor(stator) { return motors().find((m) => m.stator === stator) || motors().find((m) => m.stator === '2207'); }
-  function akkus() { return (FPV_DATA.akkus || []).map((a) => ({ name: 'Akku ' + a.typ, w: a.b_mm, l: a.l_mm, h: a.h_mm, g: a.gewicht_g })); }
+  function akkus() { return (FPV_DATA.akkus || []).map((a) => ({ name: 'Akku ' + a.typ, w: a.b_mm, l: a.l_mm, h: a.h_mm, g: a.gewicht_g, produkt: a.produkt || null })); }
   function akku(typ) { return akkus().find((a) => a.name === typ || a.name === 'Akku ' + typ) || null; }
   function stacks() { return (FPV_DATA.stack || []).map((s) => ({ name: s.name, a: s.quadrat_mm, screw: s.schraube.startsWith('M2') ? 'M2' : 'M3', board: s.platine_mm })); }
   function cams() { return (FPV_DATA.kameras || []).map((c) => ({ name: c.name, w: c.breite_mm })); }
@@ -4387,7 +4429,7 @@ const DroneLib = (() => {
     const out = [];
     const box = (name, l, b, hgt, g, extra = {}) => ({ buy: true, kind: 'box', p: { w: b, d: l, h: hgt }, name, massG: g == null ? '' : g, color: COL[cat], ...extra });
     if (cat === 'motor') for (const m of motors()) out.push({ buy: true, kind: 'cylinder', p: { d: m.d, h: m.h }, name: 'Motor ' + m.stator, massG: m.g, color: COL.motor, info: m.sheet ? `${m.src}: ${fmt(m.g, 1)} g` : 'Höhe geschätzt, Gewicht bitte eintragen' });
-    if (cat === 'akku') for (const a of akkus()) out.push(box(a.name, a.l, a.w, a.h, a.g, { info: `ca. ${a.g} g` }));
+    if (cat === 'akku') for (const a of akkus()) out.push(box(a.name, a.l, a.w, a.h, a.g, { info: a.produkt ? `${a.produkt}: ${fmt(a.g, 0)} g` : `ca. ${a.g} g` }));
     if (cat === 'video') {
       for (const v of BUY_DATA.videosender || []) out.push(box(v.name, v.l_mm, v.b_mm, v.h_mm, v.gewicht_g, { info: v.gewicht_g != null ? `${fmt(v.gewicht_g, 1)} g` + (v.unsicher ? ' (abgeleitet)' : '') : 'Gewicht bitte eintragen' }));
       for (const c of cams()) out.push(box(`Kamera ${c.name} (analog)`, c.w, c.w, c.w, '', { info: `${fmt(c.w, 1)} mm breit, Gewicht eintragen` }));
@@ -5065,7 +5107,8 @@ const Timeline = (() => {
   function chipTip(it, i, V) {
     const errs = App.errorsFor(it.id);
     const st = it.suppressed ? ' · unterdrückt' : i >= markerPos() ? ' · nach dem Marker' : '';
-    return `${i + 1}. ${Model.label(it)}${Model.sizeText(it, V) ? ' · ' + Model.sizeText(it, V) : ''}${st}${errs.length ? ' · ' + errs[0].message : ''}`;
+    const ai = it.ai ? ` · ${it.ai.edit ? 'von der KI geändert' : 'von der KI'}: „${it.ai.q}“` : '';
+    return `${i + 1}. ${Model.label(it)}${Model.sizeText(it, V) ? ' · ' + Model.sizeText(it, V) : ''}${st}${ai}${errs.length ? ' · ' + errs[0].message : ''}`;
   }
   function render() {
     if (!el) return;
@@ -5081,8 +5124,9 @@ const Timeline = (() => {
     items.forEach((it, i) => {
       if (i === mk) track.append(marker);
       const errs = App.errorsFor(it.id);
-      const c = h('button', { type: 'button', class: 'tl-chip' + (it.role === 'hole' ? ' hole' : '') + (selTop.has(it.id) ? ' sel' : '') + (i >= mk ? ' off' : '') + (it.suppressed ? ' sup' : '') + (errs.length && i < mk && !it.suppressed ? ' err' : ''), 'data-tip': chipTip(it, i, V), 'aria-label': chipTip(it, i, V), dataset: { idx: i } });
+      const c = h('button', { type: 'button', class: 'tl-chip' + (it.role === 'hole' ? ' hole' : '') + (selTop.has(it.id) ? ' sel' : '') + (i >= mk ? ' off' : '') + (it.suppressed ? ' sup' : '') + (errs.length && i < mk && !it.suppressed ? ' err' : '') + (it.ai ? ' ai' : ''), 'data-tip': chipTip(it, i, V), 'aria-label': chipTip(it, i, V), 'data-help': it.ai ? 'aiSteps' : null, dataset: { idx: i } });
       c.innerHTML = icon(iconFor(it)); c.append(h('span', { class: 'bar', style: { background: it.role === 'hole' ? 'transparent' : it.color } }));
+      if (it.ai) { const b = h('span', { class: 'ai-badge', 'aria-hidden': 'true' }); b.innerHTML = icon('spark'); c.append(b); }
       c.onclick = (e) => App.select([it.id], { additive: e.shiftKey || e.metaKey || e.ctrlKey });
       c.ondblclick = (e) => { e.preventDefault(); setMarker(i + 1, `Zeitleiste: bis „${Model.label(it)}“`); };
       c.oncontextmenu = (e) => { e.preventDefault(); menu(c, it, i); };
@@ -5099,6 +5143,7 @@ const Timeline = (() => {
     const add = (ic, label, fn) => { const b = h('button', { type: 'button', class: 'btn ghost', style: { justifyContent: 'flex-start' } }); b.innerHTML = icon(ic) + esc(label); b.onclick = () => { UI.closePop(); fn(); }; box.append(b); };
     box.append(h('div', { class: 'section-h' }, `${i + 1}. ${Model.label(it)}`));
     add('edit', 'Bearbeiten', () => App.select([it.id]));
+    add('help', 'Erklär diesen Schritt', () => Explain.dialog(it.id));
     add('rollback', 'Marker hinter diesen Schritt', () => setMarker(i + 1));
     add('rollback', 'Marker vor diesen Schritt', () => setMarker(i));
     add('suppress', it.suppressed ? 'Wieder aktivieren' : 'Unterdrücken', () => toggleSuppress(it.id));
@@ -5593,10 +5638,20 @@ const Panels = (() => {
         if (ownIdx >= 0 && (!ctxTop || inCtx)) { const sp = h('button', { type: 'button', 'aria-label': it.suppressed ? 'Aktivieren' : 'Unterdrücken', 'data-tip': it.suppressed ? 'Wieder aktivieren' : 'Unterdrücken (bleibt erhalten, zählt nicht mit)', 'data-help': 'suppress' }); sp.innerHTML = icon('suppress'); sp.onclick = (e) => { e.stopPropagation(); Timeline.toggleSuppress(it.id); }; acts.append(sp); }
         acts.append(eye, del);
         row.append(tw, sw, nm);
+        if (it.ai) { const am = h('span', { class: 'ai-mark', 'data-tip': (it.ai.edit ? 'Von der KI geändert: „' : 'Von der KI gebaut: „') + it.ai.q + '“' }); am.innerHTML = icon('spark'); row.append(am); }
         const errs = App.errorsFor(it.id);
         if (errs.length) { const er = h('span', { class: 'err', 'data-tip': errs[0].message }); er.innerHTML = icon('warn'); row.append(er); }
         row.append(sub, acts);
         row.addEventListener('click', (e) => { App.select([it.id], { additive: e.shiftKey || e.metaKey || e.ctrlKey }); });
+        row.addEventListener('contextmenu', (e) => {
+          e.preventDefault(); if (!selSet.has(it.id)) App.select([it.id]);
+          UI.menu(row, [
+            { icon: 'help', label: 'Erklär diesen Schritt', help: 'explainStep', run: () => Explain.dialog(it.id) },
+            { icon: 'edit', label: 'Umbenennen', run: async () => { const n = await UI.prompt('Umbenennen', 'Name', Model.label(it), 'Umbenennen'); if (n && n.trim()) App.change('Umbenannt', (doc) => { Model.find(doc, it.id).item.name = n.trim(); }); } },
+            ...(ownIdx >= 0 ? [{ icon: 'suppress', label: it.suppressed ? 'Wieder aktivieren' : 'Unterdrücken', run: () => Timeline.toggleSuppress(it.id) }] : []),
+            '-', { icon: 'trash', label: 'Löschen', run: () => Actions.remove([it.id]) },
+          ]);
+        });
         row.addEventListener('dblclick', async (e) => { e.stopPropagation(); const n = await UI.prompt('Umbenennen', 'Name', Model.label(it), 'Umbenennen'); if (n && n.trim()) App.change('Umbenannt', (doc) => { Model.find(doc, it.id).item.name = n.trim(); }); });
         // Ziehen im Verlauf: umsortieren oder in eine Gruppe legen
         row.addEventListener('dragstart', (e) => { dragId = it.id; e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', it.id); } catch (_) {} });
@@ -5783,6 +5838,15 @@ const Panels = (() => {
       ds.append(h('div', { class: 'btn-row' }, b));
       w.append(ds);
     }
+    if (App.doc.items.length) {
+      const ps = h('div', { class: 'section', id: 'proj-weak-sec' }, h('div', { class: 'section-h' }, 'Schwachstellen'));
+      const wl = Weak.summary();
+      if (wl) ps.append(wl.length ? Weak.rows(wl.slice(0, 4), null, true) : h('div', { class: 'hint-box' }, 'Keine Schwachstellen gefunden.'), ...(wl.length > 4 ? [h('div', { class: 'hint-box' }, `… und ${wl.length - 4} weitere.`)] : []));
+      const wb = h('button', { type: 'button', class: 'btn small', id: 'proj-weak', 'data-help': 'weakSpots' }); wb.innerHTML = icon('target') + (wl ? 'Noch mal suchen' : 'Schwachstellen suchen');
+      wb.onclick = () => Weak.dialog();
+      ps.append(h('div', { class: 'btn-row' }, wb));
+      w.append(ps);
+    }
     const pv = ViewPrefs.get();
     const va = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Ansicht'));
     va.append(UI.selectField({ id: 'view-grid', label: 'Rasterweite', value: String(pv.grid), options: [['auto', 'Automatisch (folgt dem Zoom)'], ['0.01', '0,01 mm'], ['0.1', '0,1 mm'], ['1', '1 mm'], ['10', '10 mm'], ['100', '100 mm']], onChange: (val) => ViewPrefs.set({ grid: val === 'auto' ? 'auto' : parseFloat(val) }) }));
@@ -5876,6 +5940,8 @@ const Panels = (() => {
     const kindLabel = it.kind === 'part' ? (LIBMAP[it.p.lib] || {}).label || 'Bauteil' : KINDS[it.kind].label;
     title.append(nameInp);
     if (kindLabel && kindLabel !== Model.label(it)) title.append(h('span', { class: 'kind-badge' }, kindLabel));
+    const exb = h('button', { type: 'button', class: 'icon-btn', id: 'item-explain', 'aria-label': 'Erklär diesen Schritt', 'data-tip': 'Erklär diesen Schritt', 'data-help': 'explainStep' }); exb.innerHTML = icon('help');
+    exb.onclick = () => Explain.dialog(it.id); title.append(exb);
     w.append(title);
     for (const e of App.errorsFor(it.id)) {
       const box = h('div', { class: 'err-box' }, h('span', null, e.message));
@@ -6143,7 +6209,7 @@ const Panels = (() => {
     Log.on('change', debounce(() => { if (leftTab === 'log') renderLeft(); }, 80));
     renderTools(); initViewCube();
     const rerender = debounce(() => { renderLeft(); renderRight(); renderCtx(); UI.renderHint(); }, 16);
-    App.on('doc', rerender); App.on('selection', rerender); App.on('results', rerender); DroneCheck.on('checked', () => { if (!App.sel.length) rerender(); }); App.on('mode', () => { renderTools(); rerender(); });
+    App.on('doc', rerender); App.on('selection', rerender); App.on('results', rerender); DroneCheck.on('checked', () => { if (!App.sel.length) rerender(); }); Weak.on('analyzed', () => { if (!App.sel.length) rerender(); }); App.on('mode', () => { renderTools(); rerender(); });
     Viewer.on('camera', placeCtx);
   }
   return { init, renderLeft, renderRight, renderTools, renderCtx, closeFlyout, toggleFlyout, expand: (id) => { expanded.add(id); renderLeft(); }, showParams: () => { leftTab = 'params'; renderLeft(); } };
@@ -8734,6 +8800,8 @@ const Commands = (() => {
     for (const t of DroneTpl.LIST) add('tpl-' + t.id, 'Drohnen-Vorlage: ' + t.name, 'drone', 'drohne vorlage rahmen frame quad ' + t.name.toLowerCase(), () => Start.openDrone(t), { group: 'Projekt' });
     add('drone-check', 'Drohnen-Check: Propeller, Gewicht, Schwerpunkt, Schub', 'clearance', 'check prüfen drohne propeller abstand kollision gewicht schwerpunkt schub', () => DroneCheck.dialog(), { group: 'Projekt' });
     add('variants', 'Varianten vergleichen', 'list', 'variante varianten vergleichen maße sätze', () => Variants.compareDialog(), { group: 'Projekt' });
+    add('explain', 'Erklär diesen Schritt', 'help', 'erklär erklären was ist das schritt warum', () => Explain.dialog(), { group: 'Projekt' });
+    add('weak', 'Schwachstellen suchen', 'target', 'schwachstellen schwach prüfen bruch dünn rand loch festigkeit stabil', () => Weak.dialog(), { group: 'Projekt' });
     add('versions', 'Versionen: speichern, vergleichen, zurückholen', 'rollback', 'version versionen stand vergleichen zurück sichern', () => Versions.dialog(), { group: 'Projekt' });
     add('version-save', 'Jetzigen Stand als Version speichern', 'save', 'version speichern sichern stand', async () => { const n = await UI.prompt('Version speichern', 'Name der Version', 'Version ' + (Versions.list().length + 1), 'Speichern'); if (n != null) Versions.save(n); }, { group: 'Projekt' });
     add('similar', 'Ähnliche auswählen', 'similar', 'ähnliche gleiche alle auswählen bohrungen kanten', () => Select.similar(), { group: 'Bearbeiten', kbd: 'A', needSel: true });
@@ -10149,18 +10217,21 @@ const Drawing = (() => {
 // ================= KI-Helfer (baut und ändert Modelle aus einer Beschreibung) =================
 const AI = (() => {
   let panel = null, ctl = null, history = [], off = false;
-  const RULES = `Du bist der CAD-Helfer in der Web-App „Tracery“. Du baust präzise technische 3D-Modelle, vor allem für FPV-/Speed-Drohnen, aus Grundkörpern, Skizzen und Bauteilen. Einheiten: Millimeter. Z zeigt nach oben, die XY-Ebene bei z=0 ist die Grundebene.
-
-Antworte NUR mit einem JSON-Objekt:
-{"antwort": "kurze Antwort auf Deutsch, 1–3 Sätze, per du", "aktionen": [ ... ]}
-
-Aktionen:
+  const ACTIONS = `Aktionen:
 {"op":"hinzufuegen","objekt":OBJEKT,"in":"<id einer Gruppe, optional>"}
 {"op":"aendern","id":"<id>","setze":{"name":"…","rolle":"koerper"|"loch","p":{…},"t":{…},"farbe":"#RRGGBB"}}
 {"op":"loeschen","id":"<id>"}
 {"op":"gruppieren","ids":["<id>","<id>"],"name":"…"}
 {"op":"mass","name":"Breite","wert":"75"}   (legt ein benanntes Maß an oder ändert es)
 {"op":"rundung","id":"<id>","typ":"fillet"|"chamfer","r":2,"kanten":"all"|"top"|"bottom"|"vertical"|"horizontal"}
+{"op":"muster","id":"<id>","art":"kreis","n":4,"winkel":360,"mitte":[0,0]}   (Kreismuster um die senkrechte Achse durch „mitte“, Anzahl zählt das Original mit)
+{"op":"muster","id":"<id>","art":"rechteck","nx":3,"ny":1,"dx":20,"dy":0}   (Rechteckmuster, Abstände von Mitte zu Mitte)
+{"op":"spiegeln","id":"<id>","ebene":"YZ"|"XZ"|"XY","lage":0}   (Original plus Spiegelbild; YZ = links↔rechts, XZ = vorne↔hinten, XY = oben↔unten)
+{"op":"material","id":"<id>","material":"<Kürzel aus MATERIALIEN>"}
+{"op":"gewicht","id":"<id>","g":33.8}   (Kaufteil mit festem Gewicht aus dem Datenblatt)
+{"op":"kaufteil","name":"<Name aus KAUFTEILE>","t":{"x":0,"y":0,"z":0}}   (Platzhalter mit Maßen und Gewicht aus der Bibliothek)
+{"op":"drohne","zoll":5,"form":"x"|"stretch"|"wide"|"deadcat","video":"analog"|"o3"|"o4"|"o4pro"|"walksnail"|"hdzero"|"none","motor":"2207","akku":"6S 1300 mAh"}   (baut mit dem Frame-Assistenten einen kompletten Rahmen als NEUES Projekt; nur wenn ausdrücklich ein neuer Rahmen gewünscht ist)
+{"op":"pruefen"}   (führt danach den Drohnen-Check aus: Propeller, Teile, Gewicht, Schwerpunkt, Schub)
 
 OBJEKT:
 {"art":"box|cylinder|tube|sphere|hemisphere|cone|pyramid|torus|prism|wedge|extrude|part|group","name":"…","rolle":"koerper"|"loch","p":{…},"t":{"x":0,"y":0,"z":0,"rx":0,"ry":0,"rz":0},"farbe":"#RRGGBB","kinder":[OBJEKT…],"rundungen":[{"typ":"fillet","r":2,"kanten":"vertical"}]}
@@ -10175,6 +10246,7 @@ Parameter p (alle Grundkörper stehen mit der Unterseite auf z=0 ihres eigenen S
 - part (Bauteile, Öffnung zeigt nach +Z, Tiefe geht nach −Z; setze z auf die Oberfläche):
   {"lib":"screwHole","size":"M2|M2.5|M3|M4|M5|M6|M8","head":"countersunk|counterbore|none","length":10} (rolle loch)
   {"lib":"nutTrap","size":"M3","length":12} (loch) · {"lib":"insert","size":"M3"} (loch, Gewindeeinsatz) · {"lib":"slotHole","len":20,"w":4.5,"depth":10} (loch)
+  {"lib":"holePattern","pat":"stack305|stack255|stack20|stack16|motor19|motor16|motor12|motor9","size":"M3","depth":10} (loch, vier Löcher für Stack oder Motor um die Mitte) · {"lib":"zipTie","w":3,"gap":6,"depth":10} (loch, zwei Kabelbinder-Schlitze)
   {"lib":"snapHook","length":12,"w":8,"t":1.6,"hook":1.2} (koerper) · {"lib":"hinge","len":40,"w":15,"t":2.4,"gap":0.4} (koerper) · {"lib":"gear","teeth":20,"module":1.5,"h":6,"bore":5} (koerper)
 - group: {"kinder":[…]} – Kinder mit rolle "loch" werden aus den Kindern mit rolle "koerper" geschnitten. t der Kinder ist relativ zur Gruppe.
 
@@ -10185,8 +10257,16 @@ Regeln:
 - Zahlenwerte dürfen Formeln mit Maß-Namen sein, z. B. "Breite/2+3". Lege bei neuen Teilen für die 2–4 wichtigsten Größen Maße an (op "mass") und nutze sie.
 - Neue Teile nicht in bestehende hineinsetzen: stelle sie daneben, außer der Wunsch ist ausdrücklich eine Änderung am Bestehenden.
 - Bei einer reinen Frage: "aktionen": [].
+- Jede Aktion wird ein eigener, markierter Schritt in der Zeitleiste – baue lieber wenige saubere Schritte als viele kleine.
+- Bei Drohnen (siehe "drohne" im Modell) änderst du Größen am besten über die Maße (op "mass"), z. B. Achsabstand, Armdicke, Bolzenhöhe – dann wandert alles mit. Vorne ist −Y.
 - Beziehe dich mit "id" nur auf ids, die im aktuellen Modell stehen. „das“, „es“, „hier“ meint die Auswahl.
+`;
+  const RULES = `Du bist der CAD-Helfer in der Web-App „Tracery“. Du baust präzise technische 3D-Modelle, vor allem für FPV-/Speed-Drohnen, aus Grundkörpern, Skizzen und Bauteilen. Einheiten: Millimeter. Z zeigt nach oben, die XY-Ebene bei z=0 ist die Grundebene.
 
+Antworte NUR mit einem JSON-Objekt:
+{"antwort": "kurze Antwort auf Deutsch, 1–3 Sätze, per du", "aktionen": [ ... ]}
+
+` + ACTIONS + `
 Beispiel – Wunsch „Platte 60 × 40 × 4 mit einem Loch in der Mitte“:
 {"antwort":"Ich habe dir eine Platte mit einem 5-mm-Loch gebaut. Die Breite kannst du links bei den Maßen ändern.","aktionen":[{"op":"mass","name":"Breite","wert":"60"},{"op":"hinzufuegen","objekt":{"art":"group","name":"Platte","kinder":[{"art":"box","name":"Platte","p":{"w":"Breite","d":40,"h":4}},{"art":"cylinder","name":"Loch","rolle":"loch","p":{"d":5,"h":5},"t":{"z":-0.5}}],"rundungen":[{"typ":"fillet","r":3,"kanten":"vertical"}]}}]}`;
   const KMAP = { box: 1, cylinder: 1, tube: 1, sphere: 1, hemisphere: 1, cone: 1, pyramid: 1, torus: 1, prism: 1, wedge: 1, extrude: 1, part: 1, group: 1 };
@@ -10209,9 +10289,41 @@ Beispiel – Wunsch „Platte 60 × 40 × 4 mit einem Loch in der Mitte“:
       gesamtgroesse: st ? { x: +st.x.toFixed(2), y: +st.y.toFixed(2), z: +st.z.toFixed(2), min: st.box.min.toArray().map((v) => +v.toFixed(2)), max: st.box.max.toArray().map((v) => +v.toFixed(2)) } : null,
       auswahl: App.sel,
     };
+    if (App.doc.drone) {
+      const chk = DroneCheck.summary();
+      obj.drohne = { ...App.doc.drone, check: chk ? chk.map((c) => `${c.title}: ${c.s} – ${c.text}`) : 'noch nicht geprüft' };
+    }
+    obj.materialien = MATERIALS.map((m) => m.k);
+    obj.kaufteile = buyNames();
     let s = JSON.stringify(obj);
     if (s.length > 40000) s = s.slice(0, 40000) + '…';
     return s;
+  }
+  function buyNames() { try { return DroneLib.CATS.filter((c) => c[0] !== 'loch').flatMap((c) => DroneLib.buyParts(c[0]).map((b) => b.name)); } catch (_) { return []; } }
+  function buySpec(name) {
+    const n = String(name || '').toLowerCase();
+    for (const c of DroneLib.CATS) { if (c[0] === 'loch') continue; const b = DroneLib.buyParts(c[0]).find((x) => x.name.toLowerCase() === n) || DroneLib.buyParts(c[0]).find((x) => x.name.toLowerCase().includes(n)); if (b) return b; }
+    return null;
+  }
+  // Zugang zur KI (nur in Claude). Liefert null, wenn sie hier nicht geht.
+  const idle = () => new Promise((res) => { const t0 = Date.now(); const w = () => (!App.busy || Date.now() - t0 > 60000 ? res() : setTimeout(w, 200)); setTimeout(w, 300); });
+  async function sampler() { if (off) return null; try { return (await window.claude?.use('sample')) || null; } catch (_) { return null; } }
+  function errText(e) {
+    const code = e && e.code;
+    const HIDE = ['not_granted', 'sampling_disabled', 'not_declared', 'capability_disabled', 'capability_removed'];
+    if (HIDE.includes(code)) { off = true; const ci = $('#cmd-input'); if (ci) ci.placeholder = 'Werkzeug suchen …'; }
+    return {
+      cancelled: 'Abgebrochen.',
+      not_granted: 'Die KI ist für diese Seite nicht erlaubt. Beim nächsten Öffnen kannst du sie erlauben – alles andere funktioniert wie gewohnt.',
+      sampling_disabled: 'Die KI ist für dein Konto nicht verfügbar. Alles andere funktioniert wie gewohnt.',
+      rate_limited: 'Gerade sind zu viele Anfragen unterwegs oder dein Kontingent ist aufgebraucht. Versuch es später noch einmal.',
+      invalid_json: 'Die Antwort war nicht lesbar. Versuch es noch einmal, gern etwas kürzer beschrieben.',
+      prompt_too_large: 'Das Modell ist zu groß für eine Anfrage. Beschreib nur den Teil, um den es geht.',
+      session_expired: 'Bitte melde dich neu bei Claude an und versuch es dann noch einmal.',
+      refused: 'Dazu kann die KI nichts bauen. Beschreib es bitte anders.',
+      empty_completion: 'Die KI hat nichts geantwortet. Beschreib es bitte einfacher.',
+      upstream_error: 'Die Verbindung ist abgebrochen. Versuch es gleich noch einmal.',
+    }[code] || (HIDE.includes(code) ? 'Die KI ist hier gerade nicht verfügbar. Alles andere funktioniert wie gewohnt.' : 'Das hat nicht geklappt. Versuch es noch einmal.');
   }
   function ensurePanel() {
     if (panel) return panel;
@@ -10234,8 +10346,7 @@ Beispiel – Wunsch „Platte 60 × 40 × 4 mit einem Loch in der Mitte“:
     return m;
   }
   async function ask(text) {
-    let sample = null;
-    try { sample = await window.claude?.use('sample'); } catch (_) {}
+    const sample = await sampler();
     if (!sample) { UI.modal({ title: 'KI-Helfer nicht verfügbar', body: 'Der KI-Helfer funktioniert, wenn Tracery in Claude geöffnet ist. Hier kannst du alles andere wie gewohnt nutzen.', actions: [{ label: 'OK', primary: true }] }); return; }
     if (ctl) ctl.abort();
     addMsg('me', text);
@@ -10253,35 +10364,40 @@ Beispiel – Wunsch „Platte 60 × 40 × 4 mit einem Loch in der Mitte“:
       res = await sample.json(prompt, { signal: myCtl.signal, modelTier: 'default', cache: false, onText: () => { txt.textContent = 'Baut …'; } });
     } catch (e) {
       stop.remove();
-      const code = e && e.code;
-      const HIDE = ['not_granted', 'sampling_disabled', 'not_declared', 'capability_disabled', 'capability_removed'];
-      if (HIDE.includes(code)) { off = true; const ci = $('#cmd-input'); if (ci) ci.placeholder = 'Werkzeug suchen …'; }
-      const msg = {
-        cancelled: 'Abgebrochen.',
-        not_granted: 'Die KI ist für diese Seite nicht erlaubt. Beim nächsten Öffnen kannst du sie erlauben – alles andere funktioniert wie gewohnt.',
-        sampling_disabled: 'Die KI ist für dein Konto nicht verfügbar. Alles andere funktioniert wie gewohnt.',
-        rate_limited: 'Gerade sind zu viele Anfragen unterwegs oder dein Kontingent ist aufgebraucht. Versuch es später noch einmal.',
-        invalid_json: 'Die Antwort war nicht lesbar. Versuch es noch einmal, gern etwas kürzer beschrieben.',
-        prompt_too_large: 'Das Modell ist zu groß für eine Anfrage. Beschreib nur den Teil, um den es geht.',
-        session_expired: 'Bitte melde dich neu bei Claude an und versuch es dann noch einmal.',
-        refused: 'Dazu kann die KI nichts bauen. Beschreib es bitte anders.',
-        empty_completion: 'Die KI hat nichts geantwortet. Beschreib es bitte einfacher.',
-        upstream_error: 'Die Verbindung ist abgebrochen. Versuch es gleich noch einmal.',
-      }[code] || (HIDE.includes(code) ? 'Die KI ist hier gerade nicht verfügbar. Alles andere funktioniert wie gewohnt.' : 'Das hat nicht geklappt. Versuch es noch einmal.');
-      txt.textContent = msg; ctl = null; return;
+      txt.textContent = errText(e); ctl = null; return;
     }
     stop.remove(); ctl = null;
     if (!res || typeof res !== 'object') { txt.textContent = 'Die Antwort war nicht lesbar.'; return; }
     const answer = String(res.antwort || res.answer || '').slice(0, 800) || 'Erledigt.';
-    const acts = Array.isArray(res.aktionen) ? res.aktionen : Array.isArray(res.actions) ? res.actions : [];
+    let acts = Array.isArray(res.aktionen) ? res.aktionen : Array.isArray(res.actions) ? res.actions : [];
     let report = { added: [], changed: [], notes: [] };
-    if (acts.length) {
-      try { report = applyActions(acts, text); }
+    // ein neuer Rahmen aus dem Frame-Assistenten ersetzt das Projekt – danach gelten die übrigen Aktionen für den Rahmen
+    const dr = acts.find((a) => String(a.op || '').toLowerCase() === 'drohne');
+    const wantCheck = acts.some((a) => String(a.op || '').toLowerCase() === 'pruefen') || !!dr;
+    if (dr) {
+      try {
+        const o = { zoll: [3, 4, 5, 6, 7].includes(+dr.zoll) ? +dr.zoll : 5, form: DroneTpl.FORMS[dr.form] ? dr.form : 'x', video: DroneTpl.VIDEO[dr.video] ? dr.video : 'analog' };
+        if (dr.motor && DroneLib.motors().some((m) => m.stator === String(dr.motor))) o.motor = String(dr.motor);
+        if (dr.akku && DroneLib.akku(dr.akku)) o.akku = dr.akku;
+        const cfg = DroneTpl.config(o), d = DroneTpl.build(cfg);
+        for (const it of d.items) it.ai = { q: text.slice(0, 160) };
+        App.setDoc(d); Start.hide(); report.newDoc = cfg.name;
+        report.notes.push(`Neues Projekt „${d.name}“ – dein bisheriges Projekt findest du auf der Startseite unter „Weiterarbeiten“.`);
+      } catch (e) { report.notes.push('Den Rahmen konnte ich nicht bauen.'); }
+      acts = acts.filter((a) => a !== dr);
+    }
+    if (acts.some((a) => !['pruefen', 'drohne'].includes(String(a.op || '').toLowerCase()))) {
+      try { const r2 = applyActions(acts, text); report.added.push(...r2.added); report.changed.push(...r2.changed); report.notes.push(...r2.notes); }
       catch (e) { console.error(e); txt.textContent = answer + '\n\n(Beim Umsetzen ist etwas schiefgegangen: ' + e.message + ')'; return; }
     }
     txt.textContent = answer + (report.notes.length ? '\n\nHinweis: ' + report.notes.join(' ') : '');
+    if (wantCheck && DroneCheck.isDrone()) {
+      const box = h('div', { class: 'ai-check' }, h('small', null, 'Drohnen-Check läuft …')); m.append(box);
+      idle().then(() => DroneCheck.run()).then((l) => { box.innerHTML = ''; if (!l) return; const bad = l.filter((c) => c.s === 'bad' || c.s === 'warn'); box.append(DroneCheck.rows(bad.length ? bad : l.filter((c) => c.id === 'tw' || c.id === 'weight'), (ids) => App.select(ids))); if (!bad.length) box.append(h('small', null, 'Propeller, Teile und Schwerpunkt: alles in Ordnung.')); });
+    }
     history.push({ q: text.slice(0, 160), a: answer.slice(0, 160) });
-    if (acts.length && (report.added.length || report.changed.length)) {
+    if (report.newDoc && !report.added.length && !report.changed.length) setTimeout(() => Viewer.fit(), 800);
+    else if (report.added.length || report.changed.length) {
       const row = h('div', { class: 'btn-row' });
       const u = h('button', { type: 'button', class: 'btn small' }); u.innerHTML = icon('undo') + 'Rückgängig';
       u.onclick = () => { App.undo(); u.disabled = true; };
@@ -10338,9 +10454,18 @@ Beispiel – Wunsch „Platte 60 × 40 × 4 mit einem Loch in der Mitte“:
     for (const r of o.rundungen || []) if (r && (r.r || r.r === 0)) it.finishes.push({ id: uid('f'), type: r.typ === 'chamfer' ? 'chamfer' : 'fillet', r: num(r.r, 1), edges: ['all', 'top', 'bottom', 'vertical', 'horizontal'].includes(r.kanten) ? r.kanten : 'all' });
     return it;
   }
+  // Feature-Gruppe (Muster, Spiegelung) um ein Objekt legen – wie Features.pattern, aber innerhalb einer Änderung
+  function wrapIn(doc, id, name, p) {
+    const f = Model.find(doc, id); if (!f) return null;
+    const G = Model.newItem('group', {}, { name, color: f.item.color, role: f.item.role === 'hole' ? 'hole' : 'solid' });
+    G.p = p; G.children = [f.item];
+    f.list.splice(f.list.indexOf(f.item), 1, G);
+    return G;
+  }
   function applyActions(acts, text) {
     const report = { added: [], changed: [], notes: [] };
-    App.change('KI: ' + text.slice(0, 40), (doc) => {
+    const q = String(text || '').slice(0, 160);
+    App.change('KI: ' + String(text || '').slice(0, 40), (doc) => {
       for (const a of acts.slice(0, 60)) {
         const op = String(a.op || '').toLowerCase();
         if (op === 'mass') {
@@ -10381,15 +10506,46 @@ Beispiel – Wunsch „Platte 60 × 40 × 4 mit einem Loch in der Mitte“:
           f.item.finishes = f.item.finishes || [];
           f.item.finishes.push({ id: uid('f'), type: a.typ === 'chamfer' ? 'chamfer' : 'fillet', r: num(a.r, 1), edges: ['all', 'top', 'bottom', 'vertical', 'horizontal'].includes(a.kanten) ? a.kanten : 'all' });
           report.changed.push(f.item.id);
+        } else if (op === 'muster' || op === 'pattern') {
+          if (!Model.find(doc, a.id)) { report.notes.push('Das Objekt für das Muster gab es nicht.'); continue; }
+          const circ = /kreis|circ/i.test(a.art || '');
+          const mitte = Array.isArray(a.mitte) ? a.mitte : [0, 0];
+          const G = circ ? wrapIn(doc, a.id, Features.NAMES.circ, { op: 'pattern', pt: 'circ', n: Math.max(1, Math.round(num(a.n, 4))), ang: num(a.winkel, 360), cx: num(mitte[0], 0), cy: num(mitte[1], 0) })
+            : wrapIn(doc, a.id, Features.NAMES.rect, { op: 'pattern', pt: 'rect', nx: Math.max(1, Math.round(num(a.nx, 2))), ny: Math.max(1, Math.round(num(a.ny, 1))), dx: num(a.dx, 20), dy: num(a.dy, 20) });
+          if (G) report.added.push(G.id);
+        } else if (op === 'spiegeln' || op === 'mirror') {
+          if (!Model.find(doc, a.id)) { report.notes.push('Das Objekt zum Spiegeln gab es nicht.'); continue; }
+          const G = wrapIn(doc, a.id, Features.NAMES.mirror, { op: 'pattern', pt: 'mirror', plane: ['YZ', 'XZ', 'XY'].includes(String(a.ebene).toUpperCase()) ? String(a.ebene).toUpperCase() : 'YZ', off: num(a.lage, 0) });
+          if (G) report.added.push(G.id);
+        } else if (op === 'material') {
+          const f = doc.items.find((x) => x.id === a.id); const m = MATERIALS.find((x) => x.k.toLowerCase() === String(a.material || '').toLowerCase());
+          if (!f || !m) { report.notes.push(!f ? 'Material geht nur für Teile der obersten Ebene.' : `Das Material „${a.material}“ kenne ich nicht.`); continue; }
+          f.mat = m.k; delete f.massG; report.changed.push(f.id);
+        } else if (op === 'gewicht' || op === 'mass_g') {
+          const f = doc.items.find((x) => x.id === a.id); if (!f) { report.notes.push('Ein festes Gewicht geht nur für Teile der obersten Ebene.'); continue; }
+          delete f.mat; f.massG = num(a.g, ''); report.changed.push(f.id);
+        } else if (op === 'kaufteil' || op === 'buy') {
+          const b = buySpec(a.name); if (!b) { report.notes.push(`Das Kaufteil „${a.name}“ steht nicht in der Bibliothek.`); continue; }
+          const it = Model.newItem(b.kind, { ...b.p }, { name: b.name, color: b.color });
+          it.massG = b.massG; Object.assign(it.t, cleanT(a.t));
+          doc.items.push(it); report.added.push(it.id);
         }
       }
+      // jeder neue oder geänderte Schritt merkt sich, dass er von der KI kommt – und auf welche Bitte
+      for (const id of report.added) { const f = Model.find(doc, id); if (f) f.item.ai = { q }; }
+      for (const id of report.changed) { const f = Model.find(doc, id); if (f && !f.item.ai) f.item.ai = { q, edit: true }; }
       if (!report.added.length && !report.changed.length && !acts.some((a) => a.op === 'mass')) return false;
     });
     const sel = report.added.length ? report.added : report.changed.filter((id) => Model.find(App.doc, id));
     if (sel.length) App.select(sel.slice(0, 20));
     return report;
   }
-  return { ask, get available() { return !off; } };
+  // für Erklären und Schwachstellen: eine Frage mit JSON-Antwort
+  async function json(prompt, opts = {}) {
+    const sample = await sampler(); if (!sample) return { error: 'Die KI gibt es nur, wenn Tracery in Claude geöffnet ist.' };
+    try { return { res: await sample.json(prompt, { modelTier: 'default', cache: false, ...opts }) }; } catch (e) { return { error: errText(e) }; }
+  }
+  return { ask, json, apply: applyActions, compactItem, modelText, ACTIONS, get available() { return !off; } };
 })();
 
 // ---- 84-drone.js ----
@@ -10430,13 +10586,13 @@ const DroneTpl = (() => {
   const PY = (sy) => sg(sy, MY(sy)) + SHIFT, PY2 = (sy) => sg(sy, MY(sy) + '/2') + SHIFT;
   // Bolzen vorne hinter der Kamera (lange HD-Kameras schieben sie nach hinten), hinten aus dem Propellerkreis
   const frontOff = (camL) => Math.max(22, Math.ceil((8 + (camL || 18) / 2 + 3.5) * 2) / 2);
-  const SX = 'Plattenbreite/2 - 4';
+  const SX = 'Plattenbreite/2 - 4.5';   // Lochmitte 4,5 mm vom Rand: mehr als 1,2 × Lochdurchmesser (M3)
   const SYof = (fo) => (sy) => (sy < 0 ? `Plattenlänge/2 - ${fo}` : 'Plattenlänge/2 - 16');
 
   // ---------- Auswahl für den Frame-Assistenten ----------
   const SIZES = {
-    3: { Armbreite: 8, Armdicke: 3, Plattenbreite: 30, Plattenlänge: 90, Plattendicke: 1.5, Bolzenhöhe: 20, stack: 20, motor: '1404', akku: null, prop: 2 },
-    4: { Armbreite: 10, Armdicke: 4, Plattenbreite: 34, Plattenlänge: 100, Plattendicke: 2, Bolzenhöhe: 22, stack: 20, motor: '2004', akku: null, prop: 3 },
+    3: { Armbreite: 8, Armdicke: 3, Plattenbreite: 30, Plattenlänge: 90, Plattendicke: 1.5, Bolzenhöhe: 20, stack: 20, motor: '1404', akku: '4S 450 mAh', prop: 2 },
+    4: { Armbreite: 10, Armdicke: 4, Plattenbreite: 34, Plattenlänge: 100, Plattendicke: 2, Bolzenhöhe: 22, stack: 20, motor: '2004', akku: '4S 650 mAh', prop: 3 },
     5: { Armbreite: 13, Armdicke: 5, Plattenbreite: 42, Plattenlänge: 130, Plattendicke: 2, Bolzenhöhe: 25, stack: 30.5, motor: '2207', akku: '6S 1300 mAh', prop: 4.5 },
     6: { Armbreite: 14, Armdicke: 5.5, Plattenbreite: 44, Plattenlänge: 140, Plattendicke: 2, Bolzenhöhe: 28, stack: 30.5, motor: '2306', akku: '6S 1500 mAh', prop: 6 },
     7: { Armbreite: 15, Armdicke: 6, Plattenbreite: 45, Plattenlänge: 150, Plattendicke: 2.5, Bolzenhöhe: 30, stack: 30.5, motor: '2806.5', akku: '6S 1500 mAh', prop: 7 },
@@ -10475,7 +10631,7 @@ const DroneTpl = (() => {
   function bodyGap(A, zoll, wv, wh, S, camW, camL) {
     const L = A / 2, r = (zoll * 25.4) / 2, s = (A / 4) * (Math.cos(R(wv)) - Math.cos(R(wh)));
     const mot = [[L * Math.sin(R(wv)), -L * Math.cos(R(wv)) + s], [L * Math.sin(R(wh)), L * Math.cos(R(wh)) + s]];
-    const yc = -(S.Plattenlänge / 2 - 8), sx = S.Plattenbreite / 2 - 4;
+    const yc = -(S.Plattenlänge / 2 - 8), sx = S.Plattenbreite / 2 - 4.5;
     const pts = [[camW / 2, yc - camL / 2, 0], [camW / 2 + 2.2, yc - 6, 0], [sx, -(S.Plattenlänge / 2 - frontOff(camL)), 2.5], [sx, S.Plattenlänge / 2 - 16, 2.5]];
     return Math.min(...mot.flatMap(([x, y]) => pts.map(([px, py, pr]) => Math.hypot(x - px, y - py) - pr - r)));
   }
@@ -11180,6 +11336,346 @@ const Variants = (() => {
   }
   return { list, active, changed, save, update, apply, remove, compareData, compareDialog, section };
 })();
+// ---- 88-aihelp.js ----
+// ================= „Erklär diesen Schritt“ und Schwachstellen-Analyse =================
+// Beides funktioniert ohne KI: Tracery erklärt jeden Schritt aus seinen Daten (Art, Größe, Maße, Löcher …)
+// und sucht Schwachstellen mit festen Faustregeln (Lochrand, dünne Wände, Armdicke, Drohnen-Check).
+// Ist Tracery in Claude geöffnet, kann die KI die Erklärung vertiefen und Verbesserungen vorschlagen,
+// die sich mit einem Klick als markierte Schritte umsetzen lassen.
+
+// Kurztexte je Schritt-Art: was, wozu (bei Drohnen), achtung (Entwurf Gemini, Prompt H; gegen Tracery geprüft)
+const STEP_TEXT = {"_hinweis":"Entwurf Gemini (Prompt H), von Claude am 20.10.2026 gegen das Verhalten von Tracery geprüft; 19 Sätze angepasst.","box":{"was":"Erstellt einen einfachen Kasten mit frei wählbarer Länge, Breite und Höhe.","wozu":"Super als Basis für eine Grundplatte aus Carbon oder eine einfache Akku-Auflage.","achtung":"Mach Platten nicht zu dünn, sonst brechen sie beim ersten Crash sofort durch."},"cylinder":{"was":"Erzeugt eine runde Säule mit festem Durchmesser und beliebiger Höhe.","wozu":"Ideal für stabile Abstandshalter (Standoffs) zwischen zwei Frame-Platten.","achtung":"Prüfe, ob der Zylinder nicht den Platz für deine Propeller blockiert."},"tube":{"was":"Erstellt ein rundes Rohr, das innen komplett hohl ist.","wozu":"Perfekt als leichtes Schutzröhrchen für deine Antennen oder dünne Motorkabel.","achtung":"Wähle Außendurchmesser und Wand so, dass innen das Kabel samt Stecker durchpasst."},"sphere":{"was":"Formt einen komplett runden Ball in deiner gewünschten Größe.","wozu":"Nützlich für weiche Landefüße an den Armen oder als Gelenk für eine Kamerahalterung.","achtung":"Eine Kugel liegt nur auf einem Punkt auf – schneide sie zum Drucken unten etwas flach ab."},"hemisphere":{"was":"Erstellt eine halbe Kugel mit einer flachen Unterseite.","wozu":"Wird oft als aerodynamische Kuppel (Canopy) über dem Stack oder der Kamera genutzt.","achtung":"Höhle sie mit „Wandstärke“ aus, sonst ist darunter kein Platz für die Elektronik."},"cone":{"was":"Baut einen Kegel, der unten rund ist und nach oben spitz zuläuft.","wozu":"Gut für windschnittige Spitzen an schnellen Racern oder als Zentrierhilfe.","achtung":"Ganz spitze Enden brechen leicht ab, runde die Spitze oben lieber etwas ab."},"pyramid":{"was":"Erzeugt einen eckigen Körper, der nach oben hin spitz zusammenläuft.","wozu":"Praktisch für kantige Schutzhauben oder coole Design-Elemente auf dem Frame.","achtung":"Achte darauf, dass innen genug Platz für die Ecken deiner Platinen bleibt."},"torus":{"was":"Formt einen runden Ring, der aussieht wie ein kleiner Donut oder Reifen.","wozu":"Perfekt als runder Propellerschutz (Propguard) für kleine Whoop-Drohnen.","achtung":"Mach den Ring nicht zu dick, sonst wird deine Drohne schnell viel zu schwer."},"prism":{"was":"Erstellt eine Säule mit mehreren Ecken, zum Beispiel ein Sechseck.","wozu":"Ideal für sechseckige Abstandshalter, die man mit einem Maulschlüssel festhalten kann.","achtung":"Der Durchmesser zählt hier von Ecke zu Ecke, nicht von Fläche zu Fläche – wichtig fürs Schlüsselmaß."},"wedge":{"was":"Baut einen schrägen Keil wie eine kleine Sprungschanze.","wozu":"Gut als schräge Kamera-Halterung, um den Kamerawinkel einzustellen.","achtung":"Ist der Winkel zu steil, siehst du beim langsamen Schweben nur noch den Himmel."},"extrude":{"was":"Zieht eine flache 2D-Zeichnung in die Höhe, sodass ein 3D-Körper entsteht.","wozu":"Damit machst du aus deiner flachen Zeichnung eine echte Carbon-Armplatte.","achtung":"Deine Skizze muss komplett geschlossen sein, sonst kann sie nicht hochgezogen werden."},"revolve":{"was":"Dreht ein flaches Profil im Kreis um eine Achse und formt so einen runden Körper.","wozu":"Super für Propeller-Spinner, Hülsen oder runde Antennenhalter.","achtung":"Die Zeichnung darf die Drehachse nicht kreuzen, sonst überschneidet sich das Bauteil."},"group":{"was":"Verschmilzt mehrere Einzelteile und zieht alle Loch-Körper davon ab.","wozu":"Verbindet einzelne Arme und die Mittelplatte zu einem fertigen, gelochten Drohnen-Frame.","achtung":"Löcher in einer Gruppe schneiden nur Körper derselben Gruppe – zieh fehlende Teile im Verlauf hinein."},"hole":{"was":"Verwandelt einen Körper in ein Werkzeug zum Ausschneiden – du siehst ihn gestreift.","wozu":"Schneidet zum Beispiel große Fenster in die Deckplatte, um Gewicht zu sparen.","achtung":"Ein Loch schneidet nur, was es berührt: Lass es oben und unten etwas überstehen, damit es sauber durchgeht."},"pattern_rect":{"was":"Kopiert ein Teil mehrfach in geraden Reihen und Spalten nebeneinander.","wozu":"Erstellt blitzschnell Lüftungsschlitze zur Kühlung über deinem heißen Video-Sender.","achtung":"Lass genug Material zwischen den Kopien stehen, sonst bricht das Gitter leicht durch."},"pattern_circ":{"was":"Verteilt Kopien eines Bauteils gleichmäßig im Kreis um einen Mittelpunkt.","wozu":"Perfekt, um aus einem einzelnen Drohnenarm sofort vier oder sechs Arme zu machen.","achtung":"Leg den Mittelpunkt genau fest, sonst sitzen die Kopien schief zur Rahmenmitte."},"mirror":{"was":"Erstellt eine spiegelverkehrte Kopie deines Bauteils auf der gegenüberliegenden Seite.","wozu":"Baue nur die linke Seite der Kamerahalterung und spiegle sie einfach nach rechts.","achtung":"Wähle die richtige Spiegelebene, sonst klebt die Kopie plötzlich am falschen Ort."},"split":{"was":"Schneidet einen Körper an einer flachen Ebene in zwei getrennte Teile durch.","wozu":"Teilt eine komplexe Haube in Ober- und Unterteil, damit du sie einfacher drucken kannst.","achtung":"Überlege dir vorher, wie du die geteilten Hälften später wieder zusammenschraubst."},"intersect":{"was":"Behält nur genau den Bereich übrig, in dem sich zwei Körper überschneiden.","wozu":"Formt einen runden Kamera-Schutz, der exakt in die schräge Front des Frames passt.","achtung":"Berühren sich die beiden Ausgangskörper gar nicht, bleibt am Ende nichts übrig."},"shell":{"was":"Höhlt einen massiven Körper von innen aus und lässt nur eine bestimmte Wandstärke stehen.","wozu":"Macht aus einem schweren Klotz eine leichte Schutzhülle für deine Action-Cam.","achtung":"Prüf die Wand mit „Schwachstellen suchen“ – zu dünne Wände brechen beim ersten Crash."},"fillet":{"was":"Rundet scharfe Kanten weich ab, damit Übergänge fließend werden.","wozu":"Macht die Innenecken an den Carbon-Armen viel stabiler gegen Brüche beim Absturz.","achtung":"Rundest du die Kante an einer dünnen Platte zu stark ab, entsteht ein Fehler."},"chamfer":{"was":"Schneidet eine scharfe Kante schräg ab, sodass eine kleine flache Schräge entsteht.","wozu":"Entschärft die Kanten deiner Carbon-Platten, damit sie das Akku-Kabel nicht durchschneiden.","achtung":"Mach die Schräge bei dünnem Carbon nur ganz klein, sonst bleibt keine gerade Kante übrig."},"screwHole":{"was":"Bohrt ein rundes Loch, das genau für eine bestimmte Schraubengröße wie M2 oder M3 passt.","wozu":"Unverzichtbar, um Motoren, Stack und Standoffs fest mit dem Frame zu verschrauben.","achtung":"Nimm die Passung „Mittel“: Das Loch ist dann etwas größer als die Schraube. „Eng“ klemmt leicht."},"nutTrap":{"was":"Schneidet eine sechseckige Tasche aus, in der eine Mutter festsitzt.","wozu":"Hält die Muttern unter dem Stack fest, damit du beim Schrauben keinen Schlüssel brauchst.","achtung":"Mach die Tasche nicht zu weit, sonst dreht die Mutter beim Festziehen einfach durch."},"insert":{"was":"Erstellt ein spezielles Loch, in das man ein Messing-Gewinde mit dem Lötkolben einschmilzt.","wozu":"Gibt dir super stabile Metallgewinde direkt in deinen 3D-gedruckten Kunststoffteilen.","achtung":"Das Loch muss etwas kleiner als der Einsatz sein, damit das Plastik ihn gut festhält."},"slotHole":{"was":"Bohrt ein längliches Loch, in dem eine Schraube hin und her geschoben werden kann.","wozu":"Super für Motorhalterungen, damit verschiedene Motoren auf denselben Arm passen.","achtung":"Zieh die Schrauben im Langloch später gut fest und nutze Unterlegscheiben gegen Verrutschen."},"holePattern":{"was":"Erzeugt automatisch vier passende Schraubenlöcher im Standard-Abstand für Drohnenteile.","wozu":"Bohrt mit einem Klick die exakten Löcher für einen 20x20mm-Stack oder einen Motor.","achtung":"Prüfe vorab genau, ob dein Flugcontroller 20x20 oder 30,5x30,5 Millimeter Lochabstand hat."},"zipTie":{"was":"Schneidet zwei Schlitze für einen Kabelbinder in dein Bauteil.","wozu":"Ideal, um den kleinen Funk-Empfänger oder den Kondensator sicher am Frame festzuzurren.","achtung":"Setze Schlitze nicht zu nah an den Rand der Carbon-Platte, sonst reißt der Steg aus."},"snapHook":{"was":"Baut einen kleinen federnden Haken, der an einer Kante einrasten kann.","wozu":"Perfekt für einen Akkuschacht oder eine Haube, die du ohne Werkzeug öffnen willst.","achtung":"Drucke den Haken liegend, damit die Schichten längs laufen – sonst bricht er beim ersten Biegen ab."},"hinge":{"was":"Erzeugt ein bewegliches Gelenk, mit dem du zwei Bauteile klappbar verbindest.","wozu":"Nützlich für eine aufklappbare Haube oder einen Deckel am Akkufach.","achtung":"Lass im Gelenk etwas Spiel (Einstellung „Spalt“), sonst verschmilzt es beim Drucken."},"gear":{"was":"Erstellt ein rundes Rad mit Zähnen am Rand, das in ein anderes Zahnrad greift.","wozu":"Brauchst du für coole Extras wie eine Kamera, die sich im Flug per Knopfdruck neigt.","achtung":"Beide Zahnräder brauchen exakt die gleiche Zahngröße (Modul), sonst klemmen sie sofort."},"buy":{"was":"Fügt ein fertiges Teil wie Kamera, Motor oder Akku als Platzhalter mit echtem Gewicht aus dem Datenblatt ein.","wozu":"Zeigt dir sofort, ob alle Teile in den Frame passen und wo der Schwerpunkt der Drohne liegt.","achtung":"Beim DXF bleiben Kaufteile von selbst weg; für STL blende sie vor dem Export aus."}};
+
+const Explain = (() => {
+  function keyOf(it) {
+    if (Features.isOp(it)) { const p = it.p; return p.op === 'pattern' ? ({ rect: 'pattern_rect', circ: 'pattern_circ', mirror: 'mirror' }[p.pt] || 'group') : p.op; }
+    if (it.kind === 'part') return (it.p || {}).lib;
+    if (Mass.fixedOf(it)) return 'buy';
+    if (it.kind === 'group') return 'group';
+    if (it.role === 'hole') return 'hole';
+    return it.kind;
+  }
+  // Maß-Namen, die in einem Schritt (mit allen Kindern) vorkommen
+  function paramsUsed(it, doc = App.doc) {
+    const names = new Set((doc.params || []).map((p) => p.name)), out = new Set();
+    const scan = (o) => { for (const k in o || {}) { const v = o[k]; if (typeof v === 'string') for (const n of Expr.names(v)) if (names.has(n)) out.add(n); } };
+    Model.walk([it], (x) => { scan(x.p); scan(x.t); for (const f of x.finishes || []) scan(f); if (typeof x.massG === 'string') scan({ m: x.massG }); });
+    return [...out];
+  }
+  // Körper und Löcher zählen – Muster zählen mit ihrer Anzahl (4 Motorschrauben im Kreismuster = 4 Löcher)
+  function counts(it, V) {
+    let solids = 0, holes = 0;
+    const mult = (g) => { const p = Model.resolveP(g.p || {}, V); if (p.op !== 'pattern') return 1; if (p.pt === 'circ') return Math.max(1, Math.round(p.n || 1)); if (p.pt === 'rect') return Math.max(1, Math.round(p.nx || 1)) * Math.max(1, Math.round(p.ny || 1)); return 2; };
+    const rec = (list, k, hole) => { for (const c of list || []) { if (c.suppressed) continue; const isH = hole || c.role === 'hole'; if (c.kind === 'group') rec(c.children, k * mult(c), isH); else if (isH) holes += k; else solids += k; } };
+    rec(it.children, 1, false);
+    return { solids, holes };
+  }
+  // Erklärung aus den Daten des Schritts – geht immer, auch ohne KI
+  function local(id, doc = App.doc) {
+    const f = Model.find(doc, id); if (!f) return null;
+    const it = f.item, V = Model.vars(doc).v, key = keyOf(it), txt = STEP_TEXT[key] || STEP_TEXT[it.kind] || { was: 'Ein Schritt in deinem Modell.' };
+    const lines = [];
+    const top = doc.items.indexOf(it);
+    const where = top >= 0 ? `Schritt ${top + 1} von ${doc.items.length}` : `Teil von „${Model.label(f.parent)}“`;
+    lines.push({ k: 'was', t: txt.was });
+    const bb = top >= 0 && doc === App.doc ? Viewer.baseBox(id) : null;
+    const size = bb && !bb.isEmpty() ? `${fmt(bb.max.x - bb.min.x, 1)} × ${fmt(bb.max.y - bb.min.y, 1)} × ${fmt(bb.max.z - bb.min.z, 1)} mm` : it.kind !== 'group' ? Model.sizeText(it, V) : '';
+    if (size) lines.push({ k: 'groesse', t: `Größe: ${size}.` });
+    if (it.kind === 'group') {
+      const c = counts(it, V);
+      if (Features.isOp(it)) lines.push({ k: 'op', t: `${Features.NAMES[it.p.pt] || Features.NAMES[it.p.op] || 'Rechenschritt'}: ${Features.sizeText(it, V) || ''}`.trim() + '.' });
+      else if (c.holes && c.solids) lines.push({ k: 'kinder', t: `Aus ${c.solids} ${c.solids === 1 ? 'Körper' : 'Körpern'} ${c.holes === 1 ? 'wird 1 Loch' : `werden ${c.holes} Löcher`} geschnitten.` });
+      else if (c.solids) lines.push({ k: 'kinder', t: `Besteht aus ${c.solids} ${c.solids === 1 ? 'Körper' : 'Körpern'}.` });
+    }
+    if (it.role === 'hole' && top >= 0) lines.push({ k: 'loch', t: 'Als Loch auf oberster Ebene schneidet es jeden Körper, den es berührt.' });
+    for (const fin of it.finishes || []) lines.push({ k: 'fin', t: fin.type === 'shell' ? `Ausgehöhlt mit ${fmt(Model.num(fin.r, V, 2), 2)} mm Wand.` : `${fin.type === 'chamfer' ? 'Fase' : 'Rundung'} ${fmt(Model.num(fin.r, V, 1), 2)} mm an den Kanten.` });
+    const used = paramsUsed(it, doc);
+    if (used.length) lines.push({ k: 'masse', t: `Hängt an ${used.length === 1 ? 'dem Maß' : 'den Maßen'} ${used.slice(0, 6).join(', ')}${used.length > 6 ? ` und ${used.length - 6} weiteren` : ''}. Änderst du ${used.length === 1 ? 'es' : 'eines'} unter „Maße“, rechnet Tracery diesen Schritt neu.` });
+    if (top >= 0 && Mass.fixedOf(it)) lines.push({ k: 'gewicht', t: it.massG === '' ? 'Kaufteil: Das Gewicht fehlt noch – trag es rechts ein.' : `Kaufteil mit festem Gewicht ${fmt(Model.num(it.massG, V, 0), 1)} g.` });
+    else if (top >= 0 && it.role !== 'hole') lines.push({ k: 'material', t: `Material: ${Mass.materialFor(it, doc).k}.` });
+    if (it.suppressed) lines.push({ k: 'status', t: 'Dieser Schritt ist unterdrückt und zählt gerade nicht mit.' });
+    else if (top >= 0 && doc === App.doc && top >= Timeline.markerPos()) lines.push({ k: 'status', t: 'Dieser Schritt liegt hinter dem Marker der Zeitleiste und wird gerade nicht gerechnet.' });
+    if (it.ai) lines.push({ k: 'ki', t: (it.ai.edit ? 'Zuletzt von der KI geändert' : 'Von der KI gebaut') + ` – auf die Bitte „${it.ai.q}“.` });
+    if (txt.wozu) lines.push({ k: 'wozu', t: txt.wozu });
+    if (txt.achtung) lines.push({ k: 'achtung', t: 'Pass auf: ' + txt.achtung });
+    return { id, title: Model.label(it), where, key, lines, used };
+  }
+  async function askAI(info) {
+    const f = Model.find(App.doc, info.id); if (!f) return { error: 'Den Schritt gibt es nicht mehr.' };
+    const V = Model.vars(App.doc).v;
+    const masse = (App.doc.params || []).filter((p) => info.used.includes(p.name)).map((p) => `${p.name} = ${p.expr}${typeof p.expr === 'string' ? ' (= ' + fmt(V[p.name], 2) + ')' : ''}`).join('; ');
+    const prompt = `Du erklärst in Tracery, einem CAD-Programm für FPV-Drohnen, einen Schritt aus dem Modell. Die Leser sind Kinder ab 10 und Drohnenbauer.
+Erkläre auf Deutsch in der Du-Form in 3–5 kurzen Sätzen: was dieser Schritt baut, wofür er in diesem Projekt vermutlich da ist und welche Maße ihn steuern. Erfinde nichts, was nicht in den Daten steht. Gib danach höchstens einen kurzen Tipp, wie man ihn verbessern könnte (oder einen leeren Tipp).
+Antworte NUR mit JSON: {"erklaerung":"…","tipp":"…"}
+
+PROJEKT: ${App.doc.name}${App.doc.drone ? ` (Drohne ${App.doc.drone.zoll}" ${App.doc.drone.form || ''})` : ''}
+STELLE: ${info.where}
+SCHRITT (JSON): ${JSON.stringify(AI.compactItem(f.item)).slice(0, 12000)}
+MASSE: ${masse || 'keine'}
+WAS TRACERY SCHON WEISS: ${info.lines.map((l) => l.t).join(' ')}`;
+    const r = await AI.json(prompt);
+    if (r.error) return r;
+    const e = String((r.res && (r.res.erklaerung || r.res.antwort)) || '').slice(0, 900), t = String((r.res && r.res.tipp) || '').slice(0, 300);
+    return e ? { text: e, tip: t } : { error: 'Die KI hat nichts geantwortet.' };
+  }
+  function dialog(id) {
+    id = id || App.sel[0];
+    const info = id && local(id);
+    if (!info) { UI.toast('Wähle zuerst einen Schritt – in der Zeitleiste, im Verlauf oder im Bild.', { icon: 'info' }); return; }
+    const body = h('div', { class: 'explain', id: 'explain' });
+    body.append(h('div', { class: 'explain-where' }, info.where));
+    const ul = h('ul', { class: 'explain-list' });
+    for (const l of info.lines) ul.append(h('li', { class: 'ex-' + l.k }, l.t));
+    body.append(ul);
+    const aiBox = h('div', { class: 'explain-ai', id: 'explain-ai' });
+    if (AI.available && window.claude) {
+      const b = h('button', { type: 'button', class: 'btn small', id: 'explain-ask' }); b.innerHTML = icon('spark') + 'Genauer von der KI erklären';
+      b.onclick = async () => {
+        b.disabled = true; aiBox.innerHTML = ''; aiBox.append(h('div', { class: 'hint-box' }, 'Die KI denkt nach …'));
+        const r = await askAI(info); aiBox.innerHTML = '';
+        if (r.error) { aiBox.append(h('div', { class: 'hint-box warn' }, r.error)); b.disabled = false; return; }
+        const w = h('div', { class: 'ai-say' }); w.innerHTML = icon('spark'); w.append(h('div', null, h('p', null, r.text), r.tip ? h('p', { class: 'tip' }, h('b', null, 'Tipp: '), r.tip) : ''));
+        aiBox.append(w); b.remove();
+      };
+      body.append(h('div', { class: 'btn-row' }, b));
+    }
+    body.append(aiBox);
+    UI.modal({ title: info.title, body, actions: [{ label: 'Auswählen', run: () => { App.select([id]); } }, { label: 'Schließen', primary: true }] });
+    // Gewicht nachtragen, sobald es gerechnet ist
+    const f = Model.find(App.doc, id);
+    if (f && App.doc.items.includes(f.item) && f.item.role !== 'hole') Mass.measure().then((r) => { const p = Mass.partOf(r, id); const li = body.querySelector('.ex-material, .ex-gewicht'); if (p && li && !p.fixed) li.textContent += ` Wiegt ca. ${Mass.gText(p.mass)}.`; });
+  }
+  return { local, dialog, keyOf, paramsUsed, askAI };
+})();
+
+// ---------- Schwachstellen ----------
+const Weak = (() => {
+  // Faustregeln (Gemini Prompt I, Quellen geprüft – siehe app/data/faustregeln.json)
+  const RULES = {
+    // Lochmitte bis Rand als Vielfaches des Lochdurchmessers. Für belastete Carbon-Verschraubungen empfiehlt Yongxian 2,5 × (bis 4 ×);
+    // FPV-Rahmen liegen an Motorauflagen meist darunter. Tracery meldet deshalb erst unter der Untergrenze aus dem Stahlbau (1,2 ×, EN 1993-1-8).
+    edge: { warn: 1.2, bad: 1.0, rec: 2.5 },
+    pitch: { warn: 0.5, bad: 0.25, rec: 4 },        // Steg zwischen zwei Löchern (× kleinerer Durchmesser); empfohlen: Mitte zu Mitte 4 × D (Yongxian)
+    wall: { print: [0.8, 1.5], tpu: [1.2, 1.5], fiber: [1.0, 1.5], metal: [0.5, 0.8], wood: [2, 3] },   // [rot unter, gelb unter] in mm (Druck: 3D-Demand)
+    printHole: { small: 1.5, big: 2.0 },             // Wand um Schraubenlöcher in Druckteilen: M2 1,5 mm, ab M3 2 mm (3Dbite)
+    arm: { 3: [3, 3], 4: [3, 4], 5: [4, 5], 6: [4.5, 5.5], 7: [5, 6] },   // [Race-Untergrenze, Freestyle-Empfehlung] in mm (fpvdroneframe.com; 6" geschätzt)
+  };
+  const SOURCES = [
+    ['Yongxian: Carbon-Platten verschrauben', 'https://www.yongxian.co/en/blog/carbon-fiber-plate-metal-fasteners'],
+    ['fpvdroneframe.com: Armdicke', 'https://fpvdroneframe.com/how-to-choose-the-right-fpv-drone-frame/'],
+    ['3D-Demand: Wandstärke beim FDM-Druck', 'https://www.3d-demand.com/blog/design-guidelines-for-fdm-3d-printing-wall-thickness-tolerances-file-prep'],
+    ['3Dbite: Gewindeeinsätze', 'https://3dbite.com/brass-heat-set-inserts-3d-printing-guide/'],
+  ];
+  const CLASS = { PLA: 'print', PETG: 'print', ABS: 'print', ASA: 'print', 'TPU 95A': 'tpu', PA12: 'print', PC: 'print', POM: 'print', CFK: 'fiber', GFK: 'fiber', 'Alu 6061': 'metal', 'Alu 7075': 'metal', 'Titan Gr. 5': 'metal', Baustahl: 'metal', 'V2A Edelstahl': 'metal', Messing: 'metal', Buche: 'wood', 'Pappel-Sperrholz': 'wood' };
+  let last = null, marks = [], markTimer = null;
+  const ev = makeEmitter();
+  // Abstand Punkt – Strecke
+  function segDist(p, a, b) {
+    const dx = b[0] - a[0], dy = b[1] - a[1], L = dx * dx + dy * dy;
+    const t = L ? clamp(((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L, 0, 1) : 0;
+    return Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy);
+  }
+  function edgeDist(p, e) {
+    if (e.t === 'LINE') return segDist(p, e.a, e.b);
+    if (e.t === 'CIRCLE' && e.full && e.c) return Math.abs(Math.hypot(p[0] - e.c[0], p[1] - e.c[1]) - e.r);
+    let d = Infinity; const q = e.pts || []; for (let i = 0; i < q.length - 1; i++) d = Math.min(d, segDist(p, q[i], q[i + 1]));
+    return d;
+  }
+  // Löcher in einer flachen Platte: Rand und Steg zwischen den Löchern (von oben gesehen)
+  async function plateHoles(plate) {
+    const it = App.doc.items.find((x) => x.id === plate.id); if (!it) return [];
+    const V = Model.vars(App.doc).v;
+    const holes = Model.activeItems(App.doc).filter((x) => x.role === 'hole' && !x.hidden);
+    let res; try { res = await Kernel.call('project', { scene: { items: [it, ...holes].map((x) => Model.kernelItem(x, V)) }, views: ['top'] }); } catch (_) { return []; }
+    const edges = (res.views && res.views.top && res.views.top.visible) || [];
+    const isHole = (e) => e.t === 'CIRCLE' && e.full && e.c && e.r <= 8;
+    const H = edges.filter(isHole);
+    const b = Viewer.baseBox(it.id), z = b ? b.max.z : 0;
+    const cls = CLASS[Mass.materialFor(it).k] || 'print', printed = cls === 'print' || cls === 'tpu';
+    const groups = new Map();
+    const add = (kind, s, hole, val, ratio, dn) => {
+      const key = `${kind}|${s}|${fmt(hole.r * 2, 1)}|${fmt(val, 1)}`;
+      if (!groups.has(key)) groups.set(key, { kind, s, d: hole.r * 2, val, ratio, dn, at: [] });
+      const g = groups.get(key); if (!g.at.some((q) => Math.hypot(q[0] - hole.c[0], q[1] - hole.c[1]) < 0.05)) g.at.push([hole.c[0], hole.c[1], z]);
+    };
+    for (const hl of H) {
+      const D = hl.r * 2;
+      let edge = Infinity, lig = Infinity, dn = D;
+      for (const e of edges) {
+        if (e === hl) continue;
+        if (isHole(e)) {
+          const dc = Math.hypot(e.c[0] - hl.c[0], e.c[1] - hl.c[1]); if (dc < 0.05) continue;   // gleiche Mitte: Senkung
+          const l = dc - hl.r - e.r; if (l < lig) { lig = l; dn = Math.min(D, e.r * 2); }
+          continue;
+        }
+        edge = Math.min(edge, edgeDist(hl.c, e));
+      }
+      if (isFinite(edge)) {
+        const ratio = edge / D, wall = edge - hl.r;
+        let s = ratio < RULES.edge.bad ? 'bad' : ratio < RULES.edge.warn ? 'warn' : null;
+        if (printed) { const need = D < 2.8 ? RULES.printHole.small : RULES.printHole.big; const s2 = wall < need / 2 ? 'bad' : wall < need ? 'warn' : null; if (s2 === 'bad' || (s2 && !s)) s = s2; }
+        if (s) add(printed ? 'pedge' : 'edge', s, hl, wall, ratio);
+      }
+      if (isFinite(lig) && lig > -0.01) { const ratio = lig / dn; const s = ratio < RULES.pitch.bad ? 'bad' : ratio < RULES.pitch.warn ? 'warn' : null; if (s) add('pitch', s, hl, lig, ratio, dn); }
+    }
+    return [...groups.values()].map((g) => ({
+      id: g.kind === 'pitch' ? 'hole-pitch' : 'hole-edge', s: g.s, title: g.kind === 'pitch' ? `Löcher nah beieinander – ${plate.name}` : `Löcher nah am Rand – ${plate.name}`,
+      text: (g.kind === 'pitch'
+        ? `${g.at.length} ${g.at.length === 1 ? 'Loch' : 'Löcher'} (Ø ${fmt(g.d, 1)} mm) mit nur ${fmt(g.val, 1)} mm Steg zum nächsten Loch. Tracery meldet unter ${fmt(RULES.pitch.warn * g.dn, 1)} mm (halber Durchmesser); für belastete Carbon-Verschraubungen empfehlen Hersteller sogar ${fmt(RULES.pitch.rec, 0)} × Durchmesser von Mitte zu Mitte.`
+        : `${g.at.length} ${g.at.length === 1 ? 'Loch' : 'Löcher'} (Ø ${fmt(g.d, 1)} mm) ${g.at.length === 1 ? 'hat' : 'haben'} nur ${fmt(g.val, 1)} mm Material bis zum Rand – da reißt es bei einem Crash zuerst aus. ` +
+          (g.kind === 'pedge'
+            ? `Bei Druckteilen gehören um ein Schraubenloch mindestens ${fmt(g.d < 2.8 ? RULES.printHole.small : RULES.printHole.big, 1)} mm Material.`
+            : `Tracery meldet, wenn die Lochmitte näher als ${fmt(RULES.edge.warn, 1)} × Durchmesser am Rand liegt (hier ${fmt(RULES.edge.warn * g.d, 1)} mm); für belastete Carbon-Verschraubungen empfehlen Hersteller ${fmt(RULES.edge.rec, 1)} ×.`)),
+      ids: [plate.id], at: g.at, r: g.d / 2,
+    }));
+  }
+  // dünnste Stelle eines Teils aus seinen Grundkörpern
+  function thinnest(it, V) {
+    let best = null;
+    const P = (x) => Model.resolveP(x.p || {}, V);
+    const rec = (x) => {
+      if (x.role === 'hole' || x.hidden || x.suppressed) return;   // Löcher (auch Loch-Gruppen) zählen nicht
+      if (x.kind === 'group') { for (const c of x.children || []) rec(c); }
+      const p = P(x); let t = null, what = '';
+      if (x.kind === 'box') { t = Math.min(p.w, p.d, p.h); what = 'Dicke'; }
+      else if (x.kind === 'cylinder') { t = Math.min(p.d, p.h); what = p.h < p.d ? 'Dicke' : 'Durchmesser'; }
+      else if (x.kind === 'tube') { t = Math.min(p.wall, p.h); what = 'Wand'; }
+      else if (x.kind === 'prism') { t = Math.min(p.d, p.h); what = 'Dicke'; }
+      else if (x.kind === 'extrude') { t = Math.abs(p.dist); what = 'Dicke'; }
+      for (const f of x.finishes || []) if (f.type === 'shell') { const r = Model.num(f.r, V, 2); if (t == null || r < t) { t = r; what = 'Wand'; } }
+      if (typeof t === 'number' && isFinite(t) && t > 0 && (!best || t < best.t)) best = { t, what, name: Model.label(x) };
+    };
+    rec(it);
+    return best;
+  }
+  function walls() {
+    const out = [], V = Model.vars(App.doc).v;
+    for (const it of Model.activeItems(App.doc)) {
+      if (it.hidden || it.role === 'hole' || Mass.fixedOf(it)) continue;
+      const m = Mass.materialFor(it), cls = CLASS[m.k] || 'print', [bad, warn] = RULES.wall[cls];
+      const th = thinnest(it, V); if (!th) continue;
+      const s = th.t < bad ? 'bad' : th.t < warn ? 'warn' : null; if (!s) continue;
+      const b = Viewer.baseBox(it.id); const c = b ? b.getCenter(new THREE.Vector3()) : null;
+      out.push({ id: 'wall', s, title: `Dünne Stelle – ${Model.label(it)}`, text: `„${th.name}“ ist nur ${fmt(th.t, 2)} mm ${th.what === 'Durchmesser' ? 'dick' : th.what === 'Wand' ? 'Wand' : 'dick'} (${m.k}). Faustregel für ${({ print: 'tragende Druckteile', tpu: 'TPU', fiber: 'Carbon und GFK', metal: 'Metall', wood: 'Holz' })[cls]}: mindestens ${fmt(warn, 1)} mm.`, ids: [it.id], at: c ? [[c.x, c.y, b.max.z]] : [], r: 6 });
+    }
+    return out;
+  }
+  function arms() {
+    if (!DroneCheck.isDrone()) return [];
+    const V = Model.vars(App.doc).v, z = Math.round(V.Propeller), r = RULES.arm[z]; if (!r || typeof V.Armdicke !== 'number') return [];
+    const [min, rec] = r; const t = V.Armdicke;
+    if (t >= rec) return [];
+    const s = t < min - 1 ? 'bad' : t < min ? 'warn' : 'info';
+    return [{ id: 'arm', s, title: s === 'info' ? 'Arme für Freestyle eher dünn' : 'Dünne Arme', text: s === 'info'
+      ? `Die Arme sind ${fmt(t, 1)} mm dick – für einen ${z}"-Racer in Ordnung, für Freestyle sind ${fmt(rec, 1)} mm üblich.`
+      : `Die Arme sind ${fmt(t, 1)} mm dick. Für ${z}"-Rahmen nehmen Racer mindestens ${fmt(min, 1)} mm, Freestyle-Rahmen ${fmt(rec, 1)} mm – dünnere Arme brechen beim Crash zuerst.`, ids: App.doc.items.filter((i) => i.name === 'Unterteil').map((i) => i.id), fix: { label: `Armdicke auf ${fmt(rec, 1)} mm`, run: () => App.change('Armdicke erhöht', (doc) => { doc.params.find((p) => p.name === 'Armdicke').expr = rec; }) } }];
+  }
+  async function analyze() {
+    if (!App.doc.items.length) return [];
+    const rev = App.revision, out = [];
+    for (const pl of Plates.candidates()) out.push(...(await plateHoles(pl)));
+    out.push(...walls(), ...arms());
+    if (DroneCheck.isDrone()) {
+      const l = (await DroneCheck.run()) || [];
+      for (const c of l) if ((c.s === 'bad' || c.s === 'warn') && c.id !== 'weight') out.push({ ...c, id: 'drone-' + c.id, title: c.title + ' (Drohnen-Check)' });
+    }
+    const order = { bad: 0, warn: 1, info: 2 };
+    out.sort((a, b) => order[a.s] - order[b.s]);
+    last = { rev, list: out };
+    ev.emit('analyzed', out);
+    return out;
+  }
+  function summary() { return last && last.rev === App.revision ? last.list : null; }
+  // Fundstellen im Bild markieren (rote Ringe), bis sich die Auswahl ändert
+  function clearMarks() { for (const m of marks) { Viewer.groups.overlay.remove(m); m.geometry.dispose(); m.material.dispose(); } marks = []; clearTimeout(markTimer); Viewer.requestRender(); }
+  function mark(points, r = 3) {
+    clearMarks();
+    for (const p of points || []) {
+      const R0 = Math.max(r * 1.6, 6), R1 = R0 + Math.max(1.2, R0 * 0.2);   // auch kleine Löcher gut sichtbar
+      const ring = new THREE.Mesh(new THREE.RingGeometry(R0, R1, 48), new THREE.MeshBasicMaterial({ color: 0xe5484d, transparent: true, opacity: 0.95, depthTest: false, side: THREE.DoubleSide }));
+      ring.position.set(p[0], p[1], p[2] + 0.2); ring.renderOrder = 45;
+      Viewer.groups.overlay.add(ring); marks.push(ring);
+    }
+    Viewer.requestRender();
+    markTimer = setTimeout(clearMarks, 12000);
+  }
+  function show(c) {
+    if (c.ids && c.ids.length) App.select(c.ids);
+    if (c.at && c.at.length) {
+      mark(c.at, c.r || 3);
+      // nah heranfahren, damit auch ein kleines Loch gut zu sehen ist
+      const bx = new THREE.Box3(); for (const p of c.at) bx.expandByPoint(new THREE.Vector3(...p)); bx.expandByScalar(28);
+      const cam = Viewer.camera, ctr = Viewer.controls, cen = bx.getCenter(new THREE.Vector3()), r = bx.getSize(new THREE.Vector3()).length() / 2;
+      const dir = cam.position.clone().sub(ctr.target).normalize();
+      setTimeout(() => Viewer.moveCamera(cen.clone().add(dir.multiplyScalar((r / Math.sin((cam.fov * Math.PI) / 360)) * 1.05)), cen), 60);
+    }
+  }
+  function rows(list, onShow, compact = false) {
+    const box = h('div', { class: 'chk-list' + (compact ? ' compact' : '') });
+    for (const c of list) {
+      const r = h('div', { class: 'chk-row ' + c.s, 'data-weak': c.id }, h('span', { class: 'chk-dot', 'aria-hidden': 'true' }, { ok: '✓', warn: '!', bad: '✕', info: 'i' }[c.s]), h('div', { class: 'grow' }, h('b', null, c.title), h('span', null, c.text)));
+      const btns = h('div', { class: 'chk-btns' });
+      if (c.fix) { const b = h('button', { type: 'button', class: 'btn small', 'data-fix': c.id }); b.innerHTML = icon('check') + esc(c.fix.label); b.onclick = () => { c.fix.run(); onShow && onShow(null); }; btns.append(b); }
+      if (((c.ids && c.ids.length) || (c.at && c.at.length)) && onShow) { const b = h('button', { type: 'button', class: 'btn small ghost' }, 'Zeigen'); b.onclick = () => onShow(c); btns.append(b); }
+      if (btns.children.length) r.append(btns);
+      box.append(r);
+    }
+    return box;
+  }
+  async function askAI(list) {
+    const prompt = `Du bist der Konstruktions-Prüfer in Tracery, einem CAD-Programm für FPV-Drohnen. Die Leser sind Kinder ab 10 und Drohnenbauer.
+Tracery hat mit Faustregeln diese Schwachstellen gefunden (kann auch leer sein):
+${list.length ? list.map((c, i) => `${i + 1}. [${c.s}] ${c.title}: ${c.text}`).join('\n') : 'keine'}
+
+Aufgabe: Erkläre in 2–4 kurzen Sätzen auf Deutsch (du-Form), was davon am wichtigsten ist und warum. Nenne auch eine weitere Schwachstelle, die du im Modell siehst, falls es eine gibt – erfinde aber keine Zahlen. Mach höchstens 3 konkrete Verbesserungsvorschläge, die sich mit den Aktionen unten umsetzen lassen (am besten über Maße mit op "mass", z. B. Armdicke, Plattenbreite, Bolzenhöhe).
+Antworte NUR mit JSON: {"antwort":"…","vorschlaege":[{"titel":"kurz, was passiert","aktionen":[…]}]}
+
+AKTIONEN (Format der "aktionen" in jedem Vorschlag):
+${AI.ACTIONS}
+
+AKTUELLES MODELL (JSON):
+${AI.modelText()}`;
+    const r = await AI.json(prompt);
+    if (r.error) return r;
+    const res = r.res || {};
+    const sug = (Array.isArray(res.vorschlaege) ? res.vorschlaege : []).filter((v) => v && Array.isArray(v.aktionen) && v.aktionen.length).slice(0, 3).map((v) => ({ title: String(v.titel || 'Vorschlag').slice(0, 120), acts: v.aktionen }));
+    return { text: String(res.antwort || '').slice(0, 900), sug };
+  }
+  async function dialog() {
+    if (!App.doc.items.length) { UI.toast('Es gibt noch nichts zu prüfen. Bau zuerst etwas.', { icon: 'info' }); return; }
+    const body = h('div', { class: 'chk weak', id: 'weak' }, h('div', { class: 'hint-box' }, 'Suche Schwachstellen … (Löcher, Wände, Arme' + (DroneCheck.isDrone() ? ', Drohnen-Check' : '') + ')'));
+    const m = UI.modal({ title: 'Schwachstellen', body, wide: true, actions: [{ label: 'Schließen', primary: true }] });
+    const list = await analyze();
+    const draw = (l) => {
+      body.innerHTML = '';
+      if (!l.length) body.append(h('div', { class: 'chk-row ok' }, h('span', { class: 'chk-dot' }, '✓'), h('div', { class: 'grow' }, h('b', null, 'Keine Schwachstellen gefunden'), h('span', null, 'Löcher haben genug Rand, Wände und Arme sind dick genug.'))));
+      else body.append(rows(l, (c) => { if (!c) { m.close(); setTimeout(dialog, 400); return; } m.close(); show(c); }));
+      body.append(h('div', { class: 'hint-box', html: 'Die Werte sind <b>Faustregeln</b>, keine Festigkeitsberechnung. Grün heißt: nichts Auffälliges – testen musst du trotzdem.<br><small>Quellen: ' + SOURCES.map(([t, u]) => `<a href="${u}" target="_blank" rel="noopener">${esc(t)}</a>`).join(' · ') + '</small>' }));
+      if (AI.available && window.claude) {
+        const aiBox = h('div', { class: 'explain-ai', id: 'weak-ai' });
+        const b = h('button', { type: 'button', class: 'btn small', id: 'weak-ask' }); b.innerHTML = icon('spark') + (l.length ? 'Von der KI erklären und verbessern lassen' : 'Die KI nach weiteren Schwachstellen fragen');
+        b.onclick = async () => {
+          b.disabled = true; aiBox.innerHTML = ''; aiBox.append(h('div', { class: 'hint-box' }, 'Die KI schaut sich das Modell an …'));
+          const r = await askAI(l); aiBox.innerHTML = '';
+          if (r.error) { aiBox.append(h('div', { class: 'hint-box warn' }, r.error)); b.disabled = false; return; }
+          const w = h('div', { class: 'ai-say' }); w.innerHTML = icon('spark'); w.append(h('div', null, h('p', null, r.text || 'Keine weiteren Hinweise.')));
+          aiBox.append(w);
+          for (const sg of r.sug) {
+            const row = h('div', { class: 'ai-sug' }, h('span', { class: 'grow' }, sg.title));
+            const ub = h('button', { type: 'button', class: 'btn small primary', 'data-sug': '1' }); ub.innerHTML = icon('check') + 'Umsetzen';
+            ub.onclick = () => { const rep = AI.apply(sg.acts, 'Verbesserung: ' + sg.title); ub.disabled = true; ub.innerHTML = icon('check') + 'Umgesetzt'; if (rep.notes.length) UI.toast(rep.notes.join(' '), { icon: 'info' }); };
+            row.append(ub); aiBox.append(row);
+          }
+          b.remove();
+        };
+        body.append(h('div', { class: 'btn-row' }, b), aiBox);
+      }
+    };
+    draw(list);
+  }
+  App.on('selection', () => { if (marks.length) setTimeout(() => { if (!App.sel.length) clearMarks(); }, 50); });
+  return { analyze, dialog, summary, mark, clearMarks, rows, RULES, SOURCES, on: ev.on, get marks() { return marks.length; } };
+})();
 // ---- 90-main.js ----
 // ================= Start der App =================
 (function boot() {
@@ -11194,7 +11690,7 @@ const Variants = (() => {
   window.__masswerk = { App, Viewer, Model, Actions, Sketch, SK, THREE, Print, Drawing, Kernel, UI, Commands, Panels, Handles, Start, AI, Measure, Place };
   UI.initTips();
   Viewer.init($('#viewport'));
-  window.__V = Viewer; window.__M = { App, Actions, Model, Timeline, Start, Comp, Handles, Sketch, SK, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views, Mass, Select, Versions, DroneTpl, DroneUI, DroneLib, DroneCheck, Plates, Variants }; window.__S = Start; // für automatische Tests
+  window.__V = Viewer; window.__M = { App, Actions, Model, Timeline, Start, Comp, Handles, Sketch, SK, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views, Mass, Select, Versions, DroneTpl, DroneUI, DroneLib, DroneCheck, Plates, Variants, Explain, Weak, AI }; window.__S = Start; // für automatische Tests
   Panels.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Notes.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init(); Refine.init(); Comp.init(); Views.init(); Mass.init(); Versions.init();
 
   // Kopfzeile

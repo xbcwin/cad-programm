@@ -1,14 +1,125 @@
 {
-  "_hinweis": "Entwurf Gemini (Prompt G), von Claude am 19.10.2026 auf den Herstellerseiten geprüft. Nur Einträge mit geprueft=true dienen als Vorgabe.",
+  "_hinweis": "Entwurf Gemini (Prompt G), von Claude am 19.10.2026 auf den Herstellerseiten geprüft. Nur Einträge mit geprueft=true dienen als Vorgabe. Ergänzt am 20.10.2026 aus Prompt J: T-Motor F90 1300KV (Testtabelle bei ligpower.com, 100 % Gas bei etwa 23,5 V).",
   "motoren": [
-    { "motor": "SpeedyBee 1404 V2", "stator": "1404", "kv": 4600, "zellen": "4S", "propeller": "Gemfan 3016-3", "max_schub_g": 431.5, "strom_bei_max_a": 12.85, "gewicht_motor_g": 9.12, "quelle": "https://rcdrone.top/products/speedybee-1404-v2-4600kv-brushless-motor", "geprueft": true },
-    { "motor": "Flash Hobby Arthur A1404", "stator": "1404", "kv": 2800, "zellen": "6S", "propeller": null, "max_schub_g": 343, "strom_bei_max_a": null, "gewicht_motor_g": 9.3, "quelle": "https://www.flashhobby.com/a1404-brushless-dc-motor.html", "geprueft": false },
-    { "motor": "VCI SPARK 2004", "stator": "2004", "kv": 3000, "zellen": "4S", "propeller": "Gemfan D90-3", "max_schub_g": 768, "strom_bei_max_a": 23.48, "gewicht_motor_g": 16.5, "quelle": "https://rcdrone.top/products/vci-spark-2004-brushless-motor", "geprueft": true },
-    { "motor": "Flash Hobby King K2004", "stator": "2004", "kv": 1900, "zellen": "6S", "propeller": "HQ 5030", "max_schub_g": 844, "strom_bei_max_a": 15.0, "gewicht_motor_g": 17.4, "quelle": "https://www.flashhobby.com/k2004-brushless-dc-motor.html", "geprueft": true },
-    { "motor": "T-Motor F50", "stator": "2207", "kv": 2150, "zellen": "6S", "propeller": null, "max_schub_g": 2136, "strom_bei_max_a": null, "gewicht_motor_g": 28.56, "quelle": "https://www.t-hobby.com/products/tmotor-f50-2207-racing-motor", "geprueft": true },
-    { "motor": "RCINPOWER AOS Supernova 2207", "stator": "2207", "kv": 1980, "zellen": "6S", "propeller": "Gemfan 51466", "max_schub_g": 2547, "strom_bei_max_a": null, "gewicht_motor_g": null, "quelle": "https://rcdrone.top/products/rcinpower-aos-supernova-2207-1980kv-6s-brushless-motor", "geprueft": false },
-    { "motor": "T-Motor Velox V2306 V3", "stator": "2306", "kv": 1950, "zellen": "6S", "propeller": null, "max_schub_g": null, "strom_bei_max_a": 41.7, "gewicht_motor_g": 33.7, "quelle": "https://www.t-hobby.com/products/tmotor-v2306-v3-brushless-racing-motor", "geprueft": false },
-    { "motor": "T-Motor F90", "stator": "2806.5", "kv": 1500, "zellen": "6S", "propeller": null, "max_schub_g": 2000, "strom_bei_max_a": 47.4, "gewicht_motor_g": 46.7, "quelle": "https://www.t-hobby.com/products/brushless-motor-x8-fpv-drones-f90-2806-5", "geprueft": false },
-    { "motor": "iFlight XING 2806.5", "stator": "2806.5", "kv": 1300, "zellen": "6S", "propeller": null, "max_schub_g": null, "strom_bei_max_a": 48.33, "gewicht_motor_g": 54.3, "quelle": "https://shop.iflight.com/xing-x2806-5-fpv-nextgen-motor-pro1001", "geprueft": true }
+    {
+      "motor": "SpeedyBee 1404 V2",
+      "stator": "1404",
+      "kv": 4600,
+      "zellen": "4S",
+      "propeller": "Gemfan 3016-3",
+      "max_schub_g": 431.5,
+      "strom_bei_max_a": 12.85,
+      "gewicht_motor_g": 9.12,
+      "quelle": "https://rcdrone.top/products/speedybee-1404-v2-4600kv-brushless-motor",
+      "geprueft": true
+    },
+    {
+      "motor": "Flash Hobby Arthur A1404",
+      "stator": "1404",
+      "kv": 2800,
+      "zellen": "6S",
+      "propeller": null,
+      "max_schub_g": 343,
+      "strom_bei_max_a": null,
+      "gewicht_motor_g": 9.3,
+      "quelle": "https://www.flashhobby.com/a1404-brushless-dc-motor.html",
+      "geprueft": false
+    },
+    {
+      "motor": "VCI SPARK 2004",
+      "stator": "2004",
+      "kv": 3000,
+      "zellen": "4S",
+      "propeller": "Gemfan D90-3",
+      "max_schub_g": 768,
+      "strom_bei_max_a": 23.48,
+      "gewicht_motor_g": 16.5,
+      "quelle": "https://rcdrone.top/products/vci-spark-2004-brushless-motor",
+      "geprueft": true
+    },
+    {
+      "motor": "Flash Hobby King K2004",
+      "stator": "2004",
+      "kv": 1900,
+      "zellen": "6S",
+      "propeller": "HQ 5030",
+      "max_schub_g": 844,
+      "strom_bei_max_a": 15.0,
+      "gewicht_motor_g": 17.4,
+      "quelle": "https://www.flashhobby.com/k2004-brushless-dc-motor.html",
+      "geprueft": true
+    },
+    {
+      "motor": "T-Motor F50",
+      "stator": "2207",
+      "kv": 2150,
+      "zellen": "6S",
+      "propeller": null,
+      "max_schub_g": 2136,
+      "strom_bei_max_a": null,
+      "gewicht_motor_g": 28.56,
+      "quelle": "https://www.t-hobby.com/products/tmotor-f50-2207-racing-motor",
+      "geprueft": true
+    },
+    {
+      "motor": "RCINPOWER AOS Supernova 2207",
+      "stator": "2207",
+      "kv": 1980,
+      "zellen": "6S",
+      "propeller": "Gemfan 51466",
+      "max_schub_g": 2547,
+      "strom_bei_max_a": null,
+      "gewicht_motor_g": null,
+      "quelle": "https://rcdrone.top/products/rcinpower-aos-supernova-2207-1980kv-6s-brushless-motor",
+      "geprueft": false
+    },
+    {
+      "motor": "T-Motor Velox V2306 V3",
+      "stator": "2306",
+      "kv": 1950,
+      "zellen": "6S",
+      "propeller": null,
+      "max_schub_g": null,
+      "strom_bei_max_a": 41.7,
+      "gewicht_motor_g": 33.7,
+      "quelle": "https://www.t-hobby.com/products/tmotor-v2306-v3-brushless-racing-motor",
+      "geprueft": false
+    },
+    {
+      "motor": "T-Motor F90",
+      "stator": "2806.5",
+      "kv": 1500,
+      "zellen": "6S",
+      "propeller": null,
+      "max_schub_g": 2000,
+      "strom_bei_max_a": 47.4,
+      "gewicht_motor_g": 46.7,
+      "quelle": "https://www.t-hobby.com/products/brushless-motor-x8-fpv-drones-f90-2806-5",
+      "geprueft": false
+    },
+    {
+      "motor": "T-Motor F90 2806.5",
+      "stator": "2806.5",
+      "kv": 1300,
+      "zellen": "6S",
+      "propeller": "HQ 7040-3",
+      "max_schub_g": 2360.6,
+      "strom_bei_max_a": 45.11,
+      "gewicht_motor_g": 46.6,
+      "quelle": "https://www.ligpower.com/product/f90-fpv-motor.html",
+      "geprueft": true
+    },
+    {
+      "motor": "iFlight XING 2806.5",
+      "stator": "2806.5",
+      "kv": 1300,
+      "zellen": "6S",
+      "propeller": null,
+      "max_schub_g": null,
+      "strom_bei_max_a": 48.33,
+      "gewicht_motor_g": 54.3,
+      "quelle": "https://shop.iflight.com/xing-x2806-5-fpv-nextgen-motor-pro1001",
+      "geprueft": true
+    }
   ]
 }

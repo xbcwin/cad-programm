@@ -14,7 +14,7 @@ const DroneLib = (() => {
     });
   }
   function motor(stator) { return motors().find((m) => m.stator === stator) || motors().find((m) => m.stator === '2207'); }
-  function akkus() { return (FPV_DATA.akkus || []).map((a) => ({ name: 'Akku ' + a.typ, w: a.b_mm, l: a.l_mm, h: a.h_mm, g: a.gewicht_g })); }
+  function akkus() { return (FPV_DATA.akkus || []).map((a) => ({ name: 'Akku ' + a.typ, w: a.b_mm, l: a.l_mm, h: a.h_mm, g: a.gewicht_g, produkt: a.produkt || null })); }
   function akku(typ) { return akkus().find((a) => a.name === typ || a.name === 'Akku ' + typ) || null; }
   function stacks() { return (FPV_DATA.stack || []).map((s) => ({ name: s.name, a: s.quadrat_mm, screw: s.schraube.startsWith('M2') ? 'M2' : 'M3', board: s.platine_mm })); }
   function cams() { return (FPV_DATA.kameras || []).map((c) => ({ name: c.name, w: c.breite_mm })); }
@@ -28,7 +28,7 @@ const DroneLib = (() => {
     const out = [];
     const box = (name, l, b, hgt, g, extra = {}) => ({ buy: true, kind: 'box', p: { w: b, d: l, h: hgt }, name, massG: g == null ? '' : g, color: COL[cat], ...extra });
     if (cat === 'motor') for (const m of motors()) out.push({ buy: true, kind: 'cylinder', p: { d: m.d, h: m.h }, name: 'Motor ' + m.stator, massG: m.g, color: COL.motor, info: m.sheet ? `${m.src}: ${fmt(m.g, 1)} g` : 'Höhe geschätzt, Gewicht bitte eintragen' });
-    if (cat === 'akku') for (const a of akkus()) out.push(box(a.name, a.l, a.w, a.h, a.g, { info: `ca. ${a.g} g` }));
+    if (cat === 'akku') for (const a of akkus()) out.push(box(a.name, a.l, a.w, a.h, a.g, { info: a.produkt ? `${a.produkt}: ${fmt(a.g, 0)} g` : `ca. ${a.g} g` }));
     if (cat === 'video') {
       for (const v of BUY_DATA.videosender || []) out.push(box(v.name, v.l_mm, v.b_mm, v.h_mm, v.gewicht_g, { info: v.gewicht_g != null ? `${fmt(v.gewicht_g, 1)} g` + (v.unsicher ? ' (abgeleitet)' : '') : 'Gewicht bitte eintragen' }));
       for (const c of cams()) out.push(box(`Kamera ${c.name} (analog)`, c.w, c.w, c.w, '', { info: `${fmt(c.w, 1)} mm breit, Gewicht eintragen` }));

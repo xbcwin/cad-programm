@@ -33,7 +33,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -1379,7 +1379,7 @@ def t_frame_assistent(p):
     P = p.ev("return Object.fromEntries(App.doc.params.map(x=>[x.name,x.expr]))")
     ok3 = P['Armwinkel'] == 60 and P['Armwinkel_hinten'] == 35 and P['Stack'] == 20 and P['Motorlochkreis'] == 12 and abs(P['Kamerabreite'] - 12.36) < 1e-6
     names = p.ev("return App.doc.items.map(i=>i.name)")
-    ok4 = 'DJI O4 Air Unit Sender' in names and 'DJI O4 Air Unit Kamera' in names and not any(n.startswith('Akku') for n in names) and p.ev("return App.errors.length") == 0
+    ok4 = 'DJI O4 Air Unit Sender' in names and 'DJI O4 Air Unit Kamera' in names and 'Akku 4S 450 mAh (Platzhalter)' in names and p.ev("return App.errors.length") == 0
     # die vorderen Arme sind weiter gespreizt als die hinteren
     xs = p.ev("const g=App.doc.items.find(i=>i.name.startsWith('Motor 1404')); const x=(n)=>Model.tNumeric(g.children.find(c=>c.name===n)).x; return [x('Motor vorne rechts'), x('Motor hinten rechts')]")
     ok5 = xs[0] > xs[1] + 10                                             # Deadcat: vorne weiter gespreizt
@@ -1400,7 +1400,7 @@ def t_drohnen_teile(p):
     p.empty()
     p.pg.locator('#t-drone').click(); p.wait(400)
     p.pg.locator('.flyout .chip[data-cat="akku"]').click(); p.wait(300)
-    ok1 = p.pg.locator('.flyout .tile').count() == 4
+    ok1 = p.pg.locator('.flyout .tile').count() == 9                    # 4S 450 bis 6S 1500
     p.pg.locator('.flyout .tile').filter(has_text='6S 1300').first.click(); p.wait(2500)
     ok2 = p.ev("const it=App.doc.items[0]; return it.massG===215 && it.name==='Akku 6S 1300 mAh'") and '(fest)' in (p.pg.locator('#p-mass').text_content() or '')
     p.pg.locator('#t-drone').click(); p.wait(400)
@@ -1487,7 +1487,7 @@ def t_drohnen_generator(p):
         c = p.ev("const cfg=DroneTpl.config(" + o + "); App.setDoc(DroneTpl.build(cfg)); Start.hide(); return true")
         warte_rechnen(p)
         c = chk(p)
-        out.append(p.ev("return App.errors.length") == 0 and all(c[k][0] == 'ok' for k in ['gap', 'props', 'clash']) and c['cog'][0] in ('ok', 'info'))   # 3": noch ohne Akku
+        out.append(p.ev("return App.errors.length") == 0 and all(c[k][0] == 'ok' for k in ['gap', 'props', 'clash', 'cog']))   # 3" jetzt mit Akku 4S 450
     return out
 
 
@@ -1544,6 +1544,152 @@ def t_neu13_hilfen(p):
     fehlt = [k for k in ['droneCheck', 'plateDxf', 'variants'] if k not in hilfen]
     p.pg.locator('#lt-params').click(); p.wait(400)
     ok = not fehlt and p.pg.locator('#var-new').count() == 1 and p.pg.locator('#proj-dcheck[data-help="droneCheck"]').count() == 1
+    return ok, ('ohne Hilfetext: ' + ', '.join(fehlt)) if fehlt else ''
+
+
+# ---------- Sitzung 14: KI-Schritte, Erklären, Schwachstellen ----------
+KI_MOCK = """
+window.__aiPrompts = []; window.__aiQueue = [];
+window.claude = { use: async (n) => n === 'sample' ? { json: async (prompt, opts) => {
+  window.__aiPrompts.push(prompt); await new Promise(r => setTimeout(r, 150));
+  const r = window.__aiQueue.shift();
+  if (r && r.__error) { const e = new Error('Testfehler'); e.code = r.__error; throw e; }
+  return r || { antwort: 'Okay.', aktionen: [] };
+} } : null };
+"""
+
+
+def ki(p):
+    """KI-Zugang wie in Claude, aber mit vorbereiteten Antworten (window.__aiQueue)"""
+    p.pg.add_init_script(KI_MOCK); p.pg.reload(); p.wait(2500)
+
+
+def ki_fragen(p, text, antwort):
+    p.ev("window.__aiQueue.push(arg)", antwort)
+    p.pg.locator('#cmd-input').fill(text); p.wait(200)
+    p.pg.locator('#cmd-input').press('Enter')
+    for _ in range(40):
+        p.wait(250)
+        if p.ev("return window.__aiQueue.length===0 && ![...document.querySelectorAll('.ai-msg.ai .txt')].some(t=>/Denkt nach|Baut/.test(t.textContent))"):
+            break
+    warte_rechnen(p, 30)
+
+
+def t_ki_schritte(p):
+    ki(p); p.empty()
+    q1 = 'Platte 60 x 40 x 4 mit einem Loch'
+    ki_fragen(p, q1, {'antwort': 'Ich habe dir eine Platte gebaut.', 'aktionen': [
+        {'op': 'mass', 'name': 'Breite', 'wert': '60'},
+        {'op': 'hinzufuegen', 'objekt': {'art': 'group', 'name': 'Platte', 'kinder': [
+            {'art': 'box', 'name': 'Platte', 'p': {'w': 'Breite', 'd': 40, 'h': 4}},
+            {'art': 'cylinder', 'name': 'Loch', 'rolle': 'loch', 'p': {'d': 5, 'h': 5}, 't': {'x': 15, 'z': -0.5}}]}}]})
+    ok1 = p.ev("return App.doc.items.length===1 && App.doc.items[0].ai && App.doc.items[0].ai.q===arg && App.errors.length===0", q1)
+    chip = p.pg.locator('.tl-chip').first
+    ok2 = 'ai' in chip.get_attribute('class') and chip.locator('.ai-badge').count() == 1 and 'von der KI' in chip.get_attribute('data-tip') and p.pg.locator('.tree .node .ai-mark').count() == 1
+    gid, lid = p.ev("const g=App.doc.items[0]; return [g.id, g.children[1].id]")
+    ki_fragen(p, 'Mach vier Löcher im Kreis und nimm PETG', {'antwort': 'Vier Löcher im Kreis, Material PETG.', 'aktionen': [
+        {'op': 'muster', 'id': lid, 'art': 'kreis', 'n': 4, 'mitte': [0, 0]}, {'op': 'material', 'id': gid, 'material': 'PETG'}]})
+    ok3 = p.ev("const g=App.doc.items[0]; const m=g.children[1]; return m.p.op==='pattern' && m.p.pt==='circ' && m.p.n===4 && m.children[0].id===arg && g.mat==='PETG' && App.errors.length===0", lid)
+    ok4 = 'werden 4 Löcher' in p.ev("return Explain.local(App.doc.items[0].id).lines.map(l=>l.t).join(' ')") and '"materialien"' in p.ev("return window.__aiPrompts[1]") and lid in p.ev("return window.__aiPrompts[1]")
+    p.pg.locator('.ai-msg.ai').last.get_by_role('button', name='Rückgängig').click(); warte_rechnen(p, 20)
+    ok5 = p.ev("const g=App.doc.items[0]; return g.children[1].kind==='cylinder' && !g.mat")
+    # Fehler der KI kommen verständlich an
+    ki_fragen(p, 'Mach noch einen Deckel drauf', {'__error': 'rate_limited'})
+    ok6 = 'zu viele Anfragen' in p.pg.locator('.ai-msg.ai .txt').last.text_content() and p.ev("return App.doc.items.length") == 1
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
+
+
+def t_ki_drohne(p):
+    ki(p); p.empty()
+    q = 'Bau mir einen 5 Zoll Deadcat mit DJI O4 und 6 mm Armen und GPS'
+    ki_fragen(p, q, {'antwort': 'Hier ist dein Deadcat.', 'aktionen': [
+        {'op': 'drohne', 'zoll': 5, 'form': 'deadcat', 'video': 'o4'}, {'op': 'mass', 'name': 'Armdicke', 'wert': '6'},
+        {'op': 'kaufteil', 'name': 'Flywoo GOKU GM10 Mini V3', 't': {'y': 40, 'z': 50}}, {'op': 'pruefen'}]})
+    ok1 = p.ev("return App.doc.drone && App.doc.drone.form==='deadcat' && App.doc.drone.video==='o4' && App.doc.params.find(x=>x.name==='Armdicke').expr===6")
+    ok2 = p.ev("return App.doc.items.every(i=>i.ai) && App.doc.items.some(i=>i.name==='Flywoo GOKU GM10 Mini V3' && i.massG>0)")
+    p.pg.wait_for_selector('.ai-check .chk-row, .ai-check small:has-text(\"alles in Ordnung\")', timeout=90000); p.wait(300)
+    ok3 = p.pg.locator('.ai-check .chk-row.bad').count() == 0 and p.ev("return App.errors.length") == 0
+    ok4 = p.pg.locator('.tl-chip.ai').count() == p.ev("return App.doc.items.length")
+    return [ok1, ok2, ok3, ok4]
+
+
+def t_erklaeren(p):
+    drohne(p, 'f5')
+    p.pg.locator('.tl-chip').first.click(button='right'); p.wait(300)
+    p.pg.locator('.pop').get_by_role('button', name='Erklär diesen Schritt').click(); p.wait(600)
+    t = p.pg.locator('#explain').text_content()
+    ok1 = 'Schritt 1 von 10' in t and '28 Löcher' in t and 'Achsabstand' in t and 'CFK' in t and p.pg.locator('#explain-ask').count() == 0   # ohne KI: nur die eigene Erklärung
+    p.pg.keyboard.press('Escape'); p.wait(300)
+    # Verlauf: Rechtsklick auf die Oberplatte
+    p.pg.locator('.tree .node', has_text='Oberplatte').first.click(button='right'); p.wait(300)
+    p.pg.locator('.menu').get_by_role('menuitem', name='Erklär diesen Schritt').click(); p.wait(600)
+    t2 = p.pg.locator('#explain').text_content()
+    ok2 = 'Schritt 3 von 10' in t2 and 'Plattendicke' in t2 and 'Bolzenhöhe' in t2
+    p.pg.keyboard.press('Escape'); p.wait(300)
+    # Knopf rechts neben dem Namen
+    p.ev("App.select([App.doc.items.find(i=>/^Akku/.test(i.name)).id])"); p.wait(800)
+    p.pg.locator('#item-explain').click(); p.wait(600)
+    t3 = p.pg.locator('#explain').text_content()
+    ok3 = 'Kaufteil mit festem Gewicht' in t3 and 'Gewicht' in t3
+    return [ok1, ok2, ok3]
+
+
+def t_erklaeren_ki(p):
+    ki(p); drohne(p, 'f5')
+    p.ev("window.__aiQueue.push({erklaerung:'Die Oberplatte deckt den Rahmen oben ab und trägt den Akku.', tipp:'Zwei Millimeter Carbon reichen hier.'})")
+    p.pg.locator('.tree .node', has_text='Oberplatte').first.click(button='right'); p.wait(300)
+    p.pg.locator('.menu').get_by_role('menuitem', name='Erklär diesen Schritt').click(); p.wait(500)
+    p.pg.locator('#explain-ask').click()
+    p.pg.wait_for_selector('#explain-ai .ai-say', timeout=20000)
+    t = p.pg.locator('#explain-ai').inner_text()
+    pr = p.ev("return window.__aiPrompts[0]")
+    return [('trägt den Akku' in t and 'Tipp' in t), ('Plattendicke' in pr and 'Oberplatte' in pr and 'Schritt 3 von 10' in pr)]
+
+
+def t_schwachstellen(p):
+    ki(p); drohne(p, 'f5')
+    p.pg.locator('#proj-weak').click()
+    p.pg.wait_for_selector('#weak .chk-row', timeout=90000); p.wait(300)
+    ok1 = 'Keine Schwachstellen' in p.pg.locator('#weak').text_content()          # die Vorlage besteht
+    p.pg.keyboard.press('Escape'); p.wait(300)
+    # fies: ein M3-Loch 2 mm vom Rand der Oberplatte, dazu dünne Arme
+    hid = p.ev("""const x=Model.newItem('part',{lib:'screwHole',size:'M3',head:'none',fit:'medium',length:4},{role:'hole',name:'Testloch'});
+      Object.assign(x.t,{x:'Plattenbreite/2 - 2', y:30, z:'Armdicke + Bolzenhöhe + Plattendicke + 1'});
+      App.change('x', d=>{ d.items.push(x); d.params.find(q=>q.name==='Armdicke').expr=3; }); return x.id""")
+    warte_rechnen(p); p.ev("App.clearSelection()"); p.wait(600)
+    p.pg.locator('#proj-weak').click()
+    p.pg.wait_for_selector('#weak [data-weak]', timeout=90000); p.wait(300)
+    st = p.pg.evaluate("[...document.querySelectorAll('#weak [data-weak]')].map(r=>[r.dataset.weak, r.className.split(' ')[1], r.textContent])")
+    edge = [x for x in st if x[0] == 'hole-edge']
+    ok2 = len(edge) == 1 and edge[0][1] == 'bad' and 'Oberplatte' in edge[0][2] and '1 Loch' in edge[0][2] and '0,3 mm' in edge[0][2] and any(x[0] == 'arm' for x in st)
+    # Zeigen: roter Ring am Loch, Oberplatte ausgewählt
+    p.pg.locator('#weak [data-weak="hole-edge"]').get_by_role('button', name='Zeigen').click(); p.wait(600)
+    ok3 = p.ev("return Weak.marks") == 1 and p.ev("return App.sel[0]===App.doc.items.find(i=>i.name==='Oberplatte').id")
+    p.ev("App.clearSelection()"); p.wait(600)
+    # Armdicke mit einem Klick, dann Vorschlag der KI umsetzen
+    p.pg.locator('#proj-weak').click()
+    p.pg.wait_for_selector('#weak [data-fix="arm"]', timeout=90000); p.wait(300)
+    p.pg.locator('#weak [data-fix="arm"]').click(); p.wait(800)
+    ok4 = p.ev("return App.doc.params.find(x=>x.name==='Armdicke').expr") == 5
+    p.ev("window.__aiQueue.push(arg)", {'antwort': 'Das Loch am Rand reißt leicht aus. Rück es nach innen.', 'vorschlaege': [{'titel': 'Loch 6 mm nach innen', 'aktionen': [{'op': 'aendern', 'id': hid, 'setze': {'t': {'x': 'Plattenbreite/2 - 8'}}}]}]})
+    p.pg.wait_for_selector('#weak-ask', timeout=90000); p.wait(300)
+    p.pg.locator('#weak-ask').click()
+    p.pg.wait_for_selector('#weak-ai [data-sug]', timeout=20000)
+    p.pg.locator('#weak-ai [data-sug]').first.click(); warte_rechnen(p)
+    ok5 = p.ev("const it=App.doc.items.find(i=>i.name==='Testloch'); return it.t.x==='Plattenbreite/2 - 8' && it.ai && it.ai.edit") and 'Schwachstellen' in p.ev("return window.__aiPrompts[0]")
+    p.pg.keyboard.press('Escape'); p.wait(300)
+    ok6 = p.ev("return Weak.analyze().then(l=>l.length)") == 0
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
+
+
+def t_neu14_hilfen(p):
+    drohne(p, 'f5')
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    fehlt = [k for k in ['explainStep', 'weakSpots', 'aiSteps'] if k not in hilfen]
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(800)
+    ok = not fehlt and p.pg.locator('#item-explain[data-help="explainStep"]').count() == 1
+    p.ev("App.clearSelection()"); p.wait(800)
+    ok = ok and p.pg.locator('#proj-weak[data-help="weakSpots"]').count() == 1
     return ok, ('ohne Hilfetext: ' + ', '.join(fehlt)) if fehlt else ''
 
 
@@ -1610,6 +1756,12 @@ TESTS = [
     ('Platten als DXF: Unterteil und Oberplatte / Löcher an der richtigen Stelle / ZIP', t_dxf),
     ('Varianten: speichern / abweichen / umschalten / vergleichen / Rückgängig', t_varianten),
     ('Sitzung-13-Werkzeuge haben Hilfetexte', t_neu13_hilfen),
+    ('KI-Schritte: markiert in Zeitleiste und Verlauf / Kreismuster und Material / Rückgängig / Fehlermeldung', t_ki_schritte),
+    ('KI baut Drohne: Frame-Assistent / Maß / Kaufteil / Drohnen-Check', t_ki_drohne),
+    ('Erklär diesen Schritt: Zeitleiste / Verlauf / Knopf am Namen', t_erklaeren),
+    ('Erklär diesen Schritt mit KI', t_erklaeren_ki),
+    ('Schwachstellen: Vorlage ok / Lochrand / Ringe / Armdicke / KI-Vorschlag umsetzen', t_schwachstellen),
+    ('Sitzung-14-Werkzeuge haben Hilfetexte', t_neu14_hilfen),
     ('Formel-Beispiele', t_formel_beispiele), ('Einführung „Erste Skizze“', t_einfuehrung), ('Schraubenlöcher', t_schrauben),
     ('Fies: Löschen hinter Marker + Undo', t_fies_loeschen), ('Fies: alles unterdrückt', t_fies_alle_aus),
     ('Fies: Marker am Anfang, neu laden', t_fies_reload), ('Fies: Tasten während Rechnen', t_fies_tasten),

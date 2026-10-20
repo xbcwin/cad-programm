@@ -1,0 +1,236 @@
+{
+  "_hinweis": "Entwurf Gemini (Prompt I), von Claude am 20.10.2026 an den Quellen geprüft. Eingebaut in Weak.RULES (app/src/js/88-aihelp.js).",
+  "regeln": [
+    {
+      "thema": "1. Mindest-Randabstand einer Bohrung in CFK-Platten (Lochmitte bis Rand)",
+      "wert": 2.5,
+      "einheit": "x Lochdurchmesser (D)",
+      "bedingung": "Allgemeine Verschraubung in CFK (3,0x D in Hauptlastrichtung)",
+      "begruendung": "CFK ist spröde und verformt sich nicht plastisch; ein Randabstand von 2,5 bis 4x D verhindert Ausreißen (Tear-out) und Delamination am Plattenrand.",
+      "quelle": "https://www.yongxian.co/en/blog/carbon-fiber-plate-metal-fasteners",
+      "unsicher": false,
+      "pruefung": "bestätigt",
+      "notiz": "Seite: „minimum edge distance of 2.5 times the hole diameter for a non-critical joint“, bis 4 × bei kritischen Verbindungen. Tracery meldet erst unter 1,2 × (Stahlbau-Untergrenze), weil FPV-Rahmen an Motorauflagen meist darunter liegen; 2,5 × steht als Empfehlung im Text."
+    },
+    {
+      "thema": "2. Mindestabstand zwischen zwei Bohrungen in CFK",
+      "wert": 4.0,
+      "einheit": "x Lochdurchmesser (D)",
+      "bedingung": "Abstand von Lochmitte zu Lochmitte (Center-to-Center)",
+      "begruendung": "Verhindert Spannungskonzentrationen, Materialschwächung des verbleibenden Stegs und Delamination zwischen benachbarten Befestigungspunkten.",
+      "quelle": "https://www.yongxian.co/en/blog/carbon-fiber-plate-metal-fasteners",
+      "unsicher": false,
+      "pruefung": "bestätigt",
+      "notiz": "Seite: „at least four diameters centre to centre“. Standard-Motorlochbilder liegen darunter; Tracery meldet unter einem halben Durchmesser Steg und nennt 4 × als Empfehlung."
+    },
+    {
+      "thema": "3. Übliche Carbon-Armdicke",
+      "wert": 3.0,
+      "einheit": "mm",
+      "bedingung": "3 Zoll Rahmengröße (Race / Ultralight)",
+      "begruendung": "Empfohlene Mindestdicke für leichte 3-Zoll-Rahmen, um ein gutes Verhältnis aus geringem Gewicht und ausreichender Steifigkeit zu erreichen.",
+      "quelle": "https://fpvdroneframe.com/how-to-choose-the-right-fpv-drone-frame/",
+      "unsicher": false,
+      "pruefung": "bestätigt",
+      "notiz": "Tabelle „Recommended Minimum Arm Thickness“: 3″ 3mm."
+    },
+    {
+      "thema": "3. Übliche Carbon-Armdicke",
+      "wert": 3.5,
+      "einheit": "mm",
+      "bedingung": "3 Zoll Rahmengröße (Freestyle)",
+      "begruendung": "Erhöhte Armdicke bei robusten 3- bis 3,5-Zoll-Freestyle-Rahmen für bessere Crash-Resistenz beim Tragen kleiner Action-Cams.",
+      "quelle": "https://oscarliang.com/roninuav-sohei-mk2/",
+      "unsicher": false,
+      "pruefung": "nicht geprüft",
+      "notiz": "nicht eingebaut"
+    },
+    {
+      "thema": "3. Übliche Carbon-Armdicke",
+      "wert": 3.0,
+      "einheit": "mm",
+      "bedingung": "4 Zoll Rahmengröße (Race / Long-Range)",
+      "begruendung": "Spart Gewicht bei leichten 4-Zoll-Rahmen, bei denen Agilität oder Flugzeit wichtiger sind als maximale Einschlagfestigkeit.",
+      "quelle": "https://oscarliang.com/flywoo-hexplorer/",
+      "unsicher": false,
+      "pruefung": "nicht geprüft",
+      "notiz": "eingebaut als Race-Untergrenze 4\" (3 mm), Herleitung aus 5\": Race 1 mm unter Freestyle"
+    },
+    {
+      "thema": "3. Übliche Carbon-Armdicke",
+      "wert": 4.0,
+      "einheit": "mm",
+      "bedingung": "4 Zoll Rahmengröße (Freestyle)",
+      "begruendung": "Standard-Empfehlung für 4-Zoll-Freestyle-Rahmen, um trotz längerer Hebelarme Brüche bei Abstürzen zu vermeiden.",
+      "quelle": "https://fpvdroneframe.com/how-to-choose-the-right-fpv-drone-frame/",
+      "unsicher": false,
+      "pruefung": "bestätigt",
+      "notiz": "Tabelle: 4″ 4mm."
+    },
+    {
+      "thema": "3. Übliche Carbon-Armdicke",
+      "wert": 4.0,
+      "einheit": "mm",
+      "bedingung": "5 Zoll Rahmengröße (Race)",
+      "begruendung": "Bei 5-Zoll-Racedrohnen werden 4 bis 5 mm dicke Arme genutzt, um das Gewicht für maximale Beschleunigung niedrig zu halten.",
+      "quelle": "https://fpvdroneframe.com/why-carbon-fiber-drone-frames/",
+      "unsicher": false,
+      "pruefung": "bestätigt",
+      "notiz": "„Racing: arms that are 4mm to 5mm thick“ (allgemein, nicht nur 5\")."
+    },
+    {
+      "thema": "3. Übliche Carbon-Armdicke",
+      "wert": 5.0,
+      "einheit": "mm",
+      "bedingung": "5 Zoll Rahmengröße (Freestyle)",
+      "begruendung": "Freestyle-Rahmen nutzen 5 bis 6 mm dicke Arme für maximale Haltbarkeit bei harten Einschlägen auf Beton oder gegen Hindernisse.",
+      "quelle": "https://fpvdroneframe.com/why-carbon-fiber-drone-frames/",
+      "unsicher": false,
+      "pruefung": "bestätigt",
+      "notiz": "Tabelle: 5″ „5mm (or 6mm for aggressive freestyle)“; Freestyle 5–6 mm."
+    },
+    {
+      "thema": "3. Übliche Carbon-Armdicke",
+      "wert": 4.0,
+      "einheit": "mm",
+      "bedingung": "6 Zoll Rahmengröße (Race)",
+      "begruendung": "Spezifische Faustregeln für reine 6-Zoll-Racer sind kaum gesondert dokumentiert; meist orientiert man sich an allgemeinen Racing-Vorgaben (4-5 mm).",
+      "quelle": "https://fpvdroneframe.com/why-carbon-fiber-drone-frames/",
+      "unsicher": true,
+      "pruefung": "unsicher",
+      "notiz": "6\" steht nicht in der Tabelle; Tracery schätzt Race 4,5 / Freestyle 5,5 mm."
+    },
+    {
+      "thema": "3. Übliche Carbon-Armdicke",
+      "wert": 6.0,
+      "einheit": "mm",
+      "bedingung": "6 Zoll Rahmengröße (Freestyle)",
+      "begruendung": "Durch die längeren Arme bei 6 Zoll werden mindestens 5 bis 6 mm Dicke benötigt, um Resonanzen (Schwingungen) und Armbrüche zu verhindern.",
+      "quelle": "https://fpvdroneframe.com/how-to-choose-the-right-fpv-drone-frame/",
+      "unsicher": false,
+      "pruefung": "unsicher",
+      "notiz": "6\" steht nicht in der Tabelle; Tracery schätzt 5,5 mm."
+    },
+    {
+      "thema": "3. Übliche Carbon-Armdicke",
+      "wert": 5.0,
+      "einheit": "mm",
+      "bedingung": "7 Zoll Rahmengröße (Race / Leichtbau)",
+      "begruendung": "Untergrenze für leichte 7-Zoll-Rahmen, wobei für reine 7-Zoll-Racing-Klassen kaum standardisierte Trennwerte zu Freestyle existieren.",
+      "quelle": "https://www.yongxian.co/en/blog/diy-carbon-fiber-drone-frame-guide",
+      "unsicher": true,
+      "pruefung": "unsicher",
+      "notiz": "eingebaut als Race-Untergrenze 7\" (5 mm), nicht belegt"
+    },
+    {
+      "thema": "3. Übliche Carbon-Armdicke",
+      "wert": 6.0,
+      "einheit": "mm",
+      "bedingung": "7 Zoll Rahmengröße (Freestyle / Long-Range)",
+      "begruendung": "Lange 7-Zoll-Arme erfordern 6 bis 8 mm starkes Carbon, um ein Aufschwingen der Motoren (Flex) für das Gyroskop zu unterbinden.",
+      "quelle": "https://fpvdroneframe.com/how-to-choose-the-right-fpv-drone-frame/",
+      "unsicher": false,
+      "pruefung": "bestätigt",
+      "notiz": "Tabelle: 7″ „6mm – 8mm“."
+    },
+    {
+      "thema": "4. Übliche Dicke von Ober- und Unterplatte",
+      "wert": 1.5,
+      "einheit": "mm",
+      "bedingung": "3 Zoll bis 4 Zoll Rahmengröße (Top- und Bottom-Plate)",
+      "begruendung": "Bei kleinen Rahmen von 3 bis 4 Zoll reichen 1,5 mm Plattenstärke zum Schutz der Elektronik völlig aus und halten das Gesamtgewicht niedrig.",
+      "quelle": "https://oscarliang.com/roninuav-sohei-mk2/",
+      "unsicher": false,
+      "pruefung": "teilweise",
+      "notiz": "„Top and bottom plates are typically between 1.5mm and 2.5mm thick“ (fpvdroneframe.com); Größenzuordnung nicht geprüft."
+    },
+    {
+      "thema": "4. Übliche Dicke von Ober- und Unterplatte",
+      "wert": 2.0,
+      "einheit": "mm",
+      "bedingung": "5 Zoll bis 7 Zoll Rahmengröße (Oberplatte / Top-Plate)",
+      "begruendung": "Standarddicke (1,5 bis 2,5 mm) für das Oberdeck, um den Akku-Strap und eine Action-Cam stabil zu halten, ohne den Schwerpunkt zu stark anzuheben.",
+      "quelle": "https://fpvdroneframe.com/why-carbon-fiber-drone-frames/",
+      "unsicher": false,
+      "pruefung": "bestätigt",
+      "notiz": "siehe oben, 1,5–2,5 mm."
+    },
+    {
+      "thema": "4. Übliche Dicke von Ober- und Unterplatte",
+      "wert": 2.5,
+      "einheit": "mm",
+      "bedingung": "5 Zoll bis 7 Zoll Rahmengröße (Unterplatte / Bottom-Plate)",
+      "begruendung": "Die Basisplatte wird bei 5- bis 7-Zoll-Rahmen meist etwas stärker (2,0 bis 3,0 mm) ausgelegt, da sie die verschraubten Arme zusammenhält.",
+      "quelle": "https://www.getfpv.com/tbs-source-one-v5-5-frame-kit.html",
+      "unsicher": false,
+      "pruefung": "nicht geprüft",
+      "notiz": "Getfpv-Seite des TBS Source One nicht geprüft; nicht eingebaut."
+    },
+    {
+      "thema": "5. Mindest-Wandstärke beim FDM-Druck (0,4-mm-Düse) für tragende Teile",
+      "wert": 1.5,
+      "einheit": "mm",
+      "bedingung": "PLA (tragende / funktionale Teile)",
+      "begruendung": "Während 0,8 mm (2 Perimeter) das drucktechnische Minimum sind, werden ab 1,5 mm bis 2,0 mm zuverlässige mechanische Festigkeiten erreicht.",
+      "quelle": "https://www.3d-demand.com/blog/design-guidelines-for-fdm-3d-printing-wall-thickness-tolerances-file-prep",
+      "unsicher": false,
+      "pruefung": "bestätigt",
+      "notiz": "3D-Demand: 0,8 mm Minimum, 1,2 mm empfohlen, tragende Teile ab 1,5 mm (2 mm empfohlen). Tracery: rot unter 0,8, gelb unter 1,5 mm."
+    },
+    {
+      "thema": "5. Mindest-Wandstärke beim FDM-Druck (0,4-mm-Düse) für tragende Teile",
+      "wert": 1.5,
+      "einheit": "mm",
+      "bedingung": "PETG (tragende / funktionale Teile)",
+      "begruendung": "Für mechanisch belastete Funktionsteile aus PETG sind mindestens 1,5 mm (besser 2 bis 3 mm bei hoher Last) nötig, um Delamination zu verhindern.",
+      "quelle": "https://www.3d-demand.com/blog/design-guidelines-for-fdm-3d-printing-wall-thickness-tolerances-file-prep",
+      "unsicher": false,
+      "pruefung": "teilweise",
+      "notiz": "3D-Demand nennt für PETG 0,8 mm Minimum wie PLA; die 1,5 mm gelten für tragende Teile allgemein."
+    },
+    {
+      "thema": "5. Mindest-Wandstärke beim FDM-Druck (0,4-mm-Düse) für tragende Teile",
+      "wert": 1.5,
+      "einheit": "mm",
+      "bedingung": "TPU 95A",
+      "begruendung": "Flexible Materialien wie TPU benötigen mindestens 1,5 mm Wandstärke (ca. 3 bis 4 Perimeter), da dünnere Wände schon beim Drucken wegknicken.",
+      "quelle": "https://www.3d-demand.com/blog/design-guidelines-for-fdm-3d-printing-wall-thickness-tolerances-file-prep",
+      "unsicher": false,
+      "pruefung": "bestätigt",
+      "notiz": "3D-Demand: TPU 1,5 mm Minimum, dünnere Wände knicken beim Druck weg. Tracery: rot unter 1,2, gelb unter 1,5 mm."
+    },
+    {
+      "thema": "6. Mindest-Wandstärke um Schraubenlöcher in gedruckten Teilen",
+      "wert": 1.5,
+      "einheit": "mm",
+      "bedingung": "M2-Schraubenloch / M2-Gewindeeinsatz",
+      "begruendung": "Stellt sicher, dass genügend Material (ca. 3 bis 4 Wandlinien) um das Loch bleibt, damit die Wand unter Schraubenzug oder beim Einschmelzen nicht aufreißt.",
+      "quelle": "https://3dbite.com/brass-heat-set-inserts-3d-printing-guide/",
+      "unsicher": false,
+      "pruefung": "bestätigt",
+      "notiz": "3Dbite (Gewindeeinsätze): M2/M2.5 „1.5mm minimum“; für einfache Schraubenlöcher nennt die Seite nichts."
+    },
+    {
+      "thema": "6. Mindest-Wandstärke um Schraubenlöcher in gedruckten Teilen",
+      "wert": 2.0,
+      "einheit": "mm",
+      "bedingung": "M3-Schraubenloch / M3-Gewindeeinsatz",
+      "begruendung": "Verhindert ein Ausbrechen des Kunststoffs und Verformungen bei M3-Verschraubungen sowie beim Einsetzen von Heat-Set-Inserts.",
+      "quelle": "https://3dbite.com/brass-heat-set-inserts-3d-printing-guide/",
+      "unsicher": false,
+      "pruefung": "bestätigt",
+      "notiz": "3Dbite: M3 „2mm minimum“."
+    },
+    {
+      "thema": "7. Übliche Fräser-Durchmesser bei Carbon-Fräsdiensten",
+      "wert": 1.0,
+      "einheit": "mm",
+      "bedingung": "Kleinster Fräserdurchmesser (ergibt 0,5 mm Mindest-Innenradius)",
+      "begruendung": "Bekannte FPV-Fräsdienste wie Armattan Productions nutzen minimal 1,0-mm-Fräser (0,5 mm Innenradius); viele Standarddienste nutzen 1,6 bis 2,0 mm (0,8 bis 1,0 mm Radius).",
+      "quelle": "https://www.getfpv.com/learn/fpv-essentials/manufacturing-your-first-fpv-drone-frame/",
+      "unsicher": false,
+      "pruefung": "bestätigt",
+      "notiz": "GetFPV: Armattan Mindestradius 0,5 mm (1-mm-Fräser); viele Dienste ≤ 2 mm; Radien ab 1 mm empfohlen, wenn man den Fräser nicht kennt."
+    }
+  ]
+}
