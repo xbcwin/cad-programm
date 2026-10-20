@@ -32,6 +32,7 @@ self.onmessage = async (ev) => {
     else if (cmd === 'exportSTEP') result = { data: await kernel.exportSTEP(args.scene).arrayBuffer() };
     else if (cmd === 'measure') result = kernel.measure(args.scene);
     else if (cmd === 'project') result = kernel.project(args.scene, args.views);
+    else if (cmd === 'clashes') result = kernel.clashes(args.scene, args.probes, args.skipPairs);
     else if (cmd === 'faceLoops') result = kernel.faceLoopsOf(args.key, args.faceIdx);
     else if (cmd === 'remesh') result = kernel.remesh(args.key, args.tol);
     else throw new Error('Unbekannter Befehl: ' + cmd);

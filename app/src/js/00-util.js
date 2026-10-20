@@ -577,6 +577,21 @@ const HELP = {
   "tip": "Zwei Schlitze für einen Kabelbinder",
   "hilfe": "Zieh die Kabelbinder-Schlitze auf eine Fläche. Das Kabel liegt dazwischen, der Binder läuft unten durch.",
   "tipp": "Praktisch für Antennen, Empfänger und den Akku-Stecker."
+ },
+ "droneCheck": {
+  "tip": "Rahmen prüfen: Propeller, Teile, Gewicht, Schwerpunkt, Schub",
+  "hilfe": "Drohne → „Drohnen-Check“ (oder rechts unter „Projekt“): Tracery rechnet mit dem CAD-Kern nach, ob sich die Propeller berühren, ob ein Teil in einen Propellerkreis ragt, ob Teile ineinanderstecken, wie schwer die Drohne ist, wo der Schwerpunkt liegt und – wenn du den Schub pro Motor einträgst – wie viel Schub sie im Verhältnis zum Gewicht hat.",
+  "tipp": "Der Schwerpunkt sollte fast genau in der Mitte zwischen den vier Motoren liegen. Liegt er hinten, schieb den Akku nach vorne."
+ },
+ "plateDxf": {
+  "tip": "Carbon-Platten als 2D-Zeichnung für die Fräse",
+  "hilfe": "Exportieren → „Platten als DXF“: Jede flache Platte (bis 12 mm dick) kommt als eigene DXF-Datei in Originalgröße in die ZIP – Außenkontur und alle Löcher, in Millimetern. Die Plattendicke steht im Dateinamen.",
+  "tipp": "Fräsdienste brauchen genau das: eine DXF pro Platte und die Dicke. Gekaufte Teile und Propellerkreise kommen nicht mit."
+ },
+ "variants": {
+  "tip": "Mehrere Sätze von Maßen speichern und umschalten",
+  "hilfe": "Unter „Maße“ ganz oben: „Neue Variante“ merkt sich alle Maße unter einem Namen, z. B. „5 Zoll“. Ändere dann Maße und speichere eine zweite Variante. Mit der Auswahl schaltest du um, „Vergleichen“ zeigt die Unterschiede mit Gewicht und Schub/Gewicht. Weichen die Maße ab, kannst du die aktive Variante überschreiben.",
+  "tipp": "Varianten ändern nur die Maße. Neue Teile oder Löcher gelten für alle Varianten."
  }
 };
 

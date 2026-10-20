@@ -916,5 +916,36 @@ export function createKernel(R, oc) {
     return { views: out, axes, bbox, errors };
   }
 
-  return { evaluate, remesh, exportMeshes, exportSTEP, measure, project, faceLoopsOf, _cache: cache };
+  // Kollisionen: welche Teile stecken ineinander, und welche Teile treffen die Prüfkörper (z. B. Propellerscheiben)?
+  // probes: [{ c:[x,y,z], r, h, skip:[ids] }] – senkrechte Zylinder; skipPairs: Teile, die nicht paarweise geprüft werden
+  function clashes(scene, probes = [], skipPairs = []) {
+    const errors = [];
+    const solids = evaluateShapes(scene, errors);
+    const boxes = solids.map((s) => bboxOf(s.shape));
+    const hit = (a, b) => a[0] < b[3] - 0.01 && b[0] < a[3] - 0.01 && a[1] < b[4] - 0.01 && b[1] < a[4] - 0.01 && a[2] < b[5] - 0.01 && b[2] < a[5] - 0.01;
+    const overlap = (A, B) => { let x = null; try { x = A.intersect(B); const v = R.measureVolume(x); return v; } catch (_) { return 0; } finally { safeDelete(x); } };
+    const pairs = [];
+    for (let i = 0; i < solids.length; i++) {
+      if (skipPairs.includes(solids[i].id)) continue;
+      for (let j = i + 1; j < solids.length; j++) {
+        if (skipPairs.includes(solids[j].id) || !hit(boxes[i], boxes[j])) continue;
+        const v = overlap(solids[i].shape, solids[j].shape);
+        if (v > 0.05) pairs.push({ a: solids[i].id, b: solids[j].id, v });
+      }
+    }
+    const hits = probes.map((pr) => {
+      const out = []; let cyl = null;
+      try {
+        cyl = R.makeCylinder(pr.r, pr.h, pr.c, [0, 0, 1]);
+        const cb = [pr.c[0] - pr.r, pr.c[1] - pr.r, pr.c[2], pr.c[0] + pr.r, pr.c[1] + pr.r, pr.c[2] + pr.h];
+        solids.forEach((s, i) => { if ((pr.skip || []).includes(s.id) || !hit(cb, boxes[i])) return; const v = overlap(cyl, s.shape); if (v > 0.05) out.push({ id: s.id, v }); });
+      } catch (e) { errors.push({ itemId: null, code: 'build', message: String(e && e.message || e) }); }
+      finally { safeDelete(cyl); }
+      return out;
+    });
+    for (const s of solids) safeDelete(s.shape);
+    return { pairs, hits, errors };
+  }
+
+  return { evaluate, remesh, exportMeshes, exportSTEP, measure, project, clashes, faceLoopsOf, _cache: cache };
 }

@@ -24,7 +24,7 @@ const Panels = (() => {
       btn('t-views', 'xray', 'Ansicht', 'Ansicht: Schnitt, Röntgen, Explosion und Fokus-Vorschau – ändert nur die Anzeige', '', (e) => Views.menu(e.currentTarget), 'minor');
       el.append(h('div', { class: 'sep' }));
       Views.sync();
-      btn('t-export', 'export', 'Exportieren', 'Als STEP, STL oder 3MF speichern (ZIP)', 'Strg E', () => Print.exportDialog(), 'primary', 'Export');
+      btn('t-export', 'export', 'Exportieren', 'Als STEP, STL, 3MF oder DXF speichern (ZIP)', 'Strg E', () => Print.exportDialog(), 'primary', 'Export');
     } else {
       btn('t-sheet', 'sheet', 'Blatt', 'Blattgröße, Maßstab und Ansichten', '', (e) => Drawing.sheetMenu(e.currentTarget));
       btn('t-dim', 'dim', 'Maß', 'Bemaßung hinzufügen: zwei Punkte oder einen Kreis anklicken', 'D', () => Drawing.tool('dim'));
@@ -217,6 +217,7 @@ const Panels = (() => {
     const { v, errors } = Model.vars(App.doc);
     const wrap = h('div', { class: 'props' });
     wrap.append(h('div', { class: 'hint-box', html: 'Lege hier Maße mit Namen fest, zum Beispiel <b>Wandstärke = 2</b>. In jedem Zahlenfeld kannst du dann den Namen oder eine Formel wie <b>Breite/2 + 3</b> eintippen. Änderst du das Maß hier, passt sich alles an.' }));
+    if ((App.doc.params || []).length) wrap.append(Variants.section());
     const list = h('div', { class: 'mini-list' });
     (App.doc.params || []).forEach((p, i) => {
       const row = h('div', { class: 'section' });
@@ -307,6 +308,15 @@ const Panels = (() => {
     const nameF = h('div', { class: 'field' }, h('label', { for: 'proj-name' }, 'Projektname'), h('div', { class: 'inp' }, h('input', { id: 'proj-name', value: App.doc.name, style: { fontFamily: 'var(--font)' } })));
     nameF.querySelector('input').addEventListener('change', (e) => { const v = e.target.value.trim() || 'Neues Projekt'; App.change('Projekt umbenannt', (doc) => { doc.name = v; }); });
     w.append(nameF);
+    if (DroneCheck.isDrone()) {
+      const ds = h('div', { class: 'section', id: 'proj-drone' }, h('div', { class: 'section-h' }, 'Drohne'));
+      const last = DroneCheck.summary();
+      if (last) ds.append(DroneCheck.rows(last.filter((c) => c.s !== 'ok' || c.id === 'tw'), null), ...(last.every((c) => c.s === 'ok' || c.s === 'info') ? [h('div', { class: 'hint-box' }, 'Alle Prüfungen bestanden.')] : []));
+      const b = h('button', { type: 'button', class: 'btn small', id: 'proj-dcheck', 'data-help': 'droneCheck' }); b.innerHTML = icon('clearance') + (last ? 'Noch mal prüfen' : 'Drohnen-Check');
+      b.onclick = () => DroneCheck.dialog();
+      ds.append(h('div', { class: 'btn-row' }, b));
+      w.append(ds);
+    }
     const pv = ViewPrefs.get();
     const va = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Ansicht'));
     va.append(UI.selectField({ id: 'view-grid', label: 'Rasterweite', value: String(pv.grid), options: [['auto', 'Automatisch (folgt dem Zoom)'], ['0.01', '0,01 mm'], ['0.1', '0,1 mm'], ['1', '1 mm'], ['10', '10 mm'], ['100', '100 mm']], onChange: (val) => ViewPrefs.set({ grid: val === 'auto' ? 'auto' : parseFloat(val) }) }));
@@ -667,7 +677,7 @@ const Panels = (() => {
     Log.on('change', debounce(() => { if (leftTab === 'log') renderLeft(); }, 80));
     renderTools(); initViewCube();
     const rerender = debounce(() => { renderLeft(); renderRight(); renderCtx(); UI.renderHint(); }, 16);
-    App.on('doc', rerender); App.on('selection', rerender); App.on('results', rerender); App.on('mode', () => { renderTools(); rerender(); });
+    App.on('doc', rerender); App.on('selection', rerender); App.on('results', rerender); DroneCheck.on('checked', () => { if (!App.sel.length) rerender(); }); App.on('mode', () => { renderTools(); rerender(); });
     Viewer.on('camera', placeCtx);
   }
   return { init, renderLeft, renderRight, renderTools, renderCtx, closeFlyout, toggleFlyout, expand: (id) => { expanded.add(id); renderLeft(); }, showParams: () => { leftTab = 'params'; renderLeft(); } };

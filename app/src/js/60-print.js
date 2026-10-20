@@ -133,17 +133,27 @@ const Print = (() => {
   }
   function exportDialog() {
     if (!App.doc.items.some((x) => x.role !== 'hole' && !x.hidden)) { UI.toast('Es gibt noch nichts zu exportieren. Füge zuerst einen Körper hinzu.', { icon: 'info' }); return; }
-    const opts = { step: true, stl: false, mf: false };
+    const plates = Plates.candidates();
+    const opts = { step: true, stl: false, mf: false, dxf: false, plates: plates.map((p) => p.id) };
     const body = h('div', { style: { display: 'grid', gap: '12px' } });
     body.append(h('p', null, 'Die Dateien kommen zusammen als ZIP.'));
     const mk = (k, label, sub) => { const l = h('label', { class: 'check', style: { alignItems: 'flex-start' } }, h('input', { type: 'checkbox', id: 'ex-' + k, checked: opts[k] }), h('span', null, h('b', null, label), h('br'), h('small', { style: { color: 'var(--muted)' } }, sub))); l.querySelector('input').onchange = (e) => { opts[k] = e.target.checked; }; return l; };
     body.append(mk('step', 'STEP', 'Exakte Geometrie – für Fusion, FreeCAD, SolidWorks und Fertiger'), mk('stl', 'STL', 'Dreiecksnetz, z. B. für Renderings oder 3D-Druck'), mk('mf', '3MF', 'Dreiecksnetz mit Farben und Maßeinheit'));
+    // flache Teile (Carbon-Platten) als 2D-Kontur für die Fräse oder den Laser
+    if (plates.length) {
+      const d = mk('dxf', 'Platten als DXF (für die Fräse)', 'Draufsicht in Originalgröße, eine Datei pro Platte – die Dicke steht im Dateinamen');
+      d.setAttribute('data-help', 'plateDxf');
+      const pl = h('div', { class: 'dxf-plates', style: { display: 'grid', gap: '4px', margin: '-4px 0 0 28px' } });
+      for (const p of plates) { const l = h('label', { class: 'check' }, h('input', { type: 'checkbox', 'data-plate': p.id, checked: true }), `${p.name} · ${fmt(p.t, 2)} mm`); l.querySelector('input').onchange = (e) => { opts.plates = e.target.checked ? [...new Set([...opts.plates, p.id])] : opts.plates.filter((x) => x !== p.id); }; pl.append(l); }
+      pl.hidden = !opts.dxf; d.querySelector('input').addEventListener('change', (e) => { pl.hidden = !e.target.checked; });
+      body.append(d, pl);
+    }
     const cs = checks().filter((c) => c.s === 'warn' || c.s === 'bad');
     if (cs.length) body.append(h('div', { class: 'hint-box', html: '<b>Hinweis:</b> ' + esc(cs[0].t) + ' – ' + esc(cs[0].d) }));
     UI.modal({ title: 'Exportieren', body, actions: [{ label: 'Abbrechen' }, { label: 'Als ZIP speichern', primary: true, run: () => { runExport(opts); } }] });
   }
   async function runExport(opts) {
-    if (!opts.stl && !opts.mf && !opts.step) { UI.toast('Wähle mindestens ein Format.', { kind: 'bad' }); return; }
+    if (!opts.stl && !opts.mf && !opts.step && !(opts.dxf && opts.plates.length)) { UI.toast('Wähle mindestens ein Format.', { kind: 'bad' }); return; }
     const tst = UI.toast('Dateien werden erstellt …', { icon: 'export', ms: 20000 });
     try {
       const scene = Model.kernelScene(App.doc);
@@ -156,7 +166,8 @@ const Print = (() => {
         if (opts.mf) files.push({ name: name + '.3mf', data: await build3MF(res.objects, name) });
       }
       if (opts.step) { const r = await Kernel.call('exportSTEP', { scene }); files.push({ name: name + '.step', data: new Uint8Array(r.data) }); }
-      files.push({ name: 'LIESMICH.txt', data: new TextEncoder().encode(`${App.doc.name}\nErstellt mit Tracery am ${new Date().toLocaleString('de-DE')}\n\nSTEP: exakte Geometrie für andere CAD-Programme\nSTL / 3MF: Dreiecksnetz (Millimeter)\n`) });
+      if (opts.dxf) for (const id of opts.plates) { const f = await Plates.file(id); if (f && f.count) files.push({ name: 'DXF/' + f.name, data: f.data }); }
+      files.push({ name: 'LIESMICH.txt', data: new TextEncoder().encode(`${App.doc.name}\nErstellt mit Tracery am ${new Date().toLocaleString('de-DE')}\n\nSTEP: exakte Geometrie für andere CAD-Programme\nSTL / 3MF: Dreiecksnetz (Millimeter)\n` + (opts.dxf ? 'DXF: Draufsicht jeder Platte in Originalgröße (Millimeter, Ebene KONTUR) – Dicke steht im Dateinamen\n' : '')) });
       const zip = await Zip.make(files);
       tst.remove();
       await save(name + '.zip', new Blob([zip]));

@@ -1,6 +1,6 @@
 # Fortschritt
 
-Stand: 20.10.2026 · nach Sitzung 12 von 14
+Stand: 20.10.2026 · nach Sitzung 13 von 14
 
 ## Erledigt
 
@@ -45,7 +45,7 @@ Stand: 20.10.2026 · nach Sitzung 12 von 14
 - [x] Neuer Name beim Maß (z. B. `breite`) wird automatisch unter „Maße“ angelegt
 - [x] Formel-Beispiele unter „Maße“ (Gemini, alle 12 mit Tracerys Rechner nachgeprüft), Beispiel-Maße per Klick
 - [x] Umbenennen / Entfernen eines Maßes wirkt jetzt auch auf Skizzen-Maße
-- [x] Automatischer Klicktest `tests/klicktest.py`: 83 Durchläufe (alle grün), 108 von 133 Punkten der Testliste automatisch geprüft
+- [x] Automatischer Klicktest `tests/klicktest.py`: 88 Durchläufe (alle grün), 118 von 145 Punkten der Testliste automatisch geprüft
 - [x] Aufgeräumt: Programm liegt jetzt in 28 Quelldateien unter `app/src/`, `tools/build.py` baut daraus `app/index.html`
 - [x] Notizstift (Taste N): freie Striche, die am Modell kleben, Textnotizen, 6 Farben, 3 Dicken, Radierer, ein-/ausblendbar – ohne technische Bedeutung
 - [x] Symbole für den Notizstift (Gemini, geprüft); Augen-Knopf rechts im Bild blendet Notizen aus, sobald es welche gibt
@@ -103,6 +103,13 @@ Stand: 20.10.2026 · nach Sitzung 12 von 14
 - [x] Die Daten aus `app/data` (FPV-Maße, Kaufteile) baut `tools/build.py` direkt in die Seite ein
 - [x] Kopfzeile: Messen, Notizen und Ansicht zeigen bei weniger Platz nur ihr Symbol; Dialoge erscheinen jetzt auch über der Startseite
 - [x] Neues Bauteil `app/src/js/41-dronelib.js`
+- [x] Drohnen-Check (Knopf „Drohne“ → „Drohnen-Check“, rechts unter „Projekt“ oder Eingabezeile): Luft zwischen den Propellerspitzen, Propellerkreise frei (der CAD-Kern schneidet jeden Propellerkreis mit allen Teilen, 1 mm Sicherheitsabstand), Teile stecken nicht ineinander, Abfluggewicht mit fehlenden Gewichten und 250-g-Hinweis, Schwerpunkt gegenüber der Mitte der Motoren (vorne/hinten/links/rechts), Schub zu Gewicht; „Zeigen“ wählt die betroffenen Teile aus
+- [x] Schub pro Motor: Vorgabe aus geprüften Herstellerwerten (Gemini Prompt G, `app/data/schub.json`: 1404 → 431,5 g, 2004 → 768 g, 2207 → 2136 g), eigener Wert im Check eintragbar; 2306 und 2806.5 ohne belegbaren Wert
+- [x] Der Check hat Fehler im Rahmen-Generator gefunden, die jetzt behoben sind: Oberplatte lag in der Propellerebene (Bolzen jetzt Motorhöhe + 7 mm), hintere Bolzen im Propellerkreis, HD-Sender stieß an die Oberplatte, lange HD-Kameras an die vorderen Bolzen, Kamera/Propeller beim 3"-True-X, Schwerpunkt beim Deadcat 15–24 mm zu weit vorne (der Körper rückt jetzt über die Motormitte). Alle 40 Kombinationen aus 3–7", vier Rahmenformen, Analog und DJI O3 bestehen den Check
+- [x] Platten als DXF (Exportieren → „Platten als DXF (für die Fräse)“): jede flache Platte bis 12 mm als eigene Datei in Originalgröße, Außenkontur mit Linien und Bögen, Löcher als Kreise, Ebene KONTUR, Millimeter; Dicke im Dateinamen (z. B. „Unterteil – 5 mm.dxf“); Kaufteile und Propellerkreise kommen nicht mit
+- [x] Varianten (oben unter „Maße“): alle Maße unter einem Namen speichern, umschalten (mit Rückgängig), Abweichung wird angezeigt und lässt sich überschreiben; „Vergleichen“ zeigt die Maße, die sich unterscheiden, mit Gewicht, Schub/Gewicht und Luft zwischen den Propellern
+- [x] Behoben: Versionen-Vergleich und Varianten rechneten Lagen mit Formeln (z. B. Motorposition) mit den Maßen des aktuellen Stands statt des verglichenen
+- [x] Neues Bauteil `app/src/js/86-dronecheck.js`, Kern-Befehl `clashes`
 
 ## Offen
 
@@ -135,7 +142,10 @@ Fertig.
 - [x] Lochbilder, Bauteil-Bibliothek, erste Detail-Bausteine (Kabelbinder, Gurtschlitz) (Sitzung 12)
 - [ ] H-Rahmen und Rahmen mit getrennten Armen (Sandwich)
 - [ ] Weitere Detail-Bausteine: Antennenhalter, XT60-Halter, GoPro-Halter
-- [ ] Prüfungen, DXF-Export, Varianten (Sitzung 13)
+- [x] Prüfungen, DXF-Export, Varianten (Sitzung 13)
+- [ ] Kleine Akkus (4S 450–850 mAh) für 3" und 4" in die FPV-Maße, dann prüft der Schwerpunkt-Check auch dort mit Akku
+- [ ] Schubwerte für 2306 und 2806.5 aus einer belegbaren Schubtabelle
+- [ ] Drohnen-Check auch für Rahmen, die nicht aus dem Assistenten kommen (heute braucht er die Maße Achsabstand, Armwinkel, Propeller)
 
 ### Stufe 5 – KI und Feinschliff
 - [ ] KI-Helfer auf der Zeitleiste (Sitzung 14)

@@ -33,7 +33,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -1446,6 +1446,107 @@ def t_drohne_hilfen(p):
     return ok, ('ohne Hilfetext: ' + ', '.join(fehlt)) if fehlt else ('' if ok else 'Kacheln: ' + ', '.join(kacheln))
 
 
+# ---------- Sitzung 13: Drohnen-Check, Platten als DXF, Varianten ----------
+def chk(p):
+    return p.ev("return DroneCheck.run().then(l=>Object.fromEntries(l.map(c=>[c.id,[c.s,c.text]])))")
+
+
+def t_drohnen_check(p):
+    drohne(p, 'f5')
+    p.pg.locator('#t-drone').click(); p.wait(400)
+    p.pg.locator('#drone-check').click()
+    p.pg.wait_for_selector('.modal .chk-row[data-chk="tw"]', timeout=60000); p.wait(300)
+    st = p.pg.evaluate("Object.fromEntries([...document.querySelectorAll('.modal .chk-row')].map(r=>[r.dataset.chk,r.className.split(' ')[1]]))")
+    tw = p.pg.locator('.modal .chk-row[data-chk="tw"]').inner_text()
+    ok1 = st == {'gap': 'ok', 'props': 'ok', 'clash': 'ok', 'weight': 'info', 'cog': 'ok', 'tw': 'ok'} and 'Richtwert' in tw   # Vorlage besteht alle Prüfungen
+    field(p, '#chk-thrust', 1000); p.wait(1500)
+    p.pg.wait_for_selector('.modal .chk-row[data-chk="tw"]', timeout=60000); p.wait(500)
+    m = p.ev("return Mass.measure().then(r=>r.mass)")
+    tw2 = p.pg.locator('.modal .chk-row[data-chk="tw"]').inner_text()
+    ok2 = p.ev("return App.doc.drone.thrustG===1000 && !App.doc.drone.thrustSrc") and (str(round(4000 / m, 1)).replace('.', ',') + ' : 1') in tw2 and 'Richtwert' not in tw2
+    p.pg.keyboard.press('Escape'); p.wait(300)
+    ok3 = p.pg.locator('#proj-drone .chk-list').count() == 1 and p.pg.locator('#proj-dcheck').count() == 1   # Ergebnis bleibt rechts unter „Projekt“
+    # fies: Akku weit nach hinten, Rahmen zu klein
+    p.ev("App.change('x', d=>{ d.items.find(i=>/^Akku/.test(i.name)).t.y=45; })"); warte_rechnen(p)
+    c = chk(p)
+    ok4 = c['cog'][0] in ('warn', 'bad') and 'nach hinten' in c['cog'][1]
+    p.ev("App.change('x', d=>{ d.params.find(x=>x.name==='Achsabstand').expr=170; })"); warte_rechnen(p)
+    c = chk(p)
+    ok5 = c['gap'][0] == 'bad' and c['props'][0] == 'bad' and 'Propeller' in c['props'][1]
+    # ein Teil in ein anderes schieben
+    p.ev("App.change('x', d=>{ d.params.find(x=>x.name==='Achsabstand').expr=225; d.items.find(i=>/^Stack/.test(i.name)).t.z=0; })"); warte_rechnen(p)
+    c = chk(p)
+    ok6 = c['clash'][0] == 'warn' and 'Unterteil' in c['clash'][1] and 'Stack' in c['clash'][1]
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
+
+
+def t_drohnen_generator(p):
+    p.wait(1500)
+    out = []
+    for o in ["{zoll:3, form:'x', video:'o4pro'}", "{zoll:5, form:'deadcat', video:'o3'}", "{zoll:7, form:'x', video:'walksnail'}"]:
+        c = p.ev("const cfg=DroneTpl.config(" + o + "); App.setDoc(DroneTpl.build(cfg)); Start.hide(); return true")
+        warte_rechnen(p)
+        c = chk(p)
+        out.append(p.ev("return App.errors.length") == 0 and all(c[k][0] == 'ok' for k in ['gap', 'props', 'clash']) and c['cog'][0] in ('ok', 'info'))   # 3": noch ohne Akku
+    return out
+
+
+def t_dxf(p):
+    drohne(p, 'f5')
+    names = p.ev("return Plates.candidates().map(c=>c.name+' '+c.t)")
+    ok1 = names == ['Unterteil 5', 'Oberplatte 2']          # nur flache Rahmenteile, keine Kaufteile oder Propellerkreise
+    f = p.ev("return Plates.file(App.doc.items[0].id).then(f=>({name:f.name, text:new TextDecoder().decode(f.data), circles:f.edges.filter(e=>e.t==='CIRCLE'&&e.full).map(e=>[e.c[0],e.c[1],e.r])}))")
+    ok2 = f['name'] == 'Unterteil – 5 mm.dxf' and len(f['circles']) == 28 and f['text'].count('\nCIRCLE\r') == 28 and f['text'].count('\nARC\r') == 4
+    # Wellenloch vorne rechts bei (79,55 | −79,55): von oben gesehen nicht gespiegelt, vorne ist −Y
+    ok3 = any(abs(x - 79.55) < 0.05 and abs(y + 79.55) < 0.05 and abs(r - 3.5) < 0.01 for x, y, r in f['circles'])
+    t = f['text']
+    ok4 = t.startswith('0\r\nSECTION') and t.rstrip().endswith('EOF') and '$INSUNITS\r\n70\r\n4' in t and 'KONTUR' in t
+    # Export: nur DXF anhaken
+    p.pg.get_by_role('button', name='Exportieren').first.click(); p.wait(600)
+    p.pg.locator('#ex-step').uncheck(); p.pg.locator('#ex-dxf').check()
+    with p.pg.expect_download(timeout=90000) as dl:
+        p.pg.get_by_role('button', name='Als ZIP speichern').click()
+    z = os.path.join(tempfile.gettempdir(), 'tracery-dxf.zip'); dl.value.save_as(z)
+    zn = zipfile.ZipFile(z).namelist()
+    ok5 = sorted(n for n in zn if n.startswith('DXF/')) == ['DXF/Oberplatte – 2 mm.dxf', 'DXF/Unterteil – 5 mm.dxf'] and not any(n.endswith('.step') for n in zn)
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
+def t_varianten(p):
+    drohne(p, 'f5')
+    p.pg.locator('#lt-params').click(); p.wait(400)
+    p.pg.locator('#var-new').click(); p.wait(300)
+    p.pg.fill('#prompt-inp', '5 Zoll'); p.pg.locator('.modal .actions .btn.primary').click(); p.wait(800)
+    pid = p.ev("return App.doc.params.find(x=>x.name==='Achsabstand').id")
+    field(p, '#pv-' + pid, 250); p.wait(1500)
+    ok1 = p.pg.locator('#var-update').count() == 1                     # Maße weichen ab → überschreiben anbieten
+    p.pg.locator('#var-new').click(); p.wait(300)
+    p.pg.fill('#prompt-inp', 'Groß'); p.pg.locator('.modal .actions .btn.primary').click(); p.wait(800)
+    ok2 = p.ev("return App.doc.variants.length===2 && App.doc.variants[1].values.Achsabstand===250 && App.doc.variant===App.doc.variants[1].id")
+    first = p.ev("return App.doc.variants[0].id")
+    p.pg.select_option('#var-sel', first); warte_rechnen(p)
+    ok3 = p.ev("return App.doc.params.find(x=>x.name==='Achsabstand').expr") == 225 and abs(bbox(p, 0)[3] - 92.05) < 0.1
+    p.pg.locator('#var-cmp').click()
+    p.pg.wait_for_selector('#vtable', timeout=90000); p.wait(300)
+    rows = p.pg.evaluate("[...document.querySelectorAll('#vtable tr')].map(r=>[...r.children].map(c=>c.textContent))")
+    ok4 = len(rows) == 3 and rows[0][1] == 'Achsabstand' and rows[1][0] == '5 Zoll' and rows[2][1] == '250' and all(r[2].endswith(' g') for r in rows[1:])
+    w = [float(r[2][:-2].replace(',', '.')) for r in rows[1:]]
+    ok5 = w[1] > w[0]                                                   # längere Arme wiegen mehr
+    p.pg.keyboard.press('Escape'); p.wait(300)
+    p.ev("App.undo()"); p.wait(2500)
+    ok6 = p.ev("return App.doc.params.find(x=>x.name==='Achsabstand').expr") == 250   # Umschalten lässt sich rückgängig machen
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
+
+
+def t_neu13_hilfen(p):
+    drohne(p, 'f5')
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    fehlt = [k for k in ['droneCheck', 'plateDxf', 'variants'] if k not in hilfen]
+    p.pg.locator('#lt-params').click(); p.wait(400)
+    ok = not fehlt and p.pg.locator('#var-new').count() == 1 and p.pg.locator('#proj-dcheck[data-help="droneCheck"]').count() == 1
+    return ok, ('ohne Hilfetext: ' + ', '.join(fehlt)) if fehlt else ''
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -1504,6 +1605,11 @@ TESTS = [
     ('Drohnen-Teile: Akku mit Gewicht / Motor ohne Gewicht wird angemahnt / Videosender', t_drohnen_teile),
     ('Lochbild: auf Platte ziehen / Motor 16 → Stack 30,5 / Kabelbinder', t_lochbild),
     ('Drohnen-Werkzeuge haben Hilfetexte', t_drohne_hilfen),
+    ('Drohnen-Check: Vorlage besteht / Schub eintragen / Schwerpunkt / zu kleiner Rahmen / Teile ineinander', t_drohnen_check),
+    ('Frame-Assistent: 3" O4 Pro, 5" Deadcat O3, 7" Walksnail bestehen den Check', t_drohnen_generator),
+    ('Platten als DXF: Unterteil und Oberplatte / Löcher an der richtigen Stelle / ZIP', t_dxf),
+    ('Varianten: speichern / abweichen / umschalten / vergleichen / Rückgängig', t_varianten),
+    ('Sitzung-13-Werkzeuge haben Hilfetexte', t_neu13_hilfen),
     ('Formel-Beispiele', t_formel_beispiele), ('Einführung „Erste Skizze“', t_einfuehrung), ('Schraubenlöcher', t_schrauben),
     ('Fies: Löschen hinter Marker + Undo', t_fies_loeschen), ('Fies: alles unterdrückt', t_fies_alle_aus),
     ('Fies: Marker am Anfang, neu laden', t_fies_reload), ('Fies: Tasten während Rechnen', t_fies_tasten),

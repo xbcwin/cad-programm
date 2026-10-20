@@ -2,6 +2,7 @@
 // Die Daten kommen beim Bauen aus app/data (fpv-masse.json, bauteile.json – Entwurf Gemini, geprüft).
 const FPV_DATA = /*JSON:fpv-masse.json*/null;
 const BUY_DATA = /*JSON:bauteile.json*/null;
+const THRUST_DATA = /*JSON:schub.json*/null;
 const DroneLib = (() => {
   // Motoren, deren Höhe und Gewicht aus einem Datenblatt stammen (sonst Schätzwerte, markiert)
   const MOTOR_SHEET = { '2207': { d: 28.5, h: 19.7, g: 33.8, src: 'iFlight XING-E 2207' }, '2806.5': { d: 35.1, h: 21.3, g: 54, src: 'iFlight XING 2806.5' } };
@@ -51,5 +52,10 @@ const DroneLib = (() => {
       { part: LIBMAP.slotHole, params: { ...libDefaults(LIBMAP.slotHole), len: 21, w: 3 }, name: 'Gurtschlitz' },
     ];
   }
-  return { motors, motor, akkus, akku, stacks, cams, CATS, buyParts, holeParts };
+  // Schub pro Motor als Vorgabe – nur geprüfte Messungen aus Herstellerangaben (schub.json)
+  function thrust(stator) {
+    const m = (THRUST_DATA.motoren || []).find((x) => x.stator === stator && x.geprueft && x.max_schub_g);
+    return m ? { g: m.max_schub_g, src: `${m.motor}${m.kv ? ' ' + m.kv + 'KV' : ''}, ${m.zellen}${m.propeller ? ', ' + m.propeller : ''}`, url: m.quelle } : null;
+  }
+  return { motors, motor, akkus, akku, stacks, cams, CATS, buyParts, holeParts, thrust };
 })();

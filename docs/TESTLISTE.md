@@ -1,6 +1,6 @@
 # Testliste
 
-Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 12 (20.10.2026).
+Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 13 (20.10.2026).
 
 **[x]** = automatisch geprüft mit `tests/klicktest.py` (echter Browser, echte Klicks) · **[ ]** = noch von Hand ansehen
 
@@ -18,13 +18,14 @@ Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 12 (20.10
 | Fiese Tests | 6 | 5 | „Sehr fein“ flüssig? |
 | Notizstift | 6 | 3 | Kleben beim Drehen, Farbe/Dicke, Doppelklick auf Textnotiz |
 | Regeln in der Skizze | 11 | 9 | Blau/dunkel gut erkennbar? Ziehen flüssig? |
-| Skizzen-Feinschliff | 10 | 9 | Fangmarkierungen gut erkennbar? |
+| Skizzen-Feinschliff | 11 | 10 | Fangmarkierungen gut erkennbar? |
 | Formen-Werkzeuge | 12 | 9 | Bohrungs-Ring gut sichtbar? Muster-Kreis verständlich? Wand von innen |
 | Ansichten | 12 | 8 | Schraffur erkennbar? Explosion weich? Fokus drehen, Röntgen-Kanten |
 | Messen, Masse, Auswahl, Versionen | 11 | 8 | Schwerpunkt-Symbol gut sichtbar? Vergleichs-Umriss verständlich? |
 | Drohnen-Vorlagen | 8 | 5 | Sieht es wie eine Drohne aus? Propellerkreise, STEP im anderen Programm |
 | Frame-Assistent und Drohnen-Teile | 8 | 5 | Klappfenster übersichtlich? Deadcat richtig? Kopfzeile mit Symbolen |
-| **Gesamt** | **133** | **108** | **25 Punkte, dazu ein Blick auf Animationen** |
+| Drohnen-Check, DXF, Varianten | 11 | 9 | DXF in der Fräs-Software, Check-Fenster und Varianten-Tabelle bei schmalem Fenster |
+| **Gesamt** | **145** | **118** | **27 Punkte, dazu ein Blick auf Animationen** |
 
 Wichtig: Automatisch geprüft heißt „funktioniert in Chromium unter Linux“. Safari auf dem Mac, Touch auf dem iPad und echte Grafikkarten sieht nur ein Test von Hand.
 
@@ -383,6 +384,42 @@ Nichts hiervon ändert das Modell – kein Schritt in der Zeitleiste, nichts in 
 - [ ] **Kopfzeile mit Symbolen**
   Schritte: 1. Fenster schmaler ziehen.
   Erwartet: Erst zeigen Messen, Notizen, Ansicht nur ihr Symbol, dann alle außer „Exportieren“; nichts wird abgeschnitten.
+
+## Drohnen-Check, Platten als DXF, Varianten (neu in Sitzung 13)
+
+- [x] **Drohnen-Check an der Vorlage**
+  Schritte: 1. Startseite → „5" Freestyle“. 2. Oben „Drohne“ → „Drohnen-Check“.
+  Erwartet: Sechs Zeilen; Propeller, Propellerkreise, Teile und Schwerpunkt grün, Gewicht etwa 510 g, Schub zu Gewicht etwa 16,8 : 1 mit „Richtwert … T-Motor F50“.
+- [x] **Eigenen Schub eintragen**
+  Schritte: 1. Im Check bei „Schub pro Motor“ 1000 eintippen, Enter. 2. Fenster schließen.
+  Erwartet: Der Check rechnet neu (4 × 1000 g geteilt durch das Gewicht), ohne „Richtwert“; rechts unter „Projekt“ → „Drohne“ steht das Ergebnis.
+- [x] **Fies: Akku nach hinten**
+  Schritte: 1. Akku anklicken, Y auf 45 stellen. 2. Check.
+  Erwartet: Schwerpunkt gelb oder rot, „… nach hinten verschoben“.
+- [x] **Fies: Rahmen zu klein**
+  Schritte: 1. Unter „Maße“ Achsabstand 170. 2. Check.
+  Erwartet: „Die Propeller überlappen sich …“ und „Propeller … trifft …“ rot.
+- [x] **Fies: Teile ineinander**
+  Schritte: 1. Stack-Platzhalter auf Z 0 setzen. 2. Check.
+  Erwartet: „Ineinander: Unterteil und Stack …“ gelb; „Zeigen“ wählt die beiden Teile aus.
+- [x] **Frame-Assistent besteht den Check**
+  Schritte: 1. Frame-Assistent: 3" mit DJI O4 Pro, dann 5" Deadcat mit DJI O3, dann 7" mit Walksnail bauen. 2. Jeweils Check.
+  Erwartet: Keine roten oder gelben Zeilen bei Propellern, Teilen und Schwerpunkt (beim 3" ohne Akku nur ein Hinweis).
+- [x] **Platten als DXF**
+  Schritte: 1. 5"-Vorlage → „Exportieren“. 2. STEP abhaken, „Platten als DXF“ anhaken. 3. „Als ZIP speichern“.
+  Erwartet: Im ZIP der Ordner DXF mit „Unterteil – 5 mm.dxf“ und „Oberplatte – 2 mm.dxf“; das Unterteil hat 28 Löcher, das Wellenloch vorne rechts liegt bei X 79,55 / Y −79,55.
+- [ ] **DXF in der Fräs-Software**
+  Schritte: 1. Die DXF-Dateien in LibreCAD, Fusion (Skizze einfügen) oder beim Fräsdienst hochladen.
+  Erwartet: Umriss und Löcher in Originalgröße (Millimeter), keine doppelten Linien, Bögen an den Motorauflagen rund.
+- [x] **Varianten**
+  Schritte: 1. Links „Maße“ → „Neue Variante“ → „5 Zoll“. 2. Achsabstand 250. 3. „Neue Variante“ → „Groß“. 4. Oben „5 Zoll“ wählen. 5. „Vergleichen“. 6. Cmd+Z.
+  Erwartet: Nach 2. gelber Hinweis und „Überschreiben“; nach 4. wieder 225; die Tabelle zeigt Achsabstand 225 und 250 mit Gewicht (Groß ist schwerer); Cmd+Z schaltet zurück auf 250.
+- [x] **Hilfetexte**
+  Schritte: 1. Maus auf „Drohnen-Check“, „Neue Variante“ und „Platten als DXF“.
+  Erwartet: Anleitung mit Tipp.
+- [ ] **Check-Fenster und Varianten sehen gut aus**
+  Schritte: 1. Check bei schmalem Fenster öffnen. 2. Varianten mit langem Namen anlegen.
+  Erwartet: Nichts abgeschnitten, Knöpfe in einer Reihe, Tabelle scrollt seitlich, wenn sie zu breit ist.
 
 ## Notizstift (neu)
 

@@ -30,11 +30,17 @@ const DroneTpl = (() => {
   const sg = (s, e) => (s > 0 ? `(${e})` : `-(${e})`);
   const W = (sy) => (sy < 0 ? 'Armwinkel' : 'Armwinkel_hinten');
   const MX = (sy) => `Achsabstand/2*sin(${W(sy)})`, MY = (sy) => `Achsabstand/2*cos(${W(sy)})`;
-  const SX = 'Plattenbreite/2 - 4', SY = (sy) => (sy < 0 ? 'Plattenlänge/2 - 22' : 'Plattenlänge/2 - 8');   // Bolzen vorne hinter der Kamera
+  // Bei ungleichen Armwinkeln (Deadcat) rückt der Körper so, dass die Mitte der vier Motoren über der Plattenmitte liegt – sonst sitzt der Schwerpunkt vorne
+  const SHIFT = ' + Achsabstand/4*(cos(Armwinkel) - cos(Armwinkel_hinten))';
+  const PY = (sy) => sg(sy, MY(sy)) + SHIFT, PY2 = (sy) => sg(sy, MY(sy) + '/2') + SHIFT;
+  // Bolzen vorne hinter der Kamera (lange HD-Kameras schieben sie nach hinten), hinten aus dem Propellerkreis
+  const frontOff = (camL) => Math.max(22, Math.ceil((8 + (camL || 18) / 2 + 3.5) * 2) / 2);
+  const SX = 'Plattenbreite/2 - 4';
+  const SYof = (fo) => (sy) => (sy < 0 ? `Plattenlänge/2 - ${fo}` : 'Plattenlänge/2 - 16');
 
   // ---------- Auswahl für den Frame-Assistenten ----------
   const SIZES = {
-    3: { Armbreite: 8, Armdicke: 3, Plattenbreite: 30, Plattenlänge: 85, Plattendicke: 1.5, Bolzenhöhe: 20, stack: 20, motor: '1404', akku: null, prop: 2 },
+    3: { Armbreite: 8, Armdicke: 3, Plattenbreite: 30, Plattenlänge: 90, Plattendicke: 1.5, Bolzenhöhe: 20, stack: 20, motor: '1404', akku: null, prop: 2 },
     4: { Armbreite: 10, Armdicke: 4, Plattenbreite: 34, Plattenlänge: 100, Plattendicke: 2, Bolzenhöhe: 22, stack: 20, motor: '2004', akku: null, prop: 3 },
     5: { Armbreite: 13, Armdicke: 5, Plattenbreite: 42, Plattenlänge: 130, Plattendicke: 2, Bolzenhöhe: 25, stack: 30.5, motor: '2207', akku: '6S 1300 mAh', prop: 4.5 },
     6: { Armbreite: 14, Armdicke: 5.5, Plattenbreite: 44, Plattenlänge: 140, Plattendicke: 2, Bolzenhöhe: 28, stack: 30.5, motor: '2306', akku: '6S 1500 mAh', prop: 6 },
@@ -67,6 +73,17 @@ const DroneTpl = (() => {
     const d = (a, b) => Math.hypot(m[a][0] - m[b][0], m[a][1] - m[b][1]);
     return Math.min(d(0, 1), d(2, 3), d(0, 2), d(1, 3)) - D;
   }
+  // Abstandsbolzen so hoch, dass die Propeller unter der Oberplatte durchlaufen (Motor + 7 mm, auf 5 mm aufgerundet),
+  // der Videosender auf den Stack passt (Stack oben bei 16 mm) und die Kamera zwischen die Platten
+  const standoff = (S, mot, vtx, cam) => Math.max(S.Bolzenhöhe, Math.ceil((mot.h + 7) / 5) * 5, vtx ? Math.ceil(16 + vtx.h_mm + 1) : 0, cam ? Math.ceil(cam.h_mm + 2) : 0);
+  // kleinster Abstand von Kamera, Kamerahalter und Abstandsbolzen zum Propellerkreis (von oben gesehen)
+  function bodyGap(A, zoll, wv, wh, S, camW, camL) {
+    const L = A / 2, r = (zoll * 25.4) / 2, s = (A / 4) * (Math.cos(R(wv)) - Math.cos(R(wh)));
+    const mot = [[L * Math.sin(R(wv)), -L * Math.cos(R(wv)) + s], [L * Math.sin(R(wh)), L * Math.cos(R(wh)) + s]];
+    const yc = -(S.Plattenlänge / 2 - 8), sx = S.Plattenbreite / 2 - 4;
+    const pts = [[camW / 2, yc - camL / 2, 0], [camW / 2 + 2.2, yc - 6, 0], [sx, -(S.Plattenlänge / 2 - frontOff(camL)), 2.5], [sx, S.Plattenlänge / 2 - 16, 2.5]];
+    return Math.min(...mot.flatMap(([x, y]) => pts.map(([px, py, pr]) => Math.hypot(x - px, y - py) - pr - r)));
+  }
   // vollständige Einstellung aus einer kurzen Auswahl
   function config(o = {}) {
     const zoll = o.zoll || 5, S = SIZES[zoll] || SIZES[5], F = FORMS[o.form] || FORMS.x;
@@ -74,17 +91,20 @@ const DroneTpl = (() => {
     const vid = VIDEO[o.video || 'analog'] || VIDEO.analog;
     const vtx = buy(vid[1]), cam = buy(vid[2]);
     const stack = o.stack || S.stack;
-    const A = o.A || wheelbase(zoll, F[1], F[2]);
+    const camW = cam ? cam.b_mm : o.cam || 19, camL = cam ? cam.l_mm : 18;
+    let A = o.A || wheelbase(zoll, F[1], F[2]);
+    if (!o.A) while (bodyGap(A, zoll, F[1], F[2], S, camW, camL) < 2 && A < 600) A += 5;   // Kamera und Bolzen raus aus den Propellerkreisen
+    const th = DroneLib.thrust(mot.stator);
     const akkuName = o.akku === undefined ? S.akku : o.akku;
     return {
       name: o.name || `${zoll}" ${F[0]}`, doc: o.doc || `${zoll}-Zoll-${F[0]}`, zoll, form: o.form || 'x', video: o.video || 'analog',
-      params: { Achsabstand: A, Armwinkel: F[1], Armwinkel_hinten: F[1] === F[2] ? 'Armwinkel' : F[2], Armbreite: S.Armbreite, Armdicke: o.Armdicke || S.Armdicke, Plattenbreite: S.Plattenbreite, Plattenlänge: S.Plattenlänge, Plattendicke: S.Plattendicke, Bolzenhöhe: S.Bolzenhöhe, Stack: stack, Motorlochkreis: mot.circle, Kamerabreite: cam ? cam.kamera_breite_mm : o.cam || 19, Propeller: zoll },
+      params: { Achsabstand: A, Armwinkel: F[1], Armwinkel_hinten: F[1] === F[2] ? 'Armwinkel' : F[2], Armbreite: S.Armbreite, Armdicke: o.Armdicke || S.Armdicke, Plattenbreite: S.Plattenbreite, Plattenlänge: S.Plattenlänge, Plattendicke: S.Plattendicke, Bolzenhöhe: standoff(S, mot, vtx, cam), Stack: stack, Motorlochkreis: mot.circle, Kamerabreite: cam ? cam.kamera_breite_mm : o.cam || 19, Propeller: zoll },
       stackScrew: stack >= 30 ? 'M3' : 'M2', motorScrew: mot.screw.startsWith('M1') ? 'M2' : mot.screw,
       motor: { name: 'Motor ' + mot.stator, d: mot.d, h: mot.h, g: mot.g }, prop: S.prop,
       akku: akkuName ? DroneLib.akku(akkuName) : null,
       vtx: vtx ? { name: vtx.name.replace(/\s*\(Sendeeinheit.*\)/, '') + (vid[2] ? ' Sender' : ''), l: vtx.l_mm, b: vtx.b_mm, h: vtx.h_mm, g: vtx.gewicht_g ?? '' } : null,
       cam: cam ? { name: cam.name.replace(/\s*\(Kameramodul\)/, ' Kamera'), l: cam.l_mm, b: cam.b_mm, h: cam.h_mm, g: cam.gewicht_g ?? '' } : { name: 'Kamera (Platzhalter)', g: 6 },
-      stackG: 20,
+      stackG: 20, thrust: th ? th.g : null, thrustSrc: th ? th.src : null,
     };
   }
   const PRESETS = {
@@ -99,23 +119,24 @@ const DroneTpl = (() => {
     const d = Model.newDoc(P.doc);
     d.params = Object.entries(P.params).map(([k, v]) => param(k, v));
     d.settings.material = 'CFK';
-    d.drone = { zoll: P.zoll, form: P.form, video: P.video };
+    d.drone = { zoll: P.zoll, form: P.form, video: P.video, motorH: P.motor.h, thrustG: P.thrust || null, thrustSrc: P.thrust ? P.thrustSrc : null };
     const CF = '#3b4148';
+    const SY = SYof(frontOff(P.cam && P.cam.l));
     // Unterteil: Mittelplatte, vier Arme, Motorauflagen, Löcher
     const kids = [item('box', { w: 'Plattenbreite', d: 'Plattenlänge', h: 'Armdicke' }, { name: 'Mittelplatte', color: CF })];
     for (const [n, sx, sy] of CORNERS) {
-      kids.push(item('box', { w: 'Armbreite', d: 'Achsabstand/2', h: 'Armdicke' }, { name: 'Arm ' + n, color: CF, t: { x: sg(sx, MX(sy) + '/2'), y: sg(sy, MY(sy) + '/2'), rz: sx * sy < 0 ? W(sy) : '-' + W(sy) } }));
-      kids.push(item('cylinder', { d: 'Motorlochkreis + 9', h: 'Armdicke' }, { name: 'Motorauflage ' + n, color: CF, t: { x: sg(sx, MX(sy)), y: sg(sy, MY(sy)) } }));
+      kids.push(item('box', { w: 'Armbreite', d: 'Achsabstand/2', h: 'Armdicke' }, { name: 'Arm ' + n, color: CF, t: { x: sg(sx, MX(sy) + '/2'), y: PY2(sy), rz: sx * sy < 0 ? W(sy) : '-' + W(sy) } }));
+      kids.push(item('cylinder', { d: 'Motorlochkreis + 9', h: 'Armdicke' }, { name: 'Motorauflage ' + n, color: CF, t: { x: sg(sx, MX(sy)), y: PY(sy) } }));
     }
     for (const [, sx, sy] of CORNERS) kids.push(hole(P.stackScrew, { x: sg(sx, 'Stack/2'), y: sg(sy, 'Stack/2'), z: 'Armdicke + 1' }, 'Armdicke + 2', 'Stack-Loch'));
     for (const [, sx, sy] of CORNERS) kids.push(hole('M3', { x: sg(sx, SX), y: sg(sy, SY(sy)), z: 'Armdicke + 1' }, 'Armdicke + 2', 'Bolzen-Loch'));
     for (const [n, sx, sy] of CORNERS) {
       // vier Motorschrauben als Kreismuster um die Motormitte (Lochkreis = Motorlochkreis)
       const g = Model.newItem('group', {}, { name: 'Motorlöcher ' + n, role: 'hole' });
-      g.p = { op: 'pattern', pt: 'circ', n: 4, ang: 360, cx: sg(sx, MX(sy)), cy: sg(sy, MY(sy)) };
-      g.children = [hole(P.motorScrew, { x: `${sg(sx, MX(sy))} + Motorlochkreis/2`, y: sg(sy, MY(sy)), z: 'Armdicke + 1' }, 'Armdicke + 2', 'Motorschraube')];
+      g.p = { op: 'pattern', pt: 'circ', n: 4, ang: 360, cx: sg(sx, MX(sy)), cy: PY(sy) };
+      g.children = [hole(P.motorScrew, { x: `${sg(sx, MX(sy))} + Motorlochkreis/2`, y: PY(sy), z: 'Armdicke + 1' }, 'Armdicke + 2', 'Motorschraube')];
       kids.push(g);
-      kids.push(item('cylinder', { d: 7, h: 'Armdicke + 2' }, { name: 'Wellenloch ' + n, role: 'hole', t: { x: sg(sx, MX(sy)), y: sg(sy, MY(sy)), z: -1 } }));
+      kids.push(item('cylinder', { d: 7, h: 'Armdicke + 2' }, { name: 'Wellenloch ' + n, role: 'hole', t: { x: sg(sx, MX(sy)), y: PY(sy), z: -1 } }));
     }
     const unten = group('Unterteil', kids, { color: CF });
     // Abstandsbolzen mit Gewinde
@@ -141,8 +162,8 @@ const DroneTpl = (() => {
     out.push(item('box', { w: P.cam.b || 'Kamerabreite', d: camD, h: camH }, { name: P.cam.name, color: '#16202b', t: { y: '-(Plattenlänge/2 - 8)', z: `Armdicke + Bolzenhöhe/2 - (${camH})/2` }, massG: P.cam.g }));
     const mk = [], pk = [];
     for (const [n, sx, sy] of CORNERS) {
-      mk.push(item('cylinder', { d: P.motor.d, h: P.motor.h }, { name: 'Motor ' + n, color: '#b9c2cb', t: { x: sg(sx, MX(sy)), y: sg(sy, MY(sy)), z: 'Armdicke' } }));
-      pk.push(item('tube', { d: 'Propeller*25.4', wall: 1.2, h: 1 }, { name: 'Propellerkreis ' + n, color: '#e8833a', t: { x: sg(sx, MX(sy)), y: sg(sy, MY(sy)), z: `Armdicke + ${P.motor.h + 3}` } }));
+      mk.push(item('cylinder', { d: P.motor.d, h: P.motor.h }, { name: 'Motor ' + n, color: '#b9c2cb', t: { x: sg(sx, MX(sy)), y: PY(sy), z: 'Armdicke' } }));
+      pk.push(item('tube', { d: 'Propeller*25.4', wall: 1.2, h: 1 }, { name: 'Propellerkreis ' + n, color: '#e8833a', t: { x: sg(sx, MX(sy)), y: PY(sy), z: `Armdicke + ${P.motor.h + 3}` } }));
     }
     out.push(group(P.motor.name + ' (4×, Platzhalter)', mk, { color: '#b9c2cb', massG: P.motor.g === '' ? '' : `4*${P.motor.g}` }));
     out.push(group(`Propeller ${P.zoll}" (Kreise)`, pk, { color: '#e8833a', massG: `4*${P.prop}` }));
@@ -159,7 +180,7 @@ const DroneTpl = (() => {
       pts.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="5" class="a2"/><ellipse cx="${x}" cy="${y}" rx="${big ? 13 : 11}" ry="${big ? 7 : 6}" class="b1" fill-opacity=".15"/>`).join('');
   }
   const LIST = Object.entries(PRESETS).map(([k, P]) => ({ id: 'drone-' + k, name: P.name, desc: P.desc, build: () => build(k), svg: svg(k === 'f7'), drone: true }));
-  return { build, config, wheelbase, tipGap, PRESETS, LIST, SIZES, FORMS, VIDEO };
+  return { build, config, wheelbase, tipGap, bodyGap, PRESETS, LIST, SIZES, FORMS, VIDEO };
 })();
 
 // ================= Frame-Assistent und Drohnen-Bibliothek in der Oberfläche =================
@@ -219,7 +240,9 @@ const DroneUI = (() => {
     const top = h('div', { class: 'btn-row' });
     const fa = h('button', { type: 'button', class: 'btn primary small', id: 'drone-assist' }); fa.innerHTML = icon('frame') + 'Frame-Assistent';
     fa.onclick = () => { Panels.closeFlyout(); assistant(); };
-    top.append(fa); el.append(top);
+    const dc = h('button', { type: 'button', class: 'btn small', id: 'drone-check', 'data-help': 'droneCheck' }); dc.innerHTML = icon('clearance') + 'Drohnen-Check';
+    dc.onclick = () => { Panels.closeFlyout(); DroneCheck.dialog(); };
+    top.append(fa, dc); el.append(top);
     const chips = h('div', { class: 'chips', role: 'tablist' });
     const tiles = h('div', { class: 'tiles' });
     const fill = () => {

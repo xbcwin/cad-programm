@@ -19,7 +19,7 @@ const Commands = (() => {
     add('measure', 'Messen', 'measure', 'abstand länge durchmesser lineal', () => Measure.toggle(), { group: 'Werkzeuge', kbd: 'M' });
     add('notes', 'Notizstift', 'noteDraw', 'notiz stift malen zeichnen kritzeln text markieren hinweis', () => Notes.toggle(), { group: 'Werkzeuge', kbd: 'N' });
     add('notes-show', 'Notizen ein- oder ausblenden', 'notesShow', 'notizen zeigen verstecken ausblenden', () => ViewPrefs.toggle('notes'), { group: 'Ansicht' });
-    add('export', 'Exportieren (STEP, STL, 3MF)', 'export', 'step stl 3mf exportieren speichern download', () => Print.exportDialog(), { group: 'Werkzeuge', kbd: 'Strg E' });
+    add('export', 'Exportieren (STEP, STL, 3MF, DXF)', 'export', 'step stl 3mf dxf platten fräse laser exportieren speichern download', () => Print.exportDialog(), { group: 'Werkzeuge', kbd: 'Strg E' });
     add('status', 'Modell-Status', 'info', 'status prüfen größe fehler', () => $('#ampel').click(), { group: 'Werkzeuge' });
     add('drop', 'Auf die XY-Ebene setzen', 'push', 'boden unten absetzen z null ebene', () => Actions.dropToPlate(null), { group: 'Werkzeuge' });
     add('ortho', 'Orthografisch / Perspektive', 'viewOrtho', 'ortho perspektive projektion kamera', () => ViewPrefs.toggle('ortho'), { group: 'Ansicht', kbd: 'O' });
@@ -30,6 +30,8 @@ const Commands = (() => {
     add('frame-assist', 'Frame-Assistent: Drohnenrahmen bauen', 'frame', 'frame assistent drohne rahmen bauen quad zoll', () => DroneUI.assistant(), { group: 'Projekt' });
     add('drone-lib', 'Drohnen-Teile: Motoren, Akkus, Videosender …', 'drone', 'motor akku videosender kamera empfänger gps kaufteil bibliothek', () => Panels.toggleFlyout('drone', $('#t-drone')), { group: 'Werkzeuge' });
     for (const t of DroneTpl.LIST) add('tpl-' + t.id, 'Drohnen-Vorlage: ' + t.name, 'drone', 'drohne vorlage rahmen frame quad ' + t.name.toLowerCase(), () => Start.openDrone(t), { group: 'Projekt' });
+    add('drone-check', 'Drohnen-Check: Propeller, Gewicht, Schwerpunkt, Schub', 'clearance', 'check prüfen drohne propeller abstand kollision gewicht schwerpunkt schub', () => DroneCheck.dialog(), { group: 'Projekt' });
+    add('variants', 'Varianten vergleichen', 'list', 'variante varianten vergleichen maße sätze', () => Variants.compareDialog(), { group: 'Projekt' });
     add('versions', 'Versionen: speichern, vergleichen, zurückholen', 'rollback', 'version versionen stand vergleichen zurück sichern', () => Versions.dialog(), { group: 'Projekt' });
     add('version-save', 'Jetzigen Stand als Version speichern', 'save', 'version speichern sichern stand', async () => { const n = await UI.prompt('Version speichern', 'Name der Version', 'Version ' + (Versions.list().length + 1), 'Speichern'); if (n != null) Versions.save(n); }, { group: 'Projekt' });
     add('similar', 'Ähnliche auswählen', 'similar', 'ähnliche gleiche alle auswählen bohrungen kanten', () => Select.similar(), { group: 'Bearbeiten', kbd: 'A', needSel: true });

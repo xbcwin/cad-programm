@@ -157,8 +157,9 @@ const Model = (() => {
   }
   function isActive(doc, id) { const top = topOf(doc, id); if (!top) return false; return activeItems(doc).includes(top); }
   function kernelScene(doc, extra = []) {
-    const { v } = vars(doc);
-    return { items: [...activeItems(doc), ...extra].map((it) => kernelItem(it, v)) };
+    // Lagen mit Formeln (z. B. x = Achsabstand/2) mit den Maßen DIESES Projektstands auflösen – wichtig für Versionen und Varianten
+    const { v } = vars(doc); const prev = curV; curV = v;
+    try { return { items: [...activeItems(doc), ...extra].map((it) => kernelItem(it, v)) }; } finally { curV = prev; }
   }
 
   // ---------- Größen ----------
@@ -204,6 +205,7 @@ const Model = (() => {
     doc.settings = Object.assign({ printer: 'std', custom: { x: 220, y: 220, z: 250 }, grid: 1, snap: true }, doc.settings || {});
     if (doc.rollback != null && !(doc.rollback >= 0 && doc.rollback < doc.items.length)) doc.rollback = null;
     if (!Array.isArray(doc.notes)) doc.notes = [];
+    if (doc.variants != null && !Array.isArray(doc.variants)) doc.variants = [];
     walk(doc.items, (it) => { it.t = Object.assign(T0(), it.t || {}); it.p = it.p || {}; it.finishes = it.finishes || []; if (!it.role) it.role = 'solid'; if (!it.color) it.color = nextColor(); });
     return doc;
   }
