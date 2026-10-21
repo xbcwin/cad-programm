@@ -1,6 +1,6 @@
 # Testliste
 
-Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 16 (21.10.2026).
+Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 17 (21.10.2026).
 
 **[x]** = automatisch geprüft mit `tests/klicktest.py` (echter Browser, echte Klicks) · **[ ]** = noch von Hand ansehen
 
@@ -28,7 +28,8 @@ Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 16 (21.10
 | KI-Schritte, Erklären, Schwachstellen | 12 | 9 | Echte KI in Claude, Ringe und KI-Fenster, Quellen-Links |
 | Einfache Oberfläche | 4 | 3 | Mit einem Kind ausprobieren |
 | Kaufteile in echter Form | 3 | 2 | Sehen die Teile echt aus? |
-| **Gesamt** | **164** | **132** | **32 Punkte, dazu ein Blick auf Animationen** |
+| KI-Kollege | 9 | 8 | Echter KI-Kollege in Claude |
+| **Gesamt** | **173** | **140** | **33 Punkte, dazu ein Blick auf Animationen** |
 
 Wichtig: Automatisch geprüft heißt „funktioniert in Chromium unter Linux“. Safari auf dem Mac, Touch auf dem iPad und echte Grafikkarten sieht nur ein Test von Hand.
 
@@ -479,6 +480,38 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [ ] **Mit einem Kind ausprobieren**
   Schritte: 1. Ein Kind (ab 10) mit „Einfach“ eine Platte mit vier Löchern bauen lassen, ohne zu helfen.
   Erwartet: Es findet Körper, Löcher und Exportieren allein; notieren, wo es hängen bleibt.
+
+## KI-Kollege (neu in Sitzung 17)
+
+Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische Test spielt die KI mit vorbereiteten Antworten nach.
+
+- [x] **Alles als Verbund**
+  Schritte: 1. 5"-Vorlage. 2. Unten eintippen: „Mach alles als Verbund“.
+  Erwartet: Plan mit Haken, „Runde 2“ während der Arbeit; danach ist der Rahmen ein Körper, Motoren, Akku, Kamera, Stack, Sender und Propeller bleiben einzeln; Hinweis dazu; Drohnen-Check grün; „2 Runden“.
+- [x] **Ein Rückgängig für alles**
+  Schritte: 1. Nach dem Verbund im KI-Fenster „Rückgängig“.
+  Erwartet: Alle 10 Teile wieder einzeln – ein einziger Schritt.
+- [x] **Fehler selbst beheben**
+  Schritte: 1. „Bau einen Klotz 20 × 20 × 10 mit runden Kanten“ (die KI nimmt zuerst einen zu großen Radius).
+  Erwartet: Die zweite Runde sieht „FEHLER im Modell“ und verkleinert den Radius; am Ende keine Fehler.
+- [x] **Selbstständig aus**
+  Schritte: 1. Oben im Fenster „Selbstständig“ abhaken. 2. Wieder einen Auftrag mit Fehler.
+  Erwartet: Nur eine Runde, kein Nachbessern.
+- [x] **Rückfrage**
+  Schritte: 1. Zwei Quader. 2. „Mach die Teile schöner“. 3. Einen Antwort-Knopf drücken.
+  Erwartet: Frage mit Knöpfen, am Modell ändert sich erst etwas nach der Antwort; die KI weiß, dass es die Antwort auf ihre Frage ist.
+- [x] **Viele Teile auf einmal**
+  Schritte: 1. Drei Quader nebeneinander. 2. „Richte alles links aus, färbe es rot und leg eine gedrehte Kopie daneben“.
+  Erwartet: Links bündig, alles rot, drei gedrehte Kopien, die am Ende ausgewählt sind; ein Rückgängig-Schritt.
+- [x] **Verbund ohne KI**
+  Schritte: 1. Tracery im Browser (nicht in Claude), 5"-Vorlage. 2. Unten „verbund“ tippen bzw. „Mach alles als Verbund“ + Enter.
+  Erwartet: Befehl „Alles zu einem Körper verbinden (Verbund)“; danach ein Verbund aus 4 Rahmenteilen, Meldung „Verbunden: 4 Teile …“.
+- [x] **Fehlermeldung bleibt**
+  Schritte: 1. Quader mit zu großer Rundung. 2. Einen anderen Körper einfügen und verschieben.
+  Erwartet: Die Meldung „Die Rundung ist zu groß“ bleibt stehen.
+- [ ] **Echter KI-Kollege in Claude**
+  Schritte: 1. Tracery in Claude öffnen, 5"-Vorlage. 2. „Mach alles als Verbund“, „Mach die Arme 6 mm dick und prüf die Drohne“, „Richte alle Kaufteile mittig aus“.
+  Erwartet: Sinnvoller Plan, Runden laufen durch, Ergebnis stimmt; nichts Erfundenes.
 
 ## Kaufteile in echter Form (neu in Sitzung 16)
 

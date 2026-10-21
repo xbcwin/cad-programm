@@ -1,7 +1,11 @@
 // ================= Oberfläche: Grundbausteine =================
 const UI = (() => {
   // ---------- Meldungen ----------
+  // stumm geschaltet (z. B. während der KI-Kollege arbeitet): Meldungen werden gesammelt statt gezeigt
+  let muted = null;
+  function mute(on) { if (on) { muted = []; return null; } const m = muted || []; muted = null; return m; }
   function toast(text, opts = {}) {
+    if (muted && !opts.force) { muted.push(typeof text === 'string' ? text : (text && text.textContent) || ''); return h('div'); }
     const box = $('#toasts');
     const el = h('div', { class: 'toast' + (opts.kind === 'bad' ? ' bad' : ''), role: 'status' });
     el.innerHTML = icon(opts.icon || (opts.kind === 'bad' ? 'warn' : 'check'));
@@ -217,6 +221,6 @@ const UI = (() => {
     wrap.append(h('div', { class: 'inp' }, sel));
     return wrap;
   }
-  return { toast, modal, confirm, prompt, menu, closeMenu, pop, closePop, initTips, hint, renderHint, loading, busy, numField, selectField };
+  return { toast, mute, modal, confirm, prompt, menu, closeMenu, pop, closePop, initTips, hint, renderHint, loading, busy, numField, selectField };
 })();
 

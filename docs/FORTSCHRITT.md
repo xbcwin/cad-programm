@@ -1,6 +1,6 @@
 # Fortschritt
 
-Stand: 21.10.2026 · nach Sitzung 16 (Bauplan mit 14 Sitzungen abgeschlossen)
+Stand: 21.10.2026 · nach Sitzung 17 (Bauplan mit 14 Sitzungen abgeschlossen)
 
 ## Erledigt
 
@@ -45,7 +45,7 @@ Stand: 21.10.2026 · nach Sitzung 16 (Bauplan mit 14 Sitzungen abgeschlossen)
 - [x] Neuer Name beim Maß (z. B. `breite`) wird automatisch unter „Maße“ angelegt
 - [x] Formel-Beispiele unter „Maße“ (Gemini, alle 12 mit Tracerys Rechner nachgeprüft), Beispiel-Maße per Klick
 - [x] Umbenennen / Entfernen eines Maßes wirkt jetzt auch auf Skizzen-Maße
-- [x] Automatischer Klicktest `tests/klicktest.py`: 96 Durchläufe (alle grün), 132 von 164 Punkten der Testliste automatisch geprüft
+- [x] Automatischer Klicktest `tests/klicktest.py`: 102 Durchläufe (alle grün), 140 von 173 Punkten der Testliste automatisch geprüft
 - [x] Aufgeräumt: Programm liegt jetzt in 28 Quelldateien unter `app/src/`, `tools/build.py` baut daraus `app/index.html`
 - [x] Notizstift (Taste N): freie Striche, die am Modell kleben, Textnotizen, 6 Farben, 3 Dicken, Radierer, ein-/ausblendbar – ohne technische Bedeutung
 - [x] Symbole für den Notizstift (Gemini, geprüft); Augen-Knopf rechts im Bild blendet Notizen aus, sobald es welche gibt
@@ -129,6 +129,14 @@ Stand: 21.10.2026 · nach Sitzung 16 (Bauplan mit 14 Sitzungen abgeschlossen)
 - [x] „Mehr“ in der einfachen Oberfläche: Messen, Notizstift, Ansicht, Schwachstellen und „Alle Werkzeuge zeigen“ – die Eingabezeile findet weiterhin jedes Werkzeug
 - [x] Kaufteile in echter Form (Sitzung 16): Motoren mit Fuß, Gewindelöchern im Lochkreis, Stator-Spalt, Glocke mit Lüftungslöchern und Welle; Propeller mit Nabe, drei angestellten Blättern (gegenläufig gespiegelt) und dünnem Ring für den Propellerkreis; Stack aus zwei Platinen auf Dämpfern mit Bauteilen und Löchern; FPV-Kamera mit Objektiv nach vorne und seitlichen M2-Gewinden; digitaler Sender mit Kühlrippen und Lochbild; analoger Sender und Empfänger als Platine mit Abschirmung; GPS mit Keramik-Antenne; Akku mit abgerundeten Kanten; Action-Kamera mit Objektiv; Akkustecker; Elko
 - [x] Alle Formen bleiben in den Datenblatt-Maßen; Maße lassen sich rechts ändern (z. B. Glocke Ø, Lochkreis), das Gewicht kommt weiter aus dem Datenblatt; der Frame-Assistent baut mit den echten Formen, alle 40 Kombinationen bestehen Check und Schwachstellen-Analyse
+- [x] KI-Kollege (Sitzung 17): nimmt große Aufträge an („Mach alles als Verbund“, „Richte alles mittig aus“, „Prüf die Drohne und behebe, was nicht passt“), schreibt einen Plan mit Haken, arbeitet in bis zu 5 Runden und sieht nach jeder Runde das neu gerechnete Modell mit Rückmeldung (was geklappt hat, Meldungen, neue Fehler, Drohnen-Check, Schwachstellen)
+- [x] Neue Fehler behebt der Kollege selbst (höchstens zwei Nachbesserungen); „Selbstständig“ oben im Fenster schaltet das Arbeiten in Runden ab
+- [x] Rückfragen nur bei echten Unklarheiten – mit Antwort-Knöpfen; das Gespräch (letzte 6 Aufträge) bleibt im Kopf, Antworten auf Rückfragen werden erkannt
+- [x] Neue Aktionen: verbinden (Verbund = ein Körper; Kaufteile bleiben automatisch einzeln, damit ihr Gewicht stimmt), lösen, abziehen, Schnittmenge, ausrichten, zentrieren, verschieben (um/nach, auch bei Formeln), drehen (beliebiger Winkel), umklappen, kopieren (mit Anzahl und Versatz), auf die Platte legen, Rolle, Farbe, umbenennen, aus-/einblenden, unterdrücken/aktivieren, Schwachstellen, auswählen; Rundung mit „ersetzen“
+- [x] Teile ansprechen mit „alle“, „auswahl“, „koerper“, „loecher“, „kaufteile“, „neu“, „name:…“ oder Listen; die KI sieht die Lage (min/max) jedes Teils und die aktuellen Fehler
+- [x] Ein ganzer Auftrag ist danach EIN Rückgängig-Schritt (auch „Umsetzen“ bei Schwachstellen-Vorschlägen); Meldungen während der Arbeit landen in der Rückmeldung statt als Einblendung
+- [x] „Alles als Verbund“ geht auch ohne KI: Eingabezeile „verbund“ oder „Mach alles als Verbund“ außerhalb von Claude
+- [x] Behoben: Meldungen wie „Rundung zu groß“ verschwanden, sobald eine andere Änderung neu rechnen ließ (der CAD-Kern merkt sich die Meldungen jetzt zur gespeicherten Form)
 
 ## Offen
 

@@ -629,3 +629,21 @@ body:not(.simple) .simple-only{display:none!important}
 .level-btn:hover{border-color:var(--line-strong);color:var(--ink)}
 .level-btn[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent)}
 .start-level{flex-basis:100%;display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;font-size:14px;color:var(--muted)}
+/* KI-Kollege: Plan, Status, Rückfragen */
+.ai-head-r{display:flex;align-items:center;gap:6px}
+.ai-auto{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);cursor:pointer;padding:3px 8px;border:1px solid var(--line);border-radius:999px;user-select:none}
+.ai-auto input{margin:0;accent-color:var(--accent)}
+.ai-intro{font-size:13.5px;line-height:1.5;color:var(--muted);padding:2px 0 4px}
+.ai-plan{list-style:none;margin:2px 0 0;padding:0;display:grid;gap:3px;font-size:13.5px}
+.ai-plan li{display:flex;align-items:flex-start;gap:8px;color:var(--ink-2)}
+.ai-plan li>svg{width:15px;height:15px;flex:none;color:var(--accent);margin-top:2px}
+.ai-plan li>i{width:9px;height:9px;flex:none;border:1.5px solid var(--faint);border-radius:50%;margin:5px 3px 0 3px}
+.ai-plan li.done span{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--line-strong)}
+.ai-status{font-size:12.5px;color:var(--accent);min-height:0}
+.ai-status:empty{display:none}
+.ai-msg.working .who::after{content:' · arbeitet';color:var(--faint)}
+.ai-opts{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.ai-opts .btn.on{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent)}
+.ai-opts small,.ai-rounds{color:var(--muted);font-size:12px}
+.ai-panel .ai-head{position:sticky;top:-12px;margin:-12px -14px 0;padding:12px 14px 8px;background:var(--surface);z-index:1;border-bottom:1px solid transparent}
+.ai-panel .ai-head:has(+ *){border-bottom-color:var(--line)}

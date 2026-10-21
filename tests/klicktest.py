@@ -1564,13 +1564,16 @@ def ki(p):
     p.pg.add_init_script(KI_MOCK); p.pg.reload(); p.wait(2500)
 
 
-def ki_fragen(p, text, antwort):
-    p.ev("window.__aiQueue.push(arg)", antwort)
+def ki_fragen(p, text, antwort, sekunden=60):
+    """antwort: eine Antwort der KI oder eine Liste (eine je Runde)"""
+    for a in (antwort if isinstance(antwort, list) else [antwort]):
+        p.ev("window.__aiQueue.push(arg)", a)
     p.pg.locator('#cmd-input').fill(text); p.wait(200)
     p.pg.locator('#cmd-input').press('Enter')
-    for _ in range(40):
+    p.wait(400)
+    for _ in range(sekunden * 4):
         p.wait(250)
-        if p.ev("return window.__aiQueue.length===0 && ![...document.querySelectorAll('.ai-msg.ai .txt')].some(t=>/Denkt nach|Baut/.test(t.textContent))"):
+        if p.ev("return !document.querySelector('.ai-msg.ai.working') && ![...document.querySelectorAll('.ai-msg.ai .txt')].some(t=>/Denkt nach|Baut/.test(t.textContent))"):
             break
     warte_rechnen(p, 30)
 
@@ -1750,6 +1753,108 @@ def t_kaufteil_formen(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+# ---------- Sitzung 17: KI-Kollege ----------
+def ki_warte(p, sekunden=60):
+    p.wait(400)
+    for _ in range(sekunden * 4):
+        p.wait(250)
+        if p.ev("return !document.querySelector('.ai-msg.ai.working')"):
+            break
+    warte_rechnen(p, 30)
+
+
+def t_kollege_verbund(p):
+    ki(p); drohne(p, 'f5')
+    u0 = p.ev("return App.undoStack.length")
+    ki_fragen(p, 'Mach alles als Verbund', [
+        {'antwort': 'Ich verbinde die Rahmenteile zu einem Körper und prüfe danach die Drohne.', 'plan': [{'text': 'Rahmenteile verbinden', 'fertig': False}, {'text': 'Drohne prüfen', 'fertig': False}],
+         'aktionen': [{'op': 'verbinden', 'ids': 'alle', 'name': 'Rahmen-Verbund'}, {'op': 'pruefen'}], 'weiter': True},
+        {'antwort': 'Fertig: Der Rahmen ist jetzt ein Körper, Motoren, Akku und Kamera bleiben einzeln.', 'plan': [{'text': 'Rahmenteile verbinden', 'fertig': True}, {'text': 'Drohne prüfen', 'fertig': True}], 'aktionen': [], 'weiter': False}], 150)
+    kids = p.ev("const g=App.doc.items.find(i=>i.name==='Rahmen-Verbund'); return g ? g.children.map(c=>c.name) : null")
+    ok1 = kids == ['Unterteil', 'Abstandsbolzen', 'Oberplatte', 'Kamerahalter'] and p.ev("return App.doc.items.length") == 7 and p.ev("return App.errors.length") == 0 and p.ev("return !!App.doc.items.find(i=>i.name==='Rahmen-Verbund').ai")
+    ok2 = p.ev("return App.undoStack.length") == u0 + 1 and p.ev("return App.undoStack[App.undoStack.length-1].label").startswith('KI: Mach alles')
+    pr = p.ev("return window.__aiPrompts[1] || ''")
+    ok3 = 'Runde 2 von' in pr and 'verbinden: 4 Teile' in pr and 'Drohnen-Check' in pr and 'Kaufteile bleiben einzeln' in pr and 'Rahmen-Verbund' in pr
+    card = p.pg.locator('.ai-msg.ai').last
+    t = card.locator('.txt').text_content()
+    ok4 = card.locator('.ai-plan li.done').count() == 2 and 'Fertig: Der Rahmen' in t and 'Kaufteile bleiben einzeln' in t and card.locator('.ai-check').count() == 1 and '2 Runden' in card.text_content()
+    card.get_by_role('button', name='Rückgängig').click(); warte_rechnen(p, 30)
+    ok5 = p.ev("return App.doc.items.length") == 10 and p.ev("return App.undoStack.length") == u0
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
+def t_kollege_fehler(p):
+    ki(p); p.empty()
+    u0 = p.ev("return App.undoStack.length")
+    ki_fragen(p, 'Bau einen Klotz 20 × 20 × 10 mit runden Kanten', [
+        {'antwort': 'Ich baue den Klotz.', 'aktionen': [{'op': 'hinzufuegen', 'objekt': {'art': 'box', 'name': 'Klotz', 'p': {'w': 20, 'd': 20, 'h': 10}, 'rundungen': [{'typ': 'fillet', 'r': 15, 'kanten': 'all'}]}}], 'weiter': False},
+        {'antwort': 'Der Radius war zu groß, jetzt sind es 2 mm.', 'aktionen': [{'op': 'rundung', 'ids': 'neu', 'typ': 'fillet', 'r': 2, 'kanten': 'all', 'ersetzen': True}], 'weiter': False}], 120)
+    pr = p.ev("return window.__aiPrompts[1] || ''")
+    ok1 = 'FEHLER im Modell' in pr and 'Klotz' in pr
+    fin = p.ev("const k=App.doc.items[0]; return k.finishes.map(f=>[f.type,f.r])")
+    ok2 = p.ev("return App.errors.length") == 0 and fin == [['fillet', 2]] and p.ev("return App.undoStack.length") == u0 + 1
+    # „Selbstständig“ aus: nur eine Runde, kein Nachbessern
+    p.pg.locator('#ai-auto').uncheck(); p.wait(200)
+    n = p.ev("return window.__aiPrompts.length")
+    ki_fragen(p, 'Noch ein Klotz mit zu großer Rundung', [{'antwort': 'Hier.', 'aktionen': [{'op': 'hinzufuegen', 'objekt': {'art': 'box', 'name': 'Klotz 2', 'p': {'w': 20, 'd': 20, 'h': 10}, 't': {'x': 40}, 'rundungen': [{'typ': 'fillet', 'r': 15}]}}], 'weiter': True}, {'antwort': 'Nicht benutzt.', 'aktionen': []}])
+    ok3 = p.ev("return window.__aiPrompts.length") == n + 1 and p.ev("return App.errors.length") >= 1 and 'nur diese eine Runde' in p.ev("return window.__aiPrompts[window.__aiPrompts.length-1]")
+    p.ev("window.__aiQueue.length=0"); p.pg.locator('#ai-auto').check()
+    return [ok1, ok2, ok3]
+
+
+def t_kollege_frage(p):
+    ki(p); p.empty()
+    p.ev("Actions.addPrimitive('box'); Actions.addPrimitive('box')"); warte_rechnen(p, 20)
+    u0 = p.ev("return App.undoStack.length")
+    ki_fragen(p, 'Mach die Teile schöner', {'antwort': '', 'frage': 'Soll ich die Kanten runden oder abschrägen?', 'optionen': ['Runden mit 2 mm', 'Abschrägen mit 1 mm']})
+    card = p.pg.locator('.ai-msg.ai').last
+    ok1 = card.locator('.ai-opts button[data-opt]').count() == 2 and 'runden oder abschrägen' in card.locator('.txt').text_content() and p.ev("return App.undoStack.length") == u0
+    p.ev("window.__aiQueue.push(arg)", {'antwort': 'Ich runde die senkrechten Kanten mit 2 mm.', 'aktionen': [{'op': 'rundung', 'ids': 'koerper', 'typ': 'fillet', 'r': 2, 'kanten': 'vertical'}]})
+    card.locator('.ai-opts button', has_text='Runden mit 2 mm').click(); ki_warte(p)
+    pr = p.ev("return window.__aiPrompts[1] || ''")
+    ok2 = 'Antwort auf deine Rückfrage' in pr and 'Runden mit 2 mm' in pr and p.ev("return App.doc.items.every(i=>i.finishes.length===1 && i.finishes[0].r===2)") and p.ev("return App.undoStack.length") == u0 + 1
+    return [ok1, ok2]
+
+
+def t_kollege_auswahl(p):
+    ki(p); p.empty()
+    p.ev("""Actions.addPrimitive('box'); Actions.addPrimitive('box'); Actions.addPrimitive('box');""")
+    warte_rechnen(p, 20)
+    p.ev("App.change('x', d=>{ d.items.forEach((it,i)=>{ it.t.x=i*35+(i===1?7:0); it.t.y=0; }); })"); warte_rechnen(p, 20)
+    u0 = p.ev("return App.undoStack.length")
+    ki_fragen(p, 'Richte alles links aus, färbe es rot und leg eine gedrehte Kopie daneben', {'antwort': 'Erledigt.', 'aktionen': [
+        {'op': 'verschieben', 'ids': 'alle', 'um': {'y': 0}}, {'op': 'ausrichten', 'ids': 'alle', 'an': 'links'}, {'op': 'farbe', 'ids': 'alle', 'farbe': '#d24a3c'},
+        {'op': 'kopieren', 'ids': 'alle', 'anzahl': 1, 'versatz': {'x': 0, 'y': 60}}, {'op': 'drehen', 'ids': 'neu', 'achse': 'z', 'grad': 45}, {'op': 'auswaehlen', 'ids': 'neu'}]})
+    xs = p.ev("return App.doc.items.slice(0,6).map(i=>Math.round(Actions.worldBox(i.id).min.x*100)/100)")
+    ok1 = p.ev("return App.doc.items.length") == 6 and p.ev("return App.doc.items.every(i=>i.color==='#d24a3c')") and p.ev("return App.errors.length") == 0
+    ok2 = len(set(xs[i] for i in (0, 2, 4))) == 1          # die drei Originale (jeweils vor ihrer Kopie) stehen links bündig
+    ok3 = p.ev("return App.sel.length") == 3 and p.ev("return App.sel.every(id=>Math.abs(Model.find(App.doc,id).item.t.rz-45)<0.01)") and p.ev("return App.undoStack.length") == u0 + 1
+    return [ok1, ok2, ok3]
+
+
+def t_verbund_ohne_ki(p):
+    drohne(p, 'f5')
+    p.pg.locator('#cmd-input').fill('verbund'); p.wait(300)
+    ok1 = p.pg.locator('.cmd-pop .cmd-item', has_text='Alles zu einem Körper verbinden').count() == 1
+    p.pg.locator('#cmd-input').fill('Mach alles als Verbund'); p.wait(300)
+    p.pg.locator('#cmd-input').press('Enter'); warte_rechnen(p, 60)
+    kids = p.ev("const g=App.doc.items.find(i=>i.name==='Verbund'); return g ? g.children.length : 0")
+    ok2 = kids == 4 and p.ev("return App.doc.items.length") == 7 and p.ev("return App.errors.length") == 0 and p.pg.locator('.toast', has_text='Verbunden: 4 Teile').count() >= 1
+    return [ok1, ok2]
+
+
+def t_fehler_bleibt(p):
+    p.empty()
+    p.ev("const it=Model.newItem('box',{w:20,d:20,h:10},{name:'K'}); it.finishes.push({id:'f_test1',type:'fillet',r:15,edges:'vertical'}); App.change('x', d=>{d.items.push(it);})")
+    warte_rechnen(p, 30)
+    ok1 = p.ev("return App.errors.length") == 1
+    # eine andere Änderung: die Form von K kommt aus dem Speicher – die Meldung muss bleiben
+    p.ev("Actions.addPrimitive('cylinder')"); warte_rechnen(p, 30)
+    p.ev("App.change('y', d=>{ d.items[1].t.x = 40; })"); warte_rechnen(p, 30)
+    ok2 = p.ev("return App.errors.length") == 1 and p.ev("return App.errors[0].itemId===App.doc.items[0].id && App.errors[0].code==='toobig'")
+    return [ok1, ok2]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -1821,6 +1926,12 @@ TESTS = [
     ('Sitzung-14-Werkzeuge haben Hilfetexte', t_neu14_hilfen),
     ('Einfache Oberfläche: Startseite / ausgeblendet / Grundkörper und Bauteile / Kontextleiste / Mehr / bleibt / zurück zu Profi', t_einfach),
     ('Kaufteile in echter Form: Rahmen / Motor-Details / Datenblatt-Maße / Klappfenster / Erklären', t_kaufteil_formen),
+    ('KI-Kollege: alles als Verbund / ein Rückgängig / Rückmeldung / Plan und Check / zurück', t_kollege_verbund),
+    ('KI-Kollege: behebt Fehler selbst / ohne „Selbstständig“ nur eine Runde', t_kollege_fehler),
+    ('KI-Kollege: Rückfrage mit Antwort-Knöpfen', t_kollege_frage),
+    ('KI-Kollege: alle / neu / ausrichten / färben / kopieren / drehen / auswählen', t_kollege_auswahl),
+    ('Alles als Verbund ohne KI', t_verbund_ohne_ki),
+    ('Fehlermeldung bleibt nach einer anderen Änderung', t_fehler_bleibt),
     ('Formel-Beispiele', t_formel_beispiele), ('Einführung „Erste Skizze“', t_einfuehrung), ('Schraubenlöcher', t_schrauben),
     ('Fies: Löschen hinter Marker + Undo', t_fies_loeschen), ('Fies: alles unterdrückt', t_fies_alle_aus),
     ('Fies: Marker am Anfang, neu laden', t_fies_reload), ('Fies: Tasten während Rechnen', t_fies_tasten),

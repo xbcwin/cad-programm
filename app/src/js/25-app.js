@@ -101,6 +101,16 @@ const App = (() => {
     restore(step.before); ev.emit('history');
     if (!silent) { UI.toast(`Wiederholt: ${step.label}`, { icon: 'redo', ms: 1600 }); ev.emit('log', { kind: 'redo', text: step.label, depth: S.undo.length }); }
   }
+  // mehrere Rückgängig-Schritte ab depth zu einem zusammenfassen (z. B. ein ganzer Auftrag des KI-Kollegen)
+  function squash(depth, label) {
+    const n = S.undo.length - depth; if (n <= 0) return null;
+    const first = S.undo[depth];
+    const step = { label: label || first.label, before: first.before, t: Date.now() };
+    S.undo.splice(depth, n, step);
+    ev.emit('history');
+    if (n > 1) ev.emit('log', { kind: 'info', text: `${step.label} – ${n} Schritte zu einem zusammengefasst` });
+    return step;
+  }
   // mehrere Schritte auf einmal zurück, z. B. aus dem Protokoll
   function undoTo(depth) {
     let n = 0; while (S.undo.length > depth && S.undo.length) { undo(true); n++; }
@@ -286,7 +296,7 @@ const App = (() => {
     get ctx() { return S.ctx; }, get iso() { return S.iso; }, setCtx, setIso, applyView,
     get tool() { return S.tool; }, set tool(t) { S.tool = t; ev.emit('tool'); },
     get fileSavedRev() { return S.fileSavedRev; }, set fileSavedRev(v) { S.fileSavedRev = v; },
-    setDoc, snapshot, change, touched, pushUndo, restore, undo, redo, undoTo, rebuild, requalify, replaceMesh, select, clearSelection, selectedItems, errorsFor, localBox, refreshSelectionVisuals,
+    setDoc, snapshot, change, touched, pushUndo, restore, undo, redo, undoTo, squash, rebuild, requalify, replaceMesh, select, clearSelection, selectedItems, errorsFor, localBox, refreshSelectionVisuals,
     recentProjects, loadStored, deleteStored, autosave, fitAfterBuild, on: ev.on, emit: ev.emit,
   };
 })();

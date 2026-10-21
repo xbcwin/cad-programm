@@ -157,7 +157,7 @@ const Actions = (() => {
     const first = Model.find(App.doc, ids[0]); if (!first) return;
     setRole(ids, first.item.role === 'hole' ? 'solid' : 'hole');
   }
-  function group(ids) {
+  function group(ids, opts = {}) {
     ids = (ids || App.sel).slice();
     const found = ids.map((id) => Model.find(App.doc, id)).filter(Boolean);
     if (found.length < 2) { UI.toast('Wähle mindestens zwei Objekte zum Gruppieren (mit Umschalt klicken).', { icon: 'info' }); return; }
@@ -169,7 +169,7 @@ const Actions = (() => {
       const list = parent ? Model.find(doc, parent.id).item.children : doc.items;
       const items = ids.map((id) => list.find((x) => x.id === id)).filter(Boolean);
       const firstSolid = items.find((x) => x.role !== 'hole') || items[0];
-      G = Model.newItem('group', {}, { name: 'Gruppe', color: firstSolid.color, role: 'solid' });
+      G = Model.newItem('group', {}, { name: opts.name || 'Gruppe', color: firstSolid.color, role: 'solid' });
       // Ursprung der Gruppe: Mitte unten der Auswahl (im Elternsystem)
       const PW = parent ? Model.worldMatrix(doc, parent.id) : new THREE.Matrix4();
       const c = box.isEmpty() ? new THREE.Vector3() : new THREE.Vector3((box.min.x + box.max.x) / 2, (box.min.y + box.max.y) / 2, box.min.z);
@@ -182,7 +182,17 @@ const Actions = (() => {
     });
     App.select([G.id]);
     const holes = G.children.filter((c) => c.role === 'hole').length;
-    UI.toast(holes ? 'Gruppiert – die Löcher sind jetzt fest aus dem Körper geschnitten.' : 'Gruppiert – die Teile sind jetzt ein Körper.', { icon: 'group' });
+    if (!opts.quiet) UI.toast(holes ? 'Gruppiert – die Löcher sind jetzt fest aus dem Körper geschnitten.' : 'Gruppiert – die Teile sind jetzt ein Körper.', { icon: 'group' });
+    return G.id;
+  }
+  // „Alles als Verbund“: alle sichtbaren Teile zu einem Körper – Kaufteile bleiben einzeln, damit ihr Gewicht stimmt
+  function groupAll(name = 'Verbund') {
+    const tops = Model.activeItems(App.doc).filter((x) => !x.hidden);
+    const keep = tops.filter((x) => Mass.fixedOf(x)), ids = tops.filter((x) => !Mass.fixedOf(x)).map((x) => x.id);
+    if (ids.length < 2) { UI.toast('Zum Verbinden braucht es mindestens zwei Teile.', { icon: 'info' }); return null; }
+    const gid = group(ids, { name, quiet: true });
+    if (gid) UI.toast(`Verbunden: ${ids.length} Teile sind jetzt ein Körper.` + (keep.length ? ` ${keep.length} Kaufteile bleiben einzeln, damit ihr Gewicht stimmt.` : ''), { icon: 'group', ms: 4500 });
+    return gid;
   }
   function ungroup(id) {
     id = id || App.sel[0];
@@ -198,12 +208,15 @@ const Actions = (() => {
     App.select(kids);
     if ((f.item.finishes || []).length) UI.toast('Die Rundungen der Gruppe wurden entfernt, weil es die Gruppe nicht mehr gibt.', { icon: 'info' });
   }
-  function rotate90(ids, axis) {
+  function rotate90(ids, axis) { rotate(ids, axis, 90, axis !== 'z'); }
+  // um die Mitte der Teile drehen, beliebiger Winkel; drop: danach wieder auf die XY-Ebene legen
+  function rotate(ids, axis, deg = 90, drop = false) {
     ids = ids || App.sel; if (!ids.length) return;
     const box = selBox(ids); const c = box.isEmpty() ? new THREE.Vector3() : box.getCenter(new THREE.Vector3());
-    App.change('Um 90° gedreht', (doc) => {
+    const a = (deg * Math.PI) / 180;
+    App.change(deg === 90 ? 'Um 90° gedreht' : `Um ${fmt(deg, 1)}° gedreht`, (doc) => {
       const R = new THREE.Matrix4();
-      if (axis === 'x') R.makeRotationX(Math.PI / 2); else if (axis === 'y') R.makeRotationY(Math.PI / 2); else R.makeRotationZ(Math.PI / 2);
+      if (axis === 'x') R.makeRotationX(a); else if (axis === 'y') R.makeRotationY(a); else R.makeRotationZ(a);
       const T1 = new THREE.Matrix4().makeTranslation(c.x, c.y, c.z), T2 = new THREE.Matrix4().makeTranslation(-c.x, -c.y, -c.z);
       for (const id of ids) {
         const f = Model.find(doc, id); if (!f || f.item.locked) continue;
@@ -212,7 +225,15 @@ const Actions = (() => {
         Model.setFromMatrix(f.item, PW.clone().invert().multiply(Wn));
       }
     });
-    if (axis !== 'z') setTimeout(() => dropToPlate(ids, true), 250);
+    if (drop) setTimeout(() => dropToPlate(ids, true), 250);
+  }
+  // Teile gemeinsam so verschieben, dass ihre Mitte über dem Ursprung liegt (Höhe bleibt)
+  function center(ids) {
+    ids = (ids || App.sel).filter((id) => App.doc.items.find((x) => x.id === id)); if (!ids.length) return;
+    const box = selBox(ids); if (box.isEmpty()) return;
+    const dx = -(box.min.x + box.max.x) / 2, dy = -(box.min.y + box.max.y) / 2;
+    if (Math.abs(dx) < 1e-4 && Math.abs(dy) < 1e-4) return;
+    App.change('Mittig gesetzt', (doc) => { for (const id of ids) { const it = doc.items.find((x) => x.id === id); const tn = Model.tNumeric(it); it.t.x = round(tn.x + dx, 4); it.t.y = round(tn.y + dy, 4); } });
   }
   function mirror(ids, axis) {
     ids = ids || App.sel; if (!ids.length) return;
@@ -346,6 +367,6 @@ const Actions = (() => {
     const r = (a) => round((a * 180) / Math.PI, 4);
     return { targetId, t: { x: sn(p.x, 0), y: sn(p.y, 1), z: sn(p.z, 2), rx: r(e.x), ry: r(e.y), rz: r(e.z) } };
   }
-  return { addPrimitive, addPart, addBuyPart, remove, duplicate, setRole, toggleRole, group, ungroup, rotate90, mirror, dropToPlate, align, addFinish, finishAll, setFinish, removeFinish, faceFrame, selectedFace, onFaceTransform, attach, worldBox, selBox, cuttersOf, viewCenter };
+  return { addPrimitive, addPart, addBuyPart, remove, duplicate, setRole, toggleRole, group, groupAll, ungroup, rotate90, rotate, center, mirror, dropToPlate, align, addFinish, finishAll, setFinish, removeFinish, faceFrame, selectedFace, onFaceTransform, attach, worldBox, selBox, cuttersOf, viewCenter };
 })();
 

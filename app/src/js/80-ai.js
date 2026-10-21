@@ -1,21 +1,44 @@
-// ================= KI-Helfer (baut und ändert Modelle aus einer Beschreibung) =================
+// ================= KI-Kollege: baut, ändert und prüft Modelle – auch große Aufträge in mehreren Runden =================
+// Ein Auftrag („Mach alles als Verbund“, „Prüf die Drohne und behebe, was nicht passt“) läuft so:
+// 1. Die KI plant und schickt Aktionen. 2. Tracery setzt sie um, rechnet und sammelt die Rückmeldung (Fehler, Check, Schwachstellen).
+// 3. Die KI sieht das neue Modell und macht weiter – bis sie fertig ist (höchstens MAX_ROUNDS Runden).
+// Der ganze Auftrag ist danach EIN Rückgängig-Schritt. Rückfragen der KI erscheinen mit Antwort-Knöpfen.
 const AI = (() => {
-  let panel = null, ctl = null, history = [], off = false;
+  let panel = null, ctl = null, history = [], off = false, current = null;
+  const MAX_ROUNDS = 5, AUTO_KEY = 'tracery.ai.auto';
+  const auto = () => storageGet(AUTO_KEY) !== '0';
   const ACTIONS = `Aktionen:
 {"op":"hinzufuegen","objekt":OBJEKT,"in":"<id einer Gruppe, optional>"}
 {"op":"aendern","id":"<id>","setze":{"name":"…","rolle":"koerper"|"loch","p":{…},"t":{…},"farbe":"#RRGGBB"}}
 {"op":"loeschen","id":"<id>"}
-{"op":"gruppieren","ids":["<id>","<id>"],"name":"…"}
 {"op":"mass","name":"Breite","wert":"75"}   (legt ein benanntes Maß an oder ändert es)
-{"op":"rundung","id":"<id>","typ":"fillet"|"chamfer","r":2,"kanten":"all"|"top"|"bottom"|"vertical"|"horizontal"}
+{"op":"rundung","id":"<id>","typ":"fillet"|"chamfer","r":2,"kanten":"all"|"top"|"bottom"|"vertical"|"horizontal","ersetzen":false}   (ersetzen:true ersetzt vorhandene Rundungen und Fasen)
 {"op":"muster","id":"<id>","art":"kreis","n":4,"winkel":360,"mitte":[0,0]}   (Kreismuster um die senkrechte Achse durch „mitte“, Anzahl zählt das Original mit)
 {"op":"muster","id":"<id>","art":"rechteck","nx":3,"ny":1,"dx":20,"dy":0}   (Rechteckmuster, Abstände von Mitte zu Mitte)
 {"op":"spiegeln","id":"<id>","ebene":"YZ"|"XZ"|"XY","lage":0}   (Original plus Spiegelbild; YZ = links↔rechts, XZ = vorne↔hinten, XY = oben↔unten)
+{"op":"verbinden","ids":"alle","name":"Verbund"}   (macht die Teile zu EINEM Körper – für „Verbund“, „verbinden“, „zusammenfügen“, „ein Teil daraus machen“; Löcher darin schneiden fest. Kaufteile mit festem Gewicht bleiben automatisch einzeln, außer "mit_kaufteilen":true)
+{"op":"loesen","ids":"<id>"}   (Gruppe oder Verbund wieder in Einzelteile lösen)
+{"op":"abziehen","von":"<id>","werkzeuge":["<id>"]}   (schneidet die Werkzeuge aus dem Körper „von“ aus)
+{"op":"schnittmenge","ids":["<id>","<id>"]}   (übrig bleibt, was in allen zugleich liegt)
+{"op":"ausrichten","ids":"alle","an":"links"|"rechts"|"vorne"|"hinten"|"unten"|"oben"|"mitte_x"|"mitte_y"}   (an der gemeinsamen Hülle der Teile)
+{"op":"zentrieren","ids":"alle"}   (schiebt die Teile gemeinsam, bis ihre Mitte über dem Ursprung liegt)
+{"op":"verschieben","ids":"…","um":{"x":0,"y":0,"z":0}}   oder   {"op":"verschieben","id":"…","nach":{"x":0,"y":0,"z":0}}
+{"op":"drehen","ids":"…","achse":"x"|"y"|"z","grad":90}   (um die Mitte der Teile)
+{"op":"umklappen","ids":"…","achse":"x"|"y"|"z"}   (spiegelt am Ort, ohne Kopie)
+{"op":"kopieren","ids":"…","anzahl":1,"versatz":{"x":30,"y":0,"z":0}}
+{"op":"auf_platte","ids":"alle"}   (legt die Teile auf z = 0)
+{"op":"rolle","ids":"…","rolle":"koerper"|"loch"} · {"op":"farbe","ids":"…","farbe":"#RRGGBB"} · {"op":"umbenennen","id":"…","name":"…"}
+{"op":"ausblenden","ids":"…"} · {"op":"einblenden","ids":"…"} · {"op":"unterdruecken","ids":"…"} · {"op":"aktivieren","ids":"…"}
 {"op":"material","id":"<id>","material":"<Kürzel aus MATERIALIEN>"}
 {"op":"gewicht","id":"<id>","g":33.8}   (Kaufteil mit festem Gewicht aus dem Datenblatt)
 {"op":"kaufteil","name":"<Name aus KAUFTEILE>","t":{"x":0,"y":0,"z":0}}   (Kaufteil in echter Form mit Maßen und Gewicht aus der Bibliothek)
 {"op":"drohne","zoll":5,"form":"x"|"stretch"|"wide"|"deadcat","video":"analog"|"o3"|"o4"|"o4pro"|"walksnail"|"hdzero"|"none","motor":"2207","akku":"6S 1300 mAh"}   (baut mit dem Frame-Assistenten einen kompletten Rahmen als NEUES Projekt; nur wenn ausdrücklich ein neuer Rahmen gewünscht ist)
-{"op":"pruefen"}   (führt danach den Drohnen-Check aus: Propeller, Teile, Gewicht, Schwerpunkt, Schub)
+{"op":"pruefen"}   (Drohnen-Check: Propeller, Teile, Gewicht, Schwerpunkt, Schub – das Ergebnis bekommst du als Rückmeldung)
+{"op":"schwachstellen"}   (sucht Schwachstellen: Lochrand, dünne Wände, Armdicke – das Ergebnis bekommst du als Rückmeldung)
+{"op":"auswaehlen","ids":"…"}   (wählt am Ende diese Teile aus, damit der Nutzer sie gleich sieht)
+
+TEILE ANSPRECHEN – überall, wo "id" oder "ids" steht, geht auch:
+"alle" (alle sichtbaren Teile der obersten Ebene) · "auswahl" (was der Nutzer beim Auftrag ausgewählt hatte) · "koerper" · "loecher" · "kaufteile" · "neu" (was du in diesem Auftrag gebaut hast) · "name:Arm" (Name enthält „Arm“) · oder eine Liste, z. B. ["name:Platte","<id>"].
 
 OBJEKT:
 {"art":"box|cylinder|tube|sphere|hemisphere|cone|pyramid|torus|prism|wedge|extrude|part|group","name":"…","rolle":"koerper"|"loch","p":{…},"t":{"x":0,"y":0,"z":0,"rx":0,"ry":0,"rz":0},"farbe":"#RRGGBB","kinder":[OBJEKT…],"rundungen":[{"typ":"fillet","r":2,"kanten":"vertical"}]}
@@ -39,20 +62,30 @@ Regeln:
 - Löcher sollen 0,5 mm über die Oberfläche hinausragen, damit sie sauber schneiden.
 - Lege Teile auf z=0, sofern nichts anderes gewünscht ist. Maße exakt übernehmen, nicht runden. Für Schrauben nimm part screwHole.
 - Zahlenwerte dürfen Formeln mit Maß-Namen sein, z. B. "Breite/2+3". Lege bei neuen Teilen für die 2–4 wichtigsten Größen Maße an (op "mass") und nutze sie.
-- Neue Teile nicht in bestehende hineinsetzen: stelle sie daneben, außer der Wunsch ist ausdrücklich eine Änderung am Bestehenden.
-- Bei einer reinen Frage: "aktionen": [].
-- Jede Aktion wird ein eigener, markierter Schritt in der Zeitleiste – baue lieber wenige saubere Schritte als viele kleine.
+- Neue Teile nicht in bestehende hineinsetzen: stelle sie daneben – "lage" im Modell sagt dir, wo jedes Teil liegt (min/max in mm). Ausnahme: der Wunsch ist ausdrücklich eine Änderung am Bestehenden.
 - Bei Drohnen (siehe "drohne" im Modell) änderst du Größen am besten über die Maße (op "mass"), z. B. Achsabstand, Armdicke, Bolzenhöhe – dann wandert alles mit. Vorne ist −Y.
+- Kaufteile ("kaufteil_g") verschmilzt du nie mit anderen Teilen, außer der Nutzer will das ausdrücklich: sonst stimmt ihr Gewicht nicht mehr.
 - Beziehe dich mit "id" nur auf ids, die im aktuellen Modell stehen. „das“, „es“, „hier“ meint die Auswahl.
 `;
-  const RULES = `Du bist der CAD-Helfer in der Web-App „Tracery“. Du baust präzise technische 3D-Modelle, vor allem für FPV-/Speed-Drohnen, aus Grundkörpern, Skizzen und Bauteilen. Einheiten: Millimeter. Z zeigt nach oben, die XY-Ebene bei z=0 ist die Grundebene.
+  const RULES = `Du bist der KI-Kollege in der Web-App „Tracery“, einem CAD-Programm für präzise technische Teile, vor allem für FPV- und Speed-Drohnen. Einheiten: Millimeter. Z zeigt nach oben, die XY-Ebene bei z=0 ist die Grundebene.
+
+So arbeitest du – wie ein Kollege, der mit am Modell sitzt:
+- Du nimmst auch große Aufträge an („Mach alles als Verbund“, „Richte alles mittig aus“, „Mach die Drohne leichter und prüf sie“) und erledigst sie selbstständig.
+- Bei mehr als einem Arbeitsschritt schreibst du einen kurzen Plan (2–6 Punkte) und hakst ab, was erledigt ist.
+- Du arbeitest in Runden: Nach jeder Runde setzt Tracery deine Aktionen um, rechnet das Modell neu und schickt dir eine Rückmeldung (was geklappt hat, Fehler, Prüfergebnisse) und das neue Modell. Setze "weiter": true, wenn danach noch etwas zu tun ist oder du ein Ergebnis (pruefen, schwachstellen) ansehen willst; sonst "weiter": false.
+- Meldet die Rückmeldung FEHLER, behebst du sie in der nächsten Runde (z. B. Radius kleiner, Loch verschieben) oder erklärst, warum es nicht geht.
+- Frag nur zurück, wenn der Auftrag wirklich mehrdeutig ist oder dabei etwas Wichtiges verloren ginge: dann "frage" (ein Satz) und 2–4 kurze "optionen", aber keine "aktionen". Sonst entscheide selbst und sag in der "antwort", was du entschieden hast.
+- Die "antwort" spricht den Nutzer per du an, 1–3 Sätze, auf Deutsch. In der letzten Runde fasst sie zusammen, was du gemacht hast.
 
 Antworte NUR mit einem JSON-Objekt:
-{"antwort": "kurze Antwort auf Deutsch, 1–3 Sätze, per du", "aktionen": [ ... ]}
+{"antwort":"…","plan":[{"text":"…","fertig":false}],"aktionen":[…],"weiter":false,"frage":"","optionen":[]}
 
 ` + ACTIONS + `
 Beispiel – Wunsch „Platte 60 × 40 × 4 mit einem Loch in der Mitte“:
-{"antwort":"Ich habe dir eine Platte mit einem 5-mm-Loch gebaut. Die Breite kannst du links bei den Maßen ändern.","aktionen":[{"op":"mass","name":"Breite","wert":"60"},{"op":"hinzufuegen","objekt":{"art":"group","name":"Platte","kinder":[{"art":"box","name":"Platte","p":{"w":"Breite","d":40,"h":4}},{"art":"cylinder","name":"Loch","rolle":"loch","p":{"d":5,"h":5},"t":{"z":-0.5}}],"rundungen":[{"typ":"fillet","r":3,"kanten":"vertical"}]}}]}`;
+{"antwort":"Ich habe dir eine Platte mit einem 5-mm-Loch gebaut. Die Breite kannst du links bei den Maßen ändern.","aktionen":[{"op":"mass","name":"Breite","wert":"60"},{"op":"hinzufuegen","objekt":{"art":"group","name":"Platte","kinder":[{"art":"box","name":"Platte","p":{"w":"Breite","d":40,"h":4}},{"art":"cylinder","name":"Loch","rolle":"loch","p":{"d":5,"h":5},"t":{"z":-0.5}}],"rundungen":[{"typ":"fillet","r":3,"kanten":"vertical"}]}}],"weiter":false}
+
+Beispiel – Wunsch „Mach alles als Verbund“ (Runde 1):
+{"antwort":"Ich verbinde alle Teile zu einem Körper und prüfe danach, ob alles sauber gerechnet wird.","plan":[{"text":"Alle Teile zu einem Verbund verbinden","fertig":false},{"text":"Ergebnis prüfen","fertig":false}],"aktionen":[{"op":"verbinden","ids":"alle","name":"Verbund"}],"weiter":true}`;
   const KMAP = { box: 1, cylinder: 1, tube: 1, sphere: 1, hemisphere: 1, cone: 1, pyramid: 1, torus: 1, prism: 1, wedge: 1, extrude: 1, part: 1, group: 1 };
   function compactItem(it) {
     const o = { id: it.id, art: it.kind, name: it.name, rolle: it.role === 'hole' ? 'loch' : 'koerper' };
@@ -64,14 +97,23 @@ Beispiel – Wunsch „Platte 60 × 40 × 4 mit einem Loch in der Mitte“:
     if (it.hidden) o.ausgeblendet = true;
     return o;
   }
-  function modelText() {
+  function topInfo(it) {
+    const o = compactItem(it);
+    if (Mass.fixedOf(it)) o.kaufteil_g = it.massG === '' ? 'fehlt' : it.massG;
+    if (it.suppressed) o.unterdrueckt = true;
+    try { const b = Actions.worldBox(it.id); if (b && !b.isEmpty()) o.lage = { min: b.min.toArray().map((v) => +v.toFixed(1)), max: b.max.toArray().map((v) => +v.toFixed(1)) }; } catch (_) {}
+    return o;
+  }
+  function modelText(run) {
     const st = Print.stats();
     const obj = {
       projekt: App.doc.name,
       masse: (App.doc.params || []).map((p) => ({ name: p.name, wert: p.expr })),
-      objekte: App.doc.items.map(compactItem),
+      objekte: App.doc.items.map(topInfo),
       gesamtgroesse: st ? { x: +st.x.toFixed(2), y: +st.y.toFixed(2), z: +st.z.toFixed(2), min: st.box.min.toArray().map((v) => +v.toFixed(2)), max: st.box.max.toArray().map((v) => +v.toFixed(2)) } : null,
       auswahl: App.sel,
+      ...(run ? { auswahl_beim_auftrag: run.sel0 } : {}),
+      fehler: App.errors.slice(0, 12).map(errLine),
     };
     if (App.doc.drone) {
       const chk = DroneCheck.summary();
@@ -80,15 +122,18 @@ Beispiel – Wunsch „Platte 60 × 40 × 4 mit einem Loch in der Mitte“:
     obj.materialien = MATERIALS.map((m) => m.k);
     obj.kaufteile = buyNames();
     let s = JSON.stringify(obj);
-    if (s.length > 40000) s = s.slice(0, 40000) + '…';
+    if (s.length > 60000) s = s.slice(0, 60000) + '…';
     return s;
   }
+
   function buyNames() { try { return DroneLib.CATS.filter((c) => c[0] !== 'loch').flatMap((c) => DroneLib.buyParts(c[0]).map((b) => b.name)); } catch (_) { return []; } }
   function buySpec(name) {
     const n = String(name || '').toLowerCase();
     for (const c of DroneLib.CATS) { if (c[0] === 'loch') continue; const b = DroneLib.buyParts(c[0]).find((x) => x.name.toLowerCase() === n) || DroneLib.buyParts(c[0]).find((x) => x.name.toLowerCase().includes(n)); if (b) return b; }
     return null;
   }
+  const labelOf = (id) => { const f = id && Model.find(App.doc, id); return f ? Model.label(f.item) : 'Modell'; };
+  function errLine(e) { return `${labelOf(e.itemId)}: ${e.message || e.code || 'Fehler'}`; }
   // Zugang zur KI (nur in Claude). Liefert null, wenn sie hier nicht geht.
   const idle = () => new Promise((res) => { const t0 = Date.now(); const w = () => (!App.busy || Date.now() - t0 > 60000 ? res() : setTimeout(w, 200)); setTimeout(w, 300); });
   async function sampler() { if (off) return null; try { return (await window.claude?.use('sample')) || null; } catch (_) { return null; } }
@@ -109,14 +154,18 @@ Beispiel – Wunsch „Platte 60 × 40 × 4 mit einem Loch in der Mitte“:
       upstream_error: 'Die Verbindung ist abgebrochen. Versuch es gleich noch einmal.',
     }[code] || (HIDE.includes(code) ? 'Die KI ist hier gerade nicht verfügbar. Alles andere funktioniert wie gewohnt.' : 'Das hat nicht geklappt. Versuch es noch einmal.');
   }
+  // ---------- Fenster ----------
   function ensurePanel() {
     if (panel) return panel;
     panel = h('div', { class: 'ai-panel', role: 'log', 'aria-live': 'polite' });
     const head = h('div', { class: 'ai-head' });
-    const t = h('b'); t.innerHTML = icon('spark') + 'KI-Helfer';
+    const t = h('b'); t.innerHTML = icon('spark') + 'KI-Kollege';
+    const tg = h('label', { class: 'ai-auto', 'data-tip': 'Große Aufträge selbstständig in mehreren Runden abarbeiten und Fehler selbst beheben', 'data-help': 'aiCoworker' }, h('input', { type: 'checkbox', id: 'ai-auto', checked: auto() }), h('span', null, 'Selbstständig'));
+    tg.querySelector('input').onchange = (e) => storageSet(AUTO_KEY, e.target.checked ? '1' : '0');
     const close = h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Schließen' }); close.innerHTML = icon('close');
-    close.onclick = () => { if (ctl) ctl.abort(); if (ro) ro.disconnect(); panel.remove(); panel = null; document.documentElement.style.removeProperty('--ai-h'); };
-    head.append(t, close); panel.append(head);
+    close.onclick = () => { if (current) current.stopped = true; if (ctl) ctl.abort(); if (ro) ro.disconnect(); panel.remove(); panel = null; document.documentElement.style.removeProperty('--ai-h'); };
+    head.append(t, h('div', { class: 'ai-head-r' }, tg, close)); panel.append(head);
+    panel.append(h('div', { class: 'ai-intro' }, 'Gib mir auch große Aufträge, z. B. „Mach alles als Verbund“ oder „Prüf die Drohne und behebe, was nicht passt“. Ich arbeite sie Schritt für Schritt ab – „Rückgängig“ nimmt danach alles auf einmal zurück.'));
     $('#overlay').append(panel);
     // Meldungen erscheinen über dem Helfer statt darauf
     const ro = window.ResizeObserver ? new ResizeObserver(() => { if (panel) document.documentElement.style.setProperty('--ai-h', panel.offsetHeight + 'px'); }) : null;
@@ -129,67 +178,400 @@ Beispiel – Wunsch „Platte 60 × 40 × 4 mit einem Loch in der Mitte“:
     p.append(m); p.scrollTop = p.scrollHeight;
     return m;
   }
+  function renderPlan(el, plan) {
+    if (!Array.isArray(plan) || !plan.length) return;
+    el.innerHTML = '';
+    for (const p of plan.slice(0, 8)) {
+      const t = typeof p === 'string' ? p : p && (p.text || p.schritt);
+      if (!t) continue;
+      const done = !!(p && typeof p === 'object' && (p.fertig || p.done));
+      const li = h('li', { class: done ? 'done' : '' }); li.innerHTML = done ? icon('check') : '<i></i>';
+      li.append(h('span', null, String(t).slice(0, 140)));
+      el.append(li);
+    }
+    el.hidden = !el.children.length;
+  }
+  // ---------- Ohne KI: ein paar Aufträge kennt Tracery auch selbst ----------
+  const LOCAL = [
+    { re: /\b(alles|alle|komplett|ganze)\b.*\b(verbund|verbinde|verbinden|zusammen\w*|vereinig\w*|ein(en)? (teil|körper|koerper)|gruppier\w*)/i, run: () => Actions.groupAll() },
+    { re: /\b(verbund|verbinde|verbinden)\b.*\b(alles|alle)\b/i, run: () => Actions.groupAll() },
+  ];
+  function local(text) { const L = LOCAL.find((x) => x.re.test(text)); if (!L) return false; L.run(); return true; }
+
+  // ---------- Ein Auftrag ----------
+  function newRun(text) { return { text, q: String(text || '').slice(0, 160), depth: App.undoStack.length, sel0: App.sel.slice(), added: [], changed: [], notes: [], rounds: [], stopped: false, newDoc: false }; }
+  function buildPrompt(run, round, max) {
+    const hist = history.slice(-6).map((x, i) => `${i + 1}. Nutzer: „${x.q}“ → ${x.frage ? 'Du hast zurückgefragt: ' : 'Du: '}${x.a}${x.ops ? ' [' + x.ops + ']' : ''}`).join('\n');
+    const last = history[history.length - 1];
+    let s = `${RULES}\n\nAKTUELLES MODELL (JSON):\n${modelText(run)}\n`;
+    if (hist) s += `\nBISHERIGES GESPRÄCH (das Neueste zuletzt):\n${hist}\n`;
+    s += `\nAUFTRAG DES NUTZERS:\n${run.text}\n`;
+    if (last && last.frage) s += `(Das ist die Antwort auf deine Rückfrage „${last.a}“ zum Auftrag „${last.q}“.)\n`;
+    if (run.rounds.length) {
+      s += `\nDEINE BISHERIGEN RUNDEN ZU DIESEM AUFTRAG:\n` + run.rounds.map((r, i) => `Runde ${i + 1}: ${r.answer || '–'}\nAktionen: ${r.acts.join('; ') || 'keine'}\nRückmeldung:\n${r.feedback || '(alles umgesetzt, keine Fehler)'}`).join('\n\n');
+      s += `\n\nJetzt ist Runde ${round} von höchstens ${max}. Das Modell oben ist schon auf dem neuen Stand. Mach weiter oder behebe Fehler – oder beende mit "weiter": false und einer "antwort", die zusammenfasst, was du gemacht hast.`;
+    } else if (max > 1) s += `\nDu hast bis zu ${max} Runden.`;
+    else s += `\nDu hast nur diese eine Runde: Setze alles direkt um.`;
+    return s;
+  }
+  function actSummary(a) { let s = ''; try { s = JSON.stringify(a); } catch (_) {} return s.length > 220 ? s.slice(0, 220) + '…' : s; }
+  async function feedback(rep, run, errBefore) {
+    await idle();
+    const parts = [];
+    if (rep.done.length) parts.push('Umgesetzt:\n- ' + rep.done.join('\n- '));
+    const msgs = [...rep.notes, ...(rep.toasts || [])].filter(Boolean);
+    if (msgs.length) parts.push('Meldungen von Tracery:\n- ' + msgs.join('\n- '));
+    const newErrs = App.errors.map(errLine).filter((e) => !errBefore.has(e));
+    if (newErrs.length) parts.push('FEHLER im Modell (bitte beheben oder erklären):\n- ' + newErrs.join('\n- '));
+    if (rep.check) {
+      if (DroneCheck.isDrone()) { const l = await DroneCheck.run(); if (l) { run.checkList = l; parts.push('Drohnen-Check:\n- ' + l.map((c) => `${c.title}: ${c.s} – ${c.text}`).join('\n- ')); } }
+      else parts.push('Drohnen-Check: geht nur bei einem Rahmen mit Achsabstand, Armwinkel und Propeller unter „Maße“.');
+    }
+    if (rep.weak) { const l = await Weak.analyze(); run.weakList = l; parts.push('Schwachstellen:\n- ' + (l.length ? l.map((c) => `[${c.s}] ${c.title}: ${c.text}`).join('\n- ') : 'keine gefunden')); }
+    run.notes.push(...rep.notes); run.added.push(...rep.added); run.changed.push(...rep.changed);
+    if (rep.select) run.select = rep.select;
+    return { text: parts.join('\n\n'), newErrs };
+  }
   async function ask(text) {
     const sample = await sampler();
-    if (!sample) { UI.modal({ title: 'KI-Helfer nicht verfügbar', body: 'Der KI-Helfer funktioniert, wenn Tracery in Claude geöffnet ist. Hier kannst du alles andere wie gewohnt nutzen.', actions: [{ label: 'OK', primary: true }] }); return; }
+    if (!sample) {
+      if (local(text)) return;
+      UI.modal({ title: 'KI-Kollege nicht verfügbar', body: 'Der KI-Kollege funktioniert, wenn Tracery in Claude geöffnet ist. Hier kannst du alles andere wie gewohnt nutzen – „Alles als Verbund“ findest du auch unten in der Eingabezeile.', actions: [{ label: 'OK', primary: true }] });
+      return;
+    }
+    if (current) current.stopped = true;
     if (ctl) ctl.abort();
+    const p = ensurePanel(); const intro = p.querySelector('.ai-intro'); if (intro) intro.remove();
     addMsg('me', text);
-    const m = addMsg('ai', 'Denkt nach …');
+    const m = addMsg('ai', 'Denkt nach …'); m.classList.add('working');
     const txt = m.querySelector('.txt');
+    const planEl = h('ul', { class: 'ai-plan', hidden: true }), status = h('div', { class: 'ai-status' });
     const stop = h('button', { type: 'button', class: 'btn small ghost', style: { justifySelf: 'start' } }); stop.innerHTML = icon('stop') + 'Stopp';
-    m.append(stop);
-    ctl = new AbortController(); const myCtl = ctl;
-    stop.onclick = () => myCtl.abort();
-    const recent = history.slice(-4).map((h2, i) => `${i + 1}. „${h2.q}“ → ${h2.a}`).join('\n');
-    const prompt = `${RULES}\n\nAKTUELLES MODELL (JSON):\n${modelText()}\n${recent ? '\nLETZTE ANFRAGEN:\n' + recent + '\n' : ''}\nWUNSCH DES NUTZERS:\n${text}`;
-    let res;
-    try {
-      // cache: false – wer dieselbe Bitte nach „Rückgängig“ noch einmal schickt, will einen neuen Versuch
-      res = await sample.json(prompt, { signal: myCtl.signal, modelTier: 'default', cache: false, onText: () => { txt.textContent = 'Baut …'; } });
-    } catch (e) {
-      stop.remove();
-      txt.textContent = errText(e); ctl = null; return;
+    m.append(planEl, status, stop);
+    const run = newRun(text); current = run;
+    stop.onclick = () => { run.stopped = true; if (ctl) ctl.abort(); };
+    const errBefore = new Set(App.errors.map(errLine));
+    const maxRounds = auto() ? MAX_ROUNDS : 1;
+    let answer = '', question = null, fixes = 0, failed = null;
+    for (let round = 1; round <= maxRounds && !run.stopped; round++) {
+      if (round > 1) status.textContent = `Runde ${round} · denkt nach …`;
+      const myCtl = (ctl = new AbortController());
+      let res;
+      try { res = await sample.json(buildPrompt(run, round, maxRounds), { signal: myCtl.signal, modelTier: 'default', cache: false, onText: () => { if (round === 1 && !answer) txt.textContent = 'Baut …'; } }); }
+      catch (e) { if (run.stopped || (e && e.code === 'cancelled')) run.stopped = true; else failed = errText(e); break; }
+      finally { if (ctl === myCtl) ctl = null; }
+      if (!res || typeof res !== 'object') { failed = 'Die Antwort war nicht lesbar.'; break; }
+      answer = String(res.antwort || res.answer || '').slice(0, 900) || answer;
+      if (answer) txt.textContent = answer;
+      renderPlan(planEl, res.plan);
+      const acts = Array.isArray(res.aktionen) ? res.aktionen : Array.isArray(res.actions) ? res.actions : [];
+      if (res.frage && !acts.length) { question = { text: String(res.frage).slice(0, 300), options: (Array.isArray(res.optionen) ? res.optionen : []).map((o) => String(o).slice(0, 60)).filter(Boolean).slice(0, 4) }; break; }
+      let fb = { text: '', newErrs: [] };
+      if (acts.length) {
+        status.textContent = `Runde ${round} · setzt ${acts.length} ${acts.length === 1 ? 'Schritt' : 'Schritte'} um …`;
+        UI.mute(true); let rep = null;
+        try { rep = await execute(acts, run, (s) => { status.textContent = `Runde ${round} · ${s} …`; }); }
+        catch (e) { console.error(e); run.notes.push('Beim Umsetzen ist etwas schiefgegangen: ' + e.message); }
+        finally { const t = UI.mute(false); if (rep) rep.toasts = t; }
+        if (rep) { status.textContent = `Runde ${round} · rechnet und prüft …`; fb = await feedback(rep, run, errBefore); }
+      }
+      run.rounds.push({ answer, acts: acts.map(actSummary), feedback: fb.text });
+      const mustFix = fb.newErrs.length > 0 && fixes < 2 && maxRounds > 1;
+      if (mustFix) fixes++;
+      if (!((res.weiter && acts.length) || mustFix)) break;
+      if (round === maxRounds) run.notes.push(`Ich habe nach ${maxRounds} Runden aufgehört. Schreib „mach weiter“, wenn noch etwas fehlt.`);
     }
-    stop.remove(); ctl = null;
-    if (!res || typeof res !== 'object') { txt.textContent = 'Die Antwort war nicht lesbar.'; return; }
-    const answer = String(res.antwort || res.answer || '').slice(0, 800) || 'Erledigt.';
-    let acts = Array.isArray(res.aktionen) ? res.aktionen : Array.isArray(res.actions) ? res.actions : [];
-    let report = { added: [], changed: [], notes: [] };
-    // ein neuer Rahmen aus dem Frame-Assistenten ersetzt das Projekt – danach gelten die übrigen Aktionen für den Rahmen
-    const dr = acts.find((a) => String(a.op || '').toLowerCase() === 'drohne');
-    const wantCheck = acts.some((a) => String(a.op || '').toLowerCase() === 'pruefen') || !!dr;
-    if (dr) {
-      try {
-        const o = { zoll: [3, 4, 5, 6, 7].includes(+dr.zoll) ? +dr.zoll : 5, form: DroneTpl.FORMS[dr.form] ? dr.form : 'x', video: DroneTpl.VIDEO[dr.video] ? dr.video : 'analog' };
-        if (dr.motor && DroneLib.motors().some((m) => m.stator === String(dr.motor))) o.motor = String(dr.motor);
-        if (dr.akku && DroneLib.akku(dr.akku)) o.akku = dr.akku;
-        const cfg = DroneTpl.config(o), d = DroneTpl.build(cfg);
-        for (const it of d.items) it.ai = { q: text.slice(0, 160) };
-        App.setDoc(d); Start.hide(); report.newDoc = cfg.name;
-        report.notes.push(`Neues Projekt „${d.name}“ – dein bisheriges Projekt findest du auf der Startseite unter „Weiterarbeiten“.`);
-      } catch (e) { report.notes.push('Den Rahmen konnte ich nicht bauen.'); }
-      acts = acts.filter((a) => a !== dr);
+    finish(run, m, { answer, question, failed, txt, planEl, status, stop });
+  }
+  function finish(run, m, o) {
+    const { answer, question, failed, txt, planEl, status, stop } = o;
+    if (current === run) current = null;
+    stop.remove(); status.remove(); m.classList.remove('working');
+    const did = App.undoStack.length > run.depth;
+    const step = did ? App.squash(run.depth, 'KI: ' + run.text.slice(0, 40)) : null;
+    // Text
+    let t = answer || (did ? 'Erledigt.' : '');
+    if (failed) t = did ? (t + '\n\n' + failed) : failed;
+    if (run.stopped) t = (t ? t + '\n\n' : '') + (did ? 'Gestoppt – was bis hierhin fertig war, bleibt stehen.' : 'Gestoppt.');
+    if (question) t = (answer && answer !== question.text ? answer + '\n\n' : '') + question.text;
+    const notes = [...new Set(run.notes)];
+    txt.textContent = t + (notes.length ? '\n\nHinweis: ' + notes.join(' ') : '');
+    if (planEl.hidden) planEl.remove();
+    // Rückfrage: Antwort-Knöpfe
+    if (question) {
+      const row = h('div', { class: 'ai-opts' });
+      for (const opt of question.options) { const b = h('button', { type: 'button', class: 'btn small', 'data-opt': '1' }, opt); b.onclick = () => { for (const x of row.querySelectorAll('button')) x.disabled = true; b.classList.add('on'); ask(opt); }; row.append(b); }
+      row.append(h('small', null, question.options.length ? 'oder schreib unten deine Antwort' : 'Schreib unten deine Antwort.'));
+      m.append(row);
     }
-    if (acts.some((a) => !['pruefen', 'drohne'].includes(String(a.op || '').toLowerCase()))) {
-      try { const r2 = applyActions(acts, text); report.added.push(...r2.added); report.changed.push(...r2.changed); report.notes.push(...r2.notes); }
-      catch (e) { console.error(e); txt.textContent = answer + '\n\n(Beim Umsetzen ist etwas schiefgegangen: ' + e.message + ')'; return; }
+    // Drohnen-Check als Liste
+    if (run.checkList) {
+      const l = run.checkList, bad = l.filter((c) => c.s === 'bad' || c.s === 'warn');
+      const box = h('div', { class: 'ai-check' });
+      box.append(DroneCheck.rows(bad.length ? bad : l.filter((c) => c.id === 'tw' || c.id === 'weight'), (ids) => App.select(ids)));
+      if (!bad.length) box.append(h('small', null, 'Propeller, Teile und Schwerpunkt: alles in Ordnung.'));
+      m.append(box);
     }
-    txt.textContent = answer + (report.notes.length ? '\n\nHinweis: ' + report.notes.join(' ') : '');
-    if (wantCheck && DroneCheck.isDrone()) {
-      const box = h('div', { class: 'ai-check' }, h('small', null, 'Drohnen-Check läuft …')); m.append(box);
-      idle().then(() => DroneCheck.run()).then((l) => { box.innerHTML = ''; if (!l) return; const bad = l.filter((c) => c.s === 'bad' || c.s === 'warn'); box.append(DroneCheck.rows(bad.length ? bad : l.filter((c) => c.id === 'tw' || c.id === 'weight'), (ids) => App.select(ids))); if (!bad.length) box.append(h('small', null, 'Propeller, Teile und Schwerpunkt: alles in Ordnung.')); });
-    }
-    history.push({ q: text.slice(0, 160), a: answer.slice(0, 160) });
-    if (report.newDoc && !report.added.length && !report.changed.length) setTimeout(() => Viewer.fit(), 800);
-    else if (report.added.length || report.changed.length) {
+    // Gespräch merken
+    const ops = run.rounds.flatMap((r) => r.acts.map((a) => { try { return JSON.parse(a).op; } catch (_) { return null; } })).filter(Boolean);
+    history.push({ q: run.q, a: (question ? question.text : t).slice(0, 220), ops: [...new Set(ops)].join(', '), frage: !!question });
+    if (history.length > 20) history = history.slice(-20);
+    // Auswahl und Ansicht
+    const sel = (run.select || (run.added.length ? run.added : run.changed)).filter((id) => Model.find(App.doc, id));
+    if (did && sel.length) App.select([...new Set(sel)].slice(0, 30));
+    if (run.newDoc) setTimeout(() => Viewer.fit(), 800);
+    else if (run.added.length) setTimeout(() => Viewer.fit(), 500);
+    if (step) {
       const row = h('div', { class: 'btn-row' });
       const u = h('button', { type: 'button', class: 'btn small' }); u.innerHTML = icon('undo') + 'Rückgängig';
-      u.onclick = () => { App.undo(); u.disabled = true; };
-      row.append(u); m.append(row);
-      if (report.added.length) setTimeout(() => Viewer.fit(), 500);
+      u.onclick = () => {
+        if (App.undoStack[App.undoStack.length - 1] !== step) { UI.toast('Danach hast du weitergearbeitet. Nimm die Schritte oben mit Rückgängig oder im Protokoll zurück.', { icon: 'info', ms: 4500 }); return; }
+        App.undo(); u.disabled = true;
+      };
+      row.append(u);
+      if (run.rounds.length > 1) row.append(h('small', { class: 'ai-rounds' }, `${run.rounds.length} Runden`));
+      m.append(row);
     }
+    if (panel) panel.scrollTop = panel.scrollHeight;
   }
+
   // ---------- Umsetzen ----------
+  // Teile ansprechen: ids, "alle", "auswahl", "koerper", "loecher", "kaufteile", "neu", "name:…" oder eine Liste davon
+  function pick(spec, doc, run, rep) {
+    const out = [], tops = Model.activeItems(doc).filter((x) => !x.hidden);
+    const add = (id) => { if (id && !out.includes(id) && Model.find(doc, id)) out.push(id); };
+    const one = (s) => {
+      if (s == null || s === '') return;
+      if (Array.isArray(s)) { s.forEach(one); return; }
+      if (typeof s === 'object') { if (s.name) one('name:' + s.name); if (s.id) one(s.id); return; }
+      const k = String(s).trim(), kl = k.toLowerCase();
+      if (['alle', 'alles', 'all', '*'].includes(kl)) tops.forEach((x) => add(x.id));
+      else if (['auswahl', 'ausgewählt', 'ausgewaehlt', 'selection', 'das', 'es', 'hier'].includes(kl)) (run ? run.sel0 : App.sel).forEach(add);
+      else if (['koerper', 'körper', 'solids'].includes(kl)) tops.filter((x) => x.role !== 'hole').forEach((x) => add(x.id));
+      else if (['loecher', 'löcher', 'holes'].includes(kl)) tops.filter((x) => x.role === 'hole').forEach((x) => add(x.id));
+      else if (kl === 'kaufteile') tops.filter((x) => Mass.fixedOf(x)).forEach((x) => add(x.id));
+      else if (kl === 'neu') [...(run ? run.added : []), ...(rep ? rep.added : [])].forEach(add);
+      else if (kl.startsWith('name:')) {
+        const n = kl.slice(5).trim(); if (!n) return;
+        let hits = tops.filter((x) => (x.name || '').toLowerCase().includes(n));
+        if (!hits.length) Model.walk(doc.items, (x) => { if ((x.name || '').toLowerCase().includes(n)) hits.push(x); });
+        hits.forEach((x) => add(x.id));
+      } else add(k);
+    };
+    one(spec);
+    return out;
+  }
+  const opOf = (a) => String((a && a.op) || '').toLowerCase().replace(/[äöü]/g, (c) => ({ ä: 'ae', ö: 'oe', ü: 'ue' }[c]));
+  const ALIAS = { add: 'hinzufuegen', change: 'aendern', delete: 'loeschen', group: 'verbinden', gruppieren: 'verbinden', verbund: 'verbinden', union: 'verbinden', fillet: 'rundung', pattern: 'muster', mirror: 'spiegeln', ungroup: 'loesen', subtract: 'abziehen', intersect: 'schnittmenge', align: 'ausrichten', move: 'verschieben', rotate: 'drehen', flip: 'umklappen', copy: 'kopieren', duplizieren: 'kopieren', hinlegen: 'auf_platte', drop: 'auf_platte', mass_g: 'gewicht', buy: 'kaufteil', check: 'pruefen', select: 'auswaehlen', role: 'rolle', color: 'farbe', hide: 'ausblenden', show: 'einblenden', suppress: 'unterdruecken', rename: 'umbenennen', center: 'zentrieren' };
+  const TOOL = new Set(['verbinden', 'loesen', 'abziehen', 'schnittmenge', 'ausrichten', 'zentrieren', 'drehen', 'umklappen', 'auf_platte', 'drohne', 'pruefen', 'schwachstellen', 'auswaehlen']);
+  const STEP = { verbinden: 'verbindet Teile', loesen: 'löst Gruppen', abziehen: 'schneidet aus', schnittmenge: 'bildet die Schnittmenge', ausrichten: 'richtet aus', zentrieren: 'zentriert', drehen: 'dreht', umklappen: 'klappt um', auf_platte: 'legt auf die Platte', drohne: 'baut den Rahmen', pruefen: 'merkt den Check vor', schwachstellen: 'merkt die Suche vor' };
+  // Aktionen der Reihe nach umsetzen: reine Änderungen am Modell gesammelt, Werkzeuge (Verbinden, Ausrichten …) einzeln mit dem fertig gerechneten Modell
+  async function execute(acts, run, onStep) {
+    const rep = { added: [], changed: [], notes: [], done: [], check: false, weak: false, select: null };
+    let batch = [];
+    const flush = () => { if (batch.length) { docOps(batch, run, rep); batch = []; } };
+    for (const a of acts.slice(0, 60)) {
+      if (run.stopped) break;
+      if (!a || typeof a !== 'object') continue;
+      let op = opOf(a); op = ALIAS[op] || op;
+      const tool = TOOL.has(op) || (op === 'spiegeln' && a.kopie === false);
+      if (!tool) { batch.push({ ...a, op }); continue; }
+      flush();
+      if (!['pruefen', 'schwachstellen', 'auswaehlen'].includes(op)) { await idle(); if (onStep) onStep(STEP[op] || op); }
+      await toolOp(op === 'spiegeln' ? 'umklappen' : op, a, run, rep);
+    }
+    flush();
+    // neue und geänderte Schritte merken sich, dass sie von der KI kommen – und auf welche Bitte
+    const add = rep.added.filter((id) => Model.find(App.doc, id)), chg = rep.changed.filter((id) => Model.find(App.doc, id));
+    if (add.length || chg.some((id) => !Model.find(App.doc, id).item.ai)) {
+      App.change('KI-Schritte markiert', (doc) => {
+        for (const id of add) { const f = Model.find(doc, id); if (f) f.item.ai = { q: run.q }; }
+        for (const id of chg) { const f = Model.find(doc, id); if (f && !f.item.ai) f.item.ai = { q: run.q, edit: true }; }
+      });
+    }
+    return rep;
+  }
+  const AXIS = (v) => { const s = String(v || 'z').toLowerCase(); return s === 'x' || s === 'yz' ? 'x' : s === 'y' || s === 'xz' ? 'y' : 'z'; };
+  const ALIGN = { links: 'left', left: 'left', rechts: 'right', right: 'right', vorne: 'front', front: 'front', hinten: 'back', back: 'back', unten: 'bottom', bottom: 'bottom', oben: 'top', top: 'top', mitte_x: 'cx', cx: 'cx', mitte_y: 'cy', cy: 'cy' };
+  async function toolOp(op, a, run, rep) {
+    const ids = () => pick(a.ids ?? a.id ?? a.ziel, App.doc, run, rep);
+    const name = (v) => String(v || '').trim().slice(0, 60);
+    if (op === 'verbinden') {
+      let list = ids(); const skipped = [];
+      if (!a.mit_kaufteilen) list = list.filter((id) => { const f = Model.find(App.doc, id); if (f && Mass.fixedOf(f.item)) { skipped.push(Model.label(f.item)); return false; } return true; });
+      if (skipped.length) rep.notes.push(`Kaufteile bleiben einzeln, damit ihr Gewicht stimmt: ${skipped.slice(0, 3).join(', ')}${skipped.length > 3 ? ` und ${skipped.length - 3} weitere` : ''}.`);
+      const par = list.length ? Model.find(App.doc, list[0]).parent : null;
+      const other = list.filter((id) => Model.find(App.doc, id).parent !== par);
+      list = list.filter((id) => !other.includes(id));
+      if (list.length < 2) { rep.notes.push('Zum Verbinden braucht es mindestens zwei Teile auf derselben Ebene.'); return; }
+      const nm = name(a.name) || 'Verbund';
+      const gid = Actions.group(list, { name: nm, quiet: true });
+      if (gid) { rep.added.push(gid); rep.done.push(`verbinden: ${list.length} Teile → „${nm}“ (id ${gid})`); }
+    } else if (op === 'loesen') {
+      for (const id of ids()) { const f = Model.find(App.doc, id); if (!f || f.item.kind !== 'group') continue; const nm = Model.label(f.item); Actions.ungroup(id); rep.changed.push(...App.sel); rep.done.push(`loesen: „${nm}“ → ${App.sel.length} Teile`); }
+    } else if (op === 'abziehen') {
+      const body = pick(a.von ?? a.koerper ?? a.id, App.doc, run, rep)[0];
+      const tools = pick(a.werkzeuge ?? a.mit ?? a.ids, App.doc, run, rep).filter((id) => id !== body);
+      if (!body || !tools.length) { rep.notes.push('Zum Abziehen braucht es einen Körper und mindestens ein Werkzeug.'); return; }
+      Features.boolean('subtract', [body, ...tools]);
+      if (App.sel[0] && App.sel[0] !== body) rep.added.push(App.sel[0]);
+      rep.done.push(`abziehen: ${tools.length} aus „${labelOf(body)}“`);
+    } else if (op === 'schnittmenge') {
+      const list = ids(); if (list.length < 2) { rep.notes.push('Für eine Schnittmenge braucht es mindestens zwei Körper.'); return; }
+      Features.boolean('intersect', list); rep.changed.push(...list); rep.done.push(`schnittmenge: ${list.length} Körper`);
+    } else if (op === 'ausrichten') {
+      const list = ids(); const modes = (Array.isArray(a.an) ? a.an : [a.an]).flatMap((x) => (String(x).toLowerCase() === 'mitte' ? ['cx', 'cy'] : [ALIGN[String(x).toLowerCase()]])).filter(Boolean);
+      if (list.length < 2 || !modes.length) { rep.notes.push('Zum Ausrichten braucht es mindestens zwei Teile und eine Richtung.'); return; }
+      for (const md of modes) { Actions.align(list, md); await idle(); }
+      rep.changed.push(...list); rep.done.push(`ausrichten: ${list.length} Teile an ${modes.join(', ')}`);
+    } else if (op === 'zentrieren') {
+      const list = ids(); Actions.center(list); rep.changed.push(...list); rep.done.push(`zentrieren: ${list.length} Teile`);
+    } else if (op === 'drehen') {
+      const list = ids(); const deg = num(a.grad ?? a.winkel, 90);
+      if (!list.length || typeof deg !== 'number') { rep.notes.push('Zum Drehen braucht es Teile und einen Winkel in Grad.'); return; }
+      Actions.rotate(list, AXIS(a.achse), deg, false); rep.changed.push(...list); rep.done.push(`drehen: ${list.length} Teile um ${deg}° (${AXIS(a.achse)})`);
+    } else if (op === 'umklappen') {
+      const list = ids(); if (!list.length) return;
+      Actions.mirror(list, AXIS(a.achse || ({ YZ: 'x', XZ: 'y', XY: 'z' }[String(a.ebene || '').toUpperCase()]))); rep.changed.push(...list); rep.done.push(`umklappen: ${list.length} Teile`);
+    } else if (op === 'auf_platte') {
+      const list = ids().filter((id) => App.doc.items.some((x) => x.id === id)); Actions.dropToPlate(list.length ? list : null, true); rep.changed.push(...list); rep.done.push(`auf_platte: ${list.length || 'alle'} Teile`);
+    } else if (op === 'drohne') {
+      try {
+        const o = { zoll: [3, 4, 5, 6, 7].includes(+a.zoll) ? +a.zoll : 5, form: DroneTpl.FORMS[a.form] ? a.form : 'x', video: DroneTpl.VIDEO[a.video] ? a.video : 'analog' };
+        if (a.motor && DroneLib.motors().some((m) => m.stator === String(a.motor))) o.motor = String(a.motor);
+        if (a.akku && DroneLib.akku(a.akku)) o.akku = a.akku;
+        const cfg = DroneTpl.config(o), d = DroneTpl.build(cfg);
+        for (const it of d.items) it.ai = { q: run.q };
+        App.setDoc(d); Start.hide(); run.newDoc = true; run.depth = App.undoStack.length; run.sel0 = [];
+        rep.done.push(`drohne: neues Projekt „${d.name}“ mit ${d.items.length} Teilen`);
+        rep.notes.push(`Neues Projekt „${d.name}“ – dein bisheriges Projekt findest du auf der Startseite unter „Weiterarbeiten“.`);
+        await idle();
+      } catch (e) { rep.notes.push('Den Rahmen konnte ich nicht bauen.'); }
+    } else if (op === 'pruefen') rep.check = true;
+    else if (op === 'schwachstellen') rep.weak = true;
+    else if (op === 'auswaehlen') rep.select = ids();
+  }
+  function addTo(v, d) {
+    if (!d) return v;
+    if (typeof v === 'number' || v == null || v === '') return round((typeof v === 'number' ? v : 0) + d, 4);
+    return `(${v}) ${d < 0 ? '-' : '+'} ${Math.abs(round(d, 4))}`;
+  }
+  // Änderungen am Modell, die nichts Gerechnetes brauchen – alle in einem Schritt
+  function docOps(batch, run, rep) {
+    App.change('KI: ' + run.text.slice(0, 40), (doc) => {
+      let any = false;
+      const sel = (a) => pick(a.ids ?? a.id ?? a.ziel, doc, run, rep);
+      for (const a of batch) {
+        const op = a.op;
+        if (op === 'mass') {
+          const nm = String(a.name || '').trim().replace(/\s+/g, '_');
+          if (!/^[A-Za-zÄÖÜäöüß_][A-Za-zÄÖÜäöüß_0-9]*$/.test(nm)) continue;
+          const ex = doc.params.find((p) => p.name.toLowerCase() === nm.toLowerCase());
+          const val = num(a.wert ?? a.value, 10);
+          if (ex) ex.expr = val; else doc.params.push({ id: uid('m'), name: nm, expr: val });
+          rep.done.push(`mass: ${nm} = ${val}`); any = true;
+        } else if (op === 'hinzufuegen') {
+          const it = buildItem(a.objekt || a.object || {}, rep.notes); if (!it) continue;
+          const tgt = a.in ? Model.find(doc, a.in) : null;
+          if (tgt && tgt.item.kind === 'group') tgt.item.children.push(it); else doc.items.push(it);
+          rep.added.push(it.id); rep.done.push(`hinzufuegen: „${Model.label(it)}“ (id ${it.id})`); any = true;
+        } else if (op === 'aendern') {
+          const list = sel(a); if (!list.length) { rep.notes.push('Ein Objekt zum Ändern gab es nicht.'); continue; }
+          const s = a.setze || a.set || {};
+          for (const id of list) {
+            const f = Model.find(doc, id); if (!f) continue;
+            if (s.name && list.length === 1) f.item.name = String(s.name).slice(0, 60);
+            if (s.rolle) f.item.role = s.rolle === 'loch' ? 'hole' : 'solid';
+            if (s.p && typeof s.p === 'object') {
+              if (f.item.kind === 'extrude') { if (s.p.hoehe != null) f.item.p.dist = num(s.p.hoehe, f.item.p.dist); if (s.p.richtung) f.item.p.dir = s.p.richtung; }
+              else Object.assign(f.item.p, cleanP(f.item.kind, s.p));
+            }
+            if (s.t) Object.assign(f.item.t, cleanT(s.t));
+            if (s.farbe && /^#[0-9a-f]{6}$/i.test(s.farbe)) f.item.color = s.farbe;
+            rep.changed.push(id);
+          }
+          rep.done.push(`aendern: ${list.length} Teile`); any = true;
+        } else if (op === 'loeschen') {
+          const list = sel(a); let n = 0;
+          for (const id of list) { const f = Model.find(doc, id); if (f) { f.list.splice(f.list.indexOf(f.item), 1); n++; } }
+          if (n) { rep.done.push(`loeschen: ${n} Teile`); any = true; }
+        } else if (op === 'rundung') {
+          const list = sel(a);
+          for (const id of list) {
+            const f = Model.find(doc, id); if (!f) continue;
+            f.item.finishes = f.item.finishes || [];
+            if (a.ersetzen) f.item.finishes = f.item.finishes.filter((x) => x.type === 'shell');
+            f.item.finishes.push({ id: uid('f'), type: a.typ === 'chamfer' ? 'chamfer' : 'fillet', r: num(a.r, 1), edges: ['all', 'top', 'bottom', 'vertical', 'horizontal'].includes(a.kanten) ? a.kanten : 'all' });
+            rep.changed.push(id);
+          }
+          if (list.length) { rep.done.push(`rundung: ${list.length} Teile, r ${a.r}`); any = true; }
+        } else if (op === 'muster') {
+          const id = sel(a)[0]; if (!id) { rep.notes.push('Das Objekt für das Muster gab es nicht.'); continue; }
+          const circ = /kreis|circ/i.test(a.art || '');
+          const mitte = Array.isArray(a.mitte) ? a.mitte : [0, 0];
+          const G = circ ? wrapIn(doc, id, Features.NAMES.circ, { op: 'pattern', pt: 'circ', n: Math.max(1, Math.round(num(a.n, 4))), ang: num(a.winkel, 360), cx: num(mitte[0], 0), cy: num(mitte[1], 0) })
+            : wrapIn(doc, id, Features.NAMES.rect, { op: 'pattern', pt: 'rect', nx: Math.max(1, Math.round(num(a.nx, 2))), ny: Math.max(1, Math.round(num(a.ny, 1))), dx: num(a.dx, 20), dy: num(a.dy, 20) });
+          if (G) { rep.added.push(G.id); rep.done.push(`muster: ${circ ? 'Kreis' : 'Rechteck'} um „${labelOf(id)}“ (id ${G.id})`); any = true; }
+        } else if (op === 'spiegeln') {
+          const id = sel(a)[0]; if (!id) { rep.notes.push('Das Objekt zum Spiegeln gab es nicht.'); continue; }
+          const G = wrapIn(doc, id, Features.NAMES.mirror, { op: 'pattern', pt: 'mirror', plane: ['YZ', 'XZ', 'XY'].includes(String(a.ebene).toUpperCase()) ? String(a.ebene).toUpperCase() : 'YZ', off: num(a.lage, 0) });
+          if (G) { rep.added.push(G.id); rep.done.push(`spiegeln: „${labelOf(id)}“ mit Kopie (id ${G.id})`); any = true; }
+        } else if (op === 'verschieben') {
+          const list = sel(a);
+          for (const id of list) {
+            const f = Model.find(doc, id); if (!f) continue;
+            if (a.nach && list.length === 1) Object.assign(f.item.t, cleanT(a.nach));
+            else if (a.um) for (const k of ['x', 'y', 'z']) { const d = num(a.um[k], 0); if (typeof d === 'number') f.item.t[k] = addTo(f.item.t[k], d); }
+            rep.changed.push(id);
+          }
+          if (list.length) { rep.done.push(`verschieben: ${list.length} Teile`); any = true; }
+        } else if (op === 'kopieren') {
+          const list = sel(a), n = Math.max(1, Math.min(20, Math.round(num(a.anzahl, 1)) || 1)), v = a.versatz || { x: 10, y: 10 };
+          for (const id of list) {
+            const f = Model.find(doc, id); if (!f) continue;
+            let at = f.list.indexOf(f.item);
+            for (let k = 1; k <= n; k++) {
+              const c = Model.reId(deepClone(f.item)); delete c.ai;
+              for (const ax of ['x', 'y', 'z']) { const d = num(v[ax], 0); if (typeof d === 'number' && d) c.t[ax] = addTo(c.t[ax], d * k); }
+              f.list.splice(++at, 0, c); rep.added.push(c.id);
+            }
+          }
+          if (list.length) { rep.done.push(`kopieren: ${list.length} Teile × ${n}`); any = true; }
+        } else if (['rolle', 'farbe', 'ausblenden', 'einblenden', 'unterdruecken', 'aktivieren', 'umbenennen'].includes(op)) {
+          const list = sel(a); let n = 0;
+          for (const id of list) {
+            const f = Model.find(doc, id); if (!f) continue; const it = f.item;
+            if (op === 'rolle') it.role = /loch|hole/i.test(a.rolle || '') ? 'hole' : 'solid';
+            else if (op === 'farbe') { if (!/^#[0-9a-f]{6}$/i.test(a.farbe || '')) continue; it.color = a.farbe; }
+            else if (op === 'ausblenden') it.hidden = true;
+            else if (op === 'einblenden') delete it.hidden;
+            else if (op === 'unterdruecken' || op === 'aktivieren') { if (!doc.items.includes(it)) continue; if (op === 'unterdruecken') it.suppressed = true; else delete it.suppressed; }
+            else if (op === 'umbenennen') { if (!a.name) continue; it.name = String(a.name).slice(0, 60); }
+            rep.changed.push(id); n++;
+          }
+          if (n) { rep.done.push(`${op}: ${n} Teile`); any = true; }
+        } else if (op === 'material') {
+          const m = MATERIALS.find((x) => x.k.toLowerCase() === String(a.material || '').toLowerCase());
+          if (!m) { rep.notes.push(`Das Material „${a.material}“ kenne ich nicht.`); continue; }
+          const list = sel(a).filter((id) => doc.items.some((x) => x.id === id));
+          if (!list.length) { rep.notes.push('Material geht nur für Teile der obersten Ebene.'); continue; }
+          for (const id of list) { const f = doc.items.find((x) => x.id === id); f.mat = m.k; delete f.massG; rep.changed.push(id); }
+          rep.done.push(`material: ${m.k} für ${list.length} Teile`); any = true;
+        } else if (op === 'gewicht') {
+          const list = sel(a).filter((id) => doc.items.some((x) => x.id === id));
+          if (!list.length) { rep.notes.push('Ein festes Gewicht geht nur für Teile der obersten Ebene.'); continue; }
+          for (const id of list) { const f = doc.items.find((x) => x.id === id); delete f.mat; f.massG = num(a.g, ''); rep.changed.push(id); }
+          rep.done.push(`gewicht: ${a.g} g`); any = true;
+        } else if (op === 'kaufteil') {
+          const b = buySpec(a.name); if (!b) { rep.notes.push(`Das Kaufteil „${a.name}“ steht nicht in der Bibliothek.`); continue; }
+          const it = Model.newItem(b.kind, { ...b.p }, { name: b.name, color: b.color });
+          it.massG = b.massG; Object.assign(it.t, cleanT(a.t));
+          doc.items.push(it); rep.added.push(it.id); rep.done.push(`kaufteil: „${b.name}“ (id ${it.id})`); any = true;
+        } else if (op) rep.notes.push(`Die Aktion „${op}“ kenne ich nicht.`);
+      }
+      return any ? undefined : false;
+    });
+  }
   function num(v, d) {
     if (typeof v === 'number' && isFinite(v)) return Math.max(-5000, Math.min(5000, v));
     if (typeof v === 'string' && v.trim()) { const n = parseNum(v); if (!isNaN(n)) return n; return v.trim().slice(0, 80); }
@@ -246,89 +628,19 @@ Beispiel – Wunsch „Platte 60 × 40 × 4 mit einem Loch in der Mitte“:
     f.list.splice(f.list.indexOf(f.item), 1, G);
     return G;
   }
-  function applyActions(acts, text) {
-    const report = { added: [], changed: [], notes: [] };
-    const q = String(text || '').slice(0, 160);
-    App.change('KI: ' + String(text || '').slice(0, 40), (doc) => {
-      for (const a of acts.slice(0, 60)) {
-        const op = String(a.op || '').toLowerCase();
-        if (op === 'mass') {
-          const name = String(a.name || '').trim().replace(/\s+/g, '_');
-          if (!/^[A-Za-zÄÖÜäöüß_][A-Za-zÄÖÜäöüß_0-9]*$/.test(name)) continue;
-          const ex = doc.params.find((p) => p.name.toLowerCase() === name.toLowerCase());
-          const val = num(a.wert ?? a.value, 10);
-          if (ex) ex.expr = val; else doc.params.push({ id: uid('m'), name, expr: val });
-        } else if (op === 'hinzufuegen' || op === 'add') {
-          const it = buildItem(a.objekt || a.object || {}, report.notes); if (!it) continue;
-          const tgt = a.in ? Model.find(doc, a.in) : null;
-          if (tgt && tgt.item.kind === 'group') tgt.item.children.push(it); else doc.items.push(it);
-          report.added.push(it.id);
-        } else if (op === 'aendern' || op === 'change') {
-          const f = Model.find(doc, a.id); if (!f) { report.notes.push('Ein Objekt zum Ändern gab es nicht.'); continue; }
-          const s = a.setze || a.set || {};
-          if (s.name) f.item.name = String(s.name).slice(0, 60);
-          if (s.rolle) f.item.role = s.rolle === 'loch' ? 'hole' : 'solid';
-          if (s.p && typeof s.p === 'object') {
-            if (f.item.kind === 'extrude') { if (s.p.hoehe != null) f.item.p.dist = num(s.p.hoehe, f.item.p.dist); if (s.p.richtung) f.item.p.dir = s.p.richtung; }
-            else Object.assign(f.item.p, cleanP(f.item.kind, s.p));
-          }
-          if (s.t) Object.assign(f.item.t, cleanT(s.t));
-          if (s.farbe && /^#[0-9a-f]{6}$/i.test(s.farbe)) f.item.color = s.farbe;
-          report.changed.push(f.item.id);
-        } else if (op === 'loeschen' || op === 'delete') {
-          const f = Model.find(doc, a.id); if (f) { f.list.splice(f.list.indexOf(f.item), 1); report.changed.push(a.id); }
-        } else if (op === 'gruppieren' || op === 'group') {
-          const ids = (a.ids || []).filter((id) => doc.items.find((x) => x.id === id));
-          if (ids.length < 2) continue;
-          const G = Model.newItem('group', {}, { name: a.name || 'Gruppe' });
-          const at = Math.min(...ids.map((id) => doc.items.findIndex((x) => x.id === id)));
-          for (const id of ids) { const i = doc.items.findIndex((x) => x.id === id); G.children.push(doc.items.splice(i, 1)[0]); }
-          G.color = (G.children.find((c) => c.role !== 'hole') || G.children[0]).color;
-          doc.items.splice(at, 0, G); report.added.push(G.id);
-        } else if (op === 'rundung' || op === 'fillet') {
-          const f = Model.find(doc, a.id); if (!f) continue;
-          f.item.finishes = f.item.finishes || [];
-          f.item.finishes.push({ id: uid('f'), type: a.typ === 'chamfer' ? 'chamfer' : 'fillet', r: num(a.r, 1), edges: ['all', 'top', 'bottom', 'vertical', 'horizontal'].includes(a.kanten) ? a.kanten : 'all' });
-          report.changed.push(f.item.id);
-        } else if (op === 'muster' || op === 'pattern') {
-          if (!Model.find(doc, a.id)) { report.notes.push('Das Objekt für das Muster gab es nicht.'); continue; }
-          const circ = /kreis|circ/i.test(a.art || '');
-          const mitte = Array.isArray(a.mitte) ? a.mitte : [0, 0];
-          const G = circ ? wrapIn(doc, a.id, Features.NAMES.circ, { op: 'pattern', pt: 'circ', n: Math.max(1, Math.round(num(a.n, 4))), ang: num(a.winkel, 360), cx: num(mitte[0], 0), cy: num(mitte[1], 0) })
-            : wrapIn(doc, a.id, Features.NAMES.rect, { op: 'pattern', pt: 'rect', nx: Math.max(1, Math.round(num(a.nx, 2))), ny: Math.max(1, Math.round(num(a.ny, 1))), dx: num(a.dx, 20), dy: num(a.dy, 20) });
-          if (G) report.added.push(G.id);
-        } else if (op === 'spiegeln' || op === 'mirror') {
-          if (!Model.find(doc, a.id)) { report.notes.push('Das Objekt zum Spiegeln gab es nicht.'); continue; }
-          const G = wrapIn(doc, a.id, Features.NAMES.mirror, { op: 'pattern', pt: 'mirror', plane: ['YZ', 'XZ', 'XY'].includes(String(a.ebene).toUpperCase()) ? String(a.ebene).toUpperCase() : 'YZ', off: num(a.lage, 0) });
-          if (G) report.added.push(G.id);
-        } else if (op === 'material') {
-          const f = doc.items.find((x) => x.id === a.id); const m = MATERIALS.find((x) => x.k.toLowerCase() === String(a.material || '').toLowerCase());
-          if (!f || !m) { report.notes.push(!f ? 'Material geht nur für Teile der obersten Ebene.' : `Das Material „${a.material}“ kenne ich nicht.`); continue; }
-          f.mat = m.k; delete f.massG; report.changed.push(f.id);
-        } else if (op === 'gewicht' || op === 'mass_g') {
-          const f = doc.items.find((x) => x.id === a.id); if (!f) { report.notes.push('Ein festes Gewicht geht nur für Teile der obersten Ebene.'); continue; }
-          delete f.mat; f.massG = num(a.g, ''); report.changed.push(f.id);
-        } else if (op === 'kaufteil' || op === 'buy') {
-          const b = buySpec(a.name); if (!b) { report.notes.push(`Das Kaufteil „${a.name}“ steht nicht in der Bibliothek.`); continue; }
-          const it = Model.newItem(b.kind, { ...b.p }, { name: b.name, color: b.color });
-          it.massG = b.massG; Object.assign(it.t, cleanT(a.t));
-          doc.items.push(it); report.added.push(it.id);
-        }
-      }
-      // jeder neue oder geänderte Schritt merkt sich, dass er von der KI kommt – und auf welche Bitte
-      for (const id of report.added) { const f = Model.find(doc, id); if (f) f.item.ai = { q }; }
-      for (const id of report.changed) { const f = Model.find(doc, id); if (f && !f.item.ai) f.item.ai = { q, edit: true }; }
-      if (!report.added.length && !report.changed.length && !acts.some((a) => a.op === 'mass')) return false;
-    });
-    const sel = report.added.length ? report.added : report.changed.filter((id) => Model.find(App.doc, id));
-    if (sel.length) App.select(sel.slice(0, 20));
-    return report;
+  // Aktionen ohne Gespräch umsetzen (z. B. „Umsetzen“ bei einem Vorschlag) – auch das ist danach ein Rückgängig-Schritt
+  async function apply(acts, text) {
+    const run = newRun(text); UI.mute(true); let rep = null;
+    try { rep = await execute(acts, run); } finally { const t = UI.mute(false); if (rep) rep.toasts = t; }
+    if (App.undoStack.length > run.depth) App.squash(run.depth, 'KI: ' + String(text || '').slice(0, 40));
+    const sel = (rep.select || (rep.added.length ? rep.added : rep.changed)).filter((id) => Model.find(App.doc, id));
+    if (sel.length) App.select([...new Set(sel)].slice(0, 30));
+    return rep;
   }
   // für Erklären und Schwachstellen: eine Frage mit JSON-Antwort
   async function json(prompt, opts = {}) {
     const sample = await sampler(); if (!sample) return { error: 'Die KI gibt es nur, wenn Tracery in Claude geöffnet ist.' };
     try { return { res: await sample.json(prompt, { modelTier: 'default', cache: false, ...opts }) }; } catch (e) { return { error: errText(e) }; }
   }
-  return { ask, json, apply: applyActions, compactItem, modelText, ACTIONS, get available() { return !off; } };
+  return { ask, json, apply, pick, local, compactItem, modelText, ACTIONS, get available() { return !off; }, get working() { return !!current; } };
 })();
-

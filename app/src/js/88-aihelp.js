@@ -324,7 +324,7 @@ ${AI.modelText()}`;
           for (const sg of r.sug) {
             const row = h('div', { class: 'ai-sug' }, h('span', { class: 'grow' }, sg.title));
             const ub = h('button', { type: 'button', class: 'btn small primary', 'data-sug': '1' }); ub.innerHTML = icon('check') + 'Umsetzen';
-            ub.onclick = () => { const rep = AI.apply(sg.acts, 'Verbesserung: ' + sg.title); ub.disabled = true; ub.innerHTML = icon('check') + 'Umgesetzt'; if (rep.notes.length) UI.toast(rep.notes.join(' '), { icon: 'info' }); };
+            ub.onclick = async () => { ub.disabled = true; const rep = await AI.apply(sg.acts, 'Verbesserung: ' + sg.title); ub.innerHTML = icon('check') + 'Umgesetzt'; if (rep && rep.notes.length) UI.toast(rep.notes.join(' '), { icon: 'info' }); };
             row.append(ub); aiBox.append(row);
           }
           b.remove();

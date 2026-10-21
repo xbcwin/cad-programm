@@ -36,7 +36,7 @@ export function createKernel(R, oc) {
     if (e) { e.gen = gen; return e.shape; }
     return null;
   }
-  function cachePut(key, shape) { cache.set(key, { shape, gen }); return shape; }
+  function cachePut(key, shape, errs) { cache.set(key, { shape, gen, errs: errs && errs.length ? errs : null }); return shape; }
 
   function gc() {
     // Formen entfernen, die mehrere Durchläufe nicht gebraucht wurden
@@ -670,7 +670,13 @@ export function createKernel(R, oc) {
   function evalItem(it, errors) {
     const key = defKey(it);
     const hit = cacheGet(key);
-    if (hit) return { shape: hit, key };
+    if (hit) {
+      // Meldungen beim Bauen (z. B. „Rundung zu groß“) gelten weiter, auch wenn die Form aus dem Speicher kommt
+      const e = cache.get(key).errs;
+      if (e) for (const x of e) errors.push({ ...x, itemId: x.itemId === '$self' ? it.id : x.itemId });
+      return { shape: hit, key };
+    }
+    const e0 = errors.length;
     let shape;
     try {
       if (it.kind === 'group') {
@@ -708,7 +714,7 @@ export function createKernel(R, oc) {
       errors.push({ itemId: it.id, code: err && err.code === 'split' ? 'split' : 'build', message: friendlyError(err) });
       shape = null;
     }
-    if (shape) cachePut(key, shape);
+    if (shape) cachePut(key, shape, errors.slice(e0).map((x) => ({ ...x, itemId: x.itemId === it.id ? '$self' : x.itemId })));
     return { shape, key };
   }
   function friendlyError(err) {
