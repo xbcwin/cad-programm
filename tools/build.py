@@ -2,6 +2,7 @@
 
     python3 tools/build.py          # index.html neu bauen
     python3 tools/build.py --check  # nur prüfen, ob index.html aktuell ist
+    python3 tools/build.py --artifact ORDNER  # Fassung für die Claude-Seite: kleine Seite + tracery.css + tracery.js
 
 Die Teile werden in genau dieser Reihenfolge zusammengesetzt. Sie teilen sich einen
 gemeinsamen Gültigkeitsbereich (ein einziges <script type="module">), deshalb zählt
@@ -42,21 +43,39 @@ def inline_json(line):
     return re.sub(r'/\*JSON:([\w.-]+\.json)\*/null', rep, line)
 
 
-def build():
-    out = part('head.html') + ['<style>'] + part('styles.css') + ['</style>'] + part('body.html')
-    out += ['<script type="module">'] + part('js/imports.js')
+def script_lines():
+    out = part('js/imports.js')
     for name in JS:
         if not os.path.exists(os.path.join(SRC, 'js', name)):
             continue  # noch nicht angelegt
         out += ['// ---- ' + name + ' ----'] + [inline_json(l) for l in part('js/' + name)]
-    out += ['</script>'] + part('tail.html')
+    return out
+
+
+def build():
+    out = part('head.html') + ['<style>'] + part('styles.css') + ['</style>'] + part('body.html')
+    out += ['<script type="module">'] + script_lines() + ['</script>'] + part('tail.html')
     return '\n'.join(out)
+
+
+def build_artifact(folder):
+    # Die Claude-Seite bekommt nur ein kleines Gerüst; Programm und Aussehen liegen daneben.
+    # So bleibt die Seite selbst zwischen den Sitzungen fast gleich und lässt sich günstig aktualisieren.
+    os.makedirs(folder, exist_ok=True)
+    page = part('head.html') + ['<link rel="stylesheet" href="tracery.css">'] + part('body.html') + ['<script type="module" src="tracery.js"></script>'] + part('tail.html')
+    for name, lines in (('index.html', page), ('tracery.css', part('styles.css')), ('tracery.js', script_lines())):
+        with open(os.path.join(folder, name), 'w', encoding='utf-8') as f:
+            f.write('\n'.join(lines) + ('' if name == 'index.html' else '\n'))
+    print(f'Claude-Seite gebaut in {folder}: index.html, tracery.css, tracery.js')
 
 
 def main():
     missing = [f for f in os.listdir(os.path.join(SRC, 'js')) if f.endswith('.js') and f != 'imports.js' and f not in JS]
     if missing:
         sys.exit('Nicht in tools/build.py eingetragen: ' + ', '.join(missing))
+    if '--artifact' in sys.argv:
+        build_artifact(sys.argv[sys.argv.index('--artifact') + 1])
+        return
     html = build()
     target = os.path.join(ROOT, 'index.html')
     if '--check' in sys.argv:

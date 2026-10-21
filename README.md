@@ -44,7 +44,7 @@ replicad (MIT), OpenCascade (LGPL 2.1 mit Ausnahme), Three.js (MIT).
 
 ## Ändern und bauen
 
-Geändert wird in `app/src/`, danach `python3 tools/build.py`. Die Teile in `app/src/js/` teilen sich einen gemeinsamen Gültigkeitsbereich; ihre Reihenfolge steht in `tools/build.py`. `python3 tools/build.py --check` prüft, ob `app/index.html` zum Quelltext passt.
+Geändert wird in `app/src/`, danach `python3 tools/build.py`. Die Teile in `app/src/js/` teilen sich einen gemeinsamen Gültigkeitsbereich; ihre Reihenfolge steht in `tools/build.py`. `python3 tools/build.py --check` prüft, ob `app/index.html` zum Quelltext passt. `python3 tools/build.py --artifact ORDNER` baut die Fassung für die Claude-Seite: ein kleines Seitengerüst plus `tracery.css` und `tracery.js` (dazu `kernel/`, `lib/` und `occ-kernel.wasm` mit veröffentlichen).
 
 ## Tests
 
