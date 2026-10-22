@@ -413,6 +413,72 @@ def t_neuer_name(p):
     return par == [['laenge', 8]] and 'laenge' in ''.join(p.pg.locator('.skdim').all_inner_texts())
 
 
+# ---------- Sitzung 18: Speed-Rumpf, Cinewhoop, neue Bausätze, Rahmen von Herstellern ----------
+def ok_check(c, keys=('gap', 'props', 'clash', 'cog')):
+    return all(c[k][0] == 'ok' for k in keys)
+
+
+def t_bausaetze_neu(p):
+    karten = p.pg.evaluate("[...document.querySelectorAll('.card.drone')].map(c=>c.dataset.tpl)")
+    ok1 = karten == ['assist', 'drone-f5', 'drone-r5', 'drone-s5', 'drone-c35', 'drone-f7']
+    drohne(p, 'r5')
+    c = chk(p)
+    ok2 = p.ev("return App.errors.length") == 0 and ok_check(c) and p.ev("return App.doc.params.find(x=>x.name==='Armwinkel').expr") == 35
+    # Speed: Rumpf statt Oberplatte, Kamera in der Nase, Akku unten
+    p.ev("App.setDoc(DroneTpl.build('s5')); Start.hide()"); warte_rechnen(p, 90)
+    names = p.ev("return App.doc.items.map(i=>i.name)")
+    c = chk(p)
+    V = p.ev("return Model.vars(App.doc).v")
+    tip = -(V['Rumpflänge'] / 2 + V['Nasenlänge'])
+    cam = p.ev("const it=App.doc.items.find(i=>/Kamera/.test(i.name)); const r=App.results.get(it.id); const t=Model.tNumeric(it); return [r.data.bbox[1]+t.y, r.data.bbox[4]+t.y]")
+    akku = p.ev("const it=App.doc.items.find(i=>/^Akku/.test(i.name)); const r=App.results.get(it.id); return r.data.bbox[5]+Model.tNumeric(it).z")
+    rumpf = p.ev("const it=App.doc.items.find(i=>i.name==='Rumpf'); const r=App.results.get(it.id); return [it.mat, r.data.bbox.map(x=>Math.round(x*10)/10)]")
+    ok3 = 'Rumpf' in names and 'Oberplatte' not in names and 'Abstandsbolzen' not in names and p.ev("return App.errors.length") == 0 and ok_check(c)
+    ok4 = cam[0] >= tip - 0.6 and cam[1] <= tip + V['Nasenlänge'] and abs(akku) < 0.01 and rumpf[0] == 'PETG' and abs(rumpf[1][3] - V['Rumpfdurchmesser'] / 2) < 0.2 and abs(rumpf[1][2] - V['Armdicke']) < 0.2
+    # Cinewhoop: vier Ducts, die mit den Bolzen mitwachsen
+    p.ev("App.setDoc(DroneTpl.build('c35')); Start.hide()"); warte_rechnen(p, 90)
+    c = chk(p)
+    d = p.ev("const g=App.doc.items.find(i=>i.name==='Ducts (4×)'); return g ? [g.children.length, g.children.every(x=>x.kind==='tube'), g.mat] : null")
+    ok5 = d == [4, True, 'PC'] and p.ev("return App.errors.length") == 0 and ok_check(c) and p.ev("return App.doc.params.find(x=>x.name==='Ducthöhe').expr") == 'Bolzenhöhe - 1'
+    p.ev("App.change('x', d=>{ d.params.find(x=>x.name==='Bolzenhöhe').expr=30; })"); warte_rechnen(p)
+    top = p.ev("const it=App.doc.items.find(i=>i.name==='Ducts (4×)'); return App.results.get(it.id).data.bbox[5]")
+    ok6 = abs(top - (3.5 + 29)) < 0.05 and chk(p)['clash'][0] == 'ok'
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
+
+
+def t_herstellerrahmen(p):
+    p.pg.locator('.card.drone[data-tpl="assist"]').click(); p.wait(600)
+    opts = p.pg.evaluate("[...document.querySelectorAll('#fa-vorlage option')].map(o=>o.textContent)")
+    ok1 = len(opts) >= 8 and opts[0] == 'Eigener Rahmen' and any('TBS Source One V5' in o for o in opts) and any('AOS RC HS5' in o for o in opts)
+    fid = p.ev("return DroneLib.frames().find(f=>f.name==='Source One V5').id")
+    p.pg.select_option('#fa-vorlage', fid); p.wait(400)
+    t = p.pg.locator('#fa-frame').inner_text()
+    ok2 = 'Nachbau nach Herstellermaßen' in t and '123,5 g' in t and p.pg.input_value('#fa-a') == '226' and p.pg.locator('#fa-grown').count() == 0
+    p.pg.locator('.modal .btn.primary').filter(has_text='Rahmen bauen').click(); warte_rechnen(p, 90)
+    P = p.ev("return Object.fromEntries(App.doc.params.map(x=>[x.name,x.expr]))")
+    ok3 = p.ev("return App.doc.drone.frame && App.doc.drone.frame.hersteller==='TBS' && App.doc.name.startsWith('TBS')") and P['Achsabstand'] == 226 and P['Armdicke'] == 6 and P['Plattendicke'] == 2 and P['Bolzenhöhe'] == 30
+    c = chk(p)
+    ok4 = ok_check(c) and c['frame'][0] == 'info' and 'laut Hersteller 123,5 g' in c['frame'][1] and p.ev("return App.errors.length") == 0
+    # Cinelog35: Tracery braucht mehr Achsabstand und sagt das; eine andere Form löst die Vorlage
+    p.ev("DroneUI.assistant()"); p.wait(600)
+    fid = p.ev("return DroneLib.frames().find(f=>f.name==='Cinelog35 V2').id")
+    p.pg.select_option('#fa-vorlage', fid); p.wait(400)
+    ok5 = '142 mm' in p.pg.locator('#fa-grown').inner_text() and p.pg.input_value('#fa-zoll') == '3.5' and p.pg.input_value('#fa-form') == 'cine'
+    p.pg.select_option('#fa-form', 'x'); p.wait(300)
+    ok6 = p.pg.input_value('#fa-vorlage') == '' and p.pg.locator('#fa-frame').count() == 0
+    p.pg.keyboard.press('Escape'); p.wait(300)
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
+
+
+def t_kollege_herstellerrahmen(p):
+    ki(p); p.empty()
+    ki_fragen(p, 'Bau mir den AOS HS5 nach', {'antwort': 'Ich baue den AOS RC HS5 nach.', 'aktionen': [{'op': 'drohne', 'rahmen': 'HS5 High-Speed'}, {'op': 'pruefen'}]}, 120)
+    ok1 = p.ev("return App.doc.drone && App.doc.drone.form==='speed' && App.doc.drone.frame && App.doc.drone.frame.hersteller==='AOS RC'") and p.ev("return App.doc.params.find(x=>x.name==='Achsabstand').expr") == 233
+    pr = p.ev("return window.__aiPrompts[0] || ''")
+    ok2 = 'Source One V5' in pr and '"speed"' in pr and p.ev("return App.errors.length") == 0
+    return [ok1, ok2]
+
+
 def t_formel_beispiele(p):
     p.empty(); p.pg.click('#lt-params'); p.wait(300)
     p.pg.get_by_role('button', name='Formel-Beispiele').click(); p.wait(400)
@@ -1932,6 +1998,9 @@ TESTS = [
     ('KI-Kollege: alle / neu / ausrichten / färben / kopieren / drehen / auswählen', t_kollege_auswahl),
     ('Alles als Verbund ohne KI', t_verbund_ohne_ki),
     ('Fehlermeldung bleibt nach einer anderen Änderung', t_fehler_bleibt),
+    ('Neue Bausätze: Startseite / 5" Race / 5" Speed mit Rumpf / 3,5" Cinewhoop mit Ducts / Ducts wachsen mit', t_bausaetze_neu),
+    ('Rahmen von Herstellern: Vorlage / Maße / Gewicht gegen Original / Cinelog35 mit Hinweis / Form löst Vorlage', t_herstellerrahmen),
+    ('KI-Kollege baut einen Herstellerrahmen nach', t_kollege_herstellerrahmen),
     ('Formel-Beispiele', t_formel_beispiele), ('Einführung „Erste Skizze“', t_einfuehrung), ('Schraubenlöcher', t_schrauben),
     ('Fies: Löschen hinter Marker + Undo', t_fies_loeschen), ('Fies: alles unterdrückt', t_fies_alle_aus),
     ('Fies: Marker am Anfang, neu laden', t_fies_reload), ('Fies: Tasten während Rechnen', t_fies_tasten),

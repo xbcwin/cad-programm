@@ -7,6 +7,8 @@ const AI = (() => {
   let panel = null, ctl = null, history = [], off = false, current = null;
   const MAX_ROUNDS = 5, AUTO_KEY = 'tracery.ai.auto';
   const auto = () => storageGet(AUTO_KEY) !== '0';
+  const FRAMES = DroneLib.frames().map((f) => `${f.hersteller} ${f.name}`).join(', ');
+  const norm = (t) => String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
   const ACTIONS = `Aktionen:
 {"op":"hinzufuegen","objekt":OBJEKT,"in":"<id einer Gruppe, optional>"}
 {"op":"aendern","id":"<id>","setze":{"name":"…","rolle":"koerper"|"loch","p":{…},"t":{…},"farbe":"#RRGGBB"}}
@@ -32,7 +34,7 @@ const AI = (() => {
 {"op":"material","id":"<id>","material":"<Kürzel aus MATERIALIEN>"}
 {"op":"gewicht","id":"<id>","g":33.8}   (Kaufteil mit festem Gewicht aus dem Datenblatt)
 {"op":"kaufteil","name":"<Name aus KAUFTEILE>","t":{"x":0,"y":0,"z":0}}   (Kaufteil in echter Form mit Maßen und Gewicht aus der Bibliothek)
-{"op":"drohne","zoll":5,"form":"x"|"stretch"|"wide"|"deadcat","video":"analog"|"o3"|"o4"|"o4pro"|"walksnail"|"hdzero"|"none","motor":"2207","akku":"6S 1300 mAh"}   (baut mit dem Frame-Assistenten einen kompletten Rahmen als NEUES Projekt; nur wenn ausdrücklich ein neuer Rahmen gewünscht ist)
+{"op":"drohne","zoll":5,"form":"x"|"stretch"|"wide"|"deadcat"|"cine"|"speed","video":"analog"|"o3"|"o4"|"o4pro"|"walksnail"|"hdzero"|"none","motor":"2207","akku":"6S 1300 mAh","rahmen":"Source One V5"}   (baut mit dem Frame-Assistenten einen kompletten Rahmen als NEUES Projekt; nur wenn ausdrücklich ein neuer Rahmen gewünscht ist. zoll: 3, 3.5, 4, 5, 6 oder 7. cine = Cinewhoop mit Ducts, speed = kegelförmiger Speed-Rumpf. "rahmen" nur für den Nachbau eines Herstellerrahmens: ${FRAMES})
 {"op":"pruefen"}   (Drohnen-Check: Propeller, Teile, Gewicht, Schwerpunkt, Schub – das Ergebnis bekommst du als Rückmeldung)
 {"op":"schwachstellen"}   (sucht Schwachstellen: Lochrand, dünne Wände, Armdicke – das Ergebnis bekommst du als Rückmeldung)
 {"op":"auswaehlen","ids":"…"}   (wählt am Ende diese Teile aus, damit der Nutzer sie gleich sieht)
@@ -437,7 +439,10 @@ Beispiel – Wunsch „Mach alles als Verbund“ (Runde 1):
       const list = ids().filter((id) => App.doc.items.some((x) => x.id === id)); Actions.dropToPlate(list.length ? list : null, true); rep.changed.push(...list); rep.done.push(`auf_platte: ${list.length || 'alle'} Teile`);
     } else if (op === 'drohne') {
       try {
-        const o = { zoll: [3, 4, 5, 6, 7].includes(+a.zoll) ? +a.zoll : 5, form: DroneTpl.FORMS[a.form] ? a.form : 'x', video: DroneTpl.VIDEO[a.video] ? a.video : 'analog' };
+        const fr = a.rahmen && DroneLib.frames().find((f) => norm(`${f.hersteller} ${f.name}`).includes(norm(a.rahmen)) || norm(a.rahmen).includes(norm(f.name)));
+        const o = fr ? DroneTpl.fromFrame(fr) : { zoll: DroneTpl.ZOLL.includes(+a.zoll) ? +a.zoll : 5, form: DroneTpl.FORMS[a.form] ? a.form : 'x' };
+        o.video = DroneTpl.VIDEO[a.video] ? a.video : 'analog';
+        if (a.rahmen && !fr) rep.notes.push(`Den Rahmen „${a.rahmen}“ kenne ich nicht – ich baue einen eigenen.`);
         if (a.motor && DroneLib.motors().some((m) => m.stator === String(a.motor))) o.motor = String(a.motor);
         if (a.akku && DroneLib.akku(a.akku)) o.akku = a.akku;
         const cfg = DroneTpl.config(o), d = DroneTpl.build(cfg);

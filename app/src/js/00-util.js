@@ -564,9 +564,9 @@ const HELP = {
   "tipp": "Kaufteile haben ihre echte Form und die Maße und das Gewicht aus dem Datenblatt. So stimmen Platz, Gewicht und Schwerpunkt schon beim Konstruieren."
  },
  "frameAssist": {
-  "tip": "Drohnenrahmen in einem Schritt bauen",
-  "hilfe": "Wähle Propellergröße, Rahmenform, Stack, Motor, Videosystem und Akku. Tracery rechnet den Achsabstand so, dass zwischen den Propellern genug Luft bleibt, und warnt, wenn etwas nicht passt.",
-  "tipp": "Beim Deadcat sind die vorderen Arme weiter gespreizt – dann sind die Propeller nicht im Kamerabild."
+  "tip": "Drohnenrahmen in einem Schritt bauen – eigener oder nach Hersteller",
+  "hilfe": "Wähle Propellergröße, Rahmenform, Stack, Motor, Videosystem und Akku. Tracery rechnet den Achsabstand so, dass zwischen den Propellern genug Luft bleibt, und warnt, wenn etwas nicht passt. Unter „Vorlage“ baust du echte Rahmen von Herstellern nach (TBS, GEPRC, iFlight, SpeedyBee, AOS RC): Achsabstand, Armdicke, Plattendicke und Stack stimmen, die Umrisse sind vereinfacht. Neue Formen: Cinewhoop mit Ducts um die Propeller und Speed-Rumpf mit kegelförmiger Haube.",
+  "tipp": "Beim Deadcat sind die vorderen Arme weiter gespreizt – dann sind die Propeller nicht im Kamerabild. Beim Speed-Rumpf sitzt die Kamera vorne in der Nase und der Akku hängt unten."
  },
  "holePattern": {
   "tip": "Vier Löcher für Stack oder Motor auf einmal",
@@ -580,7 +580,7 @@ const HELP = {
  },
  "droneCheck": {
   "tip": "Rahmen prüfen: Propeller, Teile, Gewicht, Schwerpunkt, Schub",
-  "hilfe": "Drohne → „Drohnen-Check“ (oder rechts unter „Projekt“): Tracery rechnet mit dem CAD-Kern nach, ob sich die Propeller berühren, ob ein Teil in einen Propellerkreis ragt, ob Teile ineinanderstecken, wie schwer die Drohne ist, wo der Schwerpunkt liegt und – wenn du den Schub pro Motor einträgst – wie viel Schub sie im Verhältnis zum Gewicht hat.",
+  "hilfe": "Drohne → „Drohnen-Check“ (oder rechts unter „Projekt“): Tracery rechnet mit dem CAD-Kern nach, ob sich die Propeller berühren, ob ein Teil in einen Propellerkreis ragt, ob Teile ineinanderstecken, wie schwer die Drohne ist, wo der Schwerpunkt liegt und – wenn du den Schub pro Motor einträgst – wie viel Schub sie im Verhältnis zum Gewicht hat. Beim Nachbau eines Herstellerrahmens vergleicht er das Rahmengewicht mit dem Original.",
   "tipp": "Der Schwerpunkt sollte fast genau in der Mitte zwischen den vier Motoren liegen. Liegt er hinten, schieb den Akku nach vorne."
  },
  "plateDxf": {

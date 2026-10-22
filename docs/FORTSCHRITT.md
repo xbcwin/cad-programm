@@ -1,6 +1,6 @@
 # Fortschritt
 
-Stand: 21.10.2026 · nach Sitzung 17 (Bauplan mit 14 Sitzungen abgeschlossen)
+Stand: 21.10.2026 · nach Sitzung 18 (Bauplan mit 14 Sitzungen abgeschlossen)
 
 ## Erledigt
 
@@ -45,7 +45,7 @@ Stand: 21.10.2026 · nach Sitzung 17 (Bauplan mit 14 Sitzungen abgeschlossen)
 - [x] Neuer Name beim Maß (z. B. `breite`) wird automatisch unter „Maße“ angelegt
 - [x] Formel-Beispiele unter „Maße“ (Gemini, alle 12 mit Tracerys Rechner nachgeprüft), Beispiel-Maße per Klick
 - [x] Umbenennen / Entfernen eines Maßes wirkt jetzt auch auf Skizzen-Maße
-- [x] Automatischer Klicktest `tests/klicktest.py`: 102 Durchläufe (alle grün), 140 von 173 Punkten der Testliste automatisch geprüft
+- [x] Automatischer Klicktest `tests/klicktest.py`: 105 Durchläufe (alle grün), 144 von 178 Punkten der Testliste automatisch geprüft
 - [x] Aufgeräumt: Programm liegt jetzt in 28 Quelldateien unter `app/src/`, `tools/build.py` baut daraus `app/index.html`
 - [x] Notizstift (Taste N): freie Striche, die am Modell kleben, Textnotizen, 6 Farben, 3 Dicken, Radierer, ein-/ausblendbar – ohne technische Bedeutung
 - [x] Symbole für den Notizstift (Gemini, geprüft); Augen-Knopf rechts im Bild blendet Notizen aus, sobald es welche gibt
@@ -137,6 +137,15 @@ Stand: 21.10.2026 · nach Sitzung 17 (Bauplan mit 14 Sitzungen abgeschlossen)
 - [x] Ein ganzer Auftrag ist danach EIN Rückgängig-Schritt (auch „Umsetzen“ bei Schwachstellen-Vorschlägen); Meldungen während der Arbeit landen in der Rückmeldung statt als Einblendung
 - [x] „Alles als Verbund“ geht auch ohne KI: Eingabezeile „verbund“ oder „Mach alles als Verbund“ außerhalb von Claude
 - [x] Behoben: Meldungen wie „Rundung zu groß“ verschwanden, sobald eine andere Änderung neu rechnen ließ (der CAD-Kern merkt sich die Meldungen jetzt zur gespeicherten Form)
+- [x] Speed-Rumpf (Sitzung 18): neue Rahmenform mit kegelförmiger, hohler Haube (PETG) – Kamera vorne in der Nase, Stack und Sender im Rumpf, schlankes Heck, Akku unten unter der Mittelplatte mit Gurtschlitzen; Durchmesser, Achshöhe und Längen rechnet Tracery aus Stack, Sender und Kamera, alles als Maße veränderbar
+- [x] Cinewhoop: Ducts (PC) um die Propeller, 3 mm Spalt, enden knapp unter der Oberplatte und wachsen mit der Bolzenhöhe mit; kurze Platte, Achsabstand so, dass Kamera und Bolzen außerhalb der Ducts bleiben
+- [x] Neue Größe 3,5 Zoll (Motor 2004, 25,5er Stack, 4S 850)
+- [x] Neue Bausätze auf der Startseite: 5" Race (Stretched-X), 5" Speed (Rumpf), 3,5" Cinewhoop (DJI O4) – alle bestehen Drohnen-Check und Schwachstellen-Analyse
+- [x] Rahmen von Herstellern nachbauen (Frame-Assistent → „Vorlage“): TBS Source One V5, GEPRC Mark5 O4 Pro Wide X, SpeedyBee Master 5 V2, iFlight Nazgul Evoque F5 V3 (Deadcat und True X), GEPRC Cinelog35 V2, AOS RC HS5 High-Speed – Achsabstand, Armdicke, Plattendicke, Stack und Lochbild von der Hersteller- oder Händlerseite (`app/data/rahmen.json`, mit Quelle); die Umrisse sind vereinfacht
+- [x] Fester Achsabstand: Platten werden kürzer und schmaler, bis Kamera und Bolzen frei sind; passt Tracerys Rumpf nicht (Cinelog35: 142 mm), nimmt der Nachbau so viel mehr wie nötig und sagt das
+- [x] Drohnen-Check vergleicht beim Nachbau das Rahmengewicht im Modell mit dem Original
+- [x] KI-Kollege kennt die neuen Formen, 3,5 Zoll und die Herstellerrahmen („Bau mir den AOS HS5 nach“)
+- [x] Motor 2004 mit Gewicht (GEPRC GR2004, 16,8 g; Glocke und Höhe weiter geschätzt)
 
 ## Offen
 
@@ -167,6 +176,9 @@ Fertig.
 - [x] 5"-Vorlage (Sitzung 11), dazu 7" Long Range
 - [x] Frame-Assistent mit 3" bis 7" und Rahmenformen True-X, Stretched-X, Wide-X, Deadcat (Sitzung 12)
 - [x] Lochbilder, Bauteil-Bibliothek, erste Detail-Bausteine (Kabelbinder, Gurtschlitz) (Sitzung 12)
+- [x] Speed-Rumpf, Cinewhoop mit Ducts, 3,5 Zoll, Rahmen von Herstellern (Sitzung 18)
+- [ ] Mehr Herstellerrahmen (Gemini Prompt L) und mehr Kaufteile mit Gewicht (Prompt M)
+- [ ] Herstellerrahmen mit Original-Umriss (heute: Tracerys Grundform mit den Herstellermaßen)
 - [ ] H-Rahmen und Rahmen mit getrennten Armen (Sandwich)
 - [ ] Weitere Detail-Bausteine: Antennenhalter, XT60-Halter, GoPro-Halter
 - [x] Prüfungen, DXF-Export, Varianten (Sitzung 13)

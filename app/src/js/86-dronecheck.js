@@ -44,6 +44,12 @@ const DroneCheck = (() => {
     if (m) {
       const miss = (m.parts || []).filter((p) => p.missing).map((p) => label(p.id));
       out.push({ id: 'weight', title: 'Abfluggewicht', s: miss.length ? 'warn' : 'info', text: `ca. ${Mass.gText(m.mass)}` + (miss.length ? ` – bei ${miss.join(', ')} fehlt noch das Gewicht.` : '.') + (m.mass < 250 ? ' Unter 250 g gelten in der EU einfachere Regeln.' : ''), ids: (m.parts || []).filter((p) => p.missing).map((p) => p.id) });
+      // Nachbau eines Herstellerrahmens: Rahmen im Modell (alles ohne Kaufteile) gegen das Gewicht laut Hersteller
+      const fr = doc.drone && doc.drone.frame;
+      if (fr && fr.g) {
+        const own = (m.parts || []).filter((p) => !p.fixed).reduce((s, p) => s + p.mass, 0), d = own - fr.g;
+        out.push({ id: 'frame', title: 'Rahmen gegen Original', s: 'info', text: `Rahmen im Modell ca. ${Mass.gText(own)}, ${fr.hersteller} ${fr.name} laut Hersteller ${Mass.gText(fr.g)} (${d >= 0 ? '+' : '−'}${Mass.gText(Math.abs(d))}). Der Nachbau hat vereinfachte Umrisse – Löcher, Fasen und Aussparungen des Originals fehlen.` + (fr.a && Math.abs(fr.a - g.A) > 0.5 ? ` Achsabstand hier ${fmt(g.A, 0)} mm, beim Original ${fmt(fr.a, 0)} mm.` : '') });
+      }
       // 5. Schwerpunkt gegenüber der Mitte zwischen den Motoren
       if (m.com) {
         const cx = g.motors.reduce((s, x) => s + x[1], 0) / 4, cy = g.motors.reduce((s, x) => s + x[2], 0) / 4;

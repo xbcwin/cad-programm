@@ -1,6 +1,6 @@
 # Testliste
 
-Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 17 (21.10.2026).
+Nach jedem Update in 15–20 Minuten durchklicken. Stand: nach Sitzung 18 (21.10.2026).
 
 **[x]** = automatisch geprüft mit `tests/klicktest.py` (echter Browser, echte Klicks) · **[ ]** = noch von Hand ansehen
 
@@ -480,6 +480,24 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [ ] **Mit einem Kind ausprobieren**
   Schritte: 1. Ein Kind (ab 10) mit „Einfach“ eine Platte mit vier Löchern bauen lassen, ohne zu helfen.
   Erwartet: Es findet Körper, Löcher und Exportieren allein; notieren, wo es hängen bleibt.
+
+## Neue Rahmen und Bausätze (neu in Sitzung 18)
+
+- [x] **Neue Bausätze**
+  Schritte: 1. Startseite → „5" Race“, dann „5" Speed“, dann „3,5" Cinewhoop“. 2. Jeweils „Drohne“ → „Drohnen-Check“.
+  Erwartet: Race mit Armen 35° zur Flugrichtung; Speed mit rotem, kegelförmigem Rumpf, Kamera in der Nase, Akku unten, ohne Oberplatte; Cinewhoop mit vier grauen Ducts; alle Prüfungen grün, keine Fehler.
+- [x] **Ducts wachsen mit**
+  Schritte: 1. 3,5" Cinewhoop. 2. Unter „Maße“ Bolzenhöhe auf 30.
+  Erwartet: Die Ducts werden höher und enden 1 mm unter der Oberplatte; nichts steckt ineinander.
+- [x] **Rahmen von Herstellern**
+  Schritte: 1. Frame-Assistent → „Vorlage“: TBS Source One V5. 2. „Rahmen bauen“. 3. Drohnen-Check.
+  Erwartet: Achsabstand 226 mm (Hersteller), Hinweis „Nachbau nach Herstellermaßen“ mit 123,5 g und Quelle; Arme 6 mm, Oberplatte 2 mm, Bolzen 30 mm; im Check die Zeile „Rahmen gegen Original“.
+- [x] **Cinelog35 mit Hinweis**
+  Schritte: 1. Frame-Assistent → „Vorlage“: GEPRC Cinelog35 V2. 2. Danach die Rahmenform auf True-X stellen.
+  Erwartet: Gelber Hinweis: Hersteller 142 mm, Tracery braucht mehr; nach dem Umstellen steht die Vorlage wieder auf „Eigener Rahmen“.
+- [ ] **Sieht der Speed-Rumpf gut aus?**
+  Schritte: 1. 5" Speed von allen Seiten ansehen, auch mit „Röntgen“ und Schnitt.
+  Erwartet: Hohle Haube mit Wand, unten offen, Kamera schaut vorne aus der Spitze; Rumpf als STL/STEP druckbar.
 
 ## KI-Kollege (neu in Sitzung 17)
 

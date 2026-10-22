@@ -3,14 +3,16 @@
 const FPV_DATA = /*JSON:fpv-masse.json*/null;
 const BUY_DATA = /*JSON:bauteile.json*/null;
 const THRUST_DATA = /*JSON:schub.json*/null;
+const FRAME_DATA = /*JSON:rahmen.json*/null;
 const DroneLib = (() => {
   // Motoren, deren Höhe und Gewicht aus einem Datenblatt stammen (sonst Schätzwerte, markiert)
-  const MOTOR_SHEET = { '2207': { d: 28.5, h: 19.7, g: 33.8, src: 'iFlight XING-E 2207' }, '2806.5': { d: 35.1, h: 21.3, g: 54, src: 'iFlight XING 2806.5' } };
+  // 2004: nur das Gewicht ist belegt (GEPRC GR2004, Motor der Cinelog35; die Maßangabe dort ist widersprüchlich) – Glocke und Höhe bleiben geschätzt
+  const MOTOR_SHEET = { '2004': { g: 16.8, src: 'GEPRC GR2004' }, '2207': { d: 28.5, h: 19.7, g: 33.8, src: 'iFlight XING-E 2207' }, '2806.5': { d: 35.1, h: 21.3, g: 54, src: 'iFlight XING 2806.5' } };
   function motors() {
     return (FPV_DATA.motoren || []).map((m) => {
       const s = MOTOR_SHEET[m.stator];
-      const d = s ? s.d : m.glocke_d_mm;
-      return { stator: m.stator, d, h: s ? s.h : round(d * 0.7, 1), g: s ? s.g : '', circle: m.lochkreis_d_mm[m.lochkreis_d_mm.length - 1], screw: m.schraube.split(' ')[0], props: m.propeller_zoll, sheet: !!s, src: s ? s.src : null };
+      const d = s && s.d ? s.d : m.glocke_d_mm;
+      return { stator: m.stator, d, h: s && s.h ? s.h : round(d * 0.7, 1), g: s ? s.g : '', circle: m.lochkreis_d_mm[m.lochkreis_d_mm.length - 1], screw: m.schraube.split(' ')[0], props: m.propeller_zoll, sheet: !!s, est: !(s && s.h), src: s ? s.src : null };
     });
   }
   function motor(stator) { return motors().find((m) => m.stator === stator) || motors().find((m) => m.stator === '2207'); }
@@ -28,7 +30,7 @@ const DroneLib = (() => {
     const out = [];
     const part = (lib, p, name, g, extra = {}) => ({ buy: true, kind: 'part', p: { lib, ...p }, name, massG: g == null ? '' : g, color: COL[cat], ...extra });
     const box = (lib, name, l, b, hgt, g, extra = {}) => part(lib, { w: b, d: l, h: hgt }, name, g, extra);
-    if (cat === 'motor') for (const m of motors()) out.push(part('buyMotor', { d: m.d, h: m.h, lk: m.circle, size: motorScrew(m) }, 'Motor ' + m.stator, m.g, { color: COL.motor, info: m.sheet ? `${m.src}: ${fmt(m.g, 1)} g` : 'Höhe geschätzt, Gewicht bitte eintragen' }));
+    if (cat === 'motor') for (const m of motors()) out.push(part('buyMotor', { d: m.d, h: m.h, lk: m.circle, size: motorScrew(m) }, 'Motor ' + m.stator, m.g, { color: COL.motor, info: m.sheet ? `${m.src}: ${fmt(m.g, 1)} g` + (m.est ? ' (Höhe geschätzt)' : '') : 'Höhe geschätzt, Gewicht bitte eintragen' }));
     if (cat === 'akku') for (const a of akkus()) out.push(box('buyBattery', a.name, a.l, a.w, a.h, a.g, { info: a.produkt ? `${a.produkt}: ${fmt(a.g, 0)} g` : `ca. ${a.g} g` }));
     if (cat === 'video') {
       for (const v of BUY_DATA.videosender || []) {
@@ -73,5 +75,7 @@ const DroneLib = (() => {
     return { lib: 'buyVtx', a: isFinite(a) ? a : 0 };
   }
   const motorScrew = (m) => (String(m.screw || 'M3').startsWith('M1') ? 'M2' : m.screw || 'M3');
-  return { motors, motor, akkus, akku, stacks, cams, CATS, buyParts, holeParts, thrust, videoShape };
+  // Rahmen von Herstellern (rahmen.json, Maße mit der Herstellerseite verglichen)
+  function frames() { return ((FRAME_DATA && FRAME_DATA.rahmen) || []).map((f, i) => ({ id: 'fr' + i, ...f })); }
+  return { motors, motor, akkus, akku, stacks, cams, CATS, buyParts, holeParts, thrust, videoShape, frames };
 })();
