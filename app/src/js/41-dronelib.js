@@ -6,13 +6,20 @@ const THRUST_DATA = /*JSON:schub.json*/null;
 const FRAME_DATA = /*JSON:rahmen.json*/null;
 const DroneLib = (() => {
   // Motoren, deren Höhe und Gewicht aus einem Datenblatt stammen (sonst Schätzwerte, markiert)
-  // 2004: nur das Gewicht ist belegt (GEPRC GR2004, Motor der Cinelog35; die Maßangabe dort ist widersprüchlich) – Glocke und Höhe bleiben geschätzt
-  const MOTOR_SHEET = { '2004': { g: 16.8, src: 'GEPRC GR2004' }, '2207': { d: 28.5, h: 19.7, g: 33.8, src: 'iFlight XING-E 2207' }, '2806.5': { d: 35.1, h: 21.3, g: 54, src: 'iFlight XING 2806.5' } };
+  // Datenblätter (Händler- oder Herstellerseite, nachgeprüft); lk = Lochkreis dieses Motors, wenn er vom ersten Wert abweicht.
+  // 1404, 2004, 2306 aus Gemini Prompt M am 22.10.2026 bestätigt; beim 1404 und 2004 sagt die Quelle nicht, ob die Höhe die Welle einschließt.
+  const MOTOR_SHEET = {
+    '1404': { d: 19.9, h: 13.5, g: 9.1, lk: 9, src: 'iFlight XING2 1404' },
+    '2004': { d: 24.3, h: 17.25, g: 16.4, src: 'T-Motor F2004' },
+    '2207': { d: 28.5, h: 19.7, g: 33.8, src: 'iFlight XING-E 2207' },
+    '2306': { d: 30, h: 18.7, g: 32.5, src: 'iFlight XING2 2306' },
+    '2806.5': { d: 35.1, h: 21.3, g: 54, src: 'iFlight XING 2806.5' },
+  };
   function motors() {
     return (FPV_DATA.motoren || []).map((m) => {
       const s = MOTOR_SHEET[m.stator];
       const d = s && s.d ? s.d : m.glocke_d_mm;
-      return { stator: m.stator, d, h: s && s.h ? s.h : round(d * 0.7, 1), g: s ? s.g : '', circle: m.lochkreis_d_mm[m.lochkreis_d_mm.length - 1], screw: m.schraube.split(' ')[0], props: m.propeller_zoll, sheet: !!s, est: !(s && s.h), src: s ? s.src : null };
+      return { stator: m.stator, d, h: s && s.h ? s.h : round(d * 0.7, 1), g: s ? s.g : '', circle: s && s.lk ? s.lk : m.lochkreis_d_mm[m.lochkreis_d_mm.length - 1], screw: m.schraube.split(' ')[0], props: m.propeller_zoll, sheet: !!s, est: !(s && s.h), src: s ? s.src : null };
     });
   }
   function motor(stator) { return motors().find((m) => m.stator === stator) || motors().find((m) => m.stator === '2207'); }

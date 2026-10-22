@@ -40,12 +40,13 @@ const DroneTpl = (() => {
 
   // ---------- Auswahl für den Frame-Assistenten ----------
   const SIZES = {
-    3: { Armbreite: 8, Armdicke: 3, Plattenbreite: 30, Plattenlänge: 90, Plattendicke: 1.5, Bolzenhöhe: 20, stack: 20, motor: '1404', akku: '4S 450 mAh', prop: 2 },
+    // prop = Gewicht eines Propellers in g: 3" Gemfan D76 (3 g), 5" Gemfan Hurricane 51466 V2 (4,2 g), 7" HQProp 7x4x3 (9,7 g) laut Händler; sonst Schätzwerte
+    3: { Armbreite: 8, Armdicke: 3, Plattenbreite: 30, Plattenlänge: 90, Plattendicke: 1.5, Bolzenhöhe: 20, stack: 20, motor: '1404', akku: '4S 450 mAh', prop: 3 },
     3.5: { Armbreite: 9, Armdicke: 3.5, Plattenbreite: 32, Plattenlänge: 95, Plattendicke: 2, Bolzenhöhe: 20, stack: 25.5, motor: '2004', akku: '4S 850 mAh', prop: 3 },
     4: { Armbreite: 10, Armdicke: 4, Plattenbreite: 34, Plattenlänge: 100, Plattendicke: 2, Bolzenhöhe: 22, stack: 20, motor: '2004', akku: '4S 650 mAh', prop: 3 },
-    5: { Armbreite: 13, Armdicke: 5, Plattenbreite: 42, Plattenlänge: 130, Plattendicke: 2, Bolzenhöhe: 25, stack: 30.5, motor: '2207', akku: '6S 1300 mAh', prop: 4.5 },
+    5: { Armbreite: 13, Armdicke: 5, Plattenbreite: 42, Plattenlänge: 130, Plattendicke: 2, Bolzenhöhe: 25, stack: 30.5, motor: '2207', akku: '6S 1300 mAh', prop: 4.2 },
     6: { Armbreite: 14, Armdicke: 5.5, Plattenbreite: 44, Plattenlänge: 140, Plattendicke: 2, Bolzenhöhe: 28, stack: 30.5, motor: '2306', akku: '6S 1500 mAh', prop: 6 },
-    7: { Armbreite: 15, Armdicke: 6, Plattenbreite: 45, Plattenlänge: 150, Plattendicke: 2.5, Bolzenhöhe: 30, stack: 30.5, motor: '2806.5', akku: '6S 1500 mAh', prop: 7 },
+    7: { Armbreite: 15, Armdicke: 6, Plattenbreite: 45, Plattenlänge: 150, Plattendicke: 2.5, Bolzenhöhe: 30, stack: 30.5, motor: '2806.5', akku: '6S 1500 mAh', prop: 9.7 },
   };
   const FORMS = { x: ['True-X', 45, 45], stretch: ['Stretched-X', 35, 35], wide: ['Wide-X', 55, 55], deadcat: ['Deadcat', 60, 35], cine: ['Cinewhoop', 45, 45], speed: ['Speed-Rumpf', 55, 55] };
   const ZOLL = [3, 3.5, 4, 5, 6, 7];
@@ -125,7 +126,7 @@ const DroneTpl = (() => {
   const sizeOf = (zoll) => SIZES[zoll] || SIZES[ZOLL.reduce((b, z) => (Math.abs(z - zoll) < Math.abs(b - zoll) ? z : b), 5)];
   // vollständige Einstellung aus einer kurzen Auswahl (o.frame: Rahmen eines Herstellers mit festen Maßen)
   function config(o = {}) {
-    const zoll = o.zoll || 5, form = FORMS[o.form] ? o.form : 'x', F = FORMS[form];
+    const zoll = o.zoll || 5, form = FORMS[o.form] ? o.form : 'x', F = [...FORMS[form]];
     const cine = form === 'cine', speed = form === 'speed';
     const S = { ...sizeOf(zoll) };
     if (o.Plattendicke) S.Plattendicke = o.Plattendicke;
@@ -142,7 +143,9 @@ const DroneTpl = (() => {
     const rp = (zoll * 25.4) / 2;
     const duct = cine ? { gap: o.ductGap != null ? o.ductGap : 3, wall: 1.6 } : null;
     const akkuName = o.akku === undefined ? S.akku : o.akku, akku = akkuName ? DroneLib.akku(akkuName) : null;
-    const fus = speed ? fuselage(stack, vtx, cam, akku, 20) : null;
+    // Stack-Gewicht nach Lochbild (SpeedyBee laut Hersteller): 20 × 20 F405 Mini 9,6 + 7,2 g, 25,5 F745 AIO 10,1 g, 30,5 F405 V4 10,5 + 23,5 g
+    const stackG = { 20: 16.8, 25.5: 10.1, 30.5: 34 }[stack] || 20;
+    const fus = speed ? fuselage(stack, vtx, cam, akku, stackG) : null;
     // Speed: so eng wie möglich – 8 % Propeller Luft nach vorne/hinten, 5 mm zwischen Rumpf und Propellerkreis
     const speedA = (D) => Math.ceil(Math.max((1.08 * 2 * rp) / Math.cos(R(F[1])), (2 * (rp + D / 2 + 5)) / Math.sin(R(F[1]))) / 5) * 5;
     let A = o.A || (duct ? Math.ceil((2 * rp + 2 * (duct.gap + duct.wall) + 4) / Math.sin(R(F[1])) / 5) * 5 : fus ? speedA(fus.D) : wheelbase(zoll, F[1], F[2]));
@@ -151,6 +154,14 @@ const DroneTpl = (() => {
       S.Plattenlänge = Math.max(100, Math.ceil((2 * Math.max(-fus.front, fus.rear)) / 5) * 5);
       S.Plattenbreite = Math.max(Wmin, S.Plattenbreite, akku ? Math.ceil((akku.w + 12) / 2) * 2 : 0);
       if (o.A && o.frame) while ((A / 2) * Math.sin(R(F[1])) - rp - fus.D / 2 < 3 && A < 800) A += 1;   // Herstellerrahmen: notfalls mehr Achsabstand
+    }
+    if (o.frame && !duct && !fus) {
+      // Herstellerrahmen: Tracerys Armwinkel sind Richtwerte – überlappen damit die Propeller, die Winkel so weit
+      // anpassen, dass 5 mm Luft bleiben (Deadcat: hinten weiter auseinander, Wide-/Stretched-X: Richtung 45°)
+      for (let i = 0; i < 25 && tipGap(A, zoll, F[1], F[2]) < 5; i++) {
+        if (form === 'deadcat') F[2]++;
+        else if (F[1] !== 45) { const d = F[1] > 45 ? -1 : 1; F[1] += d; F[2] += d; } else break;
+      }
     }
     if (o.A && !speed) {
       // fester Achsabstand (eingetippt oder vom Hersteller): erst die Platten kürzer und schmaler, bis Kamera und Bolzen frei sind –
@@ -184,7 +195,7 @@ const DroneTpl = (() => {
       akku, fus,
       vtx: vtx ? { name: vtx.name.replace(/\s*\(Sendeeinheit.*\)/, '') + (vid[2] ? ' Sender' : ''), src: vtx.name, lochbild: vtx.lochbild, l: vtx.l_mm, b: vtx.b_mm, h: vtx.h_mm, g: vtx.gewicht_g ?? '' } : null,
       cam: cam ? { name: cam.name.replace(/\s*\(Kameramodul\)/, ' Kamera'), l: cam.l_mm, b: cam.b_mm, h: cam.h_mm, g: cam.gewicht_g ?? '' } : { name: 'Kamera (Platzhalter)', g: 6 },
-      stackG: 20, thrust: th ? th.g : null, thrustSrc: th ? th.src : null,
+      stackG, thrust: th ? th.g : null, thrustSrc: th ? th.src : null,
     };
   }
   // Rahmen eines Herstellers (rahmen.json) als Einstellung für config(): Maße fest, Kaufteile nach Größe
@@ -359,7 +370,7 @@ const DroneUI = (() => {
           if (fr) Object.assign(o, DroneTpl.fromFrame(fr)); else o.A = null;
           draw();
         }),
-        sel('fa-zoll', 'Propeller', o.zoll, DroneTpl.ZOLL.map((z) => [String(z), `${zs(z)} Zoll (${fmt(z * 25.4, 1)} mm)`]), (v) => { free(); o.zoll = +v; const s = DroneTpl.SIZES[o.zoll]; o.stack = s.stack; o.motor = s.motor; o.akku = s.akku; o.A = null; draw(); }),
+        sel('fa-zoll', 'Propeller', o.zoll, [...new Set([...DroneTpl.ZOLL, o.zoll])].sort((a, b) => a - b).map((z) => [String(z), `${zs(z)} Zoll (${fmt(z * 25.4, 1)} mm)`]), (v) => { free(); o.zoll = +v; const s = DroneTpl.SIZES[o.zoll]; o.stack = s.stack; o.motor = s.motor; o.akku = s.akku; o.A = null; draw(); }),
         sel('fa-form', 'Rahmenform', o.form, Object.entries(DroneTpl.FORMS).map(([k, v]) => [k, `${v[0]} (${v[1]}°${v[1] !== v[2] ? ' / ' + v[2] + '°' : ''})`]), (v) => { free(); o.form = v; o.A = null; draw(); }),
         sel('fa-stack', 'Stack', o.stack, DroneLib.stacks().map((s) => [String(s.a), `${s.name} · ${s.screw}`]), (v) => { o.stack = +v; draw(); }),
         sel('fa-motor', 'Motor', o.motor, motors.map((m) => [m.stator, `${m.stator} · Lochkreis ${fmt(m.circle, 1)} · ${m.g !== '' ? fmt(m.g, 1) + ' g' : 'Gewicht eintragen'}`]), (v) => { o.motor = v; draw(); }),
@@ -370,7 +381,8 @@ const DroneUI = (() => {
       if (o.form === 'speed') f.append(UI.numField({ id: 'fa-tilt', label: 'Motorneigung (so schräg fliegt sie schnell)', value: cfg.params.Motorneigung, unit: '°', onCommit: (v) => { const n = parseFloat(String(v).replace(',', '.')); o.tilt = isFinite(n) ? Math.max(0, Math.min(45, n)) : null; draw(); } }));
       body.append(f);
       // Vorschau der wichtigsten Werte
-      const gap = DroneTpl.tipGap(A, o.zoll, F[1], F[2]);
+      const wv = cfg.params.Armwinkel, wh = typeof cfg.params.Armwinkel_hinten === 'number' ? cfg.params.Armwinkel_hinten : wv;   // bei Herstellerrahmen angepasst
+      const gap = DroneTpl.tipGap(A, o.zoll, wv, wh);
       const m = motors.find((x) => x.stator === o.motor);
       const warn = [];
       if (gap < 0) warn.push('Die Propeller überlappen sich – größerer Achsabstand nötig.');
@@ -387,7 +399,7 @@ const DroneUI = (() => {
         <div class="mini-row"><span class="grow">Motorlochkreis</span><b class="mono">${m ? fmt(m.circle, 1) + ' mm · ' + m.screw : '–'}</b></div>
         ${extra.map(([a, b]) => `<div class="mini-row"><span class="grow">${a}</span><b class="mono">${b}</b></div>`).join('')}</div>` +
         (grown ? `<div class="hint-box warn" id="fa-grown">Der Hersteller hat ${fmt(fr.achsabstand_mm, 0)} mm Achsabstand. Tracerys einfacher Rumpf braucht ${fmt(A, 0)} mm, damit Kamera und Bolzen nicht in die Propeller${o.form === 'cine' ? '-Ducts' : 'kreise'} ragen – das Original baut dort enger.</div>` : '') +
-        (fr ? `<div class="hint-box" id="fa-frame"><b>Nachbau nach Herstellermaßen</b> – Achsabstand ${fmt(fr.achsabstand_mm, 0)} mm, Arme ${fmt(fr.armdicke_mm, 1)} mm${fr.stack_mm ? `, Stack ${fmt(fr.stack_mm, 1)} mm` : ''}. Die Umrisse sind vereinfacht. Original-Rahmen: ${fmt(fr.gewicht_g, 1)} g · <a href="${esc(fr.quelle)}" target="_blank" rel="noopener">Quelle</a>${fr.notiz ? `<br><span class="muted">${esc(fr.notiz)}</span>` : ''}</div>` : '') +
+        (fr ? `<div class="hint-box" id="fa-frame"><b>Nachbau nach Herstellermaßen</b> – Achsabstand ${fmt(fr.achsabstand_mm, 0)} mm, Arme ${fmt(fr.armdicke_mm, 1)} mm${fr.stack_mm ? `, Stack ${fmt(fr.stack_mm, 1)} mm` : ''}. Die Umrisse sind vereinfacht. Original-Rahmen: ${fr.gewicht_g ? fmt(fr.gewicht_g, 1) + ' g' : 'Gewicht nicht angegeben'} · <a href="${esc(fr.quelle)}" target="_blank" rel="noopener">Quelle</a>${fr.notiz ? `<br><span class="muted">${esc(fr.notiz)}</span>` : ''}</div>` : '') +
         (warn.length ? `<div class="hint-box warn" id="fa-warn">${warn.join('<br>')}</div>` : grown ? '' : '<div class="hint-box">Alles passt. Nach dem Bauen änderst du jedes Maß links unter „Maße“.</div>');
       body.append(out);
     };

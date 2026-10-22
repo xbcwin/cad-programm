@@ -148,7 +148,9 @@ Stand: 21.10.2026 · nach Sitzung 18 (Bauplan mit 14 Sitzungen abgeschlossen)
 - [x] Fester Achsabstand: Platten werden kürzer und schmaler, bis Kamera und Bolzen frei sind; passt Tracerys Rumpf nicht (Cinelog35: 142 mm), nimmt der Nachbau so viel mehr wie nötig und sagt das
 - [x] Drohnen-Check vergleicht beim Nachbau das Rahmengewicht im Modell mit dem Original
 - [x] KI-Kollege kennt die neuen Formen, 3,5 Zoll und die Herstellerrahmen („Bau mir den AOS HS5 nach“)
-- [x] Motor 2004 mit Gewicht (GEPRC GR2004, 16,8 g; Glocke und Höhe weiter geschätzt)
+- [x] 6 weitere Herstellerrahmen aus Gemini Prompt L, jeder auf einer Händlerseite nachgeprüft: iFlight AOS 5 V5.1, iFlight Cidora SL5 V2.1 HD, iFlight Chimera7 Pro V2 O4 (7,5 Zoll), Foxeer Caesar 5", HGLRC Rekon7 Pro V2, Sub250 OasisFly35 DC – zusammen 13 Vorlagen. 14 von Geminis 20 Vorschlägen verworfen: 3 gibt es nicht (alle drei „Speed-Rahmen“), bei mehreren stimmten Achsabstand oder Gewicht nicht, einige ohne Quelle, 5 kleiner als 3 Zoll
+- [x] Herstellerrahmen: Würden sich mit Tracerys Richtwinkeln die Propeller berühren, passen sich die Armwinkel an (Deadcat hinten weiter, Wide-X Richtung 45°)
+- [x] Kaufteile aus Gemini Prompt M nachgeprüft: Motoren 1404 (iFlight XING2, 9,1 g, Lochkreis 9), 2004 (T-Motor F2004, 16,4 g), 2306 (iFlight XING2, 32,5 g) mit Datenblatt-Maßen; Stack-Gewicht je Lochbild (SpeedyBee: 20 × 20 16,8 g, 25,5 AIO 10,1 g, 30,5 34 g); Propeller 3" 3 g, 5" 4,2 g, 7" 9,7 g; Akkus 3S 450, 4S 1100, 6S 1100; Kameras Caddx Ratel 2 und RunCam Phoenix 2 Nano. Nicht übernommen: Happymodel 1103 (anderes Lochbild), Crossfire Nano RX und Razer Mini/Ant (Maße fehlen), Auline-Li-Ion und HQProp 5.1 (widersprüchliche Angaben), Antennen (brauchen erst eine eigene Form)
 
 ## Offen
 
@@ -181,7 +183,8 @@ Fertig.
 - [x] Lochbilder, Bauteil-Bibliothek, erste Detail-Bausteine (Kabelbinder, Gurtschlitz) (Sitzung 12)
 - [x] Speed-Drohne mit Stromlinien-Rumpf und geneigten Motoren, Cinewhoop mit Ducts, 3,5 Zoll, Rahmen von Herstellern (Sitzung 18)
 - [ ] Speed-Drohne: Verkleidungen für Arme und Motoren, Luftwiderstand ausrechnen
-- [ ] Mehr Herstellerrahmen (Gemini Prompt L) und mehr Kaufteile mit Gewicht (Prompt M)
+- [ ] Antennen als Kaufteile (Daten von Lumenier AXII 2, TrueRC Singularity, Foxeer Lollipop 4 liegen vor) – brauchen eine eigene Form
+- [ ] Größen 2 und 2,5 Zoll für kleine Cinewhoops (BetaFPV Pavo25 V2 ist schon nachgeprüft)
 - [ ] Herstellerrahmen mit Original-Umriss (heute: Tracerys Grundform mit den Herstellermaßen)
 - [ ] H-Rahmen und Rahmen mit getrennten Armen (Sandwich)
 - [ ] Weitere Detail-Bausteine: Antennenhalter, XT60-Halter, GoPro-Halter

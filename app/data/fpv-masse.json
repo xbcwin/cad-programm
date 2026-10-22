@@ -1,5 +1,5 @@
 {
-  "_hinweis": "FPV-Standardmaße (Entwurf Gemini, Prompt E; geprüft und ergänzt). Alle Maße in mm. 'ca': true heißt: Hersteller weichen spürbar ab – nur als Startwert verwenden. Stack-Lochbilder sind Quadrate (Kantenlänge), Motor-Lochbilder sind Lochkreise (Durchmesser, 4 Löcher im 90°-Abstand). Geprüft am 19.10.2026 u. a. mit Herstellerangaben (BetaFPV 1103, iFlight XING 2806.5).",
+  "_hinweis": "FPV-Standardmaße (Entwurf Gemini, Prompt E; geprüft und ergänzt). Alle Maße in mm. 'ca': true heißt: Hersteller weichen spürbar ab – nur als Startwert verwenden. Stack-Lochbilder sind Quadrate (Kantenlänge), Motor-Lochbilder sind Lochkreise (Durchmesser, 4 Löcher im 90°-Abstand). Geprüft am 19.10.2026 u. a. mit Herstellerangaben (BetaFPV 1103, iFlight XING 2806.5). Am 22.10.2026 drei Akkus aus Gemini Prompt M ergänzt (nachgeprüft).",
   "stack": [
     {
       "name": "16×16",
@@ -209,6 +209,15 @@
   ],
   "akkus": [
     {
+      "typ": "3S 450 mAh",
+      "l_mm": 45.0,
+      "b_mm": 24.0,
+      "h_mm": 21.0,
+      "gewicht_g": 42,
+      "produkt": "Tattu 450 mAh 3S 75C (XT30)",
+      "quelle": "https://genstattu.com/tattu-450mah-11-1v-75c-3s1p-lipo-battery-pack-with-xt30-plug.html"
+    },
+    {
       "typ": "4S 450 mAh",
       "l_mm": 62.3,
       "b_mm": 16.6,
@@ -252,6 +261,24 @@
       "gewicht_g": 145,
       "produkt": "Tattu R-Line V5 850 mAh 6S 150C (XT30)",
       "quelle": "https://www.rotorama.de/product/tattu-r-line-850mah-6s-150c-v5-xt30"
+    },
+    {
+      "typ": "4S 1100 mAh",
+      "l_mm": 78.0,
+      "b_mm": 38.0,
+      "h_mm": 21.0,
+      "gewicht_g": 140,
+      "produkt": "CNHL Black Series 1100 mAh 4S 130C (XT60)",
+      "quelle": "https://chinahobbyline.com/products/cnhl-black-series-v-2-0-1100mah-14-8v-4s-130c-lipo-battery-with-xt60-plug"
+    },
+    {
+      "typ": "6S 1100 mAh",
+      "l_mm": 77.0,
+      "b_mm": 35.0,
+      "h_mm": 37.0,
+      "gewicht_g": 173,
+      "produkt": "GNB 1100 mAh 6S 120C HV (XT60)",
+      "quelle": "https://rotorvillage.ca/gnb-1100mah-6s-120c-hv-lipo-xt60/"
     },
     {
       "typ": "4S 1300 mAh",

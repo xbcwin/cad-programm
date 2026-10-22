@@ -478,7 +478,11 @@ def t_speed_neigung(p):
 def t_herstellerrahmen(p):
     p.pg.locator('.card.drone[data-tpl="assist"]').click(); p.wait(600)
     opts = p.pg.evaluate("[...document.querySelectorAll('#fa-vorlage option')].map(o=>o.textContent)")
-    ok1 = len(opts) >= 8 and opts[0] == 'Eigener Rahmen' and any('TBS Source One V5' in o for o in opts) and any('AOS RC HS5' in o for o in opts)
+    ok1 = len(opts) == 14 and opts[0] == 'Eigener Rahmen' and any('TBS Source One V5' in o for o in opts) and any('AOS RC HS5' in o for o in opts)
+    # 7,5-Zoll-Rahmen: die Größe steht dann auch in der Auswahl
+    fid = p.ev("return DroneLib.frames().find(f=>f.name==='Chimera7 Pro V2 O4').id")
+    p.pg.select_option('#fa-vorlage', fid); p.wait(400)
+    ok1 = ok1 and p.pg.input_value('#fa-zoll') == '7.5' and '355 g' in p.pg.locator('#fa-frame').inner_text() and 'überlappen' not in p.pg.locator('#fa-out').inner_text()
     fid = p.ev("return DroneLib.frames().find(f=>f.name==='Source One V5').id")
     p.pg.select_option('#fa-vorlage', fid); p.wait(400)
     t = p.pg.locator('#fa-frame').inner_text()
@@ -1472,7 +1476,7 @@ def t_frame_assistent(p):
     ok2 = gap >= 15 and p.pg.locator('#fa-warn').count() == 0
     p.pg.locator('.modal .btn.primary').filter(has_text='Rahmen bauen').click(); warte_rechnen(p)
     P = p.ev("return Object.fromEntries(App.doc.params.map(x=>[x.name,x.expr]))")
-    ok3 = P['Armwinkel'] == 60 and P['Armwinkel_hinten'] == 35 and P['Stack'] == 20 and P['Motorlochkreis'] == 12 and abs(P['Kamerabreite'] - 12.36) < 1e-6
+    ok3 = P['Armwinkel'] == 60 and P['Armwinkel_hinten'] == 35 and P['Stack'] == 20 and P['Motorlochkreis'] == 9 and abs(P['Kamerabreite'] - 12.36) < 1e-6
     names = p.ev("return App.doc.items.map(i=>i.name)")
     ok4 = 'DJI O4 Air Unit Sender' in names and 'DJI O4 Air Unit Kamera' in names and 'Akku 4S 450 mAh' in names and p.ev("return App.errors.length") == 0
     # die vorderen Arme sind weiter gespreizt als die hinteren
@@ -1495,12 +1499,12 @@ def t_drohnen_teile(p):
     p.empty()
     p.pg.locator('#t-drone').click(); p.wait(400)
     p.pg.locator('.flyout .chip[data-cat="akku"]').click(); p.wait(300)
-    ok1 = p.pg.locator('.flyout .tile').count() == 9                    # 4S 450 bis 6S 1500
+    ok1 = p.pg.locator('.flyout .tile').count() == 12                   # 3S 450 bis 6S 1500
     p.pg.locator('.flyout .tile').filter(has_text='6S 1300').first.click(); p.wait(2500)
     ok2 = p.ev("const it=App.doc.items[0]; return it.massG===215 && it.name==='Akku 6S 1300 mAh'") and '(fest)' in (p.pg.locator('#p-mass').text_content() or '')
     p.pg.locator('#t-drone').click(); p.wait(400)
     p.pg.locator('.flyout .chip[data-cat="motor"]').click(); p.wait(300)
-    p.pg.locator('.flyout .tile').filter(has_text='Motor 1404').first.click(); p.wait(2500)
+    p.pg.locator('.flyout .tile').filter(has_text='Motor 1103').first.click(); p.wait(2500)
     ok3 = p.ev("return App.doc.items[1].massG") == '' and p.pg.locator('.hint-box.warn').filter(has_text='Gewicht fehlt').count() == 1
     p.ev("App.clearSelection()"); p.wait(1500)
     ok4 = 'fehlt noch das Gewicht' in p.pg.locator('.section').filter(has_text='Schwerpunkt').inner_text()

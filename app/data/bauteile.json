@@ -1,5 +1,5 @@
 {
-  "_hinweis": "Kaufteile für die Bauteil-Bibliothek (Entwurf Gemini, Prompt F). Maße in mm, Gewicht in g. 'geprueft': am 19.10.2026 mit der Hersteller- oder Händlerseite verglichen. 'unsicher': Wert fehlt oder ist abgeleitet. Lochbild = Quadrat-Seitenlänge. Am 20.10.2026 mit Gemini Prompt K nachgeprüft: 9 weitere Teile bestätigt, 2 berichtigt (GPS); XT60H und XT30U ohne vollständige Herstellerangaben.",
+  "_hinweis": "Kaufteile für die Bauteil-Bibliothek (Entwurf Gemini, Prompt F). Maße in mm, Gewicht in g. 'geprueft': am 19.10.2026 mit der Hersteller- oder Händlerseite verglichen. 'unsicher': Wert fehlt oder ist abgeleitet. Lochbild = Quadrat-Seitenlänge. Am 20.10.2026 mit Gemini Prompt K nachgeprüft: 9 weitere Teile bestätigt, 2 berichtigt (GPS); XT60H und XT30U ohne vollständige Herstellerangaben. Am 22.10.2026 aus Gemini Prompt M zwei analoge Kameras ergänzt (nachgeprüft).",
   "videosender": [
     {
       "name": "DJI O3 Air Unit (Sendeeinheit)",
@@ -149,6 +149,34 @@
       "quelle": "https://www.team-blacksheep.com/products/prod:unifypro32_hv",
       "unsicher": false,
       "geprueft": true
+    },
+    {
+      "name": "Caddx Ratel 2 Kamera (analog, Micro)",
+      "hersteller": "Caddx",
+      "l_mm": 20.0,
+      "b_mm": 19.0,
+      "h_mm": 19.0,
+      "gewicht_g": 5.9,
+      "lochbild": null,
+      "kamera_breite_mm": 19.0,
+      "quelle": "https://sequremall.com/products/caddx-ratel-2-analog-camera-165-viewing-angle-racing-drone-fpv-camera",
+      "unsicher": false,
+      "geprueft": true,
+      "notiz": "19 × 19 × 20 mm, 5,9 g"
+    },
+    {
+      "name": "RunCam Phoenix 2 Nano Kamera (analog)",
+      "hersteller": "RunCam",
+      "l_mm": 22.0,
+      "b_mm": 14.0,
+      "h_mm": 14.0,
+      "gewicht_g": 5.0,
+      "lochbild": null,
+      "kamera_breite_mm": 14.0,
+      "quelle": "https://www.hobbydrone.cz/runcam-phoenix-2-nano/",
+      "unsicher": false,
+      "geprueft": true,
+      "notiz": "14 × 14 × 22 mm, 5 g; beim Händler ausgelaufen"
     }
   ],
   "empfaenger": [

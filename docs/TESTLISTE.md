@@ -497,7 +497,7 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
   Erwartet: Die Ducts werden höher und enden 1 mm unter der Oberplatte; nichts steckt ineinander.
 - [x] **Rahmen von Herstellern**
   Schritte: 1. Frame-Assistent → „Vorlage“: TBS Source One V5. 2. „Rahmen bauen“. 3. Drohnen-Check.
-  Erwartet: Achsabstand 226 mm (Hersteller), Hinweis „Nachbau nach Herstellermaßen“ mit 123,5 g und Quelle; Arme 6 mm, Oberplatte 2 mm, Bolzen 30 mm; im Check die Zeile „Rahmen gegen Original“.
+  Erwartet: 13 Vorlagen; Achsabstand 226 mm (Hersteller), Hinweis „Nachbau nach Herstellermaßen“ mit 123,5 g und Quelle; Arme 6 mm, Oberplatte 2 mm, Bolzen 30 mm; im Check die Zeile „Rahmen gegen Original“. Bei „iFlight Chimera7 Pro V2 O4“ steht 7,5 Zoll in der Auswahl, die Propeller überlappen nicht.
 - [x] **Cinelog35 mit Hinweis**
   Schritte: 1. Frame-Assistent → „Vorlage“: GEPRC Cinelog35 V2. 2. Danach die Rahmenform auf True-X stellen.
   Erwartet: Gelber Hinweis: Hersteller 142 mm, Tracery braucht mehr; nach dem Umstellen steht die Vorlage wieder auf „Eigener Rahmen“.
