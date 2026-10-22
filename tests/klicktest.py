@@ -424,17 +424,21 @@ def t_bausaetze_neu(p):
     drohne(p, 'r5')
     c = chk(p)
     ok2 = p.ev("return App.errors.length") == 0 and ok_check(c) and p.ev("return App.doc.params.find(x=>x.name==='Armwinkel').expr") == 35
-    # Speed: Rumpf statt Oberplatte, Kamera in der Nase, Akku unten
+    # Speed: Stromlinien-Rumpf mit Kamera in der Nase, Stack und Akku innen, Motoren auf Keilen geneigt
     p.ev("App.setDoc(DroneTpl.build('s5')); Start.hide()"); warte_rechnen(p, 90)
     names = p.ev("return App.doc.items.map(i=>i.name)")
     c = chk(p)
     V = p.ev("return Model.vars(App.doc).v")
-    tip = -(V['Rumpflänge'] / 2 + V['Nasenlänge'])
-    cam = p.ev("const it=App.doc.items.find(i=>/Kamera/.test(i.name)); const r=App.results.get(it.id); const t=Model.tNumeric(it); return [r.data.bbox[1]+t.y, r.data.bbox[4]+t.y]")
-    akku = p.ev("const it=App.doc.items.find(i=>/^Akku/.test(i.name)); const r=App.results.get(it.id); return r.data.bbox[5]+Model.tNumeric(it).z")
-    rumpf = p.ev("const it=App.doc.items.find(i=>i.name==='Rumpf'); const r=App.results.get(it.id); return [it.mat, r.data.bbox.map(x=>Math.round(x*10)/10)]")
-    ok3 = 'Rumpf' in names and 'Oberplatte' not in names and 'Abstandsbolzen' not in names and p.ev("return App.errors.length") == 0 and ok_check(c)
-    ok4 = cam[0] >= tip - 0.6 and cam[1] <= tip + V['Nasenlänge'] and abs(akku) < 0.01 and rumpf[0] == 'PETG' and abs(rumpf[1][3] - V['Rumpfdurchmesser'] / 2) < 0.2 and abs(rumpf[1][2] - V['Armdicke']) < 0.2
+    tip = V['Rumpfmitte'] - V['Rumpflänge'] / 2 - V['Nasenlänge']
+    end = V['Rumpfmitte'] + V['Rumpflänge'] / 2 + V['Hecklänge']
+    wb = "const r=App.results.get(it.id); const t=Model.tNumeric(it); return [r.data.bbox[1]+t.y, r.data.bbox[4]+t.y, r.data.bbox[2]+t.z, r.data.bbox[5]+t.z, r.data.bbox[3]+t.x]"
+    cam = p.ev("const it=App.doc.items.find(i=>/Kamera/.test(i.name)); " + wb)
+    akku = p.ev("const it=App.doc.items.find(i=>/^Akku/.test(i.name)); " + wb)
+    rumpf = p.ev("const it=App.doc.items.find(i=>i.name==='Rumpf'); " + wb)
+    mot = p.ev("const g=App.doc.items.find(i=>/^Motor /.test(i.name)); return g.children.map(c=>Model.tNumeric(c).rx)")
+    ok3 = 'Rumpf' in names and 'Motorkeile' in names and 'Oberplatte' not in names and 'Abstandsbolzen' not in names and p.ev("return App.errors.length") == 0 and ok_check(c) and c['aero'][0] == 'info' and '20°' in c['aero'][1]
+    ok4 = (cam[0] >= tip - 0.6 and cam[1] <= tip + V['Nasenlänge'] and abs(akku[2] - (V['Armdicke'] + 0.5)) < 0.05 and akku[3] < V['Armdicke'] + V['Rumpfachse'] + V['Rumpfdurchmesser'] / 2
+           and abs(rumpf[0] - tip) < 0.3 and abs(rumpf[1] - end) < 0.3 and abs(rumpf[4] - V['Rumpfdurchmesser'] / 2) < 0.3 and mot == [20, 20, 20, 20])
     # Cinewhoop: vier Ducts, die mit den Bolzen mitwachsen
     p.ev("App.setDoc(DroneTpl.build('c35')); Start.hide()"); warte_rechnen(p, 90)
     c = chk(p)
@@ -444,6 +448,31 @@ def t_bausaetze_neu(p):
     top = p.ev("const it=App.doc.items.find(i=>i.name==='Ducts (4×)'); return App.results.get(it.id).data.bbox[5]")
     ok6 = abs(top - (3.5 + 29)) < 0.05 and chk(p)['clash'][0] == 'ok'
     return [ok1, ok2, ok3, ok4, ok5, ok6]
+
+
+def t_speed_neigung(p):
+    p.pg.locator('.card.drone[data-tpl="assist"]').click(); p.wait(600)
+    ok1 = p.pg.locator('#fa-tilt').count() == 0
+    p.pg.select_option('#fa-form', 'speed'); p.wait(400)
+    ok2 = p.pg.input_value('#fa-tilt') == '20' and 'Akku innen' in p.pg.locator('#fa-out').inner_text() and p.pg.locator('#fa-warn').count() == 0
+    # zu viel Neigung beim 7": Warnung mit der größten passenden Neigung
+    p.pg.select_option('#fa-zoll', '7'); p.wait(300)
+    field(p, '#fa-tilt', 35); p.wait(300)
+    ok1 = ok1 and 'höchstens 28°' in p.pg.locator('#fa-warn').inner_text()
+    p.pg.select_option('#fa-zoll', '5'); p.wait(300)
+    field(p, '#fa-tilt', 30); p.wait(300)
+    p.pg.locator('.modal .btn.primary').filter(has_text='Rahmen bauen').click(); warte_rechnen(p, 90)
+    V = p.ev("return Model.vars(App.doc).v")
+    ok3 = V['Motorneigung'] == 30 and abs(V['Keilhöhe'] - (1 + (16 + 9) / 2 * math.tan(math.radians(30)))) < 0.01 and p.ev("return App.errors.length") == 0
+    c = chk(p)
+    ok4 = ok_check(c) and '30°' in c['aero'][1]
+    # ohne Neigung: Keile 1 mm, Propeller waagerecht, weiterhin alles frei
+    p.ev("App.change('x', d=>{ d.params.find(x=>x.name==='Motorneigung').expr=0; })"); warte_rechnen(p)
+    V = p.ev("return Model.vars(App.doc).v")
+    keil = p.ev("const it=App.doc.items.find(i=>i.name==='Motorkeile'); const r=App.results.get(it.id); return r.data.bbox[5]")
+    c = chk(p)
+    ok5 = abs(V['Keilhöhe'] - 1) < 1e-6 and abs(keil - (V['Armdicke'] + 1)) < 0.05 and ok_check(c) and 'geneigten Motoren' in c['aero'][1]
+    return [ok1, ok2, ok3, ok4, ok5]
 
 
 def t_herstellerrahmen(p):
@@ -473,7 +502,7 @@ def t_herstellerrahmen(p):
 def t_kollege_herstellerrahmen(p):
     ki(p); p.empty()
     ki_fragen(p, 'Bau mir den AOS HS5 nach', {'antwort': 'Ich baue den AOS RC HS5 nach.', 'aktionen': [{'op': 'drohne', 'rahmen': 'HS5 High-Speed'}, {'op': 'pruefen'}]}, 120)
-    ok1 = p.ev("return App.doc.drone && App.doc.drone.form==='speed' && App.doc.drone.frame && App.doc.drone.frame.hersteller==='AOS RC'") and p.ev("return App.doc.params.find(x=>x.name==='Achsabstand').expr") == 233
+    ok1 = p.ev("return App.doc.drone && App.doc.drone.form==='speed' && App.doc.drone.frame && App.doc.drone.frame.hersteller==='AOS RC' && App.doc.drone.frame.a===233") and p.ev("return App.doc.params.find(x=>x.name==='Achsabstand').expr") >= 233
     pr = p.ev("return window.__aiPrompts[0] || ''")
     ok2 = 'Source One V5' in pr and '"speed"' in pr and p.ev("return App.errors.length") == 0
     return [ok1, ok2]
@@ -1998,7 +2027,8 @@ TESTS = [
     ('KI-Kollege: alle / neu / ausrichten / färben / kopieren / drehen / auswählen', t_kollege_auswahl),
     ('Alles als Verbund ohne KI', t_verbund_ohne_ki),
     ('Fehlermeldung bleibt nach einer anderen Änderung', t_fehler_bleibt),
-    ('Neue Bausätze: Startseite / 5" Race / 5" Speed mit Rumpf / 3,5" Cinewhoop mit Ducts / Ducts wachsen mit', t_bausaetze_neu),
+    ('Neue Bausätze: Startseite / 5" Race / 5" Speed mit Stromlinien-Rumpf, Akku innen, geneigten Motoren / 3,5" Cinewhoop mit Ducts / Ducts wachsen mit', t_bausaetze_neu),
+    ('Speed-Drohne: Motorneigung im Frame-Assistenten, Warnung bei zu viel / Keile / Check mit schrägen Propellern / ohne Neigung', t_speed_neigung),
     ('Rahmen von Herstellern: Vorlage / Maße / Gewicht gegen Original / Cinelog35 mit Hinweis / Form löst Vorlage', t_herstellerrahmen),
     ('KI-Kollege baut einen Herstellerrahmen nach', t_kollege_herstellerrahmen),
     ('Formel-Beispiele', t_formel_beispiele), ('Einführung „Erste Skizze“', t_einfuehrung), ('Schraubenlöcher', t_schrauben),

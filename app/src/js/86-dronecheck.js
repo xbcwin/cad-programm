@@ -14,7 +14,10 @@ const DroneCheck = (() => {
     const motorGroup = doc.items.find((i) => /^Motor /.test(i.name || ''));
     const propGroup = doc.items.find((i) => /^Propeller/.test(i.name || ''));
     const mh = (doc.drone && doc.drone.motorH) || (motorGroup && motorGroup.children && motorGroup.children[0] ? Model.num(motorGroup.children[0].p.h, V, 20) : 20);
-    return { A, wv, wh, zoll: V.Propeller, D: V.Propeller * 25.4, zProp: V.Armdicke + mh + 1, motors, motorGroup, propGroup };
+    // geneigte Motoren (Speed-Rumpf): Propellerebene steht schräg, der Prüfkörper liegt entlang der Motorachse
+    const tilt = typeof V.Motorneigung === 'number' ? V.Motorneigung : 0, keil = typeof V.Keilhöhe === 'number' ? V.Keilhöhe : 0;
+    const zProp = V.Armdicke + keil + (mh + 1) * Math.cos(R(tilt)), dy = -(mh + 1) * Math.sin(R(tilt));
+    return { A, wv, wh, zoll: V.Propeller, D: V.Propeller * 25.4, zProp, dy, tilt, motors, motorGroup, propGroup, V };
   }
   const isDrone = (doc = App.doc) => !!geometry(doc);
   const label = (id) => { const f = Model.find(App.doc, id); return f ? Model.label(f.item) : 'ein Teil'; };
@@ -28,7 +31,8 @@ const DroneCheck = (() => {
     out.push({ id: 'gap', title: 'Propeller untereinander', s: gap < 0 ? 'bad' : gap < 5 ? 'warn' : 'ok', text: gap < 0 ? `Die Propeller überlappen sich um ${fmt(-gap, 1)} mm – Achsabstand vergrößern.` : `${fmt(gap, 1)} mm Luft zwischen den Propellerspitzen.` });
     // 2./3. Kollisionen aus dem CAD-Kern
     const skip = [g.motorGroup && g.motorGroup.id, g.propGroup && g.propGroup.id].filter(Boolean);
-    const probes = g.motors.map(([, x, y]) => ({ c: [x, y, g.zProp], r: g.D / 2 + 1, h: 6, skip }));   // Propellerebene: 1 bis 7 mm über dem Motor
+    const dir = g.tilt ? [0, -Math.sin(R(g.tilt)), Math.cos(R(g.tilt))] : null;
+    const probes = g.motors.map(([, x, y]) => ({ c: [x, y + g.dy, g.zProp], r: g.D / 2 + 1, h: 6, skip, ...(dir ? { dir } : {}) }));   // Propellerebene: 1 bis 7 mm über dem Motor
     let cl = null;
     try { cl = await Kernel.call('clashes', { scene: Model.kernelScene(doc), probes, skipPairs: g.propGroup ? [g.propGroup.id] : [] }); } catch (_) {}
     if (cl) {
@@ -67,6 +71,12 @@ const DroneCheck = (() => {
         out.push({ id: 'tw', title: 'Schub zu Gewicht', s: tw < 2 ? 'bad' : tw < 4 ? 'warn' : 'ok', text: `${fmt(tw, 1)} : 1 – ` + (tw < 2 ? 'zu schwach, hebt kaum ab.' : tw < 4 ? 'reicht für ruhiges Fliegen und Long Range.' : tw < 8 ? 'gut für Freestyle.' : 'genug für Rennen.') + src });
       } else out.push({ id: 'tw', title: 'Schub zu Gewicht', s: 'info', text: 'Trag unten den Schub pro Motor aus der Schubtabelle ein.' });
     }
+    // 7. Speed-Rumpf: Form und Fluglage
+    const V = g.V;
+    if (typeof V.Rumpfdurchmesser === 'number' && typeof V.Nasenlänge === 'number') {
+      const L = V.Nasenlänge + V.Rumpflänge + V.Hecklänge, D = V.Rumpfdurchmesser;
+      out.push({ id: 'aero', title: 'Stromlinie', s: 'info', text: `Rumpf ${fmt(L, 0)} mm lang und ${fmt(D, 0)} mm dick (${fmt(L / D, 1)} : 1), Akku und Elektronik liegen innen.` + (g.tilt ? ` Motoren ${fmt(g.tilt, 0)}° geneigt: Fliegt die Drohne mit ${fmt(g.tilt, 0)}° Schräglage, liegt der Rumpf genau im Fahrtwind.` : ' Mit geneigten Motoren (Maß „Motorneigung“) läge der Rumpf im schnellen Flug flach im Wind.') });
+    }
     last = { rev, list: out };
     return out;
   }
@@ -98,11 +108,12 @@ const DroneCheck = (() => {
 
 // ---------- Platten als DXF für die Fräse ----------
 const Plates = (() => {
-  // flache Teile der obersten Ebene: höchstens 12 mm dick, kein Kaufteil, kein Loch
+  // flache Teile der obersten Ebene: höchstens 12 mm dick, kein Kaufteil, kein Loch, nichts Gedrucktes (z. B. Motorkeile)
+  const PRINTED = ['PLA', 'PETG', 'ABS', 'ASA', 'TPU 95A', 'PA12', 'PC', 'POM'];
   function candidates() {
     const out = [];
     for (const it of App.doc.items) {
-      if (it.hidden || it.role === 'hole' || Mass.fixedOf(it)) continue;
+      if (it.hidden || it.role === 'hole' || Mass.fixedOf(it) || PRINTED.includes(Mass.materialFor(it).k)) continue;
       const b = Viewer.baseBox(it.id); if (!b) continue;
       const t = b.max.z - b.min.z; if (t > 12) continue;
       out.push({ id: it.id, name: Model.label(it), t });

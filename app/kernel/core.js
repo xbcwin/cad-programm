@@ -357,8 +357,40 @@ export function createKernel(R, oc) {
     if (lib === 'gear') {
       return buildGear(p);
     }
+    if (lib === 'aeroBody') return buildAeroBody(p);
     if (typeof lib === 'string' && lib.startsWith('buy')) return buildBuy(lib, p);
     throw new Error('Unbekanntes Bauteil: ' + lib);
+  }
+  // ---------- Stromlinien-Rumpf ----------
+  // Drehkörper längs der Y-Achse (Nase nach −Y), Achse auf z = 0, Mittelteil mittig um y = 0:
+  // Nase als halbe Ellipse von der Öffnung (dn) bis zum Durchmesser d, zylindrisches Mittelteil, langes Heck,
+  // das parabelförmig bis zur Heck-Öffnung dt ausläuft. Glatte Flächen (B-Splines), hohl mit Wandstärke wall.
+  function aeroSolid(Rr, rn, rt, ln, lc, lt, ext = 0) {
+    const n = 24, P = (r, z) => [r, 0, z], L = ln + lc + lt;
+    const nose = [], tail = [];
+    for (let i = 0; i <= n; i++) { const t = i / n; nose.push(P(rn + (Rr - rn) * Math.sqrt(Math.max(0, 1 - (1 - t) * (1 - t))), t * ln)); }
+    for (let i = 0; i <= n; i++) { const t = i / n; tail.push(P(Rr - (Rr - rt) * t * t, ln + lc + t * lt)); }
+    const sp = (pts) => R.makeBSplineApproximation(pts, { tolerance: 1e-3, degMax: 3, degMin: 2 });
+    const e = [];
+    if (ext) e.push(R.makeLine(P(0, -ext), P(rn, -ext)), R.makeLine(P(rn, -ext), P(rn, 0)));
+    else e.push(R.makeLine(P(0, 0), P(rn, 0)));
+    e.push(sp(nose));
+    if (lc > 0.01) e.push(R.makeLine(P(Rr, ln), P(Rr, ln + lc)));
+    e.push(sp(tail));
+    if (ext) e.push(R.makeLine(P(rt, L), P(rt, L + ext)), R.makeLine(P(rt, L + ext), P(0, L + ext)), R.makeLine(P(0, L + ext), P(0, -ext)));
+    else e.push(R.makeLine(P(rt, L), P(0, L)), R.makeLine(P(0, L), P(0, 0)));
+    const face = R.makeFace(R.assembleWire(e));
+    return R.revolution(face, [0, 0, 0], [0, 0, 1], 360);
+  }
+  function buildAeroBody(p) {
+    const d = pos(p.d, 60), Rr = d / 2, wall = Math.min(pos(p.wall, 1.6), Rr / 3);
+    const ln = pos(p.ln, 50), lc = Math.max(0, num(p.lc, 100)), lt = pos(p.lt, 90);
+    const rn = Math.min(Math.max(pos(p.dn, 30) / 2, wall + 0.5), Rr - 0.5), rt = Math.min(Math.max(pos(p.dt, 18) / 2, wall + 0.5), Rr - 0.5);
+    const so = aeroSolid(Rr, rn, rt, ln, lc, lt);
+    const si = aeroSolid(Rr - wall, rn - wall, rt - wall, ln, lc, lt, 1);
+    const b = so.cut(si); safeDelete(so); safeDelete(si);
+    // längs legen: Höhe des Drehkörpers → +Y, Spitze vorne
+    return b.rotate(-90, [0, 0, 0], [1, 0, 0]).translate([0, -(lc / 2 + ln), 0]);
   }
   // ---------- Kaufteile mit ihrer echten Form ----------
   // Alle stehen mitten auf z = 0 und bleiben in ihren Datenblatt-Maßen (Breite w, Tiefe d, Höhe h bzw. Durchmesser d).
@@ -1081,8 +1113,11 @@ export function createKernel(R, oc) {
     const hits = probes.map((pr) => {
       const out = []; let cyl = null;
       try {
-        cyl = R.makeCylinder(pr.r, pr.h, pr.c, [0, 0, 1]);
-        const cb = [pr.c[0] - pr.r, pr.c[1] - pr.r, pr.c[2], pr.c[0] + pr.r, pr.c[1] + pr.r, pr.c[2] + pr.h];
+        // Prüfkörper senkrecht oder – bei geneigten Motoren – entlang der Motorachse (dir)
+        const dir = pr.dir || [0, 0, 1];
+        cyl = R.makeCylinder(pr.r, pr.h, pr.c, dir);
+        const e = pr.dir ? pr.r + pr.h : 0;
+        const cb = pr.dir ? [pr.c[0] - e, pr.c[1] - e, pr.c[2] - e, pr.c[0] + e, pr.c[1] + e, pr.c[2] + e] : [pr.c[0] - pr.r, pr.c[1] - pr.r, pr.c[2], pr.c[0] + pr.r, pr.c[1] + pr.r, pr.c[2] + pr.h];
         solids.forEach((s, i) => { if ((pr.skip || []).includes(s.id) || !hit(cb, boxes[i])) return; const v = overlap(cyl, s.shape); if (v > 0.05) out.push({ id: s.id, v }); });
       } catch (e) { errors.push({ itemId: null, code: 'build', message: String(e && e.message || e) }); }
       finally { safeDelete(cyl); }

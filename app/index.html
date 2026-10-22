@@ -1289,8 +1289,8 @@ const HELP = {
  },
  "frameAssist": {
   "tip": "Drohnenrahmen in einem Schritt bauen – eigener oder nach Hersteller",
-  "hilfe": "Wähle Propellergröße, Rahmenform, Stack, Motor, Videosystem und Akku. Tracery rechnet den Achsabstand so, dass zwischen den Propellern genug Luft bleibt, und warnt, wenn etwas nicht passt. Unter „Vorlage“ baust du echte Rahmen von Herstellern nach (TBS, GEPRC, iFlight, SpeedyBee, AOS RC): Achsabstand, Armdicke, Plattendicke und Stack stimmen, die Umrisse sind vereinfacht. Neue Formen: Cinewhoop mit Ducts um die Propeller und Speed-Rumpf mit kegelförmiger Haube.",
-  "tipp": "Beim Deadcat sind die vorderen Arme weiter gespreizt – dann sind die Propeller nicht im Kamerabild. Beim Speed-Rumpf sitzt die Kamera vorne in der Nase und der Akku hängt unten."
+  "hilfe": "Wähle Propellergröße, Rahmenform, Stack, Motor, Videosystem und Akku. Tracery rechnet den Achsabstand so, dass zwischen den Propellern genug Luft bleibt, und warnt, wenn etwas nicht passt. Unter „Vorlage“ baust du echte Rahmen von Herstellern nach (TBS, GEPRC, iFlight, SpeedyBee, AOS RC): Achsabstand, Armdicke, Plattendicke und Stack stimmen, die Umrisse sind vereinfacht. Neue Formen: Cinewhoop mit Ducts um die Propeller und Speed-Rumpf – ein Stromlinien-Rumpf mit Kamera in der Nase, Akku innen und geneigten Motoren.",
+  "tipp": "Beim Deadcat sind die vorderen Arme weiter gespreizt – dann sind die Propeller nicht im Kamerabild. Beim Speed-Rumpf stehen die Motoren schräg (Motorneigung): So liegt der Rumpf im schnellen Flug genau im Fahrtwind."
  },
  "holePattern": {
   "tip": "Vier Löcher für Stack oder Motor auf einmal",
@@ -4426,6 +4426,10 @@ const LIB = [
   ] },
   { lib: 'hinge', label: 'Scharnier', role: 'solid', icon: 'hinge', desc: 'Scharnier mit Spiel, aus einem Stück', params: [
     { k: 'len', label: 'Länge', type: 'num', def: 40 }, { k: 'w', label: 'Flügelbreite', type: 'num', def: 15 }, { k: 't', label: 'Dicke', type: 'num', def: 2.4 }, { k: 'gap', label: 'Spiel', type: 'num', def: 0.4 },
+  ] },
+  { lib: 'aeroBody', label: 'Stromlinien-Rumpf', role: 'solid', icon: 'revolve', desc: 'Hohler Rumpf in Tropfenform: runde Nase, Mittelteil, langes spitzes Heck – liegt längs, Nase nach vorne', params: [
+    { k: 'd', label: 'Durchmesser', type: 'num', def: 60 }, { k: 'ln', label: 'Nasenlänge', type: 'num', def: 55 }, { k: 'lc', label: 'Mittelteil', type: 'num', def: 100 }, { k: 'lt', label: 'Hecklänge', type: 'num', def: 95 },
+    { k: 'dn', label: 'Nasenöffnung Ø', type: 'num', def: 32 }, { k: 'dt', label: 'Hecköffnung Ø', type: 'num', def: 18 }, { k: 'wall', label: 'Wand', type: 'num', def: 1.6 },
   ] },
   { lib: 'gear', label: 'Zahnrad', role: 'solid', icon: 'gear', desc: 'Stirnrad mit Evolventen-Zähnen', params: [
     { k: 'teeth', label: 'Zähne', type: 'num', def: 20, int: true, unit: '' }, { k: 'module', label: 'Modul', type: 'num', def: 1.5 }, { k: 'h', label: 'Dicke', type: 'num', def: 6 }, { k: 'bore', label: 'Bohrung Ø', type: 'num', def: 5 },
@@ -10395,7 +10399,7 @@ const AI = (() => {
 {"op":"material","id":"<id>","material":"<Kürzel aus MATERIALIEN>"}
 {"op":"gewicht","id":"<id>","g":33.8}   (Kaufteil mit festem Gewicht aus dem Datenblatt)
 {"op":"kaufteil","name":"<Name aus KAUFTEILE>","t":{"x":0,"y":0,"z":0}}   (Kaufteil in echter Form mit Maßen und Gewicht aus der Bibliothek)
-{"op":"drohne","zoll":5,"form":"x"|"stretch"|"wide"|"deadcat"|"cine"|"speed","video":"analog"|"o3"|"o4"|"o4pro"|"walksnail"|"hdzero"|"none","motor":"2207","akku":"6S 1300 mAh","rahmen":"Source One V5"}   (baut mit dem Frame-Assistenten einen kompletten Rahmen als NEUES Projekt; nur wenn ausdrücklich ein neuer Rahmen gewünscht ist. zoll: 3, 3.5, 4, 5, 6 oder 7. cine = Cinewhoop mit Ducts, speed = kegelförmiger Speed-Rumpf. "rahmen" nur für den Nachbau eines Herstellerrahmens: ${FRAMES})
+{"op":"drohne","zoll":5,"form":"x"|"stretch"|"wide"|"deadcat"|"cine"|"speed","video":"analog"|"o3"|"o4"|"o4pro"|"walksnail"|"hdzero"|"none","motor":"2207","akku":"6S 1300 mAh","neigung":20,"rahmen":"Source One V5"}   (baut mit dem Frame-Assistenten einen kompletten Rahmen als NEUES Projekt; nur wenn ausdrücklich ein neuer Rahmen gewünscht ist. zoll: 3, 3.5, 4, 5, 6 oder 7. cine = Cinewhoop mit Ducts, speed = Speed-Drohne mit Stromlinien-Rumpf (Akku innen, Motoren um "neigung" Grad nach vorne geneigt, Standard 20). "rahmen" nur für den Nachbau eines Herstellerrahmens: ${FRAMES})
 {"op":"pruefen"}   (Drohnen-Check: Propeller, Teile, Gewicht, Schwerpunkt, Schub – das Ergebnis bekommst du als Rückmeldung)
 {"op":"schwachstellen"}   (sucht Schwachstellen: Lochrand, dünne Wände, Armdicke – das Ergebnis bekommst du als Rückmeldung)
 {"op":"auswaehlen","ids":"…"}   (wählt am Ende diese Teile aus, damit der Nutzer sie gleich sieht)
@@ -10426,7 +10430,7 @@ Regeln:
 - Lege Teile auf z=0, sofern nichts anderes gewünscht ist. Maße exakt übernehmen, nicht runden. Für Schrauben nimm part screwHole.
 - Zahlenwerte dürfen Formeln mit Maß-Namen sein, z. B. "Breite/2+3". Lege bei neuen Teilen für die 2–4 wichtigsten Größen Maße an (op "mass") und nutze sie.
 - Neue Teile nicht in bestehende hineinsetzen: stelle sie daneben – "lage" im Modell sagt dir, wo jedes Teil liegt (min/max in mm). Ausnahme: der Wunsch ist ausdrücklich eine Änderung am Bestehenden.
-- Bei Drohnen (siehe "drohne" im Modell) änderst du Größen am besten über die Maße (op "mass"), z. B. Achsabstand, Armdicke, Bolzenhöhe – dann wandert alles mit. Vorne ist −Y.
+- Bei Drohnen (siehe "drohne" im Modell) änderst du Größen am besten über die Maße (op "mass"), z. B. Achsabstand, Armdicke, Bolzenhöhe, Motorneigung – dann wandert alles mit. Vorne ist −Y.
 - Kaufteile ("kaufteil_g") verschmilzt du nie mit anderen Teilen, außer der Nutzer will das ausdrücklich: sonst stimmt ihr Gewicht nicht mehr.
 - Beziehe dich mit "id" nur auf ids, die im aktuellen Modell stehen. „das“, „es“, „hier“ meint die Auswahl.
 `;
@@ -10803,6 +10807,7 @@ Beispiel – Wunsch „Mach alles als Verbund“ (Runde 1):
         const fr = a.rahmen && DroneLib.frames().find((f) => norm(`${f.hersteller} ${f.name}`).includes(norm(a.rahmen)) || norm(a.rahmen).includes(norm(f.name)));
         const o = fr ? DroneTpl.fromFrame(fr) : { zoll: DroneTpl.ZOLL.includes(+a.zoll) ? +a.zoll : 5, form: DroneTpl.FORMS[a.form] ? a.form : 'x' };
         o.video = DroneTpl.VIDEO[a.video] ? a.video : 'analog';
+        if (a.neigung != null && isFinite(+a.neigung)) o.tilt = Math.max(0, Math.min(45, +a.neigung));
         if (a.rahmen && !fr) rep.notes.push(`Den Rahmen „${a.rahmen}“ kenne ich nicht – ich baue einen eigenen.`);
         if (a.motor && DroneLib.motors().some((m) => m.stator === String(a.motor))) o.motor = String(a.motor);
         if (a.akku && DroneLib.akku(a.akku)) o.akku = a.akku;
@@ -11060,7 +11065,7 @@ const DroneTpl = (() => {
     6: { Armbreite: 14, Armdicke: 5.5, Plattenbreite: 44, Plattenlänge: 140, Plattendicke: 2, Bolzenhöhe: 28, stack: 30.5, motor: '2306', akku: '6S 1500 mAh', prop: 6 },
     7: { Armbreite: 15, Armdicke: 6, Plattenbreite: 45, Plattenlänge: 150, Plattendicke: 2.5, Bolzenhöhe: 30, stack: 30.5, motor: '2806.5', akku: '6S 1500 mAh', prop: 7 },
   };
-  const FORMS = { x: ['True-X', 45, 45], stretch: ['Stretched-X', 35, 35], wide: ['Wide-X', 55, 55], deadcat: ['Deadcat', 60, 35], cine: ['Cinewhoop', 45, 45], speed: ['Speed-Rumpf', 50, 50] };
+  const FORMS = { x: ['True-X', 45, 45], stretch: ['Stretched-X', 35, 35], wide: ['Wide-X', 55, 55], deadcat: ['Deadcat', 60, 35], cine: ['Cinewhoop', 45, 45], speed: ['Speed-Rumpf', 55, 55] };
   const ZOLL = [3, 3.5, 4, 5, 6, 7];
   // Videosysteme: Sendeeinheit und Kamera aus der Bauteil-Bibliothek
   const VIDEO = {
@@ -11099,23 +11104,41 @@ const DroneTpl = (() => {
     const pts = [...(noCam ? [] : [[camW / 2, yc - camL / 2, 0], [camW / 2 + 2.2, yc - 6, 0]]), [sx, -(S.Plattenlänge / 2 - frontOff(camL)), 2.5], [sx, S.Plattenlänge / 2 - 16, 2.5]];
     return Math.min(...mot.flatMap(([x, y]) => pts.map(([px, py, pr]) => Math.hypot(x - px, y - py) - pr - r)));
   }
-  // Speed-Rumpf: kegelförmige Haube über Stack und Videosender, Kamera in der Nase.
-  // Maße über der Oberkante des Unterteils; die Achse liegt so hoch, dass der Innenraum am kleinsten wird.
-  function fuselage(stack, vtx, cam) {
-    const S = stack + 5.5, boxes = [[S / 2, 4, 16]], len = Math.max(S, vtx ? vtx.l_mm : 0);
+  // Speed-Rumpf: Stromlinien-Rumpf (Kern: aeroBody) – Kamera in der Nase, dahinter Stack mit Sender, dann der Akku.
+  // Durchmesser und Achshöhe so, dass alle Querschnitte hineinpassen; die Lage längs so, dass der Schwerpunkt
+  // über der Mitte der Motoren liegt. Maße in z über der Oberkante des Unterteils.
+  function fuselage(stack, vtx, cam, akku, stackG) {
+    const S = stack + 5.5, sl = Math.max(S, vtx ? vtx.l_mm : 0);
+    const boxes = [[S / 2, 4, 16]];
     if (vtx) boxes.push([vtx.b_mm / 2, 16, 16 + vtx.h_mm]);
+    if (akku) boxes.push([akku.w / 2, 0.5, akku.h + 0.5]);
     const cw = cam ? cam.b_mm : 19, ch = cam ? cam.h_mm : 19, cl = cam ? cam.l_mm : 18;
     let best = null;
-    for (let a = Math.ceil(ch / 2 + 1); a <= 45; a += 0.5) {
+    for (let a = 6; a <= 60; a += 0.5) {
       const ri = Math.max(...boxes.flatMap(([hw, z0, z1]) => [Math.hypot(hw, z0 - a), Math.hypot(hw, z1 - a)]));
       if (!best || ri < best.ri - 1e-9) best = { a, ri };
     }
     const wall = 1.6, D = Math.ceil(2 * (best.ri + 1.5 + wall));
-    const dt = Math.ceil(2 * (Math.hypot(cw, ch) / 2 + 0.8 + wall));   // Nasenspitze: die Kamera passt genau hinein
-    // schlanke Spitze vorne (15°), längeres Heck (12°) bis auf 40 % des Durchmessers – wie ein Torpedo
-    const Ln = Math.max(Math.ceil(cl + 4), Math.ceil((D / 2 - dt / 2) / Math.tan(R(15))));
-    const dtail = Math.ceil(D * 0.4), Lt = Math.ceil((D / 2 - dtail / 2) / Math.tan(R(12)));
-    return { D, a: best.a, Lc: Math.ceil(len + 8), Ln, Lt, dt, dtail, wall };
+    const dn = Math.ceil(2 * (Math.hypot(cw, ch) / 2 + 0.8 + wall));   // Nasenöffnung: die Kamera passt genau hinein
+    // runde Nase (knapp ein Durchmesser lang), langes Heck (1,6 Durchmesser) mit kleiner Öffnung für die Abluft
+    const Ln = Math.max(Math.ceil(cl + 6), Math.round(0.9 * D)), Lt = Math.round(1.6 * D), dt = Math.max(Math.ceil(0.3 * D), Math.ceil(2 * wall + 6));
+    const Lc = Math.ceil(sl + 3 + (akku ? akku.l + 3 : 3));
+    // Abstände zur Mitte des Mittelteils: Stack vorne, Akku hinten, Kamera in der Nase
+    const oS = -Lc / 2 + 1.5 + sl / 2, oB = akku ? Lc / 2 - 1.5 - akku.l / 2 : 0, oC = -Lc / 2 - Ln + cl / 2 + 0.5;
+    // Schale (PETG) grob als Kegelstümpfe: Mantelfläche × Wand
+    const Rr = D / 2, rn = dn / 2, rt = dt / 2, shell = (r1, r2, l) => Math.PI * (r1 + r2) * Math.hypot(r1 - r2, l) * wall / 1000 * 1.27;
+    const ms = [[(stackG || 20) + (vtx && vtx.gewicht_g ? vtx.gewicht_g : 0), oS], [cam && cam.gewicht_g ? cam.gewicht_g : 6, oC], [akku ? akku.g : 0, oB],
+      [shell(Rr, rn, Ln), -Lc / 2 - Ln * 0.4], [shell(Rr, Rr, Lc), 0], [shell(Rr, rt, Lt), Lc / 2 + Lt * 0.4]];
+    const mid = Math.round((-ms.reduce((t, [m, o]) => t + m * o, 0) / ms.reduce((t, [m]) => t + m, 0)) * 2) / 2;
+    return { D, a: best.a, Lc, Ln, Lt, dn, dt, wall, mid, sl, oS, oB, cl, front: mid + oS - sl / 2 - 3, rear: mid + (akku ? oB + akku.l / 2 : oS + sl / 2) + 3 };
+  }
+  // größte Motorneigung, bei der die hinteren Propeller noch über ihren Armen bleiben (vorne kippt die Scheibe
+  // nach unten, der Arm läuft zur Mitte nach vorne); 0,5 mm Luft wie im Drohnen-Check mit 1 mm Sicherheitsrand
+  function maxTilt(cfg) {
+    const P = cfg.params, rp = (P.Propeller * 25.4) / 2 + 1, mh = cfg.motor.h + 1, cw = Math.cos(R(P.Armwinkel));
+    let best = 0;
+    for (let t = 0; t <= 45; t++) { const k = 1 + ((P.Motorlochkreis + 9) / 2) * Math.tan(R(t)); if (k + mh * Math.cos(R(t)) - rp * cw * Math.tan(R(t)) >= 0.5) best = t; else break; }
+    return best;
   }
   const sizeOf = (zoll) => SIZES[zoll] || SIZES[ZOLL.reduce((b, z) => (Math.abs(z - zoll) < Math.abs(b - zoll) ? z : b), 5)];
   // vollständige Einstellung aus einer kurzen Auswahl (o.frame: Rahmen eines Herstellers mit festen Maßen)
@@ -11136,8 +11159,17 @@ const DroneTpl = (() => {
     if (cine) S.Plattenlänge = Lmin;   // Cinewhoop: so kurz wie möglich
     const rp = (zoll * 25.4) / 2;
     const duct = cine ? { gap: o.ductGap != null ? o.ductGap : 3, wall: 1.6 } : null;
-    const fus = speed ? fuselage(stack, vtx, cam) : null;
-    let A = o.A || (duct ? Math.ceil((2 * rp + 2 * (duct.gap + duct.wall) + 4) / Math.sin(R(F[1])) / 5) * 5 : wheelbase(zoll, F[1], F[2]));
+    const akkuName = o.akku === undefined ? S.akku : o.akku, akku = akkuName ? DroneLib.akku(akkuName) : null;
+    const fus = speed ? fuselage(stack, vtx, cam, akku, 20) : null;
+    // Speed: so eng wie möglich – 8 % Propeller Luft nach vorne/hinten, 5 mm zwischen Rumpf und Propellerkreis
+    const speedA = (D) => Math.ceil(Math.max((1.08 * 2 * rp) / Math.cos(R(F[1])), (2 * (rp + D / 2 + 5)) / Math.sin(R(F[1]))) / 5) * 5;
+    let A = o.A || (duct ? Math.ceil((2 * rp + 2 * (duct.gap + duct.wall) + 4) / Math.sin(R(F[1])) / 5) * 5 : fus ? speedA(fus.D) : wheelbase(zoll, F[1], F[2]));
+    if (fus) {
+      // Platte trägt Stack und Akku; breit genug für die Gurtschlitze neben dem Akku
+      S.Plattenlänge = Math.max(100, Math.ceil((2 * Math.max(-fus.front, fus.rear)) / 5) * 5);
+      S.Plattenbreite = Math.max(Wmin, S.Plattenbreite, akku ? Math.ceil((akku.w + 12) / 2) * 2 : 0);
+      if (o.A && o.frame) while ((A / 2) * Math.sin(R(F[1])) - rp - fus.D / 2 < 3 && A < 800) A += 1;   // Herstellerrahmen: notfalls mehr Achsabstand
+    }
     if (o.A && !speed) {
       // fester Achsabstand (eingetippt oder vom Hersteller): erst die Platten kürzer und schmaler, bis Kamera und Bolzen frei sind –
       // beim Nachbau eines Herstellerrahmens notfalls auch der Achsabstand größer (steht dann im Frame-Assistenten und im Drohnen-Check)
@@ -11147,27 +11179,27 @@ const DroneTpl = (() => {
       while (!fit() && S.Plattenbreite - 2 >= Wmin) S.Plattenbreite -= 2;
       if (o.frame) while (!fit() && A < 600) A += 1;
     }
-    if (!o.A) {
-      if (fus) while ((A / 2) * Math.sin(R(F[1])) - rp - fus.D / 2 < 3 && A < 800) A += 5;   // Rumpf raus aus den Propellerkreisen
-      else if (duct) while (bodyGap(A, zoll, F[1], F[2], S, camW, camL, rp + duct.gap + duct.wall + 1) < 1 && A < 600) A += 5;   // Kamera und Bolzen raus aus den Ducts
+    if (!o.A && !fus) {
+      if (duct) while (bodyGap(A, zoll, F[1], F[2], S, camW, camL, rp + duct.gap + duct.wall + 1) < 1 && A < 600) A += 5;   // Kamera und Bolzen raus aus den Ducts
       else while (bodyGap(A, zoll, F[1], F[2], S, camW, camL) < 2 && A < 600) A += 5;   // Kamera und Bolzen raus aus den Propellerkreisen
     }
     const th = DroneLib.thrust(mot.stator);
-    const akkuName = o.akku === undefined ? S.akku : o.akku;
     const fr = o.frame || null;
     const zs = String(zoll).replace('.', ',');
     const params = { Achsabstand: A, Armwinkel: F[1], Armwinkel_hinten: F[1] === F[2] ? 'Armwinkel' : F[2], Armbreite: S.Armbreite, Armdicke: o.Armdicke || S.Armdicke, Plattenbreite: S.Plattenbreite, Plattenlänge: S.Plattenlänge };
     if (!speed) Object.assign(params, { Plattendicke: S.Plattendicke, Bolzenhöhe: Math.max(o.bolzen || 0, standoff(S, mot, vtx, cam)) });
     Object.assign(params, { Stack: stack, Motorlochkreis: mot.circle, Kamerabreite: cam ? cam.kamera_breite_mm : o.cam || 19, Propeller: zoll });
     if (duct) Object.assign(params, { Ductspalt: duct.gap, Ductwand: duct.wall, Ducthöhe: 'Bolzenhöhe - 1' });   // Ducts enden knapp unter der Oberplatte
-    if (fus) Object.assign(params, { Rumpfdurchmesser: fus.D, Rumpfachse: fus.a, Rumpflänge: fus.Lc, Nasenlänge: fus.Ln, Hecklänge: fus.Lt, Nasenspitze: fus.dt, Heckspitze: fus.dtail, Haubenwand: fus.wall });
+    if (fus) Object.assign(params, { Rumpfdurchmesser: fus.D, Rumpfachse: fus.a, Rumpfmitte: fus.mid, Rumpflänge: fus.Lc, Nasenlänge: fus.Ln, Hecklänge: fus.Lt, Nasenöffnung: fus.dn, Hecköffnung: fus.dt, Haubenwand: fus.wall,
+      // geneigte Motoren: bei dieser Schräglage im schnellen Flug liegt der Rumpf genau im Fahrtwind; Keil vorne 1 mm dick
+      Motorneigung: o.tilt != null ? o.tilt : 20, Keilhöhe: '1 + (Motorlochkreis + 9)/2*tan(Motorneigung)' });
     return {
       name: o.name || (fr ? `${fr.hersteller} ${fr.name}` : `${zs}" ${F[0]}`), doc: o.doc || (fr ? `${fr.hersteller}-${fr.name}`.replace(/\s+/g, '-') : `${zs}-Zoll-${F[0]}`), zoll, form, video: o.video || 'analog',
       frame: fr,
       params,
       stackScrew: stack >= 30 ? 'M3' : 'M2', motorScrew: mot.screw.startsWith('M1') ? 'M2' : mot.screw,
       motor: { name: 'Motor ' + mot.stator, d: mot.d, h: mot.h, g: mot.g }, prop: S.prop,
-      akku: akkuName ? DroneLib.akku(akkuName) : null,
+      akku, fus,
       vtx: vtx ? { name: vtx.name.replace(/\s*\(Sendeeinheit.*\)/, '') + (vid[2] ? ' Sender' : ''), src: vtx.name, lochbild: vtx.lochbild, l: vtx.l_mm, b: vtx.b_mm, h: vtx.h_mm, g: vtx.gewicht_g ?? '' } : null,
       cam: cam ? { name: cam.name.replace(/\s*\(Kameramodul\)/, ' Kamera'), l: cam.l_mm, b: cam.b_mm, h: cam.h_mm, g: cam.gewicht_g ?? '' } : { name: 'Kamera (Platzhalter)', g: 6 },
       stackG: 20, thrust: th ? th.g : null, thrustSrc: th ? th.src : null,
@@ -11192,7 +11224,7 @@ const DroneTpl = (() => {
   };
   PRESETS.f5.desc = 'True-X mit 225 mm Achsabstand, 30,5er Stack, Micro-Kamera, 6S-Akku. Alles über Maße veränderbar.';
   PRESETS.r5.desc = `Stretched-X für Rennen: Arme 35° zur Flugrichtung, ${PRESETS.r5.params.Achsabstand} mm Achsabstand, flach und leicht.`;
-  PRESETS.s5.desc = `Speed-Rahmen mit kegelförmigem Rumpf: Kamera in der Nase, Stack und Sender im Rumpf, Akku unten. ${PRESETS.s5.params.Achsabstand} mm Achsabstand.`;
+  PRESETS.s5.desc = `Speed-Drohne mit Stromlinien-Rumpf: Kamera in der Nase, Stack und Akku innen, Motoren ${PRESETS.s5.params.Motorneigung}° geneigt – so liegt der Rumpf im schnellen Flug im Wind.`;
   PRESETS.c35.desc = `Cinewhoop mit Ducts um die Propeller und DJI O4 – für ruhige Aufnahmen nah an Menschen und Häusern. ${PRESETS.c35.params.Achsabstand} mm Achsabstand.`;
   PRESETS.f7.desc = 'Größerer True-X mit 295 mm Achsabstand und 19er Motoren für lange Flüge mit 6S 1500.';
 
@@ -11203,20 +11235,33 @@ const DroneTpl = (() => {
     d.settings.material = 'CFK';
     d.drone = { zoll: P.zoll, form: P.form, video: P.video, motorH: P.motor.h, thrustG: P.thrust || null, thrustSrc: P.thrust ? P.thrustSrc : null };
     if (P.frame) d.drone.frame = { name: P.frame.name, hersteller: P.frame.hersteller, g: P.frame.gewicht_g, a: P.frame.achsabstand_mm, quelle: P.frame.quelle };
-    const cine = P.form === 'cine', speed = P.form === 'speed';
+    const cine = P.form === 'cine', speed = P.form === 'speed' && !!P.fus;
     const CF = '#3b4148';
     const SY = SYof(frontOff(P.cam && P.cam.l));
+    // Speed: Stack vorne, Akku hinten im Rumpf, Motoren geneigt auf Keilen (alles hängt an Rumpfmitte und Motorneigung)
+    const fus = speed ? P.fus : null;
+    const YS = fus ? `Rumpfmitte - Rumpflänge/2 + ${fus.sl / 2 + 1.5}` : null;
+    const YB = fus && P.akku ? `Rumpfmitte + Rumpflänge/2 - ${P.akku.l / 2 + 1.5}` : null;
+    const TILT = 'Motorneigung', KZ = 'Armdicke + Keilhöhe', TL = '(Armdicke + 2*Keilhöhe)/cos(Motorneigung) + 2';
+    const tiltHoles = (n, sx, sy) => {
+      const x0 = sg(sx, MX(sy)), y0 = PY(sy), r = 'Motorlochkreis/2';
+      const hs = [[`${x0} + ${r}`, y0, KZ], [x0, `${y0} + ${r}*cos(${TILT})`, `${KZ} + ${r}*sin(${TILT})`], [`${x0} - ${r}`, y0, KZ], [x0, `${y0} - ${r}*cos(${TILT})`, `${KZ} - ${r}*sin(${TILT})`]]
+        .map(([x, y, z]) => hole(P.motorScrew, { x, y, z, rx: TILT }, TL, 'Motorschraube'));
+      hs.push(item('cylinder', { d: 7, h: `${TL} + 1` }, { name: 'Wellenloch ' + n, role: 'hole', t: { x: x0, y: `${y0} + (${TL})*sin(${TILT})`, z: `${KZ} - (${TL})*cos(${TILT})`, rx: TILT } }));
+      return hs;
+    };
     // Unterteil: Mittelplatte, vier Arme, Motorauflagen, Löcher
     const kids = [item('box', { w: 'Plattenbreite', d: 'Plattenlänge', h: 'Armdicke' }, { name: 'Mittelplatte', color: CF })];
     for (const [n, sx, sy] of CORNERS) {
       kids.push(item('box', { w: 'Armbreite', d: 'Achsabstand/2', h: 'Armdicke' }, { name: 'Arm ' + n, color: CF, t: { x: sg(sx, MX(sy) + '/2'), y: PY2(sy), rz: sx * sy < 0 ? W(sy) : '-' + W(sy) } }));
       kids.push(item('cylinder', { d: 'Motorlochkreis + 9', h: 'Armdicke' }, { name: 'Motorauflage ' + n, color: CF, t: { x: sg(sx, MX(sy)), y: PY(sy) } }));
     }
-    for (const [, sx, sy] of CORNERS) kids.push(hole(P.stackScrew, { x: sg(sx, 'Stack/2'), y: sg(sy, 'Stack/2'), z: 'Armdicke + 1' }, 'Armdicke + 2', 'Stack-Loch'));
+    for (const [, sx, sy] of CORNERS) kids.push(hole(P.stackScrew, { x: sg(sx, 'Stack/2'), y: YS ? `${YS} ${sy < 0 ? '-' : '+'} Stack/2` : sg(sy, 'Stack/2'), z: 'Armdicke + 1' }, 'Armdicke + 2', 'Stack-Loch'));
     if (!speed) for (const [, sx, sy] of CORNERS) kids.push(hole('M3', { x: sg(sx, SX), y: sg(sy, SY(sy)), z: 'Armdicke + 1' }, 'Armdicke + 2', 'Bolzen-Loch'));
-    // Speed-Rumpf: der Akku hängt unten, der Gurt läuft durch zwei Schlitze am Rand der Mittelplatte
-    else for (const s of [1, -1]) kids.push(item('box', { w: 3, d: 12, h: 'Armdicke + 2' }, { name: 'Gurtschlitz', role: 'hole', t: { x: sg(s, 'Plattenbreite/2 - 2.8'), z: -1 } }));
-    for (const [n, sx, sy] of CORNERS) {
+    // Speed-Rumpf: der Akkugurt läuft durch zwei Schlitze neben dem Akku
+    else if (YB) for (const s of [1, -1]) kids.push(item('box', { w: 3, d: 14, h: 'Armdicke + 2' }, { name: 'Gurtschlitz', role: 'hole', t: { x: sg(s, 'Plattenbreite/2 - 3.5'), y: YB, z: -1 } }));
+    if (speed) for (const [n, sx, sy] of CORNERS) kids.push(...tiltHoles(n, sx, sy));
+    else for (const [n, sx, sy] of CORNERS) {
       // vier Motorschrauben als Kreismuster um die Motormitte (Lochkreis = Motorlochkreis)
       const g = Model.newItem('group', {}, { name: 'Motorlöcher ' + n, role: 'hole' });
       g.p = { op: 'pattern', pt: 'circ', n: 4, ang: 360, cx: sg(sx, MX(sy)), cy: PY(sy) };
@@ -11242,20 +11287,21 @@ const DroneTpl = (() => {
       kh.push(item('cylinder', { d: 2.2, h: 'Kamerabreite + 10' }, { name: 'Kameraschraube M2', role: 'hole', t: { x: '-(Kamerabreite/2 + 5)', y: '-(Plattenlänge/2 - 8)', z: 'Armdicke + Bolzenhöhe/2', ry: 90 } }));
       out.push(group('Kamerahalter', kh, { color: '#5b6470', mat: 'TPU 95A' }));
     } else {
-      // kegelförmiger Rumpf (gedruckt): Mittelteil, Nase mit der Kamera, Heck – innen hohl, unten offen
-      const ax = 'Armdicke + Rumpfachse', in2 = (e) => `${e} - 2*Haubenwand`;
+      // Stromlinien-Rumpf (gedruckt): hohl, Nase und Heck offen; unten offen nur über der Mittelplatte
       const rk = [
-        item('cylinder', { d: 'Rumpfdurchmesser', h: 'Rumpflänge' }, { name: 'Mittelteil', t: { y: 'Rumpflänge/2', z: ax, rx: 90 } }),
-        item('cone', { d1: 'Rumpfdurchmesser', d2: 'Nasenspitze', h: 'Nasenlänge' }, { name: 'Nase', t: { y: '-Rumpflänge/2', z: ax, rx: 90 } }),
-        item('cone', { d1: 'Rumpfdurchmesser', d2: 'Heckspitze', h: 'Hecklänge' }, { name: 'Heck', t: { y: 'Rumpflänge/2', z: ax, rx: -90 } }),
-        item('cylinder', { d: in2('Rumpfdurchmesser'), h: 'Rumpflänge + 1' }, { name: 'Innenraum', role: 'hole', t: { y: 'Rumpflänge/2 + 0.5', z: ax, rx: 90 } }),
-        item('cone', { d1: in2('Rumpfdurchmesser'), d2: in2('Nasenspitze'), h: 'Nasenlänge + 0.5' }, { name: 'Innenraum Nase', role: 'hole', t: { y: '-Rumpflänge/2 + 0.5', z: ax, rx: 90 } }),
-        item('cylinder', { d: in2('Nasenspitze'), h: 4 }, { name: 'Kameraöffnung', role: 'hole', t: { y: '-(Rumpflänge/2 + Nasenlänge) + 2', z: ax, rx: 90 } }),
-        item('cone', { d1: in2('Rumpfdurchmesser'), d2: in2('Heckspitze'), h: 'Hecklänge + 0.5' }, { name: 'Innenraum Heck', role: 'hole', t: { y: 'Rumpflänge/2 - 0.5', z: ax, rx: -90 } }),
-        item('cylinder', { d: in2('Heckspitze'), h: 4 }, { name: 'Luftauslass', role: 'hole', t: { y: 'Rumpflänge/2 + Hecklänge - 2', z: ax, rx: -90 } }),
-        item('box', { w: 'Rumpfdurchmesser + 2', d: 'Rumpflänge + Nasenlänge + Hecklänge + 2', h: 'Rumpfdurchmesser' }, { name: 'Unterseite offen', role: 'hole', t: { y: '(Hecklänge - Nasenlänge)/2', z: 'Armdicke - Rumpfdurchmesser' } }),
+        item('part', { lib: 'aeroBody', d: 'Rumpfdurchmesser', ln: 'Nasenlänge', lc: 'Rumpflänge', lt: 'Hecklänge', dn: 'Nasenöffnung', dt: 'Hecköffnung', wall: 'Haubenwand' }, { name: 'Haube', t: { y: 'Rumpfmitte', z: 'Armdicke + Rumpfachse' } }),
+        item('box', { w: 'Rumpfdurchmesser + 2', d: 'Plattenlänge + 1', h: 'Rumpfdurchmesser' }, { name: 'Auflage auf der Mittelplatte', role: 'hole', t: { z: 'Armdicke - Rumpfdurchmesser' } }),
       ];
       out.push(group('Rumpf', rk, { color: '#d0533f', mat: 'PETG' }));
+      // Keile unter den Motoren: oben schräg (Motorneigung), vorne 1 mm dick
+      const kk = [];
+      for (const [n, sx, sy] of CORNERS) {
+        const x0 = sg(sx, MX(sy)), y0 = PY(sy);
+        kk.push(item('cylinder', { d: 'Motorlochkreis + 9', h: '2*Keilhöhe' }, { name: 'Keil ' + n, color: '#5b6470', t: { x: x0, y: y0, z: 'Armdicke' } }));
+        kk.push(item('box', { w: 'Motorlochkreis + 24', d: 'Motorlochkreis + 24', h: 40 }, { name: 'Schräge ' + n, role: 'hole', t: { x: x0, y: y0, z: KZ, rx: TILT } }));
+        kk.push(...tiltHoles(n, sx, sy));
+      }
+      out.push(group('Motorkeile', kk, { color: '#5b6470', mat: 'PETG' }));
     }
     if (cine) {
       // Ducts: Ringe um die Propeller, unten auf den Armen
@@ -11264,25 +11310,29 @@ const DroneTpl = (() => {
     }
     // Kaufteile in ihrer echten Form (Kern: buildBuy) mit festem Gewicht aus dem Datenblatt
     const buyItem = (lib, p, o) => item('part', { lib, ...p }, o);
-    out.push(buyItem('buyStack', { a: 'Stack', h: 12, size: P.stackScrew }, { name: 'Stack (FC + ESC)', color: '#3a8f6a', t: { z: 'Armdicke + 4' }, massG: P.stackG }));
+    out.push(buyItem('buyStack', { a: 'Stack', h: 12, size: P.stackScrew }, { name: 'Stack (FC + ESC)', color: '#3a8f6a', t: { ...(YS ? { y: YS } : {}), z: 'Armdicke + 4' }, massG: P.stackG }));
     if (P.vtx) {
       const vs = DroneLib.videoShape({ name: P.vtx.src, lochbild: P.vtx.lochbild });
-      out.push(vs.lib === 'buyVtx' ? buyItem('buyVtx', { w: P.vtx.b, d: P.vtx.l, h: P.vtx.h, a: vs.a }, { name: P.vtx.name, color: '#16202b', t: { z: 'Armdicke + 16' }, massG: P.vtx.g })
-        : buyItem('buyPcb', { w: P.vtx.b, d: P.vtx.l, h: P.vtx.h }, { name: P.vtx.name, color: '#16202b', t: { z: 'Armdicke + 16' }, massG: P.vtx.g }));
+      const vt = { ...(YS ? { y: YS } : {}), z: 'Armdicke + 16' };
+      out.push(vs.lib === 'buyVtx' ? buyItem('buyVtx', { w: P.vtx.b, d: P.vtx.l, h: P.vtx.h, a: vs.a }, { name: P.vtx.name, color: '#16202b', t: vt, massG: P.vtx.g })
+        : buyItem('buyPcb', { w: P.vtx.b, d: P.vtx.l, h: P.vtx.h }, { name: P.vtx.name, color: '#16202b', t: vt, massG: P.vtx.g }));
     }
     const camD = P.cam.l || 18, camH = P.cam.h || 'Kamerabreite';
-    const camT = speed ? { y: `-(Rumpflänge/2 + Nasenlänge) + ${camD / 2 + 0.5}`, z: `Armdicke + Rumpfachse - (${camH})/2` } : { y: '-(Plattenlänge/2 - 8)', z: `Armdicke + Bolzenhöhe/2 - (${camH})/2` };
+    const camT = speed ? { y: `Rumpfmitte - Rumpflänge/2 - Nasenlänge + ${camD / 2 + 0.5}`, z: `Armdicke + Rumpfachse - (${camH})/2` } : { y: '-(Plattenlänge/2 - 8)', z: `Armdicke + Bolzenhöhe/2 - (${camH})/2` };
     out.push(buyItem('buyCamera', { w: P.cam.b || 'Kamerabreite', d: camD, h: camH }, { name: P.cam.name, color: '#16202b', t: camT, massG: P.cam.g }));
     const mk = [], pk = [];
     for (const [n, sx, sy] of CORNERS) {
-      mk.push(buyItem('buyMotor', { d: P.motor.d, h: P.motor.h, lk: 'Motorlochkreis', size: P.motorScrew }, { name: 'Motor ' + n, color: '#b9c2cb', t: { x: sg(sx, MX(sy)), y: PY(sy), z: 'Armdicke' } }));
+      const mh = P.motor.h;
+      const mt = speed ? { x: sg(sx, MX(sy)), y: PY(sy), z: KZ, rx: TILT } : { x: sg(sx, MX(sy)), y: PY(sy), z: 'Armdicke' };
+      const pt = speed ? { x: sg(sx, MX(sy)), y: `${PY(sy)} - ${mh}*sin(${TILT})`, z: `${KZ} + ${mh}*cos(${TILT})`, rx: TILT } : { x: sg(sx, MX(sy)), y: PY(sy), z: `Armdicke + ${mh}` };
+      mk.push(buyItem('buyMotor', { d: P.motor.d, h: mh, lk: 'Motorlochkreis', size: P.motorScrew }, { name: 'Motor ' + n, color: '#b9c2cb', t: mt }));
       // hinten rechts und vorne links drehen andersherum: gespiegelte Blätter
-      pk.push(buyItem('buyProp', { zoll: 'Propeller', blades: 3, pitch: sx * sy < 0 ? 13 : -13 }, { name: 'Propeller ' + n, color: '#e8833a', t: { x: sg(sx, MX(sy)), y: PY(sy), z: `Armdicke + ${P.motor.h}` } }));
+      pk.push(buyItem('buyProp', { zoll: 'Propeller', blades: 3, pitch: sx * sy < 0 ? 13 : -13 }, { name: 'Propeller ' + n, color: '#e8833a', t: pt }));
     }
     out.push(group(P.motor.name + ' (4×)', mk, { color: '#b9c2cb', massG: P.motor.g === '' ? '' : `4*${P.motor.g}` }));
     out.push(group(`Propeller ${String(P.zoll).replace('.', ',')}" (4×)`, pk, { color: '#e8833a', massG: `4*${P.prop}` }));
-    // Akku oben auf der Oberplatte – beim Speed-Rumpf unten unter der Mittelplatte
-    if (P.akku) out.push(buyItem('buyBattery', { w: P.akku.w, d: P.akku.l, h: P.akku.h }, { name: P.akku.name, color: '#e2b53a', t: { z: speed ? `-${P.akku.h}` : 'Armdicke + Bolzenhöhe + Plattendicke' }, massG: P.akku.g }));
+    // Akku oben auf der Oberplatte – beim Speed-Rumpf im Rumpf hinter dem Stack
+    if (P.akku) out.push(buyItem('buyBattery', { w: P.akku.w, d: P.akku.l, h: P.akku.h }, { name: P.akku.name, color: '#e2b53a', t: speed ? { y: YB, z: 'Armdicke + 0.5' } : { z: 'Armdicke + Bolzenhöhe + Plattendicke' }, massG: P.akku.g }));
     d.items = out;
     return d;
   }
@@ -11299,7 +11349,7 @@ const DroneTpl = (() => {
   }
   const LIST = Object.entries(PRESETS).map(([k, P]) => ({ id: 'drone-' + k, name: P.name, desc: P.desc, build: () => build(k), svg: svg(k === 'f7', P.form), drone: true }));
   const frames = () => DroneLib.frames();
-  return { build, config, fromFrame, frames, wheelbase, tipGap, bodyGap, PRESETS, LIST, SIZES, FORMS, VIDEO, ZOLL };
+  return { build, config, fromFrame, frames, maxTilt, wheelbase, tipGap, bodyGap, PRESETS, LIST, SIZES, FORMS, VIDEO, ZOLL };
 })();
 
 // ================= Frame-Assistent und Drohnen-Bibliothek in der Oberfläche =================
@@ -11335,6 +11385,7 @@ const DroneUI = (() => {
         sel('fa-akku', 'Akku', o.akku || '', [['', 'Keiner'], ...akkus.map((a) => [a.name.replace(/^Akku /, ''), `${a.name.replace(/^Akku /, '')} · ca. ${a.g} g`])], (v) => { o.akku = v || null; draw(); }),
         UI.numField({ id: 'fa-a', label: 'Achsabstand', value: A, onCommit: (v) => { const n = parseFloat(String(v).replace(',', '.')); free(); o.A = isFinite(n) && n > 0 ? n : null; draw(); } }),
       );
+      if (o.form === 'speed') f.append(UI.numField({ id: 'fa-tilt', label: 'Motorneigung (so schräg fliegt sie schnell)', value: cfg.params.Motorneigung, unit: '°', onCommit: (v) => { const n = parseFloat(String(v).replace(',', '.')); o.tilt = isFinite(n) ? Math.max(0, Math.min(45, n)) : null; draw(); } }));
       body.append(f);
       // Vorschau der wichtigsten Werte
       const gap = DroneTpl.tipGap(A, o.zoll, F[1], F[2]);
@@ -11343,8 +11394,9 @@ const DroneUI = (() => {
       if (gap < 0) warn.push('Die Propeller überlappen sich – größerer Achsabstand nötig.');
       else if (gap < o.zoll * 25.4 * 0.08) warn.push('Sehr wenig Luft zwischen den Propellern.');
       if (m && m.props && (o.zoll < m.props[0] - 0.01 || o.zoll > m.props[1] + 0.01)) warn.push(`Motor ${m.stator} passt eher zu ${fmt(m.props[0], 1)}–${fmt(m.props[1], 1)}"-Propellern.`);
+      if (o.form === 'speed') { const mt = DroneTpl.maxTilt(cfg); if (cfg.params.Motorneigung > mt) warn.push(`Bei ${fmt(cfg.params.Motorneigung, 0)}° Motorneigung streifen die hinteren Propeller ihre Arme – höchstens ${mt}° passen.`); }
       const P = cfg.params, extra = [];
-      if (o.form === 'speed') extra.push(['Rumpf', `Ø ${fmt(P.Rumpfdurchmesser, 0)} mm · ${fmt(P.Rumpflänge + P.Nasenlänge + P.Hecklänge, 0)} mm lang`]);
+      if (o.form === 'speed') extra.push(['Rumpf', `Ø ${fmt(P.Rumpfdurchmesser, 0)} mm · ${fmt(P.Rumpflänge + P.Nasenlänge + P.Hecklänge, 0)} mm lang · Akku innen`]);
       if (o.form === 'cine') extra.push(['Ducts', `innen Ø ${fmt(o.zoll * 25.4 + 2 * P.Ductspalt, 1)} mm · ${fmt(P.Bolzenhöhe - 1, 0)} mm hoch`]);
       const fr = o.frame, grown = fr && A !== fr.achsabstand_mm;
       out.innerHTML = `<div class="mini-list">
@@ -11724,7 +11776,10 @@ const DroneCheck = (() => {
     const motorGroup = doc.items.find((i) => /^Motor /.test(i.name || ''));
     const propGroup = doc.items.find((i) => /^Propeller/.test(i.name || ''));
     const mh = (doc.drone && doc.drone.motorH) || (motorGroup && motorGroup.children && motorGroup.children[0] ? Model.num(motorGroup.children[0].p.h, V, 20) : 20);
-    return { A, wv, wh, zoll: V.Propeller, D: V.Propeller * 25.4, zProp: V.Armdicke + mh + 1, motors, motorGroup, propGroup };
+    // geneigte Motoren (Speed-Rumpf): Propellerebene steht schräg, der Prüfkörper liegt entlang der Motorachse
+    const tilt = typeof V.Motorneigung === 'number' ? V.Motorneigung : 0, keil = typeof V.Keilhöhe === 'number' ? V.Keilhöhe : 0;
+    const zProp = V.Armdicke + keil + (mh + 1) * Math.cos(R(tilt)), dy = -(mh + 1) * Math.sin(R(tilt));
+    return { A, wv, wh, zoll: V.Propeller, D: V.Propeller * 25.4, zProp, dy, tilt, motors, motorGroup, propGroup, V };
   }
   const isDrone = (doc = App.doc) => !!geometry(doc);
   const label = (id) => { const f = Model.find(App.doc, id); return f ? Model.label(f.item) : 'ein Teil'; };
@@ -11738,7 +11793,8 @@ const DroneCheck = (() => {
     out.push({ id: 'gap', title: 'Propeller untereinander', s: gap < 0 ? 'bad' : gap < 5 ? 'warn' : 'ok', text: gap < 0 ? `Die Propeller überlappen sich um ${fmt(-gap, 1)} mm – Achsabstand vergrößern.` : `${fmt(gap, 1)} mm Luft zwischen den Propellerspitzen.` });
     // 2./3. Kollisionen aus dem CAD-Kern
     const skip = [g.motorGroup && g.motorGroup.id, g.propGroup && g.propGroup.id].filter(Boolean);
-    const probes = g.motors.map(([, x, y]) => ({ c: [x, y, g.zProp], r: g.D / 2 + 1, h: 6, skip }));   // Propellerebene: 1 bis 7 mm über dem Motor
+    const dir = g.tilt ? [0, -Math.sin(R(g.tilt)), Math.cos(R(g.tilt))] : null;
+    const probes = g.motors.map(([, x, y]) => ({ c: [x, y + g.dy, g.zProp], r: g.D / 2 + 1, h: 6, skip, ...(dir ? { dir } : {}) }));   // Propellerebene: 1 bis 7 mm über dem Motor
     let cl = null;
     try { cl = await Kernel.call('clashes', { scene: Model.kernelScene(doc), probes, skipPairs: g.propGroup ? [g.propGroup.id] : [] }); } catch (_) {}
     if (cl) {
@@ -11777,6 +11833,12 @@ const DroneCheck = (() => {
         out.push({ id: 'tw', title: 'Schub zu Gewicht', s: tw < 2 ? 'bad' : tw < 4 ? 'warn' : 'ok', text: `${fmt(tw, 1)} : 1 – ` + (tw < 2 ? 'zu schwach, hebt kaum ab.' : tw < 4 ? 'reicht für ruhiges Fliegen und Long Range.' : tw < 8 ? 'gut für Freestyle.' : 'genug für Rennen.') + src });
       } else out.push({ id: 'tw', title: 'Schub zu Gewicht', s: 'info', text: 'Trag unten den Schub pro Motor aus der Schubtabelle ein.' });
     }
+    // 7. Speed-Rumpf: Form und Fluglage
+    const V = g.V;
+    if (typeof V.Rumpfdurchmesser === 'number' && typeof V.Nasenlänge === 'number') {
+      const L = V.Nasenlänge + V.Rumpflänge + V.Hecklänge, D = V.Rumpfdurchmesser;
+      out.push({ id: 'aero', title: 'Stromlinie', s: 'info', text: `Rumpf ${fmt(L, 0)} mm lang und ${fmt(D, 0)} mm dick (${fmt(L / D, 1)} : 1), Akku und Elektronik liegen innen.` + (g.tilt ? ` Motoren ${fmt(g.tilt, 0)}° geneigt: Fliegt die Drohne mit ${fmt(g.tilt, 0)}° Schräglage, liegt der Rumpf genau im Fahrtwind.` : ' Mit geneigten Motoren (Maß „Motorneigung“) läge der Rumpf im schnellen Flug flach im Wind.') });
+    }
     last = { rev, list: out };
     return out;
   }
@@ -11808,11 +11870,12 @@ const DroneCheck = (() => {
 
 // ---------- Platten als DXF für die Fräse ----------
 const Plates = (() => {
-  // flache Teile der obersten Ebene: höchstens 12 mm dick, kein Kaufteil, kein Loch
+  // flache Teile der obersten Ebene: höchstens 12 mm dick, kein Kaufteil, kein Loch, nichts Gedrucktes (z. B. Motorkeile)
+  const PRINTED = ['PLA', 'PETG', 'ABS', 'ASA', 'TPU 95A', 'PA12', 'PC', 'POM'];
   function candidates() {
     const out = [];
     for (const it of App.doc.items) {
-      if (it.hidden || it.role === 'hole' || Mass.fixedOf(it)) continue;
+      if (it.hidden || it.role === 'hole' || Mass.fixedOf(it) || PRINTED.includes(Mass.materialFor(it).k)) continue;
       const b = Viewer.baseBox(it.id); if (!b) continue;
       const t = b.max.z - b.min.z; if (t > 12) continue;
       out.push({ id: it.id, name: Model.label(it), t });
@@ -11937,7 +12000,7 @@ const Variants = (() => {
 // die sich mit einem Klick als markierte Schritte umsetzen lassen.
 
 // Kurztexte je Schritt-Art: was, wozu (bei Drohnen), achtung (Entwurf Gemini, Prompt H; gegen Tracery geprüft)
-const STEP_TEXT = {"_hinweis":"Entwurf Gemini (Prompt H), von Claude am 20.10.2026 gegen das Verhalten von Tracery geprüft; 19 Sätze angepasst.","box":{"was":"Erstellt einen einfachen Kasten mit frei wählbarer Länge, Breite und Höhe.","wozu":"Super als Basis für eine Grundplatte aus Carbon oder eine einfache Akku-Auflage.","achtung":"Mach Platten nicht zu dünn, sonst brechen sie beim ersten Crash sofort durch."},"cylinder":{"was":"Erzeugt eine runde Säule mit festem Durchmesser und beliebiger Höhe.","wozu":"Ideal für stabile Abstandshalter (Standoffs) zwischen zwei Frame-Platten.","achtung":"Prüfe, ob der Zylinder nicht den Platz für deine Propeller blockiert."},"tube":{"was":"Erstellt ein rundes Rohr, das innen komplett hohl ist.","wozu":"Perfekt als leichtes Schutzröhrchen für deine Antennen oder dünne Motorkabel.","achtung":"Wähle Außendurchmesser und Wand so, dass innen das Kabel samt Stecker durchpasst."},"sphere":{"was":"Formt einen komplett runden Ball in deiner gewünschten Größe.","wozu":"Nützlich für weiche Landefüße an den Armen oder als Gelenk für eine Kamerahalterung.","achtung":"Eine Kugel liegt nur auf einem Punkt auf – schneide sie zum Drucken unten etwas flach ab."},"hemisphere":{"was":"Erstellt eine halbe Kugel mit einer flachen Unterseite.","wozu":"Wird oft als aerodynamische Kuppel (Canopy) über dem Stack oder der Kamera genutzt.","achtung":"Höhle sie mit „Wandstärke“ aus, sonst ist darunter kein Platz für die Elektronik."},"cone":{"was":"Baut einen Kegel, der unten rund ist und nach oben spitz zuläuft.","wozu":"Gut für windschnittige Spitzen an schnellen Racern oder als Zentrierhilfe.","achtung":"Ganz spitze Enden brechen leicht ab, runde die Spitze oben lieber etwas ab."},"pyramid":{"was":"Erzeugt einen eckigen Körper, der nach oben hin spitz zusammenläuft.","wozu":"Praktisch für kantige Schutzhauben oder coole Design-Elemente auf dem Frame.","achtung":"Achte darauf, dass innen genug Platz für die Ecken deiner Platinen bleibt."},"torus":{"was":"Formt einen runden Ring, der aussieht wie ein kleiner Donut oder Reifen.","wozu":"Perfekt als runder Propellerschutz (Propguard) für kleine Whoop-Drohnen.","achtung":"Mach den Ring nicht zu dick, sonst wird deine Drohne schnell viel zu schwer."},"prism":{"was":"Erstellt eine Säule mit mehreren Ecken, zum Beispiel ein Sechseck.","wozu":"Ideal für sechseckige Abstandshalter, die man mit einem Maulschlüssel festhalten kann.","achtung":"Der Durchmesser zählt hier von Ecke zu Ecke, nicht von Fläche zu Fläche – wichtig fürs Schlüsselmaß."},"wedge":{"was":"Baut einen schrägen Keil wie eine kleine Sprungschanze.","wozu":"Gut als schräge Kamera-Halterung, um den Kamerawinkel einzustellen.","achtung":"Ist der Winkel zu steil, siehst du beim langsamen Schweben nur noch den Himmel."},"extrude":{"was":"Zieht eine flache 2D-Zeichnung in die Höhe, sodass ein 3D-Körper entsteht.","wozu":"Damit machst du aus deiner flachen Zeichnung eine echte Carbon-Armplatte.","achtung":"Deine Skizze muss komplett geschlossen sein, sonst kann sie nicht hochgezogen werden."},"revolve":{"was":"Dreht ein flaches Profil im Kreis um eine Achse und formt so einen runden Körper.","wozu":"Super für Propeller-Spinner, Hülsen oder runde Antennenhalter.","achtung":"Die Zeichnung darf die Drehachse nicht kreuzen, sonst überschneidet sich das Bauteil."},"group":{"was":"Verschmilzt mehrere Einzelteile und zieht alle Loch-Körper davon ab.","wozu":"Verbindet einzelne Arme und die Mittelplatte zu einem fertigen, gelochten Drohnen-Frame.","achtung":"Löcher in einer Gruppe schneiden nur Körper derselben Gruppe – zieh fehlende Teile im Verlauf hinein."},"hole":{"was":"Verwandelt einen Körper in ein Werkzeug zum Ausschneiden – du siehst ihn gestreift.","wozu":"Schneidet zum Beispiel große Fenster in die Deckplatte, um Gewicht zu sparen.","achtung":"Ein Loch schneidet nur, was es berührt: Lass es oben und unten etwas überstehen, damit es sauber durchgeht."},"pattern_rect":{"was":"Kopiert ein Teil mehrfach in geraden Reihen und Spalten nebeneinander.","wozu":"Erstellt blitzschnell Lüftungsschlitze zur Kühlung über deinem heißen Video-Sender.","achtung":"Lass genug Material zwischen den Kopien stehen, sonst bricht das Gitter leicht durch."},"pattern_circ":{"was":"Verteilt Kopien eines Bauteils gleichmäßig im Kreis um einen Mittelpunkt.","wozu":"Perfekt, um aus einem einzelnen Drohnenarm sofort vier oder sechs Arme zu machen.","achtung":"Leg den Mittelpunkt genau fest, sonst sitzen die Kopien schief zur Rahmenmitte."},"mirror":{"was":"Erstellt eine spiegelverkehrte Kopie deines Bauteils auf der gegenüberliegenden Seite.","wozu":"Baue nur die linke Seite der Kamerahalterung und spiegle sie einfach nach rechts.","achtung":"Wähle die richtige Spiegelebene, sonst klebt die Kopie plötzlich am falschen Ort."},"split":{"was":"Schneidet einen Körper an einer flachen Ebene in zwei getrennte Teile durch.","wozu":"Teilt eine komplexe Haube in Ober- und Unterteil, damit du sie einfacher drucken kannst.","achtung":"Überlege dir vorher, wie du die geteilten Hälften später wieder zusammenschraubst."},"intersect":{"was":"Behält nur genau den Bereich übrig, in dem sich zwei Körper überschneiden.","wozu":"Formt einen runden Kamera-Schutz, der exakt in die schräge Front des Frames passt.","achtung":"Berühren sich die beiden Ausgangskörper gar nicht, bleibt am Ende nichts übrig."},"shell":{"was":"Höhlt einen massiven Körper von innen aus und lässt nur eine bestimmte Wandstärke stehen.","wozu":"Macht aus einem schweren Klotz eine leichte Schutzhülle für deine Action-Cam.","achtung":"Prüf die Wand mit „Schwachstellen suchen“ – zu dünne Wände brechen beim ersten Crash."},"fillet":{"was":"Rundet scharfe Kanten weich ab, damit Übergänge fließend werden.","wozu":"Macht die Innenecken an den Carbon-Armen viel stabiler gegen Brüche beim Absturz.","achtung":"Rundest du die Kante an einer dünnen Platte zu stark ab, entsteht ein Fehler."},"chamfer":{"was":"Schneidet eine scharfe Kante schräg ab, sodass eine kleine flache Schräge entsteht.","wozu":"Entschärft die Kanten deiner Carbon-Platten, damit sie das Akku-Kabel nicht durchschneiden.","achtung":"Mach die Schräge bei dünnem Carbon nur ganz klein, sonst bleibt keine gerade Kante übrig."},"screwHole":{"was":"Bohrt ein rundes Loch, das genau für eine bestimmte Schraubengröße wie M2 oder M3 passt.","wozu":"Unverzichtbar, um Motoren, Stack und Standoffs fest mit dem Frame zu verschrauben.","achtung":"Nimm die Passung „Mittel“: Das Loch ist dann etwas größer als die Schraube. „Eng“ klemmt leicht."},"nutTrap":{"was":"Schneidet eine sechseckige Tasche aus, in der eine Mutter festsitzt.","wozu":"Hält die Muttern unter dem Stack fest, damit du beim Schrauben keinen Schlüssel brauchst.","achtung":"Mach die Tasche nicht zu weit, sonst dreht die Mutter beim Festziehen einfach durch."},"insert":{"was":"Erstellt ein spezielles Loch, in das man ein Messing-Gewinde mit dem Lötkolben einschmilzt.","wozu":"Gibt dir super stabile Metallgewinde direkt in deinen 3D-gedruckten Kunststoffteilen.","achtung":"Das Loch muss etwas kleiner als der Einsatz sein, damit das Plastik ihn gut festhält."},"slotHole":{"was":"Bohrt ein längliches Loch, in dem eine Schraube hin und her geschoben werden kann.","wozu":"Super für Motorhalterungen, damit verschiedene Motoren auf denselben Arm passen.","achtung":"Zieh die Schrauben im Langloch später gut fest und nutze Unterlegscheiben gegen Verrutschen."},"holePattern":{"was":"Erzeugt automatisch vier passende Schraubenlöcher im Standard-Abstand für Drohnenteile.","wozu":"Bohrt mit einem Klick die exakten Löcher für einen 20x20mm-Stack oder einen Motor.","achtung":"Prüfe vorab genau, ob dein Flugcontroller 20x20 oder 30,5x30,5 Millimeter Lochabstand hat."},"zipTie":{"was":"Schneidet zwei Schlitze für einen Kabelbinder in dein Bauteil.","wozu":"Ideal, um den kleinen Funk-Empfänger oder den Kondensator sicher am Frame festzuzurren.","achtung":"Setze Schlitze nicht zu nah an den Rand der Carbon-Platte, sonst reißt der Steg aus."},"snapHook":{"was":"Baut einen kleinen federnden Haken, der an einer Kante einrasten kann.","wozu":"Perfekt für einen Akkuschacht oder eine Haube, die du ohne Werkzeug öffnen willst.","achtung":"Drucke den Haken liegend, damit die Schichten längs laufen – sonst bricht er beim ersten Biegen ab."},"hinge":{"was":"Erzeugt ein bewegliches Gelenk, mit dem du zwei Bauteile klappbar verbindest.","wozu":"Nützlich für eine aufklappbare Haube oder einen Deckel am Akkufach.","achtung":"Lass im Gelenk etwas Spiel (Einstellung „Spalt“), sonst verschmilzt es beim Drucken."},"gear":{"was":"Erstellt ein rundes Rad mit Zähnen am Rand, das in ein anderes Zahnrad greift.","wozu":"Brauchst du für coole Extras wie eine Kamera, die sich im Flug per Knopfdruck neigt.","achtung":"Beide Zahnräder brauchen exakt die gleiche Zahngröße (Modul), sonst klemmen sie sofort."},"buy":{"was":"Fügt ein fertiges Teil wie Kamera, Motor oder Akku als Platzhalter mit echtem Gewicht aus dem Datenblatt ein.","wozu":"Zeigt dir sofort, ob alle Teile in den Frame passen und wo der Schwerpunkt der Drohne liegt.","achtung":"Beim DXF bleiben Kaufteile von selbst weg; für STL blende sie vor dem Export aus."}};
+const STEP_TEXT = {"_hinweis":"Entwurf Gemini (Prompt H), von Claude am 20.10.2026 gegen das Verhalten von Tracery geprüft; 19 Sätze angepasst.","box":{"was":"Erstellt einen einfachen Kasten mit frei wählbarer Länge, Breite und Höhe.","wozu":"Super als Basis für eine Grundplatte aus Carbon oder eine einfache Akku-Auflage.","achtung":"Mach Platten nicht zu dünn, sonst brechen sie beim ersten Crash sofort durch."},"cylinder":{"was":"Erzeugt eine runde Säule mit festem Durchmesser und beliebiger Höhe.","wozu":"Ideal für stabile Abstandshalter (Standoffs) zwischen zwei Frame-Platten.","achtung":"Prüfe, ob der Zylinder nicht den Platz für deine Propeller blockiert."},"tube":{"was":"Erstellt ein rundes Rohr, das innen komplett hohl ist.","wozu":"Perfekt als leichtes Schutzröhrchen für deine Antennen oder dünne Motorkabel.","achtung":"Wähle Außendurchmesser und Wand so, dass innen das Kabel samt Stecker durchpasst."},"sphere":{"was":"Formt einen komplett runden Ball in deiner gewünschten Größe.","wozu":"Nützlich für weiche Landefüße an den Armen oder als Gelenk für eine Kamerahalterung.","achtung":"Eine Kugel liegt nur auf einem Punkt auf – schneide sie zum Drucken unten etwas flach ab."},"hemisphere":{"was":"Erstellt eine halbe Kugel mit einer flachen Unterseite.","wozu":"Wird oft als aerodynamische Kuppel (Canopy) über dem Stack oder der Kamera genutzt.","achtung":"Höhle sie mit „Wandstärke“ aus, sonst ist darunter kein Platz für die Elektronik."},"cone":{"was":"Baut einen Kegel, der unten rund ist und nach oben spitz zuläuft.","wozu":"Gut für windschnittige Spitzen an schnellen Racern oder als Zentrierhilfe.","achtung":"Ganz spitze Enden brechen leicht ab, runde die Spitze oben lieber etwas ab."},"pyramid":{"was":"Erzeugt einen eckigen Körper, der nach oben hin spitz zusammenläuft.","wozu":"Praktisch für kantige Schutzhauben oder coole Design-Elemente auf dem Frame.","achtung":"Achte darauf, dass innen genug Platz für die Ecken deiner Platinen bleibt."},"torus":{"was":"Formt einen runden Ring, der aussieht wie ein kleiner Donut oder Reifen.","wozu":"Perfekt als runder Propellerschutz (Propguard) für kleine Whoop-Drohnen.","achtung":"Mach den Ring nicht zu dick, sonst wird deine Drohne schnell viel zu schwer."},"prism":{"was":"Erstellt eine Säule mit mehreren Ecken, zum Beispiel ein Sechseck.","wozu":"Ideal für sechseckige Abstandshalter, die man mit einem Maulschlüssel festhalten kann.","achtung":"Der Durchmesser zählt hier von Ecke zu Ecke, nicht von Fläche zu Fläche – wichtig fürs Schlüsselmaß."},"wedge":{"was":"Baut einen schrägen Keil wie eine kleine Sprungschanze.","wozu":"Gut als schräge Kamera-Halterung, um den Kamerawinkel einzustellen.","achtung":"Ist der Winkel zu steil, siehst du beim langsamen Schweben nur noch den Himmel."},"extrude":{"was":"Zieht eine flache 2D-Zeichnung in die Höhe, sodass ein 3D-Körper entsteht.","wozu":"Damit machst du aus deiner flachen Zeichnung eine echte Carbon-Armplatte.","achtung":"Deine Skizze muss komplett geschlossen sein, sonst kann sie nicht hochgezogen werden."},"revolve":{"was":"Dreht ein flaches Profil im Kreis um eine Achse und formt so einen runden Körper.","wozu":"Super für Propeller-Spinner, Hülsen oder runde Antennenhalter.","achtung":"Die Zeichnung darf die Drehachse nicht kreuzen, sonst überschneidet sich das Bauteil."},"group":{"was":"Verschmilzt mehrere Einzelteile und zieht alle Loch-Körper davon ab.","wozu":"Verbindet einzelne Arme und die Mittelplatte zu einem fertigen, gelochten Drohnen-Frame.","achtung":"Löcher in einer Gruppe schneiden nur Körper derselben Gruppe – zieh fehlende Teile im Verlauf hinein."},"hole":{"was":"Verwandelt einen Körper in ein Werkzeug zum Ausschneiden – du siehst ihn gestreift.","wozu":"Schneidet zum Beispiel große Fenster in die Deckplatte, um Gewicht zu sparen.","achtung":"Ein Loch schneidet nur, was es berührt: Lass es oben und unten etwas überstehen, damit es sauber durchgeht."},"pattern_rect":{"was":"Kopiert ein Teil mehrfach in geraden Reihen und Spalten nebeneinander.","wozu":"Erstellt blitzschnell Lüftungsschlitze zur Kühlung über deinem heißen Video-Sender.","achtung":"Lass genug Material zwischen den Kopien stehen, sonst bricht das Gitter leicht durch."},"pattern_circ":{"was":"Verteilt Kopien eines Bauteils gleichmäßig im Kreis um einen Mittelpunkt.","wozu":"Perfekt, um aus einem einzelnen Drohnenarm sofort vier oder sechs Arme zu machen.","achtung":"Leg den Mittelpunkt genau fest, sonst sitzen die Kopien schief zur Rahmenmitte."},"mirror":{"was":"Erstellt eine spiegelverkehrte Kopie deines Bauteils auf der gegenüberliegenden Seite.","wozu":"Baue nur die linke Seite der Kamerahalterung und spiegle sie einfach nach rechts.","achtung":"Wähle die richtige Spiegelebene, sonst klebt die Kopie plötzlich am falschen Ort."},"split":{"was":"Schneidet einen Körper an einer flachen Ebene in zwei getrennte Teile durch.","wozu":"Teilt eine komplexe Haube in Ober- und Unterteil, damit du sie einfacher drucken kannst.","achtung":"Überlege dir vorher, wie du die geteilten Hälften später wieder zusammenschraubst."},"intersect":{"was":"Behält nur genau den Bereich übrig, in dem sich zwei Körper überschneiden.","wozu":"Formt einen runden Kamera-Schutz, der exakt in die schräge Front des Frames passt.","achtung":"Berühren sich die beiden Ausgangskörper gar nicht, bleibt am Ende nichts übrig."},"shell":{"was":"Höhlt einen massiven Körper von innen aus und lässt nur eine bestimmte Wandstärke stehen.","wozu":"Macht aus einem schweren Klotz eine leichte Schutzhülle für deine Action-Cam.","achtung":"Prüf die Wand mit „Schwachstellen suchen“ – zu dünne Wände brechen beim ersten Crash."},"fillet":{"was":"Rundet scharfe Kanten weich ab, damit Übergänge fließend werden.","wozu":"Macht die Innenecken an den Carbon-Armen viel stabiler gegen Brüche beim Absturz.","achtung":"Rundest du die Kante an einer dünnen Platte zu stark ab, entsteht ein Fehler."},"chamfer":{"was":"Schneidet eine scharfe Kante schräg ab, sodass eine kleine flache Schräge entsteht.","wozu":"Entschärft die Kanten deiner Carbon-Platten, damit sie das Akku-Kabel nicht durchschneiden.","achtung":"Mach die Schräge bei dünnem Carbon nur ganz klein, sonst bleibt keine gerade Kante übrig."},"screwHole":{"was":"Bohrt ein rundes Loch, das genau für eine bestimmte Schraubengröße wie M2 oder M3 passt.","wozu":"Unverzichtbar, um Motoren, Stack und Standoffs fest mit dem Frame zu verschrauben.","achtung":"Nimm die Passung „Mittel“: Das Loch ist dann etwas größer als die Schraube. „Eng“ klemmt leicht."},"nutTrap":{"was":"Schneidet eine sechseckige Tasche aus, in der eine Mutter festsitzt.","wozu":"Hält die Muttern unter dem Stack fest, damit du beim Schrauben keinen Schlüssel brauchst.","achtung":"Mach die Tasche nicht zu weit, sonst dreht die Mutter beim Festziehen einfach durch."},"insert":{"was":"Erstellt ein spezielles Loch, in das man ein Messing-Gewinde mit dem Lötkolben einschmilzt.","wozu":"Gibt dir super stabile Metallgewinde direkt in deinen 3D-gedruckten Kunststoffteilen.","achtung":"Das Loch muss etwas kleiner als der Einsatz sein, damit das Plastik ihn gut festhält."},"slotHole":{"was":"Bohrt ein längliches Loch, in dem eine Schraube hin und her geschoben werden kann.","wozu":"Super für Motorhalterungen, damit verschiedene Motoren auf denselben Arm passen.","achtung":"Zieh die Schrauben im Langloch später gut fest und nutze Unterlegscheiben gegen Verrutschen."},"holePattern":{"was":"Erzeugt automatisch vier passende Schraubenlöcher im Standard-Abstand für Drohnenteile.","wozu":"Bohrt mit einem Klick die exakten Löcher für einen 20x20mm-Stack oder einen Motor.","achtung":"Prüfe vorab genau, ob dein Flugcontroller 20x20 oder 30,5x30,5 Millimeter Lochabstand hat."},"zipTie":{"was":"Schneidet zwei Schlitze für einen Kabelbinder in dein Bauteil.","wozu":"Ideal, um den kleinen Funk-Empfänger oder den Kondensator sicher am Frame festzuzurren.","achtung":"Setze Schlitze nicht zu nah an den Rand der Carbon-Platte, sonst reißt der Steg aus."},"snapHook":{"was":"Baut einen kleinen federnden Haken, der an einer Kante einrasten kann.","wozu":"Perfekt für einen Akkuschacht oder eine Haube, die du ohne Werkzeug öffnen willst.","achtung":"Drucke den Haken liegend, damit die Schichten längs laufen – sonst bricht er beim ersten Biegen ab."},"hinge":{"was":"Erzeugt ein bewegliches Gelenk, mit dem du zwei Bauteile klappbar verbindest.","wozu":"Nützlich für eine aufklappbare Haube oder einen Deckel am Akkufach.","achtung":"Lass im Gelenk etwas Spiel (Einstellung „Spalt“), sonst verschmilzt es beim Drucken."},"gear":{"was":"Erstellt ein rundes Rad mit Zähnen am Rand, das in ein anderes Zahnrad greift.","wozu":"Brauchst du für coole Extras wie eine Kamera, die sich im Flug per Knopfdruck neigt.","achtung":"Beide Zahnräder brauchen exakt die gleiche Zahngröße (Modul), sonst klemmen sie sofort."},"buy":{"was":"Fügt ein fertiges Teil wie Kamera, Motor oder Akku als Platzhalter mit echtem Gewicht aus dem Datenblatt ein.","wozu":"Zeigt dir sofort, ob alle Teile in den Frame passen und wo der Schwerpunkt der Drohne liegt.","achtung":"Beim DXF bleiben Kaufteile von selbst weg; für STL blende sie vor dem Export aus."},"aeroBody":{"was":"Erstellt einen hohlen Rumpf in Tropfenform: runde Nase, gerades Mittelteil und ein langes Heck, das spitz ausläuft.","wozu":"Damit bekommt eine Speed-Drohne wenig Luftwiderstand – Kamera, Stack und Akku sitzen geschützt im Rumpf.","achtung":"Der Rumpf muss weit genug von den Propellerkreisen weg sein; der Drohnen-Check zeigt dir, ob er frei ist."}};
 
 const Explain = (() => {
   function keyOf(it) {

@@ -159,5 +159,10 @@
     "was": "Fügt ein fertiges Teil wie Kamera, Motor oder Akku als Platzhalter mit echtem Gewicht aus dem Datenblatt ein.",
     "wozu": "Zeigt dir sofort, ob alle Teile in den Frame passen und wo der Schwerpunkt der Drohne liegt.",
     "achtung": "Beim DXF bleiben Kaufteile von selbst weg; für STL blende sie vor dem Export aus."
+  },
+  "aeroBody": {
+    "was": "Erstellt einen hohlen Rumpf in Tropfenform: runde Nase, gerades Mittelteil und ein langes Heck, das spitz ausläuft.",
+    "wozu": "Damit bekommt eine Speed-Drohne wenig Luftwiderstand – Kamera, Stack und Akku sitzen geschützt im Rumpf.",
+    "achtung": "Der Rumpf muss weit genug von den Propellerkreisen weg sein; der Drohnen-Check zeigt dir, ob er frei ist."
   }
 }

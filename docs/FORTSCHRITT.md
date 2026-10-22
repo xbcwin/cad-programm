@@ -45,7 +45,7 @@ Stand: 21.10.2026 · nach Sitzung 18 (Bauplan mit 14 Sitzungen abgeschlossen)
 - [x] Neuer Name beim Maß (z. B. `breite`) wird automatisch unter „Maße“ angelegt
 - [x] Formel-Beispiele unter „Maße“ (Gemini, alle 12 mit Tracerys Rechner nachgeprüft), Beispiel-Maße per Klick
 - [x] Umbenennen / Entfernen eines Maßes wirkt jetzt auch auf Skizzen-Maße
-- [x] Automatischer Klicktest `tests/klicktest.py`: 105 Durchläufe (alle grün), 144 von 178 Punkten der Testliste automatisch geprüft
+- [x] Automatischer Klicktest `tests/klicktest.py`: 106 Durchläufe (alle grün), 146 von 180 Punkten der Testliste automatisch geprüft
 - [x] Aufgeräumt: Programm liegt jetzt in 28 Quelldateien unter `app/src/`, `tools/build.py` baut daraus `app/index.html`
 - [x] Notizstift (Taste N): freie Striche, die am Modell kleben, Textnotizen, 6 Farben, 3 Dicken, Radierer, ein-/ausblendbar – ohne technische Bedeutung
 - [x] Symbole für den Notizstift (Gemini, geprüft); Augen-Knopf rechts im Bild blendet Notizen aus, sobald es welche gibt
@@ -137,7 +137,10 @@ Stand: 21.10.2026 · nach Sitzung 18 (Bauplan mit 14 Sitzungen abgeschlossen)
 - [x] Ein ganzer Auftrag ist danach EIN Rückgängig-Schritt (auch „Umsetzen“ bei Schwachstellen-Vorschlägen); Meldungen während der Arbeit landen in der Rückmeldung statt als Einblendung
 - [x] „Alles als Verbund“ geht auch ohne KI: Eingabezeile „verbund“ oder „Mach alles als Verbund“ außerhalb von Claude
 - [x] Behoben: Meldungen wie „Rundung zu groß“ verschwanden, sobald eine andere Änderung neu rechnen ließ (der CAD-Kern merkt sich die Meldungen jetzt zur gespeicherten Form)
-- [x] Speed-Rumpf (Sitzung 18): neue Rahmenform mit kegelförmiger, hohler Haube (PETG) – Kamera vorne in der Nase, Stack und Sender im Rumpf, schlankes Heck, Akku unten unter der Mittelplatte mit Gurtschlitzen; Durchmesser, Achshöhe und Längen rechnet Tracery aus Stack, Sender und Kamera, alles als Maße veränderbar
+- [x] Speed-Drohne (Sitzung 18): Stromlinien-Rumpf (PETG, hohl, glatte Flächen) mit runder Nase, Mittelteil und langem, spitz auslaufendem Heck – Kamera in der Nase, Stack mit Sender und dahinter der Akku liegen innen, unten geschlossen bis auf die Auflage auf der Mittelplatte; Durchmesser, Achshöhe, Längen und Lage (Schwerpunkt über der Motormitte) rechnet Tracery aus den Teilen, alles als Maße veränderbar
+- [x] Geneigte Motoren: Maß „Motorneigung“ (Standard 20°) mit gedruckten Keilen, schrägen Motorschrauben und Wellenlöchern; bei dieser Schräglage liegt der Rumpf im schnellen Flug genau im Fahrtwind; der Frame-Assistent warnt, ab welcher Neigung die hinteren Propeller ihre Arme streifen
+- [x] Neues Bauteil „Stromlinien-Rumpf“ (Bauteile, Profi) für eigene Rümpfe
+- [x] Drohnen-Check prüft geneigte Propeller entlang der Motorachse und zeigt beim Speed-Rumpf Schlankheit und Fluglage
 - [x] Cinewhoop: Ducts (PC) um die Propeller, 3 mm Spalt, enden knapp unter der Oberplatte und wachsen mit der Bolzenhöhe mit; kurze Platte, Achsabstand so, dass Kamera und Bolzen außerhalb der Ducts bleiben
 - [x] Neue Größe 3,5 Zoll (Motor 2004, 25,5er Stack, 4S 850)
 - [x] Neue Bausätze auf der Startseite: 5" Race (Stretched-X), 5" Speed (Rumpf), 3,5" Cinewhoop (DJI O4) – alle bestehen Drohnen-Check und Schwachstellen-Analyse
@@ -176,7 +179,8 @@ Fertig.
 - [x] 5"-Vorlage (Sitzung 11), dazu 7" Long Range
 - [x] Frame-Assistent mit 3" bis 7" und Rahmenformen True-X, Stretched-X, Wide-X, Deadcat (Sitzung 12)
 - [x] Lochbilder, Bauteil-Bibliothek, erste Detail-Bausteine (Kabelbinder, Gurtschlitz) (Sitzung 12)
-- [x] Speed-Rumpf, Cinewhoop mit Ducts, 3,5 Zoll, Rahmen von Herstellern (Sitzung 18)
+- [x] Speed-Drohne mit Stromlinien-Rumpf und geneigten Motoren, Cinewhoop mit Ducts, 3,5 Zoll, Rahmen von Herstellern (Sitzung 18)
+- [ ] Speed-Drohne: Verkleidungen für Arme und Motoren, Luftwiderstand ausrechnen
 - [ ] Mehr Herstellerrahmen (Gemini Prompt L) und mehr Kaufteile mit Gewicht (Prompt M)
 - [ ] Herstellerrahmen mit Original-Umriss (heute: Tracerys Grundform mit den Herstellermaßen)
 - [ ] H-Rahmen und Rahmen mit getrennten Armen (Sandwich)

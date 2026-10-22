@@ -485,7 +485,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 
 - [x] **Neue Bausätze**
   Schritte: 1. Startseite → „5" Race“, dann „5" Speed“, dann „3,5" Cinewhoop“. 2. Jeweils „Drohne“ → „Drohnen-Check“.
-  Erwartet: Race mit Armen 35° zur Flugrichtung; Speed mit rotem, kegelförmigem Rumpf, Kamera in der Nase, Akku unten, ohne Oberplatte; Cinewhoop mit vier grauen Ducts; alle Prüfungen grün, keine Fehler.
+  Erwartet: Race mit Armen 35° zur Flugrichtung; Speed mit rotem Stromlinien-Rumpf, Kamera in der Nase, Stack und Akku innen, Motoren schräg auf Keilen, ohne Oberplatte; Cinewhoop mit vier grauen Ducts; alle Prüfungen grün, keine Fehler.
+- [x] **Motorneigung**
+  Schritte: 1. Frame-Assistent → Rahmenform „Speed-Rumpf“. 2. Motorneigung 30°, „Rahmen bauen“. 3. Drohnen-Check. 4. Unter „Maße“ Motorneigung auf 0.
+  Erwartet: Feld „Motorneigung“ nur beim Speed-Rumpf; Keile und Propeller 30° schräg, Check grün mit „Stromlinie … 30°“; bei 0° flache 1-mm-Keile, Propeller waagerecht, Check weiter grün.
+- [x] **Zu viel Neigung**
+  Schritte: 1. Frame-Assistent, 7", Speed-Rumpf, Motorneigung 35°.
+  Erwartet: Warnung „streifen die hinteren Propeller ihre Arme – höchstens 28° passen“; gebaut zeigt der Drohnen-Check die hinteren Propeller rot.
 - [x] **Ducts wachsen mit**
   Schritte: 1. 3,5" Cinewhoop. 2. Unter „Maße“ Bolzenhöhe auf 30.
   Erwartet: Die Ducts werden höher und enden 1 mm unter der Oberplatte; nichts steckt ineinander.
@@ -497,7 +503,7 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
   Erwartet: Gelber Hinweis: Hersteller 142 mm, Tracery braucht mehr; nach dem Umstellen steht die Vorlage wieder auf „Eigener Rahmen“.
 - [ ] **Sieht der Speed-Rumpf gut aus?**
   Schritte: 1. 5" Speed von allen Seiten ansehen, auch mit „Röntgen“ und Schnitt.
-  Erwartet: Hohle Haube mit Wand, unten offen, Kamera schaut vorne aus der Spitze; Rumpf als STL/STEP druckbar.
+  Erwartet: Glatter, hohler Rumpf mit Wand, nur über der Mittelplatte unten offen, Kamera schaut vorne aus der Nase, Heck hinten offen; Rumpf als STEP druckbar (in zwei Hälften teilen).
 
 ## KI-Kollege (neu in Sitzung 17)
 
