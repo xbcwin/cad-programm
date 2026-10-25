@@ -258,15 +258,16 @@ const SKO = (() => {
   const TEMPLATES = {
     pins: { name: 'Pin-Raster (Löcher)', p: { nx: 5, ny: 2, pitch: 2.54, d: 1 } },
     vent: { name: 'Lüftungsgitter (Schlitze)', p: { n: 6, len: 20, w: 2, pitch: 4 } },
-    qfp: { name: 'Chip QFP / LQFP', p: { n: 48, body: 7, pitch: 0.5, padW: 0.27, padL: 1 } },
-    qfn: { name: 'Chip QFN', p: { n: 32, body: 5, pitch: 0.5, padW: 0.25, padL: 0.4, ep: 3.45 } },
-    bga: { name: 'Chip BGA', p: { nx: 10, ny: 10, pitch: 0.8, d: 0.4, body: 9 } },
-    soic: { name: 'Chip SOIC / SO', p: { n: 8, pitch: 1.27, bodyL: 4.9, bodyW: 3.9, span: 6, padW: 0.41 } },
-    dip: { name: 'Chip DIP (Durchsteck)', p: { n: 8, pitch: 2.54, row: 7.62, d: 0.8, bodyL: 9.8, bodyW: 6.35 } },
-    usbc: { name: 'Ausschnitt USB-C', p: { w: 9.5, h: 3.8 } },
+    qfp: { name: 'Chip QFP / LQFP', p: { n: 48, body: 7, pitch: 0.5, padW: 0.22, padL: 1 }, note: 'Nennmaße des Bauteils nach JEDEC MS-026 (LQFP-48: Pin-Breite 0,17–0,27 mm) – keine Lötpads.' },
+    qfn: { name: 'Chip QFN', p: { n: 32, body: 5, pitch: 0.5, padW: 0.25, padL: 0.4, ep: 3.45 }, note: 'Nennmaße eines QFN-32 mit 5 × 5 mm (Pad-Breite 0,18–0,30 mm, Pad-Länge 0,30–0,50 mm).' },
+    bga: { name: 'Chip BGA', p: { nx: 10, ny: 10, pitch: 0.8, d: 0.4, body: 10 }, note: 'Nennmaße eines BGA mit 10 × 10 Kugeln und 0,8 mm Raster: Gehäuse 10 × 10 mm.' },
+    soic: { name: 'Chip SOIC / SO', p: { n: 8, pitch: 1.27, bodyL: 4.9, bodyW: 3.9, span: 6, padW: 0.41 }, note: 'Nennmaße nach JEDEC MS-012 (Spannweite 5,8–6,2 mm, Bein-Breite 0,31–0,51 mm).' },
+    dip: { name: 'Chip DIP (Durchsteck)', p: { n: 8, pitch: 2.54, row: 7.62, d: 0.8, bodyL: 9.27, bodyW: 6.35 }, note: 'Nennmaße eines DIP-8 mit 300 mil Reihenabstand (Gehäuselänge 8,84–10,16 mm je nach Hersteller).' },
+    usbc: { name: 'Ausschnitt USB-C-Buchse', p: { w: 9.5, h: 3.8 }, note: 'Für eine Buchse, die bündig mit der Wand abschließt: Die Buchse ist etwa 8,9 × 3,2 mm groß, dazu kommt rundum etwas Spiel. Sitzt die Buchse tiefer, nimm „Ausschnitt USB-C-Stecker“.' },
+    usbcp: { name: 'Ausschnitt USB-C-Stecker', p: { w: 13, h: 7, r: 1.5 }, note: 'Für eine Buchse hinter der Wand: Der Stecker mit Gummikappe darf laut USB-Norm bis 12,35 × 6,5 mm groß sein. Probedruck lohnt sich.' },
     mhole: { name: 'Befestigungslöcher im Rechteck', p: { w: 30.5, h: 30.5, d: 3.4 } },
   };
-  const TPLNAMES = { nx: 'Anzahl X', ny: 'Anzahl Y', n: 'Anzahl', pitch: 'Raster', d: 'Ø', len: 'Länge', w: 'Breite', body: 'Gehäuse', padW: 'Pin-Breite', padL: 'Pin-Länge', ep: 'Mittelfläche', bodyL: 'Gehäuse lang', bodyW: 'Gehäuse breit', span: 'Spannweite', row: 'Reihenabstand', h: 'Höhe' };
+  const TPLNAMES = { nx: 'Anzahl X', ny: 'Anzahl Y', n: 'Anzahl', pitch: 'Raster', d: 'Ø', len: 'Länge', w: 'Breite', body: 'Gehäuse', padW: 'Pin-Breite', padL: 'Pin-Länge', ep: 'Mittelfläche', bodyL: 'Gehäuse lang', bodyW: 'Gehäuse breit', span: 'Spannweite', row: 'Reihenabstand', h: 'Höhe', r: 'Eckradius' };
   const pr1 = (v) => Math.round(v * 1e4) / 1e4;
   function tplEnts(type, P, c) {
     const out = [];
@@ -286,11 +287,23 @@ const SKO = (() => {
       }
       if (type === 'qfn') { const e = pos('ep', 0) / 2; if (e > 0 && e < B - pl) R(-e, -e, e, e); }
     }
-    else if (type === 'bga') { const nx = int('nx', 10), ny = int('ny', 10), t = pos('pitch', 0.8), r = pos('d', 0.4) / 2, B = Math.max(pos('body', 9) / 2, ((Math.max(nx, ny) - 1) * t) / 2 + r + 0.2); R(-B, -B, B, B); for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) C((i - (nx - 1) / 2) * t, (j - (ny - 1) / 2) * t, r); }
+    else if (type === 'bga') { const nx = int('nx', 10), ny = int('ny', 10), t = pos('pitch', 0.8), r = pos('d', 0.4) / 2, B = Math.max(pos('body', 10) / 2, ((Math.max(nx, ny) - 1) * t) / 2 + r + 0.2); R(-B, -B, B, B); for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) C((i - (nx - 1) / 2) * t, (j - (ny - 1) / 2) * t, r); }
     else if (type === 'soic') { const n = Math.max(2, Math.round(pos('n', 8) / 2) * 2), s = n / 2, t = pos('pitch', 1.27), L = pos('bodyL', 4.9) / 2, W = pos('bodyW', 3.9) / 2, S = Math.max(pos('span', 6) / 2, W + 0.2), pw = pos('padW', 0.41) / 2; R(-L, -W, L, W); for (let i = 0; i < s; i++) { const x = (i - (s - 1) / 2) * t; R(x - pw, -S, x + pw, -W); R(x - pw, W, x + pw, S); } }
     else if (type === 'usbc') { const w = pos('w', 9.5), hh = Math.min(pos('h', 3.8), w); out.push({ id: uid('e'), type: 'slot', a: pr([c[0] - (w - hh) / 2, c[1]]), b: pr([c[0] + (w - hh) / 2, c[1]]), r: pr1(hh / 2) }); }
+    else if (type === 'usbcp') {
+      const w = pos('w', 13) / 2, hh = pos('h', 7) / 2, r = Math.min(Math.max(0, Number(P.r) || 0), w - 1e-3, hh - 1e-3);
+      if (r < 1e-3) R(-w, -hh, w, hh);
+      else {
+        const P2 = (x, y) => pr([c[0] + x, c[1] + y]), L = (a, b) => out.push({ id: uid('e'), type: 'line', a, b });
+        const A = (cx, cy, a0) => { const am = a0 + Math.PI / 4, a1 = a0 + Math.PI / 2; out.push({ id: uid('e'), type: 'arc', a: P2(cx + r * Math.cos(a0), cy + r * Math.sin(a0)), m: P2(cx + r * Math.cos(am), cy + r * Math.sin(am)), b: P2(cx + r * Math.cos(a1), cy + r * Math.sin(a1)) }); };
+        L(P2(-w + r, -hh), P2(w - r, -hh)); A(w - r, -hh + r, -Math.PI / 2);
+        L(P2(w, -hh + r), P2(w, hh - r)); A(w - r, hh - r, 0);
+        L(P2(w - r, hh), P2(-w + r, hh)); A(-w + r, hh - r, Math.PI / 2);
+        L(P2(-w, hh - r), P2(-w, -hh + r)); A(-w + r, -hh + r, Math.PI);
+      }
+    }
     else if (type === 'mhole') { const w = pos('w', 30.5) / 2, hh = pos('h', 30.5) / 2, r = pos('d', 3.4) / 2; for (const sx of [-1, 1]) for (const sy of [-1, 1]) C(sx * w, sy * hh, r); }
-    else if (type === 'dip') { const n = Math.max(2, Math.round(pos('n', 8) / 2) * 2), s = n / 2, t = pos('pitch', 2.54), rw = pos('row', 7.62) / 2, r = pos('d', 0.8) / 2, L = pos('bodyL', 9.8) / 2, W = pos('bodyW', 6.35) / 2; R(-L, -W, L, W, true); for (let i = 0; i < s; i++) { const x = (i - (s - 1) / 2) * t; C(x, -rw, r); C(x, rw, r); } }
+    else if (type === 'dip') { const n = Math.max(2, Math.round(pos('n', 8) / 2) * 2), s = n / 2, t = pos('pitch', 2.54), rw = pos('row', 7.62) / 2, r = pos('d', 0.8) / 2, L = pos('bodyL', 9.27) / 2, W = pos('bodyW', 6.35) / 2; R(-L, -W, L, W, true); for (let i = 0; i < s; i++) { const x = (i - (s - 1) / 2) * t; C(x, -rw, r); C(x, rw, r); } }
     return out;
   }
 

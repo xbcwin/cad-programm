@@ -983,6 +983,7 @@ const IC = {
   holeWizard: '<path d="M12 2.5v19" stroke-dasharray="3 2.5" opacity=".5"/><path d="M2 6h5v4h2.5v8H2z M22 6h-5v4h-2.5v8H22z" fill="currentColor" opacity=".25"/><path d="M2 6h5v4h2.5v8H2 M22 6h-5v4h-2.5v8H22" />',
   countersink: '<path d="M12 2.5v19" stroke-dasharray="3 2.5" opacity=".5"/><path d="M2 6h5l2.5 4v8H2z M22 6h-5l-2.5 4v8H22z" fill="currentColor" opacity=".25"/><path d="M2 6h5l2.5 4v8H2 M22 6h-5l-2.5 4v8H22" />',
   patternRect: '<rect x="4" y="4" width="6" height="6" rx="1" fill="currentColor" opacity=".25"/><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/>',
+  patternPath: '<path d="M3 19C6 9 14 5 21 5" stroke-dasharray="3 2.5" opacity=".4"/><rect x="2" y="16" width="4" height="4" rx=".8" fill="currentColor" opacity=".25"/><rect x="2" y="16" width="4" height="4" rx=".8"/><rect x="7.5" y="9" width="4" height="4" rx=".8" transform="rotate(-35 9.5 11)"/><rect x="17" y="3" width="4" height="4" rx=".8" transform="rotate(-10 19 5)"/>',
   patternCirc: '<circle cx="12" cy="12" r="7" stroke-dasharray="3 2.5" opacity=".4"/><circle cx="12" cy="5" r="2.2" fill="currentColor" opacity=".25"/><circle cx="12" cy="5" r="2.2"/><circle cx="19" cy="12" r="2.2"/><circle cx="12" cy="19" r="2.2"/><circle cx="5" cy="12" r="2.2"/>',
   boolUnion: '<path d="M3 3h11v6h6v11H9v-6H3z" fill="currentColor" opacity=".25"/><path d="M3 3h11v6h6v11H9v-6H3z" />',
   boolSubtract: '<path d="M3 3h11v6H9v5H3z" fill="currentColor" opacity=".25"/><path d="M3 3h11v6H9v5H3z"/><path d="M14 9h6v11H9v-6" stroke-dasharray="3 2.5" opacity=".5"/>',
@@ -1213,6 +1214,11 @@ const HELP = {
   "hilfe": "Wähle einen Körper und dann „Muster“ → „Kreismuster“. Rechts stellst du Anzahl, Winkel und die Mitte ein, um die gedreht wird.",
   "tipp": "Perfekt für Lochkreise und Speichen. 360° verteilt die Kopien ganz rundherum."
  },
+ "patternPath": {
+  "tip": "Kopien entlang einer Kurve setzen",
+  "hilfe": "Wähle einen Körper oder ein Loch und dann „Muster“ → „Muster entlang Kurve“. Zeichne die Kurve – Linie, Bogen, Spline oder Kreis – und drück „Fertig“. Rechts stellst du Anzahl, Abstand und Ausrichtung ein; „Kurve bearbeiten“ ändert die Kurve später.",
+  "tipp": "Abstand 0 verteilt die Kopien gleichmäßig über die ganze Kurve. Ein Kreis als Kurve mit Ausrichtung „Mit der Kurve“ wirkt wie ein Kreismuster."
+ },
  "mirror": {
   "tip": "Gespiegelte Kopie anlegen",
   "hilfe": "Wähle einen Körper und dann „Muster“ → „Gespiegelte Kopie“. Rechts wählst du die Spiegelebene und wo sie liegt.",
@@ -1405,8 +1411,8 @@ const HELP = {
  },
  "sketchTemplate": {
   "tip": "Fertige Umrisse mit echten Maßen einsetzen",
-  "hilfe": "Wähle rechts eine Schablone – Pin-Raster, Lüftungsgitter oder ein Chip-Gehäuse (QFP, QFN, BGA, SOIC, DIP) – und stell Anzahl, Raster und Größen ein. Ein Klick ins Bild setzt sie mit der Mitte an diese Stelle; am Nullpunkt oder an Mittelpunkten rastet sie ein.",
-  "tipp": "Für einen Chip das Gehäuse hochziehen und die Pins als eigene Flächen etwas niedriger – oder alles als Aussparung für einen Halter. Die Standardmaße bitte mit dem Datenblatt vergleichen."
+  "hilfe": "Wähle rechts eine Schablone – Pin-Raster, Lüftungsgitter, ein Chip-Gehäuse (QFP, QFN, BGA, SOIC, DIP), einen USB-C-Ausschnitt oder Befestigungslöcher – und stell Anzahl, Raster und Größen ein. Ein Klick ins Bild setzt sie mit der Mitte an diese Stelle; am Nullpunkt oder an Mittelpunkten rastet sie ein.",
+  "tipp": "Für einen Chip das Gehäuse hochziehen und die Pins als eigene Flächen etwas niedriger – oder alles als Aussparung für einen Halter. Beim USB-C-Ausschnitt: „Buchse“, wenn die Buchse bündig an der Wand sitzt, „Stecker“, wenn sie dahinter liegt und der Stecker samt Gummikappe hinein muss. Die Standardmaße bitte mit dem Datenblatt vergleichen."
  },
  "extend2d": {
   "tip": "Linie bis zur nächsten Kante verlängern",
@@ -1595,7 +1601,7 @@ const Model = (() => {
   function matArr(m) { return Array.from(m.elements); }
   function kernelItem(it, V) {
     const o = { id: it.id, kind: it.kind, role: it.role, hidden: !!it.hidden, m: matArr(localMatrix(it)) };
-    if (it.kind === 'group') { let kids = it.children || []; if (it.rollback != null) kids = kids.slice(0, clamp(it.rollback, 0, kids.length)); o.children = kids.filter((c) => !c.suppressed).map((c) => kernelItem(c, V)); if (it.p && it.p.op) o.p = resolveP(it.p, V); }
+    if (it.kind === 'group') { let kids = it.children || []; if (it.rollback != null) kids = kids.slice(0, clamp(it.rollback, 0, kids.length)); o.children = kids.filter((c) => !c.suppressed).map((c) => kernelItem(c, V)); if (it.p && it.p.op) o.p = it.p.op === 'pattern' && it.p.pt === 'path' ? pathPatternParams(it, V) : resolveP(it.p, V); }
     else if (it.kind === 'extrude' || it.kind === 'revolve') o.p = sketchParams(it, V);
     else if (it.kind === 'loft') o.p = loftParams(it, V);
     else if (it.kind === 'sweep') o.p = sweepParams(it, V);
@@ -1613,6 +1619,55 @@ const Model = (() => {
     const out = { plane: p.sketch ? p.sketch.plane : { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] }, regions: chosen.map((r) => ({ outer: r.outer.k, holes: r.holes.map((h) => h.k) })) };
     if (it.kind === 'extrude') { out.dist = num(p.dist, V, 10); out.dir = p.dir || 'normal'; out.extra = num(p.extra, V, 0); }
     else { out.angle = num(p.angle, V, 360); out.axis = p.axis || { a: [0, 0], b: [0, 1] }; }
+    return out;
+  }
+  // Muster entlang Kurve: Lage und Drehung jeder Kopie aus der Kurve der Gruppe (p.sketch) berechnen.
+  // Die Kopie k wird um (Punkt k − Punkt 0) verschoben; mit „ausrichten“ dreht sie sich mit der Kurve.
+  function pathCurve(ents) {
+    let poly = null, closed = false;
+    const ch = SK.chains(ents)[0];
+    if (ch) { poly = []; for (const s of ch.segs) for (const q of SK.segPoints(s)) if (!poly.length || SK.d2(poly[poly.length - 1], q) > 1e-9) poly.push(q); }
+    else { const regs = SK.regions(ents).sort((a, b) => b.area - a.area); if (regs.length) { poly = regs[0].outer.poly.slice(); closed = true; } }
+    if (!poly || poly.length < 2) return null;
+    const ref = ents.find((e) => e.type === 'point');
+    if (ref && closed) { let bi = 0, bd = Infinity; poly.forEach((q, i) => { const d = SK.d2(q, ref.a); if (d < bd) { bd = d; bi = i; } }); poly = poly.slice(bi).concat(poly.slice(0, bi)); }
+    else if (ref && SK.d2(ref.a, poly[poly.length - 1]) < SK.d2(ref.a, poly[0])) poly.reverse();
+    if (closed) poly.push(poly[0]);
+    const cum = [0]; for (let i = 1; i < poly.length; i++) cum.push(cum[i - 1] + SK.d2(poly[i - 1], poly[i]));
+    return { poly, cum, len: cum[cum.length - 1], closed };
+  }
+  function pathAt(C, s) {
+    const { poly, cum } = C; let i = 1;
+    while (i < poly.length - 1 && cum[i] < s) i++;
+    const a = poly[i - 1], b = poly[i], L = cum[i] - cum[i - 1] || 1, t = clamp((s - cum[i - 1]) / L, 0, 1);
+    return { p: [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], ang: Math.atan2(b[1] - a[1], b[0] - a[0]) };
+  }
+  // Lage (2D in der Kurvenebene) und Richtung jeder Kopie; die erste ist das Original am Kurvenanfang
+  function pathPlaces(ents, n, d) {
+    const C = pathCurve(ents); if (!C || C.len < 1e-6) return [];
+    const N = clamp(Math.round(n), 1, 200);
+    const step = d > 0 ? d : C.closed ? C.len / N : N > 1 ? C.len / (N - 1) : 0;
+    const out = [];
+    for (let k = 0; k < N; k++) {
+      const s = k * step;
+      if (k && (C.closed ? s > C.len - 1e-6 : s > C.len + 1e-6)) break;
+      out.push(pathAt(C, Math.min(s, C.len)));
+    }
+    return out;
+  }
+  function pathPatternParams(it, V) {
+    const p = it.p || {}, out = { op: 'pattern', pt: 'path', places: [], n: [0, 0, 1], p0: [0, 0, 0], align: p.align !== false && p.align !== 'nein' };
+    if (!p.sketch) return out;
+    const L = pathPlaces(Solver.cached(p.sketch, V).ents, num(p.n, V, 5), num(p.d, V, 0)); if (!L.length) return out;
+    const pl = p.sketch.plane, x = pl.x, n = pl.n, y = [n[1] * x[2] - n[2] * x[1], n[2] * x[0] - n[0] * x[2], n[0] * x[1] - n[1] * x[0]];
+    const W = (u, v) => [x[0] * u + y[0] * v, x[1] * u + y[1] * v, x[2] * u + y[2] * v];
+    const P0 = L[0];
+    for (const q of L) {
+      let da = ((q.ang - P0.ang) * 180) / Math.PI; while (da > 180) da -= 360; while (da <= -180) da += 360;
+      out.places.push({ d: W(q.p[0] - P0.p[0], q.p[1] - P0.p[1]).map((v) => Math.round(v * 1e6) / 1e6), a: Math.round(da * 1e6) / 1e6 });
+    }
+    const o = pl.o, w0 = W(P0.p[0], P0.p[1]);
+    out.p0 = [o[0] + w0[0], o[1] + w0[1], o[2] + w0[2]]; out.n = n.slice();
     return out;
   }
   // Übergang (Loft): je Profil die größte geschlossene Fläche, dazu optional eine Spitze hinter dem letzten Profil
@@ -1730,7 +1785,7 @@ const Model = (() => {
     walk(doc.items, (it) => { it.t = Object.assign(T0(), it.t || {}); it.p = it.p || {}; it.finishes = it.finishes || []; if (!it.role) it.role = 'solid'; if (!it.color) it.color = nextColor(); });
     return doc;
   }
-  return { useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  return { pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 
 // ---- 15-sketchcore.js ----
@@ -2897,15 +2952,16 @@ const SKO = (() => {
   const TEMPLATES = {
     pins: { name: 'Pin-Raster (Löcher)', p: { nx: 5, ny: 2, pitch: 2.54, d: 1 } },
     vent: { name: 'Lüftungsgitter (Schlitze)', p: { n: 6, len: 20, w: 2, pitch: 4 } },
-    qfp: { name: 'Chip QFP / LQFP', p: { n: 48, body: 7, pitch: 0.5, padW: 0.27, padL: 1 } },
-    qfn: { name: 'Chip QFN', p: { n: 32, body: 5, pitch: 0.5, padW: 0.25, padL: 0.4, ep: 3.45 } },
-    bga: { name: 'Chip BGA', p: { nx: 10, ny: 10, pitch: 0.8, d: 0.4, body: 9 } },
-    soic: { name: 'Chip SOIC / SO', p: { n: 8, pitch: 1.27, bodyL: 4.9, bodyW: 3.9, span: 6, padW: 0.41 } },
-    dip: { name: 'Chip DIP (Durchsteck)', p: { n: 8, pitch: 2.54, row: 7.62, d: 0.8, bodyL: 9.8, bodyW: 6.35 } },
-    usbc: { name: 'Ausschnitt USB-C', p: { w: 9.5, h: 3.8 } },
+    qfp: { name: 'Chip QFP / LQFP', p: { n: 48, body: 7, pitch: 0.5, padW: 0.22, padL: 1 }, note: 'Nennmaße des Bauteils nach JEDEC MS-026 (LQFP-48: Pin-Breite 0,17–0,27 mm) – keine Lötpads.' },
+    qfn: { name: 'Chip QFN', p: { n: 32, body: 5, pitch: 0.5, padW: 0.25, padL: 0.4, ep: 3.45 }, note: 'Nennmaße eines QFN-32 mit 5 × 5 mm (Pad-Breite 0,18–0,30 mm, Pad-Länge 0,30–0,50 mm).' },
+    bga: { name: 'Chip BGA', p: { nx: 10, ny: 10, pitch: 0.8, d: 0.4, body: 10 }, note: 'Nennmaße eines BGA mit 10 × 10 Kugeln und 0,8 mm Raster: Gehäuse 10 × 10 mm.' },
+    soic: { name: 'Chip SOIC / SO', p: { n: 8, pitch: 1.27, bodyL: 4.9, bodyW: 3.9, span: 6, padW: 0.41 }, note: 'Nennmaße nach JEDEC MS-012 (Spannweite 5,8–6,2 mm, Bein-Breite 0,31–0,51 mm).' },
+    dip: { name: 'Chip DIP (Durchsteck)', p: { n: 8, pitch: 2.54, row: 7.62, d: 0.8, bodyL: 9.27, bodyW: 6.35 }, note: 'Nennmaße eines DIP-8 mit 300 mil Reihenabstand (Gehäuselänge 8,84–10,16 mm je nach Hersteller).' },
+    usbc: { name: 'Ausschnitt USB-C-Buchse', p: { w: 9.5, h: 3.8 }, note: 'Für eine Buchse, die bündig mit der Wand abschließt: Die Buchse ist etwa 8,9 × 3,2 mm groß, dazu kommt rundum etwas Spiel. Sitzt die Buchse tiefer, nimm „Ausschnitt USB-C-Stecker“.' },
+    usbcp: { name: 'Ausschnitt USB-C-Stecker', p: { w: 13, h: 7, r: 1.5 }, note: 'Für eine Buchse hinter der Wand: Der Stecker mit Gummikappe darf laut USB-Norm bis 12,35 × 6,5 mm groß sein. Probedruck lohnt sich.' },
     mhole: { name: 'Befestigungslöcher im Rechteck', p: { w: 30.5, h: 30.5, d: 3.4 } },
   };
-  const TPLNAMES = { nx: 'Anzahl X', ny: 'Anzahl Y', n: 'Anzahl', pitch: 'Raster', d: 'Ø', len: 'Länge', w: 'Breite', body: 'Gehäuse', padW: 'Pin-Breite', padL: 'Pin-Länge', ep: 'Mittelfläche', bodyL: 'Gehäuse lang', bodyW: 'Gehäuse breit', span: 'Spannweite', row: 'Reihenabstand', h: 'Höhe' };
+  const TPLNAMES = { nx: 'Anzahl X', ny: 'Anzahl Y', n: 'Anzahl', pitch: 'Raster', d: 'Ø', len: 'Länge', w: 'Breite', body: 'Gehäuse', padW: 'Pin-Breite', padL: 'Pin-Länge', ep: 'Mittelfläche', bodyL: 'Gehäuse lang', bodyW: 'Gehäuse breit', span: 'Spannweite', row: 'Reihenabstand', h: 'Höhe', r: 'Eckradius' };
   const pr1 = (v) => Math.round(v * 1e4) / 1e4;
   function tplEnts(type, P, c) {
     const out = [];
@@ -2925,11 +2981,23 @@ const SKO = (() => {
       }
       if (type === 'qfn') { const e = pos('ep', 0) / 2; if (e > 0 && e < B - pl) R(-e, -e, e, e); }
     }
-    else if (type === 'bga') { const nx = int('nx', 10), ny = int('ny', 10), t = pos('pitch', 0.8), r = pos('d', 0.4) / 2, B = Math.max(pos('body', 9) / 2, ((Math.max(nx, ny) - 1) * t) / 2 + r + 0.2); R(-B, -B, B, B); for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) C((i - (nx - 1) / 2) * t, (j - (ny - 1) / 2) * t, r); }
+    else if (type === 'bga') { const nx = int('nx', 10), ny = int('ny', 10), t = pos('pitch', 0.8), r = pos('d', 0.4) / 2, B = Math.max(pos('body', 10) / 2, ((Math.max(nx, ny) - 1) * t) / 2 + r + 0.2); R(-B, -B, B, B); for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) C((i - (nx - 1) / 2) * t, (j - (ny - 1) / 2) * t, r); }
     else if (type === 'soic') { const n = Math.max(2, Math.round(pos('n', 8) / 2) * 2), s = n / 2, t = pos('pitch', 1.27), L = pos('bodyL', 4.9) / 2, W = pos('bodyW', 3.9) / 2, S = Math.max(pos('span', 6) / 2, W + 0.2), pw = pos('padW', 0.41) / 2; R(-L, -W, L, W); for (let i = 0; i < s; i++) { const x = (i - (s - 1) / 2) * t; R(x - pw, -S, x + pw, -W); R(x - pw, W, x + pw, S); } }
     else if (type === 'usbc') { const w = pos('w', 9.5), hh = Math.min(pos('h', 3.8), w); out.push({ id: uid('e'), type: 'slot', a: pr([c[0] - (w - hh) / 2, c[1]]), b: pr([c[0] + (w - hh) / 2, c[1]]), r: pr1(hh / 2) }); }
+    else if (type === 'usbcp') {
+      const w = pos('w', 13) / 2, hh = pos('h', 7) / 2, r = Math.min(Math.max(0, Number(P.r) || 0), w - 1e-3, hh - 1e-3);
+      if (r < 1e-3) R(-w, -hh, w, hh);
+      else {
+        const P2 = (x, y) => pr([c[0] + x, c[1] + y]), L = (a, b) => out.push({ id: uid('e'), type: 'line', a, b });
+        const A = (cx, cy, a0) => { const am = a0 + Math.PI / 4, a1 = a0 + Math.PI / 2; out.push({ id: uid('e'), type: 'arc', a: P2(cx + r * Math.cos(a0), cy + r * Math.sin(a0)), m: P2(cx + r * Math.cos(am), cy + r * Math.sin(am)), b: P2(cx + r * Math.cos(a1), cy + r * Math.sin(a1)) }); };
+        L(P2(-w + r, -hh), P2(w - r, -hh)); A(w - r, -hh + r, -Math.PI / 2);
+        L(P2(w, -hh + r), P2(w, hh - r)); A(w - r, hh - r, 0);
+        L(P2(w - r, hh), P2(-w + r, hh)); A(-w + r, hh - r, Math.PI / 2);
+        L(P2(-w, hh - r), P2(-w, -hh + r)); A(-w + r, -hh + r, Math.PI);
+      }
+    }
     else if (type === 'mhole') { const w = pos('w', 30.5) / 2, hh = pos('h', 30.5) / 2, r = pos('d', 3.4) / 2; for (const sx of [-1, 1]) for (const sy of [-1, 1]) C(sx * w, sy * hh, r); }
-    else if (type === 'dip') { const n = Math.max(2, Math.round(pos('n', 8) / 2) * 2), s = n / 2, t = pos('pitch', 2.54), rw = pos('row', 7.62) / 2, r = pos('d', 0.8) / 2, L = pos('bodyL', 9.8) / 2, W = pos('bodyW', 6.35) / 2; R(-L, -W, L, W, true); for (let i = 0; i < s; i++) { const x = (i - (s - 1) / 2) * t; C(x, -rw, r); C(x, rw, r); } }
+    else if (type === 'dip') { const n = Math.max(2, Math.round(pos('n', 8) / 2) * 2), s = n / 2, t = pos('pitch', 2.54), rw = pos('row', 7.62) / 2, r = pos('d', 0.8) / 2, L = pos('bodyL', 9.27) / 2, W = pos('bodyW', 6.35) / 2; R(-L, -W, L, W, true); for (let i = 0; i < s; i++) { const x = (i - (s - 1) / 2) * t; C(x, -rw, r); C(x, rw, r); } }
     return out;
   }
 
@@ -5425,7 +5493,7 @@ const Actions = (() => {
 // ihre Lage. Der CAD-Kern rechnet die Vorschrift nach jeder Änderung neu – ändert man das Original,
 // ziehen alle Kopien mit. So lässt sich auch ein Loch in einer Platte im Kreis vervielfachen.
 const Features = (() => {
-  const NAMES = { rect: 'Rechteckmuster', circ: 'Kreismuster', mirror: 'Spiegelung', split: 'Geteilt', intersect: 'Schnittmenge' };
+  const NAMES = { rect: 'Rechteckmuster', circ: 'Kreismuster', path: 'Muster entlang Kurve', mirror: 'Spiegelung', split: 'Geteilt', intersect: 'Schnittmenge' };
   // gewählte Objekte, die alle auf derselben Ebene liegen (sonst leer)
   function siblings(ids) {
     const fs = (ids || App.sel).map((id) => Model.find(App.doc, id)).filter(Boolean);
@@ -5461,6 +5529,23 @@ const Features = (() => {
     else if (type === 'circ') G = wrap(items, NAMES.circ, { op: 'pattern', pt: 'circ', n: 4, ang: 360, cx: 0, cy: 0 });
     else G = wrap(items, NAMES.mirror, { op: 'pattern', pt: 'mirror', plane: 'YZ', off: 0 });
     UI.toast(type === 'mirror' ? 'Gespiegelte Kopie angelegt. Rechts wählst du die Spiegelebene.' : 'Muster angelegt. Rechts stellst du Anzahl und Abstand ein – auch mit Formeln.', { icon: 'check' });
+    return G;
+  }
+  // Muster entlang Kurve: erst die Kurve zeichnen (Skizze auf Höhe der Oberkante), dann legt pathFromSketch die Gruppe an
+  function patternPath(ids) {
+    const items = need(ids); if (!items.length) return null;
+    const W = Model.parentWorld(App.doc, items[0].id), inv = W.clone().invert();
+    const b = Actions.selBox(items.map((x) => x.id));
+    const c = b.isEmpty() ? new THREE.Vector3() : b.getCenter(new THREE.Vector3()).applyMatrix4(inv);
+    const top = b.isEmpty() ? 0 : new THREE.Vector3(b.getCenter(new THREE.Vector3()).x, b.getCenter(new THREE.Vector3()).y, b.max.z).applyMatrix4(inv).z;
+    Sketch.startPath({ plane: { o: [0, 0, round(top, 4)], x: [1, 0, 0], n: [0, 0, 1] }, W, ents: [{ id: uid('e'), type: 'point', a: [round(c.x, 4), round(c.y, 4)] }], ids: items.map((x) => x.id), viewSize: b.isEmpty() ? 100 : Math.max(100, 5 * Math.max(b.max.x - b.min.x, b.max.y - b.min.y)) });
+    return true;
+  }
+  function pathFromSketch(ids, sketch) {
+    const items = siblings(ids);
+    if (!items.length) { UI.toast('Die gewählten Objekte gibt es nicht mehr.', { kind: 'bad' }); return null; }
+    const G = wrap(items, NAMES.path, { op: 'pattern', pt: 'path', n: 5, d: 0, align: true, sketch });
+    UI.toast('Muster entlang der Kurve angelegt. Rechts stellst du Anzahl, Abstand und Mitdrehen ein.', { icon: 'check' });
     return G;
   }
   // Gespiegelte Kopie an einer gewählten ebenen Fläche (z. B. zweiter Arm an der Mittelfläche)
@@ -5518,6 +5603,19 @@ const Features = (() => {
     let hint = '';
     if (p.op === 'pattern' && p.pt === 'rect') { f.append(num('nx', 'Anzahl X', '', { int: true, min: 1 }), num('ny', 'Anzahl Y', '', { int: true, min: 1 }), num('dx', 'Abstand X'), num('dy', 'Abstand Y')); hint = 'Die Anzahl zählt das Original mit. Abstände gehen von Mitte zu Mitte.'; }
     else if (p.op === 'pattern' && p.pt === 'circ') { f.append(num('n', 'Anzahl', '', { int: true, min: 1 }), num('ang', 'Winkel', '°'), num('cx', 'Mitte X'), num('cy', 'Mitte Y')); hint = 'Gedreht wird um die senkrechte Achse durch die Mitte. 360° verteilt die Kopien rundherum.'; }
+    else if (p.op === 'pattern' && p.pt === 'path') {
+      f.append(num('n', 'Anzahl', '', { int: true, min: 1 }), num('d', 'Abstand', 'mm', { min: 0 }));
+      f.append(UI.selectField({ id: 'op-align', label: 'Ausrichtung', value: p.align === false ? 'nein' : 'ja', options: [['ja', 'Mit der Kurve'], ['nein', 'Wie das Original']], onChange: (v) => setP('align', v === 'ja') }));
+      hint = 'Die Anzahl zählt das Original mit. <b>Abstand 0</b> verteilt die Kopien gleichmäßig über die ganze Kurve, ein Wert setzt sie in diesem Abstand – bis die Kurve zu Ende ist. Ausrichtung „Mit der Kurve“ dreht jede Kopie so, wie die Kurve abbiegt – wie Zähne an einem Bogen.';
+      const eb = h('button', { type: 'button', class: 'btn', id: 'op-editpath' }); eb.innerHTML = icon('sketch') + 'Kurve bearbeiten';
+      eb.onclick = () => Sketch.editItem(it.id);
+      sec.append(f, h('div', { class: 'btn-row' }, eb));
+      sec.append(h('div', { class: 'hint-box', html: hint }));
+      const ub = h('button', { type: 'button', class: 'btn' }); ub.innerHTML = icon('ungroup') + 'Auflösen (nur Original behalten)';
+      ub.onclick = () => Actions.ungroup(it.id);
+      sec.append(h('div', { class: 'btn-row' }, ub));
+      return;
+    }
     else if (p.op === 'pattern' && p.pt === 'mirror' && p.plane === 'FACE') { hint = 'Gespiegelt an einer gewählten Fläche. Original und Spiegelbild sind ein Körper. Für eine andere Ebene: Rückgängig und neu spiegeln.'; }
     else if (p.op === 'pattern' && p.pt === 'mirror') { f.append(sel('plane', 'Spiegeln', [['YZ', 'Links ↔ rechts'], ['XZ', 'Vorne ↔ hinten'], ['XY', 'Oben ↔ unten']]), num('off', 'Lage der Ebene')); hint = 'Original und Spiegelbild werden ein Körper. Die Ebene geht durch den Nullpunkt, „Lage“ verschiebt sie.'; }
     else if (p.op === 'split') {
@@ -5537,13 +5635,14 @@ const Features = (() => {
     const p = Model.resolveP(it.p || {}, V || {});
     if (p.op === 'pattern' && p.pt === 'rect') return `${Math.max(1, Math.round(p.nx || 1))} × ${Math.max(1, Math.round(p.ny || 1))}`;
     if (p.op === 'pattern' && p.pt === 'circ') return `${Math.max(1, Math.round(p.n || 1))}× ${fmt(p.ang ?? 360, 0)}°`;
+    if (p.op === 'pattern' && p.pt === 'path') { let k = 0; try { k = Model.pathPatternParams(it, V || Model.vars(App.doc).v).places.length; } catch (_) { k = 0; } return k ? `${k}× entlang Kurve` : 'Kurve fehlt'; }
     if (p.op === 'pattern' && p.pt === 'mirror') return 'gespiegelt';
     if (p.op === 'split') return { both: 'beide Hälften', positive: 'eine Hälfte', negative: 'eine Hälfte' }[p.keep] || '';
     if (p.op === 'intersect') return 'Schnittmenge';
     return null;
   }
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { mirrorAtFace, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
+  return { mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
 })();
 // ---- 47-mass.js ----
 // ================= Masse: Volumen, Gewicht und Schwerpunkt =================
@@ -6828,7 +6927,7 @@ const Panels = (() => {
       b('rotate', 'Drehen', (e) => UI.menu(e.currentTarget, [{ label: 'Um 90° drehen (flach)', icon: 'rotate', kbd: 'R', run: () => Actions.rotate90(null, 'z') }, { label: 'Nach vorne kippen', icon: 'rotate', run: () => Actions.rotate90(null, 'x') }, { label: 'Zur Seite kippen', icon: 'rotate', run: () => Actions.rotate90(null, 'y') }]), '', 'Um 90° drehen oder kippen', true);
       b('mirror', 'Spiegeln', (e) => UI.menu(e.currentTarget, [{ label: 'Links ↔ rechts', icon: 'mirror', run: () => Actions.mirror(null, 'x') }, { label: 'Vorne ↔ hinten', icon: 'mirror', run: () => Actions.mirror(null, 'y') }, { label: 'Oben ↔ unten', icon: 'mirror', run: () => Actions.mirror(null, 'z') }]), '', 'Spiegeln', true);
       b('copy', 'Duplizieren', () => Actions.duplicate(), '', 'Duplizieren (Strg D)', true);
-      b('patternCirc', 'Muster', (e) => UI.menu(e.currentTarget, [{ label: 'Rechteckmuster', icon: 'patternRect', run: () => Features.pattern('rect') }, { label: 'Kreismuster', icon: 'patternCirc', run: () => Features.pattern('circ') }, { label: 'Gespiegelte Kopie', icon: 'mirror', run: () => Features.pattern('mirror') }]), '', hole ? 'Loch als Muster oder gespiegelt vervielfachen' : 'Muster oder gespiegelte Kopie', true);
+      b('patternCirc', 'Muster', (e) => UI.menu(e.currentTarget, [{ label: 'Rechteckmuster', icon: 'patternRect', run: () => Features.pattern('rect') }, { label: 'Kreismuster', icon: 'patternCirc', run: () => Features.pattern('circ') }, { label: 'Muster entlang Kurve', icon: 'patternPath', run: () => Features.patternPath() }, { label: 'Gespiegelte Kopie', icon: 'mirror', run: () => Features.pattern('mirror') }]), '', hole ? 'Loch als Muster oder gespiegelt vervielfachen' : 'Muster oder gespiegelte Kopie', true);
       if (!hole) b('split', 'Teilen', () => Features.split(), '', 'Körper an einer Ebene teilen', true);
       if (!hole && it.kind === 'extrude' && it.p && it.p.sketch) b('loft', 'Zur Spitze', () => Actions.loft([it.id], { tip: 10 }), '', 'Den Umriss zu einer Spitze zusammenlaufen lassen (Übergang mit Spitze)', true);
       if (!App.edges.length) b('similar', 'Ähnliche', () => Select.similar(), '', 'Alle gleichen Teile wählen (A)', true);
@@ -7708,7 +7807,7 @@ const Sketch = (() => {
     { id: 'slot', icon: 'slot', label: 'Langloch', key: 'G', tip: 'Langloch: zwei Mittelpunkte, dann Breite' },
     { id: 'poly', icon: 'polygon', label: 'Vieleck', key: 'P', tip: 'Regelmäßiges Vieleck vom Mittelpunkt aus' },
     { id: 'point', icon: 'point', label: 'Punkt', key: 'O', tip: 'Einzelner Punkt – z. B. als Mitte für Bohrungen oder als Bezug für Maße' },
-    { id: 'tpl', icon: 'chip', label: 'Schablone', key: 'J', tip: 'Fertige Umrisse: Pin-Raster, Lüftungsgitter, Chips (QFP, QFN, BGA, SOIC, DIP)' },
+    { id: 'tpl', icon: 'chip', label: 'Schablone', key: 'J', tip: 'Fertige Umrisse: Pin-Raster, Lüftungsgitter, Chips (QFP, QFN, BGA, SOIC, DIP), USB-C-Ausschnitte, Befestigungslöcher' },
     { id: 'text', icon: 'text', label: 'Text', key: 'B', tip: 'Schrift als Umriss – zum Prägen oder Ausschneiden' },
     { id: 'spline', icon: 'spline', label: 'Spline', key: 'S', tip: 'Spline: weiche Kurve durch Punkte – Enter beendet' },
     { id: 'corner', icon: 'fillet', label: 'Ecke runden', key: 'K', tip: 'Ecke zwischen zwei Linien runden oder fasen – auch an Rechteck und Vieleck', sep: true },
@@ -7835,11 +7934,19 @@ const Sketch = (() => {
     const f = Model.find(App.doc, id); if (!f || !f.item.p.sketch) return;
     const W = Model.worldMatrix(App.doc, id);
     begin({ plane: deepClone(f.item.p.sketch.plane), W, ents: deepClone(f.item.p.sketch.ents), dims: deepClone(f.item.p.sketch.dims || []), cons: deepClone(f.item.p.sketch.cons || []), bg: f.item.p.sketch.bg, refs: [], ctx: { mode: 'edit', editId: id } });
+    if (f.item.kind === 'group') return;   // Muster entlang Kurve: Original und Kopien bleiben sichtbar
     // Körper während des Bearbeitens ausblenden
     S.hiddenEdit = id;
     const top = Model.topOf(App.doc, id);
     if (top && top.id === id) Viewer.updateNode(id, { visible: false });
   }
+  // Kurve für „Muster entlang Kurve“ zeichnen (o: { plane, W, ents, ids })
+  function startPath(o) {
+    begin({ plane: o.plane, W: o.W, ents: o.ents || [], dims: [], cons: [], refs: [], viewSize: o.viewSize, ctx: { mode: 'patpath', ids: o.ids } });
+    UI.toast('Zeichne die Kurve, an der die Kopien entlanglaufen – Linie, Bogen, Spline oder Kreis. Dann „Fertig“.', { icon: 'info', ms: 4200 });
+  }
+  const pathGroup = () => { if (!S || S.ctx.mode !== 'edit') return null; const f = Model.find(App.doc, S.ctx.editId); return f && f.item.kind === 'group' && f.item.p && f.item.p.pt === 'path' ? f.item : null; };
+  const isPathEdit = () => !!(S && S.ctx.mode === 'edit' && (() => { const f = Model.find(App.doc, S.ctx.editId); return f && f.item.kind === 'group' && f.item.p && f.item.p.pt === 'path'; })());
   async function pushPullFace(face) {
     const loops = await loopsOf(face); if (loops == null) return;
     const fr = Actions.faceFrame(face.info);
@@ -7862,7 +7969,7 @@ const Sketch = (() => {
     if (Notes.active) Notes.stop();
     Panels.closeFlyout(); UI.closePop();
     const F = frameWorld(init.plane, init.W);
-    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' ? 'select' : 'rect', draft: null, sel: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, hoverEnt: null, trimHover: null };
+    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' ? 'select' : init.ctx.mode === 'patpath' ? 'line' : 'rect', draft: null, sel: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, hoverEnt: null, trimHover: null };
     S.dims = init.dims || []; S.cons = init.cons || []; S.picks = []; S.dimFirst = null; S.selCon = null;
     S.plane0 = deepClone(init.plane); S.pOff = init.pOff || 0; S.pTilt = 0;
     if (S.pOff) applyPlane(false, true);
@@ -7872,7 +7979,7 @@ const Sketch = (() => {
     document.body.classList.add('sketching');
     buildGroup();
     const b = SK.bounds([...S.ents, ...S.refs]);
-    const size = b ? Math.max(40, Math.max(b[2] - b[0], b[3] - b[1]) * 0.75) : 70;
+    const size = init.viewSize || (b ? Math.max(40, Math.max(b[2] - b[0], b[3] - b[1]) * 0.75) : 70);
     const c2 = b ? [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2] : [0, 0];
     const cw = S.F.o.clone().addScaledVector(S.F.x, c2[0]).addScaledVector(S.F.y, c2[1]);
     Viewer.lookAtPlane(cw.toArray(), S.F.n.toArray(), S.F.x.toArray(), size);
@@ -9294,8 +9401,17 @@ const Sketch = (() => {
         }
       }
     }
+    // Muster entlang Kurve: wo die Kopien landen (statt „offene Enden“)
+    const pathM = S.ctx.mode === 'patpath' || isPathEdit();
+    if (pathM && !S.step) {
+      const g = pathGroup(), V = Model.vars(App.doc).v;
+      const L = Model.pathPlaces(S.ents, g ? Model.num(g.p.n, V, 5) : 5, g ? Model.num(g.p.d, V, 0) : 0);
+      const bb = SK.bounds(S.ents) || [0, 0, 10, 10], rr = clamp(Math.max(bb[2] - bb[0], bb[3] - bb[1]) * 0.025, 0.6, 4);
+      L.forEach((q, i) => { const ring = []; for (let k = 0; k <= 24; k++) { const a = (k / 24) * Math.PI * 2; ring.push([q.p[0] + Math.cos(a) * rr, q.p[1] + Math.sin(a) * rr]); } lineObj(ring, acc, i ? 2 : 3.2, { order: 26 }); const t = [Math.cos(q.ang) * rr * 1.8, Math.sin(q.ang) * rr * 1.8]; lineObj([q.p, [q.p[0] + t[0], q.p[1] + t[1]]], acc, 2, { order: 26 }); });
+      S.pathCount = L.length; const pc = document.getElementById('path-count'); if (pc) pc.textContent = String(L.length);
+    }
     // offene Enden markieren
-    for (const p of SK.openEnds(S.ents)) { const w = toWorld(p[0], p[1]); const l = label('', p, 'snaptip'); l.style.transform = 'translate(-50%,-50%)'; l.style.width = '9px'; l.style.height = '9px'; l.style.padding = '0'; l.style.borderRadius = '50%'; l.style.background = th.hole; l.title = 'Offenes Ende'; }
+    if (!pathM) for (const p of SK.openEnds(S.ents)) { const w = toWorld(p[0], p[1]); const l = label('', p, 'snaptip'); l.style.transform = 'translate(-50%,-50%)'; l.style.width = '9px'; l.style.height = '9px'; l.style.padding = '0'; l.style.borderRadius = '50%'; l.style.background = th.hole; l.title = 'Offenes Ende'; }
     // Entwurf
     const d = S.draft, cur = S.cursor ? S.cursor.p : null;
     if (d && cur && !S.step) {
@@ -9464,6 +9580,7 @@ const Sketch = (() => {
   function renderPanel(body) {
     if (!S) return;
     const w = h('div', { class: 'props' });
+    if (!S.step && (S.ctx.mode === 'patpath' || isPathEdit())) w.append(h('div', { class: 'ok-box', id: 'path-hint', html: '<b>Kurve für das Muster</b> – die Kopien laufen sie vom Anfang bis zum Ende ab. Der Punkt markiert das Original: Am Ende der Kurve, das ihm näher liegt, geht es los. Ein Kreis oder ein geschlossener Umriss verteilt die Kopien rundherum.' }));
     if (S.step) { w.append(h('div', { class: 'hint-box', html: S.step.revolve ? 'Wähle die Achse, um die gedreht wird. Klick im Bild auf Flächen, um sie ab- oder anzuwählen.' : 'Zieh am Pfeil im Bild oder tipp die Höhe ein. Klick auf Flächen, um sie ab- oder anzuwählen.' })); body.append(w); return; }
     const sel = S.ents.find((x) => x.id === S.sel);
     const selCon = S.selCon && S.cons.find((c) => c.id === S.selCon);
@@ -9593,7 +9710,10 @@ const Sketch = (() => {
           const isInt = ['nx', 'ny', 'n'].includes(k);
           f6.append(UI.numField({ id: 'tp-' + k, label: SKO.TPLNAMES[k] || k, value: T.p[k], unit: isInt ? '' : 'mm', expr: false, int: isInt, min: isInt ? 1 : 0, onCommit: (v) => { T.p[k] = v; render(); } }));
         }
-        w.append(f6, h('div', { class: 'hint-box', html: 'Die Werte sind übliche Standardmaße – prüf sie mit dem Datenblatt deines Bauteils. Danach sind es normale Rechtecke und Kreise, die du einzeln ändern kannst.' }));
+        const note = SKO.TEMPLATES[T.type].note;
+        w.append(f6);
+        if (note) w.append(h('div', { class: 'hint-box', id: 'tp-note' }, note));
+        w.append(h('div', { class: 'hint-box', html: 'Die Werte sind übliche Standardmaße – prüf sie mit dem Datenblatt deines Bauteils. Danach sind es normale Linien, Bögen, Rechtecke und Kreise, die du einzeln ändern kannst.' }));
       }
       if (S.tool === 'text') {
         const T = S.txt;
@@ -9655,8 +9775,11 @@ const Sketch = (() => {
         w.append(pe);
       }
       const regs = SK.regions(S.ents);
-      w.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Geschlossene Flächen'), h('b', { class: 'mono' }, String(regs.length))));
-      if (SK.openEnds(S.ents).length) w.append(h('div', { class: 'err-box' }, 'Rot markierte Enden sind noch offen. Verbinde sie, damit eine Fläche entsteht.'));
+      if (S.ctx.mode === 'patpath' || isPathEdit()) w.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Teile auf der Kurve (mit Original)'), h('b', { class: 'mono', id: 'path-count' }, String(S.pathCount || 0))));
+      else {
+        w.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Geschlossene Flächen'), h('b', { class: 'mono' }, String(regs.length))));
+        if (SK.openEnds(S.ents).length) w.append(h('div', { class: 'err-box' }, 'Rot markierte Enden sind noch offen. Verbinde sie, damit eine Fläche entsteht.'));
+      }
     }
     w.append(h('div', { class: 'hint-box', html: 'Ansicht verschieben: <b>rechte Maustaste</b> · Zoomen: <b>Mausrad</b> · Genauer: <b>Umschalt</b> halten' }));
     body.append(w);
@@ -9668,8 +9791,14 @@ const Sketch = (() => {
     S.draft = null; hideEntry();
     const regs = SK.regions(S.ents);
     const editKind = S.ctx.mode === 'edit' ? (Model.find(App.doc, S.ctx.editId) || { item: {} }).item.kind : null;
+    const pathMode = S.ctx.mode === 'patpath' || isPathEdit();
+    if (pathMode && !SK.chains(S.ents).length && !regs.length) { UI.toast('Zeichne zuerst eine Kurve: eine Linie, einen Bogen, eine Spline oder einen Kreis.', { kind: 'bad', icon: 'info' }); return; }
+    if (S.ctx.mode === 'patpath') {
+      const sk = { plane: deepClone(S.plane), ents: S.ents, dims: S.dims, cons: S.cons }, ids = S.ctx.ids;
+      finishSession(); Features.pathFromSketch(ids, sk); return;
+    }
     if (S.ctx.mode === 'edit') {
-      if (editKind === 'sweep' ? !SK.chains(S.ents).length : !regs.length) { UI.toast(editKind === 'sweep' ? 'Der Pfad braucht mindestens eine offene Linie, einen Bogen oder eine Spline.' : 'Die Skizze braucht mindestens eine geschlossene Fläche.', { kind: 'bad' }); return; }
+      if (!pathMode && (editKind === 'sweep' ? !SK.chains(S.ents).length : !regs.length)) { UI.toast(editKind === 'sweep' ? 'Der Pfad braucht mindestens eine offene Linie, einen Bogen oder eine Spline.' : 'Die Skizze braucht mindestens eine geschlossene Fläche.', { kind: 'bad' }); return; }
       const id = S.ctx.editId, ents = S.ents, dims = S.dims, cons = S.cons, plane = deepClone(S.plane), bg = S.bg ? deepClone(S.bg) : null;
       App.change('Skizze bearbeitet', (doc) => { const f = Model.find(doc, id); f.item.p.sketch.ents = ents; f.item.p.sketch.dims = dims; f.item.p.sketch.cons = cons; f.item.p.sketch.plane = plane; if (bg) f.item.p.sketch.bg = bg; else delete f.item.p.sketch.bg; const keys = regs.map((r) => r.key); if (f.item.p.sel) f.item.p.sel = f.item.p.sel.filter((k) => keys.includes(k)); });
       finishSession(); App.select([id]); return;
@@ -9902,7 +10031,7 @@ const Sketch = (() => {
     cv.addEventListener('pointermove', (e) => { if (S) onMove(e); });
     window.addEventListener('pointerup', (e) => { if (S) { onUp(e); stepUp(e); } });
   }
-  return { init, chooseAndStart, startOnPlane, startOnFace, editItem, pushPullFace, renderPanel, onKey, cancel, setBg, setTool, get active() { return !!S; }, get state() { return S; } };
+  return { init, chooseAndStart, startOnPlane, startOnFace, startPath, editItem, pushPullFace, renderPanel, onKey, cancel, setBg, setTool, get active() { return !!S; }, get state() { return S; } };
 })();
 
 // ---- 56-notes.js ----
@@ -10282,6 +10411,7 @@ const Commands = (() => {
     add('hole-wizard', 'Bohrungs-Assistent', 'holeWizard', 'bohrung loch schraube gewinde senkung einsatz mutter', () => Place.holeWizard($('#t-parts')), { group: 'Bearbeiten' });
     add('pattern-rect', 'Rechteckmuster', 'patternRect', 'muster reihe raster kopien vervielfachen', () => Features.pattern('rect'), { group: 'Bearbeiten' });
     add('pattern-circ', 'Kreismuster', 'patternCirc', 'muster kreis rund kopien motor löcher', () => Features.pattern('circ'), { group: 'Bearbeiten' });
+    add('pattern-path', 'Muster entlang Kurve', 'patternPath', 'muster kurve pfad bogen entlang linie spline kette kopien löcher zähne', () => Features.patternPath(), { group: 'Bearbeiten' });
     add('mirror-copy', 'Gespiegelte Kopie', 'mirror', 'spiegeln kopie symmetrisch', () => Features.pattern('mirror'), { group: 'Bearbeiten' });
     add('split', 'Körper teilen', 'split', 'teilen schneiden trennen hälfte', () => Features.split(), { group: 'Bearbeiten' });
     add('bool-sub', 'Abziehen (Boolesch)', 'boolSubtract', 'boolesch abziehen differenz', () => Features.boolean('subtract'), { group: 'Bearbeiten' });
@@ -13415,11 +13545,11 @@ const Variants = (() => {
 // die sich mit einem Klick als markierte Schritte umsetzen lassen.
 
 // Kurztexte je Schritt-Art: was, wozu (bei Drohnen), achtung (Entwurf Gemini, Prompt H; gegen Tracery geprüft)
-const STEP_TEXT = {"_hinweis":"Entwurf Gemini (Prompt H), von Claude am 20.10.2026 gegen das Verhalten von Tracery geprüft; 19 Sätze angepasst.","box":{"was":"Erstellt einen einfachen Kasten mit frei wählbarer Länge, Breite und Höhe.","wozu":"Super als Basis für eine Grundplatte aus Carbon oder eine einfache Akku-Auflage.","achtung":"Mach Platten nicht zu dünn, sonst brechen sie beim ersten Crash sofort durch."},"cylinder":{"was":"Erzeugt eine runde Säule mit festem Durchmesser und beliebiger Höhe.","wozu":"Ideal für stabile Abstandshalter (Standoffs) zwischen zwei Frame-Platten.","achtung":"Prüfe, ob der Zylinder nicht den Platz für deine Propeller blockiert."},"tube":{"was":"Erstellt ein rundes Rohr, das innen komplett hohl ist.","wozu":"Perfekt als leichtes Schutzröhrchen für deine Antennen oder dünne Motorkabel.","achtung":"Wähle Außendurchmesser und Wand so, dass innen das Kabel samt Stecker durchpasst."},"sphere":{"was":"Formt einen komplett runden Ball in deiner gewünschten Größe.","wozu":"Nützlich für weiche Landefüße an den Armen oder als Gelenk für eine Kamerahalterung.","achtung":"Eine Kugel liegt nur auf einem Punkt auf – schneide sie zum Drucken unten etwas flach ab."},"hemisphere":{"was":"Erstellt eine halbe Kugel mit einer flachen Unterseite.","wozu":"Wird oft als aerodynamische Kuppel (Canopy) über dem Stack oder der Kamera genutzt.","achtung":"Höhle sie mit „Wandstärke“ aus, sonst ist darunter kein Platz für die Elektronik."},"cone":{"was":"Baut einen Kegel, der unten rund ist und nach oben spitz zuläuft.","wozu":"Gut für windschnittige Spitzen an schnellen Racern oder als Zentrierhilfe.","achtung":"Ganz spitze Enden brechen leicht ab, runde die Spitze oben lieber etwas ab."},"pyramid":{"was":"Erzeugt einen eckigen Körper, der nach oben hin spitz zusammenläuft.","wozu":"Praktisch für kantige Schutzhauben oder coole Design-Elemente auf dem Frame.","achtung":"Achte darauf, dass innen genug Platz für die Ecken deiner Platinen bleibt."},"torus":{"was":"Formt einen runden Ring, der aussieht wie ein kleiner Donut oder Reifen.","wozu":"Perfekt als runder Propellerschutz (Propguard) für kleine Whoop-Drohnen.","achtung":"Mach den Ring nicht zu dick, sonst wird deine Drohne schnell viel zu schwer."},"prism":{"was":"Erstellt eine Säule mit mehreren Ecken, zum Beispiel ein Sechseck.","wozu":"Ideal für sechseckige Abstandshalter, die man mit einem Maulschlüssel festhalten kann.","achtung":"Der Durchmesser zählt hier von Ecke zu Ecke, nicht von Fläche zu Fläche – wichtig fürs Schlüsselmaß."},"wedge":{"was":"Baut einen schrägen Keil wie eine kleine Sprungschanze.","wozu":"Gut als schräge Kamera-Halterung, um den Kamerawinkel einzustellen.","achtung":"Ist der Winkel zu steil, siehst du beim langsamen Schweben nur noch den Himmel."},"extrude":{"was":"Zieht eine flache 2D-Zeichnung in die Höhe, sodass ein 3D-Körper entsteht.","wozu":"Damit machst du aus deiner flachen Zeichnung eine echte Carbon-Armplatte.","achtung":"Deine Skizze muss komplett geschlossen sein, sonst kann sie nicht hochgezogen werden."},"revolve":{"was":"Dreht ein flaches Profil im Kreis um eine Achse und formt so einen runden Körper.","wozu":"Super für Propeller-Spinner, Hülsen oder runde Antennenhalter.","achtung":"Die Zeichnung darf die Drehachse nicht kreuzen, sonst überschneidet sich das Bauteil."},"group":{"was":"Verschmilzt mehrere Einzelteile und zieht alle Loch-Körper davon ab.","wozu":"Verbindet einzelne Arme und die Mittelplatte zu einem fertigen, gelochten Drohnen-Frame.","achtung":"Löcher in einer Gruppe schneiden nur Körper derselben Gruppe – zieh fehlende Teile im Verlauf hinein."},"hole":{"was":"Verwandelt einen Körper in ein Werkzeug zum Ausschneiden – du siehst ihn gestreift.","wozu":"Schneidet zum Beispiel große Fenster in die Deckplatte, um Gewicht zu sparen.","achtung":"Ein Loch schneidet nur, was es berührt: Lass es oben und unten etwas überstehen, damit es sauber durchgeht."},"pattern_rect":{"was":"Kopiert ein Teil mehrfach in geraden Reihen und Spalten nebeneinander.","wozu":"Erstellt blitzschnell Lüftungsschlitze zur Kühlung über deinem heißen Video-Sender.","achtung":"Lass genug Material zwischen den Kopien stehen, sonst bricht das Gitter leicht durch."},"pattern_circ":{"was":"Verteilt Kopien eines Bauteils gleichmäßig im Kreis um einen Mittelpunkt.","wozu":"Perfekt, um aus einem einzelnen Drohnenarm sofort vier oder sechs Arme zu machen.","achtung":"Leg den Mittelpunkt genau fest, sonst sitzen die Kopien schief zur Rahmenmitte."},"mirror":{"was":"Erstellt eine spiegelverkehrte Kopie deines Bauteils auf der gegenüberliegenden Seite.","wozu":"Baue nur die linke Seite der Kamerahalterung und spiegle sie einfach nach rechts.","achtung":"Wähle die richtige Spiegelebene, sonst klebt die Kopie plötzlich am falschen Ort."},"split":{"was":"Schneidet einen Körper an einer flachen Ebene in zwei getrennte Teile durch.","wozu":"Teilt eine komplexe Haube in Ober- und Unterteil, damit du sie einfacher drucken kannst.","achtung":"Überlege dir vorher, wie du die geteilten Hälften später wieder zusammenschraubst."},"intersect":{"was":"Behält nur genau den Bereich übrig, in dem sich zwei Körper überschneiden.","wozu":"Formt einen runden Kamera-Schutz, der exakt in die schräge Front des Frames passt.","achtung":"Berühren sich die beiden Ausgangskörper gar nicht, bleibt am Ende nichts übrig."},"shell":{"was":"Höhlt einen massiven Körper von innen aus und lässt nur eine bestimmte Wandstärke stehen.","wozu":"Macht aus einem schweren Klotz eine leichte Schutzhülle für deine Action-Cam.","achtung":"Prüf die Wand mit „Schwachstellen suchen“ – zu dünne Wände brechen beim ersten Crash."},"fillet":{"was":"Rundet scharfe Kanten weich ab, damit Übergänge fließend werden.","wozu":"Macht die Innenecken an den Carbon-Armen viel stabiler gegen Brüche beim Absturz.","achtung":"Rundest du die Kante an einer dünnen Platte zu stark ab, entsteht ein Fehler."},"chamfer":{"was":"Schneidet eine scharfe Kante schräg ab, sodass eine kleine flache Schräge entsteht.","wozu":"Entschärft die Kanten deiner Carbon-Platten, damit sie das Akku-Kabel nicht durchschneiden.","achtung":"Mach die Schräge bei dünnem Carbon nur ganz klein, sonst bleibt keine gerade Kante übrig."},"screwHole":{"was":"Bohrt ein rundes Loch, das genau für eine bestimmte Schraubengröße wie M2 oder M3 passt.","wozu":"Unverzichtbar, um Motoren, Stack und Standoffs fest mit dem Frame zu verschrauben.","achtung":"Nimm die Passung „Mittel“: Das Loch ist dann etwas größer als die Schraube. „Eng“ klemmt leicht."},"nutTrap":{"was":"Schneidet eine sechseckige Tasche aus, in der eine Mutter festsitzt.","wozu":"Hält die Muttern unter dem Stack fest, damit du beim Schrauben keinen Schlüssel brauchst.","achtung":"Mach die Tasche nicht zu weit, sonst dreht die Mutter beim Festziehen einfach durch."},"insert":{"was":"Erstellt ein spezielles Loch, in das man ein Messing-Gewinde mit dem Lötkolben einschmilzt.","wozu":"Gibt dir super stabile Metallgewinde direkt in deinen 3D-gedruckten Kunststoffteilen.","achtung":"Das Loch muss etwas kleiner als der Einsatz sein, damit das Plastik ihn gut festhält."},"slotHole":{"was":"Bohrt ein längliches Loch, in dem eine Schraube hin und her geschoben werden kann.","wozu":"Super für Motorhalterungen, damit verschiedene Motoren auf denselben Arm passen.","achtung":"Zieh die Schrauben im Langloch später gut fest und nutze Unterlegscheiben gegen Verrutschen."},"holePattern":{"was":"Erzeugt automatisch vier passende Schraubenlöcher im Standard-Abstand für Drohnenteile.","wozu":"Bohrt mit einem Klick die exakten Löcher für einen 20x20mm-Stack oder einen Motor.","achtung":"Prüfe vorab genau, ob dein Flugcontroller 20x20 oder 30,5x30,5 Millimeter Lochabstand hat."},"zipTie":{"was":"Schneidet zwei Schlitze für einen Kabelbinder in dein Bauteil.","wozu":"Ideal, um den kleinen Funk-Empfänger oder den Kondensator sicher am Frame festzuzurren.","achtung":"Setze Schlitze nicht zu nah an den Rand der Carbon-Platte, sonst reißt der Steg aus."},"snapHook":{"was":"Baut einen kleinen federnden Haken, der an einer Kante einrasten kann.","wozu":"Perfekt für einen Akkuschacht oder eine Haube, die du ohne Werkzeug öffnen willst.","achtung":"Drucke den Haken liegend, damit die Schichten längs laufen – sonst bricht er beim ersten Biegen ab."},"hinge":{"was":"Erzeugt ein bewegliches Gelenk, mit dem du zwei Bauteile klappbar verbindest.","wozu":"Nützlich für eine aufklappbare Haube oder einen Deckel am Akkufach.","achtung":"Lass im Gelenk etwas Spiel (Einstellung „Spalt“), sonst verschmilzt es beim Drucken."},"gear":{"was":"Erstellt ein rundes Rad mit Zähnen am Rand, das in ein anderes Zahnrad greift.","wozu":"Brauchst du für coole Extras wie eine Kamera, die sich im Flug per Knopfdruck neigt.","achtung":"Beide Zahnräder brauchen exakt die gleiche Zahngröße (Modul), sonst klemmen sie sofort."},"buy":{"was":"Fügt ein fertiges Teil wie Kamera, Motor oder Akku als Platzhalter mit echtem Gewicht aus dem Datenblatt ein.","wozu":"Zeigt dir sofort, ob alle Teile in den Frame passen und wo der Schwerpunkt der Drohne liegt.","achtung":"Beim DXF bleiben Kaufteile von selbst weg; für STL blende sie vor dem Export aus."},"aeroBody":{"was":"Erstellt einen hohlen Rumpf in Tropfenform: runde Nase, gerades Mittelteil und ein langes Heck, das spitz ausläuft.","wozu":"Damit bekommt eine Speed-Drohne wenig Luftwiderstand – Kamera, Stack und Akku sitzen geschützt im Rumpf.","achtung":"Der Rumpf muss weit genug von den Propellerkreisen weg sein; der Drohnen-Check zeigt dir, ob er frei ist."}};
+const STEP_TEXT = {"_hinweis":"Entwurf Gemini (Prompt H), von Claude am 20.10.2026 gegen das Verhalten von Tracery geprüft; 19 Sätze angepasst.","box":{"was":"Erstellt einen einfachen Kasten mit frei wählbarer Länge, Breite und Höhe.","wozu":"Super als Basis für eine Grundplatte aus Carbon oder eine einfache Akku-Auflage.","achtung":"Mach Platten nicht zu dünn, sonst brechen sie beim ersten Crash sofort durch."},"cylinder":{"was":"Erzeugt eine runde Säule mit festem Durchmesser und beliebiger Höhe.","wozu":"Ideal für stabile Abstandshalter (Standoffs) zwischen zwei Frame-Platten.","achtung":"Prüfe, ob der Zylinder nicht den Platz für deine Propeller blockiert."},"tube":{"was":"Erstellt ein rundes Rohr, das innen komplett hohl ist.","wozu":"Perfekt als leichtes Schutzröhrchen für deine Antennen oder dünne Motorkabel.","achtung":"Wähle Außendurchmesser und Wand so, dass innen das Kabel samt Stecker durchpasst."},"sphere":{"was":"Formt einen komplett runden Ball in deiner gewünschten Größe.","wozu":"Nützlich für weiche Landefüße an den Armen oder als Gelenk für eine Kamerahalterung.","achtung":"Eine Kugel liegt nur auf einem Punkt auf – schneide sie zum Drucken unten etwas flach ab."},"hemisphere":{"was":"Erstellt eine halbe Kugel mit einer flachen Unterseite.","wozu":"Wird oft als aerodynamische Kuppel (Canopy) über dem Stack oder der Kamera genutzt.","achtung":"Höhle sie mit „Wandstärke“ aus, sonst ist darunter kein Platz für die Elektronik."},"cone":{"was":"Baut einen Kegel, der unten rund ist und nach oben spitz zuläuft.","wozu":"Gut für windschnittige Spitzen an schnellen Racern oder als Zentrierhilfe.","achtung":"Ganz spitze Enden brechen leicht ab, runde die Spitze oben lieber etwas ab."},"pyramid":{"was":"Erzeugt einen eckigen Körper, der nach oben hin spitz zusammenläuft.","wozu":"Praktisch für kantige Schutzhauben oder coole Design-Elemente auf dem Frame.","achtung":"Achte darauf, dass innen genug Platz für die Ecken deiner Platinen bleibt."},"torus":{"was":"Formt einen runden Ring, der aussieht wie ein kleiner Donut oder Reifen.","wozu":"Perfekt als runder Propellerschutz (Propguard) für kleine Whoop-Drohnen.","achtung":"Mach den Ring nicht zu dick, sonst wird deine Drohne schnell viel zu schwer."},"prism":{"was":"Erstellt eine Säule mit mehreren Ecken, zum Beispiel ein Sechseck.","wozu":"Ideal für sechseckige Abstandshalter, die man mit einem Maulschlüssel festhalten kann.","achtung":"Der Durchmesser zählt hier von Ecke zu Ecke, nicht von Fläche zu Fläche – wichtig fürs Schlüsselmaß."},"wedge":{"was":"Baut einen schrägen Keil wie eine kleine Sprungschanze.","wozu":"Gut als schräge Kamera-Halterung, um den Kamerawinkel einzustellen.","achtung":"Ist der Winkel zu steil, siehst du beim langsamen Schweben nur noch den Himmel."},"extrude":{"was":"Zieht eine flache 2D-Zeichnung in die Höhe, sodass ein 3D-Körper entsteht.","wozu":"Damit machst du aus deiner flachen Zeichnung eine echte Carbon-Armplatte.","achtung":"Deine Skizze muss komplett geschlossen sein, sonst kann sie nicht hochgezogen werden."},"revolve":{"was":"Dreht ein flaches Profil im Kreis um eine Achse und formt so einen runden Körper.","wozu":"Super für Propeller-Spinner, Hülsen oder runde Antennenhalter.","achtung":"Die Zeichnung darf die Drehachse nicht kreuzen, sonst überschneidet sich das Bauteil."},"group":{"was":"Verschmilzt mehrere Einzelteile und zieht alle Loch-Körper davon ab.","wozu":"Verbindet einzelne Arme und die Mittelplatte zu einem fertigen, gelochten Drohnen-Frame.","achtung":"Löcher in einer Gruppe schneiden nur Körper derselben Gruppe – zieh fehlende Teile im Verlauf hinein."},"hole":{"was":"Verwandelt einen Körper in ein Werkzeug zum Ausschneiden – du siehst ihn gestreift.","wozu":"Schneidet zum Beispiel große Fenster in die Deckplatte, um Gewicht zu sparen.","achtung":"Ein Loch schneidet nur, was es berührt: Lass es oben und unten etwas überstehen, damit es sauber durchgeht."},"pattern_rect":{"was":"Kopiert ein Teil mehrfach in geraden Reihen und Spalten nebeneinander.","wozu":"Erstellt blitzschnell Lüftungsschlitze zur Kühlung über deinem heißen Video-Sender.","achtung":"Lass genug Material zwischen den Kopien stehen, sonst bricht das Gitter leicht durch."},"pattern_circ":{"was":"Verteilt Kopien eines Bauteils gleichmäßig im Kreis um einen Mittelpunkt.","wozu":"Perfekt, um aus einem einzelnen Drohnenarm sofort vier oder sechs Arme zu machen.","achtung":"Leg den Mittelpunkt genau fest, sonst sitzen die Kopien schief zur Rahmenmitte."},"pattern_path":{"was":"Setzt Kopien eines Teils der Reihe nach entlang einer gezeichneten Kurve – Linie, Bogen, Spline oder Kreis.","wozu":"Löcher oder Rippen folgen dem Bogen eines Arms, Zähne sitzen sauber auf einem Kreisbogen.","achtung":"Mit Ausrichtung „Mit der Kurve“ drehen sich die Kopien mit. Für Löcher, die nur der Lage folgen sollen, ist das egal – für Rippen und Zähne nicht."},"mirror":{"was":"Erstellt eine spiegelverkehrte Kopie deines Bauteils auf der gegenüberliegenden Seite.","wozu":"Baue nur die linke Seite der Kamerahalterung und spiegle sie einfach nach rechts.","achtung":"Wähle die richtige Spiegelebene, sonst klebt die Kopie plötzlich am falschen Ort."},"split":{"was":"Schneidet einen Körper an einer flachen Ebene in zwei getrennte Teile durch.","wozu":"Teilt eine komplexe Haube in Ober- und Unterteil, damit du sie einfacher drucken kannst.","achtung":"Überlege dir vorher, wie du die geteilten Hälften später wieder zusammenschraubst."},"intersect":{"was":"Behält nur genau den Bereich übrig, in dem sich zwei Körper überschneiden.","wozu":"Formt einen runden Kamera-Schutz, der exakt in die schräge Front des Frames passt.","achtung":"Berühren sich die beiden Ausgangskörper gar nicht, bleibt am Ende nichts übrig."},"shell":{"was":"Höhlt einen massiven Körper von innen aus und lässt nur eine bestimmte Wandstärke stehen.","wozu":"Macht aus einem schweren Klotz eine leichte Schutzhülle für deine Action-Cam.","achtung":"Prüf die Wand mit „Schwachstellen suchen“ – zu dünne Wände brechen beim ersten Crash."},"fillet":{"was":"Rundet scharfe Kanten weich ab, damit Übergänge fließend werden.","wozu":"Macht die Innenecken an den Carbon-Armen viel stabiler gegen Brüche beim Absturz.","achtung":"Rundest du die Kante an einer dünnen Platte zu stark ab, entsteht ein Fehler."},"chamfer":{"was":"Schneidet eine scharfe Kante schräg ab, sodass eine kleine flache Schräge entsteht.","wozu":"Entschärft die Kanten deiner Carbon-Platten, damit sie das Akku-Kabel nicht durchschneiden.","achtung":"Mach die Schräge bei dünnem Carbon nur ganz klein, sonst bleibt keine gerade Kante übrig."},"screwHole":{"was":"Bohrt ein rundes Loch, das genau für eine bestimmte Schraubengröße wie M2 oder M3 passt.","wozu":"Unverzichtbar, um Motoren, Stack und Standoffs fest mit dem Frame zu verschrauben.","achtung":"Nimm die Passung „Mittel“: Das Loch ist dann etwas größer als die Schraube. „Eng“ klemmt leicht."},"nutTrap":{"was":"Schneidet eine sechseckige Tasche aus, in der eine Mutter festsitzt.","wozu":"Hält die Muttern unter dem Stack fest, damit du beim Schrauben keinen Schlüssel brauchst.","achtung":"Mach die Tasche nicht zu weit, sonst dreht die Mutter beim Festziehen einfach durch."},"insert":{"was":"Erstellt ein spezielles Loch, in das man ein Messing-Gewinde mit dem Lötkolben einschmilzt.","wozu":"Gibt dir super stabile Metallgewinde direkt in deinen 3D-gedruckten Kunststoffteilen.","achtung":"Das Loch muss etwas kleiner als der Einsatz sein, damit das Plastik ihn gut festhält."},"slotHole":{"was":"Bohrt ein längliches Loch, in dem eine Schraube hin und her geschoben werden kann.","wozu":"Super für Motorhalterungen, damit verschiedene Motoren auf denselben Arm passen.","achtung":"Zieh die Schrauben im Langloch später gut fest und nutze Unterlegscheiben gegen Verrutschen."},"holePattern":{"was":"Erzeugt automatisch vier passende Schraubenlöcher im Standard-Abstand für Drohnenteile.","wozu":"Bohrt mit einem Klick die exakten Löcher für einen 20x20mm-Stack oder einen Motor.","achtung":"Prüfe vorab genau, ob dein Flugcontroller 20x20 oder 30,5x30,5 Millimeter Lochabstand hat."},"zipTie":{"was":"Schneidet zwei Schlitze für einen Kabelbinder in dein Bauteil.","wozu":"Ideal, um den kleinen Funk-Empfänger oder den Kondensator sicher am Frame festzuzurren.","achtung":"Setze Schlitze nicht zu nah an den Rand der Carbon-Platte, sonst reißt der Steg aus."},"snapHook":{"was":"Baut einen kleinen federnden Haken, der an einer Kante einrasten kann.","wozu":"Perfekt für einen Akkuschacht oder eine Haube, die du ohne Werkzeug öffnen willst.","achtung":"Drucke den Haken liegend, damit die Schichten längs laufen – sonst bricht er beim ersten Biegen ab."},"hinge":{"was":"Erzeugt ein bewegliches Gelenk, mit dem du zwei Bauteile klappbar verbindest.","wozu":"Nützlich für eine aufklappbare Haube oder einen Deckel am Akkufach.","achtung":"Lass im Gelenk etwas Spiel (Einstellung „Spalt“), sonst verschmilzt es beim Drucken."},"gear":{"was":"Erstellt ein rundes Rad mit Zähnen am Rand, das in ein anderes Zahnrad greift.","wozu":"Brauchst du für coole Extras wie eine Kamera, die sich im Flug per Knopfdruck neigt.","achtung":"Beide Zahnräder brauchen exakt die gleiche Zahngröße (Modul), sonst klemmen sie sofort."},"buy":{"was":"Fügt ein fertiges Teil wie Kamera, Motor oder Akku als Platzhalter mit echtem Gewicht aus dem Datenblatt ein.","wozu":"Zeigt dir sofort, ob alle Teile in den Frame passen und wo der Schwerpunkt der Drohne liegt.","achtung":"Beim DXF bleiben Kaufteile von selbst weg; für STL blende sie vor dem Export aus."},"aeroBody":{"was":"Erstellt einen hohlen Rumpf in Tropfenform: runde Nase, gerades Mittelteil und ein langes Heck, das spitz ausläuft.","wozu":"Damit bekommt eine Speed-Drohne wenig Luftwiderstand – Kamera, Stack und Akku sitzen geschützt im Rumpf.","achtung":"Der Rumpf muss weit genug von den Propellerkreisen weg sein; der Drohnen-Check zeigt dir, ob er frei ist."}};
 
 const Explain = (() => {
   function keyOf(it) {
-    if (Features.isOp(it)) { const p = it.p; return p.op === 'pattern' ? ({ rect: 'pattern_rect', circ: 'pattern_circ', mirror: 'mirror' }[p.pt] || 'group') : p.op; }
+    if (Features.isOp(it)) { const p = it.p; return p.op === 'pattern' ? ({ rect: 'pattern_rect', circ: 'pattern_circ', path: 'pattern_path', mirror: 'mirror' }[p.pt] || 'group') : p.op; }
     if (Mass.fixedOf(it) || String((it.p || {}).lib || '').startsWith('buy')) return 'buy';
     if (it.kind === 'part') return (it.p || {}).lib;
     if (it.kind === 'group') return 'group';
@@ -13436,7 +13566,7 @@ const Explain = (() => {
   // Körper und Löcher zählen – Muster zählen mit ihrer Anzahl (4 Motorschrauben im Kreismuster = 4 Löcher)
   function counts(it, V) {
     let solids = 0, holes = 0;
-    const mult = (g) => { const p = Model.resolveP(g.p || {}, V); if (p.op !== 'pattern') return 1; if (p.pt === 'circ') return Math.max(1, Math.round(p.n || 1)); if (p.pt === 'rect') return Math.max(1, Math.round(p.nx || 1)) * Math.max(1, Math.round(p.ny || 1)); return 2; };
+    const mult = (g) => { const p = Model.resolveP(g.p || {}, V); if (p.op !== 'pattern') return 1; if (p.pt === 'circ') return Math.max(1, Math.round(p.n || 1)); if (p.pt === 'rect') return Math.max(1, Math.round(p.nx || 1)) * Math.max(1, Math.round(p.ny || 1)); if (p.pt === 'path') return Math.max(1, Math.round(p.n || 1)); return 2; };
     const rec = (list, k, hole) => { for (const c of list || []) { if (c.suppressed) continue; const isH = hole || c.role === 'hole'; if (c.kind === 'group') rec(c.children, k * mult(c), isH); else if (isH) holes += k; else solids += k; } };
     rec(it.children, 1, false);
     return { solids, holes };

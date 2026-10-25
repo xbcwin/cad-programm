@@ -252,6 +252,7 @@ const IC = {
   holeWizard: '<path d="M12 2.5v19" stroke-dasharray="3 2.5" opacity=".5"/><path d="M2 6h5v4h2.5v8H2z M22 6h-5v4h-2.5v8H22z" fill="currentColor" opacity=".25"/><path d="M2 6h5v4h2.5v8H2 M22 6h-5v4h-2.5v8H22" />',
   countersink: '<path d="M12 2.5v19" stroke-dasharray="3 2.5" opacity=".5"/><path d="M2 6h5l2.5 4v8H2z M22 6h-5l-2.5 4v8H22z" fill="currentColor" opacity=".25"/><path d="M2 6h5l2.5 4v8H2 M22 6h-5l-2.5 4v8H22" />',
   patternRect: '<rect x="4" y="4" width="6" height="6" rx="1" fill="currentColor" opacity=".25"/><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/>',
+  patternPath: '<path d="M3 19C6 9 14 5 21 5" stroke-dasharray="3 2.5" opacity=".4"/><rect x="2" y="16" width="4" height="4" rx=".8" fill="currentColor" opacity=".25"/><rect x="2" y="16" width="4" height="4" rx=".8"/><rect x="7.5" y="9" width="4" height="4" rx=".8" transform="rotate(-35 9.5 11)"/><rect x="17" y="3" width="4" height="4" rx=".8" transform="rotate(-10 19 5)"/>',
   patternCirc: '<circle cx="12" cy="12" r="7" stroke-dasharray="3 2.5" opacity=".4"/><circle cx="12" cy="5" r="2.2" fill="currentColor" opacity=".25"/><circle cx="12" cy="5" r="2.2"/><circle cx="19" cy="12" r="2.2"/><circle cx="12" cy="19" r="2.2"/><circle cx="5" cy="12" r="2.2"/>',
   boolUnion: '<path d="M3 3h11v6h6v11H9v-6H3z" fill="currentColor" opacity=".25"/><path d="M3 3h11v6h6v11H9v-6H3z" />',
   boolSubtract: '<path d="M3 3h11v6H9v5H3z" fill="currentColor" opacity=".25"/><path d="M3 3h11v6H9v5H3z"/><path d="M14 9h6v11H9v-6" stroke-dasharray="3 2.5" opacity=".5"/>',
@@ -482,6 +483,11 @@ const HELP = {
   "hilfe": "Wähle einen Körper und dann „Muster“ → „Kreismuster“. Rechts stellst du Anzahl, Winkel und die Mitte ein, um die gedreht wird.",
   "tipp": "Perfekt für Lochkreise und Speichen. 360° verteilt die Kopien ganz rundherum."
  },
+ "patternPath": {
+  "tip": "Kopien entlang einer Kurve setzen",
+  "hilfe": "Wähle einen Körper oder ein Loch und dann „Muster“ → „Muster entlang Kurve“. Zeichne die Kurve – Linie, Bogen, Spline oder Kreis – und drück „Fertig“. Rechts stellst du Anzahl, Abstand und Ausrichtung ein; „Kurve bearbeiten“ ändert die Kurve später.",
+  "tipp": "Abstand 0 verteilt die Kopien gleichmäßig über die ganze Kurve. Ein Kreis als Kurve mit Ausrichtung „Mit der Kurve“ wirkt wie ein Kreismuster."
+ },
  "mirror": {
   "tip": "Gespiegelte Kopie anlegen",
   "hilfe": "Wähle einen Körper und dann „Muster“ → „Gespiegelte Kopie“. Rechts wählst du die Spiegelebene und wo sie liegt.",
@@ -674,8 +680,8 @@ const HELP = {
  },
  "sketchTemplate": {
   "tip": "Fertige Umrisse mit echten Maßen einsetzen",
-  "hilfe": "Wähle rechts eine Schablone – Pin-Raster, Lüftungsgitter oder ein Chip-Gehäuse (QFP, QFN, BGA, SOIC, DIP) – und stell Anzahl, Raster und Größen ein. Ein Klick ins Bild setzt sie mit der Mitte an diese Stelle; am Nullpunkt oder an Mittelpunkten rastet sie ein.",
-  "tipp": "Für einen Chip das Gehäuse hochziehen und die Pins als eigene Flächen etwas niedriger – oder alles als Aussparung für einen Halter. Die Standardmaße bitte mit dem Datenblatt vergleichen."
+  "hilfe": "Wähle rechts eine Schablone – Pin-Raster, Lüftungsgitter, ein Chip-Gehäuse (QFP, QFN, BGA, SOIC, DIP), einen USB-C-Ausschnitt oder Befestigungslöcher – und stell Anzahl, Raster und Größen ein. Ein Klick ins Bild setzt sie mit der Mitte an diese Stelle; am Nullpunkt oder an Mittelpunkten rastet sie ein.",
+  "tipp": "Für einen Chip das Gehäuse hochziehen und die Pins als eigene Flächen etwas niedriger – oder alles als Aussparung für einen Halter. Beim USB-C-Ausschnitt: „Buchse“, wenn die Buchse bündig an der Wand sitzt, „Stecker“, wenn sie dahinter liegt und der Stecker samt Gummikappe hinein muss. Die Standardmaße bitte mit dem Datenblatt vergleichen."
  },
  "extend2d": {
   "tip": "Linie bis zur nächsten Kante verlängern",

@@ -793,6 +793,16 @@ export function createKernel(R, oc) {
       const n = Math.max(1, Math.min(120, Math.round(num(p.n, 4)))), ang = num(p.ang, 360);
       const step = Math.abs(Math.abs(ang) - 360) < 1e-9 ? 360 / n : n > 1 ? ang / (n - 1) : 0;
       for (let k = 1; k < n; k++) copies.push(base.clone().rotate(k * step, [num(p.cx, 0), num(p.cy, 0), 0], [0, 0, 1]));
+    } else if (p.pt === 'path' && Array.isArray(p.places)) {
+      // Muster entlang Kurve: Lage und Drehung je Kopie kommen fertig aus dem Modell
+      const ax = (p.n || [0, 0, 1]).map(Number), p0 = (p.p0 || [0, 0, 0]).map(Number);
+      for (const q of p.places.slice(1, 200)) {
+        let c = base.clone();
+        if (p.align && Math.abs(Number(q.a) || 0) > 1e-9) c = c.rotate(Number(q.a), p0, ax);
+        const d = (q.d || [0, 0, 0]).map(Number);
+        if (Math.hypot(d[0], d[1], d[2]) > 1e-9) c = c.translate(d);
+        copies.push(c);
+      }
     } else if (p.pt === 'mirror' && p.plane === 'FACE' && Array.isArray(p.mn) && Array.isArray(p.mo)) {
       copies.push(base.clone().mirror(p.mn.map(Number), p.mo.map(Number)));
     } else if (p.pt === 'mirror') {

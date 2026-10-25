@@ -481,6 +481,31 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
   Schritte: 1. Ein Kind (ab 10) mit „Einfach“ eine Platte mit vier Löchern bauen lassen, ohne zu helfen.
   Erwartet: Es findet Körper, Löcher und Exportieren allein; notieren, wo es hängen bleibt.
 
+## Muster entlang Kurve (neu in Sitzung 28)
+
+- [x] **Linie als Kurve**
+  Schritte: Quader 10 × 2 wählen → „Muster“ → „Muster entlang Kurve“. Vom Punkt in der Mitte eine 30-mm-Linie nach rechts zeichnen, Esc, „Fertig“.
+  Erwartet: Beim Zeichnen 5 Ringe auf der Linie. Danach 5 Quader von 0 bis 30 mm, im Verlauf „5× entlang Kurve“.
+- [x] **Abstand**
+  Schritte: Rechts „Abstand“ 12.
+  Erwartet: Nur noch 3 Quader (0, 12, 24) – der vierte passt nicht mehr auf die Kurve.
+- [x] **Kreis, mitdrehen**
+  Schritte: „Kurve bearbeiten“, Linie durch einen Kreis ersetzen, der durch das Original geht, „Fertig“, Anzahl 4.
+  Erwartet: 4 Quader rundherum; oben und unten stehen sie quer. Mit „Ausrichtung: Wie das Original“ liegen alle gleich.
+- [ ] **Löcher entlang eines Bogens**
+  Schritte: Platte, ein Loch darin, das Loch wählen → „Muster entlang Kurve“ → Bogen zeichnen → „Fertig“ → Platte und Lochmuster gruppieren.
+  Erwartet: Alle Löcher sitzen auf dem Bogen und gehen durch die Platte.
+
+## Schablonen-Maße, USB-C-Stecker (neu in Sitzung 28)
+
+- [x] **Geprüfte Chip-Maße**
+  Schritte: Skizze, J, Schablone „Chip QFP / LQFP“.
+  Erwartet: Pin-Breite 0,22 mm, darunter ein Hinweis mit Norm und Toleranzbereich.
+- [x] **USB-C-Stecker-Ausschnitt**
+  Schritte: Schablone „Ausschnitt USB-C-Stecker“, in die Mitte klicken.
+  Erwartet: Ein Rechteck 13 × 7 mm mit vier runden Ecken (4 Linien, 4 Bögen), eine geschlossene Fläche.
+- [ ] **Passt der Stecker?** Wand mit beiden USB-C-Ausschnitten drucken, Kabel mit dickem und mit dünnem Stecker einstecken.
+
 ## Spiegeln an der Achse (neu in Sitzung 27)
 
 - [x] **Skizze an der Y-Achse spiegeln**

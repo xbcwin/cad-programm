@@ -2317,7 +2317,48 @@ def t_schablonen(p):
     p.pg.mouse.click(o[0], o[1]); p.wait(500)
     c = p.ev("return Sketch.state.ents.map(e=>e.c[0]).sort((a,b)=>a-b)")
     ok4 = len(c) == 8 and abs(c[0] + 3.81) < 1e-6 and abs(c[-1] - 3.81) < 1e-6
-    return [ok1, ok2, ok3, ok4]
+    # Sitzung 28: Werte nach Gemini-Prüfung, USB-C-Stecker-Ausschnitt mit runden Ecken
+    p.pg.select_option('#tp-type', 'qfp'); p.wait(200)
+    ok5 = abs(float(p.pg.input_value('#tp-padW').replace(',', '.')) - 0.22) < 1e-9 and p.pg.locator('#tp-note').count() == 1
+    p.pg.select_option('#tp-type', 'usbcp'); p.wait(200)
+    o2 = to_screen(p, 30, 0); p.pg.mouse.click(o2[0], o2[1]); p.wait(500)
+    u = p.ev("const S=Sketch.state; const n=S.ents.filter(e=>e.type!=='circle'); const b=SK.bounds(n); return [n.filter(e=>e.type==='line').length, n.filter(e=>e.type==='arc').length, SK.regions(n).length, b]")
+    ok6 = u[0] == 4 and u[1] == 4 and u[2] == 1 and abs(u[3][0] - 23.5) < 1e-6 and abs(u[3][2] - 36.5) < 1e-6 and abs(u[3][1] + 3.5) < 1e-6 and abs(u[3][3] - 3.5) < 1e-6
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
+
+
+# ---------- Sitzung 28: Muster entlang Kurve ----------
+def t_muster_kurve(p):
+    platte(p, 10, 2, 4)
+    b0 = bbox(p); cx0 = (b0[0] + b0[3]) / 2; cy0 = (b0[1] + b0[4]) / 2
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(400)
+    ctx(p, 'Muster', 'Muster entlang Kurve')
+    st = p.ev("const S=Sketch.state; return S && [S.ctx.mode, S.tool, S.ents.length, S.ents[0].type, S.ents[0].a]")
+    ok1 = st and st[0] == 'patpath' and st[1] == 'line' and st[2] == 1 and st[3] == 'point' and abs(st[4][0] - cx0) < 1e-6 and p.pg.locator('#path-hint').count() == 1
+    # Linie mit echten Klicks vom Original 30 mm nach rechts
+    a = to_screen(p, cx0, cy0); b = to_screen(p, cx0 + 30, cy0)
+    p.pg.mouse.click(a[0], a[1]); p.wait(200); p.pg.mouse.click(b[0], b[1]); p.wait(200); p.pg.keyboard.press('Escape'); p.wait(300)
+    cnt = p.pg.locator('#path-count').inner_text().strip() if p.pg.locator('#path-count').count() else ''
+    p.pg.locator('.sketchbar .tool.primary').click(); p.wait(2500); warte_rechnen(p, 30)
+    g = p.ev("const it=App.doc.items[0]; return [App.doc.items.length, it.kind, it.p && it.p.pt, it.children.length, Sketch.active]")
+    bb = bbox(p)
+    ok2 = cnt == '5' and g == [1, 'group', 'path', 1, False] and near(bb, [b0[0], b0[1], b0[2], b0[3] + 30, b0[4], b0[5]]) and p.ev("return Features.sizeText(App.doc.items[0])") == '5× entlang Kurve'
+    # Abstand 12: Kopien bei 0, 12, 24 (36 passt nicht mehr auf die Kurve)
+    field(p, '#op-d', 12); warte_rechnen(p, 30)
+    ok3 = near(bbox(p)[3:4], [b0[3] + 24]) and p.ev("return Features.sizeText(App.doc.items[0])") == '3× entlang Kurve'
+    # Kurve bearbeiten: Kreis durch das Original, 4 Kopien, drehen mit
+    field(p, '#op-d', 0); field(p, '#op-n', 4)
+    p.pg.locator('#op-editpath').click(); p.wait(1200)
+    ok4 = p.ev("return !!Sketch.active && Sketch.state.ctx.mode==='edit'") and p.pg.locator('#path-hint').count() == 1
+    p.ev("const S=Sketch.state; S.ents=S.ents.filter(e=>e.type==='point'); S.ents.push({id:'K',type:'circle',c:[arg[0]+20,arg[1]],r:20})", [cx0, cy0]); p.wait(200)
+    p.pg.locator('.sketchbar .tool.primary').click(); p.wait(2500); warte_rechnen(p, 30)
+    bb = bbox(p)
+    # Kopien oben und unten stehen quer: 10 mm lang in Y
+    ok5 = bb and abs(bb[3] - (cx0 + 45)) < 0.2 and abs(bb[4] - (cy0 + 25)) < 0.2 and abs(bb[1] - (cy0 - 25)) < 0.2
+    p.pg.select_option('#op-align', 'nein'); p.wait(2500); warte_rechnen(p, 30)
+    bb = bbox(p)
+    ok6 = bb and abs(bb[4] - (cy0 + 21)) < 0.2 and abs(bb[3] - (cx0 + 45)) < 0.2 and p.ev("return App.errors.length") == 0
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
 
 
 # ---------- Sitzung 22: kleine Skizzen-Werkzeuge ----------
@@ -2591,7 +2632,8 @@ TESTS = [
     ('Entlang Pfad (Sweep): offener Pfad wird Rohr / Volumen / hohl / rechteckig / Pfad bearbeiten', t_entlang_pfad),
     ('Abstand zwischen zwei Teilen setzen', t_abstand_setzen),
     ('STEP/STL importieren: einlesen / Größe stimmt / Einheit Zoll / STL als Körper', t_import_step),
-    ('Skizzen-Schablonen: Auswahl / QFP-48 / Rückgängig / Pin-Raster', t_schablonen),
+    ('Skizzen-Schablonen: Auswahl / QFP-48 / Rückgängig / Pin-Raster / Werte / USB-C-Stecker', t_schablonen),
+    ('Muster entlang Kurve: Skizze startet / Linie / Abstand / Kreis mitdrehen / ohne Drehen', t_muster_kurve),
     ('Skizze: Kreis aus 3 / 2 Punkten / tangentialer Bogen', t_kreis_bogen_modi),
     ('Skizze: Verlängern bis zur nächsten Linie', t_verlaengern),
     ('Entformungsschräge: 3° nach innen / -2° nach außen', t_schraege),

@@ -189,6 +189,11 @@
     "hilfe": "Wähle einen Körper und dann „Muster“ → „Kreismuster“. Rechts stellst du Anzahl, Winkel und die Mitte ein, um die gedreht wird.",
     "tipp": "Perfekt für Lochkreise und Speichen. 360° verteilt die Kopien ganz rundherum."
   },
+  "patternPath": {
+    "tip": "Kopien entlang einer Kurve setzen",
+    "hilfe": "Wähle einen Körper oder ein Loch und dann „Muster“ → „Muster entlang Kurve“. Zeichne die Kurve – Linie, Bogen, Spline oder Kreis – und drück „Fertig“. Rechts stellst du Anzahl, Abstand und Ausrichtung ein; „Kurve bearbeiten“ ändert die Kurve später.",
+    "tipp": "Abstand 0 verteilt die Kopien gleichmäßig über die ganze Kurve. Ein Kreis als Kurve mit Ausrichtung „Mit der Kurve“ wirkt wie ein Kreismuster."
+  },
   "mirror": {
     "tip": "Gespiegelte Kopie anlegen",
     "hilfe": "Wähle einen Körper und dann „Muster“ → „Gespiegelte Kopie“. Rechts wählst du die Spiegelebene und wo sie liegt.",
@@ -381,8 +386,8 @@
   },
   "sketchTemplate": {
     "tip": "Fertige Umrisse mit echten Maßen einsetzen",
-    "hilfe": "Wähle rechts eine Schablone – Pin-Raster, Lüftungsgitter oder ein Chip-Gehäuse (QFP, QFN, BGA, SOIC, DIP) – und stell Anzahl, Raster und Größen ein. Ein Klick ins Bild setzt sie mit der Mitte an diese Stelle; am Nullpunkt oder an Mittelpunkten rastet sie ein.",
-    "tipp": "Für einen Chip das Gehäuse hochziehen und die Pins als eigene Flächen etwas niedriger – oder alles als Aussparung für einen Halter. Die Standardmaße bitte mit dem Datenblatt vergleichen."
+    "hilfe": "Wähle rechts eine Schablone – Pin-Raster, Lüftungsgitter, ein Chip-Gehäuse (QFP, QFN, BGA, SOIC, DIP), einen USB-C-Ausschnitt oder Befestigungslöcher – und stell Anzahl, Raster und Größen ein. Ein Klick ins Bild setzt sie mit der Mitte an diese Stelle; am Nullpunkt oder an Mittelpunkten rastet sie ein.",
+    "tipp": "Für einen Chip das Gehäuse hochziehen und die Pins als eigene Flächen etwas niedriger – oder alles als Aussparung für einen Halter. Beim USB-C-Ausschnitt: „Buchse“, wenn die Buchse bündig an der Wand sitzt, „Stecker“, wenn sie dahinter liegt und der Stecker samt Gummikappe hinein muss. Die Standardmaße bitte mit dem Datenblatt vergleichen."
   },
   "extend2d": {
     "tip": "Linie bis zur nächsten Kante verlängern",

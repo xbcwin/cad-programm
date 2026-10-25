@@ -80,6 +80,11 @@
     "wozu": "Perfekt, um aus einem einzelnen Drohnenarm sofort vier oder sechs Arme zu machen.",
     "achtung": "Leg den Mittelpunkt genau fest, sonst sitzen die Kopien schief zur Rahmenmitte."
   },
+  "pattern_path": {
+    "was": "Setzt Kopien eines Teils der Reihe nach entlang einer gezeichneten Kurve – Linie, Bogen, Spline oder Kreis.",
+    "wozu": "Löcher oder Rippen folgen dem Bogen eines Arms, Zähne sitzen sauber auf einem Kreisbogen.",
+    "achtung": "Mit Ausrichtung „Mit der Kurve“ drehen sich die Kopien mit. Für Löcher, die nur der Lage folgen sollen, ist das egal – für Rippen und Zähne nicht."
+  },
   "mirror": {
     "was": "Erstellt eine spiegelverkehrte Kopie deines Bauteils auf der gegenüberliegenden Seite.",
     "wozu": "Baue nur die linke Seite der Kamerahalterung und spiegle sie einfach nach rechts.",

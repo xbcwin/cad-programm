@@ -1,6 +1,6 @@
 # Fortschritt
 
-Stand: 25.10.2026 · nach Sitzung 27 (19: Skizze auf Profi-Niveau · 20: Magnet, Rundungs-Griff · 21: Skizzieren im 3D, Übergang, Entlang Pfad, Import · 22: Kreis/Bogen-Arten, Verlängern, Entformungsschräge, Gewinde · 23: Einheiten, eigener Querschnitt, Langloch gebogen, gedrehtes Rechteck, Teilen · 24: Punkt, alle Ecken · 25: Schnitt und Spiegeln an Fläche · 26: Kantenkette, Abstände beim Verschieben · 27: Spiegeln an der Achse)
+Stand: 25.10.2026 · nach Sitzung 28 (19: Skizze auf Profi-Niveau · 20: Magnet, Rundungs-Griff · 21: Skizzieren im 3D, Übergang, Entlang Pfad, Import · 22: Kreis/Bogen-Arten, Verlängern, Entformungsschräge, Gewinde · 23: Einheiten, eigener Querschnitt, Langloch gebogen, gedrehtes Rechteck, Teilen · 24: Punkt, alle Ecken · 25: Schnitt und Spiegeln an Fläche · 26: Kantenkette, Abstände beim Verschieben · 27: Spiegeln an der Achse · 28: Muster entlang Kurve, Schablonen-Maße geprüft, USB-C-Stecker)
 
 ## Erledigt
 
@@ -183,7 +183,8 @@ Fertig.
 - [x] Rundung mit Ziehgriff an der gewählten Kante, Radius live, Zahl tippen geht auch (Sitzung 20)
 - [ ] Magnet auch auf gewölbten Flächen und für Kaufteile beim Ziehen aus der Leiste mit eigener Form
 - [x] Bohrungs-Assistent, Wandstärke, Muster, Spiegeln, Boolesch, Teilen (Sitzung 8)
-- [ ] Muster entlang einer Kante oder Kurve; Kreismuster um eine schräge Achse (heute immer um die Senkrechte)
+- [x] Muster entlang Kurve: Körper oder Loch wählen → „Muster“ → „Muster entlang Kurve“, Kurve zeichnen (Linie, Bogen, Spline, Kreis oder geschlossener Umriss); Anzahl, Abstand (0 = gleichmäßig verteilt) und Ausrichtung (mit der Kurve drehen oder nicht), „Kurve bearbeiten“; beim Zeichnen zeigen Ringe, wo die Kopien landen (Sitzung 28)
+- [ ] Muster entlang einer Körperkante (heute: Kurve selbst zeichnen); Kreismuster um eine schräge Achse (heute immer um die Senkrechte)
 - [ ] Bohrung an einem Skizzenpunkt (heute per Klick auf eine Fläche)
 - [x] Explosionsansicht, Fokus-Vorschau, Schnitt, Röntgen (Sitzung 9)
 - [ ] Explosion auch für die Teile innerhalb einer Gruppe (heute nur oberste Ebene)
@@ -215,6 +216,7 @@ Fertig.
 - [x] STEP und STL importieren (Datei öffnen oder ins Fenster ziehen), Einheit wählbar; Abstand zwischen zwei Teilen genau setzen (Sitzung 21)
 - [x] Skizzen-Schablonen: Pin-Raster, Lüftungsgitter, Chip-Gehäuse QFP, QFN, BGA, SOIC, DIP mit einstellbaren Maßen (Sitzung 21)
 - [x] Entformungsschräge (Seitenwände neigen), echte metrische Gewinde: Gewindebolzen und gedrucktes Innengewinde; Schablonen USB-C-Ausschnitt und Befestigungslöcher (Sitzung 22)
+- [x] Schablonen-Maße mit Gemini Prompt N gegen JEDEC-Normen und Datenblätter geprüft und von Hand nachgesehen: 3 Werte korrigiert (QFP-Pin-Breite 0,27 → 0,22 mm Nennmaß, BGA-Gehäuse 9 → 10 mm, DIP-8-Gehäuse 9,8 → 9,27 mm), die übrigen 17 stimmten. Jede Chip-Schablone zeigt ihre Quelle und den Toleranzbereich. USB-C: Für den Ausschnitt gibt es keinen genormten Wert – darum zwei Schablonen: „Buchse“ (9,5 × 3,8, Buchse bündig mit der Wand) und neu „Stecker“ (13 × 7 mit Eckradius, für eine Buchse hinter der Wand; die Norm erlaubt Stecker bis 12,35 × 6,5 mm) (Sitzung 28)
 - [ ] 3D-Skizzen, Übergang mit Führungskurven, Sweep mit eigenem Querschnitt aus einer Skizze, Gelenke
 - [ ] Einsteiger-Oberfläche weiter vereinfachen: größere Knöpfe, geführte erste Schritte im leeren Projekt
 

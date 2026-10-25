@@ -9,7 +9,7 @@ const STEP_TEXT = /*JSON:schritt-erklaerungen.json*/null;
 
 const Explain = (() => {
   function keyOf(it) {
-    if (Features.isOp(it)) { const p = it.p; return p.op === 'pattern' ? ({ rect: 'pattern_rect', circ: 'pattern_circ', mirror: 'mirror' }[p.pt] || 'group') : p.op; }
+    if (Features.isOp(it)) { const p = it.p; return p.op === 'pattern' ? ({ rect: 'pattern_rect', circ: 'pattern_circ', path: 'pattern_path', mirror: 'mirror' }[p.pt] || 'group') : p.op; }
     if (Mass.fixedOf(it) || String((it.p || {}).lib || '').startsWith('buy')) return 'buy';
     if (it.kind === 'part') return (it.p || {}).lib;
     if (it.kind === 'group') return 'group';
@@ -26,7 +26,7 @@ const Explain = (() => {
   // Körper und Löcher zählen – Muster zählen mit ihrer Anzahl (4 Motorschrauben im Kreismuster = 4 Löcher)
   function counts(it, V) {
     let solids = 0, holes = 0;
-    const mult = (g) => { const p = Model.resolveP(g.p || {}, V); if (p.op !== 'pattern') return 1; if (p.pt === 'circ') return Math.max(1, Math.round(p.n || 1)); if (p.pt === 'rect') return Math.max(1, Math.round(p.nx || 1)) * Math.max(1, Math.round(p.ny || 1)); return 2; };
+    const mult = (g) => { const p = Model.resolveP(g.p || {}, V); if (p.op !== 'pattern') return 1; if (p.pt === 'circ') return Math.max(1, Math.round(p.n || 1)); if (p.pt === 'rect') return Math.max(1, Math.round(p.nx || 1)) * Math.max(1, Math.round(p.ny || 1)); if (p.pt === 'path') return Math.max(1, Math.round(p.n || 1)); return 2; };
     const rec = (list, k, hole) => { for (const c of list || []) { if (c.suppressed) continue; const isH = hole || c.role === 'hole'; if (c.kind === 'group') rec(c.children, k * mult(c), isH); else if (isH) holes += k; else solids += k; } };
     rec(it.children, 1, false);
     return { solids, holes };
