@@ -481,6 +481,48 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
   Schritte: 1. Ein Kind (ab 10) mit „Einfach“ eine Platte mit vier Löchern bauen lassen, ohne zu helfen.
   Erwartet: Es findet Körper, Löcher und Exportieren allein; notieren, wo es hängen bleibt.
 
+## Skizzieren im 3D, Übergang, Entlang Pfad (neu in Sitzung 21)
+
+- [x] **Ebene verschieben und neigen**
+  Schritte: 1. „Skizze“ → Abstand 15 → „Auf der Arbeitsfläche“. 2. Rechteck, rechts „Ebene verschieben / neigen“ → Neigung 30°. 3. Fertig, 2 mm hoch.
+  Erwartet: Die Skizze liegt 15 mm über dem Boden; nach dem Neigen schaut man schräg auf die Ebene; die Platte steht 30° geneigt.
+- [x] **Doppelklick auf eine Fläche**
+  Schritte: Quader, Doppelklick auf seine Oberseite.
+  Erwartet: Die Skizze startet direkt auf der Fläche, ihre Kanten sind gestrichelt als Bezug da.
+- [x] **Übergang (Loft)**
+  Schritte: 1. Rechteck 30 × 20 auf der Arbeitsfläche hochziehen, Kreis Ø 16 auf einer 30 mm verschobenen Ebene hochziehen. 2. Beide nacheinander wählen → „Übergang“. 3. „Spitze verlängern“ 15. 4. Einen einzelnen Skizzenkörper wählen → „Zur Spitze“.
+  Erwartet: Ein weicher Körper vom Rechteck zum Kreis; mit Spitze 45 mm hoch; „Zur Spitze“ macht aus einem Rechteck 30 × 20 eine 10 mm hohe Pyramide.
+- [x] **Entlang Pfad (Sweep)**
+  Schritte: 1. In einer Skizze einen offenen Pfad aus zwei Linien und einer Spline zeichnen, „Fertig“. 2. Rechts Wand 1. 3. Querschnitt „Rechteckig“. 4. „Pfad bearbeiten“, wieder „Fertig“.
+  Erwartet: Ein Rohr Ø 6 läuft am Pfad entlang, Ecken rund; mit Wand hohl; rechteckig als Kanal; der Pfad lässt sich wieder bearbeiten.
+- [x] **Abstand zwischen zwei Teilen**
+  Schritte: Zwei Quader wählen → „Abstand“ → Richtung X, Lücke 5.
+  Erwartet: Im Feld steht vorher die echte Lücke (20 mm); danach liegt der zweite Quader genau 5 mm neben dem ersten.
+- [x] **STEP und STL importieren**
+  Schritte: Eine .step-Datei (z. B. einen Motor vom Hersteller) ins Fenster ziehen; rechts die Einheit umstellen; eine .stl-Datei ebenso.
+  Erwartet: Das Teil erscheint mit richtiger Größe, ohne Fehler; Einheit Zoll macht es 25,4-mal größer; STL wird ein Körper.
+- [x] **Skizzen-Schablonen**
+  Schritte: In der Skizze „Schablone“ (J), QFP 48 Pins, auf den Nullpunkt klicken; Rückgängig; Pin-Raster 4 × 2 setzen.
+  Erwartet: Gehäuse mit 48 Pins mittig am Nullpunkt (49 Flächen); Rückgängig nimmt alles auf einmal weg; 8 Löcher im 2,54-mm-Raster.
+- [ ] **Speed-Nase mit Übergang**
+  Schritte: Mehrere Umrisse (Rechteck, Ellipse, kleiner Kreis) hintereinander, Übergang, Spitze verlängern, Kanten runden.
+  Erwartet: Eine glatte Nase; notieren, was beim Bauen umständlich war.
+
+## Magnet und Rundungs-Griff (neu in Sitzung 20)
+
+- [x] **Magnet auf der Fläche**
+  Schritte: 1. Quader 40 × 20 × 4, von oben. 2. Fläche anklicken, Bohrung M3. 3. Mit der Maus nahe an die Mitte, an die Mittellinie und spiegelbildlich zu einem Loch fahren und klicken.
+  Erwartet: Rosa gestrichelte Hilfslinien und ein Schildchen („Mitte der Fläche“, „Mittellinie“, „gleicher Randabstand“); das Loch sitzt genau dort. Mit Strg kein Einrasten.
+- [x] **Magnet zwischen Körpern**
+  Schritte: Zwei Quader, einen am anderen vorbeiziehen.
+  Erwartet: Kanten und Mitten rasten bündig ein (Hilfslinie, Schildchen „bündig“ oder „mittig“); mit Strg oder in den Einstellungen abgeschaltet nicht.
+- [x] **Rundung mit Ziehgriff**
+  Schritte: Kante anklicken, am rosa Pfeil nach innen ziehen (oder während des Ziehens eine Zahl tippen), loslassen. Dann zweimal Rückgängig.
+  Erwartet: Die Kante rundet sich beim Ziehen sichtbar mit, Schildchen „R … mm“; rechts unter „Kanten“ steht die Rundung mit dem Radius; Rückgängig nimmt sie wieder weg.
+- [ ] **Fühlt sich das Einrasten gut an?**
+  Schritte: Kamerahalter mit M2-Löchern bauen und Löcher setzen; Teile aneinander ausrichten.
+  Erwartet: Rastet dort ein, wo man es erwartet, und stört nicht beim freien Platzieren. Notieren, was fehlt.
+
 ## Skizze auf Profi-Niveau (neu in Sitzung 19)
 
 - [x] **Ecke runden**

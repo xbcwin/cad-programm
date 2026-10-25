@@ -313,6 +313,21 @@ const Panels = (() => {
     if (used) UI.toast(`Wo „${p.name}“ benutzt wurde, steht jetzt ${fmt(+num, 3)}.`, { icon: 'info' });
   }
 
+  // Abstand zwischen zwei Teilen: Achse wählen, Lücke eintippen
+  function gapPop(anchor) {
+    const box = h('div', { style: { display: 'grid', gap: '10px', minWidth: '240px' } });
+    box.append(h('b', null, 'Abstand zwischen den Teilen'));
+    let ax = 'x';
+    const g0 = () => { const g = Actions.gapOf(null, ax); return g ? round(g.gap, 3) : 0; };
+    const body = h('div', { style: { display: 'grid', gap: '10px' } });
+    const draw = () => {
+      body.innerHTML = '';
+      body.append(UI.selectField({ id: 'gap-ax', label: 'Richtung', value: ax, options: [['x', 'Links / rechts (X)'], ['y', 'Vorne / hinten (Y)'], ['z', 'Oben / unten (Z)']], onChange: (v) => { ax = v; draw(); } }));
+      body.append(UI.numField({ id: 'gap-v', label: 'Lücke (jetzt ' + fmt(g0(), 2) + ' mm)', value: g0(), onCommit: (v) => { const n = Model.num(v, Model.vars(App.doc).v, NaN); if (!isNaN(n)) { Actions.setGap(null, ax, n); UI.closePop(); } } }));
+    };
+    draw(); box.append(body, h('div', { class: 'hint-box', html: 'Der zuletzt gewählte Teil bewegt sich. 0 = bündig aneinander, negativ = ineinander.' }));
+    UI.pop(anchor, box);
+  }
   // ---------- Einstellungen (rechts) ----------
   function renderRight() {
     const body = $('#right-body'); body.innerHTML = '';
@@ -321,7 +336,7 @@ const Panels = (() => {
     const items = App.selectedItems();
     if (!items.length) { $('#right-title').textContent = 'Projekt'; renderProject(body); return; }
     if (items.length > 1) { $('#right-title').textContent = 'Auswahl'; renderMulti(body, items); return; }
-    $('#right-title').textContent = 'Einstellungen';
+    $('#right-title').textContent = 'Eigenschaften';
     renderItem(body, items[0]);
   }
   function renderProject(body) {
@@ -484,6 +499,32 @@ const Panels = (() => {
       const eb = h('button', { type: 'button', class: 'btn' }); eb.innerHTML = icon('edit') + 'Skizze bearbeiten';
       eb.onclick = () => Sketch.editItem(it.id);
       sec.append(eb); w.append(sec);
+    } else if (it.kind === 'import') {
+      sec.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Datei'), h('b', { class: 'mono' }, it.p.file || '–')));
+      const fl = h('div', { class: 'fields' });
+      fl.append(UI.selectField({ id: 'p-scale', label: 'Einheit der Datei', value: String(it.p.scale || 1), options: [['1', 'Millimeter'], ['10', 'Zentimeter'], ['25.4', 'Zoll'], ['1000', 'Meter']], onChange: (v) => setP('scale', parseFloat(v)) }));
+      sec.append(fl, h('div', { class: 'hint-box', html: 'Importierte Teile sind feste Formen ohne Zeitleiste. Du kannst sie verschieben, drehen, runden, als Loch nutzen oder mit anderen Körpern verbinden.' }));
+      w.append(sec);
+    } else if (it.kind === 'sweep') {
+      const fl = h('div', { class: 'fields' });
+      fl.append(UI.selectField({ id: 'p-shape', label: 'Querschnitt', value: it.p.shape || 'circle', options: [['circle', 'Rund (Rohr)'], ['rect', 'Rechteckig (Kanal, Leiste)']], onChange: (v) => setP('shape', v) }));
+      if ((it.p.shape || 'circle') === 'circle') fl.append(UI.numField({ id: 'p-d', label: 'Durchmesser', value: it.p.d, onCommit: (v) => setP('d', v) }));
+      else { fl.append(UI.numField({ id: 'p-w', label: 'Breite', value: it.p.w, onCommit: (v) => setP('w', v) }), UI.numField({ id: 'p-h', label: 'Höhe', value: it.p.h, onCommit: (v) => setP('h', v) })); }
+      fl.append(UI.numField({ id: 'p-wall', label: 'Wand (0 = voll)', value: it.p.wall || 0, min: 0, onCommit: (v) => setP('wall', v) }));
+      sec.append(fl);
+      const eb = h('button', { type: 'button', class: 'btn' }); eb.innerHTML = icon('edit') + 'Pfad bearbeiten';
+      eb.onclick = () => Sketch.editItem(it.id);
+      sec.append(eb, h('div', { class: 'hint-box', html: 'Der Querschnitt läuft am Pfad entlang – gut für Rohre, Kabelkanäle, Bügel und Leisten. Mit <b>Wand</b> wird er hohl.' }));
+      w.append(sec);
+    } else if (it.kind === 'loft') {
+      const n = (it.p.sketches || []).length;
+      sec.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Umrisse'), h('b', { class: 'mono' }, String(n))));
+      const fl = h('div', { class: 'fields' });
+      fl.append(UI.numField({ id: 'p-tip', label: 'Spitze verlängern', value: it.p.tip || 0, min: 0, onCommit: (v) => setP('tip', v) }));
+      fl.append(UI.selectField({ id: 'p-ruled', label: 'Übergang', value: it.p.ruled ? 'ruled' : 'smooth', options: [['smooth', 'Weich'], ['ruled', 'Gerade Flächen']], onChange: (v) => setP('ruled', v === 'ruled') }));
+      sec.append(fl);
+      sec.append(h('div', { class: 'hint-box', html: '<b>Spitze verlängern</b> zieht den Körper hinter dem letzten Umriss zu einer Spitze zusammen – z. B. für eine Nase oder einen Kegel mit weichem Ende. Danach kannst du die Kanten wie gewohnt runden.' }));
+      w.append(sec);
     } else if (Features.isOp(it)) {
       sec.firstChild.textContent = Features.NAMES[it.p.op === 'pattern' ? it.p.pt : it.p.op] || 'Feature';
       Features.renderOp(it, sec, setP); w.append(sec);
@@ -613,10 +654,13 @@ const Panels = (() => {
       b('copy', 'Duplizieren', () => Actions.duplicate(), '', 'Duplizieren (Strg D)', true);
       b('patternCirc', 'Muster', (e) => UI.menu(e.currentTarget, [{ label: 'Rechteckmuster', icon: 'patternRect', run: () => Features.pattern('rect') }, { label: 'Kreismuster', icon: 'patternCirc', run: () => Features.pattern('circ') }, { label: 'Gespiegelte Kopie', icon: 'mirror', run: () => Features.pattern('mirror') }]), '', hole ? 'Loch als Muster oder gespiegelt vervielfachen' : 'Muster oder gespiegelte Kopie', true);
       if (!hole) b('split', 'Teilen', () => Features.split(), '', 'Körper an einer Ebene teilen', true);
+      if (!hole && it.kind === 'extrude' && it.p && it.p.sketch) b('loft', 'Zur Spitze', () => Actions.loft([it.id], { tip: 10 }), '', 'Den Umriss zu einer Spitze zusammenlaufen lassen (Übergang mit Spitze)', true);
       if (!App.edges.length) b('similar', 'Ähnliche', () => Select.similar(), '', 'Alle gleichen Teile wählen (A)', true);
       if (it.kind === 'group') b('ungroup', 'Gruppe lösen', () => Actions.ungroup(), '', 'Gruppe lösen', true);
     } else {
       b('group', 'Gruppieren', () => Actions.group(), 'accent', 'Zu einem Körper verbinden (Strg G)');
+      if (items.length === 2) b('dim', 'Abstand', (e) => gapPop(e.currentTarget), '', 'Abstand zwischen den beiden Teilen genau setzen (der zuletzt gewählte bewegt sich)', true);
+      if (items.length >= 2 && items.every((x) => x.item.kind === 'extrude')) b('loft', 'Übergang', () => Actions.loft(), '', 'Weicher Übergang durch die Umrisse – in der Reihenfolge, in der du sie gewählt hast');
       b('boolSubtract', 'Boolesch', (e) => UI.menu(e.currentTarget, [{ label: 'Vereinigen', icon: 'boolUnion', run: () => Features.boolean('union') }, { label: 'Abziehen (der zuerst gewählte bleibt)', icon: 'boolSubtract', run: () => Features.boolean('subtract') }, { label: 'Schnittmenge', icon: 'boolIntersect', run: () => Features.boolean('intersect') }]), '', 'Körper vereinigen, abziehen oder schneiden', true);
       b('layers', 'Ausrichten', (e) => UI.menu(e.currentTarget, [['left', 'Links bündig'], ['cx', 'Mittig (X)'], ['right', 'Rechts bündig'], ['front', 'Vorne bündig'], ['cy', 'Mittig (Y)'], ['back', 'Hinten bündig'], ['bottom', 'Unten bündig']].map(([m, l]) => ({ label: l, run: () => Actions.align(null, m) }))), '', 'Objekte aneinander ausrichten');
       b('copy', 'Duplizieren', () => Actions.duplicate(), '', 'Duplizieren (Strg D)', true);

@@ -567,7 +567,10 @@ const Interact = (() => {
     // Doppelklick auf einen Skizzenkörper: Skizze bearbeiten
     const id = ctxChildAt(hit, e.clientX, e.clientY) || hit.id;
     const f = Model.find(App.doc, id);
-    if (f && (f.item.kind === 'extrude' || f.item.kind === 'revolve') && f.item.p.sketch && !f.item.locked) { Sketch.editItem(id); return; }
+    if (f && (f.item.kind === 'extrude' || f.item.kind === 'revolve' || f.item.kind === 'sweep') && f.item.p.sketch && !f.item.locked) { Sketch.editItem(id); return; }
+    // Doppelklick auf eine ebene Fläche: gleich darauf zeichnen
+    const r = App.results.get(hit.id); const info = r && r.data && r.data.faces && hit.faceIdx >= 0 ? r.data.faces[hit.faceIdx] : null;
+    if (info && info.t === 'PLANE' && info.n && App.doc.items.some((x) => x.id === hit.id)) { Sketch.startOnFace({ id: hit.id, idx: hit.faceIdx, info, point: hit.point.toArray(), normal: hit.normal ? hit.normal.toArray() : null }); return; }
     Viewer.fit([hit.id]);
   }
   return { init };

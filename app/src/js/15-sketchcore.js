@@ -266,6 +266,41 @@ const SK = (() => {
     }
     return out;
   }
+  // Offene Züge (Pfade) aus Linien, Bögen und offenen Splines – der Reihe nach, vom freien Ende aus
+  function chains(ents) {
+    const list = (ents || []).filter((e) => !e.con && (e.type === 'line' || e.type === 'arc' || (e.type === 'spline' && !e.closed && e.pts && e.pts.length >= 2)) && d2(endA(e), endB(e)) > 1e-9);
+    const adj = new Map();
+    const addV = (p, e) => { const k = qkey(p); if (!adj.has(k)) adj.set(k, []); adj.get(k).push(e); };
+    for (const e of list) { addV(endA(e), e); addV(endB(e), e); }
+    const used = new Set(), out = [];
+    const segOf = (e, fwd) => {
+      if (e.type === 'spline') { const bz = splineBez(e.pts, false); return fwd ? bz : bz.slice().reverse().map(revSeg); }
+      const s = e.type === 'arc' ? { t: 'arc', a: e.a, m: e.m, b: e.b } : { t: 'line', a: e.a, b: e.b };
+      return [fwd ? s : revSeg(s)];
+    };
+    for (const e0 of list) {
+      if (used.has(e0.id)) continue;
+      // Komponente sammeln
+      const comp = []; const stack = [e0]; const seen = new Set([e0.id]);
+      while (stack.length) { const e = stack.pop(); comp.push(e); for (const p of [endA(e), endB(e)]) for (const n of adj.get(qkey(p)) || []) if (!seen.has(n.id)) { seen.add(n.id); stack.push(n); } }
+      comp.forEach((e) => used.add(e.id));
+      const deg = (p) => (adj.get(qkey(p)) || []).length;
+      if (comp.some((e) => deg(endA(e)) > 2 || deg(endB(e)) > 2)) continue;   // Abzweigungen: kein eindeutiger Pfad
+      const start = comp.find((e) => deg(endA(e)) === 1 || deg(endB(e)) === 1); if (!start) continue;   // geschlossen: das ist eine Fläche
+      let cur = start, from = deg(endA(start)) === 1 ? endA(start) : endB(start);
+      const segs = [], ids = [], vis = new Set();
+      while (cur && !vis.has(cur.id)) {
+        vis.add(cur.id); ids.push(cur.id);
+        const fwd = qkey(endA(cur)) === qkey(from);
+        segs.push(...segOf(cur, fwd));
+        from = fwd ? endB(cur) : endA(cur);
+        cur = (adj.get(qkey(from)) || []).find((n) => !vis.has(n.id));
+      }
+      let len = 0; for (const s of segs) { const pts = segPoints(s); for (let i = 1; i < pts.length; i++) len += d2(pts[i - 1], pts[i]); }
+      out.push({ segs, ents: ids, len });
+    }
+    return out.sort((a, b) => b.len - a.len);
+  }
   function openEnds(ents) {
     // Endpunkte, die nur an einer Linie hängen (Hinweis „Umriss nicht geschlossen“)
     const cnt = new Map();
@@ -436,6 +471,6 @@ const SK = (() => {
     const r = Solver.solve({ ents: ents || [], dims: dims || [], cons: cons || [] }, V, { inPlace });
     return r.ents;
   }
-  return { ellipsePoints, splineBez, bezPoints, textContours, textBox, FONTS, FONTNAMES, loops, regions, regionAt, segsOf, segPoints, splinePoints, lineSegsOf, endA, endB, anchorOf, distSeg, arcInfo, arcPoints, circlePoints, rectCorners, polyCorners, hit, distEnt, snapPoints, faceLoopsToEnts, project3, openEnds, bounds, translateEnt, inPoly, d2, applyDims, measure, setMeasure, DIMKEYS, DIMNAME };
+  return { chains, ellipsePoints, splineBez, bezPoints, textContours, textBox, FONTS, FONTNAMES, loops, regions, regionAt, segsOf, segPoints, splinePoints, lineSegsOf, endA, endB, anchorOf, distSeg, arcInfo, arcPoints, circlePoints, rectCorners, polyCorners, hit, distEnt, snapPoints, faceLoopsToEnts, project3, openEnds, bounds, translateEnt, inPoly, d2, applyDims, measure, setMeasure, DIMKEYS, DIMNAME };
 })();
 

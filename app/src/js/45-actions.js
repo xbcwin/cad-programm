@@ -289,6 +289,25 @@ const Actions = (() => {
       }
     });
   }
+  // Abstand zwischen zwei Körpern (Lücke zwischen ihren Hüllen) entlang einer Achse; der zuletzt gewählte bewegt sich
+  function gapOf(ids, ax) {
+    ids = ids || App.sel; if (ids.length !== 2) return null;
+    const a = worldBox(ids[0]), b = worldBox(ids[1]); if (!a || !b) return null;
+    const k = ax === 'y' ? 'y' : ax === 'z' ? 'z' : 'x';
+    const cb = (b.min[k] + b.max[k]) / 2, ca = (a.min[k] + a.max[k]) / 2;
+    return cb >= ca ? { gap: b.min[k] - a.max[k], dir: 1 } : { gap: a.min[k] - b.max[k], dir: -1 };
+  }
+  function setGap(ids, ax, value) {
+    ids = ids || App.sel.slice(); const g = gapOf(ids, ax); if (!g) return;
+    const k = ax === 'y' ? 'y' : ax === 'z' ? 'z' : 'x';
+    const d = new THREE.Vector3(); d[k] = (value - g.gap) * g.dir;
+    App.change('Abstand gesetzt', (doc) => {
+      const f = Model.find(doc, ids[1]); if (!f || f.item.locked) return false;
+      const PW = Model.parentWorld(doc, ids[1]); const q = new THREE.Quaternion(); PW.decompose(new THREE.Vector3(), q, new THREE.Vector3());
+      d.applyQuaternion(q.invert());
+      const tn = Model.tNumeric(f.item); f.item.t.x = round(tn.x + d.x, 4); f.item.t.y = round(tn.y + d.y, 4); f.item.t.z = round(tn.z + d.z, 4);
+    });
+  }
   // ---------- Kanten ----------
   function edgeSigs(edges) {
     const out = [];
@@ -367,6 +386,28 @@ const Actions = (() => {
     const r = (a) => round((a * 180) / Math.PI, 4);
     return { targetId, t: { x: sn(p.x, 0), y: sn(p.y, 1), z: sn(p.z, 2), rx: r(e.x), ry: r(e.y), rz: r(e.z) } };
   }
-  return { addPrimitive, addPart, addBuyPart, remove, duplicate, setRole, toggleRole, group, groupAll, ungroup, rotate90, rotate, center, mirror, dropToPlate, align, addFinish, finishAll, setFinish, removeFinish, faceFrame, selectedFace, onFaceTransform, attach, worldBox, selBox, cuttersOf, viewCenter };
+  // Übergang (Loft) aus mehreren Skizzenkörpern: ihre Skizzen werden die Profile, in Auswahl-Reihenfolge
+  function loft(ids, opts = {}) {
+    ids = ids || App.sel.slice();
+    const its = ids.map((id) => App.doc.items.find((x) => x.id === id)).filter(Boolean);
+    const ok = its.filter((it) => it.kind === 'extrude' && it.p && it.p.sketch);
+    if (ok.length < (opts.tip ? 1 : 2) || ok.length !== its.length) { UI.toast('Wähle mindestens zwei Skizzenkörper (z. B. zwei Umrisse auf verschiedenen Ebenen) – in der Reihenfolge, in der der Übergang laufen soll.', { icon: 'info', ms: 5000 }); return null; }
+    const sketches = ok.map((it) => {
+      const M = Model.localMatrix(it), sk = deepClone(it.p.sketch);
+      const o = new THREE.Vector3(...sk.plane.o).applyMatrix4(M), x = new THREE.Vector3(...sk.plane.x).transformDirection(M), n = new THREE.Vector3(...sk.plane.n).transformDirection(M);
+      sk.plane = { o: o.toArray().map((v) => round(v, 6)), x: x.toArray(), n: n.toArray() };
+      return sk;
+    });
+    let nid = null;
+    App.change('Übergang erstellt', (doc) => {
+      const idx = Math.min(...ok.map((it) => doc.items.findIndex((x) => x.id === it.id)));
+      const L = Model.newItem('loft', { sketches, ruled: false, tip: opts.tip || 0 }, { name: 'Übergang', color: ok[0].color });
+      doc.items = doc.items.filter((x) => !ids.includes(x.id));
+      doc.items.splice(Math.max(0, Math.min(idx, doc.items.length)), 0, L); nid = L.id;
+    });
+    if (nid) App.select([nid]);
+    return nid;
+  }
+  return { gapOf, setGap, loft, addPrimitive, addPart, addBuyPart, remove, duplicate, setRole, toggleRole, group, groupAll, ungroup, rotate90, rotate, center, mirror, dropToPlate, align, addFinish, finishAll, setFinish, removeFinish, faceFrame, selectedFace, onFaceTransform, attach, worldBox, selBox, cuttersOf, viewCenter };
 })();
 

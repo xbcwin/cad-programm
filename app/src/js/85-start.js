@@ -196,7 +196,22 @@ const Start = (() => {
     hide();
     if (!silent) UI.toast('Neues Projekt. Fang mit einem Körper an – oder beschreib unten, was du bauen willst.', { icon: 'newfile', ms: 4500 });
   }
+  // STEP oder STL als neues Teil ins Projekt holen
+  async function importCAD(f) {
+    const fmt = /\.stl$/i.test(f.name) ? 'stl' : 'step';
+    if (f.size > 25e6) { UI.toast('Die Datei ist zu groß (über 25 MB).', { kind: 'bad' }); return; }
+    if (el) newProject(true);
+    const buf = new Uint8Array(await f.arrayBuffer());
+    let bin = ''; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
+    const data = btoa(bin);
+    const it = Model.newItem('import', { fmt, data, file: f.name, scale: 1 }, { name: f.name.replace(/\.(step|stp|stl)$/i, '') });
+    App.change('Importiert', (doc) => { doc.items.push(it); });
+    App.select([it.id]);
+    UI.toast(`„${f.name}“ importiert.` + (f.size > 3e6 ? ' Die Datei ist groß – speichere das Projekt als Datei, der Browser-Speicher reicht dafür evtl. nicht.' : ' Mit „Auf die XY-Ebene setzen“ legst du es auf den Boden.'), { icon: 'folder', ms: 5000 });
+    setTimeout(() => { const b = Actions.worldBox(it.id); if (b && !b.isEmpty()) Viewer.fit([it.id]); }, 1500);
+  }
   async function openBlob(f) {
+    if (/\.(step|stp|stl)$/i.test(f.name)) return importCAD(f);
     try {
       const txt = await f.text(); const doc = JSON.parse(txt);
       Model.migrate(doc);
@@ -209,7 +224,7 @@ const Start = (() => {
     } catch (e) { const E = ERRORS.importFailed; UI.toast(`${E.titel}. ${E.erklaerung} ${E.loesung}`, { kind: 'bad', ms: 7000 }); console.warn(e); }
   }
   function openFile() {
-    const inp = h('input', { type: 'file', accept: '.json,application/json', style: { display: 'none' } });
+    const inp = h('input', { type: 'file', accept: '.json,application/json,.step,.stp,.stl', style: { display: 'none' } });
     inp.onchange = () => { const f = inp.files && inp.files[0]; inp.remove(); if (f) openBlob(f); };
     document.body.append(inp); inp.click();
   }
@@ -217,7 +232,7 @@ const Start = (() => {
   addEventListener('dragover', (e) => { if (e.dataTransfer && [...e.dataTransfer.types].includes('Files')) e.preventDefault(); });
   addEventListener('drop', (e) => {
     const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-    if (!f || !/\.json$/i.test(f.name)) return;
+    if (!f || !/\.(json|step|stp|stl)$/i.test(f.name)) return;
     e.preventDefault(); openBlob(f);
   });
   async function saveFile() {
@@ -226,14 +241,14 @@ const Start = (() => {
     const ok = await Print.save(name + '.tracery.json', JSON.stringify(vers.length ? { ...App.doc, versions: vers } : App.doc, null, 1));
     if (ok) App.fileSavedRev = App.revision;
   }
-  return { show, hide, newProject, openFile, openBlob, saveFile, openDrone, get open() { return !!el; } };
+  return { importCAD, show, hide, newProject, openFile, openBlob, saveFile, openDrone, get open() { return !!el; } };
 })();
 
 // ---------- Einführung ----------
 const Tour = (() => {
   let box = null, ring = null, idx = 0, off = [];
   const BASICS = [
-    { title: 'Willkommen bei Tracery', text: 'In drei Minuten baust du ein Teil mit Loch und exportierst es. Links siehst du den Verlauf, rechts die Einstellungen, in der Mitte dein Modell.', target: null },
+    { title: 'Willkommen bei Tracery', text: 'In drei Minuten baust du ein Teil mit Loch und exportierst es. Links siehst du den Verlauf, rechts die Eigenschaften, in der Mitte dein Modell.', target: null },
     { title: 'Leg einen Quader hin', text: 'Klick oben auf „Körper“ und dann auf „Quader“. Du kannst ihn auch direkt auf die Fläche ziehen.', target: '#t-body', until: () => App.doc.items.some((x) => x.kind === 'box') },
     { title: 'Mach ihn größer', text: 'Zieh an einem weißen Anfasser – oder klick auf eine der Zahlen am Quader und tipp zum Beispiel 40 ein.', target: '#viewport', until: (ev) => ev === 'size' },
     { title: 'Ein Loch einbauen', text: 'Klick wieder auf „Körper“ und unten auf „Zylinder als Loch“ – schon geht ein Loch durch den Quader. Jeder Körper kann übrigens mit einem Klick rechts auf „Loch“ zum Loch werden.', target: '#t-body', until: () => App.doc.items.some((x) => x.role === 'hole') || App.doc.items.some((x) => x.kind === 'group') },

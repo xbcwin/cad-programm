@@ -28,7 +28,7 @@
   const projectItems = () => [
     { label: 'Projekt umbenennen', icon: 'edit', run: async () => { const n = await UI.prompt('Projekt umbenennen', 'Name', App.doc.name, 'Umbenennen'); if (n && n.trim()) App.change('Projekt umbenannt', (doc) => { doc.name = n.trim(); }); } },
     { label: 'Als Datei speichern', icon: 'save', kbd: 'Strg S', run: () => Start.saveFile() },
-    { label: 'Datei öffnen …', icon: 'folder', run: () => Start.openFile() },
+    { label: 'Datei öffnen / STEP, STL importieren …', icon: 'folder', run: () => Start.openFile() },
     { label: 'Versionen …', icon: 'rollback', help: 'versions', run: () => Versions.dialog() },
     '-',
     { label: 'Neues Projekt', icon: 'newfile', run: () => Start.newProject() },

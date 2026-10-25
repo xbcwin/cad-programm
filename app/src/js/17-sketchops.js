@@ -254,6 +254,42 @@ const SKO = (() => {
     return segs.map((s) => (s.t === 'arc' ? { id: uid('e'), type: 'arc', a: pr(s.a), m: pr(s.m), b: pr(s.b), ...(e.con ? { con: true } : {}) } : { id: uid('e'), type: 'line', a: pr(s.a), b: pr(s.b), ...(e.con ? { con: true } : {}) }));
   }
 
+  // ---------- Schablonen: fertige Umrisse mit Maßen (Mitte c) ----------
+  const TEMPLATES = {
+    pins: { name: 'Pin-Raster (Löcher)', p: { nx: 5, ny: 2, pitch: 2.54, d: 1 } },
+    vent: { name: 'Lüftungsgitter (Schlitze)', p: { n: 6, len: 20, w: 2, pitch: 4 } },
+    qfp: { name: 'Chip QFP / LQFP', p: { n: 48, body: 7, pitch: 0.5, padW: 0.27, padL: 1 } },
+    qfn: { name: 'Chip QFN', p: { n: 32, body: 5, pitch: 0.5, padW: 0.25, padL: 0.4, ep: 3.45 } },
+    bga: { name: 'Chip BGA', p: { nx: 10, ny: 10, pitch: 0.8, d: 0.4, body: 9 } },
+    soic: { name: 'Chip SOIC / SO', p: { n: 8, pitch: 1.27, bodyL: 4.9, bodyW: 3.9, span: 6, padW: 0.41 } },
+    dip: { name: 'Chip DIP (Durchsteck)', p: { n: 8, pitch: 2.54, row: 7.62, d: 0.8, bodyL: 9.8, bodyW: 6.35 } },
+  };
+  const TPLNAMES = { nx: 'Anzahl X', ny: 'Anzahl Y', n: 'Anzahl', pitch: 'Raster', d: 'Ø', len: 'Länge', w: 'Breite', body: 'Gehäuse', padW: 'Pin-Breite', padL: 'Pin-Länge', ep: 'Mittelfläche', bodyL: 'Gehäuse lang', bodyW: 'Gehäuse breit', span: 'Spannweite', row: 'Reihenabstand' };
+  const pr1 = (v) => Math.round(v * 1e4) / 1e4;
+  function tplEnts(type, P, c) {
+    const out = [];
+    const R = (x0, y0, x1, y1, con) => out.push({ id: uid('e'), type: 'rect', a: pr([c[0] + Math.min(x0, x1), c[1] + Math.min(y0, y1)]), b: pr([c[0] + Math.max(x0, x1), c[1] + Math.max(y0, y1)]), ...(con ? { con: true } : {}) });
+    const C = (x, y, r) => out.push({ id: uid('e'), type: 'circle', c: pr([c[0] + x, c[1] + y]), r: pr1(r) });
+    const pos = (k, d) => { const v = Number(P[k]); return isFinite(v) && v > 0 ? v : d; };
+    const int = (k, d) => Math.max(1, Math.round(pos(k, d)));
+    if (type === 'pins') { const nx = int('nx', 5), ny = int('ny', 2), t = pos('pitch', 2.54), r = pos('d', 1) / 2; for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) C((i - (nx - 1) / 2) * t, (j - (ny - 1) / 2) * t, r); }
+    else if (type === 'vent') { const n = int('n', 6), L = pos('len', 20), w = pos('w', 2), t = pos('pitch', 4); for (let i = 0; i < n; i++) { const x = (i - (n - 1) / 2) * t; out.push({ id: uid('e'), type: 'slot', a: pr([c[0] + x, c[1] - (L - w) / 2]), b: pr([c[0] + x, c[1] + (L - w) / 2]), r: pr1(w / 2) }); } }
+    else if (type === 'qfp' || type === 'qfn') {
+      const n = Math.max(4, Math.round(pos('n', 32) / 4) * 4), s = n / 4, B = pos('body', 7) / 2, t = pos('pitch', 0.5), pw = pos('padW', 0.3) / 2, pl = pos('padL', 1);
+      R(-B, -B, B, B);
+      for (let i = 0; i < s; i++) {
+        const u = (i - (s - 1) / 2) * t;
+        if (type === 'qfp') { R(u - pw, -B - pl, u + pw, -B); R(u - pw, B, u + pw, B + pl); R(-B - pl, u - pw, -B, u + pw); R(B, u - pw, B + pl, u + pw); }
+        else { R(u - pw, -B, u + pw, -B + pl); R(u - pw, B - pl, u + pw, B); R(-B, u - pw, -B + pl, u + pw); R(B - pl, u - pw, B, u + pw); }
+      }
+      if (type === 'qfn') { const e = pos('ep', 0) / 2; if (e > 0 && e < B - pl) R(-e, -e, e, e); }
+    }
+    else if (type === 'bga') { const nx = int('nx', 10), ny = int('ny', 10), t = pos('pitch', 0.8), r = pos('d', 0.4) / 2, B = Math.max(pos('body', 9) / 2, ((Math.max(nx, ny) - 1) * t) / 2 + r + 0.2); R(-B, -B, B, B); for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) C((i - (nx - 1) / 2) * t, (j - (ny - 1) / 2) * t, r); }
+    else if (type === 'soic') { const n = Math.max(2, Math.round(pos('n', 8) / 2) * 2), s = n / 2, t = pos('pitch', 1.27), L = pos('bodyL', 4.9) / 2, W = pos('bodyW', 3.9) / 2, S = Math.max(pos('span', 6) / 2, W + 0.2), pw = pos('padW', 0.41) / 2; R(-L, -W, L, W); for (let i = 0; i < s; i++) { const x = (i - (s - 1) / 2) * t; R(x - pw, -S, x + pw, -W); R(x - pw, W, x + pw, S); } }
+    else if (type === 'dip') { const n = Math.max(2, Math.round(pos('n', 8) / 2) * 2), s = n / 2, t = pos('pitch', 2.54), rw = pos('row', 7.62) / 2, r = pos('d', 0.8) / 2, L = pos('bodyL', 9.8) / 2, W = pos('bodyW', 6.35) / 2; R(-L, -W, L, W, true); for (let i = 0; i < s; i++) { const x = (i - (s - 1) / 2) * t; C(x, -rw, r); C(x, rw, r); } }
+    return out;
+  }
+
   // ---------- Ketten (zusammenhängende Linien und Bögen) ----------
   function chainOf(ents, e0) {
     const adj = new Map();
@@ -447,5 +483,5 @@ const SKO = (() => {
   const rotPt = (p, C, th) => { const cs = Math.cos(th), sn = Math.sin(th), x = p[0] - C[0], y = p[1] - C[1]; return [C[0] + cs * x - sn * y, C[1] + sn * x + cs * y]; };
   function rotateEnt(e, C, th) { return mapEnt(e, (p) => rotPt(p, C, th), (q) => (q.rot || 0) + th, true); }
 
-  return { curve, inter, intersections, partsOf, nearestOn, closest, perpFeet, tangentFeet, trimPlan, trimPieces, trimRemoved, explode, chainOf, offsetChain, offsetShape, linkPoints, hasRadius, mirrorEnt, mirrorPoint, moveEnt, rotateEnt, rotPt, pr };
+  return { TEMPLATES, TPLNAMES, tplEnts, curve, inter, intersections, partsOf, nearestOn, closest, perpFeet, tangentFeet, trimPlan, trimPieces, trimRemoved, explode, chainOf, offsetChain, offsetShape, linkPoints, hasRadius, mirrorEnt, mirrorPoint, moveEnt, rotateEnt, rotPt, pr };
 })();

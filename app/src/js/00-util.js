@@ -167,6 +167,7 @@ const IC = {
   slot: '<path d="M8 7h8a5 5 0 0 1 0 10H8A5 5 0 0 1 8 7z" />',
   polygon: '<path d="M12 3.5 19.5 8v8L12 20.5 4.5 16V8z" />',
   image: '<rect x="3.5" y="5" width="17" height="14" rx="1.5"/><circle cx="9" cy="10" r="1.6"/><path d="M4 17l5-4.5 3.5 3 3-2.5 4.5 4" />',
+  chip: '<rect x="7" y="7" width="10" height="10" rx="1"/><path d="M9.5 3v4M12 3v4M14.5 3v4M9.5 17v4M12 17v4M14.5 17v4M3 9.5h4M3 12h4M3 14.5h4M17 9.5h4M17 12h4M17 14.5h4" />',
   ellipse: '<ellipse cx="12" cy="12" rx="9" ry="5.5"/><path d="M12 12h.01" />',
   rectCenter: '<rect x="4" y="6" width="16" height="12" rx="1"/><path d="M12 12h.01 M12 12 20 18" opacity=".55"/>',
   text: '<path d="M5 6h14 M12 6v13 M9 19h6" />',
@@ -429,14 +430,14 @@ const HELP = {
   "tipp": "Zeichne für runde Dinge wie Räder, Flaschen oder Schüsseln immer nur die halbe Querschnittsform bis zur Mitte."
  },
  "sweep": {
-  "tip": "Form entlang einer Linie ziehen",
-  "hilfe": "Klicke erst auf die Fläche (das Profil) und danach auf die Linie (den Pfad), an der sie wie auf Schienen entlanggleiten soll.",
-  "tipp": "Wenn der Pfad zu enge Kurven macht, schneidet sich der Körper selbst und es gibt eine Fehlermeldung – mach die Kurven dann etwas weiter."
+  "tip": "Querschnitt entlang eines Pfads ziehen (Sweep)",
+  "hilfe": "Zeichne in einer Skizze einen offenen Pfad aus Linien, Bögen oder einer Spline und klick „Fertig“. Tracery zieht dann ein Rohr mit 6 mm Durchmesser daran entlang. Rechts stellst du rund oder rechteckig, die Größe und eine Wand für hohle Rohre ein.",
+  "tipp": "Gut für Kabelkanäle, Antennenhalter, Bügel und Leisten. Ecken im Pfad werden automatisch rund übergangen."
  },
  "loft": {
-  "tip": "Fließender Übergang zwischen zwei Formen",
-  "hilfe": "Klicke nacheinander zwei oder mehr Skizzenflächen an, die auf unterschiedlichen Ebenen liegen, um sie weich zu verbinden.",
-  "tipp": "Damit verbindest du problemlos einen eckigen Boden mit einer kreisrunden Öffnung weiter oben."
+  "tip": "Weicher Übergang durch mehrere Umrisse (Loft)",
+  "hilfe": "Zeichne zwei oder mehr Umrisse auf verschiedenen Ebenen (z. B. ein Rechteck unten und einen Kreis 30 mm darüber – mit „Ebene verschieben“ in der Skizze). Wähle die Skizzenkörper in der Reihenfolge, durch die der Körper laufen soll, und klick „Übergang“. Bei einem einzelnen Skizzenkörper macht „Zur Spitze“ daraus eine Spitze.",
+  "tipp": "Unter „Spitze verlängern“ stellst du ein, wie weit die Spitze hinter dem letzten Umriss liegt. Für Nasen, Düsen und Rumpfteile danach die Kanten runden."
  },
  "holeWizard": {
   "tip": "Schraubenloch, Gewinde, Einsatz oder Mutternfalle bohren",
@@ -652,6 +653,21 @@ const HELP = {
   "tip": "Foto oder Zeichnung zum Nachzeichnen hinterlegen",
   "hilfe": "Lade ein Bild, zum Beispiel ein Foto von einer Platine oder ein Datenblatt. Mit „Maßstab festlegen“ klickst du zwei Punkte an, deren echten Abstand du kennst, und tippst ihn ein – dann hat das Bild die richtige Größe. Ziehen verschiebt das Bild.",
   "tipp": "Leg für den Maßstab eine möglichst lange bekannte Strecke an, das wird genauer. Das Bild kommt nicht in den Körper und nicht in den Export."
+ },
+ "magnet": {
+  "tip": "Teile rasten an sinnvollen Stellen ein",
+  "hilfe": "Beim Ziehen und beim Setzen von Löchern rastet Tracery an der Mitte einer Fläche, an Mittellinien, an Lochmitten und im gleichen Randabstand ein. Körper rasten bündig oder mittig zu anderen Körpern ein. Rosa Hilfslinien zeigen, woran.",
+  "tipp": "Halte Strg (Mac: cmd) gedrückt, um frei ohne Einrasten zu ziehen. Ganz abschalten kannst du es im Projekt rechts unter „Fangen beim Verschieben“."
+ },
+ "importCad": {
+  "tip": "STEP- oder STL-Datei als Teil holen",
+  "hilfe": "Über „Datei öffnen“ oder einfach ins Fenster ziehen: Eine .step-, .stp- oder .stl-Datei wird ein neues Teil im Projekt – zum Beispiel ein Motor oder eine Kamera vom Hersteller. Rechts stellst du ein, in welcher Einheit die Datei gemessen ist.",
+  "tipp": "STEP ist genauer als STL: Kanten lassen sich runden und Bohrungen erkennen. STL-Dateien sind Dreiecksnetze und eignen sich vor allem zum Anschauen und Ausrichten."
+ },
+ "sketchTemplate": {
+  "tip": "Fertige Umrisse mit echten Maßen einsetzen",
+  "hilfe": "Wähle rechts eine Schablone – Pin-Raster, Lüftungsgitter oder ein Chip-Gehäuse (QFP, QFN, BGA, SOIC, DIP) – und stell Anzahl, Raster und Größen ein. Ein Klick ins Bild setzt sie mit der Mitte an diese Stelle; am Nullpunkt oder an Mittelpunkten rastet sie ein.",
+  "tipp": "Für einen Chip das Gehäuse hochziehen und die Pins als eigene Flächen etwas niedriger – oder alles als Aussparung für einen Halter. Die Standardmaße bitte mit dem Datenblatt vergleichen."
  }
 };
 

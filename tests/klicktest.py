@@ -178,6 +178,9 @@ def t_unterdruecken(p):
 def t_fehler_rot(p):
     p.empty(); p.ev("Actions.addPrimitive('box')"); p.wait(1500)
     p.ev("App.change('Rundung', d=>{ d.items[0].finishes.push({id:'f_x',type:'fillet',r:50,edges:'all'}); })"); p.wait(3000)
+    for _ in range(10):
+        if p.pg.locator('.tl-chip.err').count() == 1: break
+        p.wait(1000)
     return p.pg.locator('.tl-chip.err').count() == 1 and p.pg.get_by_text('Ein Schritt hat ein Problem').count() > 0
 
 
@@ -2185,6 +2188,137 @@ def t_rundung_ziehen(p):
     return [ok1, ok2, ok3, ok4]
 
 
+# ---------- Sitzung 21: Skizzieren im 3D leichter ----------
+def t_ebene_versetzt(p):
+    p.empty()
+    p.pg.locator('#t-sketch').click(); p.wait(400)
+    p.pg.fill('#sk-off', '15'); p.pg.press('#sk-off', 'Enter'); p.wait(100)
+    p.pg.get_by_text('Auf der Arbeitsfläche').first.click(); p.wait(1500)
+    ok1 = p.ev("return Sketch.state.plane.o[2]") == 15
+    p.ev("const S=Sketch.state; S.ents.push({id:'r1',type:'rect',a:[-10,-5],b:[10,5]})")
+    # Neigung 30°
+    p.pg.locator('#sk-plane summary').click() if not p.ev("return document.querySelector('#sk-plane').open") else None
+    p.pg.fill('#pl-tilt', '30'); p.pg.press('#pl-tilt', 'Enter'); p.wait(800)
+    n = p.ev("return Sketch.state.plane.n")
+    ok2 = abs(n[2] - math.cos(math.radians(30))) < 1e-6 and abs(abs(n[1]) - 0.5) < 1e-6
+    fertig_hoch(p, '2')
+    bb = p.ev("return App.results.get(App.doc.items[0].id).data.bbox")
+    z = p.ev("const it=App.doc.items[0]; return it.p.sketch.plane.o[2]")
+    ok3 = z == 15 and p.ev("return App.errors.length") == 0 and (bb[5] - bb[2]) > 5   # geneigte Platte: deutlich höher als 2 mm
+    return [ok1, ok2, ok3]
+
+
+def t_doppelklick_flaeche(p):
+    platte(p, 40, 20, 6)
+    p.ev("Viewer.setView('iso', false)"); p.wait(1200)
+    s = world_screen(p, 12, 4, 6); p.pg.mouse.dblclick(s[0], s[1]); p.wait(1500)
+    ok1 = p.ev("return Sketch.active") and abs(p.ev("return Sketch.state.plane.o[2]") - 6) < 1e-6 and p.ev("return Sketch.state.refs.length") >= 4
+    return [ok1]
+
+
+def skizzenkoerper(p, ents, z=0, name='S'):
+    p.ev("App.change('x', d=>{ const it=Model.newItem('extrude',{},{name:arg[2]}); it.p={sketch:{plane:{o:[0,0,arg[1]],x:[1,0,0],n:[0,0,1]},ents:arg[0],dims:[],cons:[]},dist:2,dir:'normal'}; d.items.push(it); })", [ents, z, name])
+
+
+def t_uebergang(p):
+    p.empty()
+    skizzenkoerper(p, [{'id': 'r', 'type': 'rect', 'a': [-15, -10], 'b': [15, 10]}], 0, 'Unten')
+    skizzenkoerper(p, [{'id': 'c', 'type': 'circle', 'c': [0, 0], 'r': 8}], 30, 'Oben')
+    warte_rechnen(p, 20)
+    p.ev("App.select([App.doc.items[0].id]); App.select([App.doc.items[1].id], {additive:true})"); p.wait(600)
+    p.pg.locator('.ctxbar button[aria-label="Übergang"]').click(); warte_rechnen(p, 30)
+    ok1 = p.ev("return App.doc.items.length===1 && App.doc.items[0].kind==='loft' && App.errors.length===0")
+    bb = p.ev("return App.results.get(App.doc.items[0].id).data.bbox")
+    ok2 = abs(bb[2]) < 1e-3 and abs(bb[5] - 30) < 1e-3 and abs(bb[3] - 15) < 1e-3
+    p.pg.fill('#p-tip', '15'); p.pg.press('#p-tip', 'Enter'); warte_rechnen(p, 30)
+    bb2 = p.ev("return App.results.get(App.doc.items[0].id).data.bbox")
+    ok3 = abs(bb2[5] - 45) < 1e-3 and p.ev("return App.errors.length") == 0
+    # einzelner Umriss: Zur Spitze -> Pyramide 30 x 20, Spitze 10 mm
+    p.ev("App.change('x', d=>{ d.items=[]; })"); p.wait(500)
+    skizzenkoerper(p, [{'id': 'r', 'type': 'rect', 'a': [-15, -10], 'b': [15, 10]}], 0, 'Platte'); warte_rechnen(p, 20)
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(500)
+    p.pg.locator('.ctxbar button[aria-label="Zur Spitze"]').click(); warte_rechnen(p, 30)
+    v = volumen(p)
+    ok4 = v is not None and abs(v - 2000) < 1
+    return [ok1, ok2, ok3, ok4]
+
+
+def t_entlang_pfad(p):
+    sketch_xy(p)
+    p.ev("const S=Sketch.state; S.ents.push({id:'l1',type:'line',a:[0,0],b:[40,0]},{id:'l2',type:'line',a:[40,0],b:[40,30]},{id:'s1',type:'spline',pts:[[40,30],[30,45],[10,40]]})")
+    p.pg.keyboard.press('Enter'); warte_rechnen(p, 30)
+    ok1 = p.ev("return App.doc.items.length===1 && App.doc.items[0].kind==='sweep' && App.errors.length===0")
+    v = volumen(p)
+    ok2 = v is not None and 1800 < v < 3500
+    p.pg.fill('#p-wall', '1'); p.pg.press('#p-wall', 'Enter'); warte_rechnen(p, 30)
+    v2 = volumen(p)
+    ok3 = v2 is not None and abs(v2 / v - (1 - (2 / 3) ** 2)) < 0.03 and p.ev("return App.errors.length") == 0
+    p.pg.select_option('#p-shape', 'rect'); warte_rechnen(p, 30)
+    ok4 = p.ev("return App.errors.length") == 0 and p.pg.locator('#p-w').count() == 1
+    # Pfad bearbeiten per Doppelklick-Weg (E): Skizze öffnet sich und speichert wieder
+    p.ev("Sketch.editItem(App.doc.items[0].id)"); p.wait(1200)
+    ok5 = p.ev("return Sketch.active && Sketch.state.ents.length===3")
+    p.pg.keyboard.press('Enter'); p.wait(1500)
+    ok5 = ok5 and not p.ev("return Sketch.active")
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
+def t_abstand_setzen(p):
+    zwei_quader(p, 0, 0, 0, 40)
+    p.ev("App.select([App.doc.items[0].id]); App.select([App.doc.items[1].id], {additive:true})"); p.wait(600)
+    p.pg.locator('.ctxbar button[aria-label="Abstand"]').click(); p.wait(300)
+    ok1 = '20' in p.pg.locator('label[for="gap-v"]').inner_text()
+    p.pg.fill('#gap-v', '5'); p.pg.press('#gap-v', 'Enter'); p.wait(1500)
+    x = p.ev("return [App.doc.items[0].t.x, App.doc.items[1].t.x]")
+    ok2 = x[0] == 0 and abs(x[1] - 25) < 1e-6
+    return [ok1, ok2]
+
+
+def t_import_step(p):
+    # STEP aus Tracery selbst erzeugen und wieder einlesen
+    zwei_quader(p, 0, 0, 0, 40)
+    n = p.pg.evaluate("""async () => { const {Kernel, Model, App, Start} = window.__masswerk; const r = await Kernel.call('exportSTEP', { scene: Model.kernelScene(App.doc) });
+      window.__stepFile = new File([new Uint8Array(r.data)], 'Halter.step'); return r.data.byteLength; }""")
+    p.ev("App.change('x', d=>{ d.items=[]; })"); p.wait(500)
+    p.pg.evaluate("() => window.__masswerk.Start.importCAD(window.__stepFile)")
+    warte_rechnen(p, 30)
+    it = p.ev("const it=App.doc.items[0]; return it && [it.kind, it.name, it.p.fmt]")
+    ok1 = n > 1000 and it == ['import', 'Halter', 'step']
+    bb = p.ev("const r=App.results.get(App.doc.items[0].id); return r && r.data.bbox")
+    ok2 = bb is not None and abs((bb[3] - bb[0]) - 60) < 0.01 and p.ev("return App.errors.length") == 0
+    # Einheit Zoll: 25,4-fach
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(500)
+    p.pg.select_option('#p-scale', '25.4'); warte_rechnen(p, 30)
+    bb2 = p.ev("const r=App.results.get(App.doc.items[0].id); return r && r.data.bbox")
+    ok3 = bb2 is not None and abs((bb2[3] - bb2[0]) - 60 * 25.4) < 0.5
+    # STL: Tetraeder als Text
+    p.ev("App.change('x', d=>{ d.items=[]; })"); p.wait(500)
+    p.pg.evaluate("""() => { const V=[[0,0,0],[10,0,0],[0,10,0],[0,0,10]], F=[[0,2,1],[0,1,3],[0,3,2],[1,2,3]];
+      let t='solid t\\n'; for (const f of F) { t+=' facet normal 0 0 0\\n  outer loop\\n'; for (const i of f) t+='   vertex '+V[i].join(' ')+'\\n'; t+='  endloop\\n endfacet\\n'; } t+='endsolid t\\n';
+      return window.__masswerk.Start.importCAD(new File([t], 'spitze.stl')); }""")
+    warte_rechnen(p, 30)
+    v = volumen(p)
+    ok4 = p.ev("return App.doc.items[0].p.fmt") == 'stl' and v is not None and abs(abs(v) - 1000 / 6) < 1
+    return [ok1, ok2, ok3, ok4]
+
+
+def t_schablonen(p):
+    sketch_xy(p)
+    p.pg.keyboard.press('j'); p.wait(200)
+    ok1 = p.pg.locator('#tp-type').count() == 1 and p.pg.locator('#tp-n').count() == 1
+    o = to_screen(p, 0, 0); p.pg.mouse.click(o[0], o[1]); p.wait(500)
+    st = p.ev("const S=Sketch.state; return [S.ents.length, S.ents.filter(e=>e.type==='rect').length, SK.regions(S.ents).length]")
+    ok2 = st[0] == 49 and st[1] == 49 and st[2] == 49     # Gehäuse + 48 Pins
+    p.pg.keyboard.press('Control+z'); p.wait(300)
+    ok3 = p.ev("return Sketch.state.ents.length") == 0
+    p.pg.select_option('#tp-type', 'pins'); p.wait(200)
+    p.pg.fill('#tp-nx', '4'); p.pg.press('#tp-nx', 'Enter'); p.wait(100)
+    p.pg.mouse.click(o[0], o[1]); p.wait(500)
+    c = p.ev("return Sketch.state.ents.map(e=>e.c[0]).sort((a,b)=>a-b)")
+    ok4 = len(c) == 8 and abs(c[0] + 3.81) < 1e-6 and abs(c[-1] - 3.81) < 1e-6
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -2220,6 +2354,13 @@ TESTS = [
     ('Magnet auf der Fläche: Loch in die Mitte / Mittellinie / gleicher Randabstand / Hilfslinien weg', t_magnet_flaeche),
     ('Magnet zwischen Körpern: bündig / Strg hält an / Einstellung aus', t_magnet_koerper),
     ('Rundung mit Ziehgriff: Griff an der Kante / Ziehen setzt Radius / Körper / Rückgängig', t_rundung_ziehen),
+    ('Skizzen-Ebene: Abstand beim Start / Neigung 30° / Körper', t_ebene_versetzt),
+    ('Doppelklick auf eine Fläche startet die Skizze', t_doppelklick_flaeche),
+    ('Übergang (Loft): zwei Umrisse / Maße / Spitze verlängern / Zur Spitze', t_uebergang),
+    ('Entlang Pfad (Sweep): offener Pfad wird Rohr / Volumen / hohl / rechteckig / Pfad bearbeiten', t_entlang_pfad),
+    ('Abstand zwischen zwei Teilen setzen', t_abstand_setzen),
+    ('STEP/STL importieren: einlesen / Größe stimmt / Einheit Zoll / STL als Körper', t_import_step),
+    ('Skizzen-Schablonen: Auswahl / QFP-48 / Rückgängig / Pin-Raster', t_schablonen),
     ('Kreismuster: anlegen / Anzahl / folgt dem Original / Auflösen', t_kreismuster_3d),
     ('Rechteckmuster: anlegen / zweite Reihe / Formel / Maß ändern / Rückgängig', t_rechteckmuster_3d),
     ('Gespiegelte Kopie: anlegen / andere Ebene / Ebene verschieben', t_spiegelkopie),

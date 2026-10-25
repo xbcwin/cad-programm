@@ -256,6 +256,72 @@ export function createKernel(R, oc) {
     return fuseAll(solids);
   }
 
+  // Übergang zwischen mehreren Umrissen (Loft), auf Wunsch mit Spitze
+  function buildLoft(p) {
+    const pr = p.profiles || [];
+    if (pr.length < (p.tipPoint ? 1 : 2)) throw new Error('Für einen Übergang braucht es mindestens zwei geschlossene Umrisse (oder einen Umriss mit Spitze).');
+    const wires = pr.map((q) => loopWire(q.outer, planeMap(q.plane), true));
+    return R.loft(wires, { ruled: !!p.ruled, endPoint: p.tipPoint || undefined });
+  }
+
+  // Querschnitt entlang eines offenen Pfads (Sweep): Rohr, Kabelkanal, Leiste
+  function buildSweep(p) {
+    const segs = p.segs || [];
+    if (!segs.length || !p.t0) throw new Error('Die Skizze hat keinen offenen Pfad. Zeichne eine Linie, einen Bogen oder eine Spline, die nicht geschlossen ist.');
+    const M = planeMap(p.plane);
+    const edges = [];
+    for (const s of segs) {
+      if (s.t === 'arc') edges.push(R.makeThreePointArc(M.P(s.a), M.P(s.m), M.P(s.b)));
+      else if (s.t === 'bez') edges.push(R.makeBezierCurve([M.P(s.a), M.P(s.c1), M.P(s.c2), M.P(s.b)]));
+      else if (Math.hypot(s.b[0] - s.a[0], s.b[1] - s.a[1]) > 1e-6) edges.push(R.makeLine(M.P(s.a), M.P(s.b)));
+    }
+    const spine = R.assembleWire(edges);
+    const P0 = M.P(segs[0].a), O = M.P([0, 0]);
+    const T = norm(sub(M.P(p.t0), O)), N = M.n, V = [T[1] * N[2] - T[2] * N[1], T[2] * N[0] - T[0] * N[2], T[0] * N[1] - T[1] * N[0]];
+    const prof = (inset) => {
+      if (p.shape === 'rect') {
+        const w = pos(p.w, 6) / 2 - inset, h = pos(p.h, 4) / 2 - inset;
+        if (w <= 0 || h <= 0) return null;
+        const q = (a, b) => [0, 1, 2].map((k) => P0[k] + V[k] * a + N[k] * b);
+        const c = [q(-w, -h), q(w, -h), q(w, h), q(-w, h)];
+        return R.assembleWire([R.makeLine(c[0], c[1]), R.makeLine(c[1], c[2]), R.makeLine(c[2], c[3]), R.makeLine(c[3], c[0])]);
+      }
+      const r = pos(p.d, 6) / 2 - inset; if (r <= 0) return null;
+      return R.assembleWire([R.makeCircle(r, P0, T)]);
+    };
+    const sweep = (w) => R.genericSweep(w, spine, { transitionMode: 'round', forceProfileSpineOthogonality: true });
+    let shape = sweep(prof(0));
+    const wall = num(p.wall, 0);
+    if (wall > 0) { const inner = prof(wall); if (!inner) throw new Error('Die Wand ist dicker als das halbe Rohr.'); const cutter = sweep(inner); const res = shape.cut(cutter); safeDelete(shape); safeDelete(cutter); shape = res; }
+    return shape;
+  }
+
+  // Importierte STEP- oder STL-Datei (Inhalt als Base64 im Projekt)
+  function buildImport(p) {
+    if (!p.data) throw new Error('Die importierte Datei ist leer.');
+    const bin = atob(p.data); const bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const fn = 'imp_' + Math.random().toString(36).slice(2);
+    oc.FS.writeFile('/' + fn, bytes);
+    let shape = null;
+    try {
+      if (p.fmt === 'stl') {
+        const reader = new oc.StlAPI_Reader(); const sh = new oc.TopoDS_Shell();
+        if (!reader.Read(sh, fn)) throw new Error('Die STL-Datei ließ sich nicht lesen.');
+        const up = new oc.ShapeUpgrade_UnifySameDomain(sh, true, true, false); up.Build();
+        const ms = new oc.BRepBuilderAPI_MakeSolid();
+        try { ms.Add(oc.TopoDS.Shell(up.Shape())); shape = R.cast(ms.Solid()); } catch (_) { shape = R.cast(up.Shape()); }
+        reader.delete(); up.delete(); ms.delete();
+      } else {
+        const reader = new oc.STEPControl_Reader();
+        if (!reader.ReadFile(fn)) { reader.delete(); throw new Error('Die STEP-Datei ließ sich nicht lesen.'); }
+        reader.TransferRoots(); shape = R.cast(reader.OneShape()); reader.delete();
+      }
+    } finally { try { oc.FS.unlink('/' + fn); } catch (_) {} }
+    const s = num(p.scale, 1);
+    if (shape && Math.abs(s - 1) > 1e-9) shape = shape.scale(s, [0, 0, 0]);
+    return shape;
+  }
+
   // ---------- Bauteil-Bibliothek ----------
   // Maße aus app/data/schrauben.json (Entwurf Gemini, geprüft): Loch eng/mittel/weit nach ISO 273,
   // Kernloch, Senkkopf ISO 10642 (klein: DIN 965), Senkbohrung DIN 974-1, Mutter ISO 4032. Einsätze: Richtwerte.
@@ -744,6 +810,9 @@ export function createKernel(R, oc) {
         if (shape && op === 'split') shape = splitBody(shape, it.p);
       } else if (it.kind === 'extrude') shape = buildExtrude(it.p);
       else if (it.kind === 'revolve') shape = buildRevolve(it.p);
+      else if (it.kind === 'loft') shape = buildLoft(it.p);
+      else if (it.kind === 'sweep') shape = buildSweep(it.p);
+      else if (it.kind === 'import') shape = buildImport(it.p);
       else if (it.kind === 'part') shape = buildPart(it.p);
       else shape = buildPrimitive(it.kind, it.p || {});
       if (shape && it.finishes && it.finishes.length) shape = applyFinishes(shape, it.finishes, errors, it.id);

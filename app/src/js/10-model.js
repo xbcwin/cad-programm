@@ -21,6 +21,9 @@ const KINDS = {
   wedge: { label: 'Keil', params: [P('w', 'Breite', 20, { axis: 'x' }), P('d', 'Tiefe', 20, { axis: 'y' }), P('h', 'Höhe', 20, { axis: 'z' })] },
   extrude: { label: 'Skizzenkörper', params: [] },
   revolve: { label: 'Drehkörper', params: [] },
+  loft: { label: 'Übergang', params: [] },
+  sweep: { label: 'Entlang Pfad', params: [] },
+  import: { label: 'Importiert', params: [] },
   group: { label: 'Gruppe', params: [] },
   part: { label: 'Bauteil', params: [] },
 };
@@ -135,6 +138,9 @@ const Model = (() => {
     const o = { id: it.id, kind: it.kind, role: it.role, hidden: !!it.hidden, m: matArr(localMatrix(it)) };
     if (it.kind === 'group') { let kids = it.children || []; if (it.rollback != null) kids = kids.slice(0, clamp(it.rollback, 0, kids.length)); o.children = kids.filter((c) => !c.suppressed).map((c) => kernelItem(c, V)); if (it.p && it.p.op) o.p = resolveP(it.p, V); }
     else if (it.kind === 'extrude' || it.kind === 'revolve') o.p = sketchParams(it, V);
+    else if (it.kind === 'loft') o.p = loftParams(it, V);
+    else if (it.kind === 'sweep') o.p = sweepParams(it, V);
+    else if (it.kind === 'import') o.p = { fmt: it.p.fmt, data: it.p.data, scale: num(it.p.scale, V, 1) };
     else o.p = resolveP(it.p, V);
     if (it.mir) o.mir = it.mir;
     if (it.finishes && it.finishes.length) o.finishes = it.finishes.filter((f) => !f.off).map((f) => ({ id: f.id, type: f.type, r: num(f.r, V, 1), edges: f.edges, faces: f.faces }));
@@ -148,6 +154,42 @@ const Model = (() => {
     const out = { plane: p.sketch ? p.sketch.plane : { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] }, regions: chosen.map((r) => ({ outer: r.outer.k, holes: r.holes.map((h) => h.k) })) };
     if (it.kind === 'extrude') { out.dist = num(p.dist, V, 10); out.dir = p.dir || 'normal'; out.extra = num(p.extra, V, 0); }
     else { out.angle = num(p.angle, V, 360); out.axis = p.axis || { a: [0, 0], b: [0, 1] }; }
+    return out;
+  }
+  // Übergang (Loft): je Profil die größte geschlossene Fläche, dazu optional eine Spitze hinter dem letzten Profil
+  function loftParams(it, V) {
+    const p = it.p || {};
+    const profiles = [];
+    for (const sk of p.sketches || []) {
+      const regs = SK.regions(Solver.cached(sk, V).ents).sort((a, b) => b.area - a.area);
+      if (!regs.length) continue;
+      const L = regs[0].outer; let cx = 0, cy = 0; for (const q of L.poly) { cx += q[0]; cy += q[1]; } cx /= L.poly.length || 1; cy /= L.poly.length || 1;
+      profiles.push({ plane: sk.plane, outer: L.k, c: [cx, cy] });
+    }
+    const out = { profiles, ruled: !!p.ruled };
+    const tip = num(p.tip, V, 0);
+    if (tip > 0 && profiles.length) {
+      const last = profiles[profiles.length - 1], pl = last.plane;
+      const n = pl.n, x = pl.x, y = [n[1] * x[2] - n[2] * x[1], n[2] * x[0] - n[0] * x[2], n[0] * x[1] - n[1] * x[0]];
+      const prev = profiles.length > 1 ? profiles[profiles.length - 2].plane.o : null;
+      let s = 1; if (prev) { const d = [0, 1, 2].map((k) => pl.o[k] - prev[k]); if (d[0] * n[0] + d[1] * n[1] + d[2] * n[2] < 0) s = -1; }
+      out.tipPoint = [0, 1, 2].map((k) => pl.o[k] + x[k] * last.c[0] + y[k] * last.c[1] + n[k] * tip * s);
+    }
+    return out;
+  }
+  // Entlang Pfad (Sweep): längster offener Zug der Skizze, Querschnitt Kreis oder Rechteck, optional hohl
+  function sweepParams(it, V) {
+    const p = it.p || {};
+    const ch = SK.chains(p.sketch ? Solver.cached(p.sketch, V).ents : [])[0];
+    const out = { plane: p.sketch ? p.sketch.plane : { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] }, segs: ch ? ch.segs : [], shape: p.shape === 'rect' ? 'rect' : 'circle', d: num(p.d, V, 6), w: num(p.w, V, 6), h: num(p.h, V, 4), wall: num(p.wall, V, 0) };
+    if (ch) {
+      const s = ch.segs[0];
+      let t;
+      if (s.t === 'line') t = [s.b[0] - s.a[0], s.b[1] - s.a[1]];
+      else if (s.t === 'bez') t = [s.c1[0] - s.a[0], s.c1[1] - s.a[1]];
+      else { const ai = SK.arcInfo(s.a, s.m, s.b); const r = [s.a[0] - ai.c[0], s.a[1] - ai.c[1]]; t = ai.sweep > 0 ? [-r[1], r[0]] : [r[1], -r[0]]; }
+      const L = Math.hypot(t[0], t[1]) || 1; out.t0 = [t[0] / L, t[1] / L];
+    }
     return out;
   }
   // Zeitleiste: nur Schritte vor dem Marker zählen, unterdrückte Schritte werden übersprungen

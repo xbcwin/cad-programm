@@ -1,6 +1,6 @@
 # Fortschritt
 
-Stand: 25.10.2026 · nach Sitzung 19 (Skizze auf Profi-Niveau, neuer Fahrplan im Vergleichs-Dokument)
+Stand: 25.10.2026 · nach Sitzung 21 (19: Skizze auf Profi-Niveau · 20: magnetisches Einrasten, Rundung mit Ziehgriff · 21: Skizzieren im 3D, Übergang, Entlang Pfad)
 
 ## Erledigt
 
@@ -171,6 +171,9 @@ Fertig.
 - [ ] Spiegeln an der X- oder Y-Achse ohne eigene Linie
 
 ### Stufe 3 – Features und Ansichten
+- [x] Magnetisches Einrasten wie bei Canva: auf Flächen (Mitte, Mittellinien, Lochmitten, Kantenmitten, gleicher Randabstand) und zwischen Körpern (bündig, mittig, gleiche Abstände), mit Hilfslinien; Strg hält es an, abschaltbar in den Einstellungen (Sitzung 20)
+- [x] Rundung mit Ziehgriff an der gewählten Kante, Radius live, Zahl tippen geht auch (Sitzung 20)
+- [ ] Magnet auch auf gewölbten Flächen und für Kaufteile beim Ziehen aus der Leiste mit eigener Form
 - [x] Bohrungs-Assistent, Wandstärke, Muster, Spiegeln, Boolesch, Teilen (Sitzung 8)
 - [ ] Muster entlang einer Kante oder Kurve; Kreismuster um eine schräge Achse (heute immer um die Senkrechte)
 - [ ] Bohrung an einem Skizzenpunkt (heute per Klick auf eine Fläche)
@@ -198,7 +201,12 @@ Fertig.
 - [x] KI-Helfer auf der Zeitleiste, „Erklär diesen Schritt“, Schwachstellen-Analyse (Sitzung 14)
 - [ ] Schwachstellen auch für gedruckte Teile genauer: Wand um Schraubenlöcher, Überhänge
 - [x] Einsteiger-Oberfläche (Sitzung 15)
-- [ ] 3D-Skizzen, Sweep / Loft, Gelenke
+- [x] Übergang (Loft) durch mehrere Umrisse, „Zur Spitze“ / Spitze verlängern (Sitzung 21)
+- [x] Entlang Pfad (Sweep): offener Pfad wird Rohr oder rechteckiger Kanal, auch hohl (Sitzung 21)
+- [x] Skizzen-Ebene verschieben und neigen (Konstruktionsebene), Doppelklick auf ebene Fläche startet die Skizze, rechtes Panel heißt „Eigenschaften“ (Sitzung 21)
+- [x] STEP und STL importieren (Datei öffnen oder ins Fenster ziehen), Einheit wählbar; Abstand zwischen zwei Teilen genau setzen (Sitzung 21)
+- [x] Skizzen-Schablonen: Pin-Raster, Lüftungsgitter, Chip-Gehäuse QFP, QFN, BGA, SOIC, DIP mit einstellbaren Maßen (Sitzung 21)
+- [ ] 3D-Skizzen, Übergang mit Führungskurven, Sweep mit eigenem Querschnitt aus einer Skizze, Gelenke
 - [ ] Einsteiger-Oberfläche weiter vereinfachen: größere Knöpfe, geführte erste Schritte im leeren Projekt
 
 ### Stufe 6 – Konten und Zusammenarbeit (Idee, nach dem Drohnen-Modul)

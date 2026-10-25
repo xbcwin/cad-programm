@@ -10,6 +10,7 @@ const Sketch = (() => {
     { id: 'arc', icon: 'arc', label: 'Bogen', key: 'A', tip: 'Bogen: Start, Ende, dann Wölbung' },
     { id: 'slot', icon: 'slot', label: 'Langloch', key: 'G', tip: 'Langloch: zwei Mittelpunkte, dann Breite' },
     { id: 'poly', icon: 'polygon', label: 'Vieleck', key: 'P', tip: 'Regelmäßiges Vieleck vom Mittelpunkt aus' },
+    { id: 'tpl', icon: 'chip', label: 'Schablone', key: 'J', tip: 'Fertige Umrisse: Pin-Raster, Lüftungsgitter, Chips (QFP, QFN, BGA, SOIC, DIP)' },
     { id: 'text', icon: 'text', label: 'Text', key: 'B', tip: 'Schrift als Umriss – zum Prägen oder Ausschneiden' },
     { id: 'spline', icon: 'spline', label: 'Spline', key: 'S', tip: 'Spline: weiche Kurve durch Punkte – Enter beendet' },
     { id: 'corner', icon: 'fillet', label: 'Ecke runden', key: 'K', tip: 'Ecke zwischen zwei Linien runden oder fasen – auch an Rechteck und Vieleck', sep: true },
@@ -21,7 +22,7 @@ const Sketch = (() => {
     { id: 'dim', icon: 'dim', label: 'Maß', key: 'D', tip: 'Maß festlegen – auch als Formel wie breite/2', sep: true },
     { id: 'bg', icon: 'image', label: 'Bild-Vorlage', key: 'I', tip: 'Foto oder Zeichnung hinterlegen und auf echte Größe bringen – zum Nachzeichnen' },
   ];
-  const HELPKEY = { corner: 'corner2d', text: 'sketchText', bg: 'sketchImage', poly: 'polygon', dim: 'dimension', offset: 'offset2d', mirror: 'mirror2d', patrect: 'patternRect2d', patcirc: 'patternCirc2d' };
+  const HELPKEY = { tpl: 'sketchTemplate', corner: 'corner2d', text: 'sketchText', bg: 'sketchImage', poly: 'polygon', dim: 'dimension', offset: 'offset2d', mirror: 'mirror2d', patrect: 'patternRect2d', patcirc: 'patternCirc2d' };
   const HINTS = {
     select: 'Element anklicken zum Bearbeiten. Endpunkte lassen sich ziehen. <b>Entf</b> löscht.',
     line: 'Klick setzt Punkte. Zahl tippen für genaue Länge. Am Startpunkt schließen oder <b>Enter</b> zum Beenden.',
@@ -29,6 +30,7 @@ const Sketch = (() => {
     circle: 'Mittelpunkt klicken, dann Größe. Oder Durchmesser eintippen.',
     bg: 'Lade ein Foto oder eine Zeichnung als Vorlage. Mit <b>Maßstab festlegen</b> klickst du zwei Punkte an, deren Abstand du kennst – dann stimmt die Größe. Ziehen verschiebt das Bild.',
     bgcal: 'Klick den ersten Punkt auf dem Bild an, dann den zweiten. Danach tippst du den echten Abstand ein.',
+    tpl: 'Schablone und Maße rechts wählen, dann ins Bild klicken – der Klick ist die Mitte. Fängt an Nullpunkt und Mittelpunkten.',
     text: 'Text, Höhe und Schrift rechts einstellen, dann ins Bild klicken. Der Klick legt den Anfang der Grundlinie fest (bei „Mitte“ die Mitte).',
     ellipse: 'Mittelpunkt klicken, dann das Ende der ersten Achse (legt Länge und Drehung fest), dann die Breite. Oder Breite <b>Tab</b> Höhe eintippen.',
     arc: 'Startpunkt, Endpunkt, dann die Wölbung klicken.',
@@ -89,15 +91,28 @@ const Sketch = (() => {
     box.append(h('b', null, 'Wo möchtest du zeichnen?'));
     box.append(h('p', { style: { margin: 0, color: 'var(--muted)', fontSize: '13.5px', lineHeight: 1.45 } }, 'Tipp: Klick eine flache Fläche eines Körpers an und wähle „Skizze hierauf“, um direkt darauf zu zeichnen.'));
     const row = h('div', { class: 'btn-row' });
-    const mk = (label, pl) => { const b = h('button', { type: 'button', class: 'btn' }, label); b.onclick = () => { UI.closePop(); startOnPlane(pl); }; return b; };
+    let off = 0;
+    const mk = (label, pl) => { const b = h('button', { type: 'button', class: 'btn' }, label); b.onclick = () => { UI.closePop(); startOnPlane(pl, off); }; return b; };
     row.append(mk('Auf der Arbeitsfläche', 'XY'), mk('Stehend (vorne)', 'XZ'), mk('Stehend (seitlich)', 'YZ'));
+    box.append(UI.numField({ id: 'sk-off', label: 'Abstand vom Nullpunkt (Ebene verschieben)', value: 0, unit: 'mm', expr: false, onCommit: (v) => { off = v; } }));
     box.append(row);
     UI.pop(btn, box);
   }
   const PLANES = { XY: { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] }, XZ: { o: [0, 0, 0], x: [1, 0, 0], n: [0, -1, 0] }, YZ: { o: [0, 0, 0], x: [0, 1, 0], n: [1, 0, 0] } };
-  function startOnPlane(name) {
+  function startOnPlane(name, off = 0) {
     const pl = PLANES[name];
-    begin({ plane: deepClone(pl), W: new THREE.Matrix4(), ents: [], refs: [], ctx: { mode: 'new', targetId: null } });
+    begin({ plane: deepClone(pl), W: new THREE.Matrix4(), ents: [], refs: [], ctx: { mode: 'new', targetId: null }, pOff: off || 0 });
+  }
+  // Konstruktionsebene: Grundebene um einen Abstand verschieben und um ihre X-Achse neigen
+  function applyPlane(look, noRender) {
+    const P = S.plane0, n0 = new THREE.Vector3(...P.n).normalize(), x0 = new THREE.Vector3(...P.x).normalize(), y0 = new THREE.Vector3().crossVectors(n0, x0);
+    const a = ((S.pTilt || 0) * Math.PI) / 180;
+    const n = n0.clone().multiplyScalar(Math.cos(a)).addScaledVector(y0, -Math.sin(a));
+    const o = new THREE.Vector3(...P.o).addScaledVector(n0, S.pOff || 0);
+    S.plane = { ...deepClone(P), o: o.toArray().map((v) => round(v, 6)), x: x0.toArray(), n: n.toArray().map((v) => round(v, 9)) };
+    S.F = frameWorld(S.plane, S.W);
+    if (look) Viewer.lookAtPlane(S.F.o.toArray(), S.F.n.toArray(), S.F.x.toArray(), Math.max(40, (Viewer.camera.position.distanceTo(S.F.o) || 100) * 0.5));
+    if (!noRender) render();
   }
   async function loopsOf(face) {
     const r = App.results.get(face.id);
@@ -144,8 +159,10 @@ const Sketch = (() => {
     if (Notes.active) Notes.stop();
     Panels.closeFlyout(); UI.closePop();
     const F = frameWorld(init.plane, init.W);
-    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' ? 'select' : 'rect', draft: null, sel: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: 'l' }, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, hoverEnt: null, trimHover: null };
+    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' ? 'select' : 'rect', draft: null, sel: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, hoverEnt: null, trimHover: null };
     S.dims = init.dims || []; S.cons = init.cons || []; S.picks = []; S.dimFirst = null; S.selCon = null;
+    S.plane0 = deepClone(init.plane); S.pOff = init.pOff || 0; S.pTilt = 0;
+    if (S.pOff) applyPlane(false, true);
     reapply();   // Maße mit den aktuellen Werten aus „Maße“ nachrechnen
     App.clearSelection();
     Viewer.controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
@@ -154,8 +171,8 @@ const Sketch = (() => {
     const b = SK.bounds([...S.ents, ...S.refs]);
     const size = b ? Math.max(40, Math.max(b[2] - b[0], b[3] - b[1]) * 0.75) : 70;
     const c2 = b ? [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2] : [0, 0];
-    const cw = F.o.clone().addScaledVector(F.x, c2[0]).addScaledVector(F.y, c2[1]);
-    Viewer.lookAtPlane(cw.toArray(), F.n.toArray(), F.x.toArray(), size);
+    const cw = S.F.o.clone().addScaledVector(S.F.x, c2[0]).addScaledVector(S.F.y, c2[1]);
+    Viewer.lookAtPlane(cw.toArray(), S.F.n.toArray(), S.F.x.toArray(), size);
     if (!skipDraw) showBar();
     App.emit('mode');
     Panels.renderRight(); Panels.renderCtx(); Handles.clear();
@@ -976,6 +993,14 @@ const Sketch = (() => {
     if (t === 'corner') { cornerDo(uv0); return; }
     if (t === 'bgcal') { bgCalDown(uv0); return; }
     if (t === 'bg') { if (S.bg) { pushUndoBg(); S.bgDrag = { start: uv0, a0: S.bg.a.slice() }; } return; }
+    if (t === 'tpl') {
+      const ents = SKO.tplEnts(S.tpl.type, S.tpl.p, p);
+      if (!ents.length) return;
+      pushUndo(); for (const en of ents) { if (S.construction) en.con = true; S.ents.push(en); }
+      reapply(); render(); Panels.renderRight();
+      UI.toast(`${SKO.TEMPLATES[S.tpl.type].name}: ${ents.length} Elemente gesetzt.`, { icon: 'check', ms: 2200 });
+      return;
+    }
     if (t === 'text') {
       const T = S.txt; if (!String(T.s).trim()) { UI.toast('Bitte zuerst rechts einen Text eingeben.', { icon: 'info' }); return; }
       const en = addEnt({ type: 'text', a: p.slice(), s: T.s, h: T.h, font: T.font, align: T.align, rot: 0 });
@@ -1376,6 +1401,8 @@ const Sketch = (() => {
       if (t === 'arc') { if (!d.b) lineObj([d.a, cur], acc, 1.4, { dashed: true }); else if (SK.arcInfo(d.a, cur, d.b)) { lineObj(SK.arcPoints(d.a, cur, d.b), acc, 2.2); const ai = SK.arcInfo(d.a, cur, d.b); label(`R ${fmt(ai.r, 2)}`, cur); } }
       if (t === 'slot') { if (!d.b) { lineObj([d.a, cur], acc, 1.4, { dashed: true }); label(`${fmt(SK.d2(d.a, cur), 2)} mm`, cur); } else { const r = slotR(d.a, d.b, cur); if (r > 1e-6) { const e = { type: 'slot', a: d.a, b: d.b, r }; for (const p of entPts(e)) lineObj(p, acc, 2.2); label(`Breite ${fmt(2 * r, 2)}`, cur); } } }
     }
+    // Schablonen-Vorschau
+    if (S.tool === 'tpl' && cur && !S.step) for (const en of SKO.tplEnts(S.tpl.type, S.tpl.p, cur)) for (const q of entPts(en)) lineObj(q, acc, 1.4, { dashed: true });
     // Spline-Entwurf
     if (d && S.tool === 'spline' && d.pts && !S.step) {
       const pts = cur ? [...d.pts, cur] : d.pts;
@@ -1638,6 +1665,16 @@ const Sketch = (() => {
           w.append(h('div', { class: 'hint-box', html: 'Das Bild ist nur eine Vorlage zum Nachzeichnen. Es wird mit der Skizze gespeichert, kommt aber nicht in den Körper oder den Export.' }));
         }
       }
+      if (S.tool === 'tpl') {
+        const T = S.tpl;
+        w.append(UI.selectField({ id: 'tp-type', label: 'Schablone', value: T.type, options: Object.entries(SKO.TEMPLATES).map(([k, v]) => [k, v.name]), onChange: (v) => { T.type = v; T.p = { ...SKO.TEMPLATES[v].p }; Panels.renderRight(); render(); } }));
+        const f6 = h('div', { class: 'fields' });
+        for (const k of Object.keys(SKO.TEMPLATES[T.type].p)) {
+          const isInt = ['nx', 'ny', 'n'].includes(k);
+          f6.append(UI.numField({ id: 'tp-' + k, label: SKO.TPLNAMES[k] || k, value: T.p[k], unit: isInt ? '' : 'mm', expr: false, int: isInt, min: isInt ? 1 : 0, onCommit: (v) => { T.p[k] = v; render(); } }));
+        }
+        w.append(f6, h('div', { class: 'hint-box', html: 'Die Werte sind übliche Standardmaße – prüf sie mit dem Datenblatt deines Bauteils. Danach sind es normale Rechtecke und Kreise, die du einzeln ändern kannst.' }));
+      }
       if (S.tool === 'text') {
         const T = S.txt;
         w.append(UI.textField({ id: 'tx-s', label: 'Text', value: T.s, live: true, onCommit: (v) => { T.s = v; } }));
@@ -1680,6 +1717,15 @@ const Sketch = (() => {
       }
       sn.append(h('div', { class: 'hint-box', html: 'Mit gedrückter <b>Alt</b>-Taste wird gar nicht gefangen.' }));
       w.append(sn);
+      if (S.ctx.mode !== 'pushpull') {
+        const pe = h('details', { class: 'snapset', id: 'sk-plane' }, h('summary', null, 'Ebene verschieben / neigen'));
+        pe.open = !!(S.planeOpen || S.pOff || S.pTilt); pe.addEventListener('toggle', () => { S.planeOpen = pe.open; });
+        const f5 = h('div', { class: 'fields' });
+        f5.append(UI.numField({ id: 'pl-off', label: 'Abstand', value: S.pOff || 0, unit: 'mm', expr: false, onCommit: (v) => { S.pOff = v; applyPlane(false); } }));
+        f5.append(UI.numField({ id: 'pl-tilt', label: 'Neigung', value: S.pTilt || 0, unit: '°', expr: false, onCommit: (v) => { S.pTilt = clamp(v, -89, 89); applyPlane(true); Panels.renderRight(); } }));
+        pe.append(f5, h('div', { class: 'hint-box', html: 'Verschiebt die Zeichenebene entlang ihrer Richtung oder kippt sie um ihre X-Achse – z. B. für einen Kamerahalter mit 30° Neigung.' }));
+        w.append(pe);
+      }
       const regs = SK.regions(S.ents);
       w.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Geschlossene Flächen'), h('b', { class: 'mono' }, String(regs.length))));
       if (SK.openEnds(S.ents).length) w.append(h('div', { class: 'err-box' }, 'Rot markierte Enden sind noch offen. Verbinde sie, damit eine Fläche entsteht.'));
@@ -1693,12 +1739,14 @@ const Sketch = (() => {
     if (!S) return;
     S.draft = null; hideEntry();
     const regs = SK.regions(S.ents);
+    const editKind = S.ctx.mode === 'edit' ? (Model.find(App.doc, S.ctx.editId) || { item: {} }).item.kind : null;
     if (S.ctx.mode === 'edit') {
-      if (!regs.length) { UI.toast('Die Skizze braucht mindestens eine geschlossene Fläche.', { kind: 'bad' }); return; }
-      const id = S.ctx.editId, ents = S.ents, dims = S.dims, cons = S.cons, bg = S.bg ? deepClone(S.bg) : null;
-      App.change('Skizze bearbeitet', (doc) => { const f = Model.find(doc, id); f.item.p.sketch.ents = ents; f.item.p.sketch.dims = dims; f.item.p.sketch.cons = cons; if (bg) f.item.p.sketch.bg = bg; else delete f.item.p.sketch.bg; const keys = regs.map((r) => r.key); if (f.item.p.sel) f.item.p.sel = f.item.p.sel.filter((k) => keys.includes(k)); });
+      if (editKind === 'sweep' ? !SK.chains(S.ents).length : !regs.length) { UI.toast(editKind === 'sweep' ? 'Der Pfad braucht mindestens eine offene Linie, einen Bogen oder eine Spline.' : 'Die Skizze braucht mindestens eine geschlossene Fläche.', { kind: 'bad' }); return; }
+      const id = S.ctx.editId, ents = S.ents, dims = S.dims, cons = S.cons, plane = deepClone(S.plane), bg = S.bg ? deepClone(S.bg) : null;
+      App.change('Skizze bearbeitet', (doc) => { const f = Model.find(doc, id); f.item.p.sketch.ents = ents; f.item.p.sketch.dims = dims; f.item.p.sketch.cons = cons; f.item.p.sketch.plane = plane; if (bg) f.item.p.sketch.bg = bg; else delete f.item.p.sketch.bg; const keys = regs.map((r) => r.key); if (f.item.p.sel) f.item.p.sel = f.item.p.sel.filter((k) => keys.includes(k)); });
       finishSession(); App.select([id]); return;
     }
+    if (!regs.length && SK.chains(S.ents).length) { sweepFromSketch(); return; }
     if (!regs.length) { UI.toast(S.ents.length ? 'Noch keine geschlossene Fläche. Schließe den Umriss oder zeichne ein Rechteck oder einen Kreis.' : 'Zeichne zuerst etwas, zum Beispiel ein Rechteck.', { kind: 'bad', icon: 'info' }); return; }
     extrudeStep({ dist: S.ctx.targetId ? 5 : 10, dir: 'normal' });
   }
@@ -1886,6 +1934,20 @@ const Sketch = (() => {
     // neues Teil gut sichtbar machen, wenn es nach dem Zurückspringen zu klein wäre
     setTimeout(() => { const b = Actions.worldBox(top ? top.id : it.id); if (b && (Viewer.screenFraction(b) < 0.22 || !Viewer.inView(b))) Viewer.fit(App.doc.items.map((x) => x.id)); }, 480);
     UI.toast(it.role === 'hole' ? 'Aussparung erstellt. Im Verlauf kannst du die Tiefe jederzeit ändern.' : 'Fertig! Die Maße kannst du rechts jederzeit ändern.', { icon: 'check' });
+  }
+  // Offener Pfad ohne Fläche: Querschnitt (Rohr Ø 6) entlang ziehen
+  function sweepFromSketch() {
+    const ctx = S.ctx;
+    const it = Model.newItem('sweep', { sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons) }, shape: 'circle', d: 6, w: 6, h: 4, wall: 0 }, { name: 'Entlang Pfad' });
+    App.extra = [];
+    App.change('Entlang Pfad gezogen', (doc) => {
+      if (ctx.targetId && Model.find(doc, ctx.targetId)) Actions.attach(doc, ctx.targetId, it);
+      else { Model.setFromMatrix(it, S.W); doc.items.push(it); }
+    });
+    finishSession();
+    const top = Model.topOf(App.doc, it.id);
+    App.select([top ? top.id : it.id]);
+    UI.toast('Offener Pfad erkannt – als Rohr Ø 6 mm entlang gezogen. Form, Größe und Wand stellst du rechts ein.', { icon: 'check', ms: 5000 });
   }
   // ---------- Beenden ----------
   function cancel(silent) {
