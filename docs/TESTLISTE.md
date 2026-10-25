@@ -481,6 +481,12 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
   Schritte: 1. Ein Kind (ab 10) mit „Einfach“ eine Platte mit vier Löchern bauen lassen, ohne zu helfen.
   Erwartet: Es findet Körper, Löcher und Exportieren allein; notieren, wo es hängen bleibt.
 
+## Spiegeln an der Achse (neu in Sitzung 27)
+
+- [x] **Skizze an der Y-Achse spiegeln**
+  Schritte: Kreis bei X 10, Werkzeug „Spiegeln“, „An der Y-Achse“, Enter.
+  Erwartet: Eine feste Hilfslinie auf der Y-Achse und der gespiegelte Kreis bei X −10.
+
 ## Kantenkette, Abstände beim Verschieben (neu in Sitzung 26)
 
 - [x] **Kantenkette**

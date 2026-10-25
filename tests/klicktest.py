@@ -2540,6 +2540,16 @@ def t_kantenkette(p):
     return [ok1, ok2]
 
 
+def t_spiegeln_achse(p):
+    scene(p, [{'id': 'C', 'type': 'circle', 'c': [10, 5], 'r': 3}])
+    p.pg.keyboard.press('m'); p.wait(200)
+    p.pg.click('#mir-y'); p.wait(300)
+    p.pg.keyboard.press('Enter'); p.wait(500)
+    c = SS(p, "return S.ents.filter(e=>e.type==='circle').map(e=>e.c)")
+    ok = len(c) == 2 and any(abs(q[0] + 10) < 1e-6 and abs(q[1] - 5) < 1e-6 for q in c) and SS(p, "return S.status.ok && S.ents.some(e=>e.con && e.type==='line')")
+    return [ok]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -2597,6 +2607,7 @@ TESTS = [
     ('Schnitt parallel zu einer gewählten Fläche', t_schnitt_flaeche),
     ('An einer Fläche spiegeln / Original ändern', t_spiegeln_flaeche),
     ('Kantenkette: ganzer gerundeter Umriss / zusammen abrunden', t_kantenkette),
+    ('Skizze: an der Y-Achse spiegeln ohne eigene Linie', t_spiegeln_achse),
     ('Kreismuster: anlegen / Anzahl / folgt dem Original / Auflösen', t_kreismuster_3d),
     ('Rechteckmuster: anlegen / zweite Reihe / Formel / Maß ändern / Rückgängig', t_rechteckmuster_3d),
     ('Gespiegelte Kopie: anlegen / andere Ebene / Ebene verschieben', t_spiegelkopie),

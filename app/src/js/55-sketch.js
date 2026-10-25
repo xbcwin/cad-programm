@@ -893,6 +893,19 @@ const Sketch = (() => {
       render(); Panels.renderRight();
     }
   }
+  // Spiegelachse ohne eigene Linie: feste Hilfslinie durch den Nullpunkt anlegen
+  function mirrorAxis(dir) {
+    const b = SK.bounds(S.ents) || [-20, -20, 20, 20];
+    const L = Math.max(20, Math.abs(b[0]), Math.abs(b[1]), Math.abs(b[2]), Math.abs(b[3])) + 10;
+    pushUndo();
+    const ax = { id: uid('e'), type: 'line', con: true, a: dir === 'x' ? [-L, 0] : [0, -L], b: dir === 'x' ? [L, 0] : [0, L] };
+    S.ents.push(ax);
+    S.cons.push({ id: uid('k'), type: 'fix', refs: [{ e: ax.id }], at: Object.fromEntries((Solver.varsOf(ax) || []).map((k) => [k, Solver.getK(ax, k)])) });
+    reapply();
+    S.mir = { axis: ax.id, sel: [] };
+    UI.hint('Jetzt die Elemente anklicken, die gespiegelt werden sollen. <b>Enter</b> spiegelt die Gewählten – ohne Auswahl alles.');
+    render(); Panels.renderRight();
+  }
   function mirrorAll() {
     if (!S.mir) return;
     const ids = S.mir.sel.length ? S.mir.sel.slice() : S.ents.filter((e) => e.id !== S.mir.axis).map((e) => e.id);
@@ -1914,6 +1927,10 @@ const Sketch = (() => {
         const ok = h('button', { type: 'button', class: 'btn primary', id: 'pt-make' }, `Muster anlegen (${S.patSel.length} gewählt)`);
         ok.disabled = !S.patSel.length; ok.onclick = () => createPattern();
         w.append(h('div', { class: 'btn-row' }, ok));
+      }
+      if (S.tool === 'mirror' && !S.mir) {
+        const mk = (lab, id, dir) => { const b = h('button', { type: 'button', class: 'btn', id }, lab); b.onclick = () => mirrorAxis(dir); return b; };
+        w.append(h('div', { class: 'btn-row' }, mk('An der X-Achse', 'mir-x', 'x'), mk('An der Y-Achse', 'mir-y', 'y')));
       }
       if (S.tool === 'mirror' && S.mir) {
         const ok = h('button', { type: 'button', class: 'btn primary', id: 'mir-make' }, S.mir.sel.length ? `${S.mir.sel.length} Elemente spiegeln` : 'Alles spiegeln');
