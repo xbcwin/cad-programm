@@ -1,6 +1,6 @@
 # Fortschritt
 
-Stand: 25.10.2026 · nach Sitzung 24 (19: Skizze auf Profi-Niveau · 20: Magnet, Rundungs-Griff · 21: Skizzieren im 3D, Übergang, Entlang Pfad, Import · 22: Kreis/Bogen-Arten, Verlängern, Entformungsschräge, Gewinde · 23: Einheiten, eigener Querschnitt, Langloch gebogen, gedrehtes Rechteck, Teilen · 24: Punkt, alle Ecken)
+Stand: 25.10.2026 · nach Sitzung 25 (19: Skizze auf Profi-Niveau · 20: Magnet, Rundungs-Griff · 21: Skizzieren im 3D, Übergang, Entlang Pfad, Import · 22: Kreis/Bogen-Arten, Verlängern, Entformungsschräge, Gewinde · 23: Einheiten, eigener Querschnitt, Langloch gebogen, gedrehtes Rechteck, Teilen · 24: Punkt, alle Ecken · 25: Schnitt an Fläche)
 
 ## Erledigt
 
@@ -172,6 +172,7 @@ Fertig.
 - [x] Gebogenes Langloch, gedrehtes Rechteck (3 Punkte), Vieleck über die Flächen (Schlüsselweite) (Sitzung 23)
 - [x] Punkt als eigenes Element, alle Ecken auf einmal runden/fasen (Sitzung 24)
 - [x] KI-Kollege baut Übergang, Entlang Pfad, Ellipse und Text (Sitzung 24)
+- [x] An einer Fläche spiegeln (gespiegelte Kopie, ein Körper); Schnitt parallel zu einer gewählten Fläche; neue Werkzeuge in der Suchzeile (Übergang, Zur Spitze, Schräge, Abstand, Rohr entlang Pfad) (Sitzung 25)
 - [ ] Ellipse und Text trimmen und versetzen; Text entlang einer Kurve
 - [ ] Muster und Versatz: Anzahl/Abstand nachträglich für das ganze Muster ändern (heute je Kopie über das Regel-Symbol)
 - [ ] Spiegeln an der X- oder Y-Achse ohne eigene Linie
@@ -222,6 +223,8 @@ Fertig.
 - [ ] C: Gleichzeitig arbeiten
 
 ## Bekannte Punkte
+
+- „An Fläche spiegeln“ merkt sich die Ebene, nicht die Fläche: Wird das Original danach breiter, bleibt die Spiegelebene stehen
 
 - Text kennt keine Unterschneidung (Kerning) – die Buchstaben stehen nach ihrer Laufweite
 - Ellipse und Text lassen sich nicht trimmen; Ellipsen-Drehung ist keine Regel (nur ein Wert)

@@ -42,6 +42,15 @@ const Features = (() => {
     UI.toast(type === 'mirror' ? 'Gespiegelte Kopie angelegt. Rechts wählst du die Spiegelebene.' : 'Muster angelegt. Rechts stellst du Anzahl und Abstand ein – auch mit Formeln.', { icon: 'check' });
     return G;
   }
+  // Gespiegelte Kopie an einer gewählten ebenen Fläche (z. B. zweiter Arm an der Mittelfläche)
+  function mirrorAtFace(face) {
+    const top = Model.topOf(App.doc, face.id); if (!top) return null;
+    const W = Model.worldMatrix(App.doc, face.id);
+    const o = new THREE.Vector3(...face.info.c).applyMatrix4(W), n = new THREE.Vector3(...face.info.n).transformDirection(W).normalize();
+    const G = wrap([top], NAMES.mirror, { op: 'pattern', pt: 'mirror', plane: 'FACE', mo: o.toArray().map((v) => round(v, 6)), mn: n.toArray().map((v) => round(v, 9)) });
+    UI.toast('Gespiegelt an der Fläche – Original und Spiegelbild sind jetzt ein Körper.', { icon: 'check' });
+    return G;
+  }
   function split(ids) {
     const items = need(ids); if (!items.length) return null;
     const b = Actions.selBox(items.map((x) => x.id));
@@ -88,6 +97,7 @@ const Features = (() => {
     let hint = '';
     if (p.op === 'pattern' && p.pt === 'rect') { f.append(num('nx', 'Anzahl X', '', { int: true, min: 1 }), num('ny', 'Anzahl Y', '', { int: true, min: 1 }), num('dx', 'Abstand X'), num('dy', 'Abstand Y')); hint = 'Die Anzahl zählt das Original mit. Abstände gehen von Mitte zu Mitte.'; }
     else if (p.op === 'pattern' && p.pt === 'circ') { f.append(num('n', 'Anzahl', '', { int: true, min: 1 }), num('ang', 'Winkel', '°'), num('cx', 'Mitte X'), num('cy', 'Mitte Y')); hint = 'Gedreht wird um die senkrechte Achse durch die Mitte. 360° verteilt die Kopien rundherum.'; }
+    else if (p.op === 'pattern' && p.pt === 'mirror' && p.plane === 'FACE') { hint = 'Gespiegelt an einer gewählten Fläche. Original und Spiegelbild sind ein Körper. Für eine andere Ebene: Rückgängig und neu spiegeln.'; }
     else if (p.op === 'pattern' && p.pt === 'mirror') { f.append(sel('plane', 'Spiegeln', [['YZ', 'Links ↔ rechts'], ['XZ', 'Vorne ↔ hinten'], ['XY', 'Oben ↔ unten']]), num('off', 'Lage der Ebene')); hint = 'Original und Spiegelbild werden ein Körper. Die Ebene geht durch den Nullpunkt, „Lage“ verschiebt sie.'; }
     else if (p.op === 'split') {
       const pl = p.plane || 'XY';
@@ -112,5 +122,5 @@ const Features = (() => {
     return null;
   }
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
+  return { mirrorAtFace, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
 })();

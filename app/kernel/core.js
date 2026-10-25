@@ -793,6 +793,8 @@ export function createKernel(R, oc) {
       const n = Math.max(1, Math.min(120, Math.round(num(p.n, 4)))), ang = num(p.ang, 360);
       const step = Math.abs(Math.abs(ang) - 360) < 1e-9 ? 360 / n : n > 1 ? ang / (n - 1) : 0;
       for (let k = 1; k < n; k++) copies.push(base.clone().rotate(k * step, [num(p.cx, 0), num(p.cy, 0), 0], [0, 0, 1]));
+    } else if (p.pt === 'mirror' && p.plane === 'FACE' && Array.isArray(p.mn) && Array.isArray(p.mo)) {
+      copies.push(base.clone().mirror(p.mn.map(Number), p.mo.map(Number)));
     } else if (p.pt === 'mirror') {
       const pl = ['XY', 'XZ', 'YZ'].includes(p.plane) ? p.plane : 'YZ';
       const n = { YZ: [1, 0, 0], XZ: [0, 1, 0], XY: [0, 0, 1] }[pl], off = num(p.off, 0);

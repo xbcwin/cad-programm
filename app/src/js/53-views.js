@@ -21,7 +21,9 @@ const Views = (() => {
 
   // ---------- Schnitt ----------
   function cutPlane() {
-    const c = st.cut; const n = new THREE.Vector3(); n.setComponent(AX[c.plane], KEEP[c.plane] * (c.flip ? -1 : 1));
+    const c = st.cut;
+    if (c.plane === 'FACE') { const n = c.fn.clone().multiplyScalar(c.flip ? 1 : -1); const q = c.fp.clone().addScaledVector(c.fn, c.off); return { n, k: -n.dot(q), q }; }
+    const n = new THREE.Vector3(); n.setComponent(AX[c.plane], KEEP[c.plane] * (c.flip ? -1 : 1));
     return { n, k: -n.getComponent(AX[c.plane]) * c.off };
   }
   function applyCut() {
@@ -35,6 +37,16 @@ const Views = (() => {
     const c = st.cut; const g = Viewer.groups.overlay;
     if (c.helper) { g.remove(c.helper); c.helper.traverse((o) => { o.geometry && o.geometry.dispose(); o.material && o.material.dispose(); }); c.helper = null; }
     const b = modelBox(); const pad = Math.max(4, b.getSize(new THREE.Vector3()).length() * 0.08);
+    if (c.plane === 'FACE') {
+      const { q } = cutPlane(); const n = c.fn; const R = b.getSize(new THREE.Vector3()).length() / 2 + pad;
+      const u = new THREE.Vector3(Math.abs(n.z) > 0.9 ? 1 : 0, 0, Math.abs(n.z) > 0.9 ? 0 : 1).cross(n).normalize(), v = new THREE.Vector3().crossVectors(n, u);
+      const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, bb]) => q.clone().addScaledVector(u, a * R).addScaledVector(v, bb * R));
+      const col = new THREE.Color(Viewer.theme.accent);
+      const fill = new THREE.Mesh(new THREE.BufferGeometry().setFromPoints([corners[0], corners[1], corners[2], corners[0], corners[2], corners[3]]), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.07, side: THREE.DoubleSide, depthWrite: false }));
+      const line = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(corners), new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.8 }));
+      const grp = new THREE.Group(); grp.add(fill, line); fill.renderOrder = 20; line.renderOrder = 21;
+      g.add(grp); c.helper = grp; Viewer.requestRender(); return;
+    }
     const ax = AX[c.plane]; const u = [0, 1, 2].filter((i) => i !== ax);
     const lo = b.min.clone().subScalar(pad), hi = b.max.clone().addScalar(pad);
     const P = (a, bb) => { const v = new THREE.Vector3(); v.setComponent(ax, c.off); v.setComponent(u[0], a); v.setComponent(u[1], bb); return v; };
@@ -52,7 +64,15 @@ const Views = (() => {
       if (st.cut.bar) st.cut.bar.remove();
       st.cut = null; applyCut(); sync(); return;
     }
-    const plane = opts.plane || (st.cut && st.cut.plane) || 'XZ';
+    if (opts.face) {
+      const f = opts.face, W = Model.worldMatrix(App.doc, f.id);
+      const fn = new THREE.Vector3(...f.info.n).transformDirection(W).normalize(), fp = new THREE.Vector3(...f.info.c).applyMatrix4(W);
+      if (st.cut && st.cut.bar) st.cut.bar.remove();
+      if (st.cut && st.cut.helper) { Viewer.groups.overlay.remove(st.cut.helper); st.cut.helper.traverse((o) => { o.geometry && o.geometry.dispose(); o.material && o.material.dispose(); }); }
+      st.cut = { plane: 'FACE', fn, fp, off: opts.off != null ? opts.off : -1, flip: false, obj: st.cut && st.cut.obj };
+      applyCut(); cutBar(); sync(); return;
+    }
+    const plane = opts.plane && opts.plane !== 'FACE' ? opts.plane : st.cut && st.cut.plane !== 'FACE' ? st.cut.plane : 'XZ';
     const b = modelBox(); const ax = AX[plane];
     const off = opts.off != null ? opts.off : round((b.min.getComponent(ax) + b.max.getComponent(ax)) / 2, 2);
     if (st.cut && st.cut.bar) st.cut.bar.remove();
@@ -73,7 +93,8 @@ const Views = (() => {
       seg.append(x);
     }
     const b = modelBox(); const ax = AX[c.plane];
-    const lo = Math.floor(b.min.getComponent(ax) - 1), hi = Math.ceil(b.max.getComponent(ax) + 1);
+    const span = Math.ceil(b.getSize(new THREE.Vector3()).length());
+    const lo = c.plane === 'FACE' ? -span : Math.floor(b.min.getComponent(ax) - 1), hi = c.plane === 'FACE' ? span : Math.ceil(b.max.getComponent(ax) + 1);
     const range = h('input', { type: 'range', id: 'cut-range', min: lo, max: hi, step: 0.1, value: c.off, 'aria-label': 'Lage der Schnittebene' });
     const num = h('input', { type: 'text', id: 'cut-off', class: 'vb-num', inputmode: 'decimal', value: fmt(c.off, 2), 'aria-label': 'Lage in mm' });
     const set = (v) => { if (!isFinite(v)) return; c.off = v; applyCut(); range.value = v; if (document.activeElement !== num) num.value = fmt(v, 2); };
@@ -82,7 +103,8 @@ const Views = (() => {
     num.onchange = () => { const v = parseNum(num.value); if (v != null) set(v); };
     const flip = h('button', { type: 'button', class: 'btn small', id: 'cut-flip', 'data-tip': 'Die andere Hälfte zeigen' }); flip.innerHTML = icon('mirror') + 'Umdrehen';
     flip.onclick = () => { c.flip = !c.flip; applyCut(); };
-    const row = h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, AXNAME[c.plane]), range, num, h('span', { class: 'vb-u' }, 'mm'));
+    if (c.plane === 'FACE') seg.append(h('button', { type: 'button', 'aria-pressed': 'true', 'data-plane': 'FACE', 'data-tip': 'Parallel zur gewählten Fläche' }, 'An Fläche'));
+    const row = h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, c.plane === 'FACE' ? '↕' : AXNAME[c.plane]), range, num, h('span', { class: 'vb-u' }, 'mm'));
     bar.append(head, seg, row, h('div', { class: 'vb-row' }, flip, h('span', { class: 'vb-hint' }, 'Schraffiert = Schnittfläche')));
     bars().prepend(bar); c.bar = bar;
   }

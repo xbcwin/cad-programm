@@ -481,6 +481,16 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
   Schritte: 1. Ein Kind (ab 10) mit „Einfach“ eine Platte mit vier Löchern bauen lassen, ohne zu helfen.
   Erwartet: Es findet Körper, Löcher und Exportieren allein; notieren, wo es hängen bleibt.
 
+## Schnitt an Fläche (neu in Sitzung 25)
+
+- [x] **Schnitt parallel zu einer Fläche**
+  Schritte: Seitenfläche eines gedrehten Quaders anklicken → „Schnitt hier“; Abstand −15.
+  Erwartet: Schnitt-Leiste mit „An Fläche“; der Körper ist parallel zur Fläche aufgeschnitten, Schnittfläche schraffiert; × beendet.
+
+- [x] **An einer Fläche spiegeln**
+  Schritte: Quader 20 × 10 × 5, rechte Seitenfläche anklicken → „An Fläche spiegeln“.
+  Erwartet: Ein Körper von −10 bis 30 mm, doppeltes Volumen, keine Fehler. (Die Spiegelebene bleibt dort, wo die Fläche beim Spiegeln war.)
+
 ## Punkt und alle Ecken (neu in Sitzung 24)
 
 - [x] **Punkt**

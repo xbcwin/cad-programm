@@ -2498,6 +2498,35 @@ def t_ki_neue_formen(p):
     return [ok1, ok2, ok3]
 
 
+def t_schnitt_flaeche(p):
+    p.empty(); p.ev("Actions.addPrimitive('box')"); p.wait(1500)
+    p.ev("App.change('x', d=>{ const it=d.items[0]; it.t.x=0; it.t.y=0; it.t.rz=30; })"); warte_rechnen(p, 20)
+    fi = p.ev("const r=App.results.get(App.doc.items[0].id); return r.data.faces.findIndex(f=>f.t==='PLANE' && Math.abs(f.n[0])>0.9)")
+    p.ev("const it=App.doc.items[0]; const r=App.results.get(it.id); const f=r.data.faces[arg]; App.select([it.id], {face:{id:it.id, faceIdx:arg, point:f.c, normal:f.n}})", fi); p.wait(500)
+    p.pg.locator('.ctxbar button[aria-label="Schnitt hier"]').click(); p.wait(600)
+    ok1 = p.pg.locator('.viewbar [data-plane="FACE"]').count() == 1 and p.ev("return Views.cut && Views.cut.plane") == 'FACE'
+    p.pg.fill('#cut-off', '-5'); p.pg.press('#cut-off', 'Enter'); p.wait(300)
+    ok2 = p.ev("return Views.cut.off") == -5
+    p.pg.locator('.viewbar .vb-x').click(); p.wait(300)
+    ok3 = p.pg.locator('.viewbar').count() == 0
+    return [ok1, ok2, ok3]
+
+
+def t_spiegeln_flaeche(p):
+    p.empty(); p.ev("App.change('x', d=>{ const b=Model.newItem('box',{w:20,d:10,h:5}); d.items.push(b); })"); warte_rechnen(p, 20)
+    fi = p.ev("const r=App.results.get(App.doc.items[0].id); return r.data.faces.findIndex(f=>f.t==='PLANE' && f.n[0]>0.9)")
+    p.ev("const it=App.doc.items[0]; const r=App.results.get(it.id); const f=r.data.faces[arg]; App.select([it.id], {face:{id:it.id, faceIdx:arg, point:f.c, normal:f.n}})", fi); p.wait(500)
+    p.pg.locator('.ctxbar button[aria-label="An Fläche spiegeln"]').click(); warte_rechnen(p, 30)
+    bb = p.ev("return App.results.get(App.doc.items[0].id).data.bbox")
+    v = volumen(p)
+    ok1 = abs(bb[0] + 10) < 1e-3 and abs(bb[3] - 30) < 1e-3 and abs(v - 2000) < 0.5 and p.ev("return App.errors.length") == 0
+    # Original ändern: Spiegelbild wandert mit
+    p.ev("App.change('x', d=>{ d.items[0].children[0].p.w=30; })"); warte_rechnen(p, 30)
+    bb2 = p.ev("return App.results.get(App.doc.items[0].id).data.bbox")
+    ok2 = abs(bb2[0] + 15) < 1e-3
+    return [ok1, ok2]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -2552,6 +2581,8 @@ TESTS = [
     ('Skizze: Punkt setzen / Lage eintippen / Kreis rastet ein', t_punkt),
     ('Skizze: alle Ecken auf einmal runden / ein Rückgängig', t_alle_ecken),
     ('KI-Kollege baut Übergang, Pfad und Text', t_ki_neue_formen),
+    ('Schnitt parallel zu einer gewählten Fläche', t_schnitt_flaeche),
+    ('An einer Fläche spiegeln / Original ändern', t_spiegeln_flaeche),
     ('Kreismuster: anlegen / Anzahl / folgt dem Original / Auflösen', t_kreismuster_3d),
     ('Rechteckmuster: anlegen / zweite Reihe / Formel / Maß ändern / Rückgängig', t_rechteckmuster_3d),
     ('Gespiegelte Kopie: anlegen / andere Ebene / Ebene verschieben', t_spiegelkopie),

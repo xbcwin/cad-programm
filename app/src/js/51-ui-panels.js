@@ -655,6 +655,8 @@ const Panels = (() => {
       b('holeWizard', 'Bohrung', (e) => Place.holeHere(face, e.currentTarget), '', 'Bohrungs-Assistent: Schraubenloch, Gewinde, Einsatz oder Mutternfalle – hier und per Klick weitere');
       b('lift', 'Hochziehen', () => Sketch.pushPullFace(face), '', 'Die Fläche herausziehen oder hineindrücken');
       if (items[0].item.role !== 'hole' && App.doc.items.some((x) => x.id === face.id)) b('shell', 'Aushöhlen', () => Features.shell(face), '', 'Körper aushöhlen – diese Fläche wird die Öffnung');
+      b('section', 'Schnitt hier', () => Views.section(true, { face }), '', 'Schnitt parallel zu dieser Fläche – den Abstand stellst du in der Schnitt-Leiste ein', true);
+      if (items[0].item.role !== 'hole') b('mirror', 'An Fläche spiegeln', () => Features.mirrorAtFace(face), '', 'Gespiegelte Kopie an dieser Fläche – z. B. die zweite Hälfte eines symmetrischen Teils', true);
       sep();
     }
     if (items.length === 1) {
