@@ -480,7 +480,7 @@ const HELP = {
  },
  "patternCirc": {
   "tip": "Körper gleichmäßig im Kreis kopieren",
-  "hilfe": "Wähle einen Körper und dann „Muster“ → „Kreismuster“. Rechts stellst du Anzahl, Winkel und die Mitte ein, um die gedreht wird.",
+  "hilfe": "Wähle einen Körper und dann „Muster“ → „Kreismuster“. Rechts stellst du Anzahl, Winkel, die Drehachse (senkrecht, quer oder längs) und die Mitte ein, um die gedreht wird.",
   "tipp": "Perfekt für Lochkreise und Speichen. 360° verteilt die Kopien ganz rundherum."
  },
  "patternPath": {

@@ -2361,6 +2361,31 @@ def t_muster_kurve(p):
     return [ok1, ok2, ok3, ok4, ok5, ok6]
 
 
+def t_ki_muster_kurve(p):
+    ki(p); p.empty()
+    ki_fragen(p, 'Ein Stift 4 mm', {'antwort': 'Hier ist der Stift.', 'aktionen': [
+        {'op': 'hinzufuegen', 'objekt': {'art': 'cylinder', 'name': 'Stift', 'p': {'d': 4, 'h': 6}, 't': {'x': -20, 'y': 0}}}]})
+    sid = p.ev("return App.doc.items[0].id")
+    ki_fragen(p, 'Jetzt fünf davon auf einem Halbkreis', {'antwort': 'Fünf Stifte auf einem Bogen.', 'aktionen': [
+        {'op': 'muster', 'id': sid, 'art': 'kurve', 'n': 5, 'kurve': [{'typ': 'bogen', 'von': [-20, 0], 'durch': [0, 20], 'bis': [20, 0]}]}]})
+    g = p.ev("const g=App.doc.items[0]; return [g.kind, g.p && g.p.pt, g.children.length, App.errors.length, Features.sizeText(g)]")
+    ok1 = g == ['group', 'path', 1, 0, '5× entlang Kurve'] and near(bbox(p), [-22, -2, 0, 22, 22, 6], 0.25)
+    ok2 = '"art":"kurve"' in p.ev("return window.__aiPrompts[1]")
+    return [ok1, ok2]
+
+
+def t_kreismuster_achse(p):
+    p.empty(); p.ev("App.change('x', d=>{ const b=Model.newItem('box',{w:10,d:4,h:4}); b.t.z=20; d.items.push(b); })"); warte_rechnen(p, 20)
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(400)
+    ctx(p, 'Muster', 'Kreismuster'); warte_rechnen(p, 20)
+    ok1 = near(bbox(p), [-5, -5, 20, 5, 5, 24], 0.2) and p.pg.locator('#op-cz').count() == 0
+    p.pg.select_option('#op-axis', 'x'); p.wait(1500); warte_rechnen(p, 30)
+    ok2 = p.pg.locator('#op-cz').count() == 1 and p.pg.locator('#op-cx').count() == 0 and near(bbox(p), [-5, -24, -24, 5, 24, 24], 0.2) and p.ev("return App.doc.items[0].p.axis") == 'x'
+    field(p, '#op-cz', 10); warte_rechnen(p, 30)
+    ok3 = near(bbox(p), [-5, -14, -4, 5, 14, 24], 0.2) and p.ev("return App.errors.length") == 0
+    return [ok1, ok2, ok3]
+
+
 # ---------- Sitzung 22: kleine Skizzen-Werkzeuge ----------
 def t_kreis_bogen_modi(p):
     sketch_xy(p)
@@ -2566,7 +2591,10 @@ def t_spiegeln_flaeche(p):
     p.ev("App.change('x', d=>{ d.items[0].children[0].p.w=30; })"); warte_rechnen(p, 30)
     bb2 = p.ev("return App.results.get(App.doc.items[0].id).data.bbox")
     ok2 = abs(bb2[0] + 15) < 1e-3
-    return [ok1, ok2]
+    # Sitzung 28: Die Ebene hängt an der äußeren Fläche und wandert mit (vorher blieb sie bei x = 10)
+    v2 = volumen(p)
+    ok3 = p.ev("return App.doc.items[0].p.bind===true") and abs(bb2[3] - 45) < 1e-3 and abs(v2 - 3000) < 0.5 and p.ev("return App.errors.length") == 0
+    return [ok1, ok2, ok3]
 
 
 def t_kantenkette(p):
@@ -2634,6 +2662,8 @@ TESTS = [
     ('STEP/STL importieren: einlesen / Größe stimmt / Einheit Zoll / STL als Körper', t_import_step),
     ('Skizzen-Schablonen: Auswahl / QFP-48 / Rückgängig / Pin-Raster / Werte / USB-C-Stecker', t_schablonen),
     ('Muster entlang Kurve: Skizze startet / Linie / Abstand / Kreis mitdrehen / ohne Drehen', t_muster_kurve),
+    ('KI: Muster entlang Kurve / kennt die Aktion', t_ki_muster_kurve),
+    ('Kreismuster: senkrecht / Drehachse quer / Mitte Z', t_kreismuster_achse),
     ('Skizze: Kreis aus 3 / 2 Punkten / tangentialer Bogen', t_kreis_bogen_modi),
     ('Skizze: Verlängern bis zur nächsten Linie', t_verlaengern),
     ('Entformungsschräge: 3° nach innen / -2° nach außen', t_schraege),
@@ -2647,7 +2677,7 @@ TESTS = [
     ('Skizze: alle Ecken auf einmal runden / ein Rückgängig', t_alle_ecken),
     ('KI-Kollege baut Übergang, Pfad und Text', t_ki_neue_formen),
     ('Schnitt parallel zu einer gewählten Fläche', t_schnitt_flaeche),
-    ('An einer Fläche spiegeln / Original ändern', t_spiegeln_flaeche),
+    ('An einer Fläche spiegeln / Original ändern / Ebene wandert mit', t_spiegeln_flaeche),
     ('Kantenkette: ganzer gerundeter Umriss / zusammen abrunden', t_kantenkette),
     ('Skizze: an der Y-Achse spiegeln ohne eigene Linie', t_spiegeln_achse),
     ('Kreismuster: anlegen / Anzahl / folgt dem Original / Auflösen', t_kreismuster_3d),

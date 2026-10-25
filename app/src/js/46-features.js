@@ -64,8 +64,12 @@ const Features = (() => {
     const top = Model.topOf(App.doc, face.id); if (!top) return null;
     const W = Model.worldMatrix(App.doc, face.id);
     const o = new THREE.Vector3(...face.info.c).applyMatrix4(W), n = new THREE.Vector3(...face.info.n).transformDirection(W).normalize();
-    const G = wrap([top], NAMES.mirror, { op: 'pattern', pt: 'mirror', plane: 'FACE', mo: o.toArray().map((v) => round(v, 6)), mn: n.toArray().map((v) => round(v, 9)) });
-    UI.toast('Gespiegelt an der Fläche – Original und Spiegelbild sind jetzt ein Körper.', { icon: 'check' });
+    // Ist es die äußerste Fläche in ihrer Richtung (achsparallel), bleibt die Spiegelebene an ihr hängen, wenn das Original wächst
+    const box = Actions.selBox([top.id]), ax = [0, 1, 2].find((i) => Math.abs(n.getComponent(i)) > 0.9999);
+    let bind = false;
+    if (ax != null && !box.isEmpty()) { const ext = n.getComponent(ax) > 0 ? box.max.getComponent(ax) : box.min.getComponent(ax); bind = Math.abs(ext - o.getComponent(ax)) < 1e-3 * Math.max(1, box.getSize(new THREE.Vector3()).length()); }
+    const G = wrap([top], NAMES.mirror, { op: 'pattern', pt: 'mirror', plane: 'FACE', mo: o.toArray().map((v) => round(v, 6)), mn: n.toArray().map((v) => round(v, 9)), ...(bind ? { bind: true } : {}) });
+    UI.toast('Gespiegelt an der Fläche – Original und Spiegelbild sind jetzt ein Körper.' + (bind ? ' Wird das Original größer, wandert die Ebene mit.' : ''), { icon: 'check' });
     return G;
   }
   function split(ids) {
@@ -113,7 +117,15 @@ const Features = (() => {
     const sel = (k, label, opts) => UI.selectField({ id: 'op-' + k, label, value: p[k], options: opts, onChange: (v) => setP(k, v) });
     let hint = '';
     if (p.op === 'pattern' && p.pt === 'rect') { f.append(num('nx', 'Anzahl X', '', { int: true, min: 1 }), num('ny', 'Anzahl Y', '', { int: true, min: 1 }), num('dx', 'Abstand X'), num('dy', 'Abstand Y')); hint = 'Die Anzahl zählt das Original mit. Abstände gehen von Mitte zu Mitte.'; }
-    else if (p.op === 'pattern' && p.pt === 'circ') { f.append(num('n', 'Anzahl', '', { int: true, min: 1 }), num('ang', 'Winkel', '°'), num('cx', 'Mitte X'), num('cy', 'Mitte Y')); hint = 'Gedreht wird um die senkrechte Achse durch die Mitte. 360° verteilt die Kopien rundherum.'; }
+    else if (p.op === 'pattern' && p.pt === 'circ') {
+      const ax = p.axis === 'x' || p.axis === 'y' ? p.axis : 'z';
+      f.append(num('n', 'Anzahl', '', { int: true, min: 1 }), num('ang', 'Winkel', '°'));
+      f.append(UI.selectField({ id: 'op-axis', label: 'Drehachse', value: ax, options: [['z', 'Senkrecht (Z)'], ['x', 'Quer (X)'], ['y', 'Längs (Y)']], onChange: (v) => setP('axis', v) }));
+      if (ax !== 'x') f.append(num('cx', 'Mitte X'));
+      if (ax !== 'y') f.append(num('cy', 'Mitte Y'));
+      if (ax !== 'z') f.append(num('cz', 'Mitte Z'));
+      hint = { z: 'Gedreht wird um die senkrechte Achse durch die Mitte.', x: 'Gedreht wird um eine Achse quer (in X-Richtung) durch die Mitte – z. B. Löcher rund um ein liegendes Rohr.', y: 'Gedreht wird um eine Achse längs (in Y-Richtung) durch die Mitte – z. B. Rippen rund um einen liegenden Rumpf.' }[ax] + ' 360° verteilt die Kopien rundherum.';
+    }
     else if (p.op === 'pattern' && p.pt === 'path') {
       f.append(num('n', 'Anzahl', '', { int: true, min: 1 }), num('d', 'Abstand', 'mm', { min: 0 }));
       f.append(UI.selectField({ id: 'op-align', label: 'Ausrichtung', value: p.align === false ? 'nein' : 'ja', options: [['ja', 'Mit der Kurve'], ['nein', 'Wie das Original']], onChange: (v) => setP('align', v === 'ja') }));
@@ -127,7 +139,7 @@ const Features = (() => {
       sec.append(h('div', { class: 'btn-row' }, ub));
       return;
     }
-    else if (p.op === 'pattern' && p.pt === 'mirror' && p.plane === 'FACE') { hint = 'Gespiegelt an einer gewählten Fläche. Original und Spiegelbild sind ein Körper. Für eine andere Ebene: Rückgängig und neu spiegeln.'; }
+    else if (p.op === 'pattern' && p.pt === 'mirror' && p.plane === 'FACE') { hint = 'Gespiegelt an einer gewählten Fläche. Original und Spiegelbild sind ein Körper. ' + (p.bind ? 'Die Ebene hängt an der äußeren Fläche: Wird das Original größer, wandert sie mit.' : 'Die Ebene bleibt, wo die Fläche beim Spiegeln war.') + ' Für eine andere Ebene: Rückgängig und neu spiegeln.'; }
     else if (p.op === 'pattern' && p.pt === 'mirror') { f.append(sel('plane', 'Spiegeln', [['YZ', 'Links ↔ rechts'], ['XZ', 'Vorne ↔ hinten'], ['XY', 'Oben ↔ unten']]), num('off', 'Lage der Ebene')); hint = 'Original und Spiegelbild werden ein Körper. Die Ebene geht durch den Nullpunkt, „Lage“ verschiebt sie.'; }
     else if (p.op === 'split') {
       const pl = p.plane || 'XY';

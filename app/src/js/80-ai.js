@@ -15,8 +15,9 @@ const AI = (() => {
 {"op":"loeschen","id":"<id>"}
 {"op":"mass","name":"Breite","wert":"75"}   (legt ein benanntes Maß an oder ändert es)
 {"op":"rundung","id":"<id>","typ":"fillet"|"chamfer","r":2,"kanten":"all"|"top"|"bottom"|"vertical"|"horizontal","ersetzen":false}   (ersetzen:true ersetzt vorhandene Rundungen und Fasen)
-{"op":"muster","id":"<id>","art":"kreis","n":4,"winkel":360,"mitte":[0,0]}   (Kreismuster um die senkrechte Achse durch „mitte“, Anzahl zählt das Original mit)
+{"op":"muster","id":"<id>","art":"kreis","n":4,"winkel":360,"mitte":[0,0],"achse":"z"}   (Kreismuster um eine Achse durch „mitte“: "z" senkrecht (Standard), "x" quer, "y" längs – dann „mitte“ mit drei Werten [x,y,z]; Anzahl zählt das Original mit)
 {"op":"muster","id":"<id>","art":"rechteck","nx":3,"ny":1,"dx":20,"dy":0}   (Rechteckmuster, Abstände von Mitte zu Mitte)
+{"op":"muster","id":"<id>","art":"kurve","n":5,"abstand":0,"drehen":true,"hoehe":0,"kurve":[{"typ":"bogen","von":[x,y],"durch":[x,y],"bis":[x,y]}]}   (Muster entlang Kurve in der Ebene auf Höhe „hoehe“. Kurvenstücke: {"typ":"linie","von","bis"}, {"typ":"bogen","von","durch","bis"}, {"typ":"spline","punkte":[[x,y],…]} – aneinander gehängt –, oder ein {"typ":"kreis","mitte":[x,y],"r":20}. Die Kurve beginnt an der Mitte des Originals; abstand 0 = gleichmäßig verteilt; drehen:true dreht die Kopien mit der Kurve)
 {"op":"spiegeln","id":"<id>","ebene":"YZ"|"XZ"|"XY","lage":0}   (Original plus Spiegelbild; YZ = links↔rechts, XZ = vorne↔hinten, XY = oben↔unten)
 {"op":"verbinden","ids":"alle","name":"Verbund"}   (macht die Teile zu EINEM Körper – für „Verbund“, „verbinden“, „zusammenfügen“, „ein Teil daraus machen“; Löcher darin schneiden fest. Kaufteile mit festem Gewicht bleiben automatisch einzeln, außer "mit_kaufteilen":true)
 {"op":"loesen","ids":"<id>"}   (Gruppe oder Verbund wieder in Einzelteile lösen)
@@ -515,11 +516,24 @@ Beispiel – Wunsch „Mach alles als Verbund“ (Runde 1):
             rep.changed.push(id);
           }
           if (list.length) { rep.done.push(`rundung: ${list.length} Teile, r ${a.r}`); any = true; }
+        } else if (op === 'muster' && /kurve|pfad|path|curve/i.test(a.art || '')) {
+          const id = sel(a)[0]; if (!id) { rep.notes.push('Das Objekt für das Muster gab es nicht.'); continue; }
+          const ents = curveEnts(a.kurve);
+          if (!ents.length) { rep.notes.push('Für das Muster entlang Kurve fehlte die Kurve.'); continue; }
+          { // Startpunkt markieren: die Lage des Originals, sonst der Anfang des ersten Stücks
+            const t = (Model.find(doc, id) || { item: {} }).item.t || {}, tx = Number(t.x), ty = Number(t.y);
+            const e0 = ents[0], start = isFinite(tx) && isFinite(ty) ? [tx, ty] : e0.type === 'spline' ? e0.pts[0] : e0.type === 'circle' ? [e0.c[0] - e0.r, e0.c[1]] : e0.a;
+            ents.unshift({ id: uid('e'), type: 'point', a: start });
+          }
+          const sketch = { plane: { o: [0, 0, num(a.hoehe, 0)], x: [1, 0, 0], n: [0, 0, 1] }, ents, dims: [], cons: [] };
+          const G = wrapIn(doc, id, Features.NAMES.path, { op: 'pattern', pt: 'path', n: Math.max(1, Math.round(num(a.n, 5))), d: Math.max(0, num(a.abstand, 0)), align: a.drehen !== false, sketch });
+          if (G) { rep.added.push(G.id); rep.done.push(`muster: entlang Kurve mit „${labelOf(id)}“ (id ${G.id})`); any = true; }
         } else if (op === 'muster') {
           const id = sel(a)[0]; if (!id) { rep.notes.push('Das Objekt für das Muster gab es nicht.'); continue; }
           const circ = /kreis|circ/i.test(a.art || '');
           const mitte = Array.isArray(a.mitte) ? a.mitte : [0, 0];
-          const G = circ ? wrapIn(doc, id, Features.NAMES.circ, { op: 'pattern', pt: 'circ', n: Math.max(1, Math.round(num(a.n, 4))), ang: num(a.winkel, 360), cx: num(mitte[0], 0), cy: num(mitte[1], 0) })
+          const axis = ['x', 'y'].includes(String(a.achse || '').toLowerCase()) ? String(a.achse).toLowerCase() : null;
+          const G = circ ? wrapIn(doc, id, Features.NAMES.circ, { op: 'pattern', pt: 'circ', n: Math.max(1, Math.round(num(a.n, 4))), ang: num(a.winkel, 360), cx: num(mitte[0], 0), cy: num(mitte[1], 0), ...(axis ? { axis, cz: num(mitte[2], 0) } : {}) })
             : wrapIn(doc, id, Features.NAMES.rect, { op: 'pattern', pt: 'rect', nx: Math.max(1, Math.round(num(a.nx, 2))), ny: Math.max(1, Math.round(num(a.ny, 1))), dx: num(a.dx, 20), dy: num(a.dy, 20) });
           if (G) { rep.added.push(G.id); rep.done.push(`muster: ${circ ? 'Kreis' : 'Rechteck'} um „${labelOf(id)}“ (id ${G.id})`); any = true; }
         } else if (op === 'spiegeln') {
@@ -651,6 +665,19 @@ Beispiel – Wunsch „Mach alles als Verbund“ (Runde 1):
     if (o.farbe && /^#[0-9a-f]{6}$/i.test(o.farbe)) it.color = o.farbe;
     for (const r of o.rundungen || []) if (r && (r.r || r.r === 0)) it.finishes.push({ id: uid('f'), type: r.typ === 'chamfer' ? 'chamfer' : r.typ === 'draft' ? 'draft' : 'fillet', r: num(r.r, r.typ === 'draft' ? 3 : 1), edges: ['all', 'top', 'bottom', 'vertical', 'horizontal'].includes(r.kanten) ? r.kanten : 'all' });
     return it;
+  }
+  // Kurve für „Muster entlang Kurve“ aus einer kurzen Beschreibung: Linien, Bögen, Splines oder ein Kreis
+  function curveEnts(list) {
+    const P = (q) => (Array.isArray(q) && q.length >= 2 && q.every((v) => isFinite(Number(v))) ? [Number(q[0]), Number(q[1])] : null);
+    const out = [];
+    for (const k of Array.isArray(list) ? list.slice(0, 40) : list ? [list] : []) {
+      const t = String((k && k.typ) || '').toLowerCase();
+      if (t === 'kreis') { const c = P(k.mitte), r = Number(k.r); if (c && r > 0) out.push({ id: uid('e'), type: 'circle', c, r }); }
+      else if (t === 'bogen') { const a = P(k.von), m = P(k.durch), b = P(k.bis); if (a && m && b && SK.arcInfo(a, m, b)) out.push({ id: uid('e'), type: 'arc', a, m, b }); }
+      else if (t === 'spline') { const pts = (k.punkte || []).map(P).filter(Boolean); if (pts.length >= 2) out.push({ id: uid('e'), type: 'spline', pts }); }
+      else { const a = P(k.von), b = P(k.bis); if (a && b && SK.d2(a, b) > 1e-6) out.push({ id: uid('e'), type: 'line', a, b }); }
+    }
+    return out;
   }
   // Feature-Gruppe (Muster, Spiegelung) um ein Objekt legen – wie Features.pattern, aber innerhalb einer Änderung
   function wrapIn(doc, id, name, p) {

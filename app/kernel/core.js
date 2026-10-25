@@ -792,7 +792,8 @@ export function createKernel(R, oc) {
     } else if (p.pt === 'circ') {
       const n = Math.max(1, Math.min(120, Math.round(num(p.n, 4)))), ang = num(p.ang, 360);
       const step = Math.abs(Math.abs(ang) - 360) < 1e-9 ? 360 / n : n > 1 ? ang / (n - 1) : 0;
-      for (let k = 1; k < n; k++) copies.push(base.clone().rotate(k * step, [num(p.cx, 0), num(p.cy, 0), 0], [0, 0, 1]));
+      const ax = p.axis === 'x' ? [1, 0, 0] : p.axis === 'y' ? [0, 1, 0] : [0, 0, 1];   // Drehachse: senkrecht (Standard), quer oder längs
+      for (let k = 1; k < n; k++) copies.push(base.clone().rotate(k * step, [num(p.cx, 0), num(p.cy, 0), num(p.cz, 0)], ax));
     } else if (p.pt === 'path' && Array.isArray(p.places)) {
       // Muster entlang Kurve: Lage und Drehung je Kopie kommen fertig aus dem Modell
       const ax = (p.n || [0, 0, 1]).map(Number), p0 = (p.p0 || [0, 0, 0]).map(Number);
@@ -804,7 +805,20 @@ export function createKernel(R, oc) {
         copies.push(c);
       }
     } else if (p.pt === 'mirror' && p.plane === 'FACE' && Array.isArray(p.mn) && Array.isArray(p.mo)) {
-      copies.push(base.clone().mirror(p.mn.map(Number), p.mo.map(Number)));
+      const mn = p.mn.map(Number); let mo = p.mo.map(Number);
+      if (p.bind) {
+        // an die Fläche gebunden: die äußerste ebene Fläche mit dieser Richtung – wächst das Original, wandert die Ebene mit
+        let best = -Infinity;
+        try {
+          for (const f of base.faces) {
+            if (f.geomType !== 'PLANE') continue;
+            const v = f.normalAt(); if (v.x * mn[0] + v.y * mn[1] + v.z * mn[2] < 0.9999) continue;
+            const c = f.center, d = c.x * mn[0] + c.y * mn[1] + c.z * mn[2];
+            if (d > best) { best = d; mo = [c.x, c.y, c.z]; }
+          }
+        } catch (_) {}
+      }
+      copies.push(base.clone().mirror(mn, mo));
     } else if (p.pt === 'mirror') {
       const pl = ['XY', 'XZ', 'YZ'].includes(p.plane) ? p.plane : 'YZ';
       const n = { YZ: [1, 0, 0], XZ: [0, 1, 0], XY: [0, 0, 1] }[pl], off = num(p.off, 0);

@@ -481,6 +481,18 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
   Schritte: 1. Ein Kind (ab 10) mit „Einfach“ eine Platte mit vier Löchern bauen lassen, ohne zu helfen.
   Erwartet: Es findet Körper, Löcher und Exportieren allein; notieren, wo es hängen bleibt.
 
+## Spiegelebene, Kreismuster-Achse, KI (neu in Sitzung 29)
+
+- [x] **Spiegelebene wandert mit**
+  Schritte: Quader 20 breit, rechte Seitenfläche anklicken → „An Fläche spiegeln“, dann den Quader auf 30 verbreitern.
+  Erwartet: Das Spiegelbild hängt weiter an der rechten Fläche; zusammen 60 breit, ein Körper.
+- [x] **Kreismuster quer**
+  Schritte: Quader 10 × 4 × 4 auf Höhe 20, „Muster“ → „Kreismuster“, rechts „Drehachse: Quer (X)“.
+  Erwartet: 4 Quader rund um die X-Achse (oben, unten, vorne, hinten); statt „Mitte X“ gibt es „Mitte Z“.
+- [x] **KI: Muster entlang Kurve**
+  Schritte: KI-Kollege: „Fünf Stifte auf einem Halbkreis“.
+  Erwartet: Ein „Muster entlang Kurve“ mit 5 Stiften auf dem Bogen.
+
 ## Muster entlang Kurve (neu in Sitzung 28)
 
 - [x] **Linie als Kurve**

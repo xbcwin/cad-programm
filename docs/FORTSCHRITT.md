@@ -1,6 +1,6 @@
 # Fortschritt
 
-Stand: 25.10.2026 · nach Sitzung 28 (19: Skizze auf Profi-Niveau · 20: Magnet, Rundungs-Griff · 21: Skizzieren im 3D, Übergang, Entlang Pfad, Import · 22: Kreis/Bogen-Arten, Verlängern, Entformungsschräge, Gewinde · 23: Einheiten, eigener Querschnitt, Langloch gebogen, gedrehtes Rechteck, Teilen · 24: Punkt, alle Ecken · 25: Schnitt und Spiegeln an Fläche · 26: Kantenkette, Abstände beim Verschieben · 27: Spiegeln an der Achse · 28: Muster entlang Kurve, Schablonen-Maße geprüft, USB-C-Stecker)
+Stand: 25.10.2026 · nach Sitzung 29 (19: Skizze auf Profi-Niveau · 20: Magnet, Rundungs-Griff · 21: Skizzieren im 3D, Übergang, Entlang Pfad, Import · 22: Kreis/Bogen-Arten, Verlängern, Entformungsschräge, Gewinde · 23: Einheiten, eigener Querschnitt, Langloch gebogen, gedrehtes Rechteck, Teilen · 24: Punkt, alle Ecken · 25: Schnitt und Spiegeln an Fläche · 26: Kantenkette, Abstände beim Verschieben · 27: Spiegeln an der Achse · 28: Muster entlang Kurve, Schablonen-Maße geprüft, USB-C-Stecker · 29: Spiegelebene wandert mit, Kreismuster quer und längs, KI kennt Muster entlang Kurve)
 
 ## Erledigt
 
@@ -174,6 +174,7 @@ Fertig.
 - [x] KI-Kollege baut Übergang, Entlang Pfad, Ellipse und Text (Sitzung 24)
 - [x] Kantenkette wählen (Kette), Abstand zu den Nachbarn live beim Verschieben (Sitzung 26)
 - [x] An einer Fläche spiegeln (gespiegelte Kopie, ein Körper); Schnitt parallel zu einer gewählten Fläche; neue Werkzeuge in der Suchzeile (Übergang, Zur Spitze, Schräge, Abstand, Rohr entlang Pfad) (Sitzung 25)
+- [x] Spiegelebene hängt an der Fläche: Wird das Original größer, wandert sie mit (äußerste Fläche in Achsrichtung) (Sitzung 29)
 - [ ] Ellipse und Text trimmen und versetzen; Text entlang einer Kurve
 - [ ] Muster und Versatz: Anzahl/Abstand nachträglich für das ganze Muster ändern (heute je Kopie über das Regel-Symbol)
 - [x] Spiegeln an der X- oder Y-Achse ohne eigene Linie (Sitzung 27)
@@ -184,7 +185,8 @@ Fertig.
 - [ ] Magnet auch auf gewölbten Flächen und für Kaufteile beim Ziehen aus der Leiste mit eigener Form
 - [x] Bohrungs-Assistent, Wandstärke, Muster, Spiegeln, Boolesch, Teilen (Sitzung 8)
 - [x] Muster entlang Kurve: Körper oder Loch wählen → „Muster“ → „Muster entlang Kurve“, Kurve zeichnen (Linie, Bogen, Spline, Kreis oder geschlossener Umriss); Anzahl, Abstand (0 = gleichmäßig verteilt) und Ausrichtung (mit der Kurve drehen oder nicht), „Kurve bearbeiten“; beim Zeichnen zeigen Ringe, wo die Kopien landen (Sitzung 28)
-- [ ] Muster entlang einer Körperkante (heute: Kurve selbst zeichnen); Kreismuster um eine schräge Achse (heute immer um die Senkrechte)
+- [x] Kreismuster auch um eine Achse quer (X) oder längs (Y), mit Mitte Z – z. B. Löcher rund um ein liegendes Rohr; KI-Kollege kennt „Muster entlang Kurve“ und die Drehachse (Sitzung 29)
+- [ ] Muster entlang einer Körperkante (heute: Kurve selbst zeichnen); Kreismuster um eine beliebig schräge Achse
 - [ ] Bohrung an einem Skizzenpunkt (heute per Klick auf eine Fläche)
 - [x] Explosionsansicht, Fokus-Vorschau, Schnitt, Röntgen (Sitzung 9)
 - [ ] Explosion auch für die Teile innerhalb einer Gruppe (heute nur oberste Ebene)
@@ -227,7 +229,7 @@ Fertig.
 
 ## Bekannte Punkte
 
-- „An Fläche spiegeln“ merkt sich die Ebene, nicht die Fläche: Wird das Original danach breiter, bleibt die Spiegelebene stehen
+- „An Fläche spiegeln“ hängt nur an der äußersten Fläche in Achsrichtung; bei einer inneren oder schrägen Fläche bleibt die Ebene, wo sie beim Spiegeln war
 
 - Text kennt keine Unterschneidung (Kerning) – die Buchstaben stehen nach ihrer Laufweite
 - Ellipse und Text lassen sich nicht trimmen; Ellipsen-Drehung ist keine Regel (nur ein Wert)
