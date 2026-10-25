@@ -898,6 +898,7 @@ const IC = {
   slot: '<path d="M8 7h8a5 5 0 0 1 0 10H8A5 5 0 0 1 8 7z" />',
   polygon: '<path d="M12 3.5 19.5 8v8L12 20.5 4.5 16V8z" />',
   image: '<rect x="3.5" y="5" width="17" height="14" rx="1.5"/><circle cx="9" cy="10" r="1.6"/><path d="M4 17l5-4.5 3.5 3 3-2.5 4.5 4" />',
+  extend: '<path d="M4 18 13 9" /><path d="M13 9l5-5" stroke-dasharray="2.5 2"/><path d="M18 3v8M14 7h8" opacity=".55"/>',
   chip: '<rect x="7" y="7" width="10" height="10" rx="1"/><path d="M9.5 3v4M12 3v4M14.5 3v4M9.5 17v4M12 17v4M14.5 17v4M3 9.5h4M3 12h4M3 14.5h4M17 9.5h4M17 12h4M17 14.5h4" />',
   ellipse: '<ellipse cx="12" cy="12" rx="9" ry="5.5"/><path d="M12 12h.01" />',
   rectCenter: '<rect x="4" y="6" width="16" height="12" rx="1"/><path d="M12 12h.01 M12 12 20 18" opacity=".55"/>',
@@ -1037,12 +1038,12 @@ const HELP = {
  },
  "circle": {
   "tip": "Runden Kreis vom Mittelpunkt aufziehen",
-  "hilfe": "Setze den ersten Klick in die Mitte, ziehe den Kreis groß und klicke ein zweites Mal für den Rand.",
+  "hilfe": "Setze den ersten Klick in die Mitte, ziehe den Kreis groß und klicke ein zweites Mal für den Rand. Rechts kannst du auch „Zwei Punkte“ (Durchmesser) oder „Drei Punkte“ wählen – praktisch, wenn ein Kreis genau durch vorhandene Punkte gehen soll.",
   "tipp": "Tracery fragt nach dem Durchmesser (der ganzen Breite), nicht nach dem Radius."
  },
  "arc": {
   "tip": "Gebogene Linie über drei Punkte",
-  "hilfe": "Klicke zuerst auf den Startpunkt, dann auf den Endpunkt und bestimme mit dem dritten Klick die Biegung.",
+  "hilfe": "Klicke zuerst auf den Startpunkt, dann auf den Endpunkt und bestimme mit dem dritten Klick die Biegung. Mit „Tangential“ klickst du auf das Ende einer Linie oder eines Bogens und dann auf den Endpunkt – der Bogen schließt ohne Knick an.",
   "tipp": "Wenn der Bogen in die falsche Richtung schnappt, ziehe den Mauszeiger einfach über die gedachte Verbindungslinie auf die andere Seite."
  },
  "slot": {
@@ -1399,6 +1400,26 @@ const HELP = {
   "tip": "Fertige Umrisse mit echten Maßen einsetzen",
   "hilfe": "Wähle rechts eine Schablone – Pin-Raster, Lüftungsgitter oder ein Chip-Gehäuse (QFP, QFN, BGA, SOIC, DIP) – und stell Anzahl, Raster und Größen ein. Ein Klick ins Bild setzt sie mit der Mitte an diese Stelle; am Nullpunkt oder an Mittelpunkten rastet sie ein.",
   "tipp": "Für einen Chip das Gehäuse hochziehen und die Pins als eigene Flächen etwas niedriger – oder alles als Aussparung für einen Halter. Die Standardmaße bitte mit dem Datenblatt vergleichen."
+ },
+ "extend2d": {
+  "tip": "Linie bis zur nächsten Kante verlängern",
+  "hilfe": "Klick nahe an das Ende einer Linie. Sie wächst geradeaus bis zur nächsten Linie, zum nächsten Bogen oder Kreis und hängt dort per Regel fest – beim Überfahren siehst du es gestrichelt.",
+  "tipp": "Das Gegenstück zu „Trimmen“: Zusammen schließt du damit Umrisse schnell, ohne Punkte genau treffen zu müssen."
+ },
+ "draft": {
+  "tip": "Seitenwände schräg stellen (Entformungsschräge)",
+  "hilfe": "„Schräge“ unter „Kanten“ neigt alle senkrechten Seitenwände des Körpers um den eingestellten Winkel (Standard 3°). Die Unterseite behält ihre Form, nach oben wird der Körper schmaler.",
+  "tipp": "Wichtig für Gussformen und Silikonteile: Mit 1–3° lässt sich ein Teil viel leichter aus der Form lösen. Negative Winkel machen ihn nach oben breiter."
+ },
+ "threadRod": {
+  "tip": "Außengewinde zum Drucken",
+  "hilfe": "Ein Bolzen mit echtem metrischem Gewinde (M3 bis M16). Verbinde ihn mit einem Körper, z. B. für einen Schraubdeckel oder einen Antennenhalter.",
+  "tipp": "Unter M5 werden gedruckte Gewinde selten sauber – dort lieber Gewindeeinsätze oder echte Schrauben nehmen."
+ },
+ "threadHole": {
+  "tip": "Innengewinde zum Drucken",
+  "hilfe": "Ein Loch mit echtem metrischem Innengewinde und etwas Spiel, damit eine normale Schraube oder ein gedruckter Bolzen hineinpasst.",
+  "tipp": "Das Spiel (Standard 0,3 mm) hängt vom Drucker ab: Klemmt es, mach es größer; wackelt es, kleiner."
  }
 };
 
@@ -2852,8 +2873,10 @@ const SKO = (() => {
     bga: { name: 'Chip BGA', p: { nx: 10, ny: 10, pitch: 0.8, d: 0.4, body: 9 } },
     soic: { name: 'Chip SOIC / SO', p: { n: 8, pitch: 1.27, bodyL: 4.9, bodyW: 3.9, span: 6, padW: 0.41 } },
     dip: { name: 'Chip DIP (Durchsteck)', p: { n: 8, pitch: 2.54, row: 7.62, d: 0.8, bodyL: 9.8, bodyW: 6.35 } },
+    usbc: { name: 'Ausschnitt USB-C', p: { w: 9.5, h: 3.8 } },
+    mhole: { name: 'Befestigungslöcher im Rechteck', p: { w: 30.5, h: 30.5, d: 3.4 } },
   };
-  const TPLNAMES = { nx: 'Anzahl X', ny: 'Anzahl Y', n: 'Anzahl', pitch: 'Raster', d: 'Ø', len: 'Länge', w: 'Breite', body: 'Gehäuse', padW: 'Pin-Breite', padL: 'Pin-Länge', ep: 'Mittelfläche', bodyL: 'Gehäuse lang', bodyW: 'Gehäuse breit', span: 'Spannweite', row: 'Reihenabstand' };
+  const TPLNAMES = { nx: 'Anzahl X', ny: 'Anzahl Y', n: 'Anzahl', pitch: 'Raster', d: 'Ø', len: 'Länge', w: 'Breite', body: 'Gehäuse', padW: 'Pin-Breite', padL: 'Pin-Länge', ep: 'Mittelfläche', bodyL: 'Gehäuse lang', bodyW: 'Gehäuse breit', span: 'Spannweite', row: 'Reihenabstand', h: 'Höhe' };
   const pr1 = (v) => Math.round(v * 1e4) / 1e4;
   function tplEnts(type, P, c) {
     const out = [];
@@ -2875,6 +2898,8 @@ const SKO = (() => {
     }
     else if (type === 'bga') { const nx = int('nx', 10), ny = int('ny', 10), t = pos('pitch', 0.8), r = pos('d', 0.4) / 2, B = Math.max(pos('body', 9) / 2, ((Math.max(nx, ny) - 1) * t) / 2 + r + 0.2); R(-B, -B, B, B); for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) C((i - (nx - 1) / 2) * t, (j - (ny - 1) / 2) * t, r); }
     else if (type === 'soic') { const n = Math.max(2, Math.round(pos('n', 8) / 2) * 2), s = n / 2, t = pos('pitch', 1.27), L = pos('bodyL', 4.9) / 2, W = pos('bodyW', 3.9) / 2, S = Math.max(pos('span', 6) / 2, W + 0.2), pw = pos('padW', 0.41) / 2; R(-L, -W, L, W); for (let i = 0; i < s; i++) { const x = (i - (s - 1) / 2) * t; R(x - pw, -S, x + pw, -W); R(x - pw, W, x + pw, S); } }
+    else if (type === 'usbc') { const w = pos('w', 9.5), hh = Math.min(pos('h', 3.8), w); out.push({ id: uid('e'), type: 'slot', a: pr([c[0] - (w - hh) / 2, c[1]]), b: pr([c[0] + (w - hh) / 2, c[1]]), r: pr1(hh / 2) }); }
+    else if (type === 'mhole') { const w = pos('w', 30.5) / 2, hh = pos('h', 30.5) / 2, r = pos('d', 3.4) / 2; for (const sx of [-1, 1]) for (const sy of [-1, 1]) C(sx * w, sy * hh, r); }
     else if (type === 'dip') { const n = Math.max(2, Math.round(pos('n', 8) / 2) * 2), s = n / 2, t = pos('pitch', 2.54), rw = pos('row', 7.62) / 2, r = pos('d', 0.8) / 2, L = pos('bodyL', 9.8) / 2, W = pos('bodyW', 6.35) / 2; R(-L, -W, L, W, true); for (let i = 0; i < s; i++) { const x = (i - (s - 1) / 2) * t; C(x, -rw, r); C(x, rw, r); } }
     return out;
   }
@@ -4762,6 +4787,15 @@ const LIB = [
     { k: 'depth', label: 'Taschentiefe', type: 'num', def: null, auto: true },
     { k: 'length', label: 'Lochtiefe', type: 'num', def: 12 },
   ] },
+  { lib: 'threadHole', label: 'Gewindeloch (gedruckt)', role: 'hole', icon: 'target', desc: 'Echtes Innengewinde zum Drucken, mit etwas Spiel', params: [
+    { k: 'size', label: 'Gewinde', type: 'select', options: ['M4', 'M5', 'M6', 'M8', 'M10', 'M12', 'M16'], def: 'M6' },
+    { k: 'length', label: 'Tiefe', type: 'num', def: 10 },
+    { k: 'clear', label: 'Spiel', type: 'num', def: 0.3 },
+  ] },
+  { lib: 'threadRod', label: 'Gewindebolzen', role: 'solid', icon: 'target', desc: 'Außengewinde (ISO metrisch) – z. B. für gedruckte Schraubdeckel', params: [
+    { k: 'size', label: 'Gewinde', type: 'select', options: ['M3', 'M4', 'M5', 'M6', 'M8', 'M10', 'M12', 'M16'], def: 'M6' },
+    { k: 'length', label: 'Länge', type: 'num', def: 12 },
+  ] },
   { lib: 'insert', label: 'Gewindeeinsatz', role: 'hole', icon: 'target', desc: 'Loch für einen Einschmelz-Gewindeeinsatz', params: [
     { k: 'size', label: 'Gewinde', type: 'select', options: ['M2', 'M2.5', 'M3', 'M4', 'M5', 'M6', 'M8'], def: 'M3' },
     { k: 'depth', label: 'Tiefe', type: 'num', def: null, auto: true },
@@ -6240,6 +6274,7 @@ const Panels = (() => {
             const fr = h('div', { class: 'finish-row' + (ferr ? ' bad' : ''), title: ferr ? ferr.message : '' });
             fr.innerHTML = icon(fin.type === 'chamfer' ? 'chamfer' : fin.type === 'shell' ? 'shell' : 'fillet');
             if (fin.type === 'shell') fr.append(h('span', null, 'Wandstärke ' + fmt(Model.num(fin.r, V, 2), 2) + ' mm'));
+            else if (fin.type === 'draft') fr.append(h('span', null, 'Entformungsschräge ' + fmt(Model.num(fin.r, V, 3), 1) + '°'));
             else fr.append(h('span', null, (fin.type === 'chamfer' ? 'Fase ' : 'Rundung ') + fmt(Model.num(fin.r, V, 1), 2) + ' mm' + (typeof fin.edges === 'string' ? ' · ' + ({ all: 'alle Kanten', top: 'oben', bottom: 'unten', vertical: 'senkrecht', horizontal: 'waagerecht' }[fin.edges] || '') : ' · ' + (fin.edges || []).length + ' Kante' + ((fin.edges || []).length === 1 ? '' : 'n'))));
             fr.onclick = () => App.select([it.id]);
             li.append(fr);
@@ -6633,6 +6668,13 @@ const Panels = (() => {
       for (const fin of (it.finishes || []).filter((x) => x.type !== 'shell')) {
         const err = App.errorsFor(it.id).find((x) => x.finishId === fin.id);
         const row = h('div', { class: 'fields', style: { gridTemplateColumns: '1fr auto', alignItems: 'end' } });
+        if (fin.type === 'draft') {
+          const nf = UI.numField({ id: 'fin-' + fin.id, label: 'Entformungsschräge', value: fin.r, unit: '°', onCommit: (v) => Actions.setFinish(it.id, fin.id, { r: v }) });
+          if (err) nf.querySelector('.inp').classList.add('invalid');
+          const del = h('button', { type: 'button', class: 'btn ghost small', 'aria-label': 'Entfernen', 'data-tip': 'Entfernen' }); del.innerHTML = icon('trash');
+          del.onclick = () => Actions.removeFinish(it.id, fin.id);
+          row.append(nf, del); ks.append(row); continue;
+        }
         const lbl = (fin.type === 'chamfer' ? 'Fase' : 'Rundung') + (typeof fin.edges === 'string' ? ' · ' + ({ all: 'alle', top: 'oben', bottom: 'unten', vertical: 'senkrecht', horizontal: 'waagerecht' }[fin.edges] || '') : ` · ${(fin.edges || []).length} Kante${(fin.edges || []).length === 1 ? '' : 'n'}`);
         const nf = UI.numField({ id: 'fin-' + fin.id, label: lbl, value: fin.r, onCommit: (v) => Actions.setFinish(it.id, fin.id, { r: v }) });
         if (err) nf.querySelector('.inp').classList.add('invalid');
@@ -6643,6 +6685,7 @@ const Panels = (() => {
       const kr = h('div', { class: 'btn-row' });
       const mk = (label, sel) => { const b = h('button', { type: 'button', class: 'btn small', 'data-help': 'fillet' }); b.innerHTML = icon('fillet') + label; b.onclick = () => { Actions.finishAll(it.id, 'fillet', sel, 1); }; return b; };
       kr.append(mk('Alle runden', 'all'), mk('Senkrechte', 'vertical'), mk('Obere', 'top'));
+      if (!(it.finishes || []).some((x) => x.type === 'draft')) { const db = h('button', { type: 'button', class: 'btn small pro', id: 'btn-draft', 'data-help': 'draft' }); db.innerHTML = icon('chamfer') + 'Schräge'; db.onclick = () => Actions.finishAll(it.id, 'draft', 'all', 3); kr.append(db); }
       ks.append(kr);
       ks.append(h('div', { class: 'hint-box', html: 'Oder klick im Modell <b>direkt auf eine Kante</b> und wähle Abrunden.' }));
       w.append(ks);
@@ -6994,6 +7037,8 @@ const Place = (() => {
     if (d.lib === 'screwHole') return [-3.5, -3.5, -(p.length || 10), 3.5, 3.5, 0.2];
     if (d.lib === 'nutTrap') return [-3.5, -3.5, -12, 3.5, 3.5, 0.2];
     if (d.lib === 'insert') return [-2, -2, -7.7, 2, 2, 0.2];
+    if (d.lib === 'threadHole') return [-3.5, -3.5, -(p.length || 10), 3.5, 3.5, 0.2];
+    if (d.lib === 'threadRod') return [-3, -3, 0, 3, 3, p.length || 12];
     if (d.lib === 'slotHole') return [-10, -2.3, -10, 10, 2.3, 0.2];
     if (d.lib === 'snapHook') return [0, -4, 0, 2.8, 4, 12];
     if (d.lib === 'hinge') return [-20, -17.5, 0, 20, 17.5, 5.3];
@@ -7537,6 +7582,7 @@ const Sketch = (() => {
     { id: 'spline', icon: 'spline', label: 'Spline', key: 'S', tip: 'Spline: weiche Kurve durch Punkte – Enter beendet' },
     { id: 'corner', icon: 'fillet', label: 'Ecke runden', key: 'K', tip: 'Ecke zwischen zwei Linien runden oder fasen – auch an Rechteck und Vieleck', sep: true },
     { id: 'trim', icon: 'trim', label: 'Trimmen', key: 'T', tip: 'Überstehende Stücke wegschneiden' },
+    { id: 'extend', icon: 'extend', label: 'Verlängern', key: 'U', tip: 'Linie bis zur nächsten Kante verlängern' },
     { id: 'offset', icon: 'offset2d', label: 'Versatz', key: 'F', tip: 'Parallele Kopie im Abstand – bleibt per Regel verbunden' },
     { id: 'mirror', icon: 'mirror', label: 'Spiegeln', key: 'M', tip: 'An einer Linie spiegeln – legt Symmetrie-Regeln an' },
     { id: 'patrect', icon: 'patternRect', label: 'Rechteckmuster', key: 'Q', tip: 'Elemente in Reihen und Spalten vervielfachen' },
@@ -7544,7 +7590,7 @@ const Sketch = (() => {
     { id: 'dim', icon: 'dim', label: 'Maß', key: 'D', tip: 'Maß festlegen – auch als Formel wie breite/2', sep: true },
     { id: 'bg', icon: 'image', label: 'Bild-Vorlage', key: 'I', tip: 'Foto oder Zeichnung hinterlegen und auf echte Größe bringen – zum Nachzeichnen' },
   ];
-  const HELPKEY = { tpl: 'sketchTemplate', corner: 'corner2d', text: 'sketchText', bg: 'sketchImage', poly: 'polygon', dim: 'dimension', offset: 'offset2d', mirror: 'mirror2d', patrect: 'patternRect2d', patcirc: 'patternCirc2d' };
+  const HELPKEY = { extend: 'extend2d', tpl: 'sketchTemplate', corner: 'corner2d', text: 'sketchText', bg: 'sketchImage', poly: 'polygon', dim: 'dimension', offset: 'offset2d', mirror: 'mirror2d', patrect: 'patternRect2d', patcirc: 'patternCirc2d' };
   const HINTS = {
     select: 'Element anklicken zum Bearbeiten. Endpunkte lassen sich ziehen. <b>Entf</b> löscht.',
     line: 'Klick setzt Punkte. Zahl tippen für genaue Länge. Am Startpunkt schließen oder <b>Enter</b> zum Beenden.',
@@ -7552,6 +7598,7 @@ const Sketch = (() => {
     circle: 'Mittelpunkt klicken, dann Größe. Oder Durchmesser eintippen.',
     bg: 'Lade ein Foto oder eine Zeichnung als Vorlage. Mit <b>Maßstab festlegen</b> klickst du zwei Punkte an, deren Abstand du kennst – dann stimmt die Größe. Ziehen verschiebt das Bild.',
     bgcal: 'Klick den ersten Punkt auf dem Bild an, dann den zweiten. Danach tippst du den echten Abstand ein.',
+    extend: 'Klick nahe an das Ende einer Linie – sie wächst bis zur nächsten Linie, zum nächsten Bogen oder Kreis und bleibt dort per Regel hängen.',
     tpl: 'Schablone und Maße rechts wählen, dann ins Bild klicken – der Klick ist die Mitte. Fängt an Nullpunkt und Mittelpunkten.',
     text: 'Text, Höhe und Schrift rechts einstellen, dann ins Bild klicken. Der Klick legt den Anfang der Grundlinie fest (bei „Mitte“ die Mitte).',
     ellipse: 'Mittelpunkt klicken, dann das Ende der ersten Achse (legt Länge und Drehung fest), dann die Breite. Oder Breite <b>Tab</b> Höhe eintippen.',
@@ -8528,6 +8575,7 @@ const Sketch = (() => {
       const en = addEnt({ type: 'text', a: p.slice(), s: T.s, h: T.h, font: T.font, align: T.align, rot: 0 });
       S.sel = en.id; reapply(); render(); Panels.renderRight(); return;
     }
+    if (t === 'extend') { extendAt(uv0); return; }
     if (t === 'trim') { S.trimming = true; if (trimAt(uv0)) Panels.renderRight(); return; }
     if (t === 'offset') { offsetDown(uv0, e); return; }
     if (t === 'mirror') { mirrorDown(uv0); return; }
@@ -8559,6 +8607,14 @@ const Sketch = (() => {
       if (!S.draft) S.draft = { c: p };
       else if (!S.draft.ax) { if (SK.d2(S.draft.c, p) > 1e-6) S.draft.ax = p; }
       else { const q = ellDraft(S.draft, p); if (q.ry > 1e-6) addEnt({ type: 'ellipse', c: S.draft.c, rx: round(q.rx, 4), ry: round(q.ry, 4), rot: q.rot }); S.draft = null; hideEntry(); }
+    } else if (t === 'circle' && S.circMode && S.circMode !== 'center') {
+      const need = S.circMode === '3p' ? 3 : 2;
+      if (!S.draft) S.draft = { pts: [p] };
+      else if (!S.draft.pts.some((q) => SK.d2(q, p) < 1e-6)) S.draft.pts.push(p);
+      if (S.draft.pts.length >= need) { const ci = circOfDraft(S.draft.pts); if (ci && ci.r > 1e-6) addEnt({ type: 'circle', c: ci.c.map((v) => round(v, 4)), r: round(ci.r, 4) }); S.draft = null; }
+    } else if (t === 'arc' && S.arcMode === 'tan') {
+      if (!S.draft) { const st = tanStart(uv0); if (!st) { UI.toast('Klick zuerst auf das Ende einer Linie oder eines Bogens – dort setzt der Bogen tangential an.', { icon: 'info' }); return; } S.draft = { tan: st }; }
+      else { const g = tanArc(S.draft.tan, p); if (g) { const en = addEnt({ type: 'arc', a: S.draft.tan.p.slice(), m: g.m.map((v) => round(v, 4)), b: p.slice() }); S.cons.push({ id: uid('k'), type: 'tangent', refs: [{ e: S.draft.tan.e }, { e: en.id }] }, { id: uid('k'), type: 'coincident', refs: [{ e: S.draft.tan.e, p: S.draft.tan.k }, { e: en.id, p: 'a' }] }); if (!reapply().ok) { S.cons.splice(-2); reapply(); } } S.draft = null; }
     } else if (t === 'circle') {
       if (!S.draft) S.draft = { c: p };
       else { const r = SK.d2(S.draft.c, p); if (r > 1e-6) addEnt({ type: 'circle', c: S.draft.c, r: round(r, 4) }); S.draft = null; hideEntry(); }
@@ -8642,6 +8698,74 @@ const Sketch = (() => {
     m.renderOrder = 15; grp.add(m);
     if (S.tool === 'bgcal' && S.bgCal) { const cur = S.cursor ? S.cursor.p : S.bgCal[0]; lineObj([S.bgCal[0], cur], Viewer.theme.accent, 2, { dashed: true }); label(`${fmt(SK.d2(S.bgCal[0], cur), 2)} mm`, cur); }
   }
+  // Verlängern: Linienende bis zum nächsten Schnitt mit einem anderen Element
+  function extendTarget(uv) {
+    const hit = SK.hit(S.ents, uv, pxSize() * 9);
+    if (!hit || hit.type !== 'line') return null;
+    const k = SK.d2(uv, hit.a) < SK.d2(uv, hit.b) ? 'a' : 'b', P = hit[k], Q = k === 'a' ? hit.b : hit.a;
+    const L = SK.d2(P, Q); if (L < 1e-9) return null;
+    const u = [(P[0] - Q[0]) / L, (P[1] - Q[1]) / L];
+    let best = null;
+    const take = (t, e) => { if (t > 1e-6 && (!best || t < best.t)) best = { t, e }; };
+    const raySeg = (a, b, e) => { const dx = b[0] - a[0], dy = b[1] - a[1], den = u[0] * dy - u[1] * dx; if (Math.abs(den) < 1e-12) return; const wx = a[0] - P[0], wy = a[1] - P[1]; const t = (wx * dy - wy * dx) / den, s = (wx * u[1] - wy * u[0]) / den; if (s >= -1e-9 && s <= 1 + 1e-9) take(t, e); };
+    const rayCirc = (c, r, e, okAng) => { const fx = P[0] - c[0], fy = P[1] - c[1], bb = fx * u[0] + fy * u[1], cc = fx * fx + fy * fy - r * r, D = bb * bb - cc; if (D < 0) return; for (const t of [-bb - Math.sqrt(D), -bb + Math.sqrt(D)]) { const q = [P[0] + u[0] * t, P[1] + u[1] * t]; if (!okAng || okAng(q)) take(t, e); } };
+    for (const e of S.ents) {
+      if (e.id === hit.id) continue;
+      if (e.type === 'line') raySeg(e.a, e.b, e);
+      else if (e.type === 'circle') rayCirc(e.c, e.r, e);
+      else if (e.type === 'arc') { const ai = SK.arcInfo(e.a, e.m, e.b); if (ai) rayCirc(ai.c, ai.r, e, (q) => SK.distEnt(e, q) < 0.02 * ai.r + 0.05); }
+      else for (const s of SK.segsOf(e)) { const pts = SK.segPoints(s); for (let i = 1; i < pts.length; i++) raySeg(pts[i - 1], pts[i], e); }
+    }
+    if (!best) return { line: hit, k, none: true };
+    return { line: hit, k, p: [P[0] + u[0] * best.t, P[1] + u[1] * best.t], other: best.e };
+  }
+  function extendAt(uv) {
+    const T = extendTarget(uv);
+    if (!T) { UI.toast('Klick nahe an das Ende einer Linie.', { icon: 'info' }); return; }
+    if (T.none) { UI.toast('In dieser Richtung liegt nichts, bis wohin die Linie wachsen könnte.', { icon: 'info' }); return; }
+    pushUndo();
+    const L = S.ents.find((e) => e.id === T.line.id);
+    L[T.k] = T.p.map((v) => round(v, 6));
+    const dropped = S.dims.filter((d) => d.e === L.id && d.k === 'len');
+    S.dims = S.dims.filter((d) => !(d.e === L.id && d.k === 'len'));
+    if (['line', 'circle', 'arc'].includes(T.other.type)) S.cons.push({ id: uid('k'), type: 'coincident', refs: [{ e: L.id, p: T.k }, { e: T.other.id }] });
+    const r = reapply();
+    if (r && !r.ok) { sketchUndo(); UI.toast('Das geht nicht mit den Regeln dieser Skizze zusammen.', { kind: 'bad' }); return; }
+    if (dropped.length) UI.toast('Das Längen-Maß der Linie wurde entfernt.', { icon: 'info' });
+    render(); Panels.renderRight();
+  }
+  // Kreis aus 2 Punkten (Durchmesser) oder 3 Punkten
+  function circOfDraft(pts) {
+    if (pts.length === 2) return { c: [(pts[0][0] + pts[1][0]) / 2, (pts[0][1] + pts[1][1]) / 2], r: SK.d2(pts[0], pts[1]) / 2 };
+    const ai = pts.length >= 3 ? SK.arcInfo(pts[0], pts[1], pts[2]) : null; return ai ? { c: ai.c, r: ai.r } : null;
+  }
+  // Tangentialer Bogen: Start am Ende einer Linie oder eines Bogens, Richtung = dort weiter
+  function tanStart(uv) {
+    const tol = pxSize() * 10; let best = null;
+    for (const e of S.ents) {
+      if (e.type !== 'line' && e.type !== 'arc') continue;
+      for (const k of ['a', 'b']) {
+        const d = SK.d2(e[k], uv); if (d > tol || (best && d >= best.d)) continue;
+        let t;
+        if (e.type === 'line') { const o = k === 'a' ? e.b : e.a; t = [e[k][0] - o[0], e[k][1] - o[1]]; }
+        else { const ai = SK.arcInfo(e.a, e.m, e.b); if (!ai) continue; const r = [e[k][0] - ai.c[0], e[k][1] - ai.c[1]]; const ccwAtK = k === 'b' ? ai.sweep > 0 : ai.sweep < 0; t = ccwAtK ? [-r[1], r[0]] : [r[1], -r[0]]; }
+        const L = Math.hypot(t[0], t[1]); if (L < 1e-9) continue;
+        best = { e: e.id, k, p: e[k], t: [t[0] / L, t[1] / L], d };
+      }
+    }
+    return best;
+  }
+  function tanArc(st, b) {
+    const a = st.p, v = [b[0] - a[0], b[1] - a[1]], n = [-st.t[1], st.t[0]];
+    const dn = v[0] * n[0] + v[1] * n[1]; if (Math.abs(dn) < 1e-6) return null;
+    const r = (v[0] * v[0] + v[1] * v[1]) / (2 * dn), c = [a[0] + n[0] * r, a[1] + n[1] * r];
+    // Mittelpunkt des Bogens: Winkelhalbierende zwischen a und b auf der Seite, in die t zeigt
+    const ang = (p) => Math.atan2(p[1] - c[1], p[0] - c[0]);
+    const a0 = ang(a), a1 = ang(b), ccw = r > 0;
+    let sw = ccw ? a1 - a0 : a0 - a1; while (sw <= 0) sw += Math.PI * 2; while (sw > Math.PI * 2) sw -= Math.PI * 2;
+    const am = a0 + (ccw ? sw / 2 : -sw / 2), R = Math.abs(r);
+    return { c, r: R, m: [c[0] + Math.cos(am) * R, c[1] + Math.sin(am) * R] };
+  }
   function slotR(a, b, p) { const L = SK.d2(a, b); if (L < 1e-9) return SK.d2(a, p); const ux = (b[0] - a[0]) / L, uy = (b[1] - a[1]) / L; return Math.abs((p[0] - a[0]) * -uy + (p[1] - a[1]) * ux); }
   function commitDraftPolyline() { if (!S || !S.draft) return; if (S.tool === 'line') S.draft = null; else if (S.tool === 'spline') finishSpline(false); }
   let lastMouse = null;
@@ -8666,6 +8790,7 @@ const Sketch = (() => {
     }
     if (S.tool === 'trim') { if (S.trimming && (e.buttons & 1)) trimAt(uv0); trimHoverAt(uv0); S.cursor = null; render(); return; }
     if (S.tool === 'corner') { S.cornerHover = cornerFind(uv0); S.cursor = null; render(); return; }
+    if (S.tool === 'extend') { const T = extendTarget(uv0); S.extHover = T && !T.none ? T : null; S.cursor = null; render(); return; }
     if (S.tool === 'offset' && S.draft && S.draft.off) { S.offUV = uv0; S.cursor = null; render(); return; }
     if (S.tool === 'offset' || S.tool === 'mirror' || S.tool === 'patrect' || S.tool === 'patcirc') {
       const hv = SK.hit(S.ents, uv0, pxSize() * 9); S.hoverEnt = hv ? hv.id : null;
@@ -8704,6 +8829,8 @@ const Sketch = (() => {
     if (t === 'line') return [['len', 'Länge'], ['ang', 'Winkel °']];
     if (t === 'rect') return [['w', 'Breite'], ['h', 'Höhe']];
     if (t === 'ellipse') return [['w', 'Breite'], ['h', 'Höhe']];
+    if (t === 'circle' && d.pts) return null;
+    if (t === 'arc') return null;
     if (t === 'circle') return [['d', 'Ø']];
     if (t === 'poly') return [['d', 'Ø']];
     if (t === 'slot' && !d.b) return [['len', 'Länge'], ['ang', 'Winkel °']];
@@ -8918,11 +9045,15 @@ const Sketch = (() => {
         if (!d.ax) { const r = SK.d2(d.c, cur); lineObj([[2 * d.c[0] - cur[0], 2 * d.c[1] - cur[1]], cur], acc, 1.4, { dashed: true }); label(`${fmt(2 * r, 2)} mm`, cur); }
         else { const q = ellDraft(d, cur); lineObj([[2 * d.c[0] - d.ax[0], 2 * d.c[1] - d.ax[1]], d.ax], acc, 1, { dashed: true }); if (q.ry > 1e-6) { const pts = SK.ellipsePoints(d.c, q.rx, q.ry, q.rot); pts.push(pts[0]); lineObj(pts, acc, 2.2); } label(`${fmt(2 * q.rx, 2)} × ${fmt(2 * q.ry, 2)}`, cur); }
       }
-      if (t === 'circle') { const r = SK.d2(d.c, cur); lineObj(SK.segPoints({ t: 'circle', c: d.c, r }), acc, 2.2); lineObj([d.c, cur], acc, 1, { dashed: true }); label(`Ø ${fmt(2 * r, 2)}`, cur); }
+      if (t === 'circle' && d.pts) { for (const q of d.pts) label('•', q, 'snaptip'); const ci = circOfDraft([...d.pts, cur]); if (ci && d.pts.length + 1 >= 2) { lineObj(SK.segPoints({ t: 'circle', c: ci.c, r: ci.r }), acc, d.pts.length + 1 >= (S.circMode === '3p' ? 3 : 2) ? 2.2 : 1.2, { dashed: d.pts.length + 1 < (S.circMode === '3p' ? 3 : 2) }); label(`Ø ${fmt(2 * ci.r, 2)}`, cur); } }
+      else if (t === 'arc' && d.tan) { const g = tanArc(d.tan, cur); if (g) { lineObj(SK.arcPoints(d.tan.p, g.m, cur), acc, 2.2); label(`R ${fmt(g.r, 2)}`, cur); } }
+      else if (t === 'circle') { const r = SK.d2(d.c, cur); lineObj(SK.segPoints({ t: 'circle', c: d.c, r }), acc, 2.2); lineObj([d.c, cur], acc, 1, { dashed: true }); label(`Ø ${fmt(2 * r, 2)}`, cur); }
       if (t === 'poly') { const r = SK.d2(d.c, cur); const e = { type: 'poly', c: d.c, r, n: S.polySides, rot: Math.atan2(cur[1] - d.c[1], cur[0] - d.c[0]) - Math.PI / 2 }; for (const p of entPts(e)) lineObj(p, acc, 2.2); label(`Ø ${fmt(2 * r, 2)}`, cur); }
-      if (t === 'arc') { if (!d.b) lineObj([d.a, cur], acc, 1.4, { dashed: true }); else if (SK.arcInfo(d.a, cur, d.b)) { lineObj(SK.arcPoints(d.a, cur, d.b), acc, 2.2); const ai = SK.arcInfo(d.a, cur, d.b); label(`R ${fmt(ai.r, 2)}`, cur); } }
+      if (t === 'arc' && !d.tan) { if (!d.b) lineObj([d.a, cur], acc, 1.4, { dashed: true }); else if (SK.arcInfo(d.a, cur, d.b)) { lineObj(SK.arcPoints(d.a, cur, d.b), acc, 2.2); const ai = SK.arcInfo(d.a, cur, d.b); label(`R ${fmt(ai.r, 2)}`, cur); } }
       if (t === 'slot') { if (!d.b) { lineObj([d.a, cur], acc, 1.4, { dashed: true }); label(`${fmt(SK.d2(d.a, cur), 2)} mm`, cur); } else { const r = slotR(d.a, d.b, cur); if (r > 1e-6) { const e = { type: 'slot', a: d.a, b: d.b, r }; for (const p of entPts(e)) lineObj(p, acc, 2.2); label(`Breite ${fmt(2 * r, 2)}`, cur); } } }
     }
+    // Verlängern-Vorschau
+    if (S.tool === 'extend' && S.extHover) lineObj([S.extHover.line[S.extHover.k], S.extHover.p], th.accent, 2.4, { dashed: true });
     // Schablonen-Vorschau
     if (S.tool === 'tpl' && cur && !S.step) for (const en of SKO.tplEnts(S.tpl.type, S.tpl.p, cur)) for (const q of entPts(en)) lineObj(q, acc, 1.4, { dashed: true });
     // Spline-Entwurf
@@ -9206,6 +9337,8 @@ const Sketch = (() => {
         f3.append(UI.selectField({ id: 'tx-align', label: 'Ausrichtung', value: T.align, options: [['l', 'Links'], ['m', 'Mitte'], ['r', 'Rechts']], onChange: (v) => { T.align = v; } }));
         w.append(f3);
       }
+      if (S.tool === 'circle') w.append(UI.selectField({ id: 'ci-mode', label: 'Kreis', value: S.circMode || 'center', options: [['center', 'Mitte und Größe'], ['2p', 'Zwei Punkte (Durchmesser)'], ['3p', 'Drei Punkte']], onChange: (v) => { S.circMode = v; S.draft = null; render(); } }));
+      if (S.tool === 'arc') w.append(UI.selectField({ id: 'ar-mode', label: 'Bogen', value: S.arcMode || '3p', options: [['3p', 'Start, Ende, Wölbung'], ['tan', 'Tangential an Linie oder Bogen']], onChange: (v) => { S.arcMode = v; S.draft = null; render(); } }));
       if (S.tool === 'rect') w.append(UI.selectField({ id: 'rk-mode', label: 'Aufziehen', value: S.rectMid ? 'mid' : 'corner', options: [['corner', 'Von Ecke zu Ecke'], ['mid', 'Von der Mitte aus']], onChange: (v) => { S.rectMid = v === 'mid'; if (S.draft) S.draft = null; render(); } }));
       if (S.tool === 'poly') w.append(UI.numField({ id: 'sk-n', label: 'Ecken', value: S.polySides, unit: '', expr: false, min: 3, int: true, onCommit: (v) => { S.polySides = clamp(v, 3, 64); } }));
       if (S.tool === 'patrect' || S.tool === 'patcirc') {

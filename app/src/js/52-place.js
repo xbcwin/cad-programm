@@ -10,6 +10,8 @@ const Place = (() => {
     if (d.lib === 'screwHole') return [-3.5, -3.5, -(p.length || 10), 3.5, 3.5, 0.2];
     if (d.lib === 'nutTrap') return [-3.5, -3.5, -12, 3.5, 3.5, 0.2];
     if (d.lib === 'insert') return [-2, -2, -7.7, 2, 2, 0.2];
+    if (d.lib === 'threadHole') return [-3.5, -3.5, -(p.length || 10), 3.5, 3.5, 0.2];
+    if (d.lib === 'threadRod') return [-3, -3, 0, 3, 3, p.length || 12];
     if (d.lib === 'slotHole') return [-10, -2.3, -10, 10, 2.3, 0.2];
     if (d.lib === 'snapHook') return [0, -4, 0, 2.8, 4, 12];
     if (d.lib === 'hinge') return [-20, -17.5, 0, 20, 17.5, 5.3];

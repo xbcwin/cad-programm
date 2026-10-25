@@ -1,6 +1,6 @@
 # Fortschritt
 
-Stand: 25.10.2026 · nach Sitzung 21 (19: Skizze auf Profi-Niveau · 20: magnetisches Einrasten, Rundung mit Ziehgriff · 21: Skizzieren im 3D, Übergang, Entlang Pfad)
+Stand: 25.10.2026 · nach Sitzung 22 (19: Skizze auf Profi-Niveau · 20: Magnet, Rundungs-Griff · 21: Skizzieren im 3D, Übergang, Entlang Pfad, Import · 22: Kreis/Bogen-Arten, Verlängern, Entformungsschräge, Gewinde)
 
 ## Erledigt
 
@@ -165,7 +165,8 @@ Fertig.
 - [x] Spline, Fangen, Hilfslinien (Sitzung 7)
 - [x] Spline als glatte Kurve im Kern: genaue Bézier-Stücke statt kurzer Linien (Sitzung 19)
 - [x] Ecke runden / fasen in der Skizze, Ellipse, Rechteck aus der Mitte, Text (Schrift Inter), Bild-Vorlage mit Maßstab, Regeln Mittig und Konzentrisch (Sitzung 19)
-- [ ] Kreis aus 2 / 3 Punkten, tangentialer Bogen, gebogenes Langloch, Verlängern, Teilen, Pin-Raster
+- [x] Kreis aus 2 / 3 Punkten, tangentialer Bogen, Verlängern (Sitzung 22); Pin-Raster als Schablone (Sitzung 21)
+- [ ] Gebogenes Langloch, Linie teilen, Punkt als eigenes Element
 - [ ] Ellipse und Text trimmen und versetzen; Text entlang einer Kurve
 - [ ] Muster und Versatz: Anzahl/Abstand nachträglich für das ganze Muster ändern (heute je Kopie über das Regel-Symbol)
 - [ ] Spiegeln an der X- oder Y-Achse ohne eigene Linie
@@ -206,6 +207,7 @@ Fertig.
 - [x] Skizzen-Ebene verschieben und neigen (Konstruktionsebene), Doppelklick auf ebene Fläche startet die Skizze, rechtes Panel heißt „Eigenschaften“ (Sitzung 21)
 - [x] STEP und STL importieren (Datei öffnen oder ins Fenster ziehen), Einheit wählbar; Abstand zwischen zwei Teilen genau setzen (Sitzung 21)
 - [x] Skizzen-Schablonen: Pin-Raster, Lüftungsgitter, Chip-Gehäuse QFP, QFN, BGA, SOIC, DIP mit einstellbaren Maßen (Sitzung 21)
+- [x] Entformungsschräge (Seitenwände neigen), echte metrische Gewinde: Gewindebolzen und gedrucktes Innengewinde; Schablonen USB-C-Ausschnitt und Befestigungslöcher (Sitzung 22)
 - [ ] 3D-Skizzen, Übergang mit Führungskurven, Sweep mit eigenem Querschnitt aus einer Skizze, Gelenke
 - [ ] Einsteiger-Oberfläche weiter vereinfachen: größere Knöpfe, geführte erste Schritte im leeren Projekt
 

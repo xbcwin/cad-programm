@@ -167,6 +167,7 @@ const IC = {
   slot: '<path d="M8 7h8a5 5 0 0 1 0 10H8A5 5 0 0 1 8 7z" />',
   polygon: '<path d="M12 3.5 19.5 8v8L12 20.5 4.5 16V8z" />',
   image: '<rect x="3.5" y="5" width="17" height="14" rx="1.5"/><circle cx="9" cy="10" r="1.6"/><path d="M4 17l5-4.5 3.5 3 3-2.5 4.5 4" />',
+  extend: '<path d="M4 18 13 9" /><path d="M13 9l5-5" stroke-dasharray="2.5 2"/><path d="M18 3v8M14 7h8" opacity=".55"/>',
   chip: '<rect x="7" y="7" width="10" height="10" rx="1"/><path d="M9.5 3v4M12 3v4M14.5 3v4M9.5 17v4M12 17v4M14.5 17v4M3 9.5h4M3 12h4M3 14.5h4M17 9.5h4M17 12h4M17 14.5h4" />',
   ellipse: '<ellipse cx="12" cy="12" rx="9" ry="5.5"/><path d="M12 12h.01" />',
   rectCenter: '<rect x="4" y="6" width="16" height="12" rx="1"/><path d="M12 12h.01 M12 12 20 18" opacity=".55"/>',
@@ -306,12 +307,12 @@ const HELP = {
  },
  "circle": {
   "tip": "Runden Kreis vom Mittelpunkt aufziehen",
-  "hilfe": "Setze den ersten Klick in die Mitte, ziehe den Kreis groß und klicke ein zweites Mal für den Rand.",
+  "hilfe": "Setze den ersten Klick in die Mitte, ziehe den Kreis groß und klicke ein zweites Mal für den Rand. Rechts kannst du auch „Zwei Punkte“ (Durchmesser) oder „Drei Punkte“ wählen – praktisch, wenn ein Kreis genau durch vorhandene Punkte gehen soll.",
   "tipp": "Tracery fragt nach dem Durchmesser (der ganzen Breite), nicht nach dem Radius."
  },
  "arc": {
   "tip": "Gebogene Linie über drei Punkte",
-  "hilfe": "Klicke zuerst auf den Startpunkt, dann auf den Endpunkt und bestimme mit dem dritten Klick die Biegung.",
+  "hilfe": "Klicke zuerst auf den Startpunkt, dann auf den Endpunkt und bestimme mit dem dritten Klick die Biegung. Mit „Tangential“ klickst du auf das Ende einer Linie oder eines Bogens und dann auf den Endpunkt – der Bogen schließt ohne Knick an.",
   "tipp": "Wenn der Bogen in die falsche Richtung schnappt, ziehe den Mauszeiger einfach über die gedachte Verbindungslinie auf die andere Seite."
  },
  "slot": {
@@ -668,6 +669,26 @@ const HELP = {
   "tip": "Fertige Umrisse mit echten Maßen einsetzen",
   "hilfe": "Wähle rechts eine Schablone – Pin-Raster, Lüftungsgitter oder ein Chip-Gehäuse (QFP, QFN, BGA, SOIC, DIP) – und stell Anzahl, Raster und Größen ein. Ein Klick ins Bild setzt sie mit der Mitte an diese Stelle; am Nullpunkt oder an Mittelpunkten rastet sie ein.",
   "tipp": "Für einen Chip das Gehäuse hochziehen und die Pins als eigene Flächen etwas niedriger – oder alles als Aussparung für einen Halter. Die Standardmaße bitte mit dem Datenblatt vergleichen."
+ },
+ "extend2d": {
+  "tip": "Linie bis zur nächsten Kante verlängern",
+  "hilfe": "Klick nahe an das Ende einer Linie. Sie wächst geradeaus bis zur nächsten Linie, zum nächsten Bogen oder Kreis und hängt dort per Regel fest – beim Überfahren siehst du es gestrichelt.",
+  "tipp": "Das Gegenstück zu „Trimmen“: Zusammen schließt du damit Umrisse schnell, ohne Punkte genau treffen zu müssen."
+ },
+ "draft": {
+  "tip": "Seitenwände schräg stellen (Entformungsschräge)",
+  "hilfe": "„Schräge“ unter „Kanten“ neigt alle senkrechten Seitenwände des Körpers um den eingestellten Winkel (Standard 3°). Die Unterseite behält ihre Form, nach oben wird der Körper schmaler.",
+  "tipp": "Wichtig für Gussformen und Silikonteile: Mit 1–3° lässt sich ein Teil viel leichter aus der Form lösen. Negative Winkel machen ihn nach oben breiter."
+ },
+ "threadRod": {
+  "tip": "Außengewinde zum Drucken",
+  "hilfe": "Ein Bolzen mit echtem metrischem Gewinde (M3 bis M16). Verbinde ihn mit einem Körper, z. B. für einen Schraubdeckel oder einen Antennenhalter.",
+  "tipp": "Unter M5 werden gedruckte Gewinde selten sauber – dort lieber Gewindeeinsätze oder echte Schrauben nehmen."
+ },
+ "threadHole": {
+  "tip": "Innengewinde zum Drucken",
+  "hilfe": "Ein Loch mit echtem metrischem Innengewinde und etwas Spiel, damit eine normale Schraube oder ein gedruckter Bolzen hineinpasst.",
+  "tipp": "Das Spiel (Standard 0,3 mm) hängt vom Drucker ab: Klemmt es, mach es größer; wackelt es, kleiner."
  }
 };
 

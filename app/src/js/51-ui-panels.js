@@ -174,6 +174,7 @@ const Panels = (() => {
             const fr = h('div', { class: 'finish-row' + (ferr ? ' bad' : ''), title: ferr ? ferr.message : '' });
             fr.innerHTML = icon(fin.type === 'chamfer' ? 'chamfer' : fin.type === 'shell' ? 'shell' : 'fillet');
             if (fin.type === 'shell') fr.append(h('span', null, 'Wandstärke ' + fmt(Model.num(fin.r, V, 2), 2) + ' mm'));
+            else if (fin.type === 'draft') fr.append(h('span', null, 'Entformungsschräge ' + fmt(Model.num(fin.r, V, 3), 1) + '°'));
             else fr.append(h('span', null, (fin.type === 'chamfer' ? 'Fase ' : 'Rundung ') + fmt(Model.num(fin.r, V, 1), 2) + ' mm' + (typeof fin.edges === 'string' ? ' · ' + ({ all: 'alle Kanten', top: 'oben', bottom: 'unten', vertical: 'senkrecht', horizontal: 'waagerecht' }[fin.edges] || '') : ' · ' + (fin.edges || []).length + ' Kante' + ((fin.edges || []).length === 1 ? '' : 'n'))));
             fr.onclick = () => App.select([it.id]);
             li.append(fr);
@@ -567,6 +568,13 @@ const Panels = (() => {
       for (const fin of (it.finishes || []).filter((x) => x.type !== 'shell')) {
         const err = App.errorsFor(it.id).find((x) => x.finishId === fin.id);
         const row = h('div', { class: 'fields', style: { gridTemplateColumns: '1fr auto', alignItems: 'end' } });
+        if (fin.type === 'draft') {
+          const nf = UI.numField({ id: 'fin-' + fin.id, label: 'Entformungsschräge', value: fin.r, unit: '°', onCommit: (v) => Actions.setFinish(it.id, fin.id, { r: v }) });
+          if (err) nf.querySelector('.inp').classList.add('invalid');
+          const del = h('button', { type: 'button', class: 'btn ghost small', 'aria-label': 'Entfernen', 'data-tip': 'Entfernen' }); del.innerHTML = icon('trash');
+          del.onclick = () => Actions.removeFinish(it.id, fin.id);
+          row.append(nf, del); ks.append(row); continue;
+        }
         const lbl = (fin.type === 'chamfer' ? 'Fase' : 'Rundung') + (typeof fin.edges === 'string' ? ' · ' + ({ all: 'alle', top: 'oben', bottom: 'unten', vertical: 'senkrecht', horizontal: 'waagerecht' }[fin.edges] || '') : ` · ${(fin.edges || []).length} Kante${(fin.edges || []).length === 1 ? '' : 'n'}`);
         const nf = UI.numField({ id: 'fin-' + fin.id, label: lbl, value: fin.r, onCommit: (v) => Actions.setFinish(it.id, fin.id, { r: v }) });
         if (err) nf.querySelector('.inp').classList.add('invalid');
@@ -577,6 +585,7 @@ const Panels = (() => {
       const kr = h('div', { class: 'btn-row' });
       const mk = (label, sel) => { const b = h('button', { type: 'button', class: 'btn small', 'data-help': 'fillet' }); b.innerHTML = icon('fillet') + label; b.onclick = () => { Actions.finishAll(it.id, 'fillet', sel, 1); }; return b; };
       kr.append(mk('Alle runden', 'all'), mk('Senkrechte', 'vertical'), mk('Obere', 'top'));
+      if (!(it.finishes || []).some((x) => x.type === 'draft')) { const db = h('button', { type: 'button', class: 'btn small pro', id: 'btn-draft', 'data-help': 'draft' }); db.innerHTML = icon('chamfer') + 'Schräge'; db.onclick = () => Actions.finishAll(it.id, 'draft', 'all', 3); kr.append(db); }
       ks.append(kr);
       ks.append(h('div', { class: 'hint-box', html: 'Oder klick im Modell <b>direkt auf eine Kante</b> und wähle Abrunden.' }));
       w.append(ks);

@@ -263,8 +263,10 @@ const SKO = (() => {
     bga: { name: 'Chip BGA', p: { nx: 10, ny: 10, pitch: 0.8, d: 0.4, body: 9 } },
     soic: { name: 'Chip SOIC / SO', p: { n: 8, pitch: 1.27, bodyL: 4.9, bodyW: 3.9, span: 6, padW: 0.41 } },
     dip: { name: 'Chip DIP (Durchsteck)', p: { n: 8, pitch: 2.54, row: 7.62, d: 0.8, bodyL: 9.8, bodyW: 6.35 } },
+    usbc: { name: 'Ausschnitt USB-C', p: { w: 9.5, h: 3.8 } },
+    mhole: { name: 'Befestigungslöcher im Rechteck', p: { w: 30.5, h: 30.5, d: 3.4 } },
   };
-  const TPLNAMES = { nx: 'Anzahl X', ny: 'Anzahl Y', n: 'Anzahl', pitch: 'Raster', d: 'Ø', len: 'Länge', w: 'Breite', body: 'Gehäuse', padW: 'Pin-Breite', padL: 'Pin-Länge', ep: 'Mittelfläche', bodyL: 'Gehäuse lang', bodyW: 'Gehäuse breit', span: 'Spannweite', row: 'Reihenabstand' };
+  const TPLNAMES = { nx: 'Anzahl X', ny: 'Anzahl Y', n: 'Anzahl', pitch: 'Raster', d: 'Ø', len: 'Länge', w: 'Breite', body: 'Gehäuse', padW: 'Pin-Breite', padL: 'Pin-Länge', ep: 'Mittelfläche', bodyL: 'Gehäuse lang', bodyW: 'Gehäuse breit', span: 'Spannweite', row: 'Reihenabstand', h: 'Höhe' };
   const pr1 = (v) => Math.round(v * 1e4) / 1e4;
   function tplEnts(type, P, c) {
     const out = [];
@@ -286,6 +288,8 @@ const SKO = (() => {
     }
     else if (type === 'bga') { const nx = int('nx', 10), ny = int('ny', 10), t = pos('pitch', 0.8), r = pos('d', 0.4) / 2, B = Math.max(pos('body', 9) / 2, ((Math.max(nx, ny) - 1) * t) / 2 + r + 0.2); R(-B, -B, B, B); for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) C((i - (nx - 1) / 2) * t, (j - (ny - 1) / 2) * t, r); }
     else if (type === 'soic') { const n = Math.max(2, Math.round(pos('n', 8) / 2) * 2), s = n / 2, t = pos('pitch', 1.27), L = pos('bodyL', 4.9) / 2, W = pos('bodyW', 3.9) / 2, S = Math.max(pos('span', 6) / 2, W + 0.2), pw = pos('padW', 0.41) / 2; R(-L, -W, L, W); for (let i = 0; i < s; i++) { const x = (i - (s - 1) / 2) * t; R(x - pw, -S, x + pw, -W); R(x - pw, W, x + pw, S); } }
+    else if (type === 'usbc') { const w = pos('w', 9.5), hh = Math.min(pos('h', 3.8), w); out.push({ id: uid('e'), type: 'slot', a: pr([c[0] - (w - hh) / 2, c[1]]), b: pr([c[0] + (w - hh) / 2, c[1]]), r: pr1(hh / 2) }); }
+    else if (type === 'mhole') { const w = pos('w', 30.5) / 2, hh = pos('h', 30.5) / 2, r = pos('d', 3.4) / 2; for (const sx of [-1, 1]) for (const sy of [-1, 1]) C(sx * w, sy * hh, r); }
     else if (type === 'dip') { const n = Math.max(2, Math.round(pos('n', 8) / 2) * 2), s = n / 2, t = pos('pitch', 2.54), rw = pos('row', 7.62) / 2, r = pos('d', 0.8) / 2, L = pos('bodyL', 9.8) / 2, W = pos('bodyW', 6.35) / 2; R(-L, -W, L, W, true); for (let i = 0; i < s; i++) { const x = (i - (s - 1) / 2) * t; C(x, -rw, r); C(x, rw, r); } }
     return out;
   }

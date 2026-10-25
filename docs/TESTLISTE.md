@@ -481,6 +481,24 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
   Schritte: 1. Ein Kind (ab 10) mit „Einfach“ eine Platte mit vier Löchern bauen lassen, ohne zu helfen.
   Erwartet: Es findet Körper, Löcher und Exportieren allein; notieren, wo es hängen bleibt.
 
+## Kleine Werkzeuge, Schräge, Gewinde (neu in Sitzung 22)
+
+- [x] **Kreis- und Bogen-Arten**
+  Schritte: Kreis-Werkzeug, rechts „Drei Punkte“, drei Punkte klicken; „Zwei Punkte“; Bogen-Werkzeug „Tangential“, auf ein Linienende klicken, dann den Endpunkt.
+  Erwartet: Kreis genau durch die Punkte; Kreis mit den zwei Punkten als Durchmesser; Bogen schließt ohne Knick an (Regeln tangential und deckungsgleich).
+- [x] **Verlängern**
+  Schritte: Werkzeug „Verlängern“ (U), nahe an das Ende einer Linie fahren und klicken.
+  Erwartet: Gestrichelte Vorschau bis zur nächsten Linie; danach endet die Linie genau dort und hängt per Regel daran.
+- [x] **Entformungsschräge**
+  Schritte: Quader wählen, unter „Kanten“ auf „Schräge“; Winkel auf −2 ändern.
+  Erwartet: Seitenwände 3° nach innen geneigt (oben kleiner); mit −2° nach außen.
+- [x] **Gewinde**
+  Schritte: Bauteile → „Gewindebolzen“ M6; „Gewindeloch (gedruckt)“ auf eine Platte setzen.
+  Erwartet: Bolzen mit sichtbarem Gewindegang; in der Platte ein Innengewinde, keine Fehler.
+- [ ] **Passt das gedruckte Gewinde?**
+  Schritte: Platte mit M8-Gewindeloch und M8-Bolzen drucken.
+  Erwartet: Lässt sich verschrauben; sonst „Spiel“ anpassen und den Wert notieren.
+
 ## Skizzieren im 3D, Übergang, Entlang Pfad (neu in Sitzung 21)
 
 - [x] **Ebene verschieben und neigen**

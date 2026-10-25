@@ -2319,6 +2319,73 @@ def t_schablonen(p):
     return [ok1, ok2, ok3, ok4]
 
 
+# ---------- Sitzung 22: kleine Skizzen-Werkzeuge ----------
+def t_kreis_bogen_modi(p):
+    sketch_xy(p)
+    p.pg.keyboard.press('c'); p.wait(200)
+    p.pg.select_option('#ci-mode', '3p'); p.wait(100)
+    for q in ((10, 0), (0, 10), (-10, 0)):
+        s = to_screen(p, *q); p.pg.mouse.click(s[0], s[1]); p.wait(150)
+    c = p.ev("const e=Sketch.state.ents.find(x=>x.type==='circle'); return e && [e.c, e.r]")
+    ok1 = c and abs(c[0][0]) < 0.05 and abs(c[0][1]) < 0.05 and abs(c[1] - 10) < 0.05
+    p.pg.select_option('#ci-mode', '2p'); p.wait(100)
+    for q in ((15, 0), (35, 0)):
+        s = to_screen(p, *q); p.pg.mouse.click(s[0], s[1]); p.wait(150)
+    c2 = p.ev("const l=Sketch.state.ents.filter(x=>x.type==='circle'); return l.length===2 && [l[1].c, l[1].r]")
+    ok2 = c2 and abs(c2[0][0] - 25) < 0.05 and abs(c2[1] - 10) < 0.05
+    # tangentialer Bogen an einer Linie
+    p.ev("const S=Sketch.state; S.ents.push({id:'L',type:'line',a:[-40,-30],b:[-10,-30]}); Sketch.setTool('arc')"); p.wait(200)
+    p.pg.select_option('#ar-mode', 'tan'); p.wait(100)
+    s = to_screen(p, -10, -30); p.pg.mouse.click(s[0], s[1]); p.wait(150)
+    s = to_screen(p, -10, -10); p.pg.mouse.click(s[0], s[1]); p.wait(400)
+    a = p.ev("const S=Sketch.state; const e=S.ents.find(x=>x.type==='arc'); return e && [SK.arcInfo(e.a,e.m,e.b).c, SK.arcInfo(e.a,e.m,e.b).r, S.cons.some(k=>k.type==='tangent'), S.status.ok]")
+    ok3 = a and abs(a[0][0] + 10) < 0.05 and abs(a[0][1] + 20) < 0.05 and abs(a[1] - 10) < 0.05 and a[2] and a[3]
+    return [ok1, ok2, ok3]
+
+
+def t_verlaengern(p):
+    scene(p, [{'id': 'H', 'type': 'line', 'a': [-30, 0], 'b': [-5, 0]}, {'id': 'V', 'type': 'line', 'a': [10, -20], 'b': [10, 20]}])
+    p.pg.keyboard.press('u'); p.wait(200)
+    s = to_screen(p, -6, 0); p.pg.mouse.move(s[0], s[1]); p.wait(200)
+    hov = SS(p, "return !!S.extHover")
+    p.pg.mouse.click(s[0], s[1]); p.wait(400)
+    ok = SS(p, "const h=E('H'); return Math.abs(h.b[0]-10)<1e-6 && Math.abs(h.b[1])<1e-6 && S.cons.some(c=>c.type==='coincident' && c.refs[1].e==='V')")
+    return [hov, ok]
+
+
+def t_schraege(p):
+    p.empty(); p.ev("Actions.addPrimitive('box')"); p.wait(1500)
+    p.ev("App.change('x', d=>{ const it=d.items[0]; it.p.w=20; it.p.d=20; it.p.h=10; it.t.x=0; it.t.y=0; })"); warte_rechnen(p, 20)
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(500)
+    p.pg.click('#btn-draft'); warte_rechnen(p, 30)
+    v = volumen(p)
+    t = math.tan(math.radians(3))
+    # Pyramidenstumpf: unten 20x20, oben (20-2*10*tan3)^2
+    a1 = (20 - 2 * 10 * t) ** 2; soll = 10 / 3 * (400 + a1 + math.sqrt(400 * a1))
+    ok1 = v is not None and abs(v - soll) < 1 and p.ev("return App.errors.length") == 0
+    p.pg.fill('[id^="fin-"]', '-2'); p.pg.press('[id^="fin-"]', 'Enter'); warte_rechnen(p, 30)
+    v2 = volumen(p)
+    ok2 = v2 is not None and v2 > 4000
+    return [ok1, ok2]
+
+
+def t_gewinde(p):
+    p.empty()
+    p.ev("App.change('x', d=>{ d.items.push(Model.newItem('part',{lib:'threadRod',size:'M6',length:12},{role:'solid'})); })")
+    warte_rechnen(p, 60)
+    v = volumen(p)
+    ok1 = p.ev("return App.errors.length") == 0 and v is not None and math.pi * 2.46 ** 2 * 12 < v < math.pi * 9 * 12
+    # Innengewinde in einer Platte
+    p.ev("App.change('x', d=>{ d.items=[]; const b=Model.newItem('box',{w:20,d:20,h:10}); b.t.x=0; b.t.y=0; d.items.push(b); })"); warte_rechnen(p, 20)
+    v0 = volumen(p)
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(300)
+    p.ev("const f=Model.find(App.doc, App.doc.items[0].id); App.change('x', d=>{ const h=Model.newItem('part',{lib:'threadHole',size:'M6',length:10,clear:0.3},{role:'hole'}); h.t.z=10; Actions.attach(d, d.items[0].id, h); })")
+    warte_rechnen(p, 60)
+    v1 = volumen(p)
+    ok2 = p.ev("return App.errors.length") == 0 and v1 is not None and v0 - math.pi * 3.3 ** 2 * 10 < v1 < v0 - math.pi * 2.7 ** 2 * 10
+    return [ok1, ok2]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -2361,6 +2428,10 @@ TESTS = [
     ('Abstand zwischen zwei Teilen setzen', t_abstand_setzen),
     ('STEP/STL importieren: einlesen / Größe stimmt / Einheit Zoll / STL als Körper', t_import_step),
     ('Skizzen-Schablonen: Auswahl / QFP-48 / Rückgängig / Pin-Raster', t_schablonen),
+    ('Skizze: Kreis aus 3 / 2 Punkten / tangentialer Bogen', t_kreis_bogen_modi),
+    ('Skizze: Verlängern bis zur nächsten Linie', t_verlaengern),
+    ('Entformungsschräge: 3° nach innen / -2° nach außen', t_schraege),
+    ('Gewinde: Gewindebolzen M6 / gedrucktes Innengewinde', t_gewinde),
     ('Kreismuster: anlegen / Anzahl / folgt dem Original / Auflösen', t_kreismuster_3d),
     ('Rechteckmuster: anlegen / zweite Reihe / Formel / Maß ändern / Rückgängig', t_rechteckmuster_3d),
     ('Gespiegelte Kopie: anlegen / andere Ebene / Ebene verschieben', t_spiegelkopie),
