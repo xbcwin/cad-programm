@@ -465,8 +465,21 @@ const Interact = (() => {
     }
     if (!moveLabel) { moveLabel = h('div', { class: 'dimlabel live' }); $('#overlay').append(moveLabel); }
     const r = Viewer.canvas.getBoundingClientRect();
-    moveLabel.textContent = `X ${fmt(dx, 2)}  Y ${fmt(dy, 2)}`; moveLabel.style.display = mag ? 'none' : '';
-    moveLabel.style.left = e.clientX - r.left + 'px'; moveLabel.style.top = e.clientY - r.top - 30 + 'px';
+    let gapTxt = '';
+    if (moving.box0 && !moving.box0.isEmpty()) {
+      const lo = [moving.box0.min.x + dx, moving.box0.min.y + dy], hi = [moving.box0.max.x + dx, moving.box0.max.y + dy];
+      let gx = Infinity, gy = Infinity;
+      for (const o of App.doc.items) {
+        if (o.hidden || moving.ids.some((m) => m.id === o.id)) continue;
+        const b = Actions.worldBox(o.id); if (!b || b.isEmpty()) continue;
+        if (b.max.y > lo[1] && b.min.y < hi[1]) { const g = b.min.x >= hi[0] ? b.min.x - hi[0] : lo[0] >= b.max.x ? lo[0] - b.max.x : Infinity; gx = Math.min(gx, g); }
+        if (b.max.x > lo[0] && b.min.x < hi[0]) { const g = b.min.y >= hi[1] ? b.min.y - hi[1] : lo[1] >= b.max.y ? lo[1] - b.max.y : Infinity; gy = Math.min(gy, g); }
+      }
+      const parts = []; if (isFinite(gx)) parts.push('↔ ' + fmt(gx, 2)); if (isFinite(gy)) parts.push('↕ ' + fmt(gy, 2));
+      if (parts.length) gapTxt = ' · Abstand ' + parts.join('  ');
+    }
+    moveLabel.textContent = `X ${fmt(dx, 2)}  Y ${fmt(dy, 2)}` + gapTxt;
+    moveLabel.style.left = e.clientX - r.left + 'px'; moveLabel.style.top = e.clientY - r.top - (mag ? 54 : 30) + 'px';
     App.emit('doc'); Handles.rebuild(); liveRebuild();
   }
   function doMoveChild(e) {

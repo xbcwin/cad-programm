@@ -63,5 +63,46 @@ const Select = (() => {
     UI.toast(ids.length > 1 ? `${ids.length}× ${what} mit gleichen Maßen gewählt.` : 'Kein weiteres gleiches Teil gefunden.', { icon: ids.length > 1 ? 'check' : 'info' });
     return ids.length;
   }
-  return { setFilter, pickOpts, adjust, menu, similar, on: ev.on, get filter() { return filter; }, NAMES };
+  // ---------- Kantenkette: alle Kanten, die ohne Knick weiterlaufen ----------
+  const sub3 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const nrm3 = (v) => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
+  const crs3 = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const near = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) < 1e-3;
+  // Richtung der Kante an ihrem Ende p (zeigt von p in die Kante hinein)
+  function tangentAt(e, p) {
+    const atA = near(p, e.a);
+    if (e.t === 'LINE') return nrm3(atA ? sub3(e.b, e.a) : sub3(e.a, e.b));
+    if (e.t === 'CIRCLE' && e.c && e.n) {
+      let t = nrm3(crs3(e.n, sub3(p, e.c)));
+      // Richtung zum Kantenmittelpunkt prüfen
+      const toM = sub3(e.m, p); if (t[0] * toM[0] + t[1] * toM[1] + t[2] * toM[2] < 0) t = t.map((x) => -x);
+      return t;
+    }
+    if (e.pts && e.pts.length > 1) { const P = e.pts; return nrm3(atA ? sub3(P[1], P[0]) : sub3(P[P.length - 2], P[P.length - 1])); }
+    return null;
+  }
+  function chain() {
+    if (!App.edges.length) { UI.toast('Klick zuerst eine Kante an.', { icon: 'info' }); return 0; }
+    const id = App.edges[0].id; const r = App.results.get(id); if (!r) return 0;
+    const E = r.data.edges, done = new Set(App.edges.filter((x) => x.id === id).map((x) => x.edgeIdx)), queue = [...done];
+    while (queue.length) {
+      const i = queue.pop(), e = E[i]; if (!e || !e.a || !e.b) continue;
+      for (const p of [e.a, e.b]) {
+        if (near(e.a, e.b) && p === e.b) continue;
+        const t0 = tangentAt(e, p); if (!t0) continue;
+        E.forEach((f, j) => {
+          if (done.has(j) || !f || !f.a || !f.b) return;
+          const q = near(f.a, p) ? f.a : near(f.b, p) ? f.b : null; if (!q) return;
+          const t1 = tangentAt(f, q); if (!t1) return;
+          // ohne Knick: die eine Kante läuft genau entgegengesetzt weiter
+          if (t0[0] * t1[0] + t0[1] * t1[1] + t0[2] * t1[2] < -0.996) { done.add(j); queue.push(j); }
+        });
+      }
+    }
+    const list = [...done].map((i) => ({ id, edgeIdx: i }));
+    App.select([id], { edges: list });
+    UI.toast(`${list.length} Kanten in der Kette gewählt – z. B. alle zusammen abrunden.`, { icon: 'check' });
+    return list.length;
+  }
+  return { chain, setFilter, pickOpts, adjust, menu, similar, on: ev.on, get filter() { return filter; }, NAMES };
 })();

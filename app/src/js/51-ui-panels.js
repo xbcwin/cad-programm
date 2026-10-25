@@ -648,6 +648,7 @@ const Panels = (() => {
       b('fillet', 'Abrunden', () => Actions.addFinish('fillet', 1), 'accent', 'Kante abrunden (1 mm, danach änderbar)');
       b('chamfer', 'Abschrägen', () => Actions.addFinish('chamfer', 1), '', 'Kante abschrägen (1 mm, danach änderbar)');
       b('similar', 'Ähnliche', () => Select.similar(), '', 'Alle gleich langen Kanten dazuwählen (A)', true);
+      b('chainEdges', 'Kette', () => Select.chain(), '', 'Alle Kanten dazuwählen, die ohne Knick weiterlaufen (z. B. ein gerundeter Umriss)', true);
       sep();
     } else if (face && items.length === 1 && face.info.t === 'PLANE') {
       bar.append(h('span', { class: 'lbl' }, 'Fläche'));

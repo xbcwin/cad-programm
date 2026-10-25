@@ -902,6 +902,7 @@ const IC = {
   slot: '<path d="M8 7h8a5 5 0 0 1 0 10H8A5 5 0 0 1 8 7z" />',
   polygon: '<path d="M12 3.5 19.5 8v8L12 20.5 4.5 16V8z" />',
   image: '<rect x="3.5" y="5" width="17" height="14" rx="1.5"/><circle cx="9" cy="10" r="1.6"/><path d="M4 17l5-4.5 3.5 3 3-2.5 4.5 4" />',
+  chainEdges: '<path d="M4 16c3 0 4-8 8-8s5 8 8 8" /><circle cx="4" cy="16" r="1.8" fill="currentColor"/><circle cx="12" cy="8" r="1.8" fill="currentColor"/><circle cx="20" cy="16" r="1.8" fill="currentColor"/>',
   point: '<circle cx="12" cy="12" r="2.6" fill="currentColor"/><path d="M12 4v4M12 16v4M4 12h4M16 12h4" opacity=".55"/>',
   splitLine: '<path d="M4 18 10 12M14 10l6-6" /><circle cx="12" cy="11" r="2.2"/><path d="M9 6l6 10" opacity=".5" stroke-dasharray="2 2"/>',
   extend: '<path d="M4 18 13 9" /><path d="M13 9l5-5" stroke-dasharray="2.5 2"/><path d="M18 3v8M14 7h8" opacity=".55"/>',
@@ -1436,6 +1437,11 @@ const HELP = {
   "tip": "Einzelner Punkt in der Skizze",
   "hilfe": "Klick setzt einen Punkt. Er bildet keine Fläche, ist aber ein fester Bezug: Maße zu anderen Punkten oder Linien, Regeln wie „Mittig“ oder „Deckungsgleich“ – und später die Mitte für eine Bohrung.",
   "tipp": "Praktisch für Lochmitten auf einem Lochkreis: Punkt setzen, Abstand zur Mitte bemaßen, dann Kreismuster."
+ },
+ "chainEdges": {
+  "tip": "Kantenkette wählen",
+  "hilfe": "Wähle eine Kante und klick „Kette“: Alle Kanten, die ohne Knick weiterlaufen – etwa ein Umriss mit gerundeten Ecken – kommen dazu.",
+  "tipp": "Danach „Abrunden“ oder „Abschrägen“ – so rundest du einen ganzen Rand in einem Schritt."
  }
 };
 
@@ -4686,8 +4692,21 @@ const Interact = (() => {
     }
     if (!moveLabel) { moveLabel = h('div', { class: 'dimlabel live' }); $('#overlay').append(moveLabel); }
     const r = Viewer.canvas.getBoundingClientRect();
-    moveLabel.textContent = `X ${fmt(dx, 2)}  Y ${fmt(dy, 2)}`; moveLabel.style.display = mag ? 'none' : '';
-    moveLabel.style.left = e.clientX - r.left + 'px'; moveLabel.style.top = e.clientY - r.top - 30 + 'px';
+    let gapTxt = '';
+    if (moving.box0 && !moving.box0.isEmpty()) {
+      const lo = [moving.box0.min.x + dx, moving.box0.min.y + dy], hi = [moving.box0.max.x + dx, moving.box0.max.y + dy];
+      let gx = Infinity, gy = Infinity;
+      for (const o of App.doc.items) {
+        if (o.hidden || moving.ids.some((m) => m.id === o.id)) continue;
+        const b = Actions.worldBox(o.id); if (!b || b.isEmpty()) continue;
+        if (b.max.y > lo[1] && b.min.y < hi[1]) { const g = b.min.x >= hi[0] ? b.min.x - hi[0] : lo[0] >= b.max.x ? lo[0] - b.max.x : Infinity; gx = Math.min(gx, g); }
+        if (b.max.x > lo[0] && b.min.x < hi[0]) { const g = b.min.y >= hi[1] ? b.min.y - hi[1] : lo[1] >= b.max.y ? lo[1] - b.max.y : Infinity; gy = Math.min(gy, g); }
+      }
+      const parts = []; if (isFinite(gx)) parts.push('↔ ' + fmt(gx, 2)); if (isFinite(gy)) parts.push('↕ ' + fmt(gy, 2));
+      if (parts.length) gapTxt = ' · Abstand ' + parts.join('  ');
+    }
+    moveLabel.textContent = `X ${fmt(dx, 2)}  Y ${fmt(dy, 2)}` + gapTxt;
+    moveLabel.style.left = e.clientX - r.left + 'px'; moveLabel.style.top = e.clientY - r.top - (mag ? 54 : 30) + 'px';
     App.emit('doc'); Handles.rebuild(); liveRebuild();
   }
   function doMoveChild(e) {
@@ -6789,6 +6808,7 @@ const Panels = (() => {
       b('fillet', 'Abrunden', () => Actions.addFinish('fillet', 1), 'accent', 'Kante abrunden (1 mm, danach änderbar)');
       b('chamfer', 'Abschrägen', () => Actions.addFinish('chamfer', 1), '', 'Kante abschrägen (1 mm, danach änderbar)');
       b('similar', 'Ähnliche', () => Select.similar(), '', 'Alle gleich langen Kanten dazuwählen (A)', true);
+      b('chainEdges', 'Kette', () => Select.chain(), '', 'Alle Kanten dazuwählen, die ohne Knick weiterlaufen (z. B. ein gerundeter Umriss)', true);
       sep();
     } else if (face && items.length === 1 && face.info.t === 'PLANE') {
       bar.append(h('span', { class: 'lbl' }, 'Fläche'));
@@ -7631,7 +7651,48 @@ const Select = (() => {
     UI.toast(ids.length > 1 ? `${ids.length}× ${what} mit gleichen Maßen gewählt.` : 'Kein weiteres gleiches Teil gefunden.', { icon: ids.length > 1 ? 'check' : 'info' });
     return ids.length;
   }
-  return { setFilter, pickOpts, adjust, menu, similar, on: ev.on, get filter() { return filter; }, NAMES };
+  // ---------- Kantenkette: alle Kanten, die ohne Knick weiterlaufen ----------
+  const sub3 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const nrm3 = (v) => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
+  const crs3 = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const near = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) < 1e-3;
+  // Richtung der Kante an ihrem Ende p (zeigt von p in die Kante hinein)
+  function tangentAt(e, p) {
+    const atA = near(p, e.a);
+    if (e.t === 'LINE') return nrm3(atA ? sub3(e.b, e.a) : sub3(e.a, e.b));
+    if (e.t === 'CIRCLE' && e.c && e.n) {
+      let t = nrm3(crs3(e.n, sub3(p, e.c)));
+      // Richtung zum Kantenmittelpunkt prüfen
+      const toM = sub3(e.m, p); if (t[0] * toM[0] + t[1] * toM[1] + t[2] * toM[2] < 0) t = t.map((x) => -x);
+      return t;
+    }
+    if (e.pts && e.pts.length > 1) { const P = e.pts; return nrm3(atA ? sub3(P[1], P[0]) : sub3(P[P.length - 2], P[P.length - 1])); }
+    return null;
+  }
+  function chain() {
+    if (!App.edges.length) { UI.toast('Klick zuerst eine Kante an.', { icon: 'info' }); return 0; }
+    const id = App.edges[0].id; const r = App.results.get(id); if (!r) return 0;
+    const E = r.data.edges, done = new Set(App.edges.filter((x) => x.id === id).map((x) => x.edgeIdx)), queue = [...done];
+    while (queue.length) {
+      const i = queue.pop(), e = E[i]; if (!e || !e.a || !e.b) continue;
+      for (const p of [e.a, e.b]) {
+        if (near(e.a, e.b) && p === e.b) continue;
+        const t0 = tangentAt(e, p); if (!t0) continue;
+        E.forEach((f, j) => {
+          if (done.has(j) || !f || !f.a || !f.b) return;
+          const q = near(f.a, p) ? f.a : near(f.b, p) ? f.b : null; if (!q) return;
+          const t1 = tangentAt(f, q); if (!t1) return;
+          // ohne Knick: die eine Kante läuft genau entgegengesetzt weiter
+          if (t0[0] * t1[0] + t0[1] * t1[1] + t0[2] * t1[2] < -0.996) { done.add(j); queue.push(j); }
+        });
+      }
+    }
+    const list = [...done].map((i) => ({ id, edgeIdx: i }));
+    App.select([id], { edges: list });
+    UI.toast(`${list.length} Kanten in der Kette gewählt – z. B. alle zusammen abrunden.`, { icon: 'check' });
+    return list.length;
+  }
+  return { chain, setFilter, pickOpts, adjust, menu, similar, on: ev.on, get filter() { return filter; }, NAMES };
 })();
 // ---- 55-sketch.js ----
 // ================= Skizzen-Modus (Zeichnen auf einer Ebene) =================
@@ -10230,6 +10291,7 @@ const Commands = (() => {
     add('weak', 'Schwachstellen suchen', 'target', 'schwachstellen schwach prüfen bruch dünn rand loch festigkeit stabil', () => Weak.dialog(), { group: 'Projekt' });
     add('versions', 'Versionen: speichern, vergleichen, zurückholen', 'rollback', 'version versionen stand vergleichen zurück sichern', () => Versions.dialog(), { group: 'Projekt' });
     add('version-save', 'Jetzigen Stand als Version speichern', 'save', 'version speichern sichern stand', async () => { const n = await UI.prompt('Version speichern', 'Name der Version', 'Version ' + (Versions.list().length + 1), 'Speichern'); if (n != null) Versions.save(n); }, { group: 'Projekt' });
+    add('chain', 'Kantenkette wählen', 'chainEdges', 'kette kanten umriss tangential rand alle zusammen', () => Select.chain(), { group: 'Bearbeiten', needSel: true });
     add('similar', 'Ähnliche auswählen', 'similar', 'ähnliche gleiche alle auswählen bohrungen kanten', () => Select.similar(), { group: 'Bearbeiten', kbd: 'A', needSel: true });
     add('filter-body', 'Auswahlfilter: nur Körper', 'cube', 'filter auswahl körper', () => Select.setFilter('body'), { group: 'Ansicht' });
     add('filter-face', 'Auswahlfilter: nur Flächen', 'planeXY', 'filter auswahl flächen', () => Select.setFilter('face'), { group: 'Ansicht' });

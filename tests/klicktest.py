@@ -2151,9 +2151,10 @@ def t_magnet_koerper(p):
     s = world_screen(p, 40, 0, b0[2]); p.pg.mouse.move(s[0], s[1]); p.pg.mouse.down()
     t = world_screen(p, 40.5, -2.6, b0[2]); p.pg.mouse.move(t[0], t[1], steps=6); p.wait(300)
     lab = p.ev("return Snap.label")
+    gap_lbl = p.pg.locator('.dimlabel.live').inner_text() if p.pg.locator('.dimlabel.live').count() else ''
     p.pg.mouse.up(); p.wait(1500)
     y = p.ev("const a=Actions.worldBox(App.doc.items[0].id), b=Actions.worldBox(App.doc.items[1].id); return [a.min.y,b.min.y,a.max.y,b.max.y]")
-    ok1 = abs(y[0] - y[1]) < 1e-3 and lab is not None
+    ok1 = abs(y[0] - y[1]) < 1e-3 and lab is not None and 'Abstand' in gap_lbl
     # mit Strg kein Einrasten
     s = world_screen(p, 45, 5, b0[2]); p.pg.mouse.move(s[0], s[1]); p.pg.keyboard.down('Control'); p.pg.mouse.down()
     t = world_screen(p, 45, 6.4, b0[2]); p.pg.mouse.move(t[0], t[1], steps=6); p.pg.mouse.up(); p.pg.keyboard.up('Control'); p.wait(1500)
@@ -2527,6 +2528,18 @@ def t_spiegeln_flaeche(p):
     return [ok1, ok2]
 
 
+def t_kantenkette(p):
+    p.empty(); p.ev("App.change('x', d=>{ const b=Model.newItem('box',{w:20,d:10,h:5}); b.finishes.push({id:'f_v',type:'fillet',r:2,edges:'vertical'}); d.items.push(b); })"); warte_rechnen(p, 20)
+    idx = p.ev("const r=App.results.get(App.doc.items[0].id); return r.data.edges.findIndex(e=>e.t==='LINE' && Math.abs(e.m[2]-5)<1e-3)")
+    p.ev("App.select([App.doc.items[0].id], { edges: [{ id: App.doc.items[0].id, edgeIdx: arg }] })", idx); p.wait(500)
+    p.pg.locator('.ctxbar button[aria-label="Kette"]').click(); p.wait(400)
+    n = p.ev("return App.edges.length")
+    ok1 = n == 8
+    p.pg.locator('.ctxbar button[aria-label="Abrunden"]').click(); warte_rechnen(p, 30)
+    ok2 = p.ev("return App.errors.length") == 0
+    return [ok1, ok2]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -2583,6 +2596,7 @@ TESTS = [
     ('KI-Kollege baut Übergang, Pfad und Text', t_ki_neue_formen),
     ('Schnitt parallel zu einer gewählten Fläche', t_schnitt_flaeche),
     ('An einer Fläche spiegeln / Original ändern', t_spiegeln_flaeche),
+    ('Kantenkette: ganzer gerundeter Umriss / zusammen abrunden', t_kantenkette),
     ('Kreismuster: anlegen / Anzahl / folgt dem Original / Auflösen', t_kreismuster_3d),
     ('Rechteckmuster: anlegen / zweite Reihe / Formel / Maß ändern / Rückgängig', t_rechteckmuster_3d),
     ('Gespiegelte Kopie: anlegen / andere Ebene / Ebene verschieben', t_spiegelkopie),

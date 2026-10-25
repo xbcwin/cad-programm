@@ -481,6 +481,15 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
   Schritte: 1. Ein Kind (ab 10) mit „Einfach“ eine Platte mit vier Löchern bauen lassen, ohne zu helfen.
   Erwartet: Es findet Körper, Löcher und Exportieren allein; notieren, wo es hängen bleibt.
 
+## Kantenkette, Abstände beim Verschieben (neu in Sitzung 26)
+
+- [x] **Kantenkette**
+  Schritte: Quader mit gerundeten senkrechten Kanten; eine obere gerade Kante anklicken → „Kette“ → „Abrunden“.
+  Erwartet: Alle 8 Kanten des oberen Umrisses sind gewählt und werden zusammen gerundet.
+- [x] **Abstand beim Verschieben**
+  Schritte: Zwei Quader, einen neben den anderen ziehen.
+  Erwartet: Das Schildchen zeigt neben X/Y auch „Abstand ↔ … ↕ …“ zum nächsten Nachbarn.
+
 ## Schnitt an Fläche (neu in Sitzung 25)
 
 - [x] **Schnitt parallel zu einer Fläche**
