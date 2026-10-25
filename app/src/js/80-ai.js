@@ -56,7 +56,9 @@ Parameter p (alle Grundkörper stehen mit der Unterseite auf z=0 ihres eigenen S
   {"lib":"screwHole","size":"M2|M2.5|M3|M4|M5|M6|M8","head":"countersunk|counterbore|none","length":10} (rolle loch)
   {"lib":"nutTrap","size":"M3","length":12} (loch) · {"lib":"insert","size":"M3"} (loch, Gewindeeinsatz) · {"lib":"slotHole","len":20,"w":4.5,"depth":10} (loch)
   {"lib":"holePattern","pat":"stack305|stack255|stack20|stack16|motor19|motor16|motor12|motor9","size":"M3","depth":10} (loch, vier Löcher für Stack oder Motor um die Mitte) · {"lib":"zipTie","w":3,"gap":6,"depth":10} (loch, zwei Kabelbinder-Schlitze)
+  {"lib":"threadRod","size":"M3…M16","length":12} (koerper, echtes Außengewinde) · {"lib":"threadHole","size":"M4…M16","length":10,"clear":0.3} (loch, gedrucktes Innengewinde)
   {"lib":"snapHook","length":12,"w":8,"t":1.6,"hook":1.2} (koerper) · {"lib":"hinge","len":40,"w":15,"t":2.4,"gap":0.4} (koerper) · {"lib":"gear","teeth":20,"module":1.5,"h":6,"bore":5} (koerper)
+- rundungen: typ "fillet" (Rundung), "chamfer" (Fase) oder "draft" (Entformungsschräge, r = Winkel in Grad, neigt alle senkrechten Seitenwände)
 - group: {"kinder":[…]} – Kinder mit rolle "loch" werden aus den Kindern mit rolle "koerper" geschnitten. t der Kinder ist relativ zur Gruppe.
 
 Regeln:
@@ -507,7 +509,7 @@ Beispiel – Wunsch „Mach alles als Verbund“ (Runde 1):
             const f = Model.find(doc, id); if (!f) continue;
             f.item.finishes = f.item.finishes || [];
             if (a.ersetzen) f.item.finishes = f.item.finishes.filter((x) => x.type === 'shell');
-            f.item.finishes.push({ id: uid('f'), type: a.typ === 'chamfer' ? 'chamfer' : 'fillet', r: num(a.r, 1), edges: ['all', 'top', 'bottom', 'vertical', 'horizontal'].includes(a.kanten) ? a.kanten : 'all' });
+            f.item.finishes.push({ id: uid('f'), type: a.typ === 'chamfer' ? 'chamfer' : a.typ === 'draft' ? 'draft' : 'fillet', r: num(a.r, a.typ === 'draft' ? 3 : 1), edges: ['all', 'top', 'bottom', 'vertical', 'horizontal'].includes(a.kanten) ? a.kanten : 'all' });
             rep.changed.push(id);
           }
           if (list.length) { rep.done.push(`rundung: ${list.length} Teile, r ${a.r}`); any = true; }
@@ -623,7 +625,7 @@ Beispiel – Wunsch „Mach alles als Verbund“ (Runde 1):
     }
     Object.assign(it.t, cleanT(o.t));
     if (o.farbe && /^#[0-9a-f]{6}$/i.test(o.farbe)) it.color = o.farbe;
-    for (const r of o.rundungen || []) if (r && (r.r || r.r === 0)) it.finishes.push({ id: uid('f'), type: r.typ === 'chamfer' ? 'chamfer' : 'fillet', r: num(r.r, 1), edges: ['all', 'top', 'bottom', 'vertical', 'horizontal'].includes(r.kanten) ? r.kanten : 'all' });
+    for (const r of o.rundungen || []) if (r && (r.r || r.r === 0)) it.finishes.push({ id: uid('f'), type: r.typ === 'chamfer' ? 'chamfer' : r.typ === 'draft' ? 'draft' : 'fillet', r: num(r.r, r.typ === 'draft' ? 3 : 1), edges: ['all', 'top', 'bottom', 'vertical', 'horizontal'].includes(r.kanten) ? r.kanten : 'all' });
     return it;
   }
   // Feature-Gruppe (Muster, Spiegelung) um ein Objekt legen – wie Features.pattern, aber innerhalb einer Änderung

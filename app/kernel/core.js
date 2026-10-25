@@ -279,6 +279,12 @@ export function createKernel(R, oc) {
     const P0 = M.P(segs[0].a), O = M.P([0, 0]);
     const T = norm(sub(M.P(p.t0), O)), N = M.n, V = [T[1] * N[2] - T[2] * N[1], T[2] * N[0] - T[0] * N[2], T[0] * N[1] - T[1] * N[0]];
     const prof = (inset) => {
+      if (p.shape === 'sketch' && p.prof) {
+        if (inset > 0) return null;
+        const Y = [T[1] * V[2] - T[2] * V[1], T[2] * V[0] - T[0] * V[2], T[0] * V[1] - T[1] * V[0]];
+        const o = [0, 1, 2].map((k) => P0[k] - V[k] * p.prof.c[0] - Y[k] * p.prof.c[1]);
+        return loopWire(p.prof.outer, planeMap({ o, x: V, n: T }), true);
+      }
       if (p.shape === 'rect') {
         const w = pos(p.w, 6) / 2 - inset, h = pos(p.h, 4) / 2 - inset;
         if (w <= 0 || h <= 0) return null;
@@ -292,7 +298,7 @@ export function createKernel(R, oc) {
     const sweep = (w) => R.genericSweep(w, spine, { transitionMode: 'round', forceProfileSpineOthogonality: true });
     let shape = sweep(prof(0));
     const wall = num(p.wall, 0);
-    if (wall > 0) { const inner = prof(wall); if (!inner) throw new Error('Die Wand ist dicker als das halbe Rohr.'); const cutter = sweep(inner); const res = shape.cut(cutter); safeDelete(shape); safeDelete(cutter); shape = res; }
+    if (wall > 0 && p.shape !== 'sketch') { const inner = prof(wall); if (!inner) throw new Error('Die Wand ist dicker als das halbe Rohr.'); const cutter = sweep(inner); const res = shape.cut(cutter); safeDelete(shape); safeDelete(cutter); shape = res; }
     return shape;
   }
 

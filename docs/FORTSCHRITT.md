@@ -1,6 +1,6 @@
 # Fortschritt
 
-Stand: 25.10.2026 · nach Sitzung 22 (19: Skizze auf Profi-Niveau · 20: Magnet, Rundungs-Griff · 21: Skizzieren im 3D, Übergang, Entlang Pfad, Import · 22: Kreis/Bogen-Arten, Verlängern, Entformungsschräge, Gewinde)
+Stand: 25.10.2026 · nach Sitzung 23 (19: Skizze auf Profi-Niveau · 20: Magnet, Rundungs-Griff · 21: Skizzieren im 3D, Übergang, Entlang Pfad, Import · 22: Kreis/Bogen-Arten, Verlängern, Entformungsschräge, Gewinde · 23: Einheiten im Maßfeld, eigener Querschnitt)
 
 ## Erledigt
 
@@ -166,7 +166,11 @@ Fertig.
 - [x] Spline als glatte Kurve im Kern: genaue Bézier-Stücke statt kurzer Linien (Sitzung 19)
 - [x] Ecke runden / fasen in der Skizze, Ellipse, Rechteck aus der Mitte, Text (Schrift Inter), Bild-Vorlage mit Maßstab, Regeln Mittig und Konzentrisch (Sitzung 19)
 - [x] Kreis aus 2 / 3 Punkten, tangentialer Bogen, Verlängern (Sitzung 22); Pin-Raster als Schablone (Sitzung 21)
-- [ ] Gebogenes Langloch, Linie teilen, Punkt als eigenes Element
+- [x] Einheiten im Maßfeld und in Formeln: 2 cm, 1/4", 0,5 m, 10mm+2cm (Sitzung 23)
+- [x] Entlang Pfad mit eigener Form aus einem Skizzenkörper (Sitzung 23)
+- [x] Linie oder Bogen teilen (Sitzung 23); KI-Kollege kennt Gewinde und Entformungsschräge
+- [x] Gebogenes Langloch, gedrehtes Rechteck (3 Punkte), Vieleck über die Flächen (Schlüsselweite) (Sitzung 23)
+- [ ] Punkt als eigenes Element
 - [ ] Ellipse und Text trimmen und versetzen; Text entlang einer Kurve
 - [ ] Muster und Versatz: Anzahl/Abstand nachträglich für das ganze Muster ändern (heute je Kopie über das Regel-Symbol)
 - [ ] Spiegeln an der X- oder Y-Achse ohne eigene Linie

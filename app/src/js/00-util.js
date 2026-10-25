@@ -66,7 +66,11 @@ const Expr = (() => {
         let j = i; while (j < src.length && /[0-9.,]/.test(src[j])) j++;
         const raw = src.slice(i, j).replace(',', '.');
         if ((raw.match(/\./g) || []).length > 1) throw new Error('Zahl nicht lesbar: ' + src.slice(i, j));
-        out.push({ t: 'n', v: parseFloat(raw) }); i = j; continue;
+        let v = parseFloat(raw);
+        // Einheiten direkt hinter der Zahl: 2 cm, 1 in, 1", 0,5 m, 30° (Ergebnis immer in mm bzw. Grad)
+        const um = /^\s*(mm|cm|m|in|zoll|"|°)(?![A-Za-zÄÖÜäöüß_0-9])/i.exec(src.slice(j));
+        if (um) { v *= { mm: 1, cm: 10, m: 1000, in: 25.4, zoll: 25.4, '"': 25.4, '°': 1 }[um[1].toLowerCase()]; j += um[0].length; }
+        out.push({ t: 'n', v }); i = j; continue;
       }
       if (/[A-Za-zÄÖÜäöüß_]/.test(c)) {
         let j = i; while (j < src.length && /[A-Za-zÄÖÜäöüß_0-9]/.test(src[j])) j++;
@@ -167,6 +171,7 @@ const IC = {
   slot: '<path d="M8 7h8a5 5 0 0 1 0 10H8A5 5 0 0 1 8 7z" />',
   polygon: '<path d="M12 3.5 19.5 8v8L12 20.5 4.5 16V8z" />',
   image: '<rect x="3.5" y="5" width="17" height="14" rx="1.5"/><circle cx="9" cy="10" r="1.6"/><path d="M4 17l5-4.5 3.5 3 3-2.5 4.5 4" />',
+  splitLine: '<path d="M4 18 10 12M14 10l6-6" /><circle cx="12" cy="11" r="2.2"/><path d="M9 6l6 10" opacity=".5" stroke-dasharray="2 2"/>',
   extend: '<path d="M4 18 13 9" /><path d="M13 9l5-5" stroke-dasharray="2.5 2"/><path d="M18 3v8M14 7h8" opacity=".55"/>',
   chip: '<rect x="7" y="7" width="10" height="10" rx="1"/><path d="M9.5 3v4M12 3v4M14.5 3v4M9.5 17v4M12 17v4M14.5 17v4M3 9.5h4M3 12h4M3 14.5h4M17 9.5h4M17 12h4M17 14.5h4" />',
   ellipse: '<ellipse cx="12" cy="12" rx="9" ry="5.5"/><path d="M12 12h.01" />',
@@ -302,7 +307,7 @@ const HELP = {
  },
  "rect": {
   "tip": "Rechteck über zwei Ecken aufziehen",
-  "hilfe": "Klicke für die erste Ecke, ziehe die Maus schräg herüber und klicke für die gegenüberliegende Ecke. Rechts kannst du auf „Von der Mitte aus“ umschalten: Dann ist der erste Klick die Mitte – klickst du dafür auf den Nullpunkt oder einen Kreismittelpunkt, bleibt das Rechteck dort mittig.",
+  "hilfe": "Klicke für die erste Ecke, ziehe die Maus schräg herüber und klicke für die gegenüberliegende Ecke. Rechts kannst du auf „Von der Mitte aus“ umschalten: Dann ist der erste Klick die Mitte – klickst du dafür auf den Nullpunkt oder einen Kreismittelpunkt, bleibt das Rechteck dort mittig. „Gedreht“ zeichnet zuerst eine schräge Kante und dann die Höhe.",
   "tipp": "Tippe die Maße direkt nach dem ersten Klick auf der Tastatur ein und wechsle mit der Tab-Taste zwischen Breite und Höhe."
  },
  "circle": {
@@ -317,12 +322,12 @@ const HELP = {
  },
  "slot": {
   "tip": "Langloch für bewegliche Schrauben zeichnen",
-  "hilfe": "Klicke den ersten und zweiten Punkt für die Mittellinie und ziehe dann mit dem dritten Klick die Breite auf.",
+  "hilfe": "Klicke den ersten und zweiten Punkt für die Mittellinie und ziehe dann mit dem dritten Klick die Breite auf. Rechts auf „Gebogen“ umschalten: Mitte, Anfang, Ende (gegen den Uhrzeigersinn) und Breite – z. B. für verstellbare Kamerahalter.",
   "tipp": "Langlöcher sind perfekt, wenn du beim späteren Zusammenbauen noch etwas Spielraum zum Verschieben brauchst."
  },
  "polygon": {
   "tip": "Vieleck wie Sechskant zeichnen",
-  "hilfe": "Klicke auf den Mittelpunkt, ziehe die Größe auf und tippe im Eingabefeld die Anzahl der Ecken ein.",
+  "hilfe": "Klicke auf den Mittelpunkt, ziehe die Größe auf und tippe im Eingabefeld die Anzahl der Ecken ein. Mit „Über die Flächen“ ist das getippte Maß die Schlüsselweite – ideal für Mutternfallen (M3: 5,5 mm).",
   "tipp": "Für einen Sechskant-Schraubenkopf stellst du einfach die Eckenanzahl auf 6."
  },
  "spline": {
@@ -689,6 +694,11 @@ const HELP = {
   "tip": "Innengewinde zum Drucken",
   "hilfe": "Ein Loch mit echtem metrischem Innengewinde und etwas Spiel, damit eine normale Schraube oder ein gedruckter Bolzen hineinpasst.",
   "tipp": "Das Spiel (Standard 0,3 mm) hängt vom Drucker ab: Klemmt es, mach es größer; wackelt es, kleiner."
+ },
+ "split2d": {
+  "tip": "Linie oder Bogen in zwei Stücke teilen",
+  "hilfe": "Klick auf eine Linie oder einen Bogen. An dieser Stelle (sie fängt an Mitte und Schnittpunkten) wird das Element geteilt. Beide Stücke bleiben verbunden und in einer Flucht.",
+  "tipp": "Praktisch, wenn nur ein Teil einer Kante ein Maß oder eine Rundung bekommen soll."
  }
 };
 

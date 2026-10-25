@@ -183,6 +183,12 @@ const UI = (() => {
       const raw = inp.value.trim();
       if (raw === orig) { box.classList.remove('invalid'); lastBad = null; return; }
       let val = parseNum(raw);
+      // Zahl mit Einheit (2 cm, 1 in, 1/4") wird gleich in mm umgerechnet statt als Formel gespeichert
+      if (isNaN(val)) {
+        const um = /^([-+()\d.,\s*/]+?)\s*(mm|cm|m|in|zoll|"|°)$/i.exec(raw);
+        if (um) { try { val = round(Expr.eval(um[1], {}) * { mm: 1, cm: 10, m: 1000, in: 25.4, zoll: 25.4, '"': 25.4, '°': 1 }[um[2].toLowerCase()], 6); } catch (_) { val = NaN; } }
+        else if (/^[-+()\d.,\s*/]+((mm|cm|m|in|zoll|"|°)[-+()\d.,\s*/]*)+$/i.test(raw)) { try { val = round(Expr.eval(raw, {}), 6); } catch (_) { val = NaN; } }
+      }
       if (isNaN(val)) {
         if (!expr) { box.classList.add('invalid'); return; }
         const vv = Model.num(raw, Model.vars(App.doc).v, NaN);

@@ -508,10 +508,14 @@ const Panels = (() => {
       w.append(sec);
     } else if (it.kind === 'sweep') {
       const fl = h('div', { class: 'fields' });
-      fl.append(UI.selectField({ id: 'p-shape', label: 'Querschnitt', value: it.p.shape || 'circle', options: [['circle', 'Rund (Rohr)'], ['rect', 'Rechteckig (Kanal, Leiste)']], onChange: (v) => setP('shape', v) }));
-      if ((it.p.shape || 'circle') === 'circle') fl.append(UI.numField({ id: 'p-d', label: 'Durchmesser', value: it.p.d, onCommit: (v) => setP('d', v) }));
+      const profs = App.doc.items.filter((x) => x.kind === 'extrude' && x.p && x.p.sketch && x.id !== it.id);
+      const shp = it.p.shape || 'circle';
+      fl.append(UI.selectField({ id: 'p-shape', label: 'Querschnitt', value: shp, options: [['circle', 'Rund (Rohr)'], ['rect', 'Rechteckig (Kanal, Leiste)'], ...(profs.length || shp === 'sketch' ? [['sketch', 'Eigene Form aus einem Skizzenkörper']] : [])], onChange: (v) => { if (v === 'sketch' && !it.p.prof) { const src = profs[0]; if (src) App.change('Querschnitt übernommen', (doc) => { const f = Model.find(doc, it.id).item; f.p.shape = 'sketch'; f.p.prof = deepClone(src.p.sketch); f.p.profName = src.name; const s2 = doc.items.find((x) => x.id === src.id); if (s2) s2.hidden = true; }); } else setP('shape', v); } }));
+      if (shp === 'sketch') {
+        fl.append(UI.selectField({ id: 'p-prof', label: 'Form von', value: '', options: [['', it.p.profName || 'übernommen'], ...profs.map((x) => [x.id, x.name])], onChange: (v) => { const src = profs.find((x) => x.id === v); if (src) App.change('Querschnitt übernommen', (doc) => { const f = Model.find(doc, it.id).item; f.p.prof = deepClone(src.p.sketch); f.p.profName = src.name; const s2 = doc.items.find((x) => x.id === src.id); if (s2) s2.hidden = true; }); } }));
+      } else if (shp === 'circle') fl.append(UI.numField({ id: 'p-d', label: 'Durchmesser', value: it.p.d, onCommit: (v) => setP('d', v) }));
       else { fl.append(UI.numField({ id: 'p-w', label: 'Breite', value: it.p.w, onCommit: (v) => setP('w', v) }), UI.numField({ id: 'p-h', label: 'Höhe', value: it.p.h, onCommit: (v) => setP('h', v) })); }
-      fl.append(UI.numField({ id: 'p-wall', label: 'Wand (0 = voll)', value: it.p.wall || 0, min: 0, onCommit: (v) => setP('wall', v) }));
+      if (shp !== 'sketch') fl.append(UI.numField({ id: 'p-wall', label: 'Wand (0 = voll)', value: it.p.wall || 0, min: 0, onCommit: (v) => setP('wall', v) }));
       sec.append(fl);
       const eb = h('button', { type: 'button', class: 'btn' }); eb.innerHTML = icon('edit') + 'Pfad bearbeiten';
       eb.onclick = () => Sketch.editItem(it.id);

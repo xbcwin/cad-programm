@@ -16,6 +16,7 @@ const Sketch = (() => {
     { id: 'corner', icon: 'fillet', label: 'Ecke runden', key: 'K', tip: 'Ecke zwischen zwei Linien runden oder fasen – auch an Rechteck und Vieleck', sep: true },
     { id: 'trim', icon: 'trim', label: 'Trimmen', key: 'T', tip: 'Überstehende Stücke wegschneiden' },
     { id: 'extend', icon: 'extend', label: 'Verlängern', key: 'U', tip: 'Linie bis zur nächsten Kante verlängern' },
+    { id: 'splitl', icon: 'splitLine', label: 'Teilen', key: 'Y', tip: 'Linie oder Bogen an einem Punkt in zwei Stücke teilen' },
     { id: 'offset', icon: 'offset2d', label: 'Versatz', key: 'F', tip: 'Parallele Kopie im Abstand – bleibt per Regel verbunden' },
     { id: 'mirror', icon: 'mirror', label: 'Spiegeln', key: 'M', tip: 'An einer Linie spiegeln – legt Symmetrie-Regeln an' },
     { id: 'patrect', icon: 'patternRect', label: 'Rechteckmuster', key: 'Q', tip: 'Elemente in Reihen und Spalten vervielfachen' },
@@ -23,7 +24,7 @@ const Sketch = (() => {
     { id: 'dim', icon: 'dim', label: 'Maß', key: 'D', tip: 'Maß festlegen – auch als Formel wie breite/2', sep: true },
     { id: 'bg', icon: 'image', label: 'Bild-Vorlage', key: 'I', tip: 'Foto oder Zeichnung hinterlegen und auf echte Größe bringen – zum Nachzeichnen' },
   ];
-  const HELPKEY = { extend: 'extend2d', tpl: 'sketchTemplate', corner: 'corner2d', text: 'sketchText', bg: 'sketchImage', poly: 'polygon', dim: 'dimension', offset: 'offset2d', mirror: 'mirror2d', patrect: 'patternRect2d', patcirc: 'patternCirc2d' };
+  const HELPKEY = { splitl: 'split2d', extend: 'extend2d', tpl: 'sketchTemplate', corner: 'corner2d', text: 'sketchText', bg: 'sketchImage', poly: 'polygon', dim: 'dimension', offset: 'offset2d', mirror: 'mirror2d', patrect: 'patternRect2d', patcirc: 'patternCirc2d' };
   const HINTS = {
     select: 'Element anklicken zum Bearbeiten. Endpunkte lassen sich ziehen. <b>Entf</b> löscht.',
     line: 'Klick setzt Punkte. Zahl tippen für genaue Länge. Am Startpunkt schließen oder <b>Enter</b> zum Beenden.',
@@ -31,6 +32,7 @@ const Sketch = (() => {
     circle: 'Mittelpunkt klicken, dann Größe. Oder Durchmesser eintippen.',
     bg: 'Lade ein Foto oder eine Zeichnung als Vorlage. Mit <b>Maßstab festlegen</b> klickst du zwei Punkte an, deren Abstand du kennst – dann stimmt die Größe. Ziehen verschiebt das Bild.',
     bgcal: 'Klick den ersten Punkt auf dem Bild an, dann den zweiten. Danach tippst du den echten Abstand ein.',
+    splitl: 'Klick auf eine Linie oder einen Bogen – dort wird das Element in zwei Stücke geteilt, die verbunden bleiben. Fängt an Mitte und Schnittpunkten.',
     extend: 'Klick nahe an das Ende einer Linie – sie wächst bis zur nächsten Linie, zum nächsten Bogen oder Kreis und bleibt dort per Regel hängen.',
     tpl: 'Schablone und Maße rechts wählen, dann ins Bild klicken – der Klick ist die Mitte. Fängt an Nullpunkt und Mittelpunkten.',
     text: 'Text, Höhe und Schrift rechts einstellen, dann ins Bild klicken. Der Klick legt den Anfang der Grundlinie fest (bei „Mitte“ die Mitte).',
@@ -1009,6 +1011,7 @@ const Sketch = (() => {
       S.sel = en.id; reapply(); render(); Panels.renderRight(); return;
     }
     if (t === 'extend') { extendAt(uv0); return; }
+    if (t === 'splitl') { splitAt(p); return; }
     if (t === 'trim') { S.trimming = true; if (trimAt(uv0)) Panels.renderRight(); return; }
     if (t === 'offset') { offsetDown(uv0, e); return; }
     if (t === 'mirror') { mirrorDown(uv0); return; }
@@ -1034,6 +1037,13 @@ const Sketch = (() => {
         else S.draft.pts.push(p);
       }
     } else if (t === 'rect') {
+      if (S.rect3) {
+        if (!S.draft) { S.draft = { r3: [p] }; reapply(); render(); Panels.renderRight(); return; }
+        if (S.draft.r3.length === 1) { if (SK.d2(S.draft.r3[0], p) > 1e-6) S.draft.r3.push(p); render(); return; }
+        const c = rect3Corners(S.draft.r3[0], S.draft.r3[1], p); S.draft = null;
+        if (c) addRect3(c);
+        reapply(); render(); Panels.renderRight(); return;
+      }
       if (!S.draft) S.draft = { a: p, mid: S.rectMid };
       else { const q = rectDraft(S.draft, p); if (Math.abs(q.b[0] - q.a[0]) > 1e-6 && Math.abs(q.b[1] - q.a[1]) > 1e-6) { const en = addEnt({ type: 'rect', a: q.a, b: q.b }); if (S.draft.mid) midCons(en, S.draft.a); } S.draft = null; hideEntry(); }
     } else if (t === 'ellipse') {
@@ -1058,6 +1068,11 @@ const Sketch = (() => {
       if (!S.draft) S.draft = { a: p };
       else if (!S.draft.b) { if (SK.d2(S.draft.a, p) > 1e-6) S.draft.b = p; }
       else { if (SK.arcInfo(S.draft.a, p, S.draft.b)) addEnt({ type: 'arc', a: S.draft.a, b: S.draft.b, m: p }); S.draft = null; }
+    } else if (t === 'slot' && S.slotArc) {
+      if (!S.draft) S.draft = { arcslot: true, c: p };
+      else if (!S.draft.s) { if (SK.d2(S.draft.c, p) > 1e-6) S.draft.s = p; }
+      else if (!S.draft.e) { if (SK.d2(S.draft.s, p) > 1e-6) S.draft.e = p; }
+      else { const g = arcSlotGeom(S.draft, p); if (g) addArcSlot(g); S.draft = null; hideEntry(); }
     } else if (t === 'slot') {
       if (!S.draft) S.draft = { a: p };
       else if (!S.draft.b) { if (SK.d2(S.draft.a, p) > 1e-6) S.draft.b = p; }
@@ -1130,6 +1145,83 @@ const Sketch = (() => {
     const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ map: bgTex, transparent: true, opacity: B.op ?? 0.5, depthTest: false, depthWrite: false, side: THREE.DoubleSide }));
     m.renderOrder = 15; grp.add(m);
     if (S.tool === 'bgcal' && S.bgCal) { const cur = S.cursor ? S.cursor.p : S.bgCal[0]; lineObj([S.bgCal[0], cur], Viewer.theme.accent, 2, { dashed: true }); label(`${fmt(SK.d2(S.bgCal[0], cur), 2)} mm`, cur); }
+  }
+  // Gedrehtes Rechteck aus drei Punkten: erste Kante a–b, dann die Höhe
+  function rect3Corners(a, b, p) {
+    const L = SK.d2(a, b); if (L < 1e-9) return null;
+    const n = [-(b[1] - a[1]) / L, (b[0] - a[0]) / L], hgt = (p[0] - a[0]) * n[0] + (p[1] - a[1]) * n[1];
+    if (Math.abs(hgt) < 1e-6) return null;
+    return [a, b, [b[0] + n[0] * hgt, b[1] + n[1] * hgt], [a[0] + n[0] * hgt, a[1] + n[1] * hgt]].map((q) => q.map((v) => round(v, 6)));
+  }
+  function addRect3(c) {
+    pushUndo();
+    const ids = [0, 1, 2, 3].map(() => uid('e'));
+    for (let i = 0; i < 4; i++) S.ents.push({ id: ids[i], type: 'line', a: c[i], b: c[(i + 1) % 4], ...(S.construction ? { con: true } : {}) });
+    for (let i = 0; i < 4; i++) S.cons.push({ id: uid('k'), type: 'coincident', refs: [{ e: ids[i], p: 'b' }, { e: ids[(i + 1) % 4], p: 'a' }] });
+    S.cons.push({ id: uid('k'), type: 'perpendicular', refs: [{ e: ids[0] }, { e: ids[1] }] }, { id: uid('k'), type: 'parallel', refs: [{ e: ids[0] }, { e: ids[2] }] }, { id: uid('k'), type: 'parallel', refs: [{ e: ids[1] }, { e: ids[3] }] });
+  }
+  // Gebogenes Langloch: Mitte, Start, Ende (Richtung gegen den Uhrzeigersinn), dann Breite
+  function arcSlotGeom(d, wp) {
+    const c = d.c, R = SK.d2(c, d.s); if (R < 1e-6) return null;
+    const a0 = Math.atan2(d.s[1] - c[1], d.s[0] - c[0]); let a1 = Math.atan2(d.e[1] - c[1], d.e[0] - c[0]);
+    while (a1 <= a0 + 1e-6) a1 += Math.PI * 2;
+    if (a1 - a0 > Math.PI * 2 - 0.05) return null;
+    const P = (r, a) => [c[0] + Math.cos(a) * r, c[1] + Math.sin(a) * r];
+    const am = (a0 + a1) / 2, s = P(R, a0), e = P(R, a1), m = P(R, am);
+    if (!wp) return { s, e, m };
+    const w = Math.min(Math.abs(SK.d2(c, wp) - R), R * 0.95); if (w < 1e-4) return null;
+    const ri = R - w, ro = R + w;
+    const arcs = [
+      { a: P(ro, a0), m: P(ro, am), b: P(ro, a1) },             // außen
+      { a: P(ro, a1), m: [e[0] + Math.cos(a1 + Math.PI / 2) * w, e[1] + Math.sin(a1 + Math.PI / 2) * w], b: P(ri, a1) },   // Endkappe
+      { a: P(ri, a1), m: P(ri, am), b: P(ri, a0) },             // innen
+      { a: P(ri, a0), m: [s[0] + Math.cos(a0 - Math.PI / 2) * w, s[1] + Math.sin(a0 - Math.PI / 2) * w], b: P(ro, a0) },   // Anfangskappe
+    ];
+    return { s, e, m, w, arcs, c };
+  }
+  function addArcSlot(g) {
+    pushUndo();
+    const ids = g.arcs.map(() => uid('e')), r6 = (q) => q.map((v) => round(v, 6));
+    g.arcs.forEach((a, i) => S.ents.push({ id: ids[i], type: 'arc', a: r6(a.a), m: r6(a.m), b: r6(a.b), ...(S.construction ? { con: true } : {}) }));
+    for (let i = 0; i < 4; i++) {
+      const j = (i + 1) % 4;
+      S.cons.push({ id: uid('k'), type: 'coincident', refs: [{ e: ids[i], p: 'b' }, { e: ids[j], p: 'a' }] }, { id: uid('k'), type: 'tangent', refs: [{ e: ids[i] }, { e: ids[j] }], mode: i === 0 || i === 3 ? 'int' : 'ext' });
+    }
+    S.cons.push({ id: uid('k'), type: 'concentric', refs: [{ e: ids[0] }, { e: ids[2] }] }, { id: uid('k'), type: 'equal', refs: [{ e: ids[1], k: 'r' }, { e: ids[3], k: 'r' }] });
+    const r = reapply();
+    if (r && !r.ok) { // ohne Regeln, nur die Form
+      S.cons = S.cons.filter((c) => !c.refs || !c.refs.some((x) => x && ids.includes(x.e)) || c.type === 'coincident');
+      reapply();
+    }
+    render(); Panels.renderRight();
+  }
+  // Teilen: Linie oder Bogen am Punkt p in zwei verbundene Stücke
+  function splitAt(p) {
+    const hit = SK.hit(S.ents, p, pxSize() * 9);
+    if (!hit || (hit.type !== 'line' && hit.type !== 'arc')) { UI.toast('Klick auf eine Linie oder einen Bogen.', { icon: 'info' }); return; }
+    const q = SKO.closest(SKO.curve(SK.segsOf(hit)[0]), p);
+    if (SK.d2(q, hit.a) < 1e-4 || SK.d2(q, hit.b) < 1e-4) { UI.toast('Am Ende gibt es nichts zu teilen – klick weiter innen.', { icon: 'info' }); return; }
+    pushUndo();
+    const qq = q.map((v) => round(v, 6));
+    const base = hit.con ? { con: true } : {};
+    let A, B;
+    if (hit.type === 'line') { A = { id: uid('e'), type: 'line', a: hit.a, b: qq, ...base }; B = { id: uid('e'), type: 'line', a: qq, b: hit.b, ...base }; }
+    else {
+      const ai = SK.arcInfo(hit.a, hit.m, hit.b); const ang = (x) => Math.atan2(x[1] - ai.c[1], x[0] - ai.c[0]);
+      const mid = (x, y) => { let a0 = ang(x), a1 = ang(y); let d = a1 - a0; if (ai.sweep > 0) { while (d <= 0) d += Math.PI * 2; } else { while (d >= 0) d -= Math.PI * 2; } const am = a0 + d / 2; return [round(ai.c[0] + Math.cos(am) * ai.r, 6), round(ai.c[1] + Math.sin(am) * ai.r, 6)]; };
+      A = { id: uid('e'), type: 'arc', a: hit.a, m: mid(hit.a, qq), b: qq, ...base }; B = { id: uid('e'), type: 'arc', a: qq, m: mid(qq, hit.b), b: hit.b, ...base };
+    }
+    const i = S.ents.findIndex((e) => e.id === hit.id); S.ents.splice(i, 1, A, B);
+    // Regeln und Maße am alten Element: Enden umhängen, Rest entfernen
+    const remap = (r) => (r && r.e === hit.id ? (r.p === 'a' ? { ...r, e: A.id } : r.p === 'b' ? { ...r, e: B.id } : null) : r);
+    S.cons = S.cons.map((c) => { const refs = (c.refs || []).map(remap); return refs.some((r) => r === null) ? null : { ...c, refs }; }).filter(Boolean);
+    S.dims = S.dims.filter((d) => d.e !== hit.id && !(d.refs || []).some((r) => r && r.e === hit.id));
+    S.cons.push({ id: uid('k'), type: 'coincident', refs: [{ e: A.id, p: 'b' }, { e: B.id, p: 'a' }] });
+    if (hit.type === 'line') S.cons.push({ id: uid('k'), type: 'parallel', refs: [{ e: A.id }, { e: B.id }] });
+    else S.cons.push({ id: uid('k'), type: 'concentric', refs: [{ e: A.id }, { e: B.id }] }, { id: uid('k'), type: 'equal', refs: [{ e: A.id, k: 'r' }, { e: B.id, k: 'r' }] });
+    const r = reapply();
+    if (r && !r.ok) { sketchUndo(); UI.toast('Das geht mit den Regeln dieser Skizze nicht.', { kind: 'bad' }); return; }
+    render(); Panels.renderRight();
   }
   // Verlängern: Linienende bis zum nächsten Schnitt mit einem anderen Element
   function extendTarget(uv) {
@@ -1260,12 +1352,14 @@ const Sketch = (() => {
     const t = S.tool, d = S.draft;
     if (!d) return null;
     if (t === 'line') return [['len', 'Länge'], ['ang', 'Winkel °']];
+    if (t === 'rect' && d.r3) return null;
     if (t === 'rect') return [['w', 'Breite'], ['h', 'Höhe']];
     if (t === 'ellipse') return [['w', 'Breite'], ['h', 'Höhe']];
     if (t === 'circle' && d.pts) return null;
     if (t === 'arc') return null;
     if (t === 'circle') return [['d', 'Ø']];
     if (t === 'poly') return [['d', 'Ø']];
+    if (t === 'slot' && d.arcslot) return null;
     if (t === 'slot' && !d.b) return [['len', 'Länge'], ['ang', 'Winkel °']];
     if (t === 'slot' && d.b) return [['w', 'Breite']];
     if (t === 'offset' && d.off) return [['dist', 'Abstand']];
@@ -1326,7 +1420,9 @@ const Sketch = (() => {
       const en = addEnt({ type: 'ellipse', c: d.c, rx: round(w / 2, 4), ry: round(hh / 2, 4), rot: 0 }); fix(en, 'w', 'w'); fix(en, 'h', 'h'); S.draft = null;
     } else if (t === 'circle' || t === 'poly') {
       const D = val('d'); if (isNaN(D) || D <= 0) { UI.toast('Bitte einen Durchmesser eingeben.', { kind: 'bad' }); return; }
-      const en = t === 'circle' ? addEnt({ type: 'circle', c: d.c, r: round(D / 2, 4) }) : addEnt({ type: 'poly', c: d.c, r: round(D / 2, 4), n: S.polySides, rot: 0 });
+      const rr = t === 'poly' && S.polyFlats ? D / 2 / Math.cos(Math.PI / S.polySides) : D / 2;
+      const en = t === 'circle' ? addEnt({ type: 'circle', c: d.c, r: round(D / 2, 4) }) : addEnt({ type: 'poly', c: d.c, r: round(rr, 6), n: S.polySides, rot: S.polyFlats ? Math.PI / S.polySides - Math.PI / 2 : 0 });
+      if (t === 'poly' && S.polyFlats) { setDim(en.id, 'd', round(2 * rr, 6)); S.draft = null; } else
       fix(en, 'd', 'd');
       S.draft = null;
     } else if (t === 'slot' && d.b) {
@@ -1473,7 +1569,8 @@ const Sketch = (() => {
     if (d && cur && !S.step) {
       const t = S.tool;
       if (t === 'line') { const a = d.pts[d.pts.length - 1]; lineObj([a, cur], acc, 2.2); const L = SK.d2(a, cur); const ang = (Math.atan2(cur[1] - a[1], cur[0] - a[0]) * 180) / Math.PI; label(`${fmt(L, 2)} mm · ${fmt(ang, 1)}°`, [(a[0] + cur[0]) / 2, (a[1] + cur[1]) / 2]); }
-      if (t === 'rect') { const q = rectDraft(d, cur), e = { type: 'rect', a: q.a, b: q.b }; for (const p of entPts(e)) lineObj(p, acc, 2.2); if (d.mid) lineObj([d.a, cur], acc, 1, { dashed: true }); label(`${fmt(Math.abs(q.b[0] - q.a[0]), 2)} × ${fmt(Math.abs(q.b[1] - q.a[1]), 2)}`, [(d.a[0] + cur[0]) / 2, (d.a[1] + cur[1]) / 2]); }
+      if (t === 'rect' && d.r3) { if (d.r3.length === 1) lineObj([d.r3[0], cur], acc, 2.2); else { const c = rect3Corners(d.r3[0], d.r3[1], cur); if (c) { lineObj([...c, c[0]], acc, 2.2); label(`${fmt(SK.d2(c[0], c[1]), 2)} × ${fmt(SK.d2(c[1], c[2]), 2)}`, cur); } } }
+      else if (t === 'rect') { const q = rectDraft(d, cur), e = { type: 'rect', a: q.a, b: q.b }; for (const p of entPts(e)) lineObj(p, acc, 2.2); if (d.mid) lineObj([d.a, cur], acc, 1, { dashed: true }); label(`${fmt(Math.abs(q.b[0] - q.a[0]), 2)} × ${fmt(Math.abs(q.b[1] - q.a[1]), 2)}`, [(d.a[0] + cur[0]) / 2, (d.a[1] + cur[1]) / 2]); }
       if (t === 'ellipse') {
         if (!d.ax) { const r = SK.d2(d.c, cur); lineObj([[2 * d.c[0] - cur[0], 2 * d.c[1] - cur[1]], cur], acc, 1.4, { dashed: true }); label(`${fmt(2 * r, 2)} mm`, cur); }
         else { const q = ellDraft(d, cur); lineObj([[2 * d.c[0] - d.ax[0], 2 * d.c[1] - d.ax[1]], d.ax], acc, 1, { dashed: true }); if (q.ry > 1e-6) { const pts = SK.ellipsePoints(d.c, q.rx, q.ry, q.rot); pts.push(pts[0]); lineObj(pts, acc, 2.2); } label(`${fmt(2 * q.rx, 2)} × ${fmt(2 * q.ry, 2)}`, cur); }
@@ -1483,7 +1580,11 @@ const Sketch = (() => {
       else if (t === 'circle') { const r = SK.d2(d.c, cur); lineObj(SK.segPoints({ t: 'circle', c: d.c, r }), acc, 2.2); lineObj([d.c, cur], acc, 1, { dashed: true }); label(`Ø ${fmt(2 * r, 2)}`, cur); }
       if (t === 'poly') { const r = SK.d2(d.c, cur); const e = { type: 'poly', c: d.c, r, n: S.polySides, rot: Math.atan2(cur[1] - d.c[1], cur[0] - d.c[0]) - Math.PI / 2 }; for (const p of entPts(e)) lineObj(p, acc, 2.2); label(`Ø ${fmt(2 * r, 2)}`, cur); }
       if (t === 'arc' && !d.tan) { if (!d.b) lineObj([d.a, cur], acc, 1.4, { dashed: true }); else if (SK.arcInfo(d.a, cur, d.b)) { lineObj(SK.arcPoints(d.a, cur, d.b), acc, 2.2); const ai = SK.arcInfo(d.a, cur, d.b); label(`R ${fmt(ai.r, 2)}`, cur); } }
-      if (t === 'slot') { if (!d.b) { lineObj([d.a, cur], acc, 1.4, { dashed: true }); label(`${fmt(SK.d2(d.a, cur), 2)} mm`, cur); } else { const r = slotR(d.a, d.b, cur); if (r > 1e-6) { const e = { type: 'slot', a: d.a, b: d.b, r }; for (const p of entPts(e)) lineObj(p, acc, 2.2); label(`Breite ${fmt(2 * r, 2)}`, cur); } } }
+      if (t === 'slot' && d.arcslot) {
+        if (!d.s) { lineObj([d.c, cur], acc, 1.2, { dashed: true }); label(`R ${fmt(SK.d2(d.c, cur), 2)}`, cur); }
+        else if (!d.e) { const g = arcSlotGeom({ ...d, e: cur }, null); if (g) lineObj(SK.arcPoints(g.s, g.m, g.e), acc, 1.4, { dashed: true }); }
+        else { const g = arcSlotGeom(d, cur); if (g) { for (const a of g.arcs) lineObj(SK.arcPoints(a.a, a.m, a.b), acc, 2.2); label(`Breite ${fmt(2 * g.w, 2)}`, cur); } }
+      } else if (t === 'slot') { if (!d.b) { lineObj([d.a, cur], acc, 1.4, { dashed: true }); label(`${fmt(SK.d2(d.a, cur), 2)} mm`, cur); } else { const r = slotR(d.a, d.b, cur); if (r > 1e-6) { const e = { type: 'slot', a: d.a, b: d.b, r }; for (const p of entPts(e)) lineObj(p, acc, 2.2); label(`Breite ${fmt(2 * r, 2)}`, cur); } } }
     }
     // Verlängern-Vorschau
     if (S.tool === 'extend' && S.extHover) lineObj([S.extHover.line[S.extHover.k], S.extHover.p], th.accent, 2.4, { dashed: true });
@@ -1770,9 +1871,11 @@ const Sketch = (() => {
         f3.append(UI.selectField({ id: 'tx-align', label: 'Ausrichtung', value: T.align, options: [['l', 'Links'], ['m', 'Mitte'], ['r', 'Rechts']], onChange: (v) => { T.align = v; } }));
         w.append(f3);
       }
+      if (S.tool === 'slot') w.append(UI.selectField({ id: 'sl-mode', label: 'Langloch', value: S.slotArc ? 'arc' : 'line', options: [['line', 'Gerade'], ['arc', 'Gebogen (um eine Mitte)']], onChange: (v) => { S.slotArc = v === 'arc'; S.draft = null; render(); UI.hint(S.slotArc ? 'Gebogenes Langloch: Mitte klicken, dann Anfang, dann Ende (gegen den Uhrzeigersinn), zum Schluss die Breite.' : HINTS.slot); } }));
       if (S.tool === 'circle') w.append(UI.selectField({ id: 'ci-mode', label: 'Kreis', value: S.circMode || 'center', options: [['center', 'Mitte und Größe'], ['2p', 'Zwei Punkte (Durchmesser)'], ['3p', 'Drei Punkte']], onChange: (v) => { S.circMode = v; S.draft = null; render(); } }));
       if (S.tool === 'arc') w.append(UI.selectField({ id: 'ar-mode', label: 'Bogen', value: S.arcMode || '3p', options: [['3p', 'Start, Ende, Wölbung'], ['tan', 'Tangential an Linie oder Bogen']], onChange: (v) => { S.arcMode = v; S.draft = null; render(); } }));
-      if (S.tool === 'rect') w.append(UI.selectField({ id: 'rk-mode', label: 'Aufziehen', value: S.rectMid ? 'mid' : 'corner', options: [['corner', 'Von Ecke zu Ecke'], ['mid', 'Von der Mitte aus']], onChange: (v) => { S.rectMid = v === 'mid'; if (S.draft) S.draft = null; render(); } }));
+      if (S.tool === 'rect') w.append(UI.selectField({ id: 'rk-mode', label: 'Aufziehen', value: S.rect3 ? 'r3' : S.rectMid ? 'mid' : 'corner', options: [['corner', 'Von Ecke zu Ecke'], ['mid', 'Von der Mitte aus'], ['r3', 'Gedreht: Kante, dann Höhe']], onChange: (v) => { S.rectMid = v === 'mid'; S.rect3 = v === 'r3'; if (S.draft) S.draft = null; render(); } }));
+      if (S.tool === 'poly') w.append(UI.selectField({ id: 'po-mode', label: 'Getipptes Maß', value: S.polyFlats ? 'flats' : 'corners', options: [['corners', 'Über die Ecken (Umkreis)'], ['flats', 'Über die Flächen (Schlüsselweite)']], onChange: (v) => { S.polyFlats = v === 'flats'; } }));
       if (S.tool === 'poly') w.append(UI.numField({ id: 'sk-n', label: 'Ecken', value: S.polySides, unit: '', expr: false, min: 3, int: true, onCommit: (v) => { S.polySides = clamp(v, 3, 64); } }));
       if (S.tool === 'patrect' || S.tool === 'patcirc') {
         const P = S.pat; const f2 = h('div', { class: 'fields' });

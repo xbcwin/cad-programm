@@ -2386,6 +2386,73 @@ def t_gewinde(p):
     return [ok1, ok2]
 
 
+def t_pfad_eigene_form(p):
+    p.empty()
+    skizzenkoerper(p, [{'id': 'r', 'type': 'rect', 'a': [-4, -2], 'b': [4, 2]}], 0, 'Profil')
+    p.ev("App.change('x', d=>{ const it=Model.newItem('sweep',{sketch:{plane:{o:[0,0,0],x:[1,0,0],n:[0,0,1]},ents:[{id:'l',type:'line',a:[0,30],b:[50,30]}],dims:[],cons:[]},shape:'circle',d:6,w:6,h:4,wall:0},{name:'Pfad'}); d.items.push(it); })")
+    warte_rechnen(p, 30)
+    p.ev("App.select([App.doc.items[1].id])"); p.wait(500)
+    p.pg.select_option('#p-shape', 'sketch'); warte_rechnen(p, 30)
+    v = volumen(p)
+    ok1 = p.ev("const it=App.doc.items[1]; return it.p.shape==='sketch' && !!it.p.prof && App.doc.items[0].hidden===true && App.errors.length===0")
+    ok2 = v is not None and abs(v - 8 * 4 * 50) < 1
+    return [ok1, ok2]
+
+
+def t_einheiten(p):
+    p.empty(); p.ev("Actions.addPrimitive('box')"); p.wait(1500)
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(500)
+    fid = p.pg.evaluate("[...document.querySelectorAll('#right-body input')].map(i=>i.id).find(i=>/w$/.test(i))")
+    p.pg.fill('#' + fid, '2 cm'); p.pg.press('#' + fid, 'Enter'); p.wait(400)
+    a = p.ev("return App.doc.items[0].p.w")
+    p.pg.fill('#' + fid, '1/4"'); p.pg.press('#' + fid, 'Enter'); p.wait(400)
+    b = p.ev("return App.doc.items[0].p.w")
+    p.pg.fill('#' + fid, '10mm+2cm'); p.pg.press('#' + fid, 'Enter'); p.wait(400)
+    c = p.ev("return App.doc.items[0].p.w")
+    return [a == 20, abs(b - 6.35) < 1e-9, c == 30]
+
+
+def t_teilen(p):
+    scene(p, [{'id': 'H', 'type': 'line', 'a': [-20, 0], 'b': [20, 0]}])
+    p.pg.keyboard.press('y'); p.wait(200)
+    s = to_screen(p, 0, 0.3); p.pg.mouse.click(s[0], s[1]); p.wait(400)
+    st = SS(p, "return [S.ents.length, S.ents.map(e=>[e.a,e.b]), S.cons.map(c=>c.type), S.status.ok]")
+    ok1 = st[0] == 2 and 'coincident' in st[2] and 'parallel' in st[2] and st[3]
+    ok2 = abs(st[1][0][1][0]) < 0.6 and abs(st[1][0][1][1]) < 1e-6
+    return [ok1, ok2]
+
+
+def t_langloch_gebogen(p):
+    sketch_xy(p)
+    p.pg.keyboard.press('g'); p.wait(200)
+    p.pg.select_option('#sl-mode', 'arc'); p.wait(100)
+    for q in ((0, 0), (20, 0), (0, 20), (23, 0)):
+        s = to_screen(p, *q); p.pg.mouse.click(s[0], s[1]); p.wait(200)
+    st = p.ev("const S=Sketch.state; return [S.ents.filter(e=>e.type==='arc').length, S.status.ok, SK.regions(S.ents).length, SK.regions(S.ents)[0] && SK.regions(S.ents)[0].area]")
+    soll = math.pi / 4 * (23 ** 2 - 17 ** 2) + math.pi * 9
+    ok1 = st[0] == 4 and st[1] and st[2] == 1 and abs(st[3] - soll) < 2
+    fertig_hoch(p, '2')
+    ok2 = p.ev("return App.errors.length") == 0 and abs(volumen(p) - 2 * soll) < 2
+    return [ok1, ok2]
+
+
+def t_rechteck_gedreht_sechskant(p):
+    sketch_xy(p)
+    p.pg.select_option('#rk-mode', 'r3'); p.wait(100)
+    for q in ((0, 0), (20, 10), (10, 25)):
+        s = to_screen(p, *q); p.pg.mouse.click(s[0], s[1]); p.wait(200)
+    st = p.ev("const S=Sketch.state; return [S.ents.filter(e=>e.type==='line').length, S.status.ok, SK.regions(S.ents).length]")
+    ok1 = st[0] == 4 and st[1] and st[2] == 1
+    # Sechskant über die Flächen 5,5 mm (M3-Mutter)
+    p.pg.keyboard.press('p'); p.wait(200)
+    p.pg.select_option('#po-mode', 'flats'); p.wait(100)
+    s = to_screen(p, -30, 0); p.pg.mouse.click(s[0], s[1]); p.pg.mouse.move(s[0] + 30, s[1]); p.wait(200)
+    p.pg.keyboard.type('5.5'); p.pg.keyboard.press('Enter'); p.wait(400)
+    e = p.ev("const e=Sketch.state.ents.find(x=>x.type==='poly'); const c=SK.polyCorners(e); const xs=c.map(q=>q[0]), ys=c.map(q=>q[1]); return [Math.max(...xs)-Math.min(...xs), Math.max(...ys)-Math.min(...ys)]")
+    ok2 = abs(min(e) - 5.5) < 1e-3
+    return [ok1, ok2]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -2432,6 +2499,11 @@ TESTS = [
     ('Skizze: Verlängern bis zur nächsten Linie', t_verlaengern),
     ('Entformungsschräge: 3° nach innen / -2° nach außen', t_schraege),
     ('Gewinde: Gewindebolzen M6 / gedrucktes Innengewinde', t_gewinde),
+    ('Entlang Pfad mit eigener Form aus einem Skizzenkörper', t_pfad_eigene_form),
+    ('Einheiten im Maßfeld: 2 cm / 1/4" / 10mm+2cm', t_einheiten),
+    ('Skizze: Linie teilen', t_teilen),
+    ('Skizze: gebogenes Langloch', t_langloch_gebogen),
+    ('Skizze: gedrehtes Rechteck / Sechskant über die Flächen', t_rechteck_gedreht_sechskant),
     ('Kreismuster: anlegen / Anzahl / folgt dem Original / Auflösen', t_kreismuster_3d),
     ('Rechteckmuster: anlegen / zweite Reihe / Formel / Maß ändern / Rückgängig', t_rechteckmuster_3d),
     ('Gespiegelte Kopie: anlegen / andere Ebene / Ebene verschieben', t_spiegelkopie),

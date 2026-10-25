@@ -481,6 +481,25 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
   Schritte: 1. Ein Kind (ab 10) mit „Einfach“ eine Platte mit vier Löchern bauen lassen, ohne zu helfen.
   Erwartet: Es findet Körper, Löcher und Exportieren allein; notieren, wo es hängen bleibt.
 
+## Einheiten und eigener Querschnitt (neu in Sitzung 23)
+
+- [x] **Einheiten im Maßfeld**
+  Schritte: Quader wählen, Breite „2 cm“, dann „1/4\"“, dann „10mm+2cm“ eintippen.
+  Erwartet: 20 mm, 6,35 mm, 30 mm – als Zahl gespeichert, nicht als Formel.
+- [x] **Entlang Pfad mit eigener Form**
+  Schritte: Einen Umriss (z. B. Rechteck 8 × 4) hochziehen, einen offenen Pfad zeichnen; beim Pfad-Körper „Querschnitt: Eigene Form aus einem Skizzenkörper“.
+  Erwartet: Der Umriss läuft am Pfad entlang, der Skizzenkörper wird ausgeblendet.
+
+- [x] **Linie teilen**
+  Schritte: Werkzeug „Teilen“ (Y), auf die Mitte einer Linie klicken.
+  Erwartet: Zwei Linien, verbunden und in einer Flucht.
+- [x] **Gebogenes Langloch**
+  Schritte: Langloch, rechts „Gebogen“; Mitte, Anfang, Ende, Breite klicken; hochziehen.
+  Erwartet: Ein Bogen-Langloch aus vier tangentialen Bögen, eine Fläche, Körper ohne Fehler.
+- [x] **Gedrehtes Rechteck, Sechskant über die Flächen**
+  Schritte: Rechteck „Gedreht“: zwei Punkte für die Kante, dann die Höhe. Vieleck „Über die Flächen“, 5,5 eintippen.
+  Erwartet: Schräges Rechteck mit rechten Winkeln; Sechskant mit 5,5 mm Schlüsselweite.
+
 ## Kleine Werkzeuge, Schräge, Gewinde (neu in Sitzung 22)
 
 - [x] **Kreis- und Bogen-Arten**
