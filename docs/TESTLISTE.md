@@ -481,6 +481,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
   Schritte: 1. Ein Kind (ab 10) mit „Einfach“ eine Platte mit vier Löchern bauen lassen, ohne zu helfen.
   Erwartet: Es findet Körper, Löcher und Exportieren allein; notieren, wo es hängen bleibt.
 
+## Bohrungen an Skizzenpunkten (neu in Sitzung 30)
+
+- [x] **Zwei Punkte werden zwei Löcher**
+  Schritte: Platte 40 × 40 × 3, Doppelklick auf die Oberseite, Werkzeug „Punkt“ (O), zwei Punkte setzen, „Fertig“.
+  Erwartet: Der Bohrungs-Assistent heißt „Bohrungen an 2 Punkten“; nach „Löcher setzen“ sitzen zwei M3-Löcher genau an den Punkten.
+- [ ] **Stack-Lochbild**: Vier Punkte 30,5 × 30,5 bemaßen, „Fertig“, M3 durch – passt ein echter Flugcontroller?
+
 ## Spiegelebene, Kreismuster-Achse, KI (neu in Sitzung 29)
 
 - [x] **Spiegelebene wandert mit**

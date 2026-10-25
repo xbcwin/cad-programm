@@ -710,8 +710,8 @@ const HELP = {
  },
  "point": {
   "tip": "Einzelner Punkt in der Skizze",
-  "hilfe": "Klick setzt einen Punkt. Er bildet keine Fläche, ist aber ein fester Bezug: Maße zu anderen Punkten oder Linien, Regeln wie „Mittig“ oder „Deckungsgleich“ – und später die Mitte für eine Bohrung.",
-  "tipp": "Praktisch für Lochmitten auf einem Lochkreis: Punkt setzen, Abstand zur Mitte bemaßen, dann Kreismuster."
+  "hilfe": "Klick setzt einen Punkt. Er bildet keine Fläche, ist aber ein fester Bezug: Maße zu anderen Punkten oder Linien, Regeln wie „Mittig“ oder „Deckungsgleich“. Liegt die Skizze auf einer Körperfläche und enthält nur Punkte, wird beim „Fertig“ an jedem Punkt eine Bohrung gesetzt – Art und Größe wählst du im Bohrungs-Assistenten.",
+  "tipp": "Praktisch für Lochbilder mit genauen Maßen, z. B. 30,5 × 30,5 für einen Stack: vier Punkte setzen, bemaßen, „Fertig“ – fertig sind die vier Schraubenlöcher."
  },
  "chainEdges": {
   "tip": "Kantenkette wählen",

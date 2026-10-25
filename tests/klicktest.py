@@ -2386,6 +2386,26 @@ def t_kreismuster_achse(p):
     return [ok1, ok2, ok3]
 
 
+# ---------- Sitzung 30: Bohrungen an Skizzenpunkten ----------
+def t_bohrung_punkte(p):
+    p.empty(); p.ev("Actions.addPrimitive('box')"); p.wait(1500)
+    p.ev("App.change('x', d=>{ const it=d.items[0]; it.t.x=0; it.t.y=0; it.p.w=40; it.p.d=40; it.p.h=3; })"); warte_rechnen(p, 20)
+    fi = p.ev("const r=App.results.get(App.doc.items[0].id); return r.data.faces.findIndex(f=>f.t==='PLANE' && f.n[2]>0.9)")
+    p.ev("const it=App.doc.items[0]; const r=App.results.get(it.id); Sketch.startOnFace({id:it.id, idx:arg, info:r.data.faces[arg]})", fi); p.wait(1500)
+    p.pg.keyboard.press('o'); p.wait(200)
+    for q in ((-10, -10), (10, 10)):
+        s = to_screen(p, *q); p.pg.mouse.click(s[0], s[1]); p.wait(250)
+    wp = p.ev("const S=Sketch.state; return S.ents.filter(e=>e.type==='point').map(e=>{const w=S.F.o.clone().addScaledVector(S.F.x,e.a[0]).addScaledVector(S.F.y,e.a[1]); return [w.x,w.y,w.z]})")
+    p.pg.locator('.sketchbar .tool.primary').click(); p.wait(800)
+    ok1 = len(wp) == 2 and p.pg.locator('.holewiz').count() == 1 and 'an 2 Punkten' in p.pg.locator('.holewiz').inner_text() and not p.ev("return Sketch.active")
+    p.pg.select_option('#hw-type', 'through'); p.pg.select_option('#hw-size', 'M3'); p.wait(100)
+    p.pg.click('#hw-go'); p.wait(2500); warte_rechnen(p, 30)
+    parts = p.ev("const out=[]; Model.walk(App.doc.items, it=>{ if(it.kind==='part' && it.p.lib==='screwHole') out.push(Model.worldMatrix(App.doc, it.id).elements.slice(12,15)) }); return out")
+    ok2 = len(parts) == 2 and all(any(abs(a[0] - b[0]) < 0.01 and abs(a[1] - b[1]) < 0.01 for b in wp) for a in parts)
+    ok3 = p.ev("return App.errors.length") == 0 and not p.ev("return Place.active") and p.pg.locator('.holebar').count() == 0
+    return [ok1, ok2, ok3]
+
+
 # ---------- Sitzung 22: kleine Skizzen-Werkzeuge ----------
 def t_kreis_bogen_modi(p):
     sketch_xy(p)
@@ -2664,6 +2684,7 @@ TESTS = [
     ('Muster entlang Kurve: Skizze startet / Linie / Abstand / Kreis mitdrehen / ohne Drehen', t_muster_kurve),
     ('KI: Muster entlang Kurve / kennt die Aktion', t_ki_muster_kurve),
     ('Kreismuster: senkrecht / Drehachse quer / Mitte Z', t_kreismuster_achse),
+    ('Bohrungen an Skizzenpunkten: Assistent / Lage / fertig', t_bohrung_punkte),
     ('Skizze: Kreis aus 3 / 2 Punkten / tangentialer Bogen', t_kreis_bogen_modi),
     ('Skizze: Verlängern bis zur nächsten Linie', t_verlaengern),
     ('Entformungsschräge: 3° nach innen / -2° nach außen', t_schraege),

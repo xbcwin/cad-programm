@@ -1441,8 +1441,8 @@ const HELP = {
  },
  "point": {
   "tip": "Einzelner Punkt in der Skizze",
-  "hilfe": "Klick setzt einen Punkt. Er bildet keine Fläche, ist aber ein fester Bezug: Maße zu anderen Punkten oder Linien, Regeln wie „Mittig“ oder „Deckungsgleich“ – und später die Mitte für eine Bohrung.",
-  "tipp": "Praktisch für Lochmitten auf einem Lochkreis: Punkt setzen, Abstand zur Mitte bemaßen, dann Kreismuster."
+  "hilfe": "Klick setzt einen Punkt. Er bildet keine Fläche, ist aber ein fester Bezug: Maße zu anderen Punkten oder Linien, Regeln wie „Mittig“ oder „Deckungsgleich“. Liegt die Skizze auf einer Körperfläche und enthält nur Punkte, wird beim „Fertig“ an jedem Punkt eine Bohrung gesetzt – Art und Größe wählst du im Bohrungs-Assistenten.",
+  "tipp": "Praktisch für Lochbilder mit genauen Maßen, z. B. 30,5 × 30,5 für einen Stack: vier Punkte setzen, bemaßen, „Fertig“ – fertig sind die vier Schraubenlöcher."
  },
  "chainEdges": {
   "tip": "Kantenkette wählen",
@@ -7313,10 +7313,10 @@ const Place = (() => {
   const HOLE_TYPES = [['through', 'Durchgangsloch für Schraube'], ['tap', 'Gewinde schneiden (Kernloch)'], ['insert', 'Gewindeeinsatz'], ['nut', 'Mutternfalle']];
   let lastHole = { type: 'through', size: 'M3', head: 'countersunk', fit: 'medium', depth: 10, thru: true };
   let hw = null;   // laufender Setz-Modus
-  function holeHere(face, anchor) {
+  function holeHere(face, anchor, at) {
     const o = { ...lastHole };
-    const box = h('div', { style: { display: 'grid', gap: '10px', minWidth: '260px' } });
-    box.append(h('b', null, 'Bohrungs-Assistent'));
+    const box = h('div', { class: 'holewiz', style: { display: 'grid', gap: '10px', minWidth: '260px' } });
+    box.append(h('b', null, at ? `Bohrungen an ${at.pts.length} ${at.pts.length === 1 ? 'Punkt' : 'Punkten'}` : 'Bohrungs-Assistent'));
     const body = h('div', { style: { display: 'grid', gap: '10px' } });
     const draw = () => {
       body.innerHTML = '';
@@ -7340,6 +7340,8 @@ const Place = (() => {
     go.onclick = () => {
       UI.closePop(); lastHole = { ...o };
       startHoles(o);
+      // aus Skizzenpunkten: alle Löcher genau an den Punkten setzen, dann fertig
+      if (at) { for (const p of at.pts) placeAt(at.id, p, at.normal, true); stopHoles(); return; }
       // aus einer gewählten Fläche: das erste Loch gleich dort setzen
       if (face && face.point && face.normal) { const pt = new THREE.Vector3(...face.point), sn = Snap.onFace(face.id, face.idx, pt); Snap.clear(); placeAt(face.id, sn ? sn.point : pt, new THREE.Vector3(...face.normal), !!sn); }
     };
@@ -7428,7 +7430,9 @@ const Place = (() => {
     Viewer.canvas.style.cursor = ''; UI.hint(null); Viewer.requestRender(); Handles.rebuild(); Panels.renderCtx();
     if (!silent && n) UI.toast(`${n} ${n === 1 ? 'Loch' : 'Löcher'} gesetzt. Ziehen verschiebt ein Loch auf der Fläche.`, { icon: 'check' });
   }
-  return { bindTile, holeHere, holeWizard: (anchor) => holeHere(Actions.selectedFace(), anchor), stopHoles, cancel, get active() { return !!st || !!hw; }, get holes() { return !!hw; } };
+  // Bohrungen an Punkten einer Skizze auf einer Körperfläche (Punkte in Weltlage, n = Flächennormale nach außen)
+  function holesAtPoints(id, pts, n) { holeHere(null, $('#t-parts'), { id, pts, normal: n }); }
+  return { bindTile, holeHere, holesAtPoints, holeWizard: (anchor) => holeHere(Actions.selectedFace(), anchor), stopHoles, cancel, get active() { return !!st || !!hw; }, get holes() { return !!hw; } };
 })();
 
 // ---- 53-views.js ----
@@ -7843,7 +7847,7 @@ const Sketch = (() => {
     bgcal: 'Klick den ersten Punkt auf dem Bild an, dann den zweiten. Danach tippst du den echten Abstand ein.',
     splitl: 'Klick auf eine Linie oder einen Bogen – dort wird das Element in zwei Stücke geteilt, die verbunden bleiben. Fängt an Mitte und Schnittpunkten.',
     extend: 'Klick nahe an das Ende einer Linie – sie wächst bis zur nächsten Linie, zum nächsten Bogen oder Kreis und bleibt dort per Regel hängen.',
-    point: 'Klick setzt einen Punkt. Punkte bilden keine Fläche, sind aber Bezug für Maße, Regeln und spätere Bohrungen.',
+    point: 'Klick setzt einen Punkt. Punkte bilden keine Fläche, sind aber Bezug für Maße und Regeln. Auf einer Körperfläche werden reine Punkte beim „Fertig“ zu Bohrungen.',
     tpl: 'Schablone und Maße rechts wählen, dann ins Bild klicken – der Klick ist die Mitte. Fängt an Nullpunkt und Mittelpunkten.',
     text: 'Text, Höhe und Schrift rechts einstellen, dann ins Bild klicken. Der Klick legt den Anfang der Grundlinie fest (bei „Mitte“ die Mitte).',
     ellipse: 'Mittelpunkt klicken, dann das Ende der ersten Achse (legt Länge und Drehung fest), dann die Breite. Oder Breite <b>Tab</b> Höhe eintippen.',
@@ -9814,6 +9818,13 @@ const Sketch = (() => {
       const id = S.ctx.editId, ents = S.ents, dims = S.dims, cons = S.cons, plane = deepClone(S.plane), bg = S.bg ? deepClone(S.bg) : null;
       App.change('Skizze bearbeitet', (doc) => { const f = Model.find(doc, id); f.item.p.sketch.ents = ents; f.item.p.sketch.dims = dims; f.item.p.sketch.cons = cons; f.item.p.sketch.plane = plane; if (bg) f.item.p.sketch.bg = bg; else delete f.item.p.sketch.bg; const keys = regs.map((r) => r.key); if (f.item.p.sel) f.item.p.sel = f.item.p.sel.filter((k) => keys.includes(k)); });
       finishSession(); App.select([id]); return;
+    }
+    // nur Punkte auf einer Körperfläche: an jedem Punkt eine Bohrung (Bohrungs-Assistent)
+    const pts = S.ents.filter((e) => e.type === 'point' && !e.con);
+    if (!regs.length && pts.length && !SK.chains(S.ents).length) {
+      if (!S.ctx.targetId) { UI.toast('Punkte werden zu Bohrungen, wenn die Skizze auf einer Körperfläche liegt – starte sie mit Doppelklick auf die Fläche.', { kind: 'bad', icon: 'info' }); return; }
+      const id = S.ctx.targetId, n = S.F.n.clone(), wp = pts.map((e) => toWorld(e.a[0], e.a[1]));
+      finishSession(); Place.holesAtPoints(id, wp, n); return;
     }
     if (!regs.length && SK.chains(S.ents).length) { sweepFromSketch(); return; }
     if (!regs.length) { UI.toast(S.ents.length ? 'Noch keine geschlossene Fläche. Schließe den Umriss oder zeichne ein Rechteck oder einen Kreis.' : 'Zeichne zuerst etwas, zum Beispiel ein Rechteck.', { kind: 'bad', icon: 'info' }); return; }

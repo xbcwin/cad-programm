@@ -108,10 +108,10 @@ const Place = (() => {
   const HOLE_TYPES = [['through', 'Durchgangsloch für Schraube'], ['tap', 'Gewinde schneiden (Kernloch)'], ['insert', 'Gewindeeinsatz'], ['nut', 'Mutternfalle']];
   let lastHole = { type: 'through', size: 'M3', head: 'countersunk', fit: 'medium', depth: 10, thru: true };
   let hw = null;   // laufender Setz-Modus
-  function holeHere(face, anchor) {
+  function holeHere(face, anchor, at) {
     const o = { ...lastHole };
-    const box = h('div', { style: { display: 'grid', gap: '10px', minWidth: '260px' } });
-    box.append(h('b', null, 'Bohrungs-Assistent'));
+    const box = h('div', { class: 'holewiz', style: { display: 'grid', gap: '10px', minWidth: '260px' } });
+    box.append(h('b', null, at ? `Bohrungen an ${at.pts.length} ${at.pts.length === 1 ? 'Punkt' : 'Punkten'}` : 'Bohrungs-Assistent'));
     const body = h('div', { style: { display: 'grid', gap: '10px' } });
     const draw = () => {
       body.innerHTML = '';
@@ -135,6 +135,8 @@ const Place = (() => {
     go.onclick = () => {
       UI.closePop(); lastHole = { ...o };
       startHoles(o);
+      // aus Skizzenpunkten: alle Löcher genau an den Punkten setzen, dann fertig
+      if (at) { for (const p of at.pts) placeAt(at.id, p, at.normal, true); stopHoles(); return; }
       // aus einer gewählten Fläche: das erste Loch gleich dort setzen
       if (face && face.point && face.normal) { const pt = new THREE.Vector3(...face.point), sn = Snap.onFace(face.id, face.idx, pt); Snap.clear(); placeAt(face.id, sn ? sn.point : pt, new THREE.Vector3(...face.normal), !!sn); }
     };
@@ -223,6 +225,8 @@ const Place = (() => {
     Viewer.canvas.style.cursor = ''; UI.hint(null); Viewer.requestRender(); Handles.rebuild(); Panels.renderCtx();
     if (!silent && n) UI.toast(`${n} ${n === 1 ? 'Loch' : 'Löcher'} gesetzt. Ziehen verschiebt ein Loch auf der Fläche.`, { icon: 'check' });
   }
-  return { bindTile, holeHere, holeWizard: (anchor) => holeHere(Actions.selectedFace(), anchor), stopHoles, cancel, get active() { return !!st || !!hw; }, get holes() { return !!hw; } };
+  // Bohrungen an Punkten einer Skizze auf einer Körperfläche (Punkte in Weltlage, n = Flächennormale nach außen)
+  function holesAtPoints(id, pts, n) { holeHere(null, $('#t-parts'), { id, pts, normal: n }); }
+  return { bindTile, holeHere, holesAtPoints, holeWizard: (anchor) => holeHere(Actions.selectedFace(), anchor), stopHoles, cancel, get active() { return !!st || !!hw; }, get holes() { return !!hw; } };
 })();
 

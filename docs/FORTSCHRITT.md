@@ -1,6 +1,6 @@
 # Fortschritt
 
-Stand: 25.10.2026 · nach Sitzung 29 (19: Skizze auf Profi-Niveau · 20: Magnet, Rundungs-Griff · 21: Skizzieren im 3D, Übergang, Entlang Pfad, Import · 22: Kreis/Bogen-Arten, Verlängern, Entformungsschräge, Gewinde · 23: Einheiten, eigener Querschnitt, Langloch gebogen, gedrehtes Rechteck, Teilen · 24: Punkt, alle Ecken · 25: Schnitt und Spiegeln an Fläche · 26: Kantenkette, Abstände beim Verschieben · 27: Spiegeln an der Achse · 28: Muster entlang Kurve, Schablonen-Maße geprüft, USB-C-Stecker · 29: Spiegelebene wandert mit, Kreismuster quer und längs, KI kennt Muster entlang Kurve)
+Stand: 25.10.2026 · nach Sitzung 30 (19: Skizze auf Profi-Niveau · 20: Magnet, Rundungs-Griff · 21: Skizzieren im 3D, Übergang, Entlang Pfad, Import · 22: Kreis/Bogen-Arten, Verlängern, Entformungsschräge, Gewinde · 23: Einheiten, eigener Querschnitt, Langloch gebogen, gedrehtes Rechteck, Teilen · 24: Punkt, alle Ecken · 25: Schnitt und Spiegeln an Fläche · 26: Kantenkette, Abstände beim Verschieben · 27: Spiegeln an der Achse · 28: Muster entlang Kurve, Schablonen-Maße geprüft, USB-C-Stecker · 29: Spiegelebene wandert mit, Kreismuster quer und längs, KI kennt Muster entlang Kurve · 30: Bohrungen an Skizzenpunkten)
 
 ## Erledigt
 
@@ -187,7 +187,7 @@ Fertig.
 - [x] Muster entlang Kurve: Körper oder Loch wählen → „Muster“ → „Muster entlang Kurve“, Kurve zeichnen (Linie, Bogen, Spline, Kreis oder geschlossener Umriss); Anzahl, Abstand (0 = gleichmäßig verteilt) und Ausrichtung (mit der Kurve drehen oder nicht), „Kurve bearbeiten“; beim Zeichnen zeigen Ringe, wo die Kopien landen (Sitzung 28)
 - [x] Kreismuster auch um eine Achse quer (X) oder längs (Y), mit Mitte Z – z. B. Löcher rund um ein liegendes Rohr; KI-Kollege kennt „Muster entlang Kurve“ und die Drehachse (Sitzung 29)
 - [ ] Muster entlang einer Körperkante (heute: Kurve selbst zeichnen); Kreismuster um eine beliebig schräge Achse
-- [ ] Bohrung an einem Skizzenpunkt (heute per Klick auf eine Fläche)
+- [x] Bohrungen an Skizzenpunkten: Skizze auf einer Körperfläche nur mit Punkten → „Fertig“ öffnet den Bohrungs-Assistenten und setzt an jedem Punkt ein Loch, genau an der bemaßten Stelle (Sitzung 30)
 - [x] Explosionsansicht, Fokus-Vorschau, Schnitt, Röntgen (Sitzung 9)
 - [ ] Explosion auch für die Teile innerhalb einer Gruppe (heute nur oberste Ebene)
 - [ ] Schnitt an einer beliebigen Fläche statt nur an den drei Grundebenen

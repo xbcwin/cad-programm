@@ -35,7 +35,7 @@ const Sketch = (() => {
     bgcal: 'Klick den ersten Punkt auf dem Bild an, dann den zweiten. Danach tippst du den echten Abstand ein.',
     splitl: 'Klick auf eine Linie oder einen Bogen – dort wird das Element in zwei Stücke geteilt, die verbunden bleiben. Fängt an Mitte und Schnittpunkten.',
     extend: 'Klick nahe an das Ende einer Linie – sie wächst bis zur nächsten Linie, zum nächsten Bogen oder Kreis und bleibt dort per Regel hängen.',
-    point: 'Klick setzt einen Punkt. Punkte bilden keine Fläche, sind aber Bezug für Maße, Regeln und spätere Bohrungen.',
+    point: 'Klick setzt einen Punkt. Punkte bilden keine Fläche, sind aber Bezug für Maße und Regeln. Auf einer Körperfläche werden reine Punkte beim „Fertig“ zu Bohrungen.',
     tpl: 'Schablone und Maße rechts wählen, dann ins Bild klicken – der Klick ist die Mitte. Fängt an Nullpunkt und Mittelpunkten.',
     text: 'Text, Höhe und Schrift rechts einstellen, dann ins Bild klicken. Der Klick legt den Anfang der Grundlinie fest (bei „Mitte“ die Mitte).',
     ellipse: 'Mittelpunkt klicken, dann das Ende der ersten Achse (legt Länge und Drehung fest), dann die Breite. Oder Breite <b>Tab</b> Höhe eintippen.',
@@ -2006,6 +2006,13 @@ const Sketch = (() => {
       const id = S.ctx.editId, ents = S.ents, dims = S.dims, cons = S.cons, plane = deepClone(S.plane), bg = S.bg ? deepClone(S.bg) : null;
       App.change('Skizze bearbeitet', (doc) => { const f = Model.find(doc, id); f.item.p.sketch.ents = ents; f.item.p.sketch.dims = dims; f.item.p.sketch.cons = cons; f.item.p.sketch.plane = plane; if (bg) f.item.p.sketch.bg = bg; else delete f.item.p.sketch.bg; const keys = regs.map((r) => r.key); if (f.item.p.sel) f.item.p.sel = f.item.p.sel.filter((k) => keys.includes(k)); });
       finishSession(); App.select([id]); return;
+    }
+    // nur Punkte auf einer Körperfläche: an jedem Punkt eine Bohrung (Bohrungs-Assistent)
+    const pts = S.ents.filter((e) => e.type === 'point' && !e.con);
+    if (!regs.length && pts.length && !SK.chains(S.ents).length) {
+      if (!S.ctx.targetId) { UI.toast('Punkte werden zu Bohrungen, wenn die Skizze auf einer Körperfläche liegt – starte sie mit Doppelklick auf die Fläche.', { kind: 'bad', icon: 'info' }); return; }
+      const id = S.ctx.targetId, n = S.F.n.clone(), wp = pts.map((e) => toWorld(e.a[0], e.a[1]));
+      finishSession(); Place.holesAtPoints(id, wp, n); return;
     }
     if (!regs.length && SK.chains(S.ents).length) { sweepFromSketch(); return; }
     if (!regs.length) { UI.toast(S.ents.length ? 'Noch keine geschlossene Fläche. Schließe den Umriss oder zeichne ein Rechteck oder einen Kreis.' : 'Zeichne zuerst etwas, zum Beispiel ein Rechteck.', { kind: 'bad', icon: 'info' }); return; }
