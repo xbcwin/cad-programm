@@ -481,6 +481,36 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
   Schritte: 1. Ein Kind (ab 10) mit „Einfach“ eine Platte mit vier Löchern bauen lassen, ohne zu helfen.
   Erwartet: Es findet Körper, Löcher und Exportieren allein; notieren, wo es hängen bleibt.
 
+## Skizze auf Profi-Niveau (neu in Sitzung 19)
+
+- [x] **Ecke runden**
+  Schritte: 1. Skizze auf XY, Rechteck 40 × 20. 2. Werkzeug „Ecke runden“ (K), Radius 5, mit der Maus über eine Ecke fahren, klicken. 3. Radius 30 an einer anderen Ecke. 4. Art „Fase“, 5 mm, dritte Ecke. 5. Fertig, 3 mm hoch.
+  Erwartet: Beim Überfahren orange Vorschau; Bogen tangential mit Maß R 5; bei 30 der Hinweis „höchstens … mm“; Fase als schräge Linie; Körper mit Rundung und Fase, Volumen stimmt.
+- [x] **Ellipse**
+  Schritte: 1. Werkzeug „Ellipse“ (E), Mitte klicken, 30 Tab 10 Enter. 2. Zweite Ellipse mit der Maus: Mitte, schräges Achsenende, Breite. 3. Erste Ellipse anklicken, Breite 40. 4. Hochziehen.
+  Erwartet: 30 × 10 mit festen Maßen; die zweite ist gedreht; Breite folgt; Körper glatt (echte Ellipse, keine Ecken).
+- [x] **Rechteck aus der Mitte**
+  Schritte: 1. Rechteck-Werkzeug, rechts „Von der Mitte aus“. 2. Auf den Nullpunkt klicken, 20 Tab 10 Enter. 3. Breite auf 30.
+  Erwartet: Rechteck mittig um den Nullpunkt, voll bestimmt; nach dem Ändern immer noch mittig.
+- [x] **Regeln Konzentrisch und Mittig**
+  Schritte: 1. Zwei Kreise, Regel „Konzentrisch“, beide anklicken. 2. Eine Linie, Regel „Mittig“, Kreis und Linie anklicken.
+  Erwartet: Beide Kreise haben dieselbe Mitte; die Mitte sitzt auf der Linienmitte.
+- [x] **Text**
+  Schritte: 1. Werkzeug „Text“ (B), Text „FPV 5“, Höhe 8, ins Bild klicken. 2. Höhe auf 6, Text auf „FPV 7“. 3. Rechteck um den Text, hochziehen.
+  Erwartet: Großbuchstaben 8 mm hoch; Höhe wird ein festes Maß; der Text ist im Rechteck ausgeschnitten (Gravur), Löcher in a, e, 9 usw. stimmen.
+- [x] **Spline als genaue Kurve**
+  Schritte: Geschlossene Spline mit 4 Punkten hochziehen.
+  Erwartet: Der Körper hat nur 6 Flächen (4 glatte Seiten, oben, unten) statt vieler kleiner Streifen.
+- [x] **Bild als Vorlage**
+  Schritte: 1. Werkzeug „Bild-Vorlage“ (I), Bild laden. 2. „Maßstab festlegen“, zwei Punkte anklicken, echten Abstand eintippen. 3. Bild ziehen. 4. Etwas zeichnen, hochziehen, Skizze wieder bearbeiten.
+  Erwartet: Das Bild bekommt die richtige Größe; es lässt sich verschieben; beim erneuten Bearbeiten ist es wieder da, im Körper und Export nicht.
+- [x] **Skizzenleiste bricht um**
+  Schritte: Fenster schmal (1000 px), Skizze starten.
+  Erwartet: Alle Werkzeuge sind sichtbar (Leiste in mehreren Reihen), die Regel-Leiste liegt darunter.
+- [ ] **Fühlt sich das Zeichnen jetzt profimäßig an?**
+  Schritte: Eine Platine nachzeichnen: Foto laden, Maßstab setzen, Umriss mit Ecken-Rundungen, Löcher konzentrisch, Beschriftung als Text.
+  Erwartet: Geht ohne Umwege; was fehlt oder hakt, bitte notieren.
+
 ## Neue Rahmen und Bausätze (neu in Sitzung 18)
 
 - [x] **Neue Bausätze**

@@ -194,18 +194,28 @@ export function createKernel(R, oc) {
   }
   function loopArea(loop) {
     if (loop.circle) return Math.PI * loop.circle.r * loop.circle.r;
+    if (loop.ellipse) return Math.PI * loop.ellipse.rx * loop.ellipse.ry;
     const pts = [];
-    for (const s of loop.segs) { const sp = s.t === 'arc' ? arcSample(s.a, s.m, s.b) : [s.a, s.b]; for (let i = 0; i < sp.length - 1; i++) pts.push(sp[i]); }
+    const bz = (s) => { const o = []; for (let i = 0; i <= 8; i++) { const t = i / 8, u = 1 - t; o.push([0, 1].map((k) => u * u * u * s.a[k] + 3 * u * u * t * s.c1[k] + 3 * u * t * t * s.c2[k] + t * t * t * s.b[k])); } return o; };
+    for (const s of loop.segs) { const sp = s.t === 'arc' ? arcSample(s.a, s.m, s.b) : s.t === 'bez' ? bz(s) : [s.a, s.b]; for (let i = 0; i < sp.length - 1; i++) pts.push(sp[i]); }
     let A = 0; for (let i = 0; i < pts.length; i++) { const p = pts[i], q = pts[(i + 1) % pts.length]; A += p[0] * q[1] - q[0] * p[1]; }
     return A / 2;
   }
   function loopWire(loop, M, ccw = true) {
     if (loop.circle) return R.assembleWire([R.makeCircle(loop.circle.r, M.P(loop.circle.c), ccw ? M.n : M.n.map((v) => -v))]);
+    if (loop.ellipse) {
+      const E = loop.ellipse; let a = E.rx, b = E.ry, rot = E.rot || 0;
+      if (b > a) { const t = a; a = b; b = t; rot += Math.PI / 2; }
+      const d2 = [Math.cos(rot), Math.sin(rot)], xd = [0, 1, 2].map((i) => M.x[i] * d2[0] + M.y[i] * d2[1]);
+      if (Math.abs(a - b) < 1e-6) return R.assembleWire([R.makeCircle(a, M.P(E.c), ccw ? M.n : M.n.map((v) => -v))]);
+      return R.assembleWire([R.makeEllipse(a, b, M.P(E.c), ccw ? M.n : M.n.map((v) => -v), xd)]);
+    }
     let segs = loop.segs;
-    if ((loopArea(loop) > 0) !== ccw) segs = segs.slice().reverse().map((s) => ({ ...s, a: s.b, b: s.a }));
+    if ((loopArea(loop) > 0) !== ccw) segs = segs.slice().reverse().map((s) => (s.t === 'bez' ? { ...s, a: s.b, b: s.a, c1: s.c2, c2: s.c1 } : { ...s, a: s.b, b: s.a }));
     const edges = [];
     for (const s of segs) {
       if (s.t === 'arc') edges.push(R.makeThreePointArc(M.P(s.a), M.P(s.m), M.P(s.b)));
+      else if (s.t === 'bez') edges.push(R.makeBezierCurve([M.P(s.a), M.P(s.c1), M.P(s.c2), M.P(s.b)]));
       else {
         if (Math.hypot(s.b[0] - s.a[0], s.b[1] - s.a[1]) < 1e-6) continue;
         edges.push(R.makeLine(M.P(s.a), M.P(s.b)));

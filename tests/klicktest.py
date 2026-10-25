@@ -33,7 +33,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Panels}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -1954,6 +1954,237 @@ def t_fehler_bleibt(p):
     return [ok1, ok2]
 
 
+# ---------- Sitzung 19: Skizze auf Profi-Niveau ----------
+def fertig_hoch(p, d='3'):
+    p.pg.keyboard.press('Enter'); p.wait(1500); p.pg.fill('#st-dist', d); p.pg.press('#st-dist', 'Enter'); p.wait(400)
+    p.pg.locator('.stepbox .btn.primary').click(); p.wait(3000)
+    warte_rechnen(p, 40)
+
+
+def volumen(p):
+    return p.ev("return Mass.measureDoc(App.doc).then(r=>r&&r.volume)")
+
+
+def t_ecke_runden(p):
+    sketch_xy(p); cx, cy = p.canvas_center()
+    p.pg.mouse.click(cx - 100, cy - 60); p.pg.mouse.move(cx + 60, cy + 40); p.wait(200)
+    p.pg.keyboard.type('40'); p.pg.keyboard.press('Tab'); p.pg.keyboard.type('20'); p.pg.keyboard.press('Enter'); p.wait(500)
+    r = p.ev("return Sketch.state.ents[0]")
+    p.pg.keyboard.press('k'); p.wait(300)
+    p.pg.fill('#cn-r', '5'); p.pg.press('#cn-r', 'Enter'); p.wait(200)
+    k = to_screen(p, r['b'][0], r['b'][1])
+    p.pg.mouse.move(k[0] - 3, k[1] + 3); p.wait(200)
+    ok1 = p.ev("return !!Sketch.state.cornerHover")
+    p.pg.mouse.click(k[0] - 3, k[1] + 3); p.wait(500)
+    st = p.ev("const S=Sketch.state; return {arcs:S.ents.filter(e=>e.type==='arc').length, tan:S.cons.filter(c=>c.type==='tangent').length, r:S.dims.filter(d=>d.k==='r').map(d=>d.v), ok:S.status&&S.status.ok}")
+    ok2 = st['arcs'] == 1 and st['tan'] == 2 and st['r'] == [5] and st['ok']
+    # zu großer Radius: Hinweis, nichts passiert
+    p.pg.fill('#cn-r', '30'); p.pg.press('#cn-r', 'Enter'); p.wait(200)
+    k3 = to_screen(p, r['a'][0], r['b'][1])
+    p.pg.mouse.click(k3[0] + 3, k3[1] + 3); p.wait(500)
+    ok3 = p.pg.locator('.toast', has_text='höchstens').count() >= 1 and p.ev("return Sketch.state.ents.length") == 5
+    # Fase an der Ecke unten links
+    p.pg.select_option('#cn-mode', 'chamfer'); p.pg.fill('#cn-r', '5'); p.pg.press('#cn-r', 'Enter'); p.wait(200)
+    k2 = to_screen(p, r['a'][0], r['a'][1])
+    p.pg.mouse.click(k2[0] + 3, k2[1] - 3); p.wait(500)
+    fertig_hoch(p)
+    v = volumen(p); soll = (800 - 25 * (1 - math.pi / 4) - 12.5) * 3
+    return [ok1, ok2, ok3, abs(v - soll) < 0.5]
+
+
+def t_ellipse(p):
+    sketch_xy(p); cx, cy = p.canvas_center()
+    p.pg.keyboard.press('e'); p.wait(200)
+    p.pg.mouse.click(cx, cy); p.pg.mouse.move(cx + 60, cy + 10); p.wait(200)
+    p.pg.keyboard.type('30'); p.pg.keyboard.press('Tab'); p.pg.keyboard.type('10'); p.pg.keyboard.press('Enter'); p.wait(500)
+    e = p.ev("const S=Sketch.state; return [S.ents[0], S.dims.map(d=>d.k).sort()]")
+    ok1 = e[0]['type'] == 'ellipse' and abs(e[0]['rx'] - 15) < 1e-6 and abs(e[0]['ry'] - 5) < 1e-6 and e[1] == ['h', 'w']
+    # mit der Maus: Mitte, Achse (gedreht), Breite
+    p.pg.mouse.click(cx + 300, cy); p.pg.mouse.click(cx + 350, cy - 30); p.pg.mouse.move(cx + 310, cy - 30); p.wait(150)
+    p.pg.mouse.click(cx + 310, cy - 30); p.wait(300)
+    e2 = p.ev("return Sketch.state.ents[1]")
+    ok2 = e2['type'] == 'ellipse' and abs(e2['rot']) > 0.3 and e2['ry'] < e2['rx']
+    # Breite rechts ändern
+    p.pg.keyboard.press('v'); q = to_screen(p, 15, 0); p.pg.mouse.click(q[0], q[1]); p.wait(300)
+    p.pg.fill('#se-w', '40'); p.pg.press('#se-w', 'Enter'); p.wait(300)
+    ok3 = abs(p.ev("return Sketch.state.ents[0].rx") - 20) < 1e-6
+    fertig_hoch(p)
+    v = volumen(p); soll = math.pi * 20 * 5 * 3 + math.pi * e2['rx'] * e2['ry'] * 3
+    return [ok1, ok2, ok3, abs(v - soll) < 0.5]
+
+
+def t_rechteck_mitte(p):
+    sketch_xy(p)
+    p.pg.select_option('#rk-mode', 'mid'); p.wait(200)
+    o = to_screen(p, 0, 0)
+    p.pg.mouse.click(o[0], o[1]); p.pg.mouse.move(o[0] + 50, o[1] - 30); p.wait(200)
+    p.pg.keyboard.type('20'); p.pg.keyboard.press('Tab'); p.pg.keyboard.type('10'); p.pg.keyboard.press('Enter'); p.wait(500)
+    st = p.ev("const S=Sketch.state; return [S.ents[0].a, S.ents[0].b, S.cons.map(c=>c.type), S.status.dof]")
+    ok1 = st[0] == [-10, -5] and st[1] == [10, 5] and 'midpoint' in st[2] and st[3] == 0
+    # Breite ändern: bleibt mittig
+    p.pg.keyboard.press('v'); q = to_screen(p, 10, 0); p.pg.mouse.click(q[0], q[1]); p.wait(300)
+    p.pg.fill('#se-w', '30'); p.pg.press('#se-w', 'Enter'); p.wait(300)
+    a = p.ev("return Sketch.state.ents[0].a")
+    return [ok1, abs(a[0] + 15) < 1e-4 and abs(a[1] + 5) < 1e-4]
+
+
+def t_mittig_konzentrisch(p):
+    sketch_xy(p); cx, cy = p.canvas_center()
+    p.pg.keyboard.press('c'); p.pg.mouse.click(cx - 50, cy); p.pg.mouse.click(cx - 20, cy); p.wait(200)
+    p.pg.mouse.click(cx + 40, cy + 20); p.pg.mouse.click(cx + 50, cy + 20); p.wait(200)
+    ents = p.ev("return Sketch.state.ents")
+    p.pg.locator('.consbar [data-tool="c:concentric"]').click(); p.wait(200)
+    a = to_screen(p, ents[0]['c'][0] + ents[0]['r'], ents[0]['c'][1]); b = to_screen(p, ents[1]['c'][0] + ents[1]['r'], ents[1]['c'][1])
+    p.pg.mouse.click(a[0], a[1]); p.wait(150); p.pg.mouse.click(b[0], b[1]); p.wait(400)
+    c = p.ev("return Sketch.state.ents.map(e=>e.c)")
+    ok1 = math.dist(c[0], c[1]) < 1e-6
+    # Mittig: Kreismitte auf die Mitte einer Linie
+    p.ev("const S=Sketch.state; S.ents.push({id:'L1',type:'line',a:[-30,-30],b:[30,-30]}); Sketch.setTool('select')")
+    p.pg.locator('.consbar [data-tool="c:midpoint"]').click(); p.wait(200)
+    l = to_screen(p, 10, -30); e0 = p.ev("return Sketch.state.ents[0]"); a = to_screen(p, e0['c'][0] + e0['r'], e0['c'][1])
+    p.pg.mouse.click(a[0], a[1]); p.wait(150); p.pg.mouse.click(l[0], l[1]); p.wait(400)
+    c2 = p.ev("const S=Sketch.state, L=S.ents.find(e=>e.id==='L1'), c=S.ents.find(e=>e.type==='circle').c; return [c[0]-(L.a[0]+L.b[0])/2, c[1]-(L.a[1]+L.b[1])/2, S.cons.some(k=>k.type==='midpoint')]")
+    return [ok1, abs(c2[0]) < 1e-4 and abs(c2[1]) < 1e-4 and c2[2]]
+
+
+def t_text(p):
+    sketch_xy(p)
+    p.pg.keyboard.press('b'); p.wait(200)
+    p.pg.fill('#tx-s', 'FPV 5'); p.pg.fill('#tx-h', '8'); p.pg.press('#tx-h', 'Enter'); p.wait(100)
+    o = to_screen(p, -10, 0)
+    p.pg.mouse.click(o[0], o[1]); p.wait(400)
+    e = p.ev("const S=Sketch.state; return [S.ents[0], SK.textBox(S.ents[0])]")
+    ok1 = e[0]['type'] == 'text' and e[0]['s'] == 'FPV 5' and abs(e[1]['h'] - 8) < 0.3
+    p.pg.fill('#se-h', '6'); p.pg.press('#se-h', 'Enter'); p.wait(300)
+    ok2 = p.ev("const S=Sketch.state; return S.ents[0].h===6 && S.dims.some(d=>d.k==='h')")
+    p.pg.fill('#se-s', 'FPV 7'); p.pg.press('#se-s', 'Enter'); p.wait(300)
+    ok3 = p.ev("return Sketch.state.ents[0].s") == 'FPV 7'
+    # im Rechteck: Buchstaben werden Löcher (Gravur)
+    p.ev("const S=Sketch.state; S.ents.push({id:'r1',type:'rect',a:[-15,-5],b:[35,12]})")
+    regs = p.ev("return SK.regions(Sketch.state.ents).map(r=>[r.key,r.holes.length])")
+    ok4 = regs[0][0] == 'r1' and regs[0][1] >= 4
+    fertig_hoch(p)
+    ok5 = p.ev("const r=App.results.get(App.doc.items[0].id); return !!(r && r.data && r.data.faces.length > 20) && App.errors.length===0")
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
+def t_spline_genau(p):
+    sketch_xy(p)
+    p.ev("const S=Sketch.state; S.ents.push({id:'s1',type:'spline',closed:true,pts:[[0,0],[30,0],[40,20],[10,30]]})")
+    fertig_hoch(p, '2')
+    n = p.ev("const r=App.results.get(App.doc.items[0].id); return r && r.data.faces.length")
+    return [n == 6, p.ev("return App.errors.length") == 0]
+
+
+def t_bild_vorlage(p):
+    sketch_xy(p)
+    p.pg.keyboard.press('i'); p.wait(200)
+    ok1 = p.pg.locator('#bg-load').count() == 1
+    png = p.pg.evaluate("(()=>{const c=document.createElement('canvas');c.width=200;c.height=100;const g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,200,100);g.fillStyle='#000';g.fillRect(20,20,160,10);return c.toDataURL('image/png')})()")
+    p.ev("Sketch.setBg(arg, 100, 0.5)", png); p.wait(400)
+    p.pg.locator('#bg-cal').click(); p.wait(200)
+    a = to_screen(p, -40, 0); b2 = to_screen(p, 40, 0)
+    p.pg.mouse.click(a[0], a[1]); p.wait(200); p.pg.mouse.click(b2[0], b2[1]); p.wait(500)
+    p.pg.fill('#prompt-inp', '40'); p.pg.press('#prompt-inp', 'Enter'); p.wait(500)
+    bg = p.ev("const b=Sketch.state.bg; return [b.w, b.a]")
+    ok2 = abs(bg[0] - 50) < 0.5 and abs(bg[1][0] + 45) < 0.5
+    c = to_screen(p, 0, 0); d = to_screen(p, 10, 0)
+    p.pg.mouse.move(c[0], c[1]); p.pg.mouse.down(); p.pg.mouse.move(d[0], d[1], steps=4); p.pg.mouse.up(); p.wait(300)
+    ok3 = abs(p.ev("return Sketch.state.bg.a[0]") - bg[1][0] - 10) < 0.6
+    p.ev("const S=Sketch.state; S.ents.push({id:'r1',type:'rect',a:[0,0],b:[10,10]})")
+    fertig_hoch(p)
+    ok4 = p.ev("return !!App.doc.items[0].p.sketch.bg && App.doc.items[0].p.sketch.bg.w > 49")
+    p.ev("Sketch.editItem(App.doc.items[0].id)"); p.wait(1200)
+    ok5 = p.ev("return !!Sketch.state.bg")
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
+def t_skizzenleiste(p):
+    sketch_xy(p)
+    p.pg.set_viewport_size({'width': 1000, 'height': 760}); p.wait(600)
+    # alle Werkzeuge sichtbar (Leiste bricht um statt abzuschneiden)
+    vis = p.pg.evaluate("(()=>{const bar=document.querySelector('.sketchbar').getBoundingClientRect(); return [...document.querySelectorAll('.sketchbar .tool')].every(b=>{const r=b.getBoundingClientRect(); return r.width>0 && r.right<=bar.right+1 && r.left>=bar.left-1;})})()")
+    over = p.pg.evaluate("(()=>{const a=document.querySelector('.sketchbar').getBoundingClientRect(), b=document.querySelector('.consbar').getBoundingClientRect(); return b.top >= a.bottom || b.right <= a.left || b.left >= a.right})()")
+    return [vis, over]
+
+
+# ---------- Sitzung 20: Magnetisches Einrasten ----------
+def platte(p, w=40, d=20, h=4):
+    p.empty(); p.ev("Actions.addPrimitive('box')"); p.wait(1500)
+    p.ev("App.change('x', d=>{ const it=d.items[0]; it.t.x=0; it.t.y=0; it.p.w=arg[0]; it.p.d=arg[1]; it.p.h=arg[2]; })", [w, d, h]); p.wait(2000)
+    p.ev("Viewer.setView('top', false)"); p.wait(1200)
+
+
+def t_magnet_flaeche(p):
+    platte(p)
+    z = p.ev("return App.results.get(App.doc.items[0].id).data.bbox[5]")
+    s = world_screen(p, 14, 6, z); p.pg.mouse.click(s[0], s[1]); p.wait(600)
+    p.pg.locator('.ctxbar button[aria-label="Bohrung"]').click(); p.wait(400)
+    p.pg.select_option('#hw-type', 'through'); p.pg.select_option('#hw-size', 'M3'); p.wait(100)
+    p.pg.click('#hw-go'); p.wait(2500)   # erstes Loch dort, wo geklickt wurde
+    s1 = world_screen(p, 0.6, -0.5, z); p.pg.mouse.move(s1[0], s1[1]); p.wait(500); p.pg.mouse.move(s1[0] + 1, s1[1]); p.wait(300)
+    p.pg.mouse.click(s1[0] + 1, s1[1]); p.wait(2500)   # knapp neben der Mitte -> rastet in die Mitte
+    # zweites Loch: etwas neben der Mittellinie, x = 12 -> y rastet auf 0
+    s2 = world_screen(p, 12, 0.5, z); p.pg.mouse.move(s2[0], s2[1]); p.wait(500); p.pg.mouse.move(s2[0] + 1, s2[1]); p.wait(300)
+    lab = p.ev("return Snap.label")
+    p.pg.mouse.click(s2[0] + 1, s2[1]); p.wait(2500)
+    # drittes Loch: gleicher Randabstand auf der anderen Seite (x = -12)
+    s3 = world_screen(p, -11.6, 0.4, z); p.pg.mouse.move(s3[0], s3[1]); p.wait(500); p.pg.mouse.move(s3[0] + 1, s3[1]); p.wait(300)
+    lab3 = p.ev("return Snap.label")
+    p.pg.mouse.click(s3[0] + 1, s3[1]); p.wait(2500)
+    p.pg.keyboard.press('Escape'); p.wait(800)
+    pos = p.ev("const out=[]; Model.walk(App.doc.items, it=>{ if(it.kind==='part') out.push([it.t.x,it.t.y]) }); return out")
+    ok1 = len(pos) == 4 and abs(pos[1][0]) < 1e-6 and abs(pos[1][1]) < 1e-6
+    ok2 = abs(pos[2][1]) < 1e-6 and lab and 'Mittellinie' in lab
+    ok3 = abs(pos[3][0] + pos[2][0]) < 1e-6 and lab3 and 'Randabstand' in lab3
+    ok4 = p.ev("return App.errors.length") == 0 and p.pg.locator('.snaptip').count() == 0
+    return [ok1, ok2, ok3, ok4]
+
+
+def t_magnet_koerper(p):
+    zwei_quader(p, 0, 3, 0, 40)   # zweiter Quader 40 mm daneben, 3 mm versetzt
+    p.ev("Viewer.setView('top', false)"); p.wait(1200)
+    b0 = p.ev("const b=Actions.worldBox(App.doc.items[1].id); return [b.min.y,b.max.y,b.max.z]")
+    s = world_screen(p, 40, 0, b0[2]); p.pg.mouse.move(s[0], s[1]); p.pg.mouse.down()
+    t = world_screen(p, 40.5, -2.6, b0[2]); p.pg.mouse.move(t[0], t[1], steps=6); p.wait(300)
+    lab = p.ev("return Snap.label")
+    p.pg.mouse.up(); p.wait(1500)
+    y = p.ev("const a=Actions.worldBox(App.doc.items[0].id), b=Actions.worldBox(App.doc.items[1].id); return [a.min.y,b.min.y,a.max.y,b.max.y]")
+    ok1 = abs(y[0] - y[1]) < 1e-3 and lab is not None
+    # mit Strg kein Einrasten
+    s = world_screen(p, 45, 5, b0[2]); p.pg.mouse.move(s[0], s[1]); p.pg.keyboard.down('Control'); p.pg.mouse.down()
+    t = world_screen(p, 45, 6.4, b0[2]); p.pg.mouse.move(t[0], t[1], steps=6); p.pg.mouse.up(); p.pg.keyboard.up('Control'); p.wait(1500)
+    y2 = p.ev("const a=Actions.worldBox(App.doc.items[0].id), b=Actions.worldBox(App.doc.items[1].id); return [a.min.y,b.min.y]")
+    ok2 = abs(y2[0] - y2[1]) > 0.5
+    # Einstellung aus
+    p.ev("App.change('x', d=>{ d.settings.magnet=false; })"); p.wait(300)
+    s = world_screen(p, 45, 6, b0[2]); p.pg.mouse.move(s[0], s[1]); p.pg.mouse.down()
+    t = world_screen(p, 45, 4.6, b0[2]); p.pg.mouse.move(t[0], t[1], steps=6); p.wait(200)
+    ok3 = p.ev("return Snap.label") is None
+    p.pg.mouse.up()
+    return [ok1, ok2, ok3]
+
+
+def t_rundung_ziehen(p):
+    platte(p, 40, 20, 10)
+    p.ev("Viewer.setView('iso', false)"); p.wait(1200)
+    # obere vordere Kante (y = -10, z = 10) anklicken
+    idx = p.ev("const r=App.results.get(App.doc.items[0].id); return r.data.edges.findIndex(e=>e.t==='LINE' && Math.abs(e.m[1]+10)<1e-3 && Math.abs(e.m[2]-10)<1e-3)")
+    p.ev("App.select([App.doc.items[0].id], { edges: [{ id: App.doc.items[0].id, edgeIdx: arg }] })", idx); p.wait(600)
+    ok1 = p.ev("return Handles.debugKinds ? Handles.debugKinds() : null") == ['fillet'] and p.pg.locator('.fillet-tip').count() == 1
+    hp = p.ev("const m=Handles.debugHandle('fillet'); const s=Viewer.toScreen(m.position); const r=Viewer.canvas.getBoundingClientRect(); const d=Viewer.toScreen(m.position.clone().addScaledVector(m.userData.wdir, 3)); return [s.x+r.left, s.y+r.top, d.x+r.left, d.y+r.top]")
+    p.pg.mouse.move(hp[0], hp[1]); p.pg.mouse.down(); p.pg.mouse.move(hp[2], hp[3], steps=6); p.wait(1500)
+    live = p.pg.locator('.dimlabel.live').inner_text()
+    p.pg.mouse.up(); warte_rechnen(p, 20)
+    fin = p.ev("const it=App.doc.items[0]; return (it.finishes||[]).map(f=>[f.type,f.r])")
+    ok2 = len(fin) == 1 and fin[0][0] == 'fillet' and 2 <= fin[0][1] <= 4 and live.startswith('R')
+    ok3 = p.ev("return App.errors.length") == 0 and p.ev("return App.results.get(App.doc.items[0].id).data.faces.length") == 7
+    # Rückgängig: Rundung weg
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('Control+z'); p.wait(600); p.pg.keyboard.press('Control+z'); warte_rechnen(p, 20)
+    ok4 = p.ev("return (App.doc.items[0].finishes||[]).length") == 0
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -1978,6 +2209,17 @@ TESTS = [
     ('Rechteckmuster: Anzahl und Abstand / folgt dem Original', t_muster_rechteck), ('Kreismuster: Anzahl / Rechteck zerlegt / folgt dem Original', t_muster_kreis),
     ('Fangen: Schnittpunkt / ausschalten / Alt / Kreispunkt', t_fangen), ('Hilfslinien: Taste X / zählt nicht zur Fläche / umwandeln', t_hilfslinien),
     ('Skizzen-Werkzeuge haben Hilfetexte', t_skizze_hilfen),
+    ('Skizze: Ecke runden / zu groß / Fase / Körper stimmt', t_ecke_runden),
+    ('Skizze: Ellipse eintippen / mit der Maus gedreht / Breite ändern / Körper stimmt', t_ellipse),
+    ('Skizze: Rechteck aus der Mitte / bleibt mittig', t_rechteck_mitte),
+    ('Skizze: Regeln Konzentrisch / Mittig', t_mittig_konzentrisch),
+    ('Skizze: Text setzen / Höhe als Maß / Text ändern / Gravur im Rechteck / Körper', t_text),
+    ('Skizze: Spline wird genaue Kurve', t_spline_genau),
+    ('Skizze: Bild-Vorlage / Maßstab / verschieben / gespeichert / wieder da', t_bild_vorlage),
+    ('Skizzenleiste bricht um', t_skizzenleiste),
+    ('Magnet auf der Fläche: Loch in die Mitte / Mittellinie / gleicher Randabstand / Hilfslinien weg', t_magnet_flaeche),
+    ('Magnet zwischen Körpern: bündig / Strg hält an / Einstellung aus', t_magnet_koerper),
+    ('Rundung mit Ziehgriff: Griff an der Kante / Ziehen setzt Radius / Körper / Rückgängig', t_rundung_ziehen),
     ('Kreismuster: anlegen / Anzahl / folgt dem Original / Auflösen', t_kreismuster_3d),
     ('Rechteckmuster: anlegen / zweite Reihe / Formel / Maß ändern / Rückgängig', t_rechteckmuster_3d),
     ('Gespiegelte Kopie: anlegen / andere Ebene / Ebene verschieben', t_spiegelkopie),

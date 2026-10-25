@@ -166,6 +166,9 @@ const IC = {
   arc: '<path d="M4 18a9 9 0 0 1 16 0" /><circle cx="4" cy="18" r="1.6" fill="currentColor"/><circle cx="20" cy="18" r="1.6" fill="currentColor"/>',
   slot: '<path d="M8 7h8a5 5 0 0 1 0 10H8A5 5 0 0 1 8 7z" />',
   polygon: '<path d="M12 3.5 19.5 8v8L12 20.5 4.5 16V8z" />',
+  image: '<rect x="3.5" y="5" width="17" height="14" rx="1.5"/><circle cx="9" cy="10" r="1.6"/><path d="M4 17l5-4.5 3.5 3 3-2.5 4.5 4" />',
+  ellipse: '<ellipse cx="12" cy="12" rx="9" ry="5.5"/><path d="M12 12h.01" />',
+  rectCenter: '<rect x="4" y="6" width="16" height="12" rx="1"/><path d="M12 12h.01 M12 12 20 18" opacity=".55"/>',
   text: '<path d="M5 6h14 M12 6v13 M9 19h6" />',
   construct: '<path d="M4 20 20 4" stroke-dasharray="3 3"/>',
   pointer: '<path d="M5 3l14 7-6 2-2 6z" />',
@@ -227,6 +230,8 @@ const IC = {
   cTangent: '<circle cx="10" cy="14" r="6"/><path d="M5.6 3.2 20 14"/><circle cx="13.6" cy="9.2" r="1.8" fill="currentColor" stroke="none"/>',
   cEqual: '<path d="M10 10h4M10 14h4" opacity=".6"/><path d="M4 19 9 5M15 19l5-14" />',
   cSymmetric: '<path d="M12 3v18" stroke-dasharray="3 2.5" opacity=".5"/><path d="M8 7 4 12l4 5M16 7l4 5-4 5" />',
+  cMid: '<path d="M4 17 20 7" /><circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none"/>',
+  cConcentric: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><path d="M12 12h.01" />',
   cFix: '<circle cx="12" cy="6" r="2"/><path d="M12 8v12M8 11h8M5 14a7 7 0 0 0 14 0" />',
   cCoincident: '<circle cx="16" cy="8" r="4" opacity=".4"/><path d="M4 19 16 8M4 6l12 2"/><circle cx="16" cy="8" r="2" fill="currentColor" stroke="none"/>',
   extrude: '<path d="M12 14 4 17.5 12 21l8-3.5z" fill="currentColor" opacity=".25"/><path d="M4 17.5V10l8 3.5 8-3.5v7.5L12 21z" opacity=".5"/><path d="M12 14 4 17.5 12 21l8-3.5zM12 14V3M8.5 6.5 12 3l3.5 3.5" />',
@@ -295,7 +300,7 @@ const HELP = {
  },
  "rect": {
   "tip": "Rechteck über zwei Ecken aufziehen",
-  "hilfe": "Klicke für die erste Ecke, ziehe die Maus schräg herüber und klicke für die gegenüberliegende Ecke.",
+  "hilfe": "Klicke für die erste Ecke, ziehe die Maus schräg herüber und klicke für die gegenüberliegende Ecke. Rechts kannst du auf „Von der Mitte aus“ umschalten: Dann ist der erste Klick die Mitte – klickst du dafür auf den Nullpunkt oder einen Kreismittelpunkt, bleibt das Rechteck dort mittig.",
   "tipp": "Tippe die Maße direkt nach dem ersten Klick auf der Tastatur ein und wechsle mit der Tab-Taste zwischen Breite und Höhe."
  },
  "circle": {
@@ -617,6 +622,36 @@ const HELP = {
   "tip": "Der KI-Kollege arbeitet große Aufträge selbstständig ab",
   "hilfe": "Schreib unten in die Zeile, was passieren soll – auch große Aufträge wie „Mach alles als Verbund“, „Richte alles mittig aus“ oder „Prüf die Drohne und behebe, was nicht passt“. Der KI-Kollege macht einen Plan, setzt ihn in Runden um, rechnet nach jeder Runde nach und behebt Fehler selbst. Ist etwas unklar, fragt er mit Antwort-Knöpfen zurück. „Selbstständig“ oben im Fenster schaltet das Arbeiten in Runden ab.",
   "tipp": "Der ganze Auftrag ist danach ein einziger Rückgängig-Schritt. „Alles als Verbund“ geht auch ohne KI – Kaufteile bleiben dabei einzeln, damit ihr Gewicht stimmt."
+ },
+ "ellipse": {
+  "tip": "Ellipse vom Mittelpunkt aus",
+  "hilfe": "Klick zuerst den Mittelpunkt, dann das Ende der ersten Achse – damit legst du Länge und Drehung fest. Der dritte Klick bestimmt die zweite Achse. Du kannst auch Breite und Höhe eintippen.",
+  "tipp": "Gut für Griffmulden, ovale Durchbrüche und Kamera-Ausschnitte. Breite, Höhe und Drehung kannst du rechts jederzeit ändern."
+ },
+ "corner2d": {
+  "tip": "Ecke in der Skizze runden oder fasen",
+  "hilfe": "Stell rechts Rundung oder Fase und den Radius ein und klick dann auf eine Ecke – zwischen zwei Linien, an einem Rechteck oder an einem Vieleck. Beim Überfahren siehst du die Rundung schon in Orange.",
+  "tipp": "Die Rundung bleibt tangential und behält ihren Radius als Maß. Ist der Radius zu groß, sagt Tracery dir, wie groß er höchstens sein darf."
+ },
+ "cMid": {
+  "tip": "Punkt genau in die Mitte einer Linie",
+  "hilfe": "Klick einen Punkt oder Kreis an und dann die Linie. Der Punkt sitzt danach immer genau in ihrer Mitte – auch wenn du die Linie verlängerst.",
+  "tipp": "Praktisch für Bohrungen, die mittig auf einer Kante sitzen sollen."
+ },
+ "cConcentric": {
+  "tip": "Gleicher Mittelpunkt für zwei Kreise",
+  "hilfe": "Klick zwei Kreise, Bögen, Vielecke oder Ellipsen an. Sie teilen sich danach denselben Mittelpunkt.",
+  "tipp": "Ideal für Ringe, Senkungen und Lagersitze: Verschiebst du einen Kreis, wandert der andere mit."
+ },
+ "sketchText": {
+  "tip": "Text als Umriss in die Skizze setzen",
+  "hilfe": "Tipp rechts den Text ein, stell Höhe, Schrift und Ausrichtung ein und klick ins Bild. Der Text wird zu echten Umrissen: Liegt er in einem Rechteck, wird er beim Hochziehen ausgeschnitten (graviert) – wählst du nur die Buchstaben, stehen sie erhaben.",
+  "tipp": "Die Höhe gilt für Großbuchstaben. Text, Schrift und Drehung kannst du später rechts ändern, wenn du den Text anklickst."
+ },
+ "sketchImage": {
+  "tip": "Foto oder Zeichnung zum Nachzeichnen hinterlegen",
+  "hilfe": "Lade ein Bild, zum Beispiel ein Foto von einer Platine oder ein Datenblatt. Mit „Maßstab festlegen“ klickst du zwei Punkte an, deren echten Abstand du kennst, und tippst ihn ein – dann hat das Bild die richtige Größe. Ziehen verschiebt das Bild.",
+  "tipp": "Leg für den Maßstab eine möglichst lange bekannte Strecke an, das wird genauer. Das Bild kommt nicht in den Körper und nicht in den Export."
  }
 };
 

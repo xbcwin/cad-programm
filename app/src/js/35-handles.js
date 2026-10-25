@@ -8,7 +8,7 @@ const Handles = (() => {
     group = Viewer.groups.handles;
     overlayEl = $('#overlay');
     Viewer.on('camera', () => { scaleHandles(); placeLabels(); });
-    App.on('selection', rebuild);
+    App.on('selection', () => { if (!state) rebuild(); });
     App.on('results', () => { if (!state) rebuild(); });
     App.on('doc', () => { if (!state) rebuild(); });
     App.on('ghosts', () => { if (!state) rebuild(); });
@@ -50,6 +50,7 @@ const Handles = (() => {
     clear();
     const c = current(); if (!c) return;
     const { it, box, W } = c;
+    if (App.edges.length) { filletHandle(c); return; }
     const [x0, y0, z0, x1, y1, z1] = box; const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, cz = (z0 + z1) / 2;
     const map = SIZE_MAP[it.kind];
     const defs = [];
@@ -104,6 +105,33 @@ const Handles = (() => {
     }
     scaleHandles(); placeLabels();
   }
+  // Rundungs-Ziehgriff: Pfeil an der Mitte der gewählten Kante, Ziehen nach innen = größerer Radius
+  function filletHandle(c) {
+    const E = App.edges[0]; if (!E || E.id !== c.it.id) return;
+    const r = App.results.get(E.id); const g = r && r.data && r.data.edges && r.data.edges[E.edgeIdx]; if (!g) return;
+    const W = c.W;
+    const m = new THREE.Vector3(...g.m);
+    let tan = g.t === 'LINE' ? new THREE.Vector3(...g.b).sub(new THREE.Vector3(...g.a)) : g.pts ? new THREE.Vector3(...g.pts[9]).sub(new THREE.Vector3(...g.pts[7])) : null;
+    let dir;
+    if (g.t === 'CIRCLE' && g.c) dir = new THREE.Vector3(...g.c).sub(m);
+    else {
+      const b = c.box, ctr = new THREE.Vector3((b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2);
+      dir = ctr.sub(m);
+      if (tan && tan.lengthSq() > 1e-9) { tan.normalize(); dir.addScaledVector(tan, -dir.dot(tan)); }
+    }
+    if (dir.lengthSq() < 1e-9) dir.set(0, 0, -1);
+    dir.normalize();
+    const wp = m.clone().applyMatrix4(W), wdir = dir.clone().transformDirection(W).normalize();
+    const hm = handleMesh('lift');
+    hm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), wdir.clone().negate());
+    hm.material.color.set('#e0457b');
+    hm.userData = { kind: 'fillet', base: wp.clone(), wdir, dir: wdir.toArray() };
+    group.add(hm); items.push(hm);
+    const el = h('div', { class: 'dimlabel fillet-tip', title: 'Ziehen oder Zahl tippen' }, 'Rundung ziehen');
+    el.addEventListener('pointerdown', (e) => e.stopPropagation());
+    overlayEl.append(el); labels.push({ el, handle: hm });
+    scaleHandles(); placeLabels();
+  }
   function addLabel(handle, value) {
     const el = h('div', { class: 'dimlabel', title: 'Klicken und genaues Maß eintippen' }, fmt(value, 2));
     el.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
@@ -143,6 +171,7 @@ const Handles = (() => {
       const s = m.userData.kind === 'size' ? 11 * ps : m.userData.kind === 'lift' ? 13 * ps : 12 * ps;
       m.scale.setScalar(s);
       if (m.userData.kind === 'lift') m.position.copy(m.userData.base).add(new THREE.Vector3(0, 0, 26 * ps));
+      if (m.userData.kind === 'fillet') { m.scale.setScalar(13 * ps); m.position.copy(m.userData.base).addScaledVector(m.userData.wdir, -16 * ps); }
     }
     Viewer.requestRender();
   }
@@ -204,6 +233,17 @@ const Handles = (() => {
     const before = App.snapshot();
     const V = Model.vars(App.doc).v;
     state = { handle, c, before, kind: ud.kind, sx: ev.clientX, sy: ev.clientY, fine: ev.shiftKey };
+    if (ud.kind === 'fillet') {
+      state.axisDir = ud.wdir.clone();
+      state.p0 = ud.base.clone();
+      state.s0 = closestOnAxis(state.p0, state.axisDir, ev.clientX, ev.clientY);
+      const edges = App.edges.slice();
+      const tid = Actions.addFinish('fillet', 0.5, edges); if (!tid) { state = null; return false; }
+      const f = Model.find(App.doc, tid); const fin = f && f.item.finishes[f.item.finishes.length - 1];
+      if (!fin) { state = null; return false; }
+      Object.assign(state, { tid, finId: fin.id, r: 0.5 });
+      return true;
+    }
     if (ud.kind === 'size') {
       state.axisDir = ud.wdir.clone().normalize();
       state.p0 = handle.position.clone();
@@ -231,6 +271,20 @@ const Handles = (() => {
     const { c, handle } = state; const ud = handle.userData;
     const grid = App.doc.settings.snap === false ? 0 : (ev.shiftKey ? 0.1 : App.doc.settings.grid || 1);
     const snap = (v) => (grid ? Math.round(v / grid) * grid : round(v, 3));
+    if (state.kind === 'fillet') {
+      const s = closestOnAxis(state.p0, state.axisDir, ev.clientX, ev.clientY) - state.s0;
+      const step = ev.shiftKey ? 0.1 : 0.5;
+      const r = Math.max(0.1, round(Math.round((0.5 + s) / step) * step, 3));
+      if (r !== state.r) {
+        state.r = r;
+        const f = Model.find(App.doc, state.tid); const fin = f && f.item.finishes.find((x) => x.id === state.finId);
+        if (fin) { fin.r = r; App.emit('doc'); liveRebuild(); }
+      }
+      handle.userData.base = state.p0.clone().addScaledVector(state.axisDir, r * 0.6); scaleHandles();
+      for (const l of labels) if (l.handle === handle) l.el.hidden = true;
+      showLive(handle, r, 'R', ' mm');
+      return;
+    }
     if (state.kind === 'size') {
       const s = closestOnAxis(state.p0, state.axisDir, ev.clientX, ev.clientY);
       let val = ud.param === 'dist' ? snap(state.v0 + (s - state.s0)) : snap(state.v0 + (s - state.s0));
@@ -276,6 +330,11 @@ const Handles = (() => {
     if (!state) return;
     const st = state; state = null;
     if (liveEl) { liveEl.remove(); liveEl = null; }
+    if (st.kind === 'fillet') {
+      const f = Model.find(App.doc, st.tid); const fin = f && f.item.finishes.find((x) => x.id === st.finId);
+      if (fin) { fin.r = 0.5; if (st.r !== 0.5) Actions.setFinish(st.tid, st.finId, { r: st.r }); else App.rebuild(); }
+      App.select([st.tid]); rebuild(); return;
+    }
     const label = st.kind === 'size' ? 'Größe geändert' : st.kind === 'lift' ? 'Angehoben' : 'Gedreht';
     if (App.snapshot() !== st.before) { App.pushUndo(label, st.before); App.touched(); }
     rebuild();
@@ -289,6 +348,7 @@ const Handles = (() => {
       const V = Model.vars(App.doc).v; const cur = Model.num(c.it.p[ud.param], V, st.v0);
       return { fields: [{ label: LABELS[ud.param] || ud.param, value: cur, unit: 'mm' }], apply: ([v]) => { c.it.t = { ...st.t0 }; c.it.p[ud.param] = st.v0; setDim(c, handle, round(Math.max(0.001, v), 6)); fin(); } };
     }
+    if (st.kind === 'fillet') return { fields: [{ label: 'Radius', value: st.r, unit: 'mm' }], apply: ([v]) => { st.r = Math.max(0.01, round(v, 4)); fin(); } };
     if (st.kind === 'lift') return { fields: [{ label: 'Höhe', value: c.it.t.z, unit: 'mm' }], apply: ([v]) => { c.it.t = { ...st.t0, z: round(v, 6) }; fin(); } };
     if (st.kind === 'rot') {
       return { fields: [{ label: 'Drehung', value: 0, unit: '°' }], apply: ([deg]) => {
@@ -299,7 +359,9 @@ const Handles = (() => {
     }
     return null;
   }
-  return { init, rebuild, hitHandle, hover, start, move, end, inputSpec, get dragging() { return !!state; }, clear };
+  const debugKinds = () => items.filter((m) => m.isMesh).map((m) => m.userData.kind);
+  const debugHandle = (k) => items.find((m) => m.isMesh && m.userData.kind === k);
+  return { debugKinds, debugHandle, init, rebuild, hitHandle, hover, start, move, end, inputSpec, get dragging() { return !!state; }, clear };
 })();
 
 // ---------- Maus-Bedienung ----------
@@ -337,7 +399,7 @@ const Interact = (() => {
           const W = Model.worldMatrix(App.doc, gh.id);
           const q = new THREE.Quaternion(); W.decompose(new THREE.Vector3(), q, new THREE.Vector3());
           const nrm = new THREE.Vector3(0, 0, 1).applyQuaternion(q);
-          moving = { child: f.item, before: App.snapshot(), start: gh.point.clone(), normal: nrm, t0: Model.tNumeric(f.item), q, PW: Model.parentWorld(App.doc, gh.id) };
+          moving = { child: f.item, before: App.snapshot(), start: gh.point.clone(), normal: nrm, t0: Model.tNumeric(f.item), q, PW: Model.parentWorld(App.doc, gh.id), o0: new THREE.Vector3().setFromMatrixPosition(W), topId: (Model.topOf(App.doc, gh.id) || {}).id };
           return;
         }
       }
@@ -380,7 +442,7 @@ const Interact = (() => {
     if (!App.sel.includes(top.id)) App.select([top.id]);
     const ids = App.sel.map((id) => App.doc.items.find((x) => x.id === id)).filter((x) => x && !x.locked);
     const planeZ = hit.point.z;
-    moving = { ids, before: App.snapshot(), start: hit.point.clone(), planeZ, t0: new Map(ids.map((it) => [it.id, Model.tNumeric(it)])) };
+    moving = { ids, before: App.snapshot(), start: hit.point.clone(), planeZ, t0: new Map(ids.map((it) => [it.id, Model.tNumeric(it)])), box0: Actions.selBox(ids.map((it) => it.id)) };
     Viewer.canvas.style.cursor = 'grabbing';
     Viewer.clearHover();
   }
@@ -394,6 +456,8 @@ const Interact = (() => {
     let dx = p.x - moving.start.x, dy = p.y - moving.start.y;
     if (grid) { dx = Math.round(dx / grid) * grid; dy = Math.round(dy / grid) * grid; }
     if (e.altKey) { if (Math.abs(dx) > Math.abs(dy)) dy = 0; else dx = 0; }
+    const mag = e.ctrlKey || e.metaKey || e.altKey || !moving.box0 || moving.box0.isEmpty() ? (Snap.clear(), null) : Snap.bodies(moving.box0, [dx, dy], moving.ids.map((it) => it.id), moving.box0.min.z);
+    if (mag) { dx = round(mag.d[0], 4); dy = round(mag.d[1], 4); }
     for (const it of moving.ids) {
       const t0 = moving.t0.get(it.id);
       it.t = { ...t0, x: round(t0.x + dx, 4), y: round(t0.y + dy, 4) };
@@ -401,7 +465,7 @@ const Interact = (() => {
     }
     if (!moveLabel) { moveLabel = h('div', { class: 'dimlabel live' }); $('#overlay').append(moveLabel); }
     const r = Viewer.canvas.getBoundingClientRect();
-    moveLabel.textContent = `X ${fmt(dx, 2)}  Y ${fmt(dy, 2)}`;
+    moveLabel.textContent = `X ${fmt(dx, 2)}  Y ${fmt(dy, 2)}`; moveLabel.style.display = mag ? 'none' : '';
     moveLabel.style.left = e.clientX - r.left + 'px'; moveLabel.style.top = e.clientY - r.top - 30 + 'px';
     App.emit('doc'); Handles.rebuild(); liveRebuild();
   }
@@ -415,7 +479,13 @@ const Interact = (() => {
     const grid = App.doc.settings.snap === false ? 0 : (e.shiftKey ? 0.1 : App.doc.settings.grid || 1);
     if (grid) { dl.x = Math.round(dl.x / grid) * grid; dl.y = Math.round(dl.y / grid) * grid; }
     dl.z = 0;
-    const dW2 = dl.applyQuaternion(m.q);
+    let dW2 = dl.applyQuaternion(m.q);
+    // Magnet: Ursprung des Teils auf Mitte, Mittellinien, Lochmitten der Fläche darunter
+    if (!(e.ctrlKey || e.metaKey) && m.topId) {
+      const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true, solidsOnly: true });
+      const sn = hit && hit.id === m.topId && hit.normal && Math.abs(hit.normal.dot(m.normal)) > 0.999 ? Snap.onFace(hit.id, hit.faceIdx, m.o0.clone().add(dW2)) : (Snap.clear(), null);
+      if (sn) dW2 = sn.point.clone().sub(m.o0);
+    } else Snap.clear();
     const pq = new THREE.Quaternion(); m.PW.decompose(new THREE.Vector3(), pq, new THREE.Vector3());
     const dP = dW2.applyQuaternion(pq.invert());
     m.child.t = { ...m.t0, x: round(m.t0.x + dP.x, 4), y: round(m.t0.y + dP.y, 4), z: round(m.t0.z + dP.z, 4) };
@@ -428,6 +498,7 @@ const Interact = (() => {
     if (moving) {
       const m = moving; moving = null;
       if (moveLabel) { moveLabel.remove(); moveLabel = null; }
+      Snap.clear();
       Viewer.canvas.style.cursor = '';
       if (App.snapshot() !== m.before) { App.pushUndo(m.ids && m.ids.length > 1 ? 'Objekte verschoben' : 'Verschoben', m.before); App.touched(); }
       if (m.child) App.refreshSelectionVisuals();

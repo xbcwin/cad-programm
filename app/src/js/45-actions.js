@@ -356,13 +356,13 @@ const Actions = (() => {
     return { id: f.id, idx: f.faceIdx, info, point: f.point, normal: f.normal };
   }
   // Lage für ein Objekt, das auf eine Fläche gesetzt wird (lokale Z-Achse = Flächennormale)
-  function onFaceTransform(targetId, pointWorld, normalWorld) {
+  function onFaceTransform(targetId, pointWorld, normalWorld, opts = {}) {
     const W = Model.worldMatrix(App.doc, targetId), WI = W.clone().invert();
     const p = new THREE.Vector3(...pointWorld).applyMatrix4(WI);
     const n = new THREE.Vector3(...normalWorld).transformDirection(WI).normalize();
     const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), n);
     const e = new THREE.Euler().setFromQuaternion(q, 'XYZ');
-    const g = App.doc.settings.snap === false ? 0 : (App.doc.settings.grid || 1);
+    const g = App.doc.settings.snap === false || opts.exact ? 0 : (App.doc.settings.grid || 1);
     const sn = (v, k) => (!g || Math.abs(n.getComponent(k)) > 0.1 ? round(v, 4) : round(Math.round(v / g) * g, 4));
     const r = (a) => round((a * 180) / Math.PI, 4);
     return { targetId, t: { x: sn(p.x, 0), y: sn(p.y, 1), z: sn(p.z, 2), rx: r(e.x), ry: r(e.y), rz: r(e.z) } };

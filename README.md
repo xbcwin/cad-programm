@@ -40,7 +40,7 @@ Projektdateien heißen `*.tracery.json`; ältere `*.masswerk.json` lassen sich w
 
 ## Lizenzen
 
-replicad (MIT), OpenCascade (LGPL 2.1 mit Ausnahme), Three.js (MIT).
+replicad (MIT), OpenCascade (LGPL 2.1 mit Ausnahme), Three.js (MIT). Schrift Inter für das Text-Werkzeug (SIL Open Font License 1.1, siehe `app/data/schrift-LIZENZ.txt`; die Umrisse erzeugt `tools/schrift.py`).
 
 ## Ändern und bauen
 

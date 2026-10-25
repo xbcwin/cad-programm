@@ -32,6 +32,8 @@ const SK = (() => {
     for (let i = 0; i <= N; i++) { const t = info.a0 + (info.sweep * i) / N; pts.push([info.c[0] + Math.cos(t) * info.r, info.c[1] + Math.sin(t) * info.r]); }
     return pts;
   }
+  // Ellipse: Mittelpunkt c, Halbachsen rx (entlang rot) und ry
+  function ellipsePoints(c, rx, ry, rot = 0, n = 96) { const cs = Math.cos(rot), sn = Math.sin(rot), pts = []; for (let i = 0; i < n; i++) { const t = (i / n) * TAU, x = Math.cos(t) * rx, y = Math.sin(t) * ry; pts.push([c[0] + cs * x - sn * y, c[1] + sn * x + cs * y]); } return pts; }
   function circlePoints(c, r, n = 72) { const pts = []; for (let i = 0; i < n; i++) { const t = (i / n) * TAU; pts.push([c[0] + Math.cos(t) * r, c[1] + Math.sin(t) * r]); } return pts; }
   // Spline: weiche Kurve genau durch alle Punkte (Catmull-Rom, „centripetal“ – macht keine Schleifen und Überschwinger)
   function splinePoints(pts, closed) {
@@ -64,6 +66,94 @@ const SK = (() => {
   const endA = (e) => (e.type === 'spline' ? e.pts[0] : e.a);
   const endB = (e) => (e.type === 'spline' ? e.pts[e.pts.length - 1] : e.b);
   // Linienstücke einer Punktfolge (für Flächen und den CAD-Kern: Splines gehen dort als feine Linienzüge hin)
+  // Spline genau als kubische Bézier-Stücke (gleiche Kurve wie splinePoints: zentripetaler Catmull-Rom)
+  function splineBez(pts, closed) {
+    const n = pts.length;
+    if (n < 2) return [];
+    if (n === 2 && !closed) return [{ t: 'line', a: pts[0], b: pts[1] }];
+    const P = (i) => {
+      if (closed) return pts[((i % n) + n) % n];
+      if (i < 0) return [2 * pts[0][0] - pts[1][0], 2 * pts[0][1] - pts[1][1]];
+      if (i > n - 1) return [2 * pts[n - 1][0] - pts[n - 2][0], 2 * pts[n - 1][1] - pts[n - 2][1]];
+      return pts[i];
+    };
+    const out = [], spans = closed ? n : n - 1;
+    for (let i = 0; i < spans; i++) {
+      const p0 = P(i - 1), p1 = P(i), p2 = P(i + 1), p3 = P(i + 2);
+      if (d2(p1, p2) < 1e-9) continue;
+      const d01 = Math.sqrt(Math.max(d2(p0, p1), 1e-9)), d12 = Math.sqrt(Math.max(d2(p1, p2), 1e-9)), d23 = Math.sqrt(Math.max(d2(p2, p3), 1e-9));
+      const t1 = d01, t2 = t1 + d12, t3 = t2 + d23, dt = t2 - t1;
+      const m1 = [0, 1].map((k) => ((p1[k] - p0[k]) / (t1 - 0) - (p2[k] - p0[k]) / (t2 - 0) + (p2[k] - p1[k]) / dt) * dt);
+      const m2 = [0, 1].map((k) => ((p2[k] - p1[k]) / dt - (p3[k] - p1[k]) / (t3 - t1) + (p3[k] - p2[k]) / (t3 - t2)) * dt);
+      out.push({ t: 'bez', a: p1, c1: [p1[0] + m1[0] / 3, p1[1] + m1[1] / 3], c2: [p2[0] - m2[0] / 3, p2[1] - m2[1] / 3], b: p2 });
+    }
+    return out;
+  }
+  function bezPoints(s, n) {
+    n = n || Math.max(8, Math.min(40, Math.ceil((d2(s.a, s.c1) + d2(s.c1, s.c2) + d2(s.c2, s.b)) / 0.4)));
+    const o = [];
+    for (let i = 0; i <= n; i++) { const t = i / n, u = 1 - t, A = u * u * u, B = 3 * u * u * t, C = 3 * u * t * t, D = t * t * t; o.push([A * s.a[0] + B * s.c1[0] + C * s.c2[0] + D * s.b[0], A * s.a[1] + B * s.c1[1] + C * s.c2[1] + D * s.b[1]]); }
+    return o;
+  }
+  const revSeg = (s) => (s.t === 'bez' ? { t: 'bez', a: s.b, c1: s.c2, c2: s.c1, b: s.a } : s.t === 'arc' ? { t: 'arc', a: s.b, m: s.m, b: s.a } : { t: 'line', a: s.b, b: s.a });
+  // ---------- Text: Umrisse aus der eingebauten Schrift (Inter, SIL OFL 1.1) ----------
+  const FONTS = { inter: /*JSON:schrift-inter.json*/null, fett: /*JSON:schrift-inter-fett.json*/null };
+  const FONTNAMES = { inter: 'Inter', fett: 'Inter Fett' };
+  const glyphCache = new Map();
+  function glyphContours(font, ch) {
+    const key = font.name + '|' + ch;
+    if (glyphCache.has(key)) return glyphCache.get(key);
+    const g = font.glyphs[ch]; const out = [];
+    if (g && g.p) {
+      const tk = g.p.split(' '); let i = 0, cur = null, start = null, segs = null;
+      const nb = () => +tk[i++];
+      while (i < tk.length) {
+        const op = tk[i++];
+        if (op === 'M') { if (segs && segs.length) out.push(segs); cur = [nb(), nb()]; start = cur; segs = []; }
+        else if (op === 'L') { const p = [nb(), nb()]; if (p[0] !== cur[0] || p[1] !== cur[1]) segs.push({ t: 'line', a: cur, b: p }); cur = p; }
+        else if (op === 'C') { const c1 = [nb(), nb()], c2 = [nb(), nb()], p = [nb(), nb()]; segs.push({ t: 'bez', a: cur, c1, c2, b: p }); cur = p; }
+        else if (op === 'Z') { if (segs && start && (cur[0] !== start[0] || cur[1] !== start[1])) segs.push({ t: 'line', a: cur, b: start }); if (segs && segs.length) out.push(segs); segs = null; cur = start; }
+      }
+      if (segs && segs.length) out.push(segs);
+    }
+    glyphCache.set(key, out);
+    return out;
+  }
+  const textCache = new Map();
+  // Konturen eines Text-Elements in Skizzen-Koordinaten: [[seg, …], …]
+  function textContours(e) {
+    const font = FONTS[e.font] || FONTS.inter;
+    if (!font) return [];
+    const key = JSON.stringify([e.s, e.h, e.font, e.align, e.a, e.rot, e.mir, e.sp]);
+    if (textCache.has(key)) return textCache.get(key);
+    const k = (e.h > 0 ? e.h : 5) / font.cap, sp = (e.sp || 0) / k;
+    const chars = [...String(e.s || '')];
+    let w = 0; for (const ch of chars) w += ((font.glyphs[ch] || font.glyphs['?'] || { w: font.em / 2 }).w) + sp; if (chars.length) w -= sp;
+    const x0 = e.align === 'm' ? -w / 2 : e.align === 'r' ? -w : 0;
+    const cs = Math.cos(e.rot || 0), sn = Math.sin(e.rot || 0), my = e.mir ? -1 : 1;
+    const out = []; let x = x0;
+    for (const ch of chars) {
+      const g = font.glyphs[ch] || font.glyphs['?'];
+      if (g) {
+        const ox = x;
+        const T = (p) => { const u = (p[0] + ox) * k, v = p[1] * k * my; return [e.a[0] + cs * u - sn * v, e.a[1] + sn * u + cs * v]; };
+        for (const c of glyphContours(font, font.glyphs[ch] ? ch : '?')) out.push(c.map((s) => (s.t === 'bez' ? { t: 'bez', a: T(s.a), c1: T(s.c1), c2: T(s.c2), b: T(s.b) } : { t: 'line', a: T(s.a), b: T(s.b) })));
+        x += g.w + sp;
+      } else x += font.em / 2 + sp;
+    }
+    if (textCache.size > 300) textCache.clear();
+    textCache.set(key, out);
+    return out;
+  }
+  // Breite und Mitte eines Texts (für Fangpunkte und Anzeige)
+  function textBox(e) {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    const cs = Math.cos(-(e.rot || 0)), sn = Math.sin(-(e.rot || 0));
+    for (const c of textContours(e)) for (const s of c) for (const p of [s.a, s.b]) { const x = p[0] - e.a[0], y = p[1] - e.a[1], u = cs * x - sn * y, v = sn * x + cs * y; x0 = Math.min(x0, u); x1 = Math.max(x1, u); y0 = Math.min(y0, v); y1 = Math.max(y1, v); }
+    if (!isFinite(x0)) return null;
+    const cu = (x0 + x1) / 2, cv = (y0 + y1) / 2, c2 = Math.cos(e.rot || 0), s2 = Math.sin(e.rot || 0);
+    return { w: x1 - x0, h: y1 - y0, c: [e.a[0] + c2 * cu - s2 * cv, e.a[1] + s2 * cu + c2 * cv] };
+  }
   function lineSegsOf(pts) { const o = []; for (let i = 0; i < pts.length - 1; i++) if (d2(pts[i], pts[i + 1]) > 1e-9) o.push({ t: 'line', a: pts[i], b: pts[i + 1] }); return o; }
   function rectCorners(e) { const [x0, y0] = e.a, [x1, y1] = e.b; return [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]; }
   function polyCorners(e) { const pts = []; const n = Math.max(3, Math.round(e.n || 6)); for (let i = 0; i < n; i++) { const t = (e.rot || 0) + (i / n) * TAU + Math.PI / 2; pts.push([e.c[0] + Math.cos(t) * e.r, e.c[1] + Math.sin(t) * e.r]); } return pts; }
@@ -89,7 +179,9 @@ const SK = (() => {
       case 'poly': { const c = polyCorners(e); return c.map((p, i) => ({ t: 'line', a: p, b: c[(i + 1) % c.length] })); }
       case 'slot': { if (d2(e.a, e.b) < 1e-9) return [{ t: 'circle', c: e.a, r: e.r }]; return slotSegs(e); }
       case 'circle': return [{ t: 'circle', c: e.c, r: e.r }];
+      case 'ellipse': return [{ t: 'ellipse', c: e.c, rx: e.rx, ry: e.ry, rot: e.rot || 0 }];
       case 'spline': return e.pts && e.pts.length >= 2 ? [{ t: 'spline', pts: e.pts, closed: !!e.closed }] : [];
+      case 'text': return textContours(e).flat();
     }
     return [];
   }
@@ -97,7 +189,9 @@ const SK = (() => {
     if (s.t === 'line') return [s.a, s.b];
     if (s.t === 'arc') return arcPoints(s.a, s.m, s.b);
     if (s.t === 'circle') { const p = circlePoints(s.c, s.r); p.push(p[0]); return p; }
+    if (s.t === 'ellipse') { const p = ellipsePoints(s.c, s.rx, s.ry, s.rot); p.push(p[0]); return p; }
     if (s.t === 'spline') return splinePoints(s.pts, s.closed);
+    if (s.t === 'bez') return bezPoints(s);
     return [];
   }
   function polyArea(pts) { let a = 0; for (let i = 0, n = pts.length; i < n; i++) { const p = pts[i], q = pts[(i + 1) % n]; a += p[0] * q[1] - q[0] * p[1]; } return a / 2; }
@@ -113,14 +207,16 @@ const SK = (() => {
     const pts = [];
     for (const s of segs) { const sp = segPoints(s); for (let i = 0; i < sp.length - 1; i++) pts.push(sp[i]); }
     const area = polyArea(pts);
-    return { key, ents, k: { segs: segs.map((s) => (s.t === 'arc' ? { t: 'arc', a: s.a, m: s.m, b: s.b } : { t: 'line', a: s.a, b: s.b })) }, poly: pts, area: Math.abs(area) };
+    return { key, ents, k: { segs: segs.map((s) => (s.t === 'arc' ? { t: 'arc', a: s.a, m: s.m, b: s.b } : s.t === 'bez' ? { t: 'bez', a: s.a, c1: s.c1, c2: s.c2, b: s.b } : { t: 'line', a: s.a, b: s.b })) }, poly: pts, area: Math.abs(area) };
   }
   function loops(ents) {
     const out = [];
     const open = [];
     for (const e of ents || []) {
       if (e.con) continue;
+      if (e.type === 'text') { textContours(e).forEach((c, i) => { const L = loopFromSegs(c, e.id + ':' + i, [e.id]); if (L.poly.length >= 3 && L.area > 1e-6) out.push(L); }); continue; }
       if (e.type === 'circle') { out.push({ key: e.id, ents: [e.id], k: { circle: { c: e.c, r: e.r } }, poly: circlePoints(e.c, e.r), area: Math.PI * e.r * e.r }); continue; }
+      if (e.type === 'ellipse') { if (e.rx > 1e-6 && e.ry > 1e-6) out.push({ key: e.id, ents: [e.id], k: { ellipse: { c: e.c, rx: e.rx, ry: e.ry, rot: e.rot || 0 } }, poly: ellipsePoints(e.c, e.rx, e.ry, e.rot || 0), area: Math.PI * e.rx * e.ry }); continue; }
       if (e.type === 'slot' && d2(e.a, e.b) < 1e-9) { out.push({ key: e.id, ents: [e.id], k: { circle: { c: e.a, r: e.r } }, poly: circlePoints(e.a, e.r), area: Math.PI * e.r * e.r }); continue; }
       if (e.type === 'rect' || e.type === 'poly' || e.type === 'slot') {
         const segs = segsOf(e);
@@ -129,7 +225,7 @@ const SK = (() => {
       }
       if (e.type === 'spline') {
         if (!e.pts || e.pts.length < 2) continue;
-        if (e.closed) { if (e.pts.length >= 3) { const sp = splinePoints(e.pts, true); out.push(loopFromSegs(lineSegsOf(sp), e.id, [e.id])); } continue; }
+        if (e.closed) { if (e.pts.length >= 3) out.push(loopFromSegs(splineBez(e.pts, true), e.id, [e.id])); continue; }
         if (d2(endA(e), endB(e)) > 1e-9) open.push(e);
         continue;
       }
@@ -157,7 +253,7 @@ const SK = (() => {
         visited.add(cur.id);
         const forward = qkey(endA(cur)) === qkey(from);
         const a = forward ? endA(cur) : endB(cur), b = forward ? endB(cur) : endA(cur);
-        if (cur.type === 'spline') { const sp = splinePoints(cur.pts, false); segs.push(...lineSegsOf(forward ? sp : sp.slice().reverse())); }
+        if (cur.type === 'spline') { const bz = splineBez(cur.pts, false); segs.push(...(forward ? bz : bz.slice().reverse().map(revSeg))); }
         else segs.push(cur.type === 'arc' ? { t: 'arc', a, m: cur.m, b } : { t: 'line', a, b });
         from = b;
         const nxt = (adj.get(qkey(b)) || []).find((n) => n.e.id !== cur.id && !visited.has(n.e.id));
@@ -247,10 +343,12 @@ const SK = (() => {
         if (e.type === 'line') { add(e.a, 'end', r); add(e.b, 'end', r); add(lerp(e.a, e.b, 0.5), 'mid', r); }
         else if (e.type === 'arc') { add(e.a, 'end', r); add(e.b, 'end', r); const ai = arcInfo(e.a, e.m, e.b); if (ai) add(ai.c, 'center', r); }
         else if (e.type === 'circle') { add(e.c, 'center', r); for (let k = 0; k < 4; k++) add([e.c[0] + Math.cos((k * Math.PI) / 2) * e.r, e.c[1] + Math.sin((k * Math.PI) / 2) * e.r], 'quad', r); }
+        else if (e.type === 'ellipse') { add(e.c, 'center', r); ellipsePoints(e.c, e.rx, e.ry, e.rot || 0, 4).forEach((q) => add(q, 'quad', r)); }
         else if (e.type === 'rect') { const c = rectCorners(e); c.forEach((q, i) => { add(q, 'end', r); add(lerp(q, c[(i + 1) % 4], 0.5), 'mid', r); }); add(lerp(e.a, e.b, 0.5), 'center', r); }
         else if (e.type === 'poly') { polyCorners(e).forEach((q) => add(q, 'end', r)); add(e.c, 'center', r); }
         else if (e.type === 'slot') { add(e.a, 'center', r); add(e.b, 'center', r); }
         else if (e.type === 'spline') { e.pts.forEach((q) => add(q, 'end', r)); }
+        else if (e.type === 'text') { add(e.a, 'end', r); const tb = textBox(e); if (tb) add(tb.c, 'center', r); }
       }
     };
     each(ents, false); each(refs, true);
@@ -295,18 +393,18 @@ const SK = (() => {
   // ---------- Maße: feste Werte oder Formeln, die die Skizze steuern ----------
   // Ein Maß ist { id, e: Element-ID, k: Größe, v: Zahl oder Formel }.
   const DIMKEYS = {
-    line: ['len', 'ang', 'x', 'y'], rect: ['w', 'h', 'x', 'y'], circle: ['d', 'x', 'y'],
+    line: ['len', 'ang', 'x', 'y'], rect: ['w', 'h', 'x', 'y'], circle: ['d', 'x', 'y'], ellipse: ['w', 'h', 'x', 'y'], text: ['h', 'x', 'y'],
     poly: ['d', 'n', 'x', 'y'], slot: ['len', 'w', 'x', 'y'], arc: ['r', 'x', 'y'], spline: ['x', 'y'],
   };
   const DIMNAME = { len: 'Länge', ang: 'Winkel', w: 'Breite', h: 'Höhe', d: 'Durchmesser', n: 'Ecken', x: 'Abstand X', y: 'Abstand Y', r: 'Radius', dist: 'Abstand', distPL: 'Abstand', angLL: 'Winkel' };
-  const anchorKey = (e) => (e.type === 'circle' || e.type === 'poly' ? 'c' : 'a');
+  const anchorKey = (e) => (e.type === 'circle' || e.type === 'poly' || e.type === 'ellipse' ? 'c' : 'a');
   const anchorOf = (e) => (e.type === 'spline' ? e.pts[0] : e[anchorKey(e)]);
   function measure(e, k) {
     switch (k) {
       case 'len': return d2(e.a, e.b);
       case 'ang': return (Math.atan2(e.b[1] - e.a[1], e.b[0] - e.a[0]) * 180) / Math.PI;
-      case 'w': return e.type === 'slot' ? 2 * e.r : Math.abs(e.b[0] - e.a[0]);
-      case 'h': return Math.abs(e.b[1] - e.a[1]);
+      case 'w': return e.type === 'slot' ? 2 * e.r : e.type === 'ellipse' ? 2 * e.rx : Math.abs(e.b[0] - e.a[0]);
+      case 'h': return e.type === 'text' ? e.h : e.type === 'ellipse' ? 2 * e.ry : Math.abs(e.b[1] - e.a[1]);
       case 'd': return 2 * e.r;
       case 'r': { if (e.type === 'circle') return e.r; const ai = arcInfo(e.a, e.m, e.b); return ai ? ai.r : NaN; }
       case 'n': return e.n;
@@ -320,8 +418,8 @@ const SK = (() => {
     switch (k) {
       case 'len': { if (!(v > 0)) return false; const L = d2(e.a, e.b); const ux = L > 1e-9 ? (e.b[0] - e.a[0]) / L : 1, uy = L > 1e-9 ? (e.b[1] - e.a[1]) / L : 0; e.b = [r4(e.a[0] + ux * v), r4(e.a[1] + uy * v)]; return true; }
       case 'ang': { const L = d2(e.a, e.b); const t = (v * Math.PI) / 180; e.b = [r4(e.a[0] + Math.cos(t) * L), r4(e.a[1] + Math.sin(t) * L)]; return true; }
-      case 'w': if (!(v > 0)) return false; if (e.type === 'slot') e.r = v / 2; else { const s = e.b[0] >= e.a[0] ? 1 : -1; e.b = [r4(e.a[0] + s * v), e.b[1]]; } return true;
-      case 'h': { if (!(v > 0)) return false; const s = e.b[1] >= e.a[1] ? 1 : -1; e.b = [e.b[0], r4(e.a[1] + s * v)]; return true; }
+      case 'w': if (!(v > 0)) return false; if (e.type === 'slot') e.r = v / 2; else if (e.type === 'ellipse') e.rx = v / 2; else { const s = e.b[0] >= e.a[0] ? 1 : -1; e.b = [r4(e.a[0] + s * v), e.b[1]]; } return true;
+      case 'h': { if (!(v > 0)) return false; if (e.type === 'text') { e.h = v; return true; } if (e.type === 'ellipse') { e.ry = v / 2; return true; } const s = e.b[1] >= e.a[1] ? 1 : -1; e.b = [e.b[0], r4(e.a[1] + s * v)]; return true; }
       case 'd': if (!(v > 0)) return false; e.r = v / 2; return true;
       case 'n': e.n = clamp(Math.round(v), 3, 64); return true;
       case 'x': case 'y': {
@@ -338,6 +436,6 @@ const SK = (() => {
     const r = Solver.solve({ ents: ents || [], dims: dims || [], cons: cons || [] }, V, { inPlace });
     return r.ents;
   }
-  return { loops, regions, regionAt, segsOf, segPoints, splinePoints, lineSegsOf, endA, endB, anchorOf, distSeg, arcInfo, arcPoints, circlePoints, rectCorners, polyCorners, hit, distEnt, snapPoints, faceLoopsToEnts, project3, openEnds, bounds, translateEnt, inPoly, d2, applyDims, measure, setMeasure, DIMKEYS, DIMNAME };
+  return { ellipsePoints, splineBez, bezPoints, textContours, textBox, FONTS, FONTNAMES, loops, regions, regionAt, segsOf, segPoints, splinePoints, lineSegsOf, endA, endB, anchorOf, distSeg, arcInfo, arcPoints, circlePoints, rectCorners, polyCorners, hit, distEnt, snapPoints, faceLoopsToEnts, project3, openEnds, bounds, translateEnt, inPoly, d2, applyDims, measure, setMeasure, DIMKEYS, DIMNAME };
 })();
 

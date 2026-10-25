@@ -143,7 +143,7 @@ const UI = (() => {
     if (App.mode === 'drawing') return 'Die Zeichnung entsteht automatisch aus deinem Modell. Mit <b>Maß</b> fügst du Bemaßungen hinzu.';
     const n = App.doc.items.length;
     if (!n) return 'Zieh einen <b>Körper</b> auf die Fläche – oder schreib unten, was du bauen willst.';
-    if (App.edges.length) return '<b>Kante gewählt:</b> Abrunden oder Abschrägen. Mit Umschalt weitere Kanten dazunehmen.';
+    if (App.edges.length) return '<b>Kante gewählt:</b> Am rosa Pfeil ziehen rundet die Kante (Zahl tippen geht auch) – oder Abrunden / Abschrägen. Mit Umschalt weitere Kanten dazunehmen.';
     if (App.face && App.sel.length === 1) return '<b>Fläche gewählt:</b> Darauf skizzieren, ein Loch setzen oder den Körper ziehen.';
     if (App.sel.length > 1) return '<b>' + App.sel.length + ' Objekte gewählt:</b> Gruppieren verbindet sie zu einem Körper.';
     if (App.sel.length === 1) return 'Ziehen verschiebt · Pfeile ändern die Größe · <b>Zahl anklicken</b> zum Eintippen';
@@ -212,6 +212,19 @@ const UI = (() => {
     inp.addEventListener('focus', () => inp.select());
     return wrap;
   }
+  // Textfeld: übernimmt beim Tippen (live) oder erst bei Enter/Verlassen
+  function textField({ id, label, value, onCommit, live, placeholder }) {
+    const wrap = h('div', { class: 'field' });
+    if (label) wrap.append(h('label', { for: id }, label));
+    const inp = h('input', { id, type: 'text', value: value ?? '', placeholder: placeholder || '', autocomplete: 'off', spellcheck: 'false' });
+    let orig = inp.value;
+    const commit = () => { if (inp.value === orig) return; orig = inp.value; onCommit(inp.value); };
+    inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') { commit(); inp.blur(); } if (e.key === 'Escape') { inp.value = orig; inp.blur(); } });
+    if (live) inp.addEventListener('input', commit);
+    inp.addEventListener('blur', commit);
+    wrap.append(h('div', { class: 'inp' }, inp));
+    return wrap;
+  }
   function selectField({ id, label, value, options, onChange }) {
     const wrap = h('div', { class: 'field' });
     if (label) wrap.append(h('label', { for: id }, label));
@@ -221,6 +234,6 @@ const UI = (() => {
     wrap.append(h('div', { class: 'inp' }, sel));
     return wrap;
   }
-  return { toast, mute, modal, confirm, prompt, menu, closeMenu, pop, closePop, initTips, hint, renderHint, loading, busy, numField, selectField };
+  return { toast, mute, modal, confirm, prompt, menu, closeMenu, pop, closePop, initTips, hint, renderHint, loading, busy, numField, selectField, textField };
 })();
 

@@ -1,6 +1,7 @@
 // ================= Platzieren aus der Leiste (Ziehen & Ablegen) =================
 const Place = (() => {
   let st = null; // { spec, preview, onFace, pos }
+  let magnetOff = false;
   function specBox(spec) {
     if (spec.kind) return Model.primitiveBox(spec.kind, spec.p ? { ...Model.newItem(spec.kind).p, ...spec.p } : Model.newItem(spec.kind).p) || [-10, -10, 0, 10, 10, 20];
     const d = spec.part; const p = spec.params || libDefaults(d);
@@ -35,6 +36,7 @@ const Place = (() => {
       // Bewegungen am Fenster verfolgen: das Menü schließt sich beim Ziehen
       const move = (ev) => {
         if (!st && Math.hypot(ev.clientX - down.x, ev.clientY - down.y) > 6) begin(spec);
+        magnetOff = ev.ctrlKey || ev.metaKey;
         if (st) track(ev.clientX, ev.clientY);
       };
       const up = (ev) => {
@@ -67,14 +69,15 @@ const Place = (() => {
     if (hit && hit.normal) {
       const top = App.doc.items.find((it) => it.id === hit.id);
       if (top) {
-        st.onFace = Actions.onFaceTransform(hit.id, hit.point.toArray(), hit.normal.toArray());
+        const sn = magnetOff ? (Snap.clear(), null) : Snap.onFace(hit.id, hit.faceIdx, hit.point);
+        st.onFace = Actions.onFaceTransform(hit.id, (sn ? sn.point : hit.point).toArray(), hit.normal.toArray(), { exact: !!sn });
         const L = Model.localMatrix({ t: st.onFace.t });
         st.preview.matrix.copy(Model.worldMatrix(App.doc, hit.id).multiply(L));
         st.pos = null; Viewer.highlightFace('hover', hit.id, hit.faceIdx);
         Viewer.requestRender(); return;
       }
     }
-    Viewer.highlightFace('hover', null, null);
+    Viewer.highlightFace('hover', null, null); Snap.clear();
     st.onFace = null;
     const p = Viewer.pickPlane(x, y, 0);
     if (p) {
@@ -97,7 +100,7 @@ const Place = (() => {
   function cleanup() {
     if (!st) return;
     Viewer.groups.overlay.remove(st.preview); st.preview.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
-    st = null; document.body.style.cursor = ''; UI.hint(null); Viewer.highlightFace('hover', null, null); Viewer.requestRender();
+    st = null; Snap.clear(); document.body.style.cursor = ''; UI.hint(null); Viewer.highlightFace('hover', null, null); Viewer.requestRender();
   }
   // ---------- Bohrungs-Assistent: Art, Größe, Tiefe wählen, dann Löcher per Klick setzen ----------
   const HOLE_TYPES = [['through', 'Durchgangsloch für Schraube'], ['tap', 'Gewinde schneiden (Kernloch)'], ['insert', 'Gewindeeinsatz'], ['nut', 'Mutternfalle']];
@@ -131,7 +134,7 @@ const Place = (() => {
       UI.closePop(); lastHole = { ...o };
       startHoles(o);
       // aus einer gewählten Fläche: das erste Loch gleich dort setzen
-      if (face && face.point && face.normal) placeAt(face.id, new THREE.Vector3(...face.point), new THREE.Vector3(...face.normal));
+      if (face && face.point && face.normal) { const pt = new THREE.Vector3(...face.point), sn = Snap.onFace(face.id, face.idx, pt); Snap.clear(); placeAt(face.id, sn ? sn.point : pt, new THREE.Vector3(...face.normal), !!sn); }
     };
     box.append(go);
     UI.pop(anchor || $('#t-parts'), box);
@@ -150,10 +153,10 @@ const Place = (() => {
     if (o.type === 'tap') return [LIBMAP.screwHole, { size: o.size, head: 'none', fit: 'tap', length: depth }];
     return [LIBMAP.screwHole, { size: o.size, head: o.head, fit: o.fit, length: depth }];
   }
-  function placeAt(id, point, normal) {
+  function placeAt(id, point, normal, exact) {
     if (!hw) return;
     const [def, params] = specFor(hw.o, thicknessAlong(id, normal));
-    const onFace = Actions.onFaceTransform(id, point.toArray(), normal.toArray());
+    const onFace = Actions.onFaceTransform(id, point.toArray(), normal.toArray(), { exact });
     Actions.addPart(def, params, { onFace });
     App.clearSelection(); Handles.clear();
     hw.count++; holeBar();
@@ -191,13 +194,15 @@ const Place = (() => {
       if (moved) return;
       const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true, solidsOnly: true });
       if (!hit || !hit.normal) { UI.toast('Klick auf eine Fläche eines Körpers.', { icon: 'info', ms: 1600 }); return; }
-      placeAt(hit.id, hit.point, hit.normal);
+      const sn = e.ctrlKey || e.metaKey ? null : Snap.onFace(hit.id, hit.faceIdx, hit.point);
+      placeAt(hit.id, sn ? sn.point : hit.point, hit.normal, !!sn);
     };
     hw.onMove = (e) => {
       const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true, solidsOnly: true });
-      if (!hit || !hit.normal) { hw.ring.visible = false; Viewer.requestRender(); return; }
+      if (!hit || !hit.normal) { hw.ring.visible = false; Snap.clear(); Viewer.requestRender(); return; }
       const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), hit.normal);
-      hw.ring.matrix.compose(hit.point.clone().addScaledVector(hit.normal, 0.05), q, new THREE.Vector3(1, 1, 1));
+      const sn = e.ctrlKey || e.metaKey ? (Snap.clear(), null) : Snap.onFace(hit.id, hit.faceIdx, hit.point);
+      hw.ring.matrix.compose((sn ? sn.point : hit.point).clone().addScaledVector(hit.normal, 0.05), q, new THREE.Vector3(1, 1, 1));
       hw.ring.matrixWorldNeedsUpdate = true; hw.ring.visible = true; Viewer.requestRender();
     };
     cv.addEventListener('pointerdown', hw.onDown, true);
@@ -209,7 +214,7 @@ const Place = (() => {
     if (!hw) return;
     const cv = Viewer.canvas;
     cv.removeEventListener('pointerdown', hw.onDown, true); window.removeEventListener('pointerup', hw.onUp); cv.removeEventListener('pointermove', hw.onMove);
-    Viewer.groups.overlay.remove(hw.ring); hw.ring.geometry.dispose(); hw.ring.material.dispose();
+    Viewer.groups.overlay.remove(hw.ring); hw.ring.geometry.dispose(); hw.ring.material.dispose(); Snap.clear();
     if (hw.bar) hw.bar.remove();
     const n = hw.count; hw = null;
     Viewer.controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };

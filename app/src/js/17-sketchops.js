@@ -40,13 +40,13 @@ const SKO = (() => {
         tOf: (p) => norm(Math.atan2(p[1] - seg.c[1], p[0] - seg.c[0])) / TAU,
       };
     }
-    // Spline: als Linienzug mit Bogenlängen-Parameter
-    const poly = SK.splinePoints(seg.pts, seg.closed);
+    // Spline und Ellipse: als Linienzug mit Bogenlängen-Parameter
+    const poly = seg.t === 'ellipse' ? (() => { const q = SK.ellipsePoints(seg.c, seg.rx, seg.ry, seg.rot); q.push(q[0]); return q; })() : seg.t === 'bez' ? SK.bezPoints(seg) : SK.splinePoints(seg.pts, seg.closed);
     const cum = [0];
     for (let i = 1; i < poly.length; i++) cum.push(cum[i - 1] + d2(poly[i - 1], poly[i]));
     const total = cum[cum.length - 1] || 1;
     return {
-      type: 'spline', closed: !!seg.closed, poly, cum, total, pts: seg.pts,
+      type: 'spline', closed: seg.t === 'ellipse' || !!seg.closed, poly, cum, total, pts: seg.pts || poly,
       at: (t) => {
         const L = Math.max(0, Math.min(1, t)) * total;
         let i = 1; while (i < cum.length - 1 && cum[i] < L) i++;
@@ -384,7 +384,8 @@ const SKO = (() => {
     switch (e.type) {
       case 'line': case 'slot': return ['a', 'b'];
       case 'arc': return ['a', 'b', 'c'];
-      case 'circle': case 'poly': return ['c'];
+      case 'circle': case 'poly': case 'ellipse': return ['c'];
+      case 'text': return ['a'];
       case 'rect': return ['k0', 'k1', 'k2', 'k3'];
       case 'spline': return e.pts.map((_, i) => 'p' + i);
     }
@@ -407,6 +408,12 @@ const SKO = (() => {
       case 'circle': ents.push({ id, type: 'circle', c: pr(f(e.c)), r: e.r, ...base }); pairs.push([R(e.id, 'c'), R(id, 'c')]); rad.push([{ e: e.id }, { e: id }]); break;
       case 'slot': ents.push({ id, type: 'slot', a: pr(f(e.a)), b: pr(f(e.b)), r: e.r, ...base }); pairs.push([R(e.id, 'a'), R(id, 'a')], [R(e.id, 'b'), R(id, 'b')]); rad.push([{ e: e.id }, { e: id }]); break;
       case 'poly': ents.push({ id, type: 'poly', c: pr(f(e.c)), r: e.r, n: e.n, rot: polyRot(e), ...base }); pairs.push([R(e.id, 'c'), R(id, 'c')]); rad.push([{ e: e.id }, { e: id }]); break;
+      case 'text': {
+        const p0 = f(e.a), u = (e.rot || 0), px = f([e.a[0] + Math.cos(u), e.a[1] + Math.sin(u)]), py = f([e.a[0] - Math.sin(u), e.a[1] + Math.cos(u)]);
+        const ux = [px[0] - p0[0], px[1] - p0[1]], uy = [py[0] - p0[0], py[1] - p0[1]], flip = ux[0] * uy[1] - ux[1] * uy[0] < 0;
+        ents.push({ ...e, id, a: pr(p0), rot: Math.atan2(ux[1], ux[0]), mir: flip ? !e.mir : !!e.mir, ...base }); pairs.push([R(e.id, 'a'), R(id, 'a')]); break;
+      }
+      case 'ellipse': ents.push({ id, type: 'ellipse', c: pr(f(e.c)), rx: e.rx, ry: e.ry, rot: polyRot(e), ...base }); pairs.push([R(e.id, 'c'), R(id, 'c')]); break;
       case 'spline': ents.push({ id, type: 'spline', pts: e.pts.map((p) => pr(f(p))), closed: !!e.closed, ...base }); e.pts.forEach((_, i) => pairs.push([R(e.id, 'p' + i), R(id, 'p' + i)])); break;
       case 'rect': {
         if (!explodeRect) {

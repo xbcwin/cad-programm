@@ -359,7 +359,9 @@ const Panels = (() => {
     f2.append(UI.selectField({ id: 'grid', label: 'Schrittweite', value: App.doc.settings.grid, options: [[0.01, '0,01 mm'], [0.05, '0,05 mm'], [0.1, '0,1 mm'], [0.5, '0,5 mm'], [1, '1 mm'], [2, '2 mm'], [5, '5 mm'], [10, '10 mm']], onChange: (v) => App.change('Raster geändert', (doc) => { doc.settings.grid = parseFloat(v); }) }));
     const snap = h('label', { class: 'check', style: { alignSelf: 'end', paddingBottom: '8px' } }, h('input', { type: 'checkbox', id: 'snap', checked: App.doc.settings.snap !== false }), 'Einrasten');
     snap.querySelector('input').onchange = (e) => App.change('Einrasten geändert', (doc) => { doc.settings.snap = e.target.checked; });
-    f2.append(snap); gr.append(f2); w.append(gr);
+    const mag = h('label', { class: 'check', style: { paddingBottom: '4px' } }, h('input', { type: 'checkbox', id: 'magnet', checked: App.doc.settings.magnet !== false }), 'Magnetisch einrasten (Mitte, Mittellinien, Lochmitten, bündig zu anderen Teilen) – Strg hält es kurz an');
+    mag.querySelector('input').onchange = (e) => App.change('Magnet geändert', (doc) => { doc.settings.magnet = e.target.checked; });
+    f2.append(snap); gr.append(f2, mag); w.append(gr);
     const st = Print.stats();
     const info = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Überblick'));
     info.append(h('div', { class: 'mini-list' },

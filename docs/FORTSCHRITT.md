@@ -1,6 +1,6 @@
 # Fortschritt
 
-Stand: 21.10.2026 · nach Sitzung 18 (Bauplan mit 14 Sitzungen abgeschlossen)
+Stand: 25.10.2026 · nach Sitzung 19 (Skizze auf Profi-Niveau, neuer Fahrplan im Vergleichs-Dokument)
 
 ## Erledigt
 
@@ -163,7 +163,10 @@ Fertig.
 - [x] Bedingungen mit Solver (Sitzung 6)
 - [x] Trimmen, Versatz, Spiegeln, Muster in der Skizze (Sitzung 7)
 - [x] Spline, Fangen, Hilfslinien (Sitzung 7)
-- [ ] Spline als glatte Kurve im Kern (heute wird sie für das Hochziehen in kurze Linien zerlegt)
+- [x] Spline als glatte Kurve im Kern: genaue Bézier-Stücke statt kurzer Linien (Sitzung 19)
+- [x] Ecke runden / fasen in der Skizze, Ellipse, Rechteck aus der Mitte, Text (Schrift Inter), Bild-Vorlage mit Maßstab, Regeln Mittig und Konzentrisch (Sitzung 19)
+- [ ] Kreis aus 2 / 3 Punkten, tangentialer Bogen, gebogenes Langloch, Verlängern, Teilen, Pin-Raster
+- [ ] Ellipse und Text trimmen und versetzen; Text entlang einer Kurve
 - [ ] Muster und Versatz: Anzahl/Abstand nachträglich für das ganze Muster ändern (heute je Kopie über das Regel-Symbol)
 - [ ] Spiegeln an der X- oder Y-Achse ohne eigene Linie
 
@@ -204,6 +207,9 @@ Fertig.
 - [ ] C: Gleichzeitig arbeiten
 
 ## Bekannte Punkte
+
+- Text kennt keine Unterschneidung (Kerning) – die Buchstaben stehen nach ihrer Laufweite
+- Ellipse und Text lassen sich nicht trimmen; Ellipsen-Drehung ist keine Regel (nur ein Wert)
 
 - Schritt hinter dem Marker auswählen zeigt noch die Werkzeugleiste im Modell
 - Vorlagen bestehen aus einer Gruppe: Über „Bearbeiten“ im Verlauf sieht man ihre einzelnen Schritte in der Zeitleiste

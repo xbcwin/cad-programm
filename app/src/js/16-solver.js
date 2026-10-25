@@ -19,14 +19,14 @@ const Solver = (() => {
   // ---------- Variablen je Element ----------
   const VARS = {
     line: ['a0', 'a1', 'b0', 'b1'], arc: ['a0', 'a1', 'b0', 'b1', 'm0', 'm1'], circle: ['c0', 'c1', 'r'],
-    rect: ['a0', 'a1', 'b0', 'b1'], slot: ['a0', 'a1', 'b0', 'b1', 'r'], poly: ['c0', 'c1', 'r'],
+    rect: ['a0', 'a1', 'b0', 'b1'], slot: ['a0', 'a1', 'b0', 'b1', 'r'], poly: ['c0', 'c1', 'r'], ellipse: ['c0', 'c1', 'rx', 'ry'], text: ['a0', 'a1', 'h'],
   };
   // Splines haben beliebig viele Punkte: Schlüssel „p3_0“ = X des vierten Punkts, „p3_1“ = Y
   const varsOf = (e) => (e.type === 'spline' ? (e.pts || []).flatMap((_, i) => ['p' + i + '_0', 'p' + i + '_1']) : VARS[e.type]);
   const SPK = /^p(\d+)_([01])$/;
-  const getK = (e, k) => { if (k === 'r') return e.r; const m = SPK.exec(k); if (m) return e.pts[+m[1]][+m[2]]; return e[k[0]][+k[1]]; };
+  const getK = (e, k) => { if (k === 'r' || k === 'rx' || k === 'ry' || (k === 'h' && e.type === 'text')) return e[k]; const m = SPK.exec(k); if (m) return e.pts[+m[1]][+m[2]]; return e[k[0]][+k[1]]; };
   const setK = (e, k, v) => {
-    if (k === 'r') { e.r = v; return; }
+    if (k === 'r' || k === 'rx' || k === 'ry' || (k === 'h' && e.type === 'text')) { e[k] = v; return; }
     const m = SPK.exec(k);
     if (m) { e.pts = e.pts.slice(); e.pts[+m[1]] = e.pts[+m[1]].slice(); e.pts[+m[1]][+m[2]] = v; return; }
     e[k[0]] = e[k[0]].slice(); e[k[0]][+k[1]] = v;
@@ -73,6 +73,8 @@ const Solver = (() => {
         const ks = ['a0', 'a1', 'b0', 'b1', 'm0', 'm1'].map((k) => I(e.id, k));
         return { deps: ks, get: (X) => { const c = circum(X[ks[0]], X[ks[1]], X[ks[2]], X[ks[3]], X[ks[4]], X[ks[5]]); return [c[0], c[1]]; } };
       }
+      if (e.type === 'ellipse' && p === 'c') return two('c');
+      if (e.type === 'text') return two('a');
       if (e.type === 'circle' || e.type === 'poly') {
         if (p === 'c') return two('c');
         if (e.type === 'poly' && p[0] === 'v') {
@@ -128,7 +130,8 @@ const Solver = (() => {
       for (const e of ents) {
         if (e.type === 'line' || e.type === 'arc' || e.type === 'slot' || (e.type === 'spline' && !e.closed)) { put({ e: e.id, p: 'a' }); put({ e: e.id, p: 'b' }); }
         else if (e.type === 'rect') for (let i = 0; i < 4; i++) put({ e: e.id, p: 'k' + i });
-        else if (e.type === 'circle') put({ e: e.id, p: 'c' });
+        else if (e.type === 'circle' || e.type === 'ellipse') put({ e: e.id, p: 'c' });
+        else if (e.type === 'text') put({ e: e.id, p: 'a' });
         else if (e.type === 'poly') { put({ e: e.id, p: 'c' }); }
       }
       for (const g of groups.values()) for (let i = 1; i < g.length; i++) {
@@ -157,11 +160,14 @@ const Solver = (() => {
       if (k === 'len') add([J.a0, J.a1, J.b0, J.b1], (X) => hyp(X[J.b0] - X[J.a0], X[J.b1] - X[J.a1]) - v, tag);
       else if (k === 'ang') add([J.a0, J.a1, J.b0, J.b1], (X) => wrap(Math.atan2(X[J.b1] - X[J.a1], X[J.b0] - X[J.a0]) - (v * Math.PI) / 180) * Math.max(1, hyp(X[J.b0] - X[J.a0], X[J.b1] - X[J.a1])), tag);
       else if (k === 'w' && e.type === 'slot') add([J.r], (X) => 2 * X[J.r] - v, tag);
+      else if (k === 'w' && e.type === 'ellipse') add([J.rx], (X) => 2 * X[J.rx] - v, tag);
+      else if (k === 'h' && e.type === 'ellipse') add([J.ry], (X) => 2 * X[J.ry] - v, tag);
+      else if (k === 'h' && e.type === 'text') add([J.h], (X) => X[J.h] - v, tag);
       else if (k === 'w') { const s = x[J.b0] >= x[J.a0] ? 1 : -1; add([J.a0, J.b0], (X) => (X[J.b0] - X[J.a0]) * s - v, tag); }
       else if (k === 'h') { const s = x[J.b1] >= x[J.a1] ? 1 : -1; add([J.a1, J.b1], (X) => (X[J.b1] - X[J.a1]) * s - v, tag); }
       else if (k === 'd') add([J.r], (X) => 2 * X[J.r] - v, tag);
       else if (k === 'r') { const C = circle({ e: e.id }); if (C) add(C.deps, (X) => C.r(X) - v, tag); }
-      else if (k === 'x' || k === 'y') { const key = e.type === 'spline' ? 'p0_' + (k === 'x' ? '0' : '1') : (e.type === 'circle' || e.type === 'poly' ? 'c' : 'a') + (k === 'x' ? '0' : '1'); const i = J[key]; add([i], (X) => X[i] - v, tag); }
+      else if (k === 'x' || k === 'y') { const key = e.type === 'spline' ? 'p0_' + (k === 'x' ? '0' : '1') : (e.type === 'circle' || e.type === 'poly' || e.type === 'ellipse' ? 'c' : 'a') + (k === 'x' ? '0' : '1'); const i = J[key]; add([i], (X) => X[i] - v, tag); }
     }
     // ---------- Bedingungen ----------
     for (const c of opts.cons || []) {
@@ -203,8 +209,11 @@ const Solver = (() => {
         if (A && Ln) { add([...A.deps, ...Ln[0].deps, ...Ln[1].deps], (X) => { const p = A.get(X); const [dx, dy, a] = L(X, Ln); return ((p[0] - a[0]) * dy - (p[1] - a[1]) * dx) / (hyp(dx, dy) + EPS); }, tag); continue; }
         const C = circle(R[1]);
         if (A && C) add([...A.deps, ...C.deps], (X) => { const p = A.get(X), cc = C.c(X); return hyp(p[0] - cc[0], p[1] - cc[1]) - C.r(X); }, tag);
+      } else if (t === 'concentric') {
+        const A = point({ e: (R[0] || {}).e, p: 'c' }), B = point({ e: (R[1] || {}).e, p: 'c' }); if (!A || !B) continue;
+        for (const k of [0, 1]) add([...A.deps, ...B.deps], (X) => B.get(X)[k] - A.get(X)[k], tag);
       } else if (t === 'midpoint') {
-        const A = point(R[0]), Ln = line(R[1]); if (!A || !Ln) continue;
+        const A = point(R[0]), Ln = R.length === 3 ? [point(R[1]), point(R[2])] : line(R[1]); if (!A || !Ln || !Ln[0] || !Ln[1]) continue;
         for (const k of [0, 1]) add([...A.deps, ...Ln[0].deps, ...Ln[1].deps], (X) => (Ln[0].get(X)[k] + Ln[1].get(X)[k]) / 2 - A.get(X)[k], tag);
       } else if (t === 'symmetric') {
         const A = point(R[0]), B = point(R[1]), Ln = line(R[2]); if (!A || !B || !Ln) continue;
