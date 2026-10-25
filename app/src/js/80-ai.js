@@ -43,15 +43,17 @@ TEILE ANSPRECHEN – überall, wo "id" oder "ids" steht, geht auch:
 "alle" (alle sichtbaren Teile der obersten Ebene) · "auswahl" (was der Nutzer beim Auftrag ausgewählt hatte) · "koerper" · "loecher" · "kaufteile" · "neu" (was du in diesem Auftrag gebaut hast) · "name:Arm" (Name enthält „Arm“) · oder eine Liste, z. B. ["name:Platte","<id>"].
 
 OBJEKT:
-{"art":"box|cylinder|tube|sphere|hemisphere|cone|pyramid|torus|prism|wedge|extrude|part|group","name":"…","rolle":"koerper"|"loch","p":{…},"t":{"x":0,"y":0,"z":0,"rx":0,"ry":0,"rz":0},"farbe":"#RRGGBB","kinder":[OBJEKT…],"rundungen":[{"typ":"fillet","r":2,"kanten":"vertical"}]}
+{"art":"box|cylinder|tube|sphere|hemisphere|cone|pyramid|torus|prism|wedge|extrude|loft|sweep|part|group","name":"…","rolle":"koerper"|"loch","p":{…},"t":{"x":0,"y":0,"z":0,"rx":0,"ry":0,"rz":0},"farbe":"#RRGGBB","kinder":[OBJEKT…],"rundungen":[{"typ":"fillet","r":2,"kanten":"vertical"}]}
 
 Parameter p (alle Grundkörper stehen mit der Unterseite auf z=0 ihres eigenen Systems und sind in X/Y zentriert; t verschiebt/dreht, Drehung in Grad um X, dann Y, dann Z):
 - box: w (Breite X), d (Tiefe Y), h (Höhe Z)
 - cylinder: d, h · tube: d (außen), wall, h · sphere: d · hemisphere: d · cone: d1 (unten), d2 (oben, 0 = Spitze), h
 - pyramid: w, d, h · torus: d (außen), t (Ringdicke) · prism: n (Ecken), d (Umkreis), h · wedge: w, d, h (die Schräge fällt zur +X-Seite ab)
 - extrude: {"ebene":"XY"|"XZ"|"YZ","versatz":0,"hoehe":10,"richtung":"normal"|"reverse"|"both","form":[ELEMENT…]}
-  ELEMENT (2D in mm): {"rect":[x1,y1,x2,y2]} · {"circle":[cx,cy,r]} · {"poly":[[x,y],[x,y],…]} (geschlossener Linienzug) · {"slot":[x1,y1,x2,y2,r]}
+  ELEMENT (2D in mm): {"rect":[x1,y1,x2,y2]} · {"circle":[cx,cy,r]} · {"ellipse":[cx,cy,rx,ry]} · {"poly":[[x,y],[x,y],…]} (geschlossener Linienzug) · {"slot":[x1,y1,x2,y2,r]} · {"text":"FPV","x":0,"y":0,"hoehe":5,"fett":true,"mitte":true} (Schrift als Umriss; in einem Rechteck = Gravur)
   Ebene XY: u=X, v=Y, hoch in +Z. Ebene XZ: u=X, v=Z, hoch in −Y. Ebene YZ: u=Y, v=Z, hoch in +X. „versatz“ verschiebt die Ebene entlang dieser Richtung. Formen, die ganz in einer anderen liegen, werden zu Löchern darin.
+- loft (Übergang durch Umrisse): {"profile":[{"ebene":"XY","versatz":0,"form":[ELEMENT]},{"ebene":"XY","versatz":30,"form":[ELEMENT]}],"spitze":0,"gerade":false} – mit "spitze" > 0 läuft der Körper hinter dem letzten Profil zu einer Spitze zusammen (auch mit nur einem Profil).
+- sweep (Querschnitt entlang Pfad): {"ebene":"XY","versatz":0,"pfad":[[x,y],…],"glatt":false,"form":"rund"|"rechteck","d":6,"w":6,"h":4,"wand":0} – Rohr, Kabelkanal, Bügel; "glatt": true macht aus den Punkten eine Spline.
 - part (Bauteile, Öffnung zeigt nach +Z, Tiefe geht nach −Z; setze z auf die Oberfläche):
   {"lib":"screwHole","size":"M2|M2.5|M3|M4|M5|M6|M8","head":"countersunk|counterbore|none","length":10} (rolle loch)
   {"lib":"nutTrap","size":"M3","length":12} (loch) · {"lib":"insert","size":"M3"} (loch, Gewindeeinsatz) · {"lib":"slotHole","len":20,"w":4.5,"depth":10} (loch)
@@ -90,7 +92,7 @@ Beispiel – Wunsch „Platte 60 × 40 × 4 mit einem Loch in der Mitte“:
 
 Beispiel – Wunsch „Mach alles als Verbund“ (Runde 1):
 {"antwort":"Ich verbinde alle Teile zu einem Körper und prüfe danach, ob alles sauber gerechnet wird.","plan":[{"text":"Alle Teile zu einem Verbund verbinden","fertig":false},{"text":"Ergebnis prüfen","fertig":false}],"aktionen":[{"op":"verbinden","ids":"alle","name":"Verbund"}],"weiter":true}`;
-  const KMAP = { box: 1, cylinder: 1, tube: 1, sphere: 1, hemisphere: 1, cone: 1, pyramid: 1, torus: 1, prism: 1, wedge: 1, extrude: 1, part: 1, group: 1 };
+  const KMAP = { box: 1, cylinder: 1, tube: 1, sphere: 1, hemisphere: 1, cone: 1, pyramid: 1, torus: 1, prism: 1, wedge: 1, extrude: 1, loft: 1, sweep: 1, part: 1, group: 1 };
   function compactItem(it) {
     const o = { id: it.id, art: it.kind, name: it.name, rolle: it.role === 'hole' ? 'loch' : 'koerper' };
     if (it.kind === 'extrude' || it.kind === 'revolve') { o.p = { hoehe: it.p.dist, richtung: it.p.dir || 'normal', skizze: (it.p.sketch && it.p.sketch.ents.length) + ' Elemente' }; }
@@ -592,6 +594,18 @@ Beispiel – Wunsch „Mach alles als Verbund“ (Runde 1):
   }
   function cleanT(t) { const o = {}; for (const k of ['x', 'y', 'z', 'rx', 'ry', 'rz']) if (t && t[k] != null) o[k] = num(t[k], 0); return o; }
   const PLANEDEF = { XY: { x: [1, 0, 0], n: [0, 0, 1] }, XZ: { x: [1, 0, 0], n: [0, -1, 0] }, YZ: { x: [0, 1, 0], n: [1, 0, 0] } };
+  function formEnts(form) {
+    const ents = [];
+    for (const el of form || []) {
+      if (el.rect && el.rect.length === 4) ents.push({ id: uid('e'), type: 'rect', a: [num(el.rect[0], 0), num(el.rect[1], 0)], b: [num(el.rect[2], 10), num(el.rect[3], 10)] });
+      else if (el.circle && el.circle.length === 3) ents.push({ id: uid('e'), type: 'circle', c: [num(el.circle[0], 0), num(el.circle[1], 0)], r: Math.abs(num(el.circle[2], 5)) });
+      else if (el.ellipse && el.ellipse.length >= 4) ents.push({ id: uid('e'), type: 'ellipse', c: [num(el.ellipse[0], 0), num(el.ellipse[1], 0)], rx: Math.abs(num(el.ellipse[2], 5)), ry: Math.abs(num(el.ellipse[3], 3)), rot: 0 });
+      else if (el.slot && el.slot.length === 5) ents.push({ id: uid('e'), type: 'slot', a: [num(el.slot[0], 0), num(el.slot[1], 0)], b: [num(el.slot[2], 10), num(el.slot[3], 0)], r: Math.abs(num(el.slot[4], 2)) });
+      else if (Array.isArray(el.poly) && el.poly.length >= 3) { const pts = el.poly.map((q) => [num(q[0], 0), num(q[1], 0)]); for (let i = 0; i < pts.length; i++) ents.push({ id: uid('e'), type: 'line', a: pts[i], b: pts[(i + 1) % pts.length] }); }
+      else if (typeof el.text === 'string' && el.text) ents.push({ id: uid('e'), type: 'text', a: [num(el.x, 0), num(el.y, 0)], s: el.text, h: Math.abs(num(el.hoehe, 5)), font: el.fett ? 'fett' : 'inter', align: el.mitte ? 'm' : 'l', rot: 0 });
+    }
+    return ents;
+  }
   function buildItem(o, notes) {
     const kind = String(o.art || o.kind || '').toLowerCase();
     if (!KMAP[kind]) { notes.push(`„${o.art}“ kenne ich nicht.`); return null; }
@@ -601,16 +615,26 @@ Beispiel – Wunsch „Mach alles als Verbund“ (Runde 1):
       const pl = PLANEDEF[String(o.p && o.p.ebene || 'XY').toUpperCase()] || PLANEDEF.XY;
       const off = num(o.p && o.p.versatz, 0);
       const plane = { o: pl.n.map((v) => v * (typeof off === 'number' ? off : 0)), x: pl.x, n: pl.n };
-      const ents = [];
-      for (const el of (o.p && o.p.form) || []) {
-        if (el.rect && el.rect.length === 4) ents.push({ id: uid('e'), type: 'rect', a: [num(el.rect[0], 0), num(el.rect[1], 0)], b: [num(el.rect[2], 10), num(el.rect[3], 10)] });
-        else if (el.circle && el.circle.length === 3) ents.push({ id: uid('e'), type: 'circle', c: [num(el.circle[0], 0), num(el.circle[1], 0)], r: Math.abs(num(el.circle[2], 5)) });
-        else if (el.slot && el.slot.length === 5) ents.push({ id: uid('e'), type: 'slot', a: [num(el.slot[0], 0), num(el.slot[1], 0)], b: [num(el.slot[2], 10), num(el.slot[3], 0)], r: Math.abs(num(el.slot[4], 2)) });
-        else if (Array.isArray(el.poly) && el.poly.length >= 3) { const pts = el.poly.map((q) => [num(q[0], 0), num(q[1], 0)]); for (let i = 0; i < pts.length; i++) ents.push({ id: uid('e'), type: 'line', a: pts[i], b: pts[(i + 1) % pts.length] }); }
-      }
+      const ents = formEnts(o.p && o.p.form);
       if (!ents.length) { notes.push('Eine Skizze war leer.'); return null; }
       it = Model.newItem('extrude', {}, { name: o.name || 'Skizzenkörper', role });
       it.p = { sketch: { plane, ents }, dist: num(o.p.hoehe ?? o.p.dist, 10), dir: ['normal', 'reverse', 'both'].includes(o.p.richtung) ? o.p.richtung : 'normal' };
+    } else if (kind === 'loft') {
+      const sketches = [];
+      for (const pr of (o.p && o.p.profile) || []) {
+        const pl = PLANEDEF[String(pr.ebene || 'XY').toUpperCase()] || PLANEDEF.XY, off = num(pr.versatz, 0);
+        const ents = formEnts(pr.form || []); if (!ents.length) continue;
+        sketches.push({ plane: { o: pl.n.map((v) => v * off), x: pl.x, n: pl.n }, ents, dims: [], cons: [] });
+      }
+      const tip = num(o.p && o.p.spitze, 0);
+      if (sketches.length < (tip > 0 ? 1 : 2)) { notes.push('Ein Übergang braucht mindestens zwei Profile (oder ein Profil mit Spitze).'); return null; }
+      it = Model.newItem('loft', { sketches, ruled: !!(o.p && o.p.gerade), tip }, { name: o.name || 'Übergang', role });
+    } else if (kind === 'sweep') {
+      const pl = PLANEDEF[String(o.p && o.p.ebene || 'XY').toUpperCase()] || PLANEDEF.XY, off = num(o.p && o.p.versatz, 0);
+      const pts = ((o.p && o.p.pfad) || []).map((q) => [num(q[0], 0), num(q[1], 0)]);
+      if (pts.length < 2) { notes.push('Ein Pfad braucht mindestens zwei Punkte.'); return null; }
+      const ents = o.p.glatt ? [{ id: uid('e'), type: 'spline', pts, closed: false }] : pts.slice(1).map((q, i) => ({ id: uid('e'), type: 'line', a: pts[i], b: q }));
+      it = Model.newItem('sweep', { sketch: { plane: { o: pl.n.map((v) => v * off), x: pl.x, n: pl.n }, ents, dims: [], cons: [] }, shape: o.p.form === 'rechteck' ? 'rect' : 'circle', d: num(o.p.d, 6), w: num(o.p.w, 6), h: num(o.p.h, 4), wall: num(o.p.wand, 0) }, { name: o.name || 'Entlang Pfad', role });
     } else if (kind === 'part') {
       const lib = o.p && o.p.lib; const def = LIBMAP[lib];
       if (!def) { notes.push(`Das Bauteil „${lib}“ gibt es nicht.`); return null; }

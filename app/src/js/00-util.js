@@ -171,6 +171,7 @@ const IC = {
   slot: '<path d="M8 7h8a5 5 0 0 1 0 10H8A5 5 0 0 1 8 7z" />',
   polygon: '<path d="M12 3.5 19.5 8v8L12 20.5 4.5 16V8z" />',
   image: '<rect x="3.5" y="5" width="17" height="14" rx="1.5"/><circle cx="9" cy="10" r="1.6"/><path d="M4 17l5-4.5 3.5 3 3-2.5 4.5 4" />',
+  point: '<circle cx="12" cy="12" r="2.6" fill="currentColor"/><path d="M12 4v4M12 16v4M4 12h4M16 12h4" opacity=".55"/>',
   splitLine: '<path d="M4 18 10 12M14 10l6-6" /><circle cx="12" cy="11" r="2.2"/><path d="M9 6l6 10" opacity=".5" stroke-dasharray="2 2"/>',
   extend: '<path d="M4 18 13 9" /><path d="M13 9l5-5" stroke-dasharray="2.5 2"/><path d="M18 3v8M14 7h8" opacity=".55"/>',
   chip: '<rect x="7" y="7" width="10" height="10" rx="1"/><path d="M9.5 3v4M12 3v4M14.5 3v4M9.5 17v4M12 17v4M14.5 17v4M3 9.5h4M3 12h4M3 14.5h4M17 9.5h4M17 12h4M17 14.5h4" />',
@@ -699,6 +700,11 @@ const HELP = {
   "tip": "Linie oder Bogen in zwei Stücke teilen",
   "hilfe": "Klick auf eine Linie oder einen Bogen. An dieser Stelle (sie fängt an Mitte und Schnittpunkten) wird das Element geteilt. Beide Stücke bleiben verbunden und in einer Flucht.",
   "tipp": "Praktisch, wenn nur ein Teil einer Kante ein Maß oder eine Rundung bekommen soll."
+ },
+ "point": {
+  "tip": "Einzelner Punkt in der Skizze",
+  "hilfe": "Klick setzt einen Punkt. Er bildet keine Fläche, ist aber ein fester Bezug: Maße zu anderen Punkten oder Linien, Regeln wie „Mittig“ oder „Deckungsgleich“ – und später die Mitte für eine Bohrung.",
+  "tipp": "Praktisch für Lochmitten auf einem Lochkreis: Punkt setzen, Abstand zur Mitte bemaßen, dann Kreismuster."
  }
 };
 

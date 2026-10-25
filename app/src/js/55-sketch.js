@@ -10,6 +10,7 @@ const Sketch = (() => {
     { id: 'arc', icon: 'arc', label: 'Bogen', key: 'A', tip: 'Bogen: Start, Ende, dann Wölbung' },
     { id: 'slot', icon: 'slot', label: 'Langloch', key: 'G', tip: 'Langloch: zwei Mittelpunkte, dann Breite' },
     { id: 'poly', icon: 'polygon', label: 'Vieleck', key: 'P', tip: 'Regelmäßiges Vieleck vom Mittelpunkt aus' },
+    { id: 'point', icon: 'point', label: 'Punkt', key: 'O', tip: 'Einzelner Punkt – z. B. als Mitte für Bohrungen oder als Bezug für Maße' },
     { id: 'tpl', icon: 'chip', label: 'Schablone', key: 'J', tip: 'Fertige Umrisse: Pin-Raster, Lüftungsgitter, Chips (QFP, QFN, BGA, SOIC, DIP)' },
     { id: 'text', icon: 'text', label: 'Text', key: 'B', tip: 'Schrift als Umriss – zum Prägen oder Ausschneiden' },
     { id: 'spline', icon: 'spline', label: 'Spline', key: 'S', tip: 'Spline: weiche Kurve durch Punkte – Enter beendet' },
@@ -34,6 +35,7 @@ const Sketch = (() => {
     bgcal: 'Klick den ersten Punkt auf dem Bild an, dann den zweiten. Danach tippst du den echten Abstand ein.',
     splitl: 'Klick auf eine Linie oder einen Bogen – dort wird das Element in zwei Stücke geteilt, die verbunden bleiben. Fängt an Mitte und Schnittpunkten.',
     extend: 'Klick nahe an das Ende einer Linie – sie wächst bis zur nächsten Linie, zum nächsten Bogen oder Kreis und bleibt dort per Regel hängen.',
+    point: 'Klick setzt einen Punkt. Punkte bilden keine Fläche, sind aber Bezug für Maße, Regeln und spätere Bohrungen.',
     tpl: 'Schablone und Maße rechts wählen, dann ins Bild klicken – der Klick ist die Mitte. Fängt an Nullpunkt und Mittelpunkten.',
     text: 'Text, Höhe und Schrift rechts einstellen, dann ins Bild klicken. Der Klick legt den Anfang der Grundlinie fest (bei „Mitte“ die Mitte).',
     ellipse: 'Mittelpunkt klicken, dann das Ende der ersten Achse (legt Länge und Drehung fest), dann die Breite. Oder Breite <b>Tab</b> Höhe eintippen.',
@@ -406,7 +408,7 @@ const Sketch = (() => {
     if (e.type === 'line' || e.type === 'arc' || e.type === 'slot') { P('a', e.a); P('b', e.b); if (e.type === 'arc') { const ai = SK.arcInfo(e.a, e.m, e.b); if (ai) P('c', ai.c); } }
     else if (e.type === 'spline') { e.pts.forEach((q, i) => P('p' + i, q)); P('a', e.pts[0]); P('b', e.pts[e.pts.length - 1]); }
     else if (e.type === 'circle' || e.type === 'ellipse') P('c', e.c);
-    else if (e.type === 'text') P('a', e.a);
+    else if (e.type === 'text' || e.type === 'point') P('a', e.a);
     else if (e.type === 'poly') { P('c', e.c); SK.polyCorners(e).forEach((q, i) => P('v' + i, q)); }
     else if (e.type === 'rect') { SK.rectCorners(e).forEach((q, i) => P('k' + i, q)); P('c', [(e.a[0] + e.b[0]) / 2, (e.a[1] + e.b[1]) / 2]); }
     return out;
@@ -690,6 +692,24 @@ const Sketch = (() => {
     if (!best) return null;
     if (!best.shape && cornerLines(best.p).length !== 2) return null;
     return best;
+  }
+  // Alle Ecken der Skizze auf einmal runden bzw. fasen (ein Rückgängig-Schritt)
+  function cornerAll() {
+    const pts = [];
+    const add = (q) => { if (!pts.some((x) => SK.d2(x, q) < 1e-4)) pts.push(q.slice()); };
+    for (const en of S.ents) {
+      if (en.con) continue;
+      if (en.type === 'rect' || en.type === 'poly') (en.type === 'rect' ? SK.rectCorners(en) : SK.polyCorners(en)).forEach(add);
+      else if (en.type === 'line') for (const k of ['a', 'b']) if (cornerLines(en[k]).length === 2) add(en[k]);
+    }
+    if (!pts.length) { UI.toast('In dieser Skizze gibt es keine Ecken zwischen zwei Linien.', { icon: 'info' }); return; }
+    const n0 = S.undo.length, toast = UI.toast; let ok = 0;
+    UI.toast = () => {};
+    try { for (const q of pts) if (cornerDo(q)) ok++; }
+    finally { UI.toast = toast; }
+    if (S.undo.length > n0 + 1) S.undo.splice(n0 + 1);
+    reapply(); render(); Panels.renderRight();
+    UI.toast(`${ok} von ${pts.length} Ecken ${S.corner.mode === 'fillet' ? 'gerundet' : 'gefast'}.` + (ok < pts.length ? ' An den übrigen ist der Wert zu groß.' : ''), { icon: ok ? 'check' : 'info', ms: 3500 });
   }
   function cornerLines(p) {
     const out = [];
@@ -991,12 +1011,13 @@ const Sketch = (() => {
       }
       if (endHit.length) { pushUndo(); S.drag = { points: endHit, start: uv0 }; S.selCon = null; return; }
       const hit = SK.hit(S.ents, uv0, tol);
-      if (hit && (hit.type === 'text' || hit.type === 'ellipse' || hit.type === 'circle' || hit.type === 'rect' || hit.type === 'poly' || hit.type === 'slot' || hit.type === 'line' || hit.type === 'arc' || hit.type === 'spline')) { pushUndo(); S.drag = { move: hit.id, start: uv0, orig: deepClone(hit) }; }
+      if (hit && (hit.type === 'point' || hit.type === 'text' || hit.type === 'ellipse' || hit.type === 'circle' || hit.type === 'rect' || hit.type === 'poly' || hit.type === 'slot' || hit.type === 'line' || hit.type === 'arc' || hit.type === 'spline')) { pushUndo(); S.drag = { move: hit.id, start: uv0, orig: deepClone(hit) }; }
       S.sel = hit ? hit.id : null; S.selCon = null; render(); Panels.renderRight(); return;
     }
     if (t === 'corner') { cornerDo(uv0); return; }
     if (t === 'bgcal') { bgCalDown(uv0); return; }
     if (t === 'bg') { if (S.bg) { pushUndoBg(); S.bgDrag = { start: uv0, a0: S.bg.a.slice() }; } return; }
+    if (t === 'point') { addEnt({ type: 'point', a: p.slice() }); reapply(); render(); Panels.renderRight(); return; }
     if (t === 'tpl') {
       const ents = SKO.tplEnts(S.tpl.type, S.tpl.p, p);
       if (!ents.length) return;
@@ -1519,6 +1540,7 @@ const Sketch = (() => {
       const hot = hov && hov.kind !== 'point' && hov.ent && hov.ent.id === e.id;
       const col = sel ? acc : isFree ? free : ink;
       for (const p of entPts(e)) lineObj(p, col, sel ? 3.4 : hot ? 3 : 2.2, { dashed: e.con, order: 25, opacity: hot && !sel ? 0.8 : 1 });
+      if (e.type === 'point') { const k = pxSize() * 4; lineObj([[e.a[0] - k, e.a[1]], [e.a[0] + k, e.a[1]]], col, sel ? 3.4 : 2.4, { order: 26 }); lineObj([[e.a[0], e.a[1] - k], [e.a[0], e.a[1] + k]], col, sel ? 3.4 : 2.4, { order: 26 }); }
       if (hot && e.type === 'rect' && hov.ref && hov.ref.edge != null) { const c = SK.rectCorners(e); lineObj([c[hov.ref.edge], c[(hov.ref.edge + 1) % 4]], acc, 4, { order: 26 }); }
     }
     // gewählte und überfahrene Punkte
@@ -1754,7 +1776,7 @@ const Sketch = (() => {
       body.append(w); return;
     }
     if (sel) {
-      w.append(h('div', { class: 'prop-title' }, h('b', { style: { fontSize: '17px' } }, { text: 'Text', line: 'Linie', rect: 'Rechteck', circle: 'Kreis', ellipse: 'Ellipse', arc: 'Bogen', slot: 'Langloch', poly: 'Vieleck', spline: 'Spline' }[sel.type])));
+      w.append(h('div', { class: 'prop-title' }, h('b', { style: { fontSize: '17px' } }, { point: 'Punkt', text: 'Text', line: 'Linie', rect: 'Rechteck', circle: 'Kreis', ellipse: 'Ellipse', arc: 'Bogen', slot: 'Langloch', poly: 'Vieleck', spline: 'Spline' }[sel.type])));
       const upd = (fn) => { pushUndo(); fn(sel); reapply(); render(); Panels.renderRight(); };
       // Jedes eingetippte Maß wird fest (auch als Formel). Das Schloss löst es wieder.
       const dimField = (k, label, unit = 'mm', opts = {}) => {
@@ -1795,7 +1817,7 @@ const Sketch = (() => {
       }
       w.append(f);
       const fp = h('div', { class: 'fields' });
-      const ak = sel.type === 'circle' || sel.type === 'poly' || sel.type === 'ellipse' ? 'Mitte' : 'Start';
+      const ak = sel.type === 'circle' || sel.type === 'poly' || sel.type === 'ellipse' ? 'Mitte' : sel.type === 'point' ? 'Punkt' : 'Start';
       fp.append(dimField('x', ak + ' X'), dimField('y', ak + ' Y'));
       w.append(fp);
       if (S.dims.some((d) => d.e === sel.id)) w.append(h('div', { class: 'hint-box', html: 'Werte mit <b>Schloss</b> sind fest und bleiben beim Ziehen erhalten. Formeln wie <b>breite/2</b> rechnen mit den Namen aus „Maße“.' }));
@@ -1833,6 +1855,7 @@ const Sketch = (() => {
         w.append(UI.segmented ? UI.segmented({ id: 'cn-mode', value: C.mode, options: [['fillet', 'Rundung'], ['chamfer', 'Fase']], onChange: (v) => { C.mode = v; Panels.renderRight(); render(); } })
           : UI.selectField({ id: 'cn-mode', label: 'Art', value: C.mode, options: [['fillet', 'Rundung'], ['chamfer', 'Fase']], onChange: (v) => { C.mode = v; Panels.renderRight(); render(); } }));
         w.append(UI.numField({ id: 'cn-r', label: C.mode === 'fillet' ? 'Radius' : 'Abstand', value: C.r, unit: 'mm', expr: false, min: 0.01, onCommit: (v) => { if (v > 0) C.r = v; render(); } }));
+        { const ab = h('button', { type: 'button', class: 'btn', id: 'cn-all' }); ab.innerHTML = icon('fillet') + 'Alle Ecken auf einmal'; ab.onclick = () => cornerAll(); w.append(h('div', { class: 'btn-row' }, ab)); }
       }
       if (S.tool === 'bg' || S.tool === 'bgcal') {
         const B = S.bg;

@@ -423,6 +423,7 @@ const SKO = (() => {
   function linkPoints(e) {
     switch (e.type) {
       case 'line': case 'slot': return ['a', 'b'];
+      case 'point': return ['a'];
       case 'arc': return ['a', 'b', 'c'];
       case 'circle': case 'poly': case 'ellipse': return ['c'];
       case 'text': return ['a'];
@@ -440,6 +441,7 @@ const SKO = (() => {
     const R = (id2, p) => ({ e: id2, p });
     const ents = [], pairs = [], rad = [];
     switch (e.type) {
+      case 'point': ents.push({ id, type: 'point', a: pr(f(e.a)), ...base }); pairs.push([R(e.id, 'a'), R(id, 'a')]); break;
       case 'line': ents.push({ id, type: 'line', a: pr(f(e.a)), b: pr(f(e.b)), ...base }); pairs.push([R(e.id, 'a'), R(id, 'a')], [R(e.id, 'b'), R(id, 'b')]); break;
       case 'arc': {
         ents.push({ id, type: 'arc', a: pr(f(e.a)), m: pr(f(e.m)), b: pr(f(e.b)), ...base });

@@ -356,6 +356,7 @@ const SK = (() => {
     return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
   }
   function distEnt(e, p) {
+    if (e.type === 'point') return d2(e.a, p);
     let best = Infinity;
     for (const s of segsOf(e)) {
       if (s.t === 'line') best = Math.min(best, distSeg(p, s.a, s.b));
@@ -383,6 +384,7 @@ const SK = (() => {
         else if (e.type === 'poly') { polyCorners(e).forEach((q) => add(q, 'end', r)); add(e.c, 'center', r); }
         else if (e.type === 'slot') { add(e.a, 'center', r); add(e.b, 'center', r); }
         else if (e.type === 'spline') { e.pts.forEach((q) => add(q, 'end', r)); }
+        else if (e.type === 'point') add(e.a, 'end', r);
         else if (e.type === 'text') { add(e.a, 'end', r); const tb = textBox(e); if (tb) add(tb.c, 'center', r); }
       }
     };
@@ -415,7 +417,7 @@ const SK = (() => {
   }
   function bounds(ents) {
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (const e of ents) for (const s of segsOf(e)) for (const p of segPoints(s)) { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); }
+    for (const e of ents) for (const p of e.type === 'point' ? [e.a] : segsOf(e).flatMap(segPoints)) { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); }
     return isFinite(x0) ? [x0, y0, x1, y1] : null;
   }
   function translateEnt(e, dx, dy) {
@@ -428,7 +430,7 @@ const SK = (() => {
   // ---------- Maße: feste Werte oder Formeln, die die Skizze steuern ----------
   // Ein Maß ist { id, e: Element-ID, k: Größe, v: Zahl oder Formel }.
   const DIMKEYS = {
-    line: ['len', 'ang', 'x', 'y'], rect: ['w', 'h', 'x', 'y'], circle: ['d', 'x', 'y'], ellipse: ['w', 'h', 'x', 'y'], text: ['h', 'x', 'y'],
+    line: ['len', 'ang', 'x', 'y'], point: ['x', 'y'], rect: ['w', 'h', 'x', 'y'], circle: ['d', 'x', 'y'], ellipse: ['w', 'h', 'x', 'y'], text: ['h', 'x', 'y'],
     poly: ['d', 'n', 'x', 'y'], slot: ['len', 'w', 'x', 'y'], arc: ['r', 'x', 'y'], spline: ['x', 'y'],
   };
   const DIMNAME = { len: 'Länge', ang: 'Winkel', w: 'Breite', h: 'Höhe', d: 'Durchmesser', n: 'Ecken', x: 'Abstand X', y: 'Abstand Y', r: 'Radius', dist: 'Abstand', distPL: 'Abstand', angLL: 'Winkel' };

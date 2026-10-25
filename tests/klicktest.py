@@ -2453,6 +2453,51 @@ def t_rechteck_gedreht_sechskant(p):
     return [ok1, ok2]
 
 
+def t_punkt(p):
+    sketch_xy(p)
+    p.pg.keyboard.press('o'); p.wait(200)
+    s = to_screen(p, 10, 5); p.pg.mouse.click(s[0], s[1]); p.wait(300)
+    e = p.ev("return Sketch.state.ents[0]")
+    ok1 = e['type'] == 'point' and e['a'] == [10, 5]
+    # Maß x = 12 rechts eintippen, Punkt wandert
+    p.pg.keyboard.press('v'); p.pg.mouse.click(s[0], s[1]); p.wait(300)
+    p.pg.fill('#se-x', '12'); p.pg.press('#se-x', 'Enter'); p.wait(300)
+    ok2 = p.ev("return Sketch.state.ents[0].a[0]") == 12
+    # Kreis rastet am Punkt ein
+    p.pg.keyboard.press('c'); s2 = to_screen(p, 12, 5); p.pg.mouse.click(s2[0] + 2, s2[1] + 2); p.wait(150)
+    p.pg.keyboard.type('4'); p.pg.keyboard.press('Enter'); p.wait(300)
+    c = p.ev("const c=Sketch.state.ents.find(x=>x.type==='circle'); return c && c.c")
+    ok3 = c == [12, 5]
+    return [ok1, ok2, ok3]
+
+
+def t_alle_ecken(p):
+    scene(p, [{'id': 'R', 'type': 'rect', 'a': [-20, -10], 'b': [20, 10]}])
+    p.pg.keyboard.press('k'); p.wait(200)
+    p.pg.fill('#cn-r', '3'); p.pg.press('#cn-r', 'Enter'); p.wait(100)
+    p.pg.click('#cn-all'); p.wait(800)
+    st = SS(p, "return [S.ents.filter(e=>e.type==='arc').length, S.status.ok, SK.regions(S.ents)[0].area, S.undo.length]")
+    soll = 800 - 4 * (9 - math.pi * 9 / 4)
+    ok1 = st[0] == 4 and st[1] and abs(st[2] - soll) < 0.5
+    p.pg.keyboard.press('Control+z'); p.wait(300)
+    ok2 = SS(p, "return S.ents.length===1 && S.ents[0].type==='rect'")
+    return [ok1, ok2]
+
+
+def t_ki_neue_formen(p):
+    ki(p); p.empty()
+    ki_fragen(p, 'Bau mir eine Nase und einen Kabelbügel', {'antwort': 'Ich baue eine Nase und einen Bügel.', 'aktionen': [
+        {'op': 'hinzufuegen', 'objekt': {'art': 'loft', 'name': 'Nase', 'p': {'profile': [{'ebene': 'XY', 'versatz': 0, 'form': [{'ellipse': [0, 0, 12, 8]}]}, {'ebene': 'XY', 'versatz': 20, 'form': [{'circle': [0, 0, 5]}]}], 'spitze': 10}}},
+        {'op': 'hinzufuegen', 'objekt': {'art': 'sweep', 'name': 'Bügel', 'p': {'ebene': 'XZ', 'pfad': [[30, 0], [30, 15], [50, 15], [50, 0]], 'form': 'rund', 'd': 3}}},
+        {'op': 'hinzufuegen', 'objekt': {'art': 'extrude', 'name': 'Schild', 'p': {'ebene': 'XY', 'hoehe': 2, 'form': [{'rect': [-15, 30, 15, 42]}, {'text': 'FPV', 'x': 0, 'y': 33, 'hoehe': 6, 'fett': True, 'mitte': True}]}}}]}, 90)
+    kinds_ = p.ev("return App.doc.items.map(i=>i.kind)")
+    ok1 = kinds_ == ['loft', 'sweep', 'extrude']
+    ok2 = p.ev("return App.errors.length") == 0 and p.ev("return App.doc.items.every(i=>App.results.get(i.id))")
+    bb = p.ev("return App.results.get(App.doc.items[0].id).data.bbox")
+    ok3 = abs(bb[5] - 30) < 0.01
+    return [ok1, ok2, ok3]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -2504,6 +2549,9 @@ TESTS = [
     ('Skizze: Linie teilen', t_teilen),
     ('Skizze: gebogenes Langloch', t_langloch_gebogen),
     ('Skizze: gedrehtes Rechteck / Sechskant über die Flächen', t_rechteck_gedreht_sechskant),
+    ('Skizze: Punkt setzen / Lage eintippen / Kreis rastet ein', t_punkt),
+    ('Skizze: alle Ecken auf einmal runden / ein Rückgängig', t_alle_ecken),
+    ('KI-Kollege baut Übergang, Pfad und Text', t_ki_neue_formen),
     ('Kreismuster: anlegen / Anzahl / folgt dem Original / Auflösen', t_kreismuster_3d),
     ('Rechteckmuster: anlegen / zweite Reihe / Formel / Maß ändern / Rückgängig', t_rechteckmuster_3d),
     ('Gespiegelte Kopie: anlegen / andere Ebene / Ebene verschieben', t_spiegelkopie),

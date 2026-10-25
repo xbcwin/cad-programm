@@ -902,6 +902,7 @@ const IC = {
   slot: '<path d="M8 7h8a5 5 0 0 1 0 10H8A5 5 0 0 1 8 7z" />',
   polygon: '<path d="M12 3.5 19.5 8v8L12 20.5 4.5 16V8z" />',
   image: '<rect x="3.5" y="5" width="17" height="14" rx="1.5"/><circle cx="9" cy="10" r="1.6"/><path d="M4 17l5-4.5 3.5 3 3-2.5 4.5 4" />',
+  point: '<circle cx="12" cy="12" r="2.6" fill="currentColor"/><path d="M12 4v4M12 16v4M4 12h4M16 12h4" opacity=".55"/>',
   splitLine: '<path d="M4 18 10 12M14 10l6-6" /><circle cx="12" cy="11" r="2.2"/><path d="M9 6l6 10" opacity=".5" stroke-dasharray="2 2"/>',
   extend: '<path d="M4 18 13 9" /><path d="M13 9l5-5" stroke-dasharray="2.5 2"/><path d="M18 3v8M14 7h8" opacity=".55"/>',
   chip: '<rect x="7" y="7" width="10" height="10" rx="1"/><path d="M9.5 3v4M12 3v4M14.5 3v4M9.5 17v4M12 17v4M14.5 17v4M3 9.5h4M3 12h4M3 14.5h4M17 9.5h4M17 12h4M17 14.5h4" />',
@@ -1430,6 +1431,11 @@ const HELP = {
   "tip": "Linie oder Bogen in zwei Stücke teilen",
   "hilfe": "Klick auf eine Linie oder einen Bogen. An dieser Stelle (sie fängt an Mitte und Schnittpunkten) wird das Element geteilt. Beide Stücke bleiben verbunden und in einer Flucht.",
   "tipp": "Praktisch, wenn nur ein Teil einer Kante ein Maß oder eine Rundung bekommen soll."
+ },
+ "point": {
+  "tip": "Einzelner Punkt in der Skizze",
+  "hilfe": "Klick setzt einen Punkt. Er bildet keine Fläche, ist aber ein fester Bezug: Maße zu anderen Punkten oder Linien, Regeln wie „Mittig“ oder „Deckungsgleich“ – und später die Mitte für eine Bohrung.",
+  "tipp": "Praktisch für Lochmitten auf einem Lochkreis: Punkt setzen, Abstand zur Mitte bemaßen, dann Kreismuster."
  }
 };
 
@@ -2080,6 +2086,7 @@ const SK = (() => {
     return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
   }
   function distEnt(e, p) {
+    if (e.type === 'point') return d2(e.a, p);
     let best = Infinity;
     for (const s of segsOf(e)) {
       if (s.t === 'line') best = Math.min(best, distSeg(p, s.a, s.b));
@@ -2107,6 +2114,7 @@ const SK = (() => {
         else if (e.type === 'poly') { polyCorners(e).forEach((q) => add(q, 'end', r)); add(e.c, 'center', r); }
         else if (e.type === 'slot') { add(e.a, 'center', r); add(e.b, 'center', r); }
         else if (e.type === 'spline') { e.pts.forEach((q) => add(q, 'end', r)); }
+        else if (e.type === 'point') add(e.a, 'end', r);
         else if (e.type === 'text') { add(e.a, 'end', r); const tb = textBox(e); if (tb) add(tb.c, 'center', r); }
       }
     };
@@ -2139,7 +2147,7 @@ const SK = (() => {
   }
   function bounds(ents) {
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (const e of ents) for (const s of segsOf(e)) for (const p of segPoints(s)) { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); }
+    for (const e of ents) for (const p of e.type === 'point' ? [e.a] : segsOf(e).flatMap(segPoints)) { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); }
     return isFinite(x0) ? [x0, y0, x1, y1] : null;
   }
   function translateEnt(e, dx, dy) {
@@ -2152,7 +2160,7 @@ const SK = (() => {
   // ---------- Maße: feste Werte oder Formeln, die die Skizze steuern ----------
   // Ein Maß ist { id, e: Element-ID, k: Größe, v: Zahl oder Formel }.
   const DIMKEYS = {
-    line: ['len', 'ang', 'x', 'y'], rect: ['w', 'h', 'x', 'y'], circle: ['d', 'x', 'y'], ellipse: ['w', 'h', 'x', 'y'], text: ['h', 'x', 'y'],
+    line: ['len', 'ang', 'x', 'y'], point: ['x', 'y'], rect: ['w', 'h', 'x', 'y'], circle: ['d', 'x', 'y'], ellipse: ['w', 'h', 'x', 'y'], text: ['h', 'x', 'y'],
     poly: ['d', 'n', 'x', 'y'], slot: ['len', 'w', 'x', 'y'], arc: ['r', 'x', 'y'], spline: ['x', 'y'],
   };
   const DIMNAME = { len: 'Länge', ang: 'Winkel', w: 'Breite', h: 'Höhe', d: 'Durchmesser', n: 'Ecken', x: 'Abstand X', y: 'Abstand Y', r: 'Radius', dist: 'Abstand', distPL: 'Abstand', angLL: 'Winkel' };
@@ -2219,7 +2227,7 @@ const Solver = (() => {
 
   // ---------- Variablen je Element ----------
   const VARS = {
-    line: ['a0', 'a1', 'b0', 'b1'], arc: ['a0', 'a1', 'b0', 'b1', 'm0', 'm1'], circle: ['c0', 'c1', 'r'],
+    line: ['a0', 'a1', 'b0', 'b1'], point: ['a0', 'a1'], arc: ['a0', 'a1', 'b0', 'b1', 'm0', 'm1'], circle: ['c0', 'c1', 'r'],
     rect: ['a0', 'a1', 'b0', 'b1'], slot: ['a0', 'a1', 'b0', 'b1', 'r'], poly: ['c0', 'c1', 'r'], ellipse: ['c0', 'c1', 'rx', 'ry'], text: ['a0', 'a1', 'h'],
   };
   // Splines haben beliebig viele Punkte: Schlüssel „p3_0“ = X des vierten Punkts, „p3_1“ = Y
@@ -2275,7 +2283,7 @@ const Solver = (() => {
         return { deps: ks, get: (X) => { const c = circum(X[ks[0]], X[ks[1]], X[ks[2]], X[ks[3]], X[ks[4]], X[ks[5]]); return [c[0], c[1]]; } };
       }
       if (e.type === 'ellipse' && p === 'c') return two('c');
-      if (e.type === 'text') return two('a');
+      if (e.type === 'text' || e.type === 'point') return two('a');
       if (e.type === 'circle' || e.type === 'poly') {
         if (p === 'c') return two('c');
         if (e.type === 'poly' && p[0] === 'v') {
@@ -2332,7 +2340,7 @@ const Solver = (() => {
         if (e.type === 'line' || e.type === 'arc' || e.type === 'slot' || (e.type === 'spline' && !e.closed)) { put({ e: e.id, p: 'a' }); put({ e: e.id, p: 'b' }); }
         else if (e.type === 'rect') for (let i = 0; i < 4; i++) put({ e: e.id, p: 'k' + i });
         else if (e.type === 'circle' || e.type === 'ellipse') put({ e: e.id, p: 'c' });
-        else if (e.type === 'text') put({ e: e.id, p: 'a' });
+        else if (e.type === 'text' || e.type === 'point') put({ e: e.id, p: 'a' });
         else if (e.type === 'poly') { put({ e: e.id, p: 'c' }); }
       }
       for (const g of groups.values()) for (let i = 1; i < g.length; i++) {
@@ -3048,6 +3056,7 @@ const SKO = (() => {
   function linkPoints(e) {
     switch (e.type) {
       case 'line': case 'slot': return ['a', 'b'];
+      case 'point': return ['a'];
       case 'arc': return ['a', 'b', 'c'];
       case 'circle': case 'poly': case 'ellipse': return ['c'];
       case 'text': return ['a'];
@@ -3065,6 +3074,7 @@ const SKO = (() => {
     const R = (id2, p) => ({ e: id2, p });
     const ents = [], pairs = [], rad = [];
     switch (e.type) {
+      case 'point': ents.push({ id, type: 'point', a: pr(f(e.a)), ...base }); pairs.push([R(e.id, 'a'), R(id, 'a')]); break;
       case 'line': ents.push({ id, type: 'line', a: pr(f(e.a)), b: pr(f(e.b)), ...base }); pairs.push([R(e.id, 'a'), R(id, 'a')], [R(e.id, 'b'), R(id, 'b')]); break;
       case 'arc': {
         ents.push({ id, type: 'arc', a: pr(f(e.a)), m: pr(f(e.m)), b: pr(f(e.b)), ...base });
@@ -7602,6 +7612,7 @@ const Sketch = (() => {
     { id: 'arc', icon: 'arc', label: 'Bogen', key: 'A', tip: 'Bogen: Start, Ende, dann Wölbung' },
     { id: 'slot', icon: 'slot', label: 'Langloch', key: 'G', tip: 'Langloch: zwei Mittelpunkte, dann Breite' },
     { id: 'poly', icon: 'polygon', label: 'Vieleck', key: 'P', tip: 'Regelmäßiges Vieleck vom Mittelpunkt aus' },
+    { id: 'point', icon: 'point', label: 'Punkt', key: 'O', tip: 'Einzelner Punkt – z. B. als Mitte für Bohrungen oder als Bezug für Maße' },
     { id: 'tpl', icon: 'chip', label: 'Schablone', key: 'J', tip: 'Fertige Umrisse: Pin-Raster, Lüftungsgitter, Chips (QFP, QFN, BGA, SOIC, DIP)' },
     { id: 'text', icon: 'text', label: 'Text', key: 'B', tip: 'Schrift als Umriss – zum Prägen oder Ausschneiden' },
     { id: 'spline', icon: 'spline', label: 'Spline', key: 'S', tip: 'Spline: weiche Kurve durch Punkte – Enter beendet' },
@@ -7626,6 +7637,7 @@ const Sketch = (() => {
     bgcal: 'Klick den ersten Punkt auf dem Bild an, dann den zweiten. Danach tippst du den echten Abstand ein.',
     splitl: 'Klick auf eine Linie oder einen Bogen – dort wird das Element in zwei Stücke geteilt, die verbunden bleiben. Fängt an Mitte und Schnittpunkten.',
     extend: 'Klick nahe an das Ende einer Linie – sie wächst bis zur nächsten Linie, zum nächsten Bogen oder Kreis und bleibt dort per Regel hängen.',
+    point: 'Klick setzt einen Punkt. Punkte bilden keine Fläche, sind aber Bezug für Maße, Regeln und spätere Bohrungen.',
     tpl: 'Schablone und Maße rechts wählen, dann ins Bild klicken – der Klick ist die Mitte. Fängt an Nullpunkt und Mittelpunkten.',
     text: 'Text, Höhe und Schrift rechts einstellen, dann ins Bild klicken. Der Klick legt den Anfang der Grundlinie fest (bei „Mitte“ die Mitte).',
     ellipse: 'Mittelpunkt klicken, dann das Ende der ersten Achse (legt Länge und Drehung fest), dann die Breite. Oder Breite <b>Tab</b> Höhe eintippen.',
@@ -7998,7 +8010,7 @@ const Sketch = (() => {
     if (e.type === 'line' || e.type === 'arc' || e.type === 'slot') { P('a', e.a); P('b', e.b); if (e.type === 'arc') { const ai = SK.arcInfo(e.a, e.m, e.b); if (ai) P('c', ai.c); } }
     else if (e.type === 'spline') { e.pts.forEach((q, i) => P('p' + i, q)); P('a', e.pts[0]); P('b', e.pts[e.pts.length - 1]); }
     else if (e.type === 'circle' || e.type === 'ellipse') P('c', e.c);
-    else if (e.type === 'text') P('a', e.a);
+    else if (e.type === 'text' || e.type === 'point') P('a', e.a);
     else if (e.type === 'poly') { P('c', e.c); SK.polyCorners(e).forEach((q, i) => P('v' + i, q)); }
     else if (e.type === 'rect') { SK.rectCorners(e).forEach((q, i) => P('k' + i, q)); P('c', [(e.a[0] + e.b[0]) / 2, (e.a[1] + e.b[1]) / 2]); }
     return out;
@@ -8282,6 +8294,24 @@ const Sketch = (() => {
     if (!best) return null;
     if (!best.shape && cornerLines(best.p).length !== 2) return null;
     return best;
+  }
+  // Alle Ecken der Skizze auf einmal runden bzw. fasen (ein Rückgängig-Schritt)
+  function cornerAll() {
+    const pts = [];
+    const add = (q) => { if (!pts.some((x) => SK.d2(x, q) < 1e-4)) pts.push(q.slice()); };
+    for (const en of S.ents) {
+      if (en.con) continue;
+      if (en.type === 'rect' || en.type === 'poly') (en.type === 'rect' ? SK.rectCorners(en) : SK.polyCorners(en)).forEach(add);
+      else if (en.type === 'line') for (const k of ['a', 'b']) if (cornerLines(en[k]).length === 2) add(en[k]);
+    }
+    if (!pts.length) { UI.toast('In dieser Skizze gibt es keine Ecken zwischen zwei Linien.', { icon: 'info' }); return; }
+    const n0 = S.undo.length, toast = UI.toast; let ok = 0;
+    UI.toast = () => {};
+    try { for (const q of pts) if (cornerDo(q)) ok++; }
+    finally { UI.toast = toast; }
+    if (S.undo.length > n0 + 1) S.undo.splice(n0 + 1);
+    reapply(); render(); Panels.renderRight();
+    UI.toast(`${ok} von ${pts.length} Ecken ${S.corner.mode === 'fillet' ? 'gerundet' : 'gefast'}.` + (ok < pts.length ? ' An den übrigen ist der Wert zu groß.' : ''), { icon: ok ? 'check' : 'info', ms: 3500 });
   }
   function cornerLines(p) {
     const out = [];
@@ -8583,12 +8613,13 @@ const Sketch = (() => {
       }
       if (endHit.length) { pushUndo(); S.drag = { points: endHit, start: uv0 }; S.selCon = null; return; }
       const hit = SK.hit(S.ents, uv0, tol);
-      if (hit && (hit.type === 'text' || hit.type === 'ellipse' || hit.type === 'circle' || hit.type === 'rect' || hit.type === 'poly' || hit.type === 'slot' || hit.type === 'line' || hit.type === 'arc' || hit.type === 'spline')) { pushUndo(); S.drag = { move: hit.id, start: uv0, orig: deepClone(hit) }; }
+      if (hit && (hit.type === 'point' || hit.type === 'text' || hit.type === 'ellipse' || hit.type === 'circle' || hit.type === 'rect' || hit.type === 'poly' || hit.type === 'slot' || hit.type === 'line' || hit.type === 'arc' || hit.type === 'spline')) { pushUndo(); S.drag = { move: hit.id, start: uv0, orig: deepClone(hit) }; }
       S.sel = hit ? hit.id : null; S.selCon = null; render(); Panels.renderRight(); return;
     }
     if (t === 'corner') { cornerDo(uv0); return; }
     if (t === 'bgcal') { bgCalDown(uv0); return; }
     if (t === 'bg') { if (S.bg) { pushUndoBg(); S.bgDrag = { start: uv0, a0: S.bg.a.slice() }; } return; }
+    if (t === 'point') { addEnt({ type: 'point', a: p.slice() }); reapply(); render(); Panels.renderRight(); return; }
     if (t === 'tpl') {
       const ents = SKO.tplEnts(S.tpl.type, S.tpl.p, p);
       if (!ents.length) return;
@@ -9111,6 +9142,7 @@ const Sketch = (() => {
       const hot = hov && hov.kind !== 'point' && hov.ent && hov.ent.id === e.id;
       const col = sel ? acc : isFree ? free : ink;
       for (const p of entPts(e)) lineObj(p, col, sel ? 3.4 : hot ? 3 : 2.2, { dashed: e.con, order: 25, opacity: hot && !sel ? 0.8 : 1 });
+      if (e.type === 'point') { const k = pxSize() * 4; lineObj([[e.a[0] - k, e.a[1]], [e.a[0] + k, e.a[1]]], col, sel ? 3.4 : 2.4, { order: 26 }); lineObj([[e.a[0], e.a[1] - k], [e.a[0], e.a[1] + k]], col, sel ? 3.4 : 2.4, { order: 26 }); }
       if (hot && e.type === 'rect' && hov.ref && hov.ref.edge != null) { const c = SK.rectCorners(e); lineObj([c[hov.ref.edge], c[(hov.ref.edge + 1) % 4]], acc, 4, { order: 26 }); }
     }
     // gewählte und überfahrene Punkte
@@ -9346,7 +9378,7 @@ const Sketch = (() => {
       body.append(w); return;
     }
     if (sel) {
-      w.append(h('div', { class: 'prop-title' }, h('b', { style: { fontSize: '17px' } }, { text: 'Text', line: 'Linie', rect: 'Rechteck', circle: 'Kreis', ellipse: 'Ellipse', arc: 'Bogen', slot: 'Langloch', poly: 'Vieleck', spline: 'Spline' }[sel.type])));
+      w.append(h('div', { class: 'prop-title' }, h('b', { style: { fontSize: '17px' } }, { point: 'Punkt', text: 'Text', line: 'Linie', rect: 'Rechteck', circle: 'Kreis', ellipse: 'Ellipse', arc: 'Bogen', slot: 'Langloch', poly: 'Vieleck', spline: 'Spline' }[sel.type])));
       const upd = (fn) => { pushUndo(); fn(sel); reapply(); render(); Panels.renderRight(); };
       // Jedes eingetippte Maß wird fest (auch als Formel). Das Schloss löst es wieder.
       const dimField = (k, label, unit = 'mm', opts = {}) => {
@@ -9387,7 +9419,7 @@ const Sketch = (() => {
       }
       w.append(f);
       const fp = h('div', { class: 'fields' });
-      const ak = sel.type === 'circle' || sel.type === 'poly' || sel.type === 'ellipse' ? 'Mitte' : 'Start';
+      const ak = sel.type === 'circle' || sel.type === 'poly' || sel.type === 'ellipse' ? 'Mitte' : sel.type === 'point' ? 'Punkt' : 'Start';
       fp.append(dimField('x', ak + ' X'), dimField('y', ak + ' Y'));
       w.append(fp);
       if (S.dims.some((d) => d.e === sel.id)) w.append(h('div', { class: 'hint-box', html: 'Werte mit <b>Schloss</b> sind fest und bleiben beim Ziehen erhalten. Formeln wie <b>breite/2</b> rechnen mit den Namen aus „Maße“.' }));
@@ -9425,6 +9457,7 @@ const Sketch = (() => {
         w.append(UI.segmented ? UI.segmented({ id: 'cn-mode', value: C.mode, options: [['fillet', 'Rundung'], ['chamfer', 'Fase']], onChange: (v) => { C.mode = v; Panels.renderRight(); render(); } })
           : UI.selectField({ id: 'cn-mode', label: 'Art', value: C.mode, options: [['fillet', 'Rundung'], ['chamfer', 'Fase']], onChange: (v) => { C.mode = v; Panels.renderRight(); render(); } }));
         w.append(UI.numField({ id: 'cn-r', label: C.mode === 'fillet' ? 'Radius' : 'Abstand', value: C.r, unit: 'mm', expr: false, min: 0.01, onCommit: (v) => { if (v > 0) C.r = v; render(); } }));
+        { const ab = h('button', { type: 'button', class: 'btn', id: 'cn-all' }); ab.innerHTML = icon('fillet') + 'Alle Ecken auf einmal'; ab.onclick = () => cornerAll(); w.append(h('div', { class: 'btn-row' }, ab)); }
       }
       if (S.tool === 'bg' || S.tool === 'bgcal') {
         const B = S.bg;
@@ -10192,6 +10225,11 @@ const Commands = (() => {
     for (const [v, l] of [['front', 'Vorne'], ['top', 'Oben'], ['right', 'Rechts'], ['left', 'Links'], ['back', 'Hinten'], ['iso', 'Schräg']]) add('view-' + v, 'Ansicht ' + l, 'eye', 'ansicht kamera blick ' + l, () => Viewer.setView(v), { group: 'Ansicht' });
     add('new', 'Neues Projekt', 'newfile', 'neu leer anfangen', () => Start.newProject(), { group: 'Projekt' });
     add('open', 'Projekt öffnen', 'folder', 'laden datei öffnen', () => Start.openFile(), { group: 'Projekt' });
+    add('loft', 'Übergang (Loft) aus gewählten Skizzenkörpern', 'loft', 'loft übergang profile nase verbinden spitze', () => Actions.loft(), { group: 'Bearbeiten', needSel: true });
+    add('loft-tip', 'Zur Spitze zusammenlaufen lassen', 'loft', 'spitze kegel nase verlängern zuspitzen', () => { if (App.sel.length === 1) Actions.loft([App.sel[0]], { tip: 10 }); }, { group: 'Bearbeiten', needSel: true });
+    add('draft', 'Entformungsschräge', 'chamfer', 'schräge entformung guss form draft konisch neigen', () => { if (App.sel.length) Actions.finishAll(App.sel[0], 'draft', 'all', 3); }, { group: 'Bearbeiten', needSel: true });
+    add('gap', 'Abstand zwischen zwei Teilen setzen', 'dim', 'abstand lücke distanz zwischen zwei teile', () => { if (App.sel.length === 2) $('.ctxbar button[aria-label="Abstand"]') && $('.ctxbar button[aria-label="Abstand"]').click(); else UI.toast('Wähle genau zwei Teile.', { icon: 'info' }); }, { group: 'Bearbeiten', needSel: true });
+    add('sweep-help', 'Rohr oder Kanal entlang Pfad (Sweep)', 'sweep', 'sweep pfad rohr kabelkanal bügel entlang', () => { Sketch.chooseAndStart(); UI.toast('Zeichne einen offenen Pfad und klick „Fertig“ – daraus wird ein Rohr.', { icon: 'info', ms: 5000 }); }, { group: 'Werkzeuge' });
     add('import', 'STEP oder STL importieren', 'folder', 'import step stp stl datei einlesen motor', () => Start.openFile(), { group: 'Projekt' });
     add('save', 'Projekt als Datei speichern', 'save', 'sichern json datei', () => Start.saveFile(), { group: 'Projekt', kbd: 'Strg S' });
     add('start', 'Startseite und Vorlagen', 'home', 'vorlagen beispiele start', () => Start.show(), { group: 'Projekt' });
@@ -11619,15 +11657,17 @@ TEILE ANSPRECHEN – überall, wo "id" oder "ids" steht, geht auch:
 "alle" (alle sichtbaren Teile der obersten Ebene) · "auswahl" (was der Nutzer beim Auftrag ausgewählt hatte) · "koerper" · "loecher" · "kaufteile" · "neu" (was du in diesem Auftrag gebaut hast) · "name:Arm" (Name enthält „Arm“) · oder eine Liste, z. B. ["name:Platte","<id>"].
 
 OBJEKT:
-{"art":"box|cylinder|tube|sphere|hemisphere|cone|pyramid|torus|prism|wedge|extrude|part|group","name":"…","rolle":"koerper"|"loch","p":{…},"t":{"x":0,"y":0,"z":0,"rx":0,"ry":0,"rz":0},"farbe":"#RRGGBB","kinder":[OBJEKT…],"rundungen":[{"typ":"fillet","r":2,"kanten":"vertical"}]}
+{"art":"box|cylinder|tube|sphere|hemisphere|cone|pyramid|torus|prism|wedge|extrude|loft|sweep|part|group","name":"…","rolle":"koerper"|"loch","p":{…},"t":{"x":0,"y":0,"z":0,"rx":0,"ry":0,"rz":0},"farbe":"#RRGGBB","kinder":[OBJEKT…],"rundungen":[{"typ":"fillet","r":2,"kanten":"vertical"}]}
 
 Parameter p (alle Grundkörper stehen mit der Unterseite auf z=0 ihres eigenen Systems und sind in X/Y zentriert; t verschiebt/dreht, Drehung in Grad um X, dann Y, dann Z):
 - box: w (Breite X), d (Tiefe Y), h (Höhe Z)
 - cylinder: d, h · tube: d (außen), wall, h · sphere: d · hemisphere: d · cone: d1 (unten), d2 (oben, 0 = Spitze), h
 - pyramid: w, d, h · torus: d (außen), t (Ringdicke) · prism: n (Ecken), d (Umkreis), h · wedge: w, d, h (die Schräge fällt zur +X-Seite ab)
 - extrude: {"ebene":"XY"|"XZ"|"YZ","versatz":0,"hoehe":10,"richtung":"normal"|"reverse"|"both","form":[ELEMENT…]}
-  ELEMENT (2D in mm): {"rect":[x1,y1,x2,y2]} · {"circle":[cx,cy,r]} · {"poly":[[x,y],[x,y],…]} (geschlossener Linienzug) · {"slot":[x1,y1,x2,y2,r]}
+  ELEMENT (2D in mm): {"rect":[x1,y1,x2,y2]} · {"circle":[cx,cy,r]} · {"ellipse":[cx,cy,rx,ry]} · {"poly":[[x,y],[x,y],…]} (geschlossener Linienzug) · {"slot":[x1,y1,x2,y2,r]} · {"text":"FPV","x":0,"y":0,"hoehe":5,"fett":true,"mitte":true} (Schrift als Umriss; in einem Rechteck = Gravur)
   Ebene XY: u=X, v=Y, hoch in +Z. Ebene XZ: u=X, v=Z, hoch in −Y. Ebene YZ: u=Y, v=Z, hoch in +X. „versatz“ verschiebt die Ebene entlang dieser Richtung. Formen, die ganz in einer anderen liegen, werden zu Löchern darin.
+- loft (Übergang durch Umrisse): {"profile":[{"ebene":"XY","versatz":0,"form":[ELEMENT]},{"ebene":"XY","versatz":30,"form":[ELEMENT]}],"spitze":0,"gerade":false} – mit "spitze" > 0 läuft der Körper hinter dem letzten Profil zu einer Spitze zusammen (auch mit nur einem Profil).
+- sweep (Querschnitt entlang Pfad): {"ebene":"XY","versatz":0,"pfad":[[x,y],…],"glatt":false,"form":"rund"|"rechteck","d":6,"w":6,"h":4,"wand":0} – Rohr, Kabelkanal, Bügel; "glatt": true macht aus den Punkten eine Spline.
 - part (Bauteile, Öffnung zeigt nach +Z, Tiefe geht nach −Z; setze z auf die Oberfläche):
   {"lib":"screwHole","size":"M2|M2.5|M3|M4|M5|M6|M8","head":"countersunk|counterbore|none","length":10} (rolle loch)
   {"lib":"nutTrap","size":"M3","length":12} (loch) · {"lib":"insert","size":"M3"} (loch, Gewindeeinsatz) · {"lib":"slotHole","len":20,"w":4.5,"depth":10} (loch)
@@ -11666,7 +11706,7 @@ Beispiel – Wunsch „Platte 60 × 40 × 4 mit einem Loch in der Mitte“:
 
 Beispiel – Wunsch „Mach alles als Verbund“ (Runde 1):
 {"antwort":"Ich verbinde alle Teile zu einem Körper und prüfe danach, ob alles sauber gerechnet wird.","plan":[{"text":"Alle Teile zu einem Verbund verbinden","fertig":false},{"text":"Ergebnis prüfen","fertig":false}],"aktionen":[{"op":"verbinden","ids":"alle","name":"Verbund"}],"weiter":true}`;
-  const KMAP = { box: 1, cylinder: 1, tube: 1, sphere: 1, hemisphere: 1, cone: 1, pyramid: 1, torus: 1, prism: 1, wedge: 1, extrude: 1, part: 1, group: 1 };
+  const KMAP = { box: 1, cylinder: 1, tube: 1, sphere: 1, hemisphere: 1, cone: 1, pyramid: 1, torus: 1, prism: 1, wedge: 1, extrude: 1, loft: 1, sweep: 1, part: 1, group: 1 };
   function compactItem(it) {
     const o = { id: it.id, art: it.kind, name: it.name, rolle: it.role === 'hole' ? 'loch' : 'koerper' };
     if (it.kind === 'extrude' || it.kind === 'revolve') { o.p = { hoehe: it.p.dist, richtung: it.p.dir || 'normal', skizze: (it.p.sketch && it.p.sketch.ents.length) + ' Elemente' }; }
@@ -12168,6 +12208,18 @@ Beispiel – Wunsch „Mach alles als Verbund“ (Runde 1):
   }
   function cleanT(t) { const o = {}; for (const k of ['x', 'y', 'z', 'rx', 'ry', 'rz']) if (t && t[k] != null) o[k] = num(t[k], 0); return o; }
   const PLANEDEF = { XY: { x: [1, 0, 0], n: [0, 0, 1] }, XZ: { x: [1, 0, 0], n: [0, -1, 0] }, YZ: { x: [0, 1, 0], n: [1, 0, 0] } };
+  function formEnts(form) {
+    const ents = [];
+    for (const el of form || []) {
+      if (el.rect && el.rect.length === 4) ents.push({ id: uid('e'), type: 'rect', a: [num(el.rect[0], 0), num(el.rect[1], 0)], b: [num(el.rect[2], 10), num(el.rect[3], 10)] });
+      else if (el.circle && el.circle.length === 3) ents.push({ id: uid('e'), type: 'circle', c: [num(el.circle[0], 0), num(el.circle[1], 0)], r: Math.abs(num(el.circle[2], 5)) });
+      else if (el.ellipse && el.ellipse.length >= 4) ents.push({ id: uid('e'), type: 'ellipse', c: [num(el.ellipse[0], 0), num(el.ellipse[1], 0)], rx: Math.abs(num(el.ellipse[2], 5)), ry: Math.abs(num(el.ellipse[3], 3)), rot: 0 });
+      else if (el.slot && el.slot.length === 5) ents.push({ id: uid('e'), type: 'slot', a: [num(el.slot[0], 0), num(el.slot[1], 0)], b: [num(el.slot[2], 10), num(el.slot[3], 0)], r: Math.abs(num(el.slot[4], 2)) });
+      else if (Array.isArray(el.poly) && el.poly.length >= 3) { const pts = el.poly.map((q) => [num(q[0], 0), num(q[1], 0)]); for (let i = 0; i < pts.length; i++) ents.push({ id: uid('e'), type: 'line', a: pts[i], b: pts[(i + 1) % pts.length] }); }
+      else if (typeof el.text === 'string' && el.text) ents.push({ id: uid('e'), type: 'text', a: [num(el.x, 0), num(el.y, 0)], s: el.text, h: Math.abs(num(el.hoehe, 5)), font: el.fett ? 'fett' : 'inter', align: el.mitte ? 'm' : 'l', rot: 0 });
+    }
+    return ents;
+  }
   function buildItem(o, notes) {
     const kind = String(o.art || o.kind || '').toLowerCase();
     if (!KMAP[kind]) { notes.push(`„${o.art}“ kenne ich nicht.`); return null; }
@@ -12177,16 +12229,26 @@ Beispiel – Wunsch „Mach alles als Verbund“ (Runde 1):
       const pl = PLANEDEF[String(o.p && o.p.ebene || 'XY').toUpperCase()] || PLANEDEF.XY;
       const off = num(o.p && o.p.versatz, 0);
       const plane = { o: pl.n.map((v) => v * (typeof off === 'number' ? off : 0)), x: pl.x, n: pl.n };
-      const ents = [];
-      for (const el of (o.p && o.p.form) || []) {
-        if (el.rect && el.rect.length === 4) ents.push({ id: uid('e'), type: 'rect', a: [num(el.rect[0], 0), num(el.rect[1], 0)], b: [num(el.rect[2], 10), num(el.rect[3], 10)] });
-        else if (el.circle && el.circle.length === 3) ents.push({ id: uid('e'), type: 'circle', c: [num(el.circle[0], 0), num(el.circle[1], 0)], r: Math.abs(num(el.circle[2], 5)) });
-        else if (el.slot && el.slot.length === 5) ents.push({ id: uid('e'), type: 'slot', a: [num(el.slot[0], 0), num(el.slot[1], 0)], b: [num(el.slot[2], 10), num(el.slot[3], 0)], r: Math.abs(num(el.slot[4], 2)) });
-        else if (Array.isArray(el.poly) && el.poly.length >= 3) { const pts = el.poly.map((q) => [num(q[0], 0), num(q[1], 0)]); for (let i = 0; i < pts.length; i++) ents.push({ id: uid('e'), type: 'line', a: pts[i], b: pts[(i + 1) % pts.length] }); }
-      }
+      const ents = formEnts(o.p && o.p.form);
       if (!ents.length) { notes.push('Eine Skizze war leer.'); return null; }
       it = Model.newItem('extrude', {}, { name: o.name || 'Skizzenkörper', role });
       it.p = { sketch: { plane, ents }, dist: num(o.p.hoehe ?? o.p.dist, 10), dir: ['normal', 'reverse', 'both'].includes(o.p.richtung) ? o.p.richtung : 'normal' };
+    } else if (kind === 'loft') {
+      const sketches = [];
+      for (const pr of (o.p && o.p.profile) || []) {
+        const pl = PLANEDEF[String(pr.ebene || 'XY').toUpperCase()] || PLANEDEF.XY, off = num(pr.versatz, 0);
+        const ents = formEnts(pr.form || []); if (!ents.length) continue;
+        sketches.push({ plane: { o: pl.n.map((v) => v * off), x: pl.x, n: pl.n }, ents, dims: [], cons: [] });
+      }
+      const tip = num(o.p && o.p.spitze, 0);
+      if (sketches.length < (tip > 0 ? 1 : 2)) { notes.push('Ein Übergang braucht mindestens zwei Profile (oder ein Profil mit Spitze).'); return null; }
+      it = Model.newItem('loft', { sketches, ruled: !!(o.p && o.p.gerade), tip }, { name: o.name || 'Übergang', role });
+    } else if (kind === 'sweep') {
+      const pl = PLANEDEF[String(o.p && o.p.ebene || 'XY').toUpperCase()] || PLANEDEF.XY, off = num(o.p && o.p.versatz, 0);
+      const pts = ((o.p && o.p.pfad) || []).map((q) => [num(q[0], 0), num(q[1], 0)]);
+      if (pts.length < 2) { notes.push('Ein Pfad braucht mindestens zwei Punkte.'); return null; }
+      const ents = o.p.glatt ? [{ id: uid('e'), type: 'spline', pts, closed: false }] : pts.slice(1).map((q, i) => ({ id: uid('e'), type: 'line', a: pts[i], b: q }));
+      it = Model.newItem('sweep', { sketch: { plane: { o: pl.n.map((v) => v * off), x: pl.x, n: pl.n }, ents, dims: [], cons: [] }, shape: o.p.form === 'rechteck' ? 'rect' : 'circle', d: num(o.p.d, 6), w: num(o.p.w, 6), h: num(o.p.h, 4), wall: num(o.p.wand, 0) }, { name: o.name || 'Entlang Pfad', role });
     } else if (kind === 'part') {
       const lib = o.p && o.p.lib; const def = LIBMAP[lib];
       if (!def) { notes.push(`Das Bauteil „${lib}“ gibt es nicht.`); return null; }

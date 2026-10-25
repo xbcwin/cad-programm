@@ -1,6 +1,6 @@
 # Fortschritt
 
-Stand: 25.10.2026 · nach Sitzung 23 (19: Skizze auf Profi-Niveau · 20: Magnet, Rundungs-Griff · 21: Skizzieren im 3D, Übergang, Entlang Pfad, Import · 22: Kreis/Bogen-Arten, Verlängern, Entformungsschräge, Gewinde · 23: Einheiten im Maßfeld, eigener Querschnitt)
+Stand: 25.10.2026 · nach Sitzung 24 (19: Skizze auf Profi-Niveau · 20: Magnet, Rundungs-Griff · 21: Skizzieren im 3D, Übergang, Entlang Pfad, Import · 22: Kreis/Bogen-Arten, Verlängern, Entformungsschräge, Gewinde · 23: Einheiten, eigener Querschnitt, Langloch gebogen, gedrehtes Rechteck, Teilen · 24: Punkt, alle Ecken)
 
 ## Erledigt
 
@@ -170,7 +170,8 @@ Fertig.
 - [x] Entlang Pfad mit eigener Form aus einem Skizzenkörper (Sitzung 23)
 - [x] Linie oder Bogen teilen (Sitzung 23); KI-Kollege kennt Gewinde und Entformungsschräge
 - [x] Gebogenes Langloch, gedrehtes Rechteck (3 Punkte), Vieleck über die Flächen (Schlüsselweite) (Sitzung 23)
-- [ ] Punkt als eigenes Element
+- [x] Punkt als eigenes Element, alle Ecken auf einmal runden/fasen (Sitzung 24)
+- [x] KI-Kollege baut Übergang, Entlang Pfad, Ellipse und Text (Sitzung 24)
 - [ ] Ellipse und Text trimmen und versetzen; Text entlang einer Kurve
 - [ ] Muster und Versatz: Anzahl/Abstand nachträglich für das ganze Muster ändern (heute je Kopie über das Regel-Symbol)
 - [ ] Spiegeln an der X- oder Y-Achse ohne eigene Linie

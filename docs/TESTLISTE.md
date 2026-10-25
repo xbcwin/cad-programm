@@ -481,6 +481,19 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
   Schritte: 1. Ein Kind (ab 10) mit „Einfach“ eine Platte mit vier Löchern bauen lassen, ohne zu helfen.
   Erwartet: Es findet Körper, Löcher und Exportieren allein; notieren, wo es hängen bleibt.
 
+## Punkt und alle Ecken (neu in Sitzung 24)
+
+- [x] **Punkt**
+  Schritte: Werkzeug „Punkt“ (O), ins Bild klicken; mit „Auswahl“ anklicken und rechts X = 12 eintippen; Kreis auf den Punkt setzen.
+  Erwartet: Kreuz an der Stelle; wandert auf X 12; der Kreis rastet genau am Punkt ein.
+- [x] **Alle Ecken auf einmal**
+  Schritte: Rechteck, Werkzeug „Ecke runden“, Radius 3, „Alle Ecken auf einmal“; dann Rückgängig.
+  Erwartet: Vier Rundungen; ein Rückgängig bringt das Rechteck zurück.
+
+- [x] **KI-Kollege mit neuen Formen**
+  Schritte: Den KI-Kollegen um eine Nase (Übergang mit Spitze), einen Kabelbügel (Pfad) und ein Schild mit Schrift bitten.
+  Erwartet: Drei Teile ohne Fehler; die Nase läuft zu einer Spitze zusammen, die Schrift ist ins Schild graviert.
+
 ## Einheiten und eigener Querschnitt (neu in Sitzung 23)
 
 - [x] **Einheiten im Maßfeld**

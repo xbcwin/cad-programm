@@ -408,5 +408,10 @@
     "tip": "Linie oder Bogen in zwei Stücke teilen",
     "hilfe": "Klick auf eine Linie oder einen Bogen. An dieser Stelle (sie fängt an Mitte und Schnittpunkten) wird das Element geteilt. Beide Stücke bleiben verbunden und in einer Flucht.",
     "tipp": "Praktisch, wenn nur ein Teil einer Kante ein Maß oder eine Rundung bekommen soll."
+  },
+  "point": {
+    "tip": "Einzelner Punkt in der Skizze",
+    "hilfe": "Klick setzt einen Punkt. Er bildet keine Fläche, ist aber ein fester Bezug: Maße zu anderen Punkten oder Linien, Regeln wie „Mittig“ oder „Deckungsgleich“ – und später die Mitte für eine Bohrung.",
+    "tipp": "Praktisch für Lochmitten auf einem Lochkreis: Punkt setzen, Abstand zur Mitte bemaßen, dann Kreismuster."
   }
 }

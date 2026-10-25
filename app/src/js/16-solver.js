@@ -18,7 +18,7 @@ const Solver = (() => {
 
   // ---------- Variablen je Element ----------
   const VARS = {
-    line: ['a0', 'a1', 'b0', 'b1'], arc: ['a0', 'a1', 'b0', 'b1', 'm0', 'm1'], circle: ['c0', 'c1', 'r'],
+    line: ['a0', 'a1', 'b0', 'b1'], point: ['a0', 'a1'], arc: ['a0', 'a1', 'b0', 'b1', 'm0', 'm1'], circle: ['c0', 'c1', 'r'],
     rect: ['a0', 'a1', 'b0', 'b1'], slot: ['a0', 'a1', 'b0', 'b1', 'r'], poly: ['c0', 'c1', 'r'], ellipse: ['c0', 'c1', 'rx', 'ry'], text: ['a0', 'a1', 'h'],
   };
   // Splines haben beliebig viele Punkte: Schlüssel „p3_0“ = X des vierten Punkts, „p3_1“ = Y
@@ -74,7 +74,7 @@ const Solver = (() => {
         return { deps: ks, get: (X) => { const c = circum(X[ks[0]], X[ks[1]], X[ks[2]], X[ks[3]], X[ks[4]], X[ks[5]]); return [c[0], c[1]]; } };
       }
       if (e.type === 'ellipse' && p === 'c') return two('c');
-      if (e.type === 'text') return two('a');
+      if (e.type === 'text' || e.type === 'point') return two('a');
       if (e.type === 'circle' || e.type === 'poly') {
         if (p === 'c') return two('c');
         if (e.type === 'poly' && p[0] === 'v') {
@@ -131,7 +131,7 @@ const Solver = (() => {
         if (e.type === 'line' || e.type === 'arc' || e.type === 'slot' || (e.type === 'spline' && !e.closed)) { put({ e: e.id, p: 'a' }); put({ e: e.id, p: 'b' }); }
         else if (e.type === 'rect') for (let i = 0; i < 4; i++) put({ e: e.id, p: 'k' + i });
         else if (e.type === 'circle' || e.type === 'ellipse') put({ e: e.id, p: 'c' });
-        else if (e.type === 'text') put({ e: e.id, p: 'a' });
+        else if (e.type === 'text' || e.type === 'point') put({ e: e.id, p: 'a' });
         else if (e.type === 'poly') { put({ e: e.id, p: 'c' }); }
       }
       for (const g of groups.values()) for (let i = 1; i < g.length; i++) {
