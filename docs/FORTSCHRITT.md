@@ -1,6 +1,6 @@
 # Fortschritt
 
-Stand: 25.10.2026 · nach Sitzung 30 (19: Skizze auf Profi-Niveau · 20: Magnet, Rundungs-Griff · 21: Skizzieren im 3D, Übergang, Entlang Pfad, Import · 22: Kreis/Bogen-Arten, Verlängern, Entformungsschräge, Gewinde · 23: Einheiten, eigener Querschnitt, Langloch gebogen, gedrehtes Rechteck, Teilen · 24: Punkt, alle Ecken · 25: Schnitt und Spiegeln an Fläche · 26: Kantenkette, Abstände beim Verschieben · 27: Spiegeln an der Achse · 28: Muster entlang Kurve, Schablonen-Maße geprüft, USB-C-Stecker · 29: Spiegelebene wandert mit, Kreismuster quer und längs, KI kennt Muster entlang Kurve · 30: Bohrungen an Skizzenpunkten)
+Stand: 26.10.2026 · nach Sitzung 32 (19: Skizze auf Profi-Niveau · 20: Magnet, Rundungs-Griff · 21: Skizzieren im 3D, Übergang, Entlang Pfad, Import · 22: Kreis/Bogen-Arten, Verlängern, Entformungsschräge, Gewinde · 23: Einheiten, eigener Querschnitt, Langloch gebogen, gedrehtes Rechteck, Teilen · 24: Punkt, alle Ecken · 25: Schnitt und Spiegeln an Fläche · 26: Kantenkette, Abstände beim Verschieben · 27: Spiegeln an der Achse · 28: Muster entlang Kurve, Schablonen-Maße geprüft, USB-C-Stecker · 29: Spiegelebene wandert mit, Kreismuster quer und längs, KI kennt Muster entlang Kurve · 30: Bohrungen an Skizzenpunkten · 31: Wand aus Linie, Schritt hinter dem Marker, Schildchen · 32: Kante übernehmen)
 
 ## Erledigt
 
@@ -174,10 +174,15 @@ Fertig.
 - [x] KI-Kollege baut Übergang, Entlang Pfad, Ellipse und Text (Sitzung 24)
 - [x] Kantenkette wählen (Kette), Abstand zu den Nachbarn live beim Verschieben (Sitzung 26)
 - [x] An einer Fläche spiegeln (gespiegelte Kopie, ein Körper); Schnitt parallel zu einer gewählten Fläche; neue Werkzeuge in der Suchzeile (Übergang, Zur Spitze, Schräge, Abstand, Rohr entlang Pfad) (Sitzung 25)
+- [x] Schritt hinter dem Marker oder unterdrückt: statt der Werkzeugleiste nur „Marker dahinter“ bzw. „Wieder einschalten“, keine Griffe (Sitzung 31)
 - [x] Spiegelebene hängt an der Fläche: Wird das Original größer, wandert sie mit (äußerste Fläche in Achsrichtung) (Sitzung 29)
 - [ ] Ellipse und Text trimmen und versetzen; Text entlang einer Kurve
 - [ ] Muster und Versatz: Anzahl/Abstand nachträglich für das ganze Muster ändern (heute je Kopie über das Regel-Symbol)
 - [x] Spiegeln an der X- oder Y-Achse ohne eigene Linie (Sitzung 27)
+- [x] Werkzeug „Wand“ (N): offene Linie, Linienzug, Bogen oder Spline wird zur geschlossenen Wand mit einstellbarer Dicke (beide Seiten halb, Enden zu, per Regeln verbunden; die Linie bleibt Hilfslinie) – für Rippen, Stege, Antennenhalter (Sitzung 31)
+- [x] Skizzen-Leiste etwas kompakter, damit sie trotz neuer Werkzeuge bei zwei Zeilen bleibt (Sitzung 32)
+- [x] Werkzeug „Kante übernehmen“ (Z): Klick auf eine Körperkante holt sie in die Skizze – gerade als feste Linie, rund als Bogen oder Kreis, sonst als Spline (Sitzung 32)
+- [x] Maß-Schildchen, die übereinander lägen, rücken untereinander (z. B. „X 0“ und „Y 0“ am Ursprung) (Sitzung 31)
 
 ### Stufe 3 – Features und Ansichten
 - [x] Magnetisches Einrasten wie bei Canva: auf Flächen (Mitte, Mittellinien, Lochmitten, Kantenmitten, gleicher Randabstand) und zwischen Körpern (bündig, mittig, gleiche Abstände), mit Hilfslinien; Strg hält es an, abschaltbar in den Einstellungen (Sitzung 20)
@@ -234,10 +239,8 @@ Fertig.
 - Text kennt keine Unterschneidung (Kerning) – die Buchstaben stehen nach ihrer Laufweite
 - Ellipse und Text lassen sich nicht trimmen; Ellipsen-Drehung ist keine Regel (nur ein Wert)
 
-- Schritt hinter dem Marker auswählen zeigt noch die Werkzeugleiste im Modell
 - Vorlagen bestehen aus einer Gruppe: Über „Bearbeiten“ im Verlauf sieht man ihre einzelnen Schritte in der Zeitleiste
 - Übernommene Körperkanten passen sich noch nicht an, wenn sich der Körper später ändert
 - Vielecke lassen sich noch nicht drehen per Regel (nur über die Lage)
-- Schildchen „X 0“ und „Y 0“ am Ursprung liegen übereinander
 - Teilen ergibt zwei Hälften in einem Schritt; einzeln verschieben geht erst nach „Auflösen“ (dann ist der Schnitt weg)
 - Feature-Gruppen (mehrere Schritte als einen benannten Block zusammenfassen) aus dem Bauplan sind noch nicht gebaut – Bauteile decken das heute teilweise ab

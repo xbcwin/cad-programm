@@ -481,6 +481,24 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
   Schritte: 1. Ein Kind (ab 10) mit „Einfach“ eine Platte mit vier Löchern bauen lassen, ohne zu helfen.
   Erwartet: Es findet Körper, Löcher und Exportieren allein; notieren, wo es hängen bleibt.
 
+## Kante übernehmen (neu in Sitzung 32)
+
+- [x] **Kante als Linie und Kreis**
+  Schritte: Quader 20 × 20 × 10 und daneben ein Zylinder Ø 10. Skizze auf XY, Werkzeug „Kante übernehmen“ (Z), obere Kante des Quaders anklicken, dann den oberen Rand des Zylinders.
+  Erwartet: Eine feste Linie (20 lang, auf Y 10) und ein Kreis Ø 10 um die Zylindermitte.
+- [ ] **Deckel aufs Gehäuse**: Skizze auf die Oberseite eines Gehäuses, Außenkanten übernehmen, Versatz 1,5 nach innen, hochziehen – passt der Rand?
+
+## Wand aus Linie, Schritt hinter dem Marker (neu in Sitzung 31)
+
+- [x] **Wand aus einem Linienzug**
+  Schritte: Skizze, Linienzug 30 nach rechts und 20 nach oben, Esc, Werkzeug „Wand“ (N), Wandstärke 3, auf die Linie klicken, „Fertig“, 5 hoch.
+  Erwartet: Eine geschlossene Fläche (3 × 50 = 150 mm²), die Linie wird gestrichelt; Körper 750 mm³.
+- [ ] **Wand aus einem Bogen**: Bogen zeichnen, Wand 2 mm, 8 hoch – sieht aus wie ein gebogener Steg (Antennenhalter).
+- [x] **Schritt hinter dem Marker**
+  Schritte: Zwei Körper, Marker hinter den ersten, den zweiten im Verlauf anklicken.
+  Erwartet: Nur eine schmale Leiste „Hinter dem Marker · Marker dahinter“, keine Griffe; der Knopf holt den Schritt zurück.
+- [x] **Schildchen am Ursprung**: Punkt im Ursprung mit Maß X 0 und Y 0 – die Schildchen stehen untereinander, nicht übereinander.
+
 ## Bohrungen an Skizzenpunkten (neu in Sitzung 30)
 
 - [x] **Zwei Punkte werden zwei Löcher**

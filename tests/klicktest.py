@@ -2406,6 +2406,58 @@ def t_bohrung_punkte(p):
     return [ok1, ok2, ok3]
 
 
+# ---------- Sitzung 31: Wand aus Linie, Schritt hinter dem Marker, Schildchen ----------
+def t_wand(p):
+    sketch_xy(p)
+    p.pg.keyboard.press('l'); p.wait(150)
+    for q in ((0, 0), (30, 0), (30, 20)):
+        s = to_screen(p, *q); p.pg.mouse.click(s[0], s[1]); p.wait(150)
+    p.pg.keyboard.press('Escape'); p.wait(200)
+    p.pg.keyboard.press('n'); p.wait(200)
+    ok1 = p.pg.locator('#wall-t').count() == 1 and p.ev("return Sketch.state.tool") == 'wall'
+    p.pg.fill('#wall-t', '3'); p.pg.press('#wall-t', 'Enter'); p.wait(150)
+    s = to_screen(p, 15, 0); p.pg.mouse.click(s[0], s[1]); p.wait(500)
+    st = p.ev("const S=Sketch.state; const r=SK.regions(S.ents); return [r.length, r.length && Math.abs(r[0].area), S.ents.filter(e=>e.con).length, !!(S.status && S.status.ok)]")
+    ok2 = st[0] == 1 and abs(st[1] - 150) < 0.5 and st[2] == 2 and st[3]
+    fertig_hoch(p, '5')
+    v = volumen(p)
+    ok3 = v is not None and abs(v - 750) < 1 and p.ev("return App.errors.length") == 0
+    return [ok1, ok2, ok3]
+
+
+def t_hinter_marker(p):
+    p.empty(); p.ev("App.change('x', d=>{ d.items.push(Model.newItem('box',{w:10,d:10,h:5})); const c=Model.newItem('cylinder',{d:6,h:8}); c.t.x=20; d.items.push(c); })"); warte_rechnen(p, 20)
+    p.ev("Timeline.setMarker(1)"); warte_rechnen(p, 20)
+    p.ev("App.select([App.doc.items[1].id])"); p.wait(600)
+    ok1 = p.pg.locator('.ctxbar.inactive').count() == 1 and p.pg.locator('.ctxbar button[aria-label="Löschen"]').count() == 0 and 'hinter dem marker' in p.pg.locator('.ctxbar').inner_text().lower() and p.ev("return Handles.debugKinds ? Handles.debugKinds().length : 0") == 0
+    p.pg.locator('.ctxbar button[aria-label="Marker dahinter"]').click(); warte_rechnen(p, 20)
+    ok2 = p.ev("return App.doc.rollback==null && Model.isActive(App.doc, App.doc.items[1].id)")
+    return [ok1, ok2]
+
+
+def t_schildchen_ueberlappen(p):
+    sketch_xy(p)
+    p.ev("const S=Sketch.state; S.ents.push({id:'P',type:'point',a:[0,0]}); S.dims.push({id:'d1',e:'P',k:'x',v:0},{id:'d2',e:'P',k:'y',v:0}); Sketch.setTool('select')"); p.wait(400)
+    r = p.ev("return [...document.querySelectorAll('.skdim')].map(e=>{const b=e.getBoundingClientRect(); return [b.left,b.top,b.right,b.bottom]})")
+    ok1 = len(r) == 2 and not (r[0][0] < r[1][2] and r[1][0] < r[0][2] and r[0][1] < r[1][3] and r[1][1] < r[0][3])
+    return [ok1]
+
+
+# ---------- Sitzung 32: Kante übernehmen ----------
+def t_kante_uebernehmen(p):
+    p.empty(); p.ev("App.change('x', d=>{ d.items.push(Model.newItem('box',{w:20,d:20,h:10})); const c=Model.newItem('cylinder',{d:10,h:6}); c.t.x=30; d.items.push(c); })"); warte_rechnen(p, 20)
+    p.ev("Sketch.startOnPlane('XY')"); p.wait(1500)
+    p.pg.keyboard.press('z'); p.wait(200)
+    ok1 = p.ev("return Sketch.state.tool") == 'project'
+    s = world_screen(p, 0, 10, 10); p.pg.mouse.click(s[0], s[1]); p.wait(500)
+    e = p.ev("const S=Sketch.state; const e=S.ents[S.ents.length-1]; return e && [e.type, e.a, e.b, S.cons.some(c=>c.type==='fix' && c.refs[0].e===e.id)]")
+    ok2 = bool(e) and e[0] == 'line' and abs(abs(e[1][0] - e[2][0]) - 20) < 0.01 and abs(e[1][1] - 10) < 0.01 and abs(e[2][1] - 10) < 0.01 and e[3]
+    s = world_screen(p, 35, 0, 6); p.pg.mouse.click(s[0], s[1]); p.wait(500)
+    c = p.ev("const S=Sketch.state; const e=S.ents[S.ents.length-1]; return e && [e.type, e.c, e.r]")
+    ok3 = bool(c) and c[0] == 'circle' and abs(c[1][0] - 30) < 0.01 and abs(c[1][1]) < 0.01 and abs(c[2] - 5) < 0.01
+    return [ok1, ok2, ok3]
+
+
 # ---------- Sitzung 22: kleine Skizzen-Werkzeuge ----------
 def t_kreis_bogen_modi(p):
     sketch_xy(p)
@@ -2685,6 +2737,10 @@ TESTS = [
     ('KI: Muster entlang Kurve / kennt die Aktion', t_ki_muster_kurve),
     ('Kreismuster: senkrecht / Drehachse quer / Mitte Z', t_kreismuster_achse),
     ('Bohrungen an Skizzenpunkten: Assistent / Lage / fertig', t_bohrung_punkte),
+    ('Skizze: Wand aus Linie / Fläche / Körper', t_wand),
+    ('Schritt hinter dem Marker: schmale Leiste / Marker dahinter', t_hinter_marker),
+    ('Skizze: Schildchen überdecken sich nicht', t_schildchen_ueberlappen),
+    ('Skizze: Kante übernehmen / Linie fest / Kreis', t_kante_uebernehmen),
     ('Skizze: Kreis aus 3 / 2 Punkten / tangentialer Bogen', t_kreis_bogen_modi),
     ('Skizze: Verlängern bis zur nächsten Linie', t_verlaengern),
     ('Entformungsschräge: 3° nach innen / -2° nach außen', t_schraege),

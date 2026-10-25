@@ -642,6 +642,17 @@ const Panels = (() => {
     const PRO = ['similar', 'shell', 'patternCirc', 'split', 'boolSubtract', 'layers'];
     const b = (ic, label, fn, cls = '', tip, iconOnly) => { const x = h('button', { type: 'button', class: cls + (PRO.includes(ic) ? ' pro' : ''), 'data-tip': tip || (iconOnly ? label : null), 'aria-label': label || tip, 'data-help': HELP[ic] ? ic : null }); x.innerHTML = icon(ic) + (label && !iconOnly ? `<span>${label}</span>` : ''); x.onclick = (e) => { e.stopPropagation(); fn(e); }; bar.append(x); return x; };
     const sep = () => bar.append(h('span', { class: 'vsep' }));
+    // Schritt hinter dem Marker oder unterdrückt: nichts zum Bearbeiten, nur zurückholen
+    const off = !App.ctx ? items.map((x) => Model.topOf(App.doc, x.item.id)).find((t) => t && !Model.isActive(App.doc, t.id)) : null;
+    if (off) {
+      bar.classList.add('inactive');
+      bar.append(h('span', { class: 'lbl' }, off.suppressed ? 'Unterdrückt' : 'Hinter dem Marker'));
+      if (off.suppressed) b('eye', 'Wieder einschalten', () => Timeline.toggleSuppress(off.id), 'accent', 'Diesen Schritt wieder mitrechnen');
+      else b('rollback', 'Marker dahinter', () => Timeline.setMarker(App.doc.items.indexOf(off) + 1, `Zeitleiste: bis „${Model.label(off)}“`), 'accent', 'Den Marker hinter diesen Schritt ziehen – dann wird er wieder mitgerechnet');
+      $('#overlay').append(bar); ctx = bar;
+      placeCtx();
+      return;
+    }
     const face = Actions.selectedFace();
     if (App.edges.length) {
       bar.append(h('span', { class: 'lbl' }, App.edges.length > 1 ? App.edges.length + ' Kanten' : 'Kante'));
@@ -690,6 +701,7 @@ const Panels = (() => {
     const ids = App.sel;
     let box = new THREE.Box3();
     for (const id of ids) { const b = Actions.worldBox(id); if (b) box.union(b); }
+    if (box.isEmpty() && ctx.classList.contains('inactive')) { const cr0 = $('#center').getBoundingClientRect(); ctx.hidden = false; ctx.style.left = cr0.width / 2 + 'px'; ctx.style.top = '70px'; return; }
     if (box.isEmpty()) { ctx.hidden = true; return; }
     let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity, any = false;
     for (let i = 0; i < 8; i++) {
@@ -698,6 +710,7 @@ const Panels = (() => {
       minx = Math.min(minx, s.x); maxx = Math.max(maxx, s.x); miny = Math.min(miny, s.y); maxy = Math.max(maxy, s.y);
     }
     const cr = $('#center').getBoundingClientRect();
+    if (!any && ctx.classList.contains('inactive')) { ctx.hidden = false; ctx.style.left = cr.width / 2 + 'px'; ctx.style.top = '70px'; return; }
     if (!any) { ctx.hidden = true; return; }
     ctx.hidden = false;
     const bw = ctx.offsetWidth, bh = ctx.offsetHeight;

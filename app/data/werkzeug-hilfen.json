@@ -54,6 +54,16 @@
     "hilfe": "Klicke eine Linie, einen Bogen, Kreis oder eine Form an. Bewege die Maus auf die Seite, auf der die Kopie liegen soll, und klicke. Oder tippe den Abstand ein und drücke Enter – auch eine Formel geht.",
     "tipp": "Die Kopie bleibt über eine Regel mit dem Original verbunden. Ändert sich das Original, wandert sie mit. Klick auf das Regel-Symbol, um den Abstand später zu ändern."
   },
+  "wall2d": {
+    "tip": "Aus einer offenen Linie eine Wand mit Dicke machen",
+    "hilfe": "Stell rechts die Wandstärke ein und klicke eine offene Linie, einen Linienzug, einen Bogen oder eine Spline an. Tracery legt auf beiden Seiten die halbe Dicke an und schließt die Enden – die Linie bleibt als Hilfslinie in der Mitte. Mit „Fertig“ ziehst du die Wand hoch.",
+    "tipp": "Ideal für Rippen, Stege und dünne Halter, z. B. einen Antennenhalter: Bogen zeichnen, Wand 2 mm, 8 mm hochziehen. Ändert sich die Linie, wandert die Wand mit."
+  },
+  "project2d": {
+    "tip": "Kante eines Körpers in die Skizze holen",
+    "hilfe": "Klick in der Skizze auf eine Kante eines Körpers. Tracery schiebt sie senkrecht auf die Zeichenebene und legt sie als Element an: gerade Kanten als Linie, runde als Bogen oder Kreis, alles andere als Spline. Linien, Bögen und Kreise sind fest – an ihnen kannst du einrasten und bemaßen.",
+    "tipp": "So passt ein Deckel genau auf ein Gehäuse: Skizze auf die Oberseite, die Außenkanten übernehmen, „Versatz“ nach innen – fertig ist der Rand. Ändert sich der Körper später, bleibt die übernommene Kante, wo sie war."
+  },
   "mirror2d": {
     "tip": "Elemente an einer Linie spiegeln",
     "hilfe": "Klicke zuerst die Linie an, an der gespiegelt wird. Dann klickst du die Elemente an, die ein Spiegelbild bekommen sollen, und drückst Enter. Ohne Auswahl wird alles gespiegelt.",

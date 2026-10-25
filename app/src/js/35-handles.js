@@ -50,6 +50,7 @@ const Handles = (() => {
     clear();
     const c = current(); if (!c) return;
     const { it, box, W } = c;
+    if (!App.ctx && !Model.isActive(App.doc, it.id)) return;   // Schritt hinter dem Marker oder unterdrückt: keine Griffe
     if (App.edges.length) { filletHandle(c); return; }
     const [x0, y0, z0, x1, y1, z1] = box; const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, cz = (z0 + z1) / 2;
     const map = SIZE_MAP[it.kind];

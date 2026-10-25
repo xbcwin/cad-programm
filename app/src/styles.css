@@ -400,7 +400,7 @@ body.sketching .timeline{display:none}
 .ver-row{gap:8px;align-items:center;padding:8px 0}
 .fv-empty{position:absolute;inset:0;display:grid;place-items:center;padding:16px;text-align:center;font-size:13px;color:var(--muted);background:var(--surface)}
 @media (max-width: 640px){.focusview{grid-template-rows:auto 130px}.viewbars{width:auto;right:12px}}
-.sketchbar .tool{padding:7px 9px}
+.sketchbar .tool{padding:7px 7px}
 .sketchbar .tool:not(.active):not(.primary):not(.labeled) span{display:none}
 .sketchbar .tool.active span{display:inline}
 .sketchbar .title{font:600 12px/1 var(--font-cond);letter-spacing:.08em;text-transform:uppercase;color:var(--accent);padding:0 10px 0 8px;white-space:nowrap}

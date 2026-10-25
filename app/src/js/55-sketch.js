@@ -19,13 +19,15 @@ const Sketch = (() => {
     { id: 'extend', icon: 'extend', label: 'Verlängern', key: 'U', tip: 'Linie bis zur nächsten Kante verlängern' },
     { id: 'splitl', icon: 'splitLine', label: 'Teilen', key: 'Y', tip: 'Linie oder Bogen an einem Punkt in zwei Stücke teilen' },
     { id: 'offset', icon: 'offset2d', label: 'Versatz', key: 'F', tip: 'Parallele Kopie im Abstand – bleibt per Regel verbunden' },
+    { id: 'wall', icon: 'wall2d', label: 'Wand', key: 'N', tip: 'Aus einer offenen Linie eine Wand mit Dicke machen – z. B. Rippen und Stege' },
+    { id: 'project', icon: 'projectEdge', label: 'Kante', key: 'Z', tip: 'Kante eines Körpers in die Skizze holen – als feste Linie, Bogen, Kreis oder Spline' },
     { id: 'mirror', icon: 'mirror', label: 'Spiegeln', key: 'M', tip: 'An einer Linie spiegeln – legt Symmetrie-Regeln an' },
     { id: 'patrect', icon: 'patternRect', label: 'Rechteckmuster', key: 'Q', tip: 'Elemente in Reihen und Spalten vervielfachen' },
     { id: 'patcirc', icon: 'patternCirc', label: 'Kreismuster', key: 'W', tip: 'Elemente im Kreis vervielfachen' },
     { id: 'dim', icon: 'dim', label: 'Maß', key: 'D', tip: 'Maß festlegen – auch als Formel wie breite/2', sep: true },
     { id: 'bg', icon: 'image', label: 'Bild-Vorlage', key: 'I', tip: 'Foto oder Zeichnung hinterlegen und auf echte Größe bringen – zum Nachzeichnen' },
   ];
-  const HELPKEY = { splitl: 'split2d', extend: 'extend2d', tpl: 'sketchTemplate', corner: 'corner2d', text: 'sketchText', bg: 'sketchImage', poly: 'polygon', dim: 'dimension', offset: 'offset2d', mirror: 'mirror2d', patrect: 'patternRect2d', patcirc: 'patternCirc2d' };
+  const HELPKEY = { wall: 'wall2d', project: 'project2d', splitl: 'split2d', extend: 'extend2d', tpl: 'sketchTemplate', corner: 'corner2d', text: 'sketchText', bg: 'sketchImage', poly: 'polygon', dim: 'dimension', offset: 'offset2d', mirror: 'mirror2d', patrect: 'patternRect2d', patcirc: 'patternCirc2d' };
   const HINTS = {
     select: 'Element anklicken zum Bearbeiten. Endpunkte lassen sich ziehen. <b>Entf</b> löscht.',
     line: 'Klick setzt Punkte. Zahl tippen für genaue Länge. Am Startpunkt schließen oder <b>Enter</b> zum Beenden.',
@@ -35,6 +37,8 @@ const Sketch = (() => {
     bgcal: 'Klick den ersten Punkt auf dem Bild an, dann den zweiten. Danach tippst du den echten Abstand ein.',
     splitl: 'Klick auf eine Linie oder einen Bogen – dort wird das Element in zwei Stücke geteilt, die verbunden bleiben. Fängt an Mitte und Schnittpunkten.',
     extend: 'Klick nahe an das Ende einer Linie – sie wächst bis zur nächsten Linie, zum nächsten Bogen oder Kreis und bleibt dort per Regel hängen.',
+    project: 'Klick auf eine Kante eines Körpers – sie kommt als feste Linie, Bogen, Kreis oder Spline in die Skizze (senkrecht auf die Zeichenebene geschoben).',
+    wall: 'Dicke rechts einstellen, dann eine offene Linie, einen Bogen oder eine Spline anklicken – daraus wird eine geschlossene Wand zum Hochziehen. Die Linie bleibt als Hilfslinie in der Mitte.',
     point: 'Klick setzt einen Punkt. Punkte bilden keine Fläche, sind aber Bezug für Maße und Regeln. Auf einer Körperfläche werden reine Punkte beim „Fertig“ zu Bohrungen.',
     tpl: 'Schablone und Maße rechts wählen, dann ins Bild klicken – der Klick ist die Mitte. Fängt an Nullpunkt und Mittelpunkten.',
     text: 'Text, Höhe und Schrift rechts einstellen, dann ins Bild klicken. Der Klick legt den Anfang der Grundlinie fest (bei „Mitte“ die Mitte).',
@@ -173,7 +177,7 @@ const Sketch = (() => {
     if (Notes.active) Notes.stop();
     Panels.closeFlyout(); UI.closePop();
     const F = frameWorld(init.plane, init.W);
-    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' ? 'select' : init.ctx.mode === 'patpath' ? 'line' : 'rect', draft: null, sel: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, hoverEnt: null, trimHover: null };
+    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' ? 'select' : init.ctx.mode === 'patpath' ? 'line' : 'rect', draft: null, sel: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, hoverEnt: null, trimHover: null };
     S.dims = init.dims || []; S.cons = init.cons || []; S.picks = []; S.dimFirst = null; S.selCon = null;
     S.plane0 = deepClone(init.plane); S.pOff = init.pOff || 0; S.pTilt = 0;
     if (S.pOff) applyPlane(false, true);
@@ -1054,6 +1058,8 @@ const Sketch = (() => {
     }
     if (t === 'extend') { extendAt(uv0); return; }
     if (t === 'splitl') { splitAt(p); return; }
+    if (t === 'wall') { wallAt(p); return; }
+    if (t === 'project') { projectAt(e); return; }
     if (t === 'trim') { S.trimming = true; if (trimAt(uv0)) Panels.renderRight(); return; }
     if (t === 'offset') { offsetDown(uv0, e); return; }
     if (t === 'mirror') { mirrorDown(uv0); return; }
@@ -1238,6 +1244,68 @@ const Sketch = (() => {
     render(); Panels.renderRight();
   }
   // Teilen: Linie oder Bogen am Punkt p in zwei verbundene Stücke
+  // ---------- Kante übernehmen (projizieren) ----------
+  function projectAt(ev) {
+    const hit = Viewer.pick(ev.clientX, ev.clientY, { edgePx: 9 });
+    if (!hit || hit.edgeIdx == null || !hit.node) { UI.toast('Klick genau auf eine Kante eines Körpers.', { icon: 'info' }); return; }
+    const pos = Viewer.edgePositions(hit.node, hit.edgeIdx); if (!pos) return;
+    const M = hit.node.obj.matrixWorld, pts = [];
+    for (let i = 0; i < pos.length; i += 3) { const uv = toUV(new THREE.Vector3(pos[i], pos[i + 1], pos[i + 2]).applyMatrix4(M)).map((v) => round(v, 4)); if (!pts.length || SK.d2(pts[pts.length - 1], uv) > 1e-4) pts.push(uv); }
+    if (pts.length < 2) { UI.toast('Diese Kante steht senkrecht auf der Skizze – sie wäre nur ein Punkt.', { icon: 'info' }); return; }
+    const g = hit.node.data.edges[hit.edgeIdx] || {}, n = pts.length - 1, closed = SK.d2(pts[0], pts[n]) < 1e-3;
+    let en = null;
+    if (g.t === 'LINE' || n === 1) en = { type: 'line', a: pts[0], b: pts[n] };
+    else if (g.t === 'CIRCLE') {
+      const A = pts[0], B = pts[Math.floor(n / 3)], C = pts[Math.floor((2 * n) / 3)], ai = SK.arcInfo(A, B, C);
+      if (ai && pts.every((q) => Math.abs(SK.d2(q, ai.c) - ai.r) < Math.max(1e-3, ai.r * 2e-3))) en = closed ? { type: 'circle', c: ai.c.map((v) => round(v, 4)), r: round(ai.r, 4) } : { type: 'arc', a: pts[0], m: pts[Math.floor(n / 2)], b: pts[n] };
+    }
+    if (!en) { const k = Math.max(1, Math.ceil(n / 24)), sp = pts.filter((_, i) => i % k === 0); if (closed) sp.pop(); else if (SK.d2(sp[sp.length - 1], pts[n]) > 1e-4) sp.push(pts[n]); en = { type: 'spline', pts: sp, ...(closed ? { closed: true } : {}) }; }
+    const ne = addEnt(en);
+    const ks = Solver.varsOf(ne);
+    if (ne.type !== 'spline' && ks) S.cons.push({ id: uid('k'), type: 'fix', refs: [{ e: ne.id }], at: Object.fromEntries(ks.map((k) => [k, Solver.getK(ne, k)])) });
+    const r = reapply(); if (r && !r.ok) { S.cons = S.cons.filter((c) => !(c.type === 'fix' && c.refs[0].e === ne.id)); reapply(); }
+    UI.toast({ line: 'Kante als Linie übernommen.', arc: 'Kante als Bogen übernommen.', circle: 'Kante als Kreis übernommen.', spline: 'Kante als Spline übernommen.' }[ne.type], { icon: 'check', ms: 1800 });
+    render(); Panels.renderRight();
+  }
+  // ---------- Wand aus einer offenen Linie (Rippe, Steg) ----------
+  // Beide Seiten im halben Abstand versetzen, die Enden schließen – per Regeln verbunden, die Linie wird Hilfslinie in der Mitte
+  function wallAt(p) {
+    const hit = SK.hit(S.ents, p, pxSize() * 9);
+    if (!hit || hit.con || !['line', 'arc', 'spline'].includes(hit.type) || (hit.type === 'spline' && hit.closed)) { UI.toast('Klick auf eine offene Linie, einen Bogen oder eine Spline.', { icon: 'info' }); return; }
+    const t = Number(S.wallT) > 0 ? Number(S.wallT) : 2, h2 = t / 2;
+    const L = (a, b) => ({ id: uid('e'), type: 'line', a: a.slice(), b: b.slice() });
+    const add = [], cons = [], co = (e1, k1, e2, k2) => cons.push({ id: uid('k'), type: 'coincident', refs: [{ e: e1.id, p: k1 }, { e: e2.id, p: k2 }] });
+    let path;
+    if (hit.type === 'spline') {
+      const a = SKO.offsetShape(hit, h2), b = SKO.offsetShape(hit, -h2);
+      if (!a.ok || !b.ok) { UI.toast((a.ok ? b : a).why, { kind: 'bad' }); return; }
+      const A = { id: uid('e'), ...a.ent }, B = { id: uid('e'), ...b.ent }, n = A.pts.length - 1;
+      add.push(A, B, L(A.pts[0], B.pts[0]), L(A.pts[n], B.pts[n]));
+      path = [hit];
+    } else {
+      const ch = SKO.chainOf(S.ents, hit);
+      if (ch.closed) { UI.toast('Das ist schon ein geschlossener Umriss – den kannst du direkt hochziehen.', { icon: 'info' }); return; }
+      const a = SKO.offsetChain(ch, h2), b = SKO.offsetChain(ch, -h2);
+      if (!a.ok || !b.ok) { UI.toast((a.ok ? b : a).why, { kind: 'bad' }); return; }
+      const n = ch.segs.length, kS = ch.segs[0].rev ? 'b' : 'a', kE = ch.segs[n - 1].rev ? 'a' : 'b';
+      const side = (r, sd) => r.items.map((it) => { const ne = { id: uid('e'), ...it.ent }; delete ne.con; const c = offsetCon(it.src, ne, it, sd, round(h2, 4)); if (c) cons.push(c); return ne; });
+      const A = side(a, h2), B = side(b, -h2);
+      for (const P of [A, B]) for (let i = 0; i + 1 < n; i++) co(P[i], ch.segs[i].rev ? 'a' : 'b', P[i + 1], ch.segs[i + 1].rev ? 'b' : 'a');
+      const c0 = L(A[0][kS], B[0][kS]), c1 = L(A[n - 1][kE], B[n - 1][kE]);
+      co(c0, 'a', A[0], kS); co(c0, 'b', B[0], kS); co(c1, 'a', A[n - 1], kE); co(c1, 'b', B[n - 1], kE);
+      add.push(...A, ...B, c0, c1);
+      path = ch.segs.map((x) => x.e);
+    }
+    pushUndo();
+    for (const e of path) e.con = true;
+    S.ents.push(...add); S.cons.push(...cons);
+    let r = reapply();
+    if (r && !r.ok) { S.cons = S.cons.filter((c) => !cons.includes(c)); r = reapply(); }
+    if (r && !r.ok) { sketchUndo(); UI.toast('Das geht mit den Regeln dieser Skizze nicht.', { kind: 'bad' }); return; }
+    if (!SK.regions(S.ents).length) UI.toast('Die Wand überschneidet sich selbst – nimm eine kleinere Dicke.', { kind: 'bad' });
+    else UI.toast(`Wand ${fmt(t, 2)} mm dick. „Fertig“ zieht sie hoch.`, { icon: 'check', ms: 2400 });
+    S.sel = null; render(); Panels.renderRight();
+  }
   function splitAt(p) {
     const hit = SK.hit(S.ents, p, pxSize() * 9);
     if (!hit || (hit.type !== 'line' && hit.type !== 'arc')) { UI.toast('Klick auf eine Linie oder einen Bogen.', { icon: 'info' }); return; }
@@ -1572,6 +1640,7 @@ const Sketch = (() => {
     if (hov && hov.kind === 'refent') for (const p of entPts(hov.ent)) lineObj(p, acc, 3, { order: 26 });
     // feste Maße als Schildchen, anklicken zum Ändern
     const conflicts = (st && st.conflicts) || new Set();
+    const placed = [];   // Schildchen, die schon stehen – neue rücken nach unten, statt sie zu verdecken
     if (!S.step) for (const dm of S.dims) {
       const sp = dm.refs ? { k: dm.k, refs: dm.refs } : { e: dm.e, k: dm.k };
       const pos = dimPosSpec(dm); if (!pos) continue;
@@ -1584,7 +1653,11 @@ const Sketch = (() => {
       const el = h('div', { class: 'skdim' + (bad ? ' bad' : ''), 'data-tip': bad ? 'Dieses Maß geht nicht auf – klicken zum Ändern' : DIMLABEL(dm.k) + ' – klicken zum Ändern', dataset: { dim: dm.id } });
       el.innerHTML = (isF ? `<span class="fx">${esc(dm.v)}&nbsp;=</span>` : '') + esc(pre + fmt(val, 2) + unit);
       $('#overlay').append(el); labels.push(el);
-      const spx = Viewer.toScreen(toWorld(pos.p[0], pos.p[1])); el.style.left = spx.x + 'px'; el.style.top = spx.y + 'px';
+      const spx = Viewer.toScreen(toWorld(pos.p[0], pos.p[1]));
+      const lw = el.offsetWidth || 40, lh = el.offsetHeight || 18; let ly = spx.y;
+      for (let k = 0; k < 8 && placed.some((q) => Math.abs(q[0] - spx.x) < (q[2] + lw) / 2 && Math.abs(q[1] - ly) < (q[3] + lh) / 2); k++) ly += lh + 3;
+      placed.push([spx.x, ly, lw, lh]);
+      el.style.left = spx.x + 'px'; el.style.top = ly + 'px';
       el.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); });
       el.addEventListener('click', (e) => { if (sp.e) S.sel = sp.e; render(); Panels.renderRight(); askDim(sp, e.clientX, e.clientY); });
     }
@@ -1905,6 +1978,11 @@ const Sketch = (() => {
           w.append(h('div', { class: 'btn-row' }, hide, del));
           w.append(h('div', { class: 'hint-box', html: 'Das Bild ist nur eine Vorlage zum Nachzeichnen. Es wird mit der Skizze gespeichert, kommt aber nicht in den Körper oder den Export.' }));
         }
+      }
+      if (S.tool === 'wall') {
+        const fw = h('div', { class: 'fields' });
+        fw.append(UI.numField({ id: 'wall-t', label: 'Wandstärke', value: S.wallT, unit: 'mm', expr: false, min: 0.1, onCommit: (v) => { if (v > 0) S.wallT = v; } }));
+        w.append(fw);
       }
       if (S.tool === 'tpl') {
         const T = S.tpl;
