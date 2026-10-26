@@ -39,7 +39,8 @@ const App = (() => {
     if (res === false) return false;
     placeNewAtMarker(S.doc, topBefore);
     const last = S.undo[S.undo.length - 1];
-    if (opts.merge && last && last.merge === opts.merge && Date.now() - last.t < 1500) { last.t = Date.now(); }
+    if (opts.amend) { /* gehört zum letzten Schritt (z. B. nachgeführte Kanten): kein eigener Rückgängig-Schritt */ }
+    else if (opts.merge && last && last.merge === opts.merge && Date.now() - last.t < 1500) { last.t = Date.now(); }
     else { pushUndo(label, before); if (opts.merge) S.undo[S.undo.length - 1].merge = opts.merge; }
     touched();
     return res;

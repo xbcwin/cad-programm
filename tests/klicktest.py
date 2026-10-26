@@ -2458,6 +2458,37 @@ def t_kante_uebernehmen(p):
     return [ok1, ok2, ok3]
 
 
+# ---------- Sitzung 33: verbundene Kanten ----------
+def t_kante_verbunden(p):
+    p.empty(); p.ev("App.change('x', d=>{ d.items.push(Model.newItem('box',{w:20,d:20,h:10})); const c=Model.newItem('cylinder',{d:10,h:6}); c.t.x=30; d.items.push(c); })"); warte_rechnen(p, 20)
+    p.ev("Sketch.startOnPlane('XY')"); p.wait(1500)
+    p.pg.keyboard.press('z'); p.wait(200)
+    s = world_screen(p, 0, 10, 10); p.pg.mouse.click(s[0], s[1]); p.wait(400)
+    s = world_screen(p, 35, 0, 6); p.pg.mouse.click(s[0], s[1]); p.wait(400)
+    ok1 = p.ev("const S=Sketch.state; return S.ents.length===2 && S.ents.every(e=>e.link)")
+    fertig_hoch(p, '3')
+    # Quader tiefer → die übernommene Linie wandert mit
+    p.ev("App.change('Tiefe', d=>{ d.items[0].p.d = 30; })"); warte_rechnen(p, 30); p.wait(1000); warte_rechnen(p, 30)
+    st = p.ev("const it=App.doc.items[2]; const sk=it.p.sketch; const l=sk.ents.find(e=>e.type==='line'); return [it.kind, l.a[1], l.b[1]]")
+    ok2 = st[0] == 'extrude' and abs(st[1] - 15) < 1e-3 and abs(st[2] - 15) < 1e-3
+    # Zylinder dicker → der Kreis und der hochgezogene Körper wachsen mit
+    p.ev("App.change('Durchmesser', d=>{ d.items[1].p.d = 16; })"); warte_rechnen(p, 30); p.wait(1000); warte_rechnen(p, 30)
+    r = p.ev("return App.doc.items[2].p.sketch.ents.find(e=>e.type==='circle').r")
+    bb = bbox(p, 2)
+    ok3 = abs(r - 8) < 1e-3 and bb is not None and abs((bb[3] - bb[0]) - 16) < 0.05
+    # Ein Rückgängig nimmt Zylinder und Kreis zusammen zurück
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('Control+z'); warte_rechnen(p, 30); p.wait(800); warte_rechnen(p, 20)
+    r2 = p.ev("return [App.doc.items[1].p.d, App.doc.items[2].p.sketch.ents.find(e=>e.type==='circle').r, App.errors.length]")
+    ok4 = r2[0] == 10 and abs(r2[1] - 5) < 1e-3 and r2[2] == 0
+    # In der Skizze: Hinweis „Verbunden“ und lösen
+    p.ev("Sketch.editItem(App.doc.items[2].id)"); p.wait(1200)
+    p.ev("const S=Sketch.state; S.sel=S.ents.find(e=>e.type==='circle').id; Panels.renderRight()"); p.wait(300)
+    ok5 = p.pg.locator('#link-info').count() == 1
+    p.pg.click('#link-off'); p.wait(300)
+    ok6 = p.ev("return !Sketch.state.ents.find(e=>e.type==='circle').link")
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
+
+
 # ---------- Sitzung 22: kleine Skizzen-Werkzeuge ----------
 def t_kreis_bogen_modi(p):
     sketch_xy(p)
@@ -2741,6 +2772,7 @@ TESTS = [
     ('Schritt hinter dem Marker: schmale Leiste / Marker dahinter', t_hinter_marker),
     ('Skizze: Schildchen überdecken sich nicht', t_schildchen_ueberlappen),
     ('Skizze: Kante übernehmen / Linie fest / Kreis', t_kante_uebernehmen),
+    ('Verbundene Kanten: verbunden / Linie wandert / Kreis wächst / ein Rückgängig / Hinweis / lösen', t_kante_verbunden),
     ('Skizze: Kreis aus 3 / 2 Punkten / tangentialer Bogen', t_kreis_bogen_modi),
     ('Skizze: Verlängern bis zur nächsten Linie', t_verlaengern),
     ('Entformungsschräge: 3° nach innen / -2° nach außen', t_schraege),

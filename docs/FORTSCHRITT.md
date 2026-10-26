@@ -1,6 +1,6 @@
 # Fortschritt
 
-Stand: 26.10.2026 · nach Sitzung 32 (19: Skizze auf Profi-Niveau · 20: Magnet, Rundungs-Griff · 21: Skizzieren im 3D, Übergang, Entlang Pfad, Import · 22: Kreis/Bogen-Arten, Verlängern, Entformungsschräge, Gewinde · 23: Einheiten, eigener Querschnitt, Langloch gebogen, gedrehtes Rechteck, Teilen · 24: Punkt, alle Ecken · 25: Schnitt und Spiegeln an Fläche · 26: Kantenkette, Abstände beim Verschieben · 27: Spiegeln an der Achse · 28: Muster entlang Kurve, Schablonen-Maße geprüft, USB-C-Stecker · 29: Spiegelebene wandert mit, Kreismuster quer und längs, KI kennt Muster entlang Kurve · 30: Bohrungen an Skizzenpunkten · 31: Wand aus Linie, Schritt hinter dem Marker, Schildchen · 32: Kante übernehmen)
+Stand: 26.10.2026 · nach Sitzung 33 (19: Skizze auf Profi-Niveau · 20: Magnet, Rundungs-Griff · 21: Skizzieren im 3D, Übergang, Entlang Pfad, Import · 22: Kreis/Bogen-Arten, Verlängern, Entformungsschräge, Gewinde · 23: Einheiten, eigener Querschnitt, Langloch gebogen, gedrehtes Rechteck, Teilen · 24: Punkt, alle Ecken · 25: Schnitt und Spiegeln an Fläche · 26: Kantenkette, Abstände beim Verschieben · 27: Spiegeln an der Achse · 28: Muster entlang Kurve, Schablonen-Maße geprüft, USB-C-Stecker · 29: Spiegelebene wandert mit, Kreismuster quer und längs, KI kennt Muster entlang Kurve · 30: Bohrungen an Skizzenpunkten · 31: Wand aus Linie, Schritt hinter dem Marker, Schildchen · 32: Kante übernehmen · 33: verbundene Kanten)
 
 ## Erledigt
 
@@ -181,6 +181,7 @@ Fertig.
 - [x] Spiegeln an der X- oder Y-Achse ohne eigene Linie (Sitzung 27)
 - [x] Werkzeug „Wand“ (N): offene Linie, Linienzug, Bogen oder Spline wird zur geschlossenen Wand mit einstellbarer Dicke (beide Seiten halb, Enden zu, per Regeln verbunden; die Linie bleibt Hilfslinie) – für Rippen, Stege, Antennenhalter (Sitzung 31)
 - [x] Skizzen-Leiste etwas kompakter, damit sie trotz neuer Werkzeuge bei zwei Zeilen bleibt (Sitzung 32)
+- [x] Verbundene Kanten: übernommene Kanten merken sich Körper und Kante und wandern mit, wenn sich der Körper ändert (Linie, Bogen, Kreis, Spline); die Nachführung gehört zum selben Rückgängig-Schritt; Ketten-Symbol in der Skizze, „Verbindung lösen“ (Sitzung 33)
 - [x] Werkzeug „Kante übernehmen“ (Z): Klick auf eine Körperkante holt sie in die Skizze – gerade als feste Linie, rund als Bogen oder Kreis, sonst als Spline (Sitzung 32)
 - [x] Maß-Schildchen, die übereinander lägen, rücken untereinander (z. B. „X 0“ und „Y 0“ am Ursprung) (Sitzung 31)
 
@@ -191,7 +192,8 @@ Fertig.
 - [x] Bohrungs-Assistent, Wandstärke, Muster, Spiegeln, Boolesch, Teilen (Sitzung 8)
 - [x] Muster entlang Kurve: Körper oder Loch wählen → „Muster“ → „Muster entlang Kurve“, Kurve zeichnen (Linie, Bogen, Spline, Kreis oder geschlossener Umriss); Anzahl, Abstand (0 = gleichmäßig verteilt) und Ausrichtung (mit der Kurve drehen oder nicht), „Kurve bearbeiten“; beim Zeichnen zeigen Ringe, wo die Kopien landen (Sitzung 28)
 - [x] Kreismuster auch um eine Achse quer (X) oder längs (Y), mit Mitte Z – z. B. Löcher rund um ein liegendes Rohr; KI-Kollege kennt „Muster entlang Kurve“ und die Drehachse (Sitzung 29)
-- [ ] Muster entlang einer Körperkante (heute: Kurve selbst zeichnen); Kreismuster um eine beliebig schräge Achse
+- [x] Muster entlang einer Körperkante: beim Zeichnen der Kurve „Kante übernehmen“ (Sitzung 32)
+- [ ] Kreismuster um eine beliebig schräge Achse
 - [x] Bohrungen an Skizzenpunkten: Skizze auf einer Körperfläche nur mit Punkten → „Fertig“ öffnet den Bohrungs-Assistenten und setzt an jedem Punkt ein Loch, genau an der bemaßten Stelle (Sitzung 30)
 - [x] Explosionsansicht, Fokus-Vorschau, Schnitt, Röntgen (Sitzung 9)
 - [ ] Explosion auch für die Teile innerhalb einer Gruppe (heute nur oberste Ebene)
@@ -240,7 +242,7 @@ Fertig.
 - Ellipse und Text lassen sich nicht trimmen; Ellipsen-Drehung ist keine Regel (nur ein Wert)
 
 - Vorlagen bestehen aus einer Gruppe: Über „Bearbeiten“ im Verlauf sieht man ihre einzelnen Schritte in der Zeitleiste
-- Übernommene Körperkanten passen sich noch nicht an, wenn sich der Körper später ändert
+- Verbundene Kanten finden ihre Kante über Lage, Art und Länge wieder: Springt eine Kante sehr weit oder verschwindet sie, bleibt die übernommene Kante stehen; die Kanten aus „Skizze auf einer Fläche“ (Fangpunkte) sind noch nicht verbunden
 - Vielecke lassen sich noch nicht drehen per Regel (nur über die Lage)
 - Teilen ergibt zwei Hälften in einem Schritt; einzeln verschieben geht erst nach „Auflösen“ (dann ist der Schnitt weg)
 - Feature-Gruppen (mehrere Schritte als einen benannten Block zusammenfassen) aus dem Bauplan sind noch nicht gebaut – Bauteile decken das heute teilweise ab

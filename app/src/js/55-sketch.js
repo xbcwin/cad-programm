@@ -37,7 +37,7 @@ const Sketch = (() => {
     bgcal: 'Klick den ersten Punkt auf dem Bild an, dann den zweiten. Danach tippst du den echten Abstand ein.',
     splitl: 'Klick auf eine Linie oder einen Bogen – dort wird das Element in zwei Stücke geteilt, die verbunden bleiben. Fängt an Mitte und Schnittpunkten.',
     extend: 'Klick nahe an das Ende einer Linie – sie wächst bis zur nächsten Linie, zum nächsten Bogen oder Kreis und bleibt dort per Regel hängen.',
-    project: 'Klick auf eine Kante eines Körpers – sie kommt als feste Linie, Bogen, Kreis oder Spline in die Skizze (senkrecht auf die Zeichenebene geschoben).',
+    project: 'Klick auf eine Kante eines Körpers – sie kommt als feste Linie, Bogen, Kreis oder Spline in die Skizze und bleibt mit dem Körper verbunden.',
     wall: 'Dicke rechts einstellen, dann eine offene Linie, einen Bogen oder eine Spline anklicken – daraus wird eine geschlossene Wand zum Hochziehen. Die Linie bleibt als Hilfslinie in der Mitte.',
     point: 'Klick setzt einen Punkt. Punkte bilden keine Fläche, sind aber Bezug für Maße und Regeln. Auf einer Körperfläche werden reine Punkte beim „Fertig“ zu Bohrungen.',
     tpl: 'Schablone und Maße rechts wählen, dann ins Bild klicken – der Klick ist die Mitte. Fängt an Nullpunkt und Mittelpunkten.',
@@ -1245,27 +1245,109 @@ const Sketch = (() => {
   }
   // Teilen: Linie oder Bogen am Punkt p in zwei verbundene Stücke
   // ---------- Kante übernehmen (projizieren) ----------
+  // Kantenpunkte (Polylinie in Welt-Koordinaten) aus dem Ergebnis eines Körpers
+  function edgeWorldPts(data, idx, W) {
+    const g = (data.edgeGroups || []).find((x) => x[2] === idx); if (!g) return [];
+    const out = [];
+    for (let i = g[0]; i < g[0] + g[1]; i++) { const v = new THREE.Vector3(data.lines[i * 3], data.lines[i * 3 + 1], data.lines[i * 3 + 2]).applyMatrix4(W); if (!out.length || out[out.length - 1].distanceToSquared(v) > 1e-12) out.push(v); }
+    return out;
+  }
+  const uvIn = (F, v) => { const d = v.clone().sub(F.o); return [round(d.dot(F.x), 4), round(d.dot(F.y), 4)]; };
+  // Polylinie in der Skizzenebene → Skizzen-Element: gerade als Linie, rund als Bogen/Kreis, sonst Spline
+  function edgeGeom2D(pts, t) {
+    const n = pts.length - 1; if (n < 1) return null;
+    const closed = SK.d2(pts[0], pts[n]) < 1e-3;
+    if (t === 'LINE' || n === 1) return { type: 'line', a: pts[0], b: pts[n] };
+    if (t === 'CIRCLE') {
+      const A = pts[0], B = pts[Math.floor(n / 3)], C = pts[Math.floor((2 * n) / 3)], ai = SK.arcInfo(A, B, C);
+      if (ai && pts.every((q) => Math.abs(SK.d2(q, ai.c) - ai.r) < Math.max(1e-3, ai.r * 2e-3))) return closed ? { type: 'circle', c: ai.c.map((v) => round(v, 4)), r: round(ai.r, 4) } : { type: 'arc', a: pts[0], m: pts[Math.floor(n / 2)], b: pts[n] };
+    }
+    const k = Math.max(1, Math.ceil(n / 24)), sp = pts.filter((_, i) => i % k === 0);
+    if (closed) sp.pop(); else if (SK.d2(sp[sp.length - 1], pts[n]) > 1e-4) sp.push(pts[n]);
+    return { type: 'spline', pts: sp, ...(closed ? { closed: true } : {}) };
+  }
+  // Steckbrief einer Kante, damit sie nach einer Änderung des Körpers wiedergefunden wird
+  function edgeLink(id, g, pts3) {
+    const r6 = (v) => Math.round(v * 1e6) / 1e6, W = Model.worldMatrix(App.doc, id);
+    const m = new THREE.Vector3(...g.m).applyMatrix4(W);
+    const link = { id, t: g.t, m: m.toArray().map(r6), l: r6(g.l || 0) };
+    if (g.t === 'LINE' && pts3.length >= 2) link.d = pts3[pts3.length - 1].clone().sub(pts3[0]).normalize().toArray().map(r6);
+    return link;
+  }
+  // ---------- Kante übernehmen (projizieren) ----------
   function projectAt(ev) {
     const hit = Viewer.pick(ev.clientX, ev.clientY, { edgePx: 9 });
     if (!hit || hit.edgeIdx == null || !hit.node) { UI.toast('Klick genau auf eine Kante eines Körpers.', { icon: 'info' }); return; }
-    const pos = Viewer.edgePositions(hit.node, hit.edgeIdx); if (!pos) return;
-    const M = hit.node.obj.matrixWorld, pts = [];
-    for (let i = 0; i < pos.length; i += 3) { const uv = toUV(new THREE.Vector3(pos[i], pos[i + 1], pos[i + 2]).applyMatrix4(M)).map((v) => round(v, 4)); if (!pts.length || SK.d2(pts[pts.length - 1], uv) > 1e-4) pts.push(uv); }
+    const pts3 = edgeWorldPts(hit.node.data, hit.edgeIdx, hit.node.obj.matrixWorld);
+    const pts = []; for (const v of pts3) { const uv = uvIn(S.F, v); if (!pts.length || SK.d2(pts[pts.length - 1], uv) > 1e-4) pts.push(uv); }
     if (pts.length < 2) { UI.toast('Diese Kante steht senkrecht auf der Skizze – sie wäre nur ein Punkt.', { icon: 'info' }); return; }
-    const g = hit.node.data.edges[hit.edgeIdx] || {}, n = pts.length - 1, closed = SK.d2(pts[0], pts[n]) < 1e-3;
-    let en = null;
-    if (g.t === 'LINE' || n === 1) en = { type: 'line', a: pts[0], b: pts[n] };
-    else if (g.t === 'CIRCLE') {
-      const A = pts[0], B = pts[Math.floor(n / 3)], C = pts[Math.floor((2 * n) / 3)], ai = SK.arcInfo(A, B, C);
-      if (ai && pts.every((q) => Math.abs(SK.d2(q, ai.c) - ai.r) < Math.max(1e-3, ai.r * 2e-3))) en = closed ? { type: 'circle', c: ai.c.map((v) => round(v, 4)), r: round(ai.r, 4) } : { type: 'arc', a: pts[0], m: pts[Math.floor(n / 2)], b: pts[n] };
-    }
-    if (!en) { const k = Math.max(1, Math.ceil(n / 24)), sp = pts.filter((_, i) => i % k === 0); if (closed) sp.pop(); else if (SK.d2(sp[sp.length - 1], pts[n]) > 1e-4) sp.push(pts[n]); en = { type: 'spline', pts: sp, ...(closed ? { closed: true } : {}) }; }
+    const g = hit.node.data.edges[hit.edgeIdx] || {};
+    const en = edgeGeom2D(pts, g.t); if (!en) return;
+    // verbunden: wandert mit, wenn sich der Körper ändert (nicht beim Körper, zu dem diese Skizze selbst gehört)
+    const own = S.ctx.editId ? Model.topOf(App.doc, S.ctx.editId) : null;
+    if (Model.find(App.doc, hit.id) && !(own && own.id === hit.id)) en.link = edgeLink(hit.id, g, pts3);
     const ne = addEnt(en);
     const ks = Solver.varsOf(ne);
     if (ne.type !== 'spline' && ks) S.cons.push({ id: uid('k'), type: 'fix', refs: [{ e: ne.id }], at: Object.fromEntries(ks.map((k) => [k, Solver.getK(ne, k)])) });
     const r = reapply(); if (r && !r.ok) { S.cons = S.cons.filter((c) => !(c.type === 'fix' && c.refs[0].e === ne.id)); reapply(); }
-    UI.toast({ line: 'Kante als Linie übernommen.', arc: 'Kante als Bogen übernommen.', circle: 'Kante als Kreis übernommen.', spline: 'Kante als Spline übernommen.' }[ne.type], { icon: 'check', ms: 1800 });
+    UI.toast({ line: 'Kante als Linie übernommen.', arc: 'Kante als Bogen übernommen.', circle: 'Kante als Kreis übernommen.', spline: 'Kante als Spline übernommen.' }[ne.type] + (ne.link ? ' Sie bleibt mit dem Körper verbunden.' : ''), { icon: 'check', ms: 2200 });
     render(); Panels.renderRight();
+  }
+  // ---------- Verbundene Kanten nachführen ----------
+  // Nach jeder Neuberechnung: übernommene Kanten neu projizieren. Die Änderung hängt am letzten Rückgängig-Schritt,
+  // so nimmt ein Rückgängig Körper und Kante zusammen zurück.
+  let relinkRounds = 0;
+  function relinkGeom(e, F) {
+    const L = e.link, r = App.results.get(L.id); if (!r || !r.data || !r.data.edges) return null;
+    const W = Model.worldMatrix(App.doc, L.id), m0 = new THREE.Vector3(...L.m), d0 = L.d ? new THREE.Vector3(...L.d) : null;
+    let best = -1, bs = Infinity, bpts = null;
+    r.data.edges.forEach((g, i) => {
+      if (!g || g.t !== L.t || !g.m) return;
+      const s = new THREE.Vector3(...g.m).applyMatrix4(W).distanceTo(m0) + 0.25 * Math.abs((g.l || 0) - (L.l || 0));
+      if (s >= bs) return;
+      const pts3 = edgeWorldPts(r.data, i, W); if (pts3.length < 2) return;
+      if (d0 && Math.abs(pts3[pts3.length - 1].clone().sub(pts3[0]).normalize().dot(d0)) < 0.98) return;
+      bs = s; best = i; bpts = pts3;
+    });
+    if (best < 0) return null;
+    const bb = r.data.bbox, size = bb ? Math.hypot(bb[3] - bb[0], bb[4] - bb[1], bb[5] - bb[2]) : 100;
+    if (bs > Math.max(5, 0.6 * size)) return null;   // zu weit weg: lieber stehen lassen als die falsche Kante nehmen
+    const pts = []; for (const v of bpts) { const uv = uvIn(F, v); if (!pts.length || SK.d2(pts[pts.length - 1], uv) > 1e-4) pts.push(uv); }
+    const en = edgeGeom2D(pts, L.t); if (!en || en.type !== e.type) return null;
+    return { ent: en, link: edgeLink(L.id, r.data.edges[best], bpts) };
+  }
+  function sameGeom(e, n) {
+    const close = (a, b) => Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((v, i) => (Array.isArray(v) ? close(v, b[i]) : Math.abs(v - b[i]) < 1e-4));
+    for (const k of ['a', 'b', 'm', 'c']) if (n[k] && !close(e[k], n[k])) return false;
+    if (n.r != null && Math.abs(e.r - n.r) > 1e-4) return false;
+    if (n.pts && !close(e.pts, n.pts)) return false;
+    return true;
+  }
+  function relinkAll() {
+    if (S || !App.doc) return;
+    const jobs = [];
+    Model.walk(App.doc.items, (it) => {
+      const sk = it.p && it.p.sketch; if (!sk || !(sk.ents || []).some((e) => e.link)) return;
+      if (!Model.isActive(App.doc, it.id)) return;
+      const own = Model.topOf(App.doc, it.id), F = frameWorld(sk.plane, Model.worldMatrix(App.doc, it.id));
+      for (const e of sk.ents) {
+        if (!e.link || (own && own.id === e.link.id)) continue;
+        const g = relinkGeom(e, F); if (!g) continue;
+        if (!sameGeom(e, g.ent)) jobs.push({ id: it.id, eid: e.id, g });
+      }
+    });
+    if (!jobs.length) { relinkRounds = 0; return; }
+    if (++relinkRounds > 3) { relinkRounds = 0; return; }   // Schutz gegen Hin und Her
+    App.change('Übernommene Kanten nachgeführt', (doc) => {
+      for (const j of jobs) {
+        const f = Model.find(doc, j.id); if (!f) continue;
+        const sk = f.item.p.sketch, e = sk.ents.find((x) => x.id === j.eid); if (!e) continue;
+        for (const k of ['a', 'b', 'm', 'c', 'r', 'pts']) if (j.g.ent[k] != null) e[k] = deepClone(j.g.ent[k]);
+        e.link = j.g.link;
+        const ks = Solver.varsOf(e);
+        for (const c of sk.cons || []) if (c.type === 'fix' && c.refs[0].e === e.id && ks) c.at = Object.fromEntries(ks.map((k) => [k, Solver.getK(e, k)]));
+      }
+    }, { amend: true });
   }
   // ---------- Wand aus einer offenen Linie (Rippe, Steg) ----------
   // Beide Seiten im halben Abstand versetzen, die Enden schließen – per Regeln verbunden, die Linie wird Hilfslinie in der Mitte
@@ -1629,6 +1711,10 @@ const Sketch = (() => {
       const hot = hov && hov.kind !== 'point' && hov.ent && hov.ent.id === e.id;
       const col = sel ? acc : isFree ? free : ink;
       for (const p of entPts(e)) lineObj(p, col, sel ? 3.4 : hot ? 3 : 2.2, { dashed: e.con, order: 25, opacity: hot && !sel ? 0.8 : 1 });
+      if (e.link && !S.step) {   // mit einer Körperkante verbunden: kleines Ketten-Symbol in der Mitte
+        const pl = entPts(e)[0] || []; const q = pl.length === 2 ? [(pl[0][0] + pl[1][0]) / 2, (pl[0][1] + pl[1][1]) / 2] : pl[Math.floor(pl.length / 2)];
+        if (q) { const el = label('', q, 'sklink'); el.innerHTML = icon('link'); el.dataset.tip = 'Mit einer Körperkante verbunden – wandert mit'; }
+      }
       if (e.type === 'point') { const k = pxSize() * 4; lineObj([[e.a[0] - k, e.a[1]], [e.a[0] + k, e.a[1]]], col, sel ? 3.4 : 2.4, { order: 26 }); lineObj([[e.a[0], e.a[1] - k], [e.a[0], e.a[1] + k]], col, sel ? 3.4 : 2.4, { order: 26 }); }
       if (hot && e.type === 'rect' && hov.ref && hov.ref.edge != null) { const c = SK.rectCorners(e); lineObj([c[hov.ref.edge], c[(hov.ref.edge + 1) % 4]], acc, 4, { order: 26 }); }
     }
@@ -1881,6 +1967,12 @@ const Sketch = (() => {
     }
     if (sel) {
       w.append(h('div', { class: 'prop-title' }, h('b', { style: { fontSize: '17px' } }, { point: 'Punkt', text: 'Text', line: 'Linie', rect: 'Rechteck', circle: 'Kreis', ellipse: 'Ellipse', arc: 'Bogen', slot: 'Langloch', poly: 'Vieleck', spline: 'Spline' }[sel.type])));
+      if (sel.link) {
+        const src = Model.find(App.doc, sel.link.id);
+        const ub = h('button', { type: 'button', class: 'btn', id: 'link-off' }); ub.innerHTML = icon('ungroup') + 'Verbindung lösen';
+        ub.onclick = () => { pushUndo(); delete sel.link; render(); Panels.renderRight(); };
+        w.append(h('div', { class: 'ok-box', id: 'link-info', html: `<b>Verbunden</b> mit einer Kante von „${esc(src ? Model.label(src.item) : 'einem Körper')}“ – wandert mit, wenn sich der Körper ändert.` }), h('div', { class: 'btn-row' }, ub));
+      }
       const upd = (fn) => { pushUndo(); fn(sel); reapply(); render(); Panels.renderRight(); };
       // Jedes eingetippte Maß wird fest (auch als Formel). Das Schloss löst es wieder.
       const dimField = (k, label, unit = 'mm', opts = {}) => {
@@ -2315,6 +2407,7 @@ const Sketch = (() => {
     UI.hint(null); App.emit('mode'); Panels.renderRight(); Handles.rebuild();
   }
   function init() {
+    App.on('results', relinkAll);
     const cv = Viewer.canvas;
     cv.addEventListener('pointerdown', (e) => { if (S) { onDown(e); } }, true);
     cv.addEventListener('pointermove', (e) => { if (S) onMove(e); });

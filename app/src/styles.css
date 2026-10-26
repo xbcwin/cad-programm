@@ -287,6 +287,8 @@ body.sketching .viewcube{display:none}
 .consbar.vert .title{writing-mode:vertical-rl;transform:rotate(180deg);padding:4px 0 6px}
 .skcon{position:absolute;transform:translate(-50%,-50%);width:18px;height:18px;border-radius:5px;background:var(--surface);border:1px solid var(--line-strong);color:var(--ink-2);display:grid;place-items:center;cursor:pointer;box-shadow:var(--shadow-1);z-index:2}
 .skcon svg{width:13px;height:13px}
+.sklink{position:absolute;transform:translate(-50%,-140%);width:16px;height:16px;border-radius:50%;background:var(--surface);border:1px solid var(--accent);color:var(--accent);display:grid;place-items:center;pointer-events:auto;box-shadow:var(--shadow-1);z-index:2}
+.sklink svg{width:11px;height:11px}
 .skcon:hover,.skcon.sel{border-color:var(--accent);color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
 .skcon.bad{border-color:#d6574c;color:#d6574c}
 .con-ic svg{width:16px;height:16px;color:var(--accent);display:block}

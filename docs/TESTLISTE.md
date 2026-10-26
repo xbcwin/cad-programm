@@ -481,6 +481,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
   Schritte: 1. Ein Kind (ab 10) mit „Einfach“ eine Platte mit vier Löchern bauen lassen, ohne zu helfen.
   Erwartet: Es findet Körper, Löcher und Exportieren allein; notieren, wo es hängen bleibt.
 
+## Verbundene Kanten (neu in Sitzung 33)
+
+- [x] **Kante wandert mit**
+  Schritte: Quader 20 × 20 × 10 und Zylinder Ø 10. Skizze auf XY, „Kante übernehmen“: obere Quaderkante und Zylinderrand, „Fertig“, 3 hoch. Dann den Quader 30 tief und den Zylinder Ø 16 machen.
+  Erwartet: Die Linie liegt jetzt auf Y 15, der Kreis hat Ø 16 und der hochgezogene Körper ist 16 breit. Ein Rückgängig nimmt Zylinder und Kreis zusammen zurück.
+- [x] **Hinweis und lösen**: Skizze bearbeiten, den Kreis anklicken – „Verbunden mit einer Kante von „Zylinder““, Knopf „Verbindung lösen“.
+- [ ] **Deckel wächst mit**: Gehäuse, Deckel-Skizze mit übernommenen Außenkanten, dann das Gehäuse breiter machen – der Deckel wächst mit.
+
 ## Kante übernehmen (neu in Sitzung 32)
 
 - [x] **Kante als Linie und Kreis**
