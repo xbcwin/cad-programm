@@ -481,6 +481,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
   Schritte: 1. Ein Kind (ab 10) mit „Einfach“ eine Platte mit vier Löchern bauen lassen, ohne zu helfen.
   Erwartet: Es findet Körper, Löcher und Exportieren allein; notieren, wo es hängen bleibt.
 
+## Kreismuster um gewählte Achse (neu in Sitzung 34)
+
+- [x] **Achse aus einer Kante**
+  Schritte: Kleiner Quader auf Y 20 und ein langer flacher Quader auf Höhe 10. Den kleinen wählen → „Muster“ → „Kreismuster“ → „Achse im Bild wählen“ → vordere obere Kante des langen Quaders anklicken.
+  Erwartet: Vier Quader drehen sich um diese Kante (oben, hinten, unten); rechts steht „Richtung 1 · 0 · 0 durch …“.
+- [ ] **Achse aus einer Welle**: Zylinder schräg legen, ein Loch daneben, Kreismuster um die Zylinderfläche – sitzen die Löcher rundherum?
+
 ## Verbundene Kanten (neu in Sitzung 33)
 
 - [x] **Kante wandert mit**

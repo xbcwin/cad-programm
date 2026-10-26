@@ -15,7 +15,7 @@ const AI = (() => {
 {"op":"loeschen","id":"<id>"}
 {"op":"mass","name":"Breite","wert":"75"}   (legt ein benanntes Maß an oder ändert es)
 {"op":"rundung","id":"<id>","typ":"fillet"|"chamfer","r":2,"kanten":"all"|"top"|"bottom"|"vertical"|"horizontal","ersetzen":false}   (ersetzen:true ersetzt vorhandene Rundungen und Fasen)
-{"op":"muster","id":"<id>","art":"kreis","n":4,"winkel":360,"mitte":[0,0],"achse":"z"}   (Kreismuster um eine Achse durch „mitte“: "z" senkrecht (Standard), "x" quer, "y" längs – dann „mitte“ mit drei Werten [x,y,z]; Anzahl zählt das Original mit)
+{"op":"muster","id":"<id>","art":"kreis","n":4,"winkel":360,"mitte":[0,0],"achse":"z"}   (Kreismuster um eine Achse durch „mitte“: "z" senkrecht (Standard), "x" quer, "y" längs – dann „mitte“ mit drei Werten [x,y,z]; schräge Achse als Richtung "achse":[dx,dy,dz] mit "mitte":[x,y,z]; Anzahl zählt das Original mit)
 {"op":"muster","id":"<id>","art":"rechteck","nx":3,"ny":1,"dx":20,"dy":0}   (Rechteckmuster, Abstände von Mitte zu Mitte)
 {"op":"muster","id":"<id>","art":"kurve","n":5,"abstand":0,"drehen":true,"hoehe":0,"kurve":[{"typ":"bogen","von":[x,y],"durch":[x,y],"bis":[x,y]}]}   (Muster entlang Kurve in der Ebene auf Höhe „hoehe“. Kurvenstücke: {"typ":"linie","von","bis"}, {"typ":"bogen","von","durch","bis"}, {"typ":"spline","punkte":[[x,y],…]} – aneinander gehängt –, oder ein {"typ":"kreis","mitte":[x,y],"r":20}. Die Kurve beginnt an der Mitte des Originals; abstand 0 = gleichmäßig verteilt; drehen:true dreht die Kopien mit der Kurve)
 {"op":"spiegeln","id":"<id>","ebene":"YZ"|"XZ"|"XY","lage":0}   (Original plus Spiegelbild; YZ = links↔rechts, XZ = vorne↔hinten, XY = oben↔unten)
@@ -533,7 +533,10 @@ Beispiel – Wunsch „Mach alles als Verbund“ (Runde 1):
           const circ = /kreis|circ/i.test(a.art || '');
           const mitte = Array.isArray(a.mitte) ? a.mitte : [0, 0];
           const axis = ['x', 'y'].includes(String(a.achse || '').toLowerCase()) ? String(a.achse).toLowerCase() : null;
-          const G = circ ? wrapIn(doc, id, Features.NAMES.circ, { op: 'pattern', pt: 'circ', n: Math.max(1, Math.round(num(a.n, 4))), ang: num(a.winkel, 360), cx: num(mitte[0], 0), cy: num(mitte[1], 0), ...(axis ? { axis, cz: num(mitte[2], 0) } : {}) })
+          // beliebige Achse: "achse":[dx,dy,dz] und "mitte":[x,y,z]
+          const av = Array.isArray(a.achse) && a.achse.length === 3 ? a.achse.map((v) => num(v, 0)) : null, al = av ? Math.hypot(...av) : 0;
+          const free = av && al > 1e-9 ? { axis: 'pick', ad: av.map((v) => Math.round((v / al) * 1e9) / 1e9), ao: [num(mitte[0], 0), num(mitte[1], 0), num(mitte[2], 0)] } : null;
+          const G = circ ? wrapIn(doc, id, Features.NAMES.circ, { op: 'pattern', pt: 'circ', n: Math.max(1, Math.round(num(a.n, 4))), ang: num(a.winkel, 360), cx: num(mitte[0], 0), cy: num(mitte[1], 0), ...(free || (axis ? { axis, cz: num(mitte[2], 0) } : {})) })
             : wrapIn(doc, id, Features.NAMES.rect, { op: 'pattern', pt: 'rect', nx: Math.max(1, Math.round(num(a.nx, 2))), ny: Math.max(1, Math.round(num(a.ny, 1))), dx: num(a.dx, 20), dy: num(a.dy, 20) });
           if (G) { rep.added.push(G.id); rep.done.push(`muster: ${circ ? 'Kreis' : 'Rechteck'} um „${labelOf(id)}“ (id ${G.id})`); any = true; }
         } else if (op === 'spiegeln') {

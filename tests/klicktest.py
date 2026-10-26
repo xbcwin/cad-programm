@@ -2489,6 +2489,20 @@ def t_kante_verbunden(p):
     return [ok1, ok2, ok3, ok4, ok5, ok6]
 
 
+# ---------- Sitzung 34: Kreismuster um eine gewählte Achse ----------
+def t_kreismuster_gewaehlt(p):
+    p.empty(); p.ev("App.change('x', d=>{ const a=Model.newItem('box',{w:4,d:4,h:4}); a.t.y=20; d.items.push(a); const b=Model.newItem('box',{w:40,d:10,h:2}); b.t.z=10; d.items.push(b); })"); warte_rechnen(p, 20)
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(400)
+    ctx(p, 'Muster', 'Kreismuster'); warte_rechnen(p, 20)
+    p.pg.click('#op-axispick'); p.wait(300)
+    ok1 = p.ev("return Features.picking")
+    s = world_screen(p, 10, -5, 12); p.pg.mouse.click(s[0], s[1]); p.wait(800); warte_rechnen(p, 30)
+    g = p.ev("const q=App.doc.items[0].p; return [q.axis, q.ad, q.ao, Features.picking]")
+    ok2 = g[0] == 'pick' and abs(abs(g[1][0]) - 1) < 1e-6 and abs(g[2][1] + 5) < 1e-3 and abs(g[2][2] - 12) < 1e-3 and not g[3] and p.pg.locator('#op-axisinfo').count() == 1
+    ok3 = near(bbox(p), [-2, -32, -15, 2, 22, 39], 0.2) and p.ev("return App.errors.length") == 0
+    return [ok1, ok2, ok3]
+
+
 # ---------- Sitzung 22: kleine Skizzen-Werkzeuge ----------
 def t_kreis_bogen_modi(p):
     sketch_xy(p)
@@ -2773,6 +2787,7 @@ TESTS = [
     ('Skizze: Schildchen überdecken sich nicht', t_schildchen_ueberlappen),
     ('Skizze: Kante übernehmen / Linie fest / Kreis', t_kante_uebernehmen),
     ('Verbundene Kanten: verbunden / Linie wandert / Kreis wächst / ein Rückgängig / Hinweis / lösen', t_kante_verbunden),
+    ('Kreismuster um gewählte Achse: Wählen / Achse aus Kante / Kopien', t_kreismuster_gewaehlt),
     ('Skizze: Kreis aus 3 / 2 Punkten / tangentialer Bogen', t_kreis_bogen_modi),
     ('Skizze: Verlängern bis zur nächsten Linie', t_verlaengern),
     ('Entformungsschräge: 3° nach innen / -2° nach außen', t_schraege),

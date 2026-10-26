@@ -59,6 +59,59 @@ const Features = (() => {
     UI.toast('Muster entlang der Kurve angelegt. Rechts stellst du Anzahl, Abstand und Mitdrehen ein.', { icon: 'check' });
     return G;
   }
+  // ---------- Drehachse im Bild wählen (Kreismuster) ----------
+  // Gerade Kante → Achse entlang der Kante; runde Kante → Achse durch ihre Mitte, senkrecht dazu; Zylinderfläche → ihre Achse
+  let picking = null;
+  function axisOfHit(hit) {
+    const n = hit && hit.node; if (!n) return null;
+    const M = n.obj.matrixWorld;
+    if (hit.edgeIdx != null) {
+      const g = n.data.edges[hit.edgeIdx], pos = Viewer.edgePositions(n, hit.edgeIdx);
+      if (g && pos && pos.length >= 6) {
+        const P = (i) => new THREE.Vector3(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]).applyMatrix4(M), k = pos.length / 3;
+        if (g.t === 'LINE') { const a = P(0), b = P(k - 1); if (a.distanceTo(b) > 1e-6) return { o: a, d: b.sub(a).normalize(), what: 'Kante' }; }
+        if (g.t === 'CIRCLE' && k >= 3) {
+          const a = P(0), b = P(Math.floor(k / 3)), c = P(Math.floor((2 * k) / 3));
+          const ab = b.clone().sub(a), ac = c.clone().sub(a), nn = new THREE.Vector3().crossVectors(ab, ac), l2 = nn.lengthSq();
+          if (l2 > 1e-12) {
+            const cc = new THREE.Vector3().crossVectors(nn, ab).multiplyScalar(ac.lengthSq()).add(new THREE.Vector3().crossVectors(ac, nn).multiplyScalar(ab.lengthSq())).divideScalar(2 * l2).add(a);
+            return { o: cc, d: nn.normalize(), what: 'Mitte des Kreises' };
+          }
+        }
+      }
+    }
+    if (hit.faceIdx >= 0) {
+      const fi = n.data.faces[hit.faceIdx];
+      if (fi && fi.t === 'CYLINDRE' && fi.axis) return { o: new THREE.Vector3(fi.axis[0], fi.axis[1], fi.axis[2]).applyMatrix4(M), d: new THREE.Vector3(fi.axis[3], fi.axis[4], fi.axis[5]).transformDirection(M).normalize(), what: 'Achse der runden Fläche' };
+    }
+    return null;
+  }
+  function stopPick() {
+    if (!picking) return;
+    const cv = Viewer.canvas;
+    cv.removeEventListener('pointerdown', picking.down, true); window.removeEventListener('keydown', picking.key, true);
+    cv.style.cursor = ''; UI.hint(null); picking = null;
+  }
+  function pickAxis(gid) {
+    stopPick();
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const A = axisOfHit(Viewer.pick(e.clientX, e.clientY, { edgePx: 9 }));
+      if (!A) { UI.toast('Klick auf eine gerade Kante, einen runden Rand oder eine runde Fläche.', { icon: 'info' }); return; }
+      stopPick();
+      const inv = Model.worldMatrix(App.doc, gid).invert();
+      const o = A.o.clone().applyMatrix4(inv), d = A.d.clone().transformDirection(inv).normalize();
+      App.change('Drehachse gewählt', (doc) => { const f = Model.find(doc, gid); if (!f) return false; f.item.p.axis = 'pick'; f.item.p.ao = o.toArray().map((v) => round(v, 6)); f.item.p.ad = d.toArray().map((v) => round(v, 9)); });
+      App.select([gid]);
+      UI.toast('Drehachse gesetzt: ' + A.what + '.', { icon: 'check' });
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, key, gid };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true); window.addEventListener('keydown', key, true);
+    UI.hint('<b>Drehachse wählen:</b> Klick auf eine gerade Kante, einen runden Rand oder eine runde Fläche (Welle, Loch). <b>Esc</b> bricht ab.');
+  }
   // Gespiegelte Kopie an einer gewählten ebenen Fläche (z. B. zweiter Arm an der Mittelfläche)
   function mirrorAtFace(face) {
     const top = Model.topOf(App.doc, face.id); if (!top) return null;
@@ -118,13 +171,27 @@ const Features = (() => {
     let hint = '';
     if (p.op === 'pattern' && p.pt === 'rect') { f.append(num('nx', 'Anzahl X', '', { int: true, min: 1 }), num('ny', 'Anzahl Y', '', { int: true, min: 1 }), num('dx', 'Abstand X'), num('dy', 'Abstand Y')); hint = 'Die Anzahl zählt das Original mit. Abstände gehen von Mitte zu Mitte.'; }
     else if (p.op === 'pattern' && p.pt === 'circ') {
-      const ax = p.axis === 'x' || p.axis === 'y' ? p.axis : 'z';
+      const ax = p.axis === 'x' || p.axis === 'y' || (p.axis === 'pick' && Array.isArray(p.ad)) ? p.axis : 'z';
       f.append(num('n', 'Anzahl', '', { int: true, min: 1 }), num('ang', 'Winkel', '°'));
-      f.append(UI.selectField({ id: 'op-axis', label: 'Drehachse', value: ax, options: [['z', 'Senkrecht (Z)'], ['x', 'Quer (X)'], ['y', 'Längs (Y)']], onChange: (v) => setP('axis', v) }));
-      if (ax !== 'x') f.append(num('cx', 'Mitte X'));
-      if (ax !== 'y') f.append(num('cy', 'Mitte Y'));
-      if (ax !== 'z') f.append(num('cz', 'Mitte Z'));
-      hint = { z: 'Gedreht wird um die senkrechte Achse durch die Mitte.', x: 'Gedreht wird um eine Achse quer (in X-Richtung) durch die Mitte – z. B. Löcher rund um ein liegendes Rohr.', y: 'Gedreht wird um eine Achse längs (in Y-Richtung) durch die Mitte – z. B. Rippen rund um einen liegenden Rumpf.' }[ax] + ' 360° verteilt die Kopien rundherum.';
+      f.append(UI.selectField({ id: 'op-axis', label: 'Drehachse', value: ax, options: [['z', 'Senkrecht (Z)'], ['x', 'Quer (X)'], ['y', 'Längs (Y)'], ['pick', 'Im Bild gewählt']], onChange: (v) => { if (v === 'pick') pickAxis(it.id); else setP('axis', v); } }));
+      let info = null;
+      if (ax === 'pick') {
+        const d = p.ad.map((v) => fmt(v, 2)).join(' · '), o = p.ao.map((v) => fmt(v, 1)).join(' · ');
+        info = h('div', { class: 'mini-row', id: 'op-axisinfo' }, h('span', { class: 'grow' }, 'Richtung ' + d), h('b', { class: 'mono' }, 'durch ' + o));
+      } else {
+        if (ax !== 'x') f.append(num('cx', 'Mitte X'));
+        if (ax !== 'y') f.append(num('cy', 'Mitte Y'));
+        if (ax !== 'z') f.append(num('cz', 'Mitte Z'));
+      }
+      const pb = h('button', { type: 'button', class: 'btn', id: 'op-axispick' }); pb.innerHTML = icon('cursor') + (ax === 'pick' ? 'Andere Achse wählen' : 'Achse im Bild wählen');
+      pb.onclick = () => pickAxis(it.id);
+      hint = { z: 'Gedreht wird um die senkrechte Achse durch die Mitte.', x: 'Gedreht wird um eine Achse quer (in X-Richtung) durch die Mitte – z. B. Löcher rund um ein liegendes Rohr.', y: 'Gedreht wird um eine Achse längs (in Y-Richtung) durch die Mitte – z. B. Rippen rund um einen liegenden Rumpf.', pick: 'Gedreht wird um die gewählte Achse – eine gerade Kante, eine Welle oder ein Loch, auch schräg.' }[ax] + ' 360° verteilt die Kopien rundherum.';
+      sec.append(f); if (info) sec.append(info);
+      sec.append(h('div', { class: 'btn-row' }, pb), h('div', { class: 'hint-box', html: hint }));
+      const ub = h('button', { type: 'button', class: 'btn' }); ub.innerHTML = icon('ungroup') + 'Auflösen (nur Original behalten)';
+      ub.onclick = () => Actions.ungroup(it.id);
+      sec.append(h('div', { class: 'btn-row' }, ub));
+      return;
     }
     else if (p.op === 'pattern' && p.pt === 'path') {
       f.append(num('n', 'Anzahl', '', { int: true, min: 1 }), num('d', 'Abstand', 'mm', { min: 0 }));
@@ -165,5 +232,5 @@ const Features = (() => {
     return null;
   }
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
+  return { pickAxis, get picking() { return !!picking; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
 })();

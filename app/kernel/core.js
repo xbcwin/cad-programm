@@ -792,8 +792,11 @@ export function createKernel(R, oc) {
     } else if (p.pt === 'circ') {
       const n = Math.max(1, Math.min(120, Math.round(num(p.n, 4)))), ang = num(p.ang, 360);
       const step = Math.abs(Math.abs(ang) - 360) < 1e-9 ? 360 / n : n > 1 ? ang / (n - 1) : 0;
-      const ax = p.axis === 'x' ? [1, 0, 0] : p.axis === 'y' ? [0, 1, 0] : [0, 0, 1];   // Drehachse: senkrecht (Standard), quer oder längs
-      for (let k = 1; k < n; k++) copies.push(base.clone().rotate(k * step, [num(p.cx, 0), num(p.cy, 0), num(p.cz, 0)], ax));
+      // Drehachse: senkrecht (Standard), quer, längs – oder eine im Bild gewählte Achse (Kante, Welle, Loch)
+      const picked = p.axis === 'pick' && Array.isArray(p.ad) && Array.isArray(p.ao);
+      const ax = picked ? p.ad.map(Number) : p.axis === 'x' ? [1, 0, 0] : p.axis === 'y' ? [0, 1, 0] : [0, 0, 1];
+      const c = picked ? p.ao.map(Number) : [num(p.cx, 0), num(p.cy, 0), num(p.cz, 0)];
+      for (let k = 1; k < n; k++) copies.push(base.clone().rotate(k * step, c, ax));
     } else if (p.pt === 'path' && Array.isArray(p.places)) {
       // Muster entlang Kurve: Lage und Drehung je Kopie kommen fertig aus dem Modell
       const ax = (p.n || [0, 0, 1]).map(Number), p0 = (p.p0 || [0, 0, 0]).map(Number);
