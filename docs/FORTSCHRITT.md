@@ -1,6 +1,6 @@
 # Fortschritt
 
-Stand: 26.10.2026 · nach Sitzung 35 (19: Skizze auf Profi-Niveau · 20: Magnet, Rundungs-Griff · 21: Skizzieren im 3D, Übergang, Entlang Pfad, Import · 22: Kreis/Bogen-Arten, Verlängern, Entformungsschräge, Gewinde · 23: Einheiten, eigener Querschnitt, Langloch gebogen, gedrehtes Rechteck, Teilen · 24: Punkt, alle Ecken · 25: Schnitt und Spiegeln an Fläche · 26: Kantenkette, Abstände beim Verschieben · 27: Spiegeln an der Achse · 28: Muster entlang Kurve, Schablonen-Maße geprüft, USB-C-Stecker · 29: Spiegelebene wandert mit, Kreismuster quer und längs, KI kennt Muster entlang Kurve · 30: Bohrungen an Skizzenpunkten · 31: Wand aus Linie, Schritt hinter dem Marker, Schildchen · 32: Kante übernehmen · 33: verbundene Kanten · 34: Kreismuster um gewählte Achse · 35: GoPro-, XT60- und Antennenhalter)
+Stand: 26.10.2026 · nach Sitzung 36 (19: Skizze auf Profi-Niveau · 20: Magnet, Rundungs-Griff · 21: Skizzieren im 3D, Übergang, Entlang Pfad, Import · 22: Kreis/Bogen-Arten, Verlängern, Entformungsschräge, Gewinde · 23: Einheiten, eigener Querschnitt, Langloch gebogen, gedrehtes Rechteck, Teilen · 24: Punkt, alle Ecken · 25: Schnitt und Spiegeln an Fläche · 26: Kantenkette, Abstände beim Verschieben · 27: Spiegeln an der Achse · 28: Muster entlang Kurve, Schablonen-Maße geprüft, USB-C-Stecker · 29: Spiegelebene wandert mit, Kreismuster quer und längs, KI kennt Muster entlang Kurve · 30: Bohrungen an Skizzenpunkten · 31: Wand aus Linie, Schritt hinter dem Marker, Schildchen · 32: Kante übernehmen · 33: verbundene Kanten · 34: Kreismuster um gewählte Achse · 35: GoPro-, XT60- und Antennenhalter · 36: Überhänge für den 3D-Druck)
 
 ## Erledigt
 
@@ -217,7 +217,8 @@ Fertig.
 
 ### Stufe 5 – KI und Feinschliff
 - [x] KI-Helfer auf der Zeitleiste, „Erklär diesen Schritt“, Schwachstellen-Analyse (Sitzung 14)
-- [ ] Schwachstellen auch für gedruckte Teile genauer: Wand um Schraubenlöcher, Überhänge
+- [x] Ansicht „Überhänge (3D-Druck)“: rot, was steiler als der Grenzwinkel (35–60°, Standard 45°) nach unten zeigt und nicht auf dem Druckbett liegt, dazu die Fläche, die Stützen braucht (Sitzung 36)
+- [ ] Schwachstellen auch für gedruckte Teile genauer: Wand um Schraubenlöcher
 - [x] Einsteiger-Oberfläche (Sitzung 15)
 - [x] Übergang (Loft) durch mehrere Umrisse, „Zur Spitze“ / Spitze verlängern (Sitzung 21)
 - [x] Entlang Pfad (Sweep): offener Pfad wird Rohr oder rechteckiger Kanal, auch hohl (Sitzung 21)

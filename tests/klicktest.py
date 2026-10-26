@@ -1250,11 +1250,11 @@ def t_adaptiv(p):
 def t_ansicht_hilfen(p):
     p.empty()
     hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
-    fehlt = [k for k in ['section', 'xray', 'explode', 'focusView'] if k not in hilfen]
+    fehlt = [k for k in ['section', 'xray', 'explode', 'focusView', 'overhang'] if k not in hilfen]
     p.pg.locator('#t-views').click(); p.wait(300)
     im_menue = sorted(p.pg.evaluate("[...document.querySelectorAll('.menu [data-help]')].map(b=>b.dataset.help)"))
     knoepfe = sorted(p.pg.evaluate("[...document.querySelectorAll('.view-btns [data-help]')].map(b=>b.dataset.help)"))
-    ok = not fehlt and im_menue == ['explode', 'focusView', 'section', 'xray'] and {'section', 'xray'} <= set(knoepfe)
+    ok = not fehlt and im_menue == ['explode', 'focusView', 'overhang', 'section', 'xray'] and {'section', 'xray'} <= set(knoepfe)
     return ok, ('ohne Hilfetext: ' + ', '.join(fehlt)) if fehlt else ('' if ok else f'Menü {im_menue}, Knöpfe {knoepfe}')
 
 
@@ -2525,6 +2525,21 @@ def t_bausteine(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+# ---------- Sitzung 36: Überhänge für den 3D-Druck ----------
+def t_ueberhang(p):
+    p.empty(); p.ev("""App.change('x', d=>{ const a=Model.newItem('box',{w:20,d:20,h:10}); const b=Model.newItem('box',{w:20,d:20,h:5}); b.t.x=15; b.t.z=10; const g=Model.newItem('group',{},{name:'L'}); g.children=[a,b]; d.items.push(g); })"""); warte_rechnen(p, 30)
+    p.ev("Views.overhang(true)"); p.wait(800)
+    a1 = p.ev("return Views.overhangArea")
+    ok1 = a1 is not None and abs(a1 - 300) < 1 and p.pg.locator('#ov-area').count() == 1 and 'Stützen' in p.pg.locator('#ov-area').inner_text()
+    p.pg.select_option('#ov-angle', '60'); p.wait(500)
+    ok2 = abs(p.ev("return Views.overhangArea") - 300) < 1
+    p.ev("App.change('x', d=>{ d.items[0].children.pop(); })"); warte_rechnen(p, 30); p.wait(500)
+    ok3 = p.ev("return Views.overhangArea") < 0.05 and 'Keine Überhänge' in p.pg.locator('#ov-area').inner_text()
+    p.ev("Views.overhang(false)"); p.wait(300)
+    ok4 = p.pg.locator('#ov-area').count() == 0
+    return [ok1, ok2, ok3, ok4]
+
+
 # ---------- Sitzung 22: kleine Skizzen-Werkzeuge ----------
 def t_kreis_bogen_modi(p):
     sketch_xy(p)
@@ -2811,6 +2826,7 @@ TESTS = [
     ('Verbundene Kanten: verbunden / Linie wandert / Kreis wächst / ein Rückgängig / Hinweis / lösen', t_kante_verbunden),
     ('Kreismuster um gewählte Achse: Wählen / Achse aus Kante / Kopien', t_kreismuster_gewaehlt),
     ('Drohnen-Bausteine: in der Leiste / GoPro / XT60 / Antenne / 2 Finger', t_bausteine),
+    ('Überhänge: Fläche / Winkel / ohne Überhang / aus', t_ueberhang),
     ('Skizze: Kreis aus 3 / 2 Punkten / tangentialer Bogen', t_kreis_bogen_modi),
     ('Skizze: Verlängern bis zur nächsten Linie', t_verlaengern),
     ('Entformungsschräge: 3° nach innen / -2° nach außen', t_schraege),

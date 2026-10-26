@@ -2,7 +2,7 @@
 // Alles hier ändert nur, wie das Modell gezeigt wird – nie das Modell selbst. Nichts davon landet
 // in der Zeitleiste oder in der Projektdatei.
 const Views = (() => {
-  const st = { cut: null, xray: false, ex: 0, exGoal: 0, exAnim: null, focus: null };
+  const st = { cut: null, xray: false, ex: 0, exGoal: 0, exAnim: null, focus: null, ov: null };
   let wrap = null;   // Leisten links oben
   function bars() {
     if (!wrap || !wrap.isConnected) { wrap = h('div', { class: 'viewbars' }); $('#overlay').append(wrap); }
@@ -225,6 +225,61 @@ const Views = (() => {
     f.drawn = Viewer.renderInset({ x: br.left - cr.left, y: br.top - cr.top, w: br.width, h: br.height }, f.ids, f.rot);
   }
 
+  // ---------- Überhänge (3D-Druck) ----------
+  // Flächen, die steiler als der Grenzwinkel nach unten zeigen und nicht auf dem Druckbett liegen, werden rot.
+  // Druckbett = Unterseite aller sichtbaren Körper. Nur Anzeige, ändert nichts am Modell.
+  function overhangData(angle) {
+    const lim = -Math.cos((angle * Math.PI) / 180);
+    const solids = [...Viewer.nodes.values()].filter((n) => n.obj.visible && n.role !== 'hole' && n.mesh && n.data && n.data.triangles);
+    for (const n of solids) n.obj.updateMatrixWorld(true);
+    let bed = Infinity;
+    for (const n of solids) { const b = new THREE.Box3().setFromObject(n.mesh); if (!b.isEmpty()) bed = Math.min(bed, b.min.z); }
+    const out = []; let area = 0;
+    const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), ab = new THREE.Vector3(), ac = new THREE.Vector3(), nn = new THREE.Vector3();
+    for (const n of solids) {
+      const P = n.mesh.geometry.getAttribute('position').array, T = n.data.triangles, M = n.mesh.matrixWorld;
+      for (let i = 0; i + 2 < T.length; i += 3) {
+        a.fromArray(P, T[i] * 3).applyMatrix4(M); b.fromArray(P, T[i + 1] * 3).applyMatrix4(M); c.fromArray(P, T[i + 2] * 3).applyMatrix4(M);
+        nn.crossVectors(ab.subVectors(b, a), ac.subVectors(c, a)); const L = nn.length(); if (L < 1e-12) continue;
+        if (nn.z / L > lim) continue;
+        if (Math.max(a.z, b.z, c.z) < bed + 0.05) continue;   // liegt auf dem Druckbett
+        area += L / 2;
+        const o = nn.multiplyScalar(-0.02 / L);   // ein Hauch nach unten, damit es nicht flimmert
+        out.push(a.x + o.x, a.y + o.y, a.z + o.z, b.x + o.x, b.y + o.y, b.z + o.z, c.x + o.x, c.y + o.y, c.z + o.z);
+      }
+    }
+    return { pos: out, area, bed: isFinite(bed) ? bed : 0 };
+  }
+  function drawOverhang() {
+    const o = st.ov; if (!o) return;
+    if (o.mesh) { Viewer.groups.overlay.remove(o.mesh); o.mesh.geometry.dispose(); o.mesh.material.dispose(); o.mesh = null; }
+    const d = overhangData(o.angle);
+    o.area = d.area;
+    if (d.pos.length) {
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(d.pos, 3));
+      const m = new THREE.MeshBasicMaterial({ color: 0xe0483b, transparent: true, opacity: 0.75, side: THREE.DoubleSide, depthTest: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+      o.mesh = new THREE.Mesh(g, m); o.mesh.renderOrder = 18; Viewer.groups.overlay.add(o.mesh);
+    }
+    const t = o.bar && o.bar.querySelector('#ov-area');
+    if (t) t.textContent = d.area > 0.05 ? `${fmt(d.area, d.area < 100 ? 1 : 0)} mm² brauchen Stützen` : 'Keine Überhänge – druckt ohne Stützen';
+    Viewer.requestRender();
+  }
+  function overhang(on = !st.ov) {
+    if (!on) { if (st.ov) { if (st.ov.mesh) { Viewer.groups.overlay.remove(st.ov.mesh); st.ov.mesh.geometry.dispose(); st.ov.mesh.material.dispose(); } if (st.ov.bar) st.ov.bar.remove(); st.ov = null; Viewer.requestRender(); } sync(); return; }
+    if (st.ov) return;
+    const o = { angle: 45, mesh: null, area: 0 };
+    const bar = h('div', { class: 'viewbar', role: 'toolbar', 'aria-label': 'Überhänge' });
+    const head = h('div', { class: 'vb-head' }, h('span', { class: 'title' }, 'Überhänge'));
+    const close = h('button', { type: 'button', class: 'vb-x', 'aria-label': 'Überhänge ausblenden', 'data-tip': 'Ausblenden' }); close.innerHTML = icon('close'); close.onclick = () => overhang(false);
+    head.append(close);
+    const sel = h('select', { id: 'ov-angle', class: 'vb-sel', 'aria-label': 'Grenzwinkel' });
+    for (const a of [35, 40, 45, 50, 55, 60]) sel.append(h('option', { value: a, ...(a === 45 ? { selected: true } : {}) }, a + '°'));
+    sel.onchange = () => { o.angle = +sel.value; drawOverhang(); };
+    bar.append(head, h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, 'Ab'), sel, h('span', { class: 'vb-hint' }, 'Neigung gegen die Senkrechte')), h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint', id: 'ov-area' }, '')), h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint' }, 'Rot = hängt beim Drucken in der Luft. Druckbett ist die Unterseite.')));
+    bars().append(bar); o.bar = bar;
+    st.ov = o; drawOverhang(); sync();
+  }
+
   // ---------- Menü und Zustand ----------
   function menu(anchor) {
     UI.menu(anchor, [
@@ -232,10 +287,11 @@ const Views = (() => {
       { label: (st.xray ? '✓ ' : '') + 'Röntgen', icon: 'xray', kbd: 'X', help: 'xray', run: () => xray() },
       { label: (st.exGoal > 0 ? '✓ ' : '') + 'Explosion', icon: 'explode', kbd: 'U', help: 'explode', run: () => explode() },
       { label: (st.focus ? '✓ ' : '') + 'Fokus-Vorschau', icon: 'focusView', help: 'focusView', run: () => focus() },
+      { label: (st.ov ? '✓ ' : '') + 'Überhänge (3D-Druck)', icon: 'overhang', help: 'overhang', run: () => overhang() },
     ]);
   }
   function sync() {
-    const b = $('#t-views'); if (b) b.classList.toggle('active', !!(st.cut || st.xray || st.exGoal > 0 || st.focus));
+    const b = $('#t-views'); if (b) b.classList.toggle('active', !!(st.cut || st.xray || st.exGoal > 0 || st.focus || st.ov));
     const x = document.querySelector('.view-btns [data-view="xray"]'); if (x) x.classList.toggle('on', st.xray);
     const c = document.querySelector('.view-btns [data-view="cut"]'); if (c) c.classList.toggle('on', !!st.cut);
   }
@@ -251,12 +307,14 @@ const Views = (() => {
     App.on('mode', () => { if (App.mode !== 'model') reset(); });
     App.on('results', () => {
       if (st.ex > 1e-4) setEx(st.ex);
+      if (st.ov) drawOverhang();
       if (st.cut) { drawCutHelper(); const r = st.cut.bar && st.cut.bar.querySelector('#cut-range'); if (r) { const b = modelBox(); const ax = AX[st.cut.plane]; r.min = Math.floor(b.min.getComponent(ax) - 1); r.max = Math.ceil(b.max.getComponent(ax) + 1); } }
     });
   }
-  function reset() { section(false); if (st.xray) xray(false); if (st.exGoal > 0 || st.ex > 0) { cancelAnimationFrame(st.exAnim); st.exAnim = null; st.ex = st.exGoal = 0; Viewer.setOffsets(null); if (st.exBar) { st.exBar.remove(); st.exBar = null; } } focus(false); }
+  function reset() { section(false); if (st.xray) xray(false); if (st.exGoal > 0 || st.ex > 0) { cancelAnimationFrame(st.exAnim); st.exAnim = null; st.ex = st.exGoal = 0; Viewer.setOffsets(null); if (st.exBar) { st.exBar.remove(); st.exBar = null; } } focus(false); overhang(false); }
   return {
-    init, section, xray, explode, collapse, focus, menu, onKey, reset, sync, bars,
+    init, section, xray, explode, collapse, focus, overhang, menu, onKey, reset, sync, bars,
+    get overhangArea() { return st.ov ? st.ov.area : null; },
     get cut() { return st.cut ? { plane: st.cut.plane, off: st.cut.off, flip: st.cut.flip } : null; },
     get isXray() { return st.xray; }, get exploded() { return st.ex > 1e-4 || st.exGoal > 0; }, get explodeAmount() { return st.ex; },
     get focusIds() { return st.focus ? st.focus.ids.slice() : null; }, get focusDrawn() { return !!(st.focus && st.focus.drawn); },

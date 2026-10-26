@@ -230,6 +230,7 @@ const IC = {
   sketch3d: '<path d="M4 17 12 21l8-4" opacity=".4"/><path d="M6 8v8M12 12v9M18 5v11" stroke-dasharray="3 2.5" opacity=".5"/><path d="M6 8l6 4 6-7"/><circle cx="6" cy="8" r="1.8" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.8" fill="currentColor" stroke="none"/><circle cx="18" cy="5" r="1.8" fill="currentColor" stroke="none"/>',
   spline: '<path d="M4 18 7 6l10 12 3-12" stroke-dasharray="3 2.5" opacity=".4"/><path d="M4 18C7 6 17 18 20 6"/><circle cx="4" cy="18" r="1.8" fill="currentColor" stroke="none"/><circle cx="20" cy="6" r="1.8" fill="currentColor" stroke="none"/>',
   trim: '<path d="M9 12h6" stroke-dasharray="3 2.5" opacity=".5"/><path d="M11 4 7 20M3 12h6M17 10l4 4M21 10l-4 4" />',
+  overhang: '<path d="M3 20h18" opacity=".45"/><path d="M5 20V9h9"/><path d="M14 9h6v4h-6z" fill="currentColor" fill-opacity=".35"/><path d="M15 15l1.5 2M18 15l1.5 2" opacity=".6"/>',
   actionMount: '<rect x="4" y="17" width="16" height="4" rx="1"/><path d="M7 17v-6a2.5 2.5 0 0 1 5 0v6M12 17v-6a2.5 2.5 0 0 1 5 0v6"/><circle cx="12" cy="11" r="1.2"/>',
   plugMount: '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M8 9h7l2 2v4H8z"/><circle cx="5.5" cy="12" r=".8"/><circle cx="18.5" cy="12" r=".8" opacity="0"/>',
   link: '<path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/>',
@@ -747,6 +748,11 @@ const HELP = {
   "tip": "Röhrchen, die Antennen in Form halten",
   "hilfe": "Eine Grundplatte mit einem oder zwei Röhrchen. Spreizung (V-Winkel zwischen den Röhrchen) und Neigung nach hinten sind einstellbar, den Innen-Ø passt du an deine Antenne an.",
   "tipp": "Für zwei Empfangsantennen 90° Spreizung, dann liegen sie über Kreuz und der Empfang bleibt auch in Kurven gut. Am besten in TPU drucken."
+ },
+ "overhang": {
+  "tip": "Zeigt, wo beim 3D-Druck Stützen nötig sind",
+  "hilfe": "Färbt alle Flächen rot, die steiler als der Grenzwinkel nach unten zeigen und nicht auf dem Druckbett liegen – dort hängt das Material beim Drucken in der Luft. Das Druckbett ist die Unterseite deiner Teile. Unten steht, wie viel Fläche Stützen braucht.",
+  "tipp": "45° schaffen die meisten Drucker ohne Stützen. Wird viel rot: Teil anders hinlegen, eine Fase statt einer waagerechten Kante, oder in zwei Teile teilen."
  }
 };
 

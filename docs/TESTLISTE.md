@@ -481,6 +481,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
   Schritte: 1. Ein Kind (ab 10) mit „Einfach“ eine Platte mit vier Löchern bauen lassen, ohne zu helfen.
   Erwartet: Es findet Körper, Löcher und Exportieren allein; notieren, wo es hängen bleibt.
 
+## Überhänge für den 3D-Druck (neu in Sitzung 36)
+
+- [x] **Überhang wird rot**
+  Schritte: Gruppe aus einem Quader 20 × 20 × 10 und einem zweiten 20 × 20 × 5 obendrauf, 15 mm zur Seite versetzt. Ansichten → „Überhänge (3D-Druck)“.
+  Erwartet: Die freie Unterseite des oberen Quaders (15 × 20 = 300 mm²) ist rot, unten steht „300 mm² brauchen Stützen“. Ohne den oberen Quader: „Keine Überhänge“.
+- [ ] **Echtes Teil**: Kamerahalter oder Rumpf anschauen – stimmt das Rot mit dem überein, was der Slicer stützen will?
+
 ## Drohnen-Bausteine (neu in Sitzung 35)
 
 - [x] **Bausteine in der Leiste**: „Drohne“ → „Lochbilder und Bausteine“ zeigt GoPro-Halterung, XT60-Halter und Antennenhalter.
