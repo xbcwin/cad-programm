@@ -481,6 +481,10 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
   Schritte: 1. Ein Kind (ab 10) mit „Einfach“ eine Platte mit vier Löchern bauen lassen, ohne zu helfen.
   Erwartet: Es findet Körper, Löcher und Exportieren allein; notieren, wo es hängen bleibt.
 
+## Überhänge in der Schwachstellen-Analyse (neu in Sitzung 37)
+
+- [x] **Überhang wird gemeldet**: L-förmige Gruppe wie oben, „Schwachstellen suchen“ – Hinweis „Überhang beim Drucken – L“ mit 300 mm²; ohne den oberen Quader verschwindet er.
+
 ## Überhänge für den 3D-Druck (neu in Sitzung 36)
 
 - [x] **Überhang wird rot**

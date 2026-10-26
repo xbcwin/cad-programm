@@ -7804,13 +7804,14 @@ const Views = (() => {
   // ---------- Überhänge (3D-Druck) ----------
   // Flächen, die steiler als der Grenzwinkel nach unten zeigen und nicht auf dem Druckbett liegen, werden rot.
   // Druckbett = Unterseite aller sichtbaren Körper. Nur Anzeige, ändert nichts am Modell.
-  function overhangData(angle) {
+  function overhangData(angle, only) {
     const lim = -Math.cos((angle * Math.PI) / 180);
-    const solids = [...Viewer.nodes.values()].filter((n) => n.obj.visible && n.role !== 'hole' && n.mesh && n.data && n.data.triangles);
+    const all = [...Viewer.nodes.values()].filter((n) => n.obj.visible && n.role !== 'hole' && n.mesh && n.data && n.data.triangles);
+    const solids = only ? all.filter((n) => only.includes(n.id)) : all;
     for (const n of solids) n.obj.updateMatrixWorld(true);
     let bed = Infinity;
-    for (const n of solids) { const b = new THREE.Box3().setFromObject(n.mesh); if (!b.isEmpty()) bed = Math.min(bed, b.min.z); }
-    const out = []; let area = 0;
+    for (const n of all) { n.obj.updateMatrixWorld(true); const b = new THREE.Box3().setFromObject(n.mesh); if (!b.isEmpty()) bed = Math.min(bed, b.min.z); }
+    const out = []; let area = 0, cx = 0, cy = 0, cz = 0;
     const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), ab = new THREE.Vector3(), ac = new THREE.Vector3(), nn = new THREE.Vector3();
     for (const n of solids) {
       const P = n.mesh.geometry.getAttribute('position').array, T = n.data.triangles, M = n.mesh.matrixWorld;
@@ -7819,12 +7820,12 @@ const Views = (() => {
         nn.crossVectors(ab.subVectors(b, a), ac.subVectors(c, a)); const L = nn.length(); if (L < 1e-12) continue;
         if (nn.z / L > lim) continue;
         if (Math.max(a.z, b.z, c.z) < bed + 0.05) continue;   // liegt auf dem Druckbett
-        area += L / 2;
+        area += L / 2; cx += ((a.x + b.x + c.x) / 3) * (L / 2); cy += ((a.y + b.y + c.y) / 3) * (L / 2); cz += ((a.z + b.z + c.z) / 3) * (L / 2);
         const o = nn.multiplyScalar(-0.02 / L);   // ein Hauch nach unten, damit es nicht flimmert
         out.push(a.x + o.x, a.y + o.y, a.z + o.z, b.x + o.x, b.y + o.y, b.z + o.z, c.x + o.x, c.y + o.y, c.z + o.z);
       }
     }
-    return { pos: out, area, bed: isFinite(bed) ? bed : 0 };
+    return { pos: out, area, bed: isFinite(bed) ? bed : 0, c: area > 0 ? [cx / area, cy / area, cz / area] : null };
   }
   function drawOverhang() {
     const o = st.ov; if (!o) return;
@@ -7891,6 +7892,7 @@ const Views = (() => {
   return {
     init, section, xray, explode, collapse, focus, overhang, menu, onKey, reset, sync, bars,
     get overhangArea() { return st.ov ? st.ov.area : null; },
+    overhangOf: (id, angle = 45) => { const d = overhangData(angle, [id]); return { area: d.area, c: d.c }; },
     get cut() { return st.cut ? { plane: st.cut.plane, off: st.cut.off, flip: st.cut.flip } : null; },
     get isXray() { return st.xray; }, get exploded() { return st.ex > 1e-4 || st.exGoal > 0; }, get explodeAmount() { return st.ex; },
     get focusIds() { return st.focus ? st.focus.ids.slice() : null; }, get focusDrawn() { return !!(st.focus && st.focus.drawn); },
@@ -12308,6 +12310,7 @@ Parameter p (alle Grundkörper stehen mit der Unterseite auf z=0 ihres eigenen S
   {"lib":"holePattern","pat":"stack305|stack255|stack20|stack16|motor19|motor16|motor12|motor9","size":"M3","depth":10} (loch, vier Löcher für Stack oder Motor um die Mitte) · {"lib":"zipTie","w":3,"gap":6,"depth":10} (loch, zwei Kabelbinder-Schlitze)
   {"lib":"threadRod","size":"M3…M16","length":12} (koerper, echtes Außengewinde) · {"lib":"threadHole","size":"M4…M16","length":10,"clear":0.3} (loch, gedrucktes Innengewinde)
   {"lib":"snapHook","length":12,"w":8,"t":1.6,"hook":1.2} (koerper) · {"lib":"hinge","len":40,"w":15,"t":2.4,"gap":0.4} (koerper) · {"lib":"gear","teeth":20,"module":1.5,"h":6,"bore":5} (koerper)
+  {"lib":"goproMount","n":"3","hz":9} (koerper, GoPro-Finger mit M5-Loch auf einer Platte; "2" Finger für die Gegenseite) · {"lib":"xt60Holder","w":15.5,"h":8.1,"ea":26} (koerper, Platte mit Ausschnitt für einen Akkustecker und zwei Schraubenlöchern) · {"lib":"antennaMount","n":"2","di":3.5,"len":20,"spread":90,"lean":30} (koerper, Röhrchen für Antennen, V-förmig)
 - rundungen: typ "fillet" (Rundung), "chamfer" (Fase) oder "draft" (Entformungsschräge, r = Winkel in Grad, neigt alle senkrechten Seitenwände)
 - group: {"kinder":[…]} – Kinder mit rolle "loch" werden aus den Kindern mit rolle "koerper" geschnitten. t der Kinder ist relativ zur Gruppe.
 
@@ -14191,11 +14194,22 @@ const Weak = (() => {
       ? `Die Arme sind ${fmt(t, 1)} mm dick – für einen ${z}"-Racer in Ordnung, für Freestyle sind ${fmt(rec, 1)} mm üblich.`
       : `Die Arme sind ${fmt(t, 1)} mm dick. Für ${z}"-Rahmen nehmen Racer mindestens ${fmt(min, 1)} mm, Freestyle-Rahmen ${fmt(rec, 1)} mm – dünnere Arme brechen beim Crash zuerst.`, ids: App.doc.items.filter((i) => i.name === 'Unterteil').map((i) => i.id), fix: { label: `Armdicke auf ${fmt(rec, 1)} mm`, run: () => App.change('Armdicke erhöht', (doc) => { doc.params.find((p) => p.name === 'Armdicke').expr = rec; }) } }];
   }
+  // Überhänge bei Druckteilen: was steiler als 45° nach unten zeigt und nicht auf dem Druckbett liegt
+  function overhangs() {
+    const out = [];
+    for (const it of Model.activeItems(App.doc)) {
+      if (it.hidden || it.role === 'hole' || Mass.fixedOf(it) || !Viewer.nodes.has(it.id)) continue;
+      const cls = CLASS[Mass.materialFor(it).k] || 'print'; if (cls !== 'print' && cls !== 'tpu') continue;
+      const o = Views.overhangOf(it.id, 45); if (!o || o.area < 100 || !o.c) continue;   // kleine Stellen (z. B. waagerechte Schraubenlöcher) überbrückt der Drucker
+      out.push({ id: 'overhang', s: 'info', title: `Überhang beim Drucken – ${Model.label(it)}`, text: `${fmt(o.area, 0)} mm² zeigen steiler als 45° nach unten und hängen beim Drucken in der Luft – der Slicer braucht dort Stützen. Anders hinlegen, eine Fase statt einer waagerechten Kante oder in zwei Teile teilen hilft. Ansichten → „Überhänge (3D-Druck)“ zeigt die Stellen rot.`, ids: [it.id], at: [o.c], r: 6 });
+    }
+    return out;
+  }
   async function analyze() {
     if (!App.doc.items.length) return [];
     const rev = App.revision, out = [];
     for (const pl of Plates.candidates()) out.push(...(await plateHoles(pl)));
-    out.push(...walls(), ...arms());
+    out.push(...walls(), ...arms(), ...overhangs());
     if (DroneCheck.isDrone()) {
       const l = (await DroneCheck.run()) || [];
       for (const c of l) if ((c.s === 'bad' || c.s === 'warn') && c.id !== 'weight') out.push({ ...c, id: 'drone-' + c.id, title: c.title + ' (Drohnen-Check)' });

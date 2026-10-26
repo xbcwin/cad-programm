@@ -231,11 +231,22 @@ const Weak = (() => {
       ? `Die Arme sind ${fmt(t, 1)} mm dick – für einen ${z}"-Racer in Ordnung, für Freestyle sind ${fmt(rec, 1)} mm üblich.`
       : `Die Arme sind ${fmt(t, 1)} mm dick. Für ${z}"-Rahmen nehmen Racer mindestens ${fmt(min, 1)} mm, Freestyle-Rahmen ${fmt(rec, 1)} mm – dünnere Arme brechen beim Crash zuerst.`, ids: App.doc.items.filter((i) => i.name === 'Unterteil').map((i) => i.id), fix: { label: `Armdicke auf ${fmt(rec, 1)} mm`, run: () => App.change('Armdicke erhöht', (doc) => { doc.params.find((p) => p.name === 'Armdicke').expr = rec; }) } }];
   }
+  // Überhänge bei Druckteilen: was steiler als 45° nach unten zeigt und nicht auf dem Druckbett liegt
+  function overhangs() {
+    const out = [];
+    for (const it of Model.activeItems(App.doc)) {
+      if (it.hidden || it.role === 'hole' || Mass.fixedOf(it) || !Viewer.nodes.has(it.id)) continue;
+      const cls = CLASS[Mass.materialFor(it).k] || 'print'; if (cls !== 'print' && cls !== 'tpu') continue;
+      const o = Views.overhangOf(it.id, 45); if (!o || o.area < 100 || !o.c) continue;   // kleine Stellen (z. B. waagerechte Schraubenlöcher) überbrückt der Drucker
+      out.push({ id: 'overhang', s: 'info', title: `Überhang beim Drucken – ${Model.label(it)}`, text: `${fmt(o.area, 0)} mm² zeigen steiler als 45° nach unten und hängen beim Drucken in der Luft – der Slicer braucht dort Stützen. Anders hinlegen, eine Fase statt einer waagerechten Kante oder in zwei Teile teilen hilft. Ansichten → „Überhänge (3D-Druck)“ zeigt die Stellen rot.`, ids: [it.id], at: [o.c], r: 6 });
+    }
+    return out;
+  }
   async function analyze() {
     if (!App.doc.items.length) return [];
     const rev = App.revision, out = [];
     for (const pl of Plates.candidates()) out.push(...(await plateHoles(pl)));
-    out.push(...walls(), ...arms());
+    out.push(...walls(), ...arms(), ...overhangs());
     if (DroneCheck.isDrone()) {
       const l = (await DroneCheck.run()) || [];
       for (const c of l) if ((c.s === 'bad' || c.s === 'warn') && c.id !== 'weight') out.push({ ...c, id: 'drone-' + c.id, title: c.title + ' (Drohnen-Check)' });

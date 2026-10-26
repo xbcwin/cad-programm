@@ -2540,6 +2540,17 @@ def t_ueberhang(p):
     return [ok1, ok2, ok3, ok4]
 
 
+# ---------- Sitzung 37: Überhänge in der Schwachstellen-Analyse ----------
+def t_ueberhang_schwach(p):
+    p.empty(); p.ev("""App.change('x', d=>{ const a=Model.newItem('box',{w:20,d:20,h:10}); const b=Model.newItem('box',{w:20,d:20,h:5}); b.t.x=15; b.t.z=10; const g=Model.newItem('group',{},{name:'L'}); g.mat='PETG'; g.children=[a,b]; d.items.push(g); })"""); warte_rechnen(p, 30)
+    l = p.ev("return Weak.analyze().then(l=>l.map(x=>[x.id, x.s, x.text]))")
+    ok1 = any(x[0] == 'overhang' and x[1] == 'info' and x[2].startswith('300 mm²') for x in l)
+    # ohne den oberen Quader: nichts mehr
+    p.ev("App.change('x', d=>{ d.items[0].children.pop(); })"); warte_rechnen(p, 30)
+    ok2 = not any(x[0] == 'overhang' for x in p.ev("return Weak.analyze().then(l=>l.map(x=>[x.id]))"))
+    return [ok1, ok2]
+
+
 # ---------- Sitzung 22: kleine Skizzen-Werkzeuge ----------
 def t_kreis_bogen_modi(p):
     sketch_xy(p)
@@ -2827,6 +2838,7 @@ TESTS = [
     ('Kreismuster um gewählte Achse: Wählen / Achse aus Kante / Kopien', t_kreismuster_gewaehlt),
     ('Drohnen-Bausteine: in der Leiste / GoPro / XT60 / Antenne / 2 Finger', t_bausteine),
     ('Überhänge: Fläche / Winkel / ohne Überhang / aus', t_ueberhang),
+    ('Schwachstellen: Überhang bei Druckteilen / weg ohne Überhang', t_ueberhang_schwach),
     ('Skizze: Kreis aus 3 / 2 Punkten / tangentialer Bogen', t_kreis_bogen_modi),
     ('Skizze: Verlängern bis zur nächsten Linie', t_verlaengern),
     ('Entformungsschräge: 3° nach innen / -2° nach außen', t_schraege),

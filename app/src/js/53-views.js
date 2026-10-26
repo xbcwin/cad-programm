@@ -228,13 +228,14 @@ const Views = (() => {
   // ---------- Überhänge (3D-Druck) ----------
   // Flächen, die steiler als der Grenzwinkel nach unten zeigen und nicht auf dem Druckbett liegen, werden rot.
   // Druckbett = Unterseite aller sichtbaren Körper. Nur Anzeige, ändert nichts am Modell.
-  function overhangData(angle) {
+  function overhangData(angle, only) {
     const lim = -Math.cos((angle * Math.PI) / 180);
-    const solids = [...Viewer.nodes.values()].filter((n) => n.obj.visible && n.role !== 'hole' && n.mesh && n.data && n.data.triangles);
+    const all = [...Viewer.nodes.values()].filter((n) => n.obj.visible && n.role !== 'hole' && n.mesh && n.data && n.data.triangles);
+    const solids = only ? all.filter((n) => only.includes(n.id)) : all;
     for (const n of solids) n.obj.updateMatrixWorld(true);
     let bed = Infinity;
-    for (const n of solids) { const b = new THREE.Box3().setFromObject(n.mesh); if (!b.isEmpty()) bed = Math.min(bed, b.min.z); }
-    const out = []; let area = 0;
+    for (const n of all) { n.obj.updateMatrixWorld(true); const b = new THREE.Box3().setFromObject(n.mesh); if (!b.isEmpty()) bed = Math.min(bed, b.min.z); }
+    const out = []; let area = 0, cx = 0, cy = 0, cz = 0;
     const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), ab = new THREE.Vector3(), ac = new THREE.Vector3(), nn = new THREE.Vector3();
     for (const n of solids) {
       const P = n.mesh.geometry.getAttribute('position').array, T = n.data.triangles, M = n.mesh.matrixWorld;
@@ -243,12 +244,12 @@ const Views = (() => {
         nn.crossVectors(ab.subVectors(b, a), ac.subVectors(c, a)); const L = nn.length(); if (L < 1e-12) continue;
         if (nn.z / L > lim) continue;
         if (Math.max(a.z, b.z, c.z) < bed + 0.05) continue;   // liegt auf dem Druckbett
-        area += L / 2;
+        area += L / 2; cx += ((a.x + b.x + c.x) / 3) * (L / 2); cy += ((a.y + b.y + c.y) / 3) * (L / 2); cz += ((a.z + b.z + c.z) / 3) * (L / 2);
         const o = nn.multiplyScalar(-0.02 / L);   // ein Hauch nach unten, damit es nicht flimmert
         out.push(a.x + o.x, a.y + o.y, a.z + o.z, b.x + o.x, b.y + o.y, b.z + o.z, c.x + o.x, c.y + o.y, c.z + o.z);
       }
     }
-    return { pos: out, area, bed: isFinite(bed) ? bed : 0 };
+    return { pos: out, area, bed: isFinite(bed) ? bed : 0, c: area > 0 ? [cx / area, cy / area, cz / area] : null };
   }
   function drawOverhang() {
     const o = st.ov; if (!o) return;
@@ -315,6 +316,7 @@ const Views = (() => {
   return {
     init, section, xray, explode, collapse, focus, overhang, menu, onKey, reset, sync, bars,
     get overhangArea() { return st.ov ? st.ov.area : null; },
+    overhangOf: (id, angle = 45) => { const d = overhangData(angle, [id]); return { area: d.area, c: d.c }; },
     get cut() { return st.cut ? { plane: st.cut.plane, off: st.cut.off, flip: st.cut.flip } : null; },
     get isXray() { return st.xray; }, get exploded() { return st.ex > 1e-4 || st.exGoal > 0; }, get explodeAmount() { return st.ex; },
     get focusIds() { return st.focus ? st.focus.ids.slice() : null; }, get focusDrawn() { return !!(st.focus && st.focus.drawn); },
