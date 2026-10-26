@@ -481,6 +481,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
   Schritte: 1. Ein Kind (ab 10) mit „Einfach“ eine Platte mit vier Löchern bauen lassen, ohne zu helfen.
   Erwartet: Es findet Körper, Löcher und Exportieren allein; notieren, wo es hängen bleibt.
 
+## Drohnen-Bausteine (neu in Sitzung 35)
+
+- [x] **Bausteine in der Leiste**: „Drohne“ → „Lochbilder und Bausteine“ zeigt GoPro-Halterung, XT60-Halter und Antennenhalter.
+- [x] **Maße stimmen**: GoPro-Halterung 24 × 20 mm Platte, Finger bis 16,5 mm hoch; XT60-Halter 34,2 × 13,7 × 3 mm; Antennenhalter mit zwei Röhrchen im V.
+- [ ] **GoPro-Halterung drucken** (TPU): passt die Kamera mit der Rändelschraube, hält die Mutter?
+- [ ] **XT60-Halter drucken**: sitzt der Stecker stramm?
+
 ## Kreismuster um gewählte Achse (neu in Sitzung 34)
 
 - [x] **Achse aus einer Kante**

@@ -67,6 +67,9 @@ const DroneLib = (() => {
       mk('Motor 19', { pat: 'motor19', size: 'M3' }), mk('Motor 16', { pat: 'motor16', size: 'M3' }), mk('Motor 12', { pat: 'motor12', size: 'M2' }), mk('Motor 9', { pat: 'motor9', size: 'M2' }),
       { part: LIBMAP.zipTie, params: libDefaults(LIBMAP.zipTie), name: 'Kabelbinder' },
       { part: LIBMAP.slotHole, params: { ...libDefaults(LIBMAP.slotHole), len: 21, w: 3 }, name: 'Gurtschlitz' },
+      { part: LIBMAP.goproMount, params: libDefaults(LIBMAP.goproMount), name: 'GoPro-Halterung' },
+      { part: LIBMAP.xt60Holder, params: libDefaults(LIBMAP.xt60Holder), name: 'XT60-Halter' },
+      { part: LIBMAP.antennaMount, params: libDefaults(LIBMAP.antennaMount), name: 'Antennenhalter' },
     ];
   }
   // Schub pro Motor als Vorgabe – nur geprüfte Messungen aus Herstellerangaben (schub.json)

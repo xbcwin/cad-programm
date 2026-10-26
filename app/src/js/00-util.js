@@ -230,6 +230,8 @@ const IC = {
   sketch3d: '<path d="M4 17 12 21l8-4" opacity=".4"/><path d="M6 8v8M12 12v9M18 5v11" stroke-dasharray="3 2.5" opacity=".5"/><path d="M6 8l6 4 6-7"/><circle cx="6" cy="8" r="1.8" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.8" fill="currentColor" stroke="none"/><circle cx="18" cy="5" r="1.8" fill="currentColor" stroke="none"/>',
   spline: '<path d="M4 18 7 6l10 12 3-12" stroke-dasharray="3 2.5" opacity=".4"/><path d="M4 18C7 6 17 18 20 6"/><circle cx="4" cy="18" r="1.8" fill="currentColor" stroke="none"/><circle cx="20" cy="6" r="1.8" fill="currentColor" stroke="none"/>',
   trim: '<path d="M9 12h6" stroke-dasharray="3 2.5" opacity=".5"/><path d="M11 4 7 20M3 12h6M17 10l4 4M21 10l-4 4" />',
+  actionMount: '<rect x="4" y="17" width="16" height="4" rx="1"/><path d="M7 17v-6a2.5 2.5 0 0 1 5 0v6M12 17v-6a2.5 2.5 0 0 1 5 0v6"/><circle cx="12" cy="11" r="1.2"/>',
+  plugMount: '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M8 9h7l2 2v4H8z"/><circle cx="5.5" cy="12" r=".8"/><circle cx="18.5" cy="12" r=".8" opacity="0"/>',
   link: '<path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/>',
   projectEdge: '<path d="M7 3h10l4 4v6" opacity=".45"/><path d="M7 3v6M17 3v6" opacity=".45"/><path d="M12 11v6" stroke-dasharray="2 2"/><path d="M8 15l4 4 4-4"/><path d="M3 21h18" />',
   wall2d: '<path d="M4 18c3-8 9-12 16-12" stroke-dasharray="2.5 2" opacity=".5"/><path d="M3 15.5C6 8 12 4 19 3.5M5.5 20.5c3-7.5 9-11.5 16-12M3 15.5l2.5 5M19 3.5l2.5 5" />',
@@ -730,6 +732,21 @@ const HELP = {
   "tip": "Kantenkette wählen",
   "hilfe": "Wähle eine Kante und klick „Kette“: Alle Kanten, die ohne Knick weiterlaufen – etwa ein Umriss mit gerundeten Ecken – kommen dazu.",
   "tipp": "Danach „Abrunden“ oder „Abschrägen“ – so rundest du einen ganzen Rand in einem Schritt."
+ },
+ "goproMount": {
+  "tip": "Halterung für GoPro und andere Action-Kameras",
+  "hilfe": "Finger mit Loch für die M5-Rändelschraube auf einer Grundplatte. 3 Finger passen zur Kamera (sie hat 2), 2 Finger zu einer Halterung mit 3. Am äußeren Finger sitzt eine Nabe mit Sechskant-Tasche für die M5-Mutter.",
+  "tipp": "Die Vorgaben (Finger 3 mm, Spalt 3,2 mm, Loch 5,2 mm) beruhen auf Messungen an Original-Halterungen plus etwas Spiel – drucke einmal zur Probe, am besten in TPU."
+ },
+ "xt60Holder": {
+  "tip": "Platte, die einen Akkustecker festhält",
+  "hilfe": "Ausschnitt in der Form eines XT60 (zwei abgeschrägte Ecken) mit Spiel, dazu zwei Schraubenlöcher. Für andere Stecker Breite, Höhe und Abschrägung ändern.",
+  "tipp": "Die Steckermaße sind Schätzwerte – miss deinen Stecker nach. Mit 0,2 bis 0,3 mm Spiel sitzt er stramm."
+ },
+ "antennaMount": {
+  "tip": "Röhrchen, die Antennen in Form halten",
+  "hilfe": "Eine Grundplatte mit einem oder zwei Röhrchen. Spreizung (V-Winkel zwischen den Röhrchen) und Neigung nach hinten sind einstellbar, den Innen-Ø passt du an deine Antenne an.",
+  "tipp": "Für zwei Empfangsantennen 90° Spreizung, dann liegen sie über Kreuz und der Empfang bleibt auch in Kurven gut. Am besten in TPU drucken."
  }
 };
 

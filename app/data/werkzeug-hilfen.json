@@ -433,5 +433,20 @@
     "tip": "Kantenkette wählen",
     "hilfe": "Wähle eine Kante und klick „Kette“: Alle Kanten, die ohne Knick weiterlaufen – etwa ein Umriss mit gerundeten Ecken – kommen dazu.",
     "tipp": "Danach „Abrunden“ oder „Abschrägen“ – so rundest du einen ganzen Rand in einem Schritt."
+  },
+  "goproMount": {
+    "tip": "Halterung für GoPro und andere Action-Kameras",
+    "hilfe": "Finger mit Loch für die M5-Rändelschraube auf einer Grundplatte. 3 Finger passen zur Kamera (sie hat 2), 2 Finger zu einer Halterung mit 3. Am äußeren Finger sitzt eine Nabe mit Sechskant-Tasche für die M5-Mutter.",
+    "tipp": "Die Vorgaben (Finger 3 mm, Spalt 3,2 mm, Loch 5,2 mm) beruhen auf Messungen an Original-Halterungen plus etwas Spiel – drucke einmal zur Probe, am besten in TPU."
+  },
+  "xt60Holder": {
+    "tip": "Platte, die einen Akkustecker festhält",
+    "hilfe": "Ausschnitt in der Form eines XT60 (zwei abgeschrägte Ecken) mit Spiel, dazu zwei Schraubenlöcher. Für andere Stecker Breite, Höhe und Abschrägung ändern.",
+    "tipp": "Die Steckermaße sind Schätzwerte – miss deinen Stecker nach. Mit 0,2 bis 0,3 mm Spiel sitzt er stramm."
+  },
+  "antennaMount": {
+    "tip": "Röhrchen, die Antennen in Form halten",
+    "hilfe": "Eine Grundplatte mit einem oder zwei Röhrchen. Spreizung (V-Winkel zwischen den Röhrchen) und Neigung nach hinten sind einstellbar, den Innen-Ø passt du an deine Antenne an.",
+    "tipp": "Für zwei Empfangsantennen 90° Spreizung, dann liegen sie über Kreuz und der Empfang bleibt auch in Kurven gut. Am besten in TPU drucken."
   }
 }

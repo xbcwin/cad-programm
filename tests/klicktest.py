@@ -2503,6 +2503,28 @@ def t_kreismuster_gewaehlt(p):
     return [ok1, ok2, ok3]
 
 
+# ---------- Sitzung 35: Drohnen-Bausteine ----------
+def t_bausteine(p):
+    p.empty()
+    p.pg.locator('#t-drone').click(); p.wait(400)
+    p.pg.locator('.flyout .chip[data-cat="loch"]').click(); p.wait(300)
+    names = p.pg.locator('.flyout .tile').all_inner_texts()
+    ok1 = all(any(n in t for t in names) for n in ('GoPro-Halterung', 'XT60-Halter', 'Antennenhalter'))
+    p.pg.keyboard.press('Escape'); p.wait(200)
+    p.ev("""App.change('x', d=>{
+      const g=Model.newItem('part',{lib:'goproMount',n:'3',t:3,gap:3.2,hole:5.2,fw:15,hz:9,nut:'ja',bw:24,bd:20,bh:2},{role:'solid'}); d.items.push(g);
+      const x=Model.newItem('part',{lib:'xt60Holder',w:15.5,h:8.1,fit:0.3,ch:1.5,t:3,ea:26,hole:3.2,wall:2.5},{role:'solid'}); x.t.x=50; d.items.push(x);
+      const a=Model.newItem('part',{lib:'antennaMount',n:'2',di:3.5,wall:1.2,len:20,spread:90,lean:30,s:10,bw:22,bd:12,bh:2},{role:'solid'}); a.t.x=-50; d.items.push(a); })"""); warte_rechnen(p, 40)
+    b0, b1, b2 = bbox(p, 0), bbox(p, 1), bbox(p, 2)
+    ok2 = near(b0, [-12, -10, -2, 12, 10, 16.5], 0.05)
+    ok3 = near(b1, [-17.1, -6.85, 0, 17.1, 6.85, 3], 0.05)
+    ok4 = b2 is not None and b2[5] > 12 and b2[3] - b2[0] > 30 and abs(b2[2] + 2) < 0.05 and b2[4] > 8 and b2[1] > -6.05 and p.ev("return App.errors.length") == 0   # Röhrchen neigen nach hinten (+Y)
+    # Fingerzahl 2 → schmaler
+    p.ev("App.change('x', d=>{ d.items[0].p.n='2'; })"); warte_rechnen(p, 30)
+    ok5 = p.ev("return App.errors.length") == 0 and bbox(p, 0) is not None
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 # ---------- Sitzung 22: kleine Skizzen-Werkzeuge ----------
 def t_kreis_bogen_modi(p):
     sketch_xy(p)
@@ -2788,6 +2810,7 @@ TESTS = [
     ('Skizze: Kante übernehmen / Linie fest / Kreis', t_kante_uebernehmen),
     ('Verbundene Kanten: verbunden / Linie wandert / Kreis wächst / ein Rückgängig / Hinweis / lösen', t_kante_verbunden),
     ('Kreismuster um gewählte Achse: Wählen / Achse aus Kante / Kopien', t_kreismuster_gewaehlt),
+    ('Drohnen-Bausteine: in der Leiste / GoPro / XT60 / Antenne / 2 Finger', t_bausteine),
     ('Skizze: Kreis aus 3 / 2 Punkten / tangentialer Bogen', t_kreis_bogen_modi),
     ('Skizze: Verlängern bis zur nächsten Linie', t_verlaengern),
     ('Entformungsschräge: 3° nach innen / -2° nach außen', t_schraege),

@@ -1,6 +1,6 @@
 # Fortschritt
 
-Stand: 26.10.2026 · nach Sitzung 34 (19: Skizze auf Profi-Niveau · 20: Magnet, Rundungs-Griff · 21: Skizzieren im 3D, Übergang, Entlang Pfad, Import · 22: Kreis/Bogen-Arten, Verlängern, Entformungsschräge, Gewinde · 23: Einheiten, eigener Querschnitt, Langloch gebogen, gedrehtes Rechteck, Teilen · 24: Punkt, alle Ecken · 25: Schnitt und Spiegeln an Fläche · 26: Kantenkette, Abstände beim Verschieben · 27: Spiegeln an der Achse · 28: Muster entlang Kurve, Schablonen-Maße geprüft, USB-C-Stecker · 29: Spiegelebene wandert mit, Kreismuster quer und längs, KI kennt Muster entlang Kurve · 30: Bohrungen an Skizzenpunkten · 31: Wand aus Linie, Schritt hinter dem Marker, Schildchen · 32: Kante übernehmen · 33: verbundene Kanten · 34: Kreismuster um gewählte Achse)
+Stand: 26.10.2026 · nach Sitzung 35 (19: Skizze auf Profi-Niveau · 20: Magnet, Rundungs-Griff · 21: Skizzieren im 3D, Übergang, Entlang Pfad, Import · 22: Kreis/Bogen-Arten, Verlängern, Entformungsschräge, Gewinde · 23: Einheiten, eigener Querschnitt, Langloch gebogen, gedrehtes Rechteck, Teilen · 24: Punkt, alle Ecken · 25: Schnitt und Spiegeln an Fläche · 26: Kantenkette, Abstände beim Verschieben · 27: Spiegeln an der Achse · 28: Muster entlang Kurve, Schablonen-Maße geprüft, USB-C-Stecker · 29: Spiegelebene wandert mit, Kreismuster quer und längs, KI kennt Muster entlang Kurve · 30: Bohrungen an Skizzenpunkten · 31: Wand aus Linie, Schritt hinter dem Marker, Schildchen · 32: Kante übernehmen · 33: verbundene Kanten · 34: Kreismuster um gewählte Achse · 35: GoPro-, XT60- und Antennenhalter)
 
 ## Erledigt
 
@@ -197,7 +197,7 @@ Fertig.
 - [x] Bohrungen an Skizzenpunkten: Skizze auf einer Körperfläche nur mit Punkten → „Fertig“ öffnet den Bohrungs-Assistenten und setzt an jedem Punkt ein Loch, genau an der bemaßten Stelle (Sitzung 30)
 - [x] Explosionsansicht, Fokus-Vorschau, Schnitt, Röntgen (Sitzung 9)
 - [ ] Explosion auch für die Teile innerhalb einer Gruppe (heute nur oberste Ebene)
-- [ ] Schnitt an einer beliebigen Fläche statt nur an den drei Grundebenen
+- [x] Schnitt an einer beliebigen Fläche („Schnitt hier“, Sitzung 25)
 - [x] Messen, Material pro Teil, Push/Pull, „ähnliche auswählen“, Versionen (Sitzung 10)
 - [ ] Versionen in der Cloud (mit Stufe 6 – Konten)
 
@@ -211,7 +211,7 @@ Fertig.
 - [ ] Größen 2 und 2,5 Zoll für kleine Cinewhoops (BetaFPV Pavo25 V2 ist schon nachgeprüft)
 - [ ] Herstellerrahmen mit Original-Umriss (heute: Tracerys Grundform mit den Herstellermaßen)
 - [ ] H-Rahmen und Rahmen mit getrennten Armen (Sandwich)
-- [ ] Weitere Detail-Bausteine: Antennenhalter, XT60-Halter, GoPro-Halter
+- [x] Detail-Bausteine (Drohne → „Lochbilder und Bausteine“ und Bauteile): GoPro-Halterung (2 oder 3 Finger, M5-Loch, Mutter-Nabe), Stecker-Halter XT60 (Ausschnitt mit Spiel und zwei Schraubenlöchern), Antennenhalter (1 oder 2 Röhrchen, Spreizung und Neigung) – alle Maße einstellbar (Sitzung 35)
 - [x] Prüfungen, DXF-Export, Varianten (Sitzung 13)
 - [ ] Drohnen-Check auch für Rahmen, die nicht aus dem Assistenten kommen (heute braucht er die Maße Achsabstand, Armwinkel, Propeller)
 

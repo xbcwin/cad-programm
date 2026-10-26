@@ -461,6 +461,50 @@ export function createKernel(R, oc) {
       B = B.cut(R.makeCylinder(pin / 2 + g, L + 2, [-L / 2 - 1, 0, zc], [1, 0, 0]));
       return R.makeCompound([A, B]);
     }
+    if (lib === 'goproMount') {
+      // GoPro-Halterung: Finger mit M5-Loch auf einer Grundplatte (X = Schraubenachse), Mutter-Nabe am äußeren Finger
+      const n = String(p.n) === '2' ? 2 : 3, t = pos(p.t, 3), g = pos(p.gap, 3.2), dh = pos(p.hole, 5.2), fw = pos(p.fw, 15), hz = Math.max(pos(p.hz, 9), dh / 2 + 1);
+      const bw = pos(p.bw, 24), bd = pos(p.bd, 20), bh = pos(p.bh, 2);
+      const W = n * t + (n - 1) * g, parts = [R.makeBox([-bw / 2, -bd / 2, -bh], [bw / 2, bd / 2, 0])];
+      for (let i = 0; i < n; i++) {
+        const x0 = -W / 2 + i * (t + g);
+        parts.push(R.makeBox([x0, -fw / 2, -0.01], [x0 + t, fw / 2, hz]), R.makeCylinder(fw / 2, t, [x0, 0, hz], [1, 0, 0]));
+      }
+      const nut = String(p.nut) !== 'nein', nb = 4;
+      if (nut) parts.push(R.makeCylinder(6.6, nb, [W / 2 - 0.01, 0, hz], [1, 0, 0]));
+      let shape = fuseAll(parts, true);
+      shape = shape.cut(R.makeCylinder(dh / 2, W + 2 * nb + 20, [-W / 2 - nb - 10, 0, hz], [1, 0, 0]));
+      if (nut) shape = shape.cut(hexPrism(8.1, 0, 3.5 + LIFT).rotate(90, [0, 0, 0], [0, 1, 0]).translate([W / 2 + nb - 3.5, 0, hz]));
+      return shape;
+    }
+    if (lib === 'xt60Holder') {
+      // Halteplatte für einen Akkustecker: Ausschnitt mit zwei abgeschrägten Ecken (wie beim XT60), zwei Schraubenlöcher
+      const w = pos(p.w, 15.5), h = pos(p.h, 8.1), f = num(p.fit, 0.3), t = pos(p.t, 3), ea = pos(p.ea, 26), dh = pos(p.hole, 3.2), wall = pos(p.wall, 2.5), ch = Math.max(0, num(p.ch, 1.5));
+      const cw = w + 2 * f, cht = h + 2 * f, PW = Math.max(ea + dh + 2 * wall, cw + 2 * wall), PD = Math.max(cht + 2 * wall, dh + 2 * wall);
+      let shape = R.makeBox([-PW / 2, -PD / 2, 0], [PW / 2, PD / 2, t]);
+      const c = Math.min(ch, cw / 3, cht / 2), x = cw / 2, y = cht / 2;
+      const outline = c > 1e-3 ? [[-x, -y], [x, -y], [x, y - c], [x - c, y], [-x + c, y], [-x, y - c]] : [[-x, -y], [x, -y], [x, y], [-x, y]];
+      shape = shape.cut(R.basicFaceExtrusion(polygonFace(outline.map(([u, v]) => [u, v, -1])), new R.Vector([0, 0, t + 2])));
+      for (const sx of [-1, 1]) shape = shape.cut(R.makeCylinder(dh / 2, t + 2, [(sx * ea) / 2, 0, -1], [0, 0, 1]));
+      return shape;
+    }
+    if (lib === 'antennaMount') {
+      // Antennenhalter: Grundplatte mit einem oder zwei Röhrchen, V-förmig gespreizt und nach hinten geneigt
+      const n = String(p.n) === '1' ? 1 : 2, di = pos(p.di, 3.5), wall = pos(p.wall, 1.2), L = pos(p.len, 20), sp = (num(p.spread, 90) * Math.PI) / 180, lean = (num(p.lean, 30) * Math.PI) / 180;
+      const s2 = n === 1 ? 0 : pos(p.s, 10) / 2, bw = pos(p.bw, 22), bd = pos(p.bd, 12), bh = pos(p.bh, 2), ro = di / 2 + wall;
+      const parts = [R.makeBox([-bw / 2, -bd / 2, -bh], [bw / 2, bd / 2, 0])], holes = [];
+      for (let k = 0; k < n; k++) {
+        const sx = n === 1 ? 0 : k ? 1 : -1, ph = n === 1 ? 0 : sp / 2;
+        const d = [sx * Math.sin(ph), Math.cos(ph) * Math.sin(lean), Math.cos(ph) * Math.cos(lean)];   // vorne ist −Y, also nach hinten = +Y
+        const base = [sx * s2, 0, 0], start = [base[0] - d[0] * ro, base[1] - d[1] * ro, base[2] - d[2] * ro];
+        parts.push(R.makeCylinder(ro, L + ro, start, d));
+        holes.push(R.makeCylinder(di / 2, L + 1, [base[0] + d[0] * 1.2, base[1] + d[1] * 1.2, base[2] + d[2] * 1.2], d));
+      }
+      let shape = fuseAll(parts, true);
+      for (const hh of holes) shape = shape.cut(hh);
+      const big = 4 * (L + bw + bd);
+      return shape.cut(R.makeBox([-big, -big, -big], [big, big, -bh]));
+    }
     if (lib === 'gear') {
       return buildGear(p);
     }
