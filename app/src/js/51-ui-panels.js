@@ -538,6 +538,7 @@ const Panels = (() => {
       const ub = h('button', { type: 'button', class: 'btn' }); ub.innerHTML = icon('ungroup') + 'Gruppe lösen'; ub.onclick = () => Actions.ungroup(it.id);
       sec.append(h('div', { class: 'btn-row' }, ub)); w.append(sec);
     }
+    const jsec = Joints.panel(it); if (jsec) w.append(jsec);
     // Lage
     const pos = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Lage'));
     const setT = (k, val) => App.change(k.startsWith('r') ? 'Gedreht' : 'Verschoben', (doc) => { Model.find(doc, it.id).item.t[k] = val; }, { merge: 't:' + it.id + ':' + k });
@@ -687,6 +688,7 @@ const Panels = (() => {
     } else {
       b('group', 'Gruppieren', () => Actions.group(), 'accent', 'Zu einem Körper verbinden (Strg G)');
       if (items.length === 2) b('dim', 'Abstand', (e) => gapPop(e.currentTarget), '', 'Abstand zwischen den beiden Teilen genau setzen (der zuletzt gewählte bewegt sich)', true);
+      if (items.length === 2 && items.every((x) => App.doc.items.includes(x.item))) b('hinge', 'Gelenk', () => Joints.start(), '', 'Drehgelenk: das zuletzt gewählte Teil dreht sich um eine Achse, die du im Bild wählst', true);
       if (items.length >= 2 && items.every((x) => x.item.kind === 'extrude')) b('loft', 'Übergang', () => Actions.loft(), '', 'Weicher Übergang durch die Umrisse – in der Reihenfolge, in der du sie gewählt hast');
       b('boolSubtract', 'Boolesch', (e) => UI.menu(e.currentTarget, [{ label: 'Vereinigen', icon: 'boolUnion', run: () => Features.boolean('union') }, { label: 'Abziehen (der zuerst gewählte bleibt)', icon: 'boolSubtract', run: () => Features.boolean('subtract') }, { label: 'Schnittmenge', icon: 'boolIntersect', run: () => Features.boolean('intersect') }]), '', 'Körper vereinigen, abziehen oder schneiden', true);
       b('layers', 'Ausrichten', (e) => UI.menu(e.currentTarget, [['left', 'Links bündig'], ['cx', 'Mittig (X)'], ['right', 'Rechts bündig'], ['front', 'Vorne bündig'], ['cy', 'Mittig (Y)'], ['back', 'Hinten bündig'], ['bottom', 'Unten bündig']].map(([m, l]) => ({ label: l, run: () => Actions.align(null, m) }))), '', 'Objekte aneinander ausrichten');

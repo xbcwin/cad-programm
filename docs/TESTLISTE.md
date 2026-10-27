@@ -481,6 +481,20 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
   Schritte: 1. Ein Kind (ab 10) mit „Einfach“ eine Platte mit vier Löchern bauen lassen, ohne zu helfen.
   Erwartet: Es findet Körper, Löcher und Exportieren allein; notieren, wo es hängen bleibt.
 
+## Drehgelenk (neu in Sitzung 39)
+
+- [x] **Gelenk anlegen und drehen**
+  Schritte: Zwei Quader 20 × 10 × 4 nebeneinander, beide wählen → „Gelenk“ → die gemeinsame obere Kante anklicken. Winkel 90.
+  Erwartet: Der zweite Quader steht senkrecht; rechts gibt es den Abschnitt „Gelenk“ mit Regler, Winkel, Von und Bis.
+- [x] **Bewegung prüfen**: „Bewegung prüfen“ meldet, ab welchem Winkel der bewegte Quader in den anderen stößt.
+- [ ] **Klapparm drucken**: Arm mit Loch, Stift im Rahmen, Gelenk um den Stift – stimmt der Anschlag, den Tracery meldet, mit dem echten Teil?
+
+## Skizzen-Muster als Ganzes ändern (neu in Sitzung 38)
+
+- [x] **Anzahl und Abstand nachträglich**
+  Schritte: Kreis zeichnen, „Rechteckmuster“ (Q), Kreis anklicken, 3 × 10 mm, „Muster anlegen“. Dann das Regel-Symbol einer Kopie anklicken, unter „Ganzes Muster“ 5 und 8 mm eintragen, „Muster ändern“.
+  Erwartet: Fünf Kreise im Abstand 8 mm; ein Rückgängig bringt die drei zurück.
+
 ## Überhänge in der Schwachstellen-Analyse (neu in Sitzung 37)
 
 - [x] **Überhang wird gemeldet**: L-förmige Gruppe wie oben, „Schwachstellen suchen“ – Hinweis „Überhang beim Drucken – L“ mit 300 mm²; ohne den oberen Quader verschwindet er.

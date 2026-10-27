@@ -5639,7 +5639,8 @@ const Features = (() => {
     cv.removeEventListener('pointerdown', picking.down, true); window.removeEventListener('keydown', picking.key, true);
     cv.style.cursor = ''; UI.hint(null); picking = null;
   }
-  function pickAxis(gid) {
+  // Achse im Bild wählen; cb bekommt { o, d, what } in Weltkoordinaten
+  function pickAxisThen(cb, hint) {
     stopPick();
     const down = (e) => {
       if (e.button !== 0) return;
@@ -5647,17 +5648,22 @@ const Features = (() => {
       const A = axisOfHit(Viewer.pick(e.clientX, e.clientY, { edgePx: 9 }));
       if (!A) { UI.toast('Klick auf eine gerade Kante, einen runden Rand oder eine runde Fläche.', { icon: 'info' }); return; }
       stopPick();
+      cb(A);
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true); window.addEventListener('keydown', key, true);
+    UI.hint(hint || '<b>Achse wählen:</b> Klick auf eine gerade Kante, einen runden Rand oder eine runde Fläche. <b>Esc</b> bricht ab.');
+  }
+  function pickAxis(gid) {
+    pickAxisThen((A) => {
       const inv = Model.worldMatrix(App.doc, gid).invert();
       const o = A.o.clone().applyMatrix4(inv), d = A.d.clone().transformDirection(inv).normalize();
       App.change('Drehachse gewählt', (doc) => { const f = Model.find(doc, gid); if (!f) return false; f.item.p.axis = 'pick'; f.item.p.ao = o.toArray().map((v) => round(v, 6)); f.item.p.ad = d.toArray().map((v) => round(v, 9)); });
       App.select([gid]);
       UI.toast('Drehachse gesetzt: ' + A.what + '.', { icon: 'check' });
-    };
-    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
-    picking = { down, key, gid };
-    Viewer.canvas.style.cursor = 'crosshair';
-    Viewer.canvas.addEventListener('pointerdown', down, true); window.addEventListener('keydown', key, true);
-    UI.hint('<b>Drehachse wählen:</b> Klick auf eine gerade Kante, einen runden Rand oder eine runde Fläche (Welle, Loch). <b>Esc</b> bricht ab.');
+    }, '<b>Drehachse wählen:</b> Klick auf eine gerade Kante, einen runden Rand oder eine runde Fläche (Welle, Loch). <b>Esc</b> bricht ab.');
   }
   // Gespiegelte Kopie an einer gewählten ebenen Fläche (z. B. zweiter Arm an der Mittelfläche)
   function mirrorAtFace(face) {
@@ -5779,7 +5785,7 @@ const Features = (() => {
     return null;
   }
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { pickAxis, get picking() { return !!picking; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
+  return { pickAxis, pickAxisThen, get picking() { return !!picking; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
 })();
 // ---- 47-mass.js ----
 // ================= Masse: Volumen, Gewicht und Schwerpunkt =================
@@ -5850,6 +5856,120 @@ const Mass = (() => {
     ViewPrefs.on('change', refreshMarker);
   }
   return { init, measure, measureDoc, materialFor, projectMaterial, partOf, gText, fixedOf, on: ev.on, get markerShown() { return !!marker; }, get markerPos() { return marker ? marker.position.toArray() : null; } };
+})();
+// ---- 48-joints.js ----
+// ================= Gelenke: ein Teil dreht sich um eine Achse gegenüber einem anderen =================
+// Ein Gelenk ist kein Schritt der Zeitleiste: Es setzt nur die Lage des beweglichen Teils (doc.joints).
+// home = Lage des beweglichen Teils bei 0°; Achse ao/ad in Weltkoordinaten (beide Teile liegen ganz oben im Verlauf).
+const Joints = (() => {
+  const list = (doc = App.doc) => (doc && doc.joints) || [];
+  const of = (id) => list().find((j) => j.a === id || j.b === id) || null;
+  const top = (id) => App.doc.items.find((x) => x.id === id) || null;
+  function pose(j, ang, home) {
+    const H = new THREE.Matrix4().fromArray(home || j.home);
+    const o = new THREE.Vector3(...j.ao), d = new THREE.Vector3(...j.ad).normalize();
+    const R = new THREE.Matrix4().makeRotationAxis(d, (ang * Math.PI) / 180);
+    return new THREE.Matrix4().makeTranslation(o.x, o.y, o.z).multiply(R).multiply(new THREE.Matrix4().makeTranslation(-o.x, -o.y, -o.z)).multiply(H);
+  }
+  // Gelenk anlegen: zwei Teile gewählt, das zuletzt gewählte bewegt sich; dann die Achse im Bild wählen
+  function start() {
+    const sel = App.sel.map(top).filter(Boolean);
+    if (sel.length !== 2) { UI.toast('Wähle genau zwei Teile (mit Umschalt klicken) – ganz oben im Verlauf, nicht in einer Gruppe.', { icon: 'info' }); return false; }
+    if (sel.some((it) => of(it.id))) { UI.toast('Eines der Teile hängt schon an einem Gelenk.', { icon: 'info' }); return false; }
+    const [A, B] = sel;
+    Features.pickAxisThen((ax) => {
+      let jid = null;
+      App.change('Gelenk angelegt', (doc) => {
+        const b = doc.items.find((x) => x.id === B.id); if (!b) return false;
+        doc.joints = doc.joints || [];
+        jid = uid('j');
+        doc.joints.push({ id: jid, a: A.id, b: B.id, ao: ax.o.toArray().map((v) => round(v, 6)), ad: ax.d.toArray().map((v) => round(v, 9)), home: Model.localMatrix(b).toArray().map((v) => round(v, 9)), ang: 0, min: -90, max: 90 });
+      });
+      App.select([B.id]);
+      UI.toast(`Gelenk angelegt: „${Model.label(B)}“ dreht sich um die ${ax.what}, „${Model.label(A)}“ bleibt stehen.`, { icon: 'check', ms: 3600 });
+    }, '<b>Gelenkachse wählen:</b> Klick auf eine gerade Kante, einen runden Rand oder eine runde Fläche (Stift, Loch). <b>Esc</b> bricht ab.');
+    return true;
+  }
+  // Winkel setzen – wurde das Teil inzwischen von Hand bewegt, gilt seine jetzige Lage als neue Ausgangslage
+  function setAngle(jid, ang) {
+    App.change('Gelenk gedreht', (doc) => {
+      const j = list(doc).find((x) => x.id === jid); if (!j) return false;
+      const b = doc.items.find((x) => x.id === j.b); if (!b) return false;
+      const cur = Model.localMatrix(b), exp = pose(j, j.ang);
+      if (cur.elements.some((v, i) => Math.abs(v - exp.elements[i]) > 1e-4)) j.home = pose(j, -j.ang, cur.toArray()).toArray().map((v) => round(v, 9));
+      j.ang = round(clamp(Number(ang) || 0, j.min, j.max), 4);
+      Model.setFromMatrix(b, pose(j, j.ang));
+    }, { merge: 'joint:' + jid });
+  }
+  function setRange(jid, k, v) {
+    App.change('Gelenk-Bereich', (doc) => { const j = list(doc).find((x) => x.id === jid); if (!j) return false; j[k] = round(clamp(Number(v) || 0, -360, 360), 2); if (j.min > j.max) [j.min, j.max] = [j.max, j.min]; });
+  }
+  function remove(jid) {
+    App.change('Gelenk gelöst', (doc) => { doc.joints = list(doc).filter((x) => x.id !== jid); });
+    UI.toast('Gelenk gelöst – das Teil bleibt, wo es gerade ist.', { icon: 'check' });
+  }
+  // Bewegung prüfen: in Schritten von min bis max drehen und den CAD-Kern fragen, ob sich die Teile durchdringen
+  async function check(jid, step = 5) {
+    const j = list().find((x) => x.id === jid); if (!j) return null;
+    const A = top(j.a), B = top(j.b); if (!A || !B) return null;
+    const V = Model.vars(App.doc).v, ka = Model.kernelItem(A, V), out = [];
+    const cur = Model.localMatrix(B), exp = pose(j, j.ang);
+    const home = cur.elements.some((v, i) => Math.abs(v - exp.elements[i]) > 1e-4) ? pose(j, -j.ang, cur.toArray()).toArray() : j.home;
+    for (let a = j.min; a <= j.max + 1e-9; a += step) {
+      const Bc = deepClone(B); Model.setFromMatrix(Bc, pose(j, a, home));
+      let cl = null; try { cl = await Kernel.call('clashes', { scene: { items: [ka, Model.kernelItem(Bc, V)] } }); } catch (_) {}
+      out.push({ a: round(a, 4), v: cl ? cl.pairs.reduce((s, p) => s + p.v, 0) : 0 });
+    }
+    return out;
+  }
+  function describe(j, res) {
+    const hit = res.filter((r) => r.v > 0.05);
+    if (!hit.length) return { ok: true, text: `Frei im ganzen Bereich von ${fmt(j.min, 0)}° bis ${fmt(j.max, 0)}° – nichts stößt an.` };
+    const free = res.filter((r) => r.v <= 0.05).map((r) => r.a);
+    const lo = res.filter((r) => r.a <= j.ang && r.v > 0.05).map((r) => r.a), hi = res.filter((r) => r.a >= j.ang && r.v > 0.05).map((r) => r.a);
+    const from = lo.length ? Math.max(...lo) : null, to = hi.length ? Math.min(...hi) : null;
+    const parts = [];
+    if (to != null) parts.push(`stößt in Plus-Richtung bei ${fmt(to, 0)}° an`);
+    if (from != null) parts.push(`in Minus-Richtung bei ${fmt(from, 0)}°`);
+    const atNow = res.find((r) => Math.abs(r.a - j.ang) < 1e-6);
+    return { ok: false, text: (atNow && atNow.v > 0.05 ? 'Schon in dieser Stellung stecken die Teile ineinander. ' : '') + `Das Teil ${parts.join(', ')}.` + (free.length ? ` Frei: ${fmt(Math.min(...free), 0)}° … ${fmt(Math.max(...free), 0)}° (nicht unbedingt am Stück).` : '') };
+  }
+  // Abschnitt „Gelenk“ in den Eigenschaften
+  function panel(it) {
+    const j = of(it.id); if (!j) return null;
+    const A = top(j.a), B = top(j.b); if (!A || !B) return null;
+    const sec = h('div', { class: 'section', id: 'joint-sec' }, h('div', { class: 'section-h' }, 'Gelenk'));
+    sec.append(h('div', { class: 'hint-box', html: `<b>${esc(Model.label(B))}</b> dreht sich gegenüber <b>${esc(Model.label(A))}</b>.` }));
+    const range = h('input', { type: 'range', id: 'jt-range', min: j.min, max: j.max, step: 1, value: j.ang, 'aria-label': 'Gelenkwinkel', style: { width: '100%' } });
+    range.oninput = () => setAngle(j.id, +range.value);
+    sec.append(range);
+    const f = h('div', { class: 'fields three' });
+    f.append(UI.numField({ id: 'jt-ang', label: 'Winkel', value: j.ang, unit: '°', expr: false, onCommit: (v) => setAngle(j.id, v) }));
+    f.append(UI.numField({ id: 'jt-min', label: 'Von', value: j.min, unit: '°', expr: false, onCommit: (v) => setRange(j.id, 'min', v) }));
+    f.append(UI.numField({ id: 'jt-max', label: 'Bis', value: j.max, unit: '°', expr: false, onCommit: (v) => setRange(j.id, 'max', v) }));
+    sec.append(f);
+    const res = h('div', { class: 'hint-box', id: 'jt-result', hidden: true });
+    const cb = h('button', { type: 'button', class: 'btn', id: 'jt-check' }); cb.innerHTML = icon('hinge') + 'Bewegung prüfen';
+    cb.onclick = async () => {
+      cb.disabled = true; res.hidden = false; res.className = 'hint-box'; res.textContent = 'Prüfe in 5°-Schritten …';
+      const r = await check(j.id); cb.disabled = false;
+      if (!r) { res.textContent = 'Das ging nicht.'; return; }
+      const d = describe(j, r); res.className = d.ok ? 'ok-box' : 'err-box'; res.textContent = d.text; res.dataset.hits = String(r.filter((x) => x.v > 0.05).length);
+    };
+    const del = h('button', { type: 'button', class: 'btn', id: 'jt-del' }); del.innerHTML = icon('ungroup') + 'Gelenk lösen';
+    del.onclick = () => remove(j.id);
+    sec.append(h('div', { class: 'btn-row' }, cb, del), res);
+    return sec;
+  }
+  // Gelöschte Teile: Gelenke, die an ihnen hängen, fallen weg
+  function init() {
+    App.on('doc', () => {
+      const js = list(); if (!js.length) return;
+      const ids = new Set(App.doc.items.map((x) => x.id));
+      if (js.some((j) => !ids.has(j.a) || !ids.has(j.b))) App.doc.joints = js.filter((j) => ids.has(j.a) && ids.has(j.b));
+    });
+  }
+  return { init, start, setAngle, setRange, remove, check, describe, panel, of, pose, get list() { return list(); } };
 })();
 // ---- 48-viewprefs.js ----
 // ================= Ansicht: Raster, Ursprungsebenen, Achsen, Projektion =================
@@ -6934,6 +7054,7 @@ const Panels = (() => {
       const ub = h('button', { type: 'button', class: 'btn' }); ub.innerHTML = icon('ungroup') + 'Gruppe lösen'; ub.onclick = () => Actions.ungroup(it.id);
       sec.append(h('div', { class: 'btn-row' }, ub)); w.append(sec);
     }
+    const jsec = Joints.panel(it); if (jsec) w.append(jsec);
     // Lage
     const pos = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Lage'));
     const setT = (k, val) => App.change(k.startsWith('r') ? 'Gedreht' : 'Verschoben', (doc) => { Model.find(doc, it.id).item.t[k] = val; }, { merge: 't:' + it.id + ':' + k });
@@ -7083,6 +7204,7 @@ const Panels = (() => {
     } else {
       b('group', 'Gruppieren', () => Actions.group(), 'accent', 'Zu einem Körper verbinden (Strg G)');
       if (items.length === 2) b('dim', 'Abstand', (e) => gapPop(e.currentTarget), '', 'Abstand zwischen den beiden Teilen genau setzen (der zuletzt gewählte bewegt sich)', true);
+      if (items.length === 2 && items.every((x) => App.doc.items.includes(x.item))) b('hinge', 'Gelenk', () => Joints.start(), '', 'Drehgelenk: das zuletzt gewählte Teil dreht sich um eine Achse, die du im Bild wählst', true);
       if (items.length >= 2 && items.every((x) => x.item.kind === 'extrude')) b('loft', 'Übergang', () => Actions.loft(), '', 'Weicher Übergang durch die Umrisse – in der Reihenfolge, in der du sie gewählt hast');
       b('boolSubtract', 'Boolesch', (e) => UI.menu(e.currentTarget, [{ label: 'Vereinigen', icon: 'boolUnion', run: () => Features.boolean('union') }, { label: 'Abziehen (der zuerst gewählte bleibt)', icon: 'boolSubtract', run: () => Features.boolean('subtract') }, { label: 'Schnittmenge', icon: 'boolIntersect', run: () => Features.boolean('intersect') }]), '', 'Körper vereinigen, abziehen oder schneiden', true);
       b('layers', 'Ausrichten', (e) => UI.menu(e.currentTarget, [['left', 'Links bündig'], ['cx', 'Mittig (X)'], ['right', 'Rechts bündig'], ['front', 'Vorne bündig'], ['cy', 'Mittig (Y)'], ['back', 'Hinten bündig'], ['bottom', 'Unten bündig']].map(([m, l]) => ({ label: l, run: () => Actions.align(null, m) }))), '', 'Objekte aneinander ausrichten');
@@ -8982,14 +9104,17 @@ const Sketch = (() => {
   function patternCopy(e, job, C) {
     return S.tool === 'patcirc' ? SKO.rotateEnt(e, C.xy, (job.ang * Math.PI) / 180) : SKO.moveEnt(e, job.dx, job.dy);
   }
-  function createPattern() {
+  function createPattern(o = {}) {
     const ids = S.patSel.filter((id) => ent(id));
     if (!ids.length) { UI.toast('Klick zuerst die Elemente an, die vervielfältigt werden sollen.', { icon: 'info' }); return 0; }
     const circ = S.tool === 'patcirc';
     const C = circ ? S.patCenter || { ref: { e: 'origin' }, xy: [0, 0] } : null;
     const jobs = patternJobs();
     if (!jobs.length) { UI.toast('Mit dieser Anzahl entstehen keine Kopien.', { icon: 'info' }); return 0; }
-    pushUndo();
+    if (!o.noUndo) pushUndo();
+    // alle Regeln dieses Musters tragen dieselbe Kennung und die Einstellungen – so lässt es sich später als Ganzes ändern
+    const P = S.pat, pg = o.pg || uid('pg');
+    const pm = circ ? { kind: 'circ', n: P.n, ang: P.ang, src: ids.slice(), center: C.ref, cxy: C.xy.slice() } : { kind: 'rect', nx: P.nx, ny: P.ny, dx: P.dx, dy: P.dy, src: ids.slice() };
     const newCons = []; let made = 0;
     for (const job of jobs) for (const id of ids) {
       const e = ent(id);
@@ -8999,13 +9124,35 @@ const Sketch = (() => {
       const c = { id: uid('k'), type: 'xform', refs };
       if (r.rad.length) c.req = r.rad.flat();
       if (circ) { c.mode = 'rot'; c.center = C.ref; c.ang = round(job.ang, 4); } else { c.dx = round(job.dx, 4); c.dy = round(job.dy, 4); }
+      c.pg = pg; c.pm = deepClone(pm);
       newCons.push(c); made += r.ents.length;
     }
     S.cons.push(...newCons);
     S.patSel = []; S.sel = null;
     sanitize(newCons.map((c) => c.id));
+    if (o.select && newCons.length) S.selCon = newCons[0].id;
     UI.hint(HINTS[S.tool]); render(); Panels.renderRight();
     return made;
+  }
+  // Ein Muster als Ganzes ändern: alte Kopien weg, mit den neuen Einstellungen neu anlegen (ein Rückgängig-Schritt)
+  function regenPattern(pg, P) {
+    const cons = S.cons.filter((c) => c.type === 'xform' && c.pg === pg); if (!cons.length || !cons[0].pm) return false;
+    const pm = cons[0].pm, src = pm.src.filter((id) => ent(id));
+    if (!src.length) { UI.toast('Die Originale dieses Musters gibt es nicht mehr.', { kind: 'bad' }); return false; }
+    pushUndo();
+    const copies = new Set(); for (const c of cons) for (let i = 1; i < c.refs.length; i += 2) if (c.refs[i] && c.refs[i].e) copies.add(c.refs[i].e);
+    S.cons = S.cons.filter((c) => !(c.type === 'xform' && c.pg === pg));
+    for (const id of copies) if (!src.includes(id)) removeEntData(id);
+    const keep = { tool: S.tool, pat: S.pat, patSel: S.patSel, patCenter: S.patCenter };
+    S.tool = pm.kind === 'circ' ? 'patcirc' : 'patrect';
+    S.pat = { ...S.pat, ...(pm.kind === 'circ' ? { n: pm.n, ang: pm.ang } : { nx: pm.nx, ny: pm.ny, dx: pm.dx, dy: pm.dy }), ...P };
+    S.patSel = src.slice();
+    S.patCenter = pm.kind === 'circ' && pm.center && pm.center.e !== 'origin' ? { ref: pm.center, xy: refXY(pm.center) || pm.cxy } : null;
+    const made = createPattern({ noUndo: true, pg, select: true });
+    S.tool = keep.tool; S.pat = keep.pat; S.patSel = keep.patSel; S.patCenter = keep.patCenter;
+    UI.hint(HINTS[S.tool]); render(); Panels.renderRight();
+    if (!made) UI.toast('Mit dieser Anzahl bleibt nur das Original – das Muster ist aufgelöst.', { icon: 'info' });
+    return true;
   }
   function onDown(e) {
     if (!S || S.step) return stepDown(e);
@@ -9970,6 +10117,19 @@ const Sketch = (() => {
       if (selCon.type === 'offset') editNum('co-v', 'Abstand', 'mm', 'v');
       if (selCon.type === 'xform' && selCon.mode === 'rot') editNum('co-ang', 'Winkel', '°', 'ang');
       if (selCon.type === 'xform' && selCon.mode !== 'rot') { editNum('co-dx', 'Versatz X', 'mm', 'dx'); editNum('co-dy', 'Versatz Y', 'mm', 'dy'); }
+      if (selCon.type === 'xform' && selCon.pg && selCon.pm) {
+        // ganzes Muster: Anzahl und Abstand für alle Kopien zusammen
+        const pm = selCon.pm, Q = pm.kind === 'circ' ? { n: pm.n, ang: pm.ang } : { nx: pm.nx, dx: pm.dx, ny: pm.ny, dy: pm.dy };
+        const sec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Ganzes Muster'));
+        const fm = h('div', { class: 'fields' });
+        const fld = (id, label, key, unit, o2 = {}) => fm.append(UI.numField({ id, label, value: Q[key], unit, expr: false, min: o2.min, int: o2.int, onCommit: (v) => { Q[key] = v; } }));
+        if (pm.kind === 'circ') { fld('pg-n', 'Anzahl', 'n', '', { min: 1, int: true }); fld('pg-ang', 'Winkel gesamt', 'ang', '°'); }
+        else { fld('pg-nx', 'Anzahl in X', 'nx', '', { min: 1, int: true }); fld('pg-dx', 'Abstand in X', 'dx', 'mm'); fld('pg-ny', 'Anzahl in Y', 'ny', '', { min: 1, int: true }); fld('pg-dy', 'Abstand in Y', 'dy', 'mm'); }
+        const ap = h('button', { type: 'button', class: 'btn primary', id: 'pg-apply' }); ap.innerHTML = icon('check') + 'Muster ändern';
+        ap.onclick = () => regenPattern(selCon.pg, Q);
+        sec.append(fm, h('div', { class: 'btn-row' }, ap), h('div', { class: 'hint-box', html: 'Ändert alle Kopien dieses Musters zusammen – die Anzahl zählt das Original mit.' }));
+        w.append(sec);
+      }
       const del = h('button', { type: 'button', class: 'btn danger' }); del.innerHTML = icon('trash') + 'Regel löschen';
       del.onclick = () => removeCons(selCon.id);
       w.append(h('div', { class: 'btn-row' }, del));
@@ -14325,8 +14485,8 @@ ${AI.modelText()}`;
   window.__masswerk = { App, Viewer, Model, Actions, Sketch, SK, THREE, Print, Drawing, Kernel, UI, Commands, Panels, Handles, Start, AI, Measure, Place };
   UI.initTips();
   Viewer.init($('#viewport'));
-  window.__V = Viewer; window.__M = { App, Actions, Model, Timeline, Start, Comp, Handles, Sketch, SK, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views, Mass, Select, Versions, DroneTpl, DroneUI, DroneLib, DroneCheck, Plates, Variants, Explain, Weak, AI, Snap, Panels }; window.__S = Start; // für automatische Tests
-  Panels.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Notes.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init(); Refine.init(); Comp.init(); Views.init(); Mass.init(); Versions.init();
+  window.__V = Viewer; window.__M = { App, Actions, Model, Timeline, Start, Comp, Handles, Sketch, SK, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views, Mass, Select, Versions, DroneTpl, DroneUI, DroneLib, DroneCheck, Plates, Variants, Explain, Weak, AI, Snap, Panels, Joints }; window.__S = Start; // für automatische Tests
+  Panels.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Notes.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init(); Refine.init(); Comp.init(); Views.init(); Mass.init(); Joints.init(); Versions.init();
 
   // Kopfzeile
   $('#btn-undo').onclick = () => App.undo();

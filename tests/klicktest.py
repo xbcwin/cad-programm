@@ -33,7 +33,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Panels}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Panels,Joints}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -2551,6 +2551,49 @@ def t_ueberhang_schwach(p):
     return [ok1, ok2]
 
 
+# ---------- Sitzung 38: Muster in der Skizze als Ganzes ändern ----------
+def t_muster_ganz(p):
+    sketch_xy(p)
+    p.ev("const S=Sketch.state; S.ents.push({id:'K',type:'circle',c:[0,0],r:2}); Sketch.setTool('patrect')"); p.wait(300)
+    s = to_screen(p, 2, 0); p.pg.mouse.click(s[0], s[1]); p.wait(200)
+    p.pg.fill('#pt-nx', '3'); p.pg.press('#pt-nx', 'Enter'); p.pg.fill('#pt-dx', '10'); p.pg.press('#pt-dx', 'Enter'); p.wait(150)
+    p.pg.click('#pt-make'); p.wait(500)
+    ok1 = p.ev("return Sketch.state.ents.filter(e=>e.type==='circle').length") == 3
+    p.ev("const S=Sketch.state; S.selCon=S.cons.find(c=>c.type==='xform').id; S.sel=null; Panels.renderRight()"); p.wait(300)
+    ok2 = p.pg.locator('#pg-nx').count() == 1 and p.pg.locator('#pg-apply').count() == 1
+    p.pg.fill('#pg-nx', '5'); p.pg.press('#pg-nx', 'Enter'); p.pg.fill('#pg-dx', '8'); p.pg.press('#pg-dx', 'Enter'); p.wait(150)
+    p.pg.click('#pg-apply'); p.wait(600)
+    st = p.ev("const S=Sketch.state; const c=S.ents.filter(e=>e.type==='circle').map(e=>e.c[0]).sort((a,b)=>a-b); const x=S.cons.filter(k=>k.type==='xform'); return [c, x.length, new Set(x.map(k=>k.pg)).size, !!(S.status&&S.status.ok)]")
+    ok3 = len(st[0]) == 5 and all(abs(a - b) < 1e-4 for a, b in zip(st[0], [0, 8, 16, 24, 32])) and st[1] == 4 and st[2] == 1 and st[3]
+    p.pg.keyboard.press('Control+z'); p.wait(400)
+    ok4 = p.ev("return Sketch.state.ents.filter(e=>e.type==='circle').length") == 3
+    return [ok1, ok2, ok3, ok4]
+
+
+# ---------- Sitzung 39: Drehgelenk ----------
+def t_gelenk(p):
+    p.empty(); p.ev("App.change('x', d=>{ const a=Model.newItem('box',{w:20,d:10,h:4}); a.name='Arm A'; d.items.push(a); const b=Model.newItem('box',{w:20,d:10,h:4}); b.t.x=20; b.name='Arm B'; d.items.push(b); })"); warte_rechnen(p, 20)
+    p.ev("App.select([App.doc.items[0].id, App.doc.items[1].id])"); p.wait(600)
+    p.pg.locator('.ctxbar button[aria-label="Gelenk"]').click(); p.wait(300)
+    ok1 = p.ev("return Features.picking")
+    s = world_screen(p, 10, 0, 4); p.pg.mouse.click(s[0], s[1]); p.wait(800); warte_rechnen(p, 20)
+    j = p.ev("const j=(App.doc.joints||[])[0]; return j && [j.a===App.doc.items[0].id, j.b===App.doc.items[1].id, Math.abs(Math.abs(j.ad[1])-1)<1e-6, j.ao[0], j.ao[2]]")
+    ok2 = bool(j) and j[0] and j[1] and j[2] and abs(j[3] - 10) < 1e-3 and abs(j[4] - 4) < 1e-3 and p.pg.locator('#joint-sec').count() == 1
+    field(p, '#jt-ang', 90); warte_rechnen(p, 20)
+    wb = p.ev("const b=Actions.worldBox(App.doc.items[1].id); return [b.min.x,b.min.y,b.min.z,b.max.x,b.max.y,b.max.z]")
+    ok3 = abs((wb[5] - wb[2]) - 20) < 0.1 and abs((wb[3] - wb[0]) - 4) < 0.1 and p.ev("return App.doc.joints[0].ang") == 90
+    p.pg.click('#jt-check')
+    for _ in range(160):
+        p.wait(500)
+        if 'Prüfe' not in p.pg.locator('#jt-result').inner_text():
+            break
+    txt = p.pg.locator('#jt-result').inner_text(); hits = int(p.pg.locator('#jt-result').get_attribute('data-hits') or '0')
+    ok4 = 'stößt' in txt and 0 < hits < 37
+    p.pg.click('#jt-del'); p.wait(600)
+    ok5 = p.ev("return (App.doc.joints||[]).length") == 0 and p.pg.locator('#joint-sec').count() == 0
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 # ---------- Sitzung 22: kleine Skizzen-Werkzeuge ----------
 def t_kreis_bogen_modi(p):
     sketch_xy(p)
@@ -2839,6 +2882,8 @@ TESTS = [
     ('Drohnen-Bausteine: in der Leiste / GoPro / XT60 / Antenne / 2 Finger', t_bausteine),
     ('Überhänge: Fläche / Winkel / ohne Überhang / aus', t_ueberhang),
     ('Schwachstellen: Überhang bei Druckteilen / weg ohne Überhang', t_ueberhang_schwach),
+    ('Skizzen-Muster als Ganzes ändern: anlegen / Feld / 5 × 8 / Rückgängig', t_muster_ganz),
+    ('Drehgelenk: Achse wählen / angelegt / 90° / Bewegung prüfen / lösen', t_gelenk),
     ('Skizze: Kreis aus 3 / 2 Punkten / tangentialer Bogen', t_kreis_bogen_modi),
     ('Skizze: Verlängern bis zur nächsten Linie', t_verlaengern),
     ('Entformungsschräge: 3° nach innen / -2° nach außen', t_schraege),

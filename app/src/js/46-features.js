@@ -92,7 +92,8 @@ const Features = (() => {
     cv.removeEventListener('pointerdown', picking.down, true); window.removeEventListener('keydown', picking.key, true);
     cv.style.cursor = ''; UI.hint(null); picking = null;
   }
-  function pickAxis(gid) {
+  // Achse im Bild wählen; cb bekommt { o, d, what } in Weltkoordinaten
+  function pickAxisThen(cb, hint) {
     stopPick();
     const down = (e) => {
       if (e.button !== 0) return;
@@ -100,17 +101,22 @@ const Features = (() => {
       const A = axisOfHit(Viewer.pick(e.clientX, e.clientY, { edgePx: 9 }));
       if (!A) { UI.toast('Klick auf eine gerade Kante, einen runden Rand oder eine runde Fläche.', { icon: 'info' }); return; }
       stopPick();
+      cb(A);
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true); window.addEventListener('keydown', key, true);
+    UI.hint(hint || '<b>Achse wählen:</b> Klick auf eine gerade Kante, einen runden Rand oder eine runde Fläche. <b>Esc</b> bricht ab.');
+  }
+  function pickAxis(gid) {
+    pickAxisThen((A) => {
       const inv = Model.worldMatrix(App.doc, gid).invert();
       const o = A.o.clone().applyMatrix4(inv), d = A.d.clone().transformDirection(inv).normalize();
       App.change('Drehachse gewählt', (doc) => { const f = Model.find(doc, gid); if (!f) return false; f.item.p.axis = 'pick'; f.item.p.ao = o.toArray().map((v) => round(v, 6)); f.item.p.ad = d.toArray().map((v) => round(v, 9)); });
       App.select([gid]);
       UI.toast('Drehachse gesetzt: ' + A.what + '.', { icon: 'check' });
-    };
-    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
-    picking = { down, key, gid };
-    Viewer.canvas.style.cursor = 'crosshair';
-    Viewer.canvas.addEventListener('pointerdown', down, true); window.addEventListener('keydown', key, true);
-    UI.hint('<b>Drehachse wählen:</b> Klick auf eine gerade Kante, einen runden Rand oder eine runde Fläche (Welle, Loch). <b>Esc</b> bricht ab.');
+    }, '<b>Drehachse wählen:</b> Klick auf eine gerade Kante, einen runden Rand oder eine runde Fläche (Welle, Loch). <b>Esc</b> bricht ab.');
   }
   // Gespiegelte Kopie an einer gewählten ebenen Fläche (z. B. zweiter Arm an der Mittelfläche)
   function mirrorAtFace(face) {
@@ -232,5 +238,5 @@ const Features = (() => {
     return null;
   }
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { pickAxis, get picking() { return !!picking; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
+  return { pickAxis, pickAxisThen, get picking() { return !!picking; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
 })();

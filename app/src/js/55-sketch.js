@@ -972,14 +972,17 @@ const Sketch = (() => {
   function patternCopy(e, job, C) {
     return S.tool === 'patcirc' ? SKO.rotateEnt(e, C.xy, (job.ang * Math.PI) / 180) : SKO.moveEnt(e, job.dx, job.dy);
   }
-  function createPattern() {
+  function createPattern(o = {}) {
     const ids = S.patSel.filter((id) => ent(id));
     if (!ids.length) { UI.toast('Klick zuerst die Elemente an, die vervielfältigt werden sollen.', { icon: 'info' }); return 0; }
     const circ = S.tool === 'patcirc';
     const C = circ ? S.patCenter || { ref: { e: 'origin' }, xy: [0, 0] } : null;
     const jobs = patternJobs();
     if (!jobs.length) { UI.toast('Mit dieser Anzahl entstehen keine Kopien.', { icon: 'info' }); return 0; }
-    pushUndo();
+    if (!o.noUndo) pushUndo();
+    // alle Regeln dieses Musters tragen dieselbe Kennung und die Einstellungen – so lässt es sich später als Ganzes ändern
+    const P = S.pat, pg = o.pg || uid('pg');
+    const pm = circ ? { kind: 'circ', n: P.n, ang: P.ang, src: ids.slice(), center: C.ref, cxy: C.xy.slice() } : { kind: 'rect', nx: P.nx, ny: P.ny, dx: P.dx, dy: P.dy, src: ids.slice() };
     const newCons = []; let made = 0;
     for (const job of jobs) for (const id of ids) {
       const e = ent(id);
@@ -989,13 +992,35 @@ const Sketch = (() => {
       const c = { id: uid('k'), type: 'xform', refs };
       if (r.rad.length) c.req = r.rad.flat();
       if (circ) { c.mode = 'rot'; c.center = C.ref; c.ang = round(job.ang, 4); } else { c.dx = round(job.dx, 4); c.dy = round(job.dy, 4); }
+      c.pg = pg; c.pm = deepClone(pm);
       newCons.push(c); made += r.ents.length;
     }
     S.cons.push(...newCons);
     S.patSel = []; S.sel = null;
     sanitize(newCons.map((c) => c.id));
+    if (o.select && newCons.length) S.selCon = newCons[0].id;
     UI.hint(HINTS[S.tool]); render(); Panels.renderRight();
     return made;
+  }
+  // Ein Muster als Ganzes ändern: alte Kopien weg, mit den neuen Einstellungen neu anlegen (ein Rückgängig-Schritt)
+  function regenPattern(pg, P) {
+    const cons = S.cons.filter((c) => c.type === 'xform' && c.pg === pg); if (!cons.length || !cons[0].pm) return false;
+    const pm = cons[0].pm, src = pm.src.filter((id) => ent(id));
+    if (!src.length) { UI.toast('Die Originale dieses Musters gibt es nicht mehr.', { kind: 'bad' }); return false; }
+    pushUndo();
+    const copies = new Set(); for (const c of cons) for (let i = 1; i < c.refs.length; i += 2) if (c.refs[i] && c.refs[i].e) copies.add(c.refs[i].e);
+    S.cons = S.cons.filter((c) => !(c.type === 'xform' && c.pg === pg));
+    for (const id of copies) if (!src.includes(id)) removeEntData(id);
+    const keep = { tool: S.tool, pat: S.pat, patSel: S.patSel, patCenter: S.patCenter };
+    S.tool = pm.kind === 'circ' ? 'patcirc' : 'patrect';
+    S.pat = { ...S.pat, ...(pm.kind === 'circ' ? { n: pm.n, ang: pm.ang } : { nx: pm.nx, ny: pm.ny, dx: pm.dx, dy: pm.dy }), ...P };
+    S.patSel = src.slice();
+    S.patCenter = pm.kind === 'circ' && pm.center && pm.center.e !== 'origin' ? { ref: pm.center, xy: refXY(pm.center) || pm.cxy } : null;
+    const made = createPattern({ noUndo: true, pg, select: true });
+    S.tool = keep.tool; S.pat = keep.pat; S.patSel = keep.patSel; S.patCenter = keep.patCenter;
+    UI.hint(HINTS[S.tool]); render(); Panels.renderRight();
+    if (!made) UI.toast('Mit dieser Anzahl bleibt nur das Original – das Muster ist aufgelöst.', { icon: 'info' });
+    return true;
   }
   function onDown(e) {
     if (!S || S.step) return stepDown(e);
@@ -1960,6 +1985,19 @@ const Sketch = (() => {
       if (selCon.type === 'offset') editNum('co-v', 'Abstand', 'mm', 'v');
       if (selCon.type === 'xform' && selCon.mode === 'rot') editNum('co-ang', 'Winkel', '°', 'ang');
       if (selCon.type === 'xform' && selCon.mode !== 'rot') { editNum('co-dx', 'Versatz X', 'mm', 'dx'); editNum('co-dy', 'Versatz Y', 'mm', 'dy'); }
+      if (selCon.type === 'xform' && selCon.pg && selCon.pm) {
+        // ganzes Muster: Anzahl und Abstand für alle Kopien zusammen
+        const pm = selCon.pm, Q = pm.kind === 'circ' ? { n: pm.n, ang: pm.ang } : { nx: pm.nx, dx: pm.dx, ny: pm.ny, dy: pm.dy };
+        const sec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Ganzes Muster'));
+        const fm = h('div', { class: 'fields' });
+        const fld = (id, label, key, unit, o2 = {}) => fm.append(UI.numField({ id, label, value: Q[key], unit, expr: false, min: o2.min, int: o2.int, onCommit: (v) => { Q[key] = v; } }));
+        if (pm.kind === 'circ') { fld('pg-n', 'Anzahl', 'n', '', { min: 1, int: true }); fld('pg-ang', 'Winkel gesamt', 'ang', '°'); }
+        else { fld('pg-nx', 'Anzahl in X', 'nx', '', { min: 1, int: true }); fld('pg-dx', 'Abstand in X', 'dx', 'mm'); fld('pg-ny', 'Anzahl in Y', 'ny', '', { min: 1, int: true }); fld('pg-dy', 'Abstand in Y', 'dy', 'mm'); }
+        const ap = h('button', { type: 'button', class: 'btn primary', id: 'pg-apply' }); ap.innerHTML = icon('check') + 'Muster ändern';
+        ap.onclick = () => regenPattern(selCon.pg, Q);
+        sec.append(fm, h('div', { class: 'btn-row' }, ap), h('div', { class: 'hint-box', html: 'Ändert alle Kopien dieses Musters zusammen – die Anzahl zählt das Original mit.' }));
+        w.append(sec);
+      }
       const del = h('button', { type: 'button', class: 'btn danger' }); del.innerHTML = icon('trash') + 'Regel löschen';
       del.onclick = () => removeCons(selCon.id);
       w.append(h('div', { class: 'btn-row' }, del));

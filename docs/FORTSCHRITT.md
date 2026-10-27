@@ -1,6 +1,6 @@
 # Fortschritt
 
-Stand: 26.10.2026 · nach Sitzung 37 (19: Skizze auf Profi-Niveau · 20: Magnet, Rundungs-Griff · 21: Skizzieren im 3D, Übergang, Entlang Pfad, Import · 22: Kreis/Bogen-Arten, Verlängern, Entformungsschräge, Gewinde · 23: Einheiten, eigener Querschnitt, Langloch gebogen, gedrehtes Rechteck, Teilen · 24: Punkt, alle Ecken · 25: Schnitt und Spiegeln an Fläche · 26: Kantenkette, Abstände beim Verschieben · 27: Spiegeln an der Achse · 28: Muster entlang Kurve, Schablonen-Maße geprüft, USB-C-Stecker · 29: Spiegelebene wandert mit, Kreismuster quer und längs, KI kennt Muster entlang Kurve · 30: Bohrungen an Skizzenpunkten · 31: Wand aus Linie, Schritt hinter dem Marker, Schildchen · 32: Kante übernehmen · 33: verbundene Kanten · 34: Kreismuster um gewählte Achse · 35: GoPro-, XT60- und Antennenhalter · 36: Überhänge für den 3D-Druck · 37: Überhänge in der Schwachstellen-Analyse, KI kennt die Bausteine)
+Stand: 27.10.2026 · nach Sitzung 39 (19: Skizze auf Profi-Niveau · 20: Magnet, Rundungs-Griff · 21: Skizzieren im 3D, Übergang, Entlang Pfad, Import · 22: Kreis/Bogen-Arten, Verlängern, Entformungsschräge, Gewinde · 23: Einheiten, eigener Querschnitt, Langloch gebogen, gedrehtes Rechteck, Teilen · 24: Punkt, alle Ecken · 25: Schnitt und Spiegeln an Fläche · 26: Kantenkette, Abstände beim Verschieben · 27: Spiegeln an der Achse · 28: Muster entlang Kurve, Schablonen-Maße geprüft, USB-C-Stecker · 29: Spiegelebene wandert mit, Kreismuster quer und längs, KI kennt Muster entlang Kurve · 30: Bohrungen an Skizzenpunkten · 31: Wand aus Linie, Schritt hinter dem Marker, Schildchen · 32: Kante übernehmen · 33: verbundene Kanten · 34: Kreismuster um gewählte Achse · 35: GoPro-, XT60- und Antennenhalter · 36: Überhänge für den 3D-Druck · 37: Überhänge in der Schwachstellen-Analyse, KI kennt die Bausteine · 38: Skizzen-Muster als Ganzes ändern · 39: Drehgelenk)
 
 ## Erledigt
 
@@ -177,7 +177,8 @@ Fertig.
 - [x] Schritt hinter dem Marker oder unterdrückt: statt der Werkzeugleiste nur „Marker dahinter“ bzw. „Wieder einschalten“, keine Griffe (Sitzung 31)
 - [x] Spiegelebene hängt an der Fläche: Wird das Original größer, wandert sie mit (äußerste Fläche in Achsrichtung) (Sitzung 29)
 - [ ] Ellipse und Text trimmen und versetzen; Text entlang einer Kurve
-- [ ] Muster und Versatz: Anzahl/Abstand nachträglich für das ganze Muster ändern (heute je Kopie über das Regel-Symbol)
+- [x] Skizzen-Muster als Ganzes ändern: Regel-Symbol einer Kopie anklicken → „Ganzes Muster“ mit Anzahl und Abstand (Rechteck) bzw. Anzahl und Winkel (Kreis) → „Muster ändern“ (Sitzung 38)
+- [ ] Versatz nachträglich für mehrere Elemente zusammen ändern (heute je Element über das Regel-Symbol)
 - [x] Spiegeln an der X- oder Y-Achse ohne eigene Linie (Sitzung 27)
 - [x] Werkzeug „Wand“ (N): offene Linie, Linienzug, Bogen oder Spline wird zur geschlossenen Wand mit einstellbarer Dicke (beide Seiten halb, Enden zu, per Regeln verbunden; die Linie bleibt Hilfslinie) – für Rippen, Stege, Antennenhalter (Sitzung 31)
 - [x] Skizzen-Leiste etwas kompakter, damit sie trotz neuer Werkzeuge bei zwei Zeilen bleibt (Sitzung 32)
@@ -228,7 +229,8 @@ Fertig.
 - [x] Skizzen-Schablonen: Pin-Raster, Lüftungsgitter, Chip-Gehäuse QFP, QFN, BGA, SOIC, DIP mit einstellbaren Maßen (Sitzung 21)
 - [x] Entformungsschräge (Seitenwände neigen), echte metrische Gewinde: Gewindebolzen und gedrucktes Innengewinde; Schablonen USB-C-Ausschnitt und Befestigungslöcher (Sitzung 22)
 - [x] Schablonen-Maße mit Gemini Prompt N gegen JEDEC-Normen und Datenblätter geprüft und von Hand nachgesehen: 3 Werte korrigiert (QFP-Pin-Breite 0,27 → 0,22 mm Nennmaß, BGA-Gehäuse 9 → 10 mm, DIP-8-Gehäuse 9,8 → 9,27 mm), die übrigen 17 stimmten. Jede Chip-Schablone zeigt ihre Quelle und den Toleranzbereich. USB-C: Für den Ausschnitt gibt es keinen genormten Wert – darum zwei Schablonen: „Buchse“ (9,5 × 3,8, Buchse bündig mit der Wand) und neu „Stecker“ (13 × 7 mit Eckradius, für eine Buchse hinter der Wand; die Norm erlaubt Stecker bis 12,35 × 6,5 mm) (Sitzung 28)
-- [ ] 3D-Skizzen, Übergang mit Führungskurven, Sweep mit eigenem Querschnitt aus einer Skizze, Gelenke
+- [x] Drehgelenk zwischen zwei Teilen: beide wählen → „Gelenk“ → Achse im Bild (Kante, Stift, Loch); Schieberegler und Winkel mit Bereich, „Bewegung prüfen“ dreht in 5°-Schritten und meldet, wo die Teile aneinanderstoßen; „Gelenk lösen“ (Sitzung 39)
+- [ ] 3D-Skizzen, Übergang mit Führungskurven, Baugruppen mit mehreren Gelenken und Schiebegelenk
 - [ ] Einsteiger-Oberfläche weiter vereinfachen: größere Knöpfe, geführte erste Schritte im leeren Projekt
 
 ### Stufe 6 – Konten und Zusammenarbeit (Idee, nach dem Drohnen-Modul)
