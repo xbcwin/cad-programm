@@ -1,0 +1,314 @@
+# Tracery – Gesamtprompt (Stand 28.10.2026, nach Sitzung 40, Commit 0c9b360)
+
+> Diesen Text komplett in einen neuen Chat oder eine andere KI einfügen. Er beschreibt das ganze Projekt so genau, dass die KI ohne Rückfragen weiterarbeiten kann.
+
+---
+
+## 1. Deine Rolle und das Ziel
+
+Du entwickelst **Tracery** weiter, ein CAD-Programm im Browser. Der Besitzer ist **Nils Kriege** aus Berlin. Tracery soll eines der besten CAD-Programme werden, auf dem Niveau von Fusion 360, Onshape und SolidWorks. Der Schwerpunkt liegt auf **FPV- und Speed-Drohnen** und auf technischen Teilen für den 3D-Druck und die CNC-Fräse.
+
+Leitlinien:
+- Die Oberfläche ist **komplett Deutsch, in Du-Form** und **kindgerecht erklärt**: kurze Sätze und Alltagswörter. Trotzdem ist es **ernsthaftes, präzises CAD** mit exaktem B-Rep-Kern, Maßen, Formeln und Zeitleiste.
+- Nils hat sich ausdrücklich gewünscht:
+  - leichteres Abrunden
+  - leichteres Skizzieren direkt im 3D
+  - magnetisches Einrasten wie bei Canva
+  - sehr viele Werkzeuge
+  - starke 2D-Skizzen, auch für Elektronik wie Prozessoren und Chips
+- **Keine erfundenen Daten.** Maße von Kaufteilen und Normen kommen aus Datenblättern oder Händlerseiten mit Quelle. Werte, die nicht belegt sind, werden als Schätzung markiert.
+- Antworten an Nils kommen auf Deutsch. Am Ende jeder Sitzung steht eine kurze Liste „Erledigt / Offen“. Ohne Fachchinesisch, Pfade nur, wenn nötig.
+
+## 2. Zusammenarbeit und feste Regeln
+
+- **Immer nur EIN Chat arbeitet am Code.**
+- **Code-Ablage:** GitHub-Repository `xbcwin/cad-programm`, lokal auf Nils’ Mac unter `~/Documents/GitHub/cad-programm`.
+  - Von Claude aus ist der Ordner über die Mac-Brücke erreichbar, mit den Werkzeugen `mcp__remote-devices__*`. Im Brücken-Shell heißt der Pfad `~/mnt/GitHub/cad-programm`.
+- **Commits** macht die KI direkt im Mac-Ordner, immer als `Nils Kriege <nilskriege@icloud.com>`. „Push origin“ drückt **Nils selbst**.
+  - Die Commit-Nachricht ist deutsch: „Sitzung N: …“, darunter Stichpunkte.
+  - Sie endet mit:
+    ```
+    Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+    Claude-Session: <Link zur Sitzung>
+    ```
+- **Ablauf beim Commit:**
+  1. Die geänderten Dateien (Vergleich mit dem letzten committeten Stand) als Datei bereitstellen. Das ergibt eine `fileUuid`.
+  2. `device_commit_files` schreibt sie an `/Users/nilskriege/Documents/GitHub/cad-programm/…`.
+  3. Im Brücken-Shell:
+     ```
+     python3 tools/build.py --check && git add -A && git -c user.name="Nils Kriege" -c user.email="nilskriege@icloud.com" commit -q -F -
+     ```
+- **Git-Sperrdateien:** In einem verbundenen Ordner darf die Brücke ohne Freigabe nichts löschen. Die Freigabe (`device_request_delete_permission`) gilt nur für eine Sitzung.
+  - Bleiben `.git/HEAD.lock`, `.git/index.lock` oder `.git/objects/maintenance.lock` liegen, scheitert der nächste Git-Befehl mit „File exists“.
+  - Ohne Freigabe: Sperrdatei per `mv` direkt unter `.git/` umbenennen (z. B. `.git/stale-HEAD.lock-<zeit>`), nie löschen.
+  - `tmp_obj_*`-Dateien stören nicht.
+- **Ist der Mac offline:** Die geänderten Dateien als ZIP an Nils schicken und committen, sobald er wieder da ist.
+- **Gemini als Helfer:** Nils gibt Recherche- und Datenaufgaben an Gemini, zum Beispiel Datenblatt-Werte, Texte und Symbole.
+  - Die KI schreibt dafür einen genauen Prompt („Gemini Prompt A, B, C …“, zuletzt **O**). Er verlangt JSON-Antworten mit Quelle je Wert und null statt Schätzungen.
+  - Jede Gemini-Antwort wird **nachgeprüft**: Stichproben an Hersteller- oder Händlerseiten, eigene Websuche. Falsche Werte werden verworfen und begründet.
+  - **Offen:** Prompt O fragt nach Maßen für XT60H/XT30U, für die Antennen Lumenier AXII 2, TrueRC Singularity und Foxeer Lollipop 4 sowie nach Teilen für 2"- und 2,5"-Cinewhoops (Motoren 1103/1204/1303, Propeller, Pavo20/Pavo25 V2, 2S-Akkus). Die Antwort steht noch aus.
+- **Fortschritt:** Jede Sitzung bekommt eine Nummer, zuletzt **40**. Gepflegt werden:
+  - `docs/FORTSCHRITT.md` mit Stand-Zeile, Erledigt nach Stufen und „Bekannte Punkte“
+  - `docs/TESTLISTE.md` mit Abschnitt „(neu in Sitzung N)“: `[x]` = automatisch geprüft, `[ ]` = von Hand
+  - `docs/BAUPLAN.md`
+- **Weitere Ablagen:**
+  - Claude-Projekt „cad-program“ mit dem Dokument `claude/tracery-arbeitsweise.md` (Arbeitsweise für neue Chats)
+  - Claude-Doc „Tracery im Vergleich“ mit Fahrplan: Abschnitt „Stand …“ und nummerierte Liste „Sitzung … (fertig)“, „Als Nächstes“, „Danach“
+- **Online-Fassung:** Claude-Seite „Tracery“ (Artifact `XEPqXweoEvihS7rLJezNpS`), zuletzt Version 12 = Sitzung 40.
+  - Bauen: `python3 tools/build.py --artifact ORDNER` erzeugt `index.html`, `tracery.css` und `tracery.js`.
+  - Veröffentlichen: mit `url` und nur den geänderten Dateien, `kernel/core.js` nur, wenn der Kern sich geändert hat.
+  - Die Seite nutzt die Fähigkeiten `sample` (KI-Kollege) und `downloads` (Speichern).
+  - Die alte Seite `M7fu7gjPBEk91rV5VAhvLG` nur löschen, wenn Nils es sagt.
+
+## 3. Technischer Aufbau
+
+**Eine Seite, viele Quelldateien.**
+- `app/src/` enthält `styles.css`, das HTML-Gerüst und `js/` mit ca. 40 Teilen.
+- `python3 tools/build.py` baut daraus `app/index.html`. **index.html nie direkt ändern.** `--check` prüft, ob sie aktuell ist.
+- Die Reihenfolge der JS-Teile steht in `tools/build.py`: gemeinsamer Gültigkeitsbereich, neue Dateien dort eintragen.
+- JSON aus `app/data/` wird über Platzhalter `/*JSON:name.json*/null` eingesetzt.
+
+**CAD-Kern:**
+- `app/kernel/core.js`: OpenCascade über **replicad** in einem Web Worker, `occ-kernel.wasm`.
+- Wichtige Funktionen:
+  - Grundkörper und `buildPart` (Bibliotheksteile)
+  - `buildExtrude`/`buildRevolve`/`buildLoft`/`buildSweep`/`buildImport`
+  - `patternShape` (Rechteck, Kreis mit Achse z/x/y/pick, Pfad, Spiegeln auch an Fläche mit `bind`)
+  - `splitBody`, `applyFinishes` (Rundung, Fase, Entformungsschräge `draft`, Wandstärke `shell`)
+  - `evaluate`, `measure`, `project` (Zeichnung, DXF), `clashes` (Durchdringungen und Prüfkörper), `faceLoops`
+- Gewinde über Helix-Sweep mit `PITCH`-Tabelle.
+
+**JS-Module (Datei → Aufgabe):**
+
+| Datei | Aufgabe |
+| --- | --- |
+| `00-util.js` | Hilfen, `Expr`-Rechner mit Einheiten (mm, cm, m, in, zoll, ", °), Icon-Set `IC`, eingebettete Hilfetexte `HELP` (muss immer gleich `app/data/werkzeug-hilfen.json` sein, per Python neu erzeugen) |
+| `10-model.js` | Projekt-Datenmodell, `KINDS`, `newItem`, `find`/`walk`/`topOf`, Matrizen, `vars` (Maße), `kernelItem`, `sketchParams`/`loftParams`/`sweepParams`/`pathPatternParams`, `migrate` |
+| `15-sketchcore.js` (`SK`) | Skizzen-Geometrie: `segsOf`, `regions`, `chains` (offene Pfade), `bounds`, Splines als exakte Bézier (`splineBez`), Text-Umrisse (Schrift Inter, OFL), Ellipse, Fangpunkte, Maße |
+| `16-solver.js` | Skizzen-Löser (Maße und Regeln gemeinsam, Freiheitsgrade, Konflikte) |
+| `17-sketchops.js` (`SKO`) | Schnittpunkte, Trimmen, Versatz (`offsetChain`), Spiegeln, Muster (`mapEnt`), Schablonen `TEMPLATES`/`tplEnts` |
+| `20-kernel.js` | Brücke zum Worker |
+| `25-app.js` | Zustand, `App.change(label, fn, {merge, amend})` mit Rückgängig (300 Schritte), Neuberechnung, Ergebnisse |
+| `30-viewer.js` | three.js-Ansicht, Picking (Flächen, Kanten), `edgePositions`, Raster, Kamera |
+| `35-handles.js` | Ziehgriffe (Größe, Lage, Rundungsgriff), Maus-Bedienung |
+| `40-library.js` | Bibliotheksteile `LIB`/`LIBMAP` |
+| `41-dronelib.js` | FPV-Daten, Kaufteile, Herstellerrahmen |
+| `45-actions.js` | Aktionen wie Gruppieren, Ausrichten, Abstand |
+| `46-features.js` | Muster (inkl. „entlang Kurve“), Spiegeln an Fläche, Teilen, Boolesch, Wandstärke, Achse im Bild wählen (`pickAxisThen`) |
+| `47-mass.js` | Volumen, Gewicht, Schwerpunkt, Material |
+| `48-joints.js` | Dreh- und Schiebegelenke |
+| `49-*` | Bauteile im Kontext, Zeitleiste, Protokoll, Zahleneingabe beim Ziehen |
+| `50-ui-core.js`/`51-ui-panels.js` | Oberfläche, rechtes Panel „Eigenschaften“, Kontextleiste |
+| `52-snap.js` | magnetisches Einrasten |
+| `52-place.js` | Platzieren, Bohrungs-Assistent |
+| `53-views.js` | Schnitt, Röntgen, Explosion, Fokus-Vorschau, Überhänge |
+| `54-select.js` | Auswahlfilter, Ähnliche, Kantenkette |
+| `55-sketch.js` | Skizzen-Modus: alle Werkzeuge, Panel, Fertig/Hochziehen, verbundene Kanten |
+| `56-notes.js` | Notizstift |
+| `57-measure.js` | Messen |
+| `58-commands.js` | Eingabezeile, Befehlssuche |
+| `59-versions.js` | Versionen |
+| `60-print.js` | Export (STEP, STL, DXF) |
+| `70-drawing.js` | technische Zeichnung, PDF |
+| `80-ai.js` | KI-Kollege |
+| `84-drone.js` | Rahmen-Generator, Frame-Assistent, Bausätze |
+| `85-start.js` | Startseite, Öffnen, Import |
+| `86-dronecheck.js` | Drohnen-Check |
+| `88-aihelp.js` | „Erklär diesen Schritt“, Schwachstellen-Analyse `Weak` |
+| `90-main.js` | Start; stellt `window.__M` für Tests bereit |
+
+**Daten in `app/data/`** (alle von Gemini geliefert und von Claude geprüft):
+- `werkzeug-hilfen.json`, `schritt-erklaerungen.json`, `materialien.json` (18 Stück), `fehlermeldungen.json`, `schrauben.json` (M1.6–M8, Senkungen normgerecht)
+- `formel-beispiele.json`, `einfuehrung-skizze.json`, `fpv-masse.json` (Stack = Quadrat, Motor = Lochkreis)
+- `bauteile.json` (Kaufteile mit Quelle, `geprueft`), `schub.json` (nur `geprueft: true` als Vorgabe), `faustregeln.json`, `rahmen.json` (13 Herstellerrahmen)
+- `schrift-inter*.json`, erzeugt mit `tools/schrift.py`
+
+**Lokal starten:** `cd app && python3 -m http.server 8000`. Ein Doppelklick auf `index.html` geht nicht, weil Worker und WASM einen Server brauchen.
+
+## 4. Datenmodell (Projektdatei `.json`, `format: 'masswerk'`)
+
+- **`doc`:** `{ id, name, params: [{id, name, expr}], items: [...], notes, settings{printer, grid, snap, magnet}, drawing, rollback (Marker der Zeitleiste), variants, variant, drone{…}, joints: [...] }`
+- **Item:** `{ id, kind, name, role: 'solid'|'hole', color, t: {x,y,z,rx,ry,rz}, p: {...}, finishes: [{id,type:'fillet'|'chamfer'|'draft'|'shell', r, edges|faces}], suppressed, hidden, mat, massG, ai }`
+  - Werte in `t` und `p` dürfen **Formeln** mit Maßnamen sein.
+- **`kind`:**
+  - Grundkörper: `box`, `cylinder`, `sphere`, `cone`, `tube`, `torus`, `wedge`, `prism`, `pyramid`, `hemisphere`
+  - Skizzenbasiert: `extrude` (p.sketch, dist, dir, sel), `revolve`, `loft` (p.sketches, ruled, tip), `sweep` (p.sketch-Pfad, shape circle/rect/sketch, d, w, h, wall, prof)
+  - Sonstige: `import` (STEP/STL Base64), `part` (Bibliothek, `p.lib`), `group` (children; mit `p.op` = Rechen-Gruppe)
+- **Rechen-Gruppen (`p.op`):**
+  - `pattern` mit `pt`:
+    - `rect` (nx, ny, dx, dy)
+    - `circ` (n, ang, cx, cy, cz, `axis` 'z'|'x'|'y'|'pick' + `ao`/`ad`)
+    - `path` (p.sketch-Kurve, n, d, align)
+    - `mirror` (plane XY/XZ/YZ + off, oder `FACE` mit `mo`/`mn`/`bind`)
+  - `split` (plane, off, keep, gap)
+  - `intersect`
+  - Löcher in einer Gruppe werden aus den Körpern geschnitten.
+- **Skizze `p.sketch`:** `{ plane:{o,x,n}, ents, dims, cons, bg }`
+  - **Elemente:** line(a,b), arc(a,m,b), circle(c,r), ellipse(c,rx,ry,rot), rect(a,b), poly(c,r,n,rot), slot(a,b,r), spline(pts,closed), point(a), text(a,s,h,font,align,rot,mir)
+  - **Elementfelder:** `con` = Hilfslinie; `link` = verbundene Körperkante {id,t,m,l,d}
+  - **Regeln:** horizontal, vertical, parallel, perpendicular, tangent, equal, symmetric, coincident, fix (at), midpoint, concentric, offset (v), xform (Muster; `pg` Kennung, `pm` Einstellungen)
+  - **Maße:** w/h/len/d/r/x/y/ang/n, dist, distPL, angLL – auch als Formel
+- **Gelenk:** `{id, a (fest), b (beweglich), ao, ad (Achse, Welt), home (Matrix bei 0), ang, min, max, kind: 'rot'|'slide'}`
+  - Nur für Teile ganz oben im Verlauf. Gelenke sind kein Schritt der Zeitleiste.
+- **Drohnen:** vorne ist **−Y**. Die Maße `Achsabstand`, `Armwinkel`, `Armwinkel_hinten`, `Armbreite`, `Armdicke`, `Plattenbreite`/`-länge`/`-dicke`, `Bolzenhöhe`, Stack, Motorlochkreis, Kamerabreite, `Propeller` und `Motorneigung` steuern den Rahmen.
+
+## 5. Was Tracery heute kann (vollständig, nach Bereichen)
+
+**Grundlagen und Ansicht**
+- Ursprungsebenen und Achsen; Raster fest oder automatisch
+- Orthografisch/Perspektive (O), Ansichten 1/3/7/0, Ansichtswürfel
+- Tiefes Zoomen ohne Flimmern mit automatischem Nachschärfen; Qualität grob bis sehr fein; Design hell/dunkel
+- Zeitleiste:
+  - Schritte, Marker zurückrollen, Einfügen am Marker
+  - Unterdrücken; Fehler rot mit Klartext und Lösungstipp
+  - Ein Schritt hinter dem Marker zeigt nur „Marker dahinter“
+- Protokoll; Rückgängig/Wiederholen (300)
+- Maße-Tabelle mit Formeln, Varianten und Versionen (Vergleich mit Gewicht)
+- Bauteile im Kontext bearbeiten; Isolieren
+- Zahleneingabe beim Ziehen; Tastenkürzel-Übersicht (?)
+- Einfache Oberfläche für Einsteiger („Einfach/Profi“); Einführung „Deine erste Skizze“
+- Notizstift; Messen (Abstand, Winkel, Fläche); Material je Teil, Gewicht, Schwerpunkt
+- Kaufteile mit festem Gewicht
+- Auswahlfilter, „Ähnliche“, Kantenkette
+- Magnetisches Einrasten wie bei Canva: auf Flächen (Mitte, Mittellinien, Lochmitten, Kantenmitten, gleiche Randabstände) und zwischen Körpern (bündig, mittig, gleiche Abstände). Strg hält es an, abschaltbar.
+- Beim Verschieben zeigt das Schildchen den Abstand zum Nachbarn; „Abstand“ zwischen zwei Teilen lässt sich genau setzen.
+- Ansichten:
+  - Schnitt an XY/XZ/YZ oder an einer gewählten Fläche
+  - Röntgen
+  - Explosion
+  - Fokus-Vorschau
+  - **Überhänge (3D-Druck)**: rot ab Grenzwinkel 35–60°, Druckbett = Unterseite, Fläche in mm²
+
+**Skizze (Werkzeugtasten in Klammern)**
+- **Zeichnen:**
+  - Auswahl (V), Linie (L), Rechteck (R: Ecke/Mitte/gedreht über 3 Punkte), Kreis (C: Mitte/2P/3P), Ellipse (E)
+  - Bogen (A: 3 Punkte oder tangential), Langloch (G: auch gebogen), Vieleck (P: Umkreis oder Schlüsselweite), Punkt (O)
+  - Schablone (J), Text (B: Schrift Inter, fett, Ausrichtung), Spline (S)
+- **Schablonen:** Pin-Raster, Lüftungsgitter, QFP, QFN, BGA, SOIC, DIP (Maße 2026 gegen JEDEC und Datenblätter geprüft), USB-C-Buchse 9,5 × 3,8, USB-C-Stecker 13 × 7 mit Eckradius, Befestigungslöcher
+- **Bearbeiten:**
+  - Ecke runden/fasen (K, auch „Alle Ecken auf einmal“), Trimmen (T), Verlängern (U), Teilen (Y), Versatz (F)
+  - **Wand (N):** eine offene Linie wird eine Wand mit Dicke
+  - **Kante übernehmen (Z):** Körperkante als feste Linie, Bogen, Kreis oder Spline; **verbunden**, wandert also mit, wenn sich der Körper ändert (Ketten-Symbol, „Verbindung lösen“)
+  - Spiegeln (M, auch direkt an der X-/Y-Achse)
+  - Rechteckmuster (Q), Kreismuster (W) – **nachträglich als Ganzes änderbar**
+  - Maß (D, Formeln), Bild-Vorlage (I, mit Maßstab), Hilfslinie (X)
+- **Regeln:** senkrechte Leiste links, 9 Grundregeln plus Mittig und Konzentrisch.
+- **Löser:** blau = beweglich, dunkel = voll bestimmt; Widersprüche werden abgelehnt.
+- **Fangen:** Endpunkt, Mitte, Mittelpunkt, Kreispunkt, Schnitt, Lot, Tangente, auf Linie, Ausrichtung, Raster.
+- **Skizzenebene:** frei verschieben und neigen. Ein Doppelklick auf eine ebene Fläche startet die Skizze darauf, die Flächenkanten sind Fangpunkte.
+- **Einheiten im Maßfeld**, z. B. „2 cm“, „1/4"“, „10mm+2cm“.
+- **Skizze fertig:**
+  - Geschlossene Flächen → Hochziehen oder Drehen
+  - Nur offene Pfade → „Entlang Pfad“
+  - Nur Punkte auf einer Körperfläche → **Bohrungen an jedem Punkt** (Bohrungs-Assistent)
+- Die Skizzen-Leiste muss in **zwei Zeilen** passen, neue Werkzeuge bekommen kurze Namen. Der Test „Trimmen“ merkt eine dritte Zeile.
+
+**3D-Features**
+- Grundkörper mit Ziehgriffen; Hochziehen (Push/Pull an Flächen); Drehkörper
+- Übergang (Loft) mit Spitze („Zur Spitze“); Entlang Pfad (Rohr, Kanal, eigener Querschnitt)
+- STEP/STL-Import
+- Rundung und Fase per Knopf oder **Ziehgriff an der Kante**; Entformungsschräge; Wandstärke (Aushöhlen)
+- Echte metrische Gewinde (Gewindebolzen, gedrucktes Innengewinde mit Spiel)
+- Bohrungs-Assistent: Durchgang mit Senk- oder Zylinderkopf, Kernloch, Gewindeeinsatz, Mutternfalle
+- Rechteckmuster; Kreismuster um Z/X/Y oder eine **im Bild gewählte Achse** (Kante, runder Rand, Welle, Loch)
+- **Muster entlang Kurve** (Kurve zeichnen, Ringe zeigen die Lage, Anzahl/Abstand/Ausrichtung)
+- Spiegeln (Ebene oder **an Fläche**, die Ebene wandert mit der äußersten Fläche mit)
+- Teilen mit Spalt; Boolesch (Vereinigen/Abziehen/Schnittmenge)
+- **Gelenke:** Drehgelenk und **Schiebegelenk** zwischen zwei Teilen, Regler mit Bereich. „Bewegung prüfen“ fragt den Kern in Schritten nach Durchdringungen.
+
+**Bibliothek („Bauteile“ und Drohne → „Lochbilder und Bausteine“)**
+- Löcher: Schraubenloch, Mutternfalle, Gewindeloch, Gewindebolzen, Gewindeeinsatz, Langloch
+- Lochbild (Stack 30,5/25,5/20/16, Motor 19/16/12/9), Kabelbinder
+- Schnapphaken, Scharnier, Zahnrad, Stromlinien-Rumpf
+- **GoPro-Halterung:** 2 oder 3 Finger, 3,0/3,2/Loch 5,2, M5-Mutter-Nabe; Werte nach Messungen der Community
+- **XT60-Halter** (Steckermaße noch geschätzt)
+- **Antennenhalter:** 1 oder 2 Röhrchen, Spreizung, Neigung nach hinten = +Y
+- Kaufteile in echter Form mit Datenblatt-Gewicht: Motoren, Propeller, Stacks, Kameras, Videosender, Empfänger, GPS, Akkus, Action-Kameras, Stecker, Kondensatoren
+
+**Drohnen-Modul**
+- Rahmen-Generator (Rohbau aus Einzelteilen) und Frame-Assistent:
+  - Propeller 3–7" inkl. 3,5"
+  - Formen X, Stretched, Wide, Deadcat, Cinewhoop mit Ducts, **Speed** (Stromlinien-Rumpf, geneigte Motoren 20° mit Keilen)
+- 13 Herstellerrahmen als Vorlage
+- Bausätze auf der Startseite
+- **Drohnen-Check:** Propellerkreise frei, Spitzenabstand, Durchdringungen, Gewicht, Schub-Gewicht-Verhältnis
+- Platten als DXF für die Fräse
+
+**KI**
+- **KI-Kollege** (über `sample`): arbeitet in Runden mit JSON-Aktionen (hinzufuegen, aendern, muster rechteck/kreis/kurve inkl. Achse, spiegeln, verbinden, …), bessert Fehler selbst nach und fasst alles zu einem Rückgängig-Schritt zusammen.
+- Er kennt alle Formen, Bauteile, Herstellerrahmen und die neuen Bausteine.
+- „Erklär diesen Schritt“.
+- **Schwachstellen-Analyse:**
+  - Löcher zu nah am Rand oder aneinander
+  - dünne Stellen je Material
+  - Armdicke
+  - Überhänge ab 100 mm² bei Druckteilen
+  - mit Fundstellen-Ringen und KI-Vorschlägen
+
+**Export:** STEP, STL, DXF (Platten), Projektdatei, technische Zeichnung (PDF).
+
+## 6. Tests – Pflicht vor jedem Commit
+
+- `tests/klicktest.py` (Playwright, echter Browser, echte Klicks), ca. **156 Durchläufe**:
+  ```
+  cd app && python3 -m http.server 8765 &
+  TRACERY_URL=http://localhost:8765/ python3 tests/klicktest.py [Stichwort …]
+  ```
+- **Dauer:** Der Volltest braucht ca. 45–110 Minuten auf 2 Kernen. **Keine anderen Tests gleichzeitig laufen lassen**, sonst gibt es Wackler.
+- **Ergebnis heute:** 156 Durchläufe, 155 OK, 1 „von Hand“ (Flimmern beim Tiefzoomen).
+- **Neue Funktion = neuer Test.** Er kommt in die Liste am Dateiende (Name mit Schrägstrichen je Prüfpunkt) und liefert `[ok1, ok2, …]`.
+- **Hilfsfunktionen:**
+  - `p.ev(js, arg)` mit allen Modulen aus `window.__M`, `p.empty()`
+  - `sketch_xy`, `to_screen(u,v)`, `world_screen(x,y,z)`, `bbox(p,i)`, `wbox`, `near`
+  - `ctx(p,'Muster','Kreismuster')`, `field(p,'#id',wert)`, `warte_rechnen`, `fertig_hoch`, `volumen`, `platte`, `zylinder`, `zwei_quader`, `drohne(p,'f5')`
+  - `ki(p)` + `ki_fragen` (KI wird mit vorbereiteten Antworten nachgespielt)
+- **Fallstricke:**
+  - `LIBMAP` und `libDefaults` sind im Test nicht global, Teile also mit `Model.newItem('part', {lib, …})` anlegen.
+  - Neue Gruppen haben das Standardmaterial **CFK**; für Druck-Regeln `mat='PETG'` setzen.
+  - Text mit CSS-Großbuchstaben wird mit `.lower()` verglichen.
+  - Einheiten in Feldern tauchen nicht in `inner_text` auf.
+- **Arbeitsweise:** In einem Arbeitsordner bauen, für jede Sitzung eine Kopie anlegen und deren eigenen Server testen. Den Server mit einer Wächter-Schleife am Leben halten, weil Hintergrundprozesse sonst beendet werden. Erst committen, wenn der Volltest grün ist. Was ein Test findet, wird ehrlich in der Commit-Nachricht genannt.
+
+## 7. Arbeitsablauf einer Sitzung
+
+1. FORTSCHRITT, TESTLISTE und den Fahrplan lesen; den Mac-Stand prüfen (`git log --oneline -1`).
+2. In `app/src/` bauen, dann `python3 tools/build.py`.
+3. **Hilfetexte:** Neues Werkzeug → Eintrag in `werkzeug-hilfen.json` (tip, hilfe, tipp) und `HELP` in `00-util.js` neu erzeugen. Jede Skizzen-Taste und jeder Ansicht-Menüpunkt braucht Hilfe, Tests prüfen das.
+4. Neuen Test schreiben, gezielt laufen lassen, Bild per Screenshot ansehen, dann den Volltest.
+5. FORTSCHRITT, TESTLISTE und Bekannte Punkte nachführen.
+6. Committen (Abschnitt 2); dann die Online-Seite, das Claude-Doc „Tracery im Vergleich“ und `claude/tracery-arbeitsweise.md` aktualisieren.
+7. Zum Schluss Nils auf Deutsch berichten: **Erledigt / Offen**, Commit-Kürzel, Testergebnis, „Push origin“ drücken.
+
+## 8. Bekannte Punkte und Grenzen
+
+- Verbundene Kanten finden ihre Kante über Lage, Art, Länge und Richtung. Springt eine Kante sehr weit oder verschwindet sie, bleibt die übernommene Kante stehen. Die Fangkanten aus „Skizze auf Fläche“ sind nicht verbunden.
+- Spiegeln an Fläche hängt nur an der äußersten Fläche in Achsrichtung.
+- Text hat keine Unterschneidung. Ellipse und Text lassen sich nicht trimmen. Die Drehung von Ellipse und Vieleck ist keine Regel.
+- Vorlagen bestehen aus einer Gruppe. Teilen ergibt zwei Hälften in einem Schritt.
+- Explosion wirkt nur auf die oberste Ebene. Der Magnet funktioniert nur auf ebenen Flächen.
+- Gelenke funktionieren nur zwischen Teilen ganz oben im Verlauf, je Teil ein Gelenk.
+- Steckermaße XT60H/XT30U sind geschätzt; die GoPro-Maße beruhen auf Messungen der Community.
+
+## 9. Fahrplan (nächste Schritte)
+
+1. Gemini Prompt O auswerten: Stecker, Antennen als Kaufteile mit eigener Form, 2"- und 2,5"-Cinewhoops im Frame-Assistenten.
+2. Baugruppen mit mehreren Gelenken an einem Teil, Gelenk-Ketten, Anschläge speichern.
+3. 3D-Skizzen, Übergang mit Führungskurven.
+4. Magnet auf gewölbten Flächen; Explosion innerhalb von Gruppen.
+5. Drohnen-Check auch für frei gebaute Rahmen; Herstellerrahmen mit Original-Umriss; H-Rahmen und Sandwich.
+6. Speed-Drohne: Verkleidungen und Luftwiderstand.
+7. Schwachstellen: Wand um Schraubenlöcher auch bei Teilen, die keine flache Platte sind.
+8. Einsteiger-Oberfläche: größere Knöpfe, geführte erste Schritte.
+9. Später (Stufe 6): Konten, Projekte in der Cloud, Teilen, gleichzeitig arbeiten.
+
+## 10. Von Hand zu prüfen (Nils)
+
+- Gedrucktes M8-Gewinde; Gefühl beim Einrasten; Speed-Nase mit „Übergang“
+- Beide USB-C-Ausschnitte mit echten Steckern
+- Stack-Lochbild an einem echten Flugcontroller
+- GoPro-Halterung und XT60-Halter drucken
+- Wand aus Bogen; Deckel mit übernommenen Kanten
+- Anschlag beim Klapparm
+- Überhänge gegen den Slicer vergleichen
+- DXF in einer Fräs-Software
+- KI-Kollege in Claude
