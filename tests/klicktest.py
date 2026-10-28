@@ -2616,6 +2616,53 @@ def t_schiebegelenk(p):
     return [ok1, ok2, ok3, ok4]
 
 
+# ---------- Argon 1: Gelenk-Ketten ----------
+def t_gelenk_kette(p):
+    p.empty()
+    p.ev("""App.change('x', d=>{
+      const a=Model.newItem('box',{w:20,d:10,h:4}); a.name='Grundplatte'; d.items.push(a);
+      const b=Model.newItem('box',{w:20,d:10,h:4}); b.t.x=20; b.name='Arm'; d.items.push(b);
+      const c=Model.newItem('box',{w:20,d:10,h:4}); c.t.x=40; c.name='Greifer'; d.items.push(c);
+    })""")
+    warte_rechnen(p, 20)
+    # Erstes Gelenk: Grundplatte → Arm um Kante bei x=10, z=4
+    p.ev("App.select([App.doc.items[0].id, App.doc.items[1].id])"); p.wait(500)
+    p.pg.locator('.ctxbar button[aria-label="Gelenk"]').click(); p.wait(300)
+    s1 = world_screen(p, 10, 0, 4); p.pg.mouse.click(s1[0], s1[1]); p.wait(800); warte_rechnen(p, 20)
+    # Zweites Gelenk: Arm → Greifer um Kante bei x=30, z=4
+    p.ev("App.select([App.doc.items[1].id, App.doc.items[2].id])"); p.wait(500)
+    p.pg.locator('.ctxbar button[aria-label="Gelenk"]').click(); p.wait(300)
+    s2 = world_screen(p, 30, 0, 4); p.pg.mouse.click(s2[0], s2[1]); p.wait(800); warte_rechnen(p, 20)
+    # Arm auswählen: im Panel stehen beide Gelenke des Arms
+    p.ev("App.select([App.doc.items[1].id])"); p.wait(400)
+    js = p.ev("const js=App.doc.joints||[]; return [js.length, js[0]&&js[0].a===App.doc.items[0].id&&js[0].b===App.doc.items[1].id, js[1]&&js[1].a===App.doc.items[1].id&&js[1].b===App.doc.items[2].id]")
+    ok1 = js == [2, True, True] and p.pg.locator('#joint-sec .joint-item').count() == 2
+    # Erstes Gelenk um 90° drehen: Greifer und zweite Gelenkachse wandern mit
+    field(p, '#jt-ang', 90); warte_rechnen(p, 20)
+    st = p.ev("""
+      const b1=Actions.worldBox(App.doc.items[1].id), b2=Actions.worldBox(App.doc.items[2].id), j2=App.doc.joints[1];
+      return [b2.min.x, b2.min.y, b2.min.z, b2.max.x, b2.max.y, b2.max.z, b1.min.x, b1.max.x, j2.ao[0], j2.ao[2]];
+    """)
+    ok2 = (abs((st[5] - st[2]) - 20) < 0.1 and abs((st[3] - st[0]) - 4) < 0.1
+           and abs(abs((st[2] + st[5]) / 2 - 4) - 30) < 0.1 and abs(st[0] - st[6]) < 0.1
+           and abs(st[8] - 10) < 1e-3 and abs(abs(st[9] - 4) - 20) < 1e-3)
+    # Kreis (Greifer → Grundplatte) wird abgelehnt
+    p.ev("App.select([App.doc.items[2].id, App.doc.items[0].id])"); p.wait(500)
+    p.pg.locator('.ctxbar button[aria-label="Gelenk"]').click(); p.wait(300)
+    ok3 = not p.ev("return Features.picking") and p.ev("return App.doc.joints.length") == 2 and 'kreis' in p.pg.locator('#toasts').inner_text().lower()
+    # Rückgängig stellt alles wieder her
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('Control+z'); p.wait(500); warte_rechnen(p, 20)
+    u = p.ev("""
+      const b2=Actions.worldBox(App.doc.items[2].id), j1=App.doc.joints[0], j2=App.doc.joints[1];
+      return [j1.ang, j2.ao[0], j2.ao[2], [b2.min.x, b2.min.y, b2.min.z, b2.max.x, b2.max.y, b2.max.z]];
+    """)
+    ok4 = u[0] == 0 and abs(u[1] - 30) < 1e-3 and abs(u[2] - 4) < 1e-3 and near(u[3], [30, -5, 0, 50, 5, 4], 0.1)
+    # Bewegung prüfen berücksichtigt das mitbewegte dritte Teil (Grundplatte liegt nur im Weg des Greifers, nicht des Arms)
+    p.ev("App.change('x', d=>{ d.items[0].t.x=40; d.items[0].t.z=-12; })"); warte_rechnen(p, 20)
+    ok5 = p.ev("return Joints.check(App.doc.joints[0].id, 30).then(r=>r.some(x=>x.v>0.05))")
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 # ---------- Sitzung 22: kleine Skizzen-Werkzeuge ----------
 def t_kreis_bogen_modi(p):
     sketch_xy(p)
@@ -2907,6 +2954,7 @@ TESTS = [
     ('Skizzen-Muster als Ganzes ändern: anlegen / Feld / 5 × 8 / Rückgängig', t_muster_ganz),
     ('Drehgelenk: Achse wählen / angelegt / 90° / Bewegung prüfen / lösen', t_gelenk),
     ('Schiebegelenk: Achse / Art Schieben / 10 mm / frei', t_schiebegelenk),
+    ('Gelenk-Kette: zwei Gelenke / 90° bewegt drittes Teil mit / Kreis abgelehnt / Rückgängig / Bewegung prüfen mit Kette', t_gelenk_kette),
     ('Skizze: Kreis aus 3 / 2 Punkten / tangentialer Bogen', t_kreis_bogen_modi),
     ('Skizze: Verlängern bis zur nächsten Linie', t_verlaengern),
     ('Entformungsschräge: 3° nach innen / -2° nach außen', t_schraege),
@@ -2991,7 +3039,7 @@ if __name__ == '__main__':
     with sync_playwright() as pw:
         b = pw.chromium.launch(args=ARGS)
         for name, fn in TESTS:
-            if only and not any(o.lower() in name.lower() for o in only):
+            if only and not any(o.lower() in name.lower() or o.lower() in fn.__name__.lower() for o in only):
                 continue
 
             def wrap(p, fn=fn):

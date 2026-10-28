@@ -481,6 +481,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
   Schritte: 1. Ein Kind (ab 10) mit „Einfach“ eine Platte mit vier Löchern bauen lassen, ohne zu helfen.
   Erwartet: Es findet Körper, Löcher und Exportieren allein; notieren, wo es hängen bleibt.
 
+## Gelenk-Ketten (neu in Argon 1)
+
+- [x] **Zwei Gelenke in einer Kette**
+  Schritte: Drei Quader 20 × 10 × 4 nebeneinander (Grundplatte, Arm, Greifer). Erst Grundplatte + Arm → „Gelenk“ → Kante bei X 10. Dann Arm + Greifer → „Gelenk“ → Kante bei X 30. Arm anklicken, erstes Gelenk auf 90° stellen.
+  Erwartet: Rechts beim Arm stehen beide Gelenke; bei 90° steht der Arm senkrecht und der Greifer samt seiner Gelenkachse ist an die Spitze des Arms mitgewandert.
+- [x] **Kreis wird abgelehnt**: Greifer + Grundplatte wählen → „Gelenk“ – Hinweis, dass das einen Kreis ergäbe; es wird kein drittes Gelenk angelegt.
+- [x] **Rückgängig**: Strg Z stellt Arm, Greifer und die zweite Gelenkachse in einem Schritt wieder waagerecht her.
+
 ## Schiebegelenk (neu in Sitzung 40)
 
 - [x] **Schlitten auf Schiene**: Schiene 40 × 10 × 4, Schlitten 10 × 10 × 4 obendrauf, beide wählen → „Gelenk“ → vordere obere Kante der Schiene. Rechts „Art: Schieben“, Weg 10.
