@@ -5,9 +5,12 @@ const Joints = (() => {
   const list = (doc = App.doc) => (doc && doc.joints) || [];
   const of = (id) => list().find((j) => j.a === id || j.b === id) || null;
   const top = (id) => App.doc.items.find((x) => x.id === id) || null;
+  const slide = (j) => j.kind === 'slide';
+  const unit = (j) => (slide(j) ? 'mm' : '°');
   function pose(j, ang, home) {
     const H = new THREE.Matrix4().fromArray(home || j.home);
     const o = new THREE.Vector3(...j.ao), d = new THREE.Vector3(...j.ad).normalize();
+    if (slide(j)) return new THREE.Matrix4().makeTranslation(d.x * ang, d.y * ang, d.z * ang).multiply(H);   // Schiebegelenk: Weg in mm entlang der Achse
     const R = new THREE.Matrix4().makeRotationAxis(d, (ang * Math.PI) / 180);
     return new THREE.Matrix4().makeTranslation(o.x, o.y, o.z).multiply(R).multiply(new THREE.Matrix4().makeTranslation(-o.x, -o.y, -o.z)).multiply(H);
   }
@@ -41,6 +44,18 @@ const Joints = (() => {
       Model.setFromMatrix(b, pose(j, j.ang));
     }, { merge: 'joint:' + jid });
   }
+  // Art wechseln (Drehen ↔ Schieben): das Teil geht zurück in die Ausgangslage
+  function setKind(jid, kind) {
+    App.change('Gelenk-Art', (doc) => {
+      const j = list(doc).find((x) => x.id === jid); if (!j) return false;
+      const b = doc.items.find((x) => x.id === j.b); if (!b) return false;
+      const cur = Model.localMatrix(b), exp = pose(j, j.ang);
+      if (cur.elements.some((v, i) => Math.abs(v - exp.elements[i]) > 1e-4)) j.home = pose(j, -j.ang, cur.toArray()).toArray().map((v) => round(v, 9));
+      j.kind = kind === 'slide' ? 'slide' : 'rot'; j.ang = 0;
+      if (j.kind === 'slide') { j.min = -20; j.max = 20; } else { j.min = -90; j.max = 90; }
+      Model.setFromMatrix(b, pose(j, 0));
+    });
+  }
   function setRange(jid, k, v) {
     App.change('Gelenk-Bereich', (doc) => { const j = list(doc).find((x) => x.id === jid); if (!j) return false; j[k] = round(clamp(Number(v) || 0, -360, 360), 2); if (j.min > j.max) [j.min, j.max] = [j.max, j.min]; });
   }
@@ -49,8 +64,9 @@ const Joints = (() => {
     UI.toast('Gelenk gelöst – das Teil bleibt, wo es gerade ist.', { icon: 'check' });
   }
   // Bewegung prüfen: in Schritten von min bis max drehen und den CAD-Kern fragen, ob sich die Teile durchdringen
-  async function check(jid, step = 5) {
+  async function check(jid, step) {
     const j = list().find((x) => x.id === jid); if (!j) return null;
+    step = step || (slide(j) ? Math.max(0.5, round((j.max - j.min) / 40, 1)) : 5);
     const A = top(j.a), B = top(j.b); if (!A || !B) return null;
     const V = Model.vars(App.doc).v, ka = Model.kernelItem(A, V), out = [];
     const cur = Model.localMatrix(B), exp = pose(j, j.ang);
@@ -64,34 +80,36 @@ const Joints = (() => {
   }
   function describe(j, res) {
     const hit = res.filter((r) => r.v > 0.05);
-    if (!hit.length) return { ok: true, text: `Frei im ganzen Bereich von ${fmt(j.min, 0)}° bis ${fmt(j.max, 0)}° – nichts stößt an.` };
+    const u = unit(j);
+    if (!hit.length) return { ok: true, text: `Frei im ganzen Bereich von ${fmt(j.min, 1)} ${u} bis ${fmt(j.max, 1)} ${u} – nichts stößt an.` };
     const free = res.filter((r) => r.v <= 0.05).map((r) => r.a);
     const lo = res.filter((r) => r.a <= j.ang && r.v > 0.05).map((r) => r.a), hi = res.filter((r) => r.a >= j.ang && r.v > 0.05).map((r) => r.a);
     const from = lo.length ? Math.max(...lo) : null, to = hi.length ? Math.min(...hi) : null;
     const parts = [];
-    if (to != null) parts.push(`stößt in Plus-Richtung bei ${fmt(to, 0)}° an`);
-    if (from != null) parts.push(`in Minus-Richtung bei ${fmt(from, 0)}°`);
+    if (to != null) parts.push(`stößt in Plus-Richtung bei ${fmt(to, 1)} ${u} an`);
+    if (from != null) parts.push(`in Minus-Richtung bei ${fmt(from, 1)} ${u}`);
     const atNow = res.find((r) => Math.abs(r.a - j.ang) < 1e-6);
-    return { ok: false, text: (atNow && atNow.v > 0.05 ? 'Schon in dieser Stellung stecken die Teile ineinander. ' : '') + `Das Teil ${parts.join(', ')}.` + (free.length ? ` Frei: ${fmt(Math.min(...free), 0)}° … ${fmt(Math.max(...free), 0)}° (nicht unbedingt am Stück).` : '') };
+    return { ok: false, text: (atNow && atNow.v > 0.05 ? 'Schon in dieser Stellung stecken die Teile ineinander. ' : '') + `Das Teil ${parts.join(', ')}.` + (free.length ? ` Frei: ${fmt(Math.min(...free), 1)} … ${fmt(Math.max(...free), 1)} ${u} (nicht unbedingt am Stück).` : '') };
   }
   // Abschnitt „Gelenk“ in den Eigenschaften
   function panel(it) {
     const j = of(it.id); if (!j) return null;
     const A = top(j.a), B = top(j.b); if (!A || !B) return null;
     const sec = h('div', { class: 'section', id: 'joint-sec' }, h('div', { class: 'section-h' }, 'Gelenk'));
-    sec.append(h('div', { class: 'hint-box', html: `<b>${esc(Model.label(B))}</b> dreht sich gegenüber <b>${esc(Model.label(A))}</b>.` }));
-    const range = h('input', { type: 'range', id: 'jt-range', min: j.min, max: j.max, step: 1, value: j.ang, 'aria-label': 'Gelenkwinkel', style: { width: '100%' } });
+    sec.append(h('div', { class: 'hint-box', html: `<b>${esc(Model.label(B))}</b> ${slide(j) ? 'gleitet' : 'dreht sich'} gegenüber <b>${esc(Model.label(A))}</b>.` }));
+    sec.append(UI.selectField({ id: 'jt-kind', label: 'Art', value: slide(j) ? 'slide' : 'rot', options: [['rot', 'Drehen um die Achse'], ['slide', 'Schieben entlang der Achse']], onChange: (v) => setKind(j.id, v) }));
+    const range = h('input', { type: 'range', id: 'jt-range', min: j.min, max: j.max, step: slide(j) ? 0.5 : 1, value: j.ang, 'aria-label': slide(j) ? 'Weg' : 'Gelenkwinkel', style: { width: '100%' } });
     range.oninput = () => setAngle(j.id, +range.value);
     sec.append(range);
     const f = h('div', { class: 'fields three' });
-    f.append(UI.numField({ id: 'jt-ang', label: 'Winkel', value: j.ang, unit: '°', expr: false, onCommit: (v) => setAngle(j.id, v) }));
-    f.append(UI.numField({ id: 'jt-min', label: 'Von', value: j.min, unit: '°', expr: false, onCommit: (v) => setRange(j.id, 'min', v) }));
-    f.append(UI.numField({ id: 'jt-max', label: 'Bis', value: j.max, unit: '°', expr: false, onCommit: (v) => setRange(j.id, 'max', v) }));
+    f.append(UI.numField({ id: 'jt-ang', label: slide(j) ? 'Weg' : 'Winkel', value: j.ang, unit: unit(j), expr: false, onCommit: (v) => setAngle(j.id, v) }));
+    f.append(UI.numField({ id: 'jt-min', label: 'Von', value: j.min, unit: unit(j), expr: false, onCommit: (v) => setRange(j.id, 'min', v) }));
+    f.append(UI.numField({ id: 'jt-max', label: 'Bis', value: j.max, unit: unit(j), expr: false, onCommit: (v) => setRange(j.id, 'max', v) }));
     sec.append(f);
     const res = h('div', { class: 'hint-box', id: 'jt-result', hidden: true });
     const cb = h('button', { type: 'button', class: 'btn', id: 'jt-check' }); cb.innerHTML = icon('hinge') + 'Bewegung prüfen';
     cb.onclick = async () => {
-      cb.disabled = true; res.hidden = false; res.className = 'hint-box'; res.textContent = 'Prüfe in 5°-Schritten …';
+      cb.disabled = true; res.hidden = false; res.className = 'hint-box'; res.textContent = slide(j) ? 'Prüfe Schritt für Schritt …' : 'Prüfe in 5°-Schritten …';
       const r = await check(j.id); cb.disabled = false;
       if (!r) { res.textContent = 'Das ging nicht.'; return; }
       const d = describe(j, r); res.className = d.ok ? 'ok-box' : 'err-box'; res.textContent = d.text; res.dataset.hits = String(r.filter((x) => x.v > 0.05).length);
@@ -109,5 +127,5 @@ const Joints = (() => {
       if (js.some((j) => !ids.has(j.a) || !ids.has(j.b))) App.doc.joints = js.filter((j) => ids.has(j.a) && ids.has(j.b));
     });
   }
-  return { init, start, setAngle, setRange, remove, check, describe, panel, of, pose, get list() { return list(); } };
+  return { init, start, setAngle, setKind, setRange, remove, check, describe, panel, of, pose, get list() { return list(); } };
 })();

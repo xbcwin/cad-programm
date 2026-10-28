@@ -2594,6 +2594,28 @@ def t_gelenk(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+# ---------- Sitzung 40: Schiebegelenk ----------
+def t_schiebegelenk(p):
+    p.empty(); p.ev("App.change('x', d=>{ const a=Model.newItem('box',{w:40,d:10,h:4}); a.name='Schiene'; d.items.push(a); const b=Model.newItem('box',{w:10,d:10,h:4}); b.t.z=4; b.name='Schlitten'; d.items.push(b); })"); warte_rechnen(p, 20)
+    p.ev("App.select([App.doc.items[0].id, App.doc.items[1].id])"); p.wait(600)
+    p.pg.locator('.ctxbar button[aria-label="Gelenk"]').click(); p.wait(300)
+    s = world_screen(p, 15, -5, 4); p.pg.mouse.click(s[0], s[1]); p.wait(800); warte_rechnen(p, 20)
+    ok1 = p.ev("const j=(App.doc.joints||[])[0]; return !!j && Math.abs(Math.abs(j.ad[0])-1)<1e-6")
+    p.pg.select_option('#jt-kind', 'slide'); p.wait(800); warte_rechnen(p, 20)
+    ok2 = p.ev("const j=App.doc.joints[0]; return j.kind==='slide' && j.min===-20 && j.max===20") and 'Weg' in p.pg.locator('#joint-sec').inner_text()
+    x0 = p.ev("const b=Actions.worldBox(App.doc.items[1].id); return (b.min.x+b.max.x)/2")
+    field(p, '#jt-ang', 10); warte_rechnen(p, 20)
+    x1 = p.ev("const b=Actions.worldBox(App.doc.items[1].id); return [(b.min.x+b.max.x)/2, b.max.z-b.min.z]")
+    ok3 = abs(abs(x1[0] - x0) - 10) < 0.05 and abs(x1[1] - 4) < 0.05
+    p.pg.click('#jt-check')
+    for _ in range(160):
+        p.wait(500)
+        if 'Prüfe' not in p.pg.locator('#jt-result').inner_text():
+            break
+    ok4 = 'Frei im ganzen Bereich' in p.pg.locator('#jt-result').inner_text() and p.ev("return App.errors.length") == 0
+    return [ok1, ok2, ok3, ok4]
+
+
 # ---------- Sitzung 22: kleine Skizzen-Werkzeuge ----------
 def t_kreis_bogen_modi(p):
     sketch_xy(p)
@@ -2884,6 +2906,7 @@ TESTS = [
     ('Schwachstellen: Überhang bei Druckteilen / weg ohne Überhang', t_ueberhang_schwach),
     ('Skizzen-Muster als Ganzes ändern: anlegen / Feld / 5 × 8 / Rückgängig', t_muster_ganz),
     ('Drehgelenk: Achse wählen / angelegt / 90° / Bewegung prüfen / lösen', t_gelenk),
+    ('Schiebegelenk: Achse / Art Schieben / 10 mm / frei', t_schiebegelenk),
     ('Skizze: Kreis aus 3 / 2 Punkten / tangentialer Bogen', t_kreis_bogen_modi),
     ('Skizze: Verlängern bis zur nächsten Linie', t_verlaengern),
     ('Entformungsschräge: 3° nach innen / -2° nach außen', t_schraege),

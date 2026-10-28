@@ -481,6 +481,11 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
   Schritte: 1. Ein Kind (ab 10) mit „Einfach“ eine Platte mit vier Löchern bauen lassen, ohne zu helfen.
   Erwartet: Es findet Körper, Löcher und Exportieren allein; notieren, wo es hängen bleibt.
 
+## Schiebegelenk (neu in Sitzung 40)
+
+- [x] **Schlitten auf Schiene**: Schiene 40 × 10 × 4, Schlitten 10 × 10 × 4 obendrauf, beide wählen → „Gelenk“ → vordere obere Kante der Schiene. Rechts „Art: Schieben“, Weg 10.
+  Erwartet: Der Schlitten rutscht 10 mm entlang der Schiene; „Bewegung prüfen“ meldet „Frei im ganzen Bereich“.
+
 ## Drehgelenk (neu in Sitzung 39)
 
 - [x] **Gelenk anlegen und drehen**
