@@ -2659,6 +2659,38 @@ def t_gelenk(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+
+# ---------- Sitzung 44: Anschlag übernehmen, Bewegung abspielen ----------
+def t_gelenk_anschlag(p):
+    p.empty(); p.ev("App.change('x', d=>{ const a=Model.newItem('box',{w:20,d:10,h:4}); a.name='Arm A'; d.items.push(a); const b=Model.newItem('box',{w:20,d:10,h:4}); b.t.x=20; b.name='Arm B'; d.items.push(b); })"); warte_rechnen(p, 20)
+    p.ev("App.select([App.doc.items[0].id, App.doc.items[1].id])"); p.wait(600)
+    p.pg.locator('.ctxbar button[aria-label="Gelenk"]').click(); p.wait(300)
+    s = world_screen(p, 10, 0, 4); p.pg.mouse.click(s[0], s[1]); p.wait(800); warte_rechnen(p, 20)
+    p.pg.click('#jt-check')
+    for _ in range(160):
+        p.wait(500)
+        if 'Prüfe' not in p.pg.locator('#jt-result').inner_text():
+            break
+    fr = p.ev("const j=App.doc.joints[0]; return Joints.check(j.id).then(r=>Joints.freeRange(j, r))")
+    ok1 = fr is not None and fr[0] <= 0 <= fr[1] and (fr[0] > -90 or fr[1] < 90) and p.pg.locator('#jt-stop').count() == 1
+    p.pg.click('#jt-stop'); p.wait(600)
+    j = p.ev("const j=App.doc.joints[0]; return [j.min, j.max]")
+    ok2 = abs(j[0] - fr[0]) < 1e-6 and abs(j[1] - fr[1]) < 1e-6 and p.ev("return +document.querySelector('#jt-range').max") == fr[1]
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('Control+z'); p.wait(600)
+    ok3 = p.ev("const j=App.doc.joints[0]; return [j.min, j.max]") == [-90, 90]
+    # Abspielen: Das Bild bewegt sich, das Projekt bleibt unverändert
+    rev = p.ev("return App.revision")
+    p.pg.click('#jt-play'); p.wait(600)
+    mid = p.ev("const it=App.doc.items[1], n=Viewer.nodes.get(it.id), m=Model.localMatrix(it); return [!!Joints.playing, n.base.elements.some((v,i)=>Math.abs(v-m.elements[i])>1e-3)]")
+    ok4 = mid == [True, True] and 'Stopp' in p.pg.locator('#jt-play').inner_text()
+    for _ in range(20):
+        p.wait(500)
+        if not p.ev("return !!Joints.playing"):
+            break
+    end = p.ev("const it=App.doc.items[1], n=Viewer.nodes.get(it.id), m=Model.localMatrix(it); return [!!Joints.playing, n.base.elements.every((v,i)=>Math.abs(v-m.elements[i])<1e-6), App.revision===arg]", rev)
+    ok5 = end == [False, True, True] and 'abspielen' in p.pg.locator('#jt-play').inner_text()
+    return [ok1, ok2, ok3, ok4, ok5]
+
 # ---------- Sitzung 40: Schiebegelenk ----------
 def t_schiebegelenk(p):
     p.empty(); p.ev("App.change('x', d=>{ const a=Model.newItem('box',{w:40,d:10,h:4}); a.name='Schiene'; d.items.push(a); const b=Model.newItem('box',{w:10,d:10,h:4}); b.t.z=4; b.name='Schlitten'; d.items.push(b); })"); warte_rechnen(p, 20)
@@ -2782,6 +2814,83 @@ def t_ki_mittellinie(p):
     ok2 = p.ev("return App.errors.length===0 && !!App.results.get(App.doc.items[0].id)")
     bb = p.ev("return App.results.get(App.doc.items[0].id).data.bbox")
     ok3 = abs(bb[1] + 80) < 1 and abs(bb[4] - 0) < 1 and bb[5] > 20
+    return [ok1, ok2, ok3]
+
+
+# ---------- Sitzung 45: Rohr im Raum ----------
+def t_rohr_raum(p):
+    p.empty()
+    # 1. Kern: glatte Kurve durch drei Punkte im Raum, Volumen = Querschnitt × Kurvenlänge
+    p.ev("App.change('x', d=>{ const it=Model.newItem('sweep',{path3d:{pts:[[0,0,0],[30,0,10],[30,30,20]],smooth:true},shape:'circle',d:4,w:4,h:3,wall:0},{name:'Rohr'}); d.items.push(it); })"); warte_rechnen(p, 30)
+    L = p.ev("""let L=0; for (const b of Model.bez3([[0,0,0],[30,0,10],[30,30,20]])) { let q=b.a; for (let i=1;i<=200;i++){ const t=i/200,u=1-t; const r=[0,1,2].map(k=>u*u*u*b.a[k]+3*u*u*t*b.c1[k]+3*u*t*t*b.c2[k]+t*t*t*b.b[k]); L+=Math.hypot(r[0]-q[0],r[1]-q[1],r[2]-q[2]); q=r; } } return L""")
+    v = volumen(p)
+    ok1 = p.ev("return App.errors.length") == 0 and v and abs(v - 3.14159265 * 4 * L) < 0.05 * 3.14159265 * 4 * L
+    # 2. Gerade Stücke mit runden Ecken
+    p.ev("App.change('x', d=>{ d.items[0].p.path3d.smooth=false; })"); warte_rechnen(p, 30)
+    v2 = volumen(p); L2 = (30 ** 2 + 10 ** 2) ** 0.5 + (30 ** 2 + 10 ** 2) ** 0.5
+    ok2 = p.ev("return App.errors.length") == 0 and v2 and abs(v2 - 3.14159265 * 4 * L2) < 0.08 * 3.14159265 * 4 * L2
+    # 3. Im Bild klicken: zwei Punkte auf der Oberseite eines Quaders (Rohr liegt auf), einer daneben in den Raum
+    p.ev("App.change('x', d=>{ d.items=[]; const b=Model.newItem('box',{w:40,d:40,h:10}); b.name='Platte'; d.items.push(b); })"); warte_rechnen(p, 30)
+    p.pg.locator('#t-body').click(); p.wait(400); p.pg.locator('#add-route').click(); p.wait(500)
+    for (x, y, z) in ((-10, 0, 10), (10, 0, 10), (40, 30, 13)):
+        sxy = world_screen(p, x, y, z); p.pg.mouse.click(sxy[0], sxy[1]); p.wait(300)
+    n = p.pg.locator('#route-n').inner_text()
+    p.pg.keyboard.press('Enter'); warte_rechnen(p, 30)
+    it = p.ev("const it=App.doc.items[1]; return it && [it.kind, it.p.path3d.pts, it.p.d]")
+    ok3 = (n == '3' and it and it[0] == 'sweep' and it[2] == 6 and near(it[1][0], [-10, 0, 13], 0.5) and near(it[1][1], [10, 0, 13], 0.5)
+           and near(it[1][2], [40, 30, 13], 0.5) and p.ev("return App.errors.length") == 0 and p.pg.locator('.viewbar[aria-label="Rohr im Raum"]').count() == 0)
+    # 4. Punkt als Zahl ändern, Punkt löschen, Rückgängig
+    field(p, '#p3-2-z', 30); warte_rechnen(p, 30)
+    ok4 = p.ev("return App.doc.items[1].p.path3d.pts[2][2]") == 30 and p.ev("return App.errors.length") == 0 and p.pg.locator('#p3-list .p3-row').count() == 3
+    p.pg.click('#p3-del-1'); warte_rechnen(p, 30)
+    k = p.ev("return App.doc.items[1].p.path3d.pts.length")
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('Control+z'); warte_rechnen(p, 30)
+    ok5 = k == 2 and p.ev("return App.doc.items[1].p.path3d.pts.length") == 3 and p.ev("return App.errors.length") == 0
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
+def t_ki_rohr_raum(p):
+    ki(p); p.empty()
+    ki_fragen(p, 'Leg mir einen Kabelkanal, der nach oben läuft', {'antwort': 'Ich lege ein Rohr durch den Raum.', 'aktionen': [
+        {'op': 'hinzufuegen', 'objekt': {'art': 'sweep', 'name': 'Kabelkanal', 'p': {'pfad3d': [[0, 0, 0], [20, 0, 5], [20, 20, 25]], 'd': 5, 'wand': 1}}}]}, 90)
+    ok1 = p.ev("const it=App.doc.items[0]; return !!(it && it.kind==='sweep' && it.p.path3d && it.p.path3d.pts.length===3 && it.p.path3d.smooth===true && it.p.wall===1)")
+    bb = p.ev("return App.results.get(App.doc.items[0].id).data.bbox")
+    ok2 = p.ev("return App.errors.length") == 0 and bb[5] > 26 and bb[4] > 21
+    return [ok1, ok2]
+
+
+
+# ---------- Sitzung 47: KI-Kollege legt Gelenke an ----------
+def t_ki_gelenk(p):
+    ki(p); p.empty()
+    ki_fragen(p, 'Bau mir einen Klapparm', {'antwort': 'Ich baue zwei Arme mit Gelenk.', 'aktionen': [
+        {'op': 'hinzufuegen', 'objekt': {'art': 'box', 'name': 'Arm A', 'p': {'w': 20, 'd': 10, 'h': 4}}},
+        {'op': 'hinzufuegen', 'objekt': {'art': 'box', 'name': 'Arm B', 'p': {'w': 20, 'd': 10, 'h': 4}, 't': {'x': 20}}},
+        {'op': 'gelenk', 'fest': 'name:Arm A', 'beweglich': 'name:Arm B', 'achse': {'punkt': [10, 0, 4], 'richtung': [0, 1, 0]}, 'von': -120, 'bis': 0, 'winkel': -90}]}, 90)
+    j = p.ev("const j=(App.doc.joints||[])[0]; const b=App.doc.items.find(i=>i.name==='Arm B'); return j && [j.b===b.id, j.min, j.max, j.ang, (j.kind||'rot')]")
+    wb = p.ev("const b=Actions.worldBox(App.doc.items.find(i=>i.name==='Arm B').id); return [b.max.z-b.min.z, b.max.x-b.min.x]")
+    ok1 = j == [True, -120, 0, -90, 'rot'] and abs(wb[0] - 20) < 0.2 and abs(wb[1] - 4) < 0.2
+    # Ein zweites Gelenk, das B noch einmal bewegen würde, lehnt er ab
+    ki_fragen(p, 'Noch ein Gelenk', {'antwort': 'Ich versuche es.', 'aktionen': [
+        {'op': 'gelenk', 'fest': 'name:Arm A', 'beweglich': 'name:Arm B', 'achse': {'punkt': [0, 0, 0], 'richtung': [0, 0, 1]}}]}, 60)
+    ok2 = p.ev("return (App.doc.joints||[]).length") == 1
+    return [ok1, ok2]
+
+# ---------- Sitzung 46: Schwerpunkt ausgleichen ----------
+def t_schwerpunkt_ausgleich(p):
+    drohne(p, 'f5')
+    p.ev("App.change('x', d=>{ d.items.find(i=>/^Akku/.test(i.name)).t.y=45; })"); warte_rechnen(p)
+    c = chk(p)
+    ok1 = c['cog'][0] in ('warn', 'bad') and p.ev("return DroneCheck.run().then(l=>l.find(c=>c.id==='cog').fix)") == 'balance'
+    p.ev("DroneCheck.dialog()"); p.pg.wait_for_selector('.modal #chk-balance', timeout=60000); p.wait(300)
+    p.pg.click('.modal #chk-balance'); p.wait(1500); warte_rechnen(p)
+    p.pg.wait_for_selector('.modal .chk-row[data-chk="cog"]', timeout=60000); p.wait(500)
+    st = p.pg.locator('.modal .chk-row[data-chk="cog"]').get_attribute('class')
+    y = p.ev("return App.doc.items.find(i=>/^Akku/.test(i.name)).t.y")
+    ok2 = 'ok' in st.split() and y < 45 and p.pg.locator('.modal #chk-balance').count() == 0
+    p.pg.keyboard.press('Escape'); p.wait(300)
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('Control+z'); warte_rechnen(p)
+    ok3 = p.ev("return App.doc.items.find(i=>/^Akku/.test(i.name)).t.y") == 45
     return [ok1, ok2, ok3]
 
 # ---------- Sitzung 22: kleine Skizzen-Werkzeuge ----------
@@ -3076,8 +3185,13 @@ TESTS = [
     ('Skizzen-Muster als Ganzes ändern: anlegen / Feld / 5 × 8 / Rückgängig', t_muster_ganz),
     ('Drehgelenk: Achse wählen / angelegt / 90° / Bewegung prüfen / lösen', t_gelenk),
     ('Schiebegelenk: Achse / Art Schieben / 10 mm / frei', t_schiebegelenk),
+    ('Gelenk: Anschlag übernehmen / gesetzt / Rückgängig / Abspielen bewegt das Bild / Projekt unverändert', t_gelenk_anschlag),
     ('Übergang mit Mittellinie: zeichnen / Vorschau / Fertig / Rückgängig / ohne', t_uebergang_mittellinie),
     ('KI-Kollege biegt einen Übergang mit Mittellinie', t_ki_mittellinie),
+    ('Rohr im Raum: glatt / Ecken / im Bild klicken / Punkt als Zahl / löschen und Rückgängig', t_rohr_raum),
+    ('KI-Kollege legt ein Rohr im Raum', t_ki_rohr_raum),
+    ('Schwerpunkt ausgleichen: Knopf im Check / Akku wandert, Schwerpunkt mittig / Rückgängig', t_schwerpunkt_ausgleich),
+    ('KI-Kollege legt ein Gelenk an / zweites Gelenk für dasselbe Teil abgelehnt', t_ki_gelenk),
     ('Gelenk-Kette: zwei Gelenke / 90° bewegt drittes Teil mit / Kreis abgelehnt / Rückgängig / Bewegung prüfen mit Kette', t_gelenk_kette),
     ('Skizze: Kreis aus 3 / 2 Punkten / tangentialer Bogen', t_kreis_bogen_modi),
     ('Skizze: Verlängern bis zur nächsten Linie', t_verlaengern),

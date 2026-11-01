@@ -18,6 +18,7 @@ const AI = (() => {
 {"op":"muster","id":"<id>","art":"kreis","n":4,"winkel":360,"mitte":[0,0],"achse":"z"}   (Kreismuster um eine Achse durch „mitte“: "z" senkrecht (Standard), "x" quer, "y" längs – dann „mitte“ mit drei Werten [x,y,z]; schräge Achse als Richtung "achse":[dx,dy,dz] mit "mitte":[x,y,z]; Anzahl zählt das Original mit)
 {"op":"muster","id":"<id>","art":"rechteck","nx":3,"ny":1,"dx":20,"dy":0}   (Rechteckmuster, Abstände von Mitte zu Mitte)
 {"op":"muster","id":"<id>","art":"kurve","n":5,"abstand":0,"drehen":true,"hoehe":0,"kurve":[{"typ":"bogen","von":[x,y],"durch":[x,y],"bis":[x,y]}]}   (Muster entlang Kurve in der Ebene auf Höhe „hoehe“. Kurvenstücke: {"typ":"linie","von","bis"}, {"typ":"bogen","von","durch","bis"}, {"typ":"spline","punkte":[[x,y],…]} – aneinander gehängt –, oder ein {"typ":"kreis","mitte":[x,y],"r":20}. Die Kurve beginnt an der Mitte des Originals; abstand 0 = gleichmäßig verteilt; drehen:true dreht die Kopien mit der Kurve)
+{"op":"gelenk","fest":"<id>","beweglich":"<id>","achse":{"punkt":[x,y,z],"richtung":[dx,dy,dz]},"art":"drehen"|"schieben","von":-90,"bis":90,"winkel":0}   (Gelenk zwischen zwei Teilen ganz oben im Verlauf, nicht in einer Gruppe: „beweglich“ dreht sich um die Achse durch „punkt“ bzw. gleitet entlang „richtung“ – „von“/„bis“ in Grad bzw. mm, „winkel“ = Startstellung. Ketten gehen: Ein Teil darf an mehreren Gelenken hängen, wird aber nur von einem bewegt.)
 {"op":"spiegeln","id":"<id>","ebene":"YZ"|"XZ"|"XY","lage":0}   (Original plus Spiegelbild; YZ = links↔rechts, XZ = vorne↔hinten, XY = oben↔unten)
 {"op":"verbinden","ids":"alle","name":"Verbund"}   (macht die Teile zu EINEM Körper – für „Verbund“, „verbinden“, „zusammenfügen“, „ein Teil daraus machen“; Löcher darin schneiden fest. Kaufteile mit festem Gewicht bleiben automatisch einzeln, außer "mit_kaufteilen":true)
 {"op":"loesen","ids":"<id>"}   (Gruppe oder Verbund wieder in Einzelteile lösen)
@@ -54,7 +55,7 @@ Parameter p (alle Grundkörper stehen mit der Unterseite auf z=0 ihres eigenen S
   ELEMENT (2D in mm): {"rect":[x1,y1,x2,y2]} · {"circle":[cx,cy,r]} · {"ellipse":[cx,cy,rx,ry]} · {"poly":[[x,y],[x,y],…]} (geschlossener Linienzug) · {"slot":[x1,y1,x2,y2,r]} · {"text":"FPV","x":0,"y":0,"hoehe":5,"fett":true,"mitte":true} (Schrift als Umriss; in einem Rechteck = Gravur)
   Ebene XY: u=X, v=Y, hoch in +Z. Ebene XZ: u=X, v=Z, hoch in −Y. Ebene YZ: u=Y, v=Z, hoch in +X. „versatz“ verschiebt die Ebene entlang dieser Richtung. Formen, die ganz in einer anderen liegen, werden zu Löchern darin.
 - loft (Übergang durch Umrisse): {"profile":[{"ebene":"XY","versatz":0,"form":[ELEMENT]},{"ebene":"XY","versatz":30,"form":[ELEMENT]}],"spitze":0,"gerade":false,"mittellinie":{"ebene":"XZ","versatz":0,"kurve":[KURVENSTÜCK…]}} – mit "spitze" > 0 läuft der Körper hinter dem letzten Profil zu einer Spitze zusammen (auch mit nur einem Profil). "mittellinie" (optional, ab zwei Profilen) biegt den Übergang: eine offene Kurve in einer Ebene (Kurvenstücke wie bei „muster kurve“: linie/bogen/spline), die vom ersten Profil durch alle bis zum letzten läuft – die Profile bleiben, wo sie sind. In der Ebene XZ ist die 2. Koordinate z, in YZ ist die 1. y und die 2. z.
-- sweep (Querschnitt entlang Pfad): {"ebene":"XY","versatz":0,"pfad":[[x,y],…],"glatt":false,"form":"rund"|"rechteck","d":6,"w":6,"h":4,"wand":0} – Rohr, Kabelkanal, Bügel; "glatt": true macht aus den Punkten eine Spline.
+- sweep (Querschnitt entlang Pfad): {"ebene":"XY","versatz":0,"pfad":[[x,y],…],"glatt":false,"form":"rund"|"rechteck","d":6,"w":6,"h":4,"wand":0} – Rohr, Kabelkanal, Bügel; "glatt": true macht aus den Punkten eine Spline. Statt "ebene"/"pfad" geht auch "pfad3d":[[x,y,z],…] – ein Rohr durch Punkte im Raum (glatt, außer "glatt": false), z. B. ein Kabelkanal, der um Teile herum und nach oben läuft.
 - part (Bauteile, Öffnung zeigt nach +Z, Tiefe geht nach −Z; setze z auf die Oberfläche):
   {"lib":"screwHole","size":"M2|M2.5|M3|M4|M5|M6|M8","head":"countersunk|counterbore|none","length":10} (rolle loch)
   {"lib":"nutTrap","size":"M3","length":12} (loch) · {"lib":"insert","size":"M3"} (loch, Gewindeeinsatz) · {"lib":"slotHole","len":20,"w":4.5,"depth":10} (loch)
@@ -371,8 +372,8 @@ Beispiel – Wunsch „Mach alles als Verbund“ (Runde 1):
   }
   const opOf = (a) => String((a && a.op) || '').toLowerCase().replace(/[äöü]/g, (c) => ({ ä: 'ae', ö: 'oe', ü: 'ue' }[c]));
   const ALIAS = { add: 'hinzufuegen', change: 'aendern', delete: 'loeschen', group: 'verbinden', gruppieren: 'verbinden', verbund: 'verbinden', union: 'verbinden', fillet: 'rundung', pattern: 'muster', mirror: 'spiegeln', ungroup: 'loesen', subtract: 'abziehen', intersect: 'schnittmenge', align: 'ausrichten', move: 'verschieben', rotate: 'drehen', flip: 'umklappen', copy: 'kopieren', duplizieren: 'kopieren', hinlegen: 'auf_platte', drop: 'auf_platte', mass_g: 'gewicht', buy: 'kaufteil', check: 'pruefen', select: 'auswaehlen', role: 'rolle', color: 'farbe', hide: 'ausblenden', show: 'einblenden', suppress: 'unterdruecken', rename: 'umbenennen', center: 'zentrieren' };
-  const TOOL = new Set(['verbinden', 'loesen', 'abziehen', 'schnittmenge', 'ausrichten', 'zentrieren', 'drehen', 'umklappen', 'auf_platte', 'drohne', 'pruefen', 'schwachstellen', 'auswaehlen']);
-  const STEP = { verbinden: 'verbindet Teile', loesen: 'löst Gruppen', abziehen: 'schneidet aus', schnittmenge: 'bildet die Schnittmenge', ausrichten: 'richtet aus', zentrieren: 'zentriert', drehen: 'dreht', umklappen: 'klappt um', auf_platte: 'legt auf die Platte', drohne: 'baut den Rahmen', pruefen: 'merkt den Check vor', schwachstellen: 'merkt die Suche vor' };
+  const TOOL = new Set(['gelenk', 'verbinden', 'loesen', 'abziehen', 'schnittmenge', 'ausrichten', 'zentrieren', 'drehen', 'umklappen', 'auf_platte', 'drohne', 'pruefen', 'schwachstellen', 'auswaehlen']);
+  const STEP = { gelenk: 'legt ein Gelenk an', verbinden: 'verbindet Teile', loesen: 'löst Gruppen', abziehen: 'schneidet aus', schnittmenge: 'bildet die Schnittmenge', ausrichten: 'richtet aus', zentrieren: 'zentriert', drehen: 'dreht', umklappen: 'klappt um', auf_platte: 'legt auf die Platte', drohne: 'baut den Rahmen', pruefen: 'merkt den Check vor', schwachstellen: 'merkt die Suche vor' };
   // Aktionen der Reihe nach umsetzen: reine Änderungen am Modell gesammelt, Werkzeuge (Verbinden, Ausrichten …) einzeln mit dem fertig gerechneten Modell
   async function execute(acts, run, onStep) {
     const rep = { added: [], changed: [], notes: [], done: [], check: false, weak: false, select: null };
@@ -459,6 +460,15 @@ Beispiel – Wunsch „Mach alles als Verbund“ (Runde 1):
         rep.notes.push(`Neues Projekt „${d.name}“ – dein bisheriges Projekt findest du auf der Startseite unter „Weiterarbeiten“.`);
         await idle();
       } catch (e) { rep.notes.push('Den Rahmen konnte ich nicht bauen.'); }
+    } else if (op === 'gelenk') {
+      const fa = pick(a.fest ?? a.a, App.doc, run, rep)[0], fb = pick(a.beweglich ?? a.b, App.doc, run, rep)[0];
+      const ax = a.achse && typeof a.achse === 'object' ? a.achse : {};
+      const dir = Array.isArray(ax.richtung) ? ax.richtung.map(Number) : { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] }[String(a.achse || 'z').toLowerCase()] || [0, 0, 1];
+      const pt = Array.isArray(ax.punkt) ? ax.punkt.map(Number) : Array.isArray(a.punkt) ? a.punkt.map(Number) : [0, 0, 0];
+      if (!fa || !fb || ![...dir, ...pt].every((v) => Number.isFinite(v))) { rep.notes.push('Für ein Gelenk braucht es ein festes und ein bewegliches Teil und eine Achse (Punkt und Richtung).'); return; }
+      const r = Joints.add(fa, fb, pt, dir, { kind: /schieb|slide/i.test(String(a.art || '')) ? 'slide' : 'rot', min: a.von, max: a.bis, ang: a.winkel ?? a.weg });
+      if (!r.ok) { rep.notes.push(r.msg); return; }
+      rep.changed.push(fb); rep.done.push(`gelenk: „${labelOf(fb)}“ ${/schieb|slide/i.test(String(a.art || '')) ? 'gleitet' : 'dreht sich'} gegenüber „${labelOf(fa)}“ (Gelenk ${r.id})`);
     } else if (op === 'pruefen') rep.check = true;
     else if (op === 'schwachstellen') rep.weak = true;
     else if (op === 'auswaehlen') rep.select = ids();
@@ -656,10 +666,15 @@ Beispiel – Wunsch „Mach alles als Verbund“ (Runde 1):
       }
     } else if (kind === 'sweep') {
       const pl = PLANEDEF[String(o.p && o.p.ebene || 'XY').toUpperCase()] || PLANEDEF.XY, off = num(o.p && o.p.versatz, 0);
+      const p3 = ((o.p && o.p.pfad3d) || []).filter((q) => Array.isArray(q) && q.length >= 3).map((q) => [num(q[0], 0), num(q[1], 0), num(q[2], 0)]);
+      if (p3.length >= 2) {
+        it = Model.newItem('sweep', { path3d: { pts: p3, smooth: o.p.glatt !== false }, shape: o.p.form === 'rechteck' ? 'rect' : 'circle', d: num(o.p.d, 6), w: num(o.p.w, 6), h: num(o.p.h, 4), wall: num(o.p.wand, 0) }, { name: o.name || 'Rohr im Raum', role });
+      } else {
       const pts = ((o.p && o.p.pfad) || []).map((q) => [num(q[0], 0), num(q[1], 0)]);
       if (pts.length < 2) { notes.push('Ein Pfad braucht mindestens zwei Punkte.'); return null; }
       const ents = o.p.glatt ? [{ id: uid('e'), type: 'spline', pts, closed: false }] : pts.slice(1).map((q, i) => ({ id: uid('e'), type: 'line', a: pts[i], b: q }));
       it = Model.newItem('sweep', { sketch: { plane: { o: pl.n.map((v) => v * off), x: pl.x, n: pl.n }, ents, dims: [], cons: [] }, shape: o.p.form === 'rechteck' ? 'rect' : 'circle', d: num(o.p.d, 6), w: num(o.p.w, 6), h: num(o.p.h, 4), wall: num(o.p.wand, 0) }, { name: o.name || 'Entlang Pfad', role });
+      }
     } else if (kind === 'part') {
       const lib = o.p && o.p.lib; const def = LIBMAP[lib];
       if (!def) { notes.push(`Das Bauteil „${lib}“ gibt es nicht.`); return null; }

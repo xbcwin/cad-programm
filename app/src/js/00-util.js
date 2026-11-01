@@ -618,7 +618,7 @@ const HELP = {
  "droneCheck": {
   "tip": "Rahmen prüfen: Propeller, Teile, Gewicht, Schwerpunkt, Schub",
   "hilfe": "Drohne → „Drohnen-Check“ (oder rechts unter „Projekt“): Tracery rechnet mit dem CAD-Kern nach, ob sich die Propeller berühren, ob ein Teil in einen Propellerkreis ragt, ob Teile ineinanderstecken, wie schwer die Drohne ist, wo der Schwerpunkt liegt und – wenn du den Schub pro Motor einträgst – wie viel Schub sie im Verhältnis zum Gewicht hat. Beim Nachbau eines Herstellerrahmens vergleicht er das Rahmengewicht mit dem Original. Das geht auch mit einem selbst gebauten Rahmen: Setz mindestens drei Motoren aus „Kaufteile“ auf (gern einen Motor und ein Kreismuster) und dazu Propeller – oder trag die Propellergröße im Check ein.",
-  "tipp": "Der Schwerpunkt sollte fast genau in der Mitte zwischen den Motoren liegen. Liegt er hinten, schieb den Akku nach vorne."
+  "tipp": "Der Schwerpunkt sollte fast genau in der Mitte zwischen den Motoren liegen. Liegt er daneben, schiebt „Akku verschieben“ den Akku genau an die richtige Stelle."
  },
  "plateDxf": {
   "tip": "Carbon-Platten als 2D-Zeichnung für die Fräse",
@@ -759,6 +759,11 @@ const HELP = {
   "tip": "Stirnfläche: so viel Fläche zeigt die Drohne dem Fahrtwind",
   "hilfe": "Ansicht → „Fahrtwind (Stirnfläche)“: Die Kamera schaut aus der Richtung, aus der der Wind kommt, wenn die Drohne nach vorne fliegt. Mit „Neigung“ kippst du die Drohne wie im schnellen Flug mit der Nase nach unten. Unten steht die Fläche, die sie dem Wind zeigt – Tracery misst sie genau aus dem Schattenriss. Propeller zählen nur mit, wenn du das Häkchen setzt.",
   "tipp": "Vergleich zwei Varianten bei der gleichen Neigung: Die mit der kleineren Stirnfläche bremst weniger. Bei Speed-Drohnen mit geneigten Motoren fliegt der Rumpf schnell fast waagerecht – dann zählt die Fläche bei kleiner Neigung."
+ },
+ "route3d": {
+  "tip": "Rohr durch Punkte im Raum – auf Körpern oder frei",
+  "hilfe": "Körper → „Rohr im Raum“: Klick nacheinander Punkte an. Auf einem Körper liegt das Rohr auf der Fläche auf, daneben bleibt es auf der Höhe des letzten Punkts. Ziehen dreht die Ansicht wie immer, Rückschritt nimmt den letzten Punkt weg, Enter oder Doppelklick ist fertig. Rechts änderst du jeden Punkt als Zahl, den Durchmesser, die Wand und den Querschnitt.",
+  "tipp": "Gut für Kabelkanäle, Antennenrohre und Bügel, die um Teile herum laufen. „Gerade Stücke, runde Ecken“ ergibt einen Knick-Verlauf wie bei gebogenem Rohr."
  }
 };
 

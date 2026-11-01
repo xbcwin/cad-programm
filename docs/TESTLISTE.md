@@ -481,6 +481,34 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
   Schritte: 1. Ein Kind (ab 10) mit „Einfach“ eine Platte mit vier Löchern bauen lassen, ohne zu helfen.
   Erwartet: Es findet Körper, Löcher und Exportieren allein; notieren, wo es hängen bleibt.
 
+## KI-Kollege legt Gelenke an (neu in Sitzung 47)
+
+- [x] **Klapparm**: „Bau mir einen Klapparm“ → zwei Arme, Gelenk an der Oberkante, Bereich −120 … 0°, Stellung −90° → Arm B steht senkrecht.
+- [x] **Doppelt abgelehnt**: Ein zweites Gelenk, das Arm B noch einmal bewegen würde, legt er nicht an und sagt warum.
+- [ ] **In Claude von Hand**: „Bau mir einen Greifer mit zwei Gelenken“ – stimmt die Kette?
+
+## Schwerpunkt ausgleichen (neu in Sitzung 46)
+
+- [x] **Akku verschieben**: 5"-Bausatz, Akku auf Y 45 → Drohnen-Check → beim Schwerpunkt „Akku verschieben“.
+  Erwartet: Der Akku wandert nach vorne, der Check zeigt den Schwerpunkt grün; Strg Z stellt ihn zurück.
+- [ ] **Mit echter Waage vergleichen**: fertige Drohne am Schwerpunkt-Punkt auf zwei Fingern balancieren.
+
+## Rohr im Raum (neu in Sitzung 45)
+
+- [x] **Glatte Kurve**: Rohr Ø 4 durch (0,0,0), (30,0,10), (30,30,20) → Volumen = Querschnitt × Länge der Kurve.
+- [x] **Gerade Stücke**: „Verlauf: Gerade Stücke, runde Ecken“ → Volumen passt zu den zwei geraden Stücken.
+- [x] **Im Bild klicken**: Platte 40 × 40 × 10 → Körper → „Rohr im Raum“ → zwei Punkte auf die Oberseite, einer daneben → Enter.
+  Erwartet: drei Punkte; die auf der Platte liegen 3 mm über der Oberseite (Rohr Ø 6 liegt auf), der dritte auf gleicher Höhe.
+- [x] **Punkte ändern**: Z von Punkt 3 auf 30 → Rohr steigt an; „Punkt 2 löschen“ → zwei Punkte; Strg Z → wieder drei.
+- [x] **KI-Kollege**: „Leg mir einen Kabelkanal, der nach oben läuft“ → Rohr durch drei Punkte im Raum, hohl.
+- [ ] **Kabelkanal von Hand**: um einen Stack herum ein Rohr Ø 5 mit Wand 1 legen und drucken.
+
+## Gelenk: Anschlag und Abspielen (neu in Sitzung 44)
+
+- [x] **Anschlag übernehmen**: zwei Arme mit Drehgelenk → „Bewegung prüfen“ → „Als Anschlag übernehmen“ setzt Von/Bis auf den freien Bereich; Strg Z → wieder −90 … 90.
+- [x] **Abspielen**: „Bewegung abspielen“ → der Arm bewegt sich im Bild zu beiden Anschlägen und zurück; danach steht alles wie vorher, das Projekt ist unverändert.
+- [ ] **Klapparm von Hand**: Kette Platte → Arm → Greifer abspielen – bewegt sich der Greifer mit?
+
 ## Fahrtwind (neu in Sitzung 43)
 
 - [x] **Stirnfläche messen**: Quader 100 × 20 × 10 → Ansicht → „Fahrtwind (Stirnfläche)“.

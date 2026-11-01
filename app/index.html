@@ -1352,7 +1352,7 @@ const HELP = {
  "droneCheck": {
   "tip": "Rahmen prüfen: Propeller, Teile, Gewicht, Schwerpunkt, Schub",
   "hilfe": "Drohne → „Drohnen-Check“ (oder rechts unter „Projekt“): Tracery rechnet mit dem CAD-Kern nach, ob sich die Propeller berühren, ob ein Teil in einen Propellerkreis ragt, ob Teile ineinanderstecken, wie schwer die Drohne ist, wo der Schwerpunkt liegt und – wenn du den Schub pro Motor einträgst – wie viel Schub sie im Verhältnis zum Gewicht hat. Beim Nachbau eines Herstellerrahmens vergleicht er das Rahmengewicht mit dem Original. Das geht auch mit einem selbst gebauten Rahmen: Setz mindestens drei Motoren aus „Kaufteile“ auf (gern einen Motor und ein Kreismuster) und dazu Propeller – oder trag die Propellergröße im Check ein.",
-  "tipp": "Der Schwerpunkt sollte fast genau in der Mitte zwischen den Motoren liegen. Liegt er hinten, schieb den Akku nach vorne."
+  "tipp": "Der Schwerpunkt sollte fast genau in der Mitte zwischen den Motoren liegen. Liegt er daneben, schiebt „Akku verschieben“ den Akku genau an die richtige Stelle."
  },
  "plateDxf": {
   "tip": "Carbon-Platten als 2D-Zeichnung für die Fräse",
@@ -1493,6 +1493,11 @@ const HELP = {
   "tip": "Stirnfläche: so viel Fläche zeigt die Drohne dem Fahrtwind",
   "hilfe": "Ansicht → „Fahrtwind (Stirnfläche)“: Die Kamera schaut aus der Richtung, aus der der Wind kommt, wenn die Drohne nach vorne fliegt. Mit „Neigung“ kippst du die Drohne wie im schnellen Flug mit der Nase nach unten. Unten steht die Fläche, die sie dem Wind zeigt – Tracery misst sie genau aus dem Schattenriss. Propeller zählen nur mit, wenn du das Häkchen setzt.",
   "tipp": "Vergleich zwei Varianten bei der gleichen Neigung: Die mit der kleineren Stirnfläche bremst weniger. Bei Speed-Drohnen mit geneigten Motoren fliegt der Rumpf schnell fast waagerecht – dann zählt die Fläche bei kleiner Neigung."
+ },
+ "route3d": {
+  "tip": "Rohr durch Punkte im Raum – auf Körpern oder frei",
+  "hilfe": "Körper → „Rohr im Raum“: Klick nacheinander Punkte an. Auf einem Körper liegt das Rohr auf der Fläche auf, daneben bleibt es auf der Höhe des letzten Punkts. Ziehen dreht die Ansicht wie immer, Rückschritt nimmt den letzten Punkt weg, Enter oder Doppelklick ist fertig. Rechts änderst du jeden Punkt als Zahl, den Durchmesser, die Wand und den Querschnitt.",
+  "tipp": "Gut für Kabelkanäle, Antennenrohre und Bügel, die um Teile herum laufen. „Gerade Stücke, runde Ecken“ ergibt einen Knick-Verlauf wie bei gebogenem Rohr."
  }
 };
 
@@ -1809,9 +1814,35 @@ const Model = (() => {
       return Math.round((Math.acos(Math.min(1, cs)) * 180) / Math.PI);
     });
   }
+  // Glatte Kurve durch Punkte im Raum: je Abschnitt ein kubisches Bézier-Stück (wie die Skizzen-Spline, nur in 3D)
+  function bez3(pts) {
+    const n = pts.length; if (n < 3) return [];
+    const P = (i) => (i < 0 ? pts[0].map((v, k) => 2 * v - pts[1][k]) : i > n - 1 ? pts[n - 1].map((v, k) => 2 * v - pts[n - 2][k]) : pts[i]);
+    const dist = (a, b) => Math.max(1e-9, Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]));
+    const out = [];
+    for (let i = 0; i < n - 1; i++) {
+      const p0 = P(i - 1), p1 = P(i), p2 = P(i + 1), p3 = P(i + 2);
+      const t1 = dist(p0, p1), t2 = t1 + dist(p1, p2), t3 = t2 + dist(p2, p3), dt = t2 - t1;
+      const m1 = [0, 1, 2].map((k) => ((p1[k] - p0[k]) / t1 - (p2[k] - p0[k]) / t2 + (p2[k] - p1[k]) / dt) * dt);
+      const m2 = [0, 1, 2].map((k) => ((p2[k] - p1[k]) / dt - (p3[k] - p1[k]) / (t3 - t1) + (p3[k] - p2[k]) / (t3 - t2)) * dt);
+      out.push({ a: p1, c1: [0, 1, 2].map((k) => p1[k] + m1[k] / 3), c2: [0, 1, 2].map((k) => p2[k] - m2[k] / 3), b: p2 });
+    }
+    return out;
+  }
   // Entlang Pfad (Sweep): längster offener Zug der Skizze, Querschnitt Kreis oder Rechteck, optional hohl
   function sweepParams(it, V) {
     const p = it.p || {};
+    if (p.path3d && Array.isArray(p.path3d.pts)) {
+      // Pfad im Raum statt Skizze
+      const pts = p.path3d.pts.map((q) => [0, 1, 2].map((k) => num(q[k], V, 0)));
+      let prof = null;
+      if (p.shape === 'sketch' && p.prof) {
+        const regs = SK.regions(Solver.cached(p.prof, V).ents).sort((a, b) => b.area - a.area);
+        if (regs.length) { const Lp = regs[0].outer; let cx = 0, cy = 0; for (const q of Lp.poly) { cx += q[0]; cy += q[1]; } cx /= Lp.poly.length; cy /= Lp.poly.length; prof = { outer: Lp.k, holes: regs[0].holes.map((h) => h.k), c: [cx, cy] }; }
+      }
+      const smooth = p.path3d.smooth !== false;
+      return { path3d: { pts, smooth, segs: smooth ? bez3(pts) : [] }, prof, shape: p.shape === 'rect' ? 'rect' : p.shape === 'sketch' && prof ? 'sketch' : 'circle', d: num(p.d, V, 6), w: num(p.w, V, 6), h: num(p.h, V, 4), wall: num(p.wall, V, 0) };
+    }
     const ch = SK.chains(p.sketch ? Solver.cached(p.sketch, V).ents : [])[0];
     let prof = null;
     if (p.shape === 'sketch' && p.prof) {
@@ -1903,7 +1934,7 @@ const Model = (() => {
     walk(doc.items, (it) => { it.t = Object.assign(T0(), it.t || {}); it.p = it.p || {}; it.finishes = it.finishes || []; if (!it.role) it.role = 'solid'; if (!it.color) it.color = nextColor(); });
     return doc;
   }
-  return { patternMatrices, instanceMatrices, loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  return { bez3, patternMatrices, instanceMatrices, loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 
 // ---- 15-sketchcore.js ----
@@ -5743,6 +5774,102 @@ const Features = (() => {
     cv.removeEventListener('pointerdown', picking.down, true); window.removeEventListener('keydown', picking.key, true);
     cv.style.cursor = ''; UI.hint(null); picking = null;
   }
+  // ---------- Rohr im Raum: Punkte auf Körper oder in den Raum klicken ----------
+  // Auf einer Fläche liegt das Rohr auf (Mittelpunkt einen halben Durchmesser über der Fläche); daneben gilt die Höhe des letzten Punkts.
+  let route = null;
+  function routeDraw() {
+    if (!route) return;
+    if (route.obj) { Viewer.groups.overlay.remove(route.obj); route.obj.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); route.obj = null; }
+    const g = new THREE.Group(), col = new THREE.Color(Viewer.theme.accent), pts = route.pts;
+    for (const q of pts) { const m = new THREE.Mesh(new THREE.SphereGeometry(Math.max(0.6, route.d * 0.35), 14, 10), new THREE.MeshBasicMaterial({ color: col, depthTest: false, transparent: true, opacity: 0.9 })); m.position.set(q[0], q[1], q[2]); m.renderOrder = 30; g.add(m); }
+    if (pts.length >= 2) {
+      const L = [];
+      if (pts.length >= 3) for (const b of Model.bez3(pts)) for (let i = L.length ? 1 : 0; i <= 16; i++) { const t = i / 16, u = 1 - t; L.push(new THREE.Vector3(...[0, 1, 2].map((k) => u * u * u * b.a[k] + 3 * u * u * t * b.c1[k] + 3 * u * t * t * b.c2[k] + t * t * t * b.b[k]))); }
+      else L.push(new THREE.Vector3(...pts[0]), new THREE.Vector3(...pts[1]));
+      const ln = new THREE.Line(new THREE.BufferGeometry().setFromPoints(L), new THREE.LineBasicMaterial({ color: col, depthTest: false })); ln.renderOrder = 29; g.add(ln);
+    }
+    Viewer.groups.overlay.add(g); route.obj = g;
+    const n = route.bar && route.bar.querySelector('#route-n'); if (n) n.textContent = String(pts.length);
+    Viewer.requestRender();
+  }
+  function routePoint(cx, cy) {
+    const hit = Viewer.pick(cx, cy, { solidsOnly: true, noEdges: true });
+    let P = null;
+    if (hit && hit.normal) P = hit.point.clone().addScaledVector(hit.normal.clone().normalize(), route.d / 2);
+    else { const z = route.pts.length ? route.pts[route.pts.length - 1][2] : 0; P = Viewer.pickPlane(cx, cy, z); }
+    if (!P) return;
+    const q = P.toArray().map((v) => round(v, 3)), last = route.pts[route.pts.length - 1];
+    if (last && Math.hypot(q[0] - last[0], q[1] - last[1], q[2] - last[2]) < 0.5) return;   // Doppelklick: kein doppelter Punkt
+    route.pts.push(q); routeDraw();
+  }
+  function stopRoute() {
+    if (!route) return;
+    const cv = Viewer.canvas;
+    cv.removeEventListener('pointerdown', route.down, true); cv.removeEventListener('pointerup', route.up, true); cv.removeEventListener('dblclick', route.dbl, true); window.removeEventListener('keydown', route.key, true);
+    if (route.obj) { Viewer.groups.overlay.remove(route.obj); route.obj.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); }
+    if (route.bar) route.bar.remove();
+    cv.style.cursor = ''; UI.hint(null); route = null; Viewer.requestRender();
+  }
+  function routeFinish() {
+    if (!route) return null;
+    if (route.pts.length < 2) { UI.toast('Klick mindestens zwei Punkte – auf einen Körper oder daneben in den Raum.', { icon: 'info' }); return null; }
+    const pts = route.pts.map((q) => q.slice()), d = route.d;
+    stopRoute();
+    let nid = null;
+    App.change('Rohr im Raum', (doc) => { const it = Model.newItem('sweep', { path3d: { pts, smooth: true }, shape: 'circle', d, w: d, h: round(d * 0.7, 2), wall: 0 }, { name: 'Rohr im Raum' }); doc.items.push(it); nid = it.id; });
+    App.select([nid]);
+    UI.toast('Rohr angelegt. Rechts änderst du Punkte, Durchmesser und Querschnitt.', { icon: 'check' });
+    return nid;
+  }
+  function route3d(opts = {}) {
+    stopPick(); stopRoute();
+    route = { pts: (opts.pts || []).map((q) => q.slice()), d: opts.d || 6, obj: null, at: null, append: opts.append || null };
+    const cv = Viewer.canvas;
+    route.down = (e) => { if (e.button === 0) route.at = [e.clientX, e.clientY]; };
+    route.up = (e) => { if (e.button !== 0 || !route.at) return; const moved = Math.hypot(e.clientX - route.at[0], e.clientY - route.at[1]); route.at = null; if (moved < 5) routePoint(e.clientX, e.clientY); };
+    route.dbl = (e) => { e.preventDefault(); e.stopPropagation(); finishRoute(); };
+    route.key = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopRoute(); Panels.renderRight(); }
+      else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); finishRoute(); }
+      else if (e.key === 'Backspace' && !/INPUT|TEXTAREA/.test((document.activeElement || {}).tagName || '')) { e.preventDefault(); e.stopPropagation(); route.pts.pop(); routeDraw(); }
+    };
+    const bar = h('div', { class: 'viewbar', role: 'toolbar', 'aria-label': 'Rohr im Raum' });
+    const head = h('div', { class: 'vb-head' }, h('span', { class: 'title' }, opts.append ? 'Punkte anhängen' : 'Rohr im Raum'));
+    const x = h('button', { type: 'button', class: 'vb-x', 'aria-label': 'Abbrechen', 'data-tip': 'Abbrechen' }); x.innerHTML = icon('close'); x.onclick = () => { stopRoute(); Panels.renderRight(); };
+    head.append(x);
+    const din = h('input', { type: 'number', id: 'route-d', class: 'vb-sel', value: route.d, min: 0.5, step: 0.5, 'aria-label': 'Durchmesser', style: { width: '64px' } });
+    din.onchange = () => { const v = parseFloat(String(din.value).replace(',', '.')); if (v > 0) { route.d = v; routeDraw(); } };
+    const ok = h('button', { type: 'button', class: 'btn small primary', id: 'route-done' }); ok.innerHTML = icon('check') + 'Fertig'; ok.onclick = () => finishRoute();
+    bar.append(head,
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, 'Punkte'), h('b', { class: 'mono', id: 'route-n' }, String(route.pts.length)), h('span', { class: 'vb-l' }, 'Ø'), din, h('span', { class: 'vb-hint' }, 'mm')),
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint' }, 'Klick Punkte auf einen Körper (das Rohr liegt dann auf) oder daneben in den Raum. Ziehen dreht die Ansicht. Rückschritt nimmt den letzten Punkt weg.')),
+      h('div', { class: 'vb-row' }, ok));
+    if (opts.append) din.disabled = true;
+    Views.bars().append(bar); route.bar = bar;
+    cv.addEventListener('pointerdown', route.down, true); cv.addEventListener('pointerup', route.up, true); cv.addEventListener('dblclick', route.dbl, true); window.addEventListener('keydown', route.key, true);
+    cv.style.cursor = 'crosshair';
+    UI.hint('<b>Rohr im Raum:</b> Punkte klicken – <b>Enter</b> oder Doppelklick ist fertig, <b>Esc</b> bricht ab.');
+    routeDraw();
+    return true;
+  }
+  // Fertig: neues Rohr oder – beim Anhängen – die Punkte ans vorhandene Rohr
+  function finishRoute() {
+    if (!route) return null;
+    if (!route.append) return routeFinish();
+    const id = route.append, inv = route.inv || new THREE.Matrix4(), pts = route.pts.map((q) => new THREE.Vector3(...q).applyMatrix4(inv).toArray().map((v) => round(v, 3)));
+    stopRoute();
+    App.change('Punkte angehängt', (doc) => { const f = Model.find(doc, id); if (!f || !f.item.p.path3d) return false; f.item.p.path3d.pts = pts; });
+    App.select([id]); return id;
+  }
+  // Punkte eines Rohrs im Raum weiter anklicken (in Weltlage; das Rohr selbst liegt ganz oben im Verlauf)
+  function routeAppend(id) {
+    const f = Model.find(App.doc, id); if (!f || !f.item.p.path3d) return false;
+    const W = Model.worldMatrix(App.doc, id);
+    const pts = f.item.p.path3d.pts.map((q) => new THREE.Vector3(...q.map((v) => Model.num(v, Model.vars(App.doc).v, 0))).applyMatrix4(W).toArray());
+    route3d({ pts, d: Model.num(f.item.p.d, Model.vars(App.doc).v, 6), append: id });
+    route.inv = W.clone().invert();
+    return true;
+  }
   // Achse im Bild wählen; cb bekommt { o, d, what } in Weltkoordinaten
   function pickAxisThen(cb, hint) {
     stopPick();
@@ -5889,7 +6016,7 @@ const Features = (() => {
     return null;
   }
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { pickAxis, pickAxisThen, get picking() { return !!picking; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
+  return { route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, pickAxis, pickAxisThen, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
 })();
 // ---- 47-mass.js ----
 // ================= Masse: Volumen, Gewicht und Schwerpunkt =================
@@ -6026,6 +6153,26 @@ const Joints = (() => {
       if (kb) Model.setFromMatrix(kb, pose(k, k.ang));
     }
   }
+  // Gelenk ohne Klicken anlegen (für den KI-Kollegen): Achse o/d in Weltkoordinaten; liefert die Kennung oder eine Meldung
+  function add(aId, bId, o, d, opts = {}) {
+    const A = top(aId), B = top(bId);
+    if (!A || !B || A.id === B.id) return { ok: false, msg: 'Ein Gelenk braucht zwei verschiedene Teile ganz oben im Verlauf.' };
+    if (connected(App.doc, A.id, B.id)) return { ok: false, msg: `„${Model.label(A)}“ und „${Model.label(B)}“ sind schon über Gelenke verbunden – ein weiteres ergäbe einen Kreis.` };
+    if (list().some((j) => j.b === B.id)) return { ok: false, msg: `„${Model.label(B)}“ wird schon von einem Gelenk bewegt.` };
+    const dv = new THREE.Vector3(...d); if (dv.lengthSq() < 1e-12) return { ok: false, msg: 'Die Gelenkachse braucht eine Richtung.' };
+    dv.normalize();
+    const kind = opts.kind === 'slide' ? 'slide' : 'rot';
+    const lo = Number.isFinite(+opts.min) ? +opts.min : kind === 'slide' ? -20 : -90, hi = Number.isFinite(+opts.max) ? +opts.max : kind === 'slide' ? 20 : 90;
+    let jid = null;
+    App.change('Gelenk angelegt', (doc) => {
+      const b = doc.items.find((x) => x.id === B.id); if (!b) return false;
+      doc.joints = doc.joints || [];
+      jid = uid('j');
+      doc.joints.push({ id: jid, a: A.id, b: B.id, ao: o.map((v) => round(+v, 6)), ad: dv.toArray().map((v) => round(v, 9)), home: Model.localMatrix(b).toArray().map((v) => round(v, 9)), ang: 0, min: round(Math.min(lo, hi), 2), max: round(Math.max(lo, hi), 2), ...(kind === 'slide' ? { kind } : {}) });
+    });
+    if (jid && opts.ang && Number.isFinite(+opts.ang)) setAngle(jid, +opts.ang);
+    return jid ? { ok: true, id: jid } : { ok: false, msg: 'Das Gelenk ließ sich nicht anlegen.' };
+  }
   // Gelenk anlegen: zwei Teile gewählt, das zuletzt gewählte bewegt sich; dann die Achse im Bild wählen
   function start() {
     const sel = App.sel.map((id) => top(id)).filter(Boolean);
@@ -6127,6 +6274,55 @@ const Joints = (() => {
     const atNow = res.find((r) => Math.abs(r.a - j.ang) < 1e-6);
     return { ok: false, text: (atNow && atNow.v > 0.05 ? 'Schon in dieser Stellung stecken die Teile ineinander. ' : '') + `Das Teil ${parts.join(', ')}.` + (free.length ? ` Frei: ${fmt(Math.min(...free), 1)} … ${fmt(Math.max(...free), 1)} ${u} (nicht unbedingt am Stück).` : '') };
   }
+  // Freier Bereich um die jetzige Stellung aus dem Ergebnis von „Bewegung prüfen“ – wird zum Anschlag (Von/Bis)
+  function freeRange(j, res) {
+    const s = (res || []).slice().sort((a, b) => a.a - b.a); if (!s.length) return null;
+    let i0 = 0, best = Infinity; s.forEach((r, i) => { const d = Math.abs(r.a - j.ang); if (d < best) { best = d; i0 = i; } });
+    if (s[i0].v > 0.05) return null;
+    let lo = i0, hi = i0; while (lo > 0 && s[lo - 1].v <= 0.05) lo--; while (hi < s.length - 1 && s[hi + 1].v <= 0.05) hi++;
+    return [s[lo].a, s[hi].a];
+  }
+  function setStops(jid, lo, hi) {
+    App.change('Gelenk-Anschlag', (doc) => {
+      const j = list(doc).find((x) => x.id === jid); if (!j) return false;
+      j.min = round(Math.min(lo, hi), 2); j.max = round(Math.max(lo, hi), 2);
+    });
+    UI.toast('Anschlag gesetzt – weiter lässt sich das Gelenk nicht bewegen.', { icon: 'check' });
+  }
+  // Bewegung abspielen: nur im Bild (das Projekt ändert sich nicht) – bis zum einen Anschlag, zum anderen und zurück
+  let anim = null;
+  function stopPlay() {
+    if (!anim) return;
+    cancelAnimationFrame(anim.raf);
+    for (const id of anim.ids) { const it = top(id); if (it) Viewer.updateNode(id, { matrix: Model.localMatrix(it) }); }
+    const b = anim.btn; anim = null; Viewer.requestRender();
+    if (b && b.isConnected) b.innerHTML = icon('play') + 'Bewegung abspielen';
+  }
+  function play(jid, btn) {
+    if (anim) { const same = anim.jid === jid; stopPlay(); if (same) return; }
+    const j = list().find((x) => x.id === jid); if (!j) return;
+    const B = top(j.b); if (!B) return;
+    const cur = Model.localMatrix(B), exp = pose(j, j.ang);
+    const home = cur.elements.some((v, i) => Math.abs(v - exp.elements[i]) > 1e-4) ? pose(j, -j.ang, cur.toArray()).toArray() : j.home;
+    const down = downstream(App.doc, j.b).map((k) => top(k.b)).filter(Boolean).map((it) => ({ it, m: Model.localMatrix(it) }));
+    const seq = [j.ang, j.max, j.min, j.ang], speed = slide(j) ? Math.max(5, (j.max - j.min) / 1.4) : 120;
+    const legs = []; let T = 0; for (let i = 1; i < seq.length; i++) { const d = Math.abs(seq[i] - seq[i - 1]) / speed * 1000; legs.push({ a0: seq[i - 1], a1: seq[i], t0: T, t1: T + d }); T += d; }
+    if (T < 1) return;
+    const t0 = performance.now();
+    anim = { jid, ids: [B.id, ...down.map((d) => d.it.id)], btn, raf: 0, a: j.ang };
+    if (btn) btn.innerHTML = icon('close') + 'Stopp';
+    const step = () => {
+      if (!anim) return;
+      const t = performance.now() - t0;
+      if (t >= T) { stopPlay(); return; }
+      const L = legs.find((l) => t < l.t1) || legs[legs.length - 1], u = (t - L.t0) / Math.max(1, L.t1 - L.t0), e = u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
+      const a = L.a0 + (L.a1 - L.a0) * e; anim.a = a;
+      Viewer.updateNode(B.id, { matrix: pose(j, a, home) });
+      const D = stepMatrix(j, a - j.ang); for (const d of down) Viewer.updateNode(d.it.id, { matrix: D.clone().multiply(d.m) });
+      anim.raf = requestAnimationFrame(step);
+    };
+    step();
+  }
   // Abschnitt „Gelenk“ in den Eigenschaften – zeigt alle Gelenke des gewählten Teils
   function panel(it) {
     const js = allOf(it.id).filter((j) => top(j.a) && top(j.b));
@@ -6156,10 +6352,19 @@ const Joints = (() => {
         const r = await check(j.id); cb.disabled = false;
         if (!r) { res.textContent = 'Das ging nicht.'; return; }
         const d = describe(j, r); res.className = d.ok ? 'ok-box' : 'err-box'; res.textContent = d.text; res.dataset.hits = String(r.filter((x) => x.v > 0.05).length);
+        const fr = d.ok ? null : freeRange(j, r);
+        const old = box.querySelector('.jt-stop'); if (old) old.remove();
+        if (fr && fr[1] - fr[0] > 1e-9 && (fr[0] > j.min + 1e-9 || fr[1] < j.max - 1e-9)) {
+          const sb = h('button', { type: 'button', class: 'btn small jt-stop', id: 'jt-stop' + sfx }); sb.innerHTML = icon('check') + `Als Anschlag übernehmen: ${fmt(fr[0], 1)} … ${fmt(fr[1], 1)} ${unit(j)}`;
+          sb.onclick = () => setStops(j.id, fr[0], fr[1]);
+          res.after(sb);
+        }
       };
+      const pb = h('button', { type: 'button', class: 'btn', id: 'jt-play' + sfx }); pb.innerHTML = icon(anim && anim.jid === j.id ? 'close' : 'play') + (anim && anim.jid === j.id ? 'Stopp' : 'Bewegung abspielen');
+      pb.onclick = () => play(j.id, pb);
       const del = h('button', { type: 'button', class: 'btn', id: 'jt-del' + sfx }); del.innerHTML = icon('ungroup') + 'Gelenk lösen';
       del.onclick = () => remove(j.id);
-      box.append(h('div', { class: 'btn-row' }, cb, del), res);
+      box.append(h('div', { class: 'btn-row' }, pb), h('div', { class: 'btn-row' }, cb, del), res);
       sec.append(box);
     });
     return sec;
@@ -6167,12 +6372,13 @@ const Joints = (() => {
   // Gelöschte Teile: Gelenke, die an ihnen hängen, fallen weg
   function init() {
     App.on('doc', () => {
+      stopPlay();
       const js = list(); if (!js.length) return;
       const ids = new Set(App.doc.items.map((x) => x.id));
       if (js.some((j) => !ids.has(j.a) || !ids.has(j.b))) App.doc.joints = js.filter((j) => ids.has(j.a) && ids.has(j.b));
     });
   }
-  return { init, start, setAngle, setKind, setRange, remove, check, describe, panel, of, allOf, downstream, pose, get list() { return list(); } };
+  return { init, start, add, setAngle, setKind, setRange, setStops, freeRange, play, stopPlay, remove, check, describe, panel, of, allOf, downstream, pose, get list() { return list(); }, get playing() { return anim ? { jid: anim.jid, a: anim.a } : null; } };
 })();
 // ---- 48-viewprefs.js ----
 // ================= Ansicht: Raster, Ursprungsebenen, Achsen, Projektion =================
@@ -6789,7 +6995,9 @@ const Panels = (() => {
       holeBtn.onclick = () => { Actions.addPrimitive('cylinder', { role: 'hole', name: 'Loch', p: { d: 6, h: 30 } }); closeFlyout(); };
       const boxHole = h('button', { type: 'button', class: 'btn small' }); boxHole.innerHTML = icon('hole') + 'Quader als Loch';
       boxHole.onclick = () => { Actions.addPrimitive('box', { role: 'hole', name: 'Aussparung', p: { w: 10, d: 10, h: 30 } }); closeFlyout(); };
-      row.append(holeBtn, boxHole); el.append(row);
+      const routeBtn = h('button', { type: 'button', class: 'btn small pro', id: 'add-route', 'data-help': 'route3d' }); routeBtn.innerHTML = icon('sweep') + 'Rohr im Raum';
+      routeBtn.onclick = () => { closeFlyout(); Features.route3d(); };
+      row.append(holeBtn, boxHole, routeBtn); el.append(row);
       el.append(h('div', { class: 'foot' }, 'Tipp: Jeder Körper kann mit einem Klick zum Loch werden.'));
     } else if (kind === 'drone') {
       el.classList.add('drone');
@@ -7236,9 +7444,29 @@ const Panels = (() => {
       else { fl.append(UI.numField({ id: 'p-w', label: 'Breite', value: it.p.w, onCommit: (v) => setP('w', v) }), UI.numField({ id: 'p-h', label: 'Höhe', value: it.p.h, onCommit: (v) => setP('h', v) })); }
       if (shp !== 'sketch') fl.append(UI.numField({ id: 'p-wall', label: 'Wand (0 = voll)', value: it.p.wall || 0, min: 0, onCommit: (v) => setP('wall', v) }));
       sec.append(fl);
-      const eb = h('button', { type: 'button', class: 'btn' }); eb.innerHTML = icon('edit') + 'Pfad bearbeiten';
-      eb.onclick = () => Sketch.editItem(it.id);
-      sec.append(eb, h('div', { class: 'hint-box', html: 'Der Querschnitt läuft am Pfad entlang – gut für Rohre, Kabelkanäle, Bügel und Leisten. Mit <b>Wand</b> wird er hohl.' }));
+      if (it.p.path3d) {
+        // Pfad im Raum: Punkte als Zahlen, glatt oder mit Ecken, weitere Punkte im Bild anklicken
+        const P3 = it.p.path3d.pts || [];
+        const setPt = (i, k, v) => App.change('Punkt geändert', (doc) => { const f = Model.find(doc, it.id); if (!f || !f.item.p.path3d || !f.item.p.path3d.pts[i]) return false; f.item.p.path3d.pts[i][k] = v; }, { merge: 'p3:' + it.id + ':' + i + ':' + k });
+        const fs = h('div', { class: 'fields' });
+        fs.append(UI.selectField({ id: 'p-smooth', label: 'Verlauf', value: it.p.path3d.smooth === false ? 'corner' : 'smooth', options: [['smooth', 'Glatte Kurve durch die Punkte'], ['corner', 'Gerade Stücke, runde Ecken']], onChange: (v) => App.change('Verlauf', (doc) => { const f = Model.find(doc, it.id); if (!f) return false; f.item.p.path3d.smooth = v !== 'corner'; }) }));
+        sec.append(fs);
+        const list = h('div', { class: 'p3-list', id: 'p3-list' });
+        P3.forEach((q, i) => {
+          const row = h('div', { class: 'fields three p3-row' });
+          ['x', 'y', 'z'].forEach((ax, k) => row.append(UI.numField({ id: `p3-${i}-${ax}`, label: (k === 0 ? `P${i + 1} ` : '') + ax.toUpperCase(), value: q[k], onCommit: (v) => setPt(i, k, v) })));
+          list.append(row);
+          if (P3.length > 2) { const del = h('button', { type: 'button', class: 'btn ghost small', id: `p3-del-${i}`, 'aria-label': `Punkt ${i + 1} löschen` }); del.innerHTML = icon('trash') + `Punkt ${i + 1} löschen`; del.onclick = () => App.change('Punkt gelöscht', (doc) => { const f = Model.find(doc, it.id); if (!f) return false; f.item.p.path3d.pts.splice(i, 1); }); list.append(del); }
+        });
+        sec.append(list);
+        const mb = h('button', { type: 'button', class: 'btn', id: 'route-more' }); mb.innerHTML = icon('plus') + 'Punkte im Bild anhängen';
+        mb.onclick = () => Features.routeAppend(it.id);
+        sec.append(mb, h('div', { class: 'hint-box', html: 'Das Rohr läuft durch die Punkte im Raum – gut für Kabelkanäle, Antennenrohre und Bügel, die sich in alle Richtungen biegen. Mit <b>Wand</b> wird es hohl.' }));
+      } else {
+        const eb = h('button', { type: 'button', class: 'btn' }); eb.innerHTML = icon('edit') + 'Pfad bearbeiten';
+        eb.onclick = () => Sketch.editItem(it.id);
+        sec.append(eb, h('div', { class: 'hint-box', html: 'Der Querschnitt läuft am Pfad entlang – gut für Rohre, Kabelkanäle, Bügel und Leisten. Mit <b>Wand</b> wird er hohl.' }));
+      }
       w.append(sec);
     } else if (it.kind === 'loft') {
       const n = (it.p.sketches || []).length, hasPath = !!it.p.path;
@@ -11365,6 +11593,7 @@ const Commands = (() => {
     add('loft-tip', 'Zur Spitze zusammenlaufen lassen', 'loft', 'spitze kegel nase verlängern zuspitzen', () => { if (App.sel.length === 1) Actions.loft([App.sel[0]], { tip: 10 }); }, { group: 'Bearbeiten', needSel: true });
     add('draft', 'Entformungsschräge', 'chamfer', 'schräge entformung guss form draft konisch neigen', () => { if (App.sel.length) Actions.finishAll(App.sel[0], 'draft', 'all', 3); }, { group: 'Bearbeiten', needSel: true });
     add('gap', 'Abstand zwischen zwei Teilen setzen', 'dim', 'abstand lücke distanz zwischen zwei teile', () => { if (App.sel.length === 2) $('.ctxbar button[aria-label="Abstand"]') && $('.ctxbar button[aria-label="Abstand"]').click(); else UI.toast('Wähle genau zwei Teile.', { icon: 'info' }); }, { group: 'Bearbeiten', needSel: true });
+    add('route3d', 'Rohr im Raum: Punkte auf Körper oder in den Raum klicken', 'sweep', 'rohr raum 3d pfad kabel kanal antenne punkte biegen', () => Features.route3d(), { group: 'Werkzeuge' });
     add('sweep-help', 'Rohr oder Kanal entlang Pfad (Sweep)', 'sweep', 'sweep pfad rohr kabelkanal bügel entlang', () => { Sketch.chooseAndStart(); UI.toast('Zeichne einen offenen Pfad und klick „Fertig“ – daraus wird ein Rohr.', { icon: 'info', ms: 5000 }); }, { group: 'Werkzeuge' });
     add('import', 'STEP oder STL importieren', 'folder', 'import step stp stl datei einlesen motor', () => Start.openFile(), { group: 'Projekt' });
     add('save', 'Projekt als Datei speichern', 'save', 'sichern json datei', () => Start.saveFile(), { group: 'Projekt', kbd: 'Strg S' });
@@ -12768,6 +12997,7 @@ const AI = (() => {
 {"op":"muster","id":"<id>","art":"kreis","n":4,"winkel":360,"mitte":[0,0],"achse":"z"}   (Kreismuster um eine Achse durch „mitte“: "z" senkrecht (Standard), "x" quer, "y" längs – dann „mitte“ mit drei Werten [x,y,z]; schräge Achse als Richtung "achse":[dx,dy,dz] mit "mitte":[x,y,z]; Anzahl zählt das Original mit)
 {"op":"muster","id":"<id>","art":"rechteck","nx":3,"ny":1,"dx":20,"dy":0}   (Rechteckmuster, Abstände von Mitte zu Mitte)
 {"op":"muster","id":"<id>","art":"kurve","n":5,"abstand":0,"drehen":true,"hoehe":0,"kurve":[{"typ":"bogen","von":[x,y],"durch":[x,y],"bis":[x,y]}]}   (Muster entlang Kurve in der Ebene auf Höhe „hoehe“. Kurvenstücke: {"typ":"linie","von","bis"}, {"typ":"bogen","von","durch","bis"}, {"typ":"spline","punkte":[[x,y],…]} – aneinander gehängt –, oder ein {"typ":"kreis","mitte":[x,y],"r":20}. Die Kurve beginnt an der Mitte des Originals; abstand 0 = gleichmäßig verteilt; drehen:true dreht die Kopien mit der Kurve)
+{"op":"gelenk","fest":"<id>","beweglich":"<id>","achse":{"punkt":[x,y,z],"richtung":[dx,dy,dz]},"art":"drehen"|"schieben","von":-90,"bis":90,"winkel":0}   (Gelenk zwischen zwei Teilen ganz oben im Verlauf, nicht in einer Gruppe: „beweglich“ dreht sich um die Achse durch „punkt“ bzw. gleitet entlang „richtung“ – „von“/„bis“ in Grad bzw. mm, „winkel“ = Startstellung. Ketten gehen: Ein Teil darf an mehreren Gelenken hängen, wird aber nur von einem bewegt.)
 {"op":"spiegeln","id":"<id>","ebene":"YZ"|"XZ"|"XY","lage":0}   (Original plus Spiegelbild; YZ = links↔rechts, XZ = vorne↔hinten, XY = oben↔unten)
 {"op":"verbinden","ids":"alle","name":"Verbund"}   (macht die Teile zu EINEM Körper – für „Verbund“, „verbinden“, „zusammenfügen“, „ein Teil daraus machen“; Löcher darin schneiden fest. Kaufteile mit festem Gewicht bleiben automatisch einzeln, außer "mit_kaufteilen":true)
 {"op":"loesen","ids":"<id>"}   (Gruppe oder Verbund wieder in Einzelteile lösen)
@@ -12804,7 +13034,7 @@ Parameter p (alle Grundkörper stehen mit der Unterseite auf z=0 ihres eigenen S
   ELEMENT (2D in mm): {"rect":[x1,y1,x2,y2]} · {"circle":[cx,cy,r]} · {"ellipse":[cx,cy,rx,ry]} · {"poly":[[x,y],[x,y],…]} (geschlossener Linienzug) · {"slot":[x1,y1,x2,y2,r]} · {"text":"FPV","x":0,"y":0,"hoehe":5,"fett":true,"mitte":true} (Schrift als Umriss; in einem Rechteck = Gravur)
   Ebene XY: u=X, v=Y, hoch in +Z. Ebene XZ: u=X, v=Z, hoch in −Y. Ebene YZ: u=Y, v=Z, hoch in +X. „versatz“ verschiebt die Ebene entlang dieser Richtung. Formen, die ganz in einer anderen liegen, werden zu Löchern darin.
 - loft (Übergang durch Umrisse): {"profile":[{"ebene":"XY","versatz":0,"form":[ELEMENT]},{"ebene":"XY","versatz":30,"form":[ELEMENT]}],"spitze":0,"gerade":false,"mittellinie":{"ebene":"XZ","versatz":0,"kurve":[KURVENSTÜCK…]}} – mit "spitze" > 0 läuft der Körper hinter dem letzten Profil zu einer Spitze zusammen (auch mit nur einem Profil). "mittellinie" (optional, ab zwei Profilen) biegt den Übergang: eine offene Kurve in einer Ebene (Kurvenstücke wie bei „muster kurve“: linie/bogen/spline), die vom ersten Profil durch alle bis zum letzten läuft – die Profile bleiben, wo sie sind. In der Ebene XZ ist die 2. Koordinate z, in YZ ist die 1. y und die 2. z.
-- sweep (Querschnitt entlang Pfad): {"ebene":"XY","versatz":0,"pfad":[[x,y],…],"glatt":false,"form":"rund"|"rechteck","d":6,"w":6,"h":4,"wand":0} – Rohr, Kabelkanal, Bügel; "glatt": true macht aus den Punkten eine Spline.
+- sweep (Querschnitt entlang Pfad): {"ebene":"XY","versatz":0,"pfad":[[x,y],…],"glatt":false,"form":"rund"|"rechteck","d":6,"w":6,"h":4,"wand":0} – Rohr, Kabelkanal, Bügel; "glatt": true macht aus den Punkten eine Spline. Statt "ebene"/"pfad" geht auch "pfad3d":[[x,y,z],…] – ein Rohr durch Punkte im Raum (glatt, außer "glatt": false), z. B. ein Kabelkanal, der um Teile herum und nach oben läuft.
 - part (Bauteile, Öffnung zeigt nach +Z, Tiefe geht nach −Z; setze z auf die Oberfläche):
   {"lib":"screwHole","size":"M2|M2.5|M3|M4|M5|M6|M8","head":"countersunk|counterbore|none","length":10} (rolle loch)
   {"lib":"nutTrap","size":"M3","length":12} (loch) · {"lib":"insert","size":"M3"} (loch, Gewindeeinsatz) · {"lib":"slotHole","len":20,"w":4.5,"depth":10} (loch)
@@ -13121,8 +13351,8 @@ Beispiel – Wunsch „Mach alles als Verbund“ (Runde 1):
   }
   const opOf = (a) => String((a && a.op) || '').toLowerCase().replace(/[äöü]/g, (c) => ({ ä: 'ae', ö: 'oe', ü: 'ue' }[c]));
   const ALIAS = { add: 'hinzufuegen', change: 'aendern', delete: 'loeschen', group: 'verbinden', gruppieren: 'verbinden', verbund: 'verbinden', union: 'verbinden', fillet: 'rundung', pattern: 'muster', mirror: 'spiegeln', ungroup: 'loesen', subtract: 'abziehen', intersect: 'schnittmenge', align: 'ausrichten', move: 'verschieben', rotate: 'drehen', flip: 'umklappen', copy: 'kopieren', duplizieren: 'kopieren', hinlegen: 'auf_platte', drop: 'auf_platte', mass_g: 'gewicht', buy: 'kaufteil', check: 'pruefen', select: 'auswaehlen', role: 'rolle', color: 'farbe', hide: 'ausblenden', show: 'einblenden', suppress: 'unterdruecken', rename: 'umbenennen', center: 'zentrieren' };
-  const TOOL = new Set(['verbinden', 'loesen', 'abziehen', 'schnittmenge', 'ausrichten', 'zentrieren', 'drehen', 'umklappen', 'auf_platte', 'drohne', 'pruefen', 'schwachstellen', 'auswaehlen']);
-  const STEP = { verbinden: 'verbindet Teile', loesen: 'löst Gruppen', abziehen: 'schneidet aus', schnittmenge: 'bildet die Schnittmenge', ausrichten: 'richtet aus', zentrieren: 'zentriert', drehen: 'dreht', umklappen: 'klappt um', auf_platte: 'legt auf die Platte', drohne: 'baut den Rahmen', pruefen: 'merkt den Check vor', schwachstellen: 'merkt die Suche vor' };
+  const TOOL = new Set(['gelenk', 'verbinden', 'loesen', 'abziehen', 'schnittmenge', 'ausrichten', 'zentrieren', 'drehen', 'umklappen', 'auf_platte', 'drohne', 'pruefen', 'schwachstellen', 'auswaehlen']);
+  const STEP = { gelenk: 'legt ein Gelenk an', verbinden: 'verbindet Teile', loesen: 'löst Gruppen', abziehen: 'schneidet aus', schnittmenge: 'bildet die Schnittmenge', ausrichten: 'richtet aus', zentrieren: 'zentriert', drehen: 'dreht', umklappen: 'klappt um', auf_platte: 'legt auf die Platte', drohne: 'baut den Rahmen', pruefen: 'merkt den Check vor', schwachstellen: 'merkt die Suche vor' };
   // Aktionen der Reihe nach umsetzen: reine Änderungen am Modell gesammelt, Werkzeuge (Verbinden, Ausrichten …) einzeln mit dem fertig gerechneten Modell
   async function execute(acts, run, onStep) {
     const rep = { added: [], changed: [], notes: [], done: [], check: false, weak: false, select: null };
@@ -13209,6 +13439,15 @@ Beispiel – Wunsch „Mach alles als Verbund“ (Runde 1):
         rep.notes.push(`Neues Projekt „${d.name}“ – dein bisheriges Projekt findest du auf der Startseite unter „Weiterarbeiten“.`);
         await idle();
       } catch (e) { rep.notes.push('Den Rahmen konnte ich nicht bauen.'); }
+    } else if (op === 'gelenk') {
+      const fa = pick(a.fest ?? a.a, App.doc, run, rep)[0], fb = pick(a.beweglich ?? a.b, App.doc, run, rep)[0];
+      const ax = a.achse && typeof a.achse === 'object' ? a.achse : {};
+      const dir = Array.isArray(ax.richtung) ? ax.richtung.map(Number) : { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] }[String(a.achse || 'z').toLowerCase()] || [0, 0, 1];
+      const pt = Array.isArray(ax.punkt) ? ax.punkt.map(Number) : Array.isArray(a.punkt) ? a.punkt.map(Number) : [0, 0, 0];
+      if (!fa || !fb || ![...dir, ...pt].every((v) => Number.isFinite(v))) { rep.notes.push('Für ein Gelenk braucht es ein festes und ein bewegliches Teil und eine Achse (Punkt und Richtung).'); return; }
+      const r = Joints.add(fa, fb, pt, dir, { kind: /schieb|slide/i.test(String(a.art || '')) ? 'slide' : 'rot', min: a.von, max: a.bis, ang: a.winkel ?? a.weg });
+      if (!r.ok) { rep.notes.push(r.msg); return; }
+      rep.changed.push(fb); rep.done.push(`gelenk: „${labelOf(fb)}“ ${/schieb|slide/i.test(String(a.art || '')) ? 'gleitet' : 'dreht sich'} gegenüber „${labelOf(fa)}“ (Gelenk ${r.id})`);
     } else if (op === 'pruefen') rep.check = true;
     else if (op === 'schwachstellen') rep.weak = true;
     else if (op === 'auswaehlen') rep.select = ids();
@@ -13406,10 +13645,15 @@ Beispiel – Wunsch „Mach alles als Verbund“ (Runde 1):
       }
     } else if (kind === 'sweep') {
       const pl = PLANEDEF[String(o.p && o.p.ebene || 'XY').toUpperCase()] || PLANEDEF.XY, off = num(o.p && o.p.versatz, 0);
+      const p3 = ((o.p && o.p.pfad3d) || []).filter((q) => Array.isArray(q) && q.length >= 3).map((q) => [num(q[0], 0), num(q[1], 0), num(q[2], 0)]);
+      if (p3.length >= 2) {
+        it = Model.newItem('sweep', { path3d: { pts: p3, smooth: o.p.glatt !== false }, shape: o.p.form === 'rechteck' ? 'rect' : 'circle', d: num(o.p.d, 6), w: num(o.p.w, 6), h: num(o.p.h, 4), wall: num(o.p.wand, 0) }, { name: o.name || 'Rohr im Raum', role });
+      } else {
       const pts = ((o.p && o.p.pfad) || []).map((q) => [num(q[0], 0), num(q[1], 0)]);
       if (pts.length < 2) { notes.push('Ein Pfad braucht mindestens zwei Punkte.'); return null; }
       const ents = o.p.glatt ? [{ id: uid('e'), type: 'spline', pts, closed: false }] : pts.slice(1).map((q, i) => ({ id: uid('e'), type: 'line', a: pts[i], b: q }));
       it = Model.newItem('sweep', { sketch: { plane: { o: pl.n.map((v) => v * off), x: pl.x, n: pl.n }, ents, dims: [], cons: [] }, shape: o.p.form === 'rechteck' ? 'rect' : 'circle', d: num(o.p.d, 6), w: num(o.p.w, 6), h: num(o.p.h, 4), wall: num(o.p.wand, 0) }, { name: o.name || 'Entlang Pfad', role });
+      }
     } else if (kind === 'part') {
       const lib = o.p && o.p.lib; const def = LIBMAP[lib];
       if (!def) { notes.push(`Das Bauteil „${lib}“ gibt es nicht.`); return null; }
@@ -14294,6 +14538,33 @@ const DroneCheck = (() => {
     return geometry(doc) || freeGeometry(doc, Model.vars(doc).v);
   }
   const isDrone = (doc = App.doc) => !!geometryAny(doc);
+  // Akkus: Teile ganz oben im Verlauf, die „Akku“ heißen oder ein Akku aus „Kaufteile“ sind
+  const batteries = (doc = App.doc) => doc.items.filter((i) => !i.hidden && !i.suppressed && Model.isActive(doc, i.id) && (/akku/i.test(i.name || '') || (i.kind === 'part' && i.p && i.p.lib === 'buyBattery')));
+  // Wie weit muss der schwerste Akku wandern, damit der Schwerpunkt über der Mitte zwischen den Motoren liegt?
+  async function balanceInfo() {
+    const g = geometryAny(); if (!g) return null;
+    const m = await Mass.measure(); if (!m || !m.com) return null;
+    const bt = batteries().map((it) => ({ it, p: Mass.partOf(m, it.id) })).filter((x) => x.p && x.p.mass > 0).sort((a, b) => b.p.mass - a.p.mass)[0];
+    if (!bt) return null;
+    const cx = g.motors.reduce((s, x) => s + x[1], 0) / g.motors.length, cy = g.motors.reduce((s, x) => s + x[2], 0) / g.motors.length;
+    const dx = m.com[0] - cx, dy = m.com[1] - cy, k = m.mass / bt.p.mass;
+    return { id: bt.it.id, name: Model.label(bt.it), sx: Math.abs(dx) > 0.3 ? -dx * k : 0, sy: Math.abs(dy) > 0.3 ? -dy * k : 0, A: g.A };
+  }
+  async function balance() {
+    const b = await balanceInfo();
+    if (!b) { UI.toast('Dafür braucht es einen Akku im Modell (ein Teil namens „Akku“ oder einen Akku aus „Kaufteile“, ganz oben im Verlauf).', { icon: 'info', ms: 4500 }); return false; }
+    const L = Math.hypot(b.sx, b.sy);
+    if (L < 0.05) { UI.toast('Der Schwerpunkt liegt schon in der Mitte.', { icon: 'check' }); return false; }
+    if (L > b.A * 0.6) { UI.toast(`„${b.name}“ müsste ${fmt(L, 0)} mm wandern – das ist zu weit. Setz schwere Teile wie Kamera oder Sender um.`, { icon: 'info', ms: 5000 }); return false; }
+    App.change('Schwerpunkt ausgeglichen', (doc) => {
+      const it = doc.items.find((x) => x.id === b.id); if (!it) return false;
+      Model.useVars(Model.vars(doc).v);
+      it.t = it.t || Model.T0();
+      it.t.x = round(Model.tnum(it, 'x') + b.sx, 2); it.t.y = round(Model.tnum(it, 'y') + b.sy, 2);
+    });
+    UI.toast(`„${b.name}“ ${b.sy ? (b.sy < 0 ? 'nach vorne' : 'nach hinten') : 'zur Seite'} geschoben (${fmt(L, 1)} mm) – der Schwerpunkt liegt jetzt in der Mitte.`, { icon: 'check', ms: 4200 });
+    return true;
+  }
   const label = (id) => { const f = Model.find(App.doc, id); return f ? Model.label(f.item) : 'ein Teil'; };
   const thrustOf = (doc = App.doc) => (doc.drone && doc.drone.thrustG != null && doc.drone.thrustG !== '' ? Model.num(doc.drone.thrustG, Model.vars(doc).v, 0) : null);
   async function run() {
@@ -14332,9 +14603,9 @@ const DroneCheck = (() => {
         const cx = g.motors.reduce((s, x) => s + x[1], 0) / g.motors.length, cy = g.motors.reduce((s, x) => s + x[2], 0) / g.motors.length;
         const dx = m.com[0] - cx, dy = m.com[1] - cy, d = Math.hypot(dx, dy);
         const dir = [Math.abs(dy) > 0.5 ? (dy < 0 ? 'nach vorne' : 'nach hinten') : '', Math.abs(dx) > 0.5 ? (dx > 0 ? 'nach rechts' : 'nach links') : ''].filter(Boolean).join(' und ');
-        const akku = doc.items.some((i) => /akku/i.test(i.name || '') && !i.hidden);
+        const akku = batteries(doc).length > 0;
         const sc = d <= 0.03 * g.A ? 'ok' : !akku ? 'info' : d <= 0.08 * g.A ? 'warn' : 'bad';
-        out.push({ id: 'cog', title: 'Schwerpunkt', s: sc, text: (d < 0.5 ? 'Genau in der Mitte zwischen den Motoren.' : `${fmt(d, 1)} mm ${dir} verschoben` + (d <= 0.03 * g.A ? ' – passt.' : akku ? ' – Akku oder schwere Teile verschieben.' : '.')) + (akku ? '' : ' Noch ohne Akku – leg einen auf die Oberplatte und prüf noch mal.') });
+        out.push({ id: 'cog', title: 'Schwerpunkt', s: sc, ...(akku && d > 0.03 * g.A ? { fix: 'balance' } : {}), text: (d < 0.5 ? 'Genau in der Mitte zwischen den Motoren.' : `${fmt(d, 1)} mm ${dir} verschoben` + (d <= 0.03 * g.A ? ' – passt.' : akku ? ' – Akku oder schwere Teile verschieben.' : '.')) + (akku ? '' : ' Noch ohne Akku – leg einen auf die Oberplatte und prüf noch mal.') });
       }
       // 6. Schub zu Gewicht
       const t = thrustOf(doc);
@@ -14360,6 +14631,7 @@ const DroneCheck = (() => {
     for (const c of list) {
       const r = h('div', { class: 'chk-row ' + c.s, 'data-chk': c.id }, h('span', { class: 'chk-dot', 'aria-hidden': 'true' }, DOT[c.s]), h('div', { class: 'grow' }, h('b', null, c.title), h('span', null, c.text)));
       if (c.ids && c.ids.length && c.s !== 'ok' && onShow) { const b = h('button', { type: 'button', class: 'btn small ghost' }, 'Zeigen'); b.onclick = () => onShow(c.ids); r.append(b); }
+      if (c.fix === 'balance') { const b = h('button', { type: 'button', class: 'btn small', id: 'chk-balance', 'data-tip': 'Akku so verschieben, dass der Schwerpunkt mittig zwischen den Motoren liegt' }, 'Akku verschieben'); b.onclick = async () => { b.disabled = true; const ok = await balance(); const md = b.closest('.modal'); if (ok && md) { const x = [...md.querySelectorAll('.actions button')].find((y) => y.textContent.trim() === 'Schließen'); if (x) x.click(); else (md.closest('.modal-back') || md).remove(); setTimeout(dialog, 80); } else b.disabled = false; }; r.append(b); }
       box.append(r);
     }
     return box;
@@ -14380,7 +14652,7 @@ const DroneCheck = (() => {
   }
   function summary() { return last && last.rev === App.revision ? last.list : null; }
   const ev = makeEmitter();
-  return { geometry: geometryAny, isDrone, run, dialog, rows, summary, thrustOf, on: ev.on };
+  return { geometry: geometryAny, isDrone, run, dialog, rows, summary, thrustOf, balance, balanceInfo, on: ev.on };
 })();
 
 // ---------- Platten als DXF für die Fräse ----------

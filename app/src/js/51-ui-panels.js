@@ -70,7 +70,9 @@ const Panels = (() => {
       holeBtn.onclick = () => { Actions.addPrimitive('cylinder', { role: 'hole', name: 'Loch', p: { d: 6, h: 30 } }); closeFlyout(); };
       const boxHole = h('button', { type: 'button', class: 'btn small' }); boxHole.innerHTML = icon('hole') + 'Quader als Loch';
       boxHole.onclick = () => { Actions.addPrimitive('box', { role: 'hole', name: 'Aussparung', p: { w: 10, d: 10, h: 30 } }); closeFlyout(); };
-      row.append(holeBtn, boxHole); el.append(row);
+      const routeBtn = h('button', { type: 'button', class: 'btn small pro', id: 'add-route', 'data-help': 'route3d' }); routeBtn.innerHTML = icon('sweep') + 'Rohr im Raum';
+      routeBtn.onclick = () => { closeFlyout(); Features.route3d(); };
+      row.append(holeBtn, boxHole, routeBtn); el.append(row);
       el.append(h('div', { class: 'foot' }, 'Tipp: Jeder Körper kann mit einem Klick zum Loch werden.'));
     } else if (kind === 'drone') {
       el.classList.add('drone');
@@ -517,9 +519,29 @@ const Panels = (() => {
       else { fl.append(UI.numField({ id: 'p-w', label: 'Breite', value: it.p.w, onCommit: (v) => setP('w', v) }), UI.numField({ id: 'p-h', label: 'Höhe', value: it.p.h, onCommit: (v) => setP('h', v) })); }
       if (shp !== 'sketch') fl.append(UI.numField({ id: 'p-wall', label: 'Wand (0 = voll)', value: it.p.wall || 0, min: 0, onCommit: (v) => setP('wall', v) }));
       sec.append(fl);
-      const eb = h('button', { type: 'button', class: 'btn' }); eb.innerHTML = icon('edit') + 'Pfad bearbeiten';
-      eb.onclick = () => Sketch.editItem(it.id);
-      sec.append(eb, h('div', { class: 'hint-box', html: 'Der Querschnitt läuft am Pfad entlang – gut für Rohre, Kabelkanäle, Bügel und Leisten. Mit <b>Wand</b> wird er hohl.' }));
+      if (it.p.path3d) {
+        // Pfad im Raum: Punkte als Zahlen, glatt oder mit Ecken, weitere Punkte im Bild anklicken
+        const P3 = it.p.path3d.pts || [];
+        const setPt = (i, k, v) => App.change('Punkt geändert', (doc) => { const f = Model.find(doc, it.id); if (!f || !f.item.p.path3d || !f.item.p.path3d.pts[i]) return false; f.item.p.path3d.pts[i][k] = v; }, { merge: 'p3:' + it.id + ':' + i + ':' + k });
+        const fs = h('div', { class: 'fields' });
+        fs.append(UI.selectField({ id: 'p-smooth', label: 'Verlauf', value: it.p.path3d.smooth === false ? 'corner' : 'smooth', options: [['smooth', 'Glatte Kurve durch die Punkte'], ['corner', 'Gerade Stücke, runde Ecken']], onChange: (v) => App.change('Verlauf', (doc) => { const f = Model.find(doc, it.id); if (!f) return false; f.item.p.path3d.smooth = v !== 'corner'; }) }));
+        sec.append(fs);
+        const list = h('div', { class: 'p3-list', id: 'p3-list' });
+        P3.forEach((q, i) => {
+          const row = h('div', { class: 'fields three p3-row' });
+          ['x', 'y', 'z'].forEach((ax, k) => row.append(UI.numField({ id: `p3-${i}-${ax}`, label: (k === 0 ? `P${i + 1} ` : '') + ax.toUpperCase(), value: q[k], onCommit: (v) => setPt(i, k, v) })));
+          list.append(row);
+          if (P3.length > 2) { const del = h('button', { type: 'button', class: 'btn ghost small', id: `p3-del-${i}`, 'aria-label': `Punkt ${i + 1} löschen` }); del.innerHTML = icon('trash') + `Punkt ${i + 1} löschen`; del.onclick = () => App.change('Punkt gelöscht', (doc) => { const f = Model.find(doc, it.id); if (!f) return false; f.item.p.path3d.pts.splice(i, 1); }); list.append(del); }
+        });
+        sec.append(list);
+        const mb = h('button', { type: 'button', class: 'btn', id: 'route-more' }); mb.innerHTML = icon('plus') + 'Punkte im Bild anhängen';
+        mb.onclick = () => Features.routeAppend(it.id);
+        sec.append(mb, h('div', { class: 'hint-box', html: 'Das Rohr läuft durch die Punkte im Raum – gut für Kabelkanäle, Antennenrohre und Bügel, die sich in alle Richtungen biegen. Mit <b>Wand</b> wird es hohl.' }));
+      } else {
+        const eb = h('button', { type: 'button', class: 'btn' }); eb.innerHTML = icon('edit') + 'Pfad bearbeiten';
+        eb.onclick = () => Sketch.editItem(it.id);
+        sec.append(eb, h('div', { class: 'hint-box', html: 'Der Querschnitt läuft am Pfad entlang – gut für Rohre, Kabelkanäle, Bügel und Leisten. Mit <b>Wand</b> wird er hohl.' }));
+      }
       w.append(sec);
     } else if (it.kind === 'loft') {
       const n = (it.p.sketches || []).length, hasPath = !!it.p.path;

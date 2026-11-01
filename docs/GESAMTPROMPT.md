@@ -1,4 +1,4 @@
-# Tracery – Gesamtprompt (Stand 28.10.2026, nach Sitzung 40, Commit 0c9b360)
+# Tracery – Gesamtprompt (Stand 01.11.2026, nach Sitzung 47)
 
 > Diesen Text komplett in einen neuen Chat oder eine andere KI einfügen. Er beschreibt das ganze Projekt so genau, dass die KI ohne Rückfragen weiterarbeiten kann.
 
@@ -43,18 +43,19 @@ Leitlinien:
   - Ohne Freigabe: Sperrdatei per `mv` direkt unter `.git/` umbenennen (z. B. `.git/stale-HEAD.lock-<zeit>`), nie löschen.
   - `tmp_obj_*`-Dateien stören nicht.
 - **Ist der Mac offline:** Die geänderten Dateien als ZIP an Nils schicken und committen, sobald er wieder da ist.
+- **Gemini 4 Argon** darf am Code arbeiten, aber nur auf dem Zweig „argon“ (Prompt `docs/PROMPT-ARGON.md`). Claude prüft dessen Arbeit mit den Klicktests und übernimmt sie auf main (Argon 1 = Gelenk-Ketten). Vor jeder Sitzung prüfen, auf welchem Zweig der Mac-Ordner steht.
 - **Gemini als Helfer:** Nils gibt Recherche- und Datenaufgaben an Gemini, zum Beispiel Datenblatt-Werte, Texte und Symbole.
   - Die KI schreibt dafür einen genauen Prompt („Gemini Prompt A, B, C …“, zuletzt **O**). Er verlangt JSON-Antworten mit Quelle je Wert und null statt Schätzungen.
   - Jede Gemini-Antwort wird **nachgeprüft**: Stichproben an Hersteller- oder Händlerseiten, eigene Websuche. Falsche Werte werden verworfen und begründet.
   - **Offen:** Prompt O fragt nach Maßen für XT60H/XT30U, für die Antennen Lumenier AXII 2, TrueRC Singularity und Foxeer Lollipop 4 sowie nach Teilen für 2"- und 2,5"-Cinewhoops (Motoren 1103/1204/1303, Propeller, Pavo20/Pavo25 V2, 2S-Akkus). Die Antwort steht noch aus.
-- **Fortschritt:** Jede Sitzung bekommt eine Nummer, zuletzt **40**. Gepflegt werden:
+- **Fortschritt:** Jede Sitzung bekommt eine Nummer, zuletzt **47**. Gepflegt werden:
   - `docs/FORTSCHRITT.md` mit Stand-Zeile, Erledigt nach Stufen und „Bekannte Punkte“
   - `docs/TESTLISTE.md` mit Abschnitt „(neu in Sitzung N)“: `[x]` = automatisch geprüft, `[ ]` = von Hand
   - `docs/BAUPLAN.md`
 - **Weitere Ablagen:**
   - Claude-Projekt „cad-program“ mit dem Dokument `claude/tracery-arbeitsweise.md` (Arbeitsweise für neue Chats)
   - Claude-Doc „Tracery im Vergleich“ mit Fahrplan: Abschnitt „Stand …“ und nummerierte Liste „Sitzung … (fertig)“, „Als Nächstes“, „Danach“
-- **Online-Fassung:** Claude-Seite „Tracery“ (Artifact `XEPqXweoEvihS7rLJezNpS`), zuletzt Version 12 = Sitzung 40.
+- **Online-Fassung:** Claude-Seite „Tracery“ (Artifact `XEPqXweoEvihS7rLJezNpS`), Version 14 = Sitzung 43, als Nächstes Sitzung 47.
   - Bauen: `python3 tools/build.py --artifact ORDNER` erzeugt `index.html`, `tracery.css` und `tracery.js`.
   - Veröffentlichen: mit `url` und nur den geänderten Dateien, `kernel/core.js` nur, wenn der Kern sich geändert hat.
   - Die Seite nutzt die Fähigkeiten `sample` (KI-Kollege) und `downloads` (Speichern).
@@ -96,7 +97,7 @@ Leitlinien:
 | `45-actions.js` | Aktionen wie Gruppieren, Ausrichten, Abstand |
 | `46-features.js` | Muster (inkl. „entlang Kurve“), Spiegeln an Fläche, Teilen, Boolesch, Wandstärke, Achse im Bild wählen (`pickAxisThen`) |
 | `47-mass.js` | Volumen, Gewicht, Schwerpunkt, Material |
-| `48-joints.js` | Dreh- und Schiebegelenke |
+| `48-joints.js` | Dreh- und Schiebegelenke, Ketten, Anschlag übernehmen, Bewegung abspielen, `add` für die KI |
 | `49-*` | Bauteile im Kontext, Zeitleiste, Protokoll, Zahleneingabe beim Ziehen |
 | `50-ui-core.js`/`51-ui-panels.js` | Oberfläche, rechtes Panel „Eigenschaften“, Kontextleiste |
 | `52-snap.js` | magnetisches Einrasten |
@@ -150,6 +151,9 @@ Leitlinien:
   - **Maße:** w/h/len/d/r/x/y/ang/n, dist, distPL, angLL – auch als Formel
 - **Gelenk:** `{id, a (fest), b (beweglich), ao, ad (Achse, Welt), home (Matrix bei 0), ang, min, max, kind: 'rot'|'slide'}`
   - Nur für Teile ganz oben im Verlauf. Gelenke sind kein Schritt der Zeitleiste.
+  - Ketten: Ein Teil darf an mehreren Gelenken hängen, wird aber nur von einem bewegt; Kreise werden abgelehnt.
+- **Übergang mit Mittellinie:** `loft.p.path` = Skizze mit offenem Zug (Kern: Pipe-Shell mit mehreren Schnitten).
+- **Rohr im Raum:** `sweep.p.path3d = {pts: [[x,y,z],…], smooth}` statt `p.sketch`.
 - **Drohnen:** vorne ist **−Y**. Die Maße `Achsabstand`, `Armwinkel`, `Armwinkel_hinten`, `Armbreite`, `Armdicke`, `Plattenbreite`/`-länge`/`-dicke`, `Bolzenhöhe`, Stack, Motorlochkreis, Kamerabreite, `Propeller` und `Motorneigung` steuern den Rahmen.
 
 ## 5. Was Tracery heute kann (vollständig, nach Bereichen)
@@ -178,6 +182,7 @@ Leitlinien:
   - Explosion
   - Fokus-Vorschau
   - **Überhänge (3D-Druck)**: rot ab Grenzwinkel 35–60°, Druckbett = Unterseite, Fläche in mm²
+  - **Fahrtwind**: Blick aus der Windrichtung mit Neigung 0–60°, Stirnfläche in cm² aus dem Schattenriss
 
 **Skizze (Werkzeugtasten in Klammern)**
 - **Zeichnen:**
@@ -205,7 +210,7 @@ Leitlinien:
 
 **3D-Features**
 - Grundkörper mit Ziehgriffen; Hochziehen (Push/Pull an Flächen); Drehkörper
-- Übergang (Loft) mit Spitze („Zur Spitze“); Entlang Pfad (Rohr, Kanal, eigener Querschnitt)
+- Übergang (Loft) mit Spitze („Zur Spitze“) oder **entlang einer Mittellinie** (Punkte ziehen biegt den Körper, Warnung bei schrägem Auftreffen); Entlang Pfad (Rohr, Kanal, eigener Querschnitt); **Rohr im Raum** (Punkte auf Körper oder in den Raum klicken)
 - STEP/STL-Import
 - Rundung und Fase per Knopf oder **Ziehgriff an der Kante**; Entformungsschräge; Wandstärke (Aushöhlen)
 - Echte metrische Gewinde (Gewindebolzen, gedrucktes Innengewinde mit Spiel)
@@ -214,7 +219,7 @@ Leitlinien:
 - **Muster entlang Kurve** (Kurve zeichnen, Ringe zeigen die Lage, Anzahl/Abstand/Ausrichtung)
 - Spiegeln (Ebene oder **an Fläche**, die Ebene wandert mit der äußersten Fläche mit)
 - Teilen mit Spalt; Boolesch (Vereinigen/Abziehen/Schnittmenge)
-- **Gelenke:** Drehgelenk und **Schiebegelenk** zwischen zwei Teilen, Regler mit Bereich. „Bewegung prüfen“ fragt den Kern in Schritten nach Durchdringungen.
+- **Gelenke:** Drehgelenk und **Schiebegelenk** zwischen zwei Teilen, Regler mit Bereich, **Ketten** (Platte → Arm → Greifer). „Bewegung prüfen“ fragt den Kern in Schritten nach Durchdringungen; „Als Anschlag übernehmen“ und „Bewegung abspielen“.
 
 **Bibliothek („Bauteile“ und Drohne → „Lochbilder und Bausteine“)**
 - Löcher: Schraubenloch, Mutternfalle, Gewindeloch, Gewindebolzen, Gewindeeinsatz, Langloch
@@ -231,12 +236,12 @@ Leitlinien:
   - Formen X, Stretched, Wide, Deadcat, Cinewhoop mit Ducts, **Speed** (Stromlinien-Rumpf, geneigte Motoren 20° mit Keilen)
 - 13 Herstellerrahmen als Vorlage
 - Bausätze auf der Startseite
-- **Drohnen-Check:** Propellerkreise frei, Spitzenabstand, Durchdringungen, Gewicht, Schub-Gewicht-Verhältnis
+- **Drohnen-Check:** Propellerkreise frei, Spitzenabstand, Durchdringungen, Gewicht, Schwerpunkt, Schub-Gewicht-Verhältnis – auch für **selbst gebaute Rahmen** (Motoren aus „Kaufteile“, gern im Muster); **„Akku verschieben“** gleicht den Schwerpunkt aus
 - Platten als DXF für die Fräse
 
 **KI**
 - **KI-Kollege** (über `sample`): arbeitet in Runden mit JSON-Aktionen (hinzufuegen, aendern, muster rechteck/kreis/kurve inkl. Achse, spiegeln, verbinden, …), bessert Fehler selbst nach und fasst alles zu einem Rückgängig-Schritt zusammen.
-- Er kennt alle Formen, Bauteile, Herstellerrahmen und die neuen Bausteine.
+- Er kennt alle Formen, Bauteile, Herstellerrahmen und die neuen Bausteine, dazu Übergang mit `mittellinie`, Rohr mit `pfad3d` und die Aktion `gelenk`.
 - „Erklär diesen Schritt“.
 - **Schwachstellen-Analyse:**
   - Löcher zu nah am Rand oder aneinander
@@ -255,7 +260,7 @@ Leitlinien:
   TRACERY_URL=http://localhost:8765/ python3 tests/klicktest.py [Stichwort …]
   ```
 - **Dauer:** Der Volltest braucht ca. 45–110 Minuten auf 2 Kernen. **Keine anderen Tests gleichzeitig laufen lassen**, sonst gibt es Wackler.
-- **Ergebnis heute:** 156 Durchläufe, 155 OK, 1 „von Hand“ (Flimmern beim Tiefzoomen).
+- **Ergebnis heute:** rund 165 Durchläufe, alle OK bis auf 1 „von Hand“ (Flimmern beim Tiefzoomen).
 - **Neue Funktion = neuer Test.** Er kommt in die Liste am Dateiende (Name mit Schrägstrichen je Prüfpunkt) und liefert `[ok1, ok2, …]`.
 - **Hilfsfunktionen:**
   - `p.ev(js, arg)` mit allen Modulen aus `window.__M`, `p.empty()`
@@ -286,17 +291,21 @@ Leitlinien:
 - Text hat keine Unterschneidung. Ellipse und Text lassen sich nicht trimmen. Die Drehung von Ellipse und Vieleck ist keine Regel.
 - Vorlagen bestehen aus einer Gruppe. Teilen ergibt zwei Hälften in einem Schritt.
 - Explosion wirkt nur auf die oberste Ebene. Der Magnet funktioniert nur auf ebenen Flächen.
-- Gelenke funktionieren nur zwischen Teilen ganz oben im Verlauf, je Teil ein Gelenk.
+- Gelenke funktionieren nur zwischen Teilen ganz oben im Verlauf; ein Teil wird nur von einem Gelenk bewegt.
+- Übergang mit Mittellinie: keine Spitze, keine „geraden Flächen“, die Linie liegt in einer Ebene.
+- Rohr im Raum: Punkte sind feste Zahlen, nicht an Körperkanten gebunden.
+- Drohnen-Check eigener Rahmen: Steckt ein Motor mit Rahmenteilen in einer Gruppe, zählt die ganze Gruppe als ein Teil.
+- Fahrtwind misst eine Fläche, keinen Luftwiderstand (kein cw-Wert).
 - Steckermaße XT60H/XT30U sind geschätzt; die GoPro-Maße beruhen auf Messungen der Community.
 
 ## 9. Fahrplan (nächste Schritte)
 
 1. Gemini Prompt O auswerten: Stecker, Antennen als Kaufteile mit eigener Form, 2"- und 2,5"-Cinewhoops im Frame-Assistenten.
-2. Baugruppen mit mehreren Gelenken an einem Teil, Gelenk-Ketten, Anschläge speichern.
-3. 3D-Skizzen, Übergang mit Führungskurven.
+2. Gelenke auch innerhalb von Gruppen.
+3. 3D-Skizzen mit Regeln und Maßen, Übergang mit seitlichen Führungskurven.
 4. Magnet auf gewölbten Flächen; Explosion innerhalb von Gruppen.
-5. Drohnen-Check auch für frei gebaute Rahmen; Herstellerrahmen mit Original-Umriss; H-Rahmen und Sandwich.
-6. Speed-Drohne: Verkleidungen und Luftwiderstand.
+5. Herstellerrahmen mit Original-Umriss; H-Rahmen und Sandwich.
+6. Speed-Drohne: Verkleidungen; Luftwiderstand mit cw-Wert.
 7. Schwachstellen: Wand um Schraubenlöcher auch bei Teilen, die keine flache Platte sind.
 8. Einsteiger-Oberfläche: größere Knöpfe, geführte erste Schritte.
 9. Später (Stufe 6): Konten, Projekte in der Cloud, Teilen, gleichzeitig arbeiten.
@@ -308,7 +317,10 @@ Leitlinien:
 - Stack-Lochbild an einem echten Flugcontroller
 - GoPro-Halterung und XT60-Halter drucken
 - Wand aus Bogen; Deckel mit übernommenen Kanten
-- Anschlag beim Klapparm
+- Anschlag beim Klapparm, Kette abspielen
+- Speed-Rumpf mit Mittellinie und Fahrtwind
+- Kabelkanal mit „Rohr im Raum“ drucken
+- Schwerpunkt der echten Drohne nachwiegen
 - Überhänge gegen den Slicer vergleichen
 - DXF in einer Fräs-Software
 - KI-Kollege in Claude

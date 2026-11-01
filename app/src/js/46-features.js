@@ -92,6 +92,102 @@ const Features = (() => {
     cv.removeEventListener('pointerdown', picking.down, true); window.removeEventListener('keydown', picking.key, true);
     cv.style.cursor = ''; UI.hint(null); picking = null;
   }
+  // ---------- Rohr im Raum: Punkte auf Körper oder in den Raum klicken ----------
+  // Auf einer Fläche liegt das Rohr auf (Mittelpunkt einen halben Durchmesser über der Fläche); daneben gilt die Höhe des letzten Punkts.
+  let route = null;
+  function routeDraw() {
+    if (!route) return;
+    if (route.obj) { Viewer.groups.overlay.remove(route.obj); route.obj.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); route.obj = null; }
+    const g = new THREE.Group(), col = new THREE.Color(Viewer.theme.accent), pts = route.pts;
+    for (const q of pts) { const m = new THREE.Mesh(new THREE.SphereGeometry(Math.max(0.6, route.d * 0.35), 14, 10), new THREE.MeshBasicMaterial({ color: col, depthTest: false, transparent: true, opacity: 0.9 })); m.position.set(q[0], q[1], q[2]); m.renderOrder = 30; g.add(m); }
+    if (pts.length >= 2) {
+      const L = [];
+      if (pts.length >= 3) for (const b of Model.bez3(pts)) for (let i = L.length ? 1 : 0; i <= 16; i++) { const t = i / 16, u = 1 - t; L.push(new THREE.Vector3(...[0, 1, 2].map((k) => u * u * u * b.a[k] + 3 * u * u * t * b.c1[k] + 3 * u * t * t * b.c2[k] + t * t * t * b.b[k]))); }
+      else L.push(new THREE.Vector3(...pts[0]), new THREE.Vector3(...pts[1]));
+      const ln = new THREE.Line(new THREE.BufferGeometry().setFromPoints(L), new THREE.LineBasicMaterial({ color: col, depthTest: false })); ln.renderOrder = 29; g.add(ln);
+    }
+    Viewer.groups.overlay.add(g); route.obj = g;
+    const n = route.bar && route.bar.querySelector('#route-n'); if (n) n.textContent = String(pts.length);
+    Viewer.requestRender();
+  }
+  function routePoint(cx, cy) {
+    const hit = Viewer.pick(cx, cy, { solidsOnly: true, noEdges: true });
+    let P = null;
+    if (hit && hit.normal) P = hit.point.clone().addScaledVector(hit.normal.clone().normalize(), route.d / 2);
+    else { const z = route.pts.length ? route.pts[route.pts.length - 1][2] : 0; P = Viewer.pickPlane(cx, cy, z); }
+    if (!P) return;
+    const q = P.toArray().map((v) => round(v, 3)), last = route.pts[route.pts.length - 1];
+    if (last && Math.hypot(q[0] - last[0], q[1] - last[1], q[2] - last[2]) < 0.5) return;   // Doppelklick: kein doppelter Punkt
+    route.pts.push(q); routeDraw();
+  }
+  function stopRoute() {
+    if (!route) return;
+    const cv = Viewer.canvas;
+    cv.removeEventListener('pointerdown', route.down, true); cv.removeEventListener('pointerup', route.up, true); cv.removeEventListener('dblclick', route.dbl, true); window.removeEventListener('keydown', route.key, true);
+    if (route.obj) { Viewer.groups.overlay.remove(route.obj); route.obj.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); }
+    if (route.bar) route.bar.remove();
+    cv.style.cursor = ''; UI.hint(null); route = null; Viewer.requestRender();
+  }
+  function routeFinish() {
+    if (!route) return null;
+    if (route.pts.length < 2) { UI.toast('Klick mindestens zwei Punkte – auf einen Körper oder daneben in den Raum.', { icon: 'info' }); return null; }
+    const pts = route.pts.map((q) => q.slice()), d = route.d;
+    stopRoute();
+    let nid = null;
+    App.change('Rohr im Raum', (doc) => { const it = Model.newItem('sweep', { path3d: { pts, smooth: true }, shape: 'circle', d, w: d, h: round(d * 0.7, 2), wall: 0 }, { name: 'Rohr im Raum' }); doc.items.push(it); nid = it.id; });
+    App.select([nid]);
+    UI.toast('Rohr angelegt. Rechts änderst du Punkte, Durchmesser und Querschnitt.', { icon: 'check' });
+    return nid;
+  }
+  function route3d(opts = {}) {
+    stopPick(); stopRoute();
+    route = { pts: (opts.pts || []).map((q) => q.slice()), d: opts.d || 6, obj: null, at: null, append: opts.append || null };
+    const cv = Viewer.canvas;
+    route.down = (e) => { if (e.button === 0) route.at = [e.clientX, e.clientY]; };
+    route.up = (e) => { if (e.button !== 0 || !route.at) return; const moved = Math.hypot(e.clientX - route.at[0], e.clientY - route.at[1]); route.at = null; if (moved < 5) routePoint(e.clientX, e.clientY); };
+    route.dbl = (e) => { e.preventDefault(); e.stopPropagation(); finishRoute(); };
+    route.key = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopRoute(); Panels.renderRight(); }
+      else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); finishRoute(); }
+      else if (e.key === 'Backspace' && !/INPUT|TEXTAREA/.test((document.activeElement || {}).tagName || '')) { e.preventDefault(); e.stopPropagation(); route.pts.pop(); routeDraw(); }
+    };
+    const bar = h('div', { class: 'viewbar', role: 'toolbar', 'aria-label': 'Rohr im Raum' });
+    const head = h('div', { class: 'vb-head' }, h('span', { class: 'title' }, opts.append ? 'Punkte anhängen' : 'Rohr im Raum'));
+    const x = h('button', { type: 'button', class: 'vb-x', 'aria-label': 'Abbrechen', 'data-tip': 'Abbrechen' }); x.innerHTML = icon('close'); x.onclick = () => { stopRoute(); Panels.renderRight(); };
+    head.append(x);
+    const din = h('input', { type: 'number', id: 'route-d', class: 'vb-sel', value: route.d, min: 0.5, step: 0.5, 'aria-label': 'Durchmesser', style: { width: '64px' } });
+    din.onchange = () => { const v = parseFloat(String(din.value).replace(',', '.')); if (v > 0) { route.d = v; routeDraw(); } };
+    const ok = h('button', { type: 'button', class: 'btn small primary', id: 'route-done' }); ok.innerHTML = icon('check') + 'Fertig'; ok.onclick = () => finishRoute();
+    bar.append(head,
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, 'Punkte'), h('b', { class: 'mono', id: 'route-n' }, String(route.pts.length)), h('span', { class: 'vb-l' }, 'Ø'), din, h('span', { class: 'vb-hint' }, 'mm')),
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint' }, 'Klick Punkte auf einen Körper (das Rohr liegt dann auf) oder daneben in den Raum. Ziehen dreht die Ansicht. Rückschritt nimmt den letzten Punkt weg.')),
+      h('div', { class: 'vb-row' }, ok));
+    if (opts.append) din.disabled = true;
+    Views.bars().append(bar); route.bar = bar;
+    cv.addEventListener('pointerdown', route.down, true); cv.addEventListener('pointerup', route.up, true); cv.addEventListener('dblclick', route.dbl, true); window.addEventListener('keydown', route.key, true);
+    cv.style.cursor = 'crosshair';
+    UI.hint('<b>Rohr im Raum:</b> Punkte klicken – <b>Enter</b> oder Doppelklick ist fertig, <b>Esc</b> bricht ab.');
+    routeDraw();
+    return true;
+  }
+  // Fertig: neues Rohr oder – beim Anhängen – die Punkte ans vorhandene Rohr
+  function finishRoute() {
+    if (!route) return null;
+    if (!route.append) return routeFinish();
+    const id = route.append, inv = route.inv || new THREE.Matrix4(), pts = route.pts.map((q) => new THREE.Vector3(...q).applyMatrix4(inv).toArray().map((v) => round(v, 3)));
+    stopRoute();
+    App.change('Punkte angehängt', (doc) => { const f = Model.find(doc, id); if (!f || !f.item.p.path3d) return false; f.item.p.path3d.pts = pts; });
+    App.select([id]); return id;
+  }
+  // Punkte eines Rohrs im Raum weiter anklicken (in Weltlage; das Rohr selbst liegt ganz oben im Verlauf)
+  function routeAppend(id) {
+    const f = Model.find(App.doc, id); if (!f || !f.item.p.path3d) return false;
+    const W = Model.worldMatrix(App.doc, id);
+    const pts = f.item.p.path3d.pts.map((q) => new THREE.Vector3(...q.map((v) => Model.num(v, Model.vars(App.doc).v, 0))).applyMatrix4(W).toArray());
+    route3d({ pts, d: Model.num(f.item.p.d, Model.vars(App.doc).v, 6), append: id });
+    route.inv = W.clone().invert();
+    return true;
+  }
   // Achse im Bild wählen; cb bekommt { o, d, what } in Weltkoordinaten
   function pickAxisThen(cb, hint) {
     stopPick();
@@ -238,5 +334,5 @@ const Features = (() => {
     return null;
   }
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { pickAxis, pickAxisThen, get picking() { return !!picking; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
+  return { route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, pickAxis, pickAxisThen, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
 })();

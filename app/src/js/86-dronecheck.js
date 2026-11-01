@@ -56,6 +56,33 @@ const DroneCheck = (() => {
     return geometry(doc) || freeGeometry(doc, Model.vars(doc).v);
   }
   const isDrone = (doc = App.doc) => !!geometryAny(doc);
+  // Akkus: Teile ganz oben im Verlauf, die „Akku“ heißen oder ein Akku aus „Kaufteile“ sind
+  const batteries = (doc = App.doc) => doc.items.filter((i) => !i.hidden && !i.suppressed && Model.isActive(doc, i.id) && (/akku/i.test(i.name || '') || (i.kind === 'part' && i.p && i.p.lib === 'buyBattery')));
+  // Wie weit muss der schwerste Akku wandern, damit der Schwerpunkt über der Mitte zwischen den Motoren liegt?
+  async function balanceInfo() {
+    const g = geometryAny(); if (!g) return null;
+    const m = await Mass.measure(); if (!m || !m.com) return null;
+    const bt = batteries().map((it) => ({ it, p: Mass.partOf(m, it.id) })).filter((x) => x.p && x.p.mass > 0).sort((a, b) => b.p.mass - a.p.mass)[0];
+    if (!bt) return null;
+    const cx = g.motors.reduce((s, x) => s + x[1], 0) / g.motors.length, cy = g.motors.reduce((s, x) => s + x[2], 0) / g.motors.length;
+    const dx = m.com[0] - cx, dy = m.com[1] - cy, k = m.mass / bt.p.mass;
+    return { id: bt.it.id, name: Model.label(bt.it), sx: Math.abs(dx) > 0.3 ? -dx * k : 0, sy: Math.abs(dy) > 0.3 ? -dy * k : 0, A: g.A };
+  }
+  async function balance() {
+    const b = await balanceInfo();
+    if (!b) { UI.toast('Dafür braucht es einen Akku im Modell (ein Teil namens „Akku“ oder einen Akku aus „Kaufteile“, ganz oben im Verlauf).', { icon: 'info', ms: 4500 }); return false; }
+    const L = Math.hypot(b.sx, b.sy);
+    if (L < 0.05) { UI.toast('Der Schwerpunkt liegt schon in der Mitte.', { icon: 'check' }); return false; }
+    if (L > b.A * 0.6) { UI.toast(`„${b.name}“ müsste ${fmt(L, 0)} mm wandern – das ist zu weit. Setz schwere Teile wie Kamera oder Sender um.`, { icon: 'info', ms: 5000 }); return false; }
+    App.change('Schwerpunkt ausgeglichen', (doc) => {
+      const it = doc.items.find((x) => x.id === b.id); if (!it) return false;
+      Model.useVars(Model.vars(doc).v);
+      it.t = it.t || Model.T0();
+      it.t.x = round(Model.tnum(it, 'x') + b.sx, 2); it.t.y = round(Model.tnum(it, 'y') + b.sy, 2);
+    });
+    UI.toast(`„${b.name}“ ${b.sy ? (b.sy < 0 ? 'nach vorne' : 'nach hinten') : 'zur Seite'} geschoben (${fmt(L, 1)} mm) – der Schwerpunkt liegt jetzt in der Mitte.`, { icon: 'check', ms: 4200 });
+    return true;
+  }
   const label = (id) => { const f = Model.find(App.doc, id); return f ? Model.label(f.item) : 'ein Teil'; };
   const thrustOf = (doc = App.doc) => (doc.drone && doc.drone.thrustG != null && doc.drone.thrustG !== '' ? Model.num(doc.drone.thrustG, Model.vars(doc).v, 0) : null);
   async function run() {
@@ -94,9 +121,9 @@ const DroneCheck = (() => {
         const cx = g.motors.reduce((s, x) => s + x[1], 0) / g.motors.length, cy = g.motors.reduce((s, x) => s + x[2], 0) / g.motors.length;
         const dx = m.com[0] - cx, dy = m.com[1] - cy, d = Math.hypot(dx, dy);
         const dir = [Math.abs(dy) > 0.5 ? (dy < 0 ? 'nach vorne' : 'nach hinten') : '', Math.abs(dx) > 0.5 ? (dx > 0 ? 'nach rechts' : 'nach links') : ''].filter(Boolean).join(' und ');
-        const akku = doc.items.some((i) => /akku/i.test(i.name || '') && !i.hidden);
+        const akku = batteries(doc).length > 0;
         const sc = d <= 0.03 * g.A ? 'ok' : !akku ? 'info' : d <= 0.08 * g.A ? 'warn' : 'bad';
-        out.push({ id: 'cog', title: 'Schwerpunkt', s: sc, text: (d < 0.5 ? 'Genau in der Mitte zwischen den Motoren.' : `${fmt(d, 1)} mm ${dir} verschoben` + (d <= 0.03 * g.A ? ' – passt.' : akku ? ' – Akku oder schwere Teile verschieben.' : '.')) + (akku ? '' : ' Noch ohne Akku – leg einen auf die Oberplatte und prüf noch mal.') });
+        out.push({ id: 'cog', title: 'Schwerpunkt', s: sc, ...(akku && d > 0.03 * g.A ? { fix: 'balance' } : {}), text: (d < 0.5 ? 'Genau in der Mitte zwischen den Motoren.' : `${fmt(d, 1)} mm ${dir} verschoben` + (d <= 0.03 * g.A ? ' – passt.' : akku ? ' – Akku oder schwere Teile verschieben.' : '.')) + (akku ? '' : ' Noch ohne Akku – leg einen auf die Oberplatte und prüf noch mal.') });
       }
       // 6. Schub zu Gewicht
       const t = thrustOf(doc);
@@ -122,6 +149,7 @@ const DroneCheck = (() => {
     for (const c of list) {
       const r = h('div', { class: 'chk-row ' + c.s, 'data-chk': c.id }, h('span', { class: 'chk-dot', 'aria-hidden': 'true' }, DOT[c.s]), h('div', { class: 'grow' }, h('b', null, c.title), h('span', null, c.text)));
       if (c.ids && c.ids.length && c.s !== 'ok' && onShow) { const b = h('button', { type: 'button', class: 'btn small ghost' }, 'Zeigen'); b.onclick = () => onShow(c.ids); r.append(b); }
+      if (c.fix === 'balance') { const b = h('button', { type: 'button', class: 'btn small', id: 'chk-balance', 'data-tip': 'Akku so verschieben, dass der Schwerpunkt mittig zwischen den Motoren liegt' }, 'Akku verschieben'); b.onclick = async () => { b.disabled = true; const ok = await balance(); const md = b.closest('.modal'); if (ok && md) { const x = [...md.querySelectorAll('.actions button')].find((y) => y.textContent.trim() === 'Schließen'); if (x) x.click(); else (md.closest('.modal-back') || md).remove(); setTimeout(dialog, 80); } else b.disabled = false; }; r.append(b); }
       box.append(r);
     }
     return box;
@@ -142,7 +170,7 @@ const DroneCheck = (() => {
   }
   function summary() { return last && last.rev === App.revision ? last.list : null; }
   const ev = makeEmitter();
-  return { geometry: geometryAny, isDrone, run, dialog, rows, summary, thrustOf, on: ev.on };
+  return { geometry: geometryAny, isDrone, run, dialog, rows, summary, thrustOf, balance, balanceInfo, on: ev.on };
 })();
 
 // ---------- Platten als DXF für die Fräse ----------

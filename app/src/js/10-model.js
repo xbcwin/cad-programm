@@ -299,9 +299,35 @@ const Model = (() => {
       return Math.round((Math.acos(Math.min(1, cs)) * 180) / Math.PI);
     });
   }
+  // Glatte Kurve durch Punkte im Raum: je Abschnitt ein kubisches Bézier-Stück (wie die Skizzen-Spline, nur in 3D)
+  function bez3(pts) {
+    const n = pts.length; if (n < 3) return [];
+    const P = (i) => (i < 0 ? pts[0].map((v, k) => 2 * v - pts[1][k]) : i > n - 1 ? pts[n - 1].map((v, k) => 2 * v - pts[n - 2][k]) : pts[i]);
+    const dist = (a, b) => Math.max(1e-9, Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]));
+    const out = [];
+    for (let i = 0; i < n - 1; i++) {
+      const p0 = P(i - 1), p1 = P(i), p2 = P(i + 1), p3 = P(i + 2);
+      const t1 = dist(p0, p1), t2 = t1 + dist(p1, p2), t3 = t2 + dist(p2, p3), dt = t2 - t1;
+      const m1 = [0, 1, 2].map((k) => ((p1[k] - p0[k]) / t1 - (p2[k] - p0[k]) / t2 + (p2[k] - p1[k]) / dt) * dt);
+      const m2 = [0, 1, 2].map((k) => ((p2[k] - p1[k]) / dt - (p3[k] - p1[k]) / (t3 - t1) + (p3[k] - p2[k]) / (t3 - t2)) * dt);
+      out.push({ a: p1, c1: [0, 1, 2].map((k) => p1[k] + m1[k] / 3), c2: [0, 1, 2].map((k) => p2[k] - m2[k] / 3), b: p2 });
+    }
+    return out;
+  }
   // Entlang Pfad (Sweep): längster offener Zug der Skizze, Querschnitt Kreis oder Rechteck, optional hohl
   function sweepParams(it, V) {
     const p = it.p || {};
+    if (p.path3d && Array.isArray(p.path3d.pts)) {
+      // Pfad im Raum statt Skizze
+      const pts = p.path3d.pts.map((q) => [0, 1, 2].map((k) => num(q[k], V, 0)));
+      let prof = null;
+      if (p.shape === 'sketch' && p.prof) {
+        const regs = SK.regions(Solver.cached(p.prof, V).ents).sort((a, b) => b.area - a.area);
+        if (regs.length) { const Lp = regs[0].outer; let cx = 0, cy = 0; for (const q of Lp.poly) { cx += q[0]; cy += q[1]; } cx /= Lp.poly.length; cy /= Lp.poly.length; prof = { outer: Lp.k, holes: regs[0].holes.map((h) => h.k), c: [cx, cy] }; }
+      }
+      const smooth = p.path3d.smooth !== false;
+      return { path3d: { pts, smooth, segs: smooth ? bez3(pts) : [] }, prof, shape: p.shape === 'rect' ? 'rect' : p.shape === 'sketch' && prof ? 'sketch' : 'circle', d: num(p.d, V, 6), w: num(p.w, V, 6), h: num(p.h, V, 4), wall: num(p.wall, V, 0) };
+    }
     const ch = SK.chains(p.sketch ? Solver.cached(p.sketch, V).ents : [])[0];
     let prof = null;
     if (p.shape === 'sketch' && p.prof) {
@@ -393,6 +419,6 @@ const Model = (() => {
     walk(doc.items, (it) => { it.t = Object.assign(T0(), it.t || {}); it.p = it.p || {}; it.finishes = it.finishes || []; if (!it.role) it.role = 'solid'; if (!it.color) it.color = nextColor(); });
     return doc;
   }
-  return { patternMatrices, instanceMatrices, loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  return { bez3, patternMatrices, instanceMatrices, loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 

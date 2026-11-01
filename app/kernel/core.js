@@ -294,12 +294,32 @@ export function createKernel(R, oc) {
 
   // Querschnitt entlang eines offenen Pfads (Sweep): Rohr, Kabelkanal, Leiste
   function buildSweep(p) {
-    const segs = p.segs || [];
-    if (!segs.length || !p.t0) throw new Error('Die Skizze hat keinen offenen Pfad. Zeichne eine Linie, einen Bogen oder eine Spline, die nicht geschlossen ist.');
-    const M = planeMap(p.plane);
-    const spine = R.assembleWire(segEdges(segs, M));
-    const P0 = M.P(segs[0].a), O = M.P([0, 0]);
-    const T = norm(sub(M.P(p.t0), O)), N = M.n, V = [T[1] * N[2] - T[2] * N[1], T[2] * N[0] - T[0] * N[2], T[0] * N[1] - T[1] * N[0]];
+    let spine, P0, T, N;
+    const P3 = p.path3d && Array.isArray(p.path3d.pts) ? p.path3d.pts.filter((q) => Array.isArray(q) && q.length === 3 && q.every((v) => isFinite(v))) : null;
+    if (P3) {
+      // Pfad im Raum: glatte Kurve durch die Punkte (B-Spline) oder gerade Stücke mit runden Übergängen
+      const pts = P3.filter((q, i) => !i || Math.hypot(q[0] - P3[i - 1][0], q[1] - P3[i - 1][1], q[2] - P3[i - 1][2]) > 1e-6);
+      if (pts.length < 2) throw new Error('Der Pfad im Raum braucht mindestens zwei verschiedene Punkte.');
+      const bz = Array.isArray(p.path3d.segs) ? p.path3d.segs : null;
+      if (p.path3d.smooth !== false && pts.length >= 3 && bz && bz.length) {
+        spine = R.assembleWire(bz.map((g) => R.makeBezierCurve([g.a, g.c1, g.c2, g.b])));
+        T = norm(sub(bz[0].c1, bz[0].a));
+      } else {
+        const ed = []; for (let i = 1; i < pts.length; i++) ed.push(R.makeLine(pts[i - 1], pts[i]));
+        spine = R.assembleWire(ed); T = norm(sub(pts[1], pts[0]));
+      }
+      P0 = pts[0];
+      const up = Math.abs(T[2]) < 0.99 ? [0, 0, 1] : [1, 0, 0], d = T[0] * up[0] + T[1] * up[1] + T[2] * up[2];
+      N = norm([up[0] - T[0] * d, up[1] - T[1] * d, up[2] - T[2] * d]);
+    } else {
+      const segs = p.segs || [];
+      if (!segs.length || !p.t0) throw new Error('Die Skizze hat keinen offenen Pfad. Zeichne eine Linie, einen Bogen oder eine Spline, die nicht geschlossen ist.');
+      const M = planeMap(p.plane);
+      spine = R.assembleWire(segEdges(segs, M));
+      P0 = M.P(segs[0].a); const O = M.P([0, 0]);
+      T = norm(sub(M.P(p.t0), O)); N = M.n;
+    }
+    const V = [T[1] * N[2] - T[2] * N[1], T[2] * N[0] - T[0] * N[2], T[0] * N[1] - T[1] * N[0]];
     const prof = (inset) => {
       if (p.shape === 'sketch' && p.prof) {
         if (inset > 0) return null;

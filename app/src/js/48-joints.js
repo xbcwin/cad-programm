@@ -62,6 +62,26 @@ const Joints = (() => {
       if (kb) Model.setFromMatrix(kb, pose(k, k.ang));
     }
   }
+  // Gelenk ohne Klicken anlegen (für den KI-Kollegen): Achse o/d in Weltkoordinaten; liefert die Kennung oder eine Meldung
+  function add(aId, bId, o, d, opts = {}) {
+    const A = top(aId), B = top(bId);
+    if (!A || !B || A.id === B.id) return { ok: false, msg: 'Ein Gelenk braucht zwei verschiedene Teile ganz oben im Verlauf.' };
+    if (connected(App.doc, A.id, B.id)) return { ok: false, msg: `„${Model.label(A)}“ und „${Model.label(B)}“ sind schon über Gelenke verbunden – ein weiteres ergäbe einen Kreis.` };
+    if (list().some((j) => j.b === B.id)) return { ok: false, msg: `„${Model.label(B)}“ wird schon von einem Gelenk bewegt.` };
+    const dv = new THREE.Vector3(...d); if (dv.lengthSq() < 1e-12) return { ok: false, msg: 'Die Gelenkachse braucht eine Richtung.' };
+    dv.normalize();
+    const kind = opts.kind === 'slide' ? 'slide' : 'rot';
+    const lo = Number.isFinite(+opts.min) ? +opts.min : kind === 'slide' ? -20 : -90, hi = Number.isFinite(+opts.max) ? +opts.max : kind === 'slide' ? 20 : 90;
+    let jid = null;
+    App.change('Gelenk angelegt', (doc) => {
+      const b = doc.items.find((x) => x.id === B.id); if (!b) return false;
+      doc.joints = doc.joints || [];
+      jid = uid('j');
+      doc.joints.push({ id: jid, a: A.id, b: B.id, ao: o.map((v) => round(+v, 6)), ad: dv.toArray().map((v) => round(v, 9)), home: Model.localMatrix(b).toArray().map((v) => round(v, 9)), ang: 0, min: round(Math.min(lo, hi), 2), max: round(Math.max(lo, hi), 2), ...(kind === 'slide' ? { kind } : {}) });
+    });
+    if (jid && opts.ang && Number.isFinite(+opts.ang)) setAngle(jid, +opts.ang);
+    return jid ? { ok: true, id: jid } : { ok: false, msg: 'Das Gelenk ließ sich nicht anlegen.' };
+  }
   // Gelenk anlegen: zwei Teile gewählt, das zuletzt gewählte bewegt sich; dann die Achse im Bild wählen
   function start() {
     const sel = App.sel.map((id) => top(id)).filter(Boolean);
@@ -163,6 +183,55 @@ const Joints = (() => {
     const atNow = res.find((r) => Math.abs(r.a - j.ang) < 1e-6);
     return { ok: false, text: (atNow && atNow.v > 0.05 ? 'Schon in dieser Stellung stecken die Teile ineinander. ' : '') + `Das Teil ${parts.join(', ')}.` + (free.length ? ` Frei: ${fmt(Math.min(...free), 1)} … ${fmt(Math.max(...free), 1)} ${u} (nicht unbedingt am Stück).` : '') };
   }
+  // Freier Bereich um die jetzige Stellung aus dem Ergebnis von „Bewegung prüfen“ – wird zum Anschlag (Von/Bis)
+  function freeRange(j, res) {
+    const s = (res || []).slice().sort((a, b) => a.a - b.a); if (!s.length) return null;
+    let i0 = 0, best = Infinity; s.forEach((r, i) => { const d = Math.abs(r.a - j.ang); if (d < best) { best = d; i0 = i; } });
+    if (s[i0].v > 0.05) return null;
+    let lo = i0, hi = i0; while (lo > 0 && s[lo - 1].v <= 0.05) lo--; while (hi < s.length - 1 && s[hi + 1].v <= 0.05) hi++;
+    return [s[lo].a, s[hi].a];
+  }
+  function setStops(jid, lo, hi) {
+    App.change('Gelenk-Anschlag', (doc) => {
+      const j = list(doc).find((x) => x.id === jid); if (!j) return false;
+      j.min = round(Math.min(lo, hi), 2); j.max = round(Math.max(lo, hi), 2);
+    });
+    UI.toast('Anschlag gesetzt – weiter lässt sich das Gelenk nicht bewegen.', { icon: 'check' });
+  }
+  // Bewegung abspielen: nur im Bild (das Projekt ändert sich nicht) – bis zum einen Anschlag, zum anderen und zurück
+  let anim = null;
+  function stopPlay() {
+    if (!anim) return;
+    cancelAnimationFrame(anim.raf);
+    for (const id of anim.ids) { const it = top(id); if (it) Viewer.updateNode(id, { matrix: Model.localMatrix(it) }); }
+    const b = anim.btn; anim = null; Viewer.requestRender();
+    if (b && b.isConnected) b.innerHTML = icon('play') + 'Bewegung abspielen';
+  }
+  function play(jid, btn) {
+    if (anim) { const same = anim.jid === jid; stopPlay(); if (same) return; }
+    const j = list().find((x) => x.id === jid); if (!j) return;
+    const B = top(j.b); if (!B) return;
+    const cur = Model.localMatrix(B), exp = pose(j, j.ang);
+    const home = cur.elements.some((v, i) => Math.abs(v - exp.elements[i]) > 1e-4) ? pose(j, -j.ang, cur.toArray()).toArray() : j.home;
+    const down = downstream(App.doc, j.b).map((k) => top(k.b)).filter(Boolean).map((it) => ({ it, m: Model.localMatrix(it) }));
+    const seq = [j.ang, j.max, j.min, j.ang], speed = slide(j) ? Math.max(5, (j.max - j.min) / 1.4) : 120;
+    const legs = []; let T = 0; for (let i = 1; i < seq.length; i++) { const d = Math.abs(seq[i] - seq[i - 1]) / speed * 1000; legs.push({ a0: seq[i - 1], a1: seq[i], t0: T, t1: T + d }); T += d; }
+    if (T < 1) return;
+    const t0 = performance.now();
+    anim = { jid, ids: [B.id, ...down.map((d) => d.it.id)], btn, raf: 0, a: j.ang };
+    if (btn) btn.innerHTML = icon('close') + 'Stopp';
+    const step = () => {
+      if (!anim) return;
+      const t = performance.now() - t0;
+      if (t >= T) { stopPlay(); return; }
+      const L = legs.find((l) => t < l.t1) || legs[legs.length - 1], u = (t - L.t0) / Math.max(1, L.t1 - L.t0), e = u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
+      const a = L.a0 + (L.a1 - L.a0) * e; anim.a = a;
+      Viewer.updateNode(B.id, { matrix: pose(j, a, home) });
+      const D = stepMatrix(j, a - j.ang); for (const d of down) Viewer.updateNode(d.it.id, { matrix: D.clone().multiply(d.m) });
+      anim.raf = requestAnimationFrame(step);
+    };
+    step();
+  }
   // Abschnitt „Gelenk“ in den Eigenschaften – zeigt alle Gelenke des gewählten Teils
   function panel(it) {
     const js = allOf(it.id).filter((j) => top(j.a) && top(j.b));
@@ -192,10 +261,19 @@ const Joints = (() => {
         const r = await check(j.id); cb.disabled = false;
         if (!r) { res.textContent = 'Das ging nicht.'; return; }
         const d = describe(j, r); res.className = d.ok ? 'ok-box' : 'err-box'; res.textContent = d.text; res.dataset.hits = String(r.filter((x) => x.v > 0.05).length);
+        const fr = d.ok ? null : freeRange(j, r);
+        const old = box.querySelector('.jt-stop'); if (old) old.remove();
+        if (fr && fr[1] - fr[0] > 1e-9 && (fr[0] > j.min + 1e-9 || fr[1] < j.max - 1e-9)) {
+          const sb = h('button', { type: 'button', class: 'btn small jt-stop', id: 'jt-stop' + sfx }); sb.innerHTML = icon('check') + `Als Anschlag übernehmen: ${fmt(fr[0], 1)} … ${fmt(fr[1], 1)} ${unit(j)}`;
+          sb.onclick = () => setStops(j.id, fr[0], fr[1]);
+          res.after(sb);
+        }
       };
+      const pb = h('button', { type: 'button', class: 'btn', id: 'jt-play' + sfx }); pb.innerHTML = icon(anim && anim.jid === j.id ? 'close' : 'play') + (anim && anim.jid === j.id ? 'Stopp' : 'Bewegung abspielen');
+      pb.onclick = () => play(j.id, pb);
       const del = h('button', { type: 'button', class: 'btn', id: 'jt-del' + sfx }); del.innerHTML = icon('ungroup') + 'Gelenk lösen';
       del.onclick = () => remove(j.id);
-      box.append(h('div', { class: 'btn-row' }, cb, del), res);
+      box.append(h('div', { class: 'btn-row' }, pb), h('div', { class: 'btn-row' }, cb, del), res);
       sec.append(box);
     });
     return sec;
@@ -203,10 +281,11 @@ const Joints = (() => {
   // Gelöschte Teile: Gelenke, die an ihnen hängen, fallen weg
   function init() {
     App.on('doc', () => {
+      stopPlay();
       const js = list(); if (!js.length) return;
       const ids = new Set(App.doc.items.map((x) => x.id));
       if (js.some((j) => !ids.has(j.a) || !ids.has(j.b))) App.doc.joints = js.filter((j) => ids.has(j.a) && ids.has(j.b));
     });
   }
-  return { init, start, setAngle, setKind, setRange, remove, check, describe, panel, of, allOf, downstream, pose, get list() { return list(); } };
+  return { init, start, add, setAngle, setKind, setRange, setStops, freeRange, play, stopPlay, remove, check, describe, panel, of, allOf, downstream, pose, get list() { return list(); }, get playing() { return anim ? { jid: anim.jid, a: anim.a } : null; } };
 })();
