@@ -161,8 +161,8 @@
   },
   "loft": {
     "tip": "Weicher Übergang durch mehrere Umrisse (Loft)",
-    "hilfe": "Zeichne zwei oder mehr Umrisse auf verschiedenen Ebenen (z. B. ein Rechteck unten und einen Kreis 30 mm darüber – mit „Ebene verschieben“ in der Skizze). Wähle die Skizzenkörper in der Reihenfolge, durch die der Körper laufen soll, und klick „Übergang“. Bei einem einzelnen Skizzenkörper macht „Zur Spitze“ daraus eine Spitze.",
-    "tipp": "Unter „Spitze verlängern“ stellst du ein, wie weit die Spitze hinter dem letzten Umriss liegt. Für Nasen, Düsen und Rumpfteile danach die Kanten runden."
+    "hilfe": "Zeichne zwei oder mehr Umrisse auf verschiedenen Ebenen (z. B. ein Rechteck unten und einen Kreis 30 mm darüber – mit „Ebene verschieben“ in der Skizze). Wähle die Skizzenkörper in der Reihenfolge, durch die der Körper laufen soll, und klick „Übergang“. Bei einem einzelnen Skizzenkörper macht „Zur Spitze“ daraus eine Spitze. Rechts unter „Mittellinie“ kannst du den Übergang an einer gebogenen Linie entlangführen.",
+    "tipp": "Unter „Spitze verlängern“ stellst du ein, wie weit die Spitze hinter dem letzten Umriss liegt. Mit „Mittellinie zeichnen“ schwingt ein Rumpf nach oben oder ein Arm läuft im Bogen – die Umrisse bleiben dabei, wo sie sind. Für Nasen, Düsen und Rumpfteile danach die Kanten runden."
   },
   "holeWizard": {
     "tip": "Schraubenloch, Gewinde, Einsatz oder Mutternfalle bohren",

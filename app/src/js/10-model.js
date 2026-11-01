@@ -216,6 +216,18 @@ const Model = (() => {
       profiles.push({ plane: sk.plane, outer: L.k, c: [cx, cy] });
     }
     const out = { profiles, ruled: !!p.ruled };
+    // Mittellinie: längster offener Zug der Pfad-Skizze, so gedreht, dass er beim ersten Umriss beginnt
+    const ch = p.path ? SK.chains(Solver.cached(p.path, V).ents)[0] : null;
+    if (ch && profiles.length >= 2) {
+      const W3 = (pl, q) => { const n = pl.n, x = pl.x, y = [n[1] * x[2] - n[2] * x[1], n[2] * x[0] - n[0] * x[2], n[0] * x[1] - n[1] * x[0]]; return [0, 1, 2].map((k) => pl.o[k] + x[k] * q[0] + y[k] * q[1]); };
+      const d3 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+      const c0 = W3(profiles[0].plane, profiles[0].c), c1 = W3(profiles[profiles.length - 1].plane, profiles[profiles.length - 1].c);
+      const s0 = W3(p.path.plane, ch.segs[0].a), s1 = W3(p.path.plane, ch.segs[ch.segs.length - 1].b);
+      let segs = ch.segs;
+      if (d3(s0, c0) + d3(s1, c1) > d3(s0, c1) + d3(s1, c0)) segs = segs.slice().reverse().map((g) => (g.t === 'bez' ? { ...g, a: g.b, b: g.a, c1: g.c2, c2: g.c1 } : { ...g, a: g.b, b: g.a }));
+      out.path = { plane: p.path.plane, segs };
+      return out;   // mit Mittellinie: keine Spitze, kein „gerade“
+    }
     const tip = num(p.tip, V, 0);
     if (tip > 0 && profiles.length) {
       const last = profiles[profiles.length - 1], pl = last.plane;
@@ -225,6 +237,22 @@ const Model = (() => {
       out.tipPoint = [0, 1, 2].map((k) => pl.o[k] + x[k] * last.c[0] + y[k] * last.c[1] + n[k] * tip * s);
     }
     return out;
+  }
+  // Wie schräg trifft die Mittellinie die Umrisse? Winkel (Grad) zwischen Linie und Umriss-Normale je Umriss
+  function loftPathAngles(it, V) {
+    const lp = loftParams(it, V); if (!lp.path) return [];
+    const pl = lp.path.plane, n = pl.n, x = pl.x, y = [n[1] * x[2] - n[2] * x[1], n[2] * x[0] - n[0] * x[2], n[0] * x[1] - n[1] * x[0]];
+    const W = (q, o) => [0, 1, 2].map((k) => (o ? o[k] : 0) + x[k] * q[0] + y[k] * q[1]);
+    const pts = []; for (const g of lp.path.segs) { const sp = SK.segPoints(g); for (let i = pts.length ? 1 : 0; i < sp.length; i++) pts.push(W(sp[i], pl.o)); }
+    if (pts.length < 2) return [];
+    return lp.profiles.map((q) => {
+      const qn = q.plane.n, qx = q.plane.x, qy = [qn[1] * qx[2] - qn[2] * qx[1], qn[2] * qx[0] - qn[0] * qx[2], qn[0] * qx[1] - qn[1] * qx[0]];
+      const c = [0, 1, 2].map((k) => q.plane.o[k] + qx[k] * q.c[0] + qy[k] * q.c[1]);
+      let bi = 0, bd = Infinity; pts.forEach((P, i) => { const d = Math.hypot(P[0] - c[0], P[1] - c[1], P[2] - c[2]); if (d < bd) { bd = d; bi = i; } });
+      const A = pts[Math.max(0, bi - 1)], B = pts[Math.min(pts.length - 1, bi + 1)], t = [B[0] - A[0], B[1] - A[1], B[2] - A[2]], L = Math.hypot(...t) || 1;
+      const cs = Math.abs((t[0] * qn[0] + t[1] * qn[1] + t[2] * qn[2]) / L);
+      return Math.round((Math.acos(Math.min(1, cs)) * 180) / Math.PI);
+    });
   }
   // Entlang Pfad (Sweep): längster offener Zug der Skizze, Querschnitt Kreis oder Rechteck, optional hohl
   function sweepParams(it, V) {
@@ -320,6 +348,6 @@ const Model = (() => {
     walk(doc.items, (it) => { it.t = Object.assign(T0(), it.t || {}); it.p = it.p || {}; it.finishes = it.finishes || []; if (!it.role) it.role = 'solid'; if (!it.color) it.color = nextColor(); });
     return doc;
   }
-  return { pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  return { loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 

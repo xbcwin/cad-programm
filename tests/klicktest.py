@@ -2663,6 +2663,62 @@ def t_gelenk_kette(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+
+# ---------- Sitzung 41: Übergang entlang einer Mittellinie ----------
+def t_uebergang_mittellinie(p):
+    p.empty()
+    skizzenkoerper(p, [{'id': 'r', 'type': 'rect', 'a': [-15, -10], 'b': [15, 10]}], 0, 'Unten')
+    skizzenkoerper(p, [{'id': 'c', 'type': 'circle', 'c': [0, 0], 'r': 8}], 40, 'Oben')
+    warte_rechnen(p, 20)
+    p.ev("App.select([App.doc.items[0].id]); App.select([App.doc.items[1].id], {additive:true})"); p.wait(600)
+    p.pg.locator('.ctxbar button[aria-label="Übergang"]').click(); warte_rechnen(p, 30)
+    v0 = volumen(p)
+    # Mittellinie zeichnen: Skizze stehend (vorne), Spline durch die Mitten der Umrisse, zwei Hilfskanten, Vorschau
+    p.pg.locator('#loft-path-edit').click(); p.wait(1500)
+    st = SS(p, "return [S.ctx.mode, S.ents.length, S.ents[0].type, S.ents[0].pts.length, S.refs.length, S.plane.n, S.tool]")
+    pts = SS(p, "return S.ents[0].pts")
+    # 5 Punkte: Mitten der Umrisse, dazwischen die Mitte, dazu je ein Hilfspunkt senkrecht über bzw. unter den Umrissen
+    ok1 = (st[0] == 'loftpath' and st[1:5] == [1, 'spline', 5, 2] and near(st[5], [0, -1, 0], 1e-6) and st[6] == 'select'
+           and p.pg.locator('#loftpath-hint').count() == 1 and near(pts[0], [0, 0], 1e-3) and near(pts[4], [0, 40], 1e-3) and abs(pts[1][0]) < 1e-3 and abs(pts[3][0]) < 1e-3)
+    # Mitte der Kurve 20 mm zur Seite ziehen – die Vorschau biegt sich mit
+    SS(p, "S.ents[0].pts[2]=[20,20]"); p.pg.mouse.move(700, 400); p.pg.mouse.move(705, 405); p.wait(1500); warte_rechnen(p, 30)
+    pv = p.ev("const r=App.extra.length&&App.results.get('__preview'); return r&&r.data?r.data.bbox:null")
+    ok2 = pv is not None and pv[3] > 25 and -3 < pv[2] < 0.5 and abs(pv[5] - 40) < 0.5
+    # Fertig: der Übergang folgt der Mittellinie, Spitze und „gerade“ sind weg
+    p.pg.keyboard.press('Enter'); warte_rechnen(p, 30)
+    bb = p.ev("return App.results.get(App.doc.items[0].id).data.bbox")
+    v1 = volumen(p)
+    ok3 = (not p.ev("return Sketch.active") and p.ev("return !!App.doc.items[0].p.path && App.errors.length===0 && App.extra.length===0")
+           and bb[3] > 25 and -3 < bb[2] < 0.5 and abs(bb[5] - 40) < 0.5 and v1 and v0 and 1.2 * v0 < v1 < 2 * v0
+           and p.pg.locator('#loft-path-off').count() == 1 and p.pg.locator('#p-tip').count() == 0 and p.pg.locator('#loft-path-warn').count() == 0)
+    # Mittellinie, die den unteren Umriss fast flach trifft: Warnung
+    p.ev("App.change('x', d=>{ d.items[0].p.path.ents=[{id:'s',type:'spline',pts:[[0,0],[20,20],[0,40]],closed:false}]; })"); warte_rechnen(p, 30)
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(500)
+    ok3 = ok3 and p.pg.locator('#loft-path-warn').count() == 1 and 'schräg' in p.pg.locator('#loft-path-warn').inner_text()
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('Control+z'); warte_rechnen(p, 30)
+    # Rückgängig: wieder der gerade Übergang
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('Control+z'); warte_rechnen(p, 30)
+    bb2 = p.ev("return App.results.get(App.doc.items[0].id).data.bbox")
+    ok4 = p.ev("return !App.doc.items[0].p.path") and abs(bb2[3] - 15) < 1e-3
+    # Wiederholen, dann „Ohne Mittellinie“
+    p.pg.keyboard.press('Control+y'); warte_rechnen(p, 30); p.ev("App.select([App.doc.items[0].id])"); p.wait(500)
+    p.pg.locator('#loft-path-off').click(); warte_rechnen(p, 30)
+    ok5 = p.ev("return !App.doc.items[0].p.path && App.errors.length===0") and abs(p.ev("return App.results.get(App.doc.items[0].id).data.bbox")[3] - 15) < 1e-3
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
+def t_ki_mittellinie(p):
+    ki(p); p.empty()
+    ki_fragen(p, 'Bau mir einen Rumpf, der nach oben schwingt', {'antwort': 'Ich baue einen geschwungenen Rumpf.', 'aktionen': [
+        {'op': 'hinzufuegen', 'objekt': {'art': 'loft', 'name': 'Rumpf', 'p': {
+            'profile': [{'ebene': 'XZ', 'versatz': 0, 'form': [{'ellipse': [0, 0, 12, 8]}]}, {'ebene': 'XZ', 'versatz': 40, 'form': [{'ellipse': [0, 10, 8, 6]}]}, {'ebene': 'XZ', 'versatz': 80, 'form': [{'circle': [0, 20, 4]}]}],
+            'mittellinie': {'ebene': 'YZ', 'versatz': 0, 'kurve': [{'typ': 'spline', 'punkte': [[0, 0], [-40, 10], [-80, 20]]}]}}}}]}, 90)
+    ok1 = p.ev("const it=App.doc.items[0]; return !!(it && it.kind==='loft' && it.p.path && it.p.path.ents.length===1)")
+    ok2 = p.ev("return App.errors.length===0 && !!App.results.get(App.doc.items[0].id)")
+    bb = p.ev("return App.results.get(App.doc.items[0].id).data.bbox")
+    ok3 = abs(bb[1] + 80) < 1 and abs(bb[4] - 0) < 1 and bb[5] > 20
+    return [ok1, ok2, ok3]
+
 # ---------- Sitzung 22: kleine Skizzen-Werkzeuge ----------
 def t_kreis_bogen_modi(p):
     sketch_xy(p)
@@ -2954,6 +3010,8 @@ TESTS = [
     ('Skizzen-Muster als Ganzes ändern: anlegen / Feld / 5 × 8 / Rückgängig', t_muster_ganz),
     ('Drehgelenk: Achse wählen / angelegt / 90° / Bewegung prüfen / lösen', t_gelenk),
     ('Schiebegelenk: Achse / Art Schieben / 10 mm / frei', t_schiebegelenk),
+    ('Übergang mit Mittellinie: zeichnen / Vorschau / Fertig / Rückgängig / ohne', t_uebergang_mittellinie),
+    ('KI-Kollege biegt einen Übergang mit Mittellinie', t_ki_mittellinie),
     ('Gelenk-Kette: zwei Gelenke / 90° bewegt drittes Teil mit / Kreis abgelehnt / Rückgängig / Bewegung prüfen mit Kette', t_gelenk_kette),
     ('Skizze: Kreis aus 3 / 2 Punkten / tangentialer Bogen', t_kreis_bogen_modi),
     ('Skizze: Verlängern bis zur nächsten Linie', t_verlaengern),

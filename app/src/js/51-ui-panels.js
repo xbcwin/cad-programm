@@ -522,14 +522,32 @@ const Panels = (() => {
       sec.append(eb, h('div', { class: 'hint-box', html: 'Der Querschnitt läuft am Pfad entlang – gut für Rohre, Kabelkanäle, Bügel und Leisten. Mit <b>Wand</b> wird er hohl.' }));
       w.append(sec);
     } else if (it.kind === 'loft') {
-      const n = (it.p.sketches || []).length;
+      const n = (it.p.sketches || []).length, hasPath = !!it.p.path;
       sec.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Umrisse'), h('b', { class: 'mono' }, String(n))));
-      const fl = h('div', { class: 'fields' });
-      fl.append(UI.numField({ id: 'p-tip', label: 'Spitze verlängern', value: it.p.tip || 0, min: 0, onCommit: (v) => setP('tip', v) }));
-      fl.append(UI.selectField({ id: 'p-ruled', label: 'Übergang', value: it.p.ruled ? 'ruled' : 'smooth', options: [['smooth', 'Weich'], ['ruled', 'Gerade Flächen']], onChange: (v) => setP('ruled', v === 'ruled') }));
-      sec.append(fl);
-      sec.append(h('div', { class: 'hint-box', html: '<b>Spitze verlängern</b> zieht den Körper hinter dem letzten Umriss zu einer Spitze zusammen – z. B. für eine Nase oder einen Kegel mit weichem Ende. Danach kannst du die Kanten wie gewohnt runden.' }));
-      w.append(sec);
+      if (!hasPath) {
+        const fl = h('div', { class: 'fields' });
+        fl.append(UI.numField({ id: 'p-tip', label: 'Spitze verlängern', value: it.p.tip || 0, min: 0, onCommit: (v) => setP('tip', v) }));
+        fl.append(UI.selectField({ id: 'p-ruled', label: 'Übergang', value: it.p.ruled ? 'ruled' : 'smooth', options: [['smooth', 'Weich'], ['ruled', 'Gerade Flächen']], onChange: (v) => setP('ruled', v === 'ruled') }));
+        sec.append(fl);
+        sec.append(h('div', { class: 'hint-box', html: '<b>Spitze verlängern</b> zieht den Körper hinter dem letzten Umriss zu einer Spitze zusammen – z. B. für eine Nase oder einen Kegel mit weichem Ende. Danach kannst du die Kanten wie gewohnt runden.' }));
+      }
+      // Mittellinie: der Übergang folgt einer gebogenen Linie statt dem kürzesten Weg
+      const ml = h('div', { class: 'section', id: 'loft-path' }, h('div', { class: 'section-h' }, 'Mittellinie'));
+      if (n >= 2) {
+        const eb = h('button', { type: 'button', class: 'btn', id: 'loft-path-edit' }); eb.innerHTML = icon(hasPath ? 'edit' : 'spline') + (hasPath ? 'Mittellinie bearbeiten' : 'Mittellinie zeichnen');
+        eb.onclick = () => Sketch.startLoftPath(it.id);
+        const row = h('div', { class: 'btn-row' }, eb);
+        if (hasPath) {
+          const rb = h('button', { type: 'button', class: 'btn', id: 'loft-path-off' }); rb.innerHTML = icon('close') + 'Ohne Mittellinie';
+          rb.onclick = () => App.change('Mittellinie entfernt', (doc) => { const f = Model.find(doc, it.id); if (!f) return false; delete f.item.p.path; });
+          row.append(rb);
+        }
+        const ang = hasPath ? Model.loftPathAngles(it, Model.vars(App.doc).v) : [];
+        const bad = ang.map((a, i) => [a, i]).filter(([a]) => a > 30);
+        if (bad.length) ml.append(h('div', { class: 'hint-box warn', id: 'loft-path-warn', html: `Die Mittellinie trifft ${bad.length === ang.length ? 'die Umrisse' : bad.map(([, i]) => (i === 0 ? 'den ersten' : i === ang.length - 1 ? 'den letzten' : `den ${i + 1}.`) + ' Umriss').join(' und ')} schräg (${bad.map(([a]) => a + '°').join(', ')}). Dann wird der Körper dünn oder verdreht – lass sie möglichst senkrecht durch die Umrisse laufen.` }));
+        ml.append(row, h('div', { class: 'hint-box', html: hasPath ? 'Der Übergang läuft an der Mittellinie entlang. Spitze und „Gerade Flächen“ gibt es dabei nicht.' : 'Ohne Mittellinie nimmt der Übergang den kürzesten Weg. Mit einer <b>Mittellinie</b> biegst du ihn – z. B. einen Rumpf, der nach oben schwingt, oder einen Arm im Bogen.' }));
+      } else ml.append(h('div', { class: 'hint-box', html: 'Eine Mittellinie braucht mindestens zwei Umrisse.' }));
+      w.append(sec, ml);
     } else if (Features.isOp(it)) {
       sec.firstChild.textContent = Features.NAMES[it.p.op === 'pattern' ? it.p.pt : it.p.op] || 'Feature';
       Features.renderOp(it, sec, setP); w.append(sec);

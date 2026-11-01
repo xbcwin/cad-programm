@@ -256,12 +256,40 @@ export function createKernel(R, oc) {
     return fuseAll(solids);
   }
 
-  // Übergang zwischen mehreren Umrissen (Loft), auf Wunsch mit Spitze
+  // Offener Zug aus Skizzen-Stücken als Kanten im Raum (Pfad für Sweep und Mittellinie)
+  function segEdges(segs, M) {
+    const edges = [];
+    for (const s of segs) {
+      if (s.t === 'arc') edges.push(R.makeThreePointArc(M.P(s.a), M.P(s.m), M.P(s.b)));
+      else if (s.t === 'bez') edges.push(R.makeBezierCurve([M.P(s.a), M.P(s.c1), M.P(s.c2), M.P(s.b)]));
+      else if (Math.hypot(s.b[0] - s.a[0], s.b[1] - s.a[1]) > 1e-6) edges.push(R.makeLine(M.P(s.a), M.P(s.b)));
+    }
+    return edges;
+  }
+  // Übergang zwischen mehreren Umrissen (Loft), auf Wunsch mit Spitze – oder entlang einer Mittellinie
   function buildLoft(p) {
     const pr = p.profiles || [];
-    if (pr.length < (p.tipPoint ? 1 : 2)) throw new Error('Für einen Übergang braucht es mindestens zwei geschlossene Umrisse (oder einen Umriss mit Spitze).');
+    const path = p.path && p.path.segs && p.path.segs.length ? p.path : null;
+    if (pr.length < (p.tipPoint && !path ? 1 : 2)) throw new Error('Für einen Übergang braucht es mindestens zwei geschlossene Umrisse (oder einen Umriss mit Spitze).');
     const wires = pr.map((q) => loopWire(q.outer, planeMap(q.plane), true));
-    return R.loft(wires, { ruled: !!p.ruled, endPoint: p.tipPoint || undefined });
+    if (!path) return R.loft(wires, { ruled: !!p.ruled, endPoint: p.tipPoint || undefined });
+    // Mittellinie: Die Umrisse bleiben, wo sie sind; die Fläche dazwischen folgt der Linie (Pipe-Shell mit mehreren Schnitten)
+    const spine = R.assembleWire(segEdges(path.segs, planeMap(path.plane)));
+    const b = new oc.BRepOffsetAPI_MakePipeShell(spine.wrapped);
+    let shape = null;
+    try {
+      b.SetTransitionMode(oc.BRepBuilderAPI_TransitionMode.BRepBuilderAPI_RoundCorner);
+      b.SetMode(false);   // korrigiertes Frenet-Dreibein: Umrisse kippen nicht um die Linie
+      for (const w of wires) b.Add(w.wrapped, false, false);
+      b.Build();
+      if (!b.IsDone()) throw new Error('x');
+      b.MakeSolid();
+      shape = R.cast(b.Shape());
+    } catch (_) {
+      shape = null;
+    } finally { b.delete(); }
+    if (!shape) throw new Error('Der Übergang entlang der Mittellinie klappt so nicht. Die Mittellinie sollte vom ersten Umriss durch alle anderen bis zum letzten laufen und nicht zu eng gebogen sein.');
+    return shape;
   }
 
   // Querschnitt entlang eines offenen Pfads (Sweep): Rohr, Kabelkanal, Leiste
@@ -269,13 +297,7 @@ export function createKernel(R, oc) {
     const segs = p.segs || [];
     if (!segs.length || !p.t0) throw new Error('Die Skizze hat keinen offenen Pfad. Zeichne eine Linie, einen Bogen oder eine Spline, die nicht geschlossen ist.');
     const M = planeMap(p.plane);
-    const edges = [];
-    for (const s of segs) {
-      if (s.t === 'arc') edges.push(R.makeThreePointArc(M.P(s.a), M.P(s.m), M.P(s.b)));
-      else if (s.t === 'bez') edges.push(R.makeBezierCurve([M.P(s.a), M.P(s.c1), M.P(s.c2), M.P(s.b)]));
-      else if (Math.hypot(s.b[0] - s.a[0], s.b[1] - s.a[1]) > 1e-6) edges.push(R.makeLine(M.P(s.a), M.P(s.b)));
-    }
-    const spine = R.assembleWire(edges);
+    const spine = R.assembleWire(segEdges(segs, M));
     const P0 = M.P(segs[0].a), O = M.P([0, 0]);
     const T = norm(sub(M.P(p.t0), O)), N = M.n, V = [T[1] * N[2] - T[2] * N[1], T[2] * N[0] - T[0] * N[2], T[0] * N[1] - T[1] * N[0]];
     const prof = (inset) => {

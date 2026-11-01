@@ -1,6 +1,6 @@
 # Fortschritt
 
-Stand: 28.10.2026 · nach Argon 1 (19: Skizze auf Profi-Niveau · 20: Magnet, Rundungs-Griff · 21: Skizzieren im 3D, Übergang, Entlang Pfad, Import · 22: Kreis/Bogen-Arten, Verlängern, Entformungsschräge, Gewinde · 23: Einheiten, eigener Querschnitt, Langloch gebogen, gedrehtes Rechteck, Teilen · 24: Punkt, alle Ecken · 25: Schnitt und Spiegeln an Fläche · 26: Kantenkette, Abstände beim Verschieben · 27: Spiegeln an der Achse · 28: Muster entlang Kurve, Schablonen-Maße geprüft, USB-C-Stecker · 29: Spiegelebene wandert mit, Kreismuster quer und längs, KI kennt Muster entlang Kurve · 30: Bohrungen an Skizzenpunkten · 31: Wand aus Linie, Schritt hinter dem Marker, Schildchen · 32: Kante übernehmen · 33: verbundene Kanten · 34: Kreismuster um gewählte Achse · 35: GoPro-, XT60- und Antennenhalter · 36: Überhänge für den 3D-Druck · 37: Überhänge in der Schwachstellen-Analyse, KI kennt die Bausteine · 38: Skizzen-Muster als Ganzes ändern · 39: Drehgelenk · 40: Schiebegelenk · Argon 1: Gelenk-Ketten)
+Stand: 01.11.2026 · nach Sitzung 41 (19: Skizze auf Profi-Niveau · 20: Magnet, Rundungs-Griff · 21: Skizzieren im 3D, Übergang, Entlang Pfad, Import · 22: Kreis/Bogen-Arten, Verlängern, Entformungsschräge, Gewinde · 23: Einheiten, eigener Querschnitt, Langloch gebogen, gedrehtes Rechteck, Teilen · 24: Punkt, alle Ecken · 25: Schnitt und Spiegeln an Fläche · 26: Kantenkette, Abstände beim Verschieben · 27: Spiegeln an der Achse · 28: Muster entlang Kurve, Schablonen-Maße geprüft, USB-C-Stecker · 29: Spiegelebene wandert mit, Kreismuster quer und längs, KI kennt Muster entlang Kurve · 30: Bohrungen an Skizzenpunkten · 31: Wand aus Linie, Schritt hinter dem Marker, Schildchen · 32: Kante übernehmen · 33: verbundene Kanten · 34: Kreismuster um gewählte Achse · 35: GoPro-, XT60- und Antennenhalter · 36: Überhänge für den 3D-Druck · 37: Überhänge in der Schwachstellen-Analyse, KI kennt die Bausteine · 38: Skizzen-Muster als Ganzes ändern · 39: Drehgelenk · 40: Schiebegelenk · Argon 1: Gelenk-Ketten · 41: Übergang mit Mittellinie)
 
 ## Erledigt
 
@@ -232,7 +232,8 @@ Fertig.
 - [x] Drehgelenk zwischen zwei Teilen: beide wählen → „Gelenk“ → Achse im Bild (Kante, Stift, Loch); Schieberegler und Winkel mit Bereich, „Bewegung prüfen“ dreht in 5°-Schritten und meldet, wo die Teile aneinanderstoßen; „Gelenk lösen“ (Sitzung 39)
 - [x] Schiebegelenk: beim Gelenk „Art: Schieben entlang der Achse“, Weg in mm mit Bereich, „Bewegung prüfen“ in kleinen Schritten (Sitzung 40)
 - [x] Gelenk-Ketten: ein Teil darf an mehreren Gelenken hängen (z. B. Grundplatte → Arm → Greifer); dreht oder gleitet ein vorderes Gelenk, wandern alle Teile und Gelenkachsen dahinter mit; Kreise werden abgelehnt; im Panel stehen alle Gelenke des gewählten Teils, „Bewegung prüfen“ nimmt die Kette mit (Argon 1)
-- [ ] 3D-Skizzen, Übergang mit Führungskurven
+- [x] Übergang mit Mittellinie: rechts beim Übergang „Mittellinie zeichnen“ – sie ist als Spline durch die Mitten der Umrisse vorgezeichnet und läuft senkrecht aus ihnen heraus; Punkte ziehen biegt den Körper, die Vorschau rechnet mit. Die Umrisse bleiben, wo sie sind. Trifft die Linie einen Umriss schräg (über 30°), warnt Tracery. Der KI-Kollege kennt „mittellinie“ (Sitzung 41)
+- [ ] 3D-Skizzen, Übergang mit seitlichen Führungskurven
 - [ ] Einsteiger-Oberfläche weiter vereinfachen: größere Knöpfe, geführte erste Schritte im leeren Projekt
 
 ### Stufe 6 – Konten und Zusammenarbeit (Idee, nach dem Drohnen-Modul)
@@ -242,6 +243,7 @@ Fertig.
 
 ## Bekannte Punkte
 
+- Übergang mit Mittellinie: Spitze und „Gerade Flächen“ gibt es dabei nicht; die Mittellinie liegt in einer Ebene (keine 3D-Kurve). Wo sie eng gebogen ist, kann der Körper an der Innenseite etwas über die Umrisse hinausragen
 - „An Fläche spiegeln“ hängt nur an der äußersten Fläche in Achsrichtung; bei einer inneren oder schrägen Fläche bleibt die Ebene, wo sie beim Spiegeln war
 
 - Text kennt keine Unterschneidung (Kerning) – die Buchstaben stehen nach ihrer Laufweite

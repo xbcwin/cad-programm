@@ -481,6 +481,17 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
   Schritte: 1. Ein Kind (ab 10) mit „Einfach“ eine Platte mit vier Löchern bauen lassen, ohne zu helfen.
   Erwartet: Es findet Körper, Löcher und Exportieren allein; notieren, wo es hängen bleibt.
 
+## Übergang mit Mittellinie (neu in Sitzung 41)
+
+- [x] **Mittellinie zeichnen**: Rechteck 30 × 20 unten, Kreis Ø 16 40 mm darüber → beide wählen → „Übergang“. Rechts „Mittellinie zeichnen“.
+  Erwartet: Skizze „Stehend (vorne)“, eine Spline durch die Mitten der beiden Umrisse, zwei dünne Hilfskanten zeigen, wo die Umrisse stehen; grüner Hinweis rechts; keine roten „offenen Enden“.
+- [x] **Biegen mit Vorschau**: mittleren Punkt der Spline 20 mm zur Seite ziehen.
+  Erwartet: Der Körper biegt sich schon in der Skizze mit (S-Form); unten und oben bleiben Rechteck und Kreis, wo sie waren.
+- [x] **Fertig / Rückgängig / Ohne Mittellinie**: „Fertig“ → der Übergang folgt der Linie, „Spitze verlängern“ ist weg. Strg Z → wieder gerade. Strg Y, dann „Ohne Mittellinie“ → gerade.
+- [x] **Warnung bei schräger Linie**: Mittellinie so ziehen, dass sie den unteren Umriss fast flach trifft → gelber Hinweis „trifft … schräg“.
+- [x] **KI-Kollege**: „Bau mir einen Rumpf, der nach oben schwingt“ mit drei Profilen und „mittellinie“ → ein Übergang entlang der Linie, ohne Fehler.
+- [ ] **Speed-Rumpf von Hand**: drei Ellipsen hintereinander (vorne −Y), Mittellinie nach oben geschwungen, dann Kanten runden und als STL drucken.
+
 ## Gelenk-Ketten (neu in Argon 1)
 
 - [x] **Zwei Gelenke in einer Kette**
