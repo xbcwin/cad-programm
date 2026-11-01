@@ -131,6 +131,18 @@ body.sketching .viewcube{display:none}
 .finish-row svg{width:14px;height:14px}
 .finish-row.bad{color:var(--bad)}
 .empty-tree{padding:18px 16px;color:var(--muted);font-size:14px;line-height:1.5}
+.first-steps{margin:10px 10px 4px;padding:10px 12px;border-radius:var(--radius-s);background:var(--surface-2);border:1px solid var(--line);display:grid;gap:6px}
+.first-steps .fs-head{display:flex;align-items:center;gap:8px}
+.first-steps .fs-head b{font-size:14px}
+.first-steps .fs-n{font-size:12.5px;color:var(--muted);margin-left:auto}
+.first-steps .fs-x{border:0;background:none;color:var(--muted);cursor:pointer;padding:2px;display:grid;place-items:center}
+.first-steps .fs-x svg{width:16px;height:16px}
+.first-steps .fs-row{display:flex;align-items:center;gap:8px;font-size:13.5px;min-height:28px}
+.first-steps .fs-mark{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:11.5px;font-weight:600;background:var(--surface);border:1px solid var(--line);color:var(--muted);flex:none}
+.first-steps .fs-mark svg{width:13px;height:13px}
+.first-steps .fs-row.done{color:var(--muted)}
+.first-steps .fs-row.done .grow{text-decoration:line-through}
+.first-steps .fs-row.done .fs-mark{background:var(--ok-soft);border-color:var(--ok);color:var(--ok)}
 .empty-tree b{color:var(--ink)}
 
 /* Eigenschaften */
@@ -7029,9 +7041,46 @@ const Panels = (() => {
     $('#lt-tree').setAttribute('aria-selected', leftTab === 'tree'); $('#lt-params').setAttribute('aria-selected', leftTab === 'params'); $('#lt-log').setAttribute('aria-selected', leftTab === 'log');
     if (leftTab === 'tree') renderTree(body); else if (leftTab === 'log') renderLog(body); else renderParams(body);
   }
+  // ---------- Erste Schritte (nur in der einfachen Oberfläche): hakt sich selbst ab ----------
+  const FS_KEY = 'tracery-erste-schritte';
+  const fsGet = () => { try { return JSON.parse(localStorage.getItem(FS_KEY) || '{}') || {}; } catch (_) { return {}; } };
+  const fsSet = (o) => { try { localStorage.setItem(FS_KEY, JSON.stringify({ ...fsGet(), ...o })); } catch (_) {} };
+  function firstStepsState() {
+    const all = []; Model.walk(App.doc.items, (it) => { all.push(it); });
+    const plain = (it) => it.kind !== 'group' && it.kind !== 'part' && KINDS[it.kind] && KINDS[it.kind].params;
+    const sized = all.some((it) => plain(it) && KINDS[it.kind].params.some((q) => typeof q.def === 'number' && it.p && it.p[q.k] !== undefined && String(it.p[q.k]) !== String(q.def)));
+    return { body: all.some((it) => it.kind !== 'group' && it.role !== 'hole'), size: sized, hole: all.some((it) => it.role === 'hole'), save: !!fsGet().saved };
+  }
+  function firstSteps() {
+    if (!ViewPrefs.simple || fsGet().off) return null;
+    const st = firstStepsState();
+    const steps = [
+      ['body', 'Einen Körper hinzufügen', 'Klick oben auf „Körper“ und dann auf einen Quader oder Zylinder – oder zieh ihn auf die Fläche.', () => toggleFlyout('bodies', $('#t-body'))],
+      ['size', 'Die Größe ändern', 'Klick den Körper an und zieh an einem Pfeil – oder tipp rechts unter „Maße“ eine neue Zahl ein.', null],
+      ['hole', 'Ein Loch machen', 'Füg einen Zylinder hinzu, schieb ihn in den ersten Körper und klick oben in der Leiste auf „Zum Loch“.', null],
+      ['save', 'Als Datei speichern', 'Klick oben auf „Exportieren“. STL ist die Datei für den 3D-Drucker.', () => Print.exportDialog()],
+    ];
+    const n = steps.filter(([k]) => st[k]).length;
+    const box = h('div', { class: 'first-steps', id: 'first-steps' });
+    const x = h('button', { type: 'button', class: 'fs-x', 'aria-label': 'Erste Schritte ausblenden', 'data-tip': 'Ausblenden' }); x.innerHTML = icon('close');
+    x.onclick = () => { fsSet({ off: true }); renderLeft(); };
+    box.append(h('div', { class: 'fs-head' }, h('b', null, 'Erste Schritte'), h('span', { class: 'fs-n', id: 'fs-n' }, `${n} von 4`), x));
+    steps.forEach(([k, t, how, run], i) => {
+      const row = h('div', { class: 'fs-row' + (st[k] ? ' done' : ''), 'data-step': k });
+      const mark = h('span', { class: 'fs-mark', 'aria-hidden': 'true' }); if (st[k]) mark.innerHTML = icon('check'); else mark.textContent = String(i + 1);
+      row.append(mark, h('span', { class: 'grow' }, t));
+      if (!st[k]) { const b = h('button', { type: 'button', class: 'btn small ghost', 'data-how': k }, 'Wie?'); b.onclick = () => { UI.toast(how, { icon: 'info', ms: 6000 }); if (run) run(); }; row.append(b); }
+      box.append(row);
+    });
+    if (n === 4) box.append(h('div', { class: 'ok-box', id: 'fs-done' }, 'Geschafft – du kennst die Grundlagen! Mehr zeigt dir die Einführung auf der Startseite.'));
+    return box;
+  }
+  function firstStepDone(k) { fsSet({ [k]: true }); if (leftTab === 'tree') renderLeft(); }
   let dragId = null;
   function renderTree(body) {
     const items = App.doc.items;
+    const fs = items.length <= 8 ? firstSteps() : null;
+    if (fs) body.append(fs);
     if (!items.length) {
       body.append(h('div', { class: 'empty-tree', html: 'Hier erscheint alles, was du baust – <b>Schritt für Schritt</b>.<br><br>Fang mit einem <b>Körper</b> an oder beschreibe unten in der Zeile, was du bauen möchtest.' }));
       return;
@@ -7755,8 +7804,9 @@ const Panels = (() => {
     const rerender = debounce(() => { renderLeft(); renderRight(); renderCtx(); UI.renderHint(); }, 16);
     App.on('doc', rerender); App.on('selection', rerender); App.on('results', rerender); DroneCheck.on('checked', () => { if (!App.sel.length) rerender(); }); Weak.on('analyzed', () => { if (!App.sel.length) rerender(); }); App.on('mode', () => { renderTools(); rerender(); });
     Viewer.on('camera', placeCtx);
+    ViewPrefs.on('change', debounce(() => { if (leftTab === 'tree') renderLeft(); }, 30));   // Erste Schritte ein-/ausblenden
   }
-  return { init, renderLeft, renderRight, renderTools, renderCtx, closeFlyout, toggleFlyout, expand: (id) => { expanded.add(id); renderLeft(); }, showParams: () => { leftTab = 'params'; renderLeft(); } };
+  return { init, renderLeft, renderRight, renderTools, renderCtx, closeFlyout, toggleFlyout, firstStepDone, firstStepsState, expand: (id) => { expanded.add(id); renderLeft(); }, showParams: () => { leftTab = 'params'; renderLeft(); } };
 })();
 
 // ---- 52-snap.js ----
@@ -12062,6 +12112,7 @@ const Print = (() => {
       const zip = await Zip.make(files);
       tst.remove();
       await save(name + '.zip', new Blob([zip]));
+      try { Panels.firstStepDone('saved'); } catch (_) {}
     } catch (e) { tst.remove(); UI.toast('Export hat nicht geklappt: ' + e.message, { kind: 'bad' }); }
   }
   function init() {

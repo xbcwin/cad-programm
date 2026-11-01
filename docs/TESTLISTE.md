@@ -481,6 +481,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
   Schritte: 1. Ein Kind (ab 10) mit „Einfach“ eine Platte mit vier Löchern bauen lassen, ohne zu helfen.
   Erwartet: Es findet Körper, Löcher und Exportieren allein; notieren, wo es hängen bleibt.
 
+## Erste Schritte (neu in Sitzung 48)
+
+- [x] **Liste erscheint**: Oberfläche „Einfach“, leeres Projekt → links „Erste Schritte 0 von 4“.
+- [x] **Hakt sich ab**: Quader hinzufügen (1 von 4), Breite ändern (2 von 4), Zylinder als Loch (3 von 4), exportieren (4 von 4, „Geschafft“).
+- [x] **Wie?**: beim Speichern öffnet sich der Export.
+- [x] **Ausblenden**: Kreuz → bleibt aus, auch bei neuem Projekt; in „Profi“ gibt es die Liste nicht.
+- [ ] **Mit einem Kind ausprobieren**: Findet es alle vier Schritte allein?
+
 ## KI-Kollege legt Gelenke an (neu in Sitzung 47)
 
 - [x] **Klapparm**: „Bau mir einen Klapparm“ → zwei Arme, Gelenk an der Oberkante, Bereich −120 … 0°, Stellung −90° → Arm B steht senkrecht.

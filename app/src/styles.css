@@ -124,6 +124,18 @@ body.sketching .viewcube{display:none}
 .finish-row svg{width:14px;height:14px}
 .finish-row.bad{color:var(--bad)}
 .empty-tree{padding:18px 16px;color:var(--muted);font-size:14px;line-height:1.5}
+.first-steps{margin:10px 10px 4px;padding:10px 12px;border-radius:var(--radius-s);background:var(--surface-2);border:1px solid var(--line);display:grid;gap:6px}
+.first-steps .fs-head{display:flex;align-items:center;gap:8px}
+.first-steps .fs-head b{font-size:14px}
+.first-steps .fs-n{font-size:12.5px;color:var(--muted);margin-left:auto}
+.first-steps .fs-x{border:0;background:none;color:var(--muted);cursor:pointer;padding:2px;display:grid;place-items:center}
+.first-steps .fs-x svg{width:16px;height:16px}
+.first-steps .fs-row{display:flex;align-items:center;gap:8px;font-size:13.5px;min-height:28px}
+.first-steps .fs-mark{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:11.5px;font-weight:600;background:var(--surface);border:1px solid var(--line);color:var(--muted);flex:none}
+.first-steps .fs-mark svg{width:13px;height:13px}
+.first-steps .fs-row.done{color:var(--muted)}
+.first-steps .fs-row.done .grow{text-decoration:line-through}
+.first-steps .fs-row.done .fs-mark{background:var(--ok-soft);border-color:var(--ok);color:var(--ok)}
 .empty-tree b{color:var(--ink)}
 
 /* Eigenschaften */

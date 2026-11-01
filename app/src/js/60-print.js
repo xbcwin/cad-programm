@@ -171,6 +171,7 @@ const Print = (() => {
       const zip = await Zip.make(files);
       tst.remove();
       await save(name + '.zip', new Blob([zip]));
+      try { Panels.firstStepDone('saved'); } catch (_) {}
     } catch (e) { tst.remove(); UI.toast('Export hat nicht geklappt: ' + e.message, { kind: 'bad' }); }
   }
   function init() {

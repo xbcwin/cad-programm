@@ -2893,6 +2893,36 @@ def t_schwerpunkt_ausgleich(p):
     ok3 = p.ev("return App.doc.items.find(i=>/^Akku/.test(i.name)).t.y") == 45
     return [ok1, ok2, ok3]
 
+
+# ---------- Sitzung 48: Erste Schritte in der einfachen Oberfläche ----------
+def t_erste_schritte(p):
+    p.empty(); p.pg.locator('#btn-level').click(); p.wait(600)
+    n = lambda: p.pg.locator('#fs-n').inner_text() if p.pg.locator('#fs-n').count() else None
+    ok1 = n() == '0 von 4' and p.pg.locator('#first-steps .fs-row').count() == 4
+    p.ev("Actions.addPrimitive('box')"); warte_rechnen(p, 20); p.wait(300)
+    a = n()
+    p.ev("App.change('x', d=>{ d.items[0].p.w=37; })"); warte_rechnen(p, 20); p.wait(300)
+    b = n()
+    p.ev("Actions.addPrimitive('cylinder', { role: 'hole', name: 'Loch', p: { d: 6, h: 30 } })"); warte_rechnen(p, 20); p.wait(300)
+    c = n()
+    ok2 = [a, b, c] == ['1 von 4', '2 von 4', '3 von 4'] and p.pg.locator('#first-steps .fs-row.done').count() == 3
+    # „Wie?“ beim Speichern öffnet den Export
+    p.pg.click('#first-steps [data-how="save"]'); p.wait(600)
+    ok3 = p.pg.locator('.modal[aria-label="Exportieren"]').count() == 1
+    p.pg.keyboard.press('Escape'); p.wait(300)
+    p.ev("Panels.firstStepDone('saved')"); p.wait(400)
+    ok4 = n() == '4 von 4' and p.pg.locator('#fs-done').count() == 1
+    # Ausblenden bleibt aus; in „Profi“ gibt es die Liste nicht
+    p.pg.click('#first-steps .fs-x'); p.wait(400)
+    gone = p.pg.locator('#first-steps').count() == 0
+    p.ev("App.change('x', d=>{ d.items=[]; })"); p.wait(500)
+    ok5 = gone and p.pg.locator('#first-steps').count() == 0
+    p.ev("localStorage.removeItem('tracery-erste-schritte'); Panels.renderLeft()"); p.wait(300)
+    back = p.pg.locator('#first-steps').count() == 1
+    p.pg.locator('#btn-level').click(); p.wait(600)
+    ok6 = back and p.pg.locator('#first-steps').count() == 0 and p.pg.locator('#btn-level').text_content() == 'Profi'
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
+
 # ---------- Sitzung 22: kleine Skizzen-Werkzeuge ----------
 def t_kreis_bogen_modi(p):
     sketch_xy(p)
@@ -3192,6 +3222,7 @@ TESTS = [
     ('KI-Kollege legt ein Rohr im Raum', t_ki_rohr_raum),
     ('Schwerpunkt ausgleichen: Knopf im Check / Akku wandert, Schwerpunkt mittig / Rückgängig', t_schwerpunkt_ausgleich),
     ('KI-Kollege legt ein Gelenk an / zweites Gelenk für dasselbe Teil abgelehnt', t_ki_gelenk),
+    ('Erste Schritte: 0 von 4 / hakt sich ab / Wie? öffnet Export / 4 von 4 / ausblenden / nur in Einfach', t_erste_schritte),
     ('Gelenk-Kette: zwei Gelenke / 90° bewegt drittes Teil mit / Kreis abgelehnt / Rückgängig / Bewegung prüfen mit Kette', t_gelenk_kette),
     ('Skizze: Kreis aus 3 / 2 Punkten / tangentialer Bogen', t_kreis_bogen_modi),
     ('Skizze: Verlängern bis zur nächsten Linie', t_verlaengern),
