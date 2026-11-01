@@ -17,29 +17,64 @@ const DroneCheck = (() => {
     // geneigte Motoren (Speed-Rumpf): Propellerebene steht schräg, der Prüfkörper liegt entlang der Motorachse
     const tilt = typeof V.Motorneigung === 'number' ? V.Motorneigung : 0, keil = typeof V.Keilhöhe === 'number' ? V.Keilhöhe : 0;
     const zProp = V.Armdicke + keil + (mh + 1) * Math.cos(R(tilt)), dy = -(mh + 1) * Math.sin(R(tilt));
-    return { A, wv, wh, zoll: V.Propeller, D: V.Propeller * 25.4, zProp, dy, tilt, motors, motorGroup, propGroup, V };
+    const D = V.Propeller * 25.4, skip = [motorGroup && motorGroup.id, propGroup && propGroup.id].filter(Boolean);
+    const pdir = tilt ? [0, -Math.sin(R(tilt)), Math.cos(R(tilt))] : null;
+    const probes = motors.map(([, x, y]) => ({ c: [x, y + dy, zProp], r: D / 2 + 1, h: 6, skip, ...(pdir ? { dir: pdir } : {}) }));   // Propellerebene: 1 bis 7 mm über dem Motor
+    return { A, wv, wh, zoll: V.Propeller, D, zProp, dy, tilt, motors, motorGroup, propGroup, V, probes, skipPairs: propGroup ? [propGroup.id] : [], gap: DroneTpl.tipGap(A, V.Propeller, wv, wh), n: 4 };
   }
-  const isDrone = (doc = App.doc) => !!geometry(doc);
+  // Selbst gebauter Rahmen: Motoren und Propeller aus den Kaufteilen (auch in Muster-Gruppen) – ab drei Motoren
+  function freeGeometry(doc, V) {
+    const mot = [], props = [];
+    Model.walk(doc.items, (it) => { if (it.kind === 'part' && it.p && !it.suppressed && !it.hidden) { if (it.p.lib === 'buyMotor') mot.push(it); else if (it.p.lib === 'buyProp') props.push(it); } });
+    const act = (it) => Model.isActive(doc, it.id) && !Model.parentsOf(doc, it.id).some((g) => g.suppressed);
+    const M = [];
+    for (const it of mot.filter(act)) for (const W of Model.instanceMatrices(doc, it.id, V)) {
+      const b = new THREE.Vector3().applyMatrix4(W), ax = new THREE.Vector3(0, 0, 1).transformDirection(W).normalize();
+      M.push({ id: it.id, b, ax, h: Model.num(it.p.h, V, 19.7), d: Model.num(it.p.d, V, 28.5) });
+      if (M.length > 16) break;
+    }
+    if (M.length < 3) return null;
+    const pz = props.filter(act).map((it) => Model.num(it.p.zoll, V, 5));
+    const zoll = pz.length ? Math.max(...pz) : doc.drone && Number(doc.drone.zoll) > 0 ? Number(doc.drone.zoll) : typeof V.Propeller === 'number' ? V.Propeller : null;
+    const D = zoll ? zoll * 25.4 : null;
+    // Namen nach der Lage um die Mitte (vorne = −Y)
+    const c = M.reduce((a, m) => a.add(m.b), new THREE.Vector3()).divideScalar(M.length);
+    const rr = Math.max(...M.map((m) => Math.hypot(m.b.x - c.x, m.b.y - c.y))) || 1;
+    const where = (m) => [Math.abs(m.b.y - c.y) > 0.38 * rr ? (m.b.y < c.y ? 'vorne' : 'hinten') : '', Math.abs(m.b.x - c.x) > 0.38 * rr ? (m.b.x > c.x ? 'rechts' : 'links') : ''].filter(Boolean).join(' ') || 'Mitte';
+    const names = M.map(where), dup = (n) => names.filter((x) => x === n).length > 1;
+    const motors = M.map((m, i) => [dup(names[i]) ? `${names[i]} (${i + 1})` : names[i], m.b.x, m.b.y, m]);
+    // Prüfkörper: Ring in der Propellerebene (1 bis 7 mm über der Glocke), innen frei für Welle und Mutter
+    const tops = (list) => [...new Set(list.map((it) => Model.topOf(doc, it.id)).filter((t) => t && (t.kind === 'part' ? !!(t.p && String(t.p.lib || '').startsWith('buy')) : (() => { let pure = true; Model.walk(t.children || [], (k) => { if (k.kind !== 'group' && !(k.kind === 'part' && k.p && String(k.p.lib || '').startsWith('buy'))) { pure = false; return false; } }); return pure; })())).map((t) => t.id))];
+    const skip = tops([...mot, ...props]), propTops = tops(props);
+    const probes = D ? M.map((m) => ({ c: m.b.clone().addScaledVector(m.ax, m.h + 1).toArray(), r: D / 2 + 1, h: 6, ri: Math.max(4.5, m.d * 0.25), dir: m.ax.toArray(), skip })) : [];
+    let A = 0, gap = Infinity;
+    const pc = M.map((m) => m.b.clone().addScaledVector(m.ax, m.h + 1));
+    for (let i = 0; i < M.length; i++) for (let j = i + 1; j < M.length; j++) { const d = pc[i].distanceTo(pc[j]); A = Math.max(A, d); if (D) gap = Math.min(gap, d - D); }
+    return { free: true, A, zoll, D, motors, V, probes, skipPairs: propTops, gap: D ? gap : null, n: M.length, tilt: 0, zoll_from: pz.length ? 'props' : zoll ? 'eingetragen' : null };
+  }
+  function geometryAny(doc = App.doc) {
+    return geometry(doc) || freeGeometry(doc, Model.vars(doc).v);
+  }
+  const isDrone = (doc = App.doc) => !!geometryAny(doc);
   const label = (id) => { const f = Model.find(App.doc, id); return f ? Model.label(f.item) : 'ein Teil'; };
   const thrustOf = (doc = App.doc) => (doc.drone && doc.drone.thrustG != null && doc.drone.thrustG !== '' ? Model.num(doc.drone.thrustG, Model.vars(doc).v, 0) : null);
   async function run() {
-    const doc = App.doc, g = geometry(doc);
+    const doc = App.doc, g = geometryAny(doc);
     if (!g) return null;
     const rev = App.revision, out = [];
+    if (g.free) out.push({ id: 'free', title: 'Selbst gebauter Rahmen', s: 'info', text: `${g.n} Motoren aus deinen Kaufteilen erkannt` + (g.zoll ? `, Propeller ${fmt(g.zoll, 1)}" (${g.zoll_from === 'props' ? 'aus den Propellern im Modell' : 'eingetragen'}).` : '. Für die Propeller-Prüfungen fehlt noch die Größe – leg Propeller aus „Kaufteile“ auf die Motoren oder trag sie unten ein.') });
     // 1. Abstand der Propeller untereinander
-    const gap = DroneTpl.tipGap(g.A, g.zoll, g.wv, g.wh);
-    out.push({ id: 'gap', title: 'Propeller untereinander', s: gap < 0 ? 'bad' : gap < 5 ? 'warn' : 'ok', text: gap < 0 ? `Die Propeller überlappen sich um ${fmt(-gap, 1)} mm – Achsabstand vergrößern.` : `${fmt(gap, 1)} mm Luft zwischen den Propellerspitzen.` });
+    const gap = g.gap;
+    if (gap != null) out.push({ id: 'gap', title: 'Propeller untereinander', s: gap < 0 ? 'bad' : gap < 5 ? 'warn' : 'ok', text: gap < 0 ? `Die Propeller überlappen sich um ${fmt(-gap, 1)} mm – ${g.free ? 'Motoren weiter auseinander setzen' : 'Achsabstand vergrößern'}.` : `${fmt(gap, 1)} mm Luft zwischen den Propellerspitzen.` });
     // 2./3. Kollisionen aus dem CAD-Kern
-    const skip = [g.motorGroup && g.motorGroup.id, g.propGroup && g.propGroup.id].filter(Boolean);
-    const dir = g.tilt ? [0, -Math.sin(R(g.tilt)), Math.cos(R(g.tilt))] : null;
-    const probes = g.motors.map(([, x, y]) => ({ c: [x, y + g.dy, g.zProp], r: g.D / 2 + 1, h: 6, skip, ...(dir ? { dir } : {}) }));   // Propellerebene: 1 bis 7 mm über dem Motor
     let cl = null;
-    try { cl = await Kernel.call('clashes', { scene: Model.kernelScene(doc), probes, skipPairs: g.propGroup ? [g.propGroup.id] : [] }); } catch (_) {}
+    try { cl = await Kernel.call('clashes', { scene: Model.kernelScene(doc), probes: g.probes, skipPairs: g.skipPairs }); } catch (_) {}
+    if (cl && !g.probes.length) cl.hits = [];
     if (cl) {
       const bad = [];
       cl.hits.forEach((hs, i) => { if (hs.length) bad.push(`Propeller ${g.motors[i][0]} trifft ${hs.map((x) => label(x.id)).join(', ')}`); });
       const ids = [...new Set(cl.hits.flat().map((x) => x.id))];
-      out.push({ id: 'props', title: 'Propellerkreise frei', s: bad.length ? 'bad' : 'ok', text: bad.length ? bad.join('. ') + '.' : 'Kein Teil ragt in die Propellerkreise (1 mm Sicherheitsabstand).', ids });
+      if (g.probes.length) out.push({ id: 'props', title: 'Propellerkreise frei', s: bad.length ? 'bad' : 'ok', text: bad.length ? bad.join('. ') + '.' : 'Kein Teil ragt in die Propellerkreise (1 mm Sicherheitsabstand).', ids });
       const pairs = cl.pairs.map((p) => `${label(p.a)} und ${label(p.b)} (${fmt(p.v / 1000, 2)} cm³)`);
       out.push({ id: 'clash', title: 'Teile stecken nicht ineinander', s: pairs.length ? 'warn' : 'ok', text: pairs.length ? 'Ineinander: ' + pairs.join('; ') + '.' : 'Alle Teile haben ihren eigenen Platz.', ids: [...new Set(cl.pairs.flatMap((p) => [p.a, p.b]))] });
     }
@@ -56,7 +91,7 @@ const DroneCheck = (() => {
       }
       // 5. Schwerpunkt gegenüber der Mitte zwischen den Motoren
       if (m.com) {
-        const cx = g.motors.reduce((s, x) => s + x[1], 0) / 4, cy = g.motors.reduce((s, x) => s + x[2], 0) / 4;
+        const cx = g.motors.reduce((s, x) => s + x[1], 0) / g.motors.length, cy = g.motors.reduce((s, x) => s + x[2], 0) / g.motors.length;
         const dx = m.com[0] - cx, dy = m.com[1] - cy, d = Math.hypot(dx, dy);
         const dir = [Math.abs(dy) > 0.5 ? (dy < 0 ? 'nach vorne' : 'nach hinten') : '', Math.abs(dx) > 0.5 ? (dx > 0 ? 'nach rechts' : 'nach links') : ''].filter(Boolean).join(' und ');
         const akku = doc.items.some((i) => /akku/i.test(i.name || '') && !i.hidden);
@@ -66,16 +101,17 @@ const DroneCheck = (() => {
       // 6. Schub zu Gewicht
       const t = thrustOf(doc);
       if (t) {
-        const tw = (4 * t) / m.mass;
+        const tw = (g.n * t) / m.mass;
         const src = doc.drone && doc.drone.thrustSrc ? ` (Richtwert ${fmt(t, 0)} g pro Motor: ${doc.drone.thrustSrc})` : '';
         out.push({ id: 'tw', title: 'Schub zu Gewicht', s: tw < 2 ? 'bad' : tw < 4 ? 'warn' : 'ok', text: `${fmt(tw, 1)} : 1 – ` + (tw < 2 ? 'zu schwach, hebt kaum ab.' : tw < 4 ? 'reicht für ruhiges Fliegen und Long Range.' : tw < 8 ? 'gut für Freestyle.' : 'genug für Rennen.') + src });
       } else out.push({ id: 'tw', title: 'Schub zu Gewicht', s: 'info', text: 'Trag unten den Schub pro Motor aus der Schubtabelle ein.' });
     }
     // 7. Speed-Rumpf: Form und Fluglage
     const V = g.V;
-    if (typeof V.Rumpfdurchmesser === 'number' && typeof V.Nasenlänge === 'number') {
+    if (!g.free && typeof V.Rumpfdurchmesser === 'number' && typeof V.Nasenlänge === 'number') {
       const L = V.Nasenlänge + V.Rumpflänge + V.Hecklänge, D = V.Rumpfdurchmesser;
-      out.push({ id: 'aero', title: 'Stromlinie', s: 'info', text: `Rumpf ${fmt(L, 0)} mm lang und ${fmt(D, 0)} mm dick (${fmt(L / D, 1)} : 1), Akku und Elektronik liegen innen.` + (g.tilt ? ` Motoren ${fmt(g.tilt, 0)}° geneigt: Fliegt die Drohne mit ${fmt(g.tilt, 0)}° Schräglage, liegt der Rumpf genau im Fahrtwind.` : ' Mit geneigten Motoren (Maß „Motorneigung“) läge der Rumpf im schnellen Flug flach im Wind.') });
+      let fa = null; try { if (typeof Views !== 'undefined' && Viewer.nodes.size) fa = Views.windArea(0); } catch (_) {}
+      out.push({ id: 'aero', title: 'Stromlinie', s: 'info', text: `Rumpf ${fmt(L, 0)} mm lang und ${fmt(D, 0)} mm dick (${fmt(L / D, 1)} : 1), Akku und Elektronik liegen innen.` + (fa ? ` Stirnfläche von vorne ohne Propeller: ${fmt(fa / 100, 1)} cm² (Ansicht „Fahrtwind“).` : '') + (g.tilt ? ` Motoren ${fmt(g.tilt, 0)}° geneigt: Fliegt die Drohne mit ${fmt(g.tilt, 0)}° Schräglage, liegt der Rumpf genau im Fahrtwind.` : ' Mit geneigten Motoren (Maß „Motorneigung“) läge der Rumpf im schnellen Flug flach im Wind.') });
     }
     last = { rev, list: out };
     return out;
@@ -91,19 +127,22 @@ const DroneCheck = (() => {
     return box;
   }
   async function dialog() {
-    if (!isDrone()) { UI.toast('Der Drohnen-Check braucht einen Rahmen aus dem Frame-Assistenten (mit Achsabstand, Armwinkel und Propeller unter „Maße“).', { icon: 'info', ms: 5000 }); return; }
+    if (!isDrone()) { UI.toast('Der Drohnen-Check braucht einen Rahmen aus dem Frame-Assistenten – oder mindestens drei Motoren aus „Kaufteile“ an deinem eigenen Rahmen.', { icon: 'info', ms: 5000 }); return; }
     const body = h('div', { class: 'chk' }, h('div', { class: 'hint-box', id: 'chk-wait' }, 'Prüfe … (der CAD-Kern rechnet die Kollisionen genau aus)'));
     const m = UI.modal({ title: 'Drohnen-Check', body, wide: true, actions: [{ label: 'Schließen', primary: true }] });
     const list = await run();
     body.innerHTML = '';
     body.append(rows(list || [], (ids) => { m.close(); App.select(ids); Viewer.fit(ids.map((id) => (Model.topOf(App.doc, id) || {}).id).filter(Boolean)); }));
     const f = UI.numField({ id: 'chk-thrust', label: 'Schub deines Motors (Höchstwert aus der Schubtabelle)', value: App.doc.drone && App.doc.drone.thrustG != null ? App.doc.drone.thrustG : '', unit: 'g', onCommit: (v) => { App.change('Schub eingetragen', (doc) => { doc.drone = doc.drone || {}; doc.drone.thrustG = v; doc.drone.thrustSrc = null; }); m.close(); setTimeout(dialog, 50); } });
-    body.append(h('div', { class: 'fields', style: { marginTop: '10px' } }, f));
+    const fs = h('div', { class: 'fields', style: { marginTop: '10px' } }, f);
+    const g = geometryAny();
+    if (g && g.free && g.zoll_from !== 'props') fs.append(UI.numField({ id: 'chk-zoll', label: 'Propeller-Durchmesser', value: App.doc.drone && App.doc.drone.zoll ? App.doc.drone.zoll : '', unit: '"', onCommit: (v) => { App.change('Propellergröße eingetragen', (doc) => { doc.drone = doc.drone || {}; doc.drone.zoll = v; }); m.close(); setTimeout(dialog, 50); } }));
+    body.append(fs);
     ev.emit('checked', list);
   }
   function summary() { return last && last.rev === App.revision ? last.list : null; }
   const ev = makeEmitter();
-  return { geometry, isDrone, run, dialog, rows, summary, thrustOf, on: ev.on };
+  return { geometry: geometryAny, isDrone, run, dialog, rows, summary, thrustOf, on: ev.on };
 })();
 
 // ---------- Platten als DXF für die Fräse ----------
@@ -191,7 +230,7 @@ const Variants = (() => {
       const m = await Mass.measureDoc(d);
       const t = DroneCheck.thrustOf(d);
       const g = DroneCheck.geometry(d);
-      rowsOut.push({ v, mass: m ? m.mass : null, tw: t && m ? (4 * t) / m.mass : null, gap: g ? DroneTpl.tipGap(g.A, g.zoll, g.wv, g.wh) : null });
+      rowsOut.push({ v, mass: m ? m.mass : null, tw: t && m && g ? (g.n * t) / m.mass : null, gap: g ? g.gap : null });
     }
     return { names, rows: rowsOut };
   }

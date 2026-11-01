@@ -316,8 +316,8 @@
   },
   "droneCheck": {
     "tip": "Rahmen prüfen: Propeller, Teile, Gewicht, Schwerpunkt, Schub",
-    "hilfe": "Drohne → „Drohnen-Check“ (oder rechts unter „Projekt“): Tracery rechnet mit dem CAD-Kern nach, ob sich die Propeller berühren, ob ein Teil in einen Propellerkreis ragt, ob Teile ineinanderstecken, wie schwer die Drohne ist, wo der Schwerpunkt liegt und – wenn du den Schub pro Motor einträgst – wie viel Schub sie im Verhältnis zum Gewicht hat. Beim Nachbau eines Herstellerrahmens vergleicht er das Rahmengewicht mit dem Original.",
-    "tipp": "Der Schwerpunkt sollte fast genau in der Mitte zwischen den vier Motoren liegen. Liegt er hinten, schieb den Akku nach vorne."
+    "hilfe": "Drohne → „Drohnen-Check“ (oder rechts unter „Projekt“): Tracery rechnet mit dem CAD-Kern nach, ob sich die Propeller berühren, ob ein Teil in einen Propellerkreis ragt, ob Teile ineinanderstecken, wie schwer die Drohne ist, wo der Schwerpunkt liegt und – wenn du den Schub pro Motor einträgst – wie viel Schub sie im Verhältnis zum Gewicht hat. Beim Nachbau eines Herstellerrahmens vergleicht er das Rahmengewicht mit dem Original. Das geht auch mit einem selbst gebauten Rahmen: Setz mindestens drei Motoren aus „Kaufteile“ auf (gern einen Motor und ein Kreismuster) und dazu Propeller – oder trag die Propellergröße im Check ein.",
+    "tipp": "Der Schwerpunkt sollte fast genau in der Mitte zwischen den Motoren liegen. Liegt er hinten, schieb den Akku nach vorne."
   },
   "plateDxf": {
     "tip": "Carbon-Platten als 2D-Zeichnung für die Fräse",
@@ -453,5 +453,10 @@
     "tip": "Zeigt, wo beim 3D-Druck Stützen nötig sind",
     "hilfe": "Färbt alle Flächen rot, die steiler als der Grenzwinkel nach unten zeigen und nicht auf dem Druckbett liegen – dort hängt das Material beim Drucken in der Luft. Das Druckbett ist die Unterseite deiner Teile. Unten steht, wie viel Fläche Stützen braucht.",
     "tipp": "45° schaffen die meisten Drucker ohne Stützen. Wird viel rot: Teil anders hinlegen, eine Fase statt einer waagerechten Kante, oder in zwei Teile teilen."
+  },
+  "wind": {
+    "tip": "Stirnfläche: so viel Fläche zeigt die Drohne dem Fahrtwind",
+    "hilfe": "Ansicht → „Fahrtwind (Stirnfläche)“: Die Kamera schaut aus der Richtung, aus der der Wind kommt, wenn die Drohne nach vorne fliegt. Mit „Neigung“ kippst du die Drohne wie im schnellen Flug mit der Nase nach unten. Unten steht die Fläche, die sie dem Wind zeigt – Tracery misst sie genau aus dem Schattenriss. Propeller zählen nur mit, wenn du das Häkchen setzt.",
+    "tipp": "Vergleich zwei Varianten bei der gleichen Neigung: Die mit der kleineren Stirnfläche bremst weniger. Bei Speed-Drohnen mit geneigten Motoren fliegt der Rumpf schnell fast waagerecht – dann zählt die Fläche bei kleiner Neigung."
   }
 }

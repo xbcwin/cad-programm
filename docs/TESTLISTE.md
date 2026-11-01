@@ -481,6 +481,23 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
   Schritte: 1. Ein Kind (ab 10) mit „Einfach“ eine Platte mit vier Löchern bauen lassen, ohne zu helfen.
   Erwartet: Es findet Körper, Löcher und Exportieren allein; notieren, wo es hängen bleibt.
 
+## Fahrtwind (neu in Sitzung 43)
+
+- [x] **Stirnfläche messen**: Quader 100 × 20 × 10 → Ansicht → „Fahrtwind (Stirnfläche)“.
+  Erwartet: Blick von vorne, orthografisch; unten „Stirnfläche 10 cm² ohne Propeller“. Bei Neigung 30° etwa 18,7 cm².
+- [x] **Propeller nur mit Häkchen**: Propeller 5" dazu → Fläche bleibt gleich; mit „Propeller mitzählen“ wird sie größer.
+- [x] **Schließen**: Kamera und Perspektive wie vorher.
+- [ ] **Speed-Rumpf von Hand**: 5"-Speed-Drohne aus dem Frame-Assistenten → Fahrtwind; Nase dicker machen (Rumpfdurchmesser) und vergleichen.
+
+## Drohnen-Check für eigene Rahmen (neu in Sitzung 42)
+
+- [x] **Motoren im Muster**: Platte 190 × 190 × 4, ein Motor (Kaufteile) bei 80/−80 auf der Platte, Kreismuster ×4 → Drohnen-Check.
+  Erwartet: „Selbst gebauter Rahmen: 4 Motoren erkannt“, Propellergröße fehlt noch; Feld „Propeller-Durchmesser“ → 5 → Propeller-Abstand 33 mm, Kreise frei.
+- [x] **Turm im Propellerkreis**: Quader 10 × 10 × 40 bei 80/−40 → „Propeller vorne rechts trifft Kamera-Turm“.
+- [x] **Echter Propeller**: Propeller 5" aus „Kaufteile“ auf einen Motor → Größe kommt von dort; Propeller und Motor gelten nicht als „ineinander“.
+- [x] **Schub und sechs Motoren**: Schub 1000 g → Verhältnis mit vier Motoren; Kreismuster auf 6 → sechs Motoren mit eigenen Namen.
+- [ ] **Eigener Rahmen von Hand**: einen Rahmen frei zeichnen, Motoren und Propeller aus „Kaufteile“ aufsetzen, Akku drauf – passt der Schwerpunkt?
+
 ## Übergang mit Mittellinie (neu in Sitzung 41)
 
 - [x] **Mittellinie zeichnen**: Rechteck 30 × 20 unten, Kreis Ø 16 40 mm darüber → beide wählen → „Übergang“. Rechts „Mittellinie zeichnen“.

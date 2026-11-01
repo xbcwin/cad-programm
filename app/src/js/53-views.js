@@ -281,6 +281,47 @@ const Views = (() => {
     st.ov = o; drawOverhang(); sync();
   }
 
+  // ---------- Fahrtwind (Stirnfläche) ----------
+  // Blick aus der Richtung, aus der der Wind kommt: Die Drohne fliegt nach vorne (−Y) und ist um „Neigung“ mit der Nase nach unten gekippt.
+  // Die Fläche, die sie dem Wind zeigt, misst der Viewer per Schattenriss. Propeller zählen auf Wunsch mit.
+  const isProp = (id) => {
+    const it = App.doc.items.find((x) => x.id === id); if (!it) return false;
+    if (it.kind === 'part' && it.p && it.p.lib === 'buyProp') return true;
+    if (it.kind === 'group') { let any = false, all = true; Model.walk(it.children || [], (k) => { if (k.kind === 'group') return; any = true; if (!(k.kind === 'part' && k.p && k.p.lib === 'buyProp')) { all = false; return false; } }); if (any && all) return true; }
+    return /^Propeller/.test(it.name || '') && it.kind === 'group';
+  };
+  const windDir = (angle) => { const a = (angle * Math.PI) / 180; return [0, Math.cos(a), -Math.sin(a)]; };
+  const windIds = (withProps) => [...Viewer.nodes.entries()].filter(([id, n]) => n.obj.visible && n.role !== 'hole' && n.mesh && (withProps || !isProp(id))).map(([id]) => id);
+  function windArea(angle = 0, withProps = false) { return Viewer.silhouette(windIds(withProps), windDir(angle)).area; }
+  function drawWind(moveCam) {
+    const o = st.wind; if (!o) return;
+    const r = Viewer.silhouette(windIds(o.props), windDir(o.angle)); o.area = r.area;
+    const t = o.bar.querySelector('#wind-area');
+    if (t) t.innerHTML = r.area > 0 ? `Stirnfläche <b>${fmt(r.area / 100, r.area < 100 ? 2 : 1)} cm²</b>` + (o.props ? ' mit Propellern' : ' ohne Propeller') : 'Nichts zu sehen.';
+    if (moveCam && r.c) Viewer.lookAtPlane(r.c, windDir(o.angle).map((v) => -v), [1, 0, 0], r.R * 1.15);
+    Viewer.requestRender();
+  }
+  function wind(on = !st.wind) {
+    if (!on) { if (st.wind) { const o = st.wind; o.bar.remove(); st.wind = null; Viewer.setOrtho(o.ortho); Viewer.restoreCamera(o.cam); } sync(); return; }
+    if (st.wind) return;
+    const o = { angle: 0, props: false, area: 0, cam: Viewer.saveCamera(), ortho: Viewer.ortho };
+    const bar = h('div', { class: 'viewbar', role: 'toolbar', 'aria-label': 'Fahrtwind' });
+    const head = h('div', { class: 'vb-head' }, h('span', { class: 'title' }, 'Fahrtwind'));
+    const close = h('button', { type: 'button', class: 'vb-x', 'aria-label': 'Fahrtwind schließen', 'data-tip': 'Schließen' }); close.innerHTML = icon('close'); close.onclick = () => wind(false);
+    head.append(close);
+    const rng = h('input', { type: 'range', id: 'wind-angle', min: 0, max: 60, step: 5, value: 0, 'aria-label': 'Neigung nach vorne' });
+    const val = h('span', { class: 'vb-l', id: 'wind-angle-v' }, '0°');
+    rng.oninput = () => { o.angle = +rng.value; val.textContent = rng.value + '°'; drawWind(true); };
+    const cb = h('input', { type: 'checkbox', id: 'wind-props' }); cb.onchange = () => { o.props = cb.checked; drawWind(false); };
+    bar.append(head,
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, 'Neigung'), rng, val),
+      h('div', { class: 'vb-row' }, h('label', { class: 'vb-hint' }, cb, ' Propeller mitzählen')),
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint', id: 'wind-area' }, '')),
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint' }, 'So sieht der Wind deine Drohne, wenn sie mit dieser Neigung nach vorne fliegt. Kleinere Fläche = weniger Luftwiderstand.')));
+    bars().append(bar); o.bar = bar;
+    st.wind = o; Viewer.setOrtho(true); drawWind(true); sync();
+  }
+
   // ---------- Menü und Zustand ----------
   function menu(anchor) {
     UI.menu(anchor, [
@@ -289,10 +330,11 @@ const Views = (() => {
       { label: (st.exGoal > 0 ? '✓ ' : '') + 'Explosion', icon: 'explode', kbd: 'U', help: 'explode', run: () => explode() },
       { label: (st.focus ? '✓ ' : '') + 'Fokus-Vorschau', icon: 'focusView', help: 'focusView', run: () => focus() },
       { label: (st.ov ? '✓ ' : '') + 'Überhänge (3D-Druck)', icon: 'overhang', help: 'overhang', run: () => overhang() },
+      { label: (st.wind ? '✓ ' : '') + 'Fahrtwind (Stirnfläche)', icon: 'wind', help: 'wind', run: () => wind() },
     ]);
   }
   function sync() {
-    const b = $('#t-views'); if (b) b.classList.toggle('active', !!(st.cut || st.xray || st.exGoal > 0 || st.focus || st.ov));
+    const b = $('#t-views'); if (b) b.classList.toggle('active', !!(st.cut || st.xray || st.exGoal > 0 || st.focus || st.ov || st.wind));
     const x = document.querySelector('.view-btns [data-view="xray"]'); if (x) x.classList.toggle('on', st.xray);
     const c = document.querySelector('.view-btns [data-view="cut"]'); if (c) c.classList.toggle('on', !!st.cut);
   }
@@ -309,13 +351,15 @@ const Views = (() => {
     App.on('results', () => {
       if (st.ex > 1e-4) setEx(st.ex);
       if (st.ov) drawOverhang();
+      if (st.wind) drawWind(false);
       if (st.cut) { drawCutHelper(); const r = st.cut.bar && st.cut.bar.querySelector('#cut-range'); if (r) { const b = modelBox(); const ax = AX[st.cut.plane]; r.min = Math.floor(b.min.getComponent(ax) - 1); r.max = Math.ceil(b.max.getComponent(ax) + 1); } }
     });
   }
-  function reset() { section(false); if (st.xray) xray(false); if (st.exGoal > 0 || st.ex > 0) { cancelAnimationFrame(st.exAnim); st.exAnim = null; st.ex = st.exGoal = 0; Viewer.setOffsets(null); if (st.exBar) { st.exBar.remove(); st.exBar = null; } } focus(false); overhang(false); }
+  function reset() { section(false); if (st.xray) xray(false); if (st.exGoal > 0 || st.ex > 0) { cancelAnimationFrame(st.exAnim); st.exAnim = null; st.ex = st.exGoal = 0; Viewer.setOffsets(null); if (st.exBar) { st.exBar.remove(); st.exBar = null; } } focus(false); overhang(false); wind(false); }
   return {
     init, section, xray, explode, collapse, focus, overhang, menu, onKey, reset, sync, bars,
     get overhangArea() { return st.ov ? st.ov.area : null; },
+    wind, windArea, get windInfo() { return st.wind ? { angle: st.wind.angle, props: st.wind.props, area: st.wind.area } : null; },
     overhangOf: (id, angle = 45) => { const d = overhangData(angle, [id]); return { area: d.area, c: d.c }; },
     get cut() { return st.cut ? { plane: st.cut.plane, off: st.cut.off, flip: st.cut.flip } : null; },
     get isXray() { return st.xray; }, get exploded() { return st.ex > 1e-4 || st.exGoal > 0; }, get explodeAmount() { return st.ex; },

@@ -230,6 +230,7 @@ const IC = {
   sketch3d: '<path d="M4 17 12 21l8-4" opacity=".4"/><path d="M6 8v8M12 12v9M18 5v11" stroke-dasharray="3 2.5" opacity=".5"/><path d="M6 8l6 4 6-7"/><circle cx="6" cy="8" r="1.8" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.8" fill="currentColor" stroke="none"/><circle cx="18" cy="5" r="1.8" fill="currentColor" stroke="none"/>',
   spline: '<path d="M4 18 7 6l10 12 3-12" stroke-dasharray="3 2.5" opacity=".4"/><path d="M4 18C7 6 17 18 20 6"/><circle cx="4" cy="18" r="1.8" fill="currentColor" stroke="none"/><circle cx="20" cy="6" r="1.8" fill="currentColor" stroke="none"/>',
   trim: '<path d="M9 12h6" stroke-dasharray="3 2.5" opacity=".5"/><path d="M11 4 7 20M3 12h6M17 10l4 4M21 10l-4 4" />',
+  wind: '<path d="M3 8h10a3 3 0 1 0-3-3"/><path d="M3 12h15a3 3 0 1 1-3 3"/><path d="M3 16h7"/>',
   overhang: '<path d="M3 20h18" opacity=".45"/><path d="M5 20V9h9"/><path d="M14 9h6v4h-6z" fill="currentColor" fill-opacity=".35"/><path d="M15 15l1.5 2M18 15l1.5 2" opacity=".6"/>',
   actionMount: '<rect x="4" y="17" width="16" height="4" rx="1"/><path d="M7 17v-6a2.5 2.5 0 0 1 5 0v6M12 17v-6a2.5 2.5 0 0 1 5 0v6"/><circle cx="12" cy="11" r="1.2"/>',
   plugMount: '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M8 9h7l2 2v4H8z"/><circle cx="5.5" cy="12" r=".8"/><circle cx="18.5" cy="12" r=".8" opacity="0"/>',
@@ -616,8 +617,8 @@ const HELP = {
  },
  "droneCheck": {
   "tip": "Rahmen prüfen: Propeller, Teile, Gewicht, Schwerpunkt, Schub",
-  "hilfe": "Drohne → „Drohnen-Check“ (oder rechts unter „Projekt“): Tracery rechnet mit dem CAD-Kern nach, ob sich die Propeller berühren, ob ein Teil in einen Propellerkreis ragt, ob Teile ineinanderstecken, wie schwer die Drohne ist, wo der Schwerpunkt liegt und – wenn du den Schub pro Motor einträgst – wie viel Schub sie im Verhältnis zum Gewicht hat. Beim Nachbau eines Herstellerrahmens vergleicht er das Rahmengewicht mit dem Original.",
-  "tipp": "Der Schwerpunkt sollte fast genau in der Mitte zwischen den vier Motoren liegen. Liegt er hinten, schieb den Akku nach vorne."
+  "hilfe": "Drohne → „Drohnen-Check“ (oder rechts unter „Projekt“): Tracery rechnet mit dem CAD-Kern nach, ob sich die Propeller berühren, ob ein Teil in einen Propellerkreis ragt, ob Teile ineinanderstecken, wie schwer die Drohne ist, wo der Schwerpunkt liegt und – wenn du den Schub pro Motor einträgst – wie viel Schub sie im Verhältnis zum Gewicht hat. Beim Nachbau eines Herstellerrahmens vergleicht er das Rahmengewicht mit dem Original. Das geht auch mit einem selbst gebauten Rahmen: Setz mindestens drei Motoren aus „Kaufteile“ auf (gern einen Motor und ein Kreismuster) und dazu Propeller – oder trag die Propellergröße im Check ein.",
+  "tipp": "Der Schwerpunkt sollte fast genau in der Mitte zwischen den Motoren liegen. Liegt er hinten, schieb den Akku nach vorne."
  },
  "plateDxf": {
   "tip": "Carbon-Platten als 2D-Zeichnung für die Fräse",
@@ -753,6 +754,11 @@ const HELP = {
   "tip": "Zeigt, wo beim 3D-Druck Stützen nötig sind",
   "hilfe": "Färbt alle Flächen rot, die steiler als der Grenzwinkel nach unten zeigen und nicht auf dem Druckbett liegen – dort hängt das Material beim Drucken in der Luft. Das Druckbett ist die Unterseite deiner Teile. Unten steht, wie viel Fläche Stützen braucht.",
   "tipp": "45° schaffen die meisten Drucker ohne Stützen. Wird viel rot: Teil anders hinlegen, eine Fase statt einer waagerechten Kante, oder in zwei Teile teilen."
+ },
+ "wind": {
+  "tip": "Stirnfläche: so viel Fläche zeigt die Drohne dem Fahrtwind",
+  "hilfe": "Ansicht → „Fahrtwind (Stirnfläche)“: Die Kamera schaut aus der Richtung, aus der der Wind kommt, wenn die Drohne nach vorne fliegt. Mit „Neigung“ kippst du die Drohne wie im schnellen Flug mit der Nase nach unten. Unten steht die Fläche, die sie dem Wind zeigt – Tracery misst sie genau aus dem Schattenriss. Propeller zählen nur mit, wenn du das Häkchen setzt.",
+  "tipp": "Vergleich zwei Varianten bei der gleichen Neigung: Die mit der kleineren Stirnfläche bremst weniger. Bei Speed-Drohnen mit geneigten Motoren fliegt der Rumpf schnell fast waagerecht – dann zählt die Fläche bei kleiner Neigung."
  }
 };
 

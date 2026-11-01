@@ -91,6 +91,51 @@ const Model = (() => {
     if (f) m.multiply(localMatrix(f.item, new THREE.Matrix4()));
     return m;
   }
+  // Lage jeder Kopie einer Muster-Gruppe im Gruppen-Koordinatensystem – genau wie der Kern sie baut; die erste ist das Original
+  function patternMatrices(g, V) {
+    const I = new THREE.Matrix4(), out = [I];
+    if (!g.p || g.p.op !== 'pattern') return out;
+    const p = g.p.pt === 'path' ? pathPatternParams(g, V) : resolveP(g.p, V), N = (k, d) => num(p[k], V, d);
+    const rot = (c, ax, deg) => { const a = new THREE.Vector3(...ax).normalize(); return new THREE.Matrix4().makeTranslation(c[0], c[1], c[2]).multiply(new THREE.Matrix4().makeRotationAxis(a, (deg * Math.PI) / 180)).multiply(new THREE.Matrix4().makeTranslation(-c[0], -c[1], -c[2])); };
+    const refl = (nn, o) => { const v = new THREE.Vector3(...nn).normalize(), a = v.x, b = v.y, c = v.z, d = a * o[0] + b * o[1] + c * o[2]; return new THREE.Matrix4().set(1 - 2 * a * a, -2 * a * b, -2 * a * c, 2 * d * a, -2 * a * b, 1 - 2 * b * b, -2 * b * c, 2 * d * b, -2 * a * c, -2 * b * c, 1 - 2 * c * c, 2 * d * c, 0, 0, 0, 1); };
+    if (p.pt === 'rect') {
+      const nx = clamp(Math.round(N('nx', 1)), 1, 60), ny = clamp(Math.round(N('ny', 1)), 1, 60), dx = N('dx', 10), dy = N('dy', 10);
+      for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) if (i || j) out.push(new THREE.Matrix4().makeTranslation(i * dx, j * dy, 0));
+    } else if (p.pt === 'circ') {
+      const n = clamp(Math.round(N('n', 4)), 1, 120), ang = N('ang', 360);
+      const step = Math.abs(Math.abs(ang) - 360) < 1e-9 ? 360 / n : n > 1 ? ang / (n - 1) : 0;
+      const picked = p.axis === 'pick' && Array.isArray(p.ad) && Array.isArray(p.ao);
+      const ax = picked ? p.ad.map(Number) : p.axis === 'x' ? [1, 0, 0] : p.axis === 'y' ? [0, 1, 0] : [0, 0, 1];
+      const c = picked ? p.ao.map(Number) : [N('cx', 0), N('cy', 0), N('cz', 0)];
+      for (let k = 1; k < n; k++) out.push(rot(c, ax, k * step));
+    } else if (p.pt === 'path') {
+      for (const q of (p.places || []).slice(1, 200)) {
+        const d = (q.d || [0, 0, 0]).map(Number), m = new THREE.Matrix4().makeTranslation(d[0], d[1], d[2]);
+        if (p.align && Math.abs(Number(q.a) || 0) > 1e-9) m.multiply(rot(p.p0, p.n, Number(q.a)));
+        out.push(m);
+      }
+    } else if (p.pt === 'mirror' && p.plane === 'FACE' && Array.isArray(p.mn) && Array.isArray(p.mo)) out.push(refl(p.mn.map(Number), p.mo.map(Number)));
+    else if (p.pt === 'mirror') {
+      const pl = ['XY', 'XZ', 'YZ'].includes(p.plane) ? p.plane : 'YZ', n = { YZ: [1, 0, 0], XZ: [0, 1, 0], XY: [0, 0, 1] }[pl], off = N('off', 0);
+      out.push(refl(n, [n[0] * off, n[1] * off, n[2] * off]));
+    }
+    return out;
+  }
+  // Weltlage eines Teils – einmal je Kopie, wenn es in Muster-Gruppen steckt (z. B. ein Motor, viermal im Kreis kopiert)
+  function instanceMatrices(doc, id, V = vars(doc).v) {
+    const f = find(doc, id); if (!f) return [];
+    const chain = parentsOf(doc, id), prev = curV; curV = V;
+    try {
+      let mats = [new THREE.Matrix4()];
+      for (const g of chain) {
+        const L = localMatrix(g, new THREE.Matrix4()), P = patternMatrices(g, V), next = [];
+        for (const m of mats) for (const q of P) next.push(m.clone().multiply(L).multiply(q));
+        mats = next.slice(0, 2000);
+      }
+      const Li = localMatrix(f.item, new THREE.Matrix4());
+      return mats.map((m) => m.multiply(Li));
+    } finally { curV = prev; }
+  }
   function parentWorld(doc, id) {
     const chain = parentsOf(doc, id);
     const m = new THREE.Matrix4();
@@ -348,6 +393,6 @@ const Model = (() => {
     walk(doc.items, (it) => { it.t = Object.assign(T0(), it.t || {}); it.p = it.p || {}; it.finishes = it.finishes || []; if (!it.role) it.role = 'solid'; if (!it.color) it.color = nextColor(); });
     return doc;
   }
-  return { loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  return { patternMatrices, instanceMatrices, loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 

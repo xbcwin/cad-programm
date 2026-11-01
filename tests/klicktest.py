@@ -1250,11 +1250,11 @@ def t_adaptiv(p):
 def t_ansicht_hilfen(p):
     p.empty()
     hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
-    fehlt = [k for k in ['section', 'xray', 'explode', 'focusView', 'overhang'] if k not in hilfen]
+    fehlt = [k for k in ['section', 'xray', 'explode', 'focusView', 'overhang', 'wind'] if k not in hilfen]
     p.pg.locator('#t-views').click(); p.wait(300)
     im_menue = sorted(p.pg.evaluate("[...document.querySelectorAll('.menu [data-help]')].map(b=>b.dataset.help)"))
     knoepfe = sorted(p.pg.evaluate("[...document.querySelectorAll('.view-btns [data-help]')].map(b=>b.dataset.help)"))
-    ok = not fehlt and im_menue == ['explode', 'focusView', 'overhang', 'section', 'xray'] and {'section', 'xray'} <= set(knoepfe)
+    ok = not fehlt and im_menue == ['explode', 'focusView', 'overhang', 'section', 'wind', 'xray'] and {'section', 'xray'} <= set(knoepfe)
     return ok, ('ohne Hilfetext: ' + ', '.join(fehlt)) if fehlt else ('' if ok else f'Menü {im_menue}, Knöpfe {knoepfe}')
 
 
@@ -1581,6 +1581,46 @@ def t_drohnen_check(p):
     ok6 = c['clash'][0] == 'warn' and 'Unterteil' in c['clash'][1] and 'Stack' in c['clash'][1]
     return [ok1, ok2, ok3, ok4, ok5, ok6]
 
+
+
+# ---------- Sitzung 42: Drohnen-Check für selbst gebaute Rahmen ----------
+def t_drohnencheck_frei(p):
+    p.empty()
+    # eigener Rahmen: eine Platte, ein Motor vorne rechts, per Kreismuster viermal
+    p.ev("""App.change('x', d=>{
+      const pl=Model.newItem('box',{w:190,d:190,h:4}); pl.name='Rahmen'; d.items.push(pl);
+      const m=Model.newItem('part',{lib:'buyMotor',d:28.5,h:19.7,lk:16,size:'M3'}); m.name='Motor 2306'; m.t.x=80; m.t.y=-80; m.t.z=4; d.items.push(m);
+    })"""); warte_rechnen(p, 30)
+    p.ev("Features.pattern('circ', [App.doc.items[1].id])"); warte_rechnen(p, 30)
+    g = p.ev("const g=DroneCheck.geometry(); return g&&{n:g.n, free:g.free, zoll:g.zoll, m:g.motors.map(m=>[m[0], Math.round(m[1]), Math.round(m[2])])}")
+    c = chk(p)
+    ok1 = (g and g['free'] and g['n'] == 4 and g['zoll'] is None and sorted([x[1:] for x in g['m']]) == [[-80, -80], [-80, 80], [80, -80], [80, 80]]
+           and 'vorne rechts' in [x[0] for x in g['m']] and 'fehlt' in c['free'][1] and 'gap' not in c and 'props' not in c)
+    # Propellergröße im Check eintragen
+    p.ev("DroneCheck.dialog()"); p.pg.wait_for_selector('.modal #chk-zoll', timeout=60000); p.wait(300)
+    field(p, '#chk-zoll', 5); p.wait(1500)
+    p.pg.wait_for_selector('.modal .chk-row[data-chk="gap"]', timeout=60000); p.wait(300)
+    st = p.pg.evaluate("Object.fromEntries([...document.querySelectorAll('.modal .chk-row')].map(r=>[r.dataset.chk,r.className.split(' ')[1]]))")
+    gap = p.pg.locator('.modal .chk-row[data-chk="gap"]').inner_text()
+    ok2 = st.get('gap') == 'ok' and st.get('props') == 'ok' and st.get('clash') == 'ok' and '33' in gap and 'eingetragen' in p.pg.locator('.modal .chk-row[data-chk="free"]').inner_text()
+    p.pg.keyboard.press('Escape'); p.wait(300)
+    # Ein Turm ragt in den Propellerkreis vorne rechts
+    p.ev("App.change('x', d=>{ const t=Model.newItem('box',{w:10,d:10,h:40}); t.name='Kamera-Turm'; t.t.x=80; t.t.y=-40; t.t.z=4; d.items.push(t); })"); warte_rechnen(p, 30)
+    c = chk(p)
+    ok3 = c['props'][0] == 'bad' and 'Kamera-Turm' in c['props'][1] and 'vorne rechts' in c['props'][1]
+    # Turm weg, ein echter 5"-Propeller auf dem ersten Motor: Größe kommt von dort, Propeller und Motor zählen nicht als „ineinander“
+    p.ev("App.change('x', d=>{ d.items=d.items.filter(i=>i.name!=='Kamera-Turm'); d.drone.zoll=null; const pr=Model.newItem('part',{lib:'buyProp',zoll:5,blades:3,pitch:13}); pr.name='Propeller 5'; pr.t.x=80; pr.t.y=-80; pr.t.z=23.7; d.items.push(pr); })"); warte_rechnen(p, 30)
+    c = chk(p)
+    ok4 = 'Propellern im Modell' in c['free'][1] and c['gap'][0] == 'ok' and c['props'][0] == 'ok' and c['clash'][0] == 'ok'
+    # Schub: vier Motoren
+    p.ev("App.change('x', d=>{ d.drone.thrustG=1000; })"); warte_rechnen(p, 20)
+    c = chk(p); m = p.ev("return Mass.measure().then(r=>r.mass)")
+    ok5 = (str(round(4000 / m, 1)).replace('.', ',') + ' : 1') in c['tw'][1]
+    # Sechs Motoren (Hexakopter): Namen eindeutig
+    p.ev("App.change('x', d=>{ d.items.find(i=>i.kind==='group').p.n=6; })"); warte_rechnen(p, 30)
+    g = p.ev("const g=DroneCheck.geometry(); return [g.n, new Set(g.motors.map(m=>m[0])).size]")
+    ok6 = g == [6, 6]
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
 
 def t_drohnen_generator(p):
     p.wait(1500)
@@ -2540,6 +2580,31 @@ def t_ueberhang(p):
     return [ok1, ok2, ok3, ok4]
 
 
+
+# ---------- Sitzung 43: Fahrtwind (Stirnfläche) ----------
+def t_fahrtwind(p):
+    p.empty(); p.ev("App.change('x', d=>{ const b=Model.newItem('box',{w:100,d:20,h:10}); b.name='Rumpf'; d.items.push(b); })"); warte_rechnen(p, 30)
+    a0 = p.ev("return Views.windArea(0)"); a90 = p.ev("return Views.windArea(90)")
+    ok1 = abs(a0 - 1000) < 30 and abs(a90 - 2000) < 60   # von vorne 100 × 10, von oben 100 × 20
+    # Propeller zählen nur mit Häkchen
+    p.ev("App.change('x', d=>{ const pr=Model.newItem('part',{lib:'buyProp',zoll:5,blades:3,pitch:13}); pr.name='Propeller'; pr.t.z=12; d.items.push(pr); })"); warte_rechnen(p, 30)
+    ok2 = abs(p.ev("return Views.windArea(0)") - a0) < 1 and p.ev("return Views.windArea(0, true)") > a0 + 50
+    # Ansicht öffnen: Fläche steht unten, Kamera schaut von vorne
+    p.pg.locator('#t-views').click(); p.wait(300); p.pg.locator('.menu [data-help="wind"]').click(); p.wait(1200)
+    t = p.pg.locator('#wind-area').inner_text()
+    cam = p.ev("const c=Viewer.camera, t=Viewer.controls.target; return [c.position.x-t.x, c.position.y-t.y, c.position.z-t.z]")
+    import re
+    mt = re.search(r'([0-9]+(?:,[0-9]+)?) cm²', t)
+    ok3 = mt is not None and abs(float(mt.group(1).replace(',', '.')) - 10) < 0.25 and "ohne Propeller" in t and cam[1] < 0 and abs(cam[0]) < 1 and abs(cam[2]) < 1 and p.ev("return Viewer.ortho")
+    # 30° Neigung: 0,866 × 100 × 10 + 0,5 × 100 × 20 = 1866 mm²
+    p.ev("const r=document.querySelector('#wind-angle'); r.value=30; r.dispatchEvent(new Event('input'))"); p.wait(1200)
+    w = p.ev("return Views.windInfo")
+    ok4 = w['angle'] == 30 and abs(w['area'] - 1866) < 50 and '18' in p.pg.locator('#wind-area').inner_text()
+    # Schließen: Kamera und Projektion wie vorher
+    p.pg.locator('.viewbar[aria-label="Fahrtwind"] .vb-x').click(); p.wait(1000)
+    ok5 = p.pg.locator('#wind-area').count() == 0 and not p.ev("return Viewer.ortho")
+    return [ok1, ok2, ok3, ok4, ok5]
+
 # ---------- Sitzung 37: Überhänge in der Schwachstellen-Analyse ----------
 def t_ueberhang_schwach(p):
     p.empty(); p.ev("""App.change('x', d=>{ const a=Model.newItem('box',{w:20,d:20,h:10}); const b=Model.newItem('box',{w:20,d:20,h:5}); b.t.x=15; b.t.z=10; const g=Model.newItem('group',{},{name:'L'}); g.mat='PETG'; g.children=[a,b]; d.items.push(g); })"""); warte_rechnen(p, 30)
@@ -3005,6 +3070,7 @@ TESTS = [
     ('Verbundene Kanten: verbunden / Linie wandert / Kreis wächst / ein Rückgängig / Hinweis / lösen', t_kante_verbunden),
     ('Kreismuster um gewählte Achse: Wählen / Achse aus Kante / Kopien', t_kreismuster_gewaehlt),
     ('Drohnen-Bausteine: in der Leiste / GoPro / XT60 / Antenne / 2 Finger', t_bausteine),
+    ('Fahrtwind: Stirnfläche vorne und oben / Propeller nur mit Häkchen / Ansicht von vorne / 30° Neigung / schließen', t_fahrtwind),
     ('Überhänge: Fläche / Winkel / ohne Überhang / aus', t_ueberhang),
     ('Schwachstellen: Überhang bei Druckteilen / weg ohne Überhang', t_ueberhang_schwach),
     ('Skizzen-Muster als Ganzes ändern: anlegen / Feld / 5 × 8 / Rückgängig', t_muster_ganz),
@@ -3063,6 +3129,7 @@ TESTS = [
     ('Drohnen-Teile: Akku mit Gewicht / Motor ohne Gewicht wird angemahnt / Videosender', t_drohnen_teile),
     ('Lochbild: auf Platte ziehen / Motor 16 → Stack 30,5 / Kabelbinder', t_lochbild),
     ('Drohnen-Werkzeuge haben Hilfetexte', t_drohne_hilfen),
+    ('Drohnen-Check eigener Rahmen: Motoren im Muster / Propellergröße / Turm im Kreis / echter Propeller / Schub / sechs Motoren', t_drohnencheck_frei),
     ('Drohnen-Check: Vorlage besteht / Schub eintragen / Schwerpunkt / zu kleiner Rahmen / Teile ineinander', t_drohnen_check),
     ('Frame-Assistent: 3" O4 Pro, 5" Deadcat O3, 7" Walksnail bestehen den Check', t_drohnen_generator),
     ('Platten als DXF: Unterteil und Oberplatte / Löcher an der richtigen Stelle / ZIP', t_dxf),

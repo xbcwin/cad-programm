@@ -1,6 +1,6 @@
 # Fortschritt
 
-Stand: 01.11.2026 · nach Sitzung 41 (19: Skizze auf Profi-Niveau · 20: Magnet, Rundungs-Griff · 21: Skizzieren im 3D, Übergang, Entlang Pfad, Import · 22: Kreis/Bogen-Arten, Verlängern, Entformungsschräge, Gewinde · 23: Einheiten, eigener Querschnitt, Langloch gebogen, gedrehtes Rechteck, Teilen · 24: Punkt, alle Ecken · 25: Schnitt und Spiegeln an Fläche · 26: Kantenkette, Abstände beim Verschieben · 27: Spiegeln an der Achse · 28: Muster entlang Kurve, Schablonen-Maße geprüft, USB-C-Stecker · 29: Spiegelebene wandert mit, Kreismuster quer und längs, KI kennt Muster entlang Kurve · 30: Bohrungen an Skizzenpunkten · 31: Wand aus Linie, Schritt hinter dem Marker, Schildchen · 32: Kante übernehmen · 33: verbundene Kanten · 34: Kreismuster um gewählte Achse · 35: GoPro-, XT60- und Antennenhalter · 36: Überhänge für den 3D-Druck · 37: Überhänge in der Schwachstellen-Analyse, KI kennt die Bausteine · 38: Skizzen-Muster als Ganzes ändern · 39: Drehgelenk · 40: Schiebegelenk · Argon 1: Gelenk-Ketten · 41: Übergang mit Mittellinie)
+Stand: 01.11.2026 · nach Sitzung 43 (19: Skizze auf Profi-Niveau · 20: Magnet, Rundungs-Griff · 21: Skizzieren im 3D, Übergang, Entlang Pfad, Import · 22: Kreis/Bogen-Arten, Verlängern, Entformungsschräge, Gewinde · 23: Einheiten, eigener Querschnitt, Langloch gebogen, gedrehtes Rechteck, Teilen · 24: Punkt, alle Ecken · 25: Schnitt und Spiegeln an Fläche · 26: Kantenkette, Abstände beim Verschieben · 27: Spiegeln an der Achse · 28: Muster entlang Kurve, Schablonen-Maße geprüft, USB-C-Stecker · 29: Spiegelebene wandert mit, Kreismuster quer und längs, KI kennt Muster entlang Kurve · 30: Bohrungen an Skizzenpunkten · 31: Wand aus Linie, Schritt hinter dem Marker, Schildchen · 32: Kante übernehmen · 33: verbundene Kanten · 34: Kreismuster um gewählte Achse · 35: GoPro-, XT60- und Antennenhalter · 36: Überhänge für den 3D-Druck · 37: Überhänge in der Schwachstellen-Analyse, KI kennt die Bausteine · 38: Skizzen-Muster als Ganzes ändern · 39: Drehgelenk · 40: Schiebegelenk · Argon 1: Gelenk-Ketten · 41: Übergang mit Mittellinie · 42: Drohnen-Check für eigene Rahmen · 43: Fahrtwind)
 
 ## Erledigt
 
@@ -234,6 +234,8 @@ Fertig.
 - [x] Gelenk-Ketten: ein Teil darf an mehreren Gelenken hängen (z. B. Grundplatte → Arm → Greifer); dreht oder gleitet ein vorderes Gelenk, wandern alle Teile und Gelenkachsen dahinter mit; Kreise werden abgelehnt; im Panel stehen alle Gelenke des gewählten Teils, „Bewegung prüfen“ nimmt die Kette mit (Argon 1)
 - [x] Übergang mit Mittellinie: rechts beim Übergang „Mittellinie zeichnen“ – sie ist als Spline durch die Mitten der Umrisse vorgezeichnet und läuft senkrecht aus ihnen heraus; Punkte ziehen biegt den Körper, die Vorschau rechnet mit. Die Umrisse bleiben, wo sie sind. Trifft die Linie einen Umriss schräg (über 30°), warnt Tracery. Der KI-Kollege kennt „mittellinie“ (Sitzung 41)
 - [ ] 3D-Skizzen, Übergang mit seitlichen Führungskurven
+- [x] Drohnen-Check für selbst gebaute Rahmen: erkennt Motoren aus „Kaufteile“ (ab drei, auch im Kreis- oder Rechteckmuster, gespiegelt oder entlang einer Kurve), Propeller aus „Kaufteile“ oder eingetragene Größe; prüft Propeller-Abstand, Propellerkreise (als Ring, innen Platz für Welle und Mutter), Teile ineinander, Gewicht, Schwerpunkt und Schub für beliebig viele Motoren (Sitzung 42)
+- [x] Ansicht „Fahrtwind (Stirnfläche)“: Blick aus der Windrichtung, Neigung 0–60° nach vorne, Fläche in cm² aus dem Schattenriss, Propeller auf Wunsch mitgezählt; der Drohnen-Check nennt beim Speed-Rumpf die Stirnfläche von vorne (Sitzung 43)
 - [ ] Einsteiger-Oberfläche weiter vereinfachen: größere Knöpfe, geführte erste Schritte im leeren Projekt
 
 ### Stufe 6 – Konten und Zusammenarbeit (Idee, nach dem Drohnen-Modul)
@@ -243,6 +245,8 @@ Fertig.
 
 ## Bekannte Punkte
 
+- Drohnen-Check eigener Rahmen: Steckt ein Motor zusammen mit Rahmenteilen in einer Gruppe, zählt die ganze Gruppe als ein Teil – die Propellerkreise werden dann gegen die Gruppe geprüft. Motoren und Propeller am besten einzeln oder als eigenes Muster lassen
+- Fahrtwind: Die Stirnfläche ist eine Fläche, kein Luftwiderstand – wie stromlinienförmig ein Teil ist (cw-Wert), rechnet Tracery nicht
 - Übergang mit Mittellinie: Spitze und „Gerade Flächen“ gibt es dabei nicht; die Mittellinie liegt in einer Ebene (keine 3D-Kurve). Wo sie eng gebogen ist, kann der Körper an der Innenseite etwas über die Umrisse hinausragen
 - „An Fläche spiegeln“ hängt nur an der äußersten Fläche in Achsrichtung; bei einer inneren oder schrägen Fläche bleibt die Ebene, wo sie beim Spiegeln war
 

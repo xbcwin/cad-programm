@@ -692,6 +692,31 @@ const Viewer = (() => {
   }
 
   // Bild der Szene für Vorschaubilder
+  // Schattenriss: Fläche (mm²), die die Teile aus Blickrichtung dir verdecken – z. B. die Stirnfläche im Fahrtwind.
+  // Gerechnet durch Pixelzählen in einem eigenen Bild (orthografisch), unabhängig von der Kamera.
+  function silhouette(ids, dir, res = 1024) {
+    const show = ids.map((id) => nodes.get(id)).filter((n) => n && n.mesh);
+    if (!show.length) return { area: 0, px: 0 };
+    const d = new THREE.Vector3(...dir).normalize();
+    groups.nodes.updateMatrixWorld(true);
+    const box = new THREE.Box3(); for (const n of show) box.union(n.mesh.geometry.boundingBox.clone().applyMatrix4(n.mesh.matrixWorld));
+    const c = box.getCenter(new THREE.Vector3()), R = Math.max(1, box.getSize(new THREE.Vector3()).length() / 2) * 1.02;
+    const oc = new THREE.OrthographicCamera(-R, R, R, -R, 0.1, 4 * R + 20);
+    oc.up.copy(Math.abs(d.z) > 0.95 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(0, 0, 1));
+    oc.position.copy(c).addScaledVector(d, -(2 * R + 10)); oc.lookAt(c); oc.updateProjectionMatrix(); oc.updateMatrixWorld();
+    const sc = new THREE.Scene(), mat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+    for (const n of show) { const m = new THREE.Mesh(n.mesh.geometry, mat); m.matrixAutoUpdate = false; m.matrix.copy(n.mesh.matrixWorld); m.matrixWorld.copy(n.mesh.matrixWorld); sc.add(m); }
+    const rt = new THREE.WebGLRenderTarget(res, res);
+    const oldRT = renderer.getRenderTarget(), oldCol = renderer.getClearColor(new THREE.Color()), oldA = renderer.getClearAlpha(), oldClip = renderer.localClippingEnabled;
+    renderer.setRenderTarget(rt); renderer.setClearColor(0x000000, 1); renderer.localClippingEnabled = false; renderer.clear(); renderer.render(sc, oc);
+    const buf = new Uint8Array(res * res * 4); renderer.readRenderTargetPixels(rt, 0, 0, res, res, buf);
+    renderer.setRenderTarget(oldRT); renderer.setClearColor(oldCol, oldA); renderer.localClippingEnabled = oldClip;
+    rt.dispose(); mat.dispose();
+    let px = 0; for (let i = 0; i < buf.length; i += 4) if (buf[i] > 127) px++;
+    const s = (2 * R) / res;
+    needsRender = true;
+    return { area: px * s * s, px, c: c.toArray(), R };
+  }
   function snapshot(w = 480, hgt = 300) {
     const old = renderer.getSize(new THREE.Vector2());
     renderer.setSize(w, hgt, false); camera.aspect = w / hgt; camera.updateProjectionMatrix();
@@ -702,7 +727,7 @@ const Viewer = (() => {
   }
 
   return {
-    init, requestRender, setClip, setXray, setOffsets, baseBox, renderInset, setAdaptive, setCompare, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, setSelectedEdges, clearHover,
+    init, requestRender, setClip, setXray, setOffsets, baseBox, renderInset, silhouette, setAdaptive, setCompare, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, setSelectedEdges, clearHover,
     edgePositions, pick, pickGhost, pickProxy, setProxies, clearProxies, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, boxVisible, sceneBox, snapshot, makeFat, disposeFat, faceOverlay, faceArea,
     get camera() { return camera; }, get activeCamera() { return cam(); }, get ortho() { return ortho; }, get gridStep() { return gridStep; }, get controls() { return controls; }, get scene() { return scene; }, get groups() { return groups; }, get nodes() { return nodes; }, get canvas() { return renderer.domElement; }, get theme() { return theme; }, get container() { return container; },
     get clip() { return vis.clip; }, get xray() { return vis.xray; }, get lowRes() { return lowRes; },  get pixelRatio() { return renderer.getPixelRatio(); },

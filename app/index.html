@@ -964,6 +964,7 @@ const IC = {
   sketch3d: '<path d="M4 17 12 21l8-4" opacity=".4"/><path d="M6 8v8M12 12v9M18 5v11" stroke-dasharray="3 2.5" opacity=".5"/><path d="M6 8l6 4 6-7"/><circle cx="6" cy="8" r="1.8" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.8" fill="currentColor" stroke="none"/><circle cx="18" cy="5" r="1.8" fill="currentColor" stroke="none"/>',
   spline: '<path d="M4 18 7 6l10 12 3-12" stroke-dasharray="3 2.5" opacity=".4"/><path d="M4 18C7 6 17 18 20 6"/><circle cx="4" cy="18" r="1.8" fill="currentColor" stroke="none"/><circle cx="20" cy="6" r="1.8" fill="currentColor" stroke="none"/>',
   trim: '<path d="M9 12h6" stroke-dasharray="3 2.5" opacity=".5"/><path d="M11 4 7 20M3 12h6M17 10l4 4M21 10l-4 4" />',
+  wind: '<path d="M3 8h10a3 3 0 1 0-3-3"/><path d="M3 12h15a3 3 0 1 1-3 3"/><path d="M3 16h7"/>',
   overhang: '<path d="M3 20h18" opacity=".45"/><path d="M5 20V9h9"/><path d="M14 9h6v4h-6z" fill="currentColor" fill-opacity=".35"/><path d="M15 15l1.5 2M18 15l1.5 2" opacity=".6"/>',
   actionMount: '<rect x="4" y="17" width="16" height="4" rx="1"/><path d="M7 17v-6a2.5 2.5 0 0 1 5 0v6M12 17v-6a2.5 2.5 0 0 1 5 0v6"/><circle cx="12" cy="11" r="1.2"/>',
   plugMount: '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M8 9h7l2 2v4H8z"/><circle cx="5.5" cy="12" r=".8"/><circle cx="18.5" cy="12" r=".8" opacity="0"/>',
@@ -1350,8 +1351,8 @@ const HELP = {
  },
  "droneCheck": {
   "tip": "Rahmen prüfen: Propeller, Teile, Gewicht, Schwerpunkt, Schub",
-  "hilfe": "Drohne → „Drohnen-Check“ (oder rechts unter „Projekt“): Tracery rechnet mit dem CAD-Kern nach, ob sich die Propeller berühren, ob ein Teil in einen Propellerkreis ragt, ob Teile ineinanderstecken, wie schwer die Drohne ist, wo der Schwerpunkt liegt und – wenn du den Schub pro Motor einträgst – wie viel Schub sie im Verhältnis zum Gewicht hat. Beim Nachbau eines Herstellerrahmens vergleicht er das Rahmengewicht mit dem Original.",
-  "tipp": "Der Schwerpunkt sollte fast genau in der Mitte zwischen den vier Motoren liegen. Liegt er hinten, schieb den Akku nach vorne."
+  "hilfe": "Drohne → „Drohnen-Check“ (oder rechts unter „Projekt“): Tracery rechnet mit dem CAD-Kern nach, ob sich die Propeller berühren, ob ein Teil in einen Propellerkreis ragt, ob Teile ineinanderstecken, wie schwer die Drohne ist, wo der Schwerpunkt liegt und – wenn du den Schub pro Motor einträgst – wie viel Schub sie im Verhältnis zum Gewicht hat. Beim Nachbau eines Herstellerrahmens vergleicht er das Rahmengewicht mit dem Original. Das geht auch mit einem selbst gebauten Rahmen: Setz mindestens drei Motoren aus „Kaufteile“ auf (gern einen Motor und ein Kreismuster) und dazu Propeller – oder trag die Propellergröße im Check ein.",
+  "tipp": "Der Schwerpunkt sollte fast genau in der Mitte zwischen den Motoren liegen. Liegt er hinten, schieb den Akku nach vorne."
  },
  "plateDxf": {
   "tip": "Carbon-Platten als 2D-Zeichnung für die Fräse",
@@ -1487,6 +1488,11 @@ const HELP = {
   "tip": "Zeigt, wo beim 3D-Druck Stützen nötig sind",
   "hilfe": "Färbt alle Flächen rot, die steiler als der Grenzwinkel nach unten zeigen und nicht auf dem Druckbett liegen – dort hängt das Material beim Drucken in der Luft. Das Druckbett ist die Unterseite deiner Teile. Unten steht, wie viel Fläche Stützen braucht.",
   "tipp": "45° schaffen die meisten Drucker ohne Stützen. Wird viel rot: Teil anders hinlegen, eine Fase statt einer waagerechten Kante, oder in zwei Teile teilen."
+ },
+ "wind": {
+  "tip": "Stirnfläche: so viel Fläche zeigt die Drohne dem Fahrtwind",
+  "hilfe": "Ansicht → „Fahrtwind (Stirnfläche)“: Die Kamera schaut aus der Richtung, aus der der Wind kommt, wenn die Drohne nach vorne fliegt. Mit „Neigung“ kippst du die Drohne wie im schnellen Flug mit der Nase nach unten. Unten steht die Fläche, die sie dem Wind zeigt – Tracery misst sie genau aus dem Schattenriss. Propeller zählen nur mit, wenn du das Häkchen setzt.",
+  "tipp": "Vergleich zwei Varianten bei der gleichen Neigung: Die mit der kleineren Stirnfläche bremst weniger. Bei Speed-Drohnen mit geneigten Motoren fliegt der Rumpf schnell fast waagerecht – dann zählt die Fläche bei kleiner Neigung."
  }
 };
 
@@ -1594,6 +1600,51 @@ const Model = (() => {
     for (const p of chain) m.multiply(localMatrix(p, new THREE.Matrix4()));
     if (f) m.multiply(localMatrix(f.item, new THREE.Matrix4()));
     return m;
+  }
+  // Lage jeder Kopie einer Muster-Gruppe im Gruppen-Koordinatensystem – genau wie der Kern sie baut; die erste ist das Original
+  function patternMatrices(g, V) {
+    const I = new THREE.Matrix4(), out = [I];
+    if (!g.p || g.p.op !== 'pattern') return out;
+    const p = g.p.pt === 'path' ? pathPatternParams(g, V) : resolveP(g.p, V), N = (k, d) => num(p[k], V, d);
+    const rot = (c, ax, deg) => { const a = new THREE.Vector3(...ax).normalize(); return new THREE.Matrix4().makeTranslation(c[0], c[1], c[2]).multiply(new THREE.Matrix4().makeRotationAxis(a, (deg * Math.PI) / 180)).multiply(new THREE.Matrix4().makeTranslation(-c[0], -c[1], -c[2])); };
+    const refl = (nn, o) => { const v = new THREE.Vector3(...nn).normalize(), a = v.x, b = v.y, c = v.z, d = a * o[0] + b * o[1] + c * o[2]; return new THREE.Matrix4().set(1 - 2 * a * a, -2 * a * b, -2 * a * c, 2 * d * a, -2 * a * b, 1 - 2 * b * b, -2 * b * c, 2 * d * b, -2 * a * c, -2 * b * c, 1 - 2 * c * c, 2 * d * c, 0, 0, 0, 1); };
+    if (p.pt === 'rect') {
+      const nx = clamp(Math.round(N('nx', 1)), 1, 60), ny = clamp(Math.round(N('ny', 1)), 1, 60), dx = N('dx', 10), dy = N('dy', 10);
+      for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) if (i || j) out.push(new THREE.Matrix4().makeTranslation(i * dx, j * dy, 0));
+    } else if (p.pt === 'circ') {
+      const n = clamp(Math.round(N('n', 4)), 1, 120), ang = N('ang', 360);
+      const step = Math.abs(Math.abs(ang) - 360) < 1e-9 ? 360 / n : n > 1 ? ang / (n - 1) : 0;
+      const picked = p.axis === 'pick' && Array.isArray(p.ad) && Array.isArray(p.ao);
+      const ax = picked ? p.ad.map(Number) : p.axis === 'x' ? [1, 0, 0] : p.axis === 'y' ? [0, 1, 0] : [0, 0, 1];
+      const c = picked ? p.ao.map(Number) : [N('cx', 0), N('cy', 0), N('cz', 0)];
+      for (let k = 1; k < n; k++) out.push(rot(c, ax, k * step));
+    } else if (p.pt === 'path') {
+      for (const q of (p.places || []).slice(1, 200)) {
+        const d = (q.d || [0, 0, 0]).map(Number), m = new THREE.Matrix4().makeTranslation(d[0], d[1], d[2]);
+        if (p.align && Math.abs(Number(q.a) || 0) > 1e-9) m.multiply(rot(p.p0, p.n, Number(q.a)));
+        out.push(m);
+      }
+    } else if (p.pt === 'mirror' && p.plane === 'FACE' && Array.isArray(p.mn) && Array.isArray(p.mo)) out.push(refl(p.mn.map(Number), p.mo.map(Number)));
+    else if (p.pt === 'mirror') {
+      const pl = ['XY', 'XZ', 'YZ'].includes(p.plane) ? p.plane : 'YZ', n = { YZ: [1, 0, 0], XZ: [0, 1, 0], XY: [0, 0, 1] }[pl], off = N('off', 0);
+      out.push(refl(n, [n[0] * off, n[1] * off, n[2] * off]));
+    }
+    return out;
+  }
+  // Weltlage eines Teils – einmal je Kopie, wenn es in Muster-Gruppen steckt (z. B. ein Motor, viermal im Kreis kopiert)
+  function instanceMatrices(doc, id, V = vars(doc).v) {
+    const f = find(doc, id); if (!f) return [];
+    const chain = parentsOf(doc, id), prev = curV; curV = V;
+    try {
+      let mats = [new THREE.Matrix4()];
+      for (const g of chain) {
+        const L = localMatrix(g, new THREE.Matrix4()), P = patternMatrices(g, V), next = [];
+        for (const m of mats) for (const q of P) next.push(m.clone().multiply(L).multiply(q));
+        mats = next.slice(0, 2000);
+      }
+      const Li = localMatrix(f.item, new THREE.Matrix4());
+      return mats.map((m) => m.multiply(Li));
+    } finally { curV = prev; }
   }
   function parentWorld(doc, id) {
     const chain = parentsOf(doc, id);
@@ -1852,7 +1903,7 @@ const Model = (() => {
     walk(doc.items, (it) => { it.t = Object.assign(T0(), it.t || {}); it.p = it.p || {}; it.finishes = it.finishes || []; if (!it.role) it.role = 'solid'; if (!it.color) it.color = nextColor(); });
     return doc;
   }
-  return { loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  return { patternMatrices, instanceMatrices, loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 
 // ---- 15-sketchcore.js ----
@@ -4342,6 +4393,31 @@ const Viewer = (() => {
   }
 
   // Bild der Szene für Vorschaubilder
+  // Schattenriss: Fläche (mm²), die die Teile aus Blickrichtung dir verdecken – z. B. die Stirnfläche im Fahrtwind.
+  // Gerechnet durch Pixelzählen in einem eigenen Bild (orthografisch), unabhängig von der Kamera.
+  function silhouette(ids, dir, res = 1024) {
+    const show = ids.map((id) => nodes.get(id)).filter((n) => n && n.mesh);
+    if (!show.length) return { area: 0, px: 0 };
+    const d = new THREE.Vector3(...dir).normalize();
+    groups.nodes.updateMatrixWorld(true);
+    const box = new THREE.Box3(); for (const n of show) box.union(n.mesh.geometry.boundingBox.clone().applyMatrix4(n.mesh.matrixWorld));
+    const c = box.getCenter(new THREE.Vector3()), R = Math.max(1, box.getSize(new THREE.Vector3()).length() / 2) * 1.02;
+    const oc = new THREE.OrthographicCamera(-R, R, R, -R, 0.1, 4 * R + 20);
+    oc.up.copy(Math.abs(d.z) > 0.95 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(0, 0, 1));
+    oc.position.copy(c).addScaledVector(d, -(2 * R + 10)); oc.lookAt(c); oc.updateProjectionMatrix(); oc.updateMatrixWorld();
+    const sc = new THREE.Scene(), mat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+    for (const n of show) { const m = new THREE.Mesh(n.mesh.geometry, mat); m.matrixAutoUpdate = false; m.matrix.copy(n.mesh.matrixWorld); m.matrixWorld.copy(n.mesh.matrixWorld); sc.add(m); }
+    const rt = new THREE.WebGLRenderTarget(res, res);
+    const oldRT = renderer.getRenderTarget(), oldCol = renderer.getClearColor(new THREE.Color()), oldA = renderer.getClearAlpha(), oldClip = renderer.localClippingEnabled;
+    renderer.setRenderTarget(rt); renderer.setClearColor(0x000000, 1); renderer.localClippingEnabled = false; renderer.clear(); renderer.render(sc, oc);
+    const buf = new Uint8Array(res * res * 4); renderer.readRenderTargetPixels(rt, 0, 0, res, res, buf);
+    renderer.setRenderTarget(oldRT); renderer.setClearColor(oldCol, oldA); renderer.localClippingEnabled = oldClip;
+    rt.dispose(); mat.dispose();
+    let px = 0; for (let i = 0; i < buf.length; i += 4) if (buf[i] > 127) px++;
+    const s = (2 * R) / res;
+    needsRender = true;
+    return { area: px * s * s, px, c: c.toArray(), R };
+  }
   function snapshot(w = 480, hgt = 300) {
     const old = renderer.getSize(new THREE.Vector2());
     renderer.setSize(w, hgt, false); camera.aspect = w / hgt; camera.updateProjectionMatrix();
@@ -4352,7 +4428,7 @@ const Viewer = (() => {
   }
 
   return {
-    init, requestRender, setClip, setXray, setOffsets, baseBox, renderInset, setAdaptive, setCompare, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, setSelectedEdges, clearHover,
+    init, requestRender, setClip, setXray, setOffsets, baseBox, renderInset, silhouette, setAdaptive, setCompare, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, setSelectedEdges, clearHover,
     edgePositions, pick, pickGhost, pickProxy, setProxies, clearProxies, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, boxVisible, sceneBox, snapshot, makeFat, disposeFat, faceOverlay, faceArea,
     get camera() { return camera; }, get activeCamera() { return cam(); }, get ortho() { return ortho; }, get gridStep() { return gridStep; }, get controls() { return controls; }, get scene() { return scene; }, get groups() { return groups; }, get nodes() { return nodes; }, get canvas() { return renderer.domElement; }, get theme() { return theme; }, get container() { return container; },
     get clip() { return vis.clip; }, get xray() { return vis.xray; }, get lowRes() { return lowRes; },  get pixelRatio() { return renderer.getPixelRatio(); },
@@ -8124,6 +8200,47 @@ const Views = (() => {
     st.ov = o; drawOverhang(); sync();
   }
 
+  // ---------- Fahrtwind (Stirnfläche) ----------
+  // Blick aus der Richtung, aus der der Wind kommt: Die Drohne fliegt nach vorne (−Y) und ist um „Neigung“ mit der Nase nach unten gekippt.
+  // Die Fläche, die sie dem Wind zeigt, misst der Viewer per Schattenriss. Propeller zählen auf Wunsch mit.
+  const isProp = (id) => {
+    const it = App.doc.items.find((x) => x.id === id); if (!it) return false;
+    if (it.kind === 'part' && it.p && it.p.lib === 'buyProp') return true;
+    if (it.kind === 'group') { let any = false, all = true; Model.walk(it.children || [], (k) => { if (k.kind === 'group') return; any = true; if (!(k.kind === 'part' && k.p && k.p.lib === 'buyProp')) { all = false; return false; } }); if (any && all) return true; }
+    return /^Propeller/.test(it.name || '') && it.kind === 'group';
+  };
+  const windDir = (angle) => { const a = (angle * Math.PI) / 180; return [0, Math.cos(a), -Math.sin(a)]; };
+  const windIds = (withProps) => [...Viewer.nodes.entries()].filter(([id, n]) => n.obj.visible && n.role !== 'hole' && n.mesh && (withProps || !isProp(id))).map(([id]) => id);
+  function windArea(angle = 0, withProps = false) { return Viewer.silhouette(windIds(withProps), windDir(angle)).area; }
+  function drawWind(moveCam) {
+    const o = st.wind; if (!o) return;
+    const r = Viewer.silhouette(windIds(o.props), windDir(o.angle)); o.area = r.area;
+    const t = o.bar.querySelector('#wind-area');
+    if (t) t.innerHTML = r.area > 0 ? `Stirnfläche <b>${fmt(r.area / 100, r.area < 100 ? 2 : 1)} cm²</b>` + (o.props ? ' mit Propellern' : ' ohne Propeller') : 'Nichts zu sehen.';
+    if (moveCam && r.c) Viewer.lookAtPlane(r.c, windDir(o.angle).map((v) => -v), [1, 0, 0], r.R * 1.15);
+    Viewer.requestRender();
+  }
+  function wind(on = !st.wind) {
+    if (!on) { if (st.wind) { const o = st.wind; o.bar.remove(); st.wind = null; Viewer.setOrtho(o.ortho); Viewer.restoreCamera(o.cam); } sync(); return; }
+    if (st.wind) return;
+    const o = { angle: 0, props: false, area: 0, cam: Viewer.saveCamera(), ortho: Viewer.ortho };
+    const bar = h('div', { class: 'viewbar', role: 'toolbar', 'aria-label': 'Fahrtwind' });
+    const head = h('div', { class: 'vb-head' }, h('span', { class: 'title' }, 'Fahrtwind'));
+    const close = h('button', { type: 'button', class: 'vb-x', 'aria-label': 'Fahrtwind schließen', 'data-tip': 'Schließen' }); close.innerHTML = icon('close'); close.onclick = () => wind(false);
+    head.append(close);
+    const rng = h('input', { type: 'range', id: 'wind-angle', min: 0, max: 60, step: 5, value: 0, 'aria-label': 'Neigung nach vorne' });
+    const val = h('span', { class: 'vb-l', id: 'wind-angle-v' }, '0°');
+    rng.oninput = () => { o.angle = +rng.value; val.textContent = rng.value + '°'; drawWind(true); };
+    const cb = h('input', { type: 'checkbox', id: 'wind-props' }); cb.onchange = () => { o.props = cb.checked; drawWind(false); };
+    bar.append(head,
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, 'Neigung'), rng, val),
+      h('div', { class: 'vb-row' }, h('label', { class: 'vb-hint' }, cb, ' Propeller mitzählen')),
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint', id: 'wind-area' }, '')),
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint' }, 'So sieht der Wind deine Drohne, wenn sie mit dieser Neigung nach vorne fliegt. Kleinere Fläche = weniger Luftwiderstand.')));
+    bars().append(bar); o.bar = bar;
+    st.wind = o; Viewer.setOrtho(true); drawWind(true); sync();
+  }
+
   // ---------- Menü und Zustand ----------
   function menu(anchor) {
     UI.menu(anchor, [
@@ -8132,10 +8249,11 @@ const Views = (() => {
       { label: (st.exGoal > 0 ? '✓ ' : '') + 'Explosion', icon: 'explode', kbd: 'U', help: 'explode', run: () => explode() },
       { label: (st.focus ? '✓ ' : '') + 'Fokus-Vorschau', icon: 'focusView', help: 'focusView', run: () => focus() },
       { label: (st.ov ? '✓ ' : '') + 'Überhänge (3D-Druck)', icon: 'overhang', help: 'overhang', run: () => overhang() },
+      { label: (st.wind ? '✓ ' : '') + 'Fahrtwind (Stirnfläche)', icon: 'wind', help: 'wind', run: () => wind() },
     ]);
   }
   function sync() {
-    const b = $('#t-views'); if (b) b.classList.toggle('active', !!(st.cut || st.xray || st.exGoal > 0 || st.focus || st.ov));
+    const b = $('#t-views'); if (b) b.classList.toggle('active', !!(st.cut || st.xray || st.exGoal > 0 || st.focus || st.ov || st.wind));
     const x = document.querySelector('.view-btns [data-view="xray"]'); if (x) x.classList.toggle('on', st.xray);
     const c = document.querySelector('.view-btns [data-view="cut"]'); if (c) c.classList.toggle('on', !!st.cut);
   }
@@ -8152,13 +8270,15 @@ const Views = (() => {
     App.on('results', () => {
       if (st.ex > 1e-4) setEx(st.ex);
       if (st.ov) drawOverhang();
+      if (st.wind) drawWind(false);
       if (st.cut) { drawCutHelper(); const r = st.cut.bar && st.cut.bar.querySelector('#cut-range'); if (r) { const b = modelBox(); const ax = AX[st.cut.plane]; r.min = Math.floor(b.min.getComponent(ax) - 1); r.max = Math.ceil(b.max.getComponent(ax) + 1); } }
     });
   }
-  function reset() { section(false); if (st.xray) xray(false); if (st.exGoal > 0 || st.ex > 0) { cancelAnimationFrame(st.exAnim); st.exAnim = null; st.ex = st.exGoal = 0; Viewer.setOffsets(null); if (st.exBar) { st.exBar.remove(); st.exBar = null; } } focus(false); overhang(false); }
+  function reset() { section(false); if (st.xray) xray(false); if (st.exGoal > 0 || st.ex > 0) { cancelAnimationFrame(st.exAnim); st.exAnim = null; st.ex = st.exGoal = 0; Viewer.setOffsets(null); if (st.exBar) { st.exBar.remove(); st.exBar = null; } } focus(false); overhang(false); wind(false); }
   return {
     init, section, xray, explode, collapse, focus, overhang, menu, onKey, reset, sync, bars,
     get overhangArea() { return st.ov ? st.ov.area : null; },
+    wind, windArea, get windInfo() { return st.wind ? { angle: st.wind.angle, props: st.wind.props, area: st.wind.area } : null; },
     overhangOf: (id, angle = 45) => { const d = overhangData(angle, [id]); return { area: d.area, c: d.c }; },
     get cut() { return st.cut ? { plane: st.cut.plane, off: st.cut.off, flip: st.cut.flip } : null; },
     get isXray() { return st.xray; }, get exploded() { return st.ex > 1e-4 || st.exGoal > 0; }, get explodeAmount() { return st.ex; },
@@ -14135,29 +14255,64 @@ const DroneCheck = (() => {
     // geneigte Motoren (Speed-Rumpf): Propellerebene steht schräg, der Prüfkörper liegt entlang der Motorachse
     const tilt = typeof V.Motorneigung === 'number' ? V.Motorneigung : 0, keil = typeof V.Keilhöhe === 'number' ? V.Keilhöhe : 0;
     const zProp = V.Armdicke + keil + (mh + 1) * Math.cos(R(tilt)), dy = -(mh + 1) * Math.sin(R(tilt));
-    return { A, wv, wh, zoll: V.Propeller, D: V.Propeller * 25.4, zProp, dy, tilt, motors, motorGroup, propGroup, V };
+    const D = V.Propeller * 25.4, skip = [motorGroup && motorGroup.id, propGroup && propGroup.id].filter(Boolean);
+    const pdir = tilt ? [0, -Math.sin(R(tilt)), Math.cos(R(tilt))] : null;
+    const probes = motors.map(([, x, y]) => ({ c: [x, y + dy, zProp], r: D / 2 + 1, h: 6, skip, ...(pdir ? { dir: pdir } : {}) }));   // Propellerebene: 1 bis 7 mm über dem Motor
+    return { A, wv, wh, zoll: V.Propeller, D, zProp, dy, tilt, motors, motorGroup, propGroup, V, probes, skipPairs: propGroup ? [propGroup.id] : [], gap: DroneTpl.tipGap(A, V.Propeller, wv, wh), n: 4 };
   }
-  const isDrone = (doc = App.doc) => !!geometry(doc);
+  // Selbst gebauter Rahmen: Motoren und Propeller aus den Kaufteilen (auch in Muster-Gruppen) – ab drei Motoren
+  function freeGeometry(doc, V) {
+    const mot = [], props = [];
+    Model.walk(doc.items, (it) => { if (it.kind === 'part' && it.p && !it.suppressed && !it.hidden) { if (it.p.lib === 'buyMotor') mot.push(it); else if (it.p.lib === 'buyProp') props.push(it); } });
+    const act = (it) => Model.isActive(doc, it.id) && !Model.parentsOf(doc, it.id).some((g) => g.suppressed);
+    const M = [];
+    for (const it of mot.filter(act)) for (const W of Model.instanceMatrices(doc, it.id, V)) {
+      const b = new THREE.Vector3().applyMatrix4(W), ax = new THREE.Vector3(0, 0, 1).transformDirection(W).normalize();
+      M.push({ id: it.id, b, ax, h: Model.num(it.p.h, V, 19.7), d: Model.num(it.p.d, V, 28.5) });
+      if (M.length > 16) break;
+    }
+    if (M.length < 3) return null;
+    const pz = props.filter(act).map((it) => Model.num(it.p.zoll, V, 5));
+    const zoll = pz.length ? Math.max(...pz) : doc.drone && Number(doc.drone.zoll) > 0 ? Number(doc.drone.zoll) : typeof V.Propeller === 'number' ? V.Propeller : null;
+    const D = zoll ? zoll * 25.4 : null;
+    // Namen nach der Lage um die Mitte (vorne = −Y)
+    const c = M.reduce((a, m) => a.add(m.b), new THREE.Vector3()).divideScalar(M.length);
+    const rr = Math.max(...M.map((m) => Math.hypot(m.b.x - c.x, m.b.y - c.y))) || 1;
+    const where = (m) => [Math.abs(m.b.y - c.y) > 0.38 * rr ? (m.b.y < c.y ? 'vorne' : 'hinten') : '', Math.abs(m.b.x - c.x) > 0.38 * rr ? (m.b.x > c.x ? 'rechts' : 'links') : ''].filter(Boolean).join(' ') || 'Mitte';
+    const names = M.map(where), dup = (n) => names.filter((x) => x === n).length > 1;
+    const motors = M.map((m, i) => [dup(names[i]) ? `${names[i]} (${i + 1})` : names[i], m.b.x, m.b.y, m]);
+    // Prüfkörper: Ring in der Propellerebene (1 bis 7 mm über der Glocke), innen frei für Welle und Mutter
+    const tops = (list) => [...new Set(list.map((it) => Model.topOf(doc, it.id)).filter((t) => t && (t.kind === 'part' ? !!(t.p && String(t.p.lib || '').startsWith('buy')) : (() => { let pure = true; Model.walk(t.children || [], (k) => { if (k.kind !== 'group' && !(k.kind === 'part' && k.p && String(k.p.lib || '').startsWith('buy'))) { pure = false; return false; } }); return pure; })())).map((t) => t.id))];
+    const skip = tops([...mot, ...props]), propTops = tops(props);
+    const probes = D ? M.map((m) => ({ c: m.b.clone().addScaledVector(m.ax, m.h + 1).toArray(), r: D / 2 + 1, h: 6, ri: Math.max(4.5, m.d * 0.25), dir: m.ax.toArray(), skip })) : [];
+    let A = 0, gap = Infinity;
+    const pc = M.map((m) => m.b.clone().addScaledVector(m.ax, m.h + 1));
+    for (let i = 0; i < M.length; i++) for (let j = i + 1; j < M.length; j++) { const d = pc[i].distanceTo(pc[j]); A = Math.max(A, d); if (D) gap = Math.min(gap, d - D); }
+    return { free: true, A, zoll, D, motors, V, probes, skipPairs: propTops, gap: D ? gap : null, n: M.length, tilt: 0, zoll_from: pz.length ? 'props' : zoll ? 'eingetragen' : null };
+  }
+  function geometryAny(doc = App.doc) {
+    return geometry(doc) || freeGeometry(doc, Model.vars(doc).v);
+  }
+  const isDrone = (doc = App.doc) => !!geometryAny(doc);
   const label = (id) => { const f = Model.find(App.doc, id); return f ? Model.label(f.item) : 'ein Teil'; };
   const thrustOf = (doc = App.doc) => (doc.drone && doc.drone.thrustG != null && doc.drone.thrustG !== '' ? Model.num(doc.drone.thrustG, Model.vars(doc).v, 0) : null);
   async function run() {
-    const doc = App.doc, g = geometry(doc);
+    const doc = App.doc, g = geometryAny(doc);
     if (!g) return null;
     const rev = App.revision, out = [];
+    if (g.free) out.push({ id: 'free', title: 'Selbst gebauter Rahmen', s: 'info', text: `${g.n} Motoren aus deinen Kaufteilen erkannt` + (g.zoll ? `, Propeller ${fmt(g.zoll, 1)}" (${g.zoll_from === 'props' ? 'aus den Propellern im Modell' : 'eingetragen'}).` : '. Für die Propeller-Prüfungen fehlt noch die Größe – leg Propeller aus „Kaufteile“ auf die Motoren oder trag sie unten ein.') });
     // 1. Abstand der Propeller untereinander
-    const gap = DroneTpl.tipGap(g.A, g.zoll, g.wv, g.wh);
-    out.push({ id: 'gap', title: 'Propeller untereinander', s: gap < 0 ? 'bad' : gap < 5 ? 'warn' : 'ok', text: gap < 0 ? `Die Propeller überlappen sich um ${fmt(-gap, 1)} mm – Achsabstand vergrößern.` : `${fmt(gap, 1)} mm Luft zwischen den Propellerspitzen.` });
+    const gap = g.gap;
+    if (gap != null) out.push({ id: 'gap', title: 'Propeller untereinander', s: gap < 0 ? 'bad' : gap < 5 ? 'warn' : 'ok', text: gap < 0 ? `Die Propeller überlappen sich um ${fmt(-gap, 1)} mm – ${g.free ? 'Motoren weiter auseinander setzen' : 'Achsabstand vergrößern'}.` : `${fmt(gap, 1)} mm Luft zwischen den Propellerspitzen.` });
     // 2./3. Kollisionen aus dem CAD-Kern
-    const skip = [g.motorGroup && g.motorGroup.id, g.propGroup && g.propGroup.id].filter(Boolean);
-    const dir = g.tilt ? [0, -Math.sin(R(g.tilt)), Math.cos(R(g.tilt))] : null;
-    const probes = g.motors.map(([, x, y]) => ({ c: [x, y + g.dy, g.zProp], r: g.D / 2 + 1, h: 6, skip, ...(dir ? { dir } : {}) }));   // Propellerebene: 1 bis 7 mm über dem Motor
     let cl = null;
-    try { cl = await Kernel.call('clashes', { scene: Model.kernelScene(doc), probes, skipPairs: g.propGroup ? [g.propGroup.id] : [] }); } catch (_) {}
+    try { cl = await Kernel.call('clashes', { scene: Model.kernelScene(doc), probes: g.probes, skipPairs: g.skipPairs }); } catch (_) {}
+    if (cl && !g.probes.length) cl.hits = [];
     if (cl) {
       const bad = [];
       cl.hits.forEach((hs, i) => { if (hs.length) bad.push(`Propeller ${g.motors[i][0]} trifft ${hs.map((x) => label(x.id)).join(', ')}`); });
       const ids = [...new Set(cl.hits.flat().map((x) => x.id))];
-      out.push({ id: 'props', title: 'Propellerkreise frei', s: bad.length ? 'bad' : 'ok', text: bad.length ? bad.join('. ') + '.' : 'Kein Teil ragt in die Propellerkreise (1 mm Sicherheitsabstand).', ids });
+      if (g.probes.length) out.push({ id: 'props', title: 'Propellerkreise frei', s: bad.length ? 'bad' : 'ok', text: bad.length ? bad.join('. ') + '.' : 'Kein Teil ragt in die Propellerkreise (1 mm Sicherheitsabstand).', ids });
       const pairs = cl.pairs.map((p) => `${label(p.a)} und ${label(p.b)} (${fmt(p.v / 1000, 2)} cm³)`);
       out.push({ id: 'clash', title: 'Teile stecken nicht ineinander', s: pairs.length ? 'warn' : 'ok', text: pairs.length ? 'Ineinander: ' + pairs.join('; ') + '.' : 'Alle Teile haben ihren eigenen Platz.', ids: [...new Set(cl.pairs.flatMap((p) => [p.a, p.b]))] });
     }
@@ -14174,7 +14329,7 @@ const DroneCheck = (() => {
       }
       // 5. Schwerpunkt gegenüber der Mitte zwischen den Motoren
       if (m.com) {
-        const cx = g.motors.reduce((s, x) => s + x[1], 0) / 4, cy = g.motors.reduce((s, x) => s + x[2], 0) / 4;
+        const cx = g.motors.reduce((s, x) => s + x[1], 0) / g.motors.length, cy = g.motors.reduce((s, x) => s + x[2], 0) / g.motors.length;
         const dx = m.com[0] - cx, dy = m.com[1] - cy, d = Math.hypot(dx, dy);
         const dir = [Math.abs(dy) > 0.5 ? (dy < 0 ? 'nach vorne' : 'nach hinten') : '', Math.abs(dx) > 0.5 ? (dx > 0 ? 'nach rechts' : 'nach links') : ''].filter(Boolean).join(' und ');
         const akku = doc.items.some((i) => /akku/i.test(i.name || '') && !i.hidden);
@@ -14184,16 +14339,17 @@ const DroneCheck = (() => {
       // 6. Schub zu Gewicht
       const t = thrustOf(doc);
       if (t) {
-        const tw = (4 * t) / m.mass;
+        const tw = (g.n * t) / m.mass;
         const src = doc.drone && doc.drone.thrustSrc ? ` (Richtwert ${fmt(t, 0)} g pro Motor: ${doc.drone.thrustSrc})` : '';
         out.push({ id: 'tw', title: 'Schub zu Gewicht', s: tw < 2 ? 'bad' : tw < 4 ? 'warn' : 'ok', text: `${fmt(tw, 1)} : 1 – ` + (tw < 2 ? 'zu schwach, hebt kaum ab.' : tw < 4 ? 'reicht für ruhiges Fliegen und Long Range.' : tw < 8 ? 'gut für Freestyle.' : 'genug für Rennen.') + src });
       } else out.push({ id: 'tw', title: 'Schub zu Gewicht', s: 'info', text: 'Trag unten den Schub pro Motor aus der Schubtabelle ein.' });
     }
     // 7. Speed-Rumpf: Form und Fluglage
     const V = g.V;
-    if (typeof V.Rumpfdurchmesser === 'number' && typeof V.Nasenlänge === 'number') {
+    if (!g.free && typeof V.Rumpfdurchmesser === 'number' && typeof V.Nasenlänge === 'number') {
       const L = V.Nasenlänge + V.Rumpflänge + V.Hecklänge, D = V.Rumpfdurchmesser;
-      out.push({ id: 'aero', title: 'Stromlinie', s: 'info', text: `Rumpf ${fmt(L, 0)} mm lang und ${fmt(D, 0)} mm dick (${fmt(L / D, 1)} : 1), Akku und Elektronik liegen innen.` + (g.tilt ? ` Motoren ${fmt(g.tilt, 0)}° geneigt: Fliegt die Drohne mit ${fmt(g.tilt, 0)}° Schräglage, liegt der Rumpf genau im Fahrtwind.` : ' Mit geneigten Motoren (Maß „Motorneigung“) läge der Rumpf im schnellen Flug flach im Wind.') });
+      let fa = null; try { if (typeof Views !== 'undefined' && Viewer.nodes.size) fa = Views.windArea(0); } catch (_) {}
+      out.push({ id: 'aero', title: 'Stromlinie', s: 'info', text: `Rumpf ${fmt(L, 0)} mm lang und ${fmt(D, 0)} mm dick (${fmt(L / D, 1)} : 1), Akku und Elektronik liegen innen.` + (fa ? ` Stirnfläche von vorne ohne Propeller: ${fmt(fa / 100, 1)} cm² (Ansicht „Fahrtwind“).` : '') + (g.tilt ? ` Motoren ${fmt(g.tilt, 0)}° geneigt: Fliegt die Drohne mit ${fmt(g.tilt, 0)}° Schräglage, liegt der Rumpf genau im Fahrtwind.` : ' Mit geneigten Motoren (Maß „Motorneigung“) läge der Rumpf im schnellen Flug flach im Wind.') });
     }
     last = { rev, list: out };
     return out;
@@ -14209,19 +14365,22 @@ const DroneCheck = (() => {
     return box;
   }
   async function dialog() {
-    if (!isDrone()) { UI.toast('Der Drohnen-Check braucht einen Rahmen aus dem Frame-Assistenten (mit Achsabstand, Armwinkel und Propeller unter „Maße“).', { icon: 'info', ms: 5000 }); return; }
+    if (!isDrone()) { UI.toast('Der Drohnen-Check braucht einen Rahmen aus dem Frame-Assistenten – oder mindestens drei Motoren aus „Kaufteile“ an deinem eigenen Rahmen.', { icon: 'info', ms: 5000 }); return; }
     const body = h('div', { class: 'chk' }, h('div', { class: 'hint-box', id: 'chk-wait' }, 'Prüfe … (der CAD-Kern rechnet die Kollisionen genau aus)'));
     const m = UI.modal({ title: 'Drohnen-Check', body, wide: true, actions: [{ label: 'Schließen', primary: true }] });
     const list = await run();
     body.innerHTML = '';
     body.append(rows(list || [], (ids) => { m.close(); App.select(ids); Viewer.fit(ids.map((id) => (Model.topOf(App.doc, id) || {}).id).filter(Boolean)); }));
     const f = UI.numField({ id: 'chk-thrust', label: 'Schub deines Motors (Höchstwert aus der Schubtabelle)', value: App.doc.drone && App.doc.drone.thrustG != null ? App.doc.drone.thrustG : '', unit: 'g', onCommit: (v) => { App.change('Schub eingetragen', (doc) => { doc.drone = doc.drone || {}; doc.drone.thrustG = v; doc.drone.thrustSrc = null; }); m.close(); setTimeout(dialog, 50); } });
-    body.append(h('div', { class: 'fields', style: { marginTop: '10px' } }, f));
+    const fs = h('div', { class: 'fields', style: { marginTop: '10px' } }, f);
+    const g = geometryAny();
+    if (g && g.free && g.zoll_from !== 'props') fs.append(UI.numField({ id: 'chk-zoll', label: 'Propeller-Durchmesser', value: App.doc.drone && App.doc.drone.zoll ? App.doc.drone.zoll : '', unit: '"', onCommit: (v) => { App.change('Propellergröße eingetragen', (doc) => { doc.drone = doc.drone || {}; doc.drone.zoll = v; }); m.close(); setTimeout(dialog, 50); } }));
+    body.append(fs);
     ev.emit('checked', list);
   }
   function summary() { return last && last.rev === App.revision ? last.list : null; }
   const ev = makeEmitter();
-  return { geometry, isDrone, run, dialog, rows, summary, thrustOf, on: ev.on };
+  return { geometry: geometryAny, isDrone, run, dialog, rows, summary, thrustOf, on: ev.on };
 })();
 
 // ---------- Platten als DXF für die Fräse ----------
@@ -14309,7 +14468,7 @@ const Variants = (() => {
       const m = await Mass.measureDoc(d);
       const t = DroneCheck.thrustOf(d);
       const g = DroneCheck.geometry(d);
-      rowsOut.push({ v, mass: m ? m.mass : null, tw: t && m ? (4 * t) / m.mass : null, gap: g ? DroneTpl.tipGap(g.A, g.zoll, g.wv, g.wh) : null });
+      rowsOut.push({ v, mass: m ? m.mass : null, tw: t && m && g ? (g.n * t) / m.mass : null, gap: g ? g.gap : null });
     }
     return { names, rows: rowsOut };
   }

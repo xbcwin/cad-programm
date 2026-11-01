@@ -1346,6 +1346,7 @@ export function createKernel(R, oc) {
         // Prüfkörper senkrecht oder – bei geneigten Motoren – entlang der Motorachse (dir)
         const dir = pr.dir || [0, 0, 1];
         cyl = R.makeCylinder(pr.r, pr.h, pr.c, dir);
+        if (pr.ri > 0 && pr.ri < pr.r) { const inner = R.makeCylinder(pr.ri, pr.h + 2, pr.c.map((v, k) => v - dir[k]), dir); const ring = cyl.cut(inner); safeDelete(cyl); safeDelete(inner); cyl = ring; }   // Ring: innen Platz für Welle und Mutter
         const e = pr.dir ? pr.r + pr.h : 0;
         const cb = pr.dir ? [pr.c[0] - e, pr.c[1] - e, pr.c[2] - e, pr.c[0] + e, pr.c[1] + e, pr.c[2] + e] : [pr.c[0] - pr.r, pr.c[1] - pr.r, pr.c[2], pr.c[0] + pr.r, pr.c[1] + pr.r, pr.c[2] + pr.h];
         solids.forEach((s, i) => { if ((pr.skip || []).includes(s.id) || !hit(cb, boxes[i])) return; const v = overlap(cyl, s.shape); if (v > 0.05) out.push({ id: s.id, v }); });
