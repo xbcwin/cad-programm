@@ -6,7 +6,18 @@ const Joints = (() => {
   const list = (doc = App.doc) => (doc && doc.joints) || [];
   const allOf = (id, doc = App.doc) => list(doc).filter((j) => j.a === id || j.b === id);
   const of = (id, doc = App.doc) => list(doc).find((j) => j.b === id) || list(doc).find((j) => j.a === id) || null;
-  const top = (id, doc = App.doc) => (doc && doc.items && doc.items.find((x) => x.id === id)) || null;
+  // Teil suchen – auch innerhalb von Gruppen (seit Sitzung 52)
+  const top = (id, doc = App.doc) => { if (!doc || !doc.items) return null; const f = Model.find(doc, id); return f ? f.item : null; };
+  const isTop = (id, doc = App.doc) => !!(doc && doc.items && doc.items.some((x) => x.id === id));
+  // Bewegung M (in Weltkoordinaten) für ein Teil in einer Gruppe: im Koordinatensystem der Gruppe ausdrücken
+  const conj = (doc, id, M) => { const P = Model.parentWorld(doc, id); return P.clone().invert().multiply(M).multiply(P); };
+  const related = (doc, a, b) => Model.parentsOf(doc, a).some((p) => p.id === b) || Model.parentsOf(doc, b).some((p) => p.id === a);
+  const inOp = (doc, id) => Model.parentsOf(doc, id).some((p) => p.p && p.p.op);
+  function refuse(doc, A, B) {
+    if (related(doc, A.id, B.id)) return 'Ein Teil kann kein Gelenk mit der eigenen Gruppe bekommen – wähl zwei Teile nebeneinander.';
+    if (inOp(doc, A.id) || inOp(doc, B.id)) return 'Teile in einem Muster oder einer Rechen-Gruppe (Teilen, Schnittmenge) können kein Gelenk bekommen.';
+    return null;
+  }
   const slide = (j) => j.kind === 'slide';
   const unit = (j) => (slide(j) ? 'mm' : '°');
   function stepMatrix(j, ang) {
@@ -15,8 +26,8 @@ const Joints = (() => {
     const R = new THREE.Matrix4().makeRotationAxis(d, (ang * Math.PI) / 180);
     return new THREE.Matrix4().makeTranslation(o.x, o.y, o.z).multiply(R).multiply(new THREE.Matrix4().makeTranslation(-o.x, -o.y, -o.z));
   }
-  function pose(j, ang, home) {
-    return stepMatrix(j, ang).multiply(new THREE.Matrix4().fromArray(home || j.home));
+  function pose(j, ang, home, doc = App.doc) {
+    return conj(doc, j.b, stepMatrix(j, ang)).multiply(new THREE.Matrix4().fromArray(home || j.home));
   }
   // Alle Gelenke, die weiter hinten in der Kette an rootId hängen (in Reihenfolge von vorne nach hinten)
   function downstream(doc, rootId) {
@@ -47,25 +58,30 @@ const Joints = (() => {
     }
     return false;
   }
-  function syncHome(b, j) {
-    const cur = Model.localMatrix(b), exp = pose(j, j.ang);
-    if (cur.elements.some((v, i) => Math.abs(v - exp.elements[i]) > 1e-4)) j.home = pose(j, -j.ang, cur.toArray()).toArray().map((v) => round(v, 9));
+  function syncHome(b, j, doc = App.doc) {
+    const cur = Model.localMatrix(b), exp = pose(j, j.ang, null, doc);
+    if (cur.elements.some((v, i) => Math.abs(v - exp.elements[i]) > 1e-4)) j.home = pose(j, -j.ang, cur.toArray(), doc).toArray().map((v) => round(v, 9));
   }
   // Hintere Glieder der Kette samt ihren Gelenkachsen um die Bewegung D mitnehmen
   function moveChain(doc, rootId, D) {
-    for (const k of downstream(doc, rootId)) {
-      const kb = doc.items.find((x) => x.id === k.b);
-      if (kb) syncHome(kb, k);
+    const ks = downstream(doc, rootId), moved = new Set([rootId, ...ks.map((k) => k.b)]);
+    for (const k of ks) {
+      const kb = top(k.b, doc);
+      // Steckt das Teil in einer Gruppe, die selbst mitwandert, fährt es schon mit – nur die Achse nachführen
+      const carried = Model.parentsOf(doc, k.b).some((p) => moved.has(p.id));
+      if (kb && !carried) syncHome(kb, k, doc);
       k.ao = new THREE.Vector3(...k.ao).applyMatrix4(D).toArray().map((v) => round(v, 6));
       k.ad = new THREE.Vector3(...k.ad).transformDirection(D).toArray().map((v) => round(v, 9));
-      k.home = D.clone().multiply(new THREE.Matrix4().fromArray(k.home)).toArray().map((v) => round(v, 9));
-      if (kb) Model.setFromMatrix(kb, pose(k, k.ang));
+      if (carried) continue;
+      k.home = conj(doc, k.b, D).multiply(new THREE.Matrix4().fromArray(k.home)).toArray().map((v) => round(v, 9));
+      if (kb) Model.setFromMatrix(kb, pose(k, k.ang, null, doc));
     }
   }
   // Gelenk ohne Klicken anlegen (für den KI-Kollegen): Achse o/d in Weltkoordinaten; liefert die Kennung oder eine Meldung
   function add(aId, bId, o, d, opts = {}) {
     const A = top(aId), B = top(bId);
-    if (!A || !B || A.id === B.id) return { ok: false, msg: 'Ein Gelenk braucht zwei verschiedene Teile ganz oben im Verlauf.' };
+    if (!A || !B || A.id === B.id) return { ok: false, msg: 'Ein Gelenk braucht zwei verschiedene Teile.' };
+    const why = refuse(App.doc, A, B); if (why) return { ok: false, msg: why };
     if (connected(App.doc, A.id, B.id)) return { ok: false, msg: `„${Model.label(A)}“ und „${Model.label(B)}“ sind schon über Gelenke verbunden – ein weiteres ergäbe einen Kreis.` };
     if (list().some((j) => j.b === B.id)) return { ok: false, msg: `„${Model.label(B)}“ wird schon von einem Gelenk bewegt.` };
     const dv = new THREE.Vector3(...d); if (dv.lengthSq() < 1e-12) return { ok: false, msg: 'Die Gelenkachse braucht eine Richtung.' };
@@ -74,7 +90,7 @@ const Joints = (() => {
     const lo = Number.isFinite(+opts.min) ? +opts.min : kind === 'slide' ? -20 : -90, hi = Number.isFinite(+opts.max) ? +opts.max : kind === 'slide' ? 20 : 90;
     let jid = null;
     App.change('Gelenk angelegt', (doc) => {
-      const b = doc.items.find((x) => x.id === B.id); if (!b) return false;
+      const b = top(B.id, doc); if (!b) return false;
       doc.joints = doc.joints || [];
       jid = uid('j');
       doc.joints.push({ id: jid, a: A.id, b: B.id, ao: o.map((v) => round(+v, 6)), ad: dv.toArray().map((v) => round(v, 9)), home: Model.localMatrix(b).toArray().map((v) => round(v, 9)), ang: 0, min: round(Math.min(lo, hi), 2), max: round(Math.max(lo, hi), 2), ...(kind === 'slide' ? { kind } : {}) });
@@ -85,14 +101,15 @@ const Joints = (() => {
   // Gelenk anlegen: zwei Teile gewählt, das zuletzt gewählte bewegt sich; dann die Achse im Bild wählen
   function start() {
     const sel = App.sel.map((id) => top(id)).filter(Boolean);
-    if (sel.length !== 2) { UI.toast('Wähle genau zwei Teile (mit Umschalt klicken) – ganz oben im Verlauf, nicht in einer Gruppe.', { icon: 'info' }); return false; }
+    if (sel.length !== 2) { UI.toast('Wähle genau zwei Teile (mit Umschalt klicken – Teile in einer Gruppe links im Verlauf).', { icon: 'info' }); return false; }
     const [A, B] = sel;
+    const why = refuse(App.doc, A, B); if (why) { UI.toast(why, { icon: 'info' }); return false; }
     if (connected(App.doc, A.id, B.id)) { UI.toast('Das ergäbe einen Kreis – die beiden Teile sind schon über Gelenke miteinander verbunden.', { icon: 'info' }); return false; }
     if (list().some((j) => j.b === B.id)) { UI.toast(`„${Model.label(B)}“ wird schon von einem Gelenk bewegt – jedes Teil darf nur von einem Gelenk bewegt werden.`, { icon: 'info' }); return false; }
     Features.pickAxisThen((ax) => {
       let jid = null;
       App.change('Gelenk angelegt', (doc) => {
-        const b = doc.items.find((x) => x.id === B.id); if (!b) return false;
+        const b = top(B.id, doc); if (!b) return false;
         if (connected(doc, A.id, B.id) || list(doc).some((j) => j.b === B.id)) return false;
         doc.joints = doc.joints || [];
         jid = uid('j');
@@ -107,11 +124,11 @@ const Joints = (() => {
   function setAngle(jid, ang) {
     App.change('Gelenk gedreht', (doc) => {
       const j = list(doc).find((x) => x.id === jid); if (!j) return false;
-      const b = doc.items.find((x) => x.id === j.b); if (!b) return false;
-      syncHome(b, j);
+      const b = top(j.b, doc); if (!b) return false;
+      syncHome(b, j, doc);
       const prev = j.ang;
       j.ang = round(clamp(Number(ang) || 0, j.min, j.max), 4);
-      Model.setFromMatrix(b, pose(j, j.ang));
+      Model.setFromMatrix(b, pose(j, j.ang, null, doc));
       if (Math.abs(j.ang - prev) > 1e-9) moveChain(doc, j.b, stepMatrix(j, j.ang - prev));
     }, { merge: 'joint:' + jid });
   }
@@ -119,13 +136,13 @@ const Joints = (() => {
   function setKind(jid, kind) {
     App.change('Gelenk-Art', (doc) => {
       const j = list(doc).find((x) => x.id === jid); if (!j) return false;
-      const b = doc.items.find((x) => x.id === j.b); if (!b) return false;
-      syncHome(b, j);
+      const b = top(j.b, doc); if (!b) return false;
+      syncHome(b, j, doc);
       const prev = j.ang;
       if (Math.abs(prev) > 1e-9) moveChain(doc, j.b, stepMatrix(j, -prev));
       j.kind = kind === 'slide' ? 'slide' : 'rot'; j.ang = 0;
       if (j.kind === 'slide') { j.min = -20; j.max = 20; } else { j.min = -90; j.max = 90; }
-      Model.setFromMatrix(b, pose(j, 0));
+      Model.setFromMatrix(b, pose(j, 0, null, doc));
     });
   }
   function setRange(jid, k, v) {
@@ -141,9 +158,10 @@ const Joints = (() => {
     step = step || (slide(j) ? Math.max(0.5, round((j.max - j.min) / 40, 1)) : 5);
     const A = top(j.a), B = top(j.b); if (!A || !B) return null;
     const V = Model.vars(App.doc).v, out = [];
-    const cur = Model.localMatrix(B), exp = pose(j, j.ang);
-    const home = cur.elements.some((v, i) => Math.abs(v - exp.elements[i]) > 1e-4) ? pose(j, -j.ang, cur.toArray()).toArray() : j.home;
-    const down = downstream(App.doc, j.b).map((k) => top(k.b)).filter(Boolean);
+    // alles in Weltlage rechnen – so geht es auch mit Teilen in Gruppen
+    const W = (it) => Model.worldMatrix(App.doc, it.id);
+    const kw = (it, M) => { const c = deepClone(it); Model.setFromMatrix(c, M); return Model.kernelItem(c, V); };
+    const down = downstream(App.doc, j.b).map((k) => top(k.b)).filter((x) => x && !Model.parentsOf(App.doc, x.id).some((p) => p.id === j.b));
     const movSet = new Set([B.id, ...down.map((x) => x.id)]);
     const compIds = new Set([j.a, j.b]);
     let chg = true;
@@ -154,16 +172,12 @@ const Joints = (() => {
         if (compIds.has(k.b) && !compIds.has(k.a)) { compIds.add(k.a); chg = true; }
       }
     }
-    const statK = [...compIds].filter((id) => !movSet.has(id)).map((id) => top(id)).filter(Boolean).map((it) => Model.kernelItem(it, V));
-    const downCur = down.map((it) => ({ it, m: Model.localMatrix(it) }));
+    const statK = [...compIds].filter((id) => !movSet.has(id)).map((id) => top(id)).filter((x) => x && x.role !== 'hole').map((it) => kw(it, W(it)));
+    const Bw = W(B), downCur = down.map((it) => ({ it, m: W(it) }));
     for (let a = j.min; a <= j.max + 1e-9; a += step) {
-      const Bc = deepClone(B); Model.setFromMatrix(Bc, pose(j, a, home));
       const D = stepMatrix(j, a - j.ang);
-      const movK = [Model.kernelItem(Bc, V)];
-      for (const d of downCur) {
-        const dc = deepClone(d.it); Model.setFromMatrix(dc, D.clone().multiply(d.m));
-        movK.push(Model.kernelItem(dc, V));
-      }
+      const movK = [kw(B, D.clone().multiply(Bw))];
+      for (const d of downCur) movK.push(kw(d.it, D.clone().multiply(d.m)));
       let cl = null; try { cl = await Kernel.call('clashes', { scene: { items: [...statK, ...movK] } }); } catch (_) {}
       const v = cl ? cl.pairs.filter((p) => movSet.has(p.a) !== movSet.has(p.b)).reduce((s, p) => s + p.v, 0) : 0;
       out.push({ a: round(a, 4), v });
@@ -211,6 +225,7 @@ const Joints = (() => {
     if (anim) { const same = anim.jid === jid; stopPlay(); if (same) return; }
     const j = list().find((x) => x.id === jid); if (!j) return;
     const B = top(j.b); if (!B) return;
+    if (!isTop(B.id) || downstream(App.doc, j.b).some((k) => !isTop(k.b))) { UI.toast('Abspielen geht nur, wenn die bewegten Teile ganz oben im Verlauf liegen – in einer Gruppe zeigt das Bild sie als einen Körper. Mit dem Regler kannst du trotzdem jede Stellung ansehen.', { icon: 'info', ms: 5000 }); return; }
     const cur = Model.localMatrix(B), exp = pose(j, j.ang);
     const home = cur.elements.some((v, i) => Math.abs(v - exp.elements[i]) > 1e-4) ? pose(j, -j.ang, cur.toArray()).toArray() : j.home;
     const down = downstream(App.doc, j.b).map((k) => top(k.b)).filter(Boolean).map((it) => ({ it, m: Model.localMatrix(it) }));
@@ -283,7 +298,7 @@ const Joints = (() => {
     App.on('doc', () => {
       stopPlay();
       const js = list(); if (!js.length) return;
-      const ids = new Set(App.doc.items.map((x) => x.id));
+      const ids = new Set(); Model.walk(App.doc.items, (x) => { ids.add(x.id); });
       if (js.some((j) => !ids.has(j.a) || !ids.has(j.b))) App.doc.joints = js.filter((j) => ids.has(j.a) && ids.has(j.b));
     });
   }

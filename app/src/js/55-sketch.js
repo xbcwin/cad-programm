@@ -689,13 +689,16 @@ const Sketch = (() => {
   // Teilstück unter dem Mauszeiger als einfaches Element (bei Rechteck, Vieleck, Langloch nur die eine Kante bzw. der eine Bogen)
   function trimPart(hit, uv) {
     if (SIMPLE.includes(hit.type)) return { target: hit, skip: null };
-    if (hit.type === 'ellipse' || hit.type === 'text') return null;
+    if (hit.type === 'ellipse') return { target: { id: '_tmp', ...ellipseSpline(hit) }, skip: { ent: hit, i: 0 } };
+    if (hit.type === 'text') return null;
     let best = null, bd = Infinity, bi = -1;
     SK.segsOf(hit).forEach((s, i) => { const q = SKO.closest(SKO.curve(s), uv), d = SK.d2(q, uv); if (d < bd) { bd = d; best = s; bi = i; } });
     if (!best) return null;
     const target = best.t === 'arc' ? { id: '_tmp', type: 'arc', a: best.a, m: best.m, b: best.b } : best.t === 'circle' ? { id: '_tmp', type: 'circle', c: best.c, r: best.r } : { id: '_tmp', type: 'line', a: best.a, b: best.b };
     return { target, skip: { ent: hit, i: bi } };
   }
+  // Ellipse als geschlossene Spline durch 48 Punkte auf ihr (Abweichung weit unter 0,01 mm bei üblichen Größen)
+  function ellipseSpline(e) { return { type: 'spline', pts: SK.ellipsePoints(e.c, e.rx, e.ry, e.rot || 0, 48).map((q) => [round(q[0], 5), round(q[1], 5)]), closed: true }; }
   function trimCutters(skip) {
     const parts = [...SKO.partsOf(S.ents), ...SKO.partsOf(S.refs, true)];
     return skip ? parts.filter((k) => !(k.ent === skip.ent && k.i === skip.i)) : parts;
@@ -717,7 +720,15 @@ const Sketch = (() => {
     const hit = SK.hit(S.ents, uv, tolPx()); if (!hit) return false;
     pushUndo();
     let target = hit;
-    if (!SIMPLE.includes(hit.type)) {
+    if (hit.type === 'text') return false;
+    if (hit.type === 'ellipse') {
+      // Ellipse: wird dafür zur Spline, die genau auf ihr liegt
+      const sp = { id: uid('e'), ...(hit.con ? { con: true } : {}), ...ellipseSpline(hit) };
+      const at = S.ents.indexOf(hit);
+      removeEntData(hit.id);
+      S.ents.splice(at, 0, sp); target = sp;
+      UI.toast('Die Ellipse wurde dafür zu einer Spline, die genau auf ihr liegt.', { icon: 'info', ms: 2600 });
+    } else if (!SIMPLE.includes(hit.type)) {
       // Rechteck, Vieleck, Langloch: erst in einzelne Linien und Bögen zerlegen
       const parts = SKO.explode(hit);
       const at = S.ents.indexOf(hit);

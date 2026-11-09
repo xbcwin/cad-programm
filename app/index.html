@@ -653,6 +653,20 @@ body.sketching .timeline{display:none}
 .explain-list li.ex-achtung{color:var(--ink-2);list-style:none;margin-left:-18px;padding:6px 10px;border-left:3px solid var(--warn);background:var(--warn-soft);border-radius:0 6px 6px 0}
 /* Einfache Oberfläche: Profi-Werkzeuge ausblenden, „Mehr“ nur dort zeigen */
 body.simple .pro{display:none!important}
+/* Einfache Oberfläche: größere Knöpfe und Schrift (Sitzung 50) */
+body.simple{--topbar-h:60px}
+body.simple .topbar .tool{padding:11px 13px;font-size:15.5px;gap:8px}
+body.simple .topbar .tool svg{width:23px;height:23px}
+body.simple .ctxbar{padding:5px;gap:3px}
+body.simple .ctxbar button{padding:10px 12px;font-size:15px;gap:7px}
+body.simple .ctxbar button svg{width:20px;height:20px}
+body.simple .btn{padding:10px 14px;font-size:15px}
+body.simple .btn.small{padding:8px 11px;font-size:14px}
+body.simple .flyout .tile{min-height:84px}
+body.simple .flyout .tile svg{width:34px;height:34px}
+body.simple .panel-body{font-size:14.5px}
+body.simple .first-steps .fs-row{font-size:14.5px;min-height:34px}
+body.simple .node{padding:8px 10px 8px 8px;font-size:15px}
 body:not(.simple) .simple-only{display:none!important}
 .level-btn{border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:999px;padding:5px 11px;font:600 12.5px/1 var(--font);cursor:pointer;white-space:nowrap}
 .level-btn:hover{border-color:var(--line-strong);color:var(--ink)}
@@ -6109,7 +6123,18 @@ const Joints = (() => {
   const list = (doc = App.doc) => (doc && doc.joints) || [];
   const allOf = (id, doc = App.doc) => list(doc).filter((j) => j.a === id || j.b === id);
   const of = (id, doc = App.doc) => list(doc).find((j) => j.b === id) || list(doc).find((j) => j.a === id) || null;
-  const top = (id, doc = App.doc) => (doc && doc.items && doc.items.find((x) => x.id === id)) || null;
+  // Teil suchen – auch innerhalb von Gruppen (seit Sitzung 52)
+  const top = (id, doc = App.doc) => { if (!doc || !doc.items) return null; const f = Model.find(doc, id); return f ? f.item : null; };
+  const isTop = (id, doc = App.doc) => !!(doc && doc.items && doc.items.some((x) => x.id === id));
+  // Bewegung M (in Weltkoordinaten) für ein Teil in einer Gruppe: im Koordinatensystem der Gruppe ausdrücken
+  const conj = (doc, id, M) => { const P = Model.parentWorld(doc, id); return P.clone().invert().multiply(M).multiply(P); };
+  const related = (doc, a, b) => Model.parentsOf(doc, a).some((p) => p.id === b) || Model.parentsOf(doc, b).some((p) => p.id === a);
+  const inOp = (doc, id) => Model.parentsOf(doc, id).some((p) => p.p && p.p.op);
+  function refuse(doc, A, B) {
+    if (related(doc, A.id, B.id)) return 'Ein Teil kann kein Gelenk mit der eigenen Gruppe bekommen – wähl zwei Teile nebeneinander.';
+    if (inOp(doc, A.id) || inOp(doc, B.id)) return 'Teile in einem Muster oder einer Rechen-Gruppe (Teilen, Schnittmenge) können kein Gelenk bekommen.';
+    return null;
+  }
   const slide = (j) => j.kind === 'slide';
   const unit = (j) => (slide(j) ? 'mm' : '°');
   function stepMatrix(j, ang) {
@@ -6118,8 +6143,8 @@ const Joints = (() => {
     const R = new THREE.Matrix4().makeRotationAxis(d, (ang * Math.PI) / 180);
     return new THREE.Matrix4().makeTranslation(o.x, o.y, o.z).multiply(R).multiply(new THREE.Matrix4().makeTranslation(-o.x, -o.y, -o.z));
   }
-  function pose(j, ang, home) {
-    return stepMatrix(j, ang).multiply(new THREE.Matrix4().fromArray(home || j.home));
+  function pose(j, ang, home, doc = App.doc) {
+    return conj(doc, j.b, stepMatrix(j, ang)).multiply(new THREE.Matrix4().fromArray(home || j.home));
   }
   // Alle Gelenke, die weiter hinten in der Kette an rootId hängen (in Reihenfolge von vorne nach hinten)
   function downstream(doc, rootId) {
@@ -6150,25 +6175,30 @@ const Joints = (() => {
     }
     return false;
   }
-  function syncHome(b, j) {
-    const cur = Model.localMatrix(b), exp = pose(j, j.ang);
-    if (cur.elements.some((v, i) => Math.abs(v - exp.elements[i]) > 1e-4)) j.home = pose(j, -j.ang, cur.toArray()).toArray().map((v) => round(v, 9));
+  function syncHome(b, j, doc = App.doc) {
+    const cur = Model.localMatrix(b), exp = pose(j, j.ang, null, doc);
+    if (cur.elements.some((v, i) => Math.abs(v - exp.elements[i]) > 1e-4)) j.home = pose(j, -j.ang, cur.toArray(), doc).toArray().map((v) => round(v, 9));
   }
   // Hintere Glieder der Kette samt ihren Gelenkachsen um die Bewegung D mitnehmen
   function moveChain(doc, rootId, D) {
-    for (const k of downstream(doc, rootId)) {
-      const kb = doc.items.find((x) => x.id === k.b);
-      if (kb) syncHome(kb, k);
+    const ks = downstream(doc, rootId), moved = new Set([rootId, ...ks.map((k) => k.b)]);
+    for (const k of ks) {
+      const kb = top(k.b, doc);
+      // Steckt das Teil in einer Gruppe, die selbst mitwandert, fährt es schon mit – nur die Achse nachführen
+      const carried = Model.parentsOf(doc, k.b).some((p) => moved.has(p.id));
+      if (kb && !carried) syncHome(kb, k, doc);
       k.ao = new THREE.Vector3(...k.ao).applyMatrix4(D).toArray().map((v) => round(v, 6));
       k.ad = new THREE.Vector3(...k.ad).transformDirection(D).toArray().map((v) => round(v, 9));
-      k.home = D.clone().multiply(new THREE.Matrix4().fromArray(k.home)).toArray().map((v) => round(v, 9));
-      if (kb) Model.setFromMatrix(kb, pose(k, k.ang));
+      if (carried) continue;
+      k.home = conj(doc, k.b, D).multiply(new THREE.Matrix4().fromArray(k.home)).toArray().map((v) => round(v, 9));
+      if (kb) Model.setFromMatrix(kb, pose(k, k.ang, null, doc));
     }
   }
   // Gelenk ohne Klicken anlegen (für den KI-Kollegen): Achse o/d in Weltkoordinaten; liefert die Kennung oder eine Meldung
   function add(aId, bId, o, d, opts = {}) {
     const A = top(aId), B = top(bId);
-    if (!A || !B || A.id === B.id) return { ok: false, msg: 'Ein Gelenk braucht zwei verschiedene Teile ganz oben im Verlauf.' };
+    if (!A || !B || A.id === B.id) return { ok: false, msg: 'Ein Gelenk braucht zwei verschiedene Teile.' };
+    const why = refuse(App.doc, A, B); if (why) return { ok: false, msg: why };
     if (connected(App.doc, A.id, B.id)) return { ok: false, msg: `„${Model.label(A)}“ und „${Model.label(B)}“ sind schon über Gelenke verbunden – ein weiteres ergäbe einen Kreis.` };
     if (list().some((j) => j.b === B.id)) return { ok: false, msg: `„${Model.label(B)}“ wird schon von einem Gelenk bewegt.` };
     const dv = new THREE.Vector3(...d); if (dv.lengthSq() < 1e-12) return { ok: false, msg: 'Die Gelenkachse braucht eine Richtung.' };
@@ -6177,7 +6207,7 @@ const Joints = (() => {
     const lo = Number.isFinite(+opts.min) ? +opts.min : kind === 'slide' ? -20 : -90, hi = Number.isFinite(+opts.max) ? +opts.max : kind === 'slide' ? 20 : 90;
     let jid = null;
     App.change('Gelenk angelegt', (doc) => {
-      const b = doc.items.find((x) => x.id === B.id); if (!b) return false;
+      const b = top(B.id, doc); if (!b) return false;
       doc.joints = doc.joints || [];
       jid = uid('j');
       doc.joints.push({ id: jid, a: A.id, b: B.id, ao: o.map((v) => round(+v, 6)), ad: dv.toArray().map((v) => round(v, 9)), home: Model.localMatrix(b).toArray().map((v) => round(v, 9)), ang: 0, min: round(Math.min(lo, hi), 2), max: round(Math.max(lo, hi), 2), ...(kind === 'slide' ? { kind } : {}) });
@@ -6188,14 +6218,15 @@ const Joints = (() => {
   // Gelenk anlegen: zwei Teile gewählt, das zuletzt gewählte bewegt sich; dann die Achse im Bild wählen
   function start() {
     const sel = App.sel.map((id) => top(id)).filter(Boolean);
-    if (sel.length !== 2) { UI.toast('Wähle genau zwei Teile (mit Umschalt klicken) – ganz oben im Verlauf, nicht in einer Gruppe.', { icon: 'info' }); return false; }
+    if (sel.length !== 2) { UI.toast('Wähle genau zwei Teile (mit Umschalt klicken – Teile in einer Gruppe links im Verlauf).', { icon: 'info' }); return false; }
     const [A, B] = sel;
+    const why = refuse(App.doc, A, B); if (why) { UI.toast(why, { icon: 'info' }); return false; }
     if (connected(App.doc, A.id, B.id)) { UI.toast('Das ergäbe einen Kreis – die beiden Teile sind schon über Gelenke miteinander verbunden.', { icon: 'info' }); return false; }
     if (list().some((j) => j.b === B.id)) { UI.toast(`„${Model.label(B)}“ wird schon von einem Gelenk bewegt – jedes Teil darf nur von einem Gelenk bewegt werden.`, { icon: 'info' }); return false; }
     Features.pickAxisThen((ax) => {
       let jid = null;
       App.change('Gelenk angelegt', (doc) => {
-        const b = doc.items.find((x) => x.id === B.id); if (!b) return false;
+        const b = top(B.id, doc); if (!b) return false;
         if (connected(doc, A.id, B.id) || list(doc).some((j) => j.b === B.id)) return false;
         doc.joints = doc.joints || [];
         jid = uid('j');
@@ -6210,11 +6241,11 @@ const Joints = (() => {
   function setAngle(jid, ang) {
     App.change('Gelenk gedreht', (doc) => {
       const j = list(doc).find((x) => x.id === jid); if (!j) return false;
-      const b = doc.items.find((x) => x.id === j.b); if (!b) return false;
-      syncHome(b, j);
+      const b = top(j.b, doc); if (!b) return false;
+      syncHome(b, j, doc);
       const prev = j.ang;
       j.ang = round(clamp(Number(ang) || 0, j.min, j.max), 4);
-      Model.setFromMatrix(b, pose(j, j.ang));
+      Model.setFromMatrix(b, pose(j, j.ang, null, doc));
       if (Math.abs(j.ang - prev) > 1e-9) moveChain(doc, j.b, stepMatrix(j, j.ang - prev));
     }, { merge: 'joint:' + jid });
   }
@@ -6222,13 +6253,13 @@ const Joints = (() => {
   function setKind(jid, kind) {
     App.change('Gelenk-Art', (doc) => {
       const j = list(doc).find((x) => x.id === jid); if (!j) return false;
-      const b = doc.items.find((x) => x.id === j.b); if (!b) return false;
-      syncHome(b, j);
+      const b = top(j.b, doc); if (!b) return false;
+      syncHome(b, j, doc);
       const prev = j.ang;
       if (Math.abs(prev) > 1e-9) moveChain(doc, j.b, stepMatrix(j, -prev));
       j.kind = kind === 'slide' ? 'slide' : 'rot'; j.ang = 0;
       if (j.kind === 'slide') { j.min = -20; j.max = 20; } else { j.min = -90; j.max = 90; }
-      Model.setFromMatrix(b, pose(j, 0));
+      Model.setFromMatrix(b, pose(j, 0, null, doc));
     });
   }
   function setRange(jid, k, v) {
@@ -6244,9 +6275,10 @@ const Joints = (() => {
     step = step || (slide(j) ? Math.max(0.5, round((j.max - j.min) / 40, 1)) : 5);
     const A = top(j.a), B = top(j.b); if (!A || !B) return null;
     const V = Model.vars(App.doc).v, out = [];
-    const cur = Model.localMatrix(B), exp = pose(j, j.ang);
-    const home = cur.elements.some((v, i) => Math.abs(v - exp.elements[i]) > 1e-4) ? pose(j, -j.ang, cur.toArray()).toArray() : j.home;
-    const down = downstream(App.doc, j.b).map((k) => top(k.b)).filter(Boolean);
+    // alles in Weltlage rechnen – so geht es auch mit Teilen in Gruppen
+    const W = (it) => Model.worldMatrix(App.doc, it.id);
+    const kw = (it, M) => { const c = deepClone(it); Model.setFromMatrix(c, M); return Model.kernelItem(c, V); };
+    const down = downstream(App.doc, j.b).map((k) => top(k.b)).filter((x) => x && !Model.parentsOf(App.doc, x.id).some((p) => p.id === j.b));
     const movSet = new Set([B.id, ...down.map((x) => x.id)]);
     const compIds = new Set([j.a, j.b]);
     let chg = true;
@@ -6257,16 +6289,12 @@ const Joints = (() => {
         if (compIds.has(k.b) && !compIds.has(k.a)) { compIds.add(k.a); chg = true; }
       }
     }
-    const statK = [...compIds].filter((id) => !movSet.has(id)).map((id) => top(id)).filter(Boolean).map((it) => Model.kernelItem(it, V));
-    const downCur = down.map((it) => ({ it, m: Model.localMatrix(it) }));
+    const statK = [...compIds].filter((id) => !movSet.has(id)).map((id) => top(id)).filter((x) => x && x.role !== 'hole').map((it) => kw(it, W(it)));
+    const Bw = W(B), downCur = down.map((it) => ({ it, m: W(it) }));
     for (let a = j.min; a <= j.max + 1e-9; a += step) {
-      const Bc = deepClone(B); Model.setFromMatrix(Bc, pose(j, a, home));
       const D = stepMatrix(j, a - j.ang);
-      const movK = [Model.kernelItem(Bc, V)];
-      for (const d of downCur) {
-        const dc = deepClone(d.it); Model.setFromMatrix(dc, D.clone().multiply(d.m));
-        movK.push(Model.kernelItem(dc, V));
-      }
+      const movK = [kw(B, D.clone().multiply(Bw))];
+      for (const d of downCur) movK.push(kw(d.it, D.clone().multiply(d.m)));
       let cl = null; try { cl = await Kernel.call('clashes', { scene: { items: [...statK, ...movK] } }); } catch (_) {}
       const v = cl ? cl.pairs.filter((p) => movSet.has(p.a) !== movSet.has(p.b)).reduce((s, p) => s + p.v, 0) : 0;
       out.push({ a: round(a, 4), v });
@@ -6314,6 +6342,7 @@ const Joints = (() => {
     if (anim) { const same = anim.jid === jid; stopPlay(); if (same) return; }
     const j = list().find((x) => x.id === jid); if (!j) return;
     const B = top(j.b); if (!B) return;
+    if (!isTop(B.id) || downstream(App.doc, j.b).some((k) => !isTop(k.b))) { UI.toast('Abspielen geht nur, wenn die bewegten Teile ganz oben im Verlauf liegen – in einer Gruppe zeigt das Bild sie als einen Körper. Mit dem Regler kannst du trotzdem jede Stellung ansehen.', { icon: 'info', ms: 5000 }); return; }
     const cur = Model.localMatrix(B), exp = pose(j, j.ang);
     const home = cur.elements.some((v, i) => Math.abs(v - exp.elements[i]) > 1e-4) ? pose(j, -j.ang, cur.toArray()).toArray() : j.home;
     const down = downstream(App.doc, j.b).map((k) => top(k.b)).filter(Boolean).map((it) => ({ it, m: Model.localMatrix(it) }));
@@ -6386,7 +6415,7 @@ const Joints = (() => {
     App.on('doc', () => {
       stopPlay();
       const js = list(); if (!js.length) return;
-      const ids = new Set(App.doc.items.map((x) => x.id));
+      const ids = new Set(); Model.walk(App.doc.items, (x) => { ids.add(x.id); });
       if (js.some((j) => !ids.has(j.a) || !ids.has(j.b))) App.doc.joints = js.filter((j) => ids.has(j.a) && ids.has(j.b));
     });
   }
@@ -7702,7 +7731,7 @@ const Panels = (() => {
     } else {
       b('group', 'Gruppieren', () => Actions.group(), 'accent', 'Zu einem Körper verbinden (Strg G)');
       if (items.length === 2) b('dim', 'Abstand', (e) => gapPop(e.currentTarget), '', 'Abstand zwischen den beiden Teilen genau setzen (der zuletzt gewählte bewegt sich)', true);
-      if (items.length === 2 && items.every((x) => App.doc.items.includes(x.item))) b('hinge', 'Gelenk', () => Joints.start(), '', 'Drehgelenk: das zuletzt gewählte Teil dreht sich um eine Achse, die du im Bild wählst', true);
+      if (items.length === 2 && !Model.parentsOf(App.doc, items[0].item.id).some((q) => q.id === items[1].item.id) && !Model.parentsOf(App.doc, items[1].item.id).some((q) => q.id === items[0].item.id)) b('hinge', 'Gelenk', () => Joints.start(), '', 'Drehgelenk: das zuletzt gewählte Teil dreht sich um eine Achse, die du im Bild wählst', true);
       if (items.length >= 2 && items.every((x) => x.item.kind === 'extrude')) b('loft', 'Übergang', () => Actions.loft(), '', 'Weicher Übergang durch die Umrisse – in der Reihenfolge, in der du sie gewählt hast');
       b('boolSubtract', 'Boolesch', (e) => UI.menu(e.currentTarget, [{ label: 'Vereinigen', icon: 'boolUnion', run: () => Features.boolean('union') }, { label: 'Abziehen (der zuerst gewählte bleibt)', icon: 'boolSubtract', run: () => Features.boolean('subtract') }, { label: 'Schnittmenge', icon: 'boolIntersect', run: () => Features.boolean('intersect') }]), '', 'Körper vereinigen, abziehen oder schneiden', true);
       b('layers', 'Ausrichten', (e) => UI.menu(e.currentTarget, [['left', 'Links bündig'], ['cx', 'Mittig (X)'], ['right', 'Rechts bündig'], ['front', 'Vorne bündig'], ['cy', 'Mittig (Y)'], ['back', 'Hinten bündig'], ['bottom', 'Unten bündig']].map(([m, l]) => ({ label: l, run: () => Actions.align(null, m) }))), '', 'Objekte aneinander ausrichten');
@@ -9364,13 +9393,16 @@ const Sketch = (() => {
   // Teilstück unter dem Mauszeiger als einfaches Element (bei Rechteck, Vieleck, Langloch nur die eine Kante bzw. der eine Bogen)
   function trimPart(hit, uv) {
     if (SIMPLE.includes(hit.type)) return { target: hit, skip: null };
-    if (hit.type === 'ellipse' || hit.type === 'text') return null;
+    if (hit.type === 'ellipse') return { target: { id: '_tmp', ...ellipseSpline(hit) }, skip: { ent: hit, i: 0 } };
+    if (hit.type === 'text') return null;
     let best = null, bd = Infinity, bi = -1;
     SK.segsOf(hit).forEach((s, i) => { const q = SKO.closest(SKO.curve(s), uv), d = SK.d2(q, uv); if (d < bd) { bd = d; best = s; bi = i; } });
     if (!best) return null;
     const target = best.t === 'arc' ? { id: '_tmp', type: 'arc', a: best.a, m: best.m, b: best.b } : best.t === 'circle' ? { id: '_tmp', type: 'circle', c: best.c, r: best.r } : { id: '_tmp', type: 'line', a: best.a, b: best.b };
     return { target, skip: { ent: hit, i: bi } };
   }
+  // Ellipse als geschlossene Spline durch 48 Punkte auf ihr (Abweichung weit unter 0,01 mm bei üblichen Größen)
+  function ellipseSpline(e) { return { type: 'spline', pts: SK.ellipsePoints(e.c, e.rx, e.ry, e.rot || 0, 48).map((q) => [round(q[0], 5), round(q[1], 5)]), closed: true }; }
   function trimCutters(skip) {
     const parts = [...SKO.partsOf(S.ents), ...SKO.partsOf(S.refs, true)];
     return skip ? parts.filter((k) => !(k.ent === skip.ent && k.i === skip.i)) : parts;
@@ -9392,7 +9424,15 @@ const Sketch = (() => {
     const hit = SK.hit(S.ents, uv, tolPx()); if (!hit) return false;
     pushUndo();
     let target = hit;
-    if (!SIMPLE.includes(hit.type)) {
+    if (hit.type === 'text') return false;
+    if (hit.type === 'ellipse') {
+      // Ellipse: wird dafür zur Spline, die genau auf ihr liegt
+      const sp = { id: uid('e'), ...(hit.con ? { con: true } : {}), ...ellipseSpline(hit) };
+      const at = S.ents.indexOf(hit);
+      removeEntData(hit.id);
+      S.ents.splice(at, 0, sp); target = sp;
+      UI.toast('Die Ellipse wurde dafür zu einer Spline, die genau auf ihr liegt.', { icon: 'info', ms: 2600 });
+    } else if (!SIMPLE.includes(hit.type)) {
       // Rechteck, Vieleck, Langloch: erst in einzelne Linien und Bögen zerlegen
       const parts = SKO.explode(hit);
       const at = S.ents.indexOf(hit);

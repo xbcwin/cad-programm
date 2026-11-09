@@ -646,6 +646,20 @@ body.sketching .timeline{display:none}
 .explain-list li.ex-achtung{color:var(--ink-2);list-style:none;margin-left:-18px;padding:6px 10px;border-left:3px solid var(--warn);background:var(--warn-soft);border-radius:0 6px 6px 0}
 /* Einfache Oberfläche: Profi-Werkzeuge ausblenden, „Mehr“ nur dort zeigen */
 body.simple .pro{display:none!important}
+/* Einfache Oberfläche: größere Knöpfe und Schrift (Sitzung 50) */
+body.simple{--topbar-h:60px}
+body.simple .topbar .tool{padding:11px 13px;font-size:15.5px;gap:8px}
+body.simple .topbar .tool svg{width:23px;height:23px}
+body.simple .ctxbar{padding:5px;gap:3px}
+body.simple .ctxbar button{padding:10px 12px;font-size:15px;gap:7px}
+body.simple .ctxbar button svg{width:20px;height:20px}
+body.simple .btn{padding:10px 14px;font-size:15px}
+body.simple .btn.small{padding:8px 11px;font-size:14px}
+body.simple .flyout .tile{min-height:84px}
+body.simple .flyout .tile svg{width:34px;height:34px}
+body.simple .panel-body{font-size:14.5px}
+body.simple .first-steps .fs-row{font-size:14.5px;min-height:34px}
+body.simple .node{padding:8px 10px 8px 8px;font-size:15px}
 body:not(.simple) .simple-only{display:none!important}
 .level-btn{border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:999px;padding:5px 11px;font:600 12.5px/1 var(--font);cursor:pointer;white-space:nowrap}
 .level-btn:hover{border-color:var(--line-strong);color:var(--ink)}

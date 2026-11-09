@@ -1,6 +1,6 @@
 # Fortschritt
 
-Stand: 09.11.2026 · nach Sitzung 49 (19: Skizze auf Profi-Niveau · 20: Magnet, Rundungs-Griff · 21: Skizzieren im 3D, Übergang, Entlang Pfad, Import · 22: Kreis/Bogen-Arten, Verlängern, Entformungsschräge, Gewinde · 23: Einheiten, eigener Querschnitt, Langloch gebogen, gedrehtes Rechteck, Teilen · 24: Punkt, alle Ecken · 25: Schnitt und Spiegeln an Fläche · 26: Kantenkette, Abstände beim Verschieben · 27: Spiegeln an der Achse · 28: Muster entlang Kurve, Schablonen-Maße geprüft, USB-C-Stecker · 29: Spiegelebene wandert mit, Kreismuster quer und längs, KI kennt Muster entlang Kurve · 30: Bohrungen an Skizzenpunkten · 31: Wand aus Linie, Schritt hinter dem Marker, Schildchen · 32: Kante übernehmen · 33: verbundene Kanten · 34: Kreismuster um gewählte Achse · 35: GoPro-, XT60- und Antennenhalter · 36: Überhänge für den 3D-Druck · 37: Überhänge in der Schwachstellen-Analyse, KI kennt die Bausteine · 38: Skizzen-Muster als Ganzes ändern · 39: Drehgelenk · 40: Schiebegelenk · Argon 1: Gelenk-Ketten · 41: Übergang mit Mittellinie · 42: Drohnen-Check für eigene Rahmen · 43: Fahrtwind · 44: Gelenk-Anschlag und Abspielen · 45: Rohr im Raum · 46: Schwerpunkt ausgleichen · 47: KI legt Gelenke an · 48: Erste Schritte · 49: Wand um Löcher in Druckteilen)
+Stand: 09.11.2026 · nach Sitzung 52 (19: Skizze auf Profi-Niveau · 20: Magnet, Rundungs-Griff · 21: Skizzieren im 3D, Übergang, Entlang Pfad, Import · 22: Kreis/Bogen-Arten, Verlängern, Entformungsschräge, Gewinde · 23: Einheiten, eigener Querschnitt, Langloch gebogen, gedrehtes Rechteck, Teilen · 24: Punkt, alle Ecken · 25: Schnitt und Spiegeln an Fläche · 26: Kantenkette, Abstände beim Verschieben · 27: Spiegeln an der Achse · 28: Muster entlang Kurve, Schablonen-Maße geprüft, USB-C-Stecker · 29: Spiegelebene wandert mit, Kreismuster quer und längs, KI kennt Muster entlang Kurve · 30: Bohrungen an Skizzenpunkten · 31: Wand aus Linie, Schritt hinter dem Marker, Schildchen · 32: Kante übernehmen · 33: verbundene Kanten · 34: Kreismuster um gewählte Achse · 35: GoPro-, XT60- und Antennenhalter · 36: Überhänge für den 3D-Druck · 37: Überhänge in der Schwachstellen-Analyse, KI kennt die Bausteine · 38: Skizzen-Muster als Ganzes ändern · 39: Drehgelenk · 40: Schiebegelenk · Argon 1: Gelenk-Ketten · 41: Übergang mit Mittellinie · 42: Drohnen-Check für eigene Rahmen · 43: Fahrtwind · 44: Gelenk-Anschlag und Abspielen · 45: Rohr im Raum · 46: Schwerpunkt ausgleichen · 47: KI legt Gelenke an · 48: Erste Schritte · 49: Wand um Löcher in Druckteilen · 50: größere Knöpfe für Einsteiger · 51: Ellipse trimmen · 52: Gelenke in Gruppen)
 
 ## Erledigt
 
@@ -176,7 +176,7 @@ Fertig.
 - [x] An einer Fläche spiegeln (gespiegelte Kopie, ein Körper); Schnitt parallel zu einer gewählten Fläche; neue Werkzeuge in der Suchzeile (Übergang, Zur Spitze, Schräge, Abstand, Rohr entlang Pfad) (Sitzung 25)
 - [x] Schritt hinter dem Marker oder unterdrückt: statt der Werkzeugleiste nur „Marker dahinter“ bzw. „Wieder einschalten“, keine Griffe (Sitzung 31)
 - [x] Spiegelebene hängt an der Fläche: Wird das Original größer, wandert sie mit (äußerste Fläche in Achsrichtung) (Sitzung 29)
-- [ ] Ellipse und Text trimmen und versetzen; Text entlang einer Kurve
+- [ ] Text trimmen; Ellipse und Text versetzen; Text entlang einer Kurve
 - [x] Skizzen-Muster als Ganzes ändern: Regel-Symbol einer Kopie anklicken → „Ganzes Muster“ mit Anzahl und Abstand (Rechteck) bzw. Anzahl und Winkel (Kreis) → „Muster ändern“ (Sitzung 38)
 - [ ] Versatz nachträglich für mehrere Elemente zusammen ändern (heute je Element über das Regel-Symbol)
 - [x] Spiegeln an der X- oder Y-Achse ohne eigene Linie (Sitzung 27)
@@ -243,7 +243,9 @@ Fertig.
 - [x] Ansicht „Fahrtwind (Stirnfläche)“: Blick aus der Windrichtung, Neigung 0–60° nach vorne, Fläche in cm² aus dem Schattenriss, Propeller auf Wunsch mitgezählt; der Drohnen-Check nennt beim Speed-Rumpf die Stirnfläche von vorne (Sitzung 43)
 - [x] Erste Schritte in der einfachen Oberfläche: Liste links über dem Verlauf (Körper hinzufügen, Größe ändern, Loch machen, als Datei speichern), hakt sich selbst ab, „Wie?“ erklärt den Schritt und öffnet das passende Menü, ausblendbar (Sitzung 48)
 - [x] Schwachstellen: Wand um Schraubenlöcher in allen Druckteilen, nicht nur in flachen Platten – der CAD-Kern legt um jede runde Bohrung einen Ring mit der Mindestwand (M2 1,5 mm, ab M3 2 mm) und meldet, wo er aus dem Teil herausragt, mit der ungefähr dünnsten Wand (Sitzung 49)
-- [ ] Einsteiger-Oberfläche weiter vereinfachen: größere Knöpfe
+- [x] Gelenke auch zwischen Teilen innerhalb von Gruppen: das Gelenk rechnet im Koordinatensystem der Gruppe, „Bewegung prüfen“ in Weltlage; nicht erlaubt mit der eigenen Gruppe oder in Muster- und Rechen-Gruppen; Abspielen nur ganz oben im Verlauf (Sitzung 52)
+- [x] Ellipse trimmen: Beim Trimmen wird die Ellipse zu einer Spline durch 48 Punkte auf ihr (Abweichung unter 0,2 ‰ des Radius); die Enden sitzen per Regel auf den schneidenden Linien (Sitzung 51)
+- [x] Einfache Oberfläche mit größeren Knöpfen: Oberleiste, Kontextleiste, Verlauf, Knöpfe und Kacheln größer, Knöpfe oben mindestens 44 px hoch (Sitzung 50)
 
 ### Stufe 6 – Konten und Zusammenarbeit (Idee, nach dem Drohnen-Modul)
 - [ ] A: Konto mit Name und Passwort, Projekte in der Cloud
@@ -260,7 +262,7 @@ Fertig.
 - „An Fläche spiegeln“ hängt nur an der äußersten Fläche in Achsrichtung; bei einer inneren oder schrägen Fläche bleibt die Ebene, wo sie beim Spiegeln war
 
 - Text kennt keine Unterschneidung (Kerning) – die Buchstaben stehen nach ihrer Laufweite
-- Ellipse und Text lassen sich nicht trimmen; Ellipsen-Drehung ist keine Regel (nur ein Wert)
+- Text lässt sich nicht trimmen; eine getrimmte Ellipse wird zur Spline (genau auf der Ellipse, aber ohne Ellipsen-Maße); Ellipsen-Drehung ist keine Regel (nur ein Wert)
 
 - Vorlagen bestehen aus einer Gruppe: Über „Bearbeiten“ im Verlauf sieht man ihre einzelnen Schritte in der Zeitleiste
 - Verbundene Kanten finden ihre Kante über Lage, Art und Länge wieder: Springt eine Kante sehr weit oder verschwindet sie, bleibt die übernommene Kante stehen; die Kanten aus „Skizze auf einer Fläche“ (Fangpunkte) sind noch nicht verbunden

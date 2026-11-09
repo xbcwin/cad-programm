@@ -794,6 +794,26 @@ def t_trimmen(p):
     return [ok1, ok2, ok3, ok4]
 
 
+
+# ---------- Sitzung 51: Ellipse trimmen ----------
+def t_ellipse_trimmen(p):
+    scene(p, [{'id': 'E', 'type': 'ellipse', 'c': [0, 0], 'rx': 20, 'ry': 10, 'rot': 0}, {'id': 'V', 'type': 'line', 'a': [0, -20], 'b': [0, 20]}])
+    p.pg.keyboard.press('t'); p.wait(200)
+    s = to_screen(p, 20, 0); p.pg.mouse.move(s[0], s[1]); p.wait(200)
+    hover = SS(p, "return !!S.trimHover && S.trimHover.length>1 && S.trimHover.every(q=>q[0]>-0.5)")
+    p.pg.mouse.click(s[0], s[1]); p.wait(300)
+    # rechte Hälfte weg: eine offene Spline auf der Ellipse, Enden auf der senkrechten Linie
+    r = SS(p, """const sp=S.ents.filter(e=>e.type==='spline'); if (sp.length!==1 || E('E')) return null; const q=sp[0];
+      const on=q.pts.every(p=>Math.abs((p[0]/20)**2+(p[1]/10)**2-1)<1e-3);
+      const pts=SK.splinePoints(q.pts, q.closed); const dev=Math.max(...pts.map(p=>Math.abs(Math.hypot(p[0]/20,p[1]/10)-1)));
+      const ends=[q.pts[0], q.pts[q.pts.length-1]];
+      return [q.closed, on, dev, Math.max(...q.pts.map(p=>p[0])), ends.map(p=>Math.abs(p[0])<1e-3 && Math.abs(Math.abs(p[1])-10)<1e-3)]""")
+    ok1 = hover and r is not None and not r[0] and r[1] and r[2] < 0.002 and r[3] < 1e-3 and r[4] == [True, True]
+    ok2 = SS(p, "return S.cons.filter(c=>c.type==='coincident' && c.refs.some(r=>r.e==='V')).length") == 2
+    p.pg.keyboard.press('Control+z'); p.wait(200)
+    ok3 = SS(p, "return !!E('E') && !S.ents.some(e=>e.type==='spline')")
+    return [ok1, ok2, ok3]
+
 def t_versatz(p):
     scene(p, [{'id': 'R', 'type': 'rect', 'a': [0, 0], 'b': [20, 10]}, {'id': 'C', 'type': 'circle', 'c': [34, 5], 'r': 6}])
     p.pg.keyboard.press('f'); p.wait(200)
@@ -2660,6 +2680,39 @@ def t_gelenk(p):
 
 
 
+
+# ---------- Sitzung 52: Gelenke innerhalb einer Gruppe ----------
+def t_gelenk_gruppe(p):
+    p.empty()
+    p.ev("""App.change('x', d=>{
+      const g=Model.newItem('group',{}); g.name='Baugruppe'; g.t.x=50; g.t.rz=90;
+      const a=Model.newItem('box',{w:20,d:10,h:4}); a.name='Arm A';
+      const b=Model.newItem('box',{w:20,d:10,h:4}); b.t.x=20; b.name='Arm B';
+      g.children.push(a,b); d.items.push(g);
+    })"""); warte_rechnen(p, 30)
+    ids = p.ev("const g=App.doc.items[0]; return [g.id, g.children[0].id, g.children[1].id]")
+    # Gelenk-Knopf: bei zwei Teilen in der Gruppe ja, bei Gruppe + eigenem Teil nein
+    p.ev("App.select(arg)", [ids[1], ids[2]]); p.wait(500)
+    btn1 = p.pg.locator('.ctxbar button[aria-label="Gelenk"]').count()
+    p.ev("App.select(arg)", [ids[0], ids[1]]); p.wait(500)
+    btn2 = p.pg.locator('.ctxbar button[aria-label="Gelenk"]').count()
+    ok1 = btn1 == 1 and btn2 == 0 and p.ev("return Joints.add(arg[0], arg[1], [0,0,0], [0,0,1]).ok", [ids[0], ids[1]]) is False
+    # Achse = Oberkante zwischen den Armen, in Weltlage umgerechnet
+    # Gruppe bei x = 50, um 90° gedreht: (10, 0, 4) liegt in der Welt bei (50, 10, 4), die Richtung Y zeigt nach −X
+    r = p.ev("return Joints.add(arg[0], arg[1], [50,10,4], [-1,0,0], {ang: 90})", [ids[1], ids[2]])
+    warte_rechnen(p, 30)
+    wb = p.ev("const b=Actions.worldBox(arg); return [b.max.z-b.min.z, b.max.x-b.min.x, b.max.y-b.min.y]", ids[2])
+    ok2 = r['ok'] and abs(wb[0] - 20) < 0.2 and abs(wb[1] - 10) < 0.2 and abs(wb[2] - 4) < 0.2 and p.ev("return App.doc.items.length===1 && App.doc.items[0].children.length===2 && App.errors.length===0")
+    # Rückgängig: Arm B liegt wieder flach in der Gruppe
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('Control+z'); warte_rechnen(p, 30)
+    ok3 = p.ev("const b=Actions.worldBox(arg); return Math.abs(b.max.z-b.min.z-4)<0.2", ids[2])
+    p.pg.keyboard.press('Control+y'); warte_rechnen(p, 30)
+    # Bewegung prüfen rechnet in Weltlage; Abspielen geht nur ganz oben im Verlauf
+    res = p.ev("const j=App.doc.joints[0]; return Joints.check(j.id, 30).then(r=>[r.length, r.some(x=>x.v>0.05), r.some(x=>x.v<=0.05)])")
+    p.ev("Joints.play(App.doc.joints[0].id)"); p.wait(300)
+    ok4 = res[0] == 7 and res[1] and res[2] and not p.ev("return !!Joints.playing") and 'ganz oben' in p.pg.locator('#toasts').inner_text()
+    return [ok1, ok2, ok3, ok4]
+
 # ---------- Sitzung 44: Anschlag übernehmen, Bewegung abspielen ----------
 def t_gelenk_anschlag(p):
     p.empty(); p.ev("App.change('x', d=>{ const a=Model.newItem('box',{w:20,d:10,h:4}); a.name='Arm A'; d.items.push(a); const b=Model.newItem('box',{w:20,d:10,h:4}); b.t.x=20; b.name='Arm B'; d.items.push(b); })"); warte_rechnen(p, 20)
@@ -2954,6 +3007,26 @@ def t_lochwand(p):
     ok5 = 'hole-wall' not in l and 'hole-edge' in l
     return [ok1, ok2, ok3, ok4, ok5]
 
+
+# ---------- Sitzung 50: größere Knöpfe in der einfachen Oberfläche ----------
+def t_einfach_gross(p):
+    p.empty(); p.ev("Actions.addPrimitive('box')"); warte_rechnen(p, 20); p.wait(400)
+    def masse():
+        return p.pg.evaluate("""() => { const t=document.querySelector('#t-body').getBoundingClientRect(), c=document.querySelector('.ctxbar button'), n=document.querySelector('#left-body .node');
+          return [t.height, c ? c.getBoundingClientRect().height : 0, n ? n.getBoundingClientRect().height : 0, document.querySelector('.topbar').getBoundingClientRect().height]; }""")
+    pro = masse()
+    p.pg.locator('#btn-level').click(); p.wait(700)
+    ein = masse()
+    ok1 = ein[0] >= pro[0] + 4 and ein[1] >= pro[1] + 4 and ein[2] >= pro[2] + 4
+    # Oberleiste wird höher, alles bleibt in einer Zeile und im Bild
+    over = p.pg.evaluate("() => { const tb=document.querySelector('.topbar'); return tb.scrollHeight > tb.clientHeight + 1 || [...document.querySelectorAll('.topbar .tool')].some(b=>b.offsetParent && b.getBoundingClientRect().bottom > tb.getBoundingClientRect().bottom + 1); }")
+    ok2 = ein[3] >= 58 and not over
+    # Ziel: mindestens 44 px hohe Knöpfe oben (Fingerbreite)
+    ok3 = ein[0] >= 44
+    p.pg.locator('#btn-level').click(); p.wait(600)
+    ok4 = abs(masse()[0] - pro[0]) < 0.5
+    return [ok1, ok2, ok3, ok4]
+
 # ---------- Sitzung 22: kleine Skizzen-Werkzeuge ----------
 def t_kreis_bogen_modi(p):
     sketch_xy(p)
@@ -3247,6 +3320,7 @@ TESTS = [
     ('Drehgelenk: Achse wählen / angelegt / 90° / Bewegung prüfen / lösen', t_gelenk),
     ('Schiebegelenk: Achse / Art Schieben / 10 mm / frei', t_schiebegelenk),
     ('Gelenk: Anschlag übernehmen / gesetzt / Rückgängig / Abspielen bewegt das Bild / Projekt unverändert', t_gelenk_anschlag),
+    ('Gelenk in einer Gruppe: Knopf / 90° in Weltlage / Rückgängig / Bewegung prüfen, kein Abspielen', t_gelenk_gruppe),
     ('Übergang mit Mittellinie: zeichnen / Vorschau / Fertig / Rückgängig / ohne', t_uebergang_mittellinie),
     ('KI-Kollege biegt einen Übergang mit Mittellinie', t_ki_mittellinie),
     ('Rohr im Raum: glatt / Ecken / im Bild klicken / Punkt als Zahl / löschen und Rückgängig', t_rohr_raum),
@@ -3255,6 +3329,8 @@ TESTS = [
     ('KI-Kollege legt ein Gelenk an / zweites Gelenk für dasselbe Teil abgelehnt', t_ki_gelenk),
     ('Erste Schritte: 0 von 4 / hakt sich ab / Wie? öffnet Export / 4 von 4 / ausblenden / nur in Einfach', t_erste_schritte),
     ('Wand um Löcher in Druckteilen: 0,2 mm rot / 1,6 mm gelb / 3,4 mm frei / Querloch in runder Klemme frei / Carbon über Platten-Regel', t_lochwand),
+    ('Einfach: größere Knöpfe oben, in der Kontextleiste und im Verlauf / Leiste passt / 44 px / zurück zu Profi', t_einfach_gross),
+    ('Skizze: Ellipse trimmen / liegt genau auf der Ellipse / Enden verbunden / Rückgängig', t_ellipse_trimmen),
     ('Gelenk-Kette: zwei Gelenke / 90° bewegt drittes Teil mit / Kreis abgelehnt / Rückgängig / Bewegung prüfen mit Kette', t_gelenk_kette),
     ('Skizze: Kreis aus 3 / 2 Punkten / tangentialer Bogen', t_kreis_bogen_modi),
     ('Skizze: Verlängern bis zur nächsten Linie', t_verlaengern),

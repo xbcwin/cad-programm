@@ -481,6 +481,23 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
   Schritte: 1. Ein Kind (ab 10) mit „Einfach“ eine Platte mit vier Löchern bauen lassen, ohne zu helfen.
   Erwartet: Es findet Körper, Löcher und Exportieren allein; notieren, wo es hängen bleibt.
 
+## Gelenke in Gruppen (neu in Sitzung 52)
+
+- [x] **Gelenk in der Gruppe**: Gruppe (bei x 50, um 90° gedreht) mit zwei Armen → beide Arme links im Verlauf wählen → Knopf „Gelenk“ da; Gruppe + eigener Arm → kein Knopf.
+- [x] **90°**: Arm B steht senkrecht, bleibt aber in der Gruppe; Strg Z legt ihn wieder hin.
+- [x] **Bewegung prüfen** findet die Stellen, an denen die Arme ineinanderstecken; „Abspielen“ erklärt, dass es nur ganz oben im Verlauf geht.
+- [ ] **Von Hand**: Klappe an einem Gehäuse (beides in einer Gruppe) auf- und zuklappen.
+
+## Ellipse trimmen (neu in Sitzung 51)
+
+- [x] **Halbe Ellipse**: Ellipse 40 × 20 und senkrechte Linie durch die Mitte → Trimmen auf die rechte Hälfte → links bleibt eine Spline, die genau auf der Ellipse liegt, ihre Enden sitzen auf der Linie; Strg Z bringt die Ellipse zurück.
+- [ ] **Von Hand**: halbe Ellipse hochziehen und die Fläche mit dem Original vergleichen.
+
+## Größere Knöpfe für Einsteiger (neu in Sitzung 50)
+
+- [x] **Einfach**: Quader anlegen, „Profi“ → „Einfach“ → Knöpfe oben, in der Kontextleiste und Zeilen im Verlauf werden größer, die Oberleiste bleibt einzeilig; zurück zu „Profi“ wie vorher.
+- [ ] **Auf dem Tablet**: Lassen sich alle Knöpfe gut mit dem Finger treffen?
+
 ## Wand um Löcher in Druckteilen (neu in Sitzung 49)
 
 - [x] **Zu dünn**: Quader 30 × 20 × 12 aus PETG, Loch Ø 3,2 senkrecht 0,2 mm vom Rand → Schwachstellen: „Dünne Wand um ein Loch“ (rot); 1,6 mm vom Rand → gelb; 3,4 mm → nichts.
