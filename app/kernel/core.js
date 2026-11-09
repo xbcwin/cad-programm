@@ -266,8 +266,25 @@ export function createKernel(R, oc) {
     }
     return edges;
   }
+  // Geschlossene glatte Kurve genau durch Punkte im Raum (Catmull-Rom nach Bogenlänge → kubische Bézier-Stücke)
+  function bezLoopWire(pts) {
+    const m = pts.length, Q = (i) => pts[((i % m) + m) % m], E = [];
+    const dist = (a, b) => Math.max(1e-9, Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]));
+    for (let i = 0; i < m; i++) {
+      const p0 = Q(i - 1), p1 = Q(i), p2 = Q(i + 1), p3 = Q(i + 2), t1 = dist(p0, p1), t2 = t1 + dist(p1, p2), t3 = t2 + dist(p2, p3), dt = t2 - t1;
+      const m1 = [0, 1, 2].map((k) => ((p1[k] - p0[k]) / t1 - (p2[k] - p0[k]) / t2 + (p2[k] - p1[k]) / dt) * dt);
+      const m2 = [0, 1, 2].map((k) => ((p2[k] - p1[k]) / dt - (p3[k] - p1[k]) / (t3 - t1) + (p3[k] - p2[k]) / (t3 - t2)) * dt);
+      E.push(R.makeBezierCurve([p1, p1.map((v, k) => v + m1[k] / 3), p2.map((v, k) => v - m2[k] / 3), p2]));
+    }
+    return R.assembleWire(E);
+  }
   // Übergang zwischen mehreren Umrissen (Loft), auf Wunsch mit Spitze – oder entlang einer Mittellinie
   function buildLoft(p) {
+    if (Array.isArray(p.sections3) && p.sections3.length >= 2) {
+      // mit Führungskurve: Zwischenschnitte kommen fertig aus dem Modell
+      try { return R.loft(p.sections3.map(bezLoopWire), { ruled: false }); }
+      catch (_) { throw new Error('Der Übergang mit Führungskurve klappt so nicht. Die Kurve sollte neben den Umrissen entlanglaufen, vom ersten bis zum letzten, ohne die Achse zu kreuzen.'); }
+    }
     const pr = p.profiles || [];
     const path = p.path && p.path.segs && p.path.segs.length ? p.path : null;
     if (pr.length < (p.tipPoint && !path ? 1 : 2)) throw new Error('Für einen Übergang braucht es mindestens zwei geschlossene Umrisse (oder einen Umriss mit Spitze).');

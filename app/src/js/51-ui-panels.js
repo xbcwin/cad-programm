@@ -581,9 +581,9 @@ const Panels = (() => {
       }
       w.append(sec);
     } else if (it.kind === 'loft') {
-      const n = (it.p.sketches || []).length, hasPath = !!it.p.path;
+      const n = (it.p.sketches || []).length, hasPath = !!it.p.path, hasRail = !!it.p.rail;
       sec.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Umrisse'), h('b', { class: 'mono' }, String(n))));
-      if (!hasPath) {
+      if (!hasPath && !hasRail) {
         const fl = h('div', { class: 'fields' });
         fl.append(UI.numField({ id: 'p-tip', label: 'Spitze verlängern', value: it.p.tip || 0, min: 0, onCommit: (v) => setP('tip', v) }));
         fl.append(UI.selectField({ id: 'p-ruled', label: 'Übergang', value: it.p.ruled ? 'ruled' : 'smooth', options: [['smooth', 'Weich'], ['ruled', 'Gerade Flächen']], onChange: (v) => setP('ruled', v === 'ruled') }));
@@ -606,7 +606,21 @@ const Panels = (() => {
         if (bad.length) ml.append(h('div', { class: 'hint-box warn', id: 'loft-path-warn', html: `Die Mittellinie trifft ${bad.length === ang.length ? 'die Umrisse' : bad.map(([, i]) => (i === 0 ? 'den ersten' : i === ang.length - 1 ? 'den letzten' : `den ${i + 1}.`) + ' Umriss').join(' und ')} schräg (${bad.map(([a]) => a + '°').join(', ')}). Dann wird der Körper dünn oder verdreht – lass sie möglichst senkrecht durch die Umrisse laufen.` }));
         ml.append(row, h('div', { class: 'hint-box', html: hasPath ? 'Der Übergang läuft an der Mittellinie entlang. Spitze und „Gerade Flächen“ gibt es dabei nicht.' : 'Ohne Mittellinie nimmt der Übergang den kürzesten Weg. Mit einer <b>Mittellinie</b> biegst du ihn – z. B. einen Rumpf, der nach oben schwingt, oder einen Arm im Bogen.' }));
       } else ml.append(h('div', { class: 'hint-box', html: 'Eine Mittellinie braucht mindestens zwei Umrisse.' }));
-      w.append(sec, ml);
+      // Führungskurve: gibt die Seitenlinie vor – der Übergang wird zwischen den Umrissen so weit, dass er sie berührt
+      const fk = h('div', { class: 'section', id: 'loft-rail' }, h('div', { class: 'section-h' }, 'Führungskurve'));
+      if (n >= 2 && !hasPath) {
+        const eb = h('button', { type: 'button', class: 'btn', id: 'loft-rail-edit' }); eb.innerHTML = icon(hasRail ? 'edit' : 'spline') + (hasRail ? 'Führungskurve bearbeiten' : 'Führungskurve zeichnen');
+        eb.onclick = () => Sketch.startLoftPath(it.id, 'rail');
+        const row = h('div', { class: 'btn-row' }, eb);
+        if (hasRail) {
+          const rb = h('button', { type: 'button', class: 'btn', id: 'loft-rail-off' }); rb.innerHTML = icon('close') + 'Ohne Führungskurve';
+          rb.onclick = () => App.change('Führungskurve entfernt', (doc) => { const f = Model.find(doc, it.id); if (!f) return false; delete f.item.p.rail; });
+          row.append(rb);
+        }
+        fk.append(row, h('div', { class: 'hint-box', html: hasRail ? 'Zwischen den Umrissen folgt der Übergang der Führungskurve – z. B. ein Rumpf, der in der Mitte bauchig wird. Die Umrisse selbst bleiben gleich.' : 'Mit einer <b>Führungskurve</b> gibst du die Seitenlinie vor: Der Übergang wird zwischen den Umrissen bauchiger oder schlanker, ohne dass du mehr Umrisse zeichnen musst.' }));
+      } else fk.append(h('div', { class: 'hint-box', html: hasPath ? 'Mit Mittellinie geht keine Führungskurve – erst „Ohne Mittellinie“.' : 'Eine Führungskurve braucht mindestens zwei Umrisse.' }));
+      if (hasRail) { ml.innerHTML = ''; ml.append(h('div', { class: 'section-h' }, 'Mittellinie'), h('div', { class: 'hint-box', html: 'Mit Führungskurve geht keine Mittellinie – erst „Ohne Führungskurve“.' })); }
+      w.append(sec, ml, fk);
     } else if (Features.isOp(it)) {
       sec.firstChild.textContent = Features.NAMES[it.p.op === 'pattern' ? it.p.pt : it.p.op] || 'Feature';
       Features.renderOp(it, sec, setP); w.append(sec);

@@ -258,9 +258,12 @@ const Model = (() => {
       const regs = SK.regions(Solver.cached(sk, V).ents).sort((a, b) => b.area - a.area);
       if (!regs.length) continue;
       const L = regs[0].outer; let cx = 0, cy = 0; for (const q of L.poly) { cx += q[0]; cy += q[1]; } cx /= L.poly.length || 1; cy /= L.poly.length || 1;
-      profiles.push({ plane: sk.plane, outer: L.k, c: [cx, cy] });
+      profiles.push({ plane: sk.plane, outer: L.k, c: [cx, cy], poly: L.poly });
     }
     const out = { profiles, ruled: !!p.ruled };
+    // Führungskurve: Zwischenschnitte, die in Richtung der Kurve so gestreckt werden, dass sie die Kurve berühren
+    const rch = p.rail && !p.path ? SK.chains(Solver.cached(p.rail, V).ents)[0] : null;
+    if (rch && profiles.length >= 2) { const sec = railSections(profiles, p.rail.plane, rch); if (sec) { out.sections3 = sec; return out; } }
     // Mittellinie: längster offener Zug der Pfad-Skizze, so gedreht, dass er beim ersten Umriss beginnt
     const ch = p.path ? SK.chains(Solver.cached(p.path, V).ents)[0] : null;
     if (ch && profiles.length >= 2) {
@@ -282,6 +285,71 @@ const Model = (() => {
       out.tipPoint = [0, 1, 2].map((k) => pl.o[k] + x[k] * last.c[0] + y[k] * last.c[1] + n[k] * tip * s);
     }
     return out;
+  }
+  // ---------- Übergang mit Führungskurve ----------
+  const v3 = { sub: (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]], add: (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]], mul: (a, k) => [a[0] * k, a[1] * k, a[2] * k], dot: (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2], cross: (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]], len: (a) => Math.hypot(a[0], a[1], a[2]) };
+  const planeY = (pl) => v3.cross(pl.n, pl.x);
+  const W3p = (pl, q) => { const y = planeY(pl); return [0, 1, 2].map((k) => pl.o[k] + pl.x[k] * q[0] + y[k] * q[1]); };
+  // Achse (erster → letzter Umriss) und Richtung u der Führungskurve (in ihrer Ebene, quer zur Achse, zur Kurve hin)
+  function railFrame(profiles, plane, railPts) {
+    const C = profiles.map((q) => W3p(q.plane, q.c)), c0 = C[0], A = v3.sub(C[C.length - 1], c0), La = v3.len(A);
+    if (La < 1e-6) return null;
+    const a = v3.mul(A, 1 / La);
+    let u = v3.cross(plane.n, a); const ul = v3.len(u); if (ul < 0.2) return null; u = v3.mul(u, 1 / ul);
+    if (railPts && railPts.length) { const m = railPts[Math.floor(railPts.length / 2)]; if (v3.dot(v3.sub(m, c0), u) < 0) u = v3.mul(u, -1); }
+    return { C, c0, a, La, u };
+  }
+  // Umriss gleichmäßig in n Punkte teilen – Start an der Seite zur Kurve hin, gleiche Umlaufrichtung um die Achse
+  function resampleLoop(pts, c, u, a, n) {
+    let P = pts.slice(); if (P.length > 2 && v3.len(v3.sub(P[0], P[P.length - 1])) < 1e-9) P.pop();
+    let area = 0; for (let i = 0; i < P.length; i++) area += v3.dot(v3.cross(v3.sub(P[i], c), v3.sub(P[(i + 1) % P.length], c)), a);
+    if (area < 0) P.reverse();
+    let i0 = 0, best = -Infinity; P.forEach((q, i) => { const d = v3.dot(v3.sub(q, c), u); if (d > best + 1e-9) { best = d; i0 = i; } });
+    P = P.slice(i0).concat(P.slice(0, i0));
+    const cum = [0]; for (let i = 1; i <= P.length; i++) cum.push(cum[i - 1] + v3.len(v3.sub(P[i % P.length], P[i - 1])));
+    const T = cum[cum.length - 1] || 1, out = [];
+    let j = 1;
+    for (let k = 0; k < n; k++) {
+      const L = (k / n) * T; while (j < cum.length - 1 && cum[j] < L) j++;
+      const t = (L - cum[j - 1]) / Math.max(1e-12, cum[j] - cum[j - 1]), A0 = P[j - 1], B0 = P[j % P.length];
+      out.push([0, 1, 2].map((q) => A0[q] + (B0[q] - A0[q]) * t));
+    }
+    return out;
+  }
+  function railPoints(plane, ch) {
+    const pts = []; for (const g of ch.segs) { const sp = SK.segPoints(g); for (let i = pts.length ? 1 : 0; i < sp.length; i++) pts.push(W3p(plane, sp[i])); }
+    return pts;
+  }
+  function railSections(profiles, plane, ch, n = 48, K = 6) {
+    const rp = railPoints(plane, ch), F = railFrame(profiles, plane, rp); if (!F) return null;
+    const { C, c0, a, La, u } = F;
+    const loops = profiles.map((q, i) => resampleLoop(q.poly.map((r) => W3p(q.plane, r)), C[i], u, a, n));
+    const sOf = (pt) => v3.dot(v3.sub(pt, c0), a) / La;
+    // Kurve als Breite über der Achse: e(s) = Abstand von der Achse in Richtung u
+    const rs = rp.map((r) => [sOf(r), v3.dot(v3.sub(r, c0), u)]).sort((x, y) => x[0] - y[0]);
+    const eAt = (s) => { if (s < rs[0][0] - 1e-6 || s > rs[rs.length - 1][0] + 1e-6) return null; let i = 1; while (i < rs.length - 1 && rs[i][0] < s) i++; const A0 = rs[i - 1], B0 = rs[i], t = (s - A0[0]) / Math.max(1e-12, B0[0] - A0[0]); return A0[1] + (B0[1] - A0[1]) * Math.max(0, Math.min(1, t)); };
+    const ext = (L, c) => Math.max(...L.map((q) => v3.dot(v3.sub(q, c), u)));
+    const ratio = (L, c, s) => { const e = eAt(s); if (e == null) return 1; const x = ext(L, c); return x > 1e-6 ? (e - v3.dot(v3.sub(c, c0), u)) / x : 1; };
+    const g = loops.map((L, i) => ratio(L, C[i], sOf(C[i])));
+    const out = [];
+    for (let i = 0; i < loops.length - 1; i++) {
+      for (let k = 0; k < K; k++) {
+        const t = k / K;
+        if (k === 0) { out.push(loops[i]); continue; }
+        const c = v3.add(C[i], v3.mul(v3.sub(C[i + 1], C[i]), t));
+        const L = loops[i].map((q, m) => v3.add(q, v3.mul(v3.sub(loops[i + 1][m], q), t)));
+        const f = Math.max(0.05, Math.min(20, ratio(L, c, sOf(c)) / (g[i] + (g[i + 1] - g[i]) * t)));
+        out.push(L.map((q) => { const d = v3.dot(v3.sub(q, c), u); return v3.add(q, v3.mul(u, d * (f - 1))); }));
+      }
+    }
+    out.push(loops[loops.length - 1]);
+    return out;
+  }
+  // Vorgezeichnete Führungskurve: durch die äußerste Stelle jedes Umrisses in Richtung u (dann bleibt der Übergang zunächst gleich)
+  function railStart(it, V, plane) {
+    const lp = loftParams({ p: { ...it.p, rail: null, path: null, tip: 0 } }, V);
+    const F = railFrame(lp.profiles, plane, null); if (!F) return null;
+    return lp.profiles.map((q, i) => { const P3 = q.poly.map((r) => W3p(q.plane, r)), c = F.C[i]; const e = Math.max(...P3.map((x) => v3.dot(v3.sub(x, c), F.u))); return v3.add(c, v3.mul(F.u, e)); });
   }
   // Wie schräg trifft die Mittellinie die Umrisse? Winkel (Grad) zwischen Linie und Umriss-Normale je Umriss
   function loftPathAngles(it, V) {
@@ -419,6 +487,6 @@ const Model = (() => {
     walk(doc.items, (it) => { it.t = Object.assign(T0(), it.t || {}); it.p = it.p || {}; it.finishes = it.finishes || []; if (!it.role) it.role = 'solid'; if (!it.color) it.color = nextColor(); });
     return doc;
   }
-  return { bez3, patternMatrices, instanceMatrices, loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  return { railStart, railSections, bez3, patternMatrices, instanceMatrices, loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 

@@ -155,8 +155,11 @@ const Sketch = (() => {
   }
   // Mittellinie für einen Übergang: Ebene durch den ersten Umriss, in der auch der letzte liegt; vorgezeichnet als Spline durch die Mitten
   let lpKey = '';
-  function startLoftPath(id) {
+  // kind 'path' = Mittellinie, 'rail' = Führungskurve (Seitenlinie, der der Übergang zwischen den Umrissen folgt)
+  const isLoftLine = () => !!S && (S.ctx.mode === 'loftpath' || S.ctx.mode === 'loftrail');
+  function startLoftPath(id, kind = 'path') {
     const f = Model.find(App.doc, id); if (!f || f.item.kind !== 'loft') return false;
+    const key = kind === 'rail' ? 'rail' : 'path';
     const it = f.item, V = Model.vars(App.doc).v;
     const Y = (pl) => { const n = pl.n, x = pl.x; return [n[1] * x[2] - n[2] * x[1], n[2] * x[0] - n[0] * x[2], n[0] * x[1] - n[1] * x[0]]; };
     const W3 = (pl, q) => { const y = Y(pl); return [0, 1, 2].map((k) => pl.o[k] + pl.x[k] * q[0] + y[k] * q[1]); };
@@ -166,9 +169,10 @@ const Sketch = (() => {
       const poly = regs[0].outer.poly; let cx = 0, cy = 0; for (const q of poly) { cx += q[0]; cy += q[1]; } cx /= poly.length || 1; cy /= poly.length || 1;
       prof.push({ c: W3(sk.plane, [cx, cy]), n: sk.plane.n.slice(), pts: poly.map((q) => W3(sk.plane, q)) });
     }
-    if (prof.length < 2) { UI.toast('Für eine Mittellinie braucht der Übergang mindestens zwei Umrisse.', { kind: 'bad', icon: 'info' }); return false; }
+    if (prof.length < 2) { UI.toast(`Für eine ${key === 'rail' ? 'Führungskurve' : 'Mittellinie'} braucht der Übergang mindestens zwei Umrisse.`, { kind: 'bad', icon: 'info' }); return false; }
     let plane, ents = [], dims = [], cons = [];
-    if (it.p.path) { plane = deepClone(it.p.path.plane); ents = deepClone(it.p.path.ents || []); dims = deepClone(it.p.path.dims || []); cons = deepClone(it.p.path.cons || []); }
+    const old = it.p[key];
+    if (old) { plane = deepClone(old.plane); ents = deepClone(old.ents || []); dims = deepClone(old.dims || []); cons = deepClone(old.cons || []); }
     else {
       const C0 = prof[0].c, C1 = prof[prof.length - 1].c, D = new THREE.Vector3(C1[0] - C0[0], C1[1] - C0[1], C1[2] - C0[2]).normalize();
       // bevorzugt „Stehend (vorne)“, dann „seitlich“, dann „Arbeitsfläche“ – die, in der die Verbindung am besten liegt
@@ -178,7 +182,14 @@ const Sketch = (() => {
       plane = { o: B.n.map((v) => round(v * off, 6)), x: B.x.slice(), n: B.n.slice() };
     }
     const y = Y(plane), to2 = (P) => { const d = [P[0] - plane.o[0], P[1] - plane.o[1], P[2] - plane.o[2]]; return [round(d[0] * plane.x[0] + d[1] * plane.x[1] + d[2] * plane.x[2], 4), round(d[0] * y[0] + d[1] * y[1] + d[2] * y[2], 4)]; };
-    if (!it.p.path) {
+    if (!old && key === 'rail') {
+      // Führungskurve: Spline durch die äußerste Stelle jedes Umrisses (der Übergang bleibt so zunächst gleich), dazwischen je ein Punkt zum Ziehen
+      const R3 = Model.railStart(it, V, plane);
+      if (!R3) { UI.toast('Die Umrisse liegen dafür ungünstig – die Führungskurve braucht eine Ebene, die die Achse vom ersten zum letzten Umriss enthält.', { kind: 'bad', icon: 'info' }); return false; }
+      const pts = R3.map(to2), out = [pts[0]];
+      for (let i = 1; i < pts.length; i++) out.push([round((pts[i - 1][0] + pts[i][0]) / 2, 4), round((pts[i - 1][1] + pts[i][1]) / 2, 4)], pts[i]);
+      ents = [{ id: uid('e'), type: 'spline', pts: out, closed: false }];
+    } else if (!old) {
       // Spline durch die Mitten; kurz hinter dem ersten und vor dem letzten Umriss je ein Hilfspunkt in Richtung der Umriss-Normale,
       // damit die Linie senkrecht aus den Umrissen herausläuft – auch wenn man die Mitte wegzieht
       const pts = prof.map((q) => to2(q.c)), m = pts.length;
@@ -203,19 +214,21 @@ const Sketch = (() => {
     }
     lpKey = '';
     const bb = SK.bounds([...ents, ...refs]), ext = bb ? Math.max(bb[2] - bb[0], bb[3] - bb[1]) : 40;
-    begin({ plane, W: Model.worldMatrix(App.doc, id), ents, dims, cons, refs, viewSize: Math.max(60, ext * 1.7), ctx: { mode: 'loftpath', id } });
+    begin({ plane, W: Model.worldMatrix(App.doc, id), ents, dims, cons, refs, viewSize: Math.max(60, ext * 1.7), ctx: { mode: key === 'rail' ? 'loftrail' : 'loftpath', id } });
     S.hiddenEdit = id;
     const top = Model.topOf(App.doc, id); if (top && top.id === id) Viewer.updateNode(id, { visible: false });
     loftPreview();
-    UI.toast(it.p.path ? 'Bieg die Mittellinie – der Übergang folgt ihr. Dann „Fertig“.' : 'Die Mittellinie läuft durch die Mitten der Umrisse. Zieh ihre Punkte, um den Übergang zu biegen – dann „Fertig“.', { icon: 'info', ms: 4200 });
+    if (key === 'rail') UI.toast(old ? 'Zieh die Führungskurve – der Übergang folgt ihr. Dann „Fertig“.' : 'Die Führungskurve läuft an der Seite der Umrisse entlang. Zieh die Punkte dazwischen nach außen oder innen – der Übergang folgt. Dann „Fertig“.', { icon: 'info', ms: 4200 });
+    else UI.toast(it.p.path ? 'Bieg die Mittellinie – der Übergang folgt ihr. Dann „Fertig“.' : 'Die Mittellinie läuft durch die Mitten der Umrisse. Zieh ihre Punkte, um den Übergang zu biegen – dann „Fertig“.', { icon: 'info', ms: 4200 });
     return true;
   }
   // Vorschau: der Übergang mit der gerade gezeichneten Mittellinie
   const loftPreview = debounce(() => {
-    if (!S || S.ctx.mode !== 'loftpath') return;
+    if (!isLoftLine()) return;
     const k = JSON.stringify([S.ents, S.plane, S.dims]); if (k === lpKey) return; lpKey = k;
     const f = Model.find(App.doc, S.ctx.id); if (!f) return;
-    const it = deepClone(f.item); it.p.path = { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons) };
+    const it = deepClone(f.item), sk = { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons) };
+    if (S.ctx.mode === 'loftrail') { it.p.rail = sk; delete it.p.path; } else it.p.path = sk;
     Model.setFromMatrix(it, S.W); it.id = '__preview'; it.finishes = [];
     App.extra = SK.chains(S.ents).length ? [it] : []; App.rebuild();
   }, 250);
@@ -243,7 +256,7 @@ const Sketch = (() => {
     if (Notes.active) Notes.stop();
     Panels.closeFlyout(); UI.closePop();
     const F = frameWorld(init.plane, init.W);
-    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || (init.ctx.mode === 'loftpath' && init.ents.length) ? 'select' : init.ctx.mode === 'patpath' ? 'line' : 'rect', draft: null, sel: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, hoverEnt: null, trimHover: null };
+    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail') && init.ents.length) ? 'select' : init.ctx.mode === 'patpath' ? 'line' : 'rect', draft: null, sel: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, hoverEnt: null, trimHover: null };
     S.dims = init.dims || []; S.cons = init.cons || []; S.picks = []; S.dimFirst = null; S.selCon = null;
     S.plane0 = deepClone(init.plane); S.pOff = init.pOff || 0; S.pTilt = 0;
     if (S.pOff) applyPlane(false, true);
@@ -1876,7 +1889,7 @@ const Sketch = (() => {
       S.pathCount = L.length; const pc = document.getElementById('path-count'); if (pc) pc.textContent = String(L.length);
     }
     // offene Enden markieren
-    if (!pathM && S.ctx.mode !== 'loftpath') for (const p of SK.openEnds(S.ents)) { const w = toWorld(p[0], p[1]); const l = label('', p, 'snaptip'); l.style.transform = 'translate(-50%,-50%)'; l.style.width = '9px'; l.style.height = '9px'; l.style.padding = '0'; l.style.borderRadius = '50%'; l.style.background = th.hole; l.title = 'Offenes Ende'; }
+    if (!pathM && !isLoftLine()) for (const p of SK.openEnds(S.ents)) { const w = toWorld(p[0], p[1]); const l = label('', p, 'snaptip'); l.style.transform = 'translate(-50%,-50%)'; l.style.width = '9px'; l.style.height = '9px'; l.style.padding = '0'; l.style.borderRadius = '50%'; l.style.background = th.hole; l.title = 'Offenes Ende'; }
     // Entwurf
     const d = S.draft, cur = S.cursor ? S.cursor.p : null;
     if (d && cur && !S.step) {
@@ -1965,7 +1978,7 @@ const Sketch = (() => {
       snapMarker(c.kind, w, ps, acc);
       if (c.tip) { const l = label(c.tip, w, 'snaptip'); }
     }
-    if (S.ctx.mode === 'loftpath') loftPreview();
+    if (isLoftLine()) loftPreview();
     Viewer.requestRender();
   }
   // Form des Fangpunkts zeigt, was gefangen wurde
@@ -2047,6 +2060,7 @@ const Sketch = (() => {
     if (!S) return;
     const w = h('div', { class: 'props' });
     if (!S.step && (S.ctx.mode === 'patpath' || isPathEdit())) w.append(h('div', { class: 'ok-box', id: 'path-hint', html: '<b>Kurve für das Muster</b> – die Kopien laufen sie vom Anfang bis zum Ende ab. Der Punkt markiert das Original: Am Ende der Kurve, das ihm näher liegt, geht es los. Ein Kreis oder ein geschlossener Umriss verteilt die Kopien rundherum.' }));
+    if (S.ctx.mode === 'loftrail') w.append(h('div', { class: 'ok-box', id: 'loftrail-hint', html: '<b>Führungskurve für den Übergang</b> – sie gibt die Seitenlinie vor: Zwischen den Umrissen wird der Übergang in dieser Richtung so weit, dass er die Kurve berührt. Die Umrisse selbst bleiben, wie sie sind. Sie sollte vom ersten bis zum letzten Umriss laufen.' }));
     if (S.ctx.mode === 'loftpath') w.append(h('div', { class: 'ok-box', id: 'loftpath-hint', html: '<b>Mittellinie für den Übergang</b> – die Umrisse bleiben, wo sie sind (die dünnen Hilfskanten zeigen sie), und die Fläche dazwischen folgt der Linie. Sie sollte vom ersten Umriss durch alle anderen bis zum letzten laufen. Zieh die Punkte der Kurve oder zeichne eine neue Linie, einen Bogen oder eine Spline.' }));
     if (S.step) { w.append(h('div', { class: 'hint-box', html: S.step.revolve ? 'Wähle die Achse, um die gedreht wird. Klick im Bild auf Flächen, um sie ab- oder anzuwählen.' : 'Zieh am Pfeil im Bild oder tipp die Höhe ein. Klick auf Flächen, um sie ab- oder anzuwählen.' })); body.append(w); return; }
     const sel = S.ents.find((x) => x.id === S.sel);
@@ -2267,7 +2281,7 @@ const Sketch = (() => {
       }
       const regs = SK.regions(S.ents);
       if (S.ctx.mode === 'patpath' || isPathEdit()) w.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Teile auf der Kurve (mit Original)'), h('b', { class: 'mono', id: 'path-count' }, String(S.pathCount || 0))));
-      else if (S.ctx.mode === 'loftpath') { if (!SK.chains(S.ents).length) w.append(h('div', { class: 'err-box' }, 'Noch keine offene Linie – die Mittellinie braucht einen Anfang und ein Ende.')); }
+      else if (isLoftLine()) { if (!SK.chains(S.ents).length) w.append(h('div', { class: 'err-box' }, 'Noch keine offene Linie – die Mittellinie braucht einen Anfang und ein Ende.')); }
       else {
         w.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Geschlossene Flächen'), h('b', { class: 'mono' }, String(regs.length))));
         if (SK.openEnds(S.ents).length) w.append(h('div', { class: 'err-box' }, 'Rot markierte Enden sind noch offen. Verbinde sie, damit eine Fläche entsteht.'));
@@ -2284,12 +2298,13 @@ const Sketch = (() => {
     const regs = SK.regions(S.ents);
     const editKind = S.ctx.mode === 'edit' ? (Model.find(App.doc, S.ctx.editId) || { item: {} }).item.kind : null;
     const pathMode = S.ctx.mode === 'patpath' || isPathEdit();
-    if (S.ctx.mode === 'loftpath') {
-      if (!SK.chains(S.ents).length) { UI.toast('Die Mittellinie braucht eine offene Linie, einen Bogen oder eine Spline – keinen geschlossenen Umriss.', { kind: 'bad', icon: 'info' }); return; }
+    if (isLoftLine()) {
+      const rail = S.ctx.mode === 'loftrail', nm = rail ? 'Führungskurve' : 'Mittellinie';
+      if (!SK.chains(S.ents).length) { UI.toast(`Die ${nm} braucht eine offene Linie, einen Bogen oder eine Spline – keinen geschlossenen Umriss.`, { kind: 'bad', icon: 'info' }); return; }
       const id = S.ctx.id, sk = { plane: deepClone(S.plane), ents: S.ents, dims: S.dims, cons: S.cons };
       App.extra = []; finishSession();
-      App.change('Mittellinie', (doc) => { const f = Model.find(doc, id); if (!f) return false; f.item.p.path = sk; });
-      App.select([id]); UI.toast('Der Übergang folgt jetzt der Mittellinie.', { icon: 'check' }); return;
+      App.change(nm, (doc) => { const f = Model.find(doc, id); if (!f) return false; if (rail) { f.item.p.rail = sk; delete f.item.p.path; } else { f.item.p.path = sk; delete f.item.p.rail; } });
+      App.select([id]); UI.toast(`Der Übergang folgt jetzt der ${nm}.`, { icon: 'check' }); return;
     }
     if (pathMode && !SK.chains(S.ents).length && !regs.length) { UI.toast('Zeichne zuerst eine Kurve: eine Linie, einen Bogen, eine Spline oder einen Kreis.', { kind: 'bad', icon: 'info' }); return; }
     if (S.ctx.mode === 'patpath') {

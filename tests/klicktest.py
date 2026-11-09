@@ -2857,6 +2857,31 @@ def t_uebergang_mittellinie(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+
+# ---------- Sitzung 55: Übergang mit Führungskurve ----------
+def t_uebergang_fuehrung(p):
+    p.empty()
+    skizzenkoerper(p, [{'id': 'r', 'type': 'rect', 'a': [-15, -10], 'b': [15, 10]}], 0, 'Unten')
+    skizzenkoerper(p, [{'id': 'c', 'type': 'circle', 'c': [0, 0], 'r': 8}], 40, 'Oben')
+    warte_rechnen(p, 20)
+    p.ev("App.select([App.doc.items[0].id]); App.select([App.doc.items[1].id], {additive:true})"); p.wait(600)
+    p.pg.locator('.ctxbar button[aria-label="Übergang"]').click(); warte_rechnen(p, 30)
+    v0 = volumen(p)
+    p.pg.locator('#loft-rail-edit').click(); p.wait(1500)
+    st = SS(p, "return [S.ctx.mode, S.ents.length, S.ents[0].pts.length, S.ents[0].pts[0], S.ents[0].pts[2], S.tool]")
+    ok1 = st[0] == 'loftrail' and st[1:3] == [1, 3] and near([abs(st[3][0]), st[3][1]], [15, 0], 0.05) and near([abs(st[4][0]), st[4][1]], [8, 40], 0.05) and st[5] == 'select' and p.pg.locator('#loftrail-hint').count() == 1
+    # Mitte der Kurve nach außen ziehen: der Übergang wird dort bauchig, in Y bleibt er gleich
+    SS(p, "const q=S.ents[0].pts; q[1]=[Math.sign(q[0][0])*25, 20]"); p.pg.mouse.move(700, 400); p.pg.mouse.move(705, 405); p.wait(1500); warte_rechnen(p, 30)
+    pv = p.ev("const r=App.extra.length&&App.results.get('__preview'); return r&&r.data?r.data.bbox:null")
+    ok2 = pv is not None and (pv[3] - pv[0]) > 45 and abs(pv[1] + 10) < 0.6 and abs(pv[4] - 10) < 0.6 and abs(pv[2]) < 0.3 and abs(pv[5] - 40) < 0.3
+    p.pg.keyboard.press('Enter'); warte_rechnen(p, 30)
+    v1 = volumen(p)
+    ok3 = (not p.ev("return Sketch.active") and p.ev("return !!App.doc.items[0].p.rail && !App.doc.items[0].p.path && App.errors.length===0")
+           and v1 and v0 and v1 > 1.15 * v0 and p.pg.locator('#loft-rail-off').count() == 1 and p.pg.locator('#loft-path-edit').count() == 0)
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('Control+z'); warte_rechnen(p, 30)
+    ok4 = p.ev("return !App.doc.items[0].p.rail && App.errors.length===0") and abs(volumen(p) - v0) < 0.01 * v0
+    return [ok1, ok2, ok3, ok4]
+
 def t_ki_mittellinie(p):
     ki(p); p.empty()
     ki_fragen(p, 'Bau mir einen Rumpf, der nach oben schwingt', {'antwort': 'Ich baue einen geschwungenen Rumpf.', 'aktionen': [
@@ -3386,6 +3411,7 @@ TESTS = [
     ('Gelenk in einer Gruppe: Knopf / 90° in Weltlage / Rückgängig / Bewegung prüfen, kein Abspielen', t_gelenk_gruppe),
     ('Übergang mit Mittellinie: zeichnen / Vorschau / Fertig / Rückgängig / ohne', t_uebergang_mittellinie),
     ('KI-Kollege biegt einen Übergang mit Mittellinie', t_ki_mittellinie),
+    ('Übergang mit Führungskurve: vorgezeichnet / bauchig in der Vorschau / Fertig / Rückgängig', t_uebergang_fuehrung),
     ('Rohr im Raum: glatt / Ecken / im Bild klicken / Punkt als Zahl / löschen und Rückgängig', t_rohr_raum),
     ('KI-Kollege legt ein Rohr im Raum', t_ki_rohr_raum),
     ('Schwerpunkt ausgleichen: Knopf im Check / Akku wandert, Schwerpunkt mittig / Rückgängig', t_schwerpunkt_ausgleich),

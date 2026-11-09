@@ -481,6 +481,12 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
   Schritte: 1. Ein Kind (ab 10) mit „Einfach“ eine Platte mit vier Löchern bauen lassen, ohne zu helfen.
   Erwartet: Es findet Körper, Löcher und Exportieren allein; notieren, wo es hängen bleibt.
 
+## Übergang mit Führungskurve (neu in Sitzung 55)
+
+- [x] **Vorgezeichnet**: Rechteck 30 × 20 unten, Kreis Ø 16 40 mm darüber → Übergang → „Führungskurve zeichnen“ → Spline von der Rechteckkante (15) zur Kreiskante (8), Hinweis rechts.
+- [x] **Bauchig**: mittleren Punkt auf 25 ziehen → Vorschau in X über 45 mm breit, in Y und in der Höhe gleich; „Fertig“ → mehr Volumen; Strg Z → wie vorher.
+- [ ] **Speed-Rumpf**: drei Ellipsen hintereinander und eine Führungskurve von oben – sieht der Rumpf glatt aus?
+
 ## Armverkleidung (neu in Sitzung 54)
 
 - [x] **Baustein**: Drohne → Lochbilder und Bausteine → „Armverkleidung“ ist da.
