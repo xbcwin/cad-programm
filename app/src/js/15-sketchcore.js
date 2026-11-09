@@ -124,20 +124,25 @@ const SK = (() => {
   function textContours(e) {
     const font = FONTS[e.font] || FONTS.inter;
     if (!font) return [];
-    const key = JSON.stringify([e.s, e.h, e.font, e.align, e.a, e.rot, e.mir, e.sp]);
+    const key = JSON.stringify([e.s, e.h, e.font, e.align, e.a, e.rot, e.mir, e.sp, e.bend]);
     if (textCache.has(key)) return textCache.get(key);
     const k = (e.h > 0 ? e.h : 5) / font.cap, sp = (e.sp || 0) / k;
     const chars = [...String(e.s || '')];
     let w = 0; for (const ch of chars) w += ((font.glyphs[ch] || font.glyphs['?'] || { w: font.em / 2 }).w) + sp; if (chars.length) w -= sp;
     const x0 = e.align === 'm' ? -w / 2 : e.align === 'r' ? -w : 0;
     const cs = Math.cos(e.rot || 0), sn = Math.sin(e.rot || 0), my = e.mir ? -1 : 1;
+    // Bogen: Grundlinie auf einem Kreis mit Radius „bend“ (positiv: Mitte darunter, Text wölbt sich nach oben; negativ: nach unten)
+    const R = Math.abs(e.bend) > 1e-6 ? e.bend : 0;
+    const B = (u, v) => { if (!R) return [u, v]; const f = u / R, r = R + v; return [r * Math.sin(f), r * Math.cos(f) - R]; };
     const out = []; let x = x0;
     for (const ch of chars) {
       const g = font.glyphs[ch] || font.glyphs['?'];
       if (g) {
         const ox = x;
-        const T = (p) => { const u = (p[0] + ox) * k, v = p[1] * k * my; return [e.a[0] + cs * u - sn * v, e.a[1] + sn * u + cs * v]; };
-        for (const c of glyphContours(font, font.glyphs[ch] ? ch : '?')) out.push(c.map((s) => (s.t === 'bez' ? { t: 'bez', a: T(s.a), c1: T(s.c1), c2: T(s.c2), b: T(s.b) } : { t: 'line', a: T(s.a), b: T(s.b) })));
+        const T = (p) => { const [u, v] = B((p[0] + ox) * k, p[1] * k * my); return [e.a[0] + cs * u - sn * v, e.a[1] + sn * u + cs * v]; };
+        // gerade Stücke werden im Bogen zu Kurven (Stützpunkte bei einem und zwei Dritteln)
+        const L3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+        for (const c of glyphContours(font, font.glyphs[ch] ? ch : '?')) out.push(c.map((s) => (s.t === 'bez' ? { t: 'bez', a: T(s.a), c1: T(s.c1), c2: T(s.c2), b: T(s.b) } : R ? { t: 'bez', a: T(s.a), c1: T(L3(s.a, s.b, 1 / 3)), c2: T(L3(s.a, s.b, 2 / 3)), b: T(s.b) } : { t: 'line', a: T(s.a), b: T(s.b) })));
         x += g.w + sp;
       } else x += font.em / 2 + sp;
     }

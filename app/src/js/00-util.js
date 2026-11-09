@@ -352,8 +352,8 @@ const HELP = {
  },
  "offset2d": {
   "tip": "Parallele Kopie im Abstand erstellen",
-  "hilfe": "Klicke eine Linie, einen Bogen, Kreis oder eine Form an. Bewege die Maus auf die Seite, auf der die Kopie liegen soll, und klicke. Oder tippe den Abstand ein und drücke Enter – auch eine Formel geht.",
-  "tipp": "Die Kopie bleibt über eine Regel mit dem Original verbunden. Ändert sich das Original, wandert sie mit. Klick auf das Regel-Symbol, um den Abstand später zu ändern."
+  "hilfe": "Klicke eine Linie, einen Bogen, Kreis, eine Ellipse oder eine Form an. Bewege die Maus auf die Seite, auf der die Kopie liegen soll, und klicke. Oder tippe den Abstand ein und drücke Enter – auch eine Formel geht.",
+  "tipp": "Die Kopie bleibt über eine Regel mit dem Original verbunden. Ändert sich das Original, wandert sie mit. Klick auf das Regel-Symbol, um den Abstand später zu ändern – bei einer Kette gilt der neue Abstand für alle Stücke zusammen. Bei einer Ellipse wird die Kopie eine Spline genau im Abstand (sie bleibt nicht verbunden)."
  },
  "wall2d": {
   "tip": "Aus einer offenen Linie eine Wand mit Dicke machen",
@@ -463,11 +463,11 @@ const HELP = {
  "loft": {
   "tip": "Weicher Übergang durch mehrere Umrisse (Loft)",
   "hilfe": "Zeichne zwei oder mehr Umrisse auf verschiedenen Ebenen (z. B. ein Rechteck unten und einen Kreis 30 mm darüber – mit „Ebene verschieben“ in der Skizze). Wähle die Skizzenkörper in der Reihenfolge, durch die der Körper laufen soll, und klick „Übergang“. Bei einem einzelnen Skizzenkörper macht „Zur Spitze“ daraus eine Spitze. Rechts unter „Mittellinie“ kannst du den Übergang an einer gebogenen Linie entlangführen.",
-  "tipp": "Unter „Spitze verlängern“ stellst du ein, wie weit die Spitze hinter dem letzten Umriss liegt. Mit „Mittellinie zeichnen“ schwingt ein Rumpf nach oben oder ein Arm läuft im Bogen; mit „Führungskurve zeichnen“ gibst du die Seitenlinie vor und machst ihn bauchig oder schlank – die Umrisse bleiben dabei, wo sie sind. Für Nasen, Düsen und Rumpfteile danach die Kanten runden."
+  "tipp": "Unter „Spitze verlängern“ stellst du ein, wie weit die Spitze hinter dem letzten Umriss liegt. Mit „Mittellinie zeichnen“ schwingt ein Rumpf nach oben oder ein Arm läuft im Bogen; mit „Führungskurve zeichnen“ gibst du die Seitenlinie vor und machst ihn bauchig oder schlank – die Umrisse bleiben dabei, wo sie sind. Eine „Zweite Führungskurve“ quer zur ersten formt die andere Richtung: z. B. die Höhe von der Seite und die Breite von oben. Für Nasen, Düsen und Rumpfteile danach die Kanten runden."
  },
  "holeWizard": {
   "tip": "Schraubenloch, Gewinde, Einsatz oder Mutternfalle bohren",
-  "hilfe": "Klick auf eine Fläche und dann auf „Bohrung“. Wähle Art und Größe (zum Beispiel M3) und drück „Löcher setzen“. Jeder weitere Klick auf eine Fläche setzt noch ein Loch – „Fertig“ oder Esc beendet.",
+  "hilfe": "Klick auf eine Fläche und dann auf „Bohrung“ – das geht auch auf runden Flächen wie Rohren und Rümpfen. Wähle Art und Größe (zum Beispiel M3) und drück „Löcher setzen“. Jeder weitere Klick auf eine Fläche setzt noch ein Loch – „Fertig“ oder Esc beendet.",
   "tipp": "„Durchgangsloch“ lässt die Schraube frei durchrutschen. „Gewinde schneiden“ macht das kleinere Kernloch, in das sich die Schraube selbst hineindreht."
  },
  "countersink": {
@@ -477,12 +477,12 @@ const HELP = {
  },
  "fillet": {
   "tip": "Scharfe 3D-Kanten schön abrunden",
-  "hilfe": "Klicke eine oder mehrere Kanten deines 3D-Körpers an und schiebe den Pfeil, um die Rundung größer oder kleiner zu machen.",
+  "hilfe": "Klicke eine oder mehrere Kanten deines 3D-Körpers an und schiebe den Pfeil, um die Rundung größer oder kleiner zu machen. Rechts unter „Kanten“ macht „Von … bis“ eine Rundung, die entlang der Kante wächst – z. B. von 1 mm auf 4 mm; „Richtung tauschen“ dreht sie um.",
   "tipp": "Gerundete Ecken sehen besser aus und reißen bei Belastung seltener ein, zum Beispiel an den Armen eines Frames."
  },
  "chamfer": {
   "tip": "Kante im Winkel schräg anschneiden",
-  "hilfe": "Klicke auf eine Kante und ziehe am Pfeil, um die scharfe Ecke durch eine gerade Schräge (Fase) zu ersetzen.",
+  "hilfe": "Klicke auf eine Kante und ziehe am Pfeil, um die scharfe Ecke durch eine gerade Schräge (Fase) zu ersetzen. Rechts unter „Kanten“ wählst du die Art: „Gleich“ (auf beiden Seiten gleich weit), „Zwei Abstände“ (z. B. 2 mm auf der einen, 4 mm auf der anderen Fläche) oder „Mit Winkel“ (Abstand und Winkel); „Seiten tauschen“ dreht sie um.",
   "tipp": "Eine kleine Fase nimmt Kanten die Schärfe – an Carbonplatten schneiden sie dann keine Kabel mehr an."
  },
  "shell": {
@@ -603,7 +603,7 @@ const HELP = {
  "frameAssist": {
   "tip": "Drohnenrahmen in einem Schritt bauen – eigener oder nach Hersteller",
   "hilfe": "Wähle Propellergröße, Rahmenform, Stack, Motor, Videosystem und Akku. Tracery rechnet den Achsabstand so, dass zwischen den Propellern genug Luft bleibt, und warnt, wenn etwas nicht passt. Unter „Vorlage“ baust du echte Rahmen von Herstellern nach (TBS, GEPRC, iFlight, SpeedyBee, AOS RC): Achsabstand, Armdicke, Plattendicke und Stack stimmen, die Umrisse sind vereinfacht. Neue Formen: Cinewhoop mit Ducts um die Propeller und Speed-Rumpf – ein Stromlinien-Rumpf mit Kamera in der Nase, Akku innen und geneigten Motoren.",
-  "tipp": "Beim Deadcat sind die vorderen Arme weiter gespreizt – dann sind die Propeller nicht im Kamerabild. Beim Speed-Rumpf stehen die Motoren schräg (Motorneigung): So liegt der Rumpf im schnellen Flug genau im Fahrtwind."
+  "tipp": "Beim Deadcat sind die vorderen Arme weiter gespreizt – dann sind die Propeller nicht im Kamerabild. Beim Speed-Rumpf stehen die Motoren schräg (Motorneigung): So liegt der Rumpf im schnellen Flug genau im Fahrtwind. Beim H-Rahmen laufen links und rechts zwei Längsträger von Motor zu Motor, vorne und hinten verbinden zwei Querträger sie mit der Mittelplatte – viel Platz in der Mitte für Akku und Elektronik."
  },
  "holePattern": {
   "tip": "Vier Löcher für Stack oder Motor auf einmal",
@@ -678,7 +678,7 @@ const HELP = {
  "sketchText": {
   "tip": "Text als Umriss in die Skizze setzen",
   "hilfe": "Tipp rechts den Text ein, stell Höhe, Schrift und Ausrichtung ein und klick ins Bild. Der Text wird zu echten Umrissen: Liegt er in einem Rechteck, wird er beim Hochziehen ausgeschnitten (graviert) – wählst du nur die Buchstaben, stehen sie erhaben.",
-  "tipp": "Die Höhe gilt für Großbuchstaben. Text, Schrift und Drehung kannst du später rechts ändern, wenn du den Text anklickst."
+  "tipp": "Die Höhe gilt für Großbuchstaben. Text, Schrift und Drehung kannst du später rechts ändern, wenn du den Text anklickst. Mit „Bogen-Radius“ läuft der Text auf einem Kreis (positiv wölbt er sich nach oben, negativ nach unten); „An Kreis legen“ setzt ihn genau auf den nächsten Kreis oder Bogen der Skizze – z. B. als Schrift am Rand einer runden Platte."
  },
  "sketchImage": {
   "tip": "Foto oder Zeichnung zum Nachzeichnen hinterlegen",
@@ -687,7 +687,7 @@ const HELP = {
  },
  "magnet": {
   "tip": "Teile rasten an sinnvollen Stellen ein",
-  "hilfe": "Beim Ziehen und beim Setzen von Löchern rastet Tracery an der Mitte einer Fläche, an Mittellinien, an Lochmitten und im gleichen Randabstand ein. Körper rasten bündig oder mittig zu anderen Körpern ein. Rosa Hilfslinien zeigen, woran.",
+  "hilfe": "Beim Ziehen und beim Setzen von Löchern rastet Tracery an der Mitte einer Fläche, an Mittellinien, an Lochmitten und im gleichen Randabstand ein. Auf runden Flächen wie Rohren, Kugeln und Rümpfen rastet es „ganz oben“, „ganz unten“, an den Seiten und in der Mitte der Länge ein – das Teil steht dann genau senkrecht auf der Rundung. Körper rasten bündig oder mittig zu anderen Körpern ein. Rosa Hilfslinien zeigen, woran.",
   "tipp": "Halte Strg (Mac: cmd) gedrückt, um frei ohne Einrasten zu ziehen. Ganz abschalten kannst du es im Projekt rechts unter „Fangen beim Verschieben“."
  },
  "importCad": {
@@ -757,13 +757,13 @@ const HELP = {
  },
  "wind": {
   "tip": "Stirnfläche: so viel Fläche zeigt die Drohne dem Fahrtwind",
-  "hilfe": "Ansicht → „Fahrtwind (Stirnfläche)“: Die Kamera schaut aus der Richtung, aus der der Wind kommt, wenn die Drohne nach vorne fliegt. Mit „Neigung“ kippst du die Drohne wie im schnellen Flug mit der Nase nach unten. Unten steht die Fläche, die sie dem Wind zeigt – Tracery misst sie genau aus dem Schattenriss. Propeller zählen nur mit, wenn du das Häkchen setzt.",
-  "tipp": "Vergleich zwei Varianten bei der gleichen Neigung: Die mit der kleineren Stirnfläche bremst weniger. Bei Speed-Drohnen mit geneigten Motoren fliegt der Rumpf schnell fast waagerecht – dann zählt die Fläche bei kleiner Neigung."
+  "hilfe": "Ansicht → „Fahrtwind (Stirnfläche)“: Die Kamera schaut aus der Richtung, aus der der Wind kommt, wenn die Drohne nach vorne fliegt. Mit „Neigung“ kippst du die Drohne wie im schnellen Flug mit der Nase nach unten. Unten steht die Fläche, die sie dem Wind zeigt – Tracery misst sie genau aus dem Schattenriss. Propeller zählen nur mit, wenn du das Häkchen setzt. Mit „Form“ (cw-Wert) und „Tempo“ rechnet Tracery den Luftwiderstand in Newton und die Leistung dafür aus. Steht im Drohnen-Check der Schub pro Motor, schätzt es auch die Höchstgeschwindigkeit.",
+  "tipp": "Vergleich zwei Varianten bei der gleichen Neigung: Die mit der kleineren Stirnfläche bremst weniger. Der cw-Wert ist ein Richtwert – ein offener Rahmen bremst etwa doppelt so stark wie ein Stromlinien-Rumpf mit gleicher Fläche. Die Höchstgeschwindigkeit ist eine obere Grenze: Propeller schieben bei hohem Tempo weniger als auf dem Prüfstand."
  },
  "route3d": {
   "tip": "Rohr durch Punkte im Raum – auf Körpern oder frei",
-  "hilfe": "Körper → „Rohr im Raum“: Klick nacheinander Punkte an. Auf einem Körper liegt das Rohr auf der Fläche auf, daneben bleibt es auf der Höhe des letzten Punkts. Ziehen dreht die Ansicht wie immer, Rückschritt nimmt den letzten Punkt weg, Enter oder Doppelklick ist fertig. Rechts änderst du jeden Punkt als Zahl, den Durchmesser, die Wand und den Querschnitt.",
-  "tipp": "Gut für Kabelkanäle, Antennenrohre und Bügel, die um Teile herum laufen. „Gerade Stücke, runde Ecken“ ergibt einen Knick-Verlauf wie bei gebogenem Rohr."
+  "hilfe": "Körper → „Rohr im Raum“: Klick nacheinander Punkte an. Auf einem Körper liegt das Rohr auf der Fläche auf, daneben bleibt es auf der Höhe des letzten Punkts. Ziehen dreht die Ansicht wie immer, Rückschritt nimmt den letzten Punkt weg, Enter oder Doppelklick ist fertig. Rechts änderst du jeden Punkt als Zahl, den Durchmesser, die Wand und den Querschnitt. Zwischen zwei Punkten gibt es Regeln wie in einer Skizze, nur im Raum: „entlang X/Y/Z“ legt das Stück genau auf eine Achse, „Länge“ macht es genau so lang – die Punkte dahinter wandern mit.",
+  "tipp": "Gut für Kabelkanäle, Antennenrohre und Bügel, die um Teile herum laufen. „Gerade Stücke, runde Ecken“ ergibt einen Knick-Verlauf wie bei gebogenem Rohr. Für ein Antennenrohr z. B. das erste Stück „entlang Z“ mit 25 mm Länge, das zweite „entlang Y“ mit 15 mm – dann steht es genau senkrecht und knickt genau nach hinten ab. Eine Länge 0 macht das Stück wieder frei."
  },
  "armFairing": {
   "tip": "Stromlinien-Hülle über einen Arm (Speed-Drohne)",

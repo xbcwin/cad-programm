@@ -414,7 +414,7 @@ const Panels = (() => {
     f2.append(UI.selectField({ id: 'grid', label: 'Schrittweite', value: App.doc.settings.grid, options: [[0.01, '0,01 mm'], [0.05, '0,05 mm'], [0.1, '0,1 mm'], [0.5, '0,5 mm'], [1, '1 mm'], [2, '2 mm'], [5, '5 mm'], [10, '10 mm']], onChange: (v) => App.change('Raster geändert', (doc) => { doc.settings.grid = parseFloat(v); }) }));
     const snap = h('label', { class: 'check', style: { alignSelf: 'end', paddingBottom: '8px' } }, h('input', { type: 'checkbox', id: 'snap', checked: App.doc.settings.snap !== false }), 'Einrasten');
     snap.querySelector('input').onchange = (e) => App.change('Einrasten geändert', (doc) => { doc.settings.snap = e.target.checked; });
-    const mag = h('label', { class: 'check', style: { paddingBottom: '4px' } }, h('input', { type: 'checkbox', id: 'magnet', checked: App.doc.settings.magnet !== false }), 'Magnetisch einrasten (Mitte, Mittellinien, Lochmitten, bündig zu anderen Teilen) – Strg hält es kurz an');
+    const mag = h('label', { class: 'check', style: { paddingBottom: '4px' } }, h('input', { type: 'checkbox', id: 'magnet', checked: App.doc.settings.magnet !== false }), 'Magnetisch einrasten (Mitte, Mittellinien, Lochmitten, ganz oben auf Rundungen, bündig zu anderen Teilen) – Strg hält es kurz an');
     mag.querySelector('input').onchange = (e) => App.change('Magnet geändert', (doc) => { doc.settings.magnet = e.target.checked; });
     f2.append(snap); gr.append(f2, mag); w.append(gr);
     const st = Print.stats();
@@ -558,17 +558,39 @@ const Panels = (() => {
       sec.append(fl);
       if (it.p.path3d) {
         // Pfad im Raum: Punkte als Zahlen, glatt oder mit Ecken, weitere Punkte im Bild anklicken
-        const P3 = it.p.path3d.pts || [];
-        const setPt = (i, k, v) => App.change('Punkt geändert', (doc) => { const f = Model.find(doc, it.id); if (!f || !f.item.p.path3d || !f.item.p.path3d.pts[i]) return false; f.item.p.path3d.pts[i][k] = v; }, { merge: 'p3:' + it.id + ':' + i + ':' + k });
+        const V3 = Model.vars(App.doc).v, P3 = it.p.path3d.pts || [], RP = Model.path3dPoints(it.p.path3d, V3), RU = it.p.path3d.rules || [];
+        // erst alle Zahlen-Punkte auf ihre Lage mit Regeln setzen – dann bleibt beim Ändern jeder andere Punkt, wo er ist
+        const bake = (pp) => { const r = Model.path3dPoints(pp, V3); pp.pts = pp.pts.map((q, i) => q.map((v, k) => (typeof v === 'number' ? round(r[i][k], 4) : v))); };
+        const setPt = (i, k, v) => App.change('Punkt geändert', (doc) => { const f = Model.find(doc, it.id); if (!f || !f.item.p.path3d || !f.item.p.path3d.pts[i]) return false; bake(f.item.p.path3d); f.item.p.path3d.pts[i][k] = v; }, { merge: 'p3:' + it.id + ':' + i + ':' + k });
+        // Regel je Stück: Richtung (entlang X/Y/Z) und Länge – wie in einer Skizze, nur im Raum
+        const setRule = (i, patch) => App.change('Regel im Pfad', (doc) => {
+          const f = Model.find(doc, it.id); if (!f || !f.item.p.path3d) return false;
+          const pp = f.item.p.path3d; bake(pp);
+          const R = (pp.rules || []).slice(); while (R.length < pp.pts.length - 1) R.push(null);
+          const r = { ...(R[i] || {}), ...patch }; for (const k of Object.keys(r)) if (r[k] == null || r[k] === '' || r[k] === 0) delete r[k];
+          R[i] = Object.keys(r).length ? r : null;
+          if (R.some(Boolean)) pp.rules = R; else delete pp.rules;
+        });
         const fs = h('div', { class: 'fields' });
         fs.append(UI.selectField({ id: 'p-smooth', label: 'Verlauf', value: it.p.path3d.smooth === false ? 'corner' : 'smooth', options: [['smooth', 'Glatte Kurve durch die Punkte'], ['corner', 'Gerade Stücke, runde Ecken']], onChange: (v) => App.change('Verlauf', (doc) => { const f = Model.find(doc, it.id); if (!f) return false; f.item.p.path3d.smooth = v !== 'corner'; }) }));
         sec.append(fs);
         const list = h('div', { class: 'p3-list', id: 'p3-list' });
         P3.forEach((q, i) => {
           const row = h('div', { class: 'fields three p3-row' });
-          ['x', 'y', 'z'].forEach((ax, k) => row.append(UI.numField({ id: `p3-${i}-${ax}`, label: (k === 0 ? `P${i + 1} ` : '') + ax.toUpperCase(), value: q[k], onCommit: (v) => setPt(i, k, v) })));
+          ['x', 'y', 'z'].forEach((ax, k) => row.append(UI.numField({ id: `p3-${i}-${ax}`, label: (k === 0 ? `P${i + 1} ` : '') + ax.toUpperCase(), value: typeof q[k] === 'string' ? q[k] : round(RP[i][k], 3), onCommit: (v) => setPt(i, k, v) })));
           list.append(row);
-          if (P3.length > 2) { const del = h('button', { type: 'button', class: 'btn ghost small', id: `p3-del-${i}`, 'aria-label': `Punkt ${i + 1} löschen` }); del.innerHTML = icon('trash') + `Punkt ${i + 1} löschen`; del.onclick = () => App.change('Punkt gelöscht', (doc) => { const f = Model.find(doc, it.id); if (!f) return false; f.item.p.path3d.pts.splice(i, 1); }); list.append(del); }
+          if (P3.length > 2) { const del = h('button', { type: 'button', class: 'btn ghost small', id: `p3-del-${i}`, 'aria-label': `Punkt ${i + 1} löschen` }); del.innerHTML = icon('trash') + `Punkt ${i + 1} löschen`; del.onclick = () => App.change('Punkt gelöscht', (doc) => {
+            const f = Model.find(doc, it.id); if (!f) return false; const pp = f.item.p.path3d; bake(pp); pp.pts.splice(i, 1);
+            // Regeln: die beiden Stücke am gelöschten Punkt werden eins – ohne Regel
+            if (pp.rules) { const R = pp.rules.slice(); if (i === 0) R.splice(0, 1); else if (i >= R.length) R.splice(R.length - 1, 1); else { R.splice(i, 1); R[i - 1] = null; } if (R.some(Boolean)) pp.rules = R; else delete pp.rules; }
+          }); list.append(del); }
+          if (i + 1 < P3.length) {
+            const L = Math.hypot(RP[i + 1][0] - RP[i][0], RP[i + 1][1] - RP[i][1], RP[i + 1][2] - RP[i][2]), r = RU[i] || {};
+            const sr = h('div', { class: 'fields p3-seg' });
+            sr.append(UI.selectField({ id: `p3-ax-${i}`, label: `Stück P${i + 1} → P${i + 2}`, value: r.ax || '', options: [['', 'Richtung frei'], ['x', 'entlang X'], ['y', 'entlang Y'], ['z', 'entlang Z (senkrecht)']], onChange: (v) => setRule(i, { ax: v || null }) }));
+            sr.append(UI.numField({ id: `p3-len-${i}`, label: r.len != null ? 'Länge (fest)' : `Länge (jetzt ${fmt(L, 1)})`, value: r.len != null ? r.len : 0, min: 0, onCommit: (v) => setRule(i, { len: v || null }) }));
+            list.append(sr);
+          }
         });
         sec.append(list);
         const mb = h('button', { type: 'button', class: 'btn', id: 'route-more' }); mb.innerHTML = icon('plus') + 'Punkte im Bild anhängen';
@@ -581,7 +603,7 @@ const Panels = (() => {
       }
       w.append(sec);
     } else if (it.kind === 'loft') {
-      const n = (it.p.sketches || []).length, hasPath = !!it.p.path, hasRail = !!it.p.rail;
+      const n = (it.p.sketches || []).length, hasPath = !!it.p.path, hasRail1 = !!it.p.rail, hasRail2 = !!it.p.rail2, hasRail = hasRail1 || hasRail2;
       sec.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Umrisse'), h('b', { class: 'mono' }, String(n))));
       if (!hasPath && !hasRail) {
         const fl = h('div', { class: 'fields' });
@@ -609,18 +631,31 @@ const Panels = (() => {
       // Führungskurve: gibt die Seitenlinie vor – der Übergang wird zwischen den Umrissen so weit, dass er sie berührt
       const fk = h('div', { class: 'section', id: 'loft-rail' }, h('div', { class: 'section-h' }, 'Führungskurve'));
       if (n >= 2 && !hasPath) {
-        const eb = h('button', { type: 'button', class: 'btn', id: 'loft-rail-edit' }); eb.innerHTML = icon(hasRail ? 'edit' : 'spline') + (hasRail ? 'Führungskurve bearbeiten' : 'Führungskurve zeichnen');
+        const eb = h('button', { type: 'button', class: 'btn', id: 'loft-rail-edit' }); eb.innerHTML = icon(hasRail1 ? 'edit' : 'spline') + (hasRail1 ? 'Führungskurve bearbeiten' : 'Führungskurve zeichnen');
         eb.onclick = () => Sketch.startLoftPath(it.id, 'rail');
         const row = h('div', { class: 'btn-row' }, eb);
-        if (hasRail) {
+        if (hasRail1) {
           const rb = h('button', { type: 'button', class: 'btn', id: 'loft-rail-off' }); rb.innerHTML = icon('close') + 'Ohne Führungskurve';
-          rb.onclick = () => App.change('Führungskurve entfernt', (doc) => { const f = Model.find(doc, it.id); if (!f) return false; delete f.item.p.rail; });
+          rb.onclick = () => App.change('Führungskurve entfernt', (doc) => { const f = Model.find(doc, it.id); if (!f) return false; delete f.item.p.rail; delete f.item.p.rail2; });
           row.append(rb);
         }
         fk.append(row, h('div', { class: 'hint-box', html: hasRail ? 'Zwischen den Umrissen folgt der Übergang der Führungskurve – z. B. ein Rumpf, der in der Mitte bauchig wird. Die Umrisse selbst bleiben gleich.' : 'Mit einer <b>Führungskurve</b> gibst du die Seitenlinie vor: Der Übergang wird zwischen den Umrissen bauchiger oder schlanker, ohne dass du mehr Umrisse zeichnen musst.' }));
       } else fk.append(h('div', { class: 'hint-box', html: hasPath ? 'Mit Mittellinie geht keine Führungskurve – erst „Ohne Mittellinie“.' : 'Eine Führungskurve braucht mindestens zwei Umrisse.' }));
+      // zweite Führungskurve quer zur ersten (z. B. Rumpf: erste von der Seite für die Höhe, zweite von oben für die Breite)
+      const fk2 = hasRail1 && n >= 2 && !hasPath ? h('div', { class: 'section', id: 'loft-rail2' }, h('div', { class: 'section-h' }, 'Zweite Führungskurve')) : null;
+      if (fk2) {
+        const eb = h('button', { type: 'button', class: 'btn', id: 'loft-rail2-edit' }); eb.innerHTML = icon(hasRail2 ? 'edit' : 'spline') + (hasRail2 ? 'Zweite bearbeiten' : 'Zweite zeichnen');
+        eb.onclick = () => Sketch.startLoftPath(it.id, 'rail2');
+        const row = h('div', { class: 'btn-row' }, eb);
+        if (hasRail2) {
+          const rb = h('button', { type: 'button', class: 'btn', id: 'loft-rail2-off' }); rb.innerHTML = icon('close') + 'Ohne zweite';
+          rb.onclick = () => App.change('Zweite Führungskurve entfernt', (doc) => { const f = Model.find(doc, it.id); if (!f) return false; delete f.item.p.rail2; });
+          row.append(rb);
+        }
+        fk2.append(row, h('div', { class: 'hint-box', html: hasRail2 ? 'Der Übergang folgt beiden Führungskurven – jede bestimmt die Breite in ihrer Richtung.' : 'Die erste Führungskurve gibt die Breite in einer Richtung vor. Eine <b>zweite</b> quer dazu gibt die andere vor – so formst du einen Rumpf von der Seite <i>und</i> von oben.' }));
+      }
       if (hasRail) { ml.innerHTML = ''; ml.append(h('div', { class: 'section-h' }, 'Mittellinie'), h('div', { class: 'hint-box', html: 'Mit Führungskurve geht keine Mittellinie – erst „Ohne Führungskurve“.' })); }
-      w.append(sec, ml, fk);
+      w.append(sec, ml, fk); if (fk2) w.append(fk2);
     } else if (Features.isOp(it)) {
       sec.firstChild.textContent = Features.NAMES[it.p.op === 'pattern' ? it.p.pt : it.p.op] || 'Feature';
       Features.renderOp(it, sec, setP); w.append(sec);
@@ -672,11 +707,29 @@ const Panels = (() => {
           row.append(nf, del); ks.append(row); continue;
         }
         const lbl = (fin.type === 'chamfer' ? 'Fase' : 'Rundung') + (typeof fin.edges === 'string' ? ' · ' + ({ all: 'alle', top: 'oben', bottom: 'unten', vertical: 'senkrecht', horizontal: 'waagerecht' }[fin.edges] || '') : ` · ${(fin.edges || []).length} Kante${(fin.edges || []).length === 1 ? '' : 'n'}`);
-        const nf = UI.numField({ id: 'fin-' + fin.id, label: lbl, value: fin.r, onCommit: (v) => Actions.setFinish(it.id, fin.id, { r: v }) });
+        const ch = fin.type === 'chamfer', vr = !ch && !!fin.vr, cm = ch ? fin.cm || '' : '';
+        const nf = UI.numField({ id: 'fin-' + fin.id, label: vr ? lbl + ' · von' : cm ? lbl + ' · Abstand' : lbl, value: fin.r, onCommit: (v) => Actions.setFinish(it.id, fin.id, { r: v }) });
         if (err) nf.querySelector('.inp').classList.add('invalid');
         const del = h('button', { type: 'button', class: 'btn ghost small', 'aria-label': 'Entfernen', 'data-tip': 'Entfernen' }); del.innerHTML = icon('trash');
         del.onclick = () => Actions.removeFinish(it.id, fin.id);
         row.append(nf, del); ks.append(row);
+        // Art: Rundung gleichmäßig oder von … bis; Fase gleich, mit zwei Abständen oder mit Winkel
+        const r0 = Model.num(fin.r, V, 1);
+        const mo = h('div', { class: 'fields pro fin-more' });
+        if (ch) {
+          mo.append(UI.selectField({ id: 'fin-mode-' + fin.id, label: 'Art der Fase', value: cm, options: [['', 'Gleich'], ['two', 'Zwei Abstände'], ['angle', 'Mit Winkel']], onChange: (v) => Actions.setFinish(it.id, fin.id, v === 'two' ? { cm: 'two', r2: fin.r2 != null ? fin.r2 : round(r0 * 2, 3) } : v === 'angle' ? { cm: 'angle', a: fin.a != null ? fin.a : 30 } : { cm: null }) }));
+          if (cm === 'two') mo.append(UI.numField({ id: 'fin-r2-' + fin.id, label: 'Zweiter Abstand', value: fin.r2 != null ? fin.r2 : r0, onCommit: (v) => Actions.setFinish(it.id, fin.id, { r2: v }) }));
+          if (cm === 'angle') mo.append(UI.numField({ id: 'fin-a-' + fin.id, label: 'Winkel', value: fin.a != null ? fin.a : 45, unit: '°', onCommit: (v) => Actions.setFinish(it.id, fin.id, { a: v }) }));
+        } else {
+          mo.append(UI.selectField({ id: 'fin-mode-' + fin.id, label: 'Art der Rundung', value: vr ? 'var' : '', options: [['', 'Gleichmäßig'], ['var', 'Von … bis']], onChange: (v) => Actions.setFinish(it.id, fin.id, v === 'var' ? { vr: true, r2: fin.r2 != null ? fin.r2 : round(r0 / 2, 3) } : { vr: null }) }));
+          if (vr) mo.append(UI.numField({ id: 'fin-r2-' + fin.id, label: 'bis', value: fin.r2 != null ? fin.r2 : r0, onCommit: (v) => Actions.setFinish(it.id, fin.id, { r2: v }) }));
+        }
+        ks.append(mo);
+        if (vr || cm) {
+          const sw = h('button', { type: 'button', class: 'btn ghost small pro', id: 'fin-swap-' + fin.id }); sw.innerHTML = icon('mirror') + (vr ? 'Richtung tauschen' : 'Seiten tauschen');
+          sw.onclick = () => Actions.setFinish(it.id, fin.id, vr ? { r: fin.r2, r2: fin.r } : { side: fin.side ? null : 1 });
+          ks.append(h('div', { class: 'btn-row' }, sw));
+        }
       }
       const kr = h('div', { class: 'btn-row' });
       const mk = (label, sel) => { const b = h('button', { type: 'button', class: 'btn small', 'data-help': 'fillet' }); b.innerHTML = icon('fillet') + label; b.onclick = () => { Actions.finishAll(it.id, 'fillet', sel, 1); }; return b; };
@@ -761,6 +814,10 @@ const Panels = (() => {
       if (items[0].item.role !== 'hole' && App.doc.items.some((x) => x.id === face.id)) b('shell', 'Aushöhlen', () => Features.shell(face), '', 'Körper aushöhlen – diese Fläche wird die Öffnung');
       b('section', 'Schnitt hier', () => Views.section(true, { face }), '', 'Schnitt parallel zu dieser Fläche – den Abstand stellst du in der Schnitt-Leiste ein', true);
       if (items[0].item.role !== 'hole') b('mirror', 'An Fläche spiegeln', () => Features.mirrorAtFace(face), '', 'Gespiegelte Kopie an dieser Fläche – z. B. die zweite Hälfte eines symmetrischen Teils', true);
+      sep();
+    } else if (face && items.length === 1 && face.info.t !== 'PLANE') {
+      bar.append(h('span', { class: 'lbl' }, 'Runde Fläche'));
+      b('holeWizard', 'Bohrung', (e) => Place.holeHere(face, e.currentTarget), 'accent', 'Bohrungs-Assistent: Loch senkrecht in die runde Fläche – der Magnet rastet ganz oben, an den Seiten und in der Mitte ein');
       sep();
     }
     if (items.length === 1) {

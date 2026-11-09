@@ -1,6 +1,6 @@
 # Fortschritt
 
-Stand: 09.11.2026 · nach Sitzung 55 (19: Skizze auf Profi-Niveau · 20: Magnet, Rundungs-Griff · 21: Skizzieren im 3D, Übergang, Entlang Pfad, Import · 22: Kreis/Bogen-Arten, Verlängern, Entformungsschräge, Gewinde · 23: Einheiten, eigener Querschnitt, Langloch gebogen, gedrehtes Rechteck, Teilen · 24: Punkt, alle Ecken · 25: Schnitt und Spiegeln an Fläche · 26: Kantenkette, Abstände beim Verschieben · 27: Spiegeln an der Achse · 28: Muster entlang Kurve, Schablonen-Maße geprüft, USB-C-Stecker · 29: Spiegelebene wandert mit, Kreismuster quer und längs, KI kennt Muster entlang Kurve · 30: Bohrungen an Skizzenpunkten · 31: Wand aus Linie, Schritt hinter dem Marker, Schildchen · 32: Kante übernehmen · 33: verbundene Kanten · 34: Kreismuster um gewählte Achse · 35: GoPro-, XT60- und Antennenhalter · 36: Überhänge für den 3D-Druck · 37: Überhänge in der Schwachstellen-Analyse, KI kennt die Bausteine · 38: Skizzen-Muster als Ganzes ändern · 39: Drehgelenk · 40: Schiebegelenk · Argon 1: Gelenk-Ketten · 41: Übergang mit Mittellinie · 42: Drohnen-Check für eigene Rahmen · 43: Fahrtwind · 44: Gelenk-Anschlag und Abspielen · 45: Rohr im Raum · 46: Schwerpunkt ausgleichen · 47: KI legt Gelenke an · 48: Erste Schritte · 49: Wand um Löcher in Druckteilen · 50: größere Knöpfe für Einsteiger · 51: Ellipse trimmen · 52: Gelenke in Gruppen · 53: Explosion in Gruppen · 54: Armverkleidung · 55: Übergang mit Führungskurve)
+Stand: 09.11.2026 · nach Sitzung 63 (19: Skizze auf Profi-Niveau · 20: Magnet, Rundungs-Griff · 21: Skizzieren im 3D, Übergang, Entlang Pfad, Import · 22: Kreis/Bogen-Arten, Verlängern, Entformungsschräge, Gewinde · 23: Einheiten, eigener Querschnitt, Langloch gebogen, gedrehtes Rechteck, Teilen · 24: Punkt, alle Ecken · 25: Schnitt und Spiegeln an Fläche · 26: Kantenkette, Abstände beim Verschieben · 27: Spiegeln an der Achse · 28: Muster entlang Kurve, Schablonen-Maße geprüft, USB-C-Stecker · 29: Spiegelebene wandert mit, Kreismuster quer und längs, KI kennt Muster entlang Kurve · 30: Bohrungen an Skizzenpunkten · 31: Wand aus Linie, Schritt hinter dem Marker, Schildchen · 32: Kante übernehmen · 33: verbundene Kanten · 34: Kreismuster um gewählte Achse · 35: GoPro-, XT60- und Antennenhalter · 36: Überhänge für den 3D-Druck · 37: Überhänge in der Schwachstellen-Analyse, KI kennt die Bausteine · 38: Skizzen-Muster als Ganzes ändern · 39: Drehgelenk · 40: Schiebegelenk · Argon 1: Gelenk-Ketten · 41: Übergang mit Mittellinie · 42: Drohnen-Check für eigene Rahmen · 43: Fahrtwind · 44: Gelenk-Anschlag und Abspielen · 45: Rohr im Raum · 46: Schwerpunkt ausgleichen · 47: KI legt Gelenke an · 48: Erste Schritte · 49: Wand um Löcher in Druckteilen · 50: größere Knöpfe für Einsteiger · 51: Ellipse trimmen · 52: Gelenke in Gruppen · 53: Explosion in Gruppen · 54: Armverkleidung · 55: Übergang mit Führungskurve · 56: Magnet auf runden Flächen · 57: Luftwiderstand und Höchstgeschwindigkeit · 58: zwei Führungskurven · 59: Text im Bogen · 60: Ellipse versetzen, Ketten-Versatz zusammen ändern · 61: H-Rahmen · 62: Rohr im Raum mit Regeln und Maßen · 63: Fase mit zwei Abständen oder Winkel, Rundung von … bis)
 
 ## Erledigt
 
@@ -176,9 +176,11 @@ Fertig.
 - [x] An einer Fläche spiegeln (gespiegelte Kopie, ein Körper); Schnitt parallel zu einer gewählten Fläche; neue Werkzeuge in der Suchzeile (Übergang, Zur Spitze, Schräge, Abstand, Rohr entlang Pfad) (Sitzung 25)
 - [x] Schritt hinter dem Marker oder unterdrückt: statt der Werkzeugleiste nur „Marker dahinter“ bzw. „Wieder einschalten“, keine Griffe (Sitzung 31)
 - [x] Spiegelebene hängt an der Fläche: Wird das Original größer, wandert sie mit (äußerste Fläche in Achsrichtung) (Sitzung 29)
-- [ ] Text trimmen; Ellipse und Text versetzen; Text entlang einer Kurve
+- [x] Text im Bogen: „Bogen-Radius“ legt die Grundlinie auf einen Kreis (positiv nach oben gewölbt, negativ nach unten, gerade Stücke der Buchstaben werden mitgebogen); „An Kreis legen“ setzt den Text genau auf den nächsten Kreis oder Bogen der Skizze; KI-Kollege kennt „bogen“ und „drehung“ beim Text (Sitzung 59)
+- [x] Ellipse versetzen: die Kopie ist eine geschlossene Spline durch 48 Punkte genau im Abstand (Abweichung dazwischen unter 0,03 mm bei 3 mm); nach innen höchstens bis zum kleinsten Krümmungsradius, sonst ein Hinweis (Sitzung 60)
+- [ ] Text trimmen; Text versetzen; Text entlang beliebiger Kurven (Spline)
 - [x] Skizzen-Muster als Ganzes ändern: Regel-Symbol einer Kopie anklicken → „Ganzes Muster“ mit Anzahl und Abstand (Rechteck) bzw. Anzahl und Winkel (Kreis) → „Muster ändern“ (Sitzung 38)
-- [ ] Versatz nachträglich für mehrere Elemente zusammen ändern (heute je Element über das Regel-Symbol)
+- [x] Versatz nachträglich für mehrere Elemente zusammen ändern: Ein Versatz einer Kette merkt sich, welche Stücke zusammen entstanden sind; der Abstand an einem Regel-Symbol gilt dann für alle, die Originale bleiben stehen (Sitzung 60)
 - [x] Spiegeln an der X- oder Y-Achse ohne eigene Linie (Sitzung 27)
 - [x] Werkzeug „Wand“ (N): offene Linie, Linienzug, Bogen oder Spline wird zur geschlossenen Wand mit einstellbarer Dicke (beide Seiten halb, Enden zu, per Regeln verbunden; die Linie bleibt Hilfslinie) – für Rippen, Stege, Antennenhalter (Sitzung 31)
 - [x] Skizzen-Leiste etwas kompakter, damit sie trotz neuer Werkzeuge bei zwei Zeilen bleibt (Sitzung 32)
@@ -187,9 +189,11 @@ Fertig.
 - [x] Maß-Schildchen, die übereinander lägen, rücken untereinander (z. B. „X 0“ und „Y 0“ am Ursprung) (Sitzung 31)
 
 ### Stufe 3 – Features und Ansichten
+- [x] Fase mit zwei Abständen oder mit Abstand und Winkel, „Seiten tauschen“; Rundung „von … bis“, die entlang der Kante wächst, „Richtung tauschen“ (Kern: `BRepFilletAPI_MakeChamfer` mit Nachbarfläche, Rundung mit zwei Radien) (Sitzung 63)
 - [x] Magnetisches Einrasten wie bei Canva: auf Flächen (Mitte, Mittellinien, Lochmitten, Kantenmitten, gleicher Randabstand) und zwischen Körpern (bündig, mittig, gleiche Abstände), mit Hilfslinien; Strg hält es an, abschaltbar in den Einstellungen (Sitzung 20)
 - [x] Rundung mit Ziehgriff an der gewählten Kante, Radius live, Zahl tippen geht auch (Sitzung 20)
-- [ ] Magnet auch auf gewölbten Flächen und für Kaufteile beim Ziehen aus der Leiste mit eigener Form
+- [x] Magnet auf gewölbten Flächen (Rohr, Kugel, Rumpf, Übergang): rastet „ganz oben“, „ganz unten“, ganz vorne/hinten/links/rechts und auf der Mittellinie ein, je nachdem wie der Körper in der Welt liegt; das Loch oder Teil steht genau senkrecht auf der Rundung, auf Zylindern und Kugeln genau auf dem Radius; rosa Hilfslinien laufen über die Rundung (nur die sichtbare Seite); „Bohrung“ jetzt auch für runde Flächen (Sitzung 56)
+- [x] Magnet für Kaufteile beim Ziehen aus der Leiste: ein Motor aus „Drohne → Motoren“ rastet in die Mitte der Fläche (Test seit Sitzung 62); die Vorschau beim Ziehen ist noch ein Kasten, nicht die echte Form
 - [x] Bohrungs-Assistent, Wandstärke, Muster, Spiegeln, Boolesch, Teilen (Sitzung 8)
 - [x] Muster entlang Kurve: Körper oder Loch wählen → „Muster“ → „Muster entlang Kurve“, Kurve zeichnen (Linie, Bogen, Spline, Kreis oder geschlossener Umriss); Anzahl, Abstand (0 = gleichmäßig verteilt) und Ausrichtung (mit der Kurve drehen oder nicht), „Kurve bearbeiten“; beim Zeichnen zeigen Ringe, wo die Kopien landen (Sitzung 28)
 - [x] Kreismuster auch um eine Achse quer (X) oder längs (Y), mit Mitte Z – z. B. Löcher rund um ein liegendes Rohr; KI-Kollege kennt „Muster entlang Kurve“ und die Drehachse (Sitzung 29)
@@ -207,20 +211,22 @@ Fertig.
 - [x] Frame-Assistent mit 3" bis 7" und Rahmenformen True-X, Stretched-X, Wide-X, Deadcat (Sitzung 12)
 - [x] Lochbilder, Bauteil-Bibliothek, erste Detail-Bausteine (Kabelbinder, Gurtschlitz) (Sitzung 12)
 - [x] Speed-Drohne mit Stromlinien-Rumpf und geneigten Motoren, Cinewhoop mit Ducts, 3,5 Zoll, Rahmen von Herstellern (Sitzung 18)
-- [ ] Speed-Drohne: Verkleidungen für Arme und Motoren, Luftwiderstand ausrechnen
+- [x] Speed-Drohne: Armverkleidung (Sitzung 54); Luftwiderstand in der Ansicht „Fahrtwind“: Form mit cw-Wert (offener Rahmen 1,1 … Rumpf mit Armverkleidung 0,35, von selbst erkannt) und Tempo → Kraft in N, gleichwertiger Schub und Leistung; mit dem Schub aus dem Drohnen-Check eine geschätzte Höchstgeschwindigkeit (voller Schub, Neigung so, dass er die Drohne trägt, Stirnfläche bei dieser Lage, geneigte Motoren eingerechnet) (Sitzung 57)
+- [ ] Speed-Drohne: Motorverkleidungen
 - [ ] Antennen als Kaufteile (Daten von Lumenier AXII 2, TrueRC Singularity, Foxeer Lollipop 4 liegen vor) – brauchen eine eigene Form
 - [ ] Größen 2 und 2,5 Zoll für kleine Cinewhoops (BetaFPV Pavo25 V2 ist schon nachgeprüft)
 - [ ] Herstellerrahmen mit Original-Umriss (heute: Tracerys Grundform mit den Herstellermaßen)
-- [ ] H-Rahmen und Rahmen mit getrennten Armen (Sandwich)
+- [x] H-Rahmen im Frame-Assistenten (Armwinkel 40°): links und rechts ein Längsträger von Motor zu Motor, vorne und hinten ein Querträger an der Mittelplatte; alles hängt an Achsabstand, Armwinkel, Armbreite und Plattenlänge; KI-Kollege kennt Form „h“ (Sitzung 61)
+- [ ] Rahmen mit getrennten Armen (Sandwich)
 - [x] Detail-Bausteine (Drohne → „Lochbilder und Bausteine“ und Bauteile): GoPro-Halterung (2 oder 3 Finger, M5-Loch, Mutter-Nabe), Stecker-Halter XT60 (Ausschnitt mit Spiel und zwei Schraubenlöchern), Antennenhalter (1 oder 2 Röhrchen, Spreizung und Neigung) – alle Maße einstellbar (Sitzung 35)
 - [x] Prüfungen, DXF-Export, Varianten (Sitzung 13)
-- [ ] Drohnen-Check auch für Rahmen, die nicht aus dem Assistenten kommen (heute braucht er die Maße Achsabstand, Armwinkel, Propeller)
+- [x] Drohnen-Check auch für Rahmen, die nicht aus dem Assistenten kommen (Sitzung 42)
 
 ### Stufe 5 – KI und Feinschliff
 - [x] KI-Helfer auf der Zeitleiste, „Erklär diesen Schritt“, Schwachstellen-Analyse (Sitzung 14)
 - [x] Ansicht „Überhänge (3D-Druck)“: rot, was steiler als der Grenzwinkel (35–60°, Standard 45°) nach unten zeigt und nicht auf dem Druckbett liegt, dazu die Fläche, die Stützen braucht (Sitzung 36)
 - [x] Schwachstellen-Analyse meldet bei Druckteilen große Überhänge (ab 100 mm² steiler als 45°) mit Fundstelle; der KI-Kollege kennt GoPro-Halterung, XT60-Halter und Antennenhalter (Sitzung 37)
-- [ ] Schwachstellen auch für gedruckte Teile genauer: Wand um Schraubenlöcher auch bei Teilen, die keine flache Platte sind
+- [x] Schwachstellen auch für gedruckte Teile genauer: Wand um Schraubenlöcher auch bei Teilen, die keine flache Platte sind (Sitzung 49)
 - [x] Einsteiger-Oberfläche (Sitzung 15)
 - [x] Übergang (Loft) durch mehrere Umrisse, „Zur Spitze“ / Spitze verlängern (Sitzung 21)
 - [x] Entlang Pfad (Sweep): offener Pfad wird Rohr oder rechteckiger Kanal, auch hohl (Sitzung 21)
@@ -239,7 +245,9 @@ Fertig.
 - [x] Schwerpunkt ausgleichen: Liegt der Schwerpunkt neben der Mitte zwischen den Motoren, zeigt der Drohnen-Check „Akku verschieben“ – der schwerste Akku wandert genau so weit, dass der Schwerpunkt mittig liegt (auch bei eigenen Rahmen); zu weite Wege lehnt Tracery ab (Sitzung 46)
 - [x] KI-Kollege legt Gelenke an (Aktion „gelenk“: festes und bewegliches Teil, Achse aus Punkt und Richtung, Drehen oder Schieben, Bereich und Startstellung); auch Ketten (Sitzung 47)
 - [x] Übergang mit Führungskurve: rechts beim Übergang „Führungskurve zeichnen“ – eine Seitenlinie (vorgezeichnet durch die äußersten Stellen der Umrisse); zwischen den Umrissen wird der Übergang in ihrer Richtung so weit, dass er sie berührt (Zwischenschnitte aus den Umrissen gemischt und gestreckt), die Umrisse bleiben gleich; Vorschau beim Ziehen; KI-Kollege kennt „fuehrungskurve“ (Sitzung 55)
-- [ ] 3D-Skizzen mit Regeln und Maßen; Übergang mit zwei Führungskurven (oben und seitlich)
+- [x] Übergang mit zwei Führungskurven: „Zweite Führungskurve“ quer zur ersten (vorgezeichnet in der Ebene durch die Achse, deren Normale die Richtung der ersten ist) – jede streckt die Zwischenschnitte nur in ihrer Richtung, z. B. Höhe von der Seite und Breite von oben; „Ohne Führungskurve“ nimmt beide weg; KI-Kollege kennt „fuehrungskurve2“ (Sitzung 58)
+- [x] 3D-Skizze für Rohre im Raum: je Stück zwischen zwei Punkten die Regel „entlang X/Y/Z“ und eine feste Länge (Zahl oder Formel aus „Maße“); die Punkte dahinter wandern mit, die Felder zeigen die Lage mit Regeln; Punkt löschen verbindet zwei Stücke ohne Regel; KI-Kollege kennt „regeln“ beim „pfad3d“ (Sitzung 62)
+- [ ] 3D-Skizzen: Regeln zwischen Stücken (rechtwinklig, parallel), Punkt auf Fläche halten, Maße im Bild
 - [x] Drohnen-Check für selbst gebaute Rahmen: erkennt Motoren aus „Kaufteile“ (ab drei, auch im Kreis- oder Rechteckmuster, gespiegelt oder entlang einer Kurve), Propeller aus „Kaufteile“ oder eingetragene Größe; prüft Propeller-Abstand, Propellerkreise (als Ring, innen Platz für Welle und Mutter), Teile ineinander, Gewicht, Schwerpunkt und Schub für beliebig viele Motoren (Sitzung 42)
 - [x] Ansicht „Fahrtwind (Stirnfläche)“: Blick aus der Windrichtung, Neigung 0–60° nach vorne, Fläche in cm² aus dem Schattenriss, Propeller auf Wunsch mitgezählt; der Drohnen-Check nennt beim Speed-Rumpf die Stirnfläche von vorne (Sitzung 43)
 - [x] Erste Schritte in der einfachen Oberfläche: Liste links über dem Verlauf (Körper hinzufügen, Größe ändern, Loch machen, als Datei speichern), hakt sich selbst ab, „Wie?“ erklärt den Schritt und öffnet das passende Menü, ausblendbar (Sitzung 48)

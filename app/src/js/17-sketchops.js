@@ -419,6 +419,19 @@ const SKO = (() => {
       const sgn = d >= 0 ? 1 : -1;
       return { ok: true, ent: { type: 'rect', a: pr([e.a[0] + sa[0] * d, e.a[1] + sa[1] * d]), b: pr([e.b[0] + sb[0] * d, e.b[1] + sb[1] * d]) }, sgs: [sa[0] * sgn, sa[1] * sgn, sb[0] * sgn, sb[1] * sgn] };
     }
+    if (e.type === 'ellipse') {
+      // Die Versatzkurve einer Ellipse ist keine Ellipse: geschlossene Spline durch 48 Punkte genau auf ihr (Punkt + d · Normale)
+      const rx = e.rx, ry = e.ry, rmin = Math.min(rx, ry) ** 2 / Math.max(rx, ry);   // kleinster Krümmungsradius
+      if (d <= -rmin * 0.98) return { ok: false, why: `Nach innen geht bei dieser Ellipse höchstens ${Math.floor(rmin * 0.98 * 100) / 100} mm – sonst entstehen Spitzen.` };
+      const cs = Math.cos(e.rot || 0), sn = Math.sin(e.rot || 0), N = 48, pts = [];
+      for (let k = 0; k < N; k++) {
+        const t = (k / N) * Math.PI * 2, x = rx * Math.cos(t), y = ry * Math.sin(t);
+        let nx = ry * Math.cos(t), ny = rx * Math.sin(t); const L = Math.hypot(nx, ny) || 1; nx /= L; ny /= L;
+        const u = x + nx * d, v = y + ny * d;
+        pts.push(pr([e.c[0] + cs * u - sn * v, e.c[1] + sn * u + cs * v]));
+      }
+      return { ok: true, ent: { type: 'spline', pts, closed: true } };
+    }
     if (e.type === 'spline') {
       const P = e.pts, m = P.length;
       const pts = P.map((p, i) => {

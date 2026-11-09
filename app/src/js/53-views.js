@@ -325,18 +325,53 @@ const Views = (() => {
   const windDir = (angle) => { const a = (angle * Math.PI) / 180; return [0, Math.cos(a), -Math.sin(a)]; };
   const windIds = (withProps) => [...Viewer.nodes.entries()].filter(([id, n]) => n.obj.visible && n.role !== 'hole' && n.mesh && (withProps || !isProp(id))).map(([id]) => id);
   function windArea(angle = 0, withProps = false) { return Viewer.silhouette(windIds(withProps), windDir(angle)).area; }
+  // Luftwiderstand: F = ½ · ρ · v² · cw · A (Luft auf Meereshöhe, 15 °C)
+  const RHO = 1.225;
+  const CWS = [[1.1, 'Offener Rahmen · cw 1,1'], [0.8, 'Mit Haube · cw 0,8'], [0.5, 'Stromlinien-Rumpf · cw 0,5'], [0.35, 'Rumpf + Armverkleidung · cw 0,35']];
+  function cwGuess(doc = App.doc) {
+    let fair = false; Model.walk(doc.items, (it) => { if (it.kind === 'part' && it.p && it.p.lib === 'armFairing') fair = true; });
+    const V = Model.vars(doc).v, body = typeof V.Rumpfdurchmesser === 'number' || doc.items.some((it) => /^Rumpf/.test(it.name || ''));
+    return body && fair ? 0.35 : body ? 0.5 : 1.1;
+  }
+  const dragN = (areaMM2, cw, kmh) => 0.5 * RHO * (kmh / 3.6) ** 2 * cw * areaMM2 * 1e-6;
+  // Höchstgeschwindigkeit: voller Schub, so weit geneigt, dass er die Drohne gerade noch trägt (T·cos θ = Gewicht);
+  // der waagerechte Anteil T·sin θ = √(T² − G²) hält dem Luftwiderstand bei der Stirnfläche unter dieser Neigung die Waage.
+  // Mit nach vorne geneigten Motoren (motorTilt) liegt der Rumpf um diesen Winkel flacher als der Schub.
+  function topSpeed(thrustG, massG, cw, areaAt, motorTilt = 0) {
+    if (!(thrustG > massG) || !(cw > 0)) return null;
+    const th = Math.acos(massG / thrustG), deg = (th * 180) / Math.PI, body = Math.max(0, deg - motorTilt), A = areaAt(body);
+    if (!(A > 0)) return null;
+    const F = Math.sqrt(thrustG * thrustG - massG * massG) * 9.80665e-3;
+    return { kmh: Math.sqrt((2 * F) / (RHO * cw * A * 1e-6)) * 3.6, deg, body, F, A };
+  }
+  async function windTop(o) {
+    const el = o.bar.querySelector('#wind-top'); if (!el) return;
+    const g = DroneCheck.geometry(App.doc), t = DroneCheck.thrustOf(App.doc);
+    if (!g || !g.n || !t) { el.innerHTML = 'Höchstgeschwindigkeit: im <b>Drohnen-Check</b> den Schub pro Motor eintragen.'; return; }
+    const m = await Mass.measure(); if (st.wind !== o) return;
+    if (!m || !m.mass) { el.textContent = 'Höchstgeschwindigkeit: Gewicht unbekannt.'; return; }
+    const r = topSpeed(g.n * t, m.mass, o.cw, (deg) => Viewer.silhouette(windIds(o.props), windDir(deg)).area, g.tilt || 0);
+    o.top = r;
+    if (!r) { el.textContent = 'Zu wenig Schub zum Schweben – keine Höchstgeschwindigkeit.'; return; }
+    el.innerHTML = `Höchstens etwa <b>${fmt(r.kmh, 0)} km/h</b> bei ${fmt(r.deg, 0)}° Neigung` + (g.tilt ? ` (Rumpf ${fmt(r.body, 0)}°, Motoren ${fmt(g.tilt, 0)}° geneigt)` : '') + ` – geschätzt aus Schub (${g.n} × ${fmt(t, 0)} g), Gewicht (${Mass.gText(m.mass)}) und Stirnfläche. Propeller verlieren bei hohem Tempo Schub, echt also eher weniger.`;
+  }
   function drawWind(moveCam) {
     const o = st.wind; if (!o) return;
     const r = Viewer.silhouette(windIds(o.props), windDir(o.angle)); o.area = r.area;
     const t = o.bar.querySelector('#wind-area');
     if (t) t.innerHTML = r.area > 0 ? `Stirnfläche <b>${fmt(r.area / 100, r.area < 100 ? 2 : 1)} cm²</b>` + (o.props ? ' mit Propellern' : ' ohne Propeller') : 'Nichts zu sehen.';
+    const dEl = o.bar.querySelector('#wind-drag');
+    if (dEl) {
+      const D = dragN(r.area, o.cw, o.v); o.drag = D;
+      dEl.innerHTML = r.area > 0 && o.v > 0 ? `Bei ${fmt(o.v, 0)} km/h: Luftwiderstand etwa <b>${fmt(D, D < 10 ? 1 : 0)} N</b> – so viel wie ${fmt((D / 9.80665) * 1000, 0)} g Schub; dafür braucht es etwa ${fmt((D * o.v) / 3.6, 0)} W.` : '';
+    }
     if (moveCam && r.c) Viewer.lookAtPlane(r.c, windDir(o.angle).map((v) => -v), [1, 0, 0], r.R * 1.15);
     Viewer.requestRender();
   }
   function wind(on = !st.wind) {
     if (!on) { if (st.wind) { const o = st.wind; o.bar.remove(); st.wind = null; Viewer.setOrtho(o.ortho); Viewer.restoreCamera(o.cam); } sync(); return; }
     if (st.wind) return;
-    const o = { angle: 0, props: false, area: 0, cam: Viewer.saveCamera(), ortho: Viewer.ortho };
+    const o = { angle: 0, props: false, area: 0, cw: cwGuess(), v: 100, cam: Viewer.saveCamera(), ortho: Viewer.ortho };
     const bar = h('div', { class: 'viewbar', role: 'toolbar', 'aria-label': 'Fahrtwind' });
     const head = h('div', { class: 'vb-head' }, h('span', { class: 'title' }, 'Fahrtwind'));
     const close = h('button', { type: 'button', class: 'vb-x', 'aria-label': 'Fahrtwind schließen', 'data-tip': 'Schließen' }); close.innerHTML = icon('close'); close.onclick = () => wind(false);
@@ -344,14 +379,23 @@ const Views = (() => {
     const rng = h('input', { type: 'range', id: 'wind-angle', min: 0, max: 60, step: 5, value: 0, 'aria-label': 'Neigung nach vorne' });
     const val = h('span', { class: 'vb-l', id: 'wind-angle-v' }, '0°');
     rng.oninput = () => { o.angle = +rng.value; val.textContent = rng.value + '°'; drawWind(true); };
-    const cb = h('input', { type: 'checkbox', id: 'wind-props' }); cb.onchange = () => { o.props = cb.checked; drawWind(false); };
+    const cb = h('input', { type: 'checkbox', id: 'wind-props' }); cb.onchange = () => { o.props = cb.checked; drawWind(false); windTop(o); };
+    const cwSel = h('select', { id: 'wind-cw', class: 'vb-sel', style: { flex: '1', minWidth: '0' }, 'aria-label': 'Form der Drohne (cw-Wert)' });
+    for (const [v, l] of CWS) { const op = h('option', { value: v }, l); if (v === o.cw) op.selected = true; cwSel.append(op); }
+    cwSel.onchange = () => { o.cw = +cwSel.value; drawWind(false); windTop(o); };
+    const vIn = h('input', { type: 'number', id: 'wind-v', class: 'vb-num', min: 0, max: 500, step: 10, value: o.v, 'aria-label': 'Tempo in km/h' });
+    vIn.onchange = () => { const v = parseFloat(vIn.value); if (v >= 0) { o.v = v; drawWind(false); } };
     bar.append(head,
       h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, 'Neigung'), rng, val),
       h('div', { class: 'vb-row' }, h('label', { class: 'vb-hint' }, cb, ' Propeller mitzählen')),
       h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint', id: 'wind-area' }, '')),
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, 'Form'), cwSel),
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, 'Tempo'), vIn, h('span', { class: 'vb-u' }, 'km/h')),
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint', id: 'wind-drag' }, '')),
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint', id: 'wind-top' }, '')),
       h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint' }, 'So sieht der Wind deine Drohne, wenn sie mit dieser Neigung nach vorne fliegt. Kleinere Fläche = weniger Luftwiderstand.')));
     bars().append(bar); o.bar = bar;
-    st.wind = o; Viewer.setOrtho(true); drawWind(true); sync();
+    st.wind = o; Viewer.setOrtho(true); drawWind(true); sync(); windTop(o);
   }
 
   // ---------- Menü und Zustand ----------
@@ -394,7 +438,7 @@ const Views = (() => {
   return {
     init, section, xray, explode, collapse, focus, overhang, menu, onKey, reset, sync, bars,
     get overhangArea() { return st.ov ? st.ov.area : null; },
-    wind, windArea, get windInfo() { return st.wind ? { angle: st.wind.angle, props: st.wind.props, area: st.wind.area } : null; },
+    wind, windArea, get windInfo() { return st.wind ? { angle: st.wind.angle, props: st.wind.props, area: st.wind.area, cw: st.wind.cw, v: st.wind.v, drag: st.wind.drag, top: st.wind.top || null } : null; }, cwGuess, topSpeed, dragN,
     overhangOf: (id, angle = 45) => { const d = overhangData(angle, [id]); return { area: d.area, c: d.c }; },
     get cut() { return st.cut ? { plane: st.cut.plane, off: st.cut.off, flip: st.cut.flip } : null; },
     get isXray() { return st.xray; }, get exploded() { return st.ex > 1e-4 || st.exGoal > 0; }, get explodeAmount() { return st.ex; }, get explodeGroups() { return st.exGroups; }, setGroups,

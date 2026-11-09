@@ -36,7 +36,7 @@ const AI = (() => {
 {"op":"material","id":"<id>","material":"<Kürzel aus MATERIALIEN>"}
 {"op":"gewicht","id":"<id>","g":33.8}   (Kaufteil mit festem Gewicht aus dem Datenblatt)
 {"op":"kaufteil","name":"<Name aus KAUFTEILE>","t":{"x":0,"y":0,"z":0}}   (Kaufteil in echter Form mit Maßen und Gewicht aus der Bibliothek)
-{"op":"drohne","zoll":5,"form":"x"|"stretch"|"wide"|"deadcat"|"cine"|"speed","video":"analog"|"o3"|"o4"|"o4pro"|"walksnail"|"hdzero"|"none","motor":"2207","akku":"6S 1300 mAh","neigung":20,"rahmen":"Source One V5"}   (baut mit dem Frame-Assistenten einen kompletten Rahmen als NEUES Projekt; nur wenn ausdrücklich ein neuer Rahmen gewünscht ist. zoll: 3, 3.5, 4, 5, 6 oder 7. cine = Cinewhoop mit Ducts, speed = Speed-Drohne mit Stromlinien-Rumpf (Akku innen, Motoren um "neigung" Grad nach vorne geneigt, Standard 20). "rahmen" nur für den Nachbau eines Herstellerrahmens: ${FRAMES})
+{"op":"drohne","zoll":5,"form":"x"|"stretch"|"wide"|"deadcat"|"h"|"cine"|"speed","video":"analog"|"o3"|"o4"|"o4pro"|"walksnail"|"hdzero"|"none","motor":"2207","akku":"6S 1300 mAh","neigung":20,"rahmen":"Source One V5"}   (baut mit dem Frame-Assistenten einen kompletten Rahmen als NEUES Projekt; nur wenn ausdrücklich ein neuer Rahmen gewünscht ist. zoll: 3, 3.5, 4, 5, 6 oder 7. cine = Cinewhoop mit Ducts, speed = Speed-Drohne mit Stromlinien-Rumpf (Akku innen, Motoren um "neigung" Grad nach vorne geneigt, Standard 20). "rahmen" nur für den Nachbau eines Herstellerrahmens: ${FRAMES})
 {"op":"pruefen"}   (Drohnen-Check: Propeller, Teile, Gewicht, Schwerpunkt, Schub – das Ergebnis bekommst du als Rückmeldung)
 {"op":"schwachstellen"}   (sucht Schwachstellen: Lochrand, dünne Wände, Armdicke – das Ergebnis bekommst du als Rückmeldung)
 {"op":"auswaehlen","ids":"…"}   (wählt am Ende diese Teile aus, damit der Nutzer sie gleich sieht)
@@ -52,10 +52,10 @@ Parameter p (alle Grundkörper stehen mit der Unterseite auf z=0 ihres eigenen S
 - cylinder: d, h · tube: d (außen), wall, h · sphere: d · hemisphere: d · cone: d1 (unten), d2 (oben, 0 = Spitze), h
 - pyramid: w, d, h · torus: d (außen), t (Ringdicke) · prism: n (Ecken), d (Umkreis), h · wedge: w, d, h (die Schräge fällt zur +X-Seite ab)
 - extrude: {"ebene":"XY"|"XZ"|"YZ","versatz":0,"hoehe":10,"richtung":"normal"|"reverse"|"both","form":[ELEMENT…]}
-  ELEMENT (2D in mm): {"rect":[x1,y1,x2,y2]} · {"circle":[cx,cy,r]} · {"ellipse":[cx,cy,rx,ry]} · {"poly":[[x,y],[x,y],…]} (geschlossener Linienzug) · {"slot":[x1,y1,x2,y2,r]} · {"text":"FPV","x":0,"y":0,"hoehe":5,"fett":true,"mitte":true} (Schrift als Umriss; in einem Rechteck = Gravur)
+  ELEMENT (2D in mm): {"rect":[x1,y1,x2,y2]} · {"circle":[cx,cy,r]} · {"ellipse":[cx,cy,rx,ry]} · {"poly":[[x,y],[x,y],…]} (geschlossener Linienzug) · {"slot":[x1,y1,x2,y2,r]} · {"text":"FPV","x":0,"y":0,"hoehe":5,"fett":true,"mitte":true,"drehung":0,"bogen":0} (Schrift als Umriss; in einem Rechteck = Gravur; "bogen" = Radius in mm, die Grundlinie läuft dann auf einem Kreis – positiv wölbt sich der Text nach oben, Mitte des Kreises bei (x, y − bogen); so läuft Schrift am Rand einer runden Platte entlang)
   Ebene XY: u=X, v=Y, hoch in +Z. Ebene XZ: u=X, v=Z, hoch in −Y. Ebene YZ: u=Y, v=Z, hoch in +X. „versatz“ verschiebt die Ebene entlang dieser Richtung. Formen, die ganz in einer anderen liegen, werden zu Löchern darin.
-- loft (Übergang durch Umrisse): {"profile":[{"ebene":"XY","versatz":0,"form":[ELEMENT]},{"ebene":"XY","versatz":30,"form":[ELEMENT]}],"spitze":0,"gerade":false,"mittellinie":{"ebene":"XZ","versatz":0,"kurve":[KURVENSTÜCK…]}} – mit "spitze" > 0 läuft der Körper hinter dem letzten Profil zu einer Spitze zusammen (auch mit nur einem Profil). "mittellinie" (optional, ab zwei Profilen) biegt den Übergang: eine offene Kurve in einer Ebene (Kurvenstücke wie bei „muster kurve“: linie/bogen/spline), die vom ersten Profil durch alle bis zum letzten läuft – die Profile bleiben, wo sie sind. In der Ebene XZ ist die 2. Koordinate z, in YZ ist die 1. y und die 2. z. Statt "mittellinie" geht "fuehrungskurve" (gleicher Aufbau): eine Seitenlinie neben den Profilen, vom ersten bis zum letzten – der Übergang wird dazwischen so weit, dass er sie berührt (z. B. ein bauchiger Rumpf).
-- sweep (Querschnitt entlang Pfad): {"ebene":"XY","versatz":0,"pfad":[[x,y],…],"glatt":false,"form":"rund"|"rechteck","d":6,"w":6,"h":4,"wand":0} – Rohr, Kabelkanal, Bügel; "glatt": true macht aus den Punkten eine Spline. Statt "ebene"/"pfad" geht auch "pfad3d":[[x,y,z],…] – ein Rohr durch Punkte im Raum (glatt, außer "glatt": false), z. B. ein Kabelkanal, der um Teile herum und nach oben läuft.
+- loft (Übergang durch Umrisse): {"profile":[{"ebene":"XY","versatz":0,"form":[ELEMENT]},{"ebene":"XY","versatz":30,"form":[ELEMENT]}],"spitze":0,"gerade":false,"mittellinie":{"ebene":"XZ","versatz":0,"kurve":[KURVENSTÜCK…]}} – mit "spitze" > 0 läuft der Körper hinter dem letzten Profil zu einer Spitze zusammen (auch mit nur einem Profil). "mittellinie" (optional, ab zwei Profilen) biegt den Übergang: eine offene Kurve in einer Ebene (Kurvenstücke wie bei „muster kurve“: linie/bogen/spline), die vom ersten Profil durch alle bis zum letzten läuft – die Profile bleiben, wo sie sind. In der Ebene XZ ist die 2. Koordinate z, in YZ ist die 1. y und die 2. z. Statt "mittellinie" geht "fuehrungskurve" (gleicher Aufbau): eine Seitenlinie neben den Profilen, vom ersten bis zum letzten – der Übergang wird dazwischen so weit, dass er sie berührt (z. B. ein bauchiger Rumpf). Dazu passt "fuehrungskurve2" (gleicher Aufbau) in einer Ebene quer zur ersten (erste in YZ → zweite in XY): sie gibt die Breite in der anderen Richtung vor – so formst du einen Rumpf von der Seite und von oben.
+- sweep (Querschnitt entlang Pfad): {"ebene":"XY","versatz":0,"pfad":[[x,y],…],"glatt":false,"form":"rund"|"rechteck","d":6,"w":6,"h":4,"wand":0} – Rohr, Kabelkanal, Bügel; "glatt": true macht aus den Punkten eine Spline. Statt "ebene"/"pfad" geht auch "pfad3d":[[x,y,z],…] – ein Rohr durch Punkte im Raum (glatt, außer "glatt": false), z. B. ein Kabelkanal, der um Teile herum und nach oben läuft. Dazu optional "regeln":[{"achse":"z","laenge":20},null,…] – je Stück (von Punkt i zu i+1): genau entlang einer Achse und/oder mit fester Länge (auch eine Formel); die Punkte dahinter wandern mit.
 - part (Bauteile, Öffnung zeigt nach +Z, Tiefe geht nach −Z; setze z auf die Oberfläche):
   {"lib":"screwHole","size":"M2|M2.5|M3|M4|M5|M6|M8","head":"countersunk|counterbore|none","length":10} (rolle loch)
   {"lib":"nutTrap","size":"M3","length":12} (loch) · {"lib":"insert","size":"M3"} (loch, Gewindeeinsatz) · {"lib":"slotHole","len":20,"w":4.5,"depth":10} (loch)
@@ -630,7 +630,7 @@ Beispiel – Wunsch „Mach alles als Verbund“ (Runde 1):
       else if (el.ellipse && el.ellipse.length >= 4) ents.push({ id: uid('e'), type: 'ellipse', c: [num(el.ellipse[0], 0), num(el.ellipse[1], 0)], rx: Math.abs(num(el.ellipse[2], 5)), ry: Math.abs(num(el.ellipse[3], 3)), rot: 0 });
       else if (el.slot && el.slot.length === 5) ents.push({ id: uid('e'), type: 'slot', a: [num(el.slot[0], 0), num(el.slot[1], 0)], b: [num(el.slot[2], 10), num(el.slot[3], 0)], r: Math.abs(num(el.slot[4], 2)) });
       else if (Array.isArray(el.poly) && el.poly.length >= 3) { const pts = el.poly.map((q) => [num(q[0], 0), num(q[1], 0)]); for (let i = 0; i < pts.length; i++) ents.push({ id: uid('e'), type: 'line', a: pts[i], b: pts[(i + 1) % pts.length] }); }
-      else if (typeof el.text === 'string' && el.text) ents.push({ id: uid('e'), type: 'text', a: [num(el.x, 0), num(el.y, 0)], s: el.text, h: Math.abs(num(el.hoehe, 5)), font: el.fett ? 'fett' : 'inter', align: el.mitte ? 'm' : 'l', rot: 0 });
+      else if (typeof el.text === 'string' && el.text) { const te = { id: uid('e'), type: 'text', a: [num(el.x, 0), num(el.y, 0)], s: el.text, h: Math.abs(num(el.hoehe, 5)), font: el.fett ? 'fett' : 'inter', align: el.mitte ? 'm' : 'l', rot: (num(el.drehung, 0) * Math.PI) / 180 }; const bg = num(el.bogen, 0); if (Math.abs(bg) > 1e-6) te.bend = bg; ents.push(te); }
     }
     return ents;
   }
@@ -671,11 +671,21 @@ Beispiel – Wunsch „Mach alles als Verbund“ (Runde 1):
         if (ents.length && SK.chains(ents).length) { it.p.rail = { plane: { o: pl.n.map((v) => v * off), x: pl.x, n: pl.n }, ents, dims: [], cons: [] }; it.p.tip = 0; }
         else notes.push('Die Führungskurve war keine offene Kurve – der Übergang nimmt den kürzesten Weg.');
       }
+      const fk2 = o.p && o.p.fuehrungskurve2;
+      if (fk2 && it.p.rail && sketches.length >= 2) {
+        const pl = PLANEDEF[String(fk2.ebene || 'YZ').toUpperCase()] || PLANEDEF.YZ, off = num(fk2.versatz, 0);
+        const ents = curveEnts(fk2.kurve).filter((e) => e.type !== 'circle');
+        if (Math.abs(pl.n[0] * it.p.rail.plane.n[0] + pl.n[1] * it.p.rail.plane.n[1] + pl.n[2] * it.p.rail.plane.n[2]) > 0.9) notes.push('Die zweite Führungskurve muss in einer anderen Ebene liegen als die erste – sie wurde weggelassen.');
+        else if (ents.length && SK.chains(ents).length) it.p.rail2 = { plane: { o: pl.n.map((v) => v * off), x: pl.x, n: pl.n }, ents, dims: [], cons: [] };
+        else notes.push('Die zweite Führungskurve war keine offene Kurve – sie wurde weggelassen.');
+      }
     } else if (kind === 'sweep') {
       const pl = PLANEDEF[String(o.p && o.p.ebene || 'XY').toUpperCase()] || PLANEDEF.XY, off = num(o.p && o.p.versatz, 0);
       const p3 = ((o.p && o.p.pfad3d) || []).filter((q) => Array.isArray(q) && q.length >= 3).map((q) => [num(q[0], 0), num(q[1], 0), num(q[2], 0)]);
       if (p3.length >= 2) {
         it = Model.newItem('sweep', { path3d: { pts: p3, smooth: o.p.glatt !== false }, shape: o.p.form === 'rechteck' ? 'rect' : 'circle', d: num(o.p.d, 6), w: num(o.p.w, 6), h: num(o.p.h, 4), wall: num(o.p.wand, 0) }, { name: o.name || 'Rohr im Raum', role });
+        const rg = Array.isArray(o.p.regeln) ? o.p.regeln.slice(0, p3.length - 1).map((r) => { if (!r || typeof r !== 'object') return null; const x = {}; const ax = String(r.achse || '').toLowerCase(); if (['x', 'y', 'z'].includes(ax)) x.ax = ax; if (r.laenge != null && r.laenge !== '' && r.laenge !== 0) x.len = typeof r.laenge === 'string' ? r.laenge : num(r.laenge, 0); return Object.keys(x).length ? x : null; }) : [];
+        if (rg.some(Boolean)) it.p.path3d.rules = rg;
       } else {
       const pts = ((o.p && o.p.pfad) || []).map((q) => [num(q[0], 0), num(q[1], 0)]);
       if (pts.length < 2) { notes.push('Ein Pfad braucht mindestens zwei Punkte.'); return null; }

@@ -35,6 +35,7 @@ self.onmessage = async (ev) => {
     else if (cmd === 'clashes') result = kernel.clashes(args.scene, args.probes, args.skipPairs);
     else if (cmd === 'holeWalls') result = kernel.holeWalls(args.scene, args.ids, args);
     else if (cmd === 'faceLoops') result = kernel.faceLoopsOf(args.key, args.faceIdx);
+    else if (cmd === 'faceGrid') result = kernel.faceGridOf(args.key, args.faceIdx);
     else if (cmd === 'remesh') result = kernel.remesh(args.key, args.tol);
     else throw new Error('Unbekannter Befehl: ' + cmd);
     const tl = [];

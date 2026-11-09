@@ -183,7 +183,7 @@ const Features = (() => {
   function routeAppend(id) {
     const f = Model.find(App.doc, id); if (!f || !f.item.p.path3d) return false;
     const W = Model.worldMatrix(App.doc, id);
-    const pts = f.item.p.path3d.pts.map((q) => new THREE.Vector3(...q.map((v) => Model.num(v, Model.vars(App.doc).v, 0))).applyMatrix4(W).toArray());
+    const pts = Model.path3dPoints(f.item.p.path3d, Model.vars(App.doc).v).map((q) => new THREE.Vector3(...q).applyMatrix4(W).toArray());
     route3d({ pts, d: Model.num(f.item.p.d, Model.vars(App.doc).v, 6), append: id });
     route.inv = W.clone().invert();
     return true;

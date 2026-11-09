@@ -156,10 +156,14 @@ const Sketch = (() => {
   // Mittellinie für einen Übergang: Ebene durch den ersten Umriss, in der auch der letzte liegt; vorgezeichnet als Spline durch die Mitten
   let lpKey = '';
   // kind 'path' = Mittellinie, 'rail' = Führungskurve (Seitenlinie, der der Übergang zwischen den Umrissen folgt)
-  const isLoftLine = () => !!S && (S.ctx.mode === 'loftpath' || S.ctx.mode === 'loftrail');
+  // 'rail2' = zweite Führungskurve, quer zur ersten (z. B. von oben, wenn die erste von der Seite kommt)
+  const LOFTMODE = { path: 'loftpath', rail: 'loftrail', rail2: 'loftrail2' };
+  const isLoftLine = () => !!S && (S.ctx.mode === 'loftpath' || S.ctx.mode === 'loftrail' || S.ctx.mode === 'loftrail2');
+  const railKey = () => (S.ctx.mode === 'loftrail2' ? 'rail2' : S.ctx.mode === 'loftrail' ? 'rail' : null);
   function startLoftPath(id, kind = 'path') {
     const f = Model.find(App.doc, id); if (!f || f.item.kind !== 'loft') return false;
-    const key = kind === 'rail' ? 'rail' : 'path';
+    const key = kind === 'rail' || kind === 'rail2' ? kind : 'path';
+    if (key === 'rail2' && !f.item.p.rail) return startLoftPath(id, 'rail');
     const it = f.item, V = Model.vars(App.doc).v;
     const Y = (pl) => { const n = pl.n, x = pl.x; return [n[1] * x[2] - n[2] * x[1], n[2] * x[0] - n[0] * x[2], n[0] * x[1] - n[1] * x[0]]; };
     const W3 = (pl, q) => { const y = Y(pl); return [0, 1, 2].map((k) => pl.o[k] + pl.x[k] * q[0] + y[k] * q[1]); };
@@ -169,11 +173,20 @@ const Sketch = (() => {
       const poly = regs[0].outer.poly; let cx = 0, cy = 0; for (const q of poly) { cx += q[0]; cy += q[1]; } cx /= poly.length || 1; cy /= poly.length || 1;
       prof.push({ c: W3(sk.plane, [cx, cy]), n: sk.plane.n.slice(), pts: poly.map((q) => W3(sk.plane, q)) });
     }
-    if (prof.length < 2) { UI.toast(`Für eine ${key === 'rail' ? 'Führungskurve' : 'Mittellinie'} braucht der Übergang mindestens zwei Umrisse.`, { kind: 'bad', icon: 'info' }); return false; }
+    if (prof.length < 2) { UI.toast(`Für eine ${key !== 'path' ? 'Führungskurve' : 'Mittellinie'} braucht der Übergang mindestens zwei Umrisse.`, { kind: 'bad', icon: 'info' }); return false; }
     let plane, ents = [], dims = [], cons = [];
     const old = it.p[key];
     if (old) { plane = deepClone(old.plane); ents = deepClone(old.ents || []); dims = deepClone(old.dims || []); cons = deepClone(old.cons || []); }
-    else {
+    else if (key === 'rail2') {
+      // quer zur ersten Führungskurve: Ebene durch die Achse, deren Normale die Richtung der ersten Kurve ist
+      const C0 = prof[0].c, C1 = prof[prof.length - 1].c, D = new THREE.Vector3(C1[0] - C0[0], C1[1] - C0[1], C1[2] - C0[2]).normalize();
+      const n1 = new THREE.Vector3(...it.p.rail.plane.n), n2 = n1.clone().cross(D);
+      if (n2.length() < 0.2) { UI.toast('Die erste Führungskurve liegt ungünstig – eine zweite geht hier nicht.', { kind: 'bad', icon: 'info' }); return false; }
+      n2.normalize();
+      const std = ['XZ', 'YZ', 'XY'].find((k) => Math.abs(new THREE.Vector3(...PLANES[k].n).dot(n2)) > 0.999);
+      if (std) { const B = PLANES[std], off = B.n[0] * C0[0] + B.n[1] * C0[1] + B.n[2] * C0[2]; plane = { o: B.n.map((v) => round(v * off, 6)), x: B.x.slice(), n: B.n.slice() }; }
+      else plane = { o: C0.map((v) => round(v, 6)), x: D.toArray().map((v) => round(v, 9)), n: n2.toArray().map((v) => round(v, 9)) };
+    } else {
       const C0 = prof[0].c, C1 = prof[prof.length - 1].c, D = new THREE.Vector3(C1[0] - C0[0], C1[1] - C0[1], C1[2] - C0[2]).normalize();
       // bevorzugt „Stehend (vorne)“, dann „seitlich“, dann „Arbeitsfläche“ – die, in der die Verbindung am besten liegt
       const cand = ['XZ', 'YZ', 'XY'].map((k) => ({ k, d: Math.abs(new THREE.Vector3(...PLANES[k].n).dot(D)) }));
@@ -182,7 +195,7 @@ const Sketch = (() => {
       plane = { o: B.n.map((v) => round(v * off, 6)), x: B.x.slice(), n: B.n.slice() };
     }
     const y = Y(plane), to2 = (P) => { const d = [P[0] - plane.o[0], P[1] - plane.o[1], P[2] - plane.o[2]]; return [round(d[0] * plane.x[0] + d[1] * plane.x[1] + d[2] * plane.x[2], 4), round(d[0] * y[0] + d[1] * y[1] + d[2] * y[2], 4)]; };
-    if (!old && key === 'rail') {
+    if (!old && key !== 'path') {
       // Führungskurve: Spline durch die äußerste Stelle jedes Umrisses (der Übergang bleibt so zunächst gleich), dazwischen je ein Punkt zum Ziehen
       const R3 = Model.railStart(it, V, plane);
       if (!R3) { UI.toast('Die Umrisse liegen dafür ungünstig – die Führungskurve braucht eine Ebene, die die Achse vom ersten zum letzten Umriss enthält.', { kind: 'bad', icon: 'info' }); return false; }
@@ -214,11 +227,12 @@ const Sketch = (() => {
     }
     lpKey = '';
     const bb = SK.bounds([...ents, ...refs]), ext = bb ? Math.max(bb[2] - bb[0], bb[3] - bb[1]) : 40;
-    begin({ plane, W: Model.worldMatrix(App.doc, id), ents, dims, cons, refs, viewSize: Math.max(60, ext * 1.7), ctx: { mode: key === 'rail' ? 'loftrail' : 'loftpath', id } });
+    begin({ plane, W: Model.worldMatrix(App.doc, id), ents, dims, cons, refs, viewSize: Math.max(60, ext * 1.7), ctx: { mode: LOFTMODE[key], id } });
     S.hiddenEdit = id;
     const top = Model.topOf(App.doc, id); if (top && top.id === id) Viewer.updateNode(id, { visible: false });
     loftPreview();
-    if (key === 'rail') UI.toast(old ? 'Zieh die Führungskurve – der Übergang folgt ihr. Dann „Fertig“.' : 'Die Führungskurve läuft an der Seite der Umrisse entlang. Zieh die Punkte dazwischen nach außen oder innen – der Übergang folgt. Dann „Fertig“.', { icon: 'info', ms: 4200 });
+    if (key === 'rail2') UI.toast(old ? 'Zieh die zweite Führungskurve – der Übergang folgt beiden. Dann „Fertig“.' : 'Die zweite Führungskurve steht quer zur ersten – z. B. von oben, wenn die erste von der Seite kommt. Zieh ihre Punkte, dann „Fertig“.', { icon: 'info', ms: 4200 });
+    else if (key === 'rail') UI.toast(old ? 'Zieh die Führungskurve – der Übergang folgt ihr. Dann „Fertig“.' : 'Die Führungskurve läuft an der Seite der Umrisse entlang. Zieh die Punkte dazwischen nach außen oder innen – der Übergang folgt. Dann „Fertig“.', { icon: 'info', ms: 4200 });
     else UI.toast(it.p.path ? 'Bieg die Mittellinie – der Übergang folgt ihr. Dann „Fertig“.' : 'Die Mittellinie läuft durch die Mitten der Umrisse. Zieh ihre Punkte, um den Übergang zu biegen – dann „Fertig“.', { icon: 'info', ms: 4200 });
     return true;
   }
@@ -228,7 +242,7 @@ const Sketch = (() => {
     const k = JSON.stringify([S.ents, S.plane, S.dims]); if (k === lpKey) return; lpKey = k;
     const f = Model.find(App.doc, S.ctx.id); if (!f) return;
     const it = deepClone(f.item), sk = { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons) };
-    if (S.ctx.mode === 'loftrail') { it.p.rail = sk; delete it.p.path; } else it.p.path = sk;
+    const rk = railKey(); if (rk) { it.p[rk] = sk; delete it.p.path; } else { it.p.path = sk; delete it.p.rail; delete it.p.rail2; }
     Model.setFromMatrix(it, S.W); it.id = '__preview'; it.finishes = [];
     App.extra = SK.chains(S.ents).length ? [it] : []; App.rebuild();
   }, 250);
@@ -256,7 +270,7 @@ const Sketch = (() => {
     if (Notes.active) Notes.stop();
     Panels.closeFlyout(); UI.closePop();
     const F = frameWorld(init.plane, init.W);
-    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail') && init.ents.length) ? 'select' : init.ctx.mode === 'patpath' ? 'line' : 'rect', draft: null, sel: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, hoverEnt: null, trimHover: null };
+    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.mode === 'patpath' ? 'line' : 'rect', draft: null, sel: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, hoverEnt: null, trimHover: null };
     S.dims = init.dims || []; S.cons = init.cons || []; S.picks = []; S.dimFirst = null; S.selCon = null;
     S.plane0 = deepClone(init.plane); S.pOff = init.pOff || 0; S.pTilt = 0;
     if (S.pOff) applyPlane(false, true);
@@ -890,7 +904,7 @@ const Sketch = (() => {
     return true;
   }
   // ---------- Versatz ----------
-  const OFFTYPES = ['line', 'arc', 'circle', 'rect', 'poly', 'slot', 'spline'];
+  const OFFTYPES = ['line', 'arc', 'circle', 'rect', 'poly', 'slot', 'spline', 'ellipse'];
   function offsetDown(uv0, e) {
     const p = snap(uv0, { fine: e.shiftKey, off: e.altKey, exclude: S.draft && S.draft.off ? [S.draft.off.id] : undefined }).p;
     if (S.draft && S.draft.off) {
@@ -923,6 +937,14 @@ const Sketch = (() => {
     if (e.type === 'circle') return SK.d2(uv, e.c) - e.r;
     if (e.type === 'poly') return SK.d2(uv, e.c) - e.r * Math.cos(Math.PI / Math.max(3, Math.round(e.n || 6)));
     if (e.type === 'slot') return segDist(uv, e.a, e.b) - e.r;
+    if (e.type === 'ellipse') {
+      // Abstand zur Ellipse (über Punkte auf ihr), außen +, innen −
+      const pl = SK.ellipsePoints(e.c, e.rx, e.ry, e.rot || 0, 180); let bd = Infinity;
+      for (let i = 0; i < pl.length; i++) bd = Math.min(bd, segDist(uv, pl[i], pl[(i + 1) % pl.length]));
+      const cr = Math.cos(-(e.rot || 0)), sr = Math.sin(-(e.rot || 0)), dx = uv[0] - e.c[0], dy = uv[1] - e.c[1];
+      const x = cr * dx - sr * dy, y = sr * dx + cr * dy;
+      return (x / e.rx) ** 2 + (y / e.ry) ** 2 < 1 ? -bd : bd;
+    }
     if (e.type === 'rect') {
       const x0 = Math.min(e.a[0], e.b[0]), x1 = Math.max(e.a[0], e.b[0]), y0 = Math.min(e.a[1], e.b[1]), y1 = Math.max(e.a[1], e.b[1]);
       const dx = Math.max(x0 - uv[0], 0, uv[0] - x1), dy = Math.max(y0 - uv[1], 0, uv[1] - y1);
@@ -965,10 +987,12 @@ const Sketch = (() => {
       S.ents.push(ne);
       const c = offsetCon(it.src, ne, it, sd, v); if (c) newCons.push(c);
     }
+    if (newCons.length > 1) { const og = uid('og'); for (const c of newCons) c.og = og; }   // zusammen entstanden: später zusammen ändern
     S.cons.push(...newCons);
     S.draft = null; hideEntry(); S.sel = null;
     sanitize(newCons.map((c) => c.id));
     UI.hint(HINTS.offset); render(); Panels.renderRight();
+    if (calc.items.some((x) => x.src.type === 'ellipse')) UI.toast('Der Versatz einer Ellipse ist keine Ellipse mehr – die Kopie ist eine Spline durch 48 Punkte genau im Abstand. Sie folgt der Ellipse nicht, wenn du diese später änderst.', { icon: 'info', ms: 5000 });
     return true;
   }
   // Abstand eingetippt (Zahl oder Formel): die Seite kommt von der Maus, ein Minus dreht sie um
@@ -2061,6 +2085,7 @@ const Sketch = (() => {
     const w = h('div', { class: 'props' });
     if (!S.step && (S.ctx.mode === 'patpath' || isPathEdit())) w.append(h('div', { class: 'ok-box', id: 'path-hint', html: '<b>Kurve für das Muster</b> – die Kopien laufen sie vom Anfang bis zum Ende ab. Der Punkt markiert das Original: Am Ende der Kurve, das ihm näher liegt, geht es los. Ein Kreis oder ein geschlossener Umriss verteilt die Kopien rundherum.' }));
     if (S.ctx.mode === 'loftrail') w.append(h('div', { class: 'ok-box', id: 'loftrail-hint', html: '<b>Führungskurve für den Übergang</b> – sie gibt die Seitenlinie vor: Zwischen den Umrissen wird der Übergang in dieser Richtung so weit, dass er die Kurve berührt. Die Umrisse selbst bleiben, wie sie sind. Sie sollte vom ersten bis zum letzten Umriss laufen.' }));
+    if (S.ctx.mode === 'loftrail2') w.append(h('div', { class: 'ok-box', id: 'loftrail2-hint', html: '<b>Zweite Führungskurve</b> – sie steht quer zur ersten und gibt die Breite in der anderen Richtung vor (z. B. von oben gesehen, wenn die erste von der Seite kommt). Der Übergang folgt beiden, die Umrisse bleiben gleich.' }));
     if (S.ctx.mode === 'loftpath') w.append(h('div', { class: 'ok-box', id: 'loftpath-hint', html: '<b>Mittellinie für den Übergang</b> – die Umrisse bleiben, wo sie sind (die dünnen Hilfskanten zeigen sie), und die Fläche dazwischen folgt der Linie. Sie sollte vom ersten Umriss durch alle anderen bis zum letzten laufen. Zieh die Punkte der Kurve oder zeichne eine neue Linie, einen Bogen oder eine Spline.' }));
     if (S.step) { w.append(h('div', { class: 'hint-box', html: S.step.revolve ? 'Wähle die Achse, um die gedreht wird. Klick im Bild auf Flächen, um sie ab- oder anzuwählen.' : 'Zieh am Pfeil im Bild oder tipp die Höhe ein. Klick auf Flächen, um sie ab- oder anzuwählen.' })); body.append(w); return; }
     const sel = S.ents.find((x) => x.id === S.sel);
@@ -2075,7 +2100,20 @@ const Sketch = (() => {
         else { S.undo.push(JSON.stringify({ ents: S.ents, dims: S.dims, cons: S.cons.map((c) => (c === selCon ? { ...c, [key]: old } : c)) })); }
         render(); Panels.renderRight();
       } }));
-      if (selCon.type === 'offset') editNum('co-v', 'Abstand', 'mm', 'v');
+      if (selCon.type === 'offset') {
+        // Versatz einer ganzen Kette: alle Stücke, die zusammen entstanden sind, bekommen denselben Abstand
+        const grp = selCon.og ? S.cons.filter((c) => c.type === 'offset' && c.og === selCon.og) : [selCon];
+        w.append(UI.numField({ id: 'co-v', label: grp.length > 1 ? `Abstand (alle ${grp.length} Stücke)` : 'Abstand', value: selCon.v, unit: 'mm', onCommit: (v) => {
+          const old = grp.map((c) => c.v); grp.forEach((c) => { c.v = v; });
+          // die Originale möglichst stehen lassen – die Kopien wandern
+          const pins = []; for (const c of grp) { const src = ent(c.refs[0].e); if (src) for (const k of Solver.varsOf(src) || []) pins.push([src.id, k, Solver.getK(src, k)]); }
+          const r = reapply({ pins });
+          if (r && !r.ok) { grp.forEach((c, i) => { c.v = old[i]; }); reapply(); UI.toast('Dieser Wert widerspricht den anderen Regeln.', { kind: 'bad' }); }
+          else S.undo.push(JSON.stringify({ ents: S.ents, dims: S.dims, cons: S.cons.map((c) => { const i = grp.indexOf(c); return i >= 0 ? { ...c, v: old[i] } : c; }) }));
+          render(); Panels.renderRight();
+        } }));
+        if (grp.length > 1) w.append(h('div', { class: 'hint-box', id: 'co-v-all', html: `Dieser Versatz gehört zu einer Kette aus <b>${grp.length} Stücken</b> – der Abstand gilt für alle zusammen.` }));
+      }
       if (selCon.type === 'xform' && selCon.mode === 'rot') editNum('co-ang', 'Winkel', '°', 'ang');
       if (selCon.type === 'xform' && selCon.mode !== 'rot') { editNum('co-dx', 'Versatz X', 'mm', 'dx'); editNum('co-dy', 'Versatz Y', 'mm', 'dy'); }
       if (selCon.type === 'xform' && selCon.pg && selCon.pm) {
@@ -2131,6 +2169,22 @@ const Sketch = (() => {
         f.append(UI.selectField({ id: 'se-align', label: 'Ausrichtung', value: sel.align || 'l', options: [['l', 'Links'], ['m', 'Mitte'], ['r', 'Rechts']], onChange: (v) => upd((e) => { e.align = v; }) }));
         f.append(UI.numField({ id: 'se-rot', label: 'Drehung', value: round(((sel.rot || 0) * 180) / Math.PI, 3), unit: '°', expr: false, onCommit: (v) => upd((e) => { e.rot = (v * Math.PI) / 180; }) }));
         f.append(UI.numField({ id: 'se-sp', label: 'Zeichenabstand', value: sel.sp || 0, unit: 'mm', expr: false, onCommit: (v) => upd((e) => { e.sp = v; }) }));
+        f.append(UI.numField({ id: 'se-bend', label: 'Bogen-Radius', value: sel.bend || 0, unit: 'mm', expr: false, onCommit: (v) => upd((e) => { if (Math.abs(v) < 1e-6) delete e.bend; else e.bend = v; }) }));
+        // An Kreis oder Bogen legen: die Grundlinie läuft auf dem nächsten Kreis, Mitte des Texts dort, wo er gerade steht
+        const rounds = S.ents.filter((x) => x.type === 'circle' || x.type === 'arc');
+        if (rounds.length) {
+          const ob = h('button', { type: 'button', class: 'btn', id: 'se-oncircle' }); ob.innerHTML = icon('circle') + 'An Kreis legen';
+          ob.onclick = () => upd((e) => {
+            const tb = e.align === 'm' ? null : SK.textBox(e), p0 = tb ? tb.c : e.a;   // Mitte der Grundlinie (bei „Mitte“ der Ankerpunkt)
+            let best = null;
+            for (const x of rounds) { const ci = x.type === 'circle' ? { c: x.c, r: x.r } : SK.arcInfo(x.a, x.m, x.b); if (!ci) continue; const d = Math.abs(Math.hypot(p0[0] - ci.c[0], p0[1] - ci.c[1]) - ci.r); if (!best || d < best.d) best = { ...ci, d }; }
+            if (!best) return;
+            const th = Math.atan2(p0[1] - best.c[1], p0[0] - best.c[0]);
+            e.align = 'm'; e.bend = round(best.r, 4); e.rot = th - Math.PI / 2;
+            e.a = [round(best.c[0] + Math.cos(th) * best.r, 4), round(best.c[1] + Math.sin(th) * best.r, 4)];
+          });
+          f.append(h('div', { class: 'btn-row' }, ob));
+        }
         const tb = SK.textBox(sel); if (tb) w.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Größe'), h('b', { class: 'mono' }, fmt(tb.w, 2) + ' × ' + fmt(tb.h, 2) + ' mm')));
       }
       else if (sel.type === 'ellipse') {
@@ -2299,11 +2353,11 @@ const Sketch = (() => {
     const editKind = S.ctx.mode === 'edit' ? (Model.find(App.doc, S.ctx.editId) || { item: {} }).item.kind : null;
     const pathMode = S.ctx.mode === 'patpath' || isPathEdit();
     if (isLoftLine()) {
-      const rail = S.ctx.mode === 'loftrail', nm = rail ? 'Führungskurve' : 'Mittellinie';
-      if (!SK.chains(S.ents).length) { UI.toast(`Die ${nm} braucht eine offene Linie, einen Bogen oder eine Spline – keinen geschlossenen Umriss.`, { kind: 'bad', icon: 'info' }); return; }
+      const rk = railKey(), nm = rk === 'rail2' ? 'zweiten Führungskurve' : rk ? 'Führungskurve' : 'Mittellinie';
+      if (!SK.chains(S.ents).length) { UI.toast(`Die ${rk === 'rail2' ? 'zweite Führungskurve' : nm} braucht eine offene Linie, einen Bogen oder eine Spline – keinen geschlossenen Umriss.`, { kind: 'bad', icon: 'info' }); return; }
       const id = S.ctx.id, sk = { plane: deepClone(S.plane), ents: S.ents, dims: S.dims, cons: S.cons };
       App.extra = []; finishSession();
-      App.change(nm, (doc) => { const f = Model.find(doc, id); if (!f) return false; if (rail) { f.item.p.rail = sk; delete f.item.p.path; } else { f.item.p.path = sk; delete f.item.p.rail; } });
+      App.change(rk === 'rail2' ? 'Zweite Führungskurve' : rk ? 'Führungskurve' : 'Mittellinie', (doc) => { const f = Model.find(doc, id); if (!f) return false; if (rk) { f.item.p[rk] = sk; delete f.item.p.path; } else { f.item.p.path = sk; delete f.item.p.rail; delete f.item.p.rail2; } });
       App.select([id]); UI.toast(`Der Übergang folgt jetzt der ${nm}.`, { icon: 'check' }); return;
     }
     if (pathMode && !SK.chains(S.ents).length && !regs.length) { UI.toast('Zeichne zuerst eine Kurve: eine Linie, einen Bogen, eine Spline oder einen Kreis.', { kind: 'bad', icon: 'info' }); return; }

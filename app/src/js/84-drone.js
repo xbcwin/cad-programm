@@ -48,7 +48,7 @@ const DroneTpl = (() => {
     6: { Armbreite: 14, Armdicke: 5.5, Plattenbreite: 44, Plattenlänge: 140, Plattendicke: 2, Bolzenhöhe: 28, stack: 30.5, motor: '2306', akku: '6S 1500 mAh', prop: 6 },
     7: { Armbreite: 15, Armdicke: 6, Plattenbreite: 45, Plattenlänge: 150, Plattendicke: 2.5, Bolzenhöhe: 30, stack: 30.5, motor: '2806.5', akku: '6S 1500 mAh', prop: 9.7 },
   };
-  const FORMS = { x: ['True-X', 45, 45], stretch: ['Stretched-X', 35, 35], wide: ['Wide-X', 55, 55], deadcat: ['Deadcat', 60, 35], cine: ['Cinewhoop', 45, 45], speed: ['Speed-Rumpf', 55, 55] };
+  const FORMS = { x: ['True-X', 45, 45], stretch: ['Stretched-X', 35, 35], wide: ['Wide-X', 55, 55], deadcat: ['Deadcat', 60, 35], h: ['H-Rahmen', 40, 40], cine: ['Cinewhoop', 45, 45], speed: ['Speed-Rumpf', 55, 55] };
   const ZOLL = [3, 3.5, 4, 5, 6, 7];
   // Videosysteme: Sendeeinheit und Kamera aus der Bauteil-Bibliothek
   const VIDEO = {
@@ -245,7 +245,12 @@ const DroneTpl = (() => {
     };
     // Unterteil: Mittelplatte, vier Arme, Motorauflagen, Löcher
     const kids = [item('box', { w: 'Plattenbreite', d: 'Plattenlänge', h: 'Armdicke' }, { name: 'Mittelplatte', color: CF })];
-    for (const [n, sx, sy] of CORNERS) {
+    if (P.form === 'h') {
+      // H-Rahmen: links und rechts ein Längsträger von Motor zu Motor, vorne und hinten an der Mittelplatte je ein Querträger dazu
+      for (const sx of [1, -1]) kids.push(item('box', { w: 'Armbreite', d: 'Achsabstand*cos(Armwinkel) + Armbreite', h: 'Armdicke' }, { name: 'Längsträger ' + (sx > 0 ? 'rechts' : 'links'), color: CF, t: { x: sg(sx, MX(-1)) } }));
+      for (const sy of [-1, 1]) kids.push(item('box', { w: 'Achsabstand*sin(Armwinkel)', d: 'Armbreite', h: 'Armdicke' }, { name: 'Querträger ' + (sy < 0 ? 'vorne' : 'hinten'), color: CF, t: { y: sg(sy, 'Plattenlänge/2 - Armbreite/2') } }));
+      for (const [n, sx, sy] of CORNERS) kids.push(item('cylinder', { d: 'Motorlochkreis + 9', h: 'Armdicke' }, { name: 'Motorauflage ' + n, color: CF, t: { x: sg(sx, MX(sy)), y: PY(sy) } }));
+    } else for (const [n, sx, sy] of CORNERS) {
       kids.push(item('box', { w: 'Armbreite', d: 'Achsabstand/2', h: 'Armdicke' }, { name: 'Arm ' + n, color: CF, t: { x: sg(sx, MX(sy) + '/2'), y: PY2(sy), rz: sx * sy < 0 ? W(sy) : '-' + W(sy) } }));
       kids.push(item('cylinder', { d: 'Motorlochkreis + 9', h: 'Armdicke' }, { name: 'Motorauflage ' + n, color: CF, t: { x: sg(sx, MX(sy)), y: PY(sy) } }));
     }
@@ -338,6 +343,11 @@ const DroneTpl = (() => {
     const disc = 'class="b1" fill-opacity=".15"';
     if (form === 'cine') return arms + '<rect x="47" y="18" width="16" height="20" rx="2" class="a3"/>' + props(13, 7, 'class="line" fill="none" stroke-width="2.5"');
     if (form === 'speed') return arms + '<path d="M55 6L62 16V40L58 50H52L48 40V16Z" class="a1"/><circle cx="55" cy="9" r="2.4" class="a3"/>' + props(11, 6, disc);
+    if (form === 'h') {
+      const [x1, y1] = pts[0], [x0, y2] = pts[3];
+      const hb = `<path d="M${x0} ${y1}V${y2}M${x1} ${y1}V${y2}M${x0} 18H${x1}M${x0} 38H${x1}" class="line" stroke-width="5" stroke-linecap="round" fill="none"/>`;
+      return hb + '<rect x="47" y="16" width="16" height="24" rx="2" class="a3"/>' + props(big ? 13 : 11, big ? 7 : 6, disc);
+    }
     return arms + '<rect x="47" y="16" width="16" height="24" rx="2" class="a3"/>' + props(big ? 13 : 11, big ? 7 : 6, disc);
   }
   const LIST = Object.entries(PRESETS).map(([k, P]) => ({ id: 'drone-' + k, name: P.name, desc: P.desc, build: () => build(k), svg: svg(k === 'f7', P.form), drone: true }));

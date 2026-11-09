@@ -188,7 +188,7 @@ const Model = (() => {
     else if (it.kind === 'import') o.p = { fmt: it.p.fmt, data: it.p.data, scale: num(it.p.scale, V, 1) };
     else o.p = resolveP(it.p, V);
     if (it.mir) o.mir = it.mir;
-    if (it.finishes && it.finishes.length) o.finishes = it.finishes.filter((f) => !f.off).map((f) => ({ id: f.id, type: f.type, r: num(f.r, V, 1), edges: f.edges, faces: f.faces }));
+    if (it.finishes && it.finishes.length) o.finishes = it.finishes.filter((f) => !f.off).map((f) => { const x = { id: f.id, type: f.type, r: num(f.r, V, 1), edges: f.edges, faces: f.faces }; if (f.vr) { x.vr = true; x.r2 = num(f.r2, V, x.r); } if (f.cm) { x.cm = f.cm; if (f.cm === 'two') x.r2 = num(f.r2, V, x.r); else x.a = num(f.a, V, 45); } if (f.side) x.side = 1; return x; });
     return o;
   }
   function sketchParams(it, V) {
@@ -262,8 +262,8 @@ const Model = (() => {
     }
     const out = { profiles, ruled: !!p.ruled };
     // Führungskurve: Zwischenschnitte, die in Richtung der Kurve so gestreckt werden, dass sie die Kurve berühren
-    const rch = p.rail && !p.path ? SK.chains(Solver.cached(p.rail, V).ents)[0] : null;
-    if (rch && profiles.length >= 2) { const sec = railSections(profiles, p.rail.plane, rch); if (sec) { out.sections3 = sec; return out; } }
+    const rails = p.path ? [] : [p.rail, p.rail2].filter(Boolean).map((r) => ({ plane: r.plane, ch: SK.chains(Solver.cached(r, V).ents)[0] })).filter((r) => r.ch);
+    if (rails.length && profiles.length >= 2) { const sec = railSections(profiles, rails); if (sec) { out.sections3 = sec; return out; } }
     // Mittellinie: längster offener Zug der Pfad-Skizze, so gedreht, dass er beim ersten Umriss beginnt
     const ch = p.path ? SK.chains(Solver.cached(p.path, V).ents)[0] : null;
     if (ch && profiles.length >= 2) {
@@ -320,26 +320,41 @@ const Model = (() => {
     const pts = []; for (const g of ch.segs) { const sp = SK.segPoints(g); for (let i = pts.length ? 1 : 0; i < sp.length; i++) pts.push(W3p(plane, sp[i])); }
     return pts;
   }
-  function railSections(profiles, plane, ch, n = 48, K = 6) {
-    const rp = railPoints(plane, ch), F = railFrame(profiles, plane, rp); if (!F) return null;
-    const { C, c0, a, La, u } = F;
-    const loops = profiles.map((q, i) => resampleLoop(q.poly.map((r) => W3p(q.plane, r)), C[i], u, a, n));
+  // rails: [{ plane, ch }] – jede Führungskurve streckt die Zwischenschnitte in ihrer Richtung u (in ihrer Ebene, quer zur Achse).
+  // Zwei Kurven in Ebenen quer zueinander (z. B. von der Seite und von oben) wirken unabhängig: Strecken in u₁ ändert nichts in u₂.
+  function railSections(profiles, rails, n = 48, K = 6) {
+    const R = [];
+    for (const r of rails || []) {
+      if (!r || !r.ch) continue;
+      const rp = railPoints(r.plane, r.ch), F = railFrame(profiles, r.plane, rp); if (!F) continue;
+      if (R.some((x) => Math.abs(v3.dot(x.F.u, F.u)) > 0.9)) continue;   // dieselbe Richtung zweimal: nur die erste zählt
+      R.push({ rp, F });
+    }
+    if (!R.length) return null;
+    const { C, c0, a, La } = R[0].F;
+    const loops = profiles.map((q, i) => resampleLoop(q.poly.map((r) => W3p(q.plane, r)), C[i], R[0].F.u, a, n));
     const sOf = (pt) => v3.dot(v3.sub(pt, c0), a) / La;
-    // Kurve als Breite über der Achse: e(s) = Abstand von der Achse in Richtung u
-    const rs = rp.map((r) => [sOf(r), v3.dot(v3.sub(r, c0), u)]).sort((x, y) => x[0] - y[0]);
-    const eAt = (s) => { if (s < rs[0][0] - 1e-6 || s > rs[rs.length - 1][0] + 1e-6) return null; let i = 1; while (i < rs.length - 1 && rs[i][0] < s) i++; const A0 = rs[i - 1], B0 = rs[i], t = (s - A0[0]) / Math.max(1e-12, B0[0] - A0[0]); return A0[1] + (B0[1] - A0[1]) * Math.max(0, Math.min(1, t)); };
-    const ext = (L, c) => Math.max(...L.map((q) => v3.dot(v3.sub(q, c), u)));
-    const ratio = (L, c, s) => { const e = eAt(s); if (e == null) return 1; const x = ext(L, c); return x > 1e-6 ? (e - v3.dot(v3.sub(c, c0), u)) / x : 1; };
-    const g = loops.map((L, i) => ratio(L, C[i], sOf(C[i])));
+    for (const r of R) {
+      const u = r.F.u;
+      // Kurve als Breite über der Achse: e(s) = Abstand von der Achse in Richtung u
+      const rs = r.rp.map((q) => [sOf(q), v3.dot(v3.sub(q, c0), u)]).sort((x, y) => x[0] - y[0]);
+      const eAt = (s) => { if (s < rs[0][0] - 1e-6 || s > rs[rs.length - 1][0] + 1e-6) return null; let i = 1; while (i < rs.length - 1 && rs[i][0] < s) i++; const A0 = rs[i - 1], B0 = rs[i], t = (s - A0[0]) / Math.max(1e-12, B0[0] - A0[0]); return A0[1] + (B0[1] - A0[1]) * Math.max(0, Math.min(1, t)); };
+      const ext = (L, c) => Math.max(...L.map((q) => v3.dot(v3.sub(q, c), u)));
+      r.ratio = (L, c, s) => { const e = eAt(s); if (e == null) return 1; const x = ext(L, c); return x > 1e-6 ? (e - v3.dot(v3.sub(c, c0), u)) / x : 1; };
+      r.g = loops.map((L, i) => r.ratio(L, C[i], sOf(C[i])));
+    }
     const out = [];
     for (let i = 0; i < loops.length - 1; i++) {
       for (let k = 0; k < K; k++) {
         const t = k / K;
         if (k === 0) { out.push(loops[i]); continue; }
         const c = v3.add(C[i], v3.mul(v3.sub(C[i + 1], C[i]), t));
-        const L = loops[i].map((q, m) => v3.add(q, v3.mul(v3.sub(loops[i + 1][m], q), t)));
-        const f = Math.max(0.05, Math.min(20, ratio(L, c, sOf(c)) / (g[i] + (g[i + 1] - g[i]) * t)));
-        out.push(L.map((q) => { const d = v3.dot(v3.sub(q, c), u); return v3.add(q, v3.mul(u, d * (f - 1))); }));
+        let L = loops[i].map((q, m) => v3.add(q, v3.mul(v3.sub(loops[i + 1][m], q), t)));
+        for (const r of R) {
+          const u = r.F.u, f = Math.max(0.05, Math.min(20, r.ratio(L, c, sOf(c)) / (r.g[i] + (r.g[i + 1] - r.g[i]) * t)));
+          L = L.map((q) => { const d = v3.dot(v3.sub(q, c), u); return v3.add(q, v3.mul(u, d * (f - 1))); });
+        }
+        out.push(L);
       }
     }
     out.push(loops[loops.length - 1]);
@@ -347,7 +362,7 @@ const Model = (() => {
   }
   // Vorgezeichnete Führungskurve: durch die äußerste Stelle jedes Umrisses in Richtung u (dann bleibt der Übergang zunächst gleich)
   function railStart(it, V, plane) {
-    const lp = loftParams({ p: { ...it.p, rail: null, path: null, tip: 0 } }, V);
+    const lp = loftParams({ p: { ...it.p, rail: null, rail2: null, path: null, tip: 0 } }, V);
     const F = railFrame(lp.profiles, plane, null); if (!F) return null;
     return lp.profiles.map((q, i) => { const P3 = q.poly.map((r) => W3p(q.plane, r)), c = F.C[i]; const e = Math.max(...P3.map((x) => v3.dot(v3.sub(x, c), F.u))); return v3.add(c, v3.mul(F.u, e)); });
   }
@@ -382,12 +397,39 @@ const Model = (() => {
     }
     return out;
   }
+  // Pfad im Raum als 3D-Skizze: rules[i] gilt für das Stück von Punkt i zu Punkt i+1 –
+  // ax 'x' | 'y' | 'z' = genau entlang dieser Achse, len = Länge (Zahl oder Formel). Die Punkte dahinter wandern mit
+  // (jedes Stück behält seine Richtung aus den eingetragenen Punkten).
+  const AXI = { x: 0, y: 1, z: 2 };
+  function path3dPoints(path3d, V) {
+    const raw = (path3d && path3d.pts ? path3d.pts : []).map((q) => [0, 1, 2].map((k) => num(q[k], V, 0)));
+    const R = (path3d && path3d.rules) || [];
+    if (raw.length < 2 || !R.some(Boolean)) return raw;
+    const out = [raw[0].slice()];
+    for (let i = 0; i + 1 < raw.length; i++) {
+      const d0 = [0, 1, 2].map((k) => raw[i + 1][k] - raw[i][k]);
+      let d = d0.slice();
+      const r = R[i];
+      if (r) {
+        const ai = AXI[r.ax];
+        if (ai != null) { const v = d[ai]; d = [0, 0, 0]; d[ai] = v; }
+        const L = r.len != null && r.len !== '' ? num(r.len, V, NaN) : NaN;
+        if (isFinite(L) && L > 0) {
+          const l = Math.hypot(d[0], d[1], d[2]);
+          if (l > 1e-9) d = d.map((v) => (v / l) * L); else if (ai != null) d[ai] = L; else { const l0 = Math.hypot(...d0); if (l0 > 1e-9) d = d0.map((v) => (v / l0) * L); }
+        }
+        if (Math.hypot(d[0], d[1], d[2]) < 1e-6) d = d0;   // Regel geht hier nicht (Stück hätte keine Länge)
+      }
+      out.push([0, 1, 2].map((k) => out[i][k] + d[k]));
+    }
+    return out;
+  }
   // Entlang Pfad (Sweep): längster offener Zug der Skizze, Querschnitt Kreis oder Rechteck, optional hohl
   function sweepParams(it, V) {
     const p = it.p || {};
     if (p.path3d && Array.isArray(p.path3d.pts)) {
       // Pfad im Raum statt Skizze
-      const pts = p.path3d.pts.map((q) => [0, 1, 2].map((k) => num(q[k], V, 0)));
+      const pts = path3dPoints(p.path3d, V);
       let prof = null;
       if (p.shape === 'sketch' && p.prof) {
         const regs = SK.regions(Solver.cached(p.prof, V).ents).sort((a, b) => b.area - a.area);
@@ -487,6 +529,6 @@ const Model = (() => {
     walk(doc.items, (it) => { it.t = Object.assign(T0(), it.t || {}); it.p = it.p || {}; it.finishes = it.finishes || []; if (!it.role) it.role = 'solid'; if (!it.color) it.color = nextColor(); });
     return doc;
   }
-  return { railStart, railSections, bez3, patternMatrices, instanceMatrices, loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  return { path3dPoints, railStart, railSections, bez3, patternMatrices, instanceMatrices, loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 

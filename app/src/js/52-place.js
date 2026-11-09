@@ -71,8 +71,8 @@ const Place = (() => {
     if (hit && hit.normal) {
       const top = App.doc.items.find((it) => it.id === hit.id);
       if (top) {
-        const sn = magnetOff ? (Snap.clear(), null) : Snap.onFace(hit.id, hit.faceIdx, hit.point);
-        st.onFace = Actions.onFaceTransform(hit.id, (sn ? sn.point : hit.point).toArray(), hit.normal.toArray(), { exact: !!sn });
+        const sn = magnetOff ? (Snap.clear(), null) : Snap.onFace(hit.id, hit.faceIdx, hit.point, { normal: hit.normal });
+        st.onFace = Actions.onFaceTransform(hit.id, (sn ? sn.point : hit.point).toArray(), ((sn && sn.normal) || hit.normal).toArray(), { exact: !!sn });
         const L = Model.localMatrix({ t: st.onFace.t });
         st.preview.matrix.copy(Model.worldMatrix(App.doc, hit.id).multiply(L));
         st.pos = null; Viewer.highlightFace('hover', hit.id, hit.faceIdx);
@@ -109,6 +109,7 @@ const Place = (() => {
   let lastHole = { type: 'through', size: 'M3', head: 'countersunk', fit: 'medium', depth: 10, thru: true };
   let hw = null;   // laufender Setz-Modus
   function holeHere(face, anchor, at) {
+    if (face) Snap.prime(face.id, face.idx);   // Flächendaten schon holen, damit das erste Loch einrastet
     const o = { ...lastHole };
     const box = h('div', { class: 'holewiz', style: { display: 'grid', gap: '10px', minWidth: '260px' } });
     box.append(h('b', null, at ? `Bohrungen an ${at.pts.length} ${at.pts.length === 1 ? 'Punkt' : 'Punkten'}` : 'Bohrungs-Assistent'));
@@ -138,7 +139,7 @@ const Place = (() => {
       // aus Skizzenpunkten: alle Löcher genau an den Punkten setzen, dann fertig
       if (at) { for (const p of at.pts) placeAt(at.id, p, at.normal, true); stopHoles(); return; }
       // aus einer gewählten Fläche: das erste Loch gleich dort setzen
-      if (face && face.point && face.normal) { const pt = new THREE.Vector3(...face.point), sn = Snap.onFace(face.id, face.idx, pt); Snap.clear(); placeAt(face.id, sn ? sn.point : pt, new THREE.Vector3(...face.normal), !!sn); }
+      if (face && face.point && face.normal) { const pt = new THREE.Vector3(...face.point), nn = new THREE.Vector3(...face.normal), sn = Snap.onFace(face.id, face.idx, pt, { normal: nn }); Snap.clear(); placeAt(face.id, sn ? sn.point : pt, (sn && sn.normal) || nn, !!sn); }
     };
     box.append(go);
     UI.pop(anchor || $('#t-parts'), box);
@@ -198,15 +199,15 @@ const Place = (() => {
       if (moved) return;
       const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true, solidsOnly: true });
       if (!hit || !hit.normal) { UI.toast('Klick auf eine Fläche eines Körpers.', { icon: 'info', ms: 1600 }); return; }
-      const sn = e.ctrlKey || e.metaKey ? null : Snap.onFace(hit.id, hit.faceIdx, hit.point);
-      placeAt(hit.id, sn ? sn.point : hit.point, hit.normal, !!sn);
+      const sn = e.ctrlKey || e.metaKey ? null : Snap.onFace(hit.id, hit.faceIdx, hit.point, { normal: hit.normal });
+      placeAt(hit.id, sn ? sn.point : hit.point, (sn && sn.normal) || hit.normal, !!sn);
     };
     hw.onMove = (e) => {
       const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true, solidsOnly: true });
       if (!hit || !hit.normal) { hw.ring.visible = false; Snap.clear(); Viewer.requestRender(); return; }
-      const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), hit.normal);
-      const sn = e.ctrlKey || e.metaKey ? (Snap.clear(), null) : Snap.onFace(hit.id, hit.faceIdx, hit.point);
-      hw.ring.matrix.compose((sn ? sn.point : hit.point).clone().addScaledVector(hit.normal, 0.05), q, new THREE.Vector3(1, 1, 1));
+      const sn = e.ctrlKey || e.metaKey ? (Snap.clear(), null) : Snap.onFace(hit.id, hit.faceIdx, hit.point, { normal: hit.normal });
+      const nn = (sn && sn.normal) || hit.normal, q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), nn);
+      hw.ring.matrix.compose((sn ? sn.point : hit.point).clone().addScaledVector(nn, 0.05), q, new THREE.Vector3(1, 1, 1));
       hw.ring.matrixWorldNeedsUpdate = true; hw.ring.visible = true; Viewer.requestRender();
     };
     cv.addEventListener('pointerdown', hw.onDown, true);

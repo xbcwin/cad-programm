@@ -497,7 +497,7 @@ const Interact = (() => {
     // Magnet: Ursprung des Teils auf Mitte, Mittellinien, Lochmitten der Fläche darunter
     if (!(e.ctrlKey || e.metaKey) && m.topId) {
       const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true, solidsOnly: true });
-      const sn = hit && hit.id === m.topId && hit.normal && Math.abs(hit.normal.dot(m.normal)) > 0.999 ? Snap.onFace(hit.id, hit.faceIdx, m.o0.clone().add(dW2)) : (Snap.clear(), null);
+      const sn = hit && hit.id === m.topId && hit.normal && Math.abs(hit.normal.dot(m.normal)) > 0.999 ? Snap.onFace(hit.id, hit.faceIdx, m.o0.clone().add(dW2), { flatOnly: true }) : (Snap.clear(), null);
       if (sn) dW2 = sn.point.clone().sub(m.o0);
     } else Snap.clear();
     const pq = new THREE.Quaternion(); m.PW.decompose(new THREE.Vector3(), pq, new THREE.Vector3());

@@ -1112,8 +1112,8 @@ const HELP = {
  },
  "offset2d": {
   "tip": "Parallele Kopie im Abstand erstellen",
-  "hilfe": "Klicke eine Linie, einen Bogen, Kreis oder eine Form an. Bewege die Maus auf die Seite, auf der die Kopie liegen soll, und klicke. Oder tippe den Abstand ein und drücke Enter – auch eine Formel geht.",
-  "tipp": "Die Kopie bleibt über eine Regel mit dem Original verbunden. Ändert sich das Original, wandert sie mit. Klick auf das Regel-Symbol, um den Abstand später zu ändern."
+  "hilfe": "Klicke eine Linie, einen Bogen, Kreis, eine Ellipse oder eine Form an. Bewege die Maus auf die Seite, auf der die Kopie liegen soll, und klicke. Oder tippe den Abstand ein und drücke Enter – auch eine Formel geht.",
+  "tipp": "Die Kopie bleibt über eine Regel mit dem Original verbunden. Ändert sich das Original, wandert sie mit. Klick auf das Regel-Symbol, um den Abstand später zu ändern – bei einer Kette gilt der neue Abstand für alle Stücke zusammen. Bei einer Ellipse wird die Kopie eine Spline genau im Abstand (sie bleibt nicht verbunden)."
  },
  "wall2d": {
   "tip": "Aus einer offenen Linie eine Wand mit Dicke machen",
@@ -1223,11 +1223,11 @@ const HELP = {
  "loft": {
   "tip": "Weicher Übergang durch mehrere Umrisse (Loft)",
   "hilfe": "Zeichne zwei oder mehr Umrisse auf verschiedenen Ebenen (z. B. ein Rechteck unten und einen Kreis 30 mm darüber – mit „Ebene verschieben“ in der Skizze). Wähle die Skizzenkörper in der Reihenfolge, durch die der Körper laufen soll, und klick „Übergang“. Bei einem einzelnen Skizzenkörper macht „Zur Spitze“ daraus eine Spitze. Rechts unter „Mittellinie“ kannst du den Übergang an einer gebogenen Linie entlangführen.",
-  "tipp": "Unter „Spitze verlängern“ stellst du ein, wie weit die Spitze hinter dem letzten Umriss liegt. Mit „Mittellinie zeichnen“ schwingt ein Rumpf nach oben oder ein Arm läuft im Bogen; mit „Führungskurve zeichnen“ gibst du die Seitenlinie vor und machst ihn bauchig oder schlank – die Umrisse bleiben dabei, wo sie sind. Für Nasen, Düsen und Rumpfteile danach die Kanten runden."
+  "tipp": "Unter „Spitze verlängern“ stellst du ein, wie weit die Spitze hinter dem letzten Umriss liegt. Mit „Mittellinie zeichnen“ schwingt ein Rumpf nach oben oder ein Arm läuft im Bogen; mit „Führungskurve zeichnen“ gibst du die Seitenlinie vor und machst ihn bauchig oder schlank – die Umrisse bleiben dabei, wo sie sind. Eine „Zweite Führungskurve“ quer zur ersten formt die andere Richtung: z. B. die Höhe von der Seite und die Breite von oben. Für Nasen, Düsen und Rumpfteile danach die Kanten runden."
  },
  "holeWizard": {
   "tip": "Schraubenloch, Gewinde, Einsatz oder Mutternfalle bohren",
-  "hilfe": "Klick auf eine Fläche und dann auf „Bohrung“. Wähle Art und Größe (zum Beispiel M3) und drück „Löcher setzen“. Jeder weitere Klick auf eine Fläche setzt noch ein Loch – „Fertig“ oder Esc beendet.",
+  "hilfe": "Klick auf eine Fläche und dann auf „Bohrung“ – das geht auch auf runden Flächen wie Rohren und Rümpfen. Wähle Art und Größe (zum Beispiel M3) und drück „Löcher setzen“. Jeder weitere Klick auf eine Fläche setzt noch ein Loch – „Fertig“ oder Esc beendet.",
   "tipp": "„Durchgangsloch“ lässt die Schraube frei durchrutschen. „Gewinde schneiden“ macht das kleinere Kernloch, in das sich die Schraube selbst hineindreht."
  },
  "countersink": {
@@ -1237,12 +1237,12 @@ const HELP = {
  },
  "fillet": {
   "tip": "Scharfe 3D-Kanten schön abrunden",
-  "hilfe": "Klicke eine oder mehrere Kanten deines 3D-Körpers an und schiebe den Pfeil, um die Rundung größer oder kleiner zu machen.",
+  "hilfe": "Klicke eine oder mehrere Kanten deines 3D-Körpers an und schiebe den Pfeil, um die Rundung größer oder kleiner zu machen. Rechts unter „Kanten“ macht „Von … bis“ eine Rundung, die entlang der Kante wächst – z. B. von 1 mm auf 4 mm; „Richtung tauschen“ dreht sie um.",
   "tipp": "Gerundete Ecken sehen besser aus und reißen bei Belastung seltener ein, zum Beispiel an den Armen eines Frames."
  },
  "chamfer": {
   "tip": "Kante im Winkel schräg anschneiden",
-  "hilfe": "Klicke auf eine Kante und ziehe am Pfeil, um die scharfe Ecke durch eine gerade Schräge (Fase) zu ersetzen.",
+  "hilfe": "Klicke auf eine Kante und ziehe am Pfeil, um die scharfe Ecke durch eine gerade Schräge (Fase) zu ersetzen. Rechts unter „Kanten“ wählst du die Art: „Gleich“ (auf beiden Seiten gleich weit), „Zwei Abstände“ (z. B. 2 mm auf der einen, 4 mm auf der anderen Fläche) oder „Mit Winkel“ (Abstand und Winkel); „Seiten tauschen“ dreht sie um.",
   "tipp": "Eine kleine Fase nimmt Kanten die Schärfe – an Carbonplatten schneiden sie dann keine Kabel mehr an."
  },
  "shell": {
@@ -1363,7 +1363,7 @@ const HELP = {
  "frameAssist": {
   "tip": "Drohnenrahmen in einem Schritt bauen – eigener oder nach Hersteller",
   "hilfe": "Wähle Propellergröße, Rahmenform, Stack, Motor, Videosystem und Akku. Tracery rechnet den Achsabstand so, dass zwischen den Propellern genug Luft bleibt, und warnt, wenn etwas nicht passt. Unter „Vorlage“ baust du echte Rahmen von Herstellern nach (TBS, GEPRC, iFlight, SpeedyBee, AOS RC): Achsabstand, Armdicke, Plattendicke und Stack stimmen, die Umrisse sind vereinfacht. Neue Formen: Cinewhoop mit Ducts um die Propeller und Speed-Rumpf – ein Stromlinien-Rumpf mit Kamera in der Nase, Akku innen und geneigten Motoren.",
-  "tipp": "Beim Deadcat sind die vorderen Arme weiter gespreizt – dann sind die Propeller nicht im Kamerabild. Beim Speed-Rumpf stehen die Motoren schräg (Motorneigung): So liegt der Rumpf im schnellen Flug genau im Fahrtwind."
+  "tipp": "Beim Deadcat sind die vorderen Arme weiter gespreizt – dann sind die Propeller nicht im Kamerabild. Beim Speed-Rumpf stehen die Motoren schräg (Motorneigung): So liegt der Rumpf im schnellen Flug genau im Fahrtwind. Beim H-Rahmen laufen links und rechts zwei Längsträger von Motor zu Motor, vorne und hinten verbinden zwei Querträger sie mit der Mittelplatte – viel Platz in der Mitte für Akku und Elektronik."
  },
  "holePattern": {
   "tip": "Vier Löcher für Stack oder Motor auf einmal",
@@ -1438,7 +1438,7 @@ const HELP = {
  "sketchText": {
   "tip": "Text als Umriss in die Skizze setzen",
   "hilfe": "Tipp rechts den Text ein, stell Höhe, Schrift und Ausrichtung ein und klick ins Bild. Der Text wird zu echten Umrissen: Liegt er in einem Rechteck, wird er beim Hochziehen ausgeschnitten (graviert) – wählst du nur die Buchstaben, stehen sie erhaben.",
-  "tipp": "Die Höhe gilt für Großbuchstaben. Text, Schrift und Drehung kannst du später rechts ändern, wenn du den Text anklickst."
+  "tipp": "Die Höhe gilt für Großbuchstaben. Text, Schrift und Drehung kannst du später rechts ändern, wenn du den Text anklickst. Mit „Bogen-Radius“ läuft der Text auf einem Kreis (positiv wölbt er sich nach oben, negativ nach unten); „An Kreis legen“ setzt ihn genau auf den nächsten Kreis oder Bogen der Skizze – z. B. als Schrift am Rand einer runden Platte."
  },
  "sketchImage": {
   "tip": "Foto oder Zeichnung zum Nachzeichnen hinterlegen",
@@ -1447,7 +1447,7 @@ const HELP = {
  },
  "magnet": {
   "tip": "Teile rasten an sinnvollen Stellen ein",
-  "hilfe": "Beim Ziehen und beim Setzen von Löchern rastet Tracery an der Mitte einer Fläche, an Mittellinien, an Lochmitten und im gleichen Randabstand ein. Körper rasten bündig oder mittig zu anderen Körpern ein. Rosa Hilfslinien zeigen, woran.",
+  "hilfe": "Beim Ziehen und beim Setzen von Löchern rastet Tracery an der Mitte einer Fläche, an Mittellinien, an Lochmitten und im gleichen Randabstand ein. Auf runden Flächen wie Rohren, Kugeln und Rümpfen rastet es „ganz oben“, „ganz unten“, an den Seiten und in der Mitte der Länge ein – das Teil steht dann genau senkrecht auf der Rundung. Körper rasten bündig oder mittig zu anderen Körpern ein. Rosa Hilfslinien zeigen, woran.",
   "tipp": "Halte Strg (Mac: cmd) gedrückt, um frei ohne Einrasten zu ziehen. Ganz abschalten kannst du es im Projekt rechts unter „Fangen beim Verschieben“."
  },
  "importCad": {
@@ -1517,13 +1517,13 @@ const HELP = {
  },
  "wind": {
   "tip": "Stirnfläche: so viel Fläche zeigt die Drohne dem Fahrtwind",
-  "hilfe": "Ansicht → „Fahrtwind (Stirnfläche)“: Die Kamera schaut aus der Richtung, aus der der Wind kommt, wenn die Drohne nach vorne fliegt. Mit „Neigung“ kippst du die Drohne wie im schnellen Flug mit der Nase nach unten. Unten steht die Fläche, die sie dem Wind zeigt – Tracery misst sie genau aus dem Schattenriss. Propeller zählen nur mit, wenn du das Häkchen setzt.",
-  "tipp": "Vergleich zwei Varianten bei der gleichen Neigung: Die mit der kleineren Stirnfläche bremst weniger. Bei Speed-Drohnen mit geneigten Motoren fliegt der Rumpf schnell fast waagerecht – dann zählt die Fläche bei kleiner Neigung."
+  "hilfe": "Ansicht → „Fahrtwind (Stirnfläche)“: Die Kamera schaut aus der Richtung, aus der der Wind kommt, wenn die Drohne nach vorne fliegt. Mit „Neigung“ kippst du die Drohne wie im schnellen Flug mit der Nase nach unten. Unten steht die Fläche, die sie dem Wind zeigt – Tracery misst sie genau aus dem Schattenriss. Propeller zählen nur mit, wenn du das Häkchen setzt. Mit „Form“ (cw-Wert) und „Tempo“ rechnet Tracery den Luftwiderstand in Newton und die Leistung dafür aus. Steht im Drohnen-Check der Schub pro Motor, schätzt es auch die Höchstgeschwindigkeit.",
+  "tipp": "Vergleich zwei Varianten bei der gleichen Neigung: Die mit der kleineren Stirnfläche bremst weniger. Der cw-Wert ist ein Richtwert – ein offener Rahmen bremst etwa doppelt so stark wie ein Stromlinien-Rumpf mit gleicher Fläche. Die Höchstgeschwindigkeit ist eine obere Grenze: Propeller schieben bei hohem Tempo weniger als auf dem Prüfstand."
  },
  "route3d": {
   "tip": "Rohr durch Punkte im Raum – auf Körpern oder frei",
-  "hilfe": "Körper → „Rohr im Raum“: Klick nacheinander Punkte an. Auf einem Körper liegt das Rohr auf der Fläche auf, daneben bleibt es auf der Höhe des letzten Punkts. Ziehen dreht die Ansicht wie immer, Rückschritt nimmt den letzten Punkt weg, Enter oder Doppelklick ist fertig. Rechts änderst du jeden Punkt als Zahl, den Durchmesser, die Wand und den Querschnitt.",
-  "tipp": "Gut für Kabelkanäle, Antennenrohre und Bügel, die um Teile herum laufen. „Gerade Stücke, runde Ecken“ ergibt einen Knick-Verlauf wie bei gebogenem Rohr."
+  "hilfe": "Körper → „Rohr im Raum“: Klick nacheinander Punkte an. Auf einem Körper liegt das Rohr auf der Fläche auf, daneben bleibt es auf der Höhe des letzten Punkts. Ziehen dreht die Ansicht wie immer, Rückschritt nimmt den letzten Punkt weg, Enter oder Doppelklick ist fertig. Rechts änderst du jeden Punkt als Zahl, den Durchmesser, die Wand und den Querschnitt. Zwischen zwei Punkten gibt es Regeln wie in einer Skizze, nur im Raum: „entlang X/Y/Z“ legt das Stück genau auf eine Achse, „Länge“ macht es genau so lang – die Punkte dahinter wandern mit.",
+  "tipp": "Gut für Kabelkanäle, Antennenrohre und Bügel, die um Teile herum laufen. „Gerade Stücke, runde Ecken“ ergibt einen Knick-Verlauf wie bei gebogenem Rohr. Für ein Antennenrohr z. B. das erste Stück „entlang Z“ mit 25 mm Länge, das zweite „entlang Y“ mit 15 mm – dann steht es genau senkrecht und knickt genau nach hinten ab. Eine Länge 0 macht das Stück wieder frei."
  },
  "armFairing": {
   "tip": "Stromlinien-Hülle über einen Arm (Speed-Drohne)",
@@ -1734,7 +1734,7 @@ const Model = (() => {
     else if (it.kind === 'import') o.p = { fmt: it.p.fmt, data: it.p.data, scale: num(it.p.scale, V, 1) };
     else o.p = resolveP(it.p, V);
     if (it.mir) o.mir = it.mir;
-    if (it.finishes && it.finishes.length) o.finishes = it.finishes.filter((f) => !f.off).map((f) => ({ id: f.id, type: f.type, r: num(f.r, V, 1), edges: f.edges, faces: f.faces }));
+    if (it.finishes && it.finishes.length) o.finishes = it.finishes.filter((f) => !f.off).map((f) => { const x = { id: f.id, type: f.type, r: num(f.r, V, 1), edges: f.edges, faces: f.faces }; if (f.vr) { x.vr = true; x.r2 = num(f.r2, V, x.r); } if (f.cm) { x.cm = f.cm; if (f.cm === 'two') x.r2 = num(f.r2, V, x.r); else x.a = num(f.a, V, 45); } if (f.side) x.side = 1; return x; });
     return o;
   }
   function sketchParams(it, V) {
@@ -1808,8 +1808,8 @@ const Model = (() => {
     }
     const out = { profiles, ruled: !!p.ruled };
     // Führungskurve: Zwischenschnitte, die in Richtung der Kurve so gestreckt werden, dass sie die Kurve berühren
-    const rch = p.rail && !p.path ? SK.chains(Solver.cached(p.rail, V).ents)[0] : null;
-    if (rch && profiles.length >= 2) { const sec = railSections(profiles, p.rail.plane, rch); if (sec) { out.sections3 = sec; return out; } }
+    const rails = p.path ? [] : [p.rail, p.rail2].filter(Boolean).map((r) => ({ plane: r.plane, ch: SK.chains(Solver.cached(r, V).ents)[0] })).filter((r) => r.ch);
+    if (rails.length && profiles.length >= 2) { const sec = railSections(profiles, rails); if (sec) { out.sections3 = sec; return out; } }
     // Mittellinie: längster offener Zug der Pfad-Skizze, so gedreht, dass er beim ersten Umriss beginnt
     const ch = p.path ? SK.chains(Solver.cached(p.path, V).ents)[0] : null;
     if (ch && profiles.length >= 2) {
@@ -1866,26 +1866,41 @@ const Model = (() => {
     const pts = []; for (const g of ch.segs) { const sp = SK.segPoints(g); for (let i = pts.length ? 1 : 0; i < sp.length; i++) pts.push(W3p(plane, sp[i])); }
     return pts;
   }
-  function railSections(profiles, plane, ch, n = 48, K = 6) {
-    const rp = railPoints(plane, ch), F = railFrame(profiles, plane, rp); if (!F) return null;
-    const { C, c0, a, La, u } = F;
-    const loops = profiles.map((q, i) => resampleLoop(q.poly.map((r) => W3p(q.plane, r)), C[i], u, a, n));
+  // rails: [{ plane, ch }] – jede Führungskurve streckt die Zwischenschnitte in ihrer Richtung u (in ihrer Ebene, quer zur Achse).
+  // Zwei Kurven in Ebenen quer zueinander (z. B. von der Seite und von oben) wirken unabhängig: Strecken in u₁ ändert nichts in u₂.
+  function railSections(profiles, rails, n = 48, K = 6) {
+    const R = [];
+    for (const r of rails || []) {
+      if (!r || !r.ch) continue;
+      const rp = railPoints(r.plane, r.ch), F = railFrame(profiles, r.plane, rp); if (!F) continue;
+      if (R.some((x) => Math.abs(v3.dot(x.F.u, F.u)) > 0.9)) continue;   // dieselbe Richtung zweimal: nur die erste zählt
+      R.push({ rp, F });
+    }
+    if (!R.length) return null;
+    const { C, c0, a, La } = R[0].F;
+    const loops = profiles.map((q, i) => resampleLoop(q.poly.map((r) => W3p(q.plane, r)), C[i], R[0].F.u, a, n));
     const sOf = (pt) => v3.dot(v3.sub(pt, c0), a) / La;
-    // Kurve als Breite über der Achse: e(s) = Abstand von der Achse in Richtung u
-    const rs = rp.map((r) => [sOf(r), v3.dot(v3.sub(r, c0), u)]).sort((x, y) => x[0] - y[0]);
-    const eAt = (s) => { if (s < rs[0][0] - 1e-6 || s > rs[rs.length - 1][0] + 1e-6) return null; let i = 1; while (i < rs.length - 1 && rs[i][0] < s) i++; const A0 = rs[i - 1], B0 = rs[i], t = (s - A0[0]) / Math.max(1e-12, B0[0] - A0[0]); return A0[1] + (B0[1] - A0[1]) * Math.max(0, Math.min(1, t)); };
-    const ext = (L, c) => Math.max(...L.map((q) => v3.dot(v3.sub(q, c), u)));
-    const ratio = (L, c, s) => { const e = eAt(s); if (e == null) return 1; const x = ext(L, c); return x > 1e-6 ? (e - v3.dot(v3.sub(c, c0), u)) / x : 1; };
-    const g = loops.map((L, i) => ratio(L, C[i], sOf(C[i])));
+    for (const r of R) {
+      const u = r.F.u;
+      // Kurve als Breite über der Achse: e(s) = Abstand von der Achse in Richtung u
+      const rs = r.rp.map((q) => [sOf(q), v3.dot(v3.sub(q, c0), u)]).sort((x, y) => x[0] - y[0]);
+      const eAt = (s) => { if (s < rs[0][0] - 1e-6 || s > rs[rs.length - 1][0] + 1e-6) return null; let i = 1; while (i < rs.length - 1 && rs[i][0] < s) i++; const A0 = rs[i - 1], B0 = rs[i], t = (s - A0[0]) / Math.max(1e-12, B0[0] - A0[0]); return A0[1] + (B0[1] - A0[1]) * Math.max(0, Math.min(1, t)); };
+      const ext = (L, c) => Math.max(...L.map((q) => v3.dot(v3.sub(q, c), u)));
+      r.ratio = (L, c, s) => { const e = eAt(s); if (e == null) return 1; const x = ext(L, c); return x > 1e-6 ? (e - v3.dot(v3.sub(c, c0), u)) / x : 1; };
+      r.g = loops.map((L, i) => r.ratio(L, C[i], sOf(C[i])));
+    }
     const out = [];
     for (let i = 0; i < loops.length - 1; i++) {
       for (let k = 0; k < K; k++) {
         const t = k / K;
         if (k === 0) { out.push(loops[i]); continue; }
         const c = v3.add(C[i], v3.mul(v3.sub(C[i + 1], C[i]), t));
-        const L = loops[i].map((q, m) => v3.add(q, v3.mul(v3.sub(loops[i + 1][m], q), t)));
-        const f = Math.max(0.05, Math.min(20, ratio(L, c, sOf(c)) / (g[i] + (g[i + 1] - g[i]) * t)));
-        out.push(L.map((q) => { const d = v3.dot(v3.sub(q, c), u); return v3.add(q, v3.mul(u, d * (f - 1))); }));
+        let L = loops[i].map((q, m) => v3.add(q, v3.mul(v3.sub(loops[i + 1][m], q), t)));
+        for (const r of R) {
+          const u = r.F.u, f = Math.max(0.05, Math.min(20, r.ratio(L, c, sOf(c)) / (r.g[i] + (r.g[i + 1] - r.g[i]) * t)));
+          L = L.map((q) => { const d = v3.dot(v3.sub(q, c), u); return v3.add(q, v3.mul(u, d * (f - 1))); });
+        }
+        out.push(L);
       }
     }
     out.push(loops[loops.length - 1]);
@@ -1893,7 +1908,7 @@ const Model = (() => {
   }
   // Vorgezeichnete Führungskurve: durch die äußerste Stelle jedes Umrisses in Richtung u (dann bleibt der Übergang zunächst gleich)
   function railStart(it, V, plane) {
-    const lp = loftParams({ p: { ...it.p, rail: null, path: null, tip: 0 } }, V);
+    const lp = loftParams({ p: { ...it.p, rail: null, rail2: null, path: null, tip: 0 } }, V);
     const F = railFrame(lp.profiles, plane, null); if (!F) return null;
     return lp.profiles.map((q, i) => { const P3 = q.poly.map((r) => W3p(q.plane, r)), c = F.C[i]; const e = Math.max(...P3.map((x) => v3.dot(v3.sub(x, c), F.u))); return v3.add(c, v3.mul(F.u, e)); });
   }
@@ -1928,12 +1943,39 @@ const Model = (() => {
     }
     return out;
   }
+  // Pfad im Raum als 3D-Skizze: rules[i] gilt für das Stück von Punkt i zu Punkt i+1 –
+  // ax 'x' | 'y' | 'z' = genau entlang dieser Achse, len = Länge (Zahl oder Formel). Die Punkte dahinter wandern mit
+  // (jedes Stück behält seine Richtung aus den eingetragenen Punkten).
+  const AXI = { x: 0, y: 1, z: 2 };
+  function path3dPoints(path3d, V) {
+    const raw = (path3d && path3d.pts ? path3d.pts : []).map((q) => [0, 1, 2].map((k) => num(q[k], V, 0)));
+    const R = (path3d && path3d.rules) || [];
+    if (raw.length < 2 || !R.some(Boolean)) return raw;
+    const out = [raw[0].slice()];
+    for (let i = 0; i + 1 < raw.length; i++) {
+      const d0 = [0, 1, 2].map((k) => raw[i + 1][k] - raw[i][k]);
+      let d = d0.slice();
+      const r = R[i];
+      if (r) {
+        const ai = AXI[r.ax];
+        if (ai != null) { const v = d[ai]; d = [0, 0, 0]; d[ai] = v; }
+        const L = r.len != null && r.len !== '' ? num(r.len, V, NaN) : NaN;
+        if (isFinite(L) && L > 0) {
+          const l = Math.hypot(d[0], d[1], d[2]);
+          if (l > 1e-9) d = d.map((v) => (v / l) * L); else if (ai != null) d[ai] = L; else { const l0 = Math.hypot(...d0); if (l0 > 1e-9) d = d0.map((v) => (v / l0) * L); }
+        }
+        if (Math.hypot(d[0], d[1], d[2]) < 1e-6) d = d0;   // Regel geht hier nicht (Stück hätte keine Länge)
+      }
+      out.push([0, 1, 2].map((k) => out[i][k] + d[k]));
+    }
+    return out;
+  }
   // Entlang Pfad (Sweep): längster offener Zug der Skizze, Querschnitt Kreis oder Rechteck, optional hohl
   function sweepParams(it, V) {
     const p = it.p || {};
     if (p.path3d && Array.isArray(p.path3d.pts)) {
       // Pfad im Raum statt Skizze
-      const pts = p.path3d.pts.map((q) => [0, 1, 2].map((k) => num(q[k], V, 0)));
+      const pts = path3dPoints(p.path3d, V);
       let prof = null;
       if (p.shape === 'sketch' && p.prof) {
         const regs = SK.regions(Solver.cached(p.prof, V).ents).sort((a, b) => b.area - a.area);
@@ -2033,7 +2075,7 @@ const Model = (() => {
     walk(doc.items, (it) => { it.t = Object.assign(T0(), it.t || {}); it.p = it.p || {}; it.finishes = it.finishes || []; if (!it.role) it.role = 'solid'; if (!it.color) it.color = nextColor(); });
     return doc;
   }
-  return { railStart, railSections, bez3, patternMatrices, instanceMatrices, loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  return { path3dPoints, railStart, railSections, bez3, patternMatrices, instanceMatrices, loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 
 // ---- 15-sketchcore.js ----
@@ -2163,20 +2205,25 @@ const SK = (() => {
   function textContours(e) {
     const font = FONTS[e.font] || FONTS.inter;
     if (!font) return [];
-    const key = JSON.stringify([e.s, e.h, e.font, e.align, e.a, e.rot, e.mir, e.sp]);
+    const key = JSON.stringify([e.s, e.h, e.font, e.align, e.a, e.rot, e.mir, e.sp, e.bend]);
     if (textCache.has(key)) return textCache.get(key);
     const k = (e.h > 0 ? e.h : 5) / font.cap, sp = (e.sp || 0) / k;
     const chars = [...String(e.s || '')];
     let w = 0; for (const ch of chars) w += ((font.glyphs[ch] || font.glyphs['?'] || { w: font.em / 2 }).w) + sp; if (chars.length) w -= sp;
     const x0 = e.align === 'm' ? -w / 2 : e.align === 'r' ? -w : 0;
     const cs = Math.cos(e.rot || 0), sn = Math.sin(e.rot || 0), my = e.mir ? -1 : 1;
+    // Bogen: Grundlinie auf einem Kreis mit Radius „bend“ (positiv: Mitte darunter, Text wölbt sich nach oben; negativ: nach unten)
+    const R = Math.abs(e.bend) > 1e-6 ? e.bend : 0;
+    const B = (u, v) => { if (!R) return [u, v]; const f = u / R, r = R + v; return [r * Math.sin(f), r * Math.cos(f) - R]; };
     const out = []; let x = x0;
     for (const ch of chars) {
       const g = font.glyphs[ch] || font.glyphs['?'];
       if (g) {
         const ox = x;
-        const T = (p) => { const u = (p[0] + ox) * k, v = p[1] * k * my; return [e.a[0] + cs * u - sn * v, e.a[1] + sn * u + cs * v]; };
-        for (const c of glyphContours(font, font.glyphs[ch] ? ch : '?')) out.push(c.map((s) => (s.t === 'bez' ? { t: 'bez', a: T(s.a), c1: T(s.c1), c2: T(s.c2), b: T(s.b) } : { t: 'line', a: T(s.a), b: T(s.b) })));
+        const T = (p) => { const [u, v] = B((p[0] + ox) * k, p[1] * k * my); return [e.a[0] + cs * u - sn * v, e.a[1] + sn * u + cs * v]; };
+        // gerade Stücke werden im Bogen zu Kurven (Stützpunkte bei einem und zwei Dritteln)
+        const L3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+        for (const c of glyphContours(font, font.glyphs[ch] ? ch : '?')) out.push(c.map((s) => (s.t === 'bez' ? { t: 'bez', a: T(s.a), c1: T(s.c1), c2: T(s.c2), b: T(s.b) } : R ? { t: 'bez', a: T(s.a), c1: T(L3(s.a, s.b, 1 / 3)), c2: T(L3(s.a, s.b, 2 / 3)), b: T(s.b) } : { t: 'line', a: T(s.a), b: T(s.b) })));
         x += g.w + sp;
       } else x += font.em / 2 + sp;
     }
@@ -3360,6 +3407,19 @@ const SKO = (() => {
       if (w < 1e-6 || h < 1e-6) return { ok: false, why: 'Das Rechteck würde verschwinden.' };
       const sgn = d >= 0 ? 1 : -1;
       return { ok: true, ent: { type: 'rect', a: pr([e.a[0] + sa[0] * d, e.a[1] + sa[1] * d]), b: pr([e.b[0] + sb[0] * d, e.b[1] + sb[1] * d]) }, sgs: [sa[0] * sgn, sa[1] * sgn, sb[0] * sgn, sb[1] * sgn] };
+    }
+    if (e.type === 'ellipse') {
+      // Die Versatzkurve einer Ellipse ist keine Ellipse: geschlossene Spline durch 48 Punkte genau auf ihr (Punkt + d · Normale)
+      const rx = e.rx, ry = e.ry, rmin = Math.min(rx, ry) ** 2 / Math.max(rx, ry);   // kleinster Krümmungsradius
+      if (d <= -rmin * 0.98) return { ok: false, why: `Nach innen geht bei dieser Ellipse höchstens ${Math.floor(rmin * 0.98 * 100) / 100} mm – sonst entstehen Spitzen.` };
+      const cs = Math.cos(e.rot || 0), sn = Math.sin(e.rot || 0), N = 48, pts = [];
+      for (let k = 0; k < N; k++) {
+        const t = (k / N) * Math.PI * 2, x = rx * Math.cos(t), y = ry * Math.sin(t);
+        let nx = ry * Math.cos(t), ny = rx * Math.sin(t); const L = Math.hypot(nx, ny) || 1; nx /= L; ny /= L;
+        const u = x + nx * d, v = y + ny * d;
+        pts.push(pr([e.c[0] + cs * u - sn * v, e.c[1] + sn * u + cs * v]));
+      }
+      return { ok: true, ent: { type: 'spline', pts, closed: true } };
     }
     if (e.type === 'spline') {
       const P = e.pts, m = P.length;
@@ -5068,7 +5128,7 @@ const Interact = (() => {
     // Magnet: Ursprung des Teils auf Mitte, Mittellinien, Lochmitten der Fläche darunter
     if (!(e.ctrlKey || e.metaKey) && m.topId) {
       const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true, solidsOnly: true });
-      const sn = hit && hit.id === m.topId && hit.normal && Math.abs(hit.normal.dot(m.normal)) > 0.999 ? Snap.onFace(hit.id, hit.faceIdx, m.o0.clone().add(dW2)) : (Snap.clear(), null);
+      const sn = hit && hit.id === m.topId && hit.normal && Math.abs(hit.normal.dot(m.normal)) > 0.999 ? Snap.onFace(hit.id, hit.faceIdx, m.o0.clone().add(dW2), { flatOnly: true }) : (Snap.clear(), null);
       if (sn) dW2 = sn.point.clone().sub(m.o0);
     } else Snap.clear();
     const pq = new THREE.Quaternion(); m.PW.decompose(new THREE.Vector3(), pq, new THREE.Vector3());
@@ -5728,7 +5788,7 @@ const Actions = (() => {
     App.change(type === 'chamfer' ? 'Kanten abgeschrägt' : 'Kanten abgerundet', (doc) => { const f = Model.find(doc, id); if (!f) return false; f.item.finishes = f.item.finishes || []; f.item.finishes.push({ id: uid('f'), type, r, edges: sel }); });
   }
   function setFinish(itemId, finId, patch) {
-    App.change('Rundung geändert', (doc) => { const f = Model.find(doc, itemId); if (!f) return false; const fin = f.item.finishes.find((x) => x.id === finId); if (!fin) return false; Object.assign(fin, patch); }, { merge: 'fin:' + finId });
+    App.change('Rundung geändert', (doc) => { const f = Model.find(doc, itemId); if (!f) return false; const fin = f.item.finishes.find((x) => x.id === finId); if (!fin) return false; for (const k in patch) { if (patch[k] === null) delete fin[k]; else fin[k] = patch[k]; } }, { merge: 'fin:' + finId });
   }
   function removeFinish(itemId, finId) {
     App.change('Rundung entfernt', (doc) => { const f = Model.find(doc, itemId); if (!f) return false; f.item.finishes = f.item.finishes.filter((x) => x.id !== finId); });
@@ -5971,7 +6031,7 @@ const Features = (() => {
   function routeAppend(id) {
     const f = Model.find(App.doc, id); if (!f || !f.item.p.path3d) return false;
     const W = Model.worldMatrix(App.doc, id);
-    const pts = f.item.p.path3d.pts.map((q) => new THREE.Vector3(...q.map((v) => Model.num(v, Model.vars(App.doc).v, 0))).applyMatrix4(W).toArray());
+    const pts = Model.path3dPoints(f.item.p.path3d, Model.vars(App.doc).v).map((q) => new THREE.Vector3(...q).applyMatrix4(W).toArray());
     route3d({ pts, d: Model.num(f.item.p.d, Model.vars(App.doc).v, 6), append: id });
     route.inv = W.clone().invert();
     return true;
@@ -7460,7 +7520,7 @@ const Panels = (() => {
     f2.append(UI.selectField({ id: 'grid', label: 'Schrittweite', value: App.doc.settings.grid, options: [[0.01, '0,01 mm'], [0.05, '0,05 mm'], [0.1, '0,1 mm'], [0.5, '0,5 mm'], [1, '1 mm'], [2, '2 mm'], [5, '5 mm'], [10, '10 mm']], onChange: (v) => App.change('Raster geändert', (doc) => { doc.settings.grid = parseFloat(v); }) }));
     const snap = h('label', { class: 'check', style: { alignSelf: 'end', paddingBottom: '8px' } }, h('input', { type: 'checkbox', id: 'snap', checked: App.doc.settings.snap !== false }), 'Einrasten');
     snap.querySelector('input').onchange = (e) => App.change('Einrasten geändert', (doc) => { doc.settings.snap = e.target.checked; });
-    const mag = h('label', { class: 'check', style: { paddingBottom: '4px' } }, h('input', { type: 'checkbox', id: 'magnet', checked: App.doc.settings.magnet !== false }), 'Magnetisch einrasten (Mitte, Mittellinien, Lochmitten, bündig zu anderen Teilen) – Strg hält es kurz an');
+    const mag = h('label', { class: 'check', style: { paddingBottom: '4px' } }, h('input', { type: 'checkbox', id: 'magnet', checked: App.doc.settings.magnet !== false }), 'Magnetisch einrasten (Mitte, Mittellinien, Lochmitten, ganz oben auf Rundungen, bündig zu anderen Teilen) – Strg hält es kurz an');
     mag.querySelector('input').onchange = (e) => App.change('Magnet geändert', (doc) => { doc.settings.magnet = e.target.checked; });
     f2.append(snap); gr.append(f2, mag); w.append(gr);
     const st = Print.stats();
@@ -7604,17 +7664,39 @@ const Panels = (() => {
       sec.append(fl);
       if (it.p.path3d) {
         // Pfad im Raum: Punkte als Zahlen, glatt oder mit Ecken, weitere Punkte im Bild anklicken
-        const P3 = it.p.path3d.pts || [];
-        const setPt = (i, k, v) => App.change('Punkt geändert', (doc) => { const f = Model.find(doc, it.id); if (!f || !f.item.p.path3d || !f.item.p.path3d.pts[i]) return false; f.item.p.path3d.pts[i][k] = v; }, { merge: 'p3:' + it.id + ':' + i + ':' + k });
+        const V3 = Model.vars(App.doc).v, P3 = it.p.path3d.pts || [], RP = Model.path3dPoints(it.p.path3d, V3), RU = it.p.path3d.rules || [];
+        // erst alle Zahlen-Punkte auf ihre Lage mit Regeln setzen – dann bleibt beim Ändern jeder andere Punkt, wo er ist
+        const bake = (pp) => { const r = Model.path3dPoints(pp, V3); pp.pts = pp.pts.map((q, i) => q.map((v, k) => (typeof v === 'number' ? round(r[i][k], 4) : v))); };
+        const setPt = (i, k, v) => App.change('Punkt geändert', (doc) => { const f = Model.find(doc, it.id); if (!f || !f.item.p.path3d || !f.item.p.path3d.pts[i]) return false; bake(f.item.p.path3d); f.item.p.path3d.pts[i][k] = v; }, { merge: 'p3:' + it.id + ':' + i + ':' + k });
+        // Regel je Stück: Richtung (entlang X/Y/Z) und Länge – wie in einer Skizze, nur im Raum
+        const setRule = (i, patch) => App.change('Regel im Pfad', (doc) => {
+          const f = Model.find(doc, it.id); if (!f || !f.item.p.path3d) return false;
+          const pp = f.item.p.path3d; bake(pp);
+          const R = (pp.rules || []).slice(); while (R.length < pp.pts.length - 1) R.push(null);
+          const r = { ...(R[i] || {}), ...patch }; for (const k of Object.keys(r)) if (r[k] == null || r[k] === '' || r[k] === 0) delete r[k];
+          R[i] = Object.keys(r).length ? r : null;
+          if (R.some(Boolean)) pp.rules = R; else delete pp.rules;
+        });
         const fs = h('div', { class: 'fields' });
         fs.append(UI.selectField({ id: 'p-smooth', label: 'Verlauf', value: it.p.path3d.smooth === false ? 'corner' : 'smooth', options: [['smooth', 'Glatte Kurve durch die Punkte'], ['corner', 'Gerade Stücke, runde Ecken']], onChange: (v) => App.change('Verlauf', (doc) => { const f = Model.find(doc, it.id); if (!f) return false; f.item.p.path3d.smooth = v !== 'corner'; }) }));
         sec.append(fs);
         const list = h('div', { class: 'p3-list', id: 'p3-list' });
         P3.forEach((q, i) => {
           const row = h('div', { class: 'fields three p3-row' });
-          ['x', 'y', 'z'].forEach((ax, k) => row.append(UI.numField({ id: `p3-${i}-${ax}`, label: (k === 0 ? `P${i + 1} ` : '') + ax.toUpperCase(), value: q[k], onCommit: (v) => setPt(i, k, v) })));
+          ['x', 'y', 'z'].forEach((ax, k) => row.append(UI.numField({ id: `p3-${i}-${ax}`, label: (k === 0 ? `P${i + 1} ` : '') + ax.toUpperCase(), value: typeof q[k] === 'string' ? q[k] : round(RP[i][k], 3), onCommit: (v) => setPt(i, k, v) })));
           list.append(row);
-          if (P3.length > 2) { const del = h('button', { type: 'button', class: 'btn ghost small', id: `p3-del-${i}`, 'aria-label': `Punkt ${i + 1} löschen` }); del.innerHTML = icon('trash') + `Punkt ${i + 1} löschen`; del.onclick = () => App.change('Punkt gelöscht', (doc) => { const f = Model.find(doc, it.id); if (!f) return false; f.item.p.path3d.pts.splice(i, 1); }); list.append(del); }
+          if (P3.length > 2) { const del = h('button', { type: 'button', class: 'btn ghost small', id: `p3-del-${i}`, 'aria-label': `Punkt ${i + 1} löschen` }); del.innerHTML = icon('trash') + `Punkt ${i + 1} löschen`; del.onclick = () => App.change('Punkt gelöscht', (doc) => {
+            const f = Model.find(doc, it.id); if (!f) return false; const pp = f.item.p.path3d; bake(pp); pp.pts.splice(i, 1);
+            // Regeln: die beiden Stücke am gelöschten Punkt werden eins – ohne Regel
+            if (pp.rules) { const R = pp.rules.slice(); if (i === 0) R.splice(0, 1); else if (i >= R.length) R.splice(R.length - 1, 1); else { R.splice(i, 1); R[i - 1] = null; } if (R.some(Boolean)) pp.rules = R; else delete pp.rules; }
+          }); list.append(del); }
+          if (i + 1 < P3.length) {
+            const L = Math.hypot(RP[i + 1][0] - RP[i][0], RP[i + 1][1] - RP[i][1], RP[i + 1][2] - RP[i][2]), r = RU[i] || {};
+            const sr = h('div', { class: 'fields p3-seg' });
+            sr.append(UI.selectField({ id: `p3-ax-${i}`, label: `Stück P${i + 1} → P${i + 2}`, value: r.ax || '', options: [['', 'Richtung frei'], ['x', 'entlang X'], ['y', 'entlang Y'], ['z', 'entlang Z (senkrecht)']], onChange: (v) => setRule(i, { ax: v || null }) }));
+            sr.append(UI.numField({ id: `p3-len-${i}`, label: r.len != null ? 'Länge (fest)' : `Länge (jetzt ${fmt(L, 1)})`, value: r.len != null ? r.len : 0, min: 0, onCommit: (v) => setRule(i, { len: v || null }) }));
+            list.append(sr);
+          }
         });
         sec.append(list);
         const mb = h('button', { type: 'button', class: 'btn', id: 'route-more' }); mb.innerHTML = icon('plus') + 'Punkte im Bild anhängen';
@@ -7627,7 +7709,7 @@ const Panels = (() => {
       }
       w.append(sec);
     } else if (it.kind === 'loft') {
-      const n = (it.p.sketches || []).length, hasPath = !!it.p.path, hasRail = !!it.p.rail;
+      const n = (it.p.sketches || []).length, hasPath = !!it.p.path, hasRail1 = !!it.p.rail, hasRail2 = !!it.p.rail2, hasRail = hasRail1 || hasRail2;
       sec.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Umrisse'), h('b', { class: 'mono' }, String(n))));
       if (!hasPath && !hasRail) {
         const fl = h('div', { class: 'fields' });
@@ -7655,18 +7737,31 @@ const Panels = (() => {
       // Führungskurve: gibt die Seitenlinie vor – der Übergang wird zwischen den Umrissen so weit, dass er sie berührt
       const fk = h('div', { class: 'section', id: 'loft-rail' }, h('div', { class: 'section-h' }, 'Führungskurve'));
       if (n >= 2 && !hasPath) {
-        const eb = h('button', { type: 'button', class: 'btn', id: 'loft-rail-edit' }); eb.innerHTML = icon(hasRail ? 'edit' : 'spline') + (hasRail ? 'Führungskurve bearbeiten' : 'Führungskurve zeichnen');
+        const eb = h('button', { type: 'button', class: 'btn', id: 'loft-rail-edit' }); eb.innerHTML = icon(hasRail1 ? 'edit' : 'spline') + (hasRail1 ? 'Führungskurve bearbeiten' : 'Führungskurve zeichnen');
         eb.onclick = () => Sketch.startLoftPath(it.id, 'rail');
         const row = h('div', { class: 'btn-row' }, eb);
-        if (hasRail) {
+        if (hasRail1) {
           const rb = h('button', { type: 'button', class: 'btn', id: 'loft-rail-off' }); rb.innerHTML = icon('close') + 'Ohne Führungskurve';
-          rb.onclick = () => App.change('Führungskurve entfernt', (doc) => { const f = Model.find(doc, it.id); if (!f) return false; delete f.item.p.rail; });
+          rb.onclick = () => App.change('Führungskurve entfernt', (doc) => { const f = Model.find(doc, it.id); if (!f) return false; delete f.item.p.rail; delete f.item.p.rail2; });
           row.append(rb);
         }
         fk.append(row, h('div', { class: 'hint-box', html: hasRail ? 'Zwischen den Umrissen folgt der Übergang der Führungskurve – z. B. ein Rumpf, der in der Mitte bauchig wird. Die Umrisse selbst bleiben gleich.' : 'Mit einer <b>Führungskurve</b> gibst du die Seitenlinie vor: Der Übergang wird zwischen den Umrissen bauchiger oder schlanker, ohne dass du mehr Umrisse zeichnen musst.' }));
       } else fk.append(h('div', { class: 'hint-box', html: hasPath ? 'Mit Mittellinie geht keine Führungskurve – erst „Ohne Mittellinie“.' : 'Eine Führungskurve braucht mindestens zwei Umrisse.' }));
+      // zweite Führungskurve quer zur ersten (z. B. Rumpf: erste von der Seite für die Höhe, zweite von oben für die Breite)
+      const fk2 = hasRail1 && n >= 2 && !hasPath ? h('div', { class: 'section', id: 'loft-rail2' }, h('div', { class: 'section-h' }, 'Zweite Führungskurve')) : null;
+      if (fk2) {
+        const eb = h('button', { type: 'button', class: 'btn', id: 'loft-rail2-edit' }); eb.innerHTML = icon(hasRail2 ? 'edit' : 'spline') + (hasRail2 ? 'Zweite bearbeiten' : 'Zweite zeichnen');
+        eb.onclick = () => Sketch.startLoftPath(it.id, 'rail2');
+        const row = h('div', { class: 'btn-row' }, eb);
+        if (hasRail2) {
+          const rb = h('button', { type: 'button', class: 'btn', id: 'loft-rail2-off' }); rb.innerHTML = icon('close') + 'Ohne zweite';
+          rb.onclick = () => App.change('Zweite Führungskurve entfernt', (doc) => { const f = Model.find(doc, it.id); if (!f) return false; delete f.item.p.rail2; });
+          row.append(rb);
+        }
+        fk2.append(row, h('div', { class: 'hint-box', html: hasRail2 ? 'Der Übergang folgt beiden Führungskurven – jede bestimmt die Breite in ihrer Richtung.' : 'Die erste Führungskurve gibt die Breite in einer Richtung vor. Eine <b>zweite</b> quer dazu gibt die andere vor – so formst du einen Rumpf von der Seite <i>und</i> von oben.' }));
+      }
       if (hasRail) { ml.innerHTML = ''; ml.append(h('div', { class: 'section-h' }, 'Mittellinie'), h('div', { class: 'hint-box', html: 'Mit Führungskurve geht keine Mittellinie – erst „Ohne Führungskurve“.' })); }
-      w.append(sec, ml, fk);
+      w.append(sec, ml, fk); if (fk2) w.append(fk2);
     } else if (Features.isOp(it)) {
       sec.firstChild.textContent = Features.NAMES[it.p.op === 'pattern' ? it.p.pt : it.p.op] || 'Feature';
       Features.renderOp(it, sec, setP); w.append(sec);
@@ -7718,11 +7813,29 @@ const Panels = (() => {
           row.append(nf, del); ks.append(row); continue;
         }
         const lbl = (fin.type === 'chamfer' ? 'Fase' : 'Rundung') + (typeof fin.edges === 'string' ? ' · ' + ({ all: 'alle', top: 'oben', bottom: 'unten', vertical: 'senkrecht', horizontal: 'waagerecht' }[fin.edges] || '') : ` · ${(fin.edges || []).length} Kante${(fin.edges || []).length === 1 ? '' : 'n'}`);
-        const nf = UI.numField({ id: 'fin-' + fin.id, label: lbl, value: fin.r, onCommit: (v) => Actions.setFinish(it.id, fin.id, { r: v }) });
+        const ch = fin.type === 'chamfer', vr = !ch && !!fin.vr, cm = ch ? fin.cm || '' : '';
+        const nf = UI.numField({ id: 'fin-' + fin.id, label: vr ? lbl + ' · von' : cm ? lbl + ' · Abstand' : lbl, value: fin.r, onCommit: (v) => Actions.setFinish(it.id, fin.id, { r: v }) });
         if (err) nf.querySelector('.inp').classList.add('invalid');
         const del = h('button', { type: 'button', class: 'btn ghost small', 'aria-label': 'Entfernen', 'data-tip': 'Entfernen' }); del.innerHTML = icon('trash');
         del.onclick = () => Actions.removeFinish(it.id, fin.id);
         row.append(nf, del); ks.append(row);
+        // Art: Rundung gleichmäßig oder von … bis; Fase gleich, mit zwei Abständen oder mit Winkel
+        const r0 = Model.num(fin.r, V, 1);
+        const mo = h('div', { class: 'fields pro fin-more' });
+        if (ch) {
+          mo.append(UI.selectField({ id: 'fin-mode-' + fin.id, label: 'Art der Fase', value: cm, options: [['', 'Gleich'], ['two', 'Zwei Abstände'], ['angle', 'Mit Winkel']], onChange: (v) => Actions.setFinish(it.id, fin.id, v === 'two' ? { cm: 'two', r2: fin.r2 != null ? fin.r2 : round(r0 * 2, 3) } : v === 'angle' ? { cm: 'angle', a: fin.a != null ? fin.a : 30 } : { cm: null }) }));
+          if (cm === 'two') mo.append(UI.numField({ id: 'fin-r2-' + fin.id, label: 'Zweiter Abstand', value: fin.r2 != null ? fin.r2 : r0, onCommit: (v) => Actions.setFinish(it.id, fin.id, { r2: v }) }));
+          if (cm === 'angle') mo.append(UI.numField({ id: 'fin-a-' + fin.id, label: 'Winkel', value: fin.a != null ? fin.a : 45, unit: '°', onCommit: (v) => Actions.setFinish(it.id, fin.id, { a: v }) }));
+        } else {
+          mo.append(UI.selectField({ id: 'fin-mode-' + fin.id, label: 'Art der Rundung', value: vr ? 'var' : '', options: [['', 'Gleichmäßig'], ['var', 'Von … bis']], onChange: (v) => Actions.setFinish(it.id, fin.id, v === 'var' ? { vr: true, r2: fin.r2 != null ? fin.r2 : round(r0 / 2, 3) } : { vr: null }) }));
+          if (vr) mo.append(UI.numField({ id: 'fin-r2-' + fin.id, label: 'bis', value: fin.r2 != null ? fin.r2 : r0, onCommit: (v) => Actions.setFinish(it.id, fin.id, { r2: v }) }));
+        }
+        ks.append(mo);
+        if (vr || cm) {
+          const sw = h('button', { type: 'button', class: 'btn ghost small pro', id: 'fin-swap-' + fin.id }); sw.innerHTML = icon('mirror') + (vr ? 'Richtung tauschen' : 'Seiten tauschen');
+          sw.onclick = () => Actions.setFinish(it.id, fin.id, vr ? { r: fin.r2, r2: fin.r } : { side: fin.side ? null : 1 });
+          ks.append(h('div', { class: 'btn-row' }, sw));
+        }
       }
       const kr = h('div', { class: 'btn-row' });
       const mk = (label, sel) => { const b = h('button', { type: 'button', class: 'btn small', 'data-help': 'fillet' }); b.innerHTML = icon('fillet') + label; b.onclick = () => { Actions.finishAll(it.id, 'fillet', sel, 1); }; return b; };
@@ -7807,6 +7920,10 @@ const Panels = (() => {
       if (items[0].item.role !== 'hole' && App.doc.items.some((x) => x.id === face.id)) b('shell', 'Aushöhlen', () => Features.shell(face), '', 'Körper aushöhlen – diese Fläche wird die Öffnung');
       b('section', 'Schnitt hier', () => Views.section(true, { face }), '', 'Schnitt parallel zu dieser Fläche – den Abstand stellst du in der Schnitt-Leiste ein', true);
       if (items[0].item.role !== 'hole') b('mirror', 'An Fläche spiegeln', () => Features.mirrorAtFace(face), '', 'Gespiegelte Kopie an dieser Fläche – z. B. die zweite Hälfte eines symmetrischen Teils', true);
+      sep();
+    } else if (face && items.length === 1 && face.info.t !== 'PLANE') {
+      bar.append(h('span', { class: 'lbl' }, 'Runde Fläche'));
+      b('holeWizard', 'Bohrung', (e) => Place.holeHere(face, e.currentTarget), 'accent', 'Bohrungs-Assistent: Loch senkrecht in die runde Fläche – der Magnet rastet ganz oben, an den Seiten und in der Mitte ein');
       sep();
     }
     if (items.length === 1) {
@@ -7945,13 +8062,16 @@ const Snap = (() => {
   // ---------- Flächen ----------
   function faceData(id, faceIdx) {
     const r = App.results.get(id); if (!r || !r.data || !r.data.faces) return null;
-    const info = r.data.faces[faceIdx]; if (!info || info.t !== 'PLANE' || !info.n || !info.c) return null;
+    const info = r.data.faces[faceIdx]; if (!info) return null;
+    const flat = info.t === 'PLANE';
+    if (flat && (!info.n || !info.c)) return null;
     const k = r.key + '|' + faceIdx;
     const c = cache.get(k);
     if (c) return c === 'pending' ? null : c;
     cache.set(k, 'pending');
     if (cache.size > 60) for (const key of [...cache.keys()].slice(0, 20)) cache.delete(key);
-    Kernel.call('faceLoops', { key: r.key, faceIdx }).then((loops) => { cache.set(k, build(info, loops)); }).catch(() => cache.delete(k));
+    if (flat) Kernel.call('faceLoops', { key: r.key, faceIdx }).then((loops) => { cache.set(k, build(info, loops)); }).catch(() => cache.delete(k));
+    else Kernel.call('faceGrid', { key: r.key, faceIdx }).then((g) => { cache.set(k, { curved: true, g, info }); }).catch(() => cache.delete(k));
     return null;
   }
   function build(info, loops) {
@@ -7981,9 +8101,11 @@ const Snap = (() => {
     return { F, b, pts, xs, ys };
   }
   // Punkt (Welt) auf einer Fläche einrasten. Ergebnis: { point: Vector3 (Welt), label } oder null
-  function onFace(id, faceIdx, pointWorld) {
+  // opt.normal: Normale am Treffpunkt (Welt), opt.flatOnly: nur ebene Flächen
+  function onFace(id, faceIdx, pointWorld, opt = {}) {
     if (!on()) { clear(); return null; }
     const D = faceData(id, faceIdx); if (!D) { clear(); return null; }
+    if (D.curved) return opt.flatOnly ? (clear(), null) : onCurved(id, D, pointWorld, opt.normal);
     const W = Model.worldMatrix(App.doc, id), WI = W.clone().invert();
     const F = D.F, o = new THREE.Vector3(...F.o), X = new THREE.Vector3(...F.x), Y = new THREE.Vector3(...F.y);
     const lp = pointWorld.clone().applyMatrix4(WI).sub(o);
@@ -8012,6 +8134,158 @@ const Snap = (() => {
     const point = toW(u, v);
     show(guides, label, point);
     return { point, label, uv: [u, v] };
+  }
+
+  // ---------- gewölbte Flächen (Rohr, Rumpf, Kugel …) ----------
+  // Raster g: nu × nv Punkte P und Normalen N über (s, t) ∈ [0, 1]², uc/vc: Richtung geschlossen (rundherum)
+  const gi = (g, i, j) => (j * g.nu + i) * 3;
+  function wrap(g, s, t) {
+    s = g.uc ? ((s % 1) + 1) % 1 : Math.min(1, Math.max(0, s));
+    t = g.vc ? ((t % 1) + 1) % 1 : Math.min(1, Math.max(0, t));
+    return [s, t];
+  }
+  function evalG(g, A, s, t) {
+    [s, t] = wrap(g, s, t);
+    const x = s * (g.nu - 1), y = t * (g.nv - 1);
+    const i = Math.min(g.nu - 2, Math.floor(x)), j = Math.min(g.nv - 2, Math.floor(y)), fx = x - i, fy = y - j;
+    const a = gi(g, i, j), b = gi(g, i + 1, j), c = gi(g, i, j + 1), d = gi(g, i + 1, j + 1);
+    const o = new THREE.Vector3();
+    for (let k = 0; k < 3; k++) o.setComponent(k, (A[a + k] * (1 - fx) + A[b + k] * fx) * (1 - fy) + (A[c + k] * (1 - fx) + A[d + k] * fx) * fy);
+    return o;
+  }
+  const evalP = (g, s, t) => evalG(g, g.P, s, t);
+  const evalN = (g, s, t) => evalG(g, g.N, s, t).normalize();
+  function inside(g, s, t) {
+    if (!g.ins) return true;
+    [s, t] = wrap(g, s, t);
+    return !!g.ins[Math.round(t * (g.nv - 1)) * g.nu + Math.round(s * (g.nu - 1))];
+  }
+  // nächster Flächenpunkt (s, t) zu einem Punkt p (lokal)
+  function project(g, p) {
+    let best = 0, bd = Infinity;
+    for (let k = 0; k < g.nu * g.nv; k++) { const d = (g.P[3 * k] - p.x) ** 2 + (g.P[3 * k + 1] - p.y) ** 2 + (g.P[3 * k + 2] - p.z) ** 2; if (d < bd) { bd = d; best = k; } }
+    let s = (best % g.nu) / (g.nu - 1), t = Math.floor(best / g.nu) / (g.nv - 1);
+    const hs = 0.5 / (g.nu - 1), ht = 0.5 / (g.nv - 1);
+    for (let it = 0; it < 5; it++) {
+      const q = evalP(g, s, t), r = p.clone().sub(q);
+      const Ps = evalP(g, s + hs, t).sub(evalP(g, s - hs, t)).divideScalar(2 * hs), Pt = evalP(g, s, t + ht).sub(evalP(g, s, t - ht)).divideScalar(2 * ht);
+      const a = Ps.dot(Ps), b = Ps.dot(Pt), c = Pt.dot(Pt), det = a * c - b * b; if (Math.abs(det) < 1e-12) break;
+      const rs = r.dot(Ps), rt = r.dot(Pt);
+      [s, t] = wrap(g, s + (c * rs - b * rt) / det, t + (a * rt - b * rs) / det);
+    }
+    return [s, t];
+  }
+  // Linien zum Einrasten: Mittellinien (offene Richtungen) und Scheitel („ganz oben“ …) je nach Lage in der Welt
+  const DIRS = [['ganz oben', [0, 0, 1]], ['ganz unten', [0, 0, -1]], ['ganz rechts', [1, 0, 0]], ['ganz links', [-1, 0, 0]], ['ganz vorne', [0, -1, 0]], ['ganz hinten', [0, 1, 0]]];
+  function curvedLines(g, W) {
+    const WI = W.clone().invert(), lines = [];
+    if (!g.uc) lines.push({ fix: 0, mid: true, name: 'Mittellinie' });
+    if (!g.vc) lines.push({ fix: 1, mid: true, name: 'Mittellinie' });
+    for (const [name, d] of DIRS) {
+      const dl = new THREE.Vector3(...d).transformDirection(WI);
+      const val = (i, j) => { const k = gi(g, i, j); return g.N[k] * dl.x + g.N[k + 1] * dl.y + g.N[k + 2] * dl.z; };
+      // Richtung, in der sich die Normale am stärksten dreht
+      let ru = 0, rv = 0;
+      for (let j = 0; j < g.nv; j++) { let lo = 1, hi = -1; for (let i = 0; i < g.nu; i++) { const y = val(i, j); lo = Math.min(lo, y); hi = Math.max(hi, y); } ru += (hi - lo) / g.nv; }
+      for (let i = 0; i < g.nu; i++) { let lo = 1, hi = -1; for (let j = 0; j < g.nv; j++) { const y = val(i, j); lo = Math.min(lo, y); hi = Math.max(hi, y); } rv += (hi - lo) / g.nu; }
+      if (Math.max(ru, rv) < 0.15) continue;
+      const fix = ru >= rv ? 0 : 1, n1 = fix ? g.nv : g.nu, n2 = fix ? g.nu : g.nv, closed = fix ? g.vc : g.uc;
+      const get = (a, b) => (fix ? val(b, a) : val(a, b));
+      const c = new Array(n2).fill(null);
+      for (let b = 0; b < n2; b++) {
+        let best = null;
+        for (let a = 0; a < n1; a++) {
+          if (closed && a === n1 - 1) continue;          // derselbe Punkt wie a = 0
+          const y = get(a, b); if (y < 0.7) continue;
+          let am = a - 1, ap = a + 1, edge = false;
+          if (closed) { am = (a - 1 + n1 - 1) % (n1 - 1); ap = (a + 1) % (n1 - 1); }
+          else if (am < 0) { am = ap; edge = true; } else if (ap >= n1) { ap = am; edge = true; }
+          const y0 = get(am, b), y1 = get(ap, b);
+          if (y < y0 - 1e-9 || y < y1 - 1e-9) continue;
+          if (edge && y < 0.97) continue;                 // Scheitel am Rand nur, wenn er wirklich dorthin zeigt
+          if (best && y <= best.y) continue;
+          const den = y0 - 2 * y + y1, off = edge || Math.abs(den) < 1e-12 ? 0 : Math.max(-0.5, Math.min(0.5, (0.5 * (y0 - y1)) / den));
+          best = { y, p: (a + off) / (n1 - 1) };
+        }
+        if (best) c[b] = closed ? ((best.p % 1) + 1) % 1 : best.p;
+      }
+      if (c.some((x) => x !== null)) lines.push({ fix, c, closed, name, dl });
+    }
+    return lines;
+  }
+  // Wert einer Linie an der Stelle x der anderen Richtung
+  function lineAt(L, x) {
+    if (L.mid) return 0.5;
+    const n = L.c.length, f = Math.min(Math.max(x, 0), 1) * (n - 1), i = Math.min(n - 2, Math.floor(f)), w = f - i;
+    let a = L.c[i], b = L.c[i + 1];
+    if (a === null && b === null) return null;
+    if (a === null) return w > 0.5 ? b : null;
+    if (b === null) return w < 0.5 ? a : null;
+    if (L.closed && Math.abs(b - a) > 0.5) b += b < a ? 1 : -1;
+    if (Math.abs(b - a) > 0.25) return w < 0.5 ? a : b;  // Sprung: nicht über die Lücke mitteln
+    const v = a + (b - a) * w; return L.closed ? ((v % 1) + 1) % 1 : v;
+  }
+  function onCurved(id, D, pointWorld, normalHint) {
+    const g = D.g, W = Model.worldMatrix(App.doc, id), WI = W.clone().invert();
+    const mk = W.elements.map((v) => v.toFixed(4)).join(',');
+    if (D.mk !== mk) { D.lines = curvedLines(g, W); D.mk = mk; }
+    const lp = pointWorld.clone().applyMatrix4(WI);
+    const [s, t] = project(g, lp);
+    const toW = (v) => v.clone().applyMatrix4(W);
+    const p0 = evalP(g, s, t), w0 = toW(p0), sc0 = Viewer.toScreen(w0);
+    let pxmm = 1e-6;
+    for (const ax of [[1, 0, 0], [0, 1, 0], [0, 0, 1]]) { const sc = Viewer.toScreen(w0.clone().add(new THREE.Vector3(...ax))); pxmm = Math.max(pxmm, Math.hypot(sc.x - sc0.x, sc.y - sc0.y)); }
+    const tol = TOL / pxmm;
+    const pick = [null, null];
+    for (const L of D.lines) {
+      const v = lineAt(L, L.fix ? s : t); if (v === null) continue;
+      const q = L.fix ? evalP(g, s, v) : evalP(g, v, t), d = q.distanceTo(lp);
+      if (d < tol && (!pick[L.fix] || d < pick[L.fix].d)) pick[L.fix] = { L, d };
+    }
+    if (!pick[0] && !pick[1]) { clear(); return null; }
+    let ss = s, tt = t;
+    for (let it = 0; it < 4; it++) {
+      if (pick[0]) { const v = lineAt(pick[0].L, tt); if (v !== null) ss = v; }
+      if (pick[1]) { const v = lineAt(pick[1].L, ss); if (v !== null) tt = v; }
+    }
+    if (!inside(g, ss, tt)) { clear(); return null; }
+    const p = evalP(g, ss, tt), n = evalN(g, ss, tt);
+    const ci = D.info;
+    if (ci.t === 'CYLINDRE' && ci.axis && ci.r) {     // Zylinder: genau auf den Radius
+      const o = new THREE.Vector3(ci.axis[0], ci.axis[1], ci.axis[2]), ax = new THREE.Vector3(ci.axis[3], ci.axis[4], ci.axis[5]).normalize();
+      const rel = p.clone().sub(o), along = rel.dot(ax), rad = rel.addScaledVector(ax, -along);
+      // eingerastet auf „ganz oben“ o. ä.: genau die Mantellinie in dieser Richtung
+      const dirL = pick[0] && pick[0].L.dl ? pick[0].L : pick[1] && pick[1].L.dl ? pick[1].L : null;
+      if (dirL) { const dp = dirL.dl.clone().addScaledVector(ax, -dirL.dl.dot(ax)); if (dp.length() > 0.2) rad.copy(dp).multiplyScalar(rad.dot(dp) < 0 ? -1 : 1); }
+      if (rad.length() > 1e-9) { rad.normalize(); p.copy(o).addScaledVector(ax, along).addScaledVector(rad, ci.r); n.copy(rad.multiplyScalar(n.dot(rad) < 0 ? -1 : 1)); }
+    }
+    if (ci.t === 'SPHERE' && ci.sc && ci.r) {         // Kugel: genau auf den Radius
+      const c = new THREE.Vector3(...ci.sc), rad = p.clone().sub(c);
+      if (rad.length() > 1e-9) { rad.normalize(); p.copy(c).addScaledVector(rad, ci.r); n.copy(rad.multiplyScalar(n.dot(rad) < 0 ? -1 : 1)); }
+    }
+    const point = toW(p), normal = n.clone().transformDirection(W);
+    if (normalHint && normal.dot(normalHint) < 0) normal.negate();
+    const names = pick.filter(Boolean).map((x) => x.L).sort((a, b) => (b.mid ? 1 : 0) - (a.mid ? 1 : 0));
+    let label;
+    if (names.length === 2 && names[0].mid && names[1].mid) label = 'Mitte der Fläche';
+    else label = names.map((L) => (L.mid ? 'Mitte' : L.name)).join(' · ');
+    // Hilfslinien entlang der Fläche
+    const guides = [], cam = Viewer.camera.position;
+    for (const x of pick) {
+      if (!x) continue;
+      const L = x.L, n2 = L.fix ? g.nu : g.nv; let prev = null, pv = null;
+      for (let k = 0; k <= n2 * 2; k++) {
+        const o2 = k / (n2 * 2), v = lineAt(L, o2);
+        const st = v === null ? null : L.fix ? [o2, v] : [v, o2];
+        let q = st && inside(g, st[0], st[1]) ? toW(evalP(g, st[0], st[1])) : null;
+        if (q && evalN(g, st[0], st[1]).transformDirection(W).dot(cam.clone().sub(q)) < 0) q = null;   // Rückseite nicht zeichnen
+        let jump = pv === null || v === null ? 0 : Math.abs(v - pv); if (L.closed) jump = Math.min(jump, 1 - jump);
+        if (q && prev && jump < 0.15) guides.push([prev, q]);
+        prev = q; pv = v;
+      }
+    }
+    show(guides, label, point);
+    return { point, label, normal, uv: [ss, tt] };
   }
 
   // ---------- Körper zueinander (Grundebene, Z bleibt) ----------
@@ -8158,8 +8432,8 @@ const Place = (() => {
     if (hit && hit.normal) {
       const top = App.doc.items.find((it) => it.id === hit.id);
       if (top) {
-        const sn = magnetOff ? (Snap.clear(), null) : Snap.onFace(hit.id, hit.faceIdx, hit.point);
-        st.onFace = Actions.onFaceTransform(hit.id, (sn ? sn.point : hit.point).toArray(), hit.normal.toArray(), { exact: !!sn });
+        const sn = magnetOff ? (Snap.clear(), null) : Snap.onFace(hit.id, hit.faceIdx, hit.point, { normal: hit.normal });
+        st.onFace = Actions.onFaceTransform(hit.id, (sn ? sn.point : hit.point).toArray(), ((sn && sn.normal) || hit.normal).toArray(), { exact: !!sn });
         const L = Model.localMatrix({ t: st.onFace.t });
         st.preview.matrix.copy(Model.worldMatrix(App.doc, hit.id).multiply(L));
         st.pos = null; Viewer.highlightFace('hover', hit.id, hit.faceIdx);
@@ -8196,6 +8470,7 @@ const Place = (() => {
   let lastHole = { type: 'through', size: 'M3', head: 'countersunk', fit: 'medium', depth: 10, thru: true };
   let hw = null;   // laufender Setz-Modus
   function holeHere(face, anchor, at) {
+    if (face) Snap.prime(face.id, face.idx);   // Flächendaten schon holen, damit das erste Loch einrastet
     const o = { ...lastHole };
     const box = h('div', { class: 'holewiz', style: { display: 'grid', gap: '10px', minWidth: '260px' } });
     box.append(h('b', null, at ? `Bohrungen an ${at.pts.length} ${at.pts.length === 1 ? 'Punkt' : 'Punkten'}` : 'Bohrungs-Assistent'));
@@ -8225,7 +8500,7 @@ const Place = (() => {
       // aus Skizzenpunkten: alle Löcher genau an den Punkten setzen, dann fertig
       if (at) { for (const p of at.pts) placeAt(at.id, p, at.normal, true); stopHoles(); return; }
       // aus einer gewählten Fläche: das erste Loch gleich dort setzen
-      if (face && face.point && face.normal) { const pt = new THREE.Vector3(...face.point), sn = Snap.onFace(face.id, face.idx, pt); Snap.clear(); placeAt(face.id, sn ? sn.point : pt, new THREE.Vector3(...face.normal), !!sn); }
+      if (face && face.point && face.normal) { const pt = new THREE.Vector3(...face.point), nn = new THREE.Vector3(...face.normal), sn = Snap.onFace(face.id, face.idx, pt, { normal: nn }); Snap.clear(); placeAt(face.id, sn ? sn.point : pt, (sn && sn.normal) || nn, !!sn); }
     };
     box.append(go);
     UI.pop(anchor || $('#t-parts'), box);
@@ -8285,15 +8560,15 @@ const Place = (() => {
       if (moved) return;
       const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true, solidsOnly: true });
       if (!hit || !hit.normal) { UI.toast('Klick auf eine Fläche eines Körpers.', { icon: 'info', ms: 1600 }); return; }
-      const sn = e.ctrlKey || e.metaKey ? null : Snap.onFace(hit.id, hit.faceIdx, hit.point);
-      placeAt(hit.id, sn ? sn.point : hit.point, hit.normal, !!sn);
+      const sn = e.ctrlKey || e.metaKey ? null : Snap.onFace(hit.id, hit.faceIdx, hit.point, { normal: hit.normal });
+      placeAt(hit.id, sn ? sn.point : hit.point, (sn && sn.normal) || hit.normal, !!sn);
     };
     hw.onMove = (e) => {
       const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true, solidsOnly: true });
       if (!hit || !hit.normal) { hw.ring.visible = false; Snap.clear(); Viewer.requestRender(); return; }
-      const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), hit.normal);
-      const sn = e.ctrlKey || e.metaKey ? (Snap.clear(), null) : Snap.onFace(hit.id, hit.faceIdx, hit.point);
-      hw.ring.matrix.compose((sn ? sn.point : hit.point).clone().addScaledVector(hit.normal, 0.05), q, new THREE.Vector3(1, 1, 1));
+      const sn = e.ctrlKey || e.metaKey ? (Snap.clear(), null) : Snap.onFace(hit.id, hit.faceIdx, hit.point, { normal: hit.normal });
+      const nn = (sn && sn.normal) || hit.normal, q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), nn);
+      hw.ring.matrix.compose((sn ? sn.point : hit.point).clone().addScaledVector(nn, 0.05), q, new THREE.Vector3(1, 1, 1));
       hw.ring.matrixWorldNeedsUpdate = true; hw.ring.visible = true; Viewer.requestRender();
     };
     cv.addEventListener('pointerdown', hw.onDown, true);
@@ -8645,18 +8920,53 @@ const Views = (() => {
   const windDir = (angle) => { const a = (angle * Math.PI) / 180; return [0, Math.cos(a), -Math.sin(a)]; };
   const windIds = (withProps) => [...Viewer.nodes.entries()].filter(([id, n]) => n.obj.visible && n.role !== 'hole' && n.mesh && (withProps || !isProp(id))).map(([id]) => id);
   function windArea(angle = 0, withProps = false) { return Viewer.silhouette(windIds(withProps), windDir(angle)).area; }
+  // Luftwiderstand: F = ½ · ρ · v² · cw · A (Luft auf Meereshöhe, 15 °C)
+  const RHO = 1.225;
+  const CWS = [[1.1, 'Offener Rahmen · cw 1,1'], [0.8, 'Mit Haube · cw 0,8'], [0.5, 'Stromlinien-Rumpf · cw 0,5'], [0.35, 'Rumpf + Armverkleidung · cw 0,35']];
+  function cwGuess(doc = App.doc) {
+    let fair = false; Model.walk(doc.items, (it) => { if (it.kind === 'part' && it.p && it.p.lib === 'armFairing') fair = true; });
+    const V = Model.vars(doc).v, body = typeof V.Rumpfdurchmesser === 'number' || doc.items.some((it) => /^Rumpf/.test(it.name || ''));
+    return body && fair ? 0.35 : body ? 0.5 : 1.1;
+  }
+  const dragN = (areaMM2, cw, kmh) => 0.5 * RHO * (kmh / 3.6) ** 2 * cw * areaMM2 * 1e-6;
+  // Höchstgeschwindigkeit: voller Schub, so weit geneigt, dass er die Drohne gerade noch trägt (T·cos θ = Gewicht);
+  // der waagerechte Anteil T·sin θ = √(T² − G²) hält dem Luftwiderstand bei der Stirnfläche unter dieser Neigung die Waage.
+  // Mit nach vorne geneigten Motoren (motorTilt) liegt der Rumpf um diesen Winkel flacher als der Schub.
+  function topSpeed(thrustG, massG, cw, areaAt, motorTilt = 0) {
+    if (!(thrustG > massG) || !(cw > 0)) return null;
+    const th = Math.acos(massG / thrustG), deg = (th * 180) / Math.PI, body = Math.max(0, deg - motorTilt), A = areaAt(body);
+    if (!(A > 0)) return null;
+    const F = Math.sqrt(thrustG * thrustG - massG * massG) * 9.80665e-3;
+    return { kmh: Math.sqrt((2 * F) / (RHO * cw * A * 1e-6)) * 3.6, deg, body, F, A };
+  }
+  async function windTop(o) {
+    const el = o.bar.querySelector('#wind-top'); if (!el) return;
+    const g = DroneCheck.geometry(App.doc), t = DroneCheck.thrustOf(App.doc);
+    if (!g || !g.n || !t) { el.innerHTML = 'Höchstgeschwindigkeit: im <b>Drohnen-Check</b> den Schub pro Motor eintragen.'; return; }
+    const m = await Mass.measure(); if (st.wind !== o) return;
+    if (!m || !m.mass) { el.textContent = 'Höchstgeschwindigkeit: Gewicht unbekannt.'; return; }
+    const r = topSpeed(g.n * t, m.mass, o.cw, (deg) => Viewer.silhouette(windIds(o.props), windDir(deg)).area, g.tilt || 0);
+    o.top = r;
+    if (!r) { el.textContent = 'Zu wenig Schub zum Schweben – keine Höchstgeschwindigkeit.'; return; }
+    el.innerHTML = `Höchstens etwa <b>${fmt(r.kmh, 0)} km/h</b> bei ${fmt(r.deg, 0)}° Neigung` + (g.tilt ? ` (Rumpf ${fmt(r.body, 0)}°, Motoren ${fmt(g.tilt, 0)}° geneigt)` : '') + ` – geschätzt aus Schub (${g.n} × ${fmt(t, 0)} g), Gewicht (${Mass.gText(m.mass)}) und Stirnfläche. Propeller verlieren bei hohem Tempo Schub, echt also eher weniger.`;
+  }
   function drawWind(moveCam) {
     const o = st.wind; if (!o) return;
     const r = Viewer.silhouette(windIds(o.props), windDir(o.angle)); o.area = r.area;
     const t = o.bar.querySelector('#wind-area');
     if (t) t.innerHTML = r.area > 0 ? `Stirnfläche <b>${fmt(r.area / 100, r.area < 100 ? 2 : 1)} cm²</b>` + (o.props ? ' mit Propellern' : ' ohne Propeller') : 'Nichts zu sehen.';
+    const dEl = o.bar.querySelector('#wind-drag');
+    if (dEl) {
+      const D = dragN(r.area, o.cw, o.v); o.drag = D;
+      dEl.innerHTML = r.area > 0 && o.v > 0 ? `Bei ${fmt(o.v, 0)} km/h: Luftwiderstand etwa <b>${fmt(D, D < 10 ? 1 : 0)} N</b> – so viel wie ${fmt((D / 9.80665) * 1000, 0)} g Schub; dafür braucht es etwa ${fmt((D * o.v) / 3.6, 0)} W.` : '';
+    }
     if (moveCam && r.c) Viewer.lookAtPlane(r.c, windDir(o.angle).map((v) => -v), [1, 0, 0], r.R * 1.15);
     Viewer.requestRender();
   }
   function wind(on = !st.wind) {
     if (!on) { if (st.wind) { const o = st.wind; o.bar.remove(); st.wind = null; Viewer.setOrtho(o.ortho); Viewer.restoreCamera(o.cam); } sync(); return; }
     if (st.wind) return;
-    const o = { angle: 0, props: false, area: 0, cam: Viewer.saveCamera(), ortho: Viewer.ortho };
+    const o = { angle: 0, props: false, area: 0, cw: cwGuess(), v: 100, cam: Viewer.saveCamera(), ortho: Viewer.ortho };
     const bar = h('div', { class: 'viewbar', role: 'toolbar', 'aria-label': 'Fahrtwind' });
     const head = h('div', { class: 'vb-head' }, h('span', { class: 'title' }, 'Fahrtwind'));
     const close = h('button', { type: 'button', class: 'vb-x', 'aria-label': 'Fahrtwind schließen', 'data-tip': 'Schließen' }); close.innerHTML = icon('close'); close.onclick = () => wind(false);
@@ -8664,14 +8974,23 @@ const Views = (() => {
     const rng = h('input', { type: 'range', id: 'wind-angle', min: 0, max: 60, step: 5, value: 0, 'aria-label': 'Neigung nach vorne' });
     const val = h('span', { class: 'vb-l', id: 'wind-angle-v' }, '0°');
     rng.oninput = () => { o.angle = +rng.value; val.textContent = rng.value + '°'; drawWind(true); };
-    const cb = h('input', { type: 'checkbox', id: 'wind-props' }); cb.onchange = () => { o.props = cb.checked; drawWind(false); };
+    const cb = h('input', { type: 'checkbox', id: 'wind-props' }); cb.onchange = () => { o.props = cb.checked; drawWind(false); windTop(o); };
+    const cwSel = h('select', { id: 'wind-cw', class: 'vb-sel', style: { flex: '1', minWidth: '0' }, 'aria-label': 'Form der Drohne (cw-Wert)' });
+    for (const [v, l] of CWS) { const op = h('option', { value: v }, l); if (v === o.cw) op.selected = true; cwSel.append(op); }
+    cwSel.onchange = () => { o.cw = +cwSel.value; drawWind(false); windTop(o); };
+    const vIn = h('input', { type: 'number', id: 'wind-v', class: 'vb-num', min: 0, max: 500, step: 10, value: o.v, 'aria-label': 'Tempo in km/h' });
+    vIn.onchange = () => { const v = parseFloat(vIn.value); if (v >= 0) { o.v = v; drawWind(false); } };
     bar.append(head,
       h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, 'Neigung'), rng, val),
       h('div', { class: 'vb-row' }, h('label', { class: 'vb-hint' }, cb, ' Propeller mitzählen')),
       h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint', id: 'wind-area' }, '')),
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, 'Form'), cwSel),
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, 'Tempo'), vIn, h('span', { class: 'vb-u' }, 'km/h')),
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint', id: 'wind-drag' }, '')),
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint', id: 'wind-top' }, '')),
       h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint' }, 'So sieht der Wind deine Drohne, wenn sie mit dieser Neigung nach vorne fliegt. Kleinere Fläche = weniger Luftwiderstand.')));
     bars().append(bar); o.bar = bar;
-    st.wind = o; Viewer.setOrtho(true); drawWind(true); sync();
+    st.wind = o; Viewer.setOrtho(true); drawWind(true); sync(); windTop(o);
   }
 
   // ---------- Menü und Zustand ----------
@@ -8714,7 +9033,7 @@ const Views = (() => {
   return {
     init, section, xray, explode, collapse, focus, overhang, menu, onKey, reset, sync, bars,
     get overhangArea() { return st.ov ? st.ov.area : null; },
-    wind, windArea, get windInfo() { return st.wind ? { angle: st.wind.angle, props: st.wind.props, area: st.wind.area } : null; },
+    wind, windArea, get windInfo() { return st.wind ? { angle: st.wind.angle, props: st.wind.props, area: st.wind.area, cw: st.wind.cw, v: st.wind.v, drag: st.wind.drag, top: st.wind.top || null } : null; }, cwGuess, topSpeed, dragN,
     overhangOf: (id, angle = 45) => { const d = overhangData(angle, [id]); return { area: d.area, c: d.c }; },
     get cut() { return st.cut ? { plane: st.cut.plane, off: st.cut.off, flip: st.cut.flip } : null; },
     get isXray() { return st.xray; }, get exploded() { return st.ex > 1e-4 || st.exGoal > 0; }, get explodeAmount() { return st.ex; }, get explodeGroups() { return st.exGroups; }, setGroups,
@@ -8989,10 +9308,14 @@ const Sketch = (() => {
   // Mittellinie für einen Übergang: Ebene durch den ersten Umriss, in der auch der letzte liegt; vorgezeichnet als Spline durch die Mitten
   let lpKey = '';
   // kind 'path' = Mittellinie, 'rail' = Führungskurve (Seitenlinie, der der Übergang zwischen den Umrissen folgt)
-  const isLoftLine = () => !!S && (S.ctx.mode === 'loftpath' || S.ctx.mode === 'loftrail');
+  // 'rail2' = zweite Führungskurve, quer zur ersten (z. B. von oben, wenn die erste von der Seite kommt)
+  const LOFTMODE = { path: 'loftpath', rail: 'loftrail', rail2: 'loftrail2' };
+  const isLoftLine = () => !!S && (S.ctx.mode === 'loftpath' || S.ctx.mode === 'loftrail' || S.ctx.mode === 'loftrail2');
+  const railKey = () => (S.ctx.mode === 'loftrail2' ? 'rail2' : S.ctx.mode === 'loftrail' ? 'rail' : null);
   function startLoftPath(id, kind = 'path') {
     const f = Model.find(App.doc, id); if (!f || f.item.kind !== 'loft') return false;
-    const key = kind === 'rail' ? 'rail' : 'path';
+    const key = kind === 'rail' || kind === 'rail2' ? kind : 'path';
+    if (key === 'rail2' && !f.item.p.rail) return startLoftPath(id, 'rail');
     const it = f.item, V = Model.vars(App.doc).v;
     const Y = (pl) => { const n = pl.n, x = pl.x; return [n[1] * x[2] - n[2] * x[1], n[2] * x[0] - n[0] * x[2], n[0] * x[1] - n[1] * x[0]]; };
     const W3 = (pl, q) => { const y = Y(pl); return [0, 1, 2].map((k) => pl.o[k] + pl.x[k] * q[0] + y[k] * q[1]); };
@@ -9002,11 +9325,20 @@ const Sketch = (() => {
       const poly = regs[0].outer.poly; let cx = 0, cy = 0; for (const q of poly) { cx += q[0]; cy += q[1]; } cx /= poly.length || 1; cy /= poly.length || 1;
       prof.push({ c: W3(sk.plane, [cx, cy]), n: sk.plane.n.slice(), pts: poly.map((q) => W3(sk.plane, q)) });
     }
-    if (prof.length < 2) { UI.toast(`Für eine ${key === 'rail' ? 'Führungskurve' : 'Mittellinie'} braucht der Übergang mindestens zwei Umrisse.`, { kind: 'bad', icon: 'info' }); return false; }
+    if (prof.length < 2) { UI.toast(`Für eine ${key !== 'path' ? 'Führungskurve' : 'Mittellinie'} braucht der Übergang mindestens zwei Umrisse.`, { kind: 'bad', icon: 'info' }); return false; }
     let plane, ents = [], dims = [], cons = [];
     const old = it.p[key];
     if (old) { plane = deepClone(old.plane); ents = deepClone(old.ents || []); dims = deepClone(old.dims || []); cons = deepClone(old.cons || []); }
-    else {
+    else if (key === 'rail2') {
+      // quer zur ersten Führungskurve: Ebene durch die Achse, deren Normale die Richtung der ersten Kurve ist
+      const C0 = prof[0].c, C1 = prof[prof.length - 1].c, D = new THREE.Vector3(C1[0] - C0[0], C1[1] - C0[1], C1[2] - C0[2]).normalize();
+      const n1 = new THREE.Vector3(...it.p.rail.plane.n), n2 = n1.clone().cross(D);
+      if (n2.length() < 0.2) { UI.toast('Die erste Führungskurve liegt ungünstig – eine zweite geht hier nicht.', { kind: 'bad', icon: 'info' }); return false; }
+      n2.normalize();
+      const std = ['XZ', 'YZ', 'XY'].find((k) => Math.abs(new THREE.Vector3(...PLANES[k].n).dot(n2)) > 0.999);
+      if (std) { const B = PLANES[std], off = B.n[0] * C0[0] + B.n[1] * C0[1] + B.n[2] * C0[2]; plane = { o: B.n.map((v) => round(v * off, 6)), x: B.x.slice(), n: B.n.slice() }; }
+      else plane = { o: C0.map((v) => round(v, 6)), x: D.toArray().map((v) => round(v, 9)), n: n2.toArray().map((v) => round(v, 9)) };
+    } else {
       const C0 = prof[0].c, C1 = prof[prof.length - 1].c, D = new THREE.Vector3(C1[0] - C0[0], C1[1] - C0[1], C1[2] - C0[2]).normalize();
       // bevorzugt „Stehend (vorne)“, dann „seitlich“, dann „Arbeitsfläche“ – die, in der die Verbindung am besten liegt
       const cand = ['XZ', 'YZ', 'XY'].map((k) => ({ k, d: Math.abs(new THREE.Vector3(...PLANES[k].n).dot(D)) }));
@@ -9015,7 +9347,7 @@ const Sketch = (() => {
       plane = { o: B.n.map((v) => round(v * off, 6)), x: B.x.slice(), n: B.n.slice() };
     }
     const y = Y(plane), to2 = (P) => { const d = [P[0] - plane.o[0], P[1] - plane.o[1], P[2] - plane.o[2]]; return [round(d[0] * plane.x[0] + d[1] * plane.x[1] + d[2] * plane.x[2], 4), round(d[0] * y[0] + d[1] * y[1] + d[2] * y[2], 4)]; };
-    if (!old && key === 'rail') {
+    if (!old && key !== 'path') {
       // Führungskurve: Spline durch die äußerste Stelle jedes Umrisses (der Übergang bleibt so zunächst gleich), dazwischen je ein Punkt zum Ziehen
       const R3 = Model.railStart(it, V, plane);
       if (!R3) { UI.toast('Die Umrisse liegen dafür ungünstig – die Führungskurve braucht eine Ebene, die die Achse vom ersten zum letzten Umriss enthält.', { kind: 'bad', icon: 'info' }); return false; }
@@ -9047,11 +9379,12 @@ const Sketch = (() => {
     }
     lpKey = '';
     const bb = SK.bounds([...ents, ...refs]), ext = bb ? Math.max(bb[2] - bb[0], bb[3] - bb[1]) : 40;
-    begin({ plane, W: Model.worldMatrix(App.doc, id), ents, dims, cons, refs, viewSize: Math.max(60, ext * 1.7), ctx: { mode: key === 'rail' ? 'loftrail' : 'loftpath', id } });
+    begin({ plane, W: Model.worldMatrix(App.doc, id), ents, dims, cons, refs, viewSize: Math.max(60, ext * 1.7), ctx: { mode: LOFTMODE[key], id } });
     S.hiddenEdit = id;
     const top = Model.topOf(App.doc, id); if (top && top.id === id) Viewer.updateNode(id, { visible: false });
     loftPreview();
-    if (key === 'rail') UI.toast(old ? 'Zieh die Führungskurve – der Übergang folgt ihr. Dann „Fertig“.' : 'Die Führungskurve läuft an der Seite der Umrisse entlang. Zieh die Punkte dazwischen nach außen oder innen – der Übergang folgt. Dann „Fertig“.', { icon: 'info', ms: 4200 });
+    if (key === 'rail2') UI.toast(old ? 'Zieh die zweite Führungskurve – der Übergang folgt beiden. Dann „Fertig“.' : 'Die zweite Führungskurve steht quer zur ersten – z. B. von oben, wenn die erste von der Seite kommt. Zieh ihre Punkte, dann „Fertig“.', { icon: 'info', ms: 4200 });
+    else if (key === 'rail') UI.toast(old ? 'Zieh die Führungskurve – der Übergang folgt ihr. Dann „Fertig“.' : 'Die Führungskurve läuft an der Seite der Umrisse entlang. Zieh die Punkte dazwischen nach außen oder innen – der Übergang folgt. Dann „Fertig“.', { icon: 'info', ms: 4200 });
     else UI.toast(it.p.path ? 'Bieg die Mittellinie – der Übergang folgt ihr. Dann „Fertig“.' : 'Die Mittellinie läuft durch die Mitten der Umrisse. Zieh ihre Punkte, um den Übergang zu biegen – dann „Fertig“.', { icon: 'info', ms: 4200 });
     return true;
   }
@@ -9061,7 +9394,7 @@ const Sketch = (() => {
     const k = JSON.stringify([S.ents, S.plane, S.dims]); if (k === lpKey) return; lpKey = k;
     const f = Model.find(App.doc, S.ctx.id); if (!f) return;
     const it = deepClone(f.item), sk = { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons) };
-    if (S.ctx.mode === 'loftrail') { it.p.rail = sk; delete it.p.path; } else it.p.path = sk;
+    const rk = railKey(); if (rk) { it.p[rk] = sk; delete it.p.path; } else { it.p.path = sk; delete it.p.rail; delete it.p.rail2; }
     Model.setFromMatrix(it, S.W); it.id = '__preview'; it.finishes = [];
     App.extra = SK.chains(S.ents).length ? [it] : []; App.rebuild();
   }, 250);
@@ -9089,7 +9422,7 @@ const Sketch = (() => {
     if (Notes.active) Notes.stop();
     Panels.closeFlyout(); UI.closePop();
     const F = frameWorld(init.plane, init.W);
-    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail') && init.ents.length) ? 'select' : init.ctx.mode === 'patpath' ? 'line' : 'rect', draft: null, sel: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, hoverEnt: null, trimHover: null };
+    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.mode === 'patpath' ? 'line' : 'rect', draft: null, sel: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, hoverEnt: null, trimHover: null };
     S.dims = init.dims || []; S.cons = init.cons || []; S.picks = []; S.dimFirst = null; S.selCon = null;
     S.plane0 = deepClone(init.plane); S.pOff = init.pOff || 0; S.pTilt = 0;
     if (S.pOff) applyPlane(false, true);
@@ -9723,7 +10056,7 @@ const Sketch = (() => {
     return true;
   }
   // ---------- Versatz ----------
-  const OFFTYPES = ['line', 'arc', 'circle', 'rect', 'poly', 'slot', 'spline'];
+  const OFFTYPES = ['line', 'arc', 'circle', 'rect', 'poly', 'slot', 'spline', 'ellipse'];
   function offsetDown(uv0, e) {
     const p = snap(uv0, { fine: e.shiftKey, off: e.altKey, exclude: S.draft && S.draft.off ? [S.draft.off.id] : undefined }).p;
     if (S.draft && S.draft.off) {
@@ -9756,6 +10089,14 @@ const Sketch = (() => {
     if (e.type === 'circle') return SK.d2(uv, e.c) - e.r;
     if (e.type === 'poly') return SK.d2(uv, e.c) - e.r * Math.cos(Math.PI / Math.max(3, Math.round(e.n || 6)));
     if (e.type === 'slot') return segDist(uv, e.a, e.b) - e.r;
+    if (e.type === 'ellipse') {
+      // Abstand zur Ellipse (über Punkte auf ihr), außen +, innen −
+      const pl = SK.ellipsePoints(e.c, e.rx, e.ry, e.rot || 0, 180); let bd = Infinity;
+      for (let i = 0; i < pl.length; i++) bd = Math.min(bd, segDist(uv, pl[i], pl[(i + 1) % pl.length]));
+      const cr = Math.cos(-(e.rot || 0)), sr = Math.sin(-(e.rot || 0)), dx = uv[0] - e.c[0], dy = uv[1] - e.c[1];
+      const x = cr * dx - sr * dy, y = sr * dx + cr * dy;
+      return (x / e.rx) ** 2 + (y / e.ry) ** 2 < 1 ? -bd : bd;
+    }
     if (e.type === 'rect') {
       const x0 = Math.min(e.a[0], e.b[0]), x1 = Math.max(e.a[0], e.b[0]), y0 = Math.min(e.a[1], e.b[1]), y1 = Math.max(e.a[1], e.b[1]);
       const dx = Math.max(x0 - uv[0], 0, uv[0] - x1), dy = Math.max(y0 - uv[1], 0, uv[1] - y1);
@@ -9798,10 +10139,12 @@ const Sketch = (() => {
       S.ents.push(ne);
       const c = offsetCon(it.src, ne, it, sd, v); if (c) newCons.push(c);
     }
+    if (newCons.length > 1) { const og = uid('og'); for (const c of newCons) c.og = og; }   // zusammen entstanden: später zusammen ändern
     S.cons.push(...newCons);
     S.draft = null; hideEntry(); S.sel = null;
     sanitize(newCons.map((c) => c.id));
     UI.hint(HINTS.offset); render(); Panels.renderRight();
+    if (calc.items.some((x) => x.src.type === 'ellipse')) UI.toast('Der Versatz einer Ellipse ist keine Ellipse mehr – die Kopie ist eine Spline durch 48 Punkte genau im Abstand. Sie folgt der Ellipse nicht, wenn du diese später änderst.', { icon: 'info', ms: 5000 });
     return true;
   }
   // Abstand eingetippt (Zahl oder Formel): die Seite kommt von der Maus, ein Minus dreht sie um
@@ -10894,6 +11237,7 @@ const Sketch = (() => {
     const w = h('div', { class: 'props' });
     if (!S.step && (S.ctx.mode === 'patpath' || isPathEdit())) w.append(h('div', { class: 'ok-box', id: 'path-hint', html: '<b>Kurve für das Muster</b> – die Kopien laufen sie vom Anfang bis zum Ende ab. Der Punkt markiert das Original: Am Ende der Kurve, das ihm näher liegt, geht es los. Ein Kreis oder ein geschlossener Umriss verteilt die Kopien rundherum.' }));
     if (S.ctx.mode === 'loftrail') w.append(h('div', { class: 'ok-box', id: 'loftrail-hint', html: '<b>Führungskurve für den Übergang</b> – sie gibt die Seitenlinie vor: Zwischen den Umrissen wird der Übergang in dieser Richtung so weit, dass er die Kurve berührt. Die Umrisse selbst bleiben, wie sie sind. Sie sollte vom ersten bis zum letzten Umriss laufen.' }));
+    if (S.ctx.mode === 'loftrail2') w.append(h('div', { class: 'ok-box', id: 'loftrail2-hint', html: '<b>Zweite Führungskurve</b> – sie steht quer zur ersten und gibt die Breite in der anderen Richtung vor (z. B. von oben gesehen, wenn die erste von der Seite kommt). Der Übergang folgt beiden, die Umrisse bleiben gleich.' }));
     if (S.ctx.mode === 'loftpath') w.append(h('div', { class: 'ok-box', id: 'loftpath-hint', html: '<b>Mittellinie für den Übergang</b> – die Umrisse bleiben, wo sie sind (die dünnen Hilfskanten zeigen sie), und die Fläche dazwischen folgt der Linie. Sie sollte vom ersten Umriss durch alle anderen bis zum letzten laufen. Zieh die Punkte der Kurve oder zeichne eine neue Linie, einen Bogen oder eine Spline.' }));
     if (S.step) { w.append(h('div', { class: 'hint-box', html: S.step.revolve ? 'Wähle die Achse, um die gedreht wird. Klick im Bild auf Flächen, um sie ab- oder anzuwählen.' : 'Zieh am Pfeil im Bild oder tipp die Höhe ein. Klick auf Flächen, um sie ab- oder anzuwählen.' })); body.append(w); return; }
     const sel = S.ents.find((x) => x.id === S.sel);
@@ -10908,7 +11252,20 @@ const Sketch = (() => {
         else { S.undo.push(JSON.stringify({ ents: S.ents, dims: S.dims, cons: S.cons.map((c) => (c === selCon ? { ...c, [key]: old } : c)) })); }
         render(); Panels.renderRight();
       } }));
-      if (selCon.type === 'offset') editNum('co-v', 'Abstand', 'mm', 'v');
+      if (selCon.type === 'offset') {
+        // Versatz einer ganzen Kette: alle Stücke, die zusammen entstanden sind, bekommen denselben Abstand
+        const grp = selCon.og ? S.cons.filter((c) => c.type === 'offset' && c.og === selCon.og) : [selCon];
+        w.append(UI.numField({ id: 'co-v', label: grp.length > 1 ? `Abstand (alle ${grp.length} Stücke)` : 'Abstand', value: selCon.v, unit: 'mm', onCommit: (v) => {
+          const old = grp.map((c) => c.v); grp.forEach((c) => { c.v = v; });
+          // die Originale möglichst stehen lassen – die Kopien wandern
+          const pins = []; for (const c of grp) { const src = ent(c.refs[0].e); if (src) for (const k of Solver.varsOf(src) || []) pins.push([src.id, k, Solver.getK(src, k)]); }
+          const r = reapply({ pins });
+          if (r && !r.ok) { grp.forEach((c, i) => { c.v = old[i]; }); reapply(); UI.toast('Dieser Wert widerspricht den anderen Regeln.', { kind: 'bad' }); }
+          else S.undo.push(JSON.stringify({ ents: S.ents, dims: S.dims, cons: S.cons.map((c) => { const i = grp.indexOf(c); return i >= 0 ? { ...c, v: old[i] } : c; }) }));
+          render(); Panels.renderRight();
+        } }));
+        if (grp.length > 1) w.append(h('div', { class: 'hint-box', id: 'co-v-all', html: `Dieser Versatz gehört zu einer Kette aus <b>${grp.length} Stücken</b> – der Abstand gilt für alle zusammen.` }));
+      }
       if (selCon.type === 'xform' && selCon.mode === 'rot') editNum('co-ang', 'Winkel', '°', 'ang');
       if (selCon.type === 'xform' && selCon.mode !== 'rot') { editNum('co-dx', 'Versatz X', 'mm', 'dx'); editNum('co-dy', 'Versatz Y', 'mm', 'dy'); }
       if (selCon.type === 'xform' && selCon.pg && selCon.pm) {
@@ -10964,6 +11321,22 @@ const Sketch = (() => {
         f.append(UI.selectField({ id: 'se-align', label: 'Ausrichtung', value: sel.align || 'l', options: [['l', 'Links'], ['m', 'Mitte'], ['r', 'Rechts']], onChange: (v) => upd((e) => { e.align = v; }) }));
         f.append(UI.numField({ id: 'se-rot', label: 'Drehung', value: round(((sel.rot || 0) * 180) / Math.PI, 3), unit: '°', expr: false, onCommit: (v) => upd((e) => { e.rot = (v * Math.PI) / 180; }) }));
         f.append(UI.numField({ id: 'se-sp', label: 'Zeichenabstand', value: sel.sp || 0, unit: 'mm', expr: false, onCommit: (v) => upd((e) => { e.sp = v; }) }));
+        f.append(UI.numField({ id: 'se-bend', label: 'Bogen-Radius', value: sel.bend || 0, unit: 'mm', expr: false, onCommit: (v) => upd((e) => { if (Math.abs(v) < 1e-6) delete e.bend; else e.bend = v; }) }));
+        // An Kreis oder Bogen legen: die Grundlinie läuft auf dem nächsten Kreis, Mitte des Texts dort, wo er gerade steht
+        const rounds = S.ents.filter((x) => x.type === 'circle' || x.type === 'arc');
+        if (rounds.length) {
+          const ob = h('button', { type: 'button', class: 'btn', id: 'se-oncircle' }); ob.innerHTML = icon('circle') + 'An Kreis legen';
+          ob.onclick = () => upd((e) => {
+            const tb = e.align === 'm' ? null : SK.textBox(e), p0 = tb ? tb.c : e.a;   // Mitte der Grundlinie (bei „Mitte“ der Ankerpunkt)
+            let best = null;
+            for (const x of rounds) { const ci = x.type === 'circle' ? { c: x.c, r: x.r } : SK.arcInfo(x.a, x.m, x.b); if (!ci) continue; const d = Math.abs(Math.hypot(p0[0] - ci.c[0], p0[1] - ci.c[1]) - ci.r); if (!best || d < best.d) best = { ...ci, d }; }
+            if (!best) return;
+            const th = Math.atan2(p0[1] - best.c[1], p0[0] - best.c[0]);
+            e.align = 'm'; e.bend = round(best.r, 4); e.rot = th - Math.PI / 2;
+            e.a = [round(best.c[0] + Math.cos(th) * best.r, 4), round(best.c[1] + Math.sin(th) * best.r, 4)];
+          });
+          f.append(h('div', { class: 'btn-row' }, ob));
+        }
         const tb = SK.textBox(sel); if (tb) w.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Größe'), h('b', { class: 'mono' }, fmt(tb.w, 2) + ' × ' + fmt(tb.h, 2) + ' mm')));
       }
       else if (sel.type === 'ellipse') {
@@ -11132,11 +11505,11 @@ const Sketch = (() => {
     const editKind = S.ctx.mode === 'edit' ? (Model.find(App.doc, S.ctx.editId) || { item: {} }).item.kind : null;
     const pathMode = S.ctx.mode === 'patpath' || isPathEdit();
     if (isLoftLine()) {
-      const rail = S.ctx.mode === 'loftrail', nm = rail ? 'Führungskurve' : 'Mittellinie';
-      if (!SK.chains(S.ents).length) { UI.toast(`Die ${nm} braucht eine offene Linie, einen Bogen oder eine Spline – keinen geschlossenen Umriss.`, { kind: 'bad', icon: 'info' }); return; }
+      const rk = railKey(), nm = rk === 'rail2' ? 'zweiten Führungskurve' : rk ? 'Führungskurve' : 'Mittellinie';
+      if (!SK.chains(S.ents).length) { UI.toast(`Die ${rk === 'rail2' ? 'zweite Führungskurve' : nm} braucht eine offene Linie, einen Bogen oder eine Spline – keinen geschlossenen Umriss.`, { kind: 'bad', icon: 'info' }); return; }
       const id = S.ctx.id, sk = { plane: deepClone(S.plane), ents: S.ents, dims: S.dims, cons: S.cons };
       App.extra = []; finishSession();
-      App.change(nm, (doc) => { const f = Model.find(doc, id); if (!f) return false; if (rail) { f.item.p.rail = sk; delete f.item.p.path; } else { f.item.p.path = sk; delete f.item.p.rail; } });
+      App.change(rk === 'rail2' ? 'Zweite Führungskurve' : rk ? 'Führungskurve' : 'Mittellinie', (doc) => { const f = Model.find(doc, id); if (!f) return false; if (rk) { f.item.p[rk] = sk; delete f.item.p.path; } else { f.item.p.path = sk; delete f.item.p.rail; delete f.item.p.rail2; } });
       App.select([id]); UI.toast(`Der Übergang folgt jetzt der ${nm}.`, { icon: 'check' }); return;
     }
     if (pathMode && !SK.chains(S.ents).length && !regs.length) { UI.toast('Zeichne zuerst eine Kurve: eine Linie, einen Bogen, eine Spline oder einen Kreis.', { kind: 'bad', icon: 'info' }); return; }
@@ -13250,7 +13623,7 @@ const AI = (() => {
 {"op":"material","id":"<id>","material":"<Kürzel aus MATERIALIEN>"}
 {"op":"gewicht","id":"<id>","g":33.8}   (Kaufteil mit festem Gewicht aus dem Datenblatt)
 {"op":"kaufteil","name":"<Name aus KAUFTEILE>","t":{"x":0,"y":0,"z":0}}   (Kaufteil in echter Form mit Maßen und Gewicht aus der Bibliothek)
-{"op":"drohne","zoll":5,"form":"x"|"stretch"|"wide"|"deadcat"|"cine"|"speed","video":"analog"|"o3"|"o4"|"o4pro"|"walksnail"|"hdzero"|"none","motor":"2207","akku":"6S 1300 mAh","neigung":20,"rahmen":"Source One V5"}   (baut mit dem Frame-Assistenten einen kompletten Rahmen als NEUES Projekt; nur wenn ausdrücklich ein neuer Rahmen gewünscht ist. zoll: 3, 3.5, 4, 5, 6 oder 7. cine = Cinewhoop mit Ducts, speed = Speed-Drohne mit Stromlinien-Rumpf (Akku innen, Motoren um "neigung" Grad nach vorne geneigt, Standard 20). "rahmen" nur für den Nachbau eines Herstellerrahmens: ${FRAMES})
+{"op":"drohne","zoll":5,"form":"x"|"stretch"|"wide"|"deadcat"|"h"|"cine"|"speed","video":"analog"|"o3"|"o4"|"o4pro"|"walksnail"|"hdzero"|"none","motor":"2207","akku":"6S 1300 mAh","neigung":20,"rahmen":"Source One V5"}   (baut mit dem Frame-Assistenten einen kompletten Rahmen als NEUES Projekt; nur wenn ausdrücklich ein neuer Rahmen gewünscht ist. zoll: 3, 3.5, 4, 5, 6 oder 7. cine = Cinewhoop mit Ducts, speed = Speed-Drohne mit Stromlinien-Rumpf (Akku innen, Motoren um "neigung" Grad nach vorne geneigt, Standard 20). "rahmen" nur für den Nachbau eines Herstellerrahmens: ${FRAMES})
 {"op":"pruefen"}   (Drohnen-Check: Propeller, Teile, Gewicht, Schwerpunkt, Schub – das Ergebnis bekommst du als Rückmeldung)
 {"op":"schwachstellen"}   (sucht Schwachstellen: Lochrand, dünne Wände, Armdicke – das Ergebnis bekommst du als Rückmeldung)
 {"op":"auswaehlen","ids":"…"}   (wählt am Ende diese Teile aus, damit der Nutzer sie gleich sieht)
@@ -13266,10 +13639,10 @@ Parameter p (alle Grundkörper stehen mit der Unterseite auf z=0 ihres eigenen S
 - cylinder: d, h · tube: d (außen), wall, h · sphere: d · hemisphere: d · cone: d1 (unten), d2 (oben, 0 = Spitze), h
 - pyramid: w, d, h · torus: d (außen), t (Ringdicke) · prism: n (Ecken), d (Umkreis), h · wedge: w, d, h (die Schräge fällt zur +X-Seite ab)
 - extrude: {"ebene":"XY"|"XZ"|"YZ","versatz":0,"hoehe":10,"richtung":"normal"|"reverse"|"both","form":[ELEMENT…]}
-  ELEMENT (2D in mm): {"rect":[x1,y1,x2,y2]} · {"circle":[cx,cy,r]} · {"ellipse":[cx,cy,rx,ry]} · {"poly":[[x,y],[x,y],…]} (geschlossener Linienzug) · {"slot":[x1,y1,x2,y2,r]} · {"text":"FPV","x":0,"y":0,"hoehe":5,"fett":true,"mitte":true} (Schrift als Umriss; in einem Rechteck = Gravur)
+  ELEMENT (2D in mm): {"rect":[x1,y1,x2,y2]} · {"circle":[cx,cy,r]} · {"ellipse":[cx,cy,rx,ry]} · {"poly":[[x,y],[x,y],…]} (geschlossener Linienzug) · {"slot":[x1,y1,x2,y2,r]} · {"text":"FPV","x":0,"y":0,"hoehe":5,"fett":true,"mitte":true,"drehung":0,"bogen":0} (Schrift als Umriss; in einem Rechteck = Gravur; "bogen" = Radius in mm, die Grundlinie läuft dann auf einem Kreis – positiv wölbt sich der Text nach oben, Mitte des Kreises bei (x, y − bogen); so läuft Schrift am Rand einer runden Platte entlang)
   Ebene XY: u=X, v=Y, hoch in +Z. Ebene XZ: u=X, v=Z, hoch in −Y. Ebene YZ: u=Y, v=Z, hoch in +X. „versatz“ verschiebt die Ebene entlang dieser Richtung. Formen, die ganz in einer anderen liegen, werden zu Löchern darin.
-- loft (Übergang durch Umrisse): {"profile":[{"ebene":"XY","versatz":0,"form":[ELEMENT]},{"ebene":"XY","versatz":30,"form":[ELEMENT]}],"spitze":0,"gerade":false,"mittellinie":{"ebene":"XZ","versatz":0,"kurve":[KURVENSTÜCK…]}} – mit "spitze" > 0 läuft der Körper hinter dem letzten Profil zu einer Spitze zusammen (auch mit nur einem Profil). "mittellinie" (optional, ab zwei Profilen) biegt den Übergang: eine offene Kurve in einer Ebene (Kurvenstücke wie bei „muster kurve“: linie/bogen/spline), die vom ersten Profil durch alle bis zum letzten läuft – die Profile bleiben, wo sie sind. In der Ebene XZ ist die 2. Koordinate z, in YZ ist die 1. y und die 2. z. Statt "mittellinie" geht "fuehrungskurve" (gleicher Aufbau): eine Seitenlinie neben den Profilen, vom ersten bis zum letzten – der Übergang wird dazwischen so weit, dass er sie berührt (z. B. ein bauchiger Rumpf).
-- sweep (Querschnitt entlang Pfad): {"ebene":"XY","versatz":0,"pfad":[[x,y],…],"glatt":false,"form":"rund"|"rechteck","d":6,"w":6,"h":4,"wand":0} – Rohr, Kabelkanal, Bügel; "glatt": true macht aus den Punkten eine Spline. Statt "ebene"/"pfad" geht auch "pfad3d":[[x,y,z],…] – ein Rohr durch Punkte im Raum (glatt, außer "glatt": false), z. B. ein Kabelkanal, der um Teile herum und nach oben läuft.
+- loft (Übergang durch Umrisse): {"profile":[{"ebene":"XY","versatz":0,"form":[ELEMENT]},{"ebene":"XY","versatz":30,"form":[ELEMENT]}],"spitze":0,"gerade":false,"mittellinie":{"ebene":"XZ","versatz":0,"kurve":[KURVENSTÜCK…]}} – mit "spitze" > 0 läuft der Körper hinter dem letzten Profil zu einer Spitze zusammen (auch mit nur einem Profil). "mittellinie" (optional, ab zwei Profilen) biegt den Übergang: eine offene Kurve in einer Ebene (Kurvenstücke wie bei „muster kurve“: linie/bogen/spline), die vom ersten Profil durch alle bis zum letzten läuft – die Profile bleiben, wo sie sind. In der Ebene XZ ist die 2. Koordinate z, in YZ ist die 1. y und die 2. z. Statt "mittellinie" geht "fuehrungskurve" (gleicher Aufbau): eine Seitenlinie neben den Profilen, vom ersten bis zum letzten – der Übergang wird dazwischen so weit, dass er sie berührt (z. B. ein bauchiger Rumpf). Dazu passt "fuehrungskurve2" (gleicher Aufbau) in einer Ebene quer zur ersten (erste in YZ → zweite in XY): sie gibt die Breite in der anderen Richtung vor – so formst du einen Rumpf von der Seite und von oben.
+- sweep (Querschnitt entlang Pfad): {"ebene":"XY","versatz":0,"pfad":[[x,y],…],"glatt":false,"form":"rund"|"rechteck","d":6,"w":6,"h":4,"wand":0} – Rohr, Kabelkanal, Bügel; "glatt": true macht aus den Punkten eine Spline. Statt "ebene"/"pfad" geht auch "pfad3d":[[x,y,z],…] – ein Rohr durch Punkte im Raum (glatt, außer "glatt": false), z. B. ein Kabelkanal, der um Teile herum und nach oben läuft. Dazu optional "regeln":[{"achse":"z","laenge":20},null,…] – je Stück (von Punkt i zu i+1): genau entlang einer Achse und/oder mit fester Länge (auch eine Formel); die Punkte dahinter wandern mit.
 - part (Bauteile, Öffnung zeigt nach +Z, Tiefe geht nach −Z; setze z auf die Oberfläche):
   {"lib":"screwHole","size":"M2|M2.5|M3|M4|M5|M6|M8","head":"countersunk|counterbore|none","length":10} (rolle loch)
   {"lib":"nutTrap","size":"M3","length":12} (loch) · {"lib":"insert","size":"M3"} (loch, Gewindeeinsatz) · {"lib":"slotHole","len":20,"w":4.5,"depth":10} (loch)
@@ -13844,7 +14217,7 @@ Beispiel – Wunsch „Mach alles als Verbund“ (Runde 1):
       else if (el.ellipse && el.ellipse.length >= 4) ents.push({ id: uid('e'), type: 'ellipse', c: [num(el.ellipse[0], 0), num(el.ellipse[1], 0)], rx: Math.abs(num(el.ellipse[2], 5)), ry: Math.abs(num(el.ellipse[3], 3)), rot: 0 });
       else if (el.slot && el.slot.length === 5) ents.push({ id: uid('e'), type: 'slot', a: [num(el.slot[0], 0), num(el.slot[1], 0)], b: [num(el.slot[2], 10), num(el.slot[3], 0)], r: Math.abs(num(el.slot[4], 2)) });
       else if (Array.isArray(el.poly) && el.poly.length >= 3) { const pts = el.poly.map((q) => [num(q[0], 0), num(q[1], 0)]); for (let i = 0; i < pts.length; i++) ents.push({ id: uid('e'), type: 'line', a: pts[i], b: pts[(i + 1) % pts.length] }); }
-      else if (typeof el.text === 'string' && el.text) ents.push({ id: uid('e'), type: 'text', a: [num(el.x, 0), num(el.y, 0)], s: el.text, h: Math.abs(num(el.hoehe, 5)), font: el.fett ? 'fett' : 'inter', align: el.mitte ? 'm' : 'l', rot: 0 });
+      else if (typeof el.text === 'string' && el.text) { const te = { id: uid('e'), type: 'text', a: [num(el.x, 0), num(el.y, 0)], s: el.text, h: Math.abs(num(el.hoehe, 5)), font: el.fett ? 'fett' : 'inter', align: el.mitte ? 'm' : 'l', rot: (num(el.drehung, 0) * Math.PI) / 180 }; const bg = num(el.bogen, 0); if (Math.abs(bg) > 1e-6) te.bend = bg; ents.push(te); }
     }
     return ents;
   }
@@ -13885,11 +14258,21 @@ Beispiel – Wunsch „Mach alles als Verbund“ (Runde 1):
         if (ents.length && SK.chains(ents).length) { it.p.rail = { plane: { o: pl.n.map((v) => v * off), x: pl.x, n: pl.n }, ents, dims: [], cons: [] }; it.p.tip = 0; }
         else notes.push('Die Führungskurve war keine offene Kurve – der Übergang nimmt den kürzesten Weg.');
       }
+      const fk2 = o.p && o.p.fuehrungskurve2;
+      if (fk2 && it.p.rail && sketches.length >= 2) {
+        const pl = PLANEDEF[String(fk2.ebene || 'YZ').toUpperCase()] || PLANEDEF.YZ, off = num(fk2.versatz, 0);
+        const ents = curveEnts(fk2.kurve).filter((e) => e.type !== 'circle');
+        if (Math.abs(pl.n[0] * it.p.rail.plane.n[0] + pl.n[1] * it.p.rail.plane.n[1] + pl.n[2] * it.p.rail.plane.n[2]) > 0.9) notes.push('Die zweite Führungskurve muss in einer anderen Ebene liegen als die erste – sie wurde weggelassen.');
+        else if (ents.length && SK.chains(ents).length) it.p.rail2 = { plane: { o: pl.n.map((v) => v * off), x: pl.x, n: pl.n }, ents, dims: [], cons: [] };
+        else notes.push('Die zweite Führungskurve war keine offene Kurve – sie wurde weggelassen.');
+      }
     } else if (kind === 'sweep') {
       const pl = PLANEDEF[String(o.p && o.p.ebene || 'XY').toUpperCase()] || PLANEDEF.XY, off = num(o.p && o.p.versatz, 0);
       const p3 = ((o.p && o.p.pfad3d) || []).filter((q) => Array.isArray(q) && q.length >= 3).map((q) => [num(q[0], 0), num(q[1], 0), num(q[2], 0)]);
       if (p3.length >= 2) {
         it = Model.newItem('sweep', { path3d: { pts: p3, smooth: o.p.glatt !== false }, shape: o.p.form === 'rechteck' ? 'rect' : 'circle', d: num(o.p.d, 6), w: num(o.p.w, 6), h: num(o.p.h, 4), wall: num(o.p.wand, 0) }, { name: o.name || 'Rohr im Raum', role });
+        const rg = Array.isArray(o.p.regeln) ? o.p.regeln.slice(0, p3.length - 1).map((r) => { if (!r || typeof r !== 'object') return null; const x = {}; const ax = String(r.achse || '').toLowerCase(); if (['x', 'y', 'z'].includes(ax)) x.ax = ax; if (r.laenge != null && r.laenge !== '' && r.laenge !== 0) x.len = typeof r.laenge === 'string' ? r.laenge : num(r.laenge, 0); return Object.keys(x).length ? x : null; }) : [];
+        if (rg.some(Boolean)) it.p.path3d.rules = rg;
       } else {
       const pts = ((o.p && o.p.pfad) || []).map((q) => [num(q[0], 0), num(q[1], 0)]);
       if (pts.length < 2) { notes.push('Ein Pfad braucht mindestens zwei Punkte.'); return null; }
@@ -14001,7 +14384,7 @@ const DroneTpl = (() => {
     6: { Armbreite: 14, Armdicke: 5.5, Plattenbreite: 44, Plattenlänge: 140, Plattendicke: 2, Bolzenhöhe: 28, stack: 30.5, motor: '2306', akku: '6S 1500 mAh', prop: 6 },
     7: { Armbreite: 15, Armdicke: 6, Plattenbreite: 45, Plattenlänge: 150, Plattendicke: 2.5, Bolzenhöhe: 30, stack: 30.5, motor: '2806.5', akku: '6S 1500 mAh', prop: 9.7 },
   };
-  const FORMS = { x: ['True-X', 45, 45], stretch: ['Stretched-X', 35, 35], wide: ['Wide-X', 55, 55], deadcat: ['Deadcat', 60, 35], cine: ['Cinewhoop', 45, 45], speed: ['Speed-Rumpf', 55, 55] };
+  const FORMS = { x: ['True-X', 45, 45], stretch: ['Stretched-X', 35, 35], wide: ['Wide-X', 55, 55], deadcat: ['Deadcat', 60, 35], h: ['H-Rahmen', 40, 40], cine: ['Cinewhoop', 45, 45], speed: ['Speed-Rumpf', 55, 55] };
   const ZOLL = [3, 3.5, 4, 5, 6, 7];
   // Videosysteme: Sendeeinheit und Kamera aus der Bauteil-Bibliothek
   const VIDEO = {
@@ -14198,7 +14581,12 @@ const DroneTpl = (() => {
     };
     // Unterteil: Mittelplatte, vier Arme, Motorauflagen, Löcher
     const kids = [item('box', { w: 'Plattenbreite', d: 'Plattenlänge', h: 'Armdicke' }, { name: 'Mittelplatte', color: CF })];
-    for (const [n, sx, sy] of CORNERS) {
+    if (P.form === 'h') {
+      // H-Rahmen: links und rechts ein Längsträger von Motor zu Motor, vorne und hinten an der Mittelplatte je ein Querträger dazu
+      for (const sx of [1, -1]) kids.push(item('box', { w: 'Armbreite', d: 'Achsabstand*cos(Armwinkel) + Armbreite', h: 'Armdicke' }, { name: 'Längsträger ' + (sx > 0 ? 'rechts' : 'links'), color: CF, t: { x: sg(sx, MX(-1)) } }));
+      for (const sy of [-1, 1]) kids.push(item('box', { w: 'Achsabstand*sin(Armwinkel)', d: 'Armbreite', h: 'Armdicke' }, { name: 'Querträger ' + (sy < 0 ? 'vorne' : 'hinten'), color: CF, t: { y: sg(sy, 'Plattenlänge/2 - Armbreite/2') } }));
+      for (const [n, sx, sy] of CORNERS) kids.push(item('cylinder', { d: 'Motorlochkreis + 9', h: 'Armdicke' }, { name: 'Motorauflage ' + n, color: CF, t: { x: sg(sx, MX(sy)), y: PY(sy) } }));
+    } else for (const [n, sx, sy] of CORNERS) {
       kids.push(item('box', { w: 'Armbreite', d: 'Achsabstand/2', h: 'Armdicke' }, { name: 'Arm ' + n, color: CF, t: { x: sg(sx, MX(sy) + '/2'), y: PY2(sy), rz: sx * sy < 0 ? W(sy) : '-' + W(sy) } }));
       kids.push(item('cylinder', { d: 'Motorlochkreis + 9', h: 'Armdicke' }, { name: 'Motorauflage ' + n, color: CF, t: { x: sg(sx, MX(sy)), y: PY(sy) } }));
     }
@@ -14291,6 +14679,11 @@ const DroneTpl = (() => {
     const disc = 'class="b1" fill-opacity=".15"';
     if (form === 'cine') return arms + '<rect x="47" y="18" width="16" height="20" rx="2" class="a3"/>' + props(13, 7, 'class="line" fill="none" stroke-width="2.5"');
     if (form === 'speed') return arms + '<path d="M55 6L62 16V40L58 50H52L48 40V16Z" class="a1"/><circle cx="55" cy="9" r="2.4" class="a3"/>' + props(11, 6, disc);
+    if (form === 'h') {
+      const [x1, y1] = pts[0], [x0, y2] = pts[3];
+      const hb = `<path d="M${x0} ${y1}V${y2}M${x1} ${y1}V${y2}M${x0} 18H${x1}M${x0} 38H${x1}" class="line" stroke-width="5" stroke-linecap="round" fill="none"/>`;
+      return hb + '<rect x="47" y="16" width="16" height="24" rx="2" class="a3"/>' + props(big ? 13 : 11, big ? 7 : 6, disc);
+    }
     return arms + '<rect x="47" y="16" width="16" height="24" rx="2" class="a3"/>' + props(big ? 13 : 11, big ? 7 : 6, disc);
   }
   const LIST = Object.entries(PRESETS).map(([k, P]) => ({ id: 'drone-' + k, name: P.name, desc: P.desc, build: () => build(k), svg: svg(k === 'f7', P.form), drone: true }));

@@ -851,9 +851,36 @@ export function createKernel(R, oc) {
       return false;
     };
   }
-  function tryFinish(shape, type, r, matcher) {
+  // fin.vr + fin.r2: Rundung, die entlang der Kante von r nach r2 wächst; Fase mit fin.cm 'two' (zwei Abstände r, r2)
+  // oder 'angle' (Abstand r und Winkel fin.a) – gemessen auf einer der beiden Nachbarflächen (fin.side 0/1)
+  function tryFinish(shape, type, r, matcher, fin = {}) {
+    if (type === 'fillet' && fin.vr) {
+      const r2 = num(fin.r2, r) * (r / Math.max(1e-9, num(fin.r, r)));   // beim Suchen des größten Werts beide Enden gleich verkleinern
+      if (r2 > 0 && Math.abs(r2 - r) > 1e-9) return shape.fillet((e) => (matcher(e) ? [r, r2] : 0));
+    }
+    if (type === 'chamfer' && (fin.cm === 'two' || fin.cm === 'angle')) return chamferAsym(shape, r, matcher, fin);
     const f = (e) => (matcher(e) ? r : 0);
     return type === 'chamfer' ? shape.chamfer(f) : shape.fillet(f);
+  }
+  function chamferAsym(shape, d1, matcher, fin) {
+    const builder = new oc.BRepFilletAPI_MakeChamfer(shape.wrapped);
+    const faces = shape.faces, fe = faces.map((f) => f.edges);
+    const key = (f) => { const c = vec(f.center); return [Math.round(c[2] * 1e3), Math.round(c[1] * 1e3), Math.round(c[0] * 1e3)]; };
+    const cmp = (a, b) => { const x = key(a), y = key(b); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
+    const d2 = fin.cm === 'two' ? num(fin.r2, d1) * (d1 / Math.max(1e-9, num(fin.r, d1))) : 0, ang = (num(fin.a, 45) * Math.PI) / 180;
+    let n = 0;
+    try {
+      for (const e of shape.edges) {
+        if (!matcher(e)) continue;
+        const adj = faces.filter((f, i) => fe[i].some((x) => x.isSame(e))).sort(cmp);
+        if (!adj.length) continue;
+        const f = adj[Math.min(fin.side ? 1 : 0, adj.length - 1)];
+        if (fin.cm === 'angle') builder.AddDA(d1, ang, e.wrapped, f.wrapped); else builder.Add(d1, d2 > 0 ? d2 : d1, e.wrapped, f.wrapped);
+        n++;
+      }
+      if (!n) throw new Error('Keine Kante für die Fase.');
+      return R.cast(builder.Shape());
+    } finally { builder.delete(); }
   }
   function applyShell(shape, fin, errors, itemId) {
     const t = num(fin.r, 2);
@@ -884,13 +911,13 @@ export function createKernel(R, oc) {
       try { for (const e of shape.edges) if (matcher(e)) count++; } catch (_) {}
       if (!count) { errors.push({ itemId, finishId: fin.id, code: 'edges', message: 'Die gewählten Kanten gibt es nicht mehr.' }); continue; }
       try {
-        shape = tryFinish(shape, fin.type, r, matcher);
+        shape = tryFinish(shape, fin.type, r, matcher, fin);
       } catch (err) {
         // größten möglichen Wert suchen
         let lo = 0, hi = r;
         for (let i = 0; i < 6; i++) {
           const mid = (lo + hi) / 2;
-          try { const t = tryFinish(shape, fin.type, mid, matcher); t.delete(); lo = mid; } catch (_) { hi = mid; }
+          try { const t = tryFinish(shape, fin.type, mid, matcher, fin); t.delete(); lo = mid; } catch (_) { hi = mid; }
         }
         const max = Math.floor(lo * 10) / 10;
         errors.push({ itemId, finishId: fin.id, code: 'toobig', max, message: max > 0 ? `${fin.type === 'chamfer' ? 'Die Fase' : 'Die Rundung'} ist zu groß. Möglich sind höchstens ${String(max).replace('.', ',')} mm.` : `${fin.type === 'chamfer' ? 'Diese Fase' : 'Diese Rundung'} lässt sich an diesen Kanten nicht bauen.` });
@@ -1117,6 +1144,11 @@ export function createKernel(R, oc) {
         const cy = ad.Cylinder(); const ax = cy.Axis(); const l = ax.Location(), d = ax.Direction();
         info.axis = [l.X(), l.Y(), l.Z(), d.X(), d.Y(), d.Z()]; info.r = cy.Radius();
         ad.delete();
+      } else if (type === 'SPHERE') {
+        const ad = new oc.BRepAdaptor_Surface(face.wrapped, false);
+        const sp = ad.Sphere(); const l = sp.Location();
+        info.sc = [l.X(), l.Y(), l.Z()]; info.r = sp.Radius();
+        ad.delete();
       }
     } catch (_) {}
     return info;
@@ -1263,6 +1295,64 @@ export function createKernel(R, oc) {
     const loops = faceLoops(f.shape);
     for (const x of fl) x.shape.delete();
     return loops;
+  }
+  // Raster einer gewölbten Fläche für den Magneten: Punkte und Normalen über (u, v),
+  // dazu bei beschnittenen Flächen, welche Rasterpunkte wirklich auf der Fläche liegen.
+  function faceGrid(face) {
+    const b = face.UVBounds, du = b.uMax - b.uMin, dv = b.vMax - b.vMin;
+    const ad = new oc.BRepAdaptor_Surface(face.wrapped, false);
+    const uc = !!ad.IsUClosed(), vc = !!ad.IsVClosed(); ad.delete();
+    const props = new oc.BRepGProp_Face(face.wrapped, false);
+    const gp = new oc.gp_Pnt(), gn = new oc.gp_Vec();
+    const at = (s, t) => { props.Normal(b.uMin + s * du, b.vMin + t * dv, gp, gn); return [gp.X(), gp.Y(), gp.Z(), gn.X(), gn.Y(), gn.Z()]; };
+    const len = (fn) => { let L = 0, q = null; for (let i = 0; i <= 16; i++) { const p = fn(i / 16); if (q) L += Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]); q = p; } return L; };
+    const Lu = Math.max(...[0.1, 0.5, 0.9].map((t) => len((s) => at(s, t))));
+    const Lv = Math.max(...[0.1, 0.5, 0.9].map((s) => len((t) => at(s, t))));
+    const nu = Math.min(96, Math.max(8, Math.ceil(Lu / 1.2))) + 1, nv = Math.min(96, Math.max(8, Math.ceil(Lv / 1.2))) + 1;
+    const P = new Array(nu * nv * 3), N = new Array(nu * nv * 3);
+    try {
+      for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) {
+        const r = at(i / (nu - 1), j / (nv - 1)), k = (j * nu + i) * 3, l = Math.hypot(r[3], r[4], r[5]);
+        for (let c = 0; c < 3; c++) { P[k + c] = r[c]; N[k + c] = l > 1e-12 ? r[3 + c] / l : 0; }
+      }
+    } finally { props.delete(); gp.delete(); gn.delete(); }
+    // Pole (z. B. Kugelspitze): Normale vom Nachbarn übernehmen
+    for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) {
+      const k = (j * nu + i) * 3; if (N[k] || N[k + 1] || N[k + 2]) continue;
+      const jj = j === 0 ? 1 : j === nv - 1 ? nv - 2 : j, ii = i === 0 ? 1 : i === nu - 1 ? nu - 2 : i, q = (jj * nu + ii) * 3;
+      for (let c = 0; c < 3; c++) N[k + c] = N[q + c];
+    }
+    let ins = null;
+    if (!oc.BRep_Tool.NaturalRestriction(face.wrapped)) {
+      const segs = [], TA = oc.TopAbs_ShapeEnum;
+      const ex = new oc.TopExp_Explorer(face.wrapped, TA.TopAbs_EDGE, TA.TopAbs_SHAPE);
+      try {
+        while (ex.More()) {
+          const c2 = new oc.BRepAdaptor_Curve2d(oc.TopoDS.Edge(ex.Current()), face.wrapped);
+          const t0 = c2.FirstParameter(), t1 = c2.LastParameter(); let q = null;
+          for (let i = 0; i <= 24; i++) { const p = c2.Value(t0 + ((t1 - t0) * i) / 24); const s = [(p.X() - b.uMin) / du, (p.Y() - b.vMin) / dv]; p.delete(); if (q) segs.push(q, s); q = s; }
+          c2.delete(); ex.Next();
+        }
+      } finally { ex.delete(); }
+      ins = new Array(nu * nv);
+      for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) {
+        const s = Math.min(Math.max(i / (nu - 1), 1e-6), 1 - 1e-6) + 1.1e-7, t = Math.min(Math.max(j / (nv - 1), 1e-6), 1 - 1e-6) + 1.3e-7;
+        let c = 0;
+        for (let k = 0; k < segs.length; k += 2) {
+          const a = segs[k], e = segs[k + 1];
+          if ((a[1] > t) !== (e[1] > t) && a[0] + ((t - a[1]) * (e[0] - a[0])) / (e[1] - a[1]) > s) c++;
+        }
+        ins[j * nu + i] = c & 1;
+      }
+    }
+    return { nu, nv, uc, vc, P, N, ins };
+  }
+  function faceGridOf(key, faceIdx) {
+    const e = cache.get(key); if (!e) throw new Error('Die Form ist nicht mehr im Speicher. Bitte noch einmal anklicken.');
+    e.gen = gen;
+    const fl = topoList(e.shape, 'face'); const f = fl[faceIdx];
+    if (!f) throw new Error('Diese Fläche gibt es nicht mehr.');
+    try { return faceGrid(f.shape); } finally { for (const x of fl) x.shape.delete(); }
   }
   // Ergebnisformen in Weltkoordinaten (für Export und Zeichnung)
   function worldSolids(scene) {
@@ -1485,5 +1575,5 @@ export function createKernel(R, oc) {
     }
     return { holes: out, errors };
   }
-  return { evaluate, remesh, exportMeshes, exportSTEP, measure, project, clashes, holeWalls, faceLoopsOf, _cache: cache };
+  return { evaluate, remesh, exportMeshes, exportSTEP, measure, project, clashes, holeWalls, faceLoopsOf, faceGridOf, _cache: cache };
 }

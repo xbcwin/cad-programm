@@ -481,6 +481,72 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
   Schritte: 1. Ein Kind (ab 10) mit „Einfach“ eine Platte mit vier Löchern bauen lassen, ohne zu helfen.
   Erwartet: Es findet Körper, Löcher und Exportieren allein; notieren, wo es hängen bleibt.
 
+## Fase mit zwei Abständen oder Winkel, Rundung von … bis (neu in Sitzung 63)
+
+- [x] **Zwei Abstände**: Quader 20 × 20 × 10, Fase 2 an einer oberen Kante (Volumen 3960) → „Zwei Abstände“ (2 und 4) → 3920; „Seiten tauschen“ → gleiches Volumen, die Deckfläche ist 1 mm weiter/kürzer.
+- [x] **Mit Winkel**: 2 mm und 30° → 4000 − ½ · 2 · 2 · tan 30° · 20; 45° → wieder 3960; zurück auf „Gleich“ → Daten sauber.
+- [x] **Rundung von … bis**: Rundung 2 → „Von … bis“ (2 bis 1) liegt zwischen gleichmäßig 2 und 1; bis 4 → mehr weg; „Richtung tauschen“ tauscht die Werte, gleiches Volumen.
+- [ ] **Aussehen**: Sieht die wachsende Rundung an einem Arm gut aus (dünn am Motor, dick an der Mitte)?
+
+## Rohr im Raum mit Regeln und Maßen (neu in Sitzung 62)
+
+- [x] **Entlang Z**: Rohr durch (0,0,0), (3,1,20), (30,2,22) → erstes Stück „entlang Z“ → zweiter Punkt (0,0,20), der dritte wandert mit (27,1,22).
+- [x] **Länge**: erstes Stück Länge 30 → (0,0,30) und (27,1,32); zweites Stück „entlang X“ → (27,0,30); Körper bis Höhe 32, ohne Fehler.
+- [x] **Startpunkt** auf X = 10 → alle Punkte wandern mit, die Regeln halten; Feld der Länge heißt „Länge (fest)“.
+- [x] **Rückgängig** und Länge 0 → Stück wieder ohne feste Länge, Richtung bleibt.
+- [x] **KI-Kollege**: Antennenrohr mit „regeln“ (senkrecht 25, dann 15 nach hinten) → Punkte genau (0,0,25) und (0,15,25).
+- [ ] **Antennenrohr drucken**: senkrecht hoch und nach hinten geknickt – steht es gerade?
+
+## H-Rahmen (neu in Sitzung 61)
+
+- [x] **Frame-Assistent**: Rahmenform „H-Rahmen (40°)“ → genug Luft zwischen den Propellern, keine Warnung.
+- [x] **Aufbau**: Unterteil mit Längsträger links/rechts und Querträger vorne/hinten, keine schrägen Arme; Armwinkel vorne und hinten 40°.
+- [x] **Maße**: Unterteil reicht genau bis zu den Motorauflagen (Achsabstand/2 · sin 40° bzw. cos 40° plus Auflage).
+- [x] **Drohnen-Check**: Propellerabstand, Propeller frei, keine Teile ineinander, Schwerpunkt – alles ok.
+- [x] **DXF**: Unterteil als DXF mit Umriss und 28 runden Löchern.
+- [ ] **Fräsen**: DXF im Fräsprogramm öffnen – Träger und Mittelplatte ein zusammenhängender Umriss mit zwei Fenstern?
+
+## Ellipse versetzen, Ketten-Versatz zusammen ändern (neu in Sitzung 60)
+
+- [x] **Ellipse**: Ellipse 40 × 20, 0,3 rad gedreht → Versatz 3 nach außen → geschlossene Spline durch 48 Punkte, jeder Punkt und die Kurve dazwischen 3 mm (± 0,03) von der Ellipse.
+- [x] **Zu weit nach innen**: 6 mm nach innen (kleinster Krümmungsradius 5 mm) → Hinweis „höchstens …“, nichts Neues.
+- [x] **Kette zusammen**: zwei Linien mit Ecke, Versatz 5 → beide Regeln gehören zusammen; am Regel-Symbol „Abstand (alle 2 Stücke)“ auf 8 → beide Kopien 8 mm weg, die Originale bleiben stehen; Strg Z → wieder 5.
+- [ ] **Ellipse als Rand**: Ellipse versetzen und als Wand hochziehen – gleichmäßig dick?
+
+## Text im Bogen (neu in Sitzung 59)
+
+- [x] **Bogen-Radius**: Text „FPV“ (Mitte, 5 mm) bei (0, 40), Bogen-Radius 20 → alle Buchstaben liegen zwischen 20 und 25 mm um (0, 20), die äußeren sinken ab.
+- [x] **An Kreis legen**: Kreis r = 30 in der Skizze → „An Kreis legen“ → Grundlinie genau auf dem Kreis, oben, Bogen 30.
+- [x] **Rückgängig** im Skizzenmodus: wieder Bogen 20; Fertig → Körper ohne Fehler.
+- [ ] **Ring mit Schrift drucken**: oben „TRACERY FPV“ nach außen, unten „5 ZOLL“ nach innen gewölbt – lesbar und sauber gedruckt?
+
+## Übergang mit zwei Führungskurven (neu in Sitzung 58)
+
+- [x] **Erst eine**: Rechteck 30 × 20 unten, Kreis Ø 16 40 mm darüber → Übergang → noch keine „Zweite Führungskurve“; Führungskurve zeichnen, in X bauchig, Fertig.
+- [x] **Zweite vorgezeichnet**: „Zweite zeichnen“ → Ebene quer zur ersten, Spline von der Rechteckkante in Y (10) zur Kreiskante (8), Hinweis rechts.
+- [x] **Beide Richtungen**: Mitte der zweiten auf 20 → Vorschau in Y über 36 mm breit, in X so breit wie mit der ersten; Fertig → mehr Volumen; Strg Z → nur die erste.
+- [x] **Ohne Führungskurve** nimmt beide weg, Volumen wie am Anfang.
+- [x] **KI-Kollege**: Rumpf aus Ellipse und Kreis mit „fuehrungskurve“ (YZ, Höhe 20) und „fuehrungskurve2“ (XY, Breite 25) → Körper 20 hoch und 25 breit.
+- [ ] **Speed-Rumpf von Hand**: drei Ellipsen, erste Kurve von der Seite, zweite von oben – sieht der Rumpf glatt aus und lässt er sich drucken?
+
+## Luftwiderstand und Höchstgeschwindigkeit (neu in Sitzung 57)
+
+- [x] **Form erkannt**: Quader 100 × 20 × 10 namens „Rumpf“ → Ansicht → Fahrtwind → Form „Stromlinien-Rumpf · cw 0,5“, bei 100 km/h etwa 0,2 N (1000 mm² Stirnfläche).
+- [x] **Tempo und Form**: 200 km/h → viermal so viel; „Offener Rahmen · cw 1,1“ → 2,2-mal so viel.
+- [x] **Ohne Schub**: Hinweis, im Drohnen-Check den Schub pro Motor einzutragen.
+- [x] **Formel**: 2 kg Schub, 1 kg Gewicht, cw 1, 10 cm² → 60° Neigung, rund 600 km/h.
+- [x] **Speed-Drohne**: Bausatz 5" Speed, Schub 1500 g pro Motor → „Höchstens etwa … km/h“ mit Neigung, Rumpf-Neigung und Motorneigung.
+- [ ] **Vergleich mit echten Flügen**: Wie nah liegt die Schätzung an der GPS-Höchstgeschwindigkeit einer echten Speed-Drohne?
+
+## Magnet auf runden Flächen (neu in Sitzung 56)
+
+- [x] **Rohr oben**: Zylinder Ø 20 × 40 liegend (um X gekippt, unten auf dem Boden) → Mantel anklicken → „Bohrung“ → „Löcher setzen“ knapp neben der höchsten Linie → Loch genau oben (Höhe 20), senkrecht.
+- [x] **Mitte oben**: knapp neben der Mitte der Länge oben fahren → Hinweis „Mitte · ganz oben“, rosa Ring um das Rohr und Linie längs; Klick → Loch genau bei (0, 0, 20).
+- [x] **Seitlich**: Ansicht von rechts, Mantel knapp neben der Seite anklicken → Loch genau bei x = 10, zeigt waagerecht nach außen.
+- [x] **Kugel**: Kugel Ø 20, vorne am Äquator fahren → „Mitte · ganz vorne“, Loch genau auf dem Radius.
+- [x] **Ebene Flächen** wie bisher (Mitte, Mittellinie, gleicher Randabstand); Strg hält den Magneten an.
+- [ ] **Speed-Rumpf**: Kamera-Halter oder Antennenhalter aus der Leiste oben auf den Rumpf ziehen – steht er gerade und mittig?
+
 ## Übergang mit Führungskurve (neu in Sitzung 55)
 
 - [x] **Vorgezeichnet**: Rechteck 30 × 20 unten, Kreis Ø 16 40 mm darüber → Übergang → „Führungskurve zeichnen“ → Spline von der Rechteckkante (15) zur Kreiskante (8), Hinweis rechts.

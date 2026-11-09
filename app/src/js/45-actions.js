@@ -354,7 +354,7 @@ const Actions = (() => {
     App.change(type === 'chamfer' ? 'Kanten abgeschrägt' : 'Kanten abgerundet', (doc) => { const f = Model.find(doc, id); if (!f) return false; f.item.finishes = f.item.finishes || []; f.item.finishes.push({ id: uid('f'), type, r, edges: sel }); });
   }
   function setFinish(itemId, finId, patch) {
-    App.change('Rundung geändert', (doc) => { const f = Model.find(doc, itemId); if (!f) return false; const fin = f.item.finishes.find((x) => x.id === finId); if (!fin) return false; Object.assign(fin, patch); }, { merge: 'fin:' + finId });
+    App.change('Rundung geändert', (doc) => { const f = Model.find(doc, itemId); if (!f) return false; const fin = f.item.finishes.find((x) => x.id === finId); if (!fin) return false; for (const k in patch) { if (patch[k] === null) delete fin[k]; else fin[k] = patch[k]; } }, { merge: 'fin:' + finId });
   }
   function removeFinish(itemId, finId) {
     App.change('Rundung entfernt', (doc) => { const f = Model.find(doc, itemId); if (!f) return false; f.item.finishes = f.item.finishes.filter((x) => x.id !== finId); });
