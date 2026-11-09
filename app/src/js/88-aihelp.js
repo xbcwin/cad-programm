@@ -190,6 +190,29 @@ const Weak = (() => {
       ids: [plate.id], at: g.at, r: g.d / 2,
     }));
   }
+  // Druckteile, die keine flache Platte sind: Wand um jede runde Bohrung (der Kern legt einen Ring mit der Mindestwand herum)
+  async function solidHoles() {
+    const plates = new Set(Plates.candidates().map((p) => p.id));
+    const parts = Model.activeItems(App.doc).filter((it) => !it.hidden && it.role !== 'hole' && !Mass.fixedOf(it) && !plates.has(it.id) && ['print', 'tpu'].includes(CLASS[Mass.materialFor(it).k] || 'print'));
+    if (!parts.length) return [];
+    let res = null;
+    try { res = await Kernel.call('holeWalls', { scene: Model.kernelScene(App.doc), ids: parts.map((x) => x.id), small: RULES.printHole.small, big: RULES.printHole.big }); } catch (_) { return []; }
+    const groups = new Map();
+    for (const hl of (res && res.holes) || []) {
+      const s = hl.wall < hl.need / 2 ? 'bad' : 'warn';
+      const key = `${hl.id}|${s}|${fmt(hl.d, 1)}|${fmt(hl.wall, 1)}`;
+      if (!groups.has(key)) groups.set(key, { id: hl.id, s, d: hl.d, wall: hl.wall, need: hl.need, at: [] });
+      groups.get(key).at.push(hl.c);
+    }
+    return [...groups.values()].map((g) => {
+      const it = App.doc.items.find((x) => x.id === g.id), name = it ? Model.label(it) : 'Teil';
+      return {
+        id: 'hole-wall', s: g.s, title: `Dünne Wand um ein Loch – ${name}`,
+        text: `${g.at.length} ${g.at.length === 1 ? 'Loch' : 'Löcher'} (Ø ${fmt(g.d, 1)} mm) ${g.at.length === 1 ? 'hat' : 'haben'} an einer Stelle nur etwa ${fmt(g.wall, 1)} mm Material drumherum. Bei Druckteilen gehören um ein Schraubenloch mindestens ${fmt(g.need, 1)} mm – sonst reißt die Schraube beim Anziehen oder bei einem Crash aus. Loch weiter nach innen setzen oder dort mehr Material anbauen.`,
+        ids: [g.id], at: g.at, r: g.d / 2 + 1,
+      };
+    });
+  }
   // dünnste Stelle eines Teils aus seinen Grundkörpern
   function thinnest(it, V) {
     let best = null;
@@ -246,6 +269,7 @@ const Weak = (() => {
     if (!App.doc.items.length) return [];
     const rev = App.revision, out = [];
     for (const pl of Plates.candidates()) out.push(...(await plateHoles(pl)));
+    out.push(...(await solidHoles()));
     out.push(...walls(), ...arms(), ...overhangs());
     if (DroneCheck.isDrone()) {
       const l = (await DroneCheck.run()) || [];

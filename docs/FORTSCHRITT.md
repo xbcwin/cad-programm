@@ -1,6 +1,6 @@
 # Fortschritt
 
-Stand: 01.11.2026 · nach Sitzung 48 (19: Skizze auf Profi-Niveau · 20: Magnet, Rundungs-Griff · 21: Skizzieren im 3D, Übergang, Entlang Pfad, Import · 22: Kreis/Bogen-Arten, Verlängern, Entformungsschräge, Gewinde · 23: Einheiten, eigener Querschnitt, Langloch gebogen, gedrehtes Rechteck, Teilen · 24: Punkt, alle Ecken · 25: Schnitt und Spiegeln an Fläche · 26: Kantenkette, Abstände beim Verschieben · 27: Spiegeln an der Achse · 28: Muster entlang Kurve, Schablonen-Maße geprüft, USB-C-Stecker · 29: Spiegelebene wandert mit, Kreismuster quer und längs, KI kennt Muster entlang Kurve · 30: Bohrungen an Skizzenpunkten · 31: Wand aus Linie, Schritt hinter dem Marker, Schildchen · 32: Kante übernehmen · 33: verbundene Kanten · 34: Kreismuster um gewählte Achse · 35: GoPro-, XT60- und Antennenhalter · 36: Überhänge für den 3D-Druck · 37: Überhänge in der Schwachstellen-Analyse, KI kennt die Bausteine · 38: Skizzen-Muster als Ganzes ändern · 39: Drehgelenk · 40: Schiebegelenk · Argon 1: Gelenk-Ketten · 41: Übergang mit Mittellinie · 42: Drohnen-Check für eigene Rahmen · 43: Fahrtwind · 44: Gelenk-Anschlag und Abspielen · 45: Rohr im Raum · 46: Schwerpunkt ausgleichen · 47: KI legt Gelenke an · 48: Erste Schritte)
+Stand: 09.11.2026 · nach Sitzung 49 (19: Skizze auf Profi-Niveau · 20: Magnet, Rundungs-Griff · 21: Skizzieren im 3D, Übergang, Entlang Pfad, Import · 22: Kreis/Bogen-Arten, Verlängern, Entformungsschräge, Gewinde · 23: Einheiten, eigener Querschnitt, Langloch gebogen, gedrehtes Rechteck, Teilen · 24: Punkt, alle Ecken · 25: Schnitt und Spiegeln an Fläche · 26: Kantenkette, Abstände beim Verschieben · 27: Spiegeln an der Achse · 28: Muster entlang Kurve, Schablonen-Maße geprüft, USB-C-Stecker · 29: Spiegelebene wandert mit, Kreismuster quer und längs, KI kennt Muster entlang Kurve · 30: Bohrungen an Skizzenpunkten · 31: Wand aus Linie, Schritt hinter dem Marker, Schildchen · 32: Kante übernehmen · 33: verbundene Kanten · 34: Kreismuster um gewählte Achse · 35: GoPro-, XT60- und Antennenhalter · 36: Überhänge für den 3D-Druck · 37: Überhänge in der Schwachstellen-Analyse, KI kennt die Bausteine · 38: Skizzen-Muster als Ganzes ändern · 39: Drehgelenk · 40: Schiebegelenk · Argon 1: Gelenk-Ketten · 41: Übergang mit Mittellinie · 42: Drohnen-Check für eigene Rahmen · 43: Fahrtwind · 44: Gelenk-Anschlag und Abspielen · 45: Rohr im Raum · 46: Schwerpunkt ausgleichen · 47: KI legt Gelenke an · 48: Erste Schritte · 49: Wand um Löcher in Druckteilen)
 
 ## Erledigt
 
@@ -242,6 +242,7 @@ Fertig.
 - [x] Drohnen-Check für selbst gebaute Rahmen: erkennt Motoren aus „Kaufteile“ (ab drei, auch im Kreis- oder Rechteckmuster, gespiegelt oder entlang einer Kurve), Propeller aus „Kaufteile“ oder eingetragene Größe; prüft Propeller-Abstand, Propellerkreise (als Ring, innen Platz für Welle und Mutter), Teile ineinander, Gewicht, Schwerpunkt und Schub für beliebig viele Motoren (Sitzung 42)
 - [x] Ansicht „Fahrtwind (Stirnfläche)“: Blick aus der Windrichtung, Neigung 0–60° nach vorne, Fläche in cm² aus dem Schattenriss, Propeller auf Wunsch mitgezählt; der Drohnen-Check nennt beim Speed-Rumpf die Stirnfläche von vorne (Sitzung 43)
 - [x] Erste Schritte in der einfachen Oberfläche: Liste links über dem Verlauf (Körper hinzufügen, Größe ändern, Loch machen, als Datei speichern), hakt sich selbst ab, „Wie?“ erklärt den Schritt und öffnet das passende Menü, ausblendbar (Sitzung 48)
+- [x] Schwachstellen: Wand um Schraubenlöcher in allen Druckteilen, nicht nur in flachen Platten – der CAD-Kern legt um jede runde Bohrung einen Ring mit der Mindestwand (M2 1,5 mm, ab M3 2 mm) und meldet, wo er aus dem Teil herausragt, mit der ungefähr dünnsten Wand (Sitzung 49)
 - [ ] Einsteiger-Oberfläche weiter vereinfachen: größere Knöpfe
 
 ### Stufe 6 – Konten und Zusammenarbeit (Idee, nach dem Drohnen-Modul)
@@ -251,6 +252,7 @@ Fertig.
 
 ## Bekannte Punkte
 
+- Wand um Löcher: geprüft werden runde Bohrungen bis Ø 9,2 mm; Mutternfallen (Sechskant) und gedruckte Gewinde nicht. An den Lochenden wird ein kleines Stück nicht geprüft, damit schräg austretende Löcher keinen Fehlalarm geben
 - Rohr im Raum: Punkte sind feste Zahlen (auch Formeln), aber nicht an Körperkanten gebunden – wandert der Körper, bleibt das Rohr, wo es ist
 - Drohnen-Check eigener Rahmen: Steckt ein Motor zusammen mit Rahmenteilen in einer Gruppe, zählt die ganze Gruppe als ein Teil – die Propellerkreise werden dann gegen die Gruppe geprüft. Motoren und Propeller am besten einzeln oder als eigenes Muster lassen
 - Fahrtwind: Die Stirnfläche ist eine Fläche, kein Luftwiderstand – wie stromlinienförmig ein Teil ist (cw-Wert), rechnet Tracery nicht

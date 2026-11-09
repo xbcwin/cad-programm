@@ -2923,6 +2923,37 @@ def t_erste_schritte(p):
     ok6 = back and p.pg.locator('#first-steps').count() == 0 and p.pg.locator('#btn-level').text_content() == 'Profi'
     return [ok1, ok2, ok3, ok4, ok5, ok6]
 
+
+# ---------- Sitzung 49: Wand um Schraubenlöcher bei allen Druckteilen ----------
+def t_lochwand(p):
+    p.empty()
+    p.ev("""App.change('x', d=>{
+      const b=Model.newItem('box',{w:30,d:20,h:12}); b.name='Halter'; b.mat='PETG'; d.items.push(b);
+      const h=Model.newItem('cylinder',{d:3.2,h:14},{role:'hole',name:'Schraubenloch'}); h.t.x=13.2; h.t.z=-1; d.items.push(h);
+    })"""); warte_rechnen(p, 30)
+    hw = lambda: p.ev("return Weak.analyze().then(l=>l.filter(x=>x.id==='hole-wall').map(x=>[x.s, x.text]))")
+    a = hw()   # 15 - 13,2 - 1,6 = 0,2 mm Wand
+    ok1 = len(a) == 1 and a[0][0] == 'bad' and 'Dünne' not in a[0][1] and ('0,1' in a[0][1] or '0,2' in a[0][1]) and 'mindestens 2 mm' in a[0][1]
+    p.ev("App.change('x', d=>{ d.items[1].t.x=11.8; })"); warte_rechnen(p, 30)   # 1,6 mm Wand
+    b = hw()
+    ok2 = len(b) == 1 and b[0][0] == 'warn'
+    p.ev("App.change('x', d=>{ d.items[1].t.x=10; })"); warte_rechnen(p, 30)     # 3,4 mm Wand
+    ok3 = hw() == []
+    # Quer durch eine runde Klemme: kein Fehlalarm, wo das Loch aus der Rundung austritt
+    p.ev("""App.change('x', d=>{ d.items=[];
+      const c=Model.newItem('cylinder',{d:20,h:10}); c.name='Klemme'; c.mat='PETG'; d.items.push(c);
+      const h=Model.newItem('cylinder',{d:3,h:30},{role:'hole',name:'Querloch'}); h.t.rx=90; h.t.y=15; h.t.z=5; d.items.push(h);
+    })"""); warte_rechnen(p, 30)
+    ok4 = p.ev("return App.errors.length") == 0 and hw() == []
+    # Carbon-Platten prüft weiter die Platten-Regel, nicht diese
+    p.ev("""App.change('x', d=>{ d.items=[];
+      const b=Model.newItem('box',{w:30,d:20,h:3}); b.name='Platte'; b.mat='CFK'; d.items.push(b);
+      const h=Model.newItem('cylinder',{d:3.2,h:5},{role:'hole'}); h.t.x=13.2; h.t.z=-1; d.items.push(h);
+    })"""); warte_rechnen(p, 30)
+    l = p.ev("return Weak.analyze().then(l=>l.map(x=>x.id))")
+    ok5 = 'hole-wall' not in l and 'hole-edge' in l
+    return [ok1, ok2, ok3, ok4, ok5]
+
 # ---------- Sitzung 22: kleine Skizzen-Werkzeuge ----------
 def t_kreis_bogen_modi(p):
     sketch_xy(p)
@@ -3223,6 +3254,7 @@ TESTS = [
     ('Schwerpunkt ausgleichen: Knopf im Check / Akku wandert, Schwerpunkt mittig / Rückgängig', t_schwerpunkt_ausgleich),
     ('KI-Kollege legt ein Gelenk an / zweites Gelenk für dasselbe Teil abgelehnt', t_ki_gelenk),
     ('Erste Schritte: 0 von 4 / hakt sich ab / Wie? öffnet Export / 4 von 4 / ausblenden / nur in Einfach', t_erste_schritte),
+    ('Wand um Löcher in Druckteilen: 0,2 mm rot / 1,6 mm gelb / 3,4 mm frei / Querloch in runder Klemme frei / Carbon über Platten-Regel', t_lochwand),
     ('Gelenk-Kette: zwei Gelenke / 90° bewegt drittes Teil mit / Kreis abgelehnt / Rückgängig / Bewegung prüfen mit Kette', t_gelenk_kette),
     ('Skizze: Kreis aus 3 / 2 Punkten / tangentialer Bogen', t_kreis_bogen_modi),
     ('Skizze: Verlängern bis zur nächsten Linie', t_verlaengern),

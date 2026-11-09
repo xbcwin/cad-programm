@@ -481,6 +481,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
   Schritte: 1. Ein Kind (ab 10) mit „Einfach“ eine Platte mit vier Löchern bauen lassen, ohne zu helfen.
   Erwartet: Es findet Körper, Löcher und Exportieren allein; notieren, wo es hängen bleibt.
 
+## Wand um Löcher in Druckteilen (neu in Sitzung 49)
+
+- [x] **Zu dünn**: Quader 30 × 20 × 12 aus PETG, Loch Ø 3,2 senkrecht 0,2 mm vom Rand → Schwachstellen: „Dünne Wand um ein Loch“ (rot); 1,6 mm vom Rand → gelb; 3,4 mm → nichts.
+- [x] **Kein Fehlalarm**: Querloch Ø 3 durch eine runde Klemme Ø 20 → nichts.
+- [x] **Carbon-Platten**: prüft weiter die Platten-Regel („Löcher nah am Rand“).
+- [ ] **Von Hand**: eigenes Druckteil mit vielen Löchern – stimmen die markierten Stellen?
+
 ## Erste Schritte (neu in Sitzung 48)
 
 - [x] **Liste erscheint**: Oberfläche „Einfach“, leeres Projekt → links „Erste Schritte 0 von 4“.

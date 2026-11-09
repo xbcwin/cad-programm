@@ -1378,5 +1378,57 @@ export function createKernel(R, oc) {
     return { pairs, hits, errors };
   }
 
-  return { evaluate, remesh, exportMeshes, exportSTEP, measure, project, clashes, faceLoopsOf, _cache: cache };
+  // Wand um Schraubenlöcher in beliebigen Teilen: um jede runde Bohrung (volle Zylinderfläche, nach innen gewölbt)
+  // einen Ring mit der Mindestwand legen – ragt davon etwas aus dem Teil heraus, ist die Wand dort dünner.
+  function holeWalls(scene, ids = [], opts = {}) {
+    const errors = [], small = opts.small || 1.5, big = opts.big || 2, rmax = opts.rmax || 4.6;
+    // Enden etwas kürzen: Tritt das Loch schräg oder durch eine gewölbte Fläche aus, ragt der Ring dort sonst ein Stück heraus
+    const endCut = (r, w) => Math.min(1.5, Math.max(0.3, 0.3 * (r + w)));
+    const solids = evaluateShapes(scene, errors).filter((s) => ids.includes(s.id));
+    const out = [];
+    const outside = (shape, o, d, r, w, t0, t1) => {
+      let ring = null, inner = null, outer = null, rest = null;
+      const e = endCut(r, w); if (t1 - t0 - 2 * e < 0.4) return 0;
+      try {
+        const base = [o[0] + d[0] * (t0 + e), o[1] + d[1] * (t0 + e), o[2] + d[2] * (t0 + e)], L = t1 - t0 - 2 * e;
+        outer = R.makeCylinder(r + w, L, base, d); inner = R.makeCylinder(r + 0.05, L + 0.2, base.map((v, k) => v - d[k] * 0.1), d);
+        ring = outer.cut(inner); rest = ring.cut(shape);
+        const v = R.measureVolume(rest), vr = R.measureVolume(ring);
+        return v > 0.05 && v > vr * 0.002 ? v : 0;
+      } catch (_) { return 0; } finally { safeDelete(outer); safeDelete(inner); safeDelete(ring); safeDelete(rest); }
+    };
+    for (const s of solids) {
+      const holes = [];
+      for (const f of s.shape.faces) {
+        if (f.geomType !== 'CYLINDRE') continue;
+        try { const uv = f.UVBounds; if (Math.abs(uv.uMax - uv.uMin) < Math.PI * 1.9) continue; } catch (_) { continue; }
+        try {
+          const ad = new oc.BRepAdaptor_Surface(f.wrapped, false);
+          const cy = ad.Cylinder(); const ax = cy.Axis(); const l = ax.Location(), dd = ax.Direction();
+          const o = [l.X(), l.Y(), l.Z()], d = norm([dd.X(), dd.Y(), dd.Z()]), r = cy.Radius();
+          ad.delete();
+          if (r < 0.5 || r > rmax) continue;
+          let t0 = Infinity, t1 = -Infinity, pe = null;
+          for (const ed of f.edges) for (const t of [0, 0.25, 0.5, 0.75, 1]) { const p = vec(ed.pointAt(t)); const q = dot(sub(p, o), d); t0 = Math.min(t0, q); t1 = Math.max(t1, q); if (!pe) pe = p; }
+          if (!(t1 - t0 > 1) || !pe) continue;
+          // nach innen gewölbt (Bohrung) und nicht nach außen (Zapfen)?
+          const foot = add(o, mul(d, dot(sub(pe, o), d))), rad = sub(pe, foot);
+          const n = f.normalAt(pe); if (dot([n.x, n.y, n.z], rad) > 0) continue;
+          if (holes.some((h) => Math.abs(h.r - r) < 1e-3 && Math.hypot(...sub(h.o, o)) < 1e-3)) continue;
+          holes.push({ o, d, r, t0, t1 });
+        } catch (_) {}
+      }
+      for (const hl of holes.slice(0, 40)) {
+        const need = 2 * hl.r < 2.8 ? small : big;
+        if (!outside(s.shape, hl.o, hl.d, hl.r, need, hl.t0, hl.t1)) continue;
+        // ungefähre dünnste Wand: halbieren zwischen 0 und Mindestwand
+        let lo = 0, hi = need;
+        for (let k = 0; k < 4; k++) { const m = (lo + hi) / 2; if (outside(s.shape, hl.o, hl.d, hl.r, m, hl.t0, hl.t1)) hi = m; else lo = m; }
+        const tm = (hl.t0 + hl.t1) / 2;
+        out.push({ id: s.id, d: 2 * hl.r, wall: lo, need, c: add(hl.o, mul(hl.d, tm)), dir: hl.d });
+      }
+    }
+    return { holes: out, errors };
+  }
+  return { evaluate, remesh, exportMeshes, exportSTEP, measure, project, clashes, holeWalls, faceLoopsOf, _cache: cache };
 }
