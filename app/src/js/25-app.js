@@ -2,7 +2,7 @@
 const App = (() => {
   const S = {
     doc: Model.newDoc(), sel: [], face: null, edges: [], mode: 'model', tool: null,
-    results: new Map(), errors: [], undo: [], redo: [], extra: [], revision: 0, lastSavedRev: -1, fileSavedRev: -1,
+    results: new Map(), errors: [], undo: [], redo: [], extra: [], hideIds: new Set(), revision: 0, lastSavedRev: -1, fileSavedRev: -1,
     ctx: null, iso: null,   // gerade bearbeitetes Bauteil / isoliertes Teil (nur Ansicht, nicht gespeichert)
   };
   const ev = makeEmitter();
@@ -199,7 +199,7 @@ const App = (() => {
     if (S.iso && !S.doc.items.some((x) => x.id === S.iso)) S.iso = null;
     for (const [id] of Viewer.nodes) {
       const it = topItem(id); if (!it) continue;
-      Viewer.updateNode(id, { visible: !it.hidden && (!S.iso || S.iso === id), ctxDim: !!S.ctx && S.ctx !== id });
+      Viewer.updateNode(id, { visible: !it.hidden && !S.hideIds.has(id) && (!S.iso || S.iso === id), ctxDim: !!S.ctx && S.ctx !== id });
     }
     refreshCtxPick();
   }
@@ -244,7 +244,8 @@ const App = (() => {
 
   // ---------- Auswahl ----------
   function select(ids, opts = {}) {
-    ids = (ids || []).filter(Boolean);
+    // Teile, die die Explosion einzeln zeigt (Kennung „__ex:…“), stehen für das echte Teil in der Gruppe
+    ids = (ids || []).filter(Boolean).map((id) => (typeof id === 'string' && id.startsWith('__ex:') ? id.slice(5) : id));
     if (opts.additive) {
       const set = new Set(S.sel);
       for (const id of ids) { if (set.has(id)) set.delete(id); else set.add(id); }
@@ -259,7 +260,7 @@ const App = (() => {
   const ghostReq = { n: 0 };
   async function refreshSelectionVisuals() {
     const selTop = new Set();
-    for (const id of S.sel) { const top = Model.topOf(S.doc, id); if (top) selTop.add(top.id); }
+    for (const id of S.sel) { const top = Model.topOf(S.doc, id); if (top) selTop.add(top.id); selTop.add('__ex:' + id); }
     for (const [id] of Viewer.nodes) Viewer.updateNode(id, { selected: selTop.has(id) });
     Viewer.highlightFace('sel', S.face ? S.face.id : null, S.face ? S.face.faceIdx : null);
     Viewer.setSelectedEdges(S.edges);
@@ -294,6 +295,7 @@ const App = (() => {
     get undoStack() { return S.undo; }, get redoStack() { return S.redo; }, get revision() { return S.revision; }, get busy() { return busy; },
     get mode() { return S.mode; }, set mode(m) { S.mode = m; ev.emit('mode'); },
     get extra() { return S.extra; }, set extra(x) { S.extra = x; },
+    get hideIds() { return S.hideIds; }, set hideIds(x) { S.hideIds = x || new Set(); applyView(); },
     get ctx() { return S.ctx; }, get iso() { return S.iso; }, setCtx, setIso, applyView,
     get tool() { return S.tool; }, set tool(t) { S.tool = t; ev.emit('tool'); },
     get fileSavedRev() { return S.fileSavedRev; }, set fileSavedRev(v) { S.fileSavedRev = v; },

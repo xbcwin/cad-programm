@@ -70,6 +70,7 @@ const DroneLib = (() => {
       { part: LIBMAP.goproMount, params: libDefaults(LIBMAP.goproMount), name: 'GoPro-Halterung' },
       { part: LIBMAP.xt60Holder, params: libDefaults(LIBMAP.xt60Holder), name: 'XT60-Halter' },
       { part: LIBMAP.antennaMount, params: libDefaults(LIBMAP.antennaMount), name: 'Antennenhalter' },
+      { part: LIBMAP.armFairing, params: libDefaults(LIBMAP.armFairing), name: 'Armverkleidung' },
     ];
   }
   // Schub pro Motor als Vorgabe – nur geprüfte Messungen aus Herstellerangaben (schub.json)

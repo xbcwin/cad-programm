@@ -2,7 +2,7 @@
 // Alles hier ändert nur, wie das Modell gezeigt wird – nie das Modell selbst. Nichts davon landet
 // in der Zeitleiste oder in der Projektdatei.
 const Views = (() => {
-  const st = { cut: null, xray: false, ex: 0, exGoal: 0, exAnim: null, focus: null, ov: null };
+  const st = { cut: null, xray: false, ex: 0, exGoal: 0, exAnim: null, focus: null, ov: null, exGroups: false };
   let wrap = null;   // Leisten links oben
   function bars() {
     if (!wrap || !wrap.isConnected) { wrap = h('div', { class: 'viewbars' }); $('#overlay').append(wrap); }
@@ -119,8 +119,33 @@ const Views = (() => {
   // ---------- Explosion ----------
   // Teile rücken waagerecht von der Mitte weg. Übereinanderliegende Schichten (gleiche Unterkante)
   // werden nach oben auseinandergezogen, jede um die Höhe der Schichten darunter – wie in einer Bauanleitung.
+  // Ein Teil der Szene (auch die einzeln gezeigten Teile aus Gruppen)
+  const sceneItem = (id) => App.doc.items.find((x) => x.id === id) || App.extra.find((x) => x.id === id);
+  const shown = (id) => { const it = sceneItem(id); return it && !it.hidden && it.role !== 'hole' && !App.hideIds.has(id); };
+  // Gruppen zerlegen: jedes Teil einer Gruppe (eine Ebene tief) wird einzeln gezeigt – samt den Löchern der Gruppe,
+  // damit die Bohrungen nicht fehlen. Muster- und Rechen-Gruppen bleiben ganz.
+  function splitGroups() {
+    const extra = [], hide = new Set();
+    for (const g of Model.activeItems(App.doc)) {
+      if (g.kind !== 'group' || g.hidden || (g.p && g.p.op)) continue;
+      const kids = (g.children || []).filter((c) => !c.suppressed && !c.hidden);
+      const solids = kids.filter((c) => c.role !== 'hole'), holes = kids.filter((c) => c.role === 'hole');
+      if (solids.length < 2) continue;
+      hide.add(g.id);
+      for (const c of solids) extra.push({ id: '__ex:' + c.id, kind: 'group', name: c.name, role: 'solid', color: c.color || g.color, mat: c.mat || g.mat, t: deepClone(g.t || Model.T0()), p: {}, finishes: [], children: [deepClone(c), ...holes.map(deepClone)] });
+    }
+    return { extra, hide };
+  }
+  function setGroups(on) {
+    st.exGroups = !!on;
+    const { extra, hide } = on ? splitGroups() : { extra: [], hide: new Set() };
+    App.extra = extra; App.hideIds = hide;
+    App.rebuild();
+    const cb = st.exBar && st.exBar.querySelector('#ex-groups'); if (cb) cb.checked = st.exGroups;
+  }
+  const groupsSplittable = () => splitGroups().extra.length > 0;
   function offsets(f) {
-    const ids = [...Viewer.nodes.keys()].filter((id) => { const it = App.doc.items.find((x) => x.id === id); return it && !it.hidden && it.role !== 'hole'; });
+    const ids = [...Viewer.nodes.keys()].filter(shown);
     const boxes = ids.map((id) => [id, Viewer.baseBox(id)]).filter((x) => x[1]);
     const all = new THREE.Box3(); for (const [, b] of boxes) all.union(b);
     const C = all.getCenter(new THREE.Vector3()); const S = Math.max(10, all.getSize(new THREE.Vector3()).length());
@@ -146,11 +171,14 @@ const Views = (() => {
     }
     return map;
   }
-  function explodeCount() { return [...Viewer.nodes.keys()].filter((id) => { const it = App.doc.items.find((x) => x.id === id); return it && !it.hidden && it.role !== 'hole'; }).length; }
+  function explodeCount() { return [...Viewer.nodes.keys()].filter(shown).length; }
   function explode(on = st.exGoal === 0, amount = 0.6) {
     if (on && explodeCount() < 2) {
-      UI.toast('Zum Auseinanderziehen braucht es mindestens zwei Teile auf der obersten Ebene. Tipp: Eine Gruppe vorher mit „Gruppe lösen“ aufteilen.', { icon: 'info', ms: 4200 });
-      return;
+      // Nur ein Teil ganz oben, aber eine Gruppe mit mehreren Teilen: dann die Gruppen gleich mit zerlegen
+      if (!groupsSplittable()) { UI.toast('Zum Auseinanderziehen braucht es mindestens zwei Teile.', { icon: 'info', ms: 4200 }); return; }
+      setGroups(true);
+      const off = App.on('results', () => { off(); animateTo(amount); });
+      exBar(); App.select(App.sel); return;
     }
     animateTo(on ? amount : 0);
     if (on) { exBar(); App.select(App.sel); }   // Griffe ausblenden
@@ -162,7 +190,7 @@ const Views = (() => {
       const t = Math.min(1, (performance.now() - t0) / ms); const e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
       setEx(from + (goal - from) * e);
       if (t < 1) st.exAnim = requestAnimationFrame(step);
-      else { st.exAnim = null; if (goal === 0) { Viewer.setOffsets(null); if (st.exBar) { st.exBar.remove(); st.exBar = null; } Handles.rebuild(); Panels.renderCtx(); } sync(); }
+      else { st.exAnim = null; if (goal === 0) { Viewer.setOffsets(null); if (st.exBar) { st.exBar.remove(); st.exBar = null; } if (st.exGroups) setGroups(false); Handles.rebuild(); Panels.renderCtx(); } sync(); }
     };
     step();
   }
@@ -180,7 +208,11 @@ const Views = (() => {
     range.oninput = () => { cancelAnimationFrame(st.exAnim); st.exAnim = null; st.exGoal = +range.value / 100; setEx(st.exGoal); sync(); };
     const back = h('button', { type: 'button', class: 'btn small', id: 'ex-back' }); back.innerHTML = icon('group') + 'Zusammensetzen';
     back.onclick = () => explode(false);
-    bar.append(head, h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, 'Weit'), range), h('div', { class: 'vb-row' }, back, h('span', { class: 'vb-hint' }, 'Teile anklicken und rechts ändern geht weiter')));
+    const gcb = h('input', { type: 'checkbox', id: 'ex-groups' }); gcb.checked = st.exGroups;
+    gcb.onchange = () => setGroups(gcb.checked);
+    const grow = h('div', { class: 'vb-row' }, h('label', { class: 'vb-hint' }, gcb, ' Gruppen auch zerlegen'));
+    if (!st.exGroups && !groupsSplittable()) grow.hidden = true;
+    bar.append(head, h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, 'Weit'), range), grow, h('div', { class: 'vb-row' }, back, h('span', { class: 'vb-hint' }, 'Teile anklicken und rechts ändern geht weiter')));
     const fv = bars().querySelector('.focusview'); fv ? bars().insertBefore(bar, fv) : bars().append(bar); st.exBar = bar;
   }
   // Zum Zeichnen, Bohren, Messen oder Ziehen muss alles wieder an seinem Platz sein
@@ -348,21 +380,24 @@ const Views = (() => {
   }
   function init() {
     App.on('mode', () => { if (App.mode !== 'model') reset(); });
+    // Während die Gruppen zerlegt gezeigt werden: nach jeder Änderung die Einzelteile neu aufbauen
+    App.on('doc', () => { if (!st.exGroups) return; const { extra, hide } = splitGroups(); App.extra = extra; App.hideIds = hide; });
     App.on('results', () => {
       if (st.ex > 1e-4) setEx(st.ex);
       if (st.ov) drawOverhang();
       if (st.wind) drawWind(false);
+      if (st.ex > 1e-4) setEx(st.ex);
       if (st.cut) { drawCutHelper(); const r = st.cut.bar && st.cut.bar.querySelector('#cut-range'); if (r) { const b = modelBox(); const ax = AX[st.cut.plane]; r.min = Math.floor(b.min.getComponent(ax) - 1); r.max = Math.ceil(b.max.getComponent(ax) + 1); } }
     });
   }
-  function reset() { section(false); if (st.xray) xray(false); if (st.exGoal > 0 || st.ex > 0) { cancelAnimationFrame(st.exAnim); st.exAnim = null; st.ex = st.exGoal = 0; Viewer.setOffsets(null); if (st.exBar) { st.exBar.remove(); st.exBar = null; } } focus(false); overhang(false); wind(false); }
+  function reset() { section(false); if (st.xray) xray(false); if (st.exGoal > 0 || st.ex > 0) { cancelAnimationFrame(st.exAnim); st.exAnim = null; st.ex = st.exGoal = 0; Viewer.setOffsets(null); if (st.exBar) { st.exBar.remove(); st.exBar = null; } } focus(false); overhang(false); wind(false); if (st.exGroups) setGroups(false); }
   return {
     init, section, xray, explode, collapse, focus, overhang, menu, onKey, reset, sync, bars,
     get overhangArea() { return st.ov ? st.ov.area : null; },
     wind, windArea, get windInfo() { return st.wind ? { angle: st.wind.angle, props: st.wind.props, area: st.wind.area } : null; },
     overhangOf: (id, angle = 45) => { const d = overhangData(angle, [id]); return { area: d.area, c: d.c }; },
     get cut() { return st.cut ? { plane: st.cut.plane, off: st.cut.off, flip: st.cut.flip } : null; },
-    get isXray() { return st.xray; }, get exploded() { return st.ex > 1e-4 || st.exGoal > 0; }, get explodeAmount() { return st.ex; },
+    get isXray() { return st.xray; }, get exploded() { return st.ex > 1e-4 || st.exGoal > 0; }, get explodeAmount() { return st.ex; }, get explodeGroups() { return st.exGroups; }, setGroups,
     get focusIds() { return st.focus ? st.focus.ids.slice() : null; }, get focusDrawn() { return !!(st.focus && st.focus.drawn); },
   };
 })();

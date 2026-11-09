@@ -481,6 +481,19 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
   Schritte: 1. Ein Kind (ab 10) mit „Einfach“ eine Platte mit vier Löchern bauen lassen, ohne zu helfen.
   Erwartet: Es findet Körper, Löcher und Exportieren allein; notieren, wo es hängen bleibt.
 
+## Armverkleidung (neu in Sitzung 54)
+
+- [x] **Baustein**: Drohne → Lochbilder und Bausteine → „Armverkleidung“ ist da.
+- [x] **Maße**: Arm 14 × 5, Wand 1 → Profiltiefe 33,6 mm (2,4 × Armbreite), Nase 10,1 mm vor der Armmitte, etwa 10,8 mm dick, symmetrisch; ein Arm 14 × 5 steckt ohne Durchdringung im Schlitz.
+- [x] **Profiltiefe 50**: Hülle wird im Verhältnis schlanker.
+- [ ] **Drucken**: Hülle aus PETG drucken und über einen echten Arm schieben – passt das Spiel?
+
+## Explosion in Gruppen (neu in Sitzung 53)
+
+- [x] **Von selbst**: nur eine Gruppe aus drei Quadern (mit Loch) → Explosion → die Quader rücken einzeln auseinander, das Loch bleibt im ersten; Klick auf einen wählt den echten Quader in der Gruppe; Zusammensetzen → Gruppe wieder ganz.
+- [x] **Häkchen**: ein Teil plus Gruppe → normal auseinander, „Gruppen auch zerlegen“ zerlegt die Gruppe dazu.
+- [ ] **Bauanleitung**: 5"-Bausatz zerlegen und als Bild für eine Bauanleitung nutzen.
+
 ## Gelenke in Gruppen (neu in Sitzung 52)
 
 - [x] **Gelenk in der Gruppe**: Gruppe (bei x 50, um 90° gedreht) mit zwei Armen → beide Arme links im Verlauf wählen → Knopf „Gelenk“ da; Gruppe + eigener Arm → kein Knopf.

@@ -764,6 +764,11 @@ const HELP = {
   "tip": "Rohr durch Punkte im Raum – auf Körpern oder frei",
   "hilfe": "Körper → „Rohr im Raum“: Klick nacheinander Punkte an. Auf einem Körper liegt das Rohr auf der Fläche auf, daneben bleibt es auf der Höhe des letzten Punkts. Ziehen dreht die Ansicht wie immer, Rückschritt nimmt den letzten Punkt weg, Enter oder Doppelklick ist fertig. Rechts änderst du jeden Punkt als Zahl, den Durchmesser, die Wand und den Querschnitt.",
   "tipp": "Gut für Kabelkanäle, Antennenrohre und Bügel, die um Teile herum laufen. „Gerade Stücke, runde Ecken“ ergibt einen Knick-Verlauf wie bei gebogenem Rohr."
+ },
+ "armFairing": {
+  "tip": "Stromlinien-Hülle über einen Arm (Speed-Drohne)",
+  "hilfe": "Drohne → „Lochbilder und Bausteine“ → „Armverkleidung“: eine Hülle mit Tropfenprofil, die über einen Arm geschoben wird. Gib Armbreite und Armdicke ein – Tracery macht das Profil genau so dick, dass der Arm mit der eingestellten Wand hineinpasst (0,15 mm Spiel je Seite). Die Hülle liegt längs der X-Achse, die runde Nase zeigt nach vorne; dreh sie mit dem Arm mit.",
+  "tipp": "Das Profil ist die genormte NACA-Form mit der dicksten Stelle bei 30 % der Tiefe. Eine größere Profiltiefe macht die Hülle schlanker. Ob sie wirklich schneller macht, zeigt dir die Ansicht „Fahrtwind“ nur über die Fläche – den Luftwiderstand misst Tracery nicht."
  }
 };
 

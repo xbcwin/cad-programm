@@ -551,8 +551,46 @@ export function createKernel(R, oc) {
       return buildGear(p);
     }
     if (lib === 'aeroBody') return buildAeroBody(p);
+    if (lib === 'armFairing') return buildArmFairing(p);
     if (typeof lib === 'string' && lib.startsWith('buy')) return buildBuy(lib, p);
     throw new Error('Unbekanntes Bauteil: ' + lib);
+  }
+  // ---------- Stromlinien-Armverkleidung ----------
+  // Symmetrisches NACA-Profil (4-stellige Reihe, geschlossene Hinterkante): Profiltiefe in Flugrichtung (Y, Nase nach −Y),
+  // Dicke in Z; so dick, dass der Arm (Breite aw quer zur Länge, Dicke at) mit Wand hineinpasst. Längs X auf Länge len
+  // gezogen, innen ein Schlitz für den Arm. Die dickste Stelle (30 % der Tiefe) liegt auf der Armmitte (y = 0).
+  function nacaHalf(x) { return 5 * (0.2969 * Math.sqrt(x) - 0.126 * x - 0.3516 * x * x + 0.2843 * x * x * x - 0.1036 * x * x * x * x); }
+  function fairingSize(p) {
+    const aw = pos(p.aw, 14), at = pos(p.at, 5), wall = pos(p.wall, 1), L = pos(p.len, 60);
+    const cMin = (aw + 2 * wall) / 0.6 * 1.05;
+    const c = Math.max(cMin, num(p.chord, 0) > 0 ? num(p.chord, 0) : 2.4 * aw);
+    const h = at / 2 + wall, x1 = (0.3 * c - aw / 2 - wall) / c, x2 = (0.3 * c + aw / 2 + wall) / c;
+    const T = Math.max(h / (c * nacaHalf(0.3)), h / (c * nacaHalf(Math.max(0.005, x1))), h / (c * nacaHalf(Math.min(0.995, x2))));
+    return { aw, at, wall, L, c, T };
+  }
+  function buildArmFairing(p) {
+    const { aw, at, L, c, T } = fairingSize(p);
+    const P = (x, z) => [-L / 2, -0.3 * c + x * c, z];   // Profil in der Ebene x = −L/2
+    const n = 36, up = [], lo = [];
+    for (let i = 0; i <= n; i++) { const x = (1 - Math.cos((Math.PI * i) / n)) / 2; up.push(P(x, T * c * nacaHalf(x))); }
+    for (let i = n; i >= 0; i--) { const x = (1 - Math.cos((Math.PI * i) / n)) / 2; lo.push(P(x, -T * c * nacaHalf(x))); }
+    // glatte Kurve genau durch die Punkte: je Abschnitt ein kubisches Bézier-Stück (Catmull-Rom nach Bogenlänge)
+    const bz = (pts) => {
+      const m = pts.length, E = [], Q = (i) => (i < 0 ? pts[0].map((v, k) => 2 * v - pts[1][k]) : i > m - 1 ? pts[m - 1].map((v, k) => 2 * v - pts[m - 2][k]) : pts[i]);
+      const dist = (a, b2) => Math.max(1e-9, Math.hypot(a[0] - b2[0], a[1] - b2[1], a[2] - b2[2]));
+      for (let i = 0; i < m - 1; i++) {
+        const p0 = Q(i - 1), p1 = Q(i), p2 = Q(i + 1), p3 = Q(i + 2), t1 = dist(p0, p1), t2 = t1 + dist(p1, p2), t3 = t2 + dist(p2, p3), dt = t2 - t1;
+        const m1 = [0, 1, 2].map((k) => ((p1[k] - p0[k]) / t1 - (p2[k] - p0[k]) / t2 + (p2[k] - p1[k]) / dt) * dt);
+        const m2 = [0, 1, 2].map((k) => ((p2[k] - p1[k]) / dt - (p3[k] - p1[k]) / (t3 - t1) + (p3[k] - p2[k]) / (t3 - t2)) * dt);
+        E.push(R.makeBezierCurve([p1, p1.map((v, k) => v + m1[k] / 3), p2.map((v, k) => v - m2[k] / 3), p2]));
+      }
+      return E;
+    };
+    const face = R.makeFace(R.assembleWire([...bz(up), ...bz(lo)]));
+    const body = R.basicFaceExtrusion(face, new R.Vector([L, 0, 0]));
+    const slot = R.makeBox([-L / 2 - 1, -aw / 2 - 0.15, -at / 2 - 0.15], [L / 2 + 1, aw / 2 + 0.15, at / 2 + 0.15]);   // 0,15 mm Spiel je Seite
+    const out = body.cut(slot); safeDelete(body); safeDelete(slot);
+    return out;
   }
   // ---------- Stromlinien-Rumpf ----------
   // Drehkörper längs der Y-Achse (Nase nach −Y), Achse auf z = 0, Mittelteil mittig um y = 0:

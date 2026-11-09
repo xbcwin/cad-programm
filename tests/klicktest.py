@@ -3027,6 +3027,69 @@ def t_einfach_gross(p):
     ok4 = abs(masse()[0] - pro[0]) < 0.5
     return [ok1, ok2, ok3, ok4]
 
+
+# ---------- Sitzung 53: Explosion auch innerhalb von Gruppen ----------
+def t_explosion_gruppen(p):
+    p.empty()
+    p.ev("""App.change('x', d=>{
+      const g=Model.newItem('group',{}); g.name='Baugruppe';
+      for (let i=0;i<3;i++){ const b=Model.newItem('box',{w:20,d:20,h:6}); b.t.x=i*20; b.name='Teil '+(i+1); g.children.push(b); }
+      const h=Model.newItem('cylinder',{d:5,h:10},{role:'hole',name:'Loch'}); h.t.z=-2; g.children.push(h);
+      d.items.push(g);
+    })"""); warte_rechnen(p, 30)
+    gid = p.ev("return App.doc.items[0].id")
+    kids = p.ev("return App.doc.items[0].children.filter(c=>c.role!=='hole').map(c=>c.id)")
+    # Nur eine Gruppe ganz oben: die Explosion zerlegt sie von selbst
+    p.ev("Views.explode(true)"); p.wait(1500); warte_rechnen(p, 30); p.wait(800)
+    st = p.ev("""const ex=App.extra.map(x=>x.id); return [Views.explodeGroups, ex.length, App.hideIds.has(arg[0]), Viewer.nodes.get(arg[0]) ? Viewer.nodes.get(arg[0]).obj.visible : null,
+      arg[1].every(k=>ex.includes('__ex:'+k)), App.extra[0].children.length, App.errors.length, document.querySelector('#ex-groups') && document.querySelector('#ex-groups').checked]""", [gid, kids])
+    ok1 = st == [True, 3, True, False, True, 2, 0, True]   # erstes Teil trägt das Loch der Gruppe mit
+    moved = p.ev("return arg.map(k=>{ const n=Viewer.nodes.get('__ex:'+k); return n && n.off ? n.off.length() : 0; })", kids)
+    ok2 = sum(1 for m in moved if m > 1) >= 2
+    # Klick auf ein Einzelteil wählt das echte Teil in der Gruppe
+    p.ev("App.select(['__ex:'+arg])", kids[1]); p.wait(300)
+    ok3 = p.ev("return App.sel") == [kids[1]]
+    # Zusammensetzen: Gruppe wieder ganz
+    p.ev("Views.explode(false)"); p.wait(1200); warte_rechnen(p, 30); p.wait(500)
+    ok4 = p.ev("return [App.extra.length, App.hideIds.size, Viewer.nodes.get(arg).obj.visible, Views.explodeGroups]", gid) == [0, 0, True, False]
+    # Zwei Teile ganz oben + Gruppe: normal auseinander, Häkchen zerlegt auf Wunsch
+    p.ev("App.change('x', d=>{ const b=Model.newItem('box',{w:10,d:10,h:10}); b.t.x=-40; b.name='Extra'; d.items.push(b); })"); warte_rechnen(p, 30)
+    p.ev("Views.explode(true)"); p.wait(1200)
+    a = p.ev("return [Views.explodeGroups, App.extra.length, !document.querySelector('#ex-groups').closest('.vb-row').hidden]")
+    p.pg.click('#ex-groups'); p.wait(800); warte_rechnen(p, 30); p.wait(500)
+    b = p.ev("return [Views.explodeGroups, App.extra.length]")
+    p.ev("Views.explode(false)"); p.wait(1200); warte_rechnen(p, 30)
+    ok5 = a == [False, 0, True] and b == [True, 3] and p.ev("return App.extra.length") == 0
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
+# ---------- Sitzung 54: Stromlinien-Armverkleidung ----------
+def t_armverkleidung(p):
+    p.empty()
+    p.pg.locator('#t-drone').click(); p.wait(400)
+    p.pg.locator('.flyout .chip[data-cat="loch"]').click(); p.wait(300)
+    ok1 = any('Armverkleidung' in t for t in p.pg.locator('.flyout .tile').all_inner_texts())
+    p.pg.keyboard.press('Escape'); p.wait(200)
+    # Verkleidung und ein Arm 80 × 14 × 5 genau im Schlitz
+    p.ev("""App.change('x', d=>{
+      const f=Model.newItem('part',{lib:'armFairing',len:60,aw:14,at:5,wall:1,chord:0},{role:'solid'}); f.name='Verkleidung'; d.items.push(f);
+      const a=Model.newItem('box',{w:80,d:14,h:5}); a.name='Arm'; a.t.z=-2.5; d.items.push(a);
+    })"""); warte_rechnen(p, 30)
+    bb = p.ev("return App.results.get(App.doc.items[0].id).data.bbox")
+    # Profiltiefe automatisch 2,4 × 14 = 33,6 mm, Nase 30 % vor der Armmitte
+    ok2 = p.ev("return App.errors.length") == 0 and abs(bb[3] - bb[0] - 60) < 0.1 and abs(bb[1] + 10.08) < 0.3 and abs(bb[4] - 23.52) < 0.3
+    th = bb[5] - bb[2]
+    ok3 = 7 <= th <= 11 and abs(bb[5] + bb[2]) < 0.05   # gerade dick genug für 5 mm Arm + 2 × 1 mm Wand, symmetrisch
+    # Steckt der Arm in der Hülle fest? (Gelenk-Prüfung bei 0°, fragt den CAD-Kern nach Durchdringungen)
+    cl = p.ev("""const r=Joints.add(App.doc.items[0].id, App.doc.items[1].id, [0,0,0], [1,0,0], {min:0, max:0});
+      return Joints.check(r.id, 1).then(x=>{ Joints.remove(r.id); return x.map(y=>y.v); })""")
+    ok4 = cl == [0]
+    # Längere Profiltiefe macht die Hülle schlanker (relativ)
+    p.ev("App.change('x', d=>{ d.items[0].p.chord=50; })"); warte_rechnen(p, 30)
+    bb2 = p.ev("return App.results.get(App.doc.items[0].id).data.bbox")
+    ok5 = abs(bb2[4] - bb2[1] - 50) < 0.3 and (bb2[5] - bb2[2]) / 50 < th / 33.6
+    return [ok1, ok2, ok3, ok4, ok5]
+
 # ---------- Sitzung 22: kleine Skizzen-Werkzeuge ----------
 def t_kreis_bogen_modi(p):
     sketch_xy(p)
@@ -3331,6 +3394,8 @@ TESTS = [
     ('Wand um Löcher in Druckteilen: 0,2 mm rot / 1,6 mm gelb / 3,4 mm frei / Querloch in runder Klemme frei / Carbon über Platten-Regel', t_lochwand),
     ('Einfach: größere Knöpfe oben, in der Kontextleiste und im Verlauf / Leiste passt / 44 px / zurück zu Profi', t_einfach_gross),
     ('Skizze: Ellipse trimmen / liegt genau auf der Ellipse / Enden verbunden / Rückgängig', t_ellipse_trimmen),
+    ('Explosion in Gruppen: zerlegt von selbst / rückt auseinander / Klick wählt echtes Teil / zusammensetzen / Häkchen', t_explosion_gruppen),
+    ('Armverkleidung: Baustein / Maße / dick genug und symmetrisch / Arm passt / längeres Profil schlanker', t_armverkleidung),
     ('Gelenk-Kette: zwei Gelenke / 90° bewegt drittes Teil mit / Kreis abgelehnt / Rückgängig / Bewegung prüfen mit Kette', t_gelenk_kette),
     ('Skizze: Kreis aus 3 / 2 Punkten / tangentialer Bogen', t_kreis_bogen_modi),
     ('Skizze: Verlängern bis zur nächsten Linie', t_verlaengern),

@@ -1524,6 +1524,11 @@ const HELP = {
   "tip": "Rohr durch Punkte im Raum – auf Körpern oder frei",
   "hilfe": "Körper → „Rohr im Raum“: Klick nacheinander Punkte an. Auf einem Körper liegt das Rohr auf der Fläche auf, daneben bleibt es auf der Höhe des letzten Punkts. Ziehen dreht die Ansicht wie immer, Rückschritt nimmt den letzten Punkt weg, Enter oder Doppelklick ist fertig. Rechts änderst du jeden Punkt als Zahl, den Durchmesser, die Wand und den Querschnitt.",
   "tipp": "Gut für Kabelkanäle, Antennenrohre und Bügel, die um Teile herum laufen. „Gerade Stücke, runde Ecken“ ergibt einen Knick-Verlauf wie bei gebogenem Rohr."
+ },
+ "armFairing": {
+  "tip": "Stromlinien-Hülle über einen Arm (Speed-Drohne)",
+  "hilfe": "Drohne → „Lochbilder und Bausteine“ → „Armverkleidung“: eine Hülle mit Tropfenprofil, die über einen Arm geschoben wird. Gib Armbreite und Armdicke ein – Tracery macht das Profil genau so dick, dass der Arm mit der eingestellten Wand hineinpasst (0,15 mm Spiel je Seite). Die Hülle liegt längs der X-Achse, die runde Nase zeigt nach vorne; dreh sie mit dem Arm mit.",
+  "tipp": "Das Profil ist die genormte NACA-Form mit der dicksten Stelle bei 30 % der Tiefe. Eine größere Profiltiefe macht die Hülle schlanker. Ob sie wirklich schneller macht, zeigt dir die Ansicht „Fahrtwind“ nur über die Fläche – den Luftwiderstand misst Tracery nicht."
  }
 };
 
@@ -3455,7 +3460,7 @@ const Kernel = (() => {
 const App = (() => {
   const S = {
     doc: Model.newDoc(), sel: [], face: null, edges: [], mode: 'model', tool: null,
-    results: new Map(), errors: [], undo: [], redo: [], extra: [], revision: 0, lastSavedRev: -1, fileSavedRev: -1,
+    results: new Map(), errors: [], undo: [], redo: [], extra: [], hideIds: new Set(), revision: 0, lastSavedRev: -1, fileSavedRev: -1,
     ctx: null, iso: null,   // gerade bearbeitetes Bauteil / isoliertes Teil (nur Ansicht, nicht gespeichert)
   };
   const ev = makeEmitter();
@@ -3652,7 +3657,7 @@ const App = (() => {
     if (S.iso && !S.doc.items.some((x) => x.id === S.iso)) S.iso = null;
     for (const [id] of Viewer.nodes) {
       const it = topItem(id); if (!it) continue;
-      Viewer.updateNode(id, { visible: !it.hidden && (!S.iso || S.iso === id), ctxDim: !!S.ctx && S.ctx !== id });
+      Viewer.updateNode(id, { visible: !it.hidden && !S.hideIds.has(id) && (!S.iso || S.iso === id), ctxDim: !!S.ctx && S.ctx !== id });
     }
     refreshCtxPick();
   }
@@ -3697,7 +3702,8 @@ const App = (() => {
 
   // ---------- Auswahl ----------
   function select(ids, opts = {}) {
-    ids = (ids || []).filter(Boolean);
+    // Teile, die die Explosion einzeln zeigt (Kennung „__ex:…“), stehen für das echte Teil in der Gruppe
+    ids = (ids || []).filter(Boolean).map((id) => (typeof id === 'string' && id.startsWith('__ex:') ? id.slice(5) : id));
     if (opts.additive) {
       const set = new Set(S.sel);
       for (const id of ids) { if (set.has(id)) set.delete(id); else set.add(id); }
@@ -3712,7 +3718,7 @@ const App = (() => {
   const ghostReq = { n: 0 };
   async function refreshSelectionVisuals() {
     const selTop = new Set();
-    for (const id of S.sel) { const top = Model.topOf(S.doc, id); if (top) selTop.add(top.id); }
+    for (const id of S.sel) { const top = Model.topOf(S.doc, id); if (top) selTop.add(top.id); selTop.add('__ex:' + id); }
     for (const [id] of Viewer.nodes) Viewer.updateNode(id, { selected: selTop.has(id) });
     Viewer.highlightFace('sel', S.face ? S.face.id : null, S.face ? S.face.faceIdx : null);
     Viewer.setSelectedEdges(S.edges);
@@ -3747,6 +3753,7 @@ const App = (() => {
     get undoStack() { return S.undo; }, get redoStack() { return S.redo; }, get revision() { return S.revision; }, get busy() { return busy; },
     get mode() { return S.mode; }, set mode(m) { S.mode = m; ev.emit('mode'); },
     get extra() { return S.extra; }, set extra(x) { S.extra = x; },
+    get hideIds() { return S.hideIds; }, set hideIds(x) { S.hideIds = x || new Set(); applyView(); },
     get ctx() { return S.ctx; }, get iso() { return S.iso; }, setCtx, setIso, applyView,
     get tool() { return S.tool; }, set tool(t) { S.tool = t; ev.emit('tool'); },
     get fileSavedRev() { return S.fileSavedRev; }, set fileSavedRev(v) { S.fileSavedRev = v; },
@@ -5152,6 +5159,10 @@ const LIB = [
     { k: 'd', label: 'Durchmesser', type: 'num', def: 60 }, { k: 'ln', label: 'Nasenlänge', type: 'num', def: 55 }, { k: 'lc', label: 'Mittelteil', type: 'num', def: 100 }, { k: 'lt', label: 'Hecklänge', type: 'num', def: 95 },
     { k: 'dn', label: 'Nasenöffnung Ø', type: 'num', def: 32 }, { k: 'dt', label: 'Hecköffnung Ø', type: 'num', def: 18 }, { k: 'wall', label: 'Wand', type: 'num', def: 1.6 },
   ] },
+  { lib: 'armFairing', label: 'Armverkleidung', role: 'solid', icon: 'wind', desc: 'Stromlinien-Hülle über einen Arm: NACA-Tropfenprofil, Nase nach vorne, innen ein Schlitz für den Arm – so dick wie nötig', params: [
+    { k: 'len', label: 'Länge', type: 'num', def: 60 }, { k: 'aw', label: 'Armbreite', type: 'num', def: 14 }, { k: 'at', label: 'Armdicke', type: 'num', def: 5 },
+    { k: 'wall', label: 'Wand', type: 'num', def: 1 }, { k: 'chord', label: 'Profiltiefe (0 = automatisch)', type: 'num', def: 0 },
+  ] },
   { lib: 'gear', label: 'Zahnrad', role: 'solid', icon: 'gear', desc: 'Stirnrad mit Evolventen-Zähnen', params: [
     { k: 'teeth', label: 'Zähne', type: 'num', def: 20, int: true, unit: '' }, { k: 'module', label: 'Modul', type: 'num', def: 1.5 }, { k: 'h', label: 'Dicke', type: 'num', def: 6 }, { k: 'bore', label: 'Bohrung Ø', type: 'num', def: 5 },
   ] },
@@ -5272,6 +5283,7 @@ const DroneLib = (() => {
       { part: LIBMAP.goproMount, params: libDefaults(LIBMAP.goproMount), name: 'GoPro-Halterung' },
       { part: LIBMAP.xt60Holder, params: libDefaults(LIBMAP.xt60Holder), name: 'XT60-Halter' },
       { part: LIBMAP.antennaMount, params: libDefaults(LIBMAP.antennaMount), name: 'Antennenhalter' },
+      { part: LIBMAP.armFairing, params: libDefaults(LIBMAP.armFairing), name: 'Armverkleidung' },
     ];
   }
   // Schub pro Motor als Vorgabe – nur geprüfte Messungen aus Herstellerangaben (schub.json)
@@ -8228,7 +8240,7 @@ const Place = (() => {
 // Alles hier ändert nur, wie das Modell gezeigt wird – nie das Modell selbst. Nichts davon landet
 // in der Zeitleiste oder in der Projektdatei.
 const Views = (() => {
-  const st = { cut: null, xray: false, ex: 0, exGoal: 0, exAnim: null, focus: null, ov: null };
+  const st = { cut: null, xray: false, ex: 0, exGoal: 0, exAnim: null, focus: null, ov: null, exGroups: false };
   let wrap = null;   // Leisten links oben
   function bars() {
     if (!wrap || !wrap.isConnected) { wrap = h('div', { class: 'viewbars' }); $('#overlay').append(wrap); }
@@ -8345,8 +8357,33 @@ const Views = (() => {
   // ---------- Explosion ----------
   // Teile rücken waagerecht von der Mitte weg. Übereinanderliegende Schichten (gleiche Unterkante)
   // werden nach oben auseinandergezogen, jede um die Höhe der Schichten darunter – wie in einer Bauanleitung.
+  // Ein Teil der Szene (auch die einzeln gezeigten Teile aus Gruppen)
+  const sceneItem = (id) => App.doc.items.find((x) => x.id === id) || App.extra.find((x) => x.id === id);
+  const shown = (id) => { const it = sceneItem(id); return it && !it.hidden && it.role !== 'hole' && !App.hideIds.has(id); };
+  // Gruppen zerlegen: jedes Teil einer Gruppe (eine Ebene tief) wird einzeln gezeigt – samt den Löchern der Gruppe,
+  // damit die Bohrungen nicht fehlen. Muster- und Rechen-Gruppen bleiben ganz.
+  function splitGroups() {
+    const extra = [], hide = new Set();
+    for (const g of Model.activeItems(App.doc)) {
+      if (g.kind !== 'group' || g.hidden || (g.p && g.p.op)) continue;
+      const kids = (g.children || []).filter((c) => !c.suppressed && !c.hidden);
+      const solids = kids.filter((c) => c.role !== 'hole'), holes = kids.filter((c) => c.role === 'hole');
+      if (solids.length < 2) continue;
+      hide.add(g.id);
+      for (const c of solids) extra.push({ id: '__ex:' + c.id, kind: 'group', name: c.name, role: 'solid', color: c.color || g.color, mat: c.mat || g.mat, t: deepClone(g.t || Model.T0()), p: {}, finishes: [], children: [deepClone(c), ...holes.map(deepClone)] });
+    }
+    return { extra, hide };
+  }
+  function setGroups(on) {
+    st.exGroups = !!on;
+    const { extra, hide } = on ? splitGroups() : { extra: [], hide: new Set() };
+    App.extra = extra; App.hideIds = hide;
+    App.rebuild();
+    const cb = st.exBar && st.exBar.querySelector('#ex-groups'); if (cb) cb.checked = st.exGroups;
+  }
+  const groupsSplittable = () => splitGroups().extra.length > 0;
   function offsets(f) {
-    const ids = [...Viewer.nodes.keys()].filter((id) => { const it = App.doc.items.find((x) => x.id === id); return it && !it.hidden && it.role !== 'hole'; });
+    const ids = [...Viewer.nodes.keys()].filter(shown);
     const boxes = ids.map((id) => [id, Viewer.baseBox(id)]).filter((x) => x[1]);
     const all = new THREE.Box3(); for (const [, b] of boxes) all.union(b);
     const C = all.getCenter(new THREE.Vector3()); const S = Math.max(10, all.getSize(new THREE.Vector3()).length());
@@ -8372,11 +8409,14 @@ const Views = (() => {
     }
     return map;
   }
-  function explodeCount() { return [...Viewer.nodes.keys()].filter((id) => { const it = App.doc.items.find((x) => x.id === id); return it && !it.hidden && it.role !== 'hole'; }).length; }
+  function explodeCount() { return [...Viewer.nodes.keys()].filter(shown).length; }
   function explode(on = st.exGoal === 0, amount = 0.6) {
     if (on && explodeCount() < 2) {
-      UI.toast('Zum Auseinanderziehen braucht es mindestens zwei Teile auf der obersten Ebene. Tipp: Eine Gruppe vorher mit „Gruppe lösen“ aufteilen.', { icon: 'info', ms: 4200 });
-      return;
+      // Nur ein Teil ganz oben, aber eine Gruppe mit mehreren Teilen: dann die Gruppen gleich mit zerlegen
+      if (!groupsSplittable()) { UI.toast('Zum Auseinanderziehen braucht es mindestens zwei Teile.', { icon: 'info', ms: 4200 }); return; }
+      setGroups(true);
+      const off = App.on('results', () => { off(); animateTo(amount); });
+      exBar(); App.select(App.sel); return;
     }
     animateTo(on ? amount : 0);
     if (on) { exBar(); App.select(App.sel); }   // Griffe ausblenden
@@ -8388,7 +8428,7 @@ const Views = (() => {
       const t = Math.min(1, (performance.now() - t0) / ms); const e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
       setEx(from + (goal - from) * e);
       if (t < 1) st.exAnim = requestAnimationFrame(step);
-      else { st.exAnim = null; if (goal === 0) { Viewer.setOffsets(null); if (st.exBar) { st.exBar.remove(); st.exBar = null; } Handles.rebuild(); Panels.renderCtx(); } sync(); }
+      else { st.exAnim = null; if (goal === 0) { Viewer.setOffsets(null); if (st.exBar) { st.exBar.remove(); st.exBar = null; } if (st.exGroups) setGroups(false); Handles.rebuild(); Panels.renderCtx(); } sync(); }
     };
     step();
   }
@@ -8406,7 +8446,11 @@ const Views = (() => {
     range.oninput = () => { cancelAnimationFrame(st.exAnim); st.exAnim = null; st.exGoal = +range.value / 100; setEx(st.exGoal); sync(); };
     const back = h('button', { type: 'button', class: 'btn small', id: 'ex-back' }); back.innerHTML = icon('group') + 'Zusammensetzen';
     back.onclick = () => explode(false);
-    bar.append(head, h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, 'Weit'), range), h('div', { class: 'vb-row' }, back, h('span', { class: 'vb-hint' }, 'Teile anklicken und rechts ändern geht weiter')));
+    const gcb = h('input', { type: 'checkbox', id: 'ex-groups' }); gcb.checked = st.exGroups;
+    gcb.onchange = () => setGroups(gcb.checked);
+    const grow = h('div', { class: 'vb-row' }, h('label', { class: 'vb-hint' }, gcb, ' Gruppen auch zerlegen'));
+    if (!st.exGroups && !groupsSplittable()) grow.hidden = true;
+    bar.append(head, h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, 'Weit'), range), grow, h('div', { class: 'vb-row' }, back, h('span', { class: 'vb-hint' }, 'Teile anklicken und rechts ändern geht weiter')));
     const fv = bars().querySelector('.focusview'); fv ? bars().insertBefore(bar, fv) : bars().append(bar); st.exBar = bar;
   }
   // Zum Zeichnen, Bohren, Messen oder Ziehen muss alles wieder an seinem Platz sein
@@ -8574,21 +8618,24 @@ const Views = (() => {
   }
   function init() {
     App.on('mode', () => { if (App.mode !== 'model') reset(); });
+    // Während die Gruppen zerlegt gezeigt werden: nach jeder Änderung die Einzelteile neu aufbauen
+    App.on('doc', () => { if (!st.exGroups) return; const { extra, hide } = splitGroups(); App.extra = extra; App.hideIds = hide; });
     App.on('results', () => {
       if (st.ex > 1e-4) setEx(st.ex);
       if (st.ov) drawOverhang();
       if (st.wind) drawWind(false);
+      if (st.ex > 1e-4) setEx(st.ex);
       if (st.cut) { drawCutHelper(); const r = st.cut.bar && st.cut.bar.querySelector('#cut-range'); if (r) { const b = modelBox(); const ax = AX[st.cut.plane]; r.min = Math.floor(b.min.getComponent(ax) - 1); r.max = Math.ceil(b.max.getComponent(ax) + 1); } }
     });
   }
-  function reset() { section(false); if (st.xray) xray(false); if (st.exGoal > 0 || st.ex > 0) { cancelAnimationFrame(st.exAnim); st.exAnim = null; st.ex = st.exGoal = 0; Viewer.setOffsets(null); if (st.exBar) { st.exBar.remove(); st.exBar = null; } } focus(false); overhang(false); wind(false); }
+  function reset() { section(false); if (st.xray) xray(false); if (st.exGoal > 0 || st.ex > 0) { cancelAnimationFrame(st.exAnim); st.exAnim = null; st.ex = st.exGoal = 0; Viewer.setOffsets(null); if (st.exBar) { st.exBar.remove(); st.exBar = null; } } focus(false); overhang(false); wind(false); if (st.exGroups) setGroups(false); }
   return {
     init, section, xray, explode, collapse, focus, overhang, menu, onKey, reset, sync, bars,
     get overhangArea() { return st.ov ? st.ov.area : null; },
     wind, windArea, get windInfo() { return st.wind ? { angle: st.wind.angle, props: st.wind.props, area: st.wind.area } : null; },
     overhangOf: (id, angle = 45) => { const d = overhangData(angle, [id]); return { area: d.area, c: d.c }; },
     get cut() { return st.cut ? { plane: st.cut.plane, off: st.cut.off, flip: st.cut.flip } : null; },
-    get isXray() { return st.xray; }, get exploded() { return st.ex > 1e-4 || st.exGoal > 0; }, get explodeAmount() { return st.ex; },
+    get isXray() { return st.xray; }, get exploded() { return st.ex > 1e-4 || st.exGoal > 0; }, get explodeAmount() { return st.ex; }, get explodeGroups() { return st.exGroups; }, setGroups,
     get focusIds() { return st.focus ? st.focus.ids.slice() : null; }, get focusDrawn() { return !!(st.focus && st.focus.drawn); },
   };
 })();
@@ -13132,7 +13179,7 @@ Parameter p (alle Grundkörper stehen mit der Unterseite auf z=0 ihres eigenen S
   {"lib":"holePattern","pat":"stack305|stack255|stack20|stack16|motor19|motor16|motor12|motor9","size":"M3","depth":10} (loch, vier Löcher für Stack oder Motor um die Mitte) · {"lib":"zipTie","w":3,"gap":6,"depth":10} (loch, zwei Kabelbinder-Schlitze)
   {"lib":"threadRod","size":"M3…M16","length":12} (koerper, echtes Außengewinde) · {"lib":"threadHole","size":"M4…M16","length":10,"clear":0.3} (loch, gedrucktes Innengewinde)
   {"lib":"snapHook","length":12,"w":8,"t":1.6,"hook":1.2} (koerper) · {"lib":"hinge","len":40,"w":15,"t":2.4,"gap":0.4} (koerper) · {"lib":"gear","teeth":20,"module":1.5,"h":6,"bore":5} (koerper)
-  {"lib":"goproMount","n":"3","hz":9} (koerper, GoPro-Finger mit M5-Loch auf einer Platte; "2" Finger für die Gegenseite) · {"lib":"xt60Holder","w":15.5,"h":8.1,"ea":26} (koerper, Platte mit Ausschnitt für einen Akkustecker und zwei Schraubenlöchern) · {"lib":"antennaMount","n":"2","di":3.5,"len":20,"spread":90,"lean":30} (koerper, Röhrchen für Antennen, V-förmig)
+  {"lib":"goproMount","n":"3","hz":9} (koerper, GoPro-Finger mit M5-Loch auf einer Platte; "2" Finger für die Gegenseite) · {"lib":"xt60Holder","w":15.5,"h":8.1,"ea":26} (koerper, Platte mit Ausschnitt für einen Akkustecker und zwei Schraubenlöchern) · {"lib":"antennaMount","n":"2","di":3.5,"len":20,"spread":90,"lean":30} (koerper, Röhrchen für Antennen, V-förmig) · {"lib":"armFairing","len":60,"aw":14,"at":5,"wall":1,"chord":0} (koerper, Stromlinien-Hülle über einen Arm, liegt längs X mit Nase nach −Y – auf den Arm drehen und schieben)
 - rundungen: typ "fillet" (Rundung), "chamfer" (Fase) oder "draft" (Entformungsschräge, r = Winkel in Grad, neigt alle senkrechten Seitenwände)
 - group: {"kinder":[…]} – Kinder mit rolle "loch" werden aus den Kindern mit rolle "koerper" geschnitten. t der Kinder ist relativ zur Gruppe.
 
