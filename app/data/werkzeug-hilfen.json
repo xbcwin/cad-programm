@@ -1,7 +1,7 @@
 {
   "sketchFace": {
     "tip": "Neue 2D-Zeichnung auf Fläche starten",
-    "hilfe": "Klicke auf eine flache Seite deines 3D-Bauteils oder auf eine Grundebene. Die Ansicht dreht sich automatisch passend hin.",
+    "hilfe": "Klicke auf eine flache Seite deines 3D-Bauteils oder auf eine Grundebene. Die Ansicht dreht sich automatisch passend hin. Unter „Skizze“ gibt es außerdem zwei Hilfsebenen: „Mittig zwischen zwei Flächen“ (zwei parallele Flächen anklicken – die Skizze liegt genau in der Mitte) und „Durch drei Punkte“ (drei Punkte auf Körpern anklicken, Ecken und Kantenmitten rasten ein).",
     "tipp": "Eine Skizze geht nur auf flachen Ebenen, nicht auf gewölbten Rundungen."
   },
   "line": {
@@ -302,7 +302,7 @@
   "frameAssist": {
     "tip": "Drohnenrahmen in einem Schritt bauen – eigener oder nach Hersteller",
     "hilfe": "Wähle Propellergröße, Rahmenform, Stack, Motor, Videosystem und Akku. Tracery rechnet den Achsabstand so, dass zwischen den Propellern genug Luft bleibt, und warnt, wenn etwas nicht passt. Unter „Vorlage“ baust du echte Rahmen von Herstellern nach (TBS, GEPRC, iFlight, SpeedyBee, AOS RC): Achsabstand, Armdicke, Plattendicke und Stack stimmen, die Umrisse sind vereinfacht. Neue Formen: Cinewhoop mit Ducts um die Propeller und Speed-Rumpf – ein Stromlinien-Rumpf mit Kamera in der Nase, Akku innen und geneigten Motoren.",
-    "tipp": "Beim Deadcat sind die vorderen Arme weiter gespreizt – dann sind die Propeller nicht im Kamerabild. Beim Speed-Rumpf stehen die Motoren schräg (Motorneigung): So liegt der Rumpf im schnellen Flug genau im Fahrtwind. Beim H-Rahmen laufen links und rechts zwei Längsträger von Motor zu Motor, vorne und hinten verbinden zwei Querträger sie mit der Mittelplatte – viel Platz in der Mitte für Akku und Elektronik."
+    "tipp": "Beim Deadcat sind die vorderen Arme weiter gespreizt – dann sind die Propeller nicht im Kamerabild. Beim Speed-Rumpf stehen die Motoren schräg (Motorneigung): So liegt der Rumpf im schnellen Flug genau im Fahrtwind. Beim H-Rahmen laufen links und rechts zwei Längsträger von Motor zu Motor, vorne und hinten verbinden zwei Querträger sie mit der Mittelplatte – viel Platz in der Mitte für Akku und Elektronik. Bei True-, Stretched- und Wide-X kannst du unter „Arme“ einzelne Arme wählen (Sandwich): Jeder Arm trägt ein Viertel der Mittelplatte, darunter liegt eine Bodenplatte – ein gebrochener Arm lässt sich dann allein tauschen, und jeder Arm kommt als eigene DXF."
   },
   "holePattern": {
     "tip": "Vier Löcher für Stack oder Motor auf einmal",
@@ -377,7 +377,7 @@
   "sketchText": {
     "tip": "Text als Umriss in die Skizze setzen",
     "hilfe": "Tipp rechts den Text ein, stell Höhe, Schrift und Ausrichtung ein und klick ins Bild. Der Text wird zu echten Umrissen: Liegt er in einem Rechteck, wird er beim Hochziehen ausgeschnitten (graviert) – wählst du nur die Buchstaben, stehen sie erhaben.",
-    "tipp": "Die Höhe gilt für Großbuchstaben. Text, Schrift und Drehung kannst du später rechts ändern, wenn du den Text anklickst. Mit „Bogen-Radius“ läuft der Text auf einem Kreis (positiv wölbt er sich nach oben, negativ nach unten); „An Kreis legen“ setzt ihn genau auf den nächsten Kreis oder Bogen der Skizze – z. B. als Schrift am Rand einer runden Platte."
+    "tipp": "Die Höhe gilt für Großbuchstaben. Text, Schrift und Drehung kannst du später rechts ändern, wenn du den Text anklickst. Mit „Bogen-Radius“ läuft der Text auf einem Kreis (positiv wölbt er sich nach oben, negativ nach unten); „An Kreis legen“ setzt ihn genau auf den nächsten Kreis oder Bogen der Skizze – z. B. als Schrift am Rand einer runden Platte. Unter „Entlang“ legst du den Text auf eine Linie, einen Bogen oder eine Spline der Skizze – er folgt ihr, auch wenn du sie später änderst; „Andere Seite“ dreht ihn auf die andere Seite, „Verschieben entlang“ schiebt ihn auf der Kurve. Am besten ist die Kurve eine Hilfslinie."
   },
   "sketchImage": {
     "tip": "Foto oder Zeichnung zum Nachzeichnen hinterlegen",
@@ -461,7 +461,7 @@
   },
   "route3d": {
     "tip": "Rohr durch Punkte im Raum – auf Körpern oder frei",
-    "hilfe": "Körper → „Rohr im Raum“: Klick nacheinander Punkte an. Auf einem Körper liegt das Rohr auf der Fläche auf, daneben bleibt es auf der Höhe des letzten Punkts. Ziehen dreht die Ansicht wie immer, Rückschritt nimmt den letzten Punkt weg, Enter oder Doppelklick ist fertig. Rechts änderst du jeden Punkt als Zahl, den Durchmesser, die Wand und den Querschnitt. Zwischen zwei Punkten gibt es Regeln wie in einer Skizze, nur im Raum: „entlang X/Y/Z“ legt das Stück genau auf eine Achse, „Länge“ macht es genau so lang – die Punkte dahinter wandern mit.",
+    "hilfe": "Körper → „Rohr im Raum“: Klick nacheinander Punkte an. Auf einem Körper liegt das Rohr auf der Fläche auf, daneben bleibt es auf der Höhe des letzten Punkts. Ziehen dreht die Ansicht wie immer, Rückschritt nimmt den letzten Punkt weg, Enter oder Doppelklick ist fertig. Rechts änderst du jeden Punkt als Zahl, den Durchmesser, die Wand und den Querschnitt. Zwischen zwei Punkten gibt es Regeln wie in einer Skizze, nur im Raum: „entlang X/Y/Z“ legt das Stück genau auf eine Achse, „rechtwinklig“ oder „parallel zum vorigen“ richtet es am Stück davor aus, „Länge“ macht es genau so lang – die Punkte dahinter wandern mit. Ist das Rohr gewählt, steht an jedem Stück seine Länge im Bild – anklicken, Zahl tippen, Enter: dann ist sie fest (🔒).",
     "tipp": "Gut für Kabelkanäle, Antennenrohre und Bügel, die um Teile herum laufen. „Gerade Stücke, runde Ecken“ ergibt einen Knick-Verlauf wie bei gebogenem Rohr. Für ein Antennenrohr z. B. das erste Stück „entlang Z“ mit 25 mm Länge, das zweite „entlang Y“ mit 15 mm – dann steht es genau senkrecht und knickt genau nach hinten ab. Eine Länge 0 macht das Stück wieder frei."
   },
   "armFairing": {

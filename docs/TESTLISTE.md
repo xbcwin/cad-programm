@@ -481,6 +481,47 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
   Schritte: 1. Ein Kind (ab 10) mit „Einfach“ eine Platte mit vier Löchern bauen lassen, ohne zu helfen.
   Erwartet: Es findet Körper, Löcher und Exportieren allein; notieren, wo es hängen bleibt.
 
+## Rahmen mit einzelnen Armen (neu in Sitzung 69)
+
+- [x] **Frame-Assistent**: „Arme: Einzeln (Sandwich mit Bodenplatte)“ → Bodenplatte und vier Arm-Teile statt „Unterteil“, ohne Fehler.
+- [x] **Maße**: Bodenplatte von −Bodenplatte bis 0, Armspalt 0,4 mm; die beiden vorderen Arme liegen genau 0,4 mm auseinander.
+- [x] **Drohnen-Check**: alles ok, keine Teile ineinander.
+- [x] **DXF**: Bodenplatte und vier Arme als eigene Platten.
+- [ ] **Fräsen und Schrauben**: Halten die Bolzen-Schrauben die Arme fest genug, oder braucht jeder Arm noch eine zweite Schraube?
+
+## Skizzen-Ebenen mittig und durch drei Punkte (neu in Sitzung 68)
+
+- [x] **Mittig**: Quader oben bei z = 10 und z = 40 → Skizze → „Mittig zwischen zwei Flächen“ → beide Deckflächen anklicken → Skizze bei z = 25; Rechteck 3 mm hochziehen → Körper von 25 bis 28.
+- [x] **Durch drei Punkte**: knapp neben drei Ecken der Deckfläche klicken → rasten ein, Ebene z = 10, Ursprung in der ersten Ecke, X-Achse zur zweiten Ecke.
+- [x] Während des Anklickens wird nichts ausgewählt (keine Kontextleiste im Weg).
+- [ ] **Schräge Ebene**: drei Punkte an einem schrägen Teil – liegt die Skizze so, wie man es erwartet?
+
+## Rohr im Raum: rechtwinklig und parallel (neu in Sitzung 67)
+
+- [x] **Auswahl**: erstes Stück 4 Richtungen (frei, X, Y, Z), ab dem zweiten zusätzlich „rechtwinklig zum vorigen“ und „parallel zum vorigen“.
+- [x] **Rechtwinklig**: Rohr (0,0,0) → (10,0,10) → (25,3,12): zweites Stück rechtwinklig → (16,5 | 3 | 3,5), Skalarprodukt 0.
+- [x] **Parallel** danach: läuft in Richtung des ersten Stücks weiter und behält seine Länge; Schild im Bild zeigt ∥.
+
+## Längen im Bild beim Rohr im Raum (neu in Sitzung 66)
+
+- [x] **Anklicken und tippen**: Rohr durch (0,0,0), (0,0,20), (20,0,20) wählen → am ersten Stück steht „20“; anklicken, 25, Enter → Punkte (0,0,25) und (20,0,25), Schild zeigt „25 🔒“; Körper 27 hoch, ohne Fehler.
+- [ ] **Gefühl**: Stören die Schilder bei vielen Punkten?
+
+## Text entlang einer Kurve (neu in Sitzung 65)
+
+- [x] **Entlang**: Spline (Hilfslinie) von (−30, 0) über (0, 15) nach (30, 0), Text „FPV“ → „Entlang: Spline 1“ → alle Buchstaben höchstens 5,6 mm von der Kurve und darüber, mittig.
+- [x] **Andere Seite** → unter der Kurve; „Verschieben entlang“ 10 → wandert auf der Kurve.
+- [x] **Kurve ändern**: mittlerer Punkt auf 25 → der Text folgt.
+- [x] **Gerade**: „Entlang: Gerade“ → Felder weg; Rückgängig, Fertig → Körper mit Schrift ohne Fehler.
+- [x] **KI-Kollege**: Schrift „FPV“ mit „entlang“ → Hilfslinie (Spline) und Text darauf, Körper ohne Fehler.
+- [ ] **Schrift auf einem gebogenen Arm**: Name entlang der Armkante drucken – lesbar?
+
+## Vorschau in echter Form beim Ziehen (neu in Sitzung 64)
+
+- [x] **Motor ziehen**: Drohne → Motoren → „Motor 2207“ auf eine Platte ziehen → während des Ziehens der echte runde Motor an der Maus (nicht anklickbar, die Größe unten rechts ändert sich nicht); nach dem Loslassen ist die Vorschau weg, der Motor liegt auf der Platte.
+- [x] **Magnet** wie vorher: rastet in die Mitte der Fläche.
+- [ ] **Gefühl**: Ruckelt die Vorschau bei großen Teilen (Rahmen-Bausteine) auf langsamen Rechnern?
+
 ## Fase mit zwei Abständen oder Winkel, Rundung von … bis (neu in Sitzung 63)
 
 - [x] **Zwei Abstände**: Quader 20 × 20 × 10, Fase 2 an einer oberen Kante (Volumen 3960) → „Zwei Abstände“ (2 und 4) → 3920; „Seiten tauschen“ → gleiches Volumen, die Deckfläche ist 1 mm weiter/kürzer.

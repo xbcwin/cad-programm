@@ -1,4 +1,4 @@
-# Tracery – Gesamtprompt (Stand 01.11.2026, nach Sitzung 47)
+# Tracery – Gesamtprompt (Stand 09.11.2026, nach Sitzung 69)
 
 > Diesen Text komplett in einen neuen Chat oder eine andere KI einfügen. Er beschreibt das ganze Projekt so genau, dass die KI ohne Rückfragen weiterarbeiten kann.
 
@@ -48,7 +48,7 @@ Leitlinien:
   - Die KI schreibt dafür einen genauen Prompt („Gemini Prompt A, B, C …“, zuletzt **O**). Er verlangt JSON-Antworten mit Quelle je Wert und null statt Schätzungen.
   - Jede Gemini-Antwort wird **nachgeprüft**: Stichproben an Hersteller- oder Händlerseiten, eigene Websuche. Falsche Werte werden verworfen und begründet.
   - **Offen:** Prompt O fragt nach Maßen für XT60H/XT30U, für die Antennen Lumenier AXII 2, TrueRC Singularity und Foxeer Lollipop 4 sowie nach Teilen für 2"- und 2,5"-Cinewhoops (Motoren 1103/1204/1303, Propeller, Pavo20/Pavo25 V2, 2S-Akkus). Die Antwort steht noch aus.
-- **Fortschritt:** Jede Sitzung bekommt eine Nummer, zuletzt **47**. Gepflegt werden:
+- **Fortschritt:** Jede Sitzung bekommt eine Nummer, zuletzt **69**. Gepflegt werden:
   - `docs/FORTSCHRITT.md` mit Stand-Zeile, Erledigt nach Stufen und „Bekannte Punkte“
   - `docs/TESTLISTE.md` mit Abschnitt „(neu in Sitzung N)“: `[x]` = automatisch geprüft, `[ ]` = von Hand
   - `docs/BAUPLAN.md`
@@ -129,7 +129,7 @@ Leitlinien:
 ## 4. Datenmodell (Projektdatei `.json`, `format: 'masswerk'`)
 
 - **`doc`:** `{ id, name, params: [{id, name, expr}], items: [...], notes, settings{printer, grid, snap, magnet}, drawing, rollback (Marker der Zeitleiste), variants, variant, drone{…}, joints: [...] }`
-- **Item:** `{ id, kind, name, role: 'solid'|'hole', color, t: {x,y,z,rx,ry,rz}, p: {...}, finishes: [{id,type:'fillet'|'chamfer'|'draft'|'shell', r, edges|faces}], suppressed, hidden, mat, massG, ai }`
+- **Item:** `{ id, kind, name, role: 'solid'|'hole', color, t: {x,y,z,rx,ry,rz}, p: {...}, finishes: [{id,type:'fillet'|'chamfer'|'draft'|'shell', r, edges|faces, vr+r2 (Rundung von … bis), cm 'two'+r2 | 'angle'+a, side (Fase)}], suppressed, hidden, mat, massG, ai }`
   - Werte in `t` und `p` dürfen **Formeln** mit Maßnamen sein.
 - **`kind`:**
   - Grundkörper: `box`, `cylinder`, `sphere`, `cone`, `tube`, `torus`, `wedge`, `prism`, `pyramid`, `hemisphere`
@@ -145,15 +145,16 @@ Leitlinien:
   - `intersect`
   - Löcher in einer Gruppe werden aus den Körpern geschnitten.
 - **Skizze `p.sketch`:** `{ plane:{o,x,n}, ents, dims, cons, bg }`
-  - **Elemente:** line(a,b), arc(a,m,b), circle(c,r), ellipse(c,rx,ry,rot), rect(a,b), poly(c,r,n,rot), slot(a,b,r), spline(pts,closed), point(a), text(a,s,h,font,align,rot,mir)
+  - **Elemente:** line(a,b), arc(a,m,b), circle(c,r), ellipse(c,rx,ry,rot), rect(a,b), poly(c,r,n,rot), slot(a,b,r), spline(pts,closed), point(a), text(a,s,h,font,align,rot,mir, bend = Bogen-Radius, on = Kurve + onP = Punkte darauf, os, flip)
   - **Elementfelder:** `con` = Hilfslinie; `link` = verbundene Körperkante {id,t,m,l,d}
-  - **Regeln:** horizontal, vertical, parallel, perpendicular, tangent, equal, symmetric, coincident, fix (at), midpoint, concentric, offset (v), xform (Muster; `pg` Kennung, `pm` Einstellungen)
+  - **Regeln:** horizontal, vertical, parallel, perpendicular, tangent, equal, symmetric, coincident, fix (at), midpoint, concentric, offset (v, og = zusammen entstanden), xform (Muster; `pg` Kennung, `pm` Einstellungen)
   - **Maße:** w/h/len/d/r/x/y/ang/n, dist, distPL, angLL – auch als Formel
 - **Gelenk:** `{id, a (fest), b (beweglich), ao, ad (Achse, Welt), home (Matrix bei 0), ang, min, max, kind: 'rot'|'slide'}`
   - Nur für Teile ganz oben im Verlauf. Gelenke sind kein Schritt der Zeitleiste.
   - Ketten: Ein Teil darf an mehreren Gelenken hängen, wird aber nur von einem bewegt; Kreise werden abgelehnt.
 - **Übergang mit Mittellinie:** `loft.p.path` = Skizze mit offenem Zug (Kern: Pipe-Shell mit mehreren Schnitten).
-- **Rohr im Raum:** `sweep.p.path3d = {pts: [[x,y,z],…], smooth}` statt `p.sketch`.
+- **Übergang mit Führungskurven:** `loft.p.rail`, `loft.p.rail2` = Skizzen in Ebenen durch die Achse (die zweite quer zur ersten); `Model.railSections` mischt und streckt Zwischenschnitte, der Kern baut sie als `sections3`.
+- **Rohr im Raum:** `sweep.p.path3d = {pts: [[x,y,z],…], smooth, rules: [{ax:'x'|'y'|'z'|'perp'|'par', len}|null, …]}` statt `p.sketch`; `Model.path3dPoints` rechnet die Lage mit Regeln.
 - **Drohnen:** vorne ist **−Y**. Die Maße `Achsabstand`, `Armwinkel`, `Armwinkel_hinten`, `Armbreite`, `Armdicke`, `Plattenbreite`/`-länge`/`-dicke`, `Bolzenhöhe`, Stack, Motorlochkreis, Kamerabreite, `Propeller` und `Motorneigung` steuern den Rahmen.
 
 ## 5. Was Tracery heute kann (vollständig, nach Bereichen)
@@ -174,24 +175,24 @@ Leitlinien:
 - Notizstift; Messen (Abstand, Winkel, Fläche); Material je Teil, Gewicht, Schwerpunkt
 - Kaufteile mit festem Gewicht
 - Auswahlfilter, „Ähnliche“, Kantenkette
-- Magnetisches Einrasten wie bei Canva: auf Flächen (Mitte, Mittellinien, Lochmitten, Kantenmitten, gleiche Randabstände) und zwischen Körpern (bündig, mittig, gleiche Abstände). Strg hält es an, abschaltbar.
+- Magnetisches Einrasten wie bei Canva: auf Flächen (Mitte, Mittellinien, Lochmitten, Kantenmitten, gleiche Randabstände), **auf runden Flächen** (Rohr, Kugel, Rumpf: „ganz oben/unten/vorne/hinten/links/rechts“ und Mitte, das Teil steht senkrecht auf der Rundung) und zwischen Körpern (bündig, mittig, gleiche Abstände). Strg hält es an, abschaltbar. Beim Ziehen aus der Leiste zeigt die Vorschau die **echte Form**.
 - Beim Verschieben zeigt das Schildchen den Abstand zum Nachbarn; „Abstand“ zwischen zwei Teilen lässt sich genau setzen.
 - Ansichten:
   - Schnitt an XY/XZ/YZ oder an einer gewählten Fläche
   - Röntgen
-  - Explosion
+  - Explosion (auch innerhalb von Gruppen)
   - Fokus-Vorschau
   - **Überhänge (3D-Druck)**: rot ab Grenzwinkel 35–60°, Druckbett = Unterseite, Fläche in mm²
-  - **Fahrtwind**: Blick aus der Windrichtung mit Neigung 0–60°, Stirnfläche in cm² aus dem Schattenriss
+  - **Fahrtwind**: Blick aus der Windrichtung mit Neigung 0–60°, Stirnfläche in cm² aus dem Schattenriss; Form mit cw-Wert und Tempo → **Luftwiderstand** in N und Leistung; mit dem Schub aus dem Drohnen-Check eine geschätzte **Höchstgeschwindigkeit** (geneigte Motoren eingerechnet)
 
 **Skizze (Werkzeugtasten in Klammern)**
 - **Zeichnen:**
   - Auswahl (V), Linie (L), Rechteck (R: Ecke/Mitte/gedreht über 3 Punkte), Kreis (C: Mitte/2P/3P), Ellipse (E)
   - Bogen (A: 3 Punkte oder tangential), Langloch (G: auch gebogen), Vieleck (P: Umkreis oder Schlüsselweite), Punkt (O)
-  - Schablone (J), Text (B: Schrift Inter, fett, Ausrichtung), Spline (S)
+  - Schablone (J), Text (B: Schrift Inter, fett, Ausrichtung, **Bogen-Radius**, „An Kreis legen“, **entlang einer Linie, eines Bogens oder einer Spline**), Spline (S)
 - **Schablonen:** Pin-Raster, Lüftungsgitter, QFP, QFN, BGA, SOIC, DIP (Maße 2026 gegen JEDEC und Datenblätter geprüft), USB-C-Buchse 9,5 × 3,8, USB-C-Stecker 13 × 7 mit Eckradius, Befestigungslöcher
 - **Bearbeiten:**
-  - Ecke runden/fasen (K, auch „Alle Ecken auf einmal“), Trimmen (T), Verlängern (U), Teilen (Y), Versatz (F)
+  - Ecke runden/fasen (K, auch „Alle Ecken auf einmal“), Trimmen (T, auch Ellipsen), Verlängern (U), Teilen (Y), Versatz (F, auch Ellipsen; der Abstand einer Kette lässt sich später für alle Stücke zusammen ändern)
   - **Wand (N):** eine offene Linie wird eine Wand mit Dicke
   - **Kante übernehmen (Z):** Körperkante als feste Linie, Bogen, Kreis oder Spline; **verbunden**, wandert also mit, wenn sich der Körper ändert (Ketten-Symbol, „Verbindung lösen“)
   - Spiegeln (M, auch direkt an der X-/Y-Achse)
@@ -200,7 +201,7 @@ Leitlinien:
 - **Regeln:** senkrechte Leiste links, 9 Grundregeln plus Mittig und Konzentrisch.
 - **Löser:** blau = beweglich, dunkel = voll bestimmt; Widersprüche werden abgelehnt.
 - **Fangen:** Endpunkt, Mitte, Mittelpunkt, Kreispunkt, Schnitt, Lot, Tangente, auf Linie, Ausrichtung, Raster.
-- **Skizzenebene:** frei verschieben und neigen. Ein Doppelklick auf eine ebene Fläche startet die Skizze darauf, die Flächenkanten sind Fangpunkte.
+- **Skizzenebene:** frei verschieben und neigen, **mittig zwischen zwei parallelen Flächen** oder **durch drei Punkte** auf Körpern. Ein Doppelklick auf eine ebene Fläche startet die Skizze darauf, die Flächenkanten sind Fangpunkte.
 - **Einheiten im Maßfeld**, z. B. „2 cm“, „1/4"“, „10mm+2cm“.
 - **Skizze fertig:**
   - Geschlossene Flächen → Hochziehen oder Drehen
@@ -210,9 +211,9 @@ Leitlinien:
 
 **3D-Features**
 - Grundkörper mit Ziehgriffen; Hochziehen (Push/Pull an Flächen); Drehkörper
-- Übergang (Loft) mit Spitze („Zur Spitze“) oder **entlang einer Mittellinie** (Punkte ziehen biegt den Körper, Warnung bei schrägem Auftreffen); Entlang Pfad (Rohr, Kanal, eigener Querschnitt); **Rohr im Raum** (Punkte auf Körper oder in den Raum klicken)
+- Übergang (Loft) mit Spitze („Zur Spitze“) oder **entlang einer Mittellinie** (Punkte ziehen biegt den Körper, Warnung bei schrägem Auftreffen) oder mit **einer oder zwei Führungskurven** (Seitenlinie von der Seite und von oben, der Übergang wird dazwischen so breit, dass er sie berührt); Entlang Pfad (Rohr, Kanal, eigener Querschnitt); **Rohr im Raum** (Punkte auf Körper oder in den Raum klicken)
 - STEP/STL-Import
-- Rundung und Fase per Knopf oder **Ziehgriff an der Kante**; Entformungsschräge; Wandstärke (Aushöhlen)
+- Rundung und Fase per Knopf oder **Ziehgriff an der Kante**; Fase mit **zwei Abständen** oder **Abstand und Winkel**, Rundung **von … bis** (wächst entlang der Kante); Entformungsschräge; Wandstärke (Aushöhlen)
 - Echte metrische Gewinde (Gewindebolzen, gedrucktes Innengewinde mit Spiel)
 - Bohrungs-Assistent: Durchgang mit Senk- oder Zylinderkopf, Kernloch, Gewindeeinsatz, Mutternfalle
 - Rechteckmuster; Kreismuster um Z/X/Y oder eine **im Bild gewählte Achse** (Kante, runder Rand, Welle, Loch)
@@ -224,7 +225,7 @@ Leitlinien:
 **Bibliothek („Bauteile“ und Drohne → „Lochbilder und Bausteine“)**
 - Löcher: Schraubenloch, Mutternfalle, Gewindeloch, Gewindebolzen, Gewindeeinsatz, Langloch
 - Lochbild (Stack 30,5/25,5/20/16, Motor 19/16/12/9), Kabelbinder
-- Schnapphaken, Scharnier, Zahnrad, Stromlinien-Rumpf
+- Schnapphaken, Scharnier, Zahnrad, Stromlinien-Rumpf, **Armverkleidung** (NACA-Tropfenprofil für Speed-Drohnen)
 - **GoPro-Halterung:** 2 oder 3 Finger, 3,0/3,2/Loch 5,2, M5-Mutter-Nabe; Werte nach Messungen der Community
 - **XT60-Halter** (Steckermaße noch geschätzt)
 - **Antennenhalter:** 1 oder 2 Röhrchen, Spreizung, Neigung nach hinten = +Y
@@ -233,7 +234,7 @@ Leitlinien:
 **Drohnen-Modul**
 - Rahmen-Generator (Rohbau aus Einzelteilen) und Frame-Assistent:
   - Propeller 3–7" inkl. 3,5"
-  - Formen X, Stretched, Wide, Deadcat, Cinewhoop mit Ducts, **Speed** (Stromlinien-Rumpf, geneigte Motoren 20° mit Keilen)
+  - Formen X, Stretched, Wide, Deadcat, **H-Rahmen** (Längs- und Querträger), Cinewhoop mit Ducts, bei X/Stretched/Wide wahlweise **einzelne Arme** (Sandwich mit Bodenplatte), **Speed** (Stromlinien-Rumpf, geneigte Motoren 20° mit Keilen)
 - 13 Herstellerrahmen als Vorlage
 - Bausätze auf der Startseite
 - **Drohnen-Check:** Propellerkreise frei, Spitzenabstand, Durchdringungen, Gewicht, Schwerpunkt, Schub-Gewicht-Verhältnis – auch für **selbst gebaute Rahmen** (Motoren aus „Kaufteile“, gern im Muster); **„Akku verschieben“** gleicht den Schwerpunkt aus
@@ -241,7 +242,7 @@ Leitlinien:
 
 **KI**
 - **KI-Kollege** (über `sample`): arbeitet in Runden mit JSON-Aktionen (hinzufuegen, aendern, muster rechteck/kreis/kurve inkl. Achse, spiegeln, verbinden, …), bessert Fehler selbst nach und fasst alles zu einem Rückgängig-Schritt zusammen.
-- Er kennt alle Formen, Bauteile, Herstellerrahmen und die neuen Bausteine, dazu Übergang mit `mittellinie`, Rohr mit `pfad3d` und die Aktion `gelenk`.
+- Er kennt alle Formen, Bauteile, Herstellerrahmen und die neuen Bausteine, dazu Übergang mit `mittellinie`, `fuehrungskurve` und `fuehrungskurve2`, Rohr mit `pfad3d` und `regeln`, Text mit `bogen` und `entlang`, Drohnenform `h` und die Aktion `gelenk`.
 - „Erklär diesen Schritt“.
 - **Schwachstellen-Analyse:**
   - Löcher zu nah am Rand oder aneinander
@@ -254,13 +255,13 @@ Leitlinien:
 
 ## 6. Tests – Pflicht vor jedem Commit
 
-- `tests/klicktest.py` (Playwright, echter Browser, echte Klicks), ca. **156 Durchläufe**:
+- `tests/klicktest.py` (Playwright, echter Browser, echte Klicks), ca. **190 Durchläufe**:
   ```
   cd app && python3 -m http.server 8765 &
   TRACERY_URL=http://localhost:8765/ python3 tests/klicktest.py [Stichwort …]
   ```
 - **Dauer:** Der Volltest braucht ca. 45–110 Minuten auf 2 Kernen. **Keine anderen Tests gleichzeitig laufen lassen**, sonst gibt es Wackler.
-- **Ergebnis heute:** rund 165 Durchläufe, alle OK bis auf 1 „von Hand“ (Flimmern beim Tiefzoomen).
+- **Ergebnis heute:** alle OK bis auf 1 „von Hand“ (Flimmern beim Tiefzoomen). Den Server am besten im selben Hintergrund-Befehl wie den Volltest starten (Hintergrund-Befehle enden nach 2 Stunden).
 - **Neue Funktion = neuer Test.** Er kommt in die Liste am Dateiende (Name mit Schrägstrichen je Prüfpunkt) und liefert `[ok1, ok2, …]`.
 - **Hilfsfunktionen:**
   - `p.ev(js, arg)` mit allen Modulen aus `window.__M`, `p.empty()`
@@ -290,25 +291,22 @@ Leitlinien:
 - Spiegeln an Fläche hängt nur an der äußersten Fläche in Achsrichtung.
 - Text hat keine Unterschneidung. Ellipse und Text lassen sich nicht trimmen. Die Drehung von Ellipse und Vieleck ist keine Regel.
 - Vorlagen bestehen aus einer Gruppe. Teilen ergibt zwei Hälften in einem Schritt.
-- Explosion wirkt nur auf die oberste Ebene. Der Magnet funktioniert nur auf ebenen Flächen.
-- Gelenke funktionieren nur zwischen Teilen ganz oben im Verlauf; ein Teil wird nur von einem Gelenk bewegt.
+- Der Magnet auf runden Flächen rastet an Scheitel- und Mittellinien ein, nicht an Lochmitten auf der Rundung.
+- Ein Teil wird nur von einem Gelenk bewegt; „Bewegung abspielen“ nur für Teile ganz oben im Verlauf.
 - Übergang mit Mittellinie: keine Spitze, keine „geraden Flächen“, die Linie liegt in einer Ebene.
-- Rohr im Raum: Punkte sind feste Zahlen, nicht an Körperkanten gebunden.
+- Rohr im Raum: Regeln je Stück (entlang X/Y/Z, rechtwinklig/parallel zum vorigen, Länge – auch im Bild eintippen); Punkte sind nicht an Körperflächen gebunden.
 - Drohnen-Check eigener Rahmen: Steckt ein Motor mit Rahmenteilen in einer Gruppe, zählt die ganze Gruppe als ein Teil.
-- Fahrtwind misst eine Fläche, keinen Luftwiderstand (kein cw-Wert).
+- Luftwiderstand und Höchstgeschwindigkeit sind Schätzungen mit festen cw-Richtwerten; Propeller verlieren bei Tempo Schub.
 - Steckermaße XT60H/XT30U sind geschätzt; die GoPro-Maße beruhen auf Messungen der Community.
 
 ## 9. Fahrplan (nächste Schritte)
 
 1. Gemini Prompt O auswerten: Stecker, Antennen als Kaufteile mit eigener Form, 2"- und 2,5"-Cinewhoops im Frame-Assistenten.
-2. Gelenke auch innerhalb von Gruppen.
-3. 3D-Skizzen mit Regeln und Maßen, Übergang mit seitlichen Führungskurven.
-4. Magnet auf gewölbten Flächen; Explosion innerhalb von Gruppen.
-5. Herstellerrahmen mit Original-Umriss; H-Rahmen und Sandwich.
-6. Speed-Drohne: Verkleidungen; Luftwiderstand mit cw-Wert.
-7. Schwachstellen: Wand um Schraubenlöcher auch bei Teilen, die keine flache Platte sind.
-8. Einsteiger-Oberfläche: größere Knöpfe, geführte erste Schritte.
-9. Später (Stufe 6): Konten, Projekte in der Cloud, Teilen, gleichzeitig arbeiten.
+2. Rohr im Raum: Punkt an einer Körperfläche halten.
+3. Herstellerrahmen mit Original-Umriss (braucht Daten).
+4. Speed-Drohne: Motorverkleidungen.
+5. Text trimmen und versetzen.
+6. Später (Stufe 6): Konten, Projekte in der Cloud, Teilen, gleichzeitig arbeiten.
 
 ## 10. Von Hand zu prüfen (Nils)
 
@@ -324,3 +322,4 @@ Leitlinien:
 - Überhänge gegen den Slicer vergleichen
 - DXF in einer Fräs-Software
 - KI-Kollege in Claude
+- Magnet auf Rohren und Rümpfen, Höchstgeschwindigkeit gegen echte Flüge, H-Rahmen als DXF fräsen, Text im Bogen und entlang einer Kurve drucken, Rundung „von … bis“ am Arm

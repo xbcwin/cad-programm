@@ -124,25 +124,41 @@ const SK = (() => {
   function textContours(e) {
     const font = FONTS[e.font] || FONTS.inter;
     if (!font) return [];
-    const key = JSON.stringify([e.s, e.h, e.font, e.align, e.a, e.rot, e.mir, e.sp, e.bend]);
+    const PP = Array.isArray(e.onP) && e.onP.length >= 2 ? e.onP : null;
+    const key = JSON.stringify([e.s, e.h, e.font, e.align, e.a, e.rot, e.mir, e.sp, e.bend, PP, e.os]);
     if (textCache.has(key)) return textCache.get(key);
     const k = (e.h > 0 ? e.h : 5) / font.cap, sp = (e.sp || 0) / k;
     const chars = [...String(e.s || '')];
     let w = 0; for (const ch of chars) w += ((font.glyphs[ch] || font.glyphs['?'] || { w: font.em / 2 }).w) + sp; if (chars.length) w -= sp;
-    const x0 = e.align === 'm' ? -w / 2 : e.align === 'r' ? -w : 0;
+    const x0 = PP ? 0 : e.align === 'm' ? -w / 2 : e.align === 'r' ? -w : 0;
+    // Entlang einer Kurve (onP = Punkte auf ihr): Grundlinie folgt der Kurve, Buchstaben stehen senkrecht darauf (Normale links)
+    let along = null;
+    if (PP) {
+      const cum = [0]; for (let i = 1; i < PP.length; i++) cum.push(cum[i - 1] + Math.hypot(PP[i][0] - PP[i - 1][0], PP[i][1] - PP[i - 1][1]));
+      const T = cum[cum.length - 1], W = w * k;
+      const s0 = (e.align === 'm' ? (T - W) / 2 : e.align === 'r' ? T - W : 0) + (e.os || 0);
+      const nrm = []; for (let i = 0; i + 1 < PP.length; i++) { const dx = PP[i + 1][0] - PP[i][0], dy = PP[i + 1][1] - PP[i][1], l = Math.hypot(dx, dy) || 1; nrm.push([-dy / l, dx / l]); }
+      const vn = PP.map((_, i) => { const a = nrm[Math.max(0, i - 1)], b = nrm[Math.min(nrm.length - 1, i)], x = a[0] + b[0], y = a[1] + b[1], l = Math.hypot(x, y) || 1; return [x / l, y / l]; });
+      along = (u, v) => {
+        const sv = s0 + u; let j = 0; while (j < cum.length - 2 && cum[j + 1] < sv) j++;
+        const L = cum[j + 1] - cum[j] || 1e-9, t = (sv - cum[j]) / L, tc = Math.max(0, Math.min(1, t));
+        const nx = vn[j][0] + (vn[j + 1][0] - vn[j][0]) * tc, ny = vn[j][1] + (vn[j + 1][1] - vn[j][1]) * tc, nl = Math.hypot(nx, ny) || 1;
+        return [PP[j][0] + (PP[j + 1][0] - PP[j][0]) * t + (nx / nl) * v, PP[j][1] + (PP[j + 1][1] - PP[j][1]) * t + (ny / nl) * v];
+      };
+    }
     const cs = Math.cos(e.rot || 0), sn = Math.sin(e.rot || 0), my = e.mir ? -1 : 1;
     // Bogen: Grundlinie auf einem Kreis mit Radius „bend“ (positiv: Mitte darunter, Text wölbt sich nach oben; negativ: nach unten)
-    const R = Math.abs(e.bend) > 1e-6 ? e.bend : 0;
+    const R = !PP && Math.abs(e.bend) > 1e-6 ? e.bend : 0;
     const B = (u, v) => { if (!R) return [u, v]; const f = u / R, r = R + v; return [r * Math.sin(f), r * Math.cos(f) - R]; };
     const out = []; let x = x0;
     for (const ch of chars) {
       const g = font.glyphs[ch] || font.glyphs['?'];
       if (g) {
         const ox = x;
-        const T = (p) => { const [u, v] = B((p[0] + ox) * k, p[1] * k * my); return [e.a[0] + cs * u - sn * v, e.a[1] + sn * u + cs * v]; };
+        const T = along ? (p) => along((p[0] + ox) * k, p[1] * k * my) : (p) => { const [u, v] = B((p[0] + ox) * k, p[1] * k * my); return [e.a[0] + cs * u - sn * v, e.a[1] + sn * u + cs * v]; };
         // gerade Stücke werden im Bogen zu Kurven (Stützpunkte bei einem und zwei Dritteln)
         const L3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
-        for (const c of glyphContours(font, font.glyphs[ch] ? ch : '?')) out.push(c.map((s) => (s.t === 'bez' ? { t: 'bez', a: T(s.a), c1: T(s.c1), c2: T(s.c2), b: T(s.b) } : R ? { t: 'bez', a: T(s.a), c1: T(L3(s.a, s.b, 1 / 3)), c2: T(L3(s.a, s.b, 2 / 3)), b: T(s.b) } : { t: 'line', a: T(s.a), b: T(s.b) })));
+        for (const c of glyphContours(font, font.glyphs[ch] ? ch : '?')) out.push(c.map((s) => (s.t === 'bez' ? { t: 'bez', a: T(s.a), c1: T(s.c1), c2: T(s.c2), b: T(s.b) } : R || along ? { t: 'bez', a: T(s.a), c1: T(L3(s.a, s.b, 1 / 3)), c2: T(L3(s.a, s.b, 2 / 3)), b: T(s.b) } : { t: 'line', a: T(s.a), b: T(s.b) })));
         x += g.w + sp;
       } else x += font.em / 2 + sp;
     }
@@ -151,6 +167,14 @@ const SK = (() => {
     return out;
   }
   // Breite und Mitte eines Texts (für Fangpunkte und Anzeige)
+  // Punkte einer offenen Kurve (Linie, Bogen, Spline) für Text entlang der Kurve; flip = andersherum
+  function textPathPts(c, flip) {
+    if (!c || !['line', 'arc', 'spline'].includes(c.type) || (c.type === 'spline' && c.closed)) return null;
+    const pts = []; for (const sg of segsOf(c)) for (const q of segPoints(sg)) if (!pts.length || d2(pts[pts.length - 1], q) > 1e-9) pts.push([Math.round(q[0] * 1e4) / 1e4, Math.round(q[1] * 1e4) / 1e4]);
+    if (pts.length < 2) return null;
+    if (c.type === 'line') { const n = 24, a = pts[0], b = pts[pts.length - 1]; pts.length = 0; for (let i = 0; i <= n; i++) pts.push([a[0] + ((b[0] - a[0]) * i) / n, a[1] + ((b[1] - a[1]) * i) / n]); }
+    return flip ? pts.reverse() : pts;
+  }
   function textBox(e) {
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     const cs = Math.cos(-(e.rot || 0)), sn = Math.sin(-(e.rot || 0));
@@ -478,6 +502,6 @@ const SK = (() => {
     const r = Solver.solve({ ents: ents || [], dims: dims || [], cons: cons || [] }, V, { inPlace });
     return r.ents;
   }
-  return { chains, ellipsePoints, splineBez, bezPoints, textContours, textBox, FONTS, FONTNAMES, loops, regions, regionAt, segsOf, segPoints, splinePoints, lineSegsOf, endA, endB, anchorOf, distSeg, arcInfo, arcPoints, circlePoints, rectCorners, polyCorners, hit, distEnt, snapPoints, faceLoopsToEnts, project3, openEnds, bounds, translateEnt, inPoly, d2, applyDims, measure, setMeasure, DIMKEYS, DIMNAME };
+  return { textPathPts, chains, ellipsePoints, splineBez, bezPoints, textContours, textBox, FONTS, FONTNAMES, loops, regions, regionAt, segsOf, segPoints, splinePoints, lineSegsOf, endA, endB, anchorOf, distSeg, arcInfo, arcPoints, circlePoints, rectCorners, polyCorners, hit, distEnt, snapPoints, faceLoopsToEnts, project3, openEnds, bounds, translateEnt, inPoly, d2, applyDims, measure, setMeasure, DIMKEYS, DIMNAME };
 })();
 

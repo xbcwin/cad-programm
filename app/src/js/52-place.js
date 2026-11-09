@@ -55,9 +55,26 @@ const Place = (() => {
       window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', cancelIt);
     });
   }
+  // Vorschau in echter Form: das Teil wird einmal im Kern gerechnet (als Zusatz-Element „__dragprev“) und dann nur noch verschoben.
+  // Löcher bleiben beim Kasten – sie würden sonst schon beim Ziehen in Körper schneiden.
+  const DP = '__dragprev';
+  function previewItem(spec) {
+    if (spec.buy) return Model.newItem(spec.kind, { ...Model.newItem(spec.kind).p, ...spec.p }, { name: spec.name, color: spec.color });
+    if (spec.kind) return Model.newItem(spec.kind, spec.p || {});
+    if (spec.part && spec.part.role !== 'hole') return Model.newItem('part', { lib: spec.part.lib, ...(spec.params || libDefaults(spec.part)) }, { role: spec.part.role });
+    return null;
+  }
+  function showReal() {
+    if (!st || !st.real) return;
+    const has = Viewer.nodes.has(DP);
+    for (const c of st.preview.children) c.visible = !has;   // Kasten nur, bis die echte Form da ist
+    if (has) Viewer.updateNode(DP, { matrix: st.preview.matrix, visible: st.preview.visible, hover: true });
+  }
   function begin(spec) {
     Views.collapse();
     st = { spec, preview: makePreview(spec), onFace: null, pos: null };
+    const tmp = previewItem(spec);
+    if (tmp) { tmp.id = DP; App.extra = [...App.extra.filter((x) => x.id !== DP), tmp]; App.rebuild(); st.real = true; st.offRes = App.on('results', showReal); }
     Panels.closeFlyout();
     Panels.renderCtx();
     UI.hint('Loslassen, um es abzulegen. Auf einem Körper wird es <b>Teil dieses Körpers</b>.');
@@ -65,9 +82,9 @@ const Place = (() => {
   }
   function inCanvas(x, y) { const r = Viewer.canvas.getBoundingClientRect(); return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom; }
   function track(x, y) {
-    if (!inCanvas(x, y)) { st.preview.visible = false; Viewer.requestRender(); return; }
+    if (!inCanvas(x, y)) { st.preview.visible = false; showReal(); Viewer.requestRender(); return; }
     st.preview.visible = true;
-    const hit = Viewer.pick(x, y, { noEdges: true, solidsOnly: true });
+    const hit = Viewer.pick(x, y, { noEdges: true, solidsOnly: true, exclude: new Set([DP]) });
     if (hit && hit.normal) {
       const top = App.doc.items.find((it) => it.id === hit.id);
       if (top) {
@@ -76,7 +93,7 @@ const Place = (() => {
         const L = Model.localMatrix({ t: st.onFace.t });
         st.preview.matrix.copy(Model.worldMatrix(App.doc, hit.id).multiply(L));
         st.pos = null; Viewer.highlightFace('hover', hit.id, hit.faceIdx);
-        Viewer.requestRender(); return;
+        showReal(); Viewer.requestRender(); return;
       }
     }
     Viewer.highlightFace('hover', null, null); Snap.clear();
@@ -88,7 +105,7 @@ const Place = (() => {
       const hz = st.spec.part && st.spec.part.role === 'hole' ? 10 : 0;
       st.preview.matrix.makeTranslation(st.pos[0], st.pos[1], hz);
     }
-    Viewer.requestRender();
+    showReal(); Viewer.requestRender();
   }
   function finish(x, y) {
     const s = st; cleanup();
@@ -101,6 +118,8 @@ const Place = (() => {
   function cancel() { cleanup(); stopHoles(); }
   function cleanup() {
     if (!st) return;
+    if (st.offRes) st.offRes();
+    if (st.real) { App.extra = App.extra.filter((x) => x.id !== DP); Viewer.removeNode(DP); App.rebuild(); }
     Viewer.groups.overlay.remove(st.preview); st.preview.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
     st = null; Snap.clear(); document.body.style.cursor = ''; UI.hint(null); Viewer.highlightFace('hover', null, null); Viewer.requestRender();
   }

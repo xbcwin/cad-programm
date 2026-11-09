@@ -411,8 +411,17 @@ const Model = (() => {
       let d = d0.slice();
       const r = R[i];
       if (r) {
-        const ai = AXI[r.ax];
-        if (ai != null) { const v = d[ai]; d = [0, 0, 0]; d[ai] = v; }
+        const ai = AXI[r.ax], l0 = Math.hypot(d0[0], d0[1], d0[2]);
+        if (ai != null) { const v = d[ai]; d = [0, 0, 0]; d[ai] = Math.abs(v) > 1e-9 ? v : l0; }   // steht das Stück quer zur Achse: so lang wie vorher in Achsrichtung
+        else if ((r.ax === 'perp' || r.ax === 'par') && i > 0) {
+          // rechtwinklig oder parallel zum vorigen Stück (so, wie es mit seinen Regeln liegt)
+          const u = [0, 1, 2].map((k) => out[i][k] - out[i - 1][k]), lu = Math.hypot(u[0], u[1], u[2]);
+          if (lu > 1e-9) {
+            const un = u.map((v) => v / lu), dot = d[0] * un[0] + d[1] * un[1] + d[2] * un[2];
+            d = r.ax === 'par' ? un.map((v) => v * (Math.abs(dot) > 1e-9 ? dot : l0)) : d.map((v, k) => v - un[k] * dot);
+            if (r.ax === 'perp' && Math.hypot(d[0], d[1], d[2]) < 1e-9) { const c = Math.abs(un[2]) < 0.9 ? [un[1], -un[0], 0] : [0, un[2], -un[1]], lc = Math.hypot(...c); d = c.map((v) => (v / lc) * l0); }
+          }
+        }
         const L = r.len != null && r.len !== '' ? num(r.len, V, NaN) : NaN;
         if (isFinite(L) && L > 0) {
           const l = Math.hypot(d[0], d[1], d[2]);
@@ -423,6 +432,16 @@ const Model = (() => {
       out.push([0, 1, 2].map((k) => out[i][k] + d[k]));
     }
     return out;
+  }
+  // Zahlen-Punkte auf ihre Lage mit Regeln setzen (Formeln bleiben) – danach bleibt beim Ändern jeder andere Punkt, wo er ist
+  function path3dBake(pp, V) { const r = path3dPoints(pp, V); pp.pts = pp.pts.map((q, i) => q.map((v, k) => (typeof v === 'number' ? Math.round(r[i][k] * 1e4) / 1e4 : v))); }
+  // Regel für Stück i ändern (patch: { ax, len }; null oder 0 = weg)
+  function path3dSetRule(pp, i, patch, V) {
+    path3dBake(pp, V);
+    const R = (pp.rules || []).slice(); while (R.length < pp.pts.length - 1) R.push(null);
+    const r = { ...(R[i] || {}), ...patch }; for (const k of Object.keys(r)) if (r[k] == null || r[k] === '' || r[k] === 0) delete r[k];
+    R[i] = Object.keys(r).length ? r : null;
+    if (R.some(Boolean)) pp.rules = R; else delete pp.rules;
   }
   // Entlang Pfad (Sweep): längster offener Zug der Skizze, Querschnitt Kreis oder Rechteck, optional hohl
   function sweepParams(it, V) {
@@ -529,6 +548,6 @@ const Model = (() => {
     walk(doc.items, (it) => { it.t = Object.assign(T0(), it.t || {}); it.p = it.p || {}; it.finishes = it.finishes || []; if (!it.role) it.role = 'solid'; if (!it.color) it.color = nextColor(); });
     return doc;
   }
-  return { path3dPoints, railStart, railSections, bez3, patternMatrices, instanceMatrices, loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  return { path3dPoints, path3dBake, path3dSetRule, railStart, railSections, bez3, patternMatrices, instanceMatrices, loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 

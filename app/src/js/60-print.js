@@ -3,7 +3,7 @@
 const Print = (() => {
   function solidBox() {
     const box = new THREE.Box3();
-    for (const n of Viewer.nodes.values()) { if (n.role === 'hole' || !n.obj.visible) continue; box.union(n.mesh.geometry.boundingBox.clone().applyMatrix4(n.obj.matrix)); }
+    for (const n of Viewer.nodes.values()) { if (n.role === 'hole' || !n.obj.visible || n.id === '__dragprev') continue; box.union(n.mesh.geometry.boundingBox.clone().applyMatrix4(n.obj.matrix)); }
     return box;
   }
   function stats() {

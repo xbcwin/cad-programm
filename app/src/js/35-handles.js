@@ -76,6 +76,18 @@ const Handles = (() => {
       m.userData = { ...m.userData, ...d, wdir: new THREE.Vector3(...d.dir).transformDirection(W) };
       group.add(m); items.push(m); H.size.push(m);
     }
+    // Rohr im Raum: Länge jedes Stücks im Bild – Klick und Zahl tippen macht sie fest (Regel „Länge“)
+    if (it.kind === 'sweep' && it.p && it.p.path3d) {
+      const V3 = Model.vars(App.doc).v, P3 = Model.path3dPoints(it.p.path3d, V3), RU = it.p.path3d.rules || [];
+      for (let i = 0; i + 1 < P3.length; i++) {
+        const a = new THREE.Vector3(...P3[i]).applyMatrix4(W), b = new THREE.Vector3(...P3[i + 1]).applyMatrix4(W), d = b.clone().sub(a);
+        const o = new THREE.Object3D(); o.position.copy(a).add(b).multiplyScalar(0.5);
+        let side = new THREE.Vector3(0, 0, 1).cross(d); if (side.lengthSq() < 1e-9) side.set(1, 0, 0); side.normalize();
+        o.userData = { kind: 'seg', seg: i, wdir: side };
+        group.add(o); items.push(o);
+        addSegLabel(o, d.length(), RU[i] || {}, it.id);
+      }
+    }
     // Anheben (Z) über der Mitte
     const top = new THREE.Vector3(cx, cy, z1).applyMatrix4(W);
     const lift = handleMesh('lift'); lift.userData.kind = 'lift'; lift.userData.base = top.clone();
@@ -137,6 +149,31 @@ const Handles = (() => {
     const el = h('div', { class: 'dimlabel', title: 'Klicken und genaues Maß eintippen' }, fmt(value, 2));
     el.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
     el.addEventListener('click', (e) => { e.stopPropagation(); editLabel(el, handle); });
+    overlayEl.append(el);
+    labels.push({ el, handle });
+  }
+  function addSegLabel(handle, len, rule, id) {
+    const i = handle.userData.seg;
+    const el = h('div', { class: 'dimlabel seglabel' + (rule.len != null ? ' fixed' : ''), id: 'seglabel-' + i, title: 'Klicken und Länge dieses Stücks eintippen' }, (rule.ax ? ({ perp: '⊥', par: '∥' }[rule.ax] || rule.ax.toUpperCase()) + ' · ' : '') + fmt(len, 1) + (rule.len != null ? ' 🔒' : ''));
+    el.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
+    el.addEventListener('click', (e) => {
+      e.stopPropagation(); if (el.classList.contains('editing')) return;
+      el.classList.add('editing'); el.textContent = '';
+      const inp = h('input', { type: 'text', value: rule.len != null ? String(rule.len) : fmt(len, 2), 'aria-label': `Länge von Stück ${i + 1}` });
+      el.append(inp); inp.focus(); inp.select();
+      let finished = false;
+      const done = (ok) => {
+        if (finished) return; finished = true;
+        if (ok) {
+          const val = inp.value.trim(), n = parseNum(val), V = Model.vars(App.doc).v, test = isNaN(n) ? Model.num(val, V, NaN) : n;
+          if (!isNaN(test) && test >= 0) App.change('Länge im Pfad', (doc) => { const f = Model.find(doc, id); if (!f || !f.item.p.path3d) return false; Model.path3dSetRule(f.item.p.path3d, i, { len: isNaN(n) ? val : n || null }, V); });
+          else UI.toast('Bitte eine Zahl eingeben (0 macht die Länge wieder frei).', { kind: 'bad' });
+        }
+        rebuild();
+      };
+      inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); done(true); } if (e.key === 'Escape') { e.preventDefault(); done(false); } e.stopPropagation(); });
+      inp.addEventListener('blur', () => done(true), { once: true });
+    });
     overlayEl.append(el);
     labels.push({ el, handle });
   }
@@ -379,7 +416,7 @@ const Interact = (() => {
     window.addEventListener('keydown', onKey, true);
     window.addEventListener('pointermove', (e) => { lastPtr = { x: e.clientX, y: e.clientY }; }, { passive: true });
   }
-  function modelActive() { return App.mode === 'model' && !Sketch.active && !Place.active && !Measure.active && !Notes.active && !Features.picking; }
+  function modelActive() { return App.mode === 'model' && !Sketch.active && !Place.active && !Measure.active && !Notes.active && !Features.picking && !Sketch.picking; }
   function onDown(e) {
     if (!modelActive()) return;
     if (e.button !== 0) return;

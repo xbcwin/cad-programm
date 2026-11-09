@@ -106,9 +106,80 @@ const Sketch = (() => {
     row.append(mk('Auf der Arbeitsfläche', 'XY'), mk('Stehend (vorne)', 'XZ'), mk('Stehend (seitlich)', 'YZ'));
     box.append(UI.numField({ id: 'sk-off', label: 'Abstand vom Nullpunkt (Ebene verschieben)', value: 0, unit: 'mm', expr: false, onCommit: (v) => { off = v; } }));
     box.append(row);
+    // Konstruktionsebenen an Körpern
+    const row2 = h('div', { class: 'btn-row' });
+    const pk = (id, label, kind) => { const b = h('button', { type: 'button', class: 'btn', id }, label); b.onclick = () => { UI.closePop(); startPlanePick(kind); }; return b; };
+    row2.append(pk('sk-mid', 'Mittig zwischen zwei Flächen', 'mid'), pk('sk-3p', 'Durch drei Punkte', '3p'));
+    box.append(row2);
     UI.pop(btn, box);
   }
   const PLANES = { XY: { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] }, XZ: { o: [0, 0, 0], x: [1, 0, 0], n: [0, -1, 0] }, YZ: { o: [0, 0, 0], x: [0, 1, 0], n: [1, 0, 0] } };
+  // ---------- Konstruktionsebenen: mittig zwischen zwei parallelen Flächen oder durch drei Punkte auf Körpern ----------
+  let planePick = null;
+  function stopPlanePick() {
+    if (!planePick) return;
+    Viewer.canvas.removeEventListener('pointerdown', planePick.down, true); window.removeEventListener('keydown', planePick.key, true);
+    for (const m of planePick.marks) { Viewer.groups.overlay.remove(m); m.geometry.dispose(); m.material.dispose(); }
+    Viewer.canvas.style.cursor = ''; UI.hint(null); Viewer.highlightFace('sel', null, null); planePick = null; Viewer.requestRender();
+  }
+  // Punkt auf einem Körper: Ecken und Kantenmitten in der Nähe der Maus rasten ein (12 Bildpunkte)
+  function bodyPoint(hit, cx, cy) {
+    const n = hit.node, r = Viewer.canvas.getBoundingClientRect(); let best = null;
+    for (const g of (n && n.data && n.data.edges) || []) for (const q of [g.a, g.b, g.m]) {
+      if (!q) continue;
+      const w = new THREE.Vector3(...q).applyMatrix4(n.obj.matrixWorld), sc = Viewer.toScreen(w), d = Math.hypot(sc.x + r.left - cx, sc.y + r.top - cy);
+      if (d < 12 && (!best || d < best.d)) best = { w, d };
+    }
+    return best ? best.w : hit.faceIdx >= 0 ? hit.point.clone() : null;
+  }
+  function startPlanePick(kind) {
+    stopPlanePick(); if (S) cancel();
+    const need = kind === 'mid' ? 2 : 3, got = [], marks = [];
+    const hint = () => UI.hint(kind === 'mid' ? `<b>Mittelebene:</b> Klick ${got.length ? 'die zweite' : 'die erste'} flache Fläche (beide parallel). <b>Esc</b> bricht ab.` : `<b>Ebene durch drei Punkte:</b> Klick Punkt ${got.length + 1} von 3 auf einem Körper – Ecken und Kantenmitten rasten ein. <b>Esc</b> bricht ab.`);
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: kind === 'mid', solidsOnly: true });
+      if (!hit) { UI.toast(kind === 'mid' ? 'Klick eine flache Fläche eines Körpers.' : 'Klick auf einen Körper.', { icon: 'info', ms: 1600 }); return; }
+      if (kind === 'mid') {
+        const r = App.results.get(hit.id), info = r && r.data && r.data.faces[hit.faceIdx];
+        if (!info || info.t !== 'PLANE' || !info.n) { UI.toast('Klick eine flache Fläche.', { icon: 'info', ms: 1600 }); return; }
+        const W = Model.worldMatrix(App.doc, hit.id), fr = Actions.faceFrame(info);
+        got.push({ c: new THREE.Vector3(...info.c).applyMatrix4(W), n: new THREE.Vector3(...info.n).transformDirection(W).normalize(), x: new THREE.Vector3(...fr.x).transformDirection(W).normalize() });
+        Viewer.highlightFace('sel', hit.id, hit.faceIdx);
+      } else {
+        const p = bodyPoint(hit, e.clientX, e.clientY); if (!p) return;
+        got.push(p);
+        const m = new THREE.Mesh(new THREE.SphereGeometry(Viewer.pixelSizeAt(p) * 5, 12, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color('#e0457b'), depthTest: false }));
+        m.position.copy(p); m.renderOrder = 41; Viewer.groups.overlay.add(m); marks.push(m); Viewer.requestRender();
+      }
+      if (got.length < need) { hint(); return; }
+      const pl = kind === 'mid' ? midPlane(got) : plane3(got);
+      stopPlanePick();
+      if (!pl) { UI.toast(kind === 'mid' ? 'Die beiden Flächen sind nicht parallel – eine Mittelebene gibt es nur zwischen parallelen Flächen.' : 'Die drei Punkte liegen auf einer Linie – sie spannen keine Ebene auf.', { kind: 'bad' }); return; }
+      begin({ plane: pl, W: new THREE.Matrix4(), ents: [], refs: [], ctx: { mode: 'new', targetId: null } });
+      UI.toast(kind === 'mid' ? 'Skizze auf der Mittelebene – genau zwischen den beiden Flächen.' : 'Skizze auf der Ebene durch die drei Punkte.', { icon: 'check' });
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPlanePick(); } };
+    planePick = { down, key, marks };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true); window.addEventListener('keydown', key, true);
+    hint();
+  }
+  const r6v = (v) => v.toArray().map((x) => round(x, 6));
+  function midPlane([A, B]) {
+    if (Math.abs(A.n.dot(B.n)) < 0.999) return null;
+    const d = B.c.clone().sub(A.c).dot(A.n);
+    return { o: r6v(A.c.clone().addScaledVector(A.n, d / 2)), x: r6v(A.x), n: r6v(A.n) };
+  }
+  function plane3([a, b, c]) {
+    const u = b.clone().sub(a), v = c.clone().sub(a), n = u.clone().cross(v);
+    if (n.length() < 1e-6 * Math.max(1, u.length() * v.length())) return null;
+    n.normalize();
+    // Normale möglichst nach oben (sonst zur Kamera), damit „Hochziehen“ nach außen geht
+    if (Math.abs(n.z) > 1e-6 ? n.z < 0 : n.dot(Viewer.camera.position.clone().sub(a)) < 0) n.negate();
+    return { o: r6v(a), x: r6v(u.normalize()), n: r6v(n) };
+  }
   function startOnPlane(name, off = 0) {
     const pl = PLANES[name];
     begin({ plane: deepClone(pl), W: new THREE.Matrix4(), ents: [], refs: [], ctx: { mode: 'new', targetId: null }, pOff: off || 0 });
@@ -418,9 +489,18 @@ const Sketch = (() => {
   // ---------- Maße und Regeln: der Löser rechnet alles gemeinsam ----------
   const vars = () => Model.vars(App.doc).v;
   // fast: beim Ziehen ohne Beweglichkeits-Analyse (die kommt beim Loslassen)
+  // Text entlang einer Kurve: Punkte der Kurve nachführen (die Kurve kann sich gerade geändert haben)
+  function refreshTextPaths() {
+    for (const t of S.ents) {
+      if (t.type !== 'text' || !t.on) continue;
+      const c = S.ents.find((x) => x.id === t.on), pts = c ? SK.textPathPts(c, t.flip) : null;
+      if (pts) t.onP = pts; else { delete t.on; delete t.onP; delete t.os; delete t.flip; }
+    }
+  }
   function reapply(opts = {}) {
     if (!S) return null;
     const r = Solver.solve({ ents: S.ents, dims: S.dims, cons: S.cons }, vars(), { inPlace: true, analyze: !opts.fast, pins: opts.pins });
+    refreshTextPaths();
     if (!opts.fast) S.status = r; else if (S.status) S.status.conflicts = r.conflicts;
     return r;
   }
@@ -2167,12 +2247,29 @@ const Sketch = (() => {
         f.append(dimField('h', 'Höhe (Großbuchstaben)', 'mm', { min: 0.1 }));
         f.append(UI.selectField({ id: 'se-font', label: 'Schrift', value: sel.font || 'inter', options: Object.entries(SK.FONTNAMES), onChange: (v) => upd((e) => { e.font = v; }) }));
         f.append(UI.selectField({ id: 'se-align', label: 'Ausrichtung', value: sel.align || 'l', options: [['l', 'Links'], ['m', 'Mitte'], ['r', 'Rechts']], onChange: (v) => upd((e) => { e.align = v; }) }));
-        f.append(UI.numField({ id: 'se-rot', label: 'Drehung', value: round(((sel.rot || 0) * 180) / Math.PI, 3), unit: '°', expr: false, onCommit: (v) => upd((e) => { e.rot = (v * Math.PI) / 180; }) }));
+        if (!sel.on) f.append(UI.numField({ id: 'se-rot', label: 'Drehung', value: round(((sel.rot || 0) * 180) / Math.PI, 3), unit: '°', expr: false, onCommit: (v) => upd((e) => { e.rot = (v * Math.PI) / 180; }) }));
         f.append(UI.numField({ id: 'se-sp', label: 'Zeichenabstand', value: sel.sp || 0, unit: 'mm', expr: false, onCommit: (v) => upd((e) => { e.sp = v; }) }));
-        f.append(UI.numField({ id: 'se-bend', label: 'Bogen-Radius', value: sel.bend || 0, unit: 'mm', expr: false, onCommit: (v) => upd((e) => { if (Math.abs(v) < 1e-6) delete e.bend; else e.bend = v; }) }));
+        // entlang einer offenen Kurve der Skizze (Linie, Bogen, Spline)
+        const curves = S.ents.filter((x) => x.type === 'line' || x.type === 'arc' || (x.type === 'spline' && !x.closed));
+        if (curves.length || sel.on) {
+          const nm = { line: 'Linie', arc: 'Bogen', spline: 'Spline' };
+          f.append(UI.selectField({ id: 'se-on', label: 'Entlang', value: sel.on || '', options: [['', 'Gerade'], ...curves.map((c, i) => [c.id, `${nm[c.type]} ${i + 1}${c.con ? ' (Hilfslinie)' : ''}`])], onChange: (v) => upd((e) => {
+            if (v) { const c = S.ents.find((x) => x.id === v), pts = c && SK.textPathPts(c, false); if (!pts) return; e.on = v; e.onP = pts; e.align = 'm'; delete e.bend; }
+            else { delete e.on; delete e.onP; delete e.os; delete e.flip; }
+          }) }));
+          if (sel.on) {
+            f.append(UI.numField({ id: 'se-os', label: 'Verschieben entlang', value: sel.os || 0, unit: 'mm', expr: false, onCommit: (v) => upd((e) => { if (Math.abs(v) < 1e-9) delete e.os; else e.os = v; }) }));
+            const fb = h('button', { type: 'button', class: 'btn', id: 'se-flip' }); fb.innerHTML = icon('mirror') + 'Andere Seite';
+            fb.onclick = () => upd((e) => { e.flip = !e.flip; if (!e.flip) delete e.flip; const c = S.ents.find((x) => x.id === e.on); const pts = c && SK.textPathPts(c, e.flip); if (pts) e.onP = pts; });
+            f.append(h('div', { class: 'btn-row' }, fb));
+            const cv = S.ents.find((x) => x.id === sel.on);
+            if (cv && !cv.con) w.append(h('div', { class: 'hint-box', id: 'se-on-hint', html: 'Tipp: Mach die Kurve zur <b>Hilfslinie</b> (Kurve anklicken → „Hilfslinie“) – dann zählt sie nicht zur Fläche und die Buchstaben stehen frei.' }));
+          }
+        }
+        if (!sel.on) f.append(UI.numField({ id: 'se-bend', label: 'Bogen-Radius', value: sel.bend || 0, unit: 'mm', expr: false, onCommit: (v) => upd((e) => { if (Math.abs(v) < 1e-6) delete e.bend; else e.bend = v; }) }));
         // An Kreis oder Bogen legen: die Grundlinie läuft auf dem nächsten Kreis, Mitte des Texts dort, wo er gerade steht
         const rounds = S.ents.filter((x) => x.type === 'circle' || x.type === 'arc');
-        if (rounds.length) {
+        if (rounds.length && !sel.on) {
           const ob = h('button', { type: 'button', class: 'btn', id: 'se-oncircle' }); ob.innerHTML = icon('circle') + 'An Kreis legen';
           ob.onclick = () => upd((e) => {
             const tb = e.align === 'm' ? null : SK.textBox(e), p0 = tb ? tb.c : e.a;   // Mitte der Grundlinie (bei „Mitte“ der Ankerpunkt)
@@ -2607,6 +2704,6 @@ const Sketch = (() => {
     cv.addEventListener('pointermove', (e) => { if (S) onMove(e); });
     window.addEventListener('pointerup', (e) => { if (S) { onUp(e); stepUp(e); } });
   }
-  return { init, chooseAndStart, startOnPlane, startOnFace, startPath, startLoftPath, editItem, pushPullFace, renderPanel, onKey, cancel, setBg, setTool, get active() { return !!S; }, get state() { return S; } };
+  return { init, chooseAndStart, startOnPlane, startOnFace, startPath, startLoftPath, editItem, pushPullFace, renderPanel, onKey, cancel, setBg, setTool, get active() { return !!S; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
 })();
 

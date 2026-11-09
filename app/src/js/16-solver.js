@@ -393,6 +393,8 @@ const Solver = (() => {
     } else err = iterate(sys, X, active);
     // zurückschreiben
     for (const e of ents) { const m = sys.idx.get(e.id); if (!m) continue; for (const k in m) setK(e, k, Math.round(X[m[k]] * 1e6) / 1e6); }
+    // Text entlang einer Kurve folgt der Kurve, wenn sie sich durch Maße oder Regeln ändert
+    for (const e of ents) if (e.type === 'text' && e.on) { const c = ents.find((x) => x.id === e.on), pts = c ? SK.textPathPts(c, e.flip) : null; if (pts) e.onP = pts; }
     const res = residuals(sys, X);
     const conflicts = new Set();
     sys.eqs.forEach((q, i) => { if (Math.abs(res[i]) > 1e-5 && q.tag) { if (q.tag.con) conflicts.add(q.tag.con); if (q.tag.dim) conflicts.add(q.tag.dim); } });

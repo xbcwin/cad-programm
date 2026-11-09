@@ -1569,6 +1569,27 @@ def t_h_rahmen(p):
     ok5 = f['circles'] == 28 and 'KONTUR' in f['text'] and f['text'].rstrip().endswith('EOF')
     return [ok1, ok2, ok3, ok4, ok5]
 
+
+# ---------- Sitzung 69: Rahmen mit einzelnen Armen (Sandwich) ----------
+def t_sandwich(p):
+    p.pg.locator('.card.drone[data-tpl="assist"]').click(); p.wait(600)
+    ok0 = p.pg.locator('#fa-arme').count() == 1
+    p.pg.select_option('#fa-arme', 'sandwich'); p.wait(300)
+    p.pg.locator('.modal .btn.primary').filter(has_text='Rahmen bauen').click(); warte_rechnen(p, 120)
+    names = p.ev("return App.doc.items.map(i=>i.name)")
+    ok1 = ok0 and 'Bodenplatte' in names and all('Arm ' + n in names for n in ['vorne rechts', 'vorne links', 'hinten rechts', 'hinten links']) and 'Unterteil' not in names and p.ev("return App.errors.length") == 0
+    bp = p.ev("const it=App.doc.items.find(i=>i.name==='Bodenplatte'); const b=Actions.worldBox(it.id); return [b.min.z, b.max.z]")
+    P = p.ev("return Model.vars(App.doc).v")
+    ok2 = abs(bp[0] + P['Bodenplatte']) < 1e-3 and abs(bp[1]) < 1e-3 and P['Armspalt'] == 0.4 and p.ev("return App.doc.drone.arms") == 'sandwich'
+    c = chk(p)
+    ok3 = ok_check(c)
+    plates = p.ev("return Plates.candidates().map(c=>c.name)")
+    ok4 = 'Bodenplatte' in ' '.join(plates) and sum(1 for x in plates if x.startswith('Arm ')) == 4
+    # Arme berühren sich nicht: kleinster Abstand der Arm-Viertel = Armspalt
+    g = p.ev("const b=(n)=>Actions.worldBox(App.doc.items.find(i=>i.name===n).id); const a=b('Arm vorne rechts'), l=b('Arm vorne links'); return [a.min.x, l.max.x]")
+    ok5 = abs(g[0] - g[1] - 0.4) < 0.01
+    return [ok1, ok2, ok3, ok4, ok5]
+
 def t_frame_warnung(p):
     p.pg.locator('.card.drone[data-tpl="assist"]').click(); p.wait(600)
     p.pg.fill('#fa-a', '150'); p.pg.press('#fa-a', 'Enter'); p.wait(400)
@@ -2215,6 +2236,68 @@ def t_text_bogen(p):
     ok4 = p.ev("const it=App.doc.items[0]; const r=App.results.get(it.id); return !!(r && r.data && r.data.faces.length > 10) && App.errors.length===0 && it.p.sketch.ents.find(e=>e.id==='T').bend===20")
     return [ok1, ok2, ok3, ok4]
 
+
+# ---------- Sitzung 65: Text entlang einer Kurve ----------
+def t_text_kurve(p):
+    scene(p, [{'id': 'K', 'type': 'spline', 'pts': [[-30, 0], [0, 15], [30, 0]], 'closed': False, 'con': True}, {'id': 'T', 'type': 'text', 'a': [0, -20], 's': 'FPV', 'h': 5, 'font': 'inter', 'align': 'l', 'rot': 0}])
+    p.ev("const S=Sketch.state; S.sel='T'; Panels.renderRight()"); p.wait(300)
+    p.pg.select_option('#se-on', 'K'); p.wait(400)
+    # Abstand jedes Buchstaben-Punkts zur Kurve (über/unter: Vorzeichen über die y-Lage der Kurve an dieser Stelle)
+    probe = """const e=E('T'), C=SK.splinePoints(E('K').pts,false), P=SK.textContours(e).flat().flatMap(s=>[s.a,s.b]);
+      const dist=(q)=>{ let b=1e9; for(let i=0;i+1<C.length;i++){ const a=C[i], c=C[i+1], dx=c[0]-a[0], dy=c[1]-a[1], t=Math.max(0,Math.min(1,((q[0]-a[0])*dx+(q[1]-a[1])*dy)/(dx*dx+dy*dy))); b=Math.min(b,Math.hypot(q[0]-a[0]-t*dx,q[1]-a[1]-t*dy)); } return b; };
+      const yAt=(x)=>{ for(let i=0;i+1<C.length;i++){ if((C[i][0]-x)*(C[i+1][0]-x)<=0){ const t=(x-C[i][0])/((C[i+1][0]-C[i][0])||1e-9); return C[i][1]+t*(C[i+1][1]-C[i][1]); } } return 0; };
+      const d=P.map(dist), above=P.filter(q=>q[1]>=yAt(q[0])-0.05).length/P.length, xs=P.map(q=>q[0]);
+      const over=P.filter(q=>q[1]>yAt(q[0])+0.05).length/P.length; return [e.on, Math.max(...d), above, (Math.min(...xs)+Math.max(...xs))/2, Math.max(...P.map(q=>q[1])), over]"""
+    r1 = SS(p, probe)
+    ok1 = r1[0] == 'K' and r1[1] < 5.6 and r1[2] > 0.98 and abs(r1[3]) < 1.5
+    p.pg.locator('#se-flip').click(); p.wait(400)
+    r2 = SS(p, probe)
+    p.pg.fill('#se-os', '10'); p.pg.press('#se-os', 'Enter'); p.wait(400)
+    r3 = SS(p, probe)
+    ok2 = r2[5] < 0.01 and r2[1] < 5.6 and r3[3] < r2[3] - 7   # andere Seite = unter der Kurve und andersherum: +10 entlang wandert nach links
+    # Kurve ändern: der Text folgt
+    SS(p, "E('K').pts[1]=[0,25]")
+    p.pg.fill('#se-os', '0'); p.pg.press('#se-os', 'Enter'); p.wait(400)
+    r4 = SS(p, probe)
+    ok3 = r4[1] < 5.6 and r4[5] < 0.01 and r4[4] > 18
+    # als Körper: Buchstaben erhaben, ohne Fehler; gerade wieder: Felder weg
+    p.pg.select_option('#se-on', ''); p.wait(300)
+    ok4 = SS(p, "const e=E('T'); return !e.on && !e.onP && !e.flip") and p.pg.locator('#se-os').count() == 0
+    p.pg.keyboard.press('Control+z'); p.wait(300)
+    p.pg.keyboard.press('Enter'); warte_rechnen(p, 30)
+    ok5 = p.ev("const it=App.doc.items[0]; const t=it.p.sketch.ents.find(e=>e.id==='T'); return t.on==='K' && t.onP.length>10 && App.errors.length===0 && App.results.get(it.id).data.faces.length>10")
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
+# ---------- Sitzung 68: Skizzen-Ebenen mittig zwischen Flächen und durch drei Punkte ----------
+def t_skizze_ebenen(p):
+    p.empty()
+    p.ev("App.change('x', d=>{ const a=Model.newItem('box',{w:20,d:20,h:10}); a.t.x=-20; const b=Model.newItem('box',{w:20,d:20,h:10}); b.t.x=20; b.t.z=30; d.items.push(a,b); })"); warte_rechnen(p, 30)
+    p.ev("App.clearSelection(); Viewer.setView('iso', false)"); p.wait(1200)
+    p.pg.locator('#t-sketch').click(); p.wait(400)
+    p.pg.locator('#sk-mid').click(); p.wait(300)
+    s1 = world_screen(p, -20, 0, 10); p.pg.mouse.click(s1[0], s1[1]); p.wait(300)
+    s2 = world_screen(p, 20, 0, 40); p.pg.mouse.click(s2[0], s2[1]); p.wait(1200)
+    pl = p.ev("const S=Sketch.state; return S && [S.plane.o, S.plane.n]")
+    ok1 = pl is not None and abs(pl[0][2] - 25) < 1e-6 and abs(pl[1][2] - 1) < 1e-9
+    # Rechteck darauf hochziehen: liegt genau bei z = 25
+    p.ev("const S=Sketch.state; S.ents.push({id:'r1',type:'rect',a:[-5,-5],b:[5,5]})")
+    fertig_hoch(p, '3')
+    z = p.ev("const it=App.doc.items[2]; const r=App.results.get(it.id); return r && r.data.bbox && [Actions.worldBox(it.id).min.z, Actions.worldBox(it.id).max.z]")
+    ok2 = z is not None and abs(z[0] - 25) < 1e-3 and abs(z[1] - 28) < 1e-3
+    # drei Ecken oben auf dem ersten Quader (rasten ein) → Ebene z = 10
+    p.ev("App.clearSelection(); Viewer.setView('iso', false)"); p.wait(1000)
+    p.pg.locator('#t-sketch').click(); p.wait(400)
+    p.pg.locator('#sk-3p').click(); p.wait(300)
+    for (x, y) in [(-29.6, -9.6), (-10.4, -9.6), (-10.4, 9.6)]:
+        s = world_screen(p, x, y, 10); p.pg.mouse.click(s[0], s[1]); p.wait(300)
+    p.wait(900)
+    pl3 = p.ev("const S=Sketch.state; return S && [S.plane.o, S.plane.n, S.plane.x]")
+    ok3 = pl3 is not None and abs(pl3[0][2] - 10) < 1e-6 and abs(pl3[1][2] - 1) < 1e-9 and abs(pl3[0][0] + 30) < 1e-6 and abs(pl3[0][1] + 10) < 1e-6 and abs(pl3[2][0] - 1) < 1e-9
+    p.pg.keyboard.press('Escape'); p.wait(300)
+    ok4 = p.ev("return App.errors.length") == 0
+    return [ok1, ok2, ok3, ok4]
+
 def t_spline_genau(p):
     sketch_xy(p)
     p.ev("const S=Sketch.state; S.ents.push({id:'s1',type:'spline',closed:true,pts:[[0,0],[30,0],[40,20],[10,30]]})")
@@ -2346,11 +2429,29 @@ def t_magnet_kaufteil(p):
     tile = p.pg.locator('.flyout .tile').filter(has_text='Motor 2207').first.bounding_box()
     tgt = world_screen(p, 0.6, -0.5, 4)
     p.pg.mouse.move(tile['x'] + 20, tile['y'] + 20); p.pg.mouse.down()
-    p.pg.mouse.move(tgt[0], tgt[1], steps=12); p.wait(500); p.pg.mouse.move(tgt[0] + 1, tgt[1] + 1); p.wait(500)
+    # die Vorschau in echter Form wird zuerst gerechnet, die Flächendaten für den Magneten kommen kurz danach
+    p.pg.mouse.move(tgt[0], tgt[1], steps=12); p.wait(2500); p.pg.mouse.move(tgt[0] + 1, tgt[1] + 1); p.wait(500)
     lab = p.ev("return Snap.label")
     p.pg.mouse.up(); p.wait(3000)
     t = p.ev("const m=App.doc.items.find(i=>i.name==='Motor 2207'); return m && m.t")
     return [lab == 'Mitte der Fläche', t is not None and abs(t['x']) < 1e-6 and abs(t['y']) < 1e-6 and abs(t['z'] - 4) < 1e-6]
+
+def t_vorschau_echt(p):
+    p.empty(); p.ev("Actions.addPrimitive('box')"); p.wait(2000)
+    p.ev("App.change('x', d=>{ const a=d.items[0]; a.t.x=0; a.t.y=0; Object.assign(a.p,{w:60,d:60,h:4}); })"); p.wait(2000)
+    p.ev("App.clearSelection(); Viewer.setView('top', false)"); p.wait(1000)
+    p.pg.locator('#t-drone').click(); p.wait(400)
+    p.pg.locator('.flyout .chip[data-cat="motor"]').click(); p.wait(300)
+    tile = p.pg.locator('.flyout .tile').filter(has_text='Motor 2207').first.bounding_box()
+    tgt = world_screen(p, 10, 8, 4)
+    p.pg.mouse.move(tile['x'] + 20, tile['y'] + 20); p.pg.mouse.down()
+    p.pg.mouse.move(tgt[0], tgt[1], steps=12); p.wait(2500); p.pg.mouse.move(tgt[0] + 1, tgt[1] + 1); p.wait(600)
+    # echte Form des Motors (rund), an der Maus, nicht anklickbar
+    r = p.ev("const n=Viewer.nodes.get('__dragprev'); if(!n) return null; const m=n.obj.matrixWorld.elements; return [m[12],m[13],m[14], n.obj.visible, n.data.faces.filter(f=>f.t!=='PLANE').length]")
+    ok1 = r is not None and abs(r[0] - 10) < 1.5 and abs(r[1] - 8) < 1.5 and abs(r[2] - 4) < 0.01 and r[3] and r[4] > 0
+    p.pg.mouse.up(); p.wait(3000)
+    ok2 = p.ev("return !App.extra.some(x=>x.id==='__dragprev') && !Viewer.nodes.has('__dragprev') && App.doc.items.length===2 && App.errors.length===0")
+    return [ok1, ok2]
 
 def t_magnet_koerper(p):
     zwei_quader(p, 0, 3, 0, 40)   # zweiter Quader 40 mm daneben, 3 mm versetzt
@@ -3122,6 +3223,17 @@ def t_ki_zwei_fuehrung(p):
     ok3 = abs(bb[5] - 20) < 1 and abs(bb[3] - 25) < 1 and abs(bb[1] + 80) < 0.5
     return [ok1, ok2, ok3]
 
+
+def t_ki_text_kurve(p):
+    ki(p); p.empty()
+    ki_fragen(p, 'Schreib FPV im Bogen auf eine Platte', {'antwort': 'Ich setze den Schriftzug auf eine Kurve.', 'aktionen': [
+        {'op': 'hinzufuegen', 'objekt': {'art': 'extrude', 'name': 'Schrift', 'p': {'ebene': 'XY', 'versatz': 0, 'hoehe': 1,
+            'form': [{'text': 'FPV', 'hoehe': 6, 'fett': True, 'entlang': [[-25, 0], [0, 12], [25, 0]]}]}}}]}, 90)
+    r = p.ev("const it=App.doc.items[0]; const e=it&&it.p.sketch&&it.p.sketch.ents; if(!e) return null; const t=e.find(x=>x.type==='text'), k=e.find(x=>x.type==='spline'); return [!!t&&t.on===k.id, k.con, t.onP.length>10, App.errors.length]")
+    bb = p.ev("return App.results.get(App.doc.items[0].id).data.bbox")
+    return [r is not None and r[0] and r[1] and r[2], r is not None and r[3] == 0 and bb[4] > 10 and bb[1] > -3]
+
+
 # ---------- Sitzung 45: Rohr im Raum ----------
 def t_rohr_raum(p):
     p.empty()
@@ -3193,6 +3305,36 @@ def t_rohr_regeln(p):
     r = p.ev("return App.doc.items[0].p.path3d.rules")
     ok4 = e == c and r[0] == {'ax': 'z'} and r[1] == {'ax': 'x'} and p.ev("return App.errors.length") == 0
     return [ok1, ok2, ok3, ok4]
+
+
+def t_rohr_masse_bild(p):
+    p.empty()
+    p.ev("App.change('x', d=>{ const it=Model.newItem('sweep',{path3d:{pts:[[0,0,0],[0,0,20],[20,0,20]],smooth:false},shape:'circle',d:4,w:4,h:3,wall:0},{name:'Rohr'}); d.items.push(it); })"); warte_rechnen(p, 30)
+    p.ev("App.select([App.doc.items[0].id]); Viewer.setView('front', false)"); p.wait(1200)
+    t0 = p.pg.locator('#seglabel-0').inner_text() if p.pg.locator('#seglabel-0').count() else ''
+    p.pg.locator('#seglabel-0').click(); p.wait(200)
+    p.pg.keyboard.press('Control+a'); p.pg.keyboard.type('25'); p.pg.keyboard.press('Enter'); warte_rechnen(p, 30)
+    pts = p.ev("return Model.path3dPoints(App.doc.items[0].p.path3d, Model.vars(App.doc).v).map(q=>q.map(v=>Math.round(v*1000)/1000))")
+    t1 = p.pg.locator('#seglabel-0').inner_text() if p.pg.locator('#seglabel-0').count() else ''
+    ok1 = '20' in t0 and pts == [[0, 0, 0], [0, 0, 25], [20, 0, 25]] and '25' in t1 and '🔒' in t1 and p.pg.locator('#seglabel-1').count() == 1
+    ok2 = p.ev("return App.errors.length") == 0 and abs(p.ev("return App.results.get(App.doc.items[0].id).data.bbox")[5] - 27) < 0.1
+    return [ok1, ok2]
+
+
+def t_rohr_rechtwinklig(p):
+    p.empty()
+    p.ev("App.change('x', d=>{ const it=Model.newItem('sweep',{path3d:{pts:[[0,0,0],[10,0,10],[25,3,12]],smooth:false},shape:'circle',d:3,w:3,h:3,wall:0},{name:'Rohr'}); d.items.push(it); })"); warte_rechnen(p, 30)
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(500)
+    opts0 = p.pg.locator('#p3-ax-0 option').count(); opts1 = p.pg.locator('#p3-ax-1 option').count()
+    P = lambda: p.ev("return Model.path3dPoints(App.doc.items[0].p.path3d, Model.vars(App.doc).v).map(q=>q.map(v=>Math.round(v*1000)/1000))")
+    p.pg.select_option('#p3-ax-1', 'perp'); warte_rechnen(p, 30)
+    a = P()
+    dot = (a[2][0] - a[1][0]) * 10 + (a[2][2] - a[1][2]) * 10
+    p.pg.select_option('#p3-ax-1', 'par'); warte_rechnen(p, 30)
+    b = P()
+    ok1 = opts0 == 4 and opts1 == 6 and abs(dot) < 1e-2 and a[2] == [16.5, 3, 3.5] and abs(b[2][0] - b[2][2]) < 1e-3 and abs(b[2][1]) < 1e-3 and abs(b[2][0] - 10 - 9.6695 / 2 ** 0.5) < 0.01
+    ok2 = p.ev("return App.errors.length") == 0 and '∥' in p.pg.locator('#seglabel-1').inner_text()
+    return [ok1, ok2]
 
 
 def t_ki_rohr_regeln(p):
@@ -3725,15 +3867,22 @@ TESTS = [
     ('Übergang mit zwei Führungskurven: quer zur ersten vorgezeichnet / Vorschau in beiden Richtungen / Fertig / Rückgängig / beide weg', t_uebergang_zwei),
     ('KI-Kollege: Rumpf mit zwei Führungskurven (von der Seite und von oben)', t_ki_zwei_fuehrung),
     ('Text im Bogen: Radius / an Kreis legen / Rückgängig / Körper', t_text_bogen),
+    ('Text entlang Kurve: über der Kurve / andere Seite / verschieben / Kurve ändern / gerade / Körper', t_text_kurve),
+    ('KI-Kollege: Text entlang einer Kurve', t_ki_text_kurve),
+    ('Skizzen-Ebenen: mittig zwischen zwei Flächen / Körper darauf / durch drei Ecken / sauber', t_skizze_ebenen),
     ('Ellipse versetzen: Spline genau im Abstand / nach innen zu weit', t_versatz_ellipse),
     ('Versatz einer Kette: alle Stücke zusammen ändern / Rückgängig', t_versatz_kette_zusammen),
     ('H-Rahmen: im Frame-Assistenten / Längs- und Querträger / Maße / Drohnen-Check / DXF', t_h_rahmen),
+    ('Rahmen mit einzelnen Armen: Bodenplatte und vier Arme / Maße / Drohnen-Check / einzeln als DXF / Spalt', t_sandwich),
     ('Rohr im Raum mit Regeln: entlang Z / Länge / entlang X / Körper / Startpunkt wandert, Regeln halten / Rückgängig und Länge frei', t_rohr_regeln),
+    ('Rohr im Raum: Länge im Bild anklicken und eintippen', t_rohr_masse_bild),
+    ('Rohr im Raum: rechtwinklig und parallel zum vorigen Stück', t_rohr_rechtwinklig),
     ('KI-Kollege: Rohr im Raum mit Regeln (senkrecht 25, dann 15 nach hinten)', t_ki_rohr_regeln),
     ('Fase: zwei Abstände / Seiten tauschen / Winkel / zurück auf gleich', t_fase_arten),
     ('Rundung von … bis: wächst entlang der Kante / Richtung tauschen', t_rundung_variabel),
     ('Magnet auf runden Flächen: Loch oben auf dem Rohr / Mitte oben / Hinweis und Linien / seitlich waagerecht / sauber / Kugel vorne', t_magnet_rund),
     ('Magnet für Kaufteile aus der Leiste: Motor rastet in die Mitte', t_magnet_kaufteil),
+    ('Ziehen aus der Leiste: Vorschau in echter Form, danach weg', t_vorschau_echt),
     ('Luftwiderstand: Form erkannt / Kraft bei 100 km/h / Tempo und Form ändern / ohne Schub Hinweis / Formel / Speed-Drohne Höchstgeschwindigkeit', t_luftwiderstand),
     ('Rohr im Raum: glatt / Ecken / im Bild klicken / Punkt als Zahl / löschen und Rückgängig', t_rohr_raum),
     ('KI-Kollege legt ein Rohr im Raum', t_ki_rohr_raum),
