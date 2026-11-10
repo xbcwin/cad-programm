@@ -561,7 +561,9 @@ const Panels = (() => {
         const V3 = Model.vars(App.doc).v, P3 = it.p.path3d.pts || [], RP = Model.path3dPoints(it.p.path3d, V3), RU = it.p.path3d.rules || [];
         // erst alle Zahlen-Punkte auf ihre Lage mit Regeln setzen – dann bleibt beim Ändern jeder andere Punkt, wo er ist
         const bake = (pp) => Model.path3dBake(pp, V3);
-        const setPt = (i, k, v) => App.change('Punkt geändert', (doc) => { const f = Model.find(doc, it.id); if (!f || !f.item.p.path3d || !f.item.p.path3d.pts[i]) return false; bake(f.item.p.path3d); f.item.p.path3d.pts[i][k] = v; }, { merge: 'p3:' + it.id + ':' + i + ':' + k });
+        const unbind = (pp, i) => { if (pp.bind && pp.bind[i]) { pp.bind[i] = null; if (!pp.bind.some(Boolean)) delete pp.bind; } };
+        const setPt = (i, k, v) => App.change('Punkt geändert', (doc) => { const f = Model.find(doc, it.id); if (!f || !f.item.p.path3d || !f.item.p.path3d.pts[i]) return false; bake(f.item.p.path3d); f.item.p.path3d.pts[i][k] = v; unbind(f.item.p.path3d, i); }, { merge: 'p3:' + it.id + ':' + i + ':' + k });
+        const BD = it.p.path3d.bind || [];
         // Regel je Stück: Richtung (entlang X/Y/Z) und Länge – wie in einer Skizze, nur im Raum
         const setRule = (i, patch) => App.change('Regel im Pfad', (doc) => { const f = Model.find(doc, it.id); if (!f || !f.item.p.path3d) return false; Model.path3dSetRule(f.item.p.path3d, i, patch, V3); });
         const fs = h('div', { class: 'fields' });
@@ -572,10 +574,16 @@ const Panels = (() => {
           const row = h('div', { class: 'fields three p3-row' });
           ['x', 'y', 'z'].forEach((ax, k) => row.append(UI.numField({ id: `p3-${i}-${ax}`, label: (k === 0 ? `P${i + 1} ` : '') + ax.toUpperCase(), value: typeof q[k] === 'string' ? q[k] : round(RP[i][k], 3), onCommit: (v) => setPt(i, k, v) })));
           list.append(row);
+          if (BD[i]) {
+            const bf = Model.find(App.doc, BD[i].id), ub = h('button', { type: 'button', class: 'btn ghost small', id: `p3-unbind-${i}` }); ub.innerHTML = icon('close') + 'lösen';
+            ub.onclick = () => App.change('Punkt vom Körper gelöst', (doc) => { const f = Model.find(doc, it.id); if (!f || !f.item.p.path3d) return false; unbind(f.item.p.path3d, i); });
+            list.append(h('div', { class: 'mini-row', id: `p3-bound-${i}` }, h('span', { class: 'grow' }, `P${i + 1} hängt an „${bf ? Model.label(bf.item) : '?'}“ und wandert mit`), ub));
+          }
           if (P3.length > 2) { const del = h('button', { type: 'button', class: 'btn ghost small', id: `p3-del-${i}`, 'aria-label': `Punkt ${i + 1} löschen` }); del.innerHTML = icon('trash') + `Punkt ${i + 1} löschen`; del.onclick = () => App.change('Punkt gelöscht', (doc) => {
             const f = Model.find(doc, it.id); if (!f) return false; const pp = f.item.p.path3d; bake(pp); pp.pts.splice(i, 1);
             // Regeln: die beiden Stücke am gelöschten Punkt werden eins – ohne Regel
             if (pp.rules) { const R = pp.rules.slice(); if (i === 0) R.splice(0, 1); else if (i >= R.length) R.splice(R.length - 1, 1); else { R.splice(i, 1); R[i - 1] = null; } if (R.some(Boolean)) pp.rules = R; else delete pp.rules; }
+            if (pp.bind) { pp.bind.splice(i, 1); if (!pp.bind.some(Boolean)) delete pp.bind; }
           }); list.append(del); }
           if (i + 1 < P3.length) {
             const L = Math.hypot(RP[i + 1][0] - RP[i][0], RP[i + 1][1] - RP[i][1], RP[i + 1][2] - RP[i][2]), r = RU[i] || {};

@@ -50,6 +50,9 @@ const DroneLib = (() => {
     if (cat === 'funk') {
       for (const v of BUY_DATA.empfaenger || []) out.push(box('buyPcb', v.name, v.l_mm, v.b_mm, v.h_mm, v.gewicht_g, { info: `${fmt(v.gewicht_g, 1)} g` }));
       for (const v of BUY_DATA.gps || []) out.push(box('buyGps', v.name, v.l_mm, v.b_mm, v.h_mm, v.gewicht_g, { info: `${fmt(v.gewicht_g, 1)} g` }));
+      // Antennen mit eigenen Maßen (Herstellerdaten folgen): Pilz für 5,8 GHz, Stab für Empfänger/Long Range
+      out.push(part('buyAntenna', { L: 45, d: 3, form: 'pilz', kd: 14, kl: 12, conn: 'sma' }, 'Antenne Pilz (eigene Maße)', '', { info: 'Maße und Gewicht deiner Antenne eintragen' }));
+      out.push(part('buyAntenna', { L: 80, d: 4, form: 'stab', kd: 4, kl: 1, conn: 'ufl' }, 'Antenne Stab (eigene Maße)', '', { info: 'Maße und Gewicht deiner Antenne eintragen' }));
     }
     if (cat === 'action') for (const v of BUY_DATA.actioncam || []) out.push(box('buyActioncam', v.name, v.b_mm, v.l_mm, v.h_mm, v.gewicht_g, { info: `${fmt(v.gewicht_g, 1)} g` }));
     if (cat === 'klein') {

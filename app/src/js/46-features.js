@@ -112,13 +112,16 @@ const Features = (() => {
   }
   function routePoint(cx, cy) {
     const hit = Viewer.pick(cx, cy, { solidsOnly: true, noEdges: true });
-    let P = null;
-    if (hit && hit.normal) P = hit.point.clone().addScaledVector(hit.normal.clone().normalize(), route.d / 2);
-    else { const z = route.pts.length ? route.pts[route.pts.length - 1][2] : 0; P = Viewer.pickPlane(cx, cy, z); }
+    let P = null, bind = null;
+    if (hit && hit.normal) {
+      P = hit.point.clone().addScaledVector(hit.normal.clone().normalize(), route.d / 2);
+      // Punkt hängt an diesem Körper: wandert er, wandert der Punkt mit (Lage im Körper merken)
+      bind = { id: hit.id, lp: P.clone().applyMatrix4(Model.worldMatrix(App.doc, hit.id).invert()).toArray().map((v) => round(v, 4)) };
+    } else { const z = route.pts.length ? route.pts[route.pts.length - 1][2] : 0; P = Viewer.pickPlane(cx, cy, z); }
     if (!P) return;
     const q = P.toArray().map((v) => round(v, 3)), last = route.pts[route.pts.length - 1];
     if (last && Math.hypot(q[0] - last[0], q[1] - last[1], q[2] - last[2]) < 0.5) return;   // Doppelklick: kein doppelter Punkt
-    route.pts.push(q); routeDraw();
+    route.pts.push(q); route.binds.push(bind); routeDraw();
   }
   function stopRoute() {
     if (!route) return;
@@ -131,17 +134,44 @@ const Features = (() => {
   function routeFinish() {
     if (!route) return null;
     if (route.pts.length < 2) { UI.toast('Klick mindestens zwei Punkte – auf einen Körper oder daneben in den Raum.', { icon: 'info' }); return null; }
-    const pts = route.pts.map((q) => q.slice()), d = route.d;
+    const pts = route.pts.map((q) => q.slice()), d = route.d, binds = route.binds.slice();
     stopRoute();
     let nid = null;
-    App.change('Rohr im Raum', (doc) => { const it = Model.newItem('sweep', { path3d: { pts, smooth: true }, shape: 'circle', d, w: d, h: round(d * 0.7, 2), wall: 0 }, { name: 'Rohr im Raum' }); doc.items.push(it); nid = it.id; });
+    App.change('Rohr im Raum', (doc) => { const it = Model.newItem('sweep', { path3d: { pts, smooth: true, ...(binds.some(Boolean) ? { bind: binds } : {}) }, shape: 'circle', d, w: d, h: round(d * 0.7, 2), wall: 0 }, { name: 'Rohr im Raum' }); doc.items.push(it); nid = it.id; });
     App.select([nid]);
     UI.toast('Rohr angelegt. Rechts änderst du Punkte, Durchmesser und Querschnitt.', { icon: 'check' });
     return nid;
   }
+  // Punkte, die an einem Körper hängen, wandern mit, wenn der Körper verschoben oder gedreht wird (ohne eigenen Rückgängig-Schritt)
+  let relinkRounds = 0;
+  function relinkRoutes() {
+    if (!App.doc || route) return;
+    const jobs = [];
+    Model.walk(App.doc.items, (it) => {
+      const pp = it.kind === 'sweep' && it.p && it.p.path3d; if (!pp || !Array.isArray(pp.bind) || !pp.bind.some(Boolean)) return;
+      const WI = Model.worldMatrix(App.doc, it.id).invert();
+      pp.bind.forEach((b, i) => {
+        if (!b || !pp.pts[i]) return;
+        if (!Model.find(App.doc, b.id)) { jobs.push({ id: it.id, i, drop: true }); return; }
+        const w = new THREE.Vector3(...b.lp).applyMatrix4(Model.worldMatrix(App.doc, b.id)).applyMatrix4(WI);
+        if (pp.pts[i].some((v, k) => !(typeof v === 'number' && Math.abs(v - w.getComponent(k)) < 1e-3))) jobs.push({ id: it.id, i, p: w.toArray().map((v) => round(v, 4)) });
+      });
+    });
+    if (!jobs.length) { relinkRounds = 0; return; }
+    if (++relinkRounds > 3) { relinkRounds = 0; return; }   // Schutz gegen Hin und Her
+    App.change('Rohr folgt dem Körper', (doc) => {
+      for (const j of jobs) {
+        const f = Model.find(doc, j.id); if (!f || !f.item.p.path3d) continue;
+        const pp = f.item.p.path3d;
+        if (j.drop) { pp.bind[j.i] = null; if (!pp.bind.some(Boolean)) delete pp.bind; } else pp.pts[j.i] = j.p;
+      }
+    }, { amend: true });
+  }
+  App.on('results', relinkRoutes);
   function route3d(opts = {}) {
     stopPick(); stopRoute();
     route = { pts: (opts.pts || []).map((q) => q.slice()), d: opts.d || 6, obj: null, at: null, append: opts.append || null };
+    route.binds = route.pts.map((_, i) => (opts.binds && opts.binds[i]) || null);
     const cv = Viewer.canvas;
     route.down = (e) => { if (e.button === 0) route.at = [e.clientX, e.clientY]; };
     route.up = (e) => { if (e.button !== 0 || !route.at) return; const moved = Math.hypot(e.clientX - route.at[0], e.clientY - route.at[1]); route.at = null; if (moved < 5) routePoint(e.clientX, e.clientY); };
@@ -149,7 +179,7 @@ const Features = (() => {
     route.key = (e) => {
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopRoute(); Panels.renderRight(); }
       else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); finishRoute(); }
-      else if (e.key === 'Backspace' && !/INPUT|TEXTAREA/.test((document.activeElement || {}).tagName || '')) { e.preventDefault(); e.stopPropagation(); route.pts.pop(); routeDraw(); }
+      else if (e.key === 'Backspace' && !/INPUT|TEXTAREA/.test((document.activeElement || {}).tagName || '')) { e.preventDefault(); e.stopPropagation(); route.pts.pop(); route.binds.pop(); routeDraw(); }
     };
     const bar = h('div', { class: 'viewbar', role: 'toolbar', 'aria-label': 'Rohr im Raum' });
     const head = h('div', { class: 'vb-head' }, h('span', { class: 'title' }, opts.append ? 'Punkte anhängen' : 'Rohr im Raum'));
@@ -174,9 +204,9 @@ const Features = (() => {
   function finishRoute() {
     if (!route) return null;
     if (!route.append) return routeFinish();
-    const id = route.append, inv = route.inv || new THREE.Matrix4(), pts = route.pts.map((q) => new THREE.Vector3(...q).applyMatrix4(inv).toArray().map((v) => round(v, 3)));
+    const id = route.append, inv = route.inv || new THREE.Matrix4(), pts = route.pts.map((q) => new THREE.Vector3(...q).applyMatrix4(inv).toArray().map((v) => round(v, 3))), binds = route.binds.slice();
     stopRoute();
-    App.change('Punkte angehängt', (doc) => { const f = Model.find(doc, id); if (!f || !f.item.p.path3d) return false; f.item.p.path3d.pts = pts; });
+    App.change('Punkte angehängt', (doc) => { const f = Model.find(doc, id); if (!f || !f.item.p.path3d) return false; f.item.p.path3d.pts = pts; if (binds.some(Boolean)) f.item.p.path3d.bind = binds; else delete f.item.p.path3d.bind; });
     App.select([id]); return id;
   }
   // Punkte eines Rohrs im Raum weiter anklicken (in Weltlage; das Rohr selbst liegt ganz oben im Verlauf)
@@ -184,7 +214,7 @@ const Features = (() => {
     const f = Model.find(App.doc, id); if (!f || !f.item.p.path3d) return false;
     const W = Model.worldMatrix(App.doc, id);
     const pts = Model.path3dPoints(f.item.p.path3d, Model.vars(App.doc).v).map((q) => new THREE.Vector3(...q).applyMatrix4(W).toArray());
-    route3d({ pts, d: Model.num(f.item.p.d, Model.vars(App.doc).v, 6), append: id });
+    route3d({ pts, d: Model.num(f.item.p.d, Model.vars(App.doc).v, 6), append: id, binds: f.item.p.path3d.bind });
     route.inv = W.clone().invert();
     return true;
   }

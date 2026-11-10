@@ -481,6 +481,27 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
   Schritte: 1. Ein Kind (ab 10) mit „Einfach“ eine Platte mit vier Löchern bauen lassen, ohne zu helfen.
   Erwartet: Es findet Körper, Löcher und Exportieren allein; notieren, wo es hängen bleibt.
 
+## Antenne als Kaufteil (neu in Sitzung 72)
+
+- [x] **Leiste**: Drohne → Empfang und GPS → „Antenne Pilz (eigene Maße)“ und „Antenne Stab (eigene Maße)“.
+- [x] **Pilz**: 45 mm lang, Kopf Ø 14, Gewicht leer (zum Eintragen), ohne Fehler.
+- [x] **Stab mit U.FL**: 80 mm lang, 4 mm dick.
+- [ ] **Im Antennenhalter**: Pilz-Antenne in den Antennenhalter stecken – passt der Röhrchen-Durchmesser?
+
+## Schnitt eines Körpers in die Skizze (neu in Sitzung 71)
+
+- [x] **Zylinder**: Zylinder Ø 20 × 30, Skizze „Stehend (vorne)“ durch die Mitte → „Kante“ (Z) → Klick auf die Mantelfläche → Rechteck von x −10 bis 10, Höhe 0 bis 30.
+- [x] **Steg**: Klick auf den Quader 40 × 6 × 6 → seine Kontur kommt dazu (bis x = 20).
+- [x] **Rückgängig** nimmt den ganzen Schnitt auf einmal zurück.
+- [ ] **Rumpf**: Querschnitt des Speed-Rumpfs als Skizze holen und daran eine Halterung zeichnen – passt sie?
+
+## Rohr-Punkte hängen am Körper (neu in Sitzung 70)
+
+- [x] **Anklicken**: Quader A und B, Rohr im Raum von A oben nach B oben → beide Punkte hängen an ihrem Quader.
+- [x] **Mitwandern**: B um 20 mm verschieben → das Rohr-Ende wandert mit; Strg Z → beides zurück.
+- [x] **Lösen**: rechts „P2 hängt an „B““ → „lösen“ → B verschieben, der Punkt bleibt stehen.
+- [ ] **Kabelkanal am echten Modell**: Stack verschieben – folgt der Kanal sinnvoll?
+
 ## Rahmen mit einzelnen Armen (neu in Sitzung 69)
 
 - [x] **Frame-Assistent**: „Arme: Einzeln (Sandwich mit Bodenplatte)“ → Bodenplatte und vier Arm-Teile statt „Unterteil“, ohne Fehler.

@@ -2298,6 +2298,26 @@ def t_skizze_ebenen(p):
     ok4 = p.ev("return App.errors.length") == 0
     return [ok1, ok2, ok3, ok4]
 
+
+# ---------- Sitzung 71: Schnitt eines Körpers in die Skizze ----------
+def t_schnitt_skizze(p):
+    p.empty()
+    p.ev("App.change('x', d=>{ const k=Model.newItem('cylinder',{d:20,h:30},{name:'Rohr'}); k.t.x=0; const q=Model.newItem('box',{w:40,d:6,h:6},{name:'Steg'}); q.t.z=12; d.items.push(k,q); })"); warte_rechnen(p, 30)
+    # Skizze auf der Ebene durch die Mitte (XZ): Zylinder → Rechteck 20 × 30, Steg → Rechteck 40 × 6
+    p.ev("Sketch.startOnPlane('XZ', 0)"); p.wait(1500)
+    p.pg.keyboard.press('z'); p.wait(200)
+    s = world_screen(p, 0, 0, 25); p.pg.mouse.click(s[0], s[1]); p.wait(2500)
+    r = SS(p, "const L=S.ents.filter(e=>e.type==='line'); const xs=L.flatMap(e=>[e.a[0],e.b[0]]), ys=L.flatMap(e=>[e.a[1],e.b[1]]); return [L.length, Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)]")
+    ok1 = r[0] >= 4 and abs(r[1] + 10) < 1e-3 and abs(r[2] - 10) < 1e-3 and abs(r[3]) < 1e-3 and abs(r[4] - 30) < 1e-3
+    s = world_screen(p, 18, -3, 15); p.pg.mouse.click(s[0], s[1]); p.wait(2500)
+    r2 = SS(p, "const L=S.ents.filter(e=>e.type==='line'); const xs=L.flatMap(e=>[e.a[0],e.b[0]]); return [L.length, Math.max(...xs)]")
+    ok2 = r2[0] >= 8 and abs(r2[1] - 20) < 1e-3
+    # Rückgängig nimmt einen ganzen Schnitt auf einmal zurück
+    p.pg.keyboard.press('Control+z'); p.wait(300)
+    ok3 = SS(p, "return S.ents.length") == r[0]
+    ok4 = p.ev("return App.errors.length") == 0
+    return [ok1, ok2, ok3, ok4]
+
 def t_spline_genau(p):
     sketch_xy(p)
     p.ev("const S=Sketch.state; S.ents.push({id:'s1',type:'spline',closed:true,pts:[[0,0],[30,0],[40,20],[10,30]]})")
@@ -2452,6 +2472,22 @@ def t_vorschau_echt(p):
     p.pg.mouse.up(); p.wait(3000)
     ok2 = p.ev("return !App.extra.some(x=>x.id==='__dragprev') && !Viewer.nodes.has('__dragprev') && App.doc.items.length===2 && App.errors.length===0")
     return [ok1, ok2]
+
+# ---------- Sitzung 72: Antenne als Kaufteil ----------
+def t_antenne(p):
+    p.empty()
+    p.pg.locator('#t-drone').click(); p.wait(400)
+    p.pg.locator('.flyout .chip[data-cat="funk"]').click(); p.wait(300)
+    ok1 = p.pg.locator('.flyout .tile').filter(has_text='Antenne Pilz').count() == 1 and p.pg.locator('.flyout .tile').filter(has_text='Antenne Stab').count() == 1
+    p.pg.locator('.flyout .tile').filter(has_text='Antenne Pilz').first.click(); warte_rechnen(p, 30)
+    it = p.ev("const it=App.doc.items[0]; const r=App.results.get(it.id); return [it.p.lib, it.massG, r && r.data.bbox, App.errors.length]")
+    bb = it[2]
+    ok2 = it[0] == 'buyAntenna' and it[1] == '' and bb is not None and abs(bb[5] - bb[2] - 45) < 0.1 and abs(bb[3] - bb[0] - 14) < 0.1 and it[3] == 0
+    # Stab mit U.FL: 80 lang, 4 dick
+    p.ev("App.change('x', d=>{ Object.assign(d.items[0].p, {form:'stab', conn:'ufl', L:80, d:4}); })"); warte_rechnen(p, 30)
+    bb = p.ev("return App.results.get(App.doc.items[0].id).data.bbox")
+    ok3 = abs(bb[5] - bb[2] - 80) < 0.1 and abs(bb[3] - bb[0] - 4) < 0.1 and p.ev("return App.errors.length") == 0
+    return [ok1, ok2, ok3]
 
 def t_magnet_koerper(p):
     zwei_quader(p, 0, 3, 0, 40)   # zweiter Quader 40 mm daneben, 3 mm versetzt
@@ -3337,6 +3373,33 @@ def t_rohr_rechtwinklig(p):
     return [ok1, ok2]
 
 
+# ---------- Sitzung 70: Rohr-Punkte hängen am Körper ----------
+def t_rohr_haengt(p):
+    p.empty()
+    p.ev("App.change('x', d=>{ const a=Model.newItem('box',{w:20,d:20,h:10},{name:'A'}); a.t.x=-30; const b=Model.newItem('box',{w:20,d:20,h:10},{name:'B'}); b.t.x=30; d.items.push(a,b); })"); warte_rechnen(p, 30)
+    p.ev("App.clearSelection(); Viewer.setView('top', false)"); p.wait(1000)
+    p.ev("Features.route3d({d:4})"); p.wait(300)
+    for (x, y) in [(-30, 0), (30, 0)]:
+        s = world_screen(p, x, y, 10); p.pg.mouse.click(s[0], s[1]); p.wait(300)
+    p.pg.keyboard.press('Enter'); warte_rechnen(p, 30)
+    r = p.ev("const it=App.doc.items.find(i=>i.kind==='sweep'); return [it.p.path3d.pts, (it.p.path3d.bind||[]).map(b=>b&&App.doc.items.find(x=>x.id===b.id).name)]")
+    ok1 = r[1] == ['A', 'B'] and abs(r[0][1][0] - 30) < 0.5 and abs(r[0][1][2] - 12) < 0.01
+    # B verschieben: das Rohr-Ende wandert mit, in einem Rückgängig-Schritt
+    p.ev("App.change('B verschoben', d=>{ d.items.find(i=>i.name==='B').t.x=50; })"); warte_rechnen(p, 30); warte_rechnen(p, 30)
+    e1 = p.ev("return App.doc.items.find(i=>i.kind==='sweep').p.path3d.pts[1]")
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('Control+z'); warte_rechnen(p, 30); warte_rechnen(p, 30)
+    e2 = p.ev("return App.doc.items.find(i=>i.kind==='sweep').p.path3d.pts[1]")
+    ok2 = abs(e1[0] - (r[0][1][0] + 20)) < 0.01 and abs(e2[0] - r[0][1][0]) < 0.01 and p.ev("return App.doc.items.find(i=>i.name==='B').t.x") == 30
+    # lösen: Punkt bleibt, wenn B wandert
+    p.ev("App.select([App.doc.items.find(i=>i.kind==='sweep').id])"); p.wait(500)
+    ok3 = p.pg.locator('#p3-bound-1').count() == 1
+    p.pg.locator('#p3-unbind-1').click(); warte_rechnen(p, 30)
+    p.ev("App.change('B verschoben', d=>{ d.items.find(i=>i.name==='B').t.x=60; })"); warte_rechnen(p, 30); warte_rechnen(p, 30)
+    e3 = p.ev("const pp=App.doc.items.find(i=>i.kind==='sweep').p.path3d; return [pp.pts[1], pp.bind ? pp.bind.filter(Boolean).length : 0]")
+    ok4 = abs(e3[0][0] - r[0][1][0]) < 0.01 and e3[1] == 1 and p.ev("return App.errors.length") == 0
+    return [ok1, ok2, ok3, ok4]
+
+
 def t_ki_rohr_regeln(p):
     ki(p); p.empty()
     ki_fragen(p, 'Antennenrohr: 25 mm senkrecht hoch, dann 15 mm nach hinten', {'antwort': 'Ich lege das Rohr mit festen Stücken.', 'aktionen': [
@@ -3870,6 +3933,7 @@ TESTS = [
     ('Text entlang Kurve: über der Kurve / andere Seite / verschieben / Kurve ändern / gerade / Körper', t_text_kurve),
     ('KI-Kollege: Text entlang einer Kurve', t_ki_text_kurve),
     ('Skizzen-Ebenen: mittig zwischen zwei Flächen / Körper darauf / durch drei Ecken / sauber', t_skizze_ebenen),
+    ('Schnitt in die Skizze: Zylinder / Steg / ein Rückgängig / sauber', t_schnitt_skizze),
     ('Ellipse versetzen: Spline genau im Abstand / nach innen zu weit', t_versatz_ellipse),
     ('Versatz einer Kette: alle Stücke zusammen ändern / Rückgängig', t_versatz_kette_zusammen),
     ('H-Rahmen: im Frame-Assistenten / Längs- und Querträger / Maße / Drohnen-Check / DXF', t_h_rahmen),
@@ -3877,12 +3941,14 @@ TESTS = [
     ('Rohr im Raum mit Regeln: entlang Z / Länge / entlang X / Körper / Startpunkt wandert, Regeln halten / Rückgängig und Länge frei', t_rohr_regeln),
     ('Rohr im Raum: Länge im Bild anklicken und eintippen', t_rohr_masse_bild),
     ('Rohr im Raum: rechtwinklig und parallel zum vorigen Stück', t_rohr_rechtwinklig),
+    ('Rohr im Raum: Punkte hängen am Körper / wandern mit / Rückgängig / lösen', t_rohr_haengt),
     ('KI-Kollege: Rohr im Raum mit Regeln (senkrecht 25, dann 15 nach hinten)', t_ki_rohr_regeln),
     ('Fase: zwei Abstände / Seiten tauschen / Winkel / zurück auf gleich', t_fase_arten),
     ('Rundung von … bis: wächst entlang der Kante / Richtung tauschen', t_rundung_variabel),
     ('Magnet auf runden Flächen: Loch oben auf dem Rohr / Mitte oben / Hinweis und Linien / seitlich waagerecht / sauber / Kugel vorne', t_magnet_rund),
     ('Magnet für Kaufteile aus der Leiste: Motor rastet in die Mitte', t_magnet_kaufteil),
     ('Ziehen aus der Leiste: Vorschau in echter Form, danach weg', t_vorschau_echt),
+    ('Antenne als Kaufteil: Pilz und Stab in der Leiste / Maße / Stab mit U.FL', t_antenne),
     ('Luftwiderstand: Form erkannt / Kraft bei 100 km/h / Tempo und Form ändern / ohne Schub Hinweis / Formel / Speed-Drohne Höchstgeschwindigkeit', t_luftwiderstand),
     ('Rohr im Raum: glatt / Ecken / im Bild klicken / Punkt als Zahl / löschen und Rückgängig', t_rohr_raum),
     ('KI-Kollege legt ein Rohr im Raum', t_ki_rohr_raum),

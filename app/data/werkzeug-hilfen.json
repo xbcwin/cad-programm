@@ -61,7 +61,7 @@
   },
   "project2d": {
     "tip": "Kante eines Körpers in die Skizze holen",
-    "hilfe": "Klick in der Skizze auf eine Kante eines Körpers. Tracery schiebt sie senkrecht auf die Zeichenebene und legt sie als Element an: gerade Kanten als Linie, runde als Bogen oder Kreis, alles andere als Spline. Die Kante bleibt mit dem Körper verbunden (Ketten-Symbol): Ändert sich der Körper, wandert sie mit.",
+    "hilfe": "Klick in der Skizze auf eine Kante eines Körpers. Tracery schiebt sie senkrecht auf die Zeichenebene und legt sie als Element an: gerade Kanten als Linie, runde als Bogen oder Kreis, alles andere als Spline. Die Kante bleibt mit dem Körper verbunden (Ketten-Symbol): Ändert sich der Körper, wandert sie mit. Klickst du auf eine Fläche statt auf eine Kante, kommt der ganze Schnitt des Körpers mit der Skizzen-Ebene als Kontur in die Skizze – z. B. der Querschnitt eines Rumpfs, um daran weiterzuzeichnen.",
     "tipp": "So passt ein Deckel genau auf ein Gehäuse: Skizze auf die Oberseite, die Außenkanten übernehmen, „Versatz“ nach innen – fertig ist der Rand. Wird das Gehäuse breiter, wächst der Deckel mit. Soll eine Kante stehen bleiben: anklicken, „Verbindung lösen“."
   },
   "mirror2d": {
@@ -461,7 +461,7 @@
   },
   "route3d": {
     "tip": "Rohr durch Punkte im Raum – auf Körpern oder frei",
-    "hilfe": "Körper → „Rohr im Raum“: Klick nacheinander Punkte an. Auf einem Körper liegt das Rohr auf der Fläche auf, daneben bleibt es auf der Höhe des letzten Punkts. Ziehen dreht die Ansicht wie immer, Rückschritt nimmt den letzten Punkt weg, Enter oder Doppelklick ist fertig. Rechts änderst du jeden Punkt als Zahl, den Durchmesser, die Wand und den Querschnitt. Zwischen zwei Punkten gibt es Regeln wie in einer Skizze, nur im Raum: „entlang X/Y/Z“ legt das Stück genau auf eine Achse, „rechtwinklig“ oder „parallel zum vorigen“ richtet es am Stück davor aus, „Länge“ macht es genau so lang – die Punkte dahinter wandern mit. Ist das Rohr gewählt, steht an jedem Stück seine Länge im Bild – anklicken, Zahl tippen, Enter: dann ist sie fest (🔒).",
+    "hilfe": "Körper → „Rohr im Raum“: Klick nacheinander Punkte an. Auf einem Körper liegt das Rohr auf der Fläche auf, daneben bleibt es auf der Höhe des letzten Punkts. Ziehen dreht die Ansicht wie immer, Rückschritt nimmt den letzten Punkt weg, Enter oder Doppelklick ist fertig. Rechts änderst du jeden Punkt als Zahl, den Durchmesser, die Wand und den Querschnitt. Zwischen zwei Punkten gibt es Regeln wie in einer Skizze, nur im Raum: „entlang X/Y/Z“ legt das Stück genau auf eine Achse, „rechtwinklig“ oder „parallel zum vorigen“ richtet es am Stück davor aus, „Länge“ macht es genau so lang – die Punkte dahinter wandern mit. Ist das Rohr gewählt, steht an jedem Stück seine Länge im Bild – anklicken, Zahl tippen, Enter: dann ist sie fest (🔒). Punkte, die du auf einen Körper klickst, hängen an ihm: Verschiebst oder drehst du den Körper, wandert der Punkt mit („lösen“ rechts macht ihn wieder frei).",
     "tipp": "Gut für Kabelkanäle, Antennenrohre und Bügel, die um Teile herum laufen. „Gerade Stücke, runde Ecken“ ergibt einen Knick-Verlauf wie bei gebogenem Rohr. Für ein Antennenrohr z. B. das erste Stück „entlang Z“ mit 25 mm Länge, das zweite „entlang Y“ mit 15 mm – dann steht es genau senkrecht und knickt genau nach hinten ab. Eine Länge 0 macht das Stück wieder frei."
   },
   "armFairing": {

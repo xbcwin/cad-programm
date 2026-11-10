@@ -1,4 +1,4 @@
-# Tracery – Gesamtprompt (Stand 09.11.2026, nach Sitzung 69)
+# Tracery – Gesamtprompt (Stand 09.11.2026, nach Sitzung 72)
 
 > Diesen Text komplett in einen neuen Chat oder eine andere KI einfügen. Er beschreibt das ganze Projekt so genau, dass die KI ohne Rückfragen weiterarbeiten kann.
 
@@ -48,7 +48,7 @@ Leitlinien:
   - Die KI schreibt dafür einen genauen Prompt („Gemini Prompt A, B, C …“, zuletzt **O**). Er verlangt JSON-Antworten mit Quelle je Wert und null statt Schätzungen.
   - Jede Gemini-Antwort wird **nachgeprüft**: Stichproben an Hersteller- oder Händlerseiten, eigene Websuche. Falsche Werte werden verworfen und begründet.
   - **Offen:** Prompt O fragt nach Maßen für XT60H/XT30U, für die Antennen Lumenier AXII 2, TrueRC Singularity und Foxeer Lollipop 4 sowie nach Teilen für 2"- und 2,5"-Cinewhoops (Motoren 1103/1204/1303, Propeller, Pavo20/Pavo25 V2, 2S-Akkus). Die Antwort steht noch aus.
-- **Fortschritt:** Jede Sitzung bekommt eine Nummer, zuletzt **69**. Gepflegt werden:
+- **Fortschritt:** Jede Sitzung bekommt eine Nummer, zuletzt **72**. Gepflegt werden:
   - `docs/FORTSCHRITT.md` mit Stand-Zeile, Erledigt nach Stufen und „Bekannte Punkte“
   - `docs/TESTLISTE.md` mit Abschnitt „(neu in Sitzung N)“: `[x]` = automatisch geprüft, `[ ]` = von Hand
   - `docs/BAUPLAN.md`
@@ -154,7 +154,7 @@ Leitlinien:
   - Ketten: Ein Teil darf an mehreren Gelenken hängen, wird aber nur von einem bewegt; Kreise werden abgelehnt.
 - **Übergang mit Mittellinie:** `loft.p.path` = Skizze mit offenem Zug (Kern: Pipe-Shell mit mehreren Schnitten).
 - **Übergang mit Führungskurven:** `loft.p.rail`, `loft.p.rail2` = Skizzen in Ebenen durch die Achse (die zweite quer zur ersten); `Model.railSections` mischt und streckt Zwischenschnitte, der Kern baut sie als `sections3`.
-- **Rohr im Raum:** `sweep.p.path3d = {pts: [[x,y,z],…], smooth, rules: [{ax:'x'|'y'|'z'|'perp'|'par', len}|null, …]}` statt `p.sketch`; `Model.path3dPoints` rechnet die Lage mit Regeln.
+- **Rohr im Raum:** `sweep.p.path3d = {pts: [[x,y,z],…], smooth, rules: [{ax:'x'|'y'|'z'|'perp'|'par', len}|null, …], bind: [{id, lp}|null, …] (Punkt hängt an Körper id, lp = Lage im Körper)}` statt `p.sketch`; `Model.path3dPoints` rechnet die Lage mit Regeln.
 - **Drohnen:** vorne ist **−Y**. Die Maße `Achsabstand`, `Armwinkel`, `Armwinkel_hinten`, `Armbreite`, `Armdicke`, `Plattenbreite`/`-länge`/`-dicke`, `Bolzenhöhe`, Stack, Motorlochkreis, Kamerabreite, `Propeller` und `Motorneigung` steuern den Rahmen.
 
 ## 5. Was Tracery heute kann (vollständig, nach Bereichen)
@@ -194,7 +194,7 @@ Leitlinien:
 - **Bearbeiten:**
   - Ecke runden/fasen (K, auch „Alle Ecken auf einmal“), Trimmen (T, auch Ellipsen), Verlängern (U), Teilen (Y), Versatz (F, auch Ellipsen; der Abstand einer Kette lässt sich später für alle Stücke zusammen ändern)
   - **Wand (N):** eine offene Linie wird eine Wand mit Dicke
-  - **Kante übernehmen (Z):** Körperkante als feste Linie, Bogen, Kreis oder Spline; **verbunden**, wandert also mit, wenn sich der Körper ändert (Ketten-Symbol, „Verbindung lösen“)
+  - **Kante übernehmen (Z):** Körperkante als feste Linie, Bogen, Kreis oder Spline; **verbunden**, wandert also mit, wenn sich der Körper ändert (Ketten-Symbol, „Verbindung lösen“); Klick auf eine **Fläche** holt den ganzen **Schnitt** des Körpers mit der Skizzen-Ebene
   - Spiegeln (M, auch direkt an der X-/Y-Achse)
   - Rechteckmuster (Q), Kreismuster (W) – **nachträglich als Ganzes änderbar**
   - Maß (D, Formeln), Bild-Vorlage (I, mit Maßstab), Hilfslinie (X)
@@ -229,7 +229,7 @@ Leitlinien:
 - **GoPro-Halterung:** 2 oder 3 Finger, 3,0/3,2/Loch 5,2, M5-Mutter-Nabe; Werte nach Messungen der Community
 - **XT60-Halter** (Steckermaße noch geschätzt)
 - **Antennenhalter:** 1 oder 2 Röhrchen, Spreizung, Neigung nach hinten = +Y
-- Kaufteile in echter Form mit Datenblatt-Gewicht: Motoren, Propeller, Stacks, Kameras, Videosender, Empfänger, GPS, Akkus, Action-Kameras, Stecker, Kondensatoren
+- Kaufteile in echter Form mit Datenblatt-Gewicht: Motoren, Propeller, Stacks, Kameras, Videosender, Empfänger, GPS, Akkus, Action-Kameras, Stecker, Kondensatoren, **Antennen** (Pilz oder Stab, eigene Maße)
 
 **Drohnen-Modul**
 - Rahmen-Generator (Rohbau aus Einzelteilen) und Frame-Assistent:
@@ -294,7 +294,7 @@ Leitlinien:
 - Der Magnet auf runden Flächen rastet an Scheitel- und Mittellinien ein, nicht an Lochmitten auf der Rundung.
 - Ein Teil wird nur von einem Gelenk bewegt; „Bewegung abspielen“ nur für Teile ganz oben im Verlauf.
 - Übergang mit Mittellinie: keine Spitze, keine „geraden Flächen“, die Linie liegt in einer Ebene.
-- Rohr im Raum: Regeln je Stück (entlang X/Y/Z, rechtwinklig/parallel zum vorigen, Länge – auch im Bild eintippen); Punkte sind nicht an Körperflächen gebunden.
+- Rohr im Raum: Regeln je Stück (entlang X/Y/Z, rechtwinklig/parallel zum vorigen, Länge – auch im Bild eintippen); auf Körper geklickte Punkte hängen am Körper (wandern bei Verschieben/Drehen mit, nicht bei Formänderung).
 - Drohnen-Check eigener Rahmen: Steckt ein Motor mit Rahmenteilen in einer Gruppe, zählt die ganze Gruppe als ein Teil.
 - Luftwiderstand und Höchstgeschwindigkeit sind Schätzungen mit festen cw-Richtwerten; Propeller verlieren bei Tempo Schub.
 - Steckermaße XT60H/XT30U sind geschätzt; die GoPro-Maße beruhen auf Messungen der Community.
@@ -302,11 +302,10 @@ Leitlinien:
 ## 9. Fahrplan (nächste Schritte)
 
 1. Gemini Prompt O auswerten: Stecker, Antennen als Kaufteile mit eigener Form, 2"- und 2,5"-Cinewhoops im Frame-Assistenten.
-2. Rohr im Raum: Punkt an einer Körperfläche halten.
-3. Herstellerrahmen mit Original-Umriss (braucht Daten).
-4. Speed-Drohne: Motorverkleidungen.
-5. Text trimmen und versetzen.
-6. Später (Stufe 6): Konten, Projekte in der Cloud, Teilen, gleichzeitig arbeiten.
+2. Herstellerrahmen mit Original-Umriss (braucht Daten).
+3. Speed-Drohne: Motorverkleidungen.
+4. Text trimmen und versetzen.
+5. Später (Stufe 6): Konten, Projekte in der Cloud, Teilen, gleichzeitig arbeiten.
 
 ## 10. Von Hand zu prüfen (Nils)
 

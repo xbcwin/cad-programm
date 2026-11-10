@@ -751,6 +751,20 @@ export function createKernel(R, oc) {
       const pr = Math.min(h * 0.22, w * 0.14);
       return cutAll(b, [cyl(pr, 7, -w * 0.22, -d / 2 - 0.1, h / 2, [0, 1, 0]), cyl(pr, 7, w * 0.22, -d / 2 - 0.1, h / 2, [0, 1, 0])]);
     }
+    if (lib === 'buyAntenna') {
+      // Antenne nach oben (+Z): Stecker (SMA mit Sechskant, sonst nur Kabelende), Röhrchen, oben Pilzkopf oder nur ein runder Abschluss
+      const L = pos(p.L, 45), d = pos(p.d, 3), kd = pos(p.kd, 14), kl = pos(p.kl, 12), pilz = p.form !== 'stab', sma = p.conn !== 'ufl';
+      const parts = []; let z = 0;
+      if (sma) { parts.push(hexPrism(8, 0, 3), cyl(3.2, 8.5, 0, 0, 0)); z = 8.5; }
+      const tube = Math.max(1, L - z - (pilz ? kl : d / 2));
+      parts.push(cyl(d / 2, tube + (pilz ? 0.5 : 0), 0, 0, z)); z += tube;
+      if (pilz) {
+        let head = cyl(kd / 2, kl, 0, 0, z);
+        try { const r = Math.min(kd / 2, kl / 2) * 0.9; const h2 = head.fillet(r); head = h2; } catch (_) {}
+        parts.push(head);
+      } else parts.push(R.makeSphere(d / 2).translate([0, 0, z]));
+      return fuseAll(parts, true);
+    }
     if (lib === 'buyCap') {
       // Elko: Becher mit Sicke und Sollbruchkreuz oben
       const D = pos(p.d, 12.5), H = pos(p.h, 20);
@@ -1347,6 +1361,22 @@ export function createKernel(R, oc) {
     }
     return { nu, nv, uc, vc, P, N, ins };
   }
+  // Schnitt einer Form mit einer Ebene (Form-Koordinaten): Kanten als Punktfolgen
+  function sectionOf(key, o, n) {
+    const e = cache.get(key); if (!e) throw new Error('Die Form ist nicht mehr im Speicher. Bitte noch einmal anklicken.');
+    e.gen = gen;
+    const P = new oc.gp_Pnt(o[0], o[1], o[2]), D = new oc.gp_Dir(n[0], n[1], n[2]), pln = new oc.gp_Pln(P, D);
+    const sec = new oc.BRepAlgoAPI_Section(e.shape.wrapped, pln, true);
+    try {
+      const sh = R.cast(sec.Shape()), out = [];
+      for (const ed of sh.edges) {
+        const t = ed.geomType, N = t === 'LINE' ? 1 : 32, pts = [];
+        for (let i = 0; i <= N; i++) pts.push(vec(ed.pointAt(i / N)));
+        out.push({ t, pts });
+      }
+      return out;
+    } finally { sec.delete(); pln.delete(); P.delete(); D.delete(); }
+  }
   function faceGridOf(key, faceIdx) {
     const e = cache.get(key); if (!e) throw new Error('Die Form ist nicht mehr im Speicher. Bitte noch einmal anklicken.');
     e.gen = gen;
@@ -1575,5 +1605,5 @@ export function createKernel(R, oc) {
     }
     return { holes: out, errors };
   }
-  return { evaluate, remesh, exportMeshes, exportSTEP, measure, project, clashes, holeWalls, faceLoopsOf, faceGridOf, _cache: cache };
+  return { evaluate, remesh, exportMeshes, exportSTEP, measure, project, clashes, holeWalls, faceLoopsOf, faceGridOf, sectionOf, _cache: cache };
 }

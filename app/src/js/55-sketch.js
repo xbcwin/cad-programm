@@ -37,7 +37,7 @@ const Sketch = (() => {
     bgcal: 'Klick den ersten Punkt auf dem Bild an, dann den zweiten. Danach tippst du den echten Abstand ein.',
     splitl: 'Klick auf eine Linie oder einen Bogen – dort wird das Element in zwei Stücke geteilt, die verbunden bleiben. Fängt an Mitte und Schnittpunkten.',
     extend: 'Klick nahe an das Ende einer Linie – sie wächst bis zur nächsten Linie, zum nächsten Bogen oder Kreis und bleibt dort per Regel hängen.',
-    project: 'Klick auf eine Kante eines Körpers – sie kommt als feste Linie, Bogen, Kreis oder Spline in die Skizze und bleibt mit dem Körper verbunden.',
+    project: 'Klick auf eine Kante eines Körpers – sie kommt als feste Linie, Bogen, Kreis oder Spline in die Skizze und bleibt mit dem Körper verbunden. Klick auf eine <b>Fläche</b> holt den ganzen Schnitt des Körpers mit der Skizzen-Ebene.',
     wall: 'Dicke rechts einstellen, dann eine offene Linie, einen Bogen oder eine Spline anklicken – daraus wird eine geschlossene Wand zum Hochziehen. Die Linie bleibt als Hilfslinie in der Mitte.',
     point: 'Klick setzt einen Punkt. Punkte bilden keine Fläche, sind aber Bezug für Maße und Regeln. Auf einer Körperfläche werden reine Punkte beim „Fertig“ zu Bohrungen.',
     tpl: 'Schablone und Maße rechts wählen, dann ins Bild klicken – der Klick ist die Mitte. Fängt an Nullpunkt und Mittelpunkten.',
@@ -1494,9 +1494,28 @@ const Sketch = (() => {
     return link;
   }
   // ---------- Kante übernehmen (projizieren) ----------
+  // Klick auf eine Fläche statt auf eine Kante: der ganze Schnitt des Körpers mit der Skizzen-Ebene kommt als Kontur in die Skizze
+  async function sectionAt(hit) {
+    const r = App.results.get(hit.id); if (!r || !r.key) return;
+    const W = Model.worldMatrix(App.doc, hit.id), WI = W.clone().invert(), F = S.F;
+    const o = F.o.clone().applyMatrix4(WI), n = F.n.clone().transformDirection(WI).normalize();
+    let edges;
+    try { edges = await Kernel.call('section', { key: r.key, o: o.toArray(), n: n.toArray() }); } catch (e) { UI.toast('Den Schnitt konnte ich nicht rechnen: ' + (e.message || e), { kind: 'bad' }); return; }
+    if (!S || S.F !== F) return;
+    if (!edges || !edges.length) { UI.toast('Die Skizzen-Ebene schneidet diesen Körper nicht.', { icon: 'info' }); return; }
+    pushUndo(); let n2 = 0;
+    for (const g of edges) {
+      const pts = []; for (const q of g.pts) { const uv = uvIn(F, new THREE.Vector3(...q).applyMatrix4(W)); if (!pts.length || SK.d2(pts[pts.length - 1], uv) > 1e-4) pts.push(uv); }
+      const en = edgeGeom2D(pts, g.t); if (!en) continue;
+      en.id = uid('e'); if (S.construction) en.con = true; S.ents.push(en); n2++;
+    }
+    reapply(); render(); Panels.renderRight();
+    UI.toast(`Schnitt übernommen: ${n2} ${n2 === 1 ? 'Stück' : 'Stücke'} – die Kontur des Körpers in dieser Ebene.`, { icon: 'check' });
+  }
   function projectAt(ev) {
     const hit = Viewer.pick(ev.clientX, ev.clientY, { edgePx: 9 });
-    if (!hit || hit.edgeIdx == null || !hit.node) { UI.toast('Klick genau auf eine Kante eines Körpers.', { icon: 'info' }); return; }
+    if (hit && hit.edgeIdx == null && hit.faceIdx >= 0 && hit.node && hit.node.role !== 'hole') { sectionAt(hit); return; }
+    if (!hit || hit.edgeIdx == null || !hit.node) { UI.toast('Klick genau auf eine Kante eines Körpers – oder auf eine Fläche, um den ganzen Schnitt zu übernehmen.', { icon: 'info' }); return; }
     const pts3 = edgeWorldPts(hit.node.data, hit.edgeIdx, hit.node.obj.matrixWorld);
     const pts = []; for (const v of pts3) { const uv = uvIn(S.F, v); if (!pts.length || SK.d2(pts[pts.length - 1], uv) > 1e-4) pts.push(uv); }
     if (pts.length < 2) { UI.toast('Diese Kante steht senkrecht auf der Skizze – sie wäre nur ein Punkt.', { icon: 'info' }); return; }
