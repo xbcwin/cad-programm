@@ -21,6 +21,13 @@ const Commands = (() => {
     add('notes', 'Notizstift', 'noteDraw', 'notiz stift malen zeichnen kritzeln text markieren hinweis', () => Notes.toggle(), { group: 'Werkzeuge', kbd: 'N' });
     add('notes-show', 'Notizen ein- oder ausblenden', 'notesShow', 'notizen zeigen verstecken ausblenden', () => ViewPrefs.toggle('notes'), { group: 'Ansicht' });
     add('bom', 'Stückliste (alle Teile mit Anzahl und Gewicht)', 'list', 'stückliste teileliste bom einkaufsliste gewicht tabelle csv', () => Mass.bomDialog(), { group: 'Werkzeuge' });
+    add('dupLinked', 'Verknüpft duplizieren', 'copy', 'verknüpft kopie duplizieren instanz mehrfach gleich original folgt', () => Actions.duplicateLinked(), { group: 'Werkzeuge', kbd: 'Strg Umschalt D' });
+    add('hideSel', 'Ausgewählte ausblenden', 'eyeOff', 'ausblenden verstecken unsichtbar', () => Actions.hideSelected(), { group: 'Ansicht', kbd: 'Umschalt H' });
+    add('showAll', 'Alles einblenden', 'eye', 'einblenden zeigen sichtbar alle', () => Actions.showAll(), { group: 'Ansicht', kbd: 'Umschalt H' });
+    add('invertSel', 'Auswahl umkehren', 'pointer', 'auswahl umkehren invertieren andere', () => Actions.invertSelection(), { group: 'Ansicht', kbd: 'Strg Umschalt I' });
+    add('repeat', 'Letzten Befehl wiederholen', 'undo', 'wiederholen nochmal letzter befehl', () => repeat(), { group: 'Werkzeuge', kbd: 'Leertaste' });
+    add('datum', 'Bezugsebene anlegen', 'originPlanes', 'bezugsebene ebene konstruktionsebene arbeitsebene abstand versetzt schräg', () => Datums.dialog(), { group: 'Werkzeuge' });
+    add('image', 'Bild speichern (PNG)', 'image', 'bild png foto screenshot rendering präsentation hintergrund durchsichtig', () => Print.imageDialog(), { group: 'Werkzeuge' });
     add('export', 'Exportieren (STEP, STL, 3MF, DXF)', 'export', 'step stl 3mf dxf platten fräse laser exportieren speichern download', () => Print.exportDialog(), { group: 'Werkzeuge', kbd: 'Strg E' });
     add('status', 'Modell-Status', 'info', 'status prüfen größe fehler', () => $('#ampel').click(), { group: 'Werkzeuge' });
     add('drop', 'Auf die XY-Ebene setzen', 'push', 'boden unten absetzen z null ebene', () => Actions.dropToPlate(null), { group: 'Werkzeuge' });
@@ -100,10 +107,12 @@ const Commands = (() => {
   function looksLikeSentence(t) { const w = t.trim().split(/\s+/); return w.length >= 3 || /[?]/.test(t) || /\d/.test(t) && w.length >= 2; }
   function renderPop(text) {
     closePop();
-    const t = text.trim(); if (!t) return;
-    const hits = search(t);
+    const t = text.trim();
+    // leere Eingabe: die zuletzt benutzten Befehle
+    if (!t && !recent.length) return;
+    const hits = t ? search(t) : recent.map((c) => ({ ...c, group: 'Zuletzt benutzt' }));
     items = hits.map((c) => ({ type: 'cmd', c }));
-    if (AI.available) { const ai = { type: 'ai', text: t }; if (looksLikeSentence(t) || !hits.length) items.unshift(ai); else items.push(ai); }
+    if (t && AI.available) { const ai = { type: 'ai', text: t }; if (looksLikeSentence(t) || !hits.length) items.unshift(ai); else items.push(ai); }
     if (!items.length) return;
     active = 0;
     pop = h('div', { class: 'cmd-pop', role: 'listbox' });
@@ -127,12 +136,20 @@ const Commands = (() => {
     if (!it) return;
     if (it.type === 'ai') { AI.ask(it.text); inp.value = ''; $('#cmd-go').disabled = true; inp.blur(); return; }
     inp.value = ''; $('#cmd-go').disabled = true; inp.blur();
-    it.c.run();
+    exec(it.c);
   }
+  // Befehl ausführen und merken: Leertaste wiederholt ihn, die Eingabezeile zeigt die letzten Befehle
+  let last = null; const recent = [];
+  function exec(c) {
+    c = C.find((x) => x.id === c.id) || c;
+    if (c.id !== 'repeat') { last = c; const i = recent.indexOf(c); if (i >= 0) recent.splice(i, 1); recent.unshift(c); recent.length = Math.min(recent.length, 6); }
+    return c.run();
+  }
+  function repeat() { if (!last) { UI.toast('Es gibt noch keinen Befehl zum Wiederholen. Befehle aus der Eingabezeile werden gemerkt.', { icon: 'info' }); return false; } UI.toast(`Wiederholt: ${last.label}`, { icon: 'undo', ms: 1400 }); last.run(); return true; }
   function initBar() {
     const inp = $('#cmd-input'), go = $('#cmd-go');
     inp.addEventListener('input', () => { go.disabled = !inp.value.trim(); renderPop(inp.value); });
-    inp.addEventListener('focus', () => { if (inp.value.trim()) renderPop(inp.value); });
+    inp.addEventListener('focus', () => { if (inp.value.trim() || recent.length) renderPop(inp.value); });
     inp.addEventListener('blur', () => setTimeout(closePop, 120));
     inp.addEventListener('keydown', (e) => {
       e.stopPropagation();
@@ -161,12 +178,15 @@ const Commands = (() => {
     if (e.key === '?' || (e.key === 'F1')) { e.preventDefault(); showKeys(); return; }
     if (App.mode !== 'model') return;
     if (e.key === 'Escape') { if (Place.active) Place.cancel(); else if (Measure.active) Measure.stop(); else if (!App.sel.length && App.ctx) App.setCtx(null); else if (!App.sel.length && App.iso) App.setIso(null); else { Panels.closeFlyout(); App.clearSelection(); } return; }
-    if (mod && k === 'd') { e.preventDefault(); Actions.duplicate(); return; }
+    if (mod && k === 'd') { e.preventDefault(); if (e.shiftKey) Actions.duplicateLinked(); else Actions.duplicate(); return; }
     if (mod && k === 'g') { e.preventDefault(); e.shiftKey ? Actions.ungroup() : Actions.group(); return; }
-    if (mod && k === 'a') { e.preventDefault(); App.select(App.doc.items.map((x) => x.id)); return; }
+    if (mod && k === 'a') { e.preventDefault(); App.select(App.doc.items.filter((x) => !x.hidden && !App.mergedInto(x.id)).map((x) => x.id)); return; }
+    if (mod && e.shiftKey && k === 'i') { e.preventDefault(); Actions.invertSelection(); return; }
     if (mod) return;
     if (e.key === 'Delete' || e.key === 'Backspace') { if (App.sel.length) { e.preventDefault(); Actions.remove(); } return; }
     if (Views.onKey(e)) { e.preventDefault(); return; }
+    if (e.key === ' ' && !e.shiftKey) { e.preventDefault(); repeat(); return; }
+    if (k === 'h' && e.shiftKey) { if (App.sel.length) Actions.hideSelected(); else Actions.showAll(); return; }
     if (k === 'f') { Viewer.fit(App.sel.length ? App.sel.map((id) => (Model.topOf(App.doc, id) || {}).id).filter(Boolean) : null); return; }
     if (k === 'h' && App.sel.length) { Actions.toggleRole(); return; }
     if (k === 'a' && (App.sel.length || App.edges.length)) { Select.similar(); return; }
@@ -198,7 +218,7 @@ const Commands = (() => {
     const M = mac ? '⌘' : 'Strg';
     const groups = [
       ['Ansicht', [['Linke Maustaste ziehen', 'Ansicht drehen'], ['Rechte Maustaste ziehen', 'Ansicht verschieben'], ['Mausrad', 'Zoomen'], ['F', 'Auswahl oder alles zeigen'], ['1 · 3 · 7 · 0', 'Ansicht vorne · rechts · oben · schräg'], ['O', 'Orthografisch / Perspektive'], ['G', 'Raster ein / aus'], ['C', 'Schnitt ein / aus'], ['X', 'Röntgen ein / aus'], ['U', 'Explosion ein / aus'], ['I', 'Gewähltes Teil isolieren / alle zeigen']]],
-      ['Modell', [['Klicken', 'Körper, Fläche oder Kante wählen'], ['Umschalt + Klick', 'Mehrere wählen'], ['Ziehen', 'Körper verschieben – dabei Zahl tippen für genaue Werte'], ['Doppelklick', 'Skizze eines Skizzenkörpers bearbeiten · auf eine ebene Fläche: darauf zeichnen'], ['E', 'Skizze bzw. Bauteil bearbeiten'], ['Esc', 'Auswahl aufheben · Bauteil verlassen'], ['Entf', 'Löschen'], ['H', 'Körper ↔ Loch'], ['A', 'Ähnliche auswählen (gleiche Teile oder Kanten)'], ['R', 'Um 90° drehen'], ['Pfeiltasten', 'Um einen Rasterschritt verschieben (Umschalt: 10)'], ['Bild ↑ / Bild ↓', 'Anheben / Absenken'], [M + ' D', 'Duplizieren'], [M + ' G', 'Gruppieren (Umschalt: lösen)'], [M + ' A', 'Alles wählen']]],
+      ['Modell', [['Klicken', 'Körper, Fläche oder Kante wählen'], ['Umschalt + Klick', 'Mehrere wählen'], ['Umschalt + Ziehen im Leeren', 'Rahmen: nach rechts ganz drin, nach links berührt'], ['Rechtsklick', 'Menü zum Teil oder zum Bild'], ['Leertaste', 'Letzten Befehl wiederholen'], ['Umschalt H', 'Auswahl ausblenden · ohne Auswahl alles einblenden'], [M + ' Umschalt I', 'Auswahl umkehren'], [M + ' Umschalt D', 'Verknüpft duplizieren'], ['Ziehen', 'Körper verschieben – dabei Zahl tippen für genaue Werte'], ['Doppelklick', 'Skizze eines Skizzenkörpers bearbeiten · auf eine ebene Fläche: darauf zeichnen'], ['E', 'Skizze bzw. Bauteil bearbeiten'], ['Esc', 'Auswahl aufheben · Bauteil verlassen'], ['Entf', 'Löschen'], ['H', 'Körper ↔ Loch'], ['A', 'Ähnliche auswählen (gleiche Teile oder Kanten)'], ['R', 'Um 90° drehen'], ['Pfeiltasten', 'Um einen Rasterschritt verschieben (Umschalt: 10)'], ['Bild ↑ / Bild ↓', 'Anheben / Absenken'], [M + ' D', 'Duplizieren'], [M + ' G', 'Gruppieren (Umschalt: lösen)'], [M + ' A', 'Alles wählen']]],
       ['Werkzeuge', [['S', 'Skizze'], ['M', 'Messen'], ['N', 'Notizstift (P Stift · T Text · E Radierer)'], ['K', 'Körper'], ['B', 'Bauteile'], ['/ oder ' + M + ' K', 'Eingabezeile']]],
       ['In der Skizze', [['V', 'Auswahl'], ['L · R · C · A', 'Linie · Rechteck · Kreis · Bogen'], ['G · P · S', 'Langloch · Vieleck · Spline'], ['T · F', 'Trimmen · Versatz'], ['M · Q · W', 'Spiegeln · Rechteckmuster · Kreismuster'], ['X', 'Hilfslinie (neue Elemente oder das gewählte)'], ['Alt halten', 'Nicht einrasten'], ['D', 'Maß festlegen (auch Formel)'], ['Zahl tippen', 'Genaue Länge beim Zeichnen'], ['Tab', 'Nächstes Eingabefeld'], ['Umschalt halten', 'Feiner einrasten'], ['Enter', 'Linienzug beenden · Skizze fertig'], ['Esc', 'Zeichnen abbrechen · Skizze verlassen']]],
       ['Dateien und Verlauf', [[M + ' Z', 'Rückgängig'], [M + ' Y', 'Wiederholen'], [M + ' S', 'Projekt speichern'], [M + ' E', 'Exportieren (STEP und mehr)'], ['?', 'Diese Übersicht']]],
@@ -226,6 +246,6 @@ const Commands = (() => {
     UI.renderHint();
   }
   function init() { build(); initBar(); document.addEventListener('keydown', onKey); }
-  return { init, search, setMode, showKeys, list: () => C };
+  return { init, search, setMode, showKeys, list: () => C, exec, repeat, get last() { return last; }, get recent() { return recent.slice(); } };
 })();
 

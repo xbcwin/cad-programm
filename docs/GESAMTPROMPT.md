@@ -1,4 +1,4 @@
-# Tracery – Gesamtprompt (Stand 21.11.2026, nach Sitzung 81)
+# Tracery – Gesamtprompt (Stand 21.11.2026, nach Sitzung 90)
 
 > Diesen Text komplett in einen neuen Chat oder eine andere KI einfügen. Er beschreibt das ganze Projekt so genau, dass die KI ohne Rückfragen weiterarbeiten kann.
 
@@ -163,6 +163,16 @@ Leitlinien:
 - Ursprungsebenen und Achsen; Raster fest oder automatisch
 - Orthografisch/Perspektive (O), Ansichten 1/3/7/0, Ansichtswürfel
 - Tiefes Zoomen ohne Flimmern mit automatischem Nachschärfen; Qualität grob bis sehr fein; Design hell/dunkel
+- Aussehen (`ViewPrefs` look/mood/shadows, `Viewer.setLook`, `Viewer.lookOf`): Studio-Look mit Werkstoff-Oberflächen (`LOOKS` in `30-viewer.js`, `App` gibt `look` je Teil mit; `it.colorSet` = eigene Farbe schlägt Werkstoff-Farbe), Spiegel-Umgebung aus einem kleinen Leuchtflächen-Raum (PMREM), weiche Schatten (PCF, nur Hauptlicht), Prüfansichten Ton/Chrom (MatCap), Einfach (matt). Bild speichern: `Viewer.renderImage(w, h, {transparent})`, `Print.imageDialog`/`saveImage`
+- Formschritte mit Modus: `it.op = {type: 'join' | 'cut' | 'common', target}` an Teilen ganz oben; der Kern (`resolveOps` in `core.js`) verrechnet sie in Reihenfolge mit dem Zielkörper (Ketten → erster Körper), das Teil liefert dann einen leeren Knoten mit `merged` (`App.mergedInto(id)`). UI: Abschnitt „Körper“ (`#op-type`, `#op-target`), `Actions.setOp`. Hochziehen `dir: 'two'` mit `dist2`, `p.thru` = durch alles (`Model.sceneSpan`, App rechnet nach)
+- Bedienung: Rechtsklick-Menü im Bild (`Interact.contextMenu`, Rechtsklick ohne Ziehen), Rahmen-Auswahl mit Umschalt + Ziehen im Leeren (`Interact.bandSelect`), `Commands.exec` merkt Befehle (`Commands.last`, `recent`, Leertaste = `Commands.repeat`), `Actions.hideSelected`/`showAll`/`invertSelection`
+- Anzeige: `ViewPrefs.display` ('edges' | 'shaded' | 'wire' | 'hidden'), `it.opacity` (nur Anzeige), `Viewer.lookAtFace(id, faceIdx)`, `doc.views = [{id, name, p, t, up, ortho}]` mit `Views.saveView`/`goView`
+- Bezugsebenen (`46-datums.js`, `Datums`): `doc.datums = [{id, name, base, plane, hidden}]`, `base.type` 'origin' (plane, dist, tilt) | 'face' (id, n, c, dist; `relink` nach jedem Rechnen, `lost`) | 'fixed'; Bild in `Viewer.groups.datums`; `Sketch.startOnPlaneObj(plane)`, `Sketch.startPlanePick(kind, onPlane)`
+- Farbe je Fläche: `it.faceColors = [{n, c, col}]` (Flächen-Lage im Teil), im Bild als Vertex-Farben (`applyFaceColors`, `Viewer.faceIndexOf`). Text in Kurven: `Sketch.textToCurves(id)`
+- Normteile: Bauteile `stdScrew` (size, head 'zyl'|'senk', length), `stdNut`, `stdWasher` (Kern: `NORM`-Tabelle + `SCREW` in `core.js`); LIB-Einträge mit `mat` setzen den Werkstoff beim Anlegen (`Model.newItem`). KI-Aktion `verrechnen` (ids, modus, ziel)
+- Messen: Kern `minDistance(scene, ids)` (Worker `distance`, BRepExtrema_DistShapeShape) → `Measure.minDistance`; Teil-Panel zeigt Volumen, Oberfläche, Hüllmaße
+- Verknüpfte Kopien: `it.link` = Kennung des Originals; `Model.syncLinks(doc)` läuft in jedem `App.change` und übernimmt Art, Maße, Kanten, Rolle (`linkLost`, wenn das Original fehlt); `Actions.duplicateLinked`, `Actions.unlink`
+- Bezüge: `Model.dependencies(doc)` → Liste `{from, to, what, datum?}` auf oberster Ebene (Formschritt-Ziel, `link`, übernommene Skizzenkanten, Rohr-`bind`, Bezugsebenen an Flächen); Bereich `details#deps` im Teile-Panel; `Actions.remove` meldet abhängige Teile
 - Zeitleiste:
   - Schritte, Marker zurückrollen, Einfügen am Marker
   - Unterdrücken; Fehler rot mit Klartext und Lösungstipp

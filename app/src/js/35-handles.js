@@ -404,7 +404,7 @@ const Handles = (() => {
 
 // ---------- Maus-Bedienung ----------
 const Interact = (() => {
-  let down = null, moving = null, hoverTimer = 0, lastHover = null;
+  let down = null, moving = null, hoverTimer = 0, lastHover = null, rdown = null, band = null;
   function init() {
     const cv = Viewer.canvas;
     cv.addEventListener('pointerdown', onDown, true);
@@ -413,6 +413,9 @@ const Interact = (() => {
     cv.addEventListener('pointerleave', () => { if (!down) { Viewer.clearHover(); Handles.hover(null); } });
     cv.addEventListener('dblclick', onDbl);
     cv.addEventListener('contextmenu', (e) => e.preventDefault());
+    // Rechtsklick ohne Ziehen: Menü passend zu dem, was unter der Maus liegt (Ziehen mit rechts verschiebt weiter die Ansicht)
+    cv.addEventListener('pointerdown', (e) => { if (e.button === 2) rdown = { x: e.clientX, y: e.clientY }; }, true);
+    window.addEventListener('pointerup', (e) => { if (e.button !== 2 || !rdown) return; const r = rdown; rdown = null; if (Math.hypot(e.clientX - r.x, e.clientY - r.y) <= 4 && e.target === Viewer.canvas && modelActive()) contextMenu(e.clientX, e.clientY); });
     window.addEventListener('keydown', onKey, true);
     window.addEventListener('pointermove', (e) => { lastPtr = { x: e.clientX, y: e.clientY }; }, { passive: true });
   }
@@ -443,6 +446,13 @@ const Interact = (() => {
       }
     }
     const hit = Select.adjust(Viewer.pick(e.clientX, e.clientY, Select.pickOpts()));
+    // Umschalt + Ziehen im Leeren: Rahmen aufziehen (nach rechts: ganz drin · nach links: berührt)
+    if (!hit && e.shiftKey) {
+      Viewer.controls.enabled = false;
+      band = { x: e.clientX, y: e.clientY, el: h('div', { class: 'sel-band' }) }; document.body.append(band.el);
+      down = { band: true, x: e.clientX, y: e.clientY }; Viewer.canvas.setPointerCapture(e.pointerId);
+      return;
+    }
     down = { x: e.clientX, y: e.clientY, hit, t: performance.now(), shift: e.shiftKey || e.metaKey || e.ctrlKey };
     if (hit && !(App.ctx && hit.id === App.ctx) && !Views.exploded) {   // im Bauteil-Modus nicht das ganze Bauteil verschieben
       const top = App.doc.items.find((x) => x.id === hit.id);
@@ -452,6 +462,11 @@ const Interact = (() => {
   function onMove(e) {
     if (!modelActive()) return;
     if (down && down.kbd) return;
+    if (down && down.band && band) {
+      const x0 = Math.min(band.x, e.clientX), y0 = Math.min(band.y, e.clientY), cross = e.clientX < band.x;
+      Object.assign(band.el.style, { left: x0 + 'px', top: y0 + 'px', width: Math.abs(e.clientX - band.x) + 'px', height: Math.abs(e.clientY - band.y) + 'px' });
+      band.el.classList.toggle('cross', cross); return;
+    }
     if (down && down.handle) { Handles.move(e); return; }
     if (down && down.child && moving) { doMove(e); return; }
     if (down && down.hit && !moving && !(App.ctx && down.hit.id === App.ctx) && !Views.exploded) {
@@ -545,6 +560,11 @@ const Interact = (() => {
   const liveRebuildChild = throttle(() => { App.rebuild(); App.refreshSelectionVisuals(); }, 120);
   function onUp(e) {
     if (down && down.kbd) return;   // Wert wird gerade getippt
+    if (down && down.band) {
+      const b = band; band = null; down = null; Viewer.controls.enabled = true;
+      if (b) { b.el.remove(); if (Math.hypot(e.clientX - b.x, e.clientY - b.y) > 4) bandSelect(b.x, b.y, e.clientX, e.clientY); }
+      return;
+    }
     if (down && down.handle) { Handles.end(); down = null; Viewer.controls.enabled = true; return; }
     if (moving) {
       const m = moving; moving = null;
@@ -561,6 +581,65 @@ const Interact = (() => {
       down = null;
     }
     Viewer.controls.enabled = true;
+  }
+  // Rahmen-Auswahl: von links nach rechts nur Teile ganz im Rahmen, von rechts nach links alles, was er berührt
+  function bandSelect(x1, y1, x2, y2) {
+    const cross = x2 < x1, L = Math.min(x1, x2), R = Math.max(x1, x2), T = Math.min(y1, y2), B = Math.max(y1, y2);
+    const ids = [];
+    for (const it of App.doc.items) {
+      if (it.hidden || App.mergedInto(it.id)) continue;
+      const box = Actions.worldBox(it.id); if (!box) continue;
+      let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+      for (let i = 0; i < 8; i++) { const p = Viewer.toScreen(new THREE.Vector3(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z)); minx = Math.min(minx, p.x); maxx = Math.max(maxx, p.x); miny = Math.min(miny, p.y); maxy = Math.max(maxy, p.y); }
+      const r = Viewer.canvas.getBoundingClientRect(); minx += r.left; maxx += r.left; miny += r.top; maxy += r.top;
+      const inside = minx >= L && maxx <= R && miny >= T && maxy <= B;
+      const touch = maxx >= L && minx <= R && maxy >= T && miny <= B;
+      if (cross ? touch : inside) ids.push(it.id);
+    }
+    App.select(ids, { additive: false });
+    UI.toast(ids.length ? `${ids.length} ${ids.length === 1 ? 'Teil' : 'Teile'} gewählt (${cross ? 'alles, was der Rahmen berührt' : 'nur Teile ganz im Rahmen'}).` : 'Im Rahmen liegt kein Teil.', { icon: 'pointer', ms: 2200 });
+    return ids;
+  }
+  // Rechtsklick-Menü im Bild
+  function contextMenu(cx, cy) {
+    const hit = Select.adjust(Viewer.pick(cx, cy, Select.pickOpts()));
+    const top = hit ? Model.topOf(App.doc, hit.id) : null;
+    const anchor = h('div', { style: { position: 'fixed', left: cx + 'px', top: cy + 'px', width: '1px', height: '1px' } }); document.body.append(anchor);
+    setTimeout(() => anchor.remove(), 0);
+    let items;
+    if (top) {
+      if (!App.sel.includes(top.id) && !App.sel.includes(hit.id)) App.select([top.id]);
+      const it = top, sk = (it.kind === 'extrude' || it.kind === 'revolve' || it.kind === 'sweep') && it.p && it.p.sketch;
+      items = [
+        ...(sk ? [{ icon: 'edit', label: 'Skizze bearbeiten', kbd: 'E', id: 'cm-edit', run: () => Sketch.editItem(it.id) }] : []),
+        { icon: 'help', label: 'Erklär diesen Schritt', id: 'cm-explain', run: () => Explain.dialog(it.id) },
+        { icon: 'viewOrtho', label: 'Blick senkrecht auf die Fläche', id: 'cm-normal', hidden: !hit || hit.faceIdx == null || !((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).n, run: () => Viewer.lookAtFace(hit.id, hit.faceIdx) },
+        { icon: 'sketch', label: 'Skizze auf dieser Fläche', id: 'cm-sketchface', hidden: !hit || hit.faceIdx == null, run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) Sketch.startOnFace({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }); } },
+        '-',
+        { icon: 'copy', label: 'Duplizieren', kbd: 'Strg D', id: 'cm-dup', run: () => Actions.duplicate() },
+        { icon: 'copy', label: 'Verknüpft duplizieren', kbd: 'Strg Umschalt D', id: 'cm-duplink', hidden: it.kind === 'group', run: () => Actions.duplicateLinked() },
+        { icon: it.role === 'hole' ? 'solid' : 'hole', label: it.role === 'hole' ? 'Zum Körper machen' : 'Zum Loch machen', kbd: 'H', id: 'cm-role', run: () => Actions.toggleRole() },
+        { icon: 'eyeOff', label: 'Ausblenden', id: 'cm-hide', run: () => Actions.hideSelected() },
+        { icon: 'focusView', label: 'Isolieren', kbd: 'I', id: 'cm-iso', run: () => Comp.toggleIso(it.id) },
+        { icon: 'pointer', label: 'Ähnliche wählen', kbd: 'A', id: 'cm-similar', run: () => Select.similar() },
+        { icon: 'fit', label: 'Heranzoomen', kbd: 'F', id: 'cm-fit', run: () => Viewer.fit([it.id]) },
+        '-',
+        { icon: 'trash', label: 'Löschen', kbd: 'Entf', id: 'cm-del', run: () => Actions.remove() },
+      ];
+    } else {
+      const hidden = App.doc.items.filter((x) => x.hidden).length;
+      items = [
+        { icon: 'eye', label: hidden ? `Alles einblenden (${hidden})` : 'Alles einblenden', id: 'cm-showall', disabled: !hidden, run: () => Actions.showAll() },
+        { icon: 'pointer', label: 'Alles wählen', kbd: 'Strg A', id: 'cm-all', run: () => App.select(App.doc.items.filter((x) => !x.hidden && !App.mergedInto(x.id)).map((x) => x.id)) },
+        { icon: 'fit', label: 'Alles zeigen', kbd: 'F', id: 'cm-fitall', run: () => Viewer.fit() },
+        '-',
+        { icon: 'sketch', label: 'Neue Skizze', kbd: 'S', id: 'cm-sketch', run: () => Sketch.chooseAndStart() },
+        { icon: 'image', label: 'Bild speichern (PNG)', id: 'cm-image', run: () => Print.imageDialog() },
+        ...(Commands.last ? ['-', { icon: 'undo', label: `Wiederholen: ${Commands.last.label}`, kbd: 'Leertaste', id: 'cm-repeat', run: () => Commands.repeat() }] : []),
+      ];
+    }
+    UI.menu(anchor, items);
+    return items;
   }
   // im Bauteil-Modus: welches Unterteil liegt unter der Maus?
   function ctxChildAt(hit, cx, cy) {
@@ -624,6 +703,6 @@ const Interact = (() => {
     if (info && info.t === 'PLANE' && info.n && App.doc.items.some((x) => x.id === hit.id)) { Sketch.startOnFace({ id: hit.id, idx: hit.faceIdx, info, point: hit.point.toArray(), normal: hit.normal ? hit.normal.toArray() : null }); return; }
     Viewer.fit([hit.id]);
   }
-  return { init };
+  return { init, bandSelect, contextMenu };
 })();
 

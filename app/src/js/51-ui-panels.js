@@ -166,7 +166,8 @@ const Panels = (() => {
         const sw = h('span', { class: 'swatch' + (it.role === 'hole' ? ' hole' : ''), style: { background: it.color } });
         if (it.comp) { sw.innerHTML = icon('parts'); sw.classList.add('comp'); }
         const nm = h('span', { class: 'nm', title: Model.label(it) }, Model.label(it));
-        const sub = h('span', { class: 'sub mono' }, Model.sizeText(it, V));
+        const into = App.mergedInto(it.id), OPI = { join: '∪', cut: '−', common: '∩' };
+        const sub = h('span', { class: 'sub mono' }, into && it.op ? `${OPI[it.op.type]} ${Model.label(Model.find(App.doc, into).item)}` : (it.link ? '↔ ' : '') + Model.sizeText(it, V));
         const acts = h('span', { class: 'acts' });
         const eye = h('button', { type: 'button', 'aria-label': it.hidden ? 'Einblenden' : 'Ausblenden', 'data-tip': it.hidden ? 'Einblenden' : 'Ausblenden' }); eye.innerHTML = icon(it.hidden ? 'eyeOff' : 'eye');
         eye.onclick = (e) => { e.stopPropagation(); App.change(it.hidden ? 'Eingeblendet' : 'Ausgeblendet', (doc) => { const f = Model.find(doc, it.id); f.item.hidden = !f.item.hidden; }); };
@@ -225,6 +226,7 @@ const Panels = (() => {
     };
     rec(items, ul);
     body.append(ul);
+    const ds = Datums.treeSection(); if (ds) body.append(ds);
   }
   function moveInTree(srcId, dstId, mode) {
     if (!srcId || srcId === dstId) return;
@@ -374,6 +376,7 @@ const Panels = (() => {
     if (App.mode === 'drawing') { $('#right-title').textContent = 'Zeichnung'; Drawing.renderPanel(body); return; }
     if (Sketch.active) { $('#right-title').textContent = 'Skizze'; Sketch.renderPanel(body); return; }
     const items = App.selectedItems();
+    if (!items.length && Datums.selected && Datums.find(Datums.selected)) { $('#right-title').textContent = 'Bezugsebene'; Datums.renderPanel(body); return; }
     if (!items.length) { $('#right-title').textContent = 'Projekt'; renderProject(body); return; }
     if (items.length > 1) { $('#right-title').textContent = 'Auswahl'; renderMulti(body, items); return; }
     $('#right-title').textContent = 'Eigenschaften';
@@ -467,14 +470,38 @@ const Panels = (() => {
     const d = h('button', { type: 'button', class: 'btn' }); d.innerHTML = icon('copy') + 'Duplizieren'; d.onclick = () => Actions.duplicate();
     const x = h('button', { type: 'button', class: 'btn danger' }); x.innerHTML = icon('trash') + 'Löschen'; x.onclick = () => Actions.remove();
     r1.append(g, d, x); w.append(r1);
+    // zwei Teile: kleinster Abstand
+    if (found.length === 2) {
+      const ds = h('div', { class: 'section', id: 'min-dist', 'data-help': 'minDistance' }, h('div', { class: 'section-h' }, 'Kleinster Abstand'));
+      const val = h('b', { class: 'mono', id: 'min-dist-val' }, '…'); ds.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, `${Model.label(found[0].item)} ↔ ${Model.label(found[1].item)}`), val));
+      Measure.minDistance(found.map((f) => (Model.topOf(App.doc, f.item.id) || f.item).id)).then((r) => { val.textContent = !r ? '–' : r.d < 1e-6 ? 'berühren sich' : fmt(r.d, 3) + ' mm'; });
+      w.append(ds);
+    }
     const al = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Ausrichten'));
     const ar = h('div', { class: 'btn-row' });
     for (const [m, l] of [['left', 'Links'], ['cx', 'Mitte X'], ['right', 'Rechts'], ['front', 'Vorne'], ['cy', 'Mitte Y'], ['back', 'Hinten'], ['bottom', 'Unten'], ['top', 'Oben']]) {
       const b = h('button', { type: 'button', class: 'btn small' }, l); b.onclick = () => Actions.align(null, m); ar.append(b);
     }
     al.append(ar); w.append(al);
-    w.append(colorSection((c) => App.change('Farbe geändert', (doc) => { for (const f of found) Model.find(doc, f.item.id).item.color = c; }), found[0].item.color));
+    w.append(colorSection((c) => App.change('Farbe geändert', (doc) => { for (const f of found) { const T = Model.find(doc, f.item.id).item; if (c) { T.color = c; T.colorSet = true; } else delete T.colorSet; } }), found[0].item.color, found.some((f) => f.item.colorSet)));
     body.append(w);
+  }
+  // Formschritt mit Modus: eigener Körper oder mit einem früheren Körper verrechnen (nur Teile ganz oben im Verlauf)
+  function opSection(it) {
+    const idx = App.doc.items.indexOf(it);
+    if (idx < 0 || it.kind === 'group') return null;
+    const targets = App.doc.items.slice(0, idx).filter((x) => x.role !== 'hole' && !x.suppressed && x.kind !== 'group' && !(x.op && x.op.target === it.id));
+    if (!targets.length && !it.op) return null;
+    const sec = h('div', { class: 'section', id: 'op-sec', 'data-help': 'bodyOp' }, h('div', { class: 'section-h' }, 'Körper'));
+    const type = it.op ? it.op.type : 'new';
+    const tgt = it.op ? it.op.target : (targets[targets.length - 1] || {}).id;
+    const fl = h('div', { class: 'fields' });
+    fl.append(UI.selectField({ id: 'op-type', label: 'Was passiert mit dem Teil?', value: type, options: [['new', 'Eigener Körper'], ['join', 'Vereinigen mit …'], ['cut', 'Abziehen von …'], ['common', 'Schnittmenge mit …']], onChange: (v) => Actions.setOp(it.id, v === 'new' ? null : v, tgt) }));
+    if (type !== 'new') fl.append(UI.selectField({ id: 'op-target', label: 'Zielkörper', value: tgt, options: targets.map((x) => [x.id, Model.label(x)]), onChange: (v) => Actions.setOp(it.id, type, v) }));
+    sec.append(fl);
+    const into = App.mergedInto(it.id);
+    if (type !== 'new') sec.append(h('div', { class: 'hint-box' }, into ? `Das Teil steckt jetzt in „${Model.label(Model.find(App.doc, into).item)}“ – im Bild siehst du nur den fertigen Körper. Klick im Verlauf auf das Teil, um es weiter zu ändern.` : 'Das Ziel fehlt oder kommt später im Verlauf – das Teil bleibt vorerst ein eigener Körper.'));
+    return sec;
   }
   function roleSwitch(role, onSet) {
     const s = h('div', { class: 'role-switch', role: 'group', 'aria-label': 'Körper oder Loch' });
@@ -483,11 +510,22 @@ const Panels = (() => {
     a.onclick = () => onSet('solid'); b.onclick = () => onSet('hole');
     s.append(a, b); return s;
   }
-  function colorSection(onPick, cur) {
+  // Farbe: zehn feste Töne oder jede beliebige Farbe. Metall, Kohlefaser, Holz und Glas zeigen im Studio-Look
+  // die Farbe ihres Werkstoffs, bis man selbst eine Farbe wählt („Farbe vom Werkstoff“ nimmt das zurück).
+  function colorSection(onPick, cur, set, it) {
     const sec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Farbe'));
     const row = h('div', { class: 'colors' });
     for (const c of COLORS) { const b = h('button', { type: 'button', 'aria-label': c.n, 'data-tip': c.n, 'aria-pressed': c.c === cur ? 'true' : 'false', style: { background: c.c } }); b.onclick = () => onPick(c.c); row.append(b); }
-    sec.append(row); return sec;
+    const free = h('input', { type: 'color', id: 'item-color', value: /^#[0-9a-f]{6}$/i.test(cur || '') ? cur : '#2f9e91', 'aria-label': 'Eigene Farbe', 'data-tip': 'Eigene Farbe' });
+    free.addEventListener('change', () => onPick(free.value.toLowerCase()));
+    row.append(h('label', { class: 'color-free', 'data-tip': 'Jede Farbe' }, free));
+    sec.append(row);
+    const L = it ? Viewer.lookOf(it.mat || (App.doc.settings && App.doc.settings.material)) : null;
+    if (L && L.nat) {
+      if (set) { const b = h('button', { type: 'button', class: 'btn ghost', id: 'item-color-mat' }); b.innerHTML = icon('undo') + 'Farbe vom Werkstoff'; b.onclick = () => onPick(null); sec.append(h('div', { class: 'btn-row' }, b)); }
+      else sec.append(h('div', { class: 'hint-box' }, `Im Studio-Look zeigt das Teil die Farbe seines Werkstoffs (${it.mat || App.doc.settings.material}). Eine Farbe hier wählen überschreibt sie.`));
+    }
+    return sec;
   }
   function renderItem(body, f) {
     const it = f.item; const V = Model.vars(App.doc).v;
@@ -508,7 +546,33 @@ const Panels = (() => {
       if (e.code === 'edges') { const b = h('button', { type: 'button', class: 'btn small' }, 'Rundung entfernen'); b.onclick = () => Actions.removeFinish(it.id, e.finishId); box.append(h('div', null, b)); }
       w.append(box);
     }
+    if (it.link) {
+      const src = Model.find(App.doc, it.link);
+      const ls = h('div', { class: 'section', id: 'link-sec', 'data-help': 'linkedCopy' }, h('div', { class: 'section-h' }, 'Verknüpfte Kopie'));
+      ls.append(h('div', { class: src && !it.linkLost ? 'hint-box' : 'err-box' }, src && !it.linkLost ? `Diese Kopie folgt „${Model.label(src.item)}“: Maße und Kanten änderst du am Original, Lage und Farbe hier.` : 'Das Original gibt es nicht mehr – die Kopie behält ihre letzte Form.'));
+      const row = h('div', { class: 'btn-row' });
+      if (src) { const b = h('button', { type: 'button', class: 'btn', id: 'link-src' }); b.innerHTML = icon('pointer') + 'Original wählen'; b.onclick = () => App.select([it.link]); row.append(b); }
+      const u = h('button', { type: 'button', class: 'btn ghost', id: 'link-off' }); u.innerHTML = icon('copy') + 'Verknüpfung lösen'; u.onclick = () => Actions.unlink(it.id); row.append(u);
+      ls.append(row); w.append(ls);
+    }
+    // Eltern und Kinder: worauf dieses Teil aufbaut und was von ihm abhängt (KP-11)
+    if (App.doc.items.includes(it)) {
+      const deps = Model.dependencies(App.doc), up = deps.filter((x) => x.from === it.id), down = deps.filter((x) => x.to === it.id);
+      if (up.length || down.length) {
+        const ds = h('details', { class: 'section deps', id: 'deps', 'data-help': 'dependencies' }, h('summary', { class: 'section-h' }, `Bezüge (${up.length + down.length})`));
+        const nm = (id) => { const f = Model.find(App.doc, id); return f ? Model.label(f.item) : '–'; };
+        const line = (txt, id) => { const r = h('div', { class: 'mini-row dep-row' }, h('span', { class: 'grow' }, txt)); if (id && Model.find(App.doc, id)) { r.style.cursor = 'pointer'; r.onclick = () => App.select([id]); } return r; };
+        for (const x of up) ds.append(line(`${x.what} „${nm(x.to)}“`, x.to));
+        const back = { 'abgezogen von': 'wird hiervon abgezogen', 'vereinigt mit': 'ist hiermit vereinigt', 'Schnittmenge mit': 'bildet hiermit die Schnittmenge', 'verrechnet mit': 'ist hiermit verrechnet', 'verknüpfte Kopie von': 'ist eine verknüpfte Kopie hiervon', 'Skizze übernimmt Kante von': 'übernimmt Kanten hiervon', 'Rohr hängt an': 'hat Rohrpunkte hieran' };
+        for (const x of down) ds.append(line(x.datum ? `Bezugsebene „${x.datum}“ hängt hieran` : `„${nm(x.from)}“ ${back[x.what] || 'hängt hieran'}`, x.datum ? null : x.from));
+        if (down.length) ds.open = true;
+        w.append(ds);
+      }
+    }
+    const copies = []; Model.walk(App.doc.items, (x) => { if (x.link === it.id) copies.push(x); });
+    if (copies.length) w.append(h('div', { class: 'hint-box', id: 'link-count' }, `${copies.length} verknüpfte ${copies.length === 1 ? 'Kopie folgt' : 'Kopien folgen'} diesem Teil.`));
     w.append(roleSwitch(it.role, (r) => Actions.setRole([it.id], r)));
+    const opSec = opSection(it); if (opSec) w.append(opSec);
     // Maße
     const three = !!(KINDS[it.kind] && KINDS[it.kind].params.length === 3);
     const sec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, three ? 'Maße (mm)' : 'Maße'));
@@ -532,8 +596,11 @@ const Panels = (() => {
     } else if (it.kind === 'extrude' || it.kind === 'revolve') {
       const fl = h('div', { class: 'fields' });
       if (it.kind === 'extrude') {
-        fl.append(UI.numField({ id: 'p-dist', label: 'Höhe', value: it.p.dist, onCommit: (v) => setP('dist', v) }));
-        fl.append(UI.selectField({ id: 'p-dir', label: 'Richtung', value: it.p.dir || 'normal', options: [['normal', 'Nach außen'], ['reverse', 'Nach innen'], ['both', 'Beidseitig']], onChange: (v) => setP('dir', v) }));
+        const cuts = it.role === 'hole' || (it.op && it.op.type === 'cut');
+        if (!it.p.thru) fl.append(UI.numField({ id: 'p-dist', label: it.p.dir === 'two' ? 'Höhe Seite 1' : 'Höhe', value: it.p.dist, onCommit: (v) => setP('dist', v) }));
+        fl.append(UI.selectField({ id: 'p-dir', label: 'Richtung', value: it.p.dir || 'normal', options: [['normal', 'Nach außen'], ['reverse', 'Nach innen'], ['both', 'Beidseitig gleich'], ['two', 'Beidseitig verschieden']], onChange: (v) => setP('dir', v) }));
+        if (it.p.dir === 'two' && !it.p.thru) fl.append(UI.numField({ id: 'p-dist2', label: 'Höhe Seite 2', value: it.p.dist2 ?? it.p.dist, onCommit: (v) => setP('dist2', v) }));
+        if (cuts || it.p.thru) { const l = h('label', { class: 'check', 'data-help': 'thruAll' }, h('input', { type: 'checkbox', id: 'p-thru', checked: !!it.p.thru }), 'Durch alles'); l.querySelector('input').onchange = (e) => App.change(e.target.checked ? 'Durch alles' : 'Feste Tiefe', (doc) => { const T = Model.find(doc, it.id).item; if (e.target.checked) T.p.thru = true; else delete T.p.thru; }); fl.append(l); }
       } else {
         fl.append(UI.numField({ id: 'p-angle', label: 'Winkel', value: it.p.angle, unit: '°', onCommit: (v) => setP('angle', v) }));
       }
@@ -742,7 +809,32 @@ const Panels = (() => {
       ks.append(h('div', { class: 'hint-box', html: 'Oder klick im Modell <b>direkt auf eine Kante</b> und wähle Abrunden.' }));
       w.append(ks);
     }
-    w.append(colorSection((c) => App.change('Farbe geändert', (doc) => { Model.find(doc, it.id).item.color = c; }), it.color));
+    w.append(colorSection((c) => App.change(c ? 'Farbe geändert' : 'Farbe vom Werkstoff', (doc) => { const T = Model.find(doc, it.id).item; if (c) { T.color = c; T.colorSet = true; } else delete T.colorSet; }), it.color, !!it.colorSet, it));
+    // Farbe der gewählten Fläche
+    const sf = Actions.selectedFace();
+    if (sf && sf.id === it.id && it.role !== 'hole') {
+      const fsec = h('div', { class: 'section', id: 'face-color', 'data-help': 'faceColor' }, h('div', { class: 'section-h' }, 'Farbe dieser Fläche'));
+      const key = { n: sf.info.n || null, c: sf.info.c };
+      const cur = (it.faceColors || []).find((x) => Viewer.faceIndexOf(it.id, x) === sf.idx);
+      const setFace = (col) => App.change(col ? 'Flächenfarbe' : 'Flächenfarbe entfernt', (doc) => {
+        const T = Model.find(doc, it.id).item; const list = (T.faceColors || []).filter((x) => Viewer.faceIndexOf(it.id, x) !== sf.idx);
+        if (col) list.push({ ...key, col });
+        if (list.length) T.faceColors = list; else delete T.faceColors;
+      });
+      const row = h('div', { class: 'colors' });
+      for (const c of COLORS) { const b = h('button', { type: 'button', 'aria-label': c.n, 'data-tip': c.n, 'aria-pressed': cur && cur.col === c.c ? 'true' : 'false', style: { background: c.c } }); b.onclick = () => setFace(c.c); row.append(b); }
+      const free = h('input', { type: 'color', id: 'face-color-inp', value: cur ? cur.col : '#e03131', 'aria-label': 'Eigene Flächenfarbe' });
+      free.addEventListener('change', () => setFace(free.value.toLowerCase()));
+      row.append(h('label', { class: 'color-free', 'data-tip': 'Jede Farbe' }, free));
+      fsec.append(row);
+      if (cur) { const b = h('button', { type: 'button', class: 'btn ghost', id: 'face-color-off' }); b.innerHTML = icon('undo') + 'Flächenfarbe entfernen'; b.onclick = () => setFace(null); fsec.append(h('div', { class: 'btn-row' }, b)); }
+      w.append(fsec);
+    }
+    if (it.role !== 'hole') {
+      const op = h('div', { class: 'fields', 'data-help': 'opacity' });
+      op.append(UI.numField({ id: 'item-opacity', label: 'Sichtbarkeit (100 % = undurchsichtig)', value: Math.round((it.opacity ?? 1) * 100), unit: '%', expr: false, min: 5, onCommit: (v) => App.change('Durchsichtigkeit', (doc) => { const T = Model.find(doc, it.id).item; const o = clamp(v, 5, 100) / 100; if (o >= 1) delete T.opacity; else T.opacity = o; }, { merge: 'op:' + it.id }) }));
+      w.lastChild.append(op);
+    }
     // Material und Gewicht dieses Teils (nur Teile der obersten Ebene)
     if (!f.parent && it.role !== 'hole') {
       const pm = Mass.projectMaterial();
@@ -750,15 +842,19 @@ const Panels = (() => {
       const fixed = Mass.fixedOf(it);
       ms.append(UI.selectField({ id: 'p-mat', label: 'Material', value: fixed ? '__fix' : it.mat || '', options: [['', `Wie das Projekt (${pm.k})`], ['__fix', 'Kaufteil: festes Gewicht'], ...MATERIALS.map((m) => [m.k, `${m.k} · ${String(m.rho).replace('.', ',')} g/cm³`])], onChange: (v) => {
         if (v === '__fix') { Mass.measure().then((r) => { const p = Mass.partOf(r, it.id); App.change('Festes Gewicht', (doc) => { const T = Model.find(doc, it.id).item; delete T.mat; T.massG = p ? round(p.mass, 1) : 10; }); }); return; }
-        App.change('Material gewählt', (doc) => { const T = Model.find(doc, it.id).item; delete T.massG; if (v) T.mat = v; else delete T.mat; });
+        App.change('Material gewählt', (doc) => { const T = Model.find(doc, it.id).item; delete T.massG; delete T.colorSet; if (v) T.mat = v; else delete T.mat; });
       } }));
       if (fixed) {
         ms.append(h('div', { class: 'fields', style: { marginTop: '8px' } }, UI.numField({ id: 'p-massg', label: 'Gewicht (Datenblatt)', value: it.massG, unit: 'g', onCommit: (v) => App.change('Gewicht geändert', (doc) => { Model.find(doc, it.id).item.massG = v; }, { merge: 'massg:' + it.id }) })));
         ms.append(h('div', { class: 'hint-box' + (it.massG === '' ? ' warn' : ''), html: it.massG === '' ? '<b>Gewicht fehlt:</b> Trag das Gewicht aus dem Datenblatt ein – bis dahin zählt dieses Teil mit 0 g.' : 'Für gekaufte Teile wie Motoren oder Akkus: Das Gewicht kommt aus dem Datenblatt, nicht aus der Form. Auch Formeln gehen, z. B. <b>4*33,8</b>.' }));
       }
-      const vR = h('b', { class: 'mono' }, '…'), gR = h('b', { class: 'mono' }, '…');
-      ms.append(h('div', { class: 'mini-list', style: { marginTop: '8px' } }, h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Volumen'), vR), h('div', { class: 'mini-row', 'data-help': 'massProps' }, h('span', { class: 'grow' }, 'Gewicht'), gR)));
-      Mass.measure().then((r) => { const p = Mass.partOf(r, it.id); vR.textContent = p ? `${fmt(p.volume / 1000, 3)} cm³` : '–'; gR.textContent = p ? Mass.gText(p.mass) + (p.fixed ? ' (fest)' : '') : '–'; vR.id = 'p-vol'; gR.id = 'p-mass'; });
+      const vR = h('b', { class: 'mono' }, '…'), gR = h('b', { class: 'mono' }, '…'), aR = h('b', { class: 'mono' }, '…'), bR = h('b', { class: 'mono' }, '…');
+      ms.append(h('div', { class: 'mini-list', style: { marginTop: '8px' } }, h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Volumen'), vR), h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Oberfläche'), aR), h('div', { class: 'mini-row', 'data-help': 'bboxSize' }, h('span', { class: 'grow' }, 'Hüllmaße (L × B × H)'), bR), h('div', { class: 'mini-row', 'data-help': 'massProps' }, h('span', { class: 'grow' }, 'Gewicht'), gR)));
+      Mass.measure().then((r) => {
+        const p = Mass.partOf(r, it.id); vR.textContent = p ? `${fmt(p.volume / 1000, 3)} cm³` : '–'; gR.textContent = p ? Mass.gText(p.mass) + (p.fixed ? ' (fest)' : '') : '–'; vR.id = 'p-vol'; gR.id = 'p-mass';
+        aR.textContent = p && p.area ? `${fmt(p.area / 100, 2)} cm²` : '–'; aR.id = 'p-area';
+        const b = p && p.bbox; bR.textContent = b ? `${fmt(b[3] - b[0], 2)} × ${fmt(b[4] - b[1], 2)} × ${fmt(b[5] - b[2], 2)} mm` : '–'; bR.id = 'p-bbox';
+      });
       w.append(ms);
     }
     // Mehr

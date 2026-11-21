@@ -111,6 +111,12 @@ const Sketch = (() => {
     const pk = (id, label, kind) => { const b = h('button', { type: 'button', class: 'btn', id }, label); b.onclick = () => { UI.closePop(); startPlanePick(kind); }; return b; };
     row2.append(pk('sk-mid', 'Mittig zwischen zwei Flächen', 'mid'), pk('sk-3p', 'Durch drei Punkte', '3p'));
     box.append(row2);
+    // eigene Bezugsebenen des Projekts
+    const ds = Datums.list().filter((d) => !d.hidden);
+    const row3 = h('div', { class: 'btn-row' });
+    for (const d of ds) { const b = h('button', { type: 'button', class: 'btn', 'data-datum': d.id }, d.name); b.onclick = () => { UI.closePop(); Datums.sketchOn(d.id); }; row3.append(b); }
+    const nb = h('button', { type: 'button', class: 'btn ghost', id: 'sk-datum' }); nb.innerHTML = icon('plus') + 'Neue Bezugsebene …'; nb.onclick = () => { UI.closePop(); Datums.dialog(btn); };
+    row3.append(nb); box.append(row3);
     UI.pop(btn, box);
   }
   const PLANES = { XY: { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] }, XZ: { o: [0, 0, 0], x: [1, 0, 0], n: [0, -1, 0] }, YZ: { o: [0, 0, 0], x: [0, 1, 0], n: [1, 0, 0] } };
@@ -132,7 +138,7 @@ const Sketch = (() => {
     }
     return best ? best.w : hit.faceIdx >= 0 ? hit.point.clone() : null;
   }
-  function startPlanePick(kind) {
+  function startPlanePick(kind, onPlane) {
     stopPlanePick(); if (S) cancel();
     const need = kind === 'mid' ? 2 : 3, got = [], marks = [];
     const hint = () => UI.hint(kind === 'mid' ? `<b>Mittelebene:</b> Klick ${got.length ? 'die zweite' : 'die erste'} flache Fläche (beide parallel). <b>Esc</b> bricht ab.` : `<b>Ebene durch drei Punkte:</b> Klick Punkt ${got.length + 1} von 3 auf einem Körper – Ecken und Kantenmitten rasten ein. <b>Esc</b> bricht ab.`);
@@ -157,6 +163,7 @@ const Sketch = (() => {
       const pl = kind === 'mid' ? midPlane(got) : plane3(got);
       stopPlanePick();
       if (!pl) { UI.toast(kind === 'mid' ? 'Die beiden Flächen sind nicht parallel – eine Mittelebene gibt es nur zwischen parallelen Flächen.' : 'Die drei Punkte liegen auf einer Linie – sie spannen keine Ebene auf.', { kind: 'bad' }); return; }
+      if (onPlane) { onPlane(pl); return; }
       begin({ plane: pl, W: new THREE.Matrix4(), ents: [], refs: [], ctx: { mode: 'new', targetId: null } });
       UI.toast(kind === 'mid' ? 'Skizze auf der Mittelebene – genau zwischen den beiden Flächen.' : 'Skizze auf der Ebene durch die drei Punkte.', { icon: 'check' });
     };
@@ -180,6 +187,8 @@ const Sketch = (() => {
     if (Math.abs(n.z) > 1e-6 ? n.z < 0 : n.dot(Viewer.camera.position.clone().sub(a)) < 0) n.negate();
     return { o: r6v(a), x: r6v(u.normalize()), n: r6v(n) };
   }
+  // Skizze auf einer beliebigen Ebene (z. B. einer Bezugsebene)
+  function startOnPlaneObj(plane) { begin({ plane: deepClone(plane), W: new THREE.Matrix4(), ents: [], refs: [], ctx: { mode: 'new', targetId: null } }); }
   function startOnPlane(name, off = 0) {
     const pl = PLANES[name];
     begin({ plane: deepClone(pl), W: new THREE.Matrix4(), ents: [], refs: [], ctx: { mode: 'new', targetId: null }, pOff: off || 0 });
@@ -532,6 +541,36 @@ const Sketch = (() => {
     return true;
   }
   function setDim(eid, k, v) { return setDimSpec({ e: eid, k }, v); }
+  // Text in Kurven umwandeln: aus den Buchstaben werden Linien und Splines, die man trimmen, versetzen und einzeln ändern kann
+  function curvesOfContours(contours) {
+    const ents = [], P = (q) => [round(q[0], 4), round(q[1], 4)];
+    const bez = (s, t) => { const u = 1 - t; return [0, 1].map((k) => u * u * u * s.a[k] + 3 * u * u * t * s.c1[k] + 3 * u * t * t * s.c2[k] + t * t * t * s.b[k]); };
+    for (const c of contours) {
+      if (c.every((s) => s.t === 'bez')) { const pts = []; for (const s of c) for (let j = 0; j < 6; j++) pts.push(P(bez(s, j / 6))); ents.push({ id: uid('e'), type: 'spline', pts, closed: true }); continue; }
+      let k = 0; const N = c.length;
+      let start = c.findIndex((s) => s.t !== 'bez'); if (start < 0) start = 0;
+      const ord = c.map((_, i) => c[(i + start) % N]);
+      while (k < N) {
+        const s = ord[k];
+        if (s.t !== 'bez') { ents.push({ id: uid('e'), type: 'line', a: P(s.a), b: P(s.b) }); k++; continue; }
+        const pts = [P(s.a)];
+        while (k < N && ord[k].t === 'bez') { for (let j = 1; j <= 6; j++) pts.push(P(bez(ord[k], j / 6))); k++; }
+        ents.push({ id: uid('e'), type: 'spline', pts, closed: false });
+      }
+    }
+    return ents;
+  }
+  function textToCurves(id) {
+    const e = S && S.ents.find((x) => x.id === id && x.type === 'text'); if (!e) return 0;
+    const ents = curvesOfContours(SK.textContours(e));
+    if (!ents.length) { UI.toast('Der Text hat keine Buchstaben zum Umwandeln.', { kind: 'bad' }); return 0; }
+    pushUndo();
+    S.ents.splice(S.ents.indexOf(e), 1, ...ents);
+    S.dims = S.dims.filter((d) => d.e !== id); S.cons = S.cons.filter((c) => !(c.refs || []).includes(id) && c.e !== id);
+    S.sel = null; reapply(); render(); Panels.renderRight();
+    UI.toast(`Text in ${ents.length} Kurven umgewandelt – jetzt kannst du Buchstaben trimmen, versetzen oder einzeln ändern.`, { icon: 'check', ms: 3200 });
+    return ents.length;
+  }
   // Fertige Elemente (z. B. aus einer DXF oder SVG) in die offene Skizze legen – ein Rückgängig-Schritt
   function insertEnts(list) {
     if (!S || S.step || !list || !list.length) return 0;
@@ -2329,6 +2368,9 @@ const Sketch = (() => {
           f.append(h('div', { class: 'btn-row' }, ob));
         }
         const tb = SK.textBox(sel); if (tb) w.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Größe'), h('b', { class: 'mono' }, fmt(tb.w, 2) + ' × ' + fmt(tb.h, 2) + ' mm')));
+        const cb = h('button', { type: 'button', class: 'btn', id: 'se-text-curves', 'data-help': 'textCurves' }); cb.innerHTML = icon('spline') + 'In Kurven umwandeln';
+        cb.onclick = () => textToCurves(sel.id);
+        w.append(h('div', { class: 'btn-row' }, cb));
       }
       else if (sel.type === 'ellipse') {
         f.append(dimField('w', 'Breite (Achse 1)', 'mm', { min: 0.01 }), dimField('h', 'Höhe (Achse 2)', 'mm', { min: 0.01 }));
@@ -2471,6 +2513,13 @@ const Sketch = (() => {
       if (bb && bb[2] - bb[0] > 1e-6 && bb[3] - bb[1] > 1e-6) {
         const W = bb[2] - bb[0], H = bb[3] - bb[1], fz = h('div', { class: 'fields' });
         w.append(h('div', { class: 'mini-row', id: 'sk-size' }, h('span', { class: 'grow' }, 'Größe der Skizze'), h('b', { class: 'mono' }, fmt(W, 2) + ' × ' + fmt(H, 2) + ' mm')));
+        // Fläche und Umfang aller geschlossenen Flächen (Löcher abgezogen, Lochränder zählen zum Umfang)
+        const regs = SK.regions(S.ents);
+        if (regs.length) {
+          const per = (poly) => poly.reduce((s, q, i) => s + Math.hypot(q[0] - poly[(i + 1) % poly.length][0], q[1] - poly[(i + 1) % poly.length][1]), 0);
+          const A = regs.reduce((s, r) => s + r.area, 0), U = regs.reduce((s, r) => s + per(r.outer.poly) + r.holes.reduce((t, hh) => t + per(hh.poly), 0), 0);
+          w.append(h('div', { class: 'mini-row', id: 'sk-area', 'data-help': 'sketchMeasure' }, h('span', { class: 'grow' }, regs.length === 1 ? 'Fläche · Umfang' : `${regs.length} Flächen · Umfang`), h('b', { class: 'mono' }, fmt(A, 2) + ' mm² · ' + fmt(U, 2) + ' mm')));
+        }
         const go = (fac) => { if (!(fac > 0) || fac > 1000 || fac < 0.001) { UI.toast('Diese Größe geht nicht.', { kind: 'bad' }); Panels.renderRight(); return; } if (scaleAll(fac)) UI.toast(`Skizze auf ${fmt(fac * 100, 1)} % gebracht – Längen-Maße sind mitgewachsen.`, { icon: 'check' }); };
         fz.append(UI.numField({ id: 'sk-scale-w', label: 'Breite ändern (alles wächst mit)', value: round(W, 3), unit: 'mm', expr: false, min: 0.01, onCommit: (v) => go(v / W) }));
         fz.append(UI.numField({ id: 'sk-scale-f', label: 'oder Faktor', value: 100, unit: '%', expr: false, min: 0.1, onCommit: (v) => go(v / 100) }));
@@ -2768,6 +2817,6 @@ const Sketch = (() => {
     cv.addEventListener('pointermove', (e) => { if (S) onMove(e); });
     window.addEventListener('pointerup', (e) => { if (S) { onUp(e); stepUp(e); } });
   }
-  return { init, chooseAndStart, startOnPlane, startOnFace, startPath, startLoftPath, editItem, pushPullFace, renderPanel, onKey, cancel, scaleAll, insertEnts, setBg, setTool, get active() { return !!S; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
+  return { init, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startPath, startLoftPath, editItem, pushPullFace, renderPanel, onKey, cancel, scaleAll, insertEnts, textToCurves, setBg, setTool, get active() { return !!S; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
 })();
 

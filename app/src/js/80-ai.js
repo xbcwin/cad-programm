@@ -34,6 +34,7 @@ const AI = (() => {
 {"op":"rolle","ids":"…","rolle":"koerper"|"loch"} · {"op":"farbe","ids":"…","farbe":"#RRGGBB"} · {"op":"umbenennen","id":"…","name":"…"}
 {"op":"ausblenden","ids":"…"} · {"op":"einblenden","ids":"…"} · {"op":"unterdruecken","ids":"…"} · {"op":"aktivieren","ids":"…"}
 {"op":"material","id":"<id>","material":"<Kürzel aus MATERIALIEN>"}
+{"op":"verrechnen","ids":"…","modus":"vereinigen"|"abziehen"|"schnittmenge"|"eigener","ziel":"<id oder name:…>"}   (Teile ganz oben; das Ziel muss im Verlauf vorher kommen; abziehen schneidet nur aus dem Ziel, anders als rolle loch)
 {"op":"gewicht","id":"<id>","g":33.8}   (Kaufteil mit festem Gewicht aus dem Datenblatt)
 {"op":"kaufteil","name":"<Name aus KAUFTEILE>","t":{"x":0,"y":0,"z":0}}   (Kaufteil in echter Form mit Maßen und Gewicht aus der Bibliothek)
 {"op":"drohne","zoll":5,"form":"x"|"stretch"|"wide"|"deadcat"|"h"|"cine"|"speed","video":"analog"|"o3"|"o4"|"o4pro"|"walksnail"|"hdzero"|"none","motor":"2207","akku":"6S 1300 mAh","neigung":20,"rahmen":"Source One V5","arme":"einzeln"}   (baut mit dem Frame-Assistenten einen kompletten Rahmen als NEUES Projekt; nur wenn ausdrücklich ein neuer Rahmen gewünscht ist. zoll: 3, 3.5, 4, 5, 6 oder 7. cine = Cinewhoop mit Ducts, speed = Speed-Drohne mit Stromlinien-Rumpf (Akku innen, Motoren um "neigung" Grad nach vorne geneigt, Standard 20). "rahmen" nur für den Nachbau eines Herstellerrahmens: ${FRAMES}. "arme": "einzeln" baut bei x, stretch und wide vier einzelne Arme mit Bodenplatte (Sandwich, Arme lassen sich einzeln tauschen))
@@ -589,6 +590,21 @@ Beispiel – Wunsch „Mach alles als Verbund“ (Runde 1):
             rep.changed.push(id); n++;
           }
           if (n) { rep.done.push(`${op}: ${n} Teile`); any = true; }
+        } else if (op === 'verrechnen') {
+          const MODE = { vereinigen: 'join', join: 'join', abziehen: 'cut', cut: 'cut', schnittmenge: 'common', common: 'common', eigener: null, neu: null };
+          const mode = String(a.modus || '').toLowerCase();
+          if (!(mode in MODE)) { rep.notes.push(`Den Modus „${a.modus}“ kenne ich nicht (vereinigen, abziehen, schnittmenge, eigener).`); continue; }
+          const tg = MODE[mode] ? sel({ ids: a.ziel }) : [];
+          const tid = tg.find((id) => doc.items.some((x) => x.id === id));
+          if (MODE[mode] && !tid) { rep.notes.push('Für „verrechnen“ fehlt ein Zielkörper ganz oben im Verlauf.'); continue; }
+          let n = 0;
+          for (const id of sel(a)) {
+            const it = doc.items.find((x) => x.id === id); if (!it || id === tid) continue;
+            if (!MODE[mode]) { delete it.op; n++; continue; }
+            if (doc.items.indexOf(it) < doc.items.findIndex((x) => x.id === tid)) { rep.notes.push(`„${it.name}“ kommt im Verlauf vor dem Ziel – verrechnen geht nur mit früheren Körpern.`); continue; }
+            it.op = { type: MODE[mode], target: tid }; if (it.role === 'hole') it.role = 'solid'; rep.changed.push(id); n++;
+          }
+          if (n) { rep.done.push(`verrechnen (${mode}): ${n} Teile`); any = true; }
         } else if (op === 'material') {
           const m = MATERIALS.find((x) => x.k.toLowerCase() === String(a.material || '').toLowerCase());
           if (!m) { rep.notes.push(`Das Material „${a.material}“ kenne ich nicht.`); continue; }

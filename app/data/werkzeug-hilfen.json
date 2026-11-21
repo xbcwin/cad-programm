@@ -478,5 +478,90 @@
     "tip": "Alle Teile mit Anzahl und Gewicht als Liste",
     "hilfe": "Rechts unter „Projekt“ → „Stückliste“: eine Tabelle mit allen Teilen ganz oben im Verlauf – Name, Anzahl, Art (Kaufteil oder Material) und Gewicht. Gleiche Teile wie „Arm 1“ bis „Arm 4“ stehen in einer Zeile. Ein Klick auf eine Zeile wählt die Teile im Bild aus. Mit „Als Tabelle speichern“ bekommst du eine CSV-Datei, die Excel, Numbers und Google Tabellen öffnen. Darunter steht, wie viele Schrauben, Muttern und Gewindeeinsätze du brauchst – gezählt aus deinen Schraubenlöchern und Lochbildern.",
     "tipp": "Die Liste ist deine Einkaufs- und Wiegeliste: Kaufteile zum Bestellen, Platten zum Fräsen, Druckteile zum Drucken. Steht bei einem Kaufteil „fehlt“, trag sein Gewicht rechts in den Eigenschaften ein."
+  },
+  "look": {
+    "tip": "Wie die Teile aussehen: Studio-Look, einfach oder Prüfansicht",
+    "hilfe": "Ansicht → unten im Menü. „Studio-Look“ zeigt jedes Teil in seinem Werkstoff: Alu und Stahl glänzen und spiegeln das Licht, Kohlefaser ist dunkel mit Klarlack, Polycarbonat ist durchsichtig, Kunststoffe behalten ihre Farbe. Dazu kommen weiche Schatten auf dem Boden. Mit „Licht“ wählst du die Stimmung (Studio, Hell, Werkstatt). „Einfach“ ist matt und am schnellsten. Die Prüfansichten „Ton“ und „Chrom-Streifen“ zeigen, ob Flächen glatt sind.",
+    "tipp": "Den Werkstoff wählst du rechts bei einem Teil unter „Material“, für das ganze Projekt in den Projekt-Eigenschaften. Eine eigene Farbe (bunter Kreis bei den Farben) überschreibt die Werkstoff-Farbe, „Farbe vom Werkstoff“ nimmt das zurück."
+  },
+  "bodyOp": {
+    "tip": "Teil als eigenen Körper lassen oder mit einem anderen verrechnen",
+    "hilfe": "Rechts unter „Körper“ wählst du, was mit dem Teil passiert: „Eigener Körper“ lässt es allein. „Vereinigen mit …“ verschmilzt es mit einem früheren Körper zu einem Teil ohne Naht. „Abziehen von …“ schneidet es nur aus diesem einen Körper heraus – anders als ein Loch, das alles schneidet, was es trifft. „Schnittmenge mit …“ lässt nur das Stück übrig, das in beiden steckt.",
+    "tipp": "Das verrechnete Teil bleibt im Verlauf und lässt sich weiter ändern – im Bild siehst du nur den fertigen Körper. Im Verlauf steht dahinter ∪, − oder ∩ und der Name des Zielkörpers."
+  },
+  "thruAll": {
+    "tip": "Loch oder Abzieh-Schritt geht durch das ganze Modell",
+    "hilfe": "Mit dem Haken „Durch alles“ ist die Tiefe so groß, dass der Schritt sicher durch alle Körper geht. Wird dein Modell später größer, wächst die Tiefe von selbst mit.",
+    "tipp": "„Beidseitig verschieden“ zieht die Skizze in beide Richtungen, mit einer eigenen Höhe für jede Seite."
+  },
+  "display": {
+    "tip": "Wie Körper gezeichnet werden: Flächen, Kanten, Drahtgitter",
+    "hilfe": "Ansicht → unten im Menü: „Flächen mit Kanten“ (Standard), „Nur Flächen“ (ruhiger, für Bilder), „Drahtgitter“ (nur Kanten, du siehst durch alles hindurch) und „Verdeckte Kanten zeigen“ (Körper halb durchsichtig, alle Kanten sichtbar).",
+    "tipp": "Im Drahtgitter kannst du Teile weiter anklicken – das gewählte Teil wird leicht eingefärbt."
+  },
+  "savedViews": {
+    "tip": "Blickwinkel speichern und wieder aufrufen",
+    "hilfe": "Ansicht → „Ansicht speichern …“ merkt sich den Blickwinkel, den Ausschnitt und ob orthografisch. Die Ansicht wird im Projekt gespeichert und steht danach im selben Menü zum Anklicken.",
+    "tipp": "Rechtsklick auf eine ebene Fläche → „Blick senkrecht auf die Fläche“ dreht die Ansicht genau von vorne auf diese Fläche."
+  },
+  "opacity": {
+    "tip": "Teil durchsichtig machen",
+    "hilfe": "Rechts bei den Farben: „Sichtbarkeit“ unter 100 % macht das Teil durchsichtig – praktisch für Gehäuse, in die man hineinsehen will. Das ändert nur die Anzeige, nicht das Teil.",
+    "tipp": "Für einen kurzen Blick durch alles ist das Röntgen (Taste X) schneller."
+  },
+  "datum": {
+    "tip": "Eigene Ebene zum Skizzieren anlegen",
+    "hilfe": "Skizze → „Neue Bezugsebene …“: Eine Ebene mit Abstand zur Arbeitsfläche, nach vorne oder zur Seite, auch geneigt; oder mit Abstand zu einer ebenen Fläche, die du vorher anklickst – dann wandert die Ebene mit, wenn sich der Körper ändert. Dazu „Mittig zwischen zwei Flächen“ und „Durch drei Punkte“. Die Ebenen stehen im Verlauf unter „Bezugsebenen“.",
+    "tipp": "Doppelklick auf eine Bezugsebene im Verlauf startet gleich eine Skizze darauf."
+  },
+  "faceColor": {
+    "tip": "Einzelne Fläche einfärben",
+    "hilfe": "Klick eine Fläche an – rechts erscheint „Farbe dieser Fläche“. Wähl einen Ton oder mit dem bunten Kreis jede Farbe. Die Farbe gilt nur für die Anzeige, für Bilder und für Präsentationen.",
+    "tipp": "Ändert sich das Teil, findet Tracery ebene Flächen über ihre Richtung und Lage wieder. „Flächenfarbe entfernen“ nimmt die Farbe zurück."
+  },
+  "textCurves": {
+    "tip": "Buchstaben zu Linien und Kurven machen",
+    "hilfe": "In der Skizze einen Text anklicken → „In Kurven umwandeln“. Danach sind die Buchstaben normale Linien und Splines: Du kannst sie trimmen, versetzen (z. B. für eine Gravur mit Rand) oder einzelne Punkte verschieben.",
+    "tipp": "Danach lässt sich der Text nicht mehr als Text ändern – Rückgängig holt ihn zurück."
+  },
+  "sketchMeasure": {
+    "tip": "Fläche und Umfang der Skizze",
+    "hilfe": "Rechts in der Skizze (Werkzeug Auswahl, nichts gewählt) steht die Fläche aller geschlossenen Formen – Löcher abgezogen – und der Umfang, Lochränder mitgezählt.",
+    "tipp": "Der Umfang ist zum Beispiel die Schnittlänge für Laser oder Fräse."
+  },
+  "stdScrew": {
+    "tip": "Echte Schraube nach Norm",
+    "hilfe": "Bauteile → „Schraube (Norm)“: Zylinderkopf (ISO 4762) oder Senkkopf (ISO 10642) mit Innensechskant. Größe M1.6 bis M8 und Länge wählst du rechts. Der Kopf sitzt auf der Fläche, der Schaft zeigt nach unten.",
+    "tipp": "Normteile sind aus Edelstahl und zählen mit ihrem Gewicht in der Stückliste. Das Gewinde ist nur angedeutet – für ein gedrucktes Gewinde nimm „Gewindebolzen“."
+  },
+  "stdNut": {
+    "tip": "Sechskantmutter nach Norm",
+    "hilfe": "Bauteile → „Mutter (Norm)“: Sechskantmutter ISO 4032, M1.6 bis M8.",
+    "tipp": "Normteile sind aus Edelstahl und zählen mit ihrem Gewicht in der Stückliste. Das Gewinde ist nur angedeutet – für ein gedrucktes Gewinde nimm „Gewindebolzen“."
+  },
+  "stdWasher": {
+    "tip": "Unterlegscheibe nach Norm",
+    "hilfe": "Bauteile → „Scheibe (Norm)“: Unterlegscheibe ISO 7089, M1.6 bis M8.",
+    "tipp": "Normteile sind aus Edelstahl und zählen mit ihrem Gewicht in der Stückliste. Das Gewinde ist nur angedeutet – für ein gedrucktes Gewinde nimm „Gewindebolzen“."
+  },
+  "minDistance": {
+    "tip": "Kleinster Abstand zwischen zwei Teilen",
+    "hilfe": "Wähl zwei Teile (Umschalt + Klick). Rechts steht der kleinste Abstand zwischen ihnen – genau aus dem CAD-Kern – und im Bild zeigt eine gestrichelte Linie, wo er liegt.",
+    "tipp": "„berühren sich“ heißt Abstand 0 – die Teile stoßen aneinander oder stecken ineinander."
+  },
+  "bboxSize": {
+    "tip": "Länge, Breite und Höhe des Teils",
+    "hilfe": "Die Hüllmaße sind die Größe der kleinsten achsparallelen Kiste, in die das Teil passt – praktisch für Verpackung oder das Druckbett.",
+    "tipp": "Die Oberfläche steht darüber – zum Beispiel für Lack oder Beschichtung."
+  },
+  "linkedCopy": {
+    "tip": "Kopie, die dem Original folgt",
+    "hilfe": "„Verknüpft duplizieren“ (Strg Umschalt D oder Rechtsklick) legt eine Kopie an, die ihre Form vom Original bekommt: Änderst du Maße oder Rundungen am Original, ändern sich alle verknüpften Kopien mit. Lage, Name, Farbe und Werkstoff bleiben bei jeder Kopie eigen.",
+    "tipp": "„Verknüpfung lösen“ macht aus der Kopie wieder ein eigenes Teil. Im Verlauf erkennst du verknüpfte Kopien am ↔."
+  },
+  "dependencies": {
+    "tip": "Worauf das Teil aufbaut und was daran hängt",
+    "hilfe": "Unter „Bezüge“ siehst du, mit welchen Teilen dieses Teil zusammenhängt: wovon es abgezogen oder womit es vereinigt wird, wessen Kopie es ist, von wem eine Skizze Kanten übernimmt – und andersherum, welche Teile und Bezugsebenen an diesem Teil hängen. Ein Klick auf eine Zeile wählt das andere Teil.",
+    "tipp": "Bevor du ein Teil löschst, schau hier nach. Löschst du es trotzdem, behalten die abhängigen Teile ihre letzte Form, und Tracery sagt dir, welche es waren."
   }
 }

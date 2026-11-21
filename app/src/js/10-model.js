@@ -44,7 +44,9 @@ const Model = (() => {
     const params = {};
     for (const q of def.params) params[q.k] = q.def;
     Object.assign(params, p);
-    return { id: uid('i'), kind, name: extra.name || def.label || 'Objekt', role: extra.role || 'solid', p: params, t: T0(), color: extra.color || nextColor(), hidden: false, locked: false, finishes: [], ...(kind === 'group' ? { children: [] } : {}), ...extra.more };
+    const ld = kind === 'part' && typeof LIBMAP !== 'undefined' ? LIBMAP[params.lib] : null;
+    if (ld && ld.mat && !extra.mat) extra = { ...extra, mat: ld.mat };
+    return { id: uid('i'), kind, name: extra.name || def.label || 'Objekt', role: extra.role || 'solid', p: params, t: T0(), color: extra.color || nextColor(), hidden: false, locked: false, finishes: [], ...(kind === 'group' ? { children: [] } : {}), ...(extra.mat ? { mat: extra.mat } : {}), ...extra.more };
   }
   function walk(items, fn, parent = null, depth = 0) {
     for (let i = 0; i < items.length; i++) {
@@ -177,6 +179,46 @@ const Model = (() => {
     return out;
   }
 
+  // Verknüpfte Kopien: Teile mit link = Kennung des Originals übernehmen dessen Form (Art, Maße, Kanten, Rolle);
+  // Lage, Name, Farbe, Sichtbarkeit bleiben eigen. Nur für Teile ohne Unterteile.
+  function syncLinks(doc) {
+    let n = 0;
+    walk(doc.items, (it) => {
+      if (!it.link) return;
+      const f = find(doc, it.link);
+      if (!f || f.item === it || f.item.link || f.item.kind === 'group') { it.linkLost = true; return; }
+      delete it.linkLost;
+      const s = f.item;
+      const want = JSON.stringify([s.kind, s.p, s.finishes || [], s.role, s.mir || null]);
+      if (JSON.stringify([it.kind, it.p, it.finishes || [], it.role, it.mir || null]) === want) return;
+      it.kind = s.kind; it.p = deepClone(s.p); it.finishes = deepClone(s.finishes || []); it.role = s.role;
+      if (s.mir) it.mir = deepClone(s.mir); else delete it.mir;
+      n++;
+    });
+    return n;
+  }
+  // „Was hängt davon ab?“: Bezüge zwischen Teilen – Formschritt-Modus, verknüpfte Kopien, übernommene Kanten,
+  // an Körpern hängende Rohr-Punkte, Bezugsebenen an Flächen. Ergebnis: Liste {from, to, what}
+  function dependencies(doc) {
+    const out = [], top = (id) => { const t = topOf(doc, id); return t ? t.id : id; };
+    walk(doc.items, (it) => {
+      const me = top(it.id);
+      if (it.op && it.op.target) out.push({ from: me, to: top(it.op.target), what: { join: 'vereinigt mit', cut: 'abgezogen von', common: 'Schnittmenge mit' }[it.op.type] || 'verrechnet mit' });
+      if (it.link) out.push({ from: me, to: top(it.link), what: 'verknüpfte Kopie von' });
+      const sk = it.p && it.p.sketch;
+      for (const e of (sk && sk.ents) || []) if (e.link && e.link.id) out.push({ from: me, to: top(e.link.id), what: 'Skizze übernimmt Kante von' });
+      const b = it.p && it.p.path3d && it.p.path3d.bind;
+      for (const x of b || []) if (x && x.id) out.push({ from: me, to: top(x.id), what: 'Rohr hängt an' });
+    });
+    for (const d of doc.datums || []) if (d.base && d.base.type === 'face' && d.base.id) out.push({ from: 'datum:' + d.id, to: top(d.base.id), what: 'Bezugsebene an', datum: d.name });
+    const seen = new Set();
+    return out.filter((x) => { if (x.from === x.to) return false; const k = x.from + '|' + x.to + '|' + x.what; if (seen.has(k)) return false; seen.add(k); return true; });
+  }
+  // Größe des ganzen Modells für „Durch alles“ (setzt App nach dem Rechnen, auf 10 mm gerundet)
+  let sceneSpan = 100;
+  function setSceneSpan(v) { const n = Math.max(20, Math.ceil(v / 10) * 10); if (n === sceneSpan) return false; sceneSpan = n; return true; }
+  // Formschritt-Modus: neuer Körper (kein op) oder mit einem früheren Körper verrechnet
+  const OPS = { join: 'Vereinigen mit', cut: 'Abziehen von', common: 'Schnittmenge mit' };
   // ---------- Für den CAD-Kern ----------
   function matArr(m) { return Array.from(m.elements); }
   function kernelItem(it, V) {
@@ -188,6 +230,7 @@ const Model = (() => {
     else if (it.kind === 'import') o.p = { fmt: it.p.fmt, data: it.p.data, scale: num(it.p.scale, V, 1) };
     else o.p = resolveP(it.p, V);
     if (it.mir) o.mir = it.mir;
+    if (it.op && OPS[it.op.type] && it.op.target) o.op = { type: it.op.type, target: it.op.target };
     if (it.finishes && it.finishes.length) o.finishes = it.finishes.filter((f) => !f.off).map((f) => { const x = { id: f.id, type: f.type, r: num(f.r, V, 1), edges: f.edges, faces: f.faces }; if (f.vr) { x.vr = true; x.r2 = num(f.r2, V, x.r); } if (f.cm) { x.cm = f.cm; if (f.cm === 'two') x.r2 = num(f.r2, V, x.r); else x.a = num(f.a, V, 45); } if (f.side) x.side = 1; return x; });
     return o;
   }
@@ -197,7 +240,12 @@ const Model = (() => {
     let chosen = regs;
     if (Array.isArray(p.sel) && p.sel.length) { const f = regs.filter((r) => p.sel.includes(r.key)); if (f.length) chosen = f; }
     const out = { plane: p.sketch ? p.sketch.plane : { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] }, regions: chosen.map((r) => ({ outer: r.outer.k, holes: r.holes.map((h) => h.k) })) };
-    if (it.kind === 'extrude') { out.dist = num(p.dist, V, 10); out.dir = p.dir || 'normal'; out.extra = num(p.extra, V, 0); }
+    if (it.kind === 'extrude') {
+      out.dist = num(p.dist, V, 10); out.dir = p.dir || 'normal'; out.extra = num(p.extra, V, 0);
+      if (out.dir === 'two') out.dist2 = num(p.dist2, V, out.dist);
+      // „Durch alles“: so lang, dass es sicher durch alle Körper reicht (aus der Größe des Modells)
+      if (p.thru) { out.dist = sceneSpan; if (out.dir === 'two' || out.dir === 'both') { out.dir = 'two'; out.dist2 = sceneSpan; } }
+    }
     else { out.angle = num(p.angle, V, 360); out.axis = p.axis || { a: [0, 0], b: [0, 1] }; }
     return out;
   }
@@ -503,6 +551,12 @@ const Model = (() => {
         if (L === 'buyMotor' || L === 'buyCap') { const r = n('d', 20) / 2; return [-r, -r, 0, r, r, n('h', 20)]; }
         if (L === 'buyProp') { const r = (n('zoll', 5) * 25.4) / 2; return [-r, -r, 0, r, r, n('zoll', 5) * 1.2 + 0.5]; }
         if (L === 'motorFairing') { const r = n('d', 28) / 2 + Math.max(0, n('gap', 0.5)) + n('wall', 1.2); return [-r, -r, -n('at', 5) - n('tail', 30), r, r, n('h', 18)]; }
+        if (L === 'stdScrew' || L === 'stdNut' || L === 'stdWasher') {
+          const D = { 'M1.6': [3, 1.6, 3.2, 1.3, 4, 0.3], M2: [3.8, 2, 4, 1.6, 5, 0.3], 'M2.5': [4.5, 2.5, 5, 2, 6, 0.5], M3: [5.5, 3, 5.5, 2.4, 7, 0.5], M4: [7, 4, 7, 3.2, 9, 0.8], M5: [8.5, 5, 8, 4.7, 10, 1], M6: [10, 6, 10, 5.2, 12, 1.6], M8: [13, 8, 13, 6.8, 16, 1.6] }[p.size] || [5.5, 3, 5.5, 2.4, 7, 0.5];
+          if (L === 'stdNut') { const r = D[2] / Math.sqrt(3); return [-r, -r, 0, r, r, D[3]]; }
+          if (L === 'stdWasher') { const r = D[4] / 2; return [-r, -r, 0, r, r, D[5]]; }
+          const r = D[0] / 2, len = n('length', 10); return p.head === 'senk' ? [-r, -r, -len, r, r, 0] : [-r, -r, -len, r, r, D[1]];
+        }
         if (L === 'buyAntenna') { const r = Math.max(4, p.form === 'stab' ? n('d', 3) : n('kd', 14)) / 2; return [-r, -r, 0, r, r, n('L', 45)]; }
         if (L === 'buyStack') { const s = n('a', 30.5) + 5.5; return [-s / 2, -s / 2, 0, s / 2, s / 2, n('h', 12)]; }
         if (L.startsWith('buy')) { const w = n('w', 20), d = n('d', 20), h = n('h', 10); return [-w / 2, -d / 2, 0, w / 2, d / 2, h]; }
@@ -553,6 +607,6 @@ const Model = (() => {
     walk(doc.items, (it) => { it.t = Object.assign(T0(), it.t || {}); it.p = it.p || {}; it.finishes = it.finishes || []; if (!it.role) it.role = 'solid'; if (!it.color) it.color = nextColor(); });
     return doc;
   }
-  return { path3dPoints, path3dBake, path3dSetRule, railStart, railSections, bez3, patternMatrices, instanceMatrices, loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  return { dependencies, syncLinks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, railStart, railSections, bez3, patternMatrices, instanceMatrices, loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 

@@ -179,12 +179,18 @@ const Viewer = (() => {
     camera = new THREE.PerspectiveCamera(32, 1, 0.5, 30000);
     camera.up.set(0, 0, 1);
     camera.position.set(170, -250, 190);
-    for (const k of ['ground', 'origin', 'nodes', 'compare', 'ghosts', 'overlay', 'handles', 'sketch']) { groups[k] = new THREE.Group(); scene.add(groups[k]); }
+    for (const k of ['ground', 'origin', 'datums', 'nodes', 'compare', 'ghosts', 'overlay', 'handles', 'sketch']) { groups[k] = new THREE.Group(); scene.add(groups[k]); }
     orthoCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 60000);
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x6f6252, 1.55));
-    const key = new THREE.DirectionalLight(0xffffff, 2.1); key.position.set(0.55, -0.8, 1.25); scene.add(key);
-    const fill = new THREE.DirectionalLight(0xdfe8ff, 0.8); fill.position.set(-1, 0.7, 0.35); scene.add(fill);
-    const rim = new THREE.DirectionalLight(0xffffff, 0.45); rim.position.set(0.2, 1, -0.6); scene.add(rim);
+    lights.hemi = new THREE.HemisphereLight(0xffffff, 0x6f6252, 1.55); scene.add(lights.hemi);
+    const key = new THREE.DirectionalLight(0xffffff, 2.1); key.position.set(0.55, -0.8, 1.25); scene.add(key); scene.add(key.target); lights.key = key;
+    const fill = new THREE.DirectionalLight(0xdfe8ff, 0.8); fill.position.set(-1, 0.7, 0.35); scene.add(fill); lights.fill = fill;
+    const rim = new THREE.DirectionalLight(0xffffff, 0.45); rim.position.set(0.2, 1, -0.6); scene.add(rim); lights.rim = rim;
+    // weiche Schatten: nur das Hauptlicht wirft sie, nur der Boden fängt sie auf
+    renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; renderer.shadowMap.autoUpdate = false;
+    key.shadow.mapSize.set(2048, 2048); key.shadow.radius = 4; key.shadow.bias = -0.0006; key.shadow.normalBias = 0.6;
+    shadowFloor = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.ShadowMaterial({ opacity: 0.2, depthWrite: false }));
+    shadowFloor.receiveShadow = true; shadowFloor.renderOrder = -1; shadowFloor.visible = false; shadowFloor.userData.noPick = true;
+    groups.ground.add(shadowFloor);
     // Lichter folgen der Kamera leicht
     camera.add(new THREE.PointLight(0xffffff, 0, 0));
     controls = new OrbitControls(camera, renderer.domElement);
@@ -197,6 +203,7 @@ const Viewer = (() => {
     controls.target.set(0, 0, 10);
     controls.addEventListener('change', () => { needsRender = true; listeners.emit('camera'); });
     buildGrid(autoStep()); buildOrigin();
+    applyLook();
     const ro = new ResizeObserver(resize); ro.observe(el);
     resize();
     const mq = matchMedia('(prefers-color-scheme: dark)');
@@ -213,6 +220,94 @@ const Viewer = (() => {
     needsRender = true; listeners.emit('camera');
   }
   const fatMaterials = new Set();
+
+  // ---------- Aussehen: Studio-Licht, Werkstoff, Schatten, Prüfansicht ----------
+  // look: 'studio' (Werkstoff mit Glanz, Umgebung, Schatten) · 'plain' (einfach, matt) · 'clay' / 'chrome' (Prüfansicht)
+  const lights = {};
+  let shadowFloor = null, envTex = null, envMood = null, pmrem = null;
+  const LOOK = { look: 'studio', mood: 'studio', shadows: true, display: 'edges' };
+  // Werkstoff → Oberfläche. nat = der Werkstoff hat eine eigene Farbe (Metall, Kohlefaser, Holz, Glas)
+  const LOOKS = {
+    'CFK': { col: '#25272a', metal: 0, rough: 0.36, clear: 0.9, clearRough: 0.18, nat: true },
+    'GFK': { col: '#7a9a8b', metal: 0, rough: 0.42, clear: 0.6, clearRough: 0.25, nat: true },
+    'Alu 6061': { col: '#c9ced3', metal: 1, rough: 0.3, nat: true },
+    'Alu 7075': { col: '#b9c0c7', metal: 1, rough: 0.34, nat: true },
+    'Titan Gr. 5': { col: '#9a9590', metal: 1, rough: 0.4, nat: true },
+    'Baustahl': { col: '#71777d', metal: 1, rough: 0.48, nat: true },
+    'V2A Edelstahl': { col: '#cdd2d7', metal: 1, rough: 0.2, nat: true },
+    'Messing': { col: '#d8b552', metal: 1, rough: 0.28, nat: true },
+    'PLA': { rough: 0.42, clear: 0.15 }, 'PETG': { rough: 0.26, clear: 0.45 }, 'ABS': { rough: 0.55 }, 'ASA': { rough: 0.68 },
+    'TPU 95A': { rough: 0.75 }, 'PA12': { rough: 0.88 }, 'POM': { rough: 0.38, clear: 0.2 },
+    'PC': { col: '#e6f6fb', rough: 0.05, clear: 1, clearRough: 0.05, glass: 0.45, nat: true },
+    'Buche': { col: '#c99a6a', rough: 0.72, nat: true, wood: true }, 'Pappel-Sperrholz': { col: '#dcc196', rough: 0.76, nat: true, wood: true },
+  };
+  const PLASTIC = { rough: 0.45, clear: 0.15 };
+  function lookOf(mat) { return (mat && LOOKS[mat]) || PLASTIC; }
+  // Licht-Stimmungen als kleiner Raum mit Leuchtflächen – daraus wird die Spiegel-Umgebung
+  const MOODS = {
+    studio: { wall: 0xb4b8bc, floor: 0x8e9195, panels: [[[0, 0, 9], [8, 8, 0.2], 0xffffff, 9], [[-9, -2, 4], [0.2, 6, 3], 0xffffff, 5], [[9, 3, 3], [0.2, 4, 4], 0xdfe8ff, 3.5], [[0, 9, 5], [10, 0.2, 1.2], 0xffffff, 2.5]] },
+    hell: { wall: 0xdadcde, floor: 0xbfc2c5, panels: [[[0, 0, 9], [12, 12, 0.2], 0xffffff, 6], [[-9, 0, 4], [0.2, 10, 6], 0xffffff, 3], [[9, 0, 4], [0.2, 10, 6], 0xffffff, 3]] },
+    werkstatt: { wall: 0x8c7b6a, floor: 0x5a5149, panels: [[[-9, -4, 5], [0.2, 7, 5], 0xffe4c2, 8], [[0, 0, 9], [3, 12, 0.2], 0xfff1dd, 4], [[8, 6, 2], [0.2, 3, 2], 0xa9c4ff, 2]] },
+  };
+  function buildEnv(mood) {
+    if (envTex && envMood === mood) return envTex;
+    const M = MOODS[mood] || MOODS.studio, sc = new THREE.Scene();
+    const room = new THREE.Mesh(new THREE.BoxGeometry(20, 20, 20), new THREE.MeshBasicMaterial({ color: M.wall, side: THREE.BackSide }));
+    room.position.z = 3; sc.add(room);
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), new THREE.MeshBasicMaterial({ color: M.floor })); floor.position.z = -6.9; sc.add(floor);
+    for (const [p, s, c, i] of M.panels) { const m = new THREE.Mesh(new THREE.BoxGeometry(...s), new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(i) })); m.position.set(...p); sc.add(m); }
+    if (!pmrem) pmrem = new THREE.PMREMGenerator(renderer);
+    const rt = pmrem.fromScene(sc, 0.03);
+    if (envTex) envTex.dispose();
+    envTex = rt.texture; envMood = mood;
+    sc.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+    return envTex;
+  }
+  // Prüfansicht: Ton (zeigt jede Delle) oder Chrom (Streifen zeigen, wie glatt Flächen ineinander laufen)
+  const matcaps = {};
+  function matcap(kind) {
+    if (matcaps[kind]) return matcaps[kind];
+    const N = 256, c = document.createElement('canvas'); c.width = c.height = N; const g = c.getContext('2d');
+    if (kind === 'chrome') {
+      const lg = g.createLinearGradient(0, 0, 0, N);
+      [[0, '#f4f6f8'], [0.18, '#8b939c'], [0.3, '#fbfcfd'], [0.46, '#2c3036'], [0.5, '#9aa3ad'], [0.62, '#161a1e'], [0.78, '#cfd5db'], [1, '#30353b']].forEach(([o, col]) => lg.addColorStop(o, col));
+      g.fillStyle = lg; g.fillRect(0, 0, N, N);
+    } else {
+      const rg = g.createRadialGradient(N * 0.36, N * 0.3, N * 0.02, N * 0.5, N * 0.5, N * 0.56);
+      [[0, '#fff6ec'], [0.25, '#e0c8b2'], [0.65, '#9c8370'], [0.92, '#4a3d33'], [1, '#2c241e']].forEach(([o, col]) => rg.addColorStop(o, col));
+      g.fillStyle = rg; g.fillRect(0, 0, N, N);
+    }
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; matcaps[kind] = t; return t;
+  }
+  function applyLook() {
+    const st = LOOK.look === 'studio';
+    scene.environment = st ? buildEnv(LOOK.mood) : null;
+    renderer.toneMapping = st ? THREE.NeutralToneMapping : THREE.NoToneMapping; renderer.toneMappingExposure = st ? 1.05 : 1;
+    lights.hemi.intensity = st ? 0.35 : 1.55; lights.key.intensity = st ? 2.1 : 2.1; lights.fill.intensity = st ? 0.25 : 0.8; lights.rim.intensity = st ? 0.35 : 0.45;
+    lights.key.castShadow = st && LOOK.shadows;
+    fitShadow();
+    restyleAll();
+  }
+  // Schatten-Kamera und Boden an die Teile anpassen (nach jeder Änderung der Teile)
+  function fitShadow() {
+    const on = LOOK.look === 'studio' && LOOK.shadows && nodes.size > 0;
+    shadowFloor.visible = on;
+    if (!on) { renderer.shadowMap.needsUpdate = true; needsRender = true; return; }
+    const box = new THREE.Box3();
+    for (const n of nodes.values()) if (n.role !== 'hole' && n.obj.visible) box.union(n.mesh.geometry.boundingBox.clone().applyMatrix4(n.obj.matrix));
+    if (box.isEmpty()) { shadowFloor.visible = false; return; }
+    const c = box.getCenter(new THREE.Vector3()), r = Math.max(5, box.getSize(new THREE.Vector3()).length() / 2);
+    const z0 = Math.min(0, box.min.z) - 0.05;
+    shadowFloor.position.set(c.x, c.y, z0); shadowFloor.scale.set(r * 6, r * 6, 1);
+    const L = lights.key, dir = new THREE.Vector3(0.55, -0.8, 1.25).normalize();
+    L.target.position.copy(c); L.position.copy(c).addScaledVector(dir, r * 4); L.target.updateMatrixWorld();
+    const sc = L.shadow.camera; sc.left = -r * 2.2; sc.right = r * 2.2; sc.top = r * 2.2; sc.bottom = -r * 2.2; sc.near = r * 0.5; sc.far = r * 9; sc.updateProjectionMatrix();
+    renderer.shadowMap.needsUpdate = true; needsRender = true;
+  }
+  const fitShadowSoon = debounce(fitShadow, 60);
+  function setLook(patch) { Object.assign(LOOK, patch); applyLook(); listeners.emit('viewmode'); }
+  // ein Bild in hoher Auflösung (Bild speichern)
+
   function loop() {
     requestAnimationFrame(loop);
     if (camAnim) {
@@ -258,8 +353,20 @@ const Viewer = (() => {
   function requestRender() { needsRender = true; }
 
   // ---------- Objekte ----------
-  function makeMaterial(role, color) {
+  function makeMaterial(role, color, look) {
     const clip = vis.clip ? [vis.clip] : null;
+    if (role !== 'hole' && (LOOK.look === 'clay' || LOOK.look === 'chrome')) {
+      const m = new THREE.MeshMatcapMaterial({ matcap: matcap(LOOK.look), polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1, clippingPlanes: clip });
+      if (clip) capShader(m, '#9c8370');
+      return m;
+    }
+    if (role !== 'hole' && LOOK.look === 'studio') {
+      const L = look || PLASTIC; color = L.matCol || color;
+      const m = new THREE.MeshPhysicalMaterial({ color: new THREE.Color(color || '#2f9e91'), metalness: L.metal || 0, roughness: L.rough != null ? L.rough : 0.45, clearcoat: L.clear || 0, clearcoatRoughness: L.clearRough != null ? L.clearRough : 0.2, envMapIntensity: L.metal ? 1.15 : L.nat ? 0.55 : 0.7, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1, clippingPlanes: clip });
+      if (L.glass) { m.transparent = true; m.opacity = L.glass; m.depthWrite = false; }
+      if (clip) capShader(m, color);
+      return m;
+    }
     if (role === 'hole') return new THREE.MeshStandardMaterial({ color: new THREE.Color(theme.hole), transparent: true, opacity: 0.2, depthWrite: false, side: THREE.DoubleSide, roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1, clippingPlanes: clip });
     const m = new THREE.MeshStandardMaterial({ color: new THREE.Color(color || '#2f9e91'), roughness: 0.58, metalness: 0.03, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1, clippingPlanes: clip });
     if (clip) capShader(m, color);
@@ -279,20 +386,33 @@ const Viewer = (() => {
   function styleNode(n) {
     const sel = n.selected, hov = n.hover;
     if (n.mesh.material) n.mesh.material.dispose();
-    n.mesh.material = makeMaterial(n.role, n.color);
+    n.mesh.material = makeMaterial(n.role, n.color, n.look);
+    n.mesh.castShadow = n.mesh.receiveShadow = n.role !== 'hole';
+    applyFaceColors(n);
     if (n.ctxDim) {   // anderes Bauteil, während eines bearbeitet wird
       n.mesh.material.transparent = true; n.mesh.material.opacity = n.role === 'hole' ? 0.06 : 0.16; n.mesh.material.depthWrite = false;
       if (n.edges) { n.edges.material.dispose(); n.edges.material = new THREE.LineBasicMaterial({ color: new THREE.Color(theme.edge), transparent: true, opacity: 0.18 }); }
       n.mesh.renderOrder = 4; needsRender = true; return;
     }
-    if (n.role !== 'hole') {
+    if (n.role !== 'hole' && n.mesh.material.isMeshMatcapMaterial) {
+      if (sel || hov) n.mesh.material.color.lerp(new THREE.Color(theme.accent), sel ? 0.45 : 0.2);
+    } else if (n.role !== 'hole') {
       const em = new THREE.Color(theme.accent);
       n.mesh.material.emissive = em; n.mesh.material.emissiveIntensity = sel ? 0.16 : hov ? 0.07 : 0;
     } else {
       n.mesh.material.opacity = sel ? 0.34 : hov ? 0.28 : n.dim ? 0.1 : 0.2;
     }
+    // Durchsichtig je Teil (Eigenschaft des Teils)
+    if (n.role !== 'hole' && n.opacity != null && n.opacity < 1) { const mt = n.mesh.material; mt.transparent = true; mt.opacity = Math.max(0.05, n.opacity); mt.depthWrite = false; }
+    // Anzeige-Art: nur Flächen, Drahtgitter (nur Kanten) oder mit verdeckten Kanten
+    const disp = LOOK.display;
+    if (n.role !== 'hole') {
+      const mt = n.mesh.material;
+      if (disp === 'wire') { mt.transparent = true; mt.opacity = sel ? 0.12 : 0.02; mt.depthWrite = false; mt.colorWrite = !!sel; }
+      else if (disp === 'hidden') { mt.transparent = true; mt.opacity = Math.min(mt.opacity, 0.35); mt.depthWrite = false; }
+    }
     // Röntgen: Körper wie Milchglas, Kanten auch von hinten sichtbar; das gewählte Teil bleibt kräftig
-    const xr = vis.xray && n.role !== 'hole';
+    const xr = (vis.xray || disp === 'hidden') && n.role !== 'hole';
     if (xr) { const mt = n.mesh.material; mt.transparent = true; mt.opacity = sel ? 0.55 : hov ? 0.3 : 0.18; mt.depthWrite = false; mt.side = THREE.DoubleSide; }
     const clip = vis.clip ? [vis.clip] : null;
     if (n.edges) {
@@ -301,8 +421,36 @@ const Viewer = (() => {
       else n.edges.material = new THREE.LineBasicMaterial({ color: new THREE.Color(sel ? theme.accent : theme.edge), transparent: true, opacity: sel ? 1 : xr ? 0.42 : 0.5, depthTest: !xr, clippingPlanes: clip });
     }
     n.mesh.renderOrder = n.role === 'hole' ? 3 : xr ? (sel ? 2 : 1) : 0;
-    if (n.edges) n.edges.renderOrder = xr ? 5 : 0;
+    if (n.edges) { n.edges.renderOrder = xr ? 5 : 0; n.edges.visible = disp !== 'shaded' || sel || n.role === 'hole'; if (disp === 'wire' && n.role !== 'hole' && !sel) { n.edges.material.opacity = 0.9; n.edges.material.color = new THREE.Color(theme.edge).lerp(new THREE.Color(n.color || '#2f9e91'), 0.5); } }
+    if (disp === 'wire' || disp === 'hidden') n.mesh.castShadow = false;
     needsRender = true;
+  }
+  // Farbe je Fläche: Ecken der Fläche bekommen ihre Farbe, der Rest die Farbe des Teils (Vertex-Farben)
+  function faceIndexOf(n, fc) {
+    let best = -1, bd = Infinity;
+    (n.data.faces || []).forEach((f, i) => {
+      if (!f.c) return;
+      if (fc.n && f.n && (f.n[0] * fc.n[0] + f.n[1] * fc.n[1] + f.n[2] * fc.n[2]) < 0.999) return;
+      if (!!fc.n !== !!f.n) return;
+      const d = Math.hypot(f.c[0] - fc.c[0], f.c[1] - fc.c[1], f.c[2] - fc.c[2]); if (d < bd) { bd = d; best = i; }
+    });
+    // ebene Flächen: gleiche Richtung, nächstgelegene Mitte (die Fläche darf wandern); runde Flächen: nur in der Nähe
+    const R = n.mesh.geometry.boundingSphere ? n.mesh.geometry.boundingSphere.radius : 10;
+    return fc.n || bd <= Math.max(0.5, R * 0.05) ? best : -1;
+  }
+  function applyFaceColors(n) {
+    const g = n.mesh.geometry, m = n.mesh.material;
+    if (!n.faceColors || !n.faceColors.length || n.role === 'hole' || !m || m.isMeshMatcapMaterial || !n.data.faceGroups) { if (g.getAttribute('color')) g.deleteAttribute('color'); if (m) m.vertexColors = false; n.faceIdx = null; return; }
+    const base = m.color.clone(), cnt = g.getAttribute('position').count, arr = new Float32Array(cnt * 3);
+    for (let i = 0; i < cnt; i++) { arr[i * 3] = base.r; arr[i * 3 + 1] = base.g; arr[i * 3 + 2] = base.b; }
+    const tri = g.index.array, map = new Map(); n.faceIdx = [];
+    for (const fc of n.faceColors) { const fi = faceIndexOf(n, fc); n.faceIdx.push(fi); if (fi >= 0) map.set(fi, new THREE.Color(fc.col)); }
+    for (const [start, count, fi] of n.data.faceGroups) {
+      const c = map.get(fi); if (!c) continue;
+      for (let k = start; k < start + count; k++) { const v = tri[k]; arr[v * 3] = c.r; arr[v * 3 + 1] = c.g; arr[v * 3 + 2] = c.b; }
+    }
+    g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+    m.vertexColors = true; m.color.set('#ffffff'); m.needsUpdate = true;
   }
   function restyleAll() { for (const n of nodes.values()) styleNode(n); }
   function setClip(plane) { vis.clip = plane || null; restyleAll(); listeners.emit('viewmode'); }
@@ -329,7 +477,7 @@ const Viewer = (() => {
     geo.setAttribute('normal', new THREE.BufferAttribute(data.normals, 3));
     geo.setIndex(new THREE.BufferAttribute(data.triangles, 1));
     geo.computeBoundingSphere(); geo.computeBoundingBox();
-    const mesh = new THREE.Mesh(geo, makeMaterial(info.role, info.color));
+    const mesh = new THREE.Mesh(geo, makeMaterial(info.role, info.color, info.look));
     mesh.userData.nodeId = id;
     const eg = new THREE.BufferGeometry(); eg.setAttribute('position', new THREE.BufferAttribute(data.lines, 3));
     const edges = new THREE.LineSegments(eg, new THREE.LineBasicMaterial());
@@ -338,9 +486,10 @@ const Viewer = (() => {
     obj.userData.nodeId = id;
     groups.nodes.add(obj);
     const old = nodes.get(id);
-    const n = { id, obj, mesh, edges, data, role: info.role, color: info.color, selected: false, hover: false, key: info.key, base: info.matrix.clone(), off: old && old.off ? old.off : null };
+    const n = { id, obj, mesh, edges, data, role: info.role, color: info.color, look: info.look || null, opacity: info.opacity ?? null, faceColors: info.faceColors || null, selected: false, hover: false, key: info.key, base: info.matrix.clone(), off: old && old.off ? old.off : null };
     placeNode(n);
     nodes.set(id, n); styleNode(n);
+    fitShadowSoon();
     needsRender = true;
     return n;
   }
@@ -350,11 +499,15 @@ const Viewer = (() => {
     if (info.matrix) { n.base.copy(info.matrix); placeNode(n); }
     if (info.role && info.role !== n.role) { n.role = info.role; restyle = true; }
     if (info.color && info.color !== n.color) { n.color = info.color; restyle = true; }
+    if (info.look !== undefined && JSON.stringify(info.look) !== JSON.stringify(n.look)) { n.look = info.look; restyle = true; }
+    if (info.opacity !== undefined && info.opacity !== n.opacity) { n.opacity = info.opacity; restyle = true; }
+    if (info.faceColors !== undefined && JSON.stringify(info.faceColors) !== JSON.stringify(n.faceColors)) { n.faceColors = info.faceColors; restyle = true; }
+    if (info.matrix) fitShadowSoon();
     if (info.selected !== undefined && info.selected !== n.selected) { n.selected = info.selected; restyle = true; }
     if (info.hover !== undefined && info.hover !== n.hover) { n.hover = info.hover; restyle = true; }
     if (info.dim !== undefined && info.dim !== n.dim) { n.dim = info.dim; restyle = true; }
     if (info.ctxDim !== undefined && info.ctxDim !== !!n.ctxDim) { n.ctxDim = info.ctxDim; restyle = true; }
-    if (info.visible !== undefined) n.obj.visible = info.visible;
+    if (info.visible !== undefined && info.visible !== n.obj.visible) { n.obj.visible = info.visible; fitShadowSoon(); }
     if (restyle) styleNode(n);
     needsRender = true;
   }
@@ -362,7 +515,7 @@ const Viewer = (() => {
     const n = nodes.get(id); if (!n) return;
     groups.nodes.remove(n.obj);
     n.mesh.geometry.dispose(); n.mesh.material.dispose(); n.edges.geometry.dispose(); n.edges.material.dispose();
-    if (!keepMap) nodes.delete(id);
+    if (!keepMap) { nodes.delete(id); fitShadowSoon(); }
     if (hoverFace && hoverFace.id === id) clearHover();
     needsRender = true;
   }
@@ -640,6 +793,16 @@ const Viewer = (() => {
     const dist = (size / Math.tan((camera.fov * Math.PI) / 360)) * 0.7;
     moveCamera(o.clone().add(n.clone().multiplyScalar(dist)), o, y, animate);
   }
+  // Blick senkrecht auf eine ebene Fläche eines Teils (Weltlage aus dem Teil)
+  function lookAtFace(id, idx, animate = true) {
+    const n = nodes.get(id); const f = n && n.data.faces && n.data.faces[idx];
+    if (!f || !f.n || !f.c) return false;
+    const m = n.obj.matrix, c = new THREE.Vector3(...f.c).applyMatrix4(m), nn = new THREE.Vector3(...f.n).transformDirection(m);
+    const x = Math.abs(nn.z) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1).cross(nn).normalize();
+    const size = Math.max(20, n.mesh.geometry.boundingBox.getSize(new THREE.Vector3()).length() * 0.6);
+    lookAtPlane(c.toArray(), nn.toArray(), x.toArray(), size, animate);
+    return true;
+  }
   function saveCamera() { return { p: camera.position.clone(), t: controls.target.clone(), up: camera.up.clone() }; }
   function restoreCamera(s, animate = true) { if (s) moveCamera(s.p, s.t, s.up, animate); }
 
@@ -717,6 +880,26 @@ const Viewer = (() => {
     needsRender = true;
     return { area: px * s * s, px, c: c.toArray(), R };
   }
+  // Bild in beliebiger Größe: ohne Raster, Achsen, Ebenen und Griffe; Hintergrund durchsichtig oder hell
+  function renderImage(w, hgt, opts = {}) {
+    const old = renderer.getSize(new THREE.Vector2()), oldPR = renderer.getPixelRatio();
+    const hide = [gridMinor, gridMajor, groups.origin, groups.datums, groups.handles, groups.overlay, groups.sketch].filter(Boolean), was = hide.map((o) => o.visible);
+    hide.forEach((o) => { o.visible = false; });
+    const c = cam(), oldAspect = camera.aspect;
+    renderer.setPixelRatio(1); renderer.setSize(w, hgt, false);
+    if (c.isPerspectiveCamera) { c.aspect = w / hgt; c.updateProjectionMatrix(); }
+    else { const o = { l: c.left, r: c.right, t: c.top, b: c.bottom }; const hh = (c.top - c.bottom) / 2, ww = (hh * w) / hgt, cx = (c.left + c.right) / 2; c.left = cx - ww; c.right = cx + ww; c.updateProjectionMatrix(); c.userData.restore = o; }
+    renderer.setClearColor(new THREE.Color(opts.bg || '#ffffff'), opts.transparent ? 0 : 1);
+    renderer.shadowMap.needsUpdate = true;
+    renderer.render(scene, c);
+    const url = renderer.domElement.toDataURL('image/png');
+    hide.forEach((o, i) => { o.visible = was[i]; });
+    renderer.setClearColor(0x000000, 0); renderer.setPixelRatio(oldPR); renderer.setSize(old.x, old.y, false);
+    if (c.isPerspectiveCamera) { c.aspect = oldAspect; c.updateProjectionMatrix(); }
+    else if (c.userData.restore) { Object.assign(c, { left: c.userData.restore.l, right: c.userData.restore.r, top: c.userData.restore.t, bottom: c.userData.restore.b }); c.updateProjectionMatrix(); delete c.userData.restore; }
+    renderer.shadowMap.needsUpdate = true; needsRender = true;
+    return url;
+  }
   function snapshot(w = 480, hgt = 300) {
     const old = renderer.getSize(new THREE.Vector2());
     renderer.setSize(w, hgt, false); camera.aspect = w / hgt; camera.updateProjectionMatrix();
@@ -727,6 +910,7 @@ const Viewer = (() => {
   }
 
   return {
+    setLook, lookOf, get look() { return { ...LOOK }; }, fitShadow, renderImage, lookAtFace, faceIndexOf: (id, fc) => { const n = nodes.get(id); return n ? faceIndexOf(n, fc) : -1; }, get renderer() { return renderer; },
     init, requestRender, setClip, setXray, setOffsets, baseBox, renderInset, silhouette, setAdaptive, setCompare, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, setSelectedEdges, clearHover,
     edgePositions, pick, pickGhost, pickProxy, setProxies, clearProxies, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, boxVisible, sceneBox, snapshot, makeFat, disposeFat, faceOverlay, faceArea,
     get camera() { return camera; }, get activeCamera() { return cam(); }, get ortho() { return ortho; }, get gridStep() { return gridStep; }, get controls() { return controls; }, get scene() { return scene; }, get groups() { return groups; }, get nodes() { return nodes; }, get canvas() { return renderer.domElement; }, get theme() { return theme; }, get container() { return container; },

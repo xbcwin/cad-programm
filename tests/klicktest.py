@@ -33,7 +33,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Panels,Joints}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Datums,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Panels,Joints}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -1312,8 +1312,10 @@ def t_ansicht_hilfen(p):
     p.pg.locator('#t-views').click(); p.wait(300)
     im_menue = sorted(p.pg.evaluate("[...document.querySelectorAll('.menu [data-help]')].map(b=>b.dataset.help)"))
     knoepfe = sorted(p.pg.evaluate("[...document.querySelectorAll('.view-btns [data-help]')].map(b=>b.dataset.help)"))
-    ok = not fehlt and im_menue == ['explode', 'focusView', 'overhang', 'section', 'wind', 'xray'] and {'section', 'xray'} <= set(knoepfe)
-    return ok, ('ohne Hilfetext: ' + ', '.join(fehlt)) if fehlt else ('' if ok else f'Menü {im_menue}, Knöpfe {knoepfe}')
+    # Pflicht-Einträge da, und jeder Hilfe-Schlüssel im Menü hat einen Text (seit Sitzung 82 kommen Aussehen, Anzeige und Ansichten dazu)
+    ohne = [k for k in set(im_menue) | set(knoepfe) if k not in hilfen]
+    ok = not fehlt and not ohne and {'explode', 'focusView', 'overhang', 'section', 'wind', 'xray'} <= set(im_menue) and {'section', 'xray'} <= set(knoepfe)
+    return ok, ('ohne Hilfetext: ' + ', '.join(fehlt + ohne)) if (fehlt or ohne) else ('' if ok else f'Menü {im_menue}, Knöpfe {knoepfe}')
 
 
 # ---------- Messen, Masse, Auswahl, Versionen ----------
@@ -1444,7 +1446,7 @@ def drohne(p, key='f5'):
     p.pg.locator(f'.card.drone[data-tpl="drone-{key}"]').click()
     for _ in range(60):   # der Rahmen hat viele Löcher – warten, bis alles gerechnet ist
         p.wait(1000)
-        if p.ev("return !App.busy && App.results.size === App.doc.items.length"):
+        if p.ev("return !App.busy && App.results.size === App.doc.items.filter(i=>!App.mergedInto(i.id)).length"):
             break
     p.wait(1000)
 
@@ -1522,7 +1524,7 @@ def t_festes_gewicht(p):
 def warte_rechnen(p, n=60):
     for _ in range(n):
         p.wait(1000)
-        if p.ev("return !App.busy && App.results.size >= App.doc.items.filter(i=>!i.hidden).length"):
+        if p.ev("return !App.busy && App.results.size >= App.doc.items.filter(i=>!i.hidden && !App.mergedInto(i.id)).length"):
             break
     p.wait(800)
 
@@ -3649,6 +3651,375 @@ def t_explosion_gruppen(p):
 
 # ---------- Sitzung 54: Stromlinien-Armverkleidung ----------
 # ---------- Sitzung 75: Motorverkleidung ----------
+# ---------- Sitzung 82: Studio-Look ----------
+def t_studio_look(p):
+    p.empty()
+    p.ev("""App.change('x', d=>{
+      const a=Model.newItem('box',{w:60,d:40,h:3},{name:'Platte'}); a.mat='CFK'; d.items.push(a);
+      const c=Model.newItem('cylinder',{d:20,h:30},{name:'Alu'}); c.mat='Alu 6061'; c.t.z=3; d.items.push(c);
+      const e=Model.newItem('box',{w:15,d:15,h:15},{name:'PLA'}); e.mat='PLA'; e.color='#e8590c'; e.t.x=25; e.t.z=40; d.items.push(e);
+    })"""); warte_rechnen(p)
+    mat = lambda name: p.ev("const it=App.doc.items.find(i=>i.name===arg); const m=Viewer.nodes.get(it.id).mesh.material; return {t:m.type, metal:m.metalness, col:'#'+m.color.getHexString(), env: !!Viewer.scene.environment}", name)
+    a, pl, cf = mat('Alu'), mat('PLA'), mat('Platte')
+    ok1 = p.ev("return Viewer.look.look") == 'studio' and a['t'] == 'MeshPhysicalMaterial' and a['metal'] == 1 and a['col'] == '#c9ced3' and pl['metal'] == 0 and pl['col'] == '#e8590c' and cf['col'] == '#25272a' and a['env']
+    # Schatten: Boden ist da, Licht wirft Schatten
+    ok2 = p.ev("let f=null, L=null; Viewer.scene.traverse(x=>{ if(x.material&&x.material.isShadowMaterial) f=x; if(x.isDirectionalLight&&x.castShadow) L=x; }); return !!(f && f.visible && L)")
+    # eigene Farbe für das Alu-Teil, dann wieder „vom Werkstoff“
+    p.ev("App.select([App.doc.items[1].id])"); p.wait(500)
+    p.ev("const i=document.querySelector('#item-color'); i.value='#1971c2'; i.dispatchEvent(new Event('change'))"); p.wait(1200)
+    a2 = mat('Alu'); it = p.ev("return App.doc.items[1]")
+    ok3 = a2['col'] == '#1971c2' and it['colorSet'] is True and p.pg.locator('#item-color-mat').count() == 1
+    p.pg.locator('#item-color-mat').click(); p.wait(1200)
+    ok4 = mat('Alu')['col'] == '#c9ced3' and not p.ev("return App.doc.items[1].colorSet")
+    # Ansicht-Menü: Prüfansicht Ton, einfach, zurück zu Studio; Licht hell; Schatten aus
+    p.ev("App.select([])"); p.wait(300)
+    p.pg.locator('#t-views').click(); p.wait(300); p.pg.locator('#look-clay').click(); p.wait(800)
+    t1 = mat('Alu')['t']
+    p.pg.locator('#t-views').click(); p.wait(300); p.pg.locator('#look-plain').click(); p.wait(800)
+    t2 = mat('Alu')['t']; env2 = mat('Alu')['env']
+    p.pg.locator('#t-views').click(); p.wait(300); p.pg.locator('#look-studio').click(); p.wait(800)
+    p.pg.locator('#t-views').click(); p.wait(300); p.pg.locator('#mood-hell').click(); p.wait(800)
+    p.pg.locator('#t-views').click(); p.wait(300); p.pg.locator('#look-shadows').click(); p.wait(800)
+    fl = p.ev("let f=null; Viewer.scene.traverse(x=>{ if(x.material&&x.material.isShadowMaterial) f=x; }); return f.visible")
+    pv = p.ev("return ViewPrefs.get()")
+    ok5 = t1 == 'MeshMatcapMaterial' and t2 == 'MeshStandardMaterial' and not env2 and mat('Alu')['t'] == 'MeshPhysicalMaterial' and pv['mood'] == 'hell' and pv['shadows'] is False and fl is False
+    p.ev("ViewPrefs.set({ shadows: true, mood: 'studio' })")
+    # Bild speichern: 4K mit durchsichtigem Hintergrund
+    with p.pg.expect_download(timeout=60000) as dl:
+        r = p.ev("return Print.saveImage({ size: '3840', transparent: true })")
+    path = dl.value.path(); data = open(path, 'rb').read()
+    import struct
+    w, hh = struct.unpack('>II', data[16:24]); ctype = data[25]
+    ok6 = dl.value.suggested_filename.endswith('.png') and (w, hh) == (3840, 2160) and ctype == 6 and r['bytes'] > 10000
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
+
+# ---------- Sitzung 83: Formschritte mit Modus ----------
+def t_koerper_modus(p):
+    p.empty()
+    p.ev("""App.change('x', d=>{
+      const a=Model.newItem('box',{w:40,d:40,h:10},{name:'Block'}); d.items.push(a);
+      const b=Model.newItem('cylinder',{d:10,h:30},{name:'Bolzen'}); b.t.z=-5; d.items.push(b);
+    })"""); warte_rechnen(p)
+    vol = lambda: p.ev("return Mass.measure().then(r=>Object.fromEntries((r.parts||[]).map(q=>[App.doc.items.find(i=>i.id===q.id).name, Math.round(q.volume)])))")
+    v0 = vol()
+    ok1 = v0 == {'Block': 16000, 'Bolzen': round(math.pi * 25 * 30)}
+    # Bolzen von Block abziehen – über das Feld rechts
+    p.ev("App.select([App.doc.items[1].id])"); p.wait(500)
+    p.pg.select_option('#op-type', 'cut'); p.wait(500); warte_rechnen(p)
+    v1 = vol(); n1 = p.ev("return [Viewer.nodes.has(App.doc.items[1].id), App.mergedInto(App.doc.items[1].id) === App.doc.items[0].id, App.doc.items[1].op]")
+    ok2 = v1 == {'Block': round(16000 - math.pi * 25 * 10)} and n1[0] is False and n1[1] is True and n1[2]['type'] == 'cut'
+    p.ev("App.select([])"); p.wait(400); ok3 = '− Block' in p.pg.locator('#left-body').inner_text()
+    p.ev("App.select([App.doc.items[1].id])"); p.wait(500)
+    # vereinigen: der Bolzen steht oben und unten heraus
+    p.pg.select_option('#op-type', 'join'); p.wait(500); warte_rechnen(p)
+    v2 = vol(); bb = p.ev("return App.results.get(App.doc.items[0].id).data.bbox")
+    ok4 = v2 == {'Block': round(16000 + math.pi * 25 * 20)} and abs(bb[2] + 5) < 0.01 and abs(bb[5] - 25) < 0.01
+    # Schnittmenge: nur das Stück Bolzen im Block bleibt
+    p.pg.select_option('#op-type', 'common'); p.wait(500); warte_rechnen(p)
+    ok5 = vol() == {'Block': round(math.pi * 25 * 10)}
+    # zurück auf eigenen Körper, Rückgängig holt die Schnittmenge zurück
+    p.pg.select_option('#op-type', 'new'); p.wait(500); warte_rechnen(p)
+    a = vol() == v0
+    p.pg.keyboard.press('Control+z'); p.wait(800); warte_rechnen(p)
+    ok6 = a and vol() == {'Block': round(math.pi * 25 * 10)}
+    # Ziel kommt später im Verlauf: Meldung, Teil bleibt eigener Körper
+    p.ev("App.change('x', d=>{ d.items[1].op=null; d.items[0].op={type:'cut', target:d.items[1].id}; })"); warte_rechnen(p)
+    ok7 = any(e['code'] == 'op' for e in p.ev("return App.errors")) and len(vol()) == 2
+    return [ok1, ok2, ok3, ok4, ok5, ok6, ok7]
+
+# Hochziehen beidseitig verschieden und „Durch alles“
+def t_durch_alles(p):
+    p.empty()
+    p.ev("""App.change('x', d=>{
+      const a=Model.newItem('box',{w:40,d:40,h:40},{name:'Block'}); d.items.push(a);
+      const h=Model.newItem('extrude',{},{name:'Loch', role:'hole'}); h.p={sketch:{plane:{o:[0,0,40],x:[1,0,0],n:[0,0,1]},ents:[{id:'c',type:'circle',c:[0,0],r:5}],dims:[],cons:[]},dist:10,dir:'reverse'}; d.items.push(h);
+    })"""); warte_rechnen(p)
+    vol = lambda: p.ev("return Mass.measure().then(r=>Math.round((r.parts||[])[0].volume))")
+    ok1 = abs(vol() - (64000 - math.pi * 25 * 10)) < 5
+    p.ev("App.select([App.doc.items[1].id])"); p.wait(500)
+    p.pg.locator('#p-thru').check(); p.wait(800); warte_rechnen(p)
+    ok2 = abs(vol() - (64000 - math.pi * 25 * 40)) < 5 and p.pg.locator('#p-dist').count() == 0
+    # Block nach unten verlängern: das Loch geht weiter ganz durch
+    p.ev("App.change('x', d=>{ d.items[0].p.h=150; d.items[0].t.z=-110; })"); warte_rechnen(p); p.wait(1500); warte_rechnen(p)
+    ok3 = abs(vol() - (40 * 40 * 150 - math.pi * 25 * 150)) < 8
+    # beidseitig verschieden: Körper von −3 bis +5
+    p.ev("""App.change('x', d=>{ d.items.splice(1,1); d.items[0].p.h=10; const s=Model.newItem('extrude',{},{name:'Steg'}); s.p={sketch:{plane:{o:[60,0,0],x:[1,0,0],n:[0,0,1]},ents:[{id:'r',type:'rect',a:[-5,-5],b:[5,5]}],dims:[],cons:[]},dist:5,dir:'normal'}; d.items.push(s); })"""); warte_rechnen(p)
+    p.ev("App.select([App.doc.items[1].id])"); p.wait(500)
+    p.pg.select_option('#p-dir', 'two'); p.wait(600)
+    p.pg.fill('#p-dist2', '3'); p.pg.press('#p-dist2', 'Enter'); warte_rechnen(p)
+    bb = p.ev("return App.results.get(App.doc.items[1].id).data.bbox")
+    ok4 = abs(bb[2] + 3) < 0.01 and abs(bb[5] - 5) < 0.01 and p.pg.locator('#p-thru').count() == 0
+    return [ok1, ok2, ok3, ok4]
+
+# ---------- Sitzung 84: Bedienung für jeden Tag ----------
+def t_bedienung(p):
+    p.empty()
+    p.ev("""App.change('x', d=>{ for (let i=0;i<4;i++){ const a=Model.newItem('box',{w:10,d:10,h:10},{name:'Würfel '+(i+1)}); a.t.x=i*30-45; d.items.push(a); } })"""); warte_rechnen(p)
+    p.ev("Viewer.setView('top', false)"); p.wait(800); p.ev("Viewer.fit()"); p.wait(1200)
+    scr = lambda i: p.ev("const b=Actions.worldBox(App.doc.items[arg].id); const c=b.getCenter(b.min.clone()); const s=Viewer.toScreen(c); const r=Viewer.canvas.getBoundingClientRect(); return [s.x+r.left, s.y+r.top]", i)
+    a, b = scr(0), scr(1)
+    # Rahmen von links nach rechts um die ersten zwei Würfel: genau diese zwei
+    p.pg.keyboard.down('Shift'); p.pg.mouse.move(a[0] - 70, a[1] - 80); p.pg.mouse.down(); p.pg.mouse.move(b[0] + 70, b[1] + 80, steps=8)
+    cross0 = p.pg.locator('.sel-band.cross').count(); p.pg.mouse.up(); p.pg.keyboard.up('Shift'); p.wait(500)
+    names = lambda: p.ev("return App.sel.map(id=>Model.find(App.doc,id).item.name)")
+    ok1 = sorted(names()) == ['Würfel 1', 'Würfel 2'] and cross0 == 0
+    # von rechts nach links, Rahmen nur halb über Würfel 3: berührt zählt
+    c = scr(2)
+    p.pg.keyboard.down('Shift'); p.pg.mouse.move(c[0], c[1] + 60); p.pg.mouse.down(); p.pg.mouse.move(b[0] - 3, b[1] - 60, steps=8)
+    cross1 = p.pg.locator('.sel-band.cross').count(); p.pg.mouse.up(); p.pg.keyboard.up('Shift'); p.wait(500)
+    ok2 = sorted(names()) == ['Würfel 2', 'Würfel 3'] and cross1 == 1
+    # Auswahl umkehren
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('Control+Shift+I'); p.wait(400)
+    ok3 = sorted(names()) == ['Würfel 1', 'Würfel 4']
+    # Rechtsklick auf Würfel 4: Menü mit Ausblenden
+    d4 = scr(3); p.pg.mouse.click(d4[0], d4[1], button='right'); p.wait(500)
+    ok4 = p.pg.locator('#cm-hide').count() == 1 and p.pg.locator('#cm-del').count() == 1 and sorted(names()) == ['Würfel 1', 'Würfel 4']
+    p.pg.locator('#cm-hide').click(); p.wait(800)
+    ok5 = p.ev("return App.doc.items.map(i=>!!i.hidden)") == [True, False, False, True]
+    # Rechtsklick ins Leere: alles einblenden
+    p.pg.mouse.click(d4[0] - 100, d4[1] + 150, button='right'); p.wait(500)
+    ok6 = p.pg.locator('#cm-showall').count() == 1 and '(2)' in p.pg.locator('#cm-showall').inner_text()
+    p.pg.locator('#cm-showall').click(); p.wait(800)
+    ok7 = not p.ev("return App.doc.items.some(i=>i.hidden)")
+    # letzten Befehl wiederholen: „Ausgewählte ausblenden“ über die Eingabezeile, dann Leertaste
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(300)
+    p.pg.fill('#cmd-input', 'ausgewählte ausblenden'); p.wait(300); p.pg.keyboard.press('Enter'); p.wait(800)
+    p.ev("App.select([App.doc.items[1].id])"); p.wait(300)
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press(' '); p.wait(800)
+    hid = p.ev("return App.doc.items.map(i=>!!i.hidden)")
+    p.pg.locator('#cmd-input').focus(); p.wait(400)
+    ok8 = hid == [True, True, False, False] and p.ev("return Commands.last && Commands.last.id") == 'hideSel' and 'zuletzt benutzt' in p.pg.locator('.cmd-pop').inner_text().lower() and 'ausgewählte ausblenden' in p.pg.locator('.cmd-pop').inner_text().lower()
+    p.pg.keyboard.press('Escape')
+    return [ok1, ok2, ok3, ok4, ok5, ok6, ok7, ok8]
+
+# ---------- Sitzung 85: Anzeige-Arten, durchsichtig, Blick auf Fläche, gespeicherte Ansichten ----------
+def t_anzeige(p):
+    p.empty()
+    p.ev("""App.change('x', d=>{ const a=Model.newItem('box',{w:40,d:30,h:10},{name:'Platte'}); d.items.push(a); const b=Model.newItem('box',{w:10,d:10,h:10},{name:'Klotz'}); b.t.x=50; d.items.push(b); })"""); warte_rechnen(p)
+    node = lambda i: p.ev("const n=Viewer.nodes.get(App.doc.items[arg].id); const m=n.mesh.material; return {op: m.opacity, tr: m.transparent, cw: m.colorWrite, ev: n.edges.visible}", i)
+    # Nur Flächen / Drahtgitter / verdeckte Kanten / zurück
+    p.pg.locator('#t-views').click(); p.wait(300); p.pg.locator('#disp-shaded').click(); p.wait(600)
+    a = node(0)
+    p.pg.locator('#t-views').click(); p.wait(300); p.pg.locator('#disp-wire').click(); p.wait(600)
+    b = node(0)
+    p.pg.locator('#t-views').click(); p.wait(300); p.pg.locator('#disp-hidden').click(); p.wait(600)
+    c = node(0)
+    p.pg.locator('#t-views').click(); p.wait(300); p.pg.locator('#disp-edges').click(); p.wait(600)
+    d = node(0)
+    ok1 = a['ev'] is False and b['cw'] is False and b['ev'] is True and c['tr'] and c['op'] <= 0.35 and d['ev'] is True and d['op'] == 1 and d['cw'] is True
+    # Drahtgitter: Teil lässt sich trotzdem anklicken
+    p.ev("ViewPrefs.set({display:'wire'})"); p.wait(500)
+    s = p.ev("const b=Actions.worldBox(App.doc.items[1].id); const c=b.getCenter(b.min.clone()); c.z=b.max.z; const q=Viewer.toScreen(c); const r=Viewer.canvas.getBoundingClientRect(); return [q.x+r.left, q.y+r.top]")
+    p.pg.mouse.click(s[0], s[1]); p.wait(500)
+    ok2 = p.ev("return App.sel") == [p.ev("return App.doc.items[1].id")]
+    p.ev("ViewPrefs.set({display:'edges'})"); p.wait(400)
+    # durchsichtig je Teil
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(500)
+    p.pg.fill('#item-opacity', '40'); p.pg.press('#item-opacity', 'Enter'); p.wait(800)
+    e = node(0)
+    ok3 = abs(p.ev("return App.doc.items[0].opacity") - 0.4) < 1e-9 and e['tr'] and abs(e['op'] - 0.4) < 1e-6
+    p.pg.fill('#item-opacity', '100'); p.pg.press('#item-opacity', 'Enter'); p.wait(800)
+    ok4 = p.ev("return App.doc.items[0].opacity") is None and node(0)['op'] == 1
+    # Blick senkrecht auf die Oberseite (Rechtsklick auf die Fläche)
+    p.ev("App.select([])"); p.ev("Viewer.setView('iso', false)"); p.wait(800)
+    s = p.ev("const b=Actions.worldBox(App.doc.items[0].id); const c=b.getCenter(b.min.clone()); c.z=b.max.z; const q=Viewer.toScreen(c); const r=Viewer.canvas.getBoundingClientRect(); return [q.x+r.left, q.y+r.top]")
+    p.pg.mouse.click(s[0], s[1], button='right'); p.wait(500)
+    has = p.pg.locator('#cm-normal').count() == 1
+    p.pg.locator('#cm-normal').click(); p.wait(1200)
+    dirv = p.ev("const c=Viewer.camera; const t=Viewer.controls.target; const v=c.position.clone().sub(t).normalize(); return [v.x,v.y,v.z]")
+    ok5 = has and dirv[2] > 0.999
+    # Ansicht speichern und wieder aufrufen
+    p.pg.locator('#t-views').click(); p.wait(300); p.pg.locator('#view-save').click(); p.wait(500)
+    p.pg.locator('.modal input').fill('Von oben'); p.pg.keyboard.press('Enter'); p.wait(600)
+    p.ev("Viewer.setView('front', false)"); p.wait(500)
+    p.pg.locator('#t-views').click(); p.wait(300)
+    vid = p.ev("return App.doc.views[0].id"); p.pg.locator('#view-go-' + vid).click(); p.wait(1200)
+    dirv2 = p.ev("const c=Viewer.camera; const t=Viewer.controls.target; const v=c.position.clone().sub(t).normalize(); return [v.x,v.y,v.z]")
+    ok6 = p.ev("return App.doc.views[0].name") == 'Von oben' and dirv2[2] > 0.999
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
+
+# ---------- Sitzung 86: Bezugsebenen ----------
+def t_bezugsebenen(p):
+    p.empty()
+    p.ev("App.change('x', d=>{ const a=Model.newItem('box',{w:40,d:40,h:10},{name:'Block'}); d.items.push(a); })"); warte_rechnen(p)
+    p.ev("Datums.addOrigin('XY', 25)"); p.wait(600)
+    d0 = p.ev("return App.doc.datums[0]")
+    ok1 = d0['plane']['o'] == [0, 0, 25] and p.pg.locator('#datum-tree .datum-row').count() == 1 and p.pg.locator('#datum-sketch').count() == 1 and p.ev("return Viewer.groups.datums.children.length") == 1
+    # über die Oberfläche: Skizze → Neue Bezugsebene → von vorne, 15 mm, 30° geneigt
+    p.ev("Datums.select(null)"); p.wait(300)
+    p.pg.locator('#t-sketch').click(); p.wait(400); p.pg.locator('#sk-datum').click(); p.wait(400)
+    p.pg.fill('#dp-off', '15'); p.pg.press('#dp-off', 'Enter'); p.pg.fill('#dp-tilt', '30'); p.pg.press('#dp-tilt', 'Enter'); p.wait(200)
+    p.pg.locator('#dp-xz').click(); p.wait(600)
+    d1 = p.ev("return App.doc.datums[1]")
+    n = d1['plane']['n']
+    ok2 = abs(d1['plane']['o'][1] + 15) < 1e-6 and abs(n[1] + math.cos(math.radians(30))) < 1e-6 and abs(abs(n[2]) - 0.5) < 1e-6
+    # an der Oberseite des Blocks, 5 mm darüber; der Block wird höher → die Ebene wandert mit
+    p.ev("const r=App.results.get(App.doc.items[0].id); const i=r.data.faces.findIndex(f=>f.t==='PLANE'&&f.n[2]>0.9); Datums.addFromFace({id:App.doc.items[0].id, idx:i, info:r.data.faces[i]}, 5)"); p.wait(600)
+    z1 = p.ev("return App.doc.datums[2].plane.o[2]")
+    p.ev("App.change('x', d=>{ d.items[0].p.h=20; })"); warte_rechnen(p); p.wait(600)
+    z2 = p.ev("return App.doc.datums[2].plane.o[2]")
+    ok3 = abs(z1 - 15) < 1e-6 and abs(z2 - 25) < 1e-6
+    # Abstand im Panel ändern, dann darauf skizzieren und hochziehen
+    p.ev("Datums.select(App.doc.datums[2].id)"); p.wait(500)
+    p.pg.fill('#datum-dist', '30'); p.pg.press('#datum-dist', 'Enter'); p.wait(600)
+    z3 = p.ev("return App.doc.datums[2].plane.o[2]")
+    p.pg.locator('#datum-sketch').click(); p.wait(1200)
+    ok4 = abs(z3 - 50) < 1e-6 and p.ev("return Sketch.active") and abs(p.ev("return Sketch.state.plane.o[2]") - 50) < 1e-6
+    p.ev("const S=Sketch.state; S.ents.push({id:'r1',type:'rect',a:[-5,-5],b:[5,5]})"); p.wait(200)
+    p.pg.locator('.sketchbar .tool.primary').click(); p.wait(1200); p.pg.locator('.stepbox .btn.primary').click(); p.wait(1500); warte_rechnen(p)
+    it = p.ev("return App.doc.items[App.doc.items.length-1]")
+    bb = p.ev("return App.results.get(App.doc.items[App.doc.items.length-1].id).data.bbox")
+    ok5 = it['kind'] == 'extrude' and abs(bb[2] - 50) < 0.01
+    # Block löschen: die Flächen-Ebene bleibt stehen und meldet „Fläche fehlt“; Rückgängig holt alles zurück
+    p.ev("App.change('x', d=>{ d.items.splice(0,1); })"); warte_rechnen(p); p.wait(600)
+    p.ev("Datums.select(null)"); p.wait(300)
+    ok6 = 'Fläche fehlt' in p.pg.locator('#datum-tree').inner_text() and abs(p.ev("return App.doc.datums[2].plane.o[2]") - 50) < 1e-6
+    p.ev("Datums.remove(App.doc.datums[0].id)"); p.wait(400)
+    ok7 = p.ev("return App.doc.datums.length") == 2 and p.ev("return Viewer.groups.datums.children.length") == 2
+    return [ok1, ok2, ok3, ok4, ok5, ok6, ok7]
+
+# Farbe je Fläche
+def t_flaechenfarbe(p):
+    p.empty()
+    p.ev("App.change('x', d=>{ const a=Model.newItem('box',{w:40,d:30,h:10},{name:'Block'}); a.color='#1971c2'; d.items.push(a); })"); warte_rechnen(p)
+    top = p.ev("const r=App.results.get(App.doc.items[0].id); return r.data.faces.findIndex(f=>f.t==='PLANE'&&f.n[2]>0.9)")
+    p.ev("App.select([App.doc.items[0].id], {face:{id:App.doc.items[0].id, faceIdx:arg}})", top); p.wait(600)
+    ok1 = p.pg.locator('#face-color').count() == 1
+    p.ev("const i=document.querySelector('#face-color-inp'); i.value='#e03131'; i.dispatchEvent(new Event('change'))"); p.wait(1200)
+    fc = p.ev("return App.doc.items[0].faceColors")
+    # Ecken der Oberseite rot, die übrigen blau
+    cols = p.ev("""const n=Viewer.nodes.get(App.doc.items[0].id); const g=n.mesh.geometry, c=g.getAttribute('color'), fg=n.data.faceGroups, tri=g.index.array; if(!c) return null;
+      const out={}; for (const [s,cnt,fi] of fg) { const v=tri[s]; out[fi]=[c.getX(v),c.getY(v),c.getZ(v)].map(x=>Math.round(x*100)/100); } return {out, vc:n.mesh.material.vertexColors}""")
+    red = cols and cols['out'][str(top)]; other = cols and [v for k, v in cols['out'].items() if k != str(top)]
+    ok2 = fc and fc[0]['col'] == '#e03131' and cols['vc'] and red[0] > 0.5 and red[2] < 0.2 and all(o[2] > o[0] for o in other)
+    # Block höher: die Oberseite bleibt rot (Fläche wird über Lage und Richtung wiedergefunden)
+    p.ev("App.change('x', d=>{ d.items[0].p.h=20; })"); warte_rechnen(p)
+    top2 = p.ev("const r=App.results.get(App.doc.items[0].id); return r.data.faces.findIndex(f=>f.t==='PLANE'&&f.n[2]>0.9)")
+    idx = p.ev("return Viewer.faceIndexOf(App.doc.items[0].id, App.doc.items[0].faceColors[0])")
+    ok3 = idx == top2 and idx >= 0
+    # entfernen
+    p.ev("App.select([App.doc.items[0].id], {face:{id:App.doc.items[0].id, faceIdx:arg}})", top2); p.wait(600)
+    if p.pg.locator('#face-color-off').count(): p.pg.locator('#face-color-off').click(); p.wait(1000)
+    ok4 = p.ev("return App.doc.items[0].faceColors") is None
+    return [ok1, ok2, ok3, ok4]
+
+# Text in Kurven umwandeln
+def t_text_kurven(p):
+    scene(p, [{'id': 'T', 'type': 'text', 'a': [0, 0], 's': 'AB8', 'h': 10, 'font': 'inter', 'align': 'm'}])
+    area = lambda: SS(p, "return SK.regions(S.ents).reduce((s,r)=>s+r.area,0)")
+    a0 = area(); n0 = SS(p, "return SK.regions(S.ents).length")
+    SS(p, "S.sel='T'; return 1"); p.ev("Panels.renderRight()"); p.wait(400)
+    ok1 = p.pg.locator('#se-text-curves').count() == 1
+    p.pg.locator('#se-text-curves').click(); p.wait(800)
+    kinds = SS(p, "return [...new Set(S.ents.map(e=>e.type))]")
+    a1 = area(); n1 = SS(p, "return SK.regions(S.ents).length")
+    ok2 = 'text' not in kinds and set(kinds) <= {'line', 'spline'} and n1 == n0 and abs(a1 - a0) / a0 < 0.03
+    # Rückgängig holt den Text zurück
+    p.pg.keyboard.press('Control+z'); p.wait(600)
+    ok3 = SS(p, "return S.ents.length===1 && S.ents[0].type==='text'")
+    return [ok1, ok2, ok3]
+
+# Fläche und Umfang in der Skizze
+def t_skizze_messen(p):
+    scene(p, [{'id': 'R', 'type': 'rect', 'a': [-20, -10], 'b': [20, 10]}, {'id': 'C', 'type': 'circle', 'c': [5, 0], 'r': 4}])
+    p.ev("Sketch.setTool('line')"); p.wait(200); p.ev("Sketch.setTool('select')"); p.wait(400)
+    import re
+    txt = p.pg.locator('#sk-area').inner_text().replace('.', '').replace(',', '.')
+    nums = [float(x) for x in re.findall(r'\d+(?:\.\d+)?', txt)]
+    A, U = nums[-2], nums[-1]
+    return [abs(A - (800 - math.pi * 16)) < 1.0, abs(U - (120 + 2 * math.pi * 4)) < 0.5]
+
+# KI verrechnet Körper (vereinigen / abziehen)
+def t_ki_verrechnen(p):
+    ki(p); p.empty()
+    p.ev("""App.change('x', d=>{ const a=Model.newItem('box',{w:40,d:40,h:10},{name:'Block'}); d.items.push(a); const b=Model.newItem('cylinder',{d:10,h:30},{name:'Bolzen'}); b.t.z=-5; d.items.push(b); })"""); warte_rechnen(p)
+    ki_fragen(p, 'Zieh den Bolzen vom Block ab', {'antwort': 'Ich schneide den Bolzen aus dem Block.', 'aktionen': [
+        {'op': 'verrechnen', 'ids': 'name:Bolzen', 'modus': 'abziehen', 'ziel': 'name:Block'}]}, 60)
+    warte_rechnen(p)
+    it = p.ev("return App.doc.items[1]")
+    v = p.ev("return Mass.measure().then(r=>(r.parts||[]).map(q=>Math.round(q.volume)))")
+    return [it['op'] == {'type': 'cut', 'target': p.ev("return App.doc.items[0].id")}, v == [round(16000 - math.pi * 25 * 10)]]
+
+# ---------- Sitzung 88: Normteile ----------
+def t_normteile(p):
+    p.empty()
+    p.ev("""App.change('x', d=>{
+      const a=Model.newItem('part',{lib:'stdScrew',size:'M4',head:'zyl',length:12},{name:'Zylinderschraube'}); d.items.push(a);
+      const b=Model.newItem('part',{lib:'stdScrew',size:'M5',head:'senk',length:16},{name:'Senkschraube'}); b.t.x=30; d.items.push(b);
+      const c=Model.newItem('part',{lib:'stdNut',size:'M3'},{name:'Mutter'}); c.t.x=60; d.items.push(c);
+      const w=Model.newItem('part',{lib:'stdWasher',size:'M6'},{name:'Scheibe'}); w.t.x=90; d.items.push(w);
+    })"""); warte_rechnen(p, 60)
+    bb = p.ev("return App.doc.items.map(i=>App.results.get(i.id).data.bbox.map(v=>Math.round(v*100)/100))")
+    ok1 = p.ev("return App.errors.length") == 0 and bb[0][2] == -12 and bb[0][5] == 4 and abs(bb[0][3] - 3.5) < 0.01
+    ok2 = bb[1][5] == 0 and bb[1][2] == -16 and abs(bb[1][3] - 5.6) < 0.01
+    ok3 = abs(bb[2][5] - 2.4) < 0.01 and abs((bb[2][3] - bb[2][0]) - 5.5 * 2 / math.sqrt(3)) < 0.05 and abs(bb[3][5] - 1.6) < 0.01 and abs(bb[3][3] - 6) < 0.01
+    # Werkstoff Edelstahl, Gewicht passt zur Form (Zylinderschraube M4×12 wiegt etwa 2 g)
+    mats = p.ev("return App.doc.items.map(i=>i.mat)")
+    m0 = p.ev("return Mass.measure().then(r=>r.parts.find(q=>q.id===App.doc.items[0].id).mass)")
+    ok4 = all(m == 'V2A Edelstahl' for m in mats) and 1.6 < m0 < 2.6
+    # in der Bauteile-Leiste (Profi)
+    p.pg.locator('#t-parts').click(); p.wait(400)
+    txt = p.pg.locator('.flyout').inner_text()
+    ok5 = 'Schraube (Norm)' in txt and 'Mutter (Norm)' in txt and 'Scheibe (Norm)' in txt
+    p.pg.keyboard.press('Escape')
+    return [ok1, ok2, ok3, ok4, ok5]
+
+# Messen: Oberfläche, Hüllmaße, kleinster Abstand
+def t_messen_koerper(p):
+    p.empty()
+    p.ev("App.change('x', d=>{ const a=Model.newItem('box',{w:40,d:20,h:10},{name:'Block'}); d.items.push(a); const b=Model.newItem('sphere',{d:10},{name:'Kugel'}); b.t.x=40; b.t.z=20; d.items.push(b); })"); warte_rechnen(p)
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(2000)
+    area = p.pg.locator('#p-area').inner_text(); box = p.pg.locator('#p-bbox').inner_text()
+    ok1 = '28' in area and '40' in box and '20' in box and '10' in box   # 2800 mm² = 28 cm²
+    p.ev("App.select([App.doc.items[0].id, App.doc.items[1].id])"); p.wait(2500)
+    t = p.pg.locator('#min-dist-val').inner_text().replace(',', '.')
+    # Kugel-Mitte (40, 0, 25), r 5; Block-Ecke oben (20, 0..10, 10): Abstand = √(20² + 15²) − 5 = 20
+    import re
+    v = float(re.findall(r'\d+(?:\.\d+)?', t)[0]) if re.findall(r'\d+', t) else -1
+    ok2 = abs(v - 20) < 0.01 and p.ev("let n=0; Viewer.groups.overlay.traverse(o=>{ if(o.isLine && o.material.isLineDashedMaterial) n++; }); return n") >= 1
+    return [ok1, ok2]
+
+# Verknüpfte Kopien
+def t_verknuepft(p):
+    p.empty()
+    p.ev("App.change('x', d=>{ const a=Model.newItem('box',{w:20,d:20,h:10},{name:'Halter'}); d.items.push(a); })"); warte_rechnen(p)
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(400)
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('Control+Shift+D'); p.wait(800); warte_rechnen(p)
+    ok1 = p.ev("return App.doc.items.length===2 && App.doc.items[1].link===App.doc.items[0].id") and p.pg.locator('#link-sec').count() == 1
+    # Original breiter → Kopie folgt, ihre Lage bleibt eigen
+    p.ev("App.change('x', d=>{ d.items[0].p.w=40; d.items[0].finishes=[{id:'f1',type:'fillet',r:2,edges:'all'}]; })"); warte_rechnen(p)
+    bb = p.ev("return App.results.get(App.doc.items[1].id).data.bbox")
+    c = p.ev("return App.doc.items[1]")
+    ok2 = c['p']['w'] == 40 and len(c['finishes']) == 1 and abs((bb[3] - bb[0]) - 40) < 0.01
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(500)
+    ok3 = p.ev("return Model.tNumeric(App.doc.items[1]).x") == 10 and '1 verknüpfte Kopie' in p.pg.locator('#right-body').inner_text()
+    # Verknüpfung lösen: Original ändern, Kopie bleibt
+    p.ev("App.select([App.doc.items[1].id])"); p.wait(400)
+    p.pg.locator('#link-off').click(); p.wait(600)
+    p.ev("App.change('x', d=>{ d.items[0].p.w=60; })"); warte_rechnen(p)
+    ok4 = p.ev("return [App.doc.items[1].link, App.doc.items[1].p.w]") == [None, 40]
+    # neue Kopie, dann Original löschen: Kopie behält ihre Form und meldet es
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(300); p.ev("Actions.duplicateLinked()"); p.wait(600)
+    p.ev("App.change('x', d=>{ d.items.splice(0,1); })"); warte_rechnen(p)
+    lost = p.ev("const c=App.doc.items.find(i=>i.link); return c ? [c.linkLost, c.p.w] : null")
+    ok5 = lost == [True, 60]
+    return [ok1, ok2, ok3, ok4, ok5]
+
+# Bezüge: Was hängt davon ab?
+def t_bezuege(p):
+    p.empty()
+    p.ev("""App.change('x', d=>{ const a=Model.newItem('box',{w:40,d:40,h:10},{name:'Block'}); d.items.push(a); const b=Model.newItem('cylinder',{d:10,h:30},{name:'Bolzen'}); b.t.z=-5; b.op={type:'cut', target:a.id}; d.items.push(b); const c=Model.newItem('box',{w:10,d:10,h:10},{name:'Kopie'}); c.link=a.id; c.t.x=60; d.items.push(c); })"""); warte_rechnen(p)
+    deps = p.ev("return Model.dependencies(App.doc).map(x=>[x.what])")
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(600)
+    txt = p.pg.locator('#deps').inner_text()
+    ok1 = len(deps) == 2 and 'bezüge (2)' in txt.lower() and 'Bolzen“ wird hiervon abgezogen' in txt and 'Kopie' in txt
+    p.pg.locator('#deps .dep-row').first.click(); p.wait(400)
+    ok2 = p.ev("return App.sel.length===1 && App.sel[0]!==App.doc.items[0].id")
+    # Block löschen: Hinweis nennt die abhängigen Teile
+    p.ev("Actions.remove([App.doc.items[0].id])"); p.wait(600)
+    ok3 = 'Daran hingen' in p.pg.locator('.toast').last.inner_text()
+    return [ok1, ok2, ok3]
+
 def t_motorverkleidung(p):
     p.empty()
     p.pg.locator('#t-drone').click(); p.wait(400)
@@ -4186,6 +4557,20 @@ TESTS = [
     ('Stückliste: gleiche Teile zusammen / Kaufteile und fehlendes Gewicht / Dialog / Zeile wählt Teile / CSV / Filament', t_stueckliste),
     ('Stückliste der Drohnen-Vorlage: Motoren und Propeller je 4 / Schrauben gezählt, gleiche Achse nur einmal', t_stueckliste_drohne),
     ('DXF/SVG in die offene Skizze: Elemente kommen dazu / Rückgängig / DXF', t_umriss_in_skizze),
+    ('Studio-Look: Werkstoff-Aussehen / Schatten / eigene Farbe / Farbe vom Werkstoff / Ton, einfach, Licht, Schatten aus / Bild 4K durchsichtig', t_studio_look),
+    ('Formschritte mit Modus: eigener Körper / Abziehen / im Verlauf markiert / Vereinigen / Schnittmenge / zurück und Rückgängig / Ziel zu spät', t_koerper_modus),
+    ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
+    ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
+    ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
+    ('Anzeige: Flächen, Drahtgitter, verdeckte Kanten / Drahtgitter anklickbar / durchsichtig / wieder voll / Blick senkrecht auf Fläche / Ansicht speichern', t_anzeige),
+    ('Farbe je Fläche: Abschnitt bei gewählter Fläche / Oberseite rot, Rest blau / bleibt beim Ändern / entfernen', t_flaechenfarbe),
+    ('Text in Kurven: Knopf / Linien und Splines, gleiche Flächen / Rückgängig', t_text_kurven),
+    ('Skizze messen: Fläche ohne Loch / Umfang mit Lochrand', t_skizze_messen),
+    ('Normteile: Zylinderschraube / Senkschraube / Mutter und Scheibe / Edelstahl und Gewicht / in der Leiste', t_normteile),
+    ('Messen am Körper: Oberfläche und Hüllmaße / kleinster Abstand mit Linie', t_messen_koerper),
+    ('Verknüpfte Kopie: Strg Umschalt D / folgt dem Original / Lage eigen, Zähler / lösen / Original weg', t_verknuepft),
+    ('Bezüge: Liste am Teil / Klick springt / Hinweis beim Löschen', t_bezuege),
+    ('Bezugsebenen: über Grundebene / Dialog mit Neigung / an Fläche, wandert mit / Abstand ändern, Skizze darauf / hochziehen / Fläche fehlt / löschen', t_bezugsebenen),
     ('Luftwiderstand: Form erkannt / Kraft bei 100 km/h / Tempo und Form ändern / ohne Schub Hinweis / Formel / Speed-Drohne Höchstgeschwindigkeit', t_luftwiderstand),
     ('Rohr im Raum: glatt / Ecken / im Bild klicken / Punkt als Zahl / löschen und Rückgängig', t_rohr_raum),
     ('KI-Kollege legt ein Rohr im Raum', t_ki_rohr_raum),

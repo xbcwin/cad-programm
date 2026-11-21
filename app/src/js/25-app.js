@@ -38,6 +38,7 @@ const App = (() => {
     const res = fn(S.doc);
     if (res === false) return false;
     placeNewAtMarker(S.doc, topBefore);
+    Model.syncLinks(S.doc);
     const last = S.undo[S.undo.length - 1];
     if (opts.amend) { /* gehört zum letzten Schritt (z. B. nachgeführte Kanten): kein eigener Rückgängig-Schritt */ }
     else if (opts.merge && last && last.merge === opts.merge && Date.now() - last.t < 1500) { last.t = Date.now(); }
@@ -169,13 +170,21 @@ const App = (() => {
     busy = false; clearTimeout(busyTimer); ev.emit('busy', false);
     ev.emit('rebuilt');
   }
+  // Aussehen am Werkstoff: eigener Werkstoff des Teils, sonst der ausdrücklich gewählte Projekt-Werkstoff
+  function lookFor(it) {
+    const mat = it.mat || (S.doc.settings && S.doc.settings.material) || null;
+    const L = Viewer.lookOf(mat);
+    return { ...L, mat, matCol: L.nat && !it.colorSet ? L.col : null };
+  }
   function topItem(id) { return S.doc.items.find((x) => x.id === id) || S.extra.find((x) => x.id === id); }
   function apply(res) {
     const seen = new Set();
+    S.merged = new Map();
     for (const n of res.nodes) {
       seen.add(n.id);
+      if (n.merged) S.merged.set(n.id, n.merged);
       const it = topItem(n.id); if (!it) continue;
-      const info = { matrix: Model.localMatrix(it), role: it.role, color: it.color, key: n.key };
+      const info = { matrix: Model.localMatrix(it), role: it.role, color: it.color, look: lookFor(it), opacity: it.opacity ?? null, faceColors: it.faceColors || null, key: n.key };
       if (n.empty) { Viewer.removeNode(n.id); S.results.delete(n.id); continue; }
       if (n.same && S.results.has(n.id)) { Viewer.updateNode(n.id, info); continue; }
       Viewer.setNode(n.id, n, info);
@@ -187,6 +196,13 @@ const App = (() => {
     for (const e of S.errors) if (!oldErr.has(e.itemId + '|' + e.code + '|' + e.message)) ev.emit('log', { kind: 'error', text: e.message, itemId: e.itemId, code: e.code });
     applyView();
     refreshSelectionVisuals();
+    // „Durch alles“ braucht die Größe des Modells: ändert sie sich, noch einmal rechnen
+    let thru = false; Model.walk(S.doc.items, (x) => { if (x.p && x.p.thru) thru = true; });
+    if (thru) {
+      let span = 0;
+      for (const [id, r] of S.results) { const it = topItem(id); if (!it || it.role === 'hole' || (it.p && it.p.thru) || !r.data || !r.data.bbox) continue; const b = r.data.bbox, m = Model.localMatrix(it).elements; const c = Math.hypot(m[12], m[13], m[14]); span = Math.max(span, c + Math.hypot(b[3] - b[0], b[4] - b[1], b[5] - b[2])); }
+      if (Model.setSceneSpan(span * 2 + 10)) dirty = true;
+    }
     ev.emit('results');
     if (S.fitNext) { S.fitNext = false; Viewer.fit(); }
   }
@@ -243,7 +259,7 @@ const App = (() => {
   function replaceMesh(id, key, payload) {
     const it = topItem(id); const r = S.results.get(id);
     if (!it || !r || r.key !== key) return false;
-    Viewer.setNode(id, payload, { matrix: Model.localMatrix(it), role: it.role, color: it.color, key });
+    Viewer.setNode(id, payload, { matrix: Model.localMatrix(it), role: it.role, color: it.color, look: lookFor(it), opacity: it.opacity ?? null, faceColors: it.faceColors || null, key });
     r.data = payload; applyView(); refreshSelectionVisuals(); ev.emit('remeshed', id);
     return true;
   }
@@ -305,6 +321,7 @@ const App = (() => {
     get mode() { return S.mode; }, set mode(m) { S.mode = m; ev.emit('mode'); },
     get extra() { return S.extra; }, set extra(x) { S.extra = x; },
     peek, get peeking() { return S.peek == null ? null : S.peek; },
+    mergedInto(id) { return (S.merged && S.merged.get(id)) || null; },
     get hideIds() { return S.hideIds; }, set hideIds(x) { S.hideIds = x || new Set(); applyView(); },
     get ctx() { return S.ctx; }, get iso() { return S.iso; }, setCtx, setIso, applyView,
     get tool() { return S.tool; }, set tool(t) { S.tool = t; ev.emit('tool'); },

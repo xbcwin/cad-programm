@@ -31,6 +31,7 @@ self.onmessage = async (ev) => {
     else if (cmd === 'exportMeshes') result = kernel.exportMeshes(args.scene, args.fine);
     else if (cmd === 'exportSTEP') result = { data: await kernel.exportSTEP(args.scene).arrayBuffer() };
     else if (cmd === 'measure') result = kernel.measure(args.scene);
+    else if (cmd === 'distance') result = kernel.minDistance(args.scene, args.ids);
     else if (cmd === 'project') result = kernel.project(args.scene, args.views);
     else if (cmd === 'clashes') result = kernel.clashes(args.scene, args.probes, args.skipPairs);
     else if (cmd === 'holeWalls') result = kernel.holeWalls(args.scene, args.ids, args);

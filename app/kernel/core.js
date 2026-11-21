@@ -239,6 +239,7 @@ export function createKernel(R, oc) {
       let face = regionFace(rg, M);
       let v;
       if (dir === 'both') { face = face.translate(mul(M.n, -dist / 2)); v = mul(M.n, dist); }
+      else if (dir === 'two') { const d2 = pos(p.dist2, dist); face = face.translate(mul(M.n, -d2)); v = mul(M.n, dist + d2); }
       else if (dir === 'reverse') { if (extra) face = face.translate(mul(M.n, extra)); v = mul(M.n, -(dist + extra)); }
       else { if (extra) face = face.translate(mul(M.n, -extra)); v = mul(M.n, dist + extra); }
       solids.push(R.basicFaceExtrusion(face, new R.Vector(v)));
@@ -400,6 +401,44 @@ export function createKernel(R, oc) {
     M6: { fine: 6.4, hole: 6.6, coarse: 7.0, tap: 5.0, csk: 13.44, cbD: 11.0, cbH: 6.4, nutSW: 10.0, nutH: 5.2, ins: 8.0, insL: 12.7 },
     M8: { fine: 8.4, hole: 9.0, coarse: 10.0, tap: 6.8, csk: 17.92, cbD: 15.0, cbH: 8.6, nutSW: 13.0, nutH: 6.8, ins: 9.7, insL: 12.7 },
   };
+  // Normteile: Kopf Zylinderschraube ISO 4762 (Ø, Höhe, Innensechskant), Senkschraube ISO 10642 (Kopfhöhe, Innensechskant),
+  // Scheibe ISO 7089 (innen, außen, Dicke). Kopf und Scheibe aus app/data/schrauben.json bzw. Normtabellen (Nennmaße).
+  const NORM = {
+    'M1.6': { hd: 3.0, hk: 1.6, hs: 1.5, w1: 1.7, w2: 4.0, wh: 0.3 },
+    M2: { hd: 3.8, hk: 2.0, hs: 1.5, w1: 2.2, w2: 5.0, wh: 0.3 },
+    'M2.5': { hd: 4.5, hk: 2.5, hs: 2.0, w1: 2.7, w2: 6.0, wh: 0.5 },
+    M3: { hd: 5.5, hk: 3.0, hs: 2.5, ck: 1.86, cs: 2.0, w1: 3.2, w2: 7.0, wh: 0.5 },
+    M4: { hd: 7.0, hk: 4.0, hs: 3.0, ck: 2.48, cs: 2.5, w1: 4.3, w2: 9.0, wh: 0.8 },
+    M5: { hd: 8.5, hk: 5.0, hs: 4.0, ck: 3.1, cs: 3.0, w1: 5.3, w2: 10.0, wh: 1.0 },
+    M6: { hd: 10.0, hk: 6.0, hs: 5.0, ck: 3.72, cs: 4.0, w1: 6.4, w2: 12.0, wh: 1.6 },
+    M8: { hd: 13.0, hk: 8.0, hs: 6.0, ck: 4.96, cs: 5.0, w1: 8.4, w2: 16.0, wh: 1.6 },
+  };
+  const nomD = (size) => parseFloat(String(size).slice(1)) || 3;
+  // Schraube: Kopf oben auf z = 0 aufgesetzt (Zylinderkopf) bzw. bündig mit z = 0 (Senkkopf), Schaft nach unten (Gewinde nur angedeutet)
+  function buildStdScrew(p) {
+    const size = NORM[p.size] ? p.size : 'M3', n = NORM[size], s = SCREW[size], d = nomD(size), L = pos(p.length, 10);
+    if (p.head === 'senk' && n.ck) {
+      const rT = s.csk / 2, k = n.ck;
+      let body = revolveProfile([[0, 0], [rT, 0], [d / 2, -k], [d / 2, -L], [0, -L]]);
+      const sock = hexPrism(n.cs, -k * 0.75, 0.01); const r = body.cut(sock); safeDelete(body); safeDelete(sock); body = r;
+      return body;
+    }
+    let head = R.makeCylinder(n.hd / 2, n.hk, [0, 0, 0], [0, 0, 1]);
+    const sock = hexPrism(n.hs, n.hk * 0.45, n.hk + 0.01); const h2 = head.cut(sock); safeDelete(head); safeDelete(sock); head = h2;
+    const shaft = R.makeCylinder(d / 2, L, [0, 0, -L], [0, 0, 1]);
+    const out = head.fuse(shaft); safeDelete(head); safeDelete(shaft);
+    return out;
+  }
+  function buildStdNut(p) {
+    const size = NORM[p.size] ? p.size : 'M3', s = SCREW[size];
+    const nut = hexPrism(s.nutSW, 0, s.nutH), hole = R.makeCylinder(nomD(size) / 2, s.nutH + 1, [0, 0, -0.5], [0, 0, 1]);
+    const out = nut.cut(hole); safeDelete(nut); safeDelete(hole); return out;
+  }
+  function buildStdWasher(p) {
+    const n = NORM[p.size] || NORM.M3;
+    const a = R.makeCylinder(n.w2 / 2, n.wh, [0, 0, 0], [0, 0, 1]), b = R.makeCylinder(n.w1 / 2, n.wh + 1, [0, 0, -0.5], [0, 0, 1]);
+    const out = a.cut(b); safeDelete(a); safeDelete(b); return out;
+  }
   // Lochdurchmesser je nach Passung: eng, mittel (Standard), weit oder Kernloch zum Gewindeschneiden
   const holeD = (s, fit) => (fit === 'fine' ? s.fine : fit === 'coarse' ? s.coarse : fit === 'tap' ? s.tap : s.hole);
   const LIFT = 0.2; // Löcher ragen ein wenig über die Fläche hinaus, damit sie sauber schneiden
@@ -436,6 +475,9 @@ export function createKernel(R, oc) {
       const s = threadShape(p.size || 'M6', L + LIFT, num(p.clear, 0.3)).translate([0, 0, -L]);
       return s;
     }
+    if (lib === 'stdScrew') return buildStdScrew(p);
+    if (lib === 'stdNut') return buildStdNut(p);
+    if (lib === 'stdWasher') return buildStdWasher(p);
     const s = SCREW[p.size] || SCREW.M3;
     const tol = num(p.tol, 0);
     if (lib === 'screwHole') {
@@ -1247,6 +1289,45 @@ export function createKernel(R, oc) {
   // ---------- Szene ----------
   // scene = { items: [ { id, kind, role, p, m (Weltmatrix), hidden, children, finishes } ] }
   // known = { id: resultKey } (was die Anzeige schon hat)
+  // Formschritte mit Modus: Ein Teil mit op = {type: 'join' | 'cut' | 'common', target} wird mit einem früheren
+  // Körper verrechnet und verschwindet als eigenes Teil. Ketten (B in A, C in B) landen alle im ersten Körper.
+  // Ergebnis: bodies (id → {shape, key, wb} im Koordinatensystem des Zielkörpers), consumed (id → Ziel-id)
+  function resolveOps(evald, errors) {
+    const byId = new Map(evald.map((e, i) => [e.it.id, { e, i }]));
+    const consumed = new Map(), opsOf = new Map();
+    const NAMES = { join: 'Vereinigen', cut: 'Abziehen', common: 'Schnittmenge' };
+    for (let i = 0; i < evald.length; i++) {
+      const e = evald[i], op = e.it.op;
+      if (!op || !NAMES[op.type] || !e.shape || e.it.role === 'hole') continue;
+      let t = byId.get(op.target);
+      while (t && consumed.has(t.e.it.id)) t = byId.get(consumed.get(t.e.it.id));
+      if (!t || t.i >= i || !t.e.shape || t.e.it.role === 'hole') { errors.push({ itemId: e.it.id, code: 'op', message: `${NAMES[op.type]}: Der Zielkörper fehlt oder kommt erst später im Verlauf – das Teil bleibt ein eigener Körper.` }); continue; }
+      consumed.set(e.it.id, t.e.it.id);
+      if (!opsOf.has(t.e.it.id)) opsOf.set(t.e.it.id, []);
+      opsOf.get(t.e.it.id).push(e);
+    }
+    const bodies = new Map();
+    for (const [tid, list] of opsOf) {
+      const base = byId.get(tid).e, inv = matInvRigid(base.it.m);
+      let shape = base.shape, key = base.key, own = false;
+      for (const o of list) {
+        const rel = matMul(inv, o.it.m), k = keyOf([key, o.it.op.type, o.key, rel.map((v) => Math.round(v * 1e6) / 1e6)]);
+        const hit = cacheGet(k);
+        if (hit) { shape = hit; key = k; own = false; continue; }
+        try {
+          const tool = applyMatrix(o.shape, rel);
+          const next = o.it.op.type === 'join' ? shape.fuse(tool) : o.it.op.type === 'cut' ? shape.cut(tool) : shape.intersect(tool);
+          safeDelete(tool);
+          cachePut(k, next); shape = next; key = k;
+        } catch (err) {
+          errors.push({ itemId: o.it.id, code: 'op', message: `${NAMES[o.it.op.type]} mit „${base.it.name || 'Körper'}“ hat nicht geklappt – berühren sich die Teile?` });
+        }
+      }
+      const wb = bboxTransform(bboxCached(key, shape), base.it.m);
+      bodies.set(tid, { shape, key, wb });
+    }
+    return { bodies, consumed };
+  }
   function evaluate(scene, known = {}) {
     gen++;
     if (scene.quality) setQuality(scene.quality);
@@ -1261,10 +1342,13 @@ export function createKernel(R, oc) {
       }
       return { it, ...r, wb };
     });
+    const { bodies, consumed } = resolveOps(evald, errors);
+    for (const e of evald) { const b = bodies.get(e.it.id); if (b) { e.shape = b.shape; e.key = b.key; e.wb = b.wb; } }
     const holes = evald.filter((e) => e.it.role === 'hole' && e.shape);
     const nodes = [];
     for (const e of evald) {
       const it = e.it;
+      if (consumed.has(it.id)) { nodes.push({ id: it.id, key: null, empty: true, merged: consumed.get(it.id) }); continue; }
       if (!e.shape) { nodes.push({ id: it.id, key: null, empty: true }); continue; }
       let resultKey = e.key, result = e.shape;
       if (it.role !== 'hole') {
@@ -1423,10 +1507,12 @@ export function createKernel(R, oc) {
       if (r.shape) wb = bboxTransform(bboxCached(r.key, r.shape), it.m);
       return { it, ...r, wb };
     });
+    const { bodies, consumed } = resolveOps(evald, errors || []);
+    for (const e of evald) { const b = bodies.get(e.it.id); if (b) { e.shape = b.shape; e.key = b.key; e.wb = b.wb; } }
     const holes = evald.filter((e) => e.it.role === 'hole' && e.shape);
     const out = [];
     for (const e of evald) {
-      if (!e.shape || e.it.role === 'hole') continue;
+      if (!e.shape || e.it.role === 'hole' || consumed.has(e.it.id)) continue;
       let world = applyMatrix(e.shape, e.it.m);
       const cutters = holes.filter((h) => bboxHit(h.wb, e.wb));
       if (cutters.length) {
@@ -1474,6 +1560,27 @@ export function createKernel(R, oc) {
       s.shape.delete();
     }
     return { volume, area, bbox: b, count: solids.length, parts, errors };
+  }
+
+  // kleinster Abstand zwischen zwei Teilen (mit den Punkten, an denen er auftritt)
+  function minDistance(scene, ids) {
+    const errors = [];
+    const solids = evaluateShapes(scene, errors).filter((s) => ids.includes(s.id));
+    const A = solids.find((s) => s.id === ids[0]), B = solids.find((s) => s.id === ids[1]);
+    let out = null;
+    if (A && B) {
+      const t = new oc.BRepExtrema_DistShapeShape();
+      try {
+        t.LoadS1(A.shape.wrapped); t.LoadS2(B.shape.wrapped); t.Perform();
+        if (t.IsDone() && t.NbSolution() > 0) {
+          const p1 = t.PointOnShape1(1), p2 = t.PointOnShape2(1);
+          out = { d: t.Value(), a: [p1.X(), p1.Y(), p1.Z()], b: [p2.X(), p2.Y(), p2.Z()] };
+          p1.delete(); p2.delete();
+        }
+      } finally { t.delete(); }
+    }
+    for (const s of solids) s.shape.delete();
+    return out;
   }
 
   // ---------- Technische Zeichnung ----------
@@ -1629,5 +1736,5 @@ export function createKernel(R, oc) {
     }
     return { holes: out, errors };
   }
-  return { evaluate, remesh, exportMeshes, exportSTEP, measure, project, clashes, holeWalls, faceLoopsOf, faceGridOf, sectionOf, _cache: cache };
+  return { evaluate, remesh, exportMeshes, exportSTEP, measure, minDistance, project, clashes, holeWalls, faceLoopsOf, faceGridOf, sectionOf, _cache: cache };
 }

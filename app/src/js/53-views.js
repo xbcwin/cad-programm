@@ -407,7 +407,45 @@ const Views = (() => {
       { label: (st.focus ? '✓ ' : '') + 'Fokus-Vorschau', icon: 'focusView', help: 'focusView', run: () => focus() },
       { label: (st.ov ? '✓ ' : '') + 'Überhänge (3D-Druck)', icon: 'overhang', help: 'overhang', run: () => overhang() },
       { label: (st.wind ? '✓ ' : '') + 'Fahrtwind (Stirnfläche)', icon: 'wind', help: 'wind', run: () => wind() },
+      '-', ...lookItems(),
     ]);
+  }
+  // ---------- Aussehen: Studio-Look, einfach, Prüfansicht; Licht-Stimmung; Schatten ----------
+  const LOOKNAMES = { studio: 'Studio-Look (Werkstoff, Licht, Schatten)', plain: 'Einfach (matt, schnell)', clay: 'Prüfen: Ton', chrome: 'Prüfen: Chrom-Streifen' };
+  const MOODNAMES = { studio: 'Studio', hell: 'Hell', werkstatt: 'Werkstatt' };
+  function setLook(k) {
+    ViewPrefs.set({ look: k });
+    const tip = { studio: 'Studio-Look: Teile zeigen ihren Werkstoff – Metall glänzt, Kohlefaser ist dunkel.', plain: 'Einfache Darstellung: matt und am schnellsten.', clay: 'Prüfansicht Ton: Jede Delle und jeder Knick fällt auf.', chrome: 'Prüfansicht Chrom: Laufen die Streifen ohne Knick über eine Kante, gehen die Flächen glatt ineinander über.' }[k];
+    UI.toast(tip, { icon: 'info', ms: 3200 });
+  }
+  const DISPNAMES = { edges: 'Flächen mit Kanten', shaded: 'Nur Flächen', wire: 'Drahtgitter (nur Kanten)', hidden: 'Verdeckte Kanten zeigen' };
+  // gespeicherte Ansichten (im Projekt): Blickwinkel, Ausschnitt und Projektion
+  async function saveView() {
+    const name = await UI.prompt('Ansicht speichern', 'Name der Ansicht', `Ansicht ${(App.doc.views || []).length + 1}`, 'Speichern');
+    if (!name || !name.trim()) return null;
+    const c = Viewer.saveCamera(), v = { id: uid('v'), name: name.trim(), p: c.p.toArray(), t: c.t.toArray(), up: c.up.toArray(), ortho: !!ViewPrefs.get().ortho };
+    App.change(`Ansicht „${v.name}“ gespeichert`, (doc) => { (doc.views = doc.views || []).push(v); });
+    return v;
+  }
+  function goView(id) {
+    const v = (App.doc.views || []).find((x) => x.id === id); if (!v) return false;
+    if (!!ViewPrefs.get().ortho !== !!v.ortho) ViewPrefs.set({ ortho: !!v.ortho });
+    Viewer.restoreCamera({ p: new THREE.Vector3(...v.p), t: new THREE.Vector3(...v.t), up: new THREE.Vector3(...v.up) });
+    return true;
+  }
+  function removeView(id) { App.change('Ansicht gelöscht', (doc) => { doc.views = (doc.views || []).filter((x) => x.id !== id); }); }
+  function lookItems() {
+    const pv = ViewPrefs.get(), out = [];
+    for (const k of Object.keys(DISPNAMES)) out.push({ label: (pv.display === k || (!pv.display && k === 'edges') ? '✓ ' : '') + DISPNAMES[k], icon: k === 'wire' ? 'cube' : 'eye', help: 'display', id: 'disp-' + k, run: () => ViewPrefs.set({ display: k }) });
+    out.push('-');
+    for (const k of Object.keys(LOOKNAMES)) out.push({ label: (pv.look === k ? '✓ ' : '') + LOOKNAMES[k], icon: k === 'studio' ? 'spark' : 'eye', help: 'look', id: 'look-' + k, run: () => setLook(k) });
+    if (pv.look === 'studio') {
+      for (const k of Object.keys(MOODNAMES)) out.push({ label: (pv.mood === k ? '✓ ' : '') + 'Licht: ' + MOODNAMES[k], icon: 'sun', help: 'look', id: 'mood-' + k, run: () => ViewPrefs.set({ mood: k }) });
+      out.push({ label: (pv.shadows !== false ? '✓ ' : '') + 'Schatten', icon: 'shadow', help: 'look', id: 'look-shadows', run: () => ViewPrefs.set({ shadows: pv.shadows === false }) });
+    }
+    out.push('-', { label: 'Ansicht speichern …', icon: 'plus', help: 'savedViews', id: 'view-save', run: () => saveView() });
+    for (const v of App.doc.views || []) out.push({ label: 'Ansicht: ' + v.name, icon: 'viewPersp', help: 'savedViews', id: 'view-go-' + v.id, run: () => goView(v.id) });
+    return out;
   }
   function sync() {
     const b = $('#t-views'); if (b) b.classList.toggle('active', !!(st.cut || st.xray || st.exGoal > 0 || st.focus || st.ov || st.wind));
@@ -435,8 +473,7 @@ const Views = (() => {
     });
   }
   function reset() { section(false); if (st.xray) xray(false); if (st.exGoal > 0 || st.ex > 0) { cancelAnimationFrame(st.exAnim); st.exAnim = null; st.ex = st.exGoal = 0; Viewer.setOffsets(null); if (st.exBar) { st.exBar.remove(); st.exBar = null; } } focus(false); overhang(false); wind(false); if (st.exGroups) setGroups(false); }
-  return {
-    init, section, xray, explode, collapse, focus, overhang, menu, onKey, reset, sync, bars,
+  return { saveView, goView, removeView,     init, section, xray, explode, collapse, focus, overhang, menu, onKey, reset, sync, bars,
     get overhangArea() { return st.ov ? st.ov.area : null; },
     wind, windArea, get windInfo() { return st.wind ? { angle: st.wind.angle, props: st.wind.props, area: st.wind.area, cw: st.wind.cw, v: st.wind.v, drag: st.wind.drag, top: st.wind.top || null } : null; }, cwGuess, topSpeed, dragN,
     overhangOf: (id, angle = 45) => { const d = overhangData(angle, [id]); return { area: d.area, c: d.c }; },

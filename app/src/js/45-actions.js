@@ -120,12 +120,19 @@ const Actions = (() => {
   function remove(ids) {
     ids = ids || App.sel; if (!ids.length) return;
     const n = ids.length;
+    // Hängen andere Teile daran? Dann nach dem Löschen sagen, welche
+    const gone = new Set(ids.map((id) => (Model.topOf(App.doc, id) || {}).id));
+    const hit = Model.dependencies(App.doc).filter((x) => gone.has(x.to) && !gone.has(x.from));
     App.change(n > 1 ? `${n} Objekte gelöscht` : 'Gelöscht', (doc) => {
       for (const id of ids) { const f = Model.find(doc, id); if (f) f.list.splice(f.list.indexOf(f.item), 1); }
       // leere oder einzelne Gruppen aufräumen
       cleanupGroups(doc);
     });
     App.select([]);
+    if (hit.length) {
+      const names = [...new Set(hit.map((x) => (x.datum ? `Bezugsebene „${x.datum}“` : `„${Model.label((Model.find(App.doc, x.from) || { item: {} }).item)}“`)))];
+      UI.toast(`Daran hingen ${names.slice(0, 3).join(', ')}${names.length > 3 ? ' …' : ''} – sie behalten ihre letzte Form. Rückgängig holt alles zurück.`, { icon: 'warn', ms: 6000 });
+    }
   }
   function cleanupGroups(doc) {
     Model.walk(doc.items, (it, parent, depth, list, i) => {
@@ -146,6 +153,51 @@ const Actions = (() => {
     });
     App.select(newIds);
     UI.toast(newIds.length > 1 ? `${newIds.length} Objekte dupliziert` : 'Dupliziert – die Kopie liegt 10 mm versetzt', { icon: 'copy' });
+  }
+  // Verknüpft duplizieren: die Kopie folgt dem Original (Maße, Kanten), Lage und Farbe bleiben eigen
+  function duplicateLinked(ids) {
+    ids = (ids || App.sel).filter((id) => { const f = Model.find(App.doc, id); return f && f.item.kind !== 'group'; });
+    if (!ids.length) { UI.toast('Verknüpfte Kopien gehen für einzelne Teile (nicht für Verbünde).', { icon: 'info' }); return []; }
+    const newIds = [];
+    App.change('Verknüpft dupliziert', (doc) => {
+      for (const id of ids) {
+        const f = Model.find(doc, id); if (!f) continue;
+        const src = f.item.link ? Model.find(doc, f.item.link) : f; if (!src) continue;
+        const c = Model.reId(deepClone(f.item)); delete c.ai; delete c.op;
+        c.link = src.item.id;
+        const tn = Model.tNumeric(c); c.t.x = round(tn.x + 10, 4); c.t.y = round(tn.y + 10, 4);
+        c.name = src.item.name;
+        f.list.splice(f.list.indexOf(f.item) + 1, 0, c); newIds.push(c.id);
+      }
+    });
+    App.select(newIds);
+    UI.toast('Verknüpfte Kopie – ändert sich das Original, ändert sich die Kopie mit.', { icon: 'copy' });
+    return newIds;
+  }
+  function unlink(id) { App.change('Verknüpfung gelöst', (doc) => { const f = Model.find(doc, id); if (!f || !f.item.link) return false; delete f.item.link; delete f.item.linkLost; }); }
+  // Formschritt-Modus setzen: type null = eigener Körper; sonst mit dem Zielkörper vereinigen, davon abziehen oder schneiden
+  // Ausblenden und alles wieder einblenden (nur Anzeige, ein Rückgängig-Schritt)
+  function hideSelected(ids = App.sel) {
+    const tops = [...new Set(ids.map((id) => (Model.topOf(App.doc, id) || {}).id).filter(Boolean))];
+    if (!tops.length) return false;
+    App.change(tops.length === 1 ? 'Ausgeblendet' : `${tops.length} Teile ausgeblendet`, (doc) => { for (const id of tops) { const f = Model.find(doc, id); if (f) f.item.hidden = true; } });
+    App.clearSelection(); return true;
+  }
+  function showAll() {
+    if (!App.doc.items.some((x) => x.hidden)) return false;
+    App.change('Alles eingeblendet', (doc) => { Model.walk(doc.items, (x) => { if (x.hidden) delete x.hidden; }); });
+    return true;
+  }
+  function invertSelection() {
+    const cur = new Set(App.sel.map((id) => (Model.topOf(App.doc, id) || {}).id));
+    App.select(App.doc.items.filter((x) => !x.hidden && !App.mergedInto(x.id) && !cur.has(x.id)).map((x) => x.id));
+  }
+  function setOp(id, type, target) {
+    const f = Model.find(App.doc, id); if (!f) return false;
+    if (type && !target) return false;
+    const label = !type ? 'Eigener Körper' : `${Model.OPS[type]} „${Model.label(Model.find(App.doc, target).item)}“`;
+    App.change(label, (doc) => { const T = Model.find(doc, id).item; if (!type) delete T.op; else { T.op = { type, target }; if (T.role === 'hole') T.role = 'solid'; } });
+    return true;
   }
   function setRole(ids, role) {
     ids = ids || App.sel; if (!ids.length) return;
@@ -408,6 +460,6 @@ const Actions = (() => {
     if (nid) App.select([nid]);
     return nid;
   }
-  return { gapOf, setGap, loft, addPrimitive, addPart, addBuyPart, remove, duplicate, setRole, toggleRole, group, groupAll, ungroup, rotate90, rotate, center, mirror, dropToPlate, align, addFinish, finishAll, setFinish, removeFinish, faceFrame, selectedFace, onFaceTransform, attach, worldBox, selBox, cuttersOf, viewCenter };
+  return { duplicateLinked, unlink, hideSelected, showAll, invertSelection, setOp, gapOf, setGap, loft, addPrimitive, addPart, addBuyPart, remove, duplicate, setRole, toggleRole, group, groupAll, ungroup, rotate90, rotate, center, mirror, dropToPlate, align, addFinish, finishAll, setFinish, removeFinish, faceFrame, selectedFace, onFaceTransform, attach, worldBox, selBox, cuttersOf, viewCenter };
 })();
 

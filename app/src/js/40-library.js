@@ -25,6 +25,17 @@ const LIB = [
     { k: 'size', label: 'Gewinde', type: 'select', options: ['M2', 'M2.5', 'M3', 'M4', 'M5', 'M6', 'M8'], def: 'M3' },
     { k: 'depth', label: 'Tiefe', type: 'num', def: null, auto: true },
   ] },
+  { lib: 'stdScrew', label: 'Schraube (Norm)', role: 'solid', icon: 'bolt', mat: 'V2A Edelstahl', desc: 'Echte Schraube mit Innensechskant: Zylinderkopf ISO 4762 oder Senkkopf ISO 10642 – Gewinde nur angedeutet', params: [
+    { k: 'size', label: 'Größe', type: 'select', options: SIZES, def: 'M3' },
+    { k: 'head', label: 'Kopf', type: 'select', options: [['zyl', 'Zylinderkopf (ISO 4762)'], ['senk', 'Senkkopf (ISO 10642, ab M3)']], def: 'zyl' },
+    { k: 'length', label: 'Länge', type: 'num', def: 10 },
+  ] },
+  { lib: 'stdNut', label: 'Mutter (Norm)', role: 'solid', icon: 'hex', mat: 'V2A Edelstahl', desc: 'Sechskantmutter ISO 4032', params: [
+    { k: 'size', label: 'Größe', type: 'select', options: SIZES, def: 'M3' },
+  ] },
+  { lib: 'stdWasher', label: 'Scheibe (Norm)', role: 'solid', icon: 'circle', mat: 'V2A Edelstahl', desc: 'Unterlegscheibe ISO 7089', params: [
+    { k: 'size', label: 'Größe', type: 'select', options: SIZES, def: 'M3' },
+  ] },
   { lib: 'slotHole', label: 'Langloch', role: 'hole', icon: 'slot', desc: 'Längliches Loch zum Verstellen', params: [
     { k: 'len', label: 'Länge', type: 'num', def: 20 }, { k: 'w', label: 'Breite', type: 'num', def: 4.5 }, { k: 'depth', label: 'Tiefe', type: 'num', def: 10 },
   ] },

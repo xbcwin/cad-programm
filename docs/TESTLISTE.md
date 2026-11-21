@@ -481,6 +481,72 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
   Schritte: 1. Ein Kind (ab 10) mit „Einfach“ eine Platte mit vier Löchern bauen lassen, ohne zu helfen.
   Erwartet: Es findet Körper, Löcher und Exportieren allein; notieren, wo es hängen bleibt.
 
+## Bezüge (neu in Sitzung 90)
+
+- [x] **Liste**: Block, davon ein Bolzen abgezogen, dazu eine verknüpfte Kopie → am Block „Bezüge (2)“ mit „Bolzen wird hiervon abgezogen“ und der Kopie; Klick wählt das Teil.
+- [x] **Löschen**: Block löschen → Hinweis „Daran hingen …“; Rückgängig holt alles zurück.
+- [ ] **Großes Modell**: An einem echten Rahmen schauen, ob die Bezüge stimmen und nichts fehlt.
+
+## Verknüpfte Kopien (neu in Sitzung 89)
+
+- [x] **Kopie**: Strg Umschalt D legt eine verknüpfte Kopie an; Original 40 mm breit und gerundet → Kopie auch, ihre Lage bleibt.
+- [x] **Lösen**: „Verknüpfung lösen“ → Original ändern, Kopie bleibt; Original gelöscht → Kopie behält ihre Form und meldet es.
+- [ ] **Vier Motorhalter**: Einen Halter bauen, drei verknüpfte Kopien verteilen, dann das Original ändern – ändern sich alle vier?
+
+## Normteile (neu in Sitzung 88)
+
+- [x] **Formen**: Zylinderschraube M4 × 12 (Kopf 7 × 4 auf z = 0), Senkschraube M5 × 16 bündig, Mutter M3 (SW 5,5 × 2,4), Scheibe M6 (Ø 12 × 1,6).
+- [x] **Gewicht**: Edelstahl, M4 × 12 wiegt etwa 2 g; alle drei stehen in der Bauteile-Leiste.
+- [x] **Messen**: Block 40 × 20 × 10 → Oberfläche 28 cm², Hüllmaße; Block und Kugel gewählt → kleinster Abstand 20 mm mit Linie.
+- [ ] **Nachwiegen**: Eine echte M3 × 10 Zylinderschraube wiegen und mit Tracery vergleichen.
+
+## Farbe je Fläche, Text in Kurven (neu in Sitzung 87)
+
+- [x] **Flächenfarbe**: Oberseite eines blauen Blocks rot; Block höher → Oberseite bleibt rot; „Flächenfarbe entfernen“.
+- [x] **Text in Kurven**: „AB8“ → nur noch Linien und Splines mit gleich vielen Flächen und gleicher Fläche; Rückgängig holt den Text zurück.
+- [x] **Messen**: Rechteck 40 × 20 mit Kreisloch → Fläche ohne Loch, Umfang mit Lochrand.
+- [ ] **Gravur**: Umgewandelten Text versetzen (0,3 mm) und als Loch in eine Platte setzen.
+
+## Bezugsebenen (neu in Sitzung 86)
+
+- [x] **Grundebene**: Ebene 25 mm über der Arbeitsfläche steht im Verlauf und im Bild.
+- [x] **Dialog**: Skizze → „Neue Bezugsebene …“ → 15 mm, 30° → „Von vorne“ legt eine geneigte Ebene an.
+- [x] **An Fläche**: 5 mm über der Oberseite; Block höher → Ebene wandert mit; Abstand 30 im Panel; „Skizze hierauf“ und hochziehen.
+- [x] **Fläche fehlt**: Block gelöscht → Ebene bleibt und meldet „Fläche fehlt“.
+- [ ] **Im Alltag**: Eine schräge Ebene für eine Halterung anlegen, darauf skizzieren – fühlt sich das einfacher an als Ebene verschieben/neigen in der Skizze?
+
+## Anzeige (neu in Sitzung 85)
+
+- [x] **Anzeige-Arten**: Nur Flächen ohne Kanten, Drahtgitter (Flächen unsichtbar, Teil trotzdem anklickbar), verdeckte Kanten (Körper halb durchsichtig), zurück zu Flächen mit Kanten.
+- [x] **Durchsichtig**: Sichtbarkeit 40 % macht die Platte durchsichtig, 100 % wieder voll.
+- [x] **Blick auf Fläche**: Rechtsklick auf die Oberseite → „Blick senkrecht auf die Fläche“ schaut genau von oben.
+- [x] **Ansicht speichern**: „Von oben“ speichern, Ansicht wechseln, im Menü wieder aufrufen.
+
+## Bedienung für jeden Tag (neu in Sitzung 84)
+
+- [x] **Rahmen**: Umschalt + Ziehen von links nach rechts wählt nur Würfel ganz im Rahmen, von rechts nach links alles, was er berührt (gestrichelt).
+- [x] **Umkehren**: Strg Umschalt I wählt die anderen Teile.
+- [x] **Rechtsklick**: auf einem Teil Menü mit Ausblenden und Löschen; im Leeren „Alles einblenden (2)“.
+- [x] **Wiederholen**: „Ausgewählte ausblenden“ über die Eingabezeile, dann Leertaste → nächstes Teil auch ausgeblendet; leere Eingabezeile zeigt „Zuletzt benutzt“.
+- [ ] **Am Trackpad**: Rechtsklick (zwei Finger) öffnet das Menü, Ziehen mit zwei Fingern verschiebt weiter die Ansicht?
+
+## Formschritte mit Modus (neu in Sitzung 83)
+
+- [x] **Modus**: Bolzen in einem Block → „Abziehen von …“ macht ein Loch nur in den Block, „Vereinigen“ einen Körper, „Schnittmenge“ nur das gemeinsame Stück; im Verlauf steht „− Block“.
+- [x] **Zurück und Rückgängig**: „Eigener Körper“ trennt wieder, Strg Z holt den Modus zurück; Ziel später im Verlauf → Meldung.
+- [x] **Durch alles**: Loch-Skizze mit Haken „Durch alles“ geht ganz durch, auch wenn der Block länger wird; „Beidseitig verschieden“ mit 5 und 3 mm.
+- [x] **KI**: „Zieh den Bolzen vom Block ab“ → Aktion „verrechnen“, ein Körper mit Loch.
+- [ ] **Gefühl**: Ein Gehäuse nur mit Vereinigen und Abziehen bauen (ohne Loch-Körper) – ist das klarer als Körper und Loch?
+
+## Studio-Look und Bild speichern (neu in Sitzung 82)
+
+- [x] **Werkstoff**: Alu-Zylinder ist Metall in Alu-Farbe, CFK-Platte dunkel, PLA behält seine Farbe; Spiegel-Umgebung und Schatten sind an.
+- [x] **Farbe**: Eigene Farbe (bunter Kreis) färbt auch ein Alu-Teil, „Farbe vom Werkstoff“ nimmt das zurück.
+- [x] **Ansicht-Menü**: Ton → Prüfansicht, Einfach → matt ohne Spiegelung, Studio zurück, Licht „Hell“, Schatten aus.
+- [x] **Bild**: 4K mit durchsichtigem Hintergrund → PNG 3840 × 2160 mit Alpha-Kanal.
+- [ ] **Am Mac ansehen**: Sieht das Alu wie Alu aus, die Kohlefaser wie Kohlefaser? Sind die Schatten weich und ruckelt nichts beim Drehen?
+- [ ] **Bild**: Ein Bild in 4K speichern und in einer Präsentation auf dunklem Hintergrund benutzen.
+
 ## DXF/SVG in die Skizze (neu in Sitzung 81)
 
 - [x] **Einfügen**: Skizze offen, SVG öffnen → Linien und Kreis liegen in der Skizze (kein neuer Körper), Mitte auf dem Nullpunkt; Rückgängig nimmt alles heraus; DXF genauso.

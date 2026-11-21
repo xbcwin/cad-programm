@@ -152,6 +152,30 @@ const Print = (() => {
     if (cs.length) body.append(h('div', { class: 'hint-box', html: '<b>Hinweis:</b> ' + esc(cs[0].t) + ' – ' + esc(cs[0].d) }));
     UI.modal({ title: 'Exportieren', body, actions: [{ label: 'Abbrechen' }, { label: 'Als ZIP speichern', primary: true, run: () => { runExport(opts); } }] });
   }
+  // Bild speichern (PNG) – in Bildschirm- oder Druckgröße, auf Wunsch mit durchsichtigem Hintergrund
+  function imageDialog() {
+    const vp = $('#viewport').getBoundingClientRect();
+    const sizes = [['screen', `Wie der Bildschirm (${Math.round(vp.width * 2)} × ${Math.round(vp.height * 2)})`], ['1920', 'Full HD (1920 × 1080)'], ['3840', '4K (3840 × 2160)'], ['sq', 'Quadrat (2000 × 2000)']];
+    const st = { size: 'screen', transparent: false };
+    const body = h('div', { style: { display: 'grid', gap: '12px', minWidth: 'min(380px, 80vw)' } });
+    body.append(UI.selectField({ id: 'img-size', label: 'Größe', value: st.size, options: sizes, onChange: (v) => { st.size = v; } }));
+    const t = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'img-transparent' }), 'Durchsichtiger Hintergrund (für Präsentationen und Webseiten)');
+    t.querySelector('input').onchange = (e) => { st.transparent = e.target.checked; };
+    body.append(t, h('div', { class: 'hint-box' }, 'Das Bild zeigt den aktuellen Blickwinkel ohne Raster und Achsen. Im Studio-Look mit Werkstoff, Licht und Schatten (Ansicht → unten im Menü).'));
+    UI.modal({ title: 'Bild speichern', body, actions: [{ label: 'Abbrechen' }, { label: 'Als PNG speichern', primary: true, run: () => { saveImage(st); } }] });
+  }
+  function imageSize(size) {
+    const vp = $('#viewport').getBoundingClientRect();
+    if (size === '1920') return [1920, 1080]; if (size === '3840') return [3840, 2160]; if (size === 'sq') return [2000, 2000];
+    return [Math.max(64, Math.round(vp.width * 2)), Math.max(64, Math.round(vp.height * 2))];
+  }
+  async function saveImage(st) {
+    const [w, hh] = imageSize(st.size);
+    const url = Viewer.renderImage(w, hh, { transparent: st.transparent });
+    const blob = await (await fetch(url)).blob();
+    await save(safeName(App.doc.name) + '.png', blob);
+    return { w, h: hh, bytes: blob.size };
+  }
   async function runExport(opts) {
     if (!opts.stl && !opts.mf && !opts.step && !(opts.dxf && opts.plates.length)) { UI.toast('Wähle mindestens ein Format.', { kind: 'bad' }); return; }
     const tst = UI.toast('Dateien werden erstellt …', { icon: 'export', ms: 20000 });
@@ -178,7 +202,7 @@ const Print = (() => {
     App.on('results', updateAmpel); App.on('doc', debounce(updateAmpel, 200));
     $('#ampel').addEventListener('click', (e) => openAmpel(e.currentTarget));
   }
-  return { init, stats, checks, exportDialog, save, safeName, updateAmpel };
+  return { init, stats, checks, exportDialog, imageDialog, saveImage, imageSize, save, safeName, updateAmpel };
 })();
 
 // ---------- ZIP (mit Kompression, wenn der Browser sie kann) ----------
