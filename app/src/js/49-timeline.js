@@ -2,7 +2,7 @@
 // Jeder oberste Eintrag im Verlauf ist ein Schritt. Der Marker legt fest, bis wohin gerechnet wird;
 // neue Schritte landen am Marker. Unterdrückte Schritte bleiben erhalten, zählen aber nicht mit.
 const Timeline = (() => {
-  let el, track, info, bStart, bPrev, bNext, bEnd, drag = null;
+  let el, track, info, bStart, bPrev, bNext, bEnd, drag = null, peekT = null, peekK = null;
   function iconFor(it) {
     if (it.kind === 'part') { const d = LIBMAP[(it.p || {}).lib]; return d && d.icon ? d.icon : 'bolt'; }
     return ({ box: 'cube', cylinder: 'circle', tube: 'circle', sphere: 'circle', hemisphere: 'circle', torus: 'circle', cone: 'polygon', pyramid: 'polygon', prism: 'hex', wedge: 'chamfer', extrude: 'extrude', revolve: 'revolve', loft: 'loft', sweep: 'sweep', import: 'folder', group: 'group' })[it.kind] || 'cube';
@@ -43,13 +43,22 @@ const Timeline = (() => {
       const c = h('button', { type: 'button', class: 'tl-chip' + (it.role === 'hole' ? ' hole' : '') + (selTop.has(it.id) ? ' sel' : '') + (i >= mk ? ' off' : '') + (it.suppressed ? ' sup' : '') + (errs.length && i < mk && !it.suppressed ? ' err' : '') + (it.ai ? ' ai' : ''), 'data-tip': chipTip(it, i, V), 'aria-label': chipTip(it, i, V), 'data-help': it.ai ? 'aiSteps' : null, dataset: { idx: i } });
       c.innerHTML = icon(iconFor(it)); c.append(h('span', { class: 'bar', style: { background: it.role === 'hole' ? 'transparent' : it.color } }));
       if (it.ai) { const b = h('span', { class: 'ai-badge', 'aria-hidden': 'true' }); b.innerHTML = icon('spark'); c.append(b); }
-      c.onclick = (e) => App.select([it.id], { additive: e.shiftKey || e.metaKey || e.ctrlKey });
+      c.onclick = (e) => { clearTimeout(peekT); peekK = null; App.peek(null); App.select([it.id], { additive: e.shiftKey || e.metaKey || e.ctrlKey }); };
+      // Maus kurz über einem Schritt halten: Stand nach diesem Schritt ansehen (nur im Projekt, nur vor dem Marker)
+      if (own === App.doc && i < mk - 1) c.addEventListener('pointermove', (e) => {
+        if (e.pointerType === 'touch' || drag) return;
+        if (peekK === i + 1) return;
+        peekK = i + 1; clearTimeout(peekT); peekT = setTimeout(() => App.peek(i + 1), 450);
+      });
       c.ondblclick = (e) => { e.preventDefault(); setMarker(i + 1, `Zeitleiste: bis „${Model.label(it)}“`); };
       c.oncontextmenu = (e) => { e.preventDefault(); menu(c, it, i); };
       track.append(c);
     });
     if (mk >= n && n) track.append(marker);
-    info.textContent = n ? (mk >= n ? (n === 1 ? '1 Schritt' : `${n} Schritte`) : `${mk} / ${n}`) : '';
+    const pk = own === App.doc ? App.peeking : null;
+    info.classList.toggle('peek', pk != null);
+    info.textContent = pk != null ? `Vorschau: Stand nach Schritt ${pk}` : n ? (mk >= n ? (n === 1 ? '1 Schritt' : `${n} Schritte`) : `${mk} / ${n}`) : '';
+    if (pk != null) track.querySelectorAll('.tl-chip').forEach((c, j) => c.classList.toggle('peekoff', j >= pk));
     bStart.disabled = !n || mk === 0; bPrev.disabled = !n || mk === 0; bNext.disabled = mk >= n; bEnd.disabled = mk >= n;
     // aktiven Bereich sichtbar halten
     const m = track.querySelector('.tl-marker'); if (m && !drag) { const r = m.offsetLeft - track.clientWidth + 60; if (r > track.scrollLeft) track.scrollLeft = r; }
@@ -96,7 +105,9 @@ const Timeline = (() => {
     el.append(h('div', { class: 'tl-btns' }, bStart, bPrev), track, h('div', { class: 'tl-btns' }, bNext, bEnd), info);
     $('#center').append(el); $('#center').classList.add('has-tl');
     const r = debounce(render, 30);
-    App.on('doc', r); App.on('selection', r); App.on('results', r); App.on('ctx', r);
+    App.on('doc', r); App.on('selection', r); App.on('results', r); App.on('ctx', r); App.on('peek', r);
+    App.on('doc', () => { clearTimeout(peekT); peekK = null; });
+    track.addEventListener('pointerleave', () => { clearTimeout(peekT); peekK = null; App.peek(null); });
     App.on('mode', () => { el.hidden = App.mode !== 'model'; $('#center').classList.toggle('has-tl', App.mode === 'model'); });
     render();
   }

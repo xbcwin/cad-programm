@@ -683,3 +683,7 @@ body:not(.simple) .simple-only{display:none!important}
 .ai-opts small,.ai-rounds{color:var(--muted);font-size:12px}
 .ai-panel .ai-head{position:sticky;top:-12px;margin:-12px -14px 0;padding:12px 14px 8px;background:var(--surface);z-index:1;border-bottom:1px solid transparent}
 .ai-panel .ai-head:has(+ *){border-bottom-color:var(--line)}
+
+/* Zeitleiste: Vorschau beim Überfahren */
+.tl-info.peek{color:var(--accent);font-weight:600}
+.tl-chip.peekoff{opacity:.35}

@@ -73,6 +73,7 @@ const App = (() => {
     if (doc.rollback >= doc.items.length) doc.rollback = null;
   }
   function touched(noRebuild) {
+    if (S.peek != null) { S.peek = null; ev.emit('peek'); }
     Model.useVars(Model.vars(S.doc).v);
     S.doc.modified = Date.now(); S.revision++;
     ev.emit('doc');
@@ -136,6 +137,14 @@ const App = (() => {
   function deleteStored(id) { storageDel('masswerk.proj.' + id); storageDel('masswerk.versions.' + id); const idx = recentProjects().filter((x) => x.id !== id); storageSet('masswerk.index', JSON.stringify(idx)); }
 
   // ---------- Neuberechnung ----------
+  // Zeitleiste: Stand nach Schritt k nur anzeigen (null = wieder alles); ändert das Projekt nicht
+  function peek(k) {
+    k = k == null ? null : Math.max(0, Math.round(k));
+    const n = S.doc.items.length, mk = S.doc.rollback == null ? n : S.doc.rollback;
+    if (k != null && k >= mk) k = null;
+    if (k === (S.peek == null ? null : S.peek)) return;
+    S.peek = k; ev.emit('peek'); rebuild();
+  }
   function rebuild() {
     dirty = true;
     if (!busy) return runRebuild();
@@ -147,7 +156,7 @@ const App = (() => {
     clearTimeout(busyTimer); busyTimer = setTimeout(() => ev.emit('busy', true), 300);
     while (dirty) {
       dirty = false;
-      const scene = Model.kernelScene(S.doc, S.extra);
+      const scene = Model.kernelScene(S.doc, S.extra, S.peek);
       scene.quality = ViewPrefs.get().quality || 'normal';
       const known = {}; if (!S.forceMesh) for (const [id, r] of S.results) known[id] = r.key;
       S.forceMesh = false;
@@ -295,6 +304,7 @@ const App = (() => {
     get undoStack() { return S.undo; }, get redoStack() { return S.redo; }, get revision() { return S.revision; }, get busy() { return busy; },
     get mode() { return S.mode; }, set mode(m) { S.mode = m; ev.emit('mode'); },
     get extra() { return S.extra; }, set extra(x) { S.extra = x; },
+    peek, get peeking() { return S.peek == null ? null : S.peek; },
     get hideIds() { return S.hideIds; }, set hideIds(x) { S.hideIds = x || new Set(); applyView(); },
     get ctx() { return S.ctx; }, get iso() { return S.iso; }, setCtx, setIso, applyView,
     get tool() { return S.tool; }, set tool(t) { S.tool = t; ev.emit('tool'); },

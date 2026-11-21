@@ -1662,7 +1662,7 @@ def t_drohnen_check(p):
     p.pg.wait_for_selector('.modal .chk-row[data-chk="tw"]', timeout=60000); p.wait(300)
     st = p.pg.evaluate("Object.fromEntries([...document.querySelectorAll('.modal .chk-row')].map(r=>[r.dataset.chk,r.className.split(' ')[1]]))")
     tw = p.pg.locator('.modal .chk-row[data-chk="tw"]').inner_text()
-    ok1 = st == {'gap': 'ok', 'props': 'ok', 'clash': 'ok', 'weight': 'info', 'cog': 'ok', 'tw': 'ok'} and 'Richtwert' in tw   # Vorlage besteht alle Prüfungen
+    ok1 = st == {'gap': 'ok', 'props': 'ok', 'clash': 'ok', 'weight': 'info', 'cog': 'ok', 'tw': 'ok', 'flight': 'info'} and 'Richtwert' in tw   # Vorlage besteht alle Prüfungen
     field(p, '#chk-thrust', 1000); p.wait(1500)
     p.pg.wait_for_selector('.modal .chk-row[data-chk="tw"]', timeout=60000); p.wait(500)
     m = p.ev("return Mass.measure().then(r=>r.mass)")
@@ -2487,6 +2487,50 @@ def t_antenne(p):
     p.ev("App.change('x', d=>{ Object.assign(d.items[0].p, {form:'stab', conn:'ufl', L:80, d:4}); })"); warte_rechnen(p, 30)
     bb = p.ev("return App.results.get(App.doc.items[0].id).data.bbox")
     ok3 = abs(bb[5] - bb[2] - 80) < 0.1 and abs(bb[3] - bb[0] - 4) < 0.1 and p.ev("return App.errors.length") == 0
+    return [ok1, ok2, ok3]
+
+# ---------- Sitzung 73: Zeitleiste mit Vorschau ----------
+def t_zeitleiste_vorschau(p):
+    three(p); warte_rechnen(p)
+    ids = p.ev("return App.doc.items.map(i=>i.id)")
+    c = p.pg.locator('.tl-chip').first.bounding_box()
+    p.pg.mouse.move(c['x'] + 5, c['y'] + 10); p.pg.mouse.move(c['x'] + 9, c['y'] + 14, steps=3); p.wait(1500); warte_rechnen(p)
+    vis = lambda: p.ev("return App.doc.items.map(i=>App.results.has(i.id))")
+    ok1 = p.ev("return App.peeking") == 1 and vis() == [True, False, False] and 'Vorschau' in p.pg.locator('.tl-info').inner_text() and p.ev("return App.doc.rollback") is None
+    ok2 = p.pg.locator('.tl-chip.peekoff').count() == 2
+    p.pg.mouse.move(c['x'] + 5, c['y'] - 200, steps=4); p.wait(1500); warte_rechnen(p)
+    ok3 = p.ev("return App.peeking") is None and vis() == [True, True, True] and '3' in p.pg.locator('.tl-info').inner_text()
+    # eine Änderung beendet die Vorschau
+    p.ev("App.peek(2)"); p.wait(1200); warte_rechnen(p)
+    a = vis() == [True, True, False]
+    p.ev("App.change('x', d=>{ d.items[0].t.x += 5; })"); p.wait(1200); warte_rechnen(p)
+    ok4 = a and p.ev("return App.peeking") is None and vis() == [True, True, True]
+    return [ok1, ok2, ok3, ok4]
+
+# ---------- Sitzung 74: DXF importieren ----------
+def t_dxf_import(p):
+    p.empty()
+    def dxf(*pairs): return "\n".join(str(x) for x in pairs) + "\n"
+    head = [0,'SECTION',2,'HEADER',9,'$INSUNITS',70,1,0,'ENDSEC',0,'SECTION',2,'ENTITIES']
+    # Platte 4 × 2 Zoll mit runder Ecke (Bulge), Loch und einem Langloch aus Linien + Bögen
+    body = [0,'LWPOLYLINE',90,5,70,1, 10,0,20,0, 10,4,20,0, 10,4,20,1.5,42,0.41421356, 10,3.5,20,2, 10,0,20,2,
+            0,'CIRCLE',10,1,20,1,40,0.25,
+            0,'LINE',10,2,20,0.8,11,3,21,0.8, 0,'ARC',10,3,20,1,40,0.2,50,270,51,90,
+            0,'LINE',10,3,20,1.2,11,2,21,1.2, 0,'ARC',10,2,20,1,40,0.2,50,90,51,270,
+            0,'ENDSEC',0,'EOF']
+    txt = dxf(*(head + body))
+    p.ev("Start.openBlob(new File([%s], 'Rahmen.dxf'))" % repr(txt)); p.wait(800); warte_rechnen(p, 40)
+    r = p.ev("const it=App.doc.items[0]; const R=it && App.results.get(it.id); return [App.doc.items.length, it && it.kind, it && it.name, R && R.data.bbox, R && R.data.faces.length, App.errors.length, it && it.p.sketch.ents.length]")
+    bb = r[3]
+    ok1 = r[0] == 1 and r[1] == 'extrude' and r[2] == 'Rahmen' and bb is not None and abs(bb[3] - bb[0] - 101.6) < 0.05 and abs(bb[4] - bb[1] - 50.8) < 0.05 and abs(bb[5] - bb[2] - 3) < 0.01 and abs(bb[0] + 50.8) < 0.05
+    # 2 Deckflächen + 5 Außenwände (mit runder Ecke) + 1 Loch + 4 Langloch
+    ok2 = r[4] == 12 and r[5] == 0 and r[6] == 10
+    # ohne geschlossene Kontur und mit Unsinn: nichts kommt dazu, eine Meldung erklärt es
+    p.ev("Start.openBlob(new File([%s], 'offen.dxf'))" % repr(dxf(0,'SECTION',2,'ENTITIES',0,'LINE',10,0,20,0,11,10,21,0,0,'ENDSEC',0,'EOF'))); p.wait(600)
+    t1 = p.pg.locator('.toast').last.inner_text()
+    p.ev("Start.openBlob(new File(['AutoCAD Binary DXF\\r\\n\\x1a\\x00 abc'], 'binaer.dxf'))"); p.wait(600)
+    t2 = p.pg.locator('.toast').last.inner_text()
+    ok3 = p.ev("return App.doc.items.length") == 1 and 'geschlossene Kontur' in t1 and 'nicht lesen' in t2
     return [ok1, ok2, ok3]
 
 def t_magnet_koerper(p):
@@ -3604,6 +3648,189 @@ def t_explosion_gruppen(p):
 
 
 # ---------- Sitzung 54: Stromlinien-Armverkleidung ----------
+# ---------- Sitzung 75: Motorverkleidung ----------
+def t_motorverkleidung(p):
+    p.empty()
+    p.pg.locator('#t-drone').click(); p.wait(400)
+    p.pg.locator('.flyout .chip[data-cat="loch"]').click(); p.wait(300)
+    ok1 = any('Motorverkleidung' in t for t in p.pg.locator('.flyout .tile').all_inner_texts())
+    p.pg.keyboard.press('Escape'); p.wait(200)
+    # Hülle, Motor (Zylinder Ø 28 × 18) und Arm 12 × 5, der nach +X herausläuft
+    p.ev("""App.change('x', d=>{
+      const f=Model.newItem('part',{lib:'motorFairing',d:28,h:18,tail:30,aw:12,at:5,wall:1.2,gap:0.5},{role:'solid'}); f.name='Haube'; d.items.push(f);
+      const m=Model.newItem('cylinder',{d:28,h:18}); m.name='Motor'; d.items.push(m);
+      const a=Model.newItem('box',{w:60,d:12,h:5}); a.name='Arm'; a.t.x=18; a.t.z=-5; d.items.push(a);
+    })"""); warte_rechnen(p, 40)
+    bb = p.ev("return App.results.get(App.doc.items[0].id).data.bbox")
+    ro = 14 + 0.5 + 1.2
+    ok2 = p.ev("return App.errors.length") == 0 and abs(bb[3] - ro) < 0.05 and abs(bb[0] + ro) < 0.05 and abs(bb[5] - 18) < 0.05 and abs(bb[2] + 35) < 0.1
+    # Motor und Arm stecken frei in der Hülle (der Kern prüft Durchdringungen)
+    cl = p.ev("""const ids=App.doc.items.map(i=>i.id); const out=[];
+      const one=(b)=>{ const r=Joints.add(ids[0], b, [0,0,0], [0,0,1], {min:0, max:0}); return Joints.check(r.id, 1).then(x=>{ Joints.remove(r.id); out.push(x.map(y=>y.v)); }); };
+      return one(ids[1]).then(()=>one(ids[2])).then(()=>out)""")
+    ok3 = cl == [[0], [0]]
+    # hohl: deutlich leichter als ein voller Körper; längeres Heck macht sie länger
+    v = p.ev("return Mass.measureDoc(App.doc).then(r=>{ const q=(r.parts||[]).find(x=>x.id===App.doc.items[0].id); return q && q.volume; })")
+    full = 3.14159 * ro * ro * 23
+    ok4 = v is not None and 0 < v < 0.35 * full
+    p.ev("App.change('x', d=>{ d.items[0].p.tail=50; })"); warte_rechnen(p, 30)
+    bb2 = p.ev("return App.results.get(App.doc.items[0].id).data.bbox")
+    ok5 = abs(bb2[2] + 55) < 0.1 and p.ev("return Views.cwGuess()") == 1.1
+    return [ok1, ok2, ok3, ok4, ok5]
+
+# ---------- Sitzung 76: Vieleck drehen ----------
+def t_vieleck_drehen(p):
+    scene(p, [{'id': 'P', 'type': 'poly', 'c': [0, 0], 'r': 10, 'n': 6, 'rot': 0}])
+    click_uv(p, 0, 10, alt=False); p.wait(400)
+    top = lambda: SS(p, "const c=SK.polyCorners(E('P')); return [Math.max(...c.map(q=>q[1])), c.filter(q=>Math.abs(q[1]-Math.max(...c.map(z=>z[1])))<1e-6).length]")
+    t0 = top()
+    ok1 = p.pg.locator('#se-rot').count() == 1 and abs(t0[0] - 10) < 1e-6 and t0[1] == 1
+    p.pg.locator('#se-poly-flat').click(); p.wait(400)
+    t1 = top()
+    ok2 = abs(t1[0] - 10 * math.cos(math.pi / 6)) < 1e-6 and t1[1] == 2
+    p.pg.fill('#se-rot', '15'); p.pg.press('#se-rot', 'Enter'); p.wait(400)
+    ok3 = abs(SS(p, "return E('P').rot") - math.pi / 12) < 1e-6
+    p.pg.locator('#se-poly-corner').click(); p.wait(400)
+    ok4 = abs(SS(p, "return E('P').rot")) < 1e-9 and top()[1] == 1
+    return [ok1, ok2, ok3, ok4]
+
+# ---------- Sitzung 77: SVG importieren ----------
+def t_svg_import(p):
+    p.empty()
+    # 60 × 40 mm (viewBox 600 × 400): Rechteck mit runden Ecken, Kreisloch, ein gedrehtes Dreieck als Loch, Text wird gemeldet
+    svg = """<svg xmlns="http://www.w3.org/2000/svg" width="60mm" height="40mm" viewBox="0 0 600 400">
+      <defs><circle id="x" cx="0" cy="0" r="500"/></defs>
+      <rect x="0" y="0" width="600" height="400" rx="50"/>
+      <g transform="translate(150 100)"><circle cx="0" cy="0" r="40"/></g>
+      <path d="M400 250 l100 0 l-50 80 z" transform="rotate(10 450 280)"/>
+      <path d="M 300 300 c 20 -40 60 -40 80 0 s 60 40 80 0" />
+      <text x="10" y="20">Hallo</text>
+    </svg>"""
+    p.ev("Start.openBlob(new File([arg], 'Logo.svg'))", svg); p.wait(800); warte_rechnen(p, 40)
+    r = p.ev("const it=App.doc.items[0]; const R=it && App.results.get(it.id); const E=it?it.p.sketch.ents:[]; return [App.doc.items.length, it && it.name, R && R.data.bbox, R && R.data.faces.length, App.errors.length, E.filter(e=>e.type==='circle').map(e=>[e.c,e.r]), E.filter(e=>e.type==='spline').length, E.filter(e=>e.type==='line').length]")
+    bb = r[2]
+    ok1 = r[0] == 1 and r[1] == 'Logo' and bb is not None and abs(bb[3] - bb[0] - 60) < 0.05 and abs(bb[4] - bb[1] - 40) < 0.05 and abs(bb[5] - bb[2] - 1) < 0.01 and r[4] == 0
+    # Kreis: Ø 8 mm, liegt links oben (SVG zählt Y nach unten): Mitte (15 − 30, 20 − 10)
+    c = r[5][0] if len(r[5]) == 1 else None
+    ok2 = c is not None and abs(c[1] - 4) < 1e-3 and abs(c[0][0] + 15) < 1e-3 and abs(c[0][1] - 10) < 1e-3
+    # 2 Deckflächen + 4 gerade Wände + 4 Eck-Rundungen + Kreis + 3 Dreieck; die offene Wellenlinie bleibt Skizze (eine Spline), die Ecken sind echte Bögen
+    ok3 = r[3] == 14 and r[6] == 1 and r[7] == 7
+    t1 = p.pg.locator('.toast').last.inner_text()
+    p.ev("Start.openBlob(new File(['<svg xmlns=\\'http://www.w3.org/2000/svg\\'><text>A</text></svg>'], 'nur-text.svg'))"); p.wait(600)
+    t2 = p.pg.locator('.toast').last.inner_text()
+    ok4 = 'Text' in t1 and 'in Pfade' in t2 and p.ev("return App.doc.items.length") == 1
+    return [ok1, ok2, ok3, ok4]
+
+# ---------- Sitzung 78: ganze Skizze skalieren ----------
+def t_skizze_skalieren(p):
+    scene(p, [{'id': 'R', 'type': 'rect', 'a': [-20, -10], 'b': [20, 10]}, {'id': 'C', 'type': 'circle', 'c': [5, 0], 'r': 4},
+              {'id': 'L', 'type': 'line', 'a': [-20, 20], 'b': [20, 20], 'con': True}])
+    SS(p, "S.dims.push({id:'m1', e:'C', k:'d', v:8}, {id:'m2', e:'R', k:'w', v:'20*2'}); return 1")
+    p.ev("Sketch.setTool('line')"); p.wait(200); p.ev("Sketch.setTool('select')"); p.wait(300)
+    ok1 = p.pg.locator('#sk-scale-w').count() == 1 and '40' in p.pg.locator('#sk-size').inner_text()
+    p.pg.fill('#sk-scale-w', '60'); p.pg.press('#sk-scale-w', 'Enter'); p.wait(600)
+    r = SS(p, "return [E('R').a, E('R').b, E('C').c, E('C').r, S.dims.find(d=>d.id==='m1').v, S.dims.find(d=>d.id==='m2').v, E('L').b, S.status && S.status.conflicts && S.status.conflicts.length]")
+    ok2 = r[0] == [-30, -15] and r[1] == [30, 15] and r[2] == [7.5, 0] and abs(r[3] - 6) < 1e-6 and r[6] == [30, 30]
+    ok3 = abs(r[4] - 12) < 1e-6 and r[5] == '(20*2)*1,5' and not r[7] and '60' in p.pg.locator('#sk-size').inner_text()
+    # Faktor 50 % und Rückgängig
+    p.pg.fill('#sk-scale-f', '50'); p.pg.press('#sk-scale-f', 'Enter'); p.wait(600)
+    ok4 = SS(p, "return E('R').b") == [15, 7.5]
+    p.pg.keyboard.press('Control+z'); p.wait(500)
+    ok5 = SS(p, "return E('R').b") == [30, 15]
+    return [ok1, ok2, ok3, ok4, ok5]
+
+# ---------- Sitzung 79: Flugzeit im Schweben ----------
+def t_flugzeit(p):
+    drohne(p, 'f5')
+    c = chk(p)
+    m = p.ev("return Mass.measure().then(r=>r.mass)")
+    # 5 Zoll, 6S 1300 mAh: Strahltheorie mit 30 % Wirkungsgrad, 80 % vom Akku
+    T = m / 1000 * 9.81; A = 4 * math.pi * (5 * 25.4 / 2000) ** 2; w = T ** 1.5 / math.sqrt(2 * 1.225 * A) / 0.3
+    mins = 6 * 3.7 * 1.3 * 0.8 / w * 60
+    hv = p.ev("return DroneCheck.hoverTime(%r, 4, 127, 6*3.7*1.3)" % m)
+    ok1 = 'flight' in c and c['flight'][0] == 'info' and '6S 1300 mAh' in c['flight'][1] and abs(hv['min'] - mins) < 0.01 and 5 < mins < 15
+    txt = ('%.1f' % mins).replace('.', ',') if mins < 10 else '%.0f' % mins
+    ok2 = ('ca. ' + txt + ' min') in c['flight'][1] and ('%.0f W' % w) in c['flight'][1]
+    # schwerer → kürzer; Akku ohne Angaben → Hinweis; winziger Akku → Warnung
+    p.ev("App.change('x', d=>{ const b=Model.newItem('box',{w:30,d:30,h:30},{name:'Ballast'}); b.massG=400; b.t.z=60; d.items.push(b); })"); warte_rechnen(p)
+    c2 = chk(p); m2 = p.ev("return Mass.measure().then(r=>r.mass)")
+    ok3 = m2 > m + 100 and p.ev("return DroneCheck.hoverTime(%r, 4, 127, 28.86).min" % m2) < hv['min'] and c2['flight'][1] != c['flight'][1]
+    p.ev("App.change('x', d=>{ d.items.find(i=>/^Akku/.test(i.name)).name='Akku'; })"); warte_rechnen(p)
+    c3 = chk(p)
+    ok4 = 'Zellen und Kapazität' in c3['flight'][1]
+    p.ev("App.change('x', d=>{ d.items.find(i=>/^Akku/.test(i.name)).name='Akku 2S 300 mAh'; })"); warte_rechnen(p)
+    c4 = chk(p)
+    ok5 = c4['flight'][0] == 'warn' and 'sehr kurz' in c4['flight'][1]
+    return [ok1, ok2, ok3, ok4, ok5]
+
+# ---------- Sitzung 80: Stückliste ----------
+def t_stueckliste(p):
+    p.empty()
+    p.ev("""App.change('x', d=>{
+      for (let i=1;i<=4;i++){ const a=Model.newItem('box',{w:60,d:12,h:5},{name:'Arm '+i}); a.t.x=i*20; d.items.push(a); }
+      const pl=Model.newItem('box',{w:40,d:80,h:2},{name:'Platte'}); pl.t.z=20; d.items.push(pl);
+      const m=Model.newItem('cylinder',{d:28,h:18},{name:'Motor'}); m.massG=31; m.t.z=40; d.items.push(m);
+      const m2=Model.newItem('cylinder',{d:28,h:18},{name:'Motor (Kopie)'}); m2.massG=31; m2.t.z=70; d.items.push(m2);
+      const x=Model.newItem('box',{w:5,d:5,h:5},{name:'Empfänger'}); x.massG=''; x.t.z=100; d.items.push(x);
+      const l=Model.newItem('cylinder',{d:3,h:30},{name:'Loch', role:'hole'}); l.t.x=-200; d.items.push(l);
+    })"""); warte_rechnen(p, 40)
+    B = p.ev("return Mass.bom().then(b=>({rows:b.rows.map(r=>[r.name,r.n,r.kind,Math.round(r.g*100)/100,r.missing]), mass:b.mass, count:b.count}))")
+    m = p.ev("return Mass.measure().then(r=>r.mass)")
+    names = [r[0] for r in B['rows']]
+    arm = next(r for r in B['rows'] if r[0] == 'Arm')
+    ok1 = names == ['Arm', 'Platte', 'Motor', 'Empfänger'] and arm[1] == 4 and arm[2] == 'CFK' and B['count'] == 8 and abs(B['mass'] - m) < 0.01
+    mot = next(r for r in B['rows'] if r[0] == 'Motor')
+    ok2 = mot[1] == 2 and mot[2] == 'Kaufteil' and mot[3] == 31 and B['rows'][3][4] is True
+    # Dialog: Tabelle, Klick wählt die Teile, CSV
+    p.ev("Panels.renderRight()"); p.wait(300)
+    p.ev("App.select([])"); p.wait(400)
+    p.pg.locator('#proj-bom').click(); p.pg.wait_for_selector('#bom table', timeout=30000); p.wait(300)
+    ok3 = p.pg.locator('#bom .bom-row').count() == 4 and 'fehlt' in p.pg.locator('#bom .bom-row').nth(3).inner_text() and '8' in p.pg.locator('#bom .bom-sum').inner_text()
+    p.pg.locator('#bom .bom-row').first.click(); p.wait(300)
+    ok4 = p.ev("return App.sel.length") == 4
+    csv = p.ev("return Mass.bom().then(b=>Mass.bomCSV(b,'Test'))")
+    ok5 = '"Arm";4;"CFK";' in csv and '"Summe Test";8;' in csv and '"Motor";2;"Kaufteil";31;62;' in csv
+    p.pg.keyboard.press('Escape'); p.wait(200)
+    # Filament: Platte aus PETG (40 × 80 × 2 = 6,4 cm³ · 1,27 = 8,128 g → 2,66 m Draht)
+    p.ev("App.change('x', d=>{ d.items.find(i=>i.name==='Platte').mat='PETG'; })"); warte_rechnen(p)
+    F = p.ev("return Mass.bom().then(b=>b.filament)")
+    rho = p.ev("return Mass.materialFor({mat:'PETG'}).rho")
+    ok6 = len(F) == 1 and F[0]['mat'] == 'PETG' and abs(F[0]['g'] - 6.4 * rho) < 0.01 and abs(F[0]['m'] - 6.4 / (math.pi * 0.0875 ** 2) / 100) < 0.01
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
+
+def t_stueckliste_drohne(p):
+    # Drohnen-Vorlage: „Motor … (4×)“ zählt als vier Stück
+    drohne(p, 'f5')
+    D = p.ev("return Mass.bom().then(b=>b.rows.filter(r=>/^Motor|^Propeller/.test(r.name)).map(r=>[r.name,r.n,r.kind]))")
+    ok6 = len(D) == 2 and all(r[1] == 4 and r[2] == 'Kaufteil' and '(4' not in r[0] for r in D)
+    # Schrauben: Vorlage hat Stack- und Motor-Lochbilder; ein zweites Loch auf derselben Achse zählt nicht doppelt
+    S0 = p.ev("return Mass.screws()")
+    tot0 = sum(x['n'] for x in S0)
+    p.ev("""App.change('x', d=>{
+      const a=Model.newItem('part',{lib:'screwHole',size:'M5',head:'countersunk',fit:'medium',length:10},{role:'hole'}); a.t.x=300; d.items.push(a);
+      const b=Model.newItem('part',{lib:'screwHole',size:'M5',head:'countersunk',fit:'medium',length:10},{role:'hole'}); b.t.x=300; b.t.z=20; d.items.push(b);
+      const c=Model.newItem('part',{lib:'nutTrap',size:'M5',length:12},{role:'hole'}); c.t.x=320; d.items.push(c);
+    })"""); warte_rechnen(p)
+    S1 = {x['name']: x['n'] for x in p.ev("return Mass.screws()")}
+    ok7 = tot0 >= 16 and tot0 % 4 == 0 and S1.get('Schraube M5 Senkkopf') == 1 and S1.get('Mutter M5') == 1
+    return [ok6, ok7]
+
+# ---------- Sitzung 81: DXF/SVG in die offene Skizze einfügen ----------
+def t_umriss_in_skizze(p):
+    scene(p, [{'id': 'R', 'type': 'rect', 'a': [-40, -30], 'b': [40, 30]}])
+    svg = '<svg xmlns="http://www.w3.org/2000/svg" width="20mm" height="10mm" viewBox="0 0 20 10"><path d="M0 0H20V10H0Z"/><circle cx="5" cy="5" r="2"/></svg>'
+    p.ev("Start.openBlob(new File([arg], 'Logo.svg'))", svg); p.wait(900)
+    r = SS(p, "return [S.ents.length, S.ents.filter(e=>e.type==='line').length, S.ents.filter(e=>e.type==='circle').map(e=>[e.c,e.r]), S.tool, App.doc.items.length]")
+    ok1 = r[0] == 6 and r[1] == 4 and r[2] == [[[-5, 0], 2]] and r[3] == 'select' and r[4] == 1 and 'eingefügt' in p.pg.locator('.toast').last.inner_text()
+    # Rückgängig nimmt alles auf einmal wieder heraus
+    p.pg.keyboard.press('Control+z'); p.wait(500)
+    ok2 = SS(p, "return S.ents.length") == 1
+    # DXF geht genauso
+    dxf = "\n".join(str(x) for x in [0,'SECTION',2,'ENTITIES',0,'CIRCLE',10,0,20,0,40,3,0,'ENDSEC',0,'EOF']) + "\n"
+    p.ev("Start.openBlob(new File([arg], 'Loch.dxf'))", dxf); p.wait(900)
+    ok3 = SS(p, "return S.ents.filter(e=>e.type==='circle').map(e=>e.r)") == [3] and p.ev("return App.doc.items.length") == 1
+    return [ok1, ok2, ok3]
+
 def t_armverkleidung(p):
     p.empty()
     p.pg.locator('#t-drone').click(); p.wait(400)
@@ -3949,6 +4176,16 @@ TESTS = [
     ('Magnet für Kaufteile aus der Leiste: Motor rastet in die Mitte', t_magnet_kaufteil),
     ('Ziehen aus der Leiste: Vorschau in echter Form, danach weg', t_vorschau_echt),
     ('Antenne als Kaufteil: Pilz und Stab in der Leiste / Maße / Stab mit U.FL', t_antenne),
+    ('Zeitleiste mit Vorschau: Maus über Schritt / spätere blass / Maus weg / Änderung beendet', t_zeitleiste_vorschau),
+    ('DXF importieren: Platte in Millimetern mit Löchern / offene und unlesbare Datei', t_dxf_import),
+    ('Motorverkleidung: Baustein / Maße / Motor und Arm passen / hohl / Hecklänge', t_motorverkleidung),
+    ('Vieleck drehen: Feld Drehung / Fläche oben / Wert / Ecke oben', t_vieleck_drehen),
+    ('SVG importieren: Größe in Millimetern / Kreis und Lage / Rundungen, Dreieck, offene Kurve / Text-Hinweis', t_svg_import),
+    ('Skizze skalieren: Größe im Panel / Breite ändern / Maße wachsen mit / Faktor / Rückgängig', t_skizze_skalieren),
+    ('Flugzeit: Schätzung im Drohnen-Check / Zahl stimmt / schwerer = kürzer / Akku ohne Angaben / winziger Akku', t_flugzeit),
+    ('Stückliste: gleiche Teile zusammen / Kaufteile und fehlendes Gewicht / Dialog / Zeile wählt Teile / CSV / Filament', t_stueckliste),
+    ('Stückliste der Drohnen-Vorlage: Motoren und Propeller je 4 / Schrauben gezählt, gleiche Achse nur einmal', t_stueckliste_drohne),
+    ('DXF/SVG in die offene Skizze: Elemente kommen dazu / Rückgängig / DXF', t_umriss_in_skizze),
     ('Luftwiderstand: Form erkannt / Kraft bei 100 km/h / Tempo und Form ändern / ohne Schub Hinweis / Formel / Speed-Drohne Höchstgeschwindigkeit', t_luftwiderstand),
     ('Rohr im Raum: glatt / Ecken / im Bild klicken / Punkt als Zahl / löschen und Rückgängig', t_rohr_raum),
     ('KI-Kollege legt ein Rohr im Raum', t_ki_rohr_raum),
@@ -4045,7 +4282,10 @@ if __name__ == '__main__':
     only = sys.argv[1:]
     with sync_playwright() as pw:
         b = pw.chromium.launch(args=ARGS)
-        for name, fn in TESTS:
+        ab = int(os.environ.get('TRACERY_AB', '0'))   # nach einem Abbruch: die ersten N Durchläufe überspringen
+        for nr, (name, fn) in enumerate(TESTS):
+            if nr < ab:
+                continue
             if only and not any(o.lower() in name.lower() or o.lower() in fn.__name__.lower() for o in only):
                 continue
 

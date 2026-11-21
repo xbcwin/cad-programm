@@ -210,7 +210,256 @@ const Start = (() => {
     UI.toast(`„${f.name}“ importiert.` + (f.size > 3e6 ? ' Die Datei ist groß – speichere das Projekt als Datei, der Browser-Speicher reicht dafür evtl. nicht.' : ' Mit „Auf die XY-Ebene setzen“ legst du es auf den Boden.'), { icon: 'folder', ms: 5000 });
     setTimeout(() => { const b = Actions.worldBox(it.id); if (b && !b.isEmpty()) Viewer.fit([it.id]); }, 1500);
   }
+  // ---------- DXF lesen: Linien, Kreise, Bögen, Polylinien, Ellipsen und Splines werden eine Skizze ----------
+  function parseDXF(txt) {
+    const L = txt.split(/\r\n|\r|\n/), P = [];
+    for (let i = 0; i + 1 < L.length; i += 2) { const c = parseInt(L[i], 10); if (Number.isNaN(c)) return null; P.push([c, L[i + 1].trim()]); }
+    let unit = 1, sec = '', i = 0;
+    const ents = [], f = (v) => parseFloat(v) || 0, R = (v) => round(v, 4);
+    const U = { 1: 25.4, 2: 304.8, 4: 1, 5: 10, 6: 1000 };
+    const line = (a, b) => { if (Math.hypot(a[0] - b[0], a[1] - b[1]) > 1e-6) ents.push({ type: 'line', a: a.slice(), b: b.slice() }); };
+    const bulgeSeg = (a, b, bg) => {
+      if (Math.abs(bg) < 1e-9) return line(a, b);
+      const dx = b[0] - a[0], dy = b[1] - a[1], d = Math.hypot(dx, dy); if (d < 1e-6) return;
+      const s = (bg * d) / 2;
+      ents.push({ type: 'arc', a: a.slice(), m: [(a[0] + b[0]) / 2 + (dy / d) * s, (a[1] + b[1]) / 2 - (dx / d) * s], b: b.slice() });
+    };
+    const polyOut = (V, closed) => { for (let k = 0; k + 1 < V.length; k++) bulgeSeg(V[k].p, V[k + 1].p, V[k].b); if (closed && V.length > 2) bulgeSeg(V[V.length - 1].p, V[0].p, V[V.length - 1].b); };
+    // B-Spline an einer Stelle auswerten (de Boor)
+    const deBoor = (deg, kn, cp, t) => {
+      let k = deg; while (k < cp.length - 1 && t >= kn[k + 1]) k++;
+      const d = []; for (let j = 0; j <= deg; j++) d.push(cp[j + k - deg].slice());
+      for (let r = 1; r <= deg; r++) for (let j = deg; j >= r; j--) {
+        const den = kn[j + 1 + k - r] - kn[j + k - deg], a = den > 1e-12 ? (t - kn[j + k - deg]) / den : 0;
+        d[j] = [(1 - a) * d[j - 1][0] + a * d[j][0], (1 - a) * d[j - 1][1] + a * d[j][1]];
+      }
+      return d[deg];
+    };
+    while (i < P.length) {
+      const [c, v] = P[i];
+      if (c === 0 && v === 'SECTION') { sec = (P[i + 1] || [])[1] || ''; i += 2; continue; }
+      if (c === 0 && v === 'ENDSEC') { sec = ''; i++; continue; }
+      if (sec === 'HEADER' && c === 9 && v === '$INSUNITS') { unit = U[parseInt((P[i + 1] || [])[1], 10)] || 1; i += 2; continue; }
+      if (sec !== 'ENTITIES' || c !== 0) { i++; continue; }
+      // alle Paare dieses Elements einsammeln
+      let j = i + 1; const g = [];
+      while (j < P.length && P[j][0] !== 0) { g.push(P[j]); j++; }
+      const one = (code, def = 0) => { const q = g.find((x) => x[0] === code); return q ? f(q[1]) : def; };
+      const all = (code) => g.filter((x) => x[0] === code).map((x) => f(x[1]));
+      if (v === 'LINE') line([one(10), one(20)], [one(11), one(21)]);
+      else if (v === 'CIRCLE') { if (one(40) > 1e-6) ents.push({ type: 'circle', c: [one(10), one(20)], r: one(40) }); }
+      else if (v === 'ARC') {
+        const cx = one(10), cy = one(20), r = one(40); let a0 = one(50), a1 = one(51, 360); if (a1 <= a0) a1 += 360;
+        const at = (d) => [cx + r * Math.cos((d * Math.PI) / 180), cy + r * Math.sin((d * Math.PI) / 180)];
+        if (r > 1e-6) ents.push({ type: 'arc', a: at(a0), m: at((a0 + a1) / 2), b: at(a1) });
+      } else if (v === 'LWPOLYLINE') {
+        const V = []; for (const [cc, vv] of g) { if (cc === 10) V.push({ p: [f(vv), 0], b: 0 }); else if (cc === 20 && V.length) V[V.length - 1].p[1] = f(vv); else if (cc === 42 && V.length) V[V.length - 1].b = f(vv); }
+        polyOut(V, (one(70) & 1) === 1);
+      } else if (v === 'POLYLINE') {
+        const closed = (one(70) & 1) === 1, V = [];
+        while (j < P.length && P[j][1] === 'VERTEX') { let k = j + 1; const q = { p: [0, 0], b: 0 }; while (k < P.length && P[k][0] !== 0) { if (P[k][0] === 10) q.p[0] = f(P[k][1]); else if (P[k][0] === 20) q.p[1] = f(P[k][1]); else if (P[k][0] === 42) q.b = f(P[k][1]); k++; } V.push(q); j = k; }
+        polyOut(V, closed);
+      } else if (v === 'ELLIPSE') {
+        const c0 = [one(10), one(20)], mx = one(11), my = one(21), rx = Math.hypot(mx, my), ry = rx * one(40, 1), rot = Math.atan2(my, mx);
+        const t0 = one(41, 0); let t1 = one(42, Math.PI * 2); if (t1 <= t0) t1 += Math.PI * 2;
+        if (rx > 1e-6 && ry > 1e-6) {
+          if (Math.abs(t1 - t0 - Math.PI * 2) < 1e-4) ents.push({ type: 'ellipse', c: c0, rx, ry, rot });
+          else { const n = Math.max(6, Math.ceil(((t1 - t0) / Math.PI) * 12)), pts = []; for (let k = 0; k <= n; k++) { const t = t0 + ((t1 - t0) * k) / n, x = rx * Math.cos(t), y = ry * Math.sin(t); pts.push([c0[0] + x * Math.cos(rot) - y * Math.sin(rot), c0[1] + x * Math.sin(rot) + y * Math.cos(rot)]); } ents.push({ type: 'spline', pts, closed: false }); }
+        }
+      } else if (v === 'SPLINE') {
+        const fx = all(11), fy = all(21), cx = all(10), cy = all(20), kn = all(40), deg = Math.max(1, Math.round(one(71, 3))), closed = (one(70) & 1) === 1;
+        let pts = [];
+        if (fx.length >= 2) pts = fx.map((x, k) => [x, fy[k] || 0]);
+        else if (cx.length > deg && kn.length >= cx.length + deg + 1) {
+          const cp = cx.map((x, k) => [x, cy[k] || 0]), a = kn[deg], b = kn[cp.length], n = Math.min(60, Math.max(8, cp.length * 4));
+          for (let k = 0; k <= n; k++) pts.push(deBoor(deg, kn, cp, Math.min(a + ((b - a) * k) / n, b - 1e-9)));
+          pts[pts.length - 1] = cp[cp.length - 1].slice();
+        } else pts = cx.map((x, k) => [x, cy[k] || 0]);
+        if (closed && pts.length > 2 && Math.hypot(pts[0][0] - pts[pts.length - 1][0], pts[0][1] - pts[pts.length - 1][1]) < 1e-6) pts.pop();
+        if (pts.length >= 2) ents.push({ type: 'spline', pts, closed: closed && pts.length > 2 });
+      }
+      i = j;
+    }
+    return tidyOutline(ents, unit);
+  }
+  // Maßeinheit, Mitte auf den Ursprung und Endpunkte verschweißen (kleine Lücken aus anderen Programmen)
+  function tidyOutline(ents, unit) {
+    const R = (v) => round(v, 4);
+    if (!ents.length) return { ents, unit };
+    const pk = (e) => (e.type === 'line' || e.type === 'arc' ? [e.a, e.b, ...(e.m ? [e.m] : [])] : e.type === 'spline' ? e.pts : [e.c]);
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const e of ents) for (const q of pk(e)) { x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]); }
+    for (const e of ents) if (e.type === 'circle') { x0 = Math.min(x0, e.c[0] - e.r); x1 = Math.max(x1, e.c[0] + e.r); y0 = Math.min(y0, e.c[1] - e.r); y1 = Math.max(y1, e.c[1] + e.r); }
+    const mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
+    for (const e of ents) {
+      for (const q of pk(e)) { q[0] = R((q[0] - mx) * unit); q[1] = R((q[1] - my) * unit); }
+      if (e.r != null) e.r = R(e.r * unit); if (e.rx != null) { e.rx = R(e.rx * unit); e.ry = R(e.ry * unit); }
+      e.id = uid('e');
+    }
+    const ends = []; for (const e of ents) { if (e.type === 'line' || e.type === 'arc') ends.push(e.a, e.b); else if (e.type === 'spline' && !e.closed) ends.push(e.pts[0], e.pts[e.pts.length - 1]); }
+    if (ends.length <= 6000) { const grid = new Map(), tol = 0.02; for (const q of ends) { const gx = Math.round(q[0] / tol), gy = Math.round(q[1] / tol); let hit = null; for (let a = -1; a <= 1 && !hit; a++) for (let b = -1; b <= 1 && !hit; b++) { const o = grid.get((gx + a) + ':' + (gy + b)); if (o && Math.hypot(o[0] - q[0], o[1] - q[1]) <= tol) hit = o; } if (hit) { q[0] = hit[0]; q[1] = hit[1]; } else grid.set(gx + ':' + gy, q.slice()); } }
+    return { ents: ents.filter((e) => !((e.type === 'line' || e.type === 'arc') && Math.hypot(e.a[0] - e.b[0], e.a[1] - e.b[1]) < 1e-6)), unit, w: (x1 - x0) * unit, h: (y1 - y0) * unit };
+  }
+  // ---------- SVG lesen: Pfade, Rechtecke, Kreise, Ellipsen, Linien und Vielecke werden eine Skizze ----------
+  function parseSVG(txt) {
+    const doc = new DOMParser().parseFromString(txt, 'image/svg+xml'), root = doc.documentElement;
+    if (!root || root.nodeName.toLowerCase() !== 'svg' || doc.querySelector('parsererror')) return null;
+    const ents = [], f = (v) => parseFloat(v) || 0, num = (el, k, d = 0) => (el.hasAttribute(k) ? f(el.getAttribute(k)) : d);
+    // Einheit: Breite mit mm/cm/in und viewBox → Millimeter je Einheit, sonst 96 Punkte pro Zoll
+    const MM = { mm: 1, cm: 10, in: 25.4, pt: 25.4 / 72, pc: 25.4 / 6, px: 25.4 / 96, '': 25.4 / 96 };
+    const vb = (root.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(f), wm = /^\s*([\d.eE+-]+)\s*([a-z%]*)\s*$/.exec(root.getAttribute('width') || '');
+    let unit = 25.4 / 96;
+    if (wm && MM[wm[2]] != null) unit = vb.length === 4 && vb[2] > 0 ? (f(wm[1]) * MM[wm[2]]) / vb[2] : wm[2] && wm[2] !== 'px' ? MM[wm[2]] : unit;
+    // Matrix [a b c d e f] aus dem transform-Attribut
+    const mul = (m, n) => [m[0] * n[0] + m[2] * n[1], m[1] * n[0] + m[3] * n[1], m[0] * n[2] + m[2] * n[3], m[1] * n[2] + m[3] * n[3], m[0] * n[4] + m[2] * n[5] + m[4], m[1] * n[4] + m[3] * n[5] + m[5]];
+    const tfOf = (str) => {
+      let m = [1, 0, 0, 1, 0, 0];
+      for (const q of (str || '').matchAll(/(matrix|translate|scale|rotate|skewX|skewY)\s*\(([^)]*)\)/g)) {
+        const a = q[2].trim().split(/[\s,]+/).map(f), rad = (a[0] * Math.PI) / 180;
+        let n = [1, 0, 0, 1, 0, 0];
+        if (q[1] === 'matrix' && a.length >= 6) n = a.slice(0, 6);
+        else if (q[1] === 'translate') n = [1, 0, 0, 1, a[0], a[1] || 0];
+        else if (q[1] === 'scale') n = [a[0], 0, 0, a.length > 1 ? a[1] : a[0], 0, 0];
+        else if (q[1] === 'rotate') { n = [Math.cos(rad), Math.sin(rad), -Math.sin(rad), Math.cos(rad), 0, 0]; if (a.length >= 3) n = mul(mul([1, 0, 0, 1, a[1], a[2]], n), [1, 0, 0, 1, -a[1], -a[2]]); }
+        else if (q[1] === 'skewX') n = [1, 0, Math.tan(rad), 1, 0, 0];
+        else if (q[1] === 'skewY') n = [1, Math.tan(rad), 0, 1, 0, 0];
+        m = mul(m, n);
+      }
+      return m;
+    };
+    const ap = (m, p) => [m[0] * p[0] + m[2] * p[1] + m[4], -(m[1] * p[0] + m[3] * p[1] + m[5])];   // SVG zählt Y nach unten
+    // Kreisbogen (SVG-Schreibweise) als kubische Bézier-Stücke
+    const arcToBez = (p0, rx, ry, phi, large, sweep, p1) => {
+      rx = Math.abs(rx); ry = Math.abs(ry); if (rx < 1e-9 || ry < 1e-9) return { segs: [{ t: 'L', a: p0, b: p1 }] };
+      const cp = Math.cos(phi), sp = Math.sin(phi), dx = (p0[0] - p1[0]) / 2, dy = (p0[1] - p1[1]) / 2;
+      const x1 = cp * dx + sp * dy, y1 = -sp * dx + cp * dy, lam = (x1 * x1) / (rx * rx) + (y1 * y1) / (ry * ry);
+      if (lam > 1) { rx *= Math.sqrt(lam); ry *= Math.sqrt(lam); }
+      const q = Math.sqrt(Math.max(0, (rx * rx * ry * ry - rx * rx * y1 * y1 - ry * ry * x1 * x1) / (rx * rx * y1 * y1 + ry * ry * x1 * x1))) * (large === sweep ? -1 : 1);
+      const cx1 = (q * rx * y1) / ry, cy1 = (-q * ry * x1) / rx, cx = cp * cx1 - sp * cy1 + (p0[0] + p1[0]) / 2, cy = sp * cx1 + cp * cy1 + (p0[1] + p1[1]) / 2;
+      const ang = (ux, uy, vx, vy) => Math.atan2(ux * vy - uy * vx, ux * vx + uy * vy);
+      const t0 = ang(1, 0, (x1 - cx1) / rx, (y1 - cy1) / ry); let dt = ang((x1 - cx1) / rx, (y1 - cy1) / ry, (-x1 - cx1) / rx, (-y1 - cy1) / ry);
+      if (!sweep && dt > 0) dt -= 2 * Math.PI; else if (sweep && dt < 0) dt += 2 * Math.PI;
+      const n = Math.max(1, Math.ceil(Math.abs(dt) / (Math.PI / 2) - 1e-9)), d = dt / n, k = (4 / 3) * Math.tan(d / 4), out = [];
+      const P = (t) => [cx + rx * Math.cos(t) * cp - ry * Math.sin(t) * sp, cy + rx * Math.cos(t) * sp + ry * Math.sin(t) * cp], D = (t) => [-rx * Math.sin(t) * cp - ry * Math.cos(t) * sp, -rx * Math.sin(t) * sp + ry * Math.cos(t) * cp];
+      for (let i = 0; i < n; i++) { const a = t0 + i * d, b = a + d, A = P(a), B = i === n - 1 ? p1 : P(b), da = D(a), db = D(b); out.push({ t: 'C', a: A, c1: [A[0] + k * da[0], A[1] + k * da[1]], c2: [B[0] - k * db[0], B[1] - k * db[1]], b: B }); }
+      out[0].a = p0; return { segs: out, mid: P(t0 + dt / 2), circ: Math.abs(rx - ry) < 1e-9 * rx };
+    };
+    // Pfad-Text → Teilwege aus Linien (L) und Bézier-Stücken (C)
+    const pathSubs = (dstr) => {
+      const tk = (dstr || '').match(/[MmLlHhVvCcSsQqTtAaZz]|[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?/g) || [], subs = [];
+      let i = 0, cmd = '', cur = [0, 0], st = [0, 0], sub = null, lc = null, lq = null;
+      const n = () => f(tk[i++]), isNum = () => i < tk.length && !/^[A-Za-z]$/.test(tk[i]);
+      const seg = (s) => { if (!sub) { sub = { segs: [], closed: false }; subs.push(sub); } sub.segs.push(s); };
+      while (i < tk.length) {
+        if (!isNum()) cmd = tk[i++]; else if (!cmd) return subs; else if (cmd === 'M') cmd = 'L'; else if (cmd === 'm') cmd = 'l';
+        const rel = cmd === cmd.toLowerCase(), C = cmd.toUpperCase(), o = rel ? cur : [0, 0];
+        if (C === 'Z') { if (sub) { if (Math.hypot(cur[0] - st[0], cur[1] - st[1]) > 1e-9) seg({ t: 'L', a: cur, b: st }); sub.closed = true; } cur = st; sub = null; lc = lq = null; continue; }
+        if (!isNum()) continue;
+        if (C === 'M') { cur = [o[0] + n(), o[1] + n()]; st = cur; sub = null; lc = lq = null; continue; }
+        let nx = null, s = null, nc = null, nq = null;
+        if (C === 'L') nx = [o[0] + n(), o[1] + n()];
+        else if (C === 'H') nx = [(rel ? cur[0] : 0) + n(), cur[1]];
+        else if (C === 'V') nx = [cur[0], (rel ? cur[1] : 0) + n()];
+        else if (C === 'C') { const c1 = [o[0] + n(), o[1] + n()], c2 = [o[0] + n(), o[1] + n()]; nx = [o[0] + n(), o[1] + n()]; s = { t: 'C', a: cur, c1, c2, b: nx }; nc = c2; }
+        else if (C === 'S') { const c1 = lc ? [2 * cur[0] - lc[0], 2 * cur[1] - lc[1]] : cur, c2 = [o[0] + n(), o[1] + n()]; nx = [o[0] + n(), o[1] + n()]; s = { t: 'C', a: cur, c1, c2, b: nx }; nc = c2; }
+        else if (C === 'Q' || C === 'T') { const q = C === 'Q' ? [o[0] + n(), o[1] + n()] : lq ? [2 * cur[0] - lq[0], 2 * cur[1] - lq[1]] : cur; nx = [o[0] + n(), o[1] + n()]; s = { t: 'C', a: cur, c1: [cur[0] + (2 / 3) * (q[0] - cur[0]), cur[1] + (2 / 3) * (q[1] - cur[1])], c2: [nx[0] + (2 / 3) * (q[0] - nx[0]), nx[1] + (2 / 3) * (q[1] - nx[1])], b: nx }; nq = q; }
+        else if (C === 'A') { const rx = n(), ry = n(), phi = (n() * Math.PI) / 180, la = n() !== 0, sw = n() !== 0; nx = [o[0] + n(), o[1] + n()]; if (Math.hypot(nx[0] - cur[0], nx[1] - cur[1]) > 1e-9) { const A = arcToBez(cur, rx, ry, phi, la, sw, nx); if (A.circ) seg({ t: 'A', a: cur, m: A.mid, b: nx, bz: A.segs }); else A.segs.forEach(seg); } cur = nx; lc = lq = null; continue; }
+        else return subs;
+        if (s) seg(s); else if (Math.hypot(nx[0] - cur[0], nx[1] - cur[1]) > 1e-9) seg({ t: 'L', a: cur, b: nx });
+        cur = nx; lc = nc; lq = nq;
+      }
+      return subs;
+    };
+    const emit = (subs, m) => {
+      const bez = (s, t) => { const u = 1 - t; return [0, 1].map((k) => u * u * u * s.a[k] + 3 * u * u * t * s.c1[k] + 3 * u * t * t * s.c2[k] + t * t * t * s.b[k]); };
+      for (const sub of subs) {
+        // Stücke in die Zeichnung umrechnen; fast gerade Bézier-Stücke werden Linien
+        const sim = Math.abs(m[0] * m[2] + m[1] * m[3]) < 1e-9 && Math.abs(Math.hypot(m[0], m[1]) - Math.hypot(m[2], m[3])) < 1e-9 * Math.hypot(m[0], m[1]);
+        const segs = sub.segs.flatMap((s) => (s.t === 'A' ? (sim ? [s] : s.bz) : [s])).map((s) => (s.t === 'A' ? { t: 'A', a: ap(m, s.a), m: ap(m, s.m), b: ap(m, s.b) } : s.t === 'L' ? { t: 'L', a: ap(m, s.a), b: ap(m, s.b) } : { t: 'C', a: ap(m, s.a), c1: ap(m, s.c1), c2: ap(m, s.c2), b: ap(m, s.b) })).map((s) => {
+          if (s.t !== 'C') return s;
+          const dx = s.b[0] - s.a[0], dy = s.b[1] - s.a[1], L = Math.hypot(dx, dy) || 1e-9, off = (q) => Math.abs((q[0] - s.a[0]) * dy - (q[1] - s.a[1]) * dx) / L;
+          return off(s.c1) < 1e-4 * L && off(s.c2) < 1e-4 * L ? { t: 'L', a: s.a, b: s.b } : s;
+        });
+        // glatt aneinanderhängende Kurvenstücke werden eine Spline, Knicke und Linien trennen
+        const dirOut = (s) => { const q = Math.hypot(s.b[0] - s.c2[0], s.b[1] - s.c2[1]) > 1e-9 ? s.c2 : s.c1; return Math.atan2(s.b[1] - q[1], s.b[0] - q[0]); };
+        const dirIn = (s) => { const q = Math.hypot(s.c1[0] - s.a[0], s.c1[1] - s.a[1]) > 1e-9 ? s.c1 : s.c2; return Math.atan2(q[1] - s.a[1], q[0] - s.a[0]); };
+        const smooth = (a, b) => a.t === 'C' && b.t === 'C' && Math.abs(Math.atan2(Math.sin(dirIn(b) - dirOut(a)), Math.cos(dirIn(b) - dirOut(a)))) < 0.05;
+        let k = 0; const N = segs.length;
+        // Start an einem Knick, damit ein rundum glatter Weg eine geschlossene Spline wird
+        let start = 0, allSmooth = sub.closed && N > 1 && segs.every((s, j) => smooth(s, segs[(j + 1) % N]));
+        if (sub.closed && !allSmooth) { for (let j = 0; j < N; j++) if (!smooth(segs[(j + N - 1) % N], segs[j])) { start = j; break; } }
+        const ord = segs.map((_, j) => segs[(j + start) % N]);
+        if (allSmooth) { const pts = []; for (const s of ord) for (let j = 0; j < 8; j++) pts.push(bez(s, j / 8)); ents.push({ type: 'spline', pts, closed: true }); continue; }
+        while (k < N) {
+          const s = ord[k];
+          if (s.t === 'L') { ents.push({ type: 'line', a: s.a.slice(), b: s.b.slice() }); k++; continue; }
+          if (s.t === 'A') { ents.push({ type: 'arc', a: s.a.slice(), m: s.m.slice(), b: s.b.slice() }); k++; continue; }
+          const pts = [s.a.slice()];
+          for (;;) { const c = ord[k]; for (let j = 1; j <= 8; j++) pts.push(bez(c, j / 8)); k++; if (k >= N || !smooth(c, ord[k])) break; }
+          ents.push({ type: 'spline', pts, closed: false });
+        }
+      }
+    };
+    let texts = 0;
+    const walk = (el, m) => {
+      const tag = el.nodeName.toLowerCase().replace(/^svg:/, '');
+      if (['defs', 'clippath', 'mask', 'pattern', 'symbol', 'marker', 'metadata', 'style', 'title', 'desc'].includes(tag)) return;
+      if (el.getAttribute && (el.getAttribute('display') === 'none' || /display\s*:\s*none/.test(el.getAttribute('style') || ''))) return;
+      if (el.getAttribute) m = mul(m, tfOf(el.getAttribute('transform')));
+      if (tag === 'text') { texts++; return; }
+      if (tag === 'path') emit(pathSubs(el.getAttribute('d')), m);
+      else if (tag === 'line') emit([{ segs: [{ t: 'L', a: [num(el, 'x1'), num(el, 'y1')], b: [num(el, 'x2'), num(el, 'y2')] }], closed: false }], m);
+      else if (tag === 'polyline' || tag === 'polygon') { const v = (el.getAttribute('points') || '').trim().split(/[\s,]+/).map(f); if (v.length >= 4) emit(pathSubs('M' + v.join(' ') + (tag === 'polygon' ? 'Z' : '')), m); }
+      else if (tag === 'rect') {
+        const x = num(el, 'x'), y = num(el, 'y'), w = num(el, 'width'), hh = num(el, 'height');
+        let rx = el.hasAttribute('rx') ? num(el, 'rx') : num(el, 'ry'), ry = el.hasAttribute('ry') ? num(el, 'ry') : rx; rx = Math.min(rx, w / 2); ry = Math.min(ry, hh / 2);
+        if (w > 0 && hh > 0) emit(pathSubs(rx > 0 && ry > 0 ? `M${x + rx} ${y}H${x + w - rx}A${rx} ${ry} 0 0 1 ${x + w} ${y + ry}V${y + hh - ry}A${rx} ${ry} 0 0 1 ${x + w - rx} ${y + hh}H${x + rx}A${rx} ${ry} 0 0 1 ${x} ${y + hh - ry}V${y + ry}A${rx} ${ry} 0 0 1 ${x + rx} ${y}Z` : `M${x} ${y}H${x + w}V${y + hh}H${x}Z`), m);
+      } else if (tag === 'circle' || tag === 'ellipse') {
+        const cx = num(el, 'cx'), cy = num(el, 'cy'), rx = tag === 'circle' ? num(el, 'r') : num(el, 'rx'), ry = tag === 'circle' ? rx : num(el, 'ry');
+        const sx = Math.hypot(m[0], m[1]), sy = Math.hypot(m[2], m[3]), ortho = Math.abs(m[0] * m[2] + m[1] * m[3]) < 1e-6 * sx * sy;
+        if (rx > 0 && ry > 0) {
+          if (ortho && Math.abs(rx * sx - ry * sy) < 1e-6 * rx * sx) ents.push({ type: 'circle', c: ap(m, [cx, cy]), r: rx * sx });
+          else if (ortho) ents.push({ type: 'ellipse', c: ap(m, [cx, cy]), rx: rx * sx, ry: ry * sy, rot: -Math.atan2(m[1], m[0]) });
+          else emit(pathSubs(`M${cx - rx} ${cy}A${rx} ${ry} 0 1 0 ${cx + rx} ${cy}A${rx} ${ry} 0 1 0 ${cx - rx} ${cy}Z`), m);
+        }
+      }
+      for (const c of el.children || []) walk(c, m);
+    };
+    walk(root, [1, 0, 0, 1, 0, 0]);
+    const r = tidyOutline(ents, unit); r.texts = texts; return r;
+  }
+  // Datei lesen und prüfen; Meldung, wenn nichts Brauchbares darin ist
+  async function readOutline(f) {
+    const svg = /\.svg$/i.test(f.name), K = svg ? 'SVG' : 'DXF';
+    if (f.size > 8e6) { UI.toast(`Die ${K}-Datei ist zu groß (über 8 MB).`, { kind: 'bad' }); return null; }
+    let r = null; try { const txt = await f.text(); r = svg ? parseSVG(txt) : parseDXF(txt); } catch (e) { console.warn(e); }
+    if (!r) { UI.toast(svg ? 'Diese SVG kann ich nicht lesen – die Datei ist beschädigt oder kein SVG.' : 'Diese DXF kann ich nicht lesen. Speichere sie im anderen Programm als „DXF (ASCII / Text)“ – die binäre Fassung geht nicht.', { kind: 'bad', ms: 8000 }); return null; }
+    if (!r.ents.length) { UI.toast(svg ? 'In der SVG habe ich keine Formen gefunden.' + (r.texts ? ' Text muss im Zeichenprogramm zuerst in Pfade umgewandelt werden („Objekt in Pfad“).' : ' Bilder (Fotos) in einer SVG kann ich nicht nachzeichnen.') : 'In der DXF habe ich keine Linien, Kreise oder Bögen gefunden. Liegt die Zeichnung in einem Block? Dann löse ihn im anderen Programm vorher auf („Explode“).', { kind: 'bad', ms: 9000 }); return null; }
+    if (r.ents.length > 4000) { UI.toast(`Die ${K} hat ${r.ents.length} Elemente – das ist zu viel für eine Skizze (höchstens 4000).`, { kind: 'bad', ms: 7000 }); return null; }
+    return r;
+  }
+  // Im Skizzen-Modus: Umriss in die offene Skizze legen (Mitte auf dem Nullpunkt der Skizze)
+  async function insertOutline(f) {
+    const r = await readOutline(f); if (!r) return;
+    const n = Sketch.insertEnts(r.ents);
+    if (n) UI.toast(`„${f.name}“ in die Skizze eingefügt: ${n} Elemente, ${fmt(r.w)} × ${fmt(r.h)} mm, Mitte auf dem Nullpunkt.` + (r.texts ? ' Text in der SVG fehlt – wandle ihn im Zeichenprogramm vorher in Pfade um.' : '') + ' Passt die Größe nicht? Werkzeug „Auswahl“ → rechts „Breite ändern“.', { icon: 'folder', ms: 8000 });
+  }
+  async function importDXF(f) {
+    const svg = /\.svg$/i.test(f.name), K = svg ? 'SVG' : 'DXF';
+    const r = await readOutline(f); if (!r) return;
+    const closed = SK.regions(r.ents).length;
+    if (!closed) { UI.toast(`Die ${K} hat keine geschlossene Kontur – daraus kann ich keine Platte machen. Prüfe im anderen Programm, ob der Umriss irgendwo eine Lücke hat.`, { kind: 'bad', ms: 9000 }); return; }
+    if (el) newProject(true);
+    const name = f.name.replace(/\.(dxf|svg)$/i, '');
+    const it = Model.newItem('extrude', {}, { name });
+    it.p = { sketch: { plane: { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] }, ents: r.ents, dims: [], cons: [] }, dist: svg ? 1 : 3, dir: 'normal' };
+    App.change(K + ' importiert', (doc) => { doc.items.push(it); });
+    App.select([it.id]);
+    UI.toast(`„${f.name}“ importiert: ${r.ents.length} Elemente, ${fmt(r.w)} × ${fmt(r.h)} mm` + (!svg && r.unit !== 1 ? ' (in Millimeter umgerechnet)' : '') + `. Die Platte ist ${svg ? 1 : 3} mm dick – die Dicke änderst du rechts unter „Höhe“, den Umriss mit „Skizze bearbeiten“.` + (svg ? ' Stimmt die Größe nicht? „Skizze bearbeiten“ → rechts „Breite ändern“.' : '') + (r.texts ? ' Text in der SVG fehlt – wandle ihn im Zeichenprogramm vorher in Pfade um.' : ''), { icon: 'folder', ms: 9000 });
+    setTimeout(() => Viewer.fit([it.id]), 1500);
+  }
   async function openBlob(f) {
+    if (/\.(dxf|svg)$/i.test(f.name)) return Sketch.active ? insertOutline(f) : importDXF(f);
     if (/\.(step|stp|stl)$/i.test(f.name)) return importCAD(f);
     try {
       const txt = await f.text(); const doc = JSON.parse(txt);
@@ -224,7 +473,7 @@ const Start = (() => {
     } catch (e) { const E = ERRORS.importFailed; UI.toast(`${E.titel}. ${E.erklaerung} ${E.loesung}`, { kind: 'bad', ms: 7000 }); console.warn(e); }
   }
   function openFile() {
-    const inp = h('input', { type: 'file', accept: '.json,application/json,.step,.stp,.stl', style: { display: 'none' } });
+    const inp = h('input', { type: 'file', accept: '.json,application/json,.step,.stp,.stl,.dxf,.svg', style: { display: 'none' } });
     inp.onchange = () => { const f = inp.files && inp.files[0]; inp.remove(); if (f) openBlob(f); };
     document.body.append(inp); inp.click();
   }
@@ -232,7 +481,7 @@ const Start = (() => {
   addEventListener('dragover', (e) => { if (e.dataTransfer && [...e.dataTransfer.types].includes('Files')) e.preventDefault(); });
   addEventListener('drop', (e) => {
     const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-    if (!f || !/\.(json|step|stp|stl)$/i.test(f.name)) return;
+    if (!f || !/\.(json|step|stp|stl|dxf|svg)$/i.test(f.name)) return;
     e.preventDefault(); openBlob(f);
   });
   async function saveFile() {
@@ -241,7 +490,7 @@ const Start = (() => {
     const ok = await Print.save(name + '.tracery.json', JSON.stringify(vers.length ? { ...App.doc, versions: vers } : App.doc, null, 1));
     if (ok) App.fileSavedRev = App.revision;
   }
-  return { importCAD, show, hide, newProject, openFile, openBlob, saveFile, openDrone, get open() { return !!el; } };
+  return { importCAD, importDXF, parseDXF, parseSVG, show, hide, newProject, openFile, openBlob, saveFile, openDrone, get open() { return !!el; } };
 })();
 
 // ---------- Einführung ----------

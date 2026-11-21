@@ -58,6 +58,23 @@ const DroneCheck = (() => {
   const isDrone = (doc = App.doc) => !!geometryAny(doc);
   // Akkus: Teile ganz oben im Verlauf, die „Akku“ heißen oder ein Akku aus „Kaufteile“ sind
   const batteries = (doc = App.doc) => doc.items.filter((i) => !i.hidden && !i.suppressed && Model.isActive(doc, i.id) && (/akku/i.test(i.name || '') || (i.kind === 'part' && i.p && i.p.lib === 'buyBattery')));
+  // Energie der Akkus aus ihren Namen („6S 1300 mAh“): Zellen × 3,7 V × Kapazität
+  function batteryEnergy(doc = App.doc) {
+    let wh = 0; const names = [];
+    for (const b of batteries(doc)) {
+      const c = /(\d+)\s*S\b/i.exec(b.name || ''), q = /(\d+(?:[.,]\d+)?)\s*mAh/i.exec(b.name || '');
+      if (!c || !q) continue;
+      wh += (+c[1] * 3.7 * parseFloat(q[1].replace(',', '.'))) / 1000; names.push(`${c[1]}S ${q[1]} mAh`);
+    }
+    return { wh, text: names.join(' + ') };
+  }
+  // Schweben: Leistung nach der Strahltheorie (P = T^1,5 / √(2·ρ·A)), geteilt durch den Wirkungsgrad von Propeller, Motor und Regler
+  // (zusammen etwa 30 % bei kleinen FPV-Propellern – das entspricht rund 4 g Schub pro Watt bei einem 5-Zoll-Copter). Vom Akku zählen 80 %.
+  function hoverTime(massG, n, Dmm, wh) {
+    const T = (massG / 1000) * 9.81, A = n * Math.PI * (Dmm / 2000) ** 2;
+    const w = Math.pow(T, 1.5) / Math.sqrt(2 * 1.225 * A) / 0.3;
+    return { w, min: ((wh * 0.8) / w) * 60 };
+  }
   // Wie weit muss der schwerste Akku wandern, damit der Schwerpunkt über der Mitte zwischen den Motoren liegt?
   async function balanceInfo() {
     const g = geometryAny(); if (!g) return null;
@@ -132,6 +149,12 @@ const DroneCheck = (() => {
         const src = doc.drone && doc.drone.thrustSrc ? ` (Richtwert ${fmt(t, 0)} g pro Motor: ${doc.drone.thrustSrc})` : '';
         out.push({ id: 'tw', title: 'Schub zu Gewicht', s: tw < 2 ? 'bad' : tw < 4 ? 'warn' : 'ok', text: `${fmt(tw, 1)} : 1 – ` + (tw < 2 ? 'zu schwach, hebt kaum ab.' : tw < 4 ? 'reicht für ruhiges Fliegen und Long Range.' : tw < 8 ? 'gut für Freestyle.' : 'genug für Rennen.') + src });
       } else out.push({ id: 'tw', title: 'Schub zu Gewicht', s: 'info', text: 'Trag unten den Schub pro Motor aus der Schubtabelle ein.' });
+      // 6b. Flugzeit im Schweben – Schätzung aus Gewicht, Propellerfläche und Akku
+      const ak = batteryEnergy(doc);
+      if (g.D && ak.wh > 0) {
+        const hv = hoverTime(m.mass, g.n, g.D, ak.wh);
+        out.push({ id: 'flight', title: 'Flugzeit (Schätzung)', s: hv.min < 3 ? 'warn' : 'info', text: `ca. ${fmt(hv.min, hv.min < 10 ? 1 : 0)} min ruhiges Schweben mit ${ak.text} (rund ${fmt(hv.w, 0)} W). Beim schnellen Fliegen ist es meist nur ein Drittel bis die Hälfte davon.` + (hv.min < 3 ? ' Das ist sehr kurz – ein größerer Akku oder weniger Gewicht hilft.' : '') });
+      } else if (g.D && batteries(doc).length) out.push({ id: 'flight', title: 'Flugzeit (Schätzung)', s: 'info', text: 'Nenn den Akku mit Zellen und Kapazität, zum Beispiel „Akku 6S 1300 mAh“ – dann schätze ich die Flugzeit.' });
     }
     // 7. Speed-Rumpf: Form und Fluglage
     const V = g.V;
@@ -170,7 +193,7 @@ const DroneCheck = (() => {
   }
   function summary() { return last && last.rev === App.revision ? last.list : null; }
   const ev = makeEmitter();
-  return { geometry: geometryAny, isDrone, run, dialog, rows, summary, thrustOf, balance, balanceInfo, on: ev.on };
+  return { geometry: geometryAny, isDrone, run, dialog, rows, summary, thrustOf, balance, balanceInfo, hoverTime, batteryEnergy, on: ev.on };
 })();
 
 // ---------- Platten als DXF für die Fräse ----------

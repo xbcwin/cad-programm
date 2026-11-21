@@ -329,7 +329,7 @@ const Views = (() => {
   const RHO = 1.225;
   const CWS = [[1.1, 'Offener Rahmen · cw 1,1'], [0.8, 'Mit Haube · cw 0,8'], [0.5, 'Stromlinien-Rumpf · cw 0,5'], [0.35, 'Rumpf + Armverkleidung · cw 0,35']];
   function cwGuess(doc = App.doc) {
-    let fair = false; Model.walk(doc.items, (it) => { if (it.kind === 'part' && it.p && it.p.lib === 'armFairing') fair = true; });
+    let fair = false; Model.walk(doc.items, (it) => { if (it.kind === 'part' && it.p && (it.p.lib === 'armFairing' || it.p.lib === 'motorFairing')) fair = true; });
     const V = Model.vars(doc).v, body = typeof V.Rumpfdurchmesser === 'number' || doc.items.some((it) => /^Rumpf/.test(it.name || ''));
     return body && fair ? 0.35 : body ? 0.5 : 1.1;
   }

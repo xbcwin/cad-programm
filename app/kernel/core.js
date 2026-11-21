@@ -569,6 +569,7 @@ export function createKernel(R, oc) {
     }
     if (lib === 'aeroBody') return buildAeroBody(p);
     if (lib === 'armFairing') return buildArmFairing(p);
+    if (lib === 'motorFairing') return buildMotorFairing(p);
     if (typeof lib === 'string' && lib.startsWith('buy')) return buildBuy(lib, p);
     throw new Error('Unbekanntes Bauteil: ' + lib);
   }
@@ -608,6 +609,29 @@ export function createKernel(R, oc) {
     const slot = R.makeBox([-L / 2 - 1, -aw / 2 - 0.15, -at / 2 - 0.15], [L / 2 + 1, aw / 2 + 0.15, at / 2 + 0.15]);   // 0,15 mm Spiel je Seite
     const out = body.cut(slot); safeDelete(body); safeDelete(slot);
     return out;
+  }
+  // ---------- Motorverkleidung ----------
+  // Becher um den Motor (Achse +Z, Motorfuß auf z = 0 = Oberseite des Arms): oben offen für den Propeller, außen ein Zylinder
+  // bis unter den Arm, darunter ein Heck, das parabelförmig spitz zuläuft. Innen hohl (Wand), seitlich ein Schlitz für den
+  // Arm (zeigt nach +X) – er geht bis zum oberen Rand, damit die Hülle von unten über Arm und Motor geschoben wird.
+  function motorFairingSize(p) {
+    const d = pos(p.d, 28), gap = Math.max(0, num(p.gap, 0.5)), wall = pos(p.wall, 1.2), h = pos(p.h, 18);
+    const aw = pos(p.aw, 12), at = pos(p.at, 5), tail = Math.max(2 * wall + 1, pos(p.tail, 30));
+    return { d, gap, wall, h, aw, at, tail, ri: d / 2 + gap, ro: d / 2 + gap + wall };
+  }
+  function buildMotorFairing(p) {
+    const { wall, h, aw, at, tail, ri, ro } = motorFairingSize(p);
+    const P = (r, z) => [r, 0, z], n = 20;
+    const solid = (r, zt, zb, L) => {
+      const pts = []; for (let i = 0; i <= n; i++) { const t = i / n; pts.push(P(r * (1 - t * t), zb - t * L)); }
+      const e = [R.makeLine(P(0, zt), P(r, zt)), R.makeLine(P(r, zt), P(r, zb)), R.makeBSplineApproximation(pts, { tolerance: 1e-3, degMax: 3, degMin: 2 }), R.makeLine(P(0, zb - L), P(0, zt))];
+      return R.revolution(R.makeFace(R.assembleWire(e)), [0, 0, 0], [0, 0, 1], 360);
+    };
+    const so = solid(ro, h, -at, tail), si = solid(ri, h + 1, -at, tail - 2 * wall);
+    const slot = R.makeBox([0, -aw / 2 - 0.15, -at - 0.15], [ro + 1, aw / 2 + 0.15, h + 1]);
+    let out = so.cut(si); safeDelete(so); safeDelete(si);
+    const r = out.cut(slot); safeDelete(out); safeDelete(slot);
+    return r;
   }
   // ---------- Stromlinien-Rumpf ----------
   // Drehkörper längs der Y-Achse (Nase nach −Y), Achse auf z = 0, Mittelteil mittig um y = 0:

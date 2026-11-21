@@ -65,5 +65,87 @@ const Mass = (() => {
     App.on('results', refreshMarker); App.on('mode', refreshMarker);
     ViewPrefs.on('change', refreshMarker);
   }
-  return { init, measure, measureDoc, materialFor, projectMaterial, partOf, gText, fixedOf, on: ev.on, get markerShown() { return !!marker; }, get markerPos() { return marker ? marker.position.toArray() : null; } };
+  // ---------- Stückliste: alle Teile ganz oben im Verlauf, gleiche zusammengefasst ----------
+  const PRINTMATS = ['PLA', 'PETG', 'ABS', 'ASA', 'TPU 95A', 'PA12', 'PC'];
+  async function bom(doc = App.doc) {
+    const r = doc === App.doc ? await measure() : await measureDoc(doc); if (!r) return null;
+    const map = new Map();
+    for (const it of doc.items) {
+      if (it.role === 'hole' || it.suppressed || !Model.isActive(doc, it.id)) continue;
+      const p = partOf(r, it.id); if (!p) continue;
+      // „Arm 2“, „Arm (Kopie)“ und „Arm“ sind dasselbe Teil, wenn auch das Gewicht gleich ist
+      // Gruppen wie „Motor 2207 (4×)“ zählen als vier Stück
+      const mult = /\s*\((\d+)\s*[×x]\)\s*$/.exec(it.name || ''), k = mult ? Math.max(1, +mult[1]) : 1;
+      const name = String(it.name || 'Teil').replace(/\s*\(\d+\s*[×x]\)\s*$/, '').replace(/\s*\(Kopie[^)]*\)\s*$/i, '').replace(/\s+\d+$/, '').trim() || 'Teil';
+      const kind = p.fixed ? 'Kaufteil' : (p.mat || '–');
+      const key = name + '|' + kind + '|' + round(p.mass / k, 2);
+      const row = map.get(key) || { name, kind, n: 0, g: p.mass / k, cm3: p.fixed ? null : p.volume / 1000 / k, missing: !!p.missing, buy: !!p.fixed, ids: [] };
+      row.n += k; row.ids.push(it.id); map.set(key, row);
+    }
+    const rows = [...map.values()].sort((a, b) => (a.buy === b.buy ? b.g * b.n - a.g * a.n : a.buy ? 1 : -1));
+    // Filament für Druckteile: Gewicht je Druck-Material und Länge bei 1,75 mm Draht (massiv gerechnet)
+    const fil = new Map();
+    for (const x of rows) { const m = !x.buy && PRINTMATS.includes(x.kind) ? matOf(x.kind) : null; if (m) fil.set(m.k, (fil.get(m.k) || 0) + x.g * x.n); }
+    const filament = [...fil.entries()].map(([k, g]) => ({ mat: k, g, m: g / matOf(k).rho / (Math.PI * 0.0875 * 0.0875) / 100 }));
+    return { rows, mass: rows.reduce((s, x) => s + x.g * x.n, 0), count: rows.reduce((s, x) => s + x.n, 0), screws: screws(doc), filament };
+  }
+  // Schrauben, Muttern und Gewindeeinsätze aus den Loch-Bauteilen (auch in Gruppen und Mustern).
+  // Löcher auf derselben Achse (gleiche Schraube durch zwei Platten) zählen nur einmal.
+  function screws(doc = App.doc) {
+    const V = Model.vars(doc).v, map = new Map(), seen = new Set();
+    const HEAD = { countersunk: 'Senkkopf', counterbore: 'Zylinderkopf', none: '' };
+    Model.walk(doc.items, (it) => {
+      if (it.kind !== 'part' || !it.p || it.suppressed || !Model.isActive(doc, it.id)) return;
+      const L = it.p.lib, size = String(it.p.size || '');
+      let label = null, per = 1;
+      if (L === 'screwHole') label = `Schraube ${size}` + (HEAD[it.p.head] ? ' ' + HEAD[it.p.head] : '');
+      else if (L === 'holePattern') { label = `Schraube ${size}`; per = 4; }
+      else if (L === 'nutTrap') label = `Mutter ${size}`;
+      else if (L === 'insert') label = `Gewindeeinsatz ${size}`;
+      if (!label) return;
+      let n = 0;
+      for (const m of Model.instanceMatrices(doc, it.id, V)) {
+        const e = m.elements, d = new THREE.Vector3(e[8], e[9], e[10]).normalize(), o = new THREE.Vector3(e[12], e[13], e[14]);
+        if (d.z < -1e-6 || (Math.abs(d.z) <= 1e-6 && (d.y < -1e-6 || (Math.abs(d.y) <= 1e-6 && d.x < 0)))) d.negate();
+        o.addScaledVector(d, -o.dot(d));
+        const key = [label, per, ...[d.x, d.y, d.z].map((v) => Math.round(v * 100)), ...[o.x, o.y, o.z].map((v) => Math.round(v / 0.3))].join('|');
+        if (seen.has(key)) continue; seen.add(key); n += per;
+      }
+      if (n) map.set(label, (map.get(label) || 0) + n);
+    });
+    return [...map.entries()].map(([name, n]) => ({ name, n })).sort((a, b) => a.name.localeCompare(b.name, 'de', { numeric: true }));
+  }
+  function bomCSV(B, name) {
+    const q = (v) => '"' + String(v).replace(/"/g, '""') + '"', z = (v, d = 1) => String(round(v, d)).replace('.', ',');
+    const L = [['Teil', 'Anzahl', 'Art', 'Gewicht je Stück (g)', 'Gewicht gesamt (g)', 'Volumen je Stück (cm³)'].map(q).join(';')];
+    for (const x of B.rows) L.push([q(x.name), x.n, q(x.kind), x.missing ? '' : z(x.g), x.missing ? '' : z(x.g * x.n), x.cm3 == null ? '' : z(x.cm3, 2)].join(';'));
+    L.push([q('Summe ' + name), B.count, '', '', z(B.mass), ''].join(';'));
+    for (const x of B.screws || []) L.push([q(x.name), x.n, q('Kleinteil'), '', '', ''].join(';'));
+    return '\ufeff' + L.join('\r\n') + '\r\n';
+  }
+  async function bomDialog() {
+    const body = h('div', { class: 'vcmp', id: 'bom', style: { overflowX: 'auto' } }, h('div', { class: 'hint-box' }, 'Rechne …'));
+    let B = null;
+    UI.modal({ title: 'Stückliste', body, wide: true, actions: [
+      { label: 'Als Tabelle speichern (CSV)', run: () => { if (B) Print.save(Print.safeName(App.doc.name) + ' Stückliste.csv', bomCSV(B, App.doc.name)); return false; } },
+      { label: 'Schließen', primary: true }] });
+    B = await bom(); body.innerHTML = '';
+    if (!B || !B.rows.length) { body.append(h('div', { class: 'hint-box' }, 'Noch keine Teile im Projekt.')); return; }
+    const tb = h('table', { class: 'vtable' }, h('tr', null, ...['Teil', 'Anzahl', 'Art', 'je Stück', 'gesamt'].map((t) => h('th', null, t))));
+    for (const x of B.rows) {
+      const tr = h('tr', { class: 'bom-row', style: { cursor: 'pointer' } }, h('td', null, x.name), h('td', { class: 'mono' }, String(x.n)), h('td', null, x.kind), h('td', { class: 'mono' }, x.missing ? 'fehlt' : gText(x.g)), h('td', { class: 'mono' }, x.missing ? '–' : gText(x.g * x.n)));
+      tr.onclick = () => App.select(x.ids);
+      tb.append(tr);
+    }
+    tb.append(h('tr', { class: 'bom-sum' }, h('td', null, h('b', null, 'Summe')), h('td', { class: 'mono' }, h('b', null, String(B.count))), h('td', null, ''), h('td', null, ''), h('td', { class: 'mono' }, h('b', null, gText(B.mass)))));
+    body.append(tb);
+    if (B.screws.length) {
+      const ts = h('table', { class: 'vtable', id: 'bom-screws', style: { marginTop: '14px' } }, h('tr', null, h('th', null, 'Schrauben und Kleinteile'), h('th', null, 'Anzahl')));
+      for (const x of B.screws) ts.append(h('tr', null, h('td', null, x.name), h('td', { class: 'mono' }, String(x.n))));
+      body.append(ts, h('div', { class: 'hint-box' }, 'Gezählt aus Schraubenlöchern, Lochbildern (je vier), Mutternfallen und Gewindeeinsätzen – Löcher auf derselben Achse zählen als eine Schraube. Die Länge der Schrauben misst du am besten am Modell nach; ihr Gewicht ist in der Summe nicht enthalten.'));
+    }
+    if (B.filament.length) body.append(h('div', { class: 'ok-box', id: 'bom-filament', html: '<b>Filament für die Druckteile:</b> ' + B.filament.map((x) => `${x.mat} ${gText(x.g)} ≈ ${fmt(x.m, 1)} m`).join(' · ') + ' (Draht 1,75 mm, massiv gerechnet – mit weniger Füllung brauchst du weniger; Stützen und Rand kommen dazu).' }));
+    body.append(h('div', { class: 'hint-box', html: 'Gleiche Teile (gleicher Name ohne Nummer, gleiches Gewicht) stehen in einer Zeile. Klick auf eine Zeile wählt die Teile im Bild aus. <b>Kaufteile</b> zählen mit dem Gewicht aus dem Datenblatt, alles andere mit Volumen × Material.' + (B.rows.some((x) => x.missing) ? ' Bei Teilen mit „fehlt“ ist noch kein Gewicht eingetragen.' : '') }));
+  }
+  return { init, measure, measureDoc, bom, bomCSV, bomDialog, screws, materialFor, projectMaterial, partOf, gText, fixedOf, on: ev.on, get markerShown() { return !!marker; }, get markerPos() { return marker ? marker.position.toArray() : null; } };
 })();

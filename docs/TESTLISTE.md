@@ -481,6 +481,61 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
   Schritte: 1. Ein Kind (ab 10) mit „Einfach“ eine Platte mit vier Löchern bauen lassen, ohne zu helfen.
   Erwartet: Es findet Körper, Löcher und Exportieren allein; notieren, wo es hängen bleibt.
 
+## DXF/SVG in die Skizze (neu in Sitzung 81)
+
+- [x] **Einfügen**: Skizze offen, SVG öffnen → Linien und Kreis liegen in der Skizze (kein neuer Körper), Mitte auf dem Nullpunkt; Rückgängig nimmt alles heraus; DXF genauso.
+- [ ] **Gravur**: Fläche anklicken → „Skizze hierauf“ → Logo hineinziehen → Breite anpassen → als Loch 0,6 mm tief.
+
+## Stückliste (neu in Sitzung 80)
+
+- [x] **Liste**: Vier Arme, Platte, zwei Motoren, ein Teil ohne Gewicht → „Arm × 4“ in einer Zeile, Kaufteile mit festem Gewicht, „fehlt“ beim Teil ohne Gewicht, Summe = Projektgewicht.
+- [x] **Dialog**: Klick auf eine Zeile wählt die Teile; CSV enthält alle Zeilen und die Summe.
+- [x] **Schrauben**: Lochbilder zählen je vier Schrauben, zwei Löcher übereinander nur eine, Mutternfalle = eine Mutter.
+- [x] **Filament**: Platte aus PETG → Gramm und Meter Draht (1,75 mm) stehen unter der Liste.
+- [ ] **CSV öffnen**: Datei in Excel, Numbers oder Google Tabellen öffnen – Umlaute und Kommazahlen richtig?
+
+## Flugzeit-Schätzung (neu in Sitzung 79)
+
+- [x] **Drohnen-Check**: 5-Zoll-Vorlage mit 6S 1300 mAh → Zeile „Flugzeit (Schätzung)“ mit Minuten und Watt; die Zahl folgt der Formel.
+- [x] **Schwerer = kürzer**, Akku ohne Angaben → Hinweis, winziger Akku → Warnung.
+- [ ] **Echt**: Mit der gebauten Drohne schweben und die Zeit stoppen – passt die Schätzung ungefähr?
+
+## Ganze Skizze skalieren (neu in Sitzung 78)
+
+- [x] **Breite ändern**: Rechteck 40 × 20 mit Kreis → Breite 60 tippen → alles ist 1,5-mal so groß, Maße (auch Formeln) sind mitgewachsen, kein Widerspruch.
+- [x] **Faktor** 50 % und **Rückgängig**.
+- [ ] **Logo**: Importiertes SVG-Logo auf die gewünschte Breite bringen und als Loch 0,6 mm tief in eine Platte setzen.
+
+## SVG importieren (neu in Sitzung 77)
+
+- [x] **Logo**: SVG mit 60 mm Breite öffnen → Platte 60 × 40 × 1 mm; Kreis, gedrehtes Dreieck und runde Ecken stimmen, Y steht richtig herum.
+- [x] **Text**: Text in der SVG wird gemeldet („in Pfade umwandeln“); eine SVG nur mit Text legt nichts an.
+- [ ] **Echtes Logo**: Ein Logo aus Inkscape oder dem Internet ins Fenster ziehen – stimmt die Form, lässt es sich als Loch in eine Platte setzen (Gravur)?
+
+## Vieleck drehen (neu in Sitzung 76)
+
+- [x] **Drehung**: Sechseck anklicken → Feld „Drehung“; „Fläche oben“ legt eine Seite waagerecht nach oben, „Ecke oben“ dreht zurück.
+
+## Motorverkleidung (neu in Sitzung 75)
+
+- [x] **Baustein**: Drohne → Lochbilder und Bausteine → „Motorverkleidung“ ist da.
+- [x] **Passt**: Motor Ø 28 × 18 und Arm 12 × 5 stecken ohne Durchdringung in der Hülle; sie ist hohl.
+- [x] **Hecklänge** ändern → das Heck wird länger.
+- [ ] **Drucken**: Hülle mit der Spitze nach oben drucken – ohne Stützen? Lässt sie sich über Motor und Arm schieben?
+
+## DXF importieren (neu in Sitzung 74)
+
+- [x] **Platte**: DXF in Zoll mit runder Ecke, Loch und Langloch öffnen → 3 mm dicke Platte in Millimetern, mittig, mit allen Löchern.
+- [x] **Offen / unlesbar**: DXF ohne geschlossenen Umriss oder binäre DXF → Meldung, nichts wird angelegt.
+- [ ] **Echte Datei**: Eine Rahmenplatte vom Hersteller ins Fenster ziehen – stimmt die Größe, sind alle Löcher da?
+- [ ] **Bearbeiten**: Platte anklicken → „Skizze bearbeiten“ → der Umriss lässt sich ändern.
+
+## Zeitleiste mit Vorschau (neu in Sitzung 73)
+
+- [x] **Vorschau**: Drei Körper, Maus über den ersten Schritt halten → nur der erste ist zu sehen, rechts „Vorschau: Stand nach Schritt 1“, der Marker bleibt.
+- [x] **Zurück**: Maus aus der Zeitleiste → wieder alle drei; eine Änderung beendet die Vorschau auch.
+- [ ] **Gefühl**: Bei einem großen Projekt über die Schritte fahren – kommt die Vorschau schnell genug, stört sie nicht?
+
 ## Antenne als Kaufteil (neu in Sitzung 72)
 
 - [x] **Leiste**: Drohne → Empfang und GPS → „Antenne Pilz (eigene Maße)“ und „Antenne Stab (eigene Maße)“.

@@ -1,4 +1,4 @@
-# Tracery – Gesamtprompt (Stand 09.11.2026, nach Sitzung 72)
+# Tracery – Gesamtprompt (Stand 21.11.2026, nach Sitzung 81)
 
 > Diesen Text komplett in einen neuen Chat oder eine andere KI einfügen. Er beschreibt das ganze Projekt so genau, dass die KI ohne Rückfragen weiterarbeiten kann.
 
@@ -167,6 +167,7 @@ Leitlinien:
   - Schritte, Marker zurückrollen, Einfügen am Marker
   - Unterdrücken; Fehler rot mit Klartext und Lösungstipp
   - Ein Schritt hinter dem Marker zeigt nur „Marker dahinter“
+  - Überfahren eines Schritts zeigt kurz den Stand nach diesem Schritt (`App.peek`)
 - Protokoll; Rückgängig/Wiederholen (300)
 - Maße-Tabelle mit Formeln, Varianten und Versionen (Vergleich mit Gewicht)
 - Bauteile im Kontext bearbeiten; Isolieren
@@ -212,7 +213,7 @@ Leitlinien:
 **3D-Features**
 - Grundkörper mit Ziehgriffen; Hochziehen (Push/Pull an Flächen); Drehkörper
 - Übergang (Loft) mit Spitze („Zur Spitze“) oder **entlang einer Mittellinie** (Punkte ziehen biegt den Körper, Warnung bei schrägem Auftreffen) oder mit **einer oder zwei Führungskurven** (Seitenlinie von der Seite und von oben, der Übergang wird dazwischen so breit, dass er sie berührt); Entlang Pfad (Rohr, Kanal, eigener Querschnitt); **Rohr im Raum** (Punkte auf Körper oder in den Raum klicken)
-- STEP/STL-Import
+- STEP/STL-Import; DXF- und SVG-Import als Platte mit Skizze (`Start.importDXF`, `parseDXF`, `parseSVG`, `tidyOutline` in `85-start.js`)
 - Rundung und Fase per Knopf oder **Ziehgriff an der Kante**; Fase mit **zwei Abständen** oder **Abstand und Winkel**, Rundung **von … bis** (wächst entlang der Kante); Entformungsschräge; Wandstärke (Aushöhlen)
 - Echte metrische Gewinde (Gewindebolzen, gedrucktes Innengewinde mit Spiel)
 - Bohrungs-Assistent: Durchgang mit Senk- oder Zylinderkopf, Kernloch, Gewindeeinsatz, Mutternfalle

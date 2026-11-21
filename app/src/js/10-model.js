@@ -480,10 +480,12 @@ const Model = (() => {
     return doc.items.slice(0, end).filter((it) => !it.suppressed);
   }
   function isActive(doc, id) { const top = topOf(doc, id); if (!top) return false; return activeItems(doc).includes(top); }
-  function kernelScene(doc, extra = []) {
+  function kernelScene(doc, extra = [], peek = null) {
     // Lagen mit Formeln (z. B. x = Achsabstand/2) mit den Maßen DIESES Projektstands auflösen – wichtig für Versionen und Varianten
     const { v } = vars(doc); const prev = curV; curV = v;
-    try { return { items: [...activeItems(doc), ...extra].map((it) => kernelItem(it, v)) }; } finally { curV = prev; }
+    // peek = Vorschau der Zeitleiste: nur die ersten k Schritte rechnen, ohne den Marker zu verschieben
+    let act = activeItems(doc); if (peek != null) { const keep = new Set(doc.items.slice(0, Math.max(0, peek))); act = act.filter((it) => keep.has(it)); }
+    try { return { items: [...act, ...extra].map((it) => kernelItem(it, v)) }; } finally { curV = prev; }
   }
 
   // ---------- Größen ----------
@@ -500,6 +502,7 @@ const Model = (() => {
         const L = String(p.lib || '');
         if (L === 'buyMotor' || L === 'buyCap') { const r = n('d', 20) / 2; return [-r, -r, 0, r, r, n('h', 20)]; }
         if (L === 'buyProp') { const r = (n('zoll', 5) * 25.4) / 2; return [-r, -r, 0, r, r, n('zoll', 5) * 1.2 + 0.5]; }
+        if (L === 'motorFairing') { const r = n('d', 28) / 2 + Math.max(0, n('gap', 0.5)) + n('wall', 1.2); return [-r, -r, -n('at', 5) - n('tail', 30), r, r, n('h', 18)]; }
         if (L === 'buyAntenna') { const r = Math.max(4, p.form === 'stab' ? n('d', 3) : n('kd', 14)) / 2; return [-r, -r, 0, r, r, n('L', 45)]; }
         if (L === 'buyStack') { const s = n('a', 30.5) + 5.5; return [-s / 2, -s / 2, 0, s / 2, s / 2, n('h', 12)]; }
         if (L.startsWith('buy')) { const w = n('w', 20), d = n('d', 20), h = n('h', 10); return [-w / 2, -d / 2, 0, w / 2, d / 2, h]; }

@@ -439,6 +439,8 @@ const Panels = (() => {
     const cog = h('label', { class: 'check', style: { marginTop: '8px' } }, h('input', { type: 'checkbox', id: 'proj-cog', checked: !!ViewPrefs.get().cog }), 'Schwerpunkt im Bild zeigen');
     cog.querySelector('input').onchange = (e) => ViewPrefs.set({ cog: e.target.checked });
     ms.append(cog, own);
+    const bomB = h('button', { type: 'button', class: 'btn', id: 'proj-bom', 'data-help': 'bom' }); bomB.innerHTML = icon('list') + 'Stückliste'; bomB.onclick = () => Mass.bomDialog();
+    ms.append(h('div', { class: 'btn-row', style: { marginTop: '8px' } }, bomB));
     Mass.measure().then((r) => {
       if (!r) { vRow.textContent = gRow.textContent = cRow.textContent = '–'; return; }
       const cm3 = r.volume / 1000;

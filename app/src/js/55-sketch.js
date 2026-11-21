@@ -532,6 +532,33 @@ const Sketch = (() => {
     return true;
   }
   function setDim(eid, k, v) { return setDimSpec({ e: eid, k }, v); }
+  // Fertige Elemente (z. B. aus einer DXF oder SVG) in die offene Skizze legen – ein Rückgängig-Schritt
+  function insertEnts(list) {
+    if (!S || S.step || !list || !list.length) return 0;
+    pushUndo();
+    for (const e of list) S.ents.push({ ...JSON.parse(JSON.stringify(e)), id: uid('e') });
+    S.sel = null; setTool('select'); reapply(); render(); Panels.renderRight();
+    return list.length;
+  }
+  // Ganze Skizze um den Nullpunkt vergrößern oder verkleinern: Elemente, Längen-Maße und Abstände in Regeln wandern mit
+  function scaleAll(f) {
+    if (!S || !(f > 0) || Math.abs(f - 1) < 1e-9) return false;
+    pushUndo();
+    const P = (q) => { q[0] = round(q[0] * f, 4); q[1] = round(q[1] * f, 4); }, fs = String(round(f, 6)).replace('.', ',');
+    for (const e of S.ents) {
+      for (const k of ['a', 'b', 'm', 'c']) if (Array.isArray(e[k])) P(e[k]);
+      for (const k of ['pts', 'onP']) if (Array.isArray(e[k])) e[k].forEach(P);
+      for (const k of ['r', 'rx', 'ry', 'bend', 'os', 'sp'].concat(e.type === 'text' ? ['h'] : [])) if (typeof e[k] === 'number') e[k] = round(e[k] * f, 4);
+    }
+    for (const d of S.dims) { if (d.k === 'ang' || d.k === 'angLL' || d.k === 'n') continue; d.v = typeof d.v === 'number' ? round(d.v * f, 4) : `(${d.v})*${fs}`; }
+    for (const c of S.cons) {
+      for (const k of c.type === 'offset' ? ['v'] : c.type === 'xform' && c.mode !== 'rot' ? ['dx', 'dy'] : []) c[k] = typeof c[k] === 'number' ? round(c[k] * f, 4) : c[k] != null ? `(${c[k]})*${fs}` : c[k];
+      if (Array.isArray(c.at)) P(c.at);
+      if (c.pm) for (const k of ['dx', 'dy']) if (typeof c.pm[k] === 'number') c.pm[k] = round(c.pm[k] * f, 4);
+    }
+    reapply(); render(); Panels.renderRight();
+    return true;
+  }
   function removeDimSpec(sp) { pushUndo(); S.dims = S.dims.filter((d) => !specMatch(d, sp)); reapply(); render(); Panels.renderRight(); }
   function removeDim(eid, k) { removeDimSpec({ e: eid, k }); }
   const usesEnt = (r, id) => r && r.e === id;
@@ -2307,12 +2334,20 @@ const Sketch = (() => {
         f.append(dimField('w', 'Breite (Achse 1)', 'mm', { min: 0.01 }), dimField('h', 'Höhe (Achse 2)', 'mm', { min: 0.01 }));
         f.append(UI.numField({ id: 'se-rot', label: 'Drehung', value: round(((sel.rot || 0) * 180) / Math.PI, 3), unit: '°', expr: false, onCommit: (v) => upd((e) => { e.rot = (v * Math.PI) / 180; }) }));
       }
-      else if (sel.type === 'poly') { f.append(dimField('d', 'Durchmesser', 'mm', { min: 0.01 }), dimField('n', 'Ecken', '', { min: 3, int: true })); }
+      else if (sel.type === 'poly') {
+        f.append(dimField('d', 'Durchmesser', 'mm', { min: 0.01 }), dimField('n', 'Ecken', '', { min: 3, int: true }));
+        // Drehung: 0° = eine Ecke zeigt nach oben
+        f.append(UI.numField({ id: 'se-rot', label: 'Drehung', value: round(((sel.rot || 0) * 180) / Math.PI, 3), unit: '°', expr: false, onCommit: (v) => upd((e) => { e.rot = (v * Math.PI) / 180; }) }));
+      }
       else if (sel.type === 'slot') { f.append(dimField('len', 'Länge (Mitte–Mitte)', 'mm', { min: 0.01 }), dimField('w', 'Breite', 'mm', { min: 0.01 })); }
       else if (sel.type === 'arc') {
         const ai = SK.arcInfo(sel.a, sel.m, sel.b); if (ai) w.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Radius'), h('b', { class: 'mono' }, fmt(ai.r, 3) + ' mm')));
       }
       w.append(f);
+      if (sel.type === 'poly') {
+        const nn = Math.max(3, Math.round(sel.n || 6)), bt = (id, ic, label, rot) => { const b = h('button', { type: 'button', class: 'btn', id }); b.innerHTML = icon(ic) + label; b.onclick = () => upd((e) => { e.rot = rot; }); return b; };
+        w.append(h('div', { class: 'btn-row' }, bt('se-poly-corner', 'polygon', 'Ecke oben', 0), bt('se-poly-flat', 'rect', 'Fläche oben', Math.PI / nn)));
+      }
       const fp = h('div', { class: 'fields' });
       const ak = sel.type === 'circle' || sel.type === 'poly' || sel.type === 'ellipse' ? 'Mitte' : sel.type === 'point' ? 'Punkt' : 'Start';
       fp.append(dimField('x', ak + ' X'), dimField('y', ak + ' Y'));
@@ -2431,6 +2466,16 @@ const Sketch = (() => {
       const con = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'sk-con', checked: S.construction }), 'Als Hilfslinien zeichnen');
       con.querySelector('input').onchange = (e) => { S.construction = e.target.checked; syncConBtn(); };
       w.append(con);
+      // Größe der ganzen Skizze – Breite ändern skaliert alles mit (z. B. ein importiertes Logo passend machen)
+      const bb = S.tool === 'select' && S.ctx.mode !== 'pushpull' ? SK.bounds(S.ents.filter((e) => !e.con)) : null;
+      if (bb && bb[2] - bb[0] > 1e-6 && bb[3] - bb[1] > 1e-6) {
+        const W = bb[2] - bb[0], H = bb[3] - bb[1], fz = h('div', { class: 'fields' });
+        w.append(h('div', { class: 'mini-row', id: 'sk-size' }, h('span', { class: 'grow' }, 'Größe der Skizze'), h('b', { class: 'mono' }, fmt(W, 2) + ' × ' + fmt(H, 2) + ' mm')));
+        const go = (fac) => { if (!(fac > 0) || fac > 1000 || fac < 0.001) { UI.toast('Diese Größe geht nicht.', { kind: 'bad' }); Panels.renderRight(); return; } if (scaleAll(fac)) UI.toast(`Skizze auf ${fmt(fac * 100, 1)} % gebracht – Längen-Maße sind mitgewachsen.`, { icon: 'check' }); };
+        fz.append(UI.numField({ id: 'sk-scale-w', label: 'Breite ändern (alles wächst mit)', value: round(W, 3), unit: 'mm', expr: false, min: 0.01, onCommit: (v) => go(v / W) }));
+        fz.append(UI.numField({ id: 'sk-scale-f', label: 'oder Faktor', value: 100, unit: '%', expr: false, min: 0.1, onCommit: (v) => go(v / 100) }));
+        w.append(fz);
+      }
       const sn = h('details', { class: 'snapset' }, h('summary', null, 'Fangen'));
       sn.open = !!S.snapOpen; sn.addEventListener('toggle', () => { S.snapOpen = sn.open; });
       for (const [k, lab] of SNAPLIST) {
@@ -2723,6 +2768,6 @@ const Sketch = (() => {
     cv.addEventListener('pointermove', (e) => { if (S) onMove(e); });
     window.addEventListener('pointerup', (e) => { if (S) { onUp(e); stepUp(e); } });
   }
-  return { init, chooseAndStart, startOnPlane, startOnFace, startPath, startLoftPath, editItem, pushPullFace, renderPanel, onKey, cancel, setBg, setTool, get active() { return !!S; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
+  return { init, chooseAndStart, startOnPlane, startOnFace, startPath, startLoftPath, editItem, pushPullFace, renderPanel, onKey, cancel, scaleAll, insertEnts, setBg, setTool, get active() { return !!S; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
 })();
 
