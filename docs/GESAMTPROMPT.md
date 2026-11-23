@@ -1,4 +1,4 @@
-# Tracery – Gesamtprompt (Stand 21.11.2026, nach Sitzung 90)
+# Tracery – Gesamtprompt (Stand 21.11.2026, nach Sitzung 114)
 
 > Diesen Text komplett in einen neuen Chat oder eine andere KI einfügen. Er beschreibt das ganze Projekt so genau, dass die KI ohne Rückfragen weiterarbeiten kann.
 
@@ -147,8 +147,8 @@ Leitlinien:
 - **Skizze `p.sketch`:** `{ plane:{o,x,n}, ents, dims, cons, bg }`
   - **Elemente:** line(a,b), arc(a,m,b), circle(c,r), ellipse(c,rx,ry,rot), rect(a,b), poly(c,r,n,rot), slot(a,b,r), spline(pts,closed), point(a), text(a,s,h,font,align,rot,mir, bend = Bogen-Radius, on = Kurve + onP = Punkte darauf, os, flip)
   - **Elementfelder:** `con` = Hilfslinie; `link` = verbundene Körperkante {id,t,m,l,d}
-  - **Regeln:** horizontal, vertical, parallel, perpendicular, tangent, equal, symmetric, coincident, fix (at), midpoint, concentric, offset (v, og = zusammen entstanden), xform (Muster; `pg` Kennung, `pm` Einstellungen)
-  - **Maße:** w/h/len/d/r/x/y/ang/n, dist, distPL, angLL – auch als Formel
+  - **Regeln:** horizontal, vertical, parallel, perpendicular, collinear (zwei Linien auf einer Geraden), tangent, equal, symmetric, coincident, fix (at), midpoint, concentric, offset (v, og = zusammen entstanden), xform (Muster; `pg` Kennung, `pm` Einstellungen)
+  - **Maße:** w/h/len/d/r/x/y/ang/n, dist, distPL, angLL – auch als Formel; `ref: true` = Maß zum Ablesen (der Löser überspringt es, das Schildchen zeigt den gemessenen Wert in Klammern; `Sketch.setRefDim(spec)`)
 - **Gelenk:** `{id, a (fest), b (beweglich), ao, ad (Achse, Welt), home (Matrix bei 0), ang, min, max, kind: 'rot'|'slide'}`
   - Nur für Teile ganz oben im Verlauf. Gelenke sind kein Schritt der Zeitleiste.
   - Ketten: Ein Teil darf an mehreren Gelenken hängen, wird aber nur von einem bewegt; Kreise werden abgelehnt.
@@ -165,11 +165,31 @@ Leitlinien:
 - Tiefes Zoomen ohne Flimmern mit automatischem Nachschärfen; Qualität grob bis sehr fein; Design hell/dunkel
 - Aussehen (`ViewPrefs` look/mood/shadows, `Viewer.setLook`, `Viewer.lookOf`): Studio-Look mit Werkstoff-Oberflächen (`LOOKS` in `30-viewer.js`, `App` gibt `look` je Teil mit; `it.colorSet` = eigene Farbe schlägt Werkstoff-Farbe), Spiegel-Umgebung aus einem kleinen Leuchtflächen-Raum (PMREM), weiche Schatten (PCF, nur Hauptlicht), Prüfansichten Ton/Chrom (MatCap), Einfach (matt). Bild speichern: `Viewer.renderImage(w, h, {transparent})`, `Print.imageDialog`/`saveImage`
 - Formschritte mit Modus: `it.op = {type: 'join' | 'cut' | 'common', target}` an Teilen ganz oben; der Kern (`resolveOps` in `core.js`) verrechnet sie in Reihenfolge mit dem Zielkörper (Ketten → erster Körper), das Teil liefert dann einen leeren Knoten mit `merged` (`App.mergedInto(id)`). UI: Abschnitt „Körper“ (`#op-type`, `#op-target`), `Actions.setOp`. Hochziehen `dir: 'two'` mit `dist2`, `p.thru` = durch alles (`Model.sceneSpan`, App rechnet nach)
+- Skizze umhängen: `Actions.replaneSketch(id, 'o:XY' | 'd:<Bezugsebene>')` setzt `p.sketch.plane` neu und die Lage `t` zurück, `link` an Elementen fällt weg; Feld `#p-replane`
+- Kanten nach Art: `Viewer.edgeKinds(id)` → je Kante 'convex' | 'concave' | 'smooth' | null (Nachbarflächen am Kantenmittelpunkt), `Select.edgesByRule(id, rule)`; Leisten-Knöpfe „Kanten wählen“ / „Nach Art“, Menü `er-convex`/`er-concave`/`er-all`
+- Kanten einer Fläche: `Viewer.faceEdges(id, faceIdx)` (Kanten, deren Anfang, Mitte und Ende auf den Dreiecken der Fläche liegen und die noch an eine zweite Fläche grenzen); Leisten-Knopf „Ihre Kanten“ → `Panels.faceEdgeList`, Menü `fe-select`/`fe-fillet`/`fe-chamfer`
+- Notiz am Schritt: `it.note` (Text); Teil-Panel `details#note-sec` mit `#item-note`; Zeitleiste: Klasse `note` und „Notiz: …“ im Tooltip
+- Maße als CSV: `Panels.paramsCSV()` / `Panels.importParamsCSV(text)` (Trenner ; , oder Tab, Anführungszeichen, BOM); Knöpfe `#par-csv-out`/`#par-csv-in`
+- Gespeicherte Auswahl: `doc.selSets = [{id, name, ids}]`; `Interact.saveSelection(name)`, `Interact.useSelection(id)`; Rechtsklick `cm-selsave`, `cm-selset-N`
+- Rechenzeit: Kern `evaluate` gibt `times` {id: ms} zurück (nur echtes Neurechnen: Bauen, Ops, Löcher, Netz); `App.timeOf(id)`, `App.times`; Protokoll-Bereich `details#slow-steps`
+- Suchen im Verlauf: `treeFilter`/`treeKind` in `Panels` (`#tree-filter`, `#tree-kind`, `#tree-count`), Treffer samt ihrer Gruppen bleiben sichtbar
+- Trägheit: Kern `measure` liefert je Teil `inertia` = [Ix, Iy, Iz] um den Schwerpunkt bei Dichte 1 (über `GProp_GProps.MomentOfInertia(gp_Ax1)`, `gp_Mat` ist in diesem OpenCascade nicht gebunden); `Mass` macht daraus `p.I` in g·mm² (`#p-inertia` zeigt g·cm²). Standfestigkeit: `Mass.stability(id, com)` (Hülle der untersten Punkte, Abstand zur Kippkante, Kippwinkel), Anzeige `#p-stand`
+- Wandstärke: `Viewer.wallAt(id, point, normal)` (Strahl nach innen gegen die Dreiecke des Teils, ohne Rückseiten-Ausschluss), `Viewer.thinWalls(limit)` (Raster `triGrid`, je Dreieck ein Strahl von der Mitte, Ergebnis `{pos, area, minT}`); Ansicht `Views.thin()`, Leiste `#thin-limit`/`#thin-area`, `Views.thinInfo`
+- 2D-Dateien: `Print.entsToDXF(ents)` / `Print.entsToSVG(ents)` (Skizzen-Elemente ohne Hilfslinien; Linie, Kreis, Bogen echt, alles andere als Linienzug; SVG in mm, y nach oben), `Print.save2D`, `Print.faceTo2D(face, kind)` über Kern `faceLoops` und `Actions.faceFrame`; Knöpfe `#sk-dxf`/`#sk-svg`, Rechtsklick `cm-facedxf`/`cm-facesvg`
+- Export-Einstellungen: `opts.q` (Kern `exportMeshes(scene, fine, q)`, Toleranz × q), `opts.stlText` → `Print.buildSTLText`; Felder `#ex-q`, `#ex-stlfmt`; `Print.lastTris`
+- Export: `Print.exportSelection()` (gewählte Teile oberster Ebene, verrechnete zählen zum Ziel) → Option `onlySel` filtert die Netze nach `id` und gibt `only` an den Kern (`exportSTEP(scene, only)`); Option `each` legt „Einzeln/<Name>.stl/.3mf“ an; `Print.lastExport` = Dateinamen des letzten ZIP
+- Lage unter der Maus: `#coords` in der Statusleiste (`Measure.showCoords`, höchstens alle 50 ms; `Measure.coords`)
+- Maus-Steuerung: `ViewPrefs` `mouse` ('tracery' | 'onshape' | 'solidworks' | 'fusion' | 'blender') → `Viewer.setMouseStyle`; Skizze, Setzen und Notizen rufen `Viewer.useButtons('sketch' | 'place' | 'model')` statt `mouseButtons` selbst zu setzen; `Viewer.leftOrbits` = false → links im Leeren zieht einen Rahmen
+- Drehteller-Video: `Print.turntable({seconds, fps, save})` (MediaRecorder auf `canvas.captureStream`, Kamera dreht um die senkrechte Achse durch den Blickpunkt, danach zurück), Dialog `Print.turntableDialog` (`#tt-sec`), `Print.lastVideo`
+- Vorführen: `Views.present(on)` (Taste P, Klasse `body.presenting`, Vollbild, Drehteller über `requestAnimationFrame`, Leiste `#present-bar`), `Views.presenting`
+- Vorige Ansicht: `Viewer.viewBack()` (Umschalt Z), Verlauf `camHist` bis 40 – `moveCamera` und der Beginn jeder Maus-Bewegung (`controls` 'start', schnelle Folgen zusammengefasst) legen den Blick davor ab; `Viewer.viewHistory`
+- Teil dahinter: `Viewer.pickAll(cx, cy)` (alle Treffer, vorne zuerst); Alt + Klick → `Interact.selectBehind`; Rechtsklick-Einträge `cm-behind-N`
 - Bedienung: Rechtsklick-Menü im Bild (`Interact.contextMenu`, Rechtsklick ohne Ziehen), Rahmen-Auswahl mit Umschalt + Ziehen im Leeren (`Interact.bandSelect`), `Commands.exec` merkt Befehle (`Commands.last`, `recent`, Leertaste = `Commands.repeat`), `Actions.hideSelected`/`showAll`/`invertSelection`
 - Anzeige: `ViewPrefs.display` ('edges' | 'shaded' | 'wire' | 'hidden'), `it.opacity` (nur Anzeige), `Viewer.lookAtFace(id, faceIdx)`, `doc.views = [{id, name, p, t, up, ortho}]` mit `Views.saveView`/`goView`
 - Bezugsebenen (`46-datums.js`, `Datums`): `doc.datums = [{id, name, base, plane, hidden}]`, `base.type` 'origin' (plane, dist, tilt) | 'face' (id, n, c, dist; `relink` nach jedem Rechnen, `lost`) | 'fixed'; Bild in `Viewer.groups.datums`; `Sketch.startOnPlaneObj(plane)`, `Sketch.startPlanePick(kind, onPlane)`
 - Farbe je Fläche: `it.faceColors = [{n, c, col}]` (Flächen-Lage im Teil), im Bild als Vertex-Farben (`applyFaceColors`, `Viewer.faceIndexOf`). Text in Kurven: `Sketch.textToCurves(id)`
 - Normteile: Bauteile `stdScrew` (size, head 'zyl'|'senk', length), `stdNut`, `stdWasher` (Kern: `NORM`-Tabelle + `SCREW` in `core.js`); LIB-Einträge mit `mat` setzen den Werkstoff beim Anlegen (`Model.newItem`). KI-Aktion `verrechnen` (ids, modus, ziel)
+- Längen: Leisten-Schild `#sel-val` (Kantenlänge aus `edges[i].l`, Summe bei mehreren, Ø bei Kreiskante und runder Fläche `faces[i].r`); `Measure.copyText`/`copyValue` kopieren den Wert; Mess-Schilder `.dimlabel.mlabel` sind anklickbar; Messen kennt `kind: 'round'` (CYLINDRE/SPHERE)
 - Messen: Kern `minDistance(scene, ids)` (Worker `distance`, BRepExtrema_DistShapeShape) → `Measure.minDistance`; Teil-Panel zeigt Volumen, Oberfläche, Hüllmaße
 - Verknüpfte Kopien: `it.link` = Kennung des Originals; `Model.syncLinks(doc)` läuft in jedem `App.change` und übernimmt Art, Maße, Kanten, Rolle (`linkLost`, wenn das Original fehlt); `Actions.duplicateLinked`, `Actions.unlink`
 - Bezüge: `Model.dependencies(doc)` → Liste `{from, to, what, datum?}` auf oberster Ebene (Formschritt-Ziel, `link`, übernommene Skizzenkanten, Rohr-`bind`, Bezugsebenen an Flächen); Bereich `details#deps` im Teile-Panel; `Actions.remove` meldet abhängige Teile
@@ -209,7 +229,14 @@ Leitlinien:
   - Spiegeln (M, auch direkt an der X-/Y-Achse)
   - Rechteckmuster (Q), Kreismuster (W) – **nachträglich als Ganzes änderbar**
   - Maß (D, Formeln), Bild-Vorlage (I, mit Maßstab), Hilfslinie (X)
-- **Regeln:** senkrechte Leiste links, 9 Grundregeln plus Mittig und Konzentrisch.
+  - Maße als Tabelle: `details#dim-table` (Felder `#dt-N`, Zustand `S.dimTableOpen`)
+  - Linie „Tangente an zwei Kreise“: `S.lineMode = 'tan2'` → `tan2Down`/`tan2Geom` (äußere Tangente, Seite nach den Klicks), zwei `tangent`-Regeln
+  - Bogen „Mitte, Start, Ende“: `S.arcMode = 'center'` → `centerArc(d, p)`; Langloch „Gesamtlänge“: `S.slotTotal` → `slotInset(a, b, r)`, getippte Gesamtlänge wird zu `len` = Gesamtlänge − Breite
+  - Rechteck mit runden Ecken: `S.rectR` (Feld `#rk-r`) → `roundRect(en, r, keepWH)` (Ecken über `cornerDo`, dann waagerecht/senkrecht, `equal` für die Radien, bei getippten Maßen zwei `distPL`); Ecke bilden: `S.corner.mode = 'meet'` → `meetDo` (zwei Klicks, `S.meetFirst`)
+  - Kopieren/Einfügen: Strg C/V in der Skizze (`copySel`/`pasteClip`, Ablage auch in `localStorage` „tracery.sketchClip“; Regeln aus `CLIPCONS` und Maße ohne X/Y kommen mit); Doppelklick in Verschieben/Muster wählt die Kette (`SKO.chainOf`)
+  - Verschieben (H): um X/Y oder Drehen um Punkt/Mitte, auch als Kopie (`S.xm`, `applyXmove`, Auswahl über `S.patSel` wie beim Muster)
+- **Regeln:** senkrechte Leiste links, 10 Grundregeln (mit „Auf einer Linie“) plus Mittig und Konzentrisch.
+- **Maß zum Ablesen:** in Klammern, legt nichts fest; Knopf „( )“; wird automatisch so angelegt, wenn der Wert schon bestimmt ist.
 - **Löser:** blau = beweglich, dunkel = voll bestimmt; Widersprüche werden abgelehnt.
 - **Fangen:** Endpunkt, Mitte, Mittelpunkt, Kreispunkt, Schnitt, Lot, Tangente, auf Linie, Ausrichtung, Raster.
 - **Skizzenebene:** frei verschieben und neigen, **mittig zwischen zwei parallelen Flächen** oder **durch drei Punkte** auf Körpern. Ein Doppelklick auf eine ebene Fläche startet die Skizze darauf, die Flächenkanten sind Fangpunkte.

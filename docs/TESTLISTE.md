@@ -481,6 +481,151 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
   Schritte: 1. Ein Kind (ab 10) mit „Einfach“ eine Platte mit vier Löchern bauen lassen, ohne zu helfen.
   Erwartet: Es findet Körper, Löcher und Exportieren allein; notieren, wo es hängen bleibt.
 
+## Maße als Tabelle (neu in Sitzung 114)
+
+- [x] **Tabelle**: Rechteck und Kreis mit drei Maßen → drei Zeilen („Rechteck 1“, „Kreis 1“); Breite 45 eintippen → Rechteck 45 mm breit, Tabelle bleibt offen.
+
+## Drehteller-Video (neu in Sitzung 113)
+
+- [x] **Aufnahme**: 1,5 s Video → Datei mit Inhalt (video/webm), der Blick ist danach wie vorher; der Dialog öffnet sich.
+- [ ] **Abspielen**: Ein 6-s-Video in VLC, PowerPoint und auf dem Handy abspielen – ruckelt es?
+
+## Maus-Steuerung (neu in Sitzung 112)
+
+- [x] **Onshape**: Einstellung wählen → links nichts, Mitte verschieben, rechts drehen; links im Leeren zieht einen Rahmen um zwei Würfel; in der Skizze dreht rechts weiter.
+- [ ] **Gewohnheit**: Jemand, der SolidWorks oder Fusion gewohnt ist, probiert seine Einstellung – fühlt es sich richtig an (Trackpad am Mac?)
+
+## Tangente an zwei Kreise (neu in Sitzung 111)
+
+- [x] **Tangente**: Kreise r 10 und r 5, oben angeklickt → Linie berührt beide oben, zwei Tangential-Regeln; Kreis B auf Ø 16 → Linie folgt.
+- [ ] **Riemen**: Zwei Riemenscheiben mit beiden Tangenten zeichnen und hochziehen – sauberer Umriss?
+
+## Vorführ-Modus (neu in Sitzung 110)
+
+- [x] **Vorführen**: P → Leisten weg, Modell dreht sich; „Drehen anhalten“ → steht; Esc → alles wieder da.
+- [ ] **Beamer**: Auf einem zweiten Bildschirm oder Beamer vorführen – Vollbild und Tempo angenehm?
+
+## Skizze umhängen (neu in Sitzung 109)
+
+- [x] **Grundebene**: Rechteck 30 × 10 auf XY → auf „Vorne (XZ)“: steht senkrecht, x 0…30, z 0…10.
+- [x] **Bezugsebene**: auf „Arbeitsfläche 25 mm“ → z 25…28; Rückgängig holt die vorige Ebene.
+- [ ] **Auf Fläche**: Eine Skizze auf eine Körperfläche umhängen geht noch nicht – braucht es das?
+
+## Kanten nach Art wählen (neu in Sitzung 108)
+
+- [x] **Erkennen**: L-Profil (Skizze) → genau eine innere Kante (die Kehle), alle anderen außen.
+- [x] **Wählen und runden**: „Kanten wählen“ → „Alle inneren Kanten“ → die Kehle bei x = −16, z = 4; Rundung 2 mm ohne Fehler.
+- [ ] **Vereinigte Körper**: Bei zwei vereinigten Quadern die neue Kehle runden – geht noch nicht (die Rundung hängt am Ziel-Körper vor dem Vereinigen).
+
+## Rechenzeit je Schritt (neu in Sitzung 107)
+
+- [x] **Messen**: Klotz und M6-Gewindestange → die Gewindestange braucht länger (rund 7 s im Test) und steht oben im Protokoll; Klick wählt sie.
+- [ ] **Großes Projekt**: Bei einem trägen Projekt nachsehen – nennt die Liste den richtigen Übeltäter?
+
+## Export-Einstellungen (neu in Sitzung 106)
+
+- [x] **Feinheit**: Scheibe Ø 40 – „Sehr fein“ hat mehr als doppelt so viele Dreiecke wie „Grob“.
+- [x] **Format**: „Binär“ beginnt nicht mit „solid“, „Text“ schon und hat so viele „facet normal“ wie Dreiecke.
+- [ ] **Slicer**: Eine „Sehr fein“-STL im Slicer öffnen – Größe und Ladezeit in Ordnung?
+
+## Maße als CSV, Auswahl speichern (neu in Sitzung 105)
+
+- [x] **CSV**: Breite 40 und Hoehe = Breite/2 → „Breite;40;40“, „Hoehe;Breite/2;20“; CSV mit Breite 55,5, Tiefe 12 und einer kaputten Zeile laden → Breite geändert, Tiefe neu, eine Zeile übersprungen.
+- [x] **Auswahl**: Würfel 1 und 3 als „Ecken“ speichern → Rechtsklick ins Leere „Auswahl: Ecken“ wählt genau diese zwei.
+- [ ] **Excel**: Die CSV in Excel öffnen, ändern, speichern und wieder laden – bleiben Umlaute und Kommas richtig?
+
+## Suchen im Verlauf (neu in Sitzung 104)
+
+- [x] **Suchen**: 7 Schritte, „schr“ tippen → nur die Gruppe „Beschlag“ mit „Schraube“, der Cursor bleibt im Feld; Esc leert.
+- [x] **Filtern**: „Löcher“ → nur „Bohrung“; „Alle“ → wieder alle 7.
+- [ ] **Großes Projekt**: In einem Projekt mit 50 Schritten suchen – geht das flüssig?
+
+## Trägheit und Standfestigkeit (neu in Sitzung 103)
+
+- [x] **Trägheit**: PLA-Quader 20 × 20 × 40 → X und Y = m·(2² + 4²)/12, Z = m·(2² + 2²)/12 (m = 19,84 g).
+- [x] **Standfest**: derselbe Quader → „ja – kippt ab 27°“ (atan 10/20); kleiner Fuß mit langem Arm daneben → „nein – kippt um“.
+- [ ] **Echtes Teil**: Ein Teil mit bekanntem Trägheitsmoment (z. B. aus Fusion) vergleichen.
+
+## Wandstärke (neu in Sitzung 102)
+
+- [x] **Messen**: Schale 30 × 30 × 10 mit 2-mm-Wänden und 1,5-mm-Boden → Klick auf die Außenwand zeigt „Wand 2 mm“.
+- [x] **Ansicht**: Grenze 1,6 mm → Boden rot, „dünnste Stelle 1,5 mm“; Grenze 1,2 mm → „Überall mindestens 1,2 mm“.
+- [x] **Tempo**: Drohne mit 49 000 Dreiecken in 0,3 s.
+- [ ] **Echtes Gehäuse**: Ein gedrucktes Gehäuse prüfen – stimmen die roten Stellen mit den Stellen überein, die beim Druck Probleme machen?
+
+## Skizze und Fläche als DXF/SVG (neu in Sitzung 101)
+
+- [x] **Skizze**: Rechteck, Kreis, Bogen und eine Hilfslinie → DXF mit 6 Elementen; wieder eingelesen: Kreis r 4, Bogen r 5 in der richtigen Richtung; SVG 42 × 22 mm (mit 1 mm Rand).
+- [x] **Fläche**: Oberseite einer Platte mit Loch Ø 8 → 4 Linien und ein Kreis r 4.
+- [ ] **Laser/Plotter**: Eine gespeicherte DXF in LightBurn oder Inkscape öffnen – stimmt die Größe?
+
+## Export der Auswahl (neu in Sitzung 100)
+
+- [x] **Auswahl**: Deckel (mit Loch) und Fuß gewählt, Knopf nicht → „Nur die Auswahl (2 Teile)“ erscheint (ohne Haken, wie bisher wird sonst alles exportiert), angehakt: im ZIP „Einzeln/Deckel.stl“ und „Einzeln/Fuß.stl“, das Loch ist im Deckel.
+- [ ] **Slicer**: Die Einzel-Dateien in PrusaSlicer oder Bambu Studio öffnen – liegen sie richtig?
+
+## Lage unter der Maus (neu in Sitzung 99)
+
+- [x] **Körper**: Maus auf der Oberseite einer 10 mm hohen Platte bei (5, −5) → „X 5 Y −5 Z 10 mm“.
+- [x] **Boden**: Maus neben der Platte → „… · Boden“.
+- [x] **Skizze**: in einer Skizze bei (12, 7) → „Skizze X 12 Y 7 mm“.
+- [ ] **Großes Modell**: Bei einem Modell mit vielen Teilen die Maus bewegen – ruckelt etwas?
+
+## Bogen über die Mitte, Langloch über die Gesamtlänge (neu in Sitzung 98)
+
+- [x] **Bogen**: Mitte (0, 0), Start (10, 0), Ende (0, 10) → Viertelkreis; Ende neben dem Kreis wird auf den Radius gezogen, ein Bogen über 180° geht auch.
+- [x] **Langloch**: Gesamtlänge 40 getippt, Breite 10 → Mitten bei 5 und 35, Maße Breite 10 und Mittenabstand 30; mit der Maus außen 0 bis 20, Breite 6 → Mitten 3 und 17.
+- [ ] **Bemaßen**: Ein Langloch über die Gesamtlänge im fertigen Teil nachmessen (Messen-Werkzeug) – stimmt die Länge?
+
+## Rechteck mit runden Ecken, Ecke bilden (neu in Sitzung 97)
+
+- [x] **Rund**: Ecken-Radius 3, Rechteck 40 × 20 getippt → 4 Linien, 4 Bögen, ein Radius-Maß, 3× „Gleich“, Breite und Höhe als Maße.
+- [x] **Radius ändern**: Bogen wählen, Radius 5 → alle vier Bögen 5 mm, außen bleibt 40 mm; Strg Z zweimal → leer.
+- [x] **Ecke bilden**: kurze waagerechte und senkrechte Linie → treffen sich bei (20, 0); zu lange Linie wird bis zur senkrechten gekürzt.
+- [ ] **Gefühl**: Rechteck mit runden Ecken mit der Maus aufziehen und hochziehen – sieht das Teil aus wie erwartet?
+
+## Kopieren und Einfügen in der Skizze (neu in Sitzung 96)
+
+- [x] **Kette**: Doppelklick auf eine Seite eines Linien-Rechtecks wählt alle vier.
+- [x] **Einfügen**: Strg C, Strg V → vier neue Linien rechts daneben, „Waagerecht“ und das Längenmaß sind mitgekommen, Verschieben ist aktiv.
+- [x] **Andere Skizze**: In einer neuen Skizze Strg V → an derselben Stelle.
+- [ ] **Anderes Projekt**: In einem zweiten Tab mit anderem Projekt einfügen – kommt die Kopie an?
+
+## Verschieben und Drehen in der Skizze (neu in Sitzung 95)
+
+- [x] **Verschieben**: Kreis und Linie wählen, X 12 / Y −4 → beide sind genau dort, nichts doppelt.
+- [x] **Drehen als Kopie**: Linie um 90° um ihre Mitte → Original bleibt, Kopie steht senkrecht.
+- [x] **Rechteck schräg**: 30° → vier Linien; Strg Z holt das Rechteck zurück.
+- [ ] **Mit Regeln**: Ein Teil der Skizze, der über „Deckungsgleich“ an anderem hängt, verschieben – ist klar, warum es zurückspringt?
+
+## Kanten einer Fläche, Notiz am Schritt (neu in Sitzung 94)
+
+- [x] **Kanten finden**: Oberseite eines Quaders → 4 Kanten; Mantel eines Zylinders → 2 Kreiskanten (ohne Naht).
+- [x] **Alle abrunden**: Oberseite wählen → „Ihre Kanten“ → „Alle abrunden“ → eine Rundung mit 4 Kanten, kein Fehler, Volumen kleiner.
+- [x] **Notiz**: „Wand 2 mm, sonst bricht sie“ eintragen → steht am Teil und in der Zeitleiste; Rückgängig nimmt sie weg.
+- [ ] **Gehäuse**: An einem echten Gehäuse mit Löchern in der Oberseite „Ihre Kanten“ – werden die Lochkanten mitgenommen, und will man das?
+
+## Vorige Ansicht, Teil dahinter (neu in Sitzung 93)
+
+- [x] **Zurück**: Vorne → oben → rechts, dann zweimal Umschalt Z → oben, dann vorne; mit der Maus drehen und Umschalt Z → wieder vorne; Rechtsklick ins Leere zeigt „Vorige Ansicht“.
+- [x] **Dahinter**: Deckel vor Platine – Klick wählt den Deckel, Alt + Klick die Platine, nochmal Alt + Klick wieder den Deckel; Rechtsklick „Dahinter wählen: Platine“.
+- [ ] **Mausrad**: Mehrmals zoomen, dann Umschalt Z – geht es in einem Schritt zum Blick vor dem Zoomen?
+- [ ] **Mac**: Alt + Klick (Wahltaste) auf dem Mac – kommt der Klick an?
+
+## Längen und Durchmesser (neu in Sitzung 92)
+
+- [x] **Kanten**: Block 40 × 20 × 10 → obere 40er-Kante „Kante 40 mm“, alle vier oberen Kanten „4 Kanten 120 mm“.
+- [x] **Rund**: Kreiskante einer Rolle Ø 10 → „Kante Ø 10 mm“; Mantel → „Runde Fläche Ø 10 mm“; Messen am Mantel → „Zylinder Ø 10 mm (R 5)“.
+- [x] **Kopieren**: Klick aufs Schild → „10“ in der Zwischenablage, Meldung „kopiert“.
+- [ ] **Einfügen**: Den kopierten Wert mit Strg V in ein Maß-Feld einfügen – klappt das in Safari und Firefox?
+
+## Maß zum Ablesen, auf einer Linie (neu in Sitzung 91)
+
+- [x] **Ablesen**: Zwei Linien mit „Gleich“, die erste 30 mm fest → Maß an der zweiten wird „(30)“ in Klammern; erste auf 40 → „(40)“; 55 an der zweiten → Meldung mit „Nur ablesen“.
+- [x] **Umschalten**: festes Maß anklicken → „( )“ macht es zum Ablese-Maß; Ablese-Maß anklicken und 35 tippen → wieder fest.
+- [x] **Auf einer Linie**: zwei schräge Linien mit Lücke → danach auf einer Geraden; die erste waagerecht → beide auf gleicher Höhe.
+- [ ] **Gefühl**: In einer echten Skizze eine Gesamtlänge als Ablese-Maß setzen – ist es klar, dass es nur anzeigt?
+
 ## Bezüge (neu in Sitzung 90)
 
 - [x] **Liste**: Block, davon ein Bolzen abgezogen, dazu eine verknüpfte Kopie → am Block „Bezüge (2)“ mit „Bolzen wird hiervon abgezogen“ und der Kopie; Klick wählt das Teil.

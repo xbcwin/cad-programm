@@ -244,6 +244,7 @@ const IC = {
   cHoriz: '<path d="M6 8h12" stroke-dasharray="3 2.5" opacity=".4"/><path d="M4 12h16"/><circle cx="4" cy="12" r="2" fill="currentColor" stroke="none"/><circle cx="20" cy="12" r="2" fill="currentColor" stroke="none"/>',
   cVert: '<path d="M16 6v12" stroke-dasharray="3 2.5" opacity=".4"/><path d="M12 4v16"/><circle cx="12" cy="4" r="2" fill="currentColor" stroke="none"/><circle cx="12" cy="20" r="2" fill="currentColor" stroke="none"/>',
   cParallel: '<path d="M5 17 15 5M9 19 19 7" />',
+  cCollinear: '<path d="M3 19 9.5 12.5M14.5 7.5 21 1" /><circle cx="12" cy="10" r="1.2" />',
   cPerp: '<path d="M12 14h5v5" opacity=".5"/><path d="M4 19h16M12 19V5" />',
   cTangent: '<circle cx="10" cy="14" r="6"/><path d="M5.6 3.2 20 14"/><circle cx="13.6" cy="9.2" r="1.8" fill="currentColor" stroke="none"/>',
   cEqual: '<path d="M10 10h4M10 14h4" opacity=".6"/><path d="M4 19 9 5M15 19l5-14" />',
@@ -665,7 +666,7 @@ const HELP = {
  "corner2d": {
   "tip": "Ecke in der Skizze runden oder fasen",
   "hilfe": "Stell rechts Rundung oder Fase und den Radius ein und klick dann auf eine Ecke – zwischen zwei Linien, an einem Rechteck oder an einem Vieleck. Beim Überfahren siehst du die Rundung schon in Orange.",
-  "tipp": "Die Rundung bleibt tangential und behält ihren Radius als Maß. Ist der Radius zu groß, sagt Tracery dir, wie groß er höchstens sein darf."
+  "tipp": "Die Rundung bleibt tangential und behält ihren Radius als Maß. Ist der Radius zu groß, sagt Tracery dir, wie groß er höchstens sein darf. Unter „Art“ gibt es außerdem „Ecke bilden“: zwei Linien anklicken, und sie treffen sich genau an ihrem Schnittpunkt."
  },
  "cMid": {
   "tip": "Punkt genau in die Mitte einer Linie",
@@ -866,6 +867,136 @@ const HELP = {
   "tip": "Worauf das Teil aufbaut und was daran hängt",
   "hilfe": "Unter „Bezüge“ siehst du, mit welchen Teilen dieses Teil zusammenhängt: wovon es abgezogen oder womit es vereinigt wird, wessen Kopie es ist, von wem eine Skizze Kanten übernimmt – und andersherum, welche Teile und Bezugsebenen an diesem Teil hängen. Ein Klick auf eine Zeile wählt das andere Teil.",
   "tipp": "Bevor du ein Teil löschst, schau hier nach. Löschst du es trotzdem, behalten die abhängigen Teile ihre letzte Form, und Tracery sagt dir, welche es waren."
+ },
+ "cCollinear": {
+  "tip": "Zwei Linien auf derselben Geraden",
+  "hilfe": "Klicke zwei Linien nacheinander an. Danach liegen beide auf einer gemeinsamen Geraden – wie die zwei Stücke einer Kante, die von einem Ausschnitt unterbrochen wird. Zieht man an einer, wandert die andere mit.",
+  "tipp": "Die Linien müssen sich nicht berühren. Für Linien, die nur in dieselbe Richtung zeigen sollen, nimm „Parallel“."
+ },
+ "refDim": {
+  "tip": "Maß nur zum Ablesen",
+  "hilfe": "Ein Maß in Klammern legt nichts fest. Es zeigt nur, wie groß etwas gerade ist, und ändert sich mit, wenn du die Skizze änderst. Im Maß-Feld macht der Knopf „( )“ aus einem Maß ein Maß zum Ablesen. Liegt ein Wert schon durch andere Maße fest, legt Tracery das neue Maß gleich so an.",
+  "tipp": "Praktisch für eine Gesamtlänge, die sich aus Einzelmaßen ergibt. Klickst du ein Maß in Klammern an und tippst einen Wert, wird es wieder ein festes Maß – wenn das zu den anderen Regeln passt."
+ },
+ "copyValue": {
+  "tip": "Messwert kopieren",
+  "hilfe": "Wählst du eine Kante, steht oben in der Leiste ihre Länge – bei mehreren Kanten die Summe, bei einem Kreis oder einer runden Fläche der Durchmesser. Ein Klick auf diesen Wert kopiert ihn. Auch die Schilder beim Messen kopieren ihren Wert, wenn du sie anklickst.",
+  "tipp": "Mit Strg V fügst du den Wert in jedes Maß-Feld ein, zum Beispiel um ein neues Teil genauso lang zu machen."
+ },
+ "viewBack": {
+  "tip": "Zurück zur vorigen Ansicht",
+  "hilfe": "Tracery merkt sich die letzten 40 Blickwinkel – nach dem Drehen, Zoomen, einer Standard-Ansicht oder „Heranzoomen“. Umschalt Z (oder Rechtsklick ins Leere → „Vorige Ansicht“) springt Schritt für Schritt zurück.",
+  "tipp": "Hast du dich verdreht, kommst du so schnell wieder zu dem Blick, den du vorher hattest. Für Blicke, die du öfter brauchst, nimm „Ansicht speichern“."
+ },
+ "selectBehind": {
+  "tip": "Teil dahinter wählen",
+  "hilfe": "Liegt ein Teil vor dem, das du willst, halte Alt gedrückt und klick: Tracery wählt das nächste Teil an dieser Stelle dahinter. Noch ein Alt-Klick geht noch eine Ebene tiefer, am Ende wieder nach vorne. Im Rechtsklick-Menü stehen die Teile dahinter auch mit Namen.",
+  "tipp": "Praktisch bei Gehäusen: So wählst du die Platine im Inneren, ohne den Deckel auszublenden."
+ },
+ "faceEdges": {
+  "tip": "Alle Kanten einer Fläche",
+  "hilfe": "Wähl eine Fläche und klick oben in der Leiste auf „Ihre Kanten“. Dann kannst du alle Kanten rund um diese Fläche auf einmal wählen, abrunden oder abschrägen – zum Beispiel die ganze Oberkante eines Gehäuses.",
+  "tipp": "Nach dem Abrunden änderst du den Radius rechts beim Teil. Mit „Kanten wählen“ kannst du vorher noch einzelne Kanten mit Umschalt + Klick dazu- oder abwählen."
+ },
+ "stepNote": {
+  "tip": "Notiz zu diesem Schritt",
+  "hilfe": "Schreib dir auf, warum ein Schritt so ist, wie er ist. Die Notiz steht rechts beim Teil und erscheint in der Zeitleiste, wenn du mit der Maus über den Schritt fährst. Ein kleiner Punkt am Schritt zeigt, dass es eine Notiz gibt.",
+  "tipp": "Gut für Maße, die man später nicht mehr versteht – und für alle, mit denen du das Projekt teilst."
+ },
+ "xmove": {
+  "tip": "Verschieben oder drehen mit genauen Werten",
+  "hilfe": "Klick in der Skizze die Elemente an, die sich bewegen sollen (nochmal klicken wählt ab). Rechts stellst du ein: verschieben um X und Y oder drehen um einen Winkel – um die Mitte der Auswahl oder einen Punkt, den du wählst. Mit „Als Kopie“ bleibt das Original stehen. Enter oder der Knopf führt es aus.",
+  "tipp": "Feste Maße für X und Y wandern beim Verschieben mit. Wird ein Rechteck schräg gedreht, wird es zu vier Linien."
+ },
+ "coords": {
+  "tip": "Lage unter der Maus",
+  "hilfe": "Unten rechts steht, wo die Maus gerade ist: auf einem Körper die Lage auf seiner Oberfläche, daneben auf dem Boden (Z = 0), in einer Skizze X und Y der Skizze – mit Einrasten, so wie der nächste Klick gesetzt würde.",
+  "tipp": "Praktisch, um schnell zu sehen, ob etwas wirklich bei null beginnt oder wie hoch eine Fläche liegt."
+ },
+ "exportSelection": {
+  "tip": "Nur einen Teil exportieren",
+  "hilfe": "Ist beim Exportieren etwas gewählt, kannst du nur diese Teile in die Dateien schreiben. Löcher und Formschritte, die in die gewählten Teile schneiden, zählen trotzdem mit. Mit „Jeder Körper als eigene Datei“ kommt zusätzlich ein Ordner „Einzeln“ ins ZIP – eine STL bzw. 3MF pro Körper, benannt nach dem Teil.",
+  "tipp": "Für den 3D-Druck: Einzelne Dateien lassen sich im Slicer getrennt drehen und anordnen."
+ },
+ "sketchExport": {
+  "tip": "Skizze als 2D-Datei",
+  "hilfe": "„Als DXF speichern“ schreibt die Skizze in Originalgröße (Millimeter) für Laser, Fräse oder ein anderes CAD. „Als SVG speichern“ ist für Plotter, Schneideplotter und Grafikprogramme. Hilfslinien und Punkte kommen nicht mit.",
+  "tipp": "Die Knöpfe stehen rechts, wenn nichts in der Skizze gewählt ist."
+ },
+ "faceExport": {
+  "tip": "Fläche als 2D-Datei",
+  "hilfe": "Rechtsklick auf eine ebene Fläche eines Körpers → „Fläche als DXF speichern“ oder „… als SVG“. Du bekommst den Umriss dieser Fläche samt Löchern in Originalgröße, so als würdest du senkrecht darauf schauen.",
+  "tipp": "Praktisch für Platten und Bleche, die gelasert oder gefräst werden, und für Schablonen zum Ausdrucken."
+ },
+ "thinWalls": {
+  "tip": "Zu dünne Stellen zeigen",
+  "hilfe": "Ansicht → „Wandstärke (3D-Druck)“ färbt alle Stellen rot, an denen das Teil dünner ist als die gewählte Grenze – gemessen senkrecht von der Oberfläche nach innen. Unten steht, wie viel Fläche betroffen ist und wie dünn die dünnste Stelle ist. Beim Messen zeigt ein Klick auf eine Fläche auch die Wandstärke genau dort.",
+  "tipp": "Mit einer 0,4-mm-Düse sollten Wände mindestens 0,8 bis 1,2 mm haben, tragende Teile eher 2 mm und mehr."
+ },
+ "inertia": {
+  "tip": "Wie schwer sich das Teil drehen lässt",
+  "hilfe": "Die Trägheitsmomente sagen, wie viel Kraft es braucht, das Teil um seinen Schwerpunkt zu drehen – um die X-, die Y- und die Z-Richtung. Sie hängen vom Material und davon ab, wie weit die Masse vom Schwerpunkt entfernt liegt. Einheit: g·cm².",
+  "tipp": "Wichtig für alles, was sich dreht oder schnell lenkt: Räder, Rotoren, Arme. Masse nah am Schwerpunkt macht ein Teil wendiger."
+ },
+ "stability": {
+  "tip": "Steht das Teil oder kippt es?",
+  "hilfe": "So wie das Teil gerade liegt: Liegt der Schwerpunkt über der Fläche, auf der es steht, steht es. Der Winkel sagt, wie weit man es neigen kann, bevor es umfällt. „Kippt um“ heißt: Der Schwerpunkt liegt neben der Standfläche.",
+  "tipp": "Ein tiefer Schwerpunkt und eine breite Standfläche machen ein Teil standfester – zum Beispiel ein schwerer Fuß oder ein breiterer Boden."
+ },
+ "treeFilter": {
+  "tip": "Im Verlauf suchen",
+  "hilfe": "Ab sechs Schritten steht über dem Verlauf ein Suchfeld. Es findet Schritte nach Name, Art (zum Beispiel „Zylinder“) und Notiz. Daneben wählst du, was gezeigt wird: nur Körper, nur Löcher, ausgeblendete Teile, Schritte mit Fehler, mit Notiz oder von der KI. Gruppen mit Treffern klappen von selbst auf.",
+  "tipp": "Esc im Suchfeld leert es wieder."
+ },
+ "paramsCsv": {
+  "tip": "Maße als Tabelle tauschen",
+  "hilfe": "„Als CSV speichern“ schreibt alle Maße mit Namen, Wert und Ergebnis in eine Tabelle, die Excel, Numbers oder LibreOffice öffnen. „CSV laden“ liest so eine Tabelle wieder ein: Maße mit bekanntem Namen werden geändert, neue kommen dazu. Es zählen die ersten beiden Spalten: Name und Wert (Zahl oder Formel).",
+  "tipp": "So kannst du Maße in der Tabellenkalkulation vorbereiten oder zwischen Projekten tauschen."
+ },
+ "selSets": {
+  "tip": "Auswahl merken",
+  "hilfe": "Wähl mehrere Teile aus, Rechtsklick → „Auswahl speichern …“ und gib ihr einen Namen. Später wählt Rechtsklick ins Leere → „Auswahl: Name“ genau diese Teile wieder. Die Auswahl wird mit dem Projekt gespeichert.",
+  "tipp": "Praktisch für Teile, die du immer wieder zusammen ausblendest, verschiebst oder exportierst."
+ },
+ "exportSettings": {
+  "tip": "Feinheit und Format der Netze",
+  "hilfe": "STL und 3MF beschreiben die Form mit Dreiecken. „Feinheit“ bestimmt, wie viele: Grob gibt kleine Dateien mit sichtbaren Kanten an Rundungen, Sehr fein glatte Rundungen und große Dateien. STEP ist davon nicht betroffen – es bleibt immer exakt. Das STL-Format „Text“ brauchen nur wenige ältere Programme.",
+  "tipp": "Für den 3D-Druck reicht fast immer „Normal“. Für Renderings großer, runder Teile lohnt „Fein“."
+ },
+ "slowSteps": {
+  "tip": "Welcher Schritt ist langsam?",
+  "hilfe": "Im Protokoll zeigt „Rechenzeit je Schritt“ die fünf Schritte, die beim letzten Neurechnen am längsten gebraucht haben. Ein Klick wählt den Schritt. So findest du, was ein großes Modell träge macht.",
+  "tipp": "Typische Zeitfresser: Rundungen über sehr viele Kanten, echte Gewinde und Muster mit vielen Kopien. Ein Gewinde kannst du zum Beispiel erst am Ende einschalten."
+ },
+ "edgeRules": {
+  "tip": "Kanten nach Art wählen",
+  "hilfe": "„Alle äußeren Kanten“ wählt jede Kante, an der das Teil nach außen eine Ecke hat – die typischen Kanten zum Abrunden. „Alle inneren Kanten“ wählt die Kehlen, zum Beispiel wo eine Wand auf den Boden trifft. Glatte Übergänge (etwa am Rand einer Rundung) zählen zu keiner der beiden.",
+  "tipp": "Innere Kanten mit einer kleinen Rundung machen Druckteile deutlich stabiler."
+ },
+ "replaneSketch": {
+  "tip": "Skizze auf eine andere Ebene legen",
+  "hilfe": "Rechts beim Teil unter „Skizze umhängen“ wählst du eine andere Ebene – eine Grundebene oder eine deiner Bezugsebenen. Die Skizze behält Form, Maße und Regeln, nur ihre Lage im Raum ändert sich. Das Teil wird dabei an die neue Ebene gesetzt.",
+  "tipp": "Hast du aus Versehen auf der falschen Ebene gezeichnet, musst du so nicht neu anfangen. Rückgängig holt die alte Lage zurück."
+ },
+ "present": {
+  "tip": "Modell vorführen",
+  "hilfe": "„Vorführen“ (Taste P) blendet alle Leisten aus, schaltet auf Vollbild und dreht das Modell langsam – eine Runde in 40 Sekunden. Mit der Maus kannst du trotzdem drehen und zoomen. Unten rechts hältst du das Drehen an. Esc beendet den Modus.",
+  "tipp": "Zusammen mit dem Studio-Look (Ansicht → unten im Menü) wirkt das Modell am besten."
+ },
+ "mouseStyle": {
+  "tip": "Maus wie in deinem gewohnten Programm",
+  "hilfe": "Unter Menü → Einstellungen → „Maus-Steuerung“ stellst du die Maus so ein, wie du es aus Onshape, SolidWorks, Fusion oder Blender kennst. Bei diesen Arten zieht die linke Maustaste im Leeren einen Auswahl-Rahmen auf; gedreht und verschoben wird mit Mitte oder rechts.",
+  "tipp": "Das Mausrad zoomt immer. Rechtsklick ohne Ziehen öffnet weiter das Menü."
+ },
+ "turntable": {
+  "tip": "Video vom Modell",
+  "hilfe": "Ansicht → „Drehteller-Video …“ nimmt ein kurzes Video auf: Das Modell dreht sich einmal um sich selbst, genau so, wie es gerade im Bild zu sehen ist. Du wählst 4 bis 15 Sekunden; gespeichert wird eine WebM-Datei, die Browser, VLC und die meisten Präsentations-Programme abspielen.",
+  "tipp": "Vorher Studio-Look einschalten und den Blick einstellen – leicht von oben sieht meist am besten aus."
+ },
+ "dimTable": {
+  "tip": "Alle Maße auf einen Blick",
+  "hilfe": "Ist in der Skizze nichts gewählt, steht rechts „Alle Maße“: jedes Maß mit seinem Element und seinem Wert. Du kannst Werte und Formeln dort direkt ändern – praktisch, wenn viele Maße im Bild eng beieinander stehen.",
+  "tipp": "Maße zum Ablesen stehen mit „(ablesen)“ da; tippst du dort einen Wert, wird es ein festes Maß."
  }
 };
 

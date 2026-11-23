@@ -446,8 +446,9 @@ const Interact = (() => {
       }
     }
     const hit = Select.adjust(Viewer.pick(e.clientX, e.clientY, Select.pickOpts()));
-    // Umschalt + Ziehen im Leeren: Rahmen aufziehen (nach rechts: ganz drin · nach links: berührt)
-    if (!hit && e.shiftKey) {
+    // Umschalt + Ziehen im Leeren: Rahmen aufziehen (nach rechts: ganz drin · nach links: berührt);
+    // dreht die linke Maustaste nicht (Maus-Steuerung wie Onshape, SolidWorks …), auch ohne Umschalt
+    if (!hit && (e.shiftKey || !Viewer.leftOrbits)) {
       Viewer.controls.enabled = false;
       band = { x: e.clientX, y: e.clientY, el: h('div', { class: 'sel-band' }) }; document.body.append(band.el);
       down = { band: true, x: e.clientX, y: e.clientY }; Viewer.canvas.setPointerCapture(e.pointerId);
@@ -577,7 +578,7 @@ const Interact = (() => {
     }
     if (down && !down.handle) {
       const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y) > 4;
-      if (!moved && e.target === Viewer.canvas) clickSelect(down.hit, down.shift, e.clientX, e.clientY);
+      if (!moved && e.target === Viewer.canvas) { if (e.altKey && !down.shift && !App.ctx) selectBehind(e.clientX, e.clientY); else clickSelect(down.hit, down.shift, e.clientX, e.clientY); }
       down = null;
     }
     Viewer.controls.enabled = true;
@@ -600,6 +601,45 @@ const Interact = (() => {
     UI.toast(ids.length ? `${ids.length} ${ids.length === 1 ? 'Teil' : 'Teile'} gewählt (${cross ? 'alles, was der Rahmen berührt' : 'nur Teile ganz im Rahmen'}).` : 'Im Rahmen liegt kein Teil.', { icon: 'pointer', ms: 2200 });
     return ids;
   }
+  // Auswahl speichern und wieder wählen (BE-07): benannte Sätze von Teilen im Projekt
+  async function saveSelection(name) {
+    const ids = [...new Set(App.sel.map((id) => (Model.topOf(App.doc, id) || {}).id).filter(Boolean))];
+    if (!ids.length) { UI.toast('Wähl zuerst die Teile aus.', { icon: 'info' }); return null; }
+    const nm = name || (await UI.prompt('Auswahl speichern', 'Name der Auswahl', `Auswahl ${(App.doc.selSets || []).length + 1}`, 'Speichern'));
+    if (!nm || !nm.trim()) return null;
+    const s = { id: uid('ss'), name: nm.trim(), ids };
+    App.change(`Auswahl „${s.name}“ gespeichert`, (doc) => { doc.selSets = (doc.selSets || []).filter((x) => x.name !== s.name); doc.selSets.push(s); });
+    UI.toast(`„${s.name}“ gespeichert (${ids.length} ${ids.length === 1 ? 'Teil' : 'Teile'}) – Rechtsklick ins Leere wählt sie wieder.`, { icon: 'check' });
+    return s;
+  }
+  function useSelection(id) {
+    const s = (App.doc.selSets || []).find((x) => x.id === id); if (!s) return 0;
+    const ids = s.ids.filter((x) => Model.find(App.doc, x));
+    App.select(ids);
+    if (ids.length < s.ids.length) UI.toast(`${s.ids.length - ids.length} Teile dieser Auswahl gibt es nicht mehr.`, { icon: 'info' });
+    return ids.length;
+  }
+  // „Wähle das dahinter“: Teile, die unter der Maus hinter dem vorderen liegen (höchstens vier)
+  function behindItems(cx, cy, frontTop) {
+    const seen = new Set([frontTop]), out = [];
+    for (const x of Viewer.pickAll(cx, cy)) {
+      const t = Model.topOf(App.doc, x.id); if (!t || seen.has(t.id) || App.mergedInto(t.id)) continue;
+      seen.add(t.id);
+      out.push({ icon: 'pointer', label: `Dahinter wählen: „${Model.label(t)}“`, id: 'cm-behind-' + out.length, run: () => App.select([t.id]) });
+      if (out.length >= 4) break;
+    }
+    return out.length ? ['-', ...out] : [];
+  }
+  function selectBehind(cx, cy) {
+    // nächstes Teil hinter dem gewählten an dieser Stelle; am Ende wieder das vordere
+    const tops = []; for (const x of Viewer.pickAll(cx, cy)) { const t = Model.topOf(App.doc, x.id); if (t && !tops.includes(t.id) && !App.mergedInto(t.id)) tops.push(t.id); }
+    if (!tops.length) return null;
+    const cur = App.sel.length === 1 ? (Model.topOf(App.doc, App.sel[0]) || {}).id : null;
+    const i = tops.indexOf(cur), next = tops[(i + 1) % tops.length];
+    App.select([next]);
+    if (tops.length > 1) UI.toast(`Gewählt: „${Model.label(Model.find(App.doc, next).item)}“ (${tops.indexOf(next) + 1} von ${tops.length} an dieser Stelle)`, { icon: 'pointer', ms: 2200 });
+    return next;
+  }
   // Rechtsklick-Menü im Bild
   function contextMenu(cx, cy) {
     const hit = Select.adjust(Viewer.pick(cx, cy, Select.pickOpts()));
@@ -614,6 +654,8 @@ const Interact = (() => {
         ...(sk ? [{ icon: 'edit', label: 'Skizze bearbeiten', kbd: 'E', id: 'cm-edit', run: () => Sketch.editItem(it.id) }] : []),
         { icon: 'help', label: 'Erklär diesen Schritt', id: 'cm-explain', run: () => Explain.dialog(it.id) },
         { icon: 'viewOrtho', label: 'Blick senkrecht auf die Fläche', id: 'cm-normal', hidden: !hit || hit.faceIdx == null || !((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).n, run: () => Viewer.lookAtFace(hit.id, hit.faceIdx) },
+        { icon: 'export', label: 'Fläche als DXF speichern', id: 'cm-facedxf', help: 'faceExport', hidden: !hit || hit.faceIdx == null || !((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).n, run: () => { const r = App.results.get(hit.id); Print.faceTo2D({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }, 'dxf'); } },
+        { icon: 'export', label: 'Fläche als SVG speichern', id: 'cm-facesvg', help: 'faceExport', hidden: !hit || hit.faceIdx == null || !((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).n, run: () => { const r = App.results.get(hit.id); Print.faceTo2D({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }, 'svg'); } },
         { icon: 'sketch', label: 'Skizze auf dieser Fläche', id: 'cm-sketchface', hidden: !hit || hit.faceIdx == null, run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) Sketch.startOnFace({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }); } },
         '-',
         { icon: 'copy', label: 'Duplizieren', kbd: 'Strg D', id: 'cm-dup', run: () => Actions.duplicate() },
@@ -623,6 +665,8 @@ const Interact = (() => {
         { icon: 'focusView', label: 'Isolieren', kbd: 'I', id: 'cm-iso', run: () => Comp.toggleIso(it.id) },
         { icon: 'pointer', label: 'Ähnliche wählen', kbd: 'A', id: 'cm-similar', run: () => Select.similar() },
         { icon: 'fit', label: 'Heranzoomen', kbd: 'F', id: 'cm-fit', run: () => Viewer.fit([it.id]) },
+        { icon: 'pointer', label: 'Auswahl speichern …', id: 'cm-selsave', help: 'selSets', run: () => saveSelection() },
+        ...behindItems(cx, cy, top.id),
         '-',
         { icon: 'trash', label: 'Löschen', kbd: 'Entf', id: 'cm-del', run: () => Actions.remove() },
       ];
@@ -632,6 +676,8 @@ const Interact = (() => {
         { icon: 'eye', label: hidden ? `Alles einblenden (${hidden})` : 'Alles einblenden', id: 'cm-showall', disabled: !hidden, run: () => Actions.showAll() },
         { icon: 'pointer', label: 'Alles wählen', kbd: 'Strg A', id: 'cm-all', run: () => App.select(App.doc.items.filter((x) => !x.hidden && !App.mergedInto(x.id)).map((x) => x.id)) },
         { icon: 'fit', label: 'Alles zeigen', kbd: 'F', id: 'cm-fitall', run: () => Viewer.fit() },
+        ...(App.doc.selSets || []).map((s, i) => ({ icon: 'pointer', label: `Auswahl: ${s.name}`, id: 'cm-selset-' + i, help: 'selSets', run: () => useSelection(s.id) })),
+        { icon: 'undo', label: 'Vorige Ansicht', kbd: 'Umschalt Z', id: 'cm-viewback', disabled: !Viewer.viewHistory, run: () => Viewer.viewBack() },
         '-',
         { icon: 'sketch', label: 'Neue Skizze', kbd: 'S', id: 'cm-sketch', run: () => Sketch.chooseAndStart() },
         { icon: 'image', label: 'Bild speichern (PNG)', id: 'cm-image', run: () => Print.imageDialog() },
@@ -703,6 +749,6 @@ const Interact = (() => {
     if (info && info.t === 'PLANE' && info.n && App.doc.items.some((x) => x.id === hit.id)) { Sketch.startOnFace({ id: hit.id, idx: hit.faceIdx, info, point: hit.point.toArray(), normal: hit.normal ? hit.normal.toArray() : null }); return; }
     Viewer.fit([hit.id]);
   }
-  return { init, bandSelect, contextMenu };
+  return { init, bandSelect, contextMenu, selectBehind, saveSelection, useSelection };
 })();
 

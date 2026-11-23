@@ -313,6 +313,75 @@ const Views = (() => {
     st.ov = o; drawOverhang(); sync();
   }
 
+  // ---------- Wandstärke (3D-Druck, PF-07): Stellen dünner als die Grenze werden rot ----------
+  function drawThin() {
+    const o = st.thin; if (!o) return;
+    if (o.mesh) { Viewer.groups.overlay.remove(o.mesh); o.mesh.geometry.dispose(); o.mesh.material.dispose(); o.mesh = null; }
+    const d = Viewer.thinWalls(o.limit);
+    o.area = d.area; o.minT = d.minT;
+    if (d.pos.length) {
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(d.pos, 3));
+      const m = new THREE.MeshBasicMaterial({ color: 0xe0483b, transparent: true, opacity: 0.78, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+      o.mesh = new THREE.Mesh(g, m); o.mesh.renderOrder = 18; Viewer.groups.overlay.add(o.mesh);
+    }
+    const t = o.bar && o.bar.querySelector('#thin-area');
+    if (t) t.textContent = d.area > 0.05 ? `${fmt(d.area, d.area < 100 ? 1 : 0)} mm² dünner als ${fmt(o.limit, 1)} mm – dünnste Stelle ${fmt(d.minT, 2)} mm` : `Überall mindestens ${fmt(o.limit, 1)} mm`;
+    Viewer.requestRender();
+  }
+  function thin(on = !st.thin) {
+    if (!on) { if (st.thin) { if (st.thin.mesh) { Viewer.groups.overlay.remove(st.thin.mesh); st.thin.mesh.geometry.dispose(); st.thin.mesh.material.dispose(); } if (st.thin.bar) st.thin.bar.remove(); st.thin = null; Viewer.requestRender(); } sync(); return; }
+    if (st.thin) return;
+    const o = { limit: 1.2, mesh: null, area: 0 };
+    const bar = h('div', { class: 'viewbar', role: 'toolbar', 'aria-label': 'Wandstärke' });
+    const head = h('div', { class: 'vb-head' }, h('span', { class: 'title' }, 'Wandstärke'));
+    const close = h('button', { type: 'button', class: 'vb-x', 'aria-label': 'Wandstärke ausblenden', 'data-tip': 'Ausblenden' }); close.innerHTML = icon('close'); close.onclick = () => thin(false);
+    head.append(close);
+    const sel = h('select', { id: 'thin-limit', class: 'vb-sel', 'aria-label': 'Mindest-Wandstärke' });
+    for (const a of [0.4, 0.8, 1.2, 1.6, 2, 3, 5]) sel.append(h('option', { value: a, ...(a === 1.2 ? { selected: true } : {}) }, fmt(a, 1) + ' mm'));
+    sel.onchange = () => { o.limit = +sel.value; drawThin(); };
+    bar.append(head, h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, 'Rot unter'), sel, h('span', { class: 'vb-hint' }, '0,4 mm Düse: mindestens 0,8–1,2 mm')), h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint', id: 'thin-area' }, '')));
+    bars().append(bar); o.bar = bar;
+    st.thin = o; drawThin(); sync();
+  }
+
+  // ---------- Vorführ-Modus (AN-19): nur das Modell, Vollbild, auf Wunsch langsam drehend ----------
+  function present(on = !st.present) {
+    if (!on) {
+      if (!st.present) return;
+      cancelAnimationFrame(st.present.raf); if (st.present.bar) st.present.bar.remove();
+      Viewer.canvas.removeEventListener('pointerdown', st.present.pd); removeEventListener('pointerup', st.present.pu);
+      document.body.classList.remove('presenting');
+      try { if (document.fullscreenElement) document.exitFullscreen(); } catch (_) {}
+      st.present = null; sync(); setTimeout(() => Viewer.requestRender(), 50); return;
+    }
+    if (st.present) return;
+    App.clearSelection(); Handles.clear();
+    const o = { spin: true, raf: 0, last: performance.now() };
+    document.body.classList.add('presenting');
+    try { if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {}); } catch (_) {}
+    const bar = h('div', { class: 'present-bar', id: 'present-bar' });
+    const sp = h('button', { type: 'button', class: 'btn small', id: 'present-spin' }, 'Drehen anhalten');
+    sp.onclick = () => { o.spin = !o.spin; sp.textContent = o.spin ? 'Drehen anhalten' : 'Langsam drehen'; o.last = performance.now(); };
+    const ex = h('button', { type: 'button', class: 'btn small', id: 'present-exit' }, 'Beenden (Esc)'); ex.onclick = () => present(false);
+    bar.append(sp, ex); document.body.append(bar); o.bar = bar;
+    // langsam um die senkrechte Achse durch den Blickpunkt: eine Runde in 40 s
+    const tick = (t) => {
+      if (!st.present) return;
+      const dt = Math.min(0.1, (t - o.last) / 1000); o.last = t;
+      if (o.spin && !o.down) {
+        const c = Viewer.camera, tg = Viewer.controls.target, a = (dt * 2 * Math.PI) / 40;
+        const dx = c.position.x - tg.x, dy = c.position.y - tg.y, cs = Math.cos(a), sn = Math.sin(a);
+        c.position.x = tg.x + dx * cs - dy * sn; c.position.y = tg.y + dx * sn + dy * cs; c.lookAt(tg); Viewer.controls.update(); Viewer.requestRender();
+      }
+      o.raf = requestAnimationFrame(tick);
+    };
+    o.pd = () => { o.down = true; }; o.pu = () => { o.down = false; o.last = performance.now(); };
+    Viewer.canvas.addEventListener('pointerdown', o.pd); addEventListener('pointerup', o.pu);
+    st.present = o; o.raf = requestAnimationFrame(tick);
+    setTimeout(() => { Viewer.fit(null, true); }, 120);
+    UI.toast('Vorführ-Modus – Esc beendet ihn.', { icon: 'eye', ms: 2500 });
+  }
+
   // ---------- Fahrtwind (Stirnfläche) ----------
   // Blick aus der Richtung, aus der der Wind kommt: Die Drohne fliegt nach vorne (−Y) und ist um „Neigung“ mit der Nase nach unten gekippt.
   // Die Fläche, die sie dem Wind zeigt, misst der Viewer per Schattenriss. Propeller zählen auf Wunsch mit.
@@ -406,7 +475,10 @@ const Views = (() => {
       { label: (st.exGoal > 0 ? '✓ ' : '') + 'Explosion', icon: 'explode', kbd: 'U', help: 'explode', run: () => explode() },
       { label: (st.focus ? '✓ ' : '') + 'Fokus-Vorschau', icon: 'focusView', help: 'focusView', run: () => focus() },
       { label: (st.ov ? '✓ ' : '') + 'Überhänge (3D-Druck)', icon: 'overhang', help: 'overhang', run: () => overhang() },
+      { label: (st.thin ? '✓ ' : '') + 'Wandstärke (3D-Druck)', icon: 'ruler', help: 'thinWalls', id: 'view-thin', run: () => thin() },
       { label: (st.wind ? '✓ ' : '') + 'Fahrtwind (Stirnfläche)', icon: 'wind', help: 'wind', run: () => wind() },
+      { label: 'Vorführen (Vollbild)', icon: 'play', kbd: 'P', help: 'present', id: 'view-present', run: () => present(true) },
+      { label: 'Drehteller-Video …', icon: 'play', help: 'turntable', id: 'view-turntable', run: () => Print.turntableDialog() },
       '-', ...lookItems(),
     ]);
   }
@@ -443,12 +515,13 @@ const Views = (() => {
       for (const k of Object.keys(MOODNAMES)) out.push({ label: (pv.mood === k ? '✓ ' : '') + 'Licht: ' + MOODNAMES[k], icon: 'sun', help: 'look', id: 'mood-' + k, run: () => ViewPrefs.set({ mood: k }) });
       out.push({ label: (pv.shadows !== false ? '✓ ' : '') + 'Schatten', icon: 'shadow', help: 'look', id: 'look-shadows', run: () => ViewPrefs.set({ shadows: pv.shadows === false }) });
     }
-    out.push('-', { label: 'Ansicht speichern …', icon: 'plus', help: 'savedViews', id: 'view-save', run: () => saveView() });
+    out.push('-', { label: 'Vorige Ansicht', icon: 'undo', kbd: 'Umschalt Z', help: 'viewBack', id: 'view-back', disabled: !Viewer.viewHistory, run: () => Viewer.viewBack() });
+    out.push({ label: 'Ansicht speichern …', icon: 'plus', help: 'savedViews', id: 'view-save', run: () => saveView() });
     for (const v of App.doc.views || []) out.push({ label: 'Ansicht: ' + v.name, icon: 'viewPersp', help: 'savedViews', id: 'view-go-' + v.id, run: () => goView(v.id) });
     return out;
   }
   function sync() {
-    const b = $('#t-views'); if (b) b.classList.toggle('active', !!(st.cut || st.xray || st.exGoal > 0 || st.focus || st.ov || st.wind));
+    const b = $('#t-views'); if (b) b.classList.toggle('active', !!(st.cut || st.xray || st.exGoal > 0 || st.focus || st.ov || st.thin || st.wind));
     const x = document.querySelector('.view-btns [data-view="xray"]'); if (x) x.classList.toggle('on', st.xray);
     const c = document.querySelector('.view-btns [data-view="cut"]'); if (c) c.classList.toggle('on', !!st.cut);
   }
@@ -467,13 +540,15 @@ const Views = (() => {
     App.on('results', () => {
       if (st.ex > 1e-4) setEx(st.ex);
       if (st.ov) drawOverhang();
+      if (st.thin) drawThin();
       if (st.wind) drawWind(false);
       if (st.ex > 1e-4) setEx(st.ex);
       if (st.cut) { drawCutHelper(); const r = st.cut.bar && st.cut.bar.querySelector('#cut-range'); if (r) { const b = modelBox(); const ax = AX[st.cut.plane]; r.min = Math.floor(b.min.getComponent(ax) - 1); r.max = Math.ceil(b.max.getComponent(ax) + 1); } }
     });
   }
-  function reset() { section(false); if (st.xray) xray(false); if (st.exGoal > 0 || st.ex > 0) { cancelAnimationFrame(st.exAnim); st.exAnim = null; st.ex = st.exGoal = 0; Viewer.setOffsets(null); if (st.exBar) { st.exBar.remove(); st.exBar = null; } } focus(false); overhang(false); wind(false); if (st.exGroups) setGroups(false); }
+  function reset() { section(false); if (st.xray) xray(false); if (st.exGoal > 0 || st.ex > 0) { cancelAnimationFrame(st.exAnim); st.exAnim = null; st.ex = st.exGoal = 0; Viewer.setOffsets(null); if (st.exBar) { st.exBar.remove(); st.exBar = null; } } focus(false); overhang(false); thin(false); wind(false); present(false); if (st.exGroups) setGroups(false); }
   return { saveView, goView, removeView,     init, section, xray, explode, collapse, focus, overhang, menu, onKey, reset, sync, bars,
+    present, get presenting() { return !!st.present; }, thin, get thinInfo() { return st.thin ? { area: st.thin.area, minT: st.thin.minT } : null; },
     get overhangArea() { return st.ov ? st.ov.area : null; },
     wind, windArea, get windInfo() { return st.wind ? { angle: st.wind.angle, props: st.wind.props, area: st.wind.area, cw: st.wind.cw, v: st.wind.v, drag: st.wind.drag, top: st.wind.top || null } : null; }, cwGuess, topSpeed, dragN,
     overhangOf: (id, angle = 45) => { const d = overhangData(angle, [id]); return { area: d.area, c: d.c }; },

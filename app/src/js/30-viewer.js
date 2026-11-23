@@ -202,6 +202,7 @@ const Viewer = (() => {
     controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
     controls.target.set(0, 0, 10);
     controls.addEventListener('change', () => { needsRender = true; listeners.emit('camera'); });
+    controls.addEventListener('start', () => pushCam(true));
     buildGrid(autoStep()); buildOrigin();
     applyLook();
     const ro = new ResizeObserver(resize); ro.observe(el);
@@ -601,6 +602,129 @@ const Viewer = (() => {
     }
     return a;
   }
+  // ---------- Wandstärke (PF-02, PF-07) ----------
+  // Dreiecke eines Teils in Weltlage, dazu ein einfaches Raster, damit kurze Strahlen nur wenige Dreiecke prüfen
+  function worldTris(n) {
+    n.obj.updateMatrixWorld(true);
+    const P = n.mesh.geometry.getAttribute('position').array, T = n.data.triangles, M = n.mesh.matrixWorld, nt = Math.floor(T.length / 3);
+    const W = new Float32Array(nt * 9), v = new THREE.Vector3();
+    for (let i = 0; i < nt; i++) for (let k = 0; k < 3; k++) { v.fromArray(P, T[i * 3 + k] * 3).applyMatrix4(M); W[i * 9 + k * 3] = v.x; W[i * 9 + k * 3 + 1] = v.y; W[i * 9 + k * 3 + 2] = v.z; }
+    return W;
+  }
+  function triGrid(W, cell) {
+    const nt = W.length / 9; let x0 = Infinity, y0 = Infinity, z0 = Infinity;
+    for (let i = 0; i < W.length; i += 3) { x0 = Math.min(x0, W[i]); y0 = Math.min(y0, W[i + 1]); z0 = Math.min(z0, W[i + 2]); }
+    const map = new Map(), key = (i, j, k) => i + ',' + j + ',' + k, ci = (v, o) => Math.floor((v - o) / cell);
+    for (let t = 0; t < nt; t++) {
+      const o = t * 9, xs = [W[o], W[o + 3], W[o + 6]], ys = [W[o + 1], W[o + 4], W[o + 7]], zs = [W[o + 2], W[o + 5], W[o + 8]];
+      for (let i = ci(Math.min(...xs), x0); i <= ci(Math.max(...xs), x0); i++) for (let j = ci(Math.min(...ys), y0); j <= ci(Math.max(...ys), y0); j++) for (let k = ci(Math.min(...zs), z0); k <= ci(Math.max(...zs), z0); k++) {
+        const kk = key(i, j, k); let l = map.get(kk); if (!l) map.set(kk, (l = [])); l.push(t);
+      }
+    }
+    return { map, x0, y0, z0, cell, key, ci, stamp: new Int32Array(nt).fill(-1) };
+  }
+  // Strahl (ohne Rückseiten-Ausschluss) gegen Dreieck t: Abstand oder Infinity (Möller–Trumbore)
+  function rayTri(W, t, o, d) {
+    const k = t * 9, ax = W[k], ay = W[k + 1], az = W[k + 2];
+    const e1x = W[k + 3] - ax, e1y = W[k + 4] - ay, e1z = W[k + 5] - az, e2x = W[k + 6] - ax, e2y = W[k + 7] - ay, e2z = W[k + 8] - az;
+    const px = d[1] * e2z - d[2] * e2y, py = d[2] * e2x - d[0] * e2z, pz = d[0] * e2y - d[1] * e2x;
+    const det = e1x * px + e1y * py + e1z * pz; if (Math.abs(det) < 1e-12) return Infinity;
+    const inv = 1 / det, sx = o[0] - ax, sy = o[1] - ay, sz = o[2] - az;
+    const u = (sx * px + sy * py + sz * pz) * inv; if (u < -1e-7 || u > 1 + 1e-7) return Infinity;
+    const qx = sy * e1z - sz * e1y, qy = sz * e1x - sx * e1z, qz = sx * e1y - sy * e1x;
+    const vv = (d[0] * qx + d[1] * qy + d[2] * qz) * inv; if (vv < -1e-7 || u + vv > 1 + 1e-7) return Infinity;
+    const tt = (e2x * qx + e2y * qy + e2z * qz) * inv; return tt > 1e-5 ? tt : Infinity;
+  }
+  // Dicke an einem Punkt der Oberfläche: Strahl nach innen bis zur nächsten Fläche desselben Teils
+  function wallAt(id, point, normal) {
+    const n = nodes.get(id); if (!n || !n.data || !n.data.triangles) return null;
+    const W = worldTris(n), nn = new THREE.Vector3(normal.x, normal.y, normal.z).normalize();
+    const o = [point.x - nn.x * 1e-4, point.y - nn.y * 1e-4, point.z - nn.z * 1e-4], d = [-nn.x, -nn.y, -nn.z];
+    let best = Infinity; for (let t = 0; t < W.length / 9; t++) { const r = rayTri(W, t, o, d); if (r < best) best = r; }
+    return isFinite(best) ? best + 1e-4 : null;
+  }
+  // Alle Stellen dünner als „limit“: Dreiecke (Weltlage) zum Einfärben und ihre Fläche
+  function thinWalls(limit, only) {
+    const out = []; let area = 0, minT = Infinity;
+    const c = new THREE.Vector3(), a = new THREE.Vector3(), b = new THREE.Vector3(), e = new THREE.Vector3(), nrm = new THREE.Vector3();
+    for (const n of nodes.values()) {
+      if (!n.obj.visible || n.role === 'hole' || !n.mesh || !n.data || !n.data.triangles || (only && !only.includes(n.id))) continue;
+      const W = worldTris(n), nt = W.length / 9;
+      const box = new THREE.Box3(); for (let i = 0; i < W.length; i += 3) box.expandByPoint(c.set(W[i], W[i + 1], W[i + 2]));
+      const G = triGrid(W, Math.max(limit, box.getSize(c).length() / 48));
+      for (let t = 0; t < nt; t++) {
+        const k = t * 9; a.set(W[k + 3] - W[k], W[k + 4] - W[k + 1], W[k + 5] - W[k + 2]); b.set(W[k + 6] - W[k], W[k + 7] - W[k + 1], W[k + 8] - W[k + 2]);
+        nrm.crossVectors(a, b); const L = nrm.length(); if (L < 1e-12) continue; nrm.divideScalar(L);
+        c.set((W[k] + W[k + 3] + W[k + 6]) / 3, (W[k + 1] + W[k + 4] + W[k + 7]) / 3, (W[k + 2] + W[k + 5] + W[k + 8]) / 3);
+        const o = [c.x - nrm.x * 1e-4, c.y - nrm.y * 1e-4, c.z - nrm.z * 1e-4], d = [-nrm.x, -nrm.y, -nrm.z];
+        e.set(o[0] + d[0] * limit, o[1] + d[1] * limit, o[2] + d[2] * limit);
+        let best = Infinity;
+        for (let i = G.ci(Math.min(o[0], e.x), G.x0); i <= G.ci(Math.max(o[0], e.x), G.x0); i++) for (let j = G.ci(Math.min(o[1], e.y), G.y0); j <= G.ci(Math.max(o[1], e.y), G.y0); j++) for (let kk = G.ci(Math.min(o[2], e.z), G.z0); kk <= G.ci(Math.max(o[2], e.z), G.z0); kk++) {
+          const l = G.map.get(G.key(i, j, kk)); if (!l) continue;
+          for (const q of l) { if (q === t || G.stamp[q] === t) continue; G.stamp[q] = t; const r = rayTri(W, q, o, d); if (r < best) best = r; }
+        }
+        if (best < limit) {
+          area += L / 2; minT = Math.min(minT, best);
+          const off = 0.02; for (let m = 0; m < 3; m++) out.push(W[k + m * 3] + nrm.x * off, W[k + m * 3 + 1] + nrm.y * off, W[k + m * 3 + 2] + nrm.z * off);
+        }
+      }
+    }
+    return { pos: out, area, minT: isFinite(minT) ? minT : null };
+  }
+  // Art jeder Kante: außen (konvex), innen (konkav) oder glatt (tangential) – über die beiden Nachbarflächen am Kantenmittelpunkt (KP-16)
+  function edgeKinds(id) {
+    const n = nodes.get(id); if (!n || !n.data || !n.data.triangles || !n.data.edges) return [];
+    const P = n.data.vertices, T = n.data.triangles, G = n.data.faceGroups;
+    const A = new THREE.Vector3(), B = new THREE.Vector3(), C = new THREE.Vector3(), q = new THREE.Vector3(), cp = new THREE.Vector3(), tri = new THREE.Triangle();
+    const out = [];
+    for (const e of n.data.edges) {
+      if (!e || !e.m) { out.push(null); continue; }
+      q.fromArray(e.m);
+      // je Fläche das nächste Dreieck zum Kantenmittelpunkt
+      const best = [];
+      for (const [start, count, fi] of G) {
+        let bd = Infinity, bn = null, bc = null;
+        for (let i = start; i < start + count; i += 3) {
+          A.fromArray(P, T[i] * 3); B.fromArray(P, T[i + 1] * 3); C.fromArray(P, T[i + 2] * 3); tri.set(A, B, C);
+          tri.closestPointToPoint(q, cp); const d = cp.distanceToSquared(q);
+          if (d < bd) { bd = d; bn = tri.getNormal(new THREE.Vector3()); bc = new THREE.Vector3().addVectors(A, B).add(C).divideScalar(3); }
+        }
+        best.push({ fi, d: bd, n: bn, c: bc });
+      }
+      best.sort((a, b) => a.d - b.d);
+      const [f1, f2] = best;
+      if (!f1 || !f2 || f2.d > 1e-4 + (n.data.tol || 0.05) ** 2 * 4) { out.push(null); continue; }
+      if (f1.n.dot(f2.n) > 0.996) { out.push('smooth'); continue; }
+      // Punkt auf Fläche 1 vom Rand weg: liegt er vor (konkav) oder hinter (konvex) der Ebene von Fläche 2?
+      const s = f2.n.dot(f1.c.clone().sub(q)) + f1.n.dot(f2.c.clone().sub(q));
+      out.push(s < 0 ? 'convex' : 'concave');
+    }
+    return out;
+  }
+  // Kanten am Rand einer Fläche: Anfang, Mitte und Ende liegen auf den Dreiecken der Fläche (KP-15)
+  function faceEdges(id, faceIdx) {
+    const n = nodes.get(id); if (!n) return [];
+    const P = n.data.vertices, T = n.data.triangles;
+    const groupOf = (g) => {
+      const tris = [], box = new THREE.Box3();
+      for (let i = g[0]; i < g[0] + g[1]; i += 3) { const t = new THREE.Triangle(new THREE.Vector3().fromArray(P, T[i] * 3), new THREE.Vector3().fromArray(P, T[i + 1] * 3), new THREE.Vector3().fromArray(P, T[i + 2] * 3)); tris.push(t); box.expandByPoint(t.a).expandByPoint(t.b).expandByPoint(t.c); }
+      return { tris, box };
+    };
+    const G = n.data.faceGroups.find((x) => x[2] === faceIdx); if (!G) return [];
+    const me = groupOf(G);
+    const tol = Math.max(0.02, me.box.getSize(new THREE.Vector3()).length() * 0.004);
+    const q = new THREE.Vector3(), cp = new THREE.Vector3();
+    const near = (F, p) => { q.fromArray(p); if (!F.box.containsPoint(q)) { const b = F.box.clone().expandByScalar(tol); if (!b.containsPoint(q)) return false; } for (const t of F.tris) { t.closestPointToPoint(q, cp); if (cp.distanceToSquared(q) < tol * tol) return true; } return false; };
+    let others = null;
+    const out = [];
+    (n.data.edges || []).forEach((e, i) => {
+      if (!(e && e.a && e.b && e.m && near(me, e.m) && near(me, e.a) && near(me, e.b))) return;
+      // Naht einer runden Fläche (gehört nur zu ihr selbst) nicht mitnehmen
+      if (!others) others = n.data.faceGroups.filter((x) => x[2] !== faceIdx).map(groupOf);
+      if (others.some((F) => near(F, e.m))) out.push(i);
+    });
+    return out;
+  }
   function disposeFat(obj) { if (!obj) return; obj.geometry.dispose(); fatMaterials.delete(obj.material); obj.material.dispose(); }
   function highlightFace(which, id, faceIdx) {
     const cur = which === 'hover' ? hoverFace : selFace;
@@ -650,6 +774,22 @@ const Viewer = (() => {
     _ndc.set(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
     raycaster.setFromCamera(_ndc, cam());
     return raycaster;
+  }
+  // alle Teile entlang des Strahls, vorne zuerst (für „Wähle das dahinter“)
+  function pickAll(cx, cy) {
+    setRay(cx, cy);
+    const meshes = []; for (const n of nodes.values()) { if (!n.obj.visible || n.ctxDim) continue; meshes.push(n.mesh); }
+    let hits = raycaster.intersectObjects(meshes, false);
+    if (vis.clip) hits = hits.filter((x) => vis.clip.distanceToPoint(x.point) >= -1e-6);
+    const out = [], seen = new Set();
+    for (const x of hits) {
+      const n = nodes.get(x.object.userData.nodeId); if (!n) continue;
+      const tri = x.faceIndex * 3; let faceIdx = -1;
+      for (const g of n.data.faceGroups) if (tri >= g[0] && tri < g[0] + g[1]) { faceIdx = g[2]; break; }
+      const key = n.id + ':' + faceIdx; if (seen.has(key)) continue; seen.add(key);
+      out.push({ id: n.id, faceIdx, point: x.point.clone(), normal: x.face ? x.face.normal.clone().transformDirection(n.obj.matrixWorld) : null, distance: x.distance });
+    }
+    return out;
   }
   function pick(cx, cy, opts = {}) {
     setRay(cx, cy);
@@ -771,7 +911,44 @@ const Viewer = (() => {
     const dir = camera.position.clone().sub(controls.target).normalize();
     moveCamera(c.clone().add(dir.multiplyScalar(dist)), c, null, animate);
   }
+  // ---------- Vorige Ansicht: Verlauf der Kamera ----------
+  const camHist = []; let camHistT = 0, camHistUser = false, camBackBusy = false;
+  const sameCam = (a, b) => !!a && !!b && a.p.distanceTo(b.p) < 1e-3 * (1 + a.p.length()) && a.t.distanceTo(b.t) < 1e-3 * (1 + a.t.length()) && a.up.distanceTo(b.up) < 1e-4;
+  function camNow() { return camAnim ? { p: camAnim.p1.clone(), t: camAnim.q1.clone(), up: (camAnim.up1 || camera.up).clone() } : saveCamera(); }
+  function pushCam(user = false) {
+    if (camBackBusy) return;
+    const now = performance.now();
+    // Mausrad und schnelle Folgen zählen als ein Schritt
+    if (user && camHistUser && now - camHistT < 700) { camHistT = now; return; }
+    camHistT = now; camHistUser = user;
+    const s = camNow(); if (sameCam(camHist[camHist.length - 1], s)) return;
+    camHist.push(s); if (camHist.length > 40) camHist.shift();
+  }
+  function viewBack(animate = true) {
+    const cur = camNow(); let s = camHist.pop();
+    while (s && sameCam(s, cur)) s = camHist.pop();
+    if (!s) return false;
+    camBackBusy = true; moveCamera(s.p, s.t, s.up, animate); camBackBusy = false; camHistUser = false;
+    return true;
+  }
+  // ---------- Maus-Steuerung wie in anderen Programmen (BE-12) ----------
+  // ctx: 'model' (Modell), 'sketch' (Skizze: links zeichnet), 'place' (Setzen/Notizen: links setzt)
+  let mouseStyle = 'tracery', mouseCtx = 'model';
+  const M = () => THREE.MOUSE;
+  function buttonsFor(style, ctx) {
+    const R = M().ROTATE, P = M().PAN, D = M().DOLLY;
+    switch (style) {
+      case 'onshape': return { LEFT: null, MIDDLE: P, RIGHT: R };   // rechts drehen, Mitte verschieben
+      case 'solidworks': return { LEFT: null, MIDDLE: R, RIGHT: ctx === 'model' ? P : P };   // Mitte drehen, rechts verschieben
+      case 'fusion': return { LEFT: null, MIDDLE: P, RIGHT: null };   // Mitte verschieben, Umschalt + Mitte drehen
+      case 'blender': return { LEFT: null, MIDDLE: R, RIGHT: null };   // Mitte drehen, Umschalt + Mitte verschieben
+      default: return ctx === 'model' ? { LEFT: R, MIDDLE: D, RIGHT: P } : ctx === 'sketch' ? { LEFT: null, MIDDLE: D, RIGHT: P } : { LEFT: null, MIDDLE: D, RIGHT: R };
+    }
+  }
+  function useButtons(ctx = mouseCtx) { mouseCtx = ctx; if (controls) controls.mouseButtons = buttonsFor(mouseStyle, ctx); }
+  function setMouseStyle(st) { mouseStyle = st || 'tracery'; useButtons(); }
   function moveCamera(pos, target, up, animate = true) {
+    pushCam(false);
     if (!animate) { camera.position.copy(pos); controls.target.copy(target); if (up) camera.up.copy(up); controls.update(); needsRender = true; listeners.emit('camera'); return; }
     camAnim = { t0: performance.now(), dur: 420, p0: camera.position.clone(), p1: pos.clone(), q0: controls.target.clone(), q1: target.clone(), up0: up ? camera.up.clone() : null, up1: up ? up.clone() : null };
   }
@@ -910,9 +1087,9 @@ const Viewer = (() => {
   }
 
   return {
-    setLook, lookOf, get look() { return { ...LOOK }; }, fitShadow, renderImage, lookAtFace, faceIndexOf: (id, fc) => { const n = nodes.get(id); return n ? faceIndexOf(n, fc) : -1; }, get renderer() { return renderer; },
+    viewBack, get viewHistory() { return camHist.length; }, useButtons, setMouseStyle, get mouseStyle() { return mouseStyle; }, get leftOrbits() { return !!(controls && controls.mouseButtons.LEFT === THREE.MOUSE.ROTATE); }, setLook, lookOf, get look() { return { ...LOOK }; }, fitShadow, renderImage, lookAtFace, faceIndexOf: (id, fc) => { const n = nodes.get(id); return n ? faceIndexOf(n, fc) : -1; }, get renderer() { return renderer; },
     init, requestRender, setClip, setXray, setOffsets, baseBox, renderInset, silhouette, setAdaptive, setCompare, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, setSelectedEdges, clearHover,
-    edgePositions, pick, pickGhost, pickProxy, setProxies, clearProxies, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, boxVisible, sceneBox, snapshot, makeFat, disposeFat, faceOverlay, faceArea,
+    edgePositions, pick, pickAll, pickGhost, pickProxy, setProxies, clearProxies, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, boxVisible, sceneBox, snapshot, makeFat, disposeFat, faceOverlay, faceArea, faceEdges, edgeKinds, wallAt, thinWalls,
     get camera() { return camera; }, get activeCamera() { return cam(); }, get ortho() { return ortho; }, get gridStep() { return gridStep; }, get controls() { return controls; }, get scene() { return scene; }, get groups() { return groups; }, get nodes() { return nodes; }, get canvas() { return renderer.domElement; }, get theme() { return theme; }, get container() { return container; },
     get clip() { return vis.clip; }, get xray() { return vis.xray; }, get lowRes() { return lowRes; },  get pixelRatio() { return renderer.getPixelRatio(); },
     on: listeners.on,

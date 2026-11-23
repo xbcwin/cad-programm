@@ -420,6 +420,22 @@ const Actions = (() => {
     const y = new THREE.Vector3().crossVectors(n, x);
     return { o: info.c.slice(), x: x.toArray(), y: y.toArray(), n: n.toArray() };
   }
+  // Skizze eines Körpers auf eine andere Ebene legen: Form und Maße bleiben, die Lage kommt von der neuen Ebene (SK-13)
+  const BASE = { XY: { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] }, XZ: { o: [0, 0, 0], x: [1, 0, 0], n: [0, -1, 0] }, YZ: { o: [0, 0, 0], x: [0, 1, 0], n: [1, 0, 0] } };
+  function replaneSketch(id, key) {
+    let plane = null, name = '';
+    if (key.startsWith('o:')) { plane = BASE[key.slice(2)]; name = { XY: 'Arbeitsfläche', XZ: 'Vorne', YZ: 'Seite' }[key.slice(2)]; }
+    else if (key.startsWith('d:')) { const d = Datums.find(key.slice(2)); if (d && d.plane) { plane = d.plane; name = d.name; } }
+    if (!plane) return false;
+    let dropped = 0;
+    App.change(`Skizze auf „${name}“`, (doc) => {
+      const f = Model.find(doc, id); if (!f || !f.item.p || !f.item.p.sketch) return;
+      const it = f.item; it.p.sketch.plane = deepClone(plane); it.t = Model.T0();
+      for (const e of it.p.sketch.ents || []) if (e.link) { delete e.link; dropped++; }
+    });
+    UI.toast(`Die Skizze liegt jetzt auf „${name}“.` + (dropped ? ` ${dropped} übernommene Kanten hängen nicht mehr am Körper.` : ''), { icon: 'check' });
+    return true;
+  }
   function selectedFace() {
     const f = App.face; if (!f) return null;
     const r = App.results.get(f.id); if (!r) return null;
@@ -460,6 +476,6 @@ const Actions = (() => {
     if (nid) App.select([nid]);
     return nid;
   }
-  return { duplicateLinked, unlink, hideSelected, showAll, invertSelection, setOp, gapOf, setGap, loft, addPrimitive, addPart, addBuyPart, remove, duplicate, setRole, toggleRole, group, groupAll, ungroup, rotate90, rotate, center, mirror, dropToPlate, align, addFinish, finishAll, setFinish, removeFinish, faceFrame, selectedFace, onFaceTransform, attach, worldBox, selBox, cuttersOf, viewCenter };
+  return { replaneSketch,  duplicateLinked, unlink, hideSelected, showAll, invertSelection, setOp, gapOf, setGap, loft, addPrimitive, addPart, addBuyPart, remove, duplicate, setRole, toggleRole, group, groupAll, ungroup, rotate90, rotate, center, mirror, dropToPlate, align, addFinish, finishAll, setFinish, removeFinish, faceFrame, selectedFace, onFaceTransform, attach, worldBox, selBox, cuttersOf, viewCenter };
 })();
 

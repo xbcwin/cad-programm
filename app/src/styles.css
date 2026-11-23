@@ -266,6 +266,9 @@ body.sketching .viewcube{display:none}
 .ctxbar .vsep{width:1px;align-self:stretch;margin:4px 3px;background:var(--line)}
 .dimlabel{position:absolute;transform:translate(-50%,-50%);background:var(--surface);color:var(--ink);border:1px solid var(--line-strong);border-radius:5px;padding:3px 6px;font:500 12.5px/1 var(--font-mono);white-space:nowrap;box-shadow:var(--shadow-1);cursor:text;user-select:none}
 .dimlabel.live{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);pointer-events:none!important}
+.dimlabel.mlabel{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);pointer-events:auto;cursor:copy}
+.ctxbar .lbl.copyable{cursor:copy}
+.ctxbar .lbl .mono{font-family:var(--font-mono);font-weight:600;margin-left:6px}
 .dimlabel input{width:64px;border:0;outline:none;background:transparent;font:inherit;color:inherit;padding:0}
 .dimlabel.editing{background:var(--surface);border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 .snaptip{pointer-events:none!important;position:absolute;transform:translate(10px,-26px);background:var(--ink);color:var(--surface);border-radius:4px;padding:3px 6px;font:600 11.5px/1 var(--font-cond);letter-spacing:.04em;pointer-events:none;white-space:nowrap}
@@ -705,3 +708,29 @@ body:not(.simple) .simple-only{display:none!important}
 .datum-tree .tree-row .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .datum-tree .swatch.datum{display:inline-grid;place-items:center;width:18px;height:18px;color:#d9a441;background:none}
 .datum-tree .swatch.datum svg{width:16px;height:16px}
+
+/* Maß nur zum Ablesen (Referenzmaß) */
+.skdim.ref { border-style: dashed; border-color: var(--faint); color: var(--ink-2); font-style: italic; }
+.dimlock.refmark, #dim-ref { font: 600 11px/1 var(--font-mono); letter-spacing: -1px; }
+
+/* Notiz am Schritt */
+.note-sec textarea{width:100%;box-sizing:border-box;resize:vertical;min-height:54px;font:13px/1.4 var(--font);color:var(--ink);background:var(--surface);border:1px solid var(--line-strong);border-radius:6px;padding:6px 8px}
+.tl-chip.note{box-shadow:inset 0 -3px 0 var(--accent)}
+
+/* Lage unter der Maus (Statusleiste) */
+.ampel-wrap{display:flex;align-items:center;justify-content:flex-end;gap:10px;min-width:0}
+.coords{font:500 11.5px/1 var(--font-mono);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+@media (max-width:900px){.coords{display:none}}
+
+/* Suchen im Verlauf */
+.tree-filter{display:flex;gap:6px;margin:0 0 8px}
+.tree-filter input{flex:1;min-width:0;font:13px var(--font);padding:6px 8px;border:1px solid var(--line-strong);border-radius:7px;background:var(--surface);color:var(--ink)}
+.tree-filter select{font:12.5px var(--font);padding:5px 4px;border:1px solid var(--line-strong);border-radius:7px;background:var(--surface);color:var(--ink);max-width:42%}
+.tree-count{font-size:12px;color:var(--muted);margin:-2px 0 6px 2px}
+
+/* Vorführ-Modus */
+body.presenting #app{grid-template-rows:0 1fr 0}
+body.presenting .topbar,body.presenting .bottombar,body.presenting .left,body.presenting .right,body.presenting .view-btns,body.presenting .viewbars,body.presenting .ctxbar,body.presenting .tl,body.presenting .timeline{display:none!important}
+body.presenting .workspace{grid-template-columns:0 minmax(0,1fr) 0}
+.present-bar{position:fixed;right:16px;bottom:16px;display:flex;gap:8px;z-index:60;opacity:.35;transition:opacity .2s}
+.present-bar:hover{opacity:1}

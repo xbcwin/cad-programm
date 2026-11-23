@@ -177,9 +177,12 @@ const App = (() => {
     return { ...L, mat, matCol: L.nat && !it.colorSet ? L.col : null };
   }
   function topItem(id) { return S.doc.items.find((x) => x.id === id) || S.extra.find((x) => x.id === id); }
+  // Rechenzeit je Schritt: zuletzt gemessen, als er wirklich neu gerechnet wurde (BE-26)
+  const times = new Map();
   function apply(res) {
     const seen = new Set();
     S.merged = new Map();
+    for (const [id, ms] of Object.entries(res.times || {})) times.set(id, { ms, at: Date.now() });
     for (const n of res.nodes) {
       seen.add(n.id);
       if (n.merged) S.merged.set(n.id, n.merged);
@@ -321,6 +324,8 @@ const App = (() => {
     get mode() { return S.mode; }, set mode(m) { S.mode = m; ev.emit('mode'); },
     get extra() { return S.extra; }, set extra(x) { S.extra = x; },
     peek, get peeking() { return S.peek == null ? null : S.peek; },
+    timeOf(id) { return times.get(id) || null; },
+    get times() { return times; },
     mergedInto(id) { return (S.merged && S.merged.get(id)) || null; },
     get hideIds() { return S.hideIds; }, set hideIds(x) { S.hideIds = x || new Set(); applyView(); },
     get ctx() { return S.ctx; }, get iso() { return S.iso; }, setCtx, setIso, applyView,

@@ -14,7 +14,7 @@ const Mass = (() => {
     for (const p of r.parts || []) {
       const it = doc.items.find((x) => x.id === p.id);
       if (fixedOf(it)) { p.fixed = true; p.own = true; p.mat = null; p.missing = it.massG === ''; p.mass = Math.max(0, Model.num(it.massG, V, 0)); }
-      else { const m = materialFor(it, doc); p.mat = m.k; p.rho = m.rho; p.own = !!(it && matOf(it.mat)); p.mass = (p.volume / 1000) * m.rho; }
+      else { const m = materialFor(it, doc); p.mat = m.k; p.rho = m.rho; p.own = !!(it && matOf(it.mat)); p.mass = (p.volume / 1000) * m.rho; if (p.inertia) p.I = p.inertia.map((x) => (x * m.rho) / 1000); }
       mass += p.mass;
       if (p.com) for (let i = 0; i < 3; i++) c[i] += p.com[i] * p.mass;
     }
@@ -39,6 +39,35 @@ const Mass = (() => {
   function partOf(r, id) { return r && (r.parts || []).find((p) => p.id === id) || null; }
   const gText = (g) => `${fmt(g, g < 10 ? 2 : 1)} g`;
 
+  // ---------- Standfestigkeit (PF-14): Steht das Teil, so wie es liegt, oder kippt es? ----------
+  // Aufstandsfläche = Hülle der untersten Punkte; der Schwerpunkt muss darüber liegen. Kippwinkel = atan(Abstand zur Kante / Höhe).
+  function hull2(pts) {
+    const P = pts.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]); if (P.length < 3) return P;
+    const cr = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+    const lo = [], up = [];
+    for (const p of P) { while (lo.length >= 2 && cr(lo[lo.length - 2], lo[lo.length - 1], p) <= 0) lo.pop(); lo.push(p); }
+    for (let i = P.length - 1; i >= 0; i--) { const p = P[i]; while (up.length >= 2 && cr(up[up.length - 2], up[up.length - 1], p) <= 0) up.pop(); up.push(p); }
+    return lo.slice(0, -1).concat(up.slice(0, -1));
+  }
+  function stability(id, com) {
+    const n = Viewer.nodes.get(id); if (!n || !n.mesh || !com) return null;
+    n.obj.updateMatrixWorld(true);
+    const P = n.mesh.geometry.getAttribute('position').array, M = n.mesh.matrixWorld, v = new THREE.Vector3();
+    let zmin = Infinity; const all = [];
+    for (let i = 0; i < P.length; i += 3) { v.fromArray(P, i).applyMatrix4(M); all.push([v.x, v.y, v.z]); if (v.z < zmin) zmin = v.z; }
+    const foot = all.filter((p) => p[2] < zmin + 0.05).map((p) => [p[0], p[1]]);
+    const hull = hull2(foot), h = com[2] - zmin;
+    if (hull.length < 3) return { ok: false, d: 0, angle: 0, h, hull };
+    // kleinster Abstand des Schwerpunkts (von oben) zu einer Kante; negativ = außerhalb
+    let inside = true, d = Infinity;
+    for (let i = 0; i < hull.length; i++) {
+      const a = hull[i], b = hull[(i + 1) % hull.length], ex = b[0] - a[0], ey = b[1] - a[1], L = Math.hypot(ex, ey) || 1;
+      const s = (ex * (com[1] - a[1]) - ey * (com[0] - a[0])) / L;   // links der Kante = innen (Hülle gegen den Uhrzeigersinn)
+      if (s < 0) inside = false; d = Math.min(d, Math.abs(s));
+    }
+    const dd = inside ? d : -d;
+    return { ok: dd > 1e-6, d: dd, angle: dd > 0 ? (Math.atan2(dd, Math.max(h, 1e-6)) * 180) / Math.PI : 0, h, hull };
+  }
   // ---------- Schwerpunkt im Bild ----------
   let marker = null;
   function markerObj() {
@@ -147,5 +176,5 @@ const Mass = (() => {
     if (B.filament.length) body.append(h('div', { class: 'ok-box', id: 'bom-filament', html: '<b>Filament für die Druckteile:</b> ' + B.filament.map((x) => `${x.mat} ${gText(x.g)} ≈ ${fmt(x.m, 1)} m`).join(' · ') + ' (Draht 1,75 mm, massiv gerechnet – mit weniger Füllung brauchst du weniger; Stützen und Rand kommen dazu).' }));
     body.append(h('div', { class: 'hint-box', html: 'Gleiche Teile (gleicher Name ohne Nummer, gleiches Gewicht) stehen in einer Zeile. Klick auf eine Zeile wählt die Teile im Bild aus. <b>Kaufteile</b> zählen mit dem Gewicht aus dem Datenblatt, alles andere mit Volumen × Material.' + (B.rows.some((x) => x.missing) ? ' Bei Teilen mit „fehlt“ ist noch kein Gewicht eingetragen.' : '') }));
   }
-  return { init, measure, measureDoc, bom, bomCSV, bomDialog, screws, materialFor, projectMaterial, partOf, gText, fixedOf, on: ev.on, get markerShown() { return !!marker; }, get markerPos() { return marker ? marker.position.toArray() : null; } };
+  return { stability, hull2,  init, measure, measureDoc, bom, bomCSV, bomDialog, screws, materialFor, projectMaterial, partOf, gText, fixedOf, on: ev.on, get markerShown() { return !!marker; }, get markerPos() { return marker ? marker.position.toArray() : null; } };
 })();

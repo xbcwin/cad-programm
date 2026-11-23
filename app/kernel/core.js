@@ -1333,16 +1333,23 @@ export function createKernel(R, oc) {
     if (scene.quality) setQuality(scene.quality);
     const errors = [];
     const tops = (scene.items || []).filter((it) => !it.hidden);
+    // Rechenzeit je Schritt (BE-26): nur, was wirklich neu gerechnet wurde, zählt
+    const times = {}, now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    const addT = (id, t0) => { const d = now() - t0; if (d > 0.5) times[id] = (times[id] || 0) + d; };
     const evald = tops.map((it) => {
+      const t0 = now();
       const r = evalItem(it, errors);
       let wb = null;
       if (r.shape) {
         const lb = bboxCached(r.key, r.shape);
         wb = bboxTransform(lb, it.m);
       }
+      addT(it.id, t0);
       return { it, ...r, wb };
     });
+    const tOps = now();
     const { bodies, consumed } = resolveOps(evald, errors);
+    if (bodies.size) { const d = now() - tOps; if (d > 0.5) for (const id of bodies.keys()) times[id] = (times[id] || 0) + d / bodies.size; }
     for (const e of evald) { const b = bodies.get(e.it.id); if (b) { e.shape = b.shape; e.key = b.key; e.wb = b.wb; } }
     const holes = evald.filter((e) => e.it.role === 'hole' && e.shape);
     const nodes = [];
@@ -1360,11 +1367,13 @@ export function createKernel(R, oc) {
           const hitc = cacheGet(resultKey);
           if (hitc) result = hitc;
           else {
+            const tc = now();
             try {
               const tool = fuseAll(cutters.map((h, i) => applyMatrix(h.shape, rel[i])), true);
               result = e.shape.cut(tool);
               safeDelete(tool);
               cachePut(resultKey, result);
+              addT(it.id, tc);
             } catch (err) {
               errors.push({ itemId: it.id, code: 'cut', message: 'Ein Loch konnte nicht abgezogen werden.' });
               result = e.shape; resultKey = e.key;
@@ -1376,13 +1385,14 @@ export function createKernel(R, oc) {
       const mk = resultKey + '|' + Q.level;
       let payload = meshCache.get(mk);
       if (!payload) {
-        try { payload = meshPayload(result); meshCache.set(mk, payload); }
+        const tm = now();
+        try { payload = meshPayload(result); meshCache.set(mk, payload); addT(it.id, tm); }
         catch (err) { errors.push({ itemId: it.id, code: 'mesh', message: 'Die Form konnte nicht angezeigt werden.' }); nodes.push({ id: it.id, key: null, empty: true }); continue; }
       }
       nodes.push({ id: it.id, key: resultKey, ...clonePayload(payload) });
     }
     gc();
-    return { nodes, errors };
+    return { nodes, errors, times };
   }
   const bboxMemo = new Map();
   function bboxCached(key, shape) {
@@ -1523,22 +1533,25 @@ export function createKernel(R, oc) {
     return out;
   }
 
-  function exportMeshes(scene, fine = true) {
+  // q: Feinheit beim Export – 1 = normal, kleiner = feiner (0.4 = fein, 0.15 = sehr fein), größer = gröber
+  function exportMeshes(scene, fine = true, q = 1) {
     const errors = [];
     const solids = evaluateShapes(scene, errors);
     const objs = [];
+    const f = Math.max(0.05, Math.min(4, +q || 1));
     for (const s of solids) {
       const b = bboxOf(s.shape);
-      const tol = fine ? Math.min(0.05, Math.max(0.005, meshTol(b) * 0.35)) : meshTol(b);
-      const m = s.shape.mesh({ tolerance: tol, angularTolerance: fine ? 0.1 : 0.2 });
+      const tol = (fine ? Math.min(0.05, Math.max(0.005, meshTol(b) * 0.35)) : meshTol(b)) * f;
+      const m = s.shape.mesh({ tolerance: tol, angularTolerance: (fine ? 0.1 : 0.2) * Math.min(2, Math.max(0.25, f)) });
       objs.push({ id: s.id, name: s.name, color: s.color, vertices: new Float32Array(m.vertices), triangles: new Uint32Array(m.triangles) });
       s.shape.delete();
     }
     return { objects: objs, errors };
   }
-  function exportSTEP(scene) {
+  function exportSTEP(scene, only) {
     const errors = [];
-    const solids = evaluateShapes(scene, errors);
+    let solids = evaluateShapes(scene, errors);
+    if (only && only.length) { const keep = new Set(only); for (const s of solids) if (!keep.has(s.id)) s.shape.delete(); solids = solids.filter((s) => keep.has(s.id)); }
     if (!solids.length) throw new Error('Es gibt nichts zu exportieren.');
     const comp = solids.length === 1 ? solids[0].shape : R.makeCompound(solids.map((s) => s.shape));
     return comp.blobSTEP();
@@ -1551,12 +1564,23 @@ export function createKernel(R, oc) {
     let b = null; const parts = [];
     for (const s of solids) {
       let v = 0, a = 0, com = null;
-      try { const pr = R.measureShapeVolumeProperties(s.shape); v = pr.volume; com = pr.centerOfMass; pr.delete && pr.delete(); } catch (_) {}
+      let inertia = null;
+      try {
+        const pr = R.measureShapeVolumeProperties(s.shape); v = pr.volume; com = pr.centerOfMass;
+        // Trägheitsmatrix um den Schwerpunkt (bei Dichte 1, also mm⁵)
+        // (gp_Mat ist hier nicht gebunden – deshalb je Achse durch den Schwerpunkt einzeln)
+        try {
+          const g = pr.wrapped.CentreOfMass(), I = [];
+          for (const d of [[1, 0, 0], [0, 1, 0], [0, 0, 1]]) { const dir = new oc.gp_Dir(d[0], d[1], d[2]), ax = new oc.gp_Ax1(g, dir); I.push(pr.wrapped.MomentOfInertia(ax)); ax.delete(); dir.delete(); }
+          g.delete && g.delete(); inertia = I;
+        } catch (e) { inertia = null; }
+        pr.delete && pr.delete();
+      } catch (_) {}
       try { a = R.measureArea(s.shape); } catch (_) {}
       volume += v; area += a;
       const bb = bboxOf(s.shape);
       b = b ? [Math.min(b[0], bb[0]), Math.min(b[1], bb[1]), Math.min(b[2], bb[2]), Math.max(b[3], bb[3]), Math.max(b[4], bb[4]), Math.max(b[5], bb[5])] : bb;
-      parts.push({ id: s.id, volume: v, area: a, com, bbox: bb });
+      parts.push({ id: s.id, volume: v, area: a, com, bbox: bb, inertia });
       s.shape.delete();
     }
     return { volume, area, bbox: b, count: solids.length, parts, errors };

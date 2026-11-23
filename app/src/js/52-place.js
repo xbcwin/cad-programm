@@ -207,7 +207,7 @@ const Place = (() => {
     stopHoles(true);
     hw = { o, count: 0, ring: ringObj(o), down: null };
     App.clearSelection(); Handles.clear(); Panels.renderCtx();
-    Viewer.controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+    Viewer.useButtons('place');
     Viewer.canvas.style.cursor = 'crosshair';
     UI.hint('<b>Löcher setzen:</b> Jeder Klick auf eine Fläche setzt ein Loch. Ansicht drehen: <b>rechte Maustaste</b>. <b>Esc</b> beendet.');
     const cv = Viewer.canvas;
@@ -241,7 +241,7 @@ const Place = (() => {
     Viewer.groups.overlay.remove(hw.ring); hw.ring.geometry.dispose(); hw.ring.material.dispose(); Snap.clear();
     if (hw.bar) hw.bar.remove();
     const n = hw.count; hw = null;
-    Viewer.controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+    Viewer.useButtons('model');
     Viewer.canvas.style.cursor = ''; UI.hint(null); Viewer.requestRender(); Handles.rebuild(); Panels.renderCtx();
     if (!silent && n) UI.toast(`${n} ${n === 1 ? 'Loch' : 'Löcher'} gesetzt. Ziehen verschiebt ein Loch auf der Fläche.`, { icon: 'check' });
   }

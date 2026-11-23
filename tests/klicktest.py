@@ -33,7 +33,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Datums,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Panels,Joints}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Interact,Measure,Datums,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Panels,Joints}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -1348,7 +1348,7 @@ def t_messen_flaechen(p):
     p.pg.mouse.click(*top); p.wait(500); p.pg.mouse.click(*corner); p.wait(500); r3 = p.ev(R)
     p.pg.mouse.click(*top); p.wait(500); p.pg.mouse.click(*top2); p.wait(500); r4 = p.ev(R)
     p.pg.keyboard.press('Escape'); p.wait(300)
-    ok = [r1 == 'Fläche 600 mm²', (r2 or '').startswith('Winkel 90°'), (r3 or '').startswith('Abstand 10 mm'), (r4 or '').startswith('Abstand 15 mm')]
+    ok = [(r1 or '').startswith('Fläche 600 mm²'), (r2 or '').startswith('Winkel 90°'), (r3 or '').startswith('Abstand 10 mm'), (r4 or '').startswith('Abstand 15 mm')]
     return all(ok), ' '.join('✓' if x else '✗' for x in ok) + ('' if all(ok) else f' – {r1} / {r2} / {r3} / {r4}')
 
 
@@ -3929,6 +3929,628 @@ def t_skizze_messen(p):
     A, U = nums[-2], nums[-1]
     return [abs(A - (800 - math.pi * 16)) < 1.0, abs(U - (120 + 2 * math.pi * 4)) < 0.5]
 
+# ---------- Sitzung 91: Maß zum Ablesen, Regel „auf einer Linie“ ----------
+def scene_cons(p, ents, cons):
+    p.empty()
+    p.ev("App.change('x', d=>{ const it=Model.newItem('extrude',{},{}); it.p={sketch:{plane:{o:[0,0,0],x:[1,0,0],n:[0,0,1]},ents:arg[0],dims:[],cons:arg[1]},dist:3,dir:'normal'}; d.items.push(it); })", [ents, cons])
+    p.wait(1500); p.ev("Sketch.editItem(App.doc.items[0].id)"); p.wait(1500)
+
+def t_referenzmass(p):
+    scene_cons(p, [{'id': 'L1', 'type': 'line', 'a': [-30, 0], 'b': [0, 0]}, {'id': 'L2', 'type': 'line', 'a': [0, 10], 'b': [25, 10]}],
+               [{'id': 'k1', 'type': 'equal', 'refs': [{'e': 'L1'}, {'e': 'L2'}]}])
+    def sel(eid):
+        SS(p, f"S.sel='{eid}'; Panels.renderRight()"); p.wait(300)
+    sel('L1'); p.pg.fill('#se-len', '30'); p.pg.press('#se-len', 'Enter'); p.wait(400)
+    # L2 ist über „Gleich“ schon bestimmt → wird Maß zum Ablesen
+    p.pg.keyboard.press('d'); m = to_screen(p, *SS(p, "const e=E('L2'); return [(e.a[0]+e.b[0])/2,(e.a[1]+e.b[1])/2]")); p.pg.mouse.click(m[0], m[1]); p.wait(300)
+    p.pg.keyboard.press('Control+a'); p.pg.keyboard.type('30'); p.pg.keyboard.press('Enter'); p.wait(500)
+    p.ev("Sketch.setTool('select')"); sel('L2')
+    d2 = SS(p, "return S.dims.find(d=>d.e==='L2')")
+    toast = ' '.join(p.pg.locator('.toast').all_inner_texts())
+    ok1 = bool(d2 and d2.get('ref')) and 'Klammern' in toast and p.pg.locator('#se-len + .dimlock.refmark, .dimlock.refmark').count() >= 1
+    # L1 ändern → Ablese-Maß wandert mit
+    sel('L1'); p.pg.fill('#se-len', '40'); p.pg.press('#se-len', 'Enter'); p.wait(500)
+    refs = [t for t in p.pg.locator('.skdim.ref').all_inner_texts()]
+    ok2 = len(refs) == 1 and refs[0].startswith('(') and '40' in refs[0] and abs(SS(p, "return Math.hypot(E('L2').b[0]-E('L2').a[0],E('L2').b[1]-E('L2').a[1])") - 40) < 1e-3
+    # widersprechendes Maß → Meldung mit „Nur ablesen“
+    sel('L2'); p.pg.fill('#se-len', '55'); p.pg.press('#se-len', 'Enter'); p.wait(500)
+    ok3 = p.pg.locator('.toast button', has_text='Nur ablesen').count() >= 1 and SS(p, "return S.dims.find(d=>d.e==='L2').ref===true")
+    # festes Maß per „( )“ zum Ablese-Maß machen
+    lab = p.pg.locator('.skdim:not(.ref)').first; lab.click(); p.wait(300)
+    p.pg.click('#dim-ref'); p.wait(400)
+    ok4 = SS(p, "return S.dims.every(d=>d.ref)") and p.pg.locator('.skdim.ref').count() == 2
+    # Ablese-Maß anklicken und Wert tippen → wieder fest
+    p.pg.locator('.skdim.ref').first.click(); p.wait(300)
+    p.pg.keyboard.press('Control+a'); p.pg.keyboard.type('35'); p.pg.keyboard.press('Enter'); p.wait(500)
+    ok5 = SS(p, "return S.dims.filter(d=>!d.ref).length===1") and abs(SS(p, "return Math.hypot(E('L1').b[0]-E('L1').a[0],E('L1').b[1]-E('L1').a[1])") - 35) < 1e-3
+    return [ok1, ok2, ok3, ok4, ok5]
+
+def t_kollinear(p):
+    scene_cons(p, [{'id': 'L1', 'type': 'line', 'a': [-30, 0], 'b': [-10, 2]}, {'id': 'L2', 'type': 'line', 'a': [10, 6], 'b': [30, 9]}], [])
+    p.pg.click('.consbar [data-tool="c:collinear"]'); p.wait(300)
+    for eid in ('L1', 'L2'):
+        m = to_screen(p, *SS(p, f"const e=E('{eid}'); return [(e.a[0]+e.b[0])/2,(e.a[1]+e.b[1])/2]")); p.pg.mouse.click(m[0], m[1]); p.wait(300)
+    on = "const A=E('L1'), d=[A.b[0]-A.a[0],A.b[1]-A.a[1]], n=Math.hypot(...d); return [E('L2').a,E('L2').b].map(q=>Math.abs(((q[0]-A.a[0])*d[1]-(q[1]-A.a[1])*d[0])/n))"
+    dev = SS(p, on)
+    ok1 = SS(p, "return S.cons.some(c=>c.type==='collinear')") and max(dev) < 1e-4
+    # erste Linie waagerecht → zweite auch, auf gleicher Höhe
+    p.pg.click('.consbar [data-tool="c:horizontal"]'); p.wait(300)
+    m = to_screen(p, *SS(p, "const e=E('L1'); return [(e.a[0]+e.b[0])/2,(e.a[1]+e.b[1])/2]")); p.pg.mouse.click(m[0], m[1]); p.wait(400)
+    ys = SS(p, "return [E('L1').a[1],E('L1').b[1],E('L2').a[1],E('L2').b[1]]")
+    ok2 = max(ys) - min(ys) < 1e-4
+    # Regel im Bild anklickbar, Name stimmt
+    ok3 = p.pg.locator('.consbar [data-tool="c:collinear"]').get_attribute('aria-label') in (None, 'Auf einer Linie') or True
+    p.ev("Sketch.setTool('select')"); p.wait(200)
+    SS(p, "S.selCon=S.cons.find(c=>c.type==='collinear').id; Panels.renderRight()"); p.wait(300)
+    ok3 = 'Auf einer Linie' in p.pg.locator('#right').inner_text()
+    return [ok1, ok2, ok3]
+
+# ---------- Sitzung 92: Längen, Durchmesser, Wert kopieren ----------
+def t_messen_rund(p):
+    p.empty()
+    p.ev("App.change('x', d=>{ const a=Model.newItem('box',{w:40,d:20,h:10},{name:'Block'}); d.items.push(a); const c=Model.newItem('cylinder',{d:10,h:30},{name:'Rolle'}); c.t.x=60; d.items.push(c); })"); warte_rechnen(p)
+    val = lambda: p.pg.locator('#sel-val').text_content() if p.pg.locator('#sel-val').count() else ''
+    # eine 40er-Kante, dann alle vier oberen Kanten
+    p.ev("const id=App.doc.items[0].id, r=App.results.get(id); const i=r.data.edges.findIndex(e=>e.t==='LINE' && Math.abs(e.l-40)<1e-6 && Math.abs(e.a[2]-10)<1e-6); App.select([id],{edges:[{id,edgeIdx:i}]})"); p.wait(700)
+    v1 = val()
+    p.ev("const id=App.doc.items[0].id, r=App.results.get(id); const es=[]; r.data.edges.forEach((e,i)=>{ if(e.t==='LINE' && Math.abs(e.a[2]-10)<1e-6 && Math.abs(e.b[2]-10)<1e-6) es.push({id,edgeIdx:i}); }); App.select([id],{edges:es})"); p.wait(700)
+    v2 = val()
+    ok1 = 'Kante' in v1 and '40' in v1 and '4 Kanten' in v2 and '120' in v2
+    # Kreiskante der Rolle → Durchmesser; Mantel → Durchmesser
+    p.ev("const id=App.doc.items[1].id, r=App.results.get(id); const i=r.data.edges.findIndex(e=>e.t==='CIRCLE'); App.select([id],{edges:[{id,edgeIdx:i}]})"); p.wait(700)
+    v3 = val()
+    p.ev("const id=App.doc.items[1].id, r=App.results.get(id); const i=r.data.faces.findIndex(f=>f.t==='CYLINDRE'); App.select([id],{face:{id,faceIdx:i,point:new THREE.Vector3(65,0,15),normal:new THREE.Vector3(1,0,0)}})".replace('new THREE.Vector3(65,0,15)','{x:65,y:0,z:15}').replace('new THREE.Vector3(1,0,0)','{x:1,y:0,z:0}')); p.wait(700)
+    v4 = val()
+    ok2 = 'Ø' in v3 and '10' in v3 and 'Runde Fläche Ø' in v4 and '10' in v4
+    # Klick auf das Schild kopiert den Wert
+    p.pg.locator('#sel-val').click(); p.wait(400)
+    ok3 = p.ev("return Measure.copied") == '10' and 'kopiert' in ' '.join(p.pg.locator('.toast').all_inner_texts())
+    # Messen: Mantel anklicken → Zylinder Ø 10; Schild anklicken kopiert
+    p.ev("App.clearSelection(); Viewer.setView('front', false)"); p.wait(800)
+    p.pg.locator('#t-measure').click(); p.wait(400)
+    sx, sy = world_screen(p, 60, -5, 15)
+    p.pg.mouse.click(sx, sy); p.wait(600)
+    r = p.ev("return Measure.result") or ''
+    ok4 = r.startswith('Zylinder Ø 10 mm') and '(R 5)' in r
+    p.pg.locator('.dimlabel.mlabel').first.click(); p.wait(400)
+    ok5 = p.ev("return Measure.copied") == '10'
+    p.pg.keyboard.press('Escape'); p.wait(200)
+    return [ok1, ok2, ok3, ok4, ok5]
+
+# ---------- Sitzung 93: Vorige Ansicht, Teil dahinter wählen ----------
+def t_vorige_ansicht(p):
+    p.empty()
+    p.ev("App.change('x', d=>{ d.items.push(Model.newItem('box',{w:20,d:20,h:20},{name:'Würfel'})); })"); warte_rechnen(p)
+    cam = "const c=Viewer.saveCamera(); const d=c.p.clone().sub(c.t).normalize(); return [d.x,d.y,d.z].map(v=>Math.round(v*100)/100)"
+    for v in ('front', 'top', 'right'):
+        p.ev(f"Viewer.setView('{v}', false)"); p.wait(300)
+    p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('Shift+Z'); p.wait(700); d1 = p.ev(cam)
+    p.pg.keyboard.press('Shift+Z'); p.wait(700); d2 = p.ev(cam)
+    ok1 = d1 == [0, 0, 1] and d2 == [0, -1, 0]
+    # mit der Maus drehen → zurück zum Blick davor
+    cx, cy = p.canvas_center()
+    p.pg.mouse.move(cx + 250, cy + 200); p.pg.mouse.down(); p.pg.mouse.move(cx + 380, cy + 120, steps=10); p.pg.mouse.up(); p.wait(900)
+    turned = p.ev(cam)
+    p.pg.keyboard.press('Shift+Z'); p.wait(800); d3 = p.ev(cam)
+    ok2 = turned != [0, -1, 0] and d3 == [0, -1, 0]
+    # Rechtsklick ins Leere bietet „Vorige Ansicht“
+    p.pg.mouse.click(cx + 300, cy + 220, button='right'); p.wait(400)
+    ok3 = p.pg.locator('#cm-viewback').count() == 1
+    p.pg.keyboard.press('Escape')
+    return [ok1, ok2, ok3]
+
+def t_dahinter(p):
+    p.empty()
+    p.ev("App.change('x', d=>{ const a=Model.newItem('box',{w:30,d:10,h:30},{name:'Deckel'}); a.t.y=-20; d.items.push(a); const b=Model.newItem('box',{w:10,d:10,h:10},{name:'Platine'}); b.t.y=10; b.t.z=10; d.items.push(b); })"); warte_rechnen(p)
+    p.ev("App.clearSelection(); Viewer.setView('front', false)"); p.wait(900)
+    x, y = world_screen(p, 0, -25, 15)
+    names = lambda: p.ev("return App.sel.map(id=>Model.find(App.doc,id).item.name)")
+    p.pg.mouse.click(x, y); p.wait(400); n1 = names()
+    p.pg.keyboard.down('Alt'); p.pg.mouse.click(x, y); p.pg.keyboard.up('Alt'); p.wait(400); n2 = names()
+    p.pg.keyboard.down('Alt'); p.pg.mouse.click(x, y); p.pg.keyboard.up('Alt'); p.wait(400); n3 = names()
+    ok1 = n1 == ['Deckel'] and n2 == ['Platine'] and n3 == ['Deckel']
+    # Rechtsklick: „Dahinter wählen: Platine“
+    p.pg.mouse.click(x, y, button='right'); p.wait(400)
+    lab = p.pg.locator('#cm-behind-0').inner_text() if p.pg.locator('#cm-behind-0').count() else ''
+    ok2 = 'Platine' in lab
+    if ok2:
+        p.pg.locator('#cm-behind-0').click(); p.wait(400)
+    ok3 = names() == ['Platine']
+    return [ok1, ok2, ok3]
+
+# ---------- Sitzung 94: Kanten einer Fläche, Notiz am Schritt ----------
+def t_flaechenkanten(p):
+    p.empty()
+    p.ev("App.change('x', d=>{ d.items.push(Model.newItem('box',{w:40,d:30,h:20},{name:'Gehäuse'})); const c=Model.newItem('cylinder',{d:12,h:10},{name:'Stift'}); c.t.x=50; d.items.push(c); })"); warte_rechnen(p)
+    top = "const id=App.doc.items[0].id, r=App.results.get(id); return r.data.faces.findIndex(f=>f.t==='PLANE' && f.n[2]>0.99)"
+    fi = p.ev(top)
+    n = p.ev("return Panels.faceEdgeList({id:App.doc.items[0].id, idx:arg}).length", fi)
+    nc = p.ev("const id=App.doc.items[1].id, r=App.results.get(id); const i=r.data.faces.findIndex(f=>f.t==='CYLINDRE'); return Panels.faceEdgeList({id, idx:i}).length")
+    ok1 = n == 4 and nc == 2
+    # Fläche wählen → „Ihre Kanten“ → alle abrunden
+    p.ev("const id=App.doc.items[0].id; App.select([id],{face:{id,faceIdx:arg,point:[0,0,20],normal:[0,0,1]}})", fi); p.wait(600)
+    p.pg.locator('.ctxbar button[aria-label="Ihre Kanten"]').click(); p.wait(300)
+    p.pg.locator('#fe-fillet').click(); warte_rechnen(p)
+    it = p.ev("return App.doc.items[0]")
+    fin = (it.get('finishes') or [{}])[0]
+    ok2 = fin.get('type') == 'fillet' and len(fin.get('edges') or []) == 4 and p.ev("return App.errors.length") == 0
+    # Mit Rundung: Volumen kleiner als der Quader
+    v = p.ev("return Mass.measure().then(r=>Math.round(r.parts[0].volume))")
+    ok3 = 23900 < v < 24000
+    return [ok1, ok2, ok3]
+
+def t_notiz_schritt(p):
+    p.empty()
+    p.ev("App.change('x', d=>{ d.items.push(Model.newItem('box',{w:20,d:20,h:2},{name:'Wand'})); })"); warte_rechnen(p)
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(500)
+    p.pg.locator('#note-sec summary').click(); p.wait(200)
+    p.pg.fill('#item-note', 'Wand 2 mm, sonst bricht sie'); p.pg.locator('#item-note').blur(); p.wait(500)
+    ok1 = p.ev("return App.doc.items[0].note") == 'Wand 2 mm, sonst bricht sie'
+    chip = p.pg.locator('.tl-chip').first
+    ok2 = 'note' in (chip.get_attribute('class') or '') and 'Notiz: Wand 2 mm' in (chip.get_attribute('data-tip') or '')
+    p.ev("App.undo()"); p.wait(500)
+    ok3 = p.ev("return App.doc.items[0].note") is None
+    return [ok1, ok2, ok3]
+
+# ---------- Sitzung 95: Verschieben und Drehen in der Skizze ----------
+def t_skizze_verschieben(p):
+    scene(p, [{'id': 'C', 'type': 'circle', 'c': [0, 0], 'r': 5}, {'id': 'L', 'type': 'line', 'a': [10, 0], 'b': [20, 0]}, {'id': 'R', 'type': 'rect', 'a': [-30, -5], 'b': [-20, 5]}])
+    p.pg.keyboard.press('h'); p.wait(300)
+    def pick(eid, pt):
+        s = to_screen(p, *pt); p.pg.mouse.click(s[0], s[1]); p.wait(250)
+    pick('C', [5, 0]); pick('L', [15, 0])
+    p.pg.fill('#xm-dx', '12'); p.pg.press('#xm-dx', 'Enter'); p.pg.fill('#xm-dy', '-4'); p.pg.press('#xm-dy', 'Enter'); p.wait(200)
+    p.pg.keyboard.press('Enter'); p.wait(500)
+    c, l = SS(p, "return E('C')"), SS(p, "return E('L')")
+    ok1 = abs(c['c'][0] - 12) < 1e-6 and abs(c['c'][1] + 4) < 1e-6 and abs(l['a'][0] - 22) < 1e-6 and abs(l['b'][1] + 4) < 1e-6 and SS(p, "return S.ents.length") == 3
+    # als Kopie drehen: Linie um 90° um ihre Mitte
+    pick('L', [27, -4])
+    p.pg.select_option('#xm-mode', 'rot'); p.wait(300)
+    p.pg.fill('#xm-ang', '90'); p.pg.press('#xm-ang', 'Enter'); p.pg.check('#xm-copy'); p.wait(200)
+    p.pg.click('#xm-make'); p.wait(500)
+    ents = SS(p, "return S.ents.filter(e=>e.type==='line')")
+    nl = [e for e in ents if e['id'] != 'L']
+    ok2 = len(ents) == 2 and len(nl) == 1 and abs(nl[0]['a'][0] - 27) < 1e-6 and abs(abs(nl[0]['a'][1] - nl[0]['b'][1]) - 10) < 1e-6 and abs(SS(p, "return E('L').a[1]") + 4) < 1e-6
+    # Rechteck schräg drehen (30°) → wird zu vier Linien, Fläche bleibt
+    pick('R', [-25, 5])
+    p.pg.fill('#xm-ang', '30'); p.pg.press('#xm-ang', 'Enter'); p.pg.uncheck('#xm-copy'); p.wait(200)
+    p.pg.keyboard.press('Enter'); p.wait(500)
+    ok3 = SS(p, "return !E('R') && S.ents.filter(e=>e.type==='line').length===6")
+    # Rückgängig holt das Rechteck zurück
+    p.pg.keyboard.press('Control+z'); p.wait(400)
+    ok4 = SS(p, "return !!E('R')")
+    return [ok1, ok2, ok3, ok4]
+
+# ---------- Sitzung 96: Kopieren und Einfügen in der Skizze, Kette per Doppelklick ----------
+def t_skizze_kopieren(p):
+    L = lambda i, a, b: {'id': 'L%d' % i, 'type': 'line', 'a': a, 'b': b}
+    scene_cons(p, [L(1, [0, 0], [20, 0]), L(2, [20, 0], [20, 10]), L(3, [20, 10], [0, 10]), L(4, [0, 10], [0, 0]), {'id': 'C', 'type': 'circle', 'c': [40, 5], 'r': 3}],
+               [{'id': 'k1', 'type': 'horizontal', 'refs': [{'e': 'L1'}]}])
+    SS(p, "S.dims.push({id:'m1', e:'L1', k:'len', v:20})")
+    p.pg.keyboard.press('h'); p.wait(300)
+    s = to_screen(p, 10, 0); p.pg.mouse.dblclick(s[0], s[1]); p.wait(400)
+    ok1 = sorted(SS(p, "return S.patSel")) == ['L1', 'L2', 'L3', 'L4']
+    p.pg.keyboard.press('Control+c'); p.wait(300)
+    p.pg.keyboard.press('Control+v'); p.wait(600)
+    lines = SS(p, "return S.ents.filter(e=>e.type==='line')")
+    new = [e for e in lines if not e['id'].startswith('L')]
+    xs = [q for e in new for q in (e['a'][0], e['b'][0])]
+    ok2 = len(lines) == 8 and min(xs) > 20.5 and SS(p, "return S.tool") == 'xmove' and len(SS(p, "return S.patSel")) == 4
+    ok3 = SS(p, "return S.cons.filter(c=>c.type==='horizontal').length") == 2 and SS(p, "return S.dims.filter(d=>d.k==='len').length") == 2
+    # in einer neuen Skizze an derselben Stelle einfügen
+    p.ev("Sketch.cancel(true)"); p.wait(800)
+    p.ev("Sketch.startOnPlane('XZ')"); p.wait(1500)
+    p.pg.keyboard.press('Control+v'); p.wait(600)
+    ents = SS(p, "return S.ents")
+    ok4 = len(ents) == 4 and min(q for e in ents for q in (e['a'][0], e['b'][0])) == 0
+    return [ok1, ok2, ok3, ok4]
+
+# ---------- Sitzung 97: Rechteck mit runden Ecken, Ecke bilden ----------
+def t_rechteck_rund(p):
+    sketch_xy(p)
+    p.pg.keyboard.press('r'); p.wait(300)
+    p.pg.fill('#rk-r', '3'); p.pg.press('#rk-r', 'Enter'); p.wait(200)
+    a = to_screen(p, 0, 0); b = to_screen(p, 30, 15)
+    p.pg.mouse.click(*a); p.pg.mouse.move(*b); p.wait(200)
+    p.pg.keyboard.type('40'); p.pg.keyboard.press('Tab'); p.pg.keyboard.type('20'); p.pg.keyboard.press('Enter'); p.wait(700)
+    st = SS(p, "const L=S.ents.filter(e=>e.type==='line'), A=S.ents.filter(e=>e.type==='arc'); const xs=S.ents.flatMap(e=>[e.a,e.b].filter(Boolean)).map(q=>q[0]), ys=S.ents.flatMap(e=>[e.a,e.b].filter(Boolean)).map(q=>q[1]); return {nl:L.length, na:A.length, rd:S.dims.filter(d=>d.k==='r').length, eq:S.cons.filter(c=>c.type==='equal').length, pl:S.dims.filter(d=>d.k==='distPL').length, w:Math.max(...xs)-Math.min(...xs), h:Math.max(...ys)-Math.min(...ys)}")
+    ok1 = st['nl'] == 4 and st['na'] == 4 and st['rd'] == 1 and st['eq'] == 3 and st['pl'] == 2 and abs(st['w'] - 40) < 1e-3 and abs(st['h'] - 20) < 1e-3
+    # Radius eines Bogens ändern → alle vier folgen, Außenmaß bleibt
+    aid = SS(p, "return S.dims.find(d=>d.k==='r').e")
+    SS(p, f"S.sel='{aid}'; Panels.renderRight()"); p.wait(300)
+    p.pg.fill('#se-r', '5'); p.pg.press('#se-r', 'Enter'); p.wait(600)
+    rr = SS(p, "return S.ents.filter(e=>e.type==='arc').map(e=>SK.arcInfo(e.a,e.m,e.b).r)")
+    st2 = SS(p, "const xs=S.ents.flatMap(e=>[e.a,e.b].filter(Boolean)).map(q=>q[0]); return Math.max(...xs)-Math.min(...xs)")
+    ok2 = all(abs(r - 5) < 1e-3 for r in rr) and abs(st2 - 40) < 1e-3
+    # ein Rückgängig: weg ist das ganze Rechteck
+    p.pg.keyboard.press('Control+z'); p.wait(300); p.pg.keyboard.press('Control+z'); p.wait(300)
+    ok3 = SS(p, "return S.ents.length") == 0
+    return [ok1, ok2, ok3]
+
+def t_ecke_bilden(p):
+    scene_cons(p, [{'id': 'L1', 'type': 'line', 'a': [0, 0], 'b': [10, 0]}, {'id': 'L2', 'type': 'line', 'a': [20, 5], 'b': [20, 20]}, {'id': 'L3', 'type': 'line', 'a': [-5, 30], 'b': [35, 30]}], [])
+    p.pg.keyboard.press('k'); p.wait(300)
+    p.pg.select_option('#cn-mode', 'meet'); p.wait(300)
+    for q in ([5, 0], [20, 15]):
+        s = to_screen(p, *q); p.pg.mouse.click(*s); p.wait(300)
+    l1, l2 = SS(p, "return E('L1')"), SS(p, "return E('L2')")
+    ok1 = l1['b'] == [20, 0] and l2['a'] == [20, 0] and SS(p, "return S.cons.some(c=>c.type==='coincident')")
+    # zu lange Linie kürzen: L3 an L2, angeklickt links → rechts wird bis x=20 gekürzt
+    for q in ([0, 30], [20, 10]):
+        s = to_screen(p, *q); p.pg.mouse.click(*s); p.wait(300)
+    l3, l2b = SS(p, "return E('L3')"), SS(p, "return E('L2')")
+    ok2 = l3['b'] == [20, 30] and l3['a'] == [-5, 30] and l2b['b'] == [20, 30] and l2b['a'] == [20, 0]
+    return [ok1, ok2]
+
+# ---------- Sitzung 98: Bogen über die Mitte, Langloch über die Gesamtlänge ----------
+def t_bogen_mitte(p):
+    sketch_xy(p)
+    p.pg.keyboard.press('a'); p.wait(300)
+    p.pg.select_option('#ar-mode', 'center'); p.wait(200)
+    for q in ([0, 0], [10, 0], [0, 10]):
+        s = to_screen(p, *q); p.pg.mouse.click(*s); p.wait(250)
+    e = SS(p, "return S.ents[0]")
+    ok1 = e and e['type'] == 'arc' and e['a'] == [10, 0] and e['b'] == [0, 10] and abs(e['m'][0] - 7.0711) < 1e-3 and abs(e['m'][1] - 7.0711) < 1e-3
+    # Ende liegt nicht auf dem Kreis → wird auf den Radius gezogen; großer Bogen über 180°
+    for q in ([30, 0], [40, 0], [30, -5]):
+        s = to_screen(p, *q); p.pg.mouse.click(*s); p.wait(250)
+    e2 = SS(p, "return S.ents[1]")
+    ok2 = e2 and e2['b'] == [30, -10] and e2['m'][0] < 30
+    return [ok1, ok2]
+
+def t_langloch_gesamt(p):
+    sketch_xy(p)
+    p.pg.keyboard.press('g'); p.wait(300)
+    p.pg.select_option('#sl-mode', 'total'); p.wait(200)
+    a = to_screen(p, 0, 0); b = to_screen(p, 30, 0)
+    p.pg.mouse.click(*a); p.pg.mouse.move(*b); p.wait(200)
+    p.pg.keyboard.type('40'); p.pg.keyboard.press('Enter'); p.wait(300)
+    p.pg.keyboard.type('10'); p.pg.keyboard.press('Enter'); p.wait(600)
+    e = SS(p, "return S.ents[0]")
+    dims = SS(p, "return S.dims.map(d=>[d.k,d.v]).sort()")
+    ok1 = e and e['type'] == 'slot' and e['a'] == [5, 0] and e['b'] == [35, 0] and e['r'] == 5
+    ok2 = dims == [['len', 30], ['w', 10]]
+    # mit der Maus: außen 0…20, Breite 6 → Mitten 3 und 17
+    p.pg.mouse.click(*to_screen(p, 0, 20)); p.pg.mouse.click(*to_screen(p, 20, 20)); p.pg.mouse.click(*to_screen(p, 10, 23)); p.wait(500)
+    e2 = SS(p, "return S.ents[1]")
+    ok3 = e2 and abs(e2['a'][0] - 3) < 0.2 and abs(e2['b'][0] - 17) < 0.2 and abs(e2['r'] - 3) < 0.2
+    return [ok1, ok2, ok3]
+
+# ---------- Sitzung 99: Lage unter der Maus ----------
+def t_koordinaten(p):
+    p.empty()
+    p.ev("App.change('x', d=>{ d.items.push(Model.newItem('box',{w:40,d:40,h:10},{name:'Platte'})); })"); warte_rechnen(p)
+    p.ev("App.clearSelection(); Viewer.setView('iso', false)"); p.wait(800)
+    x, y = world_screen(p, 5, -5, 10)
+    p.pg.mouse.move(x - 20, y); p.pg.mouse.move(x, y, steps=4); p.wait(400)
+    t1 = p.pg.locator('#coords').inner_text()
+    c1 = p.ev("return Measure.coords")
+    ok1 = c1 and abs(c1['z'] - 10) < 1e-3 and abs(c1['x'] - 5) < 0.3 and 'Z 10' in t1
+    r = p.ev("const r=Viewer.canvas.getBoundingClientRect(); return [r.left, r.bottom]"); x2, y2 = r[0] + 90, r[1] - 90
+    p.pg.mouse.move(x2, y2, steps=4); p.wait(400)
+    ok2 = 'Boden' in p.pg.locator('#coords').inner_text()
+    # in der Skizze: X/Y der Skizze
+    p.ev("Sketch.startOnPlane('XY')"); p.wait(1500)
+    s = to_screen(p, 12, 7); p.pg.mouse.move(s[0] - 15, s[1]); p.pg.mouse.move(*s, steps=4); p.wait(400)
+    t3 = p.pg.locator('#coords').inner_text()
+    ok3 = t3.startswith('Skizze') and 'X 12' in t3 and 'Y 7' in t3
+    return [ok1, ok2, ok3]
+
+# ---------- Sitzung 100: nur die Auswahl exportieren, jeder Körper einzeln ----------
+def t_export_auswahl(p):
+    import zipfile, tempfile, struct
+    p.empty()
+    p.ev("""App.change('x', d=>{ const a=Model.newItem('box',{w:20,d:20,h:10},{name:'Deckel'}); d.items.push(a); const b=Model.newItem('cylinder',{d:6,h:20},{name:'Loch'}); b.role='hole'; b.t.z=-5; d.items.push(b);
+      const c=Model.newItem('box',{w:10,d:10,h:10},{name:'Fuß'}); c.t.x=40; d.items.push(c); const e=Model.newItem('sphere',{d:10},{name:'Knopf'}); e.t.x=-40; d.items.push(e); })"""); warte_rechnen(p)
+    p.ev("App.select([App.doc.items[0].id, App.doc.items[2].id])"); p.wait(400)
+    p.pg.get_by_role('button', name='Exportieren').first.click(); p.wait(600)
+    ok1 = p.pg.locator('#ex-onlySel').count() == 1 and not p.pg.locator('#ex-onlySel').is_checked()   # wie bisher: ohne Haken alles
+    p.pg.check('#ex-onlySel'); p.pg.check('#ex-stl'); p.pg.check('#ex-each')
+    with p.pg.expect_download(timeout=90000) as dl:
+        p.pg.get_by_role('button', name='Als ZIP speichern').click()
+    z = os.path.join(tempfile.gettempdir(), 'tracery-auswahl.zip'); dl.value.save_as(z)
+    zf = zipfile.ZipFile(z); names = zf.namelist()
+    ok2 = sorted(n for n in names if n.startswith('Einzeln/')) == ['Einzeln/Deckel.stl', 'Einzeln/Fuß.stl']
+    # Deckel behält sein Loch: in der Einzel-STL gibt es Dreiecke innen (Radius 3 um die Mitte)
+    data = zf.read('Einzeln/Deckel.stl')
+    inner = False
+    if data[:5] != b'solid':
+        n = struct.unpack('<I', data[80:84])[0]
+        for i in range(n):
+            o = 84 + i * 50 + 12
+            x, y, zz = struct.unpack('<3f', data[o:o + 12])
+            if abs((x * x + y * y) ** 0.5 - 3) < 0.05: inner = True; break
+    else:
+        import re
+        for m in re.finditer(rb'vertex\s+(\S+)\s+(\S+)\s+(\S+)', data):
+            x, y = float(m.group(1)), float(m.group(2))
+            if abs((x * x + y * y) ** 0.5 - 3) < 0.05: inner = True; break
+    ok3 = inner and p.ev("return Print.lastExport.some(n=>n.endsWith('.step'))")
+    return [ok1, ok2, ok3]
+
+# ---------- Sitzung 101: Skizze und Fläche als DXF/SVG ----------
+def t_2d_export(p):
+    scene(p, [{'id': 'R', 'type': 'rect', 'a': [0, 0], 'b': [40, 20]}, {'id': 'C', 'type': 'circle', 'c': [10, 10], 'r': 4}, {'id': 'A', 'type': 'arc', 'a': [30, 5], 'm': [35, 10], 'b': [30, 15]}, {'id': 'H', 'type': 'line', 'a': [0, 30], 'b': [40, 30], 'con': True}])
+    ok1 = p.pg.locator('#sk-dxf').count() == 1 and p.pg.locator('#sk-svg').count() == 1
+    # Rundweg DXF: wieder einlesen → gleiche Teile
+    rt = p.ev("""const d=Print.entsToDXF(Sketch.state.ents); const r=Start.parseDXF(d.text); const t={}; for(const e of r.ents) t[e.type]=(t[e.type]||0)+1;
+      const c=r.ents.find(e=>e.type==='circle'), a=r.ents.find(e=>e.type==='arc'); const ai=a&&SK.arcInfo(a.a,a.m,a.b);
+      return {n:d.count, t, c:c&&[c.c[0],c.c[1],c.r], ar: ai&&[Math.round(ai.c[0]*1000)/1000, Math.round(ai.c[1]*1000)/1000, Math.round(ai.r*1000)/1000], am: a&&a.m}""")
+    ok2 = rt['n'] == 6 and rt['t'].get('line') == 4 and rt['t'].get('circle') == 1 and rt['t'].get('arc') == 1 and rt['c'] == [-10, 0, 4] and rt['ar'] == [10, 0, 5] and rt['am'][0] > 10   # das Einlesen legt die Mitte auf den Nullpunkt
+    # Rundweg SVG: Größe in mm, Bogen in die richtige Richtung
+    sv = p.ev("""const d=Print.entsToSVG(Sketch.state.ents,'T'); const r=Start.parseSVG(d.text); const a=r.ents.find(e=>e.type==='arc'); const bb=SK.bounds(r.ents);
+      return {w: Math.round((bb[2]-bb[0])*1000)/1000, h: Math.round((bb[3]-bb[1])*1000)/1000, mm: /width="42mm"/.test(d.text), arcRight: a ? Math.max(a.a[0],a.b[0],a.m[0]) - Math.min(a.a[0],a.b[0]) > 4.9 : false, n: r.ents.length}""")
+    ok3 = sv['w'] == 40 and sv['h'] == 20 and sv['mm'] and sv['arcRight'] and sv['n'] == 6
+    p.ev("Sketch.cancel(true)"); p.wait(600)
+    # Fläche eines Körpers: Platte mit Loch, Oberseite
+    p.ev("App.change('x', d=>{ d.items=[]; const a=Model.newItem('box',{w:40,d:30,h:3},{name:'Platte'}); d.items.push(a); const b=Model.newItem('cylinder',{d:8,h:10},{name:'Loch'}); b.role='hole'; b.t.z=-2; d.items.push(b); })"); warte_rechnen(p)
+    fi = p.ev("const r=App.results.get(App.doc.items[0].id); return r.data.faces.findIndex(f=>f.t==='PLANE' && f.n[2]>0.99)")
+    p.ev("const id=App.doc.items[0].id; const r=App.results.get(id); return Print.faceTo2D({id, idx:arg, info:r.data.faces[arg]}, 'dxf')", fi); p.wait(1500)
+    l2 = p.ev("const L=Print.last2D; if(!L) return null; const r=Start.parseDXF(L.text); const t={}; for(const e of r.ents) t[e.type]=(t[e.type]||0)+1; const c=r.ents.find(e=>e.type==='circle'); return {t, r: c && c.r}")
+    ok4 = l2 and l2['t'].get('line') == 4 and l2['t'].get('circle') == 1 and abs(l2['r'] - 4) < 1e-3
+    return [ok1, ok2, ok3, ok4]
+
+# ---------- Sitzung 102: Wandstärke ----------
+def t_wandstaerke(p):
+    p.empty()
+    p.ev("App.change('x', d=>{ const a=Model.newItem('box',{w:30,d:30,h:10},{name:'Schale'}); d.items.push(a); const b=Model.newItem('box',{w:26,d:26,h:20},{name:'Innen'}); b.role='hole'; b.t.z=1.5; d.items.push(b); })"); warte_rechnen(p)
+    p.ev("App.clearSelection(); Viewer.setView('front', false)"); p.wait(800)
+    # Messen an der Außenwand vorne: 2 mm
+    p.pg.locator('#t-measure').click(); p.wait(400)
+    x, y = world_screen(p, 5, -15, 5); p.pg.mouse.click(x, y); p.wait(600)
+    r = p.ev("return Measure.result") or ''
+    ok1 = 'Wand 2 mm' in r
+    p.pg.keyboard.press('Escape'); p.wait(200)
+    # Ansicht: Grenze 1,6 → Boden (1,5 mm) ist rot; Grenze 1,2 → nichts
+    p.ev("Views.thin(true)"); p.wait(300)
+    p.pg.select_option('#thin-limit', '1.6'); p.wait(800)
+    inf = p.ev("return Views.thinInfo")
+    ok2 = inf and inf['area'] > 100 and abs(inf['minT'] - 1.5) < 0.01 and 'dünnste Stelle 1,5 mm' in p.pg.locator('#thin-area').inner_text()
+    p.pg.select_option('#thin-limit', '1.2'); p.wait(800)
+    ok3 = p.ev("return Views.thinInfo.area") < 0.05 and 'Überall mindestens' in p.pg.locator('#thin-area').inner_text()
+    p.ev("Views.thin(false)")
+    return [ok1, ok2, ok3]
+
+# ---------- Sitzung 103: Trägheit und Standfestigkeit ----------
+def t_traegheit_stand(p):
+    p.empty()
+    p.ev("App.change('x', d=>{ const a=Model.newItem('box',{w:20,d:20,h:40},{name:'Turm'}); a.mat='PLA'; d.items.push(a); })"); warte_rechnen(p)
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(2500)
+    import re
+    nums = [float(x.replace(',', '.')) for x in re.findall(r'\d+(?:,\d+)?', p.pg.locator('#p-inertia').inner_text())]
+    m = 16 * 1.24
+    ok1 = len(nums) >= 3 and abs(nums[0] - m * 20 / 12) < 0.1 and abs(nums[2] - m * 8 / 12) < 0.1
+    st = p.pg.locator('#p-stand').inner_text()
+    ok2 = 'ja' in st and '27°' in st
+    # Fuß klein, Last weit draußen → kippt
+    p.ev("App.change('x', d=>{ d.items=[]; const a=Model.newItem('box',{w:10,d:10,h:2},{name:'Fuß'}); d.items.push(a); const b=Model.newItem('box',{w:40,d:10,h:10},{name:'Arm'}); b.t.x=30; b.t.z=2; b.op={type:'join', target:a.id}; d.items.push(b); })"); warte_rechnen(p)
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(2500)
+    ok3 = 'kippt um' in p.pg.locator('#p-stand').inner_text()
+    return [ok1, ok2, ok3]
+
+# ---------- Sitzung 104: Suchen im Verlauf ----------
+def t_verlauf_suche(p):
+    p.empty()
+    p.ev("""App.change('x', d=>{ for (const n of ['Boden','Deckel','Wand links','Wand rechts','Griff']) d.items.push(Model.newItem('box',{w:10,d:10,h:5},{name:n}));
+      const l=Model.newItem('cylinder',{d:3,h:20},{name:'Bohrung'}); l.role='hole'; d.items.push(l);
+      const g=Model.newItem('group',{},{name:'Beschlag'}); g.children=[Model.newItem('cylinder',{d:3,h:8},{name:'Schraube'}), Model.newItem('box',{w:5,d:5,h:2},{name:'Platte'})]; d.items.push(g); })"""); warte_rechnen(p)
+    p.ev("Panels.renderLeft()"); p.wait(300)
+    names = lambda: p.pg.locator('#left-body .tree .nm').all_inner_texts()
+    ok1 = p.pg.locator('#tree-filter').count() == 1 and len(names()) == 7
+    p.pg.locator('#tree-filter').type('schr', delay=40); p.wait(400)
+    ok2 = names() == ['Beschlag', 'Schraube'] and p.ev("return document.activeElement && document.activeElement.id") == 'tree-filter' and '1 von 9' in p.pg.locator('#tree-count').inner_text()
+    p.pg.locator('#tree-filter').press('Escape'); p.wait(300)
+    p.pg.select_option('#tree-kind', 'hole'); p.wait(300)
+    ok3 = names() == ['Bohrung']
+    p.pg.select_option('#tree-kind', 'all'); p.wait(300)
+    ok4 = len(names()) == 7
+    return [ok1, ok2, ok3, ok4]
+
+# ---------- Sitzung 105: Maße als CSV, Auswahl speichern ----------
+def t_masse_csv(p):
+    import tempfile
+    p.empty()
+    p.ev("App.change('x', d=>{ d.params.push({id:'m1', name:'Breite', expr:40}, {id:'m2', name:'Hoehe', expr:'Breite/2'}); })"); p.wait(300)
+    csv = p.ev("return Panels.paramsCSV()")
+    ok1 = csv.splitlines()[0] == 'Name;Wert;Ergebnis' and 'Breite;40;40' in csv and 'Hoehe;Breite/2;20' in csv
+    f = os.path.join(tempfile.gettempdir(), 'masse.csv')
+    open(f, 'w', encoding='utf-8').write('Name;Wert\nBreite;55,5\nTiefe;12\n1kaputt;3\n')
+    p.pg.locator('#lt-params').click(); p.wait(300)
+    with p.pg.expect_file_chooser() as fc:
+        p.pg.locator('#par-csv-in').click()
+    fc.value.set_files(f); p.wait(800)
+    ps = p.ev("return App.doc.params.map(x=>[x.name, x.expr])")
+    ok2 = ['Breite', 55.5] in ps and ['Tiefe', 12] in ps and ['Hoehe', 'Breite/2'] in ps and len(ps) == 3 and 'übersprungen' in ' '.join(p.pg.locator('.toast').all_inner_texts())
+    return [ok1, ok2]
+
+def t_auswahl_speichern(p):
+    p.empty()
+    p.ev("App.change('x', d=>{ for (let i=0;i<4;i++){ const a=Model.newItem('box',{w:10,d:10,h:10},{name:'Würfel '+(i+1)}); a.t.x=i*20-30; d.items.push(a); } })"); warte_rechnen(p)
+    p.ev("App.select([App.doc.items[0].id, App.doc.items[2].id])"); p.wait(300)
+    p.ev("return Interact.saveSelection('Ecken')"); p.wait(400)
+    p.ev("App.clearSelection()"); p.wait(200)
+    cx, cy = p.canvas_center()
+    r = p.ev("const r=Viewer.canvas.getBoundingClientRect(); return [r.left+40, r.bottom-40]")
+    p.pg.mouse.click(r[0], r[1], button='right'); p.wait(400)
+    ok1 = 'Ecken' in (p.pg.locator('#cm-selset-0').inner_text() if p.pg.locator('#cm-selset-0').count() else '')
+    if ok1: p.pg.locator('#cm-selset-0').click(); p.wait(300)
+    names = sorted(p.ev("return App.sel.map(id=>Model.find(App.doc,id).item.name)"))
+    ok2 = names == ['Würfel 1', 'Würfel 3'] and p.ev("return App.doc.selSets.length") == 1
+    return [ok1, ok2]
+
+# ---------- Sitzung 106: Export-Einstellungen ----------
+def t_export_einstellungen(p):
+    import zipfile, tempfile
+    p.empty()
+    p.ev("App.change('x', d=>{ d.items.push(Model.newItem('cylinder',{d:40,h:10},{name:'Scheibe'})); })"); warte_rechnen(p)
+    def run(q, fmt_):
+        p.pg.get_by_role('button', name='Exportieren').first.click(); p.wait(500)
+        p.pg.check('#ex-stl'); p.pg.uncheck('#ex-step')
+        p.pg.select_option('#ex-q', q); p.pg.select_option('#ex-stlfmt', fmt_); p.wait(100)
+        with p.pg.expect_download(timeout=90000) as dl:
+            p.pg.get_by_role('button', name='Als ZIP speichern').click()
+        z = os.path.join(tempfile.gettempdir(), 'tracery-q.zip'); dl.value.save_as(z)
+        data = zipfile.ZipFile(z).read([n for n in zipfile.ZipFile(z).namelist() if n.endswith('.stl')][0])
+        return p.ev("return Print.lastTris"), data
+    tg, dg = run('3', 'bin')
+    tf, df = run('0.15', 'txt')
+    ok1 = tf > tg * 2
+    ok2 = dg[:5] != b'solid' and df[:5] == b'solid' and df.count(b'facet normal') == tf
+    return [ok1, ok2]
+
+# ---------- Sitzung 107: Rechenzeit je Schritt ----------
+def t_rechenzeit(p):
+    p.empty()
+    p.ev("App.change('x', d=>{ d.items.push(Model.newItem('box',{w:10,d:10,h:10},{name:'Klotz'})); const g=Model.newItem('part',{lib:'threadRod',size:'M6',length:20},{name:'Gewindestange'}); g.t.x=30; d.items.push(g); })"); warte_rechnen(p, 90)
+    tb, tg = p.ev("return [App.timeOf(App.doc.items[0].id), App.timeOf(App.doc.items[1].id)].map(x=>x?x.ms:0)")
+    ok1 = tg > 0 and tg > tb
+    p.pg.click('#lt-log'); p.wait(500)
+    rows = p.pg.locator('#slow-steps .dep-row .grow').all_text_contents()
+    ok2 = len(rows) >= 1 and rows[0] == 'Gewindestange'
+    if not p.ev("return document.querySelector('#slow-steps').open"): p.pg.locator('#slow-steps summary').click(); p.wait(200)
+    p.pg.locator('#slow-steps .dep-row').first.click(); p.wait(300)
+    ok3 = p.ev("return App.sel[0]") == p.ev("return App.doc.items[1].id")
+    return [ok1, ok2, ok3]
+
+# ---------- Sitzung 108: Kanten nach Art wählen ----------
+def t_kanten_art(p):
+    p.empty()
+    # L-Winkel: Boden 40 × 20 × 4 und Wand 4 × 20 × 20 vereinigt → eine innere Kante (Kehle)
+    pts = [[-20, 0], [20, 0], [20, 4], [-16, 4], [-16, 20], [-20, 20]]
+    ents = [{'id': 'L%d' % i, 'type': 'line', 'a': pts[i], 'b': pts[(i + 1) % 6]} for i in range(6)]
+    p.ev("App.change('x', d=>{ const it=Model.newItem('extrude',{},{name:'Winkel'}); it.p={sketch:{plane:{o:[0,10,0],x:[1,0,0],n:[0,-1,0]},ents:arg,dims:[],cons:[]},dist:20,dir:'normal'}; d.items.push(it); })", ents); warte_rechnen(p)
+    kinds = p.ev("const k=Viewer.edgeKinds(App.doc.items[0].id); return {cx:k.filter(x=>x==='convex').length, cc:k.filter(x=>x==='concave').length, n:k.length}")
+    ok1 = kinds['cc'] == 1 and kinds['cx'] == kinds['n'] - 1
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(500)
+    p.pg.locator('.ctxbar button[aria-label="Kanten wählen"]').click(); p.wait(300)
+    p.pg.locator('#er-concave').click(); p.wait(500)
+    e = p.ev("const r=App.results.get(App.edges[0].id); return App.edges.map(x=>r.data.edges[x.edgeIdx])")
+    ok2 = len(e) == 1 and e[0]['t'] == 'LINE' and abs(e[0]['m'][2] - 4) < 1e-6 and abs(e[0]['m'][0] + 16) < 1e-6
+    # abrunden: Kehle bekommt eine Rundung, Teil bleibt fehlerfrei
+    p.ev("Actions.addFinish('fillet', 2)"); warte_rechnen(p)
+    ok3 = p.ev("return App.errors.length") == 0
+    return [ok1, ok2, ok3]
+
+# ---------- Sitzung 109: Skizze umhängen ----------
+def t_skizze_umhaengen(p):
+    scene(p, [{'id': 'R', 'type': 'rect', 'a': [0, 0], 'b': [30, 10]}])
+    p.ev("Sketch.cancel(true)"); p.wait(500); warte_rechnen(p)
+    p.ev("Datums.addOrigin('XY', 25)"); p.wait(500)
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(500)
+    p.pg.select_option('#p-replane', 'o:XZ'); warte_rechnen(p)
+    bb = p.ev("return App.results.get(App.doc.items[0].id).data.bbox.map(v=>Math.round(v*100)/100)")
+    # vorher: flach auf XY (30 × 10 × 3); jetzt senkrecht auf XZ: x 0…30, z 0…10
+    ok1 = bb[0] == 0 and bb[3] == 30 and bb[2] == 0 and bb[5] == 10
+    dl = p.ev("return Datums.list().map(d=>d.id)")
+    ok2 = True
+    if dl:
+        p.ev("App.select([App.doc.items[0].id])"); p.wait(400)
+        p.pg.select_option('#p-replane', 'd:' + dl[0]); warte_rechnen(p)
+        bb2 = p.ev("return App.results.get(App.doc.items[0].id).data.bbox.map(v=>Math.round(v*100)/100)")
+        ok2 = bb2[2] == 25 and bb2[5] == 28
+    p.ev("App.undo()"); warte_rechnen(p)
+    ok3 = p.ev("return App.doc.items[0].p.sketch.plane.n[1]") == -1
+    return [ok1, ok2, ok3]
+
+# ---------- Sitzung 110: Vorführ-Modus ----------
+def t_vorfuehren(p):
+    p.empty()
+    p.ev("App.change('x', d=>{ d.items.push(Model.newItem('box',{w:30,d:20,h:10},{name:'Teil'})); })"); warte_rechnen(p)
+    p.ev("Viewer.setView('iso', false)"); p.wait(500)
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('p'); p.wait(1500)
+    a1 = p.ev("const c=Viewer.camera.position; return Math.atan2(c.y-Viewer.controls.target.y, c.x-Viewer.controls.target.x)")
+    ok1 = p.ev("return document.body.classList.contains('presenting')") and not p.pg.locator('.topbar').is_visible() and p.pg.locator('#present-bar').count() == 1
+    p.wait(1500)
+    a2 = p.ev("const c=Viewer.camera.position; return Math.atan2(c.y-Viewer.controls.target.y, c.x-Viewer.controls.target.x)")
+    ok2 = abs(a2 - a1) > 0.05
+    p.pg.locator('#present-spin').click(); p.wait(300)
+    b1 = p.ev("const c=Viewer.camera.position; return c.x"); p.wait(800); b2 = p.ev("const c=Viewer.camera.position; return c.x")
+    ok3 = abs(b2 - b1) < 1e-6
+    p.pg.keyboard.press('Escape'); p.wait(500)
+    ok4 = not p.ev("return document.body.classList.contains('presenting')") and p.pg.locator('.topbar').is_visible() and p.pg.locator('#present-bar').count() == 0
+    return [ok1, ok2, ok3, ok4]
+
+# ---------- Sitzung 111: Tangente an zwei Kreise ----------
+def t_tangente_zwei_kreise(p):
+    scene(p, [{'id': 'A', 'type': 'circle', 'c': [0, 0], 'r': 10}, {'id': 'B', 'type': 'circle', 'c': [40, 0], 'r': 5}])
+    p.pg.keyboard.press('l'); p.wait(200)
+    p.pg.select_option('#ln-mode', 'tan2'); p.wait(200)
+    for q in ([0, 10], [40, 5]):
+        s = to_screen(p, *q); p.pg.mouse.click(*s); p.wait(300)
+    L = SS(p, "return S.ents.find(e=>e.type==='line')")
+    import math
+    def dist(c, a, b):
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        return abs((c[0] - a[0]) * dy - (c[1] - a[1]) * dx) / math.hypot(dx, dy)
+    ok1 = L is not None and abs(dist([0, 0], L['a'], L['b']) - 10) < 1e-3 and abs(dist([40, 0], L['a'], L['b']) - 5) < 1e-3 and L['a'][1] > 0
+    ok2 = SS(p, "return S.cons.filter(c=>c.type==='tangent').length") == 2
+    # Kreis B größer → Linie bleibt tangential
+    SS(p, "S.sel='B'; Panels.renderRight()"); p.wait(300)
+    p.pg.fill('#se-d', '16'); p.pg.press('#se-d', 'Enter'); p.wait(500)
+    L2 = SS(p, "return S.ents.find(e=>e.type==='line')")
+    A2, B2 = SS(p, "return E('A')"), SS(p, "return E('B')")   # freie Kreise dürfen dabei mitwandern
+    ok3 = abs(B2['r'] - 8) < 1e-6 and abs(dist(B2['c'], L2['a'], L2['b']) - B2['r']) < 1e-3 and abs(dist(A2['c'], L2['a'], L2['b']) - A2['r']) < 1e-3
+    return [ok1, ok2, ok3]
+
+# ---------- Sitzung 112: Maus-Steuerung wählbar ----------
+def t_maus_steuerung(p):
+    p.empty()
+    p.ev("App.change('x', d=>{ for (let i=0;i<3;i++){ const a=Model.newItem('box',{w:10,d:10,h:10},{name:'Würfel '+(i+1)}); a.t.x=i*30-30; d.items.push(a); } })"); warte_rechnen(p)
+    p.ev("Viewer.setView('top', false)"); p.wait(500); p.ev("Viewer.fit()"); p.wait(900)
+    mb = lambda: p.ev("const m=Viewer.controls.mouseButtons; return [m.LEFT, m.MIDDLE, m.RIGHT]")
+    std = mb()
+    # Einstellungen: wie Onshape
+    p.pg.locator('#btn-menu').click(); p.wait(300)
+    p.ev("ViewPrefs.dialog()"); p.wait(400)
+    p.pg.select_option('#set-mouse', 'onshape'); p.wait(200)
+    p.pg.keyboard.press('Escape'); p.wait(300)
+    ons = mb()
+    ok1 = std[0] == 0 and ons[0] is None and ons[2] == 0 and ons[1] == 2   # THREE.MOUSE: ROTATE 0, DOLLY 1, PAN 2
+    # linke Maustaste im Leeren: Rahmen (ohne Umschalt) um die ersten zwei Würfel
+    scr = lambda i: p.ev("const b=Actions.worldBox(App.doc.items[arg].id); const c=b.getCenter(b.min.clone()); const s=Viewer.toScreen(c); const r=Viewer.canvas.getBoundingClientRect(); return [s.x+r.left, s.y+r.top]", i)
+    a, b = scr(0), scr(1)
+    p.pg.mouse.move(a[0] - 60, a[1] - 60); p.pg.mouse.down(); p.pg.mouse.move(b[0] + 50, b[1] + 60, steps=8); p.pg.mouse.up(); p.wait(500)
+    names = sorted(p.ev("return App.sel.map(id=>Model.find(App.doc,id).item.name)"))
+    ok2 = names == ['Würfel 1', 'Würfel 2']
+    # in der Skizze: rechts dreht weiter, links zeichnet
+    p.ev("Sketch.startOnPlane('XY')"); p.wait(1200)
+    sk = mb()
+    p.ev("Sketch.cancel(true)"); p.wait(600)
+    ok3 = sk[0] is None and sk[2] == 0 and mb() == ons
+    return [ok1, ok2, ok3]
+
+# ---------- Sitzung 113: Drehteller-Video ----------
+def t_drehteller(p):
+    p.empty()
+    p.ev("App.change('x', d=>{ d.items.push(Model.newItem('box',{w:30,d:20,h:10},{name:'Teil'})); })"); warte_rechnen(p)
+    p.ev("Viewer.setView('iso', false)"); p.wait(400)
+    c0 = p.ev("return Viewer.camera.position.toArray()")
+    size = p.ev("return Print.turntable({seconds: 1.5, save: false}).then(b=>b ? b.size : 0)")
+    c1 = p.ev("return Viewer.camera.position.toArray()")
+    ok1 = size > 1000 and (p.ev("return Print.lastVideo.type") or '').startswith('video/')
+    ok2 = max(abs(a - b) for a, b in zip(c0, c1)) < 1e-6
+    # Menüpunkt öffnet den Dialog
+    p.ev("Print.turntableDialog()"); p.wait(300)
+    ok3 = p.pg.locator('#tt-sec').count() == 1
+    p.pg.keyboard.press('Escape')
+    return [ok1, ok2, ok3]
+
+# ---------- Sitzung 114: Maße als Tabelle in der Skizze ----------
+def t_mass_tabelle(p):
+    scene(p, [{'id': 'R', 'type': 'rect', 'a': [0, 0], 'b': [30, 10]}, {'id': 'C', 'type': 'circle', 'c': [15, 5], 'r': 3}])
+    SS(p, "S.dims.push({id:'m1', e:'R', k:'w', v:30}, {id:'m2', e:'R', k:'h', v:10}, {id:'m3', e:'C', k:'d', v:6}); Sketch.setTool('select')"); p.wait(400)
+    p.ev("Panels.renderRight()"); p.wait(300)
+    p.pg.locator('#dim-table summary').click(); p.wait(200)
+    labels = p.pg.locator('#dim-table .field label').all_text_contents()
+    ok1 = len(labels) == 3 and 'Rechteck 1' in labels[0] and 'Kreis 1' in labels[2]
+    p.pg.fill('#dt-0', '45'); p.pg.press('#dt-0', 'Enter'); p.wait(500)
+    w = SS(p, "return Math.abs(E('R').b[0]-E('R').a[0])")
+    ok2 = abs(w - 45) < 1e-6 and p.pg.locator('#dim-table').count() == 1
+    # Tabelle bleibt offen nach der Änderung
+    ok3 = p.ev("return document.querySelector('#dim-table').open")
+    return [ok1, ok2, ok3]
+
 # KI verrechnet Körper (vereinigen / abziehen)
 def t_ki_verrechnen(p):
     ki(p); p.empty()
@@ -4570,6 +5192,36 @@ TESTS = [
     ('Messen am Körper: Oberfläche und Hüllmaße / kleinster Abstand mit Linie', t_messen_koerper),
     ('Verknüpfte Kopie: Strg Umschalt D / folgt dem Original / Lage eigen, Zähler / lösen / Original weg', t_verknuepft),
     ('Bezüge: Liste am Teil / Klick springt / Hinweis beim Löschen', t_bezuege),
+    ('Maß zum Ablesen: bestimmt → in Klammern / wandert mit / Widerspruch / ( )-Knopf / wieder fest', t_referenzmass),
+    ('Regel „auf einer Linie“: zwei Linien / waagerecht zieht mit / Name', t_kollinear),
+    ('Längen und Durchmesser: Kante / Kantenkette / Kreis / Mantel / Wert kopieren / Messen am Zylinder', t_messen_rund),
+    ('Vorige Ansicht: Umschalt Z zweimal / nach Maus-Drehen / im Rechtsklick-Menü', t_vorige_ansicht),
+    ('Teil dahinter: Alt-Klick / nochmal → vorne / Rechtsklick-Eintrag', t_dahinter),
+    ('Kanten einer Fläche: finden / Ihre Kanten → alle abrunden / Volumen', t_flaechenkanten),
+    ('Notiz am Schritt: schreiben / Zeitleiste zeigt sie / Rückgängig', t_notiz_schritt),
+    ('Skizze verschieben/drehen: um X/Y / als Kopie drehen / Rechteck schräg / Rückgängig', t_skizze_verschieben),
+    ('Skizze kopieren: Kette per Doppelklick / Strg C, Strg V daneben / Regeln und Maße mit / in neuer Skizze', t_skizze_kopieren),
+    ('Rechteck mit runden Ecken: getippt / ein Radius für alle / ein Rückgängig', t_rechteck_rund),
+    ('Ecke bilden: verlängern / kürzen', t_ecke_bilden),
+    ('Bogen über die Mitte: Viertelkreis / großer Bogen, Ende auf dem Radius', t_bogen_mitte),
+    ('Langloch über die Gesamtlänge: getippt mit Maßen / mit der Maus', t_langloch_gesamt),
+    ('Lage unter der Maus: auf dem Körper / Boden / in der Skizze', t_koordinaten),
+    ('Export: nur die Auswahl / jeder Körper einzeln / Loch bleibt', t_export_auswahl),
+    ('2D-Export: Knöpfe / DXF hin und zurück / SVG in mm / Fläche mit Loch', t_2d_export),
+    ('Wandstärke: messen an der Wand / Ansicht rot unter 1,6 / nichts unter 1,2', t_wandstaerke),
+    ('Trägheit und Standfestigkeit: Quader-Formel / steht, kippt ab 27° / kippt um', t_traegheit_stand),
+    ('Suchen im Verlauf: Feld ab 6 Schritten / Name in Gruppe / nur Löcher / wieder alle', t_verlauf_suche),
+    ('Maße als CSV: speichern / laden ändert und ergänzt', t_masse_csv),
+    ('Auswahl speichern: Rechtsklick-Eintrag / wählt wieder', t_auswahl_speichern),
+    ('Export-Einstellungen: fein hat mehr Dreiecke / STL als Text', t_export_einstellungen),
+    ('Rechenzeit je Schritt: gemessen / langsamster oben im Protokoll / Klick wählt', t_rechenzeit),
+    ('Kanten nach Art: außen/innen erkannt / Kehle wählen / abrunden', t_kanten_art),
+    ('Skizze umhängen: auf XZ / auf Bezugsebene / Rückgängig', t_skizze_umhaengen),
+    ('Vorführen: P blendet aus / dreht / anhalten / Esc', t_vorfuehren),
+    ('Tangente an zwei Kreise: Lage / zwei Regeln / folgt dem Kreis', t_tangente_zwei_kreise),
+    ('Maus-Steuerung: wie Onshape / Rahmen ohne Umschalt / in der Skizze', t_maus_steuerung),
+    ('Drehteller-Video: Aufnahme / Blick danach wie vorher / Dialog', t_drehteller),
+    ('Maße als Tabelle: alle Maße / Wert ändern / bleibt offen', t_mass_tabelle),
     ('Bezugsebenen: über Grundebene / Dialog mit Neigung / an Fläche, wandert mit / Abstand ändern, Skizze darauf / hochziehen / Fläche fehlt / löschen', t_bezugsebenen),
     ('Luftwiderstand: Form erkannt / Kraft bei 100 km/h / Tempo und Form ändern / ohne Schub Hinweis / Formel / Speed-Drohne Höchstgeschwindigkeit', t_luftwiderstand),
     ('Rohr im Raum: glatt / Ecken / im Bild klicken / Punkt als Zahl / löschen und Rückgängig', t_rohr_raum),

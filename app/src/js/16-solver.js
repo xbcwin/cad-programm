@@ -144,6 +144,7 @@ const Solver = (() => {
     // ---------- Maße ----------
     const badDims = [];
     for (const dm of opts.dims || []) {
+      if (dm.ref) continue;   // Maß nur zum Ablesen: zeigt an, legt nichts fest
       const v = Model.num(dm.v, V || {}, NaN);
       if (!isFinite(v)) { badDims.push(dm.id); continue; }
       const tag = { dim: dm.id };
@@ -186,6 +187,10 @@ const Solver = (() => {
           const [ux, uy] = L(X, A), [vx, vy] = L(X, B); const n = hyp(ux, uy) * hyp(vx, vy) + EPS;
           return (t === 'parallel' ? (ux * vy - uy * vx) : (ux * vx + uy * vy)) / n * 10;
         }, tag);
+      } else if (t === 'collinear') {
+        // beide Enden der zweiten Linie liegen auf der Geraden durch die erste
+        const A = line(R[0]), B = line(R[1]); if (!A || !B) continue;
+        for (const Q of B) add([...A[0].deps, ...A[1].deps, ...Q.deps], (X) => { const [dx, dy, a] = L(X, A); const q = Q.get(X); return ((q[0] - a[0]) * dy - (q[1] - a[1]) * dx) / (hyp(dx, dy) + EPS); }, tag);
       } else if (t === 'equal') {
         // { e, k: 'r' } meint den Radius (auch bei Vieleck und Langloch), sonst Länge bzw. Größe
         const rad = R[0] && R[1] && (R[0].k === 'r' || R[1].k === 'r');
@@ -373,7 +378,7 @@ const Solver = (() => {
   function solve(sketch, V, opts = {}) {
     const ents = opts.inPlace ? sketch.ents : (sketch.ents || []).map((e) => JSON.parse(JSON.stringify(e)));
     // Eckenzahl von Vielecken ist eine ganze Zahl und wird direkt gesetzt
-    for (const dm of sketch.dims || []) if (dm.k === 'n') { const e = ents.find((x) => x.id === dm.e); const n = Model.num(dm.v, V || {}, NaN); if (e && isFinite(n)) e.n = clamp(Math.round(n), 3, 64); }
+    for (const dm of sketch.dims || []) if (dm.k === 'n' && !dm.ref) { const e = ents.find((x) => x.id === dm.e); const n = Model.num(dm.v, V || {}, NaN); if (e && isFinite(n)) e.n = clamp(Math.round(n), 3, 64); }
     const sys = build(ents, V, { dims: sketch.dims, cons: sketch.cons, noJoin: opts.noJoin });
     const X = sys.x.slice();
     const active = new Array(X.length).fill(true);

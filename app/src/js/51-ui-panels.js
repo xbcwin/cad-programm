@@ -140,6 +140,29 @@ const Panels = (() => {
   }
   function firstStepDone(k) { fsSet({ [k]: true }); if (leftTab === 'tree') renderLeft(); }
   let dragId = null;
+  // Suchen und Filtern im Verlauf (BE-09)
+  let treeFilter = '', treeKind = 'all';
+  const TFKINDS = [['all', 'Alle'], ['solid', 'Körper'], ['hole', 'Löcher'], ['hidden', 'Ausgeblendet'], ['err', 'Mit Fehler'], ['note', 'Mit Notiz'], ['ai', 'Von der KI']];
+  function treeMatch(it) {
+    const q = treeFilter.trim().toLowerCase();
+    if (q) { const kl = it.kind === 'part' ? (LIBMAP[it.p && it.p.lib] || {}).label || '' : (KINDS[it.kind] || {}).label || ''; if (!(Model.label(it).toLowerCase().includes(q) || kl.toLowerCase().includes(q) || (it.note || '').toLowerCase().includes(q))) return false; }
+    if (treeKind === 'solid') return it.role !== 'hole' && it.kind !== 'group';
+    if (treeKind === 'hole') return it.role === 'hole';
+    if (treeKind === 'hidden') return !!it.hidden;
+    if (treeKind === 'err') return App.errorsFor(it.id).length > 0;
+    if (treeKind === 'note') return !!it.note;
+    if (treeKind === 'ai') return !!it.ai;
+    return true;
+  }
+  const filtering = () => !!treeFilter.trim() || treeKind !== 'all';
+  function treeFilterBar(total) {
+    const inp = h('input', { type: 'search', id: 'tree-filter', value: treeFilter, placeholder: 'Im Verlauf suchen …', 'aria-label': 'Im Verlauf suchen', autocomplete: 'off', spellcheck: 'false' });
+    inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Escape') { treeFilter = ''; renderLeft(); } });
+    inp.addEventListener('input', () => { const pos = inp.selectionStart; treeFilter = inp.value; renderLeft(); const ni = $('#tree-filter'); if (ni) { ni.focus(); try { ni.setSelectionRange(pos, pos); } catch (_) {} } });
+    const sel = h('select', { id: 'tree-kind', 'aria-label': 'Nur zeigen' }); for (const [k, l] of TFKINDS) sel.append(h('option', { value: k, ...(k === treeKind ? { selected: true } : {}) }, l));
+    sel.onchange = () => { treeKind = sel.value; renderLeft(); };
+    return h('div', { class: 'tree-filter', 'data-help': 'treeFilter' }, inp, sel);
+  }
   function renderTree(body) {
     const items = App.doc.items;
     const fs = items.length <= 8 ? firstSteps() : null;
@@ -150,9 +173,20 @@ const Panels = (() => {
     }
     const V = Model.vars(App.doc).v;
     const selSet = new Set(App.sel);
+    let nAll = 0; Model.walk(items, () => { nAll++; });
+    if (nAll >= 6 || filtering()) body.append(treeFilterBar(nAll));
+    // beim Filtern: Treffer und die Gruppen, in denen sie liegen
+    let show = null, hits = 0;
+    if (filtering()) {
+      show = new Set();
+      const mark = (list, chain) => { for (const it of list) { if (treeMatch(it)) { hits++; show.add(it.id); for (const c of chain) show.add(c); } if (it.kind === 'group') mark(it.children || [], [...chain, it.id]); } };
+      mark(items, []);
+      body.append(h('div', { class: 'tree-count', id: 'tree-count' }, hits ? `${hits} von ${nAll} ${nAll === 1 ? 'Schritt' : 'Schritten'}` : 'Nichts gefunden'));
+    }
     const ul = h('ul', { class: 'tree', role: 'tree' });
     const rec = (list, parentUl) => {
       for (const it of list) {
+        if (show && !show.has(it.id)) continue;
         const li = h('li', { role: 'treeitem' });
         const topIdx = App.doc.items.indexOf(it);
         const ctxTop = App.ctx ? App.doc.items.find((x) => x.id === App.ctx) : null;
@@ -208,7 +242,7 @@ const Panels = (() => {
           moveInTree(dragId, it.id, mode); dragId = null;
         });
         li.append(row);
-        if (expanded.has(it.id)) {
+        if (expanded.has(it.id) || (show && it.kind === 'group')) {
           for (const fin of it.finishes || []) {
             const ferr = errs.find((x) => x.finishId === fin.id);
             const fr = h('div', { class: 'finish-row' + (ferr ? ' bad' : ''), title: ferr ? ferr.message : '' });
@@ -255,6 +289,16 @@ const Panels = (() => {
     for (const [k, l] of [['all', 'Alle'], ['change', 'Änderungen'], ['error', 'Fehler']]) { const b = h('button', { type: 'button', 'aria-pressed': logFilter === k }, l); b.onclick = () => { logFilter = k; renderLeft(); }; seg.append(b); }
     const clr = h('button', { type: 'button', class: 'btn small ghost', style: { marginLeft: 'auto' } }, 'Leeren'); clr.onclick = () => Log.clear();
     tools.append(seg, clr); body.append(tools);
+    // Welche Schritte brauchen beim Rechnen am längsten? (BE-26)
+    const slow = App.doc.items.map((it) => ({ it, t: App.timeOf(it.id) })).filter((x) => x.t && x.t.ms >= 1).sort((a, b) => b.t.ms - a.t.ms).slice(0, 5);
+    if (slow.length) {
+      const sec = h('details', { class: 'section slow-sec', id: 'slow-steps', 'data-help': 'slowSteps' }, h('summary', { class: 'section-h' }, 'Rechenzeit je Schritt'));
+      const fmtMs = (ms) => (ms >= 1000 ? `${fmt(ms / 1000, 1)} s` : `${Math.round(ms)} ms`);
+      for (const x of slow) { const r = h('div', { class: 'mini-row dep-row' }, h('span', { class: 'grow' }, Model.label(x.it)), h('b', { class: 'mono' }, fmtMs(x.t.ms))); r.style.cursor = 'pointer'; r.onclick = () => App.select([x.it.id]); sec.append(r); }
+      sec.append(h('div', { class: 'hint-box', html: 'Gemessen beim letzten echten Neurechnen. Was gerade nicht geändert wurde, kommt aus dem Speicher und kostet fast nichts. Langsam sind meist Rundungen an vielen Kanten, Gewinde und Muster mit vielen Kopien.' }));
+      if (slow[0].t.ms > 1500) sec.open = true;
+      body.append(sec);
+    }
     const shown = all.filter((e) => logFilter === 'all' || (logFilter === 'error' ? e.kind === 'error' : e.kind !== 'error' && e.kind !== 'info')).slice().reverse();
     if (!shown.length) { body.append(h('div', { class: 'empty-tree' }, logFilter === 'error' ? 'Keine Fehler – alles in Ordnung.' : 'Noch nichts passiert. Jede Änderung erscheint hier mit Uhrzeit.')); return; }
     const ul = h('div', { class: 'log-list' });
@@ -308,7 +352,41 @@ const Panels = (() => {
     const exb = h('button', { type: 'button', class: 'btn ghost' }); exb.innerHTML = icon('help') + 'Formel-Beispiele';
     exb.onclick = () => formulaHelp();
     wrap.append(h('div', { class: 'btn-row' }, add, exb));
+    // Maße als Tabelle tauschen (KP-23): CSV mit Name;Wert, lesbar in Excel und Numbers
+    const csvOut = h('button', { type: 'button', class: 'btn ghost', id: 'par-csv-out', 'data-help': 'paramsCsv' }); csvOut.innerHTML = icon('export') + 'Als CSV speichern';
+    csvOut.disabled = !(App.doc.params || []).length; csvOut.onclick = () => Print.save(Print.safeName(App.doc.name) + ' – Maße.csv', new Blob(['\ufeff' + paramsCSV()], { type: 'text/csv' }));
+    const csvIn = h('button', { type: 'button', class: 'btn ghost', id: 'par-csv-in', 'data-help': 'paramsCsv' }); csvIn.innerHTML = icon('folder') + 'CSV laden';
+    csvIn.onclick = () => { const inp = h('input', { type: 'file', accept: '.csv,text/csv,text/plain', style: { display: 'none' } }); inp.onchange = async () => { const f = inp.files && inp.files[0]; inp.remove(); if (f) importParamsCSV(await f.text()); }; document.body.append(inp); inp.click(); };
+    wrap.append(h('div', { class: 'btn-row' }, csvOut, csvIn));
     body.append(wrap);
+  }
+  function paramsCSV() {
+    const q = (s) => (/[;"\n]/.test(String(s)) ? '"' + String(s).replace(/"/g, '""') + '"' : String(s));
+    const { v } = Model.vars(App.doc);
+    const rows = [['Name', 'Wert', 'Ergebnis']];
+    for (const p of App.doc.params || []) rows.push([p.name, typeof p.expr === 'number' ? fmt(p.expr, 6) : p.expr, fmt(v[p.name], 6)]);
+    return rows.map((r) => r.map(q).join(';')).join('\r\n') + '\r\n';
+  }
+  // CSV lesen: Name;Wert (auch mit Komma oder Tab getrennt); bekannte Namen werden geändert, neue angelegt
+  function importParamsCSV(txt) {
+    const lines = String(txt).replace(/^\ufeff/, '').split(/\r?\n/).filter((l) => l.trim());
+    if (!lines.length) { UI.toast('Die Datei ist leer.', { icon: 'info' }); return 0; }
+    const sep = lines[0].includes(';') ? ';' : lines[0].includes('\t') ? '\t' : ',';
+    const cells = (l) => { const out = []; let cur = '', qq = false; for (let i = 0; i < l.length; i++) { const c = l[i]; if (qq) { if (c === '"' && l[i + 1] === '"') { cur += '"'; i++; } else if (c === '"') qq = false; else cur += c; } else if (c === '"') qq = true; else if (c === sep) { out.push(cur); cur = ''; } else cur += c; } out.push(cur); return out.map((x) => x.trim()); };
+    let changed = 0, added = 0, bad = 0; const plan = [];
+    for (const l of lines) {
+      const [name, val] = cells(l);
+      if (!name || /^name$/i.test(name)) continue;
+      if (!/^[A-Za-zÄÖÜäöüß_][A-Za-zÄÖÜäöüß_0-9]*$/.test(name) || val == null || val === '') { bad++; continue; }
+      const n = parseNum(val); plan.push([name, isNaN(n) ? val : n]);
+    }
+    if (!plan.length) { UI.toast('In der Datei habe ich keine Maße gefunden (Spalten: Name;Wert).', { icon: 'info' }); return 0; }
+    App.change('Maße aus CSV', (doc) => {
+      doc.params = doc.params || [];
+      for (const [name, val] of plan) { const p = doc.params.find((x) => x.name === name); if (p) { if (String(p.expr) !== String(val)) { p.expr = val; changed++; } } else { doc.params.push({ id: uid('m'), name, expr: val }); added++; } }
+    });
+    UI.toast(`${changed} ${changed === 1 ? 'Maß' : 'Maße'} geändert, ${added} neu${bad ? `, ${bad} Zeilen übersprungen` : ''}.`, { icon: 'check' });
+    return changed + added;
   }
   // Fenster mit Schreibweise und 12 Beispielen zum Ausprobieren
   function formulaHelp() {
@@ -527,6 +605,24 @@ const Panels = (() => {
     }
     return sec;
   }
+  function edgeRuleMenu(id, anchor) {
+    UI.menu(anchor, [
+      { icon: 'pointer', label: 'Alle äußeren Kanten', id: 'er-convex', help: 'edgeRules', run: () => Select.edgesByRule(id, 'convex') },
+      { icon: 'pointer', label: 'Alle inneren Kanten', id: 'er-concave', help: 'edgeRules', run: () => Select.edgesByRule(id, 'concave') },
+      { icon: 'pointer', label: 'Alle Kanten', id: 'er-all', help: 'edgeRules', run: () => Select.edgesByRule(id, 'all') },
+    ]);
+  }
+  // Alle Kanten einer Fläche: wählen, abrunden oder abschrägen (KP-15)
+  function faceEdgeList(face) { return Viewer.faceEdges(face.id, face.idx).map((edgeIdx) => ({ id: face.id, edgeIdx })); }
+  function faceEdgeMenu(face, anchor) {
+    const list = faceEdgeList(face);
+    if (!list.length) { UI.toast('An dieser Fläche habe ich keine Kanten gefunden.', { icon: 'info' }); return; }
+    UI.menu(anchor, [
+      { icon: 'pointer', label: `Alle ${list.length} Kanten wählen`, id: 'fe-select', help: 'faceEdges', run: () => App.select([face.id], { edges: list }) },
+      { icon: 'fillet', label: 'Alle abrunden (1 mm)', id: 'fe-fillet', help: 'faceEdges', run: () => Actions.addFinish('fillet', 1, list) },
+      { icon: 'chamfer', label: 'Alle abschrägen (1 mm)', id: 'fe-chamfer', help: 'faceEdges', run: () => Actions.addFinish('chamfer', 1, list) },
+    ]);
+  }
   function renderItem(body, f) {
     const it = f.item; const V = Model.vars(App.doc).v;
     const w = h('div', { class: 'props' });
@@ -540,6 +636,17 @@ const Panels = (() => {
     const exb = h('button', { type: 'button', class: 'icon-btn', id: 'item-explain', 'aria-label': 'Erklär diesen Schritt', 'data-tip': 'Erklär diesen Schritt', 'data-help': 'explainStep' }); exb.innerHTML = icon('help');
     exb.onclick = () => Explain.dialog(it.id); title.append(exb);
     w.append(title);
+    // Notiz am Schritt (KP-55): eigener Text, steht auch in der Zeitleiste
+    {
+      const nd = h('details', { class: 'section note-sec', id: 'note-sec', 'data-help': 'stepNote' }, h('summary', { class: 'section-h' }, it.note ? 'Notiz' : 'Notiz hinzufügen'));
+      const ta = h('textarea', { id: 'item-note', rows: 3, placeholder: 'Warum ist das so? Zum Beispiel: „Wand 2 mm, weil der Drucker sonst bricht“', 'aria-label': 'Notiz zu diesem Schritt' });
+      ta.value = it.note || '';
+      ta.addEventListener('keydown', (e) => e.stopPropagation());
+      ta.addEventListener('change', () => { const v = ta.value.trim(); if (v === (it.note || '')) return; App.change(v ? 'Notiz geändert' : 'Notiz entfernt', (doc) => { const x = Model.find(doc, it.id).item; if (v) x.note = v; else delete x.note; }); });
+      nd.append(ta);
+      if (it.note) nd.open = true;
+      w.append(nd);
+    }
     for (const e of App.errorsFor(it.id)) {
       const box = h('div', { class: 'err-box' }, h('span', null, e.message));
       if (e.code === 'toobig' && e.max > 0) { const b = h('button', { type: 'button', class: 'btn small' }, `Auf ${fmt(e.max, 1)} mm setzen`); b.onclick = () => Actions.setFinish(it.id, e.finishId, { r: e.max }); box.append(h('div', null, b)); }
@@ -607,7 +714,14 @@ const Panels = (() => {
       sec.append(fl);
       const eb = h('button', { type: 'button', class: 'btn' }); eb.innerHTML = icon('edit') + 'Skizze bearbeiten';
       eb.onclick = () => Sketch.editItem(it.id);
-      sec.append(eb); w.append(sec);
+      sec.append(eb);
+      // Skizze auf eine andere Ebene umhängen (SK-13): Grundebenen und Bezugsebenen
+      if (App.doc.items.includes(it) && it.p.sketch && it.p.sketch.plane) {
+        const opts = [['', 'Ebene wechseln …'], ['o:XY', 'Arbeitsfläche (XY)'], ['o:XZ', 'Vorne (XZ)'], ['o:YZ', 'Seite (YZ)'], ...Datums.list().filter((d) => d.plane).map((d) => ['d:' + d.id, 'Bezugsebene „' + d.name + '“'])];
+        const rs = UI.selectField({ id: 'p-replane', label: 'Skizze umhängen', value: '', options: opts, onChange: (v) => { if (v) Actions.replaneSketch(it.id, v); } });
+        rs.setAttribute('data-help', 'replaneSketch'); sec.append(rs);
+      }
+      w.append(sec);
     } else if (it.kind === 'import') {
       sec.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Datei'), h('b', { class: 'mono' }, it.p.file || '–')));
       const fl = h('div', { class: 'fields' });
@@ -854,6 +968,13 @@ const Panels = (() => {
         const p = Mass.partOf(r, it.id); vR.textContent = p ? `${fmt(p.volume / 1000, 3)} cm³` : '–'; gR.textContent = p ? Mass.gText(p.mass) + (p.fixed ? ' (fest)' : '') : '–'; vR.id = 'p-vol'; gR.id = 'p-mass';
         aR.textContent = p && p.area ? `${fmt(p.area / 100, 2)} cm²` : '–'; aR.id = 'p-area';
         const b = p && p.bbox; bR.textContent = b ? `${fmt(b[3] - b[0], 2)} × ${fmt(b[4] - b[1], 2)} × ${fmt(b[5] - b[2], 2)} mm` : '–'; bR.id = 'p-bbox';
+        // Trägheit um den Schwerpunkt (PF-13) und Standfestigkeit (PF-14)
+        if (p && p.I && !p.fixed) {
+          const gc = (x) => fmt(x / 100, x / 100 < 10 ? 2 : 1);
+          ms.querySelector('.mini-list').append(h('div', { class: 'mini-row', 'data-help': 'inertia', 'data-tip': 'Trägheitsmomente um den Schwerpunkt, um die X-, Y- und Z-Richtung' }, h('span', { class: 'grow' }, 'Trägheit X · Y · Z'), h('b', { class: 'mono', id: 'p-inertia' }, `${gc(p.I[0])} · ${gc(p.I[1])} · ${gc(p.I[2])} g·cm²`)));
+        }
+        const st = p && p.com ? Mass.stability(it.id, p.com) : null;
+        if (st) ms.querySelector('.mini-list').append(h('div', { class: 'mini-row', 'data-help': 'stability' }, h('span', { class: 'grow' }, 'Standfest'), h('b', { class: 'mono', id: 'p-stand', style: { color: st.ok ? '' : 'var(--bad)' } }, st.ok ? `ja – kippt ab ${fmt(st.angle, 0)}°` : 'nein – kippt um')));
       });
       w.append(ms);
     }
@@ -898,25 +1019,40 @@ const Panels = (() => {
       return;
     }
     const face = Actions.selectedFace();
+    // Wert im Schild der Leiste: Klick kopiert ihn (Länge der Kanten, Durchmesser einer runden Fläche)
+    const valLbl = (txt, val, unit, tip) => {
+      const l = h('span', { class: 'lbl copyable', id: 'sel-val', 'data-help': 'copyValue', 'data-tip': tip + ' – klicken kopiert den Wert' }, txt, h('span', { class: 'mono' }, fmt(val, 2) + ' ' + unit));
+      l.onclick = () => Measure.copyText(fmt(val, 2), txt.trim()); return l;
+    };
     if (App.edges.length) {
-      bar.append(h('span', { class: 'lbl' }, App.edges.length > 1 ? App.edges.length + ' Kanten' : 'Kante'));
+      const eds = App.edges.map((x) => { const r = App.results.get(x.id); return r && r.data.edges[x.edgeIdx]; }).filter(Boolean);
+      const one = eds.length === 1 && eds[0];
+      const full = one && one.t === 'CIRCLE' && one.r && Math.hypot(one.a[0] - one.b[0], one.a[1] - one.b[1], one.a[2] - one.b[2]) < 1e-6;
+      const total = eds.reduce((s, e) => s + (e.l || 0), 0);
+      if (full) bar.append(valLbl('Kante Ø', one.r * 2, 'mm', `Kreis mit Radius ${fmt(one.r, 2)} mm, Umfang ${fmt(total, 2)} mm`));
+      else if (total > 0) bar.append(valLbl(App.edges.length > 1 ? App.edges.length + ' Kanten' : 'Kante', total, 'mm', App.edges.length > 1 ? 'Gesamtlänge der gewählten Kanten' : 'Länge der Kante' + (one && one.t === 'CIRCLE' && one.r ? ` (Bogen, R ${fmt(one.r, 2)} mm)` : '')));
+      else bar.append(h('span', { class: 'lbl' }, App.edges.length > 1 ? App.edges.length + ' Kanten' : 'Kante'));
       b('fillet', 'Abrunden', () => Actions.addFinish('fillet', 1), 'accent', 'Kante abrunden (1 mm, danach änderbar)');
       b('chamfer', 'Abschrägen', () => Actions.addFinish('chamfer', 1), '', 'Kante abschrägen (1 mm, danach änderbar)');
       b('similar', 'Ähnliche', () => Select.similar(), '', 'Alle gleich langen Kanten dazuwählen (A)', true);
       b('chainEdges', 'Kette', () => Select.chain(), '', 'Alle Kanten dazuwählen, die ohne Knick weiterlaufen (z. B. ein gerundeter Umriss)', true);
+      b('similar', 'Nach Art', (e) => edgeRuleMenu(App.edges[0].id, e.currentTarget), '', 'Alle äußeren oder alle inneren Kanten dieses Teils wählen', true);
       sep();
     } else if (face && items.length === 1 && face.info.t === 'PLANE') {
       bar.append(h('span', { class: 'lbl' }, 'Fläche'));
       b('sketch', 'Skizze hierauf', () => Sketch.startOnFace(face), 'accent', 'Auf dieser Fläche zeichnen');
       b('holeWizard', 'Bohrung', (e) => Place.holeHere(face, e.currentTarget), '', 'Bohrungs-Assistent: Schraubenloch, Gewinde, Einsatz oder Mutternfalle – hier und per Klick weitere');
       b('lift', 'Hochziehen', () => Sketch.pushPullFace(face), '', 'Die Fläche herausziehen oder hineindrücken');
+      b('fillet', 'Ihre Kanten', (e) => faceEdgeMenu(face, e.currentTarget), '', 'Alle Kanten dieser Fläche wählen, abrunden oder abschrägen', true);
       if (items[0].item.role !== 'hole' && App.doc.items.some((x) => x.id === face.id)) b('shell', 'Aushöhlen', () => Features.shell(face), '', 'Körper aushöhlen – diese Fläche wird die Öffnung');
       b('section', 'Schnitt hier', () => Views.section(true, { face }), '', 'Schnitt parallel zu dieser Fläche – den Abstand stellst du in der Schnitt-Leiste ein', true);
       if (items[0].item.role !== 'hole') b('mirror', 'An Fläche spiegeln', () => Features.mirrorAtFace(face), '', 'Gespiegelte Kopie an dieser Fläche – z. B. die zweite Hälfte eines symmetrischen Teils', true);
       sep();
     } else if (face && items.length === 1 && face.info.t !== 'PLANE') {
-      bar.append(h('span', { class: 'lbl' }, 'Runde Fläche'));
+      const fr = face.info.r;
+      bar.append(fr ? valLbl(face.info.t === 'SPHERE' ? 'Kugel Ø' : 'Runde Fläche Ø', fr * 2, 'mm', `Radius ${fmt(fr, 2)} mm`) : h('span', { class: 'lbl' }, 'Runde Fläche'));
       b('holeWizard', 'Bohrung', (e) => Place.holeHere(face, e.currentTarget), 'accent', 'Bohrungs-Assistent: Loch senkrecht in die runde Fläche – der Magnet rastet ganz oben, an den Seiten und in der Mitte ein');
+      b('fillet', 'Ihre Kanten', (e) => faceEdgeMenu(face, e.currentTarget), '', 'Alle Kanten dieser Fläche wählen, abrunden oder abschrägen', true);
       sep();
     }
     if (items.length === 1) {
@@ -931,6 +1067,7 @@ const Panels = (() => {
       if (!hole) b('split', 'Teilen', () => Features.split(), '', 'Körper an einer Ebene teilen', true);
       if (!hole && it.kind === 'extrude' && it.p && it.p.sketch) b('loft', 'Zur Spitze', () => Actions.loft([it.id], { tip: 10 }), '', 'Den Umriss zu einer Spitze zusammenlaufen lassen (Übergang mit Spitze)', true);
       if (!App.edges.length) b('similar', 'Ähnliche', () => Select.similar(), '', 'Alle gleichen Teile wählen (A)', true);
+      if (!App.edges.length && !face && !hole && App.results.get(it.id) && App.doc.items.includes(it)) b('fillet', 'Kanten wählen', (e) => edgeRuleMenu(it.id, e.currentTarget), '', 'Alle äußeren, alle inneren oder alle Kanten dieses Teils wählen – dann zusammen abrunden', true);
       if (it.kind === 'group') b('ungroup', 'Gruppe lösen', () => Actions.ungroup(), '', 'Gruppe lösen', true);
     } else {
       b('group', 'Gruppieren', () => Actions.group(), 'accent', 'Zu einem Körper verbinden (Strg G)');
@@ -1039,6 +1176,6 @@ const Panels = (() => {
     Viewer.on('camera', placeCtx);
     ViewPrefs.on('change', debounce(() => { if (leftTab === 'tree') renderLeft(); }, 30));   // Erste Schritte ein-/ausblenden
   }
-  return { init, renderLeft, renderRight, renderTools, renderCtx, closeFlyout, toggleFlyout, firstStepDone, firstStepsState, expand: (id) => { expanded.add(id); renderLeft(); }, showParams: () => { leftTab = 'params'; renderLeft(); } };
+  return { paramsCSV, importParamsCSV, faceEdgeList, init, renderLeft, renderRight, renderTools, renderCtx, closeFlyout, toggleFlyout, firstStepDone, firstStepsState, expand: (id) => { expanded.add(id); renderLeft(); }, showParams: () => { leftTab = 'params'; renderLeft(); } };
 })();
 

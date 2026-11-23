@@ -59,6 +59,21 @@ const Print = (() => {
     for (let i = 0; i < triangles.length; i += 3) { const a = remap[triangles[i]], b = remap[triangles[i + 1]], c = remap[triangles[i + 2]]; if (a !== b && b !== c && a !== c) tri.push(a, b, c); }
     return { pos, tri };
   }
+  // STL als Text (für Programme, die kein binäres STL lesen, und zum Nachsehen)
+  function buildSTLText(objects, name) {
+    const n = (x) => (Math.abs(x) < 5e-7 ? 0 : x).toExponential(6), out = ['solid ' + (name || 'Tracery').replace(/\s+/g, '_')];
+    for (const o of objects) {
+      const v = o.vertices, t = o.triangles;
+      for (let i = 0; i < t.length; i += 3) {
+        const a = t[i] * 3, b = t[i + 1] * 3, c = t[i + 2] * 3;
+        const ux = v[b] - v[a], uy = v[b + 1] - v[a + 1], uz = v[b + 2] - v[a + 2], wx = v[c] - v[a], wy = v[c + 1] - v[a + 1], wz = v[c + 2] - v[a + 2];
+        let nx = uy * wz - uz * wy, ny = uz * wx - ux * wz, nz = ux * wy - uy * wx; const l = Math.hypot(nx, ny, nz) || 1;
+        out.push(` facet normal ${n(nx / l)} ${n(ny / l)} ${n(nz / l)}`, '  outer loop', ...[a, b, c].map((k) => `   vertex ${n(v[k])} ${n(v[k + 1])} ${n(v[k + 2])}`), '  endloop', ' endfacet');
+      }
+    }
+    out.push('endsolid ' + (name || 'Tracery').replace(/\s+/g, '_'));
+    return new TextEncoder().encode(out.join('\n') + '\n');
+  }
   function buildSTL(objects, name) {
     let count = 0; for (const o of objects) count += o.triangles.length / 3;
     const buf = new ArrayBuffer(84 + count * 50); const dv = new DataView(buf);
@@ -139,6 +154,17 @@ const Print = (() => {
     body.append(h('p', null, 'Die Dateien kommen zusammen als ZIP.'));
     const mk = (k, label, sub) => { const l = h('label', { class: 'check', style: { alignItems: 'flex-start' } }, h('input', { type: 'checkbox', id: 'ex-' + k, checked: opts[k] }), h('span', null, h('b', null, label), h('br'), h('small', { style: { color: 'var(--muted)' } }, sub))); l.querySelector('input').onchange = (e) => { opts[k] = e.target.checked; }; return l; };
     body.append(mk('step', 'STEP', 'Exakte Geometrie – für Fusion, FreeCAD, SolidWorks und Fertiger'), mk('stl', 'STL', 'Dreiecksnetz, z. B. für Renderings oder 3D-Druck'), mk('mf', '3MF', 'Dreiecksnetz mit Farben und Maßeinheit'));
+    // Was kommt in die Dateien? (IO-07)
+    const selTops = exportSelection();
+    if (selTops.length) { opts.onlySel = false; const l = mk('onlySel', `Nur die Auswahl (${selTops.length} ${selTops.length === 1 ? 'Teil' : 'Teile'})`, 'Alles andere bleibt draußen – Löcher und Formschritte an den gewählten Teilen zählen mit'); l.setAttribute('data-help', 'exportSelection'); body.append(l); }
+    // Netz-Einstellungen (IO-08)
+    opts.q = 1; opts.stlText = false;
+    const qs = UI.selectField({ id: 'ex-q', label: 'Feinheit der Netze (STL, 3MF)', value: '1', options: [['3', 'Grob – kleine Dateien'], ['1', 'Normal'], ['0.4', 'Fein'], ['0.15', 'Sehr fein – große Dateien']], onChange: (v) => { opts.q = +v; } });
+    qs.setAttribute('data-help', 'exportSettings');
+    const st = UI.selectField({ id: 'ex-stlfmt', label: 'STL-Format', value: 'bin', options: [['bin', 'Binär (klein, Standard)'], ['txt', 'Text (ASCII)']], onChange: (v) => { opts.stlText = v === 'txt'; } });
+    st.setAttribute('data-help', 'exportSettings');
+    body.append(h('div', { class: 'fields' }, qs, st));
+    { const l = mk('each', 'Jeder Körper als eigene Datei (STL, 3MF)', 'Zusätzlich ein Ordner mit einer Datei pro Körper, benannt nach dem Teil – praktisch für den Slicer'); l.setAttribute('data-help', 'exportSelection'); body.append(l); }
     // flache Teile (Carbon-Platten) als 2D-Kontur für die Fräse oder den Laser
     if (plates.length) {
       const d = mk('dxf', 'Platten als DXF (für die Fräse)', 'Draufsicht in Originalgröße, eine Datei pro Platte – die Dicke steht im Dateinamen');
@@ -176,22 +202,152 @@ const Print = (() => {
     await save(safeName(App.doc.name) + '.png', blob);
     return { w, h: hh, bytes: blob.size };
   }
+  // gewählte Teile der obersten Ebene; verrechnete Teile zählen zu ihrem Ziel
+  function exportSelection() {
+    const out = new Set();
+    for (const id of App.sel) { const t = Model.topOf(App.doc, id); if (!t || t.role === 'hole') continue; out.add(App.mergedInto(t.id) || t.id); }
+    return [...out];
+  }
+  // ---------- 2D: Skizzen-Elemente als DXF oder SVG (SK-23, IO-05) ----------
+  function segs2D(ents) {
+    const out = [];
+    for (const e of ents || []) { if (e.con || e.type === 'point') continue; for (const s of SK.segsOf(e)) out.push(s); }
+    return out;
+  }
+  function arcGeom(s) {
+    const ai = SK.arcInfo(s.a, s.m, s.b); if (!ai) return null;
+    const ang = (p) => Math.atan2(p[1] - ai.c[1], p[0] - ai.c[0]);
+    const ccw = (s.m[0] - s.a[0]) * (s.b[1] - s.a[1]) - (s.m[1] - s.a[1]) * (s.b[0] - s.a[0]) > 0;   // Mitte rechts vom Weg Anfang→Ende = gegen den Uhrzeigersinn
+    return { c: ai.c, r: ai.r, a0: ccw ? ang(s.a) : ang(s.b), a1: ccw ? ang(s.b) : ang(s.a), ccw };
+  }
+  function entsToDXF(ents) {
+    const out = [], P = (...a) => out.push(...a.map(String));
+    const n = (v) => (Math.abs(v) < 5e-7 ? 0 : v).toFixed(4), deg = (a) => (((((a * 180) / Math.PI) % 360) + 360) % 360).toFixed(4);
+    P(0, 'SECTION', 2, 'HEADER', 9, '$INSUNITS', 70, 4, 0, 'ENDSEC');
+    P(0, 'SECTION', 2, 'TABLES', 0, 'TABLE', 2, 'LAYER', 70, 1, 0, 'LAYER', 2, 'KONTUR', 70, 0, 62, 7, 6, 'CONTINUOUS', 0, 'ENDTAB', 0, 'ENDSEC');
+    P(0, 'SECTION', 2, 'ENTITIES');
+    let count = 0;
+    const line = (a, b) => { P(0, 'LINE', 8, 'KONTUR', 10, n(a[0]), 20, n(a[1]), 30, 0, 11, n(b[0]), 21, n(b[1]), 31, 0); };
+    for (const s of segs2D(ents)) {
+      count++;
+      if (s.t === 'line') { line(s.a, s.b); continue; }
+      if (s.t === 'circle') { P(0, 'CIRCLE', 8, 'KONTUR', 10, n(s.c[0]), 20, n(s.c[1]), 30, 0, 40, n(s.r)); continue; }
+      if (s.t === 'arc') { const g = arcGeom(s); if (g) { P(0, 'ARC', 8, 'KONTUR', 10, n(g.c[0]), 20, n(g.c[1]), 30, 0, 40, n(g.r), 50, deg(g.a0), 51, deg(g.a1)); continue; } }
+      const pts = SK.segPoints(s); for (let i = 0; i < pts.length - 1; i++) line(pts[i], pts[i + 1]);
+    }
+    P(0, 'ENDSEC', 0, 'EOF');
+    return { text: out.join('\r\n') + '\r\n', count };
+  }
+  function entsToSVG(ents, title = 'Tracery') {
+    const ss = segs2D(ents); if (!ss.length) return { text: '', count: 0 };
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const s of ss) for (const p of SK.segPoints(s)) { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); }
+    const m = 1, f = (v) => (Math.abs(v) < 5e-7 ? 0 : v).toFixed(4).replace(/\.?0+$/, '');
+    const W = x1 - x0 + 2 * m, H = y1 - y0 + 2 * m;
+    // y nach oben wie in der Skizze: Punkte gespiegelt eintragen
+    const X = (v) => f(v - x0 + m), Y = (v) => f(y1 + m - v);
+    const parts = [];
+    for (const s of ss) {
+      if (s.t === 'line') parts.push(`<path d="M${X(s.a[0])} ${Y(s.a[1])}L${X(s.b[0])} ${Y(s.b[1])}"/>`);
+      else if (s.t === 'circle') parts.push(`<circle cx="${X(s.c[0])}" cy="${Y(s.c[1])}" r="${f(s.r)}"/>`);
+      else if (s.t === 'arc' && arcGeom(s)) {
+        const g = arcGeom(s); let sw = g.a1 - g.a0; while (sw < 0) sw += 2 * Math.PI;
+        // gespiegelt: gegen den Uhrzeigersinn in der Skizze = im Uhrzeigersinn im SVG
+        const [a, b] = g.ccw ? [s.a, s.b] : [s.b, s.a];
+        parts.push(`<path d="M${X(a[0])} ${Y(a[1])}A${f(g.r)} ${f(g.r)} 0 ${sw > Math.PI ? 1 : 0} 0 ${X(b[0])} ${Y(b[1])}"/>`);
+      } else { const pts = SK.segPoints(s); parts.push(`<path d="M${pts.map((p) => X(p[0]) + ' ' + Y(p[1])).join('L')}"/>`); }
+    }
+    const text = `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${f(W)}mm" height="${f(H)}mm" viewBox="0 0 ${f(W)} ${f(H)}">\n<title>${esc(title)}</title>\n<g fill="none" stroke="#000" stroke-width="0.1">\n${parts.join('\n')}\n</g>\n</svg>\n`;
+    return { text, count: ss.length };
+  }
+  let last2D = null;
+  async function save2D(ents, name, kind) {
+    const r = kind === 'svg' ? entsToSVG(ents, name) : entsToDXF(ents);
+    if (!r.count) { UI.toast('Da ist nichts zu speichern – Hilfslinien und Punkte zählen nicht.', { icon: 'info' }); return false; }
+    last2D = { kind, text: r.text, count: r.count };
+    return save(safeName(name) + (kind === 'svg' ? '.svg' : '.dxf'), new Blob([r.text], { type: kind === 'svg' ? 'image/svg+xml' : 'application/dxf' }));
+  }
+  // ebene Fläche eines Körpers in Originalgröße (Blick senkrecht darauf)
+  async function faceTo2D(face, kind) {
+    const r = App.results.get(face.id); if (!r || !face.info || face.info.t !== 'PLANE') return false;
+    let loops; try { loops = await Kernel.call('faceLoops', { key: r.key, faceIdx: face.idx }); } catch (e) { UI.toast('Die Fläche konnte ich nicht lesen: ' + e.message, { kind: 'bad' }); return false; }
+    const ents = SK.faceLoopsToEnts(Actions.faceFrame(face.info), loops);
+    const it = (Model.find(App.doc, face.id) || { item: {} }).item;
+    return save2D(ents, `${Model.label(it)} – Fläche`, kind);
+  }
+  // ---------- Drehteller-Video (AN-14): das Modell dreht sich einmal um sich selbst, als WebM ----------
+  let lastVideo = null;
+  function videoType() {
+    for (const t of ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4']) { try { if (window.MediaRecorder && MediaRecorder.isTypeSupported(t)) return t; } catch (_) {} }
+    return null;
+  }
+  function turntableDialog() {
+    const st = { sec: 6 };
+    const body = h('div', { style: { display: 'grid', gap: '12px', minWidth: 'min(380px, 80vw)' } });
+    body.append(UI.selectField({ id: 'tt-sec', label: 'Länge', value: '6', options: [['4', '4 Sekunden'], ['6', '6 Sekunden'], ['10', '10 Sekunden'], ['15', '15 Sekunden']], onChange: (v) => { st.sec = +v; } }));
+    body.append(h('div', { class: 'hint-box' }, 'Das Modell dreht sich einmal ganz herum, so wie du es gerade siehst – am schönsten im Studio-Look. Während der Aufnahme bitte nicht ins Bild klicken.'));
+    if (!videoType()) body.append(h('div', { class: 'err-box' }, 'Dieser Browser kann keine Videos aufnehmen. Chrome, Edge und Firefox können es.'));
+    UI.modal({ title: 'Drehteller-Video', body, actions: [{ label: 'Abbrechen' }, { label: 'Aufnehmen', primary: true, run: () => { turntable({ seconds: st.sec }); } }] });
+  }
+  async function turntable({ seconds = 6, fps = 30, save: doSave = true } = {}) {
+    const type = videoType(); if (!type) { UI.toast('Dieser Browser kann keine Videos aufnehmen.', { kind: 'bad' }); return null; }
+    const cv = Viewer.canvas, stream = cv.captureStream(fps), chunks = [];
+    const rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 8e6 });
+    rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+    const cam0 = Viewer.saveCamera(), tg = Viewer.controls.target.clone();
+    const dx0 = cam0.p.x - tg.x, dy0 = cam0.p.y - tg.y;
+    App.clearSelection(); Handles.clear();
+    const tst = UI.toast('Aufnahme läuft …', { icon: 'play', ms: seconds * 1000 + 3000 });
+    const done = new Promise((res) => { rec.onstop = res; });
+    rec.start(250);
+    const t0 = performance.now();
+    await new Promise((res) => {
+      const step = (t) => {
+        const k = Math.min(1, (t - t0) / (seconds * 1000)), a = k * 2 * Math.PI, cs = Math.cos(a), sn = Math.sin(a);
+        const c = Viewer.camera; c.position.set(tg.x + dx0 * cs - dy0 * sn, tg.y + dx0 * sn + dy0 * cs, cam0.p.z); c.lookAt(tg); Viewer.controls.update(); Viewer.requestRender();
+        if (k < 1) requestAnimationFrame(step); else res();
+      };
+      requestAnimationFrame(step);
+    });
+    await new Promise((r) => setTimeout(r, 120));
+    rec.stop(); await done; stream.getTracks().forEach((x) => x.stop());
+    Viewer.restoreCamera(cam0, false);
+    tst.remove();
+    const blob = new Blob(chunks, { type: type.split(';')[0] });
+    lastVideo = { size: blob.size, type: blob.type, seconds };
+    if (doSave) await save(safeName(App.doc.name) + (blob.type.includes('mp4') ? '.mp4' : '.webm'), blob);
+    return blob;
+  }
+  let lastExport = null, lastTris = 0;
   async function runExport(opts) {
     if (!opts.stl && !opts.mf && !opts.step && !(opts.dxf && opts.plates.length)) { UI.toast('Wähle mindestens ein Format.', { kind: 'bad' }); return; }
     const tst = UI.toast('Dateien werden erstellt …', { icon: 'export', ms: 20000 });
     try {
       const scene = Model.kernelScene(App.doc);
+      const only = opts.onlySel ? exportSelection() : null;
       const name = safeName(App.doc.name);
       const files = [];
       if (opts.stl || opts.mf) {
-        const res = await Kernel.call('exportMeshes', { scene, fine: true });
-        if (!res.objects.length) throw new Error('Es gibt keinen Körper zum Speichern.');
-        if (opts.stl) files.push({ name: name + '.stl', data: buildSTL(res.objects, name) });
-        if (opts.mf) files.push({ name: name + '.3mf', data: await build3MF(res.objects, name) });
+        const res = await Kernel.call('exportMeshes', { scene, fine: true, q: opts.q || 1 });
+        lastTris = res.objects.reduce((s, o) => s + o.triangles.length / 3, 0);
+        const STL = opts.stlText ? buildSTLText : buildSTL;
+        const objs = only ? res.objects.filter((o) => only.includes(o.id)) : res.objects;
+        if (!objs.length) throw new Error('Es gibt keinen Körper zum Speichern.');
+        if (opts.stl) files.push({ name: name + '.stl', data: STL(objs, name) });
+        if (opts.mf) files.push({ name: name + '.3mf', data: await build3MF(objs, name) });
+        if (opts.each && objs.length > 1) {
+          const used = new Map();
+          for (const o of objs) {
+            const f = Model.find(App.doc, o.id); let base = safeName(o.name || (f ? Model.label(f.item) : 'Körper')); const n = (used.get(base) || 0) + 1; used.set(base, n); if (n > 1) base += '-' + n;
+            if (opts.stl) files.push({ name: 'Einzeln/' + base + '.stl', data: STL([o], base) });
+            if (opts.mf) files.push({ name: 'Einzeln/' + base + '.3mf', data: await build3MF([o], base) });
+          }
+        }
       }
-      if (opts.step) { const r = await Kernel.call('exportSTEP', { scene }); files.push({ name: name + '.step', data: new Uint8Array(r.data) }); }
+      if (opts.step) { const r = await Kernel.call('exportSTEP', { scene, only }); files.push({ name: name + '.step', data: new Uint8Array(r.data) }); }
       if (opts.dxf) for (const id of opts.plates) { const f = await Plates.file(id); if (f && f.count) files.push({ name: 'DXF/' + f.name, data: f.data }); }
       files.push({ name: 'LIESMICH.txt', data: new TextEncoder().encode(`${App.doc.name}\nErstellt mit Tracery am ${new Date().toLocaleString('de-DE')}\n\nSTEP: exakte Geometrie für andere CAD-Programme\nSTL / 3MF: Dreiecksnetz (Millimeter)\n` + (opts.dxf ? 'DXF: Draufsicht jeder Platte in Originalgröße (Millimeter, Ebene KONTUR) – Dicke steht im Dateinamen\n' : '')) });
+      lastExport = files.map((f) => f.name);
       const zip = await Zip.make(files);
       tst.remove();
       await save(name + '.zip', new Blob([zip]));
@@ -202,7 +358,7 @@ const Print = (() => {
     App.on('results', updateAmpel); App.on('doc', debounce(updateAmpel, 200));
     $('#ampel').addEventListener('click', (e) => openAmpel(e.currentTarget));
   }
-  return { init, stats, checks, exportDialog, imageDialog, saveImage, imageSize, save, safeName, updateAmpel };
+  return { turntable, turntableDialog, get lastVideo() { return lastVideo; }, get lastTris() { return lastTris; }, buildSTLText, entsToDXF, entsToSVG, save2D, faceTo2D, get last2D() { return last2D; }, exportSelection, get lastExport() { return lastExport; }, runExport, init, stats, checks, exportDialog, imageDialog, saveImage, imageSize, save, safeName, updateAmpel };
 })();
 
 // ---------- ZIP (mit Kompression, wenn der Browser sie kann) ----------

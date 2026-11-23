@@ -203,14 +203,14 @@ const Notes = (() => {
     on = true;
     if (!visible()) ViewPrefs.set({ notes: true });
     App.clearSelection(); Handles.clear(); Panels.closeFlyout();
-    Viewer.controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+    Viewer.useButtons('place');
     $('#t-notes') && $('#t-notes').classList.add('active');
     setTool(tool); render();
   }
   function stop() {
     if (!on) return;
     on = false; cur = null; hideBar();
-    Viewer.controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+    Viewer.useButtons('model');
     $('#t-notes') && $('#t-notes').classList.remove('active');
     Viewer.canvas.style.cursor = ''; UI.hint(null); Handles.rebuild(); render();
   }

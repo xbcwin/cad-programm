@@ -63,6 +63,17 @@ const Select = (() => {
     UI.toast(ids.length > 1 ? `${ids.length}× ${what} mit gleichen Maßen gewählt.` : 'Kein weiteres gleiches Teil gefunden.', { icon: ids.length > 1 ? 'check' : 'info' });
     return ids.length;
   }
+  // ---------- Kanten nach Regel wählen (KP-16): alle äußeren, alle inneren, alle ----------
+  function edgesByRule(id, rule) {
+    const r = App.results.get(id); if (!r) return 0;
+    const kinds = rule === 'all' ? null : Viewer.edgeKinds(id);
+    const list = [];
+    r.data.edges.forEach((e, i) => { if (!e) return; if (rule === 'all' || kinds[i] === rule) list.push({ id, edgeIdx: i }); });
+    if (!list.length) { UI.toast(rule === 'concave' ? 'Dieses Teil hat keine inneren Kanten.' : 'Keine passenden Kanten gefunden.', { icon: 'info' }); return 0; }
+    App.select([id], { edges: list });
+    UI.toast(`${list.length} ${rule === 'convex' ? 'äußere' : rule === 'concave' ? 'innere' : ''} Kanten gewählt – zum Beispiel alle zusammen abrunden.`.replace('  ', ' '), { icon: 'check' });
+    return list.length;
+  }
   // ---------- Kantenkette: alle Kanten, die ohne Knick weiterlaufen ----------
   const sub3 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
   const nrm3 = (v) => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
@@ -104,5 +115,5 @@ const Select = (() => {
     UI.toast(`${list.length} Kanten in der Kette gewählt – z. B. alle zusammen abrunden.`, { icon: 'check' });
     return list.length;
   }
-  return { chain, setFilter, pickOpts, adjust, menu, similar, on: ev.on, get filter() { return filter; }, NAMES };
+  return { edgesByRule,  chain, setFilter, pickOpts, adjust, menu, similar, on: ev.on, get filter() { return filter; }, NAMES };
 })();
