@@ -514,6 +514,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Löschen mit Entf und Rückgängig**: Entf löscht alle gewählten Elemente auf einmal; ein Rückgängig (Strg/Cmd+Z) holt alle zusammen zurück.
 - [ ] **Von Hand**: In einer gemischten Skizze mit Linien, Kreisen, Bögen und Splines beide Rahmen-Richtungen, Umschalt + Klick und das Umschalten zu Verschieben (H) und Hilfslinie (X) testen und prüfen, ob der Rahmen flüssig folgt und die Hervorhebung gut erkennbar ist.
 
+## Linie und Bogen im Wechsel (Auto [A-005])
+
+- [x] **Hinweistext unten**: Im Linien-Werkzeug erklärt die Hinweiszeile, dass Taste A zwischen Linie und tangentialem Bogen wechselt; im Bogen-Modus wechselt der Hinweis auf „Tangentialer Bogen … A schaltet zurück auf Linie“.
+- [x] **Wechsel Linie → A → Bogen → A → Linie**: Erzeugt `line`, `arc`, `line` mit korrektem Radius/Mittelpunkt, tangentialen Übergängen (`tangent` an beiden Übergängen) und deckungsgleichen Enden (`coincident`), Löser ohne Konflikt.
+- [x] **Geschlossene Bahn**: Linie → A → 180°-Bogen → A → Linie → A → 180°-Bogen zurück zum Startpunkt schließt sauber zu einer Fläche mit richtiger Flächengröße.
+- [x] **Taste A ohne aktiven Linienzug**: Schaltet weiterhin normal auf das Bogen-Werkzeug um.
+- [ ] **Von Hand**: Freie geschwungene Umrisse (S-Kurven aus zwei Bögen hintereinander, geschlossene Langloch-Umrisse, Wechsel mit Zahleneingabe) zeichnen und prüfen, ob Vorschau, Tangenten-Fang am Bogenende und die Hinweiszeile angenehm wirken.
+
 ## Maße als Tabelle (neu in Sitzung 114)
 
 - [x] **Tabelle**: Rechteck und Kreis mit drei Maßen → drei Zeilen („Rechteck 1“, „Kreis 1“); Breite 45 eintippen → Rechteck 45 mm breit, Tabelle bleibt offen.

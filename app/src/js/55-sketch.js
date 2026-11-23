@@ -31,7 +31,7 @@ const Sketch = (() => {
   const HELPKEY = { wall: 'wall2d', project: 'project2d', splitl: 'split2d', extend: 'extend2d', tpl: 'sketchTemplate', corner: 'corner2d', text: 'sketchText', bg: 'sketchImage', poly: 'polygon', dim: 'dimension', offset: 'offset2d', mirror: 'mirror2d', patrect: 'patternRect2d', patcirc: 'patternCirc2d' };
   const HINTS = {
     select: 'Element anklicken oder im Leeren einen <b>Rahmen</b> ziehen (links→rechts: ganz drin · rechts→links: berührt · <b>Umschalt</b> fügt hinzu). Endpunkte lassen sich ziehen. <b>Entf</b> löscht, <b>H</b> verschiebt.',
-    line: 'Klick setzt Punkte. Zahl tippen für genaue Länge. Am Startpunkt schließen oder <b>Enter</b> zum Beenden.',
+    line: 'Klick setzt Punkte. <b>A</b> wechselt zwischen Linie und tangentialem Bogen. Zahl tippen für genaue Länge. Am Startpunkt schließen oder <b>Enter</b> zum Beenden.',
     rect: 'Erste Ecke klicken, dann die zweite. Oder Zahlen tippen: Breite <b>Tab</b> Höhe.',
     circle: 'Mittelpunkt klicken, dann Größe. Oder Durchmesser eintippen.',
     bg: 'Lade ein Foto oder eine Zeichnung als Vorlage. Mit <b>Maßstab festlegen</b> klickst du zwei Punkte an, deren Abstand du kennst – dann stimmt die Größe. Ziehen verschiebt das Bild.',
@@ -461,7 +461,7 @@ const Sketch = (() => {
   // Startpunkt des gerade gezeichneten Stücks – davon aus gelten Lot und Tangente
   function snapFrom() {
     const d = S.draft; if (!d) return null;
-    if (d.pts && d.pts.length) return d.pts[d.pts.length - 1];
+    if (d.pts && d.pts.length && !d.arc) return d.pts[d.pts.length - 1];
     if (d.a && !d.b && (S.tool === 'arc' || S.tool === 'slot')) return d.a;
     return null;
   }
@@ -511,9 +511,9 @@ const Sketch = (() => {
   // ---------- Zeichnen ----------
   function pushUndo() { S.undo.push(JSON.stringify({ ents: S.ents, dims: S.dims, cons: S.cons })); if (S.undo.length > 100) S.undo.shift(); }
   function sketchUndo() {
-    if (S.draft && S.draft.pts && S.draft.pts.length > 1 && S.tool === 'line') { S.draft = null; render(); return; }
+    if (S.draft && S.draft.pts && S.draft.pts.length > 1 && S.tool === 'line') { S.draft = null; hideEntry(); updateLineHint(); render(); return; }
     const last = S.undo.pop(); if (last == null) return;
-    const st = JSON.parse(last); S.ents = st.ents; S.dims = st.dims || []; S.cons = st.cons || []; clearSel(); S.selCon = null; S.draft = null; S.picks = []; reapply(); render(); Panels.renderRight();
+    const st = JSON.parse(last); S.ents = st.ents; S.dims = st.dims || []; S.cons = st.cons || []; clearSel(); S.selCon = null; S.draft = null; S.picks = []; reapply(); updateLineHint(); render(); Panels.renderRight();
   }
   function addEnt(e) { pushUndo(); e.id = uid('e'); if (S.construction) e.con = true; S.ents.push(e); return e; }
   // ---------- Maße und Regeln: der Löser rechnet alles gemeinsam ----------
@@ -1587,15 +1587,86 @@ const Sketch = (() => {
     } else if (t === 'line' && S.lineMode === 'tan2') {
       tan2Down(uv0); return;
     } else if (t === 'line') {
-      if (!S.draft) { S.draft = { pts: [p] }; }
-      else {
+      if (!S.draft) { S.draft = { pts: [p], arc: false, first: null, last: null, hadArc: false }; }
+      else if (S.draft.arc) {
+        const st = draftTan();
+        if (!st) {
+          S.draft.arc = false; updateLineHint();
+        } else {
+          if (SK.d2(st.p, p) < 1e-6) return;
+          const g = tanArc(st, p);
+          if (!g) { UI.toast('Für einen tangentialen Bogen muss der Endpunkt seitlich neben der bisherigen Richtung liegen.', { icon: 'info', ms: 2600 }); return; }
+          const en = addEnt({ type: 'arc', a: st.p.slice(), m: g.m.map((v) => round(v, 4)), b: p.slice() });
+          const prev = ent(st.e);
+          const added = [];
+          if (prev) {
+            added.push(makeTanCon(prev, en, g), { id: uid('k'), type: 'coincident', refs: [{ e: st.e, p: st.k }, { e: en.id, p: 'a' }] });
+          }
+          const closed = S.draft.pts.length >= 2 && SK.d2(p, S.draft.pts[0]) < 1e-6;
+          if (closed && S.draft.first && ent(S.draft.first.id) && S.draft.first.id !== en.id) {
+            added.push({ id: uid('k'), type: 'coincident', refs: [{ e: en.id, p: 'b' }, { e: S.draft.first.id, p: S.draft.first.end }] });
+          }
+          if (added.length) {
+            S.cons.push(...added);
+            const r = reapply();
+            if (r && !r.ok) {
+              S.cons = S.cons.filter((c) => !added.includes(c) || c.type === 'coincident');
+              if (!reapply().ok) { S.cons = S.cons.filter((c) => !added.includes(c)); reapply(); }
+            }
+          }
+          if (closed && S.draft.first) {
+            const firstEnt = ent(S.draft.first.id);
+            if (firstEnt && firstEnt.id !== en.id) {
+              const tEnd = endTangent(en, 'b'), tFirst = endTangent(firstEnt, S.draft.first.end);
+              if (tEnd && tFirst && -(tEnd.t[0] * tFirst.t[0] + tEnd.t[1] * tFirst.t[1]) > Math.cos((2 * Math.PI) / 180)) {
+                const tcClose = makeTanCon(en, firstEnt, g);
+                const tr = Solver.trial({ ents: S.ents, dims: S.dims, cons: [...S.cons, tcClose], consBefore: S.cons }, vars());
+                if (tr.ok && !tr.redundant) { S.cons.push(tcClose); reapply(); }
+              }
+            }
+          }
+          if (!S.draft.first) S.draft.first = { id: en.id, end: 'a' };
+          if (closed) { S.draft = null; hideEntry(); updateLineHint(); }
+          else { S.draft.pts.push(en.b.slice()); S.draft.last = { id: en.id, end: 'b' }; }
+        }
+      } else {
         const a = S.draft.pts[S.draft.pts.length - 1];
-        if (sn.kind !== 'end' && sn.kind !== 'center' && sn.kind !== 'mid') p = angleSnap(a, p).p;
+        const prev = S.draft.last && ent(S.draft.last.id);
+        const prevTan = prev && prev.type === 'arc' ? endTangent(prev, S.draft.last.end) : null;
+        let snappedTan = false;
+        if (sn.kind !== 'end' && sn.kind !== 'center' && sn.kind !== 'mid') {
+          const ts = prevTan ? tanLineSnap(a, p, prevTan) : null;
+          if (ts) { p = ts.p; snappedTan = true; }
+          else p = angleSnap(a, p).p;
+        }
         if (SK.d2(a, p) < 1e-6) return;
-        addEnt({ type: 'line', a: a.slice(), b: p.slice() });
+        const en = addEnt({ type: 'line', a: a.slice(), b: p.slice() });
+        const added = [];
+        if (prev) {
+          if (prev.type === 'arc' || S.draft.hadArc) {
+            added.push({ id: uid('k'), type: 'coincident', refs: [{ e: prev.id, p: S.draft.last.end }, { e: en.id, p: 'a' }] });
+          }
+          if (prevTan) {
+            const L = SK.d2(a, p);
+            const dot = ((p[0] - a[0]) * prevTan.t[0] + (p[1] - a[1]) * prevTan.t[1]) / (L || 1);
+            if (snappedTan || dot > Math.cos((8 * Math.PI) / 180)) added.push(makeTanCon(prev, en));
+          }
+        }
         const closed = SK.d2(p, S.draft.pts[0]) < 1e-6;
-        if (closed) { S.draft = null; hideEntry(); }
-        else S.draft.pts.push(p);
+        if (closed && S.draft.first && S.draft.hadArc && ent(S.draft.first.id) && S.draft.first.id !== en.id) {
+          added.push({ id: uid('k'), type: 'coincident', refs: [{ e: en.id, p: 'b' }, { e: S.draft.first.id, p: S.draft.first.end }] });
+        }
+        if (added.length) {
+          S.cons.push(...added);
+          const r = reapply();
+          if (r && !r.ok) {
+            S.cons = S.cons.filter((c) => !added.includes(c) || c.type === 'coincident');
+            if (!reapply().ok) { S.cons = S.cons.filter((c) => !added.includes(c)); reapply(); }
+          }
+        }
+        if (!S.draft.first) S.draft.first = { id: en.id, end: 'a' };
+        if (closed) { S.draft = null; hideEntry(); updateLineHint(); }
+        else { S.draft.pts.push(en.b.slice()); S.draft.last = { id: en.id, end: 'b' }; }
       }
     } else if (t === 'rect') {
       if (S.rect3) {
@@ -1618,7 +1689,7 @@ const Sketch = (() => {
       if (S.draft.pts.length >= need) { const ci = circOfDraft(S.draft.pts); if (ci && ci.r > 1e-6) addEnt({ type: 'circle', c: ci.c.map((v) => round(v, 4)), r: round(ci.r, 4) }); S.draft = null; }
     } else if (t === 'arc' && S.arcMode === 'tan') {
       if (!S.draft) { const st = tanStart(uv0); if (!st) { UI.toast('Klick zuerst auf das Ende einer Linie oder eines Bogens – dort setzt der Bogen tangential an.', { icon: 'info' }); return; } S.draft = { tan: st }; }
-      else { const g = tanArc(S.draft.tan, p); if (g) { const en = addEnt({ type: 'arc', a: S.draft.tan.p.slice(), m: g.m.map((v) => round(v, 4)), b: p.slice() }); S.cons.push({ id: uid('k'), type: 'tangent', refs: [{ e: S.draft.tan.e }, { e: en.id }] }, { id: uid('k'), type: 'coincident', refs: [{ e: S.draft.tan.e, p: S.draft.tan.k }, { e: en.id, p: 'a' }] }); if (!reapply().ok) { S.cons.splice(-2); reapply(); } } S.draft = null; }
+      else { const g = tanArc(S.draft.tan, p); if (g) { const en = addEnt({ type: 'arc', a: S.draft.tan.p.slice(), m: g.m.map((v) => round(v, 4)), b: p.slice() }); const prev = ent(S.draft.tan.e); S.cons.push(prev ? makeTanCon(prev, en, g) : { id: uid('k'), type: 'tangent', refs: [{ e: S.draft.tan.e }, { e: en.id }] }, { id: uid('k'), type: 'coincident', refs: [{ e: S.draft.tan.e, p: S.draft.tan.k }, { e: en.id, p: 'a' }] }); if (!reapply().ok) { S.cons.splice(-2); reapply(); } } S.draft = null; }
     } else if (t === 'circle') {
       if (!S.draft) S.draft = { c: p };
       else { const r = SK.d2(S.draft.c, p); if (r > 1e-6) addEnt({ type: 'circle', c: S.draft.c, r: round(r, 4) }); S.draft = null; hideEntry(); }
@@ -2034,20 +2105,73 @@ const Sketch = (() => {
     const ai = pts.length >= 3 ? SK.arcInfo(pts[0], pts[1], pts[2]) : null; return ai ? { c: ai.c, r: ai.r } : null;
   }
   // Tangentialer Bogen: Start am Ende einer Linie oder eines Bogens, Richtung = dort weiter
-  function tanStart(uv) {
-    const tol = pxSize() * 10; let best = null;
+  function endTangent(e, k) {
+    if (!e || (e.type !== 'line' && e.type !== 'arc')) return null;
+    let t;
+    if (e.type === 'line') { const o = k === 'a' ? e.b : e.a; t = [e[k][0] - o[0], e[k][1] - o[1]]; }
+    else { const ai = SK.arcInfo(e.a, e.m, e.b); if (!ai) return null; const r = [e[k][0] - ai.c[0], e[k][1] - ai.c[1]]; const ccwAtK = k === 'b' ? ai.sweep > 0 : ai.sweep < 0; t = ccwAtK ? [-r[1], r[0]] : [r[1], -r[0]]; }
+    const L = Math.hypot(t[0], t[1]); if (L < 1e-9) return null;
+    return { e: e.id, k, p: e[k], t: [t[0] / L, t[1] / L] };
+  }
+  function tanStart(uv, tol = pxSize() * 10) {
+    let best = null;
     for (const e of S.ents) {
       if (e.type !== 'line' && e.type !== 'arc') continue;
       for (const k of ['a', 'b']) {
         const d = SK.d2(e[k], uv); if (d > tol || (best && d >= best.d)) continue;
-        let t;
-        if (e.type === 'line') { const o = k === 'a' ? e.b : e.a; t = [e[k][0] - o[0], e[k][1] - o[1]]; }
-        else { const ai = SK.arcInfo(e.a, e.m, e.b); if (!ai) continue; const r = [e[k][0] - ai.c[0], e[k][1] - ai.c[1]]; const ccwAtK = k === 'b' ? ai.sweep > 0 : ai.sweep < 0; t = ccwAtK ? [-r[1], r[0]] : [r[1], -r[0]]; }
-        const L = Math.hypot(t[0], t[1]); if (L < 1e-9) continue;
-        best = { e: e.id, k, p: e[k], t: [t[0] / L, t[1] / L], d };
+        const st = endTangent(e, k);
+        if (st) best = { ...st, d };
       }
     }
     return best;
+  }
+  function draftTan() {
+    const d = S && S.draft;
+    if (!d || S.tool !== 'line' || S.lineMode === 'tan2' || !d.pts || !d.pts.length) return null;
+    if (d.last) { const prev = ent(d.last.id); if (prev) return endTangent(prev, d.last.end); }
+    return tanStart(d.pts[d.pts.length - 1], 1e-4);
+  }
+  function makeTanCon(prev, en, arcG) {
+    const c = { id: uid('k'), type: 'tangent', refs: [{ e: prev.id }, { e: en.id }] };
+    if (prev.type === 'arc' && en.type === 'arc') {
+      const A = SK.arcInfo(prev.a, prev.m, prev.b), B = arcG || SK.arcInfo(en.a, en.m, en.b);
+      if (A && B) { const d = SK.d2(A.c, B.c); c.mode = Math.abs(d - Math.abs(A.r - B.r)) < Math.abs(d - (A.r + B.r)) ? 'int' : 'ext'; }
+    }
+    return c;
+  }
+  function tanLineSnap(a, b, st) {
+    if (!st) return null;
+    const dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy);
+    if (L < 1e-9) return null;
+    const dot = (dx * st.t[0] + dy * st.t[1]) / L;
+    if (dot > Math.cos((8 * Math.PI) / 180)) return { p: [a[0] + st.t[0] * L, a[1] + st.t[1] * L], tip: 'tangential' };
+    return null;
+  }
+  const LINE_ARC_HINT = '<b>Tangentialer Bogen:</b> Endpunkt klicken – der Bogen schließt ohne Knick an. <b>A</b> schaltet zurück auf Linie, <b>Enter</b> beendet.';
+  function updateLineHint() {
+    if (!S || S.tool !== 'line') return;
+    if (S.lineMode === 'tan2') { UI.hint('<b>Tangente:</b> Klick den ersten Kreis oder Bogen an.'); return; }
+    UI.hint(S.draft && S.draft.arc ? LINE_ARC_HINT : HINTS.line);
+  }
+  function toggleLineArc() {
+    if (!S || S.tool !== 'line' || S.lineMode === 'tan2' || !S.draft) return false;
+    if (S.draft.arc) {
+      S.draft.arc = false;
+      updateLineHint();
+      render();
+      return true;
+    }
+    const st = draftTan();
+    if (!st) {
+      UI.toast('Zeichne zuerst ein Stück Linie – danach wechselt A auf tangentialen Bogen.', { icon: 'info', ms: 2600 });
+      return true;
+    }
+    S.draft.arc = true;
+    S.draft.hadArc = true;
+    hideEntry();
+    updateLineHint();
+    render();
+    return true;
   }
   function tanArc(st, b) {
     const a = st.p, v = [b[0] - a[0], b[1] - a[1]], n = [-st.t[1], st.t[0]];
@@ -2159,9 +2283,15 @@ const Sketch = (() => {
     }
     if (S.tool === 'dim' || S.tool.startsWith('c:')) { S.hoverPick = pickAt(uv0, { refs: S.tool === 'c:project', points: S.tool !== 'c:project' }); S.cursor = null; render(); return; }
     S.cursor = snap(uv0, { fine: e.shiftKey, off: e.altKey });
-    if (S.tool === 'line' && S.draft) {
+    if (S.tool === 'line' && S.draft && !S.draft.arc) {
       const a = S.draft.pts[S.draft.pts.length - 1];
-      if (S.cursor.kind !== 'end' && S.cursor.kind !== 'center' && S.cursor.kind !== 'mid') { const as = angleSnap(a, S.cursor.p); S.cursor.p = as.p; if (as.tip) S.cursor.tip = as.tip; }
+      if (S.cursor.kind !== 'end' && S.cursor.kind !== 'center' && S.cursor.kind !== 'mid') {
+        const prev = S.draft.last && ent(S.draft.last.id);
+        const pt = prev && prev.type === 'arc' ? endTangent(prev, S.draft.last.end) : null;
+        const ts = pt ? tanLineSnap(a, S.cursor.p, pt) : null;
+        if (ts) { S.cursor.p = ts.p; S.cursor.tip = ts.tip; S.cursor.guides = [...(S.cursor.guides || []), [a, ts.p]]; }
+        else { const as = angleSnap(a, S.cursor.p); S.cursor.p = as.p; if (as.tip) S.cursor.tip = as.tip; }
+      }
     }
     render();
   }
@@ -2195,7 +2325,7 @@ const Sketch = (() => {
   function entryFields() {
     const t = S.tool, d = S.draft;
     if (!d) return null;
-    if (t === 'line') return [['len', 'Länge'], ['ang', 'Winkel °']];
+    if (t === 'line') return d.arc ? null : [['len', 'Länge'], ['ang', 'Winkel °']];
     if (t === 'rect' && d.r3) return null;
     if (t === 'rect') return [['w', 'Breite'], ['h', 'Höhe']];
     if (t === 'ellipse') return [['w', 'Breite'], ['h', 'Höhe']];
@@ -2244,10 +2374,21 @@ const Sketch = (() => {
       const a = t === 'line' ? d.pts[d.pts.length - 1] : d.a;
       let L = val('len'); let ang = val('ang');
       if (isNaN(L) || L <= 0) { UI.toast('Bitte eine Länge eingeben.', { kind: 'bad' }); return; }
-      if (isNaN(ang)) ang = cur ? (Math.atan2(cur[1] - a[1], cur[0] - a[0]) * 180) / Math.PI : 0;
+      const prev = t === 'line' && d.last ? ent(d.last.id) : null;
+      const prevTan = prev && prev.type === 'arc' ? endTangent(prev, d.last.end) : null;
+      if (isNaN(ang)) ang = cur ? (Math.atan2(cur[1] - a[1], cur[0] - a[0]) * 180) / Math.PI : prevTan ? (Math.atan2(prevTan.t[1], prevTan.t[0]) * 180) / Math.PI : 0;
       const r = (ang * Math.PI) / 180;
       const b = [round(a[0] + Math.cos(r) * L, 4), round(a[1] + Math.sin(r) * L, 4)];
-      if (t === 'line') { const en = addEnt({ type: 'line', a: a.slice(), b }); fix(en, 'len', 'len'); if (raw('ang') != null) fix(en, 'ang', 'ang'); d.pts.push(b); }
+      if (t === 'line') {
+        const en = addEnt({ type: 'line', a: a.slice(), b });
+        fix(en, 'len', 'len'); if (raw('ang') != null) fix(en, 'ang', 'ang');
+        const added = [];
+        if (prev && (prev.type === 'arc' || d.hadArc)) added.push({ id: uid('k'), type: 'coincident', refs: [{ e: prev.id, p: d.last.end }, { e: en.id, p: 'a' }] });
+        if (prevTan && Math.cos(r) * prevTan.t[0] + Math.sin(r) * prevTan.t[1] > Math.cos((8 * Math.PI) / 180)) added.push(makeTanCon(prev, en));
+        if (added.length) { S.cons.push(...added); if (!reapply().ok) { S.cons = S.cons.filter((c) => !added.includes(c) || c.type === 'coincident'); if (!reapply().ok) S.cons = S.cons.filter((c) => !added.includes(c)); } }
+        if (!d.first) d.first = { id: en.id, end: 'a' };
+        d.pts.push(b); d.last = { id: en.id, end: 'b' };
+      }
       else { d.b = b; if (S.slotTotal) d.totRaw = raw('len'); }
     } else if (t === 'rect') {
       let w = val('w'), hh = val('h');
@@ -2301,15 +2442,17 @@ const Sketch = (() => {
     if (e.key === 'Escape' && S.patPick) { S.patPick = false; UI.hint(HINTS[S.tool]); render(); Panels.renderRight(); return true; }
     if (e.key === 'Escape' && S.patSel && S.patSel.length) { S.patSel = []; render(); Panels.renderRight(); return true; }
     if (e.key === 'Escape' && S.tool === 'select' && S.sels && S.sels.length > 1) { clearSel(); render(); Panels.renderRight(); return true; }
-    if (e.key === 'Escape') { if (S.draft) { S.draft = null; hideEntry(); render(); } else if (S.picks.length || S.dimFirst) { S.picks = []; S.dimFirst = null; UI.hint(HINTS[S.tool]); render(); } else if (S.tool !== 'select') setTool('select'); else cancel(); return true; }
+    if (e.key === 'Escape') { if (S.draft) { S.draft = null; hideEntry(); if (S.tool === 'line') updateLineHint(); render(); } else if (S.picks.length || S.dimFirst) { S.picks = []; S.dimFirst = null; UI.hint(HINTS[S.tool]); render(); } else if (S.tool !== 'select') setTool('select'); else cancel(); return true; }
     if (e.key === 'Enter' && S.draft && S.tool === 'spline') { finishSpline(false); return true; }
     if (e.key === 'Enter' && S.tool === 'mirror' && S.mir) { mirrorAll(); return true; }
     if (e.key === 'Enter' && (S.tool === 'patrect' || S.tool === 'patcirc') && S.patSel.length) { createPattern(); return true; }
     if (e.key === 'Enter' && S.tool === 'xmove' && S.patSel.length) { applyXmove(); return true; }
-    if (e.key === 'Enter') { if (S.draft && S.tool === 'line') { S.draft = null; render(); } else done(); return true; }
+    if (e.key === 'Enter') { if (S.draft && S.tool === 'line') { S.draft = null; hideEntry(); updateLineHint(); render(); } else done(); return true; }
     if ((e.key === 'Delete' || e.key === 'Backspace') && S.selCon) { removeCons(S.selCon); return true; }
     const selIds = selectedIds();
     if ((e.key === 'Delete' || e.key === 'Backspace') && selIds.length) { deleteEnts(selIds); return true; }
+    // Beim Linienzug wechselt A zwischen Linie und tangentialem Bogen (SK-15)
+    if (S.draft && S.tool === 'line' && S.lineMode !== 'tan2' && !e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === 'a') { e.preventDefault(); toggleLineArc(); return true; }
     // Beim Zeichnen landet jede Zahl und jeder Buchstabe im Eingabefeld (Formeln wie „breite/2“)
     if (S.draft && !e.ctrlKey && !e.metaKey && !e.altKey && /^[0-9.,\-(A-Za-zÄÖÜäöüß_]$/.test(e.key)) { if (showEntry(e.key)) { e.preventDefault(); return true; } }
     if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === 'x') { toggleConstruction(); return true; }
@@ -2480,7 +2623,11 @@ const Sketch = (() => {
     const d = S.draft, cur = S.cursor ? S.cursor.p : null;
     if (d && cur && !S.step) {
       const t = S.tool;
-      if (t === 'line') { const a = d.pts[d.pts.length - 1]; lineObj([a, cur], acc, 2.2); const L = SK.d2(a, cur); const ang = (Math.atan2(cur[1] - a[1], cur[0] - a[0]) * 180) / Math.PI; label(`${fmt(L, 2)} mm · ${fmt(ang, 1)}°`, [(a[0] + cur[0]) / 2, (a[1] + cur[1]) / 2]); }
+      if (t === 'line' && d.arc) {
+        const st = draftTan(), g = st ? tanArc(st, cur) : null;
+        if (g) { lineObj(SK.arcPoints(st.p, g.m, cur), acc, 2.2); lineObj([g.c, st.p], acc, 1, { dashed: true, opacity: 0.55 }); label(`Bogen · R ${fmt(g.r, 2)} mm`, cur); }
+        else if (st) { lineObj([st.p, cur], acc, 1.4, { dashed: true }); label('Tangentialer Bogen', cur); }
+      } else if (t === 'line') { const a = d.pts[d.pts.length - 1]; lineObj([a, cur], acc, 2.2); const L = SK.d2(a, cur); const ang = (Math.atan2(cur[1] - a[1], cur[0] - a[0]) * 180) / Math.PI; label(`${fmt(L, 2)} mm · ${fmt(ang, 1)}°`, [(a[0] + cur[0]) / 2, (a[1] + cur[1]) / 2]); }
       if (t === 'rect' && d.r3) { if (d.r3.length === 1) lineObj([d.r3[0], cur], acc, 2.2); else { const c = rect3Corners(d.r3[0], d.r3[1], cur); if (c) { lineObj([...c, c[0]], acc, 2.2); label(`${fmt(SK.d2(c[0], c[1]), 2)} × ${fmt(SK.d2(c[1], c[2]), 2)}`, cur); } } }
       else if (t === 'rect') { const q = rectDraft(d, cur), e = { type: 'rect', a: q.a, b: q.b }; for (const p of entPts(e)) lineObj(p, acc, 2.2); if (d.mid) lineObj([d.a, cur], acc, 1, { dashed: true }); label(`${fmt(Math.abs(q.b[0] - q.a[0]), 2)} × ${fmt(Math.abs(q.b[1] - q.a[1]), 2)}`, [(d.a[0] + cur[0]) / 2, (d.a[1] + cur[1]) / 2]); }
       if (t === 'ellipse') {

@@ -5327,6 +5327,92 @@ def t_a004_rahmen_auswahl(p):
     return [ok1, ok2, ok3, ok4]
 
 
+# ---------- [A-005] Linie und Bogen im Wechsel (SK-15) ----------
+def t_a005_linie_bogen_wechsel(p):
+    sketch_xy(p)
+    p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('l'); p.wait(250)
+    hint0 = (p.pg.locator('#hintline').text_content() or '').lower()
+    ok1 = SS(p, "return S.tool") == 'line' and 'a' in hint0 and 'tangentialem bogen' in hint0
+
+    def click_uv(u, v):
+        sx, sy = to_screen(p, u, v)
+        p.pg.mouse.move(sx, sy); p.wait(100)
+        p.pg.mouse.click(sx, sy); p.wait(180)
+
+    # 1. Linie (0,0) -> (20,0), dann A -> tangentialer Bogen bis (30,10), dann A -> Linie bis (30,30)
+    click_uv(0, 0)
+    click_uv(20, 0)
+    p.pg.keyboard.press('a'); p.wait(200)
+    arc_on = SS(p, "return [S.tool, !!(S.draft && S.draft.arc)]")
+    hint_arc = (p.pg.locator('#hintline').text_content() or '').lower()
+    click_uv(30, 10)
+    p.pg.keyboard.press('a'); p.wait(200)
+    arc_off = SS(p, "return [S.tool, !!(S.draft && S.draft.arc)]")
+    hint_back = (p.pg.locator('#hintline').text_content() or '').lower()
+    click_uv(30, 30)
+    p.pg.keyboard.press('Enter'); p.wait(250)
+
+    st = SS(p, """
+      const types = S.ents.map(e => e.type);
+      const [l1, a1, l2] = S.ents;
+      const ai = a1 && a1.type === 'arc' ? SK.arcInfo(a1.a, a1.m, a1.b) : null;
+      const hasTan = (x, y) => S.cons.some(c => c.type === 'tangent' && c.refs.some(r => r.e === x) && c.refs.some(r => r.e === y));
+      const hasCo = (x, px, y, py) => S.cons.some(c => c.type === 'coincident' && c.refs.some(r => r.e === x && r.p === px) && c.refs.some(r => r.e === y && r.p === py));
+      return {
+        draftNull: !S.draft,
+        types,
+        l1b: l1 && l1.b, a1a: a1 && a1.a, a1b: a1 && a1.b, l2a: l2 && l2.a, l2b: l2 && l2.b,
+        c: ai && ai.c, r: ai && ai.r,
+        tan1: !!(l1 && a1 && hasTan(l1.id, a1.id)),
+        tan2: !!(a1 && l2 && hasTan(a1.id, l2.id)),
+        co1: !!(l1 && a1 && hasCo(l1.id, 'b', a1.id, 'a')),
+        co2: !!(a1 && l2 && hasCo(a1.id, 'b', l2.id, 'a')),
+        ok: !!(S.status && S.status.ok)
+      };
+    """)
+    ok2 = (arc_on == ['line', True] and 'tangentialer bogen' in hint_arc
+           and arc_off == ['line', False] and 'tangentialem bogen' in hint_back
+           and st['draftNull'] and st['types'] == ['line', 'arc', 'line'])
+    ok3 = (st['c'] is not None and near(st['c'], [20, 10], 0.1) and abs(st['r'] - 10) < 0.1
+           and near(st['l1b'], [20, 0], 1e-3) and near(st['a1a'], [20, 0], 1e-3)
+           and near(st['a1b'], [30, 10], 1e-3) and near(st['l2a'], [30, 10], 1e-3)
+           and near(st['l2b'], [30, 30], 1e-3)
+           and st['tan1'] and st['tan2'] and st['co1'] and st['co2'] and st['ok'])
+
+    # 2. Geschlossene Bahn (Langloch aus Linie, Bogen, Linie, Bogen) schließt am Startpunkt zu einer Fläche
+    SS(p, "S.ents=[]; S.cons=[]; S.dims=[]; S.draft=null; Sketch.setTool('line');"); p.wait(200)
+    click_uv(-10, -20)
+    click_uv(10, -20)
+    p.pg.keyboard.press('a'); p.wait(150)
+    click_uv(10, -10)
+    p.pg.keyboard.press('a'); p.wait(150)
+    click_uv(-10, -10)
+    p.pg.keyboard.press('a'); p.wait(150)
+    click_uv(-10, -20)
+    st2 = SS(p, """
+      const regs = SK.regions(S.ents);
+      return {
+        draftNull: !S.draft,
+        types: S.ents.map(e => e.type),
+        tans: S.cons.filter(c => c.type === 'tangent').length,
+        coins: S.cons.filter(c => c.type === 'coincident').length,
+        regs: regs.length,
+        area: regs[0] ? regs[0].area : 0,
+        ok: !!(S.status && S.status.ok)
+      };
+    """)
+    want_area = 20 * 10 + math.pi * 25
+    ok4 = (st2['draftNull'] and st2['types'] == ['line', 'arc', 'line', 'arc']
+           and st2['tans'] >= 3 and st2['coins'] >= 4 and st2['regs'] == 1
+           and abs(st2['area'] - want_area) < 2.0 and st2['ok'])
+
+    # 3. Ohne aktiven Linienzug schaltet Taste A weiter normal auf das Bogen-Werkzeug
+    p.pg.keyboard.press('a'); p.wait(200)
+    ok5 = SS(p, "return S.tool") == 'arc'
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -5429,6 +5515,7 @@ TESTS = [
     ('[A-002] KI-Kollege allgemein: Systemtext ohne Drohne/FPV / Vorschläge / Auftrag Gehäuse 60×40×30 mit Deckel / Prompt & Rückgängig', t_a002_ki_allgemein),
     ('[A-003] Skizzen-Prüfer: Lücke 0,01 mm und doppelte Linie / hervorheben / Alles reparieren / Rückgängig & Körper / offenes Ende', t_a003_skizzen_pruefer),
     ('[A-004] Rahmen-Auswahl in der Skizze: Fenster links→rechts / Umschalt+Kreuz-Rahmen / H übernimmt in patSel / Entf löscht', t_a004_rahmen_auswahl),
+    ('[A-005] Linie und Bogen im Wechsel: Hinweistext / Linie-A-Bogen-A-Linie / Tangential & Deckungsgleich / geschlossene Bahn / Taste A ohne Entwurf', t_a005_linie_bogen_wechsel),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

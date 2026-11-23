@@ -309,9 +309,9 @@ const HELP = {
   "tipp": "Eine Skizze geht nur auf flachen Ebenen, nicht auf gewölbten Rundungen."
  },
  "line": {
-  "tip": "Gerade Linien Punkt für Punkt",
-  "hilfe": "Klicke für den Startpunkt und noch einmal für den Endpunkt. Du kannst direkt weiterklicken, um eine Kette zu zeichnen.",
-  "tipp": "Drücke die Escape-Taste, um die Linienkette zu beenden, ohne die ganze Skizze zu schließen."
+  "tip": "Gerade Linien und tangentiale Bögen im Wechsel",
+  "hilfe": "Klicke für den Startpunkt und noch einmal für den Endpunkt. Du kannst direkt weiterklicken, um eine Kette zu zeichnen. Drücke beim Linienzug die Taste A, um auf einen tangentialen Bogen umzuschalten – er schließt ohne Knick an das vorige Stück an. Noch einmal A schaltet zurück auf Linie.",
+  "tipp": "Drücke Enter oder Escape, um den Linienzug zu beenden, ohne die ganze Skizze zu schließen."
  },
  "select": {
   "tip": "Elemente wählen, Rahmen ziehen und Punkte verschieben",
