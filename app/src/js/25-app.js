@@ -302,7 +302,14 @@ const App = (() => {
   const ghostReq = { n: 0 };
   async function refreshSelectionVisuals() {
     const selTop = new Set();
-    for (const id of S.sel) { const top = Model.topOf(S.doc, id); if (top) selTop.add(top.id); selTop.add('__ex:' + id); }
+    for (const id of S.sel) {
+      const top = Model.topOf(S.doc, id);
+      if (top) {
+        selTop.add(top.id);
+        if (top.kind === 'transform' && S.merged && S.merged.has(top.id)) selTop.add(S.merged.get(top.id));
+      }
+      selTop.add('__ex:' + id);
+    }
     for (const [id] of Viewer.nodes) Viewer.updateNode(id, { selected: selTop.has(id) });
     Viewer.highlightFace('sel', S.face ? S.face.id : null, S.face ? S.face.faceIdx : null);
     Viewer.setSelectedEdges(S.edges);

@@ -6508,6 +6508,94 @@ def t_a015_ordner_speichern(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a018_verschieben_drehen_schritt(p):
+    p.empty()
+    p.ev("Actions.addPrimitive('box', { p: { w: 40, d: 20, h: 10 }, pos: [0, 0] })")
+    warte_rechnen(p, 20); p.wait(300)
+    b0 = bbox(p, 0)
+    # 1. Schritt über Kontextleiste anlegen: Ziel ist Schritt 1, eigene Lage des Originals bleibt (0,0,0)
+    btn_xf = p.pg.locator('.ctxbar button[aria-label="Verschieben/Drehen"]')
+    has_help_attr = btn_xf.get_attribute('data-help') == 'moveStep'
+    btn_xf.click()
+    warte_rechnen(p, 20); p.wait(300)
+    st1 = p.ev("""const its=App.doc.items;
+      return [its.length, its[1] && its[1].kind, its[1] && its[1].p.target === its[0].id,
+        its[0].t.x, its[0].t.y, its[0].t.z, its[0].t.rx, its[0].t.ry, its[0].t.rz,
+        App.mergedInto(its[1].id) === its[0].id]""")
+    ok1 = has_help_attr and near(b0, [-20, -10, 0, 20, 10, 10]) and st1 == [2, 'transform', True, 0, 0, 0, 0, 0, 0, True]
+
+    # 2. Werte über UI ändern (X=30, Y=15, Z=5) -> Körper folgt, t des Originals bleibt (0,0,0)
+    p.pg.fill('#xf-dx', '30'); p.pg.press('#xf-dx', 'Enter'); p.wait(200)
+    p.pg.fill('#xf-dy', '15'); p.pg.press('#xf-dy', 'Enter'); p.wait(200)
+    p.pg.fill('#xf-dz', '5'); p.pg.press('#xf-dz', 'Enter')
+    warte_rechnen(p, 20); p.wait(300)
+    b_move = bbox(p, 0)
+    t_orig = p.ev("const t=App.doc.items[0].t; return [t.x, t.y, t.z, t.rx, t.ry, t.rz]")
+    ok2 = near(b_move, [10, 5, 5, 50, 25, 15]) and t_orig == [0, 0, 0, 0, 0, 0]
+
+    # 3. Drehung um Z (90° um die Mitte des Körpers) -> Maße tauschen zu 20 × 40 × 10 um (30, 15, 10)
+    p.pg.fill('#xf-rz', '90'); p.pg.press('#xf-rz', 'Enter')
+    warte_rechnen(p, 20); p.wait(300)
+    b_rot = bbox(p, 0)
+    ok3 = near(b_rot, [20, -5, 5, 40, 35, 15])
+
+    # 4. Schritt unterdrücken -> Körper springt exakt zurück; wieder aktivieren -> zurück zur versetzten Lage
+    p.pg.locator('.tl-chip').nth(1).click(button='right'); p.wait(300)
+    p.pg.locator('.pop').get_by_role('button', name='Unterdrücken').click()
+    warte_rechnen(p, 20); p.wait(300)
+    b_sup = bbox(p, 0)
+    p.pg.locator('.tl-chip').nth(1).click(button='right'); p.wait(300)
+    p.pg.locator('.pop').get_by_role('button', name='Wieder aktivieren').click()
+    warte_rechnen(p, 20); p.wait(300)
+    b_unsup = bbox(p, 0)
+    ok4 = near(b_sup, [-20, -10, 0, 20, 10, 10]) and near(b_unsup, [20, -5, 5, 40, 35, 15])
+
+    # 5. Zeitleisten-Marker vor Schritt 2 -> Körper zurück; Marker ans Ende -> wieder versetzt
+    p.ev("Timeline.setMarker(1)")
+    warte_rechnen(p, 20); p.wait(300)
+    b_mk1 = bbox(p, 0)
+    p.ev("Timeline.setMarker(2)")
+    warte_rechnen(p, 20); p.wait(300)
+    b_mk2 = bbox(p, 0)
+    ok5 = near(b_mk1, [-20, -10, 0, 20, 10, 10]) and near(b_mk2, [20, -5, 5, 40, 35, 15])
+
+    # 6. Als Kopie: Original bleibt am alten Platz, zweiter Körper entsteht versetzt und wächst mit dem Original mit
+    p.ev("App.select([App.doc.items[1].id])"); p.wait(300)
+    p.pg.locator('#xf-copy').check()
+    warte_rechnen(p, 20); p.wait(300)
+    b_o1 = bbox(p, 0)
+    b_c1 = bbox(p, 1)
+    nodes_copy = p.ev("return [Viewer.nodes.has(App.doc.items[0].id), Viewer.nodes.has(App.doc.items[1].id), App.mergedInto(App.doc.items[1].id)]")
+    p.ev("App.change('Höhe', d=>{ d.items[0].p.h = 20; })")
+    warte_rechnen(p, 20); p.wait(300)
+    b_c2 = bbox(p, 1)
+    ok6 = (
+        near(b_o1, [-20, -10, 0, 20, 10, 10])
+        and near(b_c1, [20, -5, 5, 40, 35, 15])
+        and nodes_copy == [True, True, None]
+        and near(b_c2, [20, -5, 5, 40, 35, 25])
+    )
+
+    # 7. Formel + Rückgängig + Hilfetext + keine Rechenfehler
+    p.ev("App.change('Maß', d=>{ d.params.push({id:'m_hub', name:'Hub', expr:12}); })"); p.wait(300)
+    p.ev("App.select([App.doc.items[1].id])"); p.wait(300)
+    p.pg.fill('#xf-dz', 'Hub * 2'); p.pg.press('#xf-dz', 'Enter')
+    warte_rechnen(p, 20); p.wait(300)
+    b_form = bbox(p, 1)
+    p.ev("App.undo()")
+    warte_rechnen(p, 20); p.wait(300)
+    b_undo = bbox(p, 1)
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    ok7 = (
+        near(b_form, [20, -5, 24, 40, 35, 44])
+        and near(b_undo, [20, -5, 5, 40, 35, 25])
+        and 'moveStep' in hilfen
+        and all(k in hilfen['moveStep'] for k in ('tip', 'hilfe', 'tipp'))
+        and p.ev("return App.errors.length === 0 && Commands.search('Verschieben').some(c=>c.id==='move-step')") is True
+    )
+    return [ok1, ok2, ok3, ok4, ok5, ok6, ok7]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -6623,6 +6711,7 @@ TESTS = [
     ('[A-013] Schnitt mit Kappe und mehreren Ebenen: Würfel mit Loch / X und Y gleichzeitig / alle drei Ebenen & Kreisloch / Kappe an-aus / sauber beendet', t_a013_schnitt_kappe_mehrfach),
     ('[A-016] Speicher für große Projekte: 15 MB Import sichern & neu laden / Versionen in IndexedDB / Migration aus localStorage / Löschen räumt Blobs auf', t_a016_speicher_gross),
     ('[A-015] Projekt in Ordner speichern: ohne API ausgeblendet / Ordner wählen & Anzeige / 10 s gebündelt / Trennen & Projektwechsel / Hilfe', t_a015_ordner_speichern),
+    ('[A-018] Verschieben/Drehen als Schritt: anlegen / ändern / drehen / unterdrücken / Marker / Kopie / Formel & Rückgängig', t_a018_verschieben_drehen_schritt),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

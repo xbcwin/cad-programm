@@ -8,7 +8,7 @@ const Actions = (() => {
   function tops(ids) { return ids.map((id) => App.doc.items.find((x) => x.id === id)).filter(Boolean); }
   function findSel() { return App.selectedItems(); }
   function worldBox(id) {
-    const n = Viewer.nodes.get(id);
+    const n = Viewer.nodes.get(id) || (App.mergedInto(id) ? Viewer.nodes.get(App.mergedInto(id)) : null);
     if (n) return n.mesh.geometry.boundingBox.clone().applyMatrix4(n.obj.matrix);
     const b = App.localBox(id); if (!b) return null;
     const box = new THREE.Box3(new THREE.Vector3(b[0], b[1], b[2]), new THREE.Vector3(b[3], b[4], b[5]));

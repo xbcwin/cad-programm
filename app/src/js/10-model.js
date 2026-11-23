@@ -26,6 +26,7 @@ const KINDS = {
   import: { label: 'Importiert', params: [] },
   group: { label: 'Gruppe', params: [] },
   part: { label: 'Bauteil', params: [] },
+  transform: { label: 'Verschieben/Drehen', params: [] },
 };
 const PRIMITIVE_ORDER = ['box', 'cylinder', 'sphere', 'cone', 'pyramid', 'wedge', 'tube', 'torus', 'prism', 'hemisphere'];
 
@@ -219,6 +220,7 @@ const Model = (() => {
     walk(doc.items, (it) => {
       const me = top(it.id);
       if (it.op && it.op.target) out.push({ from: me, to: top(it.op.target), what: { join: 'vereinigt mit', cut: 'abgezogen von', common: 'Schnittmenge mit' }[it.op.type] || 'verrechnet mit' });
+      if (it.kind === 'transform' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: it.p.copy ? 'versetzte Kopie von' : 'versetzt' });
       if (it.link) out.push({ from: me, to: top(it.link), what: 'verknüpfte Kopie von' });
       const sk = it.p && it.p.sketch;
       for (const e of (sk && sk.ents) || []) if (e.link && e.link.id) out.push({ from: me, to: top(e.link.id), what: 'Skizze übernimmt Kante von' });
@@ -246,6 +248,16 @@ const Model = (() => {
       o.p = { fmt: it.p.fmt, scale: num(it.p.scale, V, 1) };
       if (it.p.blobId) o.p.blobId = it.p.blobId;
       else if (it.p.data) o.p.data = it.p.data;
+    } else if (it.kind === 'transform') {
+      const p = it.p || {};
+      o.p = {
+        target: p.target || null,
+        dx: num(p.dx, V, 0), dy: num(p.dy, V, 0), dz: num(p.dz, V, 0),
+        rx: num(p.rx, V, 0), ry: num(p.ry, V, 0), rz: num(p.rz, V, 0),
+        pivot: p.pivot === 'origin' || p.pivot === 'point' ? p.pivot : 'center',
+        px: num(p.px, V, 0), py: num(p.py, V, 0), pz: num(p.pz, V, 0),
+        copy: !!p.copy,
+      };
     }
     else o.p = resolveP(it.p, V);
     if (it.mir) o.mir = it.mir;
@@ -607,6 +619,13 @@ const Model = (() => {
       case 'torus': return `Ø ${f(p.d)}`;
       case 'extrude': return p.thin ? `${f(p.dist)} hoch · Wand ${f(p.wall || 2)}` : `${f(p.dist)} hoch`;
       case 'revolve': return `${f(p.angle)}°`;
+      case 'transform': {
+        const parts = [];
+        for (const k of ['dx', 'dy', 'dz']) if (Math.abs(p[k] || 0) > 1e-6) parts.push(`${k[1].toUpperCase()} ${p[k] > 0 ? '+' : ''}${fmt(p[k], 1)}`);
+        for (const k of ['rx', 'ry', 'rz']) if (Math.abs(p[k] || 0) > 1e-6) parts.push(`↻${k[1].toUpperCase()} ${fmt(p[k], 1)}°`);
+        const s = parts.length ? parts.join(' ') : '0 mm';
+        return p.copy ? 'Kopie · ' + s : s;
+      }
       case 'group': return (typeof Features !== 'undefined' && Features.sizeText(it, V)) || `${(it.children || []).length} Teile`;
       case 'part': {
         const L = String(p.lib || '');
