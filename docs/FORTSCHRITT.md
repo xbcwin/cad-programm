@@ -215,6 +215,7 @@ Fertig.
 - [x] Magnet für Kaufteile beim Ziehen aus der Leiste: ein Motor aus „Drohne → Motoren“ rastet in die Mitte der Fläche (Test seit Sitzung 62); seit Sitzung 64 zeigt die Vorschau beim Ziehen die echte Form (Motor, Akku, Bausteine – Löcher bleiben ein Kasten, damit sie nicht schon beim Ziehen schneiden)
 - [x] Bohrungs-Assistent, Wandstärke, Muster, Spiegeln, Boolesch, Teilen (Sitzung 8)
 - [x] Bohrungs-Arten (Auto [A-008], KP-17): Sackloch mit 118°-Bohrspitze (`blindHole`), Passbohrung H7 (`fitHole`, genaues Nennmaß mit ISO-286-Toleranzhinweis) und Zentrierbohrung nach DIN 332 Form A (`centerHole`), samt Querschnitts-Vorschau im Bohrungs-Assistenten, 3D-Setzvorschau und Hilfetexten
+- [x] Kosmetisches Gewinde (Auto [A-009], KP-20): runde Zylinderfläche außen oder innen per „Gewinde markieren“ mit M-Größe (M2–M16) und Länge markieren – farbige, gestreifte 3D-Anzeige ohne Kern-Neubau, Eintrag in Stückliste und normgerechte Darstellung in der technischen Zeichnung sowie „Echt machen“ zum Umwandeln in ein druckbares 3D-Gewinde (`threadRod`/`threadHole`)
 - [x] Muster entlang Kurve: Körper oder Loch wählen → „Muster“ → „Muster entlang Kurve“, Kurve zeichnen (Linie, Bogen, Spline, Kreis oder geschlossener Umriss); Anzahl, Abstand (0 = gleichmäßig verteilt) und Ausrichtung (mit der Kurve drehen oder nicht), „Kurve bearbeiten“; beim Zeichnen zeigen Ringe, wo die Kopien landen (Sitzung 28)
 - [x] Kreismuster auch um eine Achse quer (X) oder längs (Y), mit Mitte Z – z. B. Löcher rund um ein liegendes Rohr; KI-Kollege kennt „Muster entlang Kurve“ und die Drehachse (Sitzung 29)
 - [x] Muster entlang einer Körperkante: beim Zeichnen der Kurve „Kante übernehmen“ (Sitzung 32)
@@ -224,6 +225,7 @@ Fertig.
 - [x] Explosion auch für die Teile innerhalb einer Gruppe (Sitzung 53)
 - [x] Schnitt an einer beliebigen Fläche („Schnitt hier“, Sitzung 25)
 - [x] Messen, Material pro Teil, Push/Pull, „ähnliche auswählen“, Versionen (Sitzung 10)
+- [x] Messungen bleiben stehen (Auto [A-012], PF-05): Knopf „Messung behalten“ in der Messen-Leiste speichert Abstände, Winkel, Flächen und Durchmesser dauerhaft im Projekt (`doc.measures`, Liste „Messungen“ im Verlauf); bei Modelländerungen rechnet Tracery die Werte selbstständig nach, zeigt „verloren“ bei fehlenden Bezügen und erlaubt Ein-/Ausblenden, Umbenennen und Löschen mit Rückgängig
 - [ ] Versionen in der Cloud (mit Stufe 6 – Konten)
 
 ### Stufe 4 – Drohnen-Modul

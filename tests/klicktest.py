@@ -5741,6 +5741,75 @@ def t_a008_bohrungsarten(p):
     return [ok1, ok2, ok3, ok4]
 
 
+# ---------- A-009: Kosmetisches Gewinde (KP-20) ----------
+def t_a009_kosmetisches_gewinde(p):
+    p.empty()
+    # 1. Zylinder Ø 6 × 20, M6 × 10 markieren -> kein neuer Körper, gestreiftes 3D-Overlay, im Projekt gespeichert
+    p.ev("App.change('x', d=>{ d.items.push(Model.newItem('cylinder',{d:6,h:20},{name:'Bolzen'})); })")
+    warte_rechnen(p)
+    id0 = p.ev("return App.doc.items[0].id")
+    fi = p.ev("const r=App.results.get(arg); return r.data.faces.findIndex(f=>f.t==='CYLINDRE')", id0)
+    p.ev("const id=arg[0], fi=arg[1]; App.select([id], {face:{id, faceIdx:fi, point:[3,0,10], normal:[1,0,0]}})", [id0, fi]); p.wait(400)
+    has_ctx = p.pg.locator('.ctxbar button[aria-label="Gewinde markieren"]').count() == 1
+    p.pg.locator('.ctxbar button[aria-label="Gewinde markieren"]').click(); p.wait(300)
+    def_size = p.pg.locator('#ct-size').input_value()
+    p.pg.fill('#ct-len', '10'); p.pg.click('#ct-apply'); p.wait(400)
+    th0 = p.ev("return (App.doc.items[0].threads || [])[0]")
+    tg_n = p.ev("const n=Viewer.nodes.get(arg); return n && n.threadGroup ? n.threadGroup.children.length : 0", id0)
+    ok1 = has_ctx and def_size == 'M6' and p.ev("return App.doc.items.length") == 1 and th0 and th0['size'] == 'M6' and abs(th0['length'] - 10) < 1e-6 and th0['kind'] == 'ext' and tg_n >= 1
+
+    # 2. Stückliste und Technische Zeichnung zeigen das Gewinde
+    bom = p.ev("return Mass.bom()")
+    bom_csv = p.ev("return Mass.bom().then(b=>Mass.bomCSV(b, App.doc.name))")
+    p.ev("App.select([])"); p.wait(300)
+    p.pg.locator('#proj-bom').click(); p.wait(600)
+    bom_txt = p.pg.locator('#bom-threads').inner_text() if p.pg.locator('#bom-threads').count() else ''
+    p.pg.locator('.modal .btn.primary').click(); p.wait(300)
+    p.ev("Commands.setMode('drawing')"); p.wait(1500)
+    svg_txt = p.pg.locator('#sheet .sheet-holder svg').text_content() if p.pg.locator('#sheet .sheet-holder svg').count() else ''
+    thin_n = p.pg.locator('#sheet .sheet-holder svg .thin').count()
+    p.ev("Commands.setMode('model')"); p.wait(600)
+    ok2 = bool(bom and len(bom.get('threads') or []) == 1 and 'M6' in bom['threads'][0]['name'] and '10' in bom['threads'][0]['name'] and 'M6 × 10' in bom_txt and 'M6' in bom_csv and 'M6 × 10' in svg_txt and thin_n >= 2)
+
+    # 3. Rückgängig entfernt Markierung & 3D-Overlay, Wiederholen stellt beides wieder her
+    p.ev("App.undo()"); p.wait(400)
+    tg_after_undo = p.ev("const n=Viewer.nodes.get(arg); return n && n.threadGroup ? n.threadGroup.children.length : 0", id0)
+    ok3a = p.ev("return (App.doc.items[0].threads || []).length") == 0 and tg_after_undo == 0
+    p.ev("App.redo()"); p.wait(400)
+    tg_after_redo = p.ev("const n=Viewer.nodes.get(arg); return n && n.threadGroup ? n.threadGroup.children.length : 0", id0)
+    ok3 = ok3a and p.ev("return (App.doc.items[0].threads || []).length") == 1 and tg_after_redo >= 1
+
+    # 4. Speichern und Laden behält die Markierung
+    saved = p.ev("return JSON.stringify(App.doc)")
+    p.ev("App.setDoc(JSON.parse(arg), {fit:false})", saved); warte_rechnen(p)
+    tg_reload = p.ev("const n=Viewer.nodes.get(App.doc.items[0].id); return n && n.threadGroup ? n.threadGroup.children.length : 0")
+    ok4 = '"threads"' in saved and p.ev("return (App.doc.items[0].threads || []).length") == 1 and tg_reload >= 1
+
+    # 5. „Echt machen“ wandelt in echtes Außengewinde (threadRod) um
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(400)
+    th_id = p.ev("return App.doc.items[0].threads[0].id")
+    p.pg.locator('#th-real-' + th_id).click(); warte_rechnen(p); p.wait(400)
+    real_p = p.ev("return App.doc.items.map(x=>({kind:x.kind, p:x.p, op:x.op, threads:x.threads}))")
+    vol_real = p.ev("return Mass.measure().then(r=>r.parts.reduce((s,x)=>s+x.volume,0))")
+    ok5 = p.ev("return App.errors.length") == 0 and any(x['kind'] == 'part' and (x['p'] or {}).get('lib') == 'threadRod' for x in real_p) and not any(x.get('threads') for x in real_p) and 150 < vol_real < 520
+
+    # 6. Innengewinde auf Kernloch Ø 5 mm (M6): Markierung + „Echt machen“ -> threadHole mit cut
+    p.ev("App.change('x', d=>{ d.items=[]; d.items.push(Model.newItem('box',{w:20,d:20,h:12},{name:'Block'})); const h=Model.newItem('cylinder',{d:5,h:20},{name:'Kernloch'}); h.role='hole'; h.t.z=-2; d.items.push(h); })")
+    warte_rechnen(p)
+    bid = p.ev("return App.doc.items[0].id")
+    cfi = p.ev("const r=App.results.get(arg); return r.data.faces.findIndex(f=>f.t==='CYLINDRE')", bid)
+    p.ev("const id=arg[0], fi=arg[1]; App.select([id], {face:{id, faceIdx:fi, point:[2.5,0,6], normal:[-1,0,0]}})", [bid, cfi]); p.wait(400)
+    p.pg.locator('.ctxbar button[aria-label="Gewinde markieren"]').click(); p.wait(300)
+    int_size = p.pg.locator('#ct-size').input_value()
+    p.pg.click('#ct-apply'); p.wait(400)
+    ith = p.ev("return (App.doc.items[0].threads || [])[0]")
+    p.pg.locator('#th-real-' + ith['id']).click(); warte_rechnen(p); p.wait(400)
+    its = p.ev("return App.doc.items.map(x=>({kind:x.kind, lib:x.p&&x.p.lib, op:x.op}))")
+    ok6 = int_size == 'M6' and ith['kind'] == 'int' and p.ev("return App.errors.length") == 0 and any(x['lib'] == 'threadHole' and (x['op'] or {}).get('type') == 'cut' for x in its)
+
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
+
+
 def t_a007_duenne_wand(p):
     # 1. Offener L-Linienzug (30 + 20 = 50 mm): beim Fertigstellen Standard „Dünne Wand“ mit Wand 2 mm, Höhe 10 → 50 × 2 × 10 = 1000 mm³
     sketch_xy(p)
@@ -6031,6 +6100,72 @@ def t_a010_obj_glb(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a012_messungen_bleiben(p):
+    p.empty()
+    p.ev("Actions.addPrimitive('box'); Actions.addPrimitive('box')"); warte_rechnen(p)
+    p.ev("App.change('x', d=>{ const a=d.items[0], b=d.items[1]; a.t.x=0; a.t.y=0; Object.assign(a.p,{w:30,d:20,h:10}); b.t.x=40; b.t.y=0; Object.assign(b.p,{w:20,d:20,h:25}); })"); warte_rechnen(p)
+    p.ev("App.clearSelection(); Viewer.setView('iso', false)"); p.wait(800)
+
+    p.pg.locator('#t-measure').click(); p.wait(300)
+    ok1 = p.pg.locator('#measure-bar').count() == 1 and p.pg.locator('#measure-keep').is_disabled()
+    top, top2 = world_screen(p, 3, 3, 10), world_screen(p, 42, 2, 25)
+    p.pg.mouse.click(*top); p.wait(400)
+    p.pg.mouse.click(*top2); p.wait(400)
+    r_cur = p.ev("return Measure.result") or ''
+    ok1 = ok1 and r_cur.startswith('Abstand 15 mm') and not p.pg.locator('#measure-keep').is_disabled()
+
+    p.pg.locator('#measure-keep').click(); p.wait(400)
+    p.pg.keyboard.press('Escape'); p.wait(300)
+    ok2 = (p.ev("return (App.doc.measures || []).length") == 1
+           and p.ev("return App.doc.measures[0].value") == 15
+           and p.pg.locator('#measure-tree .measure-row').count() == 1
+           and '15 mm' in p.pg.locator('#measure-tree .measure-row').first.text_content()
+           and p.pg.locator('.dimlabel.mpin').count() == 1
+           and '15 mm' in p.pg.locator('.dimlabel.mpin').first.text_content()
+           and p.ev("return Viewer.groups.measures.children.length") >= 1)
+
+    # Quader höher machen -> Messung aktualisiert sich automatisch auf 30 mm
+    p.ev("App.change('Höher', d=>{ d.items[1].p.h = 40; })"); warte_rechnen(p)
+    ok3 = (p.ev("return App.doc.measures[0].value") == 30
+           and not p.ev("return App.doc.measures[0].lost")
+           and '30 mm' in p.pg.locator('#measure-tree .measure-row').first.text_content()
+           and '30 mm' in p.pg.locator('.dimlabel.mpin').first.text_content())
+
+    # Ein- und ausblenden
+    p.pg.locator('#measure-tree .m-eye').first.click(); p.wait(400)
+    ok4 = (p.ev("return !!App.doc.measures[0].hidden")
+           and p.pg.locator('.dimlabel.mpin').count() == 0
+           and p.ev("return Viewer.groups.measures.children.length") == 0)
+    p.pg.locator('#measure-tree .m-eye').first.click(); p.wait(400)
+    ok4 = ok4 and (not p.ev("return App.doc.measures[0].hidden")
+                   and p.pg.locator('.dimlabel.mpin').count() == 1
+                   and p.ev("return Viewer.groups.measures.children.length") >= 1)
+
+    # Im Verlauf wählen & rechts umbenennen
+    p.pg.locator('#measure-tree .measure-row').first.click(); p.wait(300)
+    ok5 = p.pg.locator('#measure-name').count() == 1 and 'Abstand 30 mm' in p.pg.locator('#measure-val').text_content()
+    p.pg.fill('#measure-name', 'Stufenhöhe'); p.pg.locator('#measure-name').press('Enter'); p.wait(400)
+    ok5 = ok5 and p.ev("return App.doc.measures[0].name") == 'Stufenhöhe' and 'Stufenhöhe' in p.pg.locator('#measure-tree').text_content()
+
+    # Bezug löschen -> „verloren“; Rückgängig -> wieder 30 mm
+    p.ev("Actions.remove([App.doc.items[1].id])"); warte_rechnen(p)
+    ok6 = (p.ev("return !!App.doc.measures[0].lost")
+           and 'verloren' in p.pg.locator('#measure-tree .measure-row').first.text_content().lower()
+           and p.pg.locator('.dimlabel.mpin.lost').count() == 1)
+    p.ev("App.undo()"); warte_rechnen(p)
+    ok6 = ok6 and (not p.ev("return App.doc.measures[0].lost")
+                   and p.ev("return App.doc.measures[0].value") == 30
+                   and '30 mm' in p.pg.locator('.dimlabel.mpin').first.text_content())
+
+    # Löschen & Rückgängig + Hilfetext prüfen
+    p.pg.locator('#measure-tree .m-del').first.click(); p.wait(400)
+    ok7 = p.ev("return (App.doc.measures || []).length") == 0 and p.pg.locator('#measure-tree').count() == 0 and p.pg.locator('.dimlabel.mpin').count() == 0
+    p.ev("App.undo()"); warte_rechnen(p)
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    ok7 = ok7 and p.ev("return (App.doc.measures || []).length") == 1 and 'measureKeep' in hilfen and all(k in hilfen['measureKeep'] for k in ('tip', 'hilfe', 'tipp'))
+    return [ok1, ok2, ok3, ok4, ok5, ok6, ok7]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -6140,7 +6275,9 @@ TESTS = [
     ('[A-006] Versatz mehrfach, beidseitig und runde Ecken: 3× Rechteck / beidseitig / Ecken rund / Kette & Rückgängig', t_a006_versatz_mehrfach),
     ('[A-008] Bohrungs-Arten: Sackloch Ø 5 × 10 mit 118°-Spitze / Passbohrung H7 / Zentrierbohrung / Vorschau & Hilfe', t_a008_bohrungsarten),
     ('[A-011] 3MF einlesen: Export-Roundtrip / mehrere Teile mit Namen & Farben / Einheit & Transform / Fehler', t_a011_3mf_import),
+    ('[A-009] Kosmetisches Gewinde: Zylinder Ø 6 M6 × 10 markieren / Stückliste & Zeichnung / Rückgängig / Speichern / Echt machen / Innengewinde', t_a009_kosmetisches_gewinde),
     ('[A-010] OBJ und GLB speichern: ZIP mit .obj/.mtl/.glb / MTL-Farben / GLB-Kopf & Meshes / Studio-Material / Einzeln', t_a010_obj_glb),
+    ('[A-012] Messungen bleiben stehen: Abstand behalten / Quader höher / ein- und ausblenden / umbenennen / verloren & Rückgängig / löschen', t_a012_messungen_bleiben),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

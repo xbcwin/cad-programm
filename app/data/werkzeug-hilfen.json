@@ -709,11 +709,6 @@
     "hilfe": "Unter Menü → Einstellungen → „Tastenkürzel“ änderst du die Tasten für Werkzeuge, Ansicht, Modell und Dateien. Klick auf ein Kürzel, drück die neue Taste und es wirkt sofort – gespeichert in deinem Browser. Doppelte Tasten meldet Tracery, damit nichts aus Versehen überschrieben wird.",
     "tipp": "Mit „Zurücksetzen“ stellst du jederzeit alle Standard-Tasten wieder her."
   },
-  "thinWall": {
-    "tip": "Offene Linien oder Umrisse als dünne Wand hochziehen",
-    "hilfe": "Schaltet „Dünne Wand“ ein: Offene Linien, Bögen und Splines werden mit der eingestellten Wandstärke hochgezogen; geschlossene Umrisse werden zu einem hohlen Rohr-Profil. Mit „Wand-Lage“ wählst du, ob die Wand mittig auf der Linie, nach innen oder nach außen wächst.",
-    "tipp": "Ideal für Gehäuse-Wände, Rippen, Rahmen und Profile – Wandstärke und Lage kannst du auch später rechts jederzeit ändern."
-  },
   "blindHole": {
     "tip": "Sackloch mit fester Tiefe und 118°-Bohrspitze",
     "hilfe": "Bohrt ein Loch mit rundem Querschnitt und einer Kegelspitze am Boden (Standard 118° wie ein Spiralbohrer, oder 140° / flach). „Tiefe (Zylinder)“ ist die zylindrische Länge; die Spitze kommt darunter noch dazu.",
@@ -729,9 +724,24 @@
     "hilfe": "Erzeugt eine genormte Zentrierbohrung mit 60°-Senkkegel, kurzer Führungsbohrung und 118°-Bohrspitze am Grund – so wie sie ein Zentrierbohrer auf der Drehbank oder Fräse herstellt.",
     "tipp": "Wähle die Größe (A 1,0 bis A 6,3) passend zum Durchmesser der Welle oder des Werkstücks."
   },
+  "cosmeticThread": {
+    "tip": "Gewinde als schnelle Markierung auf runder Fläche",
+    "hilfe": "Markiert eine runde Zylinderfläche (außen wie ein Bolzen oder innen wie ein Kernloch) mit einem metrischen Gewinde (Größe M2 bis M16 und Länge). Das Gewinde wird farbig gestreift angezeigt, rechnet ohne Zeitverlust und erscheint in der Stückliste sowie normgerecht in der technischen Zeichnung.",
+    "tipp": "Wenn du das Teil 3D-drucken willst, klicke rechts auf „Echt machen“ – dann wird aus der Markierung ein echtes 3D-Gewinde."
+  },
+  "thinWall": {
+    "tip": "Offene Linien oder Umrisse als dünne Wand hochziehen",
+    "hilfe": "Schaltet „Dünne Wand“ ein: Offene Linien, Bögen und Splines werden mit der eingestellten Wandstärke hochgezogen; geschlossene Umrisse werden zu einem hohlen Rohr-Profil. Mit „Wand-Lage“ wählst du, ob die Wand mittig auf der Linie, nach innen oder nach außen wächst.",
+    "tipp": "Ideal für Gehäuse-Wände, Rippen, Rahmen und Profile – Wandstärke und Lage kannst du auch später rechts jederzeit ändern."
+  },
   "exportObjGlb": {
     "tip": "Als OBJ (mit MTL-Farben) oder GLB speichern",
     "hilfe": "OBJ kommt zusammen mit einer MTL-Datei für Farben und Glanz (in Millimetern, ideal für Blender und ältere 3D-Programme). GLB (glTF 2.0 binär) speichert jedes Teil als eigenen Knoten mit Namen samt Werkstoff-Aussehen aus dem Studio-Look (Metall, Rauheit, Klarlack, Durchsichtigkeit).",
     "tipp": "Für Web-Ansichten und schnelle Vorschauen nimm GLB; für klassische Render-Programme OBJ + MTL."
+  },
+  "measureKeep": {
+    "tip": "Messung dauerhaft im Projekt behalten",
+    "hilfe": "Speichert die aktuelle Messung als eigenes Objekt in der Liste „Messungen“ im Verlauf. Ändert sich ein Körper oder Maß, rechnet Tracery den Wert selbstständig neu; fehlt ein Bezug, erscheint „verloren“. Du kannst jede Messung ein- und ausblenden, umbenennen oder löschen.",
+    "tipp": "Klick ein Mess-Schild im Bild an, um seine Art und den vollen Text rechts zu sehen; ein Doppelklick kopiert den Zahlenwert."
   }
 }

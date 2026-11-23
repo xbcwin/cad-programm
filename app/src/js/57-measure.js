@@ -1,49 +1,97 @@
 // ================= Messen =================
 const Measure = (() => {
   let on = false, pts = [], objs = [], els = [];
+  let sel = null, current = null, bar = null, pinObjs = [], pinEls = [];
+  const live = new Map();
+  const V3 = (a) => new THREE.Vector3(...a);
+  const r6 = (v) => v.map((x) => round(x, 6));
+  const dist3 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  const list = (doc = App.doc) => doc.measures || [];
+  const find = (id, doc = App.doc) => list(doc).find((m) => m.id === id) || null;
+  function fracOf(p, b) {
+    if (!p || !b) return null;
+    const dx = b[3] - b[0], dy = b[4] - b[1], dz = b[5] - b[2];
+    return [dx > 1e-6 ? round((p[0] - b[0]) / dx, 6) : 0.5, dy > 1e-6 ? round((p[1] - b[1]) / dy, 6) : 0.5, dz > 1e-6 ? round((p[2] - b[2]) / dz, 6) : 0.5];
+  }
   function toggle() { on ? stop() : start(); }
   function start() {
     Views.collapse();
     if (Sketch.active) return;
     if (Notes.active) Notes.stop();
-    on = true; pts = []; clearVis();
+    on = true; pts = []; current = null; last = null; clearVis();
     App.clearSelection(); Handles.clear();
     $('#t-measure') && $('#t-measure').classList.add('active');
     UI.hint('<b>Messen:</b> Klick zwei Punkte oder zwei Flächen an (Abstand, Winkel) – eine Fläche allein zeigt ihre Größe, eine runde Kante den Durchmesser. <b>Esc</b> beendet.');
     Viewer.canvas.style.cursor = 'crosshair';
+    showBar();
   }
   function stop() {
-    on = false; pts = []; last = null; clearVis();
+    on = false; pts = []; current = null; last = null; clearVis(); hideBar();
     $('#t-measure') && $('#t-measure').classList.remove('active');
     UI.hint(null); Viewer.canvas.style.cursor = '';
     Handles.rebuild();
   }
-  function clearVis() { for (const o of objs) { Viewer.groups.overlay.remove(o); Viewer.disposeFat(o); } objs = []; for (const e of els) e.remove(); els = []; Viewer.requestRender(); }
+  function showBar() {
+    hideBar();
+    bar = h('div', { class: 'sketchbar measurebar', id: 'measure-bar' });
+    const cur = h('span', { class: 'm-cur mono', id: 'measure-cur' });
+    const keepBtn = h('button', { type: 'button', class: 'tool primary', id: 'measure-keep', 'data-help': 'measureKeep', disabled: true });
+    keepBtn.innerHTML = icon('plus') + '<span>Messung behalten</span>';
+    keepBtn.onclick = () => keep();
+    const doneBtn = h('button', { type: 'button', class: 'tool', id: 'measure-done', 'data-tip': 'Messen beenden', 'data-kbd': 'Esc' });
+    doneBtn.innerHTML = icon('check') + '<span>Fertig</span>';
+    doneBtn.onclick = () => stop();
+    bar.append(cur, keepBtn, doneBtn);
+    $('#overlay').append(bar);
+    updateBar();
+  }
+  function hideBar() { if (bar) { bar.remove(); bar = null; } }
+  function updateBar() {
+    if (!bar) return;
+    const cur = $('#measure-cur'), kb = $('#measure-keep');
+    if (cur) cur.textContent = current ? current.eval.text : 'Klick Flächen, Kanten oder Punkte …';
+    if (kb) kb.disabled = !current;
+  }
+  function clearVis() { for (const o of objs) { Viewer.groups.overlay.remove(o); Viewer.disposeFat(o); } objs = []; for (const e of els) e.remove(); els = []; lastLabel = null; Viewer.requestRender(); }
   function snapPoint(hit, cx, cy) {
     const n = hit.node; const M = n.obj.matrixWorld;
     if (hit.edgeIdx != null) {
       const g = n.data.edges[hit.edgeIdx];
       if (g) {
-        const cand = [g.a, g.b, g.m]; if (g.c) cand.push(g.c);
-        let best = null, bd = 12;
+        const cand = [['a', g.a], ['b', g.b], ['m', g.m]]; if (g.c) cand.push(['c', g.c]);
+        let best = null, bestW = null, bd = 12;
         const r = Viewer.canvas.getBoundingClientRect();
-        for (const p of cand) { const w = new THREE.Vector3(...p).applyMatrix4(M); const s = Viewer.toScreen(w); const d = Math.hypot(s.x - (cx - r.left), s.y - (cy - r.top)); if (d < bd) { bd = d; best = w; } }
-        if (best) return { p: best, edge: g };
-        return { p: hit.point.clone(), edge: g };
+        for (const [k, p] of cand) { const w = new THREE.Vector3(...p).applyMatrix4(M); const s = Viewer.toScreen(w); const d = Math.hypot(s.x - (cx - r.left), s.y - (cy - r.top)); if (d < bd) { bd = d; best = w; bestW = k; } }
+        if (best) return { p: best, edge: g, which: bestW };
+        return { p: hit.point.clone(), edge: g, which: null };
       }
     }
-    return { p: hit.point.clone() };
+    return { p: hit.point.clone(), which: null };
   }
   // Was liegt unter der Maus? Punkt (an einer Kante gefangen) oder ebene Fläche
   function entityAt(hit, cx, cy) {
-    if (hit.edgeIdx != null) { const sp = snapPoint(hit, cx, cy); return { kind: 'pt', p: sp.p, edge: sp.edge }; }
-    const f = hit.faceIdx >= 0 ? hit.node.data.faces[hit.faceIdx] : null;
-    if (f && (f.t === 'CYLINDRE' || f.t === 'SPHERE') && f.r) return { kind: 'round', id: hit.id, faceIdx: hit.faceIdx, f, area: Viewer.faceArea(hit.id, hit.faceIdx), hitP: hit.point.clone(), p: hit.point.clone() };
-    if (f && f.t === 'PLANE' && f.n) {
-      const M = hit.node.obj.matrixWorld;
-      return { kind: 'face', id: hit.id, faceIdx: hit.faceIdx, c: new THREE.Vector3(...f.c).applyMatrix4(M), n: new THREE.Vector3(...f.n).transformDirection(M).normalize(), area: Viewer.faceArea(hit.id, hit.faceIdx), hitP: hit.point.clone() };
+    const M = hit.node.obj.matrixWorld, invW = M.clone().invert(), bbox = hit.node.data.bbox;
+    if (hit.edgeIdx != null) {
+      const sp = snapPoint(hit, cx, cy), g = sp.edge;
+      const lp = sp.p.clone().applyMatrix4(invW).toArray();
+      const ref = { kind: 'pt', id: hit.id, lp: r6(lp), frac: fracOf(lp, bbox), edge: g ? { t: g.t, a: r6(g.a), b: r6(g.b), m: r6(g.m), c: g.c ? r6(g.c) : null, n: g.n ? r6(g.n) : null, which: sp.which || null, mFrac: fracOf(g.m, bbox) } : null };
+      return { kind: 'pt', id: hit.id, edgeIdx: hit.edgeIdx, p: sp.p, edge: g, W: M, ref };
     }
-    return { kind: 'pt', p: hit.point.clone() };
+    const f = hit.faceIdx >= 0 ? hit.node.data.faces[hit.faceIdx] : null;
+    if (f && (f.t === 'CYLINDRE' || f.t === 'SPHERE') && f.r) {
+      const lp = hit.point.clone().applyMatrix4(invW).toArray();
+      const ln = hit.normal ? hit.normal.clone().transformDirection(invW).normalize().toArray() : null;
+      const ref = { kind: 'round', id: hit.id, t: f.t, c: r6(f.c), axis: f.axis ? r6(f.axis) : null, sc: f.sc ? r6(f.sc) : null, r: round(f.r, 6), lp: r6(lp), ln: ln ? r6(ln) : null, frac: fracOf(f.c, bbox) };
+      return { kind: 'round', id: hit.id, faceIdx: hit.faceIdx, f, area: Viewer.faceArea(hit.id, hit.faceIdx), hitP: hit.point.clone(), normal: hit.normal ? hit.normal.clone() : null, p: hit.point.clone(), ref };
+    }
+    if (f && f.t === 'PLANE' && f.n) {
+      const lp = hit.point.clone().applyMatrix4(invW).toArray();
+      const ref = { kind: 'face', id: hit.id, n: r6(f.n), c: r6(f.c), lp: r6(lp), frac: fracOf(f.c, bbox) };
+      return { kind: 'face', id: hit.id, faceIdx: hit.faceIdx, c: new THREE.Vector3(...f.c).applyMatrix4(M), n: new THREE.Vector3(...f.n).transformDirection(M).normalize(), area: Viewer.faceArea(hit.id, hit.faceIdx), hitP: hit.point.clone(), ref };
+    }
+    const lp = hit.point.clone().applyMatrix4(invW).toArray();
+    const ref = { kind: 'pt', id: hit.id, lp: r6(lp), frac: fracOf(lp, bbox), face: f && f.t === 'PLANE' && f.n ? { n: r6(f.n), c: r6(f.c), frac: fracOf(f.c, bbox) } : null };
+    return { kind: 'pt', id: hit.id, p: hit.point.clone(), ref };
   }
   function dot(p) { const d = Viewer.makeFat([p.x, p.y, p.z, p.x, p.y, p.z + 0.001], Viewer.theme.accent, 10, { depthTest: false }); Viewer.groups.overlay.add(d); objs.push(d); }
   function dash(a, b) { const l = Viewer.makeFat([a.x, a.y, a.z, b.x, b.y, b.z], Viewer.theme.accent, 3, { depthTest: false, dashed: true, dashSize: 2, gapSize: 1.2 }); Viewer.groups.overlay.add(l); objs.push(l); }
@@ -51,73 +99,429 @@ const Measure = (() => {
     if (!on || e.button !== 0) return false;
     const hit = Viewer.pick(e.clientX, e.clientY, { edgePx: 11 });
     if (!hit) return true;
-    const ent = entityAt(hit, e.clientX, e.clientY);
+    let ent = entityAt(hit, e.clientX, e.clientY);
     if (pts.length === 0 && ent.edge && ent.edge.t === 'CIRCLE' && ent.edge.r && hit.edgeIdx != null) {
       clearVis();
       const W = hit.node.obj.matrixWorld;
       const c = new THREE.Vector3(...ent.edge.c).applyMatrix4(W);
-      showLabel(`Ø ${fmt(ent.edge.r * 2, 2)} mm   (R ${fmt(ent.edge.r, 2)})`, c);
+      const circleEnt = { kind: 'circle', id: hit.id, edgeIdx: hit.edgeIdx, edge: ent.edge, c, W };
+      const ev = evalEntities('circle', [circleEnt]);
+      showLabel(ev.text, ev.p);
       const g = hit.node.data.edgeGroups.find((x) => x[2] === hit.edgeIdx);
-      const pos = Viewer.makeFat(hit.node.data.lines.slice(g[0] * 3, (g[0] + g[1]) * 3), Viewer.theme.accent, 4, { depthTest: false });
-      pos.matrixAutoUpdate = false; pos.matrix.copy(W); Viewer.groups.overlay.add(pos); objs.push(pos);
-      last = { text: els[0].textContent };
+      if (g) {
+        const pos = Viewer.makeFat(hit.node.data.lines.slice(g[0] * 3, (g[0] + g[1]) * 3), Viewer.theme.accent, 4, { depthTest: false });
+        pos.matrixAutoUpdate = false; pos.matrix.copy(W); Viewer.groups.overlay.add(pos); objs.push(pos);
+      }
+      last = { text: ev.text };
+      const bbox = hit.node.data.bbox;
+      current = { kind: 'circle', refs: [{ kind: 'circle', id: hit.id, c: r6(ent.edge.c), n: ent.edge.n ? r6(ent.edge.n) : null, r: round(ent.edge.r, 6), frac: fracOf(ent.edge.c, bbox) }], eval: ev };
+      updateBar();
       return true;
     }
     // runde Fläche allein: Durchmesser und Radius (Zylinder oder Kugel)
     if (pts.length === 0 && ent.kind === 'round') {
       clearVis();
       const m = Viewer.faceOverlay(ent.id, ent.faceIdx, Viewer.theme.accent, 0.32); if (m) { Viewer.groups.overlay.add(m); objs.push(m); }
-      const wr = hit.normal ? Viewer.wallAt(ent.id, ent.hitP, hit.normal) : null;
-      showLabel(`${ent.f.t === 'SPHERE' ? 'Kugel' : 'Zylinder'} Ø ${fmt(ent.f.r * 2, 2)} mm   (R ${fmt(ent.f.r, 2)})   Fläche ${fmt(ent.area, 1)} mm²${wr ? `   Wand ${fmt(wr, 2)} mm` : ''}`, ent.hitP);
-      last = { text: els[els.length - 1].textContent };
+      const ev = evalEntities('round', [ent]);
+      showLabel(ev.text, ev.p);
+      last = { text: ev.text };
+      current = { kind: 'round', refs: [ent.ref], eval: ev };
+      updateBar();
       Viewer.requestRender();
       return true;
     }
-    if (ent.kind === 'round') ent.kind = 'pt';
+    if (ent.kind === 'round') ent = { ...ent, kind: 'pt', ref: { kind: 'pt', id: ent.id, lp: ent.ref.lp, frac: ent.ref.frac } };
     if (pts.length >= 2) { pts = []; clearVis(); }
-    if (!pts.length) last = null;
+    if (!pts.length) { last = null; current = null; }
     pts.push(ent);
     if (ent.kind === 'face') { const m = Viewer.faceOverlay(ent.id, ent.faceIdx, Viewer.theme.accent, 0.32); if (m) { Viewer.groups.overlay.add(m); objs.push(m); } }
     else dot(ent.p);
     if (pts.length === 1 && ent.kind === 'face') {
-      // Wandstärke an dieser Stelle: Strahl nach innen bis zur Gegenseite (PF-02)
-      const wt = Viewer.wallAt(ent.id, ent.hitP, ent.n);
-      if (wt) { const q = ent.hitP.clone().addScaledVector(ent.n, -wt); dash(ent.hitP, q); }
-      showLabel(`Fläche ${fmt(ent.area, ent.area < 100 ? 2 : 1)} mm²${wt ? `   Wand ${fmt(wt, 2)} mm` : ''}`, ent.hitP); last = { text: els[els.length - 1].textContent };
+      const ev = evalEntities('face', [ent]);
+      for (const [a, b] of ev.lines) dash(a, b);
+      showLabel(ev.text, ev.p); last = { text: ev.text };
+      current = { kind: 'face', refs: [ent.ref], eval: ev };
+      updateBar();
+    } else if (pts.length === 1) {
+      updateBar();
     }
     if (pts.length === 2) result(pts[0], pts[1]);
     Viewer.requestRender();
     return true;
   }
   let last = null;
+  function evalEntities(kind, ents) {
+    if (kind === 'circle') {
+      const ent = ents[0];
+      const d = ent.edge.r * 2;
+      const short = `Ø ${fmt(d, 2)} mm`;
+      const text = `Ø ${fmt(d, 2)} mm   (R ${fmt(ent.edge.r, 2)})`;
+      return { lost: false, kind, typeLabel: 'Kreiskante', value: round(d, 6), unit: 'mm', short, text, p: ent.c.clone(), lines: [], dots: [], faces: [], circle: { id: ent.id, edgeIdx: ent.edgeIdx, W: ent.W } };
+    }
+    if (kind === 'round') {
+      const ent = ents[0];
+      const wr = ent.normal ? Viewer.wallAt(ent.id, ent.hitP, ent.normal) : null;
+      const d = ent.f.r * 2;
+      const short = `Ø ${fmt(d, 2)} mm`;
+      const text = `${ent.f.t === 'SPHERE' ? 'Kugel' : 'Zylinder'} Ø ${fmt(d, 2)} mm   (R ${fmt(ent.f.r, 2)})   Fläche ${fmt(ent.area, 1)} mm²${wr ? `   Wand ${fmt(wr, 2)} mm` : ''}`;
+      return { lost: false, kind, typeLabel: ent.f.t === 'SPHERE' ? 'Kugel' : 'Zylinder', value: round(d, 6), unit: 'mm', short, text, p: ent.hitP.clone(), lines: [], dots: [ent.hitP.clone()], faces: [{ id: ent.id, faceIdx: ent.faceIdx }], circle: null };
+    }
+    if (kind === 'face') {
+      const ent = ents[0];
+      const wt = Viewer.wallAt(ent.id, ent.hitP, ent.n);
+      const short = `${fmt(ent.area, ent.area < 100 ? 2 : 1)} mm²`;
+      const text = `Fläche ${short}${wt ? `   Wand ${fmt(wt, 2)} mm` : ''}`;
+      const lines = wt ? [[ent.hitP.clone(), ent.hitP.clone().addScaledVector(ent.n, -wt)]] : [];
+      return { lost: false, kind, typeLabel: 'Fläche', value: round(ent.area, 6), unit: 'mm²', short, text, p: ent.hitP.clone(), lines, dots: [], faces: [{ id: ent.id, faceIdx: ent.faceIdx }], circle: null };
+    }
+    const [a, b] = ents;
+    if (a.kind !== 'face' && b.kind !== 'face') {
+      const pa = a.p || a.hitP, pb = b.p || b.hitP;
+      const d = pa.distanceTo(pb);
+      const short = `${fmt(d, 2)} mm`;
+      const text = `${short}   ΔX ${fmt(Math.abs(pb.x - pa.x), 2)}  ΔY ${fmt(Math.abs(pb.y - pa.y), 2)}  ΔZ ${fmt(Math.abs(pb.z - pa.z), 2)}`;
+      return { lost: false, kind: 'pair', typeLabel: 'Abstand (Punkt–Punkt)', value: round(d, 6), unit: 'mm', short, text, p: pa.clone().lerp(pb, 0.5), lines: [[pa.clone(), pb.clone()]], dots: [pa.clone(), pb.clone()], faces: [], circle: null };
+    }
+    if (a.kind === 'face' && b.kind === 'face') {
+      const cs = Math.abs(a.n.dot(b.n));
+      if (cs > 0.99995) {
+        const d = Math.abs(b.c.clone().sub(a.c).dot(a.n));
+        const from = a.hitP.clone(), to = from.clone().addScaledVector(a.n, b.c.clone().sub(from).dot(a.n));
+        const short = d < 1e-6 ? '0 mm' : `${fmt(d, 2)} mm`;
+        const text = d < 1e-6 ? 'Beide Flächen liegen in einer Ebene' : `Abstand ${fmt(d, 2)} mm   (parallel)`;
+        return { lost: false, kind: 'pair', typeLabel: 'Abstand (Flächen)', value: round(d, 6), unit: 'mm', short, text, p: from.clone().lerp(to, 0.5), lines: d < 1e-6 ? [] : [[from, to]], dots: [from, to], faces: [{ id: a.id, faceIdx: a.faceIdx }, { id: b.id, faceIdx: b.faceIdx }], circle: null };
+      }
+      const ang = (Math.acos(clamp(cs, -1, 1)) * 180) / Math.PI;
+      const short = `${fmt(ang, 2)}°`;
+      const text = `Winkel ${short}   (zwischen den Flächen)`;
+      return { lost: false, kind: 'pair', typeLabel: 'Winkel (Flächen)', value: round(ang, 6), unit: '°', short, text, p: a.hitP.clone().lerp(b.hitP, 0.5), lines: [[a.hitP.clone(), b.hitP.clone()]], dots: [a.hitP.clone(), b.hitP.clone()], faces: [{ id: a.id, faceIdx: a.faceIdx }, { id: b.id, faceIdx: b.faceIdx }], circle: null };
+    }
+    const f = a.kind === 'face' ? a : b, q = a.kind === 'face' ? b : a, qp = q.p || q.hitP;
+    const s = qp.clone().sub(f.c).dot(f.n); const foot = qp.clone().addScaledVector(f.n, -s);
+    const d = Math.abs(s);
+    const short = `${fmt(d, 2)} mm`;
+    const text = `Abstand ${short}   (Punkt zur Fläche)`;
+    return { lost: false, kind: 'pair', typeLabel: 'Abstand (Punkt–Fläche)', value: round(d, 6), unit: 'mm', short, text, p: qp.clone().lerp(foot, 0.5), lines: [[qp.clone(), foot]], dots: [qp.clone(), foot], faces: [{ id: f.id, faceIdx: f.faceIdx }], circle: null };
+  }
   function result(a, b) {
     for (const e of els) e.remove(); els = [];
-    let text = '';
-    if (a.kind === 'pt' && b.kind === 'pt') {
-      const d = a.p.distanceTo(b.p); dash(a.p, b.p);
-      text = `${fmt(d, 2)} mm   ΔX ${fmt(Math.abs(b.p.x - a.p.x), 2)}  ΔY ${fmt(Math.abs(b.p.y - a.p.y), 2)}  ΔZ ${fmt(Math.abs(b.p.z - a.p.z), 2)}`;
-      showLabel(text, a.p.clone().lerp(b.p, 0.5));
-    } else if (a.kind === 'face' && b.kind === 'face') {
-      const cs = Math.abs(a.n.dot(b.n));
-      if (cs > 0.99995) {   // parallel: Abstand der Ebenen
-        const d = Math.abs(b.c.clone().sub(a.c).dot(a.n));
-        const from = a.hitP, to = from.clone().addScaledVector(a.n, b.c.clone().sub(from).dot(a.n));
-        dash(from, to);
-        text = d < 1e-6 ? 'Beide Flächen liegen in einer Ebene' : `Abstand ${fmt(d, 2)} mm   (parallel)`;
-        showLabel(text, from.clone().lerp(to, 0.5));
-      } else {
-        const ang = (Math.acos(clamp(cs, -1, 1)) * 180) / Math.PI;
-        text = `Winkel ${fmt(ang, 2)}°   (zwischen den Flächen)`;
-        showLabel(text, a.hitP.clone().lerp(b.hitP, 0.5));
-      }
-    } else {   // Punkt und Fläche: senkrechter Abstand zur Ebene
-      const f = a.kind === 'face' ? a : b, q = a.kind === 'face' ? b : a;
-      const s = q.p.clone().sub(f.c).dot(f.n); const foot = q.p.clone().addScaledVector(f.n, -s);
-      dash(q.p, foot);
-      text = `Abstand ${fmt(Math.abs(s), 2)} mm   (Punkt zur Fläche)`;
-      showLabel(text, q.p.clone().lerp(foot, 0.5));
+    const ev = evalEntities('pair', [a, b]);
+    for (const [p1, p2] of ev.lines) dash(p1, p2);
+    showLabel(ev.text, ev.p);
+    last = { text: ev.text };
+    current = { kind: 'pair', refs: [a.ref, b.ref], eval: ev };
+    updateBar();
+  }
+  function pickBest(cands, refC, refFrac, bbox) {
+    if (!cands.length) return null;
+    if (refC) {
+      let exact = null, bd = 0.05;
+      for (const x of cands) { const d = dist3(x.c, refC); if (d < bd) { bd = d; exact = x; } }
+      if (exact) return exact;
     }
-    last = { text };
+    if (refFrac && bbox) {
+      let best = null, bf = Infinity, bd = Infinity;
+      for (const x of cands) {
+        const f = fracOf(x.c, bbox);
+        const df = f ? dist3(f, refFrac) : Infinity;
+        const dc = refC ? dist3(x.c, refC) : 0;
+        if (df < bf - 1e-6 || (Math.abs(df - bf) <= 1e-6 && dc < bd)) { bf = df; bd = dc; best = x; }
+      }
+      if (best) return best;
+    }
+    if (refC) {
+      let best = null, bd = Infinity;
+      for (const x of cands) { const d = dist3(x.c, refC); if (d < bd) { bd = d; best = x; } }
+      return best;
+    }
+    return cands[0];
+  }
+  function resolveRef(ref) {
+    if (!ref || !ref.id) return null;
+    const r = App.results.get(ref.id), found = Model.find(App.doc, ref.id);
+    if (!r || !r.data || !found) return null;
+    const W = Model.worldMatrix(App.doc, ref.id), bbox = r.data.bbox;
+    if (ref.kind === 'face') {
+      const cands = [];
+      (r.data.faces || []).forEach((f, idx) => {
+        if (f.t !== 'PLANE' || !f.n) return;
+        if (V3(f.n).dot(V3(ref.n)) >= 0.999) cands.push({ f, idx, c: f.c });
+      });
+      const best = pickBest(cands, ref.c, ref.frac, bbox);
+      if (!best) return null;
+      const f = best.f, fn = V3(f.n).normalize(), fc = V3(f.c);
+      let lp = ref.lp ? V3(ref.lp) : fc.clone();
+      lp = lp.clone().addScaledVector(fn, fc.clone().sub(lp).dot(fn));
+      if (bbox && (lp.x < bbox[0] - 1 || lp.x > bbox[3] + 1 || lp.y < bbox[1] - 1 || lp.y > bbox[4] + 1 || lp.z < bbox[2] - 1 || lp.z > bbox[5] + 1)) lp = fc.clone();
+      return { kind: 'face', id: ref.id, faceIdx: best.idx, c: fc.clone().applyMatrix4(W), n: fn.clone().transformDirection(W).normalize(), area: Viewer.faceArea(ref.id, best.idx), hitP: lp.applyMatrix4(W), f };
+    }
+    if (ref.kind === 'round') {
+      const cands = [];
+      (r.data.faces || []).forEach((f, idx) => {
+        if (f.t !== ref.t || !f.r) return;
+        if (ref.t === 'CYLINDRE' && ref.axis && f.axis) {
+          const d = Math.abs(V3(f.axis.slice(3)).normalize().dot(V3(ref.axis.slice(3)).normalize()));
+          if (d < 0.995) return;
+        }
+        cands.push({ f, idx, c: f.c });
+      });
+      const best = pickBest(cands, ref.c, ref.frac, bbox);
+      if (!best) return null;
+      const f = best.f;
+      let ln = null;
+      if (f.t === 'CYLINDRE' && f.axis) {
+        const ax = V3(f.axis.slice(3)).normalize(), o = V3(f.axis.slice(0, 3)), dc = V3(f.c).sub(o);
+        const rad = dc.sub(ax.clone().multiplyScalar(dc.dot(ax)));
+        if (rad.lengthSq() > 1e-8) ln = rad.normalize();
+      } else if (f.t === 'SPHERE') {
+        const rad = V3(f.c).sub(V3(f.sc || [0, 0, 0]));
+        if (rad.lengthSq() > 1e-8) ln = rad.normalize();
+      }
+      if (!ln && ref.ln) ln = V3(ref.ln).normalize();
+      else if (ln && ref.ln && ln.dot(V3(ref.ln)) < 0) ln.negate();
+      return { kind: 'round', id: ref.id, faceIdx: best.idx, f, area: Viewer.faceArea(ref.id, best.idx), hitP: V3(f.c).applyMatrix4(W), normal: ln ? ln.transformDirection(W).normalize() : null };
+    }
+    if (ref.kind === 'circle') {
+      const cands = [];
+      (r.data.edges || []).forEach((e, idx) => {
+        if (e.t !== 'CIRCLE' || !e.r || !e.c) return;
+        if (ref.n && e.n && Math.abs(V3(e.n).normalize().dot(V3(ref.n).normalize())) < 0.995) return;
+        cands.push({ e, idx, c: e.c });
+      });
+      const best = pickBest(cands, ref.c, ref.frac, bbox);
+      if (!best) return null;
+      return { kind: 'circle', id: ref.id, edgeIdx: best.idx, edge: best.e, c: V3(best.e.c).applyMatrix4(W), W };
+    }
+    if (ref.kind === 'pt') {
+      if (ref.edge) {
+        const re = ref.edge;
+        const refDir = re.t === 'LINE' ? V3(re.b).sub(V3(re.a)).normalize() : null;
+        const cands = [];
+        (r.data.edges || []).forEach((e, idx) => {
+          if (e.t !== re.t) return;
+          if (e.t === 'LINE' && refDir) {
+            const d = V3(e.b).sub(V3(e.a)); if (d.lengthSq() < 1e-10) return;
+            if (Math.abs(d.normalize().dot(refDir)) < 0.995) return;
+          } else if (e.t === 'CIRCLE' && re.n && e.n) {
+            if (Math.abs(V3(e.n).normalize().dot(V3(re.n).normalize())) < 0.995) return;
+          }
+          cands.push({ e, idx, c: e.m });
+        });
+        const best = pickBest(cands, re.m, re.mFrac, bbox);
+        if (!best) return null;
+        const e = best.e;
+        let lp = null;
+        if (re.which === 'm') lp = V3(e.m);
+        else if (re.which === 'c' && e.c) lp = V3(e.c);
+        else if (re.which === 'a' || re.which === 'b') {
+          const orig = V3(re[re.which]);
+          if (e.t === 'LINE') {
+            const d = V3(e.b).sub(V3(e.a));
+            const s = d.dot(V3(re.b).sub(V3(re.a))) >= 0;
+            lp = V3(re.which === 'a' ? (s ? e.a : e.b) : (s ? e.b : e.a));
+          } else {
+            lp = V3(e.a).distanceToSquared(orig) <= V3(e.b).distanceToSquared(orig) ? V3(e.a) : V3(e.b);
+          }
+        } else if (e.t === 'LINE') {
+          const a = V3(e.a), b = V3(e.b), ab = b.clone().sub(a), l2 = ab.lengthSq();
+          const t = l2 > 1e-10 ? clamp(V3(ref.lp).sub(a).dot(ab) / l2, 0, 1) : 0;
+          lp = a.addScaledVector(ab, t);
+        } else {
+          lp = V3(e.m);
+        }
+        return { kind: 'pt', id: ref.id, p: lp.applyMatrix4(W) };
+      }
+      let lp = V3(ref.lp);
+      if (ref.face) {
+        const cands = [];
+        (r.data.faces || []).forEach((f, idx) => {
+          if (f.t !== 'PLANE' || !f.n) return;
+          if (V3(f.n).dot(V3(ref.face.n)) >= 0.999) cands.push({ f, idx, c: f.c });
+        });
+        const best = pickBest(cands, ref.face.c, ref.face.frac, bbox);
+        if (!best) return null;
+        const fn = V3(best.f.n).normalize(), fc = V3(best.f.c);
+        lp = lp.clone().addScaledVector(fn, fc.clone().sub(lp).dot(fn));
+        if (bbox && (lp.x < bbox[0] - 1 || lp.x > bbox[3] + 1 || lp.y < bbox[1] - 1 || lp.y > bbox[4] + 1 || lp.z < bbox[2] - 1 || lp.z > bbox[5] + 1)) lp = fc.clone();
+      }
+      return { kind: 'pt', id: ref.id, p: lp.applyMatrix4(W) };
+    }
+    return null;
+  }
+  function solveMeasure(m) {
+    const refs = m.refs || [];
+    if (!refs.length) return { lost: true, short: 'verloren', text: 'verloren', value: null, unit: m.unit || '', typeLabel: 'Messung', p: m.lastP ? V3(m.lastP) : null, lines: [], dots: [], faces: [], circle: null };
+    const resolved = [];
+    for (const ref of refs) {
+      const x = resolveRef(ref);
+      if (!x) return { lost: true, short: 'verloren', text: 'verloren', value: null, unit: m.unit || '', typeLabel: 'Messung', p: m.lastP ? V3(m.lastP) : null, lines: [], dots: [], faces: [], circle: null };
+      resolved.push(x);
+    }
+    return evalEntities(m.kind, resolved);
+  }
+  function evalOf(m) {
+    if (live.has(m.id)) return live.get(m.id);
+    if (m.lost) return { lost: true, short: 'verloren', text: 'verloren', value: null, unit: m.unit || '', typeLabel: 'Messung', p: m.lastP ? V3(m.lastP) : null, lines: [], dots: [], faces: [], circle: null };
+    return { lost: false, short: m.short || '', text: m.text || '', value: m.value, unit: m.unit || '', typeLabel: 'Messung', p: m.lastP ? V3(m.lastP) : null, lines: [], dots: [], faces: [], circle: null };
+  }
+  function defaultName(cur) {
+    const n = list().length + 1;
+    const t = cur.eval.typeLabel || 'Messung';
+    if (t.startsWith('Abstand')) return `Abstand ${n}`;
+    if (t.startsWith('Winkel')) return `Winkel ${n}`;
+    if (t === 'Fläche') return `Fläche ${n}`;
+    if (t === 'Kreiskante') return `Durchmesser ${n}`;
+    return `${t} ${n}`;
+  }
+  function keep() {
+    if (!current) return null;
+    const m = {
+      id: uid('ms'), name: defaultName(current), kind: current.kind, refs: deepClone(current.refs),
+      value: current.eval.value, unit: current.eval.unit, short: current.eval.short, text: current.eval.text,
+      lost: false, lastP: current.eval.p ? r6(current.eval.p.toArray()) : null,
+    };
+    live.set(m.id, current.eval);
+    App.change(`Messung „${m.name}“ behalten`, (doc) => { (doc.measures = doc.measures || []).push(m); });
+    pts = []; current = null; last = null; clearVis(); updateBar(); drawSaved();
+    UI.toast(`Messung „${m.name}“ behalten.`, { icon: 'check', ms: 2000 });
+    return m;
+  }
+  function relink() {
+    const ms = list(), seen = new Set();
+    for (const m of ms) {
+      seen.add(m.id);
+      const ev = solveMeasure(m);
+      live.set(m.id, ev);
+      m.lost = !!ev.lost;
+      if (!ev.lost) {
+        m.value = ev.value; m.unit = ev.unit; m.short = ev.short; m.text = ev.text;
+        if (ev.p) m.lastP = r6(ev.p.toArray());
+      }
+    }
+    for (const k of [...live.keys()]) if (!seen.has(k)) live.delete(k);
+    drawSaved();
+    Panels.renderLeft();
+    if (sel) Panels.renderRight();
+  }
+  function setHidden(id, hidden) {
+    App.change(hidden ? 'Messung ausgeblendet' : 'Messung eingeblendet', (doc) => {
+      const m = find(id, doc); if (!m) return false;
+      if (hidden) m.hidden = true; else delete m.hidden;
+    });
+  }
+  function rename(id, name) {
+    const v = String(name || '').trim(); if (!v) return;
+    App.change('Messung umbenannt', (doc) => { const m = find(id, doc); if (!m) return false; m.name = v; });
+  }
+  function remove(id) {
+    App.change('Messung gelöscht', (doc) => { doc.measures = list(doc).filter((x) => x.id !== id); });
+    if (sel === id) select(null);
+  }
+  function select(id) {
+    sel = id || null;
+    if (sel) {
+      App.clearSelection();
+      if (typeof Datums !== 'undefined' && Datums.selected) Datums.select(null);
+    }
+    drawSaved(); Panels.renderLeft(); Panels.renderRight();
+  }
+  function clearPins() {
+    const g = Viewer.groups.measures;
+    if (g) for (const o of pinObjs) { g.remove(o); Viewer.disposeFat(o); }
+    pinObjs = [];
+    for (const x of pinEls) x.el.remove();
+    pinEls = [];
+  }
+  function drawSaved() {
+    clearPins();
+    const g = Viewer.groups.measures;
+    if (!g || App.mode !== 'model' || (typeof Sketch !== 'undefined' && Sketch.active)) { Viewer.requestRender(); return; }
+    for (const m of list()) {
+      if (m.hidden) continue;
+      const ev = evalOf(m);
+      const col = ev.lost ? '#e03131' : m.id === sel ? '#f08c00' : '#0ca678';
+      if (!ev.lost) {
+        for (const [a, b] of ev.lines || []) {
+          const l = Viewer.makeFat([a.x, a.y, a.z, b.x, b.y, b.z], col, m.id === sel ? 3.5 : 2.5, { depthTest: false, dashed: true, dashSize: 2, gapSize: 1.2, order: 35 });
+          g.add(l); pinObjs.push(l);
+        }
+        for (const q of ev.dots || []) {
+          const d = Viewer.makeFat([q.x, q.y, q.z, q.x, q.y, q.z + 0.001], col, m.id === sel ? 9 : 7, { depthTest: false, order: 36 });
+          g.add(d); pinObjs.push(d);
+        }
+        if (ev.circle) {
+          const n = Viewer.nodes.get(ev.circle.id);
+          const eg = n && n.data && n.data.edgeGroups && n.data.edgeGroups.find((x) => x[2] === ev.circle.edgeIdx);
+          if (eg) {
+            const pos = Viewer.makeFat(n.data.lines.slice(eg[0] * 3, (eg[0] + eg[1]) * 3), col, m.id === sel ? 4 : 3, { depthTest: false, order: 35 });
+            pos.matrixAutoUpdate = false; pos.matrix.copy(ev.circle.W); g.add(pos); pinObjs.push(pos);
+          }
+        }
+        if (m.id === sel) {
+          for (const fc of ev.faces || []) {
+            const fo = Viewer.faceOverlay(fc.id, fc.faceIdx, col, 0.22);
+            if (fo) { g.add(fo); pinObjs.push(fo); }
+          }
+        }
+      }
+      if (ev.p) {
+        const el = h('div', {
+          class: 'dimlabel mpin' + (m.id === sel ? ' sel' : '') + (ev.lost ? ' lost' : ''),
+          dataset: { measure: m.id },
+          'data-tip': ev.lost ? 'Bezug fehlt – klicken für Details' : `${ev.text} · Klick wählt, Doppelklick kopiert`,
+        }, ev.lost ? 'verloren' : ev.short);
+        el.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); });
+        el.addEventListener('click', (e) => { e.stopPropagation(); select(m.id === sel ? null : m.id); });
+        el.addEventListener('dblclick', (e) => { e.stopPropagation(); if (!ev.lost) copyValue(ev.text); });
+        $('#overlay').append(el);
+        pinEls.push({ el, p: ev.p, id: m.id });
+      }
+    }
+    place();
+    Viewer.requestRender();
+  }
+  function treeSection() {
+    const ms = list(); if (!ms.length) return null;
+    const sec = h('div', { class: 'datum-tree measure-tree', id: 'measure-tree', 'data-help': 'measureKeep' }, h('div', { class: 'section-h' }, 'Messungen'));
+    for (const m of ms) {
+      const ev = evalOf(m);
+      const row = h('div', { class: 'tree-row measure-row' + (m.id === sel ? ' sel' : '') + (m.hidden ? ' dim' : '') + (ev.lost ? ' lost' : ''), 'data-measure': m.id });
+      const ic = h('span', { class: 'swatch measure' }); ic.innerHTML = icon('measure');
+      const val = h('span', { class: 'sub mono' + (ev.lost ? ' lost' : '') }, ev.lost ? 'verloren' : ev.short);
+      const acts = h('span', { class: 'm-acts' });
+      const eye = h('button', { type: 'button', class: 'm-eye', 'aria-label': m.hidden ? 'Einblenden' : 'Ausblenden', 'data-tip': m.hidden ? 'Einblenden' : 'Ausblenden' });
+      eye.innerHTML = icon(m.hidden ? 'eyeOff' : 'eye');
+      eye.onclick = (e) => { e.stopPropagation(); setHidden(m.id, !m.hidden); };
+      const del = h('button', { type: 'button', class: 'm-del', 'aria-label': 'Löschen', 'data-tip': 'Löschen' });
+      del.innerHTML = icon('trash');
+      del.onclick = (e) => { e.stopPropagation(); remove(m.id); };
+      acts.append(eye, del);
+      row.append(ic, h('span', { class: 'nm' }, m.name), val, acts);
+      row.onclick = () => select(m.id === sel ? null : m.id);
+      sec.append(row);
+    }
+    return sec;
+  }
+  function renderPanel(body) {
+    const m = find(sel); if (!m) return false;
+    const ev = evalOf(m);
+    const w = h('div', { class: 'props' });
+    const nm = h('input', { id: 'measure-name', value: m.name, 'aria-label': 'Name' });
+    nm.addEventListener('change', () => { const v = nm.value.trim(); if (v) rename(m.id, v); });
+    nm.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') nm.blur(); });
+    w.append(h('div', { class: 'prop-title' }, nm));
+    w.append(h('div', { class: 'mini-list' },
+      h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Art'), h('b', null, ev.typeLabel || 'Messung')),
+      h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Wert'), h('b', { class: 'mono' + (ev.lost ? ' bad' : ''), id: 'measure-val' }, ev.lost ? 'verloren' : ev.text))));
+    if (ev.lost) w.append(h('div', { class: 'err-box' }, 'Ein Bezug dieser Messung fehlt oder wurde gelöscht – die Messung kann nicht mehr berechnet werden.'));
+    else w.append(h('div', { class: 'hint-box' }, 'Die Messung aktualisiert sich von selbst, sobald sich das Modell ändert.'));
+    const row = h('div', { class: 'btn-row' });
+    const bc = h('button', { type: 'button', class: 'btn primary', id: 'measure-copy', disabled: ev.lost }); bc.innerHTML = icon('copy') + 'Wert kopieren'; bc.onclick = () => copyValue(ev.text);
+    const bh = h('button', { type: 'button', class: 'btn', id: 'measure-hide' }); bh.innerHTML = icon(m.hidden ? 'eye' : 'eyeOff') + (m.hidden ? 'Einblenden' : 'Ausblenden'); bh.onclick = () => setHidden(m.id, !m.hidden);
+    const bd = h('button', { type: 'button', class: 'btn ghost', id: 'measure-del' }); bd.innerHTML = icon('trash') + 'Löschen'; bd.onclick = () => remove(m.id);
+    row.append(bc, bh, bd); w.append(row);
+    body.append(w);
+    return true;
   }
   let lastLabel = null;
   function showLabel(text, p) {
@@ -126,7 +530,15 @@ const Measure = (() => {
     el.addEventListener('click', (e) => { e.stopPropagation(); copyValue(text); });
     lastLabel = { el, p }; place();
   }
-  function place() { for (const e of els) { if (!lastLabel) continue; const s = Viewer.toScreen(lastLabel.p); lastLabel.el.style.left = s.x + 'px'; lastLabel.el.style.top = s.y - 22 + 'px'; } }
+  function place() {
+    for (const e of els) { if (!lastLabel) continue; const s = Viewer.toScreen(lastLabel.p); lastLabel.el.style.left = s.x + 'px'; lastLabel.el.style.top = s.y - 22 + 'px'; }
+    for (const x of pinEls) {
+      if (!x.p) continue;
+      const s = Viewer.toScreen(x.p);
+      x.el.style.display = s.behind ? 'none' : '';
+      x.el.style.left = s.x + 'px'; x.el.style.top = s.y - 16 + 'px';
+    }
+  }
   // erste Zahl eines Messwerts in die Zwischenablage (BE-35)
   let copied = null;
   function firstNumber(text) { const m = String(text).match(/-?\d+(?:[.,]\d+)?/); return m ? m[0] : null; }
@@ -141,7 +553,19 @@ const Measure = (() => {
   }
   function copyValue(text) { const n = firstNumber(text); if (n) return copyText(n, 'Wert'); return false; }
   function init() {
-    App.on('selection', () => { if (App.sel.length !== 2) clearDist(); });
+    App.on('selection', () => {
+      if (App.sel.length !== 2) clearDist();
+      if (sel && App.sel.length) { sel = null; drawSaved(); }
+    });
+    App.on('results', relink);
+    App.on('remeshed', relink);
+    App.on('doc', () => {
+      if (sel && !find(sel)) sel = null;
+      const ids = new Set(list().map((m) => m.id));
+      for (const k of [...live.keys()]) if (!ids.has(k)) live.delete(k);
+      drawSaved();
+    });
+    App.on('mode', () => { if (App.mode !== 'model' && on) stop(); drawSaved(); });
     let d0 = null;
     Viewer.canvas.addEventListener('pointerdown', (e) => { if (on) d0 = { x: e.clientX, y: e.clientY }; }, true);
     Viewer.canvas.addEventListener('pointerup', (e) => { if (on && d0 && Math.hypot(e.clientX - d0.x, e.clientY - d0.y) < 5) onDown(e); d0 = null; });
@@ -199,6 +623,10 @@ const Measure = (() => {
     }
     return r;
   }
-  return { showCoords, get coords() { return coordsNow; }, copyText, copyValue, get copied() { return copied; }, minDistance, clearDist, init, toggle, start, stop, get active() { return on; }, get result() { return last ? last.text : (els[0] ? els[0].textContent : null); } };
+  return {
+    showCoords, get coords() { return coordsNow; }, copyText, copyValue, get copied() { return copied; }, minDistance, clearDist, init, toggle, start, stop,
+    get active() { return on; }, get result() { return last ? last.text : (els[0] ? els[0].textContent : null); },
+    list, find, keep, relink, setHidden, rename, remove, select, drawSaved, treeSection, renderPanel, get selected() { return sel; },
+  };
 })();
 

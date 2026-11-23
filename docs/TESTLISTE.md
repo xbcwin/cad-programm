@@ -1501,6 +1501,20 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [ ] **Kürzel im Alltag prüfen**
   Bitte von Hand kurz prüfen, ob die zwei Stufen-Karten und die Tastenkürzel-Liste auf schmalem Bildschirm sauber umbrechen.
 
+## Kosmetisches Gewinde (Auto [A-009])
+
+- [x] **Zylinder Ø 6 als M6 × 10 markieren**
+  Schritte: 1. Zylinder Ø 6 × 20 anlegen, Mantelfläche wählen, „Gewinde markieren“. 2. Vorgeschlagene Größe M6 und Länge 10 bestätigen.
+  Erwartet: Kein neuer Körper, Markierung im Projekt gespeichert, gestreiftes 3D-Overlay sichtbar.
+- [x] **Stückliste, Technische Zeichnung & Rückgängig**
+  Schritte: 1. Stückliste öffnen und Zeichnung ansehen. 2. Rückgängig und Wiederholen. 3. Projekt speichern/laden.
+  Erwartet: Gewinde „M6 × 10“ steht in Stückliste und Zeichnung (mit dünnen Gewindelinien); Rückgängig entfernt Markierung und Overlay; Speichern/Laden erhält sie.
+- [x] **Echt machen (Außen- und Innengewinde)**
+  Schritte: 1. Im Panel „Echt machen“ klicken (Zylinder außen sowie Kernloch Ø 5 innen).
+  Erwartet: Wandelt in echtes 3D-Gewinde (`threadRod` bzw. `threadHole` als Schnitt) ohne Fehler um.
+- [ ] **Optik der Gewindestreifen prüfen**
+  Bitte von Hand kurz prüfen, ob die schrägen Gewindestreifen bei Außen- (Messing) und Innengewinde (Blau) sowie in der technischen Zeichnung (3/4-Kreis und Linien) gut lesbar sind.
+
 ## Hochziehen als dünne Wand (Auto [A-007])
 
 - [x] **Offener L-Linienzug**: Skizze mit offenem L-Linienzug (30 + 20 = 50 mm) beenden → Dialog bietet „Dünne Wand“ und „Entlang Pfad“; mit Wand 2 mm, Höhe 10 mm, mittig entsteht ein Körper mit 1000 mm³ und exakten Maßen.
@@ -1514,6 +1528,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] `.obj` verweist auf die `.mtl`-Datei, enthält `o <Name>` je Körper, Normalen und unterschiedliche `Kd`-Farben in der `.mtl`.
 - [x] `.glb` beginnt mit `glTF`, Version 2, hat gültige `JSON`- und `BIN`-Chunks, einen Knoten/Mesh mit Namen je Körper sowie Studio-Look-Materialien (Metall, Rauheit, Klarlack, lineare Farbe).
 - [ ] Exportiertes `.obj`/`.mtl` und `.glb` von Hand in Blender oder einer 3D-Vorschau öffnen und Ausrichtung, Größe (mm bzw. m) und Oberflächen-Aussehen prüfen.
+
+## Messungen bleiben stehen (Auto [A-012])
+
+- [x] **Messung behalten**: Abstand zwischen zwei parallelen Flächen messen → Knopf „Messung behalten“ in `#measure-bar` legt die Messung unter „Messungen“ im Verlauf (`#measure-tree`) und als Schild (`.dimlabel.mpin`) im Bild ab.
+- [x] **Automatisch neu berechnen**: Quader erhöhen → gespeicherter Abstand aktualisiert sich von `15 mm` auf `30 mm` im Verlauf und im Bild.
+- [x] **Ein-/ausblenden, umbenennen, löschen & verloren**: Auge blendet Schild und 3D-Linien aus/ein; Umbennen im rechten Panel wirkt sofort; Löschen eines bezogenen Körpers zeigt „verloren“, Rückgängig stellt den Bezug wieder her; Löschen und Rückgängig sowie Hilfetext `measureKeep` funktionieren.
+- [ ] **Von Hand**: Nach Projekt-Speichern und Neuladen (auch mit Punkt–Punkt-, Winkel- und Durchmesser-Messungen) prüfen, ob alle Schilder sauber positioniert bleiben.
 
 ## Fehler melden
 

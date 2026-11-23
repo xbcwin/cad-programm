@@ -782,6 +782,22 @@ body.presenting .workspace{grid-template-columns:0 minmax(0,1fr) 0}
 .kbd-btn:hover{border-color:var(--accent-line)}
 .kbd-btn.custom{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
 .kbd-btn.listening{background:var(--accent);border-color:var(--accent);color:#fff}
+
+/* Messungen bleiben stehen (PF-05) */
+.measurebar{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:16;pointer-events:auto}
+.measurebar .m-cur{max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 8px;font-size:12.5px;color:var(--ink-2)}
+.dimlabel.mpin{background:var(--surface);border:1.5px solid #0ca678;color:var(--ink);pointer-events:auto;cursor:pointer;z-index:4}
+.dimlabel.mpin.sel{border-color:#f08c00;box-shadow:0 0 0 2px color-mix(in srgb, #f08c00 25%, transparent)}
+.dimlabel.mpin.lost{border-color:#e03131;color:#e03131;background:color-mix(in srgb, #e03131 10%, var(--surface))}
+.measure-tree .swatch.measure{display:inline-grid;place-items:center;width:18px;height:18px;color:#0ca678;background:none}
+.measure-tree .swatch.measure svg{width:16px;height:16px}
+.measure-tree .tree-row.lost .swatch.measure{color:#e03131}
+.measure-tree .sub.lost{color:#e03131;font-weight:600}
+.measure-tree .m-acts{display:inline-flex;align-items:center;gap:2px}
+.measure-tree .m-acts button{border:0;background:transparent;color:var(--muted);padding:3px;border-radius:5px;cursor:pointer;display:grid;place-items:center}
+.measure-tree .m-acts button:hover{background:var(--surface-3, rgba(0,0,0,.06));color:var(--ink)}
+.measure-tree .m-acts svg{width:14px;height:14px}
+body.presenting .dimlabel.mpin,body.presenting .measurebar{display:none!important}
 </style>
 <div id="app">
   <header class="topbar">
@@ -1133,6 +1149,7 @@ const IC = {
   antenna: '<path d="M6 5.5a6.5 6.5 0 0 0 0 7M18 5.5a6.5 6.5 0 0 1 0 7" opacity=".5"/><circle cx="12" cy="9" r="3.5" fill="currentColor" opacity=".25"/><circle cx="12" cy="9" r="3.5"/><path d="M12 12.5V21M9 21h6" />',
   standoff: '<path d="M10 3v4h4V3M10 21v-4h4v4" opacity=".5"/><rect x="8" y="3" width="8" height="18" rx="1"/><path d="M8 10h8M8 14h8" />',
   strap: '<path d="M10 7v3M13 7v3" opacity=".5"/><rect x="3" y="7" width="4" height="10" rx="1"/><path d="M7 15h10a4 4 0 0 0 0-8H7M7 10h8V7" />',
+  thread: '<rect x="6" y="3" width="12" height="18" rx="2"/><path d="M6 8l12-2M6 12l12-2M6 16l12-2M6 19l8-1.3"/>',
 };
 function icon(name, extra = '') {
   const body = IC[name] || IC.cube;
@@ -1865,11 +1882,6 @@ const HELP = {
   "hilfe": "Unter Menü → Einstellungen → „Tastenkürzel“ änderst du die Tasten für Werkzeuge, Ansicht, Modell und Dateien. Klick auf ein Kürzel, drück die neue Taste und es wirkt sofort – gespeichert in deinem Browser. Doppelte Tasten meldet Tracery, damit nichts aus Versehen überschrieben wird.",
   "tipp": "Mit „Zurücksetzen“ stellst du jederzeit alle Standard-Tasten wieder her."
  },
- "thinWall": {
-  "tip": "Offene Linien oder Umrisse als dünne Wand hochziehen",
-  "hilfe": "Schaltet „Dünne Wand“ ein: Offene Linien, Bögen und Splines werden mit der eingestellten Wandstärke hochgezogen; geschlossene Umrisse werden zu einem hohlen Rohr-Profil. Mit „Wand-Lage“ wählst du, ob die Wand mittig auf der Linie, nach innen oder nach außen wächst.",
-  "tipp": "Ideal für Gehäuse-Wände, Rippen, Rahmen und Profile – Wandstärke und Lage kannst du auch später rechts jederzeit ändern."
- },
  "blindHole": {
   "tip": "Sackloch mit fester Tiefe und 118°-Bohrspitze",
   "hilfe": "Bohrt ein Loch mit rundem Querschnitt und einer Kegelspitze am Boden (Standard 118° wie ein Spiralbohrer, oder 140° / flach). „Tiefe (Zylinder)“ ist die zylindrische Länge; die Spitze kommt darunter noch dazu.",
@@ -1885,10 +1897,25 @@ const HELP = {
   "hilfe": "Erzeugt eine genormte Zentrierbohrung mit 60°-Senkkegel, kurzer Führungsbohrung und 118°-Bohrspitze am Grund – so wie sie ein Zentrierbohrer auf der Drehbank oder Fräse herstellt.",
   "tipp": "Wähle die Größe (A 1,0 bis A 6,3) passend zum Durchmesser der Welle oder des Werkstücks."
  },
+ "cosmeticThread": {
+  "tip": "Gewinde als schnelle Markierung auf runder Fläche",
+  "hilfe": "Markiert eine runde Zylinderfläche (außen wie ein Bolzen oder innen wie ein Kernloch) mit einem metrischen Gewinde (Größe M2 bis M16 und Länge). Das Gewinde wird farbig gestreift angezeigt, rechnet ohne Zeitverlust und erscheint in der Stückliste sowie normgerecht in der technischen Zeichnung.",
+  "tipp": "Wenn du das Teil 3D-drucken willst, klicke rechts auf „Echt machen“ – dann wird aus der Markierung ein echtes 3D-Gewinde."
+ },
+ "thinWall": {
+  "tip": "Offene Linien oder Umrisse als dünne Wand hochziehen",
+  "hilfe": "Schaltet „Dünne Wand“ ein: Offene Linien, Bögen und Splines werden mit der eingestellten Wandstärke hochgezogen; geschlossene Umrisse werden zu einem hohlen Rohr-Profil. Mit „Wand-Lage“ wählst du, ob die Wand mittig auf der Linie, nach innen oder nach außen wächst.",
+  "tipp": "Ideal für Gehäuse-Wände, Rippen, Rahmen und Profile – Wandstärke und Lage kannst du auch später rechts jederzeit ändern."
+ },
  "exportObjGlb": {
   "tip": "Als OBJ (mit MTL-Farben) oder GLB speichern",
   "hilfe": "OBJ kommt zusammen mit einer MTL-Datei für Farben und Glanz (in Millimetern, ideal für Blender und ältere 3D-Programme). GLB (glTF 2.0 binär) speichert jedes Teil als eigenen Knoten mit Namen samt Werkstoff-Aussehen aus dem Studio-Look (Metall, Rauheit, Klarlack, Durchsichtigkeit).",
   "tipp": "Für Web-Ansichten und schnelle Vorschauen nimm GLB; für klassische Render-Programme OBJ + MTL."
+ },
+ "measureKeep": {
+  "tip": "Messung dauerhaft im Projekt behalten",
+  "hilfe": "Speichert die aktuelle Messung als eigenes Objekt in der Liste „Messungen“ im Verlauf. Ändert sich ein Körper oder Maß, rechnet Tracery den Wert selbstständig neu; fehlt ein Bezug, erscheint „verloren“. Du kannst jede Messung ein- und ausblenden, umbenennen oder löschen.",
+  "tipp": "Klick ein Mess-Schild im Bild an, um seine Art und den vollen Text rechts zu sehen; ein Doppelklick kopiert den Zahlenwert."
  }
 };
 
@@ -1934,6 +1961,21 @@ const KINDS = {
   part: { label: 'Bauteil', params: [] },
 };
 const PRIMITIVE_ORDER = ['box', 'cylinder', 'sphere', 'cone', 'pyramid', 'wedge', 'tube', 'torus', 'prism', 'hemisphere'];
+
+// Metrische ISO-Regelgewinde für kosmetische Gewinde (KP-20)
+const THREAD_SPECS = [
+  { size: 'M2',   d: 2.0,  pitch: 0.4,  core: 1.6  },
+  { size: 'M2.5', d: 2.5,  pitch: 0.45, core: 2.05 },
+  { size: 'M3',   d: 3.0,  pitch: 0.5,  core: 2.5  },
+  { size: 'M4',   d: 4.0,  pitch: 0.7,  core: 3.3  },
+  { size: 'M5',   d: 5.0,  pitch: 0.8,  core: 4.2  },
+  { size: 'M6',   d: 6.0,  pitch: 1.0,  core: 5.0  },
+  { size: 'M8',   d: 8.0,  pitch: 1.25, core: 6.8  },
+  { size: 'M10',  d: 10.0, pitch: 1.5,  core: 8.5  },
+  { size: 'M12',  d: 12.0, pitch: 1.75, core: 10.2 },
+  { size: 'M16',  d: 16.0, pitch: 2.0,  core: 14.0 },
+];
+const THREAD_MAP = Object.fromEntries(THREAD_SPECS.map((t) => [t.size, t]));
 
 const Model = (() => {
   const T0 = () => ({ x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 });
@@ -4611,7 +4653,7 @@ const App = (() => {
       seen.add(n.id);
       if (n.merged) S.merged.set(n.id, n.merged);
       const it = topItem(n.id); if (!it) continue;
-      const info = { matrix: Model.localMatrix(it), role: it.role, color: it.color, look: lookFor(it), opacity: it.opacity ?? null, faceColors: it.faceColors || null, key: n.key };
+      const info = { matrix: Model.localMatrix(it), role: it.role, color: it.color, look: lookFor(it), opacity: it.opacity ?? null, faceColors: it.faceColors || null, threads: it.threads || null, key: n.key };
       if (n.empty) { Viewer.removeNode(n.id); S.results.delete(n.id); continue; }
       if (n.same && S.results.has(n.id)) { Viewer.updateNode(n.id, info); continue; }
       Viewer.setNode(n.id, n, info);
@@ -4686,7 +4728,7 @@ const App = (() => {
   function replaceMesh(id, key, payload) {
     const it = topItem(id); const r = S.results.get(id);
     if (!it || !r || r.key !== key) return false;
-    Viewer.setNode(id, payload, { matrix: Model.localMatrix(it), role: it.role, color: it.color, look: lookFor(it), opacity: it.opacity ?? null, faceColors: it.faceColors || null, key });
+    Viewer.setNode(id, payload, { matrix: Model.localMatrix(it), role: it.role, color: it.color, look: lookFor(it), opacity: it.opacity ?? null, faceColors: it.faceColors || null, threads: it.threads || null, key });
     r.data = payload; applyView(); refreshSelectionVisuals(); ev.emit('remeshed', id);
     return true;
   }
@@ -4942,7 +4984,7 @@ const Viewer = (() => {
     camera = new THREE.PerspectiveCamera(32, 1, 0.5, 30000);
     camera.up.set(0, 0, 1);
     camera.position.set(170, -250, 190);
-    for (const k of ['ground', 'origin', 'datums', 'nodes', 'compare', 'ghosts', 'overlay', 'handles', 'sketch']) { groups[k] = new THREE.Group(); scene.add(groups[k]); }
+    for (const k of ['ground', 'origin', 'datums', 'nodes', 'compare', 'ghosts', 'overlay', 'measures', 'handles', 'sketch']) { groups[k] = new THREE.Group(); scene.add(groups[k]); }
     orthoCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 60000);
     lights.hemi = new THREE.HemisphereLight(0xffffff, 0x6f6252, 1.55); scene.add(lights.hemi);
     const key = new THREE.DirectionalLight(0xffffff, 2.1); key.position.set(0.55, -0.8, 1.25); scene.add(key); scene.add(key.target); lights.key = key;
@@ -5153,6 +5195,7 @@ const Viewer = (() => {
     n.mesh.material = makeMaterial(n.role, n.color, n.look);
     n.mesh.castShadow = n.mesh.receiveShadow = n.role !== 'hole';
     applyFaceColors(n);
+    applyThreads(n);
     if (n.ctxDim) {   // anderes Bauteil, während eines bearbeitet wird
       n.mesh.material.transparent = true; n.mesh.material.opacity = n.role === 'hole' ? 0.06 : 0.16; n.mesh.material.depthWrite = false;
       if (n.edges) { n.edges.material.dispose(); n.edges.material = new THREE.LineBasicMaterial({ color: new THREE.Color(theme.edge), transparent: true, opacity: 0.18 }); }
@@ -5216,6 +5259,144 @@ const Viewer = (() => {
     g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
     m.vertexColors = true; m.color.set('#ffffff'); m.needsUpdate = true;
   }
+  // Kosmetisches Gewinde (KP-20): gestreiftes Zylinder-Overlay direkt auf der runden Fläche, ohne Kern-Neubau
+  const threadTextures = {};
+  function getThreadTexture(kind) {
+    const k = kind === 'int' ? 'int' : 'ext';
+    if (threadTextures[k]) return threadTextures[k];
+    const c = document.createElement('canvas'); c.width = 64; c.height = 64;
+    const ctx = c.getContext('2d');
+    const cLight = k === 'int' ? '#57b5cc' : '#e6a83a';
+    const cDark = k === 'int' ? '#1c4754' : '#734a10';
+    ctx.fillStyle = cLight; ctx.fillRect(0, 0, 64, 64);
+    ctx.strokeStyle = cDark; ctx.lineWidth = 22;
+    for (let y = -64; y <= 128; y += 64) {
+      ctx.beginPath(); ctx.moveTo(-8, y + 6); ctx.lineTo(72, y - 6); ctx.stroke();
+    }
+    ctx.strokeStyle = k === 'int' ? 'rgba(255,255,255,0.22)' : 'rgba(255,244,214,0.26)';
+    ctx.lineWidth = 6;
+    for (let y = -64; y <= 128; y += 64) {
+      ctx.beginPath(); ctx.moveTo(-8, y + 32); ctx.lineTo(72, y + 20); ctx.stroke();
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    threadTextures[k] = tex;
+    return tex;
+  }
+  function cylinderGeomOf(data, faceIdx) {
+    const f = data && data.faces && data.faces[faceIdx];
+    if (!f || f.t !== 'CYLINDRE' || !Array.isArray(f.axis) || f.axis.length < 6 || !(f.r > 0)) return null;
+    const o = [f.axis[0], f.axis[1], f.axis[2]];
+    let d = [f.axis[3], f.axis[4], f.axis[5]];
+    const dl = Math.hypot(d[0], d[1], d[2]) || 1;
+    d = [d[0] / dl, d[1] / dl, d[2] / dl];
+    const ax = Math.abs(d[2]) >= Math.abs(d[0]) && Math.abs(d[2]) >= Math.abs(d[1]) ? 2 : Math.abs(d[1]) >= Math.abs(d[0]) ? 1 : 0;
+    if (d[ax] < 0) d = [-d[0], -d[1], -d[2]];
+    const g = (data.faceGroups || []).find((x) => x[2] === faceIdx);
+    let t0 = Infinity, t1 = -Infinity, dotSum = 0;
+    if (g && data.vertices && data.normals && data.triangles) {
+      const P = data.vertices, N = data.normals, T = data.triangles;
+      for (let i = g[0]; i < g[0] + g[1]; i++) {
+        const vi = T[i] * 3;
+        const vx = P[vi] - o[0], vy = P[vi + 1] - o[1], vz = P[vi + 2] - o[2];
+        const t = vx * d[0] + vy * d[1] + vz * d[2];
+        if (t < t0) t0 = t; if (t > t1) t1 = t;
+        const rx = vx - d[0] * t, ry = vy - d[1] * t, rz = vz - d[2] * t;
+        dotSum += N[vi] * rx + N[vi + 1] * ry + N[vi + 2] * rz;
+      }
+    }
+    if (!isFinite(t0) || !isFinite(t1)) { t0 = 0; t1 = 10; }
+    return { o, d, r: f.r, c: f.c || o.slice(), t0, t1, faceLen: Math.max(0.1, t1 - t0), kind: dotSum >= 0 ? 'ext' : 'int' };
+  }
+  function cylinderFaceInfo(id, faceIdx) {
+    const n = nodes.get(id);
+    return n ? cylinderGeomOf(n.data, faceIdx) : null;
+  }
+  function threadFaceIndex(n, th) {
+    if (!n || !n.data || !n.data.faces || !th) return -1;
+    if (!Array.isArray(th.axis) || th.axis.length < 6) return faceIndexOf(n, th);
+    const to = th.axis.slice(0, 3), td = th.axis.slice(3, 6);
+    const tdl = Math.hypot(td[0], td[1], td[2]) || 1;
+    const tdn = [td[0] / tdl, td[1] / tdl, td[2] / tdl];
+    const rTol = Math.max(0.5, (th.r || 1) * 0.25);
+    const aTol = Math.max(0.5, (th.r || 1) * 0.2);
+    let best = -1, bd = Infinity;
+    n.data.faces.forEach((f, i) => {
+      if (!f || f.t !== 'CYLINDRE' || !Array.isArray(f.axis) || f.axis.length < 6) return;
+      if (Math.abs((f.r || 0) - (th.r || 0)) > rTol) return;
+      const fd = [f.axis[3], f.axis[4], f.axis[5]];
+      const fdl = Math.hypot(fd[0], fd[1], fd[2]) || 1;
+      const fdn = [fd[0] / fdl, fd[1] / fdl, fd[2] / fdl];
+      if (Math.abs(fdn[0] * tdn[0] + fdn[1] * tdn[1] + fdn[2] * tdn[2]) < 0.99) return;
+      const dx = f.axis[0] - to[0], dy = f.axis[1] - to[1], dz = f.axis[2] - to[2];
+      const proj = dx * tdn[0] + dy * tdn[1] + dz * tdn[2];
+      const perp = Math.hypot(dx - proj * tdn[0], dy - proj * tdn[1], dz - proj * tdn[2]);
+      if (perp > aTol) return;
+      const dc = f.c && th.c ? Math.hypot(f.c[0] - th.c[0], f.c[1] - th.c[1], f.c[2] - th.c[2]) : perp;
+      if (dc < bd) { bd = dc; best = i; }
+    });
+    return best >= 0 ? best : faceIndexOf(n, th);
+  }
+  function disposeThreads(n) {
+    if (!n || !n.threadGroup) return;
+    n.obj.remove(n.threadGroup);
+    n.threadGroup.traverse((o) => {
+      if (o.geometry) o.geometry.dispose();
+      if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); }
+    });
+    n.threadGroup = null;
+  }
+  function applyThreads(n) {
+    disposeThreads(n);
+    if (!n.threads || !n.threads.length || n.role === 'hole') return;
+    const tg = new THREE.Group();
+    tg.userData.threadGroup = true;
+    const clip = vis.clip ? [vis.clip] : null;
+    const op = n.ctxDim ? 0.14 : (LOOK.display === 'wire' ? 0.25 : 0.82);
+    for (const th of n.threads) {
+      const fi = threadFaceIndex(n, th);
+      const g = fi >= 0 ? cylinderGeomOf(n.data, fi) : (Array.isArray(th.axis) && th.axis.length >= 6 ? {
+        o: th.axis.slice(0, 3), d: th.axis.slice(3, 6), r: th.r || 3, c: th.c || [0, 0, 0],
+        t0: th.t0 ?? 0, t1: th.t1 ?? 10, faceLen: Math.max(0.1, (th.t1 ?? 10) - (th.t0 ?? 0)), kind: th.kind || 'ext',
+      } : null);
+      if (!g) continue;
+      const kind = th.kind || g.kind || 'ext';
+      const L = clamp(Number(th.length) || g.faceLen, 0.2, g.faceLen);
+      const s0 = th.from === 'bottom' ? g.t0 : g.t1 - L;
+      const s1 = th.from === 'bottom' ? g.t0 + L : g.t1;
+      const rVis = kind === 'int' ? Math.max(0.05, g.r - Math.max(0.02, g.r * 0.004)) : g.r + Math.max(0.02, g.r * 0.004);
+      const spec = typeof THREAD_MAP !== 'undefined' ? THREAD_MAP[th.size] : null;
+      const pitch = spec ? spec.pitch : 1;
+      const tex = getThreadTexture(kind).clone();
+      tex.needsUpdate = true;
+      tex.repeat.set(1, Math.max(1, Math.min(80, L / pitch)));
+      const geo = new THREE.CylinderGeometry(rVis, rVis, Math.max(0.1, s1 - s0), 40, 1, true);
+      const mat = new THREE.MeshStandardMaterial({
+        map: tex, transparent: true, opacity: op, roughness: 0.45, metalness: 0.25,
+        side: THREE.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1, clippingPlanes: clip,
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.userData.cosmeticThread = th.id;
+      mesh.renderOrder = 2;
+      const dVec = new THREE.Vector3(...g.d).normalize();
+      mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dVec);
+      mesh.position.set(...g.o).addScaledVector(dVec, (s0 + s1) / 2);
+      // Feine Ringlinien an Anfang und Ende der Gewinde-Markierung
+      const rRing = rVis * (kind === 'int' ? 0.998 : 1.002);
+      const rPts = [];
+      for (let k = 0; k < 40; k++) { const a = (k / 40) * Math.PI * 2; rPts.push(Math.cos(a) * rRing, 0, Math.sin(a) * rRing); }
+      const halfL = Math.max(0.1, s1 - s0) / 2;
+      for (const yOff of [-halfL, halfL]) {
+        const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.Float32BufferAttribute(rPts, 3));
+        const rm = new THREE.LineBasicMaterial({ color: new THREE.Color(kind === 'int' ? '#1c4754' : '#6e4710'), transparent: true, opacity: n.ctxDim ? 0.18 : 0.75, clippingPlanes: clip });
+        const loop = new THREE.LineLoop(rg, rm); loop.position.y = yOff; loop.renderOrder = 3;
+        mesh.add(loop);
+      }
+      tg.add(mesh);
+    }
+    if (tg.children.length) { n.threadGroup = tg; n.obj.add(tg); }
+  }
   function restyleAll() { for (const n of nodes.values()) styleNode(n); }
   function setClip(plane) { vis.clip = plane || null; restyleAll(); listeners.emit('viewmode'); }
   function setXray(on) { vis.xray = !!on; restyleAll(); listeners.emit('viewmode'); }
@@ -5250,7 +5431,7 @@ const Viewer = (() => {
     obj.userData.nodeId = id;
     groups.nodes.add(obj);
     const old = nodes.get(id);
-    const n = { id, obj, mesh, edges, data, role: info.role, color: info.color, look: info.look || null, opacity: info.opacity ?? null, faceColors: info.faceColors || null, selected: false, hover: false, key: info.key, base: info.matrix.clone(), off: old && old.off ? old.off : null };
+    const n = { id, obj, mesh, edges, data, role: info.role, color: info.color, look: info.look || null, opacity: info.opacity ?? null, faceColors: info.faceColors || null, threads: info.threads || null, selected: false, hover: false, key: info.key, base: info.matrix.clone(), off: old && old.off ? old.off : null };
     placeNode(n);
     nodes.set(id, n); styleNode(n);
     fitShadowSoon();
@@ -5266,6 +5447,7 @@ const Viewer = (() => {
     if (info.look !== undefined && JSON.stringify(info.look) !== JSON.stringify(n.look)) { n.look = info.look; restyle = true; }
     if (info.opacity !== undefined && info.opacity !== n.opacity) { n.opacity = info.opacity; restyle = true; }
     if (info.faceColors !== undefined && JSON.stringify(info.faceColors) !== JSON.stringify(n.faceColors)) { n.faceColors = info.faceColors; restyle = true; }
+    if (info.threads !== undefined && JSON.stringify(info.threads) !== JSON.stringify(n.threads)) { n.threads = info.threads; restyle = true; }
     if (info.matrix) fitShadowSoon();
     if (info.selected !== undefined && info.selected !== n.selected) { n.selected = info.selected; restyle = true; }
     if (info.hover !== undefined && info.hover !== n.hover) { n.hover = info.hover; restyle = true; }
@@ -5277,6 +5459,7 @@ const Viewer = (() => {
   }
   function removeNode(id, keepMap) {
     const n = nodes.get(id); if (!n) return;
+    disposeThreads(n);
     groups.nodes.remove(n.obj);
     n.mesh.geometry.dispose(); n.mesh.material.dispose(); n.edges.geometry.dispose(); n.edges.material.dispose();
     if (!keepMap) { nodes.delete(id); fitShadowSoon(); }
@@ -5830,7 +6013,7 @@ const Viewer = (() => {
   // Bild in beliebiger Größe: ohne Raster, Achsen, Ebenen und Griffe; Hintergrund durchsichtig oder hell
   function renderImage(w, hgt, opts = {}) {
     const old = renderer.getSize(new THREE.Vector2()), oldPR = renderer.getPixelRatio();
-    const hide = [gridMinor, gridMajor, groups.origin, groups.datums, groups.handles, groups.overlay, groups.sketch].filter(Boolean), was = hide.map((o) => o.visible);
+    const hide = [gridMinor, gridMajor, groups.origin, groups.datums, groups.handles, groups.overlay, groups.measures, groups.sketch].filter(Boolean), was = hide.map((o) => o.visible);
     hide.forEach((o) => { o.visible = false; });
     const c = cam(), oldAspect = camera.aspect;
     renderer.setPixelRatio(1); renderer.setSize(w, hgt, false);
@@ -5857,7 +6040,7 @@ const Viewer = (() => {
   }
 
   return {
-    viewBack, get viewHistory() { return camHist.length; }, useButtons, setMouseStyle, get mouseStyle() { return mouseStyle; }, get leftOrbits() { return !!(controls && controls.mouseButtons.LEFT === THREE.MOUSE.ROTATE); }, setLook, lookOf, get look() { return { ...LOOK }; }, fitShadow, renderImage, lookAtFace, faceIndexOf: (id, fc) => { const n = nodes.get(id); return n ? faceIndexOf(n, fc) : -1; }, get renderer() { return renderer; },
+    viewBack, get viewHistory() { return camHist.length; }, useButtons, setMouseStyle, get mouseStyle() { return mouseStyle; }, get leftOrbits() { return !!(controls && controls.mouseButtons.LEFT === THREE.MOUSE.ROTATE); }, setLook, lookOf, get look() { return { ...LOOK }; }, fitShadow, renderImage, lookAtFace, faceIndexOf: (id, fc) => { const n = nodes.get(id); return n ? faceIndexOf(n, fc) : -1; }, cylinderFaceInfo, threadFaceIndex: (id, th) => { const n = nodes.get(id); return n ? threadFaceIndex(n, th) : -1; }, get renderer() { return renderer; },
     init, requestRender, setClip, setXray, setOffsets, baseBox, renderInset, silhouette, setAdaptive, setCompare, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, setSelectedEdges, clearHover,
     edgePositions, pick, pickAll, pickGhost, pickProxy, setProxies, clearProxies, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, boxVisible, sceneBox, snapshot, makeFat, disposeFat, faceOverlay, faceArea, faceEdges, edgeKinds, wallAt, thinWalls,
     get camera() { return camera; }, get activeCamera() { return cam(); }, get ortho() { return ortho; }, get gridStep() { return gridStep; }, get controls() { return controls; }, get scene() { return scene; }, get groups() { return groups; }, get nodes() { return nodes; }, get canvas() { return renderer.domElement; }, get theme() { return theme; }, get container() { return container; },
@@ -6538,6 +6721,7 @@ const Interact = (() => {
         { icon: 'export', label: 'Fläche als DXF speichern', id: 'cm-facedxf', help: 'faceExport', hidden: !hit || hit.faceIdx == null || !((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).n, run: () => { const r = App.results.get(hit.id); Print.faceTo2D({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }, 'dxf'); } },
         { icon: 'export', label: 'Fläche als SVG speichern', id: 'cm-facesvg', help: 'faceExport', hidden: !hit || hit.faceIdx == null || !((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).n, run: () => { const r = App.results.get(hit.id); Print.faceTo2D({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }, 'svg'); } },
         { icon: 'sketch', label: 'Skizze auf dieser Fläche', id: 'cm-sketchface', hidden: !hit || hit.faceIdx == null, run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) Sketch.startOnFace({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }); } },
+        { icon: 'thread', label: 'Gewinde markieren …', id: 'cm-thread', help: 'cosmeticThread', hidden: !hit || hit.faceIdx == null || top.role === 'hole' || ((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).t !== 'CYLINDRE', run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) { const a = h('div', { style: { position: 'fixed', left: cx + 'px', top: cy + 'px', width: '1px', height: '1px' } }); document.body.append(a); Features.threadPop({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }, a); setTimeout(() => a.remove(), 0); } } },
         '-',
         { icon: 'copy', label: 'Duplizieren', kbd: 'Strg D', id: 'cm-dup', run: () => Actions.duplicate() },
         { icon: 'copy', label: 'Verknüpft duplizieren', kbd: 'Strg Umschalt D', id: 'cm-duplink', hidden: it.kind === 'group', run: () => Actions.duplicateLinked() },
@@ -7774,8 +7958,196 @@ const Features = (() => {
     if (p.op === 'intersect') return 'Schnittmenge';
     return null;
   }
+  // ---------- Kosmetisches Gewinde (KP-20) ----------
+  function guessThreadSize(r, kind = 'ext') {
+    const d = 2 * (Number(r) || 3);
+    let best = THREAD_SPECS[0], bd = Infinity;
+    for (const s of THREAD_SPECS) {
+      const diff = kind === 'int' ? Math.min(Math.abs(s.core - d), Math.abs(s.d - d) + 0.05) : Math.abs(s.d - d);
+      if (diff < bd) { bd = diff; best = s; }
+    }
+    return best.size;
+  }
+  function threadOnFace(itemId, faceIdx) {
+    const f = Model.find(App.doc, itemId);
+    if (!f || !f.item.threads || !f.item.threads.length) return null;
+    return f.item.threads.find((th) => Viewer.threadFaceIndex(itemId, th) === faceIdx) || null;
+  }
+  function markThread(face, opts = {}) {
+    if (!face || !face.id) return null;
+    const found = Model.find(App.doc, face.id);
+    if (!found || found.item.role === 'hole') { UI.toast('Klick auf die runde Fläche eines Körpers.', { icon: 'info' }); return null; }
+    const g = Viewer.cylinderFaceInfo(face.id, face.idx);
+    if (!g) { UI.toast('Bitte wähle eine runde Zylinderfläche.', { icon: 'info' }); return null; }
+    const kind = opts.kind === 'int' || opts.kind === 'ext' ? opts.kind : g.kind;
+    const size = opts.size && THREAD_MAP[opts.size] ? opts.size : guessThreadSize(g.r, kind);
+    const lenRaw = opts.length != null ? Number(opts.length) : round(g.faceLen, 2);
+    const length = round(clamp(lenRaw > 0 ? lenRaw : g.faceLen, 0.5, g.faceLen), 3);
+    const from = opts.from === 'bottom' ? 'bottom' : 'top';
+    const entry = {
+      id: opts.id || uid('th'),
+      size,
+      length,
+      kind,
+      from,
+      c: g.c.map((v) => round(v, 4)),
+      axis: [...g.o.map((v) => round(v, 4)), ...g.d.map((v) => round(v, 6))],
+      r: round(g.r, 4),
+      t0: round(g.t0, 4),
+      t1: round(g.t1, 4),
+    };
+    App.change(`Gewinde markiert (${size} × ${fmt(length, 1)})`, (doc) => {
+      const T = Model.find(doc, face.id).item;
+      const list = (T.threads || []).filter((x) => x.id !== entry.id && Viewer.threadFaceIndex(face.id, x) !== face.idx);
+      list.push(entry);
+      T.threads = list;
+    });
+    UI.toast(`Gewinde ${size} × ${fmt(length, 1)} mm markiert (nur Anzeige – rechnet sofort).`, { icon: 'check' });
+    return entry.id;
+  }
+  function updateThread(itemId, threadId, patch) {
+    App.change('Gewinde geändert', (doc) => {
+      const f = Model.find(doc, itemId); if (!f || !f.item.threads) return false;
+      const th = f.item.threads.find((x) => x.id === threadId); if (!th) return false;
+      if (patch.size && THREAD_MAP[patch.size]) th.size = patch.size;
+      if (patch.kind === 'int' || patch.kind === 'ext') th.kind = patch.kind;
+      if (patch.from === 'top' || patch.from === 'bottom') th.from = patch.from;
+      if (patch.length != null) {
+        const g = Viewer.threadFaceIndex(itemId, th) >= 0 ? Viewer.cylinderFaceInfo(itemId, Viewer.threadFaceIndex(itemId, th)) : null;
+        const maxL = g ? g.faceLen : Math.max(0.5, Math.abs((th.t1 ?? 10) - (th.t0 ?? 0)));
+        const n = Number(patch.length);
+        if (n > 0) th.length = round(clamp(n, 0.5, maxL), 3);
+      }
+    });
+  }
+  function removeThread(itemId, threadId) {
+    App.change('Gewinde-Markierung entfernt', (doc) => {
+      const f = Model.find(doc, itemId); if (!f || !f.item.threads) return false;
+      const list = f.item.threads.filter((x) => x.id !== threadId);
+      if (list.length) f.item.threads = list; else delete f.item.threads;
+    });
+  }
+  function poseFromOriginDir(o, zDir) {
+    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), zDir.clone().normalize());
+    return new THREE.Matrix4().compose(o, q, new THREE.Vector3(1, 1, 1));
+  }
+  function makeThreadReal(itemId, threadId) {
+    const f = Model.find(App.doc, itemId);
+    const it = f && f.item;
+    const th = it && (it.threads || []).find((x) => x.id === threadId);
+    if (!it || !th) return null;
+    const fi = Viewer.threadFaceIndex(itemId, th);
+    const g = (fi >= 0 && Viewer.cylinderFaceInfo(itemId, fi)) || (Array.isArray(th.axis) && th.axis.length >= 6 ? {
+      o: th.axis.slice(0, 3), d: th.axis.slice(3, 6), r: th.r || 3, c: th.c || [0, 0, 0],
+      t0: th.t0 ?? 0, t1: th.t1 ?? 10, faceLen: Math.max(0.1, (th.t1 ?? 10) - (th.t0 ?? 0)), kind: th.kind || 'ext',
+    } : null);
+    if (!g) { UI.toast('Die Zylinderfläche für das Gewinde wurde nicht gefunden.', { kind: 'bad' }); return null; }
+    const L = round(clamp(Number(th.length) || g.faceLen, 0.5, g.faceLen), 3);
+    const fromBottom = th.from === 'bottom';
+    const s0 = fromBottom ? g.t0 : g.t1 - L;
+    const s1 = fromBottom ? g.t0 + L : g.t1;
+    const dL = new THREE.Vector3(...g.d).normalize();
+    const W = Model.worldMatrix(App.doc, itemId);
+    const pStartW = new THREE.Vector3(...g.o).addScaledVector(dL, s0).applyMatrix4(W);
+    const pEndW = new THREE.Vector3(...g.o).addScaledVector(dL, s1).applyMatrix4(W);
+    const dW = pEndW.clone().sub(pStartW).normalize();
+    const topCur = Model.topOf(App.doc, itemId);
+    let selId = topCur ? topCur.id : itemId;
+    App.change(`Gewinde echt gemacht (${th.size} × ${fmt(L, 1)})`, (doc) => {
+      const T = Model.find(doc, itemId).item;
+      const top = Model.topOf(doc, itemId);
+      const rest = (T.threads || []).filter((x) => x.id !== threadId);
+      if (rest.length) T.threads = rest; else delete T.threads;
+      if (th.kind === 'int') {
+        const entryPt = fromBottom ? pStartW : pEndW;
+        const outDir = fromBottom ? dW.clone().negate() : dW;
+        const hole = Model.newItem('part', { lib: 'threadHole', size: th.size, length: L, clear: 0.3 }, { name: `Innengewinde ${th.size} × ${fmt(L, 1)}`, color: top.color, role: 'solid' });
+        Model.setFromMatrix(hole, poseFromOriginDir(entryPt, outDir));
+        hole.op = { type: 'cut', target: top.id };
+        const ti = doc.items.indexOf(top);
+        doc.items.splice(ti >= 0 ? ti + 1 : doc.items.length, 0, hole);
+        selId = top.id;
+        return;
+      }
+      const isPlainCyl = T === top && T.kind === 'cylinder' && !(T.finishes && T.finishes.length) && !T.op;
+      if (isPlainCyl && L >= g.faceLen - 0.05) {
+        T.kind = 'part';
+        T.p = { lib: 'threadRod', size: th.size, length: L };
+        Model.setFromMatrix(T, poseFromOriginDir(pStartW, dW));
+        selId = T.id;
+        return;
+      }
+      if (isPlainCyl) {
+        const rem = round(Math.max(0.5, g.faceLen - L), 3);
+        T.p.h = rem;
+        if (fromBottom) Model.setFromMatrix(T, new THREE.Matrix4().makeTranslation(dW.x * L, dW.y * L, dW.z * L).multiply(Model.localMatrix(T)));
+        const rodOrigin = fromBottom ? pStartW : pStartW.clone().addScaledVector(dW, -0.05);
+        const rod = Model.newItem('part', { lib: 'threadRod', size: th.size, length: round(L + 0.05, 3) }, { name: `Gewinde ${th.size} × ${fmt(L, 1)}`, color: T.color, role: 'solid' });
+        Model.setFromMatrix(rod, poseFromOriginDir(rodOrigin, dW));
+        rod.op = { type: 'join', target: T.id };
+        const ti = doc.items.indexOf(T);
+        doc.items.splice(ti >= 0 ? ti + 1 : doc.items.length, 0, rod);
+        selId = T.id;
+        return;
+      }
+      // Beliebiger Körper: erst Überstand glatt abtragen, dann echtes Außengewinde vereinigen
+      const cutD = round(Math.max(2 * g.r, (THREAD_MAP[th.size] ? THREAD_MAP[th.size].d : 6)) + 0.2, 3);
+      const cutOrigin = fromBottom ? pStartW.clone().addScaledVector(dW, -0.05) : pStartW;
+      const cut = Model.newItem('cylinder', { d: cutD, h: round(L + 0.05, 3) }, { name: `Gewinde-Freischnitt ${th.size}`, color: top.color, role: 'solid' });
+      Model.setFromMatrix(cut, poseFromOriginDir(cutOrigin, dW));
+      cut.op = { type: 'cut', target: top.id };
+      const rodOrigin = fromBottom ? pStartW : pStartW.clone().addScaledVector(dW, -0.05);
+      const rod = Model.newItem('part', { lib: 'threadRod', size: th.size, length: round(L + 0.05, 3) }, { name: `Gewinde ${th.size} × ${fmt(L, 1)}`, color: top.color, role: 'solid' });
+      Model.setFromMatrix(rod, poseFromOriginDir(rodOrigin, dW));
+      rod.op = { type: 'join', target: top.id };
+      const ti = doc.items.indexOf(top);
+      doc.items.splice(ti >= 0 ? ti + 1 : doc.items.length, 0, cut, rod);
+      selId = top.id;
+    });
+    App.select([selId]);
+    UI.toast(`Echtes Gewinde ${th.size} × ${fmt(L, 1)} mm erzeugt. Mit Rückgängig kommst du wieder zur Markierung.`, { icon: 'check' });
+    return selId;
+  }
+  function threadPop(face, anchor) {
+    if (!face || !face.id) return;
+    const g = Viewer.cylinderFaceInfo(face.id, face.idx);
+    if (!g) { UI.toast('Bitte wähle eine runde Zylinderfläche.', { icon: 'info' }); return; }
+    const existing = threadOnFace(face.id, face.idx);
+    let size = existing ? existing.size : guessThreadSize(g.r, g.kind);
+    let len = existing ? existing.length : round(g.faceLen, 2);
+    let from = existing ? (existing.from || 'top') : 'top';
+    const box = h('div', { style: { display: 'grid', gap: '10px', minWidth: '230px' }, 'data-help': 'cosmeticThread' });
+    box.append(h('div', { class: 'section-h' }, (g.kind === 'int' ? 'Innengewinde' : 'Außengewinde') + ` · Ø ${fmt(2 * g.r, 2)} mm`));
+    const fields = h('div', { class: 'fields' });
+    fields.append(UI.selectField({ id: 'ct-size', label: 'M-Größe', value: size, options: THREAD_SPECS.map((s) => [s.size, `${s.size} (Steigung ${fmt(s.pitch, 2)})`]), onChange: (v) => { size = v; } }));
+    fields.append(UI.numField({ id: 'ct-len', label: 'Länge', value: len, min: 0.5, unit: 'mm', expr: false, onCommit: (v) => { len = v; } }));
+    box.append(fields);
+    box.append(UI.selectField({ id: 'ct-from', label: 'Beginnt am', value: from, options: [['top', 'Ende 1 (oben)'], ['bottom', 'Ende 2 (unten)']], onChange: (v) => { from = v; } }));
+    const row = h('div', { class: 'btn-row' });
+    const applyB = h('button', { type: 'button', class: 'btn primary', id: 'ct-apply' }, existing ? 'Ändern' : 'Gewinde markieren');
+    applyB.onclick = () => {
+      const lenInp = $('#ct-len');
+      const v = lenInp ? parseNum(lenInp.value) : NaN;
+      if (isFinite(v) && v > 0) len = v;
+      const selSize = $('#ct-size'); if (selSize) size = selSize.value;
+      const selFrom = $('#ct-from'); if (selFrom) from = selFrom.value;
+      markThread(face, { id: existing ? existing.id : undefined, size, length: len, from, kind: g.kind });
+      UI.closePop();
+    };
+    row.append(applyB);
+    if (existing) {
+      const realB = h('button', { type: 'button', class: 'btn', id: 'ct-real' }, 'Echt machen');
+      realB.onclick = () => { UI.closePop(); makeThreadReal(face.id, existing.id); };
+      const delB = h('button', { type: 'button', class: 'btn ghost danger', id: 'ct-del' }, 'Entfernen');
+      delB.onclick = () => { UI.closePop(); removeThread(face.id, existing.id); };
+      row.append(realB, delB);
+    }
+    box.append(row);
+    box.append(h('div', { class: 'hint-box' }, 'Nur Markierung – rechnet sofort und steht in Stückliste und Zeichnung.'));
+    UI.pop(anchor || $('#center'), box);
+  }
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, pickAxis, pickAxisThen, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
+  return { guessThreadSize, threadOnFace, markThread, updateThread, removeThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, pickAxis, pickAxisThen, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
 })();
 // ---- 46-datums.js ----
 // ================= Bezugsebenen: eigene Ebenen zum Skizzieren =================
@@ -8064,7 +8436,27 @@ const Mass = (() => {
     const fil = new Map();
     for (const x of rows) { const m = !x.buy && PRINTMATS.includes(x.kind) ? matOf(x.kind) : null; if (m) fil.set(m.k, (fil.get(m.k) || 0) + x.g * x.n); }
     const filament = [...fil.entries()].map(([k, g]) => ({ mat: k, g, m: g / matOf(k).rho / (Math.PI * 0.0875 * 0.0875) / 100 }));
-    return { rows, mass: rows.reduce((s, x) => s + x.g * x.n, 0), count: rows.reduce((s, x) => s + x.n, 0), screws: screws(doc), filament };
+    return { rows, mass: rows.reduce((s, x) => s + x.g * x.n, 0), count: rows.reduce((s, x) => s + x.n, 0), screws: screws(doc), threads: threads(doc), filament };
+  }
+  // Markierte kosmetische Gewinde (KP-20) je aktivem Körper mit Instanz-Anzahl
+  function threads(doc = App.doc) {
+    const V = Model.vars(doc).v, map = new Map();
+    Model.walk(doc.items, (it) => {
+      if (it.role === 'hole' || it.suppressed || !Model.isActive(doc, it.id) || !it.threads || !it.threads.length) return;
+      const n = Math.max(1, Model.instanceMatrices(doc, it.id, V).length);
+      const part = Model.label(it);
+      for (const th of it.threads) {
+        const L = round(Model.num(th.length, V, 10), 1);
+        const kind = th.kind === 'int' ? 'int' : 'ext';
+        const label = `${kind === 'int' ? 'Innengewinde' : 'Außengewinde'} ${th.size} × ${fmt(L, 1)} mm`;
+        const key = label + '|' + part;
+        const row = map.get(key) || { name: label, size: th.size, length: L, kind, part, n: 0, ids: [] };
+        row.n += n;
+        if (!row.ids.includes(it.id)) row.ids.push(it.id);
+        map.set(key, row);
+      }
+    });
+    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, 'de', { numeric: true }));
   }
   // Schrauben, Muttern und Gewindeeinsätze aus den Loch-Bauteilen (auch in Gruppen und Mustern).
   // Löcher auf derselben Achse (gleiche Schraube durch zwei Platten) zählen nur einmal.
@@ -8098,6 +8490,7 @@ const Mass = (() => {
     for (const x of B.rows) L.push([q(x.name), x.n, q(x.kind), x.missing ? '' : z(x.g), x.missing ? '' : z(x.g * x.n), x.cm3 == null ? '' : z(x.cm3, 2)].join(';'));
     L.push([q('Summe ' + name), B.count, '', '', z(B.mass), ''].join(';'));
     for (const x of B.screws || []) L.push([q(x.name), x.n, q('Kleinteil'), '', '', ''].join(';'));
+    for (const x of B.threads || []) L.push([q(x.name), x.n, q('Gewinde (' + x.part + ')'), '', '', ''].join(';'));
     return '\ufeff' + L.join('\r\n') + '\r\n';
   }
   async function bomDialog() {
@@ -8121,10 +8514,19 @@ const Mass = (() => {
       for (const x of B.screws) ts.append(h('tr', null, h('td', null, x.name), h('td', { class: 'mono' }, String(x.n))));
       body.append(ts, h('div', { class: 'hint-box' }, 'Gezählt aus Schraubenlöchern, Lochbildern (je vier), Mutternfallen und Gewindeeinsätzen – Löcher auf derselben Achse zählen als eine Schraube. Die Länge der Schrauben misst du am besten am Modell nach; ihr Gewicht ist in der Summe nicht enthalten.'));
     }
+    if (B.threads && B.threads.length) {
+      const tt = h('table', { class: 'vtable', id: 'bom-threads', style: { marginTop: '14px' } }, h('tr', null, h('th', null, 'Markierte Gewinde'), h('th', null, 'Teil'), h('th', null, 'Anzahl')));
+      for (const x of B.threads) {
+        const tr = h('tr', { style: { cursor: 'pointer' } }, h('td', null, x.name), h('td', null, x.part), h('td', { class: 'mono' }, String(x.n)));
+        tr.onclick = () => App.select(x.ids);
+        tt.append(tr);
+      }
+      body.append(tt);
+    }
     if (B.filament.length) body.append(h('div', { class: 'ok-box', id: 'bom-filament', html: '<b>Filament für die Druckteile:</b> ' + B.filament.map((x) => `${x.mat} ${gText(x.g)} ≈ ${fmt(x.m, 1)} m`).join(' · ') + ' (Draht 1,75 mm, massiv gerechnet – mit weniger Füllung brauchst du weniger; Stützen und Rand kommen dazu).' }));
     body.append(h('div', { class: 'hint-box', html: 'Gleiche Teile (gleicher Name ohne Nummer, gleiches Gewicht) stehen in einer Zeile. Klick auf eine Zeile wählt die Teile im Bild aus. <b>Kaufteile</b> zählen mit dem Gewicht aus dem Datenblatt, alles andere mit Volumen × Material.' + (B.rows.some((x) => x.missing) ? ' Bei Teilen mit „fehlt“ ist noch kein Gewicht eingetragen.' : '') }));
   }
-  return { stability, hull2,  init, measure, measureDoc, bom, bomCSV, bomDialog, screws, materialFor, projectMaterial, partOf, gText, fixedOf, on: ev.on, get markerShown() { return !!marker; }, get markerPos() { return marker ? marker.position.toArray() : null; } };
+  return { stability, hull2,  init, measure, measureDoc, bom, bomCSV, bomDialog, screws, threads, materialFor, projectMaterial, partOf, gText, fixedOf, on: ev.on, get markerShown() { return !!marker; }, get markerPos() { return marker ? marker.position.toArray() : null; } };
 })();
 // ---- 48-joints.js ----
 // ================= Gelenke: ein Teil dreht sich oder gleitet um eine Achse gegenüber einem anderen =================
@@ -9240,6 +9642,8 @@ const Panels = (() => {
     if (fs) body.append(fs);
     if (!items.length) {
       body.append(h('div', { class: 'empty-tree', html: 'Hier erscheint alles, was du baust – <b>Schritt für Schritt</b>.<br><br>Fang mit einem <b>Körper</b> an oder beschreibe unten in der Zeile, was du bauen möchtest.' }));
+      const ds = Datums.treeSection(); if (ds) body.append(ds);
+      const ms = Measure.treeSection(); if (ms) body.append(ms);
       return;
     }
     const V = Model.vars(App.doc).v;
@@ -9332,6 +9736,7 @@ const Panels = (() => {
     rec(items, ul);
     body.append(ul);
     const ds = Datums.treeSection(); if (ds) body.append(ds);
+    const ms = Measure.treeSection(); if (ms) body.append(ms);
   }
   function moveInTree(srcId, dstId, mode) {
     if (!srcId || srcId === dstId) return;
@@ -9526,6 +9931,7 @@ const Panels = (() => {
     if (Sketch.active) { $('#right-title').textContent = 'Skizze'; Sketch.renderPanel(body); return; }
     const items = App.selectedItems();
     if (!items.length && Datums.selected && Datums.find(Datums.selected)) { $('#right-title').textContent = 'Bezugsebene'; Datums.renderPanel(body); return; }
+    if (!items.length && Measure.selected && Measure.find(Measure.selected)) { $('#right-title').textContent = 'Messung'; Measure.renderPanel(body); return; }
     if (!items.length) { $('#right-title').textContent = 'Projekt'; renderProject(body); return; }
     if (items.length > 1) { $('#right-title').textContent = 'Auswahl'; renderMulti(body, items); return; }
     $('#right-title').textContent = 'Eigenschaften';
@@ -10030,6 +10436,35 @@ const Panels = (() => {
       if (cur) { const b = h('button', { type: 'button', class: 'btn ghost', id: 'face-color-off' }); b.innerHTML = icon('undo') + 'Flächenfarbe entfernen'; b.onclick = () => setFace(null); fsec.append(h('div', { class: 'btn-row' }, b)); }
       w.append(fsec);
     }
+    // Kosmetische Gewinde (KP-20)
+    const isCylFace = !!(sf && sf.id === it.id && sf.info.t === 'CYLINDRE');
+    if (it.role !== 'hole' && (isCylFace || (it.threads && it.threads.length))) {
+      const tsec = h('div', { class: 'section', id: 'thread-sec', 'data-help': 'cosmeticThread' }, h('div', { class: 'section-h' }, 'Gewinde (Markierung)'));
+      if (isCylFace && !Features.threadOnFace(it.id, sf.idx)) {
+        const mb = h('button', { type: 'button', class: 'btn small', id: 'btn-mark-thread' });
+        mb.innerHTML = icon('thread') + 'Gewinde auf dieser Fläche markieren';
+        mb.onclick = (e) => Features.threadPop(sf, e.currentTarget);
+        tsec.append(h('div', { class: 'btn-row' }, mb));
+      }
+      for (const th of it.threads || []) {
+        const sp = THREAD_MAP[th.size] || { pitch: 1 };
+        const box = h('div', { class: 'thread-item', style: { display: 'grid', gap: '6px', padding: '6px 0', borderTop: '1px solid var(--line)' } });
+        box.append(h('div', { class: 'mini-row' }, h('b', null, `${th.size} × ${fmt(th.length, 1)} mm`), h('span', { class: 'grow muted', style: { marginLeft: '6px', fontSize: '11px' } }, `${th.kind === 'int' ? 'Innengewinde' : 'Außengewinde'} · P ${fmt(sp.pitch, 2)}`)));
+        const fs = h('div', { class: 'fields' });
+        fs.append(UI.selectField({ id: 'th-size-' + th.id, label: 'M-Größe', value: th.size, options: THREAD_SPECS.map((s) => [s.size, s.size]), onChange: (v) => Features.updateThread(it.id, th.id, { size: v }) }));
+        fs.append(UI.numField({ id: 'th-len-' + th.id, label: 'Länge', value: th.length, min: 0.5, unit: 'mm', expr: false, onCommit: (v) => Features.updateThread(it.id, th.id, { length: v }) }));
+        fs.append(UI.selectField({ id: 'th-from-' + th.id, label: 'Ende', value: th.from || 'top', options: [['top', 'Ende 1'], ['bottom', 'Ende 2']], onChange: (v) => Features.updateThread(it.id, th.id, { from: v }) }));
+        box.append(fs);
+        const br = h('div', { class: 'btn-row' });
+        const rb = h('button', { type: 'button', class: 'btn small', id: 'th-real-' + th.id }); rb.innerHTML = icon('bolt') + 'Echt machen'; rb.onclick = () => Features.makeThreadReal(it.id, th.id);
+        const db = h('button', { type: 'button', class: 'btn ghost small', id: 'th-del-' + th.id, 'aria-label': 'Gewinde entfernen', 'data-tip': 'Entfernen' }); db.innerHTML = icon('trash'); db.onclick = () => Features.removeThread(it.id, th.id);
+        br.append(rb, db);
+        box.append(br);
+        tsec.append(box);
+      }
+      tsec.append(h('div', { class: 'hint-box' }, 'Nur Anzeige – rechnet sofort, steht in Stückliste und Zeichnung. „Echt machen“ wandelt in ein druckbares 3D-Gewinde.'));
+      w.append(tsec);
+    }
     if (it.role !== 'hole') {
       const op = h('div', { class: 'fields', 'data-help': 'opacity' });
       op.append(UI.numField({ id: 'item-opacity', label: 'Sichtbarkeit (100 % = undurchsichtig)', value: Math.round((it.opacity ?? 1) * 100), unit: '%', expr: false, min: 5, onCommit: (v) => App.change('Durchsichtigkeit', (doc) => { const T = Model.find(doc, it.id).item; const o = clamp(v, 5, 100) / 100; if (o >= 1) delete T.opacity; else T.opacity = o; }, { merge: 'op:' + it.id }) }));
@@ -10138,6 +10573,11 @@ const Panels = (() => {
       const fr = face.info.r;
       bar.append(fr ? valLbl(face.info.t === 'SPHERE' ? 'Kugel Ø' : 'Runde Fläche Ø', fr * 2, 'mm', `Radius ${fmt(fr, 2)} mm`) : h('span', { class: 'lbl' }, 'Runde Fläche'));
       b('holeWizard', 'Bohrung', (e) => Place.holeHere(face, e.currentTarget), 'accent', 'Bohrungs-Assistent: Loch senkrecht in die runde Fläche (Schraube, Sackloch, Passbohrung H7, Zentrierung …) – der Magnet rastet ganz oben, an den Seiten und in der Mitte ein');
+      if (face.info.t === 'CYLINDRE' && items[0].item.role !== 'hole') {
+        const hasTh = !!Features.threadOnFace(face.id, face.idx);
+        const tb = b('thread', hasTh ? 'Gewinde ändern' : 'Gewinde markieren', (e) => Features.threadPop(face, e.currentTarget), hasTh ? 'accent' : '', 'Kosmetisches Gewinde auf dieser runden Fläche markieren (rechnet schnell)');
+        tb.dataset.help = 'cosmeticThread';
+      }
       b('fillet', 'Ihre Kanten', (e) => faceEdgeMenu(face, e.currentTarget), '', 'Alle Kanten dieser Fläche wählen, abrunden oder abschrägen', true);
       sep();
     }
@@ -15577,49 +16017,97 @@ const Notes = (() => {
 // ================= Messen =================
 const Measure = (() => {
   let on = false, pts = [], objs = [], els = [];
+  let sel = null, current = null, bar = null, pinObjs = [], pinEls = [];
+  const live = new Map();
+  const V3 = (a) => new THREE.Vector3(...a);
+  const r6 = (v) => v.map((x) => round(x, 6));
+  const dist3 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  const list = (doc = App.doc) => doc.measures || [];
+  const find = (id, doc = App.doc) => list(doc).find((m) => m.id === id) || null;
+  function fracOf(p, b) {
+    if (!p || !b) return null;
+    const dx = b[3] - b[0], dy = b[4] - b[1], dz = b[5] - b[2];
+    return [dx > 1e-6 ? round((p[0] - b[0]) / dx, 6) : 0.5, dy > 1e-6 ? round((p[1] - b[1]) / dy, 6) : 0.5, dz > 1e-6 ? round((p[2] - b[2]) / dz, 6) : 0.5];
+  }
   function toggle() { on ? stop() : start(); }
   function start() {
     Views.collapse();
     if (Sketch.active) return;
     if (Notes.active) Notes.stop();
-    on = true; pts = []; clearVis();
+    on = true; pts = []; current = null; last = null; clearVis();
     App.clearSelection(); Handles.clear();
     $('#t-measure') && $('#t-measure').classList.add('active');
     UI.hint('<b>Messen:</b> Klick zwei Punkte oder zwei Flächen an (Abstand, Winkel) – eine Fläche allein zeigt ihre Größe, eine runde Kante den Durchmesser. <b>Esc</b> beendet.');
     Viewer.canvas.style.cursor = 'crosshair';
+    showBar();
   }
   function stop() {
-    on = false; pts = []; last = null; clearVis();
+    on = false; pts = []; current = null; last = null; clearVis(); hideBar();
     $('#t-measure') && $('#t-measure').classList.remove('active');
     UI.hint(null); Viewer.canvas.style.cursor = '';
     Handles.rebuild();
   }
-  function clearVis() { for (const o of objs) { Viewer.groups.overlay.remove(o); Viewer.disposeFat(o); } objs = []; for (const e of els) e.remove(); els = []; Viewer.requestRender(); }
+  function showBar() {
+    hideBar();
+    bar = h('div', { class: 'sketchbar measurebar', id: 'measure-bar' });
+    const cur = h('span', { class: 'm-cur mono', id: 'measure-cur' });
+    const keepBtn = h('button', { type: 'button', class: 'tool primary', id: 'measure-keep', 'data-help': 'measureKeep', disabled: true });
+    keepBtn.innerHTML = icon('plus') + '<span>Messung behalten</span>';
+    keepBtn.onclick = () => keep();
+    const doneBtn = h('button', { type: 'button', class: 'tool', id: 'measure-done', 'data-tip': 'Messen beenden', 'data-kbd': 'Esc' });
+    doneBtn.innerHTML = icon('check') + '<span>Fertig</span>';
+    doneBtn.onclick = () => stop();
+    bar.append(cur, keepBtn, doneBtn);
+    $('#overlay').append(bar);
+    updateBar();
+  }
+  function hideBar() { if (bar) { bar.remove(); bar = null; } }
+  function updateBar() {
+    if (!bar) return;
+    const cur = $('#measure-cur'), kb = $('#measure-keep');
+    if (cur) cur.textContent = current ? current.eval.text : 'Klick Flächen, Kanten oder Punkte …';
+    if (kb) kb.disabled = !current;
+  }
+  function clearVis() { for (const o of objs) { Viewer.groups.overlay.remove(o); Viewer.disposeFat(o); } objs = []; for (const e of els) e.remove(); els = []; lastLabel = null; Viewer.requestRender(); }
   function snapPoint(hit, cx, cy) {
     const n = hit.node; const M = n.obj.matrixWorld;
     if (hit.edgeIdx != null) {
       const g = n.data.edges[hit.edgeIdx];
       if (g) {
-        const cand = [g.a, g.b, g.m]; if (g.c) cand.push(g.c);
-        let best = null, bd = 12;
+        const cand = [['a', g.a], ['b', g.b], ['m', g.m]]; if (g.c) cand.push(['c', g.c]);
+        let best = null, bestW = null, bd = 12;
         const r = Viewer.canvas.getBoundingClientRect();
-        for (const p of cand) { const w = new THREE.Vector3(...p).applyMatrix4(M); const s = Viewer.toScreen(w); const d = Math.hypot(s.x - (cx - r.left), s.y - (cy - r.top)); if (d < bd) { bd = d; best = w; } }
-        if (best) return { p: best, edge: g };
-        return { p: hit.point.clone(), edge: g };
+        for (const [k, p] of cand) { const w = new THREE.Vector3(...p).applyMatrix4(M); const s = Viewer.toScreen(w); const d = Math.hypot(s.x - (cx - r.left), s.y - (cy - r.top)); if (d < bd) { bd = d; best = w; bestW = k; } }
+        if (best) return { p: best, edge: g, which: bestW };
+        return { p: hit.point.clone(), edge: g, which: null };
       }
     }
-    return { p: hit.point.clone() };
+    return { p: hit.point.clone(), which: null };
   }
   // Was liegt unter der Maus? Punkt (an einer Kante gefangen) oder ebene Fläche
   function entityAt(hit, cx, cy) {
-    if (hit.edgeIdx != null) { const sp = snapPoint(hit, cx, cy); return { kind: 'pt', p: sp.p, edge: sp.edge }; }
-    const f = hit.faceIdx >= 0 ? hit.node.data.faces[hit.faceIdx] : null;
-    if (f && (f.t === 'CYLINDRE' || f.t === 'SPHERE') && f.r) return { kind: 'round', id: hit.id, faceIdx: hit.faceIdx, f, area: Viewer.faceArea(hit.id, hit.faceIdx), hitP: hit.point.clone(), p: hit.point.clone() };
-    if (f && f.t === 'PLANE' && f.n) {
-      const M = hit.node.obj.matrixWorld;
-      return { kind: 'face', id: hit.id, faceIdx: hit.faceIdx, c: new THREE.Vector3(...f.c).applyMatrix4(M), n: new THREE.Vector3(...f.n).transformDirection(M).normalize(), area: Viewer.faceArea(hit.id, hit.faceIdx), hitP: hit.point.clone() };
+    const M = hit.node.obj.matrixWorld, invW = M.clone().invert(), bbox = hit.node.data.bbox;
+    if (hit.edgeIdx != null) {
+      const sp = snapPoint(hit, cx, cy), g = sp.edge;
+      const lp = sp.p.clone().applyMatrix4(invW).toArray();
+      const ref = { kind: 'pt', id: hit.id, lp: r6(lp), frac: fracOf(lp, bbox), edge: g ? { t: g.t, a: r6(g.a), b: r6(g.b), m: r6(g.m), c: g.c ? r6(g.c) : null, n: g.n ? r6(g.n) : null, which: sp.which || null, mFrac: fracOf(g.m, bbox) } : null };
+      return { kind: 'pt', id: hit.id, edgeIdx: hit.edgeIdx, p: sp.p, edge: g, W: M, ref };
     }
-    return { kind: 'pt', p: hit.point.clone() };
+    const f = hit.faceIdx >= 0 ? hit.node.data.faces[hit.faceIdx] : null;
+    if (f && (f.t === 'CYLINDRE' || f.t === 'SPHERE') && f.r) {
+      const lp = hit.point.clone().applyMatrix4(invW).toArray();
+      const ln = hit.normal ? hit.normal.clone().transformDirection(invW).normalize().toArray() : null;
+      const ref = { kind: 'round', id: hit.id, t: f.t, c: r6(f.c), axis: f.axis ? r6(f.axis) : null, sc: f.sc ? r6(f.sc) : null, r: round(f.r, 6), lp: r6(lp), ln: ln ? r6(ln) : null, frac: fracOf(f.c, bbox) };
+      return { kind: 'round', id: hit.id, faceIdx: hit.faceIdx, f, area: Viewer.faceArea(hit.id, hit.faceIdx), hitP: hit.point.clone(), normal: hit.normal ? hit.normal.clone() : null, p: hit.point.clone(), ref };
+    }
+    if (f && f.t === 'PLANE' && f.n) {
+      const lp = hit.point.clone().applyMatrix4(invW).toArray();
+      const ref = { kind: 'face', id: hit.id, n: r6(f.n), c: r6(f.c), lp: r6(lp), frac: fracOf(f.c, bbox) };
+      return { kind: 'face', id: hit.id, faceIdx: hit.faceIdx, c: new THREE.Vector3(...f.c).applyMatrix4(M), n: new THREE.Vector3(...f.n).transformDirection(M).normalize(), area: Viewer.faceArea(hit.id, hit.faceIdx), hitP: hit.point.clone(), ref };
+    }
+    const lp = hit.point.clone().applyMatrix4(invW).toArray();
+    const ref = { kind: 'pt', id: hit.id, lp: r6(lp), frac: fracOf(lp, bbox), face: f && f.t === 'PLANE' && f.n ? { n: r6(f.n), c: r6(f.c), frac: fracOf(f.c, bbox) } : null };
+    return { kind: 'pt', id: hit.id, p: hit.point.clone(), ref };
   }
   function dot(p) { const d = Viewer.makeFat([p.x, p.y, p.z, p.x, p.y, p.z + 0.001], Viewer.theme.accent, 10, { depthTest: false }); Viewer.groups.overlay.add(d); objs.push(d); }
   function dash(a, b) { const l = Viewer.makeFat([a.x, a.y, a.z, b.x, b.y, b.z], Viewer.theme.accent, 3, { depthTest: false, dashed: true, dashSize: 2, gapSize: 1.2 }); Viewer.groups.overlay.add(l); objs.push(l); }
@@ -15627,73 +16115,429 @@ const Measure = (() => {
     if (!on || e.button !== 0) return false;
     const hit = Viewer.pick(e.clientX, e.clientY, { edgePx: 11 });
     if (!hit) return true;
-    const ent = entityAt(hit, e.clientX, e.clientY);
+    let ent = entityAt(hit, e.clientX, e.clientY);
     if (pts.length === 0 && ent.edge && ent.edge.t === 'CIRCLE' && ent.edge.r && hit.edgeIdx != null) {
       clearVis();
       const W = hit.node.obj.matrixWorld;
       const c = new THREE.Vector3(...ent.edge.c).applyMatrix4(W);
-      showLabel(`Ø ${fmt(ent.edge.r * 2, 2)} mm   (R ${fmt(ent.edge.r, 2)})`, c);
+      const circleEnt = { kind: 'circle', id: hit.id, edgeIdx: hit.edgeIdx, edge: ent.edge, c, W };
+      const ev = evalEntities('circle', [circleEnt]);
+      showLabel(ev.text, ev.p);
       const g = hit.node.data.edgeGroups.find((x) => x[2] === hit.edgeIdx);
-      const pos = Viewer.makeFat(hit.node.data.lines.slice(g[0] * 3, (g[0] + g[1]) * 3), Viewer.theme.accent, 4, { depthTest: false });
-      pos.matrixAutoUpdate = false; pos.matrix.copy(W); Viewer.groups.overlay.add(pos); objs.push(pos);
-      last = { text: els[0].textContent };
+      if (g) {
+        const pos = Viewer.makeFat(hit.node.data.lines.slice(g[0] * 3, (g[0] + g[1]) * 3), Viewer.theme.accent, 4, { depthTest: false });
+        pos.matrixAutoUpdate = false; pos.matrix.copy(W); Viewer.groups.overlay.add(pos); objs.push(pos);
+      }
+      last = { text: ev.text };
+      const bbox = hit.node.data.bbox;
+      current = { kind: 'circle', refs: [{ kind: 'circle', id: hit.id, c: r6(ent.edge.c), n: ent.edge.n ? r6(ent.edge.n) : null, r: round(ent.edge.r, 6), frac: fracOf(ent.edge.c, bbox) }], eval: ev };
+      updateBar();
       return true;
     }
     // runde Fläche allein: Durchmesser und Radius (Zylinder oder Kugel)
     if (pts.length === 0 && ent.kind === 'round') {
       clearVis();
       const m = Viewer.faceOverlay(ent.id, ent.faceIdx, Viewer.theme.accent, 0.32); if (m) { Viewer.groups.overlay.add(m); objs.push(m); }
-      const wr = hit.normal ? Viewer.wallAt(ent.id, ent.hitP, hit.normal) : null;
-      showLabel(`${ent.f.t === 'SPHERE' ? 'Kugel' : 'Zylinder'} Ø ${fmt(ent.f.r * 2, 2)} mm   (R ${fmt(ent.f.r, 2)})   Fläche ${fmt(ent.area, 1)} mm²${wr ? `   Wand ${fmt(wr, 2)} mm` : ''}`, ent.hitP);
-      last = { text: els[els.length - 1].textContent };
+      const ev = evalEntities('round', [ent]);
+      showLabel(ev.text, ev.p);
+      last = { text: ev.text };
+      current = { kind: 'round', refs: [ent.ref], eval: ev };
+      updateBar();
       Viewer.requestRender();
       return true;
     }
-    if (ent.kind === 'round') ent.kind = 'pt';
+    if (ent.kind === 'round') ent = { ...ent, kind: 'pt', ref: { kind: 'pt', id: ent.id, lp: ent.ref.lp, frac: ent.ref.frac } };
     if (pts.length >= 2) { pts = []; clearVis(); }
-    if (!pts.length) last = null;
+    if (!pts.length) { last = null; current = null; }
     pts.push(ent);
     if (ent.kind === 'face') { const m = Viewer.faceOverlay(ent.id, ent.faceIdx, Viewer.theme.accent, 0.32); if (m) { Viewer.groups.overlay.add(m); objs.push(m); } }
     else dot(ent.p);
     if (pts.length === 1 && ent.kind === 'face') {
-      // Wandstärke an dieser Stelle: Strahl nach innen bis zur Gegenseite (PF-02)
-      const wt = Viewer.wallAt(ent.id, ent.hitP, ent.n);
-      if (wt) { const q = ent.hitP.clone().addScaledVector(ent.n, -wt); dash(ent.hitP, q); }
-      showLabel(`Fläche ${fmt(ent.area, ent.area < 100 ? 2 : 1)} mm²${wt ? `   Wand ${fmt(wt, 2)} mm` : ''}`, ent.hitP); last = { text: els[els.length - 1].textContent };
+      const ev = evalEntities('face', [ent]);
+      for (const [a, b] of ev.lines) dash(a, b);
+      showLabel(ev.text, ev.p); last = { text: ev.text };
+      current = { kind: 'face', refs: [ent.ref], eval: ev };
+      updateBar();
+    } else if (pts.length === 1) {
+      updateBar();
     }
     if (pts.length === 2) result(pts[0], pts[1]);
     Viewer.requestRender();
     return true;
   }
   let last = null;
+  function evalEntities(kind, ents) {
+    if (kind === 'circle') {
+      const ent = ents[0];
+      const d = ent.edge.r * 2;
+      const short = `Ø ${fmt(d, 2)} mm`;
+      const text = `Ø ${fmt(d, 2)} mm   (R ${fmt(ent.edge.r, 2)})`;
+      return { lost: false, kind, typeLabel: 'Kreiskante', value: round(d, 6), unit: 'mm', short, text, p: ent.c.clone(), lines: [], dots: [], faces: [], circle: { id: ent.id, edgeIdx: ent.edgeIdx, W: ent.W } };
+    }
+    if (kind === 'round') {
+      const ent = ents[0];
+      const wr = ent.normal ? Viewer.wallAt(ent.id, ent.hitP, ent.normal) : null;
+      const d = ent.f.r * 2;
+      const short = `Ø ${fmt(d, 2)} mm`;
+      const text = `${ent.f.t === 'SPHERE' ? 'Kugel' : 'Zylinder'} Ø ${fmt(d, 2)} mm   (R ${fmt(ent.f.r, 2)})   Fläche ${fmt(ent.area, 1)} mm²${wr ? `   Wand ${fmt(wr, 2)} mm` : ''}`;
+      return { lost: false, kind, typeLabel: ent.f.t === 'SPHERE' ? 'Kugel' : 'Zylinder', value: round(d, 6), unit: 'mm', short, text, p: ent.hitP.clone(), lines: [], dots: [ent.hitP.clone()], faces: [{ id: ent.id, faceIdx: ent.faceIdx }], circle: null };
+    }
+    if (kind === 'face') {
+      const ent = ents[0];
+      const wt = Viewer.wallAt(ent.id, ent.hitP, ent.n);
+      const short = `${fmt(ent.area, ent.area < 100 ? 2 : 1)} mm²`;
+      const text = `Fläche ${short}${wt ? `   Wand ${fmt(wt, 2)} mm` : ''}`;
+      const lines = wt ? [[ent.hitP.clone(), ent.hitP.clone().addScaledVector(ent.n, -wt)]] : [];
+      return { lost: false, kind, typeLabel: 'Fläche', value: round(ent.area, 6), unit: 'mm²', short, text, p: ent.hitP.clone(), lines, dots: [], faces: [{ id: ent.id, faceIdx: ent.faceIdx }], circle: null };
+    }
+    const [a, b] = ents;
+    if (a.kind !== 'face' && b.kind !== 'face') {
+      const pa = a.p || a.hitP, pb = b.p || b.hitP;
+      const d = pa.distanceTo(pb);
+      const short = `${fmt(d, 2)} mm`;
+      const text = `${short}   ΔX ${fmt(Math.abs(pb.x - pa.x), 2)}  ΔY ${fmt(Math.abs(pb.y - pa.y), 2)}  ΔZ ${fmt(Math.abs(pb.z - pa.z), 2)}`;
+      return { lost: false, kind: 'pair', typeLabel: 'Abstand (Punkt–Punkt)', value: round(d, 6), unit: 'mm', short, text, p: pa.clone().lerp(pb, 0.5), lines: [[pa.clone(), pb.clone()]], dots: [pa.clone(), pb.clone()], faces: [], circle: null };
+    }
+    if (a.kind === 'face' && b.kind === 'face') {
+      const cs = Math.abs(a.n.dot(b.n));
+      if (cs > 0.99995) {
+        const d = Math.abs(b.c.clone().sub(a.c).dot(a.n));
+        const from = a.hitP.clone(), to = from.clone().addScaledVector(a.n, b.c.clone().sub(from).dot(a.n));
+        const short = d < 1e-6 ? '0 mm' : `${fmt(d, 2)} mm`;
+        const text = d < 1e-6 ? 'Beide Flächen liegen in einer Ebene' : `Abstand ${fmt(d, 2)} mm   (parallel)`;
+        return { lost: false, kind: 'pair', typeLabel: 'Abstand (Flächen)', value: round(d, 6), unit: 'mm', short, text, p: from.clone().lerp(to, 0.5), lines: d < 1e-6 ? [] : [[from, to]], dots: [from, to], faces: [{ id: a.id, faceIdx: a.faceIdx }, { id: b.id, faceIdx: b.faceIdx }], circle: null };
+      }
+      const ang = (Math.acos(clamp(cs, -1, 1)) * 180) / Math.PI;
+      const short = `${fmt(ang, 2)}°`;
+      const text = `Winkel ${short}   (zwischen den Flächen)`;
+      return { lost: false, kind: 'pair', typeLabel: 'Winkel (Flächen)', value: round(ang, 6), unit: '°', short, text, p: a.hitP.clone().lerp(b.hitP, 0.5), lines: [[a.hitP.clone(), b.hitP.clone()]], dots: [a.hitP.clone(), b.hitP.clone()], faces: [{ id: a.id, faceIdx: a.faceIdx }, { id: b.id, faceIdx: b.faceIdx }], circle: null };
+    }
+    const f = a.kind === 'face' ? a : b, q = a.kind === 'face' ? b : a, qp = q.p || q.hitP;
+    const s = qp.clone().sub(f.c).dot(f.n); const foot = qp.clone().addScaledVector(f.n, -s);
+    const d = Math.abs(s);
+    const short = `${fmt(d, 2)} mm`;
+    const text = `Abstand ${short}   (Punkt zur Fläche)`;
+    return { lost: false, kind: 'pair', typeLabel: 'Abstand (Punkt–Fläche)', value: round(d, 6), unit: 'mm', short, text, p: qp.clone().lerp(foot, 0.5), lines: [[qp.clone(), foot]], dots: [qp.clone(), foot], faces: [{ id: f.id, faceIdx: f.faceIdx }], circle: null };
+  }
   function result(a, b) {
     for (const e of els) e.remove(); els = [];
-    let text = '';
-    if (a.kind === 'pt' && b.kind === 'pt') {
-      const d = a.p.distanceTo(b.p); dash(a.p, b.p);
-      text = `${fmt(d, 2)} mm   ΔX ${fmt(Math.abs(b.p.x - a.p.x), 2)}  ΔY ${fmt(Math.abs(b.p.y - a.p.y), 2)}  ΔZ ${fmt(Math.abs(b.p.z - a.p.z), 2)}`;
-      showLabel(text, a.p.clone().lerp(b.p, 0.5));
-    } else if (a.kind === 'face' && b.kind === 'face') {
-      const cs = Math.abs(a.n.dot(b.n));
-      if (cs > 0.99995) {   // parallel: Abstand der Ebenen
-        const d = Math.abs(b.c.clone().sub(a.c).dot(a.n));
-        const from = a.hitP, to = from.clone().addScaledVector(a.n, b.c.clone().sub(from).dot(a.n));
-        dash(from, to);
-        text = d < 1e-6 ? 'Beide Flächen liegen in einer Ebene' : `Abstand ${fmt(d, 2)} mm   (parallel)`;
-        showLabel(text, from.clone().lerp(to, 0.5));
-      } else {
-        const ang = (Math.acos(clamp(cs, -1, 1)) * 180) / Math.PI;
-        text = `Winkel ${fmt(ang, 2)}°   (zwischen den Flächen)`;
-        showLabel(text, a.hitP.clone().lerp(b.hitP, 0.5));
-      }
-    } else {   // Punkt und Fläche: senkrechter Abstand zur Ebene
-      const f = a.kind === 'face' ? a : b, q = a.kind === 'face' ? b : a;
-      const s = q.p.clone().sub(f.c).dot(f.n); const foot = q.p.clone().addScaledVector(f.n, -s);
-      dash(q.p, foot);
-      text = `Abstand ${fmt(Math.abs(s), 2)} mm   (Punkt zur Fläche)`;
-      showLabel(text, q.p.clone().lerp(foot, 0.5));
+    const ev = evalEntities('pair', [a, b]);
+    for (const [p1, p2] of ev.lines) dash(p1, p2);
+    showLabel(ev.text, ev.p);
+    last = { text: ev.text };
+    current = { kind: 'pair', refs: [a.ref, b.ref], eval: ev };
+    updateBar();
+  }
+  function pickBest(cands, refC, refFrac, bbox) {
+    if (!cands.length) return null;
+    if (refC) {
+      let exact = null, bd = 0.05;
+      for (const x of cands) { const d = dist3(x.c, refC); if (d < bd) { bd = d; exact = x; } }
+      if (exact) return exact;
     }
-    last = { text };
+    if (refFrac && bbox) {
+      let best = null, bf = Infinity, bd = Infinity;
+      for (const x of cands) {
+        const f = fracOf(x.c, bbox);
+        const df = f ? dist3(f, refFrac) : Infinity;
+        const dc = refC ? dist3(x.c, refC) : 0;
+        if (df < bf - 1e-6 || (Math.abs(df - bf) <= 1e-6 && dc < bd)) { bf = df; bd = dc; best = x; }
+      }
+      if (best) return best;
+    }
+    if (refC) {
+      let best = null, bd = Infinity;
+      for (const x of cands) { const d = dist3(x.c, refC); if (d < bd) { bd = d; best = x; } }
+      return best;
+    }
+    return cands[0];
+  }
+  function resolveRef(ref) {
+    if (!ref || !ref.id) return null;
+    const r = App.results.get(ref.id), found = Model.find(App.doc, ref.id);
+    if (!r || !r.data || !found) return null;
+    const W = Model.worldMatrix(App.doc, ref.id), bbox = r.data.bbox;
+    if (ref.kind === 'face') {
+      const cands = [];
+      (r.data.faces || []).forEach((f, idx) => {
+        if (f.t !== 'PLANE' || !f.n) return;
+        if (V3(f.n).dot(V3(ref.n)) >= 0.999) cands.push({ f, idx, c: f.c });
+      });
+      const best = pickBest(cands, ref.c, ref.frac, bbox);
+      if (!best) return null;
+      const f = best.f, fn = V3(f.n).normalize(), fc = V3(f.c);
+      let lp = ref.lp ? V3(ref.lp) : fc.clone();
+      lp = lp.clone().addScaledVector(fn, fc.clone().sub(lp).dot(fn));
+      if (bbox && (lp.x < bbox[0] - 1 || lp.x > bbox[3] + 1 || lp.y < bbox[1] - 1 || lp.y > bbox[4] + 1 || lp.z < bbox[2] - 1 || lp.z > bbox[5] + 1)) lp = fc.clone();
+      return { kind: 'face', id: ref.id, faceIdx: best.idx, c: fc.clone().applyMatrix4(W), n: fn.clone().transformDirection(W).normalize(), area: Viewer.faceArea(ref.id, best.idx), hitP: lp.applyMatrix4(W), f };
+    }
+    if (ref.kind === 'round') {
+      const cands = [];
+      (r.data.faces || []).forEach((f, idx) => {
+        if (f.t !== ref.t || !f.r) return;
+        if (ref.t === 'CYLINDRE' && ref.axis && f.axis) {
+          const d = Math.abs(V3(f.axis.slice(3)).normalize().dot(V3(ref.axis.slice(3)).normalize()));
+          if (d < 0.995) return;
+        }
+        cands.push({ f, idx, c: f.c });
+      });
+      const best = pickBest(cands, ref.c, ref.frac, bbox);
+      if (!best) return null;
+      const f = best.f;
+      let ln = null;
+      if (f.t === 'CYLINDRE' && f.axis) {
+        const ax = V3(f.axis.slice(3)).normalize(), o = V3(f.axis.slice(0, 3)), dc = V3(f.c).sub(o);
+        const rad = dc.sub(ax.clone().multiplyScalar(dc.dot(ax)));
+        if (rad.lengthSq() > 1e-8) ln = rad.normalize();
+      } else if (f.t === 'SPHERE') {
+        const rad = V3(f.c).sub(V3(f.sc || [0, 0, 0]));
+        if (rad.lengthSq() > 1e-8) ln = rad.normalize();
+      }
+      if (!ln && ref.ln) ln = V3(ref.ln).normalize();
+      else if (ln && ref.ln && ln.dot(V3(ref.ln)) < 0) ln.negate();
+      return { kind: 'round', id: ref.id, faceIdx: best.idx, f, area: Viewer.faceArea(ref.id, best.idx), hitP: V3(f.c).applyMatrix4(W), normal: ln ? ln.transformDirection(W).normalize() : null };
+    }
+    if (ref.kind === 'circle') {
+      const cands = [];
+      (r.data.edges || []).forEach((e, idx) => {
+        if (e.t !== 'CIRCLE' || !e.r || !e.c) return;
+        if (ref.n && e.n && Math.abs(V3(e.n).normalize().dot(V3(ref.n).normalize())) < 0.995) return;
+        cands.push({ e, idx, c: e.c });
+      });
+      const best = pickBest(cands, ref.c, ref.frac, bbox);
+      if (!best) return null;
+      return { kind: 'circle', id: ref.id, edgeIdx: best.idx, edge: best.e, c: V3(best.e.c).applyMatrix4(W), W };
+    }
+    if (ref.kind === 'pt') {
+      if (ref.edge) {
+        const re = ref.edge;
+        const refDir = re.t === 'LINE' ? V3(re.b).sub(V3(re.a)).normalize() : null;
+        const cands = [];
+        (r.data.edges || []).forEach((e, idx) => {
+          if (e.t !== re.t) return;
+          if (e.t === 'LINE' && refDir) {
+            const d = V3(e.b).sub(V3(e.a)); if (d.lengthSq() < 1e-10) return;
+            if (Math.abs(d.normalize().dot(refDir)) < 0.995) return;
+          } else if (e.t === 'CIRCLE' && re.n && e.n) {
+            if (Math.abs(V3(e.n).normalize().dot(V3(re.n).normalize())) < 0.995) return;
+          }
+          cands.push({ e, idx, c: e.m });
+        });
+        const best = pickBest(cands, re.m, re.mFrac, bbox);
+        if (!best) return null;
+        const e = best.e;
+        let lp = null;
+        if (re.which === 'm') lp = V3(e.m);
+        else if (re.which === 'c' && e.c) lp = V3(e.c);
+        else if (re.which === 'a' || re.which === 'b') {
+          const orig = V3(re[re.which]);
+          if (e.t === 'LINE') {
+            const d = V3(e.b).sub(V3(e.a));
+            const s = d.dot(V3(re.b).sub(V3(re.a))) >= 0;
+            lp = V3(re.which === 'a' ? (s ? e.a : e.b) : (s ? e.b : e.a));
+          } else {
+            lp = V3(e.a).distanceToSquared(orig) <= V3(e.b).distanceToSquared(orig) ? V3(e.a) : V3(e.b);
+          }
+        } else if (e.t === 'LINE') {
+          const a = V3(e.a), b = V3(e.b), ab = b.clone().sub(a), l2 = ab.lengthSq();
+          const t = l2 > 1e-10 ? clamp(V3(ref.lp).sub(a).dot(ab) / l2, 0, 1) : 0;
+          lp = a.addScaledVector(ab, t);
+        } else {
+          lp = V3(e.m);
+        }
+        return { kind: 'pt', id: ref.id, p: lp.applyMatrix4(W) };
+      }
+      let lp = V3(ref.lp);
+      if (ref.face) {
+        const cands = [];
+        (r.data.faces || []).forEach((f, idx) => {
+          if (f.t !== 'PLANE' || !f.n) return;
+          if (V3(f.n).dot(V3(ref.face.n)) >= 0.999) cands.push({ f, idx, c: f.c });
+        });
+        const best = pickBest(cands, ref.face.c, ref.face.frac, bbox);
+        if (!best) return null;
+        const fn = V3(best.f.n).normalize(), fc = V3(best.f.c);
+        lp = lp.clone().addScaledVector(fn, fc.clone().sub(lp).dot(fn));
+        if (bbox && (lp.x < bbox[0] - 1 || lp.x > bbox[3] + 1 || lp.y < bbox[1] - 1 || lp.y > bbox[4] + 1 || lp.z < bbox[2] - 1 || lp.z > bbox[5] + 1)) lp = fc.clone();
+      }
+      return { kind: 'pt', id: ref.id, p: lp.applyMatrix4(W) };
+    }
+    return null;
+  }
+  function solveMeasure(m) {
+    const refs = m.refs || [];
+    if (!refs.length) return { lost: true, short: 'verloren', text: 'verloren', value: null, unit: m.unit || '', typeLabel: 'Messung', p: m.lastP ? V3(m.lastP) : null, lines: [], dots: [], faces: [], circle: null };
+    const resolved = [];
+    for (const ref of refs) {
+      const x = resolveRef(ref);
+      if (!x) return { lost: true, short: 'verloren', text: 'verloren', value: null, unit: m.unit || '', typeLabel: 'Messung', p: m.lastP ? V3(m.lastP) : null, lines: [], dots: [], faces: [], circle: null };
+      resolved.push(x);
+    }
+    return evalEntities(m.kind, resolved);
+  }
+  function evalOf(m) {
+    if (live.has(m.id)) return live.get(m.id);
+    if (m.lost) return { lost: true, short: 'verloren', text: 'verloren', value: null, unit: m.unit || '', typeLabel: 'Messung', p: m.lastP ? V3(m.lastP) : null, lines: [], dots: [], faces: [], circle: null };
+    return { lost: false, short: m.short || '', text: m.text || '', value: m.value, unit: m.unit || '', typeLabel: 'Messung', p: m.lastP ? V3(m.lastP) : null, lines: [], dots: [], faces: [], circle: null };
+  }
+  function defaultName(cur) {
+    const n = list().length + 1;
+    const t = cur.eval.typeLabel || 'Messung';
+    if (t.startsWith('Abstand')) return `Abstand ${n}`;
+    if (t.startsWith('Winkel')) return `Winkel ${n}`;
+    if (t === 'Fläche') return `Fläche ${n}`;
+    if (t === 'Kreiskante') return `Durchmesser ${n}`;
+    return `${t} ${n}`;
+  }
+  function keep() {
+    if (!current) return null;
+    const m = {
+      id: uid('ms'), name: defaultName(current), kind: current.kind, refs: deepClone(current.refs),
+      value: current.eval.value, unit: current.eval.unit, short: current.eval.short, text: current.eval.text,
+      lost: false, lastP: current.eval.p ? r6(current.eval.p.toArray()) : null,
+    };
+    live.set(m.id, current.eval);
+    App.change(`Messung „${m.name}“ behalten`, (doc) => { (doc.measures = doc.measures || []).push(m); });
+    pts = []; current = null; last = null; clearVis(); updateBar(); drawSaved();
+    UI.toast(`Messung „${m.name}“ behalten.`, { icon: 'check', ms: 2000 });
+    return m;
+  }
+  function relink() {
+    const ms = list(), seen = new Set();
+    for (const m of ms) {
+      seen.add(m.id);
+      const ev = solveMeasure(m);
+      live.set(m.id, ev);
+      m.lost = !!ev.lost;
+      if (!ev.lost) {
+        m.value = ev.value; m.unit = ev.unit; m.short = ev.short; m.text = ev.text;
+        if (ev.p) m.lastP = r6(ev.p.toArray());
+      }
+    }
+    for (const k of [...live.keys()]) if (!seen.has(k)) live.delete(k);
+    drawSaved();
+    Panels.renderLeft();
+    if (sel) Panels.renderRight();
+  }
+  function setHidden(id, hidden) {
+    App.change(hidden ? 'Messung ausgeblendet' : 'Messung eingeblendet', (doc) => {
+      const m = find(id, doc); if (!m) return false;
+      if (hidden) m.hidden = true; else delete m.hidden;
+    });
+  }
+  function rename(id, name) {
+    const v = String(name || '').trim(); if (!v) return;
+    App.change('Messung umbenannt', (doc) => { const m = find(id, doc); if (!m) return false; m.name = v; });
+  }
+  function remove(id) {
+    App.change('Messung gelöscht', (doc) => { doc.measures = list(doc).filter((x) => x.id !== id); });
+    if (sel === id) select(null);
+  }
+  function select(id) {
+    sel = id || null;
+    if (sel) {
+      App.clearSelection();
+      if (typeof Datums !== 'undefined' && Datums.selected) Datums.select(null);
+    }
+    drawSaved(); Panels.renderLeft(); Panels.renderRight();
+  }
+  function clearPins() {
+    const g = Viewer.groups.measures;
+    if (g) for (const o of pinObjs) { g.remove(o); Viewer.disposeFat(o); }
+    pinObjs = [];
+    for (const x of pinEls) x.el.remove();
+    pinEls = [];
+  }
+  function drawSaved() {
+    clearPins();
+    const g = Viewer.groups.measures;
+    if (!g || App.mode !== 'model' || (typeof Sketch !== 'undefined' && Sketch.active)) { Viewer.requestRender(); return; }
+    for (const m of list()) {
+      if (m.hidden) continue;
+      const ev = evalOf(m);
+      const col = ev.lost ? '#e03131' : m.id === sel ? '#f08c00' : '#0ca678';
+      if (!ev.lost) {
+        for (const [a, b] of ev.lines || []) {
+          const l = Viewer.makeFat([a.x, a.y, a.z, b.x, b.y, b.z], col, m.id === sel ? 3.5 : 2.5, { depthTest: false, dashed: true, dashSize: 2, gapSize: 1.2, order: 35 });
+          g.add(l); pinObjs.push(l);
+        }
+        for (const q of ev.dots || []) {
+          const d = Viewer.makeFat([q.x, q.y, q.z, q.x, q.y, q.z + 0.001], col, m.id === sel ? 9 : 7, { depthTest: false, order: 36 });
+          g.add(d); pinObjs.push(d);
+        }
+        if (ev.circle) {
+          const n = Viewer.nodes.get(ev.circle.id);
+          const eg = n && n.data && n.data.edgeGroups && n.data.edgeGroups.find((x) => x[2] === ev.circle.edgeIdx);
+          if (eg) {
+            const pos = Viewer.makeFat(n.data.lines.slice(eg[0] * 3, (eg[0] + eg[1]) * 3), col, m.id === sel ? 4 : 3, { depthTest: false, order: 35 });
+            pos.matrixAutoUpdate = false; pos.matrix.copy(ev.circle.W); g.add(pos); pinObjs.push(pos);
+          }
+        }
+        if (m.id === sel) {
+          for (const fc of ev.faces || []) {
+            const fo = Viewer.faceOverlay(fc.id, fc.faceIdx, col, 0.22);
+            if (fo) { g.add(fo); pinObjs.push(fo); }
+          }
+        }
+      }
+      if (ev.p) {
+        const el = h('div', {
+          class: 'dimlabel mpin' + (m.id === sel ? ' sel' : '') + (ev.lost ? ' lost' : ''),
+          dataset: { measure: m.id },
+          'data-tip': ev.lost ? 'Bezug fehlt – klicken für Details' : `${ev.text} · Klick wählt, Doppelklick kopiert`,
+        }, ev.lost ? 'verloren' : ev.short);
+        el.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); });
+        el.addEventListener('click', (e) => { e.stopPropagation(); select(m.id === sel ? null : m.id); });
+        el.addEventListener('dblclick', (e) => { e.stopPropagation(); if (!ev.lost) copyValue(ev.text); });
+        $('#overlay').append(el);
+        pinEls.push({ el, p: ev.p, id: m.id });
+      }
+    }
+    place();
+    Viewer.requestRender();
+  }
+  function treeSection() {
+    const ms = list(); if (!ms.length) return null;
+    const sec = h('div', { class: 'datum-tree measure-tree', id: 'measure-tree', 'data-help': 'measureKeep' }, h('div', { class: 'section-h' }, 'Messungen'));
+    for (const m of ms) {
+      const ev = evalOf(m);
+      const row = h('div', { class: 'tree-row measure-row' + (m.id === sel ? ' sel' : '') + (m.hidden ? ' dim' : '') + (ev.lost ? ' lost' : ''), 'data-measure': m.id });
+      const ic = h('span', { class: 'swatch measure' }); ic.innerHTML = icon('measure');
+      const val = h('span', { class: 'sub mono' + (ev.lost ? ' lost' : '') }, ev.lost ? 'verloren' : ev.short);
+      const acts = h('span', { class: 'm-acts' });
+      const eye = h('button', { type: 'button', class: 'm-eye', 'aria-label': m.hidden ? 'Einblenden' : 'Ausblenden', 'data-tip': m.hidden ? 'Einblenden' : 'Ausblenden' });
+      eye.innerHTML = icon(m.hidden ? 'eyeOff' : 'eye');
+      eye.onclick = (e) => { e.stopPropagation(); setHidden(m.id, !m.hidden); };
+      const del = h('button', { type: 'button', class: 'm-del', 'aria-label': 'Löschen', 'data-tip': 'Löschen' });
+      del.innerHTML = icon('trash');
+      del.onclick = (e) => { e.stopPropagation(); remove(m.id); };
+      acts.append(eye, del);
+      row.append(ic, h('span', { class: 'nm' }, m.name), val, acts);
+      row.onclick = () => select(m.id === sel ? null : m.id);
+      sec.append(row);
+    }
+    return sec;
+  }
+  function renderPanel(body) {
+    const m = find(sel); if (!m) return false;
+    const ev = evalOf(m);
+    const w = h('div', { class: 'props' });
+    const nm = h('input', { id: 'measure-name', value: m.name, 'aria-label': 'Name' });
+    nm.addEventListener('change', () => { const v = nm.value.trim(); if (v) rename(m.id, v); });
+    nm.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') nm.blur(); });
+    w.append(h('div', { class: 'prop-title' }, nm));
+    w.append(h('div', { class: 'mini-list' },
+      h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Art'), h('b', null, ev.typeLabel || 'Messung')),
+      h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Wert'), h('b', { class: 'mono' + (ev.lost ? ' bad' : ''), id: 'measure-val' }, ev.lost ? 'verloren' : ev.text))));
+    if (ev.lost) w.append(h('div', { class: 'err-box' }, 'Ein Bezug dieser Messung fehlt oder wurde gelöscht – die Messung kann nicht mehr berechnet werden.'));
+    else w.append(h('div', { class: 'hint-box' }, 'Die Messung aktualisiert sich von selbst, sobald sich das Modell ändert.'));
+    const row = h('div', { class: 'btn-row' });
+    const bc = h('button', { type: 'button', class: 'btn primary', id: 'measure-copy', disabled: ev.lost }); bc.innerHTML = icon('copy') + 'Wert kopieren'; bc.onclick = () => copyValue(ev.text);
+    const bh = h('button', { type: 'button', class: 'btn', id: 'measure-hide' }); bh.innerHTML = icon(m.hidden ? 'eye' : 'eyeOff') + (m.hidden ? 'Einblenden' : 'Ausblenden'); bh.onclick = () => setHidden(m.id, !m.hidden);
+    const bd = h('button', { type: 'button', class: 'btn ghost', id: 'measure-del' }); bd.innerHTML = icon('trash') + 'Löschen'; bd.onclick = () => remove(m.id);
+    row.append(bc, bh, bd); w.append(row);
+    body.append(w);
+    return true;
   }
   let lastLabel = null;
   function showLabel(text, p) {
@@ -15702,7 +16546,15 @@ const Measure = (() => {
     el.addEventListener('click', (e) => { e.stopPropagation(); copyValue(text); });
     lastLabel = { el, p }; place();
   }
-  function place() { for (const e of els) { if (!lastLabel) continue; const s = Viewer.toScreen(lastLabel.p); lastLabel.el.style.left = s.x + 'px'; lastLabel.el.style.top = s.y - 22 + 'px'; } }
+  function place() {
+    for (const e of els) { if (!lastLabel) continue; const s = Viewer.toScreen(lastLabel.p); lastLabel.el.style.left = s.x + 'px'; lastLabel.el.style.top = s.y - 22 + 'px'; }
+    for (const x of pinEls) {
+      if (!x.p) continue;
+      const s = Viewer.toScreen(x.p);
+      x.el.style.display = s.behind ? 'none' : '';
+      x.el.style.left = s.x + 'px'; x.el.style.top = s.y - 16 + 'px';
+    }
+  }
   // erste Zahl eines Messwerts in die Zwischenablage (BE-35)
   let copied = null;
   function firstNumber(text) { const m = String(text).match(/-?\d+(?:[.,]\d+)?/); return m ? m[0] : null; }
@@ -15717,7 +16569,19 @@ const Measure = (() => {
   }
   function copyValue(text) { const n = firstNumber(text); if (n) return copyText(n, 'Wert'); return false; }
   function init() {
-    App.on('selection', () => { if (App.sel.length !== 2) clearDist(); });
+    App.on('selection', () => {
+      if (App.sel.length !== 2) clearDist();
+      if (sel && App.sel.length) { sel = null; drawSaved(); }
+    });
+    App.on('results', relink);
+    App.on('remeshed', relink);
+    App.on('doc', () => {
+      if (sel && !find(sel)) sel = null;
+      const ids = new Set(list().map((m) => m.id));
+      for (const k of [...live.keys()]) if (!ids.has(k)) live.delete(k);
+      drawSaved();
+    });
+    App.on('mode', () => { if (App.mode !== 'model' && on) stop(); drawSaved(); });
     let d0 = null;
     Viewer.canvas.addEventListener('pointerdown', (e) => { if (on) d0 = { x: e.clientX, y: e.clientY }; }, true);
     Viewer.canvas.addEventListener('pointerup', (e) => { if (on && d0 && Math.hypot(e.clientX - d0.x, e.clientY - d0.y) < 5) onDown(e); d0 = null; });
@@ -15775,7 +16639,11 @@ const Measure = (() => {
     }
     return r;
   }
-  return { showCoords, get coords() { return coordsNow; }, copyText, copyValue, get copied() { return copied; }, minDistance, clearDist, init, toggle, start, stop, get active() { return on; }, get result() { return last ? last.text : (els[0] ? els[0].textContent : null); } };
+  return {
+    showCoords, get coords() { return coordsNow; }, copyText, copyValue, get copied() { return copied; }, minDistance, clearDist, init, toggle, start, stop,
+    get active() { return on; }, get result() { return last ? last.text : (els[0] ? els[0].textContent : null); },
+    list, find, keep, relink, setHidden, rename, remove, select, drawSaved, treeSection, renderPanel, get selected() { return sel; },
+  };
 })();
 
 // ---- 58-commands.js ----
@@ -15942,6 +16810,7 @@ const Commands = (() => {
     add('sketch', 'Skizze zeichnen', 'sketch', 'zeichnen 2d profil umriss extrudieren', () => Sketch.chooseAndStart(), { group: 'Werkzeuge', kbd: 'S' });
     add('sketch-check', 'Skizze prüfen (Lücken und doppelte Linien)', 'target', 'skizze prüfen pruefer lücke lücken offen doppelt reparieren fehler', () => { if (Sketch.active) Sketch.check(); else UI.toast('Öffne zuerst eine Skizze, um sie zu prüfen.', { icon: 'info' }); }, { group: 'Werkzeuge' });
     add('hole-wizard', 'Bohrungs-Assistent', 'holeWizard', 'bohrung loch schraube gewinde senkung einsatz mutter sackloch bohrspitze passbohrung h7 zentrierbohrung', () => Place.holeWizard($('#t-parts')), { group: 'Bearbeiten' });
+    add('cosmetic-thread', 'Gewinde markieren (kosmetisch)', 'thread', 'gewinde kosmetisch markieren metrisch m3 m4 m5 m6 m8 echt schraube', () => { const f = Actions.selectedFace(); if (f && f.info && f.info.t === 'CYLINDRE') Features.threadPop(f, $('#center')); else UI.toast('Klick zuerst eine runde Fläche (Zylinder) an, um dort ein Gewinde zu markieren.', { icon: 'info' }); }, { group: 'Bearbeiten' });
     add('pattern-rect', 'Rechteckmuster', 'patternRect', 'muster reihe raster kopien vervielfachen', () => Features.pattern('rect'), { group: 'Bearbeiten' });
     add('pattern-circ', 'Kreismuster', 'patternCirc', 'muster kreis rund kopien löcher', () => Features.pattern('circ'), { group: 'Bearbeiten' });
     add('pattern-path', 'Muster entlang Kurve', 'patternPath', 'muster kurve pfad bogen entlang linie spline kette kopien löcher zähne', () => Features.patternPath(), { group: 'Bearbeiten' });
@@ -17279,7 +18148,7 @@ const Drawing = (() => {
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (const arr of [polys, hidden]) for (const p of arr) for (const q of p.pts) { x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]); }
     if (!isFinite(x0)) return null;
-    // Mittellinien
+    // Mittellinien und kosmetische Gewinde (KP-20)
     const centers = [];
     if (dwg().centers) {
       const dir = new THREE.Vector3(...v.dir), ex = new THREE.Vector3(...v.x), ey = new THREE.Vector3(...v.y);
@@ -17300,7 +18169,55 @@ const Drawing = (() => {
         }
       }
     }
-    return { polys, hidden, circles, points, centers, box: [x0, y0, x1, y1], w: x1 - x0, h: y1 - y0 };
+    const threads = [];
+    if (name !== 'iso') {
+      const dir = new THREE.Vector3(...v.dir), ex = new THREE.Vector3(...v.x), ey = new THREE.Vector3(...v.y);
+      const seenT = new Set();
+      for (const th of docThreads()) {
+        const k = Math.abs(th.d.dot(dir));
+        if (k > 0.995) {
+          const c = [th.p0.dot(ex), th.p0.dot(ey)];
+          const key = 'e|' + Math.round(c[0] * 20) + ',' + Math.round(c[1] * 20) + '|' + th.size + '|' + th.kind;
+          if (seenT.has(key)) continue; seenT.add(key);
+          threads.push({ type: 'end', c, r: th.r, rThread: th.rThread, size: th.size, length: th.length, kind: th.kind });
+        } else if (k < 0.05) {
+          const a = [th.p0.dot(ex), th.p0.dot(ey)], b = [th.p1.dot(ex), th.p1.dot(ey)];
+          const sA = Math.round(a[0] * 20) + ',' + Math.round(a[1] * 20), sB = Math.round(b[0] * 20) + ',' + Math.round(b[1] * 20);
+          const key = 's|' + (sA < sB ? sA + '|' + sB : sB + '|' + sA) + '|' + th.size + '|' + th.kind;
+          if (seenT.has(key)) continue; seenT.add(key);
+          threads.push({ type: 'side', a, b, r: th.r, rThread: th.rThread, size: th.size, length: th.length, kind: th.kind });
+        }
+      }
+    }
+    return { polys, hidden, circles, points, centers, threads, box: [x0, y0, x1, y1], w: x1 - x0, h: y1 - y0 };
+  }
+  function docThreads() {
+    const out = [], V = Model.vars(App.doc).v;
+    Model.walk(App.doc.items, (it) => {
+      if (it.role === 'hole' || it.suppressed || !Model.isActive(App.doc, it.id) || !it.threads || !it.threads.length) return;
+      const mats = Model.instanceMatrices(App.doc, it.id, V);
+      for (const th of it.threads) {
+        const fi = Viewer.threadFaceIndex(it.id, th);
+        const g = (fi >= 0 && Viewer.cylinderFaceInfo(it.id, fi)) || (Array.isArray(th.axis) && th.axis.length >= 6 ? {
+          o: th.axis.slice(0, 3), d: th.axis.slice(3, 6), r: th.r || 3, t0: th.t0 ?? 0, t1: th.t1 ?? 10, faceLen: Math.max(0.1, (th.t1 ?? 10) - (th.t0 ?? 0)), kind: th.kind || 'ext',
+        } : null);
+        if (!g) continue;
+        const kind = th.kind || g.kind || 'ext';
+        const L = clamp(Number(th.length) || g.faceLen, 0.2, g.faceLen);
+        const s0 = th.from === 'bottom' ? g.t0 : g.t1 - L;
+        const s1 = th.from === 'bottom' ? g.t0 + L : g.t1;
+        const spec = THREAD_MAP[th.size];
+        const rThread = kind === 'int' ? (spec ? spec.d / 2 : g.r * 1.15) : (spec ? spec.core / 2 : g.r * 0.85);
+        const dL = new THREE.Vector3(...g.d).normalize();
+        const p0L = new THREE.Vector3(...g.o).addScaledVector(dL, s0);
+        const p1L = new THREE.Vector3(...g.o).addScaledVector(dL, s1);
+        for (const M of mats) {
+          const p0 = p0L.clone().applyMatrix4(M), p1 = p1L.clone().applyMatrix4(M);
+          out.push({ p0, p1, d: p1.clone().sub(p0).normalize(), r: g.r, rThread, size: th.size, length: L, kind });
+        }
+      }
+    });
+    return out;
   }
   function freeGeom() {
     const d = dwg(); if (!d.free.length) return null;
@@ -17395,7 +18312,8 @@ const Drawing = (() => {
           const away = Math.hypot(best.c[0] - mx, best.c[1] - my) > 1e-6 ? (Math.atan2(best.c[1] - my, best.c[0] - mx) * 180) / Math.PI : 30;
           const ang = [45, 135, 225, 315].sort((p, q) => angD(p, away) - angD(q, away)).find((a) => !taken.includes(a)) ?? 45;
           taken.push(ang);
-          out.push({ ...dim, id: dim.id + '_' + Math.round(best.r * 200), type: 'dia', c: best.c, r: best.r, ang, count: g.length });
+          const mt = (v.geo.threads || []).find((th) => th.type === 'end' && Math.hypot(th.c[0] - best.c[0], th.c[1] - best.c[1]) < 0.25 && Math.abs(th.r - best.r) < 0.35);
+          out.push({ ...dim, id: dim.id + '_' + Math.round(best.r * 200), type: 'dia', c: best.c, r: best.r, ang, count: g.length, ...(mt ? { threadLabel: `${mt.size} × ${fmtDim(mt.length)}` } : {}) });
         }
         // Rundungen: gleiche Radien zusammenfassen („4× R5“). Nur deutliche Bögen – Zahnköpfe und Ähnliches bleiben weg.
         const ag = new Map();
@@ -17458,7 +18376,7 @@ const Drawing = (() => {
       const tEx = Math.min(tx, ty);
       const lead = tEx > 0 && tEx < 24 ? Math.max(5, tEx) : 7;
       const out = [P[0] + ux * lead, P[1] + uy * lead];
-      const label = (dim.count > 1 ? dim.count + '× ' : '') + (dim.type === 'dia' ? 'Ø' : 'R') + fmtDim(dim.type === 'dia' ? dim.r * 2 : dim.r);
+      const label = (dim.count > 1 ? dim.count + '× ' : '') + (dim.threadLabel ? dim.threadLabel : (dim.type === 'dia' ? 'Ø' : 'R') + fmtDim(dim.type === 'dia' ? dim.r * 2 : dim.r));
       const tl = textW(label, TXT) * 0.92 + 2;
       const tail = [out[0] + (ux >= 0 ? tl : -tl), out[1]];
       if (dim.type === 'dia') {
@@ -17507,6 +18425,33 @@ const Drawing = (() => {
       for (const c of v.geo.centers) {
         if (c.type === 'cross') { const C = toSheet(v, c.c); const r = c.r * v.s + 2; lines.push({ pts: [[C[0] - r, C[1]], [C[0] + r, C[1]]], cls: 'ctr' }, { pts: [[C[0], C[1] - r], [C[0], C[1] + r]], cls: 'ctr' }); }
         else { const A = toSheet(v, c.a), B = toSheet(v, c.b); const dx = B[0] - A[0], dy = B[1] - A[1]; const L = Math.hypot(dx, dy) || 1; const e = 2.5; lines.push({ pts: [[A[0] - (dx / L) * e, A[1] - (dy / L) * e], [B[0] + (dx / L) * e, B[1] + (dy / L) * e]], cls: 'ctr' }); }
+      }
+      // Kosmetische Gewinde nach DIN ISO 6410-1: 3/4-Kreis (Stirnansicht) bzw. dünne parallele Linien (Seitenansicht)
+      const labelSide = name === 'front' || (name === 'left' && !layout.views.front);
+      for (const th of v.geo.threads || []) {
+        if (th.type === 'end') {
+          const C = toSheet(v, th.c), rr = th.rThread * v.s;
+          if (rr > 0.3) lines.push({ pts: arcPts(th.c, th.rThread, 0, Math.PI * 1.5).map((q) => toSheet(v, q)), arc: { c: C, r: rr, a: [0, Math.PI * 1.5] }, cls: 'thin' });
+        } else if (th.type === 'side') {
+          const A = toSheet(v, th.a), B = toSheet(v, th.b);
+          const dx = B[0] - A[0], dy = B[1] - A[1], L = Math.hypot(dx, dy);
+          if (L < 0.3) continue;
+          const px = -dy / L, py = dx / L, rt = th.rThread * v.s, ro = th.r * v.s;
+          lines.push({ pts: [[A[0] + px * rt, A[1] + py * rt], [B[0] + px * rt, B[1] + py * rt]], cls: 'thin' });
+          lines.push({ pts: [[A[0] - px * rt, A[1] - py * rt], [B[0] - px * rt, B[1] - py * rt]], cls: 'thin' });
+          lines.push({ pts: [[A[0] - px * ro, A[1] - py * ro], [A[0] + px * ro, A[1] + py * ro]], cls: 'vis' });
+          lines.push({ pts: [[B[0] - px * ro, B[1] - py * ro], [B[0] + px * ro, B[1] + py * ro]], cls: 'vis' });
+          if (labelSide) {
+            const mx = (A[0] + B[0]) / 2, my = (A[1] + B[1]) / 2;
+            const P0 = [mx + px * ro, my + py * ro];
+            const P1 = [P0[0] + px * 5 + 3, P0[1] + py * 5 - 4];
+            const lbl = `${th.size} × ${fmtDim(th.length)}`;
+            const tw = textW(lbl, 3.2) + 2;
+            const P2 = [P1[0] + tw, P1[1]];
+            lines.push({ pts: [P0, P1, P2], cls: 'dim' });
+            texts.push({ x: (P1[0] + P2[0]) / 2, y: P1[1] - 1, t: lbl, size: 3.2, rot: 0, anchor: 'middle', cls: 'dimtext' });
+          }
+        }
       }
       if (name === 'free') for (const e of d.free) if (e.type === 'text') { const P = toSheet(v, e.p); texts.push({ x: P[0], y: P[1], t: e.text, size: e.size || 3.5, rot: 0, anchor: 'start', id: e.id, cls: 'free' }); }
     }

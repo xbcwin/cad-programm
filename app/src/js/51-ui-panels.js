@@ -169,6 +169,8 @@ const Panels = (() => {
     if (fs) body.append(fs);
     if (!items.length) {
       body.append(h('div', { class: 'empty-tree', html: 'Hier erscheint alles, was du baust – <b>Schritt für Schritt</b>.<br><br>Fang mit einem <b>Körper</b> an oder beschreibe unten in der Zeile, was du bauen möchtest.' }));
+      const ds = Datums.treeSection(); if (ds) body.append(ds);
+      const ms = Measure.treeSection(); if (ms) body.append(ms);
       return;
     }
     const V = Model.vars(App.doc).v;
@@ -261,6 +263,7 @@ const Panels = (() => {
     rec(items, ul);
     body.append(ul);
     const ds = Datums.treeSection(); if (ds) body.append(ds);
+    const ms = Measure.treeSection(); if (ms) body.append(ms);
   }
   function moveInTree(srcId, dstId, mode) {
     if (!srcId || srcId === dstId) return;
@@ -455,6 +458,7 @@ const Panels = (() => {
     if (Sketch.active) { $('#right-title').textContent = 'Skizze'; Sketch.renderPanel(body); return; }
     const items = App.selectedItems();
     if (!items.length && Datums.selected && Datums.find(Datums.selected)) { $('#right-title').textContent = 'Bezugsebene'; Datums.renderPanel(body); return; }
+    if (!items.length && Measure.selected && Measure.find(Measure.selected)) { $('#right-title').textContent = 'Messung'; Measure.renderPanel(body); return; }
     if (!items.length) { $('#right-title').textContent = 'Projekt'; renderProject(body); return; }
     if (items.length > 1) { $('#right-title').textContent = 'Auswahl'; renderMulti(body, items); return; }
     $('#right-title').textContent = 'Eigenschaften';
@@ -959,6 +963,35 @@ const Panels = (() => {
       if (cur) { const b = h('button', { type: 'button', class: 'btn ghost', id: 'face-color-off' }); b.innerHTML = icon('undo') + 'Flächenfarbe entfernen'; b.onclick = () => setFace(null); fsec.append(h('div', { class: 'btn-row' }, b)); }
       w.append(fsec);
     }
+    // Kosmetische Gewinde (KP-20)
+    const isCylFace = !!(sf && sf.id === it.id && sf.info.t === 'CYLINDRE');
+    if (it.role !== 'hole' && (isCylFace || (it.threads && it.threads.length))) {
+      const tsec = h('div', { class: 'section', id: 'thread-sec', 'data-help': 'cosmeticThread' }, h('div', { class: 'section-h' }, 'Gewinde (Markierung)'));
+      if (isCylFace && !Features.threadOnFace(it.id, sf.idx)) {
+        const mb = h('button', { type: 'button', class: 'btn small', id: 'btn-mark-thread' });
+        mb.innerHTML = icon('thread') + 'Gewinde auf dieser Fläche markieren';
+        mb.onclick = (e) => Features.threadPop(sf, e.currentTarget);
+        tsec.append(h('div', { class: 'btn-row' }, mb));
+      }
+      for (const th of it.threads || []) {
+        const sp = THREAD_MAP[th.size] || { pitch: 1 };
+        const box = h('div', { class: 'thread-item', style: { display: 'grid', gap: '6px', padding: '6px 0', borderTop: '1px solid var(--line)' } });
+        box.append(h('div', { class: 'mini-row' }, h('b', null, `${th.size} × ${fmt(th.length, 1)} mm`), h('span', { class: 'grow muted', style: { marginLeft: '6px', fontSize: '11px' } }, `${th.kind === 'int' ? 'Innengewinde' : 'Außengewinde'} · P ${fmt(sp.pitch, 2)}`)));
+        const fs = h('div', { class: 'fields' });
+        fs.append(UI.selectField({ id: 'th-size-' + th.id, label: 'M-Größe', value: th.size, options: THREAD_SPECS.map((s) => [s.size, s.size]), onChange: (v) => Features.updateThread(it.id, th.id, { size: v }) }));
+        fs.append(UI.numField({ id: 'th-len-' + th.id, label: 'Länge', value: th.length, min: 0.5, unit: 'mm', expr: false, onCommit: (v) => Features.updateThread(it.id, th.id, { length: v }) }));
+        fs.append(UI.selectField({ id: 'th-from-' + th.id, label: 'Ende', value: th.from || 'top', options: [['top', 'Ende 1'], ['bottom', 'Ende 2']], onChange: (v) => Features.updateThread(it.id, th.id, { from: v }) }));
+        box.append(fs);
+        const br = h('div', { class: 'btn-row' });
+        const rb = h('button', { type: 'button', class: 'btn small', id: 'th-real-' + th.id }); rb.innerHTML = icon('bolt') + 'Echt machen'; rb.onclick = () => Features.makeThreadReal(it.id, th.id);
+        const db = h('button', { type: 'button', class: 'btn ghost small', id: 'th-del-' + th.id, 'aria-label': 'Gewinde entfernen', 'data-tip': 'Entfernen' }); db.innerHTML = icon('trash'); db.onclick = () => Features.removeThread(it.id, th.id);
+        br.append(rb, db);
+        box.append(br);
+        tsec.append(box);
+      }
+      tsec.append(h('div', { class: 'hint-box' }, 'Nur Anzeige – rechnet sofort, steht in Stückliste und Zeichnung. „Echt machen“ wandelt in ein druckbares 3D-Gewinde.'));
+      w.append(tsec);
+    }
     if (it.role !== 'hole') {
       const op = h('div', { class: 'fields', 'data-help': 'opacity' });
       op.append(UI.numField({ id: 'item-opacity', label: 'Sichtbarkeit (100 % = undurchsichtig)', value: Math.round((it.opacity ?? 1) * 100), unit: '%', expr: false, min: 5, onCommit: (v) => App.change('Durchsichtigkeit', (doc) => { const T = Model.find(doc, it.id).item; const o = clamp(v, 5, 100) / 100; if (o >= 1) delete T.opacity; else T.opacity = o; }, { merge: 'op:' + it.id }) }));
@@ -1067,6 +1100,11 @@ const Panels = (() => {
       const fr = face.info.r;
       bar.append(fr ? valLbl(face.info.t === 'SPHERE' ? 'Kugel Ø' : 'Runde Fläche Ø', fr * 2, 'mm', `Radius ${fmt(fr, 2)} mm`) : h('span', { class: 'lbl' }, 'Runde Fläche'));
       b('holeWizard', 'Bohrung', (e) => Place.holeHere(face, e.currentTarget), 'accent', 'Bohrungs-Assistent: Loch senkrecht in die runde Fläche (Schraube, Sackloch, Passbohrung H7, Zentrierung …) – der Magnet rastet ganz oben, an den Seiten und in der Mitte ein');
+      if (face.info.t === 'CYLINDRE' && items[0].item.role !== 'hole') {
+        const hasTh = !!Features.threadOnFace(face.id, face.idx);
+        const tb = b('thread', hasTh ? 'Gewinde ändern' : 'Gewinde markieren', (e) => Features.threadPop(face, e.currentTarget), hasTh ? 'accent' : '', 'Kosmetisches Gewinde auf dieser runden Fläche markieren (rechnet schnell)');
+        tb.dataset.help = 'cosmeticThread';
+      }
       b('fillet', 'Ihre Kanten', (e) => faceEdgeMenu(face, e.currentTarget), '', 'Alle Kanten dieser Fläche wählen, abrunden oder abschrägen', true);
       sep();
     }
