@@ -728,5 +728,10 @@
     "tip": "Zentrierbohrung nach DIN 332 Form A",
     "hilfe": "Erzeugt eine genormte Zentrierbohrung mit 60°-Senkkegel, kurzer Führungsbohrung und 118°-Bohrspitze am Grund – so wie sie ein Zentrierbohrer auf der Drehbank oder Fräse herstellt.",
     "tipp": "Wähle die Größe (A 1,0 bis A 6,3) passend zum Durchmesser der Welle oder des Werkstücks."
+  },
+  "exportObjGlb": {
+    "tip": "Als OBJ (mit MTL-Farben) oder GLB speichern",
+    "hilfe": "OBJ kommt zusammen mit einer MTL-Datei für Farben und Glanz (in Millimetern, ideal für Blender und ältere 3D-Programme). GLB (glTF 2.0 binär) speichert jedes Teil als eigenen Knoten mit Namen samt Werkstoff-Aussehen aus dem Studio-Look (Metall, Rauheit, Klarlack, Durchsichtigkeit).",
+    "tipp": "Für Web-Ansichten und schnelle Vorschauen nimm GLB; für klassische Render-Programme OBJ + MTL."
   }
 }

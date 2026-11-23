@@ -183,7 +183,7 @@ const Commands = (() => {
     add('repeat', 'Letzten Befehl wiederholen', 'undo', 'wiederholen nochmal letzter befehl', () => repeat(), { group: 'Werkzeuge', kbd: 'Leertaste' });
     add('datum', 'Bezugsebene anlegen', 'originPlanes', 'bezugsebene ebene konstruktionsebene arbeitsebene abstand versetzt schräg', () => Datums.dialog(), { group: 'Werkzeuge' });
     add('image', 'Bild speichern (PNG)', 'image', 'bild png foto screenshot rendering präsentation hintergrund durchsichtig', () => Print.imageDialog(), { group: 'Werkzeuge' });
-    add('export', 'Exportieren (STEP, STL, 3MF, DXF)', 'export', 'step stl 3mf dxf platten fräse laser exportieren speichern download', () => Print.exportDialog(), { group: 'Werkzeuge', kbd: 'Strg E' });
+    add('export', 'Exportieren (STEP, STL, 3MF, OBJ, GLB, DXF)', 'export', 'step stl 3mf obj mtl glb gltf dxf platten fräse laser exportieren speichern download', () => Print.exportDialog(), { group: 'Werkzeuge', kbd: 'Strg E' });
     add('status', 'Modell-Status', 'info', 'status prüfen größe fehler', () => $('#ampel').click(), { group: 'Werkzeuge' });
     add('drop', 'Auf die XY-Ebene setzen', 'push', 'boden unten absetzen z null ebene', () => Actions.dropToPlate(null), { group: 'Werkzeuge' });
     add('ortho', 'Orthografisch / Perspektive', 'viewOrtho', 'ortho perspektive projektion kamera', () => ViewPrefs.toggle('ortho'), { group: 'Ansicht', kbd: 'O' });

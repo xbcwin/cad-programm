@@ -1884,6 +1884,11 @@ const HELP = {
   "tip": "Zentrierbohrung nach DIN 332 Form A",
   "hilfe": "Erzeugt eine genormte Zentrierbohrung mit 60°-Senkkegel, kurzer Führungsbohrung und 118°-Bohrspitze am Grund – so wie sie ein Zentrierbohrer auf der Drehbank oder Fräse herstellt.",
   "tipp": "Wähle die Größe (A 1,0 bis A 6,3) passend zum Durchmesser der Welle oder des Werkstücks."
+ },
+ "exportObjGlb": {
+  "tip": "Als OBJ (mit MTL-Farben) oder GLB speichern",
+  "hilfe": "OBJ kommt zusammen mit einer MTL-Datei für Farben und Glanz (in Millimetern, ideal für Blender und ältere 3D-Programme). GLB (glTF 2.0 binär) speichert jedes Teil als eigenen Knoten mit Namen samt Werkstoff-Aussehen aus dem Studio-Look (Metall, Rauheit, Klarlack, Durchsichtigkeit).",
+  "tipp": "Für Web-Ansichten und schnelle Vorschauen nimm GLB; für klassische Render-Programme OBJ + MTL."
  }
 };
 
@@ -9100,7 +9105,7 @@ const Panels = (() => {
       ]), 'simple-only');
       el.append(h('div', { class: 'sep' }));
       Views.sync();
-      btn('t-export', 'export', 'Exportieren', 'Als STEP, STL, 3MF oder DXF speichern (ZIP)', 'Strg E', () => Print.exportDialog(), 'primary', 'Export');
+      btn('t-export', 'export', 'Exportieren', 'Als STEP, STL, 3MF, OBJ, GLB oder DXF speichern (ZIP)', 'Strg E', () => Print.exportDialog(), 'primary', 'Export');
     } else {
       btn('t-sheet', 'sheet', 'Blatt', 'Blattgröße, Maßstab und Ansichten', '', (e) => Drawing.sheetMenu(e.currentTarget));
       btn('t-dim', 'dim', 'Maß', 'Bemaßung hinzufügen: zwei Punkte oder einen Kreis anklicken', 'D', () => Drawing.tool('dim'));
@@ -15959,7 +15964,7 @@ const Commands = (() => {
     add('repeat', 'Letzten Befehl wiederholen', 'undo', 'wiederholen nochmal letzter befehl', () => repeat(), { group: 'Werkzeuge', kbd: 'Leertaste' });
     add('datum', 'Bezugsebene anlegen', 'originPlanes', 'bezugsebene ebene konstruktionsebene arbeitsebene abstand versetzt schräg', () => Datums.dialog(), { group: 'Werkzeuge' });
     add('image', 'Bild speichern (PNG)', 'image', 'bild png foto screenshot rendering präsentation hintergrund durchsichtig', () => Print.imageDialog(), { group: 'Werkzeuge' });
-    add('export', 'Exportieren (STEP, STL, 3MF, DXF)', 'export', 'step stl 3mf dxf platten fräse laser exportieren speichern download', () => Print.exportDialog(), { group: 'Werkzeuge', kbd: 'Strg E' });
+    add('export', 'Exportieren (STEP, STL, 3MF, OBJ, GLB, DXF)', 'export', 'step stl 3mf obj mtl glb gltf dxf platten fräse laser exportieren speichern download', () => Print.exportDialog(), { group: 'Werkzeuge', kbd: 'Strg E' });
     add('status', 'Modell-Status', 'info', 'status prüfen größe fehler', () => $('#ampel').click(), { group: 'Werkzeuge' });
     add('drop', 'Auf die XY-Ebene setzen', 'push', 'boden unten absetzen z null ebene', () => Actions.dropToPlate(null), { group: 'Werkzeuge' });
     add('ortho', 'Orthografisch / Perspektive', 'viewOrtho', 'ortho perspektive projektion kamera', () => ViewPrefs.toggle('ortho'), { group: 'Ansicht', kbd: 'O' });
@@ -16530,6 +16535,216 @@ const Print = (() => {
     const rels = enc.encode('<?xml version="1.0" encoding="UTF-8"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Target="/3D/3dmodel.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships>');
     return Zip.make([{ name: '[Content_Types].xml', data: ct }, { name: '_rels/.rels', data: rels }, { name: '3D/3dmodel.model', data: model }]);
   }
+  function parseHexSrgb(hex) {
+    const s = String(hex || '').trim();
+    let m = /^#([0-9a-f]{6})$/i.exec(s);
+    if (m) { const n = parseInt(m[1], 16); return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]; }
+    m = /^#([0-9a-f]{3})$/i.exec(s);
+    if (m) { const a = m[1]; return [parseInt(a[0] + a[0], 16) / 255, parseInt(a[1] + a[1], 16) / 255, parseInt(a[2] + a[2], 16) / 255]; }
+    try {
+      const c = new THREE.Color(s);
+      if (THREE.SRGBColorSpace && c.getRGB) { const o = { r: 0, g: 0, b: 0 }; c.getRGB(o, THREE.SRGBColorSpace); return [o.r, o.g, o.b]; }
+      return [c.r, c.g, c.b];
+    } catch (_) { return [0.184, 0.62, 0.569]; }
+  }
+  function srgbToLinear(c) { return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
+  function ensureNormals(vertices, triangles, normals) {
+    if (normals && normals.length === vertices.length) return normals;
+    const out = new Float32Array(vertices.length);
+    for (let i = 0; i < triangles.length; i += 3) {
+      const i0 = triangles[i] * 3, i1 = triangles[i + 1] * 3, i2 = triangles[i + 2] * 3;
+      const ux = vertices[i1] - vertices[i0], uy = vertices[i1 + 1] - vertices[i0 + 1], uz = vertices[i1 + 2] - vertices[i0 + 2];
+      const wx = vertices[i2] - vertices[i0], wy = vertices[i2 + 1] - vertices[i0 + 1], wz = vertices[i2 + 2] - vertices[i0 + 2];
+      const nx = uy * wz - uz * wy, ny = uz * wx - ux * wz, nz = ux * wy - uy * wx;
+      for (const k of [i0, i1, i2]) { out[k] += nx; out[k + 1] += ny; out[k + 2] += nz; }
+    }
+    for (let i = 0; i < out.length; i += 3) {
+      const l = Math.hypot(out[i], out[i + 1], out[i + 2]);
+      if (l > 1e-12) { out[i] /= l; out[i + 1] /= l; out[i + 2] /= l; }
+      else { out[i] = 0; out[i + 1] = 0; out[i + 2] = 1; }
+    }
+    return out;
+  }
+  function partAppearance(o) {
+    const f = o.id ? Model.find(App.doc, o.id) : null;
+    const it = f ? f.item : null;
+    const matName = (it && it.mat) || (App.doc.settings && App.doc.settings.material) || null;
+    const L = Viewer.lookOf(matName);
+    const matCol = L.nat && !(it && it.colorSet) ? L.col : null;
+    const hex = matCol || (it && it.color) || o.color || '#2f9e91';
+    const srgb = parseHexSrgb(hex);
+    const opacity = it && it.opacity != null && it.opacity < 1 ? Math.max(0.05, it.opacity) : (L.glass || 1);
+    return {
+      name: o.name || (it ? Model.label(it) : 'Teil'),
+      matName: matName || 'Standard',
+      hex: String(hex).toLowerCase(),
+      srgb,
+      linear: srgb.map(srgbToLinear),
+      metalness: L.metal || 0,
+      roughness: L.rough != null ? L.rough : 0.45,
+      clearcoat: L.clear || 0,
+      clearcoatRoughness: L.clearRough != null ? L.clearRough : 0.2,
+      opacity,
+      transparent: opacity < 0.999,
+    };
+  }
+  function buildOBJ(objects, name) {
+    const mtlFile = (name || 'Tracery') + '.mtl';
+    const f4 = (v) => (Math.abs(v) < 5e-7 ? 0 : v).toFixed(4);
+    const f5 = (v) => (Math.abs(v) < 5e-7 ? 0 : v).toFixed(5);
+    const mats = new Map();
+    const mtl = ['# Tracery MTL'];
+    const matFor = (ap) => {
+      const k = [ap.matName, ap.hex, ap.metalness, ap.roughness, ap.clearcoat, ap.opacity.toFixed(3)].join('|');
+      if (mats.has(k)) return mats.get(k);
+      const token = ap.matName.replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '') || 'Standard';
+      const id = `mat_${mats.size + 1}_${token}`;
+      mats.set(k, id);
+      const [r, g, b] = ap.srgb;
+      const ks = ap.metalness > 0.5
+        ? [r * (1 - ap.roughness * 0.5), g * (1 - ap.roughness * 0.5), b * (1 - ap.roughness * 0.5)]
+        : (() => { const s = Math.min(1, 0.04 + 0.35 * (1 - ap.roughness) + 0.3 * ap.clearcoat); return [s, s, s]; })();
+      const ns = Math.round(Math.pow(1 - Math.min(0.98, ap.roughness), 2) * 900 + 10);
+      mtl.push(
+        `newmtl ${id}`,
+        `Ka ${f4(r * 0.15)} ${f4(g * 0.15)} ${f4(b * 0.15)}`,
+        `Kd ${f4(r)} ${f4(g)} ${f4(b)}`,
+        `Ks ${f4(ks[0])} ${f4(ks[1])} ${f4(ks[2])}`,
+        `Ns ${ns}`,
+        `Pr ${f4(ap.roughness)}`,
+        `Pm ${f4(ap.metalness)}`,
+        `d ${f4(ap.opacity)}`,
+        `illum ${ap.transparent ? 4 : 2}`
+      );
+      return id;
+    };
+    const obj = ['# Tracery OBJ (Millimeter)', `mtllib ${mtlFile}`];
+    let vOff = 0;
+    for (const o of objects) {
+      const ap = partAppearance(o);
+      const matId = matFor(ap);
+      const objName = String(ap.name || 'Teil').replace(/[\r\n]+/g, ' ').trim() || 'Teil';
+      obj.push(`o ${objName}`, `usemtl ${matId}`);
+      const v = o.vertices, t = o.triangles, nrm = ensureNormals(v, t, o.normals);
+      const vCount = (v.length / 3) | 0;
+      for (let i = 0; i < vCount * 3; i += 3) obj.push(`v ${f5(v[i])} ${f5(v[i + 1])} ${f5(v[i + 2])}`);
+      for (let i = 0; i < vCount * 3; i += 3) {
+        let nx = nrm[i], ny = nrm[i + 1], nz = nrm[i + 2];
+        const l = Math.hypot(nx, ny, nz);
+        if (l > 1e-12) { nx /= l; ny /= l; nz /= l; } else { nx = 0; ny = 0; nz = 1; }
+        obj.push(`vn ${f5(nx)} ${f5(ny)} ${f5(nz)}`);
+      }
+      for (let i = 0; i < t.length; i += 3) {
+        const a = t[i], b = t[i + 1], c = t[i + 2];
+        if (a >= vCount || b >= vCount || c >= vCount || a === b || b === c || a === c) continue;
+        const ia = a + 1 + vOff, ib = b + 1 + vOff, ic = c + 1 + vOff;
+        obj.push(`f ${ia}//${ia} ${ib}//${ib} ${ic}//${ic}`);
+      }
+      vOff += vCount;
+    }
+    const enc = new TextEncoder();
+    return { obj: enc.encode(obj.join('\n') + '\n'), mtl: enc.encode(mtl.join('\n') + '\n') };
+  }
+  function buildGLB(objects, name) {
+    const mats = new Map(), materials = [];
+    let usesClearcoat = false;
+    const matFor = (ap) => {
+      const k = [ap.matName, ap.hex, ap.metalness, ap.roughness, ap.clearcoat, ap.opacity.toFixed(3)].join('|');
+      if (mats.has(k)) return mats.get(k);
+      const idx = materials.length;
+      mats.set(k, idx);
+      const mat = {
+        name: ap.matName,
+        pbrMetallicRoughness: {
+          baseColorFactor: [+ap.linear[0].toFixed(6), +ap.linear[1].toFixed(6), +ap.linear[2].toFixed(6), +ap.opacity.toFixed(4)],
+          metallicFactor: +ap.metalness.toFixed(4),
+          roughnessFactor: +ap.roughness.toFixed(4),
+        },
+      };
+      if (ap.transparent) { mat.alphaMode = 'BLEND'; mat.doubleSided = true; }
+      if (ap.clearcoat > 0) {
+        usesClearcoat = true;
+        mat.extensions = { KHR_materials_clearcoat: { clearcoatFactor: +ap.clearcoat.toFixed(4), clearcoatRoughnessFactor: +ap.clearcoatRoughness.toFixed(4) } };
+      }
+      materials.push(mat);
+      return idx;
+    };
+    const binParts = [], bufferViews = [], accessors = [], meshes = [], nodes = [];
+    let binLen = 0;
+    const pushBin = (typed, target) => {
+      const pad = (4 - (binLen % 4)) % 4;
+      if (pad) { binParts.push(new Uint8Array(pad)); binLen += pad; }
+      const bytes = new Uint8Array(typed.buffer, typed.byteOffset, typed.byteLength);
+      const byteOffset = binLen;
+      binParts.push(bytes); binLen += bytes.byteLength;
+      const bv = bufferViews.length;
+      bufferViews.push({ buffer: 0, byteOffset, byteLength: bytes.byteLength, target });
+      return bv;
+    };
+    for (const o of objects) {
+      const ap = partAppearance(o);
+      const matIdx = matFor(ap);
+      const partName = String(ap.name || 'Teil').replace(/[\r\n]+/g, ' ').trim() || 'Teil';
+      const v = o.vertices, t = o.triangles, nrm = ensureNormals(v, t, o.normals);
+      const vCount = (v.length / 3) | 0;
+      const pos = new Float32Array(vCount * 3), nor = new Float32Array(vCount * 3);
+      let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+      for (let i = 0; i < vCount * 3; i += 3) {
+        // mm (Z-oben) → Meter (Y-oben, Determinante +1)
+        const px = v[i] * 0.001, py = v[i + 2] * 0.001, pz = -v[i + 1] * 0.001;
+        pos[i] = px; pos[i + 1] = py; pos[i + 2] = pz;
+        if (px < minX) minX = px; if (py < minY) minY = py; if (pz < minZ) minZ = pz;
+        if (px > maxX) maxX = px; if (py > maxY) maxY = py; if (pz > maxZ) maxZ = pz;
+        let nx = nrm[i], ny = nrm[i + 2], nz = -nrm[i + 1];
+        const l = Math.hypot(nx, ny, nz);
+        if (l > 1e-12) { nx /= l; ny /= l; nz /= l; } else { nx = 0; ny = 1; nz = 0; }
+        nor[i] = nx; nor[i + 1] = ny; nor[i + 2] = nz;
+      }
+      if (!vCount) { minX = minY = minZ = 0; maxX = maxY = maxZ = 0; }
+      const tris = [];
+      for (let i = 0; i < t.length; i += 3) {
+        const a = t[i], b = t[i + 1], c = t[i + 2];
+        if (a < vCount && b < vCount && c < vCount && a !== b && b !== c && a !== c) tris.push(a, b, c);
+      }
+      const useU16 = vCount < 65535;
+      const idxArr = useU16 ? new Uint16Array(tris) : new Uint32Array(tris);
+      const posBv = pushBin(pos, 34962), norBv = pushBin(nor, 34962), idxBv = pushBin(idxArr, 34963);
+      const posAcc = accessors.length;
+      accessors.push({ bufferView: posBv, componentType: 5126, count: vCount, type: 'VEC3', min: [minX, minY, minZ], max: [maxX, maxY, maxZ] });
+      const norAcc = accessors.length;
+      accessors.push({ bufferView: norBv, componentType: 5126, count: vCount, type: 'VEC3' });
+      const idxAcc = accessors.length;
+      accessors.push({ bufferView: idxBv, componentType: useU16 ? 5123 : 5125, count: tris.length, type: 'SCALAR' });
+      const meshIdx = meshes.length;
+      meshes.push({ name: partName, primitives: [{ attributes: { POSITION: posAcc, NORMAL: norAcc }, indices: idxAcc, material: matIdx, mode: 4 }] });
+      nodes.push({ name: partName, mesh: meshIdx });
+    }
+    const binPad = (4 - (binLen % 4)) % 4;
+    if (binPad) { binParts.push(new Uint8Array(binPad)); binLen += binPad; }
+    const gltf = {
+      asset: { version: '2.0', generator: 'Tracery' },
+      scene: 0,
+      scenes: [{ name: name || 'Tracery', nodes: nodes.map((_, i) => i) }],
+      nodes, meshes, materials, accessors, bufferViews,
+      buffers: [{ byteLength: binLen }],
+    };
+    if (usesClearcoat) gltf.extensionsUsed = ['KHR_materials_clearcoat'];
+    const jsonRaw = new TextEncoder().encode(JSON.stringify(gltf));
+    const jsonPad = (4 - (jsonRaw.length % 4)) % 4;
+    const jsonLen = jsonRaw.length + jsonPad;
+    const total = 12 + 8 + jsonLen + 8 + binLen;
+    const out = new Uint8Array(total);
+    const dv = new DataView(out.buffer);
+    dv.setUint32(0, 0x46546c67, true); dv.setUint32(4, 2, true); dv.setUint32(8, total, true);
+    dv.setUint32(12, jsonLen, true); dv.setUint32(16, 0x4e4f534a, true);
+    out.set(jsonRaw, 20);
+    for (let i = 0; i < jsonPad; i++) out[20 + jsonRaw.length + i] = 0x20;
+    const binOff = 20 + jsonLen;
+    dv.setUint32(binOff, binLen, true); dv.setUint32(binOff + 4, 0x004e4942, true);
+    let p = binOff + 8;
+    for (const part of binParts) { out.set(part, p); p += part.byteLength; }
+    return out;
+  }
   function safeName(s) { return (String(s || 'Tracery').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim() || 'Tracery').slice(0, 80); }
   async function save(filename, data) {
     let dl = null;
@@ -16558,22 +16773,24 @@ const Print = (() => {
   function exportDialog() {
     if (!App.doc.items.some((x) => x.role !== 'hole' && !x.hidden)) { UI.toast('Es gibt noch nichts zu exportieren. Füge zuerst einen Körper hinzu.', { icon: 'info' }); return; }
     const plates = Plates.candidates();
-    const opts = { step: true, stl: false, mf: false, dxf: false, plates: plates.map((p) => p.id) };
+    const opts = { step: true, stl: false, mf: false, obj: false, glb: false, dxf: false, plates: plates.map((p) => p.id) };
     const body = h('div', { style: { display: 'grid', gap: '12px' } });
     body.append(h('p', null, 'Die Dateien kommen zusammen als ZIP.'));
     const mk = (k, label, sub) => { const l = h('label', { class: 'check', style: { alignItems: 'flex-start' } }, h('input', { type: 'checkbox', id: 'ex-' + k, checked: opts[k] }), h('span', null, h('b', null, label), h('br'), h('small', { style: { color: 'var(--muted)' } }, sub))); l.querySelector('input').onchange = (e) => { opts[k] = e.target.checked; }; return l; };
-    body.append(mk('step', 'STEP', 'Exakte Geometrie – für Fusion, FreeCAD, SolidWorks und Fertiger'), mk('stl', 'STL', 'Dreiecksnetz, z. B. für Renderings oder 3D-Druck'), mk('mf', '3MF', 'Dreiecksnetz mit Farben und Maßeinheit'));
+    const objRow = mk('obj', 'OBJ (+ MTL)', 'Dreiecksnetz mit Farben – für Blender, Rendering und viele 3D-Programme'); objRow.setAttribute('data-help', 'exportObjGlb');
+    const glbRow = mk('glb', 'GLB (glTF)', '3D-Datei mit Material-Aussehen und Teilenamen – für Web, Blender und Vorschau'); glbRow.setAttribute('data-help', 'exportObjGlb');
+    body.append(mk('step', 'STEP', 'Exakte Geometrie – für Fusion, FreeCAD, SolidWorks und Fertiger'), mk('stl', 'STL', 'Dreiecksnetz, z. B. für Renderings oder 3D-Druck'), mk('mf', '3MF', 'Dreiecksnetz mit Farben und Maßeinheit'), objRow, glbRow);
     // Was kommt in die Dateien? (IO-07)
     const selTops = exportSelection();
     if (selTops.length) { opts.onlySel = false; const l = mk('onlySel', `Nur die Auswahl (${selTops.length} ${selTops.length === 1 ? 'Teil' : 'Teile'})`, 'Alles andere bleibt draußen – Löcher und Formschritte an den gewählten Teilen zählen mit'); l.setAttribute('data-help', 'exportSelection'); body.append(l); }
     // Netz-Einstellungen (IO-08)
     opts.q = 1; opts.stlText = false;
-    const qs = UI.selectField({ id: 'ex-q', label: 'Feinheit der Netze (STL, 3MF)', value: '1', options: [['3', 'Grob – kleine Dateien'], ['1', 'Normal'], ['0.4', 'Fein'], ['0.15', 'Sehr fein – große Dateien']], onChange: (v) => { opts.q = +v; } });
+    const qs = UI.selectField({ id: 'ex-q', label: 'Feinheit der Netze (STL, 3MF, OBJ, GLB)', value: '1', options: [['3', 'Grob – kleine Dateien'], ['1', 'Normal'], ['0.4', 'Fein'], ['0.15', 'Sehr fein – große Dateien']], onChange: (v) => { opts.q = +v; } });
     qs.setAttribute('data-help', 'exportSettings');
     const st = UI.selectField({ id: 'ex-stlfmt', label: 'STL-Format', value: 'bin', options: [['bin', 'Binär (klein, Standard)'], ['txt', 'Text (ASCII)']], onChange: (v) => { opts.stlText = v === 'txt'; } });
     st.setAttribute('data-help', 'exportSettings');
     body.append(h('div', { class: 'fields' }, qs, st));
-    { const l = mk('each', 'Jeder Körper als eigene Datei (STL, 3MF)', 'Zusätzlich ein Ordner mit einer Datei pro Körper, benannt nach dem Teil – praktisch für den Slicer'); l.setAttribute('data-help', 'exportSelection'); body.append(l); }
+    { const l = mk('each', 'Jeder Körper als eigene Datei (STL, 3MF, OBJ, GLB)', 'Zusätzlich ein Ordner mit einer Datei pro Körper, benannt nach dem Teil – praktisch für den Slicer'); l.setAttribute('data-help', 'exportSelection'); body.append(l); }
     // flache Teile (Carbon-Platten) als 2D-Kontur für die Fräse oder den Laser
     if (plates.length) {
       const d = mk('dxf', 'Platten als DXF (für die Fräse)', 'Draufsicht in Originalgröße, eine Datei pro Platte – die Dicke steht im Dateinamen');
@@ -16729,14 +16946,14 @@ const Print = (() => {
   }
   let lastExport = null, lastTris = 0;
   async function runExport(opts) {
-    if (!opts.stl && !opts.mf && !opts.step && !(opts.dxf && opts.plates.length)) { UI.toast('Wähle mindestens ein Format.', { kind: 'bad' }); return; }
+    if (!opts.stl && !opts.mf && !opts.obj && !opts.glb && !opts.step && !(opts.dxf && opts.plates.length)) { UI.toast('Wähle mindestens ein Format.', { kind: 'bad' }); return; }
     const tst = UI.toast('Dateien werden erstellt …', { icon: 'export', ms: 20000 });
     try {
       const scene = Model.kernelScene(App.doc);
       const only = opts.onlySel ? exportSelection() : null;
       const name = safeName(App.doc.name);
       const files = [];
-      if (opts.stl || opts.mf) {
+      if (opts.stl || opts.mf || opts.obj || opts.glb) {
         const res = await Kernel.call('exportMeshes', { scene, fine: true, q: opts.q || 1 });
         lastTris = res.objects.reduce((s, o) => s + o.triangles.length / 3, 0);
         const STL = opts.stlText ? buildSTLText : buildSTL;
@@ -16744,18 +16961,22 @@ const Print = (() => {
         if (!objs.length) throw new Error('Es gibt keinen Körper zum Speichern.');
         if (opts.stl) files.push({ name: name + '.stl', data: STL(objs, name) });
         if (opts.mf) files.push({ name: name + '.3mf', data: await build3MF(objs, name) });
+        if (opts.obj) { const r = buildOBJ(objs, name); files.push({ name: name + '.obj', data: r.obj }, { name: name + '.mtl', data: r.mtl }); }
+        if (opts.glb) files.push({ name: name + '.glb', data: buildGLB(objs, name) });
         if (opts.each && objs.length > 1) {
           const used = new Map();
           for (const o of objs) {
             const f = Model.find(App.doc, o.id); let base = safeName(o.name || (f ? Model.label(f.item) : 'Körper')); const n = (used.get(base) || 0) + 1; used.set(base, n); if (n > 1) base += '-' + n;
             if (opts.stl) files.push({ name: 'Einzeln/' + base + '.stl', data: STL([o], base) });
             if (opts.mf) files.push({ name: 'Einzeln/' + base + '.3mf', data: await build3MF([o], base) });
+            if (opts.obj) { const r = buildOBJ([o], base); files.push({ name: 'Einzeln/' + base + '.obj', data: r.obj }, { name: 'Einzeln/' + base + '.mtl', data: r.mtl }); }
+            if (opts.glb) files.push({ name: 'Einzeln/' + base + '.glb', data: buildGLB([o], base) });
           }
         }
       }
       if (opts.step) { const r = await Kernel.call('exportSTEP', { scene, only }); files.push({ name: name + '.step', data: new Uint8Array(r.data) }); }
       if (opts.dxf) for (const id of opts.plates) { const f = await Plates.file(id); if (f && f.count) files.push({ name: 'DXF/' + f.name, data: f.data }); }
-      files.push({ name: 'LIESMICH.txt', data: new TextEncoder().encode(`${App.doc.name}\nErstellt mit Tracery am ${new Date().toLocaleString('de-DE')}\n\nSTEP: exakte Geometrie für andere CAD-Programme\nSTL / 3MF: Dreiecksnetz (Millimeter)\n` + (opts.dxf ? 'DXF: Draufsicht jeder Platte in Originalgröße (Millimeter, Ebene KONTUR) – Dicke steht im Dateinamen\n' : '')) });
+      files.push({ name: 'LIESMICH.txt', data: new TextEncoder().encode(`${App.doc.name}\nErstellt mit Tracery am ${new Date().toLocaleString('de-DE')}\n\nSTEP: exakte Geometrie für andere CAD-Programme\nSTL / 3MF: Dreiecksnetz (Millimeter)\nOBJ / MTL: Dreiecksnetz mit Farben (Millimeter)\nGLB: glTF 2.0 binär mit Werkstoff-Aussehen und Teilenamen (Meter)\n` + (opts.dxf ? 'DXF: Draufsicht jeder Platte in Originalgröße (Millimeter, Ebene KONTUR) – Dicke steht im Dateinamen\n' : '')) });
       lastExport = files.map((f) => f.name);
       const zip = await Zip.make(files);
       tst.remove();
@@ -16767,7 +16988,7 @@ const Print = (() => {
     App.on('results', updateAmpel); App.on('doc', debounce(updateAmpel, 200));
     $('#ampel').addEventListener('click', (e) => openAmpel(e.currentTarget));
   }
-  return { turntable, turntableDialog, get lastVideo() { return lastVideo; }, get lastTris() { return lastTris; }, buildSTLText, entsToDXF, entsToSVG, save2D, faceTo2D, get last2D() { return last2D; }, exportSelection, get lastExport() { return lastExport; }, runExport, init, stats, checks, exportDialog, imageDialog, saveImage, imageSize, save, safeName, updateAmpel };
+  return { turntable, turntableDialog, get lastVideo() { return lastVideo; }, get lastTris() { return lastTris; }, buildSTLText, buildOBJ, buildGLB, entsToDXF, entsToSVG, save2D, faceTo2D, get last2D() { return last2D; }, exportSelection, get lastExport() { return lastExport; }, runExport, init, stats, checks, exportDialog, imageDialog, saveImage, imageSize, save, safeName, updateAmpel };
 })();
 
 // ---------- ZIP (mit Kompression, wenn der Browser sie kann) ----------

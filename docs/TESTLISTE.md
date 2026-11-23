@@ -1500,6 +1500,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Geschlossener Umriss als Rohr-Profil**: Rechteck (20 × 20) und Kreis (r = 10) mit „Dünne Wand“ werden zum hohlen Rohr-Profil (innen/außen/mittig), „Dünne Wand“ abschalten + Rückgängig funktionieren; zu große Wandstärke meldet sauber einen Fehler und erholt sich.
 - [ ] **Von Hand**: Offenen Bogen oder offene Spline als dünne Wand auf einer Körperfläche (innen/außen/mittig) hochziehen und den Ziehgriff prüfen.
 
+## OBJ und GLB speichern (Auto [A-010])
+
+- [x] Export-Dialog bietet „OBJ (+ MTL)“ und „GLB (glTF)“ mit Hilfetext `exportObjGlb`; ZIP enthält `.obj`, `.mtl`, `.glb` sowie bei „Jeder Körper als eigene Datei“ alle Formate unter `Einzeln/`.
+- [x] `.obj` verweist auf die `.mtl`-Datei, enthält `o <Name>` je Körper, Normalen und unterschiedliche `Kd`-Farben in der `.mtl`.
+- [x] `.glb` beginnt mit `glTF`, Version 2, hat gültige `JSON`- und `BIN`-Chunks, einen Knoten/Mesh mit Namen je Körper sowie Studio-Look-Materialien (Metall, Rauheit, Klarlack, lineare Farbe).
+- [ ] Exportiertes `.obj`/`.mtl` und `.glb` von Hand in Blender oder einer 3D-Vorschau öffnen und Ausrichtung, Größe (mm bzw. m) und Oberflächen-Aussehen prüfen.
+
 ## Fehler melden
 
 ```
