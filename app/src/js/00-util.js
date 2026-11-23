@@ -354,9 +354,9 @@ const HELP = {
   "tipp": "Halte die Maustaste gedrückt und wische wie mit einem Radiergummi über mehrere Stücke. Ein Stück ohne Schnittpunkt wird ganz gelöscht."
  },
  "offset2d": {
-  "tip": "Parallele Kopie im Abstand erstellen",
-  "hilfe": "Klicke eine Linie, einen Bogen, Kreis, eine Ellipse oder eine Form an. Bewege die Maus auf die Seite, auf der die Kopie liegen soll, und klicke. Oder tippe den Abstand ein und drücke Enter – auch eine Formel geht.",
-  "tipp": "Die Kopie bleibt über eine Regel mit dem Original verbunden. Ändert sich das Original, wandert sie mit. Klick auf das Regel-Symbol, um den Abstand später zu ändern – bei einer Kette gilt der neue Abstand für alle Stücke zusammen. Bei einer Ellipse wird die Kopie eine Spline genau im Abstand (sie bleibt nicht verbunden)."
+  "tip": "Parallele Kopie im Abstand erstellen – auch mehrfach und beidseitig",
+  "hilfe": "Klicke eine Linie, einen Bogen, Kreis, eine Ellipse oder eine Form an. Rechts kannst du vorher Anzahl, Beidseitig (innen und außen) und Ecken (spitz oder rund) einstellen. Bewege dann die Maus auf eine Seite und klicke – oder tippe den Abstand ein und drücke Enter (auch als Formel).",
+  "tipp": "Jede Kopie bleibt über eine Regel mit dem Original verbunden. Ändert sich das Original, wandert die Kopie mit. Klick auf das Regel-Symbol, um den Abstand später zu ändern – bei einer Kette gilt der neue Abstand für alle Stücke zusammen. Bei einer Ellipse wird die Kopie eine Spline genau im Abstand (sie bleibt nicht verbunden)."
  },
  "wall2d": {
   "tip": "Aus einer offenen Linie eine Wand mit Dicke machen",
