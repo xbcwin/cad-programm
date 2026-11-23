@@ -109,7 +109,7 @@ Leitlinien:
 | `57-measure.js` | Messen |
 | `58-commands.js` | Eingabezeile, Befehlssuche |
 | `59-versions.js` | Versionen |
-| `60-print.js` | Export (STEP, STL, 3MF, DXF), `Zip` (Packen/Entpacken) |
+| `60-print.js` | Export (STEP, STL, 3MF, OBJ/MTL, GLB, DXF), `Zip` (Packen/Entpacken) |
 | `70-drawing.js` | technische Zeichnung, PDF |
 | `80-ai.js` | KI-Kollege (`AI.RULES`, `AI.ACTIONS`, `AI.SUGGESTIONS`, `AI.open` – allgemeines CAD ohne Drohnen-Bezug; `drohne`-Aktion technisch erhalten) |
 | `84-drone.js` | Rahmen-Generator, Frame-Assistent, Bausätze |
@@ -177,7 +177,7 @@ Leitlinien:
 - Wandstärke: `Viewer.wallAt(id, point, normal)` (Strahl nach innen gegen die Dreiecke des Teils, ohne Rückseiten-Ausschluss), `Viewer.thinWalls(limit)` (Raster `triGrid`, je Dreieck ein Strahl von der Mitte, Ergebnis `{pos, area, minT}`); Ansicht `Views.thin()`, Leiste `#thin-limit`/`#thin-area`, `Views.thinInfo`
 - 2D-Dateien: `Print.entsToDXF(ents)` / `Print.entsToSVG(ents)` (Skizzen-Elemente ohne Hilfslinien; Linie, Kreis, Bogen echt, alles andere als Linienzug; SVG in mm, y nach oben), `Print.save2D`, `Print.faceTo2D(face, kind)` über Kern `faceLoops` und `Actions.faceFrame`; Knöpfe `#sk-dxf`/`#sk-svg`, Rechtsklick `cm-facedxf`/`cm-facesvg`
 - Export-Einstellungen: `opts.q` (Kern `exportMeshes(scene, fine, q)`, Toleranz × q), `opts.stlText` → `Print.buildSTLText`; Felder `#ex-q`, `#ex-stlfmt`; `Print.lastTris`
-- Export: `Print.exportSelection()` (gewählte Teile oberster Ebene, verrechnete zählen zum Ziel) → Option `onlySel` filtert die Netze nach `id` und gibt `only` an den Kern (`exportSTEP(scene, only)`); Option `each` legt „Einzeln/<Name>.stl/.3mf“ an; `Print.lastExport` = Dateinamen des letzten ZIP
+- Export: `Print.exportSelection()` (gewählte Teile oberster Ebene, verrechnete zählen zum Ziel) → Option `onlySel` filtert die Netze nach `id` und gibt `only` an den Kern (`exportSTEP(scene, only)`); Option `each` legt „Einzeln/<Name>.stl/.3mf/.obj/.mtl/.glb“ an; `Print.buildOBJ`, `Print.buildGLB`; `Print.lastExport` = Dateinamen des letzten ZIP
 - Lage unter der Maus: `#coords` in der Statusleiste (`Measure.showCoords`, höchstens alle 50 ms inkl. letztem Mauspunkt am Bewegungsende; `Measure.coords`)
 - Maus-Steuerung: `ViewPrefs` `mouse` ('tracery' | 'onshape' | 'solidworks' | 'fusion' | 'blender') → `Viewer.setMouseStyle`; Skizze, Setzen und Notizen rufen `Viewer.useButtons('sketch' | 'place' | 'model')` statt `mouseButtons` selbst zu setzen; `Viewer.leftOrbits` = false → links im Leeren zieht einen Rahmen
 - Drehteller-Video: `Print.turntable({seconds, fps, save})` (MediaRecorder auf `canvas.captureStream`, Kamera dreht um die senkrechte Achse durch den Blickpunkt, danach zurück), Dialog `Print.turntableDialog` (`#tt-sec`), `Print.lastVideo`
@@ -294,7 +294,7 @@ Leitlinien:
   - Überhänge ab 100 mm² bei Druckteilen
   - mit Fundstellen-Ringen und KI-Vorschlägen
 
-**Export:** STEP, STL, DXF (Platten), Projektdatei, technische Zeichnung (PDF).
+**Export:** STEP, STL, 3MF, OBJ/MTL (`Print.buildOBJ`), GLB (`Print.buildGLB`), DXF (Platten), Projektdatei, technische Zeichnung (PDF).
 
 ## 6. Tests – Pflicht vor jedem Commit
 
