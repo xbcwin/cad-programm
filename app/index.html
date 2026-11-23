@@ -579,7 +579,7 @@ body.sketching .timeline{display:none}
   .topbar{flex-wrap:wrap;padding:6px 10px 0;gap:6px}
   .tools{order:10;flex:1 0 100%;margin:0 -10px;padding:5px 10px 6px;border-top:1px solid var(--line);gap:4px}
   .right-tools{margin-left:auto}
-  .proj-name{display:none}
+  .proj-name,.folder-badge{display:none}
 }
 @media (max-width: 640px){
   /* Handy: Symbol über kurzem Namen, alle Werkzeuge passen in eine Zeile */
@@ -798,6 +798,17 @@ body.presenting .workspace{grid-template-columns:0 minmax(0,1fr) 0}
 .measure-tree .m-acts button:hover{background:var(--surface-3, rgba(0,0,0,.06));color:var(--ink)}
 .measure-tree .m-acts svg{width:14px;height:14px}
 body.presenting .dimlabel.mpin,body.presenting .measurebar{display:none!important}
+
+/* Projekt in Ordner speichern (BE-14) */
+.folder-badge{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);background:var(--surface-2);color:var(--muted);border-radius:999px;padding:4px 10px;font:500 12.5px/1 var(--font);max-width:210px;white-space:nowrap;flex:none;cursor:pointer}
+.folder-badge[hidden]{display:none!important}
+.folder-badge:hover{border-color:var(--line-strong);color:var(--ink)}
+.folder-badge svg{width:14px;height:14px;flex:none}
+.folder-badge span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.folder-badge.saved svg{color:var(--ok)}
+.folder-badge.pending{border-color:var(--accent-line);color:var(--accent);background:var(--accent-soft)}
+.folder-badge.saving{border-color:var(--accent-line);color:var(--accent)}
+.folder-badge.error{border-color:var(--bad);color:var(--bad);background:var(--bad-soft)}
 </style>
 <div id="app">
   <header class="topbar">
@@ -816,6 +827,7 @@ body.presenting .dimlabel.mpin,body.presenting .measurebar{display:none!importan
       <button class="icon-btn" id="btn-undo" type="button" aria-label="Rückgängig" data-tip="Rückgängig" data-kbd="Strg Z"></button>
       <button class="icon-btn" id="btn-redo" type="button" aria-label="Wiederholen" data-tip="Wiederholen" data-kbd="Strg Y"></button>
       <button class="proj-name" id="btn-project" type="button" data-tip="Projekt">Neues Projekt</button>
+      <button class="folder-badge" id="btn-folder-status" type="button" data-help="saveFolder" hidden></button>
       <button class="icon-btn" id="btn-menu" type="button" aria-label="Menü" data-tip="Menü"></button>
       <button class="icon-btn panel-toggle" id="btn-right" type="button" aria-label="Eigenschaften zeigen" data-tip="Eigenschaften"></button>
     </div>
@@ -1916,6 +1928,11 @@ const HELP = {
   "tip": "Messung dauerhaft im Projekt behalten",
   "hilfe": "Speichert die aktuelle Messung als eigenes Objekt in der Liste „Messungen“ im Verlauf. Ändert sich ein Körper oder Maß, rechnet Tracery den Wert selbstständig neu; fehlt ein Bezug, erscheint „verloren“. Du kannst jede Messung ein- und ausblenden, umbenennen oder löschen.",
   "tipp": "Klick ein Mess-Schild im Bild an, um seine Art und den vollen Text rechts zu sehen; ein Doppelklick kopiert den Zahlenwert."
+ },
+ "saveFolder": {
+  "tip": "Projekt in einen Ordner speichern und automatisch mitschreiben",
+  "hilfe": "Wählt einen Ordner auf deinem Rechner (in Chrome und Edge). Tracery legt die Projektdatei dort ab und schreibt Änderungen automatisch mit – gebündelt alle 10 Sekunden. Oben in der Leiste siehst du, in welchen Ordner gespeichert wird.",
+  "tipp": "Klick oben auf „gespeichert in …“, um sofort zu speichern, den Ordner zu wechseln oder die Verbindung zu trennen."
  }
 };
 
@@ -16885,6 +16902,7 @@ const Commands = (() => {
     add('sweep-help', 'Rohr oder Kanal entlang Pfad (Sweep)', 'sweep', 'sweep pfad rohr kabelkanal bügel entlang', () => { Sketch.chooseAndStart(); UI.toast('Zeichne einen offenen Pfad und klick „Fertig“ – daraus wird ein Rohr.', { icon: 'info', ms: 5000 }); }, { group: 'Werkzeuge' });
     add('import', 'STEP, STL oder 3MF importieren', 'folder', 'import step stp stl 3mf datei einlesen', () => Start.openFile(), { group: 'Projekt' });
     add('save', 'Projekt als Datei speichern', 'save', 'sichern json datei', () => Start.saveFile(), { group: 'Projekt', kbd: 'Strg S' });
+    add('save-folder', 'In Ordner speichern …', 'folder', 'ordner automatisch speichern sichern sync datei', () => Start.saveToFolder(), { group: 'Projekt', when: () => Start.folderSupported() });
     add('start', 'Startseite und Vorlagen', 'home', 'vorlagen beispiele start', () => Start.show(), { group: 'Projekt' });
     add('tour', 'Einführung starten', 'play', 'hilfe tutorial einführung lernen', () => Tour.start(), { group: 'Hilfe' });
     add('tour-sketch', 'Einführung: Deine erste Skizze', 'sketch', 'hilfe tutorial einführung lernen skizze maß formel', () => Tour.start('sketch'), { group: 'Hilfe' });
@@ -16898,7 +16916,7 @@ const Commands = (() => {
   }
   function search(text) {
     const q = normTxt(text.trim()); if (!q) return [];
-    const top = C.map((c) => ({ c, s: score(c, q) })).filter((x) => x.s > 0 && (!x.c.needSel || App.sel.length)).sort((a, b) => b.s - a.s).slice(0, 6);
+    const top = C.map((c) => ({ c, s: score(c, q) })).filter((x) => x.s > 0 && (!x.c.needSel || App.sel.length) && (!x.c.when || x.c.when())).sort((a, b) => b.s - a.s).slice(0, 6);
     // Treffer derselben Gruppe zusammenhalten (Gruppen in der Reihenfolge ihres besten Treffers)
     const order = []; for (const x of top) if (!order.includes(x.c.group)) order.push(x.c.group);
     return top.sort((a, b) => order.indexOf(a.c.group) - order.indexOf(b.c.group) || b.s - a.s).map((x) => x.c);
@@ -20848,13 +20866,193 @@ const Start = (() => {
     if (!f || !/\.(json|step|stp|stl|3mf|dxf|svg)$/i.test(f.name)) return;
     e.preventDefault(); openBlob(f);
   });
-  async function saveFile() {
-    const name = Print.safeName(App.doc.name);
+  function projectFileName() {
+    return Print.safeName(App.doc.name) + '.tracery.json';
+  }
+  function projectPayload() {
     const vers = Versions.exportList();
-    const ok = await Print.save(name + '.tracery.json', JSON.stringify(vers.length ? { ...App.doc, versions: vers } : App.doc, null, 1));
+    return JSON.stringify(vers.length ? { ...App.doc, versions: vers } : App.doc, null, 1);
+  }
+  async function saveFile() {
+    const ok = await Print.save(projectFileName(), projectPayload());
     if (ok) App.fileSavedRev = App.revision;
   }
-  return { importCAD, import3MF, parse3MF, importDXF, parseDXF, parseSVG, show, hide, newProject, openFile, openBlob, saveFile, openDrone, get open() { return !!el; } };
+
+  // ---------- Projekt in Ordner speichern & automatisch mitschreiben (BE-14) ----------
+  let folder = null;
+  let folderDelay = 10000;
+  let folderInited = false;
+  function folderSupported() {
+    return typeof window.showDirectoryPicker === 'function';
+  }
+  function clearFolderTimer() {
+    if (folder && folder.timer) { clearTimeout(folder.timer); folder.timer = null; }
+  }
+  function updateFolderUI() {
+    const btn = $('#btn-folder-status');
+    if (!btn) return;
+    if (!folder || !folderSupported()) {
+      btn.hidden = true;
+      btn.innerHTML = '';
+      btn.className = 'folder-badge';
+      btn.removeAttribute('data-tip');
+      return;
+    }
+    btn.hidden = false;
+    btn.className = 'folder-badge ' + folder.status;
+    let ico = 'check', label = `gespeichert in ${folder.name}`, tip = `Automatisch gespeichert in „${folder.name}/${folder.fileName}“`;
+    if (folder.status === 'saving') {
+      ico = 'save';
+      label = `speichert in ${folder.name} …`;
+      tip = `Schreibt gerade nach „${folder.name}/${folder.fileName}“ …`;
+    } else if (folder.status === 'pending') {
+      ico = 'folder';
+      label = `speichert gleich in ${folder.name} …`;
+      tip = `Änderung vorgemerkt – schreibt automatisch in „${folder.name}/${folder.fileName}“`;
+    } else if (folder.status === 'error') {
+      ico = 'warn';
+      label = `Fehler · ${folder.name}`;
+      tip = `Fehler beim Speichern in „${folder.name}“: ${folder.lastErr || 'unbekannt'}`;
+    } else if (folder.lastSavedAt) {
+      tip += ` (${new Date(folder.lastSavedAt).toLocaleTimeString('de-DE')})`;
+    }
+    btn.innerHTML = icon(ico);
+    btn.append(h('span', null, label));
+    btn.dataset.tip = tip;
+  }
+  async function writeFolderNow(opts = {}) {
+    if (!folder || !folder.handle) return false;
+    if (folder.writing) { folder.queued = true; return false; }
+    clearFolderTimer();
+    const target = folder;
+    target.writing = true;
+    target.dirty = false;
+    target.status = 'saving';
+    target.lastErr = null;
+    updateFolderUI();
+    const fileName = projectFileName();
+    const payload = projectPayload();
+    const rev = App.revision;
+    try {
+      if (typeof target.handle.queryPermission === 'function') {
+        const perm = await target.handle.queryPermission({ mode: 'readwrite' });
+        if (perm === 'denied') throw new Error('Schreibrecht für den Ordner fehlt.');
+      }
+      const fh = await target.handle.getFileHandle(fileName, { create: true });
+      const wr = await fh.createWritable();
+      await wr.write(payload);
+      await wr.close();
+      if (folder !== target) return true;
+      target.fileName = fileName;
+      target.lastSavedAt = Date.now();
+      target.lastRev = rev;
+      target.writing = false;
+      target.status = target.queued ? 'pending' : 'saved';
+      App.fileSavedRev = rev;
+      updateFolderUI();
+      if (opts.announce) {
+        UI.toast(`Gespeichert in „${target.name}/${fileName}“. Änderungen werden alle 10 s automatisch mitgeschrieben.`, { icon: 'check', ms: 5000 });
+      }
+      if (target.queued) { target.queued = false; scheduleFolderSave(); }
+      return true;
+    } catch (e) {
+      if (folder !== target) return false;
+      target.writing = false;
+      target.queued = false;
+      target.status = 'error';
+      target.lastErr = (e && e.message) || String(e || 'Schreibfehler');
+      updateFolderUI();
+      UI.toast(`Konnte nicht in „${target.name}“ speichern: ${target.lastErr}`, { kind: 'bad', ms: 6000 });
+      return false;
+    }
+  }
+  function scheduleFolderSave() {
+    if (!folder) return;
+    folder.dirty = true;
+    if (folder.writing) { folder.queued = true; return; }
+    folder.status = 'pending';
+    updateFolderUI();
+    if (!folder.timer) {
+      folder.timer = setTimeout(() => {
+        if (folder) folder.timer = null;
+        writeFolderNow();
+      }, folderDelay);
+    }
+  }
+  async function saveToFolder() {
+    if (!folderSupported()) {
+      UI.toast('Dieser Browser kann noch nicht direkt in einen Ordner speichern. Nutze Chrome oder Edge, oder „Als Datei speichern“.', { icon: 'info', ms: 5000 });
+      return false;
+    }
+    let handle;
+    try {
+      handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+    } catch (e) {
+      if (e && (e.name === 'AbortError' || e.name === 'NotAllowedError')) return false;
+      UI.toast('Ordner konnte nicht gewählt werden: ' + ((e && e.message) || 'unbekannter Fehler'), { kind: 'bad' });
+      return false;
+    }
+    if (!handle) return false;
+    clearFolderTimer();
+    const name = String(handle.name || 'Ordner').trim() || 'Ordner';
+    folder = { handle, name, docId: App.doc.id, fileName: projectFileName(), lastSavedAt: 0, lastRev: App.revision, status: 'saving', writing: false, queued: false, dirty: false, timer: null, lastErr: null };
+    updateFolderUI();
+    const ok = await writeFolderNow({ announce: true });
+    if (!ok) { folder = null; updateFolderUI(); return false; }
+    try { Panels.firstStepDone('saved'); } catch (_) {}
+    return true;
+  }
+  function saveToFolderNow() {
+    if (!folder) return saveToFolder();
+    return writeFolderNow({ announce: true });
+  }
+  function disconnectFolder(silent) {
+    if (!folder) return;
+    const name = folder.name;
+    clearFolderTimer();
+    folder = null;
+    updateFolderUI();
+    if (!silent) UI.toast(`Ordner-Verbindung zu „${name}“ getrennt.`, { icon: 'info' });
+  }
+  function openFolderMenu(anchor) {
+    if (!folder) return;
+    UI.menu(anchor, [
+      { label: 'Jetzt in Ordner speichern', icon: 'save', id: 'fm-now', run: () => saveToFolderNow() },
+      { label: 'Anderen Ordner wählen …', icon: 'folder', id: 'fm-change', run: () => saveToFolder() },
+      '-',
+      { label: 'Ordner-Verbindung trennen', icon: 'close', id: 'fm-stop', run: () => disconnectFolder() },
+    ], { alignRight: true });
+  }
+  function folderInfo() {
+    if (!folder) return null;
+    return { name: folder.name, fileName: folder.fileName, status: folder.status, lastSavedAt: folder.lastSavedAt, dirty: folder.dirty, lastErr: folder.lastErr };
+  }
+  function init() {
+    if (folderInited) return;
+    folderInited = true;
+    App.on('doc', () => {
+      if (!folder) return;
+      if (App.doc.id !== folder.docId) { disconnectFolder(true); return; }
+      if (App.revision === folder.lastRev) return;
+      folder.lastRev = App.revision;
+      scheduleFolderSave();
+    });
+    Versions.on('change', () => {
+      if (folder && App.doc.id === folder.docId) scheduleFolderSave();
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden' && folder && folder.dirty && !folder.writing) writeFolderNow();
+    });
+    const btn = $('#btn-folder-status');
+    if (btn) btn.onclick = (e) => openFolderMenu(e.currentTarget);
+    updateFolderUI();
+  }
+  return {
+    init, importCAD, import3MF, parse3MF, importDXF, parseDXF, parseSVG, show, hide, newProject, openFile, openBlob, saveFile,
+    folderSupported, folderInfo, saveToFolder, saveToFolderNow, disconnectFolder,
+    get folderDelay() { return folderDelay; }, set folderDelay(ms) { folderDelay = Math.max(0, Number(ms) || 10000); },
+    openDrone, get open() { return !!el; },
+  };
 })();
 
 // ---------- Einführung ----------
@@ -21644,7 +21842,7 @@ ${AI.modelText()}`;
   UI.initTips();
   Viewer.init($('#viewport'));
   window.__V = Viewer; window.__M = { Interact, Measure, Datums, Print, ViewPrefs, App, Actions, Model, Timeline, Start, Comp, Handles, Sketch, SK, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views, Mass, Select, Versions, DroneTpl, DroneUI, DroneLib, DroneCheck, Plates, Variants, Explain, Weak, AI, Snap, Panels, Joints }; window.__S = Start; // für automatische Tests
-  Panels.init(); Datums.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Notes.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init(); Refine.init(); Comp.init(); Views.init(); Mass.init(); Joints.init(); Versions.init();
+  Panels.init(); Datums.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Notes.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init(); Refine.init(); Comp.init(); Views.init(); Mass.init(); Joints.init(); Versions.init(); Start.init();
 
   // Kopfzeile
   $('#btn-undo').onclick = () => App.undo();
@@ -21660,6 +21858,13 @@ ${AI.modelText()}`;
   const projectItems = () => [
     { label: 'Projekt umbenennen', icon: 'edit', run: async () => { const n = await UI.prompt('Projekt umbenennen', 'Name', App.doc.name, 'Umbenennen'); if (n && n.trim()) App.change('Projekt umbenannt', (doc) => { doc.name = n.trim(); }); } },
     { label: 'Als Datei speichern', icon: 'save', kbd: 'Strg S', run: () => Start.saveFile() },
+    ...(Start.folderSupported() ? (Start.folderInfo() ? [
+      { label: `Jetzt in „${Start.folderInfo().name}“ speichern`, icon: 'save', id: 'pm-folder-now', help: 'saveFolder', run: () => Start.saveToFolderNow() },
+      { label: 'Anderen Ordner wählen …', icon: 'folder', id: 'pm-folder-change', help: 'saveFolder', run: () => Start.saveToFolder() },
+      { label: 'Ordner-Verbindung trennen', icon: 'close', id: 'pm-folder-stop', run: () => Start.disconnectFolder() },
+    ] : [
+      { label: 'In Ordner speichern …', icon: 'folder', id: 'pm-folder-save', help: 'saveFolder', run: () => Start.saveToFolder() },
+    ]) : []),
     { label: 'Datei öffnen / STEP, STL, 3MF importieren …', icon: 'folder', help: 'importCad', run: () => Start.openFile() },
     { label: 'Versionen …', icon: 'rollback', help: 'versions', run: () => Versions.dialog() },
     '-',

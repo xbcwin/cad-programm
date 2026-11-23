@@ -1536,6 +1536,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Ein-/ausblenden, umbenennen, löschen & verloren**: Auge blendet Schild und 3D-Linien aus/ein; Umbennen im rechten Panel wirkt sofort; Löschen eines bezogenen Körpers zeigt „verloren“, Rückgängig stellt den Bezug wieder her; Löschen und Rückgängig sowie Hilfetext `measureKeep` funktionieren.
 - [ ] **Von Hand**: Nach Projekt-Speichern und Neuladen (auch mit Punkt–Punkt-, Winkel- und Durchmesser-Messungen) prüfen, ob alle Schilder sauber positioniert bleiben.
 
+## Projekt in einen Ordner speichern (Auto [A-015])
+
+- [x] **Ohne API ausgeblendet**: Fehlt `window.showDirectoryPicker`, erscheinen weder „In Ordner speichern …“ im Projektmenü noch der Befehl in der Suche noch das Status-Schild oben.
+- [x] **Ordner wählen & Anzeige**: Über den `showDirectoryPicker`-Stub wird `<Projektname>.tracery.json` mit gültigem Projektinhalt geschrieben; oben erscheint `#btn-folder-status` mit „gespeichert in …“.
+- [x] **Gebündelt alle 10 s mitschreiben**: Mehrere Änderungen kurz hintereinander bleiben zunächst als „speichert gleich …“ vorgemerkt und werden nach 10 s gebündelt in einem Schreibvorgang geschrieben.
+- [x] **Trennen & Projektwechsel**: Über das Menü an `#btn-folder-status` („Ordner-Verbindung trennen“) sowie beim Start eines neuen Projekts wird die Verbindung sauber beendet.
+- [ ] **Von Hand**: In Chrome oder Edge einen echten Ordner wählen, Änderungen machen, 10 s warten und prüfen, ob die `.tracery.json`-Datei auf der Festplatte aktuell ist.
+
 ## Fehler melden
 
 ```
