@@ -236,10 +236,21 @@ const Model = (() => {
   }
   function sketchParams(it, V) {
     const p = it.p || {};
-    const regs = SK.regions(p.sketch ? Solver.cached(p.sketch, V).ents : []);
-    let chosen = regs;
-    if (Array.isArray(p.sel) && p.sel.length) { const f = regs.filter((r) => p.sel.includes(r.key)); if (f.length) chosen = f; }
-    const out = { plane: p.sketch ? p.sketch.plane : { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] }, regions: chosen.map((r) => ({ outer: r.outer.k, holes: r.holes.map((h) => h.k) })) };
+    const ents = p.sketch ? Solver.cached(p.sketch, V).ents : [];
+    const plane = p.sketch ? p.sketch.plane : { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] };
+    let out;
+    if (it.kind === 'extrude' && p.thin) {
+      const wall = num(p.wall, V, 2);
+      const side = p.wallSide === 'in' || p.wallSide === 'out' ? p.wallSide : 'center';
+      const tr = SKO.thinRegions(ents, wall, side, p.sel);
+      out = { plane, regions: tr.regions, thin: true };
+      if (tr.error) out.thinError = tr.error;
+    } else {
+      const regs = SK.regions(ents);
+      let chosen = regs;
+      if (Array.isArray(p.sel) && p.sel.length) { const f = regs.filter((r) => p.sel.includes(r.key)); if (f.length) chosen = f; }
+      out = { plane, regions: chosen.map((r) => ({ outer: r.outer.k, holes: r.holes.map((h) => h.k) })) };
+    }
     if (it.kind === 'extrude') {
       out.dist = num(p.dist, V, 10); out.dir = p.dir || 'normal'; out.extra = num(p.extra, V, 0);
       if (out.dir === 'two') out.dist2 = num(p.dist2, V, out.dist);
@@ -575,7 +586,7 @@ const Model = (() => {
       case 'cone': return `Ø ${f(p.d1)} × ${f(p.h)}`;
       case 'sphere': case 'hemisphere': return `Ø ${f(p.d)}`;
       case 'torus': return `Ø ${f(p.d)}`;
-      case 'extrude': return `${f(p.dist)} hoch`;
+      case 'extrude': return p.thin ? `${f(p.dist)} hoch · Wand ${f(p.wall || 2)}` : `${f(p.dist)} hoch`;
       case 'revolve': return `${f(p.angle)}°`;
       case 'group': return (typeof Features !== 'undefined' && Features.sizeText(it, V)) || `${(it.children || []).length} Teile`;
       case 'part': {

@@ -2641,7 +2641,9 @@ def t_uebergang(p):
 def t_entlang_pfad(p):
     sketch_xy(p)
     p.ev("const S=Sketch.state; S.ents.push({id:'l1',type:'line',a:[0,0],b:[40,0]},{id:'l2',type:'line',a:[40,0],b:[40,30]},{id:'s1',type:'spline',pts:[[40,30],[30,45],[10,40]]})")
-    p.pg.keyboard.press('Enter'); warte_rechnen(p, 30)
+    p.pg.keyboard.press('Enter'); p.wait(500)
+    p.pg.locator('#st-mode-sweep').click(); p.wait(200)
+    p.pg.locator('.stepbox .btn.primary').click(); warte_rechnen(p, 30)
     ok1 = p.ev("return App.doc.items.length===1 && App.doc.items[0].kind==='sweep' && App.errors.length===0")
     v = volumen(p)
     ok2 = v is not None and 1800 < v < 3500
@@ -5477,6 +5479,83 @@ def t_a021_profi_kuerzel(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a007_duenne_wand(p):
+    # 1. Offener L-Linienzug (30 + 20 = 50 mm): beim Fertigstellen Standard „Dünne Wand“ mit Wand 2 mm, Höhe 10 → 50 × 2 × 10 = 1000 mm³
+    sketch_xy(p)
+    p.ev("const S=Sketch.state; S.ents.push({id:'l1',type:'line',a:[0,0],b:[30,0]},{id:'l2',type:'line',a:[30,0],b:[30,20]})")
+    p.pg.keyboard.press('Enter'); p.wait(600)
+    has_box = p.pg.locator('#st-mode-thin').count() == 1 and p.pg.locator('#st-mode-thin').get_attribute('aria-pressed') == 'true'
+    p.pg.fill('#st-dist', '10'); p.pg.press('#st-dist', 'Enter'); p.wait(150)
+    p.pg.fill('#st-wall', '2'); p.pg.press('#st-wall', 'Enter'); p.wait(150)
+    p.pg.select_option('#st-wall-side', 'center'); p.wait(300)
+    p.pg.locator('.stepbox .btn.primary').click(); warte_rechnen(p, 30)
+    v_center = volumen(p)
+    bb_center = p.ev("const it=App.doc.items[0]; return it && App.results.get(it.id) && App.results.get(it.id).data.bbox")
+    ok1 = (has_box and p.ev("return App.doc.items.length===1 && App.doc.items[0].kind==='extrude' && App.doc.items[0].p.thin===true && App.errors.length===0")
+           and v_center is not None and abs(v_center - 1000) < 5
+           and bb_center is not None and abs(bb_center[0] - 0) < 0.05 and abs(bb_center[1] + 1) < 0.05
+           and abs(bb_center[3] - 31) < 0.05 and abs(bb_center[4] - 20) < 0.05 and abs(bb_center[5] - 10) < 0.05)
+
+    # 2. Wand-Lage rechts umschalten: nach innen (960 mm³), nach außen (1040 mm³), zurück auf mittig + Wand 3 mm (1500 mm³)
+    p.pg.select_option('#p-wall-side', 'in'); warte_rechnen(p, 30)
+    v_in = volumen(p)
+    bb_in = p.ev("return App.results.get(App.doc.items[0].id).data.bbox")
+    p.pg.select_option('#p-wall-side', 'out'); warte_rechnen(p, 30)
+    v_out = volumen(p)
+    bb_out = p.ev("return App.results.get(App.doc.items[0].id).data.bbox")
+    p.pg.select_option('#p-wall-side', 'center'); warte_rechnen(p, 30)
+    field(p, '#p-wall', 3); warte_rechnen(p, 30)
+    v_w3 = volumen(p)
+    ok2 = (v_in is not None and abs(v_in - 960) < 5 and abs(bb_in[1] - 0) < 0.05 and abs(bb_in[3] - 30) < 0.05
+           and v_out is not None and abs(v_out - 1040) < 5 and abs(bb_out[1] + 2) < 0.05 and abs(bb_out[3] - 32) < 0.05
+           and v_w3 is not None and abs(v_w3 - 1500) < 8 and p.ev("return App.errors.length") == 0)
+
+    # 3. Skizze bearbeiten bei offener Dünne-Wand-Skizze erlaubt Entlang-Pfad/Dünne-Wand-Speichern; #p-thin ist gesperrt
+    thin_dis = p.pg.locator('#p-thin').is_disabled()
+    p.ev("Sketch.editItem(App.doc.items[0].id)"); p.wait(1200)
+    edit_on = p.ev("return Sketch.active && Sketch.state.ents.length===2")
+    p.pg.keyboard.press('Enter'); p.wait(1200); warte_rechnen(p, 30)
+    ok3 = thin_dis and edit_on and not p.ev("return Sketch.active") and p.ev("return App.errors.length") == 0
+
+    # 4. Geschlossener Umriss (Rechteck 20 × 20): als Dünne Wand (Rohr-Profil) innen / außen / mittig + Umschalten & Rückgängig
+    p.ev("App.change('x', d=>{ d.items=[]; }); Sketch.startOnPlane('XY')"); p.wait(1500)
+    p.ev("Sketch.state.ents.push({id:'r1',type:'rect',a:[-10,-10],b:[10,10]})")
+    p.pg.keyboard.press('Enter'); p.wait(600)
+    p.pg.locator('#st-thin').check(); p.wait(250)
+    p.pg.fill('#st-dist', '10'); p.pg.press('#st-dist', 'Enter'); p.wait(150)
+    p.pg.fill('#st-wall', '2'); p.pg.press('#st-wall', 'Enter'); p.wait(150)
+    p.pg.select_option('#st-wall-side', 'in'); p.wait(300)
+    p.pg.locator('.stepbox .btn.primary').click(); warte_rechnen(p, 30)
+    v_rect_in = volumen(p)      # (20^2 - 16^2) * 10 = 1440
+    p.pg.select_option('#p-wall-side', 'out'); warte_rechnen(p, 30)
+    v_rect_out = volumen(p)     # (24^2 - 20^2) * 10 = 1760
+    p.pg.select_option('#p-wall-side', 'center'); warte_rechnen(p, 30)
+    v_rect_cen = volumen(p)     # (22^2 - 18^2) * 10 = 1600
+    p.pg.locator('#p-thin').uncheck(); warte_rechnen(p, 30)
+    v_rect_solid = volumen(p)   # 20 * 20 * 10 = 4000
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('Control+z'); p.wait(600); warte_rechnen(p, 30)
+    v_rect_undo = volumen(p)
+    ok4 = (v_rect_in is not None and abs(v_rect_in - 1440) < 5
+           and v_rect_out is not None and abs(v_rect_out - 1760) < 5
+           and v_rect_cen is not None and abs(v_rect_cen - 1600) < 5
+           and v_rect_solid is not None and abs(v_rect_solid - 4000) < 5
+           and v_rect_undo is not None and abs(v_rect_undo - 1600) < 5
+           and p.ev("return App.errors.length") == 0)
+
+    # 5. Geschlossener Kreis (r = 10, Wand 2 innen → Rohr) + zu große Wandstärke meldet Fehler und erholt sich
+    p.ev("App.change('x', d=>{ d.items=[]; const it=Model.newItem('extrude',{sketch:{plane:{o:[0,0,0],x:[1,0,0],n:[0,0,1]},ents:[{id:'c1',type:'circle',c:[0,0],r:10}],dims:[],cons:[]},dist:10,dir:'normal',thin:true,wall:2,wallSide:'in'}); d.items.push(it); })"); warte_rechnen(p, 30)
+    v_pipe = volumen(p)         # pi * (10^2 - 8^2) * 10 = 360 * pi ≈ 1130.97
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(400)
+    field(p, '#p-wall', 12); warte_rechnen(p, 30)
+    has_err = p.ev("return App.errors.length > 0")
+    field(p, '#p-wall', 2); warte_rechnen(p, 30)
+    v_pipe2 = volumen(p)
+    ok5 = (v_pipe is not None and abs(v_pipe - 360 * math.pi) < 10
+           and has_err
+           and v_pipe2 is not None and abs(v_pipe2 - 360 * math.pi) < 10 and p.ev("return App.errors.length") == 0)
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -5581,6 +5660,7 @@ TESTS = [
     ('[A-004] Rahmen-Auswahl in der Skizze: Fenster links→rechts / Umschalt+Kreuz-Rahmen / H übernimmt in patSel / Entf löscht', t_a004_rahmen_auswahl),
     ('[A-005] Linie und Bogen im Wechsel: Hinweistext / Linie-A-Bogen-A-Linie / Tangential & Deckungsgleich / geschlossene Bahn / Taste A ohne Entwurf', t_a005_linie_bogen_wechsel),
     ('[A-021] Profi-Stufe und eigene Tastenkürzel: erster Start / Profi-Schild / Kürzel ändern / doppeltes Kürzel / Zurücksetzen', t_a021_profi_kuerzel),
+    ('[A-007] Hochziehen als dünne Wand: L-Linienzug mittig / innen & außen / geschlossener Umriss als Rohr / Skizze bearbeiten & Fehler', t_a007_duenne_wand),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

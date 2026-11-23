@@ -1469,6 +1469,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [ ] **Kürzel im Alltag prüfen**
   Bitte von Hand kurz prüfen, ob die zwei Stufen-Karten und die Tastenkürzel-Liste auf schmalem Bildschirm sauber umbrechen.
 
+## Hochziehen als dünne Wand (Auto [A-007])
+
+- [x] **Offener L-Linienzug**: Skizze mit offenem L-Linienzug (30 + 20 = 50 mm) beenden → Dialog bietet „Dünne Wand“ und „Entlang Pfad“; mit Wand 2 mm, Höhe 10 mm, mittig entsteht ein Körper mit 1000 mm³ und exakten Maßen.
+- [x] **Wand-Lage & Wandstärke**: Rechts im Panel auf „Nach innen“ (960 mm³), „Nach außen“ (1040 mm³) und mittig mit Wand 3 mm (1500 mm³) umschalten sowie Skizze bearbeiten funktioniert ohne Fehler.
+- [x] **Geschlossener Umriss als Rohr-Profil**: Rechteck (20 × 20) und Kreis (r = 10) mit „Dünne Wand“ werden zum hohlen Rohr-Profil (innen/außen/mittig), „Dünne Wand“ abschalten + Rückgängig funktionieren; zu große Wandstärke meldet sauber einen Fehler und erholt sich.
+- [ ] **Von Hand**: Offenen Bogen oder offene Spline als dünne Wand auf einer Körperfläche (innen/außen/mittig) hochziehen und den Ziehgriff prüfen.
+
 ## Fehler melden
 
 ```

@@ -230,6 +230,7 @@ export function createKernel(R, oc) {
     return R.makeFace(outer, holes);
   }
   function buildExtrude(p) {
+    if (p.thinError) throw new Error(p.thinError);
     const M = planeMap(p.plane);
     const dist = pos(p.dist, 10);
     const extra = num(p.extra, 0); // kleine Verlängerung nach außen (saubere Löcher)
@@ -244,7 +245,7 @@ export function createKernel(R, oc) {
       else { if (extra) face = face.translate(mul(M.n, -extra)); v = mul(M.n, dist + extra); }
       solids.push(R.basicFaceExtrusion(face, new R.Vector(v)));
     }
-    if (!solids.length) throw new Error('Die Skizze hat keine geschlossene Fläche.');
+    if (!solids.length) throw new Error(p.thin ? 'Die Skizze hat keine Linie und keinen Umriss für eine dünne Wand.' : 'Die Skizze hat keine geschlossene Fläche.');
     return fuseAll(solids);
   }
   function buildRevolve(p) {

@@ -3332,7 +3332,13 @@ const Sketch = (() => {
       finishSession(); Features.pathFromSketch(ids, sk); return;
     }
     if (S.ctx.mode === 'edit') {
-      if (!pathMode && (editKind === 'sweep' ? !SK.chains(S.ents).length : !regs.length)) { UI.toast(editKind === 'sweep' ? 'Der Pfad braucht mindestens eine offene Linie, einen Bogen oder eine Spline.' : 'Die Skizze braucht mindestens eine geschlossene Fläche.', { kind: 'bad' }); return; }
+      const editIt = (Model.find(App.doc, S.ctx.editId) || {}).item;
+      const isThinEdit = editKind === 'extrude' && editIt && editIt.p && editIt.p.thin;
+      if (!pathMode) {
+        if (editKind === 'sweep' && !SK.chains(S.ents).length) { UI.toast('Der Pfad braucht mindestens eine offene Linie, einen Bogen oder eine Spline.', { kind: 'bad' }); return; }
+        if (isThinEdit && !regs.length && !SK.chains(S.ents).length) { UI.toast('Für eine dünne Wand braucht die Skizze mindestens eine Linie oder einen Umriss.', { kind: 'bad' }); return; }
+        if (editKind !== 'sweep' && !isThinEdit && !regs.length) { UI.toast('Die Skizze braucht mindestens eine geschlossene Fläche.', { kind: 'bad' }); return; }
+      }
       const id = S.ctx.editId, ents = S.ents, dims = S.dims, cons = S.cons, plane = deepClone(S.plane), bg = S.bg ? deepClone(S.bg) : null;
       App.change('Skizze bearbeitet', (doc) => { const f = Model.find(doc, id); f.item.p.sketch.ents = ents; f.item.p.sketch.dims = dims; f.item.p.sketch.cons = cons; f.item.p.sketch.plane = plane; if (bg) f.item.p.sketch.bg = bg; else delete f.item.p.sketch.bg; const keys = regs.map((r) => r.key); if (f.item.p.sel) f.item.p.sel = f.item.p.sel.filter((k) => keys.includes(k)); });
       finishSession(); App.select([id]); return;
@@ -3344,7 +3350,7 @@ const Sketch = (() => {
       const id = S.ctx.targetId, n = S.F.n.clone(), wp = pts.map((e) => toWorld(e.a[0], e.a[1]));
       finishSession(); Place.holesAtPoints(id, wp, n); return;
     }
-    if (!regs.length && SK.chains(S.ents).length) { sweepFromSketch(); return; }
+    if (!regs.length && SK.chains(S.ents).length) { extrudeStep({ dist: S.ctx.targetId ? 5 : 10, dir: 'normal', openOnly: true, thin: true }); return; }
     if (!regs.length) { UI.toast(S.ents.length ? 'Noch keine geschlossene Fläche. Schließe den Umriss oder zeichne ein Rechteck oder einen Kreis.' : 'Zeichne zuerst etwas, zum Beispiel ein Rechteck.', { kind: 'bad', icon: 'info' }); return; }
     extrudeStep({ dist: S.ctx.targetId ? 5 : 10, dir: 'normal' });
   }
@@ -3369,8 +3375,9 @@ const Sketch = (() => {
   function extrudeStep(opts) {
     hideBar(); tiltView();
     const regs = SK.regions(S.ents);
+    const openOnly = !!opts.openOnly || !regs.length;
     const tgt = S.ctx.targetId ? Model.find(App.doc, S.ctx.targetId) : null;
-    S.step = { dist: opts.dist, dir: opts.dir, sel: regs.map((r) => r.key), revolve: false, axis: 'y', angle: 360, fromPushPull: !!opts.fromPushPull, color: tgt ? tgt.item.color : nextColor() };
+    S.step = { dist: opts.dist, dir: opts.dir, sel: regs.map((r) => r.key), revolve: false, sweep: false, openOnly, thin: openOnly ? true : !!opts.thin, wall: opts.wall || 2, wallSide: opts.wallSide || 'center', axis: 'y', angle: 360, fromPushPull: !!opts.fromPushPull, color: tgt ? tgt.item.color : nextColor() };
     stepBox = h('div', { class: 'stepbox' });
     renderStep();
     $('#overlay').append(stepBox);
@@ -3379,15 +3386,32 @@ const Sketch = (() => {
   }
   function renderStep() {
     const st = S.step; stepBox.innerHTML = '';
-    UI.hint(st.revolve ? 'Wähl die <b>Achse</b> und den <b>Winkel</b> – 360° ergibt einen ganzen Drehkörper, zum Beispiel eine Schale oder einen Knopf.' : 'Zieh am <b>Pfeil</b> oder tipp die Höhe ein. Nach innen wird es ein <b>Loch</b>.');
-    stepBox.append(h('h3', null, st.revolve ? 'Drehen' : (st.dir === 'reverse' ? 'Hineindrücken (Loch)' : 'Hochziehen')));
+    UI.hint(st.sweep ? 'Zieht ein <b>Rohr (Ø 6 mm)</b> entlang deiner offenen Kurve. Form, Größe und Wand stellst du danach rechts ein.' : st.revolve ? 'Wähl die <b>Achse</b> und den <b>Winkel</b> – 360° ergibt einen ganzen Drehkörper, zum Beispiel eine Schale oder einen Knopf.' : st.thin ? 'Zieh am <b>Pfeil</b> oder tipp Höhe, <b>Wandstärke</b> und <b>Wand-Lage</b> ein.' : 'Zieh am <b>Pfeil</b> oder tipp die Höhe ein. Nach innen wird es ein <b>Loch</b>.');
+    stepBox.append(h('h3', null, st.sweep ? 'Entlang Pfad' : st.revolve ? 'Drehen' : st.dir === 'reverse' ? 'Hineindrücken (Loch)' : st.thin ? 'Dünne Wand' : 'Hochziehen'));
     const seg = h('div', { class: 'role-switch' });
-    const a = h('button', { type: 'button', 'aria-pressed': !st.revolve ? 'true' : 'false' }); a.innerHTML = icon('lift') + 'Hochziehen'; a.onclick = () => { st.revolve = false; renderStep(); updatePreview(); };
-    const b = h('button', { type: 'button', 'aria-pressed': st.revolve ? 'true' : 'false' }); b.innerHTML = icon('rotate') + 'Drehen'; b.onclick = () => { st.revolve = true; renderStep(); updatePreview(); };
-    seg.append(a, b); if (!st.fromPushPull) stepBox.append(seg);
-    if (!st.revolve) {
+    if (st.openOnly) {
+      const a = h('button', { type: 'button', id: 'st-mode-thin', 'aria-pressed': !st.sweep ? 'true' : 'false' }); a.innerHTML = icon('wall2d') + 'Dünne Wand'; a.onclick = () => { st.sweep = false; st.thin = true; renderStep(); updatePreview(); };
+      const b = h('button', { type: 'button', id: 'st-mode-sweep', 'aria-pressed': st.sweep ? 'true' : 'false' }); b.innerHTML = icon('sweep') + 'Entlang Pfad'; b.onclick = () => { st.sweep = true; renderStep(); updatePreview(); };
+      seg.append(a, b); stepBox.append(seg);
+    } else if (!st.fromPushPull) {
+      const a = h('button', { type: 'button', 'aria-pressed': !st.revolve ? 'true' : 'false' }); a.innerHTML = icon('lift') + 'Hochziehen'; a.onclick = () => { st.revolve = false; renderStep(); updatePreview(); };
+      const b = h('button', { type: 'button', 'aria-pressed': st.revolve ? 'true' : 'false' }); b.innerHTML = icon('rotate') + 'Drehen'; b.onclick = () => { st.revolve = true; renderStep(); updatePreview(); };
+      seg.append(a, b); stepBox.append(seg);
+    }
+    if (st.sweep) {
+      stepBox.append(h('p', null, 'Zieht ein Rohr Ø 6 mm entlang des offenen Pfads. Form, Größe und Wand kannst du danach rechts einstellen.'));
+    } else if (!st.revolve) {
       stepBox.append(UI.numField({ id: 'st-dist', label: 'Höhe', value: st.dist, onCommit: (v) => { st.dist = v; updatePreview(); } }));
       stepBox.append(UI.selectField({ id: 'st-dir', label: 'Richtung', value: st.dir, options: [['normal', S.ctx.targetId ? 'Nach außen (Körper)' : 'Nach oben'], ['reverse', S.ctx.targetId ? 'Nach innen (Loch)' : 'Nach unten'], ['both', 'Beidseitig']], onChange: (v) => { st.dir = v; renderStep(); updatePreview(); } }));
+      if (!st.openOnly && !st.fromPushPull) {
+        const tl = h('label', { class: 'check', 'data-help': 'thinWall' }, h('input', { type: 'checkbox', id: 'st-thin', checked: !!st.thin }), 'Dünne Wand');
+        tl.querySelector('input').onchange = (e) => { st.thin = e.target.checked; renderStep(); updatePreview(); };
+        stepBox.append(tl);
+      }
+      if (st.thin) {
+        stepBox.append(UI.numField({ id: 'st-wall', label: 'Wandstärke', value: st.wall, min: 0.1, onCommit: (v) => { st.wall = v; updatePreview(); } }));
+        stepBox.append(UI.selectField({ id: 'st-wall-side', label: 'Wand-Lage', value: st.wallSide || 'center', options: [['center', 'Mittig'], ['in', 'Nach innen'], ['out', 'Nach außen']], onChange: (v) => { st.wallSide = v; updatePreview(); } }));
+      }
     } else {
       const sel = S.ents.find((x) => x.id === S.sel && x.type === 'line');
       const opts = [['y', 'Um die senkrechte Achse'], ['x', 'Um die waagerechte Achse']];
@@ -3399,8 +3423,10 @@ const Sketch = (() => {
       }
       stepBox.append(UI.numField({ id: 'st-angle', label: 'Winkel', value: st.angle, unit: '°', min: 1, onCommit: (v) => { st.angle = clamp(v, 1, 360); updatePreview(); } }));
     }
-    const hole = !st.revolve && st.dir === 'reverse' && S.ctx.targetId;
-    stepBox.append(h('p', null, hole ? 'Wird als Loch aus dem Körper geschnitten.' : S.ctx.targetId ? 'Wird Teil des Körpers, auf dem du gezeichnet hast.' : 'Wird ein neuer Körper.'));
+    if (!st.sweep) {
+      const hole = !st.revolve && st.dir === 'reverse' && S.ctx.targetId;
+      stepBox.append(h('p', null, hole ? 'Wird als Loch aus dem Körper geschnitten.' : S.ctx.targetId ? 'Wird Teil des Körpers, auf dem du gezeichnet hast.' : 'Wird ein neuer Körper.'));
+    }
     const row = h('div', { class: 'btn-row', style: { justifyContent: 'flex-end' } });
     const back = h('button', { type: 'button', class: 'btn ghost' }); back.innerHTML = st.fromPushPull ? 'Abbrechen' : icon('undo') + 'Skizze'; back.dataset.tip = st.fromPushPull ? '' : 'Zurück zur Skizze'; back.onclick = () => stepBack();
     const ok = h('button', { type: 'button', class: 'btn primary' }); ok.innerHTML = icon('check') + 'Fertig'; ok.onclick = () => stepOK();
@@ -3408,14 +3434,22 @@ const Sketch = (() => {
   }
   function stepItem() {
     const st = S.step;
+    if (st.sweep) {
+      return Model.newItem('sweep', { sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons) }, shape: 'circle', d: 6, w: 6, h: 4, wall: 0 }, { name: 'Entlang Pfad', color: st.color });
+    }
     const regs = SK.regions(S.ents);
     const sel = st.sel && st.sel.length && st.sel.length < regs.length ? st.sel.slice() : null;
     const role = !st.revolve && st.dir === 'reverse' && S.ctx.targetId ? 'hole' : 'solid';
     const kind = st.revolve ? 'revolve' : 'extrude';
     const target = S.ctx.targetId ? Model.find(App.doc, S.ctx.targetId) : null;
-    const it = Model.newItem(kind, {}, { name: st.revolve ? 'Drehkörper' : role === 'hole' ? 'Aussparung' : S.ctx.targetId ? 'Erhöhung' : 'Skizzenkörper', role, color: st.color });
+    const name = st.revolve ? 'Drehkörper' : role === 'hole' ? 'Aussparung' : S.ctx.targetId ? 'Erhöhung' : (st.thin && st.openOnly ? 'Dünne Wand' : 'Skizzenkörper');
+    const it = Model.newItem(kind, {}, { name, role, color: st.color });
     const p = { sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons), ...(S.bg ? { bg: deepClone(S.bg) } : {}) }, sel };
-    if (kind === 'extrude') { p.dist = st.dist; p.dir = st.dir; if (role === 'hole') p.extra = 0.05; else if (S.ctx.targetId) p.extra = 0.02; }
+    if (kind === 'extrude') {
+      p.dist = st.dist; p.dir = st.dir;
+      if (role === 'hole') p.extra = 0.05; else if (S.ctx.targetId) p.extra = 0.02;
+      if (st.thin) { p.thin = true; p.wall = st.wall; p.wallSide = st.wallSide || 'center'; }
+    }
     else {
       p.angle = st.angle;
       if (st.axis === 'x') p.axis = { a: [0, 0], b: [1, 0] };
@@ -3438,7 +3472,17 @@ const Sketch = (() => {
   function updatePreview() { previewUpd(); }
   function arrowPos() {
     const regs = SK.regions(S.ents); const r = regs.find((x) => S.step.sel.includes(x.key)) || regs[0];
-    const lab = r ? r.label : [0, 0];
+    let lab = r ? r.label : null;
+    if (!lab) {
+      const ch = SK.chains(S.ents)[0];
+      if (ch && ch.segs.length) {
+        const pts = SK.segPoints(ch.segs[0]);
+        lab = pts[Math.floor(pts.length / 2)] || ch.segs[0].a;
+      } else {
+        const b = SK.bounds(S.ents);
+        lab = b ? [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2] : [0, 0];
+      }
+    }
     const st = S.step; const V = Model.vars(App.doc).v; const d = Model.num(st.dist, V, 10);
     const sgn = st.dir === 'reverse' ? -1 : 1; const off = st.dir === 'both' ? d / 2 : d;
     return toWorld(lab[0], lab[1]).addScaledVector(S.F.n, sgn * off);
@@ -3446,7 +3490,7 @@ const Sketch = (() => {
   function placeArrow() {
     if (arrow) { arrow.remove(); arrow = null; }
     for (const l of labels.filter((x) => x.classList.contains('steplabel'))) l.remove();
-    if (!S || !S.step || S.step.revolve) { Viewer.requestRender(); return; }
+    if (!S || !S.step || S.step.revolve || S.step.sweep) { Viewer.requestRender(); return; }
     const p = arrowPos();
     const dir = S.F.n.clone().multiplyScalar(S.step.dir === 'reverse' ? -1 : 1);
     const ps = Viewer.pixelSizeAt(p);
@@ -3522,7 +3566,8 @@ const Sketch = (() => {
     const it = stepItem();
     const ctx = S.ctx;
     App.extra = [];
-    App.change(it.role === 'hole' ? 'Aussparung erstellt' : it.kind === 'revolve' ? 'Drehkörper erstellt' : 'Hochgezogen', (doc) => {
+    const lbl = it.kind === 'sweep' ? 'Entlang Pfad gezogen' : it.role === 'hole' ? 'Aussparung erstellt' : it.kind === 'revolve' ? 'Drehkörper erstellt' : (it.p && it.p.thin ? 'Dünne Wand hochgezogen' : 'Hochgezogen');
+    App.change(lbl, (doc) => {
       if (ctx.targetId && Model.find(doc, ctx.targetId)) Actions.attach(doc, ctx.targetId, it);
       else { Model.setFromMatrix(it, S.W); doc.items.push(it); }
     });
@@ -3531,21 +3576,7 @@ const Sketch = (() => {
     App.select([top ? top.id : it.id]);
     // neues Teil gut sichtbar machen, wenn es nach dem Zurückspringen zu klein wäre
     setTimeout(() => { const b = Actions.worldBox(top ? top.id : it.id); if (b && (Viewer.screenFraction(b) < 0.22 || !Viewer.inView(b))) Viewer.fit(App.doc.items.map((x) => x.id)); }, 480);
-    UI.toast(it.role === 'hole' ? 'Aussparung erstellt. Im Verlauf kannst du die Tiefe jederzeit ändern.' : 'Fertig! Die Maße kannst du rechts jederzeit ändern.', { icon: 'check' });
-  }
-  // Offener Pfad ohne Fläche: Querschnitt (Rohr Ø 6) entlang ziehen
-  function sweepFromSketch() {
-    const ctx = S.ctx;
-    const it = Model.newItem('sweep', { sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons) }, shape: 'circle', d: 6, w: 6, h: 4, wall: 0 }, { name: 'Entlang Pfad' });
-    App.extra = [];
-    App.change('Entlang Pfad gezogen', (doc) => {
-      if (ctx.targetId && Model.find(doc, ctx.targetId)) Actions.attach(doc, ctx.targetId, it);
-      else { Model.setFromMatrix(it, S.W); doc.items.push(it); }
-    });
-    finishSession();
-    const top = Model.topOf(App.doc, it.id);
-    App.select([top ? top.id : it.id]);
-    UI.toast('Offener Pfad erkannt – als Rohr Ø 6 mm entlang gezogen. Form, Größe und Wand stellst du rechts ein.', { icon: 'check', ms: 5000 });
+    UI.toast(it.kind === 'sweep' ? 'Als Rohr Ø 6 mm entlang gezogen. Form, Größe und Wand stellst du rechts ein.' : it.role === 'hole' ? 'Aussparung erstellt. Im Verlauf kannst du die Tiefe jederzeit ändern.' : 'Fertig! Die Maße kannst du rechts jederzeit ändern.', { icon: 'check' });
   }
   // ---------- Beenden ----------
   function cancel(silent) {

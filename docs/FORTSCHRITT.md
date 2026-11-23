@@ -204,6 +204,7 @@ Fertig.
 - [x] Maß-Schildchen, die übereinander lägen, rücken untereinander (z. B. „X 0“ und „Y 0“ am Ursprung) (Sitzung 31)
 
 ### Stufe 3 – Features und Ansichten
+- [x] Hochziehen als dünne Wand (Auto [A-007], KP-03): offene Linien/Ketten (Linien, Bögen, Splines) und geschlossene Umrisse (Rohr-Profil) mit Wandstärke und Wand-Lage (mittig, nach innen, nach außen) hochziehen – Live-Vorschau beim Fertigstellen und nachträglich rechts änderbar (`SKO.thinRegions`)
 - [x] Schnitt in die Skizze: mit „Kante“ (Z) auf eine Fläche statt auf eine Kante klicken → der ganze Schnitt des Körpers mit der Skizzen-Ebene kommt als Kontur (Linien, Bögen, Kreise, Splines; ein Rückgängig-Schritt; Kern `sectionOf` über `BRepAlgoAPI_Section`) (Sitzung 71)
 - [x] Konstruktionsebenen für Skizzen: „Mittig zwischen zwei Flächen“ (zwei parallele ebene Flächen anklicken) und „Durch drei Punkte“ (Punkte auf Körpern, Ecken und Kantenmitten rasten ein; Normale nach oben) (Sitzung 68)
 - [x] Fase mit zwei Abständen oder mit Abstand und Winkel, „Seiten tauschen“; Rundung „von … bis“, die entlang der Kante wächst, „Richtung tauschen“ (Kern: `BRepFilletAPI_MakeChamfer` mit Nachbarfläche, Rundung mit zwei Radien) (Sitzung 63)
