@@ -390,6 +390,7 @@ const Viewer = (() => {
     n.mesh.material = makeMaterial(n.role, n.color, n.look);
     n.mesh.castShadow = n.mesh.receiveShadow = n.role !== 'hole';
     applyFaceColors(n);
+    applyThreads(n);
     if (n.ctxDim) {   // anderes Bauteil, während eines bearbeitet wird
       n.mesh.material.transparent = true; n.mesh.material.opacity = n.role === 'hole' ? 0.06 : 0.16; n.mesh.material.depthWrite = false;
       if (n.edges) { n.edges.material.dispose(); n.edges.material = new THREE.LineBasicMaterial({ color: new THREE.Color(theme.edge), transparent: true, opacity: 0.18 }); }
@@ -453,6 +454,144 @@ const Viewer = (() => {
     g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
     m.vertexColors = true; m.color.set('#ffffff'); m.needsUpdate = true;
   }
+  // Kosmetisches Gewinde (KP-20): gestreiftes Zylinder-Overlay direkt auf der runden Fläche, ohne Kern-Neubau
+  const threadTextures = {};
+  function getThreadTexture(kind) {
+    const k = kind === 'int' ? 'int' : 'ext';
+    if (threadTextures[k]) return threadTextures[k];
+    const c = document.createElement('canvas'); c.width = 64; c.height = 64;
+    const ctx = c.getContext('2d');
+    const cLight = k === 'int' ? '#57b5cc' : '#e6a83a';
+    const cDark = k === 'int' ? '#1c4754' : '#734a10';
+    ctx.fillStyle = cLight; ctx.fillRect(0, 0, 64, 64);
+    ctx.strokeStyle = cDark; ctx.lineWidth = 22;
+    for (let y = -64; y <= 128; y += 64) {
+      ctx.beginPath(); ctx.moveTo(-8, y + 6); ctx.lineTo(72, y - 6); ctx.stroke();
+    }
+    ctx.strokeStyle = k === 'int' ? 'rgba(255,255,255,0.22)' : 'rgba(255,244,214,0.26)';
+    ctx.lineWidth = 6;
+    for (let y = -64; y <= 128; y += 64) {
+      ctx.beginPath(); ctx.moveTo(-8, y + 32); ctx.lineTo(72, y + 20); ctx.stroke();
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    threadTextures[k] = tex;
+    return tex;
+  }
+  function cylinderGeomOf(data, faceIdx) {
+    const f = data && data.faces && data.faces[faceIdx];
+    if (!f || f.t !== 'CYLINDRE' || !Array.isArray(f.axis) || f.axis.length < 6 || !(f.r > 0)) return null;
+    const o = [f.axis[0], f.axis[1], f.axis[2]];
+    let d = [f.axis[3], f.axis[4], f.axis[5]];
+    const dl = Math.hypot(d[0], d[1], d[2]) || 1;
+    d = [d[0] / dl, d[1] / dl, d[2] / dl];
+    const ax = Math.abs(d[2]) >= Math.abs(d[0]) && Math.abs(d[2]) >= Math.abs(d[1]) ? 2 : Math.abs(d[1]) >= Math.abs(d[0]) ? 1 : 0;
+    if (d[ax] < 0) d = [-d[0], -d[1], -d[2]];
+    const g = (data.faceGroups || []).find((x) => x[2] === faceIdx);
+    let t0 = Infinity, t1 = -Infinity, dotSum = 0;
+    if (g && data.vertices && data.normals && data.triangles) {
+      const P = data.vertices, N = data.normals, T = data.triangles;
+      for (let i = g[0]; i < g[0] + g[1]; i++) {
+        const vi = T[i] * 3;
+        const vx = P[vi] - o[0], vy = P[vi + 1] - o[1], vz = P[vi + 2] - o[2];
+        const t = vx * d[0] + vy * d[1] + vz * d[2];
+        if (t < t0) t0 = t; if (t > t1) t1 = t;
+        const rx = vx - d[0] * t, ry = vy - d[1] * t, rz = vz - d[2] * t;
+        dotSum += N[vi] * rx + N[vi + 1] * ry + N[vi + 2] * rz;
+      }
+    }
+    if (!isFinite(t0) || !isFinite(t1)) { t0 = 0; t1 = 10; }
+    return { o, d, r: f.r, c: f.c || o.slice(), t0, t1, faceLen: Math.max(0.1, t1 - t0), kind: dotSum >= 0 ? 'ext' : 'int' };
+  }
+  function cylinderFaceInfo(id, faceIdx) {
+    const n = nodes.get(id);
+    return n ? cylinderGeomOf(n.data, faceIdx) : null;
+  }
+  function threadFaceIndex(n, th) {
+    if (!n || !n.data || !n.data.faces || !th) return -1;
+    if (!Array.isArray(th.axis) || th.axis.length < 6) return faceIndexOf(n, th);
+    const to = th.axis.slice(0, 3), td = th.axis.slice(3, 6);
+    const tdl = Math.hypot(td[0], td[1], td[2]) || 1;
+    const tdn = [td[0] / tdl, td[1] / tdl, td[2] / tdl];
+    const rTol = Math.max(0.5, (th.r || 1) * 0.25);
+    const aTol = Math.max(0.5, (th.r || 1) * 0.2);
+    let best = -1, bd = Infinity;
+    n.data.faces.forEach((f, i) => {
+      if (!f || f.t !== 'CYLINDRE' || !Array.isArray(f.axis) || f.axis.length < 6) return;
+      if (Math.abs((f.r || 0) - (th.r || 0)) > rTol) return;
+      const fd = [f.axis[3], f.axis[4], f.axis[5]];
+      const fdl = Math.hypot(fd[0], fd[1], fd[2]) || 1;
+      const fdn = [fd[0] / fdl, fd[1] / fdl, fd[2] / fdl];
+      if (Math.abs(fdn[0] * tdn[0] + fdn[1] * tdn[1] + fdn[2] * tdn[2]) < 0.99) return;
+      const dx = f.axis[0] - to[0], dy = f.axis[1] - to[1], dz = f.axis[2] - to[2];
+      const proj = dx * tdn[0] + dy * tdn[1] + dz * tdn[2];
+      const perp = Math.hypot(dx - proj * tdn[0], dy - proj * tdn[1], dz - proj * tdn[2]);
+      if (perp > aTol) return;
+      const dc = f.c && th.c ? Math.hypot(f.c[0] - th.c[0], f.c[1] - th.c[1], f.c[2] - th.c[2]) : perp;
+      if (dc < bd) { bd = dc; best = i; }
+    });
+    return best >= 0 ? best : faceIndexOf(n, th);
+  }
+  function disposeThreads(n) {
+    if (!n || !n.threadGroup) return;
+    n.obj.remove(n.threadGroup);
+    n.threadGroup.traverse((o) => {
+      if (o.geometry) o.geometry.dispose();
+      if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); }
+    });
+    n.threadGroup = null;
+  }
+  function applyThreads(n) {
+    disposeThreads(n);
+    if (!n.threads || !n.threads.length || n.role === 'hole') return;
+    const tg = new THREE.Group();
+    tg.userData.threadGroup = true;
+    const clip = vis.clip ? [vis.clip] : null;
+    const op = n.ctxDim ? 0.14 : (LOOK.display === 'wire' ? 0.25 : 0.82);
+    for (const th of n.threads) {
+      const fi = threadFaceIndex(n, th);
+      const g = fi >= 0 ? cylinderGeomOf(n.data, fi) : (Array.isArray(th.axis) && th.axis.length >= 6 ? {
+        o: th.axis.slice(0, 3), d: th.axis.slice(3, 6), r: th.r || 3, c: th.c || [0, 0, 0],
+        t0: th.t0 ?? 0, t1: th.t1 ?? 10, faceLen: Math.max(0.1, (th.t1 ?? 10) - (th.t0 ?? 0)), kind: th.kind || 'ext',
+      } : null);
+      if (!g) continue;
+      const kind = th.kind || g.kind || 'ext';
+      const L = clamp(Number(th.length) || g.faceLen, 0.2, g.faceLen);
+      const s0 = th.from === 'bottom' ? g.t0 : g.t1 - L;
+      const s1 = th.from === 'bottom' ? g.t0 + L : g.t1;
+      const rVis = kind === 'int' ? Math.max(0.05, g.r - Math.max(0.02, g.r * 0.004)) : g.r + Math.max(0.02, g.r * 0.004);
+      const spec = typeof THREAD_MAP !== 'undefined' ? THREAD_MAP[th.size] : null;
+      const pitch = spec ? spec.pitch : 1;
+      const tex = getThreadTexture(kind).clone();
+      tex.needsUpdate = true;
+      tex.repeat.set(1, Math.max(1, Math.min(80, L / pitch)));
+      const geo = new THREE.CylinderGeometry(rVis, rVis, Math.max(0.1, s1 - s0), 40, 1, true);
+      const mat = new THREE.MeshStandardMaterial({
+        map: tex, transparent: true, opacity: op, roughness: 0.45, metalness: 0.25,
+        side: THREE.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1, clippingPlanes: clip,
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.userData.cosmeticThread = th.id;
+      mesh.renderOrder = 2;
+      const dVec = new THREE.Vector3(...g.d).normalize();
+      mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dVec);
+      mesh.position.set(...g.o).addScaledVector(dVec, (s0 + s1) / 2);
+      // Feine Ringlinien an Anfang und Ende der Gewinde-Markierung
+      const rRing = rVis * (kind === 'int' ? 0.998 : 1.002);
+      const rPts = [];
+      for (let k = 0; k < 40; k++) { const a = (k / 40) * Math.PI * 2; rPts.push(Math.cos(a) * rRing, 0, Math.sin(a) * rRing); }
+      const halfL = Math.max(0.1, s1 - s0) / 2;
+      for (const yOff of [-halfL, halfL]) {
+        const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.Float32BufferAttribute(rPts, 3));
+        const rm = new THREE.LineBasicMaterial({ color: new THREE.Color(kind === 'int' ? '#1c4754' : '#6e4710'), transparent: true, opacity: n.ctxDim ? 0.18 : 0.75, clippingPlanes: clip });
+        const loop = new THREE.LineLoop(rg, rm); loop.position.y = yOff; loop.renderOrder = 3;
+        mesh.add(loop);
+      }
+      tg.add(mesh);
+    }
+    if (tg.children.length) { n.threadGroup = tg; n.obj.add(tg); }
+  }
   function restyleAll() { for (const n of nodes.values()) styleNode(n); }
   function setClip(plane) { vis.clip = plane || null; restyleAll(); listeners.emit('viewmode'); }
   function setXray(on) { vis.xray = !!on; restyleAll(); listeners.emit('viewmode'); }
@@ -487,7 +626,7 @@ const Viewer = (() => {
     obj.userData.nodeId = id;
     groups.nodes.add(obj);
     const old = nodes.get(id);
-    const n = { id, obj, mesh, edges, data, role: info.role, color: info.color, look: info.look || null, opacity: info.opacity ?? null, faceColors: info.faceColors || null, selected: false, hover: false, key: info.key, base: info.matrix.clone(), off: old && old.off ? old.off : null };
+    const n = { id, obj, mesh, edges, data, role: info.role, color: info.color, look: info.look || null, opacity: info.opacity ?? null, faceColors: info.faceColors || null, threads: info.threads || null, selected: false, hover: false, key: info.key, base: info.matrix.clone(), off: old && old.off ? old.off : null };
     placeNode(n);
     nodes.set(id, n); styleNode(n);
     fitShadowSoon();
@@ -503,6 +642,7 @@ const Viewer = (() => {
     if (info.look !== undefined && JSON.stringify(info.look) !== JSON.stringify(n.look)) { n.look = info.look; restyle = true; }
     if (info.opacity !== undefined && info.opacity !== n.opacity) { n.opacity = info.opacity; restyle = true; }
     if (info.faceColors !== undefined && JSON.stringify(info.faceColors) !== JSON.stringify(n.faceColors)) { n.faceColors = info.faceColors; restyle = true; }
+    if (info.threads !== undefined && JSON.stringify(info.threads) !== JSON.stringify(n.threads)) { n.threads = info.threads; restyle = true; }
     if (info.matrix) fitShadowSoon();
     if (info.selected !== undefined && info.selected !== n.selected) { n.selected = info.selected; restyle = true; }
     if (info.hover !== undefined && info.hover !== n.hover) { n.hover = info.hover; restyle = true; }
@@ -514,6 +654,7 @@ const Viewer = (() => {
   }
   function removeNode(id, keepMap) {
     const n = nodes.get(id); if (!n) return;
+    disposeThreads(n);
     groups.nodes.remove(n.obj);
     n.mesh.geometry.dispose(); n.mesh.material.dispose(); n.edges.geometry.dispose(); n.edges.material.dispose();
     if (!keepMap) { nodes.delete(id); fitShadowSoon(); }
@@ -1094,7 +1235,7 @@ const Viewer = (() => {
   }
 
   return {
-    viewBack, get viewHistory() { return camHist.length; }, useButtons, setMouseStyle, get mouseStyle() { return mouseStyle; }, get leftOrbits() { return !!(controls && controls.mouseButtons.LEFT === THREE.MOUSE.ROTATE); }, setLook, lookOf, get look() { return { ...LOOK }; }, fitShadow, renderImage, lookAtFace, faceIndexOf: (id, fc) => { const n = nodes.get(id); return n ? faceIndexOf(n, fc) : -1; }, get renderer() { return renderer; },
+    viewBack, get viewHistory() { return camHist.length; }, useButtons, setMouseStyle, get mouseStyle() { return mouseStyle; }, get leftOrbits() { return !!(controls && controls.mouseButtons.LEFT === THREE.MOUSE.ROTATE); }, setLook, lookOf, get look() { return { ...LOOK }; }, fitShadow, renderImage, lookAtFace, faceIndexOf: (id, fc) => { const n = nodes.get(id); return n ? faceIndexOf(n, fc) : -1; }, cylinderFaceInfo, threadFaceIndex: (id, th) => { const n = nodes.get(id); return n ? threadFaceIndex(n, th) : -1; }, get renderer() { return renderer; },
     init, requestRender, setClip, setXray, setOffsets, baseBox, renderInset, silhouette, setAdaptive, setCompare, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, setSelectedEdges, clearHover,
     edgePositions, pick, pickAll, pickGhost, pickProxy, setProxies, clearProxies, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, boxVisible, sceneBox, snapshot, makeFat, disposeFat, faceOverlay, faceArea, faceEdges, edgeKinds, wallAt, thinWalls,
     get camera() { return camera; }, get activeCamera() { return cam(); }, get ortho() { return ortho; }, get gridStep() { return gridStep; }, get controls() { return controls; }, get scene() { return scene; }, get groups() { return groups; }, get nodes() { return nodes; }, get canvas() { return renderer.domElement; }, get theme() { return theme; }, get container() { return container; },

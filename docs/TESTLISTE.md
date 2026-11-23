@@ -1493,6 +1493,20 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [ ] **Kürzel im Alltag prüfen**
   Bitte von Hand kurz prüfen, ob die zwei Stufen-Karten und die Tastenkürzel-Liste auf schmalem Bildschirm sauber umbrechen.
 
+## Kosmetisches Gewinde (Auto [A-009])
+
+- [x] **Zylinder Ø 6 als M6 × 10 markieren**
+  Schritte: 1. Zylinder Ø 6 × 20 anlegen, Mantelfläche wählen, „Gewinde markieren“. 2. Vorgeschlagene Größe M6 und Länge 10 bestätigen.
+  Erwartet: Kein neuer Körper, Markierung im Projekt gespeichert, gestreiftes 3D-Overlay sichtbar.
+- [x] **Stückliste, Technische Zeichnung & Rückgängig**
+  Schritte: 1. Stückliste öffnen und Zeichnung ansehen. 2. Rückgängig und Wiederholen. 3. Projekt speichern/laden.
+  Erwartet: Gewinde „M6 × 10“ steht in Stückliste und Zeichnung (mit dünnen Gewindelinien); Rückgängig entfernt Markierung und Overlay; Speichern/Laden erhält sie.
+- [x] **Echt machen (Außen- und Innengewinde)**
+  Schritte: 1. Im Panel „Echt machen“ klicken (Zylinder außen sowie Kernloch Ø 5 innen).
+  Erwartet: Wandelt in echtes 3D-Gewinde (`threadRod` bzw. `threadHole` als Schnitt) ohne Fehler um.
+- [ ] **Optik der Gewindestreifen prüfen**
+  Bitte von Hand kurz prüfen, ob die schrägen Gewindestreifen bei Außen- (Messing) und Innengewinde (Blau) sowie in der technischen Zeichnung (3/4-Kreis und Linien) gut lesbar sind.
+
 ## Fehler melden
 
 ```

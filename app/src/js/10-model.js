@@ -29,6 +29,21 @@ const KINDS = {
 };
 const PRIMITIVE_ORDER = ['box', 'cylinder', 'sphere', 'cone', 'pyramid', 'wedge', 'tube', 'torus', 'prism', 'hemisphere'];
 
+// Metrische ISO-Regelgewinde für kosmetische Gewinde (KP-20)
+const THREAD_SPECS = [
+  { size: 'M2',   d: 2.0,  pitch: 0.4,  core: 1.6  },
+  { size: 'M2.5', d: 2.5,  pitch: 0.45, core: 2.05 },
+  { size: 'M3',   d: 3.0,  pitch: 0.5,  core: 2.5  },
+  { size: 'M4',   d: 4.0,  pitch: 0.7,  core: 3.3  },
+  { size: 'M5',   d: 5.0,  pitch: 0.8,  core: 4.2  },
+  { size: 'M6',   d: 6.0,  pitch: 1.0,  core: 5.0  },
+  { size: 'M8',   d: 8.0,  pitch: 1.25, core: 6.8  },
+  { size: 'M10',  d: 10.0, pitch: 1.5,  core: 8.5  },
+  { size: 'M12',  d: 12.0, pitch: 1.75, core: 10.2 },
+  { size: 'M16',  d: 16.0, pitch: 2.0,  core: 14.0 },
+];
+const THREAD_MAP = Object.fromEntries(THREAD_SPECS.map((t) => [t.size, t]));
+
 const Model = (() => {
   const T0 = () => ({ x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 });
   function newDoc(name = 'Neues Projekt') {

@@ -211,7 +211,7 @@ const Drawing = (() => {
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (const arr of [polys, hidden]) for (const p of arr) for (const q of p.pts) { x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]); }
     if (!isFinite(x0)) return null;
-    // Mittellinien
+    // Mittellinien und kosmetische Gewinde (KP-20)
     const centers = [];
     if (dwg().centers) {
       const dir = new THREE.Vector3(...v.dir), ex = new THREE.Vector3(...v.x), ey = new THREE.Vector3(...v.y);
@@ -232,7 +232,55 @@ const Drawing = (() => {
         }
       }
     }
-    return { polys, hidden, circles, points, centers, box: [x0, y0, x1, y1], w: x1 - x0, h: y1 - y0 };
+    const threads = [];
+    if (name !== 'iso') {
+      const dir = new THREE.Vector3(...v.dir), ex = new THREE.Vector3(...v.x), ey = new THREE.Vector3(...v.y);
+      const seenT = new Set();
+      for (const th of docThreads()) {
+        const k = Math.abs(th.d.dot(dir));
+        if (k > 0.995) {
+          const c = [th.p0.dot(ex), th.p0.dot(ey)];
+          const key = 'e|' + Math.round(c[0] * 20) + ',' + Math.round(c[1] * 20) + '|' + th.size + '|' + th.kind;
+          if (seenT.has(key)) continue; seenT.add(key);
+          threads.push({ type: 'end', c, r: th.r, rThread: th.rThread, size: th.size, length: th.length, kind: th.kind });
+        } else if (k < 0.05) {
+          const a = [th.p0.dot(ex), th.p0.dot(ey)], b = [th.p1.dot(ex), th.p1.dot(ey)];
+          const sA = Math.round(a[0] * 20) + ',' + Math.round(a[1] * 20), sB = Math.round(b[0] * 20) + ',' + Math.round(b[1] * 20);
+          const key = 's|' + (sA < sB ? sA + '|' + sB : sB + '|' + sA) + '|' + th.size + '|' + th.kind;
+          if (seenT.has(key)) continue; seenT.add(key);
+          threads.push({ type: 'side', a, b, r: th.r, rThread: th.rThread, size: th.size, length: th.length, kind: th.kind });
+        }
+      }
+    }
+    return { polys, hidden, circles, points, centers, threads, box: [x0, y0, x1, y1], w: x1 - x0, h: y1 - y0 };
+  }
+  function docThreads() {
+    const out = [], V = Model.vars(App.doc).v;
+    Model.walk(App.doc.items, (it) => {
+      if (it.role === 'hole' || it.suppressed || !Model.isActive(App.doc, it.id) || !it.threads || !it.threads.length) return;
+      const mats = Model.instanceMatrices(App.doc, it.id, V);
+      for (const th of it.threads) {
+        const fi = Viewer.threadFaceIndex(it.id, th);
+        const g = (fi >= 0 && Viewer.cylinderFaceInfo(it.id, fi)) || (Array.isArray(th.axis) && th.axis.length >= 6 ? {
+          o: th.axis.slice(0, 3), d: th.axis.slice(3, 6), r: th.r || 3, t0: th.t0 ?? 0, t1: th.t1 ?? 10, faceLen: Math.max(0.1, (th.t1 ?? 10) - (th.t0 ?? 0)), kind: th.kind || 'ext',
+        } : null);
+        if (!g) continue;
+        const kind = th.kind || g.kind || 'ext';
+        const L = clamp(Number(th.length) || g.faceLen, 0.2, g.faceLen);
+        const s0 = th.from === 'bottom' ? g.t0 : g.t1 - L;
+        const s1 = th.from === 'bottom' ? g.t0 + L : g.t1;
+        const spec = THREAD_MAP[th.size];
+        const rThread = kind === 'int' ? (spec ? spec.d / 2 : g.r * 1.15) : (spec ? spec.core / 2 : g.r * 0.85);
+        const dL = new THREE.Vector3(...g.d).normalize();
+        const p0L = new THREE.Vector3(...g.o).addScaledVector(dL, s0);
+        const p1L = new THREE.Vector3(...g.o).addScaledVector(dL, s1);
+        for (const M of mats) {
+          const p0 = p0L.clone().applyMatrix4(M), p1 = p1L.clone().applyMatrix4(M);
+          out.push({ p0, p1, d: p1.clone().sub(p0).normalize(), r: g.r, rThread, size: th.size, length: L, kind });
+        }
+      }
+    });
+    return out;
   }
   function freeGeom() {
     const d = dwg(); if (!d.free.length) return null;
@@ -327,7 +375,8 @@ const Drawing = (() => {
           const away = Math.hypot(best.c[0] - mx, best.c[1] - my) > 1e-6 ? (Math.atan2(best.c[1] - my, best.c[0] - mx) * 180) / Math.PI : 30;
           const ang = [45, 135, 225, 315].sort((p, q) => angD(p, away) - angD(q, away)).find((a) => !taken.includes(a)) ?? 45;
           taken.push(ang);
-          out.push({ ...dim, id: dim.id + '_' + Math.round(best.r * 200), type: 'dia', c: best.c, r: best.r, ang, count: g.length });
+          const mt = (v.geo.threads || []).find((th) => th.type === 'end' && Math.hypot(th.c[0] - best.c[0], th.c[1] - best.c[1]) < 0.25 && Math.abs(th.r - best.r) < 0.35);
+          out.push({ ...dim, id: dim.id + '_' + Math.round(best.r * 200), type: 'dia', c: best.c, r: best.r, ang, count: g.length, ...(mt ? { threadLabel: `${mt.size} × ${fmtDim(mt.length)}` } : {}) });
         }
         // Rundungen: gleiche Radien zusammenfassen („4× R5“). Nur deutliche Bögen – Zahnköpfe und Ähnliches bleiben weg.
         const ag = new Map();
@@ -390,7 +439,7 @@ const Drawing = (() => {
       const tEx = Math.min(tx, ty);
       const lead = tEx > 0 && tEx < 24 ? Math.max(5, tEx) : 7;
       const out = [P[0] + ux * lead, P[1] + uy * lead];
-      const label = (dim.count > 1 ? dim.count + '× ' : '') + (dim.type === 'dia' ? 'Ø' : 'R') + fmtDim(dim.type === 'dia' ? dim.r * 2 : dim.r);
+      const label = (dim.count > 1 ? dim.count + '× ' : '') + (dim.threadLabel ? dim.threadLabel : (dim.type === 'dia' ? 'Ø' : 'R') + fmtDim(dim.type === 'dia' ? dim.r * 2 : dim.r));
       const tl = textW(label, TXT) * 0.92 + 2;
       const tail = [out[0] + (ux >= 0 ? tl : -tl), out[1]];
       if (dim.type === 'dia') {
@@ -439,6 +488,33 @@ const Drawing = (() => {
       for (const c of v.geo.centers) {
         if (c.type === 'cross') { const C = toSheet(v, c.c); const r = c.r * v.s + 2; lines.push({ pts: [[C[0] - r, C[1]], [C[0] + r, C[1]]], cls: 'ctr' }, { pts: [[C[0], C[1] - r], [C[0], C[1] + r]], cls: 'ctr' }); }
         else { const A = toSheet(v, c.a), B = toSheet(v, c.b); const dx = B[0] - A[0], dy = B[1] - A[1]; const L = Math.hypot(dx, dy) || 1; const e = 2.5; lines.push({ pts: [[A[0] - (dx / L) * e, A[1] - (dy / L) * e], [B[0] + (dx / L) * e, B[1] + (dy / L) * e]], cls: 'ctr' }); }
+      }
+      // Kosmetische Gewinde nach DIN ISO 6410-1: 3/4-Kreis (Stirnansicht) bzw. dünne parallele Linien (Seitenansicht)
+      const labelSide = name === 'front' || (name === 'left' && !layout.views.front);
+      for (const th of v.geo.threads || []) {
+        if (th.type === 'end') {
+          const C = toSheet(v, th.c), rr = th.rThread * v.s;
+          if (rr > 0.3) lines.push({ pts: arcPts(th.c, th.rThread, 0, Math.PI * 1.5).map((q) => toSheet(v, q)), arc: { c: C, r: rr, a: [0, Math.PI * 1.5] }, cls: 'thin' });
+        } else if (th.type === 'side') {
+          const A = toSheet(v, th.a), B = toSheet(v, th.b);
+          const dx = B[0] - A[0], dy = B[1] - A[1], L = Math.hypot(dx, dy);
+          if (L < 0.3) continue;
+          const px = -dy / L, py = dx / L, rt = th.rThread * v.s, ro = th.r * v.s;
+          lines.push({ pts: [[A[0] + px * rt, A[1] + py * rt], [B[0] + px * rt, B[1] + py * rt]], cls: 'thin' });
+          lines.push({ pts: [[A[0] - px * rt, A[1] - py * rt], [B[0] - px * rt, B[1] - py * rt]], cls: 'thin' });
+          lines.push({ pts: [[A[0] - px * ro, A[1] - py * ro], [A[0] + px * ro, A[1] + py * ro]], cls: 'vis' });
+          lines.push({ pts: [[B[0] - px * ro, B[1] - py * ro], [B[0] + px * ro, B[1] + py * ro]], cls: 'vis' });
+          if (labelSide) {
+            const mx = (A[0] + B[0]) / 2, my = (A[1] + B[1]) / 2;
+            const P0 = [mx + px * ro, my + py * ro];
+            const P1 = [P0[0] + px * 5 + 3, P0[1] + py * 5 - 4];
+            const lbl = `${th.size} × ${fmtDim(th.length)}`;
+            const tw = textW(lbl, 3.2) + 2;
+            const P2 = [P1[0] + tw, P1[1]];
+            lines.push({ pts: [P0, P1, P2], cls: 'dim' });
+            texts.push({ x: (P1[0] + P2[0]) / 2, y: P1[1] - 1, t: lbl, size: 3.2, rot: 0, anchor: 'middle', cls: 'dimtext' });
+          }
+        }
       }
       if (name === 'free') for (const e of d.free) if (e.type === 'text') { const P = toSheet(v, e.p); texts.push({ x: P[0], y: P[1], t: e.text, size: e.size || 3.5, rot: 0, anchor: 'start', id: e.id, cls: 'free' }); }
     }

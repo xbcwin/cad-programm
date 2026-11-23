@@ -1133,6 +1133,7 @@ const IC = {
   antenna: '<path d="M6 5.5a6.5 6.5 0 0 0 0 7M18 5.5a6.5 6.5 0 0 1 0 7" opacity=".5"/><circle cx="12" cy="9" r="3.5" fill="currentColor" opacity=".25"/><circle cx="12" cy="9" r="3.5"/><path d="M12 12.5V21M9 21h6" />',
   standoff: '<path d="M10 3v4h4V3M10 21v-4h4v4" opacity=".5"/><rect x="8" y="3" width="8" height="18" rx="1"/><path d="M8 10h8M8 14h8" />',
   strap: '<path d="M10 7v3M13 7v3" opacity=".5"/><rect x="3" y="7" width="4" height="10" rx="1"/><path d="M7 15h10a4 4 0 0 0 0-8H7M7 10h8V7" />',
+  thread: '<rect x="6" y="3" width="12" height="18" rx="2"/><path d="M6 8l12-2M6 12l12-2M6 16l12-2M6 19l8-1.3"/>',
 };
 function icon(name, extra = '') {
   const body = IC[name] || IC.cube;
@@ -1879,6 +1880,11 @@ const HELP = {
   "tip": "Zentrierbohrung nach DIN 332 Form A",
   "hilfe": "Erzeugt eine genormte Zentrierbohrung mit 60°-Senkkegel, kurzer Führungsbohrung und 118°-Bohrspitze am Grund – so wie sie ein Zentrierbohrer auf der Drehbank oder Fräse herstellt.",
   "tipp": "Wähle die Größe (A 1,0 bis A 6,3) passend zum Durchmesser der Welle oder des Werkstücks."
+ },
+ "cosmeticThread": {
+  "tip": "Gewinde als schnelle Markierung auf runder Fläche",
+  "hilfe": "Markiert eine runde Zylinderfläche (außen wie ein Bolzen oder innen wie ein Kernloch) mit einem metrischen Gewinde (Größe M2 bis M16 und Länge). Das Gewinde wird farbig gestreift angezeigt, rechnet ohne Zeitverlust und erscheint in der Stückliste sowie normgerecht in der technischen Zeichnung.",
+  "tipp": "Wenn du das Teil 3D-drucken willst, klicke rechts auf „Echt machen“ – dann wird aus der Markierung ein echtes 3D-Gewinde."
  }
 };
 
@@ -1924,6 +1930,21 @@ const KINDS = {
   part: { label: 'Bauteil', params: [] },
 };
 const PRIMITIVE_ORDER = ['box', 'cylinder', 'sphere', 'cone', 'pyramid', 'wedge', 'tube', 'torus', 'prism', 'hemisphere'];
+
+// Metrische ISO-Regelgewinde für kosmetische Gewinde (KP-20)
+const THREAD_SPECS = [
+  { size: 'M2',   d: 2.0,  pitch: 0.4,  core: 1.6  },
+  { size: 'M2.5', d: 2.5,  pitch: 0.45, core: 2.05 },
+  { size: 'M3',   d: 3.0,  pitch: 0.5,  core: 2.5  },
+  { size: 'M4',   d: 4.0,  pitch: 0.7,  core: 3.3  },
+  { size: 'M5',   d: 5.0,  pitch: 0.8,  core: 4.2  },
+  { size: 'M6',   d: 6.0,  pitch: 1.0,  core: 5.0  },
+  { size: 'M8',   d: 8.0,  pitch: 1.25, core: 6.8  },
+  { size: 'M10',  d: 10.0, pitch: 1.5,  core: 8.5  },
+  { size: 'M12',  d: 12.0, pitch: 1.75, core: 10.2 },
+  { size: 'M16',  d: 16.0, pitch: 2.0,  core: 14.0 },
+];
+const THREAD_MAP = Object.fromEntries(THREAD_SPECS.map((t) => [t.size, t]));
 
 const Model = (() => {
   const T0 = () => ({ x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 });
@@ -4439,7 +4460,7 @@ const App = (() => {
       seen.add(n.id);
       if (n.merged) S.merged.set(n.id, n.merged);
       const it = topItem(n.id); if (!it) continue;
-      const info = { matrix: Model.localMatrix(it), role: it.role, color: it.color, look: lookFor(it), opacity: it.opacity ?? null, faceColors: it.faceColors || null, key: n.key };
+      const info = { matrix: Model.localMatrix(it), role: it.role, color: it.color, look: lookFor(it), opacity: it.opacity ?? null, faceColors: it.faceColors || null, threads: it.threads || null, key: n.key };
       if (n.empty) { Viewer.removeNode(n.id); S.results.delete(n.id); continue; }
       if (n.same && S.results.has(n.id)) { Viewer.updateNode(n.id, info); continue; }
       Viewer.setNode(n.id, n, info);
@@ -4514,7 +4535,7 @@ const App = (() => {
   function replaceMesh(id, key, payload) {
     const it = topItem(id); const r = S.results.get(id);
     if (!it || !r || r.key !== key) return false;
-    Viewer.setNode(id, payload, { matrix: Model.localMatrix(it), role: it.role, color: it.color, look: lookFor(it), opacity: it.opacity ?? null, faceColors: it.faceColors || null, key });
+    Viewer.setNode(id, payload, { matrix: Model.localMatrix(it), role: it.role, color: it.color, look: lookFor(it), opacity: it.opacity ?? null, faceColors: it.faceColors || null, threads: it.threads || null, key });
     r.data = payload; applyView(); refreshSelectionVisuals(); ev.emit('remeshed', id);
     return true;
   }
@@ -4981,6 +5002,7 @@ const Viewer = (() => {
     n.mesh.material = makeMaterial(n.role, n.color, n.look);
     n.mesh.castShadow = n.mesh.receiveShadow = n.role !== 'hole';
     applyFaceColors(n);
+    applyThreads(n);
     if (n.ctxDim) {   // anderes Bauteil, während eines bearbeitet wird
       n.mesh.material.transparent = true; n.mesh.material.opacity = n.role === 'hole' ? 0.06 : 0.16; n.mesh.material.depthWrite = false;
       if (n.edges) { n.edges.material.dispose(); n.edges.material = new THREE.LineBasicMaterial({ color: new THREE.Color(theme.edge), transparent: true, opacity: 0.18 }); }
@@ -5044,6 +5066,144 @@ const Viewer = (() => {
     g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
     m.vertexColors = true; m.color.set('#ffffff'); m.needsUpdate = true;
   }
+  // Kosmetisches Gewinde (KP-20): gestreiftes Zylinder-Overlay direkt auf der runden Fläche, ohne Kern-Neubau
+  const threadTextures = {};
+  function getThreadTexture(kind) {
+    const k = kind === 'int' ? 'int' : 'ext';
+    if (threadTextures[k]) return threadTextures[k];
+    const c = document.createElement('canvas'); c.width = 64; c.height = 64;
+    const ctx = c.getContext('2d');
+    const cLight = k === 'int' ? '#57b5cc' : '#e6a83a';
+    const cDark = k === 'int' ? '#1c4754' : '#734a10';
+    ctx.fillStyle = cLight; ctx.fillRect(0, 0, 64, 64);
+    ctx.strokeStyle = cDark; ctx.lineWidth = 22;
+    for (let y = -64; y <= 128; y += 64) {
+      ctx.beginPath(); ctx.moveTo(-8, y + 6); ctx.lineTo(72, y - 6); ctx.stroke();
+    }
+    ctx.strokeStyle = k === 'int' ? 'rgba(255,255,255,0.22)' : 'rgba(255,244,214,0.26)';
+    ctx.lineWidth = 6;
+    for (let y = -64; y <= 128; y += 64) {
+      ctx.beginPath(); ctx.moveTo(-8, y + 32); ctx.lineTo(72, y + 20); ctx.stroke();
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    threadTextures[k] = tex;
+    return tex;
+  }
+  function cylinderGeomOf(data, faceIdx) {
+    const f = data && data.faces && data.faces[faceIdx];
+    if (!f || f.t !== 'CYLINDRE' || !Array.isArray(f.axis) || f.axis.length < 6 || !(f.r > 0)) return null;
+    const o = [f.axis[0], f.axis[1], f.axis[2]];
+    let d = [f.axis[3], f.axis[4], f.axis[5]];
+    const dl = Math.hypot(d[0], d[1], d[2]) || 1;
+    d = [d[0] / dl, d[1] / dl, d[2] / dl];
+    const ax = Math.abs(d[2]) >= Math.abs(d[0]) && Math.abs(d[2]) >= Math.abs(d[1]) ? 2 : Math.abs(d[1]) >= Math.abs(d[0]) ? 1 : 0;
+    if (d[ax] < 0) d = [-d[0], -d[1], -d[2]];
+    const g = (data.faceGroups || []).find((x) => x[2] === faceIdx);
+    let t0 = Infinity, t1 = -Infinity, dotSum = 0;
+    if (g && data.vertices && data.normals && data.triangles) {
+      const P = data.vertices, N = data.normals, T = data.triangles;
+      for (let i = g[0]; i < g[0] + g[1]; i++) {
+        const vi = T[i] * 3;
+        const vx = P[vi] - o[0], vy = P[vi + 1] - o[1], vz = P[vi + 2] - o[2];
+        const t = vx * d[0] + vy * d[1] + vz * d[2];
+        if (t < t0) t0 = t; if (t > t1) t1 = t;
+        const rx = vx - d[0] * t, ry = vy - d[1] * t, rz = vz - d[2] * t;
+        dotSum += N[vi] * rx + N[vi + 1] * ry + N[vi + 2] * rz;
+      }
+    }
+    if (!isFinite(t0) || !isFinite(t1)) { t0 = 0; t1 = 10; }
+    return { o, d, r: f.r, c: f.c || o.slice(), t0, t1, faceLen: Math.max(0.1, t1 - t0), kind: dotSum >= 0 ? 'ext' : 'int' };
+  }
+  function cylinderFaceInfo(id, faceIdx) {
+    const n = nodes.get(id);
+    return n ? cylinderGeomOf(n.data, faceIdx) : null;
+  }
+  function threadFaceIndex(n, th) {
+    if (!n || !n.data || !n.data.faces || !th) return -1;
+    if (!Array.isArray(th.axis) || th.axis.length < 6) return faceIndexOf(n, th);
+    const to = th.axis.slice(0, 3), td = th.axis.slice(3, 6);
+    const tdl = Math.hypot(td[0], td[1], td[2]) || 1;
+    const tdn = [td[0] / tdl, td[1] / tdl, td[2] / tdl];
+    const rTol = Math.max(0.5, (th.r || 1) * 0.25);
+    const aTol = Math.max(0.5, (th.r || 1) * 0.2);
+    let best = -1, bd = Infinity;
+    n.data.faces.forEach((f, i) => {
+      if (!f || f.t !== 'CYLINDRE' || !Array.isArray(f.axis) || f.axis.length < 6) return;
+      if (Math.abs((f.r || 0) - (th.r || 0)) > rTol) return;
+      const fd = [f.axis[3], f.axis[4], f.axis[5]];
+      const fdl = Math.hypot(fd[0], fd[1], fd[2]) || 1;
+      const fdn = [fd[0] / fdl, fd[1] / fdl, fd[2] / fdl];
+      if (Math.abs(fdn[0] * tdn[0] + fdn[1] * tdn[1] + fdn[2] * tdn[2]) < 0.99) return;
+      const dx = f.axis[0] - to[0], dy = f.axis[1] - to[1], dz = f.axis[2] - to[2];
+      const proj = dx * tdn[0] + dy * tdn[1] + dz * tdn[2];
+      const perp = Math.hypot(dx - proj * tdn[0], dy - proj * tdn[1], dz - proj * tdn[2]);
+      if (perp > aTol) return;
+      const dc = f.c && th.c ? Math.hypot(f.c[0] - th.c[0], f.c[1] - th.c[1], f.c[2] - th.c[2]) : perp;
+      if (dc < bd) { bd = dc; best = i; }
+    });
+    return best >= 0 ? best : faceIndexOf(n, th);
+  }
+  function disposeThreads(n) {
+    if (!n || !n.threadGroup) return;
+    n.obj.remove(n.threadGroup);
+    n.threadGroup.traverse((o) => {
+      if (o.geometry) o.geometry.dispose();
+      if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); }
+    });
+    n.threadGroup = null;
+  }
+  function applyThreads(n) {
+    disposeThreads(n);
+    if (!n.threads || !n.threads.length || n.role === 'hole') return;
+    const tg = new THREE.Group();
+    tg.userData.threadGroup = true;
+    const clip = vis.clip ? [vis.clip] : null;
+    const op = n.ctxDim ? 0.14 : (LOOK.display === 'wire' ? 0.25 : 0.82);
+    for (const th of n.threads) {
+      const fi = threadFaceIndex(n, th);
+      const g = fi >= 0 ? cylinderGeomOf(n.data, fi) : (Array.isArray(th.axis) && th.axis.length >= 6 ? {
+        o: th.axis.slice(0, 3), d: th.axis.slice(3, 6), r: th.r || 3, c: th.c || [0, 0, 0],
+        t0: th.t0 ?? 0, t1: th.t1 ?? 10, faceLen: Math.max(0.1, (th.t1 ?? 10) - (th.t0 ?? 0)), kind: th.kind || 'ext',
+      } : null);
+      if (!g) continue;
+      const kind = th.kind || g.kind || 'ext';
+      const L = clamp(Number(th.length) || g.faceLen, 0.2, g.faceLen);
+      const s0 = th.from === 'bottom' ? g.t0 : g.t1 - L;
+      const s1 = th.from === 'bottom' ? g.t0 + L : g.t1;
+      const rVis = kind === 'int' ? Math.max(0.05, g.r - Math.max(0.02, g.r * 0.004)) : g.r + Math.max(0.02, g.r * 0.004);
+      const spec = typeof THREAD_MAP !== 'undefined' ? THREAD_MAP[th.size] : null;
+      const pitch = spec ? spec.pitch : 1;
+      const tex = getThreadTexture(kind).clone();
+      tex.needsUpdate = true;
+      tex.repeat.set(1, Math.max(1, Math.min(80, L / pitch)));
+      const geo = new THREE.CylinderGeometry(rVis, rVis, Math.max(0.1, s1 - s0), 40, 1, true);
+      const mat = new THREE.MeshStandardMaterial({
+        map: tex, transparent: true, opacity: op, roughness: 0.45, metalness: 0.25,
+        side: THREE.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1, clippingPlanes: clip,
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.userData.cosmeticThread = th.id;
+      mesh.renderOrder = 2;
+      const dVec = new THREE.Vector3(...g.d).normalize();
+      mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dVec);
+      mesh.position.set(...g.o).addScaledVector(dVec, (s0 + s1) / 2);
+      // Feine Ringlinien an Anfang und Ende der Gewinde-Markierung
+      const rRing = rVis * (kind === 'int' ? 0.998 : 1.002);
+      const rPts = [];
+      for (let k = 0; k < 40; k++) { const a = (k / 40) * Math.PI * 2; rPts.push(Math.cos(a) * rRing, 0, Math.sin(a) * rRing); }
+      const halfL = Math.max(0.1, s1 - s0) / 2;
+      for (const yOff of [-halfL, halfL]) {
+        const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.Float32BufferAttribute(rPts, 3));
+        const rm = new THREE.LineBasicMaterial({ color: new THREE.Color(kind === 'int' ? '#1c4754' : '#6e4710'), transparent: true, opacity: n.ctxDim ? 0.18 : 0.75, clippingPlanes: clip });
+        const loop = new THREE.LineLoop(rg, rm); loop.position.y = yOff; loop.renderOrder = 3;
+        mesh.add(loop);
+      }
+      tg.add(mesh);
+    }
+    if (tg.children.length) { n.threadGroup = tg; n.obj.add(tg); }
+  }
   function restyleAll() { for (const n of nodes.values()) styleNode(n); }
   function setClip(plane) { vis.clip = plane || null; restyleAll(); listeners.emit('viewmode'); }
   function setXray(on) { vis.xray = !!on; restyleAll(); listeners.emit('viewmode'); }
@@ -5078,7 +5238,7 @@ const Viewer = (() => {
     obj.userData.nodeId = id;
     groups.nodes.add(obj);
     const old = nodes.get(id);
-    const n = { id, obj, mesh, edges, data, role: info.role, color: info.color, look: info.look || null, opacity: info.opacity ?? null, faceColors: info.faceColors || null, selected: false, hover: false, key: info.key, base: info.matrix.clone(), off: old && old.off ? old.off : null };
+    const n = { id, obj, mesh, edges, data, role: info.role, color: info.color, look: info.look || null, opacity: info.opacity ?? null, faceColors: info.faceColors || null, threads: info.threads || null, selected: false, hover: false, key: info.key, base: info.matrix.clone(), off: old && old.off ? old.off : null };
     placeNode(n);
     nodes.set(id, n); styleNode(n);
     fitShadowSoon();
@@ -5094,6 +5254,7 @@ const Viewer = (() => {
     if (info.look !== undefined && JSON.stringify(info.look) !== JSON.stringify(n.look)) { n.look = info.look; restyle = true; }
     if (info.opacity !== undefined && info.opacity !== n.opacity) { n.opacity = info.opacity; restyle = true; }
     if (info.faceColors !== undefined && JSON.stringify(info.faceColors) !== JSON.stringify(n.faceColors)) { n.faceColors = info.faceColors; restyle = true; }
+    if (info.threads !== undefined && JSON.stringify(info.threads) !== JSON.stringify(n.threads)) { n.threads = info.threads; restyle = true; }
     if (info.matrix) fitShadowSoon();
     if (info.selected !== undefined && info.selected !== n.selected) { n.selected = info.selected; restyle = true; }
     if (info.hover !== undefined && info.hover !== n.hover) { n.hover = info.hover; restyle = true; }
@@ -5105,6 +5266,7 @@ const Viewer = (() => {
   }
   function removeNode(id, keepMap) {
     const n = nodes.get(id); if (!n) return;
+    disposeThreads(n);
     groups.nodes.remove(n.obj);
     n.mesh.geometry.dispose(); n.mesh.material.dispose(); n.edges.geometry.dispose(); n.edges.material.dispose();
     if (!keepMap) { nodes.delete(id); fitShadowSoon(); }
@@ -5685,7 +5847,7 @@ const Viewer = (() => {
   }
 
   return {
-    viewBack, get viewHistory() { return camHist.length; }, useButtons, setMouseStyle, get mouseStyle() { return mouseStyle; }, get leftOrbits() { return !!(controls && controls.mouseButtons.LEFT === THREE.MOUSE.ROTATE); }, setLook, lookOf, get look() { return { ...LOOK }; }, fitShadow, renderImage, lookAtFace, faceIndexOf: (id, fc) => { const n = nodes.get(id); return n ? faceIndexOf(n, fc) : -1; }, get renderer() { return renderer; },
+    viewBack, get viewHistory() { return camHist.length; }, useButtons, setMouseStyle, get mouseStyle() { return mouseStyle; }, get leftOrbits() { return !!(controls && controls.mouseButtons.LEFT === THREE.MOUSE.ROTATE); }, setLook, lookOf, get look() { return { ...LOOK }; }, fitShadow, renderImage, lookAtFace, faceIndexOf: (id, fc) => { const n = nodes.get(id); return n ? faceIndexOf(n, fc) : -1; }, cylinderFaceInfo, threadFaceIndex: (id, th) => { const n = nodes.get(id); return n ? threadFaceIndex(n, th) : -1; }, get renderer() { return renderer; },
     init, requestRender, setClip, setXray, setOffsets, baseBox, renderInset, silhouette, setAdaptive, setCompare, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, setSelectedEdges, clearHover,
     edgePositions, pick, pickAll, pickGhost, pickProxy, setProxies, clearProxies, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, boxVisible, sceneBox, snapshot, makeFat, disposeFat, faceOverlay, faceArea, faceEdges, edgeKinds, wallAt, thinWalls,
     get camera() { return camera; }, get activeCamera() { return cam(); }, get ortho() { return ortho; }, get gridStep() { return gridStep; }, get controls() { return controls; }, get scene() { return scene; }, get groups() { return groups; }, get nodes() { return nodes; }, get canvas() { return renderer.domElement; }, get theme() { return theme; }, get container() { return container; },
@@ -6354,6 +6516,7 @@ const Interact = (() => {
         { icon: 'export', label: 'Fläche als DXF speichern', id: 'cm-facedxf', help: 'faceExport', hidden: !hit || hit.faceIdx == null || !((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).n, run: () => { const r = App.results.get(hit.id); Print.faceTo2D({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }, 'dxf'); } },
         { icon: 'export', label: 'Fläche als SVG speichern', id: 'cm-facesvg', help: 'faceExport', hidden: !hit || hit.faceIdx == null || !((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).n, run: () => { const r = App.results.get(hit.id); Print.faceTo2D({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }, 'svg'); } },
         { icon: 'sketch', label: 'Skizze auf dieser Fläche', id: 'cm-sketchface', hidden: !hit || hit.faceIdx == null, run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) Sketch.startOnFace({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }); } },
+        { icon: 'thread', label: 'Gewinde markieren …', id: 'cm-thread', help: 'cosmeticThread', hidden: !hit || hit.faceIdx == null || top.role === 'hole' || ((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).t !== 'CYLINDRE', run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) { const a = h('div', { style: { position: 'fixed', left: cx + 'px', top: cy + 'px', width: '1px', height: '1px' } }); document.body.append(a); Features.threadPop({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }, a); setTimeout(() => a.remove(), 0); } } },
         '-',
         { icon: 'copy', label: 'Duplizieren', kbd: 'Strg D', id: 'cm-dup', run: () => Actions.duplicate() },
         { icon: 'copy', label: 'Verknüpft duplizieren', kbd: 'Strg Umschalt D', id: 'cm-duplink', hidden: it.kind === 'group', run: () => Actions.duplicateLinked() },
@@ -7590,8 +7753,196 @@ const Features = (() => {
     if (p.op === 'intersect') return 'Schnittmenge';
     return null;
   }
+  // ---------- Kosmetisches Gewinde (KP-20) ----------
+  function guessThreadSize(r, kind = 'ext') {
+    const d = 2 * (Number(r) || 3);
+    let best = THREAD_SPECS[0], bd = Infinity;
+    for (const s of THREAD_SPECS) {
+      const diff = kind === 'int' ? Math.min(Math.abs(s.core - d), Math.abs(s.d - d) + 0.05) : Math.abs(s.d - d);
+      if (diff < bd) { bd = diff; best = s; }
+    }
+    return best.size;
+  }
+  function threadOnFace(itemId, faceIdx) {
+    const f = Model.find(App.doc, itemId);
+    if (!f || !f.item.threads || !f.item.threads.length) return null;
+    return f.item.threads.find((th) => Viewer.threadFaceIndex(itemId, th) === faceIdx) || null;
+  }
+  function markThread(face, opts = {}) {
+    if (!face || !face.id) return null;
+    const found = Model.find(App.doc, face.id);
+    if (!found || found.item.role === 'hole') { UI.toast('Klick auf die runde Fläche eines Körpers.', { icon: 'info' }); return null; }
+    const g = Viewer.cylinderFaceInfo(face.id, face.idx);
+    if (!g) { UI.toast('Bitte wähle eine runde Zylinderfläche.', { icon: 'info' }); return null; }
+    const kind = opts.kind === 'int' || opts.kind === 'ext' ? opts.kind : g.kind;
+    const size = opts.size && THREAD_MAP[opts.size] ? opts.size : guessThreadSize(g.r, kind);
+    const lenRaw = opts.length != null ? Number(opts.length) : round(g.faceLen, 2);
+    const length = round(clamp(lenRaw > 0 ? lenRaw : g.faceLen, 0.5, g.faceLen), 3);
+    const from = opts.from === 'bottom' ? 'bottom' : 'top';
+    const entry = {
+      id: opts.id || uid('th'),
+      size,
+      length,
+      kind,
+      from,
+      c: g.c.map((v) => round(v, 4)),
+      axis: [...g.o.map((v) => round(v, 4)), ...g.d.map((v) => round(v, 6))],
+      r: round(g.r, 4),
+      t0: round(g.t0, 4),
+      t1: round(g.t1, 4),
+    };
+    App.change(`Gewinde markiert (${size} × ${fmt(length, 1)})`, (doc) => {
+      const T = Model.find(doc, face.id).item;
+      const list = (T.threads || []).filter((x) => x.id !== entry.id && Viewer.threadFaceIndex(face.id, x) !== face.idx);
+      list.push(entry);
+      T.threads = list;
+    });
+    UI.toast(`Gewinde ${size} × ${fmt(length, 1)} mm markiert (nur Anzeige – rechnet sofort).`, { icon: 'check' });
+    return entry.id;
+  }
+  function updateThread(itemId, threadId, patch) {
+    App.change('Gewinde geändert', (doc) => {
+      const f = Model.find(doc, itemId); if (!f || !f.item.threads) return false;
+      const th = f.item.threads.find((x) => x.id === threadId); if (!th) return false;
+      if (patch.size && THREAD_MAP[patch.size]) th.size = patch.size;
+      if (patch.kind === 'int' || patch.kind === 'ext') th.kind = patch.kind;
+      if (patch.from === 'top' || patch.from === 'bottom') th.from = patch.from;
+      if (patch.length != null) {
+        const g = Viewer.threadFaceIndex(itemId, th) >= 0 ? Viewer.cylinderFaceInfo(itemId, Viewer.threadFaceIndex(itemId, th)) : null;
+        const maxL = g ? g.faceLen : Math.max(0.5, Math.abs((th.t1 ?? 10) - (th.t0 ?? 0)));
+        const n = Number(patch.length);
+        if (n > 0) th.length = round(clamp(n, 0.5, maxL), 3);
+      }
+    });
+  }
+  function removeThread(itemId, threadId) {
+    App.change('Gewinde-Markierung entfernt', (doc) => {
+      const f = Model.find(doc, itemId); if (!f || !f.item.threads) return false;
+      const list = f.item.threads.filter((x) => x.id !== threadId);
+      if (list.length) f.item.threads = list; else delete f.item.threads;
+    });
+  }
+  function poseFromOriginDir(o, zDir) {
+    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), zDir.clone().normalize());
+    return new THREE.Matrix4().compose(o, q, new THREE.Vector3(1, 1, 1));
+  }
+  function makeThreadReal(itemId, threadId) {
+    const f = Model.find(App.doc, itemId);
+    const it = f && f.item;
+    const th = it && (it.threads || []).find((x) => x.id === threadId);
+    if (!it || !th) return null;
+    const fi = Viewer.threadFaceIndex(itemId, th);
+    const g = (fi >= 0 && Viewer.cylinderFaceInfo(itemId, fi)) || (Array.isArray(th.axis) && th.axis.length >= 6 ? {
+      o: th.axis.slice(0, 3), d: th.axis.slice(3, 6), r: th.r || 3, c: th.c || [0, 0, 0],
+      t0: th.t0 ?? 0, t1: th.t1 ?? 10, faceLen: Math.max(0.1, (th.t1 ?? 10) - (th.t0 ?? 0)), kind: th.kind || 'ext',
+    } : null);
+    if (!g) { UI.toast('Die Zylinderfläche für das Gewinde wurde nicht gefunden.', { kind: 'bad' }); return null; }
+    const L = round(clamp(Number(th.length) || g.faceLen, 0.5, g.faceLen), 3);
+    const fromBottom = th.from === 'bottom';
+    const s0 = fromBottom ? g.t0 : g.t1 - L;
+    const s1 = fromBottom ? g.t0 + L : g.t1;
+    const dL = new THREE.Vector3(...g.d).normalize();
+    const W = Model.worldMatrix(App.doc, itemId);
+    const pStartW = new THREE.Vector3(...g.o).addScaledVector(dL, s0).applyMatrix4(W);
+    const pEndW = new THREE.Vector3(...g.o).addScaledVector(dL, s1).applyMatrix4(W);
+    const dW = pEndW.clone().sub(pStartW).normalize();
+    const topCur = Model.topOf(App.doc, itemId);
+    let selId = topCur ? topCur.id : itemId;
+    App.change(`Gewinde echt gemacht (${th.size} × ${fmt(L, 1)})`, (doc) => {
+      const T = Model.find(doc, itemId).item;
+      const top = Model.topOf(doc, itemId);
+      const rest = (T.threads || []).filter((x) => x.id !== threadId);
+      if (rest.length) T.threads = rest; else delete T.threads;
+      if (th.kind === 'int') {
+        const entryPt = fromBottom ? pStartW : pEndW;
+        const outDir = fromBottom ? dW.clone().negate() : dW;
+        const hole = Model.newItem('part', { lib: 'threadHole', size: th.size, length: L, clear: 0.3 }, { name: `Innengewinde ${th.size} × ${fmt(L, 1)}`, color: top.color, role: 'solid' });
+        Model.setFromMatrix(hole, poseFromOriginDir(entryPt, outDir));
+        hole.op = { type: 'cut', target: top.id };
+        const ti = doc.items.indexOf(top);
+        doc.items.splice(ti >= 0 ? ti + 1 : doc.items.length, 0, hole);
+        selId = top.id;
+        return;
+      }
+      const isPlainCyl = T === top && T.kind === 'cylinder' && !(T.finishes && T.finishes.length) && !T.op;
+      if (isPlainCyl && L >= g.faceLen - 0.05) {
+        T.kind = 'part';
+        T.p = { lib: 'threadRod', size: th.size, length: L };
+        Model.setFromMatrix(T, poseFromOriginDir(pStartW, dW));
+        selId = T.id;
+        return;
+      }
+      if (isPlainCyl) {
+        const rem = round(Math.max(0.5, g.faceLen - L), 3);
+        T.p.h = rem;
+        if (fromBottom) Model.setFromMatrix(T, new THREE.Matrix4().makeTranslation(dW.x * L, dW.y * L, dW.z * L).multiply(Model.localMatrix(T)));
+        const rodOrigin = fromBottom ? pStartW : pStartW.clone().addScaledVector(dW, -0.05);
+        const rod = Model.newItem('part', { lib: 'threadRod', size: th.size, length: round(L + 0.05, 3) }, { name: `Gewinde ${th.size} × ${fmt(L, 1)}`, color: T.color, role: 'solid' });
+        Model.setFromMatrix(rod, poseFromOriginDir(rodOrigin, dW));
+        rod.op = { type: 'join', target: T.id };
+        const ti = doc.items.indexOf(T);
+        doc.items.splice(ti >= 0 ? ti + 1 : doc.items.length, 0, rod);
+        selId = T.id;
+        return;
+      }
+      // Beliebiger Körper: erst Überstand glatt abtragen, dann echtes Außengewinde vereinigen
+      const cutD = round(Math.max(2 * g.r, (THREAD_MAP[th.size] ? THREAD_MAP[th.size].d : 6)) + 0.2, 3);
+      const cutOrigin = fromBottom ? pStartW.clone().addScaledVector(dW, -0.05) : pStartW;
+      const cut = Model.newItem('cylinder', { d: cutD, h: round(L + 0.05, 3) }, { name: `Gewinde-Freischnitt ${th.size}`, color: top.color, role: 'solid' });
+      Model.setFromMatrix(cut, poseFromOriginDir(cutOrigin, dW));
+      cut.op = { type: 'cut', target: top.id };
+      const rodOrigin = fromBottom ? pStartW : pStartW.clone().addScaledVector(dW, -0.05);
+      const rod = Model.newItem('part', { lib: 'threadRod', size: th.size, length: round(L + 0.05, 3) }, { name: `Gewinde ${th.size} × ${fmt(L, 1)}`, color: top.color, role: 'solid' });
+      Model.setFromMatrix(rod, poseFromOriginDir(rodOrigin, dW));
+      rod.op = { type: 'join', target: top.id };
+      const ti = doc.items.indexOf(top);
+      doc.items.splice(ti >= 0 ? ti + 1 : doc.items.length, 0, cut, rod);
+      selId = top.id;
+    });
+    App.select([selId]);
+    UI.toast(`Echtes Gewinde ${th.size} × ${fmt(L, 1)} mm erzeugt. Mit Rückgängig kommst du wieder zur Markierung.`, { icon: 'check' });
+    return selId;
+  }
+  function threadPop(face, anchor) {
+    if (!face || !face.id) return;
+    const g = Viewer.cylinderFaceInfo(face.id, face.idx);
+    if (!g) { UI.toast('Bitte wähle eine runde Zylinderfläche.', { icon: 'info' }); return; }
+    const existing = threadOnFace(face.id, face.idx);
+    let size = existing ? existing.size : guessThreadSize(g.r, g.kind);
+    let len = existing ? existing.length : round(g.faceLen, 2);
+    let from = existing ? (existing.from || 'top') : 'top';
+    const box = h('div', { style: { display: 'grid', gap: '10px', minWidth: '230px' }, 'data-help': 'cosmeticThread' });
+    box.append(h('div', { class: 'section-h' }, (g.kind === 'int' ? 'Innengewinde' : 'Außengewinde') + ` · Ø ${fmt(2 * g.r, 2)} mm`));
+    const fields = h('div', { class: 'fields' });
+    fields.append(UI.selectField({ id: 'ct-size', label: 'M-Größe', value: size, options: THREAD_SPECS.map((s) => [s.size, `${s.size} (Steigung ${fmt(s.pitch, 2)})`]), onChange: (v) => { size = v; } }));
+    fields.append(UI.numField({ id: 'ct-len', label: 'Länge', value: len, min: 0.5, unit: 'mm', expr: false, onCommit: (v) => { len = v; } }));
+    box.append(fields);
+    box.append(UI.selectField({ id: 'ct-from', label: 'Beginnt am', value: from, options: [['top', 'Ende 1 (oben)'], ['bottom', 'Ende 2 (unten)']], onChange: (v) => { from = v; } }));
+    const row = h('div', { class: 'btn-row' });
+    const applyB = h('button', { type: 'button', class: 'btn primary', id: 'ct-apply' }, existing ? 'Ändern' : 'Gewinde markieren');
+    applyB.onclick = () => {
+      const lenInp = $('#ct-len');
+      const v = lenInp ? parseNum(lenInp.value) : NaN;
+      if (isFinite(v) && v > 0) len = v;
+      const selSize = $('#ct-size'); if (selSize) size = selSize.value;
+      const selFrom = $('#ct-from'); if (selFrom) from = selFrom.value;
+      markThread(face, { id: existing ? existing.id : undefined, size, length: len, from, kind: g.kind });
+      UI.closePop();
+    };
+    row.append(applyB);
+    if (existing) {
+      const realB = h('button', { type: 'button', class: 'btn', id: 'ct-real' }, 'Echt machen');
+      realB.onclick = () => { UI.closePop(); makeThreadReal(face.id, existing.id); };
+      const delB = h('button', { type: 'button', class: 'btn ghost danger', id: 'ct-del' }, 'Entfernen');
+      delB.onclick = () => { UI.closePop(); removeThread(face.id, existing.id); };
+      row.append(realB, delB);
+    }
+    box.append(row);
+    box.append(h('div', { class: 'hint-box' }, 'Nur Markierung – rechnet sofort und steht in Stückliste und Zeichnung.'));
+    UI.pop(anchor || $('#center'), box);
+  }
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, pickAxis, pickAxisThen, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
+  return { guessThreadSize, threadOnFace, markThread, updateThread, removeThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, pickAxis, pickAxisThen, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
 })();
 // ---- 46-datums.js ----
 // ================= Bezugsebenen: eigene Ebenen zum Skizzieren =================
@@ -7880,7 +8231,27 @@ const Mass = (() => {
     const fil = new Map();
     for (const x of rows) { const m = !x.buy && PRINTMATS.includes(x.kind) ? matOf(x.kind) : null; if (m) fil.set(m.k, (fil.get(m.k) || 0) + x.g * x.n); }
     const filament = [...fil.entries()].map(([k, g]) => ({ mat: k, g, m: g / matOf(k).rho / (Math.PI * 0.0875 * 0.0875) / 100 }));
-    return { rows, mass: rows.reduce((s, x) => s + x.g * x.n, 0), count: rows.reduce((s, x) => s + x.n, 0), screws: screws(doc), filament };
+    return { rows, mass: rows.reduce((s, x) => s + x.g * x.n, 0), count: rows.reduce((s, x) => s + x.n, 0), screws: screws(doc), threads: threads(doc), filament };
+  }
+  // Markierte kosmetische Gewinde (KP-20) je aktivem Körper mit Instanz-Anzahl
+  function threads(doc = App.doc) {
+    const V = Model.vars(doc).v, map = new Map();
+    Model.walk(doc.items, (it) => {
+      if (it.role === 'hole' || it.suppressed || !Model.isActive(doc, it.id) || !it.threads || !it.threads.length) return;
+      const n = Math.max(1, Model.instanceMatrices(doc, it.id, V).length);
+      const part = Model.label(it);
+      for (const th of it.threads) {
+        const L = round(Model.num(th.length, V, 10), 1);
+        const kind = th.kind === 'int' ? 'int' : 'ext';
+        const label = `${kind === 'int' ? 'Innengewinde' : 'Außengewinde'} ${th.size} × ${fmt(L, 1)} mm`;
+        const key = label + '|' + part;
+        const row = map.get(key) || { name: label, size: th.size, length: L, kind, part, n: 0, ids: [] };
+        row.n += n;
+        if (!row.ids.includes(it.id)) row.ids.push(it.id);
+        map.set(key, row);
+      }
+    });
+    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, 'de', { numeric: true }));
   }
   // Schrauben, Muttern und Gewindeeinsätze aus den Loch-Bauteilen (auch in Gruppen und Mustern).
   // Löcher auf derselben Achse (gleiche Schraube durch zwei Platten) zählen nur einmal.
@@ -7914,6 +8285,7 @@ const Mass = (() => {
     for (const x of B.rows) L.push([q(x.name), x.n, q(x.kind), x.missing ? '' : z(x.g), x.missing ? '' : z(x.g * x.n), x.cm3 == null ? '' : z(x.cm3, 2)].join(';'));
     L.push([q('Summe ' + name), B.count, '', '', z(B.mass), ''].join(';'));
     for (const x of B.screws || []) L.push([q(x.name), x.n, q('Kleinteil'), '', '', ''].join(';'));
+    for (const x of B.threads || []) L.push([q(x.name), x.n, q('Gewinde (' + x.part + ')'), '', '', ''].join(';'));
     return '\ufeff' + L.join('\r\n') + '\r\n';
   }
   async function bomDialog() {
@@ -7937,10 +8309,19 @@ const Mass = (() => {
       for (const x of B.screws) ts.append(h('tr', null, h('td', null, x.name), h('td', { class: 'mono' }, String(x.n))));
       body.append(ts, h('div', { class: 'hint-box' }, 'Gezählt aus Schraubenlöchern, Lochbildern (je vier), Mutternfallen und Gewindeeinsätzen – Löcher auf derselben Achse zählen als eine Schraube. Die Länge der Schrauben misst du am besten am Modell nach; ihr Gewicht ist in der Summe nicht enthalten.'));
     }
+    if (B.threads && B.threads.length) {
+      const tt = h('table', { class: 'vtable', id: 'bom-threads', style: { marginTop: '14px' } }, h('tr', null, h('th', null, 'Markierte Gewinde'), h('th', null, 'Teil'), h('th', null, 'Anzahl')));
+      for (const x of B.threads) {
+        const tr = h('tr', { style: { cursor: 'pointer' } }, h('td', null, x.name), h('td', null, x.part), h('td', { class: 'mono' }, String(x.n)));
+        tr.onclick = () => App.select(x.ids);
+        tt.append(tr);
+      }
+      body.append(tt);
+    }
     if (B.filament.length) body.append(h('div', { class: 'ok-box', id: 'bom-filament', html: '<b>Filament für die Druckteile:</b> ' + B.filament.map((x) => `${x.mat} ${gText(x.g)} ≈ ${fmt(x.m, 1)} m`).join(' · ') + ' (Draht 1,75 mm, massiv gerechnet – mit weniger Füllung brauchst du weniger; Stützen und Rand kommen dazu).' }));
     body.append(h('div', { class: 'hint-box', html: 'Gleiche Teile (gleicher Name ohne Nummer, gleiches Gewicht) stehen in einer Zeile. Klick auf eine Zeile wählt die Teile im Bild aus. <b>Kaufteile</b> zählen mit dem Gewicht aus dem Datenblatt, alles andere mit Volumen × Material.' + (B.rows.some((x) => x.missing) ? ' Bei Teilen mit „fehlt“ ist noch kein Gewicht eingetragen.' : '') }));
   }
-  return { stability, hull2,  init, measure, measureDoc, bom, bomCSV, bomDialog, screws, materialFor, projectMaterial, partOf, gText, fixedOf, on: ev.on, get markerShown() { return !!marker; }, get markerPos() { return marker ? marker.position.toArray() : null; } };
+  return { stability, hull2,  init, measure, measureDoc, bom, bomCSV, bomDialog, screws, threads, materialFor, projectMaterial, partOf, gText, fixedOf, on: ev.on, get markerShown() { return !!marker; }, get markerPos() { return marker ? marker.position.toArray() : null; } };
 })();
 // ---- 48-joints.js ----
 // ================= Gelenke: ein Teil dreht sich oder gleitet um eine Achse gegenüber einem anderen =================
@@ -9834,6 +10215,35 @@ const Panels = (() => {
       if (cur) { const b = h('button', { type: 'button', class: 'btn ghost', id: 'face-color-off' }); b.innerHTML = icon('undo') + 'Flächenfarbe entfernen'; b.onclick = () => setFace(null); fsec.append(h('div', { class: 'btn-row' }, b)); }
       w.append(fsec);
     }
+    // Kosmetische Gewinde (KP-20)
+    const isCylFace = !!(sf && sf.id === it.id && sf.info.t === 'CYLINDRE');
+    if (it.role !== 'hole' && (isCylFace || (it.threads && it.threads.length))) {
+      const tsec = h('div', { class: 'section', id: 'thread-sec', 'data-help': 'cosmeticThread' }, h('div', { class: 'section-h' }, 'Gewinde (Markierung)'));
+      if (isCylFace && !Features.threadOnFace(it.id, sf.idx)) {
+        const mb = h('button', { type: 'button', class: 'btn small', id: 'btn-mark-thread' });
+        mb.innerHTML = icon('thread') + 'Gewinde auf dieser Fläche markieren';
+        mb.onclick = (e) => Features.threadPop(sf, e.currentTarget);
+        tsec.append(h('div', { class: 'btn-row' }, mb));
+      }
+      for (const th of it.threads || []) {
+        const sp = THREAD_MAP[th.size] || { pitch: 1 };
+        const box = h('div', { class: 'thread-item', style: { display: 'grid', gap: '6px', padding: '6px 0', borderTop: '1px solid var(--line)' } });
+        box.append(h('div', { class: 'mini-row' }, h('b', null, `${th.size} × ${fmt(th.length, 1)} mm`), h('span', { class: 'grow muted', style: { marginLeft: '6px', fontSize: '11px' } }, `${th.kind === 'int' ? 'Innengewinde' : 'Außengewinde'} · P ${fmt(sp.pitch, 2)}`)));
+        const fs = h('div', { class: 'fields' });
+        fs.append(UI.selectField({ id: 'th-size-' + th.id, label: 'M-Größe', value: th.size, options: THREAD_SPECS.map((s) => [s.size, s.size]), onChange: (v) => Features.updateThread(it.id, th.id, { size: v }) }));
+        fs.append(UI.numField({ id: 'th-len-' + th.id, label: 'Länge', value: th.length, min: 0.5, unit: 'mm', expr: false, onCommit: (v) => Features.updateThread(it.id, th.id, { length: v }) }));
+        fs.append(UI.selectField({ id: 'th-from-' + th.id, label: 'Ende', value: th.from || 'top', options: [['top', 'Ende 1'], ['bottom', 'Ende 2']], onChange: (v) => Features.updateThread(it.id, th.id, { from: v }) }));
+        box.append(fs);
+        const br = h('div', { class: 'btn-row' });
+        const rb = h('button', { type: 'button', class: 'btn small', id: 'th-real-' + th.id }); rb.innerHTML = icon('bolt') + 'Echt machen'; rb.onclick = () => Features.makeThreadReal(it.id, th.id);
+        const db = h('button', { type: 'button', class: 'btn ghost small', id: 'th-del-' + th.id, 'aria-label': 'Gewinde entfernen', 'data-tip': 'Entfernen' }); db.innerHTML = icon('trash'); db.onclick = () => Features.removeThread(it.id, th.id);
+        br.append(rb, db);
+        box.append(br);
+        tsec.append(box);
+      }
+      tsec.append(h('div', { class: 'hint-box' }, 'Nur Anzeige – rechnet sofort, steht in Stückliste und Zeichnung. „Echt machen“ wandelt in ein druckbares 3D-Gewinde.'));
+      w.append(tsec);
+    }
     if (it.role !== 'hole') {
       const op = h('div', { class: 'fields', 'data-help': 'opacity' });
       op.append(UI.numField({ id: 'item-opacity', label: 'Sichtbarkeit (100 % = undurchsichtig)', value: Math.round((it.opacity ?? 1) * 100), unit: '%', expr: false, min: 5, onCommit: (v) => App.change('Durchsichtigkeit', (doc) => { const T = Model.find(doc, it.id).item; const o = clamp(v, 5, 100) / 100; if (o >= 1) delete T.opacity; else T.opacity = o; }, { merge: 'op:' + it.id }) }));
@@ -9942,6 +10352,11 @@ const Panels = (() => {
       const fr = face.info.r;
       bar.append(fr ? valLbl(face.info.t === 'SPHERE' ? 'Kugel Ø' : 'Runde Fläche Ø', fr * 2, 'mm', `Radius ${fmt(fr, 2)} mm`) : h('span', { class: 'lbl' }, 'Runde Fläche'));
       b('holeWizard', 'Bohrung', (e) => Place.holeHere(face, e.currentTarget), 'accent', 'Bohrungs-Assistent: Loch senkrecht in die runde Fläche (Schraube, Sackloch, Passbohrung H7, Zentrierung …) – der Magnet rastet ganz oben, an den Seiten und in der Mitte ein');
+      if (face.info.t === 'CYLINDRE' && items[0].item.role !== 'hole') {
+        const hasTh = !!Features.threadOnFace(face.id, face.idx);
+        const tb = b('thread', hasTh ? 'Gewinde ändern' : 'Gewinde markieren', (e) => Features.threadPop(face, e.currentTarget), hasTh ? 'accent' : '', 'Kosmetisches Gewinde auf dieser runden Fläche markieren (rechnet schnell)');
+        tb.dataset.help = 'cosmeticThread';
+      }
       b('fillet', 'Ihre Kanten', (e) => faceEdgeMenu(face, e.currentTarget), '', 'Alle Kanten dieser Fläche wählen, abrunden oder abschrägen', true);
       sep();
     }
@@ -15715,6 +16130,7 @@ const Commands = (() => {
     add('sketch', 'Skizze zeichnen', 'sketch', 'zeichnen 2d profil umriss extrudieren', () => Sketch.chooseAndStart(), { group: 'Werkzeuge', kbd: 'S' });
     add('sketch-check', 'Skizze prüfen (Lücken und doppelte Linien)', 'target', 'skizze prüfen pruefer lücke lücken offen doppelt reparieren fehler', () => { if (Sketch.active) Sketch.check(); else UI.toast('Öffne zuerst eine Skizze, um sie zu prüfen.', { icon: 'info' }); }, { group: 'Werkzeuge' });
     add('hole-wizard', 'Bohrungs-Assistent', 'holeWizard', 'bohrung loch schraube gewinde senkung einsatz mutter sackloch bohrspitze passbohrung h7 zentrierbohrung', () => Place.holeWizard($('#t-parts')), { group: 'Bearbeiten' });
+    add('cosmetic-thread', 'Gewinde markieren (kosmetisch)', 'thread', 'gewinde kosmetisch markieren metrisch m3 m4 m5 m6 m8 echt schraube', () => { const f = Actions.selectedFace(); if (f && f.info && f.info.t === 'CYLINDRE') Features.threadPop(f, $('#center')); else UI.toast('Klick zuerst eine runde Fläche (Zylinder) an, um dort ein Gewinde zu markieren.', { icon: 'info' }); }, { group: 'Bearbeiten' });
     add('pattern-rect', 'Rechteckmuster', 'patternRect', 'muster reihe raster kopien vervielfachen', () => Features.pattern('rect'), { group: 'Bearbeiten' });
     add('pattern-circ', 'Kreismuster', 'patternCirc', 'muster kreis rund kopien löcher', () => Features.pattern('circ'), { group: 'Bearbeiten' });
     add('pattern-path', 'Muster entlang Kurve', 'patternPath', 'muster kurve pfad bogen entlang linie spline kette kopien löcher zähne', () => Features.patternPath(), { group: 'Bearbeiten' });
@@ -16800,7 +17216,7 @@ const Drawing = (() => {
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (const arr of [polys, hidden]) for (const p of arr) for (const q of p.pts) { x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]); }
     if (!isFinite(x0)) return null;
-    // Mittellinien
+    // Mittellinien und kosmetische Gewinde (KP-20)
     const centers = [];
     if (dwg().centers) {
       const dir = new THREE.Vector3(...v.dir), ex = new THREE.Vector3(...v.x), ey = new THREE.Vector3(...v.y);
@@ -16821,7 +17237,55 @@ const Drawing = (() => {
         }
       }
     }
-    return { polys, hidden, circles, points, centers, box: [x0, y0, x1, y1], w: x1 - x0, h: y1 - y0 };
+    const threads = [];
+    if (name !== 'iso') {
+      const dir = new THREE.Vector3(...v.dir), ex = new THREE.Vector3(...v.x), ey = new THREE.Vector3(...v.y);
+      const seenT = new Set();
+      for (const th of docThreads()) {
+        const k = Math.abs(th.d.dot(dir));
+        if (k > 0.995) {
+          const c = [th.p0.dot(ex), th.p0.dot(ey)];
+          const key = 'e|' + Math.round(c[0] * 20) + ',' + Math.round(c[1] * 20) + '|' + th.size + '|' + th.kind;
+          if (seenT.has(key)) continue; seenT.add(key);
+          threads.push({ type: 'end', c, r: th.r, rThread: th.rThread, size: th.size, length: th.length, kind: th.kind });
+        } else if (k < 0.05) {
+          const a = [th.p0.dot(ex), th.p0.dot(ey)], b = [th.p1.dot(ex), th.p1.dot(ey)];
+          const sA = Math.round(a[0] * 20) + ',' + Math.round(a[1] * 20), sB = Math.round(b[0] * 20) + ',' + Math.round(b[1] * 20);
+          const key = 's|' + (sA < sB ? sA + '|' + sB : sB + '|' + sA) + '|' + th.size + '|' + th.kind;
+          if (seenT.has(key)) continue; seenT.add(key);
+          threads.push({ type: 'side', a, b, r: th.r, rThread: th.rThread, size: th.size, length: th.length, kind: th.kind });
+        }
+      }
+    }
+    return { polys, hidden, circles, points, centers, threads, box: [x0, y0, x1, y1], w: x1 - x0, h: y1 - y0 };
+  }
+  function docThreads() {
+    const out = [], V = Model.vars(App.doc).v;
+    Model.walk(App.doc.items, (it) => {
+      if (it.role === 'hole' || it.suppressed || !Model.isActive(App.doc, it.id) || !it.threads || !it.threads.length) return;
+      const mats = Model.instanceMatrices(App.doc, it.id, V);
+      for (const th of it.threads) {
+        const fi = Viewer.threadFaceIndex(it.id, th);
+        const g = (fi >= 0 && Viewer.cylinderFaceInfo(it.id, fi)) || (Array.isArray(th.axis) && th.axis.length >= 6 ? {
+          o: th.axis.slice(0, 3), d: th.axis.slice(3, 6), r: th.r || 3, t0: th.t0 ?? 0, t1: th.t1 ?? 10, faceLen: Math.max(0.1, (th.t1 ?? 10) - (th.t0 ?? 0)), kind: th.kind || 'ext',
+        } : null);
+        if (!g) continue;
+        const kind = th.kind || g.kind || 'ext';
+        const L = clamp(Number(th.length) || g.faceLen, 0.2, g.faceLen);
+        const s0 = th.from === 'bottom' ? g.t0 : g.t1 - L;
+        const s1 = th.from === 'bottom' ? g.t0 + L : g.t1;
+        const spec = THREAD_MAP[th.size];
+        const rThread = kind === 'int' ? (spec ? spec.d / 2 : g.r * 1.15) : (spec ? spec.core / 2 : g.r * 0.85);
+        const dL = new THREE.Vector3(...g.d).normalize();
+        const p0L = new THREE.Vector3(...g.o).addScaledVector(dL, s0);
+        const p1L = new THREE.Vector3(...g.o).addScaledVector(dL, s1);
+        for (const M of mats) {
+          const p0 = p0L.clone().applyMatrix4(M), p1 = p1L.clone().applyMatrix4(M);
+          out.push({ p0, p1, d: p1.clone().sub(p0).normalize(), r: g.r, rThread, size: th.size, length: L, kind });
+        }
+      }
+    });
+    return out;
   }
   function freeGeom() {
     const d = dwg(); if (!d.free.length) return null;
@@ -16916,7 +17380,8 @@ const Drawing = (() => {
           const away = Math.hypot(best.c[0] - mx, best.c[1] - my) > 1e-6 ? (Math.atan2(best.c[1] - my, best.c[0] - mx) * 180) / Math.PI : 30;
           const ang = [45, 135, 225, 315].sort((p, q) => angD(p, away) - angD(q, away)).find((a) => !taken.includes(a)) ?? 45;
           taken.push(ang);
-          out.push({ ...dim, id: dim.id + '_' + Math.round(best.r * 200), type: 'dia', c: best.c, r: best.r, ang, count: g.length });
+          const mt = (v.geo.threads || []).find((th) => th.type === 'end' && Math.hypot(th.c[0] - best.c[0], th.c[1] - best.c[1]) < 0.25 && Math.abs(th.r - best.r) < 0.35);
+          out.push({ ...dim, id: dim.id + '_' + Math.round(best.r * 200), type: 'dia', c: best.c, r: best.r, ang, count: g.length, ...(mt ? { threadLabel: `${mt.size} × ${fmtDim(mt.length)}` } : {}) });
         }
         // Rundungen: gleiche Radien zusammenfassen („4× R5“). Nur deutliche Bögen – Zahnköpfe und Ähnliches bleiben weg.
         const ag = new Map();
@@ -16979,7 +17444,7 @@ const Drawing = (() => {
       const tEx = Math.min(tx, ty);
       const lead = tEx > 0 && tEx < 24 ? Math.max(5, tEx) : 7;
       const out = [P[0] + ux * lead, P[1] + uy * lead];
-      const label = (dim.count > 1 ? dim.count + '× ' : '') + (dim.type === 'dia' ? 'Ø' : 'R') + fmtDim(dim.type === 'dia' ? dim.r * 2 : dim.r);
+      const label = (dim.count > 1 ? dim.count + '× ' : '') + (dim.threadLabel ? dim.threadLabel : (dim.type === 'dia' ? 'Ø' : 'R') + fmtDim(dim.type === 'dia' ? dim.r * 2 : dim.r));
       const tl = textW(label, TXT) * 0.92 + 2;
       const tail = [out[0] + (ux >= 0 ? tl : -tl), out[1]];
       if (dim.type === 'dia') {
@@ -17028,6 +17493,33 @@ const Drawing = (() => {
       for (const c of v.geo.centers) {
         if (c.type === 'cross') { const C = toSheet(v, c.c); const r = c.r * v.s + 2; lines.push({ pts: [[C[0] - r, C[1]], [C[0] + r, C[1]]], cls: 'ctr' }, { pts: [[C[0], C[1] - r], [C[0], C[1] + r]], cls: 'ctr' }); }
         else { const A = toSheet(v, c.a), B = toSheet(v, c.b); const dx = B[0] - A[0], dy = B[1] - A[1]; const L = Math.hypot(dx, dy) || 1; const e = 2.5; lines.push({ pts: [[A[0] - (dx / L) * e, A[1] - (dy / L) * e], [B[0] + (dx / L) * e, B[1] + (dy / L) * e]], cls: 'ctr' }); }
+      }
+      // Kosmetische Gewinde nach DIN ISO 6410-1: 3/4-Kreis (Stirnansicht) bzw. dünne parallele Linien (Seitenansicht)
+      const labelSide = name === 'front' || (name === 'left' && !layout.views.front);
+      for (const th of v.geo.threads || []) {
+        if (th.type === 'end') {
+          const C = toSheet(v, th.c), rr = th.rThread * v.s;
+          if (rr > 0.3) lines.push({ pts: arcPts(th.c, th.rThread, 0, Math.PI * 1.5).map((q) => toSheet(v, q)), arc: { c: C, r: rr, a: [0, Math.PI * 1.5] }, cls: 'thin' });
+        } else if (th.type === 'side') {
+          const A = toSheet(v, th.a), B = toSheet(v, th.b);
+          const dx = B[0] - A[0], dy = B[1] - A[1], L = Math.hypot(dx, dy);
+          if (L < 0.3) continue;
+          const px = -dy / L, py = dx / L, rt = th.rThread * v.s, ro = th.r * v.s;
+          lines.push({ pts: [[A[0] + px * rt, A[1] + py * rt], [B[0] + px * rt, B[1] + py * rt]], cls: 'thin' });
+          lines.push({ pts: [[A[0] - px * rt, A[1] - py * rt], [B[0] - px * rt, B[1] - py * rt]], cls: 'thin' });
+          lines.push({ pts: [[A[0] - px * ro, A[1] - py * ro], [A[0] + px * ro, A[1] + py * ro]], cls: 'vis' });
+          lines.push({ pts: [[B[0] - px * ro, B[1] - py * ro], [B[0] + px * ro, B[1] + py * ro]], cls: 'vis' });
+          if (labelSide) {
+            const mx = (A[0] + B[0]) / 2, my = (A[1] + B[1]) / 2;
+            const P0 = [mx + px * ro, my + py * ro];
+            const P1 = [P0[0] + px * 5 + 3, P0[1] + py * 5 - 4];
+            const lbl = `${th.size} × ${fmtDim(th.length)}`;
+            const tw = textW(lbl, 3.2) + 2;
+            const P2 = [P1[0] + tw, P1[1]];
+            lines.push({ pts: [P0, P1, P2], cls: 'dim' });
+            texts.push({ x: (P1[0] + P2[0]) / 2, y: P1[1] - 1, t: lbl, size: 3.2, rot: 0, anchor: 'middle', cls: 'dimtext' });
+          }
+        }
       }
       if (name === 'free') for (const e of d.free) if (e.type === 'text') { const P = toSheet(v, e.p); texts.push({ x: P[0], y: P[1], t: e.text, size: e.size || 3.5, rot: 0, anchor: 'start', id: e.id, cls: 'free' }); }
     }

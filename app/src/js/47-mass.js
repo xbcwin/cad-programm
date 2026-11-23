@@ -116,7 +116,27 @@ const Mass = (() => {
     const fil = new Map();
     for (const x of rows) { const m = !x.buy && PRINTMATS.includes(x.kind) ? matOf(x.kind) : null; if (m) fil.set(m.k, (fil.get(m.k) || 0) + x.g * x.n); }
     const filament = [...fil.entries()].map(([k, g]) => ({ mat: k, g, m: g / matOf(k).rho / (Math.PI * 0.0875 * 0.0875) / 100 }));
-    return { rows, mass: rows.reduce((s, x) => s + x.g * x.n, 0), count: rows.reduce((s, x) => s + x.n, 0), screws: screws(doc), filament };
+    return { rows, mass: rows.reduce((s, x) => s + x.g * x.n, 0), count: rows.reduce((s, x) => s + x.n, 0), screws: screws(doc), threads: threads(doc), filament };
+  }
+  // Markierte kosmetische Gewinde (KP-20) je aktivem Körper mit Instanz-Anzahl
+  function threads(doc = App.doc) {
+    const V = Model.vars(doc).v, map = new Map();
+    Model.walk(doc.items, (it) => {
+      if (it.role === 'hole' || it.suppressed || !Model.isActive(doc, it.id) || !it.threads || !it.threads.length) return;
+      const n = Math.max(1, Model.instanceMatrices(doc, it.id, V).length);
+      const part = Model.label(it);
+      for (const th of it.threads) {
+        const L = round(Model.num(th.length, V, 10), 1);
+        const kind = th.kind === 'int' ? 'int' : 'ext';
+        const label = `${kind === 'int' ? 'Innengewinde' : 'Außengewinde'} ${th.size} × ${fmt(L, 1)} mm`;
+        const key = label + '|' + part;
+        const row = map.get(key) || { name: label, size: th.size, length: L, kind, part, n: 0, ids: [] };
+        row.n += n;
+        if (!row.ids.includes(it.id)) row.ids.push(it.id);
+        map.set(key, row);
+      }
+    });
+    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, 'de', { numeric: true }));
   }
   // Schrauben, Muttern und Gewindeeinsätze aus den Loch-Bauteilen (auch in Gruppen und Mustern).
   // Löcher auf derselben Achse (gleiche Schraube durch zwei Platten) zählen nur einmal.
@@ -150,6 +170,7 @@ const Mass = (() => {
     for (const x of B.rows) L.push([q(x.name), x.n, q(x.kind), x.missing ? '' : z(x.g), x.missing ? '' : z(x.g * x.n), x.cm3 == null ? '' : z(x.cm3, 2)].join(';'));
     L.push([q('Summe ' + name), B.count, '', '', z(B.mass), ''].join(';'));
     for (const x of B.screws || []) L.push([q(x.name), x.n, q('Kleinteil'), '', '', ''].join(';'));
+    for (const x of B.threads || []) L.push([q(x.name), x.n, q('Gewinde (' + x.part + ')'), '', '', ''].join(';'));
     return '\ufeff' + L.join('\r\n') + '\r\n';
   }
   async function bomDialog() {
@@ -173,8 +194,17 @@ const Mass = (() => {
       for (const x of B.screws) ts.append(h('tr', null, h('td', null, x.name), h('td', { class: 'mono' }, String(x.n))));
       body.append(ts, h('div', { class: 'hint-box' }, 'Gezählt aus Schraubenlöchern, Lochbildern (je vier), Mutternfallen und Gewindeeinsätzen – Löcher auf derselben Achse zählen als eine Schraube. Die Länge der Schrauben misst du am besten am Modell nach; ihr Gewicht ist in der Summe nicht enthalten.'));
     }
+    if (B.threads && B.threads.length) {
+      const tt = h('table', { class: 'vtable', id: 'bom-threads', style: { marginTop: '14px' } }, h('tr', null, h('th', null, 'Markierte Gewinde'), h('th', null, 'Teil'), h('th', null, 'Anzahl')));
+      for (const x of B.threads) {
+        const tr = h('tr', { style: { cursor: 'pointer' } }, h('td', null, x.name), h('td', null, x.part), h('td', { class: 'mono' }, String(x.n)));
+        tr.onclick = () => App.select(x.ids);
+        tt.append(tr);
+      }
+      body.append(tt);
+    }
     if (B.filament.length) body.append(h('div', { class: 'ok-box', id: 'bom-filament', html: '<b>Filament für die Druckteile:</b> ' + B.filament.map((x) => `${x.mat} ${gText(x.g)} ≈ ${fmt(x.m, 1)} m`).join(' · ') + ' (Draht 1,75 mm, massiv gerechnet – mit weniger Füllung brauchst du weniger; Stützen und Rand kommen dazu).' }));
     body.append(h('div', { class: 'hint-box', html: 'Gleiche Teile (gleicher Name ohne Nummer, gleiches Gewicht) stehen in einer Zeile. Klick auf eine Zeile wählt die Teile im Bild aus. <b>Kaufteile</b> zählen mit dem Gewicht aus dem Datenblatt, alles andere mit Volumen × Material.' + (B.rows.some((x) => x.missing) ? ' Bei Teilen mit „fehlt“ ist noch kein Gewicht eingetragen.' : '') }));
   }
-  return { stability, hull2,  init, measure, measureDoc, bom, bomCSV, bomDialog, screws, materialFor, projectMaterial, partOf, gText, fixedOf, on: ev.on, get markerShown() { return !!marker; }, get markerPos() { return marker ? marker.position.toArray() : null; } };
+  return { stability, hull2,  init, measure, measureDoc, bom, bomCSV, bomDialog, screws, threads, materialFor, projectMaterial, partOf, gText, fixedOf, on: ev.on, get markerShown() { return !!marker; }, get markerPos() { return marker ? marker.position.toArray() : null; } };
 })();
