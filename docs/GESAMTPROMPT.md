@@ -202,7 +202,8 @@ Leitlinien:
 - Maße-Tabelle mit Formeln, Varianten und Versionen (Vergleich mit Gewicht)
 - Bauteile im Kontext bearbeiten; Isolieren
 - Zahleneingabe beim Ziehen; Tastenkürzel-Übersicht (?)
-- Einfache Oberfläche für Einsteiger („Einfach/Profi“); Einführung „Deine erste Skizze“
+- Einfache Oberfläche für Einsteiger („Einfach/Profi“): Zwei-Karten-Wahl beim ersten Start (`ViewPrefs.firstStart`, `levelCards`) und in den Einstellungen, `ViewPrefs.level` (`'simple'|'pro'`), Schild `#btn-level`; Einführung „Deine erste Skizze“
+- Eigene Tastenkürzel (nur „Profi“): `Commands.shortcuts`/`setShortcut`/`resetShortcuts`/`renderShortcutsEditor`, gespeichert in `localStorage` (`tracery-kuerzel`), Duplikat-Prüfung, Einstellungs-Tab `#set-tab-keys`
 - Notizstift; Messen (Abstand, Winkel, Fläche); Material je Teil, Gewicht, Schwerpunkt
 - Kaufteile mit festem Gewicht
 - Auswahlfilter, „Ähnliche“, Kantenkette
@@ -233,6 +234,7 @@ Leitlinien:
   - Skizzen-Prüfer (SK-09): `SKO.inspect(ents, {gapTol, dupTol, dims, cons})`, `Sketch.check`/`repair`/`focusCheckIssue`, Knöpfe `#sk-check`/`#sk-repair`, Liste `#sk-check-res` (findet offene Enden, doppelte/überlappende Linien und winzige Lücken < 0,05 mm, hebt per Klick hervor, repariert mit `coincident` und Löschen)
   - Rahmen-Auswahl in der Skizze (SK-10): `Sketch.bandSelect(x1, y1, x2, y2, additive)`, Mehrfach-Auswahl `S.sels` (`S.sel` als Getter/Setter auf `S.sels`; links→rechts ganz drin, rechts→links gestrichelt berührt, Umschalt fügt hinzu; Entf löscht zusammen, H/Q/W übernehmen in `S.patSel`, Strg C und X unterstützen Mehrfach-Auswahl; Panel `#sk-sel-count`/`#sk-sel-move`/`#sk-sel-con`/`#sk-sel-del`)
   - Linie und Bogen im Wechsel (SK-15): im Linienzug schaltet Taste A `S.draft.arc` über `toggleLineArc` zwischen Linie und tangentialem Bogen (`endTangent`/`draftTan`/`makeTanCon`/`tanLineSnap`/`updateLineHint`, mit `tangent`- und `coincident`-Regeln, Tangenten-Fang am Bogenende und angepasstem Hinweistext)
+  - Versatz mehrfach und beidseitig (SK-21): `S.off` (`#off-n`, `#off-both`, `#off-corner`), `offsetPlan` und erweiterte `SKO.offsetChain`/`SKO.offsetShape` mit `corners: 'round'` (Eckbögen mit `offset`-Regel `corner: true`, `coincident` und `tangent`) sowie `poly`-Kanten im Solver (`line(ref)`)
   - Linie „Tangente an zwei Kreise“: `S.lineMode = 'tan2'` → `tan2Down`/`tan2Geom` (äußere Tangente, Seite nach den Klicks), zwei `tangent`-Regeln
   - Bogen „Mitte, Start, Ende“: `S.arcMode = 'center'` → `centerArc(d, p)`; Langloch „Gesamtlänge“: `S.slotTotal` → `slotInset(a, b, r)`, getippte Gesamtlänge wird zu `len` = Gesamtlänge − Breite
   - Rechteck mit runden Ecken: `S.rectR` (Feld `#rk-r`) → `roundRect(en, r, keepWH)` (Ecken über `cornerDo`, dann waagerecht/senkrecht, `equal` für die Radien, bei getippten Maßen zwei `distPL`); Ecke bilden: `S.corner.mode = 'meet'` → `meetDo` (zwei Klicks, `S.meetFirst`)

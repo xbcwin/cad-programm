@@ -5460,6 +5460,193 @@ def t_f11232113(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a021_profi_kuerzel(p):
+    # 1. Erster Start (leerer Speicher) zeigt die zwei Stufen-Karten „Einfach“ und „Profi“
+    wel = p.pg.locator('#level-welcome')
+    wel_txt = (wel.text_content() or '') if wel.count() else ''
+    ok1 = (wel.count() == 1 and wel.is_visible()
+           and p.pg.locator('#start-simple').count() == 1
+           and p.pg.locator('#start-pro').count() == 1
+           and 'wenige, große Knöpfe, alles erklärt' in wel_txt
+           and 'alle Werkzeuge, Tastenkürzel, Maus wie in deinem CAD' in wel_txt)
+
+    # 2. „Profi“ wählen → ViewPrefs.level === 'pro' und Schild zeigt „Profi“; Wechsel über Schild & Profi-Schutz in Einstellungen
+    p.pg.locator('#start-pro').click(); p.wait(300)
+    ok2a = (p.ev("return ViewPrefs.level === 'pro' && ViewPrefs.firstStart === false")
+            and p.pg.locator('#start-pro').get_attribute('aria-pressed') == 'true'
+            and p.pg.locator('#btn-level').text_content() == 'Profi'
+            and bool(p.ev("return localStorage.getItem('masswerk.view')")))
+    p.empty()
+    ok2b = p.pg.locator('#btn-level').text_content() == 'Profi'
+    # Klick auf das Schild wechselt zu Einfach; dort ist „Tastenkürzel“ in den Einstellungen versteckt
+    p.pg.locator('#btn-level').click(); p.wait(400)
+    ok2c = p.pg.locator('#btn-level').text_content() == 'Einfach' and p.ev("return ViewPrefs.level === 'simple'")
+    p.pg.click('#btn-menu'); p.wait(250); p.pg.get_by_text('Einstellungen', exact=True).click(); p.wait(350)
+    ok2d = p.pg.locator('#set-level-simple').count() == 1 and p.pg.locator('#set-level-pro').count() == 1 and not sichtbar(p, '#set-tab-keys')
+    # In den Einstellungen auf „Profi“ wechseln → Schild zeigt „Profi“ und Tab „Tastenkürzel“ erscheint
+    p.pg.locator('#set-level-pro').click(); p.wait(350)
+    ok2 = ok2a and ok2b and ok2c and ok2d and p.pg.locator('#btn-level').text_content() == 'Profi' and sichtbar(p, '#set-tab-keys')
+
+    # 3. Kürzel für „Orthografisch / Perspektive“ (O → J) ändern → neue Taste löst aus, alte nicht mehr, gespeichert in tracery-kuerzel
+    p.pg.locator('#set-tab-keys').click(); p.wait(300)
+    rows_n = p.pg.locator('.kbd-row').count()
+    p.pg.locator('.kbd-btn[data-cmd="ortho"]').click(); p.wait(150)
+    p.pg.keyboard.press('j'); p.wait(250)
+    stored = p.ev("return JSON.parse(localStorage.getItem('tracery-kuerzel') || '{}')")
+    btn_txt = p.pg.locator('.kbd-btn[data-cmd="ortho"]').text_content()
+    p.pg.keyboard.press('Escape'); p.wait(300)
+    o0 = p.ev("return Viewer.ortho")
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('o'); p.wait(300)
+    o_old = p.ev("return Viewer.ortho")
+    p.pg.keyboard.press('j'); p.wait(300)
+    o_new1 = p.ev("return Viewer.ortho")
+    p.pg.keyboard.press('j'); p.wait(300)
+    o_new2 = p.ev("return Viewer.ortho")
+    ok3 = (rows_n >= 25 and btn_txt == 'J' and stored.get('ortho') == 'j'
+           and not o0 and not o_old and o_new1 and not o_new2)
+
+    # 4. Doppeltes Kürzel wird gemeldet und nicht überschrieben
+    p.pg.click('#btn-menu'); p.wait(250); p.pg.get_by_text('Einstellungen', exact=True).click(); p.wait(300)
+    p.pg.locator('#set-tab-keys').click(); p.wait(250)
+    p.pg.locator('.kbd-btn[data-cmd="gridtoggle"]').click(); p.wait(150)
+    p.pg.keyboard.press('j'); p.wait(300)
+    msg_vis = sichtbar(p, '#kbd-msg')
+    msg_txt = (p.pg.locator('#kbd-msg').text_content() or '')
+    grid_txt = p.pg.locator('.kbd-btn[data-cmd="gridtoggle"]').text_content()
+    ok4 = msg_vis and 'belegt' in msg_txt and 'Orthografisch' in msg_txt and grid_txt == 'G'
+
+    # 5. Zurücksetzen stellt Standard wieder her
+    p.pg.locator('#kbd-reset').click(); p.wait(250)
+    reset_ok = p.pg.locator('.kbd-btn[data-cmd="ortho"]').text_content() == 'O' and p.ev("return localStorage.getItem('tracery-kuerzel')") is None
+    p.pg.keyboard.press('Escape'); p.wait(250)
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('o'); p.wait(300)
+    ok5 = reset_ok and p.ev("return Viewer.ortho")
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
+def t_a006_versatz_mehrfach(p):
+    # 1. Rechteck 20x10, Versatz 2 mm, Anzahl 3 -> drei neue Umrisse außen + Rückgängig
+    scene(p, [{'id': 'R', 'type': 'rect', 'a': [0, 0], 'b': [20, 10]}])
+    p.pg.keyboard.press('f'); p.wait(250)
+    has_ui = (p.pg.locator('#off-n').count() == 1 and p.pg.locator('#off-both').count() == 1
+              and p.pg.locator('#off-corner').count() == 1)
+    p.pg.fill('#off-n', '3'); p.pg.press('#off-n', 'Enter'); p.wait(150)
+    click_uv(p, 10, 0, alt=False)
+    p.pg.mouse.move(*to_screen(p, 10, -4)); p.wait(200)
+    p.pg.keyboard.type('2'); p.pg.keyboard.press('Enter'); p.wait(400)
+    st1 = SS(p, """
+      const rs = S.ents.filter(e => e.type === 'rect' && e.id !== 'R').map(r => [
+        Math.round((Math.max(r.a[0], r.b[0]) - Math.min(r.a[0], r.b[0])) * 100) / 100,
+        Math.round((Math.max(r.a[1], r.b[1]) - Math.min(r.a[1], r.b[1])) * 100) / 100
+      ]).sort((a, b) => a[0] - b[0]);
+      const vs = S.cons.filter(c => c.type === 'offset').map(c => c.v).sort((a, b) => a - b);
+      return { total: S.ents.length, rs, vs, ok: !!(S.status && S.status.ok) };
+    """)
+    ok1 = (has_ui and st1['total'] == 4 and st1['rs'] == [[24, 14], [28, 18], [32, 22]]
+           and st1['vs'] == [2, 4, 6] and st1['ok'])
+
+    # Ein Rückgängig entfernt alle 3 Kopien auf einmal
+    p.pg.keyboard.press('Control+z'); p.wait(300)
+    undo1 = SS(p, "return S.ents.length === 1 && S.cons.length === 0")
+
+    # 2. Beidseitig (Anzahl 1 -> innen + außen; Anzahl 2 -> 2 innen + 2 außen)
+    p.pg.fill('#off-n', '1'); p.pg.press('#off-n', 'Enter'); p.wait(150)
+    p.pg.click('#off-both'); p.wait(150)
+    click_uv(p, 10, 0, alt=False)
+    p.pg.mouse.move(*to_screen(p, 10, -4)); p.wait(200)
+    p.pg.keyboard.type('2'); p.pg.keyboard.press('Enter'); p.wait(400)
+    st2 = SS(p, """
+      const rs = S.ents.filter(e => e.type === 'rect' && e.id !== 'R').map(r => [
+        Math.round((Math.max(r.a[0], r.b[0]) - Math.min(r.a[0], r.b[0])) * 100) / 100,
+        Math.round((Math.max(r.a[1], r.b[1]) - Math.min(r.a[1], r.b[1])) * 100) / 100
+      ]).sort((a, b) => a[0] - b[0]);
+      return { total: S.ents.length, rs, ok: !!(S.status && S.status.ok) };
+    """)
+    p.pg.keyboard.press('Control+z'); p.wait(300)
+    p.pg.fill('#off-n', '2'); p.pg.press('#off-n', 'Enter'); p.wait(150)
+    click_uv(p, 10, 0, alt=False)
+    p.pg.mouse.move(*to_screen(p, 10, -4)); p.wait(200)
+    p.pg.keyboard.type('2'); p.pg.keyboard.press('Enter'); p.wait(400)
+    st2b = SS(p, """
+      const rs = S.ents.filter(e => e.type === 'rect' && e.id !== 'R').map(r => [
+        Math.round((Math.max(r.a[0], r.b[0]) - Math.min(r.a[0], r.b[0])) * 100) / 100,
+        Math.round((Math.max(r.a[1], r.b[1]) - Math.min(r.a[1], r.b[1])) * 100) / 100
+      ]).sort((a, b) => a[0] - b[0]);
+      return { total: S.ents.length, rs, ok: !!(S.status && S.status.ok) };
+    """)
+    ok2 = (undo1 and st2['total'] == 3 and st2['rs'] == [[16, 6], [24, 14]] and st2['ok']
+           and st2b['total'] == 5 and st2b['rs'] == [[12, 2], [16, 6], [24, 14], [28, 18]] and st2b['ok'])
+
+    # 3. Ecken: Rund beim Rechteck (außen 4 Linien + 4 Bögen R=2) + folgt dem Original
+    p.ev("""
+      Sketch.cancel(true);
+      App.change('x', d => { d.items[0].p.sketch.ents = arg; d.items[0].p.sketch.dims = []; d.items[0].p.sketch.cons = []; });
+      Sketch.editItem(App.doc.items[0].id);
+    """, [{'id': 'R', 'type': 'rect', 'a': [0, 0], 'b': [20, 10]}]); p.wait(600)
+    p.pg.keyboard.press('f'); p.wait(250)
+    p.pg.select_option('#off-corner', 'round'); p.wait(150)
+    click_uv(p, 10, 0, alt=False)
+    p.pg.mouse.move(*to_screen(p, 10, -4)); p.wait(200)
+    p.pg.keyboard.type('2'); p.pg.keyboard.press('Enter'); p.wait(400)
+    st3 = SS(p, """
+      const lines = S.ents.filter(e => e.type === 'line');
+      const arcs = S.ents.filter(e => e.type === 'arc');
+      const radii = arcs.map(a => SK.arcInfo(a.a, a.m, a.b).r);
+      const regs = SK.regions(S.ents);
+      const outer = SK.regions(S.ents.filter(e => e.id !== 'R'));
+      return {
+        lines: lines.length, arcs: arcs.length, radii,
+        regs: regs.length, holes: regs[0] ? regs[0].holes.length : 0,
+        ringArea: regs[0] ? regs[0].area : 0,
+        outerArea: outer[0] ? outer[0].area : 0,
+        ok: !!(S.status && S.status.ok)
+      };
+    """)
+    want_ring_area = 2 * (20 + 10) * 2 + math.pi * 4
+    want_outer_area = 20 * 10 + want_ring_area
+    p.pg.keyboard.press('v'); click_uv(p, 20, 5, alt=False); p.wait(300)
+    p.pg.fill('#se-w', '30'); p.pg.press('#se-w', 'Enter'); p.wait(400)
+    st3b = SS(p, """
+      const bb = SK.bounds(S.ents);
+      const arcs = S.ents.filter(e => e.type === 'arc');
+      const radii = arcs.map(a => SK.arcInfo(a.a, a.m, a.b).r);
+      return { bb, radii, ok: !!(S.status && S.status.ok) };
+    """)
+    ok3 = (st3['lines'] == 4 and st3['arcs'] == 4
+           and all(abs(r - 2) < 1e-3 for r in st3['radii'])
+           and st3['regs'] == 1 and st3['holes'] == 1
+           and abs(st3['ringArea'] - want_ring_area) < 1.5
+           and abs(st3['outerArea'] - want_outer_area) < 1.5 and st3['ok']
+           and st3b['bb'] is not None and abs(st3b['bb'][2] - 32) < 1e-2
+           and all(abs(r - 2) < 1e-2 for r in st3b['radii']) and st3b['ok'])
+
+    # 4. L-Kette mit Ecken Rund + Beidseitig -> äußere Ecke rund, innere spitz; Rückgängig
+    p.ev("""
+      Sketch.cancel(true);
+      App.change('x', d => { d.items[0].p.sketch.ents = arg; d.items[0].p.sketch.dims = []; d.items[0].p.sketch.cons = []; });
+      Sketch.editItem(App.doc.items[0].id);
+    """, [{'id': 'A', 'type': 'line', 'a': [0, 0], 'b': [40, 0]}, {'id': 'B', 'type': 'line', 'a': [40, 0], 'b': [40, 30]}]); p.wait(600)
+    p.pg.keyboard.press('f'); p.wait(250)
+    p.pg.click('#off-both'); p.wait(150)
+    p.pg.select_option('#off-corner', 'round'); p.wait(150)
+    click_uv(p, 20, 0, alt=False)
+    p.pg.mouse.move(*to_screen(p, 20, -6)); p.wait(200)
+    p.pg.keyboard.type('4'); p.pg.keyboard.press('Enter'); p.wait(400)
+    st4 = SS(p, """
+      const lines = S.ents.filter(e => e.type === 'line');
+      const arcs = S.ents.filter(e => e.type === 'arc');
+      const ai = arcs[0] ? SK.arcInfo(arcs[0].a, arcs[0].m, arcs[0].b) : null;
+      const innerCorner = lines.some(l => Math.hypot(l.b[0] - 36, l.b[1] - 4) < 1e-3 || Math.hypot(l.a[0] - 36, l.a[1] - 4) < 1e-3);
+      return { lines: lines.length, arcs: arcs.length, c: ai && ai.c, r: ai && ai.r, innerCorner, ok: !!(S.status && S.status.ok) };
+    """)
+    p.pg.keyboard.press('Control+z'); p.wait(300)
+    undo4 = SS(p, "return S.ents.length === 2 && S.cons.length === 0")
+    ok4 = (st4['lines'] == 6 and st4['arcs'] == 1
+           and st4['c'] is not None and near(st4['c'], [40, 0], 1e-3) and abs(st4['r'] - 4) < 1e-3
+           and st4['innerCorner'] and st4['ok'] and undo4)
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -5564,6 +5751,8 @@ TESTS = [
     ('[A-004] Rahmen-Auswahl in der Skizze: Fenster links→rechts / Umschalt+Kreuz-Rahmen / H übernimmt in patSel / Entf löscht', t_a004_rahmen_auswahl),
     ('[A-005] Linie und Bogen im Wechsel: Hinweistext / Linie-A-Bogen-A-Linie / Tangential & Deckungsgleich / geschlossene Bahn / Taste A ohne Entwurf', t_a005_linie_bogen_wechsel),
     ('[F-11232113] Volltest-Reparatur: Kontextleiste / Skizzen-Auswahl / Vorige Ansicht / Maus-Koordinaten', t_f11232113),
+    ('[A-021] Profi-Stufe und eigene Tastenkürzel: erster Start / Profi-Schild / Kürzel ändern / doppeltes Kürzel / Zurücksetzen', t_a021_profi_kuerzel),
+    ('[A-006] Versatz mehrfach, beidseitig und runde Ecken: 3× Rechteck / beidseitig / Ecken rund / Kette & Rückgängig', t_a006_versatz_mehrfach),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

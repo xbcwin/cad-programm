@@ -530,6 +530,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Maus-Koordinaten am Zielpunkt**: Schnelle Mausbewegungen über dem Modell zeigen am Ende exakt die Koordinaten unter dem Mauszeiger.
 - [ ] **Von Hand**: Bei schnellem Drehen mit sofortigem `Umschalt Z` und beim schnellen Überfahren kleiner Flächen prüfen, ob Ansichtssprung und Koordinatenanzeige ruhig wirken.
 
+## Versatz mehrfach und beidseitig (Auto [A-006])
+
+- [x] **Anzahl mehrfach**: Rechteck 20 × 10 mm mit Anzahl 3 und Abstand 2 mm nach außen → drei neue Rechtecke (24 × 14, 28 × 18, 32 × 22 mm) mit passenden Versatz-Regeln, Rückgängig nimmt alle zusammen zurück.
+- [x] **Beidseitig**: Rechteck mit „Beidseitig“ → je ein Umriss außen und innen (bzw. bei Anzahl 2 zwei außen und zwei innen).
+- [x] **Ecken rund**: Rechteck mit „Ecken: Rund“ und 2 mm Abstand → vier gerade Seiten und vier Ecken-Bögen (R = 2 mm), geschlossene Fläche, wächst beim Ändern des Originals mit.
+- [x] **Kette mit runden Ecken & Rückgängig**: L-Kette mit „Beidseitig“ und „Ecken: Rund“ → äußere Ecke gerundet (Bogen R = 4 mm), innere Ecke spitz; ein Rückgängig räumt alles auf.
+- [ ] **Von Hand**: Bei Vieleck, gemischten Ketten (Linie + Bogen) und gedrücktem Rückgängig prüfen, ob Vorschau-Schildchen, Eckenbögen und Hinweistexte klar wirken.
+
 ## Maße als Tabelle (neu in Sitzung 114)
 
 - [x] **Tabelle**: Rechteck und Kreis mit drei Maßen → drei Zeilen („Rechteck 1“, „Kreis 1“); Breite 45 eintippen → Rechteck 45 mm breit, Tabelle bleibt offen.
@@ -1465,6 +1473,17 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] Skizze mit Maß `breite` bauen, unter „Maße“ `breite` in `laenge` umbenennen – das Schildchen heißt jetzt `laenge`. Dann entfernen – das Teil bleibt gleich groß, im Schildchen steht die Zahl.
 - [ ] Qualität „Sehr fein“, dann ganz nah an eine Rundung zoomen und herauszoomen – flüssig, kein Einfrieren.
   Automatisch geprüft: kein Einfrieren. Ob es flüssig wirkt, bitte von Hand ansehen.
+
+## Profi-Stufe und eigene Tastenkürzel (Auto [A-021])
+
+- [x] **Erster Start & Stufenwahl**
+  Schritte: 1. Mit leerem Browser-Speicher starten. 2. „Profi“ auf der Karte wählen. 3. Auf das Schild „Profi“ oben rechts klicken, dann in den Einstellungen zurück auf „Profi“.
+  Erwartet: Zwei Karten „Einfach“ und „Profi“ erscheinen beim ersten Start; das Schild oben zeigt die aktuelle Stufe und wechselt per Klick.
+- [x] **Eigene Tastenkürzel (Profi)**
+  Schritte: 1. Einstellungen → „Tastenkürzel“. 2. Kürzel für „Orthografisch / Perspektive“ von `O` auf `J` ändern. 3. `O` und dann `J` drücken. 4. Dasselbe Kürzel `J` einem anderen Befehl zuweisen. 5. „Zurücksetzen“ klicken.
+  Erwartet: `O` löst nicht mehr aus, `J` sofort; doppeltes Kürzel wird gemeldet und nicht überschrieben; „Zurücksetzen“ stellt `O` wieder her.
+- [ ] **Kürzel im Alltag prüfen**
+  Bitte von Hand kurz prüfen, ob die zwei Stufen-Karten und die Tastenkürzel-Liste auf schmalem Bildschirm sauber umbrechen.
 
 ## Fehler melden
 

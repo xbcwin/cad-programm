@@ -50,7 +50,7 @@ const Sketch = (() => {
     spline: 'Klick setzt die Punkte, durch die die Kurve läuft. Am ersten Punkt schließen, auf den letzten Punkt doppelklicken oder <b>Enter</b> zum Beenden.',
     corner: 'Fahr an eine <b>Ecke</b>, an der sich zwei Linien treffen – Rechteck und Vieleck gehen auch. <b>Klick</b> rundet sie mit dem Radius rechts. Fase statt Rundung stellst du rechts um.',
     trim: 'Fahr über ein Stück zwischen zwei Schnittpunkten – es leuchtet rot. <b>Klick</b> schneidet es weg, mit gedrückter Maustaste kannst du <b>wischen</b>.',
-    offset: 'Klick eine Linie, einen Kreis oder eine Form an. Dann die Maus auf die Seite bewegen, auf die der Versatz soll, und klicken – oder den Abstand tippen und <b>Enter</b>.',
+    offset: 'Klick eine Linie, einen Kreis oder eine Form an. Rechts kannst du <b>Anzahl</b>, <b>Beidseitig</b> und <b>Ecken</b> (spitz/rund) wählen. Dann Maus auf eine Seite bewegen und klicken – oder den Abstand tippen und <b>Enter</b>.',
     mirror: 'Erst die <b>Spiegellinie</b> anklicken (eine Linie, auch eine Hilfslinie), dann die Elemente, die gespiegelt werden sollen. <b>Enter</b> spiegelt alles.',
     patrect: 'Klick die Elemente an, die vervielfacht werden sollen. Anzahl und Abstand stellst du rechts ein, dann <b>Enter</b>.',
     patcirc: 'Klick die Elemente an, die im Kreis vervielfacht werden sollen. Anzahl, Winkel und Mittelpunkt stellst du rechts ein, dann <b>Enter</b>.',
@@ -354,7 +354,7 @@ const Sketch = (() => {
     if (Notes.active) Notes.stop();
     Panels.closeFlyout(); UI.closePop();
     const F = frameWorld(init.plane, init.W);
-    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.mode === 'patpath' ? 'line' : 'rect', draft: null, sels: [], get sel() { return this.sels && this.sels.length === 1 ? this.sels[0] : null; }, set sel(v) { this.sels = v ? [v] : []; }, band: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, hoverEnt: null, trimHover: null, check: null, checkFocus: null };
+    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.mode === 'patpath' ? 'line' : 'rect', draft: null, sels: [], get sel() { return this.sels && this.sels.length === 1 ? this.sels[0] : null; }, set sel(v) { this.sels = v ? [v] : []; }, band: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, off: { count: 1, both: false, corners: 'sharp' }, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, hoverEnt: null, trimHover: null, check: null, checkFocus: null };
     S.dims = init.dims || []; S.cons = init.cons || []; S.picks = []; S.dimFirst = null; S.selCon = null;
     S.plane0 = deepClone(init.plane); S.pOff = init.pOff || 0; S.pTilt = 0;
     if (S.pOff) applyPlane(false, true);
@@ -1251,14 +1251,37 @@ const Sketch = (() => {
     }
     return 0;
   }
-  function offsetCalc(off, sd) {
+  function offsetCalc(off, sd, corners = 'sharp') {
     const e = ent(off.id); if (!e) return { ok: false, why: 'Das Element gibt es nicht mehr.' };
     if (Math.abs(sd) < 1e-6) return { ok: false, why: 'Der Abstand darf nicht 0 sein.' };
-    if (off.chain) { const r = SKO.offsetChain(off.chain, sd); return r.ok ? { ok: true, items: r.items.map((x) => ({ src: x.src, ent: x.ent })) } : r; }
-    const r = SKO.offsetShape(e, sd);
-    return r.ok ? { ok: true, items: [{ src: e, ent: r.ent, sgs: r.sgs }] } : r;
+    if (off.chain) { const r = SKO.offsetChain(off.chain, sd, corners); return r.ok ? { ok: true, items: r.items } : r; }
+    const r = SKO.offsetShape(e, sd, corners);
+    if (!r.ok) return r;
+    return r.items ? { ok: true, items: r.items } : { ok: true, items: [{ src: e, ent: r.ent, sgs: r.sgs }] };
+  }
+  function offsetPlan(off, sd, v) {
+    const O = (S && S.off) || { count: 1, both: false, corners: 'sharp' };
+    const count = clamp(Math.round(O.count || 1), 1, 20);
+    const both = !!O.both;
+    const corners = O.corners === 'round' ? 'round' : 'sharp';
+    const signs = both ? [1, -1] : [1];
+    const scaleV = (val, k) => (k === 1 ? val : typeof val === 'number' ? round(val * k, 4) : `(${val})*${k}`);
+    const copies = [], errs = [];
+    for (const s of signs) {
+      for (let k = 1; k <= count; k++) {
+        const sdk = s * k * sd;
+        const r = offsetCalc(off, sdk, corners);
+        if (r.ok) copies.push({ sd: sdk, v: scaleV(v, k), items: r.items });
+        else errs.push(r.why);
+      }
+    }
+    return { ok: copies.length > 0, copies, skipped: errs.length, total: signs.length * count, why: errs[0] || '' };
   }
   function offsetCon(src, ne, it, sd, v) {
+    if (it.edge != null) {
+      const cr = (it.srcB[0] - it.srcA[0]) * (ne.a[1] - it.srcA[1]) - (it.srcB[1] - it.srcA[1]) * (ne.a[0] - it.srcA[0]);
+      return { id: uid('k'), type: 'offset', refs: [{ e: src.id, edge: it.edge }, { e: ne.id }], v, sg: cr >= 0 ? 1 : -1 };
+    }
     const base = { id: uid('k'), type: 'offset', refs: [{ e: src.id }, { e: ne.id }], v };
     if (src.type === 'spline') return null;
     if (src.type === 'rect') return { ...base, sg: 1, sgs: it.sgs };
@@ -1269,21 +1292,40 @@ const Sketch = (() => {
   }
   function applyOffset(sd, v) {
     const off = S.draft && S.draft.off; if (!off) return false;
-    const calc = offsetCalc(off, sd);
-    if (!calc.ok) { UI.toast(calc.why, { kind: 'bad' }); return false; }
+    const plan = offsetPlan(off, sd, v);
+    if (!plan.ok) { UI.toast(plan.why, { kind: 'bad' }); return false; }
     pushUndo();
-    const newCons = [];
-    for (const it of calc.items) {
-      const ne = { id: uid('e'), ...it.ent }; if (it.src.con) ne.con = true;
-      S.ents.push(ne);
-      const c = offsetCon(it.src, ne, it, sd, v); if (c) newCons.push(c);
+    const allCons = [];
+    for (const cp of plan.copies) {
+      const copyOffCons = [], copyAuxCons = [], segEnts = new Map(), cornerJobs = [];
+      for (const it of cp.items) {
+        const ne = { id: uid('e'), ...it.ent }; if (it.src && it.src.con) ne.con = true;
+        S.ents.push(ne);
+        if (it.corner) { cornerJobs.push({ it, ne }); continue; }
+        if (it.segIdx != null) segEnts.set(it.segIdx, { ne, startKey: it.startKey, endKey: it.endKey });
+        const c = offsetCon(it.src, ne, it, cp.sd, cp.v); if (c) copyOffCons.push(c);
+      }
+      for (const { it, ne } of cornerJobs) {
+        const P = segEnts.get(it.prevSeg), Q = segEnts.get(it.nextSeg);
+        if (P && Q) {
+          copyAuxCons.push(
+            { id: uid('k'), type: 'coincident', refs: [{ e: P.ne.id, p: P.endKey }, { e: ne.id, p: 'a' }] },
+            { id: uid('k'), type: 'coincident', refs: [{ e: Q.ne.id, p: Q.startKey }, { e: ne.id, p: 'b' }] },
+            makeTanCon(P.ne, ne),
+            makeTanCon(ne, Q.ne),
+          );
+        }
+        if (it.src) copyOffCons.push({ id: uid('k'), type: 'offset', refs: [{ e: it.src.id }, { e: ne.id }], v: cp.v, sg: 1, corner: true });
+      }
+      if (copyOffCons.length > 1) { const og = uid('og'); for (const c of copyOffCons) c.og = og; }   // pro Kopie zusammen entstanden: später zusammen ändern
+      allCons.push(...copyOffCons, ...copyAuxCons);
     }
-    if (newCons.length > 1) { const og = uid('og'); for (const c of newCons) c.og = og; }   // zusammen entstanden: später zusammen ändern
-    S.cons.push(...newCons);
+    S.cons.push(...allCons);
     S.draft = null; hideEntry(); clearSel();
-    sanitize(newCons.map((c) => c.id));
+    sanitize(allCons.map((c) => c.id));
     UI.hint(HINTS.offset); render(); Panels.renderRight();
-    if (calc.items.some((x) => x.src.type === 'ellipse')) UI.toast('Der Versatz einer Ellipse ist keine Ellipse mehr – die Kopie ist eine Spline durch 48 Punkte genau im Abstand. Sie folgt der Ellipse nicht, wenn du diese später änderst.', { icon: 'info', ms: 5000 });
+    if (plan.skipped > 0) UI.toast(`${plan.copies.length} von ${plan.total} Versätzen erstellt – die übrigen waren zu eng.`, { icon: 'info', ms: 3500 });
+    if (plan.copies.some((cp) => cp.items.some((x) => x.src && x.src.type === 'ellipse'))) UI.toast('Der Versatz einer Ellipse ist keine Ellipse mehr – die Kopie ist eine Spline durch 48 Punkte genau im Abstand. Sie folgt der Ellipse nicht, wenn du diese später änderst.', { icon: 'info', ms: 5000 });
     return true;
   }
   // Abstand eingetippt (Zahl oder Formel): die Seite kommt von der Maus, ein Minus dreht sie um
@@ -2669,9 +2711,16 @@ const Sketch = (() => {
       if (src) {
         for (const p of entPts(src)) lineObj(p, acc, 3.4, { order: 26 });
         if (S.offUV) {
-          const sd = offsetSigned(off, S.offUV), calc = offsetCalc(off, sd);
-          if (calc.ok) { for (const it of calc.items) for (const p of entPts(it.ent)) lineObj(p, acc, 2.2, { dashed: true, order: 27 }); label(fmt(Math.abs(sd), 2) + ' mm', S.offUV); }
-          else if (Math.abs(sd) > 0.01) label(calc.why, S.offUV, 'dimlabel live bad');
+          const sd = offsetSigned(off, S.offUV), plan = offsetPlan(off, sd, Math.abs(sd));
+          if (plan.ok) {
+            for (const cp of plan.copies) for (const it of cp.items) for (const p of entPts(it.ent)) lineObj(p, acc, 2.2, { dashed: true, order: 27 });
+            const O = S.off || {};
+            const tags = [fmt(Math.abs(sd), 2) + ' mm'];
+            if ((O.count || 1) > 1) tags.push(Math.round(O.count) + '×');
+            if (O.both) tags.push('beidseitig');
+            if (O.corners === 'round') tags.push('rund');
+            label(tags.join(' · '), S.offUV);
+          } else if (Math.abs(sd) > 0.01) label(plan.why, S.offUV, 'dimlabel live bad');
         }
       }
     }
@@ -3111,6 +3160,16 @@ const Sketch = (() => {
         const fw = h('div', { class: 'fields' });
         fw.append(UI.numField({ id: 'wall-t', label: 'Wandstärke', value: S.wallT, unit: 'mm', expr: false, min: 0.1, onCommit: (v) => { if (v > 0) S.wallT = v; } }));
         w.append(fw);
+      }
+      if (S.tool === 'offset') {
+        const O = S.off;
+        const fo = h('div', { class: 'fields' });
+        fo.append(UI.numField({ id: 'off-n', label: 'Anzahl', value: O.count, unit: '', expr: false, min: 1, int: true, onCommit: (v) => { O.count = clamp(Math.round(v), 1, 20); render(); } }));
+        fo.append(UI.selectField({ id: 'off-corner', label: 'Ecken', value: O.corners, options: [['sharp', 'Spitz'], ['round', 'Rund']], onChange: (v) => { O.corners = v; const el = $('#off-corner'); if (el) el.blur(); render(); } }));
+        w.append(fo);
+        const bt = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'off-both', checked: !!O.both }), 'Beidseitig (innen und außen)');
+        bt.querySelector('input').onchange = (e) => { O.both = e.target.checked; e.target.blur(); render(); };
+        w.append(bt);
       }
       if (S.tool === 'tpl') {
         const T = S.tpl;
