@@ -1521,6 +1521,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] `.glb` beginnt mit `glTF`, Version 2, hat gültige `JSON`- und `BIN`-Chunks, einen Knoten/Mesh mit Namen je Körper sowie Studio-Look-Materialien (Metall, Rauheit, Klarlack, lineare Farbe).
 - [ ] Exportiertes `.obj`/`.mtl` und `.glb` von Hand in Blender oder einer 3D-Vorschau öffnen und Ausrichtung, Größe (mm bzw. m) und Oberflächen-Aussehen prüfen.
 
+## Messungen bleiben stehen (Auto [A-012])
+
+- [x] **Messung behalten**: Abstand zwischen zwei parallelen Flächen messen → Knopf „Messung behalten“ in `#measure-bar` legt die Messung unter „Messungen“ im Verlauf (`#measure-tree`) und als Schild (`.dimlabel.mpin`) im Bild ab.
+- [x] **Automatisch neu berechnen**: Quader erhöhen → gespeicherter Abstand aktualisiert sich von `15 mm` auf `30 mm` im Verlauf und im Bild.
+- [x] **Ein-/ausblenden, umbenennen, löschen & verloren**: Auge blendet Schild und 3D-Linien aus/ein; Umbennen im rechten Panel wirkt sofort; Löschen eines bezogenen Körpers zeigt „verloren“, Rückgängig stellt den Bezug wieder her; Löschen und Rückgängig sowie Hilfetext `measureKeep` funktionieren.
+- [ ] **Von Hand**: Nach Projekt-Speichern und Neuladen (auch mit Punkt–Punkt-, Winkel- und Durchmesser-Messungen) prüfen, ob alle Schilder sauber positioniert bleiben.
+
 ## Fehler melden
 
 ```

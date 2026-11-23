@@ -225,6 +225,7 @@ Fertig.
 - [x] Explosion auch für die Teile innerhalb einer Gruppe (Sitzung 53)
 - [x] Schnitt an einer beliebigen Fläche („Schnitt hier“, Sitzung 25)
 - [x] Messen, Material pro Teil, Push/Pull, „ähnliche auswählen“, Versionen (Sitzung 10)
+- [x] Messungen bleiben stehen (Auto [A-012], PF-05): Knopf „Messung behalten“ in der Messen-Leiste speichert Abstände, Winkel, Flächen und Durchmesser dauerhaft im Projekt (`doc.measures`, Liste „Messungen“ im Verlauf); bei Modelländerungen rechnet Tracery die Werte selbstständig nach, zeigt „verloren“ bei fehlenden Bezügen und erlaubt Ein-/Ausblenden, Umbenennen und Löschen mit Rückgängig
 - [ ] Versionen in der Cloud (mit Stufe 6 – Konten)
 
 ### Stufe 4 – Drohnen-Modul

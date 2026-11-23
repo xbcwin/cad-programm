@@ -179,7 +179,7 @@ const Viewer = (() => {
     camera = new THREE.PerspectiveCamera(32, 1, 0.5, 30000);
     camera.up.set(0, 0, 1);
     camera.position.set(170, -250, 190);
-    for (const k of ['ground', 'origin', 'datums', 'nodes', 'compare', 'ghosts', 'overlay', 'handles', 'sketch']) { groups[k] = new THREE.Group(); scene.add(groups[k]); }
+    for (const k of ['ground', 'origin', 'datums', 'nodes', 'compare', 'ghosts', 'overlay', 'measures', 'handles', 'sketch']) { groups[k] = new THREE.Group(); scene.add(groups[k]); }
     orthoCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 60000);
     lights.hemi = new THREE.HemisphereLight(0xffffff, 0x6f6252, 1.55); scene.add(lights.hemi);
     const key = new THREE.DirectionalLight(0xffffff, 2.1); key.position.set(0.55, -0.8, 1.25); scene.add(key); scene.add(key.target); lights.key = key;
@@ -1208,7 +1208,7 @@ const Viewer = (() => {
   // Bild in beliebiger Größe: ohne Raster, Achsen, Ebenen und Griffe; Hintergrund durchsichtig oder hell
   function renderImage(w, hgt, opts = {}) {
     const old = renderer.getSize(new THREE.Vector2()), oldPR = renderer.getPixelRatio();
-    const hide = [gridMinor, gridMajor, groups.origin, groups.datums, groups.handles, groups.overlay, groups.sketch].filter(Boolean), was = hide.map((o) => o.visible);
+    const hide = [gridMinor, gridMajor, groups.origin, groups.datums, groups.handles, groups.overlay, groups.measures, groups.sketch].filter(Boolean), was = hide.map((o) => o.visible);
     hide.forEach((o) => { o.visible = false; });
     const c = cam(), oldAspect = camera.aspect;
     renderer.setPixelRatio(1); renderer.setSize(w, hgt, false);
