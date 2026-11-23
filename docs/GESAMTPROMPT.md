@@ -191,6 +191,7 @@ Leitlinien:
 - Normteile: Bauteile `stdScrew` (size, head 'zyl'|'senk', length), `stdNut`, `stdWasher` (Kern: `NORM`-Tabelle + `SCREW` in `core.js`); LIB-Einträge mit `mat` setzen den Werkstoff beim Anlegen (`Model.newItem`). KI-Aktion `verrechnen` (ids, modus, ziel)
 - Längen: Leisten-Schild `#sel-val` (Kantenlänge aus `edges[i].l`, Summe bei mehreren, Ø bei Kreiskante und runder Fläche `faces[i].r`); `Measure.copyText`/`copyValue` kopieren den Wert; Mess-Schilder `.dimlabel.mlabel` sind anklickbar; Messen kennt `kind: 'round'` (CYLINDRE/SPHERE)
 - Messen: Kern `minDistance(scene, ids)` (Worker `distance`, BRepExtrema_DistShapeShape) → `Measure.minDistance`; Teil-Panel zeigt Volumen, Oberfläche, Hüllmaße
+- Dauerhafte Messungen (PF-05): `doc.measures` speichert Bezüge; `Measure.keep`/`relink`/`treeSection`/`renderPanel`, `#measure-keep` in `#measure-bar`, Liste `#measure-tree` im Verlauf, Schilder `.dimlabel.mpin`, `Viewer.groups.measures`, zeigt „verloren“ bei fehlenden Bezügen
 - Verknüpfte Kopien: `it.link` = Kennung des Originals; `Model.syncLinks(doc)` läuft in jedem `App.change` und übernimmt Art, Maße, Kanten, Rolle (`linkLost`, wenn das Original fehlt); `Actions.duplicateLinked`, `Actions.unlink`
 - Bezüge: `Model.dependencies(doc)` → Liste `{from, to, what, datum?}` auf oberster Ebene (Formschritt-Ziel, `link`, übernommene Skizzenkanten, Rohr-`bind`, Bezugsebenen an Flächen); Bereich `details#deps` im Teile-Panel; `Actions.remove` meldet abhängige Teile
 - Zeitleiste:

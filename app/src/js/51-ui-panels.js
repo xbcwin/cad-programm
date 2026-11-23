@@ -169,6 +169,8 @@ const Panels = (() => {
     if (fs) body.append(fs);
     if (!items.length) {
       body.append(h('div', { class: 'empty-tree', html: 'Hier erscheint alles, was du baust – <b>Schritt für Schritt</b>.<br><br>Fang mit einem <b>Körper</b> an oder beschreibe unten in der Zeile, was du bauen möchtest.' }));
+      const ds = Datums.treeSection(); if (ds) body.append(ds);
+      const ms = Measure.treeSection(); if (ms) body.append(ms);
       return;
     }
     const V = Model.vars(App.doc).v;
@@ -261,6 +263,7 @@ const Panels = (() => {
     rec(items, ul);
     body.append(ul);
     const ds = Datums.treeSection(); if (ds) body.append(ds);
+    const ms = Measure.treeSection(); if (ms) body.append(ms);
   }
   function moveInTree(srcId, dstId, mode) {
     if (!srcId || srcId === dstId) return;
@@ -455,6 +458,7 @@ const Panels = (() => {
     if (Sketch.active) { $('#right-title').textContent = 'Skizze'; Sketch.renderPanel(body); return; }
     const items = App.selectedItems();
     if (!items.length && Datums.selected && Datums.find(Datums.selected)) { $('#right-title').textContent = 'Bezugsebene'; Datums.renderPanel(body); return; }
+    if (!items.length && Measure.selected && Measure.find(Measure.selected)) { $('#right-title').textContent = 'Messung'; Measure.renderPanel(body); return; }
     if (!items.length) { $('#right-title').textContent = 'Projekt'; renderProject(body); return; }
     if (items.length > 1) { $('#right-title').textContent = 'Auswahl'; renderMulti(body, items); return; }
     $('#right-title').textContent = 'Eigenschaften';

@@ -5898,6 +5898,72 @@ def t_a010_obj_glb(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a012_messungen_bleiben(p):
+    p.empty()
+    p.ev("Actions.addPrimitive('box'); Actions.addPrimitive('box')"); warte_rechnen(p)
+    p.ev("App.change('x', d=>{ const a=d.items[0], b=d.items[1]; a.t.x=0; a.t.y=0; Object.assign(a.p,{w:30,d:20,h:10}); b.t.x=40; b.t.y=0; Object.assign(b.p,{w:20,d:20,h:25}); })"); warte_rechnen(p)
+    p.ev("App.clearSelection(); Viewer.setView('iso', false)"); p.wait(800)
+
+    p.pg.locator('#t-measure').click(); p.wait(300)
+    ok1 = p.pg.locator('#measure-bar').count() == 1 and p.pg.locator('#measure-keep').is_disabled()
+    top, top2 = world_screen(p, 3, 3, 10), world_screen(p, 42, 2, 25)
+    p.pg.mouse.click(*top); p.wait(400)
+    p.pg.mouse.click(*top2); p.wait(400)
+    r_cur = p.ev("return Measure.result") or ''
+    ok1 = ok1 and r_cur.startswith('Abstand 15 mm') and not p.pg.locator('#measure-keep').is_disabled()
+
+    p.pg.locator('#measure-keep').click(); p.wait(400)
+    p.pg.keyboard.press('Escape'); p.wait(300)
+    ok2 = (p.ev("return (App.doc.measures || []).length") == 1
+           and p.ev("return App.doc.measures[0].value") == 15
+           and p.pg.locator('#measure-tree .measure-row').count() == 1
+           and '15 mm' in p.pg.locator('#measure-tree .measure-row').first.text_content()
+           and p.pg.locator('.dimlabel.mpin').count() == 1
+           and '15 mm' in p.pg.locator('.dimlabel.mpin').first.text_content()
+           and p.ev("return Viewer.groups.measures.children.length") >= 1)
+
+    # Quader höher machen -> Messung aktualisiert sich automatisch auf 30 mm
+    p.ev("App.change('Höher', d=>{ d.items[1].p.h = 40; })"); warte_rechnen(p)
+    ok3 = (p.ev("return App.doc.measures[0].value") == 30
+           and not p.ev("return App.doc.measures[0].lost")
+           and '30 mm' in p.pg.locator('#measure-tree .measure-row').first.text_content()
+           and '30 mm' in p.pg.locator('.dimlabel.mpin').first.text_content())
+
+    # Ein- und ausblenden
+    p.pg.locator('#measure-tree .m-eye').first.click(); p.wait(400)
+    ok4 = (p.ev("return !!App.doc.measures[0].hidden")
+           and p.pg.locator('.dimlabel.mpin').count() == 0
+           and p.ev("return Viewer.groups.measures.children.length") == 0)
+    p.pg.locator('#measure-tree .m-eye').first.click(); p.wait(400)
+    ok4 = ok4 and (not p.ev("return App.doc.measures[0].hidden")
+                   and p.pg.locator('.dimlabel.mpin').count() == 1
+                   and p.ev("return Viewer.groups.measures.children.length") >= 1)
+
+    # Im Verlauf wählen & rechts umbenennen
+    p.pg.locator('#measure-tree .measure-row').first.click(); p.wait(300)
+    ok5 = p.pg.locator('#measure-name').count() == 1 and 'Abstand 30 mm' in p.pg.locator('#measure-val').text_content()
+    p.pg.fill('#measure-name', 'Stufenhöhe'); p.pg.locator('#measure-name').press('Enter'); p.wait(400)
+    ok5 = ok5 and p.ev("return App.doc.measures[0].name") == 'Stufenhöhe' and 'Stufenhöhe' in p.pg.locator('#measure-tree').text_content()
+
+    # Bezug löschen -> „verloren“; Rückgängig -> wieder 30 mm
+    p.ev("Actions.remove([App.doc.items[1].id])"); warte_rechnen(p)
+    ok6 = (p.ev("return !!App.doc.measures[0].lost")
+           and 'verloren' in p.pg.locator('#measure-tree .measure-row').first.text_content().lower()
+           and p.pg.locator('.dimlabel.mpin.lost').count() == 1)
+    p.ev("App.undo()"); warte_rechnen(p)
+    ok6 = ok6 and (not p.ev("return App.doc.measures[0].lost")
+                   and p.ev("return App.doc.measures[0].value") == 30
+                   and '30 mm' in p.pg.locator('.dimlabel.mpin').first.text_content())
+
+    # Löschen & Rückgängig + Hilfetext prüfen
+    p.pg.locator('#measure-tree .m-del').first.click(); p.wait(400)
+    ok7 = p.ev("return (App.doc.measures || []).length") == 0 and p.pg.locator('#measure-tree').count() == 0 and p.pg.locator('.dimlabel.mpin').count() == 0
+    p.ev("App.undo()"); warte_rechnen(p)
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    ok7 = ok7 and p.ev("return (App.doc.measures || []).length") == 1 and 'measureKeep' in hilfen and all(k in hilfen['measureKeep'] for k in ('tip', 'hilfe', 'tipp'))
+    return [ok1, ok2, ok3, ok4, ok5, ok6, ok7]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -6007,6 +6073,7 @@ TESTS = [
     ('[A-006] Versatz mehrfach, beidseitig und runde Ecken: 3× Rechteck / beidseitig / Ecken rund / Kette & Rückgängig', t_a006_versatz_mehrfach),
     ('[A-008] Bohrungs-Arten: Sackloch Ø 5 × 10 mit 118°-Spitze / Passbohrung H7 / Zentrierbohrung / Vorschau & Hilfe', t_a008_bohrungsarten),
     ('[A-010] OBJ und GLB speichern: ZIP mit .obj/.mtl/.glb / MTL-Farben / GLB-Kopf & Meshes / Studio-Material / Einzeln', t_a010_obj_glb),
+    ('[A-012] Messungen bleiben stehen: Abstand behalten / Quader höher / ein- und ausblenden / umbenennen / verloren & Rückgängig / löschen', t_a012_messungen_bleiben),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
