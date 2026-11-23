@@ -1558,6 +1558,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Trennen & Projektwechsel**: Über das Menü an `#btn-folder-status` („Ordner-Verbindung trennen“) sowie beim Start eines neuen Projekts wird die Verbindung sauber beendet.
 - [ ] **Von Hand**: In Chrome oder Edge einen echten Ordner wählen, Änderungen machen, 10 s warten und prüfen, ob die `.tracery.json`-Datei auf der Festplatte aktuell ist.
 
+## Ebene im Winkel und Achsen (Auto [A-017])
+
+- [x] **Ebene 30° an einer Quaderkante (BZ-02)**: Ebene liegt auf der gewählten Kante, bildet exakt 30° zur Bezugsfläche, wandert beim Ändern der Quaderhöhe mit, lässt sich rechts auf 60° ändern und direkt als Skizzenebene hochziehen.
+- [x] **Achse durch Mitte eines Zylinders → Kreismuster (BZ-06)**: `Datums.addAxisFromFace` erzeugt die Zylinderachse im Verlauf (`#axis-tree`); im Kreismuster lässt sie sich direkt wählen (`#op-axis`) und verschiebt das Muster mit, wenn der Zylinder wandert.
+- [x] **Achse durch 2 Punkte & senkrecht auf Fläche (BZ-06, BZ-07)**: Zwei-Punkte-Achse dient als Drehachse beim Drehen (Revolve, exaktes Volumen); Flächen-Normale an Punkt wandert beim Ändern der Körperhöhe mit.
+- [x] **Verwaltung & Hilfetexte**: Umbenennen, Ein-/Ausblenden, Anzeige „Bezug fehlt“ samt Rückgängig, Löschen, Befehle und Hilfetexte (`datumEdgeAngle`, `datumAxis`) geprüft.
+- [ ] **Von Hand**: Interaktives Wählen im 3D-Bild über Kontextleiste („Ebene im Winkel“ an einer Kante, „Achse“ an einem Zylinder) und beim Klick auf die Bezugsachse im Werkzeug „Achse im Bild wählen“ prüfen.
+
 ## Fehler melden
 
 ```

@@ -1053,6 +1053,16 @@ const HELP = {
   "tip": "Projekt in einen Ordner speichern und automatisch mitschreiben",
   "hilfe": "Wählt einen Ordner auf deinem Rechner (in Chrome und Edge). Tracery legt die Projektdatei dort ab und schreibt Änderungen automatisch mit – gebündelt alle 10 Sekunden. Oben in der Leiste siehst du, in welchen Ordner gespeichert wird.",
   "tipp": "Klick oben auf „gespeichert in …“, um sofort zu speichern, den Ordner zu wechseln oder die Verbindung zu trennen."
+ },
+ "datumEdgeAngle": {
+  "tip": "Bezugsebene durch eine gerade Kante im Winkel zu einer Fläche",
+  "hilfe": "Wählt eine gerade Körperkante und eine ebene Fläche als Winkel-Bezug. Die Ebene läuft durch die Kante und kippt um den eingestellten Winkel (z. B. 30°) zur Fläche. Ändert sich der Körper, wandert die Ebene mit.",
+  "tipp": "Ideal für schräge Bohrungen, Nuten oder Anschlüsse an einer Bauteilkante – den Winkel änderst du rechts jederzeit, auch mit „Richtung umkehren“."
+ },
+ "datumAxis": {
+  "tip": "Bezugsachse als Dreh- oder Musterachse anlegen",
+  "hilfe": "Legt eine eigene Achse im Projekt an: durch zwei Punkte (Ecken und Kantenmitten rasten ein), durch die Mitte einer runden Fläche (Zylinder, Kegel, Ring) oder eines Kreises, oder senkrecht auf eine ebene Fläche an einem Punkt. Sie wandert mit dem Teil mit und lässt sich direkt für Kreismuster und Drehen (Revolve) wählen.",
+  "tipp": "Im Verlauf unter „Bezugsachsen“ kannst du jede Achse benennen, ein- oder ausblenden und beim Kreismuster einfach aus der Liste „Drehachse“ auswählen."
  }
 };
 
