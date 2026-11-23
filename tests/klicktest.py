@@ -5320,8 +5320,10 @@ if __name__ == '__main__':
     with sync_playwright() as pw:
         b = pw.chromium.launch(args=ARGS)
         ab = int(os.environ.get('TRACERY_AB', '0'))   # nach einem Abbruch: die ersten N Durchläufe überspringen
+        teil = os.environ.get('TRACERY_TEIL', '')     # „i/n“: nur jeden n-ten Test ab Nummer i (Volltest in Teilen, gleichzeitig)
+        ti, tn = (int(x) for x in teil.split('/')) if teil else (0, 1)
         for nr, (name, fn) in enumerate(TESTS):
-            if nr < ab:
+            if nr < ab or nr % tn != ti:
                 continue
             if only and not any(o.lower() in name.lower() or o.lower() in fn.__name__.lower() for o in only):
                 continue
