@@ -147,9 +147,25 @@ const Measure = (() => {
     Viewer.canvas.addEventListener('pointerup', (e) => { if (on && d0 && Math.hypot(e.clientX - d0.x, e.clientY - d0.y) < 5) onDown(e); d0 = null; });
     Viewer.on('camera', place);
     // Lage unter der Maus in der Statusleiste (BE-17): im Modell X/Y/Z auf dem Körper oder dem Boden, in der Skizze X/Y der Skizze
-    let pend = null, lastT = 0;
-    Viewer.canvas.addEventListener('pointermove', (e) => { if (pend || e.buttons) return; const now = performance.now(); if (now - lastT < 50) return; lastT = now; pend = requestAnimationFrame(() => { pend = null; showCoords(e.clientX, e.clientY); }); });
-    Viewer.canvas.addEventListener('pointerleave', () => { const el = $('#coords'); if (el) el.textContent = ''; });
+    let timer = null, lastT = 0, lastPos = null;
+    const flushCoords = () => {
+      timer = null;
+      if (!lastPos) return;
+      const p = lastPos; lastPos = null;
+      lastT = performance.now();
+      showCoords(p[0], p[1]);
+    };
+    Viewer.canvas.addEventListener('pointermove', (e) => {
+      if (e.buttons) { lastPos = null; return; }
+      lastPos = [e.clientX, e.clientY];
+      if (timer) return;
+      timer = setTimeout(flushCoords, Math.max(0, 50 - (performance.now() - lastT)));
+    });
+    Viewer.canvas.addEventListener('pointerleave', () => {
+      lastPos = null;
+      if (timer) { clearTimeout(timer); timer = null; }
+      const el = $('#coords'); if (el) el.textContent = '';
+    });
   }
   let coordsNow = null;
   function showCoords(cx, cy) {

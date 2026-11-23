@@ -202,7 +202,7 @@ const Viewer = (() => {
     controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
     controls.target.set(0, 0, 10);
     controls.addEventListener('change', () => { needsRender = true; listeners.emit('camera'); });
-    controls.addEventListener('start', () => pushCam(true));
+    controls.addEventListener('start', () => { pushCam(true); camAnim = null; });
     buildGrid(autoStep()); buildOrigin();
     applyLook();
     const ro = new ResizeObserver(resize); ro.observe(el);
@@ -947,9 +947,16 @@ const Viewer = (() => {
   }
   function useButtons(ctx = mouseCtx) { mouseCtx = ctx; if (controls) controls.mouseButtons = buttonsFor(mouseStyle, ctx); }
   function setMouseStyle(st) { mouseStyle = st || 'tracery'; useButtons(); }
+  function stopDamping() {
+    if (!controls) return;
+    if (controls._sphericalDelta) controls._sphericalDelta.set(0, 0, 0);
+    if (controls._panOffset) controls._panOffset.set(0, 0, 0);
+    if ('_scale' in controls) controls._scale = 1;
+  }
   function moveCamera(pos, target, up, animate = true) {
     pushCam(false);
-    if (!animate) { camera.position.copy(pos); controls.target.copy(target); if (up) camera.up.copy(up); controls.update(); needsRender = true; listeners.emit('camera'); return; }
+    stopDamping();
+    if (!animate) { camAnim = null; camera.position.copy(pos); controls.target.copy(target); if (up) camera.up.copy(up); controls.update(); needsRender = true; listeners.emit('camera'); return; }
     camAnim = { t0: performance.now(), dur: 420, p0: camera.position.clone(), p1: pos.clone(), q0: controls.target.clone(), q1: target.clone(), up0: up ? camera.up.clone() : null, up1: up ? up.clone() : null };
   }
   const VIEWDIRS = { front: [0, -1, 0], back: [0, 1, 0], left: [-1, 0, 0], right: [1, 0, 0], top: [0, -0.0001, 1], bottom: [0, -0.0001, -1], iso: [0.62, -0.9, 0.7] };

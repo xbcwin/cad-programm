@@ -522,6 +522,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Taste A ohne aktiven Linienzug**: Schaltet weiterhin normal auf das Bogen-Werkzeug um.
 - [ ] **Von Hand**: Freie geschwungene Umrisse (S-Kurven aus zwei Bögen hintereinander, geschlossene Langloch-Umrisse, Wechsel mit Zahleneingabe) zeichnen und prüfen, ob Vorschau, Tangenten-Fang am Bogenende und die Hinweiszeile angenehm wirken.
 
+## Volltest-Reparatur (Auto [F-11232113])
+
+- [x] **Kontextleiste sofort aktuell**: Beim Wechsel der Auswahl von zwei Gruppenteilen auf Gruppe + Kind verschwindet der Gelenk-Knopf sofort und es startet keine unnötige Abstandsmessung gegen sich selbst.
+- [x] **Skizzen-Auswahl synchron**: `S.sel` und `S.sels` bleiben beim einzelnen und mehrfachen Setzen und Leeren konsistent.
+- [x] **Vorige Ansicht ohne Nachdrehen**: `Umschalt Z` nach schnellem Maus-Drehen bleibt stabil auf dem vorherigen Blick, ohne durch OrbitControls-Restdämpfung abzudriften.
+- [x] **Maus-Koordinaten am Zielpunkt**: Schnelle Mausbewegungen über dem Modell zeigen am Ende exakt die Koordinaten unter dem Mauszeiger.
+- [ ] **Von Hand**: Bei schnellem Drehen mit sofortigem `Umschalt Z` und beim schnellen Überfahren kleiner Flächen prüfen, ob Ansichtssprung und Koordinatenanzeige ruhig wirken.
+
 ## Versatz mehrfach und beidseitig (Auto [A-006])
 
 - [x] **Anzahl mehrfach**: Rechteck 20 × 10 mm mit Anzahl 3 und Abstand 2 mm nach außen → drei neue Rechtecke (24 × 14, 28 × 18, 32 × 22 mm) mit passenden Versatz-Regeln, Rückgängig nimmt alle zusammen zurück.

@@ -5413,6 +5413,53 @@ def t_a005_linie_bogen_wechsel(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_f11232113(p):
+    # 1. S.sel und S.sels bleiben in der Skizze immer synchron
+    sketch_xy(p)
+    SS(p, "S.ents.push({id:'L1',type:'line',a:[0,0],b:[20,0]},{id:'L2',type:'line',a:[0,10],b:[20,10]})")
+    s1 = SS(p, "S.sels=['L2']; S.sel='L1'; return [S.sel, S.sels.slice()]")
+    s2 = SS(p, "S.sels=['L1','L2']; return [S.sel, S.sels.slice()]")
+    s3 = SS(p, "S.sel=null; return [S.sel, S.sels.slice()]")
+    ok2 = s1 == ['L1', ['L1']] and s2 == [None, ['L1', 'L2']] and s3 == [None, []]
+    p.ev("Sketch.cancel(true)"); p.wait(200)
+
+    # 2. Kontextleiste aktualisiert sofort und rechnet keinen Abstand zwischen Gruppe und eigenem Kind
+    p.ev("""App.change('x', d=>{
+      const g=Model.newItem('group',{}); g.name='Baugruppe';
+      const a=Model.newItem('box',{w:20,d:10,h:4}); a.name='Arm A';
+      const b=Model.newItem('box',{w:20,d:10,h:4}); b.t.x=25; b.name='Arm B';
+      g.children.push(a,b); d.items=[g];
+    })"""); warte_rechnen(p, 20)
+    ids = p.ev("const g=App.doc.items[0]; return [g.id, g.children[0].id, g.children[1].id]")
+    p.ev("App.select(arg)", [ids[1], ids[2]])
+    c1 = p.pg.locator('.ctxbar button[aria-label="Gelenk"]').count()
+    p.ev("App.select(arg)", [ids[0], ids[1]])
+    c2 = p.pg.locator('.ctxbar button[aria-label="Gelenk"]').count()
+    p.wait(200)
+    ok1 = c1 == 1 and c2 == 0 and p.pg.locator('#min-dist').count() == 0
+
+    # 3. Vorige Ansicht stoppt OrbitControls-Dämpfung nach Maus-Drehen
+    p.ev("App.clearSelection(); App.change('x', d=>{ d.items=[Model.newItem('box',{w:20,d:20,h:20},{name:'Würfel'})]; })"); warte_rechnen(p)
+    cam = "const c=Viewer.saveCamera(); const d=c.p.clone().sub(c.t).normalize(); return [d.x,d.y,d.z].map(v=>Math.round(v*100)/100)"
+    p.ev("Viewer.setView('front', false)"); p.wait(300)
+    p.pg.locator('canvas').first.focus()
+    cx, cy = p.canvas_center()
+    p.pg.mouse.move(cx + 250, cy + 200); p.pg.mouse.down(); p.pg.mouse.move(cx + 380, cy + 120, steps=10); p.pg.mouse.up(); p.wait(300)
+    p.pg.keyboard.press('Shift+Z'); p.wait(800); d1 = p.ev(cam)
+    p.wait(500); d2 = p.ev(cam)
+    ok3 = d1 == [0, -1, 0] and d2 == [0, -1, 0]
+
+    # 4. Lage unter der Maus übernimmt den letzten Punkt einer schnellen Bewegung
+    p.ev("App.clearSelection(); App.change('x', d=>{ d.items=[Model.newItem('box',{w:40,d:40,h:10},{name:'Platte'})]; })"); warte_rechnen(p)
+    p.ev("Viewer.setView('iso', false)"); p.wait(600)
+    x, y = world_screen(p, 5, -5, 10)
+    p.pg.mouse.move(x - 30, y - 20); p.pg.mouse.move(x, y, steps=8); p.wait(200)
+    c = p.ev("return Measure.coords")
+    txt = p.pg.locator('#coords').inner_text()
+    ok4 = bool(c and abs(c['x'] - 5) < 0.3 and abs(c['y'] + 5) < 0.3 and abs(c['z'] - 10) < 1e-3 and 'Z 10' in txt)
+    return [ok1, ok2, ok3, ok4]
+
+
 def t_a021_profi_kuerzel(p):
     # 1. Erster Start (leerer Speicher) zeigt die zwei Stufen-Karten „Einfach“ und „Profi“
     wel = p.pg.locator('#level-welcome')
@@ -5795,6 +5842,7 @@ TESTS = [
     ('[A-003] Skizzen-Prüfer: Lücke 0,01 mm und doppelte Linie / hervorheben / Alles reparieren / Rückgängig & Körper / offenes Ende', t_a003_skizzen_pruefer),
     ('[A-004] Rahmen-Auswahl in der Skizze: Fenster links→rechts / Umschalt+Kreuz-Rahmen / H übernimmt in patSel / Entf löscht', t_a004_rahmen_auswahl),
     ('[A-005] Linie und Bogen im Wechsel: Hinweistext / Linie-A-Bogen-A-Linie / Tangential & Deckungsgleich / geschlossene Bahn / Taste A ohne Entwurf', t_a005_linie_bogen_wechsel),
+    ('[F-11232113] Volltest-Reparatur: Kontextleiste / Skizzen-Auswahl / Vorige Ansicht / Maus-Koordinaten', t_f11232113),
     ('[A-021] Profi-Stufe und eigene Tastenkürzel: erster Start / Profi-Schild / Kürzel ändern / doppeltes Kürzel / Zurücksetzen', t_a021_profi_kuerzel),
     ('[A-006] Versatz mehrfach, beidseitig und runde Ecken: 3× Rechteck / beidseitig / Ecken rund / Kette & Rückgängig', t_a006_versatz_mehrfach),
     ('[A-008] Bohrungs-Arten: Sackloch Ø 5 × 10 mit 118°-Spitze / Passbohrung H7 / Zentrierbohrung / Vorschau & Hilfe', t_a008_bohrungsarten),

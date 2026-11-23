@@ -539,11 +539,12 @@ const Panels = (() => {
     const d = h('button', { type: 'button', class: 'btn' }); d.innerHTML = icon('copy') + 'Duplizieren'; d.onclick = () => Actions.duplicate();
     const x = h('button', { type: 'button', class: 'btn danger' }); x.innerHTML = icon('trash') + 'Löschen'; x.onclick = () => Actions.remove();
     r1.append(g, d, x); w.append(r1);
-    // zwei Teile: kleinster Abstand
-    if (found.length === 2) {
+    // zwei Teile: kleinster Abstand (nur verschiedene Hauptteile, nicht ein Teil mit seiner eigenen Gruppe)
+    const tops = found.length === 2 ? found.map((f) => (Model.topOf(App.doc, f.item.id) || f.item).id) : null;
+    if (tops && tops[0] !== tops[1]) {
       const ds = h('div', { class: 'section', id: 'min-dist', 'data-help': 'minDistance' }, h('div', { class: 'section-h' }, 'Kleinster Abstand'));
       const val = h('b', { class: 'mono', id: 'min-dist-val' }, '…'); ds.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, `${Model.label(found[0].item)} ↔ ${Model.label(found[1].item)}`), val));
-      Measure.minDistance(found.map((f) => (Model.topOf(App.doc, f.item.id) || f.item).id)).then((r) => { val.textContent = !r ? '–' : r.d < 1e-6 ? 'berühren sich' : fmt(r.d, 3) + ' mm'; });
+      Measure.minDistance(tops).then((r) => { val.textContent = !r ? '–' : r.d < 1e-6 ? 'berühren sich' : fmt(r.d, 3) + ' mm'; });
       w.append(ds);
     }
     const al = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Ausrichten'));
@@ -1174,7 +1175,7 @@ const Panels = (() => {
     Log.on('change', debounce(() => { if (leftTab === 'log') renderLeft(); }, 80));
     renderTools(); initViewCube();
     const rerender = debounce(() => { renderLeft(); renderRight(); renderCtx(); UI.renderHint(); }, 16);
-    App.on('doc', rerender); App.on('selection', rerender); App.on('results', rerender); DroneCheck.on('checked', () => { if (!App.sel.length) rerender(); }); Weak.on('analyzed', () => { if (!App.sel.length) rerender(); }); App.on('mode', () => { renderTools(); rerender(); });
+    App.on('doc', rerender); App.on('selection', () => { renderCtx(); rerender(); }); App.on('results', rerender); DroneCheck.on('checked', () => { if (!App.sel.length) rerender(); }); Weak.on('analyzed', () => { if (!App.sel.length) rerender(); }); App.on('mode', () => { renderTools(); rerender(); });
     Viewer.on('camera', placeCtx);
     ViewPrefs.on('change', debounce(() => { if (leftTab === 'tree') renderLeft(); }, 30));   // Erste Schritte ein-/ausblenden
   }
