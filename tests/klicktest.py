@@ -5413,6 +5413,70 @@ def t_a005_linie_bogen_wechsel(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a021_profi_kuerzel(p):
+    # 1. Erster Start (leerer Speicher) zeigt die zwei Stufen-Karten „Einfach“ und „Profi“
+    wel = p.pg.locator('#level-welcome')
+    wel_txt = (wel.text_content() or '') if wel.count() else ''
+    ok1 = (wel.count() == 1 and wel.is_visible()
+           and p.pg.locator('#start-simple').count() == 1
+           and p.pg.locator('#start-pro').count() == 1
+           and 'wenige, große Knöpfe, alles erklärt' in wel_txt
+           and 'alle Werkzeuge, Tastenkürzel, Maus wie in deinem CAD' in wel_txt)
+
+    # 2. „Profi“ wählen → ViewPrefs.level === 'pro' und Schild zeigt „Profi“; Wechsel über Schild & Profi-Schutz in Einstellungen
+    p.pg.locator('#start-pro').click(); p.wait(300)
+    ok2a = (p.ev("return ViewPrefs.level === 'pro' && ViewPrefs.firstStart === false")
+            and p.pg.locator('#start-pro').get_attribute('aria-pressed') == 'true'
+            and p.pg.locator('#btn-level').text_content() == 'Profi'
+            and bool(p.ev("return localStorage.getItem('masswerk.view')")))
+    p.empty()
+    ok2b = p.pg.locator('#btn-level').text_content() == 'Profi'
+    # Klick auf das Schild wechselt zu Einfach; dort ist „Tastenkürzel“ in den Einstellungen versteckt
+    p.pg.locator('#btn-level').click(); p.wait(400)
+    ok2c = p.pg.locator('#btn-level').text_content() == 'Einfach' and p.ev("return ViewPrefs.level === 'simple'")
+    p.pg.click('#btn-menu'); p.wait(250); p.pg.get_by_text('Einstellungen', exact=True).click(); p.wait(350)
+    ok2d = p.pg.locator('#set-level-simple').count() == 1 and p.pg.locator('#set-level-pro').count() == 1 and not sichtbar(p, '#set-tab-keys')
+    # In den Einstellungen auf „Profi“ wechseln → Schild zeigt „Profi“ und Tab „Tastenkürzel“ erscheint
+    p.pg.locator('#set-level-pro').click(); p.wait(350)
+    ok2 = ok2a and ok2b and ok2c and ok2d and p.pg.locator('#btn-level').text_content() == 'Profi' and sichtbar(p, '#set-tab-keys')
+
+    # 3. Kürzel für „Orthografisch / Perspektive“ (O → J) ändern → neue Taste löst aus, alte nicht mehr, gespeichert in tracery-kuerzel
+    p.pg.locator('#set-tab-keys').click(); p.wait(300)
+    rows_n = p.pg.locator('.kbd-row').count()
+    p.pg.locator('.kbd-btn[data-cmd="ortho"]').click(); p.wait(150)
+    p.pg.keyboard.press('j'); p.wait(250)
+    stored = p.ev("return JSON.parse(localStorage.getItem('tracery-kuerzel') || '{}')")
+    btn_txt = p.pg.locator('.kbd-btn[data-cmd="ortho"]').text_content()
+    p.pg.keyboard.press('Escape'); p.wait(300)
+    o0 = p.ev("return Viewer.ortho")
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('o'); p.wait(300)
+    o_old = p.ev("return Viewer.ortho")
+    p.pg.keyboard.press('j'); p.wait(300)
+    o_new1 = p.ev("return Viewer.ortho")
+    p.pg.keyboard.press('j'); p.wait(300)
+    o_new2 = p.ev("return Viewer.ortho")
+    ok3 = (rows_n >= 25 and btn_txt == 'J' and stored.get('ortho') == 'j'
+           and not o0 and not o_old and o_new1 and not o_new2)
+
+    # 4. Doppeltes Kürzel wird gemeldet und nicht überschrieben
+    p.pg.click('#btn-menu'); p.wait(250); p.pg.get_by_text('Einstellungen', exact=True).click(); p.wait(300)
+    p.pg.locator('#set-tab-keys').click(); p.wait(250)
+    p.pg.locator('.kbd-btn[data-cmd="gridtoggle"]').click(); p.wait(150)
+    p.pg.keyboard.press('j'); p.wait(300)
+    msg_vis = sichtbar(p, '#kbd-msg')
+    msg_txt = (p.pg.locator('#kbd-msg').text_content() or '')
+    grid_txt = p.pg.locator('.kbd-btn[data-cmd="gridtoggle"]').text_content()
+    ok4 = msg_vis and 'belegt' in msg_txt and 'Orthografisch' in msg_txt and grid_txt == 'G'
+
+    # 5. Zurücksetzen stellt Standard wieder her
+    p.pg.locator('#kbd-reset').click(); p.wait(250)
+    reset_ok = p.pg.locator('.kbd-btn[data-cmd="ortho"]').text_content() == 'O' and p.ev("return localStorage.getItem('tracery-kuerzel')") is None
+    p.pg.keyboard.press('Escape'); p.wait(250)
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('o'); p.wait(300)
+    ok5 = reset_ok and p.ev("return Viewer.ortho")
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -5516,6 +5580,7 @@ TESTS = [
     ('[A-003] Skizzen-Prüfer: Lücke 0,01 mm und doppelte Linie / hervorheben / Alles reparieren / Rückgängig & Körper / offenes Ende', t_a003_skizzen_pruefer),
     ('[A-004] Rahmen-Auswahl in der Skizze: Fenster links→rechts / Umschalt+Kreuz-Rahmen / H übernimmt in patSel / Entf löscht', t_a004_rahmen_auswahl),
     ('[A-005] Linie und Bogen im Wechsel: Hinweistext / Linie-A-Bogen-A-Linie / Tangential & Deckungsgleich / geschlossene Bahn / Taste A ohne Entwurf', t_a005_linie_bogen_wechsel),
+    ('[A-021] Profi-Stufe und eigene Tastenkürzel: erster Start / Profi-Schild / Kürzel ändern / doppeltes Kürzel / Zurücksetzen', t_a021_profi_kuerzel),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

@@ -316,6 +316,7 @@ Fertig.
 - [x] Drohnen-Bereich für Nutzer unsichtbar gemacht: Startseite allgemein („CAD im Browser – kostenlos, ohne Konto“), kein Drohnen-Abschnitt, keine Drohnen-Knöpfe/-Menüeinträge/-Suchtreffer (Frame-Assistent, Drohnen-Check, Fahrtwind, Kaufteile, Verkleidungen …), allgemeine Hilfetexte und Schritt-Erklärungen; Code bleibt für alte Projekte erhalten (Auto [A-001], Abschnitt 4 Punkt 1)
 - [x] KI-Kollege allgemein: Systemtext, Beispiele und Vorschläge ohne Drohnen-/FPV-Bezug (Gehäuse, Halterungen, Ersatzteile, Schilder, Zahnräder, Normteile); Aktion „drohne“ bleibt technisch erhalten, wird aber nicht mehr angeboten (Auto [A-002], Abschnitt 4 Punkt 1)
 - [x] Einfache Oberfläche mit größeren Knöpfen: Oberleiste, Kontextleiste, Verlauf, Knöpfe und Kacheln größer, Knöpfe oben mindestens 44 px hoch (Sitzung 50)
+- [x] Profi-Stufe wählen und eigene Tastenkürzel: Zwei-Karten-Wahl („Einfach“ / „Profi“) beim ersten Start und in den Einstellungen, Schild oben in der Leiste, anpassbare Tastenkürzel in „Profi“ unter `tracery-kuerzel` mit Konfliktmeldung und Zurücksetzen (Auto [A-021], BE-01)
 
 ### Stufe 6 – Konten und Zusammenarbeit (Idee, nach dem Drohnen-Modul)
 - [ ] A: Konto mit Name und Passwort, Projekte in der Cloud

@@ -1,7 +1,158 @@
 // ================= Befehle, Eingabezeile, Tastatur =================
 const Commands = (() => {
   const C = [];
+  const KBD_KEY = 'tracery-kuerzel';
+  let customKeys = {};
   const add = (id, label, icon, keys, run, opts = {}) => C.push({ id, label, icon, keys: normTxt(label + ' ' + keys), run, ...opts });
+
+  // Zentrale Tastenkürzel-Tabelle (Reihenfolge je Bereich bestimmt die Anzeige in Einstellungen → Tastenkürzel)
+  const SHORTCUTS = [
+    // Ansicht
+    { id: 'fit', group: 'Ansicht', label: 'Auswahl oder alles zeigen', def: 'f', run: () => Viewer.fit(App.sel.length ? App.sel.map((id) => (Model.topOf(App.doc, id) || {}).id).filter(Boolean) : null) },
+    { id: 'viewBack', group: 'Ansicht', label: 'Vorige Ansicht', def: 'shift+z', run: () => { if (!Viewer.viewBack()) UI.toast('Keine vorige Ansicht mehr.', { icon: 'info', ms: 1800 }); } },
+    { id: 'present', group: 'Ansicht', label: 'Vorführen (Vollbild)', def: 'p', run: () => Views.present(!Views.presenting) },
+    { id: 'view-front', group: 'Ansicht', label: 'Ansicht Vorne', def: '1', run: () => Viewer.setView('front') },
+    { id: 'view-right', group: 'Ansicht', label: 'Ansicht Rechts', def: '3', run: () => Viewer.setView('right') },
+    { id: 'view-top', group: 'Ansicht', label: 'Ansicht Oben', def: '7', run: () => Viewer.setView('top') },
+    { id: 'view-iso', group: 'Ansicht', label: 'Ansicht Schräg', def: '0', run: () => Viewer.setView('iso') },
+    { id: 'ortho', group: 'Ansicht', label: 'Orthografisch / Perspektive', def: 'o', run: () => ViewPrefs.toggle('ortho') },
+    { id: 'gridtoggle', group: 'Ansicht', label: 'Raster ein / aus', def: 'g', run: () => ViewPrefs.toggle('gridOn') },
+    { id: 'section', group: 'Ansicht', label: 'Schnitt ein / aus', def: 'c', run: () => Views.section() },
+    { id: 'xray', group: 'Ansicht', label: 'Röntgen ein / aus', def: 'x', run: () => Views.xray() },
+    { id: 'explode', group: 'Ansicht', label: 'Explosion ein / aus', def: 'u', run: () => Views.explode() },
+    { id: 'isolate', group: 'Ansicht', label: 'Gewähltes Teil isolieren / alle zeigen', def: 'i', run: () => { const top = App.sel.length ? Model.topOf(App.doc, App.sel[0]) : null; if (top) Comp.toggleIso(top.id); else if (App.iso) App.setIso(null); } },
+    // Modell
+    { id: 'repeat', group: 'Modell', label: 'Letzten Befehl wiederholen', def: 'space', run: () => repeat() },
+    { id: 'hideSel', group: 'Modell', label: 'Ausblenden / Alles einblenden', def: 'shift+h', run: () => { if (App.sel.length) Actions.hideSelected(); else Actions.showAll(); } },
+    { id: 'invertSel', group: 'Modell', label: 'Auswahl umkehren', def: 'ctrl+shift+i', run: () => Actions.invertSelection() },
+    { id: 'dupLinked', group: 'Modell', label: 'Verknüpft duplizieren', def: 'ctrl+shift+d', run: () => Actions.duplicateLinked() },
+    { id: 'editItem', group: 'Modell', label: 'Skizze bzw. Bauteil bearbeiten', def: 'e', run: () => { if (App.sel.length !== 1) return false; const f = Model.find(App.doc, App.sel[0]); if (!f) return false; if ((f.item.kind === 'extrude' || f.item.kind === 'revolve' || f.item.kind === 'sweep') && f.item.p.sketch) Sketch.editItem(f.item.id); else if (f.item.kind === 'group' && App.doc.items.includes(f.item)) Comp.edit(f.item.id); } },
+    { id: 'delete', group: 'Modell', label: 'Auswahl löschen', def: 'delete', run: () => { if (App.sel.length) Actions.remove(); else return false; } },
+    { id: 'hole', group: 'Modell', label: 'Zwischen Körper und Loch wechseln', def: 'h', run: () => { if (App.sel.length) Actions.toggleRole(); else return false; } },
+    { id: 'similar', group: 'Modell', label: 'Ähnliche auswählen', def: 'a', run: () => { if (App.sel.length || App.edges.length) Select.similar(); else return false; } },
+    { id: 'rot', group: 'Modell', label: 'Um 90° drehen', def: 'r', run: () => { if (App.sel.length) Actions.rotate90(null, 'z'); else return false; } },
+    { id: 'dup', group: 'Modell', label: 'Duplizieren', def: 'ctrl+d', run: () => Actions.duplicate() },
+    { id: 'group', group: 'Modell', label: 'Gruppieren', def: 'ctrl+g', run: () => Actions.group() },
+    { id: 'ungroup', group: 'Modell', label: 'Gruppe lösen', def: 'ctrl+shift+g', run: () => Actions.ungroup() },
+    { id: 'selectAll', group: 'Modell', label: 'Alles auswählen', def: 'ctrl+a', run: () => App.select(App.doc.items.filter((x) => !x.hidden && !App.mergedInto(x.id)).map((x) => x.id)) },
+    // Werkzeuge
+    { id: 'sketch', group: 'Werkzeuge', label: 'Skizze zeichnen', def: 's', run: () => Sketch.chooseAndStart() },
+    { id: 'measure', group: 'Werkzeuge', label: 'Messen', def: 'm', run: () => Measure.toggle() },
+    { id: 'notes', group: 'Werkzeuge', label: 'Notizstift', def: 'n', run: () => Notes.toggle() },
+    { id: 'bodies', group: 'Werkzeuge', label: 'Körper-Menü', def: 'k', run: () => Panels.toggleFlyout('bodies', $('#t-body')) },
+    { id: 'parts', group: 'Werkzeuge', label: 'Bauteile-Menü', def: 'b', run: () => Panels.toggleFlyout('parts', $('#t-parts')) },
+    { id: 'cmdFocus', group: 'Werkzeuge', label: 'Eingabezeile öffnen', def: 'ctrl+k', global: true, run: () => $('#cmd-input').focus() },
+    // Dateien und Verlauf
+    { id: 'undo', group: 'Dateien und Verlauf', label: 'Rückgängig', def: 'ctrl+z', global: true, run: () => App.undo() },
+    { id: 'redo', group: 'Dateien und Verlauf', label: 'Wiederholen', def: 'ctrl+y', global: true, run: () => App.redo() },
+    { id: 'save', group: 'Dateien und Verlauf', label: 'Projekt speichern', def: 'ctrl+s', global: true, run: () => Start.saveFile() },
+    { id: 'export', group: 'Dateien und Verlauf', label: 'Exportieren (STEP und mehr)', def: 'ctrl+e', global: true, run: () => Print.exportDialog() },
+  ];
+  const SHORTCUT_MAP = Object.fromEntries(SHORTCUTS.map((s) => [s.id, s]));
+  const CMD_KBD_MAP = {
+    sketch: 'sketch', measure: 'measure', notes: 'notes', dupLinked: 'dupLinked',
+    hideSel: 'hideSel', showAll: 'hideSel', present: 'present', viewBack: 'viewBack',
+    invertSel: 'invertSel', repeat: 'repeat', export: 'export', ortho: 'ortho',
+    gridtoggle: 'gridtoggle', section: 'section', xray: 'xray', explode: 'explode',
+    isolate: 'isolate', undo: 'undo', redo: 'redo', delete: 'delete', dup: 'dup',
+    group: 'group', ungroup: 'ungroup', hole: 'hole', rot: 'rot', fit: 'fit', save: 'save',
+  };
+
+  function loadShortcuts() {
+    customKeys = {};
+    try {
+      const raw = storageGet(KBD_KEY);
+      if (!raw) return;
+      const obj = JSON.parse(raw);
+      if (!obj || typeof obj !== 'object') return;
+      for (const s of SHORTCUTS) {
+        const val = obj[s.id];
+        if (typeof val === 'string' && val.trim() && val.trim().toLowerCase() !== s.def) {
+          customKeys[s.id] = val.trim().toLowerCase();
+        }
+      }
+    } catch (_) { customKeys = {}; }
+  }
+  function saveShortcuts() {
+    if (Object.keys(customKeys).length) storageSet(KBD_KEY, JSON.stringify(customKeys));
+    else storageDel(KBD_KEY);
+  }
+  function getCombo(id) {
+    const s = SHORTCUT_MAP[id];
+    return s ? (customKeys[id] || s.def) : '';
+  }
+  function formatCombo(combo, useMac = false) {
+    if (!combo) return '';
+    const mac = useMac && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+    return combo.split('+').map((part) => {
+      if (part === 'ctrl') return mac ? '⌘' : 'Strg';
+      if (part === 'alt') return 'Alt';
+      if (part === 'shift') return 'Umschalt';
+      if (part === 'space') return 'Leertaste';
+      if (part === 'delete') return 'Entf';
+      return part.toUpperCase();
+    }).join(' ');
+  }
+  function keyLabel(id, useMac = false) { return formatCombo(getCombo(id), useMac); }
+  function eventToCombo(e) {
+    const k0 = e.key || '';
+    if (['Control', 'Shift', 'Alt', 'Meta', 'CapsLock', 'Dead', 'Unidentified', 'Escape', 'Enter', 'Tab', 'Backspace', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', 'Insert'].includes(k0)) return null;
+    let k = null;
+    if (k0 === ' ') k = 'space';
+    else if (k0 === 'Delete') k = 'delete';
+    else if (/^F([1-9]|1[0-2])$/i.test(k0)) {
+      k = k0.toLowerCase();
+      if (k === 'f1' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) return null;
+    } else if (e.altKey && e.code && /^Key([A-Z])$/.test(e.code)) k = e.code.slice(3).toLowerCase();
+    else if (e.altKey && e.code && /^Digit([0-9])$/.test(e.code)) k = e.code.slice(5);
+    else if (k0.length === 1) k = k0.toLowerCase();
+    if (!k) return null;
+    if ((k === '?' || k === '/') && !e.ctrlKey && !e.metaKey && !e.altKey) return null;
+    const p = [];
+    if (e.ctrlKey || e.metaKey) p.push('ctrl');
+    if (e.altKey) p.push('alt');
+    if (e.shiftKey && (/^[a-z0-9]$/.test(k) || k === 'space' || k === 'delete' || /^f\d+$/.test(k))) p.push('shift');
+    p.push(k);
+    return p.join('+');
+  }
+  function syncCmdKbds() {
+    for (const c of C) {
+      const sid = CMD_KBD_MAP[c.id];
+      if (sid) c.kbd = keyLabel(sid);
+    }
+    const domMap = {
+      '#btn-undo': 'undo', '#btn-redo': 'redo', '#t-body': 'bodies', '#t-sketch': 'sketch',
+      '#t-parts': 'parts', '#t-measure': 'measure', '#t-notes': 'notes', '#t-export': 'export',
+      '.view-btns [data-view="xray"]': 'xray', '.view-btns [data-view="cut"]': 'section',
+    };
+    for (const [sel, sid] of Object.entries(domMap)) {
+      const el = document.querySelector(sel);
+      if (el) el.dataset.kbd = keyLabel(sid);
+    }
+  }
+  function shortcuts() {
+    return SHORTCUTS.map((s) => {
+      const combo = getCombo(s.id);
+      return { id: s.id, group: s.group, label: s.label, def: s.def, combo, labelKey: formatCombo(combo), custom: combo !== s.def };
+    });
+  }
+  function setShortcut(id, combo) {
+    const s = SHORTCUT_MAP[id];
+    const c = String(combo || '').trim().toLowerCase();
+    if (!s || !c) return { ok: false, reason: 'invalid' };
+    const conflict = SHORTCUTS.find((x) => x.id !== id && getCombo(x.id) === c);
+    if (conflict) return { ok: false, conflict: { id: conflict.id, label: conflict.label, group: conflict.group } };
+    if (c === s.def) delete customKeys[id];
+    else customKeys[id] = c;
+    saveShortcuts();
+    syncCmdKbds();
+    return { ok: true, combo: c, labelKey: formatCombo(c) };
+  }
+  function resetShortcuts() {
+    customKeys = {};
+    storageDel(KBD_KEY);
+    syncCmdKbds();
+  }
   function build() {
     C.length = 0;
     for (const k of PRIMITIVE_ORDER) add('add-' + k, KINDS[k].label + ' hinzufügen', 'cube', 'körper form grundkörper ' + ({ box: 'würfel kasten block platte', cylinder: 'rund stab säule scheibe', sphere: 'ball', cone: 'spitze', pyramid: 'spitze', wedge: 'rampe dach schräge', tube: 'röhre ring hohl', torus: 'donut kringel', prism: 'sechseck achteck polygon', hemisphere: 'kuppel halbkugel' }[k] || ''), () => Actions.addPrimitive(k), { group: 'Körper' });
@@ -168,47 +319,25 @@ const Commands = (() => {
     if (Sketch.onKey(e)) { e.preventDefault(); return; }
     if (Notes.onKey(e)) { e.preventDefault(); return; }
     if (App.mode === 'drawing' && Drawing.onKey(e)) { e.preventDefault(); return; }
-    const k = e.key.toLowerCase(); const mod = e.ctrlKey || e.metaKey;
-    if (mod && k === 'z' && !e.shiftKey) { e.preventDefault(); App.undo(); return; }
-    if (mod && (k === 'y' || (k === 'z' && e.shiftKey))) { e.preventDefault(); App.redo(); return; }
-    if (mod && k === 's') { e.preventDefault(); Start.saveFile(); return; }
-    if (mod && k === 'e') { e.preventDefault(); Print.exportDialog(); return; }
-    if (mod && k === 'k') { e.preventDefault(); $('#cmd-input').focus(); return; }
-    if (k === '/') { e.preventDefault(); $('#cmd-input').focus(); return; }
-    if (e.key === '?' || (e.key === 'F1')) { e.preventDefault(); showKeys(); return; }
+    const combo = eventToCombo(e); const mod = e.ctrlKey || e.metaKey;
+    const gHit = combo && SHORTCUTS.find((s) => s.global && getCombo(s.id) === combo);
+    if (gHit) { e.preventDefault(); gHit.run(); return; }
+    // gewohnte Neben-Kürzel beibehalten, solange keine eigene Belegung darauf liegt
+    if (combo === 'ctrl+shift+z' && !SHORTCUTS.some((s) => getCombo(s.id) === combo)) { e.preventDefault(); App.redo(); return; }
+    if (e.key === '/' && !mod && !e.altKey && !SHORTCUTS.some((s) => getCombo(s.id) === '/')) { e.preventDefault(); $('#cmd-input').focus(); return; }
+    if ((e.key === '?' || e.key === 'F1') && !mod && !e.altKey) { e.preventDefault(); showKeys(); return; }
     if (App.mode !== 'model') return;
     if (e.key === 'Escape' && Views.presenting) { Views.present(false); return; }
     if (e.key === 'Escape') { if (Place.active) Place.cancel(); else if (Measure.active) Measure.stop(); else if (!App.sel.length && App.ctx) App.setCtx(null); else if (!App.sel.length && App.iso) App.setIso(null); else { Panels.closeFlyout(); App.clearSelection(); } return; }
-    if (mod && k === 'd') { e.preventDefault(); if (e.shiftKey) Actions.duplicateLinked(); else Actions.duplicate(); return; }
-    if (mod && k === 'g') { e.preventDefault(); e.shiftKey ? Actions.ungroup() : Actions.group(); return; }
-    if (mod && k === 'a') { e.preventDefault(); App.select(App.doc.items.filter((x) => !x.hidden && !App.mergedInto(x.id)).map((x) => x.id)); return; }
-    if (mod && e.shiftKey && k === 'i') { e.preventDefault(); Actions.invertSelection(); return; }
-    if (mod) return;
-    if (e.key === 'Delete' || e.key === 'Backspace') { if (App.sel.length) { e.preventDefault(); Actions.remove(); } return; }
-    if (Views.onKey(e)) { e.preventDefault(); return; }
-    if (e.key === ' ' && !e.shiftKey) { e.preventDefault(); repeat(); return; }
-    if (k === 'z' && e.shiftKey) { if (!Viewer.viewBack()) UI.toast('Keine vorige Ansicht mehr.', { icon: 'info', ms: 1800 }); return; }
-    if (k === 'h' && e.shiftKey) { if (App.sel.length) Actions.hideSelected(); else Actions.showAll(); return; }
-    if (k === 'f') { Viewer.fit(App.sel.length ? App.sel.map((id) => (Model.topOf(App.doc, id) || {}).id).filter(Boolean) : null); return; }
-    if (k === 'h' && App.sel.length) { Actions.toggleRole(); return; }
-    if (k === 'a' && (App.sel.length || App.edges.length)) { Select.similar(); return; }
-    if (k === 'r' && App.sel.length) { Actions.rotate90(null, 'z'); return; }
-    if (k === 's') { Sketch.chooseAndStart(); return; }
-    if (k === 'm') { Measure.toggle(); return; }
-    if (k === 'p' && !e.shiftKey) { Views.present(!Views.presenting); return; }
-    if (k === 'n') { Notes.toggle(); return; }
-    if (k === 'o') { ViewPrefs.toggle('ortho'); return; }
-    if (k === 'g') { ViewPrefs.toggle('gridOn'); return; }
-    if (['1', '3', '7', '0'].includes(k) && !e.shiftKey) { Viewer.setView({ 1: 'front', 3: 'right', 7: 'top', 0: 'iso' }[k]); return; }
-    if (k === 'k') { Panels.toggleFlyout('bodies', $('#t-body')); return; }
-    if (k === 'i') { const top = App.sel.length ? Model.topOf(App.doc, App.sel[0]) : null; if (top) Comp.toggleIso(top.id); else if (App.iso) App.setIso(null); return; }
-    if (k === 'e' && App.sel.length === 1) {
-      const f = Model.find(App.doc, App.sel[0]); if (!f) return;
-      if ((f.item.kind === 'extrude' || f.item.kind === 'revolve' || f.item.kind === 'sweep') && f.item.p.sketch) Sketch.editItem(f.item.id);
-      else if (f.item.kind === 'group' && App.doc.items.includes(f.item)) Comp.edit(f.item.id);
+    const mHit = combo && SHORTCUTS.find((s) => !s.global && getCombo(s.id) === combo);
+    if (mHit) {
+      const res = mHit.run();
+      if (res !== false) e.preventDefault();
       return;
     }
-    if (k === 'b') { Panels.toggleFlyout('parts', $('#t-parts')); return; }
+    if (e.key === 'Backspace' && !mod && !e.altKey && !e.shiftKey && getCombo('delete') === 'delete') { if (App.sel.length) { e.preventDefault(); Actions.remove(); } return; }
+    if (mod) return;
+    const k = e.key.toLowerCase();
     if (['arrowleft', 'arrowright', 'arrowup', 'arrowdown', 'pageup', 'pagedown'].includes(k) && App.sel.length) {
       e.preventDefault();
       const g = (App.doc.settings.grid || 1) * (e.shiftKey ? 10 : 1);
@@ -219,12 +348,13 @@ const Commands = (() => {
   function showKeys() {
     const mac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
     const M = mac ? '⌘' : 'Strg';
+    const K = (id) => keyLabel(id, true);
     const groups = [
-      ['Ansicht', [['Linke Maustaste ziehen', 'Ansicht drehen'], ['Rechte Maustaste ziehen', 'Ansicht verschieben'], ['Mausrad', 'Zoomen'], ['F', 'Auswahl oder alles zeigen'], ['Umschalt Z', 'Vorige Ansicht'], ['P', 'Vorführen (Vollbild, dreht langsam)'], ['1 · 3 · 7 · 0', 'Ansicht vorne · rechts · oben · schräg'], ['O', 'Orthografisch / Perspektive'], ['G', 'Raster ein / aus'], ['C', 'Schnitt ein / aus'], ['X', 'Röntgen ein / aus'], ['U', 'Explosion ein / aus'], ['I', 'Gewähltes Teil isolieren / alle zeigen']]],
-      ['Modell', [['Klicken', 'Körper, Fläche oder Kante wählen'], ['Umschalt + Klick', 'Mehrere wählen'], ['Alt + Klick', 'Das Teil dahinter wählen (nochmal: noch weiter dahinter)'], ['Umschalt + Ziehen im Leeren', 'Rahmen: nach rechts ganz drin, nach links berührt'], ['Rechtsklick', 'Menü zum Teil oder zum Bild'], ['Leertaste', 'Letzten Befehl wiederholen'], ['Umschalt H', 'Auswahl ausblenden · ohne Auswahl alles einblenden'], [M + ' Umschalt I', 'Auswahl umkehren'], [M + ' Umschalt D', 'Verknüpft duplizieren'], ['Ziehen', 'Körper verschieben – dabei Zahl tippen für genaue Werte'], ['Doppelklick', 'Skizze eines Skizzenkörpers bearbeiten · auf eine ebene Fläche: darauf zeichnen'], ['E', 'Skizze bzw. Bauteil bearbeiten'], ['Esc', 'Auswahl aufheben · Bauteil verlassen'], ['Entf', 'Löschen'], ['H', 'Körper ↔ Loch'], ['A', 'Ähnliche auswählen (gleiche Teile oder Kanten)'], ['R', 'Um 90° drehen'], ['Pfeiltasten', 'Um einen Rasterschritt verschieben (Umschalt: 10)'], ['Bild ↑ / Bild ↓', 'Anheben / Absenken'], [M + ' D', 'Duplizieren'], [M + ' G', 'Gruppieren (Umschalt: lösen)'], [M + ' A', 'Alles wählen']]],
-      ['Werkzeuge', [['S', 'Skizze'], ['M', 'Messen'], ['N', 'Notizstift (P Stift · T Text · E Radierer)'], ['K', 'Körper'], ['B', 'Bauteile'], ['/ oder ' + M + ' K', 'Eingabezeile']]],
-      ['In der Skizze', [['V', 'Auswahl'], ['L · R · C · A', 'Linie · Rechteck · Kreis · Bogen'], ['A (beim Linienzug)', 'Zwischen Linie und tangentialem Bogen wechseln'], ['G · P · S', 'Langloch · Vieleck · Spline'], ['T · F', 'Trimmen · Versatz'], ['M · Q · W', 'Spiegeln · Rechteckmuster · Kreismuster'], ['H', 'Verschieben oder drehen (Doppelklick wählt die ganze Kette)'], [(/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? '⌘' : 'Strg') + ' C · V', 'Elemente kopieren · einfügen (auch in eine andere Skizze)'], ['X', 'Hilfslinie (neue Elemente oder das gewählte)'], ['Alt halten', 'Nicht einrasten'], ['D', 'Maß festlegen (auch Formel)'], ['Zahl tippen', 'Genaue Länge beim Zeichnen'], ['Tab', 'Nächstes Eingabefeld'], ['Umschalt halten', 'Feiner einrasten'], ['Enter', 'Linienzug beenden · Skizze fertig'], ['Esc', 'Zeichnen abbrechen · Skizze verlassen']]],
-      ['Dateien und Verlauf', [[M + ' Z', 'Rückgängig'], [M + ' Y', 'Wiederholen'], [M + ' S', 'Projekt speichern'], [M + ' E', 'Exportieren (STEP und mehr)'], ['?', 'Diese Übersicht']]],
+      ['Ansicht', [['Linke Maustaste ziehen', 'Ansicht drehen'], ['Rechte Maustaste ziehen', 'Ansicht verschieben'], ['Mausrad', 'Zoomen'], [K('fit'), 'Auswahl oder alles zeigen'], [K('viewBack'), 'Vorige Ansicht'], [K('present'), 'Vorführen (Vollbild, dreht langsam)'], [`${K('view-front')} · ${K('view-right')} · ${K('view-top')} · ${K('view-iso')}`, 'Ansicht vorne · rechts · oben · schräg'], [K('ortho'), 'Orthografisch / Perspektive'], [K('gridtoggle'), 'Raster ein / aus'], [K('section'), 'Schnitt ein / aus'], [K('xray'), 'Röntgen ein / aus'], [K('explode'), 'Explosion ein / aus'], [K('isolate'), 'Gewähltes Teil isolieren / alle zeigen']]],
+      ['Modell', [['Klicken', 'Körper, Fläche oder Kante wählen'], ['Umschalt + Klick', 'Mehrere wählen'], ['Alt + Klick', 'Das Teil dahinter wählen (nochmal: noch weiter dahinter)'], ['Umschalt + Ziehen im Leeren', 'Rahmen: nach rechts ganz drin, nach links berührt'], ['Rechtsklick', 'Menü zum Teil oder zum Bild'], [K('repeat'), 'Letzten Befehl wiederholen'], [K('hideSel'), 'Auswahl ausblenden · ohne Auswahl alles einblenden'], [K('invertSel'), 'Auswahl umkehren'], [K('dupLinked'), 'Verknüpft duplizieren'], ['Ziehen', 'Körper verschieben – dabei Zahl tippen für genaue Werte'], ['Doppelklick', 'Skizze eines Skizzenkörpers bearbeiten · auf eine ebene Fläche: darauf zeichnen'], [K('editItem'), 'Skizze bzw. Bauteil bearbeiten'], ['Esc', 'Auswahl aufheben · Bauteil verlassen'], [K('delete'), 'Löschen'], [K('hole'), 'Körper ↔ Loch'], [K('similar'), 'Ähnliche auswählen (gleiche Teile oder Kanten)'], [K('rot'), 'Um 90° drehen'], ['Pfeiltasten', 'Um einen Rasterschritt verschieben (Umschalt: 10)'], ['Bild ↑ / Bild ↓', 'Anheben / Absenken'], [K('dup'), 'Duplizieren'], [`${K('group')} · ${K('ungroup')}`, 'Gruppieren · Gruppe lösen'], [K('selectAll'), 'Alles wählen']]],
+      ['Werkzeuge', [[K('sketch'), 'Skizze'], [K('measure'), 'Messen'], [K('notes'), 'Notizstift (P Stift · T Text · E Radierer)'], [K('bodies'), 'Körper'], [K('parts'), 'Bauteile'], ['/ oder ' + K('cmdFocus'), 'Eingabezeile']]],
+      ['In der Skizze', [['V', 'Auswahl'], ['L · R · C · A', 'Linie · Rechteck · Kreis · Bogen'], ['A (beim Linienzug)', 'Zwischen Linie und tangentialem Bogen wechseln'], ['G · P · S', 'Langloch · Vieleck · Spline'], ['T · F', 'Trimmen · Versatz'], ['M · Q · W', 'Spiegeln · Rechteckmuster · Kreismuster'], ['H', 'Verschieben oder drehen (Doppelklick wählt die ganze Kette)'], [M + ' C · V', 'Elemente kopieren · einfügen (auch in eine andere Skizze)'], ['X', 'Hilfslinie (neue Elemente oder das gewählte)'], ['Alt halten', 'Nicht einrasten'], ['D', 'Maß festlegen (auch Formel)'], ['Zahl tippen', 'Genaue Länge beim Zeichnen'], ['Tab', 'Nächstes Eingabefeld'], ['Umschalt halten', 'Feiner einrasten'], ['Enter', 'Linienzug beenden · Skizze fertig'], ['Esc', 'Zeichnen abbrechen · Skizze verlassen']]],
+      ['Dateien und Verlauf', [[K('undo'), 'Rückgängig'], [K('redo'), 'Wiederholen'], [K('save'), 'Projekt speichern'], [K('export'), 'Exportieren (STEP und mehr)'], ['?', 'Diese Übersicht']]],
     ];
     const t = h('div', { class: 'keys-grid' });
     for (const [title, rows] of groups) {
@@ -232,7 +362,116 @@ const Commands = (() => {
       for (const [a, b] of rows) sec.append(h('div', { class: 'mini-row' }, h('span', { class: 'kbd' }, a), h('span', { class: 'grow' }, b)));
       t.append(sec);
     }
-    UI.modal({ title: 'Tastenkürzel', body: t, actions: [{ label: 'Schließen', primary: true }] });
+    const acts = ViewPrefs.simple ? [{ label: 'Schließen', primary: true }] : [{ label: 'Kürzel ändern …', run: () => { setTimeout(() => ViewPrefs.dialog('keys'), 0); } }, { label: 'Schließen', primary: true }];
+    UI.modal({ title: 'Tastenkürzel', body: t, actions: acts });
+  }
+  // Editor für Einstellungen → Tastenkürzel (nur Profi-Stufe)
+  function renderShortcutsEditor(container) {
+    container.innerHTML = '';
+    let listening = null;
+    const msgEl = h('div', { class: 'kbd-msg', id: 'kbd-msg', role: 'alert', hidden: true });
+    const filterInp = h('input', { type: 'text', id: 'kbd-filter', placeholder: 'Befehl suchen …', autocomplete: 'off', spellcheck: 'false' });
+    const resetBtn = h('button', { type: 'button', class: 'btn small', id: 'kbd-reset' }, 'Zurücksetzen');
+    const toolbar = h('div', { class: 'kbd-toolbar' }, filterInp, resetBtn);
+    const listEl = h('div', { class: 'kbd-list' });
+    const btns = new Map();
+
+    const showMsg = (txt) => { msgEl.textContent = txt || ''; msgEl.hidden = !txt; };
+    const refreshButtons = () => {
+      for (const s of SHORTCUTS) {
+        const b = btns.get(s.id); if (!b) continue;
+        const c = getCombo(s.id);
+        b.textContent = formatCombo(c);
+        b.classList.toggle('custom', c !== s.def);
+        b.classList.remove('listening');
+      }
+    };
+    const stopCapture = () => {
+      if (!listening) return;
+      window.removeEventListener('keydown', onCapture, true);
+      const b = btns.get(listening);
+      if (b) { b.classList.remove('listening'); b.textContent = formatCombo(getCombo(listening)); }
+      listening = null;
+    };
+    function onCapture(e) {
+      if (!listening) return;
+      if (['Control', 'Shift', 'Alt', 'Meta', 'CapsLock', 'Dead', 'Unidentified'].includes(e.key)) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const id = listening;
+      if (e.key === 'Escape') { stopCapture(); showMsg(''); return; }
+      const combo = eventToCombo(e);
+      if (!combo) {
+        stopCapture();
+        showMsg('Diese Taste kann nicht als Kürzel vergeben werden.');
+        return;
+      }
+      const res = setShortcut(id, combo);
+      if (!res.ok) {
+        stopCapture();
+        const txt = `Tastenkürzel „${formatCombo(combo)}“ ist schon für „${res.conflict.label}“ belegt.`;
+        showMsg(txt);
+        UI.toast(txt, { kind: 'bad', icon: 'warn', ms: 3200 });
+        const row = listEl.querySelector(`.kbd-row[data-cmd="${res.conflict.id}"]`);
+        if (row) { row.classList.add('conflict'); setTimeout(() => row.classList.remove('conflict'), 1800); }
+        return;
+      }
+      stopCapture();
+      showMsg('');
+      refreshButtons();
+      UI.toast(`Kürzel für „${SHORTCUT_MAP[id].label}“: ${res.labelKey}`, { icon: 'check', ms: 1800 });
+    }
+    const startCapture = (id, btn) => {
+      const same = listening === id;
+      stopCapture();
+      showMsg('');
+      if (same) return;
+      listening = id;
+      btn.classList.add('listening');
+      btn.textContent = 'Taste drücken …';
+      window.addEventListener('keydown', onCapture, true);
+    };
+
+    const groups = ['Ansicht', 'Modell', 'Werkzeuge', 'Dateien und Verlauf'];
+    for (const g of groups) {
+      const sec = h('div', { class: 'kbd-sec', dataset: { group: g } }, h('div', { class: 'section-h' }, g));
+      for (const s of SHORTCUTS.filter((x) => x.group === g)) {
+        const b = h('button', { type: 'button', class: 'kbd-btn', dataset: { cmd: s.id } });
+        b.onclick = () => startCapture(s.id, b);
+        btns.set(s.id, b);
+        sec.append(h('div', { class: 'kbd-row', dataset: { cmd: s.id, search: normTxt(s.label + ' ' + g) } }, h('span', { class: 'grow' }, s.label), b));
+      }
+      listEl.append(sec);
+    }
+    refreshButtons();
+
+    filterInp.oninput = () => {
+      const q = normTxt(filterInp.value.trim());
+      for (const sec of listEl.querySelectorAll('.kbd-sec')) {
+        let vis = 0;
+        for (const r of sec.querySelectorAll('.kbd-row')) {
+          const ok = !q || r.dataset.search.includes(q);
+          r.hidden = !ok;
+          if (ok) vis++;
+        }
+        sec.hidden = vis === 0;
+      }
+    };
+    resetBtn.onclick = () => {
+      stopCapture();
+      showMsg('');
+      resetShortcuts();
+      refreshButtons();
+      UI.toast('Alle Tastenkürzel zurückgesetzt.', { icon: 'check', ms: 1800 });
+    };
+
+    container.append(
+      h('small', { style: { color: 'var(--muted)' } }, 'Klick auf ein Kürzel und drück die neue Taste. Esc bricht die Eingabe ab.'),
+      toolbar,
+      msgEl,
+      listEl,
+    );
+    return { destroy: stopCapture };
   }
   function setMode(m) {
     if (m === App.mode) return;
@@ -248,7 +487,7 @@ const Commands = (() => {
     if (m === 'drawing') Drawing.open(); else Drawing.close();
     UI.renderHint();
   }
-  function init() { build(); initBar(); document.addEventListener('keydown', onKey); }
-  return { init, search, setMode, showKeys, list: () => C, exec, repeat, get last() { return last; }, get recent() { return recent.slice(); } };
+  function init() { loadShortcuts(); build(); syncCmdKbds(); initBar(); document.addEventListener('keydown', onKey); }
+  return { init, search, setMode, showKeys, list: () => C, exec, repeat, shortcuts, setShortcut, resetShortcuts, keyLabel, eventToCombo, formatCombo, renderShortcutsEditor, syncCmdKbds, get last() { return last; }, get recent() { return recent.slice(); } };
 })();
 

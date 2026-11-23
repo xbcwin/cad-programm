@@ -1458,6 +1458,17 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [ ] Qualität „Sehr fein“, dann ganz nah an eine Rundung zoomen und herauszoomen – flüssig, kein Einfrieren.
   Automatisch geprüft: kein Einfrieren. Ob es flüssig wirkt, bitte von Hand ansehen.
 
+## Profi-Stufe und eigene Tastenkürzel (Auto [A-021])
+
+- [x] **Erster Start & Stufenwahl**
+  Schritte: 1. Mit leerem Browser-Speicher starten. 2. „Profi“ auf der Karte wählen. 3. Auf das Schild „Profi“ oben rechts klicken, dann in den Einstellungen zurück auf „Profi“.
+  Erwartet: Zwei Karten „Einfach“ und „Profi“ erscheinen beim ersten Start; das Schild oben zeigt die aktuelle Stufe und wechselt per Klick.
+- [x] **Eigene Tastenkürzel (Profi)**
+  Schritte: 1. Einstellungen → „Tastenkürzel“. 2. Kürzel für „Orthografisch / Perspektive“ von `O` auf `J` ändern. 3. `O` und dann `J` drücken. 4. Dasselbe Kürzel `J` einem anderen Befehl zuweisen. 5. „Zurücksetzen“ klicken.
+  Erwartet: `O` löst nicht mehr aus, `J` sofort; doppeltes Kürzel wird gemeldet und nicht überschrieben; „Zurücksetzen“ stellt `O` wieder her.
+- [ ] **Kürzel im Alltag prüfen**
+  Bitte von Hand kurz prüfen, ob die zwei Stufen-Karten und die Tastenkürzel-Liste auf schmalem Bildschirm sauber umbrechen.
+
 ## Fehler melden
 
 ```

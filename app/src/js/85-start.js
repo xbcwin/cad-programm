@@ -124,13 +124,25 @@ const Start = (() => {
     const tb = h('button', { type: 'button', class: 'btn' }); tb.innerHTML = icon('play') + 'Einführung (3 Minuten)'; tb.onclick = () => { newProject(true); Tour.start(); };
     const ts = h('button', { type: 'button', class: 'btn' }); ts.innerHTML = icon('sketch') + 'Erste Skizze (5 Minuten)'; ts.onclick = () => { newProject(true); Tour.start('sketch'); };
     acts.append(nb, ob, tb, ts);
-    // Oberfläche wählen: einfach für Einsteiger oder alle Werkzeuge
-    const seg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Oberfläche' });
-    const lv = (id, l, label) => { const b = h('button', { type: 'button', id, 'aria-pressed': (ViewPrefs.get().level === l) ? 'true' : 'false' }, label); b.onclick = () => { ViewPrefs.setLevel(l); for (const x of seg.children) x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); }; return b; };
-    seg.append(lv('start-simple', 'simple', 'Einfach – für Einsteiger'), lv('start-pro', 'pro', 'Profi – alle Werkzeuge'));
-    const lvRow = h('div', { class: 'start-level', 'data-help': 'levelSwitch' }, h('span', null, 'Oberfläche:'), seg);
-    head.append(brand, acts, lvRow);
-    inner.append(head);
+    // Oberfläche wählen: beim allerersten Start als zwei Karten, sonst kompakt im Kopf
+    if (ViewPrefs.firstStart) {
+      head.append(brand, acts);
+      inner.append(head);
+      inner.append(h('section', { class: 'level-welcome', id: 'level-welcome', 'data-help': 'levelSwitch' },
+        h('div', { class: 'level-welcome-head' },
+          h('h2', null, 'Wie möchtest du mit Tracery arbeiten?'),
+          h('span', null, 'Du kannst jederzeit oben rechts zwischen beiden Stufen wechseln.'),
+        ),
+        ViewPrefs.levelCards({ idPrefix: 'start', active: null }),
+      ));
+    } else {
+      const seg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Oberfläche' });
+      const lv = (id, l, label) => { const b = h('button', { type: 'button', id, 'aria-pressed': (ViewPrefs.get().level === l) ? 'true' : 'false' }, label); b.onclick = () => { ViewPrefs.setLevel(l); for (const x of seg.children) x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); }; return b; };
+      seg.append(lv('start-simple', 'simple', 'Einfach – für Einsteiger'), lv('start-pro', 'pro', 'Profi – alle Werkzeuge'));
+      const lvRow = h('div', { class: 'start-level', 'data-help': 'levelSwitch' }, h('span', null, 'Oberfläche:'), seg);
+      head.append(brand, acts, lvRow);
+      inner.append(head);
+    }
     const recent = App.recentProjects().filter((r) => r.n > 0 || r.id === App.doc.id);
     if (recent.length) {
       const sec = h('section', null, h('h2', null, 'Weiterarbeiten'));

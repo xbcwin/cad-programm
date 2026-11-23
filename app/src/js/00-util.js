@@ -1007,6 +1007,11 @@ const HELP = {
   "tip": "Lücken schließen und doppelte Linien löschen",
   "hilfe": "Schließt alle winzigen Lücken unter 0,05 mm mit der Regel „Deckungsgleich“ und löscht übereinanderliegende doppelte Linien auf einmal. Alles passiert in einem einzigen Rückgängig-Schritt.",
   "tipp": "Größere offene Enden verbindest du von Hand, zum Beispiel mit „Linie“ oder „Ecke bilden“."
+ },
+ "customShortcuts": {
+  "tip": "Eigene Tastenkürzel festlegen (nur Profi)",
+  "hilfe": "Unter Menü → Einstellungen → „Tastenkürzel“ änderst du die Tasten für Werkzeuge, Ansicht, Modell und Dateien. Klick auf ein Kürzel, drück die neue Taste und es wirkt sofort – gespeichert in deinem Browser. Doppelte Tasten meldet Tracery, damit nichts aus Versehen überschrieben wird.",
+  "tipp": "Mit „Zurücksetzen“ stellst du jederzeit alle Standard-Tasten wieder her."
  }
 };
 
