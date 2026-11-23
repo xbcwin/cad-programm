@@ -1543,6 +1543,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Kappe ein/aus & Aufräumen**: „Kappe füllen“ (`#cut-cap`) blendet Kappen ein/aus; Schließen räumt alle Clipping-Ebenen und Overlay-Meshes ohne Undo-Schritt auf.
 - [ ] **Von Hand**: An einem mehrteiligen Bauteil (z. B. Gehäuse mit Deckel) X- und Y-Schnitt gemeinsam verschieben, umdrehen und die gegenläufige Schraffur der Körper prüfen.
 
+## Projekt in einen Ordner speichern (Auto [A-015])
+
+- [x] **Ohne API ausgeblendet**: Fehlt `window.showDirectoryPicker`, erscheinen weder „In Ordner speichern …“ im Projektmenü noch der Befehl in der Suche noch das Status-Schild oben.
+- [x] **Ordner wählen & Anzeige**: Über den `showDirectoryPicker`-Stub wird `<Projektname>.tracery.json` mit gültigem Projektinhalt geschrieben; oben erscheint `#btn-folder-status` mit „gespeichert in …“.
+- [x] **Gebündelt alle 10 s mitschreiben**: Mehrere Änderungen kurz hintereinander bleiben zunächst als „speichert gleich …“ vorgemerkt und werden nach 10 s gebündelt in einem Schreibvorgang geschrieben.
+- [x] **Trennen & Projektwechsel**: Über das Menü an `#btn-folder-status` („Ordner-Verbindung trennen“) sowie beim Start eines neuen Projekts wird die Verbindung sauber beendet.
+- [ ] **Von Hand**: In Chrome oder Edge einen echten Ordner wählen, Änderungen machen, 10 s warten und prüfen, ob die `.tracery.json`-Datei auf der Festplatte aktuell ist.
+
 ## Fehler melden
 
 ```

@@ -6224,6 +6224,117 @@ def t_a013_schnitt_kappe_mehrfach(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a015_ordner_speichern(p):
+    p.empty()
+    # 1. Ohne File System Access API: kein Menüeintrag, kein Suchtreffer, kein Schild
+    p.ev("""try { delete window.showDirectoryPicker; } catch (_) {}
+      if ('showDirectoryPicker' in window) Object.defineProperty(window, 'showDirectoryPicker', { value: undefined, configurable: true, writable: true });""")
+    p.pg.locator('#btn-project').click(); p.wait(300)
+    ok1 = (
+        p.pg.locator('#pm-folder-save').count() == 0
+        and p.pg.locator('.menu button', has_text='In Ordner speichern').count() == 0
+        and not p.pg.locator('#btn-folder-status').is_visible()
+        and 'save-folder' not in p.ev("return Commands.search('In Ordner speichern').map(c => c.id)")
+    )
+    p.pg.keyboard.press('Escape'); p.wait(200)
+
+    # 2. Stub für showDirectoryPicker einrichten und erstmalig in Ordner speichern
+    p.ev("Actions.addPrimitive('box')"); warte_rechnen(p)
+    p.ev("App.change('Projekt umbenennen', d => { d.name = 'Halterung'; })"); p.wait(300)
+    p.ev("""
+      window.__fsWrites = [];
+      const stub = async () => ({
+        name: 'MeineCADs',
+        async queryPermission() { return 'granted'; },
+        async getFileHandle(name) {
+          return {
+            async createWritable() {
+              let buf = '';
+              return {
+                async write(chunk) { buf += String(chunk); },
+                async close() { window.__fsWrites.push({ name, data: buf, t: Date.now() }); },
+              };
+            },
+          };
+        },
+      });
+      Object.defineProperty(window, 'showDirectoryPicker', { value: stub, configurable: true, writable: true });
+    """)
+    p.pg.locator('#btn-project').click(); p.wait(300)
+    has_btn = p.pg.locator('#pm-folder-save').count() == 1
+    p.pg.locator('#pm-folder-save').click(); p.wait(600)
+    writes1 = p.ev("return window.__fsWrites")
+    badge_txt = (p.pg.locator('#btn-folder-status').text_content() or '').lower()
+    d1 = json.loads(writes1[0]['data']) if writes1 else {}
+    ok2 = (
+        has_btn
+        and len(writes1) == 1
+        and writes1[0]['name'] == 'Halterung.tracery.json'
+        and d1.get('name') == 'Halterung'
+        and [x.get('kind') for x in d1.get('items', [])] == ['box']
+        and p.pg.locator('#btn-folder-status').is_visible()
+        and 'gespeichert in meinecads' in badge_txt
+    )
+
+    # 3. Mehrere Änderungen innerhalb von 10 s werden gebündelt als ein Schreibvorgang geschrieben
+    delay = p.ev("return Start.folderDelay")
+    t0 = p.ev("App.change('Höhe', d => { d.items[0].p.h = 42; }); return Date.now()")
+    p.wait(300)
+    p.ev("Actions.addPrimitive('cylinder')"); warte_rechnen(p)
+    p.wait(400)
+    mid_len = p.ev("return window.__fsWrites.length")
+    is_pending = p.ev("return document.querySelector('#btn-folder-status').classList.contains('pending')")
+    for _ in range(30):
+        p.wait(400)
+        if p.ev("return window.__fsWrites.length") >= 2:
+            break
+    p.wait(600)
+    writes2 = p.ev("return window.__fsWrites")
+    d2 = json.loads(writes2[1]['data']) if len(writes2) >= 2 else {}
+    badge_cls = p.ev("return document.querySelector('#btn-folder-status').className")
+    badge_txt2 = (p.pg.locator('#btn-folder-status').text_content() or '').lower()
+    ok3 = (
+        delay == 10000
+        and mid_len == 1
+        and is_pending
+        and len(writes2) == 2
+        and (writes2[1]['t'] - t0) >= 8500
+        and [x.get('kind') for x in d2.get('items', [])] == ['box', 'cylinder']
+        and d2['items'][0]['p']['h'] == 42
+        and 'saved' in badge_cls
+        and 'gespeichert in meinecads' in badge_txt2
+    )
+
+    # 4. Menü an der Anzeige oben, Verbindung trennen & automatisches Trennen bei Projektwechsel
+    p.pg.locator('#btn-folder-status').click(); p.wait(300)
+    menu_ok = p.pg.locator('#fm-now').count() == 1 and p.pg.locator('#fm-change').count() == 1 and p.pg.locator('#fm-stop').count() == 1
+    p.pg.locator('#fm-stop').click(); p.wait(300)
+    p.ev("App.change('Breite', d => { d.items[0].p.w = 55; })"); p.wait(300)
+    stopped_ok = (
+        menu_ok
+        and not p.pg.locator('#btn-folder-status').is_visible()
+        and p.ev("return Start.folderInfo()") is None
+        and p.ev("return window.__fsWrites.length") == 2
+    )
+    reconn = p.ev("return Start.saveToFolder()"); p.wait(300)
+    p.ev("Start.newProject(true)"); p.wait(1000)
+    ok4 = (
+        stopped_ok
+        and reconn is True
+        and p.ev("return Start.folderInfo()") is None
+        and not p.pg.locator('#btn-folder-status').is_visible()
+    )
+
+    # 5. Hilfetext & Befehlssuche mit vorhandener API
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    ok5 = (
+        'save-folder' in p.ev("return Commands.search('In Ordner speichern').map(c => c.id)")
+        and 'saveFolder' in hilfen
+        and all(k in hilfen['saveFolder'] for k in ('tip', 'hilfe', 'tipp'))
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -6337,6 +6448,7 @@ TESTS = [
     ('[A-010] OBJ und GLB speichern: ZIP mit .obj/.mtl/.glb / MTL-Farben / GLB-Kopf & Meshes / Studio-Material / Einzeln', t_a010_obj_glb),
     ('[A-012] Messungen bleiben stehen: Abstand behalten / Quader höher / ein- und ausblenden / umbenennen / verloren & Rückgängig / löschen', t_a012_messungen_bleiben),
     ('[A-013] Schnitt mit Kappe und mehreren Ebenen: Würfel mit Loch / X und Y gleichzeitig / alle drei Ebenen & Kreisloch / Kappe an-aus / sauber beendet', t_a013_schnitt_kappe_mehrfach),
+    ('[A-015] Projekt in Ordner speichern: ohne API ausgeblendet / Ordner wählen & Anzeige / 10 s gebündelt / Trennen & Projektwechsel / Hilfe', t_a015_ordner_speichern),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

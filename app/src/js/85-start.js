@@ -688,13 +688,193 @@ const Start = (() => {
     if (!f || !/\.(json|step|stp|stl|3mf|dxf|svg)$/i.test(f.name)) return;
     e.preventDefault(); openBlob(f);
   });
-  async function saveFile() {
-    const name = Print.safeName(App.doc.name);
+  function projectFileName() {
+    return Print.safeName(App.doc.name) + '.tracery.json';
+  }
+  function projectPayload() {
     const vers = Versions.exportList();
-    const ok = await Print.save(name + '.tracery.json', JSON.stringify(vers.length ? { ...App.doc, versions: vers } : App.doc, null, 1));
+    return JSON.stringify(vers.length ? { ...App.doc, versions: vers } : App.doc, null, 1);
+  }
+  async function saveFile() {
+    const ok = await Print.save(projectFileName(), projectPayload());
     if (ok) App.fileSavedRev = App.revision;
   }
-  return { importCAD, import3MF, parse3MF, importDXF, parseDXF, parseSVG, show, hide, newProject, openFile, openBlob, saveFile, openDrone, get open() { return !!el; } };
+
+  // ---------- Projekt in Ordner speichern & automatisch mitschreiben (BE-14) ----------
+  let folder = null;
+  let folderDelay = 10000;
+  let folderInited = false;
+  function folderSupported() {
+    return typeof window.showDirectoryPicker === 'function';
+  }
+  function clearFolderTimer() {
+    if (folder && folder.timer) { clearTimeout(folder.timer); folder.timer = null; }
+  }
+  function updateFolderUI() {
+    const btn = $('#btn-folder-status');
+    if (!btn) return;
+    if (!folder || !folderSupported()) {
+      btn.hidden = true;
+      btn.innerHTML = '';
+      btn.className = 'folder-badge';
+      btn.removeAttribute('data-tip');
+      return;
+    }
+    btn.hidden = false;
+    btn.className = 'folder-badge ' + folder.status;
+    let ico = 'check', label = `gespeichert in ${folder.name}`, tip = `Automatisch gespeichert in „${folder.name}/${folder.fileName}“`;
+    if (folder.status === 'saving') {
+      ico = 'save';
+      label = `speichert in ${folder.name} …`;
+      tip = `Schreibt gerade nach „${folder.name}/${folder.fileName}“ …`;
+    } else if (folder.status === 'pending') {
+      ico = 'folder';
+      label = `speichert gleich in ${folder.name} …`;
+      tip = `Änderung vorgemerkt – schreibt automatisch in „${folder.name}/${folder.fileName}“`;
+    } else if (folder.status === 'error') {
+      ico = 'warn';
+      label = `Fehler · ${folder.name}`;
+      tip = `Fehler beim Speichern in „${folder.name}“: ${folder.lastErr || 'unbekannt'}`;
+    } else if (folder.lastSavedAt) {
+      tip += ` (${new Date(folder.lastSavedAt).toLocaleTimeString('de-DE')})`;
+    }
+    btn.innerHTML = icon(ico);
+    btn.append(h('span', null, label));
+    btn.dataset.tip = tip;
+  }
+  async function writeFolderNow(opts = {}) {
+    if (!folder || !folder.handle) return false;
+    if (folder.writing) { folder.queued = true; return false; }
+    clearFolderTimer();
+    const target = folder;
+    target.writing = true;
+    target.dirty = false;
+    target.status = 'saving';
+    target.lastErr = null;
+    updateFolderUI();
+    const fileName = projectFileName();
+    const payload = projectPayload();
+    const rev = App.revision;
+    try {
+      if (typeof target.handle.queryPermission === 'function') {
+        const perm = await target.handle.queryPermission({ mode: 'readwrite' });
+        if (perm === 'denied') throw new Error('Schreibrecht für den Ordner fehlt.');
+      }
+      const fh = await target.handle.getFileHandle(fileName, { create: true });
+      const wr = await fh.createWritable();
+      await wr.write(payload);
+      await wr.close();
+      if (folder !== target) return true;
+      target.fileName = fileName;
+      target.lastSavedAt = Date.now();
+      target.lastRev = rev;
+      target.writing = false;
+      target.status = target.queued ? 'pending' : 'saved';
+      App.fileSavedRev = rev;
+      updateFolderUI();
+      if (opts.announce) {
+        UI.toast(`Gespeichert in „${target.name}/${fileName}“. Änderungen werden alle 10 s automatisch mitgeschrieben.`, { icon: 'check', ms: 5000 });
+      }
+      if (target.queued) { target.queued = false; scheduleFolderSave(); }
+      return true;
+    } catch (e) {
+      if (folder !== target) return false;
+      target.writing = false;
+      target.queued = false;
+      target.status = 'error';
+      target.lastErr = (e && e.message) || String(e || 'Schreibfehler');
+      updateFolderUI();
+      UI.toast(`Konnte nicht in „${target.name}“ speichern: ${target.lastErr}`, { kind: 'bad', ms: 6000 });
+      return false;
+    }
+  }
+  function scheduleFolderSave() {
+    if (!folder) return;
+    folder.dirty = true;
+    if (folder.writing) { folder.queued = true; return; }
+    folder.status = 'pending';
+    updateFolderUI();
+    if (!folder.timer) {
+      folder.timer = setTimeout(() => {
+        if (folder) folder.timer = null;
+        writeFolderNow();
+      }, folderDelay);
+    }
+  }
+  async function saveToFolder() {
+    if (!folderSupported()) {
+      UI.toast('Dieser Browser kann noch nicht direkt in einen Ordner speichern. Nutze Chrome oder Edge, oder „Als Datei speichern“.', { icon: 'info', ms: 5000 });
+      return false;
+    }
+    let handle;
+    try {
+      handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+    } catch (e) {
+      if (e && (e.name === 'AbortError' || e.name === 'NotAllowedError')) return false;
+      UI.toast('Ordner konnte nicht gewählt werden: ' + ((e && e.message) || 'unbekannter Fehler'), { kind: 'bad' });
+      return false;
+    }
+    if (!handle) return false;
+    clearFolderTimer();
+    const name = String(handle.name || 'Ordner').trim() || 'Ordner';
+    folder = { handle, name, docId: App.doc.id, fileName: projectFileName(), lastSavedAt: 0, lastRev: App.revision, status: 'saving', writing: false, queued: false, dirty: false, timer: null, lastErr: null };
+    updateFolderUI();
+    const ok = await writeFolderNow({ announce: true });
+    if (!ok) { folder = null; updateFolderUI(); return false; }
+    try { Panels.firstStepDone('saved'); } catch (_) {}
+    return true;
+  }
+  function saveToFolderNow() {
+    if (!folder) return saveToFolder();
+    return writeFolderNow({ announce: true });
+  }
+  function disconnectFolder(silent) {
+    if (!folder) return;
+    const name = folder.name;
+    clearFolderTimer();
+    folder = null;
+    updateFolderUI();
+    if (!silent) UI.toast(`Ordner-Verbindung zu „${name}“ getrennt.`, { icon: 'info' });
+  }
+  function openFolderMenu(anchor) {
+    if (!folder) return;
+    UI.menu(anchor, [
+      { label: 'Jetzt in Ordner speichern', icon: 'save', id: 'fm-now', run: () => saveToFolderNow() },
+      { label: 'Anderen Ordner wählen …', icon: 'folder', id: 'fm-change', run: () => saveToFolder() },
+      '-',
+      { label: 'Ordner-Verbindung trennen', icon: 'close', id: 'fm-stop', run: () => disconnectFolder() },
+    ], { alignRight: true });
+  }
+  function folderInfo() {
+    if (!folder) return null;
+    return { name: folder.name, fileName: folder.fileName, status: folder.status, lastSavedAt: folder.lastSavedAt, dirty: folder.dirty, lastErr: folder.lastErr };
+  }
+  function init() {
+    if (folderInited) return;
+    folderInited = true;
+    App.on('doc', () => {
+      if (!folder) return;
+      if (App.doc.id !== folder.docId) { disconnectFolder(true); return; }
+      if (App.revision === folder.lastRev) return;
+      folder.lastRev = App.revision;
+      scheduleFolderSave();
+    });
+    Versions.on('change', () => {
+      if (folder && App.doc.id === folder.docId) scheduleFolderSave();
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden' && folder && folder.dirty && !folder.writing) writeFolderNow();
+    });
+    const btn = $('#btn-folder-status');
+    if (btn) btn.onclick = (e) => openFolderMenu(e.currentTarget);
+    updateFolderUI();
+  }
+  return {
+    init, importCAD, import3MF, parse3MF, importDXF, parseDXF, parseSVG, show, hide, newProject, openFile, openBlob, saveFile,
+    folderSupported, folderInfo, saveToFolder, saveToFolderNow, disconnectFolder,
+    get folderDelay() { return folderDelay; }, set folderDelay(ms) { folderDelay = Math.max(0, Number(ms) || 10000); },
+    openDrone, get open() { return !!el; },
+  };
 })();
 
 // ---------- Einführung ----------
