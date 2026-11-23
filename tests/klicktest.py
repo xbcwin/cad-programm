@@ -5739,6 +5739,86 @@ def t_a008_bohrungsarten(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a010_obj_glb(p):
+    import zipfile, tempfile, struct, json as _json
+    p.empty()
+    p.ev("""App.change('x', d => {
+      const a = Model.newItem('box', {w: 30, d: 20, h: 10}, {name: 'Gehäuse'});
+      a.mat = 'Alu 6061';
+      const b = Model.newItem('cylinder', {d: 16, h: 8}, {name: 'Deckel'});
+      b.mat = 'PLA'; b.color = '#d9483f'; b.colorSet = true; b.t.x = 40;
+      d.items.push(a, b);
+    })"""); warte_rechnen(p)
+
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    help_ok = 'exportObjGlb' in hilfen and all(k in hilfen['exportObjGlb'] for k in ('tip', 'hilfe', 'tipp'))
+
+    p.pg.get_by_role('button', name='Exportieren').first.click(); p.wait(500)
+    dh_obj = p.pg.locator('#ex-obj').locator('xpath=ancestor::label').get_attribute('data-help')
+    dh_glb = p.pg.locator('#ex-glb').locator('xpath=ancestor::label').get_attribute('data-help')
+    help_ok = help_ok and dh_obj == 'exportObjGlb' and dh_glb == 'exportObjGlb'
+
+    p.pg.uncheck('#ex-step'); p.pg.check('#ex-obj'); p.pg.check('#ex-glb'); p.pg.check('#ex-each'); p.wait(100)
+    with p.pg.expect_download(timeout=90000) as dl:
+        p.pg.get_by_role('button', name='Als ZIP speichern').click()
+    z = os.path.join(tempfile.gettempdir(), 'tracery-a010.zip'); dl.value.save_as(z)
+    zf = zipfile.ZipFile(z)
+    names = zf.namelist()
+    obj_files = [n for n in names if '/' not in n and n.endswith('.obj')]
+    mtl_files = [n for n in names if '/' not in n and n.endswith('.mtl')]
+    glb_files = [n for n in names if '/' not in n and n.endswith('.glb')]
+    einzeln = sorted(n for n in names if n.startswith('Einzeln/'))
+    ok1 = (help_ok and len(obj_files) == 1 and len(mtl_files) == 1 and len(glb_files) == 1
+           and einzeln == ['Einzeln/Deckel.glb', 'Einzeln/Deckel.mtl', 'Einzeln/Deckel.obj',
+                           'Einzeln/Gehäuse.glb', 'Einzeln/Gehäuse.mtl', 'Einzeln/Gehäuse.obj'])
+
+    obj_txt = zf.read(obj_files[0]).decode('utf-8') if obj_files else ''
+    mtl_txt = zf.read(mtl_files[0]).decode('utf-8') if mtl_files else ''
+    used_mtls = [line.split(None, 1)[1].strip() for line in obj_txt.splitlines() if line.startswith('usemtl ')]
+    def_mtls = {}
+    cur = None
+    for line in mtl_txt.splitlines():
+        if line.startswith('newmtl '):
+            cur = line.split(None, 1)[1].strip(); def_mtls[cur] = {}
+        elif cur and line.startswith('Kd '):
+            def_mtls[cur]['Kd'] = [float(x) for x in line.split()[1:4]]
+    ok2 = (f'mtllib {mtl_files[0]}' in obj_txt if mtl_files else False)
+    ok2 = (ok2 and 'o Gehäuse' in obj_txt and 'o Deckel' in obj_txt
+           and '\nv ' in obj_txt and '\nvn ' in obj_txt and '\nf ' in obj_txt
+           and len(used_mtls) == 2 and all(m in def_mtls and 'Kd' in def_mtls[m] for m in used_mtls)
+           and def_mtls[used_mtls[0]]['Kd'] != def_mtls[used_mtls[1]]['Kd']
+           and any(def_mtls[m]['Kd'][0] > 0.8 and def_mtls[m]['Kd'][1] < 0.35 for m in used_mtls))
+
+    glb = zf.read(glb_files[0]) if glb_files else b''
+    ok3 = False; ok4 = False
+    if len(glb) >= 28 and glb[:4] == b'glTF':
+        ver, total_len = struct.unpack('<II', glb[4:12])
+        j_len, j_type = struct.unpack('<II', glb[12:20])
+        b_off = 20 + j_len
+        b_len, b_type = struct.unpack('<II', glb[b_off:b_off + 8])
+        gltf = _json.loads(glb[20:20 + j_len].decode('utf-8').rstrip(' \x00'))
+        mesh_names = [m.get('name') for m in gltf.get('meshes', [])]
+        node_names = [n.get('name') for n in gltf.get('nodes', [])]
+        pos_accs = [gltf['accessors'][m['primitives'][0]['attributes']['POSITION']] for m in gltf.get('meshes', [])]
+        bvs_ok = all(bv['byteOffset'] + bv['byteLength'] <= b_len for bv in gltf.get('bufferViews', []))
+        ok3 = (ver == 2 and total_len == len(glb) and j_type == 0x4E4F534A and b_type == 0x004E4942
+               and gltf.get('asset', {}).get('version') == '2.0'
+               and len(gltf.get('meshes', [])) == 2 and len(gltf.get('nodes', [])) == 2
+               and mesh_names == ['Gehäuse', 'Deckel'] and node_names == ['Gehäuse', 'Deckel']
+               and all('min' in a and 'max' in a and len(a['min']) == 3 for a in pos_accs)
+               and bvs_ok)
+        mats = {gltf['nodes'][i]['name']: gltf['materials'][gltf['meshes'][gltf['nodes'][i]['mesh']]['primitives'][0]['material']] for i in range(len(gltf.get('nodes', [])))}
+        m_alu = mats.get('Gehäuse', {}).get('pbrMetallicRoughness', {})
+        m_pla = mats.get('Deckel', {}).get('pbrMetallicRoughness', {})
+        bc_pla = m_pla.get('baseColorFactor', [0, 0, 0, 0])
+        cc_pla = mats.get('Deckel', {}).get('extensions', {}).get('KHR_materials_clearcoat', {})
+        ok4 = (m_alu.get('metallicFactor') == 1 and abs(m_alu.get('roughnessFactor', 0) - 0.3) < 0.01
+               and m_pla.get('metallicFactor') == 0 and bc_pla[0] > 0.6 and bc_pla[1] < 0.1 and bc_pla[2] < 0.1
+               and abs(cc_pla.get('clearcoatFactor', 0) - 0.15) < 0.01
+               and 'KHR_materials_clearcoat' in gltf.get('extensionsUsed', []))
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -5846,6 +5926,7 @@ TESTS = [
     ('[A-021] Profi-Stufe und eigene Tastenkürzel: erster Start / Profi-Schild / Kürzel ändern / doppeltes Kürzel / Zurücksetzen', t_a021_profi_kuerzel),
     ('[A-006] Versatz mehrfach, beidseitig und runde Ecken: 3× Rechteck / beidseitig / Ecken rund / Kette & Rückgängig', t_a006_versatz_mehrfach),
     ('[A-008] Bohrungs-Arten: Sackloch Ø 5 × 10 mit 118°-Spitze / Passbohrung H7 / Zentrierbohrung / Vorschau & Hilfe', t_a008_bohrungsarten),
+    ('[A-010] OBJ und GLB speichern: ZIP mit .obj/.mtl/.glb / MTL-Farben / GLB-Kopf & Meshes / Studio-Material / Einzeln', t_a010_obj_glb),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

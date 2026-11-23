@@ -1576,7 +1576,7 @@ export function createKernel(R, oc) {
       const b = bboxOf(s.shape);
       const tol = (fine ? Math.min(0.05, Math.max(0.005, meshTol(b) * 0.35)) : meshTol(b)) * f;
       const m = s.shape.mesh({ tolerance: tol, angularTolerance: (fine ? 0.1 : 0.2) * Math.min(2, Math.max(0.25, f)) });
-      objs.push({ id: s.id, name: s.name, color: s.color, vertices: new Float32Array(m.vertices), triangles: new Uint32Array(m.triangles) });
+      objs.push({ id: s.id, name: s.name, color: s.color, vertices: new Float32Array(m.vertices), normals: new Float32Array(m.normals), triangles: new Uint32Array(m.triangles) });
       s.shape.delete();
     }
     return { objects: objs, errors };
