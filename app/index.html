@@ -1135,8 +1135,8 @@ const HELP = {
   "tipp": "Drücke die Escape-Taste, um die Linienkette zu beenden, ohne die ganze Skizze zu schließen."
  },
  "select": {
-  "tip": "Elemente wählen und Punkte ziehen",
-  "hilfe": "Klicke ein Element an, um es rechts zu bearbeiten. Endpunkte und Spline-Punkte lassen sich ziehen, ganze Elemente an der Linie. Entf löscht das Gewählte.",
+  "tip": "Elemente wählen, Rahmen ziehen und Punkte verschieben",
+  "hilfe": "Klicke ein Element an, um es rechts zu bearbeiten, oder ziehe im Leeren einen Rahmen auf: Von links nach rechts wählt nur Elemente ganz im Rahmen, von rechts nach links (gestrichelt) alles, was berührt wird. Umschalt fügt zur Auswahl hinzu. Endpunkte und Spline-Punkte lassen sich ziehen. Entf löscht das Gewählte, H verschiebt oder dreht es.",
   "tipp": "Feste Maße und Regeln bleiben beim Ziehen erhalten. Blaue Teile sind noch beweglich, dunkle liegen fest."
  },
  "rect": {
@@ -11090,7 +11090,7 @@ const Sketch = (() => {
   ];
   const HELPKEY = { wall: 'wall2d', project: 'project2d', splitl: 'split2d', extend: 'extend2d', tpl: 'sketchTemplate', corner: 'corner2d', text: 'sketchText', bg: 'sketchImage', poly: 'polygon', dim: 'dimension', offset: 'offset2d', mirror: 'mirror2d', patrect: 'patternRect2d', patcirc: 'patternCirc2d' };
   const HINTS = {
-    select: 'Element anklicken zum Bearbeiten. Endpunkte lassen sich ziehen. <b>Entf</b> löscht.',
+    select: 'Element anklicken oder im Leeren einen <b>Rahmen</b> ziehen (links→rechts: ganz drin · rechts→links: berührt · <b>Umschalt</b> fügt hinzu). Endpunkte lassen sich ziehen. <b>Entf</b> löscht, <b>H</b> verschiebt.',
     line: 'Klick setzt Punkte. Zahl tippen für genaue Länge. Am Startpunkt schließen oder <b>Enter</b> zum Beenden.',
     rect: 'Erste Ecke klicken, dann die zweite. Oder Zahlen tippen: Breite <b>Tab</b> Höhe.',
     circle: 'Mittelpunkt klicken, dann Größe. Oder Durchmesser eintippen.',
@@ -11414,7 +11414,7 @@ const Sketch = (() => {
     if (Notes.active) Notes.stop();
     Panels.closeFlyout(); UI.closePop();
     const F = frameWorld(init.plane, init.W);
-    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.mode === 'patpath' ? 'line' : 'rect', draft: null, sel: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, hoverEnt: null, trimHover: null, check: null, checkFocus: null };
+    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.mode === 'patpath' ? 'line' : 'rect', draft: null, sel: null, sels: [], band: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, hoverEnt: null, trimHover: null, check: null, checkFocus: null };
     S.dims = init.dims || []; S.cons = init.cons || []; S.picks = []; S.dimFirst = null; S.selCon = null;
     S.plane0 = deepClone(init.plane); S.pOff = init.pOff || 0; S.pTilt = 0;
     if (S.pOff) applyPlane(false, true);
@@ -11474,11 +11474,28 @@ const Sketch = (() => {
   let cbar = null;
   let bars = null;
   function hideBar() { if (bar) { bar.remove(); bar = null; } if (cbar) { cbar.remove(); cbar = null; } if (bars) { bars.remove(); bars = null; } }
+  function selectedIds() {
+    if (!S) return [];
+    const raw = S.sels && S.sels.length ? S.sels : S.sel ? [S.sel] : [];
+    return [...new Set(raw.filter((id) => ent(id)))];
+  }
+  function setSel(ids) {
+    if (!S) return;
+    const uniq = [...new Set((ids || []).filter((id) => ent(id)))];
+    S.sels = uniq;
+    S.sel = uniq.length === 1 ? uniq[0] : null;
+    if (uniq.length) S.selCon = null;
+  }
+  function clearSel() { if (!S) return; S.sels = []; S.sel = null; }
+  function clearBand() { if (S && S.band) { if (S.band.el) S.band.el.remove(); S.band = null; } }
   function setTool(id) {
     if (!S) return;
     commitDraftPolyline();
+    clearBand();
+    const carry = (id === 'xmove' || id === 'patrect' || id === 'patcirc') ? selectedIds() : [];
     S.tool = id; S.draft = null; S.picks = []; S.dimFirst = null; hideEntry(); hideDimBox();
-    S.mir = null; S.patSel = []; S.patPick = false; S.trimHover = null; S.trimming = false; S.hoverEnt = null;
+    S.mir = null; S.patSel = carry; S.patPick = false; S.trimHover = null; S.trimming = false; S.hoverEnt = null;
+    if (id !== 'select') clearSel();
     for (const el of [bar, cbar]) if (el) $$('.tool[data-tool]', el).forEach((b) => b.classList.toggle('active', b.dataset.tool === id));
     UI.hint(HINTS[id]); Panels.renderRight(); render();
   }
@@ -11556,7 +11573,7 @@ const Sketch = (() => {
   function sketchUndo() {
     if (S.draft && S.draft.pts && S.draft.pts.length > 1 && S.tool === 'line') { S.draft = null; render(); return; }
     const last = S.undo.pop(); if (last == null) return;
-    const st = JSON.parse(last); S.ents = st.ents; S.dims = st.dims || []; S.cons = st.cons || []; S.sel = null; S.selCon = null; S.draft = null; S.picks = []; reapply(); render(); Panels.renderRight();
+    const st = JSON.parse(last); S.ents = st.ents; S.dims = st.dims || []; S.cons = st.cons || []; clearSel(); S.selCon = null; S.draft = null; S.picks = []; reapply(); render(); Panels.renderRight();
   }
   function addEnt(e) { pushUndo(); e.id = uid('e'); if (S.construction) e.con = true; S.ents.push(e); return e; }
   // ---------- Maße und Regeln: der Löser rechnet alles gemeinsam ----------
@@ -11651,7 +11668,7 @@ const Sketch = (() => {
     pushUndo();
     S.ents.splice(S.ents.indexOf(e), 1, ...ents);
     S.dims = S.dims.filter((d) => d.e !== id); S.cons = S.cons.filter((c) => !(c.refs || []).includes(id) && c.e !== id);
-    S.sel = null; reapply(); render(); Panels.renderRight();
+    clearSel(); reapply(); render(); Panels.renderRight();
     UI.toast(`Text in ${ents.length} Kurven umgewandelt – jetzt kannst du Buchstaben trimmen, versetzen oder einzeln ändern.`, { icon: 'check', ms: 3200 });
     return ents.length;
   }
@@ -11660,8 +11677,8 @@ const Sketch = (() => {
   let clip = null;
   const CLIPCONS = new Set(['horizontal', 'vertical', 'parallel', 'perpendicular', 'collinear', 'tangent', 'equal', 'symmetric', 'coincident', 'midpoint', 'concentric']);
   function copySel() {
-    const ids = (S.patSel && S.patSel.length ? S.patSel : S.sel ? [S.sel] : []).filter((id) => ent(id));
-    if (!ids.length) { UI.toast('Wähl zuerst etwas aus – mit „Verschieben“ (H) auch mehrere Elemente.', { icon: 'info' }); return 0; }
+    const ids = (S.patSel && S.patSel.length ? S.patSel : selectedIds()).filter((id) => ent(id));
+    if (!ids.length) { UI.toast('Wähl zuerst etwas aus – mit Rahmen oder „Verschieben“ (H) auch mehrere Elemente.', { icon: 'info' }); return 0; }
     const set = new Set(ids), inSet = (r) => !r || r.e === 'origin' || set.has(r.e);
     const ents = ids.map((id) => { const e = deepClone(ent(id)); delete e.link; return e; });
     const cons = S.cons.filter((c) => CLIPCONS.has(c.type) && (c.refs || []).length && c.refs.every(inSet) && c.refs.some((r) => r && set.has(r.e))).map(deepClone);
@@ -11698,7 +11715,7 @@ const Sketch = (() => {
     if (!S || S.step || !list || !list.length) return 0;
     pushUndo();
     for (const e of list) S.ents.push({ ...JSON.parse(JSON.stringify(e)), id: uid('e') });
-    S.sel = null; setTool('select'); reapply(); render(); Panels.renderRight();
+    clearSel(); setTool('select'); reapply(); render(); Panels.renderRight();
     return list.length;
   }
   // Ganze Skizze um den Nullpunkt vergrößern oder verkleinern: Elemente, Längen-Maße und Abstände in Regeln wandern mit
@@ -11731,13 +11748,22 @@ const Sketch = (() => {
     S.dims = S.dims.filter((d) => d.e !== id && !(d.refs || []).some((r) => usesEnt(r, id)));
     S.cons = S.cons.filter((c) => !conRefs(c).some((r) => usesEnt(r, id)));
     if (S.sel === id) S.sel = null;
+    if (S.sels && S.sels.length) {
+      S.sels = S.sels.filter((x) => x !== id);
+      S.sel = S.sels.length === 1 ? S.sels[0] : null;
+    }
     S.patSel = (S.patSel || []).filter((x) => x !== id);
   }
-  function deleteEnt(id) {
+  function deleteEnts(ids) {
+    const list = [...new Set((ids || []).filter((id) => ent(id)))];
+    if (!list.length) return 0;
     pushUndo();
-    removeEntData(id);
+    for (const id of list) removeEntData(id);
+    clearSel();
     reapply(); render(); Panels.renderRight();
+    return list.length;
   }
+  function deleteEnt(id) { deleteEnts([id]); }
   // Nach einer Änderung am Aufbau (Trimmen, Versatz, Spiegeln, Muster): alles neu rechnen. Passt etwas nicht mehr,
   // fliegen zuerst die neuen Regeln raus, dann – nur wenn es nicht anders geht – alte, die nicht mehr aufgehen.
   function sanitize(newCons = []) {
@@ -11957,7 +11983,7 @@ const Sketch = (() => {
       }
       const n = parseNum(raw); const v = isNaN(n) ? raw : n;
       if (isNaN(Model.num(v, vars(), NaN))) { inp.parentElement.parentElement.classList.add('invalid'); UI.toast('Das kann ich nicht ausrechnen: „' + raw + '“. Prüf die Schreibweise – Beispiele findest du unter „Maße“.', { kind: 'bad' }); return; }
-      hideDimBox(); if (sp.e) S.sel = sp.e; setDimSpec(sp, v); Viewer.canvas.focus();
+      hideDimBox(); if (sp.e) setSel([sp.e]); setDimSpec(sp, v); Viewer.canvas.focus();
     };
     inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); commit(); } if (e.key === 'Escape') { hideDimBox(); Viewer.canvas.focus(); } });
   }
@@ -11975,11 +12001,18 @@ const Sketch = (() => {
   }
   function toggleConstruction() {
     if (!S || S.step) return;
-    const sel = S.sel && ent(S.sel);
-    if (sel && S.tool === 'select') {
-      pushUndo(); if (sel.con) delete sel.con; else sel.con = true;
+    const ids = selectedIds();
+    if (ids.length && S.tool === 'select') {
+      pushUndo();
+      const allCon = ids.every((id) => ent(id).con);
+      for (const id of ids) { const e = ent(id); if (allCon) delete e.con; else e.con = true; }
       reapply(); render(); Panels.renderRight();
-      UI.toast(sel.con ? 'Jetzt eine Hilfslinie (zählt nicht zur Fläche).' : 'Wieder eine normale Linie.', { icon: 'info', ms: 2200 });
+      UI.toast(
+        allCon
+          ? (ids.length === 1 ? 'Wieder eine normale Linie.' : `${ids.length} Elemente wieder normal.`)
+          : (ids.length === 1 ? 'Jetzt eine Hilfslinie (zählt nicht zur Fläche).' : `${ids.length} Elemente jetzt als Hilfslinien (zählen nicht zur Fläche).`),
+        { icon: 'info', ms: 2200 }
+      );
       return;
     }
     S.construction = !S.construction; syncConBtn();
@@ -12066,7 +12099,7 @@ const Sketch = (() => {
       }
     }
     S.cons.push(...newCons);
-    S.sel = null; sanitize(newCons.map((c) => c.id));
+    clearSel(); sanitize(newCons.map((c) => c.id));
     S.trimHover = null; render(); Panels.renderRight();
     return true;
   }
@@ -12222,7 +12255,7 @@ const Sketch = (() => {
     newCons.push({ id: uid('k'), type: 'coincident', refs: [{ e: l1.id, p: k1 }, { e: nid, p: 'a' }] }, { id: uid('k'), type: 'coincident', refs: [{ e: l2.id, p: k2 }, { e: nid, p: 'b' }] });
     S.cons.push(...newCons);
     sanitize(newCons.map((c) => c.id));
-    S.cornerHover = null; S.sel = null;
+    S.cornerHover = null; clearSel();
     if (dropDims) UI.toast('Die Längen-Maße der beiden Linien wurden entfernt – die Linien enden jetzt an der ' + (C.mode === 'fillet' ? 'Rundung.' : 'Fase.'), { icon: 'info', ms: 4000 });
     render(); Panels.renderRight();
     return true;
@@ -12313,7 +12346,7 @@ const Sketch = (() => {
     }
     if (newCons.length > 1) { const og = uid('og'); for (const c of newCons) c.og = og; }   // zusammen entstanden: später zusammen ändern
     S.cons.push(...newCons);
-    S.draft = null; hideEntry(); S.sel = null;
+    S.draft = null; hideEntry(); clearSel();
     sanitize(newCons.map((c) => c.id));
     UI.hint(HINTS.offset); render(); Panels.renderRight();
     if (calc.items.some((x) => x.src.type === 'ellipse')) UI.toast('Der Versatz einer Ellipse ist keine Ellipse mehr – die Kopie ist eine Spline durch 48 Punkte genau im Abstand. Sie folgt der Ellipse nicht, wenn du diese später änderst.', { icon: 'info', ms: 5000 });
@@ -12376,7 +12409,7 @@ const Sketch = (() => {
     }
     if (!n) { S.undo.pop(); UI.toast('Da ist nichts Neues zu spiegeln.', { icon: 'info' }); return 0; }
     S.cons.push(...newCons);
-    S.mir = null; S.sel = null;
+    S.mir = null; clearSel();
     sanitize(newCons.map((c) => c.id));
     UI.hint(HINTS.mirror); render(); Panels.renderRight();
     return n;
@@ -12463,7 +12496,7 @@ const Sketch = (() => {
         dropped += before - S.cons.length;
       }
     }
-    S.patSel = []; S.sel = null;
+    S.patSel = []; clearSel();
     reapply(); render(); Panels.renderRight();
     const what = X.copy ? (job.ang != null ? 'gedreht kopiert' : 'verschoben kopiert') : job.ang != null ? 'gedreht' : 'verschoben';
     UI.toast(`${n} ${n === 1 ? 'Element' : 'Elemente'} ${what}${dropped ? ' – Regeln, die nicht mehr passten, sind angepasst' : ''}.`, { icon: 'check' });
@@ -12493,7 +12526,7 @@ const Sketch = (() => {
       newCons.push(c); made += r.ents.length;
     }
     S.cons.push(...newCons);
-    S.patSel = []; S.sel = null;
+    S.patSel = []; clearSel();
     sanitize(newCons.map((c) => c.id));
     if (o.select && newCons.length) S.selCon = newCons[0].id;
     UI.hint(HINTS[S.tool]); render(); Panels.renderRight();
@@ -12543,7 +12576,7 @@ const Sketch = (() => {
       if (pk.kind === 'point') { S.dimFirst = pk; hideDimBox(); UI.hint('Jetzt einen <b>zweiten Punkt</b> oder eine <b>Linie</b> anklicken – für den Abstand.'); render(); return; }
       const k = dimKeyAt(pk.ent, uv0);
       if (!k) { S.dimFirst = null; UI.toast('Dafür gibt es noch kein Maß.', { icon: 'info' }); return; }
-      S.sel = pk.ent.id; S.dimFirst = pk.kind === 'line' ? pk : null;
+      setSel([pk.ent.id]); S.dimFirst = pk.kind === 'line' ? pk : null;
       UI.hint(HINTS.dim); render(); Panels.renderRight();
       askDim({ e: pk.ent.id, k }, e.clientX, e.clientY); return;
     }
@@ -12552,14 +12585,30 @@ const Sketch = (() => {
       // Endpunkt ziehen? (alle Linien, die sich dort treffen, gehen mit)
       const tol = pxSize() * 9;
       const endHit = [];
-      for (const en of S.ents) {
-        if (en.type === 'line' || en.type === 'arc') { for (const k of ['a', 'b']) if (SK.d2(en[k], uv0) < tol) endHit.push([en, k]); }
-        else if (en.type === 'spline') en.pts.forEach((q, i) => { if (SK.d2(q, uv0) < tol) endHit.push([en, 'p' + i + '_']); });
+      if (!e.shiftKey) {
+        for (const en of S.ents) {
+          if (en.type === 'line' || en.type === 'arc') { for (const k of ['a', 'b']) if (SK.d2(en[k], uv0) < tol) endHit.push([en, k]); }
+          else if (en.type === 'spline') en.pts.forEach((q, i) => { if (SK.d2(q, uv0) < tol) endHit.push([en, 'p' + i + '_']); });
+        }
       }
       if (endHit.length) { pushUndo(); S.drag = { points: endHit, start: uv0 }; S.selCon = null; return; }
       const hit = SK.hit(S.ents, uv0, tol);
-      if (hit && (hit.type === 'point' || hit.type === 'text' || hit.type === 'ellipse' || hit.type === 'circle' || hit.type === 'rect' || hit.type === 'poly' || hit.type === 'slot' || hit.type === 'line' || hit.type === 'arc' || hit.type === 'spline')) { pushUndo(); S.drag = { move: hit.id, start: uv0, orig: deepClone(hit) }; }
-      S.sel = hit ? hit.id : null; S.selCon = null; render(); Panels.renderRight(); return;
+      if (hit) {
+        if (e.shiftKey) {
+          const cur = selectedIds(), idx = cur.indexOf(hit.id);
+          if (idx >= 0) cur.splice(idx, 1); else cur.push(hit.id);
+          setSel(cur); S.selCon = null; render(); Panels.renderRight(); return;
+        }
+        if (hit.type === 'point' || hit.type === 'text' || hit.type === 'ellipse' || hit.type === 'circle' || hit.type === 'rect' || hit.type === 'poly' || hit.type === 'slot' || hit.type === 'line' || hit.type === 'arc' || hit.type === 'spline') {
+          pushUndo(); S.drag = { move: hit.id, start: uv0, orig: deepClone(hit) };
+        }
+        setSel([hit.id]); S.selCon = null; render(); Panels.renderRight(); return;
+      }
+      // Im Leeren: Rahmen-Auswahl beginnen (erst ab > 4 px Ziehen sichtbar; kurzer Klick hebt Auswahl auf)
+      clearBand();
+      S.band = { x: e.clientX, y: e.clientY, shift: e.shiftKey, el: null, moved: false };
+      try { Viewer.canvas.setPointerCapture(e.pointerId); } catch (_) {}
+      return;
     }
     if (t === 'corner') { if (S.corner.mode === 'meet') meetDo(uv0); else cornerDo(uv0); return; }
     if (t === 'bgcal') { bgCalDown(uv0); return; }
@@ -12576,7 +12625,7 @@ const Sketch = (() => {
     if (t === 'text') {
       const T = S.txt; if (!String(T.s).trim()) { UI.toast('Bitte zuerst rechts einen Text eingeben.', { icon: 'info' }); return; }
       const en = addEnt({ type: 'text', a: p.slice(), s: T.s, h: T.h, font: T.font, align: T.align, rot: 0 });
-      S.sel = en.id; reapply(); render(); Panels.renderRight(); return;
+      setSel([en.id]); reapply(); render(); Panels.renderRight(); return;
     }
     if (t === 'extend') { extendAt(uv0); return; }
     if (t === 'splitl') { splitAt(p); return; }
@@ -12974,7 +13023,7 @@ const Sketch = (() => {
     if (r && !r.ok) { sketchUndo(); UI.toast('Das geht mit den Regeln dieser Skizze nicht.', { kind: 'bad' }); return; }
     if (!SK.regions(S.ents).length) UI.toast('Die Wand überschneidet sich selbst – nimm eine kleinere Dicke.', { kind: 'bad' });
     else UI.toast(`Wand ${fmt(t, 2)} mm dick. „Fertig“ zieht sie hoch.`, { icon: 'check', ms: 2400 });
-    S.sel = null; render(); Panels.renderRight();
+    clearSel(); render(); Panels.renderRight();
   }
   function splitAt(p) {
     const hit = SK.hit(S.ents, p, pxSize() * 9);
@@ -13075,10 +13124,74 @@ const Sketch = (() => {
   function slotInset(a, b, r) { const L = SK.d2(a, b); if (L <= 2 * r + 1e-6) return null; const ux = (b[0] - a[0]) / L, uy = (b[1] - a[1]) / L; return { a: [round(a[0] + ux * r, 4), round(a[1] + uy * r, 4)], b: [round(b[0] - ux * r, 4), round(b[1] - uy * r, 4)] }; }
   function slotR(a, b, p) { const L = SK.d2(a, b); if (L < 1e-9) return SK.d2(a, p); const ux = (b[0] - a[0]) / L, uy = (b[1] - a[1]) / L; return Math.abs((p[0] - a[0]) * -uy + (p[1] - a[1]) * ux); }
   function commitDraftPolyline() { if (!S || !S.draft) return; if (S.tool === 'line') S.draft = null; else if (S.tool === 'spline') finishSpline(false); }
+  // ---------- Rahmen-Auswahl (SK-10): links→rechts = ganz drin, rechts→links = berührt ----------
+  function segIntersectsRect(a, b, L, T, R, B) {
+    let t0 = 0, t1 = 1;
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    const clip = (p, q) => {
+      if (Math.abs(p) < 1e-12) return q >= 0;
+      const r = q / p;
+      if (p < 0) { if (r > t1) return false; if (r > t0) t0 = r; }
+      else { if (r < t0) return false; if (r < t1) t1 = r; }
+      return true;
+    };
+    return clip(-dx, a[0] - L) && clip(dx, R - a[0]) && clip(-dy, a[1] - T) && clip(dy, B - a[1]) && t0 <= t1;
+  }
+  function bandMove(e) {
+    if (!S || !S.band) return;
+    const b = S.band;
+    if (!b.moved && Math.hypot(e.clientX - b.x, e.clientY - b.y) <= 4) return;
+    b.moved = true;
+    if (!b.el) { b.el = h('div', { class: 'sel-band' }); document.body.append(b.el); }
+    const x0 = Math.min(b.x, e.clientX), y0 = Math.min(b.y, e.clientY), cross = e.clientX < b.x;
+    Object.assign(b.el.style, { left: x0 + 'px', top: y0 + 'px', width: Math.abs(e.clientX - b.x) + 'px', height: Math.abs(e.clientY - b.y) + 'px' });
+    b.el.classList.toggle('cross', cross);
+  }
+  function bandSelect(x1, y1, x2, y2, additive = false) {
+    if (!S) return [];
+    const cross = x2 < x1, L = Math.min(x1, x2), R = Math.max(x1, x2), T = Math.min(y1, y2), B = Math.max(y1, y2);
+    const cr = Viewer.canvas.getBoundingClientRect();
+    const toScr = (p) => { const s = Viewer.toScreen(toWorld(p[0], p[1])); return { x: s.x + cr.left, y: s.y + cr.top, behind: !!s.behind }; };
+    const inBox = (q) => !q.behind && q.x >= L && q.x <= R && q.y >= T && q.y <= B;
+    const hits = [];
+    for (const e of S.ents) {
+      if (e.type === 'point') {
+        if (inBox(toScr(e.a))) hits.push(e.id);
+        continue;
+      }
+      const pls = entPts(e);
+      if (!pls.length) continue;
+      let allIn = true, anyTouch = false, hasPts = false;
+      for (const pl of pls) {
+        if (!pl.length) continue;
+        const sp = pl.map(toScr);
+        hasPts = true;
+        for (let i = 0; i < sp.length; i++) {
+          if (inBox(sp[i])) anyTouch = true;
+          else allIn = false;
+          if (i > 0 && !anyTouch && !sp[i - 1].behind && !sp[i].behind && segIntersectsRect([sp[i - 1].x, sp[i - 1].y], [sp[i].x, sp[i].y], L, T, R, B)) anyTouch = true;
+        }
+      }
+      if (hasPts && (cross ? anyTouch : allIn)) hits.push(e.id);
+    }
+    const next = additive ? [...selectedIds(), ...hits] : hits;
+    setSel(next);
+    S.selCon = null;
+    render(); Panels.renderRight();
+    const n = selectedIds().length;
+    UI.toast(
+      hits.length
+        ? `${n} ${n === 1 ? 'Element' : 'Elemente'} gewählt (${cross ? 'alles, was der Rahmen berührt' : 'nur Elemente ganz im Rahmen'}).`
+        : additive ? 'Im Rahmen liegt kein weiteres Element.' : 'Im Rahmen liegt kein Element.',
+      { icon: 'pointer', ms: 2200 }
+    );
+    return selectedIds();
+  }
   let lastMouse = null;
   function onMove(e) {
     if (!S) return;
     if (S.step) return stepMove(e);
+    if (S.band) return;
     const uv0 = mouseUV(e); if (!uv0) return;
     lastMouse = { e, uv: uv0 };
     if (S.bgDrag) { S.bg.a = [round(S.bgDrag.a0[0] + uv0[0] - S.bgDrag.start[0], 3), round(S.bgDrag.a0[1] + uv0[1] - S.bgDrag.start[1], 3)]; render(); return; }
@@ -13118,7 +13231,16 @@ const Sketch = (() => {
     if (dragRaf) return;
     dragRaf = requestAnimationFrame(() => { dragRaf = 0; if (!S || !S.dragPins) return; reapply({ fast: true, pins: S.dragPins }); render(); });
   }
-  function onUp() {
+  function onUp(e) {
+    if (S && S.band) {
+      const b = S.band; clearBand();
+      if (b.moved && e) {
+        bandSelect(b.x, b.y, e.clientX, e.clientY, !!(b.shift || e.shiftKey));
+      } else if (!b.shift) {
+        clearSel(); S.selCon = null; render(); Panels.renderRight();
+      }
+      return;
+    }
     if (S && S.trimming) S.trimming = false;
     if (S && S.bgDrag) { S.bgDrag = null; Panels.renderRight(); return; }
     if (!S || !S.drag) return;
@@ -13234,9 +13356,11 @@ const Sketch = (() => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); sketchUndo(); return true; }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c' && !e.shiftKey) { e.preventDefault(); copySel(); return true; }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v' && !e.shiftKey) { e.preventDefault(); pasteClip(); return true; }
+    if (e.key === 'Escape' && S.band) { clearBand(); return true; }
     if (e.key === 'Escape' && S.mir) { S.mir = null; UI.hint(HINTS.mirror); render(); return true; }
     if (e.key === 'Escape' && S.patPick) { S.patPick = false; UI.hint(HINTS[S.tool]); render(); Panels.renderRight(); return true; }
     if (e.key === 'Escape' && S.patSel && S.patSel.length) { S.patSel = []; render(); Panels.renderRight(); return true; }
+    if (e.key === 'Escape' && S.tool === 'select' && S.sels && S.sels.length > 1) { clearSel(); render(); Panels.renderRight(); return true; }
     if (e.key === 'Escape') { if (S.draft) { S.draft = null; hideEntry(); render(); } else if (S.picks.length || S.dimFirst) { S.picks = []; S.dimFirst = null; UI.hint(HINTS[S.tool]); render(); } else if (S.tool !== 'select') setTool('select'); else cancel(); return true; }
     if (e.key === 'Enter' && S.draft && S.tool === 'spline') { finishSpline(false); return true; }
     if (e.key === 'Enter' && S.tool === 'mirror' && S.mir) { mirrorAll(); return true; }
@@ -13244,7 +13368,8 @@ const Sketch = (() => {
     if (e.key === 'Enter' && S.tool === 'xmove' && S.patSel.length) { applyXmove(); return true; }
     if (e.key === 'Enter') { if (S.draft && S.tool === 'line') { S.draft = null; render(); } else done(); return true; }
     if ((e.key === 'Delete' || e.key === 'Backspace') && S.selCon) { removeCons(S.selCon); return true; }
-    if ((e.key === 'Delete' || e.key === 'Backspace') && S.sel) { deleteEnt(S.sel); return true; }
+    const selIds = selectedIds();
+    if ((e.key === 'Delete' || e.key === 'Backspace') && selIds.length) { deleteEnts(selIds); return true; }
     // Beim Zeichnen landet jede Zahl und jeder Buchstabe im Eingabefeld (Formeln wie „breite/2“)
     if (S.draft && !e.ctrlKey && !e.metaKey && !e.altKey && /^[0-9.,\-(A-Za-zÄÖÜäöüß_]$/.test(e.key)) { if (showEntry(e.key)) { e.preventDefault(); return true; } }
     if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === 'x') { toggleConstruction(); return true; }
@@ -13305,10 +13430,11 @@ const Sketch = (() => {
     // Elemente: blau = noch beweglich, dunkel = voll bestimmt
     const free = th.dark ? '#5aa9ff' : '#1c6fd1';
     const st = S.status;
+    const selSet = new Set(selectedIds());
     const picked = new Set(S.picks.filter((p) => p.ent || (p.ref && p.ref.e && p.kind !== 'point')).map((p) => p.ref.e));
     const hov = S.hoverPick;
     for (const e of S.ents) {
-      const sel = e.id === S.sel || picked.has(e.id);
+      const sel = selSet.has(e.id) || picked.has(e.id);
       const isFree = !st || !st.freeEnts || st.freeEnts.has(e.id);
       const hot = hov && hov.kind !== 'point' && hov.ent && hov.ent.id === e.id;
       const col = sel ? acc : isFree ? free : ink;
@@ -13347,7 +13473,7 @@ const Sketch = (() => {
       placed.push([spx.x, ly, lw, lh]);
       el.style.left = spx.x + 'px'; el.style.top = ly + 'px';
       el.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); });
-      el.addEventListener('click', (e) => { if (sp.e) S.sel = sp.e; render(); Panels.renderRight(); askDim(sp, e.clientX, e.clientY); });
+      el.addEventListener('click', (e) => { if (sp.e) setSel([sp.e]); render(); Panels.renderRight(); askDim(sp, e.clientX, e.clientY); });
     }
     // Regeln als kleine Symbole neben den Elementen
     if (!S.step) {
@@ -13361,7 +13487,7 @@ const Sketch = (() => {
           el.innerHTML = icon(CICON[c.type] || 'info');
           el.style.left = spx.x + n * 19 + 'px'; el.style.top = spx.y + 'px';
           el.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); });
-          el.addEventListener('click', () => { S.selCon = c.id; S.sel = null; render(); Panels.renderRight(); });
+          el.addEventListener('click', () => { S.selCon = c.id; clearSel(); render(); Panels.renderRight(); });
           $('#overlay').append(el); labels.push(el);
         }
       }
@@ -13594,7 +13720,7 @@ const Sketch = (() => {
   }
   function runCheck(quiet = false) {
     if (!S) return null;
-    S.sel = null; S.selCon = null;
+    clearSel(); S.selCon = null;
     S.check = inspectCurrent();
     S.checkFocus = null;
     render(); Panels.renderRight();
@@ -13685,7 +13811,8 @@ const Sketch = (() => {
     if (S.ctx.mode === 'loftrail2') w.append(h('div', { class: 'ok-box', id: 'loftrail2-hint', html: '<b>Zweite Führungskurve</b> – sie steht quer zur ersten und gibt die Breite in der anderen Richtung vor (z. B. von oben gesehen, wenn die erste von der Seite kommt). Der Übergang folgt beiden, die Umrisse bleiben gleich.' }));
     if (S.ctx.mode === 'loftpath') w.append(h('div', { class: 'ok-box', id: 'loftpath-hint', html: '<b>Mittellinie für den Übergang</b> – die Umrisse bleiben, wo sie sind (die dünnen Hilfskanten zeigen sie), und die Fläche dazwischen folgt der Linie. Sie sollte vom ersten Umriss durch alle anderen bis zum letzten laufen. Zieh die Punkte der Kurve oder zeichne eine neue Linie, einen Bogen oder eine Spline.' }));
     if (S.step) { w.append(h('div', { class: 'hint-box', html: S.step.revolve ? 'Wähle die Achse, um die gedreht wird. Klick im Bild auf Flächen, um sie ab- oder anzuwählen.' : 'Zieh am Pfeil im Bild oder tipp die Höhe ein. Klick auf Flächen, um sie ab- oder anzuwählen.' })); body.append(w); return; }
-    const sel = S.ents.find((x) => x.id === S.sel);
+    const sels = selectedIds();
+    const sel = sels.length === 1 ? ent(sels[0]) : null;
     const selCon = S.selCon && S.cons.find((c) => c.id === S.selCon);
     if (selCon) {
       w.append(h('div', { class: 'prop-title' }, h('b', { style: { fontSize: '17px' } }, 'Regel: ' + (CNAME[selCon.type] || selCon.type))));
@@ -13852,6 +13979,16 @@ const Sketch = (() => {
       const del = h('button', { type: 'button', class: 'btn danger' }); del.innerHTML = icon('trash') + 'Löschen';
       del.onclick = () => deleteEnt(sel.id);
       w.append(h('div', { class: 'btn-row' }, del));
+    } else if (sels.length > 1) {
+      w.append(h('div', { class: 'prop-title' }, h('b', { style: { fontSize: '17px' }, id: 'sk-sel-count' }, `${sels.length} Elemente gewählt`)));
+      w.append(h('div', { class: 'hint-box', html: 'Mit <b>Verschieben</b> (H) bewegst oder drehst du die Auswahl, <b>Strg C</b> kopiert sie, <b>X</b> schaltet Hilfslinien um und <b>Entf</b> löscht sie. <b>Umschalt + Rahmen</b> fügt weitere Elemente hinzu.' }));
+      const mv = h('button', { type: 'button', class: 'btn primary', id: 'sk-sel-move' }); mv.innerHTML = icon('arrowR') + 'Verschieben / Drehen';
+      mv.onclick = () => setTool('xmove');
+      const cn = h('button', { type: 'button', class: 'btn', id: 'sk-sel-con' }); cn.innerHTML = icon('construct') + 'Hilfslinie';
+      cn.onclick = () => toggleConstruction();
+      const del = h('button', { type: 'button', class: 'btn danger', id: 'sk-sel-del' }); del.innerHTML = icon('trash') + 'Löschen';
+      del.onclick = () => deleteEnts(sels);
+      w.append(h('div', { class: 'btn-row' }, mv), h('div', { class: 'btn-row' }, cn, del));
     } else {
       // Zustand der ganzen Skizze
       const st = S.status;
@@ -14333,7 +14470,7 @@ const Sketch = (() => {
   function finishSession() {
     if (!S) return;
     const cam = S.cam, hid = S.hiddenEdit;
-    clearGroup(); hideBar(); hideEntry(); hideDimBox();
+    clearGroup(); clearBand(); hideBar(); hideEntry(); hideDimBox();
     if (stepBox) { stepBox.remove(); stepBox = null; }
     S = null; placeArrow();
     if (hid) Viewer.updateNode(hid, { visible: true });
@@ -14347,9 +14484,11 @@ const Sketch = (() => {
     const cv = Viewer.canvas;
     cv.addEventListener('pointerdown', (e) => { if (S) { onDown(e); } }, true);
     cv.addEventListener('pointermove', (e) => { if (S) onMove(e); });
+    window.addEventListener('pointermove', (e) => { if (S && S.band) bandMove(e); });
     window.addEventListener('pointerup', (e) => { if (S) { onUp(e); stepUp(e); } });
+    window.addEventListener('pointercancel', () => { if (S && S.band) clearBand(); });
   }
-  return { copySel, pasteClip, setRefDim, check: runCheck, repair: repairCheck, focusCheckIssue, init, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startPath, startLoftPath, editItem, pushPullFace, renderPanel, onKey, cancel, scaleAll, insertEnts, textToCurves, setBg, setTool, get active() { return !!S; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
+  return { copySel, pasteClip, setRefDim, check: runCheck, repair: repairCheck, focusCheckIssue, bandSelect, init, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startPath, startLoftPath, editItem, pushPullFace, renderPanel, onKey, cancel, scaleAll, insertEnts, textToCurves, setBg, setTool, get active() { return !!S; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
 })();
 
 // ---- 56-notes.js ----

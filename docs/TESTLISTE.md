@@ -506,6 +506,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Offene Enden**: Eine offene Linie meldet zwei „Offenes Ende“-Einträge (ohne „Alles reparieren“) und hebt das angeklickte Ende im Bild hervor.
 - [ ] **Von Hand**: Bei einer größeren importierten DXF/SVG mit mehreren kleinen Lücken und überlappenden Linien „Skizze prüfen“ klicken, die Treffer der Reihe nach anklicken (prüfen, ob Ringe und Schildchen gut lesbar sind) und „Alles reparieren“ testen.
 
+## Rahmen-Auswahl in der Skizze (Auto [A-004])
+
+- [x] **Fenster-Rahmen (links → rechts)**: Im Auswahl-Werkzeug im Leeren von links nach rechts ziehen wählt nur Elemente, die komplett im Rahmen liegen (durchgezogener Rahmen, Mehrfach-Anzeige rechts).
+- [x] **Kreuz-Rahmen (rechts → links) mit Umschalt**: Von rechts nach links (gestrichelter grüner Rahmen) wählt alles, was berührt wird; mit gedrückter Umschalt-Taste wird die Auswahl erweitert.
+- [x] **Weiterbearbeiten mit H („Verschieben“)**: Taste H übernimmt die gewählten Elemente direkt in `S.patSel` und verschiebt sie gemeinsam.
+- [x] **Löschen mit Entf und Rückgängig**: Entf löscht alle gewählten Elemente auf einmal; ein Rückgängig (Strg/Cmd+Z) holt alle zusammen zurück.
+- [ ] **Von Hand**: In einer gemischten Skizze mit Linien, Kreisen, Bögen und Splines beide Rahmen-Richtungen, Umschalt + Klick und das Umschalten zu Verschieben (H) und Hilfslinie (X) testen und prüfen, ob der Rahmen flüssig folgt und die Hervorhebung gut erkennbar ist.
+
 ## Maße als Tabelle (neu in Sitzung 114)
 
 - [x] **Tabelle**: Rechteck und Kreis mit drei Maßen → drei Zeilen („Rechteck 1“, „Kreis 1“); Breite 45 eintippen → Rechteck 45 mm breit, Tabelle bleibt offen.

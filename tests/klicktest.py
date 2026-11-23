@@ -5266,6 +5266,67 @@ def t_a003_skizzen_pruefer(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+# ---------- [A-004] Rahmen-Auswahl in der Skizze (SK-10) ----------
+def t_a004_rahmen_auswahl(p):
+    ents = [
+        {'id': 'L1', 'type': 'line', 'a': [-16, 6], 'b': [-4, 6]},
+        {'id': 'L2', 'type': 'line', 'a': [-16, -6], 'b': [-4, -6]},
+        {'id': 'L3', 'type': 'line', 'a': [0, 0], 'b': [18, 0]},
+    ]
+    scene(p, ents)
+    SS(p, "Sketch.setTool('select')"); p.wait(300)
+
+    def drag_band(u1, v1, u2, v2, shift=False):
+        a = to_screen(p, u1, v1)
+        b = to_screen(p, u2, v2)
+        if shift:
+            p.pg.keyboard.down('Shift')
+        p.pg.mouse.move(a[0], a[1])
+        p.pg.mouse.down()
+        p.pg.mouse.move(b[0], b[1], steps=8)
+        has_band = p.pg.locator('.sel-band').count()
+        is_cross = p.pg.locator('.sel-band.cross').count()
+        p.pg.mouse.up()
+        if shift:
+            p.pg.keyboard.up('Shift')
+        p.wait(350)
+        return has_band, is_cross
+
+    # 1. Rahmen von links nach rechts um L1 und L2 (L3 nur halb drin) -> genau 2 gewählt, nicht gestrichelt
+    b1, c1 = drag_band(-20, 10, 5, -10, shift=False)
+    sel1 = sorted(SS(p, "return S.sels || []"))
+    cnt_txt = (p.pg.locator('#sk-sel-count').text_content() or '').lower() if p.pg.locator('#sk-sel-count').count() else ''
+    ok1 = b1 == 1 and c1 == 0 and sel1 == ['L1', 'L2'] and '2 elemente' in cnt_txt
+
+    # 2. Umschalt + Kreuz-Rahmen von rechts nach links berührt nur die Mitte von L3 -> alle 3 gewählt, gestrichelt
+    b2, c2 = drag_band(14, 5, 8, -5, shift=True)
+    sel2 = sorted(SS(p, "return S.sels || []"))
+    ok2 = b2 == 1 and c2 == 1 and sel2 == ['L1', 'L2', 'L3']
+
+    # 3. H („Verschieben“) übernimmt Auswahl in S.patSel und verschiebt alle 3 gemeinsam
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('h'); p.wait(300)
+    pat_sel = sorted(SS(p, "return S.patSel || []"))
+    tool_h = SS(p, "return S.tool")
+    p.pg.fill('#xm-dx', '5'); p.pg.press('#xm-dx', 'Enter'); p.wait(150)
+    p.pg.click('#xm-make'); p.wait(400)
+    xs_moved = SS(p, "return ['L1','L2','L3'].map(id=>S.ents.find(e=>e.id===id).a[0])")
+    ok3 = tool_h == 'xmove' and pat_sel == ['L1', 'L2', 'L3'] and all(abs(a - b) < 1e-4 for a, b in zip(xs_moved, [-11, -11, 5]))
+
+    # Rückgängig + zurück zu Auswahl (V)
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('Control+z'); p.wait(300)
+    p.pg.keyboard.press('v'); p.wait(300)
+
+    # 4. Kreuz-Rahmen ohne Umschalt berührt alle 3 Linien -> 3 gewählt; Entf löscht alle 3; Rückgängig holt alle 3 zurück
+    b4, c4 = drag_band(12, 9, -8, -9, shift=False)
+    sel4 = sorted(SS(p, "return S.sels || []"))
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('Delete'); p.wait(350)
+    after_del = SS(p, "return [S.ents.length, (S.sels||[]).length]")
+    p.pg.keyboard.press('Control+z'); p.wait(350)
+    after_undo = SS(p, "return S.ents.length")
+    ok4 = b4 == 1 and c4 == 1 and sel4 == ['L1', 'L2', 'L3'] and after_del == [0, 0] and after_undo == 3
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -5367,6 +5428,7 @@ TESTS = [
     ('[A-001] Drohnen-Bereich unsichtbar: Startseite / Menüs und Bibliothek / Befehlssuche / Über-Dialog / altes Projekt mit buyMotor', t_a001_drohnen_unsichtbar),
     ('[A-002] KI-Kollege allgemein: Systemtext ohne Drohne/FPV / Vorschläge / Auftrag Gehäuse 60×40×30 mit Deckel / Prompt & Rückgängig', t_a002_ki_allgemein),
     ('[A-003] Skizzen-Prüfer: Lücke 0,01 mm und doppelte Linie / hervorheben / Alles reparieren / Rückgängig & Körper / offenes Ende', t_a003_skizzen_pruefer),
+    ('[A-004] Rahmen-Auswahl in der Skizze: Fenster links→rechts / Umschalt+Kreuz-Rahmen / H übernimmt in patSel / Entf löscht', t_a004_rahmen_auswahl),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

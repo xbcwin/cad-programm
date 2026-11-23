@@ -10,8 +10,8 @@
     "tipp": "Drücke die Escape-Taste, um die Linienkette zu beenden, ohne die ganze Skizze zu schließen."
   },
   "select": {
-    "tip": "Elemente wählen und Punkte ziehen",
-    "hilfe": "Klicke ein Element an, um es rechts zu bearbeiten. Endpunkte und Spline-Punkte lassen sich ziehen, ganze Elemente an der Linie. Entf löscht das Gewählte.",
+    "tip": "Elemente wählen, Rahmen ziehen und Punkte verschieben",
+    "hilfe": "Klicke ein Element an, um es rechts zu bearbeiten, oder ziehe im Leeren einen Rahmen auf: Von links nach rechts wählt nur Elemente ganz im Rahmen, von rechts nach links (gestrichelt) alles, was berührt wird. Umschalt fügt zur Auswahl hinzu. Endpunkte und Spline-Punkte lassen sich ziehen. Entf löscht das Gewählte, H verschiebt oder dreht es.",
     "tipp": "Feste Maße und Regeln bleiben beim Ziehen erhalten. Blaue Teile sind noch beweglich, dunkle liegen fest."
   },
   "rect": {
