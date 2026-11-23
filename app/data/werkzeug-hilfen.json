@@ -693,5 +693,15 @@
     "tip": "Alle Maße auf einen Blick",
     "hilfe": "Ist in der Skizze nichts gewählt, steht rechts „Alle Maße“: jedes Maß mit seinem Element und seinem Wert. Du kannst Werte und Formeln dort direkt ändern – praktisch, wenn viele Maße im Bild eng beieinander stehen.",
     "tipp": "Maße zum Ablesen stehen mit „(ablesen)“ da; tippst du dort einen Wert, wird es ein festes Maß."
+  },
+  "sketchCheck": {
+    "tip": "Offene Enden, Lücken und doppelte Linien finden",
+    "hilfe": "Prüft deine Skizze auf Stellen, die eine geschlossene Fläche verhindern: offene Enden, winzige Lücken unter 0,05 mm und übereinanderliegende (doppelte) Linien. Klick auf einen Treffer in der Liste, um die Stelle im Bild hervorzuheben.",
+    "tipp": "Wenn „Fertig“ keine Fläche erkennt, obwohl alles geschlossen aussieht, hilft der Skizzen-Prüfer fast immer sofort."
+  },
+  "sketchRepair": {
+    "tip": "Lücken schließen und doppelte Linien löschen",
+    "hilfe": "Schließt alle winzigen Lücken unter 0,05 mm mit der Regel „Deckungsgleich“ und löscht übereinanderliegende doppelte Linien auf einmal. Alles passiert in einem einzigen Rückgängig-Schritt.",
+    "tipp": "Größere offene Enden verbindest du von Hand, zum Beispiel mit „Linie“ oder „Ecke bilden“."
   }
 }

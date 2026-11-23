@@ -515,5 +515,172 @@ const SKO = (() => {
   const rotPt = (p, C, th) => { const cs = Math.cos(th), sn = Math.sin(th), x = p[0] - C[0], y = p[1] - C[1]; return [C[0] + cs * x - sn * y, C[1] + sn * x + cs * y]; };
   function rotateEnt(e, C, th) { return mapEnt(e, (p) => rotPt(p, C, th), (q) => (q.rot || 0) + th, true); }
 
-  return { TEMPLATES, TPLNAMES, tplEnts, curve, inter, intersections, partsOf, nearestOn, closest, perpFeet, tangentFeet, trimPlan, trimPieces, trimRemoved, explode, chainOf, offsetChain, offsetShape, linkPoints, hasRadius, mirrorEnt, mirrorPoint, moveEnt, rotateEnt, rotPt, pr };
+  // ---------- Skizzen-Prüfer (SK-09): doppelte Linien, winzige Lücken (< 0,05 mm) und offene Enden ----------
+  function inspect(ents, opts = {}) {
+    const gapTol = opts.gapTol != null ? opts.gapTol : 0.05;
+    const dupTol = opts.dupTol != null ? opts.dupTol : 0.01;
+    const list = (ents || []).filter((e) => !e.con);
+    const dims = opts.dims || [], cons = opts.cons || [];
+    const scores = new Map();
+    const scoreOf = (e) => {
+      if (scores.has(e.id)) return scores.get(e.id);
+      let s = e.link ? 10 : 0;
+      for (const d of dims) if (d.e === e.id || (d.refs || []).some((r) => r && r.e === e.id)) s += 3;
+      for (const c of cons) if ((c.refs || []).some((r) => r && r.e === e.id)) s += 1;
+      scores.set(e.id, s);
+      return s;
+    };
+    const pickKeep = (A, B, ia, ib) => {
+      const sa = scoreOf(A), sb = scoreOf(B);
+      return sa > sb || (sa === sb && ia <= ib) ? [A, B] : [B, A];
+    };
+    const bboxOf = (e) => {
+      if (e.type === 'line') return [Math.min(e.a[0], e.b[0]), Math.min(e.a[1], e.b[1]), Math.max(e.a[0], e.b[0]), Math.max(e.a[1], e.b[1])];
+      if (e.type === 'rect') return [Math.min(e.a[0], e.b[0]), Math.min(e.a[1], e.b[1]), Math.max(e.a[0], e.b[0]), Math.max(e.a[1], e.b[1])];
+      if (e.type === 'circle') return [e.c[0] - e.r, e.c[1] - e.r, e.c[0] + e.r, e.c[1] + e.r];
+      if (e.type === 'arc') { const pts = SK.arcPoints(e.a, e.m, e.b, 16); let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; for (const q of pts) { x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]); } return [x0, y0, x1, y1]; }
+      return null;
+    };
+    const boxOverlap = (a, b, tol) => a && b && a[0] <= b[2] + tol && b[0] <= a[2] + tol && a[1] <= b[3] + tol && b[1] <= a[3] + tol;
+    const boxes = list.map(bboxOf);
+    const dups = [], dropped = new Set();
+
+    // 1. Doppelte / übereinanderliegende Elemente (Linien, Bögen, Kreise, Rechtecke)
+    for (let i = 0; i < list.length; i++) {
+      const A = list[i]; if (dropped.has(A.id)) continue;
+      for (let j = i + 1; j < list.length; j++) {
+        const B = list[j]; if (dropped.has(B.id)) continue;
+        if (!boxOverlap(boxes[i], boxes[j], dupTol)) continue;
+        if (A.type === 'line' && B.type === 'line') {
+          const LA = d2(A.a, A.b), LB = d2(B.a, B.b);
+          if (LA < 1e-9 || LB < 1e-9) continue;
+          const aLonger = LA >= LB;
+          const P = aLonger ? A : B, Q = aLonger ? B : A;
+          const LP = aLonger ? LA : LB, LQ = aLonger ? LB : LA;
+          const ux = (P.b[0] - P.a[0]) / LP, uy = (P.b[1] - P.a[1]) / LP;
+          const da = Math.abs((Q.a[0] - P.a[0]) * uy - (Q.a[1] - P.a[1]) * ux);
+          const db = Math.abs((Q.b[0] - P.a[0]) * uy - (Q.b[1] - P.a[1]) * ux);
+          if (da > dupTol || db > dupTol) continue;
+          const t0 = (Q.a[0] - P.a[0]) * ux + (Q.a[1] - P.a[1]) * uy;
+          const t1 = (Q.b[0] - P.a[0]) * ux + (Q.b[1] - P.a[1]) * uy;
+          const lo = Math.min(t0, t1), hi = Math.max(t0, t1);
+          const ov0 = Math.max(0, lo), ov1 = Math.min(LP, hi), ov = ov1 - ov0;
+          if (ov <= Math.max(1e-3, Math.min(LP, LQ) * 0.01)) continue;
+          const mid = pr([P.a[0] + ux * ((ov0 + ov1) / 2), P.a[1] + uy * ((ov0 + ov1) / 2)]);
+          const contained = lo >= -dupTol && hi <= LP + dupTol;
+          if (contained) {
+            const [keep, drop] = Math.abs(LP - LQ) <= dupTol ? pickKeep(A, B, i, j) : [P, Q];
+            dropped.add(drop.id);
+            dups.push({ kind: 'dup', sub: 'line', keepId: keep.id, dropId: drop.id, ents: [keep.id, drop.id], p: mid, len: ov, partial: false, fixable: true });
+            if (drop === A) break;
+          } else {
+            const uMin = Math.min(0, lo), uMax = Math.max(LP, hi);
+            const mergePts = [pr([P.a[0] + ux * uMin, P.a[1] + uy * uMin]), pr([P.a[0] + ux * uMax, P.a[1] + uy * uMax])];
+            dropped.add(Q.id);
+            dups.push({ kind: 'dup', sub: 'line', keepId: P.id, dropId: Q.id, ents: [P.id, Q.id], p: mid, len: ov, partial: true, mergePts, fixable: true });
+            if (Q === A) break;
+          }
+        } else if (A.type === 'arc' && B.type === 'arc') {
+          const ai = SK.arcInfo(A.a, A.m, A.b), bi = SK.arcInfo(B.a, B.m, B.b);
+          if (!ai || !bi || d2(ai.c, bi.c) > dupTol || Math.abs(ai.r - bi.r) > dupTol) continue;
+          const sameEnds = (d2(A.a, B.a) <= dupTol && d2(A.b, B.b) <= dupTol) || (d2(A.a, B.b) <= dupTol && d2(A.b, B.a) <= dupTol);
+          if (!sameEnds || SK.distEnt(A, B.m) > dupTol || SK.distEnt(B, A.m) > dupTol) continue;
+          const [keep, drop] = pickKeep(A, B, i, j);
+          dropped.add(drop.id);
+          dups.push({ kind: 'dup', sub: 'arc', keepId: keep.id, dropId: drop.id, ents: [keep.id, drop.id], p: pr(keep.m), len: Math.abs(ai.sweep) * ai.r, partial: false, fixable: true });
+          if (drop === A) break;
+        } else if (A.type === 'circle' && B.type === 'circle') {
+          if (d2(A.c, B.c) > dupTol || Math.abs(A.r - B.r) > dupTol) continue;
+          const [keep, drop] = pickKeep(A, B, i, j);
+          dropped.add(drop.id);
+          dups.push({ kind: 'dup', sub: 'circle', keepId: keep.id, dropId: drop.id, ents: [keep.id, drop.id], p: pr([keep.c[0] + keep.r, keep.c[1]]), len: TAU * keep.r, partial: false, fixable: true });
+          if (drop === A) break;
+        } else if (A.type === 'rect' && B.type === 'rect') {
+          const ba = boxes[i], bb = boxes[j];
+          if (Math.abs(ba[0] - bb[0]) > dupTol || Math.abs(ba[1] - bb[1]) > dupTol || Math.abs(ba[2] - bb[2]) > dupTol || Math.abs(ba[3] - bb[3]) > dupTol) continue;
+          const [keep, drop] = pickKeep(A, B, i, j);
+          dropped.add(drop.id);
+          dups.push({ kind: 'dup', sub: 'rect', keepId: keep.id, dropId: drop.id, ents: [keep.id, drop.id], p: pr([(ba[0] + ba[2]) / 2, (ba[1] + ba[3]) / 2]), len: 0, partial: false, fixable: true });
+          if (drop === A) break;
+        }
+      }
+    }
+    // Linie, die direkt auf einer Kante eines Rechtecks liegt
+    for (let i = 0; i < list.length; i++) {
+      const R = list[i]; if (R.type !== 'rect' || dropped.has(R.id)) continue;
+      const rc = SK.rectCorners(R);
+      for (let j = 0; j < list.length; j++) {
+        const L = list[j]; if (L.type !== 'line' || dropped.has(L.id) || !boxOverlap(boxes[i], boxes[j], dupTol)) continue;
+        const LL = d2(L.a, L.b); if (LL < 1e-9) continue;
+        for (let k = 0; k < 4; k++) {
+          const p0 = rc[k], p1 = rc[(k + 1) % 4], LE = d2(p0, p1);
+          if (LE < 1e-9) continue;
+          const ux = (p1[0] - p0[0]) / LE, uy = (p1[1] - p0[1]) / LE;
+          const da = Math.abs((L.a[0] - p0[0]) * uy - (L.a[1] - p0[1]) * ux);
+          const db = Math.abs((L.b[0] - p0[0]) * uy - (L.b[1] - p0[1]) * ux);
+          if (da > dupTol || db > dupTol) continue;
+          const t0 = (L.a[0] - p0[0]) * ux + (L.a[1] - p0[1]) * uy;
+          const t1 = (L.b[0] - p0[0]) * ux + (L.b[1] - p0[1]) * uy;
+          const lo = Math.min(t0, t1), hi = Math.max(t0, t1), ov = Math.min(LE, hi) - Math.max(0, lo);
+          if (lo >= -dupTol && hi <= LE + dupTol && ov > 1e-3) {
+            dropped.add(L.id);
+            dups.push({ kind: 'dup', sub: 'line', keepId: R.id, dropId: L.id, ents: [R.id, L.id], p: pr([(L.a[0] + L.b[0]) / 2, (L.a[1] + L.b[1]) / 2]), len: LL, partial: false, fixable: true });
+            break;
+          }
+        }
+      }
+    }
+
+    // 2. Offene Enden und winzige Lücken (< gapTol) auf den bereinigten offenen Elementen
+    const verts = new Map();
+    const putV = (xy, ep) => { const k = key(xy); if (!verts.has(k)) verts.set(k, []); verts.get(k).push(ep); };
+    for (const e of list) {
+      if (dropped.has(e.id)) continue;
+      if (!(e.type === 'line' || e.type === 'arc' || (e.type === 'spline' && !e.closed && e.pts && e.pts.length >= 2))) continue;
+      const a = SK.endA(e), b = SK.endB(e);
+      if (d2(a, b) <= 1e-9) continue;
+      putV(a, { e: e.id, p: 'a', xy: a, type: e.type, npts: e.pts ? e.pts.length : 0 });
+      putV(b, { e: e.id, p: 'b', xy: b, type: e.type, npts: e.pts ? e.pts.length : 0 });
+    }
+    const openPts = [];
+    for (const arr of verts.values()) if (arr.length === 1) openPts.push(arr[0]);
+
+    const cands = [];
+    for (let i = 0; i < openPts.length; i++) {
+      const u = openPts[i];
+      for (let j = i + 1; j < openPts.length; j++) {
+        const v = openPts[j];
+        if (u.e === v.e && !(u.type === 'spline' && u.npts >= 3)) continue;
+        if (Math.abs(u.xy[0] - v.xy[0]) >= gapTol || Math.abs(u.xy[1] - v.xy[1]) >= gapTol) continue;
+        const dist = d2(u.xy, v.xy);
+        if (dist < gapTol) cands.push({ i, j, u, v, dist });
+      }
+    }
+    cands.sort((a, b) => a.dist - b.dist);
+    const used = new Set(), gaps = [];
+    for (const c of cands) {
+      if (used.has(c.i) || used.has(c.j)) continue;
+      used.add(c.i); used.add(c.j);
+      gaps.push({
+        kind: 'gap',
+        a: { e: c.u.e, p: c.u.p },
+        b: { e: c.v.e, p: c.v.p },
+        p: pr([(c.u.xy[0] + c.v.xy[0]) / 2, (c.u.xy[1] + c.v.xy[1]) / 2]),
+        pA: c.u.xy.slice(),
+        pB: c.v.xy.slice(),
+        dist: c.dist,
+        ents: c.u.e === c.v.e ? [c.u.e] : [c.u.e, c.v.e],
+        fixable: true,
+      });
+    }
+    const opens = [];
+    openPts.forEach((u, idx) => {
+      if (!used.has(idx)) opens.push({ kind: 'open', ref: { e: u.e, p: u.p }, p: u.xy.slice(), ents: [u.e], fixable: false });
+    });
+
+    const issues = [...gaps, ...dups, ...opens];
+    return { issues, gaps, dups, opens, fixable: gaps.length + dups.length };
+  }
+
+  return { TEMPLATES, TPLNAMES, tplEnts, curve, inter, intersections, partsOf, nearestOn, closest, perpFeet, tangentFeet, trimPlan, trimPieces, trimRemoved, explode, chainOf, offsetChain, offsetShape, linkPoints, hasRadius, mirrorEnt, mirrorPoint, moveEnt, rotateEnt, rotPt, pr, inspect };
 })();

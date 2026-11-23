@@ -354,7 +354,7 @@ const Sketch = (() => {
     if (Notes.active) Notes.stop();
     Panels.closeFlyout(); UI.closePop();
     const F = frameWorld(init.plane, init.W);
-    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.mode === 'patpath' ? 'line' : 'rect', draft: null, sel: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, hoverEnt: null, trimHover: null };
+    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.mode === 'patpath' ? 'line' : 'rect', draft: null, sel: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, hoverEnt: null, trimHover: null, check: null, checkFocus: null };
     S.dims = init.dims || []; S.cons = init.cons || []; S.picks = []; S.dimFirst = null; S.selCon = null;
     S.plane0 = deepClone(init.plane); S.pOff = init.pOff || 0; S.pTilt = 0;
     if (S.pOff) applyPlane(false, true);
@@ -514,7 +514,13 @@ const Sketch = (() => {
     if (!S) return null;
     const r = Solver.solve({ ents: S.ents, dims: S.dims, cons: S.cons }, vars(), { inPlace: true, analyze: !opts.fast, pins: opts.pins });
     refreshTextPaths();
-    if (!opts.fast) S.status = r; else if (S.status) S.status.conflicts = r.conflicts;
+    if (!opts.fast) {
+      S.status = r;
+      if (S.check) {
+        S.check = inspectCurrent();
+        if (S.checkFocus != null && S.checkFocus >= S.check.issues.length) S.checkFocus = null;
+      }
+    } else if (S.status) S.status.conflicts = r.conflicts;
     return r;
   }
   const ent = (id) => S.ents.find((x) => x.id === id);
@@ -2311,6 +2317,39 @@ const Sketch = (() => {
     }
     // offene Enden markieren
     if (!pathM && !isLoftLine()) for (const p of SK.openEnds(S.ents)) { const w = toWorld(p[0], p[1]); const l = label('', p, 'snaptip'); l.style.transform = 'translate(-50%,-50%)'; l.style.width = '9px'; l.style.height = '9px'; l.style.padding = '0'; l.style.borderRadius = '50%'; l.style.background = th.hole; l.title = 'Offenes Ende'; }
+    // Skizzen-Prüfer: Fundstellen und hervorgehobene Stelle
+    if (S.check && S.check.issues.length && !S.step) {
+      const ps = pxSize();
+      S.check.issues.forEach((it, idx) => {
+        const focused = S.checkFocus === idx;
+        const col = it.kind === 'dup' ? (focused ? '#e03131' : '#e8833a') : '#e03131';
+        if (it.kind === 'dup') {
+          for (const id of it.ents) {
+            const e = ent(id); if (!e) continue;
+            for (const pts of entPts(e)) lineObj(pts, col, focused ? 5 : 3.2, { order: focused ? 29 : 27, opacity: focused ? 1 : 0.75 });
+          }
+          if (focused) ring(it.p, ps * 10, col, 2.8);
+        } else {
+          ring(it.p, ps * (focused ? 10 : 7), col, focused ? 3 : 2);
+          if (focused) {
+            ring(it.p, ps * 16, col, 1.8);
+            for (const id of it.ents) {
+              const e = ent(id); if (!e) continue;
+              for (const pts of entPts(e)) lineObj(pts, '#e8833a', 3.6, { order: 28, opacity: 0.9 });
+            }
+          }
+        }
+        if (focused) {
+          const tag = it.kind === 'gap'
+            ? `Lücke ${fmt(it.dist, 3)} mm`
+            : it.kind === 'dup'
+              ? (it.partial ? 'Überlappende Linie' : ({ line: 'Doppelte Linie', arc: 'Doppelter Bogen', circle: 'Doppelter Kreis', rect: 'Doppeltes Rechteck' }[it.sub] || 'Doppeltes Element'))
+              : 'Offenes Ende';
+          const el = label(tag, [it.p[0], it.p[1] + ps * 18], 'dimlabel live bad sk-chk-tag');
+          el.dataset.issue = String(idx);
+        }
+      });
+    }
     // Entwurf
     const d = S.draft, cur = S.cursor ? S.cursor.p : null;
     if (d && cur && !S.step) {
@@ -2483,6 +2522,99 @@ const Sketch = (() => {
     return null;
   }
   Viewer.on('camera', () => { if (S) { render(); placeEntry(); } });
+
+  // ---------- Skizzen-Prüfer (SK-09) ----------
+  const getEndPt = (e, p) => (e.type === 'spline' ? (p === 'a' ? e.pts[0] : e.pts[e.pts.length - 1]) : e[p]);
+  function setEndPt(e, p, xy) {
+    if (e.type === 'spline') { e.pts = e.pts.slice(); e.pts[p === 'a' ? 0 : e.pts.length - 1] = xy.slice(); }
+    else e[p] = xy.slice();
+  }
+  function inspectCurrent() {
+    return S ? SKO.inspect(S.ents, { gapTol: 0.05, dims: S.dims, cons: S.cons }) : { issues: [], gaps: [], dups: [], opens: [], fixable: 0 };
+  }
+  function runCheck(quiet = false) {
+    if (!S) return null;
+    S.sel = null; S.selCon = null;
+    S.check = inspectCurrent();
+    S.checkFocus = null;
+    render(); Panels.renderRight();
+    if (!quiet) {
+      if (!S.ents.length) UI.toast('Die Skizze ist noch leer – zeichne zuerst etwas.', { icon: 'info' });
+      else if (!S.check.issues.length) UI.toast('Skizze geprüft: Alles in Ordnung – keine Lücken oder doppelten Linien.', { icon: 'check' });
+      else {
+        const parts = [];
+        if (S.check.gaps.length) parts.push(`${S.check.gaps.length} ${S.check.gaps.length === 1 ? 'winzige Lücke' : 'winzige Lücken'}`);
+        if (S.check.dups.length) parts.push(`${S.check.dups.length} ${S.check.dups.length === 1 ? 'doppelte Linie' : 'doppelte Linien'}`);
+        if (S.check.opens.length) parts.push(`${S.check.opens.length} ${S.check.opens.length === 1 ? 'offenes Ende' : 'offene Enden'}`);
+        UI.toast('Skizze geprüft: ' + parts.join(', ') + ' gefunden.', { icon: 'info', ms: 4200 });
+      }
+    }
+    return S.check;
+  }
+  function focusCheckIssue(idx) {
+    if (!S || !S.check || !S.check.issues[idx]) return false;
+    S.checkFocus = idx;
+    const it = S.check.issues[idx];
+    const w = toWorld(it.p[0], it.p[1]), sc = Viewer.toScreen(w), r = Viewer.canvas.getBoundingClientRect();
+    if (sc.x < 40 || sc.x > r.width - 40 || sc.y < 40 || sc.y > r.height - 40) {
+      const size = Math.max(20, Viewer.pixelSizeAt(S.F.o) * Math.min(r.width, r.height) * 0.45);
+      Viewer.lookAtPlane(w.toArray(), S.F.n.toArray(), S.F.x.toArray(), size);
+    }
+    render(); Panels.renderRight();
+    return true;
+  }
+  function repairCheck() {
+    if (!S) return null;
+    const res = inspectCurrent();
+    if (!res.fixable) {
+      S.check = res; S.checkFocus = null; render(); Panels.renderRight();
+      UI.toast('Hier gibt es nichts automatisch zu reparieren.', { icon: 'info' });
+      return { dups: 0, gaps: 0, failed: 0, remaining: res.issues.length };
+    }
+    pushUndo();
+    let dupsFixed = 0, gapsFixed = 0, gapsFailed = 0;
+    for (const d of res.dups) {
+      if (!ent(d.dropId)) continue;
+      if (d.partial && d.mergePts) {
+        const keep = ent(d.keepId);
+        if (keep && keep.type === 'line') { keep.a = d.mergePts[0].slice(); keep.b = d.mergePts[1].slice(); }
+      }
+      removeEntData(d.dropId);
+      dupsFixed++;
+    }
+    const welded = [];
+    for (const g of res.gaps) {
+      const eA = ent(g.a.e), eB = ent(g.b.e);
+      if (!eA || !eB) continue;
+      if (eA === eB && eA.type === 'spline' && !eA.closed && eA.pts.length >= 3) {
+        eA.closed = true;
+        if (SK.d2(eA.pts[0], eA.pts[eA.pts.length - 1]) < 0.05 && eA.pts.length > 3) eA.pts.pop();
+        gapsFixed++;
+        continue;
+      }
+      const c = { id: uid('k'), type: 'coincident', refs: [g.a, g.b] };
+      const tr = Solver.trial({ ents: S.ents, dims: S.dims, cons: [...S.cons, c], consBefore: S.cons }, vars());
+      if (tr.ok) { S.cons.push(c); welded.push(g); gapsFixed++; }
+      else gapsFailed++;
+    }
+    reapply();
+    for (const g of welded) {
+      const eA = ent(g.a.e), eB = ent(g.b.e);
+      if (!eA || !eB) continue;
+      const pA = getEndPt(eA, g.a.p), pB = getEndPt(eB, g.b.p);
+      if (pA && pB && SK.d2(pA, pB) < 1e-4) setEndPt(eB, g.b.p, pA.slice());
+    }
+    reapply();
+    S.check = inspectCurrent(); S.checkFocus = null;
+    render(); Panels.renderRight();
+    const parts = [];
+    if (gapsFixed) parts.push(`${gapsFixed} ${gapsFixed === 1 ? 'Lücke' : 'Lücken'} geschlossen`);
+    if (dupsFixed) parts.push(`${dupsFixed} doppelte ${dupsFixed === 1 ? 'Linie' : 'Linien'} gelöscht`);
+    let msg = parts.length ? 'Repariert: ' + parts.join(', ') + '.' : 'Nichts geändert.';
+    if (gapsFailed) msg += ` ${gapsFailed} ${gapsFailed === 1 ? 'Lücke konnte' : 'Lücken konnten'} wegen fester Regeln nicht geschlossen werden.`;
+    UI.toast(msg, { icon: gapsFailed && !parts.length ? 'warn' : 'check', kind: gapsFailed && !parts.length ? 'bad' : undefined, ms: 4500 });
+    return { dups: dupsFixed, gaps: gapsFixed, failed: gapsFailed, remaining: S.check.issues.length };
+  }
 
   // ---------- Rechte Leiste ----------
   function renderPanel(body) {
@@ -2815,6 +2947,55 @@ const Sketch = (() => {
       else {
         w.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Geschlossene Flächen'), h('b', { class: 'mono' }, String(regs.length))));
         if (SK.openEnds(S.ents).length) w.append(h('div', { class: 'err-box' }, 'Rot markierte Enden sind noch offen. Verbinde sie, damit eine Fläche entsteht.'));
+        // Skizzen-Prüfer (SK-09)
+        const chkBtn = h('button', { type: 'button', class: 'btn', id: 'sk-check', 'data-help': 'sketchCheck' });
+        chkBtn.innerHTML = icon('target') + 'Skizze prüfen';
+        chkBtn.onclick = () => runCheck();
+        w.append(h('div', { class: 'btn-row' }, chkBtn));
+        if (S.check) {
+          const box = h('div', { class: 'sk-check-box', id: 'sk-check-res' });
+          if (!S.ents.length) {
+            box.append(h('div', { class: 'hint-box' }, 'Die Skizze ist noch leer – zeichne zuerst etwas.'));
+          } else if (!S.check.issues.length) {
+            box.append(h('div', { class: 'ok-box', id: 'sk-check-ok', html: '<b>Alles in Ordnung</b> – keine offenen Enden, keine doppelten Linien, keine winzigen Lücken.' }));
+          } else {
+            const closeBtn = h('button', { type: 'button', class: 'btn ghost small', id: 'sk-check-close', 'aria-label': 'Prüfung ausblenden', 'data-tip': 'Prüfung ausblenden' });
+            closeBtn.innerHTML = icon('close');
+            closeBtn.onclick = () => { S.check = null; S.checkFocus = null; render(); Panels.renderRight(); };
+            box.append(h('div', { class: 'sk-check-head' }, h('b', null, `${S.check.issues.length} ${S.check.issues.length === 1 ? 'Stelle gefunden' : 'Stellen gefunden'}`), closeBtn));
+            if (S.check.fixable > 0) {
+              const repBtn = h('button', { type: 'button', class: 'btn primary', id: 'sk-repair', 'data-help': 'sketchRepair' });
+              repBtn.innerHTML = icon('check') + 'Alles reparieren';
+              repBtn.onclick = () => repairCheck();
+              box.append(h('div', { class: 'btn-row' }, repBtn));
+            }
+            const list = h('div', { class: 'chk-list sk-chk-list' });
+            S.check.issues.forEach((it, idx) => {
+              const cls = 'chk-row sk-chk-item ' + (it.kind === 'dup' ? 'warn' : 'bad') + (S.checkFocus === idx ? ' active' : '');
+              const title = it.kind === 'gap'
+                ? `Winzige Lücke (${fmt(it.dist, 3)} mm)`
+                : it.kind === 'dup'
+                  ? (it.partial ? 'Überlappende Linie' : ({ line: 'Doppelte Linie', arc: 'Doppelter Bogen', circle: 'Doppelter Kreis', rect: 'Doppeltes Rechteck' }[it.sub] || 'Doppeltes Element'))
+                  : 'Offenes Ende';
+              const sub = it.kind === 'gap'
+                ? `Bei ${fmt(it.p[0], 1)} / ${fmt(it.p[1], 1)} mm – wird mit Deckungsgleich geschlossen`
+                : it.kind === 'dup'
+                  ? (it.partial ? `Überlappt um ${fmt(it.len, 1)} mm – wird zusammengeführt` : `Liegt direkt auf einem anderen Element${it.len ? ` (${fmt(it.len, 1)} mm)` : ''}`)
+                  : `Bei ${fmt(it.p[0], 1)} / ${fmt(it.p[1], 1)} mm – mit anderer Linie verbinden`;
+              const row = h('button', { type: 'button', class: cls, dataset: { idx: String(idx), kind: it.kind } },
+                h('span', { class: 'chk-dot' }, '!'),
+                h('span', { class: 'grow' }, h('b', null, title), h('small', null, sub))
+              );
+              row.onclick = () => focusCheckIssue(idx);
+              list.append(row);
+            });
+            box.append(list);
+            if (S.check.fixable > 0 && S.check.opens.length > 0) {
+              box.append(h('div', { class: 'hint-box' }, '„Alles reparieren“ schließt winzige Lücken (< 0,05 mm) mit Deckungsgleich und löscht doppelte Linien. Größere offene Enden verbindest du von Hand.'));
+            }
+          }
+          w.append(box);
+        }
         if (S.dims.length && S.tool === 'select' && !S.sel) {
           // Alle Maße der Skizze als Tabelle (SK-53): Wert oder Formel direkt ändern
           const TN = { line: 'Linie', rect: 'Rechteck', circle: 'Kreis', arc: 'Bogen', slot: 'Langloch', poly: 'Vieleck', ellipse: 'Ellipse', text: 'Text', point: 'Punkt', spline: 'Spline' };
@@ -3108,6 +3289,6 @@ const Sketch = (() => {
     cv.addEventListener('pointermove', (e) => { if (S) onMove(e); });
     window.addEventListener('pointerup', (e) => { if (S) { onUp(e); stepUp(e); } });
   }
-  return { copySel, pasteClip, setRefDim, init, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startPath, startLoftPath, editItem, pushPullFace, renderPanel, onKey, cancel, scaleAll, insertEnts, textToCurves, setBg, setTool, get active() { return !!S; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
+  return { copySel, pasteClip, setRefDim, check: runCheck, repair: repairCheck, focusCheckIssue, init, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startPath, startLoftPath, editItem, pushPullFace, renderPanel, onKey, cancel, scaleAll, insertEnts, textToCurves, setBg, setTool, get active() { return !!S; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
 })();
 

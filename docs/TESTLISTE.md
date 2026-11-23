@@ -497,6 +497,15 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Abwärtskompatibilität**: Die Aktion `drohne` bleibt technisch erhalten und baut bestehende Drohnen-Aufträge weiter ohne Fehler.
 - [ ] **Von Hand**: In Claude einen echten freien CAD-Auftrag (z. B. „Baue ein Gehäuse 60×40×30 mit Deckel“ oder „Bau eine Wandhalterung für ein Kabel mit zwei M4-Löchern“) eintippen und prüfen, ob Antwort und Ergebnis stimmig und frei von Drohnen-Sprache sind.
 
+## Skizzen-Prüfer (Auto [A-003])
+
+- [x] **Lücke und doppelte Linie erkennen**: Skizze 30 × 20 mm aus vier Linien mit 0,01-mm-Lücke am Ursprung und einer doppelten Linie → „Skizze prüfen“ meldet beides in der Ergebnisliste und bietet „Alles reparieren“ an.
+- [x] **Stelle hervorheben**: Klick auf einen Treffer in der Ergebnisliste markiert die Zeile aktiv und hebt Lücke bzw. doppelte Linie im Bild mit Ring und Schildchen hervor.
+- [x] **Alles reparieren**: Schließt die 0,01-mm-Lücke mit der Regel „Deckungsgleich“ und löscht die doppelte Linie → geschlossene Fläche (600 mm²), keine Doppelung, Prüfer meldet „Alles in Ordnung“.
+- [x] **Rückgängig und 3D-Körper**: Ein Rückgängig holt Lücke und doppelte Linie komplett zurück; erneutes Reparieren und „Fertig“ erzeugt fehlerfrei den 3D-Körper (1800 mm³).
+- [x] **Offene Enden**: Eine offene Linie meldet zwei „Offenes Ende“-Einträge (ohne „Alles reparieren“) und hebt das angeklickte Ende im Bild hervor.
+- [ ] **Von Hand**: Bei einer größeren importierten DXF/SVG mit mehreren kleinen Lücken und überlappenden Linien „Skizze prüfen“ klicken, die Treffer der Reihe nach anklicken (prüfen, ob Ringe und Schildchen gut lesbar sind) und „Alles reparieren“ testen.
+
 ## Maße als Tabelle (neu in Sitzung 114)
 
 - [x] **Tabelle**: Rechteck und Kreis mit drei Maßen → drei Zeilen („Rechteck 1“, „Kreis 1“); Breite 45 eintippen → Rechteck 45 mm breit, Tabelle bleibt offen.

@@ -190,6 +190,7 @@ Fertig.
 - [x] Bogen über Mitte, Start, Ende (Sitzung 98, SK-16): Bogen → „Mitte, Start, Ende“ – gegen den Uhrzeigersinn, der Radius kommt vom Startpunkt, das Ende wird auf den Kreis gezogen
 - [x] Tangente an zwei Kreise (Sitzung 111, SK-19): Linie → „Tangente an zwei Kreise“ – zwei Kreise oder Bögen anklicken, die äußere Tangente auf der angeklickten Seite entsteht mit zwei Tangential-Regeln (folgt, wenn sich die Kreise ändern)
 - [x] Maße als Tabelle (Sitzung 114, SK-53): in der Skizze rechts „Alle Maße (N)“ – jedes Maß mit Element und Wert, direkt änderbar (auch Formeln)
+- [x] Skizzen-Prüfer (Auto [A-003], SK-09): Knopf „Skizze prüfen“ im Skizzen-Panel findet offene Enden, doppelte/übereinanderliegende Linien und winzige Lücken (< 0,05 mm); Ergebnisliste hebt die Stelle per Klick hervor, „Alles reparieren“ schließt Lücken mit Deckungsgleich und löscht doppelte Linien in einem Rückgängig-Schritt
 - [x] Langloch über die Gesamtlänge (Sitzung 98, SK-18): Langloch → „Gerade, über die Gesamtlänge“ – die Klicks bzw. die getippte Länge sind die äußeren Enden; als Maße bleiben Breite und Mittenabstand (Gesamtlänge − Breite)
 - [x] Skizzen-Muster als Ganzes ändern: Regel-Symbol einer Kopie anklicken → „Ganzes Muster“ mit Anzahl und Abstand (Rechteck) bzw. Anzahl und Winkel (Kreis) → „Muster ändern“ (Sitzung 38)
 - [x] Versatz nachträglich für mehrere Elemente zusammen ändern: Ein Versatz einer Kette merkt sich, welche Stücke zusammen entstanden sind; der Abstand an einem Regel-Symbol gilt dann für alle, die Originale bleiben stehen (Sitzung 60)

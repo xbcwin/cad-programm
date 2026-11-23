@@ -87,7 +87,7 @@ Leitlinien:
 | `10-model.js` | Projekt-Datenmodell, `KINDS`, `newItem`, `find`/`walk`/`topOf`, Matrizen, `vars` (Maße), `kernelItem`, `sketchParams`/`loftParams`/`sweepParams`/`pathPatternParams`, `migrate` |
 | `15-sketchcore.js` (`SK`) | Skizzen-Geometrie: `segsOf`, `regions`, `chains` (offene Pfade), `bounds`, Splines als exakte Bézier (`splineBez`), Text-Umrisse (Schrift Inter, OFL), Ellipse, Fangpunkte, Maße |
 | `16-solver.js` | Skizzen-Löser (Maße und Regeln gemeinsam, Freiheitsgrade, Konflikte) |
-| `17-sketchops.js` (`SKO`) | Schnittpunkte, Trimmen, Versatz (`offsetChain`), Spiegeln, Muster (`mapEnt`), Schablonen `TEMPLATES`/`tplEnts` |
+| `17-sketchops.js` (`SKO`) | Schnittpunkte, Trimmen, Versatz (`offsetChain`), Spiegeln, Muster (`mapEnt`), Schablonen `TEMPLATES`/`tplEnts`, Skizzen-Prüfer `inspect` |
 | `20-kernel.js` | Brücke zum Worker |
 | `25-app.js` | Zustand, `App.change(label, fn, {merge, amend})` mit Rückgängig (300 Schritte), Neuberechnung, Ergebnisse |
 | `30-viewer.js` | three.js-Ansicht, Picking (Flächen, Kanten), `edgePositions`, Raster, Kamera |
@@ -230,6 +230,7 @@ Leitlinien:
   - Rechteckmuster (Q), Kreismuster (W) – **nachträglich als Ganzes änderbar**
   - Maß (D, Formeln), Bild-Vorlage (I, mit Maßstab), Hilfslinie (X)
   - Maße als Tabelle: `details#dim-table` (Felder `#dt-N`, Zustand `S.dimTableOpen`)
+  - Skizzen-Prüfer (SK-09): `SKO.inspect(ents, {gapTol, dupTol, dims, cons})`, `Sketch.check`/`repair`/`focusCheckIssue`, Knöpfe `#sk-check`/`#sk-repair`, Liste `#sk-check-res` (findet offene Enden, doppelte/überlappende Linien und winzige Lücken < 0,05 mm, hebt per Klick hervor, repariert mit `coincident` und Löschen)
   - Linie „Tangente an zwei Kreise“: `S.lineMode = 'tan2'` → `tan2Down`/`tan2Geom` (äußere Tangente, Seite nach den Klicks), zwei `tangent`-Regeln
   - Bogen „Mitte, Start, Ende“: `S.arcMode = 'center'` → `centerArc(d, p)`; Langloch „Gesamtlänge“: `S.slotTotal` → `slotInset(a, b, r)`, getippte Gesamtlänge wird zu `len` = Gesamtlänge − Breite
   - Rechteck mit runden Ecken: `S.rectR` (Feld `#rk-r`) → `roundRect(en, r, keepWH)` (Ecken über `cornerDo`, dann waagerecht/senkrecht, `equal` für die Radien, bei getippten Maßen zwei `distPL`); Ecke bilden: `S.corner.mode = 'meet'` → `meetDo` (zwei Klicks, `S.meetFirst`)

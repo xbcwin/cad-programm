@@ -5195,6 +5195,77 @@ def t_a002_ki_allgemein(p):
     return [ok1, ok2, ok3, ok4]
 
 
+# ---------- [A-003] Skizzen-Prüfer (SK-09) ----------
+def t_a003_skizzen_pruefer(p):
+    # 1. Skizze 30×20 aus 4 Linien mit 0,01 mm Lücke am Ursprung und einer doppelten Linie
+    ents = [
+        {'id': 'L1', 'type': 'line', 'a': [0, 0], 'b': [30, 0]},
+        {'id': 'L2', 'type': 'line', 'a': [30, 0], 'b': [30, 20]},
+        {'id': 'L3', 'type': 'line', 'a': [30, 20], 'b': [0, 20]},
+        {'id': 'L4', 'type': 'line', 'a': [0, 20], 'b': [0, 0.01]},
+        {'id': 'L5', 'type': 'line', 'a': [0, 0], 'b': [30, 0]},
+    ]
+    scene(p, ents)
+    # Vor dem Reparieren: keine geschlossene Fläche, Knopf „Skizze prüfen“ da
+    pre_regs = SS(p, "return SK.regions(S.ents).length")
+    p.pg.click('#sk-check'); p.wait(400)
+    items = p.pg.locator('#sk-check-res .sk-chk-item')
+    kinds = [items.nth(i).get_attribute('data-kind') for i in range(items.count())]
+    texts = [(items.nth(i).text_content() or '').lower() for i in range(items.count())]
+    ok1 = (pre_regs == 0 and items.count() == 2
+           and 'gap' in kinds and 'dup' in kinds
+           and any('0,01' in t and 'lücke' in t for t in texts)
+           and any('doppelte linie' in t for t in texts)
+           and p.pg.locator('#sk-repair').count() == 1)
+
+    # 2. Klick auf Einträge in der Ergebnisliste hebt die jeweilige Stelle im Bild hervor
+    items.nth(0).click(); p.wait(300)
+    tag0 = (p.pg.locator('.sk-chk-tag').first.text_content() or '').lower() if p.pg.locator('.sk-chk-tag').count() else ''
+    foc0 = SS(p, "return S.checkFocus")
+    act0 = 'active' in (items.nth(0).get_attribute('class') or '')
+    items.nth(1).click(); p.wait(300)
+    tag1 = (p.pg.locator('.sk-chk-tag').first.text_content() or '').lower() if p.pg.locator('.sk-chk-tag').count() else ''
+    foc1 = SS(p, "return S.checkFocus")
+    act1 = 'active' in (items.nth(1).get_attribute('class') or '')
+    ok2 = (foc0 == 0 and act0 and 'lücke' in tag0 and '0,01' in tag0
+           and foc1 == 1 and act1 and 'doppelte linie' in tag1)
+
+    # 3. „Alles reparieren“ → doppelte Linie gelöscht, Lücke mit Deckungsgleich geschlossen, geschlossene Fläche 600 mm²
+    p.pg.click('#sk-repair'); p.wait(500)
+    st = SS(p, """const regs=SK.regions(S.ents), ins=SKO.inspect(S.ents,{dims:S.dims,cons:S.cons});
+      return {
+        n: S.ents.length,
+        hasCoinc: S.cons.some(c=>c.type==='coincident'),
+        regs: regs.length,
+        area: regs[0] ? regs[0].area : 0,
+        issues: ins.issues.length,
+        ok: S.status && S.status.ok
+      }""")
+    ok_txt = (p.pg.locator('#sk-check-ok').text_content() or '').lower() if p.pg.locator('#sk-check-ok').count() else ''
+    ok3 = (st['n'] == 4 and st['hasCoinc'] and st['regs'] == 1
+           and abs(st['area'] - 600) < 0.5 and st['issues'] == 0 and st['ok']
+           and 'alles in ordnung' in ok_txt)
+
+    # 4. Ein Rückgängig macht alles rückgängig; erneutes Reparieren + Fertig erzeugt gültigen 3D-Körper (1800 mm³)
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('Control+z'); p.wait(400)
+    after_undo = SS(p, "return [S.ents.length, S.cons.length, SK.regions(S.ents).length]")
+    p.pg.click('#sk-repair'); p.wait(400)
+    p.pg.locator('.sketchbar .tool.primary').click(); warte_rechnen(p, 30)
+    vol = volumen(p)
+    ok4 = (after_undo == [5, 0, 0] and p.ev("return App.errors.length") == 0 and abs(vol - 1800) < 2)
+
+    # 5. Offenes Ende (große Lücke > 0,05 mm) wird gemeldet und hervorgehoben, ohne „Alles reparieren“
+    p.ev("Sketch.startOnPlane('XY')"); p.wait(500)
+    SS(p, "S.ents.push({id:'O1',type:'line',a:[0,0],b:[20,0]}); Sketch.setTool('select'); Panels.renderRight();"); p.wait(300)
+    p.pg.click('#sk-check'); p.wait(300)
+    oitems = p.pg.locator('#sk-check-res .sk-chk-item')
+    okinds = [oitems.nth(i).get_attribute('data-kind') for i in range(oitems.count())]
+    oitems.nth(0).click(); p.wait(250)
+    otag = (p.pg.locator('.sk-chk-tag').first.text_content() or '').lower() if p.pg.locator('.sk-chk-tag').count() else ''
+    ok5 = (okinds == ['open', 'open'] and p.pg.locator('#sk-repair').count() == 0 and 'offenes ende' in otag)
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -5295,6 +5366,7 @@ TESTS = [
     ('Formschritte mit Modus: eigener Körper / Abziehen / im Verlauf markiert / Vereinigen / Schnittmenge / zurück und Rückgängig / Ziel zu spät', t_koerper_modus),
     ('[A-001] Drohnen-Bereich unsichtbar: Startseite / Menüs und Bibliothek / Befehlssuche / Über-Dialog / altes Projekt mit buyMotor', t_a001_drohnen_unsichtbar),
     ('[A-002] KI-Kollege allgemein: Systemtext ohne Drohne/FPV / Vorschläge / Auftrag Gehäuse 60×40×30 mit Deckel / Prompt & Rückgängig', t_a002_ki_allgemein),
+    ('[A-003] Skizzen-Prüfer: Lücke 0,01 mm und doppelte Linie / hervorheben / Alles reparieren / Rückgängig & Körper / offenes Ende', t_a003_skizzen_pruefer),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
