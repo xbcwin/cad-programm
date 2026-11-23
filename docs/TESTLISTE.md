@@ -1521,6 +1521,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] `.glb` beginnt mit `glTF`, Version 2, hat gültige `JSON`- und `BIN`-Chunks, einen Knoten/Mesh mit Namen je Körper sowie Studio-Look-Materialien (Metall, Rauheit, Klarlack, lineare Farbe).
 - [ ] Exportiertes `.obj`/`.mtl` und `.glb` von Hand in Blender oder einer 3D-Vorschau öffnen und Ausrichtung, Größe (mm bzw. m) und Oberflächen-Aussehen prüfen.
 
+## Schnitt mit Kappe und mehreren Ebenen (Auto [A-013])
+
+- [x] **Würfel 20×20×20 mit Durchgangsloch Ø 8**: Schnitt (C) zeigt eine echte, schraffierte Kappe im Overlay (`sectionCap`) mit `240 mm²` Schnittfläche (Loch ausgespart).
+- [x] **Mehrere Schnittebenen gleichzeitig**: X und Y sowie alle drei Ebenen (X, Y, Z) lassen sich einzeln an-/ausschalten (`Viewer.clips`); jede Kappe wird gegen die jeweils anderen aktiven Ebenen beschnitten; Z allein zeigt das Kreisloch im Quadrat (`≈ 349,7 mm²`).
+- [x] **Kappe ein/aus & Aufräumen**: „Kappe füllen“ (`#cut-cap`) blendet Kappen ein/aus; Schließen räumt alle Clipping-Ebenen und Overlay-Meshes ohne Undo-Schritt auf.
+- [ ] **Von Hand**: An einem mehrteiligen Bauteil (z. B. Gehäuse mit Deckel) X- und Y-Schnitt gemeinsam verschieben, umdrehen und die gegenläufige Schraffur der Körper prüfen.
+
 ## Fehler melden
 
 ```

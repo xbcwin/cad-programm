@@ -10,8 +10,35 @@ const Views = (() => {
   }
   const AX = { XY: 2, XZ: 1, YZ: 0 };
   const AXNAME = { XY: 'Z', XZ: 'Y', YZ: 'X' };
+  const AXIS_TO_PLANE = { X: 'YZ', Y: 'XZ', Z: 'XY', YZ: 'YZ', XZ: 'XZ', XY: 'XY' };
+  const PLANE_ORDER = ['YZ', 'XZ', 'XY'];
+  const PLANE_META = {
+    YZ: { axis: 'X', label: 'X · Seite', color: '#d94b4b', tip: 'Schnittebene senkrecht zur X-Achse (von der Seite, YZ)' },
+    XZ: { axis: 'Y', label: 'Y · Vorne', color: '#2b9e63', tip: 'Schnittebene senkrecht zur Y-Achse (von vorne, XZ)' },
+    XY: { axis: 'Z', label: 'Z · Oben', color: '#3b7dd8', tip: 'Schnittebene senkrecht zur Z-Achse (waagerecht, XY)' },
+  };
   // Standard: der Teil zur Kamera hin (oben / vorne / rechts) wird weggeschnitten
   const KEEP = { XY: -1, XZ: 1, YZ: -1 };
+  let hatchTex = null;
+  function getHatchTex() {
+    if (hatchTex) return hatchTex;
+    const sz = 64, cv = document.createElement('canvas');
+    cv.width = sz; cv.height = sz;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, sz, sz);
+    ctx.strokeStyle = 'rgba(0,0,0,0.32)';
+    ctx.lineWidth = 3.2;
+    for (let d = -sz; d <= sz * 2; d += 16) {
+      ctx.beginPath(); ctx.moveTo(d, 0); ctx.lineTo(d + sz, sz); ctx.stroke();
+    }
+    const t = new THREE.CanvasTexture(cv);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = 4;
+    hatchTex = t;
+    return t;
+  }
   function modelBox() {
     let b = new THREE.Box3();
     for (const id of Viewer.nodes.keys()) { const x = Viewer.baseBox(id); if (x) b.union(x); }
@@ -19,94 +46,541 @@ const Views = (() => {
     return b;
   }
 
-  // ---------- Schnitt ----------
-  function cutPlane() {
-    const c = st.cut;
-    if (c.plane === 'FACE') { const n = c.fn.clone().multiplyScalar(c.flip ? 1 : -1); const q = c.fp.clone().addScaledVector(c.fn, c.off); return { n, k: -n.dot(q), q }; }
-    const n = new THREE.Vector3(); n.setComponent(AX[c.plane], KEEP[c.plane] * (c.flip ? -1 : 1));
-    return { n, k: -n.getComponent(AX[c.plane]) * c.off };
+  // ---------- Schnitt (bis zu drei Ebenen X/Y/Z oder Fläche, mit farbig schraffierter Kappe) ----------
+  function disposeOverlayGroup(grp) {
+    if (!grp) return;
+    Viewer.groups.overlay.remove(grp);
+    grp.traverse((o) => {
+      if (o.geometry) o.geometry.dispose();
+      if (o.material) o.material.dispose();
+    });
+  }
+  function disposeCutVisuals() {
+    const c = st.cut; if (!c) return;
+    disposeOverlayGroup(c.helper); c.helper = null;
+    disposeOverlayGroup(c.capGroup); c.capGroup = null;
+  }
+  function activeCutEntries() {
+    const c = st.cut; if (!c) return [];
+    if (c.mode === 'face' && c.face) return [{ key: 'FACE', entry: c.face }];
+    const out = [];
+    for (const k of PLANE_ORDER) if (c.planes[k] && c.planes[k].on) out.push({ key: k, entry: c.planes[k] });
+    return out;
+  }
+  function planeDef(key, entry) {
+    if (key === 'FACE') {
+      const n = entry.fn.clone().multiplyScalar(entry.flip ? 1 : -1);
+      const q = entry.fp.clone().addScaledVector(entry.fn, entry.off);
+      return { n, k: -n.dot(q), q };
+    }
+    const n = new THREE.Vector3();
+    n.setComponent(AX[key], KEEP[key] * (entry.flip ? -1 : 1));
+    return { n, k: -n.getComponent(AX[key]) * entry.off };
+  }
+  function planeFrame(n, k) {
+    const q = n.clone().multiplyScalar(-k);
+    const capN = n.clone().negate().normalize();
+    const ref = Math.abs(capN.z) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1);
+    const u = new THREE.Vector3().crossVectors(ref, capN).normalize();
+    const v = new THREE.Vector3().crossVectors(capN, u).normalize();
+    return { q, capN, u, v };
+  }
+  function sliceMeshWithPlane(node, n, k, frame) {
+    node.obj.updateMatrixWorld(true);
+    const M = node.mesh.matrixWorld, e = M.elements;
+    const box = node.mesh.geometry.boundingBox;
+    if (box) {
+      let bMin = Infinity, bMax = -Infinity;
+      for (let ix = 0; ix < 2; ix++) for (let iy = 0; iy < 2; iy++) for (let iz = 0; iz < 2; iz++) {
+        const lx = ix ? box.max.x : box.min.x, ly = iy ? box.max.y : box.min.y, lz = iz ? box.max.z : box.min.z;
+        const wx = e[0] * lx + e[4] * ly + e[8] * lz + e[12];
+        const wy = e[1] * lx + e[5] * ly + e[9] * lz + e[13];
+        const wz = e[2] * lx + e[6] * ly + e[10] * lz + e[14];
+        const d = n.x * wx + n.y * wy + n.z * wz + k;
+        if (d < bMin) bMin = d;
+        if (d > bMax) bMax = d;
+      }
+      if (bMin >= -1e-4 || bMax <= 1e-4) return [];
+    }
+    const pos = node.mesh.geometry.getAttribute('position').array;
+    const tris = node.data.triangles;
+    const vCnt = pos.length / 3;
+    const wx = new Float64Array(vCnt), wy = new Float64Array(vCnt), wz = new Float64Array(vCnt), dist = new Float64Array(vCnt);
+    let minD = Infinity, maxD = -Infinity;
+    for (let i = 0; i < vCnt; i++) {
+      const lx = pos[i * 3], ly = pos[i * 3 + 1], lz = pos[i * 3 + 2];
+      const X = e[0] * lx + e[4] * ly + e[8] * lz + e[12];
+      const Y = e[1] * lx + e[5] * ly + e[9] * lz + e[13];
+      const Z = e[2] * lx + e[6] * ly + e[10] * lz + e[14];
+      wx[i] = X; wy[i] = Y; wz[i] = Z;
+      const d = n.x * X + n.y * Y + n.z * Z + k - 1e-5;
+      dist[i] = d;
+      if (d < minD) minD = d;
+      if (d > maxD) maxD = d;
+    }
+    if (minD >= -1e-4 || maxD <= 1e-4) return [];
+    const { q, u, v } = frame;
+    const flipW = M.determinant() < 0;
+    const lerpEdge = (i, j) => {
+      if (i > j) { const t = i; i = j; j = t; }
+      const di = dist[i], dj = dist[j], denom = di - dj;
+      const t = Math.abs(denom) < 1e-12 ? 0.5 : clamp(di / denom, 0, 1);
+      const px = wx[i] + (wx[j] - wx[i]) * t - q.x;
+      const py = wy[i] + (wy[j] - wy[i]) * t - q.y;
+      const pz = wz[i] + (wz[j] - wz[i]) * t - q.z;
+      return [u.x * px + u.y * py + u.z * pz, v.x * px + v.y * py + v.z * pz];
+    };
+    const segs = [];
+    for (let t = 0; t + 2 < tris.length; t += 3) {
+      const i0 = tris[t], i1 = tris[t + 1], i2 = tris[t + 2];
+      const mask = (dist[i0] >= 0 ? 1 : 0) | (dist[i1] >= 0 ? 2 : 0) | (dist[i2] >= 0 ? 4 : 0);
+      if (mask === 0 || mask === 7) continue;
+      let a, b;
+      if (mask === 1) { a = lerpEdge(i2, i0); b = lerpEdge(i0, i1); }
+      else if (mask === 2) { a = lerpEdge(i0, i1); b = lerpEdge(i1, i2); }
+      else if (mask === 4) { a = lerpEdge(i1, i2); b = lerpEdge(i2, i0); }
+      else if (mask === 6) { a = lerpEdge(i0, i1); b = lerpEdge(i2, i0); }
+      else if (mask === 5) { a = lerpEdge(i1, i2); b = lerpEdge(i0, i1); }
+      else { a = lerpEdge(i2, i0); b = lerpEdge(i1, i2); }
+      const dx = b[0] - a[0], dy = b[1] - a[1];
+      if (dx * dx + dy * dy < 1e-12) continue;
+      segs.push(flipW ? [b, a] : [a, b]);
+    }
+    return segs;
+  }
+  function polyArea2D(pts) {
+    let a = 0;
+    for (let i = 0, n = pts.length; i < n; i++) {
+      const p = pts[i], q = pts[(i + 1) % n];
+      a += p[0] * q[1] - q[0] * p[1];
+    }
+    return a * 0.5;
+  }
+  function pointInPoly2D(px, py, pts) {
+    let inside = false;
+    for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      const xi = pts[i][0], yi = pts[i][1], xj = pts[j][0], yj = pts[j][1];
+      if (((yi > py) !== (yj > py)) && (px < ((xj - xi) * (py - yi)) / (yj - yi) + xi)) inside = !inside;
+    }
+    return inside;
+  }
+  function cleanLoop(raw) {
+    const pts = [];
+    for (const p of raw) {
+      const last = pts[pts.length - 1];
+      if (!last || Math.hypot(p[0] - last[0], p[1] - last[1]) > 1e-5) pts.push(p);
+    }
+    if (pts.length > 1 && Math.hypot(pts[0][0] - pts[pts.length - 1][0], pts[0][1] - pts[pts.length - 1][1]) <= 1e-5) pts.pop();
+    if (pts.length < 3) return [];
+    const simp = [];
+    for (let i = 0; i < pts.length; i++) {
+      const prev = pts[(i - 1 + pts.length) % pts.length], cur = pts[i], next = pts[(i + 1) % pts.length];
+      const ax = cur[0] - prev[0], ay = cur[1] - prev[1], bx = next[0] - cur[0], by = next[1] - cur[1];
+      const la = Math.hypot(ax, ay), lb = Math.hypot(bx, by);
+      if (la > 1e-7 && lb > 1e-7 && Math.abs(ax * by - ay * bx) <= 1e-7 * la * lb && ax * bx + ay * by > 0) continue;
+      simp.push(cur);
+    }
+    return simp.length >= 3 ? simp : pts;
+  }
+  function chainLoops(segs) {
+    if (!segs.length) return [];
+    const scale = 1000, tol2 = 2.5e-5; // 5e-3 mm
+    const startMap = new Map(), endMap = new Map();
+    const keyOf = (x, y) => Math.round(x * scale) + ',' + Math.round(y * scale);
+    const addMap = (m, p, idx) => { const k = keyOf(p[0], p[1]); let arr = m.get(k); if (!arr) { arr = []; m.set(k, arr); } arr.push(idx); };
+    for (let i = 0; i < segs.length; i++) { addMap(startMap, segs[i][0], i); addMap(endMap, segs[i][1], i); }
+    const used = new Uint8Array(segs.length);
+    const findNext = (pt, map, endIdx) => {
+      const gx = Math.round(pt[0] * scale), gy = Math.round(pt[1] * scale);
+      let best = -1, bd = tol2;
+      for (let dx = -5; dx <= 5; dx++) for (let dy = -5; dy <= 5; dy++) {
+        const arr = map.get((gx + dx) + ',' + (gy + dy));
+        if (!arr) continue;
+        for (const i of arr) {
+          if (used[i]) continue;
+          const p = segs[i][endIdx];
+          const d2 = (p[0] - pt[0]) ** 2 + (p[1] - pt[1]) ** 2;
+          if (d2 < bd) { bd = d2; best = i; }
+        }
+      }
+      return best;
+    };
+    const loops = [];
+    for (let s = 0; s < segs.length; s++) {
+      if (used[s]) continue;
+      used[s] = 1;
+      const raw = [segs[s][0], segs[s][1]];
+      let guard = segs.length + 2;
+      while (guard-- > 0) {
+        const tail = raw[raw.length - 1];
+        if (raw.length >= 3 && (tail[0] - raw[0][0]) ** 2 + (tail[1] - raw[0][1]) ** 2 < tol2) break;
+        let nx = findNext(tail, startMap, 0);
+        if (nx >= 0) { used[nx] = 1; raw.push(segs[nx][1]); continue; }
+        nx = findNext(tail, endMap, 1);
+        if (nx >= 0) { used[nx] = 1; raw.push(segs[nx][0]); continue; }
+        break;
+      }
+      if (raw.length >= 3 && Math.hypot(raw[0][0] - raw[raw.length - 1][0], raw[0][1] - raw[raw.length - 1][1]) < 0.05) {
+        const pts = cleanLoop(raw);
+        if (pts.length >= 3 && Math.abs(polyArea2D(pts)) > 1e-4) loops.push(pts);
+      }
+    }
+    return loops;
+  }
+  function triangulateLoops(loops) {
+    if (!loops.length) return { verts: [], tris: [], area: 0 };
+    const items = loops.map((pts) => { const a = polyArea2D(pts); return { pts, absA: Math.abs(a), signedA: a }; });
+    const depth = new Int32Array(items.length);
+    const parent = new Int32Array(items.length).fill(-1);
+    for (let i = 0; i < items.length; i++) {
+      const p0 = items[i].pts[0];
+      let d = 0;
+      for (let j = 0; j < items.length; j++) {
+        if (i === j || items[j].absA <= items[i].absA) continue;
+        if (pointInPoly2D(p0[0], p0[1], items[j].pts)) d++;
+      }
+      depth[i] = d;
+    }
+    for (let i = 0; i < items.length; i++) {
+      if (depth[i] % 2 === 1) {
+        let best = -1, bestA = Infinity;
+        const p0 = items[i].pts[0];
+        for (let j = 0; j < items.length; j++) {
+          if (i === j || depth[j] !== depth[i] - 1 || items[j].absA <= items[i].absA) continue;
+          if (items[j].absA < bestA && pointInPoly2D(p0[0], p0[1], items[j].pts)) { bestA = items[j].absA; best = j; }
+        }
+        parent[i] = best;
+      }
+    }
+    const verts = [], tris = [];
+    let area = 0;
+    for (let i = 0; i < items.length; i++) {
+      if (depth[i] % 2 !== 0) continue;
+      const outer = items[i].signedA >= 0 ? items[i].pts.slice() : items[i].pts.slice().reverse();
+      const holes = [];
+      let outerA = items[i].absA;
+      for (let j = 0; j < items.length; j++) {
+        if (parent[j] !== i) continue;
+        const hPts = items[j].signedA <= 0 ? items[j].pts.slice() : items[j].pts.slice().reverse();
+        holes.push(hPts);
+        outerA -= items[j].absA;
+      }
+      const cV2 = outer.map((p) => new THREE.Vector2(p[0], p[1]));
+      const hV2 = holes.map((hl) => hl.map((p) => new THREE.Vector2(p[0], p[1])));
+      let faces = null;
+      try { faces = THREE.ShapeUtils.triangulateShape(cV2, hV2); } catch (_) { faces = null; }
+      if (!faces || !faces.length) continue;
+      const baseIdx = verts.length;
+      for (const p of outer) verts.push(p);
+      for (const hl of holes) for (const p of hl) verts.push(p);
+      for (const f of faces) tris.push(baseIdx + f[0], baseIdx + f[1], baseIdx + f[2]);
+      area += Math.max(0, outerA);
+    }
+    return { verts, tris, area };
+  }
+  function capColorOf(n) {
+    const baseHex = (n.look && n.look.matCol) || n.color || '#2f9e91';
+    const c = new THREE.Color(baseHex);
+    const hsl = {};
+    c.getHSL(hsl);
+    c.setHSL(hsl.h, Math.min(1, hsl.s * 1.05), clamp(hsl.l * 0.9 + 0.08, 0.28, 0.78));
+    return c;
+  }
+  function drawCutCaps() {
+    const c = st.cut; if (!c) return;
+    disposeOverlayGroup(c.capGroup); c.capGroup = null;
+    c.capArea = 0; c.capCount = 0;
+    const entries = activeCutEntries();
+    if (!c.cap || !entries.length) { updateCutInfo(); Viewer.requestRender(); return; }
+    const grp = new THREE.Group();
+    grp.name = 'section-caps';
+    grp.userData.sectionCap = true;
+    const allObjs = entries.map((x) => x.entry.obj).filter(Boolean);
+    const solids = [...Viewer.nodes.values()].filter((n) => n.obj.visible && n.role !== 'hole' && n.mesh && n.data && n.data.triangles);
+    const box = modelBox();
+    const uvScale = 1 / clamp(box.getSize(new THREE.Vector3()).length() * 0.09, 2, 18);
+    const tex = getHatchTex();
+    let totalArea = 0, meshCount = 0;
+    for (const { key, entry } of entries) {
+      const { n, k } = planeDef(key, entry);
+      const frame = planeFrame(n, k);
+      const { q, capN, u, v } = frame;
+      const otherPlanes = allObjs.filter((pl) => pl !== entry.obj);
+      solids.forEach((node, ni) => {
+        const segs = sliceMeshWithPlane(node, n, k, frame);
+        if (!segs.length) return;
+        const loops = chainLoops(segs);
+        if (!loops.length) return;
+        const { verts, tris, area } = triangulateLoops(loops);
+        if (!tris.length) return;
+        totalArea += area;
+        const pos = new Float32Array(verts.length * 3), norm = new Float32Array(verts.length * 3), uv = new Float32Array(verts.length * 2);
+        const flipU = ni % 2 === 1 ? -1 : 1;
+        for (let i = 0; i < verts.length; i++) {
+          const uu = verts[i][0], vv = verts[i][1];
+          pos[i * 3] = q.x + u.x * uu + v.x * vv;
+          pos[i * 3 + 1] = q.y + u.y * uu + v.y * vv;
+          pos[i * 3 + 2] = q.z + u.z * uu + v.z * vv;
+          norm[i * 3] = capN.x; norm[i * 3 + 1] = capN.y; norm[i * 3 + 2] = capN.z;
+          uv[i * 2] = uu * flipU * uvScale; uv[i * 2 + 1] = vv * uvScale;
+        }
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+        geo.setAttribute('normal', new THREE.BufferAttribute(norm, 3));
+        geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+        geo.setIndex(tris);
+        const capCol = capColorOf(node);
+        const mat = new THREE.MeshBasicMaterial({
+          color: capCol, map: tex, side: THREE.DoubleSide,
+          clippingPlanes: otherPlanes.length ? otherPlanes : null,
+          polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
+        });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.renderOrder = 16;
+        mesh.userData = { sectionCap: true, planeKey: key, nodeId: node.id };
+        grp.add(mesh);
+        meshCount++;
+        const outPos = [];
+        for (const lp of loops) {
+          for (let i = 0; i < lp.length; i++) {
+            const p0 = lp[i], p1 = lp[(i + 1) % lp.length];
+            outPos.push(
+              q.x + u.x * p0[0] + v.x * p0[1], q.y + u.y * p0[0] + v.y * p0[1], q.z + u.z * p0[0] + v.z * p0[1],
+              q.x + u.x * p1[0] + v.x * p1[1], q.y + u.y * p1[0] + v.y * p1[1], q.z + u.z * p1[0] + v.z * p1[1],
+            );
+          }
+        }
+        if (outPos.length) {
+          const og = new THREE.BufferGeometry();
+          og.setAttribute('position', new THREE.Float32BufferAttribute(outPos, 3));
+          const om = new THREE.LineBasicMaterial({ color: capCol.clone().multiplyScalar(0.5), clippingPlanes: otherPlanes.length ? otherPlanes : null });
+          const ol = new THREE.LineSegments(og, om);
+          ol.renderOrder = 17;
+          ol.userData = { sectionCapOutline: true, planeKey: key, nodeId: node.id };
+          grp.add(ol);
+        }
+      });
+    }
+    c.capArea = totalArea;
+    c.capCount = meshCount;
+    if (grp.children.length) { Viewer.groups.overlay.add(grp); c.capGroup = grp; }
+    updateCutInfo();
+    Viewer.requestRender();
+  }
+  function updateCutInfo() {
+    const c = st.cut; if (!c || !c.bar) return;
+    const el = c.bar.querySelector('#cut-info'); if (!el) return;
+    const n = activeCutEntries().length;
+    if (!c.cap) { el.textContent = 'Kappe ausgeblendet'; return; }
+    if (n > 1) { el.textContent = `${n} Ebenen aktiv · schraffiert = Schnittfläche`; return; }
+    el.textContent = c.capArea > 0.05 ? `Schnittfläche ${fmt(c.capArea, c.capArea < 100 ? 1 : 0)} mm²` : 'Schraffiert = Schnittfläche';
   }
   function applyCut() {
     const c = st.cut;
-    if (!c) { Viewer.setClip(null); return; }
-    const { n, k } = cutPlane();
-    if (!c.obj) { c.obj = new THREE.Plane(n, k); Viewer.setClip(c.obj); } else { c.obj.normal.copy(n); c.obj.constant = k; Viewer.requestRender(); }
+    if (!c) { disposeCutVisuals(); Viewer.setClip(null); return; }
+    const entries = activeCutEntries();
+    const planeObjs = [];
+    let primary = null;
+    for (const { key, entry } of entries) {
+      const { n, k } = planeDef(key, entry);
+      if (!entry.obj) entry.obj = new THREE.Plane(n, k);
+      else { entry.obj.normal.copy(n); entry.obj.constant = k; }
+      planeObjs.push(entry.obj);
+      if (key === c.active || (c.mode === 'face' && key === 'FACE')) primary = entry.obj;
+    }
+    if (!primary && planeObjs.length) primary = planeObjs[0];
+    Viewer.setClip(planeObjs, { primary, cap: c.cap });
     drawCutHelper();
+    drawCutCaps();
   }
   function drawCutHelper() {
-    const c = st.cut; const g = Viewer.groups.overlay;
-    if (c.helper) { g.remove(c.helper); c.helper.traverse((o) => { o.geometry && o.geometry.dispose(); o.material && o.material.dispose(); }); c.helper = null; }
+    const c = st.cut; if (!c) return;
+    disposeOverlayGroup(c.helper); c.helper = null;
+    const entries = activeCutEntries();
+    if (!entries.length) { Viewer.requestRender(); return; }
     const b = modelBox(); const pad = Math.max(4, b.getSize(new THREE.Vector3()).length() * 0.08);
-    if (c.plane === 'FACE') {
-      const { q } = cutPlane(); const n = c.fn; const R = b.getSize(new THREE.Vector3()).length() / 2 + pad;
-      const u = new THREE.Vector3(Math.abs(n.z) > 0.9 ? 1 : 0, 0, Math.abs(n.z) > 0.9 ? 0 : 1).cross(n).normalize(), v = new THREE.Vector3().crossVectors(n, u);
-      const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, bb]) => q.clone().addScaledVector(u, a * R).addScaledVector(v, bb * R));
-      const col = new THREE.Color(Viewer.theme.accent);
-      const fill = new THREE.Mesh(new THREE.BufferGeometry().setFromPoints([corners[0], corners[1], corners[2], corners[0], corners[2], corners[3]]), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.07, side: THREE.DoubleSide, depthWrite: false }));
-      const line = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(corners), new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.8 }));
-      const grp = new THREE.Group(); grp.add(fill, line); fill.renderOrder = 20; line.renderOrder = 21;
-      g.add(grp); c.helper = grp; Viewer.requestRender(); return;
+    const grp = new THREE.Group();
+    grp.userData.sectionHelper = true;
+    for (const { key, entry } of entries) {
+      let corners;
+      if (key === 'FACE') {
+        const { q } = planeDef('FACE', entry); const n = entry.fn; const R = b.getSize(new THREE.Vector3()).length() / 2 + pad;
+        const u = new THREE.Vector3(Math.abs(n.z) > 0.9 ? 1 : 0, 0, Math.abs(n.z) > 0.9 ? 0 : 1).cross(n).normalize(), v = new THREE.Vector3().crossVectors(n, u);
+        corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, bb]) => q.clone().addScaledVector(u, a * R).addScaledVector(v, bb * R));
+      } else {
+        const ax = AX[key]; const u = [0, 1, 2].filter((i) => i !== ax);
+        const lo = b.min.clone().subScalar(pad), hi = b.max.clone().addScalar(pad);
+        const P = (a, bb) => { const v = new THREE.Vector3(); v.setComponent(ax, entry.off); v.setComponent(u[0], a); v.setComponent(u[1], bb); return v; };
+        corners = [P(lo.getComponent(u[0]), lo.getComponent(u[1])), P(hi.getComponent(u[0]), lo.getComponent(u[1])), P(hi.getComponent(u[0]), hi.getComponent(u[1])), P(lo.getComponent(u[0]), hi.getComponent(u[1]))];
+      }
+      const col = new THREE.Color(key === 'FACE' ? Viewer.theme.accent : PLANE_META[key].color);
+      const fill = new THREE.Mesh(new THREE.BufferGeometry().setFromPoints([corners[0], corners[1], corners[2], corners[0], corners[2], corners[3]]), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.045, side: THREE.DoubleSide, depthWrite: false }));
+      const line = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(corners), new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.72 }));
+      fill.renderOrder = 20; line.renderOrder = 21;
+      grp.add(fill, line);
     }
-    const ax = AX[c.plane]; const u = [0, 1, 2].filter((i) => i !== ax);
-    const lo = b.min.clone().subScalar(pad), hi = b.max.clone().addScalar(pad);
-    const P = (a, bb) => { const v = new THREE.Vector3(); v.setComponent(ax, c.off); v.setComponent(u[0], a); v.setComponent(u[1], bb); return v; };
-    const corners = [P(lo.getComponent(u[0]), lo.getComponent(u[1])), P(hi.getComponent(u[0]), lo.getComponent(u[1])), P(hi.getComponent(u[0]), hi.getComponent(u[1])), P(lo.getComponent(u[0]), hi.getComponent(u[1]))];
-    const col = new THREE.Color(Viewer.theme.accent);
-    const fill = new THREE.Mesh(new THREE.BufferGeometry().setFromPoints([corners[0], corners[1], corners[2], corners[0], corners[2], corners[3]]), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.07, side: THREE.DoubleSide, depthWrite: false }));
-    const line = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(corners), new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.8 }));
-    const grp = new THREE.Group(); grp.add(fill, line); grp.renderOrder = 20; fill.renderOrder = 20; line.renderOrder = 21;
-    g.add(grp); c.helper = grp; Viewer.requestRender();
+    grp.renderOrder = 20;
+    Viewer.groups.overlay.add(grp); c.helper = grp; Viewer.requestRender();
+  }
+  function makeCutState() {
+    const b = modelBox();
+    const mid = (k) => round((b.min.getComponent(AX[k]) + b.max.getComponent(AX[k])) / 2, 2);
+    return {
+      mode: 'axes',
+      planes: {
+        YZ: { on: false, off: mid('YZ'), flip: false, obj: null },
+        XZ: { on: false, off: mid('XZ'), flip: false, obj: null },
+        XY: { on: false, off: mid('XY'), flip: false, obj: null },
+      },
+      active: 'XZ',
+      face: null,
+      cap: true,
+      capArea: 0,
+      capCount: 0,
+      helper: null,
+      capGroup: null,
+      bar: null,
+    };
   }
   function section(on = !st.cut, opts = {}) {
     if (!on) {
       if (!st.cut) return;
-      if (st.cut.helper) { Viewer.groups.overlay.remove(st.cut.helper); st.cut.helper.traverse((o) => { o.geometry && o.geometry.dispose(); o.material && o.material.dispose(); }); }
+      disposeCutVisuals();
       if (st.cut.bar) st.cut.bar.remove();
       st.cut = null; applyCut(); sync(); return;
     }
+    const b = modelBox();
+    const mid = (k) => round((b.min.getComponent(AX[k]) + b.max.getComponent(AX[k])) / 2, 2);
+    if (!st.cut) st.cut = makeCutState();
+    const c = st.cut;
+    if (opts.cap !== undefined) c.cap = !!opts.cap;
     if (opts.face) {
       const f = opts.face, W = Model.worldMatrix(App.doc, f.id);
       const fn = new THREE.Vector3(...f.info.n).transformDirection(W).normalize(), fp = new THREE.Vector3(...f.info.c).applyMatrix4(W);
-      if (st.cut && st.cut.bar) st.cut.bar.remove();
-      if (st.cut && st.cut.helper) { Viewer.groups.overlay.remove(st.cut.helper); st.cut.helper.traverse((o) => { o.geometry && o.geometry.dispose(); o.material && o.material.dispose(); }); }
-      st.cut = { plane: 'FACE', fn, fp, off: opts.off != null ? opts.off : -1, flip: false, obj: st.cut && st.cut.obj };
+      c.mode = 'face';
+      c.face = { fn, fp, off: opts.off != null ? opts.off : -1, flip: !!opts.flip, obj: c.face && c.face.obj };
+      c.active = 'FACE';
       applyCut(); cutBar(); sync(); return;
     }
-    const plane = opts.plane && opts.plane !== 'FACE' ? opts.plane : st.cut && st.cut.plane !== 'FACE' ? st.cut.plane : 'XZ';
-    const b = modelBox(); const ax = AX[plane];
-    const off = opts.off != null ? opts.off : round((b.min.getComponent(ax) + b.max.getComponent(ax)) / 2, 2);
-    if (st.cut && st.cut.bar) st.cut.bar.remove();
-    if (st.cut && st.cut.helper) { Viewer.groups.overlay.remove(st.cut.helper); st.cut.helper.traverse((o) => { o.geometry && o.geometry.dispose(); o.material && o.material.dispose(); }); }
-    st.cut = { plane, off, flip: !!opts.flip, obj: st.cut && st.cut.obj };
+    if (opts.toggle) {
+      const k = AXIS_TO_PLANE[opts.toggle] || 'XZ';
+      if (c.mode === 'face') {
+        c.mode = 'axes';
+        for (const p of PLANE_ORDER) c.planes[p].on = (p === k);
+        c.planes[k].off = opts.off != null ? opts.off : mid(k);
+        c.planes[k].flip = !!opts.flip;
+        c.active = k;
+      } else if (c.planes[k].on) {
+        const activeCount = PLANE_ORDER.filter((p) => c.planes[p].on).length;
+        if (activeCount <= 1) {
+          UI.toast('Mindestens eine Schnittebene bleibt aktiv – × oder C beendet den Schnitt.', { icon: 'info', ms: 2400 });
+          return;
+        }
+        c.planes[k].on = false;
+        if (c.active === k) c.active = PLANE_ORDER.find((p) => c.planes[p].on) || k;
+      } else {
+        c.planes[k].on = true;
+        c.planes[k].off = opts.off != null ? opts.off : mid(k);
+        c.planes[k].flip = !!opts.flip;
+        c.active = k;
+      }
+      applyCut(); cutBar(); sync(); return;
+    }
+    if (Array.isArray(opts.planes) && opts.planes.length) {
+      c.mode = 'axes';
+      for (const p of PLANE_ORDER) c.planes[p].on = false;
+      let first = null;
+      for (const spec of opts.planes) {
+        const raw = typeof spec === 'string' ? spec : (spec.plane || spec.axis);
+        const k = AXIS_TO_PLANE[raw]; if (!k) continue;
+        c.planes[k].on = true;
+        c.planes[k].off = typeof spec === 'object' && spec.off != null ? spec.off : mid(k);
+        c.planes[k].flip = typeof spec === 'object' ? !!spec.flip : false;
+        if (!first) first = k;
+      }
+      c.active = first || 'XZ';
+      if (!first) c.planes.XZ.on = true;
+      applyCut(); cutBar(); sync(); return;
+    }
+    const plane = AXIS_TO_PLANE[opts.plane] || (c.mode === 'axes' && c.active !== 'FACE' ? c.active : 'XZ');
+    c.mode = 'axes';
+    for (const p of PLANE_ORDER) c.planes[p].on = (p === plane);
+    c.planes[plane].off = opts.off != null ? opts.off : mid(plane);
+    c.planes[plane].flip = !!opts.flip;
+    c.active = plane;
     applyCut(); cutBar(); sync();
   }
   function cutBar() {
-    const c = st.cut; if (c.bar) c.bar.remove();
+    const c = st.cut; if (!c) return;
+    if (c.bar) c.bar.remove();
+    const entries = activeCutEntries();
     const bar = h('div', { class: 'viewbar', role: 'toolbar', 'aria-label': 'Schnitt' });
-    const head = h('div', { class: 'vb-head' }, h('span', { class: 'title' }, 'Schnitt'));
+    const titleTxt = entries.length > 1 ? `Schnitt · ${entries.length} Ebenen` : 'Schnitt';
+    const head = h('div', { class: 'vb-head' }, h('span', { class: 'title' }, titleTxt));
     const close = h('button', { type: 'button', class: 'vb-x', 'aria-label': 'Schnitt beenden', 'data-tip': 'Schnitt beenden (C)' }); close.innerHTML = icon('close'); close.onclick = () => section(false);
     head.append(close);
-    const seg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Schnittebene' });
-    for (const [k, l, tip] of [['XZ', 'Von vorne', 'Senkrecht, von vorne nach hinten (XZ)'], ['YZ', 'Von der Seite', 'Senkrecht, von links nach rechts (YZ)'], ['XY', 'Waagerecht', 'Waagerecht (XY)']]) {
-      const x = h('button', { type: 'button', 'aria-pressed': c.plane === k ? 'true' : 'false', 'data-plane': k, 'data-tip': tip }, l);
-      x.onclick = () => section(true, { plane: k, flip: false });
+    const seg = h('div', { class: 'seg' + (c.mode === 'face' ? ' cut-has-face' : ''), role: 'group', 'aria-label': 'Schnittebenen (einzeln an/aus)' });
+    for (const k of PLANE_ORDER) {
+      const m = PLANE_META[k], on = c.mode === 'axes' && c.planes[k].on;
+      const dot = h('span', { class: 'cut-dot', style: { background: m.color } });
+      const x = h('button', { type: 'button', 'aria-pressed': on ? 'true' : 'false', 'data-plane': k, 'data-axis': m.axis, 'data-tip': m.tip }, dot, m.label);
+      x.onclick = () => section(true, { toggle: k });
       seg.append(x);
     }
-    const b = modelBox(); const ax = AX[c.plane];
+    if (c.mode === 'face') seg.append(h('button', { type: 'button', 'aria-pressed': 'true', 'data-plane': 'FACE', 'data-tip': 'Parallel zur gewählten Fläche' }, 'An Fläche'));
+    bar.append(head, seg);
+    const b = modelBox();
     const span = Math.ceil(b.getSize(new THREE.Vector3()).length());
-    const lo = c.plane === 'FACE' ? -span : Math.floor(b.min.getComponent(ax) - 1), hi = c.plane === 'FACE' ? span : Math.ceil(b.max.getComponent(ax) + 1);
-    const range = h('input', { type: 'range', id: 'cut-range', min: lo, max: hi, step: 0.1, value: c.off, 'aria-label': 'Lage der Schnittebene' });
-    const num = h('input', { type: 'text', id: 'cut-off', class: 'vb-num', inputmode: 'decimal', value: fmt(c.off, 2), 'aria-label': 'Lage in mm' });
-    const set = (v) => { if (!isFinite(v)) return; c.off = v; applyCut(); range.value = v; if (document.activeElement !== num) num.value = fmt(v, 2); };
-    range.oninput = () => set(+range.value);
-    num.onkeydown = (e) => { if (e.key === 'Enter') { const v = parseNum(num.value); if (v != null) set(v); num.blur(); } e.stopPropagation(); };
-    num.onchange = () => { const v = parseNum(num.value); if (v != null) set(v); };
-    const flip = h('button', { type: 'button', class: 'btn small', id: 'cut-flip', 'data-tip': 'Die andere Hälfte zeigen' }); flip.innerHTML = icon('mirror') + 'Umdrehen';
-    flip.onclick = () => { c.flip = !c.flip; applyCut(); };
-    if (c.plane === 'FACE') seg.append(h('button', { type: 'button', 'aria-pressed': 'true', 'data-plane': 'FACE', 'data-tip': 'Parallel zur gewählten Fläche' }, 'An Fläche'));
-    const row = h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, c.plane === 'FACE' ? '↕' : AXNAME[c.plane]), range, num, h('span', { class: 'vb-u' }, 'mm'));
-    bar.append(head, seg, row, h('div', { class: 'vb-row' }, flip, h('span', { class: 'vb-hint' }, 'Schraffiert = Schnittfläche')));
+    const focusPlane = (k) => {
+      if (c.active === k) return;
+      c.active = k;
+      bar.querySelectorAll('.cut-row').forEach((r) => {
+        const isF = r.dataset.rowPlane === k;
+        r.classList.toggle('is-active', isF);
+        const rng = r.querySelector('[data-cut-range]'), nm = r.querySelector('[data-cut-off]'), fl = r.querySelector('[data-cut-flip]');
+        if (rng) { if (isF) rng.id = 'cut-range'; else if (rng.id === 'cut-range') rng.removeAttribute('id'); }
+        if (nm) { if (isF) nm.id = 'cut-off'; else if (nm.id === 'cut-off') nm.removeAttribute('id'); }
+        if (fl) { if (isF) fl.id = 'cut-flip'; else if (fl.id === 'cut-flip') fl.removeAttribute('id'); }
+      });
+      const entry = k === 'FACE' ? c.face : c.planes[k];
+      if (entry && entry.obj) {
+        const all = activeCutEntries().map((x) => x.entry.obj).filter(Boolean);
+        Viewer.setClip(all, { primary: entry.obj, cap: c.cap });
+      }
+    };
+    for (const { key, entry } of entries) {
+      const isF = key === c.active || (c.mode === 'face' && key === 'FACE');
+      const ax = key === 'FACE' ? null : AX[key];
+      const lo = key === 'FACE' ? -span : Math.floor(b.min.getComponent(ax) - 1);
+      const hi = key === 'FACE' ? span : Math.ceil(b.max.getComponent(ax) + 1);
+      const range = h('input', { type: 'range', ...(isF ? { id: 'cut-range' } : {}), 'data-cut-range': key, min: lo, max: hi, step: 0.1, value: entry.off, 'aria-label': `Lage ${key === 'FACE' ? 'Fläche' : PLANE_META[key].axis}` });
+      const num = h('input', { type: 'text', ...(isF ? { id: 'cut-off' } : {}), 'data-cut-off': key, class: 'vb-num', inputmode: 'decimal', value: fmt(entry.off, 2), 'aria-label': 'Lage in mm' });
+      const set = (v) => {
+        if (!isFinite(v)) return;
+        entry.off = v;
+        focusPlane(key);
+        applyCut();
+        range.value = v;
+        if (document.activeElement !== num) num.value = fmt(v, 2);
+      };
+      range.oninput = () => set(+range.value);
+      num.onfocus = () => focusPlane(key);
+      num.onkeydown = (e) => { if (e.key === 'Enter') { const v = parseNum(num.value); if (v != null) set(v); num.blur(); } e.stopPropagation(); };
+      num.onchange = () => { const v = parseNum(num.value); if (v != null) set(v); };
+      const flip = h('button', { type: 'button', class: 'btn small cut-flip-btn', ...(isF ? { id: 'cut-flip' } : {}), 'data-cut-flip': key, 'aria-pressed': entry.flip ? 'true' : 'false', 'data-tip': 'Die andere Hälfte zeigen' });
+      flip.innerHTML = entries.length > 1 ? icon('mirror') : icon('mirror') + 'Umdrehen';
+      flip.onclick = () => { entry.flip = !entry.flip; flip.setAttribute('aria-pressed', entry.flip ? 'true' : 'false'); focusPlane(key); applyCut(); };
+      const lbl = h('span', { class: 'vb-l cut-badge', style: key === 'FACE' ? {} : { color: PLANE_META[key].color } }, key === 'FACE' ? '↕' : PLANE_META[key].axis);
+      const row = h('div', { class: 'vb-row cut-row' + (isF ? ' is-active' : ''), 'data-row-plane': key, 'data-axis': key === 'FACE' ? 'FACE' : PLANE_META[key].axis }, lbl, range, num, h('span', { class: 'vb-u' }, 'mm'), flip);
+      bar.append(row);
+    }
+    const capCb = h('input', { type: 'checkbox', id: 'cut-cap' }); capCb.checked = !!c.cap;
+    capCb.onchange = () => { c.cap = capCb.checked; applyCut(); };
+    const capLbl = h('label', { class: 'vb-hint cut-cap-lbl', 'data-tip': 'Geschnittene Flächen farbig und schraffiert füllen' }, capCb, ' Kappe füllen');
+    const info = h('span', { class: 'vb-hint', id: 'cut-info' }, '');
+    bar.append(h('div', { class: 'vb-row cut-foot' }, capLbl, info));
     bars().prepend(bar); c.bar = bar;
+    updateCutInfo();
   }
   function parseNum(s) { const v = parseFloat(String(s).replace(',', '.')); return isFinite(v) ? v : null; }
 
@@ -190,12 +664,13 @@ const Views = (() => {
       const t = Math.min(1, (performance.now() - t0) / ms); const e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
       setEx(from + (goal - from) * e);
       if (t < 1) st.exAnim = requestAnimationFrame(step);
-      else { st.exAnim = null; if (goal === 0) { Viewer.setOffsets(null); if (st.exBar) { st.exBar.remove(); st.exBar = null; } if (st.exGroups) setGroups(false); Handles.rebuild(); Panels.renderCtx(); } sync(); }
+      else { st.exAnim = null; if (goal === 0) { Viewer.setOffsets(null); if (st.exBar) { st.exBar.remove(); st.exBar = null; } if (st.exGroups) setGroups(false); Handles.rebuild(); Panels.renderCtx(); } if (st.cut) drawCutCaps(); sync(); }
     };
     step();
   }
   function setEx(f) {
     st.ex = f; Viewer.setOffsets(f > 1e-4 ? offsets(f) : null);
+    if (st.cut && !st.exAnim) drawCutCaps();
     if (st.exBar) { const r = st.exBar.querySelector('#ex-range'); if (r && document.activeElement !== r) r.value = Math.round(f * 100); }
   }
   function exBar() {
@@ -542,7 +1017,18 @@ const Views = (() => {
       if (st.thin) drawThin();
       if (st.wind) drawWind(false);
       if (st.ex > 1e-4) setEx(st.ex);
-      if (st.cut) { drawCutHelper(); const r = st.cut.bar && st.cut.bar.querySelector('#cut-range'); if (r) { const b = modelBox(); const ax = AX[st.cut.plane]; r.min = Math.floor(b.min.getComponent(ax) - 1); r.max = Math.ceil(b.max.getComponent(ax) + 1); } }
+      if (st.cut) {
+        drawCutHelper();
+        drawCutCaps();
+        if (st.cut.bar) {
+          const b = modelBox(), span = Math.ceil(b.getSize(new THREE.Vector3()).length());
+          st.cut.bar.querySelectorAll('[data-cut-range]').forEach((r) => {
+            const k = r.dataset.cutRange;
+            if (k === 'FACE') { r.min = -span; r.max = span; }
+            else { const ax = AX[k]; r.min = Math.floor(b.min.getComponent(ax) - 1); r.max = Math.ceil(b.max.getComponent(ax) + 1); }
+          });
+        }
+      }
     });
   }
   function reset() { section(false); if (st.xray) xray(false); if (st.exGoal > 0 || st.ex > 0) { cancelAnimationFrame(st.exAnim); st.exAnim = null; st.ex = st.exGoal = 0; Viewer.setOffsets(null); if (st.exBar) { st.exBar.remove(); st.exBar = null; } } focus(false); overhang(false); thin(false); wind(false); present(false); if (st.exGroups) setGroups(false); }
@@ -551,7 +1037,17 @@ const Views = (() => {
     get overhangArea() { return st.ov ? st.ov.area : null; },
     wind, windArea, get windInfo() { return st.wind ? { angle: st.wind.angle, props: st.wind.props, area: st.wind.area, cw: st.wind.cw, v: st.wind.v, drag: st.wind.drag, top: st.wind.top || null } : null; }, cwGuess, topSpeed, dragN,
     overhangOf: (id, angle = 45) => { const d = overhangData(angle, [id]); return { area: d.area, c: d.c }; },
-    get cut() { return st.cut ? { plane: st.cut.plane, off: st.cut.off, flip: st.cut.flip } : null; },
+    get cut() {
+      if (!st.cut) return null;
+      const c = st.cut, entries = activeCutEntries();
+      const curEntry = c.mode === 'face' ? c.face : (c.planes[c.active] && c.planes[c.active].on ? c.planes[c.active] : (entries[0] && entries[0].entry));
+      const curKey = c.mode === 'face' ? 'FACE' : (c.planes[c.active] && c.planes[c.active].on ? c.active : (entries[0] && entries[0].key) || 'XZ');
+      return {
+        plane: curKey, off: curEntry ? curEntry.off : 0, flip: curEntry ? curEntry.flip : false,
+        cap: c.cap, capArea: c.capArea, capCount: c.capCount,
+        planes: entries.map(({ key, entry }) => ({ plane: key, axis: key === 'FACE' ? 'FACE' : AXNAME[key], off: entry.off, flip: entry.flip })),
+      };
+    },
     get isXray() { return st.xray; }, get exploded() { return st.ex > 1e-4 || st.exGoal > 0; }, get explodeAmount() { return st.ex; }, get explodeGroups() { return st.exGroups; }, setGroups,
     get focusIds() { return st.focus ? st.focus.ids.slice() : null; }, get focusDrawn() { return !!(st.focus && st.focus.drawn); },
   };

@@ -11,8 +11,8 @@ const Viewer = (() => {
   let hoverFace = null, hoverEdge = null, selFace = null, selEdges = [];
   let camAnim = null;
   const listeners = makeEmitter();
-  // Ansichts-Modi (Sitzung 9): Schnittebene, Röntgen, Verschiebung für die Explosionsansicht
-  const vis = { clip: null, xray: false };
+  // Ansichts-Modi (Sitzung 9, PF-06): Schnittebenen, Kappen, Röntgen, Verschiebung für die Explosionsansicht
+  const vis = { clip: null, clips: [], capEnabled: true, xray: false };
   const _off = new THREE.Matrix4();
 
   function readTheme() {
@@ -355,22 +355,22 @@ const Viewer = (() => {
 
   // ---------- Objekte ----------
   function makeMaterial(role, color, look) {
-    const clip = vis.clip ? [vis.clip] : null;
+    const clip = vis.clips.length ? vis.clips : null;
     if (role !== 'hole' && (LOOK.look === 'clay' || LOOK.look === 'chrome')) {
       const m = new THREE.MeshMatcapMaterial({ matcap: matcap(LOOK.look), polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1, clippingPlanes: clip });
-      if (clip) capShader(m, '#9c8370');
+      if (clip) { m.side = THREE.DoubleSide; if (!vis.capEnabled) capShader(m, '#9c8370'); }
       return m;
     }
     if (role !== 'hole' && LOOK.look === 'studio') {
       const L = look || PLASTIC; color = L.matCol || color;
       const m = new THREE.MeshPhysicalMaterial({ color: new THREE.Color(color || '#2f9e91'), metalness: L.metal || 0, roughness: L.rough != null ? L.rough : 0.45, clearcoat: L.clear || 0, clearcoatRoughness: L.clearRough != null ? L.clearRough : 0.2, envMapIntensity: L.metal ? 1.15 : L.nat ? 0.55 : 0.7, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1, clippingPlanes: clip });
       if (L.glass) { m.transparent = true; m.opacity = L.glass; m.depthWrite = false; }
-      if (clip) capShader(m, color);
+      if (clip) { m.side = THREE.DoubleSide; if (!vis.capEnabled) capShader(m, color); }
       return m;
     }
     if (role === 'hole') return new THREE.MeshStandardMaterial({ color: new THREE.Color(theme.hole), transparent: true, opacity: 0.2, depthWrite: false, side: THREE.DoubleSide, roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1, clippingPlanes: clip });
     const m = new THREE.MeshStandardMaterial({ color: new THREE.Color(color || '#2f9e91'), roughness: 0.58, metalness: 0.03, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1, clippingPlanes: clip });
-    if (clip) capShader(m, color);
+    if (clip) { m.side = THREE.DoubleSide; if (!vis.capEnabled) capShader(m, color); }
     return m;
   }
   // Schnittfläche: Durch den Schnitt sieht man die Innenseite der Hülle. Die wird als
@@ -392,8 +392,9 @@ const Viewer = (() => {
     applyFaceColors(n);
     applyThreads(n);
     if (n.ctxDim) {   // anderes Bauteil, während eines bearbeitet wird
+      const clip = vis.clips.length ? vis.clips : null;
       n.mesh.material.transparent = true; n.mesh.material.opacity = n.role === 'hole' ? 0.06 : 0.16; n.mesh.material.depthWrite = false;
-      if (n.edges) { n.edges.material.dispose(); n.edges.material = new THREE.LineBasicMaterial({ color: new THREE.Color(theme.edge), transparent: true, opacity: 0.18 }); }
+      if (n.edges) { n.edges.material.dispose(); n.edges.material = new THREE.LineBasicMaterial({ color: new THREE.Color(theme.edge), transparent: true, opacity: 0.18, clippingPlanes: clip }); }
       n.mesh.renderOrder = 4; needsRender = true; return;
     }
     if (n.role !== 'hole' && n.mesh.material.isMeshMatcapMaterial) {
@@ -416,7 +417,7 @@ const Viewer = (() => {
     // Röntgen: Körper wie Milchglas, Kanten auch von hinten sichtbar; das gewählte Teil bleibt kräftig
     const xr = (vis.xray || disp === 'hidden') && n.role !== 'hole';
     if (xr) { const mt = n.mesh.material; mt.transparent = true; mt.opacity = sel ? 0.55 : hov ? 0.3 : 0.18; mt.depthWrite = false; mt.side = THREE.DoubleSide; }
-    const clip = vis.clip ? [vis.clip] : null;
+    const clip = vis.clips.length ? vis.clips : null;
     if (n.edges) {
       n.edges.material.dispose();
       if (n.role === 'hole') { n.edges.material = new THREE.LineDashedMaterial({ color: new THREE.Color(theme.hole), dashSize: 1.6, gapSize: 1.2, transparent: true, opacity: sel ? 1 : 0.75, depthTest: !vis.xray, clippingPlanes: clip }); n.edges.computeLineDistances(); }
@@ -547,7 +548,7 @@ const Viewer = (() => {
     if (!n.threads || !n.threads.length || n.role === 'hole') return;
     const tg = new THREE.Group();
     tg.userData.threadGroup = true;
-    const clip = vis.clip ? [vis.clip] : null;
+    const clip = vis.clips.length ? vis.clips : null;
     const op = n.ctxDim ? 0.14 : (LOOK.display === 'wire' ? 0.25 : 0.82);
     for (const th of n.threads) {
       const fi = threadFaceIndex(n, th);
@@ -593,7 +594,17 @@ const Viewer = (() => {
     if (tg.children.length) { n.threadGroup = tg; n.obj.add(tg); }
   }
   function restyleAll() { for (const n of nodes.values()) styleNode(n); }
-  function setClip(plane) { vis.clip = plane || null; restyleAll(); listeners.emit('viewmode'); }
+  function setClip(planes, opts = {}) {
+    const arr = !planes ? [] : Array.isArray(planes) ? planes.filter(Boolean) : [planes];
+    const cap = opts.cap !== undefined ? !!opts.cap : true;
+    const sameList = arr.length === vis.clips.length && arr.every((p, i) => p === vis.clips[i]) && cap === vis.capEnabled;
+    vis.clips = arr;
+    vis.clip = (opts.primary && arr.includes(opts.primary)) ? opts.primary : (arr[0] || null);
+    vis.capEnabled = cap;
+    if (!sameList) restyleAll();
+    else needsRender = true;
+    listeners.emit('viewmode');
+  }
   function setXray(on) { vis.xray = !!on; restyleAll(); listeners.emit('viewmode'); }
   // Anzeige-Verschiebung je Teil (Explosionsansicht) – das Modell selbst bleibt unverändert
   function placeNode(n) {
@@ -921,7 +932,7 @@ const Viewer = (() => {
     setRay(cx, cy);
     const meshes = []; for (const n of nodes.values()) { if (!n.obj.visible || n.ctxDim) continue; meshes.push(n.mesh); }
     let hits = raycaster.intersectObjects(meshes, false);
-    if (vis.clip) hits = hits.filter((x) => vis.clip.distanceToPoint(x.point) >= -1e-6);
+    if (vis.clips.length) hits = hits.filter((x) => vis.clips.every((pl) => pl.distanceToPoint(x.point) >= -1e-6));
     const out = [], seen = new Set();
     for (const x of hits) {
       const n = nodes.get(x.object.userData.nodeId); if (!n) continue;
@@ -937,7 +948,7 @@ const Viewer = (() => {
     const meshes = [];
     for (const n of nodes.values()) { if (!n.obj.visible || n.ctxDim) continue; if (opts.solidsOnly && n.role === 'hole') continue; if (opts.exclude && opts.exclude.has(n.id)) continue; meshes.push(n.mesh); }
     let hits = raycaster.intersectObjects(meshes, false);
-    if (vis.clip) hits = hits.filter((x) => vis.clip.distanceToPoint(x.point) >= -1e-6);
+    if (vis.clips.length) hits = hits.filter((x) => vis.clips.every((pl) => pl.distanceToPoint(x.point) >= -1e-6));
     if (vis.xray && hits.length) {
       // Röntgen: liegt das gewählte Teil vorne, gilt der Klick dem nächsten Teil dahinter
       const first = nodes.get(hits[0].object.userData.nodeId);
@@ -983,7 +994,7 @@ const Viewer = (() => {
       for (let i = g[0]; i < g[0] + g[1]; i += 2) {
         _a.set(lines[i * 3], lines[i * 3 + 1], lines[i * 3 + 2]).applyMatrix4(M);
         _b.set(lines[i * 3 + 3], lines[i * 3 + 4], lines[i * 3 + 5]).applyMatrix4(M);
-        if (vis.clip && vis.clip.distanceToPoint(_a) < 0 && vis.clip.distanceToPoint(_b) < 0) continue;
+        if (vis.clips.length && vis.clips.some((pl) => pl.distanceToPoint(_a) < 0 && pl.distanceToPoint(_b) < 0)) continue;
         const A = toS(_a), B = toS(_b);
         const dx = B[0] - A[0], dy = B[1] - A[1]; const l2 = dx * dx + dy * dy;
         let t = l2 ? ((px - A[0]) * dx + (py - A[1]) * dy) / l2 : 0; t = clamp(t, 0, 1);
@@ -1239,7 +1250,7 @@ const Viewer = (() => {
     init, requestRender, setClip, setXray, setOffsets, baseBox, renderInset, silhouette, setAdaptive, setCompare, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, setSelectedEdges, clearHover,
     edgePositions, pick, pickAll, pickGhost, pickProxy, setProxies, clearProxies, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, boxVisible, sceneBox, snapshot, makeFat, disposeFat, faceOverlay, faceArea, faceEdges, edgeKinds, wallAt, thinWalls,
     get camera() { return camera; }, get activeCamera() { return cam(); }, get ortho() { return ortho; }, get gridStep() { return gridStep; }, get controls() { return controls; }, get scene() { return scene; }, get groups() { return groups; }, get nodes() { return nodes; }, get canvas() { return renderer.domElement; }, get theme() { return theme; }, get container() { return container; },
-    get clip() { return vis.clip; }, get xray() { return vis.xray; }, get lowRes() { return lowRes; },  get pixelRatio() { return renderer.getPixelRatio(); },
+    get clip() { return vis.clip; }, get clips() { return vis.clips.slice(); }, get xray() { return vis.xray; }, get lowRes() { return lowRes; },  get pixelRatio() { return renderer.getPixelRatio(); },
     on: listeners.on,
   };
 })();

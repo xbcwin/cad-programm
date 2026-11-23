@@ -210,7 +210,7 @@ Leitlinien:
 - Magnetisches Einrasten wie bei Canva: auf Flächen (Mitte, Mittellinien, Lochmitten, Kantenmitten, gleiche Randabstände), **auf runden Flächen** (Rohr, Kugel, Rumpf: „ganz oben/unten/vorne/hinten/links/rechts“ und Mitte, das Teil steht senkrecht auf der Rundung) und zwischen Körpern (bündig, mittig, gleiche Abstände). Strg hält es an, abschaltbar. Beim Ziehen aus der Leiste zeigt die Vorschau die **echte Form**.
 - Beim Verschieben zeigt das Schildchen den Abstand zum Nachbarn; „Abstand“ zwischen zwei Teilen lässt sich genau setzen.
 - Ansichten:
-  - Schnitt an XY/XZ/YZ oder an einer gewählten Fläche
+  - Schnitt an bis zu drei Ebenen (X, Y, Z einzeln an/aus) oder an einer gewählten Fläche, mit farbig gefüllter, schraffierter Schnittkappe (`Views.section`, `Viewer.clips`)
   - Röntgen
   - Explosion (auch innerhalb von Gruppen)
   - Fokus-Vorschau
