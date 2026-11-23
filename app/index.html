@@ -1146,7 +1146,7 @@ const HELP = {
  },
  "slot": {
   "tip": "Langloch für bewegliche Schrauben zeichnen",
-  "hilfe": "Klicke den ersten und zweiten Punkt für die Mittellinie und ziehe dann mit dem dritten Klick die Breite auf. Rechts auf „Gebogen“ umschalten: Mitte, Anfang, Ende (gegen den Uhrzeigersinn) und Breite – z. B. für verstellbare Kamerahalter.",
+  "hilfe": "Klicke den ersten und zweiten Punkt für die Mittellinie und ziehe dann mit dem dritten Klick die Breite auf. Rechts auf „Gebogen“ umschalten: Mitte, Anfang, Ende (gegen den Uhrzeigersinn) und Breite – z. B. für verstellbare Halterungen.",
   "tipp": "Langlöcher sind perfekt, wenn du beim späteren Zusammenbauen noch etwas Spielraum zum Verschieben brauchst."
  },
  "polygon": {
@@ -1172,11 +1172,11 @@ const HELP = {
  "wall2d": {
   "tip": "Aus einer offenen Linie eine Wand mit Dicke machen",
   "hilfe": "Stell rechts die Wandstärke ein und klicke eine offene Linie, einen Linienzug, einen Bogen oder eine Spline an. Tracery legt auf beiden Seiten die halbe Dicke an und schließt die Enden – die Linie bleibt als Hilfslinie in der Mitte. Mit „Fertig“ ziehst du die Wand hoch.",
-  "tipp": "Ideal für Rippen, Stege und dünne Halter, z. B. einen Antennenhalter: Bogen zeichnen, Wand 2 mm, 8 mm hochziehen. Ändert sich die Linie, wandert die Wand mit."
+  "tipp": "Ideal für Rippen, Stege und dünne Halter, z. B. einen Kabelhalter: Bogen zeichnen, Wand 2 mm, 8 mm hochziehen. Ändert sich die Linie, wandert die Wand mit."
  },
  "project2d": {
   "tip": "Kante eines Körpers in die Skizze holen",
-  "hilfe": "Klick in der Skizze auf eine Kante eines Körpers. Tracery schiebt sie senkrecht auf die Zeichenebene und legt sie als Element an: gerade Kanten als Linie, runde als Bogen oder Kreis, alles andere als Spline. Die Kante bleibt mit dem Körper verbunden (Ketten-Symbol): Ändert sich der Körper, wandert sie mit. Klickst du auf eine Fläche statt auf eine Kante, kommt der ganze Schnitt des Körpers mit der Skizzen-Ebene als Kontur in die Skizze – z. B. der Querschnitt eines Rumpfs, um daran weiterzuzeichnen.",
+  "hilfe": "Klick in der Skizze auf eine Kante eines Körpers. Tracery schiebt sie senkrecht auf die Zeichenebene und legt sie als Element an: gerade Kanten als Linie, runde als Bogen oder Kreis, alles andere als Spline. Die Kante bleibt mit dem Körper verbunden (Ketten-Symbol): Ändert sich der Körper, wandert sie mit. Klickst du auf eine Fläche statt auf eine Kante, kommt der ganze Schnitt des Körpers mit der Skizzen-Ebene als Kontur in die Skizze – z. B. der Querschnitt eines Gehäuses, um daran weiterzuzeichnen.",
   "tipp": "So passt ein Deckel genau auf ein Gehäuse: Skizze auf die Oberseite, die Außenkanten übernehmen, „Versatz“ nach innen – fertig ist der Rand. Wird das Gehäuse breiter, wächst der Deckel mit. Soll eine Kante stehen bleiben: anklicken, „Verbindung lösen“."
  },
  "mirror2d": {
@@ -1192,7 +1192,7 @@ const HELP = {
  "patternCirc2d": {
   "tip": "Elemente im Kreis vervielfachen",
   "hilfe": "Klicke die Elemente an, die vervielfacht werden sollen. Rechts stellst du Anzahl und Gesamtwinkel ein und wählst bei Bedarf den Mittelpunkt (sonst gilt der Nullpunkt). Dann Enter.",
-  "tipp": "360° verteilt die Kopien rund herum. Bei weniger Grad liegt die letzte Kopie genau am Ende des Winkels. Typisch für Schraubenkreise an Motorträgern."
+  "tipp": "360° verteilt die Kopien rund herum. Bei weniger Grad liegt die letzte Kopie genau am Ende des Winkels. Typisch für Lochkreise und Flansche."
  },
  "construct2d": {
   "tip": "Hilfslinien: zeichnen, aber nicht zur Fläche zählen",
@@ -1272,16 +1272,16 @@ const HELP = {
  "sweep": {
   "tip": "Querschnitt entlang eines Pfads ziehen (Sweep)",
   "hilfe": "Zeichne in einer Skizze einen offenen Pfad aus Linien, Bögen oder einer Spline und klick „Fertig“. Tracery zieht dann ein Rohr mit 6 mm Durchmesser daran entlang. Rechts stellst du rund oder rechteckig, die Größe und eine Wand für hohle Rohre ein.",
-  "tipp": "Gut für Kabelkanäle, Antennenhalter, Bügel und Leisten. Ecken im Pfad werden automatisch rund übergangen."
+  "tipp": "Gut für Kabelkanäle, Rohre, Bügel und Leisten. Ecken im Pfad werden automatisch rund übergangen."
  },
  "loft": {
   "tip": "Weicher Übergang durch mehrere Umrisse (Loft)",
   "hilfe": "Zeichne zwei oder mehr Umrisse auf verschiedenen Ebenen (z. B. ein Rechteck unten und einen Kreis 30 mm darüber – mit „Ebene verschieben“ in der Skizze). Wähle die Skizzenkörper in der Reihenfolge, durch die der Körper laufen soll, und klick „Übergang“. Bei einem einzelnen Skizzenkörper macht „Zur Spitze“ daraus eine Spitze. Rechts unter „Mittellinie“ kannst du den Übergang an einer gebogenen Linie entlangführen.",
-  "tipp": "Unter „Spitze verlängern“ stellst du ein, wie weit die Spitze hinter dem letzten Umriss liegt. Mit „Mittellinie zeichnen“ schwingt ein Rumpf nach oben oder ein Arm läuft im Bogen; mit „Führungskurve zeichnen“ gibst du die Seitenlinie vor und machst ihn bauchig oder schlank – die Umrisse bleiben dabei, wo sie sind. Eine „Zweite Führungskurve“ quer zur ersten formt die andere Richtung: z. B. die Höhe von der Seite und die Breite von oben. Für Nasen, Düsen und Rumpfteile danach die Kanten runden."
+  "tipp": "Unter „Spitze verlängern“ stellst du ein, wie weit die Spitze hinter dem letzten Umriss liegt. Mit „Mittellinie zeichnen“ biegst du den Übergang entlang einer Kurve; mit „Führungskurve zeichnen“ gibst du die Seitenlinie vor und machst ihn bauchig oder schlank – die Umrisse bleiben dabei, wo sie sind. Eine „Zweite Führungskurve“ quer zur ersten formt die andere Richtung: z. B. die Höhe von der Seite und die Breite von oben. Für Übergänge, Düsen und Griffe danach die Kanten runden."
  },
  "holeWizard": {
   "tip": "Schraubenloch, Gewinde, Einsatz oder Mutternfalle bohren",
-  "hilfe": "Klick auf eine Fläche und dann auf „Bohrung“ – das geht auch auf runden Flächen wie Rohren und Rümpfen. Wähle Art und Größe (zum Beispiel M3) und drück „Löcher setzen“. Jeder weitere Klick auf eine Fläche setzt noch ein Loch – „Fertig“ oder Esc beendet.",
+  "hilfe": "Klick auf eine Fläche und dann auf „Bohrung“ – das geht auch auf runden Flächen wie Rohren und Zylindern. Wähle Art und Größe (zum Beispiel M3) und drück „Löcher setzen“. Jeder weitere Klick auf eine Fläche setzt noch ein Loch – „Fertig“ oder Esc beendet.",
   "tipp": "„Durchgangsloch“ lässt die Schraube frei durchrutschen. „Gewinde schneiden“ macht das kleinere Kernloch, in das sich die Schraube selbst hineindreht."
  },
  "countersink": {
@@ -1292,12 +1292,12 @@ const HELP = {
  "fillet": {
   "tip": "Scharfe 3D-Kanten schön abrunden",
   "hilfe": "Klicke eine oder mehrere Kanten deines 3D-Körpers an und schiebe den Pfeil, um die Rundung größer oder kleiner zu machen. Rechts unter „Kanten“ macht „Von … bis“ eine Rundung, die entlang der Kante wächst – z. B. von 1 mm auf 4 mm; „Richtung tauschen“ dreht sie um.",
-  "tipp": "Gerundete Ecken sehen besser aus und reißen bei Belastung seltener ein, zum Beispiel an den Armen eines Frames."
+  "tipp": "Gerundete Ecken sehen besser aus und reißen bei Belastung seltener ein, zum Beispiel an Halterungen und Winkeln."
  },
  "chamfer": {
   "tip": "Kante im Winkel schräg anschneiden",
   "hilfe": "Klicke auf eine Kante und ziehe am Pfeil, um die scharfe Ecke durch eine gerade Schräge (Fase) zu ersetzen. Rechts unter „Kanten“ wählst du die Art: „Gleich“ (auf beiden Seiten gleich weit), „Zwei Abstände“ (z. B. 2 mm auf der einen, 4 mm auf der anderen Fläche) oder „Mit Winkel“ (Abstand und Winkel); „Seiten tauschen“ dreht sie um.",
-  "tipp": "Eine kleine Fase nimmt Kanten die Schärfe – an Carbonplatten schneiden sie dann keine Kabel mehr an."
+  "tipp": "Eine kleine Fase nimmt Kanten die Schärfe – an gefrästen Platten oder Gehäusen sind die Ränder dann angenehm glatt."
  },
  "shell": {
   "tip": "Körper aushöhlen wie eine Schachtel",
@@ -1322,7 +1322,7 @@ const HELP = {
  "mirror": {
   "tip": "Gespiegelte Kopie anlegen",
   "hilfe": "Wähle einen Körper und dann „Muster“ → „Gespiegelte Kopie“. Rechts wählst du die Spiegelebene und wo sie liegt.",
-  "tipp": "Bei symmetrischen Teilen – etwa einem Frame – baust du nur eine Hälfte und spiegelst sie. Das spart die halbe Arbeit."
+  "tipp": "Bei symmetrischen Teilen – etwa einem Gehäuse oder Winkel – baust du nur eine Hälfte und spiegelst sie. Das spart die halbe Arbeit."
  },
  "boolUnion": {
   "tip": "Mehrere Körper zu einem verschmelzen",
@@ -1367,7 +1367,7 @@ const HELP = {
  "massProps": {
   "tip": "Gewicht, Volumen und Schwerpunkt",
   "hilfe": "Klick ein Teil an: Rechts unter „Material und Gewicht“ wählst du sein Material und siehst sein Gewicht. Ohne Auswahl steht dort das Gewicht des ganzen Projekts mit dem Schwerpunkt.",
-  "tipp": "Bei Speed-Drohnen zählt jedes Gramm – und der Schwerpunkt sollte in der Mitte zwischen den Motoren liegen. „Schwerpunkt im Bild zeigen“ macht ihn sichtbar."
+  "tipp": "Wenn es auf Gewicht und Balance ankommt, hilft dir „Schwerpunkt im Bild zeigen“, ihn direkt im Modell zu sehen."
  },
  "timeline": {
   "tip": "Verlauf aller bisherigen Arbeitsschritte",
@@ -1427,7 +1427,7 @@ const HELP = {
  "zipTie": {
   "tip": "Zwei Schlitze für einen Kabelbinder",
   "hilfe": "Zieh die Kabelbinder-Schlitze auf eine Fläche. Das Kabel liegt dazwischen, der Binder läuft unten durch.",
-  "tipp": "Praktisch für Antennen, Empfänger und den Akku-Stecker."
+  "tipp": "Praktisch für Kabel, Schläuche und kleine Elektronik-Module."
  },
  "droneCheck": {
   "tip": "Rahmen prüfen: Propeller, Teile, Gewicht, Schwerpunkt, Schub, Flugzeit",
@@ -1435,13 +1435,13 @@ const HELP = {
   "tipp": "Der Schwerpunkt sollte fast genau in der Mitte zwischen den Motoren liegen. Liegt er daneben, schiebt „Akku verschieben“ den Akku genau an die richtige Stelle. Die Flugzeit ist eine grobe Schätzung fürs ruhige Schweben – beim schnellen Fliegen hält der Akku meist nur ein Drittel bis halb so lang."
  },
  "plateDxf": {
-  "tip": "Carbon-Platten als 2D-Zeichnung für die Fräse",
+  "tip": "Flache Platten als 2D-Zeichnung für Fräse oder Laser",
   "hilfe": "Exportieren → „Platten als DXF“: Jede flache Platte (bis 12 mm dick) kommt als eigene DXF-Datei in Originalgröße in die ZIP – Außenkontur und alle Löcher, in Millimetern. Die Plattendicke steht im Dateinamen.",
-  "tipp": "Fräsdienste brauchen genau das: eine DXF pro Platte und die Dicke. Gekaufte Teile und Propellerkreise kommen nicht mit."
+  "tipp": "Fräs- und Laserdienste brauchen genau das: eine DXF pro Platte und die Dicke. Gekaufte Teile kommen nicht mit."
  },
  "variants": {
   "tip": "Mehrere Sätze von Maßen speichern und umschalten",
-  "hilfe": "Unter „Maße“ ganz oben: „Neue Variante“ merkt sich alle Maße unter einem Namen, z. B. „5 Zoll“. Ändere dann Maße und speichere eine zweite Variante. Mit der Auswahl schaltest du um, „Vergleichen“ zeigt die Unterschiede mit Gewicht und Schub/Gewicht. Weichen die Maße ab, kannst du die aktive Variante überschreiben.",
+  "hilfe": "Unter „Maße“ ganz oben: „Neue Variante“ merkt sich alle Maße unter einem Namen, z. B. „Klein“. Ändere dann Maße und speichere eine zweite Variante. Mit der Auswahl schaltest du um, „Vergleichen“ zeigt die Unterschiede mit Gewicht. Weichen die Maße ab, kannst du die aktive Variante überschreiben.",
   "tipp": "Varianten ändern nur die Maße. Neue Teile oder Löcher gelten für alle Varianten."
  },
  "explainStep": {
@@ -1450,23 +1450,23 @@ const HELP = {
   "tipp": "Hängt ein Schritt an einem Maß, wandert er mit, wenn du das Maß änderst – genau das zeigt dir die Erklärung."
  },
  "weakSpots": {
-  "tip": "Schwachstellen suchen: Lochrand, dünne Wände, Arme",
-  "hilfe": "Rechts unter „Projekt“ → „Schwachstellen suchen“: Tracery prüft mit Faustregeln, ob Löcher zu nah am Rand oder aneinander liegen, ob Wände für ihr Material zu dünn sind und ob die Arme einer Drohne dick genug sind. „Zeigen“ markiert die Stelle mit roten Ringen. In Claude erklärt die KI die Funde und schlägt Verbesserungen vor, die du mit „Umsetzen“ übernimmst.",
+  "tip": "Schwachstellen suchen: Lochrand, dünne Wände, Überhänge",
+  "hilfe": "Rechts unter „Projekt“ → „Schwachstellen suchen“: Tracery prüft mit Faustregeln, ob Löcher zu nah am Rand oder aneinander liegen, ob Wände für ihr Material zu dünn sind und ob Druckteile große Überhänge haben. „Zeigen“ markiert die Stelle mit roten Ringen. In Claude erklärt die KI die Funde und schlägt Verbesserungen vor, die du mit „Umsetzen“ übernimmst.",
   "tipp": "Faustregeln ersetzen keinen Test: Grün heißt nur, dass nichts Auffälliges gefunden wurde."
  },
  "aiSteps": {
   "tip": "Schritte, die die KI gebaut hat",
   "hilfe": "Was der KI-Helfer baut, wird ein normaler Schritt in der Zeitleiste – mit einem kleinen Funken-Symbol. Überfahr ihn, dann siehst du, auf welche Bitte er entstand. Du kannst ihn wie jeden Schritt ändern, unterdrücken oder mit Strg Z zurücknehmen.",
-  "tipp": "Schreib unten in die Zeile, was du willst, z. B. „Mach die Arme 6 mm dick“ oder „Bau mir einen 5-Zoll-Deadcat mit DJI O4“."
+  "tipp": "Schreib unten in die Zeile, was du willst, z. B. „Mach die Wände 3 mm dick“ oder „Bau mir ein Gehäuse 80 × 50 × 30 mit vier Schraubenlöchern“."
  },
  "levelSwitch": {
   "tip": "Einfache Oberfläche oder alle Werkzeuge",
-  "hilfe": "Oben rechts (oder auf der Startseite) schaltest du zwischen „Einfach“ und „Profi“ um. Einfach zeigt nur die wichtigsten Werkzeuge: Körper, Skizze, Bauteile, Drohne und Exportieren – Messen, Notizen, Ansicht und Profi-Werkzeuge findest du dann unter „Mehr“. Dein Modell bleibt gleich, es ändert sich nur, was du siehst.",
+  "hilfe": "Oben rechts (oder auf der Startseite) schaltest du zwischen „Einfach“ und „Profi“ um. Einfach zeigt nur die wichtigsten Werkzeuge: Körper, Skizze, Bauteile und Exportieren – Messen, Notizen, Ansicht und Profi-Werkzeuge findest du dann unter „Mehr“. Dein Modell bleibt gleich, es ändert sich nur, was du siehst.",
   "tipp": "Zum Anfangen ist „Einfach“ gut. Die Eingabezeile unten findet trotzdem jedes Werkzeug."
  },
  "aiCoworker": {
   "tip": "Der KI-Kollege arbeitet große Aufträge selbstständig ab",
-  "hilfe": "Schreib unten in die Zeile, was passieren soll – auch große Aufträge wie „Mach alles als Verbund“, „Richte alles mittig aus“ oder „Prüf die Drohne und behebe, was nicht passt“. Der KI-Kollege macht einen Plan, setzt ihn in Runden um, rechnet nach jeder Runde nach und behebt Fehler selbst. Ist etwas unklar, fragt er mit Antwort-Knöpfen zurück. „Selbstständig“ oben im Fenster schaltet das Arbeiten in Runden ab.",
+  "hilfe": "Schreib unten in die Zeile, was passieren soll – auch große Aufträge wie „Mach alles als Verbund“, „Richte alles mittig aus“ oder „Prüf das Modell auf Schwachstellen und behebe sie“. Der KI-Kollege macht einen Plan, setzt ihn in Runden um, rechnet nach jeder Runde nach und behebt Fehler selbst. Ist etwas unklar, fragt er mit Antwort-Knöpfen zurück. „Selbstständig“ oben im Fenster schaltet das Arbeiten in Runden ab.",
   "tipp": "Der ganze Auftrag ist danach ein einziger Rückgängig-Schritt. „Alles als Verbund“ geht auch ohne KI – Kaufteile bleiben dabei einzeln, damit ihr Gewicht stimmt."
  },
  "ellipse": {
@@ -1501,12 +1501,12 @@ const HELP = {
  },
  "magnet": {
   "tip": "Teile rasten an sinnvollen Stellen ein",
-  "hilfe": "Beim Ziehen und beim Setzen von Löchern rastet Tracery an der Mitte einer Fläche, an Mittellinien, an Lochmitten und im gleichen Randabstand ein. Auf runden Flächen wie Rohren, Kugeln und Rümpfen rastet es „ganz oben“, „ganz unten“, an den Seiten und in der Mitte der Länge ein – das Teil steht dann genau senkrecht auf der Rundung. Körper rasten bündig oder mittig zu anderen Körpern ein. Rosa Hilfslinien zeigen, woran.",
+  "hilfe": "Beim Ziehen und beim Setzen von Löchern rastet Tracery an der Mitte einer Fläche, an Mittellinien, an Lochmitten und im gleichen Randabstand ein. Auf runden Flächen wie Rohren, Kugeln und Zylindern rastet es „ganz oben“, „ganz unten“, an den Seiten und in der Mitte der Länge ein – das Teil steht dann genau senkrecht auf der Rundung. Körper rasten bündig oder mittig zu anderen Körpern ein. Rosa Hilfslinien zeigen, woran.",
   "tipp": "Halte Strg (Mac: cmd) gedrückt, um frei ohne Einrasten zu ziehen. Ganz abschalten kannst du es im Projekt rechts unter „Fangen beim Verschieben“."
  },
  "importCad": {
   "tip": "STEP-, STL-, DXF- oder SVG-Datei als Teil holen",
-  "hilfe": "Über „Datei öffnen“ oder einfach ins Fenster ziehen: Eine .step-, .stp- oder .stl-Datei wird ein neues Teil im Projekt – zum Beispiel ein Motor oder eine Kamera vom Hersteller. Rechts stellst du ein, in welcher Einheit die Datei gemessen ist. Eine .dxf-Datei (2D-Zeichnung, zum Beispiel ein Rahmen-Umriss vom Hersteller) wird eine 3 mm dicke Platte: Der Umriss liegt als Skizze dahinter und lässt sich mit „Skizze bearbeiten“ ändern, Löcher bleiben Löcher. Eine .svg-Datei (zum Beispiel ein Logo) wird genauso eine dünne Platte (1 mm) – als „Loch“ in eine andere Platte gesetzt ergibt das eine Gravur.",
+  "hilfe": "Über „Datei öffnen“ oder einfach ins Fenster ziehen: Eine .step-, .stp- oder .stl-Datei wird ein neues Teil im Projekt – zum Beispiel ein Normteil oder ein Bauteil vom Hersteller. Rechts stellst du ein, in welcher Einheit die Datei gemessen ist. Eine .dxf-Datei (2D-Zeichnung, zum Beispiel ein Platten-Umriss) wird eine 3 mm dicke Platte: Der Umriss liegt als Skizze dahinter und lässt sich mit „Skizze bearbeiten“ ändern, Löcher bleiben Löcher. Eine .svg-Datei (zum Beispiel ein Logo) wird genauso eine dünne Platte (1 mm) – als „Loch“ in eine andere Platte gesetzt ergibt das eine Gravur.",
   "tipp": "STEP ist genauer als STL: Kanten lassen sich runden und Bohrungen erkennen. STL-Dateien sind Dreiecksnetze und eignen sich vor allem zum Anschauen und Ausrichten. DXF muss als Text (ASCII) gespeichert sein; Zoll, Zentimeter und Meter werden in Millimeter umgerechnet. Zeichnungen in Blöcken vorher im anderen Programm auflösen. In SVG-Dateien muss Text vorher in Pfade umgewandelt sein. Stimmt die Größe nicht: „Skizze bearbeiten“ und rechts unter „Größe der Skizze“ die Breite eintippen – alles wächst mit. Ist gerade eine Skizze offen, landet die DXF oder SVG in dieser Skizze statt als neue Platte – praktisch für ein Logo auf einer Fläche."
  },
  "sketchTemplate": {
@@ -1526,7 +1526,7 @@ const HELP = {
  },
  "threadRod": {
   "tip": "Außengewinde zum Drucken",
-  "hilfe": "Ein Bolzen mit echtem metrischem Gewinde (M3 bis M16). Verbinde ihn mit einem Körper, z. B. für einen Schraubdeckel oder einen Antennenhalter.",
+  "hilfe": "Ein Bolzen mit echtem metrischem Gewinde (M3 bis M16). Verbinde ihn mit einem Körper, z. B. für einen Schraubdeckel oder ein Stativgewinde.",
   "tipp": "Unter M5 werden gedruckte Gewinde selten sauber – dort lieber Gewindeeinsätze oder echte Schrauben nehmen."
  },
  "threadHole": {
@@ -1542,7 +1542,7 @@ const HELP = {
  "point": {
   "tip": "Einzelner Punkt in der Skizze",
   "hilfe": "Klick setzt einen Punkt. Er bildet keine Fläche, ist aber ein fester Bezug: Maße zu anderen Punkten oder Linien, Regeln wie „Mittig“ oder „Deckungsgleich“. Liegt die Skizze auf einer Körperfläche und enthält nur Punkte, wird beim „Fertig“ an jedem Punkt eine Bohrung gesetzt – Art und Größe wählst du im Bohrungs-Assistenten.",
-  "tipp": "Praktisch für Lochbilder mit genauen Maßen, z. B. 30,5 × 30,5 für einen Stack: vier Punkte setzen, bemaßen, „Fertig“ – fertig sind die vier Schraubenlöcher."
+  "tipp": "Praktisch für Lochbilder mit genauen Maßen, z. B. vier Befestigungslöcher auf einer Platte: vier Punkte setzen, bemaßen, „Fertig“ – fertig sind die vier Schraubenlöcher."
  },
  "chainEdges": {
   "tip": "Kantenkette wählen",
@@ -1577,7 +1577,7 @@ const HELP = {
  "route3d": {
   "tip": "Rohr durch Punkte im Raum – auf Körpern oder frei",
   "hilfe": "Körper → „Rohr im Raum“: Klick nacheinander Punkte an. Auf einem Körper liegt das Rohr auf der Fläche auf, daneben bleibt es auf der Höhe des letzten Punkts. Ziehen dreht die Ansicht wie immer, Rückschritt nimmt den letzten Punkt weg, Enter oder Doppelklick ist fertig. Rechts änderst du jeden Punkt als Zahl, den Durchmesser, die Wand und den Querschnitt. Zwischen zwei Punkten gibt es Regeln wie in einer Skizze, nur im Raum: „entlang X/Y/Z“ legt das Stück genau auf eine Achse, „rechtwinklig“ oder „parallel zum vorigen“ richtet es am Stück davor aus, „Länge“ macht es genau so lang – die Punkte dahinter wandern mit. Ist das Rohr gewählt, steht an jedem Stück seine Länge im Bild – anklicken, Zahl tippen, Enter: dann ist sie fest (🔒). Punkte, die du auf einen Körper klickst, hängen an ihm: Verschiebst oder drehst du den Körper, wandert der Punkt mit („lösen“ rechts macht ihn wieder frei).",
-  "tipp": "Gut für Kabelkanäle, Antennenrohre und Bügel, die um Teile herum laufen. „Gerade Stücke, runde Ecken“ ergibt einen Knick-Verlauf wie bei gebogenem Rohr. Für ein Antennenrohr z. B. das erste Stück „entlang Z“ mit 25 mm Länge, das zweite „entlang Y“ mit 15 mm – dann steht es genau senkrecht und knickt genau nach hinten ab. Eine Länge 0 macht das Stück wieder frei."
+  "tipp": "Gut für Kabelkanäle, Leitungen und Bügel, die um Teile herum laufen. „Gerade Stücke, runde Ecken“ ergibt einen Knick-Verlauf wie bei gebogenem Rohr. Zum Beispiel das erste Stück „entlang Z“ mit 25 mm Länge, das zweite „entlang Y“ mit 15 mm – dann steht es genau senkrecht und knickt genau im rechten Winkel ab. Eine Länge 0 macht das Stück wieder frei."
  },
  "armFairing": {
   "tip": "Stromlinien-Hülle über einen Arm (Speed-Drohne)",
@@ -1591,7 +1591,7 @@ const HELP = {
  },
  "bom": {
   "tip": "Alle Teile mit Anzahl und Gewicht als Liste",
-  "hilfe": "Rechts unter „Projekt“ → „Stückliste“: eine Tabelle mit allen Teilen ganz oben im Verlauf – Name, Anzahl, Art (Kaufteil oder Material) und Gewicht. Gleiche Teile wie „Arm 1“ bis „Arm 4“ stehen in einer Zeile. Ein Klick auf eine Zeile wählt die Teile im Bild aus. Mit „Als Tabelle speichern“ bekommst du eine CSV-Datei, die Excel, Numbers und Google Tabellen öffnen. Darunter steht, wie viele Schrauben, Muttern und Gewindeeinsätze du brauchst – gezählt aus deinen Schraubenlöchern und Lochbildern.",
+  "hilfe": "Rechts unter „Projekt“ → „Stückliste“: eine Tabelle mit allen Teilen ganz oben im Verlauf – Name, Anzahl, Art (Kaufteil oder Material) und Gewicht. Gleiche Teile wie „Fuß 1“ bis „Fuß 4“ stehen in einer Zeile. Ein Klick auf eine Zeile wählt die Teile im Bild aus. Mit „Als Tabelle speichern“ bekommst du eine CSV-Datei, die Excel, Numbers und Google Tabellen öffnen. Darunter steht, wie viele Schrauben, Muttern und Gewindeeinsätze du brauchst – gezählt aus deinen Schraubenlöchern und Lochbildern.",
   "tipp": "Die Liste ist deine Einkaufs- und Wiegeliste: Kaufteile zum Bestellen, Platten zum Fräsen, Druckteile zum Drucken. Steht bei einem Kaufteil „fehlt“, trag sein Gewicht rechts in den Eigenschaften ein."
  },
  "look": {
@@ -6206,7 +6206,7 @@ const LIB = [
   { lib: 'slotHole', label: 'Langloch', role: 'hole', icon: 'slot', desc: 'Längliches Loch zum Verstellen', params: [
     { k: 'len', label: 'Länge', type: 'num', def: 20 }, { k: 'w', label: 'Breite', type: 'num', def: 4.5 }, { k: 'depth', label: 'Tiefe', type: 'num', def: 10 },
   ] },
-  { lib: 'holePattern', label: 'Lochbild', role: 'hole', icon: 'stack', desc: 'Vier Schraubenlöcher für einen Stack oder einen Motor', params: [
+  { lib: 'holePattern', label: 'Lochbild', role: 'hole', icon: 'stack', drone: true, desc: 'Vier Schraubenlöcher für einen Stack oder einen Motor', params: [
     { k: 'pat', label: 'Lochbild', type: 'select', options: [['stack305', 'Stack 30,5 × 30,5'], ['stack255', 'Stack 25,5 × 25,5'], ['stack20', 'Stack 20 × 20'], ['stack16', 'Stack 16 × 16'], ['motor19', 'Motor, Lochkreis 19'], ['motor16', 'Motor, Lochkreis 16'], ['motor12', 'Motor, Lochkreis 12'], ['motor9', 'Motor, Lochkreis 9'], ['square', 'Quadrat (eigenes Maß)'], ['circle', 'Lochkreis (eigenes Maß)']], def: 'stack305' },
     { k: 'a', label: 'Eigenes Maß', type: 'num', def: 20 },
     { k: 'size', label: 'Schraube', type: 'select', options: SIZES, def: 'M3' },
@@ -6223,29 +6223,29 @@ const LIB = [
   { lib: 'hinge', label: 'Scharnier', role: 'solid', icon: 'hinge', desc: 'Scharnier mit Spiel, aus einem Stück', params: [
     { k: 'len', label: 'Länge', type: 'num', def: 40 }, { k: 'w', label: 'Flügelbreite', type: 'num', def: 15 }, { k: 't', label: 'Dicke', type: 'num', def: 2.4 }, { k: 'gap', label: 'Spiel', type: 'num', def: 0.4 },
   ] },
-  { lib: 'goproMount', label: 'GoPro-Halterung', role: 'solid', icon: 'actionMount', desc: 'Finger mit M5-Loch für Action-Kameras, auf einer Grundplatte – mit Mutter-Nabe', params: [
+  { lib: 'goproMount', label: 'GoPro-Halterung', role: 'solid', icon: 'actionMount', drone: true, desc: 'Finger mit M5-Loch für Action-Kameras, auf einer Grundplatte – mit Mutter-Nabe', params: [
     { k: 'n', label: 'Finger', type: 'select', options: ['3', '2'], def: '3' }, { k: 't', label: 'Fingerdicke', type: 'num', def: 3 }, { k: 'gap', label: 'Spalt', type: 'num', def: 3.2 }, { k: 'hole', label: 'Loch Ø', type: 'num', def: 5.2 },
     { k: 'fw', label: 'Fingerbreite', type: 'num', def: 15 }, { k: 'hz', label: 'Lochhöhe', type: 'num', def: 9 }, { k: 'nut', label: 'Mutter M5', type: 'select', options: ['ja', 'nein'], def: 'ja' },
     { k: 'bw', label: 'Platte breit', type: 'num', def: 24 }, { k: 'bd', label: 'Platte tief', type: 'num', def: 20 }, { k: 'bh', label: 'Platte dick', type: 'num', def: 2 },
   ] },
-  { lib: 'xt60Holder', label: 'Stecker-Halter (XT60)', role: 'solid', icon: 'plugMount', desc: 'Platte mit Ausschnitt für einen Akkustecker und zwei Schraubenlöchern', params: [
+  { lib: 'xt60Holder', label: 'Stecker-Halter (XT60)', role: 'solid', icon: 'plugMount', drone: true, desc: 'Platte mit Ausschnitt für einen Akkustecker und zwei Schraubenlöchern', params: [
     { k: 'w', label: 'Stecker breit', type: 'num', def: 15.5 }, { k: 'h', label: 'Stecker hoch', type: 'num', def: 8.1 }, { k: 'fit', label: 'Spiel', type: 'num', def: 0.3 }, { k: 'ch', label: 'Abschrägung', type: 'num', def: 1.5 },
     { k: 't', label: 'Plattendicke', type: 'num', def: 3 }, { k: 'ea', label: 'Lochabstand', type: 'num', def: 26 }, { k: 'hole', label: 'Loch Ø', type: 'num', def: 3.2 }, { k: 'wall', label: 'Rand', type: 'num', def: 2.5 },
   ] },
-  { lib: 'antennaMount', label: 'Antennenhalter', role: 'solid', icon: 'antenna', desc: 'Grundplatte mit ein oder zwei Röhrchen, V-förmig gespreizt und nach hinten geneigt', params: [
+  { lib: 'antennaMount', label: 'Antennenhalter', role: 'solid', icon: 'antenna', drone: true, desc: 'Grundplatte mit ein oder zwei Röhrchen, V-förmig gespreizt und nach hinten geneigt', params: [
     { k: 'n', label: 'Röhrchen', type: 'select', options: ['2', '1'], def: '2' }, { k: 'di', label: 'Innen-Ø', type: 'num', def: 3.5 }, { k: 'wall', label: 'Wand', type: 'num', def: 1.2 }, { k: 'len', label: 'Länge', type: 'num', def: 20 },
     { k: 'spread', label: 'Spreizung', type: 'num', def: 90, unit: '°' }, { k: 'lean', label: 'Neigung nach hinten', type: 'num', def: 30, unit: '°' }, { k: 's', label: 'Abstand', type: 'num', def: 10 },
     { k: 'bw', label: 'Platte breit', type: 'num', def: 22 }, { k: 'bd', label: 'Platte tief', type: 'num', def: 12 }, { k: 'bh', label: 'Platte dick', type: 'num', def: 2 },
   ] },
-  { lib: 'aeroBody', label: 'Stromlinien-Rumpf', role: 'solid', icon: 'revolve', desc: 'Hohler Rumpf in Tropfenform: runde Nase, Mittelteil, langes spitzes Heck – liegt längs, Nase nach vorne', params: [
+  { lib: 'aeroBody', label: 'Stromlinien-Rumpf', role: 'solid', icon: 'revolve', drone: true, desc: 'Hohler Rumpf in Tropfenform: runde Nase, Mittelteil, langes spitzes Heck – liegt längs, Nase nach vorne', params: [
     { k: 'd', label: 'Durchmesser', type: 'num', def: 60 }, { k: 'ln', label: 'Nasenlänge', type: 'num', def: 55 }, { k: 'lc', label: 'Mittelteil', type: 'num', def: 100 }, { k: 'lt', label: 'Hecklänge', type: 'num', def: 95 },
     { k: 'dn', label: 'Nasenöffnung Ø', type: 'num', def: 32 }, { k: 'dt', label: 'Hecköffnung Ø', type: 'num', def: 18 }, { k: 'wall', label: 'Wand', type: 'num', def: 1.6 },
   ] },
-  { lib: 'armFairing', label: 'Armverkleidung', role: 'solid', icon: 'wind', desc: 'Stromlinien-Hülle über einen Arm: NACA-Tropfenprofil, Nase nach vorne, innen ein Schlitz für den Arm – so dick wie nötig', params: [
+  { lib: 'armFairing', label: 'Armverkleidung', role: 'solid', icon: 'wind', drone: true, desc: 'Stromlinien-Hülle über einen Arm: NACA-Tropfenprofil, Nase nach vorne, innen ein Schlitz für den Arm – so dick wie nötig', params: [
     { k: 'len', label: 'Länge', type: 'num', def: 60 }, { k: 'aw', label: 'Armbreite', type: 'num', def: 14 }, { k: 'at', label: 'Armdicke', type: 'num', def: 5 },
     { k: 'wall', label: 'Wand', type: 'num', def: 1 }, { k: 'chord', label: 'Profiltiefe (0 = automatisch)', type: 'num', def: 0 },
   ] },
-  { lib: 'motorFairing', label: 'Motorverkleidung', role: 'solid', icon: 'wind', desc: 'Stromlinien-Becher um einen Motor: oben offen für den Propeller, unten ein spitzes Heck, seitlich ein Schlitz für den Arm', params: [
+  { lib: 'motorFairing', label: 'Motorverkleidung', role: 'solid', icon: 'wind', drone: true, desc: 'Stromlinien-Becher um einen Motor: oben offen für den Propeller, unten ein spitzes Heck, seitlich ein Schlitz für den Arm', params: [
     { k: 'd', label: 'Motor Ø', type: 'num', def: 28 }, { k: 'h', label: 'Motorhöhe', type: 'num', def: 18 }, { k: 'tail', label: 'Hecklänge', type: 'num', def: 30 },
     { k: 'aw', label: 'Armbreite', type: 'num', def: 12 }, { k: 'at', label: 'Armdicke', type: 'num', def: 5 },
     { k: 'wall', label: 'Wand', type: 'num', def: 1.2 }, { k: 'gap', label: 'Luft um den Motor', type: 'num', def: 0.5 },
@@ -7197,7 +7197,7 @@ const Features = (() => {
       }
       const pb = h('button', { type: 'button', class: 'btn', id: 'op-axispick' }); pb.innerHTML = icon('cursor') + (ax === 'pick' ? 'Andere Achse wählen' : 'Achse im Bild wählen');
       pb.onclick = () => pickAxis(it.id);
-      hint = { z: 'Gedreht wird um die senkrechte Achse durch die Mitte.', x: 'Gedreht wird um eine Achse quer (in X-Richtung) durch die Mitte – z. B. Löcher rund um ein liegendes Rohr.', y: 'Gedreht wird um eine Achse längs (in Y-Richtung) durch die Mitte – z. B. Rippen rund um einen liegenden Rumpf.', pick: 'Gedreht wird um die gewählte Achse – eine gerade Kante, eine Welle oder ein Loch, auch schräg.' }[ax] + ' 360° verteilt die Kopien rundherum.';
+      hint = { z: 'Gedreht wird um die senkrechte Achse durch die Mitte.', x: 'Gedreht wird um eine Achse quer (in X-Richtung) durch die Mitte – z. B. Löcher rund um ein liegendes Rohr.', y: 'Gedreht wird um eine Achse längs (in Y-Richtung) durch die Mitte – z. B. Rippen rund um ein liegendes Gehäuse.', pick: 'Gedreht wird um die gewählte Achse – eine gerade Kante, eine Welle oder ein Loch, auch schräg.' }[ax] + ' 360° verteilt die Kopien rundherum.';
       sec.append(f); if (info) sec.append(info);
       sec.append(h('div', { class: 'btn-row' }, pb), h('div', { class: 'hint-box', html: hint }));
       const ub = h('button', { type: 'button', class: 'btn' }); ub.innerHTML = icon('ungroup') + 'Auflösen (nur Original behalten)';
@@ -8466,7 +8466,7 @@ const Panels = (() => {
   // ---------- Werkzeugleiste ----------
   // einfache Oberfläche: diese Grundkörper und Bauteile bleiben sichtbar
   const SIMPLE_KINDS = ['box', 'cylinder', 'sphere', 'cone', 'tube', 'hemisphere'];
-  const SIMPLE_PARTS = ['screwHole', 'nutTrap', 'slotHole', 'holePattern', 'zipTie'];
+  const SIMPLE_PARTS = ['screwHole', 'nutTrap', 'slotHole', 'zipTie', 'hinge'];
   function renderTools() {
     const el = $('#tools'); el.innerHTML = '';
     const btn = (id, ic, label, tip, kbd, onClick, cls = '', short = '') => {
@@ -8480,7 +8480,6 @@ const Panels = (() => {
       btn('t-body', 'cube', 'Körper', 'Grundkörper hinzufügen – anklicken oder auf die Fläche ziehen', 'K', (e) => toggleFlyout('bodies', e.currentTarget));
       btn('t-sketch', 'sketch', 'Skizze', 'Eine 2D-Skizze zeichnen und daraus einen Körper machen', 'S', () => Sketch.chooseAndStart());
       btn('t-parts', 'parts', 'Bauteile', 'Schraubenlöcher, Mutternfallen, Scharniere, Zahnräder …', 'B', (e) => toggleFlyout('parts', e.currentTarget));
-      btn('t-drone', 'drone', 'Drohne', 'Frame-Assistent, Kaufteile wie Motoren und Akkus, Lochbilder', '', (e) => toggleFlyout('drone', e.currentTarget));
       btn('t-measure', 'measure', 'Messen', 'Messen: Abstände, Winkel, Flächen und Durchmesser', 'M', () => Measure.toggle(), 'minor pro');
       btn('t-notes', 'noteDraw', 'Notizen', 'Notizstift: frei malen und Text hinschreiben – ohne technische Bedeutung', 'N', () => Notes.toggle(), 'minor pro');
       btn('t-views', 'xray', 'Ansicht', 'Ansicht: Schnitt, Röntgen, Explosion und Fokus-Vorschau – ändert nur die Anzeige', '', (e) => Views.menu(e.currentTarget), 'minor pro');
@@ -8508,7 +8507,7 @@ const Panels = (() => {
   const HY = { Schraubenloch: 'Schrauben\u00ADloch', Mutternfalle: 'Muttern\u00ADfalle', Gewindeeinsatz: 'Gewinde\u00ADeinsatz', Schnapphaken: 'Schnapp\u00ADhaken', Halbkugel: 'Halb\u00ADkugel' };
   const hyph = (s) => HY[s] || s;
   function closeFlyout() { if (flyout) { flyout.el.remove(); const b = flyout.btn; b && b.setAttribute('aria-expanded', 'false'); flyout = null; document.removeEventListener('pointerdown', flyOutside, true); } }
-  function flyOutside(e) { if (flyout && !flyout.el.contains(e.target) && !flyout.btn.contains(e.target)) closeFlyout(); }
+  function flyOutside(e) { if (flyout && !flyout.el.contains(e.target) && !(flyout.btn && flyout.btn.contains(e.target))) closeFlyout(); }
   function toggleFlyout(kind, btn) {
     if (flyout && flyout.kind === kind) { closeFlyout(); return; }
     closeFlyout();
@@ -8539,7 +8538,7 @@ const Panels = (() => {
     } else {
       el.append(h('h3', null, 'Bauteile'));
       const tiles = h('div', { class: 'tiles' });
-      for (const d of LIB.filter((x) => !x.buy)) {
+      for (const d of LIB.filter((x) => !x.buy && !x.drone)) {
         const t = h('div', { class: 'tile' + (d.role === 'hole' ? ' hole-part' : '') + (SIMPLE_PARTS.includes(d.lib) ? '' : ' pro'), role: 'button', tabindex: '0', 'data-tip': d.desc });
         t.innerHTML = partSVG(d); t.append(h('span', { class: 'lbl' }, hyph(d.label)), h('span', { class: 'role' }, d.role === 'hole' ? 'Loch' : 'Körper'));
         Place.bindTile(t, { part: d });
@@ -8550,9 +8549,10 @@ const Panels = (() => {
       el.append(h('div', { class: 'foot' }, 'Löcher auf eine Fläche ziehen – sie richten sich automatisch aus.'));
     }
     $('#center').append(el);
-    const br = btn.getBoundingClientRect(), cr = $('#center').getBoundingClientRect();
+    const anc = btn || $('#t-parts') || $('#t-body');
+    const br = anc ? anc.getBoundingClientRect() : { left: 16 }, cr = $('#center').getBoundingClientRect();
     el.style.left = clamp(br.left - cr.left, 8, cr.width - el.offsetWidth - 8) + 'px'; el.style.top = '8px';
-    btn.setAttribute('aria-expanded', 'true');
+    if (btn) btn.setAttribute('aria-expanded', 'true');
     flyout = { el, btn, kind };
     setTimeout(() => document.addEventListener('pointerdown', flyOutside, true), 0);
   }
@@ -8924,15 +8924,6 @@ const Panels = (() => {
     const nameF = h('div', { class: 'field' }, h('label', { for: 'proj-name' }, 'Projektname'), h('div', { class: 'inp' }, h('input', { id: 'proj-name', value: App.doc.name, style: { fontFamily: 'var(--font)' } })));
     nameF.querySelector('input').addEventListener('change', (e) => { const v = e.target.value.trim() || 'Neues Projekt'; App.change('Projekt umbenannt', (doc) => { doc.name = v; }); });
     w.append(nameF);
-    if (DroneCheck.isDrone()) {
-      const ds = h('div', { class: 'section', id: 'proj-drone' }, h('div', { class: 'section-h' }, 'Drohne'));
-      const last = DroneCheck.summary();
-      if (last) ds.append(DroneCheck.rows(last.filter((c) => c.s !== 'ok' || c.id === 'tw'), null), ...(last.every((c) => c.s === 'ok' || c.s === 'info') ? [h('div', { class: 'hint-box' }, 'Alle Prüfungen bestanden.')] : []));
-      const b = h('button', { type: 'button', class: 'btn small', id: 'proj-dcheck', 'data-help': 'droneCheck' }); b.innerHTML = icon('clearance') + (last ? 'Noch mal prüfen' : 'Drohnen-Check');
-      b.onclick = () => DroneCheck.dialog();
-      ds.append(h('div', { class: 'btn-row' }, b));
-      w.append(ds);
-    }
     if (App.doc.items.length) {
       const ps = h('div', { class: 'section', id: 'proj-weak-sec' }, h('div', { class: 'section-h' }, 'Schwachstellen'));
       const wl = Weak.summary();
@@ -9238,7 +9229,7 @@ const Panels = (() => {
         sec.append(list);
         const mb = h('button', { type: 'button', class: 'btn', id: 'route-more' }); mb.innerHTML = icon('plus') + 'Punkte im Bild anhängen';
         mb.onclick = () => Features.routeAppend(it.id);
-        sec.append(mb, h('div', { class: 'hint-box', html: 'Das Rohr läuft durch die Punkte im Raum – gut für Kabelkanäle, Antennenrohre und Bügel, die sich in alle Richtungen biegen. Mit <b>Wand</b> wird es hohl.' }));
+        sec.append(mb, h('div', { class: 'hint-box', html: 'Das Rohr läuft durch die Punkte im Raum – gut für Kabelkanäle, Leitungen und Bügel, die sich in alle Richtungen biegen. Mit <b>Wand</b> wird es hohl.' }));
       } else {
         const eb = h('button', { type: 'button', class: 'btn' }); eb.innerHTML = icon('edit') + 'Pfad bearbeiten';
         eb.onclick = () => Sketch.editItem(it.id);
@@ -9269,7 +9260,7 @@ const Panels = (() => {
         const ang = hasPath ? Model.loftPathAngles(it, Model.vars(App.doc).v) : [];
         const bad = ang.map((a, i) => [a, i]).filter(([a]) => a > 30);
         if (bad.length) ml.append(h('div', { class: 'hint-box warn', id: 'loft-path-warn', html: `Die Mittellinie trifft ${bad.length === ang.length ? 'die Umrisse' : bad.map(([, i]) => (i === 0 ? 'den ersten' : i === ang.length - 1 ? 'den letzten' : `den ${i + 1}.`) + ' Umriss').join(' und ')} schräg (${bad.map(([a]) => a + '°').join(', ')}). Dann wird der Körper dünn oder verdreht – lass sie möglichst senkrecht durch die Umrisse laufen.` }));
-        ml.append(row, h('div', { class: 'hint-box', html: hasPath ? 'Der Übergang läuft an der Mittellinie entlang. Spitze und „Gerade Flächen“ gibt es dabei nicht.' : 'Ohne Mittellinie nimmt der Übergang den kürzesten Weg. Mit einer <b>Mittellinie</b> biegst du ihn – z. B. einen Rumpf, der nach oben schwingt, oder einen Arm im Bogen.' }));
+        ml.append(row, h('div', { class: 'hint-box', html: hasPath ? 'Der Übergang läuft an der Mittellinie entlang. Spitze und „Gerade Flächen“ gibt es dabei nicht.' : 'Ohne Mittellinie nimmt der Übergang den kürzesten Weg. Mit einer <b>Mittellinie</b> biegst du ihn – z. B. ein gebogenes Rohr oder ein geschwungenes Gehäuse.' }));
       } else ml.append(h('div', { class: 'hint-box', html: 'Eine Mittellinie braucht mindestens zwei Umrisse.' }));
       // Führungskurve: gibt die Seitenlinie vor – der Übergang wird zwischen den Umrissen so weit, dass er sie berührt
       const fk = h('div', { class: 'section', id: 'loft-rail' }, h('div', { class: 'section-h' }, 'Führungskurve'));
@@ -9282,9 +9273,9 @@ const Panels = (() => {
           rb.onclick = () => App.change('Führungskurve entfernt', (doc) => { const f = Model.find(doc, it.id); if (!f) return false; delete f.item.p.rail; delete f.item.p.rail2; });
           row.append(rb);
         }
-        fk.append(row, h('div', { class: 'hint-box', html: hasRail ? 'Zwischen den Umrissen folgt der Übergang der Führungskurve – z. B. ein Rumpf, der in der Mitte bauchig wird. Die Umrisse selbst bleiben gleich.' : 'Mit einer <b>Führungskurve</b> gibst du die Seitenlinie vor: Der Übergang wird zwischen den Umrissen bauchiger oder schlanker, ohne dass du mehr Umrisse zeichnen musst.' }));
+        fk.append(row, h('div', { class: 'hint-box', html: hasRail ? 'Zwischen den Umrissen folgt der Übergang der Führungskurve – z. B. ein Griff oder ein Gehäuse, das in der Mitte bauchig wird. Die Umrisse selbst bleiben gleich.' : 'Mit einer <b>Führungskurve</b> gibst du die Seitenlinie vor: Der Übergang wird zwischen den Umrissen bauchiger oder schlanker, ohne dass du mehr Umrisse zeichnen musst.' }));
       } else fk.append(h('div', { class: 'hint-box', html: hasPath ? 'Mit Mittellinie geht keine Führungskurve – erst „Ohne Mittellinie“.' : 'Eine Führungskurve braucht mindestens zwei Umrisse.' }));
-      // zweite Führungskurve quer zur ersten (z. B. Rumpf: erste von der Seite für die Höhe, zweite von oben für die Breite)
+      // zweite Führungskurve quer zur ersten (z. B. Gehäuse: erste von der Seite für die Höhe, zweite von oben für die Breite)
       const fk2 = hasRail1 && n >= 2 && !hasPath ? h('div', { class: 'section', id: 'loft-rail2' }, h('div', { class: 'section-h' }, 'Zweite Führungskurve')) : null;
       if (fk2) {
         const eb = h('button', { type: 'button', class: 'btn', id: 'loft-rail2-edit' }); eb.innerHTML = icon(hasRail2 ? 'edit' : 'spline') + (hasRail2 ? 'Zweite bearbeiten' : 'Zweite zeichnen');
@@ -9295,7 +9286,7 @@ const Panels = (() => {
           rb.onclick = () => App.change('Zweite Führungskurve entfernt', (doc) => { const f = Model.find(doc, it.id); if (!f) return false; delete f.item.p.rail2; });
           row.append(rb);
         }
-        fk2.append(row, h('div', { class: 'hint-box', html: hasRail2 ? 'Der Übergang folgt beiden Führungskurven – jede bestimmt die Breite in ihrer Richtung.' : 'Die erste Führungskurve gibt die Breite in einer Richtung vor. Eine <b>zweite</b> quer dazu gibt die andere vor – so formst du einen Rumpf von der Seite <i>und</i> von oben.' }));
+        fk2.append(row, h('div', { class: 'hint-box', html: hasRail2 ? 'Der Übergang folgt beiden Führungskurven – jede bestimmt die Breite in ihrer Richtung.' : 'Die erste Führungskurve gibt die Breite in einer Richtung vor. Eine <b>zweite</b> quer dazu gibt die andere vor – so formst du eine Hülle von der Seite <i>und</i> von oben.' }));
       }
       if (hasRail) { ml.innerHTML = ''; ml.append(h('div', { class: 'section-h' }, 'Mittellinie'), h('div', { class: 'hint-box', html: 'Mit Führungskurve geht keine Mittellinie – erst „Ohne Führungskurve“.' })); }
       w.append(sec, ml, fk); if (fk2) w.append(fk2);
@@ -9419,7 +9410,7 @@ const Panels = (() => {
       } }));
       if (fixed) {
         ms.append(h('div', { class: 'fields', style: { marginTop: '8px' } }, UI.numField({ id: 'p-massg', label: 'Gewicht (Datenblatt)', value: it.massG, unit: 'g', onCommit: (v) => App.change('Gewicht geändert', (doc) => { Model.find(doc, it.id).item.massG = v; }, { merge: 'massg:' + it.id }) })));
-        ms.append(h('div', { class: 'hint-box' + (it.massG === '' ? ' warn' : ''), html: it.massG === '' ? '<b>Gewicht fehlt:</b> Trag das Gewicht aus dem Datenblatt ein – bis dahin zählt dieses Teil mit 0 g.' : 'Für gekaufte Teile wie Motoren oder Akkus: Das Gewicht kommt aus dem Datenblatt, nicht aus der Form. Auch Formeln gehen, z. B. <b>4*33,8</b>.' }));
+        ms.append(h('div', { class: 'hint-box' + (it.massG === '' ? ' warn' : ''), html: it.massG === '' ? '<b>Gewicht fehlt:</b> Trag das Gewicht aus dem Datenblatt ein – bis dahin zählt dieses Teil mit 0 g.' : 'Für gekaufte Teile wie Lager, Schrauben oder Elektronik: Das Gewicht kommt aus dem Datenblatt, nicht aus der Form. Auch Formeln gehen, z. B. <b>4*33,8</b>.' }));
       }
       const vR = h('b', { class: 'mono' }, '…'), gR = h('b', { class: 'mono' }, '…'), aR = h('b', { class: 'mono' }, '…'), bR = h('b', { class: 'mono' }, '…');
       ms.append(h('div', { class: 'mini-list', style: { marginTop: '8px' } }, h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Volumen'), vR), h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Oberfläche'), aR), h('div', { class: 'mini-row', 'data-help': 'bboxSize' }, h('span', { class: 'grow' }, 'Hüllmaße (L × B × H)'), bR), h('div', { class: 'mini-row', 'data-help': 'massProps' }, h('span', { class: 'grow' }, 'Gewicht'), gR)));
@@ -10679,7 +10670,6 @@ const Views = (() => {
       { label: (st.focus ? '✓ ' : '') + 'Fokus-Vorschau', icon: 'focusView', help: 'focusView', run: () => focus() },
       { label: (st.ov ? '✓ ' : '') + 'Überhänge (3D-Druck)', icon: 'overhang', help: 'overhang', run: () => overhang() },
       { label: (st.thin ? '✓ ' : '') + 'Wandstärke (3D-Druck)', icon: 'ruler', help: 'thinWalls', id: 'view-thin', run: () => thin() },
-      { label: (st.wind ? '✓ ' : '') + 'Fahrtwind (Stirnfläche)', icon: 'wind', help: 'wind', run: () => wind() },
       { label: 'Vorführen (Vollbild)', icon: 'play', kbd: 'P', help: 'present', id: 'view-present', run: () => present(true) },
       { label: 'Drehteller-Video …', icon: 'play', help: 'turntable', id: 'view-turntable', run: () => Print.turntableDialog() },
       '-', ...lookItems(),
@@ -14435,11 +14425,11 @@ const Commands = (() => {
     C.length = 0;
     for (const k of PRIMITIVE_ORDER) add('add-' + k, KINDS[k].label + ' hinzufügen', 'cube', 'körper form grundkörper ' + ({ box: 'würfel kasten block platte', cylinder: 'rund stab säule scheibe', sphere: 'ball', cone: 'spitze', pyramid: 'spitze', wedge: 'rampe dach schräge', tube: 'röhre ring hohl', torus: 'donut kringel', prism: 'sechseck achteck polygon', hemisphere: 'kuppel halbkugel' }[k] || ''), () => Actions.addPrimitive(k), { group: 'Körper' });
     add('add-hole', 'Loch (Zylinder) hinzufügen', 'hole', 'bohrung loch rund ausschnitt', () => Actions.addPrimitive('cylinder', { role: 'hole', name: 'Loch', p: { d: 6, h: 30 } }), { group: 'Körper' });
-    for (const d of LIB.filter((x) => !x.buy)) add('lib-' + d.lib, d.label + ' hinzufügen', d.icon, 'bauteil ' + d.desc, () => Actions.addPart(d, libDefaults(d)), { group: 'Bauteile' });
+    for (const d of LIB.filter((x) => !x.buy && !x.drone)) add('lib-' + d.lib, d.label + ' hinzufügen', d.icon, 'bauteil ' + d.desc, () => Actions.addPart(d, libDefaults(d)), { group: 'Bauteile' });
     add('sketch', 'Skizze zeichnen', 'sketch', 'zeichnen 2d profil umriss extrudieren', () => Sketch.chooseAndStart(), { group: 'Werkzeuge', kbd: 'S' });
     add('hole-wizard', 'Bohrungs-Assistent', 'holeWizard', 'bohrung loch schraube gewinde senkung einsatz mutter', () => Place.holeWizard($('#t-parts')), { group: 'Bearbeiten' });
     add('pattern-rect', 'Rechteckmuster', 'patternRect', 'muster reihe raster kopien vervielfachen', () => Features.pattern('rect'), { group: 'Bearbeiten' });
-    add('pattern-circ', 'Kreismuster', 'patternCirc', 'muster kreis rund kopien motor löcher', () => Features.pattern('circ'), { group: 'Bearbeiten' });
+    add('pattern-circ', 'Kreismuster', 'patternCirc', 'muster kreis rund kopien löcher', () => Features.pattern('circ'), { group: 'Bearbeiten' });
     add('pattern-path', 'Muster entlang Kurve', 'patternPath', 'muster kurve pfad bogen entlang linie spline kette kopien löcher zähne', () => Features.patternPath(), { group: 'Bearbeiten' });
     add('mirror-copy', 'Gespiegelte Kopie', 'mirror', 'spiegeln kopie symmetrisch', () => Features.pattern('mirror'), { group: 'Bearbeiten' });
     add('split', 'Körper teilen', 'split', 'teilen schneiden trennen hälfte', () => Features.split(), { group: 'Bearbeiten' });
@@ -14468,11 +14458,7 @@ const Commands = (() => {
     add('section', 'Schnitt ein/aus', 'section', 'schnitt aufschneiden querschnitt innen schnittebene', () => Views.section(), { group: 'Ansicht', kbd: 'C' });
     add('xray', 'Röntgen ein/aus', 'xray', 'röntgen durchsichtig transparent glas innen', () => Views.xray(), { group: 'Ansicht', kbd: 'X' });
     add('explode', 'Explosion: Teile auseinanderziehen', 'explode', 'explosion explosionsansicht auseinander zerlegen baugruppe', () => Views.explode(), { group: 'Ansicht', kbd: 'U' });
-    add('frame-assist', 'Frame-Assistent: Drohnenrahmen bauen', 'frame', 'frame assistent drohne rahmen bauen quad zoll', () => DroneUI.assistant(), { group: 'Projekt' });
-    add('drone-lib', 'Drohnen-Teile: Motoren, Akkus, Videosender …', 'drone', 'motor akku videosender kamera empfänger gps kaufteil bibliothek', () => Panels.toggleFlyout('drone', $('#t-drone')), { group: 'Werkzeuge' });
-    for (const t of DroneTpl.LIST) add('tpl-' + t.id, 'Drohnen-Vorlage: ' + t.name, 'drone', 'drohne vorlage rahmen frame quad ' + t.name.toLowerCase(), () => Start.openDrone(t), { group: 'Projekt' });
     add('verbund-alle', 'Alles zu einem Körper verbinden (Verbund)', 'group', 'verbund verbinden alles zusammen zusammenfügen ein körper vereinigen gruppieren alle', () => Actions.groupAll(), { group: 'Bearbeiten' });
-    add('drone-check', 'Drohnen-Check: Propeller, Gewicht, Schwerpunkt, Schub', 'clearance', 'check prüfen drohne propeller abstand kollision gewicht schwerpunkt schub', () => DroneCheck.dialog(), { group: 'Projekt' });
     add('variants', 'Varianten vergleichen', 'list', 'variante varianten vergleichen maße sätze', () => Variants.compareDialog(), { group: 'Projekt' });
     add('explain', 'Erklär diesen Schritt', 'help', 'erklär erklären was ist das schritt warum', () => Explain.dialog(), { group: 'Projekt' });
     add('weak', 'Schwachstellen suchen', 'target', 'schwachstellen schwach prüfen bruch dünn rand loch festigkeit stabil', () => Weak.dialog(), { group: 'Projekt' });
@@ -14512,9 +14498,9 @@ const Commands = (() => {
     add('loft-tip', 'Zur Spitze zusammenlaufen lassen', 'loft', 'spitze kegel nase verlängern zuspitzen', () => { if (App.sel.length === 1) Actions.loft([App.sel[0]], { tip: 10 }); }, { group: 'Bearbeiten', needSel: true });
     add('draft', 'Entformungsschräge', 'chamfer', 'schräge entformung guss form draft konisch neigen', () => { if (App.sel.length) Actions.finishAll(App.sel[0], 'draft', 'all', 3); }, { group: 'Bearbeiten', needSel: true });
     add('gap', 'Abstand zwischen zwei Teilen setzen', 'dim', 'abstand lücke distanz zwischen zwei teile', () => { if (App.sel.length === 2) $('.ctxbar button[aria-label="Abstand"]') && $('.ctxbar button[aria-label="Abstand"]').click(); else UI.toast('Wähle genau zwei Teile.', { icon: 'info' }); }, { group: 'Bearbeiten', needSel: true });
-    add('route3d', 'Rohr im Raum: Punkte auf Körper oder in den Raum klicken', 'sweep', 'rohr raum 3d pfad kabel kanal antenne punkte biegen', () => Features.route3d(), { group: 'Werkzeuge' });
+    add('route3d', 'Rohr im Raum: Punkte auf Körper oder in den Raum klicken', 'sweep', 'rohr raum 3d pfad kabel kanal punkte biegen', () => Features.route3d(), { group: 'Werkzeuge' });
     add('sweep-help', 'Rohr oder Kanal entlang Pfad (Sweep)', 'sweep', 'sweep pfad rohr kabelkanal bügel entlang', () => { Sketch.chooseAndStart(); UI.toast('Zeichne einen offenen Pfad und klick „Fertig“ – daraus wird ein Rohr.', { icon: 'info', ms: 5000 }); }, { group: 'Werkzeuge' });
-    add('import', 'STEP oder STL importieren', 'folder', 'import step stp stl datei einlesen motor', () => Start.openFile(), { group: 'Projekt' });
+    add('import', 'STEP oder STL importieren', 'folder', 'import step stp stl datei einlesen', () => Start.openFile(), { group: 'Projekt' });
     add('save', 'Projekt als Datei speichern', 'save', 'sichern json datei', () => Start.saveFile(), { group: 'Projekt', kbd: 'Strg S' });
     add('start', 'Startseite und Vorlagen', 'home', 'vorlagen beispiele start', () => Start.show(), { group: 'Projekt' });
     add('tour', 'Einführung starten', 'play', 'hilfe tutorial einführung lernen', () => Tour.start(), { group: 'Hilfe' });
@@ -16172,10 +16158,10 @@ Regeln:
 - Kaufteile ("kaufteil_g") verschmilzt du nie mit anderen Teilen, außer der Nutzer will das ausdrücklich: sonst stimmt ihr Gewicht nicht mehr.
 - Beziehe dich mit "id" nur auf ids, die im aktuellen Modell stehen. „das“, „es“, „hier“ meint die Auswahl.
 `;
-  const RULES = `Du bist der KI-Kollege in der Web-App „Tracery“, einem CAD-Programm für präzise technische Teile, vor allem für FPV- und Speed-Drohnen. Einheiten: Millimeter. Z zeigt nach oben, die XY-Ebene bei z=0 ist die Grundebene.
+  const RULES = `Du bist der KI-Kollege in der Web-App „Tracery“, einem allgemeinen CAD-Programm im Browser für präzise technische Teile. Einheiten: Millimeter. Z zeigt nach oben, die XY-Ebene bei z=0 ist die Grundebene.
 
 So arbeitest du – wie ein Kollege, der mit am Modell sitzt:
-- Du nimmst auch große Aufträge an („Mach alles als Verbund“, „Richte alles mittig aus“, „Mach die Drohne leichter und prüf sie“) und erledigst sie selbstständig.
+- Du nimmst auch große Aufträge an („Mach alles als Verbund“, „Richte alles mittig aus“, „Prüf das Modell auf Schwachstellen und behebe sie“) und erledigst sie selbstständig.
 - Bei mehr als einem Arbeitsschritt schreibst du einen kurzen Plan (2–6 Punkte) und hakst ab, was erledigt ist.
 - Du arbeitest in Runden: Nach jeder Runde setzt Tracery deine Aktionen um, rechnet das Modell neu und schickt dir eine Rückmeldung (was geklappt hat, Fehler, Prüfergebnisse) und das neue Modell. Setze "weiter": true, wenn danach noch etwas zu tun ist oder du ein Ergebnis (pruefen, schwachstellen) ansehen willst; sonst "weiter": false.
 - Meldet die Rückmeldung FEHLER, behebst du sie in der nächsten Runde (z. B. Radius kleiner, Loch verschieben) oder erklärst, warum es nicht geht.
@@ -16270,7 +16256,7 @@ Beispiel – Wunsch „Mach alles als Verbund“ (Runde 1):
     const close = h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Schließen' }); close.innerHTML = icon('close');
     close.onclick = () => { if (current) current.stopped = true; if (ctl) ctl.abort(); if (ro) ro.disconnect(); panel.remove(); panel = null; document.documentElement.style.removeProperty('--ai-h'); };
     head.append(t, h('div', { class: 'ai-head-r' }, tg, close)); panel.append(head);
-    panel.append(h('div', { class: 'ai-intro' }, 'Gib mir auch große Aufträge, z. B. „Mach alles als Verbund“ oder „Prüf die Drohne und behebe, was nicht passt“. Ich arbeite sie Schritt für Schritt ab – „Rückgängig“ nimmt danach alles auf einmal zurück.'));
+    panel.append(h('div', { class: 'ai-intro' }, 'Gib mir auch große Aufträge, z. B. „Mach alles als Verbund“ oder „Prüf das Modell auf Schwachstellen und behebe sie“. Ich arbeite sie Schritt für Schritt ab – „Rückgängig“ nimmt danach alles auf einmal zurück.'));
     $('#overlay').append(panel);
     // Meldungen erscheinen über dem Helfer statt darauf
     const ro = window.ResizeObserver ? new ResizeObserver(() => { if (panel) document.documentElement.style.setProperty('--ai-h', panel.offsetHeight + 'px'); }) : null;
@@ -17478,7 +17464,7 @@ const Start = (() => {
     const head = h('div', { class: 'start-head' });
     const brand = h('div', { class: 'start-brand' });
     brand.innerHTML = $('#brand svg').outerHTML;
-    brand.append(h('div', null, h('h1', null, 'Tracery'), h('p', null, 'Präzises CAD für Speed-Drohnen und technische Teile')));
+    brand.append(h('div', null, h('h1', null, 'Tracery'), h('p', null, 'CAD im Browser – kostenlos, ohne Konto')));
     const acts = h('div', { class: 'btn-row' });
     const nb = h('button', { type: 'button', class: 'btn primary' }); nb.innerHTML = icon('newfile') + 'Neues Projekt'; nb.onclick = () => newProject();
     const ob = h('button', { type: 'button', class: 'btn' }); ob.innerHTML = icon('folder') + 'Datei öffnen'; ob.onclick = () => openFile();
@@ -17510,21 +17496,6 @@ const Start = (() => {
       }
       sec.append(list); inner.append(sec);
     }
-    // Drohnen: vollständige, veränderbare Rahmen
-    const dsec = h('section', null, h('h2', null, 'Drohnen'));
-    const dcards = h('div', { class: 'cards' });
-    for (const t of DroneTpl.LIST) {
-      const c = h('button', { type: 'button', class: 'card drone', 'data-tpl': t.id });
-      const th = h('div', { class: 'thumb' }); th.innerHTML = tplThumb(t);
-      c.append(th, h('b', null, t.name), h('span', null, t.desc));
-      c.onclick = () => openDrone(t);
-      dcards.append(c);
-    }
-    const fa = h('button', { type: 'button', class: 'card drone', 'data-tpl': 'assist' });
-    const fth = h('div', { class: 'thumb' }); fth.innerHTML = icon('frame'); fa.append(fth, h('b', null, 'Frame-Assistent'), h('span', null, 'Größe, Rahmenform, Stack, Motor, Videosystem und Akku wählen – Tracery baut den passenden Rahmen.'));
-    fa.onclick = () => DroneUI.assistant();
-    dcards.prepend(fa);
-    dsec.append(dcards); inner.append(dsec);
     const tsec = h('section', null, h('h2', null, 'Vorlagen'));
     const cards = h('div', { class: 'cards' });
     const empty = h('button', { type: 'button', class: 'card new' });
@@ -18258,7 +18229,7 @@ const Variants = (() => {
 // die sich mit einem Klick als markierte Schritte umsetzen lassen.
 
 // Kurztexte je Schritt-Art: was, wozu (bei Drohnen), achtung (Entwurf Gemini, Prompt H; gegen Tracery geprüft)
-const STEP_TEXT = {"_hinweis":"Entwurf Gemini (Prompt H), von Claude am 20.10.2026 gegen das Verhalten von Tracery geprüft; 19 Sätze angepasst.","box":{"was":"Erstellt einen einfachen Kasten mit frei wählbarer Länge, Breite und Höhe.","wozu":"Super als Basis für eine Grundplatte aus Carbon oder eine einfache Akku-Auflage.","achtung":"Mach Platten nicht zu dünn, sonst brechen sie beim ersten Crash sofort durch."},"cylinder":{"was":"Erzeugt eine runde Säule mit festem Durchmesser und beliebiger Höhe.","wozu":"Ideal für stabile Abstandshalter (Standoffs) zwischen zwei Frame-Platten.","achtung":"Prüfe, ob der Zylinder nicht den Platz für deine Propeller blockiert."},"tube":{"was":"Erstellt ein rundes Rohr, das innen komplett hohl ist.","wozu":"Perfekt als leichtes Schutzröhrchen für deine Antennen oder dünne Motorkabel.","achtung":"Wähle Außendurchmesser und Wand so, dass innen das Kabel samt Stecker durchpasst."},"sphere":{"was":"Formt einen komplett runden Ball in deiner gewünschten Größe.","wozu":"Nützlich für weiche Landefüße an den Armen oder als Gelenk für eine Kamerahalterung.","achtung":"Eine Kugel liegt nur auf einem Punkt auf – schneide sie zum Drucken unten etwas flach ab."},"hemisphere":{"was":"Erstellt eine halbe Kugel mit einer flachen Unterseite.","wozu":"Wird oft als aerodynamische Kuppel (Canopy) über dem Stack oder der Kamera genutzt.","achtung":"Höhle sie mit „Wandstärke“ aus, sonst ist darunter kein Platz für die Elektronik."},"cone":{"was":"Baut einen Kegel, der unten rund ist und nach oben spitz zuläuft.","wozu":"Gut für windschnittige Spitzen an schnellen Racern oder als Zentrierhilfe.","achtung":"Ganz spitze Enden brechen leicht ab, runde die Spitze oben lieber etwas ab."},"pyramid":{"was":"Erzeugt einen eckigen Körper, der nach oben hin spitz zusammenläuft.","wozu":"Praktisch für kantige Schutzhauben oder coole Design-Elemente auf dem Frame.","achtung":"Achte darauf, dass innen genug Platz für die Ecken deiner Platinen bleibt."},"torus":{"was":"Formt einen runden Ring, der aussieht wie ein kleiner Donut oder Reifen.","wozu":"Perfekt als runder Propellerschutz (Propguard) für kleine Whoop-Drohnen.","achtung":"Mach den Ring nicht zu dick, sonst wird deine Drohne schnell viel zu schwer."},"prism":{"was":"Erstellt eine Säule mit mehreren Ecken, zum Beispiel ein Sechseck.","wozu":"Ideal für sechseckige Abstandshalter, die man mit einem Maulschlüssel festhalten kann.","achtung":"Der Durchmesser zählt hier von Ecke zu Ecke, nicht von Fläche zu Fläche – wichtig fürs Schlüsselmaß."},"wedge":{"was":"Baut einen schrägen Keil wie eine kleine Sprungschanze.","wozu":"Gut als schräge Kamera-Halterung, um den Kamerawinkel einzustellen.","achtung":"Ist der Winkel zu steil, siehst du beim langsamen Schweben nur noch den Himmel."},"extrude":{"was":"Zieht eine flache 2D-Zeichnung in die Höhe, sodass ein 3D-Körper entsteht.","wozu":"Damit machst du aus deiner flachen Zeichnung eine echte Carbon-Armplatte.","achtung":"Deine Skizze muss komplett geschlossen sein, sonst kann sie nicht hochgezogen werden."},"revolve":{"was":"Dreht ein flaches Profil im Kreis um eine Achse und formt so einen runden Körper.","wozu":"Super für Propeller-Spinner, Hülsen oder runde Antennenhalter.","achtung":"Die Zeichnung darf die Drehachse nicht kreuzen, sonst überschneidet sich das Bauteil."},"group":{"was":"Verschmilzt mehrere Einzelteile und zieht alle Loch-Körper davon ab.","wozu":"Verbindet einzelne Arme und die Mittelplatte zu einem fertigen, gelochten Drohnen-Frame.","achtung":"Löcher in einer Gruppe schneiden nur Körper derselben Gruppe – zieh fehlende Teile im Verlauf hinein."},"hole":{"was":"Verwandelt einen Körper in ein Werkzeug zum Ausschneiden – du siehst ihn gestreift.","wozu":"Schneidet zum Beispiel große Fenster in die Deckplatte, um Gewicht zu sparen.","achtung":"Ein Loch schneidet nur, was es berührt: Lass es oben und unten etwas überstehen, damit es sauber durchgeht."},"pattern_rect":{"was":"Kopiert ein Teil mehrfach in geraden Reihen und Spalten nebeneinander.","wozu":"Erstellt blitzschnell Lüftungsschlitze zur Kühlung über deinem heißen Video-Sender.","achtung":"Lass genug Material zwischen den Kopien stehen, sonst bricht das Gitter leicht durch."},"pattern_circ":{"was":"Verteilt Kopien eines Bauteils gleichmäßig im Kreis um einen Mittelpunkt.","wozu":"Perfekt, um aus einem einzelnen Drohnenarm sofort vier oder sechs Arme zu machen.","achtung":"Leg den Mittelpunkt genau fest, sonst sitzen die Kopien schief zur Rahmenmitte."},"pattern_path":{"was":"Setzt Kopien eines Teils der Reihe nach entlang einer gezeichneten Kurve – Linie, Bogen, Spline oder Kreis.","wozu":"Löcher oder Rippen folgen dem Bogen eines Arms, Zähne sitzen sauber auf einem Kreisbogen.","achtung":"Mit Ausrichtung „Mit der Kurve“ drehen sich die Kopien mit. Für Löcher, die nur der Lage folgen sollen, ist das egal – für Rippen und Zähne nicht."},"mirror":{"was":"Erstellt eine spiegelverkehrte Kopie deines Bauteils auf der gegenüberliegenden Seite.","wozu":"Baue nur die linke Seite der Kamerahalterung und spiegle sie einfach nach rechts.","achtung":"Wähle die richtige Spiegelebene, sonst klebt die Kopie plötzlich am falschen Ort."},"split":{"was":"Schneidet einen Körper an einer flachen Ebene in zwei getrennte Teile durch.","wozu":"Teilt eine komplexe Haube in Ober- und Unterteil, damit du sie einfacher drucken kannst.","achtung":"Überlege dir vorher, wie du die geteilten Hälften später wieder zusammenschraubst."},"intersect":{"was":"Behält nur genau den Bereich übrig, in dem sich zwei Körper überschneiden.","wozu":"Formt einen runden Kamera-Schutz, der exakt in die schräge Front des Frames passt.","achtung":"Berühren sich die beiden Ausgangskörper gar nicht, bleibt am Ende nichts übrig."},"shell":{"was":"Höhlt einen massiven Körper von innen aus und lässt nur eine bestimmte Wandstärke stehen.","wozu":"Macht aus einem schweren Klotz eine leichte Schutzhülle für deine Action-Cam.","achtung":"Prüf die Wand mit „Schwachstellen suchen“ – zu dünne Wände brechen beim ersten Crash."},"fillet":{"was":"Rundet scharfe Kanten weich ab, damit Übergänge fließend werden.","wozu":"Macht die Innenecken an den Carbon-Armen viel stabiler gegen Brüche beim Absturz.","achtung":"Rundest du die Kante an einer dünnen Platte zu stark ab, entsteht ein Fehler."},"chamfer":{"was":"Schneidet eine scharfe Kante schräg ab, sodass eine kleine flache Schräge entsteht.","wozu":"Entschärft die Kanten deiner Carbon-Platten, damit sie das Akku-Kabel nicht durchschneiden.","achtung":"Mach die Schräge bei dünnem Carbon nur ganz klein, sonst bleibt keine gerade Kante übrig."},"screwHole":{"was":"Bohrt ein rundes Loch, das genau für eine bestimmte Schraubengröße wie M2 oder M3 passt.","wozu":"Unverzichtbar, um Motoren, Stack und Standoffs fest mit dem Frame zu verschrauben.","achtung":"Nimm die Passung „Mittel“: Das Loch ist dann etwas größer als die Schraube. „Eng“ klemmt leicht."},"nutTrap":{"was":"Schneidet eine sechseckige Tasche aus, in der eine Mutter festsitzt.","wozu":"Hält die Muttern unter dem Stack fest, damit du beim Schrauben keinen Schlüssel brauchst.","achtung":"Mach die Tasche nicht zu weit, sonst dreht die Mutter beim Festziehen einfach durch."},"insert":{"was":"Erstellt ein spezielles Loch, in das man ein Messing-Gewinde mit dem Lötkolben einschmilzt.","wozu":"Gibt dir super stabile Metallgewinde direkt in deinen 3D-gedruckten Kunststoffteilen.","achtung":"Das Loch muss etwas kleiner als der Einsatz sein, damit das Plastik ihn gut festhält."},"slotHole":{"was":"Bohrt ein längliches Loch, in dem eine Schraube hin und her geschoben werden kann.","wozu":"Super für Motorhalterungen, damit verschiedene Motoren auf denselben Arm passen.","achtung":"Zieh die Schrauben im Langloch später gut fest und nutze Unterlegscheiben gegen Verrutschen."},"holePattern":{"was":"Erzeugt automatisch vier passende Schraubenlöcher im Standard-Abstand für Drohnenteile.","wozu":"Bohrt mit einem Klick die exakten Löcher für einen 20x20mm-Stack oder einen Motor.","achtung":"Prüfe vorab genau, ob dein Flugcontroller 20x20 oder 30,5x30,5 Millimeter Lochabstand hat."},"zipTie":{"was":"Schneidet zwei Schlitze für einen Kabelbinder in dein Bauteil.","wozu":"Ideal, um den kleinen Funk-Empfänger oder den Kondensator sicher am Frame festzuzurren.","achtung":"Setze Schlitze nicht zu nah an den Rand der Carbon-Platte, sonst reißt der Steg aus."},"snapHook":{"was":"Baut einen kleinen federnden Haken, der an einer Kante einrasten kann.","wozu":"Perfekt für einen Akkuschacht oder eine Haube, die du ohne Werkzeug öffnen willst.","achtung":"Drucke den Haken liegend, damit die Schichten längs laufen – sonst bricht er beim ersten Biegen ab."},"hinge":{"was":"Erzeugt ein bewegliches Gelenk, mit dem du zwei Bauteile klappbar verbindest.","wozu":"Nützlich für eine aufklappbare Haube oder einen Deckel am Akkufach.","achtung":"Lass im Gelenk etwas Spiel (Einstellung „Spalt“), sonst verschmilzt es beim Drucken."},"gear":{"was":"Erstellt ein rundes Rad mit Zähnen am Rand, das in ein anderes Zahnrad greift.","wozu":"Brauchst du für coole Extras wie eine Kamera, die sich im Flug per Knopfdruck neigt.","achtung":"Beide Zahnräder brauchen exakt die gleiche Zahngröße (Modul), sonst klemmen sie sofort."},"buy":{"was":"Fügt ein fertiges Teil wie Kamera, Motor oder Akku als Platzhalter mit echtem Gewicht aus dem Datenblatt ein.","wozu":"Zeigt dir sofort, ob alle Teile in den Frame passen und wo der Schwerpunkt der Drohne liegt.","achtung":"Beim DXF bleiben Kaufteile von selbst weg; für STL blende sie vor dem Export aus."},"aeroBody":{"was":"Erstellt einen hohlen Rumpf in Tropfenform: runde Nase, gerades Mittelteil und ein langes Heck, das spitz ausläuft.","wozu":"Damit bekommt eine Speed-Drohne wenig Luftwiderstand – Kamera, Stack und Akku sitzen geschützt im Rumpf.","achtung":"Der Rumpf muss weit genug von den Propellerkreisen weg sein; der Drohnen-Check zeigt dir, ob er frei ist."}};
+const STEP_TEXT = {"_hinweis":"Kurztexte je Schritt-Art: was, wozu, achtung – allgemein für CAD (überarbeitet für A-001).","box":{"was":"Erstellt einen einfachen Kasten mit frei wählbarer Länge, Breite und Höhe.","wozu":"Super als Basis für eine Grundplatte, ein Gehäuse oder einen Winkel.","achtung":"Mach Platten und Wände nicht zu dünn, sonst brechen sie unter Belastung."},"cylinder":{"was":"Erzeugt eine runde Säule mit festem Durchmesser und beliebiger Höhe.","wozu":"Ideal für Bolzen, Abstandshalter, Wellen oder runde Füße.","achtung":"Als Loch umgeschaltet wird aus dem Zylinder im Handumdrehen eine runde Bohrung."},"tube":{"was":"Erstellt ein rundes Rohr, das innen komplett hohl ist.","wozu":"Perfekt für Buchsen, Abstandshülsen oder Schutzröhrchen für Kabel.","achtung":"Wähle Außendurchmesser und Wand so, dass innen Kabel oder Welle samt Spiel durchpassen."},"sphere":{"was":"Formt einen komplett runden Ball in deiner gewünschten Größe.","wozu":"Nützlich für runde Knöpfe, Füße oder Kugelgelenke.","achtung":"Eine Kugel liegt nur auf einem Punkt auf – schneide sie zum 3D-Drucken unten etwas flach ab."},"hemisphere":{"was":"Erstellt eine halbe Kugel mit einer flachen Unterseite.","wozu":"Gut für Kuppeln, Abdeckkappen oder abgerundete Endstücke.","achtung":"Höhle sie mit „Wandstärke“ aus, wenn sie als hohle Kappe dienen soll."},"cone":{"was":"Baut einen Kegel, der unten rund ist und nach oben spitz oder flach zuläuft.","wozu":"Gut für Trichter, Düsen, Übergänge oder Zentrierhilfen.","achtung":"Ganz spitze Enden brechen leicht ab – gib oben lieber einen kleinen Durchmesser an."},"pyramid":{"was":"Erzeugt einen eckigen Körper, der nach oben hin spitz zusammenläuft.","wozu":"Praktisch für abgeschrägte Kappen, Füße oder Design-Elemente.","achtung":"Achte darauf, dass spitze Ecken beim Drucken oder Fräsen stabil genug bleiben."},"torus":{"was":"Formt einen runden Ring, der aussieht wie ein kleiner Donut oder Reifen.","wozu":"Perfekt für Dichtungsringe, Griffringe oder runde Ösen.","achtung":"Für einen guten Halt am Nachbarteil schiebe den Ring ein kleines Stück in den anderen Körper."},"prism":{"was":"Erstellt eine Säule mit mehreren Ecken, zum Beispiel ein Sechskant.","wozu":"Ideal für sechseckige Abstandshalter, Wellen oder Griffe, die sich mit einem Schlüssel festhalten lassen.","achtung":"Der Durchmesser zählt hier von Ecke zu Ecke, nicht von Fläche zu Fläche – wichtig fürs Schlüsselmaß."},"wedge":{"was":"Baut einen schrägen Keil wie eine kleine Rampe.","wozu":"Gut als schräge Auflage, Versteifungsrippe oder geneigte Halterung.","achtung":"Drehe den Keil bei Bedarf in 90°-Schritten, damit die Schräge in die gewünschte Richtung zeigt."},"extrude":{"was":"Zieht eine flache 2D-Zeichnung in die Höhe, sodass ein 3D-Körper entsteht.","wozu":"Damit machst du aus einer beliebigen Skizze eine Platte, ein Profil oder ein Gehäuse.","achtung":"Deine Skizze muss komplett geschlossen sein, sonst kann sie nicht hochgezogen werden."},"revolve":{"was":"Dreht ein flaches Profil im Kreis um eine Achse und formt so einen runden Körper.","wozu":"Super für Räder, Flaschen, Hülsen, Drehknöpfe oder runde Kappen.","achtung":"Die Zeichnung darf die Drehachse nicht kreuzen, sonst überschneidet sich das Bauteil."},"group":{"was":"Verschmilzt mehrere Einzelteile und zieht alle Loch-Körper davon ab.","wozu":"Verbindet mehrere Grundformen und Bohrungen zu einem fertigen Bauteil.","achtung":"Löcher in einer Gruppe schneiden nur Körper derselben Gruppe – zieh fehlende Teile im Verlauf hinein."},"hole":{"was":"Verwandelt einen Körper in ein Werkzeug zum Ausschneiden – du siehst ihn gestreift.","wozu":"Schneidet zum Beispiel Ausschnitte, Fenster oder Taschen in einen Körper.","achtung":"Ein Loch schneidet nur, was es berührt: Lass es oben und unten etwas überstehen, damit es sauber durchgeht."},"pattern_rect":{"was":"Kopiert ein Teil mehrfach in geraden Reihen und Spalten nebeneinander.","wozu":"Erstellt blitzschnell Lüftungsschlitze, Lochraster oder gleichmäßige Rippen.","achtung":"Lass genug Material zwischen den Kopien stehen, sonst bricht das Gitter leicht durch."},"pattern_circ":{"was":"Verteilt Kopien eines Bauteils gleichmäßig im Kreis um eine Achse.","wozu":"Perfekt für Lochkreise, Speichen oder sternförmige Halterungen.","achtung":"Leg Mittelpunkt und Drehachse genau fest, sonst sitzen die Kopien schief."},"pattern_path":{"was":"Setzt Kopien eines Teils der Reihe nach entlang einer gezeichneten Kurve – Linie, Bogen, Spline oder Kreis.","wozu":"Löcher, Rippen oder Zähne folgen sauber einer beliebigen Bahn.","achtung":"Mit Ausrichtung „Mit der Kurve“ drehen sich die Kopien mit. Für runde Löcher ist das egal – für Rippen und Zähne nicht."},"mirror":{"was":"Erstellt eine spiegelverkehrte Kopie deines Bauteils auf der gegenüberliegenden Seite.","wozu":"Baue nur eine Hälfte eines symmetrischen Teils und spiegle sie auf die andere Seite.","achtung":"Wähle die richtige Spiegelebene, sonst landet die Kopie am falschen Ort."},"split":{"was":"Schneidet einen Körper an einer flachen Ebene in zwei getrennte Teile durch.","wozu":"Teilt ein großes Gehäuse in Ober- und Unterteil, damit du es einfacher drucken oder fertigen kannst.","achtung":"Überlege dir vorher, wie du die geteilten Hälften später wieder verbindest."},"intersect":{"was":"Behält nur genau den Bereich übrig, in dem sich zwei Körper überschneiden.","wozu":"Formt komplexe Körper, indem du zwei Profile aus verschiedenen Richtungen kombinierst.","achtung":"Berühren sich die beiden Ausgangskörper gar nicht, bleibt am Ende nichts übrig."},"shell":{"was":"Höhlt einen massiven Körper von innen aus und lässt nur eine bestimmte Wandstärke stehen.","wozu":"Macht aus einem massiven Klotz im Handumdrehen ein hohles Gehäuse oder eine Schale.","achtung":"Prüf die Wand mit „Schwachstellen suchen“ oder „Wandstärke“ – zu dünne Wände brechen leicht."},"fillet":{"was":"Rundet scharfe Kanten weich ab, damit Übergänge fließend werden.","wozu":"Macht Innenecken stabiler gegen Brüche und sorgt für angenehme, glatte Außenkanten.","achtung":"Rundest du die Kante an einer dünnen Platte zu stark ab, entsteht ein Fehler."},"chamfer":{"was":"Schneidet eine scharfe Kante schräg ab, sodass eine kleine flache Schräge entsteht.","wozu":"Entschärft Kanten an Platten und Gehäusen oder erleichtert das Einstecken von Teilen.","achtung":"Mach die Schräge an dünnen Teilen nur klein, sonst bleibt keine gerade Fläche übrig."},"screwHole":{"was":"Bohrt ein rundes Loch, das genau für eine bestimmte Schraubengröße wie M2 oder M3 passt.","wozu":"Ideal, um Teile sauber mit Senk- oder Zylinderkopfschrauben zu verschrauben.","achtung":"Nimm die Passung „Mittel“: Das Loch ist dann etwas größer als die Schraube. „Eng“ klemmt leicht."},"nutTrap":{"was":"Schneidet eine sechseckige Tasche aus, in der eine Mutter festsitzt.","wozu":"Hält Muttern im Bauteil fest, damit du beim Schrauben keinen Schlüssel zum Gegenhalten brauchst.","achtung":"Mach die Tasche nicht zu weit, sonst dreht die Mutter beim Festziehen durch."},"insert":{"was":"Erstellt ein spezielles Loch, in das man ein Messing-Gewinde mit dem Lötkolben einschmilzt.","wozu":"Gibt dir sehr stabile Metallgewinde direkt in deinen 3D-gedruckten Kunststoffteilen.","achtung":"Das Loch muss etwas kleiner als der Einsatz sein, damit das Plastik ihn gut festhält."},"slotHole":{"was":"Bohrt ein längliches Loch, in dem eine Schraube hin und her geschoben werden kann.","wozu":"Super für verstellbare Halterungen und Anschläge.","achtung":"Zieh die Schrauben im Langloch später gut fest und nutze Unterlegscheiben gegen Verrutschen."},"holePattern":{"was":"Erzeugt vier passende Schraubenlöcher im Quadrat oder Lochkreis.","wozu":"Bohrt mit einem Klick ein fertiges Vier-Loch-Muster mit optionalem Mittelloch.","achtung":"Prüfe vorab genau, ob Lochabstand und Schraubengröße zu deinem Gegenstück passen."},"zipTie":{"was":"Schneidet zwei Schlitze für einen Kabelbinder in dein Bauteil.","wozu":"Ideal, um Kabel, Schläuche oder kleine Module sicher an einer Platte festzumachen.","achtung":"Setze Schlitze nicht zu nah an den Rand der Platte, sonst reißt der Steg aus."},"snapHook":{"was":"Baut einen kleinen federnden Haken, der an einer Kante einrasten kann.","wozu":"Perfekt für Deckel, Gehäuse oder Klappen, die du ohne Werkzeug öffnen willst.","achtung":"Drucke den Haken liegend, damit die Schichten längs laufen – sonst bricht er beim ersten Biegen ab."},"hinge":{"was":"Erzeugt ein bewegliches Gelenk, mit dem du zwei Bauteile klappbar verbindest.","wozu":"Nützlich für aufklappbare Deckel, Boxen oder bewegliche Halterungen.","achtung":"Lass im Gelenk etwas Spiel (Einstellung „Spiel“), sonst verschmilzt es beim Drucken."},"gear":{"was":"Erstellt ein rundes Rad mit Zähnen am Rand, das in ein anderes Zahnrad greift.","wozu":"Brauchst du für Getriebe, Antriebe und mechanische Bewegungen.","achtung":"Beide Zahnräder brauchen exakt die gleiche Zahngröße (Modul), sonst klemmen sie sofort."},"buy":{"was":"Fügt ein fertiges Teil mit festem Gewicht aus dem Datenblatt ein.","wozu":"Zeigt dir sofort, ob alle Bauteile zusammenpassen und wo der Schwerpunkt liegt.","achtung":"Beim DXF-Export bleiben Kaufteile von selbst weg; für STL blende sie vor dem Export aus."},"aeroBody":{"was":"Erstellt einen hohlen Körper in Tropfenform: runde Nase, gerades Mittelteil und ein langes Heck, das spitz ausläuft.","wozu":"Ergibt eine strömungsgünstige Verkleidung mit rundem Querschnitt.","achtung":"Achte auf eine ausreichende Wandstärke, wenn das Teil 3D-gedruckt wird."}};
 
 const Explain = (() => {
   function keyOf(it) {
@@ -18318,7 +18289,7 @@ const Explain = (() => {
     const f = Model.find(App.doc, info.id); if (!f) return { error: 'Den Schritt gibt es nicht mehr.' };
     const V = Model.vars(App.doc).v;
     const masse = (App.doc.params || []).filter((p) => info.used.includes(p.name)).map((p) => `${p.name} = ${p.expr}${typeof p.expr === 'string' ? ' (= ' + fmt(V[p.name], 2) + ')' : ''}`).join('; ');
-    const prompt = `Du erklärst in Tracery, einem CAD-Programm für FPV-Drohnen, einen Schritt aus dem Modell. Die Leser sind Kinder ab 10 und Drohnenbauer.
+    const prompt = `Du erklärst in Tracery, einem allgemeinen CAD-Programm im Browser, einen Schritt aus dem Modell. Erkläre einfach und verständlich.
 Erkläre auf Deutsch in der Du-Form in 3–5 kurzen Sätzen: was dieser Schritt baut, wofür er in diesem Projekt vermutlich da ist und welche Maße ihn steuern. Erfinde nichts, was nicht in den Daten steht. Gib danach höchstens einen kurzen Tipp, wie man ihn verbessern könnte (oder einen leeren Tipp).
 Antworte NUR mit JSON: {"erklaerung":"…","tipp":"…"}
 
@@ -18436,7 +18407,7 @@ const Weak = (() => {
       id: g.kind === 'pitch' ? 'hole-pitch' : 'hole-edge', s: g.s, title: g.kind === 'pitch' ? `Löcher nah beieinander – ${plate.name}` : `Löcher nah am Rand – ${plate.name}`,
       text: (g.kind === 'pitch'
         ? `${g.at.length} ${g.at.length === 1 ? 'Loch' : 'Löcher'} (Ø ${fmt(g.d, 1)} mm) mit nur ${fmt(g.val, 1)} mm Steg zum nächsten Loch. Tracery meldet unter ${fmt(RULES.pitch.warn * g.dn, 1)} mm (halber Durchmesser); für belastete Carbon-Verschraubungen empfehlen Hersteller sogar ${fmt(RULES.pitch.rec, 0)} × Durchmesser von Mitte zu Mitte.`
-        : `${g.at.length} ${g.at.length === 1 ? 'Loch' : 'Löcher'} (Ø ${fmt(g.d, 1)} mm) ${g.at.length === 1 ? 'hat' : 'haben'} nur ${fmt(g.val, 1)} mm Material bis zum Rand – da reißt es bei einem Crash zuerst aus. ` +
+        : `${g.at.length} ${g.at.length === 1 ? 'Loch' : 'Löcher'} (Ø ${fmt(g.d, 1)} mm) ${g.at.length === 1 ? 'hat' : 'haben'} nur ${fmt(g.val, 1)} mm Material bis zum Rand – da reißt das Material bei Belastung zuerst aus. ` +
           (g.kind === 'pedge'
             ? `Bei Druckteilen gehören um ein Schraubenloch mindestens ${fmt(g.d < 2.8 ? RULES.printHole.small : RULES.printHole.big, 1)} mm Material.`
             : `Tracery meldet, wenn die Lochmitte näher als ${fmt(RULES.edge.warn, 1)} × Durchmesser am Rand liegt (hier ${fmt(RULES.edge.warn * g.d, 1)} mm); für belastete Carbon-Verschraubungen empfehlen Hersteller ${fmt(RULES.edge.rec, 1)} ×.`)),
@@ -18461,7 +18432,7 @@ const Weak = (() => {
       const it = App.doc.items.find((x) => x.id === g.id), name = it ? Model.label(it) : 'Teil';
       return {
         id: 'hole-wall', s: g.s, title: `Dünne Wand um ein Loch – ${name}`,
-        text: `${g.at.length} ${g.at.length === 1 ? 'Loch' : 'Löcher'} (Ø ${fmt(g.d, 1)} mm) ${g.at.length === 1 ? 'hat' : 'haben'} an einer Stelle nur etwa ${fmt(g.wall, 1)} mm Material drumherum. Bei Druckteilen gehören um ein Schraubenloch mindestens ${fmt(g.need, 1)} mm – sonst reißt die Schraube beim Anziehen oder bei einem Crash aus. Loch weiter nach innen setzen oder dort mehr Material anbauen.`,
+        text: `${g.at.length} ${g.at.length === 1 ? 'Loch' : 'Löcher'} (Ø ${fmt(g.d, 1)} mm) ${g.at.length === 1 ? 'hat' : 'haben'} an einer Stelle nur etwa ${fmt(g.wall, 1)} mm Material drumherum. Bei Druckteilen gehören um ein Schraubenloch mindestens ${fmt(g.need, 1)} mm – sonst reißt die Schraube beim Anziehen oder bei Belastung aus. Loch weiter nach innen setzen oder dort mehr Material anbauen.`,
         ids: [g.id], at: g.at, r: g.d / 2 + 1,
       };
     });
@@ -18572,11 +18543,11 @@ const Weak = (() => {
     return box;
   }
   async function askAI(list) {
-    const prompt = `Du bist der Konstruktions-Prüfer in Tracery, einem CAD-Programm für FPV-Drohnen. Die Leser sind Kinder ab 10 und Drohnenbauer.
+    const prompt = `Du bist der Konstruktions-Prüfer in Tracery, einem allgemeinen CAD-Programm im Browser. Erkläre einfach und verständlich.
 Tracery hat mit Faustregeln diese Schwachstellen gefunden (kann auch leer sein):
 ${list.length ? list.map((c, i) => `${i + 1}. [${c.s}] ${c.title}: ${c.text}`).join('\n') : 'keine'}
 
-Aufgabe: Erkläre in 2–4 kurzen Sätzen auf Deutsch (du-Form), was davon am wichtigsten ist und warum. Nenne auch eine weitere Schwachstelle, die du im Modell siehst, falls es eine gibt – erfinde aber keine Zahlen. Mach höchstens 3 konkrete Verbesserungsvorschläge, die sich mit den Aktionen unten umsetzen lassen (am besten über Maße mit op "mass", z. B. Armdicke, Plattenbreite, Bolzenhöhe).
+Aufgabe: Erkläre in 2–4 kurzen Sätzen auf Deutsch (du-Form), was davon am wichtigsten ist und warum. Nenne auch eine weitere Schwachstelle, die du im Modell siehst, falls es eine gibt – erfinde aber keine Zahlen. Mach höchstens 3 konkrete Verbesserungsvorschläge, die sich mit den Aktionen unten umsetzen lassen (am besten über Maße mit op "mass", z. B. Wandstärke, Breite, Dicke).
 Antworte NUR mit JSON: {"antwort":"…","vorschlaege":[{"titel":"kurz, was passiert","aktionen":[…]}]}
 
 AKTIONEN (Format der "aktionen" in jedem Vorschlag):
@@ -18592,14 +18563,15 @@ ${AI.modelText()}`;
   }
   async function dialog() {
     if (!App.doc.items.length) { UI.toast('Es gibt noch nichts zu prüfen. Bau zuerst etwas.', { icon: 'info' }); return; }
-    const body = h('div', { class: 'chk weak', id: 'weak' }, h('div', { class: 'hint-box' }, 'Suche Schwachstellen … (Löcher, Wände, Arme' + (DroneCheck.isDrone() ? ', Drohnen-Check' : '') + ')'));
+    const body = h('div', { class: 'chk weak', id: 'weak' }, h('div', { class: 'hint-box' }, 'Suche Schwachstellen … (Löcher, Wände, Überhänge' + (DroneCheck.isDrone() ? ', Arme, Drohnen-Check' : '') + ')'));
     const m = UI.modal({ title: 'Schwachstellen', body, wide: true, actions: [{ label: 'Schließen', primary: true }] });
     const list = await analyze();
     const draw = (l) => {
       body.innerHTML = '';
-      if (!l.length) body.append(h('div', { class: 'chk-row ok' }, h('span', { class: 'chk-dot' }, '✓'), h('div', { class: 'grow' }, h('b', null, 'Keine Schwachstellen gefunden'), h('span', null, 'Löcher haben genug Rand, Wände und Arme sind dick genug.'))));
+      if (!l.length) body.append(h('div', { class: 'chk-row ok' }, h('span', { class: 'chk-dot' }, '✓'), h('div', { class: 'grow' }, h('b', null, 'Keine Schwachstellen gefunden'), h('span', null, 'Löcher haben genug Rand und Wände sind dick genug.'))));
       else body.append(rows(l, (c) => { if (!c) { m.close(); setTimeout(dialog, 400); return; } m.close(); show(c); }));
-      body.append(h('div', { class: 'hint-box', html: 'Die Werte sind <b>Faustregeln</b>, keine Festigkeitsberechnung. Grün heißt: nichts Auffälliges – testen musst du trotzdem.<br><small>Quellen: ' + SOURCES.map(([t, u]) => `<a href="${u}" target="_blank" rel="noopener">${esc(t)}</a>`).join(' · ') + '</small>' }));
+      const srcs = DroneCheck.isDrone() ? SOURCES : SOURCES.filter(([, u]) => !/fpvdroneframe/i.test(u));
+      body.append(h('div', { class: 'hint-box', html: 'Die Werte sind <b>Faustregeln</b>, keine Festigkeitsberechnung. Grün heißt: nichts Auffälliges – testen musst du trotzdem.<br><small>Quellen: ' + srcs.map(([t, u]) => `<a href="${u}" target="_blank" rel="noopener">${esc(t)}</a>`).join(' · ') + '</small>' }));
       if (AI.available && window.claude) {
         const aiBox = h('div', { class: 'explain-ai', id: 'weak-ai' });
         const b = h('button', { type: 'button', class: 'btn small', id: 'weak-ask' }); b.innerHTML = icon('spark') + (l.length ? 'Von der KI erklären und verbessern lassen' : 'Die KI nach weiteren Schwachstellen fragen');
@@ -18673,7 +18645,7 @@ ${AI.modelText()}`;
     { label: 'Exportieren', icon: 'export', run: () => Print.exportDialog() },
     { label: 'Bild speichern (PNG)', icon: 'image', run: () => Print.imageDialog() },
     '-',
-    { label: 'Über Tracery', icon: 'info', run: () => UI.modal({ title: 'Über Tracery', body: h('div', { style: { display: 'grid', gap: '10px', color: 'var(--muted)', lineHeight: 1.55 } }, h('p', null, 'Tracery ist ein parametrisches CAD im Browser, spezialisiert auf FPV- und Speed-Drohnen, mit technischen Zeichnungen.'), h('p', null, 'Der Name: „Tracery“ ist das englische Wort für Maßwerk – die filigranen, exakt konstruierten Ornamente in gotischen Kirchenfenstern. Genau so sollen deine Teile werden.'), h('p', null, 'Gerechnet wird mit dem CAD-Kern OpenCascade (LGPL-2.1) über die Bibliothek replicad (MIT). Die 3D-Anzeige nutzt three.js (MIT), die PDF-Ausgabe jsPDF (MIT).'), h('p', null, 'Deine Projekte bleiben in deinem Browser. Der KI-Helfer nutzt dein Claude-Konto.')), actions: [{ label: 'Schließen', primary: true }] }) },
+    { label: 'Über Tracery', icon: 'info', run: () => UI.modal({ title: 'Über Tracery', body: h('div', { style: { display: 'grid', gap: '10px', color: 'var(--muted)', lineHeight: 1.55 } }, h('p', null, 'Tracery ist ein kostenloses, parametrisches CAD im Browser – ohne Konto, mit exaktem Geometrie-Kern und technischen Zeichnungen.'), h('p', null, 'Der Name: „Tracery“ ist das englische Wort für Maßwerk – die filigranen, exakt konstruierten Ornamente in gotischen Kirchenfenstern. Genau so sollen deine Teile werden.'), h('p', null, 'Gerechnet wird mit dem CAD-Kern OpenCascade (LGPL-2.1) über die Bibliothek replicad (MIT). Die 3D-Anzeige nutzt three.js (MIT), die PDF-Ausgabe jsPDF (MIT).'), h('p', null, 'Deine Projekte bleiben in deinem Browser. Der KI-Helfer nutzt dein Claude-Konto.')), actions: [{ label: 'Schließen', primary: true }] }) },
   ], { alignRight: true });
   const ws = $('#workspace');
   $('#btn-left').onclick = () => { ws.classList.toggle('show-left'); ws.classList.remove('show-right'); };

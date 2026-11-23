@@ -38,6 +38,10 @@ class Page:
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
         self.pg.wait_for_timeout(5000)
+        try:
+            self.pg.locator('.loading').wait_for(state='detached', timeout=15000)
+        except Exception:
+            pass
 
     def wait(self, ms):
         self.pg.wait_for_timeout(ms)
@@ -243,7 +247,7 @@ def t_drag_input(p):
     # Formel
     s = [h for h in handles(p) if h[0] == 'size' and h[1] == 'w'][0]
     p.pg.mouse.move(s[2], s[3]); p.pg.mouse.down(); p.pg.mouse.move(s[2] + 20, s[3], steps=5); p.wait(200)
-    p.pg.keyboard.type('5'); p.pg.keyboard.press('Control+a'); p.pg.keyboard.type('breite/2'); p.pg.keyboard.press('Enter'); p.pg.mouse.up(); p.wait(1500)
+    p.pg.keyboard.type('5'); p.pg.keyboard.press('ControlOrMeta+a'); p.pg.keyboard.type('breite/2'); p.pg.keyboard.press('Enter'); p.pg.mouse.up(); p.wait(1500)
     w = p.ev("return Model.num(App.doc.items[0].p.w, Model.vars(App.doc).v)")
     out.append(abs(w - 15) < 1e-6)
     # Drehen 30
@@ -359,7 +363,7 @@ def t_skizze_masse(p):
     circ = p.ev("return Sketch.state.ents.find(e=>e.type==='circle')")
     pt = to_screen(p, circ['c'][0] + circ['r'], circ['c'][1])
     p.pg.keyboard.press('d'); p.pg.mouse.click(pt[0], pt[1]); p.wait(300)
-    p.pg.keyboard.press('Control+a'); p.pg.keyboard.type('6'); p.pg.keyboard.press('Enter'); p.wait(400)
+    p.pg.keyboard.press('ControlOrMeta+a'); p.pg.keyboard.type('6'); p.pg.keyboard.press('Enter'); p.wait(400)
     ok2 = 'Ø 6' in p.pg.locator('.skdim').all_inner_texts()
     # Fertig, 3 mm, breite = 60
     p.pg.keyboard.press('Enter'); p.wait(1500); p.pg.fill('#st-dist', '3'); p.pg.press('#st-dist', 'Enter'); p.wait(400)
@@ -373,7 +377,7 @@ def t_skizze_masse(p):
     ok4 = p.ev("return Sketch.active && Sketch.state.tool==='select'") and len(p.pg.locator('.skdim').all_inner_texts()) == 3
     # Schildchen ändern
     p.pg.locator('.skdim').filter(has_text='breite').first.click(); p.wait(300)
-    p.pg.keyboard.press('Control+a'); p.pg.keyboard.type('breite/2'); p.pg.keyboard.press('Enter'); p.wait(400)
+    p.pg.keyboard.press('ControlOrMeta+a'); p.pg.keyboard.type('breite/2'); p.pg.keyboard.press('Enter'); p.wait(400)
     p.pg.keyboard.press('Enter'); p.wait(3000)
     ok5 = p.pg.get_by_text('30 × 20 × 3 mm').count() > 0
     return [ok1, ok2, ok3, ok4, ok5]
@@ -403,7 +407,7 @@ def t_kaputte_formel(p):
     sketch_xy(p)
     cx, cy = p.canvas_center()
     p.pg.keyboard.press('c'); p.pg.mouse.click(cx, cy); p.pg.mouse.move(cx + 20, cy); p.pg.keyboard.type('8'); p.pg.keyboard.press('Enter'); p.wait(400)
-    p.pg.locator('.skdim').first.click(); p.wait(200); p.pg.keyboard.press('Control+a'); p.pg.keyboard.type('breite/'); p.pg.keyboard.press('Enter'); p.wait(400)
+    p.pg.locator('.skdim').first.click(); p.wait(200); p.pg.keyboard.press('ControlOrMeta+a'); p.pg.keyboard.type('breite/'); p.pg.keyboard.press('Enter'); p.wait(400)
     return p.pg.get_by_text('Das kann ich nicht ausrechnen').count() > 0 and p.ev("return Sketch.active")
 
 
@@ -411,7 +415,7 @@ def t_neuer_name(p):
     sketch_xy(p)
     cx, cy = p.canvas_center()
     p.pg.keyboard.press('c'); p.pg.mouse.click(cx, cy); p.pg.mouse.move(cx + 20, cy); p.pg.keyboard.type('8'); p.pg.keyboard.press('Enter'); p.wait(400)
-    p.pg.locator('.skdim').first.click(); p.wait(200); p.pg.keyboard.press('Control+a'); p.pg.keyboard.type('laenge'); p.pg.keyboard.press('Enter'); p.wait(600)
+    p.pg.locator('.skdim').first.click(); p.wait(200); p.pg.keyboard.press('ControlOrMeta+a'); p.pg.keyboard.type('laenge'); p.pg.keyboard.press('Enter'); p.wait(600)
     par = p.ev("return App.doc.params.map(x=>[x.name,x.expr])")
     return par == [['laenge', 8]] and 'laenge' in ''.join(p.pg.locator('.skdim').all_inner_texts())
 
@@ -422,8 +426,8 @@ def ok_check(c, keys=('gap', 'props', 'clash', 'cog')):
 
 
 def t_bausaetze_neu(p):
-    karten = p.pg.evaluate("[...document.querySelectorAll('.card.drone')].map(c=>c.dataset.tpl)")
-    ok1 = karten == ['assist', 'drone-f5', 'drone-r5', 'drone-s5', 'drone-c35', 'drone-f7']
+    karten = p.ev("return DroneTpl.LIST.map(t=>t.id)")
+    ok1 = karten == ['drone-f5', 'drone-r5', 'drone-s5', 'drone-c35', 'drone-f7']
     drohne(p, 'r5')
     c = chk(p)
     ok2 = p.ev("return App.errors.length") == 0 and ok_check(c) and p.ev("return App.doc.params.find(x=>x.name==='Armwinkel').expr") == 35
@@ -454,7 +458,7 @@ def t_bausaetze_neu(p):
 
 
 def t_speed_neigung(p):
-    p.pg.locator('.card.drone[data-tpl="assist"]').click(); p.wait(600)
+    p.ev("DroneUI.assistant()"); p.wait(600)
     ok1 = p.pg.locator('#fa-tilt').count() == 0
     p.pg.select_option('#fa-form', 'speed'); p.wait(400)
     ok2 = p.pg.input_value('#fa-tilt') == '20' and 'Akku innen' in p.pg.locator('#fa-out').inner_text() and p.pg.locator('#fa-warn').count() == 0
@@ -479,7 +483,7 @@ def t_speed_neigung(p):
 
 
 def t_herstellerrahmen(p):
-    p.pg.locator('.card.drone[data-tpl="assist"]').click(); p.wait(600)
+    p.ev("DroneUI.assistant()"); p.wait(600)
     opts = p.pg.evaluate("[...document.querySelectorAll('#fa-vorlage option')].map(o=>o.textContent)")
     ok1 = len(opts) == 14 and opts[0] == 'Eigener Rahmen' and any('TBS Source One V5' in o for o in opts) and any('AOS RC HS5' in o for o in opts)
     # 7,5-Zoll-Rahmen: die Größe steht dann auch in der Auswahl
@@ -537,7 +541,7 @@ def t_einfuehrung(p):
     s = to_screen(p, *r)
     p.pg.mouse.click(s[0], s[1]); p.pg.mouse.move(s[0] + 15, s[1]); p.pg.keyboard.type('6'); p.pg.keyboard.press('Enter'); p.wait(1000); seen.append(step())
     p.pg.locator('.skdim').filter(has_text='40').first.click(); p.wait(300)
-    p.pg.keyboard.press('Control+a'); p.pg.keyboard.type('breite'); p.pg.keyboard.press('Enter'); p.wait(1200); seen.append(step())
+    p.pg.keyboard.press('ControlOrMeta+a'); p.pg.keyboard.type('breite'); p.pg.keyboard.press('Enter'); p.wait(1200); seen.append(step())
     p.pg.click('.sketchbar .tool.primary'); p.wait(1500); seen.append(step())
     p.pg.fill('#st-dist', '3'); p.pg.press('#st-dist', 'Enter'); p.wait(400); p.pg.locator('.stepbox .btn.primary').click(); p.wait(2500); seen.append(step())
     p.ev("App.change('x', d=>{ d.params[0].expr=60; })"); p.wait(2500)
@@ -667,9 +671,9 @@ def t_regeln(p):
     ok4 = S("const a=E('C1').c,b=E('C2').c,l=E('AX'); const m=[(a[0]+b[0])/2,(a[1]+b[1])/2]; const dx=l.b[0]-l.a[0],dy=l.b[1]-l.a[1],L=Math.hypot(dx,dy); return Math.abs(((m[0]-l.a[0])*dy-(m[1]-l.a[1])*dx)/L)<1e-5 && Math.abs(((b[0]-a[0])*dx+(b[1]-a[1])*dy)/L)<1e-5")
     tool('coincident'); a1 = S("return E('A1').a"); s = to_screen(p, *a1); p.pg.mouse.click(s[0], s[1]); p.wait(200); click_ent('AX', 0.9)
     ok5 = S("const q=E('A1').a,l=E('AX'); const dx=l.b[0]-l.a[0],dy=l.b[1]-l.a[1]; return Math.abs((q[0]-l.a[0])*dy-(q[1]-l.a[1])*dx)/Math.hypot(dx,dy) < 1e-6")
-    p.pg.keyboard.press('d'); click_ent('A1'); p.pg.keyboard.press('Control+a'); p.pg.keyboard.type('5'); p.pg.keyboard.press('Enter'); p.wait(400)
+    p.pg.keyboard.press('d'); click_ent('A1'); p.pg.keyboard.press('ControlOrMeta+a'); p.pg.keyboard.type('5'); p.pg.keyboard.press('Enter'); p.wait(400)
     ok6 = abs(S("const e=E('A1'); return window.__M.SK.arcInfo(e.a,e.m,e.b).r") - 5) < 1e-4
-    p.pg.keyboard.press('d'); click_ent('AX', 0.8); click_ent('L2', 0.7); p.pg.keyboard.press('Control+a'); p.pg.keyboard.type('60'); p.pg.keyboard.press('Enter'); p.wait(400)
+    p.pg.keyboard.press('d'); click_ent('AX', 0.8); click_ent('L2', 0.7); p.pg.keyboard.press('ControlOrMeta+a'); p.pg.keyboard.type('60'); p.pg.keyboard.press('Enter'); p.wait(400)
     ok7 = abs(S("const a=E('AX'),c=E('L2'); const u=[a.b[0]-a.a[0],a.b[1]-a.a[1]], v=[c.b[0]-c.a[0],c.b[1]-c.a[1]]; return Math.atan2(Math.abs(u[0]*v[1]-u[1]*v[0]),u[0]*v[0]+u[1]*v[1])*180/Math.PI") - 60) < 1e-4
     p.pg.keyboard.press('Enter'); p.wait(2500)
     ok8 = p.ev("return App.doc.items[0].p.sketch.cons.length === 5 && App.errors.length === 0")
@@ -691,7 +695,7 @@ def t_regeln_bestimmt(p):
         m = mid(i, 0.4); p.pg.mouse.click(m[0], m[1]); p.wait(250)
     p.pg.keyboard.press('d'); a = to_screen(p, *S("return S.ents[0].a")); p.pg.mouse.click(a[0], a[1]); p.wait(200)
     m = mid(1, 0.5); p.pg.mouse.click(m[0], m[1]); p.wait(300)
-    p.pg.keyboard.press('Control+a'); p.pg.keyboard.type('25'); p.pg.keyboard.press('Enter'); p.wait(300)
+    p.pg.keyboard.press('ControlOrMeta+a'); p.pg.keyboard.type('25'); p.pg.keyboard.press('Enter'); p.wait(300)
     for i in range(2):
         p.pg.keyboard.press('v'); m = mid(i); p.pg.mouse.click(m[0], m[1]); p.wait(200)
         p.pg.fill('#se-len', '40'); p.pg.press('#se-len', 'Enter'); p.wait(300)
@@ -702,7 +706,7 @@ def t_regeln_bestimmt(p):
     ok1 = S("return S.status.dof === 0 && S.status.ok") and p.pg.get_by_text('Voll bestimmt').count() > 0
     # Widerspruch wird abgelehnt
     p.pg.keyboard.press('d'); a = to_screen(p, *S("return S.ents[0].a")); b2 = to_screen(p, *S("return S.ents[0].b")); p.pg.mouse.click(a[0], a[1]); p.wait(150); p.pg.mouse.click(b2[0], b2[1]); p.wait(300)
-    p.pg.keyboard.press('Control+a'); p.pg.keyboard.type('50'); p.pg.keyboard.press('Enter'); p.wait(500)
+    p.pg.keyboard.press('ControlOrMeta+a'); p.pg.keyboard.type('50'); p.pg.keyboard.press('Enter'); p.wait(500)
     ok2 = p.pg.get_by_text('Zu viele Regeln in der Skizze').count() > 0 and S("return S.status.ok")
     # Feste Linie lässt sich nicht wegziehen
     p.pg.keyboard.press('v'); b0 = S("return S.ents[0].b"); s0 = to_screen(p, *b0)
@@ -1314,7 +1318,7 @@ def t_ansicht_hilfen(p):
     knoepfe = sorted(p.pg.evaluate("[...document.querySelectorAll('.view-btns [data-help]')].map(b=>b.dataset.help)"))
     # Pflicht-Einträge da, und jeder Hilfe-Schlüssel im Menü hat einen Text (seit Sitzung 82 kommen Aussehen, Anzeige und Ansichten dazu)
     ohne = [k for k in set(im_menue) | set(knoepfe) if k not in hilfen]
-    ok = not fehlt and not ohne and {'explode', 'focusView', 'overhang', 'section', 'wind', 'xray'} <= set(im_menue) and {'section', 'xray'} <= set(knoepfe)
+    ok = not fehlt and not ohne and {'explode', 'focusView', 'overhang', 'section', 'xray'} <= set(im_menue) and {'section', 'xray'} <= set(knoepfe)
     return ok, ('ohne Hilfetext: ' + ', '.join(fehlt + ohne)) if (fehlt or ohne) else ('' if ok else f'Menü {im_menue}, Knöpfe {knoepfe}')
 
 
@@ -1443,7 +1447,7 @@ def t_neu10_hilfen(p):
 
 # ---------- Drohnen-Vorlagen ----------
 def drohne(p, key='f5'):
-    p.pg.locator(f'.card.drone[data-tpl="drone-{key}"]').click()
+    p.ev("App.setDoc(DroneTpl.build(arg)); Start.hide()", key)
     for _ in range(60):   # der Rahmen hat viele Löcher – warten, bis alles gerechnet ist
         p.wait(1000)
         if p.ev("return !App.busy && App.results.size === App.doc.items.filter(i=>!App.mergedInto(i.id)).length"):
@@ -1530,7 +1534,7 @@ def warte_rechnen(p, n=60):
 
 
 def t_frame_assistent(p):
-    p.pg.locator('.card.drone[data-tpl="assist"]').click(); p.wait(600)
+    p.ev("DroneUI.assistant()"); p.wait(600)
     ok1 = p.pg.locator('.frame-assist').count() == 1 and '225 mm' in p.pg.locator('#fa-out').inner_text()
     p.pg.select_option('#fa-zoll', '3'); p.wait(300)
     p.pg.select_option('#fa-form', 'deadcat'); p.wait(300)
@@ -1551,7 +1555,7 @@ def t_frame_assistent(p):
 
 # ---------- Sitzung 61: H-Rahmen ----------
 def t_h_rahmen(p):
-    p.pg.locator('.card.drone[data-tpl="assist"]').click(); p.wait(600)
+    p.ev("DroneUI.assistant()"); p.wait(600)
     p.pg.select_option('#fa-form', 'h'); p.wait(300)
     gap = float(p.pg.locator('#fa-gap').text_content().split()[0].replace(',', '.'))
     ok1 = gap >= 5 and p.pg.locator('#fa-warn').count() == 0 and 'H-Rahmen' in p.pg.locator('#fa-form').inner_text()
@@ -1574,7 +1578,7 @@ def t_h_rahmen(p):
 
 # ---------- Sitzung 69: Rahmen mit einzelnen Armen (Sandwich) ----------
 def t_sandwich(p):
-    p.pg.locator('.card.drone[data-tpl="assist"]').click(); p.wait(600)
+    p.ev("DroneUI.assistant()"); p.wait(600)
     ok0 = p.pg.locator('#fa-arme').count() == 1
     p.pg.select_option('#fa-arme', 'sandwich'); p.wait(300)
     p.pg.locator('.modal .btn.primary').filter(has_text='Rahmen bauen').click(); warte_rechnen(p, 120)
@@ -1593,7 +1597,7 @@ def t_sandwich(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 def t_frame_warnung(p):
-    p.pg.locator('.card.drone[data-tpl="assist"]').click(); p.wait(600)
+    p.ev("DroneUI.assistant()"); p.wait(600)
     p.pg.fill('#fa-a', '150'); p.pg.press('#fa-a', 'Enter'); p.wait(400)
     ok1 = 'überlappen' in p.pg.locator('#fa-warn').inner_text()
     p.pg.select_option('#fa-motor', '1103'); p.wait(300)
@@ -1604,18 +1608,18 @@ def t_frame_warnung(p):
 
 def t_drohnen_teile(p):
     p.empty()
-    p.pg.locator('#t-drone').click(); p.wait(400)
+    p.ev("Panels.closeFlyout(); Panels.toggleFlyout('drone')"); p.wait(400)
     p.pg.locator('.flyout .chip[data-cat="akku"]').click(); p.wait(300)
     ok1 = p.pg.locator('.flyout .tile').count() == 12                   # 3S 450 bis 6S 1500
     p.pg.locator('.flyout .tile').filter(has_text='6S 1300').first.click(); p.wait(2500)
     ok2 = p.ev("const it=App.doc.items[0]; return it.massG===215 && it.name==='Akku 6S 1300 mAh'") and '(fest)' in (p.pg.locator('#p-mass').text_content() or '')
-    p.pg.locator('#t-drone').click(); p.wait(400)
+    p.ev("Panels.closeFlyout(); Panels.toggleFlyout('drone')"); p.wait(400)
     p.pg.locator('.flyout .chip[data-cat="motor"]').click(); p.wait(300)
     p.pg.locator('.flyout .tile').filter(has_text='Motor 1103').first.click(); p.wait(2500)
     ok3 = p.ev("return App.doc.items[1].massG") == '' and p.pg.locator('.hint-box.warn').filter(has_text='Gewicht fehlt').count() == 1
     p.ev("App.clearSelection()"); p.wait(1500)
     ok4 = 'fehlt noch das Gewicht' in p.pg.locator('.section').filter(has_text='Schwerpunkt').inner_text()
-    p.pg.locator('#t-drone').click(); p.wait(400)
+    p.ev("Panels.closeFlyout(); Panels.toggleFlyout('drone')"); p.wait(400)
     p.pg.locator('.flyout .chip[data-cat="video"]').click(); p.wait(300)
     ok5 = p.pg.locator('.flyout .tile').filter(has_text='DJI O4 Air Unit Pro').count() >= 2
     return [ok1, ok2, ok3, ok4, ok5]
@@ -1625,7 +1629,7 @@ def t_lochbild(p):
     p.empty(); p.ev("Actions.addPrimitive('box')"); p.wait(2000)
     p.ev("App.change('x', d=>{ const a=d.items[0]; a.t.x=0; a.t.y=0; Object.assign(a.p,{w:60,d:60,h:4}); })"); p.wait(2000)
     p.ev("App.clearSelection(); Viewer.setView('top', false)"); p.wait(1000)
-    p.pg.locator('#t-drone').click(); p.wait(400)
+    p.ev("Panels.closeFlyout(); Panels.toggleFlyout('drone')"); p.wait(400)
     p.pg.locator('.flyout .chip[data-cat="loch"]').click(); p.wait(300)
     tile = p.pg.locator('.flyout .tile').filter(has_text='Motor 16').first.bounding_box()
     tgt = world_screen(p, 0, 0, 4)
@@ -1645,7 +1649,7 @@ def t_drohne_hilfen(p):
     p.empty()
     hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
     fehlt = [k for k in ['droneLib', 'frameAssist', 'holePattern', 'zipTie'] if k not in hilfen]
-    p.pg.locator('#t-drone').click(); p.wait(400)
+    p.ev("Panels.closeFlyout(); Panels.toggleFlyout('drone')"); p.wait(400)
     p.pg.locator('.flyout .chip[data-cat="loch"]').click(); p.wait(300)
     kacheln = set(p.pg.evaluate("[...document.querySelectorAll('.flyout .tile[data-help]')].map(t=>t.dataset.help)"))
     ok = not fehlt and {'holePattern', 'zipTie'} <= kacheln
@@ -1659,8 +1663,7 @@ def chk(p):
 
 def t_drohnen_check(p):
     drohne(p, 'f5')
-    p.pg.locator('#t-drone').click(); p.wait(400)
-    p.pg.locator('#drone-check').click()
+    p.ev("DroneCheck.dialog()")
     p.pg.wait_for_selector('.modal .chk-row[data-chk="tw"]', timeout=60000); p.wait(300)
     st = p.pg.evaluate("Object.fromEntries([...document.querySelectorAll('.modal .chk-row')].map(r=>[r.dataset.chk,r.className.split(' ')[1]]))")
     tw = p.pg.locator('.modal .chk-row[data-chk="tw"]').inner_text()
@@ -1671,7 +1674,7 @@ def t_drohnen_check(p):
     tw2 = p.pg.locator('.modal .chk-row[data-chk="tw"]').inner_text()
     ok2 = p.ev("return App.doc.drone.thrustG===1000 && !App.doc.drone.thrustSrc") and (str(round(4000 / m, 1)).replace('.', ',') + ' : 1') in tw2 and 'Richtwert' not in tw2
     p.pg.keyboard.press('Escape'); p.wait(300)
-    ok3 = p.pg.locator('#proj-drone .chk-list').count() == 1 and p.pg.locator('#proj-dcheck').count() == 1   # Ergebnis bleibt rechts unter „Projekt“
+    ok3 = p.ev("return !!DroneCheck.summary()")   # Ergebnis bleibt gespeichert (Drohnen-Panel im UI ausgeblendet)
     # fies: Akku weit nach hinten, Rahmen zu klein
     p.ev("App.change('x', d=>{ d.items.find(i=>/^Akku/.test(i.name)).t.y=45; })"); warte_rechnen(p)
     c = chk(p)
@@ -1789,7 +1792,7 @@ def t_neu13_hilfen(p):
     hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
     fehlt = [k for k in ['droneCheck', 'plateDxf', 'variants'] if k not in hilfen]
     p.pg.locator('#lt-params').click(); p.wait(400)
-    ok = not fehlt and p.pg.locator('#var-new').count() == 1 and p.pg.locator('#proj-dcheck[data-help="droneCheck"]').count() == 1
+    ok = not fehlt and p.pg.locator('#var-new').count() == 1
     return ok, ('ohne Hilfetext: ' + ', '.join(fehlt)) if fehlt else ''
 
 
@@ -1952,7 +1955,7 @@ def t_einfach(p):
     p.pg.locator('#start-simple').click(); p.wait(400)
     ok1 = p.pg.evaluate("document.body.classList.contains('simple')") and p.pg.locator('#start-simple').get_attribute('aria-pressed') == 'true'
     p.empty()
-    ok2 = not sichtbar(p, '#t-measure') and not sichtbar(p, '#tab-drawing') and not sichtbar(p, '#lt-log') and sichtbar(p, '#t-more') and sichtbar(p, '#t-body') and sichtbar(p, '#t-drone') and p.pg.locator('#btn-level').text_content() == 'Einfach'
+    ok2 = not sichtbar(p, '#t-measure') and not sichtbar(p, '#tab-drawing') and not sichtbar(p, '#lt-log') and sichtbar(p, '#t-more') and sichtbar(p, '#t-body') and not sichtbar(p, '#t-drone') and p.pg.locator('#btn-level').text_content() == 'Einfach'
     p.pg.locator('#t-body').click(); p.wait(400)
     n_body = p.pg.evaluate("[...document.querySelectorAll('.flyout .tile')].filter(t=>t.offsetParent).length")
     p.pg.keyboard.press('Escape'); p.pg.locator('#t-parts').click(); p.wait(400)
@@ -1991,7 +1994,7 @@ def t_kaufteil_formen(p):
     ok3 = bb == [38, 75, 39]
     # Kaufteil aus dem Klappfenster: Motor mit Form und Gewicht
     p.ev("App.setDoc(Model.newDoc())"); p.wait(1500)
-    p.pg.locator('#t-drone').click(); p.wait(400)
+    p.ev("Panels.closeFlyout(); Panels.toggleFlyout('drone')"); p.wait(400)
     p.pg.locator('.flyout .chip[data-cat="motor"]').click(); p.wait(300)
     p.pg.locator('.flyout .tile').filter(has_text='Motor 2207').first.click(); warte_rechnen(p, 20)
     ok4 = p.ev("const it=App.doc.items[0]; return it.kind==='part' && it.p.lib==='buyMotor' && it.massG===33.8 && App.errors.length===0") and p.pg.locator('.kind-badge').first.text_content() == 'Motor'
@@ -2446,7 +2449,7 @@ def t_magnet_kaufteil(p):
     p.empty(); p.ev("Actions.addPrimitive('box')"); p.wait(2000)
     p.ev("App.change('x', d=>{ const a=d.items[0]; a.t.x=0; a.t.y=0; Object.assign(a.p,{w:60,d:60,h:4}); })"); p.wait(2000)
     p.ev("App.clearSelection(); Viewer.setView('top', false)"); p.wait(1000)
-    p.pg.locator('#t-drone').click(); p.wait(400)
+    p.ev("Panels.closeFlyout(); Panels.toggleFlyout('drone')"); p.wait(400)
     p.pg.locator('.flyout .chip[data-cat="motor"]').click(); p.wait(300)
     tile = p.pg.locator('.flyout .tile').filter(has_text='Motor 2207').first.bounding_box()
     tgt = world_screen(p, 0.6, -0.5, 4)
@@ -2462,7 +2465,7 @@ def t_vorschau_echt(p):
     p.empty(); p.ev("Actions.addPrimitive('box')"); p.wait(2000)
     p.ev("App.change('x', d=>{ const a=d.items[0]; a.t.x=0; a.t.y=0; Object.assign(a.p,{w:60,d:60,h:4}); })"); p.wait(2000)
     p.ev("App.clearSelection(); Viewer.setView('top', false)"); p.wait(1000)
-    p.pg.locator('#t-drone').click(); p.wait(400)
+    p.ev("Panels.closeFlyout(); Panels.toggleFlyout('drone')"); p.wait(400)
     p.pg.locator('.flyout .chip[data-cat="motor"]').click(); p.wait(300)
     tile = p.pg.locator('.flyout .tile').filter(has_text='Motor 2207').first.bounding_box()
     tgt = world_screen(p, 10, 8, 4)
@@ -2478,7 +2481,7 @@ def t_vorschau_echt(p):
 # ---------- Sitzung 72: Antenne als Kaufteil ----------
 def t_antenne(p):
     p.empty()
-    p.pg.locator('#t-drone').click(); p.wait(400)
+    p.ev("Panels.closeFlyout(); Panels.toggleFlyout('drone')"); p.wait(400)
     p.pg.locator('.flyout .chip[data-cat="funk"]').click(); p.wait(300)
     ok1 = p.pg.locator('.flyout .tile').filter(has_text='Antenne Pilz').count() == 1 and p.pg.locator('.flyout .tile').filter(has_text='Antenne Stab').count() == 1
     p.pg.locator('.flyout .tile').filter(has_text='Antenne Pilz').first.click(); warte_rechnen(p, 30)
@@ -2897,7 +2900,7 @@ def t_kreismuster_gewaehlt(p):
 # ---------- Sitzung 35: Drohnen-Bausteine ----------
 def t_bausteine(p):
     p.empty()
-    p.pg.locator('#t-drone').click(); p.wait(400)
+    p.ev("Panels.closeFlyout(); Panels.toggleFlyout('drone')"); p.wait(400)
     p.pg.locator('.flyout .chip[data-cat="loch"]').click(); p.wait(300)
     names = p.pg.locator('.flyout .tile').all_inner_texts()
     ok1 = all(any(n in t for t in names) for n in ('GoPro-Halterung', 'XT60-Halter', 'Antennenhalter'))
@@ -2941,7 +2944,7 @@ def t_fahrtwind(p):
     p.ev("App.change('x', d=>{ const pr=Model.newItem('part',{lib:'buyProp',zoll:5,blades:3,pitch:13}); pr.name='Propeller'; pr.t.z=12; d.items.push(pr); })"); warte_rechnen(p, 30)
     ok2 = abs(p.ev("return Views.windArea(0)") - a0) < 1 and p.ev("return Views.windArea(0, true)") > a0 + 50
     # Ansicht öffnen: Fläche steht unten, Kamera schaut von vorne
-    p.pg.locator('#t-views').click(); p.wait(300); p.pg.locator('.menu [data-help="wind"]').click(); p.wait(1200)
+    p.ev("Views.wind(true)"); p.wait(1200)
     t = p.pg.locator('#wind-area').inner_text()
     cam = p.ev("const c=Viewer.camera, t=Viewer.controls.target; return [c.position.x-t.x, c.position.y-t.y, c.position.z-t.z]")
     import re
@@ -2959,7 +2962,7 @@ def t_fahrtwind(p):
 # ---------- Sitzung 57: Luftwiderstand und Höchstgeschwindigkeit ----------
 def t_luftwiderstand(p):
     p.empty(); p.ev("App.change('x', d=>{ const b=Model.newItem('box',{w:100,d:20,h:10}); b.name='Rumpf'; d.items.push(b); })"); warte_rechnen(p, 30)
-    p.pg.locator('#t-views').click(); p.wait(300); p.pg.locator('.menu [data-help="wind"]').click(); p.wait(1500)
+    p.ev("Views.wind(true)"); p.wait(1500)
     w = p.ev("return Views.windInfo")
     # 1000 mm², cw 0,5 (Rumpf), 100 km/h: ½ · 1,225 · 27,78² · 0,5 · 0,001 = 0,236 N
     ok1 = p.pg.locator('#wind-cw').input_value() == '0.5' and abs(w['drag'] - 0.2363) < 0.01 and '0,2 N' in p.pg.locator('#wind-drag').inner_text()
@@ -2976,7 +2979,7 @@ def t_luftwiderstand(p):
     # Speed-Drohne mit Schub: Höchstgeschwindigkeit steht da
     p.ev("App.setDoc(DroneTpl.build('s5')); Start.hide()"); warte_rechnen(p, 90)
     p.ev("App.change('x', d=>{ d.drone.thrustG = 1500; })"); p.wait(800)
-    p.pg.locator('#t-views').click(); p.wait(300); p.pg.locator('.menu [data-help="wind"]').click(); p.wait(4000)
+    p.ev("Views.wind(true)"); p.wait(4000)
     t = p.pg.locator('#wind-top').inner_text(); w = p.ev("return Views.windInfo")
     ok5 = p.pg.locator('#wind-cw').input_value() == '0.5' and w['top'] is not None and 120 < w['top']['kmh'] < 400 and 'km/h' in t and 'Neigung' in t
     print('   ', t)
@@ -3395,7 +3398,7 @@ def t_rohr_masse_bild(p):
     p.ev("App.select([App.doc.items[0].id]); Viewer.setView('front', false)"); p.wait(1200)
     t0 = p.pg.locator('#seglabel-0').inner_text() if p.pg.locator('#seglabel-0').count() else ''
     p.pg.locator('#seglabel-0').click(); p.wait(200)
-    p.pg.keyboard.press('Control+a'); p.pg.keyboard.type('25'); p.pg.keyboard.press('Enter'); warte_rechnen(p, 30)
+    p.pg.keyboard.press('ControlOrMeta+a'); p.pg.keyboard.type('25'); p.pg.keyboard.press('Enter'); warte_rechnen(p, 30)
     pts = p.ev("return Model.path3dPoints(App.doc.items[0].p.path3d, Model.vars(App.doc).v).map(q=>q.map(v=>Math.round(v*1000)/1000))")
     t1 = p.pg.locator('#seglabel-0').inner_text() if p.pg.locator('#seglabel-0').count() else ''
     ok1 = '20' in t0 and pts == [[0, 0, 0], [0, 0, 25], [20, 0, 25]] and '25' in t1 and '🔒' in t1 and p.pg.locator('#seglabel-1').count() == 1
@@ -3943,7 +3946,7 @@ def t_referenzmass(p):
     sel('L1'); p.pg.fill('#se-len', '30'); p.pg.press('#se-len', 'Enter'); p.wait(400)
     # L2 ist über „Gleich“ schon bestimmt → wird Maß zum Ablesen
     p.pg.keyboard.press('d'); m = to_screen(p, *SS(p, "const e=E('L2'); return [(e.a[0]+e.b[0])/2,(e.a[1]+e.b[1])/2]")); p.pg.mouse.click(m[0], m[1]); p.wait(300)
-    p.pg.keyboard.press('Control+a'); p.pg.keyboard.type('30'); p.pg.keyboard.press('Enter'); p.wait(500)
+    p.pg.keyboard.press('ControlOrMeta+a'); p.pg.keyboard.type('30'); p.pg.keyboard.press('Enter'); p.wait(500)
     p.ev("Sketch.setTool('select')"); sel('L2')
     d2 = SS(p, "return S.dims.find(d=>d.e==='L2')")
     toast = ' '.join(p.pg.locator('.toast').all_inner_texts())
@@ -3961,7 +3964,7 @@ def t_referenzmass(p):
     ok4 = SS(p, "return S.dims.every(d=>d.ref)") and p.pg.locator('.skdim.ref').count() == 2
     # Ablese-Maß anklicken und Wert tippen → wieder fest
     p.pg.locator('.skdim.ref').first.click(); p.wait(300)
-    p.pg.keyboard.press('Control+a'); p.pg.keyboard.type('35'); p.pg.keyboard.press('Enter'); p.wait(500)
+    p.pg.keyboard.press('ControlOrMeta+a'); p.pg.keyboard.type('35'); p.pg.keyboard.press('Enter'); p.wait(500)
     ok5 = SS(p, "return S.dims.filter(d=>!d.ref).length===1") and abs(SS(p, "return Math.hypot(E('L1').b[0]-E('L1').a[0],E('L1').b[1]-E('L1').a[1])") - 35) < 1e-3
     return [ok1, ok2, ok3, ok4, ok5]
 
@@ -4644,7 +4647,7 @@ def t_bezuege(p):
 
 def t_motorverkleidung(p):
     p.empty()
-    p.pg.locator('#t-drone').click(); p.wait(400)
+    p.ev("Panels.closeFlyout(); Panels.toggleFlyout('drone')"); p.wait(400)
     p.pg.locator('.flyout .chip[data-cat="loch"]').click(); p.wait(300)
     ok1 = any('Motorverkleidung' in t for t in p.pg.locator('.flyout .tile').all_inner_texts())
     p.pg.keyboard.press('Escape'); p.wait(200)
@@ -4826,7 +4829,7 @@ def t_umriss_in_skizze(p):
 
 def t_armverkleidung(p):
     p.empty()
-    p.pg.locator('#t-drone').click(); p.wait(400)
+    p.ev("Panels.closeFlyout(); Panels.toggleFlyout('drone')"); p.wait(400)
     p.pg.locator('.flyout .chip[data-cat="loch"]').click(); p.wait(300)
     ok1 = any('Armverkleidung' in t for t in p.pg.locator('.flyout .tile').all_inner_texts())
     p.pg.keyboard.press('Escape'); p.wait(200)
@@ -5083,6 +5086,49 @@ def t_spiegeln_achse(p):
     return [ok]
 
 
+# ---------- [A-001] Drohnen-Bereich unsichtbar ----------
+def t_a001_drohnen_unsichtbar(p):
+    # 1. Startseite: kein Drohnen-Abschnitt, allgemeiner Untertitel, allgemeine Vorlagen da
+    start_txt = (p.pg.locator('.start').text_content() or '').lower()
+    ok1 = (p.pg.locator('.card.drone').count() == 0
+           and 'drohne' not in start_txt and 'frame-assistent' not in start_txt
+           and 'cad im browser – kostenlos, ohne konto' in start_txt
+           and 'box mit deckel' in start_txt and 'schild mit loch' in start_txt)
+    p.empty()
+    # 2. Werkzeugleiste, Ansicht-Menü und Bauteil-Bibliothek ohne Drohnen-Einträge
+    no_btn = p.pg.locator('#t-drone').count() == 0
+    p.pg.locator('#t-views').click(); p.wait(250)
+    views_txt = (p.pg.locator('.menu').text_content() or '').lower()
+    no_wind = 'fahrtwind' not in views_txt and p.pg.locator('.menu [data-help="wind"]').count() == 0
+    p.pg.keyboard.press('Escape'); p.wait(150)
+    p.pg.locator('#t-parts').click(); p.wait(300)
+    parts_txt = (p.pg.locator('.flyout').text_content() or '').replace('\u00ad', '').lower()
+    no_drone_parts = all(w not in parts_txt for w in ['motorverkleidung', 'armverkleidung', 'stromlinien-rumpf', 'gopro', 'xt60', 'antennenhalter', 'lochbild'])
+    keep_general = all(w in parts_txt for w in ['schraubenloch', 'zahnrad', 'scharnier', 'schnapphaken', 'gewindebolzen', 'schraube (norm)', 'mutter (norm)'])
+    p.pg.keyboard.press('Escape'); p.wait(150)
+    ok2 = no_btn and no_wind and no_drone_parts and keep_general
+    # 3. Befehlssuche findet keine Drohnen-Befehle
+    hits = p.ev("return ['drohne','frame','propeller','fahrtwind','motorverkleidung','armverkleidung','gopro','xt60','antennenhalter'].map(q=>Commands.search(q).length)")
+    p.pg.locator('#cmd-input').fill('drohne'); p.wait(250)
+    pop_cnt = p.pg.locator('.cmd-pop .cmd-item:not(.ai)').count()
+    p.pg.locator('#cmd-input').fill(''); p.pg.keyboard.press('Escape'); p.wait(150)
+    ok3 = all(n == 0 for n in hits) and pop_cnt == 0
+    # 4. Über-Tracery-Dialog ohne Drohnen-Sprache
+    p.pg.locator('#btn-menu').click(); p.wait(250)
+    p.pg.locator('.menu button', has_text='Über Tracery').click(); p.wait(250)
+    about_txt = (p.pg.locator('.modal').text_content() or '').lower()
+    ok4 = 'drohne' not in about_txt and 'fpv' not in about_txt
+    p.pg.keyboard.press('Escape'); p.wait(150)
+    # 5. Altes Projekt mit buyMotor öffnet und rechnet ohne Fehler
+    old_proj = """{"format":"masswerk","version":1,"id":"p_old_motor","name":"Altprojekt Motor","params":[],"items":[{"id":"i_mot1","kind":"part","name":"Motor 2207","role":"solid","p":{"lib":"buyMotor","d":28.5,"h":19.7,"lk":16,"size":"M3"},"t":{"x":0,"y":0,"z":0,"rx":0,"ry":0,"rz":0},"color":"#b9c2cb","hidden":false,"locked":false,"finishes":[],"massG":33.8}],"notes":[],"settings":{"grid":1,"snap":true},"drawing":null}"""
+    p.ev("Start.openBlob(new File([arg], 'altprojekt.tracery.json', {type:'application/json'}))", old_proj)
+    warte_rechnen(p, 40)
+    r = p.ev("const it=App.doc.items[0]; const res=it && App.results.get(it.id); return [App.doc.name, App.errors.length, it && it.p.lib, res && res.data.bbox]")
+    ok5 = (r[0] == 'Altprojekt Motor' and r[1] == 0 and r[2] == 'buyMotor' and r[3] is not None
+           and abs((r[3][3] - r[3][0]) - 28.5) < 0.2 and p.pg.locator('#proj-drone').count() == 0)
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -5181,6 +5227,7 @@ TESTS = [
     ('DXF/SVG in die offene Skizze: Elemente kommen dazu / Rückgängig / DXF', t_umriss_in_skizze),
     ('Studio-Look: Werkstoff-Aussehen / Schatten / eigene Farbe / Farbe vom Werkstoff / Ton, einfach, Licht, Schatten aus / Bild 4K durchsichtig', t_studio_look),
     ('Formschritte mit Modus: eigener Körper / Abziehen / im Verlauf markiert / Vereinigen / Schnittmenge / zurück und Rückgängig / Ziel zu spät', t_koerper_modus),
+    ('[A-001] Drohnen-Bereich unsichtbar: Startseite / Menüs und Bibliothek / Befehlssuche / Über-Dialog / altes Projekt mit buyMotor', t_a001_drohnen_unsichtbar),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

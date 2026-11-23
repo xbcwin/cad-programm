@@ -481,6 +481,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
   Schritte: 1. Ein Kind (ab 10) mit „Einfach“ eine Platte mit vier Löchern bauen lassen, ohne zu helfen.
   Erwartet: Es findet Körper, Löcher und Exportieren allein; notieren, wo es hängen bleibt.
 
+## Drohnen-Bereich unsichtbar (Auto [A-001])
+
+- [x] **Startseite**: kein Abschnitt „Drohnen“ und kein Frame-Assistent, Untertitel „CAD im Browser – kostenlos, ohne Konto“, allgemeine Vorlagen („Box mit Deckel“, „Schild mit Loch“ …) bleiben da.
+- [x] **Menüs, Werkzeugleiste und Bibliothek**: kein Knopf „Drohne“ oben, kein „Fahrtwind“ im Ansicht-Menü, keine Drohnen-Teile in „Bauteile“ (Motorverkleidung, Armverkleidung, Stromlinien-Rumpf, GoPro, XT60, Antennenhalter, Lochbild); allgemeine Bauteile (Schraubenloch, Normteile, Gewinde, Zahnrad, Scharnier, Schnapphaken …) bleiben da.
+- [x] **Befehlssuche & Über-Dialog**: Suche nach „drohne“, „frame“, „propeller“, „fahrtwind“ … findet nichts; im Dialog „Über Tracery“ steht keine Drohnen-Sprache.
+- [x] **Alte Projekte**: Projektdatei mit einem `buyMotor`-Teil öffnet und rechnet ohne Fehler, ohne Drohnen-Panel rechts.
+- [ ] **Von Hand**: Ein echtes altes Drohnen-Projekt aus der Datei öffnen, ansehen, ein Maß ändern und prüfen, ob alles sauber rechnet und nirgends störende Drohnen-Texte auftauchen.
+
 ## Maße als Tabelle (neu in Sitzung 114)
 
 - [x] **Tabelle**: Rechteck und Kreis mit drei Maßen → drei Zeilen („Rechteck 1“, „Kreis 1“); Breite 45 eintippen → Rechteck 45 mm breit, Tabelle bleibt offen.

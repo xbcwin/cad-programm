@@ -117,7 +117,7 @@ const Start = (() => {
     const head = h('div', { class: 'start-head' });
     const brand = h('div', { class: 'start-brand' });
     brand.innerHTML = $('#brand svg').outerHTML;
-    brand.append(h('div', null, h('h1', null, 'Tracery'), h('p', null, 'Präzises CAD für Speed-Drohnen und technische Teile')));
+    brand.append(h('div', null, h('h1', null, 'Tracery'), h('p', null, 'CAD im Browser – kostenlos, ohne Konto')));
     const acts = h('div', { class: 'btn-row' });
     const nb = h('button', { type: 'button', class: 'btn primary' }); nb.innerHTML = icon('newfile') + 'Neues Projekt'; nb.onclick = () => newProject();
     const ob = h('button', { type: 'button', class: 'btn' }); ob.innerHTML = icon('folder') + 'Datei öffnen'; ob.onclick = () => openFile();
@@ -149,21 +149,6 @@ const Start = (() => {
       }
       sec.append(list); inner.append(sec);
     }
-    // Drohnen: vollständige, veränderbare Rahmen
-    const dsec = h('section', null, h('h2', null, 'Drohnen'));
-    const dcards = h('div', { class: 'cards' });
-    for (const t of DroneTpl.LIST) {
-      const c = h('button', { type: 'button', class: 'card drone', 'data-tpl': t.id });
-      const th = h('div', { class: 'thumb' }); th.innerHTML = tplThumb(t);
-      c.append(th, h('b', null, t.name), h('span', null, t.desc));
-      c.onclick = () => openDrone(t);
-      dcards.append(c);
-    }
-    const fa = h('button', { type: 'button', class: 'card drone', 'data-tpl': 'assist' });
-    const fth = h('div', { class: 'thumb' }); fth.innerHTML = icon('frame'); fa.append(fth, h('b', null, 'Frame-Assistent'), h('span', null, 'Größe, Rahmenform, Stack, Motor, Videosystem und Akku wählen – Tracery baut den passenden Rahmen.'));
-    fa.onclick = () => DroneUI.assistant();
-    dcards.prepend(fa);
-    dsec.append(dcards); inner.append(dsec);
     const tsec = h('section', null, h('h2', null, 'Vorlagen'));
     const cards = h('div', { class: 'cards' });
     const empty = h('button', { type: 'button', class: 'card new' });

@@ -31,7 +31,7 @@
   },
   "slot": {
     "tip": "Langloch für bewegliche Schrauben zeichnen",
-    "hilfe": "Klicke den ersten und zweiten Punkt für die Mittellinie und ziehe dann mit dem dritten Klick die Breite auf. Rechts auf „Gebogen“ umschalten: Mitte, Anfang, Ende (gegen den Uhrzeigersinn) und Breite – z. B. für verstellbare Kamerahalter.",
+    "hilfe": "Klicke den ersten und zweiten Punkt für die Mittellinie und ziehe dann mit dem dritten Klick die Breite auf. Rechts auf „Gebogen“ umschalten: Mitte, Anfang, Ende (gegen den Uhrzeigersinn) und Breite – z. B. für verstellbare Halterungen.",
     "tipp": "Langlöcher sind perfekt, wenn du beim späteren Zusammenbauen noch etwas Spielraum zum Verschieben brauchst."
   },
   "polygon": {
@@ -57,11 +57,11 @@
   "wall2d": {
     "tip": "Aus einer offenen Linie eine Wand mit Dicke machen",
     "hilfe": "Stell rechts die Wandstärke ein und klicke eine offene Linie, einen Linienzug, einen Bogen oder eine Spline an. Tracery legt auf beiden Seiten die halbe Dicke an und schließt die Enden – die Linie bleibt als Hilfslinie in der Mitte. Mit „Fertig“ ziehst du die Wand hoch.",
-    "tipp": "Ideal für Rippen, Stege und dünne Halter, z. B. einen Antennenhalter: Bogen zeichnen, Wand 2 mm, 8 mm hochziehen. Ändert sich die Linie, wandert die Wand mit."
+    "tipp": "Ideal für Rippen, Stege und dünne Halter, z. B. einen Kabelhalter: Bogen zeichnen, Wand 2 mm, 8 mm hochziehen. Ändert sich die Linie, wandert die Wand mit."
   },
   "project2d": {
     "tip": "Kante eines Körpers in die Skizze holen",
-    "hilfe": "Klick in der Skizze auf eine Kante eines Körpers. Tracery schiebt sie senkrecht auf die Zeichenebene und legt sie als Element an: gerade Kanten als Linie, runde als Bogen oder Kreis, alles andere als Spline. Die Kante bleibt mit dem Körper verbunden (Ketten-Symbol): Ändert sich der Körper, wandert sie mit. Klickst du auf eine Fläche statt auf eine Kante, kommt der ganze Schnitt des Körpers mit der Skizzen-Ebene als Kontur in die Skizze – z. B. der Querschnitt eines Rumpfs, um daran weiterzuzeichnen.",
+    "hilfe": "Klick in der Skizze auf eine Kante eines Körpers. Tracery schiebt sie senkrecht auf die Zeichenebene und legt sie als Element an: gerade Kanten als Linie, runde als Bogen oder Kreis, alles andere als Spline. Die Kante bleibt mit dem Körper verbunden (Ketten-Symbol): Ändert sich der Körper, wandert sie mit. Klickst du auf eine Fläche statt auf eine Kante, kommt der ganze Schnitt des Körpers mit der Skizzen-Ebene als Kontur in die Skizze – z. B. der Querschnitt eines Gehäuses, um daran weiterzuzeichnen.",
     "tipp": "So passt ein Deckel genau auf ein Gehäuse: Skizze auf die Oberseite, die Außenkanten übernehmen, „Versatz“ nach innen – fertig ist der Rand. Wird das Gehäuse breiter, wächst der Deckel mit. Soll eine Kante stehen bleiben: anklicken, „Verbindung lösen“."
   },
   "mirror2d": {
@@ -77,7 +77,7 @@
   "patternCirc2d": {
     "tip": "Elemente im Kreis vervielfachen",
     "hilfe": "Klicke die Elemente an, die vervielfacht werden sollen. Rechts stellst du Anzahl und Gesamtwinkel ein und wählst bei Bedarf den Mittelpunkt (sonst gilt der Nullpunkt). Dann Enter.",
-    "tipp": "360° verteilt die Kopien rund herum. Bei weniger Grad liegt die letzte Kopie genau am Ende des Winkels. Typisch für Schraubenkreise an Motorträgern."
+    "tipp": "360° verteilt die Kopien rund herum. Bei weniger Grad liegt die letzte Kopie genau am Ende des Winkels. Typisch für Lochkreise und Flansche."
   },
   "construct2d": {
     "tip": "Hilfslinien: zeichnen, aber nicht zur Fläche zählen",
@@ -157,16 +157,16 @@
   "sweep": {
     "tip": "Querschnitt entlang eines Pfads ziehen (Sweep)",
     "hilfe": "Zeichne in einer Skizze einen offenen Pfad aus Linien, Bögen oder einer Spline und klick „Fertig“. Tracery zieht dann ein Rohr mit 6 mm Durchmesser daran entlang. Rechts stellst du rund oder rechteckig, die Größe und eine Wand für hohle Rohre ein.",
-    "tipp": "Gut für Kabelkanäle, Antennenhalter, Bügel und Leisten. Ecken im Pfad werden automatisch rund übergangen."
+    "tipp": "Gut für Kabelkanäle, Rohre, Bügel und Leisten. Ecken im Pfad werden automatisch rund übergangen."
   },
   "loft": {
     "tip": "Weicher Übergang durch mehrere Umrisse (Loft)",
     "hilfe": "Zeichne zwei oder mehr Umrisse auf verschiedenen Ebenen (z. B. ein Rechteck unten und einen Kreis 30 mm darüber – mit „Ebene verschieben“ in der Skizze). Wähle die Skizzenkörper in der Reihenfolge, durch die der Körper laufen soll, und klick „Übergang“. Bei einem einzelnen Skizzenkörper macht „Zur Spitze“ daraus eine Spitze. Rechts unter „Mittellinie“ kannst du den Übergang an einer gebogenen Linie entlangführen.",
-    "tipp": "Unter „Spitze verlängern“ stellst du ein, wie weit die Spitze hinter dem letzten Umriss liegt. Mit „Mittellinie zeichnen“ schwingt ein Rumpf nach oben oder ein Arm läuft im Bogen; mit „Führungskurve zeichnen“ gibst du die Seitenlinie vor und machst ihn bauchig oder schlank – die Umrisse bleiben dabei, wo sie sind. Eine „Zweite Führungskurve“ quer zur ersten formt die andere Richtung: z. B. die Höhe von der Seite und die Breite von oben. Für Nasen, Düsen und Rumpfteile danach die Kanten runden."
+    "tipp": "Unter „Spitze verlängern“ stellst du ein, wie weit die Spitze hinter dem letzten Umriss liegt. Mit „Mittellinie zeichnen“ biegst du den Übergang entlang einer Kurve; mit „Führungskurve zeichnen“ gibst du die Seitenlinie vor und machst ihn bauchig oder schlank – die Umrisse bleiben dabei, wo sie sind. Eine „Zweite Führungskurve“ quer zur ersten formt die andere Richtung: z. B. die Höhe von der Seite und die Breite von oben. Für Übergänge, Düsen und Griffe danach die Kanten runden."
   },
   "holeWizard": {
     "tip": "Schraubenloch, Gewinde, Einsatz oder Mutternfalle bohren",
-    "hilfe": "Klick auf eine Fläche und dann auf „Bohrung“ – das geht auch auf runden Flächen wie Rohren und Rümpfen. Wähle Art und Größe (zum Beispiel M3) und drück „Löcher setzen“. Jeder weitere Klick auf eine Fläche setzt noch ein Loch – „Fertig“ oder Esc beendet.",
+    "hilfe": "Klick auf eine Fläche und dann auf „Bohrung“ – das geht auch auf runden Flächen wie Rohren und Zylindern. Wähle Art und Größe (zum Beispiel M3) und drück „Löcher setzen“. Jeder weitere Klick auf eine Fläche setzt noch ein Loch – „Fertig“ oder Esc beendet.",
     "tipp": "„Durchgangsloch“ lässt die Schraube frei durchrutschen. „Gewinde schneiden“ macht das kleinere Kernloch, in das sich die Schraube selbst hineindreht."
   },
   "countersink": {
@@ -177,12 +177,12 @@
   "fillet": {
     "tip": "Scharfe 3D-Kanten schön abrunden",
     "hilfe": "Klicke eine oder mehrere Kanten deines 3D-Körpers an und schiebe den Pfeil, um die Rundung größer oder kleiner zu machen. Rechts unter „Kanten“ macht „Von … bis“ eine Rundung, die entlang der Kante wächst – z. B. von 1 mm auf 4 mm; „Richtung tauschen“ dreht sie um.",
-    "tipp": "Gerundete Ecken sehen besser aus und reißen bei Belastung seltener ein, zum Beispiel an den Armen eines Frames."
+    "tipp": "Gerundete Ecken sehen besser aus und reißen bei Belastung seltener ein, zum Beispiel an Halterungen und Winkeln."
   },
   "chamfer": {
     "tip": "Kante im Winkel schräg anschneiden",
     "hilfe": "Klicke auf eine Kante und ziehe am Pfeil, um die scharfe Ecke durch eine gerade Schräge (Fase) zu ersetzen. Rechts unter „Kanten“ wählst du die Art: „Gleich“ (auf beiden Seiten gleich weit), „Zwei Abstände“ (z. B. 2 mm auf der einen, 4 mm auf der anderen Fläche) oder „Mit Winkel“ (Abstand und Winkel); „Seiten tauschen“ dreht sie um.",
-    "tipp": "Eine kleine Fase nimmt Kanten die Schärfe – an Carbonplatten schneiden sie dann keine Kabel mehr an."
+    "tipp": "Eine kleine Fase nimmt Kanten die Schärfe – an gefrästen Platten oder Gehäusen sind die Ränder dann angenehm glatt."
   },
   "shell": {
     "tip": "Körper aushöhlen wie eine Schachtel",
@@ -207,7 +207,7 @@
   "mirror": {
     "tip": "Gespiegelte Kopie anlegen",
     "hilfe": "Wähle einen Körper und dann „Muster“ → „Gespiegelte Kopie“. Rechts wählst du die Spiegelebene und wo sie liegt.",
-    "tipp": "Bei symmetrischen Teilen – etwa einem Frame – baust du nur eine Hälfte und spiegelst sie. Das spart die halbe Arbeit."
+    "tipp": "Bei symmetrischen Teilen – etwa einem Gehäuse oder Winkel – baust du nur eine Hälfte und spiegelst sie. Das spart die halbe Arbeit."
   },
   "boolUnion": {
     "tip": "Mehrere Körper zu einem verschmelzen",
@@ -252,7 +252,7 @@
   "massProps": {
     "tip": "Gewicht, Volumen und Schwerpunkt",
     "hilfe": "Klick ein Teil an: Rechts unter „Material und Gewicht“ wählst du sein Material und siehst sein Gewicht. Ohne Auswahl steht dort das Gewicht des ganzen Projekts mit dem Schwerpunkt.",
-    "tipp": "Bei Speed-Drohnen zählt jedes Gramm – und der Schwerpunkt sollte in der Mitte zwischen den Motoren liegen. „Schwerpunkt im Bild zeigen“ macht ihn sichtbar."
+    "tipp": "Wenn es auf Gewicht und Balance ankommt, hilft dir „Schwerpunkt im Bild zeigen“, ihn direkt im Modell zu sehen."
   },
   "timeline": {
     "tip": "Verlauf aller bisherigen Arbeitsschritte",
@@ -312,7 +312,7 @@
   "zipTie": {
     "tip": "Zwei Schlitze für einen Kabelbinder",
     "hilfe": "Zieh die Kabelbinder-Schlitze auf eine Fläche. Das Kabel liegt dazwischen, der Binder läuft unten durch.",
-    "tipp": "Praktisch für Antennen, Empfänger und den Akku-Stecker."
+    "tipp": "Praktisch für Kabel, Schläuche und kleine Elektronik-Module."
   },
   "droneCheck": {
     "tip": "Rahmen prüfen: Propeller, Teile, Gewicht, Schwerpunkt, Schub, Flugzeit",
@@ -320,13 +320,13 @@
     "tipp": "Der Schwerpunkt sollte fast genau in der Mitte zwischen den Motoren liegen. Liegt er daneben, schiebt „Akku verschieben“ den Akku genau an die richtige Stelle. Die Flugzeit ist eine grobe Schätzung fürs ruhige Schweben – beim schnellen Fliegen hält der Akku meist nur ein Drittel bis halb so lang."
   },
   "plateDxf": {
-    "tip": "Carbon-Platten als 2D-Zeichnung für die Fräse",
+    "tip": "Flache Platten als 2D-Zeichnung für Fräse oder Laser",
     "hilfe": "Exportieren → „Platten als DXF“: Jede flache Platte (bis 12 mm dick) kommt als eigene DXF-Datei in Originalgröße in die ZIP – Außenkontur und alle Löcher, in Millimetern. Die Plattendicke steht im Dateinamen.",
-    "tipp": "Fräsdienste brauchen genau das: eine DXF pro Platte und die Dicke. Gekaufte Teile und Propellerkreise kommen nicht mit."
+    "tipp": "Fräs- und Laserdienste brauchen genau das: eine DXF pro Platte und die Dicke. Gekaufte Teile kommen nicht mit."
   },
   "variants": {
     "tip": "Mehrere Sätze von Maßen speichern und umschalten",
-    "hilfe": "Unter „Maße“ ganz oben: „Neue Variante“ merkt sich alle Maße unter einem Namen, z. B. „5 Zoll“. Ändere dann Maße und speichere eine zweite Variante. Mit der Auswahl schaltest du um, „Vergleichen“ zeigt die Unterschiede mit Gewicht und Schub/Gewicht. Weichen die Maße ab, kannst du die aktive Variante überschreiben.",
+    "hilfe": "Unter „Maße“ ganz oben: „Neue Variante“ merkt sich alle Maße unter einem Namen, z. B. „Klein“. Ändere dann Maße und speichere eine zweite Variante. Mit der Auswahl schaltest du um, „Vergleichen“ zeigt die Unterschiede mit Gewicht. Weichen die Maße ab, kannst du die aktive Variante überschreiben.",
     "tipp": "Varianten ändern nur die Maße. Neue Teile oder Löcher gelten für alle Varianten."
   },
   "explainStep": {
@@ -335,23 +335,23 @@
     "tipp": "Hängt ein Schritt an einem Maß, wandert er mit, wenn du das Maß änderst – genau das zeigt dir die Erklärung."
   },
   "weakSpots": {
-    "tip": "Schwachstellen suchen: Lochrand, dünne Wände, Arme",
-    "hilfe": "Rechts unter „Projekt“ → „Schwachstellen suchen“: Tracery prüft mit Faustregeln, ob Löcher zu nah am Rand oder aneinander liegen, ob Wände für ihr Material zu dünn sind und ob die Arme einer Drohne dick genug sind. „Zeigen“ markiert die Stelle mit roten Ringen. In Claude erklärt die KI die Funde und schlägt Verbesserungen vor, die du mit „Umsetzen“ übernimmst.",
+    "tip": "Schwachstellen suchen: Lochrand, dünne Wände, Überhänge",
+    "hilfe": "Rechts unter „Projekt“ → „Schwachstellen suchen“: Tracery prüft mit Faustregeln, ob Löcher zu nah am Rand oder aneinander liegen, ob Wände für ihr Material zu dünn sind und ob Druckteile große Überhänge haben. „Zeigen“ markiert die Stelle mit roten Ringen. In Claude erklärt die KI die Funde und schlägt Verbesserungen vor, die du mit „Umsetzen“ übernimmst.",
     "tipp": "Faustregeln ersetzen keinen Test: Grün heißt nur, dass nichts Auffälliges gefunden wurde."
   },
   "aiSteps": {
     "tip": "Schritte, die die KI gebaut hat",
     "hilfe": "Was der KI-Helfer baut, wird ein normaler Schritt in der Zeitleiste – mit einem kleinen Funken-Symbol. Überfahr ihn, dann siehst du, auf welche Bitte er entstand. Du kannst ihn wie jeden Schritt ändern, unterdrücken oder mit Strg Z zurücknehmen.",
-    "tipp": "Schreib unten in die Zeile, was du willst, z. B. „Mach die Arme 6 mm dick“ oder „Bau mir einen 5-Zoll-Deadcat mit DJI O4“."
+    "tipp": "Schreib unten in die Zeile, was du willst, z. B. „Mach die Wände 3 mm dick“ oder „Bau mir ein Gehäuse 80 × 50 × 30 mit vier Schraubenlöchern“."
   },
   "levelSwitch": {
     "tip": "Einfache Oberfläche oder alle Werkzeuge",
-    "hilfe": "Oben rechts (oder auf der Startseite) schaltest du zwischen „Einfach“ und „Profi“ um. Einfach zeigt nur die wichtigsten Werkzeuge: Körper, Skizze, Bauteile, Drohne und Exportieren – Messen, Notizen, Ansicht und Profi-Werkzeuge findest du dann unter „Mehr“. Dein Modell bleibt gleich, es ändert sich nur, was du siehst.",
+    "hilfe": "Oben rechts (oder auf der Startseite) schaltest du zwischen „Einfach“ und „Profi“ um. Einfach zeigt nur die wichtigsten Werkzeuge: Körper, Skizze, Bauteile und Exportieren – Messen, Notizen, Ansicht und Profi-Werkzeuge findest du dann unter „Mehr“. Dein Modell bleibt gleich, es ändert sich nur, was du siehst.",
     "tipp": "Zum Anfangen ist „Einfach“ gut. Die Eingabezeile unten findet trotzdem jedes Werkzeug."
   },
   "aiCoworker": {
     "tip": "Der KI-Kollege arbeitet große Aufträge selbstständig ab",
-    "hilfe": "Schreib unten in die Zeile, was passieren soll – auch große Aufträge wie „Mach alles als Verbund“, „Richte alles mittig aus“ oder „Prüf die Drohne und behebe, was nicht passt“. Der KI-Kollege macht einen Plan, setzt ihn in Runden um, rechnet nach jeder Runde nach und behebt Fehler selbst. Ist etwas unklar, fragt er mit Antwort-Knöpfen zurück. „Selbstständig“ oben im Fenster schaltet das Arbeiten in Runden ab.",
+    "hilfe": "Schreib unten in die Zeile, was passieren soll – auch große Aufträge wie „Mach alles als Verbund“, „Richte alles mittig aus“ oder „Prüf das Modell auf Schwachstellen und behebe sie“. Der KI-Kollege macht einen Plan, setzt ihn in Runden um, rechnet nach jeder Runde nach und behebt Fehler selbst. Ist etwas unklar, fragt er mit Antwort-Knöpfen zurück. „Selbstständig“ oben im Fenster schaltet das Arbeiten in Runden ab.",
     "tipp": "Der ganze Auftrag ist danach ein einziger Rückgängig-Schritt. „Alles als Verbund“ geht auch ohne KI – Kaufteile bleiben dabei einzeln, damit ihr Gewicht stimmt."
   },
   "ellipse": {
@@ -386,12 +386,12 @@
   },
   "magnet": {
     "tip": "Teile rasten an sinnvollen Stellen ein",
-    "hilfe": "Beim Ziehen und beim Setzen von Löchern rastet Tracery an der Mitte einer Fläche, an Mittellinien, an Lochmitten und im gleichen Randabstand ein. Auf runden Flächen wie Rohren, Kugeln und Rümpfen rastet es „ganz oben“, „ganz unten“, an den Seiten und in der Mitte der Länge ein – das Teil steht dann genau senkrecht auf der Rundung. Körper rasten bündig oder mittig zu anderen Körpern ein. Rosa Hilfslinien zeigen, woran.",
+    "hilfe": "Beim Ziehen und beim Setzen von Löchern rastet Tracery an der Mitte einer Fläche, an Mittellinien, an Lochmitten und im gleichen Randabstand ein. Auf runden Flächen wie Rohren, Kugeln und Zylindern rastet es „ganz oben“, „ganz unten“, an den Seiten und in der Mitte der Länge ein – das Teil steht dann genau senkrecht auf der Rundung. Körper rasten bündig oder mittig zu anderen Körpern ein. Rosa Hilfslinien zeigen, woran.",
     "tipp": "Halte Strg (Mac: cmd) gedrückt, um frei ohne Einrasten zu ziehen. Ganz abschalten kannst du es im Projekt rechts unter „Fangen beim Verschieben“."
   },
   "importCad": {
     "tip": "STEP-, STL-, DXF- oder SVG-Datei als Teil holen",
-    "hilfe": "Über „Datei öffnen“ oder einfach ins Fenster ziehen: Eine .step-, .stp- oder .stl-Datei wird ein neues Teil im Projekt – zum Beispiel ein Motor oder eine Kamera vom Hersteller. Rechts stellst du ein, in welcher Einheit die Datei gemessen ist. Eine .dxf-Datei (2D-Zeichnung, zum Beispiel ein Rahmen-Umriss vom Hersteller) wird eine 3 mm dicke Platte: Der Umriss liegt als Skizze dahinter und lässt sich mit „Skizze bearbeiten“ ändern, Löcher bleiben Löcher. Eine .svg-Datei (zum Beispiel ein Logo) wird genauso eine dünne Platte (1 mm) – als „Loch“ in eine andere Platte gesetzt ergibt das eine Gravur.",
+    "hilfe": "Über „Datei öffnen“ oder einfach ins Fenster ziehen: Eine .step-, .stp- oder .stl-Datei wird ein neues Teil im Projekt – zum Beispiel ein Normteil oder ein Bauteil vom Hersteller. Rechts stellst du ein, in welcher Einheit die Datei gemessen ist. Eine .dxf-Datei (2D-Zeichnung, zum Beispiel ein Platten-Umriss) wird eine 3 mm dicke Platte: Der Umriss liegt als Skizze dahinter und lässt sich mit „Skizze bearbeiten“ ändern, Löcher bleiben Löcher. Eine .svg-Datei (zum Beispiel ein Logo) wird genauso eine dünne Platte (1 mm) – als „Loch“ in eine andere Platte gesetzt ergibt das eine Gravur.",
     "tipp": "STEP ist genauer als STL: Kanten lassen sich runden und Bohrungen erkennen. STL-Dateien sind Dreiecksnetze und eignen sich vor allem zum Anschauen und Ausrichten. DXF muss als Text (ASCII) gespeichert sein; Zoll, Zentimeter und Meter werden in Millimeter umgerechnet. Zeichnungen in Blöcken vorher im anderen Programm auflösen. In SVG-Dateien muss Text vorher in Pfade umgewandelt sein. Stimmt die Größe nicht: „Skizze bearbeiten“ und rechts unter „Größe der Skizze“ die Breite eintippen – alles wächst mit. Ist gerade eine Skizze offen, landet die DXF oder SVG in dieser Skizze statt als neue Platte – praktisch für ein Logo auf einer Fläche."
   },
   "sketchTemplate": {
@@ -411,7 +411,7 @@
   },
   "threadRod": {
     "tip": "Außengewinde zum Drucken",
-    "hilfe": "Ein Bolzen mit echtem metrischem Gewinde (M3 bis M16). Verbinde ihn mit einem Körper, z. B. für einen Schraubdeckel oder einen Antennenhalter.",
+    "hilfe": "Ein Bolzen mit echtem metrischem Gewinde (M3 bis M16). Verbinde ihn mit einem Körper, z. B. für einen Schraubdeckel oder ein Stativgewinde.",
     "tipp": "Unter M5 werden gedruckte Gewinde selten sauber – dort lieber Gewindeeinsätze oder echte Schrauben nehmen."
   },
   "threadHole": {
@@ -427,7 +427,7 @@
   "point": {
     "tip": "Einzelner Punkt in der Skizze",
     "hilfe": "Klick setzt einen Punkt. Er bildet keine Fläche, ist aber ein fester Bezug: Maße zu anderen Punkten oder Linien, Regeln wie „Mittig“ oder „Deckungsgleich“. Liegt die Skizze auf einer Körperfläche und enthält nur Punkte, wird beim „Fertig“ an jedem Punkt eine Bohrung gesetzt – Art und Größe wählst du im Bohrungs-Assistenten.",
-    "tipp": "Praktisch für Lochbilder mit genauen Maßen, z. B. 30,5 × 30,5 für einen Stack: vier Punkte setzen, bemaßen, „Fertig“ – fertig sind die vier Schraubenlöcher."
+    "tipp": "Praktisch für Lochbilder mit genauen Maßen, z. B. vier Befestigungslöcher auf einer Platte: vier Punkte setzen, bemaßen, „Fertig“ – fertig sind die vier Schraubenlöcher."
   },
   "chainEdges": {
     "tip": "Kantenkette wählen",
@@ -462,7 +462,7 @@
   "route3d": {
     "tip": "Rohr durch Punkte im Raum – auf Körpern oder frei",
     "hilfe": "Körper → „Rohr im Raum“: Klick nacheinander Punkte an. Auf einem Körper liegt das Rohr auf der Fläche auf, daneben bleibt es auf der Höhe des letzten Punkts. Ziehen dreht die Ansicht wie immer, Rückschritt nimmt den letzten Punkt weg, Enter oder Doppelklick ist fertig. Rechts änderst du jeden Punkt als Zahl, den Durchmesser, die Wand und den Querschnitt. Zwischen zwei Punkten gibt es Regeln wie in einer Skizze, nur im Raum: „entlang X/Y/Z“ legt das Stück genau auf eine Achse, „rechtwinklig“ oder „parallel zum vorigen“ richtet es am Stück davor aus, „Länge“ macht es genau so lang – die Punkte dahinter wandern mit. Ist das Rohr gewählt, steht an jedem Stück seine Länge im Bild – anklicken, Zahl tippen, Enter: dann ist sie fest (🔒). Punkte, die du auf einen Körper klickst, hängen an ihm: Verschiebst oder drehst du den Körper, wandert der Punkt mit („lösen“ rechts macht ihn wieder frei).",
-    "tipp": "Gut für Kabelkanäle, Antennenrohre und Bügel, die um Teile herum laufen. „Gerade Stücke, runde Ecken“ ergibt einen Knick-Verlauf wie bei gebogenem Rohr. Für ein Antennenrohr z. B. das erste Stück „entlang Z“ mit 25 mm Länge, das zweite „entlang Y“ mit 15 mm – dann steht es genau senkrecht und knickt genau nach hinten ab. Eine Länge 0 macht das Stück wieder frei."
+    "tipp": "Gut für Kabelkanäle, Leitungen und Bügel, die um Teile herum laufen. „Gerade Stücke, runde Ecken“ ergibt einen Knick-Verlauf wie bei gebogenem Rohr. Zum Beispiel das erste Stück „entlang Z“ mit 25 mm Länge, das zweite „entlang Y“ mit 15 mm – dann steht es genau senkrecht und knickt genau im rechten Winkel ab. Eine Länge 0 macht das Stück wieder frei."
   },
   "armFairing": {
     "tip": "Stromlinien-Hülle über einen Arm (Speed-Drohne)",
@@ -476,7 +476,7 @@
   },
   "bom": {
     "tip": "Alle Teile mit Anzahl und Gewicht als Liste",
-    "hilfe": "Rechts unter „Projekt“ → „Stückliste“: eine Tabelle mit allen Teilen ganz oben im Verlauf – Name, Anzahl, Art (Kaufteil oder Material) und Gewicht. Gleiche Teile wie „Arm 1“ bis „Arm 4“ stehen in einer Zeile. Ein Klick auf eine Zeile wählt die Teile im Bild aus. Mit „Als Tabelle speichern“ bekommst du eine CSV-Datei, die Excel, Numbers und Google Tabellen öffnen. Darunter steht, wie viele Schrauben, Muttern und Gewindeeinsätze du brauchst – gezählt aus deinen Schraubenlöchern und Lochbildern.",
+    "hilfe": "Rechts unter „Projekt“ → „Stückliste“: eine Tabelle mit allen Teilen ganz oben im Verlauf – Name, Anzahl, Art (Kaufteil oder Material) und Gewicht. Gleiche Teile wie „Fuß 1“ bis „Fuß 4“ stehen in einer Zeile. Ein Klick auf eine Zeile wählt die Teile im Bild aus. Mit „Als Tabelle speichern“ bekommst du eine CSV-Datei, die Excel, Numbers und Google Tabellen öffnen. Darunter steht, wie viele Schrauben, Muttern und Gewindeeinsätze du brauchst – gezählt aus deinen Schraubenlöchern und Lochbildern.",
     "tipp": "Die Liste ist deine Einkaufs- und Wiegeliste: Kaufteile zum Bestellen, Platten zum Fräsen, Druckteile zum Drucken. Steht bei einem Kaufteil „fehlt“, trag sein Gewicht rechts in den Eigenschaften ein."
   },
   "look": {

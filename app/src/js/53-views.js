@@ -476,7 +476,6 @@ const Views = (() => {
       { label: (st.focus ? '✓ ' : '') + 'Fokus-Vorschau', icon: 'focusView', help: 'focusView', run: () => focus() },
       { label: (st.ov ? '✓ ' : '') + 'Überhänge (3D-Druck)', icon: 'overhang', help: 'overhang', run: () => overhang() },
       { label: (st.thin ? '✓ ' : '') + 'Wandstärke (3D-Druck)', icon: 'ruler', help: 'thinWalls', id: 'view-thin', run: () => thin() },
-      { label: (st.wind ? '✓ ' : '') + 'Fahrtwind (Stirnfläche)', icon: 'wind', help: 'wind', run: () => wind() },
       { label: 'Vorführen (Vollbild)', icon: 'play', kbd: 'P', help: 'present', id: 'view-present', run: () => present(true) },
       { label: 'Drehteller-Video …', icon: 'play', help: 'turntable', id: 'view-turntable', run: () => Print.turntableDialog() },
       '-', ...lookItems(),

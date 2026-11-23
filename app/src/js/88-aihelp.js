@@ -65,7 +65,7 @@ const Explain = (() => {
     const f = Model.find(App.doc, info.id); if (!f) return { error: 'Den Schritt gibt es nicht mehr.' };
     const V = Model.vars(App.doc).v;
     const masse = (App.doc.params || []).filter((p) => info.used.includes(p.name)).map((p) => `${p.name} = ${p.expr}${typeof p.expr === 'string' ? ' (= ' + fmt(V[p.name], 2) + ')' : ''}`).join('; ');
-    const prompt = `Du erklärst in Tracery, einem CAD-Programm für FPV-Drohnen, einen Schritt aus dem Modell. Die Leser sind Kinder ab 10 und Drohnenbauer.
+    const prompt = `Du erklärst in Tracery, einem allgemeinen CAD-Programm im Browser, einen Schritt aus dem Modell. Erkläre einfach und verständlich.
 Erkläre auf Deutsch in der Du-Form in 3–5 kurzen Sätzen: was dieser Schritt baut, wofür er in diesem Projekt vermutlich da ist und welche Maße ihn steuern. Erfinde nichts, was nicht in den Daten steht. Gib danach höchstens einen kurzen Tipp, wie man ihn verbessern könnte (oder einen leeren Tipp).
 Antworte NUR mit JSON: {"erklaerung":"…","tipp":"…"}
 
@@ -183,7 +183,7 @@ const Weak = (() => {
       id: g.kind === 'pitch' ? 'hole-pitch' : 'hole-edge', s: g.s, title: g.kind === 'pitch' ? `Löcher nah beieinander – ${plate.name}` : `Löcher nah am Rand – ${plate.name}`,
       text: (g.kind === 'pitch'
         ? `${g.at.length} ${g.at.length === 1 ? 'Loch' : 'Löcher'} (Ø ${fmt(g.d, 1)} mm) mit nur ${fmt(g.val, 1)} mm Steg zum nächsten Loch. Tracery meldet unter ${fmt(RULES.pitch.warn * g.dn, 1)} mm (halber Durchmesser); für belastete Carbon-Verschraubungen empfehlen Hersteller sogar ${fmt(RULES.pitch.rec, 0)} × Durchmesser von Mitte zu Mitte.`
-        : `${g.at.length} ${g.at.length === 1 ? 'Loch' : 'Löcher'} (Ø ${fmt(g.d, 1)} mm) ${g.at.length === 1 ? 'hat' : 'haben'} nur ${fmt(g.val, 1)} mm Material bis zum Rand – da reißt es bei einem Crash zuerst aus. ` +
+        : `${g.at.length} ${g.at.length === 1 ? 'Loch' : 'Löcher'} (Ø ${fmt(g.d, 1)} mm) ${g.at.length === 1 ? 'hat' : 'haben'} nur ${fmt(g.val, 1)} mm Material bis zum Rand – da reißt das Material bei Belastung zuerst aus. ` +
           (g.kind === 'pedge'
             ? `Bei Druckteilen gehören um ein Schraubenloch mindestens ${fmt(g.d < 2.8 ? RULES.printHole.small : RULES.printHole.big, 1)} mm Material.`
             : `Tracery meldet, wenn die Lochmitte näher als ${fmt(RULES.edge.warn, 1)} × Durchmesser am Rand liegt (hier ${fmt(RULES.edge.warn * g.d, 1)} mm); für belastete Carbon-Verschraubungen empfehlen Hersteller ${fmt(RULES.edge.rec, 1)} ×.`)),
@@ -208,7 +208,7 @@ const Weak = (() => {
       const it = App.doc.items.find((x) => x.id === g.id), name = it ? Model.label(it) : 'Teil';
       return {
         id: 'hole-wall', s: g.s, title: `Dünne Wand um ein Loch – ${name}`,
-        text: `${g.at.length} ${g.at.length === 1 ? 'Loch' : 'Löcher'} (Ø ${fmt(g.d, 1)} mm) ${g.at.length === 1 ? 'hat' : 'haben'} an einer Stelle nur etwa ${fmt(g.wall, 1)} mm Material drumherum. Bei Druckteilen gehören um ein Schraubenloch mindestens ${fmt(g.need, 1)} mm – sonst reißt die Schraube beim Anziehen oder bei einem Crash aus. Loch weiter nach innen setzen oder dort mehr Material anbauen.`,
+        text: `${g.at.length} ${g.at.length === 1 ? 'Loch' : 'Löcher'} (Ø ${fmt(g.d, 1)} mm) ${g.at.length === 1 ? 'hat' : 'haben'} an einer Stelle nur etwa ${fmt(g.wall, 1)} mm Material drumherum. Bei Druckteilen gehören um ein Schraubenloch mindestens ${fmt(g.need, 1)} mm – sonst reißt die Schraube beim Anziehen oder bei Belastung aus. Loch weiter nach innen setzen oder dort mehr Material anbauen.`,
         ids: [g.id], at: g.at, r: g.d / 2 + 1,
       };
     });
@@ -319,11 +319,11 @@ const Weak = (() => {
     return box;
   }
   async function askAI(list) {
-    const prompt = `Du bist der Konstruktions-Prüfer in Tracery, einem CAD-Programm für FPV-Drohnen. Die Leser sind Kinder ab 10 und Drohnenbauer.
+    const prompt = `Du bist der Konstruktions-Prüfer in Tracery, einem allgemeinen CAD-Programm im Browser. Erkläre einfach und verständlich.
 Tracery hat mit Faustregeln diese Schwachstellen gefunden (kann auch leer sein):
 ${list.length ? list.map((c, i) => `${i + 1}. [${c.s}] ${c.title}: ${c.text}`).join('\n') : 'keine'}
 
-Aufgabe: Erkläre in 2–4 kurzen Sätzen auf Deutsch (du-Form), was davon am wichtigsten ist und warum. Nenne auch eine weitere Schwachstelle, die du im Modell siehst, falls es eine gibt – erfinde aber keine Zahlen. Mach höchstens 3 konkrete Verbesserungsvorschläge, die sich mit den Aktionen unten umsetzen lassen (am besten über Maße mit op "mass", z. B. Armdicke, Plattenbreite, Bolzenhöhe).
+Aufgabe: Erkläre in 2–4 kurzen Sätzen auf Deutsch (du-Form), was davon am wichtigsten ist und warum. Nenne auch eine weitere Schwachstelle, die du im Modell siehst, falls es eine gibt – erfinde aber keine Zahlen. Mach höchstens 3 konkrete Verbesserungsvorschläge, die sich mit den Aktionen unten umsetzen lassen (am besten über Maße mit op "mass", z. B. Wandstärke, Breite, Dicke).
 Antworte NUR mit JSON: {"antwort":"…","vorschlaege":[{"titel":"kurz, was passiert","aktionen":[…]}]}
 
 AKTIONEN (Format der "aktionen" in jedem Vorschlag):
@@ -339,14 +339,15 @@ ${AI.modelText()}`;
   }
   async function dialog() {
     if (!App.doc.items.length) { UI.toast('Es gibt noch nichts zu prüfen. Bau zuerst etwas.', { icon: 'info' }); return; }
-    const body = h('div', { class: 'chk weak', id: 'weak' }, h('div', { class: 'hint-box' }, 'Suche Schwachstellen … (Löcher, Wände, Arme' + (DroneCheck.isDrone() ? ', Drohnen-Check' : '') + ')'));
+    const body = h('div', { class: 'chk weak', id: 'weak' }, h('div', { class: 'hint-box' }, 'Suche Schwachstellen … (Löcher, Wände, Überhänge' + (DroneCheck.isDrone() ? ', Arme, Drohnen-Check' : '') + ')'));
     const m = UI.modal({ title: 'Schwachstellen', body, wide: true, actions: [{ label: 'Schließen', primary: true }] });
     const list = await analyze();
     const draw = (l) => {
       body.innerHTML = '';
-      if (!l.length) body.append(h('div', { class: 'chk-row ok' }, h('span', { class: 'chk-dot' }, '✓'), h('div', { class: 'grow' }, h('b', null, 'Keine Schwachstellen gefunden'), h('span', null, 'Löcher haben genug Rand, Wände und Arme sind dick genug.'))));
+      if (!l.length) body.append(h('div', { class: 'chk-row ok' }, h('span', { class: 'chk-dot' }, '✓'), h('div', { class: 'grow' }, h('b', null, 'Keine Schwachstellen gefunden'), h('span', null, 'Löcher haben genug Rand und Wände sind dick genug.'))));
       else body.append(rows(l, (c) => { if (!c) { m.close(); setTimeout(dialog, 400); return; } m.close(); show(c); }));
-      body.append(h('div', { class: 'hint-box', html: 'Die Werte sind <b>Faustregeln</b>, keine Festigkeitsberechnung. Grün heißt: nichts Auffälliges – testen musst du trotzdem.<br><small>Quellen: ' + SOURCES.map(([t, u]) => `<a href="${u}" target="_blank" rel="noopener">${esc(t)}</a>`).join(' · ') + '</small>' }));
+      const srcs = DroneCheck.isDrone() ? SOURCES : SOURCES.filter(([, u]) => !/fpvdroneframe/i.test(u));
+      body.append(h('div', { class: 'hint-box', html: 'Die Werte sind <b>Faustregeln</b>, keine Festigkeitsberechnung. Grün heißt: nichts Auffälliges – testen musst du trotzdem.<br><small>Quellen: ' + srcs.map(([t, u]) => `<a href="${u}" target="_blank" rel="noopener">${esc(t)}</a>`).join(' · ') + '</small>' }));
       if (AI.available && window.claude) {
         const aiBox = h('div', { class: 'explain-ai', id: 'weak-ai' });
         const b = h('button', { type: 'button', class: 'btn small', id: 'weak-ask' }); b.innerHTML = icon('spark') + (l.length ? 'Von der KI erklären und verbessern lassen' : 'Die KI nach weiteren Schwachstellen fragen');

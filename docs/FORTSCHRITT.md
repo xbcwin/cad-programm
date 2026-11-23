@@ -310,6 +310,7 @@ Fertig.
 - [x] Explosion auch innerhalb von Gruppen: Häkchen „Gruppen auch zerlegen“ (bei nur einer Gruppe ganz oben von selbst) zeigt jedes Teil einer Gruppe einzeln, samt den Löchern der Gruppe; Klick auf ein Einzelteil wählt das echte Teil; Muster- und Rechen-Gruppen bleiben ganz (Sitzung 53)
 - [x] Gelenke auch zwischen Teilen innerhalb von Gruppen: das Gelenk rechnet im Koordinatensystem der Gruppe, „Bewegung prüfen“ in Weltlage; nicht erlaubt mit der eigenen Gruppe oder in Muster- und Rechen-Gruppen; Abspielen nur ganz oben im Verlauf (Sitzung 52)
 - [x] Ellipse trimmen: Beim Trimmen wird die Ellipse zu einer Spline durch 48 Punkte auf ihr (Abweichung unter 0,2 ‰ des Radius); die Enden sitzen per Regel auf den schneidenden Linien (Sitzung 51)
+- [x] Drohnen-Bereich für Nutzer unsichtbar gemacht: Startseite allgemein („CAD im Browser – kostenlos, ohne Konto“), kein Drohnen-Abschnitt, keine Drohnen-Knöpfe/-Menüeinträge/-Suchtreffer (Frame-Assistent, Drohnen-Check, Fahrtwind, Kaufteile, Verkleidungen …), allgemeine Hilfetexte und Schritt-Erklärungen; Code bleibt für alte Projekte erhalten (Auto [A-001], Abschnitt 4 Punkt 1)
 - [x] Einfache Oberfläche mit größeren Knöpfen: Oberleiste, Kontextleiste, Verlauf, Knöpfe und Kacheln größer, Knöpfe oben mindestens 44 px hoch (Sitzung 50)
 
 ### Stufe 6 – Konten und Zusammenarbeit (Idee, nach dem Drohnen-Modul)

@@ -77,10 +77,10 @@ Regeln:
 - Kaufteile ("kaufteil_g") verschmilzt du nie mit anderen Teilen, außer der Nutzer will das ausdrücklich: sonst stimmt ihr Gewicht nicht mehr.
 - Beziehe dich mit "id" nur auf ids, die im aktuellen Modell stehen. „das“, „es“, „hier“ meint die Auswahl.
 `;
-  const RULES = `Du bist der KI-Kollege in der Web-App „Tracery“, einem CAD-Programm für präzise technische Teile, vor allem für FPV- und Speed-Drohnen. Einheiten: Millimeter. Z zeigt nach oben, die XY-Ebene bei z=0 ist die Grundebene.
+  const RULES = `Du bist der KI-Kollege in der Web-App „Tracery“, einem allgemeinen CAD-Programm im Browser für präzise technische Teile. Einheiten: Millimeter. Z zeigt nach oben, die XY-Ebene bei z=0 ist die Grundebene.
 
 So arbeitest du – wie ein Kollege, der mit am Modell sitzt:
-- Du nimmst auch große Aufträge an („Mach alles als Verbund“, „Richte alles mittig aus“, „Mach die Drohne leichter und prüf sie“) und erledigst sie selbstständig.
+- Du nimmst auch große Aufträge an („Mach alles als Verbund“, „Richte alles mittig aus“, „Prüf das Modell auf Schwachstellen und behebe sie“) und erledigst sie selbstständig.
 - Bei mehr als einem Arbeitsschritt schreibst du einen kurzen Plan (2–6 Punkte) und hakst ab, was erledigt ist.
 - Du arbeitest in Runden: Nach jeder Runde setzt Tracery deine Aktionen um, rechnet das Modell neu und schickt dir eine Rückmeldung (was geklappt hat, Fehler, Prüfergebnisse) und das neue Modell. Setze "weiter": true, wenn danach noch etwas zu tun ist oder du ein Ergebnis (pruefen, schwachstellen) ansehen willst; sonst "weiter": false.
 - Meldet die Rückmeldung FEHLER, behebst du sie in der nächsten Runde (z. B. Radius kleiner, Loch verschieben) oder erklärst, warum es nicht geht.
@@ -175,7 +175,7 @@ Beispiel – Wunsch „Mach alles als Verbund“ (Runde 1):
     const close = h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Schließen' }); close.innerHTML = icon('close');
     close.onclick = () => { if (current) current.stopped = true; if (ctl) ctl.abort(); if (ro) ro.disconnect(); panel.remove(); panel = null; document.documentElement.style.removeProperty('--ai-h'); };
     head.append(t, h('div', { class: 'ai-head-r' }, tg, close)); panel.append(head);
-    panel.append(h('div', { class: 'ai-intro' }, 'Gib mir auch große Aufträge, z. B. „Mach alles als Verbund“ oder „Prüf die Drohne und behebe, was nicht passt“. Ich arbeite sie Schritt für Schritt ab – „Rückgängig“ nimmt danach alles auf einmal zurück.'));
+    panel.append(h('div', { class: 'ai-intro' }, 'Gib mir auch große Aufträge, z. B. „Mach alles als Verbund“ oder „Prüf das Modell auf Schwachstellen und behebe sie“. Ich arbeite sie Schritt für Schritt ab – „Rückgängig“ nimmt danach alles auf einmal zurück.'));
     $('#overlay').append(panel);
     // Meldungen erscheinen über dem Helfer statt darauf
     const ro = window.ResizeObserver ? new ResizeObserver(() => { if (panel) document.documentElement.style.setProperty('--ai-h', panel.offsetHeight + 'px'); }) : null;
