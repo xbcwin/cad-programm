@@ -6335,6 +6335,144 @@ def t_a015_ordner_speichern(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+# ---------- [A-017] Ebene im Winkel und Achsen (BZ-02, BZ-06, BZ-07) ----------
+def t_a017_ebene_winkel_achsen(p):
+    # 1. Ebene 30° an einer Quaderkante (BZ-02)
+    p.empty()
+    p.ev("App.change('x', d=>{ const a=Model.newItem('box',{w:40,d:30,h:10},{name:'Quader'}); d.items.push(a); })"); warte_rechnen(p)
+    ref = p.ev("""const id=App.doc.items[0].id, r=App.results.get(id);
+      const fi=r.data.faces.findIndex(f=>f.t==='PLANE'&&f.n[2]>0.9);
+      const ei=r.data.edges.findIndex(g=>g.t==='LINE'&&Math.abs(g.a[2]-10)<1e-4&&Math.abs(g.b[2]-10)<1e-4);
+      const d=Datums.addEdgeAngle({id,edgeIdx:ei},{id,idx:fi,info:r.data.faces[fi]},30);
+      return {d, ea:r.data.edges[ei].a, eb:r.data.edges[ei].b};""")
+    p.wait(500)
+    d0 = ref['d']
+    pl0 = d0['plane']
+    o0, n0 = pl0['o'], pl0['n']
+    ea, eb = ref['ea'], ref['eb']
+    dot_a = abs(sum((ea[k] - o0[k]) * n0[k] for k in range(3)))
+    dot_b = abs(sum((eb[k] - o0[k]) * n0[k] for k in range(3)))
+    ok1 = (
+        d0['base']['type'] == 'edgeAngle'
+        and dot_a < 1e-4 and dot_b < 1e-4
+        and abs(abs(n0[2]) - math.cos(math.radians(30))) < 1e-4
+        and p.pg.locator('#datum-tree .datum-row').count() == 1
+        and p.ev("return Viewer.groups.datums.children.length") == 1
+    )
+
+    # 2. Quader höher -> Ebene wandert mit; Winkel auf 60° ändern; darauf skizzieren und hochziehen
+    p.ev("App.change('x', d=>{ d.items[0].p.h=20; })"); warte_rechnen(p); p.wait(500)
+    pl_moved = p.ev("return App.doc.datums[0].plane")
+    p.ev("Datums.select(App.doc.datums[0].id)"); p.wait(400)
+    p.pg.fill('#datum-angle', '60'); p.pg.press('#datum-angle', 'Enter'); p.wait(600)
+    pl_60 = p.ev("return App.doc.datums[0].plane")
+    p.pg.locator('#datum-sketch').click(); p.wait(1000)
+    p.ev("Sketch.state.ents.push({id:'r1',type:'rect',a:[-4,-4],b:[4,4]})"); p.wait(200)
+    p.pg.locator('.sketchbar .tool.primary').click(); p.wait(1000)
+    p.pg.locator('.stepbox .btn.primary').click(); p.wait(1200); warte_rechnen(p)
+    ext = p.ev("const it=App.doc.items[App.doc.items.length-1]; return {it, errs:App.errorsFor(it.id).length}")
+    ok2 = (
+        abs(pl_moved['o'][2] - 20) < 1e-4
+        and abs(abs(pl_60['n'][2]) - math.cos(math.radians(60))) < 1e-4
+        and ext['it']['kind'] == 'extrude' and ext['errs'] == 0
+        and abs(abs(ext['it']['p']['sketch']['plane']['n'][2]) - 0.5) < 1e-4
+    )
+
+    # 3. Bezugsachse durch Mitte eines Zylinders -> Kreismuster (BZ-06) + Mitwandern
+    p.ev("Start.newProject(true)"); p.wait(800)
+    p.ev("App.change('x', d=>{ const c=Model.newItem('cylinder',{d:20,h:30},{name:'Zylinder'}); c.t.x=25; c.t.y=10; d.items.push(c); })"); warte_rechnen(p)
+    ax0 = p.ev("""const id=App.doc.items[0].id, r=App.results.get(id);
+      const fi=r.data.faces.findIndex(f=>f.t==='CYLINDRE');
+      return Datums.addAxisFromFace({id,idx:fi,info:r.data.faces[fi]});""")
+    p.wait(500)
+    ax0_ok = (
+        ax0 and ax0['base']['type'] == 'roundFace'
+        and abs(ax0['axis']['o'][0] - 25) < 1e-3 and abs(ax0['axis']['o'][1] - 10) < 1e-3
+        and abs(abs(ax0['axis']['d'][2]) - 1) < 1e-4
+        and p.pg.locator('#axis-tree .axis-row').count() == 1
+        and p.ev("return Viewer.groups.datums.children.length") == 1
+    )
+    p.ev("App.change('x', d=>{ const b=Model.newItem('box',{w:6,d:6,h:6},{name:'Klotz'}); b.t.x=45; b.t.y=10; d.items.push(b); })"); warte_rechnen(p)
+    p.ev("App.select([App.doc.items[1].id]); Features.pattern('circ');"); warte_rechnen(p); p.wait(400)
+    p.pg.select_option('#op-axis', 'da:' + ax0['id']); p.wait(600); warte_rechnen(p)
+    bb1 = p.ev("return App.results.get(App.doc.items[1].id).data.bbox")
+    # Zylinder verschieben -> Bezugsachse und Kreismuster wandern mit
+    p.ev("App.change('x', d=>{ d.items[0].t.x=40; })"); warte_rechnen(p); p.wait(600); warte_rechnen(p)
+    ax0_m = p.ev("return App.doc.axes[0].axis")
+    bb2 = p.ev("return App.results.get(App.doc.items[1].id).data.bbox")
+    ok3 = (
+        ax0_ok
+        and abs(bb1[0] - 2) < 0.2 and abs(bb1[3] - 48) < 0.2
+        and abs(bb1[1] + 13) < 0.2 and abs(bb1[4] - 33) < 0.2
+        and abs(ax0_m['o'][0] - 40) < 1e-3
+        and abs((bb2[0] + bb2[3]) / 2 - 40) < 0.2
+        and abs((bb2[1] + bb2[4]) / 2 - 10) < 0.2
+    )
+
+    # 4. Bezugsachse durch 2 Punkte + Drehen (Revolve, BZ-06)
+    ax1 = p.ev("return Datums.addAxisTwoPoints([10, 0, 0], [10, 20, 0])"); p.wait(400)
+    p.ev("Sketch.startOnPlane('XY')"); p.wait(800)
+    p.ev("Sketch.state.ents.push({id:'r1',type:'rect',a:[15,0],b:[20,10]})"); p.wait(200)
+    p.pg.locator('.sketchbar .tool.primary').click(); p.wait(900)
+    p.pg.locator('.stepbox .role-switch button').nth(1).click(); p.wait(400)
+    p.pg.select_option('#st-axis', 'da:' + ax1['id']); p.wait(400)
+    p.pg.locator('.stepbox .btn.primary').click(); p.wait(1200); warte_rechnen(p)
+    rev = p.ev("""const it=App.doc.items[App.doc.items.length-1];
+      const m=App.results.get(it.id).data.bbox;
+      return Mass.measure().then(r=>{ const pt=Mass.partOf(r,it.id); return {it, m, errs:App.errorsFor(it.id).length, vol:pt&&pt.volume}; });""")
+    vol_rev = rev['vol'] or 0
+    exp_vol = math.pi * (10 ** 2 - 5 ** 2) * 10
+    ok4 = (
+        ax1 and ax1['base']['type'] == 'twoPoints'
+        and abs(ax1['axis']['o'][0] - 10) < 1e-4 and abs(abs(ax1['axis']['d'][1]) - 1) < 1e-4
+        and rev['it']['kind'] == 'revolve' and rev['it']['p'].get('axisId') == ax1['id']
+        and rev['errs'] == 0 and abs(vol_rev - exp_vol) < 5
+        and abs((rev['m'][0] + rev['m'][3]) / 2 - 10) < 0.2
+        and abs((rev['m'][2] + rev['m'][5]) / 2) < 0.2
+    )
+
+    # 5. Bezugsachse senkrecht auf Fläche an Punkt (BZ-07)
+    p.ev("App.change('x', d=>{ const b=Model.newItem('box',{w:30,d:20,h:12},{name:'Block'}); d.items.push(b); })"); warte_rechnen(p)
+    ax2 = p.ev("""const it=App.doc.items[App.doc.items.length-1], r=App.results.get(it.id);
+      const fi=r.data.faces.findIndex(f=>f.t==='PLANE'&&f.n[2]>0.9);
+      return Datums.addAxisNormalAtPoint({id:it.id,idx:fi,info:r.data.faces[fi]}, [10,5,12]);""")
+    p.wait(400)
+    p.ev("App.change('x', d=>{ d.items[d.items.length-1].p.h=24; })"); warte_rechnen(p); p.wait(500)
+    ax2_m = p.ev("return App.doc.axes[2].axis")
+    ok5 = (
+        ax2 and ax2['base']['type'] == 'faceNormal'
+        and abs(ax2['axis']['o'][0] - 10) < 1e-4 and abs(ax2['axis']['o'][1] - 5) < 1e-4
+        and abs(ax2['axis']['o'][2] - 12) < 1e-4 and abs(ax2['axis']['d'][2] - 1) < 1e-4
+        and abs(ax2_m['o'][2] - 24) < 1e-4
+    )
+
+    # 6. Achse umbenennen, ein-/ausblenden, fehlender Bezug + Rückgängig, löschen, Befehle & Hilfe
+    p.ev("Datums.selectAxis(App.doc.axes[0].id)"); p.wait(400)
+    p.pg.fill('#axis-name', 'Zylinderachse'); p.pg.press('#axis-name', 'Enter'); p.wait(400)
+    p.pg.locator('#axis-hide').click(); p.wait(300)
+    hidden_ok = p.ev("return App.doc.axes[0].hidden") is True and p.pg.locator('#axis-tree .axis-row.dim').count() == 1
+    p.pg.locator('#axis-hide').click(); p.wait(300)
+    p.ev("App.change('weg', d=>{ d.items.splice(0,1); })"); warte_rechnen(p); p.wait(400)
+    lost_ok = 'Bezug fehlt' in p.pg.locator('#axis-tree').inner_text()
+    p.ev("App.undo()"); warte_rechnen(p); p.wait(400)
+    restored_ok = 'Bezug fehlt' not in p.pg.locator('#axis-tree').inner_text()
+    p.ev("Datums.selectAxis(App.doc.axes[0].id)"); p.wait(400)
+    p.pg.locator('#axis-del').click(); p.wait(400)
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    cmd_ids_ax = p.ev("return Commands.search('Bezugsachse').map(c=>c.id)")
+    cmd_ids_ang = p.ev("return Commands.search('Winkel').map(c=>c.id)")
+    ok6 = (
+        hidden_ok and lost_ok and restored_ok
+        and p.ev("return App.doc.axes[0].name") != 'Zylinderachse'
+        and p.ev("return App.doc.axes.length") == 2
+        and 'datum-axis' in cmd_ids_ax and 'datum-edge-angle' in cmd_ids_ang
+        and 'datumEdgeAngle' in hilfen and 'datumAxis' in hilfen
+        and all(k in hilfen['datumEdgeAngle'] for k in ('tip', 'hilfe', 'tipp'))
+        and all(k in hilfen['datumAxis'] for k in ('tip', 'hilfe', 'tipp'))
+    )
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -6449,6 +6587,7 @@ TESTS = [
     ('[A-012] Messungen bleiben stehen: Abstand behalten / Quader höher / ein- und ausblenden / umbenennen / verloren & Rückgängig / löschen', t_a012_messungen_bleiben),
     ('[A-013] Schnitt mit Kappe und mehreren Ebenen: Würfel mit Loch / X und Y gleichzeitig / alle drei Ebenen & Kreisloch / Kappe an-aus / sauber beendet', t_a013_schnitt_kappe_mehrfach),
     ('[A-015] Projekt in Ordner speichern: ohne API ausgeblendet / Ordner wählen & Anzeige / 10 s gebündelt / Trennen & Projektwechsel / Hilfe', t_a015_ordner_speichern),
+    ('[A-017] Ebene im Winkel und Bezugsachsen: 30° an Quaderkante / Achse durch Zylinder → Kreismuster / Drehen um Bezugsachse / 2 Punkte & senkrecht auf Fläche', t_a017_ebene_winkel_achsen),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
