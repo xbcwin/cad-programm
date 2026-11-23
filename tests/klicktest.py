@@ -515,7 +515,7 @@ def t_kollege_herstellerrahmen(p):
     ki_fragen(p, 'Bau mir den AOS HS5 nach', {'antwort': 'Ich baue den AOS RC HS5 nach.', 'aktionen': [{'op': 'drohne', 'rahmen': 'HS5 High-Speed'}, {'op': 'pruefen'}]}, 120)
     ok1 = p.ev("return App.doc.drone && App.doc.drone.form==='speed' && App.doc.drone.frame && App.doc.drone.frame.hersteller==='AOS RC' && App.doc.drone.frame.a===233") and p.ev("return App.doc.params.find(x=>x.name==='Achsabstand').expr") >= 233
     pr = p.ev("return window.__aiPrompts[0] || ''")
-    ok2 = 'Source One V5' in pr and '"speed"' in pr and p.ev("return App.errors.length") == 0
+    ok2 = 'Source One V5' not in pr and '"op":"drohne"' not in pr and p.ev("return App.errors.length") == 0
     return [ok1, ok2]
 
 
@@ -5129,6 +5129,72 @@ def t_a001_drohnen_unsichtbar(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+# ---------- [A-002] KI-Kollege allgemein ----------
+def t_a002_ki_allgemein(p):
+    ki(p); p.empty()
+    # 1. Systemtext (RULES und ACTIONS) ohne Drohnen-/FPV-Bezug, mit allgemeinen CAD-Themen
+    rules = p.ev("return AI.RULES").lower()
+    actions = p.ev("return AI.ACTIONS").lower()
+    forbidden = ['drohne', 'fpv', 'propeller', 'cinewhoop', 'deadcat', 'gopro', 'xt60', 'source one', '"op":"drohne"', '"op":"pruefen"']
+    ok1 = (all(w not in rules for w in forbidden)
+           and all(w not in actions for w in forbidden)
+           and all(w in rules for w in ['gehäuse', 'halterung', 'ersatzteil', 'schild', 'zahnrad', 'stdscrew']))
+    # 2. Vorschläge und Intro-Panel allgemein ohne Drohne/FPV
+    sugs = p.ev("AI.open(); return AI.SUGGESTIONS")
+    intro_txt = (p.pg.locator('.ai-intro').text_content() or '').lower()
+    sug_btns = p.pg.locator('.ai-intro button[data-sug-prompt]').count()
+    ok2 = (len(sugs) >= 4 and sug_btns == len(sugs)
+           and all('drohne' not in s.lower() and 'fpv' not in s.lower() for s in sugs)
+           and 'drohne' not in intro_txt and 'fpv' not in intro_txt
+           and 'gehäuse' in intro_txt)
+    # 3. Vorbereiteter KI-Auftrag „Baue ein Gehäuse 60×40×30 mit Deckel“ über window.__aiQueue
+    q = 'Baue ein Gehäuse 60×40×30 mit Deckel'
+    ki_fragen(p, q, {
+        'antwort': 'Ich habe dir ein Gehäuse 60 × 40 × 30 mm mit 2 mm Wandstärke und einen passenden Deckel daneben gebaut.',
+        'aktionen': [
+            {'op': 'mass', 'name': 'Breite', 'wert': '60'},
+            {'op': 'mass', 'name': 'Tiefe', 'wert': '40'},
+            {'op': 'mass', 'name': 'Hoehe', 'wert': '30'},
+            {'op': 'mass', 'name': 'Wand', 'wert': '2'},
+            {'op': 'hinzufuegen', 'objekt': {'art': 'group', 'name': 'Gehäuse', 'kinder': [
+                {'art': 'box', 'name': 'Außen', 'p': {'w': 'Breite', 'd': 'Tiefe', 'h': 'Hoehe'}, 'rundungen': [{'typ': 'fillet', 'r': 3, 'kanten': 'vertical'}]},
+                {'art': 'box', 'name': 'Innenraum', 'rolle': 'loch', 'p': {'w': 'Breite - 2*Wand', 'd': 'Tiefe - 2*Wand', 'h': 'Hoehe'}, 't': {'z': 'Wand'}}
+            ], 't': {'x': '-(Breite/2 + 8)'}}},
+            {'op': 'hinzufuegen', 'objekt': {'art': 'group', 'name': 'Deckel', 'kinder': [
+                {'art': 'box', 'name': 'Deckelplatte', 'p': {'w': 'Breite', 'd': 'Tiefe', 'h': 'Wand'}, 'rundungen': [{'typ': 'fillet', 'r': 3, 'kanten': 'vertical'}]},
+                {'art': 'box', 'name': 'Steg', 'p': {'w': 'Breite - 2*Wand - 0.4', 'd': 'Tiefe - 2*Wand - 0.4', 'h': 3}, 't': {'z': 'Wand'}},
+                {'art': 'box', 'name': 'Steg innen', 'rolle': 'loch', 'p': {'w': 'Breite - 4*Wand - 0.4', 'd': 'Tiefe - 4*Wand - 0.4', 'h': 3.5}, 't': {'z': 'Wand'}}
+            ], 't': {'x': 'Breite/2 + 8'}}}
+        ],
+        'weiter': False,
+    }, 90)
+    info = p.ev("""const g=App.doc.items.find(i=>i.name==='Gehäuse'), d=App.doc.items.find(i=>i.name==='Deckel');
+      const bg=g && Actions.worldBox(g.id), bd=d && Actions.worldBox(d.id);
+      return {
+        errs: App.errors.length,
+        names: App.doc.items.map(i=>i.name),
+        ai: App.doc.items.every(i=>i.ai && i.ai.q===arg),
+        params: App.doc.params.map(x=>[x.name, x.expr]),
+        gSize: bg ? [bg.max.x-bg.min.x, bg.max.y-bg.min.y, bg.max.z-bg.min.z] : null,
+        dSize: bd ? [bd.max.x-bd.min.x, bd.max.y-bd.min.y, bd.max.z-bd.min.z] : null,
+        gap: (bg && bd) ? bd.min.x - bg.max.x : -1
+      }""", q)
+    vols = p.ev("return Mass.measure().then(r=>r.parts.map(x=>x.volume))")
+    ok3 = (info['errs'] == 0 and info['names'] == ['Gehäuse', 'Deckel'] and info['ai']
+           and info['params'] == [['Breite', 60], ['Tiefe', 40], ['Hoehe', 30], ['Wand', 2]]
+           and info['gSize'] is not None and near(info['gSize'], [60, 40, 30], 0.1)
+           and info['dSize'] is not None and near(info['dSize'], [60, 40, 5], 0.1)
+           and info['gap'] > 10
+           and len(vols) == 2 and vols[0] < 60 * 40 * 30 * 0.5
+           and p.pg.locator('.tl-chip.ai').count() == 2)
+    # 4. Tatsächlich gesendeter Prompt enthält kein Drohne/FPV und keine Drohnen-Kaufteile; Rückgängig nimmt alles zurück
+    sent = (p.ev("return window.__aiPrompts[0] || ''") or '').lower()
+    p.pg.locator('.ai-msg.ai').last.get_by_role('button', name='Rückgängig').click(); warte_rechnen(p, 20)
+    ok4 = (all(w not in sent for w in ['drohne', 'fpv', 'dji o3', 'source one', 'walksnail'])
+           and p.ev("return App.doc.items.length") == 0 and p.ev("return App.doc.params.length") == 0)
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -5228,6 +5294,7 @@ TESTS = [
     ('Studio-Look: Werkstoff-Aussehen / Schatten / eigene Farbe / Farbe vom Werkstoff / Ton, einfach, Licht, Schatten aus / Bild 4K durchsichtig', t_studio_look),
     ('Formschritte mit Modus: eigener Körper / Abziehen / im Verlauf markiert / Vereinigen / Schnittmenge / zurück und Rückgängig / Ziel zu spät', t_koerper_modus),
     ('[A-001] Drohnen-Bereich unsichtbar: Startseite / Menüs und Bibliothek / Befehlssuche / Über-Dialog / altes Projekt mit buyMotor', t_a001_drohnen_unsichtbar),
+    ('[A-002] KI-Kollege allgemein: Systemtext ohne Drohne/FPV / Vorschläge / Auftrag Gehäuse 60×40×30 mit Deckel / Prompt & Rückgängig', t_a002_ki_allgemein),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

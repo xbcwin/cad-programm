@@ -489,6 +489,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Alte Projekte**: Projektdatei mit einem `buyMotor`-Teil öffnet und rechnet ohne Fehler, ohne Drohnen-Panel rechts.
 - [ ] **Von Hand**: Ein echtes altes Drohnen-Projekt aus der Datei öffnen, ansehen, ein Maß ändern und prüfen, ob alles sauber rechnet und nirgends störende Drohnen-Texte auftauchen.
 
+## KI-Kollege allgemein (Auto [A-002])
+
+- [x] **Systemtext ohne Drohne/FPV**: `AI.RULES` und `AI.ACTIONS` enthalten keine Drohnen-/FPV-Begriffe und bieten weder `drohne` noch `pruefen` oder Drohnen-Bausteine an; allgemeine CAD-Beispiele und Normteile (`stdScrew`, `stdNut`, `stdWasher`) sind enthalten.
+- [x] **Vorschläge**: `AI.SUGGESTIONS` und das Intro-Panel (`AI.open()`) zeigen allgemeine CAD-Vorschläge (Gehäuse, Halterung, Schild, Zahnrad, Schwachstellen) ohne Drohnen-Bezug.
+- [x] **Auftrag „Baue ein Gehäuse 60×40×30 mit Deckel“**: Wird über `window.__aiQueue` fehlerfrei mit benannten Maßen (`Breite`, `Tiefe`, `Hoehe`, `Wand`), hohlem Gehäuse (60 × 40 × 30 mm) und passendem Deckel umgesetzt; der gesendete Prompt ist frei von Drohnen-/FPV-Texten und Rückgängig nimmt alles auf einmal zurück.
+- [x] **Abwärtskompatibilität**: Die Aktion `drohne` bleibt technisch erhalten und baut bestehende Drohnen-Aufträge weiter ohne Fehler.
+- [ ] **Von Hand**: In Claude einen echten freien CAD-Auftrag (z. B. „Baue ein Gehäuse 60×40×30 mit Deckel“ oder „Bau eine Wandhalterung für ein Kabel mit zwei M4-Löchern“) eintippen und prüfen, ob Antwort und Ergebnis stimmig und frei von Drohnen-Sprache sind.
+
 ## Maße als Tabelle (neu in Sitzung 114)
 
 - [x] **Tabelle**: Rechteck und Kreis mit drei Maßen → drei Zeilen („Rechteck 1“, „Kreis 1“); Breite 45 eintippen → Rechteck 45 mm breit, Tabelle bleibt offen.

@@ -111,7 +111,7 @@ Leitlinien:
 | `59-versions.js` | Versionen |
 | `60-print.js` | Export (STEP, STL, DXF) |
 | `70-drawing.js` | technische Zeichnung, PDF |
-| `80-ai.js` | KI-Kollege |
+| `80-ai.js` | KI-Kollege (`AI.RULES`, `AI.ACTIONS`, `AI.SUGGESTIONS`, `AI.open` – allgemeines CAD ohne Drohnen-Bezug; `drohne`-Aktion technisch erhalten) |
 | `84-drone.js` | Rahmen-Generator, Frame-Assistent, Bausätze |
 | `85-start.js` | Startseite, Öffnen, Import |
 | `86-dronecheck.js` | Drohnen-Check |
@@ -279,8 +279,8 @@ Leitlinien:
 - Platten als DXF für die Fräse
 
 **KI**
-- **KI-Kollege** (über `sample`): arbeitet in Runden mit JSON-Aktionen (hinzufuegen, aendern, muster rechteck/kreis/kurve inkl. Achse, spiegeln, verbinden, …), bessert Fehler selbst nach und fasst alles zu einem Rückgängig-Schritt zusammen.
-- Er kennt alle Formen, Bauteile, Herstellerrahmen und die neuen Bausteine, dazu Übergang mit `mittellinie`, `fuehrungskurve` und `fuehrungskurve2`, Rohr mit `pfad3d` und `regeln`, Text mit `bogen` und `entlang`, Drohnenform `h` und die Aktion `gelenk`.
+- **KI-Kollege** (über `sample`): allgemeiner CAD-Helfer (Gehäuse, Halterungen, Ersatzteile, Schilder, Zahnräder, Normteile), arbeitet in Runden mit JSON-Aktionen (`hinzufuegen`, `aendern`, `muster` rechteck/kreis/kurve inkl. Achse, `spiegeln`, `verbinden`, `verrechnen`, `gelenk`, …), bessert Fehler selbst nach und fasst alles zu einem Rückgängig-Schritt zusammen.
+- Er kennt alle Grundformen, allgemeinen Bauteile und Normteile (`stdScrew`, `stdNut`, `stdWasher`), dazu Übergang mit `mittellinie`, `fuehrungskurve` und `fuehrungskurve2`, Rohr mit `pfad3d` und `regeln` sowie Text mit `bogen` und `entlang`. Die Aktion `drohne` bleibt technisch erhalten, wird im Systemtext aber nicht mehr angeboten.
 - „Erklär diesen Schritt“.
 - **Schwachstellen-Analyse:**
   - Löcher zu nah am Rand oder aneinander

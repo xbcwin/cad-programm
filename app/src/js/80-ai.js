@@ -1,14 +1,20 @@
 // ================= KI-Kollege: baut, ändert und prüft Modelle – auch große Aufträge in mehreren Runden =================
-// Ein Auftrag („Mach alles als Verbund“, „Prüf die Drohne und behebe, was nicht passt“) läuft so:
-// 1. Die KI plant und schickt Aktionen. 2. Tracery setzt sie um, rechnet und sammelt die Rückmeldung (Fehler, Check, Schwachstellen).
+// Ein Auftrag („Baue ein Gehäuse 60×40×30 mit Deckel“, „Mach alles als Verbund“, „Prüf das Modell auf Schwachstellen und behebe sie“) läuft so:
+// 1. Die KI plant und schickt Aktionen. 2. Tracery setzt sie um, rechnet und sammelt die Rückmeldung (Fehler, Schwachstellen).
 // 3. Die KI sieht das neue Modell und macht weiter – bis sie fertig ist (höchstens MAX_ROUNDS Runden).
 // Der ganze Auftrag ist danach EIN Rückgängig-Schritt. Rückfragen der KI erscheinen mit Antwort-Knöpfen.
 const AI = (() => {
   let panel = null, ctl = null, history = [], off = false, current = null;
   const MAX_ROUNDS = 5, AUTO_KEY = 'tracery.ai.auto';
   const auto = () => storageGet(AUTO_KEY) !== '0';
-  const FRAMES = DroneLib.frames().map((f) => `${f.hersteller} ${f.name}`).join(', ');
   const norm = (t) => String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  const SUGGESTIONS = [
+    'Baue ein Gehäuse 60×40×30 mit Deckel',
+    'Bau eine Winkel-Halterung mit M4-Schraubenlöchern',
+    'Erstelle ein Schild 80×30 mit graviertem Text „WERKSTATT“',
+    'Bau ein Zahnrad mit 24 Zähnen und 6 mm Bohrung',
+    'Prüf das Modell auf Schwachstellen und behebe sie',
+  ];
   const ACTIONS = `Aktionen:
 {"op":"hinzufuegen","objekt":OBJEKT,"in":"<id einer Gruppe, optional>"}
 {"op":"aendern","id":"<id>","setze":{"name":"…","rolle":"koerper"|"loch","p":{…},"t":{…},"farbe":"#RRGGBB"}}
@@ -35,15 +41,12 @@ const AI = (() => {
 {"op":"ausblenden","ids":"…"} · {"op":"einblenden","ids":"…"} · {"op":"unterdruecken","ids":"…"} · {"op":"aktivieren","ids":"…"}
 {"op":"material","id":"<id>","material":"<Kürzel aus MATERIALIEN>"}
 {"op":"verrechnen","ids":"…","modus":"vereinigen"|"abziehen"|"schnittmenge"|"eigener","ziel":"<id oder name:…>"}   (Teile ganz oben; das Ziel muss im Verlauf vorher kommen; abziehen schneidet nur aus dem Ziel, anders als rolle loch)
-{"op":"gewicht","id":"<id>","g":33.8}   (Kaufteil mit festem Gewicht aus dem Datenblatt)
-{"op":"kaufteil","name":"<Name aus KAUFTEILE>","t":{"x":0,"y":0,"z":0}}   (Kaufteil in echter Form mit Maßen und Gewicht aus der Bibliothek)
-{"op":"drohne","zoll":5,"form":"x"|"stretch"|"wide"|"deadcat"|"h"|"cine"|"speed","video":"analog"|"o3"|"o4"|"o4pro"|"walksnail"|"hdzero"|"none","motor":"2207","akku":"6S 1300 mAh","neigung":20,"rahmen":"Source One V5","arme":"einzeln"}   (baut mit dem Frame-Assistenten einen kompletten Rahmen als NEUES Projekt; nur wenn ausdrücklich ein neuer Rahmen gewünscht ist. zoll: 3, 3.5, 4, 5, 6 oder 7. cine = Cinewhoop mit Ducts, speed = Speed-Drohne mit Stromlinien-Rumpf (Akku innen, Motoren um "neigung" Grad nach vorne geneigt, Standard 20). "rahmen" nur für den Nachbau eines Herstellerrahmens: ${FRAMES}. "arme": "einzeln" baut bei x, stretch und wide vier einzelne Arme mit Bodenplatte (Sandwich, Arme lassen sich einzeln tauschen))
-{"op":"pruefen"}   (Drohnen-Check: Propeller, Teile, Gewicht, Schwerpunkt, Schub – das Ergebnis bekommst du als Rückmeldung)
-{"op":"schwachstellen"}   (sucht Schwachstellen: Lochrand, dünne Wände, Armdicke – das Ergebnis bekommst du als Rückmeldung)
+{"op":"gewicht","id":"<id>","g":33.8}   (Teil mit festem Gewicht, z. B. Kaufteil aus einem Datenblatt)
+{"op":"schwachstellen"}   (sucht Schwachstellen: Lochrand, dünne Wände, Überhänge – das Ergebnis bekommst du als Rückmeldung)
 {"op":"auswaehlen","ids":"…"}   (wählt am Ende diese Teile aus, damit der Nutzer sie gleich sieht)
 
 TEILE ANSPRECHEN – überall, wo "id" oder "ids" steht, geht auch:
-"alle" (alle sichtbaren Teile der obersten Ebene) · "auswahl" (was der Nutzer beim Auftrag ausgewählt hatte) · "koerper" · "loecher" · "kaufteile" · "neu" (was du in diesem Auftrag gebaut hast) · "name:Arm" (Name enthält „Arm“) · oder eine Liste, z. B. ["name:Platte","<id>"].
+"alle" (alle sichtbaren Teile der obersten Ebene) · "auswahl" (was der Nutzer beim Auftrag ausgewählt hatte) · "koerper" · "loecher" · "kaufteile" · "neu" (was du in diesem Auftrag gebaut hast) · "name:Deckel" (Name enthält „Deckel“) · oder eine Liste, z. B. ["name:Platte","<id>"].
 
 OBJEKT:
 {"art":"box|cylinder|tube|sphere|hemisphere|cone|pyramid|torus|prism|wedge|extrude|loft|sweep|part|group","name":"…","rolle":"koerper"|"loch","p":{…},"t":{"x":0,"y":0,"z":0,"rx":0,"ry":0,"rz":0},"farbe":"#RRGGBB","kinder":[OBJEKT…],"rundungen":[{"typ":"fillet","r":2,"kanten":"vertical"}]}
@@ -53,17 +56,16 @@ Parameter p (alle Grundkörper stehen mit der Unterseite auf z=0 ihres eigenen S
 - cylinder: d, h · tube: d (außen), wall, h · sphere: d · hemisphere: d · cone: d1 (unten), d2 (oben, 0 = Spitze), h
 - pyramid: w, d, h · torus: d (außen), t (Ringdicke) · prism: n (Ecken), d (Umkreis), h · wedge: w, d, h (die Schräge fällt zur +X-Seite ab)
 - extrude: {"ebene":"XY"|"XZ"|"YZ","versatz":0,"hoehe":10,"richtung":"normal"|"reverse"|"both","form":[ELEMENT…]}
-  ELEMENT (2D in mm): {"rect":[x1,y1,x2,y2]} · {"circle":[cx,cy,r]} · {"ellipse":[cx,cy,rx,ry]} · {"poly":[[x,y],[x,y],…]} (geschlossener Linienzug) · {"slot":[x1,y1,x2,y2,r]} · {"text":"FPV","x":0,"y":0,"hoehe":5,"fett":true,"mitte":true,"drehung":0,"bogen":0} (Schrift als Umriss; in einem Rechteck = Gravur; "bogen" = Radius in mm, die Grundlinie läuft dann auf einem Kreis – positiv wölbt sich der Text nach oben, Mitte des Kreises bei (x, y − bogen); so läuft Schrift am Rand einer runden Platte entlang; "entlang":[[x,y],…] legt den Text mittig auf eine Kurve durch diese Punkte (als Hilfslinie), "andereSeite": true auf ihre andere Seite)
+  ELEMENT (2D in mm): {"rect":[x1,y1,x2,y2]} · {"circle":[cx,cy,r]} · {"ellipse":[cx,cy,rx,ry]} · {"poly":[[x,y],[x,y],…]} (geschlossener Linienzug) · {"slot":[x1,y1,x2,y2,r]} · {"text":"TRACERY","x":0,"y":0,"hoehe":5,"fett":true,"mitte":true,"drehung":0,"bogen":0} (Schrift als Umriss, z. B. für Schilder; in einem Rechteck = Gravur; "bogen" = Radius in mm, die Grundlinie läuft dann auf einem Kreis – positiv wölbt sich der Text nach oben, Mitte des Kreises bei (x, y − bogen); so läuft Schrift am Rand einer runden Platte entlang; "entlang":[[x,y],…] legt den Text mittig auf eine Kurve durch diese Punkte (als Hilfslinie), "andereSeite": true auf ihre andere Seite)
   Ebene XY: u=X, v=Y, hoch in +Z. Ebene XZ: u=X, v=Z, hoch in −Y. Ebene YZ: u=Y, v=Z, hoch in +X. „versatz“ verschiebt die Ebene entlang dieser Richtung. Formen, die ganz in einer anderen liegen, werden zu Löchern darin.
-- loft (Übergang durch Umrisse): {"profile":[{"ebene":"XY","versatz":0,"form":[ELEMENT]},{"ebene":"XY","versatz":30,"form":[ELEMENT]}],"spitze":0,"gerade":false,"mittellinie":{"ebene":"XZ","versatz":0,"kurve":[KURVENSTÜCK…]}} – mit "spitze" > 0 läuft der Körper hinter dem letzten Profil zu einer Spitze zusammen (auch mit nur einem Profil). "mittellinie" (optional, ab zwei Profilen) biegt den Übergang: eine offene Kurve in einer Ebene (Kurvenstücke wie bei „muster kurve“: linie/bogen/spline), die vom ersten Profil durch alle bis zum letzten läuft – die Profile bleiben, wo sie sind. In der Ebene XZ ist die 2. Koordinate z, in YZ ist die 1. y und die 2. z. Statt "mittellinie" geht "fuehrungskurve" (gleicher Aufbau): eine Seitenlinie neben den Profilen, vom ersten bis zum letzten – der Übergang wird dazwischen so weit, dass er sie berührt (z. B. ein bauchiger Rumpf). Dazu passt "fuehrungskurve2" (gleicher Aufbau) in einer Ebene quer zur ersten (erste in YZ → zweite in XY): sie gibt die Breite in der anderen Richtung vor – so formst du einen Rumpf von der Seite und von oben.
-- sweep (Querschnitt entlang Pfad): {"ebene":"XY","versatz":0,"pfad":[[x,y],…],"glatt":false,"form":"rund"|"rechteck","d":6,"w":6,"h":4,"wand":0} – Rohr, Kabelkanal, Bügel; "glatt": true macht aus den Punkten eine Spline. Statt "ebene"/"pfad" geht auch "pfad3d":[[x,y,z],…] – ein Rohr durch Punkte im Raum (glatt, außer "glatt": false), z. B. ein Kabelkanal, der um Teile herum und nach oben läuft. Dazu optional "regeln":[{"achse":"z","laenge":20},null,…] – je Stück (von Punkt i zu i+1): genau entlang einer Achse ("achse": "x"|"y"|"z", ab dem zweiten Stück auch "rechtwinklig" oder "parallel" zum vorigen) und/oder mit fester Länge (auch eine Formel); die Punkte dahinter wandern mit.
+- loft (Übergang durch Umrisse): {"profile":[{"ebene":"XY","versatz":0,"form":[ELEMENT]},{"ebene":"XY","versatz":30,"form":[ELEMENT]}],"spitze":0,"gerade":false,"mittellinie":{"ebene":"XZ","versatz":0,"kurve":[KURVENSTÜCK…]}} – mit "spitze" > 0 läuft der Körper hinter dem letzten Profil zu einer Spitze zusammen (auch mit nur einem Profil). "mittellinie" (optional, ab zwei Profilen) biegt den Übergang: eine offene Kurve in einer Ebene (Kurvenstücke wie bei „muster kurve“: linie/bogen/spline), die vom ersten Profil durch alle bis zum letzten läuft – die Profile bleiben, wo sie sind. In der Ebene XZ ist die 2. Koordinate z, in YZ ist die 1. y und die 2. z. Statt "mittellinie" geht "fuehrungskurve" (gleicher Aufbau): eine Seitenlinie neben den Profilen, vom ersten bis zum letzten – der Übergang wird dazwischen so weit, dass er sie berührt (z. B. ein bauchiger Griff oder ein Übergang). Dazu passt "fuehrungskurve2" (gleicher Aufbau) in einer Ebene quer zur ersten (erste in YZ → zweite in XY): sie gibt die Breite in der anderen Richtung vor – so formst du einen Körper von der Seite und von oben.
+- sweep (Querschnitt entlang Pfad): {"ebene":"XY","versatz":0,"pfad":[[x,y],…],"glatt":false,"form":"rund"|"rechteck","d":6,"w":6,"h":4,"wand":0} – Rohr, Kabelkanal, Bügel; "glatt": true macht aus den Punkten eine Spline. Statt "ebene"/"pfad" geht auch "pfad3d":[[x,y,z],…] – ein Rohr durch Punkte im Raum (glatt, außer "glatt": false), z. B. ein Kabelkanal oder Bügel, der um Teile herum und nach oben läuft. Dazu optional "regeln":[{"achse":"z","laenge":20},null,…] – je Stück (von Punkt i zu i+1): genau entlang einer Achse ("achse": "x"|"y"|"z", ab dem zweiten Stück auch "rechtwinklig" oder "parallel" zum vorigen) und/oder mit fester Länge (auch eine Formel); die Punkte dahinter wandern mit.
 - part (Bauteile, Öffnung zeigt nach +Z, Tiefe geht nach −Z; setze z auf die Oberfläche):
-  {"lib":"screwHole","size":"M2|M2.5|M3|M4|M5|M6|M8","head":"countersunk|counterbore|none","length":10} (rolle loch)
-  {"lib":"nutTrap","size":"M3","length":12} (loch) · {"lib":"insert","size":"M3"} (loch, Gewindeeinsatz) · {"lib":"slotHole","len":20,"w":4.5,"depth":10} (loch)
-  {"lib":"holePattern","pat":"stack305|stack255|stack20|stack16|motor19|motor16|motor12|motor9","size":"M3","depth":10} (loch, vier Löcher für Stack oder Motor um die Mitte) · {"lib":"zipTie","w":3,"gap":6,"depth":10} (loch, zwei Kabelbinder-Schlitze)
+  {"lib":"screwHole","size":"M1.6|M2|M2.5|M3|M4|M5|M6|M8","head":"countersunk|counterbore|none","length":10} (rolle loch)
+  {"lib":"nutTrap","size":"M3","length":12} (loch) · {"lib":"insert","size":"M3"} (loch, Gewindeeinsatz) · {"lib":"slotHole","len":20,"w":4.5,"depth":10} (loch) · {"lib":"zipTie","w":3,"gap":6,"depth":10} (loch, zwei Kabelbinder-Schlitze)
   {"lib":"threadRod","size":"M3…M16","length":12} (koerper, echtes Außengewinde) · {"lib":"threadHole","size":"M4…M16","length":10,"clear":0.3} (loch, gedrucktes Innengewinde)
-  {"lib":"snapHook","length":12,"w":8,"t":1.6,"hook":1.2} (koerper) · {"lib":"hinge","len":40,"w":15,"t":2.4,"gap":0.4} (koerper) · {"lib":"gear","teeth":20,"module":1.5,"h":6,"bore":5} (koerper)
-  {"lib":"goproMount","n":"3","hz":9} (koerper, GoPro-Finger mit M5-Loch auf einer Platte; "2" Finger für die Gegenseite) · {"lib":"xt60Holder","w":15.5,"h":8.1,"ea":26} (koerper, Platte mit Ausschnitt für einen Akkustecker und zwei Schraubenlöchern) · {"lib":"antennaMount","n":"2","di":3.5,"len":20,"spread":90,"lean":30} (koerper, Röhrchen für Antennen, V-förmig) · {"lib":"armFairing","len":60,"aw":14,"at":5,"wall":1,"chord":0} (koerper, Stromlinien-Hülle über einen Arm, liegt längs X mit Nase nach −Y – auf den Arm drehen und schieben) · {"lib":"motorFairing","d":28,"h":18,"tail":30,"aw":12,"at":5,"wall":1.2} (koerper, Stromlinien-Becher um einen Motor: Motorfuß auf z = 0, Heck nach unten, Arm-Schlitz nach +X – auf die Motormitte setzen und um Z zum Arm drehen)
+  {"lib":"stdScrew","size":"M1.6…M8","head":"zyl|senk","length":10} (koerper, Normschraube) · {"lib":"stdNut","size":"M3"} (koerper, Mutter) · {"lib":"stdWasher","size":"M3"} (koerper, Scheibe)
+  {"lib":"snapHook","length":12,"w":8,"t":1.6,"hook":1.2} (koerper) · {"lib":"hinge","len":40,"w":15,"t":2.4,"gap":0.4} (koerper) · {"lib":"gear","teeth":20,"module":1.5,"h":6,"bore":5} (koerper, Zahnrad)
 - rundungen: typ "fillet" (Rundung), "chamfer" (Fase) oder "draft" (Entformungsschräge, r = Winkel in Grad, neigt alle senkrechten Seitenwände)
 - group: {"kinder":[…]} – Kinder mit rolle "loch" werden aus den Kindern mit rolle "koerper" geschnitten. t der Kinder ist relativ zur Gruppe.
 
@@ -73,16 +75,16 @@ Regeln:
 - Lege Teile auf z=0, sofern nichts anderes gewünscht ist. Maße exakt übernehmen, nicht runden. Für Schrauben nimm part screwHole.
 - Zahlenwerte dürfen Formeln mit Maß-Namen sein, z. B. "Breite/2+3". Lege bei neuen Teilen für die 2–4 wichtigsten Größen Maße an (op "mass") und nutze sie.
 - Neue Teile nicht in bestehende hineinsetzen: stelle sie daneben – "lage" im Modell sagt dir, wo jedes Teil liegt (min/max in mm). Ausnahme: der Wunsch ist ausdrücklich eine Änderung am Bestehenden.
-- Bei Drohnen (siehe "drohne" im Modell) änderst du Größen am besten über die Maße (op "mass"), z. B. Achsabstand, Armdicke, Bolzenhöhe, Motorneigung – dann wandert alles mit. Vorne ist −Y.
-- Kaufteile ("kaufteil_g") verschmilzt du nie mit anderen Teilen, außer der Nutzer will das ausdrücklich: sonst stimmt ihr Gewicht nicht mehr.
+- Hat das Projekt benannte Maße ("masse" im Modell), änderst du Größen am besten über op "mass" (z. B. Breite, Wand, Höhe) – dann passen sich abhängige Teile automatisch an.
+- Teile mit festem Gewicht ("kaufteil_g") verschmilzt du nie mit anderen Teilen, außer der Nutzer will das ausdrücklich: sonst stimmt ihr Gewicht nicht mehr.
 - Beziehe dich mit "id" nur auf ids, die im aktuellen Modell stehen. „das“, „es“, „hier“ meint die Auswahl.
 `;
-  const RULES = `Du bist der KI-Kollege in der Web-App „Tracery“, einem allgemeinen CAD-Programm im Browser für präzise technische Teile. Einheiten: Millimeter. Z zeigt nach oben, die XY-Ebene bei z=0 ist die Grundebene.
+  const RULES = `Du bist der KI-Kollege in der Web-App „Tracery“, einem allgemeinen CAD-Programm im Browser für präzise technische Teile – zum Beispiel Gehäuse, Halterungen, Ersatzteile, Schilder, Zahnräder und Vorrichtungen für 3D-Druck, Laser oder Fräse. Einheiten: Millimeter. Z zeigt nach oben, die XY-Ebene bei z=0 ist die Grundebene.
 
 So arbeitest du – wie ein Kollege, der mit am Modell sitzt:
-- Du nimmst auch große Aufträge an („Mach alles als Verbund“, „Richte alles mittig aus“, „Prüf das Modell auf Schwachstellen und behebe sie“) und erledigst sie selbstständig.
+- Du baust neue Teile von Grund auf (Gehäuse mit Deckel, Halterungen, Ersatzteile, Schilder mit Schrift, Zahnräder …) und nimmst auch große Aufträge an („Mach alles als Verbund“, „Richte alles mittig aus“, „Prüf das Modell auf Schwachstellen und behebe sie“).
 - Bei mehr als einem Arbeitsschritt schreibst du einen kurzen Plan (2–6 Punkte) und hakst ab, was erledigt ist.
-- Du arbeitest in Runden: Nach jeder Runde setzt Tracery deine Aktionen um, rechnet das Modell neu und schickt dir eine Rückmeldung (was geklappt hat, Fehler, Prüfergebnisse) und das neue Modell. Setze "weiter": true, wenn danach noch etwas zu tun ist oder du ein Ergebnis (pruefen, schwachstellen) ansehen willst; sonst "weiter": false.
+- Du arbeitest in Runden: Nach jeder Runde setzt Tracery deine Aktionen um, rechnet das Modell neu und schickt dir eine Rückmeldung (was geklappt hat, Fehler, Prüfergebnisse) und das neue Modell. Setze "weiter": true, wenn danach noch etwas zu tun ist oder du ein Ergebnis (z. B. schwachstellen) ansehen willst; sonst "weiter": false.
 - Meldet die Rückmeldung FEHLER, behebst du sie in der nächsten Runde (z. B. Radius kleiner, Loch verschieben) oder erklärst, warum es nicht geht.
 - Frag nur zurück, wenn der Auftrag wirklich mehrdeutig ist oder dabei etwas Wichtiges verloren ginge: dann "frage" (ein Satz) und 2–4 kurze "optionen", aber keine "aktionen". Sonst entscheide selbst und sag in der "antwort", was du entschieden hast.
 - Die "antwort" spricht den Nutzer per du an, 1–3 Sätze, auf Deutsch. In der letzten Runde fasst sie zusammen, was du gemacht hast.
@@ -93,6 +95,9 @@ Antworte NUR mit einem JSON-Objekt:
 ` + ACTIONS + `
 Beispiel – Wunsch „Platte 60 × 40 × 4 mit einem Loch in der Mitte“:
 {"antwort":"Ich habe dir eine Platte mit einem 5-mm-Loch gebaut. Die Breite kannst du links bei den Maßen ändern.","aktionen":[{"op":"mass","name":"Breite","wert":"60"},{"op":"hinzufuegen","objekt":{"art":"group","name":"Platte","kinder":[{"art":"box","name":"Platte","p":{"w":"Breite","d":40,"h":4}},{"art":"cylinder","name":"Loch","rolle":"loch","p":{"d":5,"h":5},"t":{"z":-0.5}}],"rundungen":[{"typ":"fillet","r":3,"kanten":"vertical"}]}}],"weiter":false}
+
+Beispiel – Wunsch „Baue ein Gehäuse 60×40×30 mit Deckel“:
+{"antwort":"Ich habe dir ein Gehäuse 60 × 40 × 30 mm mit 2 mm Wandstärke und einen passenden Deckel daneben gebaut. Breite, Tiefe, Höhe und Wand findest du links unter „Maße“.","aktionen":[{"op":"mass","name":"Breite","wert":"60"},{"op":"mass","name":"Tiefe","wert":"40"},{"op":"mass","name":"Hoehe","wert":"30"},{"op":"mass","name":"Wand","wert":"2"},{"op":"hinzufuegen","objekt":{"art":"group","name":"Gehäuse","kinder":[{"art":"box","name":"Außen","p":{"w":"Breite","d":"Tiefe","h":"Hoehe"},"rundungen":[{"typ":"fillet","r":3,"kanten":"vertical"}]},{"art":"box","name":"Innenraum","rolle":"loch","p":{"w":"Breite - 2*Wand","d":"Tiefe - 2*Wand","h":"Hoehe"},"t":{"z":"Wand"}}],"t":{"x":"-(Breite/2 + 8)"}}},{"op":"hinzufuegen","objekt":{"art":"group","name":"Deckel","kinder":[{"art":"box","name":"Deckelplatte","p":{"w":"Breite","d":"Tiefe","h":"Wand"},"rundungen":[{"typ":"fillet","r":3,"kanten":"vertical"}]},{"art":"box","name":"Steg","p":{"w":"Breite - 2*Wand - 0.4","d":"Tiefe - 2*Wand - 0.4","h":3},"t":{"z":"Wand"}},{"art":"box","name":"Steg innen","rolle":"loch","p":{"w":"Breite - 4*Wand - 0.4","d":"Tiefe - 4*Wand - 0.4","h":3.5},"t":{"z":"Wand"}}],"t":{"x":"Breite/2 + 8"}}}],"weiter":false}
 
 Beispiel – Wunsch „Mach alles als Verbund“ (Runde 1):
 {"antwort":"Ich verbinde alle Teile zu einem Körper und prüfe danach, ob alles sauber gerechnet wird.","plan":[{"text":"Alle Teile zu einem Verbund verbinden","fertig":false},{"text":"Ergebnis prüfen","fertig":false}],"aktionen":[{"op":"verbinden","ids":"alle","name":"Verbund"}],"weiter":true}`;
@@ -128,9 +133,9 @@ Beispiel – Wunsch „Mach alles als Verbund“ (Runde 1):
     if (App.doc.drone) {
       const chk = DroneCheck.summary();
       obj.drohne = { ...App.doc.drone, check: chk ? chk.map((c) => `${c.title}: ${c.s} – ${c.text}`) : 'noch nicht geprüft' };
+      obj.kaufteile = buyNames();
     }
     obj.materialien = MATERIALS.map((m) => m.k);
-    obj.kaufteile = buyNames();
     let s = JSON.stringify(obj);
     if (s.length > 60000) s = s.slice(0, 60000) + '…';
     return s;
@@ -175,7 +180,16 @@ Beispiel – Wunsch „Mach alles als Verbund“ (Runde 1):
     const close = h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Schließen' }); close.innerHTML = icon('close');
     close.onclick = () => { if (current) current.stopped = true; if (ctl) ctl.abort(); if (ro) ro.disconnect(); panel.remove(); panel = null; document.documentElement.style.removeProperty('--ai-h'); };
     head.append(t, h('div', { class: 'ai-head-r' }, tg, close)); panel.append(head);
-    panel.append(h('div', { class: 'ai-intro' }, 'Gib mir auch große Aufträge, z. B. „Mach alles als Verbund“ oder „Prüf das Modell auf Schwachstellen und behebe sie“. Ich arbeite sie Schritt für Schritt ab – „Rückgängig“ nimmt danach alles auf einmal zurück.'));
+    const intro = h('div', { class: 'ai-intro' },
+      'Beschreib, was ich bauen oder ändern soll – z. B. Gehäuse, Halterungen, Ersatzteile, Schilder oder Zahnräder. Auch große Aufträge arbeite ich Schritt für Schritt ab – „Rückgängig“ nimmt danach alles auf einmal zurück.');
+    const sugRow = h('div', { class: 'ai-opts' });
+    for (const s of SUGGESTIONS) {
+      const b = h('button', { type: 'button', class: 'btn small', 'data-sug-prompt': '1' }, s);
+      b.onclick = () => ask(s);
+      sugRow.append(b);
+    }
+    intro.append(sugRow);
+    panel.append(intro);
     $('#overlay').append(panel);
     // Meldungen erscheinen über dem Helfer statt darauf
     const ro = window.ResizeObserver ? new ResizeObserver(() => { if (panel) document.documentElement.style.setProperty('--ai-h', panel.offsetHeight + 'px'); }) : null;
@@ -768,5 +782,5 @@ Beispiel – Wunsch „Mach alles als Verbund“ (Runde 1):
     const sample = await sampler(); if (!sample) return { error: 'Die KI gibt es nur, wenn Tracery in Claude geöffnet ist.' };
     try { return { res: await sample.json(prompt, { modelTier: 'default', cache: false, ...opts }) }; } catch (e) { return { error: errText(e) }; }
   }
-  return { ask, json, apply, pick, local, compactItem, modelText, ACTIONS, get available() { return !off; }, get working() { return !!current; } };
+  return { ask, json, apply, pick, local, compactItem, modelText, open: ensurePanel, ACTIONS, RULES, SUGGESTIONS, get available() { return !off; }, get working() { return !!current; } };
 })();
