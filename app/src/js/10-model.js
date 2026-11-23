@@ -227,7 +227,21 @@ const Model = (() => {
       const b = it.p && it.p.path3d && it.p.path3d.bind;
       for (const x of b || []) if (x && x.id) out.push({ from: me, to: top(x.id), what: 'Rohr hängt an' });
     });
-    for (const d of doc.datums || []) if (d.base && d.base.type === 'face' && d.base.id) out.push({ from: 'datum:' + d.id, to: top(d.base.id), what: 'Bezugsebene an', datum: d.name });
+    for (const d of doc.datums || []) {
+      if (d.base && d.base.type === 'face' && d.base.id) out.push({ from: 'datum:' + d.id, to: top(d.base.id), what: 'Bezugsebene an', datum: d.name });
+      else if (d.base && d.base.type === 'edgeAngle') {
+        if (d.base.edgeId) out.push({ from: 'datum:' + d.id, to: top(d.base.edgeId), what: 'Bezugsebene an', datum: d.name });
+        if (d.base.faceId) out.push({ from: 'datum:' + d.id, to: top(d.base.faceId), what: 'Bezugsebene an', datum: d.name });
+      }
+    }
+    for (const ax of doc.axes || []) {
+      const b = ax.base || {};
+      if ((b.type === 'roundFace' || b.type === 'roundEdge' || b.type === 'faceNormal') && b.id) out.push({ from: 'axis:' + ax.id, to: top(b.id), what: 'Bezugsachse an', axis: ax.name });
+      else if (b.type === 'twoPoints') {
+        if (b.bindA && b.bindA.id) out.push({ from: 'axis:' + ax.id, to: top(b.bindA.id), what: 'Bezugsachse an', axis: ax.name });
+        if (b.bindB && b.bindB.id) out.push({ from: 'axis:' + ax.id, to: top(b.bindB.id), what: 'Bezugsachse an', axis: ax.name });
+      }
+    }
     const seen = new Set();
     return out.filter((x) => { if (x.from === x.to) return false; const k = x.from + '|' + x.to + '|' + x.what; if (seen.has(k)) return false; seen.add(k); return true; });
   }
@@ -288,7 +302,11 @@ const Model = (() => {
       // „Durch alles“: so lang, dass es sicher durch alle Körper reicht (aus der Größe des Modells)
       if (p.thru) { out.dist = sceneSpan; if (out.dir === 'two' || out.dir === 'both') { out.dir = 'two'; out.dist2 = sceneSpan; } }
     }
-    else { out.angle = num(p.angle, V, 360); out.axis = p.axis || { a: [0, 0], b: [0, 1] }; }
+    else {
+      out.angle = num(p.angle, V, 360);
+      if (p.axis3d && Array.isArray(p.axis3d.o) && Array.isArray(p.axis3d.d)) out.axis3d = { o: p.axis3d.o.map(Number), d: p.axis3d.d.map(Number) };
+      else out.axis = p.axis || { a: [0, 0], b: [0, 1] };
+    }
     return out;
   }
   // Muster entlang Kurve: Lage und Drehung jeder Kopie aus der Kurve der Gruppe (p.sketch) berechnen.

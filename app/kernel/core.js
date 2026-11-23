@@ -301,7 +301,8 @@ export function createKernel(R, oc) {
   function buildRevolve(p) {
     const M = planeMap(p.plane);
     const ax = p.axis || { a: [0, 0], b: [0, 1] };
-    const c = M.P(ax.a), d = norm(sub(M.P(ax.b), c));
+    const c = p.axis3d && Array.isArray(p.axis3d.o) ? p.axis3d.o.map(Number) : M.P(ax.a);
+    const d = p.axis3d && Array.isArray(p.axis3d.d) ? norm(p.axis3d.d.map(Number)) : norm(sub(M.P(ax.b), c));
     const angle = Math.max(1, Math.min(360, num(p.angle, 360)));
     const solids = (p.regions || []).map((rg) => R.revolution(regionFace(rg, M), c, d, angle));
     if (!solids.length) throw new Error('Die Skizze hat keine geschlossene Fläche.');
@@ -1315,6 +1316,16 @@ export function createKernel(R, oc) {
         const ad = new oc.BRepAdaptor_Surface(face.wrapped, false);
         const cy = ad.Cylinder(); const ax = cy.Axis(); const l = ax.Location(), d = ax.Direction();
         info.axis = [l.X(), l.Y(), l.Z(), d.X(), d.Y(), d.Z()]; info.r = cy.Radius();
+        ad.delete();
+      } else if (type === 'CONE') {
+        const ad = new oc.BRepAdaptor_Surface(face.wrapped, false);
+        const co = ad.Cone(); const ax = co.Axis(); const l = ax.Location(), d = ax.Direction();
+        info.axis = [l.X(), l.Y(), l.Z(), d.X(), d.Y(), d.Z()];
+        ad.delete();
+      } else if (type === 'TORUS') {
+        const ad = new oc.BRepAdaptor_Surface(face.wrapped, false);
+        const to = ad.Torus(); const ax = to.Axis(); const l = ax.Location(), d = ax.Direction();
+        info.axis = [l.X(), l.Y(), l.Z(), d.X(), d.Y(), d.Z()];
         ad.delete();
       } else if (type === 'SPHERE') {
         const ad = new oc.BRepAdaptor_Surface(face.wrapped, false);

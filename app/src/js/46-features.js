@@ -218,14 +218,15 @@ const Features = (() => {
     route.inv = W.clone().invert();
     return true;
   }
-  // Achse im Bild wählen; cb bekommt { o, d, what } in Weltkoordinaten
+  // Achse im Bild wählen; cb bekommt { o, d, what, axisId? } in Weltkoordinaten
   function pickAxisThen(cb, hint) {
     stopPick();
     const down = (e) => {
       if (e.button !== 0) return;
       e.preventDefault(); e.stopPropagation();
-      const A = axisOfHit(Viewer.pick(e.clientX, e.clientY, { edgePx: 9 }));
-      if (!A) { UI.toast('Klick auf eine gerade Kante, einen runden Rand oder eine runde Fläche.', { icon: 'info' }); return; }
+      const da = typeof Datums !== 'undefined' ? Datums.pickAxis(e.clientX, e.clientY) : null;
+      const A = da ? { o: new THREE.Vector3(...da.ax.axis.o), d: new THREE.Vector3(...da.ax.axis.d), what: 'Bezugsachse „' + da.ax.name + '“', axisId: da.ax.id } : axisOfHit(Viewer.pick(e.clientX, e.clientY, { edgePx: 9 }));
+      if (!A) { UI.toast('Klick auf eine gerade Kante, einen runden Rand, eine runde Fläche oder eine Bezugsachse.', { icon: 'info' }); return; }
       stopPick();
       cb(A);
     };
@@ -233,16 +234,38 @@ const Features = (() => {
     picking = { down, key };
     Viewer.canvas.style.cursor = 'crosshair';
     Viewer.canvas.addEventListener('pointerdown', down, true); window.addEventListener('keydown', key, true);
-    UI.hint(hint || '<b>Achse wählen:</b> Klick auf eine gerade Kante, einen runden Rand oder eine runde Fläche. <b>Esc</b> bricht ab.');
+    UI.hint(hint || '<b>Achse wählen:</b> Klick auf eine gerade Kante, einen runden Rand, eine runde Fläche oder eine Bezugsachse. <b>Esc</b> bricht ab.');
+  }
+  function setPatternAxis(gid, axisId) {
+    const ax = typeof Datums !== 'undefined' ? Datums.findAxis(axisId) : null;
+    if (!ax || !ax.axis) return false;
+    const inv = Model.worldMatrix(App.doc, gid).invert();
+    const o = new THREE.Vector3(...ax.axis.o).applyMatrix4(inv), d = new THREE.Vector3(...ax.axis.d).transformDirection(inv).normalize();
+    App.change(`Drehachse „${ax.name}“`, (doc) => {
+      const f = Model.find(doc, gid); if (!f) return false;
+      f.item.p.axis = 'pick';
+      f.item.p.axisId = ax.id;
+      f.item.p.ao = o.toArray().map((v) => round(v, 6));
+      f.item.p.ad = d.toArray().map((v) => round(v, 9));
+    });
+    App.select([gid]);
+    UI.toast(`Drehachse gesetzt: Bezugsachse „${ax.name}“.`, { icon: 'check' });
+    return true;
   }
   function pickAxis(gid) {
     pickAxisThen((A) => {
       const inv = Model.worldMatrix(App.doc, gid).invert();
       const o = A.o.clone().applyMatrix4(inv), d = A.d.clone().transformDirection(inv).normalize();
-      App.change('Drehachse gewählt', (doc) => { const f = Model.find(doc, gid); if (!f) return false; f.item.p.axis = 'pick'; f.item.p.ao = o.toArray().map((v) => round(v, 6)); f.item.p.ad = d.toArray().map((v) => round(v, 9)); });
+      App.change('Drehachse gewählt', (doc) => {
+        const f = Model.find(doc, gid); if (!f) return false;
+        f.item.p.axis = 'pick';
+        if (A.axisId) f.item.p.axisId = A.axisId; else delete f.item.p.axisId;
+        f.item.p.ao = o.toArray().map((v) => round(v, 6));
+        f.item.p.ad = d.toArray().map((v) => round(v, 9));
+      });
       App.select([gid]);
       UI.toast('Drehachse gesetzt: ' + A.what + '.', { icon: 'check' });
-    }, '<b>Drehachse wählen:</b> Klick auf eine gerade Kante, einen runden Rand oder eine runde Fläche (Welle, Loch). <b>Esc</b> bricht ab.');
+    }, '<b>Drehachse wählen:</b> Klick auf eine gerade Kante, einen runden Rand, eine runde Fläche (Welle, Loch) oder eine Bezugsachse. <b>Esc</b> bricht ab.');
   }
   // Gespiegelte Kopie an einer gewählten ebenen Fläche (z. B. zweiter Arm an der Mittelfläche)
   function mirrorAtFace(face) {
@@ -303,13 +326,24 @@ const Features = (() => {
     let hint = '';
     if (p.op === 'pattern' && p.pt === 'rect') { f.append(num('nx', 'Anzahl X', '', { int: true, min: 1 }), num('ny', 'Anzahl Y', '', { int: true, min: 1 }), num('dx', 'Abstand X'), num('dy', 'Abstand Y')); hint = 'Die Anzahl zählt das Original mit. Abstände gehen von Mitte zu Mitte.'; }
     else if (p.op === 'pattern' && p.pt === 'circ') {
+      const axObj = p.axisId && typeof Datums !== 'undefined' ? Datums.findAxis(p.axisId) : null;
       const ax = p.axis === 'x' || p.axis === 'y' || (p.axis === 'pick' && Array.isArray(p.ad)) ? p.axis : 'z';
+      const axisVal = axObj ? 'da:' + axObj.id : ax;
+      const axisOpts = [['z', 'Senkrecht (Z)'], ['x', 'Quer (X)'], ['y', 'Längs (Y)'], ['pick', 'Im Bild gewählt'], ...(typeof Datums !== 'undefined' ? Datums.axes().filter((a) => a.axis).map((a) => ['da:' + a.id, 'Bezugsachse „' + a.name + '“']) : [])];
       f.append(num('n', 'Anzahl', '', { int: true, min: 1 }), num('ang', 'Winkel', '°'));
-      f.append(UI.selectField({ id: 'op-axis', label: 'Drehachse', value: ax, options: [['z', 'Senkrecht (Z)'], ['x', 'Quer (X)'], ['y', 'Längs (Y)'], ['pick', 'Im Bild gewählt']], onChange: (v) => { if (v === 'pick') pickAxis(it.id); else setP('axis', v); } }));
+      f.append(UI.selectField({
+        id: 'op-axis', label: 'Drehachse', value: axisVal, options: axisOpts,
+        onChange: (v) => {
+          if (v.startsWith('da:')) setPatternAxis(it.id, v.slice(3));
+          else if (v === 'pick') pickAxis(it.id);
+          else App.change('Drehachse geändert', (doc) => { const fn = Model.find(doc, it.id); if (!fn) return false; fn.item.p.axis = v; delete fn.item.p.axisId; });
+        },
+      }));
       let info = null;
-      if (ax === 'pick') {
-        const d = p.ad.map((v) => fmt(v, 2)).join(' · '), o = p.ao.map((v) => fmt(v, 1)).join(' · ');
-        info = h('div', { class: 'mini-row', id: 'op-axisinfo' }, h('span', { class: 'grow' }, 'Richtung ' + d), h('b', { class: 'mono' }, 'durch ' + o));
+      if (ax === 'pick' || p.axisId) {
+        const d = (p.ad || [0, 0, 1]).map((v) => fmt(v, 2)).join(' · '), o = (p.ao || [0, 0, 0]).map((v) => fmt(v, 1)).join(' · ');
+        const lbl = p.axisId ? (axObj ? `Bezugsachse „${axObj.name}“` : 'Bezugsachse fehlt') : 'Richtung ' + d;
+        info = h('div', { class: 'mini-row', id: 'op-axisinfo' }, h('span', { class: 'grow' }, lbl), h('b', { class: 'mono' }, 'durch ' + o));
       } else {
         if (ax !== 'x') f.append(num('cx', 'Mitte X'));
         if (ax !== 'y') f.append(num('cy', 'Mitte Y'));
@@ -614,5 +648,5 @@ const Features = (() => {
     sec.append(h('div', { class: 'hint-box', html: p.copy ? 'Erzeugt eine versetzte oder gedrehte <b>Kopie</b>. Ändert sich der Zielkörper, wandert die Kopie mit.' : 'Versetzt den Zielkörper als Schritt im Verlauf. Unterdrückst du diesen Schritt oder rollst den Marker davor, springt der Körper zurück.' }));
   }
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { transform, renderTransform, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, pickAxis, pickAxisThen, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
+  return { transform, renderTransform, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
 })();

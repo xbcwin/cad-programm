@@ -170,6 +170,7 @@ const Panels = (() => {
     if (!items.length) {
       body.append(h('div', { class: 'empty-tree', html: 'Hier erscheint alles, was du baust – <b>Schritt für Schritt</b>.<br><br>Fang mit einem <b>Körper</b> an oder beschreibe unten in der Zeile, was du bauen möchtest.' }));
       const ds = Datums.treeSection(); if (ds) body.append(ds);
+      const as = Datums.axisTreeSection(); if (as) body.append(as);
       const ms = Measure.treeSection(); if (ms) body.append(ms);
       return;
     }
@@ -264,6 +265,7 @@ const Panels = (() => {
     rec(items, ul);
     body.append(ul);
     const ds = Datums.treeSection(); if (ds) body.append(ds);
+    const as = Datums.axisTreeSection(); if (as) body.append(as);
     const ms = Measure.treeSection(); if (ms) body.append(ms);
   }
   function moveInTree(srcId, dstId, mode) {
@@ -459,6 +461,7 @@ const Panels = (() => {
     if (Sketch.active) { $('#right-title').textContent = 'Skizze'; Sketch.renderPanel(body); return; }
     const items = App.selectedItems();
     if (!items.length && Datums.selected && Datums.find(Datums.selected)) { $('#right-title').textContent = 'Bezugsebene'; Datums.renderPanel(body); return; }
+    if (!items.length && Datums.selectedAxis && Datums.findAxis(Datums.selectedAxis)) { $('#right-title').textContent = 'Bezugsachse'; Datums.renderAxisPanel(body); return; }
     if (!items.length && Measure.selected && Measure.find(Measure.selected)) { $('#right-title').textContent = 'Messung'; Measure.renderPanel(body); return; }
     if (!items.length) { $('#right-title').textContent = 'Projekt'; renderProject(body); return; }
     if (items.length > 1) { $('#right-title').textContent = 'Auswahl'; renderMulti(body, items); return; }
@@ -668,7 +671,7 @@ const Panels = (() => {
         const line = (txt, id) => { const r = h('div', { class: 'mini-row dep-row' }, h('span', { class: 'grow' }, txt)); if (id && Model.find(App.doc, id)) { r.style.cursor = 'pointer'; r.onclick = () => App.select([id]); } return r; };
         for (const x of up) ds.append(line(`${x.what} „${nm(x.to)}“`, x.to));
         const back = { 'abgezogen von': 'wird hiervon abgezogen', 'vereinigt mit': 'ist hiermit vereinigt', 'Schnittmenge mit': 'bildet hiermit die Schnittmenge', 'verrechnet mit': 'ist hiermit verrechnet', 'versetzt': 'versetzt diesen Körper', 'versetzte Kopie von': 'ist eine versetzte Kopie hiervon', 'verknüpfte Kopie von': 'ist eine verknüpfte Kopie hiervon', 'Skizze übernimmt Kante von': 'übernimmt Kanten hiervon', 'Rohr hängt an': 'hat Rohrpunkte hieran' };
-        for (const x of down) ds.append(line(x.datum ? `Bezugsebene „${x.datum}“ hängt hieran` : `„${nm(x.from)}“ ${back[x.what] || 'hängt hieran'}`, x.datum ? null : x.from));
+        for (const x of down) ds.append(line(x.datum ? `Bezugsebene „${x.datum}“ hängt hieran` : x.axis ? `Bezugsachse „${x.axis}“ hängt hieran` : `„${nm(x.from)}“ ${back[x.what] || 'hängt hieran'}`, x.datum || x.axis ? null : x.from));
         if (down.length) ds.open = true;
         w.append(ds);
       }
@@ -731,6 +734,14 @@ const Panels = (() => {
         }
       } else {
         fl.append(UI.numField({ id: 'p-angle', label: 'Winkel', value: it.p.angle, unit: '°', onCommit: (v) => setP('angle', v) }));
+        const axList = typeof Datums !== 'undefined' ? Datums.axes() : [];
+        if (axList.length || it.p.axisId) {
+          const opts = [['sketch', 'Achse aus der Skizze'], ...axList.filter((a) => a.axis).map((a) => ['da:' + a.id, 'Bezugsachse „' + a.name + '“'])];
+          const val = it.p.axisId && Datums.findAxis(it.p.axisId) ? 'da:' + it.p.axisId : 'sketch';
+          const as = UI.selectField({ id: 'p-rev-axis', label: 'Drehachse', value: val, options: opts, onChange: (v) => Datums.applyAxisToRevolve(it.id, v.startsWith('da:') ? v.slice(3) : null) });
+          as.setAttribute('data-help', 'datumAxis');
+          fl.append(as);
+        }
       }
       sec.append(fl);
       const eb = h('button', { type: 'button', class: 'btn' }); eb.innerHTML = icon('edit') + 'Skizze bearbeiten';
@@ -1104,6 +1115,10 @@ const Panels = (() => {
       b('similar', 'Ähnliche', () => Select.similar(), '', 'Alle gleich langen Kanten dazuwählen (A)', true);
       b('chainEdges', 'Kette', () => Select.chain(), '', 'Alle Kanten dazuwählen, die ohne Knick weiterlaufen (z. B. ein gerundeter Umriss)', true);
       b('similar', 'Nach Art', (e) => edgeRuleMenu(App.edges[0].id, e.currentTarget), '', 'Alle äußeren oder alle inneren Kanten dieses Teils wählen', true);
+      if (App.edges.length === 1 && one && one.t === 'LINE') {
+        const eb = b('originPlanes', 'Ebene im Winkel', () => Datums.startEdgeAnglePick(30, App.edges[0]), 'pro', 'Bezugsebene durch diese Kante im Winkel zu einer Fläche anlegen');
+        eb.dataset.help = 'datumEdgeAngle';
+      }
       sep();
     } else if (face && items.length === 1 && face.info.t === 'PLANE') {
       bar.append(h('span', { class: 'lbl' }, 'Fläche'));
@@ -1123,6 +1138,10 @@ const Panels = (() => {
         const hasTh = !!Features.threadOnFace(face.id, face.idx);
         const tb = b('thread', hasTh ? 'Gewinde ändern' : 'Gewinde markieren', (e) => Features.threadPop(face, e.currentTarget), hasTh ? 'accent' : '', 'Kosmetisches Gewinde auf dieser runden Fläche markieren (rechnet schnell)');
         tb.dataset.help = 'cosmeticThread';
+      }
+      if (face.info.t === 'CYLINDRE') {
+        const ab = b('axes', 'Achse', () => Datums.addAxisFromFace(face), 'pro', 'Bezugsachse durch die Mitte dieser runden Fläche anlegen');
+        ab.dataset.help = 'datumAxis';
       }
       b('fillet', 'Ihre Kanten', (e) => faceEdgeMenu(face, e.currentTarget), '', 'Alle Kanten dieser Fläche wählen, abrunden oder abschrägen', true);
       sep();

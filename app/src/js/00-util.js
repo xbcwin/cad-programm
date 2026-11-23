@@ -1059,6 +1059,16 @@ const HELP = {
   "tip": "Körper als Schritt im Verlauf verschieben, drehen oder kopieren",
   "hilfe": "Legt einen eigenen Schritt „Verschieben/Drehen“ im Verlauf an. Rechts stellst du Verschiebung (X/Y/Z), Drehung um die Mitte, den Ursprung oder einen Punkt sowie „Als Kopie“ ein – auch mit Formeln.",
   "tipp": "Wenn du diesen Schritt unterdrückst oder den Marker davor schiebst, springt der Körper sofort an seinen alten Platz zurück."
+ },
+ "datumEdgeAngle": {
+  "tip": "Bezugsebene durch eine gerade Kante im Winkel zu einer Fläche",
+  "hilfe": "Wählt eine gerade Körperkante und eine ebene Fläche als Winkel-Bezug. Die Ebene läuft durch die Kante und kippt um den eingestellten Winkel (z. B. 30°) zur Fläche. Ändert sich der Körper, wandert die Ebene mit.",
+  "tipp": "Ideal für schräge Bohrungen, Nuten oder Anschlüsse an einer Bauteilkante – den Winkel änderst du rechts jederzeit, auch mit „Richtung umkehren“."
+ },
+ "datumAxis": {
+  "tip": "Bezugsachse als Dreh- oder Musterachse anlegen",
+  "hilfe": "Legt eine eigene Achse im Projekt an: durch zwei Punkte (Ecken und Kantenmitten rasten ein), durch die Mitte einer runden Fläche (Zylinder, Kegel, Ring) oder eines Kreises, oder senkrecht auf eine ebene Fläche an einem Punkt. Sie wandert mit dem Teil mit und lässt sich direkt für Kreismuster und Drehen (Revolve) wählen.",
+  "tipp": "Im Verlauf unter „Bezugsachsen“ kannst du jede Achse benennen, ein- oder ausblenden und beim Kreismuster einfach aus der Liste „Drehachse“ auswählen."
  }
 };
 

@@ -183,7 +183,12 @@ const Commands = (() => {
     add('viewBack', 'Vorige Ansicht', 'undo', 'ansicht zurück vorige kamera blick', () => Viewer.viewBack(), { group: 'Ansicht', kbd: 'Umschalt Z' });
     add('invertSel', 'Auswahl umkehren', 'pointer', 'auswahl umkehren invertieren andere', () => Actions.invertSelection(), { group: 'Ansicht', kbd: 'Strg Umschalt I' });
     add('repeat', 'Letzten Befehl wiederholen', 'undo', 'wiederholen nochmal letzter befehl', () => repeat(), { group: 'Werkzeuge', kbd: 'Leertaste' });
-    add('datum', 'Bezugsebene anlegen', 'originPlanes', 'bezugsebene ebene konstruktionsebene arbeitsebene abstand versetzt schräg', () => Datums.dialog(), { group: 'Werkzeuge' });
+    add('datum', 'Bezugsebene anlegen', 'originPlanes', 'bezugsebene ebene konstruktionsebene arbeitsebene abstand versetzt schräg winkel kante', () => Datums.dialog(), { group: 'Werkzeuge' });
+    add('datum-edge-angle', 'Bezugsebene im Winkel an Kante', 'originPlanes', 'bezugsebene ebene kante winkel schräg geneigt', () => { const e = App.edges && App.edges.length === 1 ? App.edges[0] : null; Datums.startEdgeAnglePick(30, e); }, { group: 'Werkzeuge' });
+    add('datum-axis', 'Bezugsachse anlegen', 'axes', 'bezugsachse achse hilfsachse mittellinie zylinder punkte', () => Datums.axisDialog(), { group: 'Werkzeuge' });
+    add('datum-axis-2p', 'Bezugsachse durch zwei Punkte', 'axes', 'bezugsachse achse zwei punkte linie', () => Datums.startAxisPick('twoPoints'), { group: 'Werkzeuge' });
+    add('datum-axis-round', 'Bezugsachse durch Mitte einer Rundung', 'axes', 'bezugsachse achse zylinder rundung loch kreis mitte', () => { const f = Actions.selectedFace(); if (f && Array.isArray(f.info.axis) && f.info.axis.length >= 6) Datums.addAxisFromFace(f); else Datums.startAxisPick('roundFace'); }, { group: 'Werkzeuge' });
+    add('datum-axis-normal', 'Bezugsachse senkrecht auf Fläche', 'axes', 'bezugsachse achse senkrecht normale fläche punkt', () => Datums.startAxisPick('faceNormal'), { group: 'Werkzeuge' });
     add('image', 'Bild speichern (PNG)', 'image', 'bild png foto screenshot rendering präsentation hintergrund durchsichtig', () => Print.imageDialog(), { group: 'Werkzeuge' });
     add('export', 'Exportieren (STEP, STL, 3MF, OBJ, GLB, DXF)', 'export', 'step stl 3mf obj mtl glb gltf dxf platten fräse laser exportieren speichern download', () => Print.exportDialog(), { group: 'Werkzeuge', kbd: 'Strg E' });
     add('status', 'Modell-Status', 'info', 'status prüfen größe fehler', () => $('#ampel').click(), { group: 'Werkzeuge' });

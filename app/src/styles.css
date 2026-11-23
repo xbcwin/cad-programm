@@ -723,6 +723,8 @@ body:not(.simple) .simple-only{display:none!important}
 .datum-tree .tree-row .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .datum-tree .swatch.datum{display:inline-grid;place-items:center;width:18px;height:18px;color:#d9a441;background:none}
 .datum-tree .swatch.datum svg{width:16px;height:16px}
+.datum-tree .swatch.axis{display:inline-grid;place-items:center;width:18px;height:18px;color:#0ca678;background:none}
+.datum-tree .swatch.axis svg{width:16px;height:16px}
 
 /* Maß nur zum Ablesen (Referenzmaß) */
 .skdim.ref { border-style: dashed; border-color: var(--faint); color: var(--ink-2); font-style: italic; }

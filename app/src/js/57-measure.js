@@ -422,6 +422,7 @@ const Measure = (() => {
     if (sel) {
       App.clearSelection();
       if (typeof Datums !== 'undefined' && Datums.selected) Datums.select(null);
+      if (typeof Datums !== 'undefined' && Datums.selectedAxis) Datums.selectAxis(null);
     }
     drawSaved(); Panels.renderLeft(); Panels.renderRight();
   }

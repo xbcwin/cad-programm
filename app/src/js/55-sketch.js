@@ -120,7 +120,8 @@ const Sketch = (() => {
     const row3 = h('div', { class: 'btn-row' });
     for (const d of ds) { const b = h('button', { type: 'button', class: 'btn', 'data-datum': d.id }, d.name); b.onclick = () => { UI.closePop(); Datums.sketchOn(d.id); }; row3.append(b); }
     const nb = h('button', { type: 'button', class: 'btn ghost', id: 'sk-datum' }); nb.innerHTML = icon('plus') + 'Neue Bezugsebene …'; nb.onclick = () => { UI.closePop(); Datums.dialog(btn); };
-    row3.append(nb); box.append(row3);
+    const na = h('button', { type: 'button', class: 'btn ghost', id: 'sk-axis', 'data-help': 'datumAxis' }); na.innerHTML = icon('axes') + 'Neue Bezugsachse …'; na.onclick = () => { UI.closePop(); Datums.axisDialog(btn); };
+    row3.append(nb, na); box.append(row3);
     UI.pop(btn, box);
   }
   const PLANES = { XY: { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] }, XZ: { o: [0, 0, 0], x: [1, 0, 0], n: [0, -1, 0] }, YZ: { o: [0, 0, 0], x: [0, 1, 0], n: [1, 0, 0] } };
@@ -3469,6 +3470,7 @@ const Sketch = (() => {
       const sel = S.ents.find((x) => x.id === S.sel && x.type === 'line');
       const opts = [['y', 'Um die senkrechte Achse'], ['x', 'Um die waagerechte Achse']];
       if (S.ents.some((x) => x.type === 'line')) opts.push(['line', 'Um eine Linie der Skizze']);
+      if (typeof Datums !== 'undefined') for (const da of Datums.axes()) if (da.axis) opts.push(['da:' + da.id, 'Bezugsachse „' + da.name + '“']);
       stepBox.append(UI.selectField({ id: 'st-axis', label: 'Achse', value: st.axis, options: opts, onChange: (v) => { st.axis = v; if (v === 'line') { const l = S.ents.find((x) => x.type === 'line' && x.con) || S.ents.find((x) => x.type === 'line'); st.axisLine = l ? l.id : null; } updatePreview(); renderStep(); } }));
       if (st.axis === 'line') {
         const lines = S.ents.filter((x) => x.type === 'line');
@@ -3505,7 +3507,16 @@ const Sketch = (() => {
     }
     else {
       p.angle = st.angle;
-      if (st.axis === 'x') p.axis = { a: [0, 0], b: [1, 0] };
+      if (typeof st.axis === 'string' && st.axis.startsWith('da:') && typeof Datums !== 'undefined') {
+        const da = Datums.findAxis(st.axis.slice(3));
+        if (da && da.axis) {
+          const inv = S.W.clone().invert();
+          const o = new THREE.Vector3(...da.axis.o).applyMatrix4(inv), d = new THREE.Vector3(...da.axis.d).transformDirection(inv).normalize();
+          p.axisId = da.id;
+          p.axis3d = { o: o.toArray().map((v) => round(v, 6)), d: d.toArray().map((v) => round(v, 9)) };
+        } else p.axis = { a: [0, 0], b: [0, 1] };
+      }
+      else if (st.axis === 'x') p.axis = { a: [0, 0], b: [1, 0] };
       else if (st.axis === 'line' && st.axisLine) { const l = S.ents.find((x) => x.id === st.axisLine); if (l) { p.axis = { a: l.a, b: l.b }; } }
       else p.axis = { a: [0, 0], b: [0, 1] };
     }
