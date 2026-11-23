@@ -224,6 +224,7 @@ Fertig.
 - [x] Explosionsansicht, Fokus-Vorschau, Schnitt, Röntgen (Sitzung 9)
 - [x] Explosion auch für die Teile innerhalb einer Gruppe (Sitzung 53)
 - [x] Schnitt an einer beliebigen Fläche („Schnitt hier“, Sitzung 25)
+- [x] Schnitt mit Kappe und mehreren Ebenen (Auto [A-013], PF-06): bis zu drei Schnittebenen (X, Y, Z einzeln an/aus mit eigenem Regler und Umdrehen), geschnittene Flächen als echte dreieckige Kappe mit Schraffur und Bauteil-Farbe im Overlay (samt Kontur-Umriss und Schnittfläche in mm², abschaltbar über „Kappe füllen“)
 - [x] Messen, Material pro Teil, Push/Pull, „ähnliche auswählen“, Versionen (Sitzung 10)
 - [x] Messungen bleiben stehen (Auto [A-012], PF-05): Knopf „Messung behalten“ in der Messen-Leiste speichert Abstände, Winkel, Flächen und Durchmesser dauerhaft im Projekt (`doc.measures`, Liste „Messungen“ im Verlauf); bei Modelländerungen rechnet Tracery die Werte selbstständig nach, zeigt „verloren“ bei fehlenden Bezügen und erlaubt Ein-/Ausblenden, Umbenennen und Löschen mit Rückgängig
 - [ ] Versionen in der Cloud (mit Stufe 6 – Konten)

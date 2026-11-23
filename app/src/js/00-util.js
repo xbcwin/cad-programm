@@ -535,9 +535,9 @@ const HELP = {
   "tipp": "Mit „Spalt“ rücken die Hälften auseinander – praktisch, wenn ein Teil zu groß für den Drucker ist."
  },
  "section": {
-  "tip": "Modell aufschneiden zum Hineinschauen",
-  "hilfe": "Oben „Ansicht“ → „Schnitt“ oder Taste C. Wähle die Richtung und schieb den Regler – alles vor der Ebene wird ausgeblendet, die Schnittfläche ist schraffiert.",
-  "tipp": "Keine Sorge: Dein Bauteil geht dabei nicht kaputt, es ist nur ein Blick ins Innere. „Umdrehen“ zeigt die andere Hälfte."
+  "tip": "Modell aufschneiden mit bis zu drei Ebenen",
+  "hilfe": "Oben „Ansicht“ → „Schnitt“ oder Taste C. Schalte bis zu drei Schnittebenen (X, Y, Z) einzeln an oder aus und schiebe jede Lage genau ein. Geschnittene Körper erhalten eine farbige, schraffierte Kappe.",
+  "tipp": "Keine Sorge: Dein Bauteil geht dabei nicht kaputt, es ist nur ein Blick ins Innere. „Kappe füllen“ lässt sich ausblenden, und mit dem Spiegelsymbol drehst du jede Ebene um."
  },
  "xray": {
   "tip": "Körper halb durchsichtig machen",

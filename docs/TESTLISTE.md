@@ -1536,6 +1536,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Ein-/ausblenden, umbenennen, löschen & verloren**: Auge blendet Schild und 3D-Linien aus/ein; Umbennen im rechten Panel wirkt sofort; Löschen eines bezogenen Körpers zeigt „verloren“, Rückgängig stellt den Bezug wieder her; Löschen und Rückgängig sowie Hilfetext `measureKeep` funktionieren.
 - [ ] **Von Hand**: Nach Projekt-Speichern und Neuladen (auch mit Punkt–Punkt-, Winkel- und Durchmesser-Messungen) prüfen, ob alle Schilder sauber positioniert bleiben.
 
+## Schnitt mit Kappe und mehreren Ebenen (Auto [A-013])
+
+- [x] **Würfel 20×20×20 mit Durchgangsloch Ø 8**: Schnitt (C) zeigt eine echte, schraffierte Kappe im Overlay (`sectionCap`) mit `240 mm²` Schnittfläche (Loch ausgespart).
+- [x] **Mehrere Schnittebenen gleichzeitig**: X und Y sowie alle drei Ebenen (X, Y, Z) lassen sich einzeln an-/ausschalten (`Viewer.clips`); jede Kappe wird gegen die jeweils anderen aktiven Ebenen beschnitten; Z allein zeigt das Kreisloch im Quadrat (`≈ 349,7 mm²`).
+- [x] **Kappe ein/aus & Aufräumen**: „Kappe füllen“ (`#cut-cap`) blendet Kappen ein/aus; Schließen räumt alle Clipping-Ebenen und Overlay-Meshes ohne Undo-Schritt auf.
+- [ ] **Von Hand**: An einem mehrteiligen Bauteil (z. B. Gehäuse mit Deckel) X- und Y-Schnitt gemeinsam verschieben, umdrehen und die gegenläufige Schraffur der Körper prüfen.
+
 ## Fehler melden
 
 ```

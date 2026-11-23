@@ -6166,6 +6166,64 @@ def t_a012_messungen_bleiben(p):
     return [ok1, ok2, ok3, ok4, ok5, ok6, ok7]
 
 
+def t_a013_schnitt_kappe_mehrfach(p):
+    p.empty()
+    p.ev("""App.change('Würfel mit Loch', d => {
+      const b = Model.newItem('box', { w: 20, d: 20, h: 20 });
+      const h = Model.newItem('cylinder', { d: 8, h: 30 }, { role: 'hole' });
+      h.t.z = -5;
+      d.items.push(b, h);
+    })""")
+    warte_rechnen(p, 20)
+    u0 = p.ev("return App.undoStack.length")
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('c'); p.wait(800)
+    caps1 = p.ev("""const out=[];
+      Viewer.groups.overlay.traverse(o=>{ if(o.isMesh && o.userData.sectionCap) out.push({k:o.userData.planeKey, tris:(o.geometry.index?o.geometry.index.count:0)/3, hasMap:!!(o.material&&o.material.map), clips:o.material.clippingPlanes?o.material.clippingPlanes.length:0}); });
+      return { cut: Views.cut, clips: Viewer.clips.length, caps: out };""")
+    # Würfel 20x20x20 mit Durchgangsloch Ø 8 entlang Z: XZ-Schnitt bei y=0 zeigt zwei Stege à (6*20) = 240 mm²
+    ok1 = (caps1['cut'] is not None and caps1['cut']['plane'] == 'XZ' and len(caps1['cut']['planes']) == 1
+           and caps1['clips'] == 1 and len(caps1['caps']) == 1
+           and caps1['caps'][0]['tris'] >= 4 and caps1['caps'][0]['hasMap']
+           and abs(caps1['cut']['capArea'] - 240) < 3)
+    # X-Ebene (YZ) dazuschalten -> X und Y gleichzeitig aktiv, beide Kappen im Overlay mit je 1 Gegen-Clipping-Ebene
+    p.pg.locator('.viewbar [data-plane="YZ"]').click(); p.wait(600)
+    caps2 = p.ev("""const out=[];
+      Viewer.groups.overlay.traverse(o=>{ if(o.isMesh && o.userData.sectionCap) out.push({k:o.userData.planeKey, tris:(o.geometry.index?o.geometry.index.count:0)/3, clips:o.material.clippingPlanes?o.material.clippingPlanes.length:0}); });
+      return { cut: Views.cut, clips: Viewer.clips.length, caps: out, rows: document.querySelectorAll('.viewbar .cut-row').length, pressed: [...document.querySelectorAll('.viewbar .seg button[aria-pressed="true"]')].map(b=>b.dataset.axis) };""")
+    ok2 = (caps2['clips'] == 2 and len(caps2['cut']['planes']) == 2
+           and caps2['rows'] == 2 and set(caps2['pressed']) == {'X', 'Y'}
+           and {c['k'] for c in caps2['caps']} == {'YZ', 'XZ'}
+           and all(c['tris'] >= 4 and c['clips'] == 1 for c in caps2['caps']))
+    # Z-Ebene (XY) dazuschalten -> alle drei Ebenen gleichzeitig aktiv; dann X und Y wieder abschalten -> Z allein zeigt Kreisloch-Kappe (400 - pi*16 ≈ 349,7 mm²)
+    p.pg.locator('.viewbar [data-plane="XY"]').click(); p.wait(600)
+    caps3 = p.ev("""const out=[];
+      Viewer.groups.overlay.traverse(o=>{ if(o.isMesh && o.userData.sectionCap) out.push({k:o.userData.planeKey, clips:o.material.clippingPlanes?o.material.clippingPlanes.length:0}); });
+      return { clips: Viewer.clips.length, caps: out };""")
+    p.pg.locator('.viewbar [data-plane="YZ"]').click(); p.wait(400)
+    p.pg.locator('.viewbar [data-plane="XZ"]').click(); p.wait(600)
+    z_only = p.ev("return Views.cut")
+    ok3 = (caps3['clips'] == 3 and {c['k'] for c in caps3['caps']} == {'YZ', 'XZ', 'XY'}
+           and all(c['clips'] == 2 for c in caps3['caps'])
+           and len(z_only['planes']) == 1 and z_only['plane'] == 'XY'
+           and abs(z_only['capArea'] - (400 - math.pi * 16)) < 6)
+    # X an, Z aus, X auf 5 mm versetzen (volle Fläche 400 mm²), Kappe aus- und wieder einschalten
+    p.pg.locator('.viewbar [data-plane="YZ"]').click(); p.wait(400)
+    p.pg.locator('.viewbar [data-plane="XY"]').click(); p.wait(500)
+    p.pg.fill('[data-cut-off="YZ"]', '5'); p.pg.press('[data-cut-off="YZ"]', 'Enter'); p.wait(500)
+    area_x5 = p.ev("return Views.cut.capArea")
+    p.pg.locator('#cut-cap').uncheck(); p.wait(400)
+    no_cap = p.ev("""let n=0; Viewer.groups.overlay.traverse(o=>{ if(o.userData.sectionCap) n++; }); return {n, cap:Views.cut.cap};""")
+    p.pg.locator('#cut-cap').check(); p.wait(400)
+    has_cap = p.ev("""let n=0; Viewer.groups.overlay.traverse(o=>{ if(o.isMesh && o.userData.sectionCap) n++; }); return {n, cap:Views.cut.cap};""")
+    ok4 = abs(area_x5 - 400) < 3 and no_cap['n'] == 0 and not no_cap['cap'] and has_cap['n'] == 1 and has_cap['cap']
+    # Schnitt beenden -> alles sauber aufgeräumt, kein Undo-Schritt
+    p.pg.locator('.viewbar .vb-x').click(); p.wait(400)
+    end_st = p.ev("""let n=0; Viewer.groups.overlay.traverse(o=>{ if(o.userData.sectionCap||o.userData.sectionHelper) n++; });
+      return { cut:Views.cut, clip:Viewer.clip, clips:Viewer.clips.length, ov:n, u:App.undoStack.length, bars:document.querySelectorAll('.viewbar').length };""")
+    ok5 = end_st['cut'] is None and end_st['clip'] is None and end_st['clips'] == 0 and end_st['ov'] == 0 and end_st['bars'] == 0 and end_st['u'] == u0
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -6278,6 +6336,7 @@ TESTS = [
     ('[A-009] Kosmetisches Gewinde: Zylinder Ø 6 M6 × 10 markieren / Stückliste & Zeichnung / Rückgängig / Speichern / Echt machen / Innengewinde', t_a009_kosmetisches_gewinde),
     ('[A-010] OBJ und GLB speichern: ZIP mit .obj/.mtl/.glb / MTL-Farben / GLB-Kopf & Meshes / Studio-Material / Einzeln', t_a010_obj_glb),
     ('[A-012] Messungen bleiben stehen: Abstand behalten / Quader höher / ein- und ausblenden / umbenennen / verloren & Rückgängig / löschen', t_a012_messungen_bleiben),
+    ('[A-013] Schnitt mit Kappe und mehreren Ebenen: Würfel mit Loch / X und Y gleichzeitig / alle drei Ebenen & Kreisloch / Kappe an-aus / sauber beendet', t_a013_schnitt_kappe_mehrfach),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
