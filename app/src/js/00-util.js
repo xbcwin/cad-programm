@@ -469,9 +469,9 @@ const HELP = {
   "tipp": "Unter „Spitze verlängern“ stellst du ein, wie weit die Spitze hinter dem letzten Umriss liegt. Mit „Mittellinie zeichnen“ biegst du den Übergang entlang einer Kurve; mit „Führungskurve zeichnen“ gibst du die Seitenlinie vor und machst ihn bauchig oder schlank – die Umrisse bleiben dabei, wo sie sind. Eine „Zweite Führungskurve“ quer zur ersten formt die andere Richtung: z. B. die Höhe von der Seite und die Breite von oben. Für Übergänge, Düsen und Griffe danach die Kanten runden."
  },
  "holeWizard": {
-  "tip": "Schraubenloch, Gewinde, Einsatz oder Mutternfalle bohren",
-  "hilfe": "Klick auf eine Fläche und dann auf „Bohrung“ – das geht auch auf runden Flächen wie Rohren und Zylindern. Wähle Art und Größe (zum Beispiel M3) und drück „Löcher setzen“. Jeder weitere Klick auf eine Fläche setzt noch ein Loch – „Fertig“ oder Esc beendet.",
-  "tipp": "„Durchgangsloch“ lässt die Schraube frei durchrutschen. „Gewinde schneiden“ macht das kleinere Kernloch, in das sich die Schraube selbst hineindreht."
+  "tip": "Schraubenloch, Sackloch, Passbohrung H7, Zentrierbohrung, Einsatz oder Mutternfalle",
+  "hilfe": "Klick auf eine Fläche und dann auf „Bohrung“ – das geht auch auf runden Flächen wie Rohren und Zylindern. Wähle die Art (Durchgang, Kernloch, Sackloch mit 118°-Spitze, Passbohrung H7, Zentrierbohrung DIN 332 A, Gewindeeinsatz oder Mutternfalle) und die Maße. Unten siehst du den Querschnitt als Vorschau; ein Klick auf „Löcher setzen“ bohrt und jeder weitere Klick setzt noch ein Loch.",
+  "tipp": "„Sackloch“ hängt unten eine echte 118°-Bohrspitze an die Zylindertiefe. „Passbohrung H7“ bohrt genau das Nennmaß und nennt die ISO-286-Toleranz."
  },
  "countersink": {
   "tip": "Trichter-Rand für flache Schraubenköpfe",
@@ -1012,6 +1012,21 @@ const HELP = {
   "tip": "Eigene Tastenkürzel festlegen (nur Profi)",
   "hilfe": "Unter Menü → Einstellungen → „Tastenkürzel“ änderst du die Tasten für Werkzeuge, Ansicht, Modell und Dateien. Klick auf ein Kürzel, drück die neue Taste und es wirkt sofort – gespeichert in deinem Browser. Doppelte Tasten meldet Tracery, damit nichts aus Versehen überschrieben wird.",
   "tipp": "Mit „Zurücksetzen“ stellst du jederzeit alle Standard-Tasten wieder her."
+ },
+ "blindHole": {
+  "tip": "Sackloch mit fester Tiefe und 118°-Bohrspitze",
+  "hilfe": "Bohrt ein Loch mit rundem Querschnitt und einer Kegelspitze am Boden (Standard 118° wie ein Spiralbohrer, oder 140° / flach). „Tiefe (Zylinder)“ ist die zylindrische Länge; die Spitze kommt darunter noch dazu.",
+  "tipp": "In der Vorschau und rechts im Feld siehst du die genaue Gesamttiefe bis zur Kegelspitze – so brichst du nicht versehentlich durch die Rückseite."
+ },
+ "fitHole": {
+  "tip": "Passbohrung H7 auf genaues Nennmaß",
+  "hilfe": "Bohrt einen genauen Zylinder ohne zusätzliches Spiel (exaktes Nennmaß für Lager, Wellen oder Passstifte) und zeigt das passende Abmaß nach ISO 286 H7 an (z. B. +0,012 / 0 mm bei Ø 6).",
+  "tipp": "Für Metallteile zum späteren Aufreiben auf Maß oder für präzise gedruckte Lagersitze."
+ },
+ "centerHole": {
+  "tip": "Zentrierbohrung nach DIN 332 Form A",
+  "hilfe": "Erzeugt eine genormte Zentrierbohrung mit 60°-Senkkegel, kurzer Führungsbohrung und 118°-Bohrspitze am Grund – so wie sie ein Zentrierbohrer auf der Drehbank oder Fräse herstellt.",
+  "tipp": "Wähle die Größe (A 1,0 bis A 6,3) passend zum Durchmesser der Welle oder des Werkstücks."
  }
 };
 

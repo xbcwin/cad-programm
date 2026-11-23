@@ -1,5 +1,55 @@
 // ================= Bauteil-Bibliothek (Definitionen für die Oberfläche) =================
 const SIZES = ['M1.6', 'M2', 'M2.5', 'M3', 'M4', 'M5', 'M6', 'M8'];
+// Zentrierbohrungen nach DIN 332 Form A (60°-Kegel + Führungsbohrung mit 118°-Bohrspitze)
+const CENTER_DRILLS = {
+  A1: { d1: 1.0, d2: 2.12, t1: 1.3 },
+  'A1.6': { d1: 1.6, d2: 3.35, t1: 2.0 },
+  A2: { d1: 2.0, d2: 4.25, t1: 2.5 },
+  'A2.5': { d1: 2.5, d2: 5.30, t1: 3.1 },
+  'A3.15': { d1: 3.15, d2: 6.70, t1: 3.9 },
+  A4: { d1: 4.0, d2: 8.50, t1: 5.0 },
+  A5: { d1: 5.0, d2: 10.60, t1: 6.3 },
+  'A6.3': { d1: 6.3, d2: 13.20, t1: 8.0 },
+};
+const CENTER_SIZES = [
+  ['A1', 'A 1,0 (Ø 1,0 / 2,12)'],
+  ['A1.6', 'A 1,6 (Ø 1,6 / 3,35)'],
+  ['A2', 'A 2,0 (Ø 2,0 / 4,25)'],
+  ['A2.5', 'A 2,5 (Ø 2,5 / 5,30)'],
+  ['A3.15', 'A 3,15 (Ø 3,15 / 6,70)'],
+  ['A4', 'A 4,0 (Ø 4,0 / 8,50)'],
+  ['A5', 'A 5,0 (Ø 5,0 / 10,60)'],
+  ['A6.3', 'A 6,3 (Ø 6,3 / 13,20)'],
+];
+// ISO 286-2 Grundtoleranz IT7 (oberes Abmaß ES in µm für Einheitsbohrung H7, EI = 0)
+const H7_TABLE = [[3, 10], [6, 12], [10, 15], [18, 18], [30, 21], [50, 25], [80, 30], [120, 35], [180, 40], [250, 46], [315, 52], [400, 57], [500, 63]];
+function h7Info(d) {
+  const n = Number(d);
+  if (!(n > 0)) return { d: 0, um: null };
+  const row = H7_TABLE.find(([hi]) => n <= hi);
+  if (!row) return { d: n, um: null };
+  const es = row[1] / 1000;
+  return {
+    d: n,
+    um: row[1],
+    es,
+    min: n,
+    max: n + es,
+    esText: '+' + es.toFixed(3).replace('.', ','),
+    rangeText: `${n.toFixed(3).replace('.', ',')} – ${(n + es).toFixed(3).replace('.', ',')} mm`,
+  };
+}
+function blindTipHeight(d, tipAngle = 118) {
+  const ang = Number(tipAngle);
+  if (!(d > 0) || !(ang > 1 && ang < 179.5)) return 0;
+  return (d / 2) / Math.tan((ang * Math.PI) / 360);
+}
+function centerHoleMetrics(size) {
+  const c = CENTER_DRILLS[size] || CENTER_DRILLS['A2.5'];
+  const hCone = ((c.d2 - c.d1) / 2) / Math.tan(Math.PI / 6);
+  const tipH = (c.d1 / 2) / Math.tan((118 * Math.PI) / 360);
+  return { ...c, hCone, tipH, totalDepth: hCone + c.t1 + tipH };
+}
 const LIB = [
   { lib: 'screwHole', label: 'Schraubenloch', role: 'hole', icon: 'bolt', desc: 'Durchgangsloch mit Senkung für Schrauben', params: [
     { k: 'size', label: 'Schraube', type: 'select', options: SIZES, def: 'M3' },
@@ -24,6 +74,18 @@ const LIB = [
   { lib: 'insert', label: 'Gewindeeinsatz', role: 'hole', icon: 'target', desc: 'Loch für einen Einschmelz-Gewindeeinsatz', params: [
     { k: 'size', label: 'Gewinde', type: 'select', options: ['M2', 'M2.5', 'M3', 'M4', 'M5', 'M6', 'M8'], def: 'M3' },
     { k: 'depth', label: 'Tiefe', type: 'num', def: null, auto: true },
+  ] },
+  { lib: 'blindHole', label: 'Sackloch', role: 'hole', icon: 'holeWizard', desc: 'Bohrung mit fester Tiefe und 118°-Bohrspitze (Standard-Spiralbohrer)', params: [
+    { k: 'd', label: 'Durchmesser', type: 'num', def: 5 },
+    { k: 'depth', label: 'Tiefe (Zylinder)', type: 'num', def: 10 },
+    { k: 'tipAngle', label: 'Bohrspitze', type: 'select', options: [['118', '118° (Spiralbohrer)'], ['140', '140° (Hartmetall)'], ['180', 'Flacher Boden']], def: 118 },
+  ] },
+  { lib: 'fitHole', label: 'Passbohrung H7', role: 'hole', icon: 'target', desc: 'Präzisionsbohrung auf genaues Nennmaß mit Toleranz-Hinweis nach ISO 286 H7', params: [
+    { k: 'd', label: 'Nenn-Ø', type: 'num', def: 6 },
+    { k: 'depth', label: 'Tiefe', type: 'num', def: 10 },
+  ] },
+  { lib: 'centerHole', label: 'Zentrierbohrung', role: 'hole', icon: 'holeWizard', desc: 'Zentrierbohrung nach DIN 332 Form A (60°-Kegel + Führungsbohrung)', params: [
+    { k: 'size', label: 'Größe (DIN 332 A)', type: 'select', options: CENTER_SIZES, def: 'A2.5' },
   ] },
   { lib: 'stdScrew', label: 'Schraube (Norm)', role: 'solid', icon: 'bolt', mat: 'V2A Edelstahl', desc: 'Echte Schraube mit Innensechskant: Zylinderkopf ISO 4762 oder Senkkopf ISO 10642 – Gewinde nur angedeutet', params: [
     { k: 'size', label: 'Größe', type: 'select', options: SIZES, def: 'M3' },

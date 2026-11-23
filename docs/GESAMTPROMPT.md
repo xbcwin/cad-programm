@@ -258,7 +258,7 @@ Leitlinien:
 - STEP/STL-Import; DXF- und SVG-Import als Platte mit Skizze (`Start.importDXF`, `parseDXF`, `parseSVG`, `tidyOutline` in `85-start.js`)
 - Rundung und Fase per Knopf oder **Ziehgriff an der Kante**; Fase mit **zwei Abständen** oder **Abstand und Winkel**, Rundung **von … bis** (wächst entlang der Kante); Entformungsschräge; Wandstärke (Aushöhlen)
 - Echte metrische Gewinde (Gewindebolzen, gedrucktes Innengewinde mit Spiel)
-- Bohrungs-Assistent: Durchgang mit Senk- oder Zylinderkopf, Kernloch, Gewindeeinsatz, Mutternfalle
+- Bohrungs-Assistent: Durchgang mit Senk- oder Zylinderkopf, Kernloch, Sackloch mit 118°-Bohrspitze (`blindHole`), Passbohrung H7 (`fitHole`, ISO 286), Zentrierbohrung (`centerHole`, DIN 332 A), Gewindeeinsatz, Mutternfalle – mit Querschnitts-Vorschau (`holePreviewSVG`)
 - Rechteckmuster; Kreismuster um Z/X/Y oder eine **im Bild gewählte Achse** (Kante, runder Rand, Welle, Loch)
 - **Muster entlang Kurve** (Kurve zeichnen, Ringe zeigen die Lage, Anzahl/Abstand/Ausrichtung)
 - Spiegeln (Ebene oder **an Fläche**, die Ebene wandert mit der äußersten Fläche mit)

@@ -5600,6 +5600,98 @@ def t_a006_versatz_mehrfach(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a008_bohrungsarten(p):
+    # 1. Sackloch Ø 5 × 10 mit 118°-Bohrspitze: Quader 30×30×20 -> Volumenabzug = Zylinder + Kegel
+    p.empty()
+    p.ev("Actions.addPrimitive('box', {p:{w:30, d:30, h:20}})"); warte_rechnen(p, 20)
+    p.ev("const id=App.doc.items[0].id; const r=App.results.get(id); const fi=r.data.faces.findIndex(f=>f.t==='PLANE'&&f.n&&f.n[2]>0.9); App.select([id], {face:{id, faceIdx:fi, info:r.data.faces[fi], point:[0,0,20], normal:[0,0,1]}})"); p.wait(400)
+    p.pg.locator('.ctxbar button[aria-label="Bohrung"]').click(); p.wait(400)
+    p.pg.select_option('#hw-type', 'blind'); p.wait(200)
+    p.pg.fill('#hw-d', '5'); p.pg.press('#hw-d', 'Enter'); p.wait(150)
+    p.pg.fill('#hw-depth', '10'); p.pg.press('#hw-depth', 'Enter'); p.wait(200)
+    prev1 = p.pg.locator('#hw-preview svg').count() == 1 and '118°' in (p.pg.locator('#hw-preview').text_content() or '')
+    info1 = p.pg.locator('#hw-info').text_content() or ''
+    has_tip_info = '118°' in info1 and 'Gesamttiefe' in info1
+    p.pg.click('#hw-go'); warte_rechnen(p, 25); p.pg.keyboard.press('Escape'); p.wait(500)
+    v1 = volumen(p)
+    r_b = 2.5
+    tip_h = r_b / math.tan(math.radians(59))
+    want_cut_blind = math.pi * r_b * r_b * 10 + (1.0 / 3.0) * math.pi * r_b * r_b * tip_h
+    got_cut_blind = 18000.0 - (v1 or 0)
+    blind_meta = p.ev("""
+      const it = App.doc.items[0];
+      const ch = it.children && it.children.find(c => c.kind === 'part' && c.p.lib === 'blindHole');
+      const res = App.results.get(it.id);
+      const bot = res && res.data && res.data.faces.filter(f => f.t === 'PLANE' && f.n && f.n[2] < -0.9);
+      return {
+        err: App.errors.length,
+        p: ch && ch.p,
+        botLoops: bot && bot[0] ? null : null,
+        hasCone: res && res.data && res.data.faces.some(f => f.t === 'CONE'),
+        zMin: res && res.data && res.data.faces.reduce((m, f) => Math.min(m, f.c ? f.c[2] : 99), 99),
+        botCount: bot ? bot.length : 0
+      };
+    """)
+    ok1 = (prev1 and has_tip_info and blind_meta['err'] == 0
+           and blind_meta['p'] is not None and blind_meta['p']['d'] == 5
+           and blind_meta['p']['depth'] == 10 and blind_meta['p']['tipAngle'] == 118
+           and blind_meta['hasCone'] and blind_meta['botCount'] == 1
+           and abs(got_cut_blind - want_cut_blind) < 0.05)
+
+    # 2. Passbohrung H7: genaues Nennmaß Ø 6 + ISO-286-Toleranzhinweis (+0,012 / 0 mm)
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(200)
+    p.ev("Actions.addPrimitive('box', {p:{w:30, d:30, h:10}})"); warte_rechnen(p, 20)
+    p.ev("const id=App.doc.items[0].id; const r=App.results.get(id); const fi=r.data.faces.findIndex(f=>f.t==='PLANE'&&f.n&&f.n[2]>0.9); App.select([id], {face:{id, faceIdx:fi, info:r.data.faces[fi], point:[0,0,10], normal:[0,0,1]}})"); p.wait(400)
+    p.pg.locator('.ctxbar button[aria-label="Bohrung"]').click(); p.wait(400)
+    p.pg.select_option('#hw-type', 'fit'); p.wait(200)
+    p.pg.fill('#hw-d', '6'); p.pg.press('#hw-d', 'Enter'); p.wait(200)
+    info2 = p.pg.locator('#hw-info').text_content() or ''
+    prev2 = 'H7' in (p.pg.locator('#hw-preview').text_content() or '') and '+0,012' in info2
+    p.pg.click('#hw-go'); warte_rechnen(p, 25); p.pg.keyboard.press('Escape'); p.wait(500)
+    v2 = volumen(p)
+    want_cut_fit = math.pi * 3.0 * 3.0 * 10.0
+    got_cut_fit = 9000.0 - (v2 or 0)
+    p.ev("const ch=App.doc.items[0].children.find(c=>c.kind==='part'&&c.p.lib==='fitHole'); if(ch) App.select([ch.id]);"); p.wait(400)
+    panel_fit = p.pg.locator('#p-fit-hint').text_content() or ''
+    ok2 = (prev2 and p.ev("return App.errors.length") == 0
+           and abs(got_cut_fit - want_cut_fit) < 0.05
+           and 'H7' in panel_fit and '+0,012' in panel_fit)
+
+    # 3. Zentrierbohrung (DIN 332 Form A): A2.5 (Ø 2,5 / Ø 5,30 / t1 3,1 / 60°-Kegel + 118°-Spitze)
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(200)
+    p.ev("Actions.addPrimitive('box', {p:{w:30, d:30, h:20}})"); warte_rechnen(p, 20)
+    p.ev("const id=App.doc.items[0].id; const r=App.results.get(id); const fi=r.data.faces.findIndex(f=>f.t==='PLANE'&&f.n&&f.n[2]>0.9); App.select([id], {face:{id, faceIdx:fi, info:r.data.faces[fi], point:[0,0,20], normal:[0,0,1]}})"); p.wait(400)
+    p.pg.locator('.ctxbar button[aria-label="Bohrung"]').click(); p.wait(400)
+    p.pg.select_option('#hw-type', 'center'); p.wait(200)
+    p.pg.select_option('#hw-size', 'A2.5'); p.wait(200)
+    prev3 = '60°' in (p.pg.locator('#hw-preview').text_content() or '') and 'DIN 332' in (p.pg.locator('#hw-info').text_content() or '')
+    p.pg.click('#hw-go'); warte_rechnen(p, 25); p.pg.keyboard.press('Escape'); p.wait(500)
+    v3 = volumen(p)
+    r1, r2, t1 = 2.5 / 2.0, 5.30 / 2.0, 3.1
+    h_cone = (r2 - r1) / math.tan(math.radians(30))
+    tip_c = r1 / math.tan(math.radians(59))
+    want_cut_center = ((math.pi * h_cone / 3.0) * (r2 * r2 + r2 * r1 + r1 * r1)
+                       + math.pi * r1 * r1 * t1
+                       + (1.0 / 3.0) * math.pi * r1 * r1 * tip_c)
+    got_cut_center = 18000.0 - (v3 or 0)
+    ok3 = prev3 and p.ev("return App.errors.length") == 0 and abs(got_cut_center - want_cut_center) < 0.05
+
+    # 4. Hilfetexte und data-help im Bohrungs-Assistenten
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    keys = ['holeWizard', 'blindHole', 'fitHole', 'centerHole']
+    ok4 = all(k in hilfen and all(f in hilfen[k] for f in ('tip', 'hilfe', 'tipp')) for k in keys)
+    p.ev("const id=App.doc.items[0].id; const r=App.results.get(id); const fi=r.data.faces.findIndex(f=>f.t==='PLANE'&&f.n&&f.n[2]>0.9); App.select([id], {face:{id, faceIdx:fi, info:r.data.faces[fi], point:[0,0,20], normal:[0,0,1]}})"); p.wait(300)
+    p.pg.locator('.ctxbar button[aria-label="Bohrung"]').click(); p.wait(300)
+    p.pg.select_option('#hw-type', 'blind'); p.wait(150)
+    dh_blind = p.pg.locator('.holewiz').get_attribute('data-help')
+    p.pg.select_option('#hw-type', 'fit'); p.wait(150)
+    dh_fit = p.pg.locator('.holewiz').get_attribute('data-help')
+    p.pg.select_option('#hw-type', 'center'); p.wait(150)
+    dh_center = p.pg.locator('.holewiz').get_attribute('data-help')
+    ok4 = ok4 and dh_blind == 'blindHole' and dh_fit == 'fitHole' and dh_center == 'centerHole'
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -5705,6 +5797,7 @@ TESTS = [
     ('[A-005] Linie und Bogen im Wechsel: Hinweistext / Linie-A-Bogen-A-Linie / Tangential & Deckungsgleich / geschlossene Bahn / Taste A ohne Entwurf', t_a005_linie_bogen_wechsel),
     ('[A-021] Profi-Stufe und eigene Tastenkürzel: erster Start / Profi-Schild / Kürzel ändern / doppeltes Kürzel / Zurücksetzen', t_a021_profi_kuerzel),
     ('[A-006] Versatz mehrfach, beidseitig und runde Ecken: 3× Rechteck / beidseitig / Ecken rund / Kette & Rückgängig', t_a006_versatz_mehrfach),
+    ('[A-008] Bohrungs-Arten: Sackloch Ø 5 × 10 mit 118°-Spitze / Passbohrung H7 / Zentrierbohrung / Vorschau & Hilfe', t_a008_bohrungsarten),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

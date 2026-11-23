@@ -530,6 +530,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Kette mit runden Ecken & Rückgängig**: L-Kette mit „Beidseitig“ und „Ecken: Rund“ → äußere Ecke gerundet (Bogen R = 4 mm), innere Ecke spitz; ein Rückgängig räumt alles auf.
 - [ ] **Von Hand**: Bei Vieleck, gemischten Ketten (Linie + Bogen) und gedrücktem Rückgängig prüfen, ob Vorschau-Schildchen, Eckenbögen und Hinweistexte klar wirken.
 
+## Bohrungs-Arten (Auto [A-008])
+
+- [x] **Sackloch Ø 5 × 10 mit 118°-Bohrspitze**: Volumen des abgezogenen Teils stimmt bis auf < 0,05 mm³ mit Zylinder + 118°-Kegel überein, das Loch bleibt im Körper blind, Querschnitts-Vorschau zeigt `118°` und Gesamttiefe.
+- [x] **Passbohrung H7**: Genaues Nennmaß im 3D-Körper (Volumen = exakter Zylinder), Toleranz-Hinweis nach ISO 286 H7 (z. B. `+0,012 / 0 mm` für Ø 6 H7) sowohl in der Vorschau des Assistenten als auch rechts beim Bauteil.
+- [x] **Zentrierbohrung (DIN 332 Form A)**: A2,5 mit 60°-Kegel, Führungsbohrung und 118°-Spitze – Querschnitts-Vorschau zeigt `60°` und DIN-332-Maße, Volumen stimmt mit Kegelstumpf + Zylinder + Spitze überein.
+- [x] **Hilfetexte**: `holeWizard`, `blindHole`, `fitHole` und `centerHole` sind in `werkzeug-hilfen.json` und `HELP` gepflegt und im Assistenten per `data-help` angebunden.
+- [ ] **Von Hand**: Im Bohrungs-Assistenten auf einer Platte und auf einem runden Rohr zwischen allen Bohrungs-Arten wechseln und prüfen, ob Querschnitts-Vorschau, 3D-Drahtvorschau beim Fangen und die Bedienung am Dialog rund wirken.
+
 ## Maße als Tabelle (neu in Sitzung 114)
 
 - [x] **Tabelle**: Rechteck und Kreis mit drei Maßen → drei Zeilen („Rechteck 1“, „Kreis 1“); Breite 45 eintippen → Rechteck 45 mm breit, Tabelle bleibt offen.

@@ -10,6 +10,9 @@ const Place = (() => {
     if (d.lib === 'screwHole') return [-3.5, -3.5, -(p.length || 10), 3.5, 3.5, 0.2];
     if (d.lib === 'nutTrap') return [-3.5, -3.5, -12, 3.5, 3.5, 0.2];
     if (d.lib === 'insert') return [-2, -2, -7.7, 2, 2, 0.2];
+    if (d.lib === 'blindHole') { const r = (Number(p.d) || 5) / 2, tip = blindTipHeight(Number(p.d) || 5, p.tipAngle ?? 118); return [-r, -r, -((Number(p.depth) || 10) + tip), r, r, 0.2]; }
+    if (d.lib === 'fitHole') { const r = (Number(p.d) || 6) / 2; return [-r, -r, -(Number(p.depth) || 10), r, r, 0.2]; }
+    if (d.lib === 'centerHole') { const m = centerHoleMetrics(p.size), r = m.d2 / 2; return [-r, -r, -m.totalDepth, r, r, 0.2]; }
     if (d.lib === 'threadHole') return [-3.5, -3.5, -(p.length || 10), 3.5, 3.5, 0.2];
     if (d.lib === 'threadRod') return [-3, -3, 0, 3, 3, p.length || 12];
     if (d.lib === 'slotHole') return [-10, -2.3, -10, 10, 2.3, 0.2];
@@ -124,35 +127,162 @@ const Place = (() => {
     st = null; Snap.clear(); document.body.style.cursor = ''; UI.hint(null); Viewer.highlightFace('hover', null, null); Viewer.requestRender();
   }
   // ---------- Bohrungs-Assistent: Art, Größe, Tiefe wählen, dann Löcher per Klick setzen ----------
-  const HOLE_TYPES = [['through', 'Durchgangsloch für Schraube'], ['tap', 'Gewinde schneiden (Kernloch)'], ['insert', 'Gewindeeinsatz'], ['nut', 'Mutternfalle']];
-  let lastHole = { type: 'through', size: 'M3', head: 'countersunk', fit: 'medium', depth: 10, thru: true };
+  const HOLE_TYPES = [
+    ['through', 'Durchgangsloch für Schraube'],
+    ['tap', 'Gewinde schneiden (Kernloch)'],
+    ['blind', 'Sackloch (mit 118°-Bohrspitze)'],
+    ['fit', 'Passbohrung H7 (ISO 286)'],
+    ['center', 'Zentrierbohrung (DIN 332 A)'],
+    ['insert', 'Gewindeeinsatz'],
+    ['nut', 'Mutternfalle'],
+  ];
+  let lastHole = { type: 'through', size: 'M3', head: 'countersunk', fit: 'medium', depth: 10, thru: true, d: 5, tipAngle: 118, fitD: 6, centerSize: 'A2.5' };
   let hw = null;   // laufender Setz-Modus
+  const hwNum = (v, fb) => { const n = Model.num(v, Model.vars(App.doc).v, NaN); return n > 0 ? n : fb; };
+  function holeHelpKey(type) { return type === 'blind' ? 'blindHole' : type === 'fit' ? 'fitHole' : type === 'center' ? 'centerHole' : 'holeWizard'; }
+  function holePreviewSVG(o) {
+    const W = 236, H = 82, cx = 118, y0 = 14, yB = 72;
+    const mat = (holePath) => `<path d="M24 ${y0} H212 V${yB} H24 Z" fill="var(--accent)" fill-opacity=".14" stroke="var(--line-strong)" stroke-width="1"/>`
+      + `<path d="${holePath}" fill="var(--surface)" stroke="var(--hole)" stroke-width="1.5" stroke-linejoin="round"/>`
+      + `<line x1="${cx}" y1="6" x2="${cx}" y2="${yB + 4}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 2.5"/>`;
+    if (o.type === 'blind') {
+      const d = hwNum(o.d, 5), depth = hwNum(o.depth, 10), ang = Number(o.tipAngle ?? 118);
+      const tipH = blindTipHeight(d, ang);
+      const scale = Math.min(46 / Math.max(depth + tipH, 1), 36 / Math.max(d / 2, 1));
+      const rPx = Math.max(8, Math.min(36, (d / 2) * scale));
+      const dPx = Math.max(18, Math.min(44, depth * scale));
+      const tPx = ang >= 179.5 ? 0 : Math.max(5, Math.min(18, tipH * scale));
+      const y1 = y0 + dPx, y2 = y1 + tPx;
+      const lbl = `<text x="${cx + rPx + 6}" y="${y0 + dPx / 2 + 3}" font-size="10" fill="var(--muted)">t ${fmt(depth, 1)}</text>`
+        + `<text x="28" y="${y0 + 13}" font-size="10" fill="var(--ink)">Ø ${fmt(d, 2)}</text>`
+        + (tPx > 0 ? `<text x="${cx + rPx + 6}" y="${y2}" font-size="10" fill="var(--hole)">${ang}°</text>` : '');
+      return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - rPx} ${y0} V${y1} L${cx} ${y2} L${cx + rPx} ${y1} V${y0} Z`)}${lbl}</svg>`;
+    }
+    if (o.type === 'fit') {
+      const d = hwNum(o.fitD, 6), info = h7Info(d);
+      const rPx = Math.max(12, Math.min(30, d * 2.4));
+      const tolLbl = info.um != null ? `${info.esText} / 0` : 'H7';
+      return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - rPx} ${y0} V${yB} H${cx + rPx} V${y0} Z`)}`
+        + `<text x="28" y="${y0 + 14}" font-size="10.5" font-weight="600" fill="var(--ink)">Ø ${fmt(d, 2)} H7</text>`
+        + `<text x="${cx + rPx + 7}" y="${y0 + 30}" font-size="10" fill="var(--hole)">${tolLbl}</text></svg>`;
+    }
+    if (o.type === 'center') {
+      const m = centerHoleMetrics(o.centerSize);
+      const sc = Math.min(34 / Math.max(m.d2 / 2, 1), 48 / Math.max(m.totalDepth, 1));
+      const r1 = Math.max(7, m.d1 / 2 * sc), r2 = Math.max(r1 + 8, Math.min(38, m.d2 / 2 * sc));
+      const y1 = y0 + Math.max(12, m.hCone * sc), y2 = y1 + Math.max(14, m.t1 * sc), y3 = y2 + Math.max(5, m.tipH * sc);
+      return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - r2} ${y0} L${cx - r1} ${y1} V${y2} L${cx} ${y3} L${cx + r1} ${y2} V${y1} L${cx + r2} ${y0} Z`)}`
+        + `<text x="28" y="${y0 + 13}" font-size="10" fill="var(--ink)">Ø ${fmt(m.d2, 2)}</text>`
+        + `<text x="28" y="${y2}" font-size="10" fill="var(--muted)">Ø ${fmt(m.d1, 2)}</text>`
+        + `<text x="${cx + r2 + 6}" y="${y1}" font-size="10" fill="var(--hole)">60°</text></svg>`;
+    }
+    if (o.type === 'through' && o.head === 'countersunk') {
+      return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - 28} ${y0} L${cx - 14} ${y0 + 16} V${yB} H${cx + 14} V${y0 + 16} L${cx + 28} ${y0} Z`)}`
+        + `<text x="28" y="${y0 + 14}" font-size="10" fill="var(--ink)">${o.size} Senk.</text></svg>`;
+    }
+    if (o.type === 'through' && o.head === 'counterbore') {
+      return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - 26} ${y0} V${y0 + 22} H${cx - 14} V${yB} H${cx + 14} V${y0 + 22} H${cx + 26} V${y0} Z`)}`
+        + `<text x="28" y="${y0 + 14}" font-size="10" fill="var(--ink)">${o.size} Zyl.</text></svg>`;
+    }
+    if (o.type === 'nut') {
+      return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - 26} ${y0} V${y0 + 20} H${cx - 13} V${yB} H${cx + 13} V${y0 + 20} H${cx + 26} V${y0} Z`)}`
+        + `<text x="28" y="${y0 + 14}" font-size="10" fill="var(--ink)">Mutter ${o.size}</text></svg>`;
+    }
+    const r = o.type === 'insert' ? 18 : 13;
+    const endY = o.thru ? yB : yB - 12;
+    const lbl = o.type === 'tap' ? `${o.size} Kernloch` : o.type === 'insert' ? `${o.size} Einsatz` : `${o.size} Durchg.`;
+    return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - r} ${y0} V${endY} H${cx + r} V${y0} Z`)}`
+      + `<text x="28" y="${y0 + 14}" font-size="10" fill="var(--ink)">${lbl}</text></svg>`;
+  }
+  function holeInfoHTML(o) {
+    if (o.type === 'blind') {
+      const d = hwNum(o.d, 5), depth = hwNum(o.depth, 10), ang = Number(o.tipAngle ?? 118);
+      const tipH = blindTipHeight(d, ang);
+      if (ang >= 179.5) return `<b>Flacher Boden:</b> Tiefe ${fmt(depth, 2)} mm (wie gefräst).`;
+      return `<b>Bohrspitze (${ang}°):</b> +${fmt(tipH, 2)} mm → Gesamttiefe <b>${fmt(depth + tipH, 2)} mm</b>.`;
+    }
+    if (o.type === 'fit') {
+      const d = hwNum(o.fitD, 6), info = h7Info(d);
+      if (info.um != null) return `<b>Passung Ø ${fmt(d, 2)} H7 (ISO 286):</b> ${info.esText} / 0 mm (${info.rangeText}). Im Modell wird genau das Nennmaß gebohrt – beim Fertigen auf Maß reiben.`;
+      return `<b>Passung Ø ${fmt(d, 2)} H7:</b> Im Modell wird genau das Nennmaß gebohrt (ISO 286 H7 gilt bis Ø 500 mm).`;
+    }
+    if (o.type === 'center') {
+      const m = centerHoleMetrics(o.centerSize);
+      return `<b>DIN 332 Form A (${o.centerSize}):</b> Führungs-Ø ${fmt(m.d1, 2)} mm · 60°-Kegel Ø ${fmt(m.d2, 2)} mm · Gesamttiefe ${fmt(m.totalDepth, 2)} mm.`;
+    }
+    return '';
+  }
   function holeHere(face, anchor, at) {
     if (face) Snap.prime(face.id, face.idx);   // Flächendaten schon holen, damit das erste Loch einrastet
     const o = { ...lastHole };
-    const box = h('div', { class: 'holewiz', style: { display: 'grid', gap: '10px', minWidth: '260px' } });
-    box.append(h('b', null, at ? `Bohrungen an ${at.pts.length} ${at.pts.length === 1 ? 'Punkt' : 'Punkten'}` : 'Bohrungs-Assistent'));
+    const box = h('div', { class: 'holewiz', style: { display: 'grid', gap: '10px', minWidth: '264px' } });
+    const titleEl = h('b', null, at ? `Bohrungen an ${at.pts.length} ${at.pts.length === 1 ? 'Punkt' : 'Punkten'}` : 'Bohrungs-Assistent');
+    box.append(titleEl);
     const body = h('div', { style: { display: 'grid', gap: '10px' } });
+    const prev = h('div', { id: 'hw-preview', class: 'hw-preview' });
+    const infoBox = h('div', { id: 'hw-info', class: 'hint-box hw-info' });
+    const updatePreview = () => {
+      box.dataset.help = holeHelpKey(o.type);
+      prev.innerHTML = holePreviewSVG(o);
+      const txt = holeInfoHTML(o);
+      infoBox.innerHTML = txt;
+      infoBox.style.display = txt ? '' : 'none';
+    };
+    const bindLive = (wrap, apply) => {
+      const inp = wrap.querySelector('input');
+      if (inp) inp.addEventListener('input', () => { const n = parseNum(inp.value); if (n > 0) { apply(n); updatePreview(); } });
+    };
     const draw = () => {
       body.innerHTML = '';
-      body.append(UI.selectField({ id: 'hw-type', label: 'Art', value: o.type, options: HOLE_TYPES, onChange: (v) => { o.type = v; draw(); } }));
-      const sizes = o.type === 'insert' ? SIZES.filter((x) => x !== 'M1.6') : SIZES;
-      if (!sizes.includes(o.size)) o.size = 'M3';
-      body.append(UI.selectField({ id: 'hw-size', label: o.type === 'nut' ? 'Mutter' : o.type === 'insert' ? 'Gewinde' : 'Schraube', value: o.size, options: sizes, onChange: (v) => { o.size = v; } }));
-      if (o.type === 'through') {
+      const tf = UI.selectField({ id: 'hw-type', label: 'Art', value: o.type, options: HOLE_TYPES, onChange: (v) => { o.type = v; draw(); } });
+      tf.dataset.help = holeHelpKey(o.type);
+      body.append(tf);
+      if (o.type === 'blind') {
         const f = h('div', { class: 'fields' });
-        f.append(UI.selectField({ id: 'hw-head', label: 'Kopf', value: o.head, options: LIBMAP.screwHole.params[1].options, onChange: (v) => { o.head = v; } }));
-        f.append(UI.selectField({ id: 'hw-fit', label: 'Loch', value: o.fit, options: [['medium', 'Mittel'], ['fine', 'Eng'], ['coarse', 'Weit']], onChange: (v) => { o.fit = v; } }));
+        const df = UI.numField({ id: 'hw-d', label: 'Durchmesser', value: o.d, min: 0.2, onCommit: (v) => { o.d = v; updatePreview(); } });
+        const dp = UI.numField({ id: 'hw-depth', label: 'Tiefe (Zylinder)', value: o.depth, min: 0.2, onCommit: (v) => { o.depth = v; updatePreview(); } });
+        bindLive(df, (n) => { o.d = n; });
+        bindLive(dp, (n) => { o.depth = n; });
+        f.append(df, dp);
         body.append(f);
+        body.append(UI.selectField({ id: 'hw-tip', label: 'Bohrspitze', value: String(o.tipAngle ?? 118), options: LIBMAP.blindHole.params[2].options, onChange: (v) => { o.tipAngle = Number(v); updatePreview(); } }));
+      } else if (o.type === 'fit') {
+        const df = UI.numField({ id: 'hw-d', label: 'Nenn-Ø (H7)', value: o.fitD, min: 0.2, onCommit: (v) => { o.fitD = v; updatePreview(); } });
+        bindLive(df, (n) => { o.fitD = n; });
+        body.append(df);
+        const thru = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'hw-thru', checked: !!o.thru }), 'Ganz durch den Körper');
+        thru.querySelector('input').onchange = (e) => { o.thru = e.target.checked; draw(); };
+        body.append(thru);
+        if (!o.thru) {
+          const dp = UI.numField({ id: 'hw-depth', label: 'Tiefe', value: o.depth, min: 0.2, onCommit: (v) => { o.depth = v; updatePreview(); } });
+          bindLive(dp, (n) => { o.depth = n; });
+          body.append(dp);
+        }
+      } else if (o.type === 'center') {
+        body.append(UI.selectField({ id: 'hw-size', label: 'Größe (DIN 332 A)', value: o.centerSize, options: CENTER_SIZES, onChange: (v) => { o.centerSize = v; updatePreview(); } }));
+      } else {
+        const sizes = o.type === 'insert' ? SIZES.filter((x) => x !== 'M1.6') : SIZES;
+        if (!sizes.includes(o.size)) o.size = 'M3';
+        body.append(UI.selectField({ id: 'hw-size', label: o.type === 'nut' ? 'Mutter' : o.type === 'insert' ? 'Gewinde' : 'Schraube', value: o.size, options: sizes, onChange: (v) => { o.size = v; updatePreview(); } }));
+        if (o.type === 'through') {
+          const f = h('div', { class: 'fields' });
+          f.append(UI.selectField({ id: 'hw-head', label: 'Kopf', value: o.head, options: LIBMAP.screwHole.params[1].options, onChange: (v) => { o.head = v; updatePreview(); } }));
+          f.append(UI.selectField({ id: 'hw-fit', label: 'Loch', value: o.fit, options: [['medium', 'Mittel'], ['fine', 'Eng'], ['coarse', 'Weit']], onChange: (v) => { o.fit = v; updatePreview(); } }));
+          body.append(f);
+        }
+        const thru = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'hw-thru', checked: !!o.thru }), o.type === 'insert' ? 'So tief wie der Körper' : 'Ganz durch den Körper');
+        thru.querySelector('input').onchange = (e) => { o.thru = e.target.checked; draw(); };
+        body.append(thru);
+        if (!o.thru) body.append(UI.numField({ id: 'hw-depth', label: 'Tiefe', value: o.depth, onCommit: (v) => { o.depth = v; } }));
       }
-      const thru = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'hw-thru', checked: !!o.thru }), o.type === 'insert' ? 'So tief wie der Körper' : 'Ganz durch den Körper');
-      thru.querySelector('input').onchange = (e) => { o.thru = e.target.checked; draw(); };
-      body.append(thru);
-      if (!o.thru) body.append(UI.numField({ id: 'hw-depth', label: 'Tiefe', value: o.depth, onCommit: (v) => { o.depth = v; } }));
+      updatePreview();
+      const popEl = box.closest('.pop');
+      if (popEl) { const pr = popEl.getBoundingClientRect(); if (pr.bottom > innerHeight - 8) popEl.style.top = Math.max(8, innerHeight - pr.height - 8) + 'px'; }
     };
-    draw(); box.append(body);
+    draw(); box.append(body, prev, infoBox);
     const go = h('button', { type: 'button', class: 'btn primary', id: 'hw-go' }); go.innerHTML = icon('check') + 'Löcher setzen';
     go.onclick = () => {
+      const ae = document.activeElement; if (ae && box.contains(ae) && ae.tagName === 'INPUT') ae.blur();
       UI.closePop(); lastHole = { ...o };
       startHoles(o);
       // aus Skizzenpunkten: alle Löcher genau an den Punkten setzen, dann fertig
@@ -172,6 +302,9 @@ const Place = (() => {
   }
   function specFor(o, thick) {
     const depth = o.thru ? thick : o.depth;
+    if (o.type === 'blind') return [LIBMAP.blindHole, { d: o.d, depth: o.depth, tipAngle: Number(o.tipAngle ?? 118) }];
+    if (o.type === 'fit') return [LIBMAP.fitHole, { d: o.fitD, depth: o.thru ? thick : o.depth }];
+    if (o.type === 'center') return [LIBMAP.centerHole, { size: o.centerSize }];
     if (o.type === 'insert') return [LIBMAP.insert, { size: o.size, depth: o.thru ? thick : depth }];
     if (o.type === 'nut') return [LIBMAP.nutTrap, { size: o.size, depth: null, length: depth }];
     if (o.type === 'tap') return [LIBMAP.screwHole, { size: o.size, head: 'none', fit: 'tap', length: depth }];
@@ -188,19 +321,42 @@ const Place = (() => {
   function holeBar() {
     if (hw.bar) hw.bar.remove();
     const bar = h('div', { class: 'sketchbar holebar', role: 'toolbar', 'aria-label': 'Bohrungen' });
-    const name = { through: 'Durchgang', tap: 'Kernloch', insert: 'Einsatz', nut: 'Mutternfalle' }[hw.o.type];
-    bar.append(h('span', { class: 'title' }, 'Bohrungen'), h('span', { class: 'lbl', style: { padding: '0 8px', fontSize: '13px' } }, `${hw.o.size} · ${name} · ${hw.count} gesetzt`));
+    const name = { through: 'Durchgang', tap: 'Kernloch', blind: 'Sackloch', fit: 'Passung H7', center: 'Zentrierung', insert: 'Einsatz', nut: 'Mutternfalle' }[hw.o.type];
+    const sz = hw.o.type === 'blind' ? `Ø ${fmt(hwNum(hw.o.d, 5), 2)}` : hw.o.type === 'fit' ? `Ø ${fmt(hwNum(hw.o.fitD, 6), 2)}` : hw.o.type === 'center' ? hw.o.centerSize : hw.o.size;
+    bar.append(h('span', { class: 'title' }, 'Bohrungen'), h('span', { class: 'lbl', style: { padding: '0 8px', fontSize: '13px' } }, `${sz} · ${name} · ${hw.count} gesetzt`));
     const ok = h('button', { type: 'button', class: 'tool primary', 'data-kbd': 'Esc' }); ok.innerHTML = icon('check') + '<span>Fertig</span>'; ok.onclick = () => stopHoles();
     bar.append(ok); $('#overlay').append(bar); hw.bar = bar;
   }
   function ringObj(o) {
-    const r = (parseFloat(String(o.size).slice(1)) || 3) * (o.type === 'through' && o.head !== 'none' ? 1.1 : 0.6);
-    const pts = []; for (let i = 0; i <= 40; i++) { const t = (i / 40) * Math.PI * 2; pts.push(new THREE.Vector3(Math.cos(t) * r, Math.sin(t) * r, 0)); }
-    pts.push(new THREE.Vector3(-r * 1.4, 0, 0), new THREE.Vector3(r * 1.4, 0, 0));
-    const g = new THREE.BufferGeometry().setFromPoints(pts);
-    const l = new THREE.Line(g, new THREE.LineBasicMaterial({ color: new THREE.Color(Viewer.theme.hole), depthTest: false, transparent: true }));
-    l.renderOrder = 30; l.matrixAutoUpdate = false; l.visible = false;
-    Viewer.groups.overlay.add(l); return l;
+    const grp = new THREE.Group();
+    const mat = new THREE.LineBasicMaterial({ color: new THREE.Color(Viewer.theme.hole), depthTest: false, transparent: true });
+    const mkCircle = (radius, z = 0) => {
+      const pts = []; for (let i = 0; i <= 40; i++) { const t = (i / 40) * Math.PI * 2; pts.push(new THREE.Vector3(Math.cos(t) * radius, Math.sin(t) * radius, z)); }
+      return new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat);
+    };
+    const mkLine = (a, b) => new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...a), new THREE.Vector3(...b)]), mat);
+    let r = (parseFloat(String(o.size).slice(1)) || 3) * (o.type === 'through' && o.head !== 'none' ? 1.1 : 0.6);
+    if (o.type === 'blind') {
+      r = hwNum(o.d, 5) / 2;
+      const dep = hwNum(o.depth, 10), tip = blindTipHeight(r * 2, o.tipAngle ?? 118);
+      grp.add(mkCircle(r, 0), mkCircle(r, -dep));
+      for (const [sx, sy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) grp.add(mkLine([sx * r, sy * r, 0], [sx * r, sy * r, -dep]), mkLine([sx * r, sy * r, -dep], [0, 0, -(dep + tip)]));
+    } else if (o.type === 'fit') {
+      r = hwNum(o.fitD, 6) / 2;
+      const dep = o.thru ? 12 : hwNum(o.depth, 10);
+      grp.add(mkCircle(r, 0), mkCircle(r, -dep));
+      for (const [sx, sy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) grp.add(mkLine([sx * r, sy * r, 0], [sx * r, sy * r, -dep]));
+    } else if (o.type === 'center') {
+      const m = centerHoleMetrics(o.centerSize), r1 = m.d1 / 2; r = m.d2 / 2;
+      grp.add(mkCircle(r, 0), mkCircle(r1, -m.hCone), mkCircle(r1, -(m.hCone + m.t1)));
+      for (const [sx, sy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) grp.add(mkLine([sx * r, sy * r, 0], [sx * r1, sy * r1, -m.hCone]), mkLine([sx * r1, sy * r1, -m.hCone], [sx * r1, sy * r1, -(m.hCone + m.t1)]), mkLine([sx * r1, sy * r1, -(m.hCone + m.t1)], [0, 0, -m.totalDepth]));
+    } else {
+      grp.add(mkCircle(r, 0));
+    }
+    grp.add(mkLine([-r * 1.4, 0, 0], [r * 1.4, 0, 0]), mkLine([0, -r * 1.4, 0], [0, r * 1.4, 0]));
+    grp.traverse((c) => { c.renderOrder = 30; });
+    grp.matrixAutoUpdate = false; grp.visible = false;
+    Viewer.groups.overlay.add(grp); return grp;
   }
   function startHoles(o) {
     Views.collapse();
@@ -238,7 +394,10 @@ const Place = (() => {
     if (!hw) return;
     const cv = Viewer.canvas;
     cv.removeEventListener('pointerdown', hw.onDown, true); window.removeEventListener('pointerup', hw.onUp); cv.removeEventListener('pointermove', hw.onMove);
-    Viewer.groups.overlay.remove(hw.ring); hw.ring.geometry.dispose(); hw.ring.material.dispose(); Snap.clear();
+    Viewer.groups.overlay.remove(hw.ring);
+    const mats = new Set(); hw.ring.traverse((c) => { if (c.geometry) c.geometry.dispose(); if (c.material) mats.add(c.material); });
+    for (const m of mats) m.dispose();
+    Snap.clear();
     if (hw.bar) hw.bar.remove();
     const n = hw.count; hw = null;
     Viewer.useButtons('model');
