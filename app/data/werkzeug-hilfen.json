@@ -728,5 +728,15 @@
     "tip": "Gewinde als schnelle Markierung auf runder Fläche",
     "hilfe": "Markiert eine runde Zylinderfläche (außen wie ein Bolzen oder innen wie ein Kernloch) mit einem metrischen Gewinde (Größe M2 bis M16 und Länge). Das Gewinde wird farbig gestreift angezeigt, rechnet ohne Zeitverlust und erscheint in der Stückliste sowie normgerecht in der technischen Zeichnung.",
     "tipp": "Wenn du das Teil 3D-drucken willst, klicke rechts auf „Echt machen“ – dann wird aus der Markierung ein echtes 3D-Gewinde."
+  },
+  "thinWall": {
+    "tip": "Offene Linien oder Umrisse als dünne Wand hochziehen",
+    "hilfe": "Schaltet „Dünne Wand“ ein: Offene Linien, Bögen und Splines werden mit der eingestellten Wandstärke hochgezogen; geschlossene Umrisse werden zu einem hohlen Rohr-Profil. Mit „Wand-Lage“ wählst du, ob die Wand mittig auf der Linie, nach innen oder nach außen wächst.",
+    "tipp": "Ideal für Gehäuse-Wände, Rippen, Rahmen und Profile – Wandstärke und Lage kannst du auch später rechts jederzeit ändern."
+  },
+  "exportObjGlb": {
+    "tip": "Als OBJ (mit MTL-Farben) oder GLB speichern",
+    "hilfe": "OBJ kommt zusammen mit einer MTL-Datei für Farben und Glanz (in Millimetern, ideal für Blender und ältere 3D-Programme). GLB (glTF 2.0 binär) speichert jedes Teil als eigenen Knoten mit Namen samt Werkstoff-Aussehen aus dem Studio-Look (Metall, Rauheit, Klarlack, Durchsichtigkeit).",
+    "tipp": "Für Web-Ansichten und schnelle Vorschauen nimm GLB; für klassische Render-Programme OBJ + MTL."
   }
 }

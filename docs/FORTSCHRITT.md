@@ -205,6 +205,7 @@ Fertig.
 - [x] Maß-Schildchen, die übereinander lägen, rücken untereinander (z. B. „X 0“ und „Y 0“ am Ursprung) (Sitzung 31)
 
 ### Stufe 3 – Features und Ansichten
+- [x] Hochziehen als dünne Wand (Auto [A-007], KP-03): offene Linien/Ketten (Linien, Bögen, Splines) und geschlossene Umrisse (Rohr-Profil) mit Wandstärke und Wand-Lage (mittig, nach innen, nach außen) hochziehen – Live-Vorschau beim Fertigstellen und nachträglich rechts änderbar (`SKO.thinRegions`)
 - [x] Schnitt in die Skizze: mit „Kante“ (Z) auf eine Fläche statt auf eine Kante klicken → der ganze Schnitt des Körpers mit der Skizzen-Ebene kommt als Kontur (Linien, Bögen, Kreise, Splines; ein Rückgängig-Schritt; Kern `sectionOf` über `BRepAlgoAPI_Section`) (Sitzung 71)
 - [x] Konstruktionsebenen für Skizzen: „Mittig zwischen zwei Flächen“ (zwei parallele ebene Flächen anklicken) und „Durch drei Punkte“ (Punkte auf Körpern, Ecken und Kantenmitten rasten ein; Normale nach oben) (Sitzung 68)
 - [x] Fase mit zwei Abständen oder mit Abstand und Winkel, „Seiten tauschen“; Rundung „von … bis“, die entlang der Kante wächst, „Richtung tauschen“ (Kern: `BRepFilletAPI_MakeChamfer` mit Nachbarfläche, Rundung mit zwei Radien) (Sitzung 63)
@@ -258,6 +259,7 @@ Fertig.
 - [x] Export nur der Auswahl und einzeln (Sitzung 100, IO-07): Ist etwas gewählt, bietet „Exportieren“ „Nur die Auswahl“ an (Löcher und Formschritte daran zählen mit, STEP und Netze); „Jeder Körper als eigene Datei“ legt zusätzlich einen Ordner „Einzeln“ mit einer STL/3MF pro Körper an, benannt nach dem Teil
 - [x] Skizze und Fläche als DXF/SVG (Sitzung 101, SK-23, IO-05): in der Skizze rechts „Als DXF speichern“ / „Als SVG speichern“ (ohne Hilfslinien und Punkte, Bögen und Kreise bleiben echte Bögen); Rechtsklick auf eine ebene Fläche → „Fläche als DXF/SVG speichern“ (Umriss samt Löchern in Originalgröße)
 - [x] Export-Einstellungen (Sitzung 106, IO-08): „Feinheit der Netze“ (Grob, Normal, Fein, Sehr fein) für STL und 3MF, „STL-Format“ binär oder Text; STEP bleibt exakt
+- [x] OBJ und GLB speichern (Auto [A-010], IO-02): Export-Dialog bietet zusätzlich OBJ (+ MTL mit Farben und Glanzwerten) sowie GLB (glTF 2.0 binär mit Studio-Look-Materialien inkl. Metall/Rauheit/Klarlack/Transparenz und einem benannten Knoten pro Teil), auch für „Nur die Auswahl“ und „Jeder Körper als eigene Datei“
 - [x] Kanten einer Fläche (Sitzung 94, KP-15): Fläche wählen → „Ihre Kanten“ → alle wählen, alle abrunden oder alle abschrägen (auch an runden Flächen, ohne die Naht)
 - [x] Kanten nach Art wählen (Sitzung 108, KP-16): Teil wählen → „Kanten wählen“ (oder bei gewählten Kanten „Nach Art“) → alle äußeren, alle inneren oder alle Kanten; glatte Übergänge zählen zu keiner Art. Bekannt: Rundungen an Kanten, die erst durch „Vereinigen“ entstehen, gehen noch nicht
 - [x] Notiz am Schritt (Sitzung 94, KP-55): rechts „Notiz hinzufügen“; die Notiz steht im Tooltip der Zeitleiste, der Schritt bekommt einen farbigen Strich

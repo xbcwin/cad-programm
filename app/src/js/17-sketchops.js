@@ -718,5 +718,156 @@ const SKO = (() => {
     return { issues, gaps, dups, opens, fixable: gaps.length + dups.length };
   }
 
-  return { TEMPLATES, TPLNAMES, tplEnts, curve, inter, intersections, partsOf, nearestOn, closest, perpFeet, tangentFeet, trimPlan, trimPieces, trimRemoved, explode, chainOf, offsetChain, offsetShape, linkPoints, hasRadius, mirrorEnt, mirrorPoint, moveEnt, rotateEnt, rotPt, pr, inspect };
+  // ---------- Dünne Wand (KP-03): offene Linien/Ketten und geschlossene Umrisse versetzen ----------
+  function polyArea2(pts) { let a = 0; for (let i = 0, n = pts.length; i < n; i++) { const p = pts[i], q = pts[(i + 1) % n]; a += p[0] * q[1] - q[0] * p[1]; } return a / 2; }
+  function revSeg(s) { return s.t === 'bez' ? { t: 'bez', a: s.b, c1: s.c2, c2: s.c1, b: s.a } : s.t === 'arc' ? { t: 'arc', a: s.b, m: s.m, b: s.a } : { t: 'line', a: s.b, b: s.a }; }
+  function cloneSeg(s) {
+    if (s.t === 'arc') return { t: 'arc', a: s.a.slice(), m: s.m.slice(), b: s.b.slice() };
+    if (s.t === 'bez') return { t: 'bez', a: s.a.slice(), c1: s.c1.slice(), c2: s.c2.slice(), b: s.b.slice() };
+    return { t: 'line', a: s.a.slice(), b: s.b.slice() };
+  }
+  // Linienzug mit Bogenlängen-Winkelhalbierender versetzen (sd > 0 links der Laufrichtung)
+  function offsetPolyline(pts, sd, closed) {
+    const P = [];
+    for (const q of pts) if (!P.length || d2(P[P.length - 1], q) > 1e-9) P.push(q);
+    if (closed && P.length > 1 && d2(P[0], P[P.length - 1]) < 1e-9) P.pop();
+    const m = P.length;
+    if (m < (closed ? 3 : 2)) return { ok: false, why: 'Die Kurve ist zu kurz.' };
+    const edgeCount = closed ? m : m - 1;
+    const norms = [];
+    for (let i = 0; i < edgeCount; i++) {
+      const a = P[i], b = P[(i + 1) % m], dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1;
+      norms.push([-dy / L, dx / L]);
+    }
+    const V = [];
+    for (let i = 0; i < m; i++) {
+      let off;
+      if (!closed && i === 0) off = [norms[0][0] * sd, norms[0][1] * sd];
+      else if (!closed && i === m - 1) off = [norms[m - 2][0] * sd, norms[m - 2][1] * sd];
+      else {
+        const nA = norms[(i - 1 + edgeCount) % edgeCount], nB = norms[i % edgeCount];
+        const bx = nA[0] + nB[0], by = nA[1] + nB[1], den = 1 + nA[0] * nB[0] + nA[1] * nB[1];
+        if (den > 0.1) off = [(bx / den) * sd, (by / den) * sd];
+        else {
+          const bl = Math.hypot(bx, by);
+          off = bl > 1e-9 ? [(bx / bl) * 3 * sd, (by / bl) * 3 * sd] : [nA[0] * sd, nA[1] * sd];
+        }
+      }
+      V.push(pr([P[i][0] + off[0], P[i][1] + off[1]]));
+    }
+    const segs = [];
+    for (let i = 0; i < edgeCount; i++) {
+      const a = V[i], b = V[(i + 1) % m];
+      if (d2(a, b) > 1e-7) segs.push({ t: 'line', a, b });
+    }
+    for (let i = 1; i < segs.length; i++) segs[i].a = segs[i - 1].b.slice();
+    if (closed && segs.length > 1) segs[0].a = segs[segs.length - 1].b.slice();
+    if (segs.length < (closed ? 3 : 1)) return { ok: false, why: 'Die Wandstärke ist für diese Kurve zu groß.' };
+    return { ok: true, segs };
+  }
+  function offsetSegs(segs, sd, closed) {
+    if (!segs || !segs.length) return { ok: false, why: 'Keine Segmente vorhanden.' };
+    if (Math.abs(sd) < 1e-9) {
+      const out = segs.map(cloneSeg);
+      for (let i = 1; i < out.length; i++) if (d2(out[i - 1].b, out[i].a) < 1e-3) out[i].a = out[i - 1].b.slice();
+      if (closed && out.length > 1 && d2(out[out.length - 1].b, out[0].a) < 1e-3) out[0].a = out[out.length - 1].b.slice();
+      return { ok: true, segs: out };
+    }
+    if (segs.every((s) => s.t === 'line' || s.t === 'arc')) {
+      const chIn = {
+        closed: !!closed,
+        segs: segs.map((s) => ({
+          e: s.t === 'arc' ? { type: 'arc', a: s.a, m: s.m, b: s.b } : { type: 'line', a: s.a, b: s.b },
+          rev: false, a: s.a, b: s.b,
+        })),
+      };
+      const r = offsetChain(chIn, sd);
+      if (!r.ok) return r;
+      const out = r.items.map((x) => (x.ent.type === 'arc' ? { t: 'arc', a: x.ent.a, m: x.ent.m, b: x.ent.b } : { t: 'line', a: x.ent.a, b: x.ent.b }));
+      for (let i = 1; i < out.length; i++) out[i].a = out[i - 1].b.slice();
+      if (closed && out.length > 1) out[0].a = out[out.length - 1].b.slice();
+      return { ok: true, segs: out };
+    }
+    const pts = [];
+    for (const s of segs) {
+      const sp = s.t === 'bez' ? SK.bezPoints(s, 16) : SK.segPoints(s);
+      for (const q of sp) if (!pts.length || d2(pts[pts.length - 1], q) > 1e-7) pts.push(q);
+    }
+    return offsetPolyline(pts, sd, closed);
+  }
+  // Geschlossene Schleife um d versetzen (d > 0 nach außen, d < 0 nach innen)
+  function offsetClosedLoop(L, d, ents) {
+    if (Math.abs(d) < 1e-9) return { ok: true, k: L.k };
+    if (L.k.circle) {
+      const r = L.k.circle.r + d;
+      if (r <= 1e-4) return { ok: false, why: 'Die Wandstärke ist zu groß für diesen Kreis.' };
+      return { ok: true, k: { circle: { c: L.k.circle.c.slice(), r: r6(r) } } };
+    }
+    if (L.k.ellipse) {
+      const r = offsetShape({ type: 'ellipse', ...L.k.ellipse }, d);
+      if (!r.ok) return { ok: false, why: 'Die Wandstärke ist zu groß für diese Ellipse.' };
+      return { ok: true, k: { segs: SK.splineBez(r.ent.pts, true) } };
+    }
+    const e = L.ents.length === 1 ? (ents || []).find((x) => x.id === L.ents[0]) : null;
+    if (e && (e.type === 'rect' || e.type === 'poly' || e.type === 'slot')) {
+      const r = offsetShape(e, d);
+      if (!r.ok) return { ok: false, why: 'Die Wandstärke ist zu groß für diesen Umriss.' };
+      if (r.ent.type === 'slot' && d2(r.ent.a, r.ent.b) < 1e-9) return { ok: true, k: { circle: { c: r.ent.a, r: r.ent.r } } };
+      return { ok: true, k: { segs: SK.segsOf(r.ent).map((s) => (s.t === 'arc' ? { t: 'arc', a: s.a, m: s.m, b: s.b } : { t: 'line', a: s.a, b: s.b })) } };
+    }
+    const ccw = polyArea2(L.poly) > 0;
+    const sd = ccw ? -d : d;
+    const r = offsetSegs(L.k.segs, sd, true);
+    if (!r.ok) return { ok: false, why: 'Die Wandstärke ist zu groß für diesen Umriss.' };
+    const pts = [];
+    for (const s of r.segs) { const sp = SK.segPoints(s); for (let i = 0; i < sp.length - 1; i++) pts.push(sp[i]); }
+    const aNew = polyArea2(pts);
+    if (Math.abs(aNew) < 1e-4 || (aNew > 0) !== ccw || (d < 0 && Math.abs(aNew) >= L.area)) {
+      return { ok: false, why: 'Die Wandstärke ist zu groß für diesen Umriss.' };
+    }
+    return { ok: true, k: { segs: r.segs } };
+  }
+  function thinRegions(ents, wall, side = 'center', sel = null) {
+    if (!(wall > 1e-4)) return { regions: [], error: 'Die Wandstärke muss größer als 0 mm sein.' };
+    const s = side === 'in' || side === 'out' ? side : 'center';
+    const regions = [];
+    const regs = SK.regions(ents);
+    let chosen = regs;
+    if (Array.isArray(sel) && sel.length) { const f = regs.filter((r) => sel.includes(r.key)); if (f.length) chosen = f; }
+    const dOut = s === 'in' ? 0 : s === 'out' ? wall : wall / 2;
+    const dIn = s === 'out' ? 0 : s === 'in' ? -wall : -wall / 2;
+    for (const rg of chosen) {
+      for (const L of [rg.outer, ...rg.holes]) {
+        const oR = offsetClosedLoop(L, dOut, ents);
+        if (!oR.ok) return { regions: [], error: oR.why };
+        const iR = offsetClosedLoop(L, dIn, ents);
+        if (!iR.ok) return { regions: [], error: iR.why };
+        regions.push({ outer: oR.k, holes: [iR.k] });
+      }
+    }
+    for (const ch of SK.chains(ents)) {
+      const pts = [];
+      for (const sg of ch.segs) for (const q of SK.segPoints(sg)) if (!pts.length || d2(pts[pts.length - 1], q) > 1e-7) pts.push(q);
+      const A = polyArea2(pts);
+      const inSign = Math.abs(A) > 1e-4 ? (A > 0 ? 1 : -1) : 1;
+      const d1 = s === 'in' ? inSign * wall : s === 'out' ? -inSign * wall : wall / 2;
+      const d2s = s === 'center' ? -wall / 2 : 0;
+      const rA = offsetSegs(ch.segs, d1, false);
+      if (!rA.ok) return { regions: [], error: rA.why || 'Die Wandstärke ist für diese Kurve zu groß.' };
+      const rB = offsetSegs(ch.segs, d2s, false);
+      if (!rB.ok) return { regions: [], error: rB.why || 'Die Wandstärke ist für diese Kurve zu groß.' };
+      const A0 = rA.segs, B0 = rB.segs;
+      const loopSegs = [
+        ...A0,
+        { t: 'line', a: A0[A0.length - 1].b.slice(), b: B0[B0.length - 1].b.slice() },
+        ...B0.slice().reverse().map(revSeg),
+        { t: 'line', a: B0[0].a.slice(), b: A0[0].a.slice() },
+      ];
+      regions.push({ outer: { segs: loopSegs }, holes: [] });
+    }
+    if (!regions.length) return { regions: [], error: 'Die Skizze hat keine Linie und keinen Umriss für eine dünne Wand.' };
+    return { regions, error: null };
+  }
+
+  return { TEMPLATES, TPLNAMES, tplEnts, curve, inter, intersections, partsOf, nearestOn, closest, perpFeet, tangentFeet, trimPlan, trimPieces, trimRemoved, explode, chainOf, offsetChain, offsetShape, linkPoints, hasRadius, mirrorEnt, mirrorPoint, moveEnt, rotateEnt, rotPt, pr, inspect, thinRegions };
 })();

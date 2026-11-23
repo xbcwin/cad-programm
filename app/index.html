@@ -1885,6 +1885,16 @@ const HELP = {
   "tip": "Gewinde als schnelle Markierung auf runder Fläche",
   "hilfe": "Markiert eine runde Zylinderfläche (außen wie ein Bolzen oder innen wie ein Kernloch) mit einem metrischen Gewinde (Größe M2 bis M16 und Länge). Das Gewinde wird farbig gestreift angezeigt, rechnet ohne Zeitverlust und erscheint in der Stückliste sowie normgerecht in der technischen Zeichnung.",
   "tipp": "Wenn du das Teil 3D-drucken willst, klicke rechts auf „Echt machen“ – dann wird aus der Markierung ein echtes 3D-Gewinde."
+ },
+ "thinWall": {
+  "tip": "Offene Linien oder Umrisse als dünne Wand hochziehen",
+  "hilfe": "Schaltet „Dünne Wand“ ein: Offene Linien, Bögen und Splines werden mit der eingestellten Wandstärke hochgezogen; geschlossene Umrisse werden zu einem hohlen Rohr-Profil. Mit „Wand-Lage“ wählst du, ob die Wand mittig auf der Linie, nach innen oder nach außen wächst.",
+  "tipp": "Ideal für Gehäuse-Wände, Rippen, Rahmen und Profile – Wandstärke und Lage kannst du auch später rechts jederzeit ändern."
+ },
+ "exportObjGlb": {
+  "tip": "Als OBJ (mit MTL-Farben) oder GLB speichern",
+  "hilfe": "OBJ kommt zusammen mit einer MTL-Datei für Farben und Glanz (in Millimetern, ideal für Blender und ältere 3D-Programme). GLB (glTF 2.0 binär) speichert jedes Teil als eigenen Knoten mit Namen samt Werkstoff-Aussehen aus dem Studio-Look (Metall, Rauheit, Klarlack, Durchsichtigkeit).",
+  "tipp": "Für Web-Ansichten und schnelle Vorschauen nimm GLB; für klassische Render-Programme OBJ + MTL."
  }
 };
 
@@ -2153,10 +2163,21 @@ const Model = (() => {
   }
   function sketchParams(it, V) {
     const p = it.p || {};
-    const regs = SK.regions(p.sketch ? Solver.cached(p.sketch, V).ents : []);
-    let chosen = regs;
-    if (Array.isArray(p.sel) && p.sel.length) { const f = regs.filter((r) => p.sel.includes(r.key)); if (f.length) chosen = f; }
-    const out = { plane: p.sketch ? p.sketch.plane : { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] }, regions: chosen.map((r) => ({ outer: r.outer.k, holes: r.holes.map((h) => h.k) })) };
+    const ents = p.sketch ? Solver.cached(p.sketch, V).ents : [];
+    const plane = p.sketch ? p.sketch.plane : { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] };
+    let out;
+    if (it.kind === 'extrude' && p.thin) {
+      const wall = num(p.wall, V, 2);
+      const side = p.wallSide === 'in' || p.wallSide === 'out' ? p.wallSide : 'center';
+      const tr = SKO.thinRegions(ents, wall, side, p.sel);
+      out = { plane, regions: tr.regions, thin: true };
+      if (tr.error) out.thinError = tr.error;
+    } else {
+      const regs = SK.regions(ents);
+      let chosen = regs;
+      if (Array.isArray(p.sel) && p.sel.length) { const f = regs.filter((r) => p.sel.includes(r.key)); if (f.length) chosen = f; }
+      out = { plane, regions: chosen.map((r) => ({ outer: r.outer.k, holes: r.holes.map((h) => h.k) })) };
+    }
     if (it.kind === 'extrude') {
       out.dist = num(p.dist, V, 10); out.dir = p.dir || 'normal'; out.extra = num(p.extra, V, 0);
       if (out.dir === 'two') out.dist2 = num(p.dist2, V, out.dist);
@@ -2492,7 +2513,7 @@ const Model = (() => {
       case 'cone': return `Ø ${f(p.d1)} × ${f(p.h)}`;
       case 'sphere': case 'hemisphere': return `Ø ${f(p.d)}`;
       case 'torus': return `Ø ${f(p.d)}`;
-      case 'extrude': return `${f(p.dist)} hoch`;
+      case 'extrude': return p.thin ? `${f(p.dist)} hoch · Wand ${f(p.wall || 2)}` : `${f(p.dist)} hoch`;
       case 'revolve': return `${f(p.angle)}°`;
       case 'group': return (typeof Features !== 'undefined' && Features.sizeText(it, V)) || `${(it.children || []).length} Teile`;
       case 'part': {
@@ -4191,7 +4212,158 @@ const SKO = (() => {
     return { issues, gaps, dups, opens, fixable: gaps.length + dups.length };
   }
 
-  return { TEMPLATES, TPLNAMES, tplEnts, curve, inter, intersections, partsOf, nearestOn, closest, perpFeet, tangentFeet, trimPlan, trimPieces, trimRemoved, explode, chainOf, offsetChain, offsetShape, linkPoints, hasRadius, mirrorEnt, mirrorPoint, moveEnt, rotateEnt, rotPt, pr, inspect };
+  // ---------- Dünne Wand (KP-03): offene Linien/Ketten und geschlossene Umrisse versetzen ----------
+  function polyArea2(pts) { let a = 0; for (let i = 0, n = pts.length; i < n; i++) { const p = pts[i], q = pts[(i + 1) % n]; a += p[0] * q[1] - q[0] * p[1]; } return a / 2; }
+  function revSeg(s) { return s.t === 'bez' ? { t: 'bez', a: s.b, c1: s.c2, c2: s.c1, b: s.a } : s.t === 'arc' ? { t: 'arc', a: s.b, m: s.m, b: s.a } : { t: 'line', a: s.b, b: s.a }; }
+  function cloneSeg(s) {
+    if (s.t === 'arc') return { t: 'arc', a: s.a.slice(), m: s.m.slice(), b: s.b.slice() };
+    if (s.t === 'bez') return { t: 'bez', a: s.a.slice(), c1: s.c1.slice(), c2: s.c2.slice(), b: s.b.slice() };
+    return { t: 'line', a: s.a.slice(), b: s.b.slice() };
+  }
+  // Linienzug mit Bogenlängen-Winkelhalbierender versetzen (sd > 0 links der Laufrichtung)
+  function offsetPolyline(pts, sd, closed) {
+    const P = [];
+    for (const q of pts) if (!P.length || d2(P[P.length - 1], q) > 1e-9) P.push(q);
+    if (closed && P.length > 1 && d2(P[0], P[P.length - 1]) < 1e-9) P.pop();
+    const m = P.length;
+    if (m < (closed ? 3 : 2)) return { ok: false, why: 'Die Kurve ist zu kurz.' };
+    const edgeCount = closed ? m : m - 1;
+    const norms = [];
+    for (let i = 0; i < edgeCount; i++) {
+      const a = P[i], b = P[(i + 1) % m], dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1;
+      norms.push([-dy / L, dx / L]);
+    }
+    const V = [];
+    for (let i = 0; i < m; i++) {
+      let off;
+      if (!closed && i === 0) off = [norms[0][0] * sd, norms[0][1] * sd];
+      else if (!closed && i === m - 1) off = [norms[m - 2][0] * sd, norms[m - 2][1] * sd];
+      else {
+        const nA = norms[(i - 1 + edgeCount) % edgeCount], nB = norms[i % edgeCount];
+        const bx = nA[0] + nB[0], by = nA[1] + nB[1], den = 1 + nA[0] * nB[0] + nA[1] * nB[1];
+        if (den > 0.1) off = [(bx / den) * sd, (by / den) * sd];
+        else {
+          const bl = Math.hypot(bx, by);
+          off = bl > 1e-9 ? [(bx / bl) * 3 * sd, (by / bl) * 3 * sd] : [nA[0] * sd, nA[1] * sd];
+        }
+      }
+      V.push(pr([P[i][0] + off[0], P[i][1] + off[1]]));
+    }
+    const segs = [];
+    for (let i = 0; i < edgeCount; i++) {
+      const a = V[i], b = V[(i + 1) % m];
+      if (d2(a, b) > 1e-7) segs.push({ t: 'line', a, b });
+    }
+    for (let i = 1; i < segs.length; i++) segs[i].a = segs[i - 1].b.slice();
+    if (closed && segs.length > 1) segs[0].a = segs[segs.length - 1].b.slice();
+    if (segs.length < (closed ? 3 : 1)) return { ok: false, why: 'Die Wandstärke ist für diese Kurve zu groß.' };
+    return { ok: true, segs };
+  }
+  function offsetSegs(segs, sd, closed) {
+    if (!segs || !segs.length) return { ok: false, why: 'Keine Segmente vorhanden.' };
+    if (Math.abs(sd) < 1e-9) {
+      const out = segs.map(cloneSeg);
+      for (let i = 1; i < out.length; i++) if (d2(out[i - 1].b, out[i].a) < 1e-3) out[i].a = out[i - 1].b.slice();
+      if (closed && out.length > 1 && d2(out[out.length - 1].b, out[0].a) < 1e-3) out[0].a = out[out.length - 1].b.slice();
+      return { ok: true, segs: out };
+    }
+    if (segs.every((s) => s.t === 'line' || s.t === 'arc')) {
+      const chIn = {
+        closed: !!closed,
+        segs: segs.map((s) => ({
+          e: s.t === 'arc' ? { type: 'arc', a: s.a, m: s.m, b: s.b } : { type: 'line', a: s.a, b: s.b },
+          rev: false, a: s.a, b: s.b,
+        })),
+      };
+      const r = offsetChain(chIn, sd);
+      if (!r.ok) return r;
+      const out = r.items.map((x) => (x.ent.type === 'arc' ? { t: 'arc', a: x.ent.a, m: x.ent.m, b: x.ent.b } : { t: 'line', a: x.ent.a, b: x.ent.b }));
+      for (let i = 1; i < out.length; i++) out[i].a = out[i - 1].b.slice();
+      if (closed && out.length > 1) out[0].a = out[out.length - 1].b.slice();
+      return { ok: true, segs: out };
+    }
+    const pts = [];
+    for (const s of segs) {
+      const sp = s.t === 'bez' ? SK.bezPoints(s, 16) : SK.segPoints(s);
+      for (const q of sp) if (!pts.length || d2(pts[pts.length - 1], q) > 1e-7) pts.push(q);
+    }
+    return offsetPolyline(pts, sd, closed);
+  }
+  // Geschlossene Schleife um d versetzen (d > 0 nach außen, d < 0 nach innen)
+  function offsetClosedLoop(L, d, ents) {
+    if (Math.abs(d) < 1e-9) return { ok: true, k: L.k };
+    if (L.k.circle) {
+      const r = L.k.circle.r + d;
+      if (r <= 1e-4) return { ok: false, why: 'Die Wandstärke ist zu groß für diesen Kreis.' };
+      return { ok: true, k: { circle: { c: L.k.circle.c.slice(), r: r6(r) } } };
+    }
+    if (L.k.ellipse) {
+      const r = offsetShape({ type: 'ellipse', ...L.k.ellipse }, d);
+      if (!r.ok) return { ok: false, why: 'Die Wandstärke ist zu groß für diese Ellipse.' };
+      return { ok: true, k: { segs: SK.splineBez(r.ent.pts, true) } };
+    }
+    const e = L.ents.length === 1 ? (ents || []).find((x) => x.id === L.ents[0]) : null;
+    if (e && (e.type === 'rect' || e.type === 'poly' || e.type === 'slot')) {
+      const r = offsetShape(e, d);
+      if (!r.ok) return { ok: false, why: 'Die Wandstärke ist zu groß für diesen Umriss.' };
+      if (r.ent.type === 'slot' && d2(r.ent.a, r.ent.b) < 1e-9) return { ok: true, k: { circle: { c: r.ent.a, r: r.ent.r } } };
+      return { ok: true, k: { segs: SK.segsOf(r.ent).map((s) => (s.t === 'arc' ? { t: 'arc', a: s.a, m: s.m, b: s.b } : { t: 'line', a: s.a, b: s.b })) } };
+    }
+    const ccw = polyArea2(L.poly) > 0;
+    const sd = ccw ? -d : d;
+    const r = offsetSegs(L.k.segs, sd, true);
+    if (!r.ok) return { ok: false, why: 'Die Wandstärke ist zu groß für diesen Umriss.' };
+    const pts = [];
+    for (const s of r.segs) { const sp = SK.segPoints(s); for (let i = 0; i < sp.length - 1; i++) pts.push(sp[i]); }
+    const aNew = polyArea2(pts);
+    if (Math.abs(aNew) < 1e-4 || (aNew > 0) !== ccw || (d < 0 && Math.abs(aNew) >= L.area)) {
+      return { ok: false, why: 'Die Wandstärke ist zu groß für diesen Umriss.' };
+    }
+    return { ok: true, k: { segs: r.segs } };
+  }
+  function thinRegions(ents, wall, side = 'center', sel = null) {
+    if (!(wall > 1e-4)) return { regions: [], error: 'Die Wandstärke muss größer als 0 mm sein.' };
+    const s = side === 'in' || side === 'out' ? side : 'center';
+    const regions = [];
+    const regs = SK.regions(ents);
+    let chosen = regs;
+    if (Array.isArray(sel) && sel.length) { const f = regs.filter((r) => sel.includes(r.key)); if (f.length) chosen = f; }
+    const dOut = s === 'in' ? 0 : s === 'out' ? wall : wall / 2;
+    const dIn = s === 'out' ? 0 : s === 'in' ? -wall : -wall / 2;
+    for (const rg of chosen) {
+      for (const L of [rg.outer, ...rg.holes]) {
+        const oR = offsetClosedLoop(L, dOut, ents);
+        if (!oR.ok) return { regions: [], error: oR.why };
+        const iR = offsetClosedLoop(L, dIn, ents);
+        if (!iR.ok) return { regions: [], error: iR.why };
+        regions.push({ outer: oR.k, holes: [iR.k] });
+      }
+    }
+    for (const ch of SK.chains(ents)) {
+      const pts = [];
+      for (const sg of ch.segs) for (const q of SK.segPoints(sg)) if (!pts.length || d2(pts[pts.length - 1], q) > 1e-7) pts.push(q);
+      const A = polyArea2(pts);
+      const inSign = Math.abs(A) > 1e-4 ? (A > 0 ? 1 : -1) : 1;
+      const d1 = s === 'in' ? inSign * wall : s === 'out' ? -inSign * wall : wall / 2;
+      const d2s = s === 'center' ? -wall / 2 : 0;
+      const rA = offsetSegs(ch.segs, d1, false);
+      if (!rA.ok) return { regions: [], error: rA.why || 'Die Wandstärke ist für diese Kurve zu groß.' };
+      const rB = offsetSegs(ch.segs, d2s, false);
+      if (!rB.ok) return { regions: [], error: rB.why || 'Die Wandstärke ist für diese Kurve zu groß.' };
+      const A0 = rA.segs, B0 = rB.segs;
+      const loopSegs = [
+        ...A0,
+        { t: 'line', a: A0[A0.length - 1].b.slice(), b: B0[B0.length - 1].b.slice() },
+        ...B0.slice().reverse().map(revSeg),
+        { t: 'line', a: B0[0].a.slice(), b: A0[0].a.slice() },
+      ];
+      regions.push({ outer: { segs: loopSegs }, holes: [] });
+    }
+    if (!regions.length) return { regions: [], error: 'Die Skizze hat keine Linie und keinen Umriss für eine dünne Wand.' };
+    return { regions, error: null };
+  }
+
+  return { TEMPLATES, TPLNAMES, tplEnts, curve, inter, intersections, partsOf, nearestOn, closest, perpFeet, tangentFeet, trimPlan, trimPieces, trimRemoved, explode, chainOf, offsetChain, offsetShape, linkPoints, hasRadius, mirrorEnt, mirrorPoint, moveEnt, rotateEnt, rotPt, pr, inspect, thinRegions };
 })();
 // ---- 20-kernel.js ----
 // ================= Verbindung zum CAD-Kern (Web Worker) =================
@@ -5921,7 +6093,19 @@ const Handles = (() => {
     } else if (it.kind === 'extrude' && it.p && it.p.sketch) {
       const pl = it.p.sketch.plane; const n = new THREE.Vector3(...pl.n).normalize();
       const dirSign = it.p.dir === 'reverse' ? -1 : 1;
-      const rg = SK.regions(Solver.cached(it.p.sketch, Model.vars(App.doc).v).ents); const lab = rg[0] ? rg[0].label : [0, 0];
+      const ents = Solver.cached(it.p.sketch, Model.vars(App.doc).v).ents;
+      const rg = SK.regions(ents);
+      let lab = rg[0] ? rg[0].label : null;
+      if (!lab) {
+        const ch = SK.chains(ents)[0];
+        if (ch && ch.segs.length) {
+          const pts = SK.segPoints(ch.segs[0]);
+          lab = pts[Math.floor(pts.length / 2)] || ch.segs[0].a;
+        } else {
+          const b = SK.bounds(ents);
+          lab = b ? [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2] : [0, 0];
+        }
+      }
       const x = new THREE.Vector3(...pl.x).normalize(), y = new THREE.Vector3().crossVectors(n, x);
       const o = new THREE.Vector3(...pl.o).addScaledVector(x, lab[0]).addScaledVector(y, lab[1]);
       const dist = Model.num(it.p.dist, Model.vars(App.doc).v, 10);
@@ -9302,7 +9486,7 @@ const Panels = (() => {
       ]), 'simple-only');
       el.append(h('div', { class: 'sep' }));
       Views.sync();
-      btn('t-export', 'export', 'Exportieren', 'Als STEP, STL, 3MF oder DXF speichern (ZIP)', 'Strg E', () => Print.exportDialog(), 'primary', 'Export');
+      btn('t-export', 'export', 'Exportieren', 'Als STEP, STL, 3MF, OBJ, GLB oder DXF speichern (ZIP)', 'Strg E', () => Print.exportDialog(), 'primary', 'Export');
     } else {
       btn('t-sheet', 'sheet', 'Blatt', 'Blattgröße, Maßstab und Ansichten', '', (e) => Drawing.sheetMenu(e.currentTarget));
       btn('t-dim', 'dim', 'Maß', 'Bemaßung hinzufügen: zwei Punkte oder einen Kreis anklicken', 'D', () => Drawing.tool('dim'));
@@ -9979,6 +10163,18 @@ const Panels = (() => {
         fl.append(UI.selectField({ id: 'p-dir', label: 'Richtung', value: it.p.dir || 'normal', options: [['normal', 'Nach außen'], ['reverse', 'Nach innen'], ['both', 'Beidseitig gleich'], ['two', 'Beidseitig verschieden']], onChange: (v) => setP('dir', v) }));
         if (it.p.dir === 'two' && !it.p.thru) fl.append(UI.numField({ id: 'p-dist2', label: 'Höhe Seite 2', value: it.p.dist2 ?? it.p.dist, onCommit: (v) => setP('dist2', v) }));
         if (cuts || it.p.thru) { const l = h('label', { class: 'check', 'data-help': 'thruAll' }, h('input', { type: 'checkbox', id: 'p-thru', checked: !!it.p.thru }), 'Durch alles'); l.querySelector('input').onchange = (e) => App.change(e.target.checked ? 'Durch alles' : 'Feste Tiefe', (doc) => { const T = Model.find(doc, it.id).item; if (e.target.checked) T.p.thru = true; else delete T.p.thru; }); fl.append(l); }
+        const hasRegs = SK.regions(it.p.sketch ? Solver.cached(it.p.sketch, Model.vars(App.doc).v).ents : []).length > 0;
+        const tl = h('label', { class: 'check', 'data-help': 'thinWall' }, h('input', { type: 'checkbox', id: 'p-thin', checked: !!it.p.thin, disabled: !!it.p.thin && !hasRegs }), 'Dünne Wand');
+        tl.querySelector('input').onchange = (e) => App.change(e.target.checked ? 'Dünne Wand an' : 'Dünne Wand aus', (doc) => {
+          const T = Model.find(doc, it.id).item;
+          if (e.target.checked) { T.p.thin = true; if (T.p.wall == null) T.p.wall = 2; if (!T.p.wallSide) T.p.wallSide = 'center'; }
+          else delete T.p.thin;
+        });
+        fl.append(tl);
+        if (it.p.thin) {
+          fl.append(UI.numField({ id: 'p-wall', label: 'Wandstärke', value: it.p.wall ?? 2, min: 0.1, onCommit: (v) => setP('wall', v) }));
+          fl.append(UI.selectField({ id: 'p-wall-side', label: 'Wand-Lage', value: it.p.wallSide || 'center', options: [['center', 'Mittig'], ['in', 'Nach innen'], ['out', 'Nach außen']], onChange: (v) => setP('wallSide', v) }));
+        }
       } else {
         fl.append(UI.numField({ id: 'p-angle', label: 'Winkel', value: it.p.angle, unit: '°', onCommit: (v) => setP('angle', v) }));
       }
@@ -15272,7 +15468,13 @@ const Sketch = (() => {
       finishSession(); Features.pathFromSketch(ids, sk); return;
     }
     if (S.ctx.mode === 'edit') {
-      if (!pathMode && (editKind === 'sweep' ? !SK.chains(S.ents).length : !regs.length)) { UI.toast(editKind === 'sweep' ? 'Der Pfad braucht mindestens eine offene Linie, einen Bogen oder eine Spline.' : 'Die Skizze braucht mindestens eine geschlossene Fläche.', { kind: 'bad' }); return; }
+      const editIt = (Model.find(App.doc, S.ctx.editId) || {}).item;
+      const isThinEdit = editKind === 'extrude' && editIt && editIt.p && editIt.p.thin;
+      if (!pathMode) {
+        if (editKind === 'sweep' && !SK.chains(S.ents).length) { UI.toast('Der Pfad braucht mindestens eine offene Linie, einen Bogen oder eine Spline.', { kind: 'bad' }); return; }
+        if (isThinEdit && !regs.length && !SK.chains(S.ents).length) { UI.toast('Für eine dünne Wand braucht die Skizze mindestens eine Linie oder einen Umriss.', { kind: 'bad' }); return; }
+        if (editKind !== 'sweep' && !isThinEdit && !regs.length) { UI.toast('Die Skizze braucht mindestens eine geschlossene Fläche.', { kind: 'bad' }); return; }
+      }
       const id = S.ctx.editId, ents = S.ents, dims = S.dims, cons = S.cons, plane = deepClone(S.plane), bg = S.bg ? deepClone(S.bg) : null;
       App.change('Skizze bearbeitet', (doc) => { const f = Model.find(doc, id); f.item.p.sketch.ents = ents; f.item.p.sketch.dims = dims; f.item.p.sketch.cons = cons; f.item.p.sketch.plane = plane; if (bg) f.item.p.sketch.bg = bg; else delete f.item.p.sketch.bg; const keys = regs.map((r) => r.key); if (f.item.p.sel) f.item.p.sel = f.item.p.sel.filter((k) => keys.includes(k)); });
       finishSession(); App.select([id]); return;
@@ -15284,7 +15486,7 @@ const Sketch = (() => {
       const id = S.ctx.targetId, n = S.F.n.clone(), wp = pts.map((e) => toWorld(e.a[0], e.a[1]));
       finishSession(); Place.holesAtPoints(id, wp, n); return;
     }
-    if (!regs.length && SK.chains(S.ents).length) { sweepFromSketch(); return; }
+    if (!regs.length && SK.chains(S.ents).length) { extrudeStep({ dist: S.ctx.targetId ? 5 : 10, dir: 'normal', openOnly: true, thin: true }); return; }
     if (!regs.length) { UI.toast(S.ents.length ? 'Noch keine geschlossene Fläche. Schließe den Umriss oder zeichne ein Rechteck oder einen Kreis.' : 'Zeichne zuerst etwas, zum Beispiel ein Rechteck.', { kind: 'bad', icon: 'info' }); return; }
     extrudeStep({ dist: S.ctx.targetId ? 5 : 10, dir: 'normal' });
   }
@@ -15309,8 +15511,9 @@ const Sketch = (() => {
   function extrudeStep(opts) {
     hideBar(); tiltView();
     const regs = SK.regions(S.ents);
+    const openOnly = !!opts.openOnly || !regs.length;
     const tgt = S.ctx.targetId ? Model.find(App.doc, S.ctx.targetId) : null;
-    S.step = { dist: opts.dist, dir: opts.dir, sel: regs.map((r) => r.key), revolve: false, axis: 'y', angle: 360, fromPushPull: !!opts.fromPushPull, color: tgt ? tgt.item.color : nextColor() };
+    S.step = { dist: opts.dist, dir: opts.dir, sel: regs.map((r) => r.key), revolve: false, sweep: false, openOnly, thin: openOnly ? true : !!opts.thin, wall: opts.wall || 2, wallSide: opts.wallSide || 'center', axis: 'y', angle: 360, fromPushPull: !!opts.fromPushPull, color: tgt ? tgt.item.color : nextColor() };
     stepBox = h('div', { class: 'stepbox' });
     renderStep();
     $('#overlay').append(stepBox);
@@ -15319,15 +15522,32 @@ const Sketch = (() => {
   }
   function renderStep() {
     const st = S.step; stepBox.innerHTML = '';
-    UI.hint(st.revolve ? 'Wähl die <b>Achse</b> und den <b>Winkel</b> – 360° ergibt einen ganzen Drehkörper, zum Beispiel eine Schale oder einen Knopf.' : 'Zieh am <b>Pfeil</b> oder tipp die Höhe ein. Nach innen wird es ein <b>Loch</b>.');
-    stepBox.append(h('h3', null, st.revolve ? 'Drehen' : (st.dir === 'reverse' ? 'Hineindrücken (Loch)' : 'Hochziehen')));
+    UI.hint(st.sweep ? 'Zieht ein <b>Rohr (Ø 6 mm)</b> entlang deiner offenen Kurve. Form, Größe und Wand stellst du danach rechts ein.' : st.revolve ? 'Wähl die <b>Achse</b> und den <b>Winkel</b> – 360° ergibt einen ganzen Drehkörper, zum Beispiel eine Schale oder einen Knopf.' : st.thin ? 'Zieh am <b>Pfeil</b> oder tipp Höhe, <b>Wandstärke</b> und <b>Wand-Lage</b> ein.' : 'Zieh am <b>Pfeil</b> oder tipp die Höhe ein. Nach innen wird es ein <b>Loch</b>.');
+    stepBox.append(h('h3', null, st.sweep ? 'Entlang Pfad' : st.revolve ? 'Drehen' : st.dir === 'reverse' ? 'Hineindrücken (Loch)' : st.thin ? 'Dünne Wand' : 'Hochziehen'));
     const seg = h('div', { class: 'role-switch' });
-    const a = h('button', { type: 'button', 'aria-pressed': !st.revolve ? 'true' : 'false' }); a.innerHTML = icon('lift') + 'Hochziehen'; a.onclick = () => { st.revolve = false; renderStep(); updatePreview(); };
-    const b = h('button', { type: 'button', 'aria-pressed': st.revolve ? 'true' : 'false' }); b.innerHTML = icon('rotate') + 'Drehen'; b.onclick = () => { st.revolve = true; renderStep(); updatePreview(); };
-    seg.append(a, b); if (!st.fromPushPull) stepBox.append(seg);
-    if (!st.revolve) {
+    if (st.openOnly) {
+      const a = h('button', { type: 'button', id: 'st-mode-thin', 'aria-pressed': !st.sweep ? 'true' : 'false' }); a.innerHTML = icon('wall2d') + 'Dünne Wand'; a.onclick = () => { st.sweep = false; st.thin = true; renderStep(); updatePreview(); };
+      const b = h('button', { type: 'button', id: 'st-mode-sweep', 'aria-pressed': st.sweep ? 'true' : 'false' }); b.innerHTML = icon('sweep') + 'Entlang Pfad'; b.onclick = () => { st.sweep = true; renderStep(); updatePreview(); };
+      seg.append(a, b); stepBox.append(seg);
+    } else if (!st.fromPushPull) {
+      const a = h('button', { type: 'button', 'aria-pressed': !st.revolve ? 'true' : 'false' }); a.innerHTML = icon('lift') + 'Hochziehen'; a.onclick = () => { st.revolve = false; renderStep(); updatePreview(); };
+      const b = h('button', { type: 'button', 'aria-pressed': st.revolve ? 'true' : 'false' }); b.innerHTML = icon('rotate') + 'Drehen'; b.onclick = () => { st.revolve = true; renderStep(); updatePreview(); };
+      seg.append(a, b); stepBox.append(seg);
+    }
+    if (st.sweep) {
+      stepBox.append(h('p', null, 'Zieht ein Rohr Ø 6 mm entlang des offenen Pfads. Form, Größe und Wand kannst du danach rechts einstellen.'));
+    } else if (!st.revolve) {
       stepBox.append(UI.numField({ id: 'st-dist', label: 'Höhe', value: st.dist, onCommit: (v) => { st.dist = v; updatePreview(); } }));
       stepBox.append(UI.selectField({ id: 'st-dir', label: 'Richtung', value: st.dir, options: [['normal', S.ctx.targetId ? 'Nach außen (Körper)' : 'Nach oben'], ['reverse', S.ctx.targetId ? 'Nach innen (Loch)' : 'Nach unten'], ['both', 'Beidseitig']], onChange: (v) => { st.dir = v; renderStep(); updatePreview(); } }));
+      if (!st.openOnly && !st.fromPushPull) {
+        const tl = h('label', { class: 'check', 'data-help': 'thinWall' }, h('input', { type: 'checkbox', id: 'st-thin', checked: !!st.thin }), 'Dünne Wand');
+        tl.querySelector('input').onchange = (e) => { st.thin = e.target.checked; renderStep(); updatePreview(); };
+        stepBox.append(tl);
+      }
+      if (st.thin) {
+        stepBox.append(UI.numField({ id: 'st-wall', label: 'Wandstärke', value: st.wall, min: 0.1, onCommit: (v) => { st.wall = v; updatePreview(); } }));
+        stepBox.append(UI.selectField({ id: 'st-wall-side', label: 'Wand-Lage', value: st.wallSide || 'center', options: [['center', 'Mittig'], ['in', 'Nach innen'], ['out', 'Nach außen']], onChange: (v) => { st.wallSide = v; updatePreview(); } }));
+      }
     } else {
       const sel = S.ents.find((x) => x.id === S.sel && x.type === 'line');
       const opts = [['y', 'Um die senkrechte Achse'], ['x', 'Um die waagerechte Achse']];
@@ -15339,8 +15559,10 @@ const Sketch = (() => {
       }
       stepBox.append(UI.numField({ id: 'st-angle', label: 'Winkel', value: st.angle, unit: '°', min: 1, onCommit: (v) => { st.angle = clamp(v, 1, 360); updatePreview(); } }));
     }
-    const hole = !st.revolve && st.dir === 'reverse' && S.ctx.targetId;
-    stepBox.append(h('p', null, hole ? 'Wird als Loch aus dem Körper geschnitten.' : S.ctx.targetId ? 'Wird Teil des Körpers, auf dem du gezeichnet hast.' : 'Wird ein neuer Körper.'));
+    if (!st.sweep) {
+      const hole = !st.revolve && st.dir === 'reverse' && S.ctx.targetId;
+      stepBox.append(h('p', null, hole ? 'Wird als Loch aus dem Körper geschnitten.' : S.ctx.targetId ? 'Wird Teil des Körpers, auf dem du gezeichnet hast.' : 'Wird ein neuer Körper.'));
+    }
     const row = h('div', { class: 'btn-row', style: { justifyContent: 'flex-end' } });
     const back = h('button', { type: 'button', class: 'btn ghost' }); back.innerHTML = st.fromPushPull ? 'Abbrechen' : icon('undo') + 'Skizze'; back.dataset.tip = st.fromPushPull ? '' : 'Zurück zur Skizze'; back.onclick = () => stepBack();
     const ok = h('button', { type: 'button', class: 'btn primary' }); ok.innerHTML = icon('check') + 'Fertig'; ok.onclick = () => stepOK();
@@ -15348,14 +15570,22 @@ const Sketch = (() => {
   }
   function stepItem() {
     const st = S.step;
+    if (st.sweep) {
+      return Model.newItem('sweep', { sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons) }, shape: 'circle', d: 6, w: 6, h: 4, wall: 0 }, { name: 'Entlang Pfad', color: st.color });
+    }
     const regs = SK.regions(S.ents);
     const sel = st.sel && st.sel.length && st.sel.length < regs.length ? st.sel.slice() : null;
     const role = !st.revolve && st.dir === 'reverse' && S.ctx.targetId ? 'hole' : 'solid';
     const kind = st.revolve ? 'revolve' : 'extrude';
     const target = S.ctx.targetId ? Model.find(App.doc, S.ctx.targetId) : null;
-    const it = Model.newItem(kind, {}, { name: st.revolve ? 'Drehkörper' : role === 'hole' ? 'Aussparung' : S.ctx.targetId ? 'Erhöhung' : 'Skizzenkörper', role, color: st.color });
+    const name = st.revolve ? 'Drehkörper' : role === 'hole' ? 'Aussparung' : S.ctx.targetId ? 'Erhöhung' : (st.thin && st.openOnly ? 'Dünne Wand' : 'Skizzenkörper');
+    const it = Model.newItem(kind, {}, { name, role, color: st.color });
     const p = { sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons), ...(S.bg ? { bg: deepClone(S.bg) } : {}) }, sel };
-    if (kind === 'extrude') { p.dist = st.dist; p.dir = st.dir; if (role === 'hole') p.extra = 0.05; else if (S.ctx.targetId) p.extra = 0.02; }
+    if (kind === 'extrude') {
+      p.dist = st.dist; p.dir = st.dir;
+      if (role === 'hole') p.extra = 0.05; else if (S.ctx.targetId) p.extra = 0.02;
+      if (st.thin) { p.thin = true; p.wall = st.wall; p.wallSide = st.wallSide || 'center'; }
+    }
     else {
       p.angle = st.angle;
       if (st.axis === 'x') p.axis = { a: [0, 0], b: [1, 0] };
@@ -15378,7 +15608,17 @@ const Sketch = (() => {
   function updatePreview() { previewUpd(); }
   function arrowPos() {
     const regs = SK.regions(S.ents); const r = regs.find((x) => S.step.sel.includes(x.key)) || regs[0];
-    const lab = r ? r.label : [0, 0];
+    let lab = r ? r.label : null;
+    if (!lab) {
+      const ch = SK.chains(S.ents)[0];
+      if (ch && ch.segs.length) {
+        const pts = SK.segPoints(ch.segs[0]);
+        lab = pts[Math.floor(pts.length / 2)] || ch.segs[0].a;
+      } else {
+        const b = SK.bounds(S.ents);
+        lab = b ? [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2] : [0, 0];
+      }
+    }
     const st = S.step; const V = Model.vars(App.doc).v; const d = Model.num(st.dist, V, 10);
     const sgn = st.dir === 'reverse' ? -1 : 1; const off = st.dir === 'both' ? d / 2 : d;
     return toWorld(lab[0], lab[1]).addScaledVector(S.F.n, sgn * off);
@@ -15386,7 +15626,7 @@ const Sketch = (() => {
   function placeArrow() {
     if (arrow) { arrow.remove(); arrow = null; }
     for (const l of labels.filter((x) => x.classList.contains('steplabel'))) l.remove();
-    if (!S || !S.step || S.step.revolve) { Viewer.requestRender(); return; }
+    if (!S || !S.step || S.step.revolve || S.step.sweep) { Viewer.requestRender(); return; }
     const p = arrowPos();
     const dir = S.F.n.clone().multiplyScalar(S.step.dir === 'reverse' ? -1 : 1);
     const ps = Viewer.pixelSizeAt(p);
@@ -15462,7 +15702,8 @@ const Sketch = (() => {
     const it = stepItem();
     const ctx = S.ctx;
     App.extra = [];
-    App.change(it.role === 'hole' ? 'Aussparung erstellt' : it.kind === 'revolve' ? 'Drehkörper erstellt' : 'Hochgezogen', (doc) => {
+    const lbl = it.kind === 'sweep' ? 'Entlang Pfad gezogen' : it.role === 'hole' ? 'Aussparung erstellt' : it.kind === 'revolve' ? 'Drehkörper erstellt' : (it.p && it.p.thin ? 'Dünne Wand hochgezogen' : 'Hochgezogen');
+    App.change(lbl, (doc) => {
       if (ctx.targetId && Model.find(doc, ctx.targetId)) Actions.attach(doc, ctx.targetId, it);
       else { Model.setFromMatrix(it, S.W); doc.items.push(it); }
     });
@@ -15471,21 +15712,7 @@ const Sketch = (() => {
     App.select([top ? top.id : it.id]);
     // neues Teil gut sichtbar machen, wenn es nach dem Zurückspringen zu klein wäre
     setTimeout(() => { const b = Actions.worldBox(top ? top.id : it.id); if (b && (Viewer.screenFraction(b) < 0.22 || !Viewer.inView(b))) Viewer.fit(App.doc.items.map((x) => x.id)); }, 480);
-    UI.toast(it.role === 'hole' ? 'Aussparung erstellt. Im Verlauf kannst du die Tiefe jederzeit ändern.' : 'Fertig! Die Maße kannst du rechts jederzeit ändern.', { icon: 'check' });
-  }
-  // Offener Pfad ohne Fläche: Querschnitt (Rohr Ø 6) entlang ziehen
-  function sweepFromSketch() {
-    const ctx = S.ctx;
-    const it = Model.newItem('sweep', { sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons) }, shape: 'circle', d: 6, w: 6, h: 4, wall: 0 }, { name: 'Entlang Pfad' });
-    App.extra = [];
-    App.change('Entlang Pfad gezogen', (doc) => {
-      if (ctx.targetId && Model.find(doc, ctx.targetId)) Actions.attach(doc, ctx.targetId, it);
-      else { Model.setFromMatrix(it, S.W); doc.items.push(it); }
-    });
-    finishSession();
-    const top = Model.topOf(App.doc, it.id);
-    App.select([top ? top.id : it.id]);
-    UI.toast('Offener Pfad erkannt – als Rohr Ø 6 mm entlang gezogen. Form, Größe und Wand stellst du rechts ein.', { icon: 'check', ms: 5000 });
+    UI.toast(it.kind === 'sweep' ? 'Als Rohr Ø 6 mm entlang gezogen. Form, Größe und Wand stellst du rechts ein.' : it.role === 'hole' ? 'Aussparung erstellt. Im Verlauf kannst du die Tiefe jederzeit ändern.' : 'Fertig! Die Maße kannst du rechts jederzeit ändern.', { icon: 'check' });
   }
   // ---------- Beenden ----------
   function cancel(silent) {
@@ -16153,7 +16380,7 @@ const Commands = (() => {
     add('repeat', 'Letzten Befehl wiederholen', 'undo', 'wiederholen nochmal letzter befehl', () => repeat(), { group: 'Werkzeuge', kbd: 'Leertaste' });
     add('datum', 'Bezugsebene anlegen', 'originPlanes', 'bezugsebene ebene konstruktionsebene arbeitsebene abstand versetzt schräg', () => Datums.dialog(), { group: 'Werkzeuge' });
     add('image', 'Bild speichern (PNG)', 'image', 'bild png foto screenshot rendering präsentation hintergrund durchsichtig', () => Print.imageDialog(), { group: 'Werkzeuge' });
-    add('export', 'Exportieren (STEP, STL, 3MF, DXF)', 'export', 'step stl 3mf dxf platten fräse laser exportieren speichern download', () => Print.exportDialog(), { group: 'Werkzeuge', kbd: 'Strg E' });
+    add('export', 'Exportieren (STEP, STL, 3MF, OBJ, GLB, DXF)', 'export', 'step stl 3mf obj mtl glb gltf dxf platten fräse laser exportieren speichern download', () => Print.exportDialog(), { group: 'Werkzeuge', kbd: 'Strg E' });
     add('status', 'Modell-Status', 'info', 'status prüfen größe fehler', () => $('#ampel').click(), { group: 'Werkzeuge' });
     add('drop', 'Auf die XY-Ebene setzen', 'push', 'boden unten absetzen z null ebene', () => Actions.dropToPlate(null), { group: 'Werkzeuge' });
     add('ortho', 'Orthografisch / Perspektive', 'viewOrtho', 'ortho perspektive projektion kamera', () => ViewPrefs.toggle('ortho'), { group: 'Ansicht', kbd: 'O' });
@@ -16724,6 +16951,216 @@ const Print = (() => {
     const rels = enc.encode('<?xml version="1.0" encoding="UTF-8"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Target="/3D/3dmodel.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships>');
     return Zip.make([{ name: '[Content_Types].xml', data: ct }, { name: '_rels/.rels', data: rels }, { name: '3D/3dmodel.model', data: model }]);
   }
+  function parseHexSrgb(hex) {
+    const s = String(hex || '').trim();
+    let m = /^#([0-9a-f]{6})$/i.exec(s);
+    if (m) { const n = parseInt(m[1], 16); return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]; }
+    m = /^#([0-9a-f]{3})$/i.exec(s);
+    if (m) { const a = m[1]; return [parseInt(a[0] + a[0], 16) / 255, parseInt(a[1] + a[1], 16) / 255, parseInt(a[2] + a[2], 16) / 255]; }
+    try {
+      const c = new THREE.Color(s);
+      if (THREE.SRGBColorSpace && c.getRGB) { const o = { r: 0, g: 0, b: 0 }; c.getRGB(o, THREE.SRGBColorSpace); return [o.r, o.g, o.b]; }
+      return [c.r, c.g, c.b];
+    } catch (_) { return [0.184, 0.62, 0.569]; }
+  }
+  function srgbToLinear(c) { return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
+  function ensureNormals(vertices, triangles, normals) {
+    if (normals && normals.length === vertices.length) return normals;
+    const out = new Float32Array(vertices.length);
+    for (let i = 0; i < triangles.length; i += 3) {
+      const i0 = triangles[i] * 3, i1 = triangles[i + 1] * 3, i2 = triangles[i + 2] * 3;
+      const ux = vertices[i1] - vertices[i0], uy = vertices[i1 + 1] - vertices[i0 + 1], uz = vertices[i1 + 2] - vertices[i0 + 2];
+      const wx = vertices[i2] - vertices[i0], wy = vertices[i2 + 1] - vertices[i0 + 1], wz = vertices[i2 + 2] - vertices[i0 + 2];
+      const nx = uy * wz - uz * wy, ny = uz * wx - ux * wz, nz = ux * wy - uy * wx;
+      for (const k of [i0, i1, i2]) { out[k] += nx; out[k + 1] += ny; out[k + 2] += nz; }
+    }
+    for (let i = 0; i < out.length; i += 3) {
+      const l = Math.hypot(out[i], out[i + 1], out[i + 2]);
+      if (l > 1e-12) { out[i] /= l; out[i + 1] /= l; out[i + 2] /= l; }
+      else { out[i] = 0; out[i + 1] = 0; out[i + 2] = 1; }
+    }
+    return out;
+  }
+  function partAppearance(o) {
+    const f = o.id ? Model.find(App.doc, o.id) : null;
+    const it = f ? f.item : null;
+    const matName = (it && it.mat) || (App.doc.settings && App.doc.settings.material) || null;
+    const L = Viewer.lookOf(matName);
+    const matCol = L.nat && !(it && it.colorSet) ? L.col : null;
+    const hex = matCol || (it && it.color) || o.color || '#2f9e91';
+    const srgb = parseHexSrgb(hex);
+    const opacity = it && it.opacity != null && it.opacity < 1 ? Math.max(0.05, it.opacity) : (L.glass || 1);
+    return {
+      name: o.name || (it ? Model.label(it) : 'Teil'),
+      matName: matName || 'Standard',
+      hex: String(hex).toLowerCase(),
+      srgb,
+      linear: srgb.map(srgbToLinear),
+      metalness: L.metal || 0,
+      roughness: L.rough != null ? L.rough : 0.45,
+      clearcoat: L.clear || 0,
+      clearcoatRoughness: L.clearRough != null ? L.clearRough : 0.2,
+      opacity,
+      transparent: opacity < 0.999,
+    };
+  }
+  function buildOBJ(objects, name) {
+    const mtlFile = (name || 'Tracery') + '.mtl';
+    const f4 = (v) => (Math.abs(v) < 5e-7 ? 0 : v).toFixed(4);
+    const f5 = (v) => (Math.abs(v) < 5e-7 ? 0 : v).toFixed(5);
+    const mats = new Map();
+    const mtl = ['# Tracery MTL'];
+    const matFor = (ap) => {
+      const k = [ap.matName, ap.hex, ap.metalness, ap.roughness, ap.clearcoat, ap.opacity.toFixed(3)].join('|');
+      if (mats.has(k)) return mats.get(k);
+      const token = ap.matName.replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '') || 'Standard';
+      const id = `mat_${mats.size + 1}_${token}`;
+      mats.set(k, id);
+      const [r, g, b] = ap.srgb;
+      const ks = ap.metalness > 0.5
+        ? [r * (1 - ap.roughness * 0.5), g * (1 - ap.roughness * 0.5), b * (1 - ap.roughness * 0.5)]
+        : (() => { const s = Math.min(1, 0.04 + 0.35 * (1 - ap.roughness) + 0.3 * ap.clearcoat); return [s, s, s]; })();
+      const ns = Math.round(Math.pow(1 - Math.min(0.98, ap.roughness), 2) * 900 + 10);
+      mtl.push(
+        `newmtl ${id}`,
+        `Ka ${f4(r * 0.15)} ${f4(g * 0.15)} ${f4(b * 0.15)}`,
+        `Kd ${f4(r)} ${f4(g)} ${f4(b)}`,
+        `Ks ${f4(ks[0])} ${f4(ks[1])} ${f4(ks[2])}`,
+        `Ns ${ns}`,
+        `Pr ${f4(ap.roughness)}`,
+        `Pm ${f4(ap.metalness)}`,
+        `d ${f4(ap.opacity)}`,
+        `illum ${ap.transparent ? 4 : 2}`
+      );
+      return id;
+    };
+    const obj = ['# Tracery OBJ (Millimeter)', `mtllib ${mtlFile}`];
+    let vOff = 0;
+    for (const o of objects) {
+      const ap = partAppearance(o);
+      const matId = matFor(ap);
+      const objName = String(ap.name || 'Teil').replace(/[\r\n]+/g, ' ').trim() || 'Teil';
+      obj.push(`o ${objName}`, `usemtl ${matId}`);
+      const v = o.vertices, t = o.triangles, nrm = ensureNormals(v, t, o.normals);
+      const vCount = (v.length / 3) | 0;
+      for (let i = 0; i < vCount * 3; i += 3) obj.push(`v ${f5(v[i])} ${f5(v[i + 1])} ${f5(v[i + 2])}`);
+      for (let i = 0; i < vCount * 3; i += 3) {
+        let nx = nrm[i], ny = nrm[i + 1], nz = nrm[i + 2];
+        const l = Math.hypot(nx, ny, nz);
+        if (l > 1e-12) { nx /= l; ny /= l; nz /= l; } else { nx = 0; ny = 0; nz = 1; }
+        obj.push(`vn ${f5(nx)} ${f5(ny)} ${f5(nz)}`);
+      }
+      for (let i = 0; i < t.length; i += 3) {
+        const a = t[i], b = t[i + 1], c = t[i + 2];
+        if (a >= vCount || b >= vCount || c >= vCount || a === b || b === c || a === c) continue;
+        const ia = a + 1 + vOff, ib = b + 1 + vOff, ic = c + 1 + vOff;
+        obj.push(`f ${ia}//${ia} ${ib}//${ib} ${ic}//${ic}`);
+      }
+      vOff += vCount;
+    }
+    const enc = new TextEncoder();
+    return { obj: enc.encode(obj.join('\n') + '\n'), mtl: enc.encode(mtl.join('\n') + '\n') };
+  }
+  function buildGLB(objects, name) {
+    const mats = new Map(), materials = [];
+    let usesClearcoat = false;
+    const matFor = (ap) => {
+      const k = [ap.matName, ap.hex, ap.metalness, ap.roughness, ap.clearcoat, ap.opacity.toFixed(3)].join('|');
+      if (mats.has(k)) return mats.get(k);
+      const idx = materials.length;
+      mats.set(k, idx);
+      const mat = {
+        name: ap.matName,
+        pbrMetallicRoughness: {
+          baseColorFactor: [+ap.linear[0].toFixed(6), +ap.linear[1].toFixed(6), +ap.linear[2].toFixed(6), +ap.opacity.toFixed(4)],
+          metallicFactor: +ap.metalness.toFixed(4),
+          roughnessFactor: +ap.roughness.toFixed(4),
+        },
+      };
+      if (ap.transparent) { mat.alphaMode = 'BLEND'; mat.doubleSided = true; }
+      if (ap.clearcoat > 0) {
+        usesClearcoat = true;
+        mat.extensions = { KHR_materials_clearcoat: { clearcoatFactor: +ap.clearcoat.toFixed(4), clearcoatRoughnessFactor: +ap.clearcoatRoughness.toFixed(4) } };
+      }
+      materials.push(mat);
+      return idx;
+    };
+    const binParts = [], bufferViews = [], accessors = [], meshes = [], nodes = [];
+    let binLen = 0;
+    const pushBin = (typed, target) => {
+      const pad = (4 - (binLen % 4)) % 4;
+      if (pad) { binParts.push(new Uint8Array(pad)); binLen += pad; }
+      const bytes = new Uint8Array(typed.buffer, typed.byteOffset, typed.byteLength);
+      const byteOffset = binLen;
+      binParts.push(bytes); binLen += bytes.byteLength;
+      const bv = bufferViews.length;
+      bufferViews.push({ buffer: 0, byteOffset, byteLength: bytes.byteLength, target });
+      return bv;
+    };
+    for (const o of objects) {
+      const ap = partAppearance(o);
+      const matIdx = matFor(ap);
+      const partName = String(ap.name || 'Teil').replace(/[\r\n]+/g, ' ').trim() || 'Teil';
+      const v = o.vertices, t = o.triangles, nrm = ensureNormals(v, t, o.normals);
+      const vCount = (v.length / 3) | 0;
+      const pos = new Float32Array(vCount * 3), nor = new Float32Array(vCount * 3);
+      let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+      for (let i = 0; i < vCount * 3; i += 3) {
+        // mm (Z-oben) → Meter (Y-oben, Determinante +1)
+        const px = v[i] * 0.001, py = v[i + 2] * 0.001, pz = -v[i + 1] * 0.001;
+        pos[i] = px; pos[i + 1] = py; pos[i + 2] = pz;
+        if (px < minX) minX = px; if (py < minY) minY = py; if (pz < minZ) minZ = pz;
+        if (px > maxX) maxX = px; if (py > maxY) maxY = py; if (pz > maxZ) maxZ = pz;
+        let nx = nrm[i], ny = nrm[i + 2], nz = -nrm[i + 1];
+        const l = Math.hypot(nx, ny, nz);
+        if (l > 1e-12) { nx /= l; ny /= l; nz /= l; } else { nx = 0; ny = 1; nz = 0; }
+        nor[i] = nx; nor[i + 1] = ny; nor[i + 2] = nz;
+      }
+      if (!vCount) { minX = minY = minZ = 0; maxX = maxY = maxZ = 0; }
+      const tris = [];
+      for (let i = 0; i < t.length; i += 3) {
+        const a = t[i], b = t[i + 1], c = t[i + 2];
+        if (a < vCount && b < vCount && c < vCount && a !== b && b !== c && a !== c) tris.push(a, b, c);
+      }
+      const useU16 = vCount < 65535;
+      const idxArr = useU16 ? new Uint16Array(tris) : new Uint32Array(tris);
+      const posBv = pushBin(pos, 34962), norBv = pushBin(nor, 34962), idxBv = pushBin(idxArr, 34963);
+      const posAcc = accessors.length;
+      accessors.push({ bufferView: posBv, componentType: 5126, count: vCount, type: 'VEC3', min: [minX, minY, minZ], max: [maxX, maxY, maxZ] });
+      const norAcc = accessors.length;
+      accessors.push({ bufferView: norBv, componentType: 5126, count: vCount, type: 'VEC3' });
+      const idxAcc = accessors.length;
+      accessors.push({ bufferView: idxBv, componentType: useU16 ? 5123 : 5125, count: tris.length, type: 'SCALAR' });
+      const meshIdx = meshes.length;
+      meshes.push({ name: partName, primitives: [{ attributes: { POSITION: posAcc, NORMAL: norAcc }, indices: idxAcc, material: matIdx, mode: 4 }] });
+      nodes.push({ name: partName, mesh: meshIdx });
+    }
+    const binPad = (4 - (binLen % 4)) % 4;
+    if (binPad) { binParts.push(new Uint8Array(binPad)); binLen += binPad; }
+    const gltf = {
+      asset: { version: '2.0', generator: 'Tracery' },
+      scene: 0,
+      scenes: [{ name: name || 'Tracery', nodes: nodes.map((_, i) => i) }],
+      nodes, meshes, materials, accessors, bufferViews,
+      buffers: [{ byteLength: binLen }],
+    };
+    if (usesClearcoat) gltf.extensionsUsed = ['KHR_materials_clearcoat'];
+    const jsonRaw = new TextEncoder().encode(JSON.stringify(gltf));
+    const jsonPad = (4 - (jsonRaw.length % 4)) % 4;
+    const jsonLen = jsonRaw.length + jsonPad;
+    const total = 12 + 8 + jsonLen + 8 + binLen;
+    const out = new Uint8Array(total);
+    const dv = new DataView(out.buffer);
+    dv.setUint32(0, 0x46546c67, true); dv.setUint32(4, 2, true); dv.setUint32(8, total, true);
+    dv.setUint32(12, jsonLen, true); dv.setUint32(16, 0x4e4f534a, true);
+    out.set(jsonRaw, 20);
+    for (let i = 0; i < jsonPad; i++) out[20 + jsonRaw.length + i] = 0x20;
+    const binOff = 20 + jsonLen;
+    dv.setUint32(binOff, binLen, true); dv.setUint32(binOff + 4, 0x004e4942, true);
+    let p = binOff + 8;
+    for (const part of binParts) { out.set(part, p); p += part.byteLength; }
+    return out;
+  }
   function safeName(s) { return (String(s || 'Tracery').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim() || 'Tracery').slice(0, 80); }
   async function save(filename, data) {
     let dl = null;
@@ -16752,22 +17189,24 @@ const Print = (() => {
   function exportDialog() {
     if (!App.doc.items.some((x) => x.role !== 'hole' && !x.hidden)) { UI.toast('Es gibt noch nichts zu exportieren. Füge zuerst einen Körper hinzu.', { icon: 'info' }); return; }
     const plates = Plates.candidates();
-    const opts = { step: true, stl: false, mf: false, dxf: false, plates: plates.map((p) => p.id) };
+    const opts = { step: true, stl: false, mf: false, obj: false, glb: false, dxf: false, plates: plates.map((p) => p.id) };
     const body = h('div', { style: { display: 'grid', gap: '12px' } });
     body.append(h('p', null, 'Die Dateien kommen zusammen als ZIP.'));
     const mk = (k, label, sub) => { const l = h('label', { class: 'check', style: { alignItems: 'flex-start' } }, h('input', { type: 'checkbox', id: 'ex-' + k, checked: opts[k] }), h('span', null, h('b', null, label), h('br'), h('small', { style: { color: 'var(--muted)' } }, sub))); l.querySelector('input').onchange = (e) => { opts[k] = e.target.checked; }; return l; };
-    body.append(mk('step', 'STEP', 'Exakte Geometrie – für Fusion, FreeCAD, SolidWorks und Fertiger'), mk('stl', 'STL', 'Dreiecksnetz, z. B. für Renderings oder 3D-Druck'), mk('mf', '3MF', 'Dreiecksnetz mit Farben und Maßeinheit'));
+    const objRow = mk('obj', 'OBJ (+ MTL)', 'Dreiecksnetz mit Farben – für Blender, Rendering und viele 3D-Programme'); objRow.setAttribute('data-help', 'exportObjGlb');
+    const glbRow = mk('glb', 'GLB (glTF)', '3D-Datei mit Material-Aussehen und Teilenamen – für Web, Blender und Vorschau'); glbRow.setAttribute('data-help', 'exportObjGlb');
+    body.append(mk('step', 'STEP', 'Exakte Geometrie – für Fusion, FreeCAD, SolidWorks und Fertiger'), mk('stl', 'STL', 'Dreiecksnetz, z. B. für Renderings oder 3D-Druck'), mk('mf', '3MF', 'Dreiecksnetz mit Farben und Maßeinheit'), objRow, glbRow);
     // Was kommt in die Dateien? (IO-07)
     const selTops = exportSelection();
     if (selTops.length) { opts.onlySel = false; const l = mk('onlySel', `Nur die Auswahl (${selTops.length} ${selTops.length === 1 ? 'Teil' : 'Teile'})`, 'Alles andere bleibt draußen – Löcher und Formschritte an den gewählten Teilen zählen mit'); l.setAttribute('data-help', 'exportSelection'); body.append(l); }
     // Netz-Einstellungen (IO-08)
     opts.q = 1; opts.stlText = false;
-    const qs = UI.selectField({ id: 'ex-q', label: 'Feinheit der Netze (STL, 3MF)', value: '1', options: [['3', 'Grob – kleine Dateien'], ['1', 'Normal'], ['0.4', 'Fein'], ['0.15', 'Sehr fein – große Dateien']], onChange: (v) => { opts.q = +v; } });
+    const qs = UI.selectField({ id: 'ex-q', label: 'Feinheit der Netze (STL, 3MF, OBJ, GLB)', value: '1', options: [['3', 'Grob – kleine Dateien'], ['1', 'Normal'], ['0.4', 'Fein'], ['0.15', 'Sehr fein – große Dateien']], onChange: (v) => { opts.q = +v; } });
     qs.setAttribute('data-help', 'exportSettings');
     const st = UI.selectField({ id: 'ex-stlfmt', label: 'STL-Format', value: 'bin', options: [['bin', 'Binär (klein, Standard)'], ['txt', 'Text (ASCII)']], onChange: (v) => { opts.stlText = v === 'txt'; } });
     st.setAttribute('data-help', 'exportSettings');
     body.append(h('div', { class: 'fields' }, qs, st));
-    { const l = mk('each', 'Jeder Körper als eigene Datei (STL, 3MF)', 'Zusätzlich ein Ordner mit einer Datei pro Körper, benannt nach dem Teil – praktisch für den Slicer'); l.setAttribute('data-help', 'exportSelection'); body.append(l); }
+    { const l = mk('each', 'Jeder Körper als eigene Datei (STL, 3MF, OBJ, GLB)', 'Zusätzlich ein Ordner mit einer Datei pro Körper, benannt nach dem Teil – praktisch für den Slicer'); l.setAttribute('data-help', 'exportSelection'); body.append(l); }
     // flache Teile (Carbon-Platten) als 2D-Kontur für die Fräse oder den Laser
     if (plates.length) {
       const d = mk('dxf', 'Platten als DXF (für die Fräse)', 'Draufsicht in Originalgröße, eine Datei pro Platte – die Dicke steht im Dateinamen');
@@ -16923,14 +17362,14 @@ const Print = (() => {
   }
   let lastExport = null, lastTris = 0;
   async function runExport(opts) {
-    if (!opts.stl && !opts.mf && !opts.step && !(opts.dxf && opts.plates.length)) { UI.toast('Wähle mindestens ein Format.', { kind: 'bad' }); return; }
+    if (!opts.stl && !opts.mf && !opts.obj && !opts.glb && !opts.step && !(opts.dxf && opts.plates.length)) { UI.toast('Wähle mindestens ein Format.', { kind: 'bad' }); return; }
     const tst = UI.toast('Dateien werden erstellt …', { icon: 'export', ms: 20000 });
     try {
       const scene = Model.kernelScene(App.doc);
       const only = opts.onlySel ? exportSelection() : null;
       const name = safeName(App.doc.name);
       const files = [];
-      if (opts.stl || opts.mf) {
+      if (opts.stl || opts.mf || opts.obj || opts.glb) {
         const res = await Kernel.call('exportMeshes', { scene, fine: true, q: opts.q || 1 });
         lastTris = res.objects.reduce((s, o) => s + o.triangles.length / 3, 0);
         const STL = opts.stlText ? buildSTLText : buildSTL;
@@ -16938,18 +17377,22 @@ const Print = (() => {
         if (!objs.length) throw new Error('Es gibt keinen Körper zum Speichern.');
         if (opts.stl) files.push({ name: name + '.stl', data: STL(objs, name) });
         if (opts.mf) files.push({ name: name + '.3mf', data: await build3MF(objs, name) });
+        if (opts.obj) { const r = buildOBJ(objs, name); files.push({ name: name + '.obj', data: r.obj }, { name: name + '.mtl', data: r.mtl }); }
+        if (opts.glb) files.push({ name: name + '.glb', data: buildGLB(objs, name) });
         if (opts.each && objs.length > 1) {
           const used = new Map();
           for (const o of objs) {
             const f = Model.find(App.doc, o.id); let base = safeName(o.name || (f ? Model.label(f.item) : 'Körper')); const n = (used.get(base) || 0) + 1; used.set(base, n); if (n > 1) base += '-' + n;
             if (opts.stl) files.push({ name: 'Einzeln/' + base + '.stl', data: STL([o], base) });
             if (opts.mf) files.push({ name: 'Einzeln/' + base + '.3mf', data: await build3MF([o], base) });
+            if (opts.obj) { const r = buildOBJ([o], base); files.push({ name: 'Einzeln/' + base + '.obj', data: r.obj }, { name: 'Einzeln/' + base + '.mtl', data: r.mtl }); }
+            if (opts.glb) files.push({ name: 'Einzeln/' + base + '.glb', data: buildGLB([o], base) });
           }
         }
       }
       if (opts.step) { const r = await Kernel.call('exportSTEP', { scene, only }); files.push({ name: name + '.step', data: new Uint8Array(r.data) }); }
       if (opts.dxf) for (const id of opts.plates) { const f = await Plates.file(id); if (f && f.count) files.push({ name: 'DXF/' + f.name, data: f.data }); }
-      files.push({ name: 'LIESMICH.txt', data: new TextEncoder().encode(`${App.doc.name}\nErstellt mit Tracery am ${new Date().toLocaleString('de-DE')}\n\nSTEP: exakte Geometrie für andere CAD-Programme\nSTL / 3MF: Dreiecksnetz (Millimeter)\n` + (opts.dxf ? 'DXF: Draufsicht jeder Platte in Originalgröße (Millimeter, Ebene KONTUR) – Dicke steht im Dateinamen\n' : '')) });
+      files.push({ name: 'LIESMICH.txt', data: new TextEncoder().encode(`${App.doc.name}\nErstellt mit Tracery am ${new Date().toLocaleString('de-DE')}\n\nSTEP: exakte Geometrie für andere CAD-Programme\nSTL / 3MF: Dreiecksnetz (Millimeter)\nOBJ / MTL: Dreiecksnetz mit Farben (Millimeter)\nGLB: glTF 2.0 binär mit Werkstoff-Aussehen und Teilenamen (Meter)\n` + (opts.dxf ? 'DXF: Draufsicht jeder Platte in Originalgröße (Millimeter, Ebene KONTUR) – Dicke steht im Dateinamen\n' : '')) });
       lastExport = files.map((f) => f.name);
       const zip = await Zip.make(files);
       tst.remove();
@@ -16961,7 +17404,7 @@ const Print = (() => {
     App.on('results', updateAmpel); App.on('doc', debounce(updateAmpel, 200));
     $('#ampel').addEventListener('click', (e) => openAmpel(e.currentTarget));
   }
-  return { turntable, turntableDialog, get lastVideo() { return lastVideo; }, get lastTris() { return lastTris; }, buildSTLText, entsToDXF, entsToSVG, save2D, faceTo2D, get last2D() { return last2D; }, exportSelection, get lastExport() { return lastExport; }, runExport, init, stats, checks, exportDialog, imageDialog, saveImage, imageSize, save, safeName, updateAmpel };
+  return { turntable, turntableDialog, get lastVideo() { return lastVideo; }, get lastTris() { return lastTris; }, buildSTLText, buildOBJ, buildGLB, entsToDXF, entsToSVG, save2D, faceTo2D, get last2D() { return last2D; }, exportSelection, get lastExport() { return lastExport; }, runExport, init, stats, checks, exportDialog, imageDialog, saveImage, imageSize, save, safeName, updateAmpel };
 })();
 
 // ---------- ZIP (mit Kompression, wenn der Browser sie kann) ----------

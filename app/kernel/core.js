@@ -230,6 +230,7 @@ export function createKernel(R, oc) {
     return R.makeFace(outer, holes);
   }
   function buildExtrude(p) {
+    if (p.thinError) throw new Error(p.thinError);
     const M = planeMap(p.plane);
     const dist = pos(p.dist, 10);
     const extra = num(p.extra, 0); // kleine Verlängerung nach außen (saubere Löcher)
@@ -244,7 +245,7 @@ export function createKernel(R, oc) {
       else { if (extra) face = face.translate(mul(M.n, -extra)); v = mul(M.n, dist + extra); }
       solids.push(R.basicFaceExtrusion(face, new R.Vector(v)));
     }
-    if (!solids.length) throw new Error('Die Skizze hat keine geschlossene Fläche.');
+    if (!solids.length) throw new Error(p.thin ? 'Die Skizze hat keine Linie und keinen Umriss für eine dünne Wand.' : 'Die Skizze hat keine geschlossene Fläche.');
     return fuseAll(solids);
   }
   function buildRevolve(p) {
@@ -1576,7 +1577,7 @@ export function createKernel(R, oc) {
       const b = bboxOf(s.shape);
       const tol = (fine ? Math.min(0.05, Math.max(0.005, meshTol(b) * 0.35)) : meshTol(b)) * f;
       const m = s.shape.mesh({ tolerance: tol, angularTolerance: (fine ? 0.1 : 0.2) * Math.min(2, Math.max(0.25, f)) });
-      objs.push({ id: s.id, name: s.name, color: s.color, vertices: new Float32Array(m.vertices), triangles: new Uint32Array(m.triangles) });
+      objs.push({ id: s.id, name: s.name, color: s.color, vertices: new Float32Array(m.vertices), normals: new Float32Array(m.normals), triangles: new Uint32Array(m.triangles) });
       s.shape.delete();
     }
     return { objects: objs, errors };

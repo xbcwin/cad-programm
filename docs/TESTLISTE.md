@@ -1507,6 +1507,20 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [ ] **Optik der Gewindestreifen prüfen**
   Bitte von Hand kurz prüfen, ob die schrägen Gewindestreifen bei Außen- (Messing) und Innengewinde (Blau) sowie in der technischen Zeichnung (3/4-Kreis und Linien) gut lesbar sind.
 
+## Hochziehen als dünne Wand (Auto [A-007])
+
+- [x] **Offener L-Linienzug**: Skizze mit offenem L-Linienzug (30 + 20 = 50 mm) beenden → Dialog bietet „Dünne Wand“ und „Entlang Pfad“; mit Wand 2 mm, Höhe 10 mm, mittig entsteht ein Körper mit 1000 mm³ und exakten Maßen.
+- [x] **Wand-Lage & Wandstärke**: Rechts im Panel auf „Nach innen“ (960 mm³), „Nach außen“ (1040 mm³) und mittig mit Wand 3 mm (1500 mm³) umschalten sowie Skizze bearbeiten funktioniert ohne Fehler.
+- [x] **Geschlossener Umriss als Rohr-Profil**: Rechteck (20 × 20) und Kreis (r = 10) mit „Dünne Wand“ werden zum hohlen Rohr-Profil (innen/außen/mittig), „Dünne Wand“ abschalten + Rückgängig funktionieren; zu große Wandstärke meldet sauber einen Fehler und erholt sich.
+- [ ] **Von Hand**: Offenen Bogen oder offene Spline als dünne Wand auf einer Körperfläche (innen/außen/mittig) hochziehen und den Ziehgriff prüfen.
+
+## OBJ und GLB speichern (Auto [A-010])
+
+- [x] Export-Dialog bietet „OBJ (+ MTL)“ und „GLB (glTF)“ mit Hilfetext `exportObjGlb`; ZIP enthält `.obj`, `.mtl`, `.glb` sowie bei „Jeder Körper als eigene Datei“ alle Formate unter `Einzeln/`.
+- [x] `.obj` verweist auf die `.mtl`-Datei, enthält `o <Name>` je Körper, Normalen und unterschiedliche `Kd`-Farben in der `.mtl`.
+- [x] `.glb` beginnt mit `glTF`, Version 2, hat gültige `JSON`- und `BIN`-Chunks, einen Knoten/Mesh mit Namen je Körper sowie Studio-Look-Materialien (Metall, Rauheit, Klarlack, lineare Farbe).
+- [ ] Exportiertes `.obj`/`.mtl` und `.glb` von Hand in Blender oder einer 3D-Vorschau öffnen und Ausrichtung, Größe (mm bzw. m) und Oberflächen-Aussehen prüfen.
+
 ## Fehler melden
 
 ```

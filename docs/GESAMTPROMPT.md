@@ -87,7 +87,7 @@ Leitlinien:
 | `10-model.js` | Projekt-Datenmodell, `KINDS`, `newItem`, `find`/`walk`/`topOf`, Matrizen, `vars` (Maße), `kernelItem`, `sketchParams`/`loftParams`/`sweepParams`/`pathPatternParams`, `migrate` |
 | `15-sketchcore.js` (`SK`) | Skizzen-Geometrie: `segsOf`, `regions`, `chains` (offene Pfade), `bounds`, Splines als exakte Bézier (`splineBez`), Text-Umrisse (Schrift Inter, OFL), Ellipse, Fangpunkte, Maße |
 | `16-solver.js` | Skizzen-Löser (Maße und Regeln gemeinsam, Freiheitsgrade, Konflikte) |
-| `17-sketchops.js` (`SKO`) | Schnittpunkte, Trimmen, Versatz (`offsetChain`), Spiegeln, Muster (`mapEnt`), Schablonen `TEMPLATES`/`tplEnts`, Skizzen-Prüfer `inspect` |
+| `17-sketchops.js` (`SKO`) | Schnittpunkte, Trimmen, Versatz (`offsetChain`), dünne Wand (`thinRegions`), Spiegeln, Muster (`mapEnt`), Schablonen `TEMPLATES`/`tplEnts`, Skizzen-Prüfer `inspect` |
 | `20-kernel.js` | Brücke zum Worker |
 | `25-app.js` | Zustand, `App.change(label, fn, {merge, amend})` mit Rückgängig (300 Schritte), Neuberechnung, Ergebnisse |
 | `30-viewer.js` | three.js-Ansicht, Picking (Flächen, Kanten), `edgePositions`, Raster, Kamera |
@@ -109,7 +109,7 @@ Leitlinien:
 | `57-measure.js` | Messen |
 | `58-commands.js` | Eingabezeile, Befehlssuche |
 | `59-versions.js` | Versionen |
-| `60-print.js` | Export (STEP, STL, DXF) |
+| `60-print.js` | Export (STEP, STL, 3MF, OBJ/MTL, GLB, DXF) |
 | `70-drawing.js` | technische Zeichnung, PDF |
 | `80-ai.js` | KI-Kollege (`AI.RULES`, `AI.ACTIONS`, `AI.SUGGESTIONS`, `AI.open` – allgemeines CAD ohne Drohnen-Bezug; `drohne`-Aktion technisch erhalten) |
 | `84-drone.js` | Rahmen-Generator, Frame-Assistent, Bausätze |
@@ -133,7 +133,7 @@ Leitlinien:
   - Werte in `t` und `p` dürfen **Formeln** mit Maßnamen sein.
 - **`kind`:**
   - Grundkörper: `box`, `cylinder`, `sphere`, `cone`, `tube`, `torus`, `wedge`, `prism`, `pyramid`, `hemisphere`
-  - Skizzenbasiert: `extrude` (p.sketch, dist, dir, sel), `revolve`, `loft` (p.sketches, ruled, tip), `sweep` (p.sketch-Pfad, shape circle/rect/sketch, d, w, h, wall, prof)
+  - Skizzenbasiert: `extrude` (p.sketch, dist, dir, sel, thin, wall, wallSide), `revolve`, `loft` (p.sketches, ruled, tip), `sweep` (p.sketch-Pfad, shape circle/rect/sketch, d, w, h, wall, prof)
   - Sonstige: `import` (STEP/STL Base64), `part` (Bibliothek, `p.lib`), `group` (children; mit `p.op` = Rechen-Gruppe)
 - **Rechen-Gruppen (`p.op`):**
   - `pattern` mit `pt`:
@@ -177,7 +177,7 @@ Leitlinien:
 - Wandstärke: `Viewer.wallAt(id, point, normal)` (Strahl nach innen gegen die Dreiecke des Teils, ohne Rückseiten-Ausschluss), `Viewer.thinWalls(limit)` (Raster `triGrid`, je Dreieck ein Strahl von der Mitte, Ergebnis `{pos, area, minT}`); Ansicht `Views.thin()`, Leiste `#thin-limit`/`#thin-area`, `Views.thinInfo`
 - 2D-Dateien: `Print.entsToDXF(ents)` / `Print.entsToSVG(ents)` (Skizzen-Elemente ohne Hilfslinien; Linie, Kreis, Bogen echt, alles andere als Linienzug; SVG in mm, y nach oben), `Print.save2D`, `Print.faceTo2D(face, kind)` über Kern `faceLoops` und `Actions.faceFrame`; Knöpfe `#sk-dxf`/`#sk-svg`, Rechtsklick `cm-facedxf`/`cm-facesvg`
 - Export-Einstellungen: `opts.q` (Kern `exportMeshes(scene, fine, q)`, Toleranz × q), `opts.stlText` → `Print.buildSTLText`; Felder `#ex-q`, `#ex-stlfmt`; `Print.lastTris`
-- Export: `Print.exportSelection()` (gewählte Teile oberster Ebene, verrechnete zählen zum Ziel) → Option `onlySel` filtert die Netze nach `id` und gibt `only` an den Kern (`exportSTEP(scene, only)`); Option `each` legt „Einzeln/<Name>.stl/.3mf“ an; `Print.lastExport` = Dateinamen des letzten ZIP
+- Export: `Print.exportSelection()` (gewählte Teile oberster Ebene, verrechnete zählen zum Ziel) → Option `onlySel` filtert die Netze nach `id` und gibt `only` an den Kern (`exportSTEP(scene, only)`); Option `each` legt „Einzeln/<Name>.stl/.3mf/.obj/.mtl/.glb“ an; `Print.buildOBJ`, `Print.buildGLB`; `Print.lastExport` = Dateinamen des letzten ZIP
 - Lage unter der Maus: `#coords` in der Statusleiste (`Measure.showCoords`, höchstens alle 50 ms inkl. letztem Mauspunkt am Bewegungsende; `Measure.coords`)
 - Maus-Steuerung: `ViewPrefs` `mouse` ('tracery' | 'onshape' | 'solidworks' | 'fusion' | 'blender') → `Viewer.setMouseStyle`; Skizze, Setzen und Notizen rufen `Viewer.useButtons('sketch' | 'place' | 'model')` statt `mouseButtons` selbst zu setzen; `Viewer.leftOrbits` = false → links im Leeren zieht einen Rahmen
 - Drehteller-Video: `Print.turntable({seconds, fps, save})` (MediaRecorder auf `canvas.captureStream`, Kamera dreht um die senkrechte Achse durch den Blickpunkt, danach zurück), Dialog `Print.turntableDialog` (`#tt-sec`), `Print.lastVideo`
@@ -294,7 +294,7 @@ Leitlinien:
   - Überhänge ab 100 mm² bei Druckteilen
   - mit Fundstellen-Ringen und KI-Vorschlägen
 
-**Export:** STEP, STL, DXF (Platten), Projektdatei, technische Zeichnung (PDF).
+**Export:** STEP, STL, 3MF, OBJ/MTL (`Print.buildOBJ`), GLB (`Print.buildGLB`), DXF (Platten), Projektdatei, technische Zeichnung (PDF).
 
 ## 6. Tests – Pflicht vor jedem Commit
 
