@@ -97,6 +97,7 @@ const Solver = (() => {
       const e = byId.get(ref.e); if (!e) return null;
       if (e.type === 'line' || e.type === 'slot') return [point({ e: e.id, p: 'a' }), point({ e: e.id, p: 'b' })];
       if (e.type === 'rect' && ref.edge != null) { const i = ((ref.edge % 4) + 4) % 4; return [point({ e: e.id, p: 'k' + i }), point({ e: e.id, p: 'k' + ((i + 1) % 4) })]; }
+      if (e.type === 'poly' && ref.edge != null) { const n = Math.max(3, Math.round(e.n || 6)), i = ((ref.edge % n) + n) % n; return [point({ e: e.id, p: 'v' + i }), point({ e: e.id, p: 'v' + ((i + 1) % n) })]; }
       return null;
     }
     // Kreis-Zugriff: Mittelpunkt + Radius
@@ -251,7 +252,10 @@ const Solver = (() => {
         const eS = byId.get((R[0] || {}).e), eN = byId.get((R[1] || {}).e); if (!eS || !eN) continue;
         const v = Model.num(c.v, V || {}, NaN); if (!isFinite(v)) continue;
         const sg = c.sg || 1;
-        if (eS.type === 'rect' && eN.type === 'rect' && R[0].edge == null) {
+        if (c.corner) {
+          const D1 = circle(R[1]); if (!D1) continue;
+          add(D1.deps, (X) => D1.r(X) - Math.abs(v), tag);
+        } else if (eS.type === 'rect' && eN.type === 'rect' && R[0].edge == null) {
           const sgs = c.sgs || [-1, -1, 1, 1];
           [['a0', 0], ['a1', 1], ['b0', 2], ['b1', 3]].forEach(([k, i]) => { const s = idx.get(eS.id)[k], n = idx.get(eN.id)[k]; add([s, n], (X) => X[n] - X[s] - sgs[i] * v, tag); });
         } else if (eS.type === 'slot' && eN.type === 'slot') {

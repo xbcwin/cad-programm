@@ -1203,9 +1203,9 @@ const HELP = {
   "tipp": "Halte die Maustaste gedrückt und wische wie mit einem Radiergummi über mehrere Stücke. Ein Stück ohne Schnittpunkt wird ganz gelöscht."
  },
  "offset2d": {
-  "tip": "Parallele Kopie im Abstand erstellen",
-  "hilfe": "Klicke eine Linie, einen Bogen, Kreis, eine Ellipse oder eine Form an. Bewege die Maus auf die Seite, auf der die Kopie liegen soll, und klicke. Oder tippe den Abstand ein und drücke Enter – auch eine Formel geht.",
-  "tipp": "Die Kopie bleibt über eine Regel mit dem Original verbunden. Ändert sich das Original, wandert sie mit. Klick auf das Regel-Symbol, um den Abstand später zu ändern – bei einer Kette gilt der neue Abstand für alle Stücke zusammen. Bei einer Ellipse wird die Kopie eine Spline genau im Abstand (sie bleibt nicht verbunden)."
+  "tip": "Parallele Kopie im Abstand erstellen – auch mehrfach und beidseitig",
+  "hilfe": "Klicke eine Linie, einen Bogen, Kreis, eine Ellipse oder eine Form an. Rechts kannst du vorher Anzahl, Beidseitig (innen und außen) und Ecken (spitz oder rund) einstellen. Bewege dann die Maus auf eine Seite und klicke – oder tippe den Abstand ein und drücke Enter (auch als Formel).",
+  "tipp": "Jede Kopie bleibt über eine Regel mit dem Original verbunden. Ändert sich das Original, wandert die Kopie mit. Klick auf das Regel-Symbol, um den Abstand später zu ändern – bei einer Kette gilt der neue Abstand für alle Stücke zusammen. Bei einer Ellipse wird die Kopie eine Spline genau im Abstand (sie bleibt nicht verbunden)."
  },
  "wall2d": {
   "tip": "Aus einer offenen Linie eine Wand mit Dicke machen",
@@ -3096,6 +3096,7 @@ const Solver = (() => {
       const e = byId.get(ref.e); if (!e) return null;
       if (e.type === 'line' || e.type === 'slot') return [point({ e: e.id, p: 'a' }), point({ e: e.id, p: 'b' })];
       if (e.type === 'rect' && ref.edge != null) { const i = ((ref.edge % 4) + 4) % 4; return [point({ e: e.id, p: 'k' + i }), point({ e: e.id, p: 'k' + ((i + 1) % 4) })]; }
+      if (e.type === 'poly' && ref.edge != null) { const n = Math.max(3, Math.round(e.n || 6)), i = ((ref.edge % n) + n) % n; return [point({ e: e.id, p: 'v' + i }), point({ e: e.id, p: 'v' + ((i + 1) % n) })]; }
       return null;
     }
     // Kreis-Zugriff: Mittelpunkt + Radius
@@ -3250,7 +3251,10 @@ const Solver = (() => {
         const eS = byId.get((R[0] || {}).e), eN = byId.get((R[1] || {}).e); if (!eS || !eN) continue;
         const v = Model.num(c.v, V || {}, NaN); if (!isFinite(v)) continue;
         const sg = c.sg || 1;
-        if (eS.type === 'rect' && eN.type === 'rect' && R[0].edge == null) {
+        if (c.corner) {
+          const D1 = circle(R[1]); if (!D1) continue;
+          add(D1.deps, (X) => D1.r(X) - Math.abs(v), tag);
+        } else if (eS.type === 'rect' && eN.type === 'rect' && R[0].edge == null) {
           const sgs = c.sgs || [-1, -1, 1, 1];
           [['a0', 0], ['a1', 1], ['b0', 2], ['b1', 3]].forEach(([k, i]) => { const s = idx.get(eS.id)[k], n = idx.get(eN.id)[k]; add([s, n], (X) => X[n] - X[s] - sgs[i] * v, tag); });
         } else if (eS.type === 'slot' && eN.type === 'slot') {
@@ -3784,24 +3788,25 @@ const SKO = (() => {
     if (Q.line) return lineCircleInf(Q.line.p, [Q.line.p[0] + Q.line.u[0], Q.line.p[1] + Q.line.u[1]], P.circle.c, P.circle.r);
     return circleCircle(P.circle.c, P.circle.r, Q.circle.c, Q.circle.r);
   }
-  // sd > 0: nach links (in Laufrichtung der Kette), sd < 0: nach rechts
-  function offsetChain(chain, sd) {
+  // sd > 0: nach links (in Laufrichtung der Kette), sd < 0: nach rechts; corners: 'sharp' | 'round'
+  function offsetChain(chain, sd, corners = 'sharp') {
     const n = chain.segs.length;
     const items = chain.segs.map((s) => {
       if (s.e.type === 'line') {
         const L = d2(s.a, s.b), u = [(s.b[0] - s.a[0]) / L, (s.b[1] - s.a[1]) / L], nv = [-u[1], u[0]];
         const A = [s.a[0] + nv[0] * sd, s.a[1] + nv[1] * sd], B = [s.b[0] + nv[0] * sd, s.b[1] + nv[1] * sd];
-        return { s, line: { p: A, u }, start: A, end: B };
+        return { s, line: { p: A, u }, start: A, end: B, tStart: u, tEnd: u };
       }
       const ai = SK.arcInfo(s.a, s.e.m, s.b);
       if (!ai) return null;
       const r = ai.sweep > 0 ? ai.r - sd : ai.r + sd;
       if (r < 1e-6) return null;
       const at = (p) => { const d = d2(p, ai.c); return [ai.c[0] + ((p[0] - ai.c[0]) / d) * r, ai.c[1] + ((p[1] - ai.c[1]) / d) * r]; };
-      return { s, ai, r, circle: { c: ai.c, r }, start: at(s.a), end: at(s.b) };
+      const tAt = (a) => (ai.sweep > 0 ? [-Math.sin(a), Math.cos(a)] : [Math.sin(a), -Math.cos(a)]);
+      return { s, ai, r, circle: { c: ai.c, r }, start: at(s.a), end: at(s.b), tStart: tAt(ai.a0), tEnd: tAt(ai.a1) };
     });
     if (items.some((x) => !x)) return { ok: false, why: 'Der Versatz ist hier zu groß – ein Bogen würde verschwinden.' };
-    const V = [];   // Eckpunkte: V[i] ist der Anfang von Stück i
+    const starts = items.map((it) => it.start), ends = items.map((it) => it.end), cornerArcs = new Array(n).fill(null);
     const joint = (i, j) => {
       const P = items[i], Q = items[j];
       const c = infInter(P, Q);
@@ -3810,14 +3815,31 @@ const SKO = (() => {
       for (const x of c) { const dd = d2(x, P.end); if (dd < bd) { bd = dd; best = x; } }
       return best;
     };
+    const joinPair = (i, j) => {
+      const cr = cross(items[i].tEnd, items[j].tStart);
+      const dt = items[i].tEnd[0] * items[j].tStart[0] + items[i].tEnd[1] * items[j].tStart[1];
+      const isOuter = corners === 'round' && (cr * sd < -1e-7 || (Math.abs(cr) <= 1e-7 && dt < -1 + 1e-6)) && d2(items[i].end, items[j].start) > 1e-5;
+      if (isOuter) {
+        const C = chain.segs[i].b, r = Math.abs(sd), a = ends[i], b = starts[j];
+        const a0 = Math.atan2(a[1] - C[1], a[0] - C[0]), a1 = Math.atan2(b[1] - C[1], b[0] - C[0]);
+        let sw = sd < 0 ? norm(a1 - a0) : -norm(a0 - a1);
+        if (Math.abs(sw) < 1e-6) sw = sd < 0 ? Math.PI : -Math.PI;
+        const m = [C[0] + Math.cos(a0 + sw / 2) * r, C[1] + Math.sin(a0 + sw / 2) * r];
+        cornerArcs[i] = { type: 'arc', a: pr(a), m: pr(m), b: pr(b), ...(chain.segs[i].e.con ? { con: true } : {}) };
+        return true;
+      }
+      const v = joint(i, j);
+      if (!v) return false;
+      ends[i] = v; starts[j] = v;
+      return true;
+    };
     for (let i = 0; i < n; i++) {
-      if (i === 0) { if (chain.closed) { const v = joint(n - 1, 0); if (!v) return { ok: false, why: 'Der Versatz passt hier nicht an die Ecke.' }; V.push(v); } else V.push(items[0].start); }
-      else { const v = joint(i - 1, i); if (!v) return { ok: false, why: 'Der Versatz passt hier nicht an die Ecke.' }; V.push(v); }
+      if (i < n - 1) { if (!joinPair(i, i + 1)) return { ok: false, why: 'Der Versatz passt hier nicht an die Ecke.' }; }
+      else if (chain.closed && !joinPair(n - 1, 0)) return { ok: false, why: 'Der Versatz passt hier nicht an die Ecke.' };
     }
-    if (!chain.closed) V.push(items[n - 1].end);
     const out = [];
     for (let i = 0; i < n; i++) {
-      const a = V[i], b = chain.closed ? V[(i + 1) % n] : V[i + 1], it = items[i];
+      const a = starts[i], b = ends[i], it = items[i];
       let ent;
       if (it.line) {
         if ((b[0] - a[0]) * it.line.u[0] + (b[1] - a[1]) * it.line.u[1] < 1e-6) return { ok: false, why: 'Der Versatz ist hier zu groß – eine Linie würde verschwinden.' };
@@ -3832,17 +3854,35 @@ const SKO = (() => {
       // wieder so ausrichten wie das Original
       if (it.s.rev) { const t = ent.a; ent.a = ent.b; ent.b = t; }
       if (it.s.e.con) ent.con = true;
-      out.push({ src: it.s.e, ent });
+      out.push({ src: it.s.e, ent, segIdx: i, startKey: it.s.rev ? 'b' : 'a', endKey: it.s.rev ? 'a' : 'b' });
+      if (cornerArcs[i]) out.push({ src: it.s.e, ent: cornerArcs[i], corner: true, prevSeg: i, nextSeg: (i + 1) % n });
     }
     return { ok: true, items: out };
   }
   // Versatz einer Form (Kreis, Rechteck, Vieleck, Langloch, Spline); d > 0 = nach außen / größer, d < 0 = nach innen
-  function offsetShape(e, d) {
+  function offsetShape(e, d, corners = 'sharp') {
     const n = Math.max(3, Math.round(e.n || 6));
     if (e.type === 'circle') { const r = e.r + d; return r > 1e-6 ? { ok: true, ent: { type: 'circle', c: e.c.slice(), r: r6(r) } } : { ok: false, why: 'Der Kreis würde verschwinden.' }; }
     if (e.type === 'slot') { const r = e.r + d; return r > 1e-6 ? { ok: true, ent: { type: 'slot', a: e.a.slice(), b: e.b.slice(), r: r6(r) } } : { ok: false, why: 'Das Langloch würde verschwinden.' }; }
-    if (e.type === 'poly') { const r = e.r + d / Math.cos(Math.PI / n); return r > 1e-6 ? { ok: true, ent: { type: 'poly', c: e.c.slice(), r: r6(r), n, rot: e.rot || 0 } } : { ok: false, why: 'Das Vieleck würde verschwinden.' }; }
+    if (e.type === 'poly') {
+      if (d > 0 && corners === 'round') {
+        const segs = SK.segsOf(e);
+        const chain = { segs: segs.map((s) => ({ e: { type: 'line', a: s.a, b: s.b, con: e.con }, rev: false, a: s.a, b: s.b })), closed: true };
+        const r = offsetChain(chain, -d, 'round');
+        if (!r.ok) return r;
+        return { ok: true, items: r.items.map((it) => (it.corner ? { ...it, src: e } : { ...it, src: e, edge: it.segIdx, srcA: segs[it.segIdx].a, srcB: segs[it.segIdx].b })) };
+      }
+      const r = e.r + d / Math.cos(Math.PI / n); return r > 1e-6 ? { ok: true, ent: { type: 'poly', c: e.c.slice(), r: r6(r), n, rot: e.rot || 0 } } : { ok: false, why: 'Das Vieleck würde verschwinden.' };
+    }
     if (e.type === 'rect') {
+      if (d > 0 && corners === 'round') {
+        const cs = SK.rectCorners(e), area = (e.b[0] - e.a[0]) * (e.b[1] - e.a[1]);
+        if (Math.abs(area) < 1e-12) return { ok: false, why: 'Das Rechteck ist leer.' };
+        const chain = { segs: [0, 1, 2, 3].map((i) => { const a = cs[i], b = cs[(i + 1) % 4]; return { e: { type: 'line', a, b, con: e.con }, rev: false, a, b }; }), closed: true };
+        const r = offsetChain(chain, area >= 0 ? -d : d, 'round');
+        if (!r.ok) return r;
+        return { ok: true, items: r.items.map((it) => (it.corner ? { ...it, src: e } : { ...it, src: e, edge: it.segIdx, srcA: cs[it.segIdx], srcB: cs[(it.segIdx + 1) % 4] })) };
+      }
       const sa = [e.a[0] <= e.b[0] ? -1 : 1, e.a[1] <= e.b[1] ? -1 : 1], sb = [-sa[0], -sa[1]];
       const w = Math.abs(e.b[0] - e.a[0]) + 2 * d, h = Math.abs(e.b[1] - e.a[1]) + 2 * d;
       if (w < 1e-6 || h < 1e-6) return { ok: false, why: 'Das Rechteck würde verschwinden.' };
@@ -11224,7 +11264,7 @@ const Sketch = (() => {
     spline: 'Klick setzt die Punkte, durch die die Kurve läuft. Am ersten Punkt schließen, auf den letzten Punkt doppelklicken oder <b>Enter</b> zum Beenden.',
     corner: 'Fahr an eine <b>Ecke</b>, an der sich zwei Linien treffen – Rechteck und Vieleck gehen auch. <b>Klick</b> rundet sie mit dem Radius rechts. Fase statt Rundung stellst du rechts um.',
     trim: 'Fahr über ein Stück zwischen zwei Schnittpunkten – es leuchtet rot. <b>Klick</b> schneidet es weg, mit gedrückter Maustaste kannst du <b>wischen</b>.',
-    offset: 'Klick eine Linie, einen Kreis oder eine Form an. Dann die Maus auf die Seite bewegen, auf die der Versatz soll, und klicken – oder den Abstand tippen und <b>Enter</b>.',
+    offset: 'Klick eine Linie, einen Kreis oder eine Form an. Rechts kannst du <b>Anzahl</b>, <b>Beidseitig</b> und <b>Ecken</b> (spitz/rund) wählen. Dann Maus auf eine Seite bewegen und klicken – oder den Abstand tippen und <b>Enter</b>.',
     mirror: 'Erst die <b>Spiegellinie</b> anklicken (eine Linie, auch eine Hilfslinie), dann die Elemente, die gespiegelt werden sollen. <b>Enter</b> spiegelt alles.',
     patrect: 'Klick die Elemente an, die vervielfacht werden sollen. Anzahl und Abstand stellst du rechts ein, dann <b>Enter</b>.',
     patcirc: 'Klick die Elemente an, die im Kreis vervielfacht werden sollen. Anzahl, Winkel und Mittelpunkt stellst du rechts ein, dann <b>Enter</b>.',
@@ -11528,7 +11568,7 @@ const Sketch = (() => {
     if (Notes.active) Notes.stop();
     Panels.closeFlyout(); UI.closePop();
     const F = frameWorld(init.plane, init.W);
-    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.mode === 'patpath' ? 'line' : 'rect', draft: null, sel: null, sels: [], band: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, hoverEnt: null, trimHover: null, check: null, checkFocus: null };
+    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.mode === 'patpath' ? 'line' : 'rect', draft: null, sel: null, sels: [], band: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, off: { count: 1, both: false, corners: 'sharp' }, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, hoverEnt: null, trimHover: null, check: null, checkFocus: null };
     S.dims = init.dims || []; S.cons = init.cons || []; S.picks = []; S.dimFirst = null; S.selCon = null;
     S.plane0 = deepClone(init.plane); S.pOff = init.pOff || 0; S.pTilt = 0;
     if (S.pOff) applyPlane(false, true);
@@ -12431,14 +12471,37 @@ const Sketch = (() => {
     }
     return 0;
   }
-  function offsetCalc(off, sd) {
+  function offsetCalc(off, sd, corners = 'sharp') {
     const e = ent(off.id); if (!e) return { ok: false, why: 'Das Element gibt es nicht mehr.' };
     if (Math.abs(sd) < 1e-6) return { ok: false, why: 'Der Abstand darf nicht 0 sein.' };
-    if (off.chain) { const r = SKO.offsetChain(off.chain, sd); return r.ok ? { ok: true, items: r.items.map((x) => ({ src: x.src, ent: x.ent })) } : r; }
-    const r = SKO.offsetShape(e, sd);
-    return r.ok ? { ok: true, items: [{ src: e, ent: r.ent, sgs: r.sgs }] } : r;
+    if (off.chain) { const r = SKO.offsetChain(off.chain, sd, corners); return r.ok ? { ok: true, items: r.items } : r; }
+    const r = SKO.offsetShape(e, sd, corners);
+    if (!r.ok) return r;
+    return r.items ? { ok: true, items: r.items } : { ok: true, items: [{ src: e, ent: r.ent, sgs: r.sgs }] };
+  }
+  function offsetPlan(off, sd, v) {
+    const O = (S && S.off) || { count: 1, both: false, corners: 'sharp' };
+    const count = clamp(Math.round(O.count || 1), 1, 20);
+    const both = !!O.both;
+    const corners = O.corners === 'round' ? 'round' : 'sharp';
+    const signs = both ? [1, -1] : [1];
+    const scaleV = (val, k) => (k === 1 ? val : typeof val === 'number' ? round(val * k, 4) : `(${val})*${k}`);
+    const copies = [], errs = [];
+    for (const s of signs) {
+      for (let k = 1; k <= count; k++) {
+        const sdk = s * k * sd;
+        const r = offsetCalc(off, sdk, corners);
+        if (r.ok) copies.push({ sd: sdk, v: scaleV(v, k), items: r.items });
+        else errs.push(r.why);
+      }
+    }
+    return { ok: copies.length > 0, copies, skipped: errs.length, total: signs.length * count, why: errs[0] || '' };
   }
   function offsetCon(src, ne, it, sd, v) {
+    if (it.edge != null) {
+      const cr = (it.srcB[0] - it.srcA[0]) * (ne.a[1] - it.srcA[1]) - (it.srcB[1] - it.srcA[1]) * (ne.a[0] - it.srcA[0]);
+      return { id: uid('k'), type: 'offset', refs: [{ e: src.id, edge: it.edge }, { e: ne.id }], v, sg: cr >= 0 ? 1 : -1 };
+    }
     const base = { id: uid('k'), type: 'offset', refs: [{ e: src.id }, { e: ne.id }], v };
     if (src.type === 'spline') return null;
     if (src.type === 'rect') return { ...base, sg: 1, sgs: it.sgs };
@@ -12449,21 +12512,40 @@ const Sketch = (() => {
   }
   function applyOffset(sd, v) {
     const off = S.draft && S.draft.off; if (!off) return false;
-    const calc = offsetCalc(off, sd);
-    if (!calc.ok) { UI.toast(calc.why, { kind: 'bad' }); return false; }
+    const plan = offsetPlan(off, sd, v);
+    if (!plan.ok) { UI.toast(plan.why, { kind: 'bad' }); return false; }
     pushUndo();
-    const newCons = [];
-    for (const it of calc.items) {
-      const ne = { id: uid('e'), ...it.ent }; if (it.src.con) ne.con = true;
-      S.ents.push(ne);
-      const c = offsetCon(it.src, ne, it, sd, v); if (c) newCons.push(c);
+    const allCons = [];
+    for (const cp of plan.copies) {
+      const copyOffCons = [], copyAuxCons = [], segEnts = new Map(), cornerJobs = [];
+      for (const it of cp.items) {
+        const ne = { id: uid('e'), ...it.ent }; if (it.src && it.src.con) ne.con = true;
+        S.ents.push(ne);
+        if (it.corner) { cornerJobs.push({ it, ne }); continue; }
+        if (it.segIdx != null) segEnts.set(it.segIdx, { ne, startKey: it.startKey, endKey: it.endKey });
+        const c = offsetCon(it.src, ne, it, cp.sd, cp.v); if (c) copyOffCons.push(c);
+      }
+      for (const { it, ne } of cornerJobs) {
+        const P = segEnts.get(it.prevSeg), Q = segEnts.get(it.nextSeg);
+        if (P && Q) {
+          copyAuxCons.push(
+            { id: uid('k'), type: 'coincident', refs: [{ e: P.ne.id, p: P.endKey }, { e: ne.id, p: 'a' }] },
+            { id: uid('k'), type: 'coincident', refs: [{ e: Q.ne.id, p: Q.startKey }, { e: ne.id, p: 'b' }] },
+            makeTanCon(P.ne, ne),
+            makeTanCon(ne, Q.ne),
+          );
+        }
+        if (it.src) copyOffCons.push({ id: uid('k'), type: 'offset', refs: [{ e: it.src.id }, { e: ne.id }], v: cp.v, sg: 1, corner: true });
+      }
+      if (copyOffCons.length > 1) { const og = uid('og'); for (const c of copyOffCons) c.og = og; }   // pro Kopie zusammen entstanden: später zusammen ändern
+      allCons.push(...copyOffCons, ...copyAuxCons);
     }
-    if (newCons.length > 1) { const og = uid('og'); for (const c of newCons) c.og = og; }   // zusammen entstanden: später zusammen ändern
-    S.cons.push(...newCons);
+    S.cons.push(...allCons);
     S.draft = null; hideEntry(); clearSel();
-    sanitize(newCons.map((c) => c.id));
+    sanitize(allCons.map((c) => c.id));
     UI.hint(HINTS.offset); render(); Panels.renderRight();
-    if (calc.items.some((x) => x.src.type === 'ellipse')) UI.toast('Der Versatz einer Ellipse ist keine Ellipse mehr – die Kopie ist eine Spline durch 48 Punkte genau im Abstand. Sie folgt der Ellipse nicht, wenn du diese später änderst.', { icon: 'info', ms: 5000 });
+    if (plan.skipped > 0) UI.toast(`${plan.copies.length} von ${plan.total} Versätzen erstellt – die übrigen waren zu eng.`, { icon: 'info', ms: 3500 });
+    if (plan.copies.some((cp) => cp.items.some((x) => x.src && x.src.type === 'ellipse'))) UI.toast('Der Versatz einer Ellipse ist keine Ellipse mehr – die Kopie ist eine Spline durch 48 Punkte genau im Abstand. Sie folgt der Ellipse nicht, wenn du diese später änderst.', { icon: 'info', ms: 5000 });
     return true;
   }
   // Abstand eingetippt (Zahl oder Formel): die Seite kommt von der Maus, ein Minus dreht sie um
@@ -13849,9 +13931,16 @@ const Sketch = (() => {
       if (src) {
         for (const p of entPts(src)) lineObj(p, acc, 3.4, { order: 26 });
         if (S.offUV) {
-          const sd = offsetSigned(off, S.offUV), calc = offsetCalc(off, sd);
-          if (calc.ok) { for (const it of calc.items) for (const p of entPts(it.ent)) lineObj(p, acc, 2.2, { dashed: true, order: 27 }); label(fmt(Math.abs(sd), 2) + ' mm', S.offUV); }
-          else if (Math.abs(sd) > 0.01) label(calc.why, S.offUV, 'dimlabel live bad');
+          const sd = offsetSigned(off, S.offUV), plan = offsetPlan(off, sd, Math.abs(sd));
+          if (plan.ok) {
+            for (const cp of plan.copies) for (const it of cp.items) for (const p of entPts(it.ent)) lineObj(p, acc, 2.2, { dashed: true, order: 27 });
+            const O = S.off || {};
+            const tags = [fmt(Math.abs(sd), 2) + ' mm'];
+            if ((O.count || 1) > 1) tags.push(Math.round(O.count) + '×');
+            if (O.both) tags.push('beidseitig');
+            if (O.corners === 'round') tags.push('rund');
+            label(tags.join(' · '), S.offUV);
+          } else if (Math.abs(sd) > 0.01) label(plan.why, S.offUV, 'dimlabel live bad');
         }
       }
     }
@@ -14291,6 +14380,16 @@ const Sketch = (() => {
         const fw = h('div', { class: 'fields' });
         fw.append(UI.numField({ id: 'wall-t', label: 'Wandstärke', value: S.wallT, unit: 'mm', expr: false, min: 0.1, onCommit: (v) => { if (v > 0) S.wallT = v; } }));
         w.append(fw);
+      }
+      if (S.tool === 'offset') {
+        const O = S.off;
+        const fo = h('div', { class: 'fields' });
+        fo.append(UI.numField({ id: 'off-n', label: 'Anzahl', value: O.count, unit: '', expr: false, min: 1, int: true, onCommit: (v) => { O.count = clamp(Math.round(v), 1, 20); render(); } }));
+        fo.append(UI.selectField({ id: 'off-corner', label: 'Ecken', value: O.corners, options: [['sharp', 'Spitz'], ['round', 'Rund']], onChange: (v) => { O.corners = v; const el = $('#off-corner'); if (el) el.blur(); render(); } }));
+        w.append(fo);
+        const bt = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'off-both', checked: !!O.both }), 'Beidseitig (innen und außen)');
+        bt.querySelector('input').onchange = (e) => { O.both = e.target.checked; e.target.blur(); render(); };
+        w.append(bt);
       }
       if (S.tool === 'tpl') {
         const T = S.tpl;

@@ -522,6 +522,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Taste A ohne aktiven Linienzug**: Schaltet weiterhin normal auf das Bogen-Werkzeug um.
 - [ ] **Von Hand**: Freie geschwungene Umrisse (S-Kurven aus zwei Bögen hintereinander, geschlossene Langloch-Umrisse, Wechsel mit Zahleneingabe) zeichnen und prüfen, ob Vorschau, Tangenten-Fang am Bogenende und die Hinweiszeile angenehm wirken.
 
+## Versatz mehrfach und beidseitig (Auto [A-006])
+
+- [x] **Anzahl mehrfach**: Rechteck 20 × 10 mm mit Anzahl 3 und Abstand 2 mm nach außen → drei neue Rechtecke (24 × 14, 28 × 18, 32 × 22 mm) mit passenden Versatz-Regeln, Rückgängig nimmt alle zusammen zurück.
+- [x] **Beidseitig**: Rechteck mit „Beidseitig“ → je ein Umriss außen und innen (bzw. bei Anzahl 2 zwei außen und zwei innen).
+- [x] **Ecken rund**: Rechteck mit „Ecken: Rund“ und 2 mm Abstand → vier gerade Seiten und vier Ecken-Bögen (R = 2 mm), geschlossene Fläche, wächst beim Ändern des Originals mit.
+- [x] **Kette mit runden Ecken & Rückgängig**: L-Kette mit „Beidseitig“ und „Ecken: Rund“ → äußere Ecke gerundet (Bogen R = 4 mm), innere Ecke spitz; ein Rückgängig räumt alles auf.
+- [ ] **Von Hand**: Bei Vieleck, gemischten Ketten (Linie + Bogen) und gedrücktem Rückgängig prüfen, ob Vorschau-Schildchen, Eckenbögen und Hinweistexte klar wirken.
+
 ## Maße als Tabelle (neu in Sitzung 114)
 
 - [x] **Tabelle**: Rechteck und Kreis mit drei Maßen → drei Zeilen („Rechteck 1“, „Kreis 1“); Breite 45 eintippen → Rechteck 45 mm breit, Tabelle bleibt offen.
