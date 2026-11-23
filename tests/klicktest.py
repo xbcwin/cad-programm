@@ -33,7 +33,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Interact,Measure,Datums,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Panels,Joints}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Panels,Joints}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -6224,6 +6224,179 @@ def t_a013_schnitt_kappe_mehrfach(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a016_speicher_gross(p):
+    # 1. 15+ MB STEP-Import anlegen, binär in IndexedDB sichern (nicht in localStorage)
+    p.empty()
+    p.ev("Actions.addPrimitive('box')"); warte_rechnen(p, 20)
+    prep = p.pg.evaluate("""async () => {
+      const { Kernel, Model, App, Start } = window.__masswerk;
+      const r = await Kernel.call('exportSTEP', { scene: Model.kernelScene(App.doc) });
+      const head = new TextDecoder('utf-8').decode(new Uint8Array(r.data));
+      const line = '/* ' + '0123456789abcdef'.repeat(4) + ' */\\n';
+      const need = 15600000 - head.length;
+      const pad = line.repeat(Math.ceil(need / line.length));
+      const bigStep = head.replace('DATA;', 'DATA;\\n' + pad);
+      App.change('clear', d => { d.items = []; });
+      await Start.importCAD(new File([bigStep], 'GrossesTeil.step'));
+      return bigStep.length;
+    }""")
+    warte_rechnen(p, 45)
+    st1 = p.ev("""return (async () => {
+      await App.autosave.flush();
+      await Store.whenIdle();
+      const it = App.doc.items[0];
+      const m = await Mass.measure();
+      const lsProj = localStorage.getItem('masswerk.proj.' + App.doc.id);
+      const blob = await new Promise((res) => {
+        const req = indexedDB.open('tracery-db', 1);
+        req.onsuccess = () => {
+          const tx = req.result.transaction('blobs', 'readonly');
+          const g = tx.objectStore('blobs').get(it.p.blobId);
+          g.onsuccess = () => res(g.result ? { len: g.result.bytes.byteLength, bin: g.result.bytes instanceof Uint8Array || g.result.bytes instanceof ArrayBuffer } : null);
+          g.onerror = () => res(null);
+        };
+        req.onerror = () => res(null);
+      });
+      return {
+        docId: App.doc.id,
+        errs: App.errors.length,
+        hasBlobId: !!(it && it.p && it.p.blobId),
+        noData: it && it.p && it.p.data === undefined,
+        size: it && it.p && it.p.size,
+        blobId: it && it.p && it.p.blobId,
+        vol: m && m.volume,
+        lsProj,
+        blob,
+      };
+    })();""")
+    ok1 = (prep > 15_500_000 and st1['errs'] == 0 and st1['hasBlobId'] and st1['noData']
+           and st1['size'] > 15_500_000 and abs(st1['vol'] - 8000) < 10
+           and st1['lsProj'] is None and st1['blob'] is not None
+           and st1['blob']['bin'] and st1['blob']['len'] > 15_500_000)
+
+    # 2. Nach Neuladen der Seite vollständig aus IndexedDB wiederhergestellt
+    p.pg.reload()
+    p.wait(4000)
+    try:
+        p.pg.locator('.loading').wait_for(state='detached', timeout=25000)
+    except Exception:
+        pass
+    warte_rechnen(p, 45)
+    st2 = p.ev("""return Mass.measure().then(m => {
+      const it = App.doc.items[0];
+      return {
+        docId: App.doc.id,
+        len: App.doc.items.length,
+        errs: App.errors.length,
+        blobId: it && it.p && it.p.blobId,
+        noData: it && it.p && it.p.data === undefined,
+        size: it && it.p && it.p.size,
+        vol: m && m.volume,
+      };
+    });""")
+    ok2 = (st2['docId'] == st1['docId'] and st2['len'] == 1 and st2['errs'] == 0
+           and st2['blobId'] == st1['blobId'] and st2['noData']
+           and st2['size'] == st1['size'] and abs(st2['vol'] - 8000) < 10)
+
+    # 3. Versionen in IndexedDB (inkl. 15-MB-Import), Neuladen und Zurückholen
+    p.ev("Versions.save('Mit 15 MB Import'); Actions.addPrimitive('cylinder');"); warte_rechnen(p, 20)
+    p.ev("return App.autosave.flush().then(() => Store.whenIdle());")
+    p.pg.reload()
+    p.wait(4000)
+    try:
+        p.pg.locator('.loading').wait_for(state='detached', timeout=25000)
+    except Exception:
+        pass
+    warte_rechnen(p, 45)
+    v_before = p.ev("""return {
+      names: Versions.list().map(v => v.name),
+      lsVer: localStorage.getItem('masswerk.versions.' + App.doc.id),
+      len: App.doc.items.length,
+      vid: Versions.list()[0] && Versions.list()[0].id,
+    };""")
+    p.ev("return Versions.restore(arg);", v_before['vid'])
+    warte_rechnen(p, 40)
+    v_after = p.ev("return Mass.measure().then(m => ({ len: App.doc.items.length, errs: App.errors.length, vol: m && m.volume }));")
+    ok3 = (v_before['names'] == ['Mit 15 MB Import'] and v_before['lsVer'] is None and v_before['len'] == 2
+           and v_after['len'] == 1 and v_after['errs'] == 0 and abs(v_after['vol'] - 8000) < 10)
+
+    # 4. Migration aus localStorage beim ersten Start (inkl. Base64-STL-Import und alter Version)
+    p.ev("""return (async () => {
+      Start.newProject(true);
+      App.autosave.cancel();
+      const V = [[0,0,0],[10,0,0],[0,10,0],[0,0,10]], F = [[0,2,1],[0,1,3],[0,3,2],[1,2,3]];
+      let stl = 'solid t\\n';
+      for (const f of F) { stl += ' facet normal 0 0 0\\n  outer loop\\n'; for (const i of f) stl += '   vertex ' + V[i].join(' ') + '\\n'; stl += '  endloop\\n endfacet\\n'; }
+      stl += 'endsolid t\\n';
+      const b64 = btoa(stl);
+      const oldDoc = {
+        format: 'masswerk', version: 1, id: 'p_old_mig', name: 'Altes Projekt', created: 1000, modified: 2000,
+        params: [], notes: [], settings: { printer: 'std', custom: { x: 220, y: 220, z: 250 }, grid: 1, snap: true }, drawing: null,
+        items: [{ id: 'i_old_1', kind: 'import', name: 'Spitze', role: 'solid', color: '#2f9e91', hidden: false, locked: false, finishes: [], t: { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 }, p: { fmt: 'stl', data: b64, file: 'spitze.stl', scale: 1 } }],
+      };
+      const oldVer = [{ id: 'v_old_1', name: 'Altstand', t: 1500, doc: JSON.parse(JSON.stringify(oldDoc)) }];
+      await Store.whenIdle();
+      await new Promise((res) => {
+        const req = indexedDB.open('tracery-db', 1);
+        req.onsuccess = () => {
+          const d = req.result;
+          const tx = d.transaction(['projects', 'versions', 'blobs', 'meta'], 'readwrite');
+          tx.objectStore('projects').clear();
+          tx.objectStore('versions').clear();
+          tx.objectStore('blobs').clear();
+          tx.objectStore('meta').clear();
+          tx.oncomplete = () => res(true);
+          tx.onerror = () => res(false);
+        };
+      });
+      localStorage.setItem('masswerk.proj.p_old_mig', JSON.stringify(oldDoc));
+      localStorage.setItem('masswerk.versions.p_old_mig', JSON.stringify(oldVer));
+      localStorage.setItem('masswerk.index', JSON.stringify([{ id: 'p_old_mig', name: 'Altes Projekt', modified: 2000, n: 1 }]));
+      localStorage.setItem('masswerk.last', 'p_old_mig');
+      return true;
+    })();""")
+    p.pg.reload()
+    p.wait(4000)
+    try:
+        p.pg.locator('.loading').wait_for(state='detached', timeout=25000)
+    except Exception:
+        pass
+    warte_rechnen(p, 30)
+    mig = p.ev("""return Mass.measure().then(m => {
+      const it = App.doc.items[0];
+      return {
+        docId: App.doc.id,
+        errs: App.errors.length,
+        hasBlobId: !!(it && it.p && it.p.blobId),
+        noData: it && it.p && it.p.data === undefined,
+        vol: m && m.volume,
+        vers: Versions.list().map(v => v.name),
+        lsLeft: ['masswerk.proj.p_old_mig', 'masswerk.versions.p_old_mig', 'masswerk.index', 'masswerk.last'].filter(k => localStorage.getItem(k) !== null),
+      };
+    });""")
+    ok4 = (mig['docId'] == 'p_old_mig' and mig['errs'] == 0 and mig['hasBlobId'] and mig['noData']
+           and abs(mig['vol'] - 1000 / 6) < 2 and mig['vers'] == ['Altstand'] and mig['lsLeft'] == [])
+
+    # 5. Löschen räumt Projekt, Versionen und verwaiste Blobs in IndexedDB auf
+    cleaned = p.ev("""return (async () => {
+      Start.newProject(true);
+      await App.deleteStored('p_old_mig');
+      await Store.whenIdle();
+      return new Promise((res) => {
+        const req = indexedDB.open('tracery-db', 1);
+        req.onsuccess = () => {
+          const tx = req.result.transaction(['projects', 'versions', 'blobs'], 'readonly');
+          const c1 = tx.objectStore('projects').count();
+          const c2 = tx.objectStore('versions').count();
+          const c3 = tx.objectStore('blobs').count();
+          tx.oncomplete = () => res({ p: c1.result, v: c2.result, b: c3.result });
+        };
+      });
+    })();""")
+    ok5 = cleaned == {'p': 0, 'v': 0, 'b': 0}
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -6337,6 +6510,7 @@ TESTS = [
     ('[A-010] OBJ und GLB speichern: ZIP mit .obj/.mtl/.glb / MTL-Farben / GLB-Kopf & Meshes / Studio-Material / Einzeln', t_a010_obj_glb),
     ('[A-012] Messungen bleiben stehen: Abstand behalten / Quader höher / ein- und ausblenden / umbenennen / verloren & Rückgängig / löschen', t_a012_messungen_bleiben),
     ('[A-013] Schnitt mit Kappe und mehreren Ebenen: Würfel mit Loch / X und Y gleichzeitig / alle drei Ebenen & Kreisloch / Kappe an-aus / sauber beendet', t_a013_schnitt_kappe_mehrfach),
+    ('[A-016] Speicher für große Projekte: 15 MB Import sichern & neu laden / Versionen in IndexedDB / Migration aus localStorage / Löschen räumt Blobs auf', t_a016_speicher_gross),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

@@ -1543,6 +1543,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Kappe ein/aus & Aufräumen**: „Kappe füllen“ (`#cut-cap`) blendet Kappen ein/aus; Schließen räumt alle Clipping-Ebenen und Overlay-Meshes ohne Undo-Schritt auf.
 - [ ] **Von Hand**: An einem mehrteiligen Bauteil (z. B. Gehäuse mit Deckel) X- und Y-Schnitt gemeinsam verschieben, umdrehen und die gegenläufige Schraffur der Körper prüfen.
 
+## Speicher für große Projekte (Auto [A-016])
+
+- [x] **15+ MB Import binär sichern & neu laden**: Eine über 15 MB große STEP-Datei wird über `Store.putBlob` binär (`Uint8Array`) in IndexedDB (`tracery-db` → `blobs`) gespeichert (`p.blobId`, kein Base64 im Dokument, kein `localStorage`-Eintrag) und nach dem Neuladen der Seite vollständig mit exakter Geometrie wiederhergestellt.
+- [x] **Versionen in IndexedDB**: Versionen samt Referenzen auf binäre Importe werden im `versions`-Store der IndexedDB abgelegt, überstehen ein Neuladen und lassen sich wieder zurückholen.
+- [x] **Migration aus `localStorage` & Aufräumen**: Vorhandene Projekte, Base64-Importe und Versionen aus `localStorage` werden beim ersten Start automatisch in IndexedDB übernommen und aus `localStorage` bereinigt; das Löschen eines Projekts entfernt auch nicht mehr genutzte Blobs.
+- [ ] **Von Hand**: Ein großes Projekt (> 15 MB STEP/STL) als `.tracery.json` speichern, das Projekt aus dem Browser löschen und die gespeicherte Datei wieder hineinziehen.
+
 ## Fehler melden
 
 ```

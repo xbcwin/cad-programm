@@ -13,6 +13,10 @@ const App = (() => {
     // noch ausstehendes Speichern des bisherigen Projekts zuerst erledigen
     if (S.doc) { try { autosave.flush(); } catch (_) {} }
     S.doc = Model.migrate(doc);
+    if (typeof Store !== 'undefined') {
+      Store.extractBlobs(S.doc);
+      if (S.doc.id) Store.loadVersions(S.doc.id).catch(() => {});
+    }
     Model.useVars(Model.vars(S.doc).v);
     S.sel = []; S.face = null; S.edges = []; S.undo = []; S.redo = []; S.extra = []; S.ctx = null; S.iso = null;
     for (const id of [...S.results.keys()]) Viewer.removeNode(id);
@@ -121,21 +125,27 @@ const App = (() => {
   }
 
   // ---------- Speichern im Browser ----------
-  const autosave = debounce(() => {
+  function saveNow() {
     const d = S.doc;
-    if (!Model.countItems(d) && !d.params.length && !storageGet('masswerk.proj.' + d.id)) return;
-    storageSet('masswerk.proj.' + d.id, JSON.stringify(d));
-    let idx = [];
-    try { idx = JSON.parse(storageGet('masswerk.index') || '[]'); } catch (_) {}
-    idx = idx.filter((x) => x.id !== d.id);
-    idx.unshift({ id: d.id, name: d.name, modified: d.modified, n: Model.countItems(d) });
-    storageSet('masswerk.index', JSON.stringify(idx.slice(0, 30)));
-    storageSet('masswerk.last', d.id);
-    S.lastSavedRev = S.revision;
-  }, 700);
-  function recentProjects() { try { return JSON.parse(storageGet('masswerk.index') || '[]'); } catch (_) { return []; } }
-  function loadStored(id) { try { const s = storageGet('masswerk.proj.' + id); return s ? JSON.parse(s) : null; } catch (_) { return null; } }
-  function deleteStored(id) { storageDel('masswerk.proj.' + id); storageDel('masswerk.versions.' + id); const idx = recentProjects().filter((x) => x.id !== id); storageSet('masswerk.index', JSON.stringify(idx)); }
+    if (!d) return Promise.resolve(false);
+    const count = Model.countItems(d);
+    if (!count && !d.params.length && !Store.hasProject(d.id)) return Promise.resolve(false);
+    const rev = S.revision;
+    return Store.saveProject(d, count).then((ok) => {
+      if (ok && S.doc && S.doc.id === d.id && S.lastSavedRev < rev) S.lastSavedRev = rev;
+      return ok;
+    });
+  }
+  const autosave = (() => {
+    let t = null;
+    const f = () => { clearTimeout(t); t = setTimeout(() => { t = null; saveNow(); }, 700); };
+    f.flush = () => { clearTimeout(t); t = null; return saveNow(); };
+    f.cancel = () => { clearTimeout(t); t = null; };
+    return f;
+  })();
+  const recentProjects = () => Store.recentProjects();
+  const loadStored = (id) => Store.loadProject(id);
+  const deleteStored = (id) => Store.deleteProject(id, S.doc && S.doc.id !== id ? S.doc : null);
 
   // ---------- Neuberechnung ----------
   // Zeitleiste: Stand nach Schritt k nur anzeigen (null = wieder alles); ändert das Projekt nicht
@@ -157,6 +167,10 @@ const App = (() => {
     clearTimeout(busyTimer); busyTimer = setTimeout(() => ev.emit('busy', true), 300);
     while (dirty) {
       dirty = false;
+      if (typeof Store !== 'undefined') {
+        const ids = Store.collectBlobIds(S.doc);
+        if ([...ids].some((id) => !Store.getBlobSync(id))) await Store.hydrateDoc(S.doc);
+      }
       const scene = Model.kernelScene(S.doc, S.extra, S.peek);
       scene.quality = ViewPrefs.get().quality || 'normal';
       const known = {}; if (!S.forceMesh) for (const [id, r] of S.results) known[id] = r.key;

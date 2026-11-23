@@ -2,6 +2,7 @@
 const Kernel = (() => {
   let worker = null, seq = 1, ready = false;
   const pending = new Map();
+  const sentBlobs = new Set();
   let readyResolve, readyReject;
   const readyPromise = new Promise((res, rej) => { readyResolve = res; readyReject = rej; });
   readyPromise.catch(() => {}); // Fehler zeigt der Startbildschirm
@@ -45,6 +46,7 @@ const Kernel = (() => {
       let w;
       try { w = await spawn('direct'); } catch (e1) { console.warn('Kern-Worker direkt nicht gestartet:', e1); w = await spawn('blob'); }
       worker = w;
+      sentBlobs.clear();
       worker.onmessage = (ev) => {
         const { id, ok, result, error } = ev.data || {};
         if (id === 0) return; // geladen
@@ -64,7 +66,22 @@ const Kernel = (() => {
       return info;
     } catch (e) { readyReject(e); throw e; }
   }
+  function attachBlobs(scene) {
+    if (!scene || !Array.isArray(scene.items) || typeof Store === 'undefined') return;
+    const walk = (items) => {
+      for (const it of items) {
+        if (!it) continue;
+        if (it.kind === 'import' && it.p && it.p.blobId && !it.p.bytes && !sentBlobs.has(it.p.blobId)) {
+          const b = Store.getBlobSync(it.p.blobId);
+          if (b) { it.p.bytes = b; sentBlobs.add(it.p.blobId); }
+        }
+        if (it.children) walk(it.children);
+      }
+    };
+    walk(scene.items);
+  }
   function call(cmd, args = {}, transfer = []) {
+    if (args && args.scene && args.scene.items) attachBlobs(args.scene);
     return new Promise((resolve, reject) => {
       const id = seq++;
       pending.set(id, { resolve, reject });

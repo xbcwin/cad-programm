@@ -153,9 +153,9 @@ const Start = (() => {
         row.querySelector('svg').style.cssText = 'width:26px;height:26px;color:var(--accent);flex:none';
         row.append(h('div', { class: 'grow' }, h('b', null, r.name), h('span', null, `${r.n} Objekt${r.n === 1 ? '' : 'e'} · ${new Date(r.modified).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' })}`)));
         const del = h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Aus dem Browser löschen', 'data-tip': 'Aus diesem Browser löschen' }); del.innerHTML = icon('trash');
-        del.onclick = async (e) => { e.stopPropagation(); if (await UI.confirm('Projekt löschen?', `„${r.name}“ wird aus diesem Browser gelöscht. Gespeicherte Dateien bleiben erhalten.`, 'Löschen', true)) { App.deleteStored(r.id); show(); } };
+        del.onclick = async (e) => { e.stopPropagation(); if (await UI.confirm('Projekt löschen?', `„${r.name}“ wird aus diesem Browser gelöscht. Gespeicherte Dateien bleiben erhalten.`, 'Löschen', true)) { await App.deleteStored(r.id); show(); } };
         row.append(del);
-        const openIt = () => { if (r.id === App.doc.id) { hide(); return; } const d = App.loadStored(r.id); if (d) { App.setDoc(d); hide(); } else UI.toast('Das Projekt ist nicht mehr da.', { kind: 'bad' }); };
+        const openIt = async () => { if (r.id === App.doc.id) { hide(); return; } const d = await App.loadStored(r.id); if (d) { App.setDoc(d); hide(); } else UI.toast('Das Projekt ist nicht mehr da.', { kind: 'bad' }); };
         row.onclick = openIt; row.onkeydown = (e) => { if (e.key === 'Enter') openIt(); };
         list.append(row);
       }
@@ -193,21 +193,18 @@ const Start = (() => {
     hide();
     if (!silent) UI.toast('Neues Projekt. Fang mit einem Körper an – oder beschreib unten, was du bauen willst.', { icon: 'newfile', ms: 4500 });
   }
-  function bytesToBase64(buf) {
-    let bin = ''; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
-    return btoa(bin);
-  }
   // STEP, STL oder 3MF als neues Teil (oder mehrere Teile) ins Projekt holen
   async function importCAD(f) {
     if (/\.3mf$/i.test(f.name)) return import3MF(f);
     const fmt = /\.stl$/i.test(f.name) ? 'stl' : 'step';
-    if (f.size > 25e6) { UI.toast('Die Datei ist zu groß (über 25 MB).', { kind: 'bad' }); return; }
+    if (f.size > 100e6) { UI.toast('Die Datei ist zu groß (über 100 MB).', { kind: 'bad' }); return; }
     if (el) newProject(true);
-    const data = bytesToBase64(new Uint8Array(await f.arrayBuffer()));
-    const it = Model.newItem('import', { fmt, data, file: f.name, scale: 1 }, { name: f.name.replace(/\.(step|stp|stl)$/i, '') });
+    const bytes = new Uint8Array(await f.arrayBuffer());
+    const blobId = await Store.putBlob(bytes);
+    const it = Model.newItem('import', { fmt, blobId, size: bytes.byteLength, file: f.name, scale: 1 }, { name: f.name.replace(/\.(step|stp|stl)$/i, '') });
     App.change('Importiert', (doc) => { doc.items.push(it); });
     App.select([it.id]);
-    UI.toast(`„${f.name}“ importiert.` + (f.size > 3e6 ? ' Die Datei ist groß – speichere das Projekt als Datei, der Browser-Speicher reicht dafür evtl. nicht.' : ' Mit „Auf die XY-Ebene setzen“ legst du es auf den Boden.'), { icon: 'folder', ms: 5000 });
+    UI.toast(`„${f.name}“ importiert. Mit „Auf die XY-Ebene setzen“ legst du es auf den Boden.`, { icon: 'folder', ms: 5000 });
     setTimeout(() => { const b = Actions.worldBox(it.id); if (b && !b.isEmpty()) Viewer.fit([it.id]); }, 1500);
   }
   // ---------- 3MF lesen: ZIP mit 3D/3dmodel.model, mehrere Teile mit Namen, Farben, Einheiten und Transform-Matrizen ----------
@@ -388,7 +385,7 @@ const Start = (() => {
     return { parts, unit: rootModel.unitName, unitScale: rootModel.unitScale, title: rootModel.title };
   }
   async function import3MF(f) {
-    if (f.size > 25e6) { UI.toast('Die Datei ist zu groß (über 25 MB).', { kind: 'bad' }); return; }
+    if (f.size > 100e6) { UI.toast('Die Datei ist zu groß (über 100 MB).', { kind: 'bad' }); return; }
     let parsed;
     try { parsed = await parse3MF(await f.arrayBuffer()); } catch (e) {
       UI.toast('Diese 3MF-Datei kann ich nicht lesen: ' + (e && e.message ? e.message : 'unbekannter Fehler'), { kind: 'bad', ms: 7000 });
@@ -397,17 +394,19 @@ const Start = (() => {
     if (!parsed.parts.length) { UI.toast('In der 3MF-Datei habe ich keine 3D-Körper gefunden.', { kind: 'bad', ms: 6000 }); return; }
     if (el) newProject(true);
     const base = f.name.replace(/\.3mf$/i, '');
-    const items = parsed.parts.map((pt, i) => {
+    const items = [];
+    for (let i = 0; i < parsed.parts.length; i++) {
+      const pt = parsed.parts[i];
       const name = pt.name || (parsed.parts.length === 1 ? base : `${base} ${i + 1}`);
       const stl = Print.buildSTL([{ vertices: pt.vertices, triangles: pt.triangles }], name);
+      const blobId = await Store.putBlob(stl);
       const extra = pt.color ? { color: pt.color, more: { colorSet: true } } : {};
-      return Model.newItem('import', { fmt: 'stl', data: bytesToBase64(stl), file: f.name, scale: 1 }, { name, ...extra });
-    });
+      items.push(Model.newItem('import', { fmt: 'stl', blobId, size: stl.byteLength, file: f.name, scale: 1 }, { name, ...extra }));
+    }
     App.change('3MF importiert', (doc) => { doc.items.push(...items); });
     App.select(items.map((x) => x.id));
     const unitNote = parsed.unitScale !== 1 ? ` (von ${parsed.unit} in Millimeter umgerechnet)` : '';
-    const bigNote = f.size > 3e6 ? ' Die Datei ist groß – speichere das Projekt als Datei, der Browser-Speicher reicht dafür evtl. nicht.' : ' Mit „Auf die XY-Ebene setzen“ legst du sie auf den Boden.';
-    UI.toast(`„${f.name}“ importiert: ${items.length} ${items.length === 1 ? 'Teil' : 'Teile'}${unitNote}.${bigNote}`, { icon: 'folder', ms: 6000 });
+    UI.toast(`„${f.name}“ importiert: ${items.length} ${items.length === 1 ? 'Teil' : 'Teile'}${unitNote}. Mit „Auf die XY-Ebene setzen“ legst du sie auf den Boden.`, { icon: 'folder', ms: 6000 });
     setTimeout(() => {
       const box = new THREE.Box3();
       for (const it of items) { const b = Actions.worldBox(it.id); if (b && !b.isEmpty()) box.union(b); }
@@ -669,8 +668,9 @@ const Start = (() => {
       const txt = await f.text(); const doc = JSON.parse(txt);
       Model.migrate(doc);
       const vers = Array.isArray(doc.versions) ? doc.versions : null; delete doc.versions;
-      if (App.loadStored(doc.id) && doc.id !== App.doc.id) doc.id = uid('p');
-      if (vers) Versions.importList(doc.id, vers);
+      if (Store.hasProject(doc.id) && doc.id !== App.doc.id) doc.id = uid('p');
+      Store.extractBlobs(doc);
+      if (vers) await Versions.importList(doc.id, vers);
       App.setDoc(doc); hide();
       App.fileSavedRev = App.revision;
       UI.toast(`„${doc.name}“ geöffnet.`, { icon: 'folder' });
@@ -691,7 +691,10 @@ const Start = (() => {
   async function saveFile() {
     const name = Print.safeName(App.doc.name);
     const vers = Versions.exportList();
-    const ok = await Print.save(name + '.tracery.json', JSON.stringify(vers.length ? { ...App.doc, versions: vers } : App.doc, null, 1));
+    const docOut = await Store.inlineBlobs(App.doc);
+    const versOut = [];
+    for (const v of vers) versOut.push(v && v.doc ? { ...v, doc: await Store.inlineBlobs(v.doc) } : v);
+    const ok = await Print.save(name + '.tracery.json', JSON.stringify(versOut.length ? { ...docOut, versions: versOut } : docOut, null, 1));
     if (ok) App.fileSavedRev = App.revision;
   }
   return { importCAD, import3MF, parse3MF, importDXF, parseDXF, parseSVG, show, hide, newProject, openFile, openBlob, saveFile, openDrone, get open() { return !!el; } };

@@ -127,6 +127,6 @@ const ViewPrefs = (() => {
     syncTabs(curTab);
     UI.modal({ title: 'Einstellungen', body, actions: [{ label: 'Fertig', primary: true }], onClose: () => { if (kbdEd) kbdEd.destroy(); } });
   }
-  return { get: () => ({ ...v }), get level() { return v.level; }, set level(l) { setLevel(l); }, get firstStart() { return firstStart; }, set, toggle, apply, dialog, setLevel, syncLevel, levelCards, get simple() { return simple(); }, on: ev.on };
+  return { get: () => ({ ...v }), get level() { return v.level; }, set level(l) { setLevel(l); }, get firstStart() { return firstStart && !(typeof Store !== 'undefined' && Store.hasProjects); }, set, toggle, apply, dialog, setLevel, syncLevel, levelCards, get simple() { return simple(); }, on: ev.on };
 })();
 

@@ -1,16 +1,28 @@
 // ================= Versionen: Stände speichern, vergleichen, zurückholen =================
-// Versionen liegen außerhalb des Projekts im Browser-Speicher (sonst würde jeder Rückgängig-Schritt
+// Versionen liegen außerhalb des Projekts in der Browser-Datenbank (sonst würde jeder Rückgängig-Schritt
 // alle Versionen mitschleppen). Beim Speichern als Datei kommen sie mit in die Datei.
 const Versions = (() => {
-  const key = (id) => 'masswerk.versions.' + id;
-  function list(id = App.doc.id) { try { const a = JSON.parse(storageGet(key(id)) || '[]'); return Array.isArray(a) ? a : []; } catch (_) { return []; } }
-  function store(arr, id = App.doc.id) { return storageSet(key(id), JSON.stringify(arr)); }
-  function snapshotDoc() { const d = JSON.parse(App.snapshot()); delete d.versions; return d; }
+  function list(id = App.doc.id) { return Store.getVersionsSync(id); }
+  function store(arr, id = App.doc.id) { return Store.setVersions(id, arr); }
+  function snapshotDoc() { Store.extractBlobs(App.doc); const d = JSON.parse(App.snapshot()); delete d.versions; return d; }
   function save(name) {
     const arr = list();
     const v = { id: uid('v'), name: (name || '').trim() || 'Version ' + (arr.length + 1), t: Date.now(), doc: snapshotDoc() };
     arr.push(v);
-    if (!store(arr)) { UI.toast('Die Version passt nicht mehr in den Browser-Speicher. Lösche ältere Versionen oder speichere das Projekt als Datei.', { kind: 'bad', ms: 6000 }); arr.pop(); return null; }
+    const p = store(arr);
+    if (p && typeof p.then === 'function') {
+      p.then((ok) => {
+        if (!ok) {
+          store(list().filter((x) => x.id !== v.id));
+          UI.toast('Die Version konnte nicht im Browser-Speicher gesichert werden.', { kind: 'bad', ms: 6000 });
+          ev.emit('change');
+        }
+      });
+    } else if (!p) {
+      UI.toast('Die Version passt nicht mehr in den Browser-Speicher. Lösche ältere Versionen oder speichere das Projekt als Datei.', { kind: 'bad', ms: 6000 });
+      arr.pop();
+      return null;
+    }
     UI.toast(`„${v.name}“ gespeichert.`, { icon: 'check' });
     ev.emit('change');
     return v;
@@ -18,9 +30,10 @@ const Versions = (() => {
   function remove(vid) { store(list().filter((v) => v.id !== vid)); ev.emit('change'); }
   function rename(vid, name) { const arr = list(); const v = arr.find((x) => x.id === vid); if (v && name.trim()) { v.name = name.trim(); store(arr); ev.emit('change'); } }
   // Zurückholen ist ein normaler Schritt – Rückgängig bringt den Stand von eben zurück
-  function restore(vid) {
+  async function restore(vid) {
     const v = list().find((x) => x.id === vid); if (!v) return;
     compareOff();
+    await Store.hydrateDoc(v.doc);
     App.change(`Version „${v.name}“ zurückgeholt`, (doc) => {
       const keep = { id: doc.id, name: doc.name, created: doc.created };
       const src = JSON.parse(JSON.stringify(v.doc));
@@ -33,7 +46,7 @@ const Versions = (() => {
   }
   // Dateien: Versionen mitnehmen und wieder einlesen
   function exportList() { return list(); }
-  function importList(id, arr) { if (Array.isArray(arr) && arr.length) store(arr.filter((v) => v && v.doc && v.doc.format === 'masswerk'), id); }
+  function importList(id, arr) { if (Array.isArray(arr) && arr.length) return store(arr.filter((v) => v && v.doc && v.doc.format === 'masswerk'), id); return Promise.resolve(true); }
 
   // ---------- Unterschiede ----------
   const ev = makeEmitter();
@@ -69,6 +82,7 @@ const Versions = (() => {
     const v = list().find((x) => x.id === vid); if (!v) return;
     compareOff();
     const old = JSON.parse(JSON.stringify(v.doc)); Model.migrate(old);
+    await Store.hydrateDoc(old);
     const d = diff(old, App.doc);
     const bar = h('div', { class: 'viewbar cmpbar', role: 'region', 'aria-label': 'Vergleich' });
     const head = h('div', { class: 'vb-head' }, h('span', { class: 'title' }, 'Vergleich'));
@@ -133,6 +147,6 @@ const Versions = (() => {
     draw();
     const m = UI.modal({ title: 'Versionen', body, actions: [{ label: 'Schließen', primary: true }] });
   }
-  function init() { App.on('doc', () => { if (cmp && !App.doc) compareOff(); }); }
+  function init() { App.on('doc', () => { if (cmp && !App.doc) compareOff(); if (App.doc && App.doc.id) Store.loadVersions(App.doc.id).then(() => ev.emit('change')).catch(() => {}); }); }
   return { init, list, save, remove, rename, restore, compare, compareOff, diff, dialog, exportList, importList, on: ev.on, get comparing() { return cmp ? { name: cmp.v.name, diff: cmp.diff, shown: !!(cmp.nodes && cmp.nodes.length) } : null; } };
 })();

@@ -4,6 +4,7 @@
 export function createKernel(R, oc) {
   const cache = new Map(); // key -> { shape, gen, bbox }
   const meshCache = new Map(); // resultKey -> mesh payload (plain arrays, reusable)
+  const importBlobs = new Map(); // blobId -> Uint8Array (binäre Import-Dateien)
   let gen = 0;
 
   // ---------- kleine Helfer ----------
@@ -18,6 +19,31 @@ export function createKernel(R, oc) {
     h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
     h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
     return (h2 >>> 0).toString(36) + (h1 >>> 0).toString(36);
+  }
+  function hashBytes(u8) {
+    let h1 = 0xdeadbeef ^ u8.byteLength, h2 = 0x41c6ce57 ^ u8.byteLength;
+    for (let i = 0; i < u8.byteLength; i++) {
+      const ch = u8[i];
+      h1 = Math.imul(h1 ^ ch, 2654435761);
+      h2 = Math.imul(h2 ^ ch, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return (h2 >>> 0).toString(36) + (h1 >>> 0).toString(36) + '_' + u8.byteLength;
+  }
+  function ingestBlobs(scene) {
+    if (!scene || !Array.isArray(scene.items)) return;
+    const walk = (items) => {
+      for (const it of items) {
+        if (!it) continue;
+        if (it.kind === 'import' && it.p && it.p.blobId && it.p.bytes) {
+          const u8 = it.p.bytes instanceof Uint8Array ? it.p.bytes : new Uint8Array(it.p.bytes);
+          importBlobs.set(it.p.blobId, u8);
+        }
+        if (it.children) walk(it.children);
+      }
+    };
+    walk(scene.items);
   }
   const keyOf = (o) => hashStr(JSON.stringify(o));
   const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -363,10 +389,13 @@ export function createKernel(R, oc) {
     return shape;
   }
 
-  // Importierte STEP- oder STL-Datei (Inhalt als Base64 im Projekt)
+  // Importierte STEP- oder STL-Datei (binär per blobId/bytes oder Base64)
   function buildImport(p) {
-    if (!p.data) throw new Error('Die importierte Datei ist leer.');
-    const bin = atob(p.data); const bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    let bytes = p.bytes ? (p.bytes instanceof Uint8Array ? p.bytes : new Uint8Array(p.bytes)) : (p.blobId ? importBlobs.get(p.blobId) : null);
+    if (!bytes && p.data) {
+      const bin = atob(p.data); bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    }
+    if (!bytes || !bytes.byteLength) throw new Error('Die importierte Datei ist leer.');
     const fn = 'imp_' + Math.random().toString(36).slice(2);
     oc.FS.writeFile('/' + fn, bytes);
     let shape = null;
@@ -1140,7 +1169,11 @@ export function createKernel(R, oc) {
   // ---------- Objekte auswerten ----------
   function defKey(it) {
     // alles, was die eigene Form bestimmt (nicht die eigene Lage)
-    return keyOf({ k: it.kind, p: it.p, f: it.finishes || null, mir: it.mir || null, c: it.children ? it.children.filter((c) => !c.hidden).map((c) => [defKey(c), c.role, c.m]) : null });
+    let p = it.p;
+    if (it.kind === 'import' && p && (p.blobId || p.bytes)) {
+      p = { fmt: p.fmt, scale: p.scale, blobId: p.blobId || hashBytes(p.bytes instanceof Uint8Array ? p.bytes : new Uint8Array(p.bytes)) };
+    }
+    return keyOf({ k: it.kind, p, f: it.finishes || null, mir: it.mir || null, c: it.children ? it.children.filter((c) => !c.hidden).map((c) => [defKey(c), c.role, c.m]) : null });
   }
   function evalItem(it, errors) {
     const key = defKey(it);
@@ -1364,6 +1397,7 @@ export function createKernel(R, oc) {
   }
   function evaluate(scene, known = {}) {
     gen++;
+    ingestBlobs(scene);
     if (scene.quality) setQuality(scene.quality);
     const errors = [];
     const tops = (scene.items || []).filter((it) => !it.hidden);
@@ -1569,6 +1603,7 @@ export function createKernel(R, oc) {
 
   // q: Feinheit beim Export – 1 = normal, kleiner = feiner (0.4 = fein, 0.15 = sehr fein), größer = gröber
   function exportMeshes(scene, fine = true, q = 1) {
+    ingestBlobs(scene);
     const errors = [];
     const solids = evaluateShapes(scene, errors);
     const objs = [];
@@ -1583,6 +1618,7 @@ export function createKernel(R, oc) {
     return { objects: objs, errors };
   }
   function exportSTEP(scene, only) {
+    ingestBlobs(scene);
     const errors = [];
     let solids = evaluateShapes(scene, errors);
     if (only && only.length) { const keep = new Set(only); for (const s of solids) if (!keep.has(s.id)) s.shape.delete(); solids = solids.filter((s) => keep.has(s.id)); }
@@ -1592,6 +1628,7 @@ export function createKernel(R, oc) {
   }
   // Volumen, Oberfläche und Schwerpunkt – je Teil der obersten Ebene und gesamt
   function measure(scene) {
+    ingestBlobs(scene);
     const errors = [];
     const solids = evaluateShapes(scene, errors);
     let volume = 0, area = 0;
@@ -1622,6 +1659,7 @@ export function createKernel(R, oc) {
 
   // kleinster Abstand zwischen zwei Teilen (mit den Punkten, an denen er auftritt)
   function minDistance(scene, ids) {
+    ingestBlobs(scene);
     const errors = [];
     const solids = evaluateShapes(scene, errors).filter((s) => ids.includes(s.id));
     const A = solids.find((s) => s.id === ids[0]), B = solids.find((s) => s.id === ids[1]);
@@ -1674,6 +1712,7 @@ export function createKernel(R, oc) {
     return out;
   }
   function project(scene, views) {
+    ingestBlobs(scene);
     const errors = [];
     const solids = evaluateShapes(scene, errors);
     if (!solids.length) return { views: {}, axes: [], errors };
@@ -1710,6 +1749,7 @@ export function createKernel(R, oc) {
   // Kollisionen: welche Teile stecken ineinander, und welche Teile treffen die Prüfkörper (z. B. Propellerscheiben)?
   // probes: [{ c:[x,y,z], r, h, skip:[ids] }] – senkrechte Zylinder; skipPairs: Teile, die nicht paarweise geprüft werden
   function clashes(scene, probes = [], skipPairs = []) {
+    ingestBlobs(scene);
     const errors = [];
     const solids = evaluateShapes(scene, errors);
     const boxes = solids.map((s) => bboxOf(s.shape));
@@ -1745,6 +1785,7 @@ export function createKernel(R, oc) {
   // Wand um Schraubenlöcher in beliebigen Teilen: um jede runde Bohrung (volle Zylinderfläche, nach innen gewölbt)
   // einen Ring mit der Mindestwand legen – ragt davon etwas aus dem Teil heraus, ist die Wand dort dünner.
   function holeWalls(scene, ids = [], opts = {}) {
+    ingestBlobs(scene);
     const errors = [], small = opts.small || 1.5, big = opts.big || 2, rmax = opts.rmax || 4.6;
     // Enden etwas kürzen: Tritt das Loch schräg oder durch eine gewölbte Fläche aus, ragt der Ring dort sonst ein Stück heraus
     const endCut = (r, w) => Math.min(1.5, Math.max(0.3, 0.3 * (r + w)));

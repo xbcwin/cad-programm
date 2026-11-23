@@ -242,7 +242,11 @@ const Model = (() => {
     else if (it.kind === 'extrude' || it.kind === 'revolve') o.p = sketchParams(it, V);
     else if (it.kind === 'loft') o.p = loftParams(it, V);
     else if (it.kind === 'sweep') o.p = sweepParams(it, V);
-    else if (it.kind === 'import') o.p = { fmt: it.p.fmt, data: it.p.data, scale: num(it.p.scale, V, 1) };
+    else if (it.kind === 'import') {
+      o.p = { fmt: it.p.fmt, scale: num(it.p.scale, V, 1) };
+      if (it.p.blobId) o.p.blobId = it.p.blobId;
+      else if (it.p.data) o.p.data = it.p.data;
+    }
     else o.p = resolveP(it.p, V);
     if (it.mir) o.mir = it.mir;
     if (it.op && OPS[it.op.type] && it.op.target) o.op = { type: it.op.type, target: it.op.target };

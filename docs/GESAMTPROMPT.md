@@ -84,6 +84,7 @@ Leitlinien:
 | Datei | Aufgabe |
 | --- | --- |
 | `00-util.js` | Hilfen, `Expr`-Rechner mit Einheiten (mm, cm, m, in, zoll, ", °), Icon-Set `IC`, eingebettete Hilfetexte `HELP` (muss immer gleich `app/data/werkzeug-hilfen.json` sein, per Python neu erzeugen) |
+| `05-storage.js` | Browser-Datenbank (`Store`, IndexedDB `tracery-db` mit `projects`, `versions`, `blobs`, `meta`), binäre Import-Blobs, Migration aus `localStorage` |
 | `10-model.js` | Projekt-Datenmodell, `KINDS`, `newItem`, `find`/`walk`/`topOf`, Matrizen, `vars` (Maße), `kernelItem`, `sketchParams`/`loftParams`/`sweepParams`/`pathPatternParams`, `migrate` |
 | `15-sketchcore.js` (`SK`) | Skizzen-Geometrie: `segsOf`, `regions`, `chains` (offene Pfade), `bounds`, Splines als exakte Bézier (`splineBez`), Text-Umrisse (Schrift Inter, OFL), Ellipse, Fangpunkte, Maße |
 | `16-solver.js` | Skizzen-Löser (Maße und Regeln gemeinsam, Freiheitsgrade, Konflikte) |
@@ -256,7 +257,7 @@ Leitlinien:
 **3D-Features**
 - Grundkörper mit Ziehgriffen; Hochziehen (Push/Pull an Flächen); Drehkörper
 - Übergang (Loft) mit Spitze („Zur Spitze“) oder **entlang einer Mittellinie** (Punkte ziehen biegt den Körper, Warnung bei schrägem Auftreffen) oder mit **einer oder zwei Führungskurven** (Seitenlinie von der Seite und von oben, der Übergang wird dazwischen so breit, dass er sie berührt); Entlang Pfad (Rohr, Kanal, eigener Querschnitt); **Rohr im Raum** (Punkte auf Körper oder in den Raum klicken)
-- STEP/STL/3MF-Import (`Start.importCAD`, `Start.import3MF`, `Start.parse3MF` mit `Zip.read`: mehrere Objekte/Komponenten mit Namen, Farben und Einheiten); DXF- und SVG-Import als Platte mit Skizze (`Start.importDXF`, `parseDXF`, `parseSVG`, `tidyOutline` in `85-start.js`)
+- STEP/STL/3MF-Import (`Start.importCAD`, `Start.import3MF`, `Start.parse3MF` mit `Zip.read`: mehrere Objekte/Komponenten mit Namen, Farben und Einheiten; binär als `blobId` in IndexedDB `tracery-db` über `Store` statt Base64 im Autosave); DXF- und SVG-Import als Platte mit Skizze (`Start.importDXF`, `parseDXF`, `parseSVG`, `tidyOutline` in `85-start.js`)
 - Rundung und Fase per Knopf oder **Ziehgriff an der Kante**; Fase mit **zwei Abständen** oder **Abstand und Winkel**, Rundung **von … bis** (wächst entlang der Kante); Entformungsschräge; Wandstärke (Aushöhlen)
 - Echte metrische Gewinde (Gewindebolzen, gedrucktes Innengewinde mit Spiel) und **kosmetische Gewinde** (`it.threads`, gestreifte 3D-Markierung ohne Kern-Neubau, Stückliste, Zeichnung nach DIN ISO 6410-1, „Echt machen“ über `Features.makeThreadReal`)
 - Bohrungs-Assistent: Durchgang mit Senk- oder Zylinderkopf, Kernloch, Sackloch mit 118°-Bohrspitze (`blindHole`), Passbohrung H7 (`fitHole`, ISO 286), Zentrierbohrung (`centerHole`, DIN 332 A), Gewindeeinsatz, Mutternfalle – mit Querschnitts-Vorschau (`holePreviewSVG`)

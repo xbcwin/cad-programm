@@ -326,6 +326,7 @@ Fertig.
 - [x] Volltest-Fehler repariert (Auto [F-11232113]): `S.sel`/`S.sels` synchronisiert (`t_referenzmass`), nachgeführte Koordinatenanzeige bei schneller Mausbewegung (`t_koordinaten`), Dämpfung der OrbitControls bei `moveCamera`/`viewBack` gestoppt (`t_vorige_ansicht`), Kontextleiste bei Auswahlwechsel sofort aktualisiert und sinnlose Abstandsmessung zwischen Gruppe und Kind unterdrückt (`t_gelenk_gruppe`)
 - [x] Einfache Oberfläche mit größeren Knöpfen: Oberleiste, Kontextleiste, Verlauf, Knöpfe und Kacheln größer, Knöpfe oben mindestens 44 px hoch (Sitzung 50)
 - [x] Profi-Stufe wählen und eigene Tastenkürzel: Zwei-Karten-Wahl („Einfach“ / „Profi“) beim ersten Start und in den Einstellungen, Schild oben in der Leiste, anpassbare Tastenkürzel in „Profi“ unter `tracery-kuerzel` mit Konfliktmeldung und Zurücksetzen (Auto [A-021], BE-01)
+- [x] Speicher für große Projekte (Auto [A-016], PL-06): Autosave und Versionen liegen jetzt in der Browser-Datenbank (`tracery-db`, IndexedDB) statt im engen `localStorage`; importierte STEP-, STL- und 3MF-Dateien bis 100 MB werden binär als `Uint8Array` im Blob-Store abgelegt, bestehende Projekte und Versionen aus `localStorage` beim ersten Start automatisch übernommen und verwaiste Blobs beim Löschen aufgeräumt
 
 ### Stufe 6 – Konten und Zusammenarbeit (Idee, nach dem Drohnen-Modul)
 - [ ] A: Konto mit Name und Passwort, Projekte in der Cloud
