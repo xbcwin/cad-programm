@@ -12,7 +12,7 @@
   UI.initTips();
   Viewer.init($('#viewport'));
   window.__V = Viewer; window.__M = { Store, Interact, Measure, Datums, Print, ViewPrefs, App, Actions, Model, Timeline, Start, Comp, Handles, Sketch, SK, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views, Mass, Select, Versions, DroneTpl, DroneUI, DroneLib, DroneCheck, Plates, Variants, Explain, Weak, AI, Snap, Panels, Joints }; window.__S = Start; // für automatische Tests
-  Panels.init(); Datums.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Notes.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init(); Refine.init(); Comp.init(); Views.init(); Mass.init(); Joints.init(); Versions.init();
+  Panels.init(); Datums.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Notes.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init(); Refine.init(); Comp.init(); Views.init(); Mass.init(); Joints.init(); Versions.init(); Start.init();
 
   // Kopfzeile
   $('#btn-undo').onclick = () => App.undo();
@@ -28,6 +28,13 @@
   const projectItems = () => [
     { label: 'Projekt umbenennen', icon: 'edit', run: async () => { const n = await UI.prompt('Projekt umbenennen', 'Name', App.doc.name, 'Umbenennen'); if (n && n.trim()) App.change('Projekt umbenannt', (doc) => { doc.name = n.trim(); }); } },
     { label: 'Als Datei speichern', icon: 'save', kbd: 'Strg S', run: () => Start.saveFile() },
+    ...(Start.folderSupported() ? (Start.folderInfo() ? [
+      { label: `Jetzt in „${Start.folderInfo().name}“ speichern`, icon: 'save', id: 'pm-folder-now', help: 'saveFolder', run: () => Start.saveToFolderNow() },
+      { label: 'Anderen Ordner wählen …', icon: 'folder', id: 'pm-folder-change', help: 'saveFolder', run: () => Start.saveToFolder() },
+      { label: 'Ordner-Verbindung trennen', icon: 'close', id: 'pm-folder-stop', run: () => Start.disconnectFolder() },
+    ] : [
+      { label: 'In Ordner speichern …', icon: 'folder', id: 'pm-folder-save', help: 'saveFolder', run: () => Start.saveToFolder() },
+    ]) : []),
     { label: 'Datei öffnen / STEP, STL, 3MF importieren …', icon: 'folder', help: 'importCad', run: () => Start.openFile() },
     { label: 'Versionen …', icon: 'rollback', help: 'versions', run: () => Versions.dialog() },
     '-',

@@ -743,5 +743,10 @@
     "tip": "Messung dauerhaft im Projekt behalten",
     "hilfe": "Speichert die aktuelle Messung als eigenes Objekt in der Liste „Messungen“ im Verlauf. Ändert sich ein Körper oder Maß, rechnet Tracery den Wert selbstständig neu; fehlt ein Bezug, erscheint „verloren“. Du kannst jede Messung ein- und ausblenden, umbenennen oder löschen.",
     "tipp": "Klick ein Mess-Schild im Bild an, um seine Art und den vollen Text rechts zu sehen; ein Doppelklick kopiert den Zahlenwert."
+  },
+  "saveFolder": {
+    "tip": "Projekt in einen Ordner speichern und automatisch mitschreiben",
+    "hilfe": "Wählt einen Ordner auf deinem Rechner (in Chrome und Edge). Tracery legt die Projektdatei dort ab und schreibt Änderungen automatisch mit – gebündelt alle 10 Sekunden. Oben in der Leiste siehst du, in welchen Ordner gespeichert wird.",
+    "tipp": "Klick oben auf „gespeichert in …“, um sofort zu speichern, den Ordner zu wechseln oder die Verbindung zu trennen."
   }
 }
