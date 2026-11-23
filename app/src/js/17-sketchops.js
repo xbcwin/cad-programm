@@ -354,24 +354,25 @@ const SKO = (() => {
     if (Q.line) return lineCircleInf(Q.line.p, [Q.line.p[0] + Q.line.u[0], Q.line.p[1] + Q.line.u[1]], P.circle.c, P.circle.r);
     return circleCircle(P.circle.c, P.circle.r, Q.circle.c, Q.circle.r);
   }
-  // sd > 0: nach links (in Laufrichtung der Kette), sd < 0: nach rechts
-  function offsetChain(chain, sd) {
+  // sd > 0: nach links (in Laufrichtung der Kette), sd < 0: nach rechts; corners: 'sharp' | 'round'
+  function offsetChain(chain, sd, corners = 'sharp') {
     const n = chain.segs.length;
     const items = chain.segs.map((s) => {
       if (s.e.type === 'line') {
         const L = d2(s.a, s.b), u = [(s.b[0] - s.a[0]) / L, (s.b[1] - s.a[1]) / L], nv = [-u[1], u[0]];
         const A = [s.a[0] + nv[0] * sd, s.a[1] + nv[1] * sd], B = [s.b[0] + nv[0] * sd, s.b[1] + nv[1] * sd];
-        return { s, line: { p: A, u }, start: A, end: B };
+        return { s, line: { p: A, u }, start: A, end: B, tStart: u, tEnd: u };
       }
       const ai = SK.arcInfo(s.a, s.e.m, s.b);
       if (!ai) return null;
       const r = ai.sweep > 0 ? ai.r - sd : ai.r + sd;
       if (r < 1e-6) return null;
       const at = (p) => { const d = d2(p, ai.c); return [ai.c[0] + ((p[0] - ai.c[0]) / d) * r, ai.c[1] + ((p[1] - ai.c[1]) / d) * r]; };
-      return { s, ai, r, circle: { c: ai.c, r }, start: at(s.a), end: at(s.b) };
+      const tAt = (a) => (ai.sweep > 0 ? [-Math.sin(a), Math.cos(a)] : [Math.sin(a), -Math.cos(a)]);
+      return { s, ai, r, circle: { c: ai.c, r }, start: at(s.a), end: at(s.b), tStart: tAt(ai.a0), tEnd: tAt(ai.a1) };
     });
     if (items.some((x) => !x)) return { ok: false, why: 'Der Versatz ist hier zu groß – ein Bogen würde verschwinden.' };
-    const V = [];   // Eckpunkte: V[i] ist der Anfang von Stück i
+    const starts = items.map((it) => it.start), ends = items.map((it) => it.end), cornerArcs = new Array(n).fill(null);
     const joint = (i, j) => {
       const P = items[i], Q = items[j];
       const c = infInter(P, Q);
@@ -380,14 +381,31 @@ const SKO = (() => {
       for (const x of c) { const dd = d2(x, P.end); if (dd < bd) { bd = dd; best = x; } }
       return best;
     };
+    const joinPair = (i, j) => {
+      const cr = cross(items[i].tEnd, items[j].tStart);
+      const dt = items[i].tEnd[0] * items[j].tStart[0] + items[i].tEnd[1] * items[j].tStart[1];
+      const isOuter = corners === 'round' && (cr * sd < -1e-7 || (Math.abs(cr) <= 1e-7 && dt < -1 + 1e-6)) && d2(items[i].end, items[j].start) > 1e-5;
+      if (isOuter) {
+        const C = chain.segs[i].b, r = Math.abs(sd), a = ends[i], b = starts[j];
+        const a0 = Math.atan2(a[1] - C[1], a[0] - C[0]), a1 = Math.atan2(b[1] - C[1], b[0] - C[0]);
+        let sw = sd < 0 ? norm(a1 - a0) : -norm(a0 - a1);
+        if (Math.abs(sw) < 1e-6) sw = sd < 0 ? Math.PI : -Math.PI;
+        const m = [C[0] + Math.cos(a0 + sw / 2) * r, C[1] + Math.sin(a0 + sw / 2) * r];
+        cornerArcs[i] = { type: 'arc', a: pr(a), m: pr(m), b: pr(b), ...(chain.segs[i].e.con ? { con: true } : {}) };
+        return true;
+      }
+      const v = joint(i, j);
+      if (!v) return false;
+      ends[i] = v; starts[j] = v;
+      return true;
+    };
     for (let i = 0; i < n; i++) {
-      if (i === 0) { if (chain.closed) { const v = joint(n - 1, 0); if (!v) return { ok: false, why: 'Der Versatz passt hier nicht an die Ecke.' }; V.push(v); } else V.push(items[0].start); }
-      else { const v = joint(i - 1, i); if (!v) return { ok: false, why: 'Der Versatz passt hier nicht an die Ecke.' }; V.push(v); }
+      if (i < n - 1) { if (!joinPair(i, i + 1)) return { ok: false, why: 'Der Versatz passt hier nicht an die Ecke.' }; }
+      else if (chain.closed && !joinPair(n - 1, 0)) return { ok: false, why: 'Der Versatz passt hier nicht an die Ecke.' };
     }
-    if (!chain.closed) V.push(items[n - 1].end);
     const out = [];
     for (let i = 0; i < n; i++) {
-      const a = V[i], b = chain.closed ? V[(i + 1) % n] : V[i + 1], it = items[i];
+      const a = starts[i], b = ends[i], it = items[i];
       let ent;
       if (it.line) {
         if ((b[0] - a[0]) * it.line.u[0] + (b[1] - a[1]) * it.line.u[1] < 1e-6) return { ok: false, why: 'Der Versatz ist hier zu groß – eine Linie würde verschwinden.' };
@@ -402,17 +420,35 @@ const SKO = (() => {
       // wieder so ausrichten wie das Original
       if (it.s.rev) { const t = ent.a; ent.a = ent.b; ent.b = t; }
       if (it.s.e.con) ent.con = true;
-      out.push({ src: it.s.e, ent });
+      out.push({ src: it.s.e, ent, segIdx: i, startKey: it.s.rev ? 'b' : 'a', endKey: it.s.rev ? 'a' : 'b' });
+      if (cornerArcs[i]) out.push({ src: it.s.e, ent: cornerArcs[i], corner: true, prevSeg: i, nextSeg: (i + 1) % n });
     }
     return { ok: true, items: out };
   }
   // Versatz einer Form (Kreis, Rechteck, Vieleck, Langloch, Spline); d > 0 = nach außen / größer, d < 0 = nach innen
-  function offsetShape(e, d) {
+  function offsetShape(e, d, corners = 'sharp') {
     const n = Math.max(3, Math.round(e.n || 6));
     if (e.type === 'circle') { const r = e.r + d; return r > 1e-6 ? { ok: true, ent: { type: 'circle', c: e.c.slice(), r: r6(r) } } : { ok: false, why: 'Der Kreis würde verschwinden.' }; }
     if (e.type === 'slot') { const r = e.r + d; return r > 1e-6 ? { ok: true, ent: { type: 'slot', a: e.a.slice(), b: e.b.slice(), r: r6(r) } } : { ok: false, why: 'Das Langloch würde verschwinden.' }; }
-    if (e.type === 'poly') { const r = e.r + d / Math.cos(Math.PI / n); return r > 1e-6 ? { ok: true, ent: { type: 'poly', c: e.c.slice(), r: r6(r), n, rot: e.rot || 0 } } : { ok: false, why: 'Das Vieleck würde verschwinden.' }; }
+    if (e.type === 'poly') {
+      if (d > 0 && corners === 'round') {
+        const segs = SK.segsOf(e);
+        const chain = { segs: segs.map((s) => ({ e: { type: 'line', a: s.a, b: s.b, con: e.con }, rev: false, a: s.a, b: s.b })), closed: true };
+        const r = offsetChain(chain, -d, 'round');
+        if (!r.ok) return r;
+        return { ok: true, items: r.items.map((it) => (it.corner ? { ...it, src: e } : { ...it, src: e, edge: it.segIdx, srcA: segs[it.segIdx].a, srcB: segs[it.segIdx].b })) };
+      }
+      const r = e.r + d / Math.cos(Math.PI / n); return r > 1e-6 ? { ok: true, ent: { type: 'poly', c: e.c.slice(), r: r6(r), n, rot: e.rot || 0 } } : { ok: false, why: 'Das Vieleck würde verschwinden.' };
+    }
     if (e.type === 'rect') {
+      if (d > 0 && corners === 'round') {
+        const cs = SK.rectCorners(e), area = (e.b[0] - e.a[0]) * (e.b[1] - e.a[1]);
+        if (Math.abs(area) < 1e-12) return { ok: false, why: 'Das Rechteck ist leer.' };
+        const chain = { segs: [0, 1, 2, 3].map((i) => { const a = cs[i], b = cs[(i + 1) % 4]; return { e: { type: 'line', a, b, con: e.con }, rev: false, a, b }; }), closed: true };
+        const r = offsetChain(chain, area >= 0 ? -d : d, 'round');
+        if (!r.ok) return r;
+        return { ok: true, items: r.items.map((it) => (it.corner ? { ...it, src: e } : { ...it, src: e, edge: it.segIdx, srcA: cs[it.segIdx], srcB: cs[(it.segIdx + 1) % 4] })) };
+      }
       const sa = [e.a[0] <= e.b[0] ? -1 : 1, e.a[1] <= e.b[1] ? -1 : 1], sb = [-sa[0], -sa[1]];
       const w = Math.abs(e.b[0] - e.a[0]) + 2 * d, h = Math.abs(e.b[1] - e.a[1]) + 2 * d;
       if (w < 1e-6 || h < 1e-6) return { ok: false, why: 'Das Rechteck würde verschwinden.' };

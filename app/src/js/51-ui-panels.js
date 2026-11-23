@@ -80,7 +80,7 @@ const Panels = (() => {
       el.append(h('h3', null, 'Bauteile'));
       const tiles = h('div', { class: 'tiles' });
       for (const d of LIB.filter((x) => !x.buy && !x.drone)) {
-        const t = h('div', { class: 'tile' + (d.role === 'hole' ? ' hole-part' : '') + (SIMPLE_PARTS.includes(d.lib) ? '' : ' pro'), role: 'button', tabindex: '0', 'data-tip': d.desc });
+        const t = h('div', { class: 'tile' + (d.role === 'hole' ? ' hole-part' : '') + (SIMPLE_PARTS.includes(d.lib) ? '' : ' pro'), role: 'button', tabindex: '0', 'data-tip': d.desc, 'data-help': HELP[d.lib] ? d.lib : null });
         t.innerHTML = partSVG(d); t.append(h('span', { class: 'lbl' }, hyph(d.label)), h('span', { class: 'role' }, d.role === 'hole' ? 'Loch' : 'Körper'));
         Place.bindTile(t, { part: d });
         t.addEventListener('keydown', (e) => { if (e.key === 'Enter') { Actions.addPart(d, libDefaults(d)); closeFlyout(); } });
@@ -539,11 +539,12 @@ const Panels = (() => {
     const d = h('button', { type: 'button', class: 'btn' }); d.innerHTML = icon('copy') + 'Duplizieren'; d.onclick = () => Actions.duplicate();
     const x = h('button', { type: 'button', class: 'btn danger' }); x.innerHTML = icon('trash') + 'Löschen'; x.onclick = () => Actions.remove();
     r1.append(g, d, x); w.append(r1);
-    // zwei Teile: kleinster Abstand
-    if (found.length === 2) {
+    // zwei Teile: kleinster Abstand (nur verschiedene Hauptteile, nicht ein Teil mit seiner eigenen Gruppe)
+    const tops = found.length === 2 ? found.map((f) => (Model.topOf(App.doc, f.item.id) || f.item).id) : null;
+    if (tops && tops[0] !== tops[1]) {
       const ds = h('div', { class: 'section', id: 'min-dist', 'data-help': 'minDistance' }, h('div', { class: 'section-h' }, 'Kleinster Abstand'));
       const val = h('b', { class: 'mono', id: 'min-dist-val' }, '…'); ds.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, `${Model.label(found[0].item)} ↔ ${Model.label(found[1].item)}`), val));
-      Measure.minDistance(found.map((f) => (Model.topOf(App.doc, f.item.id) || f.item).id)).then((r) => { val.textContent = !r ? '–' : r.d < 1e-6 ? 'berühren sich' : fmt(r.d, 3) + ' mm'; });
+      Measure.minDistance(tops).then((r) => { val.textContent = !r ? '–' : r.d < 1e-6 ? 'berühren sich' : fmt(r.d, 3) + ' mm'; });
       w.append(ds);
     }
     const al = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Ausrichten'));
@@ -684,11 +685,22 @@ const Panels = (() => {
       if (def) {
         const fl = h('div', { class: 'fields' });
         for (const q of def.params) {
-          if (q.type === 'select') fl.append(UI.selectField({ id: 'lp-' + q.k, label: q.label, value: it.p[q.k], options: q.options, onChange: (v) => setP(q.k, v) }));
+          if (q.type === 'select') fl.append(UI.selectField({ id: 'lp-' + q.k, label: q.label, value: it.p[q.k], options: q.options, onChange: (v) => setP(q.k, q.k === 'tipAngle' ? Number(v) : v) }));
           else fl.append(UI.numField({ id: 'lp-' + q.k, label: q.label, value: it.p[q.k] ?? '', unit: q.unit ?? 'mm', int: q.int, placeholder: q.auto ? 'passend' : '', onCommit: (v) => setP(q.k, v) }));
         }
         sec.append(fl);
-        if (def.lib === 'screwHole' || def.lib === 'insert' || def.lib === 'nutTrap') sec.append(h('div', { class: 'hint-box', html: 'Das Loch zeigt mit der flachen Seite nach oben. Setz es mit <b>Loch hier</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.' }));
+        if (def.lib === 'blindHole') {
+          const d = Model.num(it.p.d, V, 5), dep = Model.num(it.p.depth, V, 10), ang = Number(it.p.tipAngle ?? 118), tipH = blindTipHeight(d, ang);
+          const tipTxt = ang >= 179.5 ? `Flacher Boden, Tiefe ${fmt(dep, 2)} mm.` : `Bohrspitze (${ang}°): +${fmt(tipH, 2)} mm → Gesamttiefe <b>${fmt(dep + tipH, 2)} mm</b>.`;
+          sec.append(h('div', { class: 'hint-box', html: `${tipTxt} Setz es mit <b>Bohrung</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.` }));
+        } else if (def.lib === 'fitHole') {
+          const d = Model.num(it.p.d, V, 6), info = h7Info(d);
+          const tolTxt = info.um != null ? `<b>Passung Ø ${fmt(d, 2)} H7 (ISO 286):</b> ${info.esText} / 0 mm (${info.rangeText}). Im 3D-Modell wird genau das Nennmaß gebohrt – beim Fertigen auf Maß reiben.` : `<b>Passung Ø ${fmt(d, 2)} H7:</b> Im 3D-Modell wird genau das Nennmaß gebohrt.`;
+          sec.append(h('div', { id: 'p-fit-hint', class: 'hint-box', html: tolTxt }));
+        } else if (def.lib === 'centerHole') {
+          const m = centerHoleMetrics(it.p.size);
+          sec.append(h('div', { class: 'hint-box', html: `<b>DIN 332 Form A (${it.p.size || 'A2.5'}):</b> Führungs-Ø ${fmt(m.d1, 2)} mm · 60°-Kegel Ø ${fmt(m.d2, 2)} mm · Gesamttiefe ${fmt(m.totalDepth, 2)} mm.` }));
+        } else if (def.lib === 'screwHole' || def.lib === 'insert' || def.lib === 'nutTrap') sec.append(h('div', { class: 'hint-box', html: 'Das Loch zeigt mit der flachen Seite nach oben. Setz es mit <b>Loch hier</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.' }));
         w.append(sec);
       }
     } else if (it.kind === 'extrude' || it.kind === 'revolve') {
@@ -1044,7 +1056,7 @@ const Panels = (() => {
     } else if (face && items.length === 1 && face.info.t === 'PLANE') {
       bar.append(h('span', { class: 'lbl' }, 'Fläche'));
       b('sketch', 'Skizze hierauf', () => Sketch.startOnFace(face), 'accent', 'Auf dieser Fläche zeichnen');
-      b('holeWizard', 'Bohrung', (e) => Place.holeHere(face, e.currentTarget), '', 'Bohrungs-Assistent: Schraubenloch, Gewinde, Einsatz oder Mutternfalle – hier und per Klick weitere');
+      b('holeWizard', 'Bohrung', (e) => Place.holeHere(face, e.currentTarget), '', 'Bohrungs-Assistent: Durchgang, Kernloch, Sackloch mit Spitze, Passbohrung H7, Zentrierbohrung, Einsatz oder Mutternfalle');
       b('lift', 'Hochziehen', () => Sketch.pushPullFace(face), '', 'Die Fläche herausziehen oder hineindrücken');
       b('fillet', 'Ihre Kanten', (e) => faceEdgeMenu(face, e.currentTarget), '', 'Alle Kanten dieser Fläche wählen, abrunden oder abschrägen', true);
       if (items[0].item.role !== 'hole' && App.doc.items.some((x) => x.id === face.id)) b('shell', 'Aushöhlen', () => Features.shell(face), '', 'Körper aushöhlen – diese Fläche wird die Öffnung');
@@ -1054,7 +1066,7 @@ const Panels = (() => {
     } else if (face && items.length === 1 && face.info.t !== 'PLANE') {
       const fr = face.info.r;
       bar.append(fr ? valLbl(face.info.t === 'SPHERE' ? 'Kugel Ø' : 'Runde Fläche Ø', fr * 2, 'mm', `Radius ${fmt(fr, 2)} mm`) : h('span', { class: 'lbl' }, 'Runde Fläche'));
-      b('holeWizard', 'Bohrung', (e) => Place.holeHere(face, e.currentTarget), 'accent', 'Bohrungs-Assistent: Loch senkrecht in die runde Fläche – der Magnet rastet ganz oben, an den Seiten und in der Mitte ein');
+      b('holeWizard', 'Bohrung', (e) => Place.holeHere(face, e.currentTarget), 'accent', 'Bohrungs-Assistent: Loch senkrecht in die runde Fläche (Schraube, Sackloch, Passbohrung H7, Zentrierung …) – der Magnet rastet ganz oben, an den Seiten und in der Mitte ein');
       b('fillet', 'Ihre Kanten', (e) => faceEdgeMenu(face, e.currentTarget), '', 'Alle Kanten dieser Fläche wählen, abrunden oder abschrägen', true);
       sep();
     }
@@ -1175,7 +1187,7 @@ const Panels = (() => {
     Log.on('change', debounce(() => { if (leftTab === 'log') renderLeft(); }, 80));
     renderTools(); initViewCube();
     const rerender = debounce(() => { renderLeft(); renderRight(); renderCtx(); UI.renderHint(); }, 16);
-    App.on('doc', rerender); App.on('selection', rerender); App.on('results', rerender); DroneCheck.on('checked', () => { if (!App.sel.length) rerender(); }); Weak.on('analyzed', () => { if (!App.sel.length) rerender(); }); App.on('mode', () => { renderTools(); rerender(); });
+    App.on('doc', rerender); App.on('selection', () => { renderCtx(); rerender(); }); App.on('results', rerender); DroneCheck.on('checked', () => { if (!App.sel.length) rerender(); }); Weak.on('analyzed', () => { if (!App.sel.length) rerender(); }); App.on('mode', () => { renderTools(); rerender(); });
     Viewer.on('camera', placeCtx);
     ViewPrefs.on('change', debounce(() => { if (leftTab === 'tree') renderLeft(); }, 30));   // Erste Schritte ein-/ausblenden
   }

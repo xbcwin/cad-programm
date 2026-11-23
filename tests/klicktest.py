@@ -5415,6 +5415,53 @@ def t_a005_linie_bogen_wechsel(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_f11232113(p):
+    # 1. S.sel und S.sels bleiben in der Skizze immer synchron
+    sketch_xy(p)
+    SS(p, "S.ents.push({id:'L1',type:'line',a:[0,0],b:[20,0]},{id:'L2',type:'line',a:[0,10],b:[20,10]})")
+    s1 = SS(p, "S.sels=['L2']; S.sel='L1'; return [S.sel, S.sels.slice()]")
+    s2 = SS(p, "S.sels=['L1','L2']; return [S.sel, S.sels.slice()]")
+    s3 = SS(p, "S.sel=null; return [S.sel, S.sels.slice()]")
+    ok2 = s1 == ['L1', ['L1']] and s2 == [None, ['L1', 'L2']] and s3 == [None, []]
+    p.ev("Sketch.cancel(true)"); p.wait(200)
+
+    # 2. Kontextleiste aktualisiert sofort und rechnet keinen Abstand zwischen Gruppe und eigenem Kind
+    p.ev("""App.change('x', d=>{
+      const g=Model.newItem('group',{}); g.name='Baugruppe';
+      const a=Model.newItem('box',{w:20,d:10,h:4}); a.name='Arm A';
+      const b=Model.newItem('box',{w:20,d:10,h:4}); b.t.x=25; b.name='Arm B';
+      g.children.push(a,b); d.items=[g];
+    })"""); warte_rechnen(p, 20)
+    ids = p.ev("const g=App.doc.items[0]; return [g.id, g.children[0].id, g.children[1].id]")
+    p.ev("App.select(arg)", [ids[1], ids[2]])
+    c1 = p.pg.locator('.ctxbar button[aria-label="Gelenk"]').count()
+    p.ev("App.select(arg)", [ids[0], ids[1]])
+    c2 = p.pg.locator('.ctxbar button[aria-label="Gelenk"]').count()
+    p.wait(200)
+    ok1 = c1 == 1 and c2 == 0 and p.pg.locator('#min-dist').count() == 0
+
+    # 3. Vorige Ansicht stoppt OrbitControls-Dämpfung nach Maus-Drehen
+    p.ev("App.clearSelection(); App.change('x', d=>{ d.items=[Model.newItem('box',{w:20,d:20,h:20},{name:'Würfel'})]; })"); warte_rechnen(p)
+    cam = "const c=Viewer.saveCamera(); const d=c.p.clone().sub(c.t).normalize(); return [d.x,d.y,d.z].map(v=>Math.round(v*100)/100)"
+    p.ev("Viewer.setView('front', false)"); p.wait(300)
+    p.pg.locator('canvas').first.focus()
+    cx, cy = p.canvas_center()
+    p.pg.mouse.move(cx + 250, cy + 200); p.pg.mouse.down(); p.pg.mouse.move(cx + 380, cy + 120, steps=10); p.pg.mouse.up(); p.wait(300)
+    p.pg.keyboard.press('Shift+Z'); p.wait(800); d1 = p.ev(cam)
+    p.wait(500); d2 = p.ev(cam)
+    ok3 = d1 == [0, -1, 0] and d2 == [0, -1, 0]
+
+    # 4. Lage unter der Maus übernimmt den letzten Punkt einer schnellen Bewegung
+    p.ev("App.clearSelection(); App.change('x', d=>{ d.items=[Model.newItem('box',{w:40,d:40,h:10},{name:'Platte'})]; })"); warte_rechnen(p)
+    p.ev("Viewer.setView('iso', false)"); p.wait(600)
+    x, y = world_screen(p, 5, -5, 10)
+    p.pg.mouse.move(x - 30, y - 20); p.pg.mouse.move(x, y, steps=8); p.wait(200)
+    c = p.ev("return Measure.coords")
+    txt = p.pg.locator('#coords').inner_text()
+    ok4 = bool(c and abs(c['x'] - 5) < 0.3 and abs(c['y'] + 5) < 0.3 and abs(c['z'] - 10) < 1e-3 and 'Z 10' in txt)
+    return [ok1, ok2, ok3, ok4]
+
+
 def t_a021_profi_kuerzel(p):
     # 1. Erster Start (leerer Speicher) zeigt die zwei Stufen-Karten „Einfach“ und „Profi“
     wel = p.pg.locator('#level-welcome')
@@ -5477,6 +5524,221 @@ def t_a021_profi_kuerzel(p):
     p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('o'); p.wait(300)
     ok5 = reset_ok and p.ev("return Viewer.ortho")
     return [ok1, ok2, ok3, ok4, ok5]
+
+
+def t_a006_versatz_mehrfach(p):
+    # 1. Rechteck 20x10, Versatz 2 mm, Anzahl 3 -> drei neue Umrisse außen + Rückgängig
+    scene(p, [{'id': 'R', 'type': 'rect', 'a': [0, 0], 'b': [20, 10]}])
+    p.pg.keyboard.press('f'); p.wait(250)
+    has_ui = (p.pg.locator('#off-n').count() == 1 and p.pg.locator('#off-both').count() == 1
+              and p.pg.locator('#off-corner').count() == 1)
+    p.pg.fill('#off-n', '3'); p.pg.press('#off-n', 'Enter'); p.wait(150)
+    click_uv(p, 10, 0, alt=False)
+    p.pg.mouse.move(*to_screen(p, 10, -4)); p.wait(200)
+    p.pg.keyboard.type('2'); p.pg.keyboard.press('Enter'); p.wait(400)
+    st1 = SS(p, """
+      const rs = S.ents.filter(e => e.type === 'rect' && e.id !== 'R').map(r => [
+        Math.round((Math.max(r.a[0], r.b[0]) - Math.min(r.a[0], r.b[0])) * 100) / 100,
+        Math.round((Math.max(r.a[1], r.b[1]) - Math.min(r.a[1], r.b[1])) * 100) / 100
+      ]).sort((a, b) => a[0] - b[0]);
+      const vs = S.cons.filter(c => c.type === 'offset').map(c => c.v).sort((a, b) => a - b);
+      return { total: S.ents.length, rs, vs, ok: !!(S.status && S.status.ok) };
+    """)
+    ok1 = (has_ui and st1['total'] == 4 and st1['rs'] == [[24, 14], [28, 18], [32, 22]]
+           and st1['vs'] == [2, 4, 6] and st1['ok'])
+
+    # Ein Rückgängig entfernt alle 3 Kopien auf einmal
+    p.pg.keyboard.press('Control+z'); p.wait(300)
+    undo1 = SS(p, "return S.ents.length === 1 && S.cons.length === 0")
+
+    # 2. Beidseitig (Anzahl 1 -> innen + außen; Anzahl 2 -> 2 innen + 2 außen)
+    p.pg.fill('#off-n', '1'); p.pg.press('#off-n', 'Enter'); p.wait(150)
+    p.pg.click('#off-both'); p.wait(150)
+    click_uv(p, 10, 0, alt=False)
+    p.pg.mouse.move(*to_screen(p, 10, -4)); p.wait(200)
+    p.pg.keyboard.type('2'); p.pg.keyboard.press('Enter'); p.wait(400)
+    st2 = SS(p, """
+      const rs = S.ents.filter(e => e.type === 'rect' && e.id !== 'R').map(r => [
+        Math.round((Math.max(r.a[0], r.b[0]) - Math.min(r.a[0], r.b[0])) * 100) / 100,
+        Math.round((Math.max(r.a[1], r.b[1]) - Math.min(r.a[1], r.b[1])) * 100) / 100
+      ]).sort((a, b) => a[0] - b[0]);
+      return { total: S.ents.length, rs, ok: !!(S.status && S.status.ok) };
+    """)
+    p.pg.keyboard.press('Control+z'); p.wait(300)
+    p.pg.fill('#off-n', '2'); p.pg.press('#off-n', 'Enter'); p.wait(150)
+    click_uv(p, 10, 0, alt=False)
+    p.pg.mouse.move(*to_screen(p, 10, -4)); p.wait(200)
+    p.pg.keyboard.type('2'); p.pg.keyboard.press('Enter'); p.wait(400)
+    st2b = SS(p, """
+      const rs = S.ents.filter(e => e.type === 'rect' && e.id !== 'R').map(r => [
+        Math.round((Math.max(r.a[0], r.b[0]) - Math.min(r.a[0], r.b[0])) * 100) / 100,
+        Math.round((Math.max(r.a[1], r.b[1]) - Math.min(r.a[1], r.b[1])) * 100) / 100
+      ]).sort((a, b) => a[0] - b[0]);
+      return { total: S.ents.length, rs, ok: !!(S.status && S.status.ok) };
+    """)
+    ok2 = (undo1 and st2['total'] == 3 and st2['rs'] == [[16, 6], [24, 14]] and st2['ok']
+           and st2b['total'] == 5 and st2b['rs'] == [[12, 2], [16, 6], [24, 14], [28, 18]] and st2b['ok'])
+
+    # 3. Ecken: Rund beim Rechteck (außen 4 Linien + 4 Bögen R=2) + folgt dem Original
+    p.ev("""
+      Sketch.cancel(true);
+      App.change('x', d => { d.items[0].p.sketch.ents = arg; d.items[0].p.sketch.dims = []; d.items[0].p.sketch.cons = []; });
+      Sketch.editItem(App.doc.items[0].id);
+    """, [{'id': 'R', 'type': 'rect', 'a': [0, 0], 'b': [20, 10]}]); p.wait(600)
+    p.pg.keyboard.press('f'); p.wait(250)
+    p.pg.select_option('#off-corner', 'round'); p.wait(150)
+    click_uv(p, 10, 0, alt=False)
+    p.pg.mouse.move(*to_screen(p, 10, -4)); p.wait(200)
+    p.pg.keyboard.type('2'); p.pg.keyboard.press('Enter'); p.wait(400)
+    st3 = SS(p, """
+      const lines = S.ents.filter(e => e.type === 'line');
+      const arcs = S.ents.filter(e => e.type === 'arc');
+      const radii = arcs.map(a => SK.arcInfo(a.a, a.m, a.b).r);
+      const regs = SK.regions(S.ents);
+      const outer = SK.regions(S.ents.filter(e => e.id !== 'R'));
+      return {
+        lines: lines.length, arcs: arcs.length, radii,
+        regs: regs.length, holes: regs[0] ? regs[0].holes.length : 0,
+        ringArea: regs[0] ? regs[0].area : 0,
+        outerArea: outer[0] ? outer[0].area : 0,
+        ok: !!(S.status && S.status.ok)
+      };
+    """)
+    want_ring_area = 2 * (20 + 10) * 2 + math.pi * 4
+    want_outer_area = 20 * 10 + want_ring_area
+    p.pg.keyboard.press('v'); click_uv(p, 20, 5, alt=False); p.wait(300)
+    p.pg.fill('#se-w', '30'); p.pg.press('#se-w', 'Enter'); p.wait(400)
+    st3b = SS(p, """
+      const bb = SK.bounds(S.ents);
+      const arcs = S.ents.filter(e => e.type === 'arc');
+      const radii = arcs.map(a => SK.arcInfo(a.a, a.m, a.b).r);
+      return { bb, radii, ok: !!(S.status && S.status.ok) };
+    """)
+    ok3 = (st3['lines'] == 4 and st3['arcs'] == 4
+           and all(abs(r - 2) < 1e-3 for r in st3['radii'])
+           and st3['regs'] == 1 and st3['holes'] == 1
+           and abs(st3['ringArea'] - want_ring_area) < 1.5
+           and abs(st3['outerArea'] - want_outer_area) < 1.5 and st3['ok']
+           and st3b['bb'] is not None and abs(st3b['bb'][2] - 32) < 1e-2
+           and all(abs(r - 2) < 1e-2 for r in st3b['radii']) and st3b['ok'])
+
+    # 4. L-Kette mit Ecken Rund + Beidseitig -> äußere Ecke rund, innere spitz; Rückgängig
+    p.ev("""
+      Sketch.cancel(true);
+      App.change('x', d => { d.items[0].p.sketch.ents = arg; d.items[0].p.sketch.dims = []; d.items[0].p.sketch.cons = []; });
+      Sketch.editItem(App.doc.items[0].id);
+    """, [{'id': 'A', 'type': 'line', 'a': [0, 0], 'b': [40, 0]}, {'id': 'B', 'type': 'line', 'a': [40, 0], 'b': [40, 30]}]); p.wait(600)
+    p.pg.keyboard.press('f'); p.wait(250)
+    p.pg.click('#off-both'); p.wait(150)
+    p.pg.select_option('#off-corner', 'round'); p.wait(150)
+    click_uv(p, 20, 0, alt=False)
+    p.pg.mouse.move(*to_screen(p, 20, -6)); p.wait(200)
+    p.pg.keyboard.type('4'); p.pg.keyboard.press('Enter'); p.wait(400)
+    st4 = SS(p, """
+      const lines = S.ents.filter(e => e.type === 'line');
+      const arcs = S.ents.filter(e => e.type === 'arc');
+      const ai = arcs[0] ? SK.arcInfo(arcs[0].a, arcs[0].m, arcs[0].b) : null;
+      const innerCorner = lines.some(l => Math.hypot(l.b[0] - 36, l.b[1] - 4) < 1e-3 || Math.hypot(l.a[0] - 36, l.a[1] - 4) < 1e-3);
+      return { lines: lines.length, arcs: arcs.length, c: ai && ai.c, r: ai && ai.r, innerCorner, ok: !!(S.status && S.status.ok) };
+    """)
+    p.pg.keyboard.press('Control+z'); p.wait(300)
+    undo4 = SS(p, "return S.ents.length === 2 && S.cons.length === 0")
+    ok4 = (st4['lines'] == 6 and st4['arcs'] == 1
+           and st4['c'] is not None and near(st4['c'], [40, 0], 1e-3) and abs(st4['r'] - 4) < 1e-3
+           and st4['innerCorner'] and st4['ok'] and undo4)
+    return [ok1, ok2, ok3, ok4]
+
+
+def t_a008_bohrungsarten(p):
+    # 1. Sackloch Ø 5 × 10 mit 118°-Bohrspitze: Quader 30×30×20 -> Volumenabzug = Zylinder + Kegel
+    p.empty()
+    p.ev("Actions.addPrimitive('box', {p:{w:30, d:30, h:20}})"); warte_rechnen(p, 20)
+    p.ev("const id=App.doc.items[0].id; const r=App.results.get(id); const fi=r.data.faces.findIndex(f=>f.t==='PLANE'&&f.n&&f.n[2]>0.9); App.select([id], {face:{id, faceIdx:fi, info:r.data.faces[fi], point:[0,0,20], normal:[0,0,1]}})"); p.wait(400)
+    p.pg.locator('.ctxbar button[aria-label="Bohrung"]').click(); p.wait(400)
+    p.pg.select_option('#hw-type', 'blind'); p.wait(200)
+    p.pg.fill('#hw-d', '5'); p.pg.press('#hw-d', 'Enter'); p.wait(150)
+    p.pg.fill('#hw-depth', '10'); p.pg.press('#hw-depth', 'Enter'); p.wait(200)
+    prev1 = p.pg.locator('#hw-preview svg').count() == 1 and '118°' in (p.pg.locator('#hw-preview').text_content() or '')
+    info1 = p.pg.locator('#hw-info').text_content() or ''
+    has_tip_info = '118°' in info1 and 'Gesamttiefe' in info1
+    p.pg.click('#hw-go'); warte_rechnen(p, 25); p.pg.keyboard.press('Escape'); p.wait(500)
+    v1 = volumen(p)
+    r_b = 2.5
+    tip_h = r_b / math.tan(math.radians(59))
+    want_cut_blind = math.pi * r_b * r_b * 10 + (1.0 / 3.0) * math.pi * r_b * r_b * tip_h
+    got_cut_blind = 18000.0 - (v1 or 0)
+    blind_meta = p.ev("""
+      const it = App.doc.items[0];
+      const ch = it.children && it.children.find(c => c.kind === 'part' && c.p.lib === 'blindHole');
+      const res = App.results.get(it.id);
+      const bot = res && res.data && res.data.faces.filter(f => f.t === 'PLANE' && f.n && f.n[2] < -0.9);
+      return {
+        err: App.errors.length,
+        p: ch && ch.p,
+        botLoops: bot && bot[0] ? null : null,
+        hasCone: res && res.data && res.data.faces.some(f => f.t === 'CONE'),
+        zMin: res && res.data && res.data.faces.reduce((m, f) => Math.min(m, f.c ? f.c[2] : 99), 99),
+        botCount: bot ? bot.length : 0
+      };
+    """)
+    ok1 = (prev1 and has_tip_info and blind_meta['err'] == 0
+           and blind_meta['p'] is not None and blind_meta['p']['d'] == 5
+           and blind_meta['p']['depth'] == 10 and blind_meta['p']['tipAngle'] == 118
+           and blind_meta['hasCone'] and blind_meta['botCount'] == 1
+           and abs(got_cut_blind - want_cut_blind) < 0.05)
+
+    # 2. Passbohrung H7: genaues Nennmaß Ø 6 + ISO-286-Toleranzhinweis (+0,012 / 0 mm)
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(200)
+    p.ev("Actions.addPrimitive('box', {p:{w:30, d:30, h:10}})"); warte_rechnen(p, 20)
+    p.ev("const id=App.doc.items[0].id; const r=App.results.get(id); const fi=r.data.faces.findIndex(f=>f.t==='PLANE'&&f.n&&f.n[2]>0.9); App.select([id], {face:{id, faceIdx:fi, info:r.data.faces[fi], point:[0,0,10], normal:[0,0,1]}})"); p.wait(400)
+    p.pg.locator('.ctxbar button[aria-label="Bohrung"]').click(); p.wait(400)
+    p.pg.select_option('#hw-type', 'fit'); p.wait(200)
+    p.pg.fill('#hw-d', '6'); p.pg.press('#hw-d', 'Enter'); p.wait(200)
+    info2 = p.pg.locator('#hw-info').text_content() or ''
+    prev2 = 'H7' in (p.pg.locator('#hw-preview').text_content() or '') and '+0,012' in info2
+    p.pg.click('#hw-go'); warte_rechnen(p, 25); p.pg.keyboard.press('Escape'); p.wait(500)
+    v2 = volumen(p)
+    want_cut_fit = math.pi * 3.0 * 3.0 * 10.0
+    got_cut_fit = 9000.0 - (v2 or 0)
+    p.ev("const ch=App.doc.items[0].children.find(c=>c.kind==='part'&&c.p.lib==='fitHole'); if(ch) App.select([ch.id]);"); p.wait(400)
+    panel_fit = p.pg.locator('#p-fit-hint').text_content() or ''
+    ok2 = (prev2 and p.ev("return App.errors.length") == 0
+           and abs(got_cut_fit - want_cut_fit) < 0.05
+           and 'H7' in panel_fit and '+0,012' in panel_fit)
+
+    # 3. Zentrierbohrung (DIN 332 Form A): A2.5 (Ø 2,5 / Ø 5,30 / t1 3,1 / 60°-Kegel + 118°-Spitze)
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(200)
+    p.ev("Actions.addPrimitive('box', {p:{w:30, d:30, h:20}})"); warte_rechnen(p, 20)
+    p.ev("const id=App.doc.items[0].id; const r=App.results.get(id); const fi=r.data.faces.findIndex(f=>f.t==='PLANE'&&f.n&&f.n[2]>0.9); App.select([id], {face:{id, faceIdx:fi, info:r.data.faces[fi], point:[0,0,20], normal:[0,0,1]}})"); p.wait(400)
+    p.pg.locator('.ctxbar button[aria-label="Bohrung"]').click(); p.wait(400)
+    p.pg.select_option('#hw-type', 'center'); p.wait(200)
+    p.pg.select_option('#hw-size', 'A2.5'); p.wait(200)
+    prev3 = '60°' in (p.pg.locator('#hw-preview').text_content() or '') and 'DIN 332' in (p.pg.locator('#hw-info').text_content() or '')
+    p.pg.click('#hw-go'); warte_rechnen(p, 25); p.pg.keyboard.press('Escape'); p.wait(500)
+    v3 = volumen(p)
+    r1, r2, t1 = 2.5 / 2.0, 5.30 / 2.0, 3.1
+    h_cone = (r2 - r1) / math.tan(math.radians(30))
+    tip_c = r1 / math.tan(math.radians(59))
+    want_cut_center = ((math.pi * h_cone / 3.0) * (r2 * r2 + r2 * r1 + r1 * r1)
+                       + math.pi * r1 * r1 * t1
+                       + (1.0 / 3.0) * math.pi * r1 * r1 * tip_c)
+    got_cut_center = 18000.0 - (v3 or 0)
+    ok3 = prev3 and p.ev("return App.errors.length") == 0 and abs(got_cut_center - want_cut_center) < 0.05
+
+    # 4. Hilfetexte und data-help im Bohrungs-Assistenten
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    keys = ['holeWizard', 'blindHole', 'fitHole', 'centerHole']
+    ok4 = all(k in hilfen and all(f in hilfen[k] for f in ('tip', 'hilfe', 'tipp')) for k in keys)
+    p.ev("const id=App.doc.items[0].id; const r=App.results.get(id); const fi=r.data.faces.findIndex(f=>f.t==='PLANE'&&f.n&&f.n[2]>0.9); App.select([id], {face:{id, faceIdx:fi, info:r.data.faces[fi], point:[0,0,20], normal:[0,0,1]}})"); p.wait(300)
+    p.pg.locator('.ctxbar button[aria-label="Bohrung"]').click(); p.wait(300)
+    p.pg.select_option('#hw-type', 'blind'); p.wait(150)
+    dh_blind = p.pg.locator('.holewiz').get_attribute('data-help')
+    p.pg.select_option('#hw-type', 'fit'); p.wait(150)
+    dh_fit = p.pg.locator('.holewiz').get_attribute('data-help')
+    p.pg.select_option('#hw-type', 'center'); p.wait(150)
+    dh_center = p.pg.locator('.holewiz').get_attribute('data-help')
+    ok4 = ok4 and dh_blind == 'blindHole' and dh_fit == 'fitHole' and dh_center == 'centerHole'
+    return [ok1, ok2, ok3, ok4]
 
 
 def t_a007_duenne_wand(p):
@@ -5659,8 +5921,11 @@ TESTS = [
     ('[A-003] Skizzen-Prüfer: Lücke 0,01 mm und doppelte Linie / hervorheben / Alles reparieren / Rückgängig & Körper / offenes Ende', t_a003_skizzen_pruefer),
     ('[A-004] Rahmen-Auswahl in der Skizze: Fenster links→rechts / Umschalt+Kreuz-Rahmen / H übernimmt in patSel / Entf löscht', t_a004_rahmen_auswahl),
     ('[A-005] Linie und Bogen im Wechsel: Hinweistext / Linie-A-Bogen-A-Linie / Tangential & Deckungsgleich / geschlossene Bahn / Taste A ohne Entwurf', t_a005_linie_bogen_wechsel),
+    ('[F-11232113] Volltest-Reparatur: Kontextleiste / Skizzen-Auswahl / Vorige Ansicht / Maus-Koordinaten', t_f11232113),
     ('[A-021] Profi-Stufe und eigene Tastenkürzel: erster Start / Profi-Schild / Kürzel ändern / doppeltes Kürzel / Zurücksetzen', t_a021_profi_kuerzel),
     ('[A-007] Hochziehen als dünne Wand: L-Linienzug mittig / innen & außen / geschlossener Umriss als Rohr / Skizze bearbeiten & Fehler', t_a007_duenne_wand),
+    ('[A-006] Versatz mehrfach, beidseitig und runde Ecken: 3× Rechteck / beidseitig / Ecken rund / Kette & Rückgängig', t_a006_versatz_mehrfach),
+    ('[A-008] Bohrungs-Arten: Sackloch Ø 5 × 10 mit 118°-Spitze / Passbohrung H7 / Zentrierbohrung / Vorschau & Hilfe', t_a008_bohrungsarten),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

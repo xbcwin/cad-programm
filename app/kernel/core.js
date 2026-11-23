@@ -402,6 +402,17 @@ export function createKernel(R, oc) {
     M6: { fine: 6.4, hole: 6.6, coarse: 7.0, tap: 5.0, csk: 13.44, cbD: 11.0, cbH: 6.4, nutSW: 10.0, nutH: 5.2, ins: 8.0, insL: 12.7 },
     M8: { fine: 8.4, hole: 9.0, coarse: 10.0, tap: 6.8, csk: 17.92, cbD: 15.0, cbH: 8.6, nutSW: 13.0, nutH: 6.8, ins: 9.7, insL: 12.7 },
   };
+  // Zentrierbohrungen nach DIN 332 Form A (60°-Kegel + Führungsbohrung mit 118°-Bohrspitze)
+  const CENTER_DRILL = {
+    A1: { d1: 1.0, d2: 2.12, t1: 1.3 },
+    'A1.6': { d1: 1.6, d2: 3.35, t1: 2.0 },
+    A2: { d1: 2.0, d2: 4.25, t1: 2.5 },
+    'A2.5': { d1: 2.5, d2: 5.30, t1: 3.1 },
+    'A3.15': { d1: 3.15, d2: 6.70, t1: 3.9 },
+    A4: { d1: 4.0, d2: 8.50, t1: 5.0 },
+    A5: { d1: 5.0, d2: 10.60, t1: 6.3 },
+    'A6.3': { d1: 6.3, d2: 13.20, t1: 8.0 },
+  };
   // Normteile: Kopf Zylinderschraube ISO 4762 (Ø, Höhe, Innensechskant), Senkschraube ISO 10642 (Kopfhöhe, Innensechskant),
   // Scheibe ISO 7089 (innen, außen, Dicke). Kopf und Scheibe aus app/data/schrauben.json bzw. Normtabellen (Nennmaße).
   const NORM = {
@@ -507,6 +518,28 @@ export function createKernel(R, oc) {
       const si = s.ins ? s : SCREW.M2;
       const L = pos(p.depth, si.insL + 1);
       return R.makeCylinder((si.ins + tol) / 2, L + LIFT, [0, 0, -L], [0, 0, 1]);
+    }
+    if (lib === 'blindHole') {
+      const d = pos(p.d, 5), L = pos(p.depth, 10), ang = num(p.tipAngle, 118);
+      const r = d / 2;
+      if (ang > 1 && ang < 179.5) {
+        const tipH = r / Math.tan((ang * Math.PI) / 360);
+        return revolveProfile([[0, -(L + tipH)], [r, -L], [r, LIFT], [0, LIFT]]);
+      }
+      return R.makeCylinder(r, L + LIFT, [0, 0, -L], [0, 0, 1]);
+    }
+    if (lib === 'fitHole') {
+      // Passbohrung H7: genau das Nennmaß ohne zusätzliches Spiel
+      const d = pos(p.d, 6), L = pos(p.depth, 10);
+      return R.makeCylinder(d / 2, L + LIFT, [0, 0, -L], [0, 0, 1]);
+    }
+    if (lib === 'centerHole') {
+      const c = CENTER_DRILL[p.size] || CENTER_DRILL['A2.5'];
+      const r1 = c.d1 / 2, r2 = c.d2 / 2;
+      const hCone = (r2 - r1) / Math.tan(Math.PI / 6); // 60°-Senkwinkel (30° halb)
+      const tipH = r1 / Math.tan((118 * Math.PI) / 360); // 118°-Bohrspitze
+      const z1 = -hCone, z2 = -(hCone + c.t1), z3 = z2 - tipH;
+      return revolveProfile([[0, z3], [r1, z2], [r1, z1], [r2, 0], [r2, LIFT], [0, LIFT]]);
     }
     if (lib === 'holePattern') {
       // Lochbild: vier Schraubenlöcher als Quadrat (Stack) oder auf einem Lochkreis (Motor), dazu ein Mittelloch

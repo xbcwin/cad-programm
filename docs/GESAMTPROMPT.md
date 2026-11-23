@@ -178,11 +178,11 @@ Leitlinien:
 - 2D-Dateien: `Print.entsToDXF(ents)` / `Print.entsToSVG(ents)` (Skizzen-Elemente ohne Hilfslinien; Linie, Kreis, Bogen echt, alles andere als Linienzug; SVG in mm, y nach oben), `Print.save2D`, `Print.faceTo2D(face, kind)` über Kern `faceLoops` und `Actions.faceFrame`; Knöpfe `#sk-dxf`/`#sk-svg`, Rechtsklick `cm-facedxf`/`cm-facesvg`
 - Export-Einstellungen: `opts.q` (Kern `exportMeshes(scene, fine, q)`, Toleranz × q), `opts.stlText` → `Print.buildSTLText`; Felder `#ex-q`, `#ex-stlfmt`; `Print.lastTris`
 - Export: `Print.exportSelection()` (gewählte Teile oberster Ebene, verrechnete zählen zum Ziel) → Option `onlySel` filtert die Netze nach `id` und gibt `only` an den Kern (`exportSTEP(scene, only)`); Option `each` legt „Einzeln/<Name>.stl/.3mf“ an; `Print.lastExport` = Dateinamen des letzten ZIP
-- Lage unter der Maus: `#coords` in der Statusleiste (`Measure.showCoords`, höchstens alle 50 ms; `Measure.coords`)
+- Lage unter der Maus: `#coords` in der Statusleiste (`Measure.showCoords`, höchstens alle 50 ms inkl. letztem Mauspunkt am Bewegungsende; `Measure.coords`)
 - Maus-Steuerung: `ViewPrefs` `mouse` ('tracery' | 'onshape' | 'solidworks' | 'fusion' | 'blender') → `Viewer.setMouseStyle`; Skizze, Setzen und Notizen rufen `Viewer.useButtons('sketch' | 'place' | 'model')` statt `mouseButtons` selbst zu setzen; `Viewer.leftOrbits` = false → links im Leeren zieht einen Rahmen
 - Drehteller-Video: `Print.turntable({seconds, fps, save})` (MediaRecorder auf `canvas.captureStream`, Kamera dreht um die senkrechte Achse durch den Blickpunkt, danach zurück), Dialog `Print.turntableDialog` (`#tt-sec`), `Print.lastVideo`
 - Vorführen: `Views.present(on)` (Taste P, Klasse `body.presenting`, Vollbild, Drehteller über `requestAnimationFrame`, Leiste `#present-bar`), `Views.presenting`
-- Vorige Ansicht: `Viewer.viewBack()` (Umschalt Z), Verlauf `camHist` bis 40 – `moveCamera` und der Beginn jeder Maus-Bewegung (`controls` 'start', schnelle Folgen zusammengefasst) legen den Blick davor ab; `Viewer.viewHistory`
+- Vorige Ansicht: `Viewer.viewBack()` (Umschalt Z), Verlauf `camHist` bis 40 – `moveCamera` (setzt über `stopDamping()` Restdämpfung der OrbitControls zurück) und der Beginn jeder Maus-Bewegung (`controls` 'start', schnelle Folgen zusammengefasst) legen den Blick davor ab; `Viewer.viewHistory`
 - Teil dahinter: `Viewer.pickAll(cx, cy)` (alle Treffer, vorne zuerst); Alt + Klick → `Interact.selectBehind`; Rechtsklick-Einträge `cm-behind-N`
 - Bedienung: Rechtsklick-Menü im Bild (`Interact.contextMenu`, Rechtsklick ohne Ziehen), Rahmen-Auswahl mit Umschalt + Ziehen im Leeren (`Interact.bandSelect`), `Commands.exec` merkt Befehle (`Commands.last`, `recent`, Leertaste = `Commands.repeat`), `Actions.hideSelected`/`showAll`/`invertSelection`
 - Anzeige: `ViewPrefs.display` ('edges' | 'shaded' | 'wire' | 'hidden'), `it.opacity` (nur Anzeige), `Viewer.lookAtFace(id, faceIdx)`, `doc.views = [{id, name, p, t, up, ortho}]` mit `Views.saveView`/`goView`
@@ -232,8 +232,9 @@ Leitlinien:
   - Maß (D, Formeln), Bild-Vorlage (I, mit Maßstab), Hilfslinie (X)
   - Maße als Tabelle: `details#dim-table` (Felder `#dt-N`, Zustand `S.dimTableOpen`)
   - Skizzen-Prüfer (SK-09): `SKO.inspect(ents, {gapTol, dupTol, dims, cons})`, `Sketch.check`/`repair`/`focusCheckIssue`, Knöpfe `#sk-check`/`#sk-repair`, Liste `#sk-check-res` (findet offene Enden, doppelte/überlappende Linien und winzige Lücken < 0,05 mm, hebt per Klick hervor, repariert mit `coincident` und Löschen)
-  - Rahmen-Auswahl in der Skizze (SK-10): `Sketch.bandSelect(x1, y1, x2, y2, additive)`, Mehrfach-Auswahl `S.sels` (links→rechts ganz drin, rechts→links gestrichelt berührt, Umschalt fügt hinzu; Entf löscht zusammen, H/Q/W übernehmen in `S.patSel`, Strg C und X unterstützen Mehrfach-Auswahl; Panel `#sk-sel-count`/`#sk-sel-move`/`#sk-sel-con`/`#sk-sel-del`)
+  - Rahmen-Auswahl in der Skizze (SK-10): `Sketch.bandSelect(x1, y1, x2, y2, additive)`, Mehrfach-Auswahl `S.sels` (`S.sel` als Getter/Setter auf `S.sels`; links→rechts ganz drin, rechts→links gestrichelt berührt, Umschalt fügt hinzu; Entf löscht zusammen, H/Q/W übernehmen in `S.patSel`, Strg C und X unterstützen Mehrfach-Auswahl; Panel `#sk-sel-count`/`#sk-sel-move`/`#sk-sel-con`/`#sk-sel-del`)
   - Linie und Bogen im Wechsel (SK-15): im Linienzug schaltet Taste A `S.draft.arc` über `toggleLineArc` zwischen Linie und tangentialem Bogen (`endTangent`/`draftTan`/`makeTanCon`/`tanLineSnap`/`updateLineHint`, mit `tangent`- und `coincident`-Regeln, Tangenten-Fang am Bogenende und angepasstem Hinweistext)
+  - Versatz mehrfach und beidseitig (SK-21): `S.off` (`#off-n`, `#off-both`, `#off-corner`), `offsetPlan` und erweiterte `SKO.offsetChain`/`SKO.offsetShape` mit `corners: 'round'` (Eckbögen mit `offset`-Regel `corner: true`, `coincident` und `tangent`) sowie `poly`-Kanten im Solver (`line(ref)`)
   - Linie „Tangente an zwei Kreise“: `S.lineMode = 'tan2'` → `tan2Down`/`tan2Geom` (äußere Tangente, Seite nach den Klicks), zwei `tangent`-Regeln
   - Bogen „Mitte, Start, Ende“: `S.arcMode = 'center'` → `centerArc(d, p)`; Langloch „Gesamtlänge“: `S.slotTotal` → `slotInset(a, b, r)`, getippte Gesamtlänge wird zu `len` = Gesamtlänge − Breite
   - Rechteck mit runden Ecken: `S.rectR` (Feld `#rk-r`) → `roundRect(en, r, keepWH)` (Ecken über `cornerDo`, dann waagerecht/senkrecht, `equal` für die Radien, bei getippten Maßen zwei `distPL`); Ecke bilden: `S.corner.mode = 'meet'` → `meetDo` (zwei Klicks, `S.meetFirst`)
@@ -257,7 +258,7 @@ Leitlinien:
 - STEP/STL-Import; DXF- und SVG-Import als Platte mit Skizze (`Start.importDXF`, `parseDXF`, `parseSVG`, `tidyOutline` in `85-start.js`)
 - Rundung und Fase per Knopf oder **Ziehgriff an der Kante**; Fase mit **zwei Abständen** oder **Abstand und Winkel**, Rundung **von … bis** (wächst entlang der Kante); Entformungsschräge; Wandstärke (Aushöhlen)
 - Echte metrische Gewinde (Gewindebolzen, gedrucktes Innengewinde mit Spiel)
-- Bohrungs-Assistent: Durchgang mit Senk- oder Zylinderkopf, Kernloch, Gewindeeinsatz, Mutternfalle
+- Bohrungs-Assistent: Durchgang mit Senk- oder Zylinderkopf, Kernloch, Sackloch mit 118°-Bohrspitze (`blindHole`), Passbohrung H7 (`fitHole`, ISO 286), Zentrierbohrung (`centerHole`, DIN 332 A), Gewindeeinsatz, Mutternfalle – mit Querschnitts-Vorschau (`holePreviewSVG`)
 - Rechteckmuster; Kreismuster um Z/X/Y oder eine **im Bild gewählte Achse** (Kante, runder Rand, Welle, Loch)
 - **Muster entlang Kurve** (Kurve zeichnen, Ringe zeigen die Lage, Anzahl/Abstand/Ausrichtung)
 - Spiegeln (Ebene oder **an Fläche**, die Ebene wandert mit der äußersten Fläche mit)

@@ -488,6 +488,9 @@ body.sketching .timeline{display:none}
 .ai-head b svg{width:16px;height:16px}
 
 .pop{position:fixed;z-index:70;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-2);padding:12px;display:grid;gap:10px;width:min(340px,calc(100vw - 24px))}
+.hw-preview{display:flex;align-items:center;justify-content:center;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius-s);padding:4px 6px}
+.hw-preview svg{width:100%;height:74px;display:block}
+.hw-info{font-size:12.5px;padding:7px 10px}
 .menu{position:fixed;z-index:70;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-2);padding:5px;display:grid;min-width:210px}
 .menu button{display:flex;align-items:center;gap:10px;border:0;background:transparent;border-radius:6px;padding:8px 10px;text-align:left;font-size:14px;color:var(--ink)}
 .menu button svg{width:17px;height:17px;color:var(--muted)}
@@ -1203,9 +1206,9 @@ const HELP = {
   "tipp": "Halte die Maustaste gedrückt und wische wie mit einem Radiergummi über mehrere Stücke. Ein Stück ohne Schnittpunkt wird ganz gelöscht."
  },
  "offset2d": {
-  "tip": "Parallele Kopie im Abstand erstellen",
-  "hilfe": "Klicke eine Linie, einen Bogen, Kreis, eine Ellipse oder eine Form an. Bewege die Maus auf die Seite, auf der die Kopie liegen soll, und klicke. Oder tippe den Abstand ein und drücke Enter – auch eine Formel geht.",
-  "tipp": "Die Kopie bleibt über eine Regel mit dem Original verbunden. Ändert sich das Original, wandert sie mit. Klick auf das Regel-Symbol, um den Abstand später zu ändern – bei einer Kette gilt der neue Abstand für alle Stücke zusammen. Bei einer Ellipse wird die Kopie eine Spline genau im Abstand (sie bleibt nicht verbunden)."
+  "tip": "Parallele Kopie im Abstand erstellen – auch mehrfach und beidseitig",
+  "hilfe": "Klicke eine Linie, einen Bogen, Kreis, eine Ellipse oder eine Form an. Rechts kannst du vorher Anzahl, Beidseitig (innen und außen) und Ecken (spitz oder rund) einstellen. Bewege dann die Maus auf eine Seite und klicke – oder tippe den Abstand ein und drücke Enter (auch als Formel).",
+  "tipp": "Jede Kopie bleibt über eine Regel mit dem Original verbunden. Ändert sich das Original, wandert die Kopie mit. Klick auf das Regel-Symbol, um den Abstand später zu ändern – bei einer Kette gilt der neue Abstand für alle Stücke zusammen. Bei einer Ellipse wird die Kopie eine Spline genau im Abstand (sie bleibt nicht verbunden)."
  },
  "wall2d": {
   "tip": "Aus einer offenen Linie eine Wand mit Dicke machen",
@@ -1318,9 +1321,9 @@ const HELP = {
   "tipp": "Unter „Spitze verlängern“ stellst du ein, wie weit die Spitze hinter dem letzten Umriss liegt. Mit „Mittellinie zeichnen“ biegst du den Übergang entlang einer Kurve; mit „Führungskurve zeichnen“ gibst du die Seitenlinie vor und machst ihn bauchig oder schlank – die Umrisse bleiben dabei, wo sie sind. Eine „Zweite Führungskurve“ quer zur ersten formt die andere Richtung: z. B. die Höhe von der Seite und die Breite von oben. Für Übergänge, Düsen und Griffe danach die Kanten runden."
  },
  "holeWizard": {
-  "tip": "Schraubenloch, Gewinde, Einsatz oder Mutternfalle bohren",
-  "hilfe": "Klick auf eine Fläche und dann auf „Bohrung“ – das geht auch auf runden Flächen wie Rohren und Zylindern. Wähle Art und Größe (zum Beispiel M3) und drück „Löcher setzen“. Jeder weitere Klick auf eine Fläche setzt noch ein Loch – „Fertig“ oder Esc beendet.",
-  "tipp": "„Durchgangsloch“ lässt die Schraube frei durchrutschen. „Gewinde schneiden“ macht das kleinere Kernloch, in das sich die Schraube selbst hineindreht."
+  "tip": "Schraubenloch, Sackloch, Passbohrung H7, Zentrierbohrung, Einsatz oder Mutternfalle",
+  "hilfe": "Klick auf eine Fläche und dann auf „Bohrung“ – das geht auch auf runden Flächen wie Rohren und Zylindern. Wähle die Art (Durchgang, Kernloch, Sackloch mit 118°-Spitze, Passbohrung H7, Zentrierbohrung DIN 332 A, Gewindeeinsatz oder Mutternfalle) und die Maße. Unten siehst du den Querschnitt als Vorschau; ein Klick auf „Löcher setzen“ bohrt und jeder weitere Klick setzt noch ein Loch.",
+  "tipp": "„Sackloch“ hängt unten eine echte 118°-Bohrspitze an die Zylindertiefe. „Passbohrung H7“ bohrt genau das Nennmaß und nennt die ISO-286-Toleranz."
  },
  "countersink": {
   "tip": "Trichter-Rand für flache Schraubenköpfe",
@@ -1866,6 +1869,21 @@ const HELP = {
   "tip": "Offene Linien oder Umrisse als dünne Wand hochziehen",
   "hilfe": "Schaltet „Dünne Wand“ ein: Offene Linien, Bögen und Splines werden mit der eingestellten Wandstärke hochgezogen; geschlossene Umrisse werden zu einem hohlen Rohr-Profil. Mit „Wand-Lage“ wählst du, ob die Wand mittig auf der Linie, nach innen oder nach außen wächst.",
   "tipp": "Ideal für Gehäuse-Wände, Rippen, Rahmen und Profile – Wandstärke und Lage kannst du auch später rechts jederzeit ändern."
+ },
+ "blindHole": {
+  "tip": "Sackloch mit fester Tiefe und 118°-Bohrspitze",
+  "hilfe": "Bohrt ein Loch mit rundem Querschnitt und einer Kegelspitze am Boden (Standard 118° wie ein Spiralbohrer, oder 140° / flach). „Tiefe (Zylinder)“ ist die zylindrische Länge; die Spitze kommt darunter noch dazu.",
+  "tipp": "In der Vorschau und rechts im Feld siehst du die genaue Gesamttiefe bis zur Kegelspitze – so brichst du nicht versehentlich durch die Rückseite."
+ },
+ "fitHole": {
+  "tip": "Passbohrung H7 auf genaues Nennmaß",
+  "hilfe": "Bohrt einen genauen Zylinder ohne zusätzliches Spiel (exaktes Nennmaß für Lager, Wellen oder Passstifte) und zeigt das passende Abmaß nach ISO 286 H7 an (z. B. +0,012 / 0 mm bei Ø 6).",
+  "tipp": "Für Metallteile zum späteren Aufreiben auf Maß oder für präzise gedruckte Lagersitze."
+ },
+ "centerHole": {
+  "tip": "Zentrierbohrung nach DIN 332 Form A",
+  "hilfe": "Erzeugt eine genormte Zentrierbohrung mit 60°-Senkkegel, kurzer Führungsbohrung und 118°-Bohrspitze am Grund – so wie sie ein Zentrierbohrer auf der Drehbank oder Fräse herstellt.",
+  "tipp": "Wähle die Größe (A 1,0 bis A 6,3) passend zum Durchmesser der Welle oder des Werkstücks."
  }
 };
 
@@ -3112,6 +3130,7 @@ const Solver = (() => {
       const e = byId.get(ref.e); if (!e) return null;
       if (e.type === 'line' || e.type === 'slot') return [point({ e: e.id, p: 'a' }), point({ e: e.id, p: 'b' })];
       if (e.type === 'rect' && ref.edge != null) { const i = ((ref.edge % 4) + 4) % 4; return [point({ e: e.id, p: 'k' + i }), point({ e: e.id, p: 'k' + ((i + 1) % 4) })]; }
+      if (e.type === 'poly' && ref.edge != null) { const n = Math.max(3, Math.round(e.n || 6)), i = ((ref.edge % n) + n) % n; return [point({ e: e.id, p: 'v' + i }), point({ e: e.id, p: 'v' + ((i + 1) % n) })]; }
       return null;
     }
     // Kreis-Zugriff: Mittelpunkt + Radius
@@ -3266,7 +3285,10 @@ const Solver = (() => {
         const eS = byId.get((R[0] || {}).e), eN = byId.get((R[1] || {}).e); if (!eS || !eN) continue;
         const v = Model.num(c.v, V || {}, NaN); if (!isFinite(v)) continue;
         const sg = c.sg || 1;
-        if (eS.type === 'rect' && eN.type === 'rect' && R[0].edge == null) {
+        if (c.corner) {
+          const D1 = circle(R[1]); if (!D1) continue;
+          add(D1.deps, (X) => D1.r(X) - Math.abs(v), tag);
+        } else if (eS.type === 'rect' && eN.type === 'rect' && R[0].edge == null) {
           const sgs = c.sgs || [-1, -1, 1, 1];
           [['a0', 0], ['a1', 1], ['b0', 2], ['b1', 3]].forEach(([k, i]) => { const s = idx.get(eS.id)[k], n = idx.get(eN.id)[k]; add([s, n], (X) => X[n] - X[s] - sgs[i] * v, tag); });
         } else if (eS.type === 'slot' && eN.type === 'slot') {
@@ -3800,24 +3822,25 @@ const SKO = (() => {
     if (Q.line) return lineCircleInf(Q.line.p, [Q.line.p[0] + Q.line.u[0], Q.line.p[1] + Q.line.u[1]], P.circle.c, P.circle.r);
     return circleCircle(P.circle.c, P.circle.r, Q.circle.c, Q.circle.r);
   }
-  // sd > 0: nach links (in Laufrichtung der Kette), sd < 0: nach rechts
-  function offsetChain(chain, sd) {
+  // sd > 0: nach links (in Laufrichtung der Kette), sd < 0: nach rechts; corners: 'sharp' | 'round'
+  function offsetChain(chain, sd, corners = 'sharp') {
     const n = chain.segs.length;
     const items = chain.segs.map((s) => {
       if (s.e.type === 'line') {
         const L = d2(s.a, s.b), u = [(s.b[0] - s.a[0]) / L, (s.b[1] - s.a[1]) / L], nv = [-u[1], u[0]];
         const A = [s.a[0] + nv[0] * sd, s.a[1] + nv[1] * sd], B = [s.b[0] + nv[0] * sd, s.b[1] + nv[1] * sd];
-        return { s, line: { p: A, u }, start: A, end: B };
+        return { s, line: { p: A, u }, start: A, end: B, tStart: u, tEnd: u };
       }
       const ai = SK.arcInfo(s.a, s.e.m, s.b);
       if (!ai) return null;
       const r = ai.sweep > 0 ? ai.r - sd : ai.r + sd;
       if (r < 1e-6) return null;
       const at = (p) => { const d = d2(p, ai.c); return [ai.c[0] + ((p[0] - ai.c[0]) / d) * r, ai.c[1] + ((p[1] - ai.c[1]) / d) * r]; };
-      return { s, ai, r, circle: { c: ai.c, r }, start: at(s.a), end: at(s.b) };
+      const tAt = (a) => (ai.sweep > 0 ? [-Math.sin(a), Math.cos(a)] : [Math.sin(a), -Math.cos(a)]);
+      return { s, ai, r, circle: { c: ai.c, r }, start: at(s.a), end: at(s.b), tStart: tAt(ai.a0), tEnd: tAt(ai.a1) };
     });
     if (items.some((x) => !x)) return { ok: false, why: 'Der Versatz ist hier zu groß – ein Bogen würde verschwinden.' };
-    const V = [];   // Eckpunkte: V[i] ist der Anfang von Stück i
+    const starts = items.map((it) => it.start), ends = items.map((it) => it.end), cornerArcs = new Array(n).fill(null);
     const joint = (i, j) => {
       const P = items[i], Q = items[j];
       const c = infInter(P, Q);
@@ -3826,14 +3849,31 @@ const SKO = (() => {
       for (const x of c) { const dd = d2(x, P.end); if (dd < bd) { bd = dd; best = x; } }
       return best;
     };
+    const joinPair = (i, j) => {
+      const cr = cross(items[i].tEnd, items[j].tStart);
+      const dt = items[i].tEnd[0] * items[j].tStart[0] + items[i].tEnd[1] * items[j].tStart[1];
+      const isOuter = corners === 'round' && (cr * sd < -1e-7 || (Math.abs(cr) <= 1e-7 && dt < -1 + 1e-6)) && d2(items[i].end, items[j].start) > 1e-5;
+      if (isOuter) {
+        const C = chain.segs[i].b, r = Math.abs(sd), a = ends[i], b = starts[j];
+        const a0 = Math.atan2(a[1] - C[1], a[0] - C[0]), a1 = Math.atan2(b[1] - C[1], b[0] - C[0]);
+        let sw = sd < 0 ? norm(a1 - a0) : -norm(a0 - a1);
+        if (Math.abs(sw) < 1e-6) sw = sd < 0 ? Math.PI : -Math.PI;
+        const m = [C[0] + Math.cos(a0 + sw / 2) * r, C[1] + Math.sin(a0 + sw / 2) * r];
+        cornerArcs[i] = { type: 'arc', a: pr(a), m: pr(m), b: pr(b), ...(chain.segs[i].e.con ? { con: true } : {}) };
+        return true;
+      }
+      const v = joint(i, j);
+      if (!v) return false;
+      ends[i] = v; starts[j] = v;
+      return true;
+    };
     for (let i = 0; i < n; i++) {
-      if (i === 0) { if (chain.closed) { const v = joint(n - 1, 0); if (!v) return { ok: false, why: 'Der Versatz passt hier nicht an die Ecke.' }; V.push(v); } else V.push(items[0].start); }
-      else { const v = joint(i - 1, i); if (!v) return { ok: false, why: 'Der Versatz passt hier nicht an die Ecke.' }; V.push(v); }
+      if (i < n - 1) { if (!joinPair(i, i + 1)) return { ok: false, why: 'Der Versatz passt hier nicht an die Ecke.' }; }
+      else if (chain.closed && !joinPair(n - 1, 0)) return { ok: false, why: 'Der Versatz passt hier nicht an die Ecke.' };
     }
-    if (!chain.closed) V.push(items[n - 1].end);
     const out = [];
     for (let i = 0; i < n; i++) {
-      const a = V[i], b = chain.closed ? V[(i + 1) % n] : V[i + 1], it = items[i];
+      const a = starts[i], b = ends[i], it = items[i];
       let ent;
       if (it.line) {
         if ((b[0] - a[0]) * it.line.u[0] + (b[1] - a[1]) * it.line.u[1] < 1e-6) return { ok: false, why: 'Der Versatz ist hier zu groß – eine Linie würde verschwinden.' };
@@ -3848,17 +3888,35 @@ const SKO = (() => {
       // wieder so ausrichten wie das Original
       if (it.s.rev) { const t = ent.a; ent.a = ent.b; ent.b = t; }
       if (it.s.e.con) ent.con = true;
-      out.push({ src: it.s.e, ent });
+      out.push({ src: it.s.e, ent, segIdx: i, startKey: it.s.rev ? 'b' : 'a', endKey: it.s.rev ? 'a' : 'b' });
+      if (cornerArcs[i]) out.push({ src: it.s.e, ent: cornerArcs[i], corner: true, prevSeg: i, nextSeg: (i + 1) % n });
     }
     return { ok: true, items: out };
   }
   // Versatz einer Form (Kreis, Rechteck, Vieleck, Langloch, Spline); d > 0 = nach außen / größer, d < 0 = nach innen
-  function offsetShape(e, d) {
+  function offsetShape(e, d, corners = 'sharp') {
     const n = Math.max(3, Math.round(e.n || 6));
     if (e.type === 'circle') { const r = e.r + d; return r > 1e-6 ? { ok: true, ent: { type: 'circle', c: e.c.slice(), r: r6(r) } } : { ok: false, why: 'Der Kreis würde verschwinden.' }; }
     if (e.type === 'slot') { const r = e.r + d; return r > 1e-6 ? { ok: true, ent: { type: 'slot', a: e.a.slice(), b: e.b.slice(), r: r6(r) } } : { ok: false, why: 'Das Langloch würde verschwinden.' }; }
-    if (e.type === 'poly') { const r = e.r + d / Math.cos(Math.PI / n); return r > 1e-6 ? { ok: true, ent: { type: 'poly', c: e.c.slice(), r: r6(r), n, rot: e.rot || 0 } } : { ok: false, why: 'Das Vieleck würde verschwinden.' }; }
+    if (e.type === 'poly') {
+      if (d > 0 && corners === 'round') {
+        const segs = SK.segsOf(e);
+        const chain = { segs: segs.map((s) => ({ e: { type: 'line', a: s.a, b: s.b, con: e.con }, rev: false, a: s.a, b: s.b })), closed: true };
+        const r = offsetChain(chain, -d, 'round');
+        if (!r.ok) return r;
+        return { ok: true, items: r.items.map((it) => (it.corner ? { ...it, src: e } : { ...it, src: e, edge: it.segIdx, srcA: segs[it.segIdx].a, srcB: segs[it.segIdx].b })) };
+      }
+      const r = e.r + d / Math.cos(Math.PI / n); return r > 1e-6 ? { ok: true, ent: { type: 'poly', c: e.c.slice(), r: r6(r), n, rot: e.rot || 0 } } : { ok: false, why: 'Das Vieleck würde verschwinden.' };
+    }
     if (e.type === 'rect') {
+      if (d > 0 && corners === 'round') {
+        const cs = SK.rectCorners(e), area = (e.b[0] - e.a[0]) * (e.b[1] - e.a[1]);
+        if (Math.abs(area) < 1e-12) return { ok: false, why: 'Das Rechteck ist leer.' };
+        const chain = { segs: [0, 1, 2, 3].map((i) => { const a = cs[i], b = cs[(i + 1) % 4]; return { e: { type: 'line', a, b, con: e.con }, rev: false, a, b }; }), closed: true };
+        const r = offsetChain(chain, area >= 0 ? -d : d, 'round');
+        if (!r.ok) return r;
+        return { ok: true, items: r.items.map((it) => (it.corner ? { ...it, src: e } : { ...it, src: e, edge: it.segIdx, srcA: cs[it.segIdx], srcB: cs[(it.segIdx + 1) % 4] })) };
+      }
       const sa = [e.a[0] <= e.b[0] ? -1 : 1, e.a[1] <= e.b[1] ? -1 : 1], sb = [-sa[0], -sa[1]];
       const w = Math.abs(e.b[0] - e.a[0]) + 2 * d, h = Math.abs(e.b[1] - e.a[1]) + 2 * d;
       if (w < 1e-6 || h < 1e-6) return { ok: false, why: 'Das Rechteck würde verschwinden.' };
@@ -4902,7 +4960,7 @@ const Viewer = (() => {
     controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
     controls.target.set(0, 0, 10);
     controls.addEventListener('change', () => { needsRender = true; listeners.emit('camera'); });
-    controls.addEventListener('start', () => pushCam(true));
+    controls.addEventListener('start', () => { pushCam(true); camAnim = null; });
     buildGrid(autoStep()); buildOrigin();
     applyLook();
     const ro = new ResizeObserver(resize); ro.observe(el);
@@ -5647,9 +5705,16 @@ const Viewer = (() => {
   }
   function useButtons(ctx = mouseCtx) { mouseCtx = ctx; if (controls) controls.mouseButtons = buttonsFor(mouseStyle, ctx); }
   function setMouseStyle(st) { mouseStyle = st || 'tracery'; useButtons(); }
+  function stopDamping() {
+    if (!controls) return;
+    if (controls._sphericalDelta) controls._sphericalDelta.set(0, 0, 0);
+    if (controls._panOffset) controls._panOffset.set(0, 0, 0);
+    if ('_scale' in controls) controls._scale = 1;
+  }
   function moveCamera(pos, target, up, animate = true) {
     pushCam(false);
-    if (!animate) { camera.position.copy(pos); controls.target.copy(target); if (up) camera.up.copy(up); controls.update(); needsRender = true; listeners.emit('camera'); return; }
+    stopDamping();
+    if (!animate) { camAnim = null; camera.position.copy(pos); controls.target.copy(target); if (up) camera.up.copy(up); controls.update(); needsRender = true; listeners.emit('camera'); return; }
     camAnim = { t0: performance.now(), dur: 420, p0: camera.position.clone(), p1: pos.clone(), q0: controls.target.clone(), q1: target.clone(), up0: up ? camera.up.clone() : null, up1: up ? up.clone() : null };
   }
   const VIEWDIRS = { front: [0, -1, 0], back: [0, 1, 0], left: [-1, 0, 0], right: [1, 0, 0], top: [0, -0.0001, 1], bottom: [0, -0.0001, -1], iso: [0.62, -0.9, 0.7] };
@@ -6566,6 +6631,56 @@ const Interact = (() => {
 // ---- 40-library.js ----
 // ================= Bauteil-Bibliothek (Definitionen für die Oberfläche) =================
 const SIZES = ['M1.6', 'M2', 'M2.5', 'M3', 'M4', 'M5', 'M6', 'M8'];
+// Zentrierbohrungen nach DIN 332 Form A (60°-Kegel + Führungsbohrung mit 118°-Bohrspitze)
+const CENTER_DRILLS = {
+  A1: { d1: 1.0, d2: 2.12, t1: 1.3 },
+  'A1.6': { d1: 1.6, d2: 3.35, t1: 2.0 },
+  A2: { d1: 2.0, d2: 4.25, t1: 2.5 },
+  'A2.5': { d1: 2.5, d2: 5.30, t1: 3.1 },
+  'A3.15': { d1: 3.15, d2: 6.70, t1: 3.9 },
+  A4: { d1: 4.0, d2: 8.50, t1: 5.0 },
+  A5: { d1: 5.0, d2: 10.60, t1: 6.3 },
+  'A6.3': { d1: 6.3, d2: 13.20, t1: 8.0 },
+};
+const CENTER_SIZES = [
+  ['A1', 'A 1,0 (Ø 1,0 / 2,12)'],
+  ['A1.6', 'A 1,6 (Ø 1,6 / 3,35)'],
+  ['A2', 'A 2,0 (Ø 2,0 / 4,25)'],
+  ['A2.5', 'A 2,5 (Ø 2,5 / 5,30)'],
+  ['A3.15', 'A 3,15 (Ø 3,15 / 6,70)'],
+  ['A4', 'A 4,0 (Ø 4,0 / 8,50)'],
+  ['A5', 'A 5,0 (Ø 5,0 / 10,60)'],
+  ['A6.3', 'A 6,3 (Ø 6,3 / 13,20)'],
+];
+// ISO 286-2 Grundtoleranz IT7 (oberes Abmaß ES in µm für Einheitsbohrung H7, EI = 0)
+const H7_TABLE = [[3, 10], [6, 12], [10, 15], [18, 18], [30, 21], [50, 25], [80, 30], [120, 35], [180, 40], [250, 46], [315, 52], [400, 57], [500, 63]];
+function h7Info(d) {
+  const n = Number(d);
+  if (!(n > 0)) return { d: 0, um: null };
+  const row = H7_TABLE.find(([hi]) => n <= hi);
+  if (!row) return { d: n, um: null };
+  const es = row[1] / 1000;
+  return {
+    d: n,
+    um: row[1],
+    es,
+    min: n,
+    max: n + es,
+    esText: '+' + es.toFixed(3).replace('.', ','),
+    rangeText: `${n.toFixed(3).replace('.', ',')} – ${(n + es).toFixed(3).replace('.', ',')} mm`,
+  };
+}
+function blindTipHeight(d, tipAngle = 118) {
+  const ang = Number(tipAngle);
+  if (!(d > 0) || !(ang > 1 && ang < 179.5)) return 0;
+  return (d / 2) / Math.tan((ang * Math.PI) / 360);
+}
+function centerHoleMetrics(size) {
+  const c = CENTER_DRILLS[size] || CENTER_DRILLS['A2.5'];
+  const hCone = ((c.d2 - c.d1) / 2) / Math.tan(Math.PI / 6);
+  const tipH = (c.d1 / 2) / Math.tan((118 * Math.PI) / 360);
+  return { ...c, hCone, tipH, totalDepth: hCone + c.t1 + tipH };
+}
 const LIB = [
   { lib: 'screwHole', label: 'Schraubenloch', role: 'hole', icon: 'bolt', desc: 'Durchgangsloch mit Senkung für Schrauben', params: [
     { k: 'size', label: 'Schraube', type: 'select', options: SIZES, def: 'M3' },
@@ -6590,6 +6705,18 @@ const LIB = [
   { lib: 'insert', label: 'Gewindeeinsatz', role: 'hole', icon: 'target', desc: 'Loch für einen Einschmelz-Gewindeeinsatz', params: [
     { k: 'size', label: 'Gewinde', type: 'select', options: ['M2', 'M2.5', 'M3', 'M4', 'M5', 'M6', 'M8'], def: 'M3' },
     { k: 'depth', label: 'Tiefe', type: 'num', def: null, auto: true },
+  ] },
+  { lib: 'blindHole', label: 'Sackloch', role: 'hole', icon: 'holeWizard', desc: 'Bohrung mit fester Tiefe und 118°-Bohrspitze (Standard-Spiralbohrer)', params: [
+    { k: 'd', label: 'Durchmesser', type: 'num', def: 5 },
+    { k: 'depth', label: 'Tiefe (Zylinder)', type: 'num', def: 10 },
+    { k: 'tipAngle', label: 'Bohrspitze', type: 'select', options: [['118', '118° (Spiralbohrer)'], ['140', '140° (Hartmetall)'], ['180', 'Flacher Boden']], def: 118 },
+  ] },
+  { lib: 'fitHole', label: 'Passbohrung H7', role: 'hole', icon: 'target', desc: 'Präzisionsbohrung auf genaues Nennmaß mit Toleranz-Hinweis nach ISO 286 H7', params: [
+    { k: 'd', label: 'Nenn-Ø', type: 'num', def: 6 },
+    { k: 'depth', label: 'Tiefe', type: 'num', def: 10 },
+  ] },
+  { lib: 'centerHole', label: 'Zentrierbohrung', role: 'hole', icon: 'holeWizard', desc: 'Zentrierbohrung nach DIN 332 Form A (60°-Kegel + Führungsbohrung)', params: [
+    { k: 'size', label: 'Größe (DIN 332 A)', type: 'select', options: CENTER_SIZES, def: 'A2.5' },
   ] },
   { lib: 'stdScrew', label: 'Schraube (Norm)', role: 'solid', icon: 'bolt', mat: 'V2A Edelstahl', desc: 'Echte Schraube mit Innensechskant: Zylinderkopf ISO 4762 oder Senkkopf ISO 10642 – Gewinde nur angedeutet', params: [
     { k: 'size', label: 'Größe', type: 'select', options: SIZES, def: 'M3' },
@@ -9019,7 +9146,7 @@ const Panels = (() => {
       el.append(h('h3', null, 'Bauteile'));
       const tiles = h('div', { class: 'tiles' });
       for (const d of LIB.filter((x) => !x.buy && !x.drone)) {
-        const t = h('div', { class: 'tile' + (d.role === 'hole' ? ' hole-part' : '') + (SIMPLE_PARTS.includes(d.lib) ? '' : ' pro'), role: 'button', tabindex: '0', 'data-tip': d.desc });
+        const t = h('div', { class: 'tile' + (d.role === 'hole' ? ' hole-part' : '') + (SIMPLE_PARTS.includes(d.lib) ? '' : ' pro'), role: 'button', tabindex: '0', 'data-tip': d.desc, 'data-help': HELP[d.lib] ? d.lib : null });
         t.innerHTML = partSVG(d); t.append(h('span', { class: 'lbl' }, hyph(d.label)), h('span', { class: 'role' }, d.role === 'hole' ? 'Loch' : 'Körper'));
         Place.bindTile(t, { part: d });
         t.addEventListener('keydown', (e) => { if (e.key === 'Enter') { Actions.addPart(d, libDefaults(d)); closeFlyout(); } });
@@ -9478,11 +9605,12 @@ const Panels = (() => {
     const d = h('button', { type: 'button', class: 'btn' }); d.innerHTML = icon('copy') + 'Duplizieren'; d.onclick = () => Actions.duplicate();
     const x = h('button', { type: 'button', class: 'btn danger' }); x.innerHTML = icon('trash') + 'Löschen'; x.onclick = () => Actions.remove();
     r1.append(g, d, x); w.append(r1);
-    // zwei Teile: kleinster Abstand
-    if (found.length === 2) {
+    // zwei Teile: kleinster Abstand (nur verschiedene Hauptteile, nicht ein Teil mit seiner eigenen Gruppe)
+    const tops = found.length === 2 ? found.map((f) => (Model.topOf(App.doc, f.item.id) || f.item).id) : null;
+    if (tops && tops[0] !== tops[1]) {
       const ds = h('div', { class: 'section', id: 'min-dist', 'data-help': 'minDistance' }, h('div', { class: 'section-h' }, 'Kleinster Abstand'));
       const val = h('b', { class: 'mono', id: 'min-dist-val' }, '…'); ds.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, `${Model.label(found[0].item)} ↔ ${Model.label(found[1].item)}`), val));
-      Measure.minDistance(found.map((f) => (Model.topOf(App.doc, f.item.id) || f.item).id)).then((r) => { val.textContent = !r ? '–' : r.d < 1e-6 ? 'berühren sich' : fmt(r.d, 3) + ' mm'; });
+      Measure.minDistance(tops).then((r) => { val.textContent = !r ? '–' : r.d < 1e-6 ? 'berühren sich' : fmt(r.d, 3) + ' mm'; });
       w.append(ds);
     }
     const al = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Ausrichten'));
@@ -9623,11 +9751,22 @@ const Panels = (() => {
       if (def) {
         const fl = h('div', { class: 'fields' });
         for (const q of def.params) {
-          if (q.type === 'select') fl.append(UI.selectField({ id: 'lp-' + q.k, label: q.label, value: it.p[q.k], options: q.options, onChange: (v) => setP(q.k, v) }));
+          if (q.type === 'select') fl.append(UI.selectField({ id: 'lp-' + q.k, label: q.label, value: it.p[q.k], options: q.options, onChange: (v) => setP(q.k, q.k === 'tipAngle' ? Number(v) : v) }));
           else fl.append(UI.numField({ id: 'lp-' + q.k, label: q.label, value: it.p[q.k] ?? '', unit: q.unit ?? 'mm', int: q.int, placeholder: q.auto ? 'passend' : '', onCommit: (v) => setP(q.k, v) }));
         }
         sec.append(fl);
-        if (def.lib === 'screwHole' || def.lib === 'insert' || def.lib === 'nutTrap') sec.append(h('div', { class: 'hint-box', html: 'Das Loch zeigt mit der flachen Seite nach oben. Setz es mit <b>Loch hier</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.' }));
+        if (def.lib === 'blindHole') {
+          const d = Model.num(it.p.d, V, 5), dep = Model.num(it.p.depth, V, 10), ang = Number(it.p.tipAngle ?? 118), tipH = blindTipHeight(d, ang);
+          const tipTxt = ang >= 179.5 ? `Flacher Boden, Tiefe ${fmt(dep, 2)} mm.` : `Bohrspitze (${ang}°): +${fmt(tipH, 2)} mm → Gesamttiefe <b>${fmt(dep + tipH, 2)} mm</b>.`;
+          sec.append(h('div', { class: 'hint-box', html: `${tipTxt} Setz es mit <b>Bohrung</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.` }));
+        } else if (def.lib === 'fitHole') {
+          const d = Model.num(it.p.d, V, 6), info = h7Info(d);
+          const tolTxt = info.um != null ? `<b>Passung Ø ${fmt(d, 2)} H7 (ISO 286):</b> ${info.esText} / 0 mm (${info.rangeText}). Im 3D-Modell wird genau das Nennmaß gebohrt – beim Fertigen auf Maß reiben.` : `<b>Passung Ø ${fmt(d, 2)} H7:</b> Im 3D-Modell wird genau das Nennmaß gebohrt.`;
+          sec.append(h('div', { id: 'p-fit-hint', class: 'hint-box', html: tolTxt }));
+        } else if (def.lib === 'centerHole') {
+          const m = centerHoleMetrics(it.p.size);
+          sec.append(h('div', { class: 'hint-box', html: `<b>DIN 332 Form A (${it.p.size || 'A2.5'}):</b> Führungs-Ø ${fmt(m.d1, 2)} mm · 60°-Kegel Ø ${fmt(m.d2, 2)} mm · Gesamttiefe ${fmt(m.totalDepth, 2)} mm.` }));
+        } else if (def.lib === 'screwHole' || def.lib === 'insert' || def.lib === 'nutTrap') sec.append(h('div', { class: 'hint-box', html: 'Das Loch zeigt mit der flachen Seite nach oben. Setz es mit <b>Loch hier</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.' }));
         w.append(sec);
       }
     } else if (it.kind === 'extrude' || it.kind === 'revolve') {
@@ -9983,7 +10122,7 @@ const Panels = (() => {
     } else if (face && items.length === 1 && face.info.t === 'PLANE') {
       bar.append(h('span', { class: 'lbl' }, 'Fläche'));
       b('sketch', 'Skizze hierauf', () => Sketch.startOnFace(face), 'accent', 'Auf dieser Fläche zeichnen');
-      b('holeWizard', 'Bohrung', (e) => Place.holeHere(face, e.currentTarget), '', 'Bohrungs-Assistent: Schraubenloch, Gewinde, Einsatz oder Mutternfalle – hier und per Klick weitere');
+      b('holeWizard', 'Bohrung', (e) => Place.holeHere(face, e.currentTarget), '', 'Bohrungs-Assistent: Durchgang, Kernloch, Sackloch mit Spitze, Passbohrung H7, Zentrierbohrung, Einsatz oder Mutternfalle');
       b('lift', 'Hochziehen', () => Sketch.pushPullFace(face), '', 'Die Fläche herausziehen oder hineindrücken');
       b('fillet', 'Ihre Kanten', (e) => faceEdgeMenu(face, e.currentTarget), '', 'Alle Kanten dieser Fläche wählen, abrunden oder abschrägen', true);
       if (items[0].item.role !== 'hole' && App.doc.items.some((x) => x.id === face.id)) b('shell', 'Aushöhlen', () => Features.shell(face), '', 'Körper aushöhlen – diese Fläche wird die Öffnung');
@@ -9993,7 +10132,7 @@ const Panels = (() => {
     } else if (face && items.length === 1 && face.info.t !== 'PLANE') {
       const fr = face.info.r;
       bar.append(fr ? valLbl(face.info.t === 'SPHERE' ? 'Kugel Ø' : 'Runde Fläche Ø', fr * 2, 'mm', `Radius ${fmt(fr, 2)} mm`) : h('span', { class: 'lbl' }, 'Runde Fläche'));
-      b('holeWizard', 'Bohrung', (e) => Place.holeHere(face, e.currentTarget), 'accent', 'Bohrungs-Assistent: Loch senkrecht in die runde Fläche – der Magnet rastet ganz oben, an den Seiten und in der Mitte ein');
+      b('holeWizard', 'Bohrung', (e) => Place.holeHere(face, e.currentTarget), 'accent', 'Bohrungs-Assistent: Loch senkrecht in die runde Fläche (Schraube, Sackloch, Passbohrung H7, Zentrierung …) – der Magnet rastet ganz oben, an den Seiten und in der Mitte ein');
       b('fillet', 'Ihre Kanten', (e) => faceEdgeMenu(face, e.currentTarget), '', 'Alle Kanten dieser Fläche wählen, abrunden oder abschrägen', true);
       sep();
     }
@@ -10114,7 +10253,7 @@ const Panels = (() => {
     Log.on('change', debounce(() => { if (leftTab === 'log') renderLeft(); }, 80));
     renderTools(); initViewCube();
     const rerender = debounce(() => { renderLeft(); renderRight(); renderCtx(); UI.renderHint(); }, 16);
-    App.on('doc', rerender); App.on('selection', rerender); App.on('results', rerender); DroneCheck.on('checked', () => { if (!App.sel.length) rerender(); }); Weak.on('analyzed', () => { if (!App.sel.length) rerender(); }); App.on('mode', () => { renderTools(); rerender(); });
+    App.on('doc', rerender); App.on('selection', () => { renderCtx(); rerender(); }); App.on('results', rerender); DroneCheck.on('checked', () => { if (!App.sel.length) rerender(); }); Weak.on('analyzed', () => { if (!App.sel.length) rerender(); }); App.on('mode', () => { renderTools(); rerender(); });
     Viewer.on('camera', placeCtx);
     ViewPrefs.on('change', debounce(() => { if (leftTab === 'tree') renderLeft(); }, 30));   // Erste Schritte ein-/ausblenden
   }
@@ -10443,6 +10582,9 @@ const Place = (() => {
     if (d.lib === 'screwHole') return [-3.5, -3.5, -(p.length || 10), 3.5, 3.5, 0.2];
     if (d.lib === 'nutTrap') return [-3.5, -3.5, -12, 3.5, 3.5, 0.2];
     if (d.lib === 'insert') return [-2, -2, -7.7, 2, 2, 0.2];
+    if (d.lib === 'blindHole') { const r = (Number(p.d) || 5) / 2, tip = blindTipHeight(Number(p.d) || 5, p.tipAngle ?? 118); return [-r, -r, -((Number(p.depth) || 10) + tip), r, r, 0.2]; }
+    if (d.lib === 'fitHole') { const r = (Number(p.d) || 6) / 2; return [-r, -r, -(Number(p.depth) || 10), r, r, 0.2]; }
+    if (d.lib === 'centerHole') { const m = centerHoleMetrics(p.size), r = m.d2 / 2; return [-r, -r, -m.totalDepth, r, r, 0.2]; }
     if (d.lib === 'threadHole') return [-3.5, -3.5, -(p.length || 10), 3.5, 3.5, 0.2];
     if (d.lib === 'threadRod') return [-3, -3, 0, 3, 3, p.length || 12];
     if (d.lib === 'slotHole') return [-10, -2.3, -10, 10, 2.3, 0.2];
@@ -10557,35 +10699,162 @@ const Place = (() => {
     st = null; Snap.clear(); document.body.style.cursor = ''; UI.hint(null); Viewer.highlightFace('hover', null, null); Viewer.requestRender();
   }
   // ---------- Bohrungs-Assistent: Art, Größe, Tiefe wählen, dann Löcher per Klick setzen ----------
-  const HOLE_TYPES = [['through', 'Durchgangsloch für Schraube'], ['tap', 'Gewinde schneiden (Kernloch)'], ['insert', 'Gewindeeinsatz'], ['nut', 'Mutternfalle']];
-  let lastHole = { type: 'through', size: 'M3', head: 'countersunk', fit: 'medium', depth: 10, thru: true };
+  const HOLE_TYPES = [
+    ['through', 'Durchgangsloch für Schraube'],
+    ['tap', 'Gewinde schneiden (Kernloch)'],
+    ['blind', 'Sackloch (mit 118°-Bohrspitze)'],
+    ['fit', 'Passbohrung H7 (ISO 286)'],
+    ['center', 'Zentrierbohrung (DIN 332 A)'],
+    ['insert', 'Gewindeeinsatz'],
+    ['nut', 'Mutternfalle'],
+  ];
+  let lastHole = { type: 'through', size: 'M3', head: 'countersunk', fit: 'medium', depth: 10, thru: true, d: 5, tipAngle: 118, fitD: 6, centerSize: 'A2.5' };
   let hw = null;   // laufender Setz-Modus
+  const hwNum = (v, fb) => { const n = Model.num(v, Model.vars(App.doc).v, NaN); return n > 0 ? n : fb; };
+  function holeHelpKey(type) { return type === 'blind' ? 'blindHole' : type === 'fit' ? 'fitHole' : type === 'center' ? 'centerHole' : 'holeWizard'; }
+  function holePreviewSVG(o) {
+    const W = 236, H = 82, cx = 118, y0 = 14, yB = 72;
+    const mat = (holePath) => `<path d="M24 ${y0} H212 V${yB} H24 Z" fill="var(--accent)" fill-opacity=".14" stroke="var(--line-strong)" stroke-width="1"/>`
+      + `<path d="${holePath}" fill="var(--surface)" stroke="var(--hole)" stroke-width="1.5" stroke-linejoin="round"/>`
+      + `<line x1="${cx}" y1="6" x2="${cx}" y2="${yB + 4}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 2.5"/>`;
+    if (o.type === 'blind') {
+      const d = hwNum(o.d, 5), depth = hwNum(o.depth, 10), ang = Number(o.tipAngle ?? 118);
+      const tipH = blindTipHeight(d, ang);
+      const scale = Math.min(46 / Math.max(depth + tipH, 1), 36 / Math.max(d / 2, 1));
+      const rPx = Math.max(8, Math.min(36, (d / 2) * scale));
+      const dPx = Math.max(18, Math.min(44, depth * scale));
+      const tPx = ang >= 179.5 ? 0 : Math.max(5, Math.min(18, tipH * scale));
+      const y1 = y0 + dPx, y2 = y1 + tPx;
+      const lbl = `<text x="${cx + rPx + 6}" y="${y0 + dPx / 2 + 3}" font-size="10" fill="var(--muted)">t ${fmt(depth, 1)}</text>`
+        + `<text x="28" y="${y0 + 13}" font-size="10" fill="var(--ink)">Ø ${fmt(d, 2)}</text>`
+        + (tPx > 0 ? `<text x="${cx + rPx + 6}" y="${y2}" font-size="10" fill="var(--hole)">${ang}°</text>` : '');
+      return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - rPx} ${y0} V${y1} L${cx} ${y2} L${cx + rPx} ${y1} V${y0} Z`)}${lbl}</svg>`;
+    }
+    if (o.type === 'fit') {
+      const d = hwNum(o.fitD, 6), info = h7Info(d);
+      const rPx = Math.max(12, Math.min(30, d * 2.4));
+      const tolLbl = info.um != null ? `${info.esText} / 0` : 'H7';
+      return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - rPx} ${y0} V${yB} H${cx + rPx} V${y0} Z`)}`
+        + `<text x="28" y="${y0 + 14}" font-size="10.5" font-weight="600" fill="var(--ink)">Ø ${fmt(d, 2)} H7</text>`
+        + `<text x="${cx + rPx + 7}" y="${y0 + 30}" font-size="10" fill="var(--hole)">${tolLbl}</text></svg>`;
+    }
+    if (o.type === 'center') {
+      const m = centerHoleMetrics(o.centerSize);
+      const sc = Math.min(34 / Math.max(m.d2 / 2, 1), 48 / Math.max(m.totalDepth, 1));
+      const r1 = Math.max(7, m.d1 / 2 * sc), r2 = Math.max(r1 + 8, Math.min(38, m.d2 / 2 * sc));
+      const y1 = y0 + Math.max(12, m.hCone * sc), y2 = y1 + Math.max(14, m.t1 * sc), y3 = y2 + Math.max(5, m.tipH * sc);
+      return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - r2} ${y0} L${cx - r1} ${y1} V${y2} L${cx} ${y3} L${cx + r1} ${y2} V${y1} L${cx + r2} ${y0} Z`)}`
+        + `<text x="28" y="${y0 + 13}" font-size="10" fill="var(--ink)">Ø ${fmt(m.d2, 2)}</text>`
+        + `<text x="28" y="${y2}" font-size="10" fill="var(--muted)">Ø ${fmt(m.d1, 2)}</text>`
+        + `<text x="${cx + r2 + 6}" y="${y1}" font-size="10" fill="var(--hole)">60°</text></svg>`;
+    }
+    if (o.type === 'through' && o.head === 'countersunk') {
+      return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - 28} ${y0} L${cx - 14} ${y0 + 16} V${yB} H${cx + 14} V${y0 + 16} L${cx + 28} ${y0} Z`)}`
+        + `<text x="28" y="${y0 + 14}" font-size="10" fill="var(--ink)">${o.size} Senk.</text></svg>`;
+    }
+    if (o.type === 'through' && o.head === 'counterbore') {
+      return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - 26} ${y0} V${y0 + 22} H${cx - 14} V${yB} H${cx + 14} V${y0 + 22} H${cx + 26} V${y0} Z`)}`
+        + `<text x="28" y="${y0 + 14}" font-size="10" fill="var(--ink)">${o.size} Zyl.</text></svg>`;
+    }
+    if (o.type === 'nut') {
+      return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - 26} ${y0} V${y0 + 20} H${cx - 13} V${yB} H${cx + 13} V${y0 + 20} H${cx + 26} V${y0} Z`)}`
+        + `<text x="28" y="${y0 + 14}" font-size="10" fill="var(--ink)">Mutter ${o.size}</text></svg>`;
+    }
+    const r = o.type === 'insert' ? 18 : 13;
+    const endY = o.thru ? yB : yB - 12;
+    const lbl = o.type === 'tap' ? `${o.size} Kernloch` : o.type === 'insert' ? `${o.size} Einsatz` : `${o.size} Durchg.`;
+    return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - r} ${y0} V${endY} H${cx + r} V${y0} Z`)}`
+      + `<text x="28" y="${y0 + 14}" font-size="10" fill="var(--ink)">${lbl}</text></svg>`;
+  }
+  function holeInfoHTML(o) {
+    if (o.type === 'blind') {
+      const d = hwNum(o.d, 5), depth = hwNum(o.depth, 10), ang = Number(o.tipAngle ?? 118);
+      const tipH = blindTipHeight(d, ang);
+      if (ang >= 179.5) return `<b>Flacher Boden:</b> Tiefe ${fmt(depth, 2)} mm (wie gefräst).`;
+      return `<b>Bohrspitze (${ang}°):</b> +${fmt(tipH, 2)} mm → Gesamttiefe <b>${fmt(depth + tipH, 2)} mm</b>.`;
+    }
+    if (o.type === 'fit') {
+      const d = hwNum(o.fitD, 6), info = h7Info(d);
+      if (info.um != null) return `<b>Passung Ø ${fmt(d, 2)} H7 (ISO 286):</b> ${info.esText} / 0 mm (${info.rangeText}). Im Modell wird genau das Nennmaß gebohrt – beim Fertigen auf Maß reiben.`;
+      return `<b>Passung Ø ${fmt(d, 2)} H7:</b> Im Modell wird genau das Nennmaß gebohrt (ISO 286 H7 gilt bis Ø 500 mm).`;
+    }
+    if (o.type === 'center') {
+      const m = centerHoleMetrics(o.centerSize);
+      return `<b>DIN 332 Form A (${o.centerSize}):</b> Führungs-Ø ${fmt(m.d1, 2)} mm · 60°-Kegel Ø ${fmt(m.d2, 2)} mm · Gesamttiefe ${fmt(m.totalDepth, 2)} mm.`;
+    }
+    return '';
+  }
   function holeHere(face, anchor, at) {
     if (face) Snap.prime(face.id, face.idx);   // Flächendaten schon holen, damit das erste Loch einrastet
     const o = { ...lastHole };
-    const box = h('div', { class: 'holewiz', style: { display: 'grid', gap: '10px', minWidth: '260px' } });
-    box.append(h('b', null, at ? `Bohrungen an ${at.pts.length} ${at.pts.length === 1 ? 'Punkt' : 'Punkten'}` : 'Bohrungs-Assistent'));
+    const box = h('div', { class: 'holewiz', style: { display: 'grid', gap: '10px', minWidth: '264px' } });
+    const titleEl = h('b', null, at ? `Bohrungen an ${at.pts.length} ${at.pts.length === 1 ? 'Punkt' : 'Punkten'}` : 'Bohrungs-Assistent');
+    box.append(titleEl);
     const body = h('div', { style: { display: 'grid', gap: '10px' } });
+    const prev = h('div', { id: 'hw-preview', class: 'hw-preview' });
+    const infoBox = h('div', { id: 'hw-info', class: 'hint-box hw-info' });
+    const updatePreview = () => {
+      box.dataset.help = holeHelpKey(o.type);
+      prev.innerHTML = holePreviewSVG(o);
+      const txt = holeInfoHTML(o);
+      infoBox.innerHTML = txt;
+      infoBox.style.display = txt ? '' : 'none';
+    };
+    const bindLive = (wrap, apply) => {
+      const inp = wrap.querySelector('input');
+      if (inp) inp.addEventListener('input', () => { const n = parseNum(inp.value); if (n > 0) { apply(n); updatePreview(); } });
+    };
     const draw = () => {
       body.innerHTML = '';
-      body.append(UI.selectField({ id: 'hw-type', label: 'Art', value: o.type, options: HOLE_TYPES, onChange: (v) => { o.type = v; draw(); } }));
-      const sizes = o.type === 'insert' ? SIZES.filter((x) => x !== 'M1.6') : SIZES;
-      if (!sizes.includes(o.size)) o.size = 'M3';
-      body.append(UI.selectField({ id: 'hw-size', label: o.type === 'nut' ? 'Mutter' : o.type === 'insert' ? 'Gewinde' : 'Schraube', value: o.size, options: sizes, onChange: (v) => { o.size = v; } }));
-      if (o.type === 'through') {
+      const tf = UI.selectField({ id: 'hw-type', label: 'Art', value: o.type, options: HOLE_TYPES, onChange: (v) => { o.type = v; draw(); } });
+      tf.dataset.help = holeHelpKey(o.type);
+      body.append(tf);
+      if (o.type === 'blind') {
         const f = h('div', { class: 'fields' });
-        f.append(UI.selectField({ id: 'hw-head', label: 'Kopf', value: o.head, options: LIBMAP.screwHole.params[1].options, onChange: (v) => { o.head = v; } }));
-        f.append(UI.selectField({ id: 'hw-fit', label: 'Loch', value: o.fit, options: [['medium', 'Mittel'], ['fine', 'Eng'], ['coarse', 'Weit']], onChange: (v) => { o.fit = v; } }));
+        const df = UI.numField({ id: 'hw-d', label: 'Durchmesser', value: o.d, min: 0.2, onCommit: (v) => { o.d = v; updatePreview(); } });
+        const dp = UI.numField({ id: 'hw-depth', label: 'Tiefe (Zylinder)', value: o.depth, min: 0.2, onCommit: (v) => { o.depth = v; updatePreview(); } });
+        bindLive(df, (n) => { o.d = n; });
+        bindLive(dp, (n) => { o.depth = n; });
+        f.append(df, dp);
         body.append(f);
+        body.append(UI.selectField({ id: 'hw-tip', label: 'Bohrspitze', value: String(o.tipAngle ?? 118), options: LIBMAP.blindHole.params[2].options, onChange: (v) => { o.tipAngle = Number(v); updatePreview(); } }));
+      } else if (o.type === 'fit') {
+        const df = UI.numField({ id: 'hw-d', label: 'Nenn-Ø (H7)', value: o.fitD, min: 0.2, onCommit: (v) => { o.fitD = v; updatePreview(); } });
+        bindLive(df, (n) => { o.fitD = n; });
+        body.append(df);
+        const thru = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'hw-thru', checked: !!o.thru }), 'Ganz durch den Körper');
+        thru.querySelector('input').onchange = (e) => { o.thru = e.target.checked; draw(); };
+        body.append(thru);
+        if (!o.thru) {
+          const dp = UI.numField({ id: 'hw-depth', label: 'Tiefe', value: o.depth, min: 0.2, onCommit: (v) => { o.depth = v; updatePreview(); } });
+          bindLive(dp, (n) => { o.depth = n; });
+          body.append(dp);
+        }
+      } else if (o.type === 'center') {
+        body.append(UI.selectField({ id: 'hw-size', label: 'Größe (DIN 332 A)', value: o.centerSize, options: CENTER_SIZES, onChange: (v) => { o.centerSize = v; updatePreview(); } }));
+      } else {
+        const sizes = o.type === 'insert' ? SIZES.filter((x) => x !== 'M1.6') : SIZES;
+        if (!sizes.includes(o.size)) o.size = 'M3';
+        body.append(UI.selectField({ id: 'hw-size', label: o.type === 'nut' ? 'Mutter' : o.type === 'insert' ? 'Gewinde' : 'Schraube', value: o.size, options: sizes, onChange: (v) => { o.size = v; updatePreview(); } }));
+        if (o.type === 'through') {
+          const f = h('div', { class: 'fields' });
+          f.append(UI.selectField({ id: 'hw-head', label: 'Kopf', value: o.head, options: LIBMAP.screwHole.params[1].options, onChange: (v) => { o.head = v; updatePreview(); } }));
+          f.append(UI.selectField({ id: 'hw-fit', label: 'Loch', value: o.fit, options: [['medium', 'Mittel'], ['fine', 'Eng'], ['coarse', 'Weit']], onChange: (v) => { o.fit = v; updatePreview(); } }));
+          body.append(f);
+        }
+        const thru = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'hw-thru', checked: !!o.thru }), o.type === 'insert' ? 'So tief wie der Körper' : 'Ganz durch den Körper');
+        thru.querySelector('input').onchange = (e) => { o.thru = e.target.checked; draw(); };
+        body.append(thru);
+        if (!o.thru) body.append(UI.numField({ id: 'hw-depth', label: 'Tiefe', value: o.depth, onCommit: (v) => { o.depth = v; } }));
       }
-      const thru = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'hw-thru', checked: !!o.thru }), o.type === 'insert' ? 'So tief wie der Körper' : 'Ganz durch den Körper');
-      thru.querySelector('input').onchange = (e) => { o.thru = e.target.checked; draw(); };
-      body.append(thru);
-      if (!o.thru) body.append(UI.numField({ id: 'hw-depth', label: 'Tiefe', value: o.depth, onCommit: (v) => { o.depth = v; } }));
+      updatePreview();
+      const popEl = box.closest('.pop');
+      if (popEl) { const pr = popEl.getBoundingClientRect(); if (pr.bottom > innerHeight - 8) popEl.style.top = Math.max(8, innerHeight - pr.height - 8) + 'px'; }
     };
-    draw(); box.append(body);
+    draw(); box.append(body, prev, infoBox);
     const go = h('button', { type: 'button', class: 'btn primary', id: 'hw-go' }); go.innerHTML = icon('check') + 'Löcher setzen';
     go.onclick = () => {
+      const ae = document.activeElement; if (ae && box.contains(ae) && ae.tagName === 'INPUT') ae.blur();
       UI.closePop(); lastHole = { ...o };
       startHoles(o);
       // aus Skizzenpunkten: alle Löcher genau an den Punkten setzen, dann fertig
@@ -10605,6 +10874,9 @@ const Place = (() => {
   }
   function specFor(o, thick) {
     const depth = o.thru ? thick : o.depth;
+    if (o.type === 'blind') return [LIBMAP.blindHole, { d: o.d, depth: o.depth, tipAngle: Number(o.tipAngle ?? 118) }];
+    if (o.type === 'fit') return [LIBMAP.fitHole, { d: o.fitD, depth: o.thru ? thick : o.depth }];
+    if (o.type === 'center') return [LIBMAP.centerHole, { size: o.centerSize }];
     if (o.type === 'insert') return [LIBMAP.insert, { size: o.size, depth: o.thru ? thick : depth }];
     if (o.type === 'nut') return [LIBMAP.nutTrap, { size: o.size, depth: null, length: depth }];
     if (o.type === 'tap') return [LIBMAP.screwHole, { size: o.size, head: 'none', fit: 'tap', length: depth }];
@@ -10621,19 +10893,42 @@ const Place = (() => {
   function holeBar() {
     if (hw.bar) hw.bar.remove();
     const bar = h('div', { class: 'sketchbar holebar', role: 'toolbar', 'aria-label': 'Bohrungen' });
-    const name = { through: 'Durchgang', tap: 'Kernloch', insert: 'Einsatz', nut: 'Mutternfalle' }[hw.o.type];
-    bar.append(h('span', { class: 'title' }, 'Bohrungen'), h('span', { class: 'lbl', style: { padding: '0 8px', fontSize: '13px' } }, `${hw.o.size} · ${name} · ${hw.count} gesetzt`));
+    const name = { through: 'Durchgang', tap: 'Kernloch', blind: 'Sackloch', fit: 'Passung H7', center: 'Zentrierung', insert: 'Einsatz', nut: 'Mutternfalle' }[hw.o.type];
+    const sz = hw.o.type === 'blind' ? `Ø ${fmt(hwNum(hw.o.d, 5), 2)}` : hw.o.type === 'fit' ? `Ø ${fmt(hwNum(hw.o.fitD, 6), 2)}` : hw.o.type === 'center' ? hw.o.centerSize : hw.o.size;
+    bar.append(h('span', { class: 'title' }, 'Bohrungen'), h('span', { class: 'lbl', style: { padding: '0 8px', fontSize: '13px' } }, `${sz} · ${name} · ${hw.count} gesetzt`));
     const ok = h('button', { type: 'button', class: 'tool primary', 'data-kbd': 'Esc' }); ok.innerHTML = icon('check') + '<span>Fertig</span>'; ok.onclick = () => stopHoles();
     bar.append(ok); $('#overlay').append(bar); hw.bar = bar;
   }
   function ringObj(o) {
-    const r = (parseFloat(String(o.size).slice(1)) || 3) * (o.type === 'through' && o.head !== 'none' ? 1.1 : 0.6);
-    const pts = []; for (let i = 0; i <= 40; i++) { const t = (i / 40) * Math.PI * 2; pts.push(new THREE.Vector3(Math.cos(t) * r, Math.sin(t) * r, 0)); }
-    pts.push(new THREE.Vector3(-r * 1.4, 0, 0), new THREE.Vector3(r * 1.4, 0, 0));
-    const g = new THREE.BufferGeometry().setFromPoints(pts);
-    const l = new THREE.Line(g, new THREE.LineBasicMaterial({ color: new THREE.Color(Viewer.theme.hole), depthTest: false, transparent: true }));
-    l.renderOrder = 30; l.matrixAutoUpdate = false; l.visible = false;
-    Viewer.groups.overlay.add(l); return l;
+    const grp = new THREE.Group();
+    const mat = new THREE.LineBasicMaterial({ color: new THREE.Color(Viewer.theme.hole), depthTest: false, transparent: true });
+    const mkCircle = (radius, z = 0) => {
+      const pts = []; for (let i = 0; i <= 40; i++) { const t = (i / 40) * Math.PI * 2; pts.push(new THREE.Vector3(Math.cos(t) * radius, Math.sin(t) * radius, z)); }
+      return new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat);
+    };
+    const mkLine = (a, b) => new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...a), new THREE.Vector3(...b)]), mat);
+    let r = (parseFloat(String(o.size).slice(1)) || 3) * (o.type === 'through' && o.head !== 'none' ? 1.1 : 0.6);
+    if (o.type === 'blind') {
+      r = hwNum(o.d, 5) / 2;
+      const dep = hwNum(o.depth, 10), tip = blindTipHeight(r * 2, o.tipAngle ?? 118);
+      grp.add(mkCircle(r, 0), mkCircle(r, -dep));
+      for (const [sx, sy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) grp.add(mkLine([sx * r, sy * r, 0], [sx * r, sy * r, -dep]), mkLine([sx * r, sy * r, -dep], [0, 0, -(dep + tip)]));
+    } else if (o.type === 'fit') {
+      r = hwNum(o.fitD, 6) / 2;
+      const dep = o.thru ? 12 : hwNum(o.depth, 10);
+      grp.add(mkCircle(r, 0), mkCircle(r, -dep));
+      for (const [sx, sy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) grp.add(mkLine([sx * r, sy * r, 0], [sx * r, sy * r, -dep]));
+    } else if (o.type === 'center') {
+      const m = centerHoleMetrics(o.centerSize), r1 = m.d1 / 2; r = m.d2 / 2;
+      grp.add(mkCircle(r, 0), mkCircle(r1, -m.hCone), mkCircle(r1, -(m.hCone + m.t1)));
+      for (const [sx, sy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) grp.add(mkLine([sx * r, sy * r, 0], [sx * r1, sy * r1, -m.hCone]), mkLine([sx * r1, sy * r1, -m.hCone], [sx * r1, sy * r1, -(m.hCone + m.t1)]), mkLine([sx * r1, sy * r1, -(m.hCone + m.t1)], [0, 0, -m.totalDepth]));
+    } else {
+      grp.add(mkCircle(r, 0));
+    }
+    grp.add(mkLine([-r * 1.4, 0, 0], [r * 1.4, 0, 0]), mkLine([0, -r * 1.4, 0], [0, r * 1.4, 0]));
+    grp.traverse((c) => { c.renderOrder = 30; });
+    grp.matrixAutoUpdate = false; grp.visible = false;
+    Viewer.groups.overlay.add(grp); return grp;
   }
   function startHoles(o) {
     Views.collapse();
@@ -10671,7 +10966,10 @@ const Place = (() => {
     if (!hw) return;
     const cv = Viewer.canvas;
     cv.removeEventListener('pointerdown', hw.onDown, true); window.removeEventListener('pointerup', hw.onUp); cv.removeEventListener('pointermove', hw.onMove);
-    Viewer.groups.overlay.remove(hw.ring); hw.ring.geometry.dispose(); hw.ring.material.dispose(); Snap.clear();
+    Viewer.groups.overlay.remove(hw.ring);
+    const mats = new Set(); hw.ring.traverse((c) => { if (c.geometry) c.geometry.dispose(); if (c.material) mats.add(c.material); });
+    for (const m of mats) m.dispose();
+    Snap.clear();
     if (hw.bar) hw.bar.remove();
     const n = hw.count; hw = null;
     Viewer.useButtons('model');
@@ -11415,7 +11713,7 @@ const Sketch = (() => {
     spline: 'Klick setzt die Punkte, durch die die Kurve läuft. Am ersten Punkt schließen, auf den letzten Punkt doppelklicken oder <b>Enter</b> zum Beenden.',
     corner: 'Fahr an eine <b>Ecke</b>, an der sich zwei Linien treffen – Rechteck und Vieleck gehen auch. <b>Klick</b> rundet sie mit dem Radius rechts. Fase statt Rundung stellst du rechts um.',
     trim: 'Fahr über ein Stück zwischen zwei Schnittpunkten – es leuchtet rot. <b>Klick</b> schneidet es weg, mit gedrückter Maustaste kannst du <b>wischen</b>.',
-    offset: 'Klick eine Linie, einen Kreis oder eine Form an. Dann die Maus auf die Seite bewegen, auf die der Versatz soll, und klicken – oder den Abstand tippen und <b>Enter</b>.',
+    offset: 'Klick eine Linie, einen Kreis oder eine Form an. Rechts kannst du <b>Anzahl</b>, <b>Beidseitig</b> und <b>Ecken</b> (spitz/rund) wählen. Dann Maus auf eine Seite bewegen und klicken – oder den Abstand tippen und <b>Enter</b>.',
     mirror: 'Erst die <b>Spiegellinie</b> anklicken (eine Linie, auch eine Hilfslinie), dann die Elemente, die gespiegelt werden sollen. <b>Enter</b> spiegelt alles.',
     patrect: 'Klick die Elemente an, die vervielfacht werden sollen. Anzahl und Abstand stellst du rechts ein, dann <b>Enter</b>.',
     patcirc: 'Klick die Elemente an, die im Kreis vervielfacht werden sollen. Anzahl, Winkel und Mittelpunkt stellst du rechts ein, dann <b>Enter</b>.',
@@ -11719,7 +12017,7 @@ const Sketch = (() => {
     if (Notes.active) Notes.stop();
     Panels.closeFlyout(); UI.closePop();
     const F = frameWorld(init.plane, init.W);
-    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.mode === 'patpath' ? 'line' : 'rect', draft: null, sel: null, sels: [], band: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, hoverEnt: null, trimHover: null, check: null, checkFocus: null };
+    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.mode === 'patpath' ? 'line' : 'rect', draft: null, sels: [], get sel() { return this.sels && this.sels.length === 1 ? this.sels[0] : null; }, set sel(v) { this.sels = v ? [v] : []; }, band: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, off: { count: 1, both: false, corners: 'sharp' }, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, hoverEnt: null, trimHover: null, check: null, checkFocus: null };
     S.dims = init.dims || []; S.cons = init.cons || []; S.picks = []; S.dimFirst = null; S.selCon = null;
     S.plane0 = deepClone(init.plane); S.pOff = init.pOff || 0; S.pTilt = 0;
     if (S.pOff) applyPlane(false, true);
@@ -11781,17 +12079,15 @@ const Sketch = (() => {
   function hideBar() { if (bar) { bar.remove(); bar = null; } if (cbar) { cbar.remove(); cbar = null; } if (bars) { bars.remove(); bars = null; } }
   function selectedIds() {
     if (!S) return [];
-    const raw = S.sels && S.sels.length ? S.sels : S.sel ? [S.sel] : [];
-    return [...new Set(raw.filter((id) => ent(id)))];
+    return [...new Set((S.sels || []).filter((id) => ent(id)))];
   }
   function setSel(ids) {
     if (!S) return;
     const uniq = [...new Set((ids || []).filter((id) => ent(id)))];
     S.sels = uniq;
-    S.sel = uniq.length === 1 ? uniq[0] : null;
     if (uniq.length) S.selCon = null;
   }
-  function clearSel() { if (!S) return; S.sels = []; S.sel = null; }
+  function clearSel() { if (!S) return; S.sels = []; }
   function clearBand() { if (S && S.band) { if (S.band.el) S.band.el.remove(); S.band = null; } }
   function setTool(id) {
     if (!S) return;
@@ -12052,11 +12348,7 @@ const Sketch = (() => {
     S.ents = S.ents.filter((x) => x.id !== id);
     S.dims = S.dims.filter((d) => d.e !== id && !(d.refs || []).some((r) => usesEnt(r, id)));
     S.cons = S.cons.filter((c) => !conRefs(c).some((r) => usesEnt(r, id)));
-    if (S.sel === id) S.sel = null;
-    if (S.sels && S.sels.length) {
-      S.sels = S.sels.filter((x) => x !== id);
-      S.sel = S.sels.length === 1 ? S.sels[0] : null;
-    }
+    if (S.sels && S.sels.length) S.sels = S.sels.filter((x) => x !== id);
     S.patSel = (S.patSel || []).filter((x) => x !== id);
   }
   function deleteEnts(ids) {
@@ -12391,7 +12683,7 @@ const Sketch = (() => {
       });
       const keeps = pieces.some((pc) => pc.keepsId);
       let at = S.ents.indexOf(target);
-      if (!keeps) { S.ents.splice(at, 1); if (S.sel === tid) S.sel = null; }
+      if (!keeps) { S.ents.splice(at, 1); if (S.sels && S.sels.length) S.sels = S.sels.filter((x) => x !== tid); }
       for (const pc of pieces) {
         let en;
         if (pc.keepsId) { en = target; for (const k of ['a', 'b', 'm', 'c', 'r', 'pts', 'closed']) delete en[k]; Object.assign(en, pc.ent); }
@@ -12622,14 +12914,37 @@ const Sketch = (() => {
     }
     return 0;
   }
-  function offsetCalc(off, sd) {
+  function offsetCalc(off, sd, corners = 'sharp') {
     const e = ent(off.id); if (!e) return { ok: false, why: 'Das Element gibt es nicht mehr.' };
     if (Math.abs(sd) < 1e-6) return { ok: false, why: 'Der Abstand darf nicht 0 sein.' };
-    if (off.chain) { const r = SKO.offsetChain(off.chain, sd); return r.ok ? { ok: true, items: r.items.map((x) => ({ src: x.src, ent: x.ent })) } : r; }
-    const r = SKO.offsetShape(e, sd);
-    return r.ok ? { ok: true, items: [{ src: e, ent: r.ent, sgs: r.sgs }] } : r;
+    if (off.chain) { const r = SKO.offsetChain(off.chain, sd, corners); return r.ok ? { ok: true, items: r.items } : r; }
+    const r = SKO.offsetShape(e, sd, corners);
+    if (!r.ok) return r;
+    return r.items ? { ok: true, items: r.items } : { ok: true, items: [{ src: e, ent: r.ent, sgs: r.sgs }] };
+  }
+  function offsetPlan(off, sd, v) {
+    const O = (S && S.off) || { count: 1, both: false, corners: 'sharp' };
+    const count = clamp(Math.round(O.count || 1), 1, 20);
+    const both = !!O.both;
+    const corners = O.corners === 'round' ? 'round' : 'sharp';
+    const signs = both ? [1, -1] : [1];
+    const scaleV = (val, k) => (k === 1 ? val : typeof val === 'number' ? round(val * k, 4) : `(${val})*${k}`);
+    const copies = [], errs = [];
+    for (const s of signs) {
+      for (let k = 1; k <= count; k++) {
+        const sdk = s * k * sd;
+        const r = offsetCalc(off, sdk, corners);
+        if (r.ok) copies.push({ sd: sdk, v: scaleV(v, k), items: r.items });
+        else errs.push(r.why);
+      }
+    }
+    return { ok: copies.length > 0, copies, skipped: errs.length, total: signs.length * count, why: errs[0] || '' };
   }
   function offsetCon(src, ne, it, sd, v) {
+    if (it.edge != null) {
+      const cr = (it.srcB[0] - it.srcA[0]) * (ne.a[1] - it.srcA[1]) - (it.srcB[1] - it.srcA[1]) * (ne.a[0] - it.srcA[0]);
+      return { id: uid('k'), type: 'offset', refs: [{ e: src.id, edge: it.edge }, { e: ne.id }], v, sg: cr >= 0 ? 1 : -1 };
+    }
     const base = { id: uid('k'), type: 'offset', refs: [{ e: src.id }, { e: ne.id }], v };
     if (src.type === 'spline') return null;
     if (src.type === 'rect') return { ...base, sg: 1, sgs: it.sgs };
@@ -12640,21 +12955,40 @@ const Sketch = (() => {
   }
   function applyOffset(sd, v) {
     const off = S.draft && S.draft.off; if (!off) return false;
-    const calc = offsetCalc(off, sd);
-    if (!calc.ok) { UI.toast(calc.why, { kind: 'bad' }); return false; }
+    const plan = offsetPlan(off, sd, v);
+    if (!plan.ok) { UI.toast(plan.why, { kind: 'bad' }); return false; }
     pushUndo();
-    const newCons = [];
-    for (const it of calc.items) {
-      const ne = { id: uid('e'), ...it.ent }; if (it.src.con) ne.con = true;
-      S.ents.push(ne);
-      const c = offsetCon(it.src, ne, it, sd, v); if (c) newCons.push(c);
+    const allCons = [];
+    for (const cp of plan.copies) {
+      const copyOffCons = [], copyAuxCons = [], segEnts = new Map(), cornerJobs = [];
+      for (const it of cp.items) {
+        const ne = { id: uid('e'), ...it.ent }; if (it.src && it.src.con) ne.con = true;
+        S.ents.push(ne);
+        if (it.corner) { cornerJobs.push({ it, ne }); continue; }
+        if (it.segIdx != null) segEnts.set(it.segIdx, { ne, startKey: it.startKey, endKey: it.endKey });
+        const c = offsetCon(it.src, ne, it, cp.sd, cp.v); if (c) copyOffCons.push(c);
+      }
+      for (const { it, ne } of cornerJobs) {
+        const P = segEnts.get(it.prevSeg), Q = segEnts.get(it.nextSeg);
+        if (P && Q) {
+          copyAuxCons.push(
+            { id: uid('k'), type: 'coincident', refs: [{ e: P.ne.id, p: P.endKey }, { e: ne.id, p: 'a' }] },
+            { id: uid('k'), type: 'coincident', refs: [{ e: Q.ne.id, p: Q.startKey }, { e: ne.id, p: 'b' }] },
+            makeTanCon(P.ne, ne),
+            makeTanCon(ne, Q.ne),
+          );
+        }
+        if (it.src) copyOffCons.push({ id: uid('k'), type: 'offset', refs: [{ e: it.src.id }, { e: ne.id }], v: cp.v, sg: 1, corner: true });
+      }
+      if (copyOffCons.length > 1) { const og = uid('og'); for (const c of copyOffCons) c.og = og; }   // pro Kopie zusammen entstanden: später zusammen ändern
+      allCons.push(...copyOffCons, ...copyAuxCons);
     }
-    if (newCons.length > 1) { const og = uid('og'); for (const c of newCons) c.og = og; }   // zusammen entstanden: später zusammen ändern
-    S.cons.push(...newCons);
+    S.cons.push(...allCons);
     S.draft = null; hideEntry(); clearSel();
-    sanitize(newCons.map((c) => c.id));
+    sanitize(allCons.map((c) => c.id));
     UI.hint(HINTS.offset); render(); Panels.renderRight();
-    if (calc.items.some((x) => x.src.type === 'ellipse')) UI.toast('Der Versatz einer Ellipse ist keine Ellipse mehr – die Kopie ist eine Spline durch 48 Punkte genau im Abstand. Sie folgt der Ellipse nicht, wenn du diese später änderst.', { icon: 'info', ms: 5000 });
+    if (plan.skipped > 0) UI.toast(`${plan.copies.length} von ${plan.total} Versätzen erstellt – die übrigen waren zu eng.`, { icon: 'info', ms: 3500 });
+    if (plan.copies.some((cp) => cp.items.some((x) => x.src && x.src.type === 'ellipse'))) UI.toast('Der Versatz einer Ellipse ist keine Ellipse mehr – die Kopie ist eine Spline durch 48 Punkte genau im Abstand. Sie folgt der Ellipse nicht, wenn du diese später änderst.', { icon: 'info', ms: 5000 });
     return true;
   }
   // Abstand eingetippt (Zahl oder Formel): die Seite kommt von der Maus, ein Minus dreht sie um
@@ -14040,9 +14374,16 @@ const Sketch = (() => {
       if (src) {
         for (const p of entPts(src)) lineObj(p, acc, 3.4, { order: 26 });
         if (S.offUV) {
-          const sd = offsetSigned(off, S.offUV), calc = offsetCalc(off, sd);
-          if (calc.ok) { for (const it of calc.items) for (const p of entPts(it.ent)) lineObj(p, acc, 2.2, { dashed: true, order: 27 }); label(fmt(Math.abs(sd), 2) + ' mm', S.offUV); }
-          else if (Math.abs(sd) > 0.01) label(calc.why, S.offUV, 'dimlabel live bad');
+          const sd = offsetSigned(off, S.offUV), plan = offsetPlan(off, sd, Math.abs(sd));
+          if (plan.ok) {
+            for (const cp of plan.copies) for (const it of cp.items) for (const p of entPts(it.ent)) lineObj(p, acc, 2.2, { dashed: true, order: 27 });
+            const O = S.off || {};
+            const tags = [fmt(Math.abs(sd), 2) + ' mm'];
+            if ((O.count || 1) > 1) tags.push(Math.round(O.count) + '×');
+            if (O.both) tags.push('beidseitig');
+            if (O.corners === 'round') tags.push('rund');
+            label(tags.join(' · '), S.offUV);
+          } else if (Math.abs(sd) > 0.01) label(plan.why, S.offUV, 'dimlabel live bad');
         }
       }
     }
@@ -14482,6 +14823,16 @@ const Sketch = (() => {
         const fw = h('div', { class: 'fields' });
         fw.append(UI.numField({ id: 'wall-t', label: 'Wandstärke', value: S.wallT, unit: 'mm', expr: false, min: 0.1, onCommit: (v) => { if (v > 0) S.wallT = v; } }));
         w.append(fw);
+      }
+      if (S.tool === 'offset') {
+        const O = S.off;
+        const fo = h('div', { class: 'fields' });
+        fo.append(UI.numField({ id: 'off-n', label: 'Anzahl', value: O.count, unit: '', expr: false, min: 1, int: true, onCommit: (v) => { O.count = clamp(Math.round(v), 1, 20); render(); } }));
+        fo.append(UI.selectField({ id: 'off-corner', label: 'Ecken', value: O.corners, options: [['sharp', 'Spitz'], ['round', 'Rund']], onChange: (v) => { O.corners = v; const el = $('#off-corner'); if (el) el.blur(); render(); } }));
+        w.append(fo);
+        const bt = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'off-both', checked: !!O.both }), 'Beidseitig (innen und außen)');
+        bt.querySelector('input').onchange = (e) => { O.both = e.target.checked; e.target.blur(); render(); };
+        w.append(bt);
       }
       if (S.tool === 'tpl') {
         const T = S.tpl;
@@ -15367,9 +15718,25 @@ const Measure = (() => {
     Viewer.canvas.addEventListener('pointerup', (e) => { if (on && d0 && Math.hypot(e.clientX - d0.x, e.clientY - d0.y) < 5) onDown(e); d0 = null; });
     Viewer.on('camera', place);
     // Lage unter der Maus in der Statusleiste (BE-17): im Modell X/Y/Z auf dem Körper oder dem Boden, in der Skizze X/Y der Skizze
-    let pend = null, lastT = 0;
-    Viewer.canvas.addEventListener('pointermove', (e) => { if (pend || e.buttons) return; const now = performance.now(); if (now - lastT < 50) return; lastT = now; pend = requestAnimationFrame(() => { pend = null; showCoords(e.clientX, e.clientY); }); });
-    Viewer.canvas.addEventListener('pointerleave', () => { const el = $('#coords'); if (el) el.textContent = ''; });
+    let timer = null, lastT = 0, lastPos = null;
+    const flushCoords = () => {
+      timer = null;
+      if (!lastPos) return;
+      const p = lastPos; lastPos = null;
+      lastT = performance.now();
+      showCoords(p[0], p[1]);
+    };
+    Viewer.canvas.addEventListener('pointermove', (e) => {
+      if (e.buttons) { lastPos = null; return; }
+      lastPos = [e.clientX, e.clientY];
+      if (timer) return;
+      timer = setTimeout(flushCoords, Math.max(0, 50 - (performance.now() - lastT)));
+    });
+    Viewer.canvas.addEventListener('pointerleave', () => {
+      lastPos = null;
+      if (timer) { clearTimeout(timer); timer = null; }
+      const el = $('#coords'); if (el) el.textContent = '';
+    });
   }
   let coordsNow = null;
   function showCoords(cx, cy) {
@@ -15569,7 +15936,7 @@ const Commands = (() => {
     for (const d of LIB.filter((x) => !x.buy && !x.drone)) add('lib-' + d.lib, d.label + ' hinzufügen', d.icon, 'bauteil ' + d.desc, () => Actions.addPart(d, libDefaults(d)), { group: 'Bauteile' });
     add('sketch', 'Skizze zeichnen', 'sketch', 'zeichnen 2d profil umriss extrudieren', () => Sketch.chooseAndStart(), { group: 'Werkzeuge', kbd: 'S' });
     add('sketch-check', 'Skizze prüfen (Lücken und doppelte Linien)', 'target', 'skizze prüfen pruefer lücke lücken offen doppelt reparieren fehler', () => { if (Sketch.active) Sketch.check(); else UI.toast('Öffne zuerst eine Skizze, um sie zu prüfen.', { icon: 'info' }); }, { group: 'Werkzeuge' });
-    add('hole-wizard', 'Bohrungs-Assistent', 'holeWizard', 'bohrung loch schraube gewinde senkung einsatz mutter', () => Place.holeWizard($('#t-parts')), { group: 'Bearbeiten' });
+    add('hole-wizard', 'Bohrungs-Assistent', 'holeWizard', 'bohrung loch schraube gewinde senkung einsatz mutter sackloch bohrspitze passbohrung h7 zentrierbohrung', () => Place.holeWizard($('#t-parts')), { group: 'Bearbeiten' });
     add('pattern-rect', 'Rechteckmuster', 'patternRect', 'muster reihe raster kopien vervielfachen', () => Features.pattern('rect'), { group: 'Bearbeiten' });
     add('pattern-circ', 'Kreismuster', 'patternCirc', 'muster kreis rund kopien löcher', () => Features.pattern('circ'), { group: 'Bearbeiten' });
     add('pattern-path', 'Muster entlang Kurve', 'patternPath', 'muster kurve pfad bogen entlang linie spline kette kopien löcher zähne', () => Features.patternPath(), { group: 'Bearbeiten' });
@@ -19485,7 +19852,7 @@ const Variants = (() => {
 // die sich mit einem Klick als markierte Schritte umsetzen lassen.
 
 // Kurztexte je Schritt-Art: was, wozu (bei Drohnen), achtung (Entwurf Gemini, Prompt H; gegen Tracery geprüft)
-const STEP_TEXT = {"_hinweis":"Kurztexte je Schritt-Art: was, wozu, achtung – allgemein für CAD (überarbeitet für A-001).","box":{"was":"Erstellt einen einfachen Kasten mit frei wählbarer Länge, Breite und Höhe.","wozu":"Super als Basis für eine Grundplatte, ein Gehäuse oder einen Winkel.","achtung":"Mach Platten und Wände nicht zu dünn, sonst brechen sie unter Belastung."},"cylinder":{"was":"Erzeugt eine runde Säule mit festem Durchmesser und beliebiger Höhe.","wozu":"Ideal für Bolzen, Abstandshalter, Wellen oder runde Füße.","achtung":"Als Loch umgeschaltet wird aus dem Zylinder im Handumdrehen eine runde Bohrung."},"tube":{"was":"Erstellt ein rundes Rohr, das innen komplett hohl ist.","wozu":"Perfekt für Buchsen, Abstandshülsen oder Schutzröhrchen für Kabel.","achtung":"Wähle Außendurchmesser und Wand so, dass innen Kabel oder Welle samt Spiel durchpassen."},"sphere":{"was":"Formt einen komplett runden Ball in deiner gewünschten Größe.","wozu":"Nützlich für runde Knöpfe, Füße oder Kugelgelenke.","achtung":"Eine Kugel liegt nur auf einem Punkt auf – schneide sie zum 3D-Drucken unten etwas flach ab."},"hemisphere":{"was":"Erstellt eine halbe Kugel mit einer flachen Unterseite.","wozu":"Gut für Kuppeln, Abdeckkappen oder abgerundete Endstücke.","achtung":"Höhle sie mit „Wandstärke“ aus, wenn sie als hohle Kappe dienen soll."},"cone":{"was":"Baut einen Kegel, der unten rund ist und nach oben spitz oder flach zuläuft.","wozu":"Gut für Trichter, Düsen, Übergänge oder Zentrierhilfen.","achtung":"Ganz spitze Enden brechen leicht ab – gib oben lieber einen kleinen Durchmesser an."},"pyramid":{"was":"Erzeugt einen eckigen Körper, der nach oben hin spitz zusammenläuft.","wozu":"Praktisch für abgeschrägte Kappen, Füße oder Design-Elemente.","achtung":"Achte darauf, dass spitze Ecken beim Drucken oder Fräsen stabil genug bleiben."},"torus":{"was":"Formt einen runden Ring, der aussieht wie ein kleiner Donut oder Reifen.","wozu":"Perfekt für Dichtungsringe, Griffringe oder runde Ösen.","achtung":"Für einen guten Halt am Nachbarteil schiebe den Ring ein kleines Stück in den anderen Körper."},"prism":{"was":"Erstellt eine Säule mit mehreren Ecken, zum Beispiel ein Sechskant.","wozu":"Ideal für sechseckige Abstandshalter, Wellen oder Griffe, die sich mit einem Schlüssel festhalten lassen.","achtung":"Der Durchmesser zählt hier von Ecke zu Ecke, nicht von Fläche zu Fläche – wichtig fürs Schlüsselmaß."},"wedge":{"was":"Baut einen schrägen Keil wie eine kleine Rampe.","wozu":"Gut als schräge Auflage, Versteifungsrippe oder geneigte Halterung.","achtung":"Drehe den Keil bei Bedarf in 90°-Schritten, damit die Schräge in die gewünschte Richtung zeigt."},"extrude":{"was":"Zieht eine flache 2D-Zeichnung in die Höhe, sodass ein 3D-Körper entsteht.","wozu":"Damit machst du aus einer beliebigen Skizze eine Platte, ein Profil oder ein Gehäuse.","achtung":"Deine Skizze muss komplett geschlossen sein, sonst kann sie nicht hochgezogen werden."},"revolve":{"was":"Dreht ein flaches Profil im Kreis um eine Achse und formt so einen runden Körper.","wozu":"Super für Räder, Flaschen, Hülsen, Drehknöpfe oder runde Kappen.","achtung":"Die Zeichnung darf die Drehachse nicht kreuzen, sonst überschneidet sich das Bauteil."},"group":{"was":"Verschmilzt mehrere Einzelteile und zieht alle Loch-Körper davon ab.","wozu":"Verbindet mehrere Grundformen und Bohrungen zu einem fertigen Bauteil.","achtung":"Löcher in einer Gruppe schneiden nur Körper derselben Gruppe – zieh fehlende Teile im Verlauf hinein."},"hole":{"was":"Verwandelt einen Körper in ein Werkzeug zum Ausschneiden – du siehst ihn gestreift.","wozu":"Schneidet zum Beispiel Ausschnitte, Fenster oder Taschen in einen Körper.","achtung":"Ein Loch schneidet nur, was es berührt: Lass es oben und unten etwas überstehen, damit es sauber durchgeht."},"pattern_rect":{"was":"Kopiert ein Teil mehrfach in geraden Reihen und Spalten nebeneinander.","wozu":"Erstellt blitzschnell Lüftungsschlitze, Lochraster oder gleichmäßige Rippen.","achtung":"Lass genug Material zwischen den Kopien stehen, sonst bricht das Gitter leicht durch."},"pattern_circ":{"was":"Verteilt Kopien eines Bauteils gleichmäßig im Kreis um eine Achse.","wozu":"Perfekt für Lochkreise, Speichen oder sternförmige Halterungen.","achtung":"Leg Mittelpunkt und Drehachse genau fest, sonst sitzen die Kopien schief."},"pattern_path":{"was":"Setzt Kopien eines Teils der Reihe nach entlang einer gezeichneten Kurve – Linie, Bogen, Spline oder Kreis.","wozu":"Löcher, Rippen oder Zähne folgen sauber einer beliebigen Bahn.","achtung":"Mit Ausrichtung „Mit der Kurve“ drehen sich die Kopien mit. Für runde Löcher ist das egal – für Rippen und Zähne nicht."},"mirror":{"was":"Erstellt eine spiegelverkehrte Kopie deines Bauteils auf der gegenüberliegenden Seite.","wozu":"Baue nur eine Hälfte eines symmetrischen Teils und spiegle sie auf die andere Seite.","achtung":"Wähle die richtige Spiegelebene, sonst landet die Kopie am falschen Ort."},"split":{"was":"Schneidet einen Körper an einer flachen Ebene in zwei getrennte Teile durch.","wozu":"Teilt ein großes Gehäuse in Ober- und Unterteil, damit du es einfacher drucken oder fertigen kannst.","achtung":"Überlege dir vorher, wie du die geteilten Hälften später wieder verbindest."},"intersect":{"was":"Behält nur genau den Bereich übrig, in dem sich zwei Körper überschneiden.","wozu":"Formt komplexe Körper, indem du zwei Profile aus verschiedenen Richtungen kombinierst.","achtung":"Berühren sich die beiden Ausgangskörper gar nicht, bleibt am Ende nichts übrig."},"shell":{"was":"Höhlt einen massiven Körper von innen aus und lässt nur eine bestimmte Wandstärke stehen.","wozu":"Macht aus einem massiven Klotz im Handumdrehen ein hohles Gehäuse oder eine Schale.","achtung":"Prüf die Wand mit „Schwachstellen suchen“ oder „Wandstärke“ – zu dünne Wände brechen leicht."},"fillet":{"was":"Rundet scharfe Kanten weich ab, damit Übergänge fließend werden.","wozu":"Macht Innenecken stabiler gegen Brüche und sorgt für angenehme, glatte Außenkanten.","achtung":"Rundest du die Kante an einer dünnen Platte zu stark ab, entsteht ein Fehler."},"chamfer":{"was":"Schneidet eine scharfe Kante schräg ab, sodass eine kleine flache Schräge entsteht.","wozu":"Entschärft Kanten an Platten und Gehäusen oder erleichtert das Einstecken von Teilen.","achtung":"Mach die Schräge an dünnen Teilen nur klein, sonst bleibt keine gerade Fläche übrig."},"screwHole":{"was":"Bohrt ein rundes Loch, das genau für eine bestimmte Schraubengröße wie M2 oder M3 passt.","wozu":"Ideal, um Teile sauber mit Senk- oder Zylinderkopfschrauben zu verschrauben.","achtung":"Nimm die Passung „Mittel“: Das Loch ist dann etwas größer als die Schraube. „Eng“ klemmt leicht."},"nutTrap":{"was":"Schneidet eine sechseckige Tasche aus, in der eine Mutter festsitzt.","wozu":"Hält Muttern im Bauteil fest, damit du beim Schrauben keinen Schlüssel zum Gegenhalten brauchst.","achtung":"Mach die Tasche nicht zu weit, sonst dreht die Mutter beim Festziehen durch."},"insert":{"was":"Erstellt ein spezielles Loch, in das man ein Messing-Gewinde mit dem Lötkolben einschmilzt.","wozu":"Gibt dir sehr stabile Metallgewinde direkt in deinen 3D-gedruckten Kunststoffteilen.","achtung":"Das Loch muss etwas kleiner als der Einsatz sein, damit das Plastik ihn gut festhält."},"slotHole":{"was":"Bohrt ein längliches Loch, in dem eine Schraube hin und her geschoben werden kann.","wozu":"Super für verstellbare Halterungen und Anschläge.","achtung":"Zieh die Schrauben im Langloch später gut fest und nutze Unterlegscheiben gegen Verrutschen."},"holePattern":{"was":"Erzeugt vier passende Schraubenlöcher im Quadrat oder Lochkreis.","wozu":"Bohrt mit einem Klick ein fertiges Vier-Loch-Muster mit optionalem Mittelloch.","achtung":"Prüfe vorab genau, ob Lochabstand und Schraubengröße zu deinem Gegenstück passen."},"zipTie":{"was":"Schneidet zwei Schlitze für einen Kabelbinder in dein Bauteil.","wozu":"Ideal, um Kabel, Schläuche oder kleine Module sicher an einer Platte festzumachen.","achtung":"Setze Schlitze nicht zu nah an den Rand der Platte, sonst reißt der Steg aus."},"snapHook":{"was":"Baut einen kleinen federnden Haken, der an einer Kante einrasten kann.","wozu":"Perfekt für Deckel, Gehäuse oder Klappen, die du ohne Werkzeug öffnen willst.","achtung":"Drucke den Haken liegend, damit die Schichten längs laufen – sonst bricht er beim ersten Biegen ab."},"hinge":{"was":"Erzeugt ein bewegliches Gelenk, mit dem du zwei Bauteile klappbar verbindest.","wozu":"Nützlich für aufklappbare Deckel, Boxen oder bewegliche Halterungen.","achtung":"Lass im Gelenk etwas Spiel (Einstellung „Spiel“), sonst verschmilzt es beim Drucken."},"gear":{"was":"Erstellt ein rundes Rad mit Zähnen am Rand, das in ein anderes Zahnrad greift.","wozu":"Brauchst du für Getriebe, Antriebe und mechanische Bewegungen.","achtung":"Beide Zahnräder brauchen exakt die gleiche Zahngröße (Modul), sonst klemmen sie sofort."},"buy":{"was":"Fügt ein fertiges Teil mit festem Gewicht aus dem Datenblatt ein.","wozu":"Zeigt dir sofort, ob alle Bauteile zusammenpassen und wo der Schwerpunkt liegt.","achtung":"Beim DXF-Export bleiben Kaufteile von selbst weg; für STL blende sie vor dem Export aus."},"aeroBody":{"was":"Erstellt einen hohlen Körper in Tropfenform: runde Nase, gerades Mittelteil und ein langes Heck, das spitz ausläuft.","wozu":"Ergibt eine strömungsgünstige Verkleidung mit rundem Querschnitt.","achtung":"Achte auf eine ausreichende Wandstärke, wenn das Teil 3D-gedruckt wird."}};
+const STEP_TEXT = {"_hinweis":"Kurztexte je Schritt-Art: was, wozu, achtung – allgemein für CAD (überarbeitet für A-001).","box":{"was":"Erstellt einen einfachen Kasten mit frei wählbarer Länge, Breite und Höhe.","wozu":"Super als Basis für eine Grundplatte, ein Gehäuse oder einen Winkel.","achtung":"Mach Platten und Wände nicht zu dünn, sonst brechen sie unter Belastung."},"cylinder":{"was":"Erzeugt eine runde Säule mit festem Durchmesser und beliebiger Höhe.","wozu":"Ideal für Bolzen, Abstandshalter, Wellen oder runde Füße.","achtung":"Als Loch umgeschaltet wird aus dem Zylinder im Handumdrehen eine runde Bohrung."},"tube":{"was":"Erstellt ein rundes Rohr, das innen komplett hohl ist.","wozu":"Perfekt für Buchsen, Abstandshülsen oder Schutzröhrchen für Kabel.","achtung":"Wähle Außendurchmesser und Wand so, dass innen Kabel oder Welle samt Spiel durchpassen."},"sphere":{"was":"Formt einen komplett runden Ball in deiner gewünschten Größe.","wozu":"Nützlich für runde Knöpfe, Füße oder Kugelgelenke.","achtung":"Eine Kugel liegt nur auf einem Punkt auf – schneide sie zum 3D-Drucken unten etwas flach ab."},"hemisphere":{"was":"Erstellt eine halbe Kugel mit einer flachen Unterseite.","wozu":"Gut für Kuppeln, Abdeckkappen oder abgerundete Endstücke.","achtung":"Höhle sie mit „Wandstärke“ aus, wenn sie als hohle Kappe dienen soll."},"cone":{"was":"Baut einen Kegel, der unten rund ist und nach oben spitz oder flach zuläuft.","wozu":"Gut für Trichter, Düsen, Übergänge oder Zentrierhilfen.","achtung":"Ganz spitze Enden brechen leicht ab – gib oben lieber einen kleinen Durchmesser an."},"pyramid":{"was":"Erzeugt einen eckigen Körper, der nach oben hin spitz zusammenläuft.","wozu":"Praktisch für abgeschrägte Kappen, Füße oder Design-Elemente.","achtung":"Achte darauf, dass spitze Ecken beim Drucken oder Fräsen stabil genug bleiben."},"torus":{"was":"Formt einen runden Ring, der aussieht wie ein kleiner Donut oder Reifen.","wozu":"Perfekt für Dichtungsringe, Griffringe oder runde Ösen.","achtung":"Für einen guten Halt am Nachbarteil schiebe den Ring ein kleines Stück in den anderen Körper."},"prism":{"was":"Erstellt eine Säule mit mehreren Ecken, zum Beispiel ein Sechskant.","wozu":"Ideal für sechseckige Abstandshalter, Wellen oder Griffe, die sich mit einem Schlüssel festhalten lassen.","achtung":"Der Durchmesser zählt hier von Ecke zu Ecke, nicht von Fläche zu Fläche – wichtig fürs Schlüsselmaß."},"wedge":{"was":"Baut einen schrägen Keil wie eine kleine Rampe.","wozu":"Gut als schräge Auflage, Versteifungsrippe oder geneigte Halterung.","achtung":"Drehe den Keil bei Bedarf in 90°-Schritten, damit die Schräge in die gewünschte Richtung zeigt."},"extrude":{"was":"Zieht eine flache 2D-Zeichnung in die Höhe, sodass ein 3D-Körper entsteht.","wozu":"Damit machst du aus einer beliebigen Skizze eine Platte, ein Profil oder ein Gehäuse.","achtung":"Deine Skizze muss komplett geschlossen sein, sonst kann sie nicht hochgezogen werden."},"revolve":{"was":"Dreht ein flaches Profil im Kreis um eine Achse und formt so einen runden Körper.","wozu":"Super für Räder, Flaschen, Hülsen, Drehknöpfe oder runde Kappen.","achtung":"Die Zeichnung darf die Drehachse nicht kreuzen, sonst überschneidet sich das Bauteil."},"group":{"was":"Verschmilzt mehrere Einzelteile und zieht alle Loch-Körper davon ab.","wozu":"Verbindet mehrere Grundformen und Bohrungen zu einem fertigen Bauteil.","achtung":"Löcher in einer Gruppe schneiden nur Körper derselben Gruppe – zieh fehlende Teile im Verlauf hinein."},"hole":{"was":"Verwandelt einen Körper in ein Werkzeug zum Ausschneiden – du siehst ihn gestreift.","wozu":"Schneidet zum Beispiel Ausschnitte, Fenster oder Taschen in einen Körper.","achtung":"Ein Loch schneidet nur, was es berührt: Lass es oben und unten etwas überstehen, damit es sauber durchgeht."},"pattern_rect":{"was":"Kopiert ein Teil mehrfach in geraden Reihen und Spalten nebeneinander.","wozu":"Erstellt blitzschnell Lüftungsschlitze, Lochraster oder gleichmäßige Rippen.","achtung":"Lass genug Material zwischen den Kopien stehen, sonst bricht das Gitter leicht durch."},"pattern_circ":{"was":"Verteilt Kopien eines Bauteils gleichmäßig im Kreis um eine Achse.","wozu":"Perfekt für Lochkreise, Speichen oder sternförmige Halterungen.","achtung":"Leg Mittelpunkt und Drehachse genau fest, sonst sitzen die Kopien schief."},"pattern_path":{"was":"Setzt Kopien eines Teils der Reihe nach entlang einer gezeichneten Kurve – Linie, Bogen, Spline oder Kreis.","wozu":"Löcher, Rippen oder Zähne folgen sauber einer beliebigen Bahn.","achtung":"Mit Ausrichtung „Mit der Kurve“ drehen sich die Kopien mit. Für runde Löcher ist das egal – für Rippen und Zähne nicht."},"mirror":{"was":"Erstellt eine spiegelverkehrte Kopie deines Bauteils auf der gegenüberliegenden Seite.","wozu":"Baue nur eine Hälfte eines symmetrischen Teils und spiegle sie auf die andere Seite.","achtung":"Wähle die richtige Spiegelebene, sonst landet die Kopie am falschen Ort."},"split":{"was":"Schneidet einen Körper an einer flachen Ebene in zwei getrennte Teile durch.","wozu":"Teilt ein großes Gehäuse in Ober- und Unterteil, damit du es einfacher drucken oder fertigen kannst.","achtung":"Überlege dir vorher, wie du die geteilten Hälften später wieder verbindest."},"intersect":{"was":"Behält nur genau den Bereich übrig, in dem sich zwei Körper überschneiden.","wozu":"Formt komplexe Körper, indem du zwei Profile aus verschiedenen Richtungen kombinierst.","achtung":"Berühren sich die beiden Ausgangskörper gar nicht, bleibt am Ende nichts übrig."},"shell":{"was":"Höhlt einen massiven Körper von innen aus und lässt nur eine bestimmte Wandstärke stehen.","wozu":"Macht aus einem massiven Klotz im Handumdrehen ein hohles Gehäuse oder eine Schale.","achtung":"Prüf die Wand mit „Schwachstellen suchen“ oder „Wandstärke“ – zu dünne Wände brechen leicht."},"fillet":{"was":"Rundet scharfe Kanten weich ab, damit Übergänge fließend werden.","wozu":"Macht Innenecken stabiler gegen Brüche und sorgt für angenehme, glatte Außenkanten.","achtung":"Rundest du die Kante an einer dünnen Platte zu stark ab, entsteht ein Fehler."},"chamfer":{"was":"Schneidet eine scharfe Kante schräg ab, sodass eine kleine flache Schräge entsteht.","wozu":"Entschärft Kanten an Platten und Gehäusen oder erleichtert das Einstecken von Teilen.","achtung":"Mach die Schräge an dünnen Teilen nur klein, sonst bleibt keine gerade Fläche übrig."},"screwHole":{"was":"Bohrt ein rundes Loch, das genau für eine bestimmte Schraubengröße wie M2 oder M3 passt.","wozu":"Ideal, um Teile sauber mit Senk- oder Zylinderkopfschrauben zu verschrauben.","achtung":"Nimm die Passung „Mittel“: Das Loch ist dann etwas größer als die Schraube. „Eng“ klemmt leicht."},"nutTrap":{"was":"Schneidet eine sechseckige Tasche aus, in der eine Mutter festsitzt.","wozu":"Hält Muttern im Bauteil fest, damit du beim Schrauben keinen Schlüssel zum Gegenhalten brauchst.","achtung":"Mach die Tasche nicht zu weit, sonst dreht die Mutter beim Festziehen durch."},"insert":{"was":"Erstellt ein spezielles Loch, in das man ein Messing-Gewinde mit dem Lötkolben einschmilzt.","wozu":"Gibt dir sehr stabile Metallgewinde direkt in deinen 3D-gedruckten Kunststoffteilen.","achtung":"Das Loch muss etwas kleiner als der Einsatz sein, damit das Plastik ihn gut festhält."},"blindHole":{"was":"Bohrt ein Sackloch bis zu einer festen Tiefe, mit spitzem Boden wie von einem 118°-Spiralbohrer.","wozu":"Ideal für Bohrungen, die nicht auf der Rückseite wieder heraustreten dürfen.","achtung":"Die Gesamttiefe ist die Zylindertiefe plus die Höhe der Bohrspitze – lass genug Material bis zur Rückseite."},"fitHole":{"was":"Bohrt ein rundes Loch genau mit dem gewählten Nennmaß für eine H7-Passung (ISO 286).","wozu":"Für Passstifte, Wellen und Lager, die spielfrei oder genau geführt sitzen sollen.","achtung":"Im 3D-Modell steht das genaue Nennmaß – beim Fräsen oder Drehen wird danach mit der Reibahle auf H7 gerieben."},"centerHole":{"was":"Erzeugt eine genormte Zentrierbohrung nach DIN 332 Form A mit 60°-Kegel und kleiner Führungsbohrung.","wozu":"Nimmt die Drehbank-Spitze auf oder dient beim Bohren als genaue Anbohrung.","achtung":"Wähle die Größe passend zum Wellendurchmesser – die Maße sind fest durch DIN 332 vorgegeben."},"slotHole":{"was":"Bohrt ein längliches Loch, in dem eine Schraube hin und her geschoben werden kann.","wozu":"Super für verstellbare Halterungen und Anschläge.","achtung":"Zieh die Schrauben im Langloch später gut fest und nutze Unterlegscheiben gegen Verrutschen."},"holePattern":{"was":"Erzeugt vier passende Schraubenlöcher im Quadrat oder Lochkreis.","wozu":"Bohrt mit einem Klick ein fertiges Vier-Loch-Muster mit optionalem Mittelloch.","achtung":"Prüfe vorab genau, ob Lochabstand und Schraubengröße zu deinem Gegenstück passen."},"zipTie":{"was":"Schneidet zwei Schlitze für einen Kabelbinder in dein Bauteil.","wozu":"Ideal, um Kabel, Schläuche oder kleine Module sicher an einer Platte festzumachen.","achtung":"Setze Schlitze nicht zu nah an den Rand der Platte, sonst reißt der Steg aus."},"snapHook":{"was":"Baut einen kleinen federnden Haken, der an einer Kante einrasten kann.","wozu":"Perfekt für Deckel, Gehäuse oder Klappen, die du ohne Werkzeug öffnen willst.","achtung":"Drucke den Haken liegend, damit die Schichten längs laufen – sonst bricht er beim ersten Biegen ab."},"hinge":{"was":"Erzeugt ein bewegliches Gelenk, mit dem du zwei Bauteile klappbar verbindest.","wozu":"Nützlich für aufklappbare Deckel, Boxen oder bewegliche Halterungen.","achtung":"Lass im Gelenk etwas Spiel (Einstellung „Spiel“), sonst verschmilzt es beim Drucken."},"gear":{"was":"Erstellt ein rundes Rad mit Zähnen am Rand, das in ein anderes Zahnrad greift.","wozu":"Brauchst du für Getriebe, Antriebe und mechanische Bewegungen.","achtung":"Beide Zahnräder brauchen exakt die gleiche Zahngröße (Modul), sonst klemmen sie sofort."},"buy":{"was":"Fügt ein fertiges Teil mit festem Gewicht aus dem Datenblatt ein.","wozu":"Zeigt dir sofort, ob alle Bauteile zusammenpassen und wo der Schwerpunkt liegt.","achtung":"Beim DXF-Export bleiben Kaufteile von selbst weg; für STL blende sie vor dem Export aus."},"aeroBody":{"was":"Erstellt einen hohlen Körper in Tropfenform: runde Nase, gerades Mittelteil und ein langes Heck, das spitz ausläuft.","wozu":"Ergibt eine strömungsgünstige Verkleidung mit rundem Querschnitt.","achtung":"Achte auf eine ausreichende Wandstärke, wenn das Teil 3D-gedruckt wird."}};
 
 const Explain = (() => {
   function keyOf(it) {

@@ -130,6 +130,21 @@
     "wozu": "Gibt dir sehr stabile Metallgewinde direkt in deinen 3D-gedruckten Kunststoffteilen.",
     "achtung": "Das Loch muss etwas kleiner als der Einsatz sein, damit das Plastik ihn gut festhält."
   },
+  "blindHole": {
+    "was": "Bohrt ein Sackloch bis zu einer festen Tiefe, mit spitzem Boden wie von einem 118°-Spiralbohrer.",
+    "wozu": "Ideal für Bohrungen, die nicht auf der Rückseite wieder heraustreten dürfen.",
+    "achtung": "Die Gesamttiefe ist die Zylindertiefe plus die Höhe der Bohrspitze – lass genug Material bis zur Rückseite."
+  },
+  "fitHole": {
+    "was": "Bohrt ein rundes Loch genau mit dem gewählten Nennmaß für eine H7-Passung (ISO 286).",
+    "wozu": "Für Passstifte, Wellen und Lager, die spielfrei oder genau geführt sitzen sollen.",
+    "achtung": "Im 3D-Modell steht das genaue Nennmaß – beim Fräsen oder Drehen wird danach mit der Reibahle auf H7 gerieben."
+  },
+  "centerHole": {
+    "was": "Erzeugt eine genormte Zentrierbohrung nach DIN 332 Form A mit 60°-Kegel und kleiner Führungsbohrung.",
+    "wozu": "Nimmt die Drehbank-Spitze auf oder dient beim Bohren als genaue Anbohrung.",
+    "achtung": "Wähle die Größe passend zum Wellendurchmesser – die Maße sind fest durch DIN 332 vorgegeben."
+  },
   "slotHole": {
     "was": "Bohrt ein längliches Loch, in dem eine Schraube hin und her geschoben werden kann.",
     "wozu": "Super für verstellbare Halterungen und Anschläge.",
