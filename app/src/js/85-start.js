@@ -193,19 +193,226 @@ const Start = (() => {
     hide();
     if (!silent) UI.toast('Neues Projekt. Fang mit einem Körper an – oder beschreib unten, was du bauen willst.', { icon: 'newfile', ms: 4500 });
   }
-  // STEP oder STL als neues Teil ins Projekt holen
+  function bytesToBase64(buf) {
+    let bin = ''; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
+    return btoa(bin);
+  }
+  // STEP, STL oder 3MF als neues Teil (oder mehrere Teile) ins Projekt holen
   async function importCAD(f) {
+    if (/\.3mf$/i.test(f.name)) return import3MF(f);
     const fmt = /\.stl$/i.test(f.name) ? 'stl' : 'step';
     if (f.size > 25e6) { UI.toast('Die Datei ist zu groß (über 25 MB).', { kind: 'bad' }); return; }
     if (el) newProject(true);
-    const buf = new Uint8Array(await f.arrayBuffer());
-    let bin = ''; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
-    const data = btoa(bin);
+    const data = bytesToBase64(new Uint8Array(await f.arrayBuffer()));
     const it = Model.newItem('import', { fmt, data, file: f.name, scale: 1 }, { name: f.name.replace(/\.(step|stp|stl)$/i, '') });
     App.change('Importiert', (doc) => { doc.items.push(it); });
     App.select([it.id]);
     UI.toast(`„${f.name}“ importiert.` + (f.size > 3e6 ? ' Die Datei ist groß – speichere das Projekt als Datei, der Browser-Speicher reicht dafür evtl. nicht.' : ' Mit „Auf die XY-Ebene setzen“ legst du es auf den Boden.'), { icon: 'folder', ms: 5000 });
     setTimeout(() => { const b = Actions.worldBox(it.id); if (b && !b.isEmpty()) Viewer.fit([it.id]); }, 1500);
+  }
+  // ---------- 3MF lesen: ZIP mit 3D/3dmodel.model, mehrere Teile mit Namen, Farben, Einheiten und Transform-Matrizen ----------
+  async function parse3MF(buf) {
+    const files = await Zip.read(buf, (n) => /\.rels$|\.model$/i.test(n));
+    const normPath = (p) => {
+      const segs = [];
+      for (const s of String(p || '').replace(/\\/g, '/').replace(/^\/+/, '').split('/')) {
+        if (!s || s === '.') continue;
+        if (s === '..') segs.pop();
+        else segs.push(s);
+      }
+      return segs.join('/');
+    };
+    const findEntry = (p) => {
+      const np = normPath(p);
+      if (files.has(np)) return { path: np, data: files.get(np) };
+      const low = np.toLowerCase();
+      for (const [k, v] of files) if (k.toLowerCase() === low) return { path: k, data: v };
+      return null;
+    };
+    const resolvePath = (base, rel) => {
+      if (!rel) return '';
+      if (rel.startsWith('/')) return normPath(rel);
+      const i = base.lastIndexOf('/');
+      return normPath((i >= 0 ? base.slice(0, i + 1) : '') + rel);
+    };
+    const kids = (node, name) => [...((node && node.children) || [])].filter((c) => c.localName === name);
+    const attr = (node, name) => {
+      if (!node) return null;
+      const v = node.getAttribute(name);
+      if (v != null) return v;
+      for (const a of node.attributes || []) if (a.localName === name) return a.value;
+      return null;
+    };
+    const normHex = (s) => { const m = /^\s*#?([0-9a-f]{6})(?:[0-9a-f]{2})?\s*$/i.exec(s || ''); return m ? '#' + m[1].toLowerCase() : null; };
+    const dec = new TextDecoder('utf-8'), parser = new DOMParser();
+    const parseXml = (bytes) => parser.parseFromString(dec.decode(bytes).replace(/^\uFEFF/, ''), 'application/xml');
+    let mainPath = null;
+    const rels = findEntry('_rels/.rels');
+    if (rels) {
+      const rdoc = parseXml(rels.data);
+      for (const r of kids(rdoc.documentElement, 'Relationship')) {
+        if (/\/3dmodel$/i.test(r.getAttribute('Type') || '')) { mainPath = normPath(r.getAttribute('Target')); break; }
+      }
+    }
+    if (!mainPath || !findEntry(mainPath)) mainPath = findEntry('3D/3dmodel.model') ? '3D/3dmodel.model' : [...files.keys()].find((k) => /\.model$/i.test(k));
+    if (!mainPath || !findEntry(mainPath)) throw new Error('In der 3MF-Datei fehlt das 3D-Modell (3D/3dmodel.model).');
+
+    const UNITS = { micron: 0.001, millimeter: 1, centimeter: 10, inch: 25.4, foot: 304.8, meter: 1000 };
+    const ID = [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0];
+    const parseMat = (str, u) => {
+      if (!str || !str.trim()) return ID;
+      const a = str.trim().split(/\s+/).map(Number);
+      if (a.length < 12 || a.some((x) => !Number.isFinite(x))) return ID;
+      const m = a.slice(0, 12); m[9] *= u; m[10] *= u; m[11] *= u; return m;
+    };
+    const mulMat = (A, B) => {
+      const R = new Array(12);
+      for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) R[r * 3 + c] = A[r * 3] * B[c] + A[r * 3 + 1] * B[3 + c] + A[r * 3 + 2] * B[6 + c];
+      for (let c = 0; c < 3; c++) R[9 + c] = A[9] * B[c] + A[10] * B[3 + c] + A[11] * B[6 + c] + B[9 + c];
+      return R;
+    };
+    const det3 = (M) => M[0] * (M[4] * M[8] - M[5] * M[7]) - M[1] * (M[3] * M[8] - M[5] * M[6]) + M[2] * (M[3] * M[7] - M[4] * M[6]);
+
+    const modelCache = new Map();
+    const loadModel = (path) => {
+      const hit = findEntry(path); if (!hit) return null;
+      if (modelCache.has(hit.path)) return modelCache.get(hit.path);
+      const doc = parseXml(hit.data), root = doc.documentElement;
+      if (!root || root.localName !== 'model' || doc.querySelector('parsererror')) throw new Error('Die 3MF-Modellbeschreibung (XML) ist beschädigt.');
+      const unitName = (root.getAttribute('unit') || 'millimeter').trim().toLowerCase(), unitScale = UNITS[unitName] || 1;
+      let title = '';
+      for (const md of kids(root, 'metadata')) if ((md.getAttribute('name') || '').toLowerCase() === 'title') title = (md.textContent || '').trim();
+      const palettes = new Map(), objects = new Map();
+      for (const res of kids(root, 'resources')) {
+        for (const bm of kids(res, 'basematerials')) palettes.set(bm.getAttribute('id'), kids(bm, 'base').map((b) => normHex(b.getAttribute('displaycolor'))));
+        for (const cg of kids(res, 'colorgroup')) palettes.set(cg.getAttribute('id'), kids(cg, 'color').map((c) => normHex(c.getAttribute('color'))));
+        for (const ob of kids(res, 'object')) {
+          const id = ob.getAttribute('id'); if (!id) continue;
+          const obj = {
+            id,
+            name: (ob.getAttribute('name') || '').trim(),
+            type: (ob.getAttribute('type') || 'model').trim().toLowerCase(),
+            pid: ob.getAttribute('pid'),
+            pindex: ob.hasAttribute('pindex') ? parseInt(ob.getAttribute('pindex'), 10) : null,
+            mesh: null,
+            components: null,
+          };
+          const me = kids(ob, 'mesh')[0];
+          if (me) {
+            const vEls = kids(kids(me, 'vertices')[0], 'vertex'), tEls = kids(kids(me, 'triangles')[0], 'triangle');
+            const verts = new Float64Array(vEls.length * 3), tris = new Uint32Array(tEls.length * 3);
+            for (let i = 0; i < vEls.length; i++) {
+              const ve = vEls[i];
+              verts[i * 3] = (parseFloat(ve.getAttribute('x')) || 0) * unitScale;
+              verts[i * 3 + 1] = (parseFloat(ve.getAttribute('y')) || 0) * unitScale;
+              verts[i * 3 + 2] = (parseFloat(ve.getAttribute('z')) || 0) * unitScale;
+            }
+            for (let i = 0; i < tEls.length; i++) {
+              const te = tEls[i];
+              tris[i * 3] = parseInt(te.getAttribute('v1'), 10);
+              tris[i * 3 + 1] = parseInt(te.getAttribute('v2'), 10);
+              tris[i * 3 + 2] = parseInt(te.getAttribute('v3'), 10);
+              if (i === 0 && (te.hasAttribute('pid') || te.hasAttribute('p1'))) {
+                obj.triPid = te.getAttribute('pid');
+                obj.triP1 = te.hasAttribute('p1') ? parseInt(te.getAttribute('p1'), 10) : null;
+              }
+            }
+            obj.mesh = { verts, tris };
+          }
+          const ce = kids(ob, 'components')[0];
+          if (ce) {
+            obj.components = kids(ce, 'component').map((c) => ({
+              objectid: c.getAttribute('objectid'),
+              transform: parseMat(c.getAttribute('transform'), unitScale),
+              path: attr(c, 'path'),
+            })).filter((c) => c.objectid);
+          }
+          objects.set(id, obj);
+        }
+      }
+      const buildItems = [];
+      for (const b of kids(root, 'build')) {
+        for (const it of kids(b, 'item')) {
+          const oid = it.getAttribute('objectid');
+          if (oid) buildItems.push({ objectid: oid, transform: parseMat(it.getAttribute('transform'), unitScale), partnumber: (it.getAttribute('partnumber') || '').trim() });
+        }
+      }
+      const m = { path: hit.path, unitName, unitScale, title, palettes, objects, buildItems };
+      modelCache.set(hit.path, m);
+      return m;
+    };
+    const resolveColor = (model, obj) => {
+      if (obj.pid && model.palettes.has(obj.pid)) {
+        const pal = model.palettes.get(obj.pid), idx = Number.isFinite(obj.pindex) ? obj.pindex : 0;
+        if (pal[idx]) return pal[idx];
+      }
+      const tPid = obj.triPid || obj.pid;
+      if (tPid && Number.isFinite(obj.triP1) && model.palettes.has(tPid)) {
+        const c = model.palettes.get(tPid)[obj.triP1];
+        if (c) return c;
+      }
+      return null;
+    };
+    const parts = [];
+    const collect = (modelPath, objId, mat, inheritName, inheritColor, seen) => {
+      const m = loadModel(modelPath); if (!m) return;
+      const obj = m.objects.get(objId); if (!obj || obj.type === 'support' || obj.type === 'other') return;
+      const key = m.path + '#' + objId; if (seen.has(key)) return;
+      const nextSeen = new Set(seen); nextSeen.add(key);
+      const name = obj.name || inheritName, color = resolveColor(m, obj) || inheritColor;
+      if (obj.mesh && obj.mesh.tris.length >= 3 && obj.mesh.verts.length >= 9) {
+        const srcV = obj.mesh.verts, nVert = srcV.length / 3, vertices = new Float32Array(srcV.length);
+        for (let i = 0; i < srcV.length; i += 3) {
+          const x = srcV[i], y = srcV[i + 1], z = srcV[i + 2];
+          vertices[i] = x * mat[0] + y * mat[3] + z * mat[6] + mat[9];
+          vertices[i + 1] = x * mat[1] + y * mat[4] + z * mat[7] + mat[10];
+          vertices[i + 2] = x * mat[2] + y * mat[5] + z * mat[8] + mat[11];
+        }
+        const flip = det3(mat) < 0, srcT = obj.mesh.tris, triOut = [];
+        for (let i = 0; i < srcT.length; i += 3) {
+          const a = srcT[i], b = flip ? srcT[i + 2] : srcT[i + 1], c = flip ? srcT[i + 1] : srcT[i + 2];
+          if (a >= 0 && b >= 0 && c >= 0 && a < nVert && b < nVert && c < nVert && a !== b && b !== c && a !== c) triOut.push(a, b, c);
+        }
+        if (triOut.length >= 3) parts.push({ name, color, vertices, triangles: new Uint32Array(triOut) });
+      }
+      if (obj.components) {
+        for (const c of obj.components) collect(c.path ? resolvePath(m.path, c.path) : m.path, c.objectid, mulMat(c.transform, mat), name, color, nextSeen);
+      }
+    };
+    const rootModel = loadModel(mainPath);
+    if (rootModel.buildItems.length) {
+      for (const bi of rootModel.buildItems) collect(rootModel.path, bi.objectid, bi.transform, bi.partnumber, null, new Set());
+    } else {
+      for (const obj of rootModel.objects.values()) if (obj.mesh) collect(rootModel.path, obj.id, ID, '', null, new Set());
+    }
+    return { parts, unit: rootModel.unitName, unitScale: rootModel.unitScale, title: rootModel.title };
+  }
+  async function import3MF(f) {
+    if (f.size > 25e6) { UI.toast('Die Datei ist zu groß (über 25 MB).', { kind: 'bad' }); return; }
+    let parsed;
+    try { parsed = await parse3MF(await f.arrayBuffer()); } catch (e) {
+      UI.toast('Diese 3MF-Datei kann ich nicht lesen: ' + (e && e.message ? e.message : 'unbekannter Fehler'), { kind: 'bad', ms: 7000 });
+      console.warn(e); return;
+    }
+    if (!parsed.parts.length) { UI.toast('In der 3MF-Datei habe ich keine 3D-Körper gefunden.', { kind: 'bad', ms: 6000 }); return; }
+    if (el) newProject(true);
+    const base = f.name.replace(/\.3mf$/i, '');
+    const items = parsed.parts.map((pt, i) => {
+      const name = pt.name || (parsed.parts.length === 1 ? base : `${base} ${i + 1}`);
+      const stl = Print.buildSTL([{ vertices: pt.vertices, triangles: pt.triangles }], name);
+      const extra = pt.color ? { color: pt.color, more: { colorSet: true } } : {};
+      return Model.newItem('import', { fmt: 'stl', data: bytesToBase64(stl), file: f.name, scale: 1 }, { name, ...extra });
+    });
+    App.change('3MF importiert', (doc) => { doc.items.push(...items); });
+    App.select(items.map((x) => x.id));
+    const unitNote = parsed.unitScale !== 1 ? ` (von ${parsed.unit} in Millimeter umgerechnet)` : '';
+    const bigNote = f.size > 3e6 ? ' Die Datei ist groß – speichere das Projekt als Datei, der Browser-Speicher reicht dafür evtl. nicht.' : ' Mit „Auf die XY-Ebene setzen“ legst du sie auf den Boden.';
+    UI.toast(`„${f.name}“ importiert: ${items.length} ${items.length === 1 ? 'Teil' : 'Teile'}${unitNote}.${bigNote}`, { icon: 'folder', ms: 6000 });
+    setTimeout(() => {
+      const box = new THREE.Box3();
+      for (const it of items) { const b = Actions.worldBox(it.id); if (b && !b.isEmpty()) box.union(b); }
+      if (!box.isEmpty()) Viewer.fit(items.map((x) => x.id));
+    }, 1500);
   }
   // ---------- DXF lesen: Linien, Kreise, Bögen, Polylinien, Ellipsen und Splines werden eine Skizze ----------
   function parseDXF(txt) {
@@ -457,7 +664,7 @@ const Start = (() => {
   }
   async function openBlob(f) {
     if (/\.(dxf|svg)$/i.test(f.name)) return Sketch.active ? insertOutline(f) : importDXF(f);
-    if (/\.(step|stp|stl)$/i.test(f.name)) return importCAD(f);
+    if (/\.(step|stp|stl|3mf)$/i.test(f.name)) return importCAD(f);
     try {
       const txt = await f.text(); const doc = JSON.parse(txt);
       Model.migrate(doc);
@@ -470,7 +677,7 @@ const Start = (() => {
     } catch (e) { const E = ERRORS.importFailed; UI.toast(`${E.titel}. ${E.erklaerung} ${E.loesung}`, { kind: 'bad', ms: 7000 }); console.warn(e); }
   }
   function openFile() {
-    const inp = h('input', { type: 'file', accept: '.json,application/json,.step,.stp,.stl,.dxf,.svg', style: { display: 'none' } });
+    const inp = h('input', { type: 'file', accept: '.json,application/json,.step,.stp,.stl,.3mf,.dxf,.svg', style: { display: 'none' } });
     inp.onchange = () => { const f = inp.files && inp.files[0]; inp.remove(); if (f) openBlob(f); };
     document.body.append(inp); inp.click();
   }
@@ -478,7 +685,7 @@ const Start = (() => {
   addEventListener('dragover', (e) => { if (e.dataTransfer && [...e.dataTransfer.types].includes('Files')) e.preventDefault(); });
   addEventListener('drop', (e) => {
     const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-    if (!f || !/\.(json|step|stp|stl|dxf|svg)$/i.test(f.name)) return;
+    if (!f || !/\.(json|step|stp|stl|3mf|dxf|svg)$/i.test(f.name)) return;
     e.preventDefault(); openBlob(f);
   });
   async function saveFile() {
@@ -487,7 +694,7 @@ const Start = (() => {
     const ok = await Print.save(name + '.tracery.json', JSON.stringify(vers.length ? { ...App.doc, versions: vers } : App.doc, null, 1));
     if (ok) App.fileSavedRev = App.revision;
   }
-  return { importCAD, importDXF, parseDXF, parseSVG, show, hide, newProject, openFile, openBlob, saveFile, openDrone, get open() { return !!el; } };
+  return { importCAD, import3MF, parse3MF, importDXF, parseDXF, parseSVG, show, hide, newProject, openFile, openBlob, saveFile, openDrone, get open() { return !!el; } };
 })();
 
 // ---------- Einführung ----------

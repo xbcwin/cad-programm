@@ -331,7 +331,10 @@ const Print = (() => {
         const res = await Kernel.call('exportMeshes', { scene, fine: true, q: opts.q || 1 });
         lastTris = res.objects.reduce((s, o) => s + o.triangles.length / 3, 0);
         const STL = opts.stlText ? buildSTLText : buildSTL;
-        const objs = only ? res.objects.filter((o) => only.includes(o.id)) : res.objects;
+        const objs = (only ? res.objects.filter((o) => only.includes(o.id)) : res.objects).map((o) => {
+          const f = Model.find(App.doc, o.id);
+          return f ? { ...o, name: o.name || Model.label(f.item), color: o.color || f.item.color } : o;
+        });
         if (!objs.length) throw new Error('Es gibt keinen Körper zum Speichern.');
         if (opts.stl) files.push({ name: name + '.stl', data: STL(objs, name) });
         if (opts.mf) files.push({ name: name + '.3mf', data: await build3MF(objs, name) });
@@ -358,7 +361,7 @@ const Print = (() => {
     App.on('results', updateAmpel); App.on('doc', debounce(updateAmpel, 200));
     $('#ampel').addEventListener('click', (e) => openAmpel(e.currentTarget));
   }
-  return { turntable, turntableDialog, get lastVideo() { return lastVideo; }, get lastTris() { return lastTris; }, buildSTLText, entsToDXF, entsToSVG, save2D, faceTo2D, get last2D() { return last2D; }, exportSelection, get lastExport() { return lastExport; }, runExport, init, stats, checks, exportDialog, imageDialog, saveImage, imageSize, save, safeName, updateAmpel };
+  return { turntable, turntableDialog, get lastVideo() { return lastVideo; }, get lastTris() { return lastTris; }, buildSTL, buildSTLText, build3MF, entsToDXF, entsToSVG, save2D, faceTo2D, get last2D() { return last2D; }, exportSelection, get lastExport() { return lastExport; }, runExport, init, stats, checks, exportDialog, imageDialog, saveImage, imageSize, save, safeName, updateAmpel };
 })();
 
 // ---------- ZIP (mit Kompression, wenn der Browser sie kann) ----------
@@ -369,6 +372,39 @@ const Zip = (() => {
   async function deflate(data) {
     if (typeof CompressionStream === 'undefined') return null;
     try { const cs = new CompressionStream('deflate-raw'); return new Uint8Array(await new Response(new Blob([data]).stream().pipeThrough(cs)).arrayBuffer()); } catch (_) { return null; }
+  }
+  async function inflate(data) {
+    if (typeof DecompressionStream === 'undefined') throw new Error('Dieser Browser kann komprimierte ZIP-Dateien nicht entpacken.');
+    const ds = new DecompressionStream('deflate-raw');
+    return new Uint8Array(await new Response(new Blob([data]).stream().pipeThrough(ds)).arrayBuffer());
+  }
+  async function read(buf, filter) {
+    const bytes = buf instanceof Uint8Array ? buf : ArrayBuffer.isView(buf) ? new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength) : new Uint8Array(buf);
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength), dec = new TextDecoder('utf-8'), out = new Map();
+    let eocd = -1;
+    for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65557); i--) {
+      if (dv.getUint32(i, true) === 0x06054b50 && i + 22 + dv.getUint16(i + 20, true) <= bytes.length) { eocd = i; break; }
+    }
+    if (eocd < 0) throw new Error('Das ist keine gültige 3MF-/ZIP-Datei.');
+    const entries = dv.getUint16(eocd + 10, true), cdOff = dv.getUint32(eocd + 16, true);
+    let p = cdOff;
+    for (let i = 0; i < entries; i++) {
+      if (p + 46 > bytes.length || dv.getUint32(p, true) !== 0x02014b50) throw new Error('Die 3MF-/ZIP-Datei ist beschädigt.');
+      const method = dv.getUint16(p + 10, true), compSize = dv.getUint32(p + 20, true), uncompSize = dv.getUint32(p + 24, true);
+      const nameLen = dv.getUint16(p + 28, true), extraLen = dv.getUint16(p + 30, true), commentLen = dv.getUint16(p + 32, true), localOff = dv.getUint32(p + 42, true);
+      const name = dec.decode(bytes.subarray(p + 46, p + 46 + nameLen)).replace(/\\/g, '/').replace(/^\/+/, '');
+      p += 46 + nameLen + extraLen + commentLen;
+      if (name.endsWith('/') || (filter && !filter(name))) continue;
+      if (localOff + 30 > bytes.length || dv.getUint32(localOff, true) !== 0x04034b50) throw new Error('Die 3MF-/ZIP-Datei ist beschädigt.');
+      const dataOff = localOff + 30 + dv.getUint16(localOff + 26, true) + dv.getUint16(localOff + 28, true);
+      if (dataOff + compSize > bytes.length) throw new Error('Die 3MF-/ZIP-Datei ist unvollständig.');
+      const raw = bytes.subarray(dataOff, dataOff + compSize);
+      if (uncompSize === 0 && compSize === 0) out.set(name, new Uint8Array(0));
+      else if (method === 0) out.set(name, raw.slice());
+      else if (method === 8) out.set(name, await inflate(raw));
+      else throw new Error('Nicht unterstützte ZIP-Kompression (' + method + ').');
+    }
+    return out;
   }
   async function make(files) {
     const enc = new TextEncoder(); const parts = []; const central = []; let off = 0;
@@ -396,6 +432,6 @@ const Zip = (() => {
     for (const p of all) { out.set(p, o); o += p.length; }
     return out;
   }
-  return { make, crc32 };
+  return { make, read, crc32 };
 })();
 

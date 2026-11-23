@@ -5818,6 +5818,139 @@ def t_a007_duenne_wand(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a011_3mf_import(p):
+    import base64, io
+    # 1. Export-Roundtrip: 2 benannte, farbige Teile aus Tracery als 3MF exportieren und wieder einlesen
+    p.ev("""App.change('x', d => {
+      d.items = [];
+      const b = Model.newItem('box', { w: 30, d: 20, h: 10 }, { name: 'Sockel', color: '#d6574c' });
+      const c = Model.newItem('cylinder', { d: 16, h: 25 }, { name: 'Turm', color: '#3f7fd6' });
+      c.t.x = 40; c.t.y = 10;
+      d.items.push(b, c);
+    })""")
+    warte_rechnen(p, 30)
+    orig = p.ev("""return App.doc.items.map(it => {
+      const b = Actions.worldBox(it.id);
+      return { name: it.name, color: it.color, bbox: b && [b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z] };
+    })""")
+    ok_exp = p.pg.evaluate("""async () => {
+      const { Kernel, Model, App, Print } = window.__masswerk;
+      const res = await Kernel.call('exportMeshes', { scene: Model.kernelScene(App.doc), fine: true, q: 1 });
+      const objs = res.objects.map(o => {
+        const f = Model.find(App.doc, o.id);
+        return f ? { ...o, name: Model.label(f.item), color: f.item.color } : o;
+      });
+      window.__mfBytes = await Print.build3MF(objs, 'Roundtrip');
+      return window.__mfBytes && window.__mfBytes.length > 200;
+    }""")
+    p.ev("App.change('x', d => { d.items = []; })"); p.wait(400)
+    p.pg.evaluate("() => window.__masswerk.Start.openBlob(new File([window.__mfBytes], 'Roundtrip.3mf'))")
+    warte_rechnen(p, 30)
+    imp = p.ev("""return {
+      errs: App.errors.length,
+      items: App.doc.items.map(it => ({
+        kind: it.kind, fmt: it.p && it.p.fmt, name: it.name, color: it.color, colorSet: !!it.colorSet,
+        bbox: App.results.get(it.id) && App.results.get(it.id).data.bbox,
+      }))
+    }""")
+    def same_bb(a, b, tol=0.2):
+        return a and b and len(a) == 6 and len(b) == 6 and all(abs(a[i] - b[i]) < tol for i in range(6))
+    ok1 = (bool(ok_exp) and imp['errs'] == 0 and len(imp['items']) == 2
+           and [x['name'] for x in imp['items']] == ['Sockel', 'Turm']
+           and [x['color'] for x in imp['items']] == ['#d6574c', '#3f7fd6']
+           and all(x['colorSet'] and x['kind'] == 'import' and x['fmt'] == 'stl' for x in imp['items'])
+           and same_bb(imp['items'][0]['bbox'], orig[0]['bbox'])
+           and same_bb(imp['items'][1]['bbox'], orig[1]['bbox']))
+
+    # 2. Externe 3MF (ZIP deflated): Einheit Zoll, colorgroup und build-Transform + Rückgängig
+    def mk_3mf(model_xml):
+        buf = io.BytesIO()
+        ct = '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/></Types>'
+        rels = '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Target="/3D/3dmodel.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships>'
+        with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr('[Content_Types].xml', ct)
+            zf.writestr('_rels/.rels', rels)
+            zf.writestr('3D/3dmodel.model', model_xml)
+        return base64.b64encode(buf.getvalue()).decode('ascii')
+
+    cube_v = [(0,0,0),(1,0,0),(1,1,0),(0,1,0),(0,0,1),(1,0,1),(1,1,1),(0,1,1)]
+    cube_t = [(0,2,1),(0,3,2),(4,5,6),(4,6,7),(0,1,5),(0,5,4),(1,2,6),(1,6,5),(2,3,7),(2,7,6),(3,0,4),(3,4,7)]
+    verts_xml = ''.join(f'<vertex x="{x}" y="{y}" z="{z}"/>' for x, y, z in cube_v)
+    tris_xml = ''.join(f'<triangle v1="{a}" v2="{b}" v3="{c}"/>' for a, b, c in cube_t)
+    inch_xml = f'''<?xml version="1.0" encoding="UTF-8"?>
+<model unit="inch" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:m="http://schemas.microsoft.com/3dmanufacturing/material/2015/02">
+  <resources>
+    <m:colorgroup id="5"><m:color color="#5B9F55FF"/></m:colorgroup>
+    <object id="2" type="model" name="Zollwürfel" pid="5" pindex="0"><mesh><vertices>{verts_xml}</vertices><triangles>{tris_xml}</triangles></mesh></object>
+  </resources>
+  <build><item objectid="2" transform="1 0 0 0 1 0 0 0 1 2 0 0"/></build>
+</model>'''
+    p.ev("App.change('x', d => { d.items = []; })"); p.wait(400)
+    p.pg.evaluate("""(b64) => {
+      const bin = atob(b64), u = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+      return window.__masswerk.Start.openBlob(new File([u], 'zoll.3mf'));
+    }""", mk_3mf(inch_xml))
+    warte_rechnen(p, 30)
+    zoll = p.ev("""const it = App.doc.items[0]; const r = it && App.results.get(it.id);
+      return { errs: App.errors.length, n: App.doc.items.length, name: it && it.name, color: it && it.color, colorSet: it && !!it.colorSet, bbox: r && r.data.bbox };""")
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('Control+z'); p.wait(400); warte_rechnen(p, 30)
+    after_undo = p.ev("return App.doc.items.length")
+    ok2 = (zoll['errs'] == 0 and zoll['n'] == 1 and zoll['name'] == 'Zollwürfel'
+           and zoll['color'] == '#5b9f55' and zoll['colorSet']
+           and same_bb(zoll['bbox'], [50.8, 0, 0, 76.2, 25.4, 25.4], 0.15)
+           and after_undo == 0)
+
+    # 3. Komponenten (inkl. Spiegelung mit det < 0) und Fehlerbehandlung bei kaputter 3MF
+    verts10 = ''.join(f'<vertex x="{x*10}" y="{y*10}" z="{z*10}"/>' for x, y, z in cube_v)
+    comp_xml = f'''<?xml version="1.0" encoding="UTF-8"?>
+<model unit="millimeter" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
+  <resources>
+    <basematerials id="1"><base name="Orange" displaycolor="#E8833AFF"/></basematerials>
+    <object id="2" type="model"><mesh><vertices>{verts10}</vertices><triangles>{tris_xml}</triangles></mesh></object>
+    <object id="3" type="model" name="Baugruppe" pid="1" pindex="0">
+      <components>
+        <component objectid="2" transform="1 0 0 0 1 0 0 0 1 20 0 0"/>
+        <component objectid="2" transform="-1 0 0 0 1 0 0 0 1 0 0 0"/>
+      </components>
+    </object>
+  </resources>
+  <build><item objectid="3"/></build>
+</model>'''
+    p.pg.evaluate("""(b64) => {
+      const bin = atob(b64), u = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+      return window.__masswerk.Start.openBlob(new File([u], 'comp.3mf'));
+    }""", mk_3mf(comp_xml))
+    warte_rechnen(p, 30)
+    comp = p.ev("""return Mass.measureDoc(App.doc).then(m => ({
+        errs: App.errors.length,
+        items: App.doc.items.map(it => {
+          const mp = m && m.parts && m.parts.find(q => q.id === it.id);
+          return { name: it.name, color: it.color, bbox: App.results.get(it.id) && App.results.get(it.id).data.bbox, vol: mp ? mp.volume : 0 };
+        })
+      }))""")
+    p.pg.evaluate("() => window.__masswerk.Start.openBlob(new File([new Uint8Array([1, 2, 3, 4])], 'kaputt.3mf'))"); p.wait(400)
+    bad_toast = p.pg.locator('.toast.bad').count() >= 1
+    after_bad = p.ev("return App.doc.items.length")
+    ok3 = (comp['errs'] == 0 and len(comp['items']) == 2
+           and all(x['name'] == 'Baugruppe' and x['color'] == '#e8833a' and x['vol'] and abs(x['vol'] - 1000) < 5 for x in comp['items'])
+           and same_bb(comp['items'][0]['bbox'], [20, 0, 0, 30, 10, 10], 0.15)
+           and same_bb(comp['items'][1]['bbox'], [-10, 0, 0, 0, 10, 10], 0.15)
+           and bad_toast and after_bad == 2)
+
+    # 4. Befehlssuche, Projekt-Menü und Hilfetexte kennen 3MF
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    has_cmd = p.ev("return Commands.search('3mf').some(c => c.id === 'import')")
+    p.pg.locator('#btn-project').click(); p.wait(200)
+    menu_item = p.pg.locator('.menu [data-help="importCad"]')
+    menu_ok = menu_item.count() == 1 and '3MF' in (menu_item.text_content() or '')
+    p.pg.keyboard.press('Escape'); p.wait(150)
+    ok4 = (bool(has_cmd) and menu_ok and 'importCad' in hilfen
+           and all(f in hilfen['importCad'] and '3mf' in hilfen['importCad'][f].lower() for f in ('tip', 'hilfe', 'tipp')))
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -5926,6 +6059,7 @@ TESTS = [
     ('[A-007] Hochziehen als dünne Wand: L-Linienzug mittig / innen & außen / geschlossener Umriss als Rohr / Skizze bearbeiten & Fehler', t_a007_duenne_wand),
     ('[A-006] Versatz mehrfach, beidseitig und runde Ecken: 3× Rechteck / beidseitig / Ecken rund / Kette & Rückgängig', t_a006_versatz_mehrfach),
     ('[A-008] Bohrungs-Arten: Sackloch Ø 5 × 10 mit 118°-Spitze / Passbohrung H7 / Zentrierbohrung / Vorschau & Hilfe', t_a008_bohrungsarten),
+    ('[A-011] 3MF einlesen: Export-Roundtrip / mehrere Teile mit Namen & Farben / Einheit & Transform / Fehler', t_a011_3mf_import),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

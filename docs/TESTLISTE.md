@@ -546,6 +546,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Hilfetexte**: `holeWizard`, `blindHole`, `fitHole` und `centerHole` sind in `werkzeug-hilfen.json` und `HELP` gepflegt und im Assistenten per `data-help` angebunden.
 - [ ] **Von Hand**: Im Bohrungs-Assistenten auf einer Platte und auf einem runden Rohr zwischen allen Bohrungs-Arten wechseln und prüfen, ob Querschnitts-Vorschau, 3D-Drahtvorschau beim Fangen und die Bedienung am Dialog rund wirken.
 
+## 3MF einlesen (Auto [A-011])
+
+- [x] **Export-Roundtrip**: Zwei benannte und gefärbte Teile („Sockel“ rot, „Turm“ blau) über `Print.build3MF` exportieren und als `.3mf` wieder einlesen → gleiche Anzahl Teile, Namen, Farben (`colorSet`) und Hüllmaße (< 0,2 mm).
+- [x] **Einheit, Farben & Transform**: Komprimierte (Deflate) 3MF-Datei mit `unit="inch"`, `colorgroup` und verschobenem `build`-Eintrag einlesen → korrekte Umrechnung in Millimeter, Farbe übernommen, Rückgängig räumt sauber auf.
+- [x] **Komponenten & Fehler**: 3MF mit `<components>` (inkl. gespiegelter Transform mit negativer Determinante) erzeugt getrennte Teile mit richtiger Lage und Orientierung; beschädigte `.3mf` zeigt eine verständliche Fehlermeldung.
+- [x] **Befehlssuche & Hilfe**: `Commands.search('3mf')` findet den Import und `werkzeug-hilfen.json` / `HELP.importCad` dokumentieren `.3mf`.
+- [ ] **Von Hand**: Eine echte mehrteilige, bunte `.3mf`-Datei aus PrusaSlicer oder Bambu Studio per Drag & Drop ins Tracery-Fenster ziehen und Namen, Farben, Größe und Ausrichtung prüfen.
+
 ## Maße als Tabelle (neu in Sitzung 114)
 
 - [x] **Tabelle**: Rechteck und Kreis mit drei Maßen → drei Zeilen („Rechteck 1“, „Kreis 1“); Breite 45 eintippen → Rechteck 45 mm breit, Tabelle bleibt offen.
