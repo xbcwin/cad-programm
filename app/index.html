@@ -4702,7 +4702,7 @@ const Viewer = (() => {
     controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
     controls.target.set(0, 0, 10);
     controls.addEventListener('change', () => { needsRender = true; listeners.emit('camera'); });
-    controls.addEventListener('start', () => pushCam(true));
+    controls.addEventListener('start', () => { pushCam(true); camAnim = null; });
     buildGrid(autoStep()); buildOrigin();
     applyLook();
     const ro = new ResizeObserver(resize); ro.observe(el);
@@ -5447,9 +5447,16 @@ const Viewer = (() => {
   }
   function useButtons(ctx = mouseCtx) { mouseCtx = ctx; if (controls) controls.mouseButtons = buttonsFor(mouseStyle, ctx); }
   function setMouseStyle(st) { mouseStyle = st || 'tracery'; useButtons(); }
+  function stopDamping() {
+    if (!controls) return;
+    if (controls._sphericalDelta) controls._sphericalDelta.set(0, 0, 0);
+    if (controls._panOffset) controls._panOffset.set(0, 0, 0);
+    if ('_scale' in controls) controls._scale = 1;
+  }
   function moveCamera(pos, target, up, animate = true) {
     pushCam(false);
-    if (!animate) { camera.position.copy(pos); controls.target.copy(target); if (up) camera.up.copy(up); controls.update(); needsRender = true; listeners.emit('camera'); return; }
+    stopDamping();
+    if (!animate) { camAnim = null; camera.position.copy(pos); controls.target.copy(target); if (up) camera.up.copy(up); controls.update(); needsRender = true; listeners.emit('camera'); return; }
     camAnim = { t0: performance.now(), dur: 420, p0: camera.position.clone(), p1: pos.clone(), q0: controls.target.clone(), q1: target.clone(), up0: up ? camera.up.clone() : null, up1: up ? up.clone() : null };
   }
   const VIEWDIRS = { front: [0, -1, 0], back: [0, 1, 0], left: [-1, 0, 0], right: [1, 0, 0], top: [0, -0.0001, 1], bottom: [0, -0.0001, -1], iso: [0.62, -0.9, 0.7] };
@@ -9185,11 +9192,12 @@ const Panels = (() => {
     const d = h('button', { type: 'button', class: 'btn' }); d.innerHTML = icon('copy') + 'Duplizieren'; d.onclick = () => Actions.duplicate();
     const x = h('button', { type: 'button', class: 'btn danger' }); x.innerHTML = icon('trash') + 'Löschen'; x.onclick = () => Actions.remove();
     r1.append(g, d, x); w.append(r1);
-    // zwei Teile: kleinster Abstand
-    if (found.length === 2) {
+    // zwei Teile: kleinster Abstand (nur verschiedene Hauptteile, nicht ein Teil mit seiner eigenen Gruppe)
+    const tops = found.length === 2 ? found.map((f) => (Model.topOf(App.doc, f.item.id) || f.item).id) : null;
+    if (tops && tops[0] !== tops[1]) {
       const ds = h('div', { class: 'section', id: 'min-dist', 'data-help': 'minDistance' }, h('div', { class: 'section-h' }, 'Kleinster Abstand'));
       const val = h('b', { class: 'mono', id: 'min-dist-val' }, '…'); ds.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, `${Model.label(found[0].item)} ↔ ${Model.label(found[1].item)}`), val));
-      Measure.minDistance(found.map((f) => (Model.topOf(App.doc, f.item.id) || f.item).id)).then((r) => { val.textContent = !r ? '–' : r.d < 1e-6 ? 'berühren sich' : fmt(r.d, 3) + ' mm'; });
+      Measure.minDistance(tops).then((r) => { val.textContent = !r ? '–' : r.d < 1e-6 ? 'berühren sich' : fmt(r.d, 3) + ' mm'; });
       w.append(ds);
     }
     const al = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Ausrichten'));
@@ -9809,7 +9817,7 @@ const Panels = (() => {
     Log.on('change', debounce(() => { if (leftTab === 'log') renderLeft(); }, 80));
     renderTools(); initViewCube();
     const rerender = debounce(() => { renderLeft(); renderRight(); renderCtx(); UI.renderHint(); }, 16);
-    App.on('doc', rerender); App.on('selection', rerender); App.on('results', rerender); DroneCheck.on('checked', () => { if (!App.sel.length) rerender(); }); Weak.on('analyzed', () => { if (!App.sel.length) rerender(); }); App.on('mode', () => { renderTools(); rerender(); });
+    App.on('doc', rerender); App.on('selection', () => { renderCtx(); rerender(); }); App.on('results', rerender); DroneCheck.on('checked', () => { if (!App.sel.length) rerender(); }); Weak.on('analyzed', () => { if (!App.sel.length) rerender(); }); App.on('mode', () => { renderTools(); rerender(); });
     Viewer.on('camera', placeCtx);
     ViewPrefs.on('change', debounce(() => { if (leftTab === 'tree') renderLeft(); }, 30));   // Erste Schritte ein-/ausblenden
   }
@@ -11414,7 +11422,7 @@ const Sketch = (() => {
     if (Notes.active) Notes.stop();
     Panels.closeFlyout(); UI.closePop();
     const F = frameWorld(init.plane, init.W);
-    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.mode === 'patpath' ? 'line' : 'rect', draft: null, sel: null, sels: [], band: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, hoverEnt: null, trimHover: null, check: null, checkFocus: null };
+    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.mode === 'patpath' ? 'line' : 'rect', draft: null, sels: [], get sel() { return this.sels && this.sels.length === 1 ? this.sels[0] : null; }, set sel(v) { this.sels = v ? [v] : []; }, band: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, hoverEnt: null, trimHover: null, check: null, checkFocus: null };
     S.dims = init.dims || []; S.cons = init.cons || []; S.picks = []; S.dimFirst = null; S.selCon = null;
     S.plane0 = deepClone(init.plane); S.pOff = init.pOff || 0; S.pTilt = 0;
     if (S.pOff) applyPlane(false, true);
@@ -11476,17 +11484,15 @@ const Sketch = (() => {
   function hideBar() { if (bar) { bar.remove(); bar = null; } if (cbar) { cbar.remove(); cbar = null; } if (bars) { bars.remove(); bars = null; } }
   function selectedIds() {
     if (!S) return [];
-    const raw = S.sels && S.sels.length ? S.sels : S.sel ? [S.sel] : [];
-    return [...new Set(raw.filter((id) => ent(id)))];
+    return [...new Set((S.sels || []).filter((id) => ent(id)))];
   }
   function setSel(ids) {
     if (!S) return;
     const uniq = [...new Set((ids || []).filter((id) => ent(id)))];
     S.sels = uniq;
-    S.sel = uniq.length === 1 ? uniq[0] : null;
     if (uniq.length) S.selCon = null;
   }
-  function clearSel() { if (!S) return; S.sels = []; S.sel = null; }
+  function clearSel() { if (!S) return; S.sels = []; }
   function clearBand() { if (S && S.band) { if (S.band.el) S.band.el.remove(); S.band = null; } }
   function setTool(id) {
     if (!S) return;
@@ -11747,11 +11753,7 @@ const Sketch = (() => {
     S.ents = S.ents.filter((x) => x.id !== id);
     S.dims = S.dims.filter((d) => d.e !== id && !(d.refs || []).some((r) => usesEnt(r, id)));
     S.cons = S.cons.filter((c) => !conRefs(c).some((r) => usesEnt(r, id)));
-    if (S.sel === id) S.sel = null;
-    if (S.sels && S.sels.length) {
-      S.sels = S.sels.filter((x) => x !== id);
-      S.sel = S.sels.length === 1 ? S.sels[0] : null;
-    }
+    if (S.sels && S.sels.length) S.sels = S.sels.filter((x) => x !== id);
     S.patSel = (S.patSel || []).filter((x) => x !== id);
   }
   function deleteEnts(ids) {
@@ -12086,7 +12088,7 @@ const Sketch = (() => {
       });
       const keeps = pieces.some((pc) => pc.keepsId);
       let at = S.ents.indexOf(target);
-      if (!keeps) { S.ents.splice(at, 1); if (S.sel === tid) S.sel = null; }
+      if (!keeps) { S.ents.splice(at, 1); if (S.sels && S.sels.length) S.sels = S.sels.filter((x) => x !== tid); }
       for (const pc of pieces) {
         let en;
         if (pc.keepsId) { en = target; for (const k of ['a', 'b', 'm', 'c', 'r', 'pts', 'closed']) delete en[k]; Object.assign(en, pc.ent); }
@@ -15031,9 +15033,25 @@ const Measure = (() => {
     Viewer.canvas.addEventListener('pointerup', (e) => { if (on && d0 && Math.hypot(e.clientX - d0.x, e.clientY - d0.y) < 5) onDown(e); d0 = null; });
     Viewer.on('camera', place);
     // Lage unter der Maus in der Statusleiste (BE-17): im Modell X/Y/Z auf dem Körper oder dem Boden, in der Skizze X/Y der Skizze
-    let pend = null, lastT = 0;
-    Viewer.canvas.addEventListener('pointermove', (e) => { if (pend || e.buttons) return; const now = performance.now(); if (now - lastT < 50) return; lastT = now; pend = requestAnimationFrame(() => { pend = null; showCoords(e.clientX, e.clientY); }); });
-    Viewer.canvas.addEventListener('pointerleave', () => { const el = $('#coords'); if (el) el.textContent = ''; });
+    let timer = null, lastT = 0, lastPos = null;
+    const flushCoords = () => {
+      timer = null;
+      if (!lastPos) return;
+      const p = lastPos; lastPos = null;
+      lastT = performance.now();
+      showCoords(p[0], p[1]);
+    };
+    Viewer.canvas.addEventListener('pointermove', (e) => {
+      if (e.buttons) { lastPos = null; return; }
+      lastPos = [e.clientX, e.clientY];
+      if (timer) return;
+      timer = setTimeout(flushCoords, Math.max(0, 50 - (performance.now() - lastT)));
+    });
+    Viewer.canvas.addEventListener('pointerleave', () => {
+      lastPos = null;
+      if (timer) { clearTimeout(timer); timer = null; }
+      const el = $('#coords'); if (el) el.textContent = '';
+    });
   }
   let coordsNow = null;
   function showCoords(cx, cy) {

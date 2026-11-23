@@ -354,7 +354,7 @@ const Sketch = (() => {
     if (Notes.active) Notes.stop();
     Panels.closeFlyout(); UI.closePop();
     const F = frameWorld(init.plane, init.W);
-    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.mode === 'patpath' ? 'line' : 'rect', draft: null, sel: null, sels: [], band: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, hoverEnt: null, trimHover: null, check: null, checkFocus: null };
+    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.mode === 'patpath' ? 'line' : 'rect', draft: null, sels: [], get sel() { return this.sels && this.sels.length === 1 ? this.sels[0] : null; }, set sel(v) { this.sels = v ? [v] : []; }, band: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, hoverEnt: null, trimHover: null, check: null, checkFocus: null };
     S.dims = init.dims || []; S.cons = init.cons || []; S.picks = []; S.dimFirst = null; S.selCon = null;
     S.plane0 = deepClone(init.plane); S.pOff = init.pOff || 0; S.pTilt = 0;
     if (S.pOff) applyPlane(false, true);
@@ -416,17 +416,15 @@ const Sketch = (() => {
   function hideBar() { if (bar) { bar.remove(); bar = null; } if (cbar) { cbar.remove(); cbar = null; } if (bars) { bars.remove(); bars = null; } }
   function selectedIds() {
     if (!S) return [];
-    const raw = S.sels && S.sels.length ? S.sels : S.sel ? [S.sel] : [];
-    return [...new Set(raw.filter((id) => ent(id)))];
+    return [...new Set((S.sels || []).filter((id) => ent(id)))];
   }
   function setSel(ids) {
     if (!S) return;
     const uniq = [...new Set((ids || []).filter((id) => ent(id)))];
     S.sels = uniq;
-    S.sel = uniq.length === 1 ? uniq[0] : null;
     if (uniq.length) S.selCon = null;
   }
-  function clearSel() { if (!S) return; S.sels = []; S.sel = null; }
+  function clearSel() { if (!S) return; S.sels = []; }
   function clearBand() { if (S && S.band) { if (S.band.el) S.band.el.remove(); S.band = null; } }
   function setTool(id) {
     if (!S) return;
@@ -687,11 +685,7 @@ const Sketch = (() => {
     S.ents = S.ents.filter((x) => x.id !== id);
     S.dims = S.dims.filter((d) => d.e !== id && !(d.refs || []).some((r) => usesEnt(r, id)));
     S.cons = S.cons.filter((c) => !conRefs(c).some((r) => usesEnt(r, id)));
-    if (S.sel === id) S.sel = null;
-    if (S.sels && S.sels.length) {
-      S.sels = S.sels.filter((x) => x !== id);
-      S.sel = S.sels.length === 1 ? S.sels[0] : null;
-    }
+    if (S.sels && S.sels.length) S.sels = S.sels.filter((x) => x !== id);
     S.patSel = (S.patSel || []).filter((x) => x !== id);
   }
   function deleteEnts(ids) {
@@ -1026,7 +1020,7 @@ const Sketch = (() => {
       });
       const keeps = pieces.some((pc) => pc.keepsId);
       let at = S.ents.indexOf(target);
-      if (!keeps) { S.ents.splice(at, 1); if (S.sel === tid) S.sel = null; }
+      if (!keeps) { S.ents.splice(at, 1); if (S.sels && S.sels.length) S.sels = S.sels.filter((x) => x !== tid); }
       for (const pc of pieces) {
         let en;
         if (pc.keepsId) { en = target; for (const k of ['a', 'b', 'm', 'c', 'r', 'pts', 'closed']) delete en[k]; Object.assign(en, pc.ent); }
