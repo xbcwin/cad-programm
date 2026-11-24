@@ -1735,6 +1735,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Datentabelle & Hilfetext**: `app/data/gewinde.json` enthält alle Kernloch- und Senkungsmaße mit Norm-Quellenangaben (`_quellen`, `quelle`), und `threadStandards` steht in `app/data/werkzeug-hilfen.json` samt `data-help` an `#hw-norm`.
 - [ ] **Von Hand**: Im Browser den Bohrungs-Assistenten auf einer Fläche öffnen, zwischen den fünf Normen wechseln und Querschnittsvorschau sowie Hinweise im Eigenschaften-Panel prüfen.
 
+## Varianten schalten Schritte (Auto [A-040], KP-21)
+
+- [x] **Ohne Loch schalten**: In der Variante „ohne Loch“ einen Loch-Schritt per Häkchen unter `#var-steps` unterdrücken (`suppressed: [holeId]`); der Loch-Schritt wird unterdrückt und das Volumen steigt von `11214,6 mm³` auf `12000,0 mm³`.
+- [x] **Umschalten & Rückgängig**: Wechsel zwischen „mit Loch“ und „ohne Loch“ schaltet das Loch samt Volumen hin und her; gleichzeitige Abweichungen bei Maßen und unterdrückten Schritten werden gemeldet, lassen sich überschreiben und mit `App.undo()` zurücknehmen; Projektmigration erhält `v.suppressed`.
+- [x] **Varianten vergleichen & Hilfe**: `#vtable` zeigt unterschiedliche Schritte („aktiv“ / „unterdrückt“) sowie die geänderten Gewichte; Hilfetext `variants` in `app/data/werkzeug-hilfen.json` beschreibt Maße und Schritte.
+- [ ] **Von Hand**: In einem Projekt mit mehreren Schritten und Untergruppen im Reiter „Maße“ zwei Varianten mit verschiedenen aktiven Schritten anlegen, Häkchen ein-/ausklappen und umschalten, um Zeitleiste und 3D-Ansicht gemeinsam springen zu sehen.
+
 ## Fehler melden
 
 ```

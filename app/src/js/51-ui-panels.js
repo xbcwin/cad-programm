@@ -583,7 +583,7 @@ const Panels = (() => {
     const { v, errors } = Model.vars(App.doc);
     const wrap = h('div', { class: 'props' });
     wrap.append(h('div', { class: 'hint-box', html: 'Lege hier Maße mit Namen fest, zum Beispiel <b>Wandstärke = 2</b>. In jedem Zahlenfeld kannst du dann den Namen oder eine Formel wie <b>Breite/2 + 3</b> eintippen. Änderst du das Maß hier, passt sich alles an.' }));
-    if ((App.doc.params || []).length) { const vs = Variants.section(); vs.classList.add('pro'); wrap.append(vs); }
+    if ((App.doc.params || []).length || (App.doc.items || []).length || (App.doc.variants || []).length) { const vs = Variants.section(); vs.classList.add('pro'); wrap.append(vs); }
     const list = h('div', { class: 'mini-list' });
     (App.doc.params || []).forEach((p, i) => {
       const row = h('div', { class: 'section' });

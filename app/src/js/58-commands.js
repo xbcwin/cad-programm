@@ -220,7 +220,7 @@ const Commands = (() => {
     add('xray', 'Röntgen ein/aus', 'xray', 'röntgen durchsichtig transparent glas innen', () => Views.xray(), { group: 'Ansicht', kbd: 'X' });
     add('explode', 'Explosion: Teile auseinanderziehen', 'explode', 'explosion explosionsansicht auseinander zerlegen baugruppe', () => Views.explode(), { group: 'Ansicht', kbd: 'U' });
     add('verbund-alle', 'Alles zu einem Körper verbinden (Verbund)', 'group', 'verbund verbinden alles zusammen zusammenfügen ein körper vereinigen gruppieren alle', () => Actions.groupAll(), { group: 'Bearbeiten' });
-    add('variants', 'Varianten vergleichen', 'list', 'variante varianten vergleichen maße sätze', () => Variants.compareDialog(), { group: 'Projekt' });
+    add('variants', 'Varianten vergleichen', 'list', 'variante varianten vergleichen maße sätze schritte unterdrücken', () => Variants.compareDialog(), { group: 'Projekt' });
     add('explain', 'Erklär diesen Schritt', 'help', 'erklär erklären was ist das schritt warum', () => Explain.dialog(), { group: 'Projekt' });
     add('weak', 'Schwachstellen suchen', 'target', 'schwachstellen schwach prüfen bruch dünn rand loch festigkeit stabil', () => Weak.dialog(), { group: 'Projekt' });
     add('versions', 'Versionen: speichern, vergleichen, zurückholen', 'rollback', 'version versionen stand vergleichen zurück sichern', () => Versions.dialog(), { group: 'Projekt' });

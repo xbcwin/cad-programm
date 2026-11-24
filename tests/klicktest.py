@@ -9216,6 +9216,88 @@ def t_a038_mehr_gewinde(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a040_varianten_schritte(p):
+    p.empty()
+    p.ev("""
+    App.change('Platte mit Loch', d => {
+      d.params.push({ id: 'm_b', name: 'Breite', expr: 40 });
+      const b = Model.newItem('box', { w: 'Breite', d: 30, h: 10 }, { name: 'Platte' });
+      const h = Model.newItem('cylinder', { d: 10, h: 12 }, { name: 'Loch', role: 'hole' });
+      h.t.z = -1;
+      d.items.push(b, h);
+    });
+    """)
+    warte_rechnen(p)
+    v_full = 40 * 30 * 10
+    v_hole = v_full - math.pi * 25 * 10
+    v0 = volumen(p)
+    hole_id = p.ev("return App.doc.items[1].id")
+
+    p.pg.locator('#lt-params').click(); p.wait(300)
+    p.pg.locator('#var-new').click(); p.wait(250)
+    p.pg.fill('#prompt-inp', 'mit Loch'); p.pg.locator('.modal .actions .btn.primary').click(); p.wait(500)
+    p.pg.locator('#var-new').click(); p.wait(250)
+    p.pg.fill('#prompt-inp', 'ohne Loch'); p.pg.locator('.modal .actions .btn.primary').click(); p.wait(500)
+    v1_id, v2_id = p.ev("return App.doc.variants.map(v=>v.id)")
+    step_names = p.pg.locator('#var-steps .var-step-name').all_text_contents()
+    ok1 = v0 is not None and abs(v0 - v_hole) < 1.0 and step_names == ['Platte', 'Loch']
+
+    # In Variante „ohne Loch“ den Loch-Schritt über die Checkbox unterdrücken
+    p.pg.locator(f'#var-steps .var-step-cb[data-id="{hole_id}"]').click()
+    warte_rechnen(p)
+    v1 = volumen(p)
+    sup_v2 = p.ev("return Variants.suppressedOf(arg)", v2_id)
+    cnt_txt = p.pg.locator('#var-steps .var-steps-count').text_content()
+    ok2 = (p.ev("return !!App.doc.items[1].suppressed")
+           and sup_v2 == [hole_id]
+           and '1 unterdrückt' in cnt_txt
+           and v1 is not None and abs(v1 - v_full) < 1.0)
+
+    # Umschalten auf „mit Loch“ und wieder zurück auf „ohne Loch“ ändert das Volumen hin und zurück
+    p.pg.select_option('#var-sel', v1_id); warte_rechnen(p)
+    v2 = volumen(p)
+    hole_on = p.ev("return !App.doc.items[1].suppressed")
+    p.pg.select_option('#var-sel', v2_id); warte_rechnen(p)
+    v3 = volumen(p)
+    hole_off = p.ev("return !!App.doc.items[1].suppressed")
+    ok3 = (hole_on and hole_off
+           and v2 is not None and abs(v2 - v_hole) < 1.0
+           and v3 is not None and abs(v3 - v_full) < 1.0)
+
+    # Varianten vergleichen zeigt den Schritt-Unterschied und korrektes Gewicht
+    p.pg.locator('#var-cmp').click()
+    p.pg.wait_for_selector('#vtable', timeout=90000); p.wait(250)
+    rows = p.pg.evaluate("[...document.querySelectorAll('#vtable tr')].map(r=>[...r.children].map(c=>c.textContent))")
+    loch_col = rows[0].index('Loch') if 'Loch' in rows[0] else -1
+    gew_col = rows[0].index('Gewicht') if 'Gewicht' in rows[0] else -1
+    w_mit = float(rows[1][gew_col][:-2].replace(',', '.')) if gew_col >= 0 else 0
+    w_ohne = float(rows[2][gew_col][:-2].replace(',', '.')) if gew_col >= 0 else 0
+    ok4 = (len(rows) == 3 and loch_col >= 0 and gew_col >= 0
+           and rows[1][loch_col] == 'aktiv' and rows[2][loch_col] == 'unterdrückt'
+           and w_ohne > w_mit)
+    p.pg.keyboard.press('Escape'); p.wait(250)
+
+    # Kombiniert: Maß & Schritt ändern -> Abweichung -> Variantenwechsel -> Undo & Migration -> Hilfe
+    p.pg.select_option('#var-sel', v1_id); warte_rechnen(p)
+    field(p, '#pv-m_b', 50); warte_rechnen(p)
+    p.ev("Timeline.toggleSuppress(arg)", hole_id); warte_rechnen(p)
+    warn_txt = p.pg.locator('.section.variants .hint-box.warn').text_content()
+    has_up = p.pg.locator('#var-update').count() == 1
+    p.pg.select_option('#var-sel', v2_id); warte_rechnen(p)
+    v4 = volumen(p)
+    b_after = p.ev("return App.doc.params.find(x=>x.id==='m_b').expr")
+    p.ev("App.undo()"); warte_rechnen(p)
+    undo_ok = p.ev("return App.doc.params.find(x=>x.id==='m_b').expr") == 50 and p.ev("return App.doc.variant") == v1_id
+    mig_sup = p.ev("const d=Model.migrate(JSON.parse(App.snapshot())); return d.variants[1].suppressed")
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    vh = hilfen.get('variants') or {}
+    ok5 = (has_up and 'Maße' in warn_txt and 'Schritte' in warn_txt
+           and b_after == 40 and v4 is not None and abs(v4 - v_full) < 1.0
+           and undo_ok and mig_sup == [hole_id]
+           and 'Schritte' in vh.get('hilfe', '') and 'unterdrückt' in vh.get('hilfe', ''))
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -9354,6 +9436,7 @@ TESTS = [
     ('[A-036] Muster von Schritten: Tasche 6× im Kreis / Kopie per Klick auslassen / wieder aktiv & Undo / Rechteckmuster & Auflösen / Hilfe & Speichern', t_muster_schritte),
     ('[A-035] Kaputter Bezug: neu wählen (Rundung, Fase, Skizze)', t_kaputter_bezug),
     ('[A-038] Bohrungs-Assistent mehr Gewinde: Feingewinde M10×1,25 (8,8 mm) / 1/4"-20 UNC (5,1 mm) / Rohrgewinde G1/4 / Tabelle & Hilfe', t_a038_mehr_gewinde),
+    ('[A-040] Varianten schalten Schritte: ohne Loch / Volumen & zurück / Vergleich / Maße & Schritte / Abweichung & Undo', t_a040_varianten_schritte),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
