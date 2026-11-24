@@ -2041,6 +2041,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Rückgängig, Speichern/Neuladen, PDF, DXF & Hilfen**: Undo/Redo, JSON-Roundtrip, PDF-Export (`%PDF-1.4` mit Spalten und Teilenamen), DXF-Export (Kreise auf `BEMASSUNG`, Tabellentexte auf `RAHMEN`), Befehlssuche und Hilfetexte (`drawingBalloons`, `drawingBom`) funktionieren vollständig.
 - [ ] **Von Hand**: Im Browser eine kleine Baugruppe aus mehreren Teilen und einer Gruppe in der Zeichnung mit Positionsnummern versehen, Kreise und Stückliste auf dem Blatt zurechtschieben und die exportierte PDF- und DXF-Datei prüfen.
 
+## Mehrere Projekte in Tabs (Auto [A-075], BE-13)
+
+- [x] **Zwei Projekte in Tabs öffnen & wechseln**: Über „+“ → „Neues leeres Projekt“ bzw. gespeichertes Projekt ein zweites Projekt in einem neuen Tab öffnen; Klick auf die Tabs zeigt jeweils nur den zugehörigen Körper in 3D-Ansicht und Verlauf.
+- [x] **Eigenes Rückgängig je Tab**: Eine Änderung in Tab 2 per „Rückgängig“ zurücknehmen lässt Tab 1 samt seinem Verlauf und Rückgängig-Stapel unverändert.
+- [x] **Schließen mit Nachfrage, Einfach/Profi, Neuladen & Hilfe**: „×“ auf einem Tab mit ungespeicherten Änderungen öffnet den Bestätigungsdialog („Abbrechen“ / „Trotzdem schließen“), ein unberührter leerer Tab schließt sofort; Tab-Leiste funktioniert in „Einfach“ und „Profi“, offene Tabs werden beim Neuladen wiederhergestellt und der `+`-Knopf trägt `data-help="projectTabs"`.
+- [ ] **Von Hand**: Im Browser mehrere Projekte per „+“ (inkl. Vorlage und `.json`-Datei) öffnen, mit Doppelklick umbenennen, per Rechtsklick „Andere Tabs schließen“ prüfen und das Design in „Einfach“ und „Profi“ sowie bei schmalem Fenster ansehen.
+
 ## Fehler melden
 
 ```
