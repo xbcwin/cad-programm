@@ -1676,6 +1676,21 @@ const HELP = {
   "tip": "Gleitlagerbuchse nach ISO 3547 / DIN 1850",
   "hilfe": "Bauteile → Normteile → „Gleitlager (Norm)“: Zylindrische Gleitlagerbuchse (Form C) oder Bundbuchse (Form F) aus Messing mit genormtem Innen-Ø d, Außen-Ø D und Wanddicke s₃.",
   "tipp": "Eine Bundbuchse stützt sich mit dem Bund seitlich an der Bohrung ab – wähle die Gehäusebohrung passend zu Außen-Ø D in H7."
+ },
+ "printerSelect": {
+  "tip": "3D-Drucker wählen, Bauraum prüfen und Drehvorschlag nutzen",
+  "hilfe": "Wählt einen bekannten 3D-Drucker (Bambu Lab A1 / A1 mini / P1S / X1C, Prusa MK4 / Mini, Ender 3, Voron 2.4) oder eine eigene Bauraum-Größe. Passt das Teil nicht aufs Druckbett, warnt Tracery in Warnfarbe und schlägt eine Drehung vor – zum Beispiel 45° diagonal.",
+  "tipp": "Mit „So drehen“ richtest du das Modell mit einem Klick passend auf dem Druckbett aus."
+ },
+ "holeComp": {
+  "tip": "Runde Löcher beim STL/3MF-Export vergrößern (+0,1 bis +0,4 mm)",
+  "hilfe": "Beim 3D-Druck schrumpfen runde Bohrungen oft leicht nach innen. Mit dem Loch-Ausgleich (+0,1 bis +0,4 mm Durchmesser) werden alle runden inneren Löcher beim Export als STL oder 3MF entsprechend größer gerechnet.",
+  "tipp": "Dein CAD-Modell selbst sowie STEP, IGES und BREP bleiben dabei unverändert exakt."
+ },
+ "userLibrary": {
+  "tip": "Eigene Teile mit Vorschaubild und Maßen lokal speichern und überall einsetzen",
+  "hilfe": "Rechtsklick auf ein Teil → „In meine Bibliothek“: Das Teil wird samt Vorschaubild in diesem Browser gespeichert. Alle benutzten Maße mit Namen (oder Zahlenmaße) wählst du als Eingabefelder aus. Unter „Bauteile → Meine Teile“ lässt es sich in jedes andere Projekt einsetzen und dort je Kopie mit eigenen Maßen anpassen.",
+  "tipp": "Ideal für wiederkehrende Halterungen, Stecker-Ausschnitte oder fertige Baugruppen-Teile."
  }
 };
 

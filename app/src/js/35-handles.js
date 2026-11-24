@@ -832,6 +832,7 @@ const Interact = (() => {
         { icon: 'moveStep', label: T('common.moveStep'), id: 'cm-movestep', help: 'moveStep', run: () => Features.transform([top.id]) },
         { icon: 'scaleBody', label: T('common.scaleStep'), id: 'cm-scale', help: 'scaleBody', hidden: !App.doc.items.includes(top), run: () => Features.scale([top.id]) },
         { icon: 'copy', label: T('menu.ctx.dupLinked'), kbd: 'Strg Umschalt D', id: 'cm-duplink', hidden: it.kind === 'group', run: () => Actions.duplicateLinked() },
+        ...(UserLib.canSave(top) ? [{ icon: 'save', label: 'In meine Bibliothek', id: 'cm-userlib', help: 'userLibrary', run: () => UserLib.saveDialog(top.id) }] : []),
         { icon: it.role === 'hole' ? 'solid' : 'hole', label: it.role === 'hole' ? T('menu.ctx.toSolid') : T('menu.ctx.toHole'), kbd: 'H', id: 'cm-role', run: () => Actions.toggleRole() },
         { icon: 'eyeOff', label: T('common.hide'), id: 'cm-hide', run: () => Actions.hideSelected() },
         { icon: 'focusView', label: T('common.isolate'), kbd: 'I', id: 'cm-iso', run: () => Comp.toggleIso(it.id) },

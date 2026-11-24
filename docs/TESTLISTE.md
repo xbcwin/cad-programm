@@ -1911,6 +1911,21 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Erweiterte Werkstoff-Sammlung & Kategorien**: Alle 26 Werkstoffe (Stähle, Edelstahl, Messing, Kupfer, POM, PA6, PC, ABS, PETG, TPU, Sperrholz, MDF …) haben Dichte, Studio-Aussehen, Quelle und erscheinen gruppiert in der Auswahl; Suche und Hilfetexte sind aktuell.
 - [ ] **Von Hand**: Im Browser eine Sechskantschraube M16×60 samt M16-Scheibe und -Mutter zusammensetzen sowie verschiedene Werkstoffe (z. B. Kupfer, MDF, V4A Edelstahl) im Studio-Look betrachten.
 
+## 3D-Druck: Drucker und Loch-Ausgleich (Auto [A-059], DR-01, DR-02)
+
+- [x] **Drucker-Liste & Bauraum**: Alle geforderten Drucker (Bambu A1 / A1 mini / P1S / X1C, Prusa MK4 / Mini, Ender 3, Voron 2.4) lassen sich im Projekt-Panel (`#proj-printer`) und über die Befehlssuche wählen; Bauraum und Düse werden übernommen und im 3D-Rahmen angezeigt.
+- [x] **Warnung & Drehvorschlag**: Bei Bambu A1 mini (180³) und einem 200-mm-Teil warnen `#proj-bed-status`, `#ampel` und der Export-Dialog samt diagonalem 45°-Drehvorschlag; Klick auf `#proj-bed-rotate` dreht das Modell passend auf das Druckbett; ein 200×200×200-Teil meldet korrekt „passt auch gedreht nicht“.
+- [x] **Loch-Ausgleich im STL & 3MF**: Bei Loch-Ausgleich `+0,20 mm` hat ein Loch Ø 5 mm im exportierten STL und 3MF exakt Ø 5,20 mm, während ein Außenzapfen Ø 5 mm bei Ø 5,00 mm bleibt und das CAD-Modell unverändert Ø 5,00 mm behält.
+- [x] **Hilfetexte**: `printerSelect` und `holeComp` sind in `werkzeug-hilfen.json` und `HELP` vollständig gepflegt.
+- [ ] **Von Hand**: Im Browser ein Druckteil mit Bohrung und Senkung auf „Bambu Lab A1 mini“ prüfen, per „So drehen“ ausrichten und die exportierte 3MF/STL-Datei im Slicer (z. B. Bambu Studio oder PrusaSlicer) nachmessen.
+
+## Eigene Teile in die Bibliothek (Auto [A-058], BI-08)
+
+- [x] **In meine Bibliothek speichern**: Rechtsklick im 3D-Bild (`#cm-userlib`) und im Verlauf (`#tm-userlib`) öffnen `#userlib-save-dialog` mit gerendertem PNG-Vorschaubild und erkannten Maßen (z. B. `Breite` aus Parametern oder direkte Zahlenmaße).
+- [x] **In neuem Projekt einsetzen & Maße ändern**: Unter „Bauteile → Meine Teile“ (`#my-parts-grid`) erscheint das Teil mit Vorschaubild und lässt sich in ein leeres Projekt einsetzen, ohne `doc.params` zu füllen; Ändern des Eingabefelds `Breite` im Eigenschaften-Panel (`#userpart-sec`) passt den 3D-Körper direkt an.
+- [x] **Unabhängige Kopien, Neuladen, Löschen & Hilfe**: Eine zweite eingesetzte Kopie behält ihr eigenes Maß unabhängig von der ersten; gespeicherte Teile bleiben nach Neuladen erhalten, lassen sich über den Papierkorb entfernen und haben den Hilfetext `userLibrary`.
+- [ ] **Von Hand**: Ein selbst konstruiertes Teil mit mehreren Körpern und Formeln speichern, in ein anderes Projekt auf eine Körperfläche ziehen und dort die Maße variieren.
+
 ## Fehler melden
 
 ```

@@ -97,6 +97,7 @@ Leitlinien:
 | `35-handles.js` | Ziehgriffe (Größe, Lage, Rundungsgriff, Drehwinkel-Griff `revAngle`), Maus-Bedienung |
 | `40-library.js` | Bibliotheksteile `LIB`/`LIBMAP` (Drohnen-Bausteine mit `drone: true` ausgeblendet, bleiben für alte Projekte in `LIBMAP`) |
 | `41-dronelib.js` | FPV-Daten, Kaufteile, Herstellerrahmen |
+| `42-userlib.js` (`UserLib`) | Eigene Teile-Bibliothek (`tracery-bibliothek` in `localStorage`, Vorschaubild, lokale Maße) |
 | `45-actions.js` | Aktionen wie Gruppieren, Ausrichten, Abstand |
 | `46-features.js` | Muster (inkl. „entlang Kurve“, Formschritt-Muster und Kopien auslassen `togglePatternSkip`), Spiegeln an Fläche, Teilen, Boolesch, Wandstärke, Achse im Bild wählen (`pickAxisThen`), Drehen bis Fläche (`pickRevolveFace`) |
 | `46-reffix.js` | Kaputte Bezüge (`RefFix`): gelbe Warnung bei verlorener Kante/Fläche an Rundung, Fase, Wandstärke oder Skizze, gestrichelte Alt-Lage (`Viewer.setRefGhost`) und Assistent „Neu wählen“ |
@@ -114,7 +115,7 @@ Leitlinien:
 | `57-measure.js` | Messen |
 | `58-commands.js` | Eingabezeile, Befehlssuche |
 | `59-versions.js` | Versionen |
-| `60-print.js` | Export (STEP mit XCAF-Farben/Namen/Baugruppen, IGES, BREP, STL, 3MF, OBJ/MTL, GLB, DXF), `Zip` (Packen/Entpacken) |
+| `60-print.js` | Export (STEP mit XCAF-Farben/Namen/Baugruppen, IGES, BREP, STL, 3MF, OBJ/MTL, GLB, DXF), Drucker-Liste `PRINTERS`, Bauraum-Prüfung `fitCheck`/`applyRotationSuggestion`, Loch-Ausgleich `holeComp` für STL/3MF, `Zip` (Packen/Entpacken) |
 | `70-drawing.js` | technische Zeichnung, PDF |
 | `80-ai.js` | KI-Kollege (`AI.RULES`, `AI.ACTIONS`, `AI.SUGGESTIONS`, `AI.open` – allgemeines CAD ohne Drohnen-Bezug; `drohne`-Aktion technisch erhalten) |
 | `84-drone.js` | Rahmen-Generator, Frame-Assistent, Bausätze |
@@ -125,7 +126,7 @@ Leitlinien:
 | `90-main.js` | Start; stellt `window.__M` für Tests bereit |
 
 **Daten in `app/data/`** (alle von Gemini geliefert und von Claude geprüft):
-- `werkzeug-hilfen.json`, `texte-de.json`, `schritt-erklaerungen.json`, `materialien.json` (26 Stück in 4 Kategorien mit Dichte, Aussehen und Quellen), `fehlermeldungen.json`, `schrauben.json` (M1.6–M24, Zylinder-, Sechskant- und Senkkopf normgerecht), `gewinde.json` (Regelgewinde M1.6–M24, Feingewinde, Zoll UNC/UNF, Rohrgewinde G1/8–G1 mit Quellen), `passstifte.json` (ISO 2338), `passfedern.json` (DIN 6885 Form A), `lager.json` (DIN 625-1 Kugellager 608/6000er/6200er & ISO 3547 Gleitlager)
+- `werkzeug-hilfen.json`, `texte-de.json`, `schritt-erklaerungen.json`, `materialien.json` (26 Stück in 4 Kategorien mit Dichte, Aussehen und Quellen), `drucker.json` (10 3D-Drucker-Profile), `fehlermeldungen.json`, `schrauben.json` (M1.6–M24, Zylinder-, Sechskant- und Senkkopf normgerecht), `gewinde.json` (Regelgewinde M1.6–M24, Feingewinde, Zoll UNC/UNF, Rohrgewinde G1/8–G1 mit Quellen), `passstifte.json` (ISO 2338), `passfedern.json` (DIN 6885 Form A), `lager.json` (DIN 625-1 Kugellager 608/6000er/6200er & ISO 3547 Gleitlager)
 - `formel-beispiele.json`, `einfuehrung-skizze.json`, `fpv-masse.json` (Stack = Quadrat, Motor = Lochkreis)
 - `bauteile.json` (Kaufteile mit Quelle, `geprueft`), `schub.json` (nur `geprueft: true` als Vorgabe), `faustregeln.json`, `rahmen.json` (13 Herstellerrahmen)
 - `schrift-inter*.json`, erzeugt mit `tools/schrift.py`

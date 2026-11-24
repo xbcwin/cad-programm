@@ -33,7 +33,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Templates,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,Log,Kernel}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Templates,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,Log,Kernel}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -12100,6 +12100,310 @@ def t_a057_schrauben_werkstoffe(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+# ---------- [A-059] 3D-Druck: Drucker und Loch-Ausgleich (DR-01, DR-02) ----------
+def t_a059_drucker_loch_ausgleich(p):
+    import io, zipfile, tempfile, struct, re
+    p.empty()
+
+    # 1. Drucker-Liste prüfen (Bambu A1/A1 mini/P1S/X1C, Prusa MK4/Mini, Ender 3, Voron 2.4) & A1 mini wählen
+    printers = p.ev("return Print.PRINTERS")
+    names = [x['name'] for x in printers]
+    req = ['Bambu Lab A1', 'Bambu Lab A1 mini', 'Bambu Lab P1S', 'Bambu Lab X1C', 'Prusa MK4', 'Prusa Mini', 'Ender 3']
+    has_voron = any('Voron 2.4' in n for n in names)
+    sel_opts = p.pg.locator('#proj-printer option').all_text_contents()
+    p.pg.select_option('#proj-printer', 'bambu-a1-mini'); p.wait(300)
+    bed_st = p.ev("return { bed: App.doc.settings.printBed, visCount: Viewer.groups.printBed.children.length }")
+    ok1 = (
+        all(r in names for r in req) and has_voron
+        and len(sel_opts) >= len(printers) + 2
+        and bed_st['bed']['enabled'] is True
+        and bed_st['bed']['printer'] == 'bambu-a1-mini'
+        and bed_st['bed']['x'] == 180 and bed_st['bed']['y'] == 180 and bed_st['bed']['z'] == 180
+        and bed_st['visCount'] >= 3
+    )
+
+    # 2. Bambu A1 mini (180³) und ein 200-mm-Teil -> Warnung + Drehvorschlag (45° diagonal) + So drehen
+    p.ev("App.change('Langes Teil', d => { d.items.push(Model.newItem('box', { w: 200, d: 20, h: 20 }, { name: 'Schiene' })); })")
+    warte_rechnen(p, 30)
+    p.wait(300)
+    warn_cls = p.pg.locator('#proj-bed-status').get_attribute('class') or ''
+    warn_txt = p.pg.locator('#proj-bed-status').text_content() or ''
+    amp_cls = p.pg.locator('#ampel').get_attribute('class') or ''
+    fit_before = p.ev("return Print.fitCheck()")
+
+    # Auch Export-Dialog zeigt die Warnung samt Drehvorschlag
+    p.pg.get_by_role('button', name='Exportieren').first.click(); p.wait(300)
+    ex_warn = p.pg.locator('#ex-warn-box').count() == 1 and p.pg.locator('#ex-bed-rotate').count() == 1
+    p.pg.get_by_role('button', name='Abbrechen').click(); p.wait(200)
+
+    # Ein Klick auf "So drehen" richtet das Teil passend aufs Bett aus
+    p.pg.locator('#proj-bed-rotate').click(); p.wait(500)
+    warte_rechnen(p, 30)
+    p.wait(300)
+    fit_after = p.ev("return Print.fitCheck()")
+    after_cls = p.pg.locator('#proj-bed-status').get_attribute('class') or ''
+    amp_after = p.pg.locator('#ampel').get_attribute('class') or ''
+
+    # Ein 200x200x200-Teil passt auch gedreht nicht
+    p.ev("App.change('Zu groß', d => { d.items[0].p = { w: 200, d: 200, h: 200 }; d.items[0].t = { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 }; })")
+    warte_rechnen(p, 30)
+    p.wait(300)
+    fit_cube = p.ev("return Print.fitCheck()")
+    no_rot_btn = p.pg.locator('#proj-bed-rotate').count() == 0
+    ok2 = (
+        'warn' in warn_cls and '45°' in warn_txt and 'warn' in amp_cls
+        and fit_before['fits'] is False and fit_before['suggestion']['canFit'] is True
+        and ex_warn
+        and fit_after['fits'] is True and 'warn' not in after_cls and 'ok' in amp_after
+        and fit_cube['fits'] is False and fit_cube['suggestion']['canFit'] is False and no_rot_btn
+    )
+
+    # 3. Loch-Ausgleich 0,2 mm -> Loch Ø 5 hat im STL und 3MF Ø 5,2, Zapfen und Modell bleiben Ø 5,0
+    p.ev("Start.newProject(true)"); p.wait(400)
+    p.ev("""App.change('Lochtest', d => {
+      d.items.push(Model.newItem('box', { w: 30, d: 30, h: 10 }, { name: 'Platte' }));
+      const h = Model.newItem('cylinder', { d: 5, h: 20 }, { name: 'Loch', role: 'hole' });
+      h.t.z = -5; d.items.push(h);
+      const z = Model.newItem('cylinder', { d: 5, h: 10 }, { name: 'Zapfen' });
+      z.t.x = 35; d.items.push(z);
+    })""")
+    warte_rechnen(p, 40)
+    p.pg.select_option('#proj-hole-comp', '0.2'); p.wait(300)
+    hc_set = p.ev("return Print.holeComp()")
+
+    def measure_stl_diam(data, cx, cy):
+        rs = []
+        n = struct.unpack('<I', data[80:84])[0]
+        for i in range(n):
+            base = 84 + i * 50 + 12
+            for k in range(3):
+                x, y, z = struct.unpack('<3f', data[base + k * 12:base + k * 12 + 12])
+                r = ((x - cx) ** 2 + (y - cy) ** 2) ** 0.5
+                if 0.5 < r < 8:
+                    rs.append(r)
+        return 2 * (sum(rs) / len(rs)) if rs else 0
+
+    def measure_3mf_diam(xml_bytes, cx, cy):
+        txt = xml_bytes.decode('utf-8', errors='replace')
+        rs = []
+        for m in re.finditer(r'<vertex\s+x="([^"]+)"\s+y="([^"]+)"\s+z="([^"]+)"', txt):
+            x, y, z = float(m.group(1)), float(m.group(2)), float(m.group(3))
+            r = ((x - cx) ** 2 + (y - cy) ** 2) ** 0.5
+            if 0.5 < r < 8:
+                rs.append(r)
+        return 2 * (sum(rs) / len(rs)) if rs else 0
+
+    p.pg.get_by_role('button', name='Exportieren').first.click(); p.wait(300)
+    ex_hc_val = p.pg.locator('#ex-hole-comp').input_value()
+    p.pg.check('#ex-stl'); p.pg.check('#ex-mf'); p.pg.uncheck('#ex-step')
+    with p.pg.expect_download(timeout=90000) as dl:
+        p.pg.get_by_role('button', name='Als ZIP speichern').click()
+    z1 = os.path.join(tempfile.gettempdir(), 'tracery-a059-1.zip'); dl.value.save_as(z1)
+    zf1 = zipfile.ZipFile(z1)
+    stl1 = zf1.read([n for n in zf1.namelist() if n.endswith('.stl')][0])
+    mf1_zip = zf1.read([n for n in zf1.namelist() if n.endswith('.3mf')][0])
+    mf1 = zipfile.ZipFile(io.BytesIO(mf1_zip)).read('3D/3dmodel.model')
+    d_stl_hole = measure_stl_diam(stl1, 0, 0)
+    d_stl_pin = measure_stl_diam(stl1, 35, 0)
+    d_3mf_hole = measure_3mf_diam(mf1, 0, 0)
+
+    # Modell im CAD-Kern bleibt exakt Ø 5,0 mm
+    model_r = p.ev("""const r = App.results.get(App.doc.items[0].id);
+      const cf = r && r.data && r.data.faces ? r.data.faces.find(f => f.t === 'CYLINDRE') : null;
+      return cf ? cf.r : 0;""")
+
+    # Export ohne Ausgleich -> wieder Ø 5,0 mm
+    p.pg.get_by_role('button', name='Exportieren').first.click(); p.wait(300)
+    p.pg.select_option('#ex-hole-comp', '0')
+    p.pg.check('#ex-stl'); p.pg.uncheck('#ex-step')
+    with p.pg.expect_download(timeout=90000) as dl2:
+        p.pg.get_by_role('button', name='Als ZIP speichern').click()
+    z2 = os.path.join(tempfile.gettempdir(), 'tracery-a059-2.zip'); dl2.value.save_as(z2)
+    zf2 = zipfile.ZipFile(z2)
+    stl2 = zf2.read([n for n in zf2.namelist() if n.endswith('.stl')][0])
+    d_stl_off = measure_stl_diam(stl2, 0, 0)
+
+    ok3 = (
+        abs(hc_set - 0.2) < 1e-6 and ex_hc_val == '0.2'
+        and abs(d_stl_hole - 5.2) < 0.04
+        and abs(d_3mf_hole - 5.2) < 0.04
+        and abs(d_stl_pin - 5.0) < 0.04
+        and abs(model_r - 2.5) < 1e-3
+        and abs(d_stl_off - 5.0) < 0.04
+    )
+
+    # 4. Hilfetexte & DOM-Attribute prüfen
+    help_ok = p.ev("""return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(d => ({
+      json: ['printerSelect', 'holeComp'].every(k => d[k] && d[k].tip && d[k].hilfe && d[k].tipp),
+      dom: document.querySelectorAll('[data-help="printerSelect"]').length === 1 && document.querySelectorAll('[data-help="holeComp"]').length >= 1,
+    }))""")
+    ok4 = bool(help_ok['json'] and help_ok['dom'])
+    return [ok1, ok2, ok3, ok4]
+
+
+def t_a058_eigene_bibliothek(p):
+    # 1. Teil mit Maß „Breite“ (40 mm) und Loch per Rechtsklick → „In meine Bibliothek“ speichern
+    p.empty()
+    p.ev("""
+      UserLib.clear();
+      App.change('Teil mit Breite', d => {
+        d.params = [{ id: 'm_breite', name: 'Breite', expr: 40 }];
+        const g = Model.newItem('group', {}, { name: 'Halterung', color: '#2f9e91' });
+        const b = Model.newItem('box', { w: 'Breite', d: 20, h: 10 }, { name: 'Platte', color: '#2f9e91' });
+        const h1 = Model.newItem('cylinder', { d: 5, h: 14 }, { name: 'Loch', role: 'hole', t: { x: 'Breite/4', y: 0, z: -2 } });
+        g.children = [b, h1];
+        d.items = [g];
+      });
+    """)
+    warte_rechnen(p)
+    p.ev("Viewer.setView('iso', false); Viewer.fit(null, false); Viewer.renderNow();")
+    p.wait(300)
+
+    # Echter Rechtsklick auf das Teil im 3D-Bild → „In meine Bibliothek“
+    sx, sy = world_screen(p, -8, 0, 10)
+    p.pg.mouse.click(sx, sy, button='right')
+    p.pg.wait_for_selector('#cm-userlib')
+    cm_has = p.pg.locator('#cm-userlib').count() > 0
+    p.pg.locator('#cm-userlib').click()
+    p.pg.wait_for_selector('#userlib-save-dialog')
+    dlg = p.ev("""
+      const img = document.querySelector('#userlib-save-dialog .ul-save-preview img');
+      const chks = [...document.querySelectorAll('#ul-params .ul-param-row')].map(r => ({
+        name: r.querySelector('.ul-p-name').value,
+        val: r.querySelector('.ul-p-val').value,
+        checked: r.querySelector('.ul-p-chk').checked,
+      }));
+      return { thumb: img ? img.src : '', chks };
+    """)
+    p.pg.locator('#ul-name').fill('Halterung A')
+    p.pg.locator('#ul-save-ok').click()
+    p.pg.wait_for_selector('#userlib-save-dialog', state='detached')
+
+    # Verlauf-Kontextmenü enthält ebenfalls #tm-userlib; einfacher Grundkörper erkennt Durchmesser/Höhe
+    p.ev("document.querySelector('#left-body .node')?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 80, clientY: 160 }))")
+    tm_has = p.pg.locator('#tm-userlib').count() > 0
+    p.pg.keyboard.press('Escape')
+    p.ev("App.change('Zyl', d => { d.items.push(Model.newItem('cylinder', { d: 12, h: 18 }, { name: 'Bolzen', t: { x: 60 } })); })")
+    warte_rechnen(p)
+    cyl_det = p.ev("return UserLib.detectParams(App.doc.items[1], App.doc).candidates.map(c => c.name)")
+    ok1 = (
+        cm_has and tm_has
+        and dlg['thumb'].startswith('data:image/png;base64,') and len(dlg['thumb']) > 200
+        and any(c['name'] == 'Breite' and c['checked'] and c['val'] == '40' for c in dlg['chks'])
+        and 'Durchmesser' in cyl_det and 'Höhe' in cyl_det
+    )
+
+    # 2. Neues Projekt öffnen → unter „Meine Teile“ mit Vorschaubild einsetzen → Breite ändern passt Körper an
+    p.ev("Start.show()")
+    p.wait(250)
+    p.empty()
+    p.pg.locator('#t-parts').click()
+    p.pg.wait_for_selector('#my-parts-head')
+    fly = p.ev("""
+      const head = document.querySelector('#my-parts-head')?.textContent || '';
+      const tile = document.querySelector('#my-parts-grid .tile.user-tile');
+      const img = tile ? tile.querySelector('img.ul-thumb') : null;
+      return {
+        head,
+        hasTile: !!tile,
+        label: tile ? tile.querySelector('.lbl')?.textContent : '',
+        thumbOk: !!(img && img.src.startsWith('data:image/png;base64,')),
+      };
+    """)
+    p.pg.locator('#my-parts-grid .tile.user-tile').first.click()
+    warte_rechnen(p)
+
+    info_before = p.ev("""
+      return Mass.measure().then(m => {
+        const id = App.doc.items[0]?.id;
+        const b = id && Actions.worldBox(id);
+        return {
+          paramsLen: App.doc.params.length,
+          dx: b ? b.max.x - b.min.x : 0,
+          dy: b ? b.max.y - b.min.y : 0,
+          dz: b ? b.max.z - b.min.z : 0,
+          vol: m?.volume || 0,
+          upTitle: document.querySelector('#userpart-sec .section-h')?.textContent || '',
+          upInputName: document.querySelector('#up-0')?.dataset?.upName || '',
+          upVal: document.querySelector('#up-0')?.value || '',
+        };
+      });
+    """)
+
+    # Breite im Eigenschaften-Panel von 40 auf 80 ändern
+    inp = p.pg.locator('#up-0')
+    inp.click()
+    inp.fill('80')
+    inp.press('Enter')
+    warte_rechnen(p)
+
+    info_after = p.ev("""
+      return Mass.measure().then(m => {
+        const id = App.doc.items[0]?.id;
+        const b = id && Actions.worldBox(id);
+        return {
+          paramsLen: App.doc.params.length,
+          dx: b ? b.max.x - b.min.x : 0,
+          dy: b ? b.max.y - b.min.y : 0,
+          dz: b ? b.max.z - b.min.z : 0,
+          vol: m?.volume || 0,
+        };
+      });
+    """)
+    ok2 = (
+        'Meine Teile' in fly['head'] and fly['hasTile'] and fly['label'] == 'Halterung A' and fly['thumbOk']
+        and info_before['paramsLen'] == 0 and info_before['upInputName'] == 'Breite' and info_before['upVal'] == '40'
+        and abs(info_before['dx'] - 40) < 0.2 and abs(info_before['dy'] - 20) < 0.2 and abs(info_before['dz'] - 10) < 0.2
+        and info_after['paramsLen'] == 0
+        and abs(info_after['dx'] - 80) < 0.2 and abs(info_after['dy'] - 20) < 0.2
+        and info_after['vol'] > info_before['vol'] * 1.8
+    )
+
+    # 3. Zweite Kopie einsetzen → behält eigene Breite 40, während erste 80 bleibt
+    p.pg.locator('#t-parts').click()
+    p.pg.wait_for_selector('#my-parts-grid .tile.user-tile')
+    p.pg.locator('#my-parts-grid .tile.user-tile').first.click()
+    warte_rechnen(p)
+    two = p.ev("""
+      const boxes = App.doc.items.map(it => {
+        const b = Actions.worldBox(it.id);
+        return b ? b.max.x - b.min.x : 0;
+      });
+      return { count: App.doc.items.length, boxes };
+    """)
+    ok3 = two['count'] == 2 and abs(two['boxes'][0] - 80) < 0.2 and abs(two['boxes'][1] - 40) < 0.2
+
+    # 4. Neuladen → Bibliothek bleibt erhalten, Teil löschen & Hilfetext prüfen
+    p.pg.reload(wait_until='domcontentloaded')
+    p.pg.wait_for_function("() => !!(window.__M && window.__M.UserLib && window.__M.Commands && window.__M.App)", timeout=15000)
+    p.ev("Start.hide()")
+    persisted = p.ev("""
+      return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(helpJson => {
+        const list = UserLib.list();
+        return {
+          n: list.length,
+          name: list[0]?.name,
+          hasThumb: !!(list[0]?.thumb && list[0].thumb.startsWith('data:image/png;base64,')),
+          hasBreite: (list[0]?.params || []).some(q => q.name === 'Breite'),
+          cmds: Commands.search('meine bibliothek').length + Commands.search('meine teile').length,
+          helpOk: !!(helpJson.userLibrary && helpJson.userLibrary.tip && helpJson.userLibrary.hilfe && helpJson.userLibrary.tipp),
+        };
+      });
+    """)
+    p.pg.locator('#t-parts').click()
+    p.pg.wait_for_selector('#my-parts-grid .tile.user-tile .ul-del')
+    p.pg.locator('#my-parts-grid .tile.user-tile .ul-del').first.click()
+    after_del = p.ev("return { n: UserLib.list().length, emptyTxt: document.querySelector('#my-parts-grid')?.textContent || '' }")
+    p.ev("UserLib.clear()")
+    ok4 = (
+        persisted['n'] == 1 and persisted['name'] == 'Halterung A'
+        and persisted['hasThumb'] and persisted['hasBreite']
+        and persisted['cmds'] >= 2 and persisted['helpOk']
+        and after_del['n'] == 0 and 'Noch keine eigenen Teile' in after_del['emptyTxt']
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -12260,6 +12564,8 @@ TESTS = [
     ('[A-055] Sparsames Rückgängig: 200 Änderungen als Patches / Speicher viel kleiner / 200× Rückgängig exakt / Redo & Speicherlimit', t_a055_sparsames_rueckgaengig),
     ('[A-056] Normteile: Passstifte, Passfedern mit Nut, Kugel- und Gleitlager', t_a056_normteile_stifte_lager),
     ('[A-057] Schrauben M10–M24 & Werkstoffe: Sechskantschraube M16×60 SW 24 / M10–M24 Normteile / Werkstoff Messing Dichte 8,4–8,7 / neue Werkstoffe mit Aussehen & Quelle / Suche & Hilfe', t_a057_schrauben_werkstoffe),
+    ('[A-059] 3D-Druck: Drucker-Liste, Bauraum-Warnung mit Drehvorschlag & Loch-Ausgleich im STL/3MF', t_a059_drucker_loch_ausgleich),
+    ('[A-058] Eigene Teile in die Bibliothek: mit Maß „Breite“ speichern / Vorschaubild / in neuem Projekt einsetzen / Breite ändern passt Körper an / zweite Kopie & Neuladen & Löschen & Hilfe', t_a058_eigene_bibliothek),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

@@ -4407,38 +4407,161 @@ export function createKernel(R, oc) {
     return out;
   }
 
+  // Loch-Ausgleich (DR-02): vergrößert runde innere Bohrungen beim Netz-Export (STL/3MF), das Modell bleibt gleich
+  function applyHoleCompensation(shape, holeComp) {
+    const hc = Number(holeComp);
+    if (!(hc > 1e-4) || !shape) return { shape, count: 0 };
+    const dr = Math.min(2, hc) / 2;
+    const planes = [];
+    const rawCyls = [];
+    for (const f of shape.faces) {
+      if (f.geomType === 'PLANE') {
+        try {
+          const n = f.normalAt(), c = f.center, bb = bboxOf(f);
+          planes.push({ n: [n.x, n.y, n.z], c: [c.x, c.y, c.z], bb });
+        } catch (_) {}
+        continue;
+      }
+      if (f.geomType !== 'CYLINDRE') continue;
+      let ad = null;
+      try {
+        ad = new oc.BRepAdaptor_Surface(f.wrapped, false);
+        const cy = ad.Cylinder(), ax = cy.Axis(), l = ax.Location(), dd = ax.Direction();
+        const oRaw = [l.X(), l.Y(), l.Z()];
+        let d = norm([dd.X(), dd.Y(), dd.Z()]);
+        const r = cy.Radius();
+        ad.delete(); ad = null;
+        if (!(r >= 0.25 && r <= 150)) continue;
+        // kanonische Richtung, damit geteilte koaxiale Teilflächen zusammengefasst werden können
+        if (Math.abs(d[2]) > 1e-4 ? d[2] < 0 : Math.abs(d[1]) > 1e-4 ? d[1] < 0 : d[0] < 0) d = mul(d, -1);
+        const o0 = sub(oRaw, mul(d, dot(oRaw, d)));
+        let t0 = Infinity, t1 = -Infinity, peEdge = null;
+        for (const ed of f.edges) {
+          for (const t of [0, 0.25, 0.5, 0.75, 1]) {
+            const p = vec(ed.pointAt(t));
+            const q = dot(p, d);
+            if (q < t0) t0 = q;
+            if (q > t1) t1 = q;
+            if (!peEdge) peEdge = p;
+          }
+        }
+        if (!(t1 - t0 > 0.05)) continue;
+        let pe = null;
+        try { const mp = f.pointOnSurface(0.5, 0.5); pe = [mp.x, mp.y, mp.z]; } catch (_) { pe = peEdge; }
+        if (!pe) continue;
+        const foot = add(o0, mul(d, dot(pe, d))), rad = sub(pe, foot);
+        const n = f.normalAt(pe);
+        if (dot([n.x, n.y, n.z], rad) >= -1e-6) continue; // nur nach innen gewölbte Bohrungen, keine Zapfen
+        let uSpan = 0;
+        try { const uv = f.UVBounds; uSpan = Math.min(2 * Math.PI, Math.abs(uv.uMax - uv.uMin)); } catch (_) { continue; }
+        if (!(uSpan > 0.05)) continue;
+        rawCyls.push({ o0, d, r, t0, t1, uSpan });
+      } catch (_) {
+        if (ad) try { ad.delete(); } catch (_) {}
+      }
+    }
+    if (!rawCyls.length) return { shape, count: 0 };
+    // koaxiale Teilflächen (z. B. gespiegelte 2×180°-Hälften) zu ganzen Löchern zusammenführen
+    const groups = [];
+    for (const c of rawCyls) {
+      let grp = null;
+      for (const g of groups) {
+        if (Math.abs(g.r - c.r) < 1e-3 && Math.abs(dot(g.d, c.d)) > 0.9999 && len(sub(g.o0, c.o0)) < 1e-2) {
+          if (Math.min(g.t1, c.t1) >= Math.max(g.t0, c.t0) - 0.05) { grp = g; break; }
+        }
+      }
+      if (grp) {
+        grp.t0 = Math.min(grp.t0, c.t0);
+        grp.t1 = Math.max(grp.t1, c.t1);
+        grp.uSpan = Math.min(2 * Math.PI, grp.uSpan + c.uSpan);
+      } else {
+        groups.push({ o0: c.o0, d: c.d, r: c.r, t0: c.t0, t1: c.t1, uSpan: c.uSpan });
+      }
+    }
+    const holes = groups.filter((g) => g.uSpan >= Math.PI * 1.9 && g.t1 - g.t0 >= 0.05);
+    if (!holes.length) return { shape, count: 0 };
+    const endClosed = (o0, d, r, tEnd, dirEnd) => {
+      const pEnd = add(o0, mul(d, tEnd));
+      const margin = r + 0.2;
+      for (const pf of planes) {
+        if (dot(pf.n, dirEnd) > -0.95) continue;
+        if (Math.abs(dot(sub(pEnd, pf.c), pf.n)) > 0.02) continue;
+        if (pEnd[0] >= pf.bb.minX - margin && pEnd[0] <= pf.bb.maxX + margin
+          && pEnd[1] >= pf.bb.minY - margin && pEnd[1] <= pf.bb.maxY + margin
+          && pEnd[2] >= pf.bb.minZ - margin && pEnd[2] <= pf.bb.maxZ + margin) return true;
+      }
+      return false;
+    };
+    let cur = shape, count = 0;
+    for (const g of holes) {
+      const ext0 = endClosed(g.o0, g.d, g.r, g.t0, mul(g.d, -1)) ? 0 : 0.05;
+      const ext1 = endClosed(g.o0, g.d, g.r, g.t1, g.d) ? 0 : 0.05;
+      const tStart = g.t0 - ext0;
+      const span = (g.t1 + ext1) - tStart;
+      if (!(span > 0.05)) continue;
+      const base = add(g.o0, mul(g.d, tStart));
+      let cyl = null, cut = null;
+      try {
+        cyl = R.makeCylinder(g.r + dr, span, base, g.d);
+        cut = cur.cut(cyl);
+        if (cut && cut.faces && cut.faces.length > 0 && R.measureVolume(cut) > 1e-4) {
+          if (cur !== shape) safeDelete(cur);
+          cur = cut;
+          cut = null;
+          count++;
+        }
+      } catch (_) {} finally {
+        safeDelete(cyl);
+        safeDelete(cut);
+      }
+    }
+    return { shape: cur, count };
+  }
+
   // q: Feinheit beim Export – 1 = normal, kleiner = feiner (0.4 = fein, 0.15 = sehr fein), größer = gröber
-  function exportMeshes(scene, fine = true, q = 1, originMat = null) {
+  function exportMeshes(scene, fine = true, q = 1, originMat = null, holeComp = 0) {
     ingestBlobs(scene);
     const errors = [];
     const solids = evaluateShapes(scene, errors);
     const objs = [];
     const f = Math.max(0.05, Math.min(4, +q || 1));
+    const hc = Number(holeComp) > 0 ? Math.min(2, Number(holeComp)) : 0;
+    let compensatedHoles = 0;
     const useTr = Array.isArray(originMat) && originMat.length === 16 && !isIdentity(originMat);
     const meshOne = (shape, metaObj) => {
-      const b = bboxOf(shape);
-      const tol = (fine ? Math.min(0.05, Math.max(0.005, meshTol(b) * 0.35)) : meshTol(b)) * f;
-      const m = shape.mesh({ tolerance: tol, angularTolerance: (fine ? 0.1 : 0.2) * Math.min(2, Math.max(0.25, f)) });
-      const verts = new Float32Array(m.vertices), norms = new Float32Array(m.normals);
-      if (useTr) {
-        const m0 = originMat;
-        for (let i = 0; i < verts.length; i += 3) {
-          const x = verts[i], y = verts[i + 1], z = verts[i + 2];
-          verts[i] = m0[0] * x + m0[4] * y + m0[8] * z + m0[12];
-          verts[i + 1] = m0[1] * x + m0[5] * y + m0[9] * z + m0[13];
-          verts[i + 2] = m0[2] * x + m0[6] * y + m0[10] * z + m0[14];
-        }
-        for (let i = 0; i < norms.length; i += 3) {
-          const x = norms[i], y = norms[i + 1], z = norms[i + 2];
-          let nx = m0[0] * x + m0[4] * y + m0[8] * z;
-          let ny = m0[1] * x + m0[5] * y + m0[9] * z;
-          let nz = m0[2] * x + m0[6] * y + m0[10] * z;
-          const l = Math.hypot(nx, ny, nz);
-          if (l > 1e-12) { nx /= l; ny /= l; nz /= l; }
-          norms[i] = nx; norms[i + 1] = ny; norms[i + 2] = nz;
-        }
+      let workShape = shape;
+      if (hc > 0) {
+        const comp = applyHoleCompensation(shape, hc);
+        workShape = comp.shape;
+        compensatedHoles += comp.count;
       }
-      objs.push({ ...metaObj, vertices: verts, normals: norms, triangles: new Uint32Array(m.triangles) });
+      try {
+        const b = bboxOf(workShape);
+        const tol = (fine ? Math.min(0.05, Math.max(0.005, meshTol(b) * 0.35)) : meshTol(b)) * f;
+        const m = workShape.mesh({ tolerance: tol, angularTolerance: (fine ? 0.1 : 0.2) * Math.min(2, Math.max(0.25, f)) });
+        const verts = new Float32Array(m.vertices), norms = new Float32Array(m.normals);
+        if (useTr) {
+          const m0 = originMat;
+          for (let i = 0; i < verts.length; i += 3) {
+            const x = verts[i], y = verts[i + 1], z = verts[i + 2];
+            verts[i] = m0[0] * x + m0[4] * y + m0[8] * z + m0[12];
+            verts[i + 1] = m0[1] * x + m0[5] * y + m0[9] * z + m0[13];
+            verts[i + 2] = m0[2] * x + m0[6] * y + m0[10] * z + m0[14];
+          }
+          for (let i = 0; i < norms.length; i += 3) {
+            const x = norms[i], y = norms[i + 1], z = norms[i + 2];
+            let nx = m0[0] * x + m0[4] * y + m0[8] * z;
+            let ny = m0[1] * x + m0[5] * y + m0[9] * z;
+            let nz = m0[2] * x + m0[6] * y + m0[10] * z;
+            const l = Math.hypot(nx, ny, nz);
+            if (l > 1e-12) { nx /= l; ny /= l; nz /= l; }
+            norms[i] = nx; norms[i + 1] = ny; norms[i + 2] = nz;
+          }
+        }
+        objs.push({ ...metaObj, vertices: verts, normals: norms, triangles: new Uint32Array(m.triangles) });
+      } finally {
+        if (workShape !== shape) safeDelete(workShape);
+      }
     };
     for (const s of solids) {
       const parts = sortedSolids(s.shape, matInvRigid(s.m));
@@ -4458,7 +4581,7 @@ export function createKernel(R, oc) {
       }
       s.shape.delete();
     }
-    return { objects: objs, errors };
+    return { objects: objs, errors, compensatedHoles };
   }
   function srgbToLinear(c) {
     return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);

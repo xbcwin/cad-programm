@@ -18,7 +18,7 @@ const Viewer = (() => {
   function readTheme() {
     const cs = getComputedStyle(document.documentElement);
     const g = (n, d) => (cs.getPropertyValue(n).trim() || d);
-    theme.ink = g('--ink', '#16202b'); theme.accent = g('--accent', '#0c7a70'); theme.hole = g('--hole', '#d9483f');
+    theme.ink = g('--ink', '#16202b'); theme.accent = g('--accent', '#0c7a70'); theme.hole = g('--hole', '#d9483f'); theme.warn = g('--warn', '#b77a06');
     theme.dark = matchMedia('(prefers-color-scheme: dark)').matches && document.documentElement.getAttribute('data-theme') !== 'light' || document.documentElement.getAttribute('data-theme') === 'dark';
     theme.edge = theme.dark ? '#0b0f13' : '#1c2630';
     theme.surface = g('--surface', theme.dark ? '#1a2027' : '#ffffff');
@@ -168,9 +168,10 @@ const Viewer = (() => {
     if (!bed || !bed.enabled || !(bed.x > 0) || !(bed.y > 0)) { needsRender = true; return; }
     const bx = Number(bed.x), by = Number(bed.y), bz = Number(bed.z) > 0 ? Number(bed.z) : 250;
     const hx = bx / 2, hy = by / 2;
+    const bedCol = bed.warn ? theme.warn : theme.accent;
     const plate = new THREE.Mesh(
       new THREE.PlaneGeometry(bx, by),
-      new THREE.MeshBasicMaterial({ color: theme.accent, transparent: true, opacity: 0.05, side: THREE.DoubleSide, depthWrite: false }),
+      new THREE.MeshBasicMaterial({ color: bedCol, transparent: true, opacity: bed.warn ? 0.09 : 0.05, side: THREE.DoubleSide, depthWrite: false }),
     );
     plate.position.z = -0.02;
     plate.renderOrder = -2;
@@ -183,7 +184,7 @@ const Viewer = (() => {
     ];
     const baseGeo = new THREE.BufferGeometry();
     baseGeo.setAttribute('position', new THREE.Float32BufferAttribute(basePts, 3));
-    const baseFrame = new THREE.LineSegments(baseGeo, new THREE.LineBasicMaterial({ color: theme.accent, transparent: true, opacity: 0.75, depthWrite: false }));
+    const baseFrame = new THREE.LineSegments(baseGeo, new THREE.LineBasicMaterial({ color: bedCol, transparent: true, opacity: bed.warn ? 0.9 : 0.75, depthWrite: false }));
     baseFrame.renderOrder = -1;
     baseFrame.userData.noPick = true;
     const volPts = [
@@ -198,7 +199,7 @@ const Viewer = (() => {
     ];
     const volGeo = new THREE.BufferGeometry();
     volGeo.setAttribute('position', new THREE.Float32BufferAttribute(volPts, 3));
-    const volFrame = new THREE.LineSegments(volGeo, new THREE.LineBasicMaterial({ color: theme.accent, transparent: true, opacity: 0.22, depthWrite: false }));
+    const volFrame = new THREE.LineSegments(volGeo, new THREE.LineBasicMaterial({ color: bedCol, transparent: true, opacity: bed.warn ? 0.45 : 0.22, depthWrite: false }));
     volFrame.renderOrder = -1;
     volFrame.userData.noPick = true;
     groups.printBed.add(plate, baseFrame, volFrame);
@@ -1490,6 +1491,57 @@ const Viewer = (() => {
     renderer.shadowMap.needsUpdate = true; needsRender = true;
     return url;
   }
+  function renderPartThumb(ids, w = 160, hgt = 120) {
+    const list = Array.isArray(ids) ? ids : [ids];
+    groups.nodes.updateMatrixWorld(true);
+    const show = list.map((id) => nodes.get(id)).filter((n) => n && n.mesh && n.mesh.geometry && n.mesh.geometry.boundingBox);
+    if (!show.length) return null;
+    const box = new THREE.Box3();
+    for (const n of show) box.union(n.mesh.geometry.boundingBox.clone().applyMatrix4(n.obj.matrixWorld));
+    if (box.isEmpty()) return null;
+    const c = box.getCenter(new THREE.Vector3());
+    const R = Math.max(1, box.getSize(new THREE.Vector3()).length() / 2);
+    const tc = new THREE.PerspectiveCamera(30, w / hgt, 0.05, 10000);
+    const dir = new THREE.Vector3(0.62, -0.9, 0.7).normalize();
+    const dist = (R / Math.sin((tc.fov * Math.PI) / 360)) * 1.18 / Math.min(1, w / hgt);
+    tc.position.copy(c).addScaledVector(dir, dist);
+    tc.up.set(0, 0, 1);
+    tc.lookAt(c);
+    tc.near = Math.max(0.05, dist - R * 3);
+    tc.far = dist + R * 3;
+    tc.updateProjectionMatrix();
+    const old = renderer.getSize(new THREE.Vector2()), oldPR = renderer.getPixelRatio();
+    const oldCol = renderer.getClearColor(new THREE.Color()), oldA = renderer.getClearAlpha(), oldClip = renderer.localClippingEnabled;
+    const nodeVis = new Map(); for (const n of nodes.values()) nodeVis.set(n, n.obj.visible);
+    const gridVis = [gridMinor ? gridMinor.visible : false, gridMajor ? gridMajor.visible : false];
+    const gv = {}; for (const k of Object.keys(groups)) if (k !== 'nodes') gv[k] = groups[k].visible;
+    try {
+      for (const n of nodes.values()) n.obj.visible = show.includes(n);
+      if (gridMinor) gridMinor.visible = false;
+      if (gridMajor) gridMajor.visible = false;
+      for (const k of Object.keys(gv)) groups[k].visible = false;
+      renderer.localClippingEnabled = false;
+      renderer.setPixelRatio(1);
+      renderer.setSize(w, hgt, false);
+      renderer.setClearColor(new THREE.Color(theme.surface || '#ffffff'), 0);
+      renderer.shadowMap.needsUpdate = true;
+      renderer.render(scene, tc);
+      return renderer.domElement.toDataURL('image/png');
+    } catch (_) {
+      return null;
+    } finally {
+      for (const [n, v] of nodeVis) n.obj.visible = v;
+      if (gridMinor) gridMinor.visible = gridVis[0];
+      if (gridMajor) gridMinor.visible = gridVis[1];
+      for (const k of Object.keys(gv)) groups[k].visible = gv[k];
+      renderer.localClippingEnabled = oldClip;
+      renderer.setClearColor(oldCol, oldA);
+      renderer.setPixelRatio(oldPR);
+      renderer.setSize(old.x, old.y, false);
+      renderer.shadowMap.needsUpdate = true;
+      needsRender = true;
+    }
+  }
   function snapshot(w = 480, hgt = 300) {
     const old = renderer.getSize(new THREE.Vector2());
     renderer.setSize(w, hgt, false); camera.aspect = w / hgt; camera.updateProjectionMatrix();
@@ -1500,7 +1552,7 @@ const Viewer = (() => {
   }
 
   return {
-    viewBack, get viewHistory() { return camHist.length; }, useButtons, setMouseStyle, get mouseStyle() { return mouseStyle; }, get leftOrbits() { return !!(controls && controls.mouseButtons.LEFT === THREE.MOUSE.ROTATE); }, setLook, lookOf, get look() { return { ...LOOK }; }, fitShadow, renderImage, lookAtFace, faceIndexOf: (id, fc) => { const n = nodes.get(id); return n ? faceIndexOf(n, fc) : -1; }, cylinderFaceInfo, threadFaceIndex: (id, th) => { const n = nodes.get(id); return n ? threadFaceIndex(n, th) : -1; }, get renderer() { return renderer; },
+    viewBack, get viewHistory() { return camHist.length; }, useButtons, setMouseStyle, get mouseStyle() { return mouseStyle; }, get leftOrbits() { return !!(controls && controls.mouseButtons.LEFT === THREE.MOUSE.ROTATE); }, setLook, lookOf, get look() { return { ...LOOK }; }, fitShadow, renderImage, renderPartThumb, lookAtFace, faceIndexOf: (id, fc) => { const n = nodes.get(id); return n ? faceIndexOf(n, fc) : -1; }, cylinderFaceInfo, threadFaceIndex: (id, th) => { const n = nodes.get(id); return n ? threadFaceIndex(n, th) : -1; }, get renderer() { return renderer; },
     init, requestRender, renderNow, setClip, setXray, setOffsets, baseBox, renderInset, silhouette, setAdaptive, setCompare, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, highlightBody, setSelectedEdges, clearHover, setRefGhost, clearRefGhost, hasRefGhost,
     edgePositions, pick, pickAll, pickGhost, pickProxy, setProxies, clearProxies, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, setPrintBed, boxVisible, sceneBox, snapshot, makeFat, disposeFat, faceOverlay, faceArea, faceEdges, edgeKinds, wallAt, thinWalls,
     get camera() { syncCamAnim(); return camera; }, get activeCamera() { syncCamAnim(); return cam(); }, get ortho() { return ortho; }, get gridStep() { return gridStep; }, get controls() { return controls; }, get scene() { return scene; }, get groups() { return groups; }, get nodes() { return nodes; }, get canvas() { return renderer.domElement; }, get theme() { return theme; }, get container() { return container; },
