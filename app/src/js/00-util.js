@@ -1796,6 +1796,11 @@ const HELP = {
   "tip": "Ausgewählte Körper mit Strg C / Strg V in andere Projekte oder Tabs kopieren",
   "hilfe": "Kopiert die gewählten Körper samt ihren zugehörigen Schritten, Bohrungen, Rundungen, Werkstoffen, Farben und verwendeten Maßen in die Zwischenablage. Im anderen Projekt oder Browser-Tab fügt Strg V (oder Rechtsklick → Einfügen) alles wieder ein. Hängt ein Teil an Bezügen außerhalb der Auswahl, wird es automatisch als feste Form (BREP) mitgenommen.",
   "tipp": "Im selben Projekt rückt eingefügter Ersatz um 10 mm zur Seite; in einem anderen Tab landet der Körper genau an seiner ursprünglichen Stelle."
+ },
+ "projectTabs": {
+  "tip": "Mehrere Projekte gleichzeitig in Tabs öffnen und wechseln",
+  "hilfe": "In der Tab-Leiste oben arbeitest du an mehreren Projekten parallel. Mit „+“ öffnest du ein neues leeres Projekt, eine Vorlage, eine Datei oder ein bereits gespeichertes Projekt in einem neuen Tab. Ein Klick auf einen Tab wechselt samt eigenem Verlauf und eigenem Rückgängig dorthin; „×“ schließt den Tab und fragt bei ungespeicherten Änderungen nach.",
+  "tipp": "Mit einem Doppelklick auf den Tab-Namen benennst du das Projekt um, und ein Rechtsklick schließt bei Bedarf alle anderen Tabs."
  }
 };
 

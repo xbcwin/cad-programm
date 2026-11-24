@@ -477,5 +477,22 @@
   "recovery.dismiss": "Verwerfen",
   "recovery.restored": "Letzter Stand von „{name}“ wiederhergestellt.",
   "recovery.discarded": "Wiederherstellungs-Stand verworfen.",
-  "recovery.failed": "Der letzte Stand konnte nicht wiederhergestellt werden."
+  "recovery.failed": "Der letzte Stand konnte nicht wiederhergestellt werden.",
+
+  "tabs.barAria": "Geöffnete Projekte",
+  "tabs.addAria": "Projekt in neuem Tab öffnen",
+  "tabs.addTip": "Neues oder gespeichertes Projekt in neuem Tab öffnen",
+  "tabs.newEmpty": "Neues leeres Projekt",
+  "tabs.newTemplate": "Neues Projekt aus Vorlage …",
+  "tabs.openFile": "Projektdatei öffnen (.json) …",
+  "tabs.openInNewTab": "In neuem Tab öffnen",
+  "tabs.alreadyOpen": "offen",
+  "tabs.closeAria": "Tab „{name}“ schließen",
+  "tabs.closeTip": "Tab schließen",
+  "tabs.closeDirtyTitle": "Ungespeicherte Änderungen schließen?",
+  "tabs.closeDirtyBody": "Im Projekt „{name}“ gibt es noch ungespeicherte Änderungen (nicht als Datei gespeichert). Tab trotzdem schließen?",
+  "tabs.closeAnyway": "Trotzdem schließen",
+  "tabs.closeOthers": "Andere Tabs schließen",
+  "tabs.rename": "Projekt umbenennen",
+  "tabs.newOpened": "Neuer Projekt-Tab geöffnet."
 }

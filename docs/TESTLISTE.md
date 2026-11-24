@@ -2048,6 +2048,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Feste Form (BREP-Fallback), Kontextmenü & Hilfe**: Teile mit nicht mitkopierten externen Bezügen (z. B. isolierte `transform`-Kopie) werden automatisch als BREP gebacken und behalten Volumen, Farbe und Werkstoff; `#cm-copy`, `#cm-paste`, Befehlssuche und Hilfetext `copyBetweenTabs` sind vorhanden.
 - [ ] **Von Hand**: Im Browser zwei Tracery-Tabs öffnen, einen aufwendigeren Körper mit Rundungen, Bohrung, eigenem Werkstoff und Farbe per `Strg/Cmd+C` kopieren, im zweiten Tab mit `Strg/Cmd+V` einfügen und Lage, Farbe und Material visuell prüfen.
 
+## Mehrere Projekte in Tabs (Auto [A-075], BE-13)
+
+- [x] **Zwei Projekte in Tabs öffnen & wechseln**: Über „+“ → „Neues leeres Projekt“ bzw. gespeichertes Projekt ein zweites Projekt in einem neuen Tab öffnen; Klick auf die Tabs zeigt jeweils nur den zugehörigen Körper in 3D-Ansicht und Verlauf.
+- [x] **Eigenes Rückgängig je Tab**: Eine Änderung in Tab 2 per „Rückgängig“ zurücknehmen lässt Tab 1 samt seinem Verlauf und Rückgängig-Stapel unverändert.
+- [x] **Schließen mit Nachfrage, Einfach/Profi, Neuladen & Hilfe**: „×“ auf einem Tab mit ungespeicherten Änderungen öffnet den Bestätigungsdialog („Abbrechen“ / „Trotzdem schließen“), ein unberührter leerer Tab schließt sofort; Tab-Leiste funktioniert in „Einfach“ und „Profi“, offene Tabs werden beim Neuladen wiederhergestellt und der `+`-Knopf trägt `data-help="projectTabs"`.
+- [ ] **Von Hand**: Im Browser mehrere Projekte per „+“ (inkl. Vorlage und `.json`-Datei) öffnen, mit Doppelklick umbenennen, per Rechtsklick „Andere Tabs schließen“ prüfen und das Design in „Einfach“ und „Profi“ sowie bei schmalem Fenster ansehen.
+
 ## Fehler melden
 
 ```
