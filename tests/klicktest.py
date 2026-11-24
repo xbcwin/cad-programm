@@ -22184,6 +22184,140 @@ def t_a109_lizenz_fremde_bausteine(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_spline_kontrollpunkte_griffe(p):
+    # 1. Kontrollpunkt-Spline mit 4 Punkten (Profi): Start/Ende exakt auf 1. und 4. Punkt, innen angezogen
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(200)
+    sketch_xy(p)
+    p.pg.keyboard.press('s'); p.wait(250)
+    has_cv_opt = p.pg.locator('#sp-mode option[value="cv"]').count() == 1
+    p.pg.select_option('#sp-mode', 'cv'); p.wait(200)
+    for u, v in [(-30, 0), (-10, 25), (10, -25), (30, 0)]:
+        click_uv(p, u, v)
+    p.pg.keyboard.press('Enter'); p.wait(300)
+    cv4 = SS(p, """const e=S.ents[0]; if(!e||e.type!=='spline') return null;
+      const segs=SK.segsOf(e), pl=SK.segPoints(segs[0]), bz=SK.splineBez(e.pts, !!e.closed, e);
+      const dStart=Math.hypot(pl[0][0]-e.pts[0][0], pl[0][1]-e.pts[0][1]);
+      const dEnd=Math.hypot(pl[pl.length-1][0]-e.pts[3][0], pl[pl.length-1][1]-e.pts[3][1]);
+      const dC1=Math.min(...pl.map(q=>Math.hypot(q[0]-e.pts[1][0], q[1]-e.pts[1][1])));
+      const dC2=Math.min(...pl.map(q=>Math.hypot(q[0]-e.pts[2][0], q[1]-e.pts[2][1])));
+      const inside=pl.every(q=>q[0]>=-30.01&&q[0]<=30.01&&q[1]>=-25.01&&q[1]<=25.01);
+      return { n:S.ents.length, mode:e.mode, closed:!!e.closed, nPts:e.pts.length, nBz:bz.length, dStart, dEnd, dC1, dC2, inside, len:pl.length };""")
+    ok1 = (
+        has_cv_opt and cv4 and cv4['n'] == 1 and cv4['mode'] == 'cv' and not cv4['closed']
+        and cv4['nPts'] == 4 and cv4['nBz'] == 1 and cv4['len'] > 20
+        and cv4['dStart'] < 1e-6 and cv4['dEnd'] < 1e-6
+        and cv4['dC1'] > 5.0 and cv4['dC2'] > 5.0 and cv4['inside']
+    )
+
+    # 2. Kontrollpunkt-Spline mit 5 Punkten (C1/C2-stetig) + geschlossener Kontrollpunkt-Spline beim Hochziehen
+    cv5 = SS(p, """const e={id:'cv5',type:'spline',mode:'cv',closed:false,pts:[[-30,0],[-15,20],[0,-10],[15,20],[30,0]]};
+      const bz=SK.splineBez(e.pts,false,e), pl=SK.splinePoints(e.pts,false,e);
+      const t1L=[bz[0].b[0]-bz[0].c2[0], bz[0].b[1]-bz[0].c2[1]], t1R=[bz[1].c1[0]-bz[1].a[0], bz[1].c1[1]-bz[1].a[1]];
+      const c1gap=Math.hypot(t1L[0]-t1R[0], t1L[1]-t1R[1]);
+      return { nBz:bz.length, dStart:Math.hypot(pl[0][0]+30,pl[0][1]), dEnd:Math.hypot(pl[pl.length-1][0]-30,pl[pl.length-1][1]), c1gap };""")
+    p.ev("Sketch.setSplineMode('cv'); const S=Sketch.state; S.ents=[{id:'cvc',type:'spline',mode:'cv',closed:true,pts:[[-20,-20],[20,-20],[20,20],[-20,20]]}]; S.dims=[]; S.cons=[]; Sketch.render();"); p.wait(250)
+    reg_n = SS(p, "return SK.regions(S.ents).length")
+    p.pg.keyboard.press('Enter'); p.wait(500)
+    p.pg.locator('.stepbox .btn.primary').click()
+    warte_rechnen(p, 30)
+    vol_cv = p.ev("const it=App.doc.items[0]; const R=it&&App.results.get(it.id); return [App.errors.length, R&&R.data&&R.data.faces.length]")
+    ok2 = (
+        cv5 and cv5['nBz'] == 2 and cv5['dStart'] < 1e-6 and cv5['dEnd'] < 1e-6 and cv5['c1gap'] < 1e-6
+        and reg_n == 1 and vol_cv[0] == 0 and vol_cv[1] >= 3
+    )
+
+    # 3. Tangenten-Griff am Startpunkt per Zahleneingabe auf 45 Grad -> gemessene Tangente 45 Grad
+    p.ev("App.change('x', d => { d.items = []; }); Sketch.startOnPlane('XY');"); p.wait(1000)
+    p.ev("Sketch.state.ents.push({id:'sp1',type:'spline',pts:[[-30,0],[0,0],[30,0]],closed:false}); Sketch.render(); Panels.renderRight();"); p.wait(250)
+    p.pg.keyboard.press('v'); p.wait(150)
+    s_mid = to_screen(p, -15, 0)
+    p.pg.mouse.click(s_mid[0], s_mid[1]); p.wait(300)
+    has_panel = (
+        p.pg.locator('#se-spline-handles').count() == 1
+        and p.pg.locator('#se-sh-pt').count() == 1
+        and p.pg.locator('#se-hAng0').count() == 1
+        and p.pg.locator('#se-hLen0').count() == 1
+    )
+    ang_inp = p.pg.locator('#se-hAng0')
+    ang_inp.fill('45'); ang_inp.press('Enter'); p.wait(350)
+    tan45 = SS(p, """const e=E('sp1'); const dm=S.dims.find(d=>d.e==='sp1'&&d.k==='hAng0');
+      const tg=SK.splineTangentAt(e,0), bz=SK.splineBez(e.pts,false,e), pl=SK.splinePoints(e.pts,false,e);
+      const bzAng=Math.atan2(bz[0].c1[1]-bz[0].a[1], bz[0].c1[0]-bz[0].a[0])*180/Math.PI;
+      const plAng=Math.atan2(pl[1][1]-pl[0][1], pl[1][0]-pl[0][0])*180/Math.PI;
+      const fitMax=Math.max(...e.pts.map(q=>Math.min(...pl.map(r=>Math.hypot(r[0]-q[0],r[1]-q[1])))));
+      return { dm:dm&&dm.v, tgAng:tg&&tg.ang, bzAng, plAng, fitMax, h0:e.handles&&e.handles[0] };""")
+    ok3 = (
+        has_panel and tan45 and abs(float(tan45['dm']) - 45.0) < 1e-4
+        and abs(tan45['tgAng'] - 45.0) < 0.01
+        and abs(tan45['bzAng'] - 45.0) < 0.01
+        and abs(tan45['plAng'] - 45.0) < 3.0
+        and tan45['fitMax'] < 1e-6
+    )
+
+    # 4. Griff am Punkt 2 per Maus ziehen (45°), per Maß-Werkzeug (D) bemaßen & per Knopf zurücksetzen (+ Strg+Z)
+    h1_tip = SS(p, "const e=E('sp1'), h=SK.splineHandle(e,1); return [e.pts[1][0]+h[0], e.pts[1][1]+h[1]];")
+    drag_from = to_screen(p, h1_tip[0], h1_tip[1])
+    drag_to = to_screen(p, 10, 10)   # Punkt 2 ist (0,0) -> Richtung (10,10) = 45°
+    p.pg.mouse.move(drag_from[0], drag_from[1]); p.pg.mouse.down()
+    p.pg.mouse.move(drag_to[0], drag_to[1], steps=6); p.pg.mouse.up(); p.wait(350)
+    dragged1 = SS(p, "const e=E('sp1'), tg=SK.splineTangentAt(e,1); return { custom:!!(e.handles&&Array.isArray(e.handles[1])), ang:tg&&tg.ang, selI:S.selHandle&&S.selHandle.i };")
+
+    # Maß-Werkzeug (D) auf Griff 1 setzen und 30° eingeben
+    h1_now = SS(p, "const e=E('sp1'), h=SK.splineHandle(e,1); return [e.pts[1][0]+h[0], e.pts[1][1]+h[1]];")
+    p.ev("document.activeElement && document.activeElement.blur()")
+    p.pg.keyboard.press('d'); p.wait(200)
+    s_h1 = to_screen(p, h1_now[0], h1_now[1])
+    p.pg.mouse.click(s_h1[0], s_h1[1]); p.wait(250)
+    has_dimask = p.pg.locator('.dimask input').count() == 1 and p.pg.locator('#dim-handle-toggle').count() == 1
+    if has_dimask:
+        p.pg.locator('.dimask input').fill('30'); p.pg.locator('.dimask input').press('Enter'); p.wait(300)
+    dim30 = SS(p, "const e=E('sp1'), tg=SK.splineTangentAt(e,1); return tg&&tg.ang;")
+
+    # Griff zurücksetzen + Strg+Z
+    p.pg.keyboard.press('v'); p.wait(150)
+    p.ev("Sketch.selectSplineHandle('sp1', 1)"); p.wait(200)
+    p.pg.locator('#se-sh-reset').click(); p.wait(300)
+    after_reset = SS(p, "const e=E('sp1'); return { h1:e.handles&&e.handles[1], hasDim:S.dims.some(d=>d.e==='sp1'&&d.k==='hAng1') };")
+    p.pg.keyboard.press('Control+z'); p.wait(300)
+    after_undo = SS(p, "const e=E('sp1'), tg=SK.splineTangentAt(e,1); return { h1:!!(e.handles&&e.handles[1]), ang:tg&&tg.ang };")
+    ok4 = (
+        dragged1 and dragged1['custom'] and dragged1['selI'] == 1 and abs(dragged1['ang'] - 45.0) < 3.0
+        and has_dimask and dim30 is not None and abs(dim30 - 30.0) < 0.05
+        and after_reset and after_reset['h1'] is None and not after_reset['hasDim']
+        and after_undo and after_undo['h1'] and abs(after_undo['ang'] - 30.0) < 0.05
+    )
+
+    # 5. Einfach-Modus blendet Profi-Funktionen aus; Hilfen & Übersetzung vorhanden; 0 Fehler
+    p.ev("ViewPrefs.setLevel('simple'); Sketch.setTool('spline');"); p.wait(250)
+    simple_hidden = (
+        p.pg.locator('#sp-mode').count() == 0
+        and SS(p, "return S.splineMode") == 'fit'
+    )
+    p.ev("Sketch.setTool('select'); Sketch.selectSplineHandle('sp1', 0);"); p.wait(200)
+    simple_handles_hidden = p.pg.locator('#se-spline-handles').count() == 0
+    p.ev("ViewPrefs.setLevel('pro');"); p.wait(200)
+    meta = p.pg.evaluate("""async () => {
+      const [de, en, hilfen] = await Promise.all([
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+      ]);
+      const ka = Object.keys(de), kb = Object.keys(en), sb = new Set(kb);
+      const keys = ['sk.hint.splineCV','sk.panel.splineFit','sk.panel.splineCV','sk.panel.splineHandlesHead','sk.panel.handleAngle','sk.panel.handleStrength','sk.panel.handleReset','sk.dim.hAng','sk.dim.hLen'];
+      return {
+        hCtrl: !!(hilfen.splineControl && hilfen.splineControl.tip && hilfen.splineControl.hilfe && hilfen.splineControl.tipp),
+        hHand: !!(hilfen.splineHandles && hilfen.splineHandles.tip && hilfen.splineHandles.hilfe && hilfen.splineHandles.tipp),
+        i18n: ka.length === kb.length && ka.every(k => sb.has(k)) && keys.every(k => !!de[k] && !!en[k])
+      };
+    }""")
+    ok5 = (
+        simple_hidden and simple_handles_hidden
+        and meta and meta['hCtrl'] and meta['hHand'] and meta['i18n']
+        and not p.errs
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -22401,6 +22535,7 @@ TESTS = [
     ('[A-108] Einstellungen speichern/laden & Oberflächen-Größe (BE-30, BE-31)', t_a108_einstellungen_groesse),
     ('[A-107] Rechnen abbrechen & Meldungs-Zentrale (BE-27, BE-25)', t_a107_abbrechen_meldungen),
     ('[A-109] Lizenz „Alle Rechte vorbehalten“ & Fremde Bausteine (PL-02)', t_a109_lizenz_fremde_bausteine),
+    ('[A-111] Spline mit Kontrollpunkten und Tangenten-Griffen (SK-32, SK-33)', t_spline_kontrollpunkte_griffe),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

@@ -72,7 +72,17 @@ const SK = (() => {
   }
   function circlePoints(c, r, n = 72) { const pts = []; for (let i = 0; i < n; i++) { const t = (i / n) * TAU; pts.push([c[0] + Math.cos(t) * r, c[1] + Math.sin(t) * r]); } return pts; }
   // Spline: weiche Kurve genau durch alle Punkte (Catmull-Rom, „centripetal“ – macht keine Schleifen und Überschwinger)
-  function splinePoints(pts, closed) {
+  function splinePoints(pts, closed, opts) {
+    if (opts && (opts.mode === 'cv' || (Array.isArray(opts.handles) && opts.handles.some((h) => Array.isArray(h))))) {
+      const bz = splineBez(pts, closed, opts);
+      if (!bz.length) return pts.slice();
+      const out = [];
+      for (let i = 0; i < bz.length; i++) {
+        const s = bz[i], sp = s.t === 'line' ? [s.a, s.b] : bezPoints(s);
+        for (let k = i === 0 ? 0 : 1; k < sp.length; k++) out.push(sp[k]);
+      }
+      return out;
+    }
     const n = pts.length;
     if (n < 2) return pts.slice();
     if (n === 2 && !closed) return [pts[0], pts[1]];
@@ -99,14 +109,71 @@ const SK = (() => {
     out.push(closed ? out[0] : pts[n - 1]);
     return out;
   }
-  const endA = (e) => (e.type === 'spline' ? e.pts[0] : e.type === 'ellarc' ? ellArcPt(e.c, e.rx, e.ry, e.rot || 0, e.a0) : e.a);
-  const endB = (e) => (e.type === 'spline' ? e.pts[e.pts.length - 1] : e.type === 'ellarc' ? ellArcPt(e.c, e.rx, e.ry, e.rot || 0, e.a1) : e.b);
-  // Linienstücke einer Punktfolge (für Flächen und den CAD-Kern: Splines gehen dort als feine Linienzüge hin)
-  // Spline genau als kubische Bézier-Stücke (gleiche Kurve wie splinePoints: zentripetaler Catmull-Rom)
-  function splineBez(pts, closed) {
+  const endA = (e) => (e.type === 'spline' ? (e.mode === 'cv' && e.closed && e.pts.length >= 3 ? cvSplineBez(e.pts, true)[0].a : e.pts[0]) : e.type === 'ellarc' ? ellArcPt(e.c, e.rx, e.ry, e.rot || 0, e.a0) : e.a);
+  const endB = (e) => (e.type === 'spline' ? (e.mode === 'cv' && e.closed && e.pts.length >= 3 ? cvSplineBez(e.pts, true)[0].a : e.pts[e.pts.length - 1]) : e.type === 'ellarc' ? ellArcPt(e.c, e.rx, e.ry, e.rot || 0, e.a1) : e.b);
+  // Kontrollpunkt-Spline (kubischer B-Spline, exakt als kubische Bézier-Stücke über Boehm-Knoteneinfügung)
+  function cvSplineBez(pts, closed) {
     const n = pts.length;
     if (n < 2) return [];
-    if (n === 2 && !closed) return [{ t: 'line', a: pts[0], b: pts[1] }];
+    if (closed) {
+      if (n < 3) return [];
+      const out = [];
+      for (let i = 0; i < n; i++) {
+        const q0 = pts[(i - 1 + n) % n], q1 = pts[i], q2 = pts[(i + 1) % n], q3 = pts[(i + 2) % n];
+        out.push({
+          t: 'bez',
+          a: [(q0[0] + 4 * q1[0] + q2[0]) / 6, (q0[1] + 4 * q1[1] + q2[1]) / 6],
+          c1: [(2 * q1[0] + q2[0]) / 3, (2 * q1[1] + q2[1]) / 3],
+          c2: [(q1[0] + 2 * q2[0]) / 3, (q1[1] + 2 * q2[1]) / 3],
+          b: [(q1[0] + 4 * q2[0] + q3[0]) / 6, (q1[1] + 4 * q2[1] + q3[1]) / 6],
+        });
+      }
+      return out;
+    }
+    if (n === 2) return [{ t: 'line', a: pts[0], b: pts[1] }];
+    if (n === 3) return [{ t: 'bez', a: pts[0], c1: lerp(pts[0], pts[1], 2 / 3), c2: lerp(pts[2], pts[1], 2 / 3), b: pts[2] }];
+    const m = n - 3;
+    let Q = pts.map((q) => [q[0], q[1]]);
+    const U = [0, 0, 0, 0];
+    for (let j = 1; j < m; j++) U.push(j);
+    U.push(m, m, m, m);
+    const insertKnot = (u) => {
+      let k = 3;
+      while (k < U.length - 4 && U[k + 1] <= u) k++;
+      const Qn = new Array(Q.length + 1);
+      for (let i = 0; i < Qn.length; i++) {
+        if (i <= k - 3) Qn[i] = Q[i];
+        else if (i >= k + 1) Qn[i] = Q[i - 1];
+        else {
+          const den = U[i + 3] - U[i];
+          const a = den > 1e-12 ? (u - U[i]) / den : 0;
+          Qn[i] = lerp(Q[i - 1], Q[i], a);
+        }
+      }
+      Q = Qn;
+      U.splice(k + 1, 0, u);
+    };
+    for (let j = 1; j < m; j++) { insertKnot(j); insertKnot(j); }
+    const out = [];
+    for (let j = 0; j < m; j++) out.push({ t: 'bez', a: Q[3 * j], c1: Q[3 * j + 1], c2: Q[3 * j + 2], b: Q[3 * j + 3] });
+    return out;
+  }
+  // Linienstücke einer Punktfolge (für Flächen und den CAD-Kern: Splines gehen dort als feine Linienzüge hin)
+  // Spline genau als kubische Bézier-Stücke (gleiche Kurve wie splinePoints: zentripetaler Catmull-Rom oder Kontrollpunkte/Griffe)
+  function splineBez(pts, closed, opts) {
+    if (opts && opts.mode === 'cv') return cvSplineBez(pts, closed);
+    const n = pts.length;
+    if (n < 2) return [];
+    const handles = opts && Array.isArray(opts.handles) ? opts.handles : null;
+    if (n === 2 && !closed) {
+      if (handles && (Array.isArray(handles[0]) || Array.isArray(handles[1]))) {
+        const def = [(pts[1][0] - pts[0][0]) / 3, (pts[1][1] - pts[0][1]) / 3];
+        const h0 = Array.isArray(handles[0]) ? handles[0] : def;
+        const h1 = Array.isArray(handles[1]) ? handles[1] : def;
+        return [{ t: 'bez', a: pts[0], c1: [pts[0][0] + h0[0], pts[0][1] + h0[1]], c2: [pts[1][0] - h1[0], pts[1][1] - h1[1]], b: pts[1] }];
+      }
+      return [{ t: 'line', a: pts[0], b: pts[1] }];
+    }
     const P = (i) => {
       if (closed) return pts[((i % n) + n) % n];
       if (i < 0) return [2 * pts[0][0] - pts[1][0], 2 * pts[0][1] - pts[1][1]];
@@ -121,9 +188,50 @@ const SK = (() => {
       const t1 = d01, t2 = t1 + d12, t3 = t2 + d23, dt = t2 - t1;
       const m1 = [0, 1].map((k) => ((p1[k] - p0[k]) / (t1 - 0) - (p2[k] - p0[k]) / (t2 - 0) + (p2[k] - p1[k]) / dt) * dt);
       const m2 = [0, 1].map((k) => ((p2[k] - p1[k]) / dt - (p3[k] - p1[k]) / (t3 - t1) + (p3[k] - p2[k]) / (t3 - t2)) * dt);
-      out.push({ t: 'bez', a: p1, c1: [p1[0] + m1[0] / 3, p1[1] + m1[1] / 3], c2: [p2[0] - m2[0] / 3, p2[1] - m2[1] / 3], b: p2 });
+      const idx1 = closed ? (i % n) : i, idx2 = closed ? ((i + 1) % n) : i + 1;
+      const h1 = handles && Array.isArray(handles[idx1]) ? handles[idx1] : [m1[0] / 3, m1[1] / 3];
+      const h2 = handles && Array.isArray(handles[idx2]) ? handles[idx2] : [m2[0] / 3, m2[1] / 3];
+      out.push({ t: 'bez', a: p1, c1: [p1[0] + h1[0], p1[1] + h1[1]], c2: [p2[0] - h2[0], p2[1] - h2[1]], b: p2 });
     }
     return out;
+  }
+  // Tangenten-Griff am Punkt i einer Durchgangs-Spline (Ausgangsvektor vom Punkt zum vorderen Griffende)
+  function splineHandle(e, i) {
+    if (!e || e.type !== 'spline' || e.mode === 'cv' || !e.pts || i < 0 || i >= e.pts.length) return null;
+    if (Array.isArray(e.handles) && Array.isArray(e.handles[i])) return e.handles[i].slice();
+    const n = e.pts.length;
+    if (n < 2) return null;
+    if (n === 2 && !e.closed) return [(e.pts[1][0] - e.pts[0][0]) / 3, (e.pts[1][1] - e.pts[0][1]) / 3];
+    const bz = splineBez(e.pts, !!e.closed);
+    if (!bz.length) return null;
+    if (!e.closed && i === 0) return [bz[0].c1[0] - e.pts[0][0], bz[0].c1[1] - e.pts[0][1]];
+    if (!e.closed && i === n - 1) { const s = bz[bz.length - 1]; return [e.pts[n - 1][0] - s.c2[0], e.pts[n - 1][1] - s.c2[1]]; }
+    const sIn = bz[(i - 1 + bz.length) % bz.length], sOut = bz[i % bz.length];
+    const vIn = [e.pts[i][0] - sIn.c2[0], e.pts[i][1] - sIn.c2[1]];
+    const vOut = [sOut.c1[0] - e.pts[i][0], sOut.c1[1] - e.pts[i][1]];
+    return [(vIn[0] + vOut[0]) / 2, (vIn[1] + vOut[1]) / 2];
+  }
+  // Tangente an einem Spline-Punkt (Richtung und Winkel in °)
+  function splineTangentAt(e, i) {
+    if (!e || e.type !== 'spline' || !e.pts || e.pts.length < 2) return null;
+    const bz = splineBez(e.pts, !!e.closed, e);
+    if (!bz.length) return null;
+    const n = e.pts.length;
+    let vx = 0, vy = 0;
+    const segVecA = (s) => (s.t === 'bez' ? [s.c1[0] - s.a[0], s.c1[1] - s.a[1]] : [s.b[0] - s.a[0], s.b[1] - s.a[1]]);
+    const segVecB = (s) => (s.t === 'bez' ? [s.b[0] - s.c2[0], s.b[1] - s.c2[1]] : [s.b[0] - s.a[0], s.b[1] - s.a[1]]);
+    if (e.mode === 'cv') {
+      const s = i === n - 1 ? bz[bz.length - 1] : bz[Math.min(i, bz.length - 1)];
+      [vx, vy] = i === n - 1 ? segVecB(s) : segVecA(s);
+    } else if (!e.closed && i === 0) {
+      [vx, vy] = segVecA(bz[0]);
+    } else if (!e.closed && i >= n - 1) {
+      [vx, vy] = segVecB(bz[bz.length - 1]);
+    } else {
+      [vx, vy] = segVecA(bz[((i % bz.length) + bz.length) % bz.length]);
+    }
+    const L = Math.hypot(vx, vy);
+    return { vec: [vx, vy], len: L, dir: L > 1e-12 ? [vx / L, vy / L] : [1, 0], ang: (Math.atan2(vy, vx) * 180) / Math.PI };
   }
   function bezPoints(s, n) {
     n = n || Math.max(8, Math.min(40, Math.ceil((d2(s.a, s.c1) + d2(s.c1, s.c2) + d2(s.c2, s.b)) / 0.4)));
@@ -395,7 +503,7 @@ const SK = (() => {
       case 'circle': return [{ t: 'circle', c: e.c, r: e.r, sid: e.id }];
       case 'ellipse': return [{ t: 'ellipse', c: e.c, rx: e.rx, ry: e.ry, rot: e.rot || 0, sid: e.id }];
       case 'ellarc': return [{ t: 'ellarc', c: e.c, rx: e.rx, ry: e.ry, rot: e.rot || 0, a0: e.a0, a1: e.a1, ccw: e.ccw !== false, sid: e.id }];
-      case 'spline': return e.pts && e.pts.length >= 2 ? [{ t: 'spline', pts: e.pts, closed: !!e.closed, sid: e.id }] : [];
+      case 'spline': return e.pts && e.pts.length >= 2 ? [{ t: 'spline', pts: e.pts, closed: !!e.closed, ...(e.mode ? { mode: e.mode } : {}), ...(e.handles ? { handles: e.handles } : {}), sid: e.id }] : [];
       case 'text': return textContours(e).flat();
     }
     return [];
@@ -406,7 +514,7 @@ const SK = (() => {
     if (s.t === 'circle') { const p = circlePoints(s.c, s.r); p.push(p[0]); return p; }
     if (s.t === 'ellipse') { const p = ellipsePoints(s.c, s.rx, s.ry, s.rot); p.push(p[0]); return p; }
     if (s.t === 'ellarc') return ellArcPoints(s.c, s.rx, s.ry, s.rot, s.a0, s.a1, s.ccw);
-    if (s.t === 'spline') return splinePoints(s.pts, s.closed);
+    if (s.t === 'spline') return splinePoints(s.pts, s.closed, s);
     if (s.t === 'bez') return bezPoints(s);
     return [];
   }
@@ -448,7 +556,7 @@ const SK = (() => {
       }
       if (e.type === 'spline') {
         if (!e.pts || e.pts.length < 2) continue;
-        if (e.closed) { if (e.pts.length >= 3) out.push(loopFromSegs(splineBez(e.pts, true).map((s, si) => ({ ...s, sid: e.id + ':' + si })), e.id, [e.id])); continue; }
+        if (e.closed) { if (e.pts.length >= 3) out.push(loopFromSegs(splineBez(e.pts, true, e).map((s, si) => ({ ...s, sid: e.id + ':' + si })), e.id, [e.id])); continue; }
         if (d2(endA(e), endB(e)) > 1e-9) open.push(e);
         continue;
       }
@@ -476,7 +584,7 @@ const SK = (() => {
         visited.add(cur.id);
         const forward = qkey(endA(cur)) === qkey(from);
         const a = forward ? endA(cur) : endB(cur), b = forward ? endB(cur) : endA(cur);
-        if (cur.type === 'spline') { const bz = splineBez(cur.pts, false).map((s, si) => ({ ...s, sid: cur.id + ':' + si })); segs.push(...(forward ? bz : bz.slice().reverse().map(revSeg))); }
+        if (cur.type === 'spline') { const bz = splineBez(cur.pts, false, cur).map((s, si) => ({ ...s, sid: cur.id + ':' + si })); segs.push(...(forward ? bz : bz.slice().reverse().map(revSeg))); }
         else if (cur.type === 'ellarc') { const bz = ellArcBez(cur.c, cur.rx, cur.ry, cur.rot || 0, cur.a0, cur.a1, cur.ccw !== false).map((s, si) => ({ ...s, sid: cur.id + ':' + si })); segs.push(...(forward ? bz : bz.slice().reverse().map(revSeg))); }
         else segs.push(cur.type === 'arc' ? { t: 'arc', a, m: cur.m, b, sid: cur.id } : { t: 'line', a, b, sid: cur.id });
         from = b;
@@ -498,7 +606,7 @@ const SK = (() => {
     for (const e of list) { addV(endA(e), e); addV(endB(e), e); }
     const used = new Set(), out = [];
     const segOf = (e, fwd) => {
-      if (e.type === 'spline') { const bz = splineBez(e.pts, false); return fwd ? bz : bz.slice().reverse().map(revSeg); }
+      if (e.type === 'spline') { const bz = splineBez(e.pts, false, e); return fwd ? bz : bz.slice().reverse().map(revSeg); }
       if (e.type === 'ellarc') { const bz = ellArcBez(e.c, e.rx, e.ry, e.rot || 0, e.a0, e.a1, e.ccw !== false); return fwd ? bz : bz.slice().reverse().map(revSeg); }
       const s = e.type === 'arc' ? { t: 'arc', a: e.a, m: e.m, b: e.b } : { t: 'line', a: e.a, b: e.b };
       return [fwd ? s : revSeg(s)];
@@ -658,6 +766,7 @@ const SK = (() => {
     const o = { ...e };
     for (const k of ['a', 'b', 'm', 'c']) if (o[k]) o[k] = mv(o[k]);
     if (o.pts) o.pts = o.pts.map(mv);
+    if (Array.isArray(o.handles)) o.handles = o.handles.map((h) => (Array.isArray(h) ? h.slice() : h));
     return o;
   }
   // ---------- Maße: feste Werte oder Formeln, die die Skizze steuern ----------
@@ -694,6 +803,12 @@ const SK = (() => {
       case 'x': return anchorOf(e)[0];
       case 'y': return anchorOf(e)[1];
     }
+    if (e && e.type === 'spline') {
+      const hmA = /^hAng(\d+)$/.exec(k);
+      if (hmA) { const h = splineHandle(e, +hmA[1]); return h ? (Math.atan2(h[1], h[0]) * 180) / Math.PI : NaN; }
+      const hmL = /^hLen(\d+)$/.exec(k);
+      if (hmL) { const h = splineHandle(e, +hmL[1]); return h ? Math.hypot(h[0], h[1]) : NaN; }
+    }
     return NaN;
   }
   const r4 = (x) => Math.round(x * 1e4) / 1e4;
@@ -713,6 +828,25 @@ const SK = (() => {
         Object.assign(e, translateEnt(e, k === 'x' ? dv : 0, k === 'y' ? dv : 0)); return true;
       }
     }
+    if (e && e.type === 'spline' && e.mode !== 'cv') {
+      const hmA = /^hAng(\d+)$/.exec(k);
+      if (hmA) {
+        const hi = +hmA[1], h = splineHandle(e, hi); if (!h) return false;
+        const L = Math.max(0.5, Math.hypot(h[0], h[1])), t = (v * Math.PI) / 180;
+        e.handles = Array.isArray(e.handles) ? e.handles.slice() : [];
+        e.handles[hi] = [r4(Math.cos(t) * L), r4(Math.sin(t) * L)];
+        return true;
+      }
+      const hmL = /^hLen(\d+)$/.exec(k);
+      if (hmL) {
+        if (!(v > 0)) return false;
+        const hi = +hmL[1], h = splineHandle(e, hi); if (!h) return false;
+        const L = Math.hypot(h[0], h[1]), ux = L > 1e-9 ? h[0] / L : 1, uy = L > 1e-9 ? h[1] / L : 0;
+        e.handles = Array.isArray(e.handles) ? e.handles.slice() : [];
+        e.handles[hi] = [r4(ux * v), r4(uy * v)];
+        return true;
+      }
+    }
     return false;
   }
   const ends = (e) => (e.type === 'line' || e.type === 'arc' ? [e.a, e.b] : []);
@@ -721,6 +855,6 @@ const SK = (() => {
     const r = Solver.solve({ ents: ents || [], dims: dims || [], cons: cons || [] }, V, { inPlace });
     return r.ents;
   }
-  return { textPathPts, chains, ellipsePoints, ellArcSweep, ellArcPt, ellArcPoints, ellArcBez, splineBez, bezPoints, textContours, textBox, FONTS, FONTNAMES, isFontLoaded, loadFont, needsEntsFonts, ensureEntsFonts, ensureDocFonts, onFont: fontEv.on, syncFonts, ensureFonts, loops, regions, regionAt, segsOf, segPoints, splinePoints, lineSegsOf, endA, endB, anchorOf, distSeg, arcInfo, arcPoints, circlePoints, rectCorners, polyCorners, hit, distEnt, snapPoints, faceLoopsToEnts, project3, openEnds, bounds, translateEnt, inPoly, d2, applyDims, measure, setMeasure, DIMKEYS, DIMNAME };
+  return { textPathPts, chains, ellipsePoints, ellArcSweep, ellArcPt, ellArcPoints, ellArcBez, splineBez, splineHandle, splineTangentAt, bezPoints, textContours, textBox, FONTS, FONTNAMES, isFontLoaded, loadFont, needsEntsFonts, ensureEntsFonts, ensureDocFonts, onFont: fontEv.on, syncFonts, ensureFonts, loops, regions, regionAt, segsOf, segPoints, splinePoints, lineSegsOf, endA, endB, anchorOf, distSeg, arcInfo, arcPoints, circlePoints, rectCorners, polyCorners, hit, distEnt, snapPoints, faceLoopsToEnts, project3, openEnds, bounds, translateEnt, inPoly, d2, applyDims, measure, setMeasure, DIMKEYS, DIMNAME };
 })();
 

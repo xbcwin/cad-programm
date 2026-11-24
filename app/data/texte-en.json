@@ -2788,5 +2788,21 @@
   "notices.emptyHints": "No notices in this session.",
   "notices.jump": "Jump to",
   "notices.jumpTip": "Select and focus this step in the viewport",
-  "notices.gone": "This step no longer exists in the current model."
+  "notices.gone": "This step no longer exists in the current model.",
+  "sk.hint.splineCV": "Click to place control points: the curve starts at the first, ends at the last and bends smoothly toward the others. Press <b>Enter</b> to finish.",
+  "sk.panel.splineFit": "Through points",
+  "sk.panel.splineCV": "With control points",
+  "sk.panel.splineClosed": "Closed curve",
+  "sk.panel.splineHandlesHead": "Tangent handles",
+  "sk.panel.splineHandlesHint": "Drag handles in the canvas or enter angle and strength as dimensions.",
+  "sk.panel.handlePoint": "Point {n}",
+  "sk.panel.handleStart": "Point {n} (Start)",
+  "sk.panel.handleEnd": "Point {n} (End)",
+  "sk.panel.handleAngle": "Tangent angle",
+  "sk.panel.handleStrength": "Tangent strength",
+  "sk.panel.handleReset": "Reset handle",
+  "sk.dim.hAng": "Handle angle P{n}",
+  "sk.dim.hLen": "Handle strength P{n}",
+  "sk.dimBox.toHandleLen": "Dimension handle strength",
+  "sk.dimBox.toHandleAng": "Dimension handle angle"
 }

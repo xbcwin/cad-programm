@@ -2098,6 +2098,16 @@ const HELP = {
   "tip": "Liste aller mitgelieferten fremden Bausteine mit Lizenz und Lizenztext anzeigen",
   "hilfe": "Zeigt alle fremden Bibliotheken und Schriften an, die Tracery mitliefert – zum Beispiel three.js für die 3D-Ansicht, die Schrift Inter sowie OpenCascade und replicad – jeweils mit Urheber, Lizenzart und dem zugehörigen Lizenztext.",
   "tipp": "Klick bei einem Baustein auf „Lizenztext anzeigen“, um die vollständigen Bedingungen einzublenden."
+ },
+ "splineControl": {
+  "tip": "Weiche Formkurve über Kontrollpunkte (Profi)",
+  "hilfe": "Bei „Mit Kontrollpunkten“ beginnt die Kurve exakt im ersten Punkt und endet im letzten Punkt. Alle Punkte dazwischen ziehen die Kurve wie Magnete weich an, ohne dass sie durch jeden Punkt hindurch muss.",
+  "tipp": "Ideal für glatte Übergänge ohne Dellen – am rechten Rand oder vor dem Zeichnen kannst du jederzeit zwischen „Durch Punkte“ und „Mit Kontrollpunkten“ wechseln."
+ },
+ "splineHandles": {
+  "tip": "Tangenten-Griffe an jedem Punkt einer Durchgangs-Spline einstellen (Profi)",
+  "hilfe": "Wähle eine Durchgangs-Spline aus, um an jedem Punkt einen Griff für Richtung (Winkel) und Stärke (Länge) der Tangente zu sehen. Ziehe ein Griffende direkt im Bild oder gib Winkel und Stärke rechts bzw. mit dem Maß-Werkzeug (D) exakt ein.",
+  "tipp": "Mit „Griff zurücksetzen“ übernimmt der Punkt wieder automatisch die weiche Standard-Tangente seiner Nachbarpunkte."
  }
 };
 
