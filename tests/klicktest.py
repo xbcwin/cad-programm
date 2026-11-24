@@ -13472,6 +13472,275 @@ def t_f11241014(p):
     return [ok1, ok2]
 
 
+def t_a067_zeichnung_mass_arten(p):
+    def sheet_screen(sx, sy):
+        return p.ev("""
+          const svg = document.querySelector('#sheet .sheet-holder svg');
+          const pt = svg.createSVGPoint(); pt.x = arg[0]; pt.y = arg[1];
+          const q = pt.matrixTransform(svg.getScreenCTM());
+          return [q.x, q.y];
+        """, [sx, sy])
+
+    p.empty()
+    p.ev("""
+      App.change('Platte anlegen', d => {
+        d.items.push(Model.newItem('box', { w: 60, d: 40, h: 15 }, { name: 'Platte' }));
+      });
+    """)
+    warte_rechnen(p, 30)
+    # 1-mm-Fase rechts oben (x=30, z=15) und 5-mm-Rundung hinten links (x=-30, y=20)
+    p.ev("""
+      const it = App.doc.items[0];
+      const edges = App.results.get(it.id).data.edges;
+      const eCh = edges.findIndex(e => e && e.m && Math.hypot(e.m[0] - 30, e.m[1], e.m[2] - 15) < 0.25);
+      const eFil = edges.findIndex(e => e && e.m && Math.hypot(e.m[0] + 30, e.m[1] - 20, e.m[2] - 7.5) < 0.25);
+      if (eCh >= 0) Actions.addFinish('chamfer', 1, [{ id: it.id, edgeIdx: eCh }]);
+      if (eFil >= 0) Actions.addFinish('fillet', 5, [{ id: it.id, edgeIdx: eFil }]);
+      App.change('Bohrungen hinzufügen', d => {
+        d.items.push(Model.newItem('cylinder', { d: 8, h: 20 }, { name: 'Bohrung8', role: 'hole', more: { t: { x: -10, y: 0, z: -2, rx: 0, ry: 0, rz: 0 } } }));
+        d.items.push(Model.newItem('cylinder', { d: 6, h: 20 }, { name: 'Bohrung6', role: 'hole', more: { t: { x: 10, y: 0, z: -2, rx: 0, ry: 0, rz: 0 } } }));
+      });
+    """)
+    warte_rechnen(p, 30)
+
+    # In Zeichnung wechseln, A3 quer, Maßstab 2:1, Auto-Maße leeren
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.ev("return Drawing.waitReady()")
+    p.pg.select_option('#dw-panel-sheet', 'A3')
+    p.pg.select_option('#dw-panel-orient', 'landscape')
+    p.wait(200)
+    p.pg.click('#t-sheet'); p.wait(200)
+    p.pg.select_option('#dw-scale', '2')
+    p.pg.click('#sheet-tabs'); p.wait(250)
+    p.ev("App.change('Auto-Maße aus', () => { Drawing.activeSheet().dims = []; }); Drawing.refresh();")
+    p.wait(250)
+
+    # 1. Bohrung -> Ø-Maß (Ø8) und Rundung -> R-Maß (R5)
+    p.pg.click('#dw-dm-dia'); p.wait(150)
+    dia_pt = p.ev("""
+      const v = Drawing.layout.views.top;
+      const c = v.geo.circles.find(x => x.full && Math.abs(x.r - 4) < 0.15);
+      return c ? [v.ox + (c.c[0] + c.r * Math.SQRT1_2) * v.s, v.oy - (c.c[1] + c.r * Math.SQRT1_2) * v.s] : null;
+    """)
+    sd = sheet_screen(*dia_pt)
+    p.pg.mouse.move(sd[0], sd[1]); p.wait(80)
+    p.pg.mouse.click(sd[0], sd[1]); p.wait(200)
+
+    p.pg.click('#dw-dm-rad'); p.wait(150)
+    rad_pt = p.ev("""
+      const v = Drawing.layout.views.top;
+      const c = v.geo.circles.find(x => !x.full && Math.abs(x.r - 5) < 0.25);
+      const mid = c && c.arc ? (c.arc[0] + c.arc[1]) * 0.5 : Math.PI * 0.75;
+      return c ? [v.ox + (c.c[0] + c.r * Math.cos(mid)) * v.s, v.oy - (c.c[1] + c.r * Math.sin(mid)) * v.s] : null;
+    """)
+    sr = sheet_screen(*rad_pt)
+    p.pg.mouse.move(sr[0], sr[1]); p.wait(80)
+    p.pg.mouse.click(sr[0], sr[1]); p.wait(200)
+
+    s1 = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const dims = Drawing.activeSheet().dims;
+      const texts = [...svg.querySelectorAll('text.dimtext')].map(t => t.textContent);
+      return { types: dims.map(d => d.type), rDia: dims[0]?.r, rRad: dims[1]?.r, texts };
+    """)
+    ok1 = (
+        s1['types'] == ['dia', 'rad']
+        and abs((s1['rDia'] or 0) - 4) < 0.05
+        and abs((s1['rRad'] or 0) - 5) < 0.05
+        and 'Ø8' in s1['texts']
+        and 'R5' in s1['texts']
+    )
+
+    # 2. Fase 1 mm -> "1×45°"
+    p.pg.click('#dw-dm-chamfer'); p.wait(150)
+    ch_pt = p.ev("""
+      const v = Drawing.layout.views.front;
+      const toS = (q) => [v.ox + q[0] * v.s, v.oy - q[1] * v.s];
+      let hit = null;
+      for (const pl of v.geo.polys) {
+        if (pl.c || pl.pts.length < 2) continue;
+        for (let i = 0; i < pl.pts.length - 1; i++) {
+          const a = pl.pts[i], b = pl.pts[i + 1];
+          const dx = Math.abs(b[0] - a[0]), dy = Math.abs(b[1] - a[1]);
+          if (Math.abs(dx - 1) < 0.15 && Math.abs(dy - 1) < 0.15) {
+            hit = toS([(a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5]);
+          }
+        }
+      }
+      return hit;
+    """)
+    sc = sheet_screen(*ch_pt)
+    p.pg.mouse.move(sc[0], sc[1]); p.wait(80)
+    p.pg.mouse.click(sc[0], sc[1]); p.wait(200)
+
+    s2 = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const d = Drawing.activeSheet().dims.find(x => x.type === 'chamfer');
+      const t = d ? svg.querySelector(`text.dimtext[data-id="${d.id}"]`)?.textContent : '';
+      return { ok: !!d, dist: d?.dist, ang: d?.ang, label: t };
+    """)
+    ok2 = s2['ok'] and abs((s2['dist'] or 0) - 1) < 0.05 and abs((s2['ang'] or 0) - 45) < 0.1 and s2['label'] == '1×45°'
+
+    # 3. Zwei Kanten -> Winkelmaß 90° + Gegenwinkel
+    p.pg.click('#dw-dm-ang'); p.wait(150)
+    ang_pts = p.ev("""
+      const v = Drawing.layout.views.front;
+      const toS = (q) => [v.ox + q[0] * v.s, v.oy - q[1] * v.s];
+      const b = v.geo.box;
+      return {
+        e1: toS([(b[0] + b[2]) * 0.5, b[1]]),
+        e2: toS([b[0], (b[1] + b[3]) * 0.5]),
+        place: toS([b[0] + 10, b[1] + 5]),
+      };
+    """)
+    for key in ('e1', 'e2', 'place'):
+        pt = sheet_screen(*ang_pts[key])
+        p.pg.mouse.move(pt[0], pt[1]); p.wait(80)
+        p.pg.mouse.click(pt[0], pt[1]); p.wait(150)
+
+    s3 = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const d = Drawing.activeSheet().dims.find(x => x.type === 'ang');
+      const txt = d ? svg.querySelector(`text.dimtext[data-id="${d.id}"]`)?.textContent : '';
+      const arrows = d ? svg.querySelectorAll(`polygon.arrow[data-id="${d.id}"]`).length : 0;
+      return { ok: !!d, id: d?.id, a0: d?.a0, a1: d?.a1, txt, arrows };
+    """)
+    # Winkelmaß wählen und Gegenwinkel testen
+    p.ev("Drawing.select(arg)", s3['id']); p.wait(150)
+    p.pg.click('#dw-dim-supp'); p.wait(200)
+    s3_flip = p.ev("const d = Drawing.activeSheet().dims.find(x => x.id === arg); return { a0: d?.a0, a1: d?.a1 };", s3['id'])
+    ok3 = s3['ok'] and s3['txt'] == '90°' and s3['arrows'] == 2 and abs(s3_flip['a0'] - s3['a0']) > 0.1
+
+    # 4. Kettenmaß: -30 -> -10 -> 10 -> 30 in Draufsicht
+    p.pg.click('#dw-dm-chain'); p.wait(150)
+    ch_chain = p.ev("""
+      const v = Drawing.layout.views.top;
+      const toS = (q) => [v.ox + q[0] * v.s, v.oy - q[1] * v.s];
+      const b = v.geo.box;
+      return {
+        p0: toS([b[0], b[1]]),
+        p1: toS([-10, 0]),
+        place: toS([-20, b[1] - 8]),
+        p2: toS([10, 0]),
+        p3: toS([b[2], b[1]]),
+      };
+    """)
+    for key in ('p0', 'p1', 'place', 'p2', 'p3'):
+        pt = sheet_screen(*ch_chain[key])
+        p.pg.mouse.move(pt[0], pt[1]); p.wait(70)
+        p.pg.mouse.click(pt[0], pt[1]); p.wait(140)
+    p.pg.keyboard.press('Enter'); p.wait(150)
+
+    s4 = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const d = Drawing.activeSheet().dims.find(x => x.type === 'chain');
+      const nodes = d ? [...svg.querySelectorAll(`text.dimtext[data-id="${d.id}"]`)] : [];
+      const ys = nodes.map(n => parseFloat(n.getAttribute('y')));
+      const xs = nodes.map(n => parseFloat(n.getAttribute('x')));
+      const vals = nodes.map(n => n.textContent);
+      return { ok: !!d, nPts: d?.pts?.length || 0, vals, ys, xs };
+    """)
+    ok4 = (
+        s4['ok']
+        and s4['nPts'] == 4
+        and s4['vals'] == ['20', '20', '20']
+        and len(s4['ys']) == 3
+        and max(s4['ys']) - min(s4['ys']) < 0.05
+    )
+
+    # 5. Bezugsmaß: von linker Kante (-30, 0) zu (-10, 0), (10, 0), (30, -20)
+    p.pg.click('#dw-dm-base'); p.wait(150)
+    base_pts = p.ev("""
+      const v = Drawing.layout.views.top;
+      const toS = (q) => [v.ox + q[0] * v.s, v.oy - q[1] * v.s];
+      const b = v.geo.box;
+      return {
+        ref: toS([b[0], 0]),
+        p1: toS([-10, 0]),
+        place: toS([-20, b[3] + 7]),
+        p2: toS([10, 0]),
+        p3: toS([b[2], b[1]]),
+      };
+    """)
+    for key in ('ref', 'p1', 'place', 'p2', 'p3'):
+        pt = sheet_screen(*base_pts[key])
+        p.pg.mouse.move(pt[0], pt[1]); p.wait(70)
+        p.pg.mouse.click(pt[0], pt[1]); p.wait(140)
+    p.pg.keyboard.press('Enter'); p.wait(150)
+
+    s5 = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const d = Drawing.activeSheet().dims.find(x => x.type === 'base');
+      const nodes = d ? [...svg.querySelectorAll(`text.dimtext[data-id="${d.id}"]`)] : [];
+      const ys = nodes.map(n => parseFloat(n.getAttribute('y'))).sort((a, b) => a - b);
+      const vals = nodes.map(n => n.textContent);
+      return { ok: !!d, nPts: d?.pts?.length || 0, vals, ys };
+    """)
+    ok5 = (
+        s5['ok']
+        and s5['nPts'] == 3
+        and s5['vals'] == ['20', '40', '60']
+        and len(s5['ys']) == 3
+        and abs((s5['ys'][1] - s5['ys'][0]) - 8) < 0.2
+        and abs((s5['ys'][2] - s5['ys'][1]) - 8) < 0.2
+    )
+
+    # 6. PDF-Export, Speichern/Laden, Rückgängig/Wiederholen, Menü, Befehle & Hilfe
+    p.pg.keyboard.press('Escape'); p.wait(150)
+    pdf_info = p.ev("""
+      return Drawing.buildPDFBytes().then(bytes => {
+        let s = '';
+        for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+        return {
+          head: s.slice(0, 8),
+          hasDia: s.includes('\\xd88') || s.includes('Ø8'),
+          hasRad: s.includes('R5'),
+          hasCh: s.includes('1\\xd745\\xb0') || s.includes('1×45°'),
+          hasAng: s.includes('90\\xb0') || s.includes('90°'),
+        };
+      });
+    """)
+    saved = p.ev("return JSON.stringify(App.doc)")
+    p.ev("App.setDoc(JSON.parse(arg), {fit:false})", saved); warte_rechnen(p); p.wait(300)
+    after_reload = p.ev("return Drawing.activeSheet().dims.map(d => d.type)")
+    p.ev("const b = Drawing.activeSheet().dims.find(d => d.type === 'base'); if (b) Drawing.select(b.id);")
+    p.wait(150)
+    p.pg.click('#dw-del-sel'); p.wait(200)
+    after_del = p.ev("return Drawing.activeSheet().dims.length")
+    p.ev("App.undo()"); p.wait(200)
+    after_undo = p.ev("return Drawing.activeSheet().dims.length")
+    p.ev("App.redo()"); p.wait(200)
+    after_redo = p.ev("return Drawing.activeSheet().dims.length")
+    p.ev("App.undo()"); p.wait(200)
+
+    p.pg.click('#t-dim-kind'); p.wait(200)
+    menu_txt = p.ev("return [...document.querySelectorAll('.menu [role=\"menuitem\"]')].map(x => x.textContent).join('|')")
+    p.pg.keyboard.press('Escape'); p.wait(100)
+
+    help_ok = p.ev("""
+      return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(hj => {
+        const h = hj.drawingDimTypes;
+        return !!(h && h.tip && h.hilfe && h.tipp)
+          && document.querySelectorAll('[data-help="drawingDimTypes"]').length >= 1
+          && Commands.search('kettenmaß').length >= 1
+          && Commands.search('bezugsmaß').length >= 1
+          && Commands.search('winkelmaß').length >= 1
+          && Commands.search('fasenmaß').length >= 1;
+      });
+    """)
+
+    ok6 = (
+        pdf_info['head'] == '%PDF-1.4'
+        and pdf_info['hasDia'] and pdf_info['hasRad'] and pdf_info['hasCh'] and pdf_info['hasAng']
+        and after_reload == ['dia', 'rad', 'chamfer', 'ang', 'chain', 'base']
+        and after_del == 5 and after_undo == 6 and after_redo == 5
+        and 'Kettenmaß' in menu_txt and 'Bezugsmaß' in menu_txt and 'Fase' in menu_txt
+        and help_ok
+    )
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -13641,6 +13910,7 @@ TESTS = [
     ('[A-061] Stabile Bezüge, Schritt 1: Rundung an Kante über Tasche & Längenänderung 40→60 / geteilte Kante / Skizzen-Fase / Skizze auf Fläche / Lage-Ersatz', t_a061_stabile_bezuege),
     ('[A-064] Zeichnung: Detailansicht (Detail Z 4:1, wahre Maße, 4× Geometrie)', t_a064_zeichnung_detailansicht),
     ('[F-11241014] Volltest-Reparatur: Skizze-Fertig wartet auf Schrift-Laden / rechtes Panel schützt fokussiertes Eingabefeld bei results', t_f11241014),
+    ('[A-067] Zeichnung: Maß-Arten (Ø Bohrung, R Rundung, Fase 1×45°, Winkel 90°, Ketten- & Bezugsmaß)', t_a067_zeichnung_mass_arten),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

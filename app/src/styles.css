@@ -604,6 +604,9 @@ body.sketching .timeline{display:none}
 .sheet-tab-add{display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 10px;border-radius:8px;border:1px dashed var(--line-2);background:transparent;color:var(--ink-2);font:500 12.5px/1 var(--font);cursor:pointer;flex:none}
 .sheet-tab-add:hover{border-color:var(--accent-line);color:var(--accent);background:var(--accent-soft)}
 .sheet-tab-add svg{width:13px;height:13px}
+.dw-dim-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.dw-dim-grid .btn{justify-content:flex-start;padding:6px 8px;font-size:12.5px}
+.dw-dim-grid .btn.active{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent);font-weight:600}
 
 /* Kopfzeile: bei weniger Platz zeigen erst die Nebenwerkzeuge, dann alle außer „Exportieren“ nur ihr Symbol */
 @media (max-width: 1500px) and (min-width: 901px){ .tool.minor span{display:none} .tool.minor{padding:7px 9px} }

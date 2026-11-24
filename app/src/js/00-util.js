@@ -1726,6 +1726,11 @@ const HELP = {
   "tip": "Schnittlinie A–A durch eine Ansicht ziehen – Schnittansicht mit Schraffur erzeugen",
   "hilfe": "Klicke „Schnittansicht“ (Taste S) und ziehe mit gedrückter Maus oder zwei Klicks eine Schnittlinie quer durch eine Ansicht. Tracery schneidet das 3D-Modell an dieser Ebene, legt eine Schnittansicht („Schnitt A–A“) an und füllt alle geschnittenen Flächen mit normgerechter 45°-Schraffur.",
   "tipp": "Löcher und Hohlräume bleiben un-schraffiert. Rechts im Panel kannst du die Blickrichtung der Pfeile umkehren oder weitere Schnitte (B–B, C–C …) hinzufügen."
+ },
+ "drawingDimTypes": {
+  "tip": "Maß-Arten: Kettenmaß, Bezugsmaß, Winkel, Radius (R), Durchmesser (Ø) und Fase (1×45°)",
+  "hilfe": "Wähle rechts unter „Bemaßung“ oder über „Maß-Arten“ in der Leiste die gewünschte Maß-Art: Kettenmaß setzt mehrere Maße hintereinander auf eine Linie, Bezugsmaß staffelt alle Maße ab einer gemeinsamen Kante, Winkel misst zwischen zwei Kanten, R und Ø bemaßen Rundungen und Bohrungen, und Fase erkennt abgeschrägte Kanten wie 1×45°.",
+  "tipp": "Bei Ketten- und Bezugsmaß klickst du einfach weitere Punkte an; Enter schließt die Reihe ab. Bei Winkelmaßen kannst du nach dem Anklicken rechts auf „Gegenwinkel“ umschalten."
  }
 };
 

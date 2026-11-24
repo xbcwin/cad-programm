@@ -29,8 +29,12 @@ const Panels = (() => {
       const detBtn = btn('t-detail', 'zoomIn', T('tool.detail'), T('tool.detailTip'), 'Z', () => Drawing.tool('detail'), Drawing.activeTool === 'detail' ? 'active' : '');
       detBtn.dataset.help = 'drawingDetail';
       detBtn.setAttribute('aria-pressed', String(Drawing.activeTool === 'detail'));
-      const dimBtn = btn('t-dim', 'dim', T('tool.dim'), T('tool.dimTip'), 'D', () => Drawing.tool('dim'), Drawing.activeTool === 'dim' ? 'active' : '');
-      dimBtn.setAttribute('aria-pressed', String(Drawing.activeTool === 'dim'));
+      const dimBtn = btn('t-dim', 'dim', T('tool.dim'), T('tool.dimTip'), 'D', () => Drawing.tool('dim'), Drawing.activeTool === 'dim' && Drawing.dimMode === 'lin' ? 'active' : '');
+      dimBtn.dataset.help = 'drawingDimTypes';
+      dimBtn.setAttribute('aria-pressed', String(Drawing.activeTool === 'dim' && Drawing.dimMode === 'lin'));
+      const dimKindBtn = btn('t-dim-kind', 'dim', T('tool.dimKinds'), T('tool.dimKindsTip'), '', (e) => Drawing.dimMenu(e.currentTarget), Drawing.activeTool === 'dim' && Drawing.dimMode !== 'lin' ? 'active' : '');
+      dimKindBtn.dataset.help = 'drawingDimTypes';
+      dimKindBtn.setAttribute('aria-pressed', String(Drawing.activeTool === 'dim' && Drawing.dimMode !== 'lin'));
       btn('t-autodim', 'target', T('tool.autodim'), T('tool.autodimTip'), '', () => Drawing.autoDims(), '', T('tool.autodimShort'));
       btn('t-draw', 'line', T('tool.draw2d'), T('tool.draw2dTip'), '', (e) => Drawing.drawMenu(e.currentTarget));
       el.append(h('div', { class: 'sep' }));
