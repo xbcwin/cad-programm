@@ -1002,6 +1002,226 @@ const Viewer = (() => {
     }
     return { pos: out, area, minT: isFinite(minT) ? minT : null };
   }
+  // ---------- Schräge- und Hinterschnitt-Analyse (PF-09, PF-10) ----------
+  // Färbt alle Flächen je nach Entformungsrichtung: grün = genug Schräge, gelb = zu wenig Schräge, rot = Hinterschnitt.
+  function draftAnalysis(opts = {}) {
+    const rawDir = Array.isArray(opts.dir) ? opts.dir : (opts.dir && typeof opts.dir.x === 'number' ? [opts.dir.x, opts.dir.y, opts.dir.z] : [0, 0, 1]);
+    const d = new THREE.Vector3(Number(rawDir[0]) || 0, Number(rawDir[1]) || 0, Number(rawDir[2]) || 0);
+    if (d.lengthSq() < 1e-12) d.set(0, 0, 1);
+    else d.normalize();
+    const minAngle = clamp(Number(opts.minAngle ?? 1), 0, 89);
+    const twoSided = opts.twoSided !== false;
+    const only = Array.isArray(opts.only) ? opts.only : null;
+
+    const solids = [...nodes.values()].filter((n) => n.obj.visible && !n.allBodiesHidden && n.role !== 'hole' && n.mesh && n.data && n.data.triangles && (!only || only.includes(n.id)));
+    if (!solids.length) {
+      return {
+        pos: [], norms: [], colors: [],
+        areas: { ok: 0, warn: 0, undercut: 0, total: 0 },
+        counts: { ok: 0, warn: 0, undercut: 0 },
+        faces: [], box: null, dir: [d.x, d.y, d.z], minAngle, twoSided,
+      };
+    }
+
+    const ref = Math.abs(d.z) < 0.9 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(1, 0, 0);
+    const u = new THREE.Vector3().crossVectors(ref, d).normalize();
+    const v = new THREE.Vector3().crossVectors(d, u).normalize();
+
+    const worldBox = new THREE.Box3();
+    const tris = [];
+    let uMin = Infinity, uMax = -Infinity, vMin = Infinity, vMax = -Infinity;
+    const aV = new THREE.Vector3(), bV = new THREE.Vector3(), cV = new THREE.Vector3();
+    const ab = new THREE.Vector3(), ac = new THREE.Vector3(), nrm = new THREE.Vector3();
+
+    for (let ni = 0; ni < solids.length; ni++) {
+      const n = solids[ni];
+      const W = worldTris(n);
+      const nt = W.length / 9;
+      const triFace = new Int32Array(nt).fill(-1);
+      for (const [start, count, fi] of n.visFaceGroups || n.data.faceGroups || []) {
+        const t0 = Math.floor(start / 3), t1 = Math.floor((start + count) / 3);
+        for (let ti = t0; ti < t1 && ti < nt; ti++) triFace[ti] = fi;
+      }
+      for (let ti = 0; ti < nt; ti++) {
+        const k = ti * 9;
+        aV.set(W[k], W[k + 1], W[k + 2]);
+        bV.set(W[k + 3], W[k + 4], W[k + 5]);
+        cV.set(W[k + 6], W[k + 7], W[k + 8]);
+        nrm.crossVectors(ab.subVectors(bV, aV), ac.subVectors(cV, aV));
+        const L = nrm.length();
+        if (L < 1e-12) continue;
+        nrm.divideScalar(L);
+        worldBox.expandByPoint(aV).expandByPoint(bV).expandByPoint(cV);
+        const au = aV.dot(u), av = aV.dot(v), aw = aV.dot(d);
+        const bu = bV.dot(u), bv = bV.dot(v), bw = bV.dot(d);
+        const cu = cV.dot(u), cv = cV.dot(v), cw = cV.dot(d);
+        const det = (bu - au) * (cv - av) - (bv - av) * (cu - au);
+        uMin = Math.min(uMin, au, bu, cu); uMax = Math.max(uMax, au, bu, cu);
+        vMin = Math.min(vMin, av, bv, cv); vMax = Math.max(vMax, av, bv, cv);
+        tris.push({
+          ni, fi: triFace[ti], area: L * 0.5,
+          ax: aV.x, ay: aV.y, az: aV.z, bx: bV.x, by: bV.y, bz: bV.z, cx: cV.x, cy: cV.y, cz: cV.z,
+          nx: nrm.x, ny: nrm.y, nz: nrm.z,
+          au, av, aw, bu, bv, bw, cu, cv, cw, det,
+        });
+      }
+    }
+
+    if (!tris.length || worldBox.isEmpty()) {
+      return {
+        pos: [], norms: [], colors: [],
+        areas: { ok: 0, warn: 0, undercut: 0, total: 0 },
+        counts: { ok: 0, warn: 0, undercut: 0 },
+        faces: [], box: null, dir: [d.x, d.y, d.z], minAngle, twoSided,
+      };
+    }
+
+    const spanU = Math.max(1e-3, uMax - uMin), spanV = Math.max(1e-3, vMax - vMin);
+    const gridN = clamp(Math.ceil(Math.sqrt(tris.length)), 16, 80);
+    const cell = Math.max(spanU, spanV) / gridN;
+    const grid = new Map();
+    const ci = (val, origin) => clamp(Math.floor((val - origin) / cell), 0, gridN + 1);
+    for (let ti = 0; ti < tris.length; ti++) {
+      const t = tris[ti];
+      if (Math.abs(t.det) <= 1e-10) continue;
+      const i0 = ci(Math.min(t.au, t.bu, t.cu), uMin), i1 = ci(Math.max(t.au, t.bu, t.cu), uMin);
+      const j0 = ci(Math.min(t.av, t.bv, t.cv), vMin), j1 = ci(Math.max(t.av, t.bv, t.cv), vMin);
+      for (let ix = i0; ix <= i1; ix++) {
+        for (let iy = j0; iy <= j1; iy++) {
+          const key = ix + ',' + iy;
+          let arr = grid.get(key);
+          if (!arr) grid.set(key, (arr = []));
+          arr.push(ti);
+        }
+      }
+    }
+
+    const diag = Math.max(1, worldBox.getSize(new THREE.Vector3()).length());
+    const eps = clamp(diag * 1e-5, 1e-4, 5e-3);
+    const wTol = Math.max(1e-4, eps * 0.5);
+    const dirEps = Math.sin((0.05 * Math.PI) / 180);
+    const tolAng = minAngle <= 1e-6 ? 0.05 : 1e-3;
+    const off = Math.max(0.015, diag * 0.00025);
+
+    const COL_OK = new THREE.Color('#2fb36d');
+    const COL_WARN = new THREE.Color('#f0b429');
+    const COL_BAD = new THREE.Color('#e0483b');
+
+    const pos = new Float32Array(tris.length * 9);
+    const norms = new Float32Array(tris.length * 9);
+    const colors = new Float32Array(tris.length * 9);
+    const areas = { ok: 0, warn: 0, undercut: 0, total: 0 };
+    const counts = { ok: 0, warn: 0, undercut: 0 };
+    const faceMap = new Map();
+
+    for (let ti = 0; ti < tris.length; ti++) {
+      const t = tris[ti];
+      const px = (t.ax + t.bx + t.cx) / 3 + eps * t.nx;
+      const py = (t.ay + t.by + t.cy) / 3 + eps * t.ny;
+      const pz = (t.az + t.bz + t.cz) / 3 + eps * t.nz;
+      const pu = px * u.x + py * u.y + pz * u.z;
+      const pv = px * v.x + py * v.y + pz * v.z;
+      const pw = px * d.x + py * d.y + pz * d.z;
+
+      let blockedPos = false, blockedNeg = false;
+      const list = grid.get(ci(pu, uMin) + ',' + ci(pv, vMin));
+      if (list) {
+        for (let li = 0; li < list.length; li++) {
+          const qi = list[li];
+          if (qi === ti) continue;
+          const q = tris[qi];
+          const inv = 1 / q.det;
+          const bu = ((pu - q.au) * (q.cv - q.av) - (pv - q.av) * (q.cu - q.au)) * inv;
+          if (bu < -1e-6 || bu > 1 + 1e-6) continue;
+          const bv = ((q.bu - q.au) * (pv - q.av) - (q.bv - q.av) * (pu - q.au)) * inv;
+          if (bv < -1e-6 || bu + bv > 1 + 1e-6) continue;
+          const hitW = q.aw + bu * (q.bw - q.aw) + bv * (q.cw - q.aw);
+          if (hitW > pw + wTol) blockedPos = true;
+          else if (hitW < pw - wTol) blockedNeg = true;
+          if (blockedPos && (!twoSided || blockedNeg)) break;
+        }
+      }
+
+      const s = t.nx * d.x + t.ny * d.y + t.nz * d.z;
+      const alpha = (Math.asin(clamp(s, -1, 1)) * 180) / Math.PI;
+      const canPos = s >= -dirEps && !blockedPos;
+      const canNeg = twoSided && s <= dirEps && !blockedNeg;
+      let status, effAngle = alpha;
+      if (!canPos && !canNeg) {
+        status = 'undercut';
+      } else {
+        if (canPos && !canNeg) effAngle = alpha;
+        else if (canNeg && !canPos) effAngle = -alpha;
+        else effAngle = Math.abs(alpha);
+        status = effAngle >= minAngle - tolAng ? 'ok' : 'warn';
+      }
+
+      areas[status] += t.area;
+      areas.total += t.area;
+      counts[status]++;
+
+      const col = status === 'ok' ? COL_OK : status === 'warn' ? COL_WARN : COL_BAD;
+      const o = ti * 9;
+      const ox = t.nx * off, oy = t.ny * off, oz = t.nz * off;
+      pos[o] = t.ax + ox; pos[o + 1] = t.ay + oy; pos[o + 2] = t.az + oz;
+      pos[o + 3] = t.bx + ox; pos[o + 4] = t.by + oy; pos[o + 5] = t.bz + oz;
+      pos[o + 6] = t.cx + ox; pos[o + 7] = t.cy + oy; pos[o + 8] = t.cz + oz;
+      for (let m = 0; m < 3; m++) {
+        const mo = o + m * 3;
+        norms[mo] = t.nx; norms[mo + 1] = t.ny; norms[mo + 2] = t.nz;
+        colors[mo] = col.r; colors[mo + 1] = col.g; colors[mo + 2] = col.b;
+      }
+
+      const n = solids[t.ni];
+      const fk = n.id + ':' + t.fi;
+      let fe = faceMap.get(fk);
+      if (!fe) {
+        fe = { ni: t.ni, fi: t.fi, area: 0, areaOk: 0, areaWarn: 0, areaUndercut: 0, angleSum: 0, cx: 0, cy: 0, cz: 0, nx: 0, ny: 0, nz: 0 };
+        faceMap.set(fk, fe);
+      }
+      fe.area += t.area;
+      if (status === 'ok') fe.areaOk += t.area;
+      else if (status === 'warn') fe.areaWarn += t.area;
+      else fe.areaUndercut += t.area;
+      fe.angleSum += effAngle * t.area;
+      fe.cx += ((t.ax + t.bx + t.cx) / 3) * t.area;
+      fe.cy += ((t.ay + t.by + t.cy) / 3) * t.area;
+      fe.cz += ((t.az + t.bz + t.cz) / 3) * t.area;
+      fe.nx += t.nx * t.area;
+      fe.ny += t.ny * t.area;
+      fe.nz += t.nz * t.area;
+    }
+
+    const faces = [];
+    for (const fe of faceMap.values()) {
+      const n = solids[fe.ni];
+      const f = fe.fi >= 0 && n.data && Array.isArray(n.data.faces) ? n.data.faces[fe.fi] : null;
+      const status = (fe.areaUndercut >= fe.area * 0.5 || (fe.areaUndercut > fe.areaOk && fe.areaUndercut > fe.areaWarn))
+        ? 'undercut'
+        : (fe.areaWarn > fe.areaOk ? 'warn' : 'ok');
+      let normal;
+      if (f && f.n) {
+        normal = new THREE.Vector3(...f.n).transformDirection(n.mesh.matrixWorld).normalize().toArray();
+      } else {
+        const nl = Math.hypot(fe.nx, fe.ny, fe.nz) || 1;
+        normal = [fe.nx / nl, fe.ny / nl, fe.nz / nl];
+      }
+      const center = (f && f.c)
+        ? new THREE.Vector3(...f.c).applyMatrix4(n.mesh.matrixWorld).toArray()
+        : (fe.area > 0 ? [fe.cx / fe.area, fe.cy / fe.area, fe.cz / fe.area] : [0, 0, 0]);
+      faces.push({
+        id: n.id, faceIdx: fe.fi, type: f ? f.t : null, status,
+        area: fe.area, areaOk: fe.areaOk, areaWarn: fe.areaWarn, areaUndercut: fe.areaUndercut,
+        angle: fe.area > 0 ? round(fe.angleSum / fe.area, 2) : 0,
+        center, normal,
+      });
+    }
+
+    return {
+      pos, norms, colors, areas, counts, faces, box: worldBox,
+      dir: [d.x, d.y, d.z], minAngle, twoSided,
+    };
+  }
   // Art jeder Kante: außen (konvex), innen (konkav) oder glatt (tangential) – über die beiden Nachbarflächen am Kantenmittelpunkt (KP-16)
   function edgeKinds(id) {
     const n = nodes.get(id); if (!n || !n.data || !n.data.triangles || !n.data.edges) return [];
@@ -1714,7 +1934,7 @@ const Viewer = (() => {
   return {
     viewBack, get viewHistory() { return camHist.length; }, useButtons, setMouseStyle, get mouseStyle() { return mouseStyle; }, get leftOrbits() { return !!(controls && controls.mouseButtons.LEFT === THREE.MOUSE.ROTATE); }, setLook, lookOf, get look() { return { ...LOOK }; }, fitShadow, renderImage, renderPartThumb, cameraBasis, renderOrthoView, lookAtFace, faceIndexOf: (id, fc) => { const n = nodes.get(id); return n ? faceIndexOf(n, fc) : -1; }, cylinderFaceInfo, threadFaceIndex: (id, th) => { const n = nodes.get(id); return n ? threadFaceIndex(n, th) : -1; }, get renderer() { return renderer; },
     init, requestRender, renderNow, setClip, setXray, setOffsets, baseBox, renderInset, silhouette, setAdaptive, setCompare, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, highlightBody, setSelectedEdges, clearHover, setRefGhost, clearRefGhost, hasRefGhost,
-    edgePositions, pick, pickAll, pickGhost, pickProxy, setProxies, clearProxies, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, setPrintBed, boxVisible, sceneBox, snapshot, makeFat, disposeFat, faceOverlay, faceArea, faceEdges, edgeKinds, wallAt, thinWalls,
+    edgePositions, pick, pickAll, pickGhost, pickProxy, setProxies, clearProxies, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, setPrintBed, boxVisible, sceneBox, snapshot, makeFat, disposeFat, faceOverlay, faceArea, faceEdges, edgeKinds, wallAt, thinWalls, draftAnalysis,
     get camera() { syncCamAnim(); return camera; }, get activeCamera() { syncCamAnim(); return cam(); }, get ortho() { return ortho; }, get gridStep() { return gridStep; }, get controls() { return controls; }, get scene() { return scene; }, get groups() { return groups; }, get nodes() { return nodes; }, get canvas() { return renderer.domElement; }, get theme() { return theme; }, get container() { return container; },
     get clip() { return vis.clip; }, get clips() { return vis.clips.slice(); }, get xray() { return vis.xray; }, get lowRes() { return lowRes; },  get pixelRatio() { return renderer.getPixelRatio(); },
     on: listeners.on,

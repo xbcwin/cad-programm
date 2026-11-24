@@ -1338,5 +1338,10 @@
     "tip": "CSV- oder XYZ-Punktedatei als 3D-Punktwolke oder Skizzenpunkte laden",
     "hilfe": "Liest Mess- und Scan-Punkte aus .csv- oder .xyz-Dateien (Komma, Semikolon, Tab oder Leerzeichen als Trenner, optional mit Überschrift und RGB-Farben). Du kannst sie als 3D-Punktwolke im Raum anzeigen oder direkt als Skizzenpunkte bzw. Spline auf der XY-Ebene anlegen.",
     "tipp": "Eine 3D-Punktwolke lässt sich rechts in Punktgröße, Farbe und Maßeinheit anpassen und jederzeit über „Als Skizzenpunkte übernehmen“ in eine Skizze übertragen."
+  },
+  "draftAnalysis": {
+    "tip": "Schräge und Hinterschnitte für Guss- oder Spritzgussformen farbig prüfen",
+    "hilfe": "Färbt alle Flächen passend zur gewählten Entformungsrichtung: Grün bedeutet genug Entformungsschräge ab dem eingestellten Winkel, Gelb bedeutet zu wenig Schräge (z. B. senkrechte Wände), und Rot zeigt Hinterschnitte, an denen das Teil in der Form hängen bleibt.",
+    "tipp": "Wähl über „Fläche“ direkt eine ebene Modellfläche als Auszugsrichtung und schalte bei einteiligen Formen (z. B. Silikonabguss) „Zweiteilige Form“ aus."
   }
 }

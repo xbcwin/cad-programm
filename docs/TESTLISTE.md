@@ -538,6 +538,15 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Kette mit runden Ecken & Rückgängig**: L-Kette mit „Beidseitig“ und „Ecken: Rund“ → äußere Ecke gerundet (Bogen R = 4 mm), innere Ecke spitz; ein Rückgängig räumt alles auf.
 - [ ] **Von Hand**: Bei Vieleck, gemischten Ketten (Linie + Bogen) und gedrücktem Rückgängig prüfen, ob Vorschau-Schildchen, Eckenbögen und Hinweistexte klar wirken.
 
+## Schräge- und Hinterschnitt-Analyse (Auto [A-105])
+
+- [x] **Quader mit 3° Schräge, Grenze 1°**: Über Prüfen → „Schräge & Hinterschnitte“ zeigen alle vier Seitenflächen grün (`ok`, Schrägewinkel ~3°) ohne Warnung oder Hinterschnitt.
+- [x] **Grenzwinkel einstellbar**: Grenze von 1° auf 5° stellen färbt die 3°-Seitenflächen gelb (`warn`); zurück auf 1° wieder grün.
+- [x] **Quader mit seitlicher Nut → Hinterschnitt rot**: Nut-Decke, Nut-Boden und Nut-Rückwand werden rot als Hinterschnitt markiert (~720 mm²), senkrechte Außenwände gelb, Ober-/Unterseite grün.
+- [x] **Entformungsrichtung & Ein-/Zweiteilige Form**: Wechsel auf `+X` löst den Hinterschnitt der Nut auf; Abschalten von „Zweiteilige Form“ markiert auch die Unterseite als Hinterschnitt.
+- [x] **Befehlssuche, Hilfe & Schließen**: `Commands.search('hinterschnitt')` findet die Analyse, `HELP.draftAnalysis` ist vorhanden und Schließen räumt Overlay und Leiste auf.
+- [ ] **Von Hand**: Bei einem geschwungenen Gehäuse mit Rippen, Bohrungen und gewählter schräger Bezugsfläche Entformungsrichtung per „Fläche“ anklicken und prüfen, ob Farben, Richtungspfeil und Flächenwerte klar lesbar sind.
+
 ## Bohrungs-Arten (Auto [A-008])
 
 - [x] **Sackloch Ø 5 × 10 mit 118°-Bohrspitze**: Volumen des abgezogenen Teils stimmt bis auf < 0,05 mm³ mit Zylinder + 118°-Kegel überein, das Loch bleibt im Körper blind, Querschnitts-Vorschau zeigt `118°` und Gesamttiefe.

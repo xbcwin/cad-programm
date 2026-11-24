@@ -18,6 +18,7 @@ const Measure = (() => {
     Views.collapse();
     if (Sketch.active) return;
     if (Notes.active) Notes.stop();
+    stopDraftFacePick();
     on = true; pts = []; current = null; last = null; clearVis();
     App.clearSelection(); Handles.clear();
     $('#t-measure') && $('#t-measure').classList.add('active');
@@ -1001,7 +1002,7 @@ const Measure = (() => {
       if (sel && App.sel.length) { sel = null; drawSaved(); }
       updateStatus();
     });
-    App.on('results', () => { relink(); syncMeasuredParams(); updateStatus(); });
+    App.on('results', () => { relink(); syncMeasuredParams(); updateStatus(); if (draftSt) drawDraft(); });
     App.on('remeshed', relink);
     App.on('rebuilt', updateCalc);
     App.on('docLoaded', stopFieldPick);
@@ -1013,15 +1014,18 @@ const Measure = (() => {
         if (curFmt !== lastFmt) { lastFmt = curFmt; refreshDisplay(); }
       });
     }
+    if (typeof I18n !== 'undefined' && I18n.on) {
+      I18n.on('change', () => { if (draftSt) { buildDraftBar(); updateDraftUI(); } });
+    }
     App.on('doc', () => {
       if (sel && !find(sel)) sel = null;
       const ids = new Set(list().map((m) => m.id));
       for (const k of [...live.keys()]) if (!ids.has(k)) live.delete(k);
-      if (Units.key() !== lastUnit) { lastUnit = Units.key(); if (list().length) relink(); }
+      if (Units.key() !== lastUnit) { lastUnit = Units.key(); if (list().length) relink(); if (draftSt) updateDraftUI(); }
       drawSaved();
       updateStatus();
     });
-    App.on('mode', () => { if (App.mode !== 'model') { if (on) stop(); stopFieldPick(); } drawSaved(); updateStatus(); });
+    App.on('mode', () => { if (App.mode !== 'model') { if (on) stop(); if (draftSt) draft(false); stopFieldPick(); } drawSaved(); updateStatus(); });
     App.on('sketch', updateStatus);
     App.on('sketchSel', updateStatus);
     App.on('calc', (b) => { calcBusy = !!b; updateCalc(); });
@@ -1091,11 +1095,315 @@ const Measure = (() => {
     }
     return r;
   }
+  // ---------- Schräge- und Hinterschnitt-Analyse (PF-09, PF-10) ----------
+  const DRAFT_DIRS = { '+Z': [0, 0, 1], '-Z': [0, 0, -1], '+X': [1, 0, 0], '-X': [-1, 0, 0], '+Y': [0, 1, 0], '-Y': [0, -1, 0] };
+  let draftSt = null;
+  function normalizeDraftDir(val) {
+    if (typeof val === 'string' && DRAFT_DIRS[val]) return { dirKey: val, dir: DRAFT_DIRS[val].slice() };
+    if (Array.isArray(val) && val.length >= 3) {
+      const x = Number(val[0]) || 0, y = Number(val[1]) || 0, z = Number(val[2]) || 0;
+      const l = Math.hypot(x, y, z);
+      if (l > 1e-9) {
+        const u = [x / l, y / l, z / l];
+        for (const [k, d] of Object.entries(DRAFT_DIRS)) {
+          if (u[0] * d[0] + u[1] * d[1] + u[2] * d[2] > 0.9999) return { dirKey: k, dir: d.slice() };
+        }
+        return { dirKey: 'face', dir: u };
+      }
+    }
+    return { dirKey: '+Z', dir: [0, 0, 1] };
+  }
+  function syncDraftButtons() {
+    if (typeof GeomCheck !== 'undefined' && GeomCheck.sync) GeomCheck.sync();
+    if (typeof Views !== 'undefined' && Views.sync) Views.sync();
+  }
+  function disposeDraftVisuals() {
+    if (!draftSt) return;
+    if (draftSt.mesh) {
+      Viewer.groups.overlay.remove(draftSt.mesh);
+      draftSt.mesh.geometry.dispose();
+      draftSt.mesh.material.dispose();
+      draftSt.mesh = null;
+    }
+    if (draftSt.arrow) {
+      Viewer.groups.overlay.remove(draftSt.arrow);
+      draftSt.arrow.traverse((o) => {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) o.material.dispose();
+      });
+      draftSt.arrow = null;
+    }
+  }
+  function stopDraftFacePick() {
+    if (!draftSt || !draftSt.picking) return;
+    const pk = draftSt.picking;
+    const cv = Viewer.canvas;
+    cv.removeEventListener('pointerdown', pk.down, true);
+    window.removeEventListener('keydown', pk.key, true);
+    cv.style.cursor = '';
+    UI.hint(null);
+    draftSt.picking = null;
+    const btn = draftSt.bar && draftSt.bar.querySelector('#draft-pick-face');
+    if (btn) btn.classList.remove('active');
+  }
+  function startDraftFacePick() {
+    if (!draftSt) return;
+    if (draftSt.picking) { stopDraftFacePick(); return; }
+    if (on) stop();
+    stopFieldPick();
+    const cv = Viewer.canvas;
+    const btn = draftSt.bar && draftSt.bar.querySelector('#draft-pick-face');
+    if (btn) btn.classList.add('active');
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true });
+      const f = hit && hit.faceIdx >= 0 && hit.node && hit.node.data && hit.node.data.faces ? hit.node.data.faces[hit.faceIdx] : null;
+      if (!f || f.t !== 'PLANE' || !f.n) {
+        UI.toast(T('draft.pickFaceNeedPlane'), { icon: 'info' });
+        return;
+      }
+      const wn = new THREE.Vector3(...f.n).transformDirection(hit.node.obj.matrixWorld).normalize().toArray();
+      const norm = normalizeDraftDir(wn);
+      stopDraftFacePick();
+      if (!draftSt) return;
+      draftSt.dirKey = norm.dirKey;
+      draftSt.dir = norm.dir;
+      syncDraftBarInputs();
+      drawDraft();
+    };
+    const key = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault(); e.stopPropagation();
+        stopDraftFacePick();
+      }
+    };
+    draftSt.picking = { down, key };
+    cv.addEventListener('pointerdown', down, true);
+    window.addEventListener('keydown', key, true);
+    cv.style.cursor = 'crosshair';
+    UI.hint(T('draft.pickFaceHint'));
+  }
+  function makeDraftArrow(box, dir, twoSided) {
+    if (!box || box.isEmpty()) return null;
+    const grp = new THREE.Group();
+    const d = new THREE.Vector3(...dir).normalize();
+    const c = box.getCenter(new THREE.Vector3());
+    const sz = box.getSize(new THREE.Vector3());
+    const span = Math.abs(d.x) * sz.x + Math.abs(d.y) * sz.y + Math.abs(d.z) * sz.z;
+    const diag = Math.max(10, sz.length());
+    const len = clamp(diag * 0.28, 8, 28);
+    const rad = clamp(len * 0.055, 0.35, 1.3);
+    const buildOne = (vec, distOff, opacity, scale) => {
+      const L = len * scale, R = rad * scale;
+      const g = new THREE.Group();
+      const mat = new THREE.MeshBasicMaterial({ color: 0x2b7de9, transparent: opacity < 1, opacity, depthTest: false });
+      const shaftL = L * 0.62, headL = L * 0.38;
+      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(R, R, shaftL, 12), mat);
+      shaft.position.y = shaftL / 2;
+      const head = new THREE.Mesh(new THREE.ConeGeometry(R * 2.3, headL, 14), mat);
+      head.position.y = shaftL + headL / 2;
+      g.add(shaft, head);
+      g.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), vec);
+      g.position.copy(c).addScaledVector(vec, distOff);
+      g.renderOrder = 22;
+      shaft.renderOrder = head.renderOrder = 22;
+      return g;
+    };
+    const off = span * 0.5 + clamp(diag * 0.08, 3, 12);
+    grp.add(buildOne(d, off, 0.95, 1));
+    if (twoSided) grp.add(buildOne(d.clone().negate(), off, 0.55, 0.78));
+    grp.userData.noPick = true;
+    return grp;
+  }
+  function updateDraftUI() {
+    if (!draftSt || !draftSt.bar) return;
+    const r = draftSt.info;
+    const fmtA = (a) => Units.fmtAreaU(a || 0, a > 0 && a < 100 ? 1 : 0);
+    const okEl = draftSt.bar.querySelector('#draft-ok-val');
+    const warnEl = draftSt.bar.querySelector('#draft-warn-val');
+    const badEl = draftSt.bar.querySelector('#draft-bad-val');
+    const sumEl = draftSt.bar.querySelector('#draft-summary');
+    if (okEl) okEl.textContent = r ? fmtA(r.areas.ok) : '0';
+    if (warnEl) warnEl.textContent = r ? fmtA(r.areas.warn) : '0';
+    if (badEl) badEl.textContent = r ? fmtA(r.areas.undercut) : '0';
+    if (sumEl) {
+      if (!r || !(r.areas.total > 0)) sumEl.textContent = T('draft.empty');
+      else if (r.areas.undercut > 0.05) sumEl.textContent = T('draft.hasUndercut', { area: fmtA(r.areas.undercut) });
+      else if (r.areas.warn > 0.05) sumEl.textContent = T('draft.hasWarn', { area: fmtA(r.areas.warn), ang: fmtAngleU(draftSt.minAngle) });
+      else sumEl.textContent = T('draft.allOk', { ang: fmtAngleU(draftSt.minAngle) });
+    }
+  }
+  function syncDraftBarInputs() {
+    if (!draftSt || !draftSt.bar) return;
+    const selEl = draftSt.bar.querySelector('#draft-dir');
+    if (selEl) {
+      let faceOpt = selEl.querySelector('option[value="face"]');
+      if (draftSt.dirKey === 'face') {
+        if (!faceOpt) { faceOpt = h('option', { value: 'face' }, T('draft.dirFace')); selEl.append(faceOpt); }
+        selEl.value = 'face';
+      } else {
+        if (faceOpt) faceOpt.remove();
+        selEl.value = draftSt.dirKey;
+      }
+    }
+    const rng = draftSt.bar.querySelector('#draft-angle-range');
+    const num = draftSt.bar.querySelector('#draft-angle');
+    if (rng && document.activeElement !== rng) rng.value = String(clamp(draftSt.minAngle, 0, 15));
+    if (num && document.activeElement !== num) num.value = String(round(draftSt.minAngle, 2));
+    const two = draftSt.bar.querySelector('#draft-two-sided');
+    if (two) two.checked = !!draftSt.twoSided;
+  }
+  function drawDraft() {
+    if (!draftSt) return;
+    disposeDraftVisuals();
+    const res = Viewer.draftAnalysis({ dir: draftSt.dir, minAngle: draftSt.minAngle, twoSided: draftSt.twoSided });
+    draftSt.info = res;
+    if (res.pos && res.pos.length) {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(res.pos, 3));
+      geo.setAttribute('normal', new THREE.Float32BufferAttribute(res.norms, 3));
+      geo.setAttribute('color', new THREE.Float32BufferAttribute(res.colors, 3));
+      const mat = new THREE.MeshStandardMaterial({
+        vertexColors: true, roughness: 0.55, metalness: 0.04,
+        transparent: true, opacity: 0.88, side: THREE.DoubleSide,
+        polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.renderOrder = 18;
+      mesh.userData.noPick = true;
+      Viewer.groups.overlay.add(mesh);
+      draftSt.mesh = mesh;
+    }
+    const arrow = makeDraftArrow(res.box, draftSt.dir, draftSt.twoSided);
+    if (arrow) { Viewer.groups.overlay.add(arrow); draftSt.arrow = arrow; }
+    updateDraftUI();
+    Viewer.requestRender();
+  }
+  function buildDraftBar() {
+    if (!draftSt) return;
+    if (draftSt.bar) draftSt.bar.remove();
+    const barEl = h('div', { class: 'viewbar draft-bar', id: 'draft-bar', role: 'toolbar', 'aria-label': T('draft.title'), 'data-help': 'draftAnalysis' });
+    const head = h('div', { class: 'vb-head' }, h('span', { class: 'title' }, T('draft.title')));
+    const closeBtn = h('button', { type: 'button', class: 'vb-x', id: 'draft-close', 'aria-label': T('draft.closeAria'), 'data-tip': T('common.close') });
+    closeBtn.innerHTML = icon('close');
+    closeBtn.onclick = () => draft(false);
+    head.append(closeBtn);
+
+    const dirSel = h('select', { id: 'draft-dir', class: 'vb-sel', style: { flex: '1', minWidth: '0' }, 'aria-label': T('draft.dirAria') },
+      h('option', { value: '+Z' }, T('draft.dirPosZ')),
+      h('option', { value: '-Z' }, T('draft.dirNegZ')),
+      h('option', { value: '+X' }, T('draft.dirPosX')),
+      h('option', { value: '-X' }, T('draft.dirNegX')),
+      h('option', { value: '+Y' }, T('draft.dirPosY')),
+      h('option', { value: '-Y' }, T('draft.dirNegY')));
+    dirSel.onchange = () => {
+      if (dirSel.value === 'face') return;
+      const norm = normalizeDraftDir(dirSel.value);
+      draftSt.dirKey = norm.dirKey;
+      draftSt.dir = norm.dir;
+      syncDraftBarInputs();
+      drawDraft();
+    };
+    const flipBtn = h('button', { type: 'button', class: 'btn small', id: 'draft-flip', 'aria-label': T('draft.flipTip'), 'data-tip': T('draft.flipTip') });
+    flipBtn.innerHTML = icon('mirror');
+    flipBtn.onclick = () => {
+      const neg = [-draftSt.dir[0], -draftSt.dir[1], -draftSt.dir[2]];
+      const norm = normalizeDraftDir(neg);
+      draftSt.dirKey = norm.dirKey;
+      draftSt.dir = norm.dir;
+      syncDraftBarInputs();
+      drawDraft();
+    };
+    const pickBtn = h('button', { type: 'button', class: 'btn small', id: 'draft-pick-face', 'data-tip': T('draft.pickFaceTip') }, T('draft.pickFace'));
+    pickBtn.onclick = () => startDraftFacePick();
+
+    const rng = h('input', { type: 'range', id: 'draft-angle-range', min: 0, max: 15, step: 0.5, value: clamp(draftSt.minAngle, 0, 15), 'aria-label': T('draft.angleAria') });
+    const num = h('input', { type: 'number', id: 'draft-angle', class: 'vb-num', min: 0, max: 45, step: 0.5, value: round(draftSt.minAngle, 2), 'aria-label': T('draft.angleAria') });
+    const setAngle = (raw) => {
+      const v = parseFloat(String(raw).replace(',', '.'));
+      if (!isFinite(v)) return;
+      draftSt.minAngle = clamp(v, 0, 45);
+      syncDraftBarInputs();
+      drawDraft();
+    };
+    rng.oninput = () => setAngle(rng.value);
+    num.oninput = () => setAngle(num.value);
+    num.onchange = () => setAngle(num.value);
+    num.onkeydown = (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') { setAngle(num.value); num.blur(); }
+    };
+
+    const twoCb = h('input', { type: 'checkbox', id: 'draft-two-sided' });
+    twoCb.checked = !!draftSt.twoSided;
+    twoCb.onchange = () => { draftSt.twoSided = twoCb.checked; drawDraft(); };
+
+    const legend = h('div', { class: 'draft-legend' },
+      h('div', { class: 'draft-chip', id: 'draft-ok' }, h('span', { class: 'draft-dot ok' }), h('span', { class: 'draft-lbl' }, T('draft.okLabel')), h('b', { class: 'mono', id: 'draft-ok-val' }, '0')),
+      h('div', { class: 'draft-chip', id: 'draft-warn' }, h('span', { class: 'draft-dot warn' }), h('span', { class: 'draft-lbl' }, T('draft.warnLabel')), h('b', { class: 'mono', id: 'draft-warn-val' }, '0')),
+      h('div', { class: 'draft-chip', id: 'draft-bad' }, h('span', { class: 'draft-dot bad' }), h('span', { class: 'draft-lbl' }, T('draft.badLabel')), h('b', { class: 'mono', id: 'draft-bad-val' }, '0')));
+
+    barEl.append(
+      head,
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, T('draft.dirLabel')), dirSel, flipBtn, pickBtn),
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, T('draft.angleLabel')), rng, num, h('span', { class: 'vb-u' }, '°')),
+      h('div', { class: 'vb-row' }, h('label', { class: 'vb-hint', 'data-tip': T('draft.twoSidedTip') }, twoCb, ' ', T('draft.twoSided'))),
+      legend,
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint', id: 'draft-summary' }, '')));
+    Views.bars().append(barEl);
+    draftSt.bar = barEl;
+    syncDraftBarInputs();
+    updateDraftUI();
+  }
+  function draft(onArg = !draftSt, opts = {}) {
+    if (!onArg) {
+      if (!draftSt) return false;
+      stopDraftFacePick();
+      disposeDraftVisuals();
+      if (draftSt.bar) draftSt.bar.remove();
+      draftSt = null;
+      syncDraftButtons();
+      Viewer.requestRender();
+      return false;
+    }
+    const norm = opts.dir !== undefined ? normalizeDraftDir(opts.dir) : (draftSt ? { dirKey: draftSt.dirKey, dir: draftSt.dir } : { dirKey: '+Z', dir: [0, 0, 1] });
+    const angRaw = opts.minAngle !== undefined ? opts.minAngle : (opts.angle !== undefined ? opts.angle : (draftSt ? draftSt.minAngle : 1));
+    const minAngle = clamp(Number(angRaw), 0, 45);
+    const twoSided = opts.twoSided !== undefined ? !!opts.twoSided : (draftSt ? draftSt.twoSided : true);
+    if (draftSt) {
+      draftSt.dirKey = norm.dirKey;
+      draftSt.dir = norm.dir;
+      draftSt.minAngle = isFinite(minAngle) ? minAngle : 1;
+      draftSt.twoSided = twoSided;
+      syncDraftBarInputs();
+      drawDraft();
+      syncDraftButtons();
+      return true;
+    }
+    draftSt = { dirKey: norm.dirKey, dir: norm.dir, minAngle: isFinite(minAngle) ? minAngle : 1, twoSided, bar: null, mesh: null, arrow: null, info: null, picking: null };
+    buildDraftBar();
+    drawDraft();
+    syncDraftButtons();
+    return true;
+  }
   return {
     showCoords, get coords() { return coordsNow; }, updateStatus, setCalcBusy, get statusInfo() { return { ...statusState }; }, copyText, copyValue, get copied() { return copied; }, minDistance, clearDist, init, toggle, start, stop, refreshDisplay,
     get active() { return on; }, get result() { return last ? last.text : (els[0] ? els[0].textContent : null); },
     list, find, keep, relink, setHidden, rename, remove, select, drawSaved, treeSection, renderPanel, get selected() { return sel; },
     pickEdgeForField, stopFieldPick, syncMeasuredParams, unlinkMeasuredParam, buildEdgeMeasureRef, resolveMeasuredEdge, get pickingField() { return !!fieldPick; },
+    draft, get draftActive() { return !!draftSt; },
+    get draftInfo() {
+      if (!draftSt) return null;
+      const r = draftSt.info;
+      return {
+        active: true, dirKey: draftSt.dirKey, dir: draftSt.dir.slice(), minAngle: draftSt.minAngle, twoSided: draftSt.twoSided,
+        areas: r ? { ...r.areas } : { ok: 0, warn: 0, undercut: 0, total: 0 },
+        counts: r ? { ...r.counts } : { ok: 0, warn: 0, undercut: 0 },
+        faces: r ? r.faces.map((f) => ({ ...f })) : [],
+        hasMesh: !!draftSt.mesh,
+      };
+    },
   };
 })();
 
