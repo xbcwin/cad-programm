@@ -1035,6 +1035,7 @@ const Views = (() => {
       { label: (st.focus ? '✓ ' : '') + T('menu.view.focus'), icon: 'focusView', help: 'focusView', run: () => focus() },
       { label: (st.ov ? '✓ ' : '') + T('menu.view.overhang'), icon: 'overhang', help: 'overhang', run: () => overhang() },
       { label: (st.thin ? '✓ ' : '') + T('menu.view.thin'), icon: 'ruler', help: 'thinWalls', id: 'view-thin', run: () => thin() },
+      { label: (typeof Measure !== 'undefined' && Measure.draftActive ? '✓ ' : '') + T('menu.view.draft'), icon: 'chamfer', help: 'draftAnalysis', id: 'view-draft', run: () => Measure.draft() },
       { label: T('menu.view.present'), icon: 'play', kbd: 'P', help: 'present', id: 'view-present', run: () => present(true) },
       { label: T('menu.view.turntable'), icon: 'play', help: 'turntable', id: 'view-turntable', run: () => Print.turntableDialog() },
       '-', ...lookItems(),
@@ -1079,7 +1080,7 @@ const Views = (() => {
     return out;
   }
   function sync() {
-    const b = $('#t-views'); if (b) b.classList.toggle('active', !!(st.cut || st.xray || st.exGoal > 0 || st.focus || st.ov || st.thin || st.wind));
+    const b = $('#t-views'); if (b) b.classList.toggle('active', !!(st.cut || st.xray || st.exGoal > 0 || st.focus || st.ov || st.thin || st.wind || (typeof Measure !== 'undefined' && Measure.draftActive)));
     const x = document.querySelector('.view-btns [data-view="xray"]'); if (x) x.classList.toggle('on', st.xray);
     const c = document.querySelector('.view-btns [data-view="cut"]'); if (c) c.classList.toggle('on', !!st.cut);
   }
@@ -1115,7 +1116,7 @@ const Views = (() => {
       }
     });
   }
-  function reset() { section(false); if (st.xray) xray(false); if (st.exWaitOff) { st.exWaitOff(); st.exWaitOff = null; } stopExAnim(); if (st.exGoal > 0 || st.ex > 0) { st.ex = st.exGoal = 0; Viewer.setOffsets(null); if (st.exBar) { st.exBar.remove(); st.exBar = null; } } focus(false); overhang(false); thin(false); wind(false); present(false); if (st.exGroups) setGroups(false); }
+  function reset() { section(false); if (st.xray) xray(false); if (st.exWaitOff) { st.exWaitOff(); st.exWaitOff = null; } stopExAnim(); if (st.exGoal > 0 || st.ex > 0) { st.ex = st.exGoal = 0; Viewer.setOffsets(null); if (st.exBar) { st.exBar.remove(); st.exBar = null; } } focus(false); overhang(false); thin(false); wind(false); present(false); if (typeof Measure !== 'undefined' && Measure.draftActive) Measure.draft(false); if (st.exGroups) setGroups(false); }
   return { saveView, goView, removeView,     init, section, xray, explode, collapse, focus, overhang, menu, onKey, reset, sync, bars,
     present, get presenting() { return !!st.present; }, thin, get thinInfo() { return st.thin ? { area: st.thin.area, minT: st.thin.minT } : null; },
     get overhangArea() { return st.ov ? st.ov.area : null; },

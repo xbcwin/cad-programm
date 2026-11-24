@@ -2047,6 +2047,11 @@ const HELP = {
   "tip": "Entlang Pfad direkt von einem Körper abziehen (z. B. Nut entlang einer Kurve)",
   "hilfe": "Schneidet das entlang des Pfads gezogene Profil sofort als Nut, Rille oder Kanal aus einem bestehenden Körper heraus – wahlweise gleich beim Abschließen der Skizze oder nachträglich rechts unter „Körper“.",
   "tipp": "Zeichne den Pfad direkt auf der Oberfläche des Körpers; mit der Querschnitts-Höhe bestimmst du, wie tief die Nut einschneidet."
+ },
+ "draftAnalysis": {
+  "tip": "Schräge und Hinterschnitte für Guss- oder Spritzgussformen farbig prüfen",
+  "hilfe": "Färbt alle Flächen passend zur gewählten Entformungsrichtung: Grün bedeutet genug Entformungsschräge ab dem eingestellten Winkel, Gelb bedeutet zu wenig Schräge (z. B. senkrechte Wände), und Rot zeigt Hinterschnitte, an denen das Teil in der Form hängen bleibt.",
+  "tipp": "Wähl über „Fläche“ direkt eine ebene Modellfläche als Auszugsrichtung und schalte bei einteiligen Formen (z. B. Silikonabguss) „Zweiteilige Form“ aus."
  }
 };
 

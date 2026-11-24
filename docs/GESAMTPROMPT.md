@@ -93,7 +93,7 @@ Leitlinien:
 | `17-sketchops.js` (`SKO`) | Schnittpunkte, Trimmen, Versatz (`offsetChain`), dünne Wand (`thinRegions`), Spiegeln, Muster (`mapEnt`), Schablonen `TEMPLATES`/`tplEnts`, Skizzen-Prüfer `inspect` |
 | `20-kernel.js` | Brücke zum Worker-Pool (`Kernel.ensure`/`state`/`timings`/`setMultiWorker`/`maxWorkers`/`poolStats`, lädt WASM einmal bei Bedarf, verteilt unabhängige Körper auf bis zu 4 Worker, Zähler & Fingerabdrücke über `stats`/`resetStats`/`clearCache`/`lastStats`/`fingerprint`) |
 | `25-app.js` | Zustand, `App.change(label, fn, {merge, amend})` mit sparsamem Patch-Rückgängig (`App.Patch`, Speicherlimit 32 MB, `App.historyStats`, `App.setHistoryLimit`), Bereinigung/Prüfung von `mergedInto`, mehrere Projekt-Tabs (`openTab`/`switchTab`/`closeTab`/`restoreOpenTabs`), Neuberechnung, Ergebnisse & Schritt-Cache (`stepFingerprint`/`stepCacheStatus`/`evalStats`) |
-| `30-viewer.js` | three.js-Ansicht, Picking (Flächen, Kanten), `edgePositions`, Raster, `renderNow` (synchrones Einzelbild), Kamera (`syncCamAnim`/`scheduleCamEmit`, `camera.updateMatrixWorld`), adaptive Auflösung mit zeitkompensierter Dämpfung und Timer-Fallback (`scheduleAdaptRestore`), Touch-Steuerung (`touchesFor`: zwei Finger `TOUCH.DOLLY_ROTATE` bzw. `TOUCH.DOLLY_PAN` in der Skizze) |
+| `30-viewer.js` | three.js-Ansicht, Picking (Flächen, Kanten), `edgePositions`, Raster, `renderNow` (synchrones Einzelbild), Kamera (`syncCamAnim`/`scheduleCamEmit`, `camera.updateMatrixWorld`), adaptive Auflösung mit zeitkompensierter Dämpfung und Timer-Fallback (`scheduleAdaptRestore`), Touch-Steuerung (`touchesFor`: zwei Finger `TOUCH.DOLLY_ROTATE` bzw. `TOUCH.DOLLY_PAN` in der Skizze), `draftAnalysis` (Schräge-/Hinterschnitt-Analyse PF-09/PF-10) |
 | `35-handles.js` | Ziehgriffe (Größe, Lage, Rundungsgriff, Drehwinkel-Griff `revAngle`, am Tablet vergrößert; Schildchen `placeLabels()` weichen bei verkürztem Sehstrahl seitlich aus und reichen Alt-/Rechtsklick per `bindLabelPass` durch), Maus- und Touch-Bedienung (Antippen wählt, langes Tippen öffnet Kontextmenü, Mehr-Finger-Passthrough) |
 | `40-library.js` | Bibliotheksteile `LIB`/`LIBMAP` (Drohnen-Bausteine mit `drone: true` ausgeblendet, bleiben für alte Projekte in `LIBMAP`) |
 | `41-dronelib.js` | FPV-Daten, Kaufteile, Herstellerrahmen |
@@ -113,7 +113,7 @@ Leitlinien:
 | `54-select.js` | Auswahlfilter, Ähnliche, Kantenkette |
 | `55-sketch.js` | Skizzen-Modus: alle Werkzeuge, Panel, `refreshUI`, Fertig/Hochziehen (`done()` wartet auf ungeladene Text-Schriften), verbundene Kanten, Re-Entranz-Schutz in `render()`, synchronisiertes `dimBox._typed` in `askDim()`/`onKey()` |
 | `56-notes.js` | Notizstift |
-| `57-measure.js` | Messen (inkl. verknüpfter Messwert-Parameter `pickEdgeForField`/`syncMeasuredParams`/`unlinkMeasuredParam`) |
+| `57-measure.js` | Messen (inkl. verknüpfter Messwert-Parameter `pickEdgeForField`/`syncMeasuredParams`/`unlinkMeasuredParam` sowie Schräge- und Hinterschnitt-Analyse `Measure.draft`/`draftActive`/`draftInfo`) |
 | `58-commands.js` | Eingabezeile, Befehlssuche |
 | `59-versions.js` | Versionen |
 | `60-print.js` | Export (STEP mit XCAF-Farben/Namen/Baugruppen, IGES, BREP, STL, 3MF, OBJ/MTL, GLB, DXF), Drucker-Liste `PRINTERS`, Bauraum-Prüfung `fitCheck`/`applyRotationSuggestion`, Loch-Ausgleich `holeComp` für STL/3MF, Passungs-Vorgaben `PRINT_FITS`/`printFit`, Düsen-Wandcheck `nozzleWallCheck`, Ausrichten `orientForPrint`/`bestPrintOrientation`, `Zip` (Packen/Entpacken) |

@@ -21179,6 +21179,117 @@ def t_a102_pfad_verdrehung_schnitt(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a105_schraege_hinterschnitt(p):
+    p.empty()
+    # 1. Quader 20x20x10 mit 3° Entformungsschräge, Grenze 1° → alle 4 Seitenflächen grün
+    p.ev("""
+      App.change('draft-box', d => {
+        const b = Model.newItem('box', { w: 20, d: 20, h: 10 });
+        b.t.x = 0; b.t.y = 0;
+        b.finishes.push({ id: 'f_d1', type: 'draft', r: 3 });
+        d.items.push(b);
+      });
+    """)
+    warte_rechnen(p, 30)
+    p.pg.click('#t-check'); p.wait(250)
+    p.pg.click('#check-draft'); p.wait(400)
+    p.pg.locator('#draft-bar').wait_for(state='visible', timeout=5000)
+    info1 = p.ev("return Measure.draftInfo")
+    sides1 = [f for f in (info1 and info1.get('faces') or []) if abs(f['normal'][2]) < 0.5]
+    ok1 = (
+        info1 is not None and info1['active'] and info1['hasMesh']
+        and info1['minAngle'] == 1
+        and len(sides1) == 4
+        and all(f['status'] == 'ok' and 2.5 <= f['angle'] <= 3.5 for f in sides1)
+        and info1['areas']['warn'] < 0.05
+        and info1['areas']['undercut'] < 0.05
+        and p.pg.locator('#t-check.active').count() == 1
+    )
+
+    # 2. Winkel-Grenze auf 5° erhöhen → 3°-Seitenflächen gelb; zurück auf 1° → wieder grün
+    p.pg.fill('#draft-angle', '5')
+    p.pg.locator('#draft-angle').dispatch_event('change')
+    p.wait(300)
+    info2a = p.ev("return Measure.draftInfo")
+    sides2a = [f for f in (info2a and info2a.get('faces') or []) if abs(f['normal'][2]) < 0.5]
+    p.pg.fill('#draft-angle', '1')
+    p.pg.locator('#draft-angle').dispatch_event('change')
+    p.wait(300)
+    info2b = p.ev("return Measure.draftInfo")
+    ok2 = (
+        info2a is not None and info2a['minAngle'] == 5
+        and len(sides2a) == 4
+        and all(f['status'] == 'warn' for f in sides2a)
+        and info2a['areas']['warn'] > 700
+        and info2a['areas']['undercut'] < 0.05
+        and info2b is not None and info2b['areas']['warn'] < 0.05
+    )
+
+    # 3. Quader 30x30x30 mit seitlicher Nut (+X-Seite, x=[7..15], z=[11..19]) → Nut-Flächen rot (Hinterschnitt)
+    p.ev("""
+      App.change('groove-box', d => {
+        d.items = [];
+        const b = Model.newItem('box', { w: 30, d: 30, h: 30 }, { name: 'Block' });
+        b.t.x = 0; b.t.y = 0; b.t.z = 0;
+        const h = Model.newItem('box', { w: 10, d: 34, h: 8 }, { role: 'hole', name: 'Nut' });
+        h.t.x = 12; h.t.y = 0; h.t.z = 11;
+        const g = Model.newItem('group', {}, { name: 'Nutkoerper' });
+        g.children = [b, h];
+        d.items.push(g);
+      });
+    """)
+    warte_rechnen(p, 30)
+    p.wait(300)
+    info3 = p.ev("return Measure.draftInfo")
+    faces3 = info3 and info3.get('faces') or []
+    groove_ceil = [f for f in faces3 if f['normal'][2] < -0.9 and f['center'][2] > 15 and f['center'][2] < 25]
+    groove_floor = [f for f in faces3 if f['normal'][2] > 0.9 and f['center'][2] > 5 and f['center'][2] < 15]
+    groove_back = [f for f in faces3 if f['normal'][0] > 0.9 and abs(f['center'][0] - 7) < 0.5]
+    left_outer = [f for f in faces3 if f['normal'][0] < -0.9 and abs(f['center'][0] + 15) < 0.5]
+    top_face = [f for f in faces3 if f['normal'][2] > 0.9 and abs(f['center'][2] - 30) < 0.5]
+    sum_txt3 = (p.pg.locator('#draft-summary').text_content() or '').lower()
+    ok3 = (
+        len(groove_ceil) == 1 and groove_ceil[0]['status'] == 'undercut'
+        and len(groove_floor) == 1 and groove_floor[0]['status'] == 'undercut'
+        and len(groove_back) == 1 and groove_back[0]['status'] == 'undercut'
+        and len(left_outer) == 1 and left_outer[0]['status'] == 'warn'
+        and len(top_face) == 1 and top_face[0]['status'] == 'ok'
+        and 680 < info3['areas']['undercut'] < 760
+        and 'hinterschnitt' in sum_txt3
+    )
+
+    # 4. Richtung +X: Nut öffnet sich nach +X → kein Hinterschnitt; zurück auf +Z & Einseitig → Unterseite rot
+    p.pg.select_option('#draft-dir', '+X'); p.wait(300)
+    info4a = p.ev("return Measure.draftInfo")
+    p.pg.select_option('#draft-dir', '+Z'); p.wait(200)
+    p.pg.uncheck('#draft-two-sided'); p.wait(300)
+    info4b = p.ev("return Measure.draftInfo")
+    bottom4b = [f for f in (info4b and info4b.get('faces') or []) if f['normal'][2] < -0.9 and abs(f['center'][2]) < 0.5]
+    ok4 = (
+        info4a is not None and info4a['dirKey'] == '+X' and info4a['areas']['undercut'] < 0.05
+        and info4b is not None and info4b['twoSided'] is False
+        and len(bottom4b) == 1 and bottom4b[0]['status'] == 'undercut'
+        and info4b['areas']['undercut'] > 1500
+    )
+
+    # 5. Befehlssuche, Hilfe & Schließen über #draft-close
+    cmds_ok = p.ev("return Commands.search('hinterschnitt').some(c => c.id === 'draft-analysis')")
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    help_ok = (
+        'draftAnalysis' in hilfen
+        and all(f in hilfen['draftAnalysis'] for f in ('tip', 'hilfe', 'tipp'))
+        and p.pg.locator('#draft-bar').get_attribute('data-help') == 'draftAnalysis'
+    )
+    p.pg.click('#draft-close'); p.wait(250)
+    ok5 = (
+        cmds_ok and help_ok
+        and p.ev("return !Measure.draftActive && Measure.draftInfo === null")
+        and p.pg.locator('#draft-bar').count() == 0
+        and p.pg.locator('#t-check.active').count() == 0
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -21390,6 +21501,7 @@ TESTS = [
     ('[A-100] Körper als Schritt löschen & Messwert als Maß (KP-51, KP-53)', t_a100_loeschen_messwert),
     ('[A-101] Feder und Spirale: Zylinder-Feder / Kegel-Feder / flache Spirale / Einfach-Modus', t_a101_feder_spirale),
     ('[A-102] Entlang Pfad mit Verdrehung und als Schnitt (KP-28, KP-29)', t_a102_pfad_verdrehung_schnitt),
+    ('[A-105] Schräge- und Hinterschnitt-Analyse (PF-09, PF-10)', t_a105_schraege_hinterschnitt),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

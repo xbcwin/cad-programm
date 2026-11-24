@@ -4,7 +4,7 @@ const GeomCheck = (() => {
 
   function sync() {
     const b = $('#t-check');
-    if (b) b.classList.toggle('active', !!bar || (typeof ClashCheck !== 'undefined' && ClashCheck.active));
+    if (b) b.classList.toggle('active', !!bar || (typeof ClashCheck !== 'undefined' && ClashCheck.active) || (typeof Measure !== 'undefined' && Measure.draftActive));
   }
 
   function menu(anchor) {
@@ -15,6 +15,7 @@ const GeomCheck = (() => {
       '-',
       { label: T('menu.check.thin'), icon: 'ruler', id: 'check-thin', help: 'thinWalls', run: () => Views.thin() },
       { label: T('menu.check.overhang'), icon: 'overhang', id: 'check-overhang', help: 'overhang', run: () => Views.overhang() },
+      { label: (typeof Measure !== 'undefined' && Measure.draftActive ? '✓ ' : '') + T('menu.check.draft'), icon: 'chamfer', id: 'check-draft', help: 'draftAnalysis', run: () => Measure.draft() },
     ]);
   }
 
