@@ -1861,6 +1861,36 @@ const HELP = {
   "tip": "Zwei ebene Flächen parallel im festen Abstand halten",
   "hilfe": "Hält zwei ebene Flächen verschiedener Teile parallel und genau im angegebenen Abstand – mit Zahl, Einheit oder Formel (z. B. spalt + 2). Der Abstand lässt sich jederzeit rechts oder in der Maße-Tabelle ändern und mit weiteren Verbindungen (z. B. Eben oder einem zweiten Abstand quer dazu) kombinieren.",
   "tipp": "Ein negativer Abstand oder „Seite umkehren“ legt die Fläche auf die andere Seite – perfekt für Überlappungen oder Anschläge."
+ },
+ "subAssembly": {
+  "tip": "Eine Baugruppe als bewegliches Ganzes in eine andere Baugruppe einsetzen",
+  "hilfe": "Du kannst eine gespeicherte oder geöffnete Baugruppe genau wie ein Bauteil in eine größere Baugruppe einsetzen. Alle enthaltenen Teile und Unterbaugruppen bleiben verknüpft und bewegen, drehen und verschieben sich gemeinsam als eine Einheit.",
+  "tipp": "Klicke im Verlauf auf den Pfeil neben der Unterbaugruppe, um ihre Teile anzusehen, oder öffne sie zum Bearbeiten per Doppelklick im eigenen Tab."
+ },
+ "groundPart": {
+  "tip": "Ein Teil fest an seiner Stelle verankern, damit nichts verrutscht",
+  "hilfe": "Per Rechtsklick → „Festsetzen“ wird ein Teil wie an einem Schraubstock fixiert. Es lässt sich weder mit der Maus noch über Pfeiltasten, Lage-Felder oder Verbindungen und Gelenke verschieben. Im Verlauf links zeigt ein Schloss-Symbol den festen Stand.",
+  "tipp": "Setze in jeder Baugruppe zuerst das Grundteil fest, bevor du andere Teile damit verbindest – mit Rechtsklick → „Festsetzen lösen“ gibst du es jederzeit wieder frei."
+ },
+ "mateAngle": {
+  "tip": "Zwei ebene Flächen oder gerade Kanten in einem genauen Winkel zueinander ausrichten",
+  "hilfe": "Dreht das zweite gewählte Teil so, dass seine Fläche oder Kante exakt im eingestellten Winkel zur Fläche oder Kante des ersten Teils steht. Der Winkel lässt sich rechts jederzeit als Zahl oder als Formel mit Maßen (z. B. Neigung) ändern und bei Bedarf umkehren.",
+  "tipp": "Du kannst zwei Flächen, zwei gerade Kanten oder auch eine Fläche mit einer Kante verbinden."
+ },
+ "mateCenter": {
+  "tip": "Ein Teil genau mittig zwischen zwei parallelen Flächen eines anderen ausrichten",
+  "hilfe": "Wähle zuerst zwei gegenüberliegende parallele Flächen (z. B. die beiden Seitenwände einer Nut) und danach das Teil oder zwei seiner eigenen Außenflächen. Tracery stellt das Teil so ein, dass links und rechts exakt derselbe Abstand bleibt – auch wenn du die Nut oder das Teil später verschiebst oder in der Größe änderst.",
+  "tipp": "Im Modus „Ganzes Teil“ reichen 3 Klicks (Nutwand 1, Nutwand 2, Teil); mit „2 Flächen“ richtest du zusätzlich eine schiefe Ausrichtung über zwei Außenflächen exakt parallel zu den Nutwänden aus."
+ },
+ "mateBall": {
+  "tip": "Kugelgelenk: zwei Punkte fallen zusammen, Drehen in alle Richtungen frei",
+  "hilfe": "Legt einen gewählten Punkt (oder die Mitte einer Kugel) am zweiten Teil genau auf einen Punkt am ersten Teil. Beide Punkte bleiben zusammen, während sich das zweite Teil frei um X, Y und Z in alle Richtungen drehen lässt.",
+  "tipp": "Auch wenn du das Teil mit der Maus ziehst oder rechts bei der Lage verschiebst, bleibt der Gelenkpunkt fest am Platz."
+ },
+ "mateSlot": {
+  "tip": "Stift im Langloch: gleitet entlang der Mittellinie bis zum Endanschlag",
+  "hilfe": "Setzt einen Stift (Zylinder, Kreisrand oder Punkt) genau auf die Mittellinie eines Langlochs. Der Stift lässt sich entlang des Langlochs schieben und drehen und bleibt am Anfang und Ende des Langlochs automatisch am Anschlag stehen.",
+  "tipp": "Klick zuerst auf die Innenfläche oder den Rand des Langlochs und dann auf den Stift. Rechts kannst du Weg, Drehwinkel und die Anschläge jederzeit anpassen."
  }
 };
 

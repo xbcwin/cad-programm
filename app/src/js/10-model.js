@@ -62,6 +62,12 @@ const Model = (() => {
   function resolveDoc(docId) { return (docId && docResolver) ? (docResolver(docId) || null) : null; }
   function docType(doc) { return (doc && doc.docType === 'assembly') ? 'assembly' : 'part'; }
   function isAssembly(doc) { return docType(doc) === 'assembly'; }
+  function isSubAssemblyRef(it) {
+    if (!it || it.kind !== 'ref') return false;
+    const rd = resolveDoc(it.p && it.p.docId);
+    if (rd) return isAssembly(rd);
+    return !!(it.p && it.p.docType === 'assembly');
+  }
   function newDoc(name = 'Neues Projekt', opts = {}) {
     return {
       format: 'masswerk', version: 1, docType: (opts && opts.docType === 'assembly') ? 'assembly' : 'part',
@@ -1200,6 +1206,10 @@ const Model = (() => {
       case 'ref': {
         const rd = resolveDoc(it.p && it.p.docId);
         if (!rd) return T('asm.refMissingShort');
+        if (isAssembly(rd)) {
+          const n = (rd.items || []).filter((x) => !x.suppressed).length;
+          return T('asm.subAsmSub', { n, unit: n === 1 ? T('asm.partOne') : T('asm.partMany') });
+        }
         return rd.name && rd.name !== label(it) ? '→ ' + rd.name : T('asm.refShort');
       }
       case 'part': {
@@ -1542,6 +1552,6 @@ const Model = (() => {
     if (aPos != null && aNeg != null) return aNeg < aPos;
     return aPos == null && aNeg != null;
   }
-  return { matchBodies, displayColor, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, railStart, railSections, bez3, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, loftParams, loftPathAngles, pathPatternParams, pathPlaces, wrapAngleInfo, useVars, tnum, tNumeric, newDoc, newAssemblyDoc, docType, isAssembly, setDocResolver, resolveDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, scopeVars, itemVars, evalInfo, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  return { matchBodies, displayColor, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, railStart, railSections, bez3, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, loftParams, loftPathAngles, pathPatternParams, pathPlaces, wrapAngleInfo, useVars, tnum, tNumeric, newDoc, newAssemblyDoc, docType, isAssembly, isSubAssemblyRef, setDocResolver, resolveDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, scopeVars, itemVars, evalInfo, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 

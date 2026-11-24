@@ -2117,6 +2117,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Einstiegspunkte, Suche & Hilfe**: Rechtes Panel (`#partref-sec` / `#btn-open-part-tab`), Rechtsklick-Menü (`#cm-open-part-tab`), Befehlssuche („Bauteil im Tab öffnen“, „Neue Baugruppe anlegen“) und Hilfetext `assemblyPartTab` sind vorhanden.
 - [ ] **Von Hand**: Im Browser über „+“ → „Neue Baugruppe“ eine Baugruppe anlegen, ein gespeichertes Bauteil über „Bauteil in Baugruppe einfügen …“ zweimal platzieren, per Doppelklick im Tab ändern, über das Banner speichern/zurückspringen und die aktualisierte Darstellung prüfen.
 
+## Verbindungen Kugel und Stift im Langloch (Auto [A-087], BG-06)
+
+- [x] **Stift im Langloch (20 mm) mit Endanschlägen**: Ein gekippter Stift wird per `Joints.addSlot` auf die automatisch erkannte 20-mm-Mittellinie eines Langlochs (`slotHole` `26 × 6 mm`) ausgerichtet; beim Ziehen weit über beide Enden hinaus (`+35 mm` / `-45 mm`) sowie beim Ändern der Lage-Felder (`#t-x`/`#t-y`) bleibt der Stift exakt auf der Mittellinie und stoppt am Anschlag (`+10 mm` / `-10 mm`).
+- [x] **Kugel (Drehen frei)**: `Joints.addBall` legt zwei gewählte Punkte deckungsgleich aufeinander (`< 0,01 mm`); freies Drehen um X/Y/Z (`#jt-rx`/`#jt-ry`/`#jt-ang`), 3D-Ziehen mit der Maus und Verschiebe-Eingaben (`#t-x`/`#t-z`) halten den Gelenkpunkt exakt zusammen.
+- [x] **Abspielen, Suche & Hilfetexte**: „Bewegung abspielen“, Rückgängig, Befehlssuche (`mate-ball`, `mate-slot`) und Hilfetexte (`mateBall`, `mateSlot`) arbeiten ohne Fehler.
+- [ ] **Von Hand**: Im Browser zwei Teile über Kontextleiste → „Verbindung“ → „Kugel“ bzw. „Stift im Langloch“ durch Anklicken im 3D-Bild verbinden, über das Langloch-Ende hinausziehen und das Kugelgelenk drehen.
+
 ## Verbindungen zylindrisch und eben (Auto [A-086], BG-06)
 
 - [x] **Zylindrisch (Welle in Bohrung)**: Ein gekippter, versetzter Bolzen wird per `Joints.addCylindrical` auf eine Bohrung ausgerichtet; beide Zylinderachsen fallen deckungsgleich zusammen (`|d1 · d2| > 0,99999`, Achsabstand `< 0,01 mm`). Drehen (`#jt-ang`), Schieben (`#jt-pos`), seitliche Lage-Eingabe (`#t-x` wird auf die Achse zurückgeführt) und „Richtung umkehren“ (`#jt-flip`) erhalten die Achsen-Deckung; „Bewegung abspielen“ bewegt Bolzen im Bild ohne `App.revision` zu ändern.
@@ -2146,6 +2153,21 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Kombinierbar & Konfliktschutz**: `planar` (`Z = 0`) + `distance` (`6 mm` in X) gelten gleichzeitig (Verschieben in Y frei, X/Z gehalten, Änderung auf `11 mm` wirkt); ein widersprüchlicher zweiter Abstand wird sauber abgelehnt (`ok: false`).
 - [x] **Verlauf, Rückgängig, Befehle & Hilfetexte**: Verbindungen erscheinen in `#joint-tree`, lassen sich per `Strg+Z` rückgängig machen und löschen; Befehlssuche (`mate-parallel`, `mate-tangent`, `mate-distance`) und Hilfetexte (`mateParallel`, `mateTangent`, `mateDistance`) sind ohne Seitenfehler vorhanden.
 - [ ] **Von Hand**: Im Browser zwei Teile über Kontextleiste → „Verbindung“ → „Parallel“, „Tangential“ und „Abstand“ (inkl. Eingabefeld `#jp-dist` in der oberen Leiste) verbinden, im 3D-Bild ziehen und die orange Abstandslinie im Verlauf prüfen.
+
+## Unterbaugruppen und Teil festsetzen (Auto [A-084], BG-03, BG-04)
+
+- [x] **Unterbaugruppe einsetzen & verschieben**: Eine gespeicherte Unterbaugruppe mit 2 Bauteilen lässt sich über „Bauteil einsetzen“ in eine Hauptbaugruppe einfügen, im Verlauf aufklappen, gegen Zyklen absichern, beim Verschieben gemeinsam mit beiden Teilen bewegen und übersteht Neuladen aus IndexedDB.
+- [x] **Teil festsetzen & Schloss im Verlauf**: Rechtsklick → „Festsetzen“ (`#cm-ground` / `#tm-ground`) setzt `locked`, zeigt ein Schloss-Symbol (`.lock-mark`) im Verlauf, deaktiviert Lage-Felder und schützt das Teil vor Mausziehen, Pfeiltasten, Dreh-/Ausrichte-Aktionen sowie Verbindungen/Gelenken.
+- [x] **Lösen, Rückgängig, Suche & Hilfe**: „Festsetzen lösen“ gibt das Teil wieder frei, `Strg+Z` stellt den Zustand wieder her, und Befehlssuche sowie Hilfetexte (`subAssembly`, `groundPart`) sind vorhanden.
+- [ ] **Von Hand**: Im Browser eine Unterbaugruppe mit mehreren Teilen einsetzen, im 3D-Bild mit der Maus verschieben, ein Grundteil per Rechtsklick festsetzen und danach mit einem weiteren Teil per „Verbinden: fest“ verknüpfen.
+
+## Verbindungen mit Winkel und mittig (Auto [A-089], BG-07)
+
+- [x] **Winkel 30° zwischen zwei Flächen & Messen**: Zwei Quader über Kontextleiste → „Verbindung“ → „Winkel“ auf `30°` ausrichten; `Joints.measureAngle`, Normalen-Winkel und das Werkzeug „Messen“ zwischen beiden Flächen liefern exakt `30°`. Ändern über `#jt-angle` auf `45°` und „Winkel umkehren“ (`#jt-flip`) richten den zweiten Quader nach.
+- [x] **Formel-Winkel & Kante-an-Kante**: Ein Maß `Neigung = 30` in `#jt-angle` legt die Formel ab (`.fx`-Vorschau `30`), und das Ändern des Maßes auf `60` dreht das verbundene Teil automatisch auf `60°`; zwei gerade Kanten richten sich auf `30°` aus.
+- [x] **Quader mittig in 20-mm-Nut**: Ein schmaler Quader (`8 mm`) wird mittig zwischen die beiden Seitenwände einer `20 mm` breiten Nut gesetzt; links und rechts ergibt sich exakt derselbe Abstand (`6,00 mm`), der auch beim Verschieben entlang/quer zur Nut, beim Verschieben des Nut-Blocks und im 2-Flächen-Modus (`bMode: 'faces'`) erhalten bleibt.
+- [x] **Verlauf, Löschen, Rückgängig, Suche & Hilfe**: Verbindungen erscheinen im Verlauf unter `#joint-tree`, lassen sich rechts bearbeiten, per `#jt-del` lösen und per `Strg+Z` wiederherstellen; Befehlssuche (`mate-angle`, `mate-center`) und Hilfetexte (`mateAngle`, `mateCenter`) sind ohne Seitenfehler vorhanden.
+- [ ] **Von Hand**: Im Browser zwei Körper über „Verbindung“ → „Winkel“ (Fläche/Kante) bzw. „Mittig“ (Nutwand 1, Nutwand 2, Teil) durch Anklicken im 3D-Bild verbinden und im Panel rechts Winkel/Formel sowie die angezeigten Nutabstände prüfen.
 
 ## Fehler melden
 

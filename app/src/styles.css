@@ -737,6 +737,11 @@ body.sketching .timeline{display:none}
 .tl-chip .ai-badge svg{width:9px;height:9px}
 .node .ai-mark{display:grid;place-items:center;color:var(--accent);flex:none}
 .node .ai-mark svg{width:13px;height:13px}
+.node .lock-mark{display:grid;place-items:center;color:var(--warn, #e08b00);flex:none}
+.node .lock-mark svg{width:13px;height:13px}
+.node.grounded .nm{font-weight:500}
+.node.subasm-child{opacity:.82;cursor:default}
+.subasm-children{margin:0;padding-left:18px;list-style:none}
 .prop-title #item-explain{flex:none}
 .explain-where{font:600 11.5px/1 var(--font-cond);letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-bottom:6px}
 .explain-list{margin:0;padding-left:18px;display:grid;gap:6px;font-size:14px;line-height:1.5;color:var(--ink-2)}

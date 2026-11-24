@@ -274,7 +274,7 @@ const Panels = (() => {
     if (n !== null) Actions.setBody(itemId, bodyIdx, { name: n.trim() || null });
   }
   function renderBodiesList(it) {
-    if (!App.doc.items.includes(it) || it.role === 'hole' || App.mergedInto(it.id) || (it.p && it.p.assembly)) return null;
+    if (!App.doc.items.includes(it) || it.role === 'hole' || it.kind === 'ref' || App.mergedInto(it.id) || (it.p && it.p.assembly)) return null;
     const res = App.results.get(it.id);
     const evalBodies = res && res.data && res.data.bodies;
     if (!evalBodies || evalBodies.length < 2) return null;
@@ -389,20 +389,56 @@ const Panels = (() => {
     }
     const ul = h('ul', { class: 'tree', role: 'tree' });
     const ctxTop = App.ctx ? App.doc.items.find((x) => x.id === App.ctx) : null;
+    const renderSubAsmList = (subD, rootRefItem, seenDocs) => {
+      const cu = h('ul', { role: 'group', class: 'subasm-children' });
+      const nextSeen = new Set(seenDocs);
+      if (subD.id) nextSeen.add(subD.id);
+      const subV = Model.vars(subD).v;
+      for (const child of subD.items || []) {
+        if (!child || child.suppressed) continue;
+        const childIsSub = Model.isSubAssemblyRef(child);
+        const childSubDoc = childIsSub && child.p && child.p.docId && !nextSeen.has(child.p.docId) ? Model.resolveDoc(child.p.docId) : null;
+        const subLi = h('li', { role: 'treeitem' });
+        const subRow = h('div', { class: 'node subasm-child' + (child.hidden ? ' hidden-item' : '') + (child.locked ? ' grounded' : ''), dataset: { subdocItem: child.id } });
+        const subTw = h('span', { class: 'tw' }); subTw.style.visibility = 'hidden';
+        const subSw = h('span', { class: 'swatch' + (child.role === 'hole' ? ' hole' : '') + (child.kind === 'ref' ? ' comp ref' : '') + (childIsSub ? ' subasm' : ''), style: { background: child.color } });
+        if (child.kind === 'ref') subSw.innerHTML = icon('parts');
+        const subNm = h('span', { class: 'nm', title: Model.label(child) }, Model.label(child));
+        const subSub = h('span', { class: 'sub mono' }, Model.sizeText(child, subV));
+        subRow.append(subTw, subSw, subNm);
+        if (child.locked) {
+          const lm = h('span', { class: 'lock-mark', 'data-tip': T('asm.groundedTip'), title: T('asm.groundedTip') });
+          lm.innerHTML = icon('lock');
+          subRow.append(lm);
+        }
+        subRow.append(subSub);
+        subRow.addEventListener('click', (e) => { e.stopPropagation(); App.select([rootRefItem.id]); });
+        subRow.addEventListener('dblclick', (e) => { e.stopPropagation(); Comp.openRef(rootRefItem.id); });
+        subLi.append(subRow);
+        if (childSubDoc && (childSubDoc.items || []).length) {
+          subLi.append(renderSubAsmList(childSubDoc, rootRefItem, nextSeen));
+        }
+        cu.append(subLi);
+      }
+      return cu;
+    };
     const renderItemLi = (it) => {
       const li = h('li', { role: 'treeitem' });
       const topIdx = App.doc.items.indexOf(it);
       const inCtx = !!ctxTop && Model.topOf(App.doc, it.id) === ctxTop;
       const ownList = ctxTop ? ctxTop.children : App.doc.items, ownIdx = ownList.indexOf(it);
       const rolled = ownIdx >= 0 && (!ctxTop || inCtx) && ownIdx >= Timeline.markerPos();
-      const row = h('div', { class: 'node' + (selSet.has(it.id) ? ' sel' : '') + (it.hidden ? ' hidden-item' : '') + (it.suppressed ? ' supp' : '') + (rolled ? ' rolled' : '') + (ctxTop && !inCtx ? ' ctx-other' : '') + (ctxTop === it ? ' ctx-active' : ''), draggable: 'true', dataset: { id: it.id } });
+      const isSubAsm = Model.isSubAssemblyRef(it);
+      const subDoc = isSubAsm ? Model.resolveDoc(it.p && it.p.docId) : null;
+      const hasSubKids = !!(subDoc && (subDoc.items || []).some((x) => x && !x.suppressed));
+      const row = h('div', { class: 'node' + (selSet.has(it.id) ? ' sel' : '') + (it.hidden ? ' hidden-item' : '') + (it.locked ? ' grounded' : '') + (it.suppressed ? ' supp' : '') + (rolled ? ' rolled' : '') + (ctxTop && !inCtx ? ' ctx-other' : '') + (ctxTop === it ? ' ctx-active' : ''), draggable: 'true', dataset: { id: it.id } });
       const tw = h('button', { type: 'button', class: 'tw' + (expanded.has(it.id) ? ' open' : ''), 'aria-label': T('left.tree.expand') });
-      if ((it.kind === 'group' && !it.partRef) || (it.finishes || []).length) { tw.innerHTML = icon('chevR'); tw.onclick = (e) => { e.stopPropagation(); expanded.has(it.id) ? expanded.delete(it.id) : expanded.add(it.id); renderLeft(); }; }
+      if ((it.kind === 'group' && !it.partRef) || (it.finishes || []).length || hasSubKids) { tw.innerHTML = icon('chevR'); tw.onclick = (e) => { e.stopPropagation(); expanded.has(it.id) ? expanded.delete(it.id) : expanded.add(it.id); renderLeft(); }; }
       else tw.style.visibility = 'hidden';
       const sw = h('span', { class: 'swatch' + (it.role === 'hole' ? ' hole' : ''), style: { background: it.color } });
       if (it.partRef) { sw.innerHTML = icon('parts'); sw.classList.add('partref'); }
       else if (it.comp) { sw.innerHTML = icon('parts'); sw.classList.add('comp'); }
-      else if (it.kind === 'ref') { sw.innerHTML = icon('parts'); sw.classList.add('comp', 'ref'); }
+      else if (it.kind === 'ref') { sw.innerHTML = icon('parts'); sw.classList.add('comp', 'ref'); if (isSubAsm) sw.classList.add('subasm'); }
       const nm = h('span', { class: 'nm', title: Model.label(it) }, Model.label(it));
       const into = App.mergedInto(it.id), intoF = into ? Model.find(App.doc, into) : null, OPI = { join: '∪', cut: '−', common: '∩' };
       const patTxt = Features.isOp(it) ? Model.sizeText(it, V) : '';
@@ -421,11 +457,12 @@ const Panels = (() => {
         ob.onclick = (e) => { e.stopPropagation(); Assembly.openPartTab(it.id); };
         acts.append(ob);
       } else if (topIdx >= 0 && it.kind === 'group') { const be = h('button', { type: 'button', 'aria-label': T('left.tree.editComp'), 'data-tip': App.ctx === it.id ? T('left.tree.editCompEnd') : T('left.tree.editCompStart') }); be.innerHTML = icon(App.ctx === it.id ? 'check' : 'edit'); be.onclick = (e) => { e.stopPropagation(); App.ctx === it.id ? App.setCtx(null) : Comp.edit(it.id); }; acts.append(be); }
-      if (it.kind === 'ref') { const ro = h('button', { type: 'button', 'aria-label': T('asm.openPart'), 'data-tip': T('asm.openPart') }); ro.innerHTML = icon('edit'); ro.onclick = (e) => { e.stopPropagation(); Comp.openRef(it.id); }; acts.append(ro); }
+      if (it.kind === 'ref') { const ro = h('button', { type: 'button', 'aria-label': isSubAsm ? T('asm.openSubAsm') : T('asm.openPart'), 'data-tip': isSubAsm ? T('asm.openSubAsm') : T('asm.openPart') }); ro.innerHTML = icon('edit'); ro.onclick = (e) => { e.stopPropagation(); Comp.openRef(it.id); }; acts.append(ro); }
       if (topIdx >= 0) { const io = h('button', { type: 'button', 'aria-label': T('common.isolate'), 'data-tip': App.iso === it.id ? T('left.tree.isoOff') : T('left.tree.isoOn') }); io.innerHTML = icon('focusView'); io.onclick = (e) => { e.stopPropagation(); Comp.toggleIso(it.id); }; acts.append(io); }
       if (ownIdx >= 0 && (!ctxTop || inCtx)) { const sp = h('button', { type: 'button', 'aria-label': it.suppressed ? T('left.tree.activate') : T('common.suppress'), 'data-tip': it.suppressed ? T('common.unsuppress') : T('left.tree.suppressTip'), 'data-help': 'suppress' }); sp.innerHTML = icon('suppress'); sp.onclick = (e) => { e.stopPropagation(); Timeline.toggleSuppress(it.id); }; acts.append(sp); }
       acts.append(dup, eye, del);
       row.append(tw, sw, nm);
+      if (it.locked) { const lm = h('span', { class: 'lock-mark', 'data-tip': T('asm.groundedTip'), title: T('asm.groundedTip'), 'data-help': 'groundPart' }); lm.innerHTML = icon('lock'); row.append(lm); }
       if (it.ai) { const am = h('span', { class: 'ai-mark', 'data-tip': it.ai.edit ? T('left.tree.aiEditTip', { q: it.ai.q }) : T('left.tree.aiNewTip', { q: it.ai.q }) }); am.innerHTML = icon('spark'); row.append(am); }
       const hardErrs = RefFix.hardErrorsFor(it.id);
       const refIssues = RefFix.issuesOf(it.id);
@@ -446,8 +483,9 @@ const Panels = (() => {
         const topSelNow = [...new Set(App.sel.map((id) => (Model.topOf(App.doc, id) || {}).id).filter(Boolean))];
         const inFld = topIdx >= 0 ? Model.folderOf(App.doc, it.id) : null;
         UI.menu(row, [
-          ...(it.kind === 'ref' ? [{ icon: 'edit', label: T('asm.openPart'), id: 'tm-ref-open', help: 'assemblyDoc', run: () => Comp.openRef(it.id) }] : []),
+          ...(it.kind === 'ref' ? [{ icon: 'edit', label: isSubAsm ? T('asm.openSubAsm') : T('asm.openPart'), id: 'tm-ref-open', help: isSubAsm ? 'subAssembly' : 'assemblyDoc', run: () => Comp.openRef(it.id) }] : []),
           ...(typeof Assembly !== 'undefined' && Assembly.canOpenInTab(it, App.doc) ? [{ icon: 'edit', label: T('asm.openInTab'), id: 'tm-open-part-tab', help: 'assemblyPartTab', run: () => Assembly.openPartTab(it.id) }] : []),
+          ...(topIdx >= 0 ? [{ icon: it.locked ? 'unlock' : 'lock', label: it.locked ? T('asm.unground') : T('asm.ground'), id: 'tm-ground', help: 'groundPart', run: () => Actions.toggleGround([it.id]) }] : []),
           ...(refIssues.length ? [{ icon: 'warn', label: T('left.tree.refFixMenu'), id: 'tm-reffix', help: 'refFix', run: () => RefFix.start(refIssues[0]) }] : []),
           { icon: 'help', label: T('common.explainStep'), help: 'explainStep', run: () => Explain.dialog(it.id) },
           { icon: 'copy', label: T('common.duplicate'), id: 'tm-dup', kbd: 'Strg D', help: 'treeDuplicate', run: () => Actions.duplicate([it.id]) },
@@ -538,6 +576,7 @@ const Panels = (() => {
           li.append(fr);
         }
         if (it.kind === 'group') { const cu = h('ul', { role: 'group' }); rec(it.children || [], cu); li.append(cu); }
+        if (hasSubKids) li.append(renderSubAsmList(subDoc, it, new Set(App.doc && App.doc.id ? [App.doc.id] : [])));
       }
       return li;
     };
@@ -1401,20 +1440,34 @@ const Panels = (() => {
     // Maße oder Bauteil-Verweis
     if (isRef) {
       const refDoc = Model.resolveDoc(it.p && it.p.docId);
-      const refSec = h('div', { class: 'section', id: 'ref-sec', 'data-help': 'assemblyDoc' }, h('div', { class: 'section-h' }, T('asm.refTitle')));
+      const isSub = !!(refDoc ? Model.isAssembly(refDoc) : (it.p && it.p.docType === 'assembly'));
+      const refSec = h('div', { class: 'section', id: 'ref-sec', 'data-help': isSub ? 'subAssembly' : 'assemblyDoc' }, h('div', { class: 'section-h' }, isSub ? T('asm.subAsmTitle') : T('asm.refTitle')));
       if (refDoc) {
-        const refCnt = Model.countItems(refDoc);
-        refSec.append(h('div', { class: 'hint-box' }, T('asm.refActive', { name: refDoc.name || 'Bauteil', n: refCnt, unit: refCnt === 1 ? T('common.object') : T('common.objects') })));
+        if (isSub) {
+          const subItems = (refDoc.items || []).filter((x) => !x.suppressed);
+          refSec.append(h('div', { class: 'hint-box' }, T('asm.subAsmActive', { name: refDoc.name || T('doc.assembly'), n: subItems.length, unit: subItems.length === 1 ? T('asm.partOne') : T('asm.partMany') })));
+          if (subItems.length) {
+            const subV = Model.vars(refDoc).v;
+            const ml = h('div', { class: 'mini-list', style: { marginBottom: '8px' } });
+            for (const c of subItems) {
+              ml.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, Model.label(c)), h('span', { class: 'mono muted' }, Model.sizeText(c, subV))));
+            }
+            refSec.append(ml);
+          }
+        } else {
+          const refCnt = Model.countItems(refDoc);
+          refSec.append(h('div', { class: 'hint-box' }, T('asm.refActive', { name: refDoc.name || 'Bauteil', n: refCnt, unit: refCnt === 1 ? T('common.object') : T('common.objects') })));
+        }
       } else {
         refSec.append(h('div', { class: 'err-box' }, T('asm.refMissingErr', { name: (it.p && it.p.docName) || Model.label(it) })));
       }
       const br = h('div', { class: 'btn-row' });
       const ob = h('button', { type: 'button', class: 'btn primary', id: 'btn-ref-open' });
-      ob.innerHTML = icon('edit') + esc(T('asm.openPart'));
+      ob.innerHTML = icon('edit') + esc(isSub ? T('asm.openSubAsm') : T('asm.openPart'));
       ob.disabled = !refDoc;
       ob.onclick = () => Comp.openRef(it.id);
       br.append(ob);
-      refSec.append(br, h('div', { class: 'hint-box' }, T('asm.refHint')));
+      refSec.append(br, h('div', { class: 'hint-box' }, isSub ? T('asm.subAsmHint') : T('asm.refHint')));
       w.append(refSec);
     } else {
     const three = !!(KINDS[it.kind] && KINDS[it.kind].params.length === 3);
@@ -1927,29 +1980,43 @@ const Panels = (() => {
     // Lage
     if (!isMergedStep && it.kind !== 'transform') {
       const fixedJ = typeof Joints !== 'undefined' && Joints.fixedJointOf ? Joints.fixedJointOf(it.id) : null;
+      const grounded = !!it.locked;
+      const posLocked = !!(fixedJ || grounded);
       const pos = h('div', { class: 'section' }, h('div', { class: 'section-h' }, T('panel.pos.title')));
-      const setT = (k, val) => App.change(k.startsWith('r') ? 'Gedreht' : 'Verschoben', (doc) => { if (typeof Joints !== 'undefined' && Joints.isFixedPart(it.id)) return false; Model.find(doc, it.id).item.t[k] = val; Joints.constrain(doc, it.id); }, { merge: 't:' + it.id + ':' + k });
+      const setT = (k, val) => App.change(k.startsWith('r') ? 'Gedreht' : 'Verschoben', (doc) => {
+        const tgt = Model.find(doc, it.id)?.item;
+        if (!tgt || tgt.locked || (typeof Joints !== 'undefined' && Joints.isFixedPart(it.id))) return false;
+        tgt.t[k] = val;
+        if (typeof Joints !== 'undefined' && Joints.constrain) Joints.constrain(doc, it.id);
+      }, { merge: 't:' + it.id + ':' + k });
       const fp = h('div', { class: 'fields three' });
       for (const k of ['x', 'y', 'z']) {
         const nf = UI.numField({ id: 't-' + k, value: it.t[k], axis: k, unit: '', len: true, onCommit: (v) => setT(k, v) });
-        if (fixedJ) nf.querySelector('input').disabled = true;
+        if (posLocked) nf.querySelector('input').disabled = true;
         fp.append(nf);
       }
       const fr = h('div', { class: 'fields three' });
       for (const k of ['rx', 'ry', 'rz']) {
         const nf = UI.numField({ id: 't-' + k, value: it.t[k], axis: k[1], unit: '°', onCommit: (v) => setT(k, v) });
-        if (fixedJ) nf.querySelector('input').disabled = true;
+        if (posLocked) nf.querySelector('input').disabled = true;
         fr.append(nf);
       }
       pos.append(h('div', { class: 'field' }, h('label', null, T('panel.pos.position', { u: Units.label() })), fp), h('div', { class: 'field' }, h('label', null, T('panel.pos.rotation')), fr));
+      if (grounded) {
+        const gh = h('div', { class: 'hint-box', id: 'grounded-hint', style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' } }, h('span', null, T('asm.groundedLockedHint')));
+        const ug = h('button', { type: 'button', class: 'btn small', id: 'btn-unground' }, T('asm.unground'));
+        ug.onclick = () => Actions.setGrounded([it.id], false);
+        gh.append(ug);
+        pos.append(gh);
+      }
       if (fixedJ) {
         const refA = Model.find(App.doc, fixedJ.a);
         pos.append(h('div', { class: 'hint-box' }, T('joint.fixedLockedHint', { name: refA ? Model.label(refA.item) : 'Teil' })));
       }
       const qa = h('div', { class: 'btn-row' });
-      const drop = h('button', { type: 'button', class: 'btn small', disabled: !!fixedJ, 'data-tip': T('panel.pos.toXYTip') }); drop.innerHTML = icon('push') + esc(T('panel.pos.toXY'));
+      const drop = h('button', { type: 'button', class: 'btn small', disabled: posLocked, 'data-tip': T('panel.pos.toXYTip') }); drop.innerHTML = icon('push') + esc(T('panel.pos.toXY'));
       drop.onclick = () => Actions.dropToPlate([it.id]);
-      const rz = h('button', { type: 'button', class: 'btn small', disabled: !!fixedJ, 'data-tip': T('panel.pos.rot90Tip'), 'data-kbd': 'R' }); rz.innerHTML = icon('rotate') + esc(T('panel.pos.rot90'));
+      const rz = h('button', { type: 'button', class: 'btn small', disabled: posLocked, 'data-tip': T('panel.pos.rot90Tip'), 'data-kbd': 'R' }); rz.innerHTML = icon('rotate') + esc(T('panel.pos.rot90'));
       rz.onclick = () => Actions.rotate90([it.id], 'z');
       if (!f.parent) qa.append(drop);
       qa.append(rz); pos.append(qa);
@@ -2122,7 +2189,7 @@ const Panels = (() => {
     const mbox = h('div', { class: 'section', hidden: true });
     more.onclick = () => { const o = more.getAttribute('aria-expanded') !== 'true'; more.setAttribute('aria-expanded', o); mbox.hidden = !o; };
     const lk = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'lock', checked: !!it.locked }), T('panel.item.lock'));
-    lk.querySelector('input').onchange = (e) => App.change(e.target.checked ? 'Gesperrt' : 'Entsperrt', (doc) => { Model.find(doc, it.id).item.locked = e.target.checked; });
+    lk.querySelector('input').onchange = (e) => Actions.setGrounded([it.id], e.target.checked);
     const hd = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'hide', checked: !!it.hidden }), T('common.hide'));
     hd.querySelector('input').onchange = (e) => App.change(e.target.checked ? 'Ausgeblendet' : 'Eingeblendet', (doc) => { Model.find(doc, it.id).item.hidden = e.target.checked; });
     const br = h('div', { class: 'btn-row' });
@@ -2320,8 +2387,11 @@ const Panels = (() => {
     }
     if (items.length === 1 && items[0].item.kind === 'ref') {
       const it = items[0].item;
-      bar.append(h('span', { class: 'lbl' }, T('kind.ref')));
-      b('edit', T('asm.openPart'), () => Comp.openRef(it.id), 'accent', T('asm.openPartTip')).dataset.help = 'assemblyDoc';
+      const isSubAsm = Model.isSubAssemblyRef(it);
+      bar.append(h('span', { class: 'lbl' }, isSubAsm ? T('asm.subAsmShort') : T('kind.ref')));
+      b('edit', isSubAsm ? T('asm.openSubAsm') : T('asm.openPart'), () => Comp.openRef(it.id), 'accent', isSubAsm ? T('asm.openSubAsmTip') : T('asm.openPartTip')).dataset.help = isSubAsm ? 'subAssembly' : 'assemblyDoc';
+      const gb = b(it.locked ? 'unlock' : 'lock', it.locked ? T('asm.unground') : T('asm.ground'), () => Actions.toggleGround([it.id]), it.locked ? 'accent' : '', it.locked ? T('asm.ungroundTip') : T('asm.groundTip'), true);
+      gb.id = 'ctx-ground'; gb.dataset.help = 'groundPart';
       b('rotate', T('ctx.rotate'), (e) => UI.menu(e.currentTarget, [{ label: T('ctx.rotZ'), icon: 'rotate', kbd: 'R', run: () => Actions.rotate90(null, 'z') }, { label: T('ctx.rotX'), icon: 'rotate', run: () => Actions.rotate90(null, 'x') }, { label: T('ctx.rotY'), icon: 'rotate', run: () => Actions.rotate90(null, 'y') }]), '', T('ctx.rotateTip'), true);
       b('copy', T('common.duplicate'), () => Actions.duplicate(), '', T('ctx.dupTip'), true);
       b('focusView', T('common.isolate'), () => Comp.toggleIso(it.id), '', T('left.tree.isoOn'), true);
@@ -2335,6 +2405,10 @@ const Panels = (() => {
       const it = items[0].item;
       const hole = it.role === 'hole';
       const compact = !!(face || App.edges.length);
+      if (it.locked || Model.isAssembly(App.doc)) {
+        const gb = b(it.locked ? 'unlock' : 'lock', it.locked ? T('asm.unground') : T('asm.ground'), () => Actions.toggleGround([it.id]), it.locked ? 'accent' : '', it.locked ? T('asm.ungroundTip') : T('asm.groundTip'), true);
+        gb.id = 'ctx-ground'; gb.dataset.help = 'groundPart';
+      }
       b(hole ? 'solid' : 'hole', hole ? T('ctx.toBody') : T('ctx.toHole'), () => Actions.toggleRole(), '', hole ? T('ctx.toBodyTip') : T('ctx.toHoleTip'), compact);
       b('rotate', T('ctx.rotate'), (e) => UI.menu(e.currentTarget, [{ label: T('ctx.rotZ'), icon: 'rotate', kbd: 'R', run: () => Actions.rotate90(null, 'z') }, { label: T('ctx.rotX'), icon: 'rotate', run: () => Actions.rotate90(null, 'x') }, { label: T('ctx.rotY'), icon: 'rotate', run: () => Actions.rotate90(null, 'y') }, '-', { label: T('ctx.orientPrint'), icon: 'overhang', help: 'orientPrint', run: () => Print.orientForPrint() }]), '', T('ctx.rotateTip'), true);
       b('mirror', T('ctx.mirror'), (e) => UI.menu(e.currentTarget, [{ label: T('ctx.mirrorX'), icon: 'mirror', run: () => Actions.mirror(null, 'x') }, { label: T('ctx.mirrorY'), icon: 'mirror', run: () => Actions.mirror(null, 'y') }, { label: T('ctx.mirrorZ'), icon: 'mirror', run: () => Actions.mirror(null, 'z') }]), '', T('ctx.mirrorTip'), true);
@@ -2365,6 +2439,10 @@ const Panels = (() => {
         b('axes', T('ctx.mate'), (e) => UI.menu(e.currentTarget, [
           { label: T('ctx.mateCyl'), icon: 'axes', help: 'mateCyl', run: () => Joints.startCylindrical() },
           { label: T('ctx.matePlanar'), icon: 'planeXY', help: 'matePlanar', run: () => Joints.startPlanar() },
+          { label: T('ctx.mateAngle'), icon: 'rotate', help: 'mateAngle', run: () => Joints.startAngle() },
+          { label: T('ctx.mateCenter'), icon: 'cSymmetric', help: 'mateCenter', run: () => Joints.startCenter() },
+          { label: T('ctx.mateBall'), icon: 'circle', help: 'mateBall', run: () => Joints.startBall() },
+          { label: T('ctx.mateSlot'), icon: 'slot', help: 'mateSlot', run: () => Joints.startSlot() },
           '-',
           { label: T('ctx.mateParallel'), icon: 'cParallel', help: 'mateParallel', run: () => Joints.startParallel() },
           { label: T('ctx.mateTangent'), icon: 'cTangent', help: 'mateTangent', run: () => Joints.startTangent() },

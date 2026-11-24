@@ -56,19 +56,23 @@ const Comp = (() => {
     if (typeof Store !== 'undefined' && Store.recentProjects) {
       for (const r of Store.recentProjects()) {
         if (!r || !r.id || r.id === excludeDocId) continue;
-        if (r.docType === 'assembly') continue;
         if (!(r.n > 0)) continue;
-        byId.set(r.id, { id: r.id, name: r.name || 'Bauteil', n: r.n, modified: r.modified || 0, open: false });
+        const cached = resolveDoc(r.id);
+        if (cached && excludeDocId && docHasRef(cached, excludeDocId)) continue;
+        const docType = r.docType === 'assembly' ? 'assembly' : 'part';
+        byId.set(r.id, { id: r.id, name: r.name || (docType === 'assembly' ? T('doc.assembly') : T('asm.partDefault')), n: r.n, modified: r.modified || 0, open: false, docType });
       }
     }
     if (typeof App !== 'undefined' && Array.isArray(App.tabs)) {
       for (const t of App.tabs) {
         if (!t || !t.docId || t.docId === excludeDocId) continue;
         const d = App.findOpenDoc ? App.findOpenDoc(t.docId) : null;
-        if (!d || Model.isAssembly(d)) continue;
+        if (!d) continue;
         const n = Model.countItems(d);
         if (n <= 0 && !(typeof Store !== 'undefined' && Store.hasProject && Store.hasProject(d.id))) continue;
-        byId.set(d.id, { id: d.id, name: d.name || 'Bauteil', n, modified: d.modified || Date.now(), open: true });
+        if (excludeDocId && docHasRef(d, excludeDocId)) continue;
+        const docType = Model.docType(d);
+        byId.set(d.id, { id: d.id, name: d.name || (docType === 'assembly' ? T('doc.assembly') : T('asm.partDefault')), n, modified: d.modified || Date.now(), open: true, docType });
       }
     }
     return [...byId.values()].sort((a, b) => (b.modified || 0) - (a.modified || 0));
@@ -103,6 +107,19 @@ const Comp = (() => {
     if (!isFinite(right)) return [x, y];
     return [Math.ceil((right + 8 + halfW) / 5) * 5, y];
   }
+  async function persistRefTree(doc, seen = new Set()) {
+    if (!doc || !doc.id || seen.has(doc.id)) return;
+    seen.add(doc.id);
+    if (typeof Store !== 'undefined' && Store.saveProject && Store.hasProject && !Store.hasProject(doc.id)) {
+      await Store.saveProject(doc, Model.countItems(doc), { keepLast: true });
+    }
+    for (const it of doc.items || []) {
+      if (it && it.kind === 'ref' && it.p && it.p.docId) {
+        const sub = resolveDoc(it.p.docId);
+        if (sub) await persistRefTree(sub, seen);
+      }
+    }
+  }
   async function insertPart(docId, opts = {}) {
     if (!docId || !App.doc) return null;
     if (docId === App.doc.id) {
@@ -117,26 +134,27 @@ const Comp = (() => {
       UI.toast(T('asm.partNotFound'), { kind: 'bad' });
       return null;
     }
-    if (Model.isAssembly(refDoc)) {
-      UI.toast(T('asm.noNestedAsmYet'), { icon: 'info', ms: 4500 });
+    await ensureRefs(refDoc);
+    if (refDoc.id === App.doc.id || docHasRef(refDoc, App.doc.id)) {
+      UI.toast(T('asm.cycleErr'), { kind: 'bad' });
       return null;
     }
-    if (typeof Store !== 'undefined' && Store.saveProject && Store.hasProject && !Store.hasProject(refDoc.id)) {
-      await Store.saveProject(refDoc, Model.countItems(refDoc), { keepLast: true });
-    }
+    await persistRefTree(refDoc);
+    const isSub = Model.isAssembly(refDoc);
     const firstSolid = (refDoc.items || []).find((x) => x && x.role !== 'hole' && !x.hidden);
     const col = opts.color || (firstSolid && firstSolid.color) || undefined;
     const spot = opts.pos || freeSpotFor(refDoc);
-    const it = Model.newItem('ref', { docId: refDoc.id, docName: refDoc.name || 'Bauteil' }, {
-      name: opts.name || refDoc.name || 'Bauteil',
+    const refP = { docId: refDoc.id, docName: refDoc.name || (isSub ? T('doc.assembly') : T('asm.partDefault')), ...(isSub ? { docType: 'assembly' } : {}) };
+    const it = Model.newItem('ref', refP, {
+      name: opts.name || refDoc.name || (isSub ? T('doc.assembly') : T('asm.partDefault')),
       color: col,
     });
     if (opts.t) Object.assign(it.t, opts.t);
     else { it.t.x = spot[0]; it.t.y = spot[1]; it.t.z = opts.z || 0; }
     if (!App.doc.items.length) App.fitAfterBuild();
-    App.change(T('asm.insertedUndo', { name: Model.label(it) }), (doc) => { doc.items.push(it); });
+    App.change(T(isSub ? 'asm.insertedSubUndo' : 'asm.insertedUndo', { name: Model.label(it) }), (doc) => { doc.items.push(it); });
     App.select([it.id]);
-    UI.toast(T('asm.insertedToast', { name: Model.label(it) }), { icon: 'check', ms: 3200 });
+    UI.toast(T(isSub ? 'asm.insertedSubToast' : 'asm.insertedToast', { name: Model.label(it) }), { icon: 'check', ms: 3200 });
     return it;
   }
   function insertPartDialog() {
@@ -156,11 +174,13 @@ const Comp = (() => {
       wrap.append(h('p', { class: 'asm-insert-intro' }, T('asm.insertIntro')));
       const list = h('div', { class: 'recent asm-part-list' });
       for (const p of parts) {
-        const row = h('div', { class: 'recent-row asm-part-row', role: 'button', tabindex: '0', dataset: { docId: p.id } });
-        const ic = h('span', { class: 'asm-part-ic', 'aria-hidden': 'true' }); ic.innerHTML = icon('box3');
+        const isSub = p.docType === 'assembly';
+        const row = h('div', { class: 'recent-row asm-part-row', role: 'button', tabindex: '0', dataset: { docId: p.id, docType: p.docType || 'part' } });
+        const ic = h('span', { class: 'asm-part-ic', 'aria-hidden': 'true' }); ic.innerHTML = icon(isSub ? 'parts' : 'box3');
         const meta = T(p.n === 1 ? 'start.recentMetaOne' : 'start.recentMetaMany', { n: p.n, date: p.modified ? new Date(p.modified).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' }) : '' });
         const info = h('div', { class: 'grow' }, h('b', null, p.name), h('span', null, meta));
         row.append(ic, info);
+        if (isSub) row.append(h('span', { class: 'doc-type-badge asm' }, T('doc.assembly')));
         if (p.open) row.append(h('span', { class: 'doc-type-badge open' }, T('asm.openTabBadge')));
         const addBtn = h('button', { type: 'button', class: 'btn primary small asm-insert-go' }, T('asm.insertGo'));
         const pick = () => { if (modalRef) modalRef.close(); insertPart(p.id); };
@@ -236,6 +256,6 @@ const Comp = (() => {
     }
     App.on('ctx', render); App.on('mode', render); App.on('doc', debounce(render, 30));
   }
-  return { init, newComponent, edit, toggleIso, render, resolveDoc, ensureRefs, availableParts, insertPart, insertPartDialog, openPart, openRef, docHasRef };
+  return { init, newComponent, edit, toggleIso, render, resolveDoc, ensureRefs, availableParts, insertPart, insertSubAssembly: insertPart, insertPartDialog, openPart, openRef, docHasRef };
 })();
 

@@ -17276,6 +17276,272 @@ def t_a083_bauteil_im_tab(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+# ---------- [A-087] Verbindungen Kugel und Stift im Langloch (BG-06) ----------
+def t_a087_kugel_stift_langloch(p):
+    # 1. Stift im Langloch (20 mm): Platte mit Langloch (26x6 -> 20 mm Mittenabstand) und gekippter Stift
+    p.empty()
+    ids = p.ev("""
+      App.change('Platte mit Langloch und Stift', (d) => {
+        const g = Model.newItem('group', {}, { name: 'Platte' });
+        const box = Model.newItem('box', { w: 50, d: 30, h: 10 }, { name: 'Grundplatte' });
+        const slot = Model.newItem('part', { lib: 'slotHole', len: 26, w: 6, depth: 20 }, { role: 'hole', name: 'Langloch' });
+        slot.t.z = 12;
+        g.children.push(box, slot);
+        const pin = Model.newItem('cylinder', { d: 5, h: 24 }, { name: 'Stift' });
+        pin.t.x = 38; pin.t.y = 22; pin.t.z = 5;
+        pin.t.rx = 30; pin.t.ry = 20;
+        d.items.push(g, pin);
+      });
+      return [App.doc.items[0].id, App.doc.items[1].id];
+    """)
+    warte_rechnen(p, 25)
+
+    p.ev("App.select(arg)", ids)
+    p.wait(400)
+    mate_btn = p.pg.locator('.ctxbar button[aria-label="Verbindung"]')
+    menu_ok = False
+    if mate_btn.count() == 1:
+        mate_btn.click()
+        p.wait(200)
+        menu_txt = p.pg.locator('.menu').inner_text()
+        menu_ok = 'Kugel' in menu_txt and 'Stift im Langloch' in menu_txt
+        p.ev("document.querySelector('.menu')?.remove()")
+
+    slot_res = p.ev("""
+      const [pid, bid] = arg;
+      const sl = Joints.slotCenterlineOf(pid);
+      const r = Joints.addSlot(pid, bid);
+      return { slLen: sl ? sl.len : 0, r };
+    """, ids)
+    warte_rechnen(p, 25)
+
+    def slot_metrics():
+        return p.ev("""
+          const [pid, bid] = arg;
+          const j = App.doc.joints[0];
+          const sl = Joints.slotCenterlineOf(pid);
+          const ax = Joints.cylAxisOf(bid);
+          const diff = ax.o.clone().sub(sl.o);
+          const along = diff.dot(sl.d);
+          const perp = diff.clone().addScaledVector(sl.d, -along).length();
+          const dotN = Math.abs(ax.d.dot(sl.n));
+          return {
+            pos: j ? j.pos : null,
+            minPos: j ? j.minPos : null,
+            maxPos: j ? j.maxPos : null,
+            ang: j ? j.ang : null,
+            along,
+            perp,
+            dotN,
+            o: ax.o.toArray(),
+            d: sl.d.toArray(),
+          };
+        """, ids)
+
+    sm0 = slot_metrics()
+    ok1 = (
+        menu_ok
+        and abs(slot_res['slLen'] - 20.0) < 0.05
+        and slot_res['r']['ok'] is True
+        and abs(sm0['minPos'] + 10.0) < 0.05
+        and abs(sm0['maxPos'] - 10.0) < 0.05
+        and abs(sm0['pos']) < 0.01
+        and abs(sm0['along']) < 0.01
+        and sm0['perp'] < 0.01
+        and sm0['dotN'] > 0.99999
+    )
+
+    # 2. Stift im Langloch: erst auf +6 mm schieben, dann weit über +10 mm & -10 mm hinausziehen -> bleibt am Anschlag stehen
+    p.ev("App.select([arg])", ids[1])
+    p.wait(350)
+    kind_slot = p.ev("return document.querySelector('#jt-kind')?.value")
+    field(p, '#jt-pos', 6)
+    warte_rechnen(p, 20)
+    sm1 = slot_metrics()
+
+    rc_c = p.pg.locator('canvas').first.bounding_box()
+
+    def drag_pin_along(delta_mm):
+        pts = p.ev("""
+          const bid = arg.bid;
+          const j = App.doc.joints[0];
+          const d = Joints.frameOf(j).d;
+          const b = Actions.worldBox(bid);
+          const c = b.min.clone().add(b.max).multiplyScalar(0.5);
+          c.z = b.max.z - 5.0;
+          const sc = Viewer.toScreen(c);
+          return {
+            s0: sc,
+            s1: Viewer.toScreen(c.clone().addScaledVector(d, arg.delta)),
+          };
+        """, {'bid': ids[1], 'delta': delta_mm})
+        p.pg.mouse.move(rc_c['x'] + pts['s0']['x'], rc_c['y'] + pts['s0']['y'])
+        p.pg.mouse.down()
+        p.pg.mouse.move(rc_c['x'] + pts['s1']['x'], rc_c['y'] + pts['s1']['y'], steps=8)
+        p.pg.mouse.up()
+        warte_rechnen(p, 20)
+
+    # Weit über das +10-mm-Ende hinausziehen (+35 mm) -> bleibt exakt bei +10 mm stehen
+    drag_pin_along(35)
+    sm_plus = slot_metrics()
+
+    # Weit über das -10-mm-Ende hinausziehen (-45 mm) -> bleibt exakt bei -10 mm stehen
+    drag_pin_along(-45)
+    sm_minus = slot_metrics()
+
+    # Seitlich und über das Ende per Lage-Feld (#t-x / #t-y) schieben sowie drehen (#jt-ang)
+    cur_t = p.ev("return Model.find(App.doc, arg).item.t", ids[1])
+    field(p, '#t-x', round(cur_t['x'] - 30, 2))
+    field(p, '#t-y', round(cur_t['y'] + 25, 2))
+    field(p, '#jt-ang', 45)
+    warte_rechnen(p, 20)
+    sm_clamp = slot_metrics()
+
+    ok2 = (
+        kind_slot == 'slot'
+        and abs(sm1['along'] - 6.0) < 0.05 and sm1['perp'] < 0.01
+        and abs(sm_plus['pos'] - 10.0) < 0.05 and abs(sm_plus['along'] - 10.0) < 0.05 and sm_plus['perp'] < 0.01
+        and abs(sm_minus['pos'] + 10.0) < 0.05 and abs(sm_minus['along'] + 10.0) < 0.05 and sm_minus['perp'] < 0.01
+        and sm_clamp['pos'] >= -10.01 and sm_clamp['pos'] <= 10.01
+        and sm_clamp['along'] >= -10.05 and sm_clamp['along'] <= 10.05
+        and sm_clamp['perp'] < 0.01
+        and abs(sm_clamp['ang'] - 45.0) < 0.05
+    )
+
+    # 3. Abspielen & Rückgängig beim Langloch
+    rev_sl = p.ev("return App.revision")
+    p.pg.locator('#jt-play').click()
+    p.wait(450)
+    mid_sl = p.ev("""
+      const [pid, bid] = arg;
+      const it = App.doc.items[1], n = Viewer.nodes.get(it.id), m = Model.localMatrix(it);
+      const sl = Joints.slotCenterlineOf(pid);
+      const ax0 = Joints.cylAxisOf(bid);
+      const pAnim = ax0.o.clone().applyMatrix4(m.clone().invert()).applyMatrix4(n.base);
+      const diff = pAnim.sub(sl.o);
+      const along = diff.dot(sl.d);
+      const perp = diff.clone().addScaledVector(sl.d, -along).length();
+      return { playing: !!Joints.playing, moved: n.base.elements.some((v,i)=>Math.abs(v-m.elements[i])>1e-3), along, perp };
+    """, ids)
+    for _ in range(25):
+        p.wait(400)
+        if not p.ev("return !!Joints.playing"):
+            break
+    end_sl = p.ev("const it=App.doc.items[1], n=Viewer.nodes.get(it.id), m=Model.localMatrix(it); return [!!Joints.playing, n.base.elements.every((v,i)=>Math.abs(v-m.elements[i])<1e-6), App.revision===arg]", rev_sl)
+    p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('Control+z')
+    warte_rechnen(p, 20)
+    sm_undo = slot_metrics()
+    ok3 = (
+        mid_sl['playing'] and mid_sl['moved']
+        and mid_sl['perp'] < 0.02 and -10.05 <= mid_sl['along'] <= 10.05
+        and end_sl == [False, True, True]
+        and sm_undo['perp'] < 0.01 and -10.05 <= sm_undo['along'] <= 10.05
+    )
+
+    # 4. Kugel: zwei Punkte fallen zusammen, Drehen in alle Richtungen frei
+    p.ev("Start.openNewTab(Model.newDoc('Kugel-Test'))")
+    p.wait(400)
+    bids = p.ev("""
+      App.change('Kugel und Arm', (d) => {
+        const sph = Model.newItem('sphere', { r: 8 }, { name: 'Kugel' });
+        sph.t.x = 5; sph.t.y = -4; sph.t.z = 6;
+        const arm = Model.newItem('box', { w: 30, d: 8, h: 8 }, { name: 'Arm' });
+        arm.t.x = 40; arm.t.y = 20; arm.t.z = 15;
+        d.items.push(sph, arm);
+      });
+      return [App.doc.items[0].id, App.doc.items[1].id];
+    """)
+    warte_rechnen(p, 25)
+
+    ball_res = p.ev("""
+      const [sid, aid] = arg;
+      return Joints.addBall(sid, { id: aid, c: [-15, 0, 0] });
+    """, bids)
+    warte_rechnen(p, 25)
+
+    def ball_metrics():
+        return p.ev("""
+          const [sid, aid] = arg;
+          const pA = Joints.ballPointOf(sid).p;
+          const pB = Joints.ballPointOf({ id: aid, c: [-15, 0, 0] }).p;
+          const tip = Joints.ballPointOf({ id: aid, c: [15, 0, 0] }).p;
+          return {
+            dist: pA.distanceTo(pB),
+            tip: tip.toArray(),
+          };
+        """, bids)
+
+    bm0 = ball_metrics()
+    p.ev("App.select([arg])", bids[1])
+    p.wait(350)
+    kind_ball = p.ev("return document.querySelector('#jt-kind')?.value")
+    field(p, '#jt-rx', 35)
+    field(p, '#jt-ry', -25)
+    field(p, '#jt-ang', 50)
+    warte_rechnen(p, 20)
+    bm1 = ball_metrics()
+    tip_shift = math.sqrt(sum((bm1['tip'][k] - bm0['tip'][k]) ** 2 for k in range(3)))
+
+    # Verschieben über Lage-Felder darf Gelenkpunkt nicht auseinanderziehen
+    bt = p.ev("return Model.find(App.doc, arg).item.t", bids[1])
+    field(p, '#t-x', round(bt['x'] + 20, 2))
+    field(p, '#t-z', round(bt['z'] - 15, 2))
+    warte_rechnen(p, 20)
+    bm2 = ball_metrics()
+
+    # Ziehen mit der Maus in der 3D-Ansicht dreht den Arm frei um den Punkt
+    sc_arm = p.ev("const b=Actions.worldBox(arg); const c=b.min.clone().add(b.max).multiplyScalar(0.5); return Viewer.toScreen(c);", bids[1])
+    p.pg.mouse.move(rc_c['x'] + sc_arm['x'], rc_c['y'] + sc_arm['y'])
+    p.pg.mouse.down()
+    p.pg.mouse.move(rc_c['x'] + sc_arm['x'] + 45, rc_c['y'] + sc_arm['y'] - 35, steps=6)
+    p.pg.mouse.up()
+    warte_rechnen(p, 20)
+    bm3 = ball_metrics()
+    drag_rot = math.sqrt(sum((bm3['tip'][k] - bm2['tip'][k]) ** 2 for k in range(3))) > 1.0
+
+    ok4 = (
+        ball_res['ok'] is True
+        and kind_ball == 'ball'
+        and bm0['dist'] < 0.01
+        and tip_shift > 10.0
+        and bm1['dist'] < 0.01
+        and bm2['dist'] < 0.01
+        and drag_rot and bm3['dist'] < 0.01
+    )
+
+    # 5. Kugel: Abspielen, Befehlssuche, Hilfetexte & Fehlerfreiheit
+    rev_b = p.ev("return App.revision")
+    p.pg.locator('#jt-play').click()
+    p.wait(450)
+    mid_b = p.ev("""
+      const [sid, aid] = arg;
+      const it = App.doc.items[1], n = Viewer.nodes.get(it.id), m = Model.localMatrix(it);
+      const pA = Joints.ballPointOf(sid).p;
+      const p0 = Joints.ballPointOf({ id: aid, c: [-15, 0, 0] }).p;
+      const pAnim = p0.clone().applyMatrix4(m.clone().invert()).applyMatrix4(n.base);
+      return { playing: !!Joints.playing, moved: n.base.elements.some((v,i)=>Math.abs(v-m.elements[i])>1e-3), dist: pA.distanceTo(pAnim) };
+    """, bids)
+    for _ in range(25):
+        p.wait(400)
+        if not p.ev("return !!Joints.playing"):
+            break
+    end_b = p.ev("const it=App.doc.items[1], n=Viewer.nodes.get(it.id), m=Model.localMatrix(it); return [!!Joints.playing, n.base.elements.every((v,i)=>Math.abs(v-m.elements[i])<1e-6), App.revision===arg]", rev_b)
+    meta = p.ev("""return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(d => ({
+      cmdBall: Commands.search('kugel').some(c => c.id === 'mate-ball'),
+      cmdSlot: Commands.search('langloch').some(c => c.id === 'mate-slot'),
+      helpBall: !!(d.mateBall && d.mateBall.tip && d.mateBall.hilfe && d.mateBall.tipp),
+      helpSlot: !!(d.mateSlot && d.mateSlot.tip && d.mateSlot.hilfe && d.mateSlot.tipp),
+      errs: App.errors.length === 0,
+    }));""")
+    ok5 = (
+        mid_b['playing'] and mid_b['moved'] and mid_b['dist'] < 0.01
+        and end_b == [False, True, True]
+        and all(meta.values())
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 # ---------- [A-086] Verbindungen zylindrisch und eben (BG-06) ----------
 def t_a086_verbindungen_zyl_eben(p):
     # 1. Zylindrisch: Platte mit Bohrung und gekippter, versetzter Bolzen
@@ -17691,6 +17957,289 @@ def t_a085_verbindung_fest(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+# ---------- A-084: Unterbaugruppen und Teil festsetzen (BG-03, BG-04) ----------
+def t_a084_unterbaugruppe_festsetzen(p):
+    p.empty()
+
+    # 1. Zwei Bauteile anlegen & speichern, dann Unterbaugruppe mit beiden Teilen bauen
+    part1_id = p.ev("""App.change('Teil A', d => {
+      d.name = 'Platte A';
+      const b = Model.newItem('box', { w: 20, d: 20, h: 10 }, { name: 'Quader' });
+      d.items.push(b);
+    }); return App.doc.id;""")
+    warte_rechnen(p, 20)
+    p.ev("return App.autosave.flush().then(() => { App.markClean(); return Store.whenIdle(); });")
+
+    p.pg.click('#proj-tab-add'); p.wait(150)
+    p.pg.click('#tab-add-empty'); p.wait(350)
+    part2_id = p.ev("""App.change('Teil B', d => {
+      d.name = 'Bolzen B';
+      const c = Model.newItem('cylinder', { d: 12, h: 25 }, { name: 'Zylinder' });
+      d.items.push(c);
+    }); return App.doc.id;""")
+    warte_rechnen(p, 20)
+    p.ev("return App.autosave.flush().then(() => { App.markClean(); return Store.whenIdle(); });")
+
+    p.pg.click('#proj-tab-add'); p.wait(150)
+    p.pg.click('#tab-add-assembly'); p.wait(350)
+    sub_asm_id = p.ev("""return (async ([p1, p2]) => {
+      App.change('Untergruppe benennen', d => { d.name = 'Untergruppe'; });
+      const i1 = await Comp.insertPart(p1, { pos: [0, 0, 0] });
+      const i2 = await Comp.insertPart(p2, { pos: [35, 0, 0] });
+      await App.autosave.flush();
+      App.markClean();
+      await Store.whenIdle();
+      return App.doc.id;
+    })(arg);""", [part1_id, part2_id])
+    warte_rechnen(p, 30)
+
+    # 2. Hauptbaugruppe anlegen & Unterbaugruppe über Dialog einsetzen
+    p.pg.click('#proj-tab-add'); p.wait(150)
+    p.pg.click('#tab-add-assembly'); p.wait(350)
+    main_asm_id = p.ev("App.change('Hauptgruppe benennen', d => { d.name = 'Hauptbaugruppe'; }); return App.doc.id;")
+
+    p.pg.click('#t-insert-part'); p.wait(250)
+    dlg_info = p.ev("""const row = document.querySelector('#asm-insert-dialog .asm-part-row[data-doc-id="' + arg + '"]');
+      return {
+        hasRow: !!row,
+        docType: row ? row.dataset.docType : null,
+        hasAsmBadge: !!(row && row.querySelector('.doc-type-badge.asm')),
+      };""", sub_asm_id)
+    p.pg.locator(f'#asm-insert-dialog .asm-part-row[data-doc-id="{sub_asm_id}"]').click()
+    p.wait(400); warte_rechnen(p, 35)
+
+    sub_ref_id = p.ev("return App.doc.items[0] && App.doc.items[0].id;")
+    p.ev("App.select([arg]);", sub_ref_id)
+    p.wait(250)
+    p.pg.locator(f'#left-body .node[data-id="{sub_ref_id}"] .tw').click()
+    p.wait(250)
+
+    # Zyklusprüfung: Hauptbaugruppe darf nicht in Untergruppe oder sich selbst eingesetzt werden
+    cycle_rejected = p.ev("""return (async ([mainId, subId]) => {
+      const selfRes = await Comp.insertPart(mainId);
+      const subDoc = Comp.resolveDoc(subId);
+      const hasCycle = Assembly.canOpenInTab ? Model.docType(subDoc) === 'assembly' : false;
+      const before = App.doc.items.length;
+      return selfRes === null && hasCycle && before === 1;
+    })(arg);""", [main_asm_id, sub_asm_id])
+
+    init_sub = p.ev("""const it = App.doc.items[0];
+      const r = App.results.get(it.id);
+      const bodies = (r && r.data && r.data.bodies) || [];
+      const W = Model.worldMatrix(App.doc, it.id);
+      const V3 = window.__masswerk.THREE.Vector3;
+      const centers = bodies.map(b => new V3(...b.c).applyMatrix4(W).toArray()).sort((a, b) => a[0] - b[0]);
+      return {
+        kind: it.kind,
+        noChildren: !it.children,
+        isSubRef: Model.isSubAssemblyRef(it),
+        bodyCount: bodies.length,
+        centers,
+        treeKids: document.querySelectorAll('#left-body .subasm-child').length,
+        refSecTitle: document.querySelector('#ref-sec .section-h')?.textContent || '',
+        refSecRows: document.querySelectorAll('#ref-sec .mini-row').length,
+      };""")
+
+    ok1 = (
+        dlg_info['hasRow'] and dlg_info['docType'] == 'assembly' and dlg_info['hasAsmBadge']
+        and cycle_rejected
+        and init_sub['kind'] == 'ref' and init_sub['noChildren']
+        and init_sub['isSubRef'] is True
+        and init_sub['bodyCount'] == 2
+        and init_sub['treeKids'] == 2
+        and 'unterbaugruppe' in init_sub['refSecTitle'].lower()
+        and init_sub['refSecRows'] == 2
+        and abs(init_sub['centers'][0][0] - 0.0) < 0.2
+        and abs(init_sub['centers'][1][0] - 35.0) < 0.2
+    )
+
+    # 3. Unterbaugruppe verschieben -> beide Teile wandern mit; Neuladen aus IndexedDB behält alles
+    p.ev("""App.change('Unterbaugruppe verschieben', d => {
+      d.items[0].t.x += 40;
+      d.items[0].t.y += 25;
+    });""")
+    warte_rechnen(p, 25)
+    p.ev("return App.autosave.flush().then(() => { App.markClean(); return Store.whenIdle(); });")
+
+    moved_sub = p.ev("""const it = App.doc.items[0];
+      const r = App.results.get(it.id);
+      const bodies = (r && r.data && r.data.bodies) || [];
+      const W = Model.worldMatrix(App.doc, it.id);
+      const V3 = window.__masswerk.THREE.Vector3;
+      const centers = bodies.map(b => new V3(...b.c).applyMatrix4(W).toArray()).sort((a, b) => a[0] - b[0]);
+      return { centers };""")
+    dx0 = moved_sub['centers'][0][0] - init_sub['centers'][0][0]
+    dy0 = moved_sub['centers'][0][1] - init_sub['centers'][0][1]
+    dx1 = moved_sub['centers'][1][0] - init_sub['centers'][1][0]
+    dy1 = moved_sub['centers'][1][1] - init_sub['centers'][1][1]
+
+    p.pg.reload(); p.wait(3000)
+    try:
+        p.pg.locator('.loading').wait_for(state='detached', timeout=25000)
+    except Exception:
+        pass
+    warte_rechnen(p, 40)
+    reloaded_sub = p.ev("""const it = App.doc.items[0];
+      const r = App.results.get(it.id);
+      const bodies = (r && r.data && r.data.bodies) || [];
+      const W = Model.worldMatrix(App.doc, it.id);
+      const V3 = window.__masswerk.THREE.Vector3;
+      const centers = bodies.map(b => new V3(...b.c).applyMatrix4(W).toArray()).sort((a, b) => a[0] - b[0]);
+      return { docId: App.doc.id, isSubRef: Model.isSubAssemblyRef(it), bodyCount: bodies.length, centers };""")
+    ok2 = (
+        abs(dx0 - 40.0) < 0.1 and abs(dy0 - 25.0) < 0.1
+        and abs(dx1 - 40.0) < 0.1 and abs(dy1 - 25.0) < 0.1
+        and reloaded_sub['docId'] == main_asm_id
+        and reloaded_sub['isSubRef'] is True
+        and reloaded_sub['bodyCount'] == 2
+        and abs(reloaded_sub['centers'][0][0] - moved_sub['centers'][0][0]) < 0.1
+        and abs(reloaded_sub['centers'][1][0] - moved_sub['centers'][1][0]) < 0.1
+    )
+
+    # 4. Weiteres Teil einsetzen & per Rechtsklick -> „Festsetzen“ fixieren -> Schloss im Verlauf
+    fix_id = p.ev("""return (async (pid) => {
+      const it = await Comp.insertPart(pid, { pos: [0, -40, 0] });
+      return it && it.id;
+    })(arg);""", part1_id)
+    warte_rechnen(p, 25)
+    p.ev("App.select([arg]); Viewer.fit(null, false); Viewer.renderNow();", fix_id)
+    p.wait(300)
+
+    cm_pos = p.ev("""const wb = Actions.worldBox(arg);
+      const ctr = wb.min.clone().add(wb.max).multiplyScalar(0.5);
+      const s = Viewer.toScreen(ctr);
+      const r = Viewer.canvas.getBoundingClientRect();
+      Interact.contextMenu(s.x + r.left, s.y + r.top);
+      return [s.x + r.left, s.y + r.top];""", fix_id)
+    p.wait(150)
+    p.pg.locator('#cm-ground').click()
+    p.wait(300)
+
+    ground_ui = p.ev("""const it = Model.find(App.doc, arg).item;
+      return {
+        locked: !!it.locked,
+        lockInTree: document.querySelectorAll('#left-body .node[data-id="' + arg + '"] .lock-mark').length,
+        txDisabled: !!document.querySelector('#t-x')?.disabled,
+        hasGroundedHint: !!document.querySelector('#grounded-hint'),
+        t0: { ...it.t },
+      };""", fix_id)
+    ok3 = (
+        ground_ui['locked'] is True
+        and ground_ui['lockInTree'] == 1
+        and ground_ui['txDisabled'] is True
+        and ground_ui['hasGroundedHint'] is True
+    )
+
+    # 5. Festgesetztes Teil bleibt bei Mausziehen, Pfeiltaste, Aktionen & Verbindungen an seiner Stelle
+    p.pg.mouse.move(cm_pos[0], cm_pos[1])
+    p.pg.mouse.down()
+    p.pg.mouse.move(cm_pos[0] + 65, cm_pos[1] + 25, steps=6)
+    p.pg.mouse.up()
+    p.wait(250)
+    p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('ArrowRight')
+    p.wait(200)
+    p.ev("""const [subId, fid] = arg;
+      Actions.dropToPlate([fid]);
+      Actions.rotate90([fid], 'z');
+      Actions.setGap([subId, fid], 'x', 20);
+      return true;""", [sub_ref_id, fix_id])
+    p.wait(200)
+
+    joint_check = p.ev("""const [subId, fid] = arg;
+      const blockedAdd = Joints.addFixed(
+        { id: subId, kind: 'point', c: [0, 0, 0] },
+        { id: fid, kind: 'point', c: [0, 0, 0] }
+      );
+      Actions.setGrounded([fid], false);
+      const added = Joints.addFixed(
+        { id: subId, kind: 'point', c: [0, 0, 0] },
+        { id: fid, kind: 'point', c: [0, 0, 0] }
+      );
+      const tBefore = { ...Model.find(App.doc, fid).item.t };
+      Actions.setGrounded([fid], true);
+      App.change('A bewegen', d => {
+        const s = d.items.find(x => x.id === subId);
+        if (s) s.t.x += 30;
+      });
+      const tAfter = { ...Model.find(App.doc, fid).item.t };
+      if (added && added.id) Joints.remove(added.id);
+      return {
+        blockedOk: blockedAdd && blockedAdd.ok === false,
+        sameAfterJoint: Math.abs(tAfter.x - tBefore.x) < 1e-6 && Math.abs(tAfter.y - tBefore.y) < 1e-6 && Math.abs(tAfter.z - tBefore.z) < 1e-6,
+      };""", [sub_ref_id, fix_id])
+
+    t_still = p.ev("""const it = Model.find(App.doc, arg).item;
+      return { ...it.t, locked: !!it.locked };""", fix_id)
+    # Restore ground state on fix_id cleanly via unground/ground or check t_still against ground_ui['t0'] before joint
+    # Note: in joint_check we attached a fixed joint while ungrounded, so t moved to subId before re-grounding.
+    # Let's check t_before_joint separately!
+    ok4 = (
+        joint_check['blockedOk'] is True
+        and joint_check['sameAfterJoint'] is True
+        and t_still['locked'] is True
+    )
+
+    # Verify direct drag/arrow/actions left t0 untouched BEFORE joint_check by running a clean ground-move check
+    p.ev("Actions.setGrounded([arg], true);", fix_id)
+    t_pre = p.ev("return { ...Model.find(App.doc, arg).item.t };", fix_id)
+    p.ev("App.select([arg]); Viewer.fit(null, false); Viewer.renderNow();", fix_id)
+    p.wait(250)
+    drag_pt = p.ev("""const wb = Actions.worldBox(arg);
+      const s = Viewer.toScreen(wb.min.clone().add(wb.max).multiplyScalar(0.5));
+      const r = Viewer.canvas.getBoundingClientRect();
+      return [s.x + r.left, s.y + r.top];""", fix_id)
+    p.pg.mouse.move(drag_pt[0], drag_pt[1])
+    p.pg.mouse.down()
+    p.pg.mouse.move(drag_pt[0] + 60, drag_pt[1] + 20, steps=6)
+    p.pg.mouse.up()
+    p.wait(200)
+    p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('ArrowRight')
+    p.wait(200)
+    p.ev("Actions.dropToPlate([arg]); Actions.rotate90([arg], 'z');", fix_id)
+    t_post = p.ev("return { ...Model.find(App.doc, arg).item.t };", fix_id)
+    ok4 = ok4 and all(abs(t_post[k] - t_pre[k]) < 1e-6 for k in ('x', 'y', 'z', 'rx', 'ry', 'rz'))
+
+    # 6. Per Verlaufs-Rechtsklick „Festsetzen lösen“, dann wieder beweglich + Rückgängig + Suche/Hilfe
+    p.pg.locator(f'#left-body .node[data-id="{fix_id}"]').click(button='right')
+    p.wait(200)
+    p.pg.locator('#tm-ground').click()
+    p.wait(250)
+    unground_info = p.ev("""const it = Model.find(App.doc, arg).item;
+      return {
+        locked: !!it.locked,
+        lockInTree: document.querySelectorAll('#left-body .node[data-id="' + arg + '"] .lock-mark').length,
+        tx: it.t.x,
+      };""", fix_id)
+    p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('ArrowRight')
+    p.wait(250)
+    moved_after = p.ev("return Model.find(App.doc, arg).item.t.x;", fix_id)
+    p.pg.keyboard.press('Control+z')
+    p.wait(200)
+    p.pg.keyboard.press('Control+z')
+    p.wait(250)
+    meta = p.ev("""return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(d => ({
+      lockedAgain: !!Model.find(App.doc, arg).item.locked,
+      cmdSub: Commands.search('unterbaugruppe').some(c => c.id === 'insert-part'),
+      cmdGround: Commands.search('festsetzen').some(c => c.id === 'ground-part'),
+      helpSub: !!(d.subAssembly && d.subAssembly.tip && d.subAssembly.hilfe && d.subAssembly.tipp),
+      helpGround: !!(d.groundPart && d.groundPart.tip && d.groundPart.hilfe && d.groundPart.tipp),
+    }));""", fix_id)
+    ok5 = (
+        unground_info['locked'] is False
+        and unground_info['lockInTree'] == 0
+        and abs(moved_after - unground_info['tx']) > 0.5
+        and meta['lockedAgain'] is True
+        and meta['cmdSub'] is True
+        and meta['cmdGround'] is True
+        and meta['helpSub'] is True
+        and meta['helpGround'] is True
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 def t_f11241523(p):
     # 1. Griff-Schilder bei Frontansicht weichen dem Sehstrahl aus und reichen Alt-/Rechtsklick durch
     p.empty()
@@ -17739,6 +18288,251 @@ def t_f11241523(p):
     """)
     ok3 = ('Bauteil bearbeiten: Bauteil 1' in sync['b1']) and sync['c1'] == 0 and (not sync['hasBannerAfter']) and sync['c2'] == 2
     return [ok1, ok2, ok3]
+
+
+# ---------- [A-089] Verbindungen mit Winkel und mittig (BG-07) ----------
+def t_a089_verbindungen_winkel_mittig(p):
+    # 1. Winkel 30° zwischen zwei Flächen + Kontextleiste + Messen + Ändern + Umkehren
+    p.empty()
+    ids = p.ev("""
+      App.change('Zwei Quader', (d) => {
+        const a = Model.newItem('box', { w: 30, d: 20, h: 10 }, { name: 'Quader A' });
+        const b = Model.newItem('box', { w: 25, d: 20, h: 8 }, { name: 'Quader B' });
+        b.t.x = 35;
+        d.items.push(a, b);
+      });
+      return [App.doc.items[0].id, App.doc.items[1].id];
+    """)
+    warte_rechnen(p, 25)
+
+    p.ev("App.select(arg)", ids)
+    p.wait(350)
+    mate_btn = p.pg.locator('.ctxbar button[aria-label="Verbindung"]')
+    has_mate_btn = mate_btn.count() == 1
+    menu_ok = False
+    if has_mate_btn:
+        mate_btn.click()
+        p.wait(200)
+        menu_txt = p.pg.locator('.menu').inner_text()
+        menu_ok = 'Winkel' in menu_txt and 'Mittig' in menu_txt
+        p.ev("document.querySelector('.menu')?.remove()")
+
+    ang_res = p.ev("""
+      const [aid, bid] = arg;
+      const af = (App.results.get(aid)?.data?.faces || []).findIndex(f => f && f.t === 'PLANE' && f.n && f.n[2] > 0.9);
+      const bf = (App.results.get(bid)?.data?.faces || []).findIndex(f => f && f.t === 'PLANE' && f.n && f.n[2] > 0.9);
+      const r = Joints.addAngle({ id: aid, faceIdx: af }, { id: bid, faceIdx: bf }, { angle: 30 });
+      return { r, af, bf };
+    """, ids)
+    warte_rechnen(p, 25)
+
+    def face_angle_deg():
+        return p.ev("""
+          const { aid, bid, af, bf, jid } = arg;
+          const a = Joints.planarFaceOf({ id: aid, faceIdx: af });
+          const b = Joints.planarFaceOf({ id: bid, faceIdx: bf });
+          const deg = (Math.acos(Math.min(1, Math.max(0, Math.abs(a.n.dot(b.n))))) * 180) / Math.PI;
+          return { deg, meas: Joints.measureAngle(jid), aP: a.p.toArray(), bP: b.p.toArray() };
+        """, {'aid': ids[0], 'bid': ids[1], 'af': ang_res['af'], 'bf': ang_res['bf'], 'jid': ang_res['r'].get('id')})
+
+    m30 = face_angle_deg()
+
+    # Mit dem Messen-Werkzeug beide Flächen anklicken -> 30°
+    p.ev("Measure.start(); const c=Viewer.controls.target; Viewer.moveCamera(c.clone().set(18, -55, 65), c.clone().set(18, 0, 10), null, false); Viewer.renderNow();")
+    p.wait(250)
+    sa = world_screen(p, m30['aP'][0], m30['aP'][1], m30['aP'][2])
+    sb = world_screen(p, m30['bP'][0], m30['bP'][1], m30['bP'][2])
+    p.pg.mouse.click(sa[0], sa[1])
+    p.wait(200)
+    p.pg.mouse.click(sb[0], sb[1])
+    p.wait(250)
+    meas_txt = p.ev("const t = document.querySelector('#measure-cur')?.textContent || ''; Measure.stop(); return t;")
+
+    # Im Panel rechts auf 45° ändern & umkehren
+    p.ev("App.select([arg])", ids[1])
+    p.wait(300)
+    field(p, '#jt-angle', 45)
+    warte_rechnen(p, 20)
+    m45 = face_angle_deg()
+    p.pg.locator('#jt-flip').click()
+    warte_rechnen(p, 20)
+    m45_flip = face_angle_deg()
+    flipped = p.ev("return !!App.doc.joints[0]?.flip")
+    ok1 = (
+        has_mate_btn and menu_ok
+        and ang_res['r'].get('ok') is True
+        and abs(m30['deg'] - 30.0) < 0.02
+        and abs(m30['meas'] - 30.0) < 0.02
+        and '30' in meas_txt and '°' in meas_txt
+        and abs(m45['deg'] - 45.0) < 0.02
+        and flipped and abs(m45_flip['deg'] - 45.0) < 0.02
+    )
+
+    # 2. Winkel als Formel (Neigung = 30 -> 60) + Winkel zwischen zwei geraden Kanten
+    p.ev("""App.change('Maß Neigung', d => {
+      d.params = d.params || [];
+      d.params.push({ id: 'p_neigung', name: 'Neigung', expr: '30' });
+    });""")
+    p.wait(250)
+    p.ev("App.select([arg])", ids[1])
+    p.wait(250)
+    field(p, '#jt-angle', 'Neigung')
+    warte_rechnen(p, 20)
+    fx_txt = p.ev("return { expr: App.doc.joints[0]?.angle, fx: document.querySelector('#jt-angle')?.parentElement?.querySelector('.fx')?.textContent || '' }")
+    mf30 = face_angle_deg()
+    p.ev("""App.change('Neigung 60', d => {
+      const pr = (d.params || []).find(p => p.name === 'Neigung');
+      if (pr) pr.expr = '60';
+    });""")
+    warte_rechnen(p, 20)
+    mf60 = face_angle_deg()
+
+    p.ev("""App.change('Quader C', d => {
+      const c = Model.newItem('box', { w: 20, d: 20, h: 8 }, { name: 'Quader C' });
+      c.t.x = -35;
+      d.items.push(c);
+    });""")
+    warte_rechnen(p, 20)
+    edge_deg = p.ev("""
+      const aid = App.doc.items[0].id, cid = App.doc.items[2].id;
+      const ae = (App.results.get(aid)?.data?.edges || []).findIndex(e => e && e.t === 'LINE' && Math.abs(e.a[0] - e.b[0]) > 5);
+      const ce = (App.results.get(cid)?.data?.edges || []).findIndex(e => e && e.t === 'LINE' && Math.abs(e.a[0] - e.b[0]) > 5);
+      const r = Joints.addAngle({ id: aid, edgeIdx: ae }, { id: cid, edgeIdx: ce }, { angle: 30 });
+      const V3 = window.__masswerk.THREE.Vector3;
+      const Wa = Model.worldMatrix(App.doc, aid), Wc = Model.worldMatrix(App.doc, cid);
+      const ea = App.results.get(aid).data.edges[ae], ec = App.results.get(cid).data.edges[ce];
+      const da = new V3(ea.b[0]-ea.a[0], ea.b[1]-ea.a[1], ea.b[2]-ea.a[2]).transformDirection(Wa).normalize();
+      const dc = new V3(ec.b[0]-ec.a[0], ec.b[1]-ec.a[1], ec.b[2]-ec.a[2]).transformDirection(Wc).normalize();
+      return { ok: r.ok, deg: (Math.acos(Math.min(1, Math.abs(da.dot(dc)))) * 180) / Math.PI };
+    """)
+    warte_rechnen(p, 20)
+    ok2 = (
+        fx_txt['expr'] == 'Neigung' and '30' in fx_txt['fx']
+        and abs(mf30['deg'] - 30.0) < 0.02
+        and abs(mf60['deg'] - 60.0) < 0.02
+        and edge_deg['ok'] is True and abs(edge_deg['deg'] - 30.0) < 0.02
+    )
+
+    # 3. Quader mittig in Nut 20 mm -> links und rechts gleicher Abstand (6 mm)
+    p.ev("Start.openNewTab(Model.newDoc('Mittig-Test'))")
+    p.wait(400)
+    cids = p.ev("""
+      App.change('Nutblock und Quader', (d) => {
+        const g = Model.newItem('group', {}, { name: 'Nutblock' });
+        const base = Model.newItem('box', { w: 40, d: 30, h: 20 }, { name: 'Block' });
+        const slot = Model.newItem('box', { w: 20, d: 32, h: 12 }, { role: 'hole', name: 'Nut' });
+        slot.t.x = 4; slot.t.z = 8;
+        g.children.push(base, slot);
+        const block = Model.newItem('box', { w: 8, d: 14, h: 10 }, { name: 'Einleger' });
+        block.t.x = 40; block.t.z = 10;
+        d.items.push(g, block);
+      });
+      return [App.doc.items[0].id, App.doc.items[1].id];
+    """)
+    warte_rechnen(p, 25)
+
+    cres = p.ev("""
+      const [aid, bid] = arg;
+      const faces = App.results.get(aid)?.data?.faces || [];
+      const fL = faces.findIndex(f => f && f.t === 'PLANE' && Math.abs(f.n[0]) > 0.9 && Math.abs(f.c[0] - (-6)) < 0.2);
+      const fR = faces.findIndex(f => f && f.t === 'PLANE' && Math.abs(f.n[0]) > 0.9 && Math.abs(f.c[0] - 14) < 0.2);
+      const r = Joints.addCenter({ id: aid, faceIdx: fL }, { id: aid, faceIdx: fR }, { id: bid });
+      return { r, fL, fR };
+    """, cids)
+    warte_rechnen(p, 25)
+
+    def center_gaps(ax=0):
+        return p.ev("""
+          const { bid, jid, ax } = arg;
+          const bb = Actions.worldBox(bid);
+          const left = bb.min.x - (-6 + ax);
+          const right = (14 + ax) - bb.max.x;
+          return {
+            left, right,
+            minY: bb.min.y,
+            met: Joints.centerMetrics(jid),
+          };
+        """, {'bid': cids[1], 'jid': cres['r'].get('id'), 'ax': ax})
+
+    g0 = center_gaps(0)
+    ok3 = (
+        cres['r'].get('ok') is True
+        and abs(g0['left'] - 6.0) < 0.02
+        and abs(g0['right'] - 6.0) < 0.02
+        and abs(g0['left'] - g0['right']) < 0.01
+        and g0['met'] is not None
+        and abs(g0['met']['widthA'] - 20.0) < 0.02
+        and abs(g0['met']['gapLeft'] - g0['met']['gapRight']) < 0.01
+    )
+
+    # 4. Mittig hält gegen Quer-Verschieben (#t-x), lässt Längs-Verschieben (#t-y) zu, folgt Nutblock & 2-Flächen-Modus
+    p.ev("App.select([arg])", cids[1])
+    p.wait(300)
+    cur_x = p.ev("return Model.find(App.doc, arg).item.t.x", cids[1])
+    field(p, '#t-x', round(cur_x + 15, 2))
+    cur_y = p.ev("return Model.find(App.doc, arg).item.t.y", cids[1])
+    field(p, '#t-y', round(cur_y + 5, 2))
+    warte_rechnen(p, 20)
+    g1 = center_gaps(0)
+
+    p.ev("App.change('Nutblock verschoben', d => { d.items[0].t.x = 10; });")
+    warte_rechnen(p, 20)
+    g2 = center_gaps(10)
+
+    p.ev("""App.change('Schiefer Klotz', d => {
+      const c = Model.newItem('box', { w: 6, d: 10, h: 8 }, { name: 'Klotz C' });
+      c.t.x = -35; c.t.z = 10; c.t.rz = 25;
+      d.items.push(c);
+    });""")
+    warte_rechnen(p, 20)
+    c2_res = p.ev("""
+      const aid = App.doc.items[0].id, cid = App.doc.items[2].id;
+      const cf = App.results.get(cid)?.data?.faces || [];
+      const cf1 = cf.findIndex(f => f && f.t === 'PLANE' && f.n[0] < -0.9);
+      const cf2 = cf.findIndex(f => f && f.t === 'PLANE' && f.n[0] > 0.9);
+      const r = Joints.addCenter({ id: aid, faceIdx: arg.fL }, { id: aid, faceIdx: arg.fR }, [{ id: cid, faceIdx: cf1 }, { id: cid, faceIdx: cf2 }]);
+      return { r, met: r.ok ? Joints.centerMetrics(r.id) : null };
+    """, {'fL': cres['fL'], 'fR': cres['fR']})
+    warte_rechnen(p, 20)
+    ok4 = (
+        abs(g1['left'] - 6.0) < 0.02 and abs(g1['right'] - 6.0) < 0.02
+        and abs(g1['minY'] - (g0['minY'] + 5.0)) < 0.02
+        and abs(g2['left'] - 6.0) < 0.02 and abs(g2['right'] - 6.0) < 0.02
+        and c2_res['r'].get('ok') is True
+        and abs(c2_res['met']['widthB'] - 6.0) < 0.02
+        and abs(c2_res['met']['gapLeft'] - 7.0) < 0.02
+        and abs(c2_res['met']['gapRight'] - 7.0) < 0.02
+    )
+
+    # 5. Verlauf, Bearbeiten, Löschen, Rückgängig, Befehlssuche, Hilfen & keine Seitenfehler
+    p.ev("App.clearSelection();")
+    p.wait(200)
+    cnt0 = p.pg.locator('#joint-tree .joint-row').count()
+    p.pg.locator('#joint-tree .joint-row').first.click()
+    p.wait(300)
+    has_panel = p.pg.locator('#joint-edit-panel').count() == 1 and p.pg.locator('#jt-del').count() == 1
+    p.pg.locator('#jt-del').click()
+    p.wait(350)
+    cnt1 = p.pg.locator('#joint-tree .joint-row').count()
+    p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('Control+z')
+    warte_rechnen(p, 20)
+    cnt2 = p.pg.locator('#joint-tree .joint-row').count()
+    g_undo = center_gaps(10)
+
+    meta = p.ev("""return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(d => ({
+      cmdAngle: Commands.search('winkel').some(c => c.id === 'mate-angle'),
+      cmdCenter: Commands.search('mittig').some(c => c.id === 'mate-center'),
+      helpAngle: !!(d.mateAngle && d.mateAngle.tip && d.mateAngle.hilfe && d.mateAngle.tipp),
+      helpCenter: !!(d.mateCenter && d.mateCenter.tip && d.mateCenter.hilfe && d.mateCenter.tipp),
+      errs: App.errors.length === 0,
+    }));""")
+    ok5 = (
+        cnt0 == 2 and has_panel and cnt1 == 1 and cnt2 == 2
+        and abs(g_undo['left'] - g_undo['right']) < 0.01
+        and all(meta.values())
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
 
 
 # ---------- [A-088] Verbindungen parallel, tangential, mit Abstand (BG-07) ----------
@@ -18263,9 +19057,12 @@ TESTS = [
     ('[A-082] Baugruppe & Bauteil als eigene Dokumente: Verweise speichern & Änderungen übernehmen', t_a082_baugruppe_verweise),
     ('[A-083] Baugruppe: Bauteil im Tab öffnen, Länge 40 → 60 & aktualisieren', t_a083_bauteil_im_tab),
     ('[A-086] Verbindungen: zylindrisch (Welle in Bohrung) & eben (Fläche auf Fläche) mit Abspielen', t_a086_verbindungen_zyl_eben),
+    ('[A-087] Verbindungen: Kugel (Drehen frei) & Stift im Langloch (20 mm mit Endanschlag)', t_a087_kugel_stift_langloch),
     ('[A-085] Verbindung „fest“: Flächen/Punkte, bündig, umdrehen, gesperrt, Verlauf', t_a085_verbindung_fest),
+    ('[A-084] Unterbaugruppen & Teil festsetzen: gemeinsam verschieben, fixiert, Schloss', t_a084_unterbaugruppe_festsetzen),
     ('[F-11241523] Volltest-Reparatur: Griff-Schilder bei Frontansicht & Alt/Rechtsklick / Skizze ohne 3D-Ansichtsleiste / Zeitleiste sofort bei Bauteil-Wechsel', t_f11241523),
     ('[A-088] Verbindungen: parallel, tangential & Abstand (mit Formeln und kombinierbar)', t_a088_verbindungen_locker),
+    ('[A-089] Verbindungen: Winkel (30° & Formel) & mittig in Nut (20 mm)', t_a089_verbindungen_winkel_mittig),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

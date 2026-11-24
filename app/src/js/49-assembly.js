@@ -147,12 +147,22 @@ const Assembly = (() => {
     return Model.migrate(doc);
   }
 
-  function hasCycle(asmDocId, partDoc) {
+  function hasCycle(asmDocId, partDoc, seen = new Set()) {
     if (!asmDocId || !partDoc) return false;
     if (partDoc.id === asmDocId) return true;
+    if (partDoc.id) {
+      if (seen.has(partDoc.id)) return false;
+      seen.add(partDoc.id);
+    }
     let found = false;
     Model.walk(partDoc.items || [], (it) => {
+      if (!it) return;
       if (isPartRef(it) && it.partRef.docId === asmDocId) { found = true; return false; }
+      if (it.kind === 'ref' && it.p && it.p.docId) {
+        if (it.p.docId === asmDocId) { found = true; return false; }
+        const sub = Model.resolveDoc(it.p.docId);
+        if (sub && hasCycle(asmDocId, sub, seen)) { found = true; return false; }
+      }
     });
     return found;
   }
