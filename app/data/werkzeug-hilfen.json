@@ -60,9 +60,9 @@
     "tipp": "Ideal für Rippen, Stege und dünne Halter, z. B. einen Kabelhalter: Bogen zeichnen, Wand 2 mm, 8 mm hochziehen. Ändert sich die Linie, wandert die Wand mit."
   },
   "project2d": {
-    "tip": "Kante eines Körpers in die Skizze holen",
-    "hilfe": "Klick in der Skizze auf eine Kante eines Körpers. Tracery schiebt sie senkrecht auf die Zeichenebene und legt sie als Element an: gerade Kanten als Linie, runde als Bogen oder Kreis, alles andere als Spline. Die Kante bleibt mit dem Körper verbunden (Ketten-Symbol): Ändert sich der Körper, wandert sie mit. Klickst du auf eine Fläche statt auf eine Kante, kommt der ganze Schnitt des Körpers mit der Skizzen-Ebene als Kontur in die Skizze – z. B. der Querschnitt eines Gehäuses, um daran weiterzuzeichnen.",
-    "tipp": "So passt ein Deckel genau auf ein Gehäuse: Skizze auf die Oberseite, die Außenkanten übernehmen, „Versatz“ nach innen – fertig ist der Rand. Wird das Gehäuse breiter, wächst der Deckel mit. Soll eine Kante stehen bleiben: anklicken, „Verbindung lösen“."
+    "tip": "Kante oder ganze ebene Fläche in die Skizze holen",
+    "hilfe": "Klick in der Skizze auf eine Kante eines Körpers – sie kommt als Linie, Bogen, Kreis oder Spline in die Skizze und bleibt mit dem Körper verbunden. Mit Umschalt + Klick auf eine ebene Körperfläche übernimmst du alle Randkanten (Außenkontur und Löcher) auf einmal. Im Feld „Versatz“ stellst du bei Bedarf einen Abstand ein (+ nach außen, − nach innen). Ein normaler Klick auf eine Fläche holt den Schnitt des Körpers mit der Skizzen-Ebene.",
+    "tipp": "So passt ein Deckel oder eine Dichtung mit Spiel: Skizze auf die Oberseite, Versatz auf 0,2 mm oder 2 mm stellen und mit Umschalt + Klick die Fläche übernehmen – Außenrand und Löcher entstehen versetzt auf einmal und wachsen mit."
   },
   "mirror2d": {
     "tip": "Elemente an einer Linie spiegeln",

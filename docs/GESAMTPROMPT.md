@@ -230,7 +230,7 @@ Leitlinien:
 - **Bearbeiten:**
   - Ecke runden/fasen (K, auch „Alle Ecken auf einmal“), Trimmen (T, auch Ellipsen), Verlängern (U), Teilen (Y), Versatz (F, auch Ellipsen; der Abstand einer Kette lässt sich später für alle Stücke zusammen ändern)
   - **Wand (N):** eine offene Linie wird eine Wand mit Dicke
-  - **Kante übernehmen (Z):** Körperkante als feste Linie, Bogen, Kreis oder Spline; **verbunden**, wandert also mit, wenn sich der Körper ändert (Ketten-Symbol, „Verbindung lösen“); Klick auf eine **Fläche** holt den ganzen **Schnitt** des Körpers mit der Skizzen-Ebene
+  - **Kante übernehmen (Z):** Körperkante als feste Linie, Bogen, Kreis oder Spline; **verbunden**, wandert also mit, wenn sich der Körper ändert (Ketten-Symbol, „Verbindung lösen“); Klick auf eine **Fläche** holt den ganzen **Schnitt** des Körpers mit der Skizzen-Ebene; **Umschalt + Klick** auf eine ebene Fläche übernimmt alle Randkanten (außen und Löcher) auf einmal (`projectFaceAt`), mit Feld **Versatz** (`S.projOff`, `#proj-off`, `offsetLoop2D` über `SKO.offsetChain`) direkt versetzt (+ außen / − innen)
   - Spiegeln (M, auch direkt an der X-/Y-Achse)
   - Rechteckmuster (Q), Kreismuster (W) – **nachträglich als Ganzes änderbar**
   - Maß (D, Formeln), Bild-Vorlage (I, mit Maßstab), Hilfslinie (X)

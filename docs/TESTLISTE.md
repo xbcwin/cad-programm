@@ -1602,6 +1602,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Einfach & Profi, Hilfe und Befehlssuche**: Knopf „Fertig bestimmen“ ist in beiden Stufen sichtbar; Hilfetext `sketchAutoDefine` und Befehl `sketch-autodef` sind vorhanden.
 - [ ] **Von Hand**: In einer größeren Freihand-Skizze mit leicht schiefen Linien, Bögen und einem Kreis „Fertig bestimmen“ klicken, die gestrichelte Vorschau auf Lesbarkeit prüfen und anschließend einzelne Maße im Bild anpassen.
 
+## Ganze Fläche in die Skizze, mit Versatz (Auto [A-025])
+
+- [x] **Umschalt + Klick auf ebene Fläche**: Quader 40×30×10 mit Loch Ø10 → alle 5 Randkanten (4 Linien als Rechteck 40×30 + 1 Kreis Ø10) werden in einem Schritt verbunden und fixiert als geschlossene Fläche mit Loch übernommen; Rückgängig entfernt alle auf einmal.
+- [x] **Versatz nach außen (+2 mm) & innen (−2 mm)**: Feld `#proj-off` = `2` ergibt 44×34-Rechteck und Ø6-Kreis (verbunden); `-2` ergibt 36×26-Rechteck und Ø14-Kreis.
+- [x] **Verbundene Nachführung mit Versatz**: Nach dem Hochziehen und Verbreitern des Quaders auf 50 mm wächst die mit +2 mm Versatz übernommene Kontur automatisch auf 54×34 mit (Loch bleibt Ø6).
+- [ ] **Von Hand**: Bei gedrückter Umschalt-Taste die Flächen-Hervorhebung vor dem Klick sowie die Übernahme einer komplexeren ebenen Fläche mit mehreren Bögen und Langlöchern bei positivem und negativem Versatz prüfen.
+
 ## Fehler melden
 
 ```
