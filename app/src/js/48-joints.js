@@ -1,4 +1,4 @@
-// ================= Gelenke & Verbindungen: fest (starr), Drehen, Schieben, Zylindrisch, Eben, Kugel, Stift im Langloch, Winkel, Mittig =================
+// ================= Gelenke & Verbindungen: fest (starr), Drehen, Schieben, Zylindrisch, Eben, Kugel, Stift im Langloch, Winkel, Mittig, Parallel, Tangential, Abstand =================
 // Ein Gelenk / eine Verbindung ist kein Schritt der Zeitleiste: Es setzt die Lage des beweglichen Teils (doc.joints).
 // Mehrere Verbindungen und Gelenke bilden eine Kette: Bewegt sich ein vorderes Teil, wandern alle Teile und Gelenkachsen dahinter mit.
 // home = Lage des beweglichen Teils in der Nullstellung; ao/ad (und au bei eben/kugel/langloch) in Weltkoordinaten.
@@ -6,8 +6,8 @@ const Joints = (() => {
   const list = (doc = App.doc) => (doc && doc.joints) || [];
   const allOf = (id, doc = App.doc) => list(doc).filter((j) => j.a === id || j.b === id);
   const of = (id, doc = App.doc) => list(doc).find((j) => j.b === id) || list(doc).find((j) => j.a === id) || null;
-  const drivingOf = (id, doc = App.doc) => list(doc).find((j) => j.b === id) || null;
-  const kindOf = (j) => (j && (j.kind === 'fixed' || j.kind === 'slide' || j.kind === 'cyl' || j.kind === 'planar' || j.kind === 'ball' || j.kind === 'slot' || j.kind === 'angle' || j.kind === 'center') ? j.kind : 'rot');
+  const isLooseKind = (k) => k === 'parallel' || k === 'tangent' || k === 'distance';
+  const kindOf = (j) => (j && (j.kind === 'fixed' || j.kind === 'slide' || j.kind === 'cyl' || j.kind === 'planar' || j.kind === 'ball' || j.kind === 'slot' || j.kind === 'angle' || j.kind === 'center' || isLooseKind(j.kind)) ? j.kind : 'rot');
   const fixed = (j) => kindOf(j) === 'fixed';
   const slide = (j) => kindOf(j) === 'slide';
   const isCyl = (j) => kindOf(j) === 'cyl';
@@ -16,7 +16,13 @@ const Joints = (() => {
   const isSlot = (j) => kindOf(j) === 'slot';
   const isAngle = (j) => kindOf(j) === 'angle';
   const isCenter = (j) => kindOf(j) === 'center';
+  const isParallel = (j) => kindOf(j) === 'parallel';
+  const isTangent = (j) => kindOf(j) === 'tangent';
+  const isDistance = (j) => kindOf(j) === 'distance';
+  const isLoose = (j) => isLooseKind(kindOf(j));
   const isConstraint = (j) => fixed(j) || isAngle(j) || isCenter(j);
+  const drivingOf = (id, doc = App.doc) => list(doc).find((j) => j.b === id && !isLoose(j)) || null;
+  const looseOf = (id, doc = App.doc) => list(doc).filter((j) => isLoose(j) && j.b === id);
   const isFixedPart = (id, doc = App.doc) => list(doc).some((j) => j.kind === 'fixed' && j.b === id);
   const fixedJointOf = (id, doc = App.doc) => list(doc).find((j) => j.kind === 'fixed' && j.b === id) || null;
   const r6 = (arr) => arr.map((v) => round(v, 6));
@@ -67,13 +73,20 @@ const Joints = (() => {
   }
 
   // ---------- 3D-Geometrie-Helfer für Achsen und Ebenen ----------
-  function rotBetween(from, to) {
+  function rotBetween(from, to, hintAxis = null) {
     const a = from.clone().normalize(), b = to.clone().normalize();
     const dot = a.dot(b);
     if (dot > 1 - 1e-10) return new THREE.Quaternion();
     if (dot < -1 + 1e-10) {
-      const ref = Math.abs(a.x) < 0.8 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
-      const ax = new THREE.Vector3().crossVectors(a, ref).normalize();
+      let ax = null;
+      if (hintAxis) {
+        const perp = hintAxis.clone().addScaledVector(a, -hintAxis.dot(a));
+        if (perp.lengthSq() > 1e-6) ax = perp.normalize();
+      }
+      if (!ax) {
+        const ref = Math.abs(a.x) < 0.8 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+        ax = new THREE.Vector3().crossVectors(a, ref).normalize();
+      }
       return new THREE.Quaternion().setFromAxisAngle(ax, Math.PI);
     }
     return new THREE.Quaternion().setFromUnitVectors(a, b);
@@ -487,13 +500,25 @@ const Joints = (() => {
   }
   // Prüfen, ob zwei Teile schon über Gelenke verbunden sind (ein weiteres Gelenk dazwischen ergäbe einen Kreis)
   function connected(doc, idA, idB) {
-    const js = list(doc), seen = new Set([idA]), q = [idA];
+    const js = list(doc).filter((j) => !isLoose(j)), seen = new Set([idA]), q = [idA];
     while (q.length) {
       const x = q.shift();
       if (x === idB) return true;
       for (const j of js) {
         if (j.a === x && !seen.has(j.b)) { seen.add(j.b); q.push(j.b); }
         if (j.b === x && !seen.has(j.a)) { seen.add(j.a); q.push(j.a); }
+      }
+    }
+    return false;
+  }
+  function wouldCycleDirected(doc, aId, bId) {
+    if (aId === bId) return true;
+    const js = list(doc), seen = new Set([bId]), q = [bId];
+    while (q.length) {
+      const x = q.shift();
+      if (x === aId) return true;
+      for (const j of js) {
+        if (j.a === x && !seen.has(j.b)) { seen.add(j.b); q.push(j.b); }
       }
     }
     return false;
@@ -508,11 +533,12 @@ const Joints = (() => {
   // Hintere Glieder der Kette samt ihren Gelenkachsen um die Bewegung D mitnehmen
   function moveChain(doc, rootId, D, opts = {}) {
     const ks = downstream(doc, rootId, { stopAtLocked: true }), moved = new Set([rootId, ...ks.map((k) => k.b)]);
+    const V = Model.vars(doc).v;
     for (const k of ks) {
       const kb = top(k.b, doc);
       // Steckt das Teil in einer Gruppe, die selbst mitwandert, fährt es schon mit – nur die Achse nachführen
       const carried = Model.parentsOf(doc, k.b).some((p) => moved.has(p.id));
-      if (kb && !carried && !fixed(k)) syncHome(kb, k, doc);
+      if (kb && !carried && !isConstraint(k) && !isLoose(k)) syncHome(kb, k, doc);
       k.ao = r6(new THREE.Vector3(...k.ao).applyMatrix4(D).toArray());
       k.ad = r9(new THREE.Vector3(...k.ad).transformDirection(D).normalize().toArray());
       if (Array.isArray(k.au)) k.au = r9(new THREE.Vector3(...k.au).transformDirection(D).normalize().toArray());
@@ -533,6 +559,13 @@ const Joints = (() => {
         }
         continue;
       }
+      if (isLoose(k)) {
+        if (kb && !kb.locked) {
+          solvePartConstraints(doc, k.b, V);
+          if (opts.live && isTop(kb.id, doc)) Viewer.updateNode(kb.id, { matrix: Model.localMatrix(kb) });
+        }
+        continue;
+      }
       k.home = r9(conj(doc, k.b, D).multiply(new THREE.Matrix4().fromArray(k.home)).toArray());
       if (kb) {
         Model.setFromMatrix(kb, pose(k, stateOf(k), null, doc));
@@ -545,6 +578,7 @@ const Joints = (() => {
     const r = top(rootId, doc);
     if (r && r.locked) return true;
     return downstream(doc, rootId).some((k) => {
+      if (isLoose(k)) return false;
       const kb = top(k.b, doc);
       return !!(kb && kb.locked);
     });
@@ -557,7 +591,7 @@ const Joints = (() => {
     if (it.locked) return { blocked: true, reason: 'grounded', name: Model.label(it) };
     if (isFixedPart(itemId, doc)) return { blocked: true, reason: 'fixed', name: Model.label(it) };
     const mj = drivingOf(itemId, doc);
-    const groundedChildren = list(doc).filter((k) => k.a === itemId && subtreeHasLocked(doc, k.b));
+    const groundedChildren = list(doc).filter((k) => k.a === itemId && !isLoose(k) && subtreeHasLocked(doc, k.b));
     if (groundedChildren.length > 1) return { blocked: true, reason: 'groundedChain', name: Model.label(it) };
     if (groundedChildren.length === 1) {
       const jd = groundedChildren[0];
@@ -585,15 +619,16 @@ const Joints = (() => {
         moved.add(k.b);
         q.push(k.b);
         const carried = Model.parentsOf(doc, k.b).some((p) => moved.has(p.id));
-        if (kb && !carried && !isConstraint(k)) syncHome(kb, k, doc);
+        if (kb && !carried && !isConstraint(k) && !isLoose(k)) syncHome(kb, k, doc);
         entries.push({
           id: k.id,
           bId: k.b,
-          ao: [...k.ao],
-          ad: [...k.ad],
+          ao: Array.isArray(k.ao) ? [...k.ao] : null,
+          ad: Array.isArray(k.ad) ? [...k.ad] : null,
           au: Array.isArray(k.au) ? [...k.au] : null,
-          home: [...k.home],
+          home: Array.isArray(k.home) ? [...k.home] : null,
           isCon: isConstraint(k),
+          isLoose: isLoose(k),
           isAngOrCtr: isAngle(k) || isCenter(k),
           bW0: kb ? Model.worldMatrix(doc, kb.id).clone() : null,
           carried,
@@ -605,14 +640,20 @@ const Joints = (() => {
 
   function applyChainDelta(doc, snap, D, opts = {}) {
     if (!snap || !snap.entries || !snap.entries.length) return;
+    const V = Model.vars(doc).v;
     for (const e of snap.entries) {
       const k = list(doc).find((x) => x.id === e.id);
       if (!k) continue;
       const kb = top(e.bId, doc);
-      k.ao = r6(new THREE.Vector3(...e.ao).applyMatrix4(D).toArray());
-      k.ad = r9(new THREE.Vector3(...e.ad).transformDirection(D).normalize().toArray());
+      if (Array.isArray(e.ao)) k.ao = r6(new THREE.Vector3(...e.ao).applyMatrix4(D).toArray());
+      if (Array.isArray(e.ad)) k.ad = r9(new THREE.Vector3(...e.ad).transformDirection(D).normalize().toArray());
       if (Array.isArray(e.au)) k.au = r9(new THREE.Vector3(...e.au).transformDirection(D).normalize().toArray());
       if (e.carried || !kb || kb.locked) continue;
+      if (e.isLoose) {
+        solvePartConstraints(doc, e.bId, V);
+        if (opts.live && isTop(kb.id, doc)) Viewer.updateNode(kb.id, { matrix: Model.localMatrix(kb) });
+        continue;
+      }
       if (e.isCon) {
         if (e.isAngOrCtr && e.bW0) {
           const WbNew0 = D.clone().multiply(e.bW0);
@@ -628,6 +669,7 @@ const Joints = (() => {
         }
         continue;
       }
+      if (!e.home) continue;
       k.home = r9(conj(doc, k.b, D).multiply(new THREE.Matrix4().fromArray(e.home)).toArray());
       Model.setFromMatrix(kb, pose(k, stateOf(k), null, doc));
       if (opts.live && isTop(kb.id, doc)) Viewer.updateNode(kb.id, { matrix: Model.localMatrix(kb) });
@@ -916,29 +958,406 @@ const Joints = (() => {
   }
 
   function syncFixed(doc = App.doc, opts = {}) {
-    const ordered = fixedOrder(doc);
-    if (!ordered.length) return false;
+    return syncAll(doc, opts);
+  }
+
+  function resolvePlaneRef(spec, doc = App.doc) {
+    if (!spec) return null;
+    if (typeof spec === 'string') spec = { id: spec };
+    if (!spec.id) return null;
+    const res = App.results.get(spec.id);
+    const data = res && res.data;
+    const faces = data && data.faces;
+    const bbox = data && data.bbox;
+    const idx = spec.faceIdx != null ? spec.faceIdx : (spec.idx != null ? spec.idx : null);
+    let fi = null;
+    if (idx != null && faces && faces.length) {
+      fi = faces[idx] || null;
+      if (!fi || fi.t !== 'PLANE' || !Array.isArray(fi.c) || !Array.isArray(fi.n)) return null;
+    } else if (spec.info && spec.info.t === 'PLANE') {
+      fi = spec.info;
+    }
+    const cRaw = (fi && fi.c) || spec.c || spec.p;
+    const nRaw = (fi && fi.n) || spec.n;
+    if (!Array.isArray(cRaw) || !Array.isArray(nRaw)) return null;
+    const cv = new THREE.Vector3(...cRaw), nv = new THREE.Vector3(...nRaw);
+    if (nv.lengthSq() < 1e-12) return null;
+    if (spec.world) {
+      const invW = Model.worldMatrix(doc, spec.id).invert();
+      cv.applyMatrix4(invW);
+      nv.transformDirection(invW);
+    }
+    nv.normalize();
+    const cArr = r6(cv.toArray());
+    return {
+      kind: 'face',
+      c: cArr,
+      n: r9(nv.toArray()),
+      tid: (fi && fi.tid) || spec.tid || null,
+      idx,
+      frac: fracOf(cArr, bbox),
+    };
+  }
+
+  function resolveCylRef(spec, doc = App.doc) {
+    if (!spec) return null;
+    if (typeof spec === 'string') spec = { id: spec };
+    if (!spec.id) return null;
+    const res = App.results.get(spec.id);
+    const data = res && res.data;
+    const faces = data && data.faces;
+    const bbox = data && data.bbox;
+    const idx = spec.faceIdx != null ? spec.faceIdx : (spec.idx != null ? spec.idx : null);
+    let fi = null;
+    if (idx != null && faces && faces.length) {
+      fi = faces[idx] || null;
+      if (!fi || fi.t !== 'CYLINDRE' || !Array.isArray(fi.axis) || !(fi.r > 0)) return null;
+    } else if (spec.info && spec.info.t === 'CYLINDRE' && Array.isArray(spec.info.axis) && spec.info.r > 0) {
+      fi = spec.info;
+    } else if (!Array.isArray(spec.o) && !Array.isArray(spec.d) && faces && faces.length) {
+      fi = faces.find((f) => f && f.t === 'CYLINDRE' && Array.isArray(f.axis) && f.r > 0) || null;
+    }
+    let ov, dv, rad, cArr;
+    if (fi) {
+      const { l, d } = cylPointOnAxis(fi);
+      ov = l; dv = d; rad = Number(fi.r);
+      cArr = Array.isArray(fi.c) ? r6(fi.c) : r6(l.toArray());
+    } else if (Array.isArray(spec.o) && Array.isArray(spec.d) && Number(spec.r) > 0) {
+      ov = new THREE.Vector3(...spec.o);
+      dv = new THREE.Vector3(...spec.d);
+      rad = Number(spec.r);
+      if (dv.lengthSq() < 1e-12) return null;
+      if (spec.world) {
+        const invW = Model.worldMatrix(doc, spec.id).invert();
+        ov.applyMatrix4(invW);
+        dv.transformDirection(invW);
+      }
+      dv.normalize();
+      cArr = r6(ov.toArray());
+    } else return null;
+    const oArr = r6(ov.toArray());
+    return {
+      kind: 'cyl',
+      o: oArr,
+      d: r9(dv.toArray()),
+      r: round(rad, 6),
+      c: cArr,
+      tid: (fi && fi.tid) || spec.tid || null,
+      idx,
+      frac: fracOf(cArr, bbox),
+    };
+  }
+
+  function matchCylRef(itemId, ref) {
+    if (!ref || ref.kind !== 'cyl') return null;
+    const res = App.results.get(itemId);
+    const data = res && res.data;
+    const faces = data && data.faces;
+    if (!faces || !faces.length) return null;
+    const bbox = data.bbox;
+    if (ref.tid) {
+      const byTid = faces.findIndex((f) => f && f.t === 'CYLINDRE' && f.tid === ref.tid && Array.isArray(f.axis) && f.r > 0);
+      if (byTid >= 0) {
+        const f = faces[byTid];
+        const { l, d } = cylPointOnAxis(f);
+        const cArr = Array.isArray(f.c) ? r6(f.c) : r6(l.toArray());
+        return { idx: byTid, o: r6(l.toArray()), d: r9(d.toArray()), r: round(f.r, 6), c: cArr, tid: f.tid, frac: fracOf(cArr, bbox) };
+      }
+    }
+    const rd = new THREE.Vector3(...ref.d).normalize();
+    const rc = ref.c || ref.o;
+    let best = -1, bestScore = Infinity;
+    for (let i = 0; i < faces.length; i++) {
+      const f = faces[i];
+      if (!f || f.t !== 'CYLINDRE' || !Array.isArray(f.axis) || !(f.r > 0)) continue;
+      const { l, d } = cylPointOnAxis(f);
+      if (Math.abs(d.dot(rd)) < 0.995) continue;
+      const fc = Array.isArray(f.c) ? f.c : l.toArray();
+      let score = Math.hypot(fc[0] - rc[0], fc[1] - rc[1], fc[2] - rc[2]) + Math.abs(f.r - ref.r) * 10;
+      if (ref.frac && bbox) {
+        const ff = fracOf(fc, bbox);
+        const fDist = Math.hypot(ff[0] - ref.frac[0], ff[1] - ref.frac[1], ff[2] - ref.frac[2]);
+        score = fDist * 100 + score * 1e-3;
+      }
+      if (score < bestScore) { bestScore = score; best = i; }
+    }
+    if (best < 0) return null;
+    const f = faces[best];
+    const { l, d } = cylPointOnAxis(f);
+    const cArr = Array.isArray(f.c) ? r6(f.c) : r6(l.toArray());
+    return { idx: best, o: r6(l.toArray()), d: r9(d.toArray()), r: round(f.r, 6), c: cArr, tid: f.tid || ref.tid || null, frac: fracOf(cArr, bbox) };
+  }
+
+  function evalDist(j, V) {
+    return Model.num(j && j.dist, V || Model.vars(App.doc).v, 0);
+  }
+
+  function parseDistVal(raw, V) {
+    if (typeof raw === 'number') {
+      if (!Number.isFinite(raw)) return { ok: false, msg: 'Bitte einen gültigen Abstand eingeben.' };
+      return { ok: true, value: round(raw, 6) };
+    }
+    const s = String(raw ?? '').trim();
+    if (!s) return { ok: false, msg: 'Bitte einen gültigen Abstand eingeben.' };
+    const p = Units.parseLen(s, V || Model.vars(App.doc).v, { expr: true });
+    if (!p.ok) return { ok: false, msg: p.error || 'Der Abstand konnte nicht berechnet werden.' };
+    return { ok: true, value: typeof p.value === 'number' ? round(p.value, 6) : p.value };
+  }
+
+  function rotMatrixAround(pt, q) {
+    const R = new THREE.Matrix4().makeRotationFromQuaternion(q);
+    return new THREE.Matrix4().makeTranslation(pt.x, pt.y, pt.z).multiply(R).multiply(new THREE.Matrix4().makeTranslation(-pt.x, -pt.y, -pt.z));
+  }
+
+  function projectLooseMatrix(doc, j, Wb, V, hintAxis = null) {
+    const Wa = Model.worldMatrix(doc, j.a);
+    const k = kindOf(j);
+    if (k === 'parallel' || k === 'distance') {
+      const pA = new THREE.Vector3(...j.refA.c).applyMatrix4(Wa);
+      const nA = new THREE.Vector3(...j.refA.n).transformDirection(Wa).normalize();
+      const pB = new THREE.Vector3(...j.refB.c).applyMatrix4(Wb);
+      const nB = new THREE.Vector3(...j.refB.n).transformDirection(Wb).normalize();
+      const nTarget = j.flip ? nA.clone() : nA.clone().negate();
+      const angErr = nB.distanceTo(nTarget);
+      let WbNew = angErr > 1e-12 ? rotMatrixAround(pB, rotBetween(nB, nTarget, hintAxis)).multiply(Wb) : Wb.clone();
+      if (k === 'parallel') return { Wb: WbNew, err: angErr * 10, ao: pA, ad: nA };
+      const d = evalDist(j, V);
+      const s = pB.clone().sub(pA).dot(nA);
+      const delta = d - s;
+      if (Math.abs(delta) > 1e-12) WbNew = new THREE.Matrix4().makeTranslation(nA.x * delta, nA.y * delta, nA.z * delta).multiply(WbNew);
+      const bo = pB.clone().addScaledVector(nA, delta);
+      const ao = bo.clone().addScaledVector(nA, -d);
+      return { Wb: WbNew, err: angErr * 10 + Math.abs(delta), ao, ad: nA, bo };
+    }
+    if (k === 'tangent') {
+      if (j.refA.kind === 'face' && j.refB.kind === 'cyl') {
+        const pA = new THREE.Vector3(...j.refA.c).applyMatrix4(Wa);
+        const nA = new THREE.Vector3(...j.refA.n).transformDirection(Wa).normalize();
+        const oB = new THREE.Vector3(...j.refB.o).applyMatrix4(Wb);
+        const dB = new THREE.Vector3(...j.refB.d).transformDirection(Wb).normalize();
+        const R = Number(j.refB.r) || 0;
+        const dotDN = dB.dot(nA);
+        let dTarget = dB.clone().addScaledVector(nA, -dotDN);
+        if (dTarget.lengthSq() < 1e-10) dTarget = canonicalX(nA.toArray());
+        else dTarget.normalize();
+        let WbNew = Math.abs(dotDN) > 1e-12 ? rotMatrixAround(oB, rotBetween(dB, dTarget, hintAxis)).multiply(Wb) : Wb.clone();
+        const sTarget = j.flip ? -R : R;
+        const s = oB.clone().sub(pA).dot(nA);
+        const delta = sTarget - s;
+        if (Math.abs(delta) > 1e-12) WbNew = new THREE.Matrix4().makeTranslation(nA.x * delta, nA.y * delta, nA.z * delta).multiply(WbNew);
+        const ao = oB.clone().addScaledVector(nA, delta - sTarget);
+        return { Wb: WbNew, err: Math.abs(dotDN) * 10 + Math.abs(delta), ao, ad: nA };
+      }
+      if (j.refA.kind === 'cyl' && j.refB.kind === 'face') {
+        const oA = new THREE.Vector3(...j.refA.o).applyMatrix4(Wa);
+        const dA = new THREE.Vector3(...j.refA.d).transformDirection(Wa).normalize();
+        const R = Number(j.refA.r) || 0;
+        const pB = new THREE.Vector3(...j.refB.c).applyMatrix4(Wb);
+        const nB = new THREE.Vector3(...j.refB.n).transformDirection(Wb).normalize();
+        const dotND = nB.dot(dA);
+        let nTarget = nB.clone().addScaledVector(dA, -dotND);
+        if (nTarget.lengthSq() < 1e-10) {
+          const radVec = oA.clone().sub(pB);
+          radVec.addScaledVector(dA, -radVec.dot(dA));
+          nTarget = radVec.lengthSq() > 1e-10 ? radVec.normalize() : canonicalX(dA.toArray());
+        } else nTarget.normalize();
+        let WbNew = Math.abs(dotND) > 1e-12 ? rotMatrixAround(pB, rotBetween(nB, nTarget, hintAxis)).multiply(Wb) : Wb.clone();
+        const sTarget = j.flip ? -R : R;
+        const s = oA.clone().sub(pB).dot(nTarget);
+        const delta = s - sTarget;
+        if (Math.abs(delta) > 1e-12) WbNew = new THREE.Matrix4().makeTranslation(nTarget.x * delta, nTarget.y * delta, nTarget.z * delta).multiply(WbNew);
+        const ao = pB.clone().addScaledVector(nTarget, delta);
+        return { Wb: WbNew, err: Math.abs(dotND) * 10 + Math.abs(delta), ao, ad: nTarget };
+      }
+    }
+    return { Wb: Wb.clone(), err: 0 };
+  }
+
+  function looseError(doc, j, V) {
+    return projectLooseMatrix(doc, j, Model.worldMatrix(doc, j.b), V).err;
+  }
+
+  function projectKinematicMatrix(doc, kinJ, Wb) {
+    if (isConstraint(kinJ)) {
+      const sol = solveConstraintPose(doc, kinJ);
+      return { Wb: sol ? sol.WbNew : Wb.clone(), next: null, err: sol ? maxMatDiff(sol.WbNew, Wb) : 0 };
+    }
+    const Pb = Model.parentWorld(doc, kinJ.b);
+    const W_home = Pb.clone().multiply(new THREE.Matrix4().fromArray(kinJ.home));
+    const D_want = Wb.clone().multiply(W_home.clone().invert());
+    const o = new THREE.Vector3(...kinJ.ao);
+    const dp = o.clone().applyMatrix4(D_want).sub(o);
+    const k = kindOf(kinJ);
+    const raw = stateOf(kinJ);
+    if (k === 'cyl') {
+      const d = new THREE.Vector3(...kinJ.ad).normalize();
+      raw.pos = round(dp.dot(d), 5);
+      raw.ang = round(twistDegAround(D_want, d), 5);
+    } else if (k === 'planar') {
+      const pf = planeFrame(kinJ);
+      raw.u = round(dp.dot(pf.u), 5);
+      raw.v = round(dp.dot(pf.v), 5);
+      raw.ang = round(twistDegAround(D_want, pf.n), 5);
+    } else if (k === 'ball') {
+      const pf = planeFrame(kinJ);
+      const F = new THREE.Matrix4().makeBasis(pf.u, pf.v, pf.n);
+      const R_world = new THREE.Matrix4().extractRotation(D_want);
+      const R_loc = F.clone().transpose().multiply(R_world).multiply(F);
+      const e = new THREE.Euler().setFromRotationMatrix(R_loc, 'XYZ');
+      const toDeg = (rad) => {
+        let dg = round((rad * 180) / Math.PI, 5);
+        if (dg > 180) dg -= 360;
+        if (dg < -180) dg += 360;
+        return dg;
+      };
+      raw.rx = toDeg(e.x);
+      raw.ry = toDeg(e.y);
+      raw.ang = toDeg(e.z);
+    } else if (k === 'slot') {
+      const fr = frameOf(kinJ);
+      raw.pos = round(clamp(dp.dot(fr.d), fr.minPos, fr.maxPos), 5);
+      raw.ang = round(twistDegAround(D_want, fr.n), 5);
+    } else if (k === 'slide') {
+      const d = new THREE.Vector3(...kinJ.ad).normalize();
+      raw.ang = round(dp.dot(d), 5);
+    } else {
+      const d = new THREE.Vector3(...kinJ.ad).normalize();
+      raw.ang = round(twistDegAround(D_want, d), 5);
+    }
+    const next = kinJ.stopsLocked ? clampState(kinJ, raw) : raw;
+    const WbProj = Pb.clone().multiply(pose(kinJ, next, null, doc));
+    return { Wb: WbProj, next, err: maxMatDiff(WbProj, Wb) };
+  }
+
+  function solvePartConstraints(doc, bId, V, opts = {}) {
+    const B = top(bId, doc);
+    const looseJs = looseOf(bId, doc);
+    const kinJ = drivingOf(bId, doc);
+    if (!B || B.locked || !looseJs.length || fixed(kinJ)) return { changed: false, err: 0 };
+    const WbStart = Model.worldMatrix(doc, bId);
+    let Wb = WbStart.clone();
+    const hintAxis = kinJ && Array.isArray(kinJ.ad) ? new THREE.Vector3(...kinJ.ad).normalize() : null;
+    let lastKinState = null;
+    let iterErr = 0;
+    for (let it = 0; it < 120; it++) {
+      iterErr = 0;
+      for (const j of looseJs) {
+        const pr = projectLooseMatrix(doc, j, Wb, V, hintAxis);
+        Wb = pr.Wb;
+        if (pr.err > iterErr) iterErr = pr.err;
+      }
+      if (kinJ) {
+        const pk = projectKinematicMatrix(doc, kinJ, Wb);
+        Wb = pk.Wb;
+        lastKinState = pk.next;
+        if (pk.err > iterErr) iterErr = pk.err;
+      }
+      if (iterErr < 1e-6) break;
+    }
+    let finalErr = 0;
+    for (const j of looseJs) finalErr = Math.max(finalErr, projectLooseMatrix(doc, j, Wb, V, hintAxis).err);
+    if (kinJ) finalErr = Math.max(finalErr, projectKinematicMatrix(doc, kinJ, Wb).err);
+    const changed = maxMatDiff(Wb, WbStart) > 1e-5;
+    if (opts.dryRun) return { changed, err: finalErr };
+    if (kinJ && lastKinState) {
+      writeState(kinJ, lastKinState);
+      if (!kinJ.stopsLocked) {
+        if (lastKinState.ang < (kinJ.min ?? -180)) kinJ.min = round(Math.floor(lastKinState.ang), 2);
+        if (lastKinState.ang > (kinJ.max ?? 180)) kinJ.max = round(Math.ceil(lastKinState.ang), 2);
+        if (isCyl(kinJ)) {
+          if (lastKinState.pos < (kinJ.minPos ?? -20)) kinJ.minPos = round(Math.floor(lastKinState.pos), 2);
+          if (lastKinState.pos > (kinJ.maxPos ?? 20)) kinJ.maxPos = round(Math.ceil(lastKinState.pos), 2);
+        } else if (isPlanar(kinJ)) {
+          if (lastKinState.u < (kinJ.minU ?? -20)) kinJ.minU = round(Math.floor(lastKinState.u), 2);
+          if (lastKinState.u > (kinJ.maxU ?? 20)) kinJ.maxU = round(Math.ceil(lastKinState.u), 2);
+          if (lastKinState.v < (kinJ.minV ?? -20)) kinJ.minV = round(Math.floor(lastKinState.v), 2);
+          if (lastKinState.v > (kinJ.maxV ?? 20)) kinJ.maxV = round(Math.ceil(lastKinState.v), 2);
+        }
+      }
+    }
+    const LbNew = Model.parentWorld(doc, bId).invert().multiply(Wb);
+    if (maxMatDiff(LbNew, Model.localMatrix(B)) > 1e-6) Model.setFromMatrix(B, LbNew);
+    for (const j of looseJs) {
+      const pr = projectLooseMatrix(doc, j, Wb, V, hintAxis);
+      if (pr.ao) j.ao = r6(pr.ao.toArray());
+      if (pr.ad) j.ad = r9(pr.ad.toArray());
+      if (pr.bo) j.bo = r6(pr.bo.toArray()); else delete j.bo;
+    }
+    return { changed, err: finalErr };
+  }
+
+  function constraintOrder(doc) {
+    const js = list(doc);
+    const activeBs = new Set(js.filter((j) => isConstraint(j) || isLoose(j)).map((j) => j.b));
+    if (!activeBs.size) return [];
+    const nodes = new Set();
+    const adj = new Map(), indeg = new Map();
+    for (const j of js) {
+      nodes.add(j.a); nodes.add(j.b);
+      if (!adj.has(j.a)) adj.set(j.a, []);
+      adj.get(j.a).push(j.b);
+      indeg.set(j.b, (indeg.get(j.b) || 0) + 1);
+      if (!indeg.has(j.a)) indeg.set(j.a, 0);
+    }
+    const q = [], order = [], seen = new Set();
+    for (const id of nodes) if ((indeg.get(id) || 0) === 0) q.push(id);
+    while (q.length) {
+      const u = q.shift();
+      if (seen.has(u)) continue;
+      seen.add(u);
+      if (activeBs.has(u)) order.push(u);
+      for (const v of adj.get(u) || []) {
+        const d = (indeg.get(v) || 1) - 1;
+        indeg.set(v, d);
+        if (d <= 0 && !seen.has(v)) q.push(v);
+      }
+    }
+    for (const id of activeBs) if (!seen.has(id)) order.push(id);
+    return order;
+  }
+
+  function syncAll(doc = App.doc, opts = {}) {
+    const order = constraintOrder(doc);
+    if (!order.length) return false;
+    const V = Model.vars(doc).v;
     let changed = false;
-    for (const j of ordered) {
-      const B = top(j.b, doc);
+    for (const bId of order) {
+      const B = top(bId, doc);
       if (!B || B.locked) continue;
-      const WbOld = Model.worldMatrix(doc, B.id);
-      const sol = solveConstraintPose(doc, j);
-      if (!sol) continue;
-      const Pb = Model.parentWorld(doc, B.id);
-      const LbNew = Pb.clone().invert().multiply(sol.WbNew);
-      const LbOld = Model.localMatrix(B);
-      if (maxMatDiff(LbNew, LbOld) > 1e-5) {
-        Model.setFromMatrix(B, LbNew);
-        j.home = r9(Model.localMatrix(B).toArray());
-        j.ao = r6(sol.ao.toArray());
-        j.ad = r9(sol.ad.toArray());
-        changed = true;
-        if (opts.live && isTop(B.id, doc)) Viewer.updateNode(B.id, { matrix: Model.localMatrix(B) });
-        const hasNonConstraintChild = list(doc).some((k) => k.a === B.id && !isConstraint(k));
-        if (hasNonConstraintChild) {
-          const D = sol.WbNew.clone().multiply(WbOld.clone().invert());
-          moveChain(doc, B.id, D, opts);
+      const cj = list(doc).find((j) => isConstraint(j) && j.b === bId) || null;
+      const hasLoose = looseOf(bId, doc).length > 0;
+      if (cj && (fixed(cj) || !hasLoose)) {
+        const WbOld = Model.worldMatrix(doc, bId);
+        const sol = solveConstraintPose(doc, cj);
+        if (!sol) continue;
+        const Pb = Model.parentWorld(doc, bId);
+        const LbNew = Pb.clone().invert().multiply(sol.WbNew);
+        const LbOld = Model.localMatrix(B);
+        if (maxMatDiff(LbNew, LbOld) > 1e-5) {
+          Model.setFromMatrix(B, LbNew);
+          cj.home = r9(Model.localMatrix(B).toArray());
+          cj.ao = r6(sol.ao.toArray());
+          cj.ad = r9(sol.ad.toArray());
+          changed = true;
+          if (opts.live && isTop(B.id, doc)) Viewer.updateNode(B.id, { matrix: Model.localMatrix(B) });
+          const hasNonConstraintChild = list(doc).some((k) => k.a === B.id && !isConstraint(k) && !isLoose(k));
+          if (hasNonConstraintChild) {
+            const D = sol.WbNew.clone().multiply(WbOld.clone().invert());
+            moveChain(doc, B.id, D, opts);
+          }
+        }
+      } else if (hasLoose) {
+        const WbOld = Model.worldMatrix(doc, bId);
+        const res = solvePartConstraints(doc, bId, V);
+        if (res.changed) {
+          changed = true;
+          if (opts.live && isTop(B.id, doc)) Viewer.updateNode(B.id, { matrix: Model.localMatrix(B) });
+          const hasKinChild = list(doc).some((k) => k.a === B.id && !isConstraint(k) && !isLoose(k));
+          if (hasKinChild) {
+            const WbNew = Model.worldMatrix(doc, bId);
+            const D = WbNew.clone().multiply(WbOld.clone().invert());
+            moveChain(doc, B.id, D, opts);
+          }
         }
       }
     }
@@ -979,6 +1398,7 @@ const Joints = (() => {
         tid: (fi && fi.tid) || spec.tid || null,
         idx,
         frac: fracOf(cArr, bbox),
+        ...(spec.dock ? { dock: true } : {}),
       };
     }
     const pt = spec.c || spec.p || spec.point;
@@ -1109,8 +1529,9 @@ const Joints = (() => {
   let relinking = false;
   function relinkFixed() {
     if (relinking || !App.doc) return;
-    const fjs = list().filter(isConstraint);
+    const fjs = list().filter((j) => isConstraint(j) || isLoose(j));
     if (!fjs.length) return;
+    const V = Model.vars(App.doc).v;
     const refUpdates = [];
     let needSync = false;
     const queueFace = (jid, side, itemId, ref) => {
@@ -1129,8 +1550,8 @@ const Joints = (() => {
     };
     for (const j of fjs) {
       if (fixed(j) && j.mode === 'face') {
-        queueFace(j.id, 'refA', j.a, j.refA);
-        queueFace(j.id, 'refB', j.b, j.refB);
+        if (j.refA && !j.refA.dock) queueFace(j.id, 'refA', j.a, j.refA);
+        if (j.refB && !j.refB.dock) queueFace(j.id, 'refB', j.b, j.refB);
       } else if (isAngle(j)) {
         if (j.refA && j.refA.kind === 'face') queueFace(j.id, 'refA', j.a, j.refA);
         else if (j.refA && j.refA.kind === 'edge') queueEdge(j.id, 'refA', j.a, j.refA);
@@ -1143,12 +1564,34 @@ const Joints = (() => {
           if (j.refB1) queueFace(j.id, 'refB1', j.b, j.refB1);
           if (j.refB2) queueFace(j.id, 'refB2', j.b, j.refB2);
         }
+      } else if (isLoose(j)) {
+        for (const [side, itemId] of [['refA', j.a], ['refB', j.b]]) {
+          const ref = j[side];
+          if (!ref) continue;
+          if (ref.kind === 'face') {
+            queueFace(j.id, side, itemId, ref);
+          } else if (ref.kind === 'cyl') {
+            const m = matchCylRef(itemId, ref);
+            if (m) {
+              const do_ = Math.hypot(m.o[0] - ref.o[0], m.o[1] - ref.o[1], m.o[2] - ref.o[2]);
+              const dd = Math.hypot(m.d[0] - ref.d[0], m.d[1] - ref.d[1], m.d[2] - ref.d[2]);
+              const dr = Math.abs(m.r - ref.r);
+              if (do_ > 1e-4 || dd > 1e-4 || dr > 1e-4 || (m.tid && m.tid !== ref.tid)) refUpdates.push({ jid: j.id, side, kind: 'cyl', m });
+            }
+          }
+        }
       }
       const B = top(j.b);
-      const sol = solveConstraintPose(App.doc, j);
-      if (B && !B.locked && sol) {
-        const LbNew = Model.parentWorld(App.doc, B.id).invert().multiply(sol.WbNew);
-        if (maxMatDiff(LbNew, Model.localMatrix(B)) > 1e-4) needSync = true;
+      if (B && !B.locked) {
+        if (isConstraint(j)) {
+          const sol = solveConstraintPose(App.doc, j);
+          if (sol) {
+            const LbNew = Model.parentWorld(App.doc, B.id).invert().multiply(sol.WbNew);
+            if (maxMatDiff(LbNew, Model.localMatrix(B)) > 1e-4) needSync = true;
+          }
+        } else if (solvePartConstraints(App.doc, j.b, V, { dryRun: true }).changed) {
+          needSync = true;
+        }
       }
     }
     if (!refUpdates.length && !needSync) return;
@@ -1159,7 +1602,9 @@ const Joints = (() => {
           const j = list(doc).find((x) => x.id === u.jid);
           if (!j || !j[u.side]) continue;
           const prev = j[u.side];
-          if (u.kind === 'edge') {
+          if (u.kind === 'cyl') {
+            j[u.side] = { ...prev, o: u.m.o, d: u.m.d, r: u.m.r, c: u.m.c, tid: u.m.tid, idx: u.m.idx, frac: u.m.frac };
+          } else if (u.kind === 'edge') {
             j[u.side] = { ...prev, c: u.m.c, d: u.m.d, tid: u.m.tid, idx: u.m.idx, frac: u.m.frac };
           } else {
             const nVec = new THREE.Vector3(...u.m.n).normalize();
@@ -1170,7 +1615,8 @@ const Joints = (() => {
             j[u.side] = { ...prev, c: u.m.c, n: u.m.n, x: r9(xVec.toArray()), tid: u.m.tid, idx: u.m.idx, frac: u.m.frac };
           }
         }
-        syncFixed(doc);
+        const synced = syncAll(doc);
+        if (!refUpdates.length && !synced) return false;
       }, { amend: true });
     } finally { relinking = false; }
   }
@@ -1181,7 +1627,7 @@ const Joints = (() => {
     if (!A || !B || A.id === B.id) return { ok: false, msg: 'Wähle zwei verschiedene Teile für die Verbindung.' };
     const why = refuse(App.doc, A, B); if (why) return { ok: false, msg: why };
     if (B.locked) return { ok: false, msg: T('asm.groundedJointErr', { name: Model.label(B) }) };
-    if (connected(App.doc, A.id, B.id)) return { ok: false, msg: `„${Model.label(A)}“ und „${Model.label(B)}“ sind schon miteinander verbunden – ein weiteres ergäbe einen Kreis.` };
+    if (connected(App.doc, A.id, B.id) || wouldCycleDirected(App.doc, A.id, B.id)) return { ok: false, msg: `„${Model.label(A)}“ und „${Model.label(B)}“ sind schon miteinander verbunden – ein weiteres ergäbe einen Kreis.` };
     if (list().some((j) => j.b === B.id)) return { ok: false, msg: `„${Model.label(B)}“ wird schon von einer Verbindung gehalten.` };
     const refA = resolveRef(aSpec, App.doc), refB = resolveRef(bSpec, App.doc);
     if (!refA || !refB) return { ok: false, msg: 'Die gewählte Fläche oder der Punkt konnte nicht bestimmt werden.' };
@@ -1194,7 +1640,8 @@ const Joints = (() => {
       relQ = r9(qa.clone().invert().multiply(qb).toArray());
     }
     let jid = null;
-    App.change('Verbindung angelegt', (doc) => {
+    const changeOpts = opts.before ? { before: opts.before } : undefined;
+    App.change(opts.label || 'Verbindung angelegt', (doc) => {
       const b = top(B.id, doc); if (!b) return false;
       doc.joints = doc.joints || [];
       jid = uid('j');
@@ -1220,7 +1667,7 @@ const Joints = (() => {
         max: 0,
       });
       syncFixed(doc);
-    });
+    }, changeOpts);
     if (jid) drawSelectedJoint();
     return jid ? { ok: true, id: jid } : { ok: false, msg: 'Die Verbindung ließ sich nicht anlegen.' };
   }
@@ -1470,8 +1917,8 @@ const Joints = (() => {
     if (!A || !B || A.id === B.id) return { ok: false, msg: 'Eine Verbindung braucht zwei verschiedene Teile.' };
     const why = refuse(App.doc, A, B); if (why) return { ok: false, msg: why };
     if (B.locked) return { ok: false, msg: T('asm.groundedJointErr', { name: Model.label(B) }) };
-    if (connected(App.doc, A.id, B.id)) return { ok: false, msg: `„${Model.label(A)}“ und „${Model.label(B)}“ sind schon über Verbindungen gekoppelt – eine weitere ergäbe einen Kreis.` };
-    if (list().some((j) => j.b === B.id)) return { ok: false, msg: `„${Model.label(B)}“ wird schon von einem Gelenk oder einer Verbindung bewegt.` };
+    if (connected(App.doc, A.id, B.id) || wouldCycleDirected(App.doc, A.id, B.id)) return { ok: false, msg: `„${Model.label(A)}“ und „${Model.label(B)}“ sind schon über Verbindungen gekoppelt – eine weitere ergäbe einen Kreis.` };
+    if (list().some((j) => j.b === B.id && !isLoose(j))) return { ok: false, msg: `„${Model.label(B)}“ wird schon von einem Gelenk oder einer Verbindung bewegt.` };
     const dv = new THREE.Vector3(...d); if (dv.lengthSq() < 1e-12) return { ok: false, msg: 'Die Achse braucht eine Richtung.' };
     dv.normalize();
     const k = opts.kind === 'slide' || opts.kind === 'cyl' || opts.kind === 'planar' ? opts.kind : 'rot';
@@ -1525,8 +1972,8 @@ const Joints = (() => {
     if (!A || !B || A.id === B.id) return { ok: false, msg: 'Wähle zwei verschiedene Teile.' };
     const why = refuse(App.doc, A, B); if (why) return { ok: false, msg: why };
     if (B.locked) return { ok: false, msg: T('asm.groundedJointErr', { name: Model.label(B) }) };
-    if (connected(App.doc, A.id, B.id)) return { ok: false, msg: 'Das ergäbe einen Kreis – die beiden Teile sind schon über Verbindungen miteinander gekoppelt.' };
-    if (list().some((j) => j.b === B.id)) return { ok: false, msg: `„${Model.label(B)}“ wird schon von einer Verbindung bewegt – jedes Teil darf nur eine bewegende Verbindung haben.` };
+    if (connected(App.doc, A.id, B.id) || wouldCycleDirected(App.doc, A.id, B.id)) return { ok: false, msg: 'Das ergäbe einen Kreis – die beiden Teile sind schon über Verbindungen miteinander gekoppelt.' };
+    if (list().some((j) => j.b === B.id && !isLoose(j))) return { ok: false, msg: `„${Model.label(B)}“ wird schon von einer Verbindung bewegt – jedes Teil darf nur eine bewegende Verbindung haben.` };
 
     const baseD = axA.d.dot(axB.d) >= 0 ? axA.d.clone() : axA.d.clone().negate();
     const dTarget = opts.flip ? baseD.clone().negate() : baseD;
@@ -1541,10 +1988,12 @@ const Joints = (() => {
     const hi = Number.isFinite(+opts.max) ? +opts.max : 180;
     const plo = Number.isFinite(+opts.minPos) ? +opts.minPos : -20;
     const phi = Number.isFinite(+opts.maxPos) ? +opts.maxPos : 20;
-    let jid = null;
+    let jid = null, conflictMsg = null;
     App.change('Zylindrische Verbindung angelegt', (doc) => {
       const b = top(B.id, doc); if (!b || b.locked) return false;
-      if (connected(doc, A.id, B.id) || list(doc).some((j) => j.b === B.id)) return false;
+      if (connected(doc, A.id, B.id) || wouldCycleDirected(doc, A.id, B.id) || list(doc).some((j) => j.b === B.id && !isLoose(j))) return false;
+      const snapItems = looseOf(B.id, doc).length ? deepClone(doc.items) : null;
+      const snapJoints = snapItems ? deepClone(doc.joints) : null;
       const newLocal = conj(doc, B.id, M_align).multiply(Model.localMatrix(b));
       Model.setFromMatrix(b, newLocal);
       moveChain(doc, B.id, M_align);
@@ -1559,7 +2008,18 @@ const Joints = (() => {
         pos: 0, minPos: round(Math.min(plo, phi), 2), maxPos: round(Math.max(plo, phi), 2),
         flip: !!opts.flip,
       });
+      if (looseOf(B.id, doc).length) {
+        const sol = solvePartConstraints(doc, B.id, Model.vars(doc).v);
+        if (sol.err > 0.05) {
+          doc.items = snapItems;
+          doc.joints = snapJoints;
+          conflictMsg = `Die zylindrische Verbindung widerspricht einer bestehenden Verbindung an „${Model.label(B)}“.`;
+          jid = null;
+          return false;
+        }
+      }
     });
+    if (conflictMsg) return { ok: false, msg: conflictMsg };
     if (jid) {
       const patch = {};
       if (opts.ang != null && Number.isFinite(+opts.ang)) patch.ang = +opts.ang;
@@ -1576,8 +2036,8 @@ const Joints = (() => {
     if (!A || !B || A.id === B.id) return { ok: false, msg: 'Wähle zwei verschiedene Teile.' };
     const why = refuse(App.doc, A, B); if (why) return { ok: false, msg: why };
     if (B.locked) return { ok: false, msg: T('asm.groundedJointErr', { name: Model.label(B) }) };
-    if (connected(App.doc, A.id, B.id)) return { ok: false, msg: 'Das ergäbe einen Kreis – die beiden Teile sind schon über Verbindungen miteinander gekoppelt.' };
-    if (list().some((j) => j.b === B.id)) return { ok: false, msg: `„${Model.label(B)}“ wird schon von einer Verbindung bewegt – jedes Teil darf nur eine bewegende Verbindung haben.` };
+    if (connected(App.doc, A.id, B.id) || wouldCycleDirected(App.doc, A.id, B.id)) return { ok: false, msg: 'Das ergäbe einen Kreis – die beiden Teile sind schon über Verbindungen miteinander gekoppelt.' };
+    if (list().some((j) => j.b === B.id && !isLoose(j))) return { ok: false, msg: `„${Model.label(B)}“ wird schon von einer Verbindung bewegt – jedes Teil darf nur eine bewegende Verbindung haben.` };
 
     // Standard: Flächen zeigen aufeinander zu (Normalen entgegengesetzt), damit die Teile bündig aufeinander liegen
     const nTarget = opts.flip ? plA.n.clone() : plA.n.clone().negate();
@@ -1596,10 +2056,12 @@ const Joints = (() => {
     const uhi = Number.isFinite(+opts.maxU) ? +opts.maxU : 20;
     const vlo = Number.isFinite(+opts.minV) ? +opts.minV : -20;
     const vhi = Number.isFinite(+opts.maxV) ? +opts.maxV : 20;
-    let jid = null;
+    let jid = null, conflictMsg = null;
     App.change('Ebene Verbindung angelegt', (doc) => {
       const b = top(B.id, doc); if (!b || b.locked) return false;
-      if (connected(doc, A.id, B.id) || list(doc).some((j) => j.b === B.id)) return false;
+      if (connected(doc, A.id, B.id) || wouldCycleDirected(doc, A.id, B.id) || list(doc).some((j) => j.b === B.id && !isLoose(j))) return false;
+      const snapItems = looseOf(B.id, doc).length ? deepClone(doc.items) : null;
+      const snapJoints = snapItems ? deepClone(doc.joints) : null;
       const newLocal = conj(doc, B.id, M_align).multiply(Model.localMatrix(b));
       Model.setFromMatrix(b, newLocal);
       moveChain(doc, B.id, M_align);
@@ -1616,7 +2078,18 @@ const Joints = (() => {
         ang: 0, min: round(Math.min(lo, hi), 2), max: round(Math.max(lo, hi), 2),
         flip: !!opts.flip,
       });
+      if (looseOf(B.id, doc).length) {
+        const sol = solvePartConstraints(doc, B.id, Model.vars(doc).v);
+        if (sol.err > 0.05) {
+          doc.items = snapItems;
+          doc.joints = snapJoints;
+          conflictMsg = `Die ebene Verbindung widerspricht einer bestehenden Verbindung an „${Model.label(B)}“.`;
+          jid = null;
+          return false;
+        }
+      }
     });
+    if (conflictMsg) return { ok: false, msg: conflictMsg };
     if (jid) {
       const patch = {};
       if (opts.u != null && Number.isFinite(+opts.u)) patch.u = +opts.u;
@@ -1627,14 +2100,167 @@ const Joints = (() => {
     return jid ? { ok: true, id: jid } : { ok: false, msg: 'Die ebene Verbindung ließ sich nicht anlegen.' };
   }
 
+  // ---------- Lockere Verbindungen: Parallel, Tangential, Abstand (BG-07) ----------
+  function validateLoosePair(doc, aId, bId) {
+    const A = top(aId, doc), B = top(bId, doc);
+    if (!A || !B || A.id === B.id) return { ok: false, msg: 'Wähle zwei verschiedene Teile.' };
+    const why = refuse(doc, A, B); if (why) return { ok: false, msg: why };
+    if (B.locked) return { ok: false, msg: T('asm.groundedJointErr', { name: Model.label(B) }) };
+    if (isFixedPart(B.id, doc)) return { ok: false, msg: `„${Model.label(B)}“ ist fest verbunden und kann keine weitere Verbindung aufnehmen.` };
+    if (wouldCycleDirected(doc, A.id, B.id)) return { ok: false, msg: `„${Model.label(A)}“ und „${Model.label(B)}“ sind schon in Gegenrichtung verbunden – das ergäbe einen Kreis.` };
+    return { ok: true, A, B };
+  }
+
+  function addLooseEntry(label, A, B, entry) {
+    let jid = null, conflictMsg = null;
+    App.change(label, (doc) => {
+      const b = top(B.id, doc); if (!b || b.locked) return false;
+      if (wouldCycleDirected(doc, A.id, B.id) || isFixedPart(B.id, doc)) return false;
+      const snapItems = deepClone(doc.items), snapJoints = deepClone(doc.joints || []);
+      doc.joints = doc.joints || [];
+      jid = uid('j');
+      const idx = doc.joints.length + 1;
+      const full = {
+        id: jid,
+        name: entry.name || `Verbindung ${idx}`,
+        a: A.id,
+        b: B.id,
+        ao: [0, 0, 0],
+        ad: [0, 0, 1],
+        ...entry,
+      };
+      doc.joints.push(full);
+      const sol = solvePartConstraints(doc, B.id, Model.vars(doc).v);
+      if (sol.err > 0.05) {
+        doc.items = snapItems;
+        doc.joints = snapJoints;
+        conflictMsg = `Diese Verbindung widerspricht einer bestehenden Verbindung an „${Model.label(B)}“.`;
+        jid = null;
+        return false;
+      }
+      syncAll(doc);
+    });
+    if (conflictMsg) return { ok: false, msg: conflictMsg };
+    if (jid) drawSelectedJoint();
+    return jid ? { ok: true, id: jid } : { ok: false, msg: 'Die Verbindung ließ sich nicht anlegen.' };
+  }
+
+  function addParallel(aRef, bRef, opts = {}) {
+    const refA = resolvePlaneRef(aRef), refB = resolvePlaneRef(bRef);
+    if (!refA || !refB) return { ok: false, msg: 'Für „Parallel“ werden zwei ebene Flächen benötigt.' };
+    const chk = validateLoosePair(App.doc, aRef.id, bRef.id);
+    if (!chk.ok) return chk;
+    const Wa = Model.worldMatrix(App.doc, chk.A.id), Wb = Model.worldMatrix(App.doc, chk.B.id);
+    const nAw = new THREE.Vector3(...refA.n).transformDirection(Wa).normalize();
+    const nBw = new THREE.Vector3(...refB.n).transformDirection(Wb).normalize();
+    const flip = opts.flip != null ? !!opts.flip : (nAw.dot(nBw) >= 0);
+    return addLooseEntry('Parallele Verbindung angelegt', chk.A, chk.B, {
+      kind: 'parallel',
+      name: opts.name,
+      refA,
+      refB,
+      flip,
+    });
+  }
+
+  function addTangent(aRef, bRef, opts = {}) {
+    if (!aRef || !bRef) return { ok: false, msg: 'Für „Tangential“ werden eine ebene Fläche und eine runde Zylinderfläche benötigt.' };
+    let refA = resolvePlaneRef(aRef), refB = resolveCylRef(bRef);
+    if (!refA || !refB) {
+      refA = resolveCylRef(aRef);
+      refB = resolvePlaneRef(bRef);
+    }
+    if (!refA || !refB) return { ok: false, msg: 'Für „Tangential“ werden eine ebene Fläche und eine runde Zylinderfläche benötigt.' };
+    const chk = validateLoosePair(App.doc, aRef.id, bRef.id);
+    if (!chk.ok) return chk;
+    return addLooseEntry('Tangentiale Verbindung angelegt', chk.A, chk.B, {
+      kind: 'tangent',
+      name: opts.name,
+      refA,
+      refB,
+      flip: !!opts.flip,
+    });
+  }
+
+  function addDistance(aRef, bRef, distOrOpts = 5, opts = {}) {
+    let distRaw = distOrOpts;
+    if (distOrOpts && typeof distOrOpts === 'object') {
+      opts = distOrOpts;
+      distRaw = opts.dist;
+    }
+    if (distRaw === undefined || distRaw === null || distRaw === '') distRaw = 5;
+    const parsed = parseDistVal(distRaw, Model.vars(App.doc).v);
+    if (!parsed.ok) return { ok: false, msg: parsed.msg };
+    const refA = resolvePlaneRef(aRef), refB = resolvePlaneRef(bRef);
+    if (!refA || !refB) return { ok: false, msg: 'Für „Abstand“ werden zwei ebene Flächen benötigt.' };
+    const chk = validateLoosePair(App.doc, aRef.id, bRef.id);
+    if (!chk.ok) return chk;
+    const Wa = Model.worldMatrix(App.doc, chk.A.id), Wb = Model.worldMatrix(App.doc, chk.B.id);
+    const nAw = new THREE.Vector3(...refA.n).transformDirection(Wa).normalize();
+    const nBw = new THREE.Vector3(...refB.n).transformDirection(Wb).normalize();
+    const flip = opts.flip != null ? !!opts.flip : (nAw.dot(nBw) > 0.5);
+    return addLooseEntry('Abstands-Verbindung angelegt', chk.A, chk.B, {
+      kind: 'distance',
+      name: opts.name,
+      refA,
+      refB,
+      dist: parsed.value,
+      flip,
+    });
+  }
+
+  function updateLoose(jid, patch, opts = {}) {
+    const cur = list().find((x) => x.id === jid);
+    if (!cur || !isLoose(cur)) return false;
+    let parsedDist = null;
+    if ('dist' in patch) {
+      parsedDist = parseDistVal(patch.dist, Model.vars(App.doc).v);
+      if (!parsedDist.ok) { UI.toast(parsedDist.msg, { kind: 'bad' }); return false; }
+    }
+    const label = opts.label || ('flip' in patch ? 'Verbindung umgekehrt' : 'dist' in patch ? 'Abstand geändert' : 'name' in patch ? 'Verbindung umbenannt' : 'Verbindung geändert');
+    const changeOpts = opts.merge ? { merge: opts.merge } : {};
+    let conflictMsg = null;
+    const ok = App.change(label, (doc) => {
+      const j = list(doc).find((x) => x.id === jid);
+      if (!j || !isLoose(j)) return false;
+      const snapItems = ('flip' in patch || parsedDist) ? deepClone(doc.items) : null;
+      const snapJoints = snapItems ? deepClone(doc.joints) : null;
+      if ('name' in patch) j.name = String(patch.name || '').trim() || j.name;
+      if ('flip' in patch) j.flip = !!patch.flip;
+      if (parsedDist) j.dist = parsedDist.value;
+      const sol = solvePartConstraints(doc, j.b, Model.vars(doc).v);
+      if (sol.err > 0.05) {
+        if (snapItems) { doc.items = snapItems; doc.joints = snapJoints; }
+        const b = top(j.b, doc);
+        conflictMsg = `Diese Änderung widerspricht einer bestehenden Verbindung an „${b ? Model.label(b) : 'Teil'}“.`;
+        return false;
+      }
+      syncAll(doc);
+    }, changeOpts);
+    if (conflictMsg) { UI.toast(conflictMsg, { kind: 'bad' }); return false; }
+    drawSelectedJoint();
+    return ok;
+  }
+
+  function setDistance(jid, dist) {
+    return updateLoose(jid, { dist }, { label: 'Abstand geändert', merge: 'jdist:' + jid });
+  }
+
+  function flipLoose(jid) {
+    const j = list().find((x) => x.id === jid);
+    if (!j || !isLoose(j)) return false;
+    return updateLoose(jid, { flip: !j.flip }, { label: 'Verbindung umgekehrt' });
+  }
+
   function addBall(aRef, bRef, opts = {}) {
     const ptA = ballPointOf(aRef), ptB = ballPointOf(bRef);
     if (!ptA || !ptB) return { ok: false, msg: 'Für „Kugel“ werden zwei Punkte oder Kugel-/Zylinderflächen an verschiedenen Teilen benötigt.' };
     const A = top(ptA.id), B = top(ptB.id);
     if (!A || !B || A.id === B.id) return { ok: false, msg: 'Wähle zwei verschiedene Teile.' };
     const why = refuse(App.doc, A, B); if (why) return { ok: false, msg: why };
-    if (connected(App.doc, A.id, B.id)) return { ok: false, msg: 'Das ergäbe einen Kreis – die beiden Teile sind schon über Verbindungen miteinander gekoppelt.' };
-    if (list().some((j) => j.b === B.id)) return { ok: false, msg: `„${Model.label(B)}“ wird schon von einer Verbindung bewegt – jedes Teil darf nur eine bewegende Verbindung haben.` };
+    if (B.locked) return { ok: false, msg: T('asm.groundedJointErr', { name: Model.label(B) }) };
+    if (connected(App.doc, A.id, B.id) || wouldCycleDirected(App.doc, A.id, B.id)) return { ok: false, msg: 'Das ergäbe einen Kreis – die beiden Teile sind schon über Verbindungen miteinander gekoppelt.' };
+    if (list().some((j) => j.b === B.id && !isLoose(j))) return { ok: false, msg: `„${Model.label(B)}“ wird schon von einer Verbindung bewegt – jedes Teil darf nur eine bewegende Verbindung haben.` };
 
     const dp = ptA.p.clone().sub(ptB.p);
     const M_align = new THREE.Matrix4().makeTranslation(dp.x, dp.y, dp.z);
@@ -1646,8 +2272,8 @@ const Joints = (() => {
     const hi = Number.isFinite(+opts.max) ? +opts.max : 180;
     let jid = null;
     App.change('Kugel-Verbindung angelegt', (doc) => {
-      const b = top(B.id, doc); if (!b) return false;
-      if (connected(doc, A.id, B.id) || list(doc).some((j) => j.b === B.id)) return false;
+      const b = top(B.id, doc); if (!b || b.locked) return false;
+      if (connected(doc, A.id, B.id) || wouldCycleDirected(doc, A.id, B.id) || list(doc).some((j) => j.b === B.id && !isLoose(j))) return false;
       const newLocal = conj(doc, B.id, M_align).multiply(Model.localMatrix(b));
       Model.setFromMatrix(b, newLocal);
       moveChain(doc, B.id, M_align);
@@ -1683,8 +2309,9 @@ const Joints = (() => {
     const A = top(sl.id), B = top(pin.id);
     if (!A || !B || A.id === B.id) return { ok: false, msg: 'Wähle zwei verschiedene Teile.' };
     const why = refuse(App.doc, A, B); if (why) return { ok: false, msg: why };
-    if (connected(App.doc, A.id, B.id)) return { ok: false, msg: 'Das ergäbe einen Kreis – die beiden Teile sind schon über Verbindungen miteinander gekoppelt.' };
-    if (list().some((j) => j.b === B.id)) return { ok: false, msg: `„${Model.label(B)}“ wird schon von einer Verbindung bewegt – jedes Teil darf nur eine bewegende Verbindung haben.` };
+    if (B.locked) return { ok: false, msg: T('asm.groundedJointErr', { name: Model.label(B) }) };
+    if (connected(App.doc, A.id, B.id) || wouldCycleDirected(App.doc, A.id, B.id)) return { ok: false, msg: 'Das ergäbe einen Kreis – die beiden Teile sind schon über Verbindungen miteinander gekoppelt.' };
+    if (list().some((j) => j.b === B.id && !isLoose(j))) return { ok: false, msg: `„${Model.label(B)}“ wird schon von einer Verbindung bewegt – jedes Teil darf nur eine bewegende Verbindung haben.` };
 
     let M_align;
     if (pin.axis && opts.alignAxis !== false) {
@@ -1708,8 +2335,8 @@ const Joints = (() => {
     const hi = Number.isFinite(+opts.max) ? +opts.max : 180;
     let jid = null;
     App.change('Stift-im-Langloch-Verbindung angelegt', (doc) => {
-      const b = top(B.id, doc); if (!b) return false;
-      if (connected(doc, A.id, B.id) || list(doc).some((j) => j.b === B.id)) return false;
+      const b = top(B.id, doc); if (!b || b.locked) return false;
+      if (connected(doc, A.id, B.id) || wouldCycleDirected(doc, A.id, B.id) || list(doc).some((j) => j.b === B.id && !isLoose(j))) return false;
       const newLocal = conj(doc, B.id, M_align).multiply(Model.localMatrix(b));
       Model.setFromMatrix(b, newLocal);
       moveChain(doc, B.id, M_align);
@@ -1734,6 +2361,173 @@ const Joints = (() => {
       if (Object.keys(patch).length) setState(jid, patch);
     }
     return jid ? { ok: true, id: jid } : { ok: false, msg: 'Die Stift-im-Langloch-Verbindung ließ sich nicht anlegen.' };
+  }
+
+  function canConnect(aId, bId, doc = App.doc) {
+    const A = top(aId, doc), B = top(bId, doc);
+    if (!A || !B || A.id === B.id) return { ok: false, msg: 'Bitte zwei verschiedene Teile wählen.' };
+    const why = refuse(doc, A, B); if (why) return { ok: false, msg: why };
+    if (B.locked) return { ok: false, msg: T('asm.groundedJointErr', { name: Model.label(B) }) };
+    if (connected(doc, A.id, B.id)) return { ok: false, msg: `„${Model.label(A)}“ und „${Model.label(B)}“ sind schon miteinander verbunden – ein weiteres ergäbe einen Kreis.` };
+    if (list(doc).some((j) => j.b === B.id)) return { ok: false, msg: `„${Model.label(B)}“ wird schon von einer Verbindung bewegt.` };
+    return { ok: true, A, B };
+  }
+
+  function dockOptions(dock) {
+    if (!dock || !dock.target || !dock.source) return [];
+    const t = dock.target, s = dock.source;
+    const opts = [
+      { kind: 'fixed', label: 'Fest', icon: 'lock', desc: 'Starr an diesem Punkt', primary: true },
+    ];
+    if (t.kind === 'hole' && s.kind === 'hole') {
+      opts.push(
+        { kind: 'cyl', label: 'Zylindrisch', icon: 'hinge', desc: 'Drehen und schieben' },
+        { kind: 'rot', label: 'Drehen', icon: 'rotate', desc: 'Dreht um die Achse' }
+      );
+    } else if (t.kind === 'face' && s.kind === 'face') {
+      opts.push({ kind: 'planar', label: 'Eben', icon: 'plane', desc: 'Gleitet auf der Fläche' });
+    } else {
+      opts.push({ kind: 'ball', label: 'Kugel', icon: 'sphere', desc: 'Dreht frei um den Punkt' });
+    }
+    opts.push({ kind: 'none', label: 'Nur einrasten', icon: 'close', desc: 'Ohne Verbindung' });
+    return opts;
+  }
+
+  function applyDockJoint(dock, kind, opts = {}) {
+    if (!dock || !dock.target || !dock.source) return { ok: false, msg: 'Kein Andock-Punkt gewählt.' };
+    if (kind === 'none') return { ok: true, id: null, kind: 'none' };
+    const { target, source } = dock;
+    const chk = canConnect(target.id, source.id);
+    if (!chk.ok) return { ok: false, msg: chk.msg };
+    const Wb = Model.worldMatrix(App.doc, source.id);
+    const sP = new THREE.Vector3(...source.localP).applyMatrix4(Wb);
+    const sN = new THREE.Vector3(...source.localN).transformDirection(Wb).normalize();
+    if (kind === 'fixed') {
+      const aSpec = {
+        id: target.id,
+        kind: 'face',
+        c: target.localP,
+        n: target.localN,
+        x: dock.xAl,
+        ...(target.kind === 'face' && target.faceIdx != null ? { faceIdx: target.faceIdx } : { dock: true }),
+      };
+      const bSpec = {
+        id: source.id,
+        kind: 'face',
+        c: source.localP,
+        n: source.localN,
+        x: dock.xBl,
+        ...(source.kind === 'face' && !source.primary && source.faceIdx != null ? { faceIdx: source.faceIdx } : { dock: true }),
+      };
+      return addFixed(aSpec, bSpec, opts);
+    }
+    if (kind === 'cyl') {
+      return addCylindrical(
+        { id: target.id, o: target.p.toArray(), d: target.n.toArray(), what: target.name },
+        { id: source.id, o: sP.toArray(), d: sN.toArray(), what: source.name },
+        opts
+      );
+    }
+    if (kind === 'rot') {
+      return add(target.id, source.id, target.p.toArray(), target.n.toArray(), { kind: 'rot', min: -180, max: 180, ...opts });
+    }
+    if (kind === 'planar') {
+      return addPlanar(
+        { id: target.id, p: target.p.toArray(), n: target.n.toArray(), what: target.name },
+        { id: source.id, p: sP.toArray(), n: sN.toArray(), what: source.name },
+        opts
+      );
+    }
+    if (kind === 'ball') {
+      return addBall(
+        { id: target.id, p: target.p.toArray(), what: target.name },
+        { id: source.id, p: sP.toArray(), what: source.name },
+        opts
+      );
+    }
+    return { ok: false, msg: 'Unbekannte Verbindungsart.' };
+  }
+
+  let dockPop = null;
+  function closeDockPrompt() {
+    if (!dockPop) return;
+    document.removeEventListener('pointerdown', dockPop.outside, true);
+    window.removeEventListener('keydown', dockPop.key, true);
+    dockPop.el.remove();
+    dockPop = null;
+  }
+  function onDockDrop(dock, screenPt, opts = {}) {
+    closeDockPrompt();
+    if (!dock || !dock.target || !dock.source) return { snapped: false, connected: false };
+    const chk = canConnect(dock.target.id, dock.source.id);
+    if (!chk.ok) {
+      UI.toast(`Eingerastet (${dock.target.name}) – Verbindung nicht möglich: ${chk.msg}`, { icon: 'info', ms: 3400 });
+      return { snapped: true, connected: false };
+    }
+    const { A, B } = chk;
+    if (typeof ViewPrefs !== 'undefined' && ViewPrefs.simple) {
+      const res = applyDockJoint(dock, 'fixed', { before: opts.before, label: 'Eingerastet & verbunden' });
+      if (res && res.ok) {
+        UI.toast(`Eingerastet & fest verbunden: „${Model.label(B)}“ an „${Model.label(A)}“ (${dock.target.name}).`, { icon: 'check', ms: 3400 });
+        return { snapped: true, connected: true, kind: 'fixed', id: res.id };
+      }
+      if (res && res.msg) UI.toast(res.msg, { icon: 'info' });
+      return { snapped: true, connected: false };
+    }
+
+    const choices = dockOptions(dock);
+    const el = h('div', { class: 'dock-pop', id: 'dock-joint-pop', role: 'dialog', 'aria-label': 'Verbindung wählen', 'data-help': 'dockSnap' });
+    el.append(
+      h('div', { class: 'dock-pop-head' }, 'Verbindung anlegen?'),
+      h('div', { class: 'dock-pop-sub' }, `${dock.target.name}: ${Model.label(B)} → ${Model.label(A)}`)
+    );
+    const listEl = h('div', { class: 'dock-pop-list' });
+    const pick = (opt) => {
+      closeDockPrompt();
+      if (opt.kind === 'none') {
+        UI.toast(`Nur eingerastet (${dock.target.name}, ohne Verbindung).`, { icon: 'check', ms: 2400 });
+        return;
+      }
+      const res = applyDockJoint(dock, opt.kind);
+      if (res && res.ok) {
+        UI.toast(`${opt.label} verbunden: „${Model.label(B)}“ an „${Model.label(A)}“.`, { icon: 'check', ms: 3200 });
+      } else if (res && res.msg) {
+        UI.toast(res.msg, { kind: 'bad' });
+      }
+    };
+    for (const opt of choices) {
+      const btn = h('button', {
+        type: 'button',
+        id: 'dock-opt-' + opt.kind,
+        class: 'dock-opt' + (opt.primary ? ' primary' : ''),
+        dataset: { kind: opt.kind },
+      });
+      btn.innerHTML = icon(opt.icon);
+      btn.append(h('span', null, h('b', null, opt.label), h('small', null, opt.desc)));
+      btn.onclick = () => pick(opt);
+      listEl.append(btn);
+    }
+    el.append(listEl);
+    document.body.append(el);
+    const r = el.getBoundingClientRect();
+    const sx = screenPt && Number.isFinite(screenPt.x) ? screenPt.x : innerWidth / 2;
+    const sy = screenPt && Number.isFinite(screenPt.y) ? screenPt.y : innerHeight / 2;
+    el.style.left = clamp(sx + 16, 8, innerWidth - r.width - 8) + 'px';
+    el.style.top = clamp(sy - 16, 8, innerHeight - r.height - 8) + 'px';
+
+    const outside = (ev) => { if (dockPop && !dockPop.el.contains(ev.target)) closeDockPrompt(); };
+    const key = (ev) => {
+      if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); closeDockPrompt(); }
+      else if (ev.key === 'Enter') {
+        ev.preventDefault(); ev.stopPropagation();
+        const def = choices.find((x) => x.kind === 'fixed') || choices[0];
+        if (def) pick(def);
+      }
+    };
+    dockPop = { el, outside, key };
+    setTimeout(() => document.addEventListener('pointerdown', outside, true), 0);
+    window.addEventListener('keydown', key, true);
+    return { snapped: true, connected: false, prompt: true };
   }
 
   // ---------- Interaktives Wählen im Bild ----------
@@ -1783,7 +2577,12 @@ const Joints = (() => {
       }
       return;
     }
-    if (Array.isArray(j.ad)) {
+    if (isDistance(j) && Array.isArray(j.bo)) {
+      const q = new THREE.Vector3(...j.bo);
+      const ptB = Viewer.makeFat([q.x, q.y, q.z, q.x, q.y, q.z + 0.001], '#f08c00', 11, { depthTest: false });
+      const dl = Viewer.makeFat([p.x, p.y, p.z, q.x, q.y, q.z], '#f08c00', 3, { depthTest: false, dashed: true, dashSize: 2, gapSize: 1.2 });
+      Viewer.groups.overlay.add(ptB, dl); visObjs.push(ptB, dl);
+    } else if (Array.isArray(j.ad)) {
       const d = new THREE.Vector3(...j.ad).normalize();
       const b = p.clone().addScaledVector(d, 10);
       const ln = Viewer.makeFat([p.x, p.y, p.z, b.x, b.y, b.z], '#f08c00', 3, { depthTest: false });
@@ -1941,14 +2740,14 @@ const Joints = (() => {
     const [A, B] = sel;
     const why = refuse(App.doc, A, B); if (why) { UI.toast(why, { icon: 'info' }); return false; }
     if (B.locked) { UI.toast(T('asm.groundedJointErr', { name: Model.label(B) }), { icon: 'lock' }); return false; }
-    if (connected(App.doc, A.id, B.id)) { UI.toast('Das ergäbe einen Kreis – die beiden Teile sind schon über Verbindungen miteinander gekoppelt.', { icon: 'info' }); return false; }
-    if (list().some((j) => j.b === B.id)) { UI.toast(`„${Model.label(B)}“ wird schon von einer Verbindung bewegt – jedes Teil darf nur von einem Gelenk bewegt werden.`, { icon: 'info' }); return false; }
+    if (connected(App.doc, A.id, B.id) || wouldCycleDirected(App.doc, A.id, B.id)) { UI.toast('Das ergäbe einen Kreis – die beiden Teile sind schon über Verbindungen miteinander gekoppelt.', { icon: 'info' }); return false; }
+    if (list().some((j) => j.b === B.id && !isLoose(j))) { UI.toast(`„${Model.label(B)}“ wird schon von einer Verbindung bewegt – jedes Teil darf nur von einem Gelenk bewegt werden.`, { icon: 'info' }); return false; }
     const isSlide = kind === 'slide';
     Features.pickAxisThen((ax) => {
       let jid = null;
       App.change('Gelenk angelegt', (doc) => {
         const b = top(B.id, doc); if (!b || b.locked) return false;
-        if (connected(doc, A.id, B.id) || list(doc).some((j) => j.b === B.id)) return false;
+        if (connected(doc, A.id, B.id) || wouldCycleDirected(doc, A.id, B.id) || list(doc).some((j) => j.b === B.id && !isLoose(j))) return false;
         doc.joints = doc.joints || [];
         jid = uid('j');
         const entry = {
@@ -2053,6 +2852,185 @@ const Joints = (() => {
     Viewer.canvas.addEventListener('pointermove', move);
     window.addEventListener('keydown', key, true);
     setHint();
+    return true;
+  }
+
+  function startParallel(firstRef = null) {
+    stopPick();
+    let step1 = firstRef ? resolvePlaneRef(firstRef) : null;
+    if (step1) step1 = { id: firstRef.id, faceIdx: step1.idx };
+    const setHint = () => {
+      UI.hint(step1
+        ? `<b>Parallel (2/2):</b> Klick auf die ebene Fläche am <b>zweiten Teil</b> (richtet sich parallel aus). <b>Esc</b> bricht ab.`
+        : `<b>Parallel (1/2):</b> Klick auf die ebene Fläche am <b>ersten Teil</b> (bleibt stehen). <b>Esc</b> bricht ab.`);
+    };
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true, solidsOnly: true });
+      const pl = planarHitOf(hit);
+      if (!pl) { UI.toast('Klick auf eine ebene Fläche eines Körpers.', { icon: 'info' }); return; }
+      if (!step1) {
+        if (!top(pl.id)) return;
+        step1 = { id: pl.id, faceIdx: pl.faceIdx };
+        Viewer.highlightFace('sel', pl.id, pl.faceIdx);
+        setHint();
+        return;
+      }
+      if (pl.id === step1.id) { UI.toast('Wähle jetzt eine ebene Fläche an einem anderen Teil.', { icon: 'info' }); return; }
+      const r = addParallel(step1, { id: pl.id, faceIdx: pl.faceIdx });
+      if (!r.ok) { UI.toast(r.msg, { kind: 'bad', ms: 4000 }); return; }
+      stopPick();
+      select(r.id);
+      const A = top(step1.id), B = top(pl.id);
+      UI.toast(`Parallel ausgerichtet: „${Model.label(B)}“ ↔ „${Model.label(A)}“.`, { icon: 'check', ms: 3400 });
+    };
+    const move = (e) => {
+      const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true, solidsOnly: true });
+      const ok = !!planarHitOf(hit) && (!step1 || hit.id !== step1.id);
+      Viewer.highlightFace('hover', ok ? hit.id : null, ok ? hit.faceIdx : null);
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    pickState = { down, move, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    Viewer.canvas.addEventListener('pointermove', move);
+    window.addEventListener('keydown', key, true);
+    if (step1 && step1.faceIdx != null) Viewer.highlightFace('sel', step1.id, step1.faceIdx);
+    setHint();
+    return true;
+  }
+
+  function tangentHitOf(hit, wantKind = null) {
+    if (!hit || !hit.node || hit.faceIdx == null || hit.faceIdx < 0) return null;
+    const fi = hit.node.data && hit.node.data.faces && hit.node.data.faces[hit.faceIdx];
+    if (!fi) return null;
+    if (fi.t === 'PLANE' && (!wantKind || wantKind === 'face') && Array.isArray(fi.n) && Array.isArray(fi.c)) {
+      return { kind: 'face', id: hit.id, faceIdx: hit.faceIdx };
+    }
+    if (fi.t === 'CYLINDRE' && (!wantKind || wantKind === 'cyl') && Array.isArray(fi.axis) && fi.r > 0) {
+      return { kind: 'cyl', id: hit.id, faceIdx: hit.faceIdx };
+    }
+    return null;
+  }
+
+  function startTangent(firstRef = null) {
+    stopPick();
+    let step1 = null;
+    if (firstRef && firstRef.id) {
+      if (resolvePlaneRef(firstRef)) step1 = { kind: 'face', id: firstRef.id, faceIdx: firstRef.faceIdx ?? firstRef.idx };
+      else if (resolveCylRef(firstRef)) step1 = { kind: 'cyl', id: firstRef.id, faceIdx: firstRef.faceIdx ?? firstRef.idx };
+    }
+    const wantNext = () => (!step1 ? null : step1.kind === 'face' ? 'cyl' : 'face');
+    const setHint = () => {
+      if (!step1) UI.hint('<b>Tangential (1/2):</b> Klick auf eine ebene Fläche oder eine runde Zylinderfläche am <b>ersten Teil</b>. <b>Esc</b> bricht ab.');
+      else if (step1.kind === 'face') UI.hint('<b>Tangential (2/2):</b> Klick auf die <b>runde Zylinderfläche</b> am zweiten Teil. <b>Esc</b> bricht ab.');
+      else UI.hint('<b>Tangential (2/2):</b> Klick auf die <b>ebene Fläche</b> am zweiten Teil. <b>Esc</b> bricht ab.');
+    };
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true, solidsOnly: true });
+      const th = tangentHitOf(hit, wantNext());
+      if (!th) {
+        const w = wantNext();
+        UI.toast(w === 'cyl' ? 'Klick auf eine runde Zylinderfläche.' : w === 'face' ? 'Klick auf eine ebene Fläche.' : 'Klick auf eine ebene Fläche oder eine runde Zylinderfläche.', { icon: 'info' });
+        return;
+      }
+      if (!step1) {
+        if (!top(th.id)) return;
+        step1 = th;
+        Viewer.highlightFace('sel', th.id, th.faceIdx);
+        setHint();
+        return;
+      }
+      if (th.id === step1.id) { UI.toast('Wähle eine Fläche an einem anderen Teil.', { icon: 'info' }); return; }
+      const r = addTangent({ id: step1.id, faceIdx: step1.faceIdx }, { id: th.id, faceIdx: th.faceIdx });
+      if (!r.ok) { UI.toast(r.msg, { kind: 'bad', ms: 4000 }); return; }
+      stopPick();
+      select(r.id);
+      const A = top(step1.id), B = top(th.id);
+      UI.toast(`Tangential angelegt: „${Model.label(B)}“ ↔ „${Model.label(A)}“.`, { icon: 'check', ms: 3400 });
+    };
+    const move = (e) => {
+      const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true, solidsOnly: true });
+      const th = tangentHitOf(hit, wantNext());
+      const ok = !!th && (!step1 || th.id !== step1.id);
+      Viewer.highlightFace('hover', ok ? hit.id : null, ok ? hit.faceIdx : null);
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    pickState = { down, move, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    Viewer.canvas.addEventListener('pointermove', move);
+    window.addEventListener('keydown', key, true);
+    if (step1 && step1.faceIdx != null) Viewer.highlightFace('sel', step1.id, step1.faceIdx);
+    setHint();
+    return true;
+  }
+
+  function startDistance(firstRef = null, defaultDist = 5) {
+    stopPick();
+    let step1 = firstRef ? resolvePlaneRef(firstRef) : null;
+    if (step1) step1 = { id: firstRef.id, faceIdx: step1.idx };
+    hidePickBar();
+    pickBar = h('div', { class: 'sketchbar measurebar', id: 'joint-pick-bar' });
+    const msg = h('span', { class: 'm-cur', id: 'jp-msg' });
+    const distLbl = h('label', { for: 'jp-dist', style: { fontSize: '12px', color: 'var(--muted)' } }, T('joint.distLabel') + ':');
+    const distInp = h('input', { id: 'jp-dist', type: 'text', value: String(defaultDist), style: { width: '82px' }, autocomplete: 'off', spellcheck: 'false' });
+    distInp.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') return;
+      e.stopPropagation();
+      if (e.key === 'Enter') distInp.blur();
+    });
+    const unitSpan = h('span', { style: { fontSize: '12px', color: 'var(--muted)' } }, Units.label());
+    const cancelBtn = h('button', { type: 'button', class: 'tool', id: 'jp-cancel', 'data-kbd': 'Esc' });
+    cancelBtn.innerHTML = icon('close') + `<span>${esc(T('common.cancel'))}</span>`;
+    cancelBtn.onclick = () => stopPick();
+    pickBar.append(msg, distLbl, distInp, unitSpan, cancelBtn);
+    $('#overlay').append(pickBar);
+
+    const updateDistHint = () => {
+      const name1 = step1 ? Model.label(top(step1.id) || { name: 'Teil 1' }) : '';
+      const txt = step1 ? T('joint.pickDistStep2', { name: name1 }) : T('joint.pickDistStep1');
+      msg.textContent = txt;
+      UI.hint(`<b>${esc(txt)}</b> <b>Esc</b> bricht ab.`);
+    };
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true, solidsOnly: true });
+      const pl = planarHitOf(hit);
+      if (!pl) { UI.toast('Klick auf eine ebene Fläche eines Körpers.', { icon: 'info' }); return; }
+      if (!step1) {
+        if (!top(pl.id)) return;
+        step1 = { id: pl.id, faceIdx: pl.faceIdx };
+        Viewer.highlightFace('sel', pl.id, pl.faceIdx);
+        updateDistHint();
+        return;
+      }
+      if (pl.id === step1.id) { UI.toast('Wähle jetzt eine ebene Fläche an einem anderen Teil.', { icon: 'info' }); return; }
+      const raw = distInp.value.trim();
+      const r = addDistance(step1, { id: pl.id, faceIdx: pl.faceIdx }, { dist: raw === '' ? defaultDist : raw });
+      if (!r.ok) { UI.toast(r.msg, { kind: 'bad', ms: 4000 }); return; }
+      stopPick();
+      select(r.id);
+      const A = top(step1.id), B = top(pl.id);
+      UI.toast(`Abstand angelegt: „${Model.label(B)}“ ↔ „${Model.label(A)}“.`, { icon: 'check', ms: 3400 });
+    };
+    const move = (e) => {
+      const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true, solidsOnly: true });
+      const ok = !!planarHitOf(hit) && (!step1 || hit.id !== step1.id);
+      Viewer.highlightFace('hover', ok ? hit.id : null, ok ? hit.faceIdx : null);
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    pickState = { down, move, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    Viewer.canvas.addEventListener('pointermove', move);
+    window.addEventListener('keydown', key, true);
+    if (step1 && step1.faceIdx != null) Viewer.highlightFace('sel', step1.id, step1.faceIdx);
+    updateDistHint();
     return true;
   }
 
@@ -2174,7 +3152,6 @@ const Joints = (() => {
     setHint();
     return true;
   }
-
   function startFixed(firstFace = null, replaceJid = null) {
     stopPlay();
     if (typeof Measure !== 'undefined' && Measure.active) Measure.stop();
@@ -2616,13 +3593,17 @@ const Joints = (() => {
     const normPatch = patch && 'rz' in patch && !('ang' in patch) ? { ...patch, ang: patch.rz } : patch;
     const label = normPatch && Object.keys(normPatch).length === 1 && 'ang' in normPatch ? 'Gelenk bewegt' : 'Verbindung bewegt';
     App.change(label, (doc) => {
-      const j = list(doc).find((x) => x.id === jid); if (!j || isConstraint(j)) return false;
+      const j = list(doc).find((x) => x.id === jid); if (!j || isConstraint(j) || isLoose(j)) return false;
       const b = top(j.b, doc); if (!b || b.locked) return false;
       syncHome(b, j, doc);
       const prev = stateOf(j);
-      const next = clampState(j, normPatch);
+      let next = clampState(j, normPatch);
       writeState(j, next);
       Model.setFromMatrix(b, pose(j, next, null, doc));
+      if (looseOf(j.b, doc).length) {
+        solvePartConstraints(doc, j.b, Model.vars(doc).v);
+        next = stateOf(j);
+      }
       if (stateChanged(prev, next, kindOf(j))) moveChain(doc, j.b, deltaMatrix(j, prev, next));
     }, { merge: 'joint:' + jid });
     drawSelectedJoint();
@@ -2634,7 +3615,7 @@ const Joints = (() => {
   function setKind(jid, kind) {
     const k = kind === 'slide' || kind === 'cyl' || kind === 'planar' || kind === 'ball' || kind === 'slot' ? kind : 'rot';
     App.change('Verbindungs-Art', (doc) => {
-      const j = list(doc).find((x) => x.id === jid); if (!j || isConstraint(j)) return false;
+      const j = list(doc).find((x) => x.id === jid); if (!j || isConstraint(j) || isLoose(j)) return false;
       const b = top(j.b, doc); if (!b || b.locked) return false;
       syncHome(b, j, doc);
       const prev = stateOf(j);
@@ -2695,7 +3676,7 @@ const Joints = (() => {
     }[k];
     if (!pair) return;
     App.change('Verbindungs-Bereich', (doc) => {
-      const j = list(doc).find((x) => x.id === jid); if (!j || isConstraint(j)) return false;
+      const j = list(doc).find((x) => x.id === jid); if (!j || isConstraint(j) || isLoose(j)) return false;
       const lim = pair[2];
       j[k] = round(clamp(Number(v) || 0, -lim, lim), 4);
       if (j[pair[0]] > j[pair[1]]) [j[pair[0]], j[pair[1]]] = [j[pair[1]], j[pair[0]]];
@@ -2715,6 +3696,11 @@ const Joints = (() => {
   }
 
   function flip(jid) {
+    const cur = list().find((x) => x.id === jid);
+    if (!cur) return false;
+    if (fixed(cur)) return flipFixed(jid);
+    if (isAngle(cur)) return flipAngle(jid);
+    if (isLoose(cur)) return flipLoose(jid);
     App.change('Verbindung umkehren', (doc) => {
       const j = list(doc).find((x) => x.id === jid); if (!j) return false;
       const b = top(j.b, doc); if (!b || b.locked) return false;
@@ -2759,10 +3745,21 @@ const Joints = (() => {
     return deg;
   }
 
-  // Verschieben/Drehen eines verbundenen Teils auf die erlaubten Freiheitsgrade von 'rot'/'slide'/'cyl'/'planar'/'ball'/'slot'/'angle'/'center' projizieren
+  // Verschieben/Drehen eines verbundenen Teils auf die erlaubten Freiheitsgrade von 'rot'/'slide'/'cyl'/'planar'/'ball'/'slot'/'angle'/'center' sowie lockere Verbindungen projizieren
   function constrain(doc, itemId) {
     const j = drivingOf(itemId, doc);
-    if (!j || fixed(j)) return false;
+    const hasLoose = looseOf(itemId, doc).length > 0;
+    if (!j || fixed(j)) {
+      if (!hasLoose || (j && fixed(j))) return false;
+      const b = top(itemId, doc); if (!b || b.locked) return false;
+      const WbOld = Model.worldMatrix(doc, itemId);
+      const sol = solvePartConstraints(doc, itemId, Model.vars(doc).v);
+      if (sol.changed && list(doc).some((k) => k.a === itemId && !isConstraint(k) && !isLoose(k))) {
+        const WbNew = Model.worldMatrix(doc, itemId);
+        moveChain(doc, itemId, WbNew.clone().multiply(WbOld.clone().invert()));
+      }
+      return sol.changed;
+    }
     const b = top(j.b, doc);
     if (!b || b.locked) return false;
     if (j.kind === 'angle' || j.kind === 'center') {
@@ -2859,8 +3856,12 @@ const Joints = (() => {
       j.pos = posNew;
       j.ang = angNew;
     }
-    const next = stateOf(j);
+    let next = stateOf(j);
     Model.setFromMatrix(b, pose(j, next, null, doc));
+    if (hasLoose) {
+      solvePartConstraints(doc, j.b, Model.vars(doc).v);
+      next = stateOf(j);
+    }
     if (stateChanged(prev, next, kindOf(j))) moveChain(doc, j.b, deltaMatrix(j, prev, next));
     return true;
   }
@@ -2939,13 +3940,17 @@ const Joints = (() => {
 
   // Live-Ziehen in der 3D-Ansicht (ohne eigenes App.change – Interact.onUp speichert den Rückgängig-Schritt)
   function applyDrag(jid, patch, opts = {}) {
-    const j = list(App.doc).find((x) => x.id === jid); if (!j || isConstraint(j)) return null;
+    const j = list(App.doc).find((x) => x.id === jid); if (!j || isConstraint(j) || isLoose(j)) return null;
     if (opts && opts.reverse && opts.snap) return applyReverseDrag(j, patch, opts.snap);
     const b = top(j.b, App.doc); if (!b || b.locked) return null;
     const prev = stateOf(j);
     const k = kindOf(j);
-    const next = computeDragState(j, patch || {});
+    let next = computeDragState(j, patch || {});
     Model.setFromMatrix(b, pose(j, next, null, App.doc));
+    if (looseOf(j.b, App.doc).length) {
+      solvePartConstraints(App.doc, j.b, Model.vars(App.doc).v);
+      next = stateOf(j);
+    }
     if (stateChanged(prev, next, k)) moveChain(App.doc, j.b, deltaMatrix(j, prev, next), { live: true });
     if (isTop(b.id, App.doc)) Viewer.updateNode(b.id, { matrix: Model.localMatrix(b) });
     for (const d of downstream(App.doc, j.b, { stopAtLocked: true })) {
@@ -2969,7 +3974,7 @@ const Joints = (() => {
 
   function remove(jid) {
     const cur = list().find((x) => x.id === jid);
-    const wasConn = isConstraint(cur);
+    const wasConn = isConstraint(cur) || isLoose(cur);
     App.change(wasConn ? 'Verbindung gelöst' : 'Gelenk gelöst', (doc) => { doc.joints = list(doc).filter((x) => x.id !== jid); });
     if (selJoint === jid) { selJoint = null; clearSelVis(); Panels.renderRight(); Panels.renderLeft(); }
     UI.toast(wasConn ? 'Verbindung gelöst – das Teil lässt sich wieder frei bewegen.' : 'Verbindung gelöst – das Teil bleibt, wo es gerade ist.', { icon: 'check' });
@@ -2996,7 +4001,7 @@ const Joints = (() => {
     return { key: 'ang', lo: j.min, hi: j.max, len: false };
   }
   async function check(jid, step) {
-    const j = list().find((x) => x.id === jid); if (!j || isConstraint(j)) return null;
+    const j = list().find((x) => x.id === jid); if (!j || isConstraint(j) || isLoose(j)) return null;
     const sw = sweepMeta(j);
     step = step || (sw.len ? Math.max(0.5, round((sw.hi - sw.lo) / 40, 1)) : 5);
     const A = top(j.a), B = top(j.b); if (!A || !B) return null;
@@ -3055,7 +4060,7 @@ const Joints = (() => {
   }
   function setStops(jid, lo, hi) {
     App.change('Gelenk-Anschlag', (doc) => {
-      const j = list(doc).find((x) => x.id === jid); if (!j || isConstraint(j)) return false;
+      const j = list(doc).find((x) => x.id === jid); if (!j || isConstraint(j) || isLoose(j)) return false;
       const a = round(Math.min(lo, hi), 2), b = round(Math.max(lo, hi), 2);
       const sw = sweepMeta(j);
       if (sw.key === 'pos') { j.minPos = a; j.maxPos = b; j.stopsLocked = true; }
@@ -3166,7 +4171,7 @@ const Joints = (() => {
   }
   function play(jid, btn) {
     if (anim) { const same = anim.jid === jid; stopPlay(); if (same) return; }
-    const j = list().find((x) => x.id === jid); if (!j || isConstraint(j)) return;
+    const j = list().find((x) => x.id === jid); if (!j || isConstraint(j) || isLoose(j)) return;
     const B = top(j.b); if (!B) return;
     if (B.locked) { UI.toast(T('asm.groundedJointErr', { name: Model.label(B) }), { icon: 'lock' }); return; }
     if (!isTop(B.id) || downstream(App.doc, j.b, { stopAtLocked: true }).some((k) => !isTop(k.b))) { UI.toast('Abspielen geht nur, wenn die bewegten Teile ganz oben im Verlauf liegen – in einer Gruppe zeigt das Bild sie als einen Körper. Mit dem Regler kannst du trotzdem jede Stellung ansehen.', { icon: 'info', ms: 5000 }); return; }
@@ -3252,6 +4257,44 @@ const Joints = (() => {
   function renderJointControls(j, sfx = '', opts = {}) {
     const A = top(j.a), B = top(j.b);
     const box = h('div', { class: 'joint-item', dataset: { jid: j.id } });
+    if (isLoose(j)) {
+      const k = kindOf(j);
+      const hintHtml = k === 'parallel'
+        ? `<b>${esc(Model.label(B))}</b> bleibt parallel zu <b>${esc(Model.label(A))}</b> (frei verschiebbar).`
+        : k === 'tangent'
+          ? `<b>${esc(Model.label(B))}</b> berührt <b>${esc(Model.label(A))}</b> tangential.`
+          : `<b>${esc(Model.label(B))}</b> hält festen Abstand zu <b>${esc(Model.label(A))}</b>.`;
+      box.append(h('div', { class: 'hint-box', html: hintHtml }));
+      if (k === 'distance') {
+        const fl = h('div', { class: 'fields' });
+        fl.append(UI.numField({
+          id: 'jt-dist' + sfx,
+          label: T('joint.distLabel'),
+          value: j.dist ?? 0,
+          unit: 'mm',
+          len: true,
+          expr: true,
+          onCommit: (v) => updateLoose(j.id, { dist: v }, { label: 'Abstand geändert', merge: 'jdist:' + j.id }),
+        }));
+        box.append(fl);
+      }
+      const r1 = h('div', { class: 'btn-row' });
+      const fb = h('button', { type: 'button', class: 'btn' + (j.flip ? ' primary' : ''), id: 'jt-flip' + sfx, 'aria-pressed': String(!!j.flip) });
+      fb.innerHTML = icon('mirror') + esc(k === 'parallel' ? T('joint.flipDir') : T('joint.flipSide'));
+      fb.onclick = () => flipLoose(j.id);
+      r1.append(fb);
+      if (!opts.full) {
+        const eb = h('button', { type: 'button', class: 'btn', id: 'jt-open' + sfx });
+        eb.innerHTML = icon('edit') + 'Bearbeiten';
+        eb.onclick = () => select(j.id);
+        r1.append(eb);
+      }
+      const del = h('button', { type: 'button', class: 'btn danger', id: 'jt-del' + sfx });
+      del.innerHTML = icon('ungroup') + esc(T('joint.removeBtn'));
+      del.onclick = () => remove(j.id);
+      box.append(r1, h('div', { class: 'btn-row' }, del));
+      return box;
+    }
     if (fixed(j)) {
       const modeLbl = j.mode === 'face' ? 'Fläche an Fläche' : 'Punkt an Punkt';
       box.append(h('div', { class: 'hint-box', html: `<b>${esc(Model.label(B))}</b> ist fest mit <b>${esc(Model.label(A))}</b> verbunden (${modeLbl}).` }));
@@ -3456,13 +4499,18 @@ const Joints = (() => {
   function treeSection() {
     const js = list().filter((j) => top(j.a) && top(j.b));
     if (!js.length) return null;
+    const V = js.some(isDistance) ? Model.vars(App.doc).v : null;
     const sec = h('div', { class: 'datum-tree joint-tree', id: 'joint-tree', 'data-help': 'fixedJoint' }, h('div', { class: 'section-h' }, T('joint.treeHeading')));
     for (const j of js) {
       const row = h('div', { class: 'tree-row joint-row' + (j.id === selJoint ? ' sel' : ''), 'data-joint': j.id });
-      const ic = h('span', { class: 'swatch joint' }); ic.innerHTML = icon(fixed(j) ? 'lock' : isAngle(j) ? 'rotate' : isCenter(j) ? 'cSymmetric' : 'hinge');
+      const icName = fixed(j) ? 'lock' : isAngle(j) ? 'rotate' : isCenter(j) ? 'cSymmetric' : isParallel(j) ? 'cParallel' : isTangent(j) ? 'cTangent' : isDistance(j) ? 'clearance' : 'hinge';
+      const ic = h('span', { class: 'swatch joint' }); ic.innerHTML = icon(icName);
       const subTxt = fixed(j) ? (j.flip ? `${T('joint.fixedKind')} · ↺` : T('joint.fixedKind'))
         : isAngle(j) ? `${fmtAngleU(evalAngleDeg(j.angle))}${j.flip ? ' · ↺' : ''}`
         : isCenter(j) ? T('joint.centerKind')
+        : isParallel(j) ? (j.flip ? `${T('joint.parallelKind')} · ↺` : T('joint.parallelKind'))
+        : isTangent(j) ? (j.flip ? `${T('joint.tangentKind')} · ↺` : T('joint.tangentKind'))
+        : isDistance(j) ? `${T('joint.distanceKind')} · ${Units.fmtLenU(evalDist(j, V), 2)}`
         : isCyl(j) ? 'Zylindrisch' : isPlanar(j) ? 'Eben' : isBall(j) ? 'Kugel' : isSlot(j) ? 'Langloch' : (slide(j) ? 'Schieben' : 'Drehen');
       const del = h('button', { type: 'button', class: 'j-del', 'aria-label': T('common.delete'), 'data-tip': T('common.delete') });
       del.innerHTML = icon('trash');
@@ -3475,6 +4523,7 @@ const Joints = (() => {
           { icon: 'edit', label: 'Bearbeiten', run: () => select(j.id) },
           ...(fixed(j) ? [{ icon: 'mirror', label: T('joint.fixedFlip'), run: () => flipFixed(j.id) }] : []),
           ...(isAngle(j) ? [{ icon: 'mirror', label: T('joint.angleFlip'), run: () => flipAngle(j.id) }] : []),
+          ...(isLoose(j) ? [{ icon: 'mirror', label: isParallel(j) ? T('joint.flipDir') : T('joint.flipSide'), run: () => flipLoose(j.id) }] : []),
           { icon: 'edit', label: T('common.rename'), run: async () => { const n = await UI.prompt(T('common.rename'), T('common.name'), jointLabel(j), T('common.rename')); if (n && n.trim()) App.change('Verbindung umbenannt', (doc) => { const x = list(doc).find((y) => y.id === j.id); if (x) x.name = n.trim(); }); } },
           '-',
           { icon: 'trash', label: T('common.delete'), run: () => remove(j.id) },
@@ -3490,7 +4539,8 @@ const Joints = (() => {
     if (!j) return false;
     const A = top(j.a), B = top(j.b);
     if (!A || !B) return false;
-    const w = h('div', { class: 'props', id: 'joint-edit-panel', 'data-help': fixed(j) ? 'fixedJoint' : isAngle(j) ? 'mateAngle' : isCenter(j) ? 'mateCenter' : null });
+    const helpKey = fixed(j) ? 'fixedJoint' : isAngle(j) ? 'mateAngle' : isCenter(j) ? 'mateCenter' : isParallel(j) ? 'mateParallel' : isTangent(j) ? 'mateTangent' : isDistance(j) ? 'mateDistance' : isCyl(j) ? 'mateCyl' : isPlanar(j) ? 'matePlanar' : isBall(j) ? 'mateBall' : isSlot(j) ? 'mateSlot' : null;
+    const w = h('div', { class: 'props', id: 'joint-edit-panel', 'data-help': helpKey });
     const nm = h('input', { id: 'jt-name', value: jointLabel(j), 'aria-label': T('common.name') });
     nm.addEventListener('change', () => {
       const v = nm.value.trim();
@@ -3514,7 +4564,7 @@ const Joints = (() => {
   function panel(it) {
     const js = allOf(it.id).filter((j) => top(j.a) && top(j.b));
     if (!js.length) return null;
-    const anyConn = js.some((j) => isConstraint(j) || isCyl(j) || isPlanar(j) || isBall(j) || isSlot(j));
+    const anyConn = js.some((j) => isConstraint(j) || isLoose(j) || isCyl(j) || isPlanar(j) || isBall(j) || isSlot(j));
     const title = js.length > 1 ? (anyConn ? `Verbindungen (${js.length})` : `Gelenke (${js.length})`) : (anyConn ? 'Verbindung' : 'Gelenk');
     const sec = h('div', { class: 'section', id: 'joint-sec' }, h('div', { class: 'section-h' }, title));
     js.forEach((j, idx) => {
@@ -3547,8 +4597,8 @@ const Joints = (() => {
       relinkFixed();
       drawSelectedJoint();
     });
-    App.on('docLoaded', () => { stopPick(); clearDragVis(); });
-    App.on('mode', () => { stopPick(); clearDragVis(); });
+    App.on('docLoaded', () => { stopPick(); clearDragVis(); closeDockPrompt(); });
+    App.on('mode', () => { stopPick(); clearDragVis(); closeDockPrompt(); });
   }
 
   return {
@@ -3557,6 +4607,9 @@ const Joints = (() => {
     startFixed,
     startCylindrical,
     startPlanar,
+    startParallel,
+    startTangent,
+    startDistance,
     startBall,
     startSlot,
     startAngle,
@@ -3567,6 +4620,7 @@ const Joints = (() => {
     updateFixed,
     flipFixed,
     syncFixed,
+    syncAll,
     addAngle,
     updateAngle,
     flipAngle,
@@ -3579,6 +4633,20 @@ const Joints = (() => {
     addPlanar,
     addBall,
     addSlot,
+    addParallel,
+    addTangent,
+    addDistance,
+    updateLoose,
+    setDistance,
+    flipLoose,
+    looseOf,
+    resolvePlaneRef,
+    resolveCylRef,
+    canConnect,
+    dockOptions,
+    applyDockJoint,
+    onDockDrop,
+    closeDockPrompt,
     setAngle,
     setState,
     setKind,
@@ -3620,6 +4688,7 @@ const Joints = (() => {
     isFixedPart,
     fixedJointOf,
     get picking() { return !!pickState; },
+    get dockPromptOpen() { return !!dockPop; },
     get selected() { return selJoint; },
     get list() { return list(); },
     get playing() { return anim ? { jid: anim.jid, a: anim.a, st: anim.st } : null; },

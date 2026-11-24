@@ -235,6 +235,7 @@ const Commands = (() => {
     add('explain', 'Erklär diesen Schritt', 'help', 'erklär erklären was ist das schritt warum', () => Explain.dialog(), { group: 'Projekt' });
     add('weak', 'Schwachstellen suchen', 'target', 'schwachstellen schwach prüfen bruch dünn rand loch festigkeit stabil', () => Weak.dialog(), { group: 'Projekt' });
     add('geom-check', 'Geometrie prüfen (kaputte Flächen, winzige Kanten)', 'target', 'geometrie prüfen check kaputt fläche kante winzig selbstschnitt brep fehler', () => GeomCheck.open(), { group: 'Projekt' });
+    add('clash-check', 'Durchdringungen suchen (Baugruppe prüfen)', 'boolIntersect', 'durchdringung durchdringungen kollision kollisionen überlappung überschneidung schnitt baugruppe prüfen clash interference bg-10', () => ClashCheck.open(), { group: 'Baugruppe' });
     add('versions', 'Versionen: speichern, vergleichen, zurückholen', 'rollback', 'version versionen stand vergleichen zurück sichern', () => Versions.dialog(), { group: 'Projekt' });
     add('version-save', 'Jetzigen Stand als Version speichern', 'save', 'version speichern sichern stand', async () => { const n = await UI.prompt('Version speichern', 'Name der Version', 'Version ' + (Versions.list().length + 1), 'Speichern'); if (n != null) Versions.save(n); }, { group: 'Projekt' });
     add('chain', 'Kantenkette wählen', 'chainEdges', 'kette kanten umriss tangential rand alle zusammen', () => Select.chain(), { group: 'Bearbeiten', needSel: true });
@@ -257,6 +258,9 @@ const Commands = (() => {
     add('sync-assembly', 'Baugruppe aktualisieren', 'undo', 'baugruppe aktualisieren sync bauteil abgleichen', () => Assembly.syncCurrentAssembly({ announce: true }), { group: 'Werkzeuge' });
     add('mate-cyl', 'Verbindung: Zylindrisch (Welle in Bohrung)', 'axes', 'verbindung gelenk zylindrisch welle bohrung bolzen achse drehen schieben bg-06', () => Joints.startCylindrical(), { group: 'Baugruppe' });
     add('mate-planar', 'Verbindung: Eben (Fläche auf Fläche)', 'planeXY', 'verbindung gelenk eben planar flaeche fläche schieben drehen bg-06', () => Joints.startPlanar(), { group: 'Baugruppe' });
+    add('mate-parallel', 'Verbindung: Parallel (zwei Flächen)', 'cParallel', 'verbindung parallel flaechen flächen ausrichten bg-07', () => Joints.startParallel(), { group: 'Baugruppe' });
+    add('mate-tangent', 'Verbindung: Tangential (Fläche an Zylinder)', 'cTangent', 'verbindung tangential beruehren berühren zylinder flaeche fläche bg-07', () => Joints.startTangent(), { group: 'Baugruppe' });
+    add('mate-distance', 'Verbindung: Abstand (zwei Flächen)', 'clearance', 'verbindung abstand distanz spalt flaechen flächen formel bg-07', () => Joints.startDistance(), { group: 'Baugruppe' });
     add('mate-angle', 'Verbindung: Winkel (Flächen oder Kanten)', 'rotate', 'verbindung gelenk winkel grad formel flaeche fläche kante schraeg schräg neigung angle mate bg-07', () => Joints.startAngle(), { group: 'Baugruppe' });
     add('mate-center', 'Verbindung: Mittig (zwischen zwei Flächen / Nut)', 'cSymmetric', 'verbindung gelenk mittig mitte zentriert breite nut flaeche fläche width center mate bg-07', () => Joints.startCenter(), { group: 'Baugruppe' });
     add('mate-ball', 'Verbindung: Kugel (Kugelgelenk)', 'circle', 'verbindung gelenk kugel kugelgelenk ball punkt drehen frei bg-06', () => Joints.startBall(), { group: 'Baugruppe' });

@@ -7786,11 +7786,13 @@ export function createKernel(R, oc) {
 
   // Kollisionen: welche Teile stecken ineinander, und welche Teile treffen die Prüfkörper (z. B. Propellerscheiben)?
   // probes: [{ c:[x,y,z], r, h, skip:[ids] }] – senkrechte Zylinder; skipPairs: Teile, die nicht paarweise geprüft werden
-  function clashes(scene, probes = [], skipPairs = []) {
+  function clashes(scene, probes = [], skipPairs = [], opts = {}) {
     ingestBlobs(scene);
     const errors = [];
     const solids = evaluateShapes(scene, errors);
     const boxes = solids.map((s) => bboxOf(s.shape));
+    const minVol = opts && opts.minVol != null ? Number(opts.minVol) : 0.05;
+    const withMesh = !!(opts && opts.withMesh);
     const hit = (a, b) => a[0] < b[3] - 0.01 && b[0] < a[3] - 0.01 && a[1] < b[4] - 0.01 && b[1] < a[4] - 0.01 && a[2] < b[5] - 0.01 && b[2] < a[5] - 0.01;
     const overlap = (A, B) => { let x = null; try { x = A.intersect(B); const v = R.measureVolume(x); return v; } catch (_) { return 0; } finally { safeDelete(x); } };
     const pairs = [];
@@ -7798,10 +7800,40 @@ export function createKernel(R, oc) {
       if (skipPairs.includes(solids[i].id)) continue;
       for (let j = i + 1; j < solids.length; j++) {
         if (skipPairs.includes(solids[j].id) || !hit(boxes[i], boxes[j])) continue;
-        const v = overlap(solids[i].shape, solids[j].shape);
-        if (v > 0.05) pairs.push({ a: solids[i].id, b: solids[j].id, v });
+        if (!withMesh) {
+          const v = overlap(solids[i].shape, solids[j].shape);
+          if (v > minVol) pairs.push({ a: solids[i].id, b: solids[j].id, v });
+          continue;
+        }
+        let x = null;
+        try {
+          x = solids[i].shape.intersect(solids[j].shape);
+          const v = R.measureVolume(x);
+          if (v > minVol) {
+            const bbox = bboxOf(x);
+            const center = shapeCenterOfMass(x, bbox);
+            let mesh = null;
+            try {
+              const tol = Math.max(0.02, Math.min(meshTol(bbox), 0.35));
+              const ang = Math.min(Q.ang, 0.25);
+              const m = x.mesh({ tolerance: tol, angularTolerance: ang });
+              const e = x.meshEdges({ tolerance: tol, angularTolerance: ang });
+              if (m && m.vertices && m.vertices.length && m.triangles && m.triangles.length) {
+                mesh = {
+                  vertices: new Float32Array(m.vertices),
+                  normals: new Float32Array(m.normals),
+                  triangles: new Uint32Array(m.triangles),
+                  lines: new Float32Array(e && e.lines ? e.lines : []),
+                };
+              }
+            } catch (_) {}
+            pairs.push({ a: solids[i].id, b: solids[j].id, v, bbox, center, mesh });
+          }
+        } catch (_) {}
+        finally { safeDelete(x); }
       }
     }
+    if (withMesh) pairs.sort((p, q) => q.v - p.v);
     const hits = probes.map((pr) => {
       const out = []; let cyl = null;
       try {
@@ -7817,7 +7849,7 @@ export function createKernel(R, oc) {
       return out;
     });
     for (const s of solids) safeDelete(s.shape);
-    return { pairs, hits, errors };
+    return { pairs, hits, errors, checkedCount: solids.length };
   }
 
   // Wand um Schraubenlöcher in beliebigen Teilen: um jede runde Bohrung (volle Zylinderfläche, nach innen gewölbt)

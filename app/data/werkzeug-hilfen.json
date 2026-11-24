@@ -1174,6 +1174,21 @@
     "hilfe": "Legt das zweite gewählte Teil bündig an das erste (Flächen gegeneinander und Mitten übereinander oder Punkt auf Punkt). Das verbundene Teil wandert bei jeder Bewegung oder Größenänderung des ersten Teils mit und lässt sich nicht mehr einzeln verschieben. Unter „Verbindungen“ links im Verlauf kannst du die Verbindung jederzeit umdrehen, drehen, einen Abstand setzen oder lösen.",
     "tipp": "Halte während der Wahl die rechte Maustaste gedrückt, um das Modell zu drehen und verdeckte Unterseiten bequem anzuklicken."
   },
+  "mateParallel": {
+    "tip": "Zwei ebene Flächen parallel zueinander ausrichten",
+    "hilfe": "Dreht das zweite Teil so, dass beide gewählten Flächen exakt parallel stehen. Das Teil bleibt frei verschiebbar (in allen drei Richtungen) und lässt sich weiter um die Flächennormale drehen – und du kannst diese Verbindung mit weiteren Abständen oder Gelenken kombinieren.",
+    "tipp": "Mit „Richtung umkehren“ im Eigenschaften-Panel drehst du die gewählte Fläche um 180° auf die Gegenseite."
+  },
+  "mateTangent": {
+    "tip": "Ebene Fläche tangential an einen Zylinder legen",
+    "hilfe": "Richtet eine ebene Fläche und eine runde Zylinderfläche so aus, dass sich beide genau an einer Linie berühren (Reihenfolge egal). Änderst du später den Durchmesser des Zylinders oder schiebst das erste Teil, wandert die tangentiale Lage automatisch mit.",
+    "tipp": "Mit „Seite umkehren“ springt das Teil auf die gegenüberliegende Seite des Zylinders bzw. der Ebene."
+  },
+  "mateDistance": {
+    "tip": "Zwei ebene Flächen parallel im festen Abstand halten",
+    "hilfe": "Hält zwei ebene Flächen verschiedener Teile parallel und genau im angegebenen Abstand – mit Zahl, Einheit oder Formel (z. B. spalt + 2). Der Abstand lässt sich jederzeit rechts oder in der Maße-Tabelle ändern und mit weiteren Verbindungen (z. B. Eben oder einem zweiten Abstand quer dazu) kombinieren.",
+    "tipp": "Ein negativer Abstand oder „Seite umkehren“ legt die Fläche auf die andere Seite – perfekt für Überlappungen oder Anschläge."
+  },
   "subAssembly": {
     "tip": "Eine Baugruppe als bewegliches Ganzes in eine andere Baugruppe einsetzen",
     "hilfe": "Du kannst eine gespeicherte oder geöffnete Baugruppe genau wie ein Bauteil in eine größere Baugruppe einsetzen. Alle enthaltenen Teile und Unterbaugruppen bleiben verknüpft und bewegen, drehen und verschieben sich gemeinsam als eine Einheit.",
@@ -1203,5 +1218,15 @@
     "tip": "Stift im Langloch: gleitet entlang der Mittellinie bis zum Endanschlag",
     "hilfe": "Setzt einen Stift (Zylinder, Kreisrand oder Punkt) genau auf die Mittellinie eines Langlochs. Der Stift lässt sich entlang des Langlochs schieben und drehen und bleibt am Anfang und Ende des Langlochs automatisch am Anschlag stehen.",
     "tipp": "Klick zuerst auf die Innenfläche oder den Rand des Langlochs und dann auf den Stift. Rechts kannst du Weg, Drehwinkel und die Anschläge jederzeit anpassen."
+  },
+  "dockSnap": {
+    "tip": "Andock-Punkte beim Ziehen: automatisch einrasten und verbinden",
+    "hilfe": "Beim Ziehen eines Teils zeigen sich Lochmitten, Flächenmitten und Kantenmitten an den anderen Teilen. Ziehst du ein Teil (zum Beispiel eine Schraube) nahe an einen passenden Punkt, rastet es genau ausgerichtet ein. Im Modus „Einfach“ wird dabei automatisch eine feste Verbindung angelegt, im Modus „Profi“ wählst du beim Loslassen die gewünschte Verbindungsart.",
+    "tipp": "Halte Strg (Mac: cmd) gedrückt, um frei ohne Einrasten zu ziehen. In der Profi-Auswahl übernimmt Enter „Fest“ und Esc rastet nur ohne Verbindung ein."
+  },
+  "clashCheck": {
+    "tip": "Prüft alle Teile der Baugruppe paarweise auf Durchdringungen und listet jede Überschneidung",
+    "hilfe": "Sucht in der ganzen Baugruppe nach Stellen, an denen zwei Teile ineinanderstecken. Jedes betroffene Paar erscheint in einer Liste mit seinem Überschneidungs-Volumen. Klickst du auf einen Eintrag, springt die Kamera direkt hin und hebt den gemeinsamen Überschneidungskörper rot hervor.",
+    "tipp": "Teile, die sich nur exakt Fläche an Fläche berühren, werden nicht als Fehler gemeldet – nur echte Überschneidungen mit Volumen."
   }
 }

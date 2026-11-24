@@ -2145,12 +2145,28 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Zeitleiste sofort bei Bauteil-Wechsel**: `Timeline` reagiert auf `App.on('ctx')` und `App.on('peek')` synchron ohne 30-ms-Entprell-Verzug (`t_bauteil`, `[F-11241523]`).
 - [ ] **Von Hand**: In der Frontansicht auf einem Quader `Alt + Klick` und Rechtsklick auf ein Maßschild prüfen, in eine Skizze wechseln (Ansichtsknöpfe rechts unten bleiben ausgeblendet) und über „Neues Bauteil“ die leere Bauteil-Zeitleiste prüfen.
 
+## Verbindungen parallel, tangential, mit Abstand (Auto [A-088], BG-07)
+
+- [x] **Abstand zwischen zwei Flächen (`5 → 12 mm` & Formeln)**: Zwei Quader mit `addDistance(..., 5)` liefern gemessen `5,0 mm` (`Measure.minDistance` und Flächenabstand); Änderung über `#jt-dist` auf `12` ergibt `12,0 mm`; Formel `spalt + 2` mit Maß `spalt = 8` → `10,0 mm`, nach Maßänderung `spalt = 15` automatisch `17,0 mm`.
+- [x] **Parallel (`addParallel`)**: Zwei ebene Flächen werden parallel ausgerichtet (`|nA · nB| > 0,99999`), ohne die Lage zu verschieben; freies Verschieben in X/Y/Z bleibt erhalten, Kippen wird zurückgeführt und „Richtung umkehren“ (`#jt-flip`) dreht die Normale um `180°`.
+- [x] **Tangential (`addTangent`)**: Ebene Fläche an Zylinder (`d = 16`, `r = 8`) berührt in beiden Reihenfolgen (`Ebene→Zylinder` und `Zylinder→Ebene`) mit `minDist < 0,02 mm`; „Seite umkehren“ spiegelt auf `-8,0 mm`, Durchmesseränderung auf `24` führt automatisch auf `12,0 mm` nach.
+- [x] **Kombinierbar & Konfliktschutz**: `planar` (`Z = 0`) + `distance` (`6 mm` in X) gelten gleichzeitig (Verschieben in Y frei, X/Z gehalten, Änderung auf `11 mm` wirkt); ein widersprüchlicher zweiter Abstand wird sauber abgelehnt (`ok: false`).
+- [x] **Verlauf, Rückgängig, Befehle & Hilfetexte**: Verbindungen erscheinen in `#joint-tree`, lassen sich per `Strg+Z` rückgängig machen und löschen; Befehlssuche (`mate-parallel`, `mate-tangent`, `mate-distance`) und Hilfetexte (`mateParallel`, `mateTangent`, `mateDistance`) sind ohne Seitenfehler vorhanden.
+- [ ] **Von Hand**: Im Browser zwei Teile über Kontextleiste → „Verbindung“ → „Parallel“, „Tangential“ und „Abstand“ (inkl. Eingabefeld `#jp-dist` in der oberen Leiste) verbinden, im 3D-Bild ziehen und die orange Abstandslinie im Verlauf prüfen.
+
 ## Unterbaugruppen und Teil festsetzen (Auto [A-084], BG-03, BG-04)
 
 - [x] **Unterbaugruppe einsetzen & verschieben**: Eine gespeicherte Unterbaugruppe mit 2 Bauteilen lässt sich über „Bauteil einsetzen“ in eine Hauptbaugruppe einfügen, im Verlauf aufklappen, gegen Zyklen absichern, beim Verschieben gemeinsam mit beiden Teilen bewegen und übersteht Neuladen aus IndexedDB.
 - [x] **Teil festsetzen & Schloss im Verlauf**: Rechtsklick → „Festsetzen“ (`#cm-ground` / `#tm-ground`) setzt `locked`, zeigt ein Schloss-Symbol (`.lock-mark`) im Verlauf, deaktiviert Lage-Felder und schützt das Teil vor Mausziehen, Pfeiltasten, Dreh-/Ausrichte-Aktionen sowie Verbindungen/Gelenken.
 - [x] **Lösen, Rückgängig, Suche & Hilfe**: „Festsetzen lösen“ gibt das Teil wieder frei, `Strg+Z` stellt den Zustand wieder her, und Befehlssuche sowie Hilfetexte (`subAssembly`, `groundPart`) sind vorhanden.
 - [ ] **Von Hand**: Im Browser eine Unterbaugruppe mit mehreren Teilen einsetzen, im 3D-Bild mit der Maus verschieben, ein Grundteil per Rechtsklick festsetzen und danach mit einem weiteren Teil per „Verbinden: fest“ verknüpfen.
+
+## Andock-Punkte und Einrasten beim Ziehen (Auto [A-090], BG-08)
+
+- [x] **Andock-Punkte sichtbar & Schraube in Bohrung (Einfach)**: Beim Ziehen einer geneigten M3-Schraube zeigen sich Loch-, Flächen- und Kantenmitten an der gelochten Platte; über der Bohrung rastet die Schraubenachse deckungsgleich in der Bohrungsachse ein (`z = 6 mm`), legt im Modus „Einfach“ automatisch eine feste Verbindung an und wandert beim Verschieben der Platte mit.
+- [x] **Verbindungs-Auswahl im Profi-Modus**: Beim Loslassen einer Schraube auf der zweiten Bohrung erscheint `#dock-joint-pop` mit „Fest“, „Zylindrisch“, „Drehen“ und „Nur einrasten“; Wahl von „Zylindrisch“ legt die zylindrische Verbindung deckungsgleich auf der Bohrungsachse an.
+- [x] **Flächenmitte, „Nur einrasten“ & Strg**: Ein Quader rastet auf der Flächenmitte der Platte ein, bietet „Eben“ und „Nur einrasten“ an, legt bei „Nur einrasten“ keine Verbindung an und ignoriert bei gedrücktem `Strg` die Andock-Punkte; Hilfetext `dockSnap` ist vorhanden und es treten keine Seitenfehler auf.
+- [ ] **Von Hand**: Im Browser eine Baugruppe mit gelochter Platte und Normschraube öffnen, die Schraube per Maus über verschiedene Löcher und Kanten ziehen, die farbigen Andock-Punkte und das Einrasten prüfen und im Modus „Profi“ verschiedene Verbindungsarten ausprobieren.
 
 ## Verbindungen mit Winkel und mittig (Auto [A-089], BG-07)
 
@@ -2159,6 +2175,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Quader mittig in 20-mm-Nut**: Ein schmaler Quader (`8 mm`) wird mittig zwischen die beiden Seitenwände einer `20 mm` breiten Nut gesetzt; links und rechts ergibt sich exakt derselbe Abstand (`6,00 mm`), der auch beim Verschieben entlang/quer zur Nut, beim Verschieben des Nut-Blocks und im 2-Flächen-Modus (`bMode: 'faces'`) erhalten bleibt.
 - [x] **Verlauf, Löschen, Rückgängig, Suche & Hilfe**: Verbindungen erscheinen im Verlauf unter `#joint-tree`, lassen sich rechts bearbeiten, per `#jt-del` lösen und per `Strg+Z` wiederherstellen; Befehlssuche (`mate-angle`, `mate-center`) und Hilfetexte (`mateAngle`, `mateCenter`) sind ohne Seitenfehler vorhanden.
 - [ ] **Von Hand**: Im Browser zwei Körper über „Verbindung“ → „Winkel“ (Fläche/Kante) bzw. „Mittig“ (Nutwand 1, Nutwand 2, Teil) durch Anklicken im 3D-Bild verbinden und im Panel rechts Winkel/Formel sowie die angezeigten Nutabstände prüfen.
+
+## Durchdringungen der ganzen Baugruppe als Liste (Auto [A-092], BG-10)
+
+- [x] **3 Teile, 2 überlappen um 1000 mm³**: Klick auf „Durchdringungen suchen“ (`#proj-clashes`) liefert genau einen Eintrag (`Teil A – Teil B`) mit Volumen `≈ 1000 mm³` und berechnetem Schnittnetz.
+- [x] **Anspringen & rote 3D-Hervorhebung**: Klick auf den Eintrag fährt die Kamera direkt zum Überschneidungskörper (`[5, 5, 5]`), wählt beide Teile aus und zeigt die Schnittform rot im Overlay (`#0xe5484d`).
+- [x] **Berührende Flächen & „Noch mal“**: Nach Verschieben auf bündiges Berühren (`Abstand = 0`) erscheint der Hinweis auf Modelländerung; „Noch mal“ meldet „Keine Durchdringungen“.
+- [x] **Echte Baugruppe mit Verweisen (`ref`), Suche & Hilfe**: In einer Baugruppe (`docType: 'assembly'`) mit 3 eingesetzten `ref`-Instanzen findet `#t-clashes` exakt das überlappende Paar (`≈ 1000 mm³`); Prüfen-Menü, Befehlssuche (`clash-check`) und Hilfetext (`clashCheck`) arbeiten ohne Seitenfehler.
+- [ ] **Von Hand**: Im Browser eine Baugruppe mit mehreren leicht überlappenden und berührenden Teilen öffnen, auf „Durchdringungen suchen“ klicken, einen Listeneintrag anklicken und prüfen, ob die Kamera zur Stelle springt und die Überschneidung rot durchschimmert.
 
 ## Teile mit der Maus bewegen, Verbindungen rechnen mit (Auto [A-091], BG-09)
 
