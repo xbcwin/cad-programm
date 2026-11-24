@@ -26,7 +26,7 @@ const Commands = (() => {
     { id: 'hideSel', get group() { return T('dlg.keys.groupModel'); }, get label() { return T('kbd.hideSel'); }, def: 'shift+h', run: () => { if (App.sel.length) Actions.hideSelected(); else Actions.showAll(); } },
     { id: 'invertSel', get group() { return T('dlg.keys.groupModel'); }, get label() { return T('kbd.invertSel'); }, def: 'ctrl+shift+i', run: () => Actions.invertSelection() },
     { id: 'dupLinked', get group() { return T('dlg.keys.groupModel'); }, get label() { return T('kbd.dupLinked'); }, def: 'ctrl+shift+d', run: () => Actions.duplicateLinked() },
-    { id: 'editItem', get group() { return T('dlg.keys.groupModel'); }, get label() { return T('kbd.editItem'); }, def: 'e', run: () => { if (App.sel.length !== 1) return false; const f = Model.find(App.doc, App.sel[0]); if (!f) return false; if ((f.item.kind === 'extrude' || f.item.kind === 'revolve' || f.item.kind === 'sweep' || f.item.kind === 'rib' || f.item.kind === 'wrap' || f.item.kind === 'emboss') && f.item.p.sketch) Sketch.editItem(f.item.id); else if (f.item.kind === 'group' && App.doc.items.includes(f.item)) Comp.edit(f.item.id); } },
+    { id: 'editItem', get group() { return T('dlg.keys.groupModel'); }, get label() { return T('kbd.editItem'); }, def: 'e', run: () => { if (App.sel.length !== 1) return false; const f = Model.find(App.doc, App.sel[0]); if (!f) return false; if (f.item.kind === 'ref') Comp.openRef(f.item.id); else if (typeof Assembly !== 'undefined' && Assembly.canOpenInTab(f.item, App.doc)) Assembly.openPartTab(f.item.id); else if ((f.item.kind === 'extrude' || f.item.kind === 'revolve' || f.item.kind === 'sweep' || f.item.kind === 'rib' || f.item.kind === 'wrap' || f.item.kind === 'emboss') && f.item.p.sketch) Sketch.editItem(f.item.id); else if (f.item.kind === 'group' && App.doc.items.includes(f.item)) Comp.edit(f.item.id); } },
     { id: 'delete', get group() { return T('dlg.keys.groupModel'); }, get label() { return T('kbd.delete'); }, def: 'delete', run: () => { if (App.sel.length) Actions.remove(); else return false; } },
     { id: 'hole', get group() { return T('dlg.keys.groupModel'); }, get label() { return T('kbd.hole'); }, def: 'h', run: () => { if (App.sel.length) Actions.toggleRole(); else return false; } },
     { id: 'similar', get group() { return T('dlg.keys.groupModel'); }, get label() { return T('kbd.similar'); }, def: 'a', run: () => { if (App.sel.length || App.edges.length) Select.similar(); else return false; } },
@@ -247,11 +247,13 @@ const Commands = (() => {
     add('planes', 'Ursprungsebenen ein/aus', 'originPlanes', 'ursprung ebenen xy xz yz origin', () => ViewPrefs.toggle('planes'), { group: 'Ansicht' });
     add('axes', 'Achsen ein/aus', 'axes', 'achsen x y z', () => ViewPrefs.toggle('axes'), { group: 'Ansicht' });
     add('newcomp', 'Neues Bauteil', 'parts', 'bauteil komponente baugruppe component neu', () => Comp.newComponent(), { group: 'Werkzeuge' });
-    add('new-assembly', 'Neue Baugruppe (Dokument)', 'parts', 'baugruppe assembly neu dokument verweis', () => Start.newAssembly(), { group: 'Projekt' });
-    add('insert-part', 'Bauteil in Baugruppe einsetzen', 'parts', 'bauteil einsetzen verweis baugruppe assembly', () => {
+    add('new-assembly', 'Neue Baugruppe anlegen', 'parts', 'baugruppe assembly neu dokument tab verweis', () => Start.openNewTab(Model.newAssemblyDoc(T('asm.defaultName'))), { group: 'Projekt' });
+    add('insert-part', 'Bauteil in Baugruppe einsetzen …', 'parts', 'bauteil einsetzen verweis baugruppe assembly einfuegen einfügen teil', () => {
       if (Model.isAssembly(App.doc)) Comp.insertPartDialog();
       else UI.toast('Wechsle zuerst in eine Baugruppe (oder lege über Start → „Neue Baugruppe“ eine an).', { icon: 'info' });
-    }, { group: 'Baugruppe', when: () => Model.isAssembly(App.doc) });
+    }, { group: 'Baugruppe' });
+    add('open-part-tab', 'Bauteil im Tab öffnen', 'edit', 'bauteil tab oeffnen öffnen baugruppe bearbeiten', () => { const t = App.sel.length ? Model.topOf(App.doc, App.sel[0]) : null; if (t && Assembly.canOpenInTab(t, App.doc)) Assembly.openPartTab(t.id); else UI.toast(T('asm.selectPartFirst'), { icon: 'info' }); }, { group: 'Werkzeuge' });
+    add('sync-assembly', 'Baugruppe aktualisieren', 'undo', 'baugruppe aktualisieren sync bauteil abgleichen', () => Assembly.syncCurrentAssembly({ announce: true }), { group: 'Werkzeuge' });
     add('editcomp', 'Gewählte Gruppe als Bauteil bearbeiten', 'edit', 'bauteil bearbeiten kontext', () => { const t = App.sel.length ? Model.topOf(App.doc, App.sel[0]) : null; if (t && t.kind === 'group') Comp.edit(t.id); else UI.toast('Wähle zuerst eine Gruppe oder ein Bauteil aus.', { icon: 'info' }); }, { group: 'Werkzeuge' });
     add('isolate', 'Gewähltes Teil isolieren', 'focusView', 'isolieren nur dieses zeigen', () => { const t = App.sel.length ? Model.topOf(App.doc, App.sel[0]) : null; if (t) Comp.toggleIso(t.id); }, { group: 'Ansicht' });
     add('drawing', 'Technische Zeichnung öffnen', 'sheet', 'zeichnung ansichten bemaßung pdf dreitafel', () => setMode('drawing'), { group: 'Werkzeuge' });

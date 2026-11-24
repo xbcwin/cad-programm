@@ -396,10 +396,11 @@ const Panels = (() => {
       const rolled = ownIdx >= 0 && (!ctxTop || inCtx) && ownIdx >= Timeline.markerPos();
       const row = h('div', { class: 'node' + (selSet.has(it.id) ? ' sel' : '') + (it.hidden ? ' hidden-item' : '') + (it.suppressed ? ' supp' : '') + (rolled ? ' rolled' : '') + (ctxTop && !inCtx ? ' ctx-other' : '') + (ctxTop === it ? ' ctx-active' : ''), draggable: 'true', dataset: { id: it.id } });
       const tw = h('button', { type: 'button', class: 'tw' + (expanded.has(it.id) ? ' open' : ''), 'aria-label': T('left.tree.expand') });
-      if (it.kind === 'group' || (it.finishes || []).length) { tw.innerHTML = icon('chevR'); tw.onclick = (e) => { e.stopPropagation(); expanded.has(it.id) ? expanded.delete(it.id) : expanded.add(it.id); renderLeft(); }; }
+      if ((it.kind === 'group' && !it.partRef) || (it.finishes || []).length) { tw.innerHTML = icon('chevR'); tw.onclick = (e) => { e.stopPropagation(); expanded.has(it.id) ? expanded.delete(it.id) : expanded.add(it.id); renderLeft(); }; }
       else tw.style.visibility = 'hidden';
       const sw = h('span', { class: 'swatch' + (it.role === 'hole' ? ' hole' : ''), style: { background: it.color } });
-      if (it.comp) { sw.innerHTML = icon('parts'); sw.classList.add('comp'); }
+      if (it.partRef) { sw.innerHTML = icon('parts'); sw.classList.add('partref'); }
+      else if (it.comp) { sw.innerHTML = icon('parts'); sw.classList.add('comp'); }
       else if (it.kind === 'ref') { sw.innerHTML = icon('parts'); sw.classList.add('comp', 'ref'); }
       const nm = h('span', { class: 'nm', title: Model.label(it) }, Model.label(it));
       const into = App.mergedInto(it.id), intoF = into ? Model.find(App.doc, into) : null, OPI = { join: '∪', cut: '−', common: '∩' };
@@ -413,7 +414,12 @@ const Panels = (() => {
       eye.onclick = (e) => { e.stopPropagation(); App.change(it.hidden ? 'Eingeblendet' : 'Ausgeblendet', (doc) => { const f = Model.find(doc, it.id); f.item.hidden = !f.item.hidden; }); };
       const del = h('button', { type: 'button', 'aria-label': T('common.delete'), 'data-tip': T('common.delete') }); del.innerHTML = icon('trash');
       del.onclick = (e) => { e.stopPropagation(); Actions.remove([it.id]); };
-      if (topIdx >= 0 && it.kind === 'group') { const be = h('button', { type: 'button', 'aria-label': T('left.tree.editComp'), 'data-tip': App.ctx === it.id ? T('left.tree.editCompEnd') : T('left.tree.editCompStart') }); be.innerHTML = icon(App.ctx === it.id ? 'check' : 'edit'); be.onclick = (e) => { e.stopPropagation(); App.ctx === it.id ? App.setCtx(null) : Comp.edit(it.id); }; acts.append(be); }
+      if (topIdx >= 0 && it.partRef && typeof Assembly !== 'undefined') {
+        const ob = h('button', { type: 'button', class: 'act-open-tab', 'aria-label': T('asm.openInTab'), 'data-tip': T('asm.openInTabTip'), 'data-help': 'assemblyPartTab' });
+        ob.innerHTML = icon('edit');
+        ob.onclick = (e) => { e.stopPropagation(); Assembly.openPartTab(it.id); };
+        acts.append(ob);
+      } else if (topIdx >= 0 && it.kind === 'group') { const be = h('button', { type: 'button', 'aria-label': T('left.tree.editComp'), 'data-tip': App.ctx === it.id ? T('left.tree.editCompEnd') : T('left.tree.editCompStart') }); be.innerHTML = icon(App.ctx === it.id ? 'check' : 'edit'); be.onclick = (e) => { e.stopPropagation(); App.ctx === it.id ? App.setCtx(null) : Comp.edit(it.id); }; acts.append(be); }
       if (it.kind === 'ref') { const ro = h('button', { type: 'button', 'aria-label': T('asm.openPart'), 'data-tip': T('asm.openPart') }); ro.innerHTML = icon('edit'); ro.onclick = (e) => { e.stopPropagation(); Comp.openRef(it.id); }; acts.append(ro); }
       if (topIdx >= 0) { const io = h('button', { type: 'button', 'aria-label': T('common.isolate'), 'data-tip': App.iso === it.id ? T('left.tree.isoOff') : T('left.tree.isoOn') }); io.innerHTML = icon('focusView'); io.onclick = (e) => { e.stopPropagation(); Comp.toggleIso(it.id); }; acts.append(io); }
       if (ownIdx >= 0 && (!ctxTop || inCtx)) { const sp = h('button', { type: 'button', 'aria-label': it.suppressed ? T('left.tree.activate') : T('common.suppress'), 'data-tip': it.suppressed ? T('common.unsuppress') : T('left.tree.suppressTip'), 'data-help': 'suppress' }); sp.innerHTML = icon('suppress'); sp.onclick = (e) => { e.stopPropagation(); Timeline.toggleSuppress(it.id); }; acts.append(sp); }
@@ -440,6 +446,7 @@ const Panels = (() => {
         const inFld = topIdx >= 0 ? Model.folderOf(App.doc, it.id) : null;
         UI.menu(row, [
           ...(it.kind === 'ref' ? [{ icon: 'edit', label: T('asm.openPart'), id: 'tm-ref-open', help: 'assemblyDoc', run: () => Comp.openRef(it.id) }] : []),
+          ...(typeof Assembly !== 'undefined' && Assembly.canOpenInTab(it, App.doc) ? [{ icon: 'edit', label: T('asm.openInTab'), id: 'tm-open-part-tab', help: 'assemblyPartTab', run: () => Assembly.openPartTab(it.id) }] : []),
           ...(refIssues.length ? [{ icon: 'warn', label: T('left.tree.refFixMenu'), id: 'tm-reffix', help: 'refFix', run: () => RefFix.start(refIssues[0]) }] : []),
           { icon: 'help', label: T('common.explainStep'), help: 'explainStep', run: () => Explain.dialog(it.id) },
           { icon: 'copy', label: T('common.duplicate'), id: 'tm-dup', kbd: 'Strg D', help: 'treeDuplicate', run: () => Actions.duplicate([it.id]) },
@@ -454,7 +461,7 @@ const Panels = (() => {
           '-', { icon: 'trash', label: T('common.delete'), run: () => Actions.remove([it.id]) },
         ]);
       });
-      row.addEventListener('dblclick', async (e) => { e.stopPropagation(); const n = await UI.prompt(T('common.rename'), T('common.name'), Model.label(it), T('common.rename')); if (n && n.trim()) App.change('Umbenannt', (doc) => { Model.find(doc, it.id).item.name = n.trim(); }); });
+      row.addEventListener('dblclick', async (e) => { e.stopPropagation(); if (it.kind === 'ref') { Comp.openRef(it.id); return; } if (typeof Assembly !== 'undefined' && Assembly.canOpenInTab(it, App.doc)) { Assembly.openPartTab(it.id); return; } const n = await UI.prompt(T('common.rename'), T('common.name'), Model.label(it), T('common.rename')); if (n && n.trim()) App.change('Umbenannt', (doc) => { Model.find(doc, it.id).item.name = n.trim(); }); });
       // Ziehen im Verlauf: umsortieren oder in eine Gruppe legen
       row.addEventListener('dragstart', (e) => {
         dragInfo = { type: 'item', id: it.id };
@@ -1888,9 +1895,27 @@ const Panels = (() => {
       sec.firstChild.textContent = Features.NAMES[it.p.op === 'pattern' ? it.p.pt : it.p.op] || T('panel.item.feature');
       Features.renderOp(it, sec, setP); w.append(sec);
     } else if (it.kind === 'group') {
-      sec.append(h('div', { class: 'hint-box', html: T('panel.group.hint', { n: it.children.length }) }));
-      const ub = h('button', { type: 'button', class: 'btn' }); ub.innerHTML = icon('ungroup') + esc(T('panel.group.ungroup')); ub.onclick = () => Actions.ungroup(it.id);
-      sec.append(h('div', { class: 'btn-row' }, ub)); w.append(sec);
+      if (it.partRef && typeof Assembly !== 'undefined') {
+        sec.id = 'partref-sec';
+        sec.setAttribute('data-help', 'assemblyPartTab');
+        sec.firstChild.textContent = T('asm.partRefTitle');
+        sec.append(h('div', { class: 'hint-box', html: T('asm.partRefHint', { name: esc(it.partRef.name || Model.label(it)) }) }));
+        const ob = h('button', { type: 'button', class: 'btn primary', id: 'btn-open-part-tab' });
+        ob.innerHTML = icon('edit') + esc(T('asm.openInTab'));
+        ob.onclick = () => Assembly.openPartTab(it.id);
+        const sb = h('button', { type: 'button', class: 'btn', id: 'btn-sync-part-ref' });
+        sb.innerHTML = icon('undo') + esc(T('asm.syncNow'));
+        sb.onclick = () => Assembly.syncCurrentAssembly({ announce: true });
+        const ub = h('button', { type: 'button', class: 'btn ghost', id: 'btn-unlink-part-ref' });
+        ub.innerHTML = icon('ungroup') + esc(T('asm.unlink'));
+        ub.onclick = () => Assembly.unlinkPart(it.id);
+        sec.append(h('div', { class: 'btn-row' }, ob, sb, ub));
+        w.append(sec);
+      } else {
+        sec.append(h('div', { class: 'hint-box', html: T('panel.group.hint', { n: it.children.length }) }));
+        const ub = h('button', { type: 'button', class: 'btn' }); ub.innerHTML = icon('ungroup') + esc(T('panel.group.ungroup')); ub.onclick = () => Actions.ungroup(it.id);
+        sec.append(h('div', { class: 'btn-row' }, ub)); w.append(sec);
+      }
     }
     }
     const jsec = Joints.panel(it); if (jsec) w.append(jsec);
@@ -2296,7 +2321,12 @@ const Panels = (() => {
       if (!hole && it.kind === 'extrude' && it.p && it.p.sketch) b('loft', T('ctx.toTip'), () => Actions.loft([it.id], { tip: 10 }), '', T('ctx.toTipTip'), true);
       if (!App.edges.length) b('similar', T('ctx.similar'), () => Select.similar(), '', T('ctx.similarPartsTip'), true);
       if (!App.edges.length && !face && !hole && App.results.get(it.id) && App.doc.items.includes(it)) b('fillet', T('ctx.selectEdges'), (e) => edgeRuleMenu(it.id, e.currentTarget), '', T('ctx.selectEdgesTip'), true);
-      if (it.kind === 'group') b('ungroup', T('ctx.ungroup'), () => Actions.ungroup(), '', T('ctx.ungroupTip'), true);
+      if (typeof Assembly !== 'undefined' && Assembly.canOpenInTab(it, App.doc)) {
+        const ob = b('edit', T('asm.openInTab'), () => Assembly.openPartTab(it.id), 'accent', T('asm.openInTabTip'));
+        ob.id = 'ctx-open-part-tab';
+        ob.dataset.help = 'assemblyPartTab';
+      }
+      if (it.kind === 'group' && !it.partRef) b('ungroup', T('ctx.ungroup'), () => Actions.ungroup(), '', T('ctx.ungroupTip'), true);
     } else {
       const hasRef = items.some((x) => x.item.kind === 'ref');
       if (!hasRef) b('group', T('ctx.group'), () => Actions.group(), 'accent', T('ctx.groupTip'));

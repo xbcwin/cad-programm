@@ -2110,6 +2110,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Antippen & Zwei-Finger-Bedienung**: Antippen eines Quaders wählt ihn (Antippen im Leeren hebt die Auswahl auf); eine Zwei-Finger-Geste (Verschieben + Spreizen) dreht und zoomt die 3D-Kamera ohne die Auswahl zu verändern.
 - [ ] **Von Hand**: Auf einem echten iPad in Safari hochkant und quer die Bedienung mit Finger und Stift (Panels klappen, Körper antippen, Ziehgriffe bewegen, zwei Finger drehen/zoomen, Skizze und langes Tippen für das Kontextmenü) testen.
 
+## Bauteil im Tab öffnen (Auto [A-083], BG-01)
+
+- [x] **Bauteil in Baugruppe per Doppelklick im Tab öffnen**: Eine Baugruppe mit zwei eingesetzten Instanzen eines Bauteils (`Leiste`, `40 × 20 × 10 mm`) zeigt für beide `40 mm` Hüllmaß; Doppelklick im 3D-Bild auf das Teil öffnet `Leiste` in einem eigenen Tab samt Banner `#asm-part-banner` („Speichern“ / „Zurück zur Baugruppe“).
+- [x] **Speichern aktualisiert Baugruppe (Länge 40 → 60 & Tab-Wechsel 60 → 75)**: Nach Änderung der Quaderbreite auf `60 mm`, Klick auf `#asm-save-btn` und `#asm-back-btn` zeigen beide Instanzen in der Baugruppe das neue Hüllmaß `60 mm` (bei erhaltener Position); ein Doppelklick im Verlauf wechselt ohne Duplikat in denselben Bauteil-Tab und übernimmt `75 mm` beim direkten Klick auf den Baugruppen-Tab.
+- [x] **Einstiegspunkte, Suche & Hilfe**: Rechtes Panel (`#partref-sec` / `#btn-open-part-tab`), Rechtsklick-Menü (`#cm-open-part-tab`), Befehlssuche („Bauteil im Tab öffnen“, „Neue Baugruppe anlegen“) und Hilfetext `assemblyPartTab` sind vorhanden.
+- [ ] **Von Hand**: Im Browser über „+“ → „Neue Baugruppe“ eine Baugruppe anlegen, ein gespeichertes Bauteil über „Bauteil in Baugruppe einfügen …“ zweimal platzieren, per Doppelklick im Tab ändern, über das Banner speichern/zurückspringen und die aktualisierte Darstellung prüfen.
+
 ## Fehler melden
 
 ```

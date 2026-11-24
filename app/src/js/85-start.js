@@ -2314,14 +2314,14 @@ const Start = (() => {
     for (const t of allTabs) {
       const isAsm = t.docType === 'assembly';
       const tab = h('div', {
-        class: 'proj-tab' + (t.active ? ' active' : '') + (t.dirty ? ' dirty' : '') + (isAsm ? ' asm-tab' : ''),
+        class: 'proj-tab' + (t.active ? ' active' : '') + (t.dirty ? ' dirty' : '') + (isAsm ? ' asm-tab is-assembly' : ''),
         role: 'tab',
         tabindex: '0',
         'aria-selected': String(!!t.active),
         dataset: { tabId: t.tabId, docId: t.docId || '', docType: t.docType || 'part' },
       });
       const dot = h('span', { class: 'ptab-dot', 'aria-hidden': 'true' });
-      const typeIc = h('span', { class: 'ptab-type', 'aria-hidden': 'true', title: isAsm ? T('doc.assembly') : T('doc.part') });
+      const typeIc = h('span', { class: 'ptab-type' + (isAsm ? ' ptab-kind' : ''), 'aria-hidden': 'true', 'data-tip': isAsm ? T('asm.tabKindTip') : T('doc.part'), title: isAsm ? T('doc.assembly') : T('doc.part') });
       typeIc.innerHTML = icon(isAsm ? 'parts' : 'box3');
       const tip = (isAsm ? T('doc.assembly') + ': ' : '') + t.name + (t.dirty ? ' (ungespeicherte Änderungen)' : '');
       const nameEl = h('span', { class: 'ptab-name', 'data-tip': tip }, t.name);
@@ -2380,7 +2380,7 @@ const Start = (() => {
     const openIds = new Set((App.tabs || []).map((t) => t.docId).filter(Boolean));
     const items = [
       { id: 'tab-add-empty', label: T('tabs.newEmpty'), icon: 'newfile', run: () => openNewTab() },
-      { id: 'tab-add-asm', label: T('tabs.newAssembly'), icon: 'parts', help: 'assemblyDoc', run: () => openNewTab(Model.newAssemblyDoc(T('asm.defaultName'))) },
+      { id: 'tab-add-assembly', label: T('tabs.newAssembly'), icon: 'parts', help: 'assemblyDoc', run: () => openNewTab(Model.newAssemblyDoc(T('asm.defaultName'))) },
       { id: 'tab-add-tpl', label: T('tabs.newTemplate'), icon: 'cube', run: () => newProjectDialog({ newTab: true }) },
       { id: 'tab-add-file', label: T('tabs.openFile'), icon: 'folder', run: () => openFile({ newTab: true }) },
     ];

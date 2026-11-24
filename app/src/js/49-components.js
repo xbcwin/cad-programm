@@ -161,7 +161,7 @@ const Comp = (() => {
         const meta = T(p.n === 1 ? 'start.recentMetaOne' : 'start.recentMetaMany', { n: p.n, date: p.modified ? new Date(p.modified).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' }) : '' });
         const info = h('div', { class: 'grow' }, h('b', null, p.name), h('span', null, meta));
         row.append(ic, info);
-        if (p.open) row.append(h('span', { class: 'doc-type-badge open' }, T('asm.openInTab')));
+        if (p.open) row.append(h('span', { class: 'doc-type-badge open' }, T('asm.openTabBadge')));
         const addBtn = h('button', { type: 'button', class: 'btn primary small asm-insert-go' }, T('asm.insertGo'));
         const pick = () => { if (modalRef) modalRef.close(); insertPart(p.id); };
         addBtn.onclick = (e) => { e.stopPropagation(); pick(); };

@@ -128,7 +128,7 @@ const Model = (() => {
     try {
       for (const p of chain) {
         m.multiply(localMatrix(p, new THREE.Matrix4()));
-        if (p.userPart) curV = scopeVars(curV, p.userPart);
+        curV = scopeItemVars(curV, p);
       }
       if (f) m.multiply(localMatrix(f.item, new THREE.Matrix4()));
       return m;
@@ -188,7 +188,7 @@ const Model = (() => {
       let mats = [new THREE.Matrix4()];
       for (const g of chain) {
         const L = localMatrix(g, new THREE.Matrix4());
-        if (g.userPart) curV = scopeVars(curV, g.userPart);
+        curV = scopeItemVars(curV, g);
         const P = patternMatrices(g, curV), next = [];
         for (const m of mats) for (const q of P) next.push(m.clone().multiply(L).multiply(q));
         mats = next.slice(0, 2000);
@@ -204,7 +204,7 @@ const Model = (() => {
     try {
       for (const p of chain) {
         m.multiply(localMatrix(p, new THREE.Matrix4()));
-        if (p.userPart) curV = scopeVars(curV, p.userPart);
+        curV = scopeItemVars(curV, p);
       }
       return m;
     } finally { curV = prev; }
@@ -244,11 +244,16 @@ const Model = (() => {
     }
     return v;
   }
+  function scopeItemVars(v, it) {
+    if (it && it.partRef) v = scopeVars(v, it.partRef);
+    if (it && it.userPart) v = scopeVars(v, it.userPart);
+    return v;
+  }
   function itemVars(doc, id) {
     let v = vars(doc).v;
-    for (const p of parentsOf(doc, id)) if (p.userPart) v = scopeVars(v, p.userPart);
+    for (const p of parentsOf(doc, id)) v = scopeItemVars(v, p);
     const f = find(doc, id);
-    if (f && f.item && f.item.userPart) v = scopeVars(v, f.item.userPart);
+    if (f && f.item) v = scopeItemVars(v, f.item);
     return v;
   }
   function evalInfo(val, V) {
@@ -382,7 +387,7 @@ const Model = (() => {
     const prev = curV; curV = V;
     try {
       const m = matArr(localMatrix(it));
-      const ownV = it.userPart ? scopeVars(V, it.userPart) : V;
+      const ownV = scopeItemVars(V, it);
       curV = ownV;
       const o = { id: it.id, kind: it.kind, role: it.role, hidden: !!it.hidden, name: label(it), color: displayColor(it), m };
       if (it.opacity != null && it.opacity < 1) o.opacity = Math.max(0.05, it.opacity);
@@ -1056,7 +1061,7 @@ const Model = (() => {
   }
   function itemLocalBox(it, V = {}) {
     if (!it) return null;
-    if (it.userPart) V = scopeVars(V, it.userPart);
+    V = scopeItemVars(V, it);
     const pb = primitiveBox(it.kind, resolveP(it.p, V));
     if (pb) return pb;
     if ((it.kind === 'extrude' || it.kind === 'rib' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'revolve') && it.p && it.p.sketch) {
@@ -1118,7 +1123,7 @@ const Model = (() => {
   }
   function label(it) { return it.name || (KINDS[it.kind] && KINDS[it.kind].label) || 'Objekt'; }
   function sizeText(it, V) {
-    if (it && it.userPart) V = scopeVars(V || {}, it.userPart);
+    V = scopeItemVars(V || {}, it);
     const p = resolveP(it.p || {}, V || {});
     const f = (x) => Units.fmtLen(x, 1);
     const u = Units.key() !== 'mm' ? ' ' + Units.label() : '';
@@ -1181,6 +1186,12 @@ const Model = (() => {
       case 'group': {
         const ft = typeof Features !== 'undefined' && Features.sizeText(it, V);
         if (ft) return ft;
+        if (it.partRef) {
+          const r = typeof App !== 'undefined' && App.results && App.results.get(it.id);
+          const b = r && r.data && r.data.bbox;
+          if (b) return `${f(b[3] - b[0])} × ${f(b[4] - b[1])} × ${f(b[5] - b[2])}${u}`;
+          return T('asm.partBadge');
+        }
         if (it.userPart && Array.isArray(it.userPart.params) && it.userPart.params.length) {
           return it.userPart.params.slice(0, 2).map((q) => `${q.label || q.name} ${f(num(q.expr, V, 0))}${u}`).join(' · ');
         }

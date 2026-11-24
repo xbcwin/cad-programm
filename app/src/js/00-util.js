@@ -1826,6 +1826,11 @@ const HELP = {
   "tip": "Ein Bauteil als Verweis mit eigener Lage in die Baugruppe einsetzen",
   "hilfe": "Öffnet eine Liste aller gespeicherten oder in Tabs geöffneten Bauteile. Das gewählte Bauteil erscheint in der Baugruppe als Verweis und lässt sich dort frei verschieben, drehen, färben oder mehrfach einsetzen.",
   "tipp": "Über „Bauteil öffnen“ springst du jederzeit in das Original-Bauteil, um Maße oder Skizzen zu ändern."
+ },
+ "assemblyPartTab": {
+  "tip": "Bauteil aus einer Baugruppe im eigenen Tab öffnen und nach dem Speichern aktualisieren",
+  "hilfe": "Mach einen Doppelklick auf ein Teil in der Baugruppe (im 3D-Bild oder links im Verlauf), um das zugehörige Bauteil in einem eigenen Tab zu öffnen. Dort siehst du alle seine eigenen Schritte und Maße. Nach dem Speichern oder beim Zurückwechseln aktualisiert sich die Baugruppe mit allen Kopien dieses Bauteils automatisch.",
+  "tipp": "Oben im Bauteil-Tab erscheint ein Hinweis-Banner mit „Speichern“ und „Zurück zur Baugruppe“ – so wechselst du mit einem Klick zurück."
  }
 };
 
