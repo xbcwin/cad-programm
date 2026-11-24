@@ -1841,6 +1841,11 @@ const HELP = {
   "tip": "Fläche auf Fläche: bündig aneinanderlegen, Schieben in der Ebene und Drehen erlauben",
   "hilfe": "Legt zwei ebene Flächen verschiedener Teile ohne Abstand exakt aufeinander. Das zweite Teil lässt sich anschließend frei auf dieser Ebene in zwei Richtungen verschieben und um die Flächennormale drehen, ohne abzuheben.",
   "tipp": "Auch beim Ziehen mit der Maus im 3D-Bild oder beim Ändern von X/Y/Z bleibt der Abstand zwischen den beiden Flächen exakt 0."
+ },
+ "fixedJoint": {
+  "tip": "Zwei Teile an gewählten Flächen oder Punkten fest verbinden",
+  "hilfe": "Legt das zweite gewählte Teil bündig an das erste (Flächen gegeneinander und Mitten übereinander oder Punkt auf Punkt). Das verbundene Teil wandert bei jeder Bewegung oder Größenänderung des ersten Teils mit und lässt sich nicht mehr einzeln verschieben. Unter „Verbindungen“ links im Verlauf kannst du die Verbindung jederzeit umdrehen, drehen, einen Abstand setzen oder lösen.",
+  "tipp": "Halte während der Wahl die rechte Maustaste gedrückt, um das Modell zu drehen und verdeckte Unterseiten bequem anzuklicken."
  }
 };
 

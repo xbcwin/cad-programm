@@ -17492,6 +17492,205 @@ def t_a086_verbindungen_zyl_eben(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+# ---------- A-085: Verbindung „fest“ (BG-05) ----------
+def t_a085_verbindung_fest(p):
+    p.empty()
+    p.ev("""App.change('x', d => {
+      const a = Model.newItem('box', { w: 20, d: 20, h: 10 }); a.name = 'Quader A'; d.items.push(a);
+      const b = Model.newItem('box', { w: 12, d: 12, h: 8 }); b.name = 'Quader B'; b.t.x = 35; b.t.y = 10; b.t.z = 20; d.items.push(b);
+    });""")
+    warte_rechnen(p, 25)
+
+    # 1. Zwei Quader wählen, „Verbinden: fest“ klicken, obere Fläche von A & untere Fläche von B anklicken
+    p.ev("App.select([App.doc.items[0].id, App.doc.items[1].id]);")
+    p.wait(400)
+    p.pg.locator('#ctx-fixed-joint').click()
+    p.wait(300)
+    picking_started = p.ev("return Joints.picking && !!document.querySelector('#joint-pick-bar');")
+
+    # Kamera von schräg oben → obere Fläche von A (0, 0, 10)
+    p.ev("const c=Viewer.controls.target; Viewer.moveCamera(c.clone().set(10, -45, 55), c.clone().set(15, 5, 10), null, false); Viewer.renderNow();")
+    p.wait(200)
+    s1 = world_screen(p, 0, 0, 10)
+    p.pg.mouse.click(s1[0], s1[1])
+    p.wait(300)
+
+    # Kamera von schräg unten → untere Fläche von B (35, 10, 20)
+    p.ev("const c=Viewer.controls.target; Viewer.moveCamera(c.clone().set(35, -30, -15), c.clone().set(35, 10, 20), null, false); Viewer.renderNow();")
+    p.wait(200)
+    s2 = world_screen(p, 35, 10, 20)
+    p.pg.mouse.click(s2[0], s2[1])
+    p.wait(600)
+    warte_rechnen(p, 25)
+
+    st1 = p.ev("""
+      const A = App.doc.items[0], B = App.doc.items[1];
+      const j = (App.doc.joints || [])[0];
+      const ba = Actions.worldBox(A.id), bb = Actions.worldBox(B.id);
+      return Measure.minDistance([A.id, B.id]).then(md => ({
+        jCount: (App.doc.joints || []).length,
+        kind: j && j.kind, mode: j && j.mode, aOk: j && j.a === A.id, bOk: j && j.b === B.id,
+        pickingOff: !Joints.picking,
+        dz: Math.abs(bb.min.z - ba.max.z),
+        cx: Math.abs(((bb.min.x + bb.max.x) / 2) - ((ba.min.x + ba.max.x) / 2)),
+        cy: Math.abs(((bb.min.y + bb.max.y) / 2) - ((ba.min.y + ba.max.y) / 2)),
+        minDist: md ? md.d : -1,
+        bh: bb.max.z - bb.min.z,
+      }));
+    """)
+    ok1 = (
+        picking_started
+        and st1['jCount'] == 1
+        and st1['kind'] == 'fixed'
+        and st1['mode'] == 'face'
+        and st1['aOk'] and st1['bOk']
+        and st1['pickingOff']
+        and st1['dz'] < 1e-4
+        and st1['cx'] < 1e-4
+        and st1['cy'] < 1e-4
+        and 0 <= st1['minDist'] < 1e-4
+        and abs(st1['bh'] - 8.0) < 0.05
+    )
+
+    # 2. Teil B lässt sich nicht mehr verschieben (Mausziehen, Pfeiltaste, Panel, dropToPlate); Teil A verschieben nimmt B mit
+    p.ev("const c=Viewer.controls.target; Viewer.moveCamera(c.clone().set(25, -45, 45), c.clone().set(0, 0, 10), null, false); Viewer.renderNow();")
+    p.wait(200)
+    p.ev("App.select([App.doc.items[1].id]);")
+    p.wait(300)
+    before_b = p.ev("return { ...App.doc.items[1].t };")
+    sb = world_screen(p, 0, 0, 14)
+    p.pg.mouse.move(sb[0], sb[1])
+    p.pg.mouse.down()
+    p.pg.mouse.move(sb[0] + 60, sb[1] + 20, steps=6)
+    p.pg.mouse.up()
+    p.wait(300)
+    p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('ArrowRight')
+    p.wait(300)
+    p.ev("Actions.dropToPlate([App.doc.items[1].id]);")
+    p.wait(300)
+    lock_info = p.ev("""
+      const B = App.doc.items[1];
+      const tx = document.querySelector('#t-x');
+      return {
+        txDisabled: !!(tx && tx.disabled),
+        handles: Handles.debugKinds(),
+        sameT: Math.abs(B.t.x - arg.x) < 1e-6 && Math.abs(B.t.y - arg.y) < 1e-6 && Math.abs(B.t.z - arg.z) < 1e-6,
+      };
+    """, before_b)
+    p.ev("App.change('A verschoben', d => { d.items[0].t.x = 15; d.items[0].t.y = -5; });")
+    warte_rechnen(p, 20)
+    follow = p.ev("""
+      const ba = Actions.worldBox(App.doc.items[0].id), bb = Actions.worldBox(App.doc.items[1].id);
+      return {
+        cx: (bb.min.x + bb.max.x) / 2,
+        cy: (bb.min.y + bb.max.y) / 2,
+        dz: Math.abs(bb.min.z - ba.max.z),
+      };
+    """)
+    ok2 = (
+        lock_info['txDisabled']
+        and 'lift' not in lock_info['handles']
+        and 'rot' not in lock_info['handles']
+        and lock_info['sameT']
+        and abs(follow['cx'] - 15.0) < 1e-3
+        and abs(follow['cy'] - (-5.0)) < 1e-3
+        and follow['dz'] < 1e-4
+    )
+
+    # 3. Verlauf links, Bearbeiten rechts & „Umdrehen“ (#jt-flip)
+    tree_cnt = p.pg.locator('#joint-tree .joint-row').count()
+    p.pg.locator('#joint-tree .joint-row').first.click()
+    p.wait(300)
+    has_panel = p.pg.locator('#joint-edit-panel').count() == 1 and p.pg.locator('#jt-flip').count() == 1
+    p.pg.locator('#jt-flip').click()
+    p.wait(400)
+    warte_rechnen(p, 20)
+    flipped = p.ev("""
+      const j = App.doc.joints[0];
+      const ba = Actions.worldBox(App.doc.items[0].id), bb = Actions.worldBox(App.doc.items[1].id);
+      return { flip: !!j.flip, maxZDiff: Math.abs(bb.max.z - ba.max.z) };
+    """)
+    p.pg.locator('#jt-flip').click()
+    p.wait(400)
+    warte_rechnen(p, 20)
+    unflipped = p.ev("""
+      const j = App.doc.joints[0];
+      const ba = Actions.worldBox(App.doc.items[0].id), bb = Actions.worldBox(App.doc.items[1].id);
+      return { flip: !!j.flip, minZDiff: Math.abs(bb.min.z - ba.max.z) };
+    """)
+    ok3 = (
+        tree_cnt == 1
+        and has_panel
+        and flipped['flip'] is True
+        and flipped['maxZDiff'] < 1e-4
+        and unflipped['flip'] is False
+        and unflipped['minZDiff'] < 1e-4
+    )
+
+    # 4. Zwei Punkte verbinden (mode === 'point')
+    pt_res = p.ev("""
+      App.change('C dazu', d => {
+        const c = Model.newItem('box', { w: 10, d: 10, h: 6 }); c.name = 'Quader C'; c.t.x = -30; d.items.push(c);
+      });
+      const A = App.doc.items[0], C = App.doc.items[2];
+      return Joints.addFixed(
+        { id: A.id, kind: 'point', c: [10, 10, 10] },
+        { id: C.id, kind: 'point', c: [-5, -5, 0] }
+      );
+    """)
+    warte_rechnen(p, 20)
+    pt_check = p.ev("""
+      const ba = Actions.worldBox(App.doc.items[0].id), bc = Actions.worldBox(App.doc.items[2].id);
+      const j2 = App.doc.joints[1];
+      return {
+        mode: j2 && j2.mode,
+        isFixedC: Joints.isFixedPart(App.doc.items[2].id),
+        dx: Math.abs(bc.min.x - ba.max.x),
+        dy: Math.abs(bc.min.y - ba.max.y),
+        dz: Math.abs(bc.min.z - ba.max.z),
+      };
+    """)
+    ok4 = (
+        bool(pt_res and pt_res.get('ok'))
+        and pt_check['mode'] == 'point'
+        and pt_check['isFixedC']
+        and pt_check['dx'] < 1e-4
+        and pt_check['dy'] < 1e-4
+        and pt_check['dz'] < 1e-4
+    )
+
+    # 5. Löschen im Verlauf, wieder frei verschiebbar, Rückgängig, Befehlssuche & Hilfetext
+    p.ev("App.select([App.doc.items[2].id]);")
+    p.wait(250)
+    p.pg.locator('#joint-tree .joint-row').first.click()
+    p.wait(300)
+    p.pg.locator('#jt-del').click()
+    p.wait(400)
+    after_del = p.ev("return { cnt: App.doc.joints.length, fixedB: Joints.isFixedPart(App.doc.items[1].id), bx0: App.doc.items[1].t.x };")
+    p.ev("App.select([App.doc.items[1].id]);")
+    p.wait(200)
+    p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('ArrowRight')
+    p.wait(300)
+    bx_moved = p.ev("return App.doc.items[1].t.x;")
+    p.pg.keyboard.press('Control+z')
+    p.wait(300)
+    p.pg.keyboard.press('Control+z')
+    p.wait(400)
+    after_undo = p.ev("return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(d => ({ cnt: App.doc.joints.length, fixedB: Joints.isFixedPart(App.doc.items[1].id), cmd: Commands.search('verbinden fest').some(c => c.id === 'fixed-joint'), help: !!(d.fixedJoint && d.fixedJoint.tip && d.fixedJoint.hilfe && d.fixedJoint.tipp) }));")
+    ok5 = (
+        after_del['cnt'] == 1
+        and after_del['fixedB'] is False
+        and abs(bx_moved - after_del['bx0']) > 0.5
+        and after_undo['cnt'] == 2
+        and after_undo['fixedB'] is True
+        and after_undo['cmd'] is True
+        and after_undo['help'] is True
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -17682,6 +17881,7 @@ TESTS = [
     ('[A-082] Baugruppe & Bauteil als eigene Dokumente: Verweise speichern & Änderungen übernehmen', t_a082_baugruppe_verweise),
     ('[A-083] Baugruppe: Bauteil im Tab öffnen, Länge 40 → 60 & aktualisieren', t_a083_bauteil_im_tab),
     ('[A-086] Verbindungen: zylindrisch (Welle in Bohrung) & eben (Fläche auf Fläche) mit Abspielen', t_a086_verbindungen_zyl_eben),
+    ('[A-085] Verbindung „fest“: Flächen/Punkte, bündig, umdrehen, gesperrt, Verlauf', t_a085_verbindung_fest),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

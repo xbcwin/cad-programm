@@ -2374,5 +2374,17 @@
   "ctx.mateCyl": "Zylindrisch (Welle in Bohrung)",
   "ctx.matePlanar": "Eben (Fläche auf Fläche)",
   "ctx.mateRot": "Drehgelenk",
-  "ctx.mateSlide": "Schiebegelenk"
+  "ctx.mateSlide": "Schiebegelenk",
+  "ctx.fixedJoint": "Verbinden: fest",
+  "ctx.fixedJointTip": "Zwei Flächen oder Punkte fest miteinander verbinden",
+  "panel.title.joint": "Verbindung",
+  "joint.treeHeading": "Verbindungen",
+  "joint.fixedKind": "fest",
+  "joint.fixedFlip": "Umdrehen",
+  "joint.fixedLockedHint": "Fest verbunden mit „{name}“ – lässt sich nicht frei verschieben.",
+  "joint.fixedCannotMove": "„{name}“ ist fest verbunden und lässt sich nicht verschieben.",
+  "joint.pickStep1": "Verbinden (fest): 1. Fläche oder Punkt am ersten Teil klicken (bleibt stehen).",
+  "joint.pickStep2": "Verbinden (fest): 2. Fläche oder Punkt am zweiten Teil klicken (legt sich an „{name}“).",
+  "joint.removeBtn": "Verbindung lösen",
+  "joint.repickBtn": "Flächen / Punkte neu wählen"
 }

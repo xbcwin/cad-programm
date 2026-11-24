@@ -2123,6 +2123,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Eben (Fläche auf Fläche)**: Ein versetzter Block wird auf eine um `20°` geneigte Platte per `Joints.addPlanar` bündig gelegt (Abstand `< 0,01 mm`, entgegengesetzte Normalen). Verschieben in `U`/`V` (`#jt-u`/`#jt-v`), Drehen (`#jt-ang`), Ändern von `#t-z`/`#t-x` sowie Ziehen mit der Maus im 3D-Bild halten den Flächenabstand exakt bei `0`; „Bewegung abspielen“ gleitet und dreht in der Ebene, Rückgängig, Befehlssuche und Hilfetexte (`mateCyl`, `matePlanar`) funktionieren ohne Seitenfehler.
 - [ ] **Von Hand**: Im Browser zwei Teile über Kontextleiste → „Verbindung“ → „Zylindrisch“ bzw. „Eben“ durch Anklicken zweier Flächen im 3D-Bild verbinden und mit der Maus im Bild verschieben sowie abspielen.
 
+## Verbindung „fest“ (Auto [A-085], BG-05)
+
+- [x] **Zwei Flächen bündig verbinden**: Zwei Quader wählen → „Verbinden: fest“ → obere Fläche von A und untere Fläche von B anklicken legt B mittig und mit Abstand `0 mm` genau auf A.
+- [x] **Gesperrt & Mitwandern**: Das verbundene Teil B lässt sich weder per Maus, Ziehgriffen, Pfeiltasten noch über die Lage-Felder oder `dropToPlate` verschieben; beim Verschieben von A wandert B exakt mit.
+- [x] **Verlauf, Bearbeiten & Umdrehen**: Die Verbindung erscheint unter „Verbindungen“ im Verlauf, öffnet rechts das Bearbeitungs-Panel und dreht Teil B per „Umdrehen“ sauber auf die Gegenseite und zurück.
+- [x] **Punkt-an-Punkt, Löschen & Rückgängig**: Zwei gewählte Punkte fallen deckungsgleich zusammen; Löschen im Verlauf gibt Teil B wieder frei, `Strg+Z` stellt die Verbindung wieder her; Befehlssuche und Hilfetext `fixedJoint` sind vorhanden.
+- [ ] **Von Hand**: Im Browser zwei Teile über „Verbinden: fest“ (Modus Auto / Fläche / Punkt) verbinden, während der Auswahl die Ansicht mit der rechten Maustaste drehen, Drehwinkel/Abstand rechts testen und das Ergebnis mit mehreren verketteten Teilen prüfen.
+
 ## Fehler melden
 
 ```

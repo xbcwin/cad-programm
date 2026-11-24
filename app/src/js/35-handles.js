@@ -143,23 +143,25 @@ const Handles = (() => {
         addSegLabel(o, d.length(), RU[i] || {}, it.id);
       }
     }
-    // Anheben (Z) über der Mitte
-    const top = new THREE.Vector3(cx, cy, z1).applyMatrix4(W);
-    const lift = handleMesh('lift'); lift.userData.kind = 'lift'; lift.userData.base = top.clone();
-    group.add(lift); items.push(lift); H.lift = lift;
-    // Drehen um Z
-    const center = new THREE.Vector3(cx, cy, z0).applyMatrix4(W);
-    const rad = Math.max(8, Math.hypot(x1 - x0, y1 - y0) / 2 + 6);
-    const pts = []; for (let i = 0; i <= 96; i++) { const a = (i / 96) * Math.PI * 2; pts.push(new THREE.Vector3(center.x + Math.cos(a) * rad, center.y + Math.sin(a) * rad, center.z)); }
-    const rg = new THREE.BufferGeometry().setFromPoints(pts);
-    ring = new THREE.Line(rg, new THREE.LineDashedMaterial({ color: new THREE.Color(Viewer.theme.accent), dashSize: 2, gapSize: 2, depthTest: false, transparent: true, opacity: 0.8 }));
-    ring.computeLineDistances(); ring.renderOrder = 29;
-    group.add(ring); items.push(ring);
-    const rot = handleMesh('rot');
-    const ang = -Math.PI / 4;
-    rot.position.set(center.x + Math.cos(ang) * rad, center.y + Math.sin(ang) * rad, center.z);
-    rot.userData = { kind: 'rot', center: center.clone(), rad };
-    group.add(rot); items.push(rot); H.rot = rot;
+    // Anheben (Z) und Drehen um Z – gesperrt, solange das Teil von einer festen Verbindung gehalten wird
+    const isFixedJ = typeof Joints !== 'undefined' && Joints.isFixedPart(it.id);
+    if (!isFixedJ) {
+      const top = new THREE.Vector3(cx, cy, z1).applyMatrix4(W);
+      const lift = handleMesh('lift'); lift.userData.kind = 'lift'; lift.userData.base = top.clone();
+      group.add(lift); items.push(lift); H.lift = lift;
+      const center = new THREE.Vector3(cx, cy, z0).applyMatrix4(W);
+      const rad = Math.max(8, Math.hypot(x1 - x0, y1 - y0) / 2 + 6);
+      const pts = []; for (let i = 0; i <= 96; i++) { const a = (i / 96) * Math.PI * 2; pts.push(new THREE.Vector3(center.x + Math.cos(a) * rad, center.y + Math.sin(a) * rad, center.z)); }
+      const rg = new THREE.BufferGeometry().setFromPoints(pts);
+      ring = new THREE.Line(rg, new THREE.LineDashedMaterial({ color: new THREE.Color(Viewer.theme.accent), dashSize: 2, gapSize: 2, depthTest: false, transparent: true, opacity: 0.8 }));
+      ring.computeLineDistances(); ring.renderOrder = 29;
+      group.add(ring); items.push(ring);
+      const rot = handleMesh('rot');
+      const ang = -Math.PI / 4;
+      rot.position.set(center.x + Math.cos(ang) * rad, center.y + Math.sin(ang) * rad, center.z);
+      rot.userData = { kind: 'rot', center: center.clone(), rad };
+      group.add(rot); items.push(rot); H.rot = rot;
+    }
     // Beschriftungen
     const V = Model.vars(App.doc).v;
     const P = Model.resolveP(it.p, V);
@@ -372,6 +374,7 @@ const Handles = (() => {
   function start(handle, ev) {
     const c = current(); if (!c) return false;
     const ud = handle.userData;
+    if ((ud.kind === 'lift' || ud.kind === 'rot') && typeof Joints !== 'undefined' && Joints.isFixedPart(c.it.id)) return false;
     const before = App.snapshot();
     const V = Model.vars(App.doc).v;
     state = { handle, c, before, kind: ud.kind, sx: ev.clientX, sy: ev.clientY, fine: ev.shiftKey };
@@ -597,7 +600,7 @@ const Interact = (() => {
     window.addEventListener('keydown', onKey, true);
     window.addEventListener('pointermove', (e) => { lastPtr = { x: e.clientX, y: e.clientY }; }, { passive: true });
   }
-  function modelActive() { return App.mode === 'model' && !Sketch.active && !Place.active && !Measure.active && !Notes.active && !Features.picking && !Joints.picking && !Sketch.picking && !Datums.picking && !RefFix.picking; }
+  function modelActive() { return App.mode === 'model' && !Sketch.active && !Place.active && !Measure.active && !Notes.active && !Features.picking && !Sketch.picking && !Datums.picking && !RefFix.picking && !(typeof Joints !== 'undefined' && Joints.picking); }
   function onDown(e) {
     if (e.pointerType === 'touch') {
       activeTouches.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -624,7 +627,7 @@ const Interact = (() => {
       const gh = Viewer.pickGhost(e.clientX, e.clientY);
       if (gh && gh.id === App.sel[0]) {
         const f = Model.find(App.doc, gh.id);
-        if (f && !f.item.locked) {
+        if (f && !f.item.locked && !(typeof Joints !== 'undefined' && Joints.isFixedPart(gh.id))) {
           Viewer.controls.enabled = false;
           down = { x: e.clientX, y: e.clientY, child: true };
           const W = Model.worldMatrix(App.doc, gh.id);
@@ -647,7 +650,7 @@ const Interact = (() => {
     down = { x: e.clientX, y: e.clientY, hit, t: performance.now(), shift: e.shiftKey || e.metaKey || e.ctrlKey, touch: isTouch, id: e.pointerId, moved: false };
     if (!isTouch && hit && !(App.ctx && hit.id === App.ctx) && !Views.exploded) {   // im Bauteil-Modus nicht das ganze Bauteil verschieben
       const top = App.doc.items.find((x) => x.id === hit.id);
-      if (top && !top.locked) Viewer.controls.enabled = false; // Körper ziehen statt Ansicht drehen
+      if (top && !top.locked && !(typeof Joints !== 'undefined' && Joints.isFixedPart(top.id))) Viewer.controls.enabled = false; // Körper ziehen statt Ansicht drehen
     }
     if (isTouch) {
       clearLongPress();
@@ -703,8 +706,13 @@ const Interact = (() => {
   function startMove(e) {
     const hit = down.hit; const top = App.doc.items.find((x) => x.id === hit.id);
     if (!top || top.locked || isStepMod(top)) { down = null; Viewer.controls.enabled = true; return; }
+    if (typeof Joints !== 'undefined' && Joints.isFixedPart(top.id)) {
+      UI.toast(T('joint.fixedCannotMove', { name: Model.label(top) }), { icon: 'info' });
+      down = null; Viewer.controls.enabled = true; return;
+    }
     if (!App.sel.includes(top.id)) App.select([top.id]);
-    const ids = App.sel.map((id) => App.doc.items.find((x) => x.id === id)).filter((x) => x && !x.locked && !isStepMod(x));
+    const ids = App.sel.map((id) => App.doc.items.find((x) => x.id === id)).filter((x) => x && !x.locked && !isStepMod(x) && !(typeof Joints !== 'undefined' && Joints.isFixedPart(x.id)));
+    if (!ids.length) { down = null; Viewer.controls.enabled = true; return; }
     const planeZ = hit.point.z;
     let joint = null;
     if (ids.length === 1) {
@@ -774,6 +782,7 @@ const Interact = (() => {
       }
       Viewer.updateNode(it.id, { matrix: Model.localMatrix(it) });
     }
+    if (typeof Joints !== 'undefined' && Joints.syncFixed) Joints.syncFixed(App.doc, { live: true });
     if (!moveLabel) { moveLabel = h('div', { class: 'dimlabel live' }); $('#overlay').append(moveLabel); }
     let gapTxt = '';
     if (moving.box0 && !moving.box0.isEmpty()) {
@@ -948,6 +957,7 @@ const Interact = (() => {
         { icon: 'thread', label: T('menu.ctx.thread'), id: 'cm-thread', help: 'threadFace', hidden: !hit || hit.faceIdx == null || top.role === 'hole' || ((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).t !== 'CYLINDRE', run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) { const a = h('div', { style: { position: 'fixed', left: cx + 'px', top: cy + 'px', width: '1px', height: '1px' } }); document.body.append(a); Features.threadPop({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }, a, { mode: 'auto' }); setTimeout(() => a.remove(), 0); } } },
         { icon: 'thicken', label: T('common.thicken'), id: 'cm-thicken', help: 'thickenFace', hidden: !hit || hit.faceIdx == null || top.role === 'hole' || !App.doc.items.includes(top), run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) Features.thicken({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }); } },
         { icon: 'emboss', label: T('common.emboss'), id: 'cm-emboss', help: 'emboss', hidden: !hit || hit.faceIdx == null || top.role === 'hole' || !App.doc.items.includes(top), run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) Features.startEmboss({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }); } },
+        { icon: 'lock', label: T('ctx.fixedJoint'), id: 'cm-fixed-joint', help: 'fixedJoint', hidden: !hit || hit.faceIdx == null || top.role === 'hole' || App.doc.items.filter((x) => !x.hidden && x.role !== 'hole').length < 2 || ((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).t !== 'PLANE', run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) Joints.startFixed({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx], point: hit.point.toArray() }); } },
         '-',
         { icon: 'copy', label: T('menu.ctx.copyBody'), kbd: Commands.keyLabel('copy'), id: 'cm-copy', help: 'copyBetweenTabs', run: () => Clipboard.copy() },
         { icon: 'copy', label: T('common.duplicate'), kbd: 'Strg D', id: 'cm-dup', run: () => Actions.duplicate() },

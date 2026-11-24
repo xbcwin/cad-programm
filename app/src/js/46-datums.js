@@ -796,6 +796,7 @@ const Datums = (() => {
       selAxis = null; selPoint = null; selCsys = null;
       App.clearSelection();
       if (typeof Measure !== 'undefined' && Measure.selected) Measure.select(null);
+      if (typeof Joints !== 'undefined' && Joints.selected) Joints.select(null);
     }
     draw(); Panels.renderRight(); Panels.renderLeft();
   }
@@ -976,6 +977,7 @@ const Datums = (() => {
       sel = null; selPoint = null; selCsys = null;
       App.clearSelection();
       if (typeof Measure !== 'undefined' && Measure.selected) Measure.select(null);
+      if (typeof Joints !== 'undefined' && Joints.selected) Joints.select(null);
     }
     draw(); Panels.renderRight(); Panels.renderLeft();
   }
@@ -1212,6 +1214,7 @@ const Datums = (() => {
       sel = null; selAxis = null; selCsys = null;
       App.clearSelection();
       if (typeof Measure !== 'undefined' && Measure.selected) Measure.select(null);
+      if (typeof Joints !== 'undefined' && Joints.selected) Joints.select(null);
     }
     draw(); Panels.renderRight(); Panels.renderLeft();
   }
@@ -1390,6 +1393,7 @@ const Datums = (() => {
       sel = null; selAxis = null; selPoint = null;
       App.clearSelection();
       if (typeof Measure !== 'undefined' && Measure.selected) Measure.select(null);
+      if (typeof Joints !== 'undefined' && Joints.selected) Joints.select(null);
     }
     draw(); Panels.renderRight(); Panels.renderLeft();
   }

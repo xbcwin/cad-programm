@@ -256,6 +256,7 @@ const Commands = (() => {
     add('sync-assembly', 'Baugruppe aktualisieren', 'undo', 'baugruppe aktualisieren sync bauteil abgleichen', () => Assembly.syncCurrentAssembly({ announce: true }), { group: 'Werkzeuge' });
     add('mate-cyl', 'Verbindung: Zylindrisch (Welle in Bohrung)', 'axes', 'verbindung gelenk zylindrisch welle bohrung bolzen achse drehen schieben bg-06', () => Joints.startCylindrical(), { group: 'Baugruppe' });
     add('mate-planar', 'Verbindung: Eben (Fläche auf Fläche)', 'planeXY', 'verbindung gelenk eben planar flaeche fläche schieben drehen bg-06', () => Joints.startPlanar(), { group: 'Baugruppe' });
+    add('fixed-joint', 'Verbinden: fest (zwei Flächen oder Punkte)', 'lock', 'verbinden fest verbindung starr baugruppe bündig fläche punkt mate rigid joint', () => Joints.startFixed(), { group: 'Werkzeuge' });
     add('editcomp', 'Gewählte Gruppe als Bauteil bearbeiten', 'edit', 'bauteil bearbeiten kontext', () => { const t = App.sel.length ? Model.topOf(App.doc, App.sel[0]) : null; if (t && t.kind === 'group') Comp.edit(t.id); else UI.toast('Wähle zuerst eine Gruppe oder ein Bauteil aus.', { icon: 'info' }); }, { group: 'Werkzeuge' });
     add('isolate', 'Gewähltes Teil isolieren', 'focusView', 'isolieren nur dieses zeigen', () => { const t = App.sel.length ? Model.topOf(App.doc, App.sel[0]) : null; if (t) Comp.toggleIso(t.id); }, { group: 'Ansicht' });
     add('drawing', 'Technische Zeichnung öffnen', 'sheet', 'zeichnung ansichten bemaßung pdf dreitafel', () => setMode('drawing'), { group: 'Werkzeuge' });
@@ -413,21 +414,37 @@ const Commands = (() => {
     if ((e.key === '?' || e.key === 'F1') && !mod && !e.altKey) { e.preventDefault(); showKeys(); return; }
     if (App.mode !== 'model') return;
     if (e.key === 'Escape' && Views.presenting) { Views.present(false); return; }
-    if (e.key === 'Escape') { if (RefFix.picking) RefFix.stop(); else if (Place.active) Place.cancel(); else if (Measure.active) Measure.stop(); else if (!App.sel.length && App.ctx) App.setCtx(null); else if (!App.sel.length && App.iso) App.setIso(null); else { Panels.closeFlyout(); App.clearSelection(); } return; }
+    if (e.key === 'Escape') { if (typeof Joints !== 'undefined' && Joints.picking) Joints.stopPick(); else if (RefFix.picking) RefFix.stop(); else if (Place.active) Place.cancel(); else if (Measure.active) Measure.stop(); else if (!App.sel.length && App.ctx) App.setCtx(null); else if (!App.sel.length && App.iso) App.setIso(null); else { Panels.closeFlyout(); App.clearSelection(); } return; }
     const mHit = combo && SHORTCUTS.find((s) => !s.global && getCombo(s.id) === combo);
     if (mHit) {
+      if (mHit.id === 'delete' && !App.sel.length && typeof Joints !== 'undefined' && Joints.selected) { e.preventDefault(); Joints.remove(Joints.selected); return; }
       const res = mHit.run();
       if (res !== false) e.preventDefault();
       return;
     }
-    if (e.key === 'Backspace' && !mod && !e.altKey && !e.shiftKey && getCombo('delete') === 'delete') { if (App.sel.length) { e.preventDefault(); Actions.remove(); } return; }
+    if (e.key === 'Backspace' && !mod && !e.altKey && !e.shiftKey && getCombo('delete') === 'delete') {
+      if (App.sel.length) { e.preventDefault(); Actions.remove(); }
+      else if (typeof Joints !== 'undefined' && Joints.selected) { e.preventDefault(); Joints.remove(Joints.selected); }
+      return;
+    }
     if (mod) return;
     const k = e.key.toLowerCase();
     if (['arrowleft', 'arrowright', 'arrowup', 'arrowdown', 'pageup', 'pagedown'].includes(k) && App.sel.length) {
       e.preventDefault();
       const g = (App.doc.settings.grid || 1) * (e.shiftKey ? 10 : 1);
       const d = { arrowleft: [-g, 0, 0], arrowright: [g, 0, 0], arrowup: [0, g, 0], arrowdown: [0, -g, 0], pageup: [0, 0, g], pagedown: [0, 0, -g] }[k];
-      App.change('Verschoben', (doc) => { for (const id of App.sel) { const f = Model.find(doc, id); if (!f || f.item.locked) continue; const PW = Model.parentWorld(doc, id); const q = new THREE.Quaternion(); PW.decompose(new THREE.Vector3(), q, new THREE.Vector3()); const v = new THREE.Vector3(...d).applyQuaternion(q.invert()); const tn = Model.tNumeric(f.item); f.item.t.x = round(tn.x + v.x, 4); f.item.t.y = round(tn.y + v.y, 4); f.item.t.z = round(tn.z + v.z, 4); } }, { merge: 'nudge' });
+      let blockedName = null;
+      const moved = App.change('Verschoben', (doc) => {
+        let any = false;
+        for (const id of App.sel) {
+          const f = Model.find(doc, id); if (!f || f.item.locked) continue;
+          if (typeof Joints !== 'undefined' && Joints.isFixedPart(id)) { if (!blockedName) blockedName = Model.label(f.item); continue; }
+          const PW = Model.parentWorld(doc, id); const q = new THREE.Quaternion(); PW.decompose(new THREE.Vector3(), q, new THREE.Vector3()); const v = new THREE.Vector3(...d).applyQuaternion(q.invert()); const tn = Model.tNumeric(f.item); f.item.t.x = round(tn.x + v.x, 4); f.item.t.y = round(tn.y + v.y, 4); f.item.t.z = round(tn.z + v.z, 4);
+          any = true;
+        }
+        if (!any) return false;
+      }, { merge: 'nudge' });
+      if (moved === false && blockedName) UI.toast(T('joint.fixedCannotMove', { name: blockedName }), { icon: 'info' });
     }
   }
   function showKeys() {

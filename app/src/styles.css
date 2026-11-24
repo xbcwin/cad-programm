@@ -826,6 +826,11 @@ body:not(.simple) .simple-only{display:none!important}
 .datum-tree .swatch.point svg{width:16px;height:16px}
 .datum-tree .swatch.csys{display:inline-grid;place-items:center;width:18px;height:18px;color:#1971c2;background:none}
 .datum-tree .swatch.csys svg{width:16px;height:16px}
+.datum-tree .swatch.joint{display:inline-grid;place-items:center;width:18px;height:18px;color:var(--accent);background:none}
+.datum-tree .swatch.joint svg{width:16px;height:16px}
+.joint-tree .j-del{border:0;background:none;color:var(--muted);padding:3px;border-radius:6px;cursor:pointer;display:inline-grid;place-items:center}
+.joint-tree .j-del:hover{color:var(--bad);background:color-mix(in srgb, var(--bad) 10%, transparent)}
+.joint-tree .j-del svg{width:14px;height:14px}
 
 /* Maß nur zum Ablesen (Referenzmaß) */
 .skdim.ref { border-style: dashed; border-color: var(--faint); color: var(--ink-2); font-style: italic; }
