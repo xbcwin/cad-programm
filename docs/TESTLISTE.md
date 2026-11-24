@@ -1942,6 +1942,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Skizze auf Fläche (`planeRef` mit `tid`) & Lage-Ersatz**: Skizze auf oberer Quaderfläche (`F:top`) samt Aufbau wandert bei Höhenänderung 15 → 25 mit auf Z = 33; alte Bezüge ohne `tid` greifen weiter über die Lage.
 - [ ] **Von Hand**: Im Browser einen Quader mit Tasche und Rundungen sowie einer Skizze auf der Deckfläche versehen, frühe Maße per Ziehgriff und Feld stark ändern und prüfen, dass Rundungen und Skizzenfläche ohne Warnung mitwandern.
 
+## 3D-Druck: Passungen, Düsen-Wand und Ausrichten (Auto [A-060], DR-03, DR-04, DR-05)
+
+- [x] **Passungs-Vorgaben (`lose`, `gleitend`, `fest`, `Presssitz`)**: Im Projekt-Panel (`#proj-print-fit`), im Bohrungs-Assistenten (`#hw-print-fit`) sowie an `stdPin` und `threadRod` vergrößert die Vorgabe Bohrungen um `+0,4 / +0,2 / +0,1 / 0 mm` und verkleinert Bolzen/Stifte um `−0,4 / −0,2 / −0,1 / 0 mm` exakt im CAD-Kern.
+- [x] **Düsen-Wandstärken-Check (`< 2 × Düse`)**: Eine `0,6`-mm-Wand meldet bei `0,4`-mm-Düse Warnungen in `#proj-nozzle-wall`, `#ampel`, `Weak.analyze()` (`nozzle-wall`) und `#thin-nozzle-warn`; ab `1,0` mm ist sie grün, bei `0,6`-mm-Düse warnt `1,0` mm wieder.
+- [x] **Für den Druck ausrichten**: Ein L-Winkel mit ≥ 300 mm² Überhang sowie ein schräg gedrehter L-Winkel werden über `#ov-orient` bzw. `#proj-orient-print` mit einem Klick auf `< 1 mm²` Überhang und Unterseite `Z = 0` ausgerichtet (samt Rückgängig).
+- [x] **Hilfetexte**: `printFit`, `nozzleWall` und `orientPrint` sind in `werkzeug-hilfen.json`, `HELP` und als `data-help`-Attribute im DOM vorhanden.
+- [ ] **Von Hand**: Im Browser ein zweiteiliges Steckteil (Bolzen + Bohrung mit Passung „Gleitend“) und ein Bauteil mit dünner Rippe sowie Überhang prüfen und mit „Für den Druck ausrichten“ ausrichten.
+
 ## Fehler melden
 
 ```

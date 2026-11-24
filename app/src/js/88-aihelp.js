@@ -301,16 +301,25 @@ const Weak = (() => {
       if (it.hidden || it.role === 'hole' || Mass.fixedOf(it) || !Viewer.nodes.has(it.id)) continue;
       const cls = CLASS[Mass.materialFor(it).k] || 'print'; if (cls !== 'print' && cls !== 'tpu') continue;
       const o = Views.overhangOf(it.id, 45); if (!o || o.area < 100 || !o.c) continue;   // kleine Stellen (z. B. waagerechte Schraubenlöcher) überbrückt der Drucker
-      out.push({ id: 'overhang', s: 'info', title: `Überhang beim Drucken – ${Model.label(it)}`, text: `${fmtFixed(o.area, 0)} mm² zeigen steiler als 45° nach unten und hängen beim Drucken in der Luft – der Slicer braucht dort Stützen. Anders hinlegen, eine Fase statt einer waagerechten Kante oder in zwei Teile teilen hilft. Ansichten → „Überhänge (3D-Druck)“ zeigt die Stellen rot.`, ids: [it.id], at: [o.c], r: 6 });
+      out.push({ id: 'overhang', s: 'info', title: `Überhang beim Drucken – ${Model.label(it)}`, text: `${fmtFixed(o.area, 0)} mm² zeigen steiler als 45° nach unten und hängen beim Drucken in der Luft – der Slicer braucht dort Stützen. Anders hinlegen, eine Fase statt einer waagerechten Kante oder in zwei Teile teilen hilft. Ansichten → „Überhänge (3D-Druck)“ zeigt die Stellen rot.`, ids: [it.id], at: [o.c], r: 6, fix: { label: 'Für den Druck ausrichten', run: () => Print.orientForPrint([it.id]) } });
     }
     return out;
+  }
+  function nozzleWalls() {
+    if (typeof Print === 'undefined' || !Print.nozzleWallCheck) return [];
+    const pbOn = !!(App.doc.settings && App.doc.settings.printBed && App.doc.settings.printBed.enabled);
+    const hasPrintMat = Model.activeItems(App.doc).some((it) => !it.hidden && it.role !== 'hole' && !Mass.fixedOf(it) && ['print', 'tpu'].includes(CLASS[Mass.materialFor(it).k] || 'print'));
+    if (!pbOn && !hasPrintMat) return [];
+    const nw = Print.nozzleWallCheck();
+    if (!nw.warn) return [];
+    return [{ id: 'nozzle-wall', s: 'warn', title: 'Wand zu dünn für die Düse', text: nw.summary, fix: { label: 'Stellen zeigen', run: () => Views.thin(true, { limit: nw.minWall }) } }];
   }
   async function analyze() {
     if (!App.doc.items.length) return [];
     const rev = App.revision, out = [];
     for (const pl of Plates.candidates()) out.push(...(await plateHoles(pl)));
     out.push(...(await solidHoles()));
-    out.push(...walls(), ...arms(), ...overhangs());
+    out.push(...walls(), ...nozzleWalls(), ...arms(), ...overhangs());
     if (DroneCheck.isDrone()) {
       const l = (await DroneCheck.run()) || [];
       for (const c of l) if ((c.s === 'bad' || c.s === 'warn') && c.id !== 'weight') out.push({ ...c, id: 'drone-' + c.id, title: c.title + ' (Drohnen-Check)' });

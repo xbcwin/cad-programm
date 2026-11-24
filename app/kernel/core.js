@@ -834,13 +834,20 @@ export function createKernel(R, oc) {
     const topo = ensureTopoComplete(shape, createTopoMap(), '$self');
     return { shape, topo };
   }
+  const PRINT_FIT_MM = { loose: 0.4, slide: 0.2, snug: 0.1, press: 0 };
+  const hasPrintFit = (k) => !!(k && Object.prototype.hasOwnProperty.call(PRINT_FIT_MM, k));
+  const printFitDelta = (k) => (hasPrintFit(k) ? PRINT_FIT_MM[k] : 0);
   function buildPrimitive(kind, p) {
     switch (kind) {
       case 'box': {
         const w = pos(p.w, 20), d = pos(p.d, 20), h = pos(p.h, 20);
         return R.makeBox([-w / 2, -d / 2, 0], [w / 2, d / 2, h]);
       }
-      case 'cylinder': return R.makeCylinder(pos(p.d, 20) / 2, pos(p.h, 20), [0, 0, 0], [0, 0, 1]);
+      case 'cylinder': {
+        const pf = printFitDelta(p.printFit);
+        const dEff = Math.max(0.2, pos(p.d, 20) + (p.printFitSign === 1 ? pf : -pf));
+        return R.makeCylinder(dEff / 2, pos(p.h, 20), [0, 0, 0], [0, 0, 1]);
+      }
       case 'tube': {
         const D = pos(p.d, 20), h = pos(p.h, 20), wall = pos(p.wall, 2);
         const outer = R.makeCylinder(D / 2, h);
@@ -2189,7 +2196,7 @@ export function createKernel(R, oc) {
   }
   function buildStdPin(p) {
     const sp = p.spec && typeof p.spec === 'object' ? p.spec : {};
-    const d = pos(sp.d, pos(p.d, 6)), L = pos(p.length, 20), r = d / 2;
+    const d = Math.max(0.4, pos(sp.d, pos(p.d, 6)) - printFitDelta(p.printFit)), L = pos(p.length, 20), r = d / 2;
     const cRaw = num(sp.c, d * 0.18);
     const c = Math.min(Math.max(0.05, cRaw), L * 0.3, r * 0.8);
     const dr = Math.min(r * 0.45, c * Math.tan((15 * Math.PI) / 180));
@@ -2262,7 +2269,7 @@ export function createKernel(R, oc) {
   // Metrisches ISO-Regelgewinde (vereinfacht): Kern + Gewindegang als Sweep entlang einer Schraubenlinie
   const PITCH = { M2: 0.4, 'M2.5': 0.45, M3: 0.5, M4: 0.7, M5: 0.8, M6: 1.0, M8: 1.25, M10: 1.5, M12: 1.75, M16: 2.0, M20: 2.5, M24: 3.0 };
   function threadShape(size, L, grow, pitch) {
-    const D = (parseFloat(String(size).slice(1)) || 6) + grow;
+    const D = Math.max(0.8, (parseFloat(String(size).slice(1)) || 6) + grow);
     const defP = PITCH[size] || 1, rawP = num(pitch, 0);
     const P = rawP > 0 ? Math.min(Math.max(rawP, 0.25), D * 0.45) : defP;
     const rMaj = D / 2, depth = 0.5413 * P, rMin = Math.max(0.25, rMaj - depth);
@@ -2294,11 +2301,13 @@ export function createKernel(R, oc) {
   }
   function buildPart(p) {
     const lib = p.lib;
-    if (lib === 'threadRod') { const L = pos(p.length, 12); return threadShape(p.size || 'M6', L, 0, p.pitch); }
+    const pf = printFitDelta(p.printFit);
+    if (lib === 'threadRod') { const L = pos(p.length, 12); return threadShape(p.size || 'M6', L, -pf, p.pitch); }
     if (lib === 'threadHole') {
       const L = pos(p.length, 10);
       // Innengewinde zum Drucken: etwas Luft (Spiel), durchgehend nach unten
-      const s = threadShape(p.size || 'M6', L + LIFT, num(p.clear, 0.3), p.pitch).translate([0, 0, -L]);
+      const cl = hasPrintFit(p.printFit) ? pf : num(p.clear, 0.3);
+      const s = threadShape(p.size || 'M6', L + LIFT, cl, p.pitch).translate([0, 0, -L]);
       return s;
     }
     if (lib === 'stdScrew') return buildStdScrew(p);
@@ -2310,7 +2319,7 @@ export function createKernel(R, oc) {
     if (lib === 'stdBearing') return buildStdBearing(p);
     if (lib === 'stdSleeve') return buildStdSleeve(p);
     const s = p.spec && typeof p.spec === 'object' ? { ...(SCREW[p.size] || SCREW.M3), ...p.spec } : (SCREW[p.size] || SCREW.M3);
-    const tol = num(p.tol, 0);
+    const tol = num(p.tol, 0) + pf;
     if (lib === 'screwHole') {
       const L = pos(p.length, 10);
       const hd = holeD(s, p.fit);
@@ -2341,7 +2350,7 @@ export function createKernel(R, oc) {
       return R.makeCylinder((si.ins + tol) / 2, L + LIFT, [0, 0, -L], [0, 0, 1]);
     }
     if (lib === 'blindHole') {
-      const d = pos(p.d, 5), L = pos(p.depth, 10), ang = num(p.tipAngle, 118);
+      const d = pos(p.d, 5) + pf, L = pos(p.depth, 10), ang = num(p.tipAngle, 118);
       const r = d / 2;
       if (ang > 1 && ang < 179.5) {
         const tipH = r / Math.tan((ang * Math.PI) / 360);
@@ -2350,8 +2359,8 @@ export function createKernel(R, oc) {
       return R.makeCylinder(r, L + LIFT, [0, 0, -L], [0, 0, 1]);
     }
     if (lib === 'fitHole') {
-      // Passbohrung H7: genau das Nennmaß ohne zusätzliches Spiel
-      const d = pos(p.d, 6), L = pos(p.depth, 10);
+      // Passbohrung H7: genau das Nennmaß (zzgl. gewählter 3D-Druck-Passung)
+      const d = pos(p.d, 6) + pf, L = pos(p.depth, 10);
       return R.makeCylinder(d / 2, L + LIFT, [0, 0, -L], [0, 0, 1]);
     }
     if (lib === 'centerHole') {

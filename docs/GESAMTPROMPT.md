@@ -115,7 +115,7 @@ Leitlinien:
 | `57-measure.js` | Messen |
 | `58-commands.js` | Eingabezeile, Befehlssuche |
 | `59-versions.js` | Versionen |
-| `60-print.js` | Export (STEP mit XCAF-Farben/Namen/Baugruppen, IGES, BREP, STL, 3MF, OBJ/MTL, GLB, DXF), Drucker-Liste `PRINTERS`, Bauraum-Prüfung `fitCheck`/`applyRotationSuggestion`, Loch-Ausgleich `holeComp` für STL/3MF, `Zip` (Packen/Entpacken) |
+| `60-print.js` | Export (STEP mit XCAF-Farben/Namen/Baugruppen, IGES, BREP, STL, 3MF, OBJ/MTL, GLB, DXF), Drucker-Liste `PRINTERS`, Bauraum-Prüfung `fitCheck`/`applyRotationSuggestion`, Loch-Ausgleich `holeComp` für STL/3MF, Passungs-Vorgaben `PRINT_FITS`/`printFit`, Düsen-Wandcheck `nozzleWallCheck`, Ausrichten `orientForPrint`/`bestPrintOrientation`, `Zip` (Packen/Entpacken) |
 | `70-drawing.js` | technische Zeichnung (`Drawing`), mehrere Blätter mit Tabs (`#sheet-tabs`, `addSheet`/`renameSheet`/`removeSheet`), Formate A4–A0 hoch/quer, eingebauter mehrseitiger PDF-Export (`buildPDFBytes`), SVG/DXF |
 | `80-ai.js` | KI-Kollege (`AI.RULES`, `AI.ACTIONS`, `AI.SUGGESTIONS`, `AI.open` – allgemeines CAD ohne Drohnen-Bezug; `drohne`-Aktion technisch erhalten) |
 | `84-drone.js` | Rahmen-Generator, Frame-Assistent, Bausätze |

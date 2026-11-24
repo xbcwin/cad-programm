@@ -151,7 +151,8 @@ const Place = (() => {
     ['insert', 'Gewindeeinsatz'],
     ['nut', 'Mutternfalle'],
   ];
-  let lastHole = { type: 'through', norm: 'metric', size: 'M3', head: 'countersunk', fit: 'medium', depth: 10, thru: true, d: 5, tipAngle: 118, fitD: 6, centerSize: 'A2.5' };
+  let lastHole = { type: 'through', norm: 'metric', size: 'M3', head: 'countersunk', fit: 'medium', depth: 10, thru: true, d: 5, tipAngle: 118, fitD: 6, centerSize: 'A2.5', printFit: '' };
+  let lastProjFit = '';
   let hw = null;   // laufender Setz-Modus
   const hwNum = (v, fb) => { const n = Model.num(v, Model.vars(App.doc).v, NaN); return n > 0 ? n : fb; };
   function holeHelpKey(type) { return type === 'blind' ? 'blindHole' : type === 'fit' ? 'fitHole' : type === 'center' ? 'centerHole' : 'holeWizard'; }
@@ -160,8 +161,9 @@ const Place = (() => {
     const mat = (holePath) => `<path d="M24 ${y0} H212 V${yB} H24 Z" fill="var(--accent)" fill-opacity=".14" stroke="var(--line-strong)" stroke-width="1"/>`
       + `<path d="${holePath}" fill="var(--surface)" stroke="var(--hole)" stroke-width="1.5" stroke-linejoin="round"/>`
       + `<line x1="${cx}" y1="6" x2="${cx}" y2="${yB + 4}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 2.5"/>`;
+    const pf = o.type === 'center' ? 0 : printFitMm(o.printFit);
     if (o.type === 'blind') {
-      const d = hwNum(o.d, 5), depth = hwNum(o.depth, 10), ang = Number(o.tipAngle ?? 118);
+      const d = hwNum(o.d, 5) + pf, depth = hwNum(o.depth, 10), ang = Number(o.tipAngle ?? 118);
       const tipH = blindTipHeight(d, ang);
       const scale = Math.min(46 / Math.max(depth + tipH, 1), 36 / Math.max(d / 2, 1));
       const rPx = Math.max(8, Math.min(36, (d / 2) * scale));
@@ -174,7 +176,7 @@ const Place = (() => {
       return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - rPx} ${y0} V${y1} L${cx} ${y2} L${cx + rPx} ${y1} V${y0} Z`)}${lbl}</svg>`;
     }
     if (o.type === 'fit') {
-      const d = hwNum(o.fitD, 6), info = h7Info(d);
+      const d = hwNum(o.fitD, 6) + pf, info = h7Info(hwNum(o.fitD, 6));
       const rPx = Math.max(12, Math.min(30, d * 2.4));
       const tolLbl = info.um != null ? `${info.esText} / 0` : 'H7';
       return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - rPx} ${y0} V${yB} H${cx + rPx} V${y0} Z`)}`
@@ -212,22 +214,26 @@ const Place = (() => {
     }
     const r = o.type === 'insert' ? 18 : 13;
     const endY = o.thru ? yB : yB - 12;
-    const dia = te ? threadHoleDia(te, o.type === 'tap' ? 'tap' : o.fit) : null;
+    const dia = te ? threadHoleDia(te, o.type === 'tap' ? 'tap' : o.fit) + pf : null;
     const lbl = o.type === 'tap' ? `${o.size} Kernloch${dia ? ' Ø ' + fmtFixed(dia, 2) : ''}` : o.type === 'insert' ? `${o.size} Einsatz` : `${o.size} Durchg.${dia ? ' Ø ' + fmtFixed(dia, 2) : ''}`;
     return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - r} ${y0} V${endY} H${cx + r} V${y0} Z`)}`
       + `<text x="28" y="${y0 + 14}" font-size="10" fill="var(--ink)">${esc(lbl)}</text></svg>`;
   }
   function holeInfoHTML(o) {
+    const pf = o.type === 'center' ? 0 : printFitMm(o.printFit);
+    const pfi = o.type === 'center' ? null : printFitInfo(o.printFit);
+    const pfNote = pfi ? `<br><b>Druck-Passung ${esc(pfi.label)}:</b> ${pf > 0 ? `+${Units.fmtLenU(pf, 2)}` : '0'} mm Spiel.` : '';
     if (o.type === 'blind') {
-      const d = hwNum(o.d, 5), depth = hwNum(o.depth, 10), ang = Number(o.tipAngle ?? 118);
+      const d = hwNum(o.d, 5) + pf, depth = hwNum(o.depth, 10), ang = Number(o.tipAngle ?? 118);
       const tipH = blindTipHeight(d, ang);
-      if (ang >= 179.5) return `<b>Flacher Boden:</b> Tiefe ${Units.fmtLenU(depth, 2)} (wie gefräst).`;
-      return `<b>Bohrspitze (${ang}°):</b> +${Units.fmtLenU(tipH, 2)} → Gesamttiefe <b>${Units.fmtLenU(depth + tipH, 2)}</b>.`;
+      const dTxt = pfi && pf > 0 ? `Ø <b>${Units.fmtLenU(d, 2)}</b> (${Units.fmtLenU(hwNum(o.d, 5), 2)} + ${fmtFixed(pf, 1)} mm) · ` : '';
+      if (ang >= 179.5) return `${dTxt}<b>Flacher Boden:</b> Tiefe ${Units.fmtLenU(depth, 2)} (wie gefräst).${pfNote}`;
+      return `${dTxt}<b>Bohrspitze (${ang}°):</b> +${Units.fmtLenU(tipH, 2)} → Gesamttiefe <b>${Units.fmtLenU(depth + tipH, 2)}</b>.${pfNote}`;
     }
     if (o.type === 'fit') {
-      const d = hwNum(o.fitD, 6), info = h7Info(d);
-      if (info.um != null) return `<b>Passung Ø ${Units.fmtLenU(d, 2)} H7 (ISO 286):</b> ${info.esText} / 0 mm (${info.rangeText}). Im Modell wird genau das Nennmaß gebohrt – beim Fertigen auf Maß reiben.`;
-      return `<b>Passung Ø ${Units.fmtLenU(d, 2)} H7:</b> Im Modell wird genau das Nennmaß gebohrt (ISO 286 H7 gilt bis Ø 500 mm).`;
+      const nom = hwNum(o.fitD, 6), d = nom + pf, info = h7Info(nom);
+      if (info.um != null) return `<b>Passung Ø ${Units.fmtLenU(d, 2)} H7 (ISO 286):</b> ${info.esText} / 0 mm (${info.rangeText}). ${pfi && pf > 0 ? `Druck-Passung ${esc(pfi.label)} (+${fmtFixed(pf, 1)} mm).` : 'Im Modell wird genau das Nennmaß gebohrt – beim Fertigen auf Maß reiben.'}`;
+      return `<b>Passung Ø ${Units.fmtLenU(d, 2)} H7:</b> Im Modell wird ${pfi && pf > 0 ? `inkl. Druck-Passung ${esc(pfi.label)} (+${fmtFixed(pf, 1)} mm) ` : 'genau das Nennmaß '}gebohrt.`;
     }
     if (o.type === 'center') {
       const m = centerHoleMetrics(o.centerSize);
@@ -238,21 +244,24 @@ const Place = (() => {
       if (!te) return '';
       const pitchTxt = te.tpi ? `${te.tpi} Gg/1″ (${fmtFixed(te.steigung_mm, 2)} mm)` : `Steigung ${fmtFixed(te.steigung_mm, 2)} mm`;
       const drillTxt = te.bohrer ? ` · Bohrer ${esc(te.bohrer)}` : '';
-      return `<b>Kernloch ${esc(te.id)}:</b> Ø <b>${Units.fmtLenU(te.kernloch_mm, 2)}</b> (${pitchTxt}${drillTxt}).<br><span style="color:var(--muted)">Norm: ${esc(te.quelle)}</span>`;
+      return `<b>Kernloch ${esc(te.id)}:</b> Ø <b>${Units.fmtLenU(te.kernloch_mm + pf, 2)}</b> (${pitchTxt}${drillTxt}).${pfNote}<br><span style="color:var(--muted)">Norm: ${esc(te.quelle)}</span>`;
     }
     if (o.type === 'through') {
       const te = threadEntry(o.size);
       if (!te) return '';
-      const dia = threadHoleDia(te, o.fit);
+      const dia = threadHoleDia(te, o.fit) + pf;
       let headTxt = '';
-      if (o.head === 'countersunk' && te.senkung_senk_d_mm) headTxt = ` · Senkkopf Ø ${Units.fmtLenU(te.senkung_senk_d_mm, 2)} (${te.senkung_winkel_grad || 90}°)`;
-      else if (o.head === 'counterbore' && te.senkung_zyl_d_mm) headTxt = ` · ${te.normId === 'pipe_g' ? 'Flachsenkung' : 'Zylindersenkung'} Ø ${Units.fmtLenU(te.senkung_zyl_d_mm, 2)} × ${Units.fmtLenU(te.senkung_zyl_t_mm, 2)}`;
-      return `<b>Durchgang ${esc(te.id)}:</b> Ø <b>${Units.fmtLenU(dia, 2)}</b>${headTxt}.<br><span style="color:var(--muted)">Norm: ${esc(te.quelle)}</span>`;
+      if (o.head === 'countersunk' && te.senkung_senk_d_mm) headTxt = ` · Senkkopf Ø ${Units.fmtLenU(te.senkung_senk_d_mm + pf, 2)} (${te.senkung_winkel_grad || 90}°)`;
+      else if (o.head === 'counterbore' && te.senkung_zyl_d_mm) headTxt = ` · ${te.normId === 'pipe_g' ? 'Flachsenkung' : 'Zylindersenkung'} Ø ${Units.fmtLenU(te.senkung_zyl_d_mm + pf, 2)} × ${Units.fmtLenU(te.senkung_zyl_t_mm, 2)}`;
+      return `<b>Durchgang ${esc(te.id)}:</b> Ø <b>${Units.fmtLenU(dia, 2)}</b>${headTxt}.${pfNote}<br><span style="color:var(--muted)">Norm: ${esc(te.quelle)}</span>`;
     }
+    if (pfi) return `<b>Druck-Passung ${esc(pfi.label)}:</b> ${pf > 0 ? `+${Units.fmtLenU(pf, 2)} mm Spiel auf das Loch.` : '0 mm Spiel (Presssitz).'}`;
     return '';
   }
   function holeHere(face, anchor, at) {
     if (face) Snap.prime(face.id, face.idx);   // Flächendaten schon holen, damit das erste Loch einrastet
+    const curProjFit = typeof Print !== 'undefined' ? Print.printFit() : '';
+    if (curProjFit !== lastProjFit) { lastHole.printFit = curProjFit; lastProjFit = curProjFit; }
     const o = { ...lastHole };
     const box = h('div', { class: 'holewiz', style: { display: 'grid', gap: '10px', minWidth: '264px' } });
     const titleEl = h('b', null, at ? `Bohrungen an ${at.pts.length} ${at.pts.length === 1 ? 'Punkt' : 'Punkten'}` : 'Bohrungs-Assistent');
@@ -342,6 +351,15 @@ const Place = (() => {
         body.append(thru);
         if (!o.thru) body.append(UI.numField({ id: 'hw-depth', label: 'Tiefe', value: o.depth, onCommit: (v) => { o.depth = v; } }));
       }
+      if (o.type !== 'center') {
+        const pff = UI.selectField({
+          id: 'hw-print-fit', label: 'Druck-Passung', value: o.printFit || '',
+          options: PRINT_FIT_HOLE_OPTIONS,
+          onChange: (v) => { o.printFit = v; updatePreview(); },
+        });
+        pff.dataset.help = 'printFit';
+        body.append(pff);
+      }
       updatePreview();
       const popEl = box.closest('.pop');
       if (popEl) { const pr = popEl.getBoundingClientRect(); if (pr.bottom > innerHeight - 8) popEl.style.top = Math.max(8, innerHeight - pr.height - 8) + 'px'; }
@@ -369,19 +387,20 @@ const Place = (() => {
   }
   function specFor(o, thick) {
     const depth = o.thru ? thick : o.depth;
-    if (o.type === 'blind') return [LIBMAP.blindHole, { d: o.d, depth: o.depth, tipAngle: Number(o.tipAngle ?? 118) }];
-    if (o.type === 'fit') return [LIBMAP.fitHole, { d: o.fitD, depth: o.thru ? thick : o.depth }];
+    const pf = o.printFit || '';
+    if (o.type === 'blind') return [LIBMAP.blindHole, { d: o.d, depth: o.depth, tipAngle: Number(o.tipAngle ?? 118), printFit: pf }];
+    if (o.type === 'fit') return [LIBMAP.fitHole, { d: o.fitD, depth: o.thru ? thick : o.depth, printFit: pf }];
     if (o.type === 'center') return [LIBMAP.centerHole, { size: o.centerSize }];
-    if (o.type === 'insert') return [LIBMAP.insert, { size: o.size, depth: o.thru ? thick : depth }];
-    if (o.type === 'nut') return [LIBMAP.nutTrap, { size: o.size, depth: null, length: depth }];
-    if (o.type === 'tap') return [LIBMAP.screwHole, { size: o.size, head: 'none', fit: 'tap', length: depth }];
-    return [LIBMAP.screwHole, { size: o.size, head: o.head, fit: o.fit, length: depth }];
+    if (o.type === 'insert') return [LIBMAP.insert, { size: o.size, depth: o.thru ? thick : depth, printFit: pf }];
+    if (o.type === 'nut') return [LIBMAP.nutTrap, { size: o.size, depth: null, length: depth, printFit: pf }];
+    if (o.type === 'tap') return [LIBMAP.screwHole, { size: o.size, head: 'none', fit: 'tap', length: depth, printFit: pf }];
+    return [LIBMAP.screwHole, { size: o.size, head: o.head, fit: o.fit, length: depth, printFit: pf }];
   }
   function placeAt(id, point, normal, exact) {
     if (!hw) return;
     const [def, params] = specFor(hw.o, thicknessAlong(id, normal));
     const onFace = Actions.onFaceTransform(id, point.toArray(), normal.toArray(), { exact });
-    Actions.addPart(def, params, { onFace });
+    Actions.addPart(def, params, { onFace, explicitPrintFit: true });
     App.clearSelection(); Handles.clear();
     hw.count++; holeBar();
   }
@@ -403,18 +422,19 @@ const Place = (() => {
     };
     const mkLine = (a, b) => new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...a), new THREE.Vector3(...b)]), mat);
     const te = (o.type === 'through' || o.type === 'tap') && typeof threadEntry === 'function' ? threadEntry(o.size) : null;
+    const pf = printFitMm(o.printFit);
     let r = te
-      ? (o.type === 'through' && o.head === 'countersunk' && te.senkung_senk_d_mm ? te.senkung_senk_d_mm / 2
-        : o.type === 'through' && o.head === 'counterbore' && te.senkung_zyl_d_mm ? te.senkung_zyl_d_mm / 2
-        : threadHoleDia(te, o.type === 'tap' ? 'tap' : o.fit) / 2)
-      : (parseFloat(String(o.size).slice(1)) || 3) * (o.type === 'through' && o.head !== 'none' ? 1.1 : 0.6);
+      ? ((o.type === 'through' && o.head === 'countersunk' && te.senkung_senk_d_mm ? te.senkung_senk_d_mm
+        : o.type === 'through' && o.head === 'counterbore' && te.senkung_zyl_d_mm ? te.senkung_zyl_d_mm
+        : threadHoleDia(te, o.type === 'tap' ? 'tap' : o.fit)) + pf) / 2
+      : (parseFloat(String(o.size).slice(1)) || 3) * (o.type === 'through' && o.head !== 'none' ? 1.1 : 0.6) + pf / 2;
     if (o.type === 'blind') {
-      r = hwNum(o.d, 5) / 2;
+      r = (hwNum(o.d, 5) + pf) / 2;
       const dep = hwNum(o.depth, 10), tip = blindTipHeight(r * 2, o.tipAngle ?? 118);
       grp.add(mkCircle(r, 0), mkCircle(r, -dep));
       for (const [sx, sy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) grp.add(mkLine([sx * r, sy * r, 0], [sx * r, sy * r, -dep]), mkLine([sx * r, sy * r, -dep], [0, 0, -(dep + tip)]));
     } else if (o.type === 'fit') {
-      r = hwNum(o.fitD, 6) / 2;
+      r = (hwNum(o.fitD, 6) + pf) / 2;
       const dep = o.thru ? 12 : hwNum(o.depth, 10);
       grp.add(mkCircle(r, 0), mkCircle(r, -dep));
       for (const [sx, sy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) grp.add(mkLine([sx * r, sy * r, 0], [sx * r, sy * r, -dep]));

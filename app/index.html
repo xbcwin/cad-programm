@@ -2849,6 +2849,21 @@ const HELP = {
   "hilfe": "Beim 3D-Druck schrumpfen runde Bohrungen oft leicht nach innen. Mit dem Loch-Ausgleich (+0,1 bis +0,4 mm Durchmesser) werden alle runden inneren Löcher beim Export als STL oder 3MF entsprechend größer gerechnet.",
   "tipp": "Dein CAD-Modell selbst sowie STEP, IGES und BREP bleiben dabei unverändert exakt."
  },
+ "printFit": {
+  "tip": "Passungs-Vorgaben für 3D-Druckteile: lose 0,4 / gleitend 0,2 / fest 0,1 / Presssitz 0 mm",
+  "hilfe": "Gedruckte Teile brauchen etwas Spiel, damit Bolzen, Stifte und Schrauben sauber passen. Wähle eine Vorgabe: bei Bohrungen wird das Spiel auf den Durchmesser addiert, bei Bolzen und Stiften abgezogen – als Projekt-Vorgabe oder direkt am Teil.",
+  "tipp": "Für bewegliche Deckel und Gleitsitze nimm „Gleitend“ (0,2 mm), für stramme Verbindungen „Fest“ (0,1 mm)."
+ },
+ "nozzleWall": {
+  "tip": "Prüft alle Wände gegen die gewählte Düse (Warnung unter 2 × Düse)",
+  "hilfe": "Wände dünner als zwei Bahnen der Druckdüse (unter 2 × Düse, z. B. 0,8 mm bei einer 0,4-mm-Düse) druckt der Slicer nicht mehr stabil oder lässt Lücken. Tracery warnt im Projekt-Panel, an der Ampel und bei den Schwachstellen.",
+  "tipp": "Klick auf „Stellen zeigen“, um alle zu dünnen Bereiche rot am Modell hervorzuheben."
+ },
+ "orientPrint": {
+  "tip": "Dreht das Teil automatisch so, dass möglichst wenig Überhang entsteht",
+  "hilfe": "„Für den Druck ausrichten“ prüft alle sinnvollen Liegerichtungen des Teils und dreht es in die Lage mit der kleinsten Überhangfläche und sicherem Stand auf dem Druckbett (Z = 0).",
+  "tipp": "Wähle ein einzelnes Teil aus oder richte das ganze Modell auf einmal aus – ein Klick auf Rückgängig dreht es wieder zurück."
+ },
  "userLibrary": {
   "tip": "Eigene Teile mit Vorschaubild und Maßen lokal speichern und überall einsetzen",
   "hilfe": "Rechtsklick auf ein Teil → „In meine Bibliothek“: Das Teil wird samt Vorschaubild in diesem Browser gespeichert. Alle benutzten Maße mit Namen (oder Zahlenmaße) wählst du als Eingabefelder aus. Unter „Bauteile → Meine Teile“ lässt es sich in jedes andere Projekt einsetzen und dort je Kopie mit eigenen Maßen anpassen.",
@@ -3589,7 +3604,7 @@ const THREAD_MAP = Object.fromEntries(THREAD_SPECS.map((t) => [t.size, t]));
 
 const Model = (() => {
   const T0 = () => ({ x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 });
-  const defBed = () => ({ enabled: false, printer: 'custom', x: 220, y: 220, z: 250, nozzle: 0.4, holeComp: 0 });
+  const defBed = () => ({ enabled: false, printer: 'custom', x: 220, y: 220, z: 250, nozzle: 0.4, holeComp: 0, printFit: '' });
   function newDoc(name = 'Neues Projekt') {
     return {
       format: 'masswerk', version: 1, id: uid('p'), name, created: Date.now(), modified: Date.now(),
@@ -3964,6 +3979,8 @@ const Model = (() => {
       }
       else {
         o.p = resolveP(it.p, ownV);
+        if (it.p && typeof it.p.printFit === 'string') o.p.printFit = it.p.printFit;
+        if (it.kind === 'cylinder' && o.p.printFit) o.p.printFitSign = it.role === 'hole' ? 1 : -1;
         if (it.kind === 'part') {
           if (it.p && typeof it.p.size === 'string') o.p.size = it.p.size;
           if (o.p.lib === 'screwHole' && typeof threadEntry === 'function') {
@@ -4688,6 +4705,7 @@ const Model = (() => {
       z: Number(rawBed.z) > 0 ? Number(rawBed.z) : 250,
       nozzle: Number(rawBed.nozzle) > 0 ? Number(rawBed.nozzle) : 0.4,
       holeComp: Number.isFinite(Number(rawBed.holeComp)) ? clamp(Math.round(Number(rawBed.holeComp) * 100) / 100, 0, 1) : 0,
+      printFit: ['loose', 'slide', 'snug', 'press'].includes(rawBed.printFit) ? rawBed.printFit : '',
     };
     if (!Units.DEFS[doc.settings.unit]) doc.settings.unit = 'mm';
     if (doc.rollback != null && !(doc.rollback >= 0 && doc.rollback < doc.items.length)) doc.rollback = null;
@@ -11331,41 +11349,70 @@ function sleeveEntry(size) {
   const s = String(size || '8x10').trim().toLowerCase().replace(/\s+/g, '').replace('×', 'x').replace(',', '.');
   return SLEEVE_BY_ID.get(s) || SLEEVE_BY_ID.get('8x10') || SLEEVE_LIST[0] || null;
 }
+// 3D-Druck-Passungs-Vorgaben (DR-03): Spiel wird bei Löchern addiert, bei Bolzen abgezogen
+const PRINT_FITS = [
+  { id: 'loose', label: 'Lose', mm: 0.4, desc: 'Viel Spiel – steckt leicht ohne Nacharbeit' },
+  { id: 'slide', label: 'Gleitend', mm: 0.2, desc: 'Bewegliche Teile, Deckel und Steckverbindungen' },
+  { id: 'snug', label: 'Fest', mm: 0.1, desc: 'Strammer Sitz, von Hand zusammendrückbar' },
+  { id: 'press', label: 'Presssitz', mm: 0, desc: 'Kein Spiel – zum Einpressen' },
+];
+const PRINT_FIT_MAP = Object.fromEntries(PRINT_FITS.map((f) => [f.id, f]));
+function printFitInfo(id) { return PRINT_FIT_MAP[String(id || '')] || null; }
+function printFitMm(id) { const f = printFitInfo(id); return f ? f.mm : 0; }
+const PRINT_FIT_PROJ_OPTIONS = [
+  ['', 'Aus (exakte Nennmaße)'],
+  ...PRINT_FITS.map((f) => [f.id, `${f.label} (${f.mm === 0 ? '0' : fmtFixed(f.mm, 1)} mm)`]),
+];
+const PRINT_FIT_HOLE_OPTIONS = [
+  ['', 'Keine (exakt)'],
+  ...PRINT_FITS.map((f) => [f.id, f.mm > 0 ? `${f.label} (+${fmtFixed(f.mm, 1)} mm)` : `${f.label} (0 mm)`]),
+];
+const PRINT_FIT_BOLT_OPTIONS = [
+  ['', 'Keine (exakt)'],
+  ...PRINT_FITS.map((f) => [f.id, f.mm > 0 ? `${f.label} (−${fmtFixed(f.mm, 1)} mm)` : `${f.label} (0 mm)`]),
+];
 const LIB = [
   { lib: 'screwHole', label: 'Schraubenloch', role: 'hole', icon: 'bolt', desc: 'Durchgangsloch mit Senkung für Schrauben', params: [
     { k: 'size', label: 'Gewinde', type: 'select', options: THREAD_GROUPED_OPTIONS, def: 'M3' },
     { k: 'head', label: 'Kopf', type: 'select', options: [['countersunk', 'Senkkopf'], ['counterbore', 'Zylinderkopf'], ['none', 'ohne Senkung']], def: 'countersunk' },
     { k: 'fit', label: 'Loch', type: 'select', options: [['medium', 'Mittel (Standard)'], ['fine', 'Eng (genau)'], ['coarse', 'Weit (mit Spiel)'], ['tap', 'Kernloch für Gewinde']], def: 'medium' },
     { k: 'length', label: 'Tiefe', type: 'num', def: 10 },
+    { k: 'printFit', label: 'Druck-Passung', type: 'select', options: PRINT_FIT_HOLE_OPTIONS, def: '' },
   ] },
   { lib: 'nutTrap', label: 'Mutternfalle', role: 'hole', icon: 'hex', desc: 'Sechskant-Tasche für eine Mutter, mit Schraubenloch', params: [
     { k: 'size', label: 'Mutter', type: 'select', options: SIZES, def: 'M3' },
     { k: 'depth', label: 'Taschentiefe', type: 'num', def: null, auto: true },
     { k: 'length', label: 'Lochtiefe', type: 'num', def: 12 },
+    { k: 'printFit', label: 'Druck-Passung', type: 'select', options: PRINT_FIT_HOLE_OPTIONS, def: '' },
   ] },
   { lib: 'threadHole', label: 'Gewindeloch (gedruckt)', role: 'hole', icon: 'target', desc: 'Echtes Innengewinde zum Drucken, mit etwas Spiel', params: [
     { k: 'size', label: 'Gewinde', type: 'select', options: ['M2', 'M2.5', 'M3', 'M4', 'M5', 'M6', 'M8', 'M10', 'M12', 'M16', 'M20', 'M24'], def: 'M6' },
     { k: 'length', label: 'Tiefe', type: 'num', def: 10 },
     { k: 'pitch', label: 'Steigung', type: 'num', def: null, auto: true },
     { k: 'clear', label: 'Spiel', type: 'num', def: 0.3 },
+    { k: 'printFit', label: 'Druck-Passung', type: 'select', options: PRINT_FIT_HOLE_OPTIONS, def: '' },
   ] },
   { lib: 'threadRod', label: 'Gewindebolzen', role: 'solid', icon: 'target', desc: 'Außengewinde (ISO metrisch) – z. B. für gedruckte Schraubdeckel', params: [
     { k: 'size', label: 'Gewinde', type: 'select', options: ['M2', 'M2.5', 'M3', 'M4', 'M5', 'M6', 'M8', 'M10', 'M12', 'M16', 'M20', 'M24'], def: 'M6' },
     { k: 'length', label: 'Länge', type: 'num', def: 12 },
     { k: 'pitch', label: 'Steigung', type: 'num', def: null, auto: true },
+    { k: 'printFit', label: 'Druck-Passung', type: 'select', options: PRINT_FIT_BOLT_OPTIONS, def: '' },
   ] },
   { lib: 'insert', label: 'Gewindeeinsatz', role: 'hole', icon: 'target', desc: 'Loch für einen Einschmelz-Gewindeeinsatz', params: [
     { k: 'size', label: 'Gewinde', type: 'select', options: ['M2', 'M2.5', 'M3', 'M4', 'M5', 'M6', 'M8'], def: 'M3' },
     { k: 'depth', label: 'Tiefe', type: 'num', def: null, auto: true },
+    { k: 'printFit', label: 'Druck-Passung', type: 'select', options: PRINT_FIT_HOLE_OPTIONS, def: '' },
   ] },
   { lib: 'blindHole', label: 'Sackloch', role: 'hole', icon: 'holeWizard', desc: 'Bohrung mit fester Tiefe und 118°-Bohrspitze (Standard-Spiralbohrer)', params: [
     { k: 'd', label: 'Durchmesser', type: 'num', def: 5 },
     { k: 'depth', label: 'Tiefe (Zylinder)', type: 'num', def: 10 },
     { k: 'tipAngle', label: 'Bohrspitze', type: 'select', options: [['118', '118° (Spiralbohrer)'], ['140', '140° (Hartmetall)'], ['180', 'Flacher Boden']], def: 118 },
+    { k: 'printFit', label: 'Druck-Passung', type: 'select', options: PRINT_FIT_HOLE_OPTIONS, def: '' },
   ] },
   { lib: 'fitHole', label: 'Passbohrung H7', role: 'hole', icon: 'target', desc: 'Präzisionsbohrung auf genaues Nennmaß mit Toleranz-Hinweis nach ISO 286 H7', params: [
     { k: 'd', label: 'Nenn-Ø', type: 'num', def: 6 },
     { k: 'depth', label: 'Tiefe', type: 'num', def: 10 },
+    { k: 'printFit', label: 'Druck-Passung', type: 'select', options: PRINT_FIT_HOLE_OPTIONS, def: '' },
   ] },
   { lib: 'centerHole', label: 'Zentrierbohrung', role: 'hole', icon: 'holeWizard', desc: 'Zentrierbohrung nach DIN 332 Form A (60°-Kegel + Führungsbohrung)', params: [
     { k: 'size', label: 'Größe (DIN 332 A)', type: 'select', options: CENTER_SIZES, def: 'A2.5' },
@@ -11385,6 +11432,7 @@ const LIB = [
     { k: 'size', label: 'Durchmesser', type: 'select', options: PIN_OPTIONS, def: '6' },
     { k: 'length', label: 'Länge', type: 'num', def: 20 },
     { k: 'tol', label: 'Toleranz', type: 'select', options: [['m6', 'm6 (Form A, Standard)'], ['h8', 'h8 (Form B)']], def: 'm6' },
+    { k: 'printFit', label: 'Druck-Passung', type: 'select', options: PRINT_FIT_BOLT_OPTIONS, def: '' },
   ] },
   { lib: 'stdKey', label: 'Passfeder (DIN 6885 A)', role: 'solid', icon: 'key', mat: 'Baustahl', std: true, desc: 'Rundstirnige Passfeder nach DIN 6885 Form A', params: [
     { k: 'size', label: 'Querschnitt (b × h)', type: 'select', options: KEY_OPTIONS, def: '6x6' },
@@ -12224,6 +12272,9 @@ const Actions = (() => {
   }
   function addPart(def, params, opts = {}) {
     if (sceneEmpty() && !opts.onFace && def.role !== 'hole') App.fitAfterBuild();
+    if (def && Array.isArray(def.params) && def.params.some((q) => q.k === 'printFit') && !opts.explicitPrintFit && !(params && params.printFit) && typeof Print !== 'undefined' && Print.printFit()) {
+      params = { ...(params || {}), printFit: Print.printFit() };
+    }
     const it = Model.newItem('part', { lib: def.lib, ...params }, { name: opts.name || def.label, role: def.role });
     const hole = def.role === 'hole';
     const spot = opts.pos || (hole ? viewCenter() : freeSpot(25, 25));
@@ -20900,6 +20951,11 @@ const Panels = (() => {
     printerSel.setAttribute('data-help', 'printerSelect');
     printerSel.style.marginTop = '8px';
     bedSec.append(bedOn, printerSel);
+    const nozWrap = h('div', { style: { marginTop: '8px' } }, UI.numField({
+      id: 'proj-bed-nozzle', label: 'Düse Ø', value: Print.nozzle(), unit: 'mm', len: false, min: 0.1, max: 2, step: 0.1, expr: false,
+      onCommit: (v) => Print.setNozzle(v),
+    }));
+    bedSec.append(nozWrap);
     if (pb.enabled) {
       const bedFields = h('div', { class: 'fields three', style: { marginTop: '8px' } });
       for (const [k, lbl] of [['x', 'Breite'], ['y', 'Tiefe'], ['z', 'Höhe']]) {
@@ -20907,7 +20963,7 @@ const Panels = (() => {
           id: 'proj-bed-' + k, label: lbl, value: pb[k], axis: k, unit: 'mm', min: 10, expr: false,
           onCommit: (v) => App.change('Druckbett geändert', (doc) => {
             doc.settings = doc.settings || {};
-            doc.settings.printBed = Object.assign({ enabled: true, printer: 'custom', x: 220, y: 220, z: 250, nozzle: 0.4, holeComp: 0 }, doc.settings.printBed || {});
+            doc.settings.printBed = Object.assign({ enabled: true, printer: 'custom', x: 220, y: 220, z: 250, nozzle: 0.4, holeComp: 0, printFit: '' }, doc.settings.printBed || {});
             doc.settings.printBed[k] = v;
             const pr = Print.findPrinter(doc.settings.printBed.printer);
             if (!pr || pr[k] !== v) doc.settings.printBed.printer = 'custom';
@@ -20916,14 +20972,6 @@ const Panels = (() => {
           }),
         }));
       }
-      const nozWrap = h('div', { style: { marginTop: '8px' } }, UI.numField({
-        id: 'proj-bed-nozzle', label: 'Düse Ø', value: pb.nozzle, unit: 'mm', len: false, min: 0.1, step: 0.1, expr: false,
-        onCommit: (v) => App.change('Düse geändert', (doc) => {
-          doc.settings = doc.settings || {};
-          doc.settings.printBed = Object.assign({ enabled: true, printer: 'custom', x: 220, y: 220, z: 250, nozzle: 0.4, holeComp: 0 }, doc.settings.printBed || {});
-          doc.settings.printBed.nozzle = v;
-        }),
-      }));
       const fit = Print.fitCheck(pb, st);
       const bedStatus = h('div', { class: 'hint-box' + (!fit.fits ? ' warn' : ''), id: 'proj-bed-status', style: { marginTop: '8px' } });
       if (!fit.fits) {
@@ -20937,7 +20985,38 @@ const Panels = (() => {
         const pPrefix = fit.printer ? fit.printer.name + ' · ' : 'Druckbett ';
         bedStatus.textContent = `${pPrefix}${Units.fmtLen(pb.x, 0)} × ${Units.fmtLen(pb.y, 0)} × ${Units.fmtLen(pb.z, 0)} ${Units.label()} · Düse ${fmt(pb.nozzle, 2)} mm`;
       }
-      bedSec.append(bedFields, nozWrap, bedStatus);
+      bedSec.append(bedFields, bedStatus);
+    }
+    const pfVal = Print.printFit();
+    const pfSel = UI.selectField({
+      id: 'proj-print-fit', label: 'Passungs-Vorgabe (Druckteile)', value: pfVal,
+      options: PRINT_FIT_PROJ_OPTIONS,
+      onChange: (v) => Print.setPrintFit(v),
+    });
+    pfSel.setAttribute('data-help', 'printFit');
+    pfSel.style.marginTop = '8px';
+    bedSec.append(pfSel);
+    if (pfVal) {
+      const pfi = printFitInfo(pfVal);
+      if (pfi) bedSec.append(h('small', { id: 'proj-print-fit-hint', style: { display: 'block', color: 'var(--muted)', marginTop: '4px' } }, `${pfi.label}: Bohrungs-Assistent ${pfi.mm > 0 ? `+${fmtFixed(pfi.mm, 1)}` : '0'} mm · Bolzen ${pfi.mm > 0 ? `−${fmtFixed(pfi.mm, 1)}` : '0'} mm (${pfi.desc}).`));
+    }
+    if (st) {
+      const nw = Print.nozzleWallCheck();
+      if (nw.summary) {
+        const nwBox = h('div', { class: 'hint-box' + (nw.warn ? ' warn' : ''), id: 'proj-nozzle-wall', 'data-help': 'nozzleWall', style: { marginTop: '8px' } }, h('div', null, nw.summary));
+        if (nw.warn) {
+          const showBtn = h('button', { type: 'button', class: 'btn', id: 'proj-nozzle-wall-show', style: { marginTop: '6px' } }, 'Stellen zeigen');
+          showBtn.onclick = () => Views.thin(true, { limit: nw.minWall });
+          nwBox.append(showBtn);
+        }
+        bedSec.append(nwBox);
+      }
+      const orientRow = h('div', { class: 'btn-row', style: { marginTop: '8px' } });
+      const orientBtn = h('button', { type: 'button', class: 'btn', id: 'proj-orient-print', 'data-help': 'orientPrint' });
+      orientBtn.innerHTML = icon('overhang') + 'Für den Druck ausrichten';
+      orientBtn.onclick = () => Print.orientForPrint();
+      orientRow.append(orientBtn);
+      bedSec.append(orientRow);
     }
     const hcVal = Print.holeComp();
     const hcChoices = [0, 0.1, 0.2, 0.3, 0.4];
@@ -21217,23 +21296,48 @@ const Panels = (() => {
     if (KINDS[it.kind] && KINDS[it.kind].params.length) {
       const fl = h('div', { class: 'fields' + (KINDS[it.kind].params.length === 3 ? ' three' : '') });
       for (const q of KINDS[it.kind].params) fl.append(UI.numField({ id: 'p-' + q.k, label: q.label, value: it.p[q.k], unit: q.unit, axis: q.axis, min: q.min, int: q.int, vars: V, onCommit: (val) => setP(q.k, val) }));
-      sec.append(fl); w.append(sec);
+      sec.append(fl);
+      if (it.kind === 'cylinder') {
+        const pfVal = it.p.printFit || '';
+        const pfSel = UI.selectField({
+          id: 'p-printFit', label: 'Druck-Passung', value: pfVal,
+          options: it.role === 'hole' ? PRINT_FIT_HOLE_OPTIONS : PRINT_FIT_BOLT_OPTIONS,
+          onChange: (v) => setP('printFit', v),
+        });
+        pfSel.setAttribute('data-help', 'printFit');
+        pfSel.style.marginTop = '8px';
+        sec.append(pfSel);
+        const pfi = printFitInfo(pfVal);
+        if (pfi) {
+          const dNom = Model.num(it.p.d, V, 20);
+          const dEff = Math.max(0.2, dNom + (it.role === 'hole' ? pfi.mm : -pfi.mm));
+          sec.append(h('div', { id: 'p-cyl-fit-hint', class: 'hint-box', html: `<b>Druck-Passung ${esc(pfi.label)}:</b> ${it.role === 'hole' ? '+' : '−'}${fmtFixed(pfi.mm, 1)} mm → Ø <b>${Units.fmtLenU(dEff, 2)}</b>.` }));
+        }
+      }
+      w.append(sec);
     } else if (it.kind === 'part') {
       const def = LIBMAP[it.p.lib];
       if (def) {
         const fl = h('div', { class: 'fields' });
         for (const q of def.params) {
-          if (q.type === 'select') fl.append(UI.selectField({ id: 'lp-' + q.k, label: q.label, value: it.p[q.k], options: q.options, onChange: (v) => setP(q.k, q.k === 'tipAngle' ? Number(v) : v) }));
-          else fl.append(UI.numField({ id: 'lp-' + q.k, label: q.label, value: it.p[q.k] ?? '', unit: q.unit ?? 'mm', int: q.int, vars: V, placeholder: q.auto ? 'passend' : '', onCommit: (v) => setP(q.k, v) }));
+          let fld;
+          if (q.type === 'select') fld = UI.selectField({ id: 'lp-' + q.k, label: q.label, value: it.p[q.k] ?? q.def ?? '', options: q.options, onChange: (v) => setP(q.k, q.k === 'tipAngle' ? Number(v) : v) });
+          else fld = UI.numField({ id: 'lp-' + q.k, label: q.label, value: it.p[q.k] ?? '', unit: q.unit ?? 'mm', int: q.int, vars: V, placeholder: q.auto ? 'passend' : '', onCommit: (v) => setP(q.k, v) });
+          if (q.k === 'printFit') fld.setAttribute('data-help', 'printFit');
+          fl.append(fld);
         }
         sec.append(fl);
+        const pfi = printFitInfo(it.p.printFit);
+        const pf = pfi ? pfi.mm : 0;
+        const pfHoleNote = pfi ? `<br><b>Druck-Passung ${esc(pfi.label)}:</b> ${pf > 0 ? `+${Units.fmtLenU(pf, 2)} mm` : '0 mm'} Spiel.` : '';
         if (def.lib === 'blindHole') {
-          const d = Model.num(it.p.d, V, 5), dep = Model.num(it.p.depth, V, 10), ang = Number(it.p.tipAngle ?? 118), tipH = blindTipHeight(d, ang);
+          const dNom = Model.num(it.p.d, V, 5), d = dNom + pf, dep = Model.num(it.p.depth, V, 10), ang = Number(it.p.tipAngle ?? 118), tipH = blindTipHeight(d, ang);
+          const dTxt = pfi && pf > 0 ? `Ø <b>${Units.fmtLenU(d, 2)}</b> (${Units.fmtLenU(dNom, 2)} + ${fmtFixed(pf, 1)} mm) · ` : '';
           const tipTxt = ang >= 179.5 ? `Flacher Boden, Tiefe ${Units.fmtLenU(dep, 2)}.` : `Bohrspitze (${fmtAngleU(ang)}): +${Units.fmtLenU(tipH, 2)} → Gesamttiefe <b>${Units.fmtLenU(dep + tipH, 2)}</b>.`;
-          sec.append(h('div', { class: 'hint-box', html: `${tipTxt} Setz es mit <b>Bohrung</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.` }));
+          sec.append(h('div', { class: 'hint-box', html: `${dTxt}${tipTxt}${pfHoleNote} Setz es mit <b>Bohrung</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.` }));
         } else if (def.lib === 'fitHole') {
-          const d = Model.num(it.p.d, V, 6), info = h7Info(d);
-          const tolTxt = info.um != null ? `<b>Passung Ø ${Units.fmtLenU(d, 2)} H7 (ISO 286):</b> ${info.esText} / 0 mm (${info.rangeText}). Im 3D-Modell wird genau das Nennmaß gebohrt – beim Fertigen auf Maß reiben.` : `<b>Passung Ø ${Units.fmtLenU(d, 2)} H7:</b> Im 3D-Modell wird genau das Nennmaß gebohrt.`;
+          const dNom = Model.num(it.p.d, V, 6), d = dNom + pf, info = h7Info(dNom);
+          const tolTxt = info.um != null ? `<b>Passung Ø ${Units.fmtLenU(d, 2)} H7 (ISO 286):</b> ${info.esText} / 0 mm (${info.rangeText}). ${pfi && pf > 0 ? `Druck-Passung ${esc(pfi.label)} (+${fmtFixed(pf, 1)} mm).` : 'Im 3D-Modell wird genau das Nennmaß gebohrt – beim Fertigen auf Maß reiben.'}` : `<b>Passung Ø ${Units.fmtLenU(d, 2)} H7:</b> Im 3D-Modell wird ${pfi && pf > 0 ? `inkl. Druck-Passung ${esc(pfi.label)} (+${fmtFixed(pf, 1)} mm) ` : 'genau das Nennmaß '}gebohrt.`;
           sec.append(h('div', { id: 'p-fit-hint', class: 'hint-box', html: tolTxt }));
         } else if (def.lib === 'centerHole') {
           const m = centerHoleMetrics(it.p.size);
@@ -21242,25 +21346,33 @@ const Panels = (() => {
           const te = threadEntry(it.p.size);
           let screwTxt = '';
           if (te) {
-            const dia = threadHoleDia(te, it.p.fit);
+            const dia = threadHoleDia(te, it.p.fit) + pf;
             const art = it.p.fit === 'tap' ? 'Kernloch' : 'Durchgang';
             let headTxt = '';
             if (it.p.fit !== 'tap') {
-              if (it.p.head === 'countersunk' && te.senkung_senk_d_mm) headTxt = ` · Senkkopf Ø ${Units.fmtLenU(te.senkung_senk_d_mm, 2)} (${te.senkung_winkel_grad || 90}°)`;
-              else if (it.p.head === 'counterbore' && te.senkung_zyl_d_mm) headTxt = ` · ${te.normId === 'pipe_g' ? 'Flachsenkung' : 'Zylindersenkung'} Ø ${Units.fmtLenU(te.senkung_zyl_d_mm, 2)} × ${Units.fmtLenU(te.senkung_zyl_t_mm, 2)}`;
+              if (it.p.head === 'countersunk' && te.senkung_senk_d_mm) headTxt = ` · Senkkopf Ø ${Units.fmtLenU(te.senkung_senk_d_mm + pf, 2)} (${te.senkung_winkel_grad || 90}°)`;
+              else if (it.p.head === 'counterbore' && te.senkung_zyl_d_mm) headTxt = ` · ${te.normId === 'pipe_g' ? 'Flachsenkung' : 'Zylindersenkung'} Ø ${Units.fmtLenU(te.senkung_zyl_d_mm + pf, 2)} × ${Units.fmtLenU(te.senkung_zyl_t_mm, 2)}`;
             }
-            screwTxt = `<b>${esc(te.id)}</b> (${esc(te.normName)}): ${art} Ø <b>${Units.fmtLenU(dia, 2)}</b>${headTxt}<br><span style="color:var(--muted)">Norm: ${esc(te.quelle)}</span><br>`;
+            screwTxt = `<b>${esc(te.id)}</b> (${esc(te.normName)}): ${art} Ø <b>${Units.fmtLenU(dia, 2)}</b>${headTxt}${pfHoleNote}<br><span style="color:var(--muted)">Norm: ${esc(te.quelle)}</span><br>`;
           }
           sec.append(h('div', { id: 'p-screw-hint', class: 'hint-box', html: `${screwTxt}Das Loch zeigt mit der flachen Seite nach oben. Setz es mit <b>Loch hier</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.` }));
-        } else if (def.lib === 'insert' || def.lib === 'nutTrap') sec.append(h('div', { class: 'hint-box', html: 'Das Loch zeigt mit der flachen Seite nach oben. Setz es mit <b>Loch hier</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.' }));
-        else if (def.lib === 'stdPin' && typeof pinEntry === 'function') {
+        } else if (def.lib === 'insert' || def.lib === 'nutTrap') {
+          sec.append(h('div', { class: 'hint-box', html: `${pfi ? `<b>Druck-Passung ${esc(pfi.label)}:</b> ${pf > 0 ? `+${Units.fmtLenU(pf, 2)} mm` : '0 mm'} Spiel.<br>` : ''}Das Loch zeigt mit der flachen Seite nach oben. Setz es mit <b>Loch hier</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.` }));
+        } else if (def.lib === 'threadRod' && pfi) {
+          const nom = parseFloat(String(it.p.size || 'M6').slice(1)) || 6;
+          sec.append(h('div', { id: 'p-threadrod-hint', class: 'hint-box', html: `<b>Druck-Passung ${esc(pfi.label)}:</b> Außengewinde um ${pf > 0 ? `−${Units.fmtLenU(pf, 2)}` : '0 mm'} angepasst (effektiv Ø <b>${Units.fmtLenU(Math.max(0.8, nom - pf), 2)}</b>).` }));
+        } else if (def.lib === 'threadHole' && pfi) {
+          const nom = parseFloat(String(it.p.size || 'M6').slice(1)) || 6;
+          sec.append(h('div', { id: 'p-threadhole-hint', class: 'hint-box', html: `<b>Druck-Passung ${esc(pfi.label)}:</b> Innengewinde mit ${pf > 0 ? `+${Units.fmtLenU(pf, 2)}` : '0 mm'} Spiel (effektiv Ø <b>${Units.fmtLenU(nom + pf, 2)}</b>).` }));
+        } else if (def.lib === 'stdPin' && typeof pinEntry === 'function') {
           const pe = pinEntry(it.p.size ?? it.p.d);
           if (pe) {
             const L = Model.num(it.p.length, V, 20), tol = it.p.tol === 'h8' ? 'h8' : 'm6';
             const minD = tol === 'h8' ? pe.h8_min_mm : pe.m6_min_mm, maxD = tol === 'h8' ? pe.h8_max_mm : pe.m6_max_mm;
             const h7 = h7Info(pe.d_mm);
             const fitTxt = h7.um != null ? ` · Empfohlene Bohrung: <b>Ø ${Units.fmtLenU(pe.d_mm, 2)} H7</b> (${h7.rangeText})` : '';
-            sec.append(h('div', { id: 'p-stdpin-hint', class: 'hint-box', html: `<b>ISO 2338 - ${pe.d_mm} ${tol} × ${Units.fmtLenU(L, 1)}</b><br>Toleranzfeld ${tol}: ${fmtFixed(minD, 3)} – ${fmtFixed(maxD, 3)} mm · Fase c ≈ ${Units.fmtLenU(pe.c_mm, 2)}${fitTxt}<br><span style="color:var(--muted)">Norm: ISO 2338:1997</span>` }));
+            const pfPinTxt = pfi ? `<br><b>Druck-Passung ${esc(pfi.label)}:</b> Stift-Ø um ${pf > 0 ? `−${Units.fmtLenU(pf, 2)}` : '0 mm'} angepasst → <b>Ø ${Units.fmtLenU(Math.max(0.4, pe.d_mm - pf), 2)}</b>.` : '';
+            sec.append(h('div', { id: 'p-stdpin-hint', class: 'hint-box', html: `<b>ISO 2338 - ${pe.d_mm} ${tol} × ${Units.fmtLenU(L, 1)}</b><br>Toleranzfeld ${tol}: ${fmtFixed(minD, 3)} – ${fmtFixed(maxD, 3)} mm · Fase c ≈ ${Units.fmtLenU(pe.c_mm, 2)}${fitTxt}${pfPinTxt}<br><span style="color:var(--muted)">Norm: ISO 2338:1997</span>` }));
           }
         } else if (def.lib === 'stdKey' && typeof keyEntry === 'function') {
           const ke = keyEntry(it.p.size);
@@ -22042,7 +22154,7 @@ const Panels = (() => {
       const hole = it.role === 'hole';
       const compact = !!(face || App.edges.length);
       b(hole ? 'solid' : 'hole', hole ? T('ctx.toBody') : T('ctx.toHole'), () => Actions.toggleRole(), '', hole ? T('ctx.toBodyTip') : T('ctx.toHoleTip'), compact);
-      b('rotate', T('ctx.rotate'), (e) => UI.menu(e.currentTarget, [{ label: T('ctx.rotZ'), icon: 'rotate', kbd: 'R', run: () => Actions.rotate90(null, 'z') }, { label: T('ctx.rotX'), icon: 'rotate', run: () => Actions.rotate90(null, 'x') }, { label: T('ctx.rotY'), icon: 'rotate', run: () => Actions.rotate90(null, 'y') }]), '', T('ctx.rotateTip'), true);
+      b('rotate', T('ctx.rotate'), (e) => UI.menu(e.currentTarget, [{ label: T('ctx.rotZ'), icon: 'rotate', kbd: 'R', run: () => Actions.rotate90(null, 'z') }, { label: T('ctx.rotX'), icon: 'rotate', run: () => Actions.rotate90(null, 'x') }, { label: T('ctx.rotY'), icon: 'rotate', run: () => Actions.rotate90(null, 'y') }, '-', { label: 'Für den Druck ausrichten', icon: 'overhang', help: 'orientPrint', run: () => Print.orientForPrint() }]), '', T('ctx.rotateTip'), true);
       b('mirror', T('ctx.mirror'), (e) => UI.menu(e.currentTarget, [{ label: T('ctx.mirrorX'), icon: 'mirror', run: () => Actions.mirror(null, 'x') }, { label: T('ctx.mirrorY'), icon: 'mirror', run: () => Actions.mirror(null, 'y') }, { label: T('ctx.mirrorZ'), icon: 'mirror', run: () => Actions.mirror(null, 'z') }]), '', T('ctx.mirrorTip'), true);
       b('copy', T('common.duplicate'), () => Actions.duplicate(), '', T('ctx.dupTip'), true);
       if (App.doc.items.includes(it)) b('moveStep', T('ctx.moveStep'), () => Features.transform(), '', T('ctx.moveStepTip'), true);
@@ -22633,7 +22745,8 @@ const Place = (() => {
     ['insert', 'Gewindeeinsatz'],
     ['nut', 'Mutternfalle'],
   ];
-  let lastHole = { type: 'through', norm: 'metric', size: 'M3', head: 'countersunk', fit: 'medium', depth: 10, thru: true, d: 5, tipAngle: 118, fitD: 6, centerSize: 'A2.5' };
+  let lastHole = { type: 'through', norm: 'metric', size: 'M3', head: 'countersunk', fit: 'medium', depth: 10, thru: true, d: 5, tipAngle: 118, fitD: 6, centerSize: 'A2.5', printFit: '' };
+  let lastProjFit = '';
   let hw = null;   // laufender Setz-Modus
   const hwNum = (v, fb) => { const n = Model.num(v, Model.vars(App.doc).v, NaN); return n > 0 ? n : fb; };
   function holeHelpKey(type) { return type === 'blind' ? 'blindHole' : type === 'fit' ? 'fitHole' : type === 'center' ? 'centerHole' : 'holeWizard'; }
@@ -22642,8 +22755,9 @@ const Place = (() => {
     const mat = (holePath) => `<path d="M24 ${y0} H212 V${yB} H24 Z" fill="var(--accent)" fill-opacity=".14" stroke="var(--line-strong)" stroke-width="1"/>`
       + `<path d="${holePath}" fill="var(--surface)" stroke="var(--hole)" stroke-width="1.5" stroke-linejoin="round"/>`
       + `<line x1="${cx}" y1="6" x2="${cx}" y2="${yB + 4}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 2.5"/>`;
+    const pf = o.type === 'center' ? 0 : printFitMm(o.printFit);
     if (o.type === 'blind') {
-      const d = hwNum(o.d, 5), depth = hwNum(o.depth, 10), ang = Number(o.tipAngle ?? 118);
+      const d = hwNum(o.d, 5) + pf, depth = hwNum(o.depth, 10), ang = Number(o.tipAngle ?? 118);
       const tipH = blindTipHeight(d, ang);
       const scale = Math.min(46 / Math.max(depth + tipH, 1), 36 / Math.max(d / 2, 1));
       const rPx = Math.max(8, Math.min(36, (d / 2) * scale));
@@ -22656,7 +22770,7 @@ const Place = (() => {
       return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - rPx} ${y0} V${y1} L${cx} ${y2} L${cx + rPx} ${y1} V${y0} Z`)}${lbl}</svg>`;
     }
     if (o.type === 'fit') {
-      const d = hwNum(o.fitD, 6), info = h7Info(d);
+      const d = hwNum(o.fitD, 6) + pf, info = h7Info(hwNum(o.fitD, 6));
       const rPx = Math.max(12, Math.min(30, d * 2.4));
       const tolLbl = info.um != null ? `${info.esText} / 0` : 'H7';
       return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - rPx} ${y0} V${yB} H${cx + rPx} V${y0} Z`)}`
@@ -22694,22 +22808,26 @@ const Place = (() => {
     }
     const r = o.type === 'insert' ? 18 : 13;
     const endY = o.thru ? yB : yB - 12;
-    const dia = te ? threadHoleDia(te, o.type === 'tap' ? 'tap' : o.fit) : null;
+    const dia = te ? threadHoleDia(te, o.type === 'tap' ? 'tap' : o.fit) + pf : null;
     const lbl = o.type === 'tap' ? `${o.size} Kernloch${dia ? ' Ø ' + fmtFixed(dia, 2) : ''}` : o.type === 'insert' ? `${o.size} Einsatz` : `${o.size} Durchg.${dia ? ' Ø ' + fmtFixed(dia, 2) : ''}`;
     return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - r} ${y0} V${endY} H${cx + r} V${y0} Z`)}`
       + `<text x="28" y="${y0 + 14}" font-size="10" fill="var(--ink)">${esc(lbl)}</text></svg>`;
   }
   function holeInfoHTML(o) {
+    const pf = o.type === 'center' ? 0 : printFitMm(o.printFit);
+    const pfi = o.type === 'center' ? null : printFitInfo(o.printFit);
+    const pfNote = pfi ? `<br><b>Druck-Passung ${esc(pfi.label)}:</b> ${pf > 0 ? `+${Units.fmtLenU(pf, 2)}` : '0'} mm Spiel.` : '';
     if (o.type === 'blind') {
-      const d = hwNum(o.d, 5), depth = hwNum(o.depth, 10), ang = Number(o.tipAngle ?? 118);
+      const d = hwNum(o.d, 5) + pf, depth = hwNum(o.depth, 10), ang = Number(o.tipAngle ?? 118);
       const tipH = blindTipHeight(d, ang);
-      if (ang >= 179.5) return `<b>Flacher Boden:</b> Tiefe ${Units.fmtLenU(depth, 2)} (wie gefräst).`;
-      return `<b>Bohrspitze (${ang}°):</b> +${Units.fmtLenU(tipH, 2)} → Gesamttiefe <b>${Units.fmtLenU(depth + tipH, 2)}</b>.`;
+      const dTxt = pfi && pf > 0 ? `Ø <b>${Units.fmtLenU(d, 2)}</b> (${Units.fmtLenU(hwNum(o.d, 5), 2)} + ${fmtFixed(pf, 1)} mm) · ` : '';
+      if (ang >= 179.5) return `${dTxt}<b>Flacher Boden:</b> Tiefe ${Units.fmtLenU(depth, 2)} (wie gefräst).${pfNote}`;
+      return `${dTxt}<b>Bohrspitze (${ang}°):</b> +${Units.fmtLenU(tipH, 2)} → Gesamttiefe <b>${Units.fmtLenU(depth + tipH, 2)}</b>.${pfNote}`;
     }
     if (o.type === 'fit') {
-      const d = hwNum(o.fitD, 6), info = h7Info(d);
-      if (info.um != null) return `<b>Passung Ø ${Units.fmtLenU(d, 2)} H7 (ISO 286):</b> ${info.esText} / 0 mm (${info.rangeText}). Im Modell wird genau das Nennmaß gebohrt – beim Fertigen auf Maß reiben.`;
-      return `<b>Passung Ø ${Units.fmtLenU(d, 2)} H7:</b> Im Modell wird genau das Nennmaß gebohrt (ISO 286 H7 gilt bis Ø 500 mm).`;
+      const nom = hwNum(o.fitD, 6), d = nom + pf, info = h7Info(nom);
+      if (info.um != null) return `<b>Passung Ø ${Units.fmtLenU(d, 2)} H7 (ISO 286):</b> ${info.esText} / 0 mm (${info.rangeText}). ${pfi && pf > 0 ? `Druck-Passung ${esc(pfi.label)} (+${fmtFixed(pf, 1)} mm).` : 'Im Modell wird genau das Nennmaß gebohrt – beim Fertigen auf Maß reiben.'}`;
+      return `<b>Passung Ø ${Units.fmtLenU(d, 2)} H7:</b> Im Modell wird ${pfi && pf > 0 ? `inkl. Druck-Passung ${esc(pfi.label)} (+${fmtFixed(pf, 1)} mm) ` : 'genau das Nennmaß '}gebohrt.`;
     }
     if (o.type === 'center') {
       const m = centerHoleMetrics(o.centerSize);
@@ -22720,21 +22838,24 @@ const Place = (() => {
       if (!te) return '';
       const pitchTxt = te.tpi ? `${te.tpi} Gg/1″ (${fmtFixed(te.steigung_mm, 2)} mm)` : `Steigung ${fmtFixed(te.steigung_mm, 2)} mm`;
       const drillTxt = te.bohrer ? ` · Bohrer ${esc(te.bohrer)}` : '';
-      return `<b>Kernloch ${esc(te.id)}:</b> Ø <b>${Units.fmtLenU(te.kernloch_mm, 2)}</b> (${pitchTxt}${drillTxt}).<br><span style="color:var(--muted)">Norm: ${esc(te.quelle)}</span>`;
+      return `<b>Kernloch ${esc(te.id)}:</b> Ø <b>${Units.fmtLenU(te.kernloch_mm + pf, 2)}</b> (${pitchTxt}${drillTxt}).${pfNote}<br><span style="color:var(--muted)">Norm: ${esc(te.quelle)}</span>`;
     }
     if (o.type === 'through') {
       const te = threadEntry(o.size);
       if (!te) return '';
-      const dia = threadHoleDia(te, o.fit);
+      const dia = threadHoleDia(te, o.fit) + pf;
       let headTxt = '';
-      if (o.head === 'countersunk' && te.senkung_senk_d_mm) headTxt = ` · Senkkopf Ø ${Units.fmtLenU(te.senkung_senk_d_mm, 2)} (${te.senkung_winkel_grad || 90}°)`;
-      else if (o.head === 'counterbore' && te.senkung_zyl_d_mm) headTxt = ` · ${te.normId === 'pipe_g' ? 'Flachsenkung' : 'Zylindersenkung'} Ø ${Units.fmtLenU(te.senkung_zyl_d_mm, 2)} × ${Units.fmtLenU(te.senkung_zyl_t_mm, 2)}`;
-      return `<b>Durchgang ${esc(te.id)}:</b> Ø <b>${Units.fmtLenU(dia, 2)}</b>${headTxt}.<br><span style="color:var(--muted)">Norm: ${esc(te.quelle)}</span>`;
+      if (o.head === 'countersunk' && te.senkung_senk_d_mm) headTxt = ` · Senkkopf Ø ${Units.fmtLenU(te.senkung_senk_d_mm + pf, 2)} (${te.senkung_winkel_grad || 90}°)`;
+      else if (o.head === 'counterbore' && te.senkung_zyl_d_mm) headTxt = ` · ${te.normId === 'pipe_g' ? 'Flachsenkung' : 'Zylindersenkung'} Ø ${Units.fmtLenU(te.senkung_zyl_d_mm + pf, 2)} × ${Units.fmtLenU(te.senkung_zyl_t_mm, 2)}`;
+      return `<b>Durchgang ${esc(te.id)}:</b> Ø <b>${Units.fmtLenU(dia, 2)}</b>${headTxt}.${pfNote}<br><span style="color:var(--muted)">Norm: ${esc(te.quelle)}</span>`;
     }
+    if (pfi) return `<b>Druck-Passung ${esc(pfi.label)}:</b> ${pf > 0 ? `+${Units.fmtLenU(pf, 2)} mm Spiel auf das Loch.` : '0 mm Spiel (Presssitz).'}`;
     return '';
   }
   function holeHere(face, anchor, at) {
     if (face) Snap.prime(face.id, face.idx);   // Flächendaten schon holen, damit das erste Loch einrastet
+    const curProjFit = typeof Print !== 'undefined' ? Print.printFit() : '';
+    if (curProjFit !== lastProjFit) { lastHole.printFit = curProjFit; lastProjFit = curProjFit; }
     const o = { ...lastHole };
     const box = h('div', { class: 'holewiz', style: { display: 'grid', gap: '10px', minWidth: '264px' } });
     const titleEl = h('b', null, at ? `Bohrungen an ${at.pts.length} ${at.pts.length === 1 ? 'Punkt' : 'Punkten'}` : 'Bohrungs-Assistent');
@@ -22824,6 +22945,15 @@ const Place = (() => {
         body.append(thru);
         if (!o.thru) body.append(UI.numField({ id: 'hw-depth', label: 'Tiefe', value: o.depth, onCommit: (v) => { o.depth = v; } }));
       }
+      if (o.type !== 'center') {
+        const pff = UI.selectField({
+          id: 'hw-print-fit', label: 'Druck-Passung', value: o.printFit || '',
+          options: PRINT_FIT_HOLE_OPTIONS,
+          onChange: (v) => { o.printFit = v; updatePreview(); },
+        });
+        pff.dataset.help = 'printFit';
+        body.append(pff);
+      }
       updatePreview();
       const popEl = box.closest('.pop');
       if (popEl) { const pr = popEl.getBoundingClientRect(); if (pr.bottom > innerHeight - 8) popEl.style.top = Math.max(8, innerHeight - pr.height - 8) + 'px'; }
@@ -22851,19 +22981,20 @@ const Place = (() => {
   }
   function specFor(o, thick) {
     const depth = o.thru ? thick : o.depth;
-    if (o.type === 'blind') return [LIBMAP.blindHole, { d: o.d, depth: o.depth, tipAngle: Number(o.tipAngle ?? 118) }];
-    if (o.type === 'fit') return [LIBMAP.fitHole, { d: o.fitD, depth: o.thru ? thick : o.depth }];
+    const pf = o.printFit || '';
+    if (o.type === 'blind') return [LIBMAP.blindHole, { d: o.d, depth: o.depth, tipAngle: Number(o.tipAngle ?? 118), printFit: pf }];
+    if (o.type === 'fit') return [LIBMAP.fitHole, { d: o.fitD, depth: o.thru ? thick : o.depth, printFit: pf }];
     if (o.type === 'center') return [LIBMAP.centerHole, { size: o.centerSize }];
-    if (o.type === 'insert') return [LIBMAP.insert, { size: o.size, depth: o.thru ? thick : depth }];
-    if (o.type === 'nut') return [LIBMAP.nutTrap, { size: o.size, depth: null, length: depth }];
-    if (o.type === 'tap') return [LIBMAP.screwHole, { size: o.size, head: 'none', fit: 'tap', length: depth }];
-    return [LIBMAP.screwHole, { size: o.size, head: o.head, fit: o.fit, length: depth }];
+    if (o.type === 'insert') return [LIBMAP.insert, { size: o.size, depth: o.thru ? thick : depth, printFit: pf }];
+    if (o.type === 'nut') return [LIBMAP.nutTrap, { size: o.size, depth: null, length: depth, printFit: pf }];
+    if (o.type === 'tap') return [LIBMAP.screwHole, { size: o.size, head: 'none', fit: 'tap', length: depth, printFit: pf }];
+    return [LIBMAP.screwHole, { size: o.size, head: o.head, fit: o.fit, length: depth, printFit: pf }];
   }
   function placeAt(id, point, normal, exact) {
     if (!hw) return;
     const [def, params] = specFor(hw.o, thicknessAlong(id, normal));
     const onFace = Actions.onFaceTransform(id, point.toArray(), normal.toArray(), { exact });
-    Actions.addPart(def, params, { onFace });
+    Actions.addPart(def, params, { onFace, explicitPrintFit: true });
     App.clearSelection(); Handles.clear();
     hw.count++; holeBar();
   }
@@ -22885,18 +23016,19 @@ const Place = (() => {
     };
     const mkLine = (a, b) => new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...a), new THREE.Vector3(...b)]), mat);
     const te = (o.type === 'through' || o.type === 'tap') && typeof threadEntry === 'function' ? threadEntry(o.size) : null;
+    const pf = printFitMm(o.printFit);
     let r = te
-      ? (o.type === 'through' && o.head === 'countersunk' && te.senkung_senk_d_mm ? te.senkung_senk_d_mm / 2
-        : o.type === 'through' && o.head === 'counterbore' && te.senkung_zyl_d_mm ? te.senkung_zyl_d_mm / 2
-        : threadHoleDia(te, o.type === 'tap' ? 'tap' : o.fit) / 2)
-      : (parseFloat(String(o.size).slice(1)) || 3) * (o.type === 'through' && o.head !== 'none' ? 1.1 : 0.6);
+      ? ((o.type === 'through' && o.head === 'countersunk' && te.senkung_senk_d_mm ? te.senkung_senk_d_mm
+        : o.type === 'through' && o.head === 'counterbore' && te.senkung_zyl_d_mm ? te.senkung_zyl_d_mm
+        : threadHoleDia(te, o.type === 'tap' ? 'tap' : o.fit)) + pf) / 2
+      : (parseFloat(String(o.size).slice(1)) || 3) * (o.type === 'through' && o.head !== 'none' ? 1.1 : 0.6) + pf / 2;
     if (o.type === 'blind') {
-      r = hwNum(o.d, 5) / 2;
+      r = (hwNum(o.d, 5) + pf) / 2;
       const dep = hwNum(o.depth, 10), tip = blindTipHeight(r * 2, o.tipAngle ?? 118);
       grp.add(mkCircle(r, 0), mkCircle(r, -dep));
       for (const [sx, sy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) grp.add(mkLine([sx * r, sy * r, 0], [sx * r, sy * r, -dep]), mkLine([sx * r, sy * r, -dep], [0, 0, -(dep + tip)]));
     } else if (o.type === 'fit') {
-      r = hwNum(o.fitD, 6) / 2;
+      r = (hwNum(o.fitD, 6) + pf) / 2;
       const dep = o.thru ? 12 : hwNum(o.depth, 10);
       grp.add(mkCircle(r, 0), mkCircle(r, -dep));
       for (const [sx, sy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) grp.add(mkLine([sx * r, sy * r, 0], [sx * r, sy * r, -dep]));
@@ -23766,11 +23898,15 @@ const Views = (() => {
     for (const a of [35, 40, 45, 50, 55, 60]) sel.append(h('option', { value: a, ...(a === 45 ? { selected: true } : {}) }, a + '°'));
     sel.onchange = () => { o.angle = +sel.value; drawOverhang(); };
     bar.append(head, h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, 'Ab'), sel, h('span', { class: 'vb-hint' }, 'Neigung gegen die Senkrechte')), h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint', id: 'ov-area' }, '')), h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint' }, 'Rot = hängt beim Drucken in der Luft. Druckbett ist die Unterseite.')));
+    const ob = h('button', { type: 'button', class: 'btn small', id: 'ov-orient', 'data-help': 'orientPrint' });
+    ob.innerHTML = icon('rotate') + 'Für den Druck ausrichten';
+    ob.onclick = () => Print.orientForPrint(null, { angle: o.angle });
+    bar.append(h('div', { class: 'vb-row' }, ob));
     bars().append(bar); o.bar = bar;
     st.ov = o; drawOverhang(); sync();
   }
 
-  // ---------- Wandstärke (3D-Druck, PF-07): Stellen dünner als die Grenze werden rot ----------
+  // ---------- Wandstärke (3D-Druck, PF-07, DR-04): Stellen dünner als die Grenze werden rot ----------
   function drawThin() {
     const o = st.thin; if (!o) return;
     if (o.mesh) { Viewer.groups.overlay.remove(o.mesh); o.mesh.geometry.dispose(); o.mesh.material.dispose(); o.mesh = null; }
@@ -23783,20 +23919,63 @@ const Views = (() => {
     }
     const t = o.bar && o.bar.querySelector('#thin-area');
     if (t) t.textContent = d.area > 0.05 ? `${Units.fmtAreaU(d.area, d.area < 100 ? 1 : 0)} dünner als ${Units.fmtLenU(o.limit, 1)} – dünnste Stelle ${Units.fmtLenU(d.minT, 2)}` : `Überall mindestens ${Units.fmtLenU(o.limit, 1)}`;
+    const nwEl = o.bar && o.bar.querySelector('#thin-nozzle-warn');
+    if (nwEl && typeof Print !== 'undefined' && Print.nozzleWallCheck) {
+      const nw = Print.nozzleWallCheck();
+      nwEl.className = nw.warn ? 'hint-box warn' : 'vb-hint';
+      nwEl.textContent = nw.summary;
+      nwEl.hidden = !nw.summary;
+    }
     Viewer.requestRender();
   }
-  function thin(on = !st.thin) {
+  function thin(on = !st.thin, opts = {}) {
     if (!on) { if (st.thin) { if (st.thin.mesh) { Viewer.groups.overlay.remove(st.thin.mesh); st.thin.mesh.geometry.dispose(); st.thin.mesh.material.dispose(); } if (st.thin.bar) st.thin.bar.remove(); st.thin = null; Viewer.requestRender(); } sync(); return; }
-    if (st.thin) return;
-    const o = { limit: 1.2, mesh: null, area: 0 };
+    const noz = typeof Print !== 'undefined' && Print.nozzle ? Print.nozzle() : 0.4;
+    const minWall = round(2 * noz, 2);
+    const lim = opts && opts.limit > 0 ? round(opts.limit, 2) : 1.2;
+    if (st.thin) {
+      if (opts && opts.limit > 0) {
+        st.thin.limit = lim;
+        const sel = st.thin.bar && st.thin.bar.querySelector('#thin-limit');
+        if (sel) {
+          if (![...sel.options].some((op) => Math.abs(+op.value - lim) < 1e-4)) {
+            sel.append(h('option', { value: lim }, Units.fmtLenFixedU(lim, 2)));
+          }
+          sel.value = String([...sel.options].find((op) => Math.abs(+op.value - lim) < 1e-4)?.value || lim);
+        }
+        drawThin();
+      }
+      return;
+    }
+    const o = { limit: lim, mesh: null, area: 0 };
     const bar = h('div', { class: 'viewbar', role: 'toolbar', 'aria-label': 'Wandstärke' });
     const head = h('div', { class: 'vb-head' }, h('span', { class: 'title' }, 'Wandstärke'));
     const close = h('button', { type: 'button', class: 'vb-x', 'aria-label': 'Wandstärke ausblenden', 'data-tip': 'Ausblenden' }); close.innerHTML = icon('close'); close.onclick = () => thin(false);
     head.append(close);
     const sel = h('select', { id: 'thin-limit', class: 'vb-sel', 'aria-label': 'Mindest-Wandstärke' });
-    for (const a of [0.4, 0.8, 1.2, 1.6, 2, 3, 5]) sel.append(h('option', { value: a, ...(a === 1.2 ? { selected: true } : {}) }, Units.fmtLenFixedU(a, 1)));
+    const vals = [0.4, 0.8, 1.2, 1.6, 2, 3, 5];
+    if (!vals.some((a) => Math.abs(a - minWall) < 1e-4)) vals.push(minWall);
+    if (!vals.some((a) => Math.abs(a - lim) < 1e-4)) vals.push(lim);
+    vals.sort((a, b) => a - b);
+    for (const a of vals) {
+      const isNoz = Math.abs(a - minWall) < 1e-4;
+      const lbl = Units.fmtLenFixedU(a, a % 0.1 > 1e-3 ? 2 : 1) + (isNoz ? ' (2 × Düse)' : '');
+      sel.append(h('option', { value: a, ...(Math.abs(a - lim) < 1e-4 ? { selected: true } : {}) }, lbl));
+    }
     sel.onchange = () => { o.limit = +sel.value; drawThin(); };
-    bar.append(head, h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, 'Rot unter'), sel, h('span', { class: 'vb-hint' }, '0,4 mm Düse: mindestens 0,8–1,2 mm')), h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint', id: 'thin-area' }, '')));
+    const nozBtn = h('button', { type: 'button', class: 'btn small', id: 'thin-nozzle-btn', 'data-help': 'nozzleWall' }, 'Düse 2×');
+    nozBtn.onclick = () => {
+      const curMin = round(2 * (typeof Print !== 'undefined' && Print.nozzle ? Print.nozzle() : 0.4), 2);
+      o.limit = curMin;
+      if (![...sel.options].some((op) => Math.abs(+op.value - curMin) < 1e-4)) sel.append(h('option', { value: curMin }, Units.fmtLenFixedU(curMin, 2)));
+      sel.value = String([...sel.options].find((op) => Math.abs(+op.value - curMin) < 1e-4)?.value || curMin);
+      drawThin();
+    };
+    bar.append(head,
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, 'Rot unter'), sel, nozBtn),
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint' }, `Düse ${fmt(noz, 2)} mm: mindestens ${Units.fmtLenU(minWall, 2)} (2 × Düse)`)),
+      h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint', id: 'thin-area' }, '')),
+      h('div', { class: 'vb-row' }, h('div', { id: 'thin-nozzle-warn', class: 'vb-hint', 'data-help': 'nozzleWall' }, '')));
     bars().append(bar); o.bar = bar;
     st.thin = o; drawThin(); sync();
   }
@@ -24017,6 +24196,7 @@ const Views = (() => {
   return { saveView, goView, removeView,     init, section, xray, explode, collapse, focus, overhang, menu, onKey, reset, sync, bars,
     present, get presenting() { return !!st.present; }, thin, get thinInfo() { return st.thin ? { area: st.thin.area, minT: st.thin.minT } : null; },
     get overhangArea() { return st.ov ? st.ov.area : null; },
+    get overhangAngle() { return st.ov ? st.ov.angle : 45; },
     wind, windArea, get windInfo() { return st.wind ? { angle: st.wind.angle, props: st.wind.props, area: st.wind.area, cw: st.wind.cw, v: st.wind.v, drag: st.wind.drag, top: st.wind.top || null } : null; }, cwGuess, topSpeed, dragN,
     overhangOf: (id, angle = 45) => { const d = overhangData(angle, [id]); return { area: d.area, c: d.c }; },
     get cut() {
@@ -30694,7 +30874,9 @@ const Commands = (() => {
     add('datum-csys', 'Eigenes Koordinatensystem anlegen', 'axes', 'koordinatensystem nullpunkt ursprung achsen export step stl 3mf', () => Datums.csysDialog(), { group: 'Werkzeuge' });
     add('image', 'Bild speichern (PNG)', 'image', 'bild png foto screenshot rendering präsentation hintergrund durchsichtig', () => Print.imageDialog(), { group: 'Werkzeuge' });
     add('export', 'Exportieren (STEP, IGES, BREP, STL, 3MF, OBJ, GLB, DXF)', 'export', 'step igs iges brep stl 3mf obj mtl glb gltf dxf platten fräse laser exportieren speichern download', () => Print.exportDialog(), { group: 'Werkzeuge', kbd: 'Strg E' });
-    add('printer-settings', '3D-Drucker und Loch-Ausgleich einstellen', 'printer', 'drucker bauraum bambu a1 p1s x1c prusa mk4 mini ender voron loch ausgleich 3d-druck', () => { Commands.setMode('model'); App.clearSelection(); setTimeout(() => { const el = $('#proj-printer'); if (el) { el.scrollIntoView({ block: 'nearest' }); el.focus(); } }, 60); }, { group: 'Projekt' });
+    add('printer-settings', '3D-Drucker und Loch-Ausgleich einstellen', 'printer', 'drucker bauraum bambu a1 p1s x1c prusa mk4 mini ender voron loch ausgleich 3d-druck passung lose gleitend fest presssitz duese wandstaerke', () => { Commands.setMode('model'); App.clearSelection(); setTimeout(() => { const el = $('#proj-printer'); if (el) { el.scrollIntoView({ block: 'nearest' }); el.focus(); } }, 60); }, { group: 'Projekt' });
+    add('orient-print', 'Für den Druck ausrichten (wenig Überhang)', 'overhang', 'druck ausrichten drehen ueberhang stuetzen orientieren 3d-druck flach legen', () => Print.orientForPrint(), { group: 'Projekt' });
+    add('nozzle-wall', 'Wandstärke gegen Düse prüfen', 'ruler', 'wandstaerke duese 3d-druck duenn warnung pruefen wand', () => Views.thin(true, { limit: round(2 * Print.nozzle(), 2) }), { group: 'Projekt' });
     add('status', 'Modell-Status', 'info', 'status prüfen größe fehler', () => $('#ampel').click(), { group: 'Werkzeuge' });
     add('drop', 'Auf die XY-Ebene setzen', 'push', 'boden unten absetzen z null ebene', () => Actions.dropToPlate(null), { group: 'Werkzeuge' });
     add('ortho', 'Orthografisch / Perspektive', 'viewOrtho', 'ortho perspektive projektion kamera', () => ViewPrefs.toggle('ortho'), { group: 'Ansicht', kbd: 'O' });
@@ -31178,6 +31360,29 @@ const Print = (() => {
     const hc = App.doc && App.doc.settings && App.doc.settings.printBed ? Number(App.doc.settings.printBed.holeComp) : 0;
     return Number.isFinite(hc) && hc > 0 ? clamp(Math.round(hc * 100) / 100, 0, 1) : 0;
   }
+  function nozzle() {
+    const nz = App.doc && App.doc.settings && App.doc.settings.printBed ? Number(App.doc.settings.printBed.nozzle) : 0.4;
+    return Number.isFinite(nz) && nz > 0 ? clamp(Math.round(nz * 100) / 100, 0.1, 2.0) : 0.4;
+  }
+  function setNozzle(mm) {
+    const v = Number.isFinite(Number(mm)) ? clamp(Math.round(Number(mm) * 100) / 100, 0.1, 2.0) : 0.4;
+    App.change('Düse geändert', (doc) => {
+      doc.settings = doc.settings || {};
+      doc.settings.printBed = Object.assign({ enabled: false, printer: 'custom', x: 220, y: 220, z: 250, nozzle: 0.4, holeComp: 0, printFit: '' }, doc.settings.printBed || {}, { nozzle: v });
+    });
+  }
+  function printFit() {
+    const pf = App.doc && App.doc.settings && App.doc.settings.printBed ? App.doc.settings.printBed.printFit : '';
+    return ['loose', 'slide', 'snug', 'press'].includes(pf) ? pf : '';
+  }
+  function setPrintFit(id) {
+    const pf = ['loose', 'slide', 'snug', 'press'].includes(id) ? id : '';
+    const info = typeof printFitInfo === 'function' ? printFitInfo(pf) : null;
+    App.change(info ? `Druck-Passung: ${info.label}` : 'Druck-Passung ausgeschaltet', (doc) => {
+      doc.settings = doc.settings || {};
+      doc.settings.printBed = Object.assign({ enabled: false, printer: 'custom', x: 220, y: 220, z: 250, nozzle: 0.4, holeComp: 0, printFit: '' }, doc.settings.printBed || {}, { printFit: pf });
+    });
+  }
   function setPrinter(id) {
     const p = findPrinter(id);
     App.change(p ? `Drucker: ${p.name}` : id === 'custom' ? 'Eigene Druckergröße' : 'Druckbett deaktiviert', (doc) => {
@@ -31320,6 +31525,266 @@ const Print = (() => {
     UI.toast('Modell für den Drucker gedreht.', { icon: 'check' });
     return true;
   }
+  // ---------- DR-04: Wandstärken-Check gegen die Düse (Wand < 2 × Düse = Warnung) ----------
+  const NON_PRINT_LIBS = new Set(['stdScrew', 'stdNut', 'stdWasher', 'stdBearing', 'stdSleeve', 'stdPin', 'stdKey', 'threadRod']);
+  let wallCache = null;
+  function printableWallNodes(onlyIds = null) {
+    const out = [];
+    for (const n of Viewer.nodes.values()) {
+      if (!n.obj.visible || n.allBodiesHidden || n.role === 'hole' || n.id === '__dragprev' || !n.mesh || !n.data || !n.data.triangles) continue;
+      if (onlyIds && !onlyIds.includes(n.id)) continue;
+      if (!onlyIds) {
+        const f = Model.find(App.doc, n.id);
+        const it = f ? f.item : null;
+        if (it && (typeof Mass !== 'undefined' && Mass.fixedOf(it))) continue;
+        if (it && it.kind === 'part' && it.p && NON_PRINT_LIBS.has(it.p.lib)) continue;
+      }
+      out.push(n);
+    }
+    return out;
+  }
+  function nozzleWallCheck(nozzleVal = nozzle(), onlyIds = null) {
+    const noz = Number(nozzleVal) > 0 ? clamp(Math.round(Number(nozzleVal) * 100) / 100, 0.1, 2.0) : nozzle();
+    const minWall = round(2 * noz, 4);
+    const nodes = printableWallNodes(onlyIds);
+    if (!nodes.length) return { ok: true, warn: false, nozzle: noz, minWall, area: 0, minT: null, summary: '' };
+    const ids = nodes.map((n) => n.id);
+    const geomSig = nodes.map((n) => `${n.id}:${(App.results.get(n.id) && App.results.get(n.id).key) || ''}`).join(',');
+    const cacheKey = `${App.revision}|${noz}|${geomSig}`;
+    if (!App.busy && wallCache && wallCache.key === cacheKey) return wallCache.res;
+    const d = Viewer.thinWalls(Math.max(0.05, minWall - 0.01), ids);
+    const minT = d.minT != null ? round(d.minT + 1e-4, 3) : null;
+    const warn = d.area >= 0.5 && minT != null && minT < minWall - 0.01;
+    const summary = warn
+      ? `Wand zu dünn für ${fmt(noz, 2)}-mm-Düse: dünnste Stelle ${Units.fmtLenU(minT, 2)} (mindestens ${Units.fmtLenU(minWall, 2)} = 2 × Düse, ${Units.fmtAreaU(d.area, d.area < 100 ? 1 : 0)} betroffen).`
+      : `Wandstärke passt zur ${fmt(noz, 2)}-mm-Düse (überall mindestens ${Units.fmtLenU(minWall, 2)} = 2 × Düse).`;
+    const res = { ok: !warn, warn, nozzle: noz, minWall, area: d.area, minT, summary };
+    if (!App.busy) wallCache = { key: cacheKey, res };
+    return res;
+  }
+
+  // ---------- DR-05: Für den Druck ausrichten (minimale Überhangfläche, sichere Auflage auf Z = 0) ----------
+  function orientTargetNodes(ids = null) {
+    const all = [...Viewer.nodes.values()].filter((n) => n.obj.visible && !n.allBodiesHidden && n.role !== 'hole' && n.id !== '__dragprev' && n.mesh && n.data && n.data.triangles);
+    if (Array.isArray(ids) && ids.length) {
+      const want = new Set();
+      for (const id of ids) {
+        const t = Model.topOf(App.doc, id);
+        if (t) want.add(App.mergedInto(t.id) || t.id);
+        want.add(id);
+      }
+      const sub = all.filter((n) => want.has(n.id));
+      if (sub.length) return sub;
+    }
+    if (App.sel && App.sel.length) {
+      const want = new Set();
+      for (const id of App.sel) {
+        const t = Model.topOf(App.doc, id);
+        if (t) want.add(App.mergedInto(t.id) || t.id);
+      }
+      const sub = all.filter((n) => want.has(n.id));
+      if (sub.length) return sub;
+    }
+    return all;
+  }
+  function collectOrientTris(nodes) {
+    const tris = [];
+    const box = new THREE.Box3();
+    const va = new THREE.Vector3(), vb = new THREE.Vector3(), vc = new THREE.Vector3();
+    const ab = new THREE.Vector3(), ac = new THREE.Vector3(), nn = new THREE.Vector3();
+    for (const n of nodes) {
+      n.obj.updateMatrixWorld(true);
+      const P = n.mesh.geometry.getAttribute('position').array;
+      const T = n.data.triangles;
+      const M = n.mesh.matrixWorld;
+      for (let i = 0; i + 2 < T.length; i += 3) {
+        va.fromArray(P, T[i] * 3).applyMatrix4(M);
+        vb.fromArray(P, T[i + 1] * 3).applyMatrix4(M);
+        vc.fromArray(P, T[i + 2] * 3).applyMatrix4(M);
+        box.expandByPoint(va).expandByPoint(vb).expandByPoint(vc);
+        nn.crossVectors(ab.subVectors(vb, va), ac.subVectors(vc, va));
+        const L = nn.length();
+        if (L < 1e-10) continue;
+        tris.push({
+          ax: va.x, ay: va.y, az: va.z,
+          bx: vb.x, by: vb.y, bz: vb.z,
+          cx: vc.x, cy: vc.y, cz: vc.z,
+          nx: nn.x / L, ny: nn.y / L, nz: nn.z / L,
+          area: L / 2,
+        });
+      }
+    }
+    return { tris, box };
+  }
+  function orientCandidates(tris) {
+    const cands = [];
+    const add = (dx, dy, dz, eulerHint = null, isCurrent = false) => {
+      const l = Math.hypot(dx, dy, dz);
+      if (l < 1e-9) return;
+      const x = dx / l, y = dy / l, z = dz / l;
+      if (cands.some((c) => c.x * x + c.y * y + c.z * z > 0.9994)) return;
+      cands.push({ x, y, z, eulerHint, isCurrent });
+    };
+    add(0, 0, -1, [0, 0, 0], true);
+    add(0, 0, 1, [180, 0, 0], false);
+    add(1, 0, 0, [0, 90, 0], false);
+    add(-1, 0, 0, [0, -90, 0], false);
+    add(0, 1, 0, [-90, 0, 0], false);
+    add(0, -1, 0, [90, 0, 0], false);
+    // Häufige Flächen-Normalen aus dem Netz clustern
+    const clusters = [];
+    for (const t of tris) {
+      let cl = null;
+      for (const c of clusters) {
+        if (c.x * t.nx + c.y * t.ny + c.z * t.nz > 0.9985) { cl = c; break; }
+      }
+      if (!cl) clusters.push({ x: t.nx, y: t.ny, z: t.nz, area: t.area });
+      else cl.area += t.area;
+    }
+    clusters.sort((a, b) => b.area - a.area);
+    for (const c of clusters.slice(0, 16)) add(c.x, c.y, c.z);
+    for (const c of clusters.slice(0, 6)) add(-c.x, -c.y, -c.z);
+    // 45°-Diagonalen als Ausweichrichtungen
+    const s = Math.SQRT1_2;
+    for (const [sx, sy] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+      add(sx * s, 0, sy * s);
+      add(0, sx * s, sy * s);
+      add(sx * s, sy * s, 0);
+    }
+    return cands;
+  }
+  function evalOrientCandidate(tris, cand, lim) {
+    const ux = -cand.x, uy = -cand.y, uz = -cand.z;
+    let minH = Infinity, maxH = -Infinity;
+    for (let i = 0; i < tris.length; i++) {
+      const t = tris[i];
+      const ha = t.ax * ux + t.ay * uy + t.az * uz;
+      const hb = t.bx * ux + t.by * uy + t.bz * uz;
+      const hc = t.cx * ux + t.cy * uy + t.cz * uz;
+      if (ha < minH) minH = ha; if (hb < minH) minH = hb; if (hc < minH) minH = hc;
+      if (ha > maxH) maxH = ha; if (hb > maxH) maxH = hb; if (hc > maxH) maxH = hc;
+    }
+    let overhangArea = 0, supportVol = 0, bedArea = 0;
+    for (let i = 0; i < tris.length; i++) {
+      const t = tris[i];
+      const nz = t.nx * ux + t.ny * uy + t.nz * uz;
+      const ha = t.ax * ux + t.ay * uy + t.az * uz - minH;
+      const hb = t.bx * ux + t.by * uy + t.bz * uz - minH;
+      const hc = t.cx * ux + t.cy * uy + t.cz * uz - minH;
+      const topH = Math.max(ha, hb, hc);
+      if (nz <= -0.996 && topH <= 0.15) bedArea += t.area;
+      if (nz <= lim && topH >= 0.05) {
+        overhangArea += t.area;
+        supportVol += t.area * ((ha + hb + hc) / 3);
+      }
+    }
+    return { ...cand, overhangArea, supportVol, bedArea, height: maxH - minH };
+  }
+  function betterOrient(A, B) {
+    const ovTol = Math.max(0.5, 0.01 * Math.min(A.overhangArea, B.overhangArea));
+    if (Math.abs(A.overhangArea - B.overhangArea) > ovTol) return A.overhangArea < B.overhangArea;
+    if (A.overhangArea > 0.5 && B.overhangArea > 0.5) {
+      const svTol = Math.max(5, 0.05 * Math.min(A.supportVol, B.supportVol));
+      if (Math.abs(A.supportVol - B.supportVol) > svTol) return A.supportVol < B.supportVol;
+    }
+    const bedTol = Math.max(1, 0.05 * Math.max(A.bedArea, B.bedArea));
+    if (Math.abs(A.bedArea - B.bedArea) > bedTol) return A.bedArea > B.bedArea;
+    if (Math.abs(A.height - B.height) > 0.5) return A.height < B.height;
+    if (A.isCurrent !== B.isCurrent) return A.isCurrent;
+    return !!A.eulerHint && !B.eulerHint;
+  }
+  function bestPrintOrientation(ids = null, opts = {}) {
+    const nodes = orientTargetNodes(ids);
+    if (!nodes.length) return null;
+    const { tris, box } = collectOrientTris(nodes);
+    if (!tris.length || box.isEmpty()) return null;
+    const angle = Number(opts.angle) > 0 ? Number(opts.angle) : (typeof Views !== 'undefined' && Views.overhangAngle ? Views.overhangAngle : 45);
+    const lim = -Math.cos((angle * Math.PI) / 180);
+    const cands = orientCandidates(tris);
+    let cur = null, best = null;
+    for (const c of cands) {
+      const ev = evalOrientCandidate(tris, c, lim);
+      if (c.isCurrent) cur = ev;
+      if (!best || betterOrient(ev, best)) best = ev;
+    }
+    return { nodes, tris, box, cur, best, angle };
+  }
+  function orientForPrint(ids = null, opts = {}) {
+    const plan = bestPrintOrientation(ids, opts);
+    if (!plan) { UI.toast('Kein sichtbarer Körper zum Ausrichten.', { icon: 'info' }); return { ok: false, changed: false }; }
+    const { nodes, tris, box, cur, best } = plan;
+    if (best.isCurrent && Math.abs(box.min.z) < 0.05) {
+      const msg = best.overhangArea < 0.5
+        ? 'Liegt schon optimal ohne Überhänge auf dem Druckbett.'
+        : `Schon optimal ausgerichtet (${Units.fmtAreaU(best.overhangArea, best.overhangArea < 100 ? 1 : 0)} Überhang).`;
+      UI.toast(msg, { icon: 'check' });
+      return { ok: true, changed: false, before: cur.overhangArea, after: best.overhangArea, bedArea: best.bedArea, beforeBed: cur.bedArea };
+    }
+    const D2R = Math.PI / 180, R2D = 180 / Math.PI;
+    const piv = box.getCenter(new THREE.Vector3());
+    let qAdd;
+    if (best.eulerHint) {
+      qAdd = new THREE.Quaternion().setFromEuler(new THREE.Euler(best.eulerHint[0] * D2R, best.eulerHint[1] * D2R, best.eulerHint[2] * D2R, 'XYZ'));
+    } else {
+      const dVec = new THREE.Vector3(best.x, best.y, best.z).normalize();
+      qAdd = dVec.z > 0.9999
+        ? new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI, 0, 0, 'XYZ'))
+        : new THREE.Quaternion().setFromUnitVectors(dVec, new THREE.Vector3(0, 0, -1));
+    }
+    const mAdd = new THREE.Matrix4().makeTranslation(piv.x, piv.y, piv.z)
+      .multiply(new THREE.Matrix4().makeRotationFromQuaternion(qAdd))
+      .multiply(new THREE.Matrix4().makeTranslation(-piv.x, -piv.y, -piv.z));
+    const bRot = new THREE.Box3(), tmpV = new THREE.Vector3();
+    for (let i = 0; i < tris.length; i++) {
+      const t = tris[i];
+      bRot.expandByPoint(tmpV.set(t.ax, t.ay, t.az).applyMatrix4(mAdd));
+      bRot.expandByPoint(tmpV.set(t.bx, t.by, t.bz).applyMatrix4(mAdd));
+      bRot.expandByPoint(tmpV.set(t.cx, t.cy, t.cz).applyMatrix4(mAdd));
+    }
+    const shift = bRot.isEmpty()
+      ? new THREE.Vector3(0, 0, 0)
+      : new THREE.Vector3(piv.x - (bRot.min.x + bRot.max.x) / 2, piv.y - (bRot.min.y + bRot.max.y) / 2, -bRot.min.z);
+    const nodeIds = new Set(nodes.map((n) => n.id));
+    const fullModel = nodeIds.size >= [...Viewer.nodes.values()].filter((n) => n.obj.visible && !n.allBodiesHidden && n.role !== 'hole' && n.id !== '__dragprev').length;
+    const rnd = (v) => Math.round(v * 1e4) / 1e4;
+    const snapDeg = (d) => {
+      for (const a of [0, 90, -90, 180, -180]) if (Math.abs(d - a) < 1e-3) return a;
+      return rnd(d);
+    };
+    App.change('Für den Druck ausgerichtet', (doc) => {
+      const vars = Model.vars(doc);
+      Model.useVars(vars);
+      for (const it of doc.items) {
+        if (!it || it.hidden) continue;
+        if (!fullModel) {
+          const targetMatch = nodeIds.has(it.id) || nodeIds.has(App.mergedInto(it.id));
+          let holeMatch = false;
+          if (!targetMatch && it.role === 'hole') {
+            const hb = typeof Actions !== 'undefined' && Actions.worldBox ? Actions.worldBox(it.id) : null;
+            if (hb && hb.intersectsBox(box)) holeMatch = true;
+          }
+          if (!targetMatch && !holeMatch) continue;
+        }
+        it.t = it.t || { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 };
+        const tn = Model.tNumeric(it);
+        const pNew = new THREE.Vector3(tn.x, tn.y, tn.z).applyMatrix4(mAdd).add(shift);
+        const qOld = new THREE.Quaternion().setFromEuler(new THREE.Euler(tn.rx * D2R, tn.ry * D2R, tn.rz * D2R, 'XYZ'));
+        const qNew = qAdd.clone().multiply(qOld);
+        const eNew = new THREE.Euler().setFromQuaternion(qNew, 'XYZ');
+        it.t.x = rnd(pNew.x); it.t.y = rnd(pNew.y); it.t.z = rnd(pNew.z);
+        it.t.rx = snapDeg(eNew.x * R2D); it.t.ry = snapDeg(eNew.y * R2D); it.t.rz = snapDeg(eNew.z * R2D);
+      }
+    });
+    const beforeTxt = Units.fmtAreaU(cur.overhangArea, cur.overhangArea < 100 ? 1 : 0);
+    const afterTxt = Units.fmtAreaU(best.overhangArea, best.overhangArea < 100 ? 1 : 0);
+    UI.toast(
+      best.overhangArea < 0.5
+        ? `Für den Druck ausgerichtet – keine Überhänge mehr (vorher ${beforeTxt}).`
+        : `Für den Druck ausgerichtet: Überhang von ${beforeTxt} auf ${afterTxt} verringert.`,
+      { icon: 'check', ms: 4200 },
+    );
+    return { ok: true, changed: true, before: cur.overhangArea, after: best.overhangArea, bedArea: best.bedArea, beforeBed: cur.bedArea };
+  }
   function checks() {
     const out = [];
     const st = stats();
@@ -31330,6 +31795,12 @@ const Print = (() => {
     const fit = fitCheck(pb, st);
     if (!fit.fits) {
       out.push({ s: 'warn', t: 'Passt nicht auf den Drucker', d: fit.summary, fit });
+    }
+    const wallNodes = printableWallNodes();
+    const totalTris = wallNodes.reduce((s, n) => s + ((n.data && n.data.triangles && n.data.triangles.length) || 0) / 3, 0);
+    if (wallNodes.length && totalTris <= 25000) {
+      const nw = nozzleWallCheck();
+      if (nw.warn) out.push({ s: 'warn', t: 'Wand zu dünn für die Düse', d: nw.summary, nozzleWall: nw });
     }
     const bodies = App.doc.items.filter((x) => x.role !== 'hole' && !x.hidden).length;
     if (!out.length) out.push({ s: 'ok', t: `${Units.fmtLen(st.x, 2)} × ${Units.fmtLen(st.y, 2)} × ${Units.fmtLen(st.z, 2)} ${Units.label()}`, d: `${bodies} ${bodies === 1 ? 'Körper' : 'Körper'}, Ursprung bei (0 | 0 | 0). Abmessungen der Hüllbox.` });
@@ -31358,6 +31829,11 @@ const Print = (() => {
         const rb = h('button', { type: 'button', class: 'btn', style: { marginTop: '6px' } }, 'So drehen');
         rb.onclick = () => { UI.closePop(); applyRotationSuggestion(c.fit.suggestion); };
         infoCol.append(rb);
+      }
+      if (c.nozzleWall) {
+        const wb = h('button', { type: 'button', class: 'btn', style: { marginTop: '6px' } }, 'Stellen zeigen');
+        wb.onclick = () => { UI.closePop(); Views.thin(true, { limit: c.nozzleWall.minWall }); };
+        infoCol.append(wb);
       }
       row.append(stI, infoCol); list.append(row);
     }
@@ -31736,6 +32212,11 @@ const Print = (() => {
         rb.onclick = () => { UI.closeModal(); applyRotationSuggestion(cs[0].fit.suggestion); };
         warnBox.append(rb);
       }
+      if (cs[0].nozzleWall) {
+        const wb = h('button', { type: 'button', class: 'btn', id: 'ex-nozzle-show', style: { marginTop: '6px' } }, 'Stellen zeigen');
+        wb.onclick = () => { UI.closeModal(); Views.thin(true, { limit: cs[0].nozzleWall.minWall }); };
+        warnBox.append(wb);
+      }
       body.append(warnBox);
     }
     UI.modal({ title: 'Exportieren', body, actions: [{ label: 'Abbrechen' }, { label: 'Als ZIP speichern', primary: true, run: () => { runExport(opts); } }] });
@@ -31960,10 +32441,11 @@ const Print = (() => {
     } catch (e) { tst.remove(); UI.toast('Export hat nicht geklappt: ' + e.message, { kind: 'bad' }); }
   }
   function init() {
-    App.on('results', updateAmpel); App.on('doc', debounce(updateAmpel, 200));
+    App.on('results', () => { wallCache = null; updateAmpel(); });
+    App.on('doc', debounce(() => { wallCache = null; updateAmpel(); }, 200));
     $('#ampel').addEventListener('click', (e) => openAmpel(e.currentTarget));
   }
-  return { PRINTERS, findPrinter, setPrinter, holeComp, setHoleComp, fitCheck, applyRotationSuggestion, get lastHoleComp() { return lastHoleComp; }, turntable, turntableDialog, get lastVideo() { return lastVideo; }, get lastTris() { return lastTris; }, buildSTL, buildSTLText, build3MF, buildOBJ, buildGLB, entsToDXF, entsToSVG, save2D, faceTo2D, get last2D() { return last2D; }, exportSelection, get lastExport() { return lastExport; }, runExport, init, stats, checks, exportDialog, imageDialog, saveImage, imageSize, save, safeName, updateAmpel };
+  return { PRINTERS, findPrinter, setPrinter, nozzle, setNozzle, printFit, setPrintFit, PRINT_FITS: typeof PRINT_FITS !== 'undefined' ? PRINT_FITS : [], printFitMm: typeof printFitMm === 'function' ? printFitMm : () => 0, holeComp, setHoleComp, fitCheck, applyRotationSuggestion, nozzleWallCheck, bestPrintOrientation, orientForPrint, get lastHoleComp() { return lastHoleComp; }, turntable, turntableDialog, get lastVideo() { return lastVideo; }, get lastTris() { return lastTris; }, buildSTL, buildSTLText, build3MF, buildOBJ, buildGLB, entsToDXF, entsToSVG, save2D, faceTo2D, get last2D() { return last2D; }, exportSelection, get lastExport() { return lastExport; }, runExport, init, stats, checks, exportDialog, imageDialog, saveImage, imageSize, save, safeName, updateAmpel };
 })();
 
 // ---------- ZIP (mit Kompression, wenn der Browser sie kann) ----------
@@ -38109,16 +38591,25 @@ const Weak = (() => {
       if (it.hidden || it.role === 'hole' || Mass.fixedOf(it) || !Viewer.nodes.has(it.id)) continue;
       const cls = CLASS[Mass.materialFor(it).k] || 'print'; if (cls !== 'print' && cls !== 'tpu') continue;
       const o = Views.overhangOf(it.id, 45); if (!o || o.area < 100 || !o.c) continue;   // kleine Stellen (z. B. waagerechte Schraubenlöcher) überbrückt der Drucker
-      out.push({ id: 'overhang', s: 'info', title: `Überhang beim Drucken – ${Model.label(it)}`, text: `${fmtFixed(o.area, 0)} mm² zeigen steiler als 45° nach unten und hängen beim Drucken in der Luft – der Slicer braucht dort Stützen. Anders hinlegen, eine Fase statt einer waagerechten Kante oder in zwei Teile teilen hilft. Ansichten → „Überhänge (3D-Druck)“ zeigt die Stellen rot.`, ids: [it.id], at: [o.c], r: 6 });
+      out.push({ id: 'overhang', s: 'info', title: `Überhang beim Drucken – ${Model.label(it)}`, text: `${fmtFixed(o.area, 0)} mm² zeigen steiler als 45° nach unten und hängen beim Drucken in der Luft – der Slicer braucht dort Stützen. Anders hinlegen, eine Fase statt einer waagerechten Kante oder in zwei Teile teilen hilft. Ansichten → „Überhänge (3D-Druck)“ zeigt die Stellen rot.`, ids: [it.id], at: [o.c], r: 6, fix: { label: 'Für den Druck ausrichten', run: () => Print.orientForPrint([it.id]) } });
     }
     return out;
+  }
+  function nozzleWalls() {
+    if (typeof Print === 'undefined' || !Print.nozzleWallCheck) return [];
+    const pbOn = !!(App.doc.settings && App.doc.settings.printBed && App.doc.settings.printBed.enabled);
+    const hasPrintMat = Model.activeItems(App.doc).some((it) => !it.hidden && it.role !== 'hole' && !Mass.fixedOf(it) && ['print', 'tpu'].includes(CLASS[Mass.materialFor(it).k] || 'print'));
+    if (!pbOn && !hasPrintMat) return [];
+    const nw = Print.nozzleWallCheck();
+    if (!nw.warn) return [];
+    return [{ id: 'nozzle-wall', s: 'warn', title: 'Wand zu dünn für die Düse', text: nw.summary, fix: { label: 'Stellen zeigen', run: () => Views.thin(true, { limit: nw.minWall }) } }];
   }
   async function analyze() {
     if (!App.doc.items.length) return [];
     const rev = App.revision, out = [];
     for (const pl of Plates.candidates()) out.push(...(await plateHoles(pl)));
     out.push(...(await solidHoles()));
-    out.push(...walls(), ...arms(), ...overhangs());
+    out.push(...walls(), ...nozzleWalls(), ...arms(), ...overhangs());
     if (DroneCheck.isDrone()) {
       const l = (await DroneCheck.run()) || [];
       for (const c of l) if ((c.s === 'bad' || c.s === 'warn') && c.id !== 'weight') out.push({ ...c, id: 'drone-' + c.id, title: c.title + ' (Drohnen-Check)' });
