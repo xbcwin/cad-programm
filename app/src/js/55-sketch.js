@@ -239,7 +239,7 @@ const Sketch = (() => {
     UI.toast('Zeichne die Kurve, an der die Kopien entlanglaufen – Linie, Bogen, Spline oder Kreis. Dann „Fertig“.', { icon: 'info', ms: 4200 });
   }
   // Mittellinie für einen Übergang: Ebene durch den ersten Umriss, in der auch der letzte liegt; vorgezeichnet als Spline durch die Mitten
-  let lpKey = '';
+  let lpKey = '', lpPending = '';
   // kind 'path' = Mittellinie, 'rail' = Führungskurve (Seitenlinie, der der Übergang zwischen den Umrissen folgt)
   // 'rail2' = zweite Führungskurve, quer zur ersten (z. B. von oben, wenn die erste von der Seite kommt)
   const LOFTMODE = { path: 'loftpath', rail: 'loftrail', rail2: 'loftrail2' };
@@ -310,7 +310,7 @@ const Sketch = (() => {
       for (let i = 0; i < P.length; i += step) for (let j = i + 1; j < P.length; j += step) { const d = SK.d2(P[i], P[j]); if (d > dm) { dm = d; a = P[i]; b = P[j]; } }
       if (dm > 1e-6) refs.push({ id: uid('r'), type: 'line', a, b });
     }
-    lpKey = '';
+    loftPreviewDebounced.cancel(); lpKey = ''; lpPending = '';
     const bb = SK.bounds([...ents, ...refs]), ext = bb ? Math.max(bb[2] - bb[0], bb[3] - bb[1]) : 40;
     begin({ plane, W: Model.worldMatrix(App.doc, id), ents, dims, cons, refs, viewSize: Math.max(60, ext * 1.7), ctx: { mode: LOFTMODE[key], id } });
     S.hiddenEdit = id;
@@ -321,8 +321,9 @@ const Sketch = (() => {
     else UI.toast(it.p.path ? 'Bieg die Mittellinie – der Übergang folgt ihr. Dann „Fertig“.' : 'Die Mittellinie läuft durch die Mitten der Umrisse. Zieh ihre Punkte, um den Übergang zu biegen – dann „Fertig“.', { icon: 'info', ms: 4200 });
     return true;
   }
-  // Vorschau: der Übergang mit der gerade gezeichneten Mittellinie
-  const loftPreview = debounce(() => {
+  // Vorschau: der Übergang mit der gerade gezeichneten Mittellinie (nur bei echter Kurvenänderung neu verzögern)
+  const loftPreviewDebounced = debounce(() => {
+    lpPending = '';
     if (!isLoftLine()) return;
     const k = JSON.stringify([S.ents, S.plane, S.dims]); if (k === lpKey) return; lpKey = k;
     const f = Model.find(App.doc, S.ctx.id); if (!f) return;
@@ -331,6 +332,14 @@ const Sketch = (() => {
     Model.setFromMatrix(it, S.W); it.id = '__preview'; it.finishes = [];
     App.extra = SK.chains(S.ents).length ? [it] : []; App.rebuild();
   }, 250);
+  function loftPreview() {
+    if (!isLoftLine()) return;
+    const k = JSON.stringify([S.ents, S.plane, S.dims]);
+    if (k === lpKey) { if (lpPending) { loftPreviewDebounced.cancel(); lpPending = ''; } return; }
+    if (k === lpPending) return;
+    lpPending = k;
+    loftPreviewDebounced();
+  }
   const pathGroup = () => { if (!S || S.ctx.mode !== 'edit') return null; const f = Model.find(App.doc, S.ctx.editId); return f && f.item.kind === 'group' && f.item.p && f.item.p.pt === 'path' ? f.item : null; };
   const isPathEdit = () => !!(S && S.ctx.mode === 'edit' && (() => { const f = Model.find(App.doc, S.ctx.editId); return f && f.item.kind === 'group' && f.item.p && f.item.p.pt === 'path'; })());
   async function pushPullFace(face) {
@@ -3651,6 +3660,7 @@ const Sketch = (() => {
   }
   function finishSession() {
     if (!S) return;
+    loftPreviewDebounced.cancel(); lpKey = ''; lpPending = '';
     const cam = S.cam, hid = S.hiddenEdit;
     clearGroup(); clearBand(); hideBar(); hideEntry(); hideDimBox();
     if (stepBox) { stepBox.remove(); stepBox = null; }

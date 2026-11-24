@@ -9,7 +9,7 @@ const Viewer = (() => {
   const raycaster = new THREE.Raycaster();
   const theme = {};
   let hoverFace = null, hoverEdge = null, selFace = null, selEdges = [];
-  let camAnim = null;
+  let camAnim = null, camAnimTimer = null, inLoopCam = false;
   const listeners = makeEmitter();
   // Ansichts-Modi (Sitzung 9, PF-06): Schnittebenen, Kappen, Röntgen, Verschiebung für die Explosionsansicht
   const vis = { clip: null, clips: [], capEnabled: true, xray: false };
@@ -201,8 +201,8 @@ const Viewer = (() => {
     controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
     controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
     controls.target.set(0, 0, 10);
-    controls.addEventListener('change', () => { needsRender = true; listeners.emit('camera'); });
-    controls.addEventListener('start', () => { pushCam(true); camAnim = null; });
+    controls.addEventListener('change', () => { needsRender = true; if (!inLoopCam) listeners.emit('camera'); });
+    controls.addEventListener('start', () => { pushCam(true); cancelCamAnim(); });
     buildGrid(autoStep()); buildOrigin();
     applyLook();
     const ro = new ResizeObserver(resize); ro.observe(el);
@@ -311,17 +311,20 @@ const Viewer = (() => {
 
   function loop() {
     requestAnimationFrame(loop);
+    let camMoved = false;
     if (camAnim) {
       const t = Math.min(1, (performance.now() - camAnim.t0) / camAnim.dur);
       const e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
       camera.position.lerpVectors(camAnim.p0, camAnim.p1, e);
       controls.target.lerpVectors(camAnim.q0, camAnim.q1, e);
       if (camAnim.up0) camera.up.lerpVectors(camAnim.up0, camAnim.up1, e).normalize();
-      if (t >= 1) { camAnim = null; }
-      needsRender = true; listeners.emit('camera');
+      if (t >= 1) cancelCamAnim();
+      needsRender = true; camMoved = true;
     }
+    inLoopCam = true;
     const moved = controls.update();
-    if (moved) listeners.emit('camera');
+    inLoopCam = false;
+    if (camMoved || moved) listeners.emit('camera');
     const now = performance.now();
     if (camAnim) lastMotion = now;
     else if (moved) {   // nur echte Bewegung zählt, nicht das lange Ausrollen der Dämpfung
@@ -922,6 +925,7 @@ const Viewer = (() => {
   const _ndc = new THREE.Vector2();
   function rect() { return renderer.domElement.getBoundingClientRect(); }
   function setRay(cx, cy) {
+    syncCamAnim();
     const r = rect();
     _ndc.set(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
     raycaster.setFromCamera(_ndc, cam());
@@ -1030,6 +1034,7 @@ const Viewer = (() => {
     return raycaster.ray.intersectPlane(pl, p) ? p : null;
   }
   function toScreen(v) {
+    syncCamAnim();
     const r = rect(); const p = v.clone().project(cam());
     return { x: (p.x + 1) / 2 * r.width, y: (1 - p.y) / 2 * r.height, behind: p.z > 1 };
   }
@@ -1105,11 +1110,38 @@ const Viewer = (() => {
     if (controls._panOffset) controls._panOffset.set(0, 0, 0);
     if ('_scale' in controls) controls._scale = 1;
   }
+  function cancelCamAnim() {
+    camAnim = null;
+    if (camAnimTimer) { clearTimeout(camAnimTimer); camAnimTimer = null; }
+  }
+  function finishCamAnim() {
+    if (!camAnim) return;
+    const a = camAnim;
+    cancelCamAnim();
+    camera.position.copy(a.p1);
+    controls.target.copy(a.q1);
+    if (a.up1) camera.up.copy(a.up1);
+    stopDamping();
+    inLoopCam = true;
+    controls.update();
+    inLoopCam = false;
+    needsRender = true;
+    listeners.emit('camera');
+  }
+  function syncCamAnim() {
+    if (camAnim && performance.now() - camAnim.t0 >= camAnim.dur) finishCamAnim();
+  }
   function moveCamera(pos, target, up, animate = true) {
     pushCam(false);
     stopDamping();
-    if (!animate) { camAnim = null; camera.position.copy(pos); controls.target.copy(target); if (up) camera.up.copy(up); controls.update(); needsRender = true; listeners.emit('camera'); return; }
+    cancelCamAnim();
+    if (!animate) {
+      camera.position.copy(pos); controls.target.copy(target); if (up) camera.up.copy(up);
+      inLoopCam = true; controls.update(); inLoopCam = false;
+      needsRender = true; listeners.emit('camera'); return;
+    }
     camAnim = { t0: performance.now(), dur: 420, p0: camera.position.clone(), p1: pos.clone(), q0: controls.target.clone(), q1: target.clone(), up0: up ? camera.up.clone() : null, up1: up ? up.clone() : null };
+    camAnimTimer = setTimeout(() => { camAnimTimer = null; finishCamAnim(); }, camAnim.dur + 20);
   }
   const VIEWDIRS = { front: [0, -1, 0], back: [0, 1, 0], left: [-1, 0, 0], right: [1, 0, 0], top: [0, -0.0001, 1], bottom: [0, -0.0001, -1], iso: [0.62, -0.9, 0.7] };
   function setView(name, animate = true) {
@@ -1139,7 +1171,7 @@ const Viewer = (() => {
     lookAtPlane(c.toArray(), nn.toArray(), x.toArray(), size, animate);
     return true;
   }
-  function saveCamera() { return { p: camera.position.clone(), t: controls.target.clone(), up: camera.up.clone() }; }
+  function saveCamera() { syncCamAnim(); return { p: camera.position.clone(), t: controls.target.clone(), up: camera.up.clone() }; }
   function restoreCamera(s, animate = true) { if (s) moveCamera(s.p, s.t, s.up, animate); }
 
   // ---------- Zweites Bild in einer Ecke (Fokus-Vorschau) ----------
@@ -1249,7 +1281,7 @@ const Viewer = (() => {
     viewBack, get viewHistory() { return camHist.length; }, useButtons, setMouseStyle, get mouseStyle() { return mouseStyle; }, get leftOrbits() { return !!(controls && controls.mouseButtons.LEFT === THREE.MOUSE.ROTATE); }, setLook, lookOf, get look() { return { ...LOOK }; }, fitShadow, renderImage, lookAtFace, faceIndexOf: (id, fc) => { const n = nodes.get(id); return n ? faceIndexOf(n, fc) : -1; }, cylinderFaceInfo, threadFaceIndex: (id, th) => { const n = nodes.get(id); return n ? threadFaceIndex(n, th) : -1; }, get renderer() { return renderer; },
     init, requestRender, setClip, setXray, setOffsets, baseBox, renderInset, silhouette, setAdaptive, setCompare, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, setSelectedEdges, clearHover,
     edgePositions, pick, pickAll, pickGhost, pickProxy, setProxies, clearProxies, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, boxVisible, sceneBox, snapshot, makeFat, disposeFat, faceOverlay, faceArea, faceEdges, edgeKinds, wallAt, thinWalls,
-    get camera() { return camera; }, get activeCamera() { return cam(); }, get ortho() { return ortho; }, get gridStep() { return gridStep; }, get controls() { return controls; }, get scene() { return scene; }, get groups() { return groups; }, get nodes() { return nodes; }, get canvas() { return renderer.domElement; }, get theme() { return theme; }, get container() { return container; },
+    get camera() { syncCamAnim(); return camera; }, get activeCamera() { syncCamAnim(); return cam(); }, get ortho() { return ortho; }, get gridStep() { return gridStep; }, get controls() { return controls; }, get scene() { return scene; }, get groups() { return groups; }, get nodes() { return nodes; }, get canvas() { return renderer.domElement; }, get theme() { return theme; }, get container() { return container; },
     get clip() { return vis.clip; }, get clips() { return vis.clips.slice(); }, get xray() { return vis.xray; }, get lowRes() { return lowRes; },  get pixelRatio() { return renderer.getPixelRatio(); },
     on: listeners.on,
   };
