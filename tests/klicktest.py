@@ -16337,6 +16337,425 @@ def t_a079_firefox_webkit(p):
     return [ok_cli, wk_vol, wk_compat, ff_vol, ff_compat]
 
 
+def t_f11241334(p):
+    p.empty()
+    ids = p.ev("""return App.change('x', d => {
+      const a = Model.newItem('box', { w: 40, d: 40, h: 10 }, { name: 'Block' }); d.items.push(a);
+      const b = Model.newItem('cylinder', { d: 10, h: 30 }, { name: 'Bolzen' }); b.t.z = -5; b.op = { type: 'cut', target: a.id }; d.items.push(b);
+      const c = Model.newItem('box', { w: 10, d: 10, h: 10 }, { name: 'Kopie' }); c.link = a.id; c.t.x = 60; d.items.push(c);
+      return [a.id, b.id, c.id];
+    })""")
+    warte_rechnen(p)
+    aid, bid, _cid = ids
+    ok1 = p.ev("return App.mergedInto(arg[1]) === arg[0]", [aid, bid])
+    # Während Block gelöscht wird und das asynchrone rebuild() noch läuft,
+    # dürfen renderLeft() und renderRight() (auch bei gewähltem Bolzen) nicht crashen.
+    p.ev("App.select([arg])", bid)
+    res = p.ev("""const [aid, bid] = arg;
+      let err = null;
+      let mergedAfter = null;
+      App.change('Gelöscht', d => {
+        const i = d.items.findIndex(x => x.id === aid);
+        if (i >= 0) d.items.splice(i, 1);
+      });
+      try {
+        mergedAfter = App.mergedInto(bid);
+        Panels.renderLeft();
+        Panels.renderRight();
+      } catch (e) {
+        err = String(e);
+      }
+      const leftTxt = document.querySelector('#left-body')?.textContent || '';
+      const hintTxt = document.querySelector('#op-sec .hint-box')?.textContent || '';
+      return { err, mergedAfter, hasBolzen: leftTxt.includes('Bolzen'), hasMissingHint: hintTxt === T('panel.op.missingHint') };
+    """, [aid, bid])
+    ok2 = (
+        res['err'] is None
+        and res['mergedAfter'] is None
+        and res['hasBolzen']
+        and res['hasMissingHint']
+        and not p.errs
+    )
+    warte_rechnen(p)
+    p.ev("App.undo()"); warte_rechnen(p)
+    restored = p.ev("return App.mergedInto(arg[1]) === arg[0]", [aid, bid])
+    # Gleiches Szenario über Actions.remove (wie in t_bezuege) samt sofortigem Re-Render vor rebuild()
+    p.ev("App.select([arg[1]])", [aid, bid])
+    p.ev("Actions.remove([arg[0]]); Panels.renderLeft(); Panels.renderRight();", [aid, bid])
+    p.wait(400)
+    warte_rechnen(p)
+    toast_txt = p.pg.locator('.toast').last.inner_text() if p.pg.locator('.toast').count() else ''
+    ok3 = restored and ('Daran hingen' in toast_txt) and not p.errs
+    return [ok1, ok2, ok3]
+
+
+# ---------- [A-078] Große Modelle, Schritt 2: mehrere Rechen-Helfer (PL-04) ----------
+def t_a078_mehrere_rechenhelfer(p):
+    reqs = []
+    p.pg.on('request', lambda req: reqs.append(req.url))
+    p.empty()
+
+    # 1. Vier unabhängige Körper mit jeweils eigenem Bohrungsmuster (Rechteck- / Kreismuster)
+    p.ev("""
+      App.change('Vier Körper mit Bohrungsmustern', (doc) => {
+        const specs = [
+          { name: 'Platte A', x: 0, w: 60, d: 40, h: 6, pt: 'rect', nx: 3, ny: 2, dx: 16, dy: 16, ox: -16, oy: -8, hd: 4 },
+          { name: 'Platte B', x: 120, w: 54, d: 54, h: 8, pt: 'circ', n: 4, rad: 16, hd: 5 },
+          { name: 'Platte C', x: 240, w: 70, d: 34, h: 5, pt: 'rect', nx: 4, ny: 1, dx: 15, dy: 0, ox: -22.5, oy: 0, hd: 3.5 },
+          { name: 'Platte D', x: 360, w: 50, d: 50, h: 10, pt: 'circ', n: 6, rad: 14, hd: 3.2 },
+        ];
+        for (const s of specs) {
+          const base = Model.newItem('box', { w: s.w, d: s.d, h: s.h }, { name: s.name + ' Grund' });
+          let pat;
+          if (s.pt === 'rect') {
+            const hole = Model.newItem('cylinder', { d: s.hd, h: s.h + 4 }, { name: 'Bohrung', role: 'hole' });
+            hole.t.x = s.ox; hole.t.y = s.oy; hole.t.z = -2;
+            pat = Model.newItem('group', { op: 'pattern', pt: 'rect', nx: s.nx, ny: s.ny, dx: s.dx, dy: s.dy }, { name: 'Lochmuster' });
+            pat.children = [hole];
+          } else {
+            const hole = Model.newItem('cylinder', { d: s.hd, h: s.h + 4 }, { name: 'Bohrung', role: 'hole' });
+            hole.t.x = s.rad; hole.t.y = 0; hole.t.z = -2;
+            pat = Model.newItem('group', { op: 'pattern', pt: 'circ', n: s.n, ang: 360, cx: 0, cy: 0, cz: 0, axis: 'z' }, { name: 'Lochmuster' });
+            pat.children = [hole];
+          }
+          const grp = Model.newItem('group', {}, { name: s.name });
+          grp.t.x = s.x;
+          grp.children = [base, pat];
+          doc.items.push(grp);
+        }
+      });
+    """)
+    warte_rechnen(p, 40)
+
+    # 2. Verteilung auf mehrere Rechen-Helfer & genau ein WASM-Abruf
+    st_multi = p.ev("return Kernel.poolStats;")
+    expected_max = p.ev("const c = Number(navigator.hardwareConcurrency); return Math.min(4, Math.max(1, Number.isFinite(c) && c >= 1 ? Math.floor(c) : 2));")
+    multi_expected = expected_max > 1
+    used_helpers = [w for w in st_multi['lastEval']['workerIds'] if w > 0]
+    jobs_used_count = sum(1 for c in st_multi['workerJobs'] if c > 0)
+    ok1 = (
+        st_multi['wasmFetches'] == 1
+        and st_multi['maxWorkers'] == expected_max
+        and st_multi['lastEval']['chunks'] == 4
+        and st_multi['parallelEvalCalls'] >= (1 if multi_expected else 0)
+        and (st_multi['lastEval']['workersUsed'] > 1 if multi_expected else st_multi['lastEval']['workersUsed'] == 1)
+        and (st_multi['activeWorkers'] > 1 and st_multi['activeWorkers'] <= 4 if multi_expected else st_multi['activeWorkers'] == 1)
+        and (len(used_helpers) >= 1 and jobs_used_count > 1 if multi_expected else jobs_used_count == 1)
+    )
+
+    # 3. Schluessel-gebundene Aufrufe (faceLoops & remesh) funktionieren auch auf einem Neben-Helfer
+    helper_res = p.ev("""return (async () => {
+      const st = Kernel.poolStats;
+      const iw = st.lastEval.itemWorkers || {};
+      const targetId = Object.keys(iw).find((id) => iw[id] > 0) || App.doc.items[0].id;
+      const r = App.results.get(targetId);
+      if (!r || !r.key) return { ok: false };
+      const loops = await Kernel.call('faceLoops', { key: r.key, faceIdx: 0 });
+      const mesh = await Kernel.call('remesh', { key: r.key, tol: 0.04 });
+      return { ok: Array.isArray(loops) && loops.length > 0 && mesh && mesh.triangles && mesh.triangles.length > 0 };
+    })();""")
+
+    snap_js = """return (async () => {
+      const m = await Mass.measure();
+      const parts = {};
+      for (const p of (m && m.parts) || []) parts[p.id] = p.volume;
+      return {
+        errors: App.errors.length,
+        order: App.doc.items.map((it) => {
+          const r = App.results.get(it.id);
+          const d = r && r.data;
+          return {
+            id: it.id,
+            name: it.name,
+            key: r ? r.key : null,
+            bbox: d ? d.bbox : null,
+            tris: d && d.triangles ? d.triangles.length : 0,
+            faces: d && d.faces ? d.faces.length : 0,
+            edges: d && d.edges ? d.edges.length : 0,
+            vol: parts[it.id] || 0,
+          };
+        }),
+      };
+    })();"""
+    res_multi = p.ev(snap_js)
+    ok2 = (
+        helper_res['ok']
+        and res_multi['errors'] == 0
+        and len(res_multi['order']) == 4
+        and all(x['tris'] > 0 and x['vol'] > 1000 for x in res_multi['order'])
+    )
+
+    # 4. Einstellung (nur Profi): sichtbar in Profi, versteckt in Einfach, Abschalten nutzt nur 1 Helfer
+    p.ev("ViewPrefs.dialog();")
+    p.wait(300)
+    chk_pro = p.pg.locator('#set-multiWorker')
+    vis_pro = chk_pro.is_visible() and chk_pro.is_checked()
+    help_attr = p.pg.locator('[data-help="multiWorker"]').count() >= 1
+    p.pg.keyboard.press('Escape'); p.wait(200)
+
+    p.ev("ViewPrefs.setLevel('simple'); ViewPrefs.dialog();")
+    p.wait(300)
+    vis_simple = p.pg.locator('#set-multiWorker').is_visible()
+    p.pg.keyboard.press('Escape'); p.wait(200)
+
+    p.ev("ViewPrefs.setLevel('pro'); ViewPrefs.dialog();")
+    p.wait(300)
+    p.pg.uncheck('#set-multiWorker')
+    p.wait(200)
+    p.pg.locator('.modal .btn.primary').click()
+    p.wait(300)
+    p.ev("App.requalify();")
+    warte_rechnen(p, 40)
+
+    st_single = p.ev("return Kernel.poolStats;")
+    res_single = p.ev(snap_js)
+    same_geom = (
+        res_single['errors'] == 0
+        and len(res_single['order']) == len(res_multi['order'])
+        and all(
+            a['id'] == b['id']
+            and a['key'] == b['key']
+            and a['faces'] == b['faces']
+            and a['edges'] == b['edges']
+            and a['tris'] == b['tris']
+            and abs(a['vol'] - b['vol']) < 1e-4
+            and all(abs(x - y) < 1e-4 for x, y in zip(a['bbox'], b['bbox']))
+            for a, b in zip(res_multi['order'], res_single['order'])
+        )
+    )
+    ok3 = (
+        vis_pro and help_attr and not vis_simple
+        and st_single['multiWorker'] is False
+        and st_single['activeWorkers'] == 1
+        and st_single['lastEval']['workersUsed'] == 1
+        and st_single['wasmFetches'] == 1
+        and same_geom
+    )
+
+    # 5. Wieder einschalten + abhängige Körper (cut) bleiben zusammen + kein Nachladen aus dem Netz
+    p.ev("ViewPrefs.dialog();")
+    p.wait(250)
+    p.pg.check('#set-multiWorker')
+    p.wait(150)
+    p.pg.locator('.modal .btn.primary').click()
+    p.wait(250)
+    p.ev("""
+      App.change('Abhängiger Schritt', (doc) => {
+        const cutter = Model.newItem('cylinder', { d: 10, h: 20 }, { name: 'Zentralloch' });
+        cutter.t.z = -2;
+        cutter.op = { type: 'cut', target: doc.items[0].id };
+        doc.items.push(cutter);
+      });
+    """)
+    warte_rechnen(p, 40)
+    st_dep = p.ev("return Kernel.poolStats;")
+    dep_ok = (
+        st_dep['multiWorker'] is True
+        and st_dep['lastEval']['chunks'] == 4
+        and st_dep['wasmFetches'] == 1
+        and p.ev("return App.errors.length") == 0
+        and p.ev("return !!App.mergedInto(App.doc.items[4].id)")
+    )
+    wasm_reqs = [u for u in reqs if 'occ-kernel.wasm' in u]
+    foreign_reqs = [
+        u for u in reqs
+        if u.startswith('http')
+        and not u.startswith('http://localhost:')
+        and not u.startswith('http://127.0.0.1:')
+        and not u.startswith('https://fonts.googleapis.com/')
+        and not u.startswith('https://fonts.gstatic.com/')
+    ]
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r => r.json())")
+    h_mw = hilfen.get('multiWorker') or {}
+    ok4 = (
+        dep_ok
+        and len(wasm_reqs) == 1
+        and len(foreign_reqs) == 0
+        and bool(h_mw.get('tip') and h_mw.get('hilfe') and h_mw.get('tipp'))
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
+PW_DEVICES = {}
+
+
+def t_a080_tablet(p):
+    dev = dict(PW_DEVICES.get('iPad Pro 11') or {
+        'viewport': {'width': 834, 'height': 1194},
+        'device_scale_factor': 2,
+        'is_mobile': True,
+        'has_touch': True,
+    })
+    dev['accept_downloads'] = True
+    ctx = p.ctx.browser.new_context(**dev)
+    errs = []
+    try:
+        pg = ctx.new_page()
+        pg.on('pageerror', lambda e: errs.append(str(e)))
+        pg.add_init_script("try{if(!sessionStorage.getItem('kt')){localStorage.clear();sessionStorage.setItem('kt','1')}}catch(e){}")
+        pg.goto(URL)
+        pg.wait_for_timeout(2500)
+        pg.get_by_text('Leeres Projekt').first.tap()
+        pg.wait_for_timeout(4500)
+        try:
+            pg.locator('.loading').wait_for(state='detached', timeout=15000)
+        except Exception:
+            pass
+        ev = lambda js, arg=None: pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,Log,Kernel,Drawing}=window.__M; " + js + "}", arg)
+
+        # 1. Tablet-Modus aktiv (< 1100 px + Touch), Panels eingeklappt, Toggle-Knöpfe >= 44 px
+        st1 = pg.evaluate("""() => {
+          const l = document.querySelector('#left').getBoundingClientRect();
+          const r = document.querySelector('#right').getBoundingClientRect();
+          const bl = document.querySelector('#btn-left').getBoundingClientRect();
+          const br = document.querySelector('#btn-right').getBoundingClientRect();
+          return {
+            tablet: document.body.classList.contains('tablet'),
+            simple: document.body.classList.contains('simple'),
+            w: innerWidth,
+            lRight: l.right,
+            rLeft: r.left,
+            blH: bl.height, blW: bl.width,
+            brH: br.height, brW: br.width
+          };
+        }""")
+        ok1 = (
+            st1['tablet'] is True
+            and st1['simple'] is False
+            and st1['w'] < 1100
+            and st1['lRight'] <= 1
+            and st1['rLeft'] >= st1['w'] - 1
+            and st1['blH'] >= 44 and st1['blW'] >= 44
+            and st1['brH'] >= 44 and st1['brW'] >= 44
+        )
+
+        # 2. Profi: alle sichtbaren Werkzeugleisten- und Kopfzeilen-Knöpfe >= 44 px
+        def check_bar_btns():
+            return pg.evaluate("""() => {
+              const tools = [...document.querySelectorAll('#tools button.tool')].filter(b => b.offsetParent);
+              const top = ['#btn-left', '#btn-right', '#btn-undo', '#btn-redo', '#btn-menu', '#btn-level', '#tab-model', '#tab-drawing']
+                .map(s => document.querySelector(s)).filter(b => b && b.offsetParent);
+              const minToolH = Math.min(...tools.map(b => b.getBoundingClientRect().height));
+              const minToolW = Math.min(...tools.map(b => b.getBoundingClientRect().width));
+              const minTopH = Math.min(...top.map(b => b.getBoundingClientRect().height));
+              const minTopW = Math.min(...top.map(b => b.getBoundingClientRect().width));
+              return { nTools: tools.length, minToolH, minToolW, minTopH, minTopW };
+            }""")
+        b_pro = check_bar_btns()
+        ok2 = (
+            b_pro['nTools'] >= 4
+            and b_pro['minToolH'] >= 44
+            and b_pro['minToolW'] >= 44
+            and b_pro['minTopH'] >= 44
+            and b_pro['minTopW'] >= 44
+        )
+
+        def wait_cond(js, tries=80):
+            for _ in range(tries):
+                if pg.evaluate(js):
+                    return True
+                pg.wait_for_timeout(50)
+            return False
+
+        # 3. Panels ein- und ausklappbar (links & rechts)
+        pg.locator('#btn-left').tap()
+        wait_cond("() => document.querySelector('#left').getBoundingClientRect().left >= -1")
+        l_open = pg.evaluate("() => ({ l: document.querySelector('#left').getBoundingClientRect().left, exp: document.querySelector('#btn-left').getAttribute('aria-expanded') })")
+        pg.locator('#btn-left-close').tap()
+        wait_cond("() => document.querySelector('#left').getBoundingClientRect().right <= 1")
+        l_closed = pg.evaluate("() => ({ r: document.querySelector('#left').getBoundingClientRect().right, exp: document.querySelector('#btn-left').getAttribute('aria-expanded') })")
+        pg.locator('#btn-right').tap()
+        wait_cond("() => document.querySelector('#right').getBoundingClientRect().right <= innerWidth + 1")
+        r_open = pg.evaluate("() => ({ r: document.querySelector('#right').getBoundingClientRect().right, w: innerWidth, exp: document.querySelector('#btn-right').getAttribute('aria-expanded') })")
+        cb = pg.locator('canvas').first.bounding_box()
+        pg.touchscreen.tap(cb['x'] + 24, cb['y'] + 24)
+        wait_cond("() => document.querySelector('#right').getBoundingClientRect().left >= innerWidth - 1")
+        r_closed = pg.evaluate("() => ({ l: document.querySelector('#right').getBoundingClientRect().left, w: innerWidth, exp: document.querySelector('#btn-right').getAttribute('aria-expanded') })")
+        ok3 = (
+            l_open['l'] >= -1 and l_open['exp'] == 'true'
+            and l_closed['r'] <= 1 and l_closed['exp'] == 'false'
+            and r_open['r'] <= r_open['w'] + 1 and r_open['exp'] == 'true'
+            and r_closed['l'] >= r_closed['w'] - 1 and r_closed['exp'] == 'false'
+        )
+
+        # 4. Körper anlegen, Antippen wählt ihn, Kontextleiste >= 44 px, Antippen ins Leere hebt Auswahl auf
+        ev("Actions.addPrimitive('box')")
+        for _ in range(30):
+            if ev("return !App.busy && App.results.size >= 1"):
+                break
+            pg.wait_for_timeout(300)
+        pg.wait_for_timeout(400)
+        bid = ev("return App.doc.items[0].id")
+        ev("App.clearSelection(); Viewer.fit();"); pg.wait_for_timeout(700)
+        pt = ev("""const b=Actions.worldBox(arg); const c=b.getCenter(Viewer.camera.position.clone());
+          const s=Viewer.toScreen(c); const r=Viewer.canvas.getBoundingClientRect();
+          return [s.x+r.left, s.y+r.top];""", bid)
+        pg.touchscreen.tap(pt[0], pt[1]); pg.wait_for_timeout(400)
+        sel_after_tap = ev("return App.sel.slice()")
+        ctx_btns = pg.evaluate("""() => {
+          const btns = [...document.querySelectorAll('.ctxbar button')].filter(b => b.offsetParent);
+          return btns.length ? Math.min(...btns.map(b => b.getBoundingClientRect().height)) : 0;
+        }""")
+        pg.touchscreen.tap(cb['x'] + 20, cb['y'] + cb['height'] - 20); pg.wait_for_timeout(350)
+        sel_cleared = ev("return App.sel.slice()")
+        ok4 = sel_after_tap == [bid] and ctx_btns >= 44 and sel_cleared == []
+
+        # 5. Zwei Finger drehen und zoomen die Ansicht
+        cam0 = ev("const c=Viewer.camera.position, t=Viewer.controls.target; const v=c.clone().sub(t); return { dir: v.clone().normalize().toArray(), dist: v.length() };")
+        cdp = ctx.new_cdp_session(pg)
+        p1x, p1y = pt[0], pt[1]
+        p2x, p2y = pt[0] + 90, pt[1]
+        cdp.send('Input.dispatchTouchEvent', {'type': 'touchStart', 'touchPoints': [{'x': p1x, 'y': p1y, 'id': 1}, {'x': p2x, 'y': p2y, 'id': 2}]})
+        steps = 10
+        for s_i in range(1, steps + 1):
+            f = s_i / steps
+            x1 = p1x + 55 * f - 80 * f
+            y1 = p1y - 45 * f
+            x2 = p2x + 55 * f + 80 * f
+            y2 = p2y - 45 * f
+            cdp.send('Input.dispatchTouchEvent', {'type': 'touchMove', 'touchPoints': [{'x': x1, 'y': y1, 'id': 1}, {'x': x2, 'y': y2, 'id': 2}]})
+            pg.wait_for_timeout(25)
+        cdp.send('Input.dispatchTouchEvent', {'type': 'touchEnd', 'touchPoints': []})
+        pg.wait_for_timeout(500)
+        cam1 = ev("const c=Viewer.camera.position, t=Viewer.controls.target; const v=c.clone().sub(t); return { dir: v.clone().normalize().toArray(), dist: v.length() };")
+        dot = max(-1.0, min(1.0, sum(a * b for a, b in zip(cam0['dir'], cam1['dir']))))
+        ang_deg = math.degrees(math.acos(dot))
+        sel_after_two = ev("return App.sel.slice()")
+        ok5 = ang_deg > 3.0 and cam1['dist'] < cam0['dist'] * 0.92 and sel_after_two == []
+
+        # 6. Einfach-Stufe am Tablet: Knöpfe >= 44 px, Panels klappen, Antippen wählt
+        pg.locator('#btn-level').tap(); pg.wait_for_timeout(500)
+        b_sim = check_bar_btns()
+        sim_cls = pg.evaluate("() => [document.body.classList.contains('simple'), document.body.classList.contains('tablet')]")
+        pg.locator('#btn-left').tap()
+        sim_l_open = wait_cond("() => document.querySelector('#left').getBoundingClientRect().left >= -1")
+        pg.locator('#btn-left-close').tap()
+        wait_cond("() => document.querySelector('#left').getBoundingClientRect().right <= 1")
+        pt2 = ev("""const b=Actions.worldBox(arg); const c=b.getCenter(Viewer.camera.position.clone());
+          const s=Viewer.toScreen(c); const r=Viewer.canvas.getBoundingClientRect();
+          return [s.x+r.left, s.y+r.top];""", bid)
+        pg.touchscreen.tap(pt2[0], pt2[1]); pg.wait_for_timeout(350)
+        sim_sel = ev("return App.sel.slice()")
+        ok6 = (
+            sim_cls == [True, True]
+            and b_sim['nTools'] >= 3
+            and b_sim['minToolH'] >= 44
+            and sim_l_open is True
+            and sim_sel == [bid]
+        )
+
+        # 7. Querformat 1024x768 (< 1100 px + Touch): bleibt im Tablet-Modus und >= 44 px
+        pg.locator('#btn-level').tap(); pg.wait_for_timeout(400)
+        pg.set_viewport_size({'width': 1024, 'height': 768}); pg.wait_for_timeout(400)
+        b_land = check_bar_btns()
+        land_tab = pg.evaluate("() => [document.body.classList.contains('tablet'), document.querySelector('#left').getBoundingClientRect().right <= 1]")
+        ok7 = land_tab == [True, True] and b_land['minToolH'] >= 44 and len(errs) == 0
+
+        return [ok1, ok2, ok3, ok4, ok5, ok6, ok7]
+    finally:
+        ctx.close()
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -16518,8 +16937,11 @@ TESTS = [
     ('[A-070] Zeichnung: Positionsnummern und Stückliste (ZE-12)', t_a070_positionsnummern_stueckliste),
     ('[A-076] Kopieren zwischen Projekten: Quader mit Bohrung in Tab 1 → Tab 2 (Volumen, Farbe, Werkstoff, Schritte, feste Form, Rückgängig)', t_a076_kopieren_projekte),
     ('[A-075] Projekt-Tabs: zwei Projekte, unabhängiges Rückgängig, Schließen mit Nachfrage, Einfach & Profi, Neuladen & Hilfe', t_a075_projekt_tabs),
+    ('[A-078] Mehrere Rechen-Helfer: 4 unabhängige Körper mit Bohrungsmustern verteilt & ergebnisgleich, Einstellung (Profi), kein Nachladen', t_a078_mehrere_rechenhelfer),
     ('[A-077] Große Modelle: nur neu rechnen, was sich geändert hat (Fingerabdruck & Kern-Zähler)', t_a077_nur_geandertes_rechnen),
     ('[A-079] Läuft in Firefox und Safari: Quader mit Bohrung in WebKit & Firefox, Volumen ohne App.errors', t_a079_firefox_webkit),
+    ('[F-11241334] Volltest-Reparatur: Veraltete mergedInto-Bezüge beim Löschen ohne Seitenfehler in Verlauf & Eigenschaften', t_f11241334),
+    ('[A-080] Am Tablet bedienbar: iPad Pro 11 (44 px Knöpfe, einklappbare Panels, Antippen, 2-Finger-Drehen/Zoomen, Einfach & Profi)', t_a080_tablet),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
@@ -16659,6 +17081,7 @@ if __name__ == '__main__':
     if BROWSER_NAME != 'chromium':
         print(f'Browser: {BROWSER_NAME}', flush=True)
     with sync_playwright() as pw:
+        PW_DEVICES = pw.devices
         _PW = pw
         b = launch_browser(pw, BROWSER_NAME)
         try:

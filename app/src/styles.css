@@ -646,7 +646,7 @@ body.sketching .timeline{display:none}
   .bottombar{grid-template-columns:minmax(100px,1fr) minmax(200px,340px) minmax(0,auto)}
 }
 @media (max-width: 900px){
-  .workspace,.workspace.drawing-mode{grid-template-columns:minmax(0,1fr)}
+  .workspace,.workspace.drawing-mode{grid-template-columns:minmax(0,1fr);overflow:hidden}
   .left,.right{position:absolute;top:0;bottom:0;width:min(300px,86vw);box-shadow:var(--shadow-2);transition:transform .2s ease}
   .left{left:0;transform:translateX(-105%)}
   .right{right:0;transform:translateX(105%)}
@@ -1137,5 +1137,65 @@ body.simple .proj-tab .ptab-close{width:24px;height:24px}
 body.simple .proj-tab .ptab-close svg{width:14px;height:14px}
 body.simple .tabbar-add{width:34px;height:34px}
 body.simple .tabbar-add svg{width:18px;height:18px}
+
+/* ---------- Tablet- & Touch-Bedienung (PL-09) ---------- */
+.panel-close{display:none;margin-left:auto}
+.panel-toggle[aria-expanded="true"]{background:var(--accent-soft);color:var(--accent)}
+@media (max-width: 900px){ .panel-close{display:inline-grid} }
+body.tablet #app{grid-template-rows:auto auto 1fr auto}
+body.tablet .topbar{flex-wrap:wrap;padding:6px 10px 0;gap:6px}
+body.tablet .topbar .brand b,body.tablet .proj-name,body.tablet .folder-badge{display:none}
+body.tablet .topbar .right-tools{margin-left:auto;gap:4px}
+body.tablet .topbar .tools{order:10;flex:1 0 100%;margin:0 -10px;padding:6px 10px;border-top:1px solid var(--line);gap:6px;-webkit-overflow-scrolling:touch}
+body.tablet .topbar .tool{min-height:44px;min-width:44px;padding:10px 13px;font-size:15px;gap:7px;flex-direction:row;flex:none}
+body.tablet .topbar .tool svg{width:22px;height:22px}
+body.tablet .topbar .tool.minor span,body.tablet .topbar .tool:not(.primary) span{display:inline}
+body.tablet .topbar .tool .l-full{display:none}
+body.tablet .topbar .tool .l-short{display:inline}
+body.tablet .topbar .icon-btn,body.tablet .panel-close{width:44px;height:44px;min-width:44px;min-height:44px}
+body.tablet .topbar .icon-btn svg,body.tablet .panel-close svg{width:21px;height:21px}
+body.tablet .topbar .seg button{min-height:44px;padding:8px 14px;font-size:14.5px}
+body.tablet .topbar .level-btn{min-height:44px;min-width:44px;padding:8px 14px;font-size:14px}
+body.tablet .panel-toggle,body.tablet .panel-close{display:inline-grid}
+body.tablet .workspace,body.tablet .workspace.drawing-mode{grid-template-columns:minmax(0,1fr);overflow:hidden}
+body.tablet .left,body.tablet .right{position:absolute;top:0;bottom:0;width:min(320px,86vw);box-shadow:var(--shadow-2);transition:transform .2s ease;grid-column:1;grid-row:1;pointer-events:none}
+body.tablet .left{left:0;transform:translateX(-105%)}
+body.tablet .right{right:0;transform:translateX(105%)}
+body.tablet .workspace.show-left .left,body.tablet .workspace.show-right .right{transform:none;pointer-events:auto}
+body.tablet .workspace.drawing-mode .left{display:flex}
+body.tablet .center{grid-column:1}
+body.tablet .tabs button{min-height:44px;padding:8px 12px;font-size:13.5px}
+body.tablet .ctxbar{padding:5px;gap:4px}
+body.tablet .ctxbar button{min-height:44px;min-width:44px;padding:10px 12px;font-size:15px;gap:7px}
+body.tablet .ctxbar button svg{width:20px;height:20px}
+body.tablet .view-btns button{width:44px;height:44px}
+body.tablet .view-btns svg{width:21px;height:21px}
+body.tablet .sketchbar .tool,body.tablet .consbar .tool,body.tablet .dwgbar .tool{min-height:44px;min-width:44px;padding:10px}
+body.tablet .btn{min-height:44px;padding:10px 14px;font-size:15px}
+body.tablet .btn.small{min-height:40px;padding:8px 12px;font-size:14px}
+body.tablet .node{min-height:44px;padding:8px 10px;font-size:15px}
+body.tablet .node .acts button{width:36px;height:36px}
+body.tablet .menu button{min-height:44px;padding:10px 12px;font-size:15px}
+body.tablet .inp{height:44px}
+body.tablet .timeline{height:54px;left:76px;right:68px}
+body.tablet .tl-chip,body.tablet .tl-btns button{width:40px;height:40px}
+body.tablet .tl-marker{width:22px;height:44px}
+body.tablet .center.has-tl .view-btns{bottom:74px}
+body.tablet .center.has-tl .axis-gizmo{bottom:70px}
+body.tablet .coords{display:none}
+body.tablet .bottombar{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"cmd cmd" "hint amp";row-gap:6px}
+body.tablet .cmd{grid-area:cmd}
+body.tablet .hintline{grid-area:hint}
+body.tablet .ampel-wrap{grid-area:amp}
+body.tablet .cmd-box{height:46px}
+body.tablet .cmd-box .go{width:36px;height:36px}
+body.tablet .tabbar{height:44px}
+body.tablet .proj-tab{height:39px;font-size:14.5px;padding:0 8px 0 12px}
+body.tablet .proj-tab.active{height:40px}
+body.tablet .proj-tab .ptab-close{width:28px;height:28px}
+body.tablet .tabbar-add{width:38px;height:38px}
+@media (max-width: 640px){
+  body.tablet .topbar .tool{min-height:44px;padding:8px 10px;font-size:13.5px}
+}
 
 

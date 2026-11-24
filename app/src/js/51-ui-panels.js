@@ -383,9 +383,9 @@ const Panels = (() => {
       const sw = h('span', { class: 'swatch' + (it.role === 'hole' ? ' hole' : ''), style: { background: it.color } });
       if (it.comp) { sw.innerHTML = icon('parts'); sw.classList.add('comp'); }
       const nm = h('span', { class: 'nm', title: Model.label(it) }, Model.label(it));
-      const into = App.mergedInto(it.id), OPI = { join: '∪', cut: '−', common: '∩' };
+      const into = App.mergedInto(it.id), intoF = into ? Model.find(App.doc, into) : null, OPI = { join: '∪', cut: '−', common: '∩' };
       const patTxt = Features.isOp(it) ? Model.sizeText(it, V) : '';
-      const sub = h('span', { class: 'sub mono' }, into && it.op ? `${patTxt ? patTxt + ' · ' : ''}${OPI[it.op.type]} ${Model.label(Model.find(App.doc, into).item)}` : (it.link ? '↔ ' : '') + Model.sizeText(it, V));
+      const sub = h('span', { class: 'sub mono' }, intoF && it.op ? `${patTxt ? patTxt + ' · ' : ''}${OPI[it.op.type]} ${Model.label(intoF.item)}` : (it.link ? '↔ ' : '') + Model.sizeText(it, V));
       const acts = h('span', { class: 'acts' });
       const dup = h('button', { type: 'button', class: 'act-dup', 'aria-label': T('common.duplicate'), 'data-tip': T('ctx.dupTip'), 'data-help': 'treeDuplicate' });
       dup.innerHTML = icon('copy');
@@ -1181,8 +1181,8 @@ const Panels = (() => {
     fl.append(UI.selectField({ id: 'op-type', label: T('panel.op.what'), value: type, options: [['new', T('panel.op.new')], ['join', T('panel.op.join')], ['cut', T('panel.op.cut')], ['common', T('panel.op.common')]], onChange: (v) => Actions.setOp(it.id, v === 'new' ? null : v, tgt) }));
     if (type !== 'new') fl.append(UI.selectField({ id: 'op-target', label: T('panel.op.target'), value: tgt, options: targets.map((x) => [x.id, Model.label(x)]), onChange: (v) => Actions.setOp(it.id, type, v) }));
     sec.append(fl);
-    const into = App.mergedInto(it.id);
-    if (type !== 'new') sec.append(h('div', { class: 'hint-box' }, into ? T('panel.op.mergedHint', { name: Model.label(Model.find(App.doc, into).item) }) : T('panel.op.missingHint')));
+    const into = App.mergedInto(it.id), intoF = into ? Model.find(App.doc, into) : null;
+    if (type !== 'new') sec.append(h('div', { class: 'hint-box' }, intoF ? T('panel.op.mergedHint', { name: Model.label(intoF.item) }) : T('panel.op.missingHint')));
     return sec;
   }
   function roleSwitch(role, onSet) {
@@ -2387,6 +2387,6 @@ const Panels = (() => {
     App.on('ghosts', placeCtx);
     ViewPrefs.on('change', debounce(() => { if (leftTab === 'tree') renderLeft(); }, 30));   // Erste Schritte ein-/ausblenden
   }
-  return { paramsCSV, importParamsCSV, faceEdgeList, init, renderLeft, renderRight, renderTools, renderCtx, refreshViewCube, closeFlyout, toggleFlyout, firstStepDone, firstStepsState, expand: (id) => { expanded.add(id); renderLeft(); }, showParams: () => { leftTab = 'params'; renderLeft(); } };
+  return { paramsCSV, importParamsCSV, faceEdgeList, init, renderLeft, renderRight, renderTools, renderCtx, refreshViewCube, closeFlyout, toggleFlyout, firstStepDone, firstStepsState, expand: (id) => { expanded.add(id); renderLeft(); }, showParams: () => { leftTab = 'params'; renderLeft(); if (((document.documentElement && document.documentElement.clientWidth) || innerWidth) <= 900 || (UI.isTablet && UI.isTablet())) { const ws = $('#workspace'); if (ws) { ws.classList.add('show-left'); ws.classList.remove('show-right'); } const bl = $('#btn-left'), br = $('#btn-right'); if (bl) bl.setAttribute('aria-expanded', 'true'); if (br) br.setAttribute('aria-expanded', 'false'); } } };
 })();
 
