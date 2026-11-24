@@ -1163,5 +1163,15 @@
     "tip": "Zwei Teile an gewählten Flächen oder Punkten fest verbinden",
     "hilfe": "Legt das zweite gewählte Teil bündig an das erste (Flächen gegeneinander und Mitten übereinander oder Punkt auf Punkt). Das verbundene Teil wandert bei jeder Bewegung oder Größenänderung des ersten Teils mit und lässt sich nicht mehr einzeln verschieben. Unter „Verbindungen“ links im Verlauf kannst du die Verbindung jederzeit umdrehen, drehen, einen Abstand setzen oder lösen.",
     "tipp": "Halte während der Wahl die rechte Maustaste gedrückt, um das Modell zu drehen und verdeckte Unterseiten bequem anzuklicken."
+  },
+  "subAssembly": {
+    "tip": "Eine Baugruppe als bewegliches Ganzes in eine andere Baugruppe einsetzen",
+    "hilfe": "Du kannst eine gespeicherte oder geöffnete Baugruppe genau wie ein Bauteil in eine größere Baugruppe einsetzen. Alle enthaltenen Teile und Unterbaugruppen bleiben verknüpft und bewegen, drehen und verschieben sich gemeinsam als eine Einheit.",
+    "tipp": "Klicke im Verlauf auf den Pfeil neben der Unterbaugruppe, um ihre Teile anzusehen, oder öffne sie zum Bearbeiten per Doppelklick im eigenen Tab."
+  },
+  "groundPart": {
+    "tip": "Ein Teil fest an seiner Stelle verankern, damit nichts verrutscht",
+    "hilfe": "Per Rechtsklick → „Festsetzen“ wird ein Teil wie an einem Schraubstock fixiert. Es lässt sich weder mit der Maus noch über Pfeiltasten, Lage-Felder oder Verbindungen und Gelenke verschieben. Im Verlauf links zeigt ein Schloss-Symbol den festen Stand.",
+    "tipp": "Setze in jeder Baugruppe zuerst das Grundteil fest, bevor du andere Teile damit verbindest – mit Rechtsklick → „Festsetzen lösen“ gibst du es jederzeit wieder frei."
   }
 }

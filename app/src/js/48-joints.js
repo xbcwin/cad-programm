@@ -67,13 +67,18 @@ const Joints = (() => {
     return conj(doc, j.b, stepMatrix(j, ang)).multiply(new THREE.Matrix4().fromArray(home || j.home));
   }
   // Alle Gelenke, die weiter hinten in der Kette an rootId hängen (in Reihenfolge von vorne nach hinten)
-  function downstream(doc, rootId) {
+  function downstream(doc, rootId, opts = {}) {
     const js = list(doc), out = [], seen = new Set([rootId]);
+    const stopAtLocked = !!(opts && opts.stopAtLocked);
     const q = [rootId];
     while (q.length) {
       const a = q.shift();
       for (const j of js) {
         if (j.a === a && !seen.has(j.b)) {
+          if (stopAtLocked) {
+            const kb = top(j.b, doc);
+            if (kb && kb.locked) continue;
+          }
           seen.add(j.b);
           out.push(j);
           q.push(j.b);
@@ -101,7 +106,7 @@ const Joints = (() => {
   }
   // Hintere Glieder der Kette samt ihren Gelenkachsen um die Bewegung D mitnehmen
   function moveChain(doc, rootId, D, opts = {}) {
-    const ks = downstream(doc, rootId), moved = new Set([rootId, ...ks.map((k) => k.b)]);
+    const ks = downstream(doc, rootId, { stopAtLocked: true }), moved = new Set([rootId, ...ks.map((k) => k.b)]);
     for (const k of ks) {
       const kb = top(k.b, doc);
       // Steckt das Teil in einer Gruppe, die selbst mitwandert, fährt es schon mit – nur die Achse nachführen
@@ -199,7 +204,7 @@ const Joints = (() => {
     let changed = false;
     for (const j of ordered) {
       const B = top(j.b, doc);
-      if (!B) continue;
+      if (!B || B.locked) continue;
       const WbOld = Model.worldMatrix(doc, B.id);
       const sol = solveFixedPose(doc, j);
       if (!sol) continue;
@@ -325,7 +330,7 @@ const Joints = (() => {
       }
       const B = top(j.b);
       const sol = solveFixedPose(App.doc, j);
-      if (B && sol) {
+      if (B && !B.locked && sol) {
         const LbNew = Model.parentWorld(App.doc, B.id).invert().multiply(sol.WbNew);
         if (maxMatDiff(LbNew, Model.localMatrix(B)) > 1e-4) needSync = true;
       }
@@ -355,7 +360,7 @@ const Joints = (() => {
     const A = top(aSpec.id), B = top(bSpec.id);
     if (!A || !B || A.id === B.id) return { ok: false, msg: 'Wähle zwei verschiedene Teile für die Verbindung.' };
     const why = refuse(App.doc, A, B); if (why) return { ok: false, msg: why };
-    if (B.locked) return { ok: false, msg: `„${Model.label(B)}“ ist gesperrt.` };
+    if (B.locked) return { ok: false, msg: T('asm.groundedJointErr', { name: Model.label(B) }) };
     if (connected(App.doc, A.id, B.id)) return { ok: false, msg: `„${Model.label(A)}“ und „${Model.label(B)}“ sind schon miteinander verbunden – ein weiteres ergäbe einen Kreis.` };
     if (list().some((j) => j.b === B.id)) return { ok: false, msg: `„${Model.label(B)}“ wird schon von einer Verbindung gehalten.` };
     const refA = resolveRef(aSpec, App.doc), refB = resolveRef(bSpec, App.doc);
@@ -434,6 +439,7 @@ const Joints = (() => {
     const A = top(aId), B = top(bId);
     if (!A || !B || A.id === B.id) return { ok: false, msg: 'Ein Gelenk braucht zwei verschiedene Teile.' };
     const why = refuse(App.doc, A, B); if (why) return { ok: false, msg: why };
+    if (B.locked) return { ok: false, msg: T('asm.groundedJointErr', { name: Model.label(B) }) };
     if (connected(App.doc, A.id, B.id)) return { ok: false, msg: `„${Model.label(A)}“ und „${Model.label(B)}“ sind schon über Gelenke verbunden – ein weiteres ergäbe einen Kreis.` };
     if (list().some((j) => j.b === B.id)) return { ok: false, msg: `„${Model.label(B)}“ wird schon von einem Gelenk bewegt.` };
     const dv = new THREE.Vector3(...d); if (dv.lengthSq() < 1e-12) return { ok: false, msg: 'Die Gelenkachse braucht eine Richtung.' };
@@ -456,6 +462,7 @@ const Joints = (() => {
     if (sel.length !== 2) { UI.toast('Wähle genau zwei Teile (mit Umschalt klicken – Teile in einer Gruppe links im Verlauf).', { icon: 'info' }); return false; }
     const [A, B] = sel;
     const why = refuse(App.doc, A, B); if (why) { UI.toast(why, { icon: 'info' }); return false; }
+    if (B.locked) { UI.toast(T('asm.groundedJointErr', { name: Model.label(B) }), { icon: 'lock' }); return false; }
     if (connected(App.doc, A.id, B.id)) { UI.toast('Das ergäbe einen Kreis – die beiden Teile sind schon über Gelenke miteinander verbunden.', { icon: 'info' }); return false; }
     if (list().some((j) => j.b === B.id)) { UI.toast(`„${Model.label(B)}“ wird schon von einem Gelenk bewegt – jedes Teil darf nur von einem Gelenk bewegt werden.`, { icon: 'info' }); return false; }
     Features.pickAxisThen((ax) => {
@@ -719,9 +726,12 @@ const Joints = (() => {
 
   // Winkel setzen – wurde das Teil inzwischen von Hand bewegt, gilt seine jetzige Lage als neue Ausgangslage
   function setAngle(jid, ang) {
+    const curJ = list().find((x) => x.id === jid);
+    const curB = curJ && top(curJ.b);
+    if (curB && curB.locked) { UI.toast(T('asm.groundedJointErr', { name: Model.label(curB) }), { icon: 'lock' }); return false; }
     App.change('Gelenk gedreht', (doc) => {
       const j = list(doc).find((x) => x.id === jid); if (!j || fixed(j)) return false;
-      const b = top(j.b, doc); if (!b) return false;
+      const b = top(j.b, doc); if (!b || b.locked) return false;
       syncHome(b, j, doc);
       const prev = j.ang;
       j.ang = round(clamp(Number(ang) || 0, j.min, j.max), 4);
@@ -733,7 +743,7 @@ const Joints = (() => {
   function setKind(jid, kind) {
     App.change('Gelenk-Art', (doc) => {
       const j = list(doc).find((x) => x.id === jid); if (!j || fixed(j)) return false;
-      const b = top(j.b, doc); if (!b) return false;
+      const b = top(j.b, doc); if (!b || b.locked) return false;
       syncHome(b, j, doc);
       const prev = j.ang;
       if (Math.abs(prev) > 1e-9) moveChain(doc, j.b, stepMatrix(j, -prev));
@@ -828,10 +838,11 @@ const Joints = (() => {
     if (anim) { const same = anim.jid === jid; stopPlay(); if (same) return; }
     const j = list().find((x) => x.id === jid); if (!j || fixed(j)) return;
     const B = top(j.b); if (!B) return;
-    if (!isTop(B.id) || downstream(App.doc, j.b).some((k) => !isTop(k.b))) { UI.toast('Abspielen geht nur, wenn die bewegten Teile ganz oben im Verlauf liegen – in einer Gruppe zeigt das Bild sie als einen Körper. Mit dem Regler kannst du trotzdem jede Stellung ansehen.', { icon: 'info', ms: 5000 }); return; }
+    if (B.locked) { UI.toast(T('asm.groundedJointErr', { name: Model.label(B) }), { icon: 'lock' }); return; }
+    if (!isTop(B.id) || downstream(App.doc, j.b, { stopAtLocked: true }).some((k) => !isTop(k.b))) { UI.toast('Abspielen geht nur, wenn die bewegten Teile ganz oben im Verlauf liegen – in einer Gruppe zeigt das Bild sie als einen Körper. Mit dem Regler kannst du trotzdem jede Stellung ansehen.', { icon: 'info', ms: 5000 }); return; }
     const cur = Model.localMatrix(B), exp = pose(j, j.ang);
     const home = cur.elements.some((v, i) => Math.abs(v - exp.elements[i]) > 1e-4) ? pose(j, -j.ang, cur.toArray()).toArray() : j.home;
-    const down = downstream(App.doc, j.b).map((k) => top(k.b)).filter(Boolean).map((it) => ({ it, m: Model.localMatrix(it) }));
+    const down = downstream(App.doc, j.b, { stopAtLocked: true }).map((k) => top(k.b)).filter(Boolean).map((it) => ({ it, m: Model.localMatrix(it) }));
     const seq = [j.ang, j.max, j.min, j.ang], speed = slide(j) ? Math.max(5, (j.max - j.min) / 1.4) : 120;
     const legs = []; let T = 0; for (let i = 1; i < seq.length; i++) { const d = Math.abs(seq[i] - seq[i - 1]) / speed * 1000; legs.push({ a0: seq[i - 1], a1: seq[i], t0: T, t1: T + d }); T += d; }
     if (T < 1) return;

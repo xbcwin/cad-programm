@@ -371,9 +371,49 @@ const Actions = (() => {
   function rotate90(ids, axis) { rotate(ids, axis, 90, axis !== 'z'); }
   // um die Mitte der Teile drehen, beliebiger Winkel; drop: danach wieder auf die XY-Ebene legen
   const isFixedJ = (id) => typeof Joints !== 'undefined' && Joints.isFixedPart(id);
+  const isLocked = (id) => { const f = Model.find(App.doc, id); return !!(f && f.item && f.item.locked); };
+  function cannotMoveToast(id) {
+    const f = Model.find(App.doc, id);
+    const name = f ? Model.label(f.item) : 'Teil';
+    if (f && f.item && f.item.locked) UI.toast(T('asm.groundedCannotMove', { name }), { icon: 'lock' });
+    else UI.toast(T('joint.fixedCannotMove', { name }), { icon: 'info' });
+  }
+  function setGrounded(ids, grounded = true) {
+    ids = (ids && ids.length ? ids : App.sel).map((id) => (Model.topOf(App.doc, id) || {}).id).filter(Boolean);
+    ids = [...new Set(ids)];
+    if (!ids.length) { UI.toast(T('asm.selectPartToGround'), { icon: 'info' }); return false; }
+    const target = !!grounded;
+    let changed = 0;
+    App.change(T(target ? 'asm.groundUndo' : 'asm.ungroundUndo'), (doc) => {
+      let any = false;
+      for (const id of ids) {
+        const f = Model.find(doc, id);
+        if (!f || !f.item || !!f.item.locked === target) continue;
+        f.item.locked = target;
+        any = true;
+        changed++;
+      }
+      if (!any) return false;
+    });
+    if (changed > 0) {
+      const f0 = Model.find(App.doc, ids[0]);
+      const name = f0 ? Model.label(f0.item) : T('asm.partDefault');
+      UI.toast(changed === 1
+        ? T(target ? 'asm.groundedToastOne' : 'asm.ungroundedToastOne', { name })
+        : T(target ? 'asm.groundedToastMany' : 'asm.ungroundedToastMany', { n: changed }),
+      { icon: target ? 'lock' : 'unlock', ms: 2600 });
+    }
+    return changed > 0;
+  }
+  function toggleGround(ids) {
+    ids = (ids && ids.length ? ids : App.sel).map((id) => (Model.topOf(App.doc, id) || {}).id).filter(Boolean);
+    ids = [...new Set(ids)];
+    if (!ids.length) { UI.toast(T('asm.selectPartToGround'), { icon: 'info' }); return false; }
+    return setGrounded(ids, !ids.every(isLocked));
+  }
   function rotate(ids, axis, deg = 90, drop = false) {
     ids = ids || App.sel; if (!ids.length) return;
-    if (ids.every(isFixedJ)) { UI.toast(T('joint.fixedCannotMove', { name: Model.label(Model.find(App.doc, ids[0]).item) }), { icon: 'info' }); return; }
+    if (ids.every((id) => isLocked(id) || isFixedJ(id))) { cannotMoveToast(ids[0]); return; }
     const box = selBox(ids); const c = box.isEmpty() ? new THREE.Vector3() : box.getCenter(new THREE.Vector3());
     const a = (deg * Math.PI) / 180;
     App.change(deg === 90 ? 'Um 90° gedreht' : `Um ${fmtAngleU(deg)} gedreht`, (doc) => {
@@ -391,7 +431,9 @@ const Actions = (() => {
   }
   // Teile gemeinsam so verschieben, dass ihre Mitte über dem Ursprung liegt (Höhe bleibt)
   function center(ids) {
-    ids = (ids || App.sel).filter((id) => App.doc.items.find((x) => x.id === id) && !isFixedJ(id)); if (!ids.length) return;
+    const raw = (ids || App.sel).filter((id) => App.doc.items.find((x) => x.id === id));
+    ids = raw.filter((id) => !isLocked(id) && !isFixedJ(id));
+    if (!ids.length) { if (raw.length) cannotMoveToast(raw[0]); return; }
     const box = selBox(ids); if (box.isEmpty()) return;
     const dx = -(box.min.x + box.max.x) / 2, dy = -(box.min.y + box.max.y) / 2;
     if (Math.abs(dx) < 1e-4 && Math.abs(dy) < 1e-4) return;
@@ -399,14 +441,14 @@ const Actions = (() => {
   }
   function mirror(ids, axis) {
     ids = ids || App.sel; if (!ids.length) return;
-    if (ids.every(isFixedJ)) { UI.toast(T('joint.fixedCannotMove', { name: Model.label(Model.find(App.doc, ids[0]).item) }), { icon: 'info' }); return; }
+    if (ids.every((id) => isLocked(id) || isFixedJ(id))) { cannotMoveToast(ids[0]); return; }
     const box = selBox(ids); const c = box.isEmpty() ? new THREE.Vector3() : box.getCenter(new THREE.Vector3());
     App.change('Gespiegelt', (doc) => {
       const S = new THREE.Matrix4().makeScale(axis === 'x' ? -1 : 1, axis === 'y' ? -1 : 1, axis === 'z' ? -1 : 1);
       const T1 = new THREE.Matrix4().makeTranslation(c.x, c.y, c.z), T2 = new THREE.Matrix4().makeTranslation(-c.x, -c.y, -c.z);
       const Mref = T1.multiply(S).multiply(T2);
       for (const id of ids) {
-        const f = Model.find(doc, id); if (!f || isFixedJ(id)) continue;
+        const f = Model.find(doc, id); if (!f || f.item.locked || isFixedJ(id)) continue;
         const W = Model.worldMatrix(doc, id), PW = Model.parentWorld(doc, id);
         const D = new THREE.Matrix4().makeScale(-1, 1, 1);
         const Wn = Mref.clone().multiply(W).multiply(D);
@@ -417,10 +459,15 @@ const Actions = (() => {
     });
   }
   function dropToPlate(ids, quiet) {
-    ids = (ids || App.sel).filter((id) => App.doc.items.find((x) => x.id === id) && !isFixedJ(id));
+    const hadExplicit = !!(ids && ids.length) || !!(App.sel && App.sel.length);
+    const raw = (ids || App.sel).filter((id) => App.doc.items.find((x) => x.id === id));
+    ids = raw.filter((id) => !isLocked(id) && !isFixedJ(id));
     if (!ids.length) {
-      if ((App.sel || []).some(isFixedJ)) { if (!quiet) UI.toast(T('joint.fixedCannotMove', { name: Model.label(Model.find(App.doc, App.sel.find(isFixedJ)).item) }), { icon: 'info' }); return; }
-      ids = App.doc.items.filter((x) => x.role !== 'hole' && !x.hidden && !isFixedJ(x.id)).map((x) => x.id);
+      if (hadExplicit && raw.some((id) => isLocked(id) || isFixedJ(id))) {
+        if (!quiet) cannotMoveToast(raw.find((id) => isLocked(id) || isFixedJ(id)));
+        return;
+      }
+      ids = App.doc.items.filter((x) => x.role !== 'hole' && !x.hidden && !x.locked && !isFixedJ(x.id)).map((x) => x.id);
     }
     let changed = 0;
     const before = App.snapshot();
@@ -465,7 +512,7 @@ const Actions = (() => {
   }
   function setGap(ids, ax, value) {
     ids = ids || App.sel.slice();
-    if (ids.length === 2 && isFixedJ(ids[1])) { UI.toast(T('joint.fixedCannotMove', { name: Model.label(Model.find(App.doc, ids[1]).item) }), { icon: 'info' }); return; }
+    if (ids.length === 2 && (isLocked(ids[1]) || isFixedJ(ids[1]))) { cannotMoveToast(ids[1]); return; }
     const g = gapOf(ids, ax); if (!g) return;
     const k = ax === 'y' ? 'y' : ax === 'z' ? 'z' : 'x';
     const d = new THREE.Vector3(); d[k] = (value - g.gap) * g.dir;
@@ -779,6 +826,6 @@ const Actions = (() => {
     });
     return true;
   }
-  return { setBody, showOnlyBody, showAllBodies, reorder, createFolder, toggleFolder, renameFolder, ungroupFolder, removeFromFolder, replaneSketch, duplicateLinked, unlink, hideSelected, showAll, invertSelection, setOp, gapOf, setGap, loft, addPrimitive, addPart, addBuyPart, addUserPart, remove, duplicate, setRole, toggleRole, group, groupAll, ungroup, rotate90, rotate, center, mirror, dropToPlate, align, addFinish, finishAll, setFinish, removeFinish, edgeSigOf, faceFrame, selectedFace, onFaceTransform, attach, worldBox, selBox, cuttersOf, viewCenter };
+  return { setBody, showOnlyBody, showAllBodies, reorder, createFolder, toggleFolder, renameFolder, ungroupFolder, removeFromFolder, replaneSketch, duplicateLinked, unlink, hideSelected, showAll, invertSelection, setOp, gapOf, setGap, loft, addPrimitive, addPart, addBuyPart, addUserPart, remove, duplicate, setRole, toggleRole, group, groupAll, ungroup, rotate90, rotate, center, mirror, dropToPlate, align, addFinish, finishAll, setFinish, removeFinish, edgeSigOf, faceFrame, selectedFace, onFaceTransform, attach, worldBox, selBox, cuttersOf, viewCenter, setGrounded, toggleGround };
 })();
 

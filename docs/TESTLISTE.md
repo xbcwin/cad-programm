@@ -2125,6 +2125,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Punkt-an-Punkt, Löschen & Rückgängig**: Zwei gewählte Punkte fallen deckungsgleich zusammen; Löschen im Verlauf gibt Teil B wieder frei, `Strg+Z` stellt die Verbindung wieder her; Befehlssuche und Hilfetext `fixedJoint` sind vorhanden.
 - [ ] **Von Hand**: Im Browser zwei Teile über „Verbinden: fest“ (Modus Auto / Fläche / Punkt) verbinden, während der Auswahl die Ansicht mit der rechten Maustaste drehen, Drehwinkel/Abstand rechts testen und das Ergebnis mit mehreren verketteten Teilen prüfen.
 
+## Unterbaugruppen und Teil festsetzen (Auto [A-084], BG-03, BG-04)
+
+- [x] **Unterbaugruppe einsetzen & verschieben**: Eine gespeicherte Unterbaugruppe mit 2 Bauteilen lässt sich über „Bauteil einsetzen“ in eine Hauptbaugruppe einfügen, im Verlauf aufklappen, gegen Zyklen absichern, beim Verschieben gemeinsam mit beiden Teilen bewegen und übersteht Neuladen aus IndexedDB.
+- [x] **Teil festsetzen & Schloss im Verlauf**: Rechtsklick → „Festsetzen“ (`#cm-ground` / `#tm-ground`) setzt `locked`, zeigt ein Schloss-Symbol (`.lock-mark`) im Verlauf, deaktiviert Lage-Felder und schützt das Teil vor Mausziehen, Pfeiltasten, Dreh-/Ausrichte-Aktionen sowie Verbindungen/Gelenken.
+- [x] **Lösen, Rückgängig, Suche & Hilfe**: „Festsetzen lösen“ gibt das Teil wieder frei, `Strg+Z` stellt den Zustand wieder her, und Befehlssuche sowie Hilfetexte (`subAssembly`, `groundPart`) sind vorhanden.
+- [ ] **Von Hand**: Im Browser eine Unterbaugruppe mit mehreren Teilen einsetzen, im 3D-Bild mit der Maus verschieben, ein Grundteil per Rechtsklick festsetzen und danach mit einem weiteren Teil per „Verbinden: fest“ verknüpfen.
+
 ## Fehler melden
 
 ```

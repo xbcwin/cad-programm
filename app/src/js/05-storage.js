@@ -217,7 +217,11 @@ const Store = (() => {
     });
     for (const refId of refIds) {
       if (seen.has(refId)) continue;
-      if (!projectCache.has(refId)) await loadProjectInternal(refId, seen).catch(() => null);
+      if (!projectCache.has(refId)) {
+        await loadProjectInternal(refId, seen).catch(() => null);
+      } else {
+        await hydrateDoc(projectCache.get(refId), seen).catch(() => null);
+      }
     }
     return doc;
   }

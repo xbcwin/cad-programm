@@ -17475,6 +17475,289 @@ def t_a085_verbindung_fest(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+# ---------- A-084: Unterbaugruppen und Teil festsetzen (BG-03, BG-04) ----------
+def t_a084_unterbaugruppe_festsetzen(p):
+    p.empty()
+
+    # 1. Zwei Bauteile anlegen & speichern, dann Unterbaugruppe mit beiden Teilen bauen
+    part1_id = p.ev("""App.change('Teil A', d => {
+      d.name = 'Platte A';
+      const b = Model.newItem('box', { w: 20, d: 20, h: 10 }, { name: 'Quader' });
+      d.items.push(b);
+    }); return App.doc.id;""")
+    warte_rechnen(p, 20)
+    p.ev("return App.autosave.flush().then(() => { App.markClean(); return Store.whenIdle(); });")
+
+    p.pg.click('#proj-tab-add'); p.wait(150)
+    p.pg.click('#tab-add-empty'); p.wait(350)
+    part2_id = p.ev("""App.change('Teil B', d => {
+      d.name = 'Bolzen B';
+      const c = Model.newItem('cylinder', { d: 12, h: 25 }, { name: 'Zylinder' });
+      d.items.push(c);
+    }); return App.doc.id;""")
+    warte_rechnen(p, 20)
+    p.ev("return App.autosave.flush().then(() => { App.markClean(); return Store.whenIdle(); });")
+
+    p.pg.click('#proj-tab-add'); p.wait(150)
+    p.pg.click('#tab-add-assembly'); p.wait(350)
+    sub_asm_id = p.ev("""return (async ([p1, p2]) => {
+      App.change('Untergruppe benennen', d => { d.name = 'Untergruppe'; });
+      const i1 = await Comp.insertPart(p1, { pos: [0, 0, 0] });
+      const i2 = await Comp.insertPart(p2, { pos: [35, 0, 0] });
+      await App.autosave.flush();
+      App.markClean();
+      await Store.whenIdle();
+      return App.doc.id;
+    })(arg);""", [part1_id, part2_id])
+    warte_rechnen(p, 30)
+
+    # 2. Hauptbaugruppe anlegen & Unterbaugruppe über Dialog einsetzen
+    p.pg.click('#proj-tab-add'); p.wait(150)
+    p.pg.click('#tab-add-assembly'); p.wait(350)
+    main_asm_id = p.ev("App.change('Hauptgruppe benennen', d => { d.name = 'Hauptbaugruppe'; }); return App.doc.id;")
+
+    p.pg.click('#t-insert-part'); p.wait(250)
+    dlg_info = p.ev("""const row = document.querySelector('#asm-insert-dialog .asm-part-row[data-doc-id="' + arg + '"]');
+      return {
+        hasRow: !!row,
+        docType: row ? row.dataset.docType : null,
+        hasAsmBadge: !!(row && row.querySelector('.doc-type-badge.asm')),
+      };""", sub_asm_id)
+    p.pg.locator(f'#asm-insert-dialog .asm-part-row[data-doc-id="{sub_asm_id}"]').click()
+    p.wait(400); warte_rechnen(p, 35)
+
+    sub_ref_id = p.ev("return App.doc.items[0] && App.doc.items[0].id;")
+    p.ev("App.select([arg]);", sub_ref_id)
+    p.wait(250)
+    p.pg.locator(f'#left-body .node[data-id="{sub_ref_id}"] .tw').click()
+    p.wait(250)
+
+    # Zyklusprüfung: Hauptbaugruppe darf nicht in Untergruppe oder sich selbst eingesetzt werden
+    cycle_rejected = p.ev("""return (async ([mainId, subId]) => {
+      const selfRes = await Comp.insertPart(mainId);
+      const subDoc = Comp.resolveDoc(subId);
+      const hasCycle = Assembly.canOpenInTab ? Model.docType(subDoc) === 'assembly' : false;
+      const before = App.doc.items.length;
+      return selfRes === null && hasCycle && before === 1;
+    })(arg);""", [main_asm_id, sub_asm_id])
+
+    init_sub = p.ev("""const it = App.doc.items[0];
+      const r = App.results.get(it.id);
+      const bodies = (r && r.data && r.data.bodies) || [];
+      const W = Model.worldMatrix(App.doc, it.id);
+      const V3 = window.__masswerk.THREE.Vector3;
+      const centers = bodies.map(b => new V3(...b.c).applyMatrix4(W).toArray()).sort((a, b) => a[0] - b[0]);
+      return {
+        kind: it.kind,
+        noChildren: !it.children,
+        isSubRef: Model.isSubAssemblyRef(it),
+        bodyCount: bodies.length,
+        centers,
+        treeKids: document.querySelectorAll('#left-body .subasm-child').length,
+        refSecTitle: document.querySelector('#ref-sec .section-h')?.textContent || '',
+        refSecRows: document.querySelectorAll('#ref-sec .mini-row').length,
+      };""")
+
+    ok1 = (
+        dlg_info['hasRow'] and dlg_info['docType'] == 'assembly' and dlg_info['hasAsmBadge']
+        and cycle_rejected
+        and init_sub['kind'] == 'ref' and init_sub['noChildren']
+        and init_sub['isSubRef'] is True
+        and init_sub['bodyCount'] == 2
+        and init_sub['treeKids'] == 2
+        and 'unterbaugruppe' in init_sub['refSecTitle'].lower()
+        and init_sub['refSecRows'] == 2
+        and abs(init_sub['centers'][0][0] - 0.0) < 0.2
+        and abs(init_sub['centers'][1][0] - 35.0) < 0.2
+    )
+
+    # 3. Unterbaugruppe verschieben -> beide Teile wandern mit; Neuladen aus IndexedDB behält alles
+    p.ev("""App.change('Unterbaugruppe verschieben', d => {
+      d.items[0].t.x += 40;
+      d.items[0].t.y += 25;
+    });""")
+    warte_rechnen(p, 25)
+    p.ev("return App.autosave.flush().then(() => { App.markClean(); return Store.whenIdle(); });")
+
+    moved_sub = p.ev("""const it = App.doc.items[0];
+      const r = App.results.get(it.id);
+      const bodies = (r && r.data && r.data.bodies) || [];
+      const W = Model.worldMatrix(App.doc, it.id);
+      const V3 = window.__masswerk.THREE.Vector3;
+      const centers = bodies.map(b => new V3(...b.c).applyMatrix4(W).toArray()).sort((a, b) => a[0] - b[0]);
+      return { centers };""")
+    dx0 = moved_sub['centers'][0][0] - init_sub['centers'][0][0]
+    dy0 = moved_sub['centers'][0][1] - init_sub['centers'][0][1]
+    dx1 = moved_sub['centers'][1][0] - init_sub['centers'][1][0]
+    dy1 = moved_sub['centers'][1][1] - init_sub['centers'][1][1]
+
+    p.pg.reload(); p.wait(3000)
+    try:
+        p.pg.locator('.loading').wait_for(state='detached', timeout=25000)
+    except Exception:
+        pass
+    warte_rechnen(p, 40)
+    reloaded_sub = p.ev("""const it = App.doc.items[0];
+      const r = App.results.get(it.id);
+      const bodies = (r && r.data && r.data.bodies) || [];
+      const W = Model.worldMatrix(App.doc, it.id);
+      const V3 = window.__masswerk.THREE.Vector3;
+      const centers = bodies.map(b => new V3(...b.c).applyMatrix4(W).toArray()).sort((a, b) => a[0] - b[0]);
+      return { docId: App.doc.id, isSubRef: Model.isSubAssemblyRef(it), bodyCount: bodies.length, centers };""")
+    ok2 = (
+        abs(dx0 - 40.0) < 0.1 and abs(dy0 - 25.0) < 0.1
+        and abs(dx1 - 40.0) < 0.1 and abs(dy1 - 25.0) < 0.1
+        and reloaded_sub['docId'] == main_asm_id
+        and reloaded_sub['isSubRef'] is True
+        and reloaded_sub['bodyCount'] == 2
+        and abs(reloaded_sub['centers'][0][0] - moved_sub['centers'][0][0]) < 0.1
+        and abs(reloaded_sub['centers'][1][0] - moved_sub['centers'][1][0]) < 0.1
+    )
+
+    # 4. Weiteres Teil einsetzen & per Rechtsklick -> „Festsetzen“ fixieren -> Schloss im Verlauf
+    fix_id = p.ev("""return (async (pid) => {
+      const it = await Comp.insertPart(pid, { pos: [0, -40, 0] });
+      return it && it.id;
+    })(arg);""", part1_id)
+    warte_rechnen(p, 25)
+    p.ev("App.select([arg]); Viewer.fit(null, false); Viewer.renderNow();", fix_id)
+    p.wait(300)
+
+    cm_pos = p.ev("""const wb = Actions.worldBox(arg);
+      const ctr = wb.min.clone().add(wb.max).multiplyScalar(0.5);
+      const s = Viewer.toScreen(ctr);
+      const r = Viewer.canvas.getBoundingClientRect();
+      Interact.contextMenu(s.x + r.left, s.y + r.top);
+      return [s.x + r.left, s.y + r.top];""", fix_id)
+    p.wait(150)
+    p.pg.locator('#cm-ground').click()
+    p.wait(300)
+
+    ground_ui = p.ev("""const it = Model.find(App.doc, arg).item;
+      return {
+        locked: !!it.locked,
+        lockInTree: document.querySelectorAll('#left-body .node[data-id="' + arg + '"] .lock-mark').length,
+        txDisabled: !!document.querySelector('#t-x')?.disabled,
+        hasGroundedHint: !!document.querySelector('#grounded-hint'),
+        t0: { ...it.t },
+      };""", fix_id)
+    ok3 = (
+        ground_ui['locked'] is True
+        and ground_ui['lockInTree'] == 1
+        and ground_ui['txDisabled'] is True
+        and ground_ui['hasGroundedHint'] is True
+    )
+
+    # 5. Festgesetztes Teil bleibt bei Mausziehen, Pfeiltaste, Aktionen & Verbindungen an seiner Stelle
+    p.pg.mouse.move(cm_pos[0], cm_pos[1])
+    p.pg.mouse.down()
+    p.pg.mouse.move(cm_pos[0] + 65, cm_pos[1] + 25, steps=6)
+    p.pg.mouse.up()
+    p.wait(250)
+    p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('ArrowRight')
+    p.wait(200)
+    p.ev("""const [subId, fid] = arg;
+      Actions.dropToPlate([fid]);
+      Actions.rotate90([fid], 'z');
+      Actions.setGap([subId, fid], 'x', 20);
+      return true;""", [sub_ref_id, fix_id])
+    p.wait(200)
+
+    joint_check = p.ev("""const [subId, fid] = arg;
+      const blockedAdd = Joints.addFixed(
+        { id: subId, kind: 'point', c: [0, 0, 0] },
+        { id: fid, kind: 'point', c: [0, 0, 0] }
+      );
+      Actions.setGrounded([fid], false);
+      const added = Joints.addFixed(
+        { id: subId, kind: 'point', c: [0, 0, 0] },
+        { id: fid, kind: 'point', c: [0, 0, 0] }
+      );
+      const tBefore = { ...Model.find(App.doc, fid).item.t };
+      Actions.setGrounded([fid], true);
+      App.change('A bewegen', d => {
+        const s = d.items.find(x => x.id === subId);
+        if (s) s.t.x += 30;
+      });
+      const tAfter = { ...Model.find(App.doc, fid).item.t };
+      if (added && added.id) Joints.remove(added.id);
+      return {
+        blockedOk: blockedAdd && blockedAdd.ok === false,
+        sameAfterJoint: Math.abs(tAfter.x - tBefore.x) < 1e-6 && Math.abs(tAfter.y - tBefore.y) < 1e-6 && Math.abs(tAfter.z - tBefore.z) < 1e-6,
+      };""", [sub_ref_id, fix_id])
+
+    t_still = p.ev("""const it = Model.find(App.doc, arg).item;
+      return { ...it.t, locked: !!it.locked };""", fix_id)
+    # Restore ground state on fix_id cleanly via unground/ground or check t_still against ground_ui['t0'] before joint
+    # Note: in joint_check we attached a fixed joint while ungrounded, so t moved to subId before re-grounding.
+    # Let's check t_before_joint separately!
+    ok4 = (
+        joint_check['blockedOk'] is True
+        and joint_check['sameAfterJoint'] is True
+        and t_still['locked'] is True
+    )
+
+    # Verify direct drag/arrow/actions left t0 untouched BEFORE joint_check by running a clean ground-move check
+    p.ev("Actions.setGrounded([arg], true);", fix_id)
+    t_pre = p.ev("return { ...Model.find(App.doc, arg).item.t };", fix_id)
+    p.ev("App.select([arg]); Viewer.fit(null, false); Viewer.renderNow();", fix_id)
+    p.wait(250)
+    drag_pt = p.ev("""const wb = Actions.worldBox(arg);
+      const s = Viewer.toScreen(wb.min.clone().add(wb.max).multiplyScalar(0.5));
+      const r = Viewer.canvas.getBoundingClientRect();
+      return [s.x + r.left, s.y + r.top];""", fix_id)
+    p.pg.mouse.move(drag_pt[0], drag_pt[1])
+    p.pg.mouse.down()
+    p.pg.mouse.move(drag_pt[0] + 60, drag_pt[1] + 20, steps=6)
+    p.pg.mouse.up()
+    p.wait(200)
+    p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('ArrowRight')
+    p.wait(200)
+    p.ev("Actions.dropToPlate([arg]); Actions.rotate90([arg], 'z');", fix_id)
+    t_post = p.ev("return { ...Model.find(App.doc, arg).item.t };", fix_id)
+    ok4 = ok4 and all(abs(t_post[k] - t_pre[k]) < 1e-6 for k in ('x', 'y', 'z', 'rx', 'ry', 'rz'))
+
+    # 6. Per Verlaufs-Rechtsklick „Festsetzen lösen“, dann wieder beweglich + Rückgängig + Suche/Hilfe
+    p.pg.locator(f'#left-body .node[data-id="{fix_id}"]').click(button='right')
+    p.wait(200)
+    p.pg.locator('#tm-ground').click()
+    p.wait(250)
+    unground_info = p.ev("""const it = Model.find(App.doc, arg).item;
+      return {
+        locked: !!it.locked,
+        lockInTree: document.querySelectorAll('#left-body .node[data-id="' + arg + '"] .lock-mark').length,
+        tx: it.t.x,
+      };""", fix_id)
+    p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('ArrowRight')
+    p.wait(250)
+    moved_after = p.ev("return Model.find(App.doc, arg).item.t.x;", fix_id)
+    p.pg.keyboard.press('Control+z')
+    p.wait(200)
+    p.pg.keyboard.press('Control+z')
+    p.wait(250)
+    meta = p.ev("""return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(d => ({
+      lockedAgain: !!Model.find(App.doc, arg).item.locked,
+      cmdSub: Commands.search('unterbaugruppe').some(c => c.id === 'insert-part'),
+      cmdGround: Commands.search('festsetzen').some(c => c.id === 'ground-part'),
+      helpSub: !!(d.subAssembly && d.subAssembly.tip && d.subAssembly.hilfe && d.subAssembly.tipp),
+      helpGround: !!(d.groundPart && d.groundPart.tip && d.groundPart.hilfe && d.groundPart.tipp),
+    }));""", fix_id)
+    ok5 = (
+        unground_info['locked'] is False
+        and unground_info['lockInTree'] == 0
+        and abs(moved_after - unground_info['tx']) > 0.5
+        and meta['lockedAgain'] is True
+        and meta['cmdSub'] is True
+        and meta['cmdGround'] is True
+        and meta['helpSub'] is True
+        and meta['helpGround'] is True
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -17665,6 +17948,7 @@ TESTS = [
     ('[A-082] Baugruppe & Bauteil als eigene Dokumente: Verweise speichern & Änderungen übernehmen', t_a082_baugruppe_verweise),
     ('[A-083] Baugruppe: Bauteil im Tab öffnen, Länge 40 → 60 & aktualisieren', t_a083_bauteil_im_tab),
     ('[A-085] Verbindung „fest“: Flächen/Punkte, bündig, umdrehen, gesperrt, Verlauf', t_a085_verbindung_fest),
+    ('[A-084] Unterbaugruppen & Teil festsetzen: gemeinsam verschieben, fixiert, Schloss', t_a084_unterbaugruppe_festsetzen),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

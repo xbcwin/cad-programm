@@ -697,7 +697,11 @@ const Interact = (() => {
   const isStepMod = (x) => x.kind === 'transform' || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'emboss' || x.kind === 'mirrorStep';
   function startMove(e) {
     const hit = down.hit; const top = App.doc.items.find((x) => x.id === hit.id);
-    if (!top || top.locked || isStepMod(top)) { down = null; Viewer.controls.enabled = true; return; }
+    if (!top || isStepMod(top)) { down = null; Viewer.controls.enabled = true; return; }
+    if (top.locked) {
+      UI.toast(T('asm.groundedCannotMove', { name: Model.label(top) }), { icon: 'lock' });
+      down = null; Viewer.controls.enabled = true; return;
+    }
     if (typeof Joints !== 'undefined' && Joints.isFixedPart(top.id)) {
       UI.toast(T('joint.fixedCannotMove', { name: Model.label(top) }), { icon: 'info' });
       down = null; Viewer.controls.enabled = true; return;
@@ -892,9 +896,12 @@ const Interact = (() => {
     if (top) {
       if (!App.sel.includes(top.id) && !App.sel.includes(hit.id)) App.select([top.id]);
       const it = top, sk = (it.kind === 'extrude' || it.kind === 'revolve' || it.kind === 'sweep' || it.kind === 'rib' || it.kind === 'emboss') && it.p && it.p.sketch;
+      const isSubAsm = it.kind === 'ref' && typeof Model !== 'undefined' && Model.isSubAssemblyRef && Model.isSubAssemblyRef(it);
       items = [
+        ...(it.kind === 'ref' ? [{ icon: 'edit', label: isSubAsm ? T('asm.openSubAsm') : T('asm.openPart'), id: 'cm-ref-open', help: isSubAsm ? 'subAssembly' : 'assemblyDoc', run: () => Comp.openRef(it.id) }] : []),
         ...(typeof Assembly !== 'undefined' && Assembly.canOpenInTab(it, App.doc) ? [{ icon: 'edit', label: T('asm.openInTab'), kbd: 'E', id: 'cm-open-part-tab', help: 'assemblyPartTab', run: () => Assembly.openPartTab(it.id) }] : []),
         ...(sk ? [{ icon: 'edit', label: T('menu.ctx.editSketch'), kbd: 'E', id: 'cm-edit', run: () => Sketch.editItem(it.id) }] : []),
+        { icon: it.locked ? 'unlock' : 'lock', label: it.locked ? T('asm.unground') : T('asm.ground'), id: 'cm-ground', help: 'groundPart', run: () => Actions.toggleGround([it.id]) },
         { icon: 'help', label: T('common.explainStep'), id: 'cm-explain', run: () => Explain.dialog(it.id) },
         { icon: 'viewOrtho', label: T('menu.ctx.lookAtFace'), id: 'cm-normal', hidden: !hit || hit.faceIdx == null || !((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).n, run: () => Viewer.lookAtFace(hit.id, hit.faceIdx) },
         { icon: 'export', label: T('menu.ctx.faceDxf'), id: 'cm-facedxf', help: 'faceExport', hidden: !hit || hit.faceIdx == null || !((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).n, run: () => { const r = App.results.get(hit.id); Print.faceTo2D({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }, 'dxf'); } },

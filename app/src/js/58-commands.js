@@ -248,10 +248,11 @@ const Commands = (() => {
     add('axes', 'Achsen ein/aus', 'axes', 'achsen x y z', () => ViewPrefs.toggle('axes'), { group: 'Ansicht' });
     add('newcomp', 'Neues Bauteil', 'parts', 'bauteil komponente baugruppe component neu', () => Comp.newComponent(), { group: 'Werkzeuge' });
     add('new-assembly', 'Neue Baugruppe anlegen', 'parts', 'baugruppe assembly neu dokument tab verweis', () => Start.openNewTab(Model.newAssemblyDoc(T('asm.defaultName'))), { group: 'Projekt' });
-    add('insert-part', 'Bauteil in Baugruppe einsetzen …', 'parts', 'bauteil einsetzen verweis baugruppe assembly einfuegen einfügen teil', () => {
+    add('insert-part', 'Bauteil oder Unterbaugruppe einsetzen …', 'parts', 'bauteil unterbaugruppe subassembly einsetzen verweis baugruppe assembly einfuegen einfügen teil', () => {
       if (Model.isAssembly(App.doc)) Comp.insertPartDialog();
       else UI.toast('Wechsle zuerst in eine Baugruppe (oder lege über Start → „Neue Baugruppe“ eine an).', { icon: 'info' });
     }, { group: 'Baugruppe' });
+    add('ground-part', 'Teil festsetzen / lösen', 'lock', 'festsetzen fixieren lösen loesen sperren schloss verankern ground fix lock baugruppe', () => Actions.toggleGround(), { group: 'Baugruppe', needSel: true });
     add('open-part-tab', 'Bauteil im Tab öffnen', 'edit', 'bauteil tab oeffnen öffnen baugruppe bearbeiten', () => { const t = App.sel.length ? Model.topOf(App.doc, App.sel[0]) : null; if (t && Assembly.canOpenInTab(t, App.doc)) Assembly.openPartTab(t.id); else UI.toast(T('asm.selectPartFirst'), { icon: 'info' }); }, { group: 'Werkzeuge' });
     add('sync-assembly', 'Baugruppe aktualisieren', 'undo', 'baugruppe aktualisieren sync bauteil abgleichen', () => Assembly.syncCurrentAssembly({ announce: true }), { group: 'Werkzeuge' });
     add('fixed-joint', 'Verbinden: fest (zwei Flächen oder Punkte)', 'lock', 'verbinden fest verbindung starr baugruppe bündig fläche punkt mate rigid joint', () => Joints.startFixed(), { group: 'Werkzeuge' });
@@ -431,18 +432,22 @@ const Commands = (() => {
       e.preventDefault();
       const g = (App.doc.settings.grid || 1) * (e.shiftKey ? 10 : 1);
       const d = { arrowleft: [-g, 0, 0], arrowright: [g, 0, 0], arrowup: [0, g, 0], arrowdown: [0, -g, 0], pageup: [0, 0, g], pagedown: [0, 0, -g] }[k];
-      let blockedName = null;
+      let blockedName = null, lockedName = null;
       const moved = App.change('Verschoben', (doc) => {
         let any = false;
         for (const id of App.sel) {
-          const f = Model.find(doc, id); if (!f || f.item.locked) continue;
+          const f = Model.find(doc, id); if (!f) continue;
+          if (f.item.locked) { if (!lockedName) lockedName = Model.label(f.item); continue; }
           if (typeof Joints !== 'undefined' && Joints.isFixedPart(id)) { if (!blockedName) blockedName = Model.label(f.item); continue; }
           const PW = Model.parentWorld(doc, id); const q = new THREE.Quaternion(); PW.decompose(new THREE.Vector3(), q, new THREE.Vector3()); const v = new THREE.Vector3(...d).applyQuaternion(q.invert()); const tn = Model.tNumeric(f.item); f.item.t.x = round(tn.x + v.x, 4); f.item.t.y = round(tn.y + v.y, 4); f.item.t.z = round(tn.z + v.z, 4);
           any = true;
         }
         if (!any) return false;
       }, { merge: 'nudge' });
-      if (moved === false && blockedName) UI.toast(T('joint.fixedCannotMove', { name: blockedName }), { icon: 'info' });
+      if (moved === false) {
+        if (lockedName) UI.toast(T('asm.groundedCannotMove', { name: lockedName }), { icon: 'lock' });
+        else if (blockedName) UI.toast(T('joint.fixedCannotMove', { name: blockedName }), { icon: 'info' });
+      }
     }
   }
   function showKeys() {
