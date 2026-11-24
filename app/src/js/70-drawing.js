@@ -4,9 +4,48 @@ const Drawing = (() => {
   const SHEET_ORDER = ['A4', 'A3', 'A2', 'A1', 'A0'];
   const SCALES = [20, 10, 5, 2, 1, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01];
   const scaleText = (s) => (s >= 1 ? `${fmtFixed(s, 2)}:1` : `1:${fmtFixed(1 / s, 2)}`);
-  let proj = null, projRev = -1, loadingProj = false, projId = 0;
-  let svg = null, wrap = null, holder = null, tabsBar = null, zoom = 1, tool = null, toolState = null, selDim = null;
+  let proj = null, projRev = -1, projSceneKey = null, loadingProj = false, projId = 0;
+  const projSigs = new Map(), shadeCache = new Map();
+  let svg = null, wrap = null, holder = null, tabsBar = null, zoom = 1, tool = null, toolState = null, selDim = null, selView = null;
   let layout = null;
+  function norm3(v, fb = [1, -1, 1]) {
+    const a = Array.isArray(v) && v.length >= 3 ? v : fb;
+    const L = Math.hypot(a[0], a[1], a[2]);
+    if (L < 1e-8) return norm3(fb, [0, -1, 0]);
+    return [a[0] / L, a[1] / L, a[2] / L];
+  }
+  function orthoX3(x, dir) {
+    const d = norm3(dir);
+    let x0 = Array.isArray(x) && x.length >= 3 ? [x[0], x[1], x[2]] : [0, 0, 0];
+    const k = x0[0] * d[0] + x0[1] * d[1] + x0[2] * d[2];
+    x0 = [x0[0] - d[0] * k, x0[1] - d[1] * k, x0[2] - d[2] * k];
+    if (Math.hypot(x0[0], x0[1], x0[2]) < 1e-6) {
+      const up = Math.abs(d[2]) > 0.95 ? [0, 1, 0] : [0, 0, 1];
+      x0 = [up[1] * d[2] - up[2] * d[1], up[2] * d[0] - up[0] * d[2], up[0] * d[1] - up[1] * d[0]];
+    }
+    return norm3(x0, [1, 0, 0]);
+  }
+  const ISO_DIR = norm3([1, -1, 1]);
+  const ISO_X = orthoX3([1, 1, 0], ISO_DIR);
+  const STD_DIR = {
+    front: { dir: [0, -1, 0], x: [1, 0, 0] },
+    top: { dir: [0, 0, 1], x: [1, 0, 0] },
+    left: { dir: [-1, 0, 0], x: [0, -1, 0] },
+    iso: { dir: ISO_DIR, x: ISO_X },
+  };
+  function normalizeExtraView(v) {
+    if (!v || typeof v !== 'object') return null;
+    const kind = v.kind === 'free' ? 'free' : 'iso';
+    const dir = norm3(v.dir, ISO_DIR);
+    const x = orthoX3(v.x, dir);
+    return {
+      id: v.id || uid('v'),
+      kind,
+      name: String(v.name || (kind === 'free' ? 'Freie Ansicht' : 'Isometrie')),
+      dir,
+      x,
+    };
+  }
   function defaultAutoDims() {
     return [
       { id: uid('d'), auto: 'width', view: 'front' },
@@ -23,7 +62,9 @@ const Drawing = (() => {
       sheet: SHEETS[opts.sheet] ? opts.sheet : (tpl && SHEETS[tpl.sheet] ? tpl.sheet : 'A4'),
       orient: opts.orient === 'portrait' || opts.orient === 'landscape' ? opts.orient : (tpl && tpl.orient ? tpl.orient : 'landscape'),
       scale: opts.scale != null ? opts.scale : 'auto',
-      views: opts.views ? { ...opts.views } : { front: true, top: true, left: true, iso: true },
+      views: opts.views ? { ...opts.views } : { front: true, top: true, left: true, iso: false },
+      viewOpts: opts.viewOpts && typeof opts.viewOpts === 'object' ? JSON.parse(JSON.stringify(opts.viewOpts)) : {},
+      extraViews: Array.isArray(opts.extraViews) ? opts.extraViews.map(normalizeExtraView).filter(Boolean) : [],
       hidden: opts.hidden != null ? !!opts.hidden : (tpl ? !!tpl.hidden : true),
       centers: opts.centers != null ? !!opts.centers : (tpl ? !!tpl.centers : true),
       dims: opts.dims || defaultAutoDims(),
@@ -47,6 +88,8 @@ const Drawing = (() => {
       orient: raw && raw.orient,
       scale: raw && raw.scale != null ? raw.scale : 'auto',
       views: raw && raw.views,
+      viewOpts: raw && raw.viewOpts,
+      extraViews: raw && raw.extraViews,
       hidden: raw && raw.hidden,
       centers: raw && raw.centers,
       dims: raw && Array.isArray(raw.dims) ? raw.dims : undefined,
@@ -80,6 +123,9 @@ const Drawing = (() => {
       const cur = d.drawing.sheets[i];
       if (!cur || !cur.id || !SHEETS[cur.sheet] || !cur.views || !Array.isArray(cur.dims) || !Array.isArray(cur.free) || !cur.title || !cur.name) {
         d.drawing.sheets[i] = normalizeSheet(cur, `Blatt ${i + 1}`);
+      } else {
+        if (!cur.viewOpts || typeof cur.viewOpts !== 'object') cur.viewOpts = {};
+        if (!Array.isArray(cur.extraViews)) cur.extraViews = [];
       }
     }
     if (!d.drawing.sheets.some((x) => x.id === d.drawing.active)) d.drawing.active = d.drawing.sheets[0].id;
@@ -105,7 +151,7 @@ const Drawing = (() => {
     const st = dwgState();
     if (!st.sheets.some((x) => x.id === id) || st.active === id) return;
     st.active = id;
-    selDim = null;
+    selDim = null; selView = null;
     toolState = tool === 'dim' ? { stage: 0 } : tool ? {} : null;
     fitZoom(true);
     refresh();
@@ -138,6 +184,15 @@ const Drawing = (() => {
     clone.name = cand;
     clone.dims = (clone.dims || []).map((x) => ({ ...x, id: uid('d') }));
     clone.free = (clone.free || []).map((x) => ({ ...x, id: uid('f') }));
+    if (Array.isArray(clone.extraViews) && clone.extraViews.length) {
+      const idMap = new Map();
+      clone.extraViews = clone.extraViews.map((v) => { const nid = uid('v'); idMap.set(v.id, nid); return { ...v, id: nid }; });
+      if (clone.viewOpts && typeof clone.viewOpts === 'object') {
+        const nextOpts = {};
+        for (const [k, val] of Object.entries(clone.viewOpts)) nextOpts[idMap.get(k) || k] = val;
+        clone.viewOpts = nextOpts;
+      }
+    }
     if (clone.title) clone.title.blatt = '';
     App.change('Blatt dupliziert', () => {
       const st2 = dwgState();
@@ -205,7 +260,7 @@ const Drawing = (() => {
     renderTabs();
     refresh();
   }
-  function close() { tool = null; toolState = null; const el = $('#sheet'); if (el) el.innerHTML = ''; svg = null; wrap = null; holder = null; tabsBar = null; }
+  function close() { tool = null; toolState = null; selView = null; const el = $('#sheet'); if (el) el.innerHTML = ''; svg = null; wrap = null; holder = null; tabsBar = null; }
   function renderTabs() {
     if (!tabsBar) return;
     const list = sheets();
@@ -265,24 +320,176 @@ const Drawing = (() => {
     if (!noRender) setZoom(zoom);
   }
   function sheetSize(sh = dwg()) { const s = SHEETS[sh.sheet] || SHEETS.A4; return sh.orient === 'portrait' ? [s[1], s[0]] : [s[0], s[1]]; }
+  function dirSig(v) {
+    return (v.dir || []).concat(v.x || []).map((n) => Math.round(n * 10000)).join(',');
+  }
+  function viewLabel(sh, key) {
+    if (key === 'front') return 'Vorderansicht';
+    if (key === 'top') return 'Draufsicht';
+    if (key === 'left') return 'Seitenansicht';
+    if (key === 'iso') return 'Isometrie';
+    const ev = (sh.extraViews || []).find((v) => v.id === key);
+    return ev ? ev.name : key;
+  }
+  function is3dView(sh, key) {
+    return key === 'iso' || (sh.extraViews || []).some((v) => v.id === key);
+  }
+  function viewOpts(sh, key) {
+    const is3d = is3dView(sh, key);
+    const def = { scale: 'sheet', hidden: is3d ? false : !!sh.hidden, tangent: true, shaded: false };
+    const ov = (sh.viewOpts && sh.viewOpts[key]) || {};
+    return {
+      scale: typeof ov.scale === 'number' && ov.scale > 0 ? ov.scale : 'sheet',
+      hidden: ov.hidden != null ? !!ov.hidden : def.hidden,
+      tangent: ov.tangent != null ? !!ov.tangent : def.tangent,
+      shaded: ov.shaded != null ? !!ov.shaded : def.shaded,
+    };
+  }
+  function activeViews(sh = dwg()) {
+    const out = [];
+    for (const k of ['front', 'top', 'left', 'iso']) {
+      if (sh.views && sh.views[k]) out.push({ id: k, kind: k, name: viewLabel(sh, k), is3d: k === 'iso', custom: false, removable: k === 'iso' });
+    }
+    for (const ev of sh.extraViews || []) {
+      out.push({ id: ev.id, kind: ev.kind, name: ev.name, is3d: true, custom: true, removable: true, dir: ev.dir, x: ev.x });
+    }
+    return out;
+  }
+  function currentViewKey(sh = dwg()) {
+    const list = activeViews(sh);
+    if (!list.length) return null;
+    return list.some((v) => v.id === selView) ? selView : list[0].id;
+  }
+  function selectView(key) {
+    selView = key; selDim = null;
+    render(); Panels.renderRight();
+  }
+  function setViewOpt(key, patch, label) {
+    App.change(label || 'Ansicht geändert', () => {
+      const s = dwg();
+      s.viewOpts = s.viewOpts || {};
+      s.viewOpts[key] = { ...(s.viewOpts[key] || {}), ...patch };
+    });
+    render(); Panels.renderRight();
+  }
+  async function addView(kind = 'iso', opts = {}) {
+    const k = kind === 'free' ? 'free' : 'iso';
+    let dir, x;
+    if (k === 'free') {
+      if (opts.dir) { dir = norm3(opts.dir, ISO_DIR); x = orthoX3(opts.x, dir); }
+      else if (typeof Viewer !== 'undefined' && Viewer.cameraBasis) { const cb = Viewer.cameraBasis(); dir = norm3(cb.dir, ISO_DIR); x = orthoX3(cb.x, dir); }
+      else { dir = ISO_DIR; x = ISO_X; }
+    } else {
+      dir = norm3(opts.dir, ISO_DIR); x = orthoX3(opts.x, dir);
+    }
+    const base = k === 'free' ? 'Freie Ansicht' : 'Isometrie';
+    const used = new Set(activeViews(dwg()).map((v) => v.name));
+    let name = opts.name || base;
+    if (!opts.name && used.has(name)) {
+      let n = 2;
+      while (used.has(base + ' ' + n)) n++;
+      name = base + ' ' + n;
+    }
+    const nv = { id: uid('v'), kind: k, name, dir, x };
+    const vOpts = {
+      scale: typeof opts.scale === 'number' && opts.scale > 0 ? opts.scale : 'sheet',
+      hidden: opts.hidden != null ? !!opts.hidden : false,
+      tangent: opts.tangent != null ? !!opts.tangent : true,
+      shaded: !!opts.shaded,
+    };
+    App.change(k === 'free' ? 'Freie Ansicht hinzugefügt' : 'Isometrische Ansicht hinzugefügt', () => {
+      const s = dwg();
+      s.extraViews = s.extraViews || [];
+      s.extraViews.push(nv);
+      s.viewOpts = s.viewOpts || {};
+      s.viewOpts[nv.id] = vOpts;
+    });
+    selView = nv.id; selDim = null;
+    await refresh(); Panels.renderRight();
+    return nv;
+  }
+  function removeView(key) {
+    App.change('Ansicht entfernt', () => {
+      const s = dwg();
+      if (key === 'iso') s.views.iso = false;
+      else s.extraViews = (s.extraViews || []).filter((v) => v.id !== key);
+      if (s.viewOpts) delete s.viewOpts[key];
+    });
+    selView = currentViewKey();
+    render(); Panels.renderRight();
+  }
+  async function updateFreeViewCamera(key) {
+    const cb = typeof Viewer !== 'undefined' && Viewer.cameraBasis ? Viewer.cameraBasis() : null;
+    if (!cb) return;
+    const dir = norm3(cb.dir, ISO_DIR), x = orthoX3(cb.x, dir);
+    App.change('3D-Blickwinkel übernommen', () => {
+      const s = dwg();
+      const ev = (s.extraViews || []).find((v) => v.id === key);
+      if (ev) { ev.dir = dir; ev.x = x; }
+    });
+    for (const ck of [...shadeCache.keys()]) if (ck.startsWith(key + '|')) shadeCache.delete(ck);
+    await refresh(); Panels.renderRight();
+  }
+  function collectNeededViews() {
+    const specs = [];
+    const seen = new Set();
+    const addSpec = (key, spec, sig) => {
+      if (seen.has(key)) return;
+      seen.add(key);
+      specs.push({ key, spec, sig });
+    };
+    for (const k of ['front', 'top', 'left']) addSpec(k, k, 'std');
+    const all = sheets();
+    if (all.some((s) => s.views && s.views.iso)) addSpec('iso', 'iso', 'std');
+    for (const s of all) {
+      for (const ev of s.extraViews || []) {
+        addSpec(ev.id, { key: ev.id, dir: ev.dir, x: ev.x }, dirSig(ev));
+      }
+    }
+    return specs;
+  }
   async function ensureProjections() {
-    const needIso = sheets().some((s) => s.views && s.views.iso);
-    const need = App.revision !== projRev || (needIso && (!proj || !proj.views || !proj.views.iso));
-    if (!need) return;
-    if (!Model.activeItems(App.doc).length) { proj = null; projRev = App.revision; return; }
+    if (!Model.activeItems(App.doc).length) {
+      proj = null; projRev = App.revision; projSceneKey = null; projSigs.clear(); geoCache.clear(); shadeCache.clear();
+      return;
+    }
     if (loadingProj) {
       while (loadingProj) await new Promise((r) => setTimeout(r, 30));
       return ensureProjections();
     }
+    const specs = collectNeededViews();
+    const scene = Model.kernelScene(App.doc);
+    const sceneKey = JSON.stringify(scene);
+    const rev = App.revision;
+    if (!proj || sceneKey !== projSceneKey) {
+      loadingProj = true;
+      try {
+        proj = await Kernel.call('project', { scene, views: specs.map((s) => s.spec) });
+        projSceneKey = sceneKey;
+        projRev = rev;
+        projSigs.clear();
+        for (const s of specs) projSigs.set(s.key, s.sig);
+        projId++;
+        geoCache.clear();
+        shadeCache.clear();
+      } finally {
+        loadingProj = false;
+      }
+      return;
+    }
+    const missing = specs.filter((s) => !proj.views || !proj.views[s.key] || projSigs.get(s.key) !== s.sig);
+    if (!missing.length) { projRev = rev; return; }
     loadingProj = true;
     try {
-      const views = ['front', 'top', 'left'];
-      if (needIso) views.push('iso');
-      const scene = Model.kernelScene(App.doc);
-      const rev = App.revision;
-      proj = await Kernel.call('project', { scene, views });
-      projId++;
+      const res = await Kernel.call('project', { scene, views: missing.map((s) => s.spec) });
+      proj.views = proj.views || {};
+      if (res && res.views) Object.assign(proj.views, res.views);
+      for (const s of missing) {
+        projSigs.set(s.key, s.sig);
+        for (const ck of [...shadeCache.keys()]) if (ck.startsWith(s.key + '|')) shadeCache.delete(ck);
+      }
       projRev = rev;
+      projId++;
     } finally {
       loadingProj = false;
     }
@@ -293,6 +500,7 @@ const Drawing = (() => {
       await ensureProjections();
     } catch (e) { UI.toast('Die Ansichten konnten nicht berechnet werden: ' + e.message, { kind: 'bad' }); }
     render();
+    Panels.renderRight();
   }
   // ---------- Kanten aufräumen ----------
   // Die Projektion liefert viele Kanten doppelt (Vorder- und Hinterkante liegen übereinander) und verdeckte
@@ -431,30 +639,41 @@ const Drawing = (() => {
   const geoCache = new Map();
   function viewGeom(name, sh = dwg()) {
     if (!proj || !proj.views || !proj.views[name]) return null;
+    const opts = viewOpts(sh, name);
+    const is3d = is3dView(sh, name);
     // beim Bemaßen wird bei jeder Mausbewegung neu gezeichnet – die aufgeräumten Kanten merken
-    const ck = name + '|' + projId + '|' + !!sh.hidden + '|' + !!sh.centers;
+    const ck = name + '|' + projId + '|' + !!opts.hidden + '|' + !!opts.tangent + '|' + !!sh.centers + '|' + is3d;
     if (geoCache.has(ck)) return geoCache.get(ck);
-    if (geoCache.size > 16) geoCache.clear();
-    const g = viewGeom_(name, sh); geoCache.set(ck, g); return g;
+    if (geoCache.size > 32) geoCache.clear();
+    const g = viewGeom_(name, sh, opts, is3d); geoCache.set(ck, g); return g;
   }
-  function viewGeom_(name, sh = dwg()) {
+  function viewGeom_(name, sh = dwg(), opts = viewOpts(sh, name), is3d = is3dView(sh, name)) {
     const v = proj.views[name];
     const raw = (e) => (e.t === 'LINE' && e.a ? { kind: 'line', a: e.a, b: e.b } : e.t === 'CIRCLE' && e.c && e.pts ? { kind: 'arc', c: e.c, r: e.r, full: !!e.full, pts: e.pts } : e.pts ? { kind: 'curve', pts: e.pts } : null);
-    // Isometrie wie üblich ohne verdeckte Kanten
-    const showHidden = sh.hidden && name !== 'iso';
-    const cg = cleanGeom(v.visible.map(raw).filter(Boolean), showHidden ? v.hidden.map(raw).filter(Boolean) : []);
-    const polys = cg.vis, hidden = cg.hid, circles = [], points = [];
-    for (const p of polys) {
+    const sharpVis = (v.visible || []).map(raw).filter(Boolean);
+    const tanVis = (v.tangentVisible || []).map(raw).filter(Boolean);
+    const sharpHid = (v.hidden || []).map(raw).filter(Boolean);
+    const tanHid = (v.tangentHidden || []).map(raw).filter(Boolean);
+    const cg1 = cleanGeom(sharpVis, opts.tangent ? tanVis : []);
+    const polys = cg1.vis, tangents = opts.tangent ? cg1.hid : [];
+    let hidden = [];
+    if (opts.hidden) {
+      const allVis = opts.tangent ? [...sharpVis, ...tanVis] : sharpVis;
+      const allHid = opts.tangent ? [...sharpHid, ...tanHid] : sharpHid;
+      hidden = cleanGeom(allVis, allHid).hid;
+    }
+    const circles = [], points = [];
+    for (const arr of [polys, tangents]) for (const p of arr) {
       points.push(p.pts[0], p.pts[p.pts.length - 1]);
       if (p.c) { circles.push({ c: p.c, r: p.r, full: !p.arc, arc: p.arc }); points.push(p.c); }
     }
     for (const p of hidden) points.push(p.pts[0], p.pts[p.pts.length - 1]);
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (const arr of [polys, hidden]) for (const p of arr) for (const q of p.pts) { x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]); }
+    for (const arr of [polys, tangents, hidden]) for (const p of arr) for (const q of p.pts) { x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]); }
     if (!isFinite(x0)) return null;
     // Mittellinien und kosmetische Gewinde (KP-20)
     const centers = [];
-    if (sh.centers) {
+    if (sh.centers && !is3d) {
       const dir = new THREE.Vector3(...v.dir), ex = new THREE.Vector3(...v.x), ey = new THREE.Vector3(...v.y);
       const seen = new Set();
       for (const a of proj.axes || []) {
@@ -474,7 +693,7 @@ const Drawing = (() => {
       }
     }
     const threads = [];
-    if (name !== 'iso') {
+    if (!is3d) {
       const dir = new THREE.Vector3(...v.dir), ex = new THREE.Vector3(...v.x), ey = new THREE.Vector3(...v.y);
       const seenT = new Set();
       for (const th of docThreads()) {
@@ -493,7 +712,7 @@ const Drawing = (() => {
         }
       }
     }
-    return { polys, hidden, circles, points, centers, threads, box: [x0, y0, x1, y1], w: x1 - x0, h: y1 - y0 };
+    return { polys, tangents, hidden, circles, points, centers, threads, box: [x0, y0, x1, y1], w: x1 - x0, h: y1 - y0 };
   }
   function docThreads() {
     const out = [], V = Model.vars(App.doc).v;
@@ -553,35 +772,92 @@ const Drawing = (() => {
     const frame = { x: 20, y: m, w: W - 20 - m, h: H - 2 * m };
     const tb = { w: Math.min(180, frame.w), h: 32 };
     const area = { x: frame.x + 8, y: frame.y + 8, w: frame.w - 16, h: frame.h - tb.h - 16 };
-    const G = { front: sh.views.front ? viewGeom('front', sh) : null, top: sh.views.top ? viewGeom('top', sh) : null, left: sh.views.left ? viewGeom('left', sh) : null, iso: sh.views.iso ? viewGeom('iso', sh) : null, free: freeGeom(sh) };
+    const G = {
+      front: sh.views.front ? viewGeom('front', sh) : null,
+      top: sh.views.top ? viewGeom('top', sh) : null,
+      left: sh.views.left ? viewGeom('left', sh) : null,
+      iso: sh.views.iso ? viewGeom('iso', sh) : null,
+      free: freeGeom(sh),
+    };
+    const extras = [];
+    if (G.iso) extras.push({ id: 'iso', geo: G.iso, opts: viewOpts(sh, 'iso'), label: viewLabel(sh, 'iso') });
+    for (const ev of sh.extraViews || []) {
+      const geo = viewGeom(ev.id, sh);
+      if (geo) extras.push({ id: ev.id, geo, opts: viewOpts(sh, ev.id), label: ev.name });
+    }
+    const oF = viewOpts(sh, 'front'), oT = viewOpts(sh, 'top'), oL = viewOpts(sh, 'left');
+    const scOf = (opts, baseS) => (typeof opts.scale === 'number' && opts.scale > 0 ? opts.scale : baseS);
     const main = G.front || G.top || G.left;
     let s = 1;
     const gap = 22;
-    const needW = (sc) => (G.front ? G.front.w * sc : G.top ? G.top.w * sc : 0) + (G.left ? gap + G.left.w * sc : 0);
-    const needH = (sc) => (G.front ? G.front.h * sc : G.left ? G.left.h * sc : 0) + (G.top ? gap + G.top.h * sc : 0);
-    const isoRoom = G.iso ? 0.35 : 0;
+    const needW = (sc) => (G.front ? G.front.w * scOf(oF, sc) : G.top ? G.top.w * scOf(oT, sc) : 0) + (G.left ? gap + G.left.w * scOf(oL, sc) : 0);
+    const needH = (sc) => (G.front ? G.front.h * scOf(oF, sc) : G.left ? G.left.h * scOf(oL, sc) : 0) + (G.top ? gap + G.top.h * scOf(oT, sc) : 0);
+    const extraRoom = extras.length > 1 || (extras.length && !G.top) ? 0.35 : 0;
     if (sh.scale === 'auto') {
       s = SCALES[SCALES.length - 1];
       for (const sc of SCALES) {
         if (!main) { s = 1; break; }
-        if (needW(sc) + 24 <= area.w * (G.iso && !G.top ? 1 - isoRoom : 1) && needH(sc) + 24 <= area.h) { s = sc; break; }
+        if (needW(sc) + 24 <= area.w * (1 - extraRoom) && needH(sc) + 24 <= area.h) { s = sc; break; }
       }
     } else s = +sh.scale || 1;
     const views = {};
+    const place = (name, geo, sc, px, py, opts, label, is3d) => {
+      views[name] = {
+        geo, s: sc, ox: px - geo.box[0] * sc, oy: py + geo.box[3] * sc,
+        noDims: is3d, is3d, opts, label,
+        customScale: typeof opts.scale === 'number' && opts.scale > 0,
+        rect: [px, py, px + geo.w * sc, py + geo.h * sc],
+      };
+    };
+    const placeExtra = (ex, rx, ry, aw, ah) => {
+      if (aw < 16 || ah < 16) return;
+      let si;
+      if (typeof ex.opts.scale === 'number' && ex.opts.scale > 0) si = ex.opts.scale;
+      else {
+        const start = main ? s : 1;
+        if (ex.geo.w * start <= aw && ex.geo.h * start <= ah) si = start;
+        else {
+          si = SCALES.find((sc) => sc <= start && ex.geo.w * sc <= aw && ex.geo.h * sc <= ah);
+          if (!si) si = Math.max(0.01, Math.min(aw / Math.max(1e-6, ex.geo.w), ah / Math.max(1e-6, ex.geo.h)) * 0.92);
+        }
+      }
+      const px = rx + (aw - ex.geo.w * si) / 2;
+      const py = ry + (ah - ex.geo.h * si) / 2;
+      place(ex.id, ex.geo, si, px, py, ex.opts, ex.label, true);
+    };
     if (main) {
-      const fw = G.front ? G.front.w * s : G.top.w * s, fh = G.front ? G.front.h * s : 0;
-      const lw = G.left ? G.left.w * s : 0; const th = G.top ? G.top.h * s : 0;
+      const sf = scOf(oF, s), st = scOf(oT, s), sl = scOf(oL, s);
+      const fw = G.front ? G.front.w * sf : G.top.w * st, fh = G.front ? G.front.h * sf : 0;
+      const lw = G.left ? G.left.w * sl : 0, th = G.top ? G.top.h * st : 0;
       const totalW = fw + (G.left ? gap + lw : 0), totalH = fh + (G.top ? gap + th : 0);
-      const x0 = area.x + Math.max(12, (area.w * (G.iso ? 0.72 : 1) - totalW) / 2), y0 = area.y + Math.max(12, (area.h - totalH) / 2);
-      const place = (name, geo, px, py) => { views[name] = { geo, s, ox: px - geo.box[0] * s, oy: py + geo.box[3] * s }; };
-      if (G.front) place('front', G.front, x0, y0);
-      if (G.left) { const py = G.front ? y0 + (G.front.box[3] - G.left.box[3]) * s : y0; place('left', G.left, x0 + fw + gap, py); if (G.front) views.left.oy = views.front.oy; }
-      if (G.top) { place('top', G.top, x0, y0 + fh + (G.front ? gap : 0)); if (G.front) views.top.ox = views.front.ox; }
-      if (G.iso) {
-        const rx = x0 + fw + gap; const ry = G.top ? y0 + fh + gap : y0;
-        const aw = area.x + area.w - rx - 6, ah = area.y + area.h - ry - 6;
-        let si = s; while (si > 0.01 && (G.iso.w * si > aw || G.iso.h * si > ah)) si /= 1.25;
-        if (aw > 20 && ah > 20) views.iso = { geo: G.iso, s: si, ox: rx + (aw - G.iso.w * si) / 2 - G.iso.box[0] * si, oy: ry + (ah - G.iso.h * si) / 2 + G.iso.box[3] * si, noDims: true };
+      const x0 = area.x + Math.max(12, (area.w * (extras.length ? 0.68 : 1) - totalW) / 2);
+      const y0 = area.y + Math.max(12, (area.h - totalH) / 2);
+      if (G.front) place('front', G.front, sf, x0, y0, oF, viewLabel(sh, 'front'), false);
+      if (G.left) {
+        const py = G.front ? (sl === sf ? y0 + (G.front.box[3] - G.left.box[3]) * sf : y0 + (fh - G.left.h * sl) / 2) : y0;
+        place('left', G.left, sl, x0 + fw + gap, py, oL, viewLabel(sh, 'left'), false);
+        if (G.front && sl === sf) views.left.oy = views.front.oy;
+      }
+      if (G.top) {
+        const px = G.front && st !== sf ? x0 + (fw - G.top.w * st) / 2 : x0;
+        place('top', G.top, st, px, y0 + fh + (G.front ? gap : 0), oT, viewLabel(sh, 'top'), false);
+        if (G.front && st === sf) views.top.ox = views.front.ox;
+      }
+      if (extras.length === 1 && G.front && G.left && G.top) {
+        const rx = x0 + fw + gap, ry = y0 + fh + gap;
+        placeExtra(extras[0], rx, ry, area.x + area.w - rx - 6, area.y + area.h - ry - 10);
+      } else if (extras.length) {
+        const rx = x0 + totalW + gap;
+        const aw = area.x + area.w - rx - 6;
+        const slotH = (area.h - 6) / extras.length;
+        for (let i = 0; i < extras.length; i++) placeExtra(extras[i], rx, area.y + i * slotH, aw, slotH - 10);
+      }
+    } else if (extras.length) {
+      const cols = Math.min(extras.length, 2), rows = Math.ceil(extras.length / cols);
+      const cw = (area.w - (cols - 1) * 14) / cols, ch = (area.h - (rows - 1) * 12) / rows;
+      for (let i = 0; i < extras.length; i++) {
+        const col = i % cols, row = Math.floor(i / cols);
+        placeExtra(extras[i], area.x + col * (cw + 14), area.y + row * (ch + 12), cw, ch - 10);
       }
     }
     // frei Gezeichnetes liegt fest auf dem Papier: Millimeter ab der linken unteren Blattecke, 1:1
@@ -709,42 +985,63 @@ const Drawing = (() => {
   }
 
   // ---------- Zeichnen ----------
+  function getShadedImage(name, v) {
+    if (!proj || !proj.views || !proj.views[name] || !v || !v.geo || typeof Viewer === 'undefined' || !Viewer.renderOrthoView) return null;
+    const pv = proj.views[name];
+    const ck = name + '|' + projSceneKey + '|' + dirSig(pv) + '|' + v.geo.box.map((n) => Math.round(n * 100)).join(',');
+    if (shadeCache.has(ck)) return shadeCache.get(ck);
+    const img = Viewer.renderOrthoView({ dir: pv.dir, x: pv.x, box: v.geo.box, maxPx: 720 });
+    if (img) {
+      if (shadeCache.size > 24) shadeCache.clear();
+      shadeCache.set(ck, img);
+    }
+    return img;
+  }
   function buildSheetContent(sh, idx, total) {
     const lay = computeLayout(sh);
     const { W, H, frame } = lay;
-    const lines = [], texts = [];
+    const lines = [], texts = [], images = [];
     // Rahmen
     lines.push({ rect: [0, 0, W, H], cls: 'paper' });
     lines.push({ rect: [frame.x, frame.y, frame.w, frame.h], cls: 'frame' });
     // Ansichten
     for (const [name, v] of Object.entries(lay.views)) {
+      if (v.opts && v.opts.shaded && name !== 'free') {
+        const img = getShadedImage(name, v);
+        if (img) {
+          const b = v.geo.box;
+          const TL = toSheet(v, [b[0], b[3]]);
+          images.push({ x: TL[0], y: TL[1], w: v.geo.w * v.s, h: v.geo.h * v.s, png: img.png, jpg: img.jpg, iw: img.w, ih: img.h, viewKey: name });
+        }
+      }
       const asLine = (p, cls) => {
-        if (p.c && !p.arc) return { circle: [...toSheet(v, p.c), p.r * v.s], cls };
-        const l = { pts: p.pts.map((q) => toSheet(v, q)), cls };
+        if (p.c && !p.arc) return { circle: [...toSheet(v, p.c), p.r * v.s], cls, view: name };
+        const l = { pts: p.pts.map((q) => toSheet(v, q)), cls, view: name };
         if (p.arc) l.arc = { c: toSheet(v, p.c), r: p.r * v.s, a: p.arc };
         return l;
       };
       for (const p of v.geo.polys) lines.push(asLine(p, 'vis'));
+      for (const p of v.geo.tangents || []) lines.push(asLine(p, 'tan'));
       for (const p of v.geo.hidden) lines.push(asLine(p, 'hid'));
       for (const c of v.geo.centers) {
-        if (c.type === 'cross') { const C = toSheet(v, c.c); const r = c.r * v.s + 2; lines.push({ pts: [[C[0] - r, C[1]], [C[0] + r, C[1]]], cls: 'ctr' }, { pts: [[C[0], C[1] - r], [C[0], C[1] + r]], cls: 'ctr' }); }
-        else { const A = toSheet(v, c.a), B = toSheet(v, c.b); const dx = B[0] - A[0], dy = B[1] - A[1]; const L = Math.hypot(dx, dy) || 1; const e = 2.5; lines.push({ pts: [[A[0] - (dx / L) * e, A[1] - (dy / L) * e], [B[0] + (dx / L) * e, B[1] + (dy / L) * e]], cls: 'ctr' }); }
+        if (c.type === 'cross') { const C = toSheet(v, c.c); const r = c.r * v.s + 2; lines.push({ pts: [[C[0] - r, C[1]], [C[0] + r, C[1]]], cls: 'ctr', view: name }, { pts: [[C[0], C[1] - r], [C[0], C[1] + r]], cls: 'ctr', view: name }); }
+        else { const A = toSheet(v, c.a), B = toSheet(v, c.b); const dx = B[0] - A[0], dy = B[1] - A[1]; const L = Math.hypot(dx, dy) || 1; const e = 2.5; lines.push({ pts: [[A[0] - (dx / L) * e, A[1] - (dy / L) * e], [B[0] + (dx / L) * e, B[1] + (dy / L) * e]], cls: 'ctr', view: name }); }
       }
       // Kosmetische Gewinde nach DIN ISO 6410-1: 3/4-Kreis (Stirnansicht) bzw. dünne parallele Linien (Seitenansicht)
       const labelSide = name === 'front' || (name === 'left' && !lay.views.front);
       for (const th of v.geo.threads || []) {
         if (th.type === 'end') {
           const C = toSheet(v, th.c), rr = th.rThread * v.s;
-          if (rr > 0.3) lines.push({ pts: arcPts(th.c, th.rThread, 0, Math.PI * 1.5).map((q) => toSheet(v, q)), arc: { c: C, r: rr, a: [0, Math.PI * 1.5] }, cls: 'thin' });
+          if (rr > 0.3) lines.push({ pts: arcPts(th.c, th.rThread, 0, Math.PI * 1.5).map((q) => toSheet(v, q)), arc: { c: C, r: rr, a: [0, Math.PI * 1.5] }, cls: 'thin', view: name });
         } else if (th.type === 'side') {
           const A = toSheet(v, th.a), B = toSheet(v, th.b);
           const dx = B[0] - A[0], dy = B[1] - A[1], L = Math.hypot(dx, dy);
           if (L < 0.3) continue;
           const px = -dy / L, py = dx / L, rt = th.rThread * v.s, ro = th.r * v.s;
-          lines.push({ pts: [[A[0] + px * rt, A[1] + py * rt], [B[0] + px * rt, B[1] + py * rt]], cls: 'thin' });
-          lines.push({ pts: [[A[0] - px * rt, A[1] - py * rt], [B[0] - px * rt, B[1] - py * rt]], cls: 'thin' });
-          lines.push({ pts: [[A[0] - px * ro, A[1] - py * ro], [A[0] + px * ro, A[1] + py * ro]], cls: 'vis' });
-          lines.push({ pts: [[B[0] - px * ro, B[1] - py * ro], [B[0] + px * ro, B[1] + py * ro]], cls: 'vis' });
+          lines.push({ pts: [[A[0] + px * rt, A[1] + py * rt], [B[0] + px * rt, B[1] + py * rt]], cls: 'thin', view: name });
+          lines.push({ pts: [[A[0] - px * rt, A[1] - py * rt], [B[0] - px * rt, B[1] - py * rt]], cls: 'thin', view: name });
+          lines.push({ pts: [[A[0] - px * ro, A[1] - py * ro], [A[0] + px * ro, A[1] + py * ro]], cls: 'vis', view: name });
+          lines.push({ pts: [[B[0] - px * ro, B[1] - py * ro], [B[0] + px * ro, B[1] + py * ro]], cls: 'vis', view: name });
           if (labelSide) {
             const mx = (A[0] + B[0]) / 2, my = (A[1] + B[1]) / 2;
             const P0 = [mx + px * ro, my + py * ro];
@@ -757,6 +1054,11 @@ const Drawing = (() => {
           }
         }
       }
+      if (v.rect && v.is3d) {
+        texts.push({ x: (v.rect[0] + v.rect[2]) / 2, y: v.rect[3] + 4.5, t: `${v.label} (${scaleText(v.s)})`, size: 3.0, anchor: 'middle', cls: 'vlabel', view: name });
+      } else if (v.rect && v.customScale) {
+        texts.push({ x: (v.rect[0] + v.rect[2]) / 2, y: v.rect[1] - 2.5, t: `${v.label} (${scaleText(v.s)})`, size: 2.8, anchor: 'middle', cls: 'vlabel', view: name });
+      }
       if (name === 'free') for (const e of sh.free) if (e.type === 'text') { const P = toSheet(v, e.p); texts.push({ x: P[0], y: P[1], t: e.text, size: e.size || 3.5, rot: 0, anchor: 'start', id: e.id, cls: 'free' }); }
     }
     if (!Object.keys(lay.views).length) texts.push({ x: W / 2, y: H / 2 - 10, t: 'Noch kein Modell – bau zuerst etwas im Reiter „Modell“.', size: 5, anchor: 'middle', cls: 'note' });
@@ -764,16 +1066,21 @@ const Drawing = (() => {
     for (const dim of autoDimList(sh, lay)) if (lay.views[dim.view] && !lay.views[dim.view].noDims) dimSVG(dim, lines, texts, lay);
     // Schriftfeld
     titleBlock(sh, lay, idx, total, lines, texts);
-    return { layout: lay, lines, texts };
+    return { layout: lay, lines, texts, images };
   }
   function render() {
     if (!holder) return;
     const all = sheets(), idx = activeIndex(), sh = all[idx] || dwg();
     const cur = buildSheetContent(sh, idx, all.length);
     layout = cur.layout;
+    const svKey = currentViewKey(sh);
+    if (svKey && layout.views[svKey] && layout.views[svKey].rect && !tool) {
+      const r = layout.views[svKey].rect;
+      cur.lines.push({ rect: [r[0] - 2, r[1] - 2, r[2] - r[0] + 4, r[3] - r[1] + 4], cls: 'view-sel' });
+    }
     // Werkzeug-Vorschau
     if (tool === 'dim' && toolState) previewDim(cur.lines, cur.texts);
-    buildSVG(cur.lines, cur.texts);
+    buildSVG(cur.lines, cur.texts, cur.images);
     const sv = document.getElementById('dw-scale-val'); if (sv) sv.textContent = scaleText(layout.s);
     renderTabs();
   }
@@ -830,18 +1137,18 @@ const Drawing = (() => {
   function textW(t, size) { return String(t).length * size * 0.56; }
   function fitSize(t, w, max, min) { const n = String(t).length || 1; return Math.max(min, Math.min(max, w / (n * 0.56))); }
   function clipText(t, w, size) { t = String(t); if (textW(t, size) <= w) return t; const n = Math.max(1, Math.floor(w / (size * 0.56)) - 1); return t.slice(0, n) + '…'; }
-  function buildSVG(lines, texts) {
+  function buildSVG(lines, texts, images = []) {
     const { W, H } = layout;
     const NS = 'http://www.w3.org/2000/svg';
     const s = document.createElementNS(NS, 'svg');
     s.setAttribute('xmlns', NS);
     s.setAttribute('viewBox', `0 0 ${W} ${H}`); s.setAttribute('width', W * zoom * 3.2); s.setAttribute('height', H * zoom * 3.2);
     const style = document.createElementNS(NS, 'style');
-    style.textContent = `.paper{fill:#fff;stroke:none}.frame{fill:none;stroke:#111;stroke-width:.7}.thin{fill:none;stroke:#111;stroke-width:.25}.vis{fill:none;stroke:#111;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round}.hid{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:2.4 1.2}.ctr{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:8 1.2 .6 1.2}.dim{fill:none;stroke:#111;stroke-width:.25}.arrow{fill:#111;stroke:none}.sel .dim,.dim.sel{stroke:#0c7a70;stroke-width:.4}.arrow.sel{fill:#0c7a70}text{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif;fill:#111}text.lab{fill:#555}text.note{fill:#888}text.sel{fill:#0c7a70}.prev{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:1.5 1}.snap{fill:none;stroke:#0c7a70;stroke-width:.4}`;
+    style.textContent = `.paper{fill:#fff;stroke:none}.frame{fill:none;stroke:#111;stroke-width:.7}.thin{fill:none;stroke:#111;stroke-width:.25}.vis{fill:none;stroke:#111;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round}.tan{fill:none;stroke:#444;stroke-width:.2;stroke-linecap:round;stroke-linejoin:round}.hid{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:2.4 1.2}.ctr{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:8 1.2 .6 1.2}.dim{fill:none;stroke:#111;stroke-width:.25}.arrow{fill:#111;stroke:none}.view-sel{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:2 1.5;pointer-events:none}.sel .dim,.dim.sel{stroke:#0c7a70;stroke-width:.4}.arrow.sel{fill:#0c7a70}text{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif;fill:#111}text.lab{fill:#555}text.note{fill:#888}text.vlabel{fill:#333;font-weight:500}text.sel{fill:#0c7a70}.prev{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:1.5 1}.snap{fill:none;stroke:#0c7a70;stroke-width:.4}`;
     s.append(style);
     const g = document.createElementNS(NS, 'g'); s.append(g);
     const f = (n) => (Math.round(n * 1000) / 1000).toString();
-    for (const l of lines) {
+    const appendLine = (l) => {
       let el;
       const sel = l.id && l.id === selDim;
       if (l.rect) { el = document.createElementNS(NS, 'rect'); el.setAttribute('x', f(l.rect[0])); el.setAttribute('y', f(l.rect[1])); el.setAttribute('width', f(l.rect[2])); el.setAttribute('height', f(l.rect[3])); }
@@ -850,28 +1157,51 @@ const Drawing = (() => {
       else { el = document.createElementNS(NS, 'polyline'); el.setAttribute('points', l.pts.map((p) => f(p[0]) + ',' + f(p[1])).join(' ')); }
       el.setAttribute('class', l.cls + (sel ? ' sel' : ''));
       if (l.id) el.dataset.id = l.id;
+      if (l.view) el.dataset.view = l.view;
+      g.append(el);
+    };
+    for (const l of lines) if (l.cls === 'paper') appendLine(l);
+    for (const im of images) {
+      if (!im.png && !im.jpg) continue;
+      const el = document.createElementNS(NS, 'image');
+      el.setAttribute('class', 'shade-img');
+      el.setAttribute('x', f(im.x)); el.setAttribute('y', f(im.y));
+      el.setAttribute('width', f(im.w)); el.setAttribute('height', f(im.h));
+      el.setAttribute('preserveAspectRatio', 'none');
+      el.setAttribute('href', im.png || im.jpg);
+      if (im.viewKey) el.dataset.view = im.viewKey;
       g.append(el);
     }
+    for (const l of lines) if (l.cls !== 'paper') appendLine(l);
     for (const t of texts) {
       const el = document.createElementNS(NS, 'text');
       el.setAttribute('x', f(t.x)); el.setAttribute('y', f(t.y)); el.setAttribute('font-size', f(t.size)); el.setAttribute('text-anchor', t.anchor || 'start');
       if (t.rot) el.setAttribute('transform', `rotate(${f(t.rot)} ${f(t.x)} ${f(t.y)})`);
       el.setAttribute('class', (t.cls || '') + (t.id && t.id === selDim ? ' sel' : ''));
       if (t.id) el.dataset.id = t.id;
+      if (t.view) el.dataset.view = t.view;
       el.textContent = t.t;
       g.append(el);
     }
     holder.innerHTML = ''; holder.append(s); svg = s;
     s.addEventListener('pointermove', onMove); s.addEventListener('pointerdown', onDown);
-    lastLines = lines; lastTexts = texts;
+    lastLines = lines; lastTexts = texts; lastImages = images;
   }
-  let lastLines = [], lastTexts = [];
+  let lastLines = [], lastTexts = [], lastImages = [];
   // ---------- Maus ----------
   function sheetPt(e) { const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY; const m = svg.getScreenCTM(); if (!m) return [0, 0]; const q = pt.matrixTransform(m.inverse()); return [q.x, q.y]; }
   function viewAt(P) {
     let best = null;
     for (const [name, v] of Object.entries(layout.views)) { if (v.noDims) continue; const b = v.geo.box; const A = toSheet(v, [b[0], b[3]]), B = toSheet(v, [b[2], b[1]]); if (P[0] >= A[0] - 8 && P[0] <= B[0] + 8 && P[1] >= A[1] - 8 && P[1] <= B[1] + 8) best = name; }
     return best;
+  }
+  function viewAtAll(P) {
+    if (!layout || !layout.views) return null;
+    for (const [name, v] of Object.entries(layout.views)) {
+      if (name === 'free' || !v.rect) continue;
+      if (P[0] >= v.rect[0] - 4 && P[0] <= v.rect[2] + 4 && P[1] >= v.rect[1] - 4 && P[1] <= v.rect[3] + 4) return name;
+    }
+    return null;
   }
   function snapIn(name, P) {
     const v = layout.views[name]; if (!v) return null;
@@ -908,6 +1238,10 @@ const Drawing = (() => {
     if (tool && tool.startsWith('free-')) { freeDown(e); return; }
     const t = e.target.closest && e.target.closest('[data-id]');
     selDim = t ? t.dataset.id : null;
+    if (!t) {
+      const hitV = viewAtAll(P);
+      if (hitV) selView = hitV;
+    }
     if (t && e.detail === 2) editFreeText(selDim);
     render(); Panels.renderRight();
   }
@@ -1049,7 +1383,7 @@ const Drawing = (() => {
   }
   // ---------- Menüs ----------
   function set(fn, label) { App.change(label || 'Zeichnung geändert', () => fn(dwg())); refreshSoon(); }
-  const refreshSoon = debounce(() => { projRev = -1; refresh(); }, 30);
+  const refreshSoon = debounce(() => { refresh(); }, 30);
   function sheetOptions() {
     return SHEET_ORDER.map((k) => {
       const [w, h] = SHEETS[k];
@@ -1067,13 +1401,32 @@ const Drawing = (() => {
     box.append(h('div', { class: 'section-h' }, T('menu.draw.viewsHeading')));
     for (const [k, l] of [['front', T('menu.draw.vFront')], ['top', T('menu.draw.vTop')], ['left', T('menu.draw.vLeft')], ['iso', T('menu.draw.vIso')]]) {
       const c = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'dw-v-' + k, checked: !!d.views[k] }), l);
-      c.querySelector('input').onchange = (e) => set((x) => { x.views[k] = e.target.checked; }); box.append(c);
+      c.querySelector('input').onchange = (e) => { set((x) => { x.views[k] = e.target.checked; }); Panels.renderRight(); }; box.append(c);
     }
     for (const [k, l] of [['hidden', T('menu.draw.hiddenEdges')], ['centers', T('menu.draw.centers')]]) {
       const c = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'dw-' + k, checked: !!d[k] }), l);
-      c.querySelector('input').onchange = (e) => set((x) => { x[k] = e.target.checked; }); box.append(c);
+      c.querySelector('input').onchange = (e) => {
+        const on = e.target.checked;
+        set((x) => {
+          x[k] = on;
+          if (k === 'hidden' && x.viewOpts) {
+            for (const vk of ['front', 'top', 'left']) if (x.viewOpts[vk]) delete x.viewOpts[vk].hidden;
+          }
+        });
+        Panels.renderRight();
+      };
+      box.append(c);
     }
     UI.pop(anchor, box);
+  }
+  function viewMenu(anchor) {
+    UI.menu(anchor, [
+      { label: T('menu.draw.addIso'), icon: 'cube', run: () => addView('iso') },
+      { label: T('menu.draw.addIsoShaded'), icon: 'cube', run: () => addView('iso', { shaded: true }) },
+      '-',
+      { label: T('menu.draw.addFree'), icon: 'eye', run: () => addView('free') },
+      { label: T('menu.draw.addFreeShaded'), icon: 'eye', run: () => addView('free', { shaded: true }) },
+    ]);
   }
   function exportMenu(anchor) {
     UI.menu(anchor, [
@@ -1092,6 +1445,7 @@ const Drawing = (() => {
     const clone = svg.cloneNode(true); clone.removeAttribute('width'); clone.removeAttribute('height');
     const [W, H] = sheetSize(); clone.setAttribute('width', W + 'mm'); clone.setAttribute('height', H + 'mm');
     clone.querySelectorAll('.sel').forEach((el) => el.classList.remove('sel'));
+    clone.querySelectorAll('.view-sel').forEach((el) => el.remove());
     const str = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone);
     Print.save(fileBase(true) + '.svg', str);
   }
@@ -1118,20 +1472,33 @@ const Drawing = (() => {
     for (let i = 0; i < str.length; i++) out[i] = str.charCodeAt(i) & 0xff;
     return out;
   }
-  function pageStream(W, H, lines, texts) {
+  function dataUrlToBytes(url) {
+    if (!url || typeof url !== 'string') return null;
+    const idx = url.indexOf(';base64,');
+    if (idx < 0) return null;
+    const bin = atob(url.slice(idx + 8));
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  function pageStream(W, H, lines, texts, pdfImages = []) {
     const out = ['1 J 1 j'];
     const style = {
       frame: [0.7, null],
       thin: [0.25, null],
       vis: [0.5, null],
+      tan: [0.2, null],
       hid: [0.25, [2.4, 1.2]],
       ctr: [0.25, [8, 1.2, 0.6, 1.2]],
       dim: [0.25, null],
     };
     const px = (x) => pf(x * PT);
     const py = (y) => pf((H - y) * PT);
+    for (const im of pdfImages) {
+      out.push(`q ${pf(im.w * PT)} 0 0 ${pf(im.h * PT)} ${px(im.x)} ${py(im.y + im.h)} cm /${im.name} Do Q`);
+    }
     for (const l of lines) {
-      if (l.cls === 'paper' || l.cls === 'prev' || l.cls === 'snap') continue;
+      if (l.cls === 'paper' || l.cls === 'prev' || l.cls === 'snap' || l.cls === 'view-sel') continue;
       if (l.cls === 'arrow') {
         const [a, b, c] = l.poly;
         out.push(`0.067 g ${px(a[0])} ${py(a[1])} m ${px(b[0])} ${py(b[1])} l ${px(c[0])} ${py(c[1])} l h f`);
@@ -1139,7 +1506,7 @@ const Drawing = (() => {
       }
       const st = style[l.cls];
       if (!st) continue;
-      out.push(`0.067 G ${pf(st[0] * PT)} w`);
+      out.push(`${l.cls === 'tan' ? '0.267' : '0.067'} G ${pf(st[0] * PT)} w`);
       if (st[1]) out.push(`[${st[1].map((v) => pf(v * PT)).join(' ')}] 0 d`);
       else out.push('[] 0 d');
       if (l.rect) {
@@ -1188,13 +1555,25 @@ const Drawing = (() => {
     const infoId = addStr(`<< /Title (${pdfEsc(meta.title || 'Zeichnung')}) /Creator (Tracery) >>`);
     const kids = [];
     for (const p of pages) {
-      const sBytes = toPdfBytes(pageStream(p.W, p.H, p.lines, p.texts));
+      const pdfImages = [];
+      for (const im of p.images || []) {
+        const imgBytes = dataUrlToBytes(im.jpg);
+        if (!imgBytes || imgBytes.length < 4 || imgBytes[0] !== 0xff || imgBytes[1] !== 0xd8) continue;
+        const ih = toPdfBytes(`<< /Type /XObject /Subtype /Image /Width ${im.iw} /Height ${im.ih} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${imgBytes.length} >>\nstream\n`);
+        const it = toPdfBytes('\nendstream');
+        const imObj = new Uint8Array(ih.length + imgBytes.length + it.length);
+        imObj.set(ih, 0); imObj.set(imgBytes, ih.length); imObj.set(it, ih.length + imgBytes.length);
+        const imId = addObj(imObj);
+        pdfImages.push({ ...im, name: 'Im' + (pdfImages.length + 1), id: imId });
+      }
+      const sBytes = toPdfBytes(pageStream(p.W, p.H, p.lines, p.texts, pdfImages));
       const head = toPdfBytes(`<< /Length ${sBytes.length} >>\nstream\n`);
       const tail = toPdfBytes('\nendstream');
       const cObj = new Uint8Array(head.length + sBytes.length + tail.length);
       cObj.set(head, 0); cObj.set(sBytes, head.length); cObj.set(tail, head.length + sBytes.length);
       const cId = addObj(cObj);
-      const pId = addStr(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pf2(p.W * PT)} ${pf2(p.H * PT)}] /Resources << /Font << /F1 ${f1} 0 R /F2 ${f2} 0 R >> >> /Contents ${cId} 0 R >>`);
+      const xobj = pdfImages.length ? ` /XObject << ${pdfImages.map((im) => `/${im.name} ${im.id} 0 R`).join(' ')} >>` : '';
+      const pId = addStr(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pf2(p.W * PT)} ${pf2(p.H * PT)}] /Resources << /Font << /F1 ${f1} 0 R /F2 ${f2} 0 R >>${xobj} >> /Contents ${cId} 0 R >>`);
       kids.push(pId);
     }
     objs[0] = toPdfBytes('<< /Type /Catalog /Pages 2 0 R >>');
@@ -1230,7 +1609,7 @@ const Drawing = (() => {
     const all = sheets();
     const pages = all.map((sh, i) => {
       const content = buildSheetContent(sh, i, all.length);
-      return { W: content.layout.W, H: content.layout.H, lines: content.lines, texts: content.texts };
+      return { W: content.layout.W, H: content.layout.H, lines: content.lines, texts: content.texts, images: content.images };
     });
     const active = dwg();
     return buildPDF(pages, { title: (active.title && active.title.titel) || App.doc.name });
@@ -1253,10 +1632,10 @@ const Drawing = (() => {
     P(0, 'LTYPE', 2, 'CONTINUOUS', 70, 0, 3, 'Solid line', 72, 65, 73, 0, 40, 0.0);
     P(0, 'LTYPE', 2, 'DASHED', 70, 0, 3, '__ __ __', 72, 65, 73, 2, 40, 3.6, 49, 2.4, 49, -1.2);
     P(0, 'LTYPE', 2, 'CENTER', 70, 0, 3, '____ _ ____', 72, 65, 73, 4, 40, 11, 49, 8, 49, -1.2, 49, 0.6, 49, -1.2);
-    P(0, 'ENDTAB', 0, 'TABLE', 2, 'LAYER', 70, 5);
-    for (const [n, lt, col] of [['SICHTBAR', 'CONTINUOUS', 7], ['VERDECKT', 'DASHED', 8], ['MITTELLINIE', 'CENTER', 1], ['BEMASSUNG', 'CONTINUOUS', 3], ['RAHMEN', 'CONTINUOUS', 7]]) P(0, 'LAYER', 2, n, 70, 0, 62, col, 6, lt);
+    P(0, 'ENDTAB', 0, 'TABLE', 2, 'LAYER', 70, 6);
+    for (const [n, lt, col] of [['SICHTBAR', 'CONTINUOUS', 7], ['TANGENTIAL', 'CONTINUOUS', 9], ['VERDECKT', 'DASHED', 8], ['MITTELLINIE', 'CENTER', 1], ['BEMASSUNG', 'CONTINUOUS', 3], ['RAHMEN', 'CONTINUOUS', 7]]) P(0, 'LAYER', 2, n, 70, 0, 62, col, 6, lt);
     P(0, 'ENDTAB', 0, 'ENDSEC', 0, 'SECTION', 2, 'ENTITIES');
-    const layer = { vis: 'SICHTBAR', hid: 'VERDECKT', ctr: 'MITTELLINIE', dim: 'BEMASSUNG', arrow: 'BEMASSUNG', frame: 'RAHMEN', thin: 'RAHMEN' };
+    const layer = { vis: 'SICHTBAR', tan: 'TANGENTIAL', hid: 'VERDECKT', ctr: 'MITTELLINIE', dim: 'BEMASSUNG', arrow: 'BEMASSUNG', frame: 'RAHMEN', thin: 'RAHMEN' };
     const Y = (y) => H - y;
     const line = (a, b, ly) => P(0, 'LINE', 8, ly, 10, a[0].toFixed(4), 20, Y(a[1]).toFixed(4), 30, 0, 11, b[0].toFixed(4), 21, Y(b[1]).toFixed(4), 31, 0);
     for (const l of lastLines) {
@@ -1287,6 +1666,62 @@ const Drawing = (() => {
   function renderPanel(body) {
     const all = sheets(), idx = activeIndex(), d = all[idx] || dwg();
     const w = h('div', { class: 'props' });
+    const vSec = h('div', { class: 'section', 'data-help': 'drawingViews' }, h('div', { class: 'section-h' }, 'Ansichten'));
+    const bIso = h('button', { type: 'button', class: 'btn', id: 'dw-add-iso', 'data-help': 'drawingViews' });
+    bIso.innerHTML = icon('plus') + 'Isometrie';
+    bIso.onclick = () => addView('iso');
+    const bFree = h('button', { type: 'button', class: 'btn', id: 'dw-add-free', 'data-help': 'drawingViews' });
+    bFree.innerHTML = icon('eye') + '3D-Ansicht';
+    bFree.onclick = () => addView('free');
+    vSec.append(h('div', { class: 'btn-row' }, bIso, bFree));
+    const avList = activeViews(d);
+    const curKey = currentViewKey(d);
+    if (avList.length) {
+      const vList = h('div', { class: 'dw-view-list', id: 'dw-view-list' });
+      for (const av of avList) {
+        const isAct = av.id === curKey;
+        const vo = viewOpts(d, av.id);
+        const layV = layout && layout.views ? layout.views[av.id] : null;
+        const scLbl = typeof vo.scale === 'number' ? scaleText(vo.scale) : layV ? scaleText(layV.s) : (layout ? scaleText(layout.s) : '–');
+        const row = h('div', { class: 'dw-view-row' + (isAct ? ' active' : ''), 'data-view-id': av.id });
+        row.append(h('span', { class: 'dw-view-name' }, av.name), h('span', { class: 'dw-view-badge' }, scLbl));
+        if (av.removable) {
+          const del = h('button', { type: 'button', class: 'dw-view-del', 'aria-label': 'Ansicht entfernen', 'data-tip': 'Ansicht entfernen' });
+          del.innerHTML = icon('close');
+          del.onclick = (e) => { e.stopPropagation(); removeView(av.id); };
+          row.append(del);
+        }
+        row.onclick = () => selectView(av.id);
+        vList.append(row);
+      }
+      vSec.append(vList);
+      const curMeta = avList.find((x) => x.id === curKey);
+      const curOpts = viewOpts(d, curKey);
+      const vp = h('div', { class: 'dw-view-props', id: 'dw-view-props', 'data-help': 'drawingViewProps' });
+      vp.append(h('div', { class: 'dw-view-props-h' }, 'Ansicht: ' + (curMeta ? curMeta.name : curKey)));
+      const sheetScaleLbl = `${T('menu.draw.scaleSheet')} (${layout ? scaleText(layout.s) : '–'})`;
+      vp.append(UI.selectField({
+        id: 'dw-v-scale',
+        label: T('menu.draw.scale'),
+        value: curOpts.scale === 'sheet' ? 'sheet' : String(curOpts.scale),
+        options: [['sheet', sheetScaleLbl], ...SCALES.map((s) => [String(s), scaleText(s)])],
+        onChange: (v) => setViewOpt(curKey, { scale: v === 'sheet' ? 'sheet' : +v }, 'Ansichts-Maßstab geändert'),
+      }));
+      for (const [ok, ol] of [['hidden', T('menu.draw.hiddenEdges')], ['tangent', T('menu.draw.tangentEdges')], ['shaded', T('menu.draw.shaded')]]) {
+        const chk = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'dw-v-' + ok, checked: !!curOpts[ok] }), ol);
+        chk.querySelector('input').onchange = (e) => setViewOpt(curKey, { [ok]: e.target.checked }, 'Ansichtseinstellung geändert');
+        vp.append(chk);
+      }
+      if (curMeta && curMeta.kind === 'free') {
+        const recam = h('button', { type: 'button', class: 'btn', id: 'dw-v-recam' });
+        recam.innerHTML = icon('eye') + 'Aktuelle 3D-Ansicht übernehmen';
+        recam.onclick = () => updateFreeViewCamera(curKey);
+        vp.append(recam);
+      }
+      vSec.append(vp);
+    }
+    w.append(vSec);
+
     const sec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Schriftfeld'));
     const tf = (k, label, ph) => { const f = h('div', { class: 'field' }, h('label', { for: 'tb-' + k }, label), h('div', { class: 'inp' }, h('input', { id: 'tb-' + k, value: d.title[k] || '', placeholder: ph || '', style: { fontFamily: 'var(--font)' } }))); f.querySelector('input').addEventListener('change', (e) => set((x) => { x.title[k] = e.target.value; }, 'Schriftfeld geändert')); f.querySelector('input').addEventListener('keydown', (e) => e.stopPropagation()); return f; };
     sec.append(tf('titel', 'Benennung', App.doc.name), h('div', { class: 'fields' }, tf('nummer', 'Zeichnungsnummer'), tf('blatt', 'Blatt', `${idx + 1}/${all.length}`)), h('div', { class: 'fields' }, tf('name', 'Gezeichnet von'), tf('datum', 'Datum')), h('div', { class: 'fields' }, tf('werkstoff', 'Werkstoff'), tf('firma', 'Firma / Schule')));
@@ -1308,15 +1743,17 @@ const Drawing = (() => {
       const del = h('button', { type: 'button', class: 'btn danger' }); del.innerHTML = icon('trash') + 'Gewähltes löschen'; del.onclick = () => removeSel();
       w.append(h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Auswahl'), h('div', { class: 'btn-row' }, del)));
     }
-    w.append(h('div', { class: 'hint-box', html: 'Die Ansichten stehen nach <b>Projektionsmethode 1</b>: Draufsicht unter der Vorderansicht, Seitenansicht von links rechts daneben. Maß anklicken und <b>Entf</b> drücken zum Löschen. Unten über die Tabs fügst du weitere Blätter hinzu – der PDF-Export enthält alle Blätter.' }));
+    w.append(h('div', { class: 'hint-box', html: 'Die Ansichten stehen nach <b>Projektionsmethode 1</b>: Draufsicht unter der Vorderansicht, Seitenansicht von links rechts daneben. Wähle eine Ansicht auf dem Blatt oder in der Liste, um Maßstab, Kanten oder Schattierung einzustellen. Unten über die Tabs fügst du weitere Blätter hinzu.' }));
     body.append(w);
   }
   function tool_(t) { setTool(tool === t ? null : t); }
   App.on('doc', () => { if (App.mode === 'drawing') refreshSoonDoc(); });
   const refreshSoonDoc = debounce(async () => { await refresh(); Panels.renderRight(); }, 150);
   return {
-    open, close, refresh, sheetMenu, exportMenu, drawMenu, autoDims, tool: tool_, onKey, renderPanel,
+    open, close, refresh, sheetMenu, viewMenu, exportMenu, drawMenu, autoDims, tool: tool_, onKey, renderPanel,
     SHEETS, sheets, activeSheet: dwg, addSheet, selectSheet, renameSheet, removeSheet, duplicateSheet,
+    addView, removeView, selectView, setViewOpt, viewOpts, activeViews, updateFreeViewCamera,
+    get selectedView() { return currentViewKey(); },
     exportPDF, buildPDFBytes,
     get layout() { return layout; },
   };

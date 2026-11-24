@@ -1542,6 +1542,107 @@ const Viewer = (() => {
       needsRender = true;
     }
   }
+  function cameraBasis() {
+    syncCamAnim();
+    camera.updateMatrixWorld();
+    const m = camera.matrixWorld.elements;
+    const dir = new THREE.Vector3(m[8], m[9], m[10]).normalize();
+    let x = new THREE.Vector3(m[0], m[1], m[2]);
+    x.addScaledVector(dir, -x.dot(dir));
+    if (x.lengthSq() < 1e-8) {
+      const up = Math.abs(dir.z) > 0.95 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(0, 0, 1);
+      x.crossVectors(up, dir);
+    }
+    x.normalize();
+    const y = new THREE.Vector3().crossVectors(dir, x).normalize();
+    return { dir: dir.toArray(), x: x.toArray(), y: y.toArray() };
+  }
+  function renderOrthoView({ dir, x, box, maxPx = 720 } = {}) {
+    if (!Array.isArray(dir) || !Array.isArray(box) || box.length < 4) return null;
+    groups.nodes.updateMatrixWorld(true);
+    const show = [...nodes.values()].filter((n) => n && n.mesh && n.obj.visible && !n.allBodiesHidden && n.role !== 'hole' && n.mesh.geometry && n.mesh.geometry.boundingBox);
+    if (!show.length) return null;
+    const d = new THREE.Vector3(...dir).normalize();
+    if (d.lengthSq() < 1e-8) return null;
+    const ex = Array.isArray(x) ? new THREE.Vector3(...x) : new THREE.Vector3(1, 0, 0);
+    ex.addScaledVector(d, -ex.dot(d));
+    if (ex.lengthSq() < 1e-8) ex.crossVectors(Math.abs(d.z) > 0.95 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(0, 0, 1), d);
+    ex.normalize();
+    const ey = new THREE.Vector3().crossVectors(d, ex).normalize();
+    const [x0, y0, x1, y1] = box;
+    const w = x1 - x0, h = y1 - y0;
+    if (!(w > 1e-6 && h > 1e-6)) return null;
+    const uc = (x0 + x1) / 2, vc = (y0 + y1) / 2, hw = w / 2, hh = h / 2;
+    const lim = Math.max(64, Math.min(1200, Math.round(maxPx || 720)));
+    const iw = w >= h ? lim : Math.max(32, Math.round((lim * w) / h));
+    const ih = h >= w ? lim : Math.max(32, Math.round((lim * h) / w));
+    const wb = new THREE.Box3();
+    for (const n of show) wb.union(n.mesh.geometry.boundingBox.clone().applyMatrix4(n.obj.matrixWorld));
+    if (wb.isEmpty()) return null;
+    let dMin = Infinity, dMax = -Infinity;
+    const cPt = new THREE.Vector3();
+    for (let ix = 0; ix < 2; ix++) for (let iy = 0; iy < 2; iy++) for (let iz = 0; iz < 2; iz++) {
+      cPt.set(ix ? wb.max.x : wb.min.x, iy ? wb.max.y : wb.min.y, iz ? wb.max.z : wb.min.z);
+      const s = cPt.dot(d);
+      if (s < dMin) dMin = s;
+      if (s > dMax) dMax = s;
+    }
+    const pad = Math.max(10, (dMax - dMin) * 0.5);
+    const oc = new THREE.OrthographicCamera(-hw, hw, hh, -hh, 0.1, (dMax - dMin) + 2 * pad + 20);
+    oc.position.copy(ex).multiplyScalar(uc).addScaledVector(ey, vc).addScaledVector(d, dMax + pad);
+    const rotM = new THREE.Matrix4().makeBasis(ex, ey, d);
+    oc.quaternion.setFromRotationMatrix(rotM);
+    oc.up.copy(ey);
+    oc.updateProjectionMatrix();
+    oc.updateMatrixWorld();
+
+    const old = renderer.getSize(new THREE.Vector2()), oldPR = renderer.getPixelRatio();
+    const oldCol = renderer.getClearColor(new THREE.Color()), oldA = renderer.getClearAlpha(), oldClip = renderer.localClippingEnabled;
+    const gridVis = [gridMinor ? gridMinor.visible : false, gridMajor ? gridMajor.visible : false];
+    const gv = {}; for (const k of Object.keys(groups)) if (k !== 'nodes') gv[k] = groups[k].visible;
+    const nodeState = [];
+    for (const n of nodes.values()) {
+      nodeState.push([n, n.obj.visible, n.mesh ? n.mesh.visible : false, n.edges ? n.edges.visible : false]);
+      const vis = show.includes(n);
+      n.obj.visible = vis;
+      if (n.mesh) n.mesh.visible = vis;
+      if (n.edges) n.edges.visible = false;
+    }
+    try {
+      if (gridMinor) gridMinor.visible = false;
+      if (gridMajor) gridMajor.visible = false;
+      for (const k of Object.keys(gv)) groups[k].visible = false;
+      renderer.localClippingEnabled = false;
+      renderer.setPixelRatio(1);
+      renderer.setSize(iw, ih, false);
+      renderer.setClearColor(0xffffff, 0);
+      renderer.shadowMap.needsUpdate = true;
+      renderer.render(scene, oc);
+      const png = renderer.domElement.toDataURL('image/png');
+      let jpg = null;
+      try {
+        const c2 = document.createElement('canvas'); c2.width = iw; c2.height = ih;
+        const ctx = c2.getContext('2d');
+        ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, iw, ih);
+        ctx.drawImage(renderer.domElement, 0, 0, iw, ih);
+        jpg = c2.toDataURL('image/jpeg', 0.92);
+      } catch (_) {}
+      return { png, jpg, w: iw, h: ih };
+    } catch (_) {
+      return null;
+    } finally {
+      for (const [n, ov, mv, ev] of nodeState) { n.obj.visible = ov; if (n.mesh) n.mesh.visible = mv; if (n.edges) n.edges.visible = ev; }
+      if (gridMinor) gridMinor.visible = gridVis[0];
+      if (gridMajor) gridMajor.visible = gridVis[1];
+      for (const k of Object.keys(gv)) groups[k].visible = gv[k];
+      renderer.localClippingEnabled = oldClip;
+      renderer.setClearColor(oldCol, oldA);
+      renderer.setPixelRatio(oldPR);
+      if (old.x > 0 && old.y > 0) renderer.setSize(old.x, old.y, false);
+      renderer.shadowMap.needsUpdate = true;
+      needsRender = true;
+    }
+  }
   function snapshot(w = 480, hgt = 300) {
     const old = renderer.getSize(new THREE.Vector2());
     renderer.setSize(w, hgt, false); camera.aspect = w / hgt; camera.updateProjectionMatrix();
@@ -1552,7 +1653,7 @@ const Viewer = (() => {
   }
 
   return {
-    viewBack, get viewHistory() { return camHist.length; }, useButtons, setMouseStyle, get mouseStyle() { return mouseStyle; }, get leftOrbits() { return !!(controls && controls.mouseButtons.LEFT === THREE.MOUSE.ROTATE); }, setLook, lookOf, get look() { return { ...LOOK }; }, fitShadow, renderImage, renderPartThumb, lookAtFace, faceIndexOf: (id, fc) => { const n = nodes.get(id); return n ? faceIndexOf(n, fc) : -1; }, cylinderFaceInfo, threadFaceIndex: (id, th) => { const n = nodes.get(id); return n ? threadFaceIndex(n, th) : -1; }, get renderer() { return renderer; },
+    viewBack, get viewHistory() { return camHist.length; }, useButtons, setMouseStyle, get mouseStyle() { return mouseStyle; }, get leftOrbits() { return !!(controls && controls.mouseButtons.LEFT === THREE.MOUSE.ROTATE); }, setLook, lookOf, get look() { return { ...LOOK }; }, fitShadow, renderImage, renderPartThumb, cameraBasis, renderOrthoView, lookAtFace, faceIndexOf: (id, fc) => { const n = nodes.get(id); return n ? faceIndexOf(n, fc) : -1; }, cylinderFaceInfo, threadFaceIndex: (id, th) => { const n = nodes.get(id); return n ? threadFaceIndex(n, th) : -1; }, get renderer() { return renderer; },
     init, requestRender, renderNow, setClip, setXray, setOffsets, baseBox, renderInset, silhouette, setAdaptive, setCompare, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, highlightBody, setSelectedEdges, clearHover, setRefGhost, clearRefGhost, hasRefGhost,
     edgePositions, pick, pickAll, pickGhost, pickProxy, setProxies, clearProxies, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, setPrintBed, boxVisible, sceneBox, snapshot, makeFat, disposeFat, faceOverlay, faceArea, faceEdges, edgeKinds, wallAt, thinWalls,
     get camera() { syncCamAnim(); return camera; }, get activeCamera() { syncCamAnim(); return cam(); }, get ortho() { return ortho; }, get gridStep() { return gridStep; }, get controls() { return controls; }, get scene() { return scene; }, get groups() { return groups; }, get nodes() { return nodes; }, get canvas() { return renderer.domElement; }, get theme() { return theme; }, get container() { return container; },

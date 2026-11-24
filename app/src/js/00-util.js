@@ -1716,6 +1716,16 @@ const HELP = {
   "tip": "Blattformat A4 bis A0 im Hoch- oder Querformat wählen",
   "hilfe": "Du kannst jedes Blatt einzeln auf DIN A4, A3, A2, A1 oder A0 sowie zwischen Quer- und Hochformat umstellen. Rahmen (20 mm Heftrand links, 10 bzw. 20 mm Außenrand) und das Schriftfeld passen sich der gewählten Blattgröße automatisch an.",
   "tipp": "Größere Formate wie A2, A1 oder A0 eignen sich besonders für Baugruppen oder große Werkstücke im Maßstab 1:1."
+ },
+ "drawingViews": {
+  "tip": "Isometrische oder freie 3D-Ansichten zur Zeichnung hinzufügen",
+  "hilfe": "Über „Ansicht +“ oder rechts unter „Ansichten“ fügst du eine isometrische Ansicht oder eine freie Ansicht aus deiner aktuellen 3D-Kamera hinzu – wahlweise gleich schattiert. Bei freien Ansichten kannst du den Blickwinkel später über „Aktuelle 3D-Ansicht übernehmen“ aktualisieren.",
+  "tipp": "Mit Klick auf eine Ansicht auf dem Blatt oder in der Liste rechts wählst du sie aus und stellst sie einzeln ein."
+ },
+ "drawingViewProps": {
+  "tip": "Maßstab, Kantenarten und Schattierung je Ansicht einstellen",
+  "hilfe": "Für die gewählte Ansicht legst du einen eigenen Maßstab („Wie Blatt“ oder einen Normmaßstab), verdeckte Kanten (gestrichelt), tangentiale Übergangskanten (dünne Volllinie an Rundungen) und eine schattierte 3D-Füllung fest. Alles wird auch im PDF und SVG gespeichert.",
+  "tipp": "Schalte verdeckte Kanten in der Isometrie aus und nur in den Schnitt- oder Hauptansichten ein, damit das Blatt übersichtlich bleibt."
  }
 };
 

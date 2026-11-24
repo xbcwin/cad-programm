@@ -248,6 +248,8 @@ const Commands = (() => {
     add('isolate', 'Gewähltes Teil isolieren', 'focusView', 'isolieren nur dieses zeigen', () => { const t = App.sel.length ? Model.topOf(App.doc, App.sel[0]) : null; if (t) Comp.toggleIso(t.id); }, { group: 'Ansicht' });
     add('drawing', 'Technische Zeichnung öffnen', 'sheet', 'zeichnung ansichten bemaßung pdf dreitafel', () => setMode('drawing'), { group: 'Werkzeuge' });
     add('drawingAddSheet', 'Neues Zeichnungsblatt hinzufügen', 'sheet', 'blatt seite zeichnung a4 a3 a2 a1 a0 format', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.addSheet(); }, { group: 'Werkzeuge' });
+    add('drawingAddIso', 'Zeichnung: Isometrische Ansicht hinzufügen', 'cube', 'zeichnung isometrie isometrisch 3d ansicht schattiert', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.addView('iso'); }, { group: 'Werkzeuge' });
+    add('drawingAddFree', 'Zeichnung: Freie 3D-Ansicht hinzufügen', 'eye', 'zeichnung freie ansicht 3d kamera aktuell schattiert', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.addView('free'); }, { group: 'Werkzeuge' });
     add('model', 'Zurück zum Modell', 'cube', 'modell 3d', () => setMode('model'), { group: 'Werkzeuge' });
     add('params', 'Maße mit Namen festlegen', 'sliders', 'parameter variable formel maß', () => Panels.showParams(), { group: 'Werkzeuge' });
     for (const [uk, un] of Units.OPTIONS) add('unit-' + uk, 'Einheit: ' + un, 'ruler', 'einheit einheiten mm cm m zoll inch ' + uk, () => Units.set(uk), { group: 'Projekt' });

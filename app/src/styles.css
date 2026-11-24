@@ -604,6 +604,18 @@ body.sketching .timeline{display:none}
 .sheet-tab-add{display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 10px;border-radius:8px;border:1px dashed var(--line-2);background:transparent;color:var(--ink-2);font:500 12.5px/1 var(--font);cursor:pointer;flex:none}
 .sheet-tab-add:hover{border-color:var(--accent-line);color:var(--accent);background:var(--accent-soft)}
 .sheet-tab-add svg{width:13px;height:13px}
+.dw-view-list{display:grid;gap:4px;margin:8px 0}
+.dw-view-row{display:flex;align-items:center;gap:6px;padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);cursor:pointer;font-size:12.5px}
+.dw-view-row:hover{border-color:var(--line-2)}
+.dw-view-row.active{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent);font-weight:600}
+.dw-view-row .dw-view-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dw-view-row .dw-view-badge{font:600 11px/1 var(--font-mono);color:var(--muted);padding:2px 5px;border-radius:5px;background:var(--surface)}
+.dw-view-row.active .dw-view-badge{color:var(--accent)}
+.dw-view-row .dw-view-del{display:inline-grid;place-items:center;width:20px;height:20px;border:none;border-radius:5px;background:transparent;color:var(--muted);cursor:pointer;padding:0}
+.dw-view-row .dw-view-del:hover{background:var(--surface);color:var(--bad)}
+.dw-view-row .dw-view-del svg{width:12px;height:12px}
+.dw-view-props{display:grid;gap:8px;padding:9px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2)}
+.dw-view-props-h{font:600 12px/1.2 var(--font);color:var(--ink);margin-bottom:2px}
 
 /* Kopfzeile: bei weniger Platz zeigen erst die Nebenwerkzeuge, dann alle außer „Exportieren“ nur ihr Symbol */
 @media (max-width: 1500px) and (min-width: 901px){ .tool.minor span{display:none} .tool.minor{padding:7px 9px} }

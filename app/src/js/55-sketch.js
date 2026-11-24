@@ -1093,9 +1093,15 @@ const Sketch = (() => {
     const r = Viewer.canvas.getBoundingClientRect();
     dimBox.style.left = clientX - r.left + 'px'; dimBox.style.top = clientY - r.top + 'px';
     $('#overlay').append(dimBox);
+    let userTyped = false;
+    inp.addEventListener('input', () => { userTyped = true; if (dimBox) dimBox._typed = true; });
     // nach dem Mausklick fokussieren, sonst holt sich das 3D-Bild den Fokus zurück
-    const grab = () => { if (dimBox && dimBox.contains(inp)) { inp.focus(); inp.select(); } };
-    grab(); setTimeout(grab, 0); setTimeout(grab, 60);
+    const grab = () => {
+      if (!dimBox || !dimBox.contains(inp)) return;
+      if (document.activeElement !== inp) inp.focus();
+      if (!userTyped) inp.select();
+    };
+    grab(); setTimeout(grab, 0); requestAnimationFrame(grab);
     const commit = () => {
       const raw = inp.value.trim(); if (!raw) { hideDimBox(); return; }
       if (raw === orig && cur && !cur.ref) { hideDimBox(); Viewer.canvas.focus(); return; }
@@ -1117,6 +1123,7 @@ const Sketch = (() => {
       }
       hideDimBox(); if (sp.e) setSel([sp.e]); setDimSpec(sp, v); Viewer.canvas.focus();
     };
+    dimBox._inp = inp; dimBox._commit = commit; dimBox._typed = false;
     inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); commit(); } if (e.key === 'Escape') { hideDimBox(); Viewer.canvas.focus(); } });
   }
   // ---------- Spline ----------
@@ -1745,13 +1752,14 @@ const Sketch = (() => {
         else if (fp && pk.kind === 'line') { k = 'distPL'; refs = [f.ref, pk.ref]; }
         else if (f.kind === 'line' && np) { k = 'distPL'; refs = [pk.ref, f.ref]; }
         else if (f.kind === 'line' && pk.kind === 'line' && !sameRefs(f.ref, pk.ref)) { k = 'angLL'; refs = [f.ref, pk.ref]; }
-        if (k) { S.dimFirst = null; askDim({ k, refs }, e.clientX, e.clientY); render(); return; }
+        if (k) { e.preventDefault(); S.dimFirst = null; askDim({ k, refs }, e.clientX, e.clientY); render(); return; }
       }
       if (pk.kind === 'point') { S.dimFirst = pk; hideDimBox(); UI.hint('Jetzt einen <b>zweiten Punkt</b> oder eine <b>Linie</b> anklicken – für den Abstand.'); render(); return; }
       const k = dimKeyAt(pk.ent, uv0);
       if (!k) { S.dimFirst = null; UI.toast('Dafür gibt es noch kein Maß.', { icon: 'info' }); return; }
       setSel([pk.ent.id]); S.dimFirst = pk.kind === 'line' ? pk : null;
       UI.hint(HINTS.dim); render(); Panels.renderRight();
+      e.preventDefault();
       askDim({ e: pk.ent.id, k }, e.clientX, e.clientY); return;
     }
     if (t.startsWith('c:')) { consPick(t === 'c:project' ? null : pickAt(uv0), e); return; }
@@ -2904,6 +2912,12 @@ const Sketch = (() => {
     dragRaf = requestAnimationFrame(() => { dragRaf = 0; if (!S || !S.dragPins) return; reapply({ fast: true, pins: S.dragPins }); render(); });
   }
   function onUp(e) {
+    if (dimBox && dimBox._inp && document.body.contains(dimBox) && !dimBox.contains(e && e.target)) {
+      if (document.activeElement !== dimBox._inp) {
+        dimBox._inp.focus();
+        if (!dimBox._typed) dimBox._inp.select();
+      }
+    }
     if (S && S.band) {
       const b = S.band; clearBand();
       if (b.moved && e) {
@@ -3045,6 +3059,18 @@ const Sketch = (() => {
     if (!S) return false;
     const tag = (e.target && e.target.tagName) || '';
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return false;
+    if (dimBox && dimBox._inp && document.body.contains(dimBox)) {
+      if (e.key === 'Enter') { e.preventDefault(); dimBox._commit(); return true; }
+      if (e.key === 'Escape') { e.preventDefault(); hideDimBox(); Viewer.canvas.focus(); return true; }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') { e.preventDefault(); dimBox._inp.focus(); dimBox._inp.select(); return true; }
+      if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.length === 1) {
+        e.preventDefault();
+        dimBox._inp.focus();
+        dimBox._inp.value = dimBox._typed ? dimBox._inp.value + e.key : e.key;
+        dimBox._typed = true;
+        return true;
+      }
+    }
     if (S.step) {
       if (e.key === 'Escape') {
         if (S.step.pickingFace) {
