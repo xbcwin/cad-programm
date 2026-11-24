@@ -2220,6 +2220,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Koordinatenmaße (Profi, `ord`)**: Nullkante wählen, drei Punkte fortlaufend mit `15`, `25` und `-10` bemaßen → X-Werte folgen samt `0`-Markierung an der Nullkante; im Modus „Einfach“ ausgeblendet, Rückgängig (`Strg+Z`) und Hilfetexte (`dimModes`, `ordinateDim`) ohne Seitenfehler.
 - [ ] **Von Hand**: Im Browser im Profi-Modus beim Werkzeug „Maß“ (D) zwischen „Bogenlänge“, „Winkel über 3 Punkte“ und „Koordinatenmaße“ umschalten und die ausgerichteten Hilfslinien sowie den Umschalter `⌒`/`R` am Bogen prüfen.
 
+## Maß zwischen Kreisrändern, Skizze sperren & Drehachse markieren (Auto [A-096], SK-29, SK-54, SK-55)
+
+- [x] **Maß zwischen Kreisrändern (`distCC`)**: Zwei Kreise (`r = 5`, Mittenabstand `30`) mit Modus „Kleinster Abstand“ bemaßt → Maßfeld zeigt `20`, Schild `min 20`; Änderung auf `15` zieht die Kreismitte nach (`25`), Umschalten auf `max` (`40`) und `center` (`30`) sowie `Strg+Z` arbeiten exakt.
+- [x] **Skizze sperren (`sketch.locked`)**: Schloss `#sk-lock` sperrt die Skizze (`#sk-lock-badge` sichtbar); Ziehen am Kreisrand ändert die Lage nicht, `Entf` löscht nichts; nach Entsperren lässt sich der Kreis wieder ziehen; gespeicherte Sperre bleibt nach Fertigstellen und erneutem Öffnen erhalten.
+- [x] **Drehachse markieren (`e.revAxis`)**: Linie mit `#se-rev-axis` als Drehachse markiert (ohne Warnung zu offenen Enden); „Fertig“ öffnet „Drehen“ direkt mit dieser Linie (`axisEnt`), der entstandene Drehkörper dreht um `x = 5` mit dem exakten Volumen.
+- [ ] **Von Hand**: Im Browser zwei Kreise zwischen Mitte, kleinstem und größtem Abstand umschalten, die gesperrte Skizze am Schloss sperren/entsperren und eine markierte Drehachse beim Drehen optisch prüfen.
+
 ## Fehler melden
 
 ```

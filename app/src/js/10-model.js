@@ -564,7 +564,12 @@ const Model = (() => {
         out.toFaceFlip = !!p.toFaceFlip;
       }
       if (p.axis3d && Array.isArray(p.axis3d.o) && Array.isArray(p.axis3d.d)) out.axis3d = { o: p.axis3d.o.map(Number), d: p.axis3d.d.map(Number) };
-      else out.axis = p.axis || { a: [0, 0], b: [0, 1] };
+      else {
+        const axEnt = p.axisEnt ? ents.find((x) => x.id === p.axisEnt && x.type === 'line') : null;
+        const revEnt = !p.axis ? ents.find((x) => x.type === 'line' && x.revAxis) : null;
+        const axLine = axEnt || revEnt;
+        out.axis = axLine ? { a: axLine.a.slice(), b: axLine.b.slice() } : (p.axis || { a: [0, 0], b: [0, 1] });
+      }
     }
     return out;
   }
@@ -1482,14 +1487,17 @@ const Model = (() => {
     const norm3 = (a) => { const l = v3.len(a) || 1; return v3.mul(a, 1 / l); };
     const o = pl.o || [0, 0, 0], x = norm3(pl.x || [1, 0, 0]), n = norm3(pl.n || [0, 0, 1]), y = v3.cross(n, x);
     const P = (uv) => [o[0] + x[0] * uv[0] + y[0] * uv[1], o[1] + x[1] * uv[0] + y[1] * uv[1], o[2] + x[2] * uv[0] + y[2] * uv[1]];
+    const ents = Solver.cached(sk, V || {}).ents;
     let c, d;
     if (p.axis3d && Array.isArray(p.axis3d.o) && Array.isArray(p.axis3d.d)) {
       c = p.axis3d.o.map(Number); d = norm3(p.axis3d.d.map(Number));
     } else {
-      const ax = p.axis || { a: [0, 0], b: [0, 1] };
+      const axEnt = p.axisEnt ? ents.find((x) => x.id === p.axisEnt && x.type === 'line') : null;
+      const revEnt = !p.axis ? ents.find((x) => x.type === 'line' && x.revAxis) : null;
+      const axLine = axEnt || revEnt;
+      const ax = axLine ? { a: axLine.a, b: axLine.b } : (p.axis || { a: [0, 0], b: [0, 1] });
       c = P(ax.a); d = norm3(v3.sub(P(ax.b), c));
     }
-    const ents = Solver.cached(sk, V || {}).ents;
     const regs = SK.regions(ents);
     let chosen = regs;
     if (Array.isArray(p.sel) && p.sel.length) { const f = regs.filter((r) => p.sel.includes(r.key)); if (f.length) chosen = f; }

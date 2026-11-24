@@ -446,7 +446,7 @@ const SK = (() => {
   }
   // Offene Züge (Pfade) aus Linien, Bögen und offenen Splines – der Reihe nach, vom freien Ende aus
   function chains(ents) {
-    const list = (ents || []).filter((e) => !e.con && (e.type === 'line' || e.type === 'arc' || (e.type === 'spline' && !e.closed && e.pts && e.pts.length >= 2)) && d2(endA(e), endB(e)) > 1e-9);
+    const list = (ents || []).filter((e) => !e.con && !e.revAxis && (e.type === 'line' || e.type === 'arc' || (e.type === 'spline' && !e.closed && e.pts && e.pts.length >= 2)) && d2(endA(e), endB(e)) > 1e-9);
     const adj = new Map();
     const addV = (p, e) => { const k = qkey(p); if (!adj.has(k)) adj.set(k, []); adj.get(k).push(e); };
     for (const e of list) { addV(endA(e), e); addV(endB(e), e); }
@@ -481,9 +481,16 @@ const SK = (() => {
   }
   function openEnds(ents) {
     // Endpunkte, die nur an einer Linie hängen (Hinweis „Umriss nicht geschlossen“)
+    // Alleinstehende Drehachsen (revAxis) zählen nicht als offenes Ende.
     const cnt = new Map();
-    for (const e of ents || []) { if (e.con || (e.type !== 'line' && e.type !== 'arc' && !(e.type === 'spline' && !e.closed))) continue; for (const p of [endA(e), endB(e)]) { const k = qkey(p); cnt.set(k, { p, n: ((cnt.get(k) || {}).n || 0) + 1 }); } }
-    return [...cnt.values()].filter((x) => x.n === 1).map((x) => x.p);
+    for (const e of ents || []) {
+      if (e.con || (e.type !== 'line' && e.type !== 'arc' && !(e.type === 'spline' && !e.closed))) continue;
+      for (const p of [endA(e), endB(e)]) {
+        const k = qkey(p), cur = cnt.get(k);
+        cnt.set(k, { p, n: (cur ? cur.n : 0) + 1, rev: (cur ? cur.rev : true) && !!e.revAxis });
+      }
+    }
+    return [...cnt.values()].filter((x) => x.n === 1 && !x.rev).map((x) => x.p);
   }
   function labelPoint(poly, holes) {
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
@@ -619,7 +626,7 @@ const SK = (() => {
     get r() { return T('common.radius'); }, get arcLen() { return T('sk.dim.arcLen'); },
     get dist() { return T('common.distance'); }, get distPL() { return T('common.distance'); },
     get angLL() { return T('common.angle'); }, get ang3() { return T('sk.dim.ang3'); },
-    get ord() { return T('sk.dim.ord'); },
+    get ord() { return T('sk.dim.ord'); }, get distCC() { return T('sk.dim.distCC'); },
   };
   const anchorKey = (e) => (e.type === 'circle' || e.type === 'poly' || e.type === 'ellipse' ? 'c' : 'a');
   const anchorOf = (e) => (e.type === 'spline' ? e.pts[0] : e[anchorKey(e)]);

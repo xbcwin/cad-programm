@@ -1251,5 +1251,17 @@ body.tablet .tabbar-add{width:38px;height:38px}
 .clash-check-bar{width:350px;max-width:calc(100vw - 24px)}
 .clash-vol{font-size:12px;color:var(--bad);font-weight:600}
 
+/* Skizze sperren, Kreisrand-Maß & Drehachse (SK-29, SK-54, SK-55) */
+.sk-lock-btn{display:inline-flex;align-items:center;gap:6px}
+.sk-lock-btn.active{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.sk-lock-badge{position:absolute;top:12px;left:12px;z-index:17;display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;background:var(--surface);border:1.5px solid var(--accent);color:var(--ink);font:600 12.5px/1.2 var(--font-cond);letter-spacing:.02em;box-shadow:var(--shadow-1);pointer-events:none}
+.sk-lock-badge svg{width:14px;height:14px;color:var(--accent)}
+.dim-cc-sw{display:inline-flex;gap:2px;background:var(--surface-2);border:1px solid var(--line);border-radius:5px;padding:2px}
+.dim-cc-btn{border:0;background:transparent;color:var(--muted);padding:3px 6px;border-radius:4px;font:600 11px/1 var(--font-cond);cursor:pointer;white-space:nowrap}
+.dim-cc-btn:hover{color:var(--ink);background:var(--surface-3)}
+.dim-cc-btn.active{background:var(--accent);color:var(--accent-ink)}
+.sklink.sk-revaxis{border-color:#9c36b5;color:#9c36b5}
+[data-theme="dark"] .sklink.sk-revaxis{border-color:#da77f2;color:#da77f2}
+
 
 

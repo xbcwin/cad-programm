@@ -675,11 +675,11 @@ const SKO = (() => {
       if (!(e.type === 'line' || e.type === 'arc' || (e.type === 'spline' && !e.closed && e.pts && e.pts.length >= 2))) continue;
       const a = SK.endA(e), b = SK.endB(e);
       if (d2(a, b) <= 1e-9) continue;
-      putV(a, { e: e.id, p: 'a', xy: a, type: e.type, npts: e.pts ? e.pts.length : 0 });
-      putV(b, { e: e.id, p: 'b', xy: b, type: e.type, npts: e.pts ? e.pts.length : 0 });
+      putV(a, { e: e.id, p: 'a', xy: a, type: e.type, npts: e.pts ? e.pts.length : 0, revAxis: !!e.revAxis });
+      putV(b, { e: e.id, p: 'b', xy: b, type: e.type, npts: e.pts ? e.pts.length : 0, revAxis: !!e.revAxis });
     }
     const openPts = [];
-    for (const arr of verts.values()) if (arr.length === 1) openPts.push(arr[0]);
+    for (const arr of verts.values()) if (arr.length === 1 && !arr[0].revAxis) openPts.push(arr[0]);
 
     const cands = [];
     for (let i = 0; i < openPts.length; i++) {

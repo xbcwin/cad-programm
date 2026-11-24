@@ -20063,6 +20063,155 @@ def t_a095_koordinaten_bogen_winkel3(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a096_kreisrand_sperren_drehachse(p):
+    import math
+    sketch_xy(p)
+    def reset_sketch(ents, dims=None, cons=None):
+        p.ev("const S=Sketch.state; S.locked=false; S.ents=arg[0]; S.dims=arg[1]||[]; S.cons=arg[2]||[]; S.dimFirst=null; S.dimPicks=[]; S.ordBase=null; S.sels=[]; S.selCon=null; Sketch.setTool('select'); Sketch.render(); Panels.renderRight(); Viewer.canvas.focus();", [ents, dims or [], cons or []])
+        p.wait(300)
+
+    # 1. SK-29: Maß zwischen Kreisrändern (Mitte, kleinster & größter Abstand)
+    reset_sketch(
+        [
+            {'id': 'C1', 'type': 'circle', 'c': [0, 0], 'r': 5},
+            {'id': 'C2', 'type': 'circle', 'c': [30, 0], 'r': 5},
+        ],
+        [
+            {'id': 'd2', 'e': 'C2', 'k': 'd', 'v': 10},
+            {'id': 'y2', 'e': 'C2', 'k': 'y', 'v': 0},
+        ],
+        [
+            {'id': 'f1', 'type': 'fix', 'refs': [{'e': 'C1'}], 'at': {'c0': 0, 'c1': 0, 'r': 5}},
+        ],
+    )
+    p.pg.keyboard.press('d'); p.wait(250)
+    p.pg.select_option('#dm-circ', 'min'); p.wait(200)
+    s1 = to_screen(p, 0, 5)
+    s2 = to_screen(p, 30, 5)
+    p.pg.mouse.click(s1[0], s1[1]); p.wait(250)
+    p.pg.mouse.click(s2[0], s2[1]); p.wait(300)
+    ask_val_min = p.pg.locator('.dimask input').input_value().strip()
+    p.pg.keyboard.press('Enter'); p.wait(450)
+    dm_min = SS(p, "return S.dims.find(d => d.k==='distCC')")
+    lbl_min = p.pg.locator('.skdim').filter(has_text='min').first.text_content() if p.pg.locator('.skdim').filter(has_text='min').count() else ''
+    p.pg.locator('.skdim').filter(has_text='min').first.click(); p.wait(250)
+    p.pg.keyboard.press('ControlOrMeta+a'); p.pg.keyboard.type('15'); p.pg.keyboard.press('Enter'); p.wait(450)
+    c2x_15 = SS(p, "return E('C2').c[0]")
+
+    p.pg.locator('.skdim').filter(has_text='min').first.click(); p.wait(250)
+    p.pg.click('#dim-cc-max'); p.wait(250)
+    ask_val_max = p.pg.locator('.dimask input').input_value().strip()
+    p.pg.keyboard.press('ControlOrMeta+a'); p.pg.keyboard.type('40'); p.pg.keyboard.press('Enter'); p.wait(450)
+    c2x_max = SS(p, "return E('C2').c[0]")
+
+    p.pg.locator('.skdim').filter(has_text='max').first.click(); p.wait(250)
+    p.pg.click('#dim-cc-center'); p.wait(250)
+    ask_val_ctr = p.pg.locator('.dimask input').input_value().strip()
+    p.pg.keyboard.press('Enter'); p.wait(450)
+    dm_ctr = SS(p, "return S.dims.find(d => d.k==='distCC')")
+    p.ev("Viewer.canvas.focus()"); p.wait(100)
+    p.pg.keyboard.press('ControlOrMeta+z'); p.wait(400)
+    dm_undo = SS(p, "return S.dims.find(d => d.k==='distCC')")
+    ok1 = (
+        ask_val_min == '20'
+        and dm_min is not None and dm_min.get('cm') == 'min' and abs(dm_min.get('v', -1) - 20) < 1e-3
+        and 'min 20' in lbl_min
+        and abs(c2x_15 - 25) < 1e-3
+        and ask_val_max == '35'
+        and abs(c2x_max - 30) < 1e-3
+        and ask_val_ctr == '30'
+        and dm_ctr is not None and dm_ctr.get('cm') == 'center' and abs(dm_ctr.get('v', -1) - 30) < 1e-3
+        and dm_undo is not None and dm_undo.get('cm') == 'max' and abs(dm_undo.get('v', -1) - 40) < 1e-3
+    )
+
+    # 2. SK-54: Skizze sperren verhindert Ziehen & Ändern und bleibt gespeichert
+    reset_sketch([{'id': 'C1', 'type': 'circle', 'c': [10, 5], 'r': 8}])
+    p.pg.click('#sk-lock'); p.wait(300)
+    locked_on = SS(p, "return S.locked === true") and p.pg.locator('#sk-lock-badge').count() == 1
+    c0 = SS(p, "return E('C1').c.slice()")
+    sc_edge = to_screen(p, 10, 13)
+    p.pg.mouse.move(sc_edge[0], sc_edge[1])
+    p.pg.mouse.down()
+    p.pg.mouse.move(sc_edge[0] + 60, sc_edge[1] - 40, steps=5)
+    p.pg.mouse.up(); p.wait(300)
+    c1_locked = SS(p, "return E('C1').c.slice()")
+    p.ev("Viewer.canvas.focus()"); p.wait(100)
+    p.pg.keyboard.press('Delete'); p.wait(250)
+    ents_after_del = SS(p, "return S.ents.length")
+
+    p.pg.click('#sk-lock'); p.wait(300)
+    unlocked = SS(p, "return S.locked === false") and p.pg.locator('#sk-lock-badge').count() == 0
+    p.pg.mouse.move(sc_edge[0], sc_edge[1])
+    p.pg.mouse.down()
+    p.pg.mouse.move(sc_edge[0] + 60, sc_edge[1] - 40, steps=5)
+    p.pg.mouse.up(); p.wait(300)
+    c2_unlocked = SS(p, "return E('C1').c.slice()")
+    moved_dist = math.hypot(c2_unlocked[0] - c0[0], c2_unlocked[1] - c0[1])
+
+    p.pg.click('#sk-lock'); p.wait(250)
+    p.ev("Viewer.canvas.focus()"); p.wait(100)
+    p.pg.keyboard.press('Enter'); p.wait(350)
+    p.pg.keyboard.press('Enter'); warte_rechnen(p)
+    p.ev("Sketch.editItem(App.doc.items[0].id)"); p.wait(900)
+    locked_saved = SS(p, "return S.locked === true") and p.ev("return App.doc.items[0].p.sketch.locked === true")
+    p.ev("Sketch.cancel(true)"); p.wait(250)
+    ok2 = (
+        locked_on
+        and c1_locked == c0
+        and ents_after_del == 1
+        and unlocked
+        and moved_dist > 1.0
+        and locked_saved
+    )
+
+    # 3. SK-55: Linie als Drehachse markieren & automatisch beim Drehen nutzen
+    p.ev("App.change('leer', d => { d.items = []; }); Sketch.startOnPlane('XY');"); p.wait(450)
+    reset_sketch(
+        [
+            {'id': 'R1', 'type': 'rect', 'a': [10, 0], 'b': [20, 10]},
+            {'id': 'AX', 'type': 'line', 'a': [5, -5], 'b': [5, 15]},
+        ]
+    )
+    s_ax = to_screen(p, 5, 5)
+    p.pg.mouse.click(s_ax[0], s_ax[1]); p.wait(250)
+    p.pg.click('#se-rev-axis'); p.wait(300)
+    rev_marked = SS(p, "return E('AX').revAxis === true && SK.openEnds(S.ents).length === 0")
+    badge_cnt = p.pg.locator('.sklink.sk-revaxis').count()
+    p.ev("Viewer.canvas.focus()"); p.wait(100)
+    p.pg.keyboard.press('Enter'); p.wait(400)
+    step_auto = SS(p, "return !!(S.step && S.step.revolve === true && S.step.axis === 'line' && S.step.axisLine === 'AX')")
+    p.pg.keyboard.press('Enter'); warte_rechnen(p)
+    rev_res = p.ev("""
+      const it = App.doc.items[0];
+      const res = App.results.get(it.id);
+      const bb = res && res.data && res.data.bbox;
+      return Mass.measure().then(r => {
+        const pt = Mass.partOf(r, it.id);
+        return { kind: it && it.kind, axisEnt: it && it.p && it.p.axisEnt, minX: bb ? bb[0] : NaN, maxX: bb ? bb[3] : NaN, vol: pt ? pt.volume : 0 };
+      });
+    """)
+    ok3 = (
+        rev_marked
+        and badge_cnt >= 1
+        and step_auto
+        and rev_res['kind'] == 'revolve'
+        and rev_res['axisEnt'] == 'AX'
+        and abs(rev_res['minX'] + 10) < 0.5
+        and abs(rev_res['maxX'] - 20) < 0.5
+        and abs(rev_res['vol'] - 2000 * math.pi) < 80
+    )
+
+    # 4. Hilfetexte & keine Seitenfehler
+    meta = p.ev("""return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(d => ({
+      helpJson: !!(d.circleEdgeDim && d.circleEdgeDim.tip && d.circleEdgeDim.hilfe && d.circleEdgeDim.tipp
+        && d.sketchLock && d.sketchLock.tip && d.sketchLock.hilfe && d.sketchLock.tipp
+        && d.revolveAxis && d.revolveAxis.tip && d.revolveAxis.hilfe && d.revolveAxis.tipp),
+      errs: App.errors.length === 0,
+    }));""")
+    ok4 = bool(all(meta.values()) and not p.errs)
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -20266,6 +20415,7 @@ TESTS = [
     ('[A-094] Teil ersetzen und aus Datei einfügen: feste Verbindung erhalten, neues Hüllmaß, STEP & Projekt', t_a094_teil_ersetzen_aus_datei),
     ('[A-093] Eigenschaften je Teil: Teilenummer, Beschreibung, Lieferant, Preis in Stückliste & CSV', t_a093_eigenschaften_je_teil),
     ('[A-095] Koordinatenmaße (Profi), Bogenlänge & Winkel über drei Punkte (SK-27, SK-28)', t_a095_koordinaten_bogen_winkel3),
+    ('[A-096] Maß zwischen Kreisrändern, Skizze sperren & Drehachse markieren (SK-29, SK-54, SK-55)', t_a096_kreisrand_sperren_drehachse),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

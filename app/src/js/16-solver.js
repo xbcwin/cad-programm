@@ -192,6 +192,16 @@ const Solver = (() => {
             const ax = dm.axis === 'y' ? 1 : 0;
             add([...P.deps, ...O.deps], (X) => sg * (P.get(X)[ax] - O.get(X)[ax]) - v, tag);
           }
+        } else if (k === 'distCC') {
+          const A = circle(dm.refs[0]), B = circle(dm.refs[1]);
+          if (!A || !B) continue;
+          const cm = dm.cm || 'center';
+          const sgn = cm === 'min' ? -1 : cm === 'max' ? 1 : 0;
+          add([...A.deps, ...B.deps], (X) => {
+            const a = A.c(X), b = B.c(X);
+            const d = hyp(b[0] - a[0], b[1] - a[1]);
+            return (sgn ? d + sgn * (A.r(X) + B.r(X)) : d) - v;
+          }, tag);
         }
         continue;
       }

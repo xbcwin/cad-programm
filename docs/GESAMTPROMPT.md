@@ -245,7 +245,8 @@ Leitlinien:
   - Spiegeln (M, auch direkt an der X-/Y-Achse)
   - Rechteckmuster (Q), Kreismuster (W) – **nachträglich als Ganzes änderbar**
   - Maß (D, Formeln), Bild-Vorlage (I, mit Maßstab), Hilfslinie (X)
-  - Maß-Arten (`S.dimMode`, `Sketch.setDimMode`): Automatisch, Bogenlänge (`arcLen` mit Umschalter `⌒`/`R`), Winkel über 3 Punkte (`ang3`), Koordinatenmaße (`ord` ab gewählter Nullkante, nur Profi)
+  - Maß-Arten (`S.dimMode`, `Sketch.setDimMode`): Automatisch, Bogenlänge (`arcLen` mit Umschalter `⌒`/`R`), Winkel über 3 Punkte (`ang3`), Koordinatenmaße (`ord` ab gewählter Nullkante, nur Profi), Kreisrand-Abstand (`distCC` mit `cm: 'center'|'min'|'max'`, `Sketch.setDimCircMode`)
+  - Skizze sperren (`sketch.locked`, `Sketch.setLocked`/`toggleLocked`, Knopf `#sk-lock`, Plakette `#sk-lock-badge`) und Drehachse markieren (`e.revAxis`, `Sketch.setRevAxis`, Checkbox `#se-rev-axis`, assoziatives `p.axisEnt` beim Drehen)
   - Maße als Tabelle: `details#dim-table` (Felder `#dt-N`, Zustand `S.dimTableOpen`)
   - Skizzen-Prüfer (SK-09): `SKO.inspect(ents, {gapTol, dupTol, dims, cons})`, `Sketch.check`/`repair`/`focusCheckIssue`, Knöpfe `#sk-check`/`#sk-repair`, Liste `#sk-check-res` (findet offene Enden, doppelte/überlappende Linien und winzige Lücken < 0,05 mm, hebt per Klick hervor, repariert mit `coincident` und Löschen)
   - Skizze fertig bestimmen (SK-06): `SKO.autoDefine(sketch, V, {angleTol, gapTol})`, `Sketch.autoDefine`/`applyAutoDefine`/`cancelAutoDefine`, Knöpfe `#sk-autodef`/`#sk-autodef-apply`/`#sk-autodef-cancel` (schlägt fehlende Regeln < 2° / < 0,05 mm und Maße gestrichelt vor; Übernehmen in einem Rückgängig-Schritt)

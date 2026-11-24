@@ -1927,6 +1927,21 @@ const HELP = {
   "tip": "Alle Abstände von einer gemeinsamen Nullkante oder einem Nullpunkt messen",
   "hilfe": "Koordinatenmaße (Profi) sparen Maßketten: Klicke zuerst eine Linie als Nullkante (0) an und danach der Reihe nach alle Punkte oder Kanten. Jedes Maß wird ab derselben Nullkante gemessen – positive Werte auf der ersten Seite, negative auf der Gegenseite.",
   "tipp": "Mit „Neue Nullkante wählen“ oder Esc setzt du den Bezug jederzeit neu."
+ },
+ "circleEdgeDim": {
+  "tip": "Abstand zwischen zwei Kreisen: Mitte, kleinster oder größter Randabstand",
+  "hilfe": "Klickst du im Maß-Werkzeug zwei Kreise oder Bögen nacheinander an, misst Tracery wahlweise von Mitte zu Mitte, den kleinsten Abstand zwischen den Rändern (Wandstärke dazwischen) oder den größten Abstand bis zu den Außenkanten.",
+  "tipp": "Du kannst die Art rechts im Panel vorab wählen oder jederzeit direkt im kleinen Maßfeld zwischen Mitte, Min und Max umschalten."
+ },
+ "sketchLock": {
+  "tip": "Skizze komplett sperren, damit nichts mehr versehentlich verrutscht",
+  "hilfe": "Ein Klick auf das Schloss friert die ganze Skizze ein: Alle Maße, Regeln und Linien bleiben fest am Platz, nichts lässt sich mehr verschieben, zeichnen oder löschen. Auswählen, prüfen und zu einem Körper fertigstellen bleibt weiter möglich.",
+  "tipp": "Die Sperre bleibt auch beim Speichern im Projekt erhalten – ein zweiter Klick auf das Schloss gibt die Skizze wieder frei."
+ },
+ "revolveAxis": {
+  "tip": "Linie als Drehachse markieren, damit „Drehen“ sie von selbst übernimmt",
+  "hilfe": "Hake bei einer gewählten Linie „Als Drehachse markieren“ an. Sie erscheint dann als lila Strichpunkt-Achse und „Fertig → Drehen“ benutzt sie automatisch als Achse für den Drehkörper.",
+  "tipp": "Pro Skizze kann genau eine Linie als Drehachse markiert sein; eine alleinstehende Drehachse wird nicht als offenes Ende bemängelt."
  }
 };
 
