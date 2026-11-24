@@ -1697,6 +1697,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Projektdatei und Export**: Namen, Farben und Sichtbarkeit bleiben in der Projektdatei und nach Neuladen erhalten; ausgeblendete Körper fehlen im Export, und „Jeder Körper als eigene Datei“ übernimmt die Körpernamen und Farben in STL und 3MF (`bodyList`-Hilfe vorhanden).
 - [ ] **Von Hand**: Im Browser bei einem geteilten Körper oder einer mehrteiligen Skizze per Maus über die Körper-Zeilen fahren (Vorschau-Markierung prüfen) und Rechtsklick-Menü („Nur diesen Körper zeigen“, „Alle Körper einblenden“) testen.
 
+## Kaputter Bezug: neu wählen (Auto [A-035], KP-12)
+
+- [x] **Verlorene Kante bei Rundung & Fase**: Ändert sich ein Maß so, dass die Kante einer Rundung oder Fase verschwindet, zeigen Verlauf (`.node .warn-ref`), Zeitleiste (`.tl-chip.warn`) und Eigenschaften-Panel (`.warn-box`) ein gelbes Warnzeichen samt „Neu wählen“.
+- [x] **Gestrichelte Alt-Lage & Kante neu wählen**: Der Assistent (`RefFix`) blendet die alte Lage gelb gestrichelt im 3D-Bild ein (`Viewer.hasRefGhost()`), übernimmt per Klick eine neue Kante am Körper und rechnet danach fehlerfrei weiter.
+- [x] **Verlorene Skizzen-Bezugsebene & Hilfetext**: Wird die Bezugsebene einer Skizze gelöscht, erscheint das gelbe Warnzeichen; „Neu wählen“ setzt die Skizze wieder auf eine Ebene/Fläche, alles rechnet fehlerfrei weiter und der Hilfetext `refFix` ist vorhanden.
+- [ ] **Von Hand**: Im Browser beim geöffneten „Neu wählen“-Assistenten prüfen, dass sich die Ansicht per linker Maustaste weiterhin drehen lässt und die gestrichelte Alt-Lage beim Überfahren von Ersatzkanten bzw. -flächen gut sichtbar bleibt.
+
 ## Fehler melden
 
 ```

@@ -123,6 +123,8 @@ body.sketching .viewcube{display:none}
 .node.hidden-item .nm{color:var(--faint);text-decoration:line-through}
 .node .err{color:var(--bad);display:grid;place-items:center}
 .node .err svg{width:15px;height:15px}
+.node .warn-ref{color:var(--warn);display:grid;place-items:center;cursor:pointer;flex:none}
+.node .warn-ref svg{width:15px;height:15px}
 .node.drop-before::before,.node.drop-after::after{content:"";position:absolute;left:8px;right:8px;height:2px;background:var(--accent);border-radius:2px}
 .node.drop-before::before{top:-2px}.node.drop-after::after{bottom:-2px}
 .node.drop-into{outline:2px solid var(--accent);outline-offset:-2px}
@@ -139,6 +141,9 @@ body.sketching .viewcube{display:none}
 .finish-row:hover{background:var(--surface-2)}
 .finish-row svg{width:14px;height:14px}
 .finish-row.bad{color:var(--bad)}
+.finish-row.warn{color:var(--warn)}
+.finish-row .fin-fix-btn{margin-left:auto;padding:2px 7px;font-size:11.5px;border:1px solid var(--warn);background:var(--warn-soft);color:var(--ink);border-radius:5px;cursor:pointer}
+.finish-row .fin-fix-btn:hover{background:var(--warn);color:#fff}
 .empty-tree{padding:18px 16px;color:var(--muted);font-size:14px;line-height:1.5}
 .first-steps{margin:10px 10px 4px;padding:10px 12px;border-radius:var(--radius-s);background:var(--surface-2);border:1px solid var(--line);display:grid;gap:6px}
 .first-steps .fs-head{display:flex;align-items:center;gap:8px}
@@ -181,6 +186,7 @@ body.sketching .viewcube{display:none}
 .inp .axis.x{color:#d24a3c}.inp .axis.y{color:#3a9a3f}.inp .axis.z{color:#3067d0}
 .inp.expr{border-style:dashed;border-color:var(--accent-line)}
 .inp.invalid{border-color:var(--bad);box-shadow:0 0 0 3px var(--bad-soft)}
+.inp.warn{border-color:var(--warn);box-shadow:0 0 0 3px var(--warn-soft)}
 .inp .fx{font:600 11px/1 var(--font-mono);color:var(--accent);padding-right:6px}
 .role-switch{display:grid;grid-template-columns:1fr 1fr;background:var(--surface-3);padding:3px;border-radius:var(--radius);gap:3px}
 .role-switch button{border:0;border-radius:6px;padding:8px 6px;background:transparent;display:flex;align-items:center;justify-content:center;gap:7px;font:600 14px/1 var(--font-cond);letter-spacing:.02em;color:var(--muted)}
@@ -198,6 +204,10 @@ body.sketching .viewcube{display:none}
 .btn:hover{border-color:var(--line-strong);color:var(--ink)}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .btn.primary:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
+.btn.warn-act{background:var(--warn);border-color:var(--warn);color:#fff}
+.btn.warn-act:hover{filter:brightness(1.08);color:#fff}
+[data-theme="dark"] .btn.warn-act{color:#1b1404}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .btn.warn-act{color:#1b1404}}
 .btn.danger{color:var(--bad)}
 .btn.ghost{border-color:transparent;background:transparent}
 .btn.ghost:hover{background:var(--surface-3)}
@@ -208,6 +218,7 @@ body.sketching .viewcube{display:none}
 .hint-box.warn{color:var(--ink);background:var(--warn-soft);border-left:3px solid var(--warn)}
 .hint-box b{color:var(--ink)}
 .err-box{font-size:13.5px;line-height:1.45;color:var(--bad);background:var(--bad-soft);border-radius:var(--radius-s);padding:9px 11px;display:grid;gap:6px}
+.warn-box{font-size:13.5px;line-height:1.45;color:var(--ink);background:var(--warn-soft);border-left:3px solid var(--warn);border-radius:var(--radius-s);padding:9px 11px;display:grid;gap:7px}
 .kbd{font:500 11.5px/1 var(--font-mono);border:1px solid var(--line-strong);border-bottom-width:2px;border-radius:4px;padding:2px 5px;color:var(--muted);background:var(--surface)}
 .mini-list{display:grid;gap:4px}
 .mini-row{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;background:var(--surface-2);font-size:13.5px}
@@ -364,6 +375,14 @@ body.sketching .timeline{display:none}
 .tl-chip.sup::after{content:"";position:absolute;left:4px;right:4px;top:50%;height:1.7px;background:var(--ink-2);transform:rotate(-40deg)}
 .tl-chip.err{border-color:var(--bad);color:var(--bad);background:var(--bad-soft)}
 .tl-chip.err::before{content:"";position:absolute;top:-3px;right:-3px;width:9px;height:9px;border-radius:50%;background:var(--bad);border:2px solid var(--surface)}
+.tl-chip.warn{border-color:var(--warn);color:var(--warn);background:var(--warn-soft)}
+.tl-chip.warn::before{content:"";position:absolute;top:-3px;right:-3px;width:9px;height:9px;border-radius:50%;background:var(--warn);border:2px solid var(--surface)}
+.reffix-bar{position:absolute;top:14px;left:50%;transform:translateX(-50%);z-index:26;display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:var(--radius);background:var(--surface);border:1.5px solid var(--warn);box-shadow:var(--shadow-2);max-width:min(92%,640px);flex-wrap:wrap}
+.reffix-bar .rf-ic{color:var(--warn);display:grid;place-items:center;flex:none}
+.reffix-bar .rf-ic svg{width:18px;height:18px}
+.reffix-bar .rf-txt{display:grid;gap:1px;font-size:13px;min-width:0;flex:1 1 180px}
+.reffix-bar .rf-txt b{font-size:13.5px;color:var(--ink)}
+.reffix-bar .rf-txt span{color:var(--muted);font-size:12.5px}
 .tl-marker{flex:none;width:12px;height:38px;cursor:ew-resize;display:grid;place-items:center;touch-action:none}
 .tl-marker i{display:block;width:4px;height:100%;border-radius:2px;background:var(--accent)}
 .tl-marker:hover i,.tl-marker.drag i{background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
@@ -2214,6 +2233,11 @@ const HELP = {
   "tip": "Mehrere getrennte Körper in einem Teil verwalten",
   "hilfe": "Enthält ein Teil mehrere getrennte Körper (zum Beispiel zwei Inseln aus einer Skizze oder nach dem Teilen), zeigt der Verlauf darunter jeden Körper einzeln. Du kannst ihn benennen, einfärben sowie ein- und ausblenden – beim Export „Jeder Körper als eigene Datei“ übernimmt Tracery die Namen.",
   "tipp": "Ein Doppelklick auf den Körpernamen benennt ihn direkt um, ein Klick auf das Farbfeld daneben ändert seine Farbe."
+ },
+ "refFix": {
+  "tip": "Verlorene Kante oder Fläche neu wählen",
+  "hilfe": "Verliert eine Rundung, Fase, Wandstärke oder Skizze ihre ursprüngliche Kante oder Fläche (etwa weil ein früheres Maß geändert wurde), erscheint im Verlauf ein gelbes Warnzeichen. Mit „Neu wählen“ blendet Tracery die alte Lage gelb gestrichelt ein – ein Klick auf die neue Kante oder Fläche repariert den Bezug, und alles rechnet weiter.",
+  "tipp": "Du kannst die Ansicht währenddessen wie gewohnt drehen, um die gewünschte Kante oder Fläche gut anzuklicken."
  }
 };
 
@@ -7202,7 +7226,7 @@ const Viewer = (() => {
     camera = new THREE.PerspectiveCamera(32, 1, 0.5, 30000);
     camera.up.set(0, 0, 1);
     camera.position.set(170, -250, 190);
-    for (const k of ['ground', 'origin', 'datums', 'nodes', 'compare', 'ghosts', 'overlay', 'measures', 'handles', 'sketch']) { groups[k] = new THREE.Group(); scene.add(groups[k]); }
+    for (const k of ['ground', 'origin', 'datums', 'nodes', 'compare', 'ghosts', 'overlay', 'measures', 'handles', 'sketch', 'reffix']) { groups[k] = new THREE.Group(); scene.add(groups[k]); }
     orthoCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 60000);
     lights.hemi = new THREE.HemisphereLight(0xffffff, 0x6f6252, 1.55); scene.add(lights.hemi);
     const key = new THREE.DirectionalLight(0xffffff, 2.1); key.position.set(0.55, -0.8, 1.25); scene.add(key); scene.add(key.target); lights.key = key;
@@ -8048,6 +8072,67 @@ const Viewer = (() => {
     needsRender = true;
   }
   function clearHover() { highlightFace('hover', null, null); highlightEdge(null, null); highlightBody(null, null); }
+  // Gestrichelte Anzeige der alten Lage eines verlorenen Bezugs (KP-12)
+  function clearRefGhost() {
+    if (!groups.reffix) return;
+    for (const o of [...groups.reffix.children]) {
+      groups.reffix.remove(o);
+      o.traverse((x) => {
+        if (x.isLineSegments2 || fatMaterials.has(x.material)) disposeFat(x);
+        else { if (x.geometry) x.geometry.dispose(); if (x.material) x.material.dispose(); }
+      });
+    }
+    needsRender = true;
+  }
+  function setRefGhost(specs) {
+    clearRefGhost();
+    if (!groups.reffix || !Array.isArray(specs) || !specs.length) return;
+    const col = '#e69500';
+    for (const s of specs) {
+      if (!s) continue;
+      if (s.kind === 'segments' && Array.isArray(s.positions) && s.positions.length >= 6) {
+        const line = makeFat(s.positions, col, 3.5, { dashed: true, dashSize: 2.5, gapSize: 1.8, depthTest: false, order: 25 });
+        groups.reffix.add(line);
+        for (const p of s.dots || []) {
+          const dot = new THREE.Mesh(new THREE.SphereGeometry(s.dotR || 0.85, 10, 8), new THREE.MeshBasicMaterial({ color: col, depthTest: false, transparent: true, opacity: 0.95 }));
+          dot.position.set(p[0], p[1], p[2]); dot.renderOrder = 26;
+          groups.reffix.add(dot);
+        }
+      } else if (s.kind === 'plane' && Array.isArray(s.o) && Array.isArray(s.n)) {
+        const o = new THREE.Vector3(...s.o), n = new THREE.Vector3(...s.n).normalize();
+        let x = Array.isArray(s.x) ? new THREE.Vector3(...s.x).normalize() : null;
+        if (!x || Math.abs(x.dot(n)) > 0.98) x = (Math.abs(n.z) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1).cross(n)).normalize();
+        const y = new THREE.Vector3().crossVectors(n, x).normalize();
+        const h = (s.size || 20) / 2;
+        const c = [
+          o.clone().addScaledVector(x, -h).addScaledVector(y, -h),
+          o.clone().addScaledVector(x, h).addScaledVector(y, -h),
+          o.clone().addScaledVector(x, h).addScaledVector(y, h),
+          o.clone().addScaledVector(x, -h).addScaledVector(y, h),
+        ];
+        const geo = new THREE.BufferGeometry().setFromPoints([c[0], c[1], c[2], c[0], c[2], c[3]]);
+        const mat = new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.16, depthWrite: false, depthTest: false, side: THREE.DoubleSide });
+        const mesh = new THREE.Mesh(geo, mat); mesh.renderOrder = 24;
+        groups.reffix.add(mesh);
+        const pos = [];
+        for (let i = 0; i < 4; i++) { const a = c[i], b = c[(i + 1) % 4]; pos.push(a.x, a.y, a.z, b.x, b.y, b.z); }
+        const nEnd = o.clone().addScaledVector(n, Math.max(4, h * 0.45));
+        pos.push(o.x, o.y, o.z, nEnd.x, nEnd.y, nEnd.z);
+        groups.reffix.add(makeFat(pos, col, 3, { dashed: true, dashSize: 2.2, gapSize: 1.6, depthTest: false, order: 25 }));
+      } else if (s.kind === 'marker' && Array.isArray(s.p)) {
+        const p = new THREE.Vector3(...s.p), r = clamp(s.r || 5, 2, 16), pos = [];
+        const N = 16;
+        for (let i = 0; i < N; i++) {
+          const a1 = (i / N) * Math.PI * 2, a2 = ((i + 1) / N) * Math.PI * 2;
+          pos.push(p.x + Math.cos(a1) * r, p.y + Math.sin(a1) * r, p.z, p.x + Math.cos(a2) * r, p.y + Math.sin(a2) * r, p.z);
+        }
+        pos.push(p.x - r * 0.7, p.y, p.z, p.x + r * 0.7, p.y, p.z, p.x, p.y - r * 0.7, p.z, p.x, p.y + r * 0.7, p.z, p.x, p.y, p.z - r * 0.7, p.x, p.y, p.z + r * 0.7);
+        groups.reffix.add(makeFat(pos, col, 3.2, { dashed: true, dashSize: 1.8, gapSize: 1.4, depthTest: false, order: 25 }));
+      }
+    }
+    needsRender = true;
+  }
+  function hasRefGhost() { return !!(groups.reffix && groups.reffix.children.length); }
 
   // ---------- Auswahl mit der Maus ----------
   const _ndc = new THREE.Vector2();
@@ -8390,7 +8475,7 @@ const Viewer = (() => {
   // Bild in beliebiger Größe: ohne Raster, Achsen, Ebenen und Griffe; Hintergrund durchsichtig oder hell
   function renderImage(w, hgt, opts = {}) {
     const old = renderer.getSize(new THREE.Vector2()), oldPR = renderer.getPixelRatio();
-    const hide = [gridMinor, gridMajor, groups.origin, groups.datums, groups.handles, groups.overlay, groups.measures, groups.sketch].filter(Boolean), was = hide.map((o) => o.visible);
+    const hide = [gridMinor, gridMajor, groups.origin, groups.datums, groups.handles, groups.overlay, groups.measures, groups.sketch, groups.reffix].filter(Boolean), was = hide.map((o) => o.visible);
     hide.forEach((o) => { o.visible = false; });
     const c = cam(), oldAspect = camera.aspect;
     renderer.setPixelRatio(1); renderer.setSize(w, hgt, false);
@@ -8418,7 +8503,7 @@ const Viewer = (() => {
 
   return {
     viewBack, get viewHistory() { return camHist.length; }, useButtons, setMouseStyle, get mouseStyle() { return mouseStyle; }, get leftOrbits() { return !!(controls && controls.mouseButtons.LEFT === THREE.MOUSE.ROTATE); }, setLook, lookOf, get look() { return { ...LOOK }; }, fitShadow, renderImage, lookAtFace, faceIndexOf: (id, fc) => { const n = nodes.get(id); return n ? faceIndexOf(n, fc) : -1; }, cylinderFaceInfo, threadFaceIndex: (id, th) => { const n = nodes.get(id); return n ? threadFaceIndex(n, th) : -1; }, get renderer() { return renderer; },
-    init, requestRender, setClip, setXray, setOffsets, baseBox, renderInset, silhouette, setAdaptive, setCompare, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, highlightBody, setSelectedEdges, clearHover,
+    init, requestRender, setClip, setXray, setOffsets, baseBox, renderInset, silhouette, setAdaptive, setCompare, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, highlightBody, setSelectedEdges, clearHover, setRefGhost, clearRefGhost, hasRefGhost,
     edgePositions, pick, pickAll, pickGhost, pickProxy, setProxies, clearProxies, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, boxVisible, sceneBox, snapshot, makeFat, disposeFat, faceOverlay, faceArea, faceEdges, edgeKinds, wallAt, thinWalls,
     get camera() { syncCamAnim(); return camera; }, get activeCamera() { syncCamAnim(); return cam(); }, get ortho() { return ortho; }, get gridStep() { return gridStep; }, get controls() { return controls; }, get scene() { return scene; }, get groups() { return groups; }, get nodes() { return nodes; }, get canvas() { return renderer.domElement; }, get theme() { return theme; }, get container() { return container; },
     get clip() { return vis.clip; }, get clips() { return vis.clips.slice(); }, get xray() { return vis.xray; }, get lowRes() { return lowRes; },  get pixelRatio() { return renderer.getPixelRatio(); },
@@ -9002,7 +9087,7 @@ const Interact = (() => {
     window.addEventListener('keydown', onKey, true);
     window.addEventListener('pointermove', (e) => { lastPtr = { x: e.clientX, y: e.clientY }; }, { passive: true });
   }
-  function modelActive() { return App.mode === 'model' && !Sketch.active && !Place.active && !Measure.active && !Notes.active && !Features.picking && !Sketch.picking && !Datums.picking; }
+  function modelActive() { return App.mode === 'model' && !Sketch.active && !Place.active && !Measure.active && !Notes.active && !Features.picking && !Sketch.picking && !Datums.picking && !RefFix.picking; }
   function onDown(e) {
     if (!modelActive()) return;
     if (e.button !== 0) return;
@@ -10077,9 +10162,20 @@ const Actions = (() => {
     });
   }
   // ---------- Kanten ----------
+  function edgeSigOf(id, edgeIdx) {
+    const r = App.results.get(id); if (!r || !r.data || !r.data.edges) return null;
+    const g = r.data.edges[edgeIdx]; if (!g) return null;
+    const r5 = (arr) => arr.map((v) => round(v, 5));
+    const sig = { m: r5(g.m), l: round(g.l, 5), t: g.t };
+    if (Array.isArray(g.a)) sig.a = r5(g.a);
+    if (Array.isArray(g.b)) sig.b = r5(g.b);
+    if (g.t === 'CIRCLE' && g.c && g.n && g.r != null) { sig.c = r5(g.c); sig.n = r5(g.n); sig.r = round(g.r, 5); }
+    if (Array.isArray(g.pts) && g.pts.length >= 2) sig.pts = g.pts.map(r5);
+    return sig;
+  }
   function edgeSigs(edges) {
     const out = [];
-    for (const e of edges) { const r = App.results.get(e.id); if (!r) continue; const g = r.data.edges[e.edgeIdx]; if (!g) continue; out.push({ id: e.id, sig: { m: g.m.map((v) => round(v, 5)), l: round(g.l, 5), t: g.t } }); }
+    for (const e of edges) { const sig = edgeSigOf(e.id, e.edgeIdx); if (sig) out.push({ id: e.id, sig }); }
     return out;
   }
   function cuttersOf(id) {
@@ -10147,6 +10243,8 @@ const Actions = (() => {
     App.change(`Skizze auf „${name}“`, (doc) => {
       const f = Model.find(doc, id); if (!f || !f.item.p || !f.item.p.sketch) return;
       const it = f.item; it.p.sketch.plane = deepClone(plane); it.t = Model.T0();
+      if (key.startsWith('d:')) it.p.sketch.planeRef = { kind: 'datum', datumId: key.slice(2), name };
+      else delete it.p.sketch.planeRef;
       for (const e of it.p.sketch.ents || []) if (e.link) { delete e.link; dropped++; }
     });
     UI.toast(`Die Skizze liegt jetzt auf „${name}“.` + (dropped ? ` ${dropped} übernommene Kanten hängen nicht mehr am Körper.` : ''), { icon: 'check' });
@@ -10365,7 +10463,7 @@ const Actions = (() => {
     });
     return true;
   }
-  return { setBody, showOnlyBody, showAllBodies, reorder, createFolder, toggleFolder, renameFolder, ungroupFolder, removeFromFolder, replaneSketch, duplicateLinked, unlink, hideSelected, showAll, invertSelection, setOp, gapOf, setGap, loft, addPrimitive, addPart, addBuyPart, remove, duplicate, setRole, toggleRole, group, groupAll, ungroup, rotate90, rotate, center, mirror, dropToPlate, align, addFinish, finishAll, setFinish, removeFinish, faceFrame, selectedFace, onFaceTransform, attach, worldBox, selBox, cuttersOf, viewCenter };
+  return { setBody, showOnlyBody, showAllBodies, reorder, createFolder, toggleFolder, renameFolder, ungroupFolder, removeFromFolder, replaneSketch, duplicateLinked, unlink, hideSelected, showAll, invertSelection, setOp, gapOf, setGap, loft, addPrimitive, addPart, addBuyPart, remove, duplicate, setRole, toggleRole, group, groupAll, ungroup, rotate90, rotate, center, mirror, dropToPlate, align, addFinish, finishAll, setFinish, removeFinish, edgeSigOf, faceFrame, selectedFace, onFaceTransform, attach, worldBox, selBox, cuttersOf, viewCenter };
 })();
 
 // ---- 46-features.js ----
@@ -10932,7 +11030,9 @@ const Features = (() => {
   function shell(face) {
     const it = face && App.doc.items.find((x) => x.id === face.id);
     if (!it || it.role === 'hole') { UI.toast('Klick auf eine Fläche eines Körpers.', { icon: 'info' }); return; }
-    const sig = { c: face.info.c.map((v) => round(v, 4)), n: face.info.n ? face.info.n.map((v) => round(v, 5)) : null };
+    const bb = App.results.get(face.id)?.data?.bbox;
+    const size = bb ? round(clamp(Math.max(bb[3] - bb[0], bb[4] - bb[1], bb[5] - bb[2]) * 0.6, 8, 60), 2) : 20;
+    const sig = { c: face.info.c.map((v) => round(v, 4)), n: face.info.n ? face.info.n.map((v) => round(v, 5)) : null, size };
     const ex = (it.finishes || []).find((f) => f.type === 'shell');
     App.change(ex ? 'Öffnung geändert' : 'Ausgehöhlt', (doc) => {
       const T = Model.find(doc, it.id).item; T.finishes = T.finishes || [];
@@ -12132,7 +12232,7 @@ const Datums = (() => {
   }
   function sketchOn(id) {
     const d = find(id); if (!d) return false;
-    select(null); Sketch.startOnPlaneObj(deepClone(d.plane));
+    select(null); Sketch.startOnPlaneObj(deepClone(d.plane), { datumId: d.id, datumName: d.name });
     UI.toast(`Skizze auf „${d.name}“.`, { icon: 'check', ms: 1800 });
     return true;
   }
@@ -13622,6 +13722,677 @@ const Datums = (() => {
     get picking() { return !!pickState; },
   };
 })();
+// ---- 46-reffix.js ----
+// ================= Kaputte Bezüge erkennen und neu wählen (KP-12) =================
+const RefFix = (() => {
+  let state = null;
+  let barEl = null;
+
+  const isRefError = (e) => !!(e && (e.code === 'edges' || e.code === 'ref'));
+  const hardErrorsFor = (itemId) => App.errorsFor(itemId).filter((e) => !isRefError(e));
+
+  function planeRefLost(pr) {
+    if (!pr) return false;
+    if (pr.kind === 'datum') {
+      if (typeof Datums === 'undefined') return false;
+      const d = Datums.find(pr.datumId);
+      return !d || Datums.lost.includes(d.id);
+    }
+    if (pr.kind === 'face') {
+      const rf = Model.find(App.doc, pr.id);
+      if (!rf || rf.item.suppressed) return true;
+      const res = App.results.get(pr.id);
+      if (res && res.data && Array.isArray(res.data.faces)) {
+        const pn = pr.n || [0, 0, 1], pc = pr.c || [0, 0, 0];
+        const ok = res.data.faces.some((fc) => {
+          if (!fc || fc.t !== 'PLANE' || !fc.n || !fc.c) return false;
+          if (fc.n[0] * pn[0] + fc.n[1] * pn[1] + fc.n[2] * pn[2] < 0.995) return false;
+          const dist = Math.abs((fc.c[0] - pc[0]) * pn[0] + (fc.c[1] - pc[1]) * pn[1] + (fc.c[2] - pc[2]) * pn[2]);
+          return dist < 0.08;
+        });
+        return !ok;
+      }
+      // Kindkörper innerhalb einer Gruppe: bei Grundkörpern die ebene Seite gegen primitiveBox prüfen
+      const pb = Model.primitiveBox(rf.item.kind, Model.resolveP(rf.item.p, Model.vars(App.doc).v));
+      if (pb && Array.isArray(pr.n) && Array.isArray(pr.c)) {
+        for (let k = 0; k < 3; k++) {
+          if (Math.abs(pr.n[k]) > 0.995) {
+            const want = pr.n[k] > 0 ? pb[k + 3] : pb[k];
+            return Math.abs(want - pr.c[k]) >= 0.08;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
+  function issuesOf(itemId) {
+    if (!App.doc || !Model.isActive(App.doc, itemId)) return [];
+    const f = Model.find(App.doc, itemId);
+    if (!f) return [];
+    const it = f.item;
+    const out = [];
+    const errs = App.errorsFor(itemId);
+
+    for (const e of errs) {
+      if (e.code !== 'edges') continue;
+      const fin = (it.finishes || []).find((x) => x.id === e.finishId);
+      if (!fin) continue;
+      if (fin.type === 'shell') {
+        out.push({
+          key: `${it.id}:fin:${fin.id}`,
+          kind: 'finish-face',
+          itemId: it.id,
+          finishId: fin.id,
+          finishType: 'shell',
+          missing: Array.isArray(e.missing) ? e.missing.slice() : null,
+          title: 'Wandstärke',
+          message: e.message,
+          needCount: Math.max(1, (e.missing || fin.faces || [0]).length),
+        });
+      } else {
+        out.push({
+          key: `${it.id}:fin:${fin.id}`,
+          kind: 'finish-edge',
+          itemId: it.id,
+          finishId: fin.id,
+          finishType: fin.type,
+          missing: Array.isArray(e.missing) ? e.missing.slice() : null,
+          title: fin.type === 'chamfer' ? 'Fase' : 'Rundung',
+          message: e.message,
+          needCount: Array.isArray(fin.edges) ? Math.max(1, (e.missing || fin.edges).length) : 1,
+        });
+      }
+    }
+
+    if (it.p && it.p.sketch && it.p.sketch.planeRef && planeRefLost(it.p.sketch.planeRef)) {
+      out.push({
+        key: `${it.id}:skplane`,
+        kind: 'sketch-plane',
+        itemId: it.id,
+        title: 'Skizzen-Fläche',
+        message: 'Die Fläche oder Bezugsebene dieser Skizze gibt es nicht mehr.',
+        needCount: 1,
+      });
+    }
+
+    if (it.p && it.p.sketch && typeof Sketch !== 'undefined' && Sketch.isLinkLost) {
+      for (const e of it.p.sketch.ents || []) {
+        if (e.link && Sketch.isLinkLost(it, e)) {
+          out.push({
+            key: `${it.id}:sklink:${e.id}`,
+            kind: 'sketch-link',
+            itemId: it.id,
+            entId: e.id,
+            title: 'Übernommene Kante',
+            message: 'Eine verbundene Körperkante der Skizze gibt es nicht mehr.',
+            needCount: 1,
+          });
+        }
+      }
+    }
+
+    if (it.kind === 'extrude' && it.p && it.p.extent === 'toFace') {
+      const refErr = errs.find((e) => e.code === 'ref');
+      if (refErr) {
+        out.push({
+          key: `${it.id}:extface`,
+          kind: 'extrude-toFace',
+          itemId: it.id,
+          title: 'Zielfläche (Hochziehen)',
+          message: refErr.message,
+          needCount: 1,
+        });
+      }
+    }
+
+    if (it.kind === 'revolve' && it.p && it.p.dir === 'toFace' && it.p.toFace && it.p.toFace.lost) {
+      out.push({
+        key: `${it.id}:revface`,
+        kind: 'revolve-toFace',
+        itemId: it.id,
+        title: 'Zielfläche (Drehen)',
+        message: `Die Zielfläche „${it.p.toFace.name || '?'}“ gibt es nicht mehr.`,
+        needCount: 1,
+      });
+    }
+
+    return out;
+  }
+
+  function firstDescendantIssue(it) {
+    if (!it || !it.children) return null;
+    for (const c of it.children) {
+      const own = issuesOf(c.id);
+      if (own.length) return own[0];
+      const sub = firstDescendantIssue(c);
+      if (sub) return sub;
+    }
+    return null;
+  }
+
+  function hasBrokenRef(itemId) {
+    if (issuesOf(itemId).length) return true;
+    const f = Model.find(App.doc, itemId);
+    return !!(f && f.item.kind === 'group' && firstDescendantIssue(f.item));
+  }
+
+  function allIssues() {
+    if (!App.doc) return [];
+    const out = [];
+    Model.walk(App.doc.items, (it) => { out.push(...issuesOf(it.id)); });
+    return out;
+  }
+
+  function boxEdgesPositions(bb, M) {
+    if (!bb) return [];
+    const [x0, y0, z0, x1, y1, z1] = bb;
+    const pt = (x, y, z) => new THREE.Vector3(x, y, z).applyMatrix4(M).toArray();
+    const c = [
+      pt(x0, y0, z0), pt(x1, y0, z0), pt(x1, y1, z0), pt(x0, y1, z0),
+      pt(x0, y0, z1), pt(x1, y0, z1), pt(x1, y1, z1), pt(x0, y1, z1),
+    ];
+    const idx = [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4], [0, 4], [1, 5], [2, 6], [3, 7]];
+    const pos = [];
+    for (const [i, j] of idx) pos.push(...c[i], ...c[j]);
+    return pos;
+  }
+
+  function circlePointsWorld(c, n, r, M) {
+    const cv = new THREE.Vector3(...c), nv = new THREE.Vector3(...n).normalize();
+    let u = Math.abs(nv.z) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1).cross(nv);
+    if (u.lengthSq() < 1e-6) u.set(1, 0, 0);
+    u.normalize();
+    const v = new THREE.Vector3().crossVectors(nv, u).normalize();
+    const pos = [], N = 36;
+    for (let i = 0; i < N; i++) {
+      const a1 = (i / N) * Math.PI * 2, a2 = ((i + 1) / N) * Math.PI * 2;
+      const p1 = cv.clone().addScaledVector(u, Math.cos(a1) * r).addScaledVector(v, Math.sin(a1) * r).applyMatrix4(M);
+      const p2 = cv.clone().addScaledVector(u, Math.cos(a2) * r).addScaledVector(v, Math.sin(a2) * r).applyMatrix4(M);
+      pos.push(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z);
+    }
+    return pos;
+  }
+
+  function buildGhostSpecs(issue) {
+    const f = Model.find(App.doc, issue.itemId);
+    if (!f) return [];
+    const it = f.item;
+    const W = Model.worldMatrix(App.doc, issue.itemId);
+    const ptW = (a) => new THREE.Vector3(...a).applyMatrix4(W).toArray();
+    const dirW = (d) => new THREE.Vector3(...d).transformDirection(W).normalize().toArray();
+    const specs = [];
+
+    if (issue.kind === 'finish-edge') {
+      const fin = (it.finishes || []).find((x) => x.id === issue.finishId);
+      if (!fin) return specs;
+      if (typeof fin.edges === 'string') {
+        const res = App.results.get(issue.itemId);
+        const bb = res && res.data && res.data.bbox ? res.data.bbox : App.localBox(issue.itemId);
+        const pos = boxEdgesPositions(bb, W);
+        if (pos.length >= 6) specs.push({ kind: 'segments', positions: pos });
+        return specs;
+      }
+      const list = Array.isArray(fin.edges) ? fin.edges : [];
+      const idxs = Array.isArray(issue.missing) && issue.missing.length ? issue.missing : list.map((_, i) => i);
+      for (const idx of idxs) {
+        const s = list[idx];
+        if (!s) continue;
+        if (Array.isArray(s.pts) && s.pts.length >= 2) {
+          const wp = s.pts.map(ptW), pos = [];
+          for (let i = 0; i + 1 < wp.length; i++) pos.push(...wp[i], ...wp[i + 1]);
+          specs.push({ kind: 'segments', positions: pos, dots: [wp[0], wp[wp.length - 1]] });
+        } else if (s.t === 'CIRCLE' && Array.isArray(s.c) && Array.isArray(s.n) && s.r > 0) {
+          specs.push({ kind: 'segments', positions: circlePointsWorld(s.c, s.n, s.r, W) });
+        } else if (Array.isArray(s.a) && Array.isArray(s.b)) {
+          const a = ptW(s.a), b = ptW(s.b);
+          specs.push({ kind: 'segments', positions: [...a, ...b], dots: [a, b] });
+        } else if (Array.isArray(s.m)) {
+          specs.push({ kind: 'marker', p: ptW(s.m), r: clamp((s.l || 10) * 0.25, 2.5, 12) });
+        }
+      }
+      return specs;
+    }
+
+    if (issue.kind === 'finish-face') {
+      const fin = (it.finishes || []).find((x) => x.id === issue.finishId);
+      if (!fin) return specs;
+      const list = Array.isArray(fin.faces) ? fin.faces : [];
+      const idxs = Array.isArray(issue.missing) && issue.missing.length ? issue.missing : list.map((_, i) => i);
+      for (const idx of idxs) {
+        const s = list[idx];
+        if (!s || !Array.isArray(s.c)) continue;
+        specs.push({ kind: 'plane', o: ptW(s.c), n: dirW(s.n || [0, 0, 1]), size: clamp(s.size || 20, 8, 60) });
+      }
+      return specs;
+    }
+
+    if (issue.kind === 'sketch-plane') {
+      const sk = it.p && it.p.sketch;
+      if (!sk || !sk.plane) return specs;
+      const b = SK.bounds(sk.ents || []);
+      const bSize = b ? Math.max(b[2] - b[0], b[3] - b[1]) * 1.25 : 0;
+      const prSize = sk.planeRef && sk.planeRef.size ? sk.planeRef.size : 24;
+      specs.push({
+        kind: 'plane',
+        o: ptW(sk.plane.o),
+        x: dirW(sk.plane.x || [1, 0, 0]),
+        n: dirW(sk.plane.n || [0, 0, 1]),
+        size: clamp(Math.max(bSize, prSize), 14, 80),
+      });
+      const xo = new THREE.Vector3(...sk.plane.x).normalize(), no = new THREE.Vector3(...sk.plane.n).normalize();
+      const yo = new THREE.Vector3().crossVectors(no, xo).normalize();
+      const pos = [];
+      for (const e of sk.ents || []) {
+        if (e.con) continue;
+        const pts = SK.segPoints(e);
+        for (let i = 0; i + 1 < pts.length; i++) {
+          const p1 = new THREE.Vector3(...sk.plane.o).addScaledVector(xo, pts[i][0]).addScaledVector(yo, pts[i][1]).applyMatrix4(W);
+          const p2 = new THREE.Vector3(...sk.plane.o).addScaledVector(xo, pts[i + 1][0]).addScaledVector(yo, pts[i + 1][1]).applyMatrix4(W);
+          pos.push(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z);
+        }
+      }
+      if (pos.length >= 6) specs.push({ kind: 'segments', positions: pos });
+      return specs;
+    }
+
+    if (issue.kind === 'sketch-link') {
+      const sk = it.p && it.p.sketch;
+      const e = sk && (sk.ents || []).find((x) => x.id === issue.entId);
+      if (!e) return specs;
+      const wp = typeof Sketch !== 'undefined' && Sketch.linkPointsWorld ? Sketch.linkPointsWorld(it, e) : [];
+      if (wp.length >= 2) {
+        const pos = [];
+        for (let i = 0; i + 1 < wp.length; i++) pos.push(...wp[i], ...wp[i + 1]);
+        specs.push({ kind: 'segments', positions: pos, dots: [wp[0], wp[wp.length - 1]] });
+      } else if (e.link && Array.isArray(e.link.m)) {
+        specs.push({ kind: 'marker', p: e.link.m.slice(), r: clamp((e.link.l || 10) * 0.25, 2.5, 12) });
+      }
+      return specs;
+    }
+
+    if (issue.kind === 'extrude-toFace') {
+      const tf = it.p && it.p.toFace;
+      if (!tf) return specs;
+      if (Array.isArray(tf.wc) && Array.isArray(tf.wn)) specs.push({ kind: 'plane', o: tf.wc.slice(), n: tf.wn.slice(), size: 28 });
+      else if (Array.isArray(tf.c) && Array.isArray(tf.n)) specs.push({ kind: 'plane', o: tf.c.slice(), n: tf.n.slice(), size: 28 });
+      return specs;
+    }
+
+    if (issue.kind === 'revolve-toFace') {
+      const tf = it.p && it.p.toFace;
+      if (!tf) return specs;
+      if (Array.isArray(tf.o) && Array.isArray(tf.fn)) specs.push({ kind: 'plane', o: ptW(tf.o), n: dirW(tf.fn), size: 28 });
+      return specs;
+    }
+
+    return specs;
+  }
+
+  function applyFinishEdge(issue, picked) {
+    if (!picked || !picked.length) return false;
+    const sigs = picked.map((e) => Actions.edgeSigOf(e.id, e.edgeIdx)).filter(Boolean);
+    if (!sigs.length) return false;
+    App.change('Kante neu gewählt', (doc) => {
+      const f = Model.find(doc, issue.itemId);
+      if (!f) return false;
+      const fin = (f.item.finishes || []).find((x) => x.id === issue.finishId);
+      if (!fin) return false;
+      const miss = Array.isArray(issue.missing) ? new Set(issue.missing) : null;
+      const kept = Array.isArray(fin.edges) && miss && miss.size < fin.edges.length
+        ? fin.edges.filter((_, i) => !miss.has(i))
+        : [];
+      const merged = [...kept];
+      for (const s of sigs) {
+        const dup = merged.some((k) => k && k.m && Math.hypot(k.m[0] - s.m[0], k.m[1] - s.m[1], k.m[2] - s.m[2]) < 1e-3);
+        if (!dup) merged.push(s);
+      }
+      fin.edges = merged;
+    });
+    return true;
+  }
+
+  function applyFinishFace(issue, hit) {
+    const r = App.results.get(hit.id);
+    const fi = r && r.data && r.data.faces && r.data.faces[hit.faceIdx];
+    if (!fi || !fi.c) return false;
+    const bb = r.data.bbox;
+    const size = bb ? round(clamp(Math.max(bb[3] - bb[0], bb[4] - bb[1], bb[5] - bb[2]) * 0.6, 8, 60), 2) : 20;
+    const sig = { c: fi.c.map((v) => round(v, 4)), n: fi.n ? fi.n.map((v) => round(v, 5)) : null, size };
+    App.change('Fläche neu gewählt', (doc) => {
+      const f = Model.find(doc, issue.itemId);
+      if (!f) return false;
+      const fin = (f.item.finishes || []).find((x) => x.id === issue.finishId);
+      if (!fin) return false;
+      const miss = Array.isArray(issue.missing) ? new Set(issue.missing) : null;
+      const kept = Array.isArray(fin.faces) && miss && miss.size < fin.faces.length
+        ? fin.faces.filter((_, i) => !miss.has(i))
+        : [];
+      const dup = kept.some((k) => k && k.c && Math.hypot(k.c[0] - sig.c[0], k.c[1] - sig.c[1], k.c[2] - sig.c[2]) < 1e-3);
+      if (!dup) kept.push(sig);
+      fin.faces = kept;
+    });
+    return true;
+  }
+
+  function applySketchPlane(issue, planeSpec) {
+    const r6 = (v) => round(v, 6);
+    App.change('Skizzen-Fläche neu gewählt', (doc) => {
+      const f = Model.find(doc, issue.itemId);
+      if (!f || !f.item.p || !f.item.p.sketch) return false;
+      const it = f.item;
+      const PWInv = Model.parentWorld(doc, it.id).invert();
+      const oL = new THREE.Vector3(...planeSpec.oW).applyMatrix4(PWInv).toArray().map(r6);
+      const xL = new THREE.Vector3(...planeSpec.xW).transformDirection(PWInv).normalize().toArray().map(r6);
+      const nL = new THREE.Vector3(...planeSpec.nW).transformDirection(PWInv).normalize().toArray().map(r6);
+      it.t = Model.T0();
+      it.p.sketch.plane = { o: oL, x: xL, n: nL };
+      if (planeSpec.planeRef) it.p.sketch.planeRef = deepClone(planeSpec.planeRef);
+      else delete it.p.sketch.planeRef;
+    });
+    return true;
+  }
+
+  function removeBar() {
+    if (barEl) { barEl.remove(); barEl = null; }
+  }
+
+  function updateBar() {
+    if (!barEl || !state) return;
+    const cnt = barEl.querySelector('#reffix-count');
+    const applyBtn = barEl.querySelector('#reffix-apply');
+    if (cnt) cnt.textContent = `${state.pickedEdges.length} gewählt`;
+    if (applyBtn) applyBtn.disabled = state.pickedEdges.length === 0;
+  }
+
+  function renderBar(issue) {
+    removeBar();
+    const vp = $('#viewport');
+    if (!vp) return;
+    const desc = {
+      'finish-edge': issue.needCount > 1
+        ? `Alte Lage ist gestrichelt. Klick neue Kanten am Körper an und bestätige mit „Übernehmen“.`
+        : 'Alte Lage ist gestrichelt. Klick eine neue Kante am Körper an.',
+      'finish-face': 'Alte Lage ist gestrichelt. Klick eine neue Öffnungsfläche am Körper an.',
+      'sketch-plane': 'Alte Lage ist gestrichelt. Klick eine ebene Körperfläche oder Bezugsebene an.',
+      'sketch-link': 'Alte Lage ist gestrichelt. Klick eine neue Kante eines anderen Körpers an.',
+      'extrude-toFace': 'Alte Lage ist gestrichelt. Klick eine neue Zielfläche oder Bezugsebene an.',
+      'revolve-toFace': 'Alte Lage ist gestrichelt. Klick eine neue Zielfläche oder Bezugsebene an.',
+    }[issue.kind] || 'Alte Lage ist gestrichelt. Klick einen neuen Bezug an.';
+
+    barEl = h('div', { class: 'reffix-bar', id: 'reffix-bar', role: 'dialog', 'aria-label': 'Bezug neu wählen' });
+    const ic = h('span', { class: 'rf-ic' }); ic.innerHTML = icon('warn');
+    const txt = h('div', { class: 'rf-txt' }, h('b', null, `Neu wählen: ${issue.title}`), h('span', null, desc));
+    const acts = h('div', { class: 'btn-row' });
+
+    if (issue.kind === 'finish-edge' && issue.needCount > 1) {
+      acts.append(h('span', { class: 'kbd', id: 'reffix-count' }, '0 gewählt'));
+      const ap = h('button', { type: 'button', class: 'btn small warn-act', id: 'reffix-apply', disabled: true });
+      ap.innerHTML = icon('check') + 'Übernehmen';
+      ap.onclick = () => applyMulti();
+      acts.append(ap);
+    }
+
+    if (issue.kind === 'sketch-plane') {
+      const planes = [
+        ['XY', { oW: [0, 0, 0], xW: [1, 0, 0], nW: [0, 0, 1], planeRef: null }],
+        ['XZ', { oW: [0, 0, 0], xW: [1, 0, 0], nW: [0, -1, 0], planeRef: null }],
+        ['YZ', { oW: [0, 0, 0], xW: [0, 1, 0], nW: [1, 0, 0], planeRef: null }],
+      ];
+      for (const [lbl, spec] of planes) {
+        const qb = h('button', { type: 'button', class: 'btn small', dataset: { reffixPlane: lbl } }, lbl);
+        qb.onclick = () => {
+          applySketchPlane(issue, spec);
+          stop({ keepToast: true });
+          UI.toast(`Skizzen-Fläche auf ${lbl} gesetzt.`, { icon: 'check' });
+        };
+        acts.append(qb);
+      }
+    }
+
+    if (issue.kind === 'sketch-link') {
+      const ub = h('button', { type: 'button', class: 'btn small', id: 'reffix-unlink' });
+      ub.innerHTML = icon('ungroup') + 'Verbindung lösen';
+      ub.onclick = () => {
+        App.change('Verbindung gelöst', (doc) => {
+          const f = Model.find(doc, issue.itemId);
+          const e = f && f.item.p && f.item.p.sketch && (f.item.p.sketch.ents || []).find((x) => x.id === issue.entId);
+          if (!e) return false;
+          delete e.link;
+        });
+        stop({ keepToast: true });
+        UI.toast('Verbindung zur Körperkante gelöst.', { icon: 'check' });
+      };
+      acts.append(ub);
+    }
+
+    const cb = h('button', { type: 'button', class: 'btn small ghost', id: 'reffix-cancel' });
+    cb.innerHTML = icon('close') + 'Abbrechen';
+    cb.onclick = () => stop();
+    acts.append(cb);
+
+    barEl.append(ic, txt, acts);
+    vp.append(barEl);
+  }
+
+  function applyMulti() {
+    if (!state || state.issue.kind !== 'finish-edge' || !state.pickedEdges.length) return false;
+    const ok = applyFinishEdge(state.issue, state.pickedEdges);
+    if (!ok) return false;
+    stop({ keepToast: true });
+    UI.toast('Bezug neu gewählt – Modell wird neu berechnet.', { icon: 'check' });
+    return true;
+  }
+
+  function stop(opts = {}) {
+    if (!state) return;
+    const st = state;
+    state = null;
+    Viewer.canvas.removeEventListener('pointerdown', st.down);
+    Viewer.canvas.removeEventListener('pointermove', st.move);
+    window.removeEventListener('pointerup', st.up, true);
+    window.removeEventListener('keydown', st.key, true);
+    Viewer.canvas.style.cursor = '';
+    Viewer.clearHover();
+    Viewer.setSelectedEdges([]);
+    Viewer.clearRefGhost();
+    removeBar();
+    UI.hint('');
+    if (!opts.keepToast) Panels.renderRight();
+  }
+
+  function start(issueOrItemId) {
+    const issue = typeof issueOrItemId === 'string' ? issuesOf(issueOrItemId)[0] : issueOrItemId;
+    if (!issue) { UI.toast('Kein kaputter Bezug gefunden.', { icon: 'info' }); return false; }
+
+    stop({ keepToast: true });
+    if (typeof Features !== 'undefined' && Features.picking && Features.stopPick) Features.stopPick();
+    if (typeof Datums !== 'undefined' && Datums.picking && Datums.stopPick) Datums.stopPick();
+    if (typeof Measure !== 'undefined' && Measure.active) Measure.stop();
+    if (typeof Place !== 'undefined' && Place.active) Place.cancel();
+
+    const top = Model.topOf(App.doc, issue.itemId);
+    const selId = top ? top.id : issue.itemId;
+    if (!App.sel.includes(selId) && !App.sel.includes(issue.itemId)) App.select([issue.itemId]);
+
+    Viewer.setRefGhost(buildGhostSpecs(issue));
+
+    const ownExclude = new Set(['__preview']);
+    if (issue.kind === 'sketch-plane' || issue.kind === 'extrude-toFace' || issue.kind === 'revolve-toFace') {
+      if (top && top.id === issue.itemId) ownExclude.add(issue.itemId);
+    }
+
+    let downPos = null;
+    const down = (e) => {
+      if (e.button === 0) downPos = { x: e.clientX, y: e.clientY };
+    };
+    const move = (e) => {
+      if (!state) return;
+      if (issue.kind === 'finish-edge') {
+        const hit = Viewer.pick(e.clientX, e.clientY, { edgePx: 10 });
+        if (hit && hit.id === issue.itemId && hit.edgeIdx >= 0) Viewer.highlightEdge(hit.id, hit.edgeIdx);
+        else Viewer.highlightEdge(null, null);
+      } else if (issue.kind === 'sketch-link') {
+        const hit = Viewer.pick(e.clientX, e.clientY, { edgePx: 10 });
+        if (hit && hit.edgeIdx >= 0 && (!top || hit.id !== top.id)) Viewer.highlightEdge(hit.id, hit.edgeIdx);
+        else Viewer.highlightEdge(null, null);
+      } else if (issue.kind === 'finish-face') {
+        const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true });
+        if (hit && hit.id === issue.itemId && hit.faceIdx >= 0) Viewer.highlightFace('hover', hit.id, hit.faceIdx);
+        else Viewer.highlightFace('hover', null, null);
+      } else {
+        const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true, exclude: ownExclude });
+        if (hit && hit.faceIdx >= 0) Viewer.highlightFace('hover', hit.id, hit.faceIdx);
+        else Viewer.highlightFace('hover', null, null);
+      }
+    };
+    const up = (e) => {
+      if (e.button !== 0 || !state || !downPos) return;
+      const dist = Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y);
+      downPos = null;
+      if (dist > 6) return;
+      if (e.target !== Viewer.canvas) return;
+      e.preventDefault(); e.stopPropagation();
+
+      if (issue.kind === 'finish-edge') {
+        const hit = Viewer.pick(e.clientX, e.clientY, { edgePx: 10 });
+        if (!hit || hit.id !== issue.itemId || !(hit.edgeIdx >= 0)) {
+          UI.toast('Klick eine Kante dieses Körpers an.', { icon: 'info' });
+          return;
+        }
+        if (issue.needCount <= 1) {
+          applyFinishEdge(issue, [{ id: hit.id, edgeIdx: hit.edgeIdx }]);
+          stop({ keepToast: true });
+          UI.toast('Bezug neu gewählt – Modell wird neu berechnet.', { icon: 'check' });
+          return;
+        }
+        const idx = state.pickedEdges.findIndex((x) => x.id === hit.id && x.edgeIdx === hit.edgeIdx);
+        if (idx >= 0) state.pickedEdges.splice(idx, 1);
+        else state.pickedEdges.push({ id: hit.id, edgeIdx: hit.edgeIdx });
+        Viewer.setSelectedEdges(state.pickedEdges);
+        updateBar();
+        return;
+      }
+
+      if (issue.kind === 'finish-face') {
+        const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true });
+        if (!hit || hit.id !== issue.itemId || !(hit.faceIdx >= 0)) {
+          UI.toast('Klick eine Fläche dieses Körpers an.', { icon: 'info' });
+          return;
+        }
+        applyFinishFace(issue, hit);
+        stop({ keepToast: true });
+        UI.toast('Öffnungsfläche neu gewählt – Modell wird neu berechnet.', { icon: 'check' });
+        return;
+      }
+
+      if (issue.kind === 'sketch-plane') {
+        const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true, exclude: ownExclude });
+        if (hit && hit.faceIdx >= 0) {
+          const fi = App.results.get(hit.id)?.data?.faces?.[hit.faceIdx];
+          if (fi && fi.t === 'PLANE' && fi.n && fi.c) {
+            const fr = Actions.faceFrame(fi);
+            const W = Model.worldMatrix(App.doc, hit.id);
+            const oW = new THREE.Vector3(...fr.o).applyMatrix4(W).toArray();
+            const xW = new THREE.Vector3(...fr.x).transformDirection(W).normalize().toArray();
+            const nW = new THREE.Vector3(...fr.n).transformDirection(W).normalize().toArray();
+            const bb = App.results.get(hit.id)?.data?.bbox;
+            const size = bb ? round(clamp(Math.max(bb[3] - bb[0], bb[4] - bb[1], bb[5] - bb[2]) * 0.6, 10, 80), 2) : 24;
+            const planeRef = { kind: 'face', id: hit.id, c: fi.c.map((v) => round(v, 5)), n: fi.n.map((v) => round(v, 5)), size };
+            applySketchPlane(issue, { oW, xW, nW, planeRef });
+            stop({ keepToast: true });
+            UI.toast('Skizzen-Fläche neu gewählt – Modell wird neu berechnet.', { icon: 'check' });
+            return;
+          }
+        }
+        const dp = typeof Features !== 'undefined' && Features.pickDatumPlaneAt ? Features.pickDatumPlaneAt(e.clientX, e.clientY) : null;
+        if (dp && dp.datum && dp.datum.plane) {
+          const pl = dp.datum.plane;
+          applySketchPlane(issue, {
+            oW: pl.o, xW: pl.x, nW: pl.n,
+            planeRef: { kind: 'datum', datumId: dp.datum.id, name: dp.datum.name },
+          });
+          stop({ keepToast: true });
+          UI.toast(`Skizze auf Bezugsebene „${dp.datum.name}“ gelegt.`, { icon: 'check' });
+          return;
+        }
+        UI.toast('Bitte wähle eine ebene Körperfläche oder Bezugsebene.', { icon: 'info' });
+        return;
+      }
+
+      if (issue.kind === 'sketch-link') {
+        const hit = Viewer.pick(e.clientX, e.clientY, { edgePx: 10 });
+        if (!hit || !(hit.edgeIdx >= 0) || (top && hit.id === top.id)) {
+          UI.toast('Klick eine Kante eines anderen Körpers an.', { icon: 'info' });
+          return;
+        }
+        const res = Sketch.rebindLink(issue.itemId, issue.entId, hit.id, hit.edgeIdx);
+        if (!res.ok) { UI.toast(res.why || 'Kante konnte nicht übernommen werden.', { kind: 'bad' }); return; }
+        stop({ keepToast: true });
+        UI.toast('Verbundene Kante neu gewählt.', { icon: 'check' });
+        return;
+      }
+
+      if (issue.kind === 'extrude-toFace') {
+        const ref = Features.pickTargetFaceAt(e.clientX, e.clientY, ownExclude);
+        if (!ref) { UI.toast('Klick auf eine Körperfläche oder Bezugsebene.', { icon: 'info' }); return; }
+        Features.setExtrudeToFace(issue.itemId, ref);
+        stop({ keepToast: true });
+        UI.toast('Zielfläche neu gewählt: ' + (ref.label || 'Fläche') + '.', { icon: 'check' });
+        return;
+      }
+
+      if (issue.kind === 'revolve-toFace') {
+        const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true, exclude: ownExclude });
+        if (hit && hit.faceIdx >= 0) {
+          const fi = App.results.get(hit.id)?.data?.faces?.[hit.faceIdx];
+          if (fi && fi.t === 'PLANE' && fi.n) {
+            Features.setRevolveToFace(issue.itemId, { id: hit.id, idx: hit.faceIdx, info: fi, point: hit.point ? hit.point.toArray() : null });
+            stop({ keepToast: true });
+            UI.toast('Zielfläche neu gewählt.', { icon: 'check' });
+            return;
+          }
+        }
+        const dp = Features.pickDatumPlaneAt(e.clientX, e.clientY);
+        if (dp && dp.datum) {
+          Features.setRevolveToFace(issue.itemId, { datumId: dp.datum.id });
+          stop({ keepToast: true });
+          UI.toast(`Bezugsebene „${dp.datum.name}“ als Ziel gesetzt.`, { icon: 'check' });
+          return;
+        }
+        UI.toast('Bitte wähle eine ebene Körperfläche oder Bezugsebene.', { icon: 'info' });
+      }
+    };
+    const key = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stop(); }
+      else if (e.key === 'Enter' && state && state.issue.kind === 'finish-edge' && state.pickedEdges.length) { e.preventDefault(); e.stopPropagation(); applyMulti(); }
+    };
+
+    state = { issue, pickedEdges: [], down, move, up, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down);
+    Viewer.canvas.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up, true);
+    window.addEventListener('keydown', key, true);
+    renderBar(issue);
+    UI.hint(`<b>Neu wählen (${esc(issue.title)}):</b> Die alte Lage ist gelb gestrichelt. Klick einen neuen Bezug an · <b>Esc</b> bricht ab.`);
+    return true;
+  }
+
+  function init() {
+    App.on('mode', () => { if (state && App.mode !== 'model') stop({ keepToast: true }); });
+    App.on('doc', () => {
+      if (state && !Model.find(App.doc, state.issue.itemId)) stop({ keepToast: true });
+    });
+  }
+
+  return {
+    init, isRefError, hardErrorsFor, issuesOf, firstDescendantIssue, hasBrokenRef, allIssues,
+    buildGhostSpecs, start, stop, applyMulti,
+    get active() { return !!state; },
+    get picking() { return !!state; },
+  };
+})();
 // ---- 47-mass.js ----
 // ================= Masse: Volumen, Gewicht und Schwerpunkt =================
 // Der CAD-Kern rechnet je Teil der obersten Ebene das exakte Volumen und den Volumenschwerpunkt.
@@ -14348,10 +15119,12 @@ const Timeline = (() => {
     App.change(f.item.suppressed ? `Aktiviert: ${Model.label(f.item)}` : `Unterdrückt: ${Model.label(f.item)}`, (doc) => { const t = Model.find(doc, id).item; t.suppressed = !t.suppressed; });
   }
   function chipTip(it, i, V) {
-    const errs = App.errorsFor(it.id);
+    const errs = RefFix.hardErrorsFor(it.id);
+    const refs = RefFix.issuesOf(it.id);
     const st = it.suppressed ? ' · unterdrückt' : i >= markerPos() ? ' · nach dem Marker' : '';
     const ai = it.ai ? ` · ${it.ai.edit ? 'von der KI geändert' : 'von der KI'}: „${it.ai.q}“` : '';
-    return `${i + 1}. ${Model.label(it)}${Model.sizeText(it, V) ? ' · ' + Model.sizeText(it, V) : ''}${st}${ai}${errs.length ? ' · ' + errs[0].message : ''}${it.note ? ' · Notiz: ' + it.note : ''}`;
+    const msg = errs.length ? ' · ' + errs[0].message : refs.length ? ' · ' + refs[0].message : '';
+    return `${i + 1}. ${Model.label(it)}${Model.sizeText(it, V) ? ' · ' + Model.sizeText(it, V) : ''}${st}${ai}${msg}${it.note ? ' · Notiz: ' + it.note : ''}`;
   }
   function render() {
     if (!el) return;
@@ -14366,8 +15139,10 @@ const Timeline = (() => {
     marker.addEventListener('keydown', (e) => { if (e.key === 'ArrowLeft') { e.preventDefault(); setMarker(mk - 1); } if (e.key === 'ArrowRight') { e.preventDefault(); setMarker(mk + 1); } });
     items.forEach((it, i) => {
       if (i === mk) track.append(marker);
-      const errs = App.errorsFor(it.id);
-      const c = h('button', { type: 'button', class: 'tl-chip' + (it.role === 'hole' ? ' hole' : '') + (selTop.has(it.id) ? ' sel' : '') + (i >= mk ? ' off' : '') + (it.suppressed ? ' sup' : '') + (errs.length && i < mk && !it.suppressed ? ' err' : '') + (it.ai ? ' ai' : '') + (it.note ? ' note' : ''), 'data-tip': chipTip(it, i, V), 'aria-label': chipTip(it, i, V), 'data-help': it.ai ? 'aiSteps' : null, dataset: { idx: i } });
+      const hardErrs = RefFix.hardErrorsFor(it.id);
+      const hasWarn = !hardErrs.length && RefFix.hasBrokenRef(it.id);
+      const cls = hardErrs.length && i < mk && !it.suppressed ? ' err' : hasWarn && i < mk && !it.suppressed ? ' warn' : '';
+      const c = h('button', { type: 'button', class: 'tl-chip' + (it.role === 'hole' ? ' hole' : '') + (selTop.has(it.id) ? ' sel' : '') + (i >= mk ? ' off' : '') + (it.suppressed ? ' sup' : '') + cls + (it.ai ? ' ai' : '') + (it.note ? ' note' : ''), 'data-tip': chipTip(it, i, V), 'aria-label': chipTip(it, i, V), 'data-help': it.ai ? 'aiSteps' : null, dataset: { idx: i } });
       c.innerHTML = icon(iconFor(it)); c.append(h('span', { class: 'bar', style: { background: it.role === 'hole' ? 'transparent' : it.color } }));
       if (it.ai) { const b = h('span', { class: 'ai-badge', 'aria-hidden': 'true' }); b.innerHTML = icon('spark'); c.append(b); }
       c.onclick = (e) => { clearTimeout(peekT); peekK = null; App.peek(null); App.select([it.id], { additive: e.shiftKey || e.metaKey || e.ctrlKey }); };
@@ -14971,7 +15746,7 @@ const Panels = (() => {
     if (treeKind === 'solid') return it.role !== 'hole' && it.kind !== 'group';
     if (treeKind === 'hole') return it.role === 'hole';
     if (treeKind === 'hidden') return !!it.hidden || (it.bodies || []).some((b) => b && b.hidden);
-    if (treeKind === 'err') return App.errorsFor(it.id).length > 0;
+    if (treeKind === 'err') return App.errorsFor(it.id).length > 0 || RefFix.hasBrokenRef(it.id);
     if (treeKind === 'note') return !!it.note;
     if (treeKind === 'ai') return !!it.ai;
     return true;
@@ -15136,8 +15911,17 @@ const Panels = (() => {
       acts.append(dup, eye, del);
       row.append(tw, sw, nm);
       if (it.ai) { const am = h('span', { class: 'ai-mark', 'data-tip': (it.ai.edit ? 'Von der KI geändert: „' : 'Von der KI gebaut: „') + it.ai.q + '“' }); am.innerHTML = icon('spark'); row.append(am); }
-      const errs = App.errorsFor(it.id);
-      if (errs.length) { const er = h('span', { class: 'err', 'data-tip': errs[0].message }); er.innerHTML = icon('warn'); row.append(er); }
+      const hardErrs = RefFix.hardErrorsFor(it.id);
+      const refIssues = RefFix.issuesOf(it.id);
+      const childRef = !refIssues.length && it.kind === 'group' && !expanded.has(it.id) ? RefFix.firstDescendantIssue(it) : null;
+      if (hardErrs.length) { const er = h('span', { class: 'err', 'data-tip': hardErrs[0].message }); er.innerHTML = icon('warn'); row.append(er); }
+      if (refIssues.length || childRef) {
+        const iss = refIssues[0] || childRef;
+        const wr = h('span', { class: 'warn-ref', 'data-tip': iss.message + ' · Klicken zum Neu wählen', title: iss.message + ' · Klicken zum Neu wählen', 'data-help': 'refFix' });
+        wr.innerHTML = icon('warn');
+        wr.onclick = (e) => { e.stopPropagation(); RefFix.start(iss); };
+        row.append(wr);
+      }
       row.append(sub, acts);
       row.addEventListener('click', (e) => { App.select([it.id], { additive: e.shiftKey || e.metaKey || e.ctrlKey }); });
       row.addEventListener('contextmenu', (e) => {
@@ -15145,6 +15929,7 @@ const Panels = (() => {
         const topSelNow = [...new Set(App.sel.map((id) => (Model.topOf(App.doc, id) || {}).id).filter(Boolean))];
         const inFld = topIdx >= 0 ? Model.folderOf(App.doc, it.id) : null;
         UI.menu(row, [
+          ...(refIssues.length ? [{ icon: 'warn', label: 'Neu wählen (kaputter Bezug)', id: 'tm-reffix', help: 'refFix', run: () => RefFix.start(refIssues[0]) }] : []),
           { icon: 'help', label: T('common.explainStep'), help: 'explainStep', run: () => Explain.dialog(it.id) },
           { icon: 'copy', label: T('common.duplicate'), id: 'tm-dup', kbd: 'Strg D', help: 'treeDuplicate', run: () => Actions.duplicate([it.id]) },
           ...(topIdx >= 0 ? [{ icon: 'moveStep', label: T('common.moveStep'), help: 'moveStep', run: () => Features.transform([it.id]) }] : []),
@@ -15205,13 +15990,23 @@ const Panels = (() => {
       const bl = renderBodiesList(it);
       if (bl) li.append(bl);
       if (expanded.has(it.id) || (show && it.kind === 'group')) {
+        const errs = App.errorsFor(it.id);
         for (const fin of it.finishes || []) {
           const ferr = errs.find((x) => x.finishId === fin.id);
-          const fr = h('div', { class: 'finish-row' + (ferr ? ' bad' : ''), title: ferr ? ferr.message : '' });
+          const isRef = !!(ferr && RefFix.isRefError(ferr));
+          const fr = h('div', { class: 'finish-row' + (isRef ? ' warn' : ferr ? ' bad' : ''), title: ferr ? ferr.message : '' });
           fr.innerHTML = icon(fin.type === 'chamfer' ? 'chamfer' : fin.type === 'shell' ? 'shell' : 'fillet');
           if (fin.type === 'shell') fr.append(h('span', null, 'Wandstärke ' + Units.fmtLenU(Model.num(fin.r, V, 2), 2)));
           else if (fin.type === 'draft') fr.append(h('span', null, 'Entformungsschräge ' + fmt(Model.num(fin.r, V, 3), 1) + '°'));
           else fr.append(h('span', null, (fin.type === 'chamfer' ? 'Fase ' : 'Rundung ') + Units.fmtLenU(Model.num(fin.r, V, 1), 2) + (typeof fin.edges === 'string' ? ' · ' + ({ all: 'alle Kanten', top: 'oben', bottom: 'unten', vertical: 'senkrecht', horizontal: 'waagerecht' }[fin.edges] || '') : ' · ' + (fin.edges || []).length + ' Kante' + ((fin.edges || []).length === 1 ? '' : 'n'))));
+          if (isRef) {
+            const iss = refIssues.find((x) => x.finishId === fin.id);
+            if (iss) {
+              const fb = h('button', { type: 'button', class: 'fin-fix-btn', 'data-help': 'refFix' }, 'Neu wählen');
+              fb.onclick = (e) => { e.stopPropagation(); RefFix.start(iss); };
+              fr.append(fb);
+            }
+          }
           fr.onclick = () => App.select([it.id]);
           li.append(fr);
         }
@@ -15701,10 +16496,44 @@ const Panels = (() => {
       if (it.note) nd.open = true;
       w.append(nd);
     }
+    const rightIssues = RefFix.issuesOf(it.id);
+    const shownKeys = new Set();
     for (const e of App.errorsFor(it.id)) {
+      if (RefFix.isRefError(e)) {
+        const iss = e.finishId
+          ? rightIssues.find((x) => x.finishId === e.finishId)
+          : rightIssues.find((x) => x.kind === 'extrude-toFace');
+        if (iss) shownKeys.add(iss.key);
+        const box = h('div', { class: 'warn-box', 'data-help': 'refFix' }, h('span', null, e.message));
+        const brow = h('div', { class: 'btn-row' });
+        if (iss) {
+          const fb = h('button', { type: 'button', class: 'btn small warn-act', 'data-reffix': '1', 'data-help': 'refFix' });
+          fb.innerHTML = icon('warn') + 'Neu wählen';
+          fb.onclick = () => RefFix.start(iss);
+          brow.append(fb);
+        }
+        if (e.finishId) {
+          const fin = (it.finishes || []).find((x) => x.id === e.finishId);
+          const rmLabel = fin && fin.type === 'chamfer' ? 'Fase entfernen' : fin && fin.type === 'shell' ? 'Aushöhlen entfernen' : 'Rundung entfernen';
+          const b = h('button', { type: 'button', class: 'btn small' }, rmLabel);
+          b.onclick = () => Actions.removeFinish(it.id, e.finishId);
+          brow.append(b);
+        }
+        if (brow.children.length) box.append(brow);
+        w.append(box);
+        continue;
+      }
       const box = h('div', { class: 'err-box' }, h('span', null, e.message));
       if (e.code === 'toobig' && e.max > 0) { const b = h('button', { type: 'button', class: 'btn small' }, `Auf ${Units.fmtLenU(e.max, 1)} setzen`); b.onclick = () => Actions.setFinish(it.id, e.finishId, { r: e.max }); box.append(h('div', null, b)); }
-      if (e.code === 'edges') { const b = h('button', { type: 'button', class: 'btn small' }, 'Rundung entfernen'); b.onclick = () => Actions.removeFinish(it.id, e.finishId); box.append(h('div', null, b)); }
+      w.append(box);
+    }
+    for (const iss of rightIssues) {
+      if (shownKeys.has(iss.key)) continue;
+      const box = h('div', { class: 'warn-box', 'data-help': 'refFix' }, h('span', null, iss.message));
+      const fb = h('button', { type: 'button', class: 'btn small warn-act', 'data-reffix': '1', 'data-help': 'refFix' });
+      fb.innerHTML = icon('warn') + 'Neu wählen';
+      fb.onclick = () => RefFix.start(iss);
+      box.append(h('div', { class: 'btn-row' }, fb));
       w.append(box);
     }
     if (it.link) {
@@ -16063,19 +16892,26 @@ const Panels = (() => {
       const ks = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Kanten'));
       for (const fin of (it.finishes || []).filter((x) => x.type === 'shell')) {
         const err = App.errorsFor(it.id).find((x) => x.finishId === fin.id);
+        const isRef = !!(err && RefFix.isRefError(err));
         const sh = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Wandstärke'));
-        const row = h('div', { class: 'fields', style: { gridTemplateColumns: '1fr auto', alignItems: 'end' } });
+        const row = h('div', { class: 'fields', style: { gridTemplateColumns: isRef ? '1fr auto auto' : '1fr auto', alignItems: 'end' } });
         const nf = UI.numField({ id: 'fin-' + fin.id, label: `Wand · ${(fin.faces || []).length} Öffnung${(fin.faces || []).length === 1 ? '' : 'en'}`, value: fin.r, onCommit: (v) => Actions.setFinish(it.id, fin.id, { r: v }) });
-        if (err) nf.querySelector('.inp').classList.add('invalid');
+        if (err) nf.querySelector('.inp').classList.add(isRef ? 'warn' : 'invalid');
+        row.append(nf);
+        if (isRef) {
+          const iss = rightIssues.find((x) => x.finishId === fin.id);
+          if (iss) { const fb = h('button', { type: 'button', class: 'btn small warn-act', 'data-help': 'refFix' }, 'Neu wählen'); fb.onclick = () => RefFix.start(iss); row.append(fb); }
+        }
         const del = h('button', { type: 'button', class: 'btn ghost small', 'aria-label': 'Aushöhlen entfernen', 'data-tip': 'Aushöhlen entfernen' }); del.innerHTML = icon('trash');
         del.onclick = () => Actions.removeFinish(it.id, fin.id);
-        row.append(nf, del); sh.append(row);
+        row.append(del); sh.append(row);
         sh.append(h('div', { class: 'hint-box', html: 'Klick eine weitere Fläche an und wähle <b>Aushöhlen</b>, um sie zu öffnen oder wieder zu schließen.' }));
         w.append(sh);
       }
       for (const fin of (it.finishes || []).filter((x) => x.type !== 'shell')) {
         const err = App.errorsFor(it.id).find((x) => x.finishId === fin.id);
-        const row = h('div', { class: 'fields', style: { gridTemplateColumns: '1fr auto', alignItems: 'end' } });
+        const isRef = !!(err && RefFix.isRefError(err));
+        const row = h('div', { class: 'fields', style: { gridTemplateColumns: isRef ? '1fr auto auto' : '1fr auto', alignItems: 'end' } });
         if (fin.type === 'draft') {
           const nf = UI.numField({ id: 'fin-' + fin.id, label: 'Entformungsschräge', value: fin.r, unit: '°', onCommit: (v) => Actions.setFinish(it.id, fin.id, { r: v }) });
           if (err) nf.querySelector('.inp').classList.add('invalid');
@@ -16086,10 +16922,15 @@ const Panels = (() => {
         const lbl = (fin.type === 'chamfer' ? 'Fase' : 'Rundung') + (typeof fin.edges === 'string' ? ' · ' + ({ all: 'alle', top: 'oben', bottom: 'unten', vertical: 'senkrecht', horizontal: 'waagerecht' }[fin.edges] || '') : ` · ${(fin.edges || []).length} Kante${(fin.edges || []).length === 1 ? '' : 'n'}`);
         const ch = fin.type === 'chamfer', vr = !ch && !!fin.vr, cm = ch ? fin.cm || '' : '';
         const nf = UI.numField({ id: 'fin-' + fin.id, label: vr ? lbl + ' · von' : cm ? lbl + ' · Abstand' : lbl, value: fin.r, onCommit: (v) => Actions.setFinish(it.id, fin.id, { r: v }) });
-        if (err) nf.querySelector('.inp').classList.add('invalid');
+        if (err) nf.querySelector('.inp').classList.add(isRef ? 'warn' : 'invalid');
+        row.append(nf);
+        if (isRef) {
+          const iss = rightIssues.find((x) => x.finishId === fin.id);
+          if (iss) { const fb = h('button', { type: 'button', class: 'btn small warn-act', 'data-help': 'refFix' }, 'Neu wählen'); fb.onclick = () => RefFix.start(iss); row.append(fb); }
+        }
         const del = h('button', { type: 'button', class: 'btn ghost small', 'aria-label': 'Entfernen', 'data-tip': 'Entfernen' }); del.innerHTML = icon('trash');
         del.onclick = () => Actions.removeFinish(it.id, fin.id);
-        row.append(nf, del); ks.append(row);
+        row.append(del); ks.append(row);
         // Art: Rundung gleichmäßig oder von … bis; Fase gleich, mit zwei Abständen oder mit Winkel
         const r0 = Model.num(fin.r, V, 1);
         const mo = h('div', { class: 'fields pro fin-more' });
@@ -18561,7 +19402,10 @@ const Sketch = (() => {
     return { o: r6v(a), x: r6v(u.normalize()), n: r6v(n) };
   }
   // Skizze auf einer beliebigen Ebene (z. B. einer Bezugsebene)
-  function startOnPlaneObj(plane, opts = {}) { begin({ plane: deepClone(plane), W: new THREE.Matrix4(), ents: [], refs: [], ctx: { mode: 'new', targetId: null, ribMode: !!opts.ribMode } }); }
+  function startOnPlaneObj(plane, opts = {}) {
+    const planeRef = opts.datumId ? { kind: 'datum', datumId: opts.datumId, name: opts.datumName || '' } : null;
+    begin({ plane: deepClone(plane), W: new THREE.Matrix4(), ents: [], refs: [], planeRef, ctx: { mode: 'new', targetId: null, ribMode: !!opts.ribMode } });
+  }
   function startOnPlane(name, off = 0, opts = {}) {
     const pl = PLANES[name];
     begin({ plane: deepClone(pl), W: new THREE.Matrix4(), ents: [], refs: [], ctx: { mode: 'new', targetId: null, ribMode: !!opts.ribMode }, pOff: off || 0 });
@@ -18583,18 +19427,39 @@ const Sketch = (() => {
     try { return await Kernel.call('faceLoops', { key: r.key, faceIdx: face.idx }); }
     catch (e) { UI.toast(e.message, { kind: 'bad' }); return null; }
   }
+  function faceSizeApprox(face, loops) {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const lp of loops || []) for (const s of lp || []) for (const pt of [s.a, s.b, s.m, s.c].filter(Boolean)) {
+      minX = Math.min(minX, pt[0]); maxX = Math.max(maxX, pt[0]); minY = Math.min(minY, pt[1]); maxY = Math.max(maxY, pt[1]);
+    }
+    if (isFinite(minX)) {
+      const span = Math.max(maxX - minX, maxY - minY);
+      if (span > 1e-3) return round(clamp(span * 0.8, 10, 80), 2);
+    }
+    const bb = App.results.get(face.id)?.data?.bbox;
+    if (bb) return round(clamp(Math.max(bb[3] - bb[0], bb[4] - bb[1], bb[5] - bb[2]) * 0.6, 10, 80), 2);
+    return 24;
+  }
   async function startOnFace(face, opts = {}) {
     const loops = await loopsOf(face); if (loops == null) return;
     const fr = Actions.faceFrame(face.info);
     const plane = { o: fr.o, x: fr.x, n: fr.n };
     const W = Model.worldMatrix(App.doc, face.id);
     const refs = SK.faceLoopsToEnts({ o: fr.o, x: fr.x, y: fr.y }, loops);
-    begin({ plane, W, ents: [], refs, ctx: { mode: 'new', targetId: face.id, ribMode: !!opts.ribMode } });
+    const planeRef = {
+      kind: 'face',
+      id: face.id,
+      c: face.info.c.map((v) => round(v, 5)),
+      n: (face.info.n || [0, 0, 1]).map((v) => round(v, 5)),
+      size: faceSizeApprox(face, loops),
+    };
+    begin({ plane, W, ents: [], refs, planeRef, ctx: { mode: 'new', targetId: face.id, ribMode: !!opts.ribMode } });
   }
   function editItem(id) {
     const f = Model.find(App.doc, id); if (!f || !f.item.p.sketch) return;
     const W = Model.worldMatrix(App.doc, id);
-    begin({ plane: deepClone(f.item.p.sketch.plane), W, ents: deepClone(f.item.p.sketch.ents), dims: deepClone(f.item.p.sketch.dims || []), cons: deepClone(f.item.p.sketch.cons || []), bg: f.item.p.sketch.bg, refs: [], ctx: { mode: 'edit', editId: id } });
+    const planeRef = f.item.p.sketch.planeRef ? deepClone(f.item.p.sketch.planeRef) : null;
+    begin({ plane: deepClone(f.item.p.sketch.plane), W, ents: deepClone(f.item.p.sketch.ents), dims: deepClone(f.item.p.sketch.dims || []), cons: deepClone(f.item.p.sketch.cons || []), bg: f.item.p.sketch.bg, planeRef, refs: [], ctx: { mode: 'edit', editId: id } });
     if (f.item.kind === 'group' || f.item.kind === 'rib') return;   // Muster entlang Kurve & Rippe: Zielkörper bleibt sichtbar
     // Körper während des Bearbeitens ausblenden
     S.hiddenEdit = id;
@@ -20711,6 +21576,57 @@ const Sketch = (() => {
     if (n.r != null && Math.abs(e.r - n.r) > 1e-4) return false;
     if (n.pts && !close(e.pts, n.pts)) return false;
     return true;
+  }
+  // Prüft rein lesend, ob eine verbundene Körperkante ihr Ziel verloren hat (KP-12)
+  function isLinkLost(it, e) {
+    if (!e || !e.link || !e.link.id || !App.doc) return false;
+    const rf = Model.find(App.doc, e.link.id);
+    if (!rf || rf.item.suppressed) return true;
+    if (!App.results.has(e.link.id)) return false;
+    const sk = it && it.p && it.p.sketch; if (!sk || !sk.plane) return false;
+    const F = frameWorld(sk.plane, Model.worldMatrix(App.doc, it.id));
+    return !relinkGeom(e, F);
+  }
+  function linkPointsWorld(it, e) {
+    const sk = it && it.p && it.p.sketch; if (!sk || !sk.plane || !e) return [];
+    const F = frameWorld(sk.plane, Model.worldMatrix(App.doc, it.id));
+    return SK.segPoints(e).map((q) => F.o.clone().addScaledVector(F.x, q[0]).addScaledVector(F.y, q[1]).toArray());
+  }
+  function rebindLink(itemId, entId, targetId, edgeIdx) {
+    const f = Model.find(App.doc, itemId);
+    if (!f || !f.item.p || !f.item.p.sketch) return { ok: false, why: 'Skizze nicht gefunden.' };
+    const r = App.results.get(targetId);
+    if (!r || !r.data || !r.data.edges || !r.data.edges[edgeIdx]) return { ok: false, why: 'Kante nicht gefunden.' };
+    const g = r.data.edges[edgeIdx];
+    const W = Model.worldMatrix(App.doc, targetId);
+    const pts3 = edgeWorldPts(r.data, edgeIdx, W);
+    if (pts3.length < 2) return { ok: false, why: 'Kante hat keine Geometrie.' };
+    const sk = f.item.p.sketch;
+    const F = frameWorld(sk.plane, Model.worldMatrix(App.doc, itemId));
+    const pts = []; for (const v of pts3) { const uv = uvIn(F, v); if (!pts.length || SK.d2(pts[pts.length - 1], uv) > 1e-4) pts.push(uv); }
+    const en = edgeGeom2D(pts, g.t);
+    if (!en) return { ok: false, why: 'Kante konnte nicht in die Skizzenebene übernommen werden.' };
+    const link = edgeLink(targetId, g, pts3);
+    App.change('Verbundene Kante neu gewählt', (doc) => {
+      const fn = Model.find(doc, itemId); if (!fn || !fn.item.p || !fn.item.p.sketch) return false;
+      const sk2 = fn.item.p.sketch;
+      const orig = (sk2.ents || []).find((x) => x.id === entId); if (!orig) return false;
+      const sameType = orig.type === en.type;
+      if (!sameType) {
+        for (const k of ['a', 'b', 'm', 'c', 'r', 'pts', 'closed']) delete orig[k];
+        orig.type = en.type;
+        sk2.cons = (sk2.cons || []).filter((c) => c.type === 'fix' || !c.refs || !c.refs.some((x) => x && x.e === orig.id));
+        sk2.dims = (sk2.dims || []).filter((d) => !d.refs || !d.refs.some((x) => x && x.e === orig.id));
+      }
+      for (const k of ['a', 'b', 'm', 'c', 'r', 'pts', 'closed']) {
+        if (en[k] != null) orig[k] = deepClone(en[k]);
+        else delete orig[k];
+      }
+      orig.link = link;
+      const ks = Solver.varsOf(orig);
+      for (const c of sk2.cons || []) if (c.type === 'fix' && c.refs && c.refs[0] && c.refs[0].e === orig.id && ks) c.at = Object.fromEntries(ks.map((k) => [k, Solver.getK(orig, k)]));
+    });
+    return { ok: true };
   }
   function relinkAll() {
     if (S || !App.doc) return;
@@ -22978,9 +23894,10 @@ const Sketch = (() => {
   }
   function stepItem() {
     const st = S.step;
+    const pr = S.planeRef ? { planeRef: deepClone(S.planeRef) } : {};
     if (st.rib) {
       return Model.newItem('rib', {
-        sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons) },
+        sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons), ...pr },
         target: st.ribTarget,
         thickness: st.ribThickness,
         side: st.ribSide || 'center',
@@ -22991,7 +23908,7 @@ const Sketch = (() => {
       }, { name: 'Rippe', color: st.color });
     }
     if (st.sweep) {
-      return Model.newItem('sweep', { sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons) }, shape: 'circle', d: 6, w: 6, h: 4, wall: 0 }, { name: 'Entlang Pfad', color: st.color });
+      return Model.newItem('sweep', { sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons), ...pr }, shape: 'circle', d: 6, w: 6, h: 4, wall: 0 }, { name: 'Entlang Pfad', color: st.color });
     }
     const regs = SK.regions(S.ents);
     const sel = st.sel && st.sel.length && st.sel.length < regs.length ? st.sel.slice() : null;
@@ -23000,7 +23917,7 @@ const Sketch = (() => {
     const target = S.ctx.targetId ? Model.find(App.doc, S.ctx.targetId) : null;
     const name = st.revolve ? 'Drehkörper' : role === 'hole' ? 'Aussparung' : S.ctx.targetId ? 'Erhöhung' : (st.thin && st.openOnly ? 'Dünne Wand' : 'Skizzenkörper');
     const it = Model.newItem(kind, {}, { name, role, color: st.color });
-    const p = { sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons), ...(S.bg ? { bg: deepClone(S.bg) } : {}) }, sel };
+    const p = { sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons), ...pr, ...(S.bg ? { bg: deepClone(S.bg) } : {}) }, sel };
     if (kind === 'extrude') {
       const rd = (st.extent === 'toNext' || st.extent === 'toFace') ? App.resolvedDist('__preview') : null;
       p.dist = rd != null ? round(rd, 4) : st.dist;
@@ -23249,7 +24166,7 @@ const Sketch = (() => {
     window.addEventListener('keydown', onModKey);
     window.addEventListener('keyup', onModKey);
   }
-  return { copySel, pasteClip, setRefDim, setDimSpec, check: runCheck, repair: repairCheck, focusCheckIssue, autoDefine: proposeAutoDefine, applyAutoDefine, cancelAutoDefine, toggleFreeSpots, setFreeMode, wiggleFree, focusConflictItem, removeConflictItem, clearConflict, bandSelect, init, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startPath, startLoftPath, editItem, pushPullFace, renderPanel, onKey, cancel, scaleAll, insertEnts, textToCurves, loadFontFile, setBg, setTool, get angleSnap() { return angleSnapOn; }, setAngleSnap, lengthSnapStep, get active() { return !!S; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
+  return { isLinkLost, rebindLink, linkPointsWorld, copySel, pasteClip, setRefDim, setDimSpec, check: runCheck, repair: repairCheck, focusCheckIssue, autoDefine: proposeAutoDefine, applyAutoDefine, cancelAutoDefine, toggleFreeSpots, setFreeMode, wiggleFree, focusConflictItem, removeConflictItem, clearConflict, bandSelect, init, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startPath, startLoftPath, editItem, pushPullFace, renderPanel, onKey, cancel, scaleAll, insertEnts, textToCurves, loadFontFile, setBg, setTool, get angleSnap() { return angleSnapOn; }, setAngleSnap, lengthSnapStep, get active() { return !!S; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
 })();
 
 // ---- 56-notes.js ----
@@ -24311,6 +25228,12 @@ const Commands = (() => {
     add('bool-int', 'Schnittmenge (Boolesch)', 'boolIntersect', 'boolesch schnittmenge', () => Features.boolean('intersect'), { group: 'Bearbeiten' });
     add('shell', 'Aushöhlen / Wandstärke', 'shell', 'wandstärke aushöhlen schale hohl gehäuse', () => { const f = Actions.selectedFace(); if (f) Features.shell(f); else UI.toast('Klick zuerst die Fläche an, die offen sein soll.', { icon: 'info' }); }, { group: 'Bearbeiten' });
     add('rib', 'Rippe anlegen (Versteifung aus Linie)', 'rib', 'rippe steg versteifung schräge gehäuse schale wand', () => Features.startRib(), { group: 'Bearbeiten' });
+    add('reffix', 'Kaputten Bezug neu wählen', 'warn', 'kaputt bezug neu wählen kante fläche warnung gelb rundung fase skizze', () => {
+      const selIssue = App.sel.length ? RefFix.issuesOf(App.sel[0])[0] : null;
+      const iss = selIssue || RefFix.allIssues()[0];
+      if (iss) RefFix.start(iss);
+      else UI.toast('Alle Bezüge sind in Ordnung.', { icon: 'check' });
+    }, { group: 'Bearbeiten' });
     add('measure', 'Messen', 'measure', 'abstand länge durchmesser lineal', () => Measure.toggle(), { group: 'Werkzeuge', kbd: 'M' });
     add('notes', 'Notizstift', 'noteDraw', 'notiz stift malen zeichnen kritzeln text markieren hinweis', () => Notes.toggle(), { group: 'Werkzeuge', kbd: 'N' });
     add('notes-show', 'Notizen ein- oder ausblenden', 'notesShow', 'notizen zeigen verstecken ausblenden', () => ViewPrefs.toggle('notes'), { group: 'Ansicht' });
@@ -24488,7 +25411,7 @@ const Commands = (() => {
     if ((e.key === '?' || e.key === 'F1') && !mod && !e.altKey) { e.preventDefault(); showKeys(); return; }
     if (App.mode !== 'model') return;
     if (e.key === 'Escape' && Views.presenting) { Views.present(false); return; }
-    if (e.key === 'Escape') { if (Place.active) Place.cancel(); else if (Measure.active) Measure.stop(); else if (!App.sel.length && App.ctx) App.setCtx(null); else if (!App.sel.length && App.iso) App.setIso(null); else { Panels.closeFlyout(); App.clearSelection(); } return; }
+    if (e.key === 'Escape') { if (RefFix.picking) RefFix.stop(); else if (Place.active) Place.cancel(); else if (Measure.active) Measure.stop(); else if (!App.sel.length && App.ctx) App.setCtx(null); else if (!App.sel.length && App.iso) App.setIso(null); else { Panels.closeFlyout(); App.clearSelection(); } return; }
     const mHit = combo && SHORTCUTS.find((s) => !s.global && getCombo(s.id) === combo);
     if (mHit) {
       const res = mHit.run();
@@ -29367,12 +30290,12 @@ ${AI.modelText()}`;
   $('#btn-undo').innerHTML = icon('undo'); $('#btn-redo').innerHTML = icon('redo'); $('#btn-menu').innerHTML = icon('menu');
   $('#btn-left').innerHTML = icon('list'); $('#btn-right').innerHTML = icon('sliders');
 
-  window.__masswerk = { App, Viewer, Model, Actions, Sketch, SK, TTF, THREE, Print, Drawing, Kernel, UI, Commands, Panels, Handles, Start, AI, Measure, Place, Store, I18n, T, Units };
+  window.__masswerk = { App, Viewer, Model, Actions, Sketch, SK, TTF, THREE, Print, Drawing, Kernel, UI, Commands, Panels, Handles, Start, AI, Measure, Place, Store, I18n, T, Units, RefFix };
   UI.initTips();
   I18n.applyDom();
   Viewer.init($('#viewport'));
-  window.__V = Viewer; window.__M = { Store, Interact, Measure, Datums, Print, ViewPrefs, App, Actions, Model, Timeline, Start, Comp, Handles, Sketch, SK, TTF, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views, Mass, Select, Versions, DroneTpl, DroneUI, DroneLib, DroneCheck, Plates, Variants, Explain, Weak, AI, Snap, Panels, Joints, I18n, T, Units }; window.__S = Start; // für automatische Tests
-  Panels.init(); Datums.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Notes.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init(); Refine.init(); Comp.init(); Views.init(); Mass.init(); Joints.init(); Versions.init(); Start.init();
+  window.__V = Viewer; window.__M = { Store, Interact, Measure, Datums, RefFix, Print, ViewPrefs, App, Actions, Model, Timeline, Start, Comp, Handles, Sketch, SK, TTF, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views, Mass, Select, Versions, DroneTpl, DroneUI, DroneLib, DroneCheck, Plates, Variants, Explain, Weak, AI, Snap, Panels, Joints, I18n, T, Units }; window.__S = Start; // für automatische Tests
+  Panels.init(); Datums.init(); RefFix.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Notes.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init(); Refine.init(); Comp.init(); Views.init(); Mass.init(); Joints.init(); Versions.init(); Start.init();
 
   // Kopfzeile
   $('#btn-undo').onclick = () => App.undo();

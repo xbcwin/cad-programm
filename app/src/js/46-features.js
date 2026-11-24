@@ -561,7 +561,9 @@ const Features = (() => {
   function shell(face) {
     const it = face && App.doc.items.find((x) => x.id === face.id);
     if (!it || it.role === 'hole') { UI.toast('Klick auf eine Fläche eines Körpers.', { icon: 'info' }); return; }
-    const sig = { c: face.info.c.map((v) => round(v, 4)), n: face.info.n ? face.info.n.map((v) => round(v, 5)) : null };
+    const bb = App.results.get(face.id)?.data?.bbox;
+    const size = bb ? round(clamp(Math.max(bb[3] - bb[0], bb[4] - bb[1], bb[5] - bb[2]) * 0.6, 8, 60), 2) : 20;
+    const sig = { c: face.info.c.map((v) => round(v, 4)), n: face.info.n ? face.info.n.map((v) => round(v, 5)) : null, size };
     const ex = (it.finishes || []).find((f) => f.type === 'shell');
     App.change(ex ? 'Öffnung geändert' : 'Ausgehöhlt', (doc) => {
       const T = Model.find(doc, it.id).item; T.finishes = T.finishes || [];

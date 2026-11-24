@@ -573,7 +573,7 @@ const Interact = (() => {
     window.addEventListener('keydown', onKey, true);
     window.addEventListener('pointermove', (e) => { lastPtr = { x: e.clientX, y: e.clientY }; }, { passive: true });
   }
-  function modelActive() { return App.mode === 'model' && !Sketch.active && !Place.active && !Measure.active && !Notes.active && !Features.picking && !Sketch.picking && !Datums.picking; }
+  function modelActive() { return App.mode === 'model' && !Sketch.active && !Place.active && !Measure.active && !Notes.active && !Features.picking && !Sketch.picking && !Datums.picking && !RefFix.picking; }
   function onDown(e) {
     if (!modelActive()) return;
     if (e.button !== 0) return;

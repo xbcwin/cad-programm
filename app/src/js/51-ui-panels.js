@@ -160,7 +160,7 @@ const Panels = (() => {
     if (treeKind === 'solid') return it.role !== 'hole' && it.kind !== 'group';
     if (treeKind === 'hole') return it.role === 'hole';
     if (treeKind === 'hidden') return !!it.hidden || (it.bodies || []).some((b) => b && b.hidden);
-    if (treeKind === 'err') return App.errorsFor(it.id).length > 0;
+    if (treeKind === 'err') return App.errorsFor(it.id).length > 0 || RefFix.hasBrokenRef(it.id);
     if (treeKind === 'note') return !!it.note;
     if (treeKind === 'ai') return !!it.ai;
     return true;
@@ -325,8 +325,17 @@ const Panels = (() => {
       acts.append(dup, eye, del);
       row.append(tw, sw, nm);
       if (it.ai) { const am = h('span', { class: 'ai-mark', 'data-tip': (it.ai.edit ? 'Von der KI geändert: „' : 'Von der KI gebaut: „') + it.ai.q + '“' }); am.innerHTML = icon('spark'); row.append(am); }
-      const errs = App.errorsFor(it.id);
-      if (errs.length) { const er = h('span', { class: 'err', 'data-tip': errs[0].message }); er.innerHTML = icon('warn'); row.append(er); }
+      const hardErrs = RefFix.hardErrorsFor(it.id);
+      const refIssues = RefFix.issuesOf(it.id);
+      const childRef = !refIssues.length && it.kind === 'group' && !expanded.has(it.id) ? RefFix.firstDescendantIssue(it) : null;
+      if (hardErrs.length) { const er = h('span', { class: 'err', 'data-tip': hardErrs[0].message }); er.innerHTML = icon('warn'); row.append(er); }
+      if (refIssues.length || childRef) {
+        const iss = refIssues[0] || childRef;
+        const wr = h('span', { class: 'warn-ref', 'data-tip': iss.message + ' · Klicken zum Neu wählen', title: iss.message + ' · Klicken zum Neu wählen', 'data-help': 'refFix' });
+        wr.innerHTML = icon('warn');
+        wr.onclick = (e) => { e.stopPropagation(); RefFix.start(iss); };
+        row.append(wr);
+      }
       row.append(sub, acts);
       row.addEventListener('click', (e) => { App.select([it.id], { additive: e.shiftKey || e.metaKey || e.ctrlKey }); });
       row.addEventListener('contextmenu', (e) => {
@@ -334,6 +343,7 @@ const Panels = (() => {
         const topSelNow = [...new Set(App.sel.map((id) => (Model.topOf(App.doc, id) || {}).id).filter(Boolean))];
         const inFld = topIdx >= 0 ? Model.folderOf(App.doc, it.id) : null;
         UI.menu(row, [
+          ...(refIssues.length ? [{ icon: 'warn', label: 'Neu wählen (kaputter Bezug)', id: 'tm-reffix', help: 'refFix', run: () => RefFix.start(refIssues[0]) }] : []),
           { icon: 'help', label: T('common.explainStep'), help: 'explainStep', run: () => Explain.dialog(it.id) },
           { icon: 'copy', label: T('common.duplicate'), id: 'tm-dup', kbd: 'Strg D', help: 'treeDuplicate', run: () => Actions.duplicate([it.id]) },
           ...(topIdx >= 0 ? [{ icon: 'moveStep', label: T('common.moveStep'), help: 'moveStep', run: () => Features.transform([it.id]) }] : []),
@@ -394,13 +404,23 @@ const Panels = (() => {
       const bl = renderBodiesList(it);
       if (bl) li.append(bl);
       if (expanded.has(it.id) || (show && it.kind === 'group')) {
+        const errs = App.errorsFor(it.id);
         for (const fin of it.finishes || []) {
           const ferr = errs.find((x) => x.finishId === fin.id);
-          const fr = h('div', { class: 'finish-row' + (ferr ? ' bad' : ''), title: ferr ? ferr.message : '' });
+          const isRef = !!(ferr && RefFix.isRefError(ferr));
+          const fr = h('div', { class: 'finish-row' + (isRef ? ' warn' : ferr ? ' bad' : ''), title: ferr ? ferr.message : '' });
           fr.innerHTML = icon(fin.type === 'chamfer' ? 'chamfer' : fin.type === 'shell' ? 'shell' : 'fillet');
           if (fin.type === 'shell') fr.append(h('span', null, 'Wandstärke ' + Units.fmtLenU(Model.num(fin.r, V, 2), 2)));
           else if (fin.type === 'draft') fr.append(h('span', null, 'Entformungsschräge ' + fmt(Model.num(fin.r, V, 3), 1) + '°'));
           else fr.append(h('span', null, (fin.type === 'chamfer' ? 'Fase ' : 'Rundung ') + Units.fmtLenU(Model.num(fin.r, V, 1), 2) + (typeof fin.edges === 'string' ? ' · ' + ({ all: 'alle Kanten', top: 'oben', bottom: 'unten', vertical: 'senkrecht', horizontal: 'waagerecht' }[fin.edges] || '') : ' · ' + (fin.edges || []).length + ' Kante' + ((fin.edges || []).length === 1 ? '' : 'n'))));
+          if (isRef) {
+            const iss = refIssues.find((x) => x.finishId === fin.id);
+            if (iss) {
+              const fb = h('button', { type: 'button', class: 'fin-fix-btn', 'data-help': 'refFix' }, 'Neu wählen');
+              fb.onclick = (e) => { e.stopPropagation(); RefFix.start(iss); };
+              fr.append(fb);
+            }
+          }
           fr.onclick = () => App.select([it.id]);
           li.append(fr);
         }
@@ -890,10 +910,44 @@ const Panels = (() => {
       if (it.note) nd.open = true;
       w.append(nd);
     }
+    const rightIssues = RefFix.issuesOf(it.id);
+    const shownKeys = new Set();
     for (const e of App.errorsFor(it.id)) {
+      if (RefFix.isRefError(e)) {
+        const iss = e.finishId
+          ? rightIssues.find((x) => x.finishId === e.finishId)
+          : rightIssues.find((x) => x.kind === 'extrude-toFace');
+        if (iss) shownKeys.add(iss.key);
+        const box = h('div', { class: 'warn-box', 'data-help': 'refFix' }, h('span', null, e.message));
+        const brow = h('div', { class: 'btn-row' });
+        if (iss) {
+          const fb = h('button', { type: 'button', class: 'btn small warn-act', 'data-reffix': '1', 'data-help': 'refFix' });
+          fb.innerHTML = icon('warn') + 'Neu wählen';
+          fb.onclick = () => RefFix.start(iss);
+          brow.append(fb);
+        }
+        if (e.finishId) {
+          const fin = (it.finishes || []).find((x) => x.id === e.finishId);
+          const rmLabel = fin && fin.type === 'chamfer' ? 'Fase entfernen' : fin && fin.type === 'shell' ? 'Aushöhlen entfernen' : 'Rundung entfernen';
+          const b = h('button', { type: 'button', class: 'btn small' }, rmLabel);
+          b.onclick = () => Actions.removeFinish(it.id, e.finishId);
+          brow.append(b);
+        }
+        if (brow.children.length) box.append(brow);
+        w.append(box);
+        continue;
+      }
       const box = h('div', { class: 'err-box' }, h('span', null, e.message));
       if (e.code === 'toobig' && e.max > 0) { const b = h('button', { type: 'button', class: 'btn small' }, `Auf ${Units.fmtLenU(e.max, 1)} setzen`); b.onclick = () => Actions.setFinish(it.id, e.finishId, { r: e.max }); box.append(h('div', null, b)); }
-      if (e.code === 'edges') { const b = h('button', { type: 'button', class: 'btn small' }, 'Rundung entfernen'); b.onclick = () => Actions.removeFinish(it.id, e.finishId); box.append(h('div', null, b)); }
+      w.append(box);
+    }
+    for (const iss of rightIssues) {
+      if (shownKeys.has(iss.key)) continue;
+      const box = h('div', { class: 'warn-box', 'data-help': 'refFix' }, h('span', null, iss.message));
+      const fb = h('button', { type: 'button', class: 'btn small warn-act', 'data-reffix': '1', 'data-help': 'refFix' });
+      fb.innerHTML = icon('warn') + 'Neu wählen';
+      fb.onclick = () => RefFix.start(iss);
+      box.append(h('div', { class: 'btn-row' }, fb));
       w.append(box);
     }
     if (it.link) {
@@ -1252,19 +1306,26 @@ const Panels = (() => {
       const ks = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Kanten'));
       for (const fin of (it.finishes || []).filter((x) => x.type === 'shell')) {
         const err = App.errorsFor(it.id).find((x) => x.finishId === fin.id);
+        const isRef = !!(err && RefFix.isRefError(err));
         const sh = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Wandstärke'));
-        const row = h('div', { class: 'fields', style: { gridTemplateColumns: '1fr auto', alignItems: 'end' } });
+        const row = h('div', { class: 'fields', style: { gridTemplateColumns: isRef ? '1fr auto auto' : '1fr auto', alignItems: 'end' } });
         const nf = UI.numField({ id: 'fin-' + fin.id, label: `Wand · ${(fin.faces || []).length} Öffnung${(fin.faces || []).length === 1 ? '' : 'en'}`, value: fin.r, onCommit: (v) => Actions.setFinish(it.id, fin.id, { r: v }) });
-        if (err) nf.querySelector('.inp').classList.add('invalid');
+        if (err) nf.querySelector('.inp').classList.add(isRef ? 'warn' : 'invalid');
+        row.append(nf);
+        if (isRef) {
+          const iss = rightIssues.find((x) => x.finishId === fin.id);
+          if (iss) { const fb = h('button', { type: 'button', class: 'btn small warn-act', 'data-help': 'refFix' }, 'Neu wählen'); fb.onclick = () => RefFix.start(iss); row.append(fb); }
+        }
         const del = h('button', { type: 'button', class: 'btn ghost small', 'aria-label': 'Aushöhlen entfernen', 'data-tip': 'Aushöhlen entfernen' }); del.innerHTML = icon('trash');
         del.onclick = () => Actions.removeFinish(it.id, fin.id);
-        row.append(nf, del); sh.append(row);
+        row.append(del); sh.append(row);
         sh.append(h('div', { class: 'hint-box', html: 'Klick eine weitere Fläche an und wähle <b>Aushöhlen</b>, um sie zu öffnen oder wieder zu schließen.' }));
         w.append(sh);
       }
       for (const fin of (it.finishes || []).filter((x) => x.type !== 'shell')) {
         const err = App.errorsFor(it.id).find((x) => x.finishId === fin.id);
-        const row = h('div', { class: 'fields', style: { gridTemplateColumns: '1fr auto', alignItems: 'end' } });
+        const isRef = !!(err && RefFix.isRefError(err));
+        const row = h('div', { class: 'fields', style: { gridTemplateColumns: isRef ? '1fr auto auto' : '1fr auto', alignItems: 'end' } });
         if (fin.type === 'draft') {
           const nf = UI.numField({ id: 'fin-' + fin.id, label: 'Entformungsschräge', value: fin.r, unit: '°', onCommit: (v) => Actions.setFinish(it.id, fin.id, { r: v }) });
           if (err) nf.querySelector('.inp').classList.add('invalid');
@@ -1275,10 +1336,15 @@ const Panels = (() => {
         const lbl = (fin.type === 'chamfer' ? 'Fase' : 'Rundung') + (typeof fin.edges === 'string' ? ' · ' + ({ all: 'alle', top: 'oben', bottom: 'unten', vertical: 'senkrecht', horizontal: 'waagerecht' }[fin.edges] || '') : ` · ${(fin.edges || []).length} Kante${(fin.edges || []).length === 1 ? '' : 'n'}`);
         const ch = fin.type === 'chamfer', vr = !ch && !!fin.vr, cm = ch ? fin.cm || '' : '';
         const nf = UI.numField({ id: 'fin-' + fin.id, label: vr ? lbl + ' · von' : cm ? lbl + ' · Abstand' : lbl, value: fin.r, onCommit: (v) => Actions.setFinish(it.id, fin.id, { r: v }) });
-        if (err) nf.querySelector('.inp').classList.add('invalid');
+        if (err) nf.querySelector('.inp').classList.add(isRef ? 'warn' : 'invalid');
+        row.append(nf);
+        if (isRef) {
+          const iss = rightIssues.find((x) => x.finishId === fin.id);
+          if (iss) { const fb = h('button', { type: 'button', class: 'btn small warn-act', 'data-help': 'refFix' }, 'Neu wählen'); fb.onclick = () => RefFix.start(iss); row.append(fb); }
+        }
         const del = h('button', { type: 'button', class: 'btn ghost small', 'aria-label': 'Entfernen', 'data-tip': 'Entfernen' }); del.innerHTML = icon('trash');
         del.onclick = () => Actions.removeFinish(it.id, fin.id);
-        row.append(nf, del); ks.append(row);
+        row.append(del); ks.append(row);
         // Art: Rundung gleichmäßig oder von … bis; Fase gleich, mit zwei Abständen oder mit Winkel
         const r0 = Model.num(fin.r, V, 1);
         const mo = h('div', { class: 'fields pro fin-more' });
