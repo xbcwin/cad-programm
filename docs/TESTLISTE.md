@@ -1926,6 +1926,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Unabhängige Kopien, Neuladen, Löschen & Hilfe**: Eine zweite eingesetzte Kopie behält ihr eigenes Maß unabhängig von der ersten; gespeicherte Teile bleiben nach Neuladen erhalten, lassen sich über den Papierkorb entfernen und haben den Hilfetext `userLibrary`.
 - [ ] **Von Hand**: Ein selbst konstruiertes Teil mit mehreren Körpern und Formeln speichern, in ein anderes Projekt auf eine Körperfläche ziehen und dort die Maße variieren.
 
+## Zeichnung: mehrere Blätter, A4 bis A0 (Auto [A-062], ZE-01)
+
+- [x] **Blatt-Tabs unten**: Im Bereich „Zeichnung“ lassen sich über `#sheet-tabs` und `#dw-add-sheet` neue Blätter anlegen, per Klick wechseln, umbenennen (`.st-ren`) und (ab dem zweiten Blatt) wieder löschen (`.st-del`) – jeweils rückgängig machbar und in der Projektdatei gespeichert.
+- [x] **Formate A4 bis A0 (hoch & quer)**: Jedes Blatt lässt sich einzeln auf A4, A3, A2, A1 oder A0 im Hoch- oder Querformat umstellen; Rahmen (20 mm Heftrand, 10/20 mm Außenrand) und Schriftfeld (mit Format-Feld und automatischer Zählung `i/N`) passen sich an.
+- [x] **Mehrseitiger PDF-Export**: Der PDF-Export erzeugt ohne externes Nachladen eine mehrseitige PDF-Datei (`%PDF-1.4`) mit allen Blättern in ihren exakten Seitengrößen (z. B. Seite 1 A4 hoch `210 × 297 mm`, Seite 2 A3 quer `420 × 297 mm`).
+- [x] **Rückwärtskompatibilität & Hilfen**: Alte Ein-Blatt-Projekte werden beim Öffnen nahtlos übernommen; `drawingSheets` und `drawingFormat` sind in `werkzeug-hilfen.json` und `HELP` gepflegt.
+- [ ] **Von Hand**: Im Browser eine Zeichnung mit drei Blättern (z. B. A4 hoch, A3 quer, A1 quer) anlegen, unterschiedlich bemaßen, als PDF exportieren und die Seitengrößen im PDF-Betrachter prüfen.
+
 ## Fehler melden
 
 ```

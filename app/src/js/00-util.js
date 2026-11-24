@@ -1691,6 +1691,16 @@ const HELP = {
   "tip": "Eigene Teile mit Vorschaubild und Maßen lokal speichern und überall einsetzen",
   "hilfe": "Rechtsklick auf ein Teil → „In meine Bibliothek“: Das Teil wird samt Vorschaubild in diesem Browser gespeichert. Alle benutzten Maße mit Namen (oder Zahlenmaße) wählst du als Eingabefelder aus. Unter „Bauteile → Meine Teile“ lässt es sich in jedes andere Projekt einsetzen und dort je Kopie mit eigenen Maßen anpassen.",
   "tipp": "Ideal für wiederkehrende Halterungen, Stecker-Ausschnitte oder fertige Baugruppen-Teile."
+ },
+ "drawingSheets": {
+  "tip": "Mehrere Zeichnungsblätter unten über Tabs verwalten",
+  "hilfe": "In der Tab-Leiste unten legst du mit „+ Blatt“ weitere Blätter an, wechselst zwischen ihnen, benennst sie um (Stift-Symbol oder Doppelklick) oder löschst einzelne Blätter. Beim PDF-Export landen alle Blätter nacheinander in einer einzigen PDF-Datei – jedes in seiner eigenen Seitengröße.",
+  "tipp": "Wenn das Feld „Blatt“ im Schriftfeld leer bleibt, zählt Tracery automatisch als 1/2, 2/2 usw."
+ },
+ "drawingFormat": {
+  "tip": "Blattformat A4 bis A0 im Hoch- oder Querformat wählen",
+  "hilfe": "Du kannst jedes Blatt einzeln auf DIN A4, A3, A2, A1 oder A0 sowie zwischen Quer- und Hochformat umstellen. Rahmen (20 mm Heftrand links, 10 bzw. 20 mm Außenrand) und das Schriftfeld passen sich der gewählten Blattgröße automatisch an.",
+  "tipp": "Größere Formate wie A2, A1 oder A0 eignen sich besonders für Baugruppen oder große Werkstücke im Maßstab 1:1."
  }
 };
 

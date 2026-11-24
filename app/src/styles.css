@@ -584,14 +584,26 @@ body.sketching .timeline{display:none}
 .tour-ring{position:fixed;z-index:87;border:2px solid var(--accent);border-radius:10px;box-shadow:0 0 0 4px var(--accent-soft);pointer-events:none;transition:all .25s}
 
 /* Zeichnung */
-.sheet-wrap{position:absolute;inset:0;overflow:auto;display:grid;place-items:center;padding:24px;background:var(--surface-3)}
+.sheet-wrap{position:absolute;inset:0 0 38px 0;overflow:auto;display:grid;place-items:center;padding:24px;background:var(--surface-3)}
 .sheet-wrap.panning{cursor:grabbing}
 .sheet-holder{position:relative;box-shadow:var(--shadow-2);background:#fff;flex:none}
 .sheet-holder svg{display:block}
 .dwgbar{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:16;display:flex;align-items:center;gap:2px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-2);padding:5px;max-width:calc(100% - 24px);overflow-x:auto;scrollbar-width:none}
 .dwgbar .tool{padding:7px 9px}
-.zoom-btns{position:absolute;right:12px;bottom:12px;display:flex;gap:6px;z-index:12}
+.zoom-btns{position:absolute;right:12px;bottom:50px;display:flex;gap:6px;z-index:12}
 .zoom-btns button{height:34px;min-width:34px;border-radius:9px;border:1px solid var(--line);background:var(--surface);display:grid;place-items:center;color:var(--ink-2);box-shadow:var(--shadow-1);padding:0 8px;font:600 13px/1 var(--font-mono)}
+.sheet-tabs{position:absolute;left:0;right:0;bottom:0;height:38px;display:flex;align-items:center;gap:4px;padding:4px 10px;background:var(--surface);border-top:1px solid var(--line);overflow-x:auto;scrollbar-width:thin;z-index:13}
+.sheet-tab{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 8px 0 10px;border-radius:8px;border:1px solid var(--line);background:var(--surface-2);color:var(--ink-2);font:500 12.5px/1 var(--font);cursor:pointer;flex:none;user-select:none}
+.sheet-tab:hover{border-color:var(--line-2);color:var(--ink)}
+.sheet-tab.active{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent);font-weight:600}
+.sheet-tab .st-fmt{font:600 11px/1 var(--font-mono);color:var(--muted);padding:2px 4px;border-radius:4px;background:var(--surface-3)}
+.sheet-tab.active .st-fmt{color:var(--accent);background:rgba(12,122,112,.12)}
+.sheet-tab .st-act{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:5px;color:var(--muted);padding:0;border:none;background:transparent;cursor:pointer}
+.sheet-tab .st-act:hover{background:var(--surface-3);color:var(--ink)}
+.sheet-tab .st-act svg{width:12px;height:12px}
+.sheet-tab-add{display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 10px;border-radius:8px;border:1px dashed var(--line-2);background:transparent;color:var(--ink-2);font:500 12.5px/1 var(--font);cursor:pointer;flex:none}
+.sheet-tab-add:hover{border-color:var(--accent-line);color:var(--accent);background:var(--accent-soft)}
+.sheet-tab-add svg{width:13px;height:13px}
 
 /* Kopfzeile: bei weniger Platz zeigen erst die Nebenwerkzeuge, dann alle außer „Exportieren“ nur ihr Symbol */
 @media (max-width: 1500px) and (min-width: 901px){ .tool.minor span{display:none} .tool.minor{padding:7px 9px} }

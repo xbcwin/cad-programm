@@ -1,15 +1,190 @@
 // ================= Technische Zeichnung =================
 const Drawing = (() => {
-  const SHEETS = { A4: [297, 210], A3: [420, 297] };
-  const SCALES = [10, 5, 2, 1, 0.5, 0.2, 0.1, 0.05, 0.02];
+  const SHEETS = { A4: [297, 210], A3: [420, 297], A2: [594, 420], A1: [841, 594], A0: [1189, 841] };
+  const SHEET_ORDER = ['A4', 'A3', 'A2', 'A1', 'A0'];
+  const SCALES = [20, 10, 5, 2, 1, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01];
   const scaleText = (s) => (s >= 1 ? `${fmtFixed(s, 2)}:1` : `1:${fmtFixed(1 / s, 2)}`);
   let proj = null, projRev = -1, loadingProj = false, projId = 0;
-  let svg = null, wrap = null, holder = null, zoom = 1, tool = null, toolState = null, selDim = null;
+  let svg = null, wrap = null, holder = null, tabsBar = null, zoom = 1, tool = null, toolState = null, selDim = null;
   let layout = null;
-  function dwg() {
+  function defaultAutoDims() {
+    return [
+      { id: uid('d'), auto: 'width', view: 'front' },
+      { id: uid('d'), auto: 'height', view: 'front' },
+      { id: uid('d'), auto: 'depth', view: 'left' },
+      { id: uid('d'), auto: 'circles', view: 'top' },
+    ];
+  }
+  function makeSheet(opts = {}, tpl = null) {
+    const t0 = tpl && tpl.title ? tpl.title : {};
+    return {
+      id: opts.id || uid('sh'),
+      name: opts.name || 'Blatt 1',
+      sheet: SHEETS[opts.sheet] ? opts.sheet : (tpl && SHEETS[tpl.sheet] ? tpl.sheet : 'A4'),
+      orient: opts.orient === 'portrait' || opts.orient === 'landscape' ? opts.orient : (tpl && tpl.orient ? tpl.orient : 'landscape'),
+      scale: opts.scale != null ? opts.scale : 'auto',
+      views: opts.views ? { ...opts.views } : { front: true, top: true, left: true, iso: true },
+      hidden: opts.hidden != null ? !!opts.hidden : (tpl ? !!tpl.hidden : true),
+      centers: opts.centers != null ? !!opts.centers : (tpl ? !!tpl.centers : true),
+      dims: opts.dims || defaultAutoDims(),
+      free: opts.free || [],
+      title: {
+        titel: t0.titel || '',
+        nummer: t0.nummer || '',
+        name: t0.name || '',
+        datum: t0.datum || new Date().toLocaleDateString('de-DE'),
+        werkstoff: t0.werkstoff || 'PLA',
+        firma: t0.firma || '',
+        blatt: '',
+      },
+    };
+  }
+  function normalizeSheet(raw, fallbackName = 'Blatt 1') {
+    const s = makeSheet({
+      id: raw && raw.id,
+      name: raw && raw.name ? String(raw.name) : fallbackName,
+      sheet: raw && raw.sheet,
+      orient: raw && raw.orient,
+      scale: raw && raw.scale != null ? raw.scale : 'auto',
+      views: raw && raw.views,
+      hidden: raw && raw.hidden,
+      centers: raw && raw.centers,
+      dims: raw && Array.isArray(raw.dims) ? raw.dims : undefined,
+      free: raw && Array.isArray(raw.free) ? raw.free : undefined,
+    });
+    if (raw && raw.title && typeof raw.title === 'object') {
+      Object.assign(s.title, raw.title);
+      if (s.title.blatt === '1/1') s.title.blatt = '';
+    }
+    return s;
+  }
+  function dwgState() {
     const d = App.doc;
-    if (!d.drawing) d.drawing = { sheet: 'A4', orient: 'landscape', scale: 'auto', views: { front: true, top: true, left: true, iso: true }, hidden: true, centers: true, dims: [{ id: uid('d'), auto: 'width', view: 'front' }, { id: uid('d'), auto: 'height', view: 'front' }, { id: uid('d'), auto: 'depth', view: 'left' }, { id: uid('d'), auto: 'circles', view: 'top' }], free: [], title: { titel: '', nummer: '', name: '', datum: new Date().toLocaleDateString('de-DE'), werkstoff: 'PLA', firma: '', blatt: '1/1' } };
+    if (!d.drawing) {
+      const first = makeSheet({ name: 'Blatt 1' });
+      d.drawing = { sheets: [first], active: first.id };
+      return d.drawing;
+    }
+    if (!Array.isArray(d.drawing.sheets)) {
+      const legacy = normalizeSheet(d.drawing, 'Blatt 1');
+      d.drawing = { sheets: [legacy], active: legacy.id };
+      return d.drawing;
+    }
+    if (!d.drawing.sheets.length) {
+      const first = makeSheet({ name: 'Blatt 1' });
+      d.drawing.sheets.push(first);
+      d.drawing.active = first.id;
+      return d.drawing;
+    }
+    for (let i = 0; i < d.drawing.sheets.length; i++) {
+      const cur = d.drawing.sheets[i];
+      if (!cur || !cur.id || !SHEETS[cur.sheet] || !cur.views || !Array.isArray(cur.dims) || !Array.isArray(cur.free) || !cur.title || !cur.name) {
+        d.drawing.sheets[i] = normalizeSheet(cur, `Blatt ${i + 1}`);
+      }
+    }
+    if (!d.drawing.sheets.some((x) => x.id === d.drawing.active)) d.drawing.active = d.drawing.sheets[0].id;
     return d.drawing;
+  }
+  function sheets() { return dwgState().sheets; }
+  function activeIndex() {
+    const st = dwgState();
+    const idx = st.sheets.findIndex((x) => x.id === st.active);
+    return idx >= 0 ? idx : 0;
+  }
+  function dwg() {
+    const st = dwgState();
+    return st.sheets[activeIndex()] || st.sheets[0];
+  }
+  function nextSheetName() {
+    const used = new Set(sheets().map((s) => s.name));
+    let n = 1;
+    while (used.has('Blatt ' + n)) n++;
+    return 'Blatt ' + n;
+  }
+  function selectSheet(id) {
+    const st = dwgState();
+    if (!st.sheets.some((x) => x.id === id) || st.active === id) return;
+    st.active = id;
+    selDim = null;
+    toolState = tool === 'dim' ? { stage: 0 } : tool ? {} : null;
+    fitZoom(true);
+    refresh();
+    Panels.renderRight();
+  }
+  function addSheet(opts = {}) {
+    const cur = dwg();
+    const name = opts.name || nextSheetName();
+    const ns = makeSheet({ ...opts, name }, cur);
+    App.change('Blatt hinzugefügt', () => {
+      const st = dwgState();
+      st.sheets.push(ns);
+      st.active = ns.id;
+    });
+    selDim = null;
+    toolState = tool === 'dim' ? { stage: 0 } : tool ? {} : null;
+    fitZoom(true);
+    refresh();
+    Panels.renderRight();
+    return ns;
+  }
+  function duplicateSheet(id) {
+    const st = dwgState();
+    const src = st.sheets.find((x) => x.id === id) || dwg();
+    const clone = JSON.parse(JSON.stringify(src));
+    clone.id = uid('sh');
+    const used = new Set(st.sheets.map((x) => x.name));
+    let n = 1, cand = src.name + ' Kopie';
+    while (used.has(cand)) { n++; cand = src.name + ' Kopie ' + n; }
+    clone.name = cand;
+    clone.dims = (clone.dims || []).map((x) => ({ ...x, id: uid('d') }));
+    clone.free = (clone.free || []).map((x) => ({ ...x, id: uid('f') }));
+    if (clone.title) clone.title.blatt = '';
+    App.change('Blatt dupliziert', () => {
+      const st2 = dwgState();
+      st2.sheets.push(clone);
+      st2.active = clone.id;
+    });
+    selDim = null;
+    fitZoom(true);
+    refresh();
+    Panels.renderRight();
+    return clone;
+  }
+  async function renameSheet(id, newName) {
+    const st = dwgState();
+    const target = st.sheets.find((x) => x.id === id) || dwg();
+    if (!target) return false;
+    let val = newName;
+    if (val === undefined) val = await UI.prompt('Blatt umbenennen', 'Blattname', target.name, 'Umbenennen');
+    const clean = String(val || '').trim();
+    if (!clean || clean === target.name) return false;
+    App.change('Blatt umbenannt', () => {
+      const s = dwgState().sheets.find((x) => x.id === target.id);
+      if (s) s.name = clean;
+    });
+    render();
+    Panels.renderRight();
+    return true;
+  }
+  function removeSheet(id) {
+    const list = sheets();
+    if (list.length <= 1) { UI.toast('Mindestens ein Blatt muss bleiben.', { icon: 'info' }); return false; }
+    const target = list.find((x) => x.id === id) || dwg();
+    if (!target) return false;
+    const removedName = target.name;
+    App.change('Blatt gelöscht', () => {
+      const st = dwgState();
+      const i = st.sheets.findIndex((x) => x.id === target.id);
+      if (i < 0 || st.sheets.length <= 1) return;
+      st.sheets.splice(i, 1);
+      if (st.active === target.id) st.active = st.sheets[Math.min(i, st.sheets.length - 1)].id;
+    });
+    selDim = null;
+    fitZoom(true);
+    refresh();
+    Panels.renderRight();
+    UI.toast(`„${removedName}“ entfernt.`, { icon: 'info' });
+    return true;
   }
   // ---------- Öffnen ----------
   function open() {
@@ -22,40 +197,101 @@ const Drawing = (() => {
     const b2 = h('button', { type: 'button', 'aria-label': 'Ganzes Blatt', 'data-tip': 'Ganzes Blatt zeigen' }); b2.innerHTML = icon('fit'); b2.onclick = () => fitZoom();
     const b3 = h('button', { type: 'button', 'aria-label': 'Vergrößern', 'data-tip': 'Vergrößern' }); b3.innerHTML = icon('zoomIn'); b3.onclick = () => setZoom(zoom * 1.25);
     zb.append(b1, b2, b3); el.append(zb);
+    tabsBar = h('div', { class: 'sheet-tabs', id: 'sheet-tabs', role: 'tablist', 'aria-label': 'Zeichnungsblätter', 'data-help': 'drawingSheets' });
+    el.append(tabsBar);
     wrap.addEventListener('wheel', (e) => { if (!e.ctrlKey && !e.metaKey && !e.altKey) return; e.preventDefault(); setZoom(zoom * (e.deltaY < 0 ? 1.12 : 1 / 1.12)); }, { passive: false });
-    dwg();
+    dwgState();
     fitZoom(true);
+    renderTabs();
     refresh();
   }
-  function close() { tool = null; toolState = null; const el = $('#sheet'); if (el) el.innerHTML = ''; svg = null; }
-  function setZoom(z) { zoom = clamp(z, 0.3, 8); if (svg) { const [W, H] = sheetSize(); svg.setAttribute('width', W * zoom * 3.2); svg.setAttribute('height', H * zoom * 3.2); } }
+  function close() { tool = null; toolState = null; const el = $('#sheet'); if (el) el.innerHTML = ''; svg = null; wrap = null; holder = null; tabsBar = null; }
+  function renderTabs() {
+    if (!tabsBar) return;
+    const list = sheets();
+    const active = dwg();
+    tabsBar.innerHTML = '';
+    for (const s of list) {
+      const isAct = s.id === active.id;
+      const tab = h('div', {
+        class: 'sheet-tab' + (isAct ? ' active' : ''),
+        role: 'tab',
+        tabindex: '0',
+        'aria-selected': String(isAct),
+        'data-sheet-id': s.id,
+      });
+      const nm = h('span', { class: 'st-name', title: s.name }, s.name);
+      nm.ondblclick = (e) => { e.stopPropagation(); renameSheet(s.id); };
+      const fmt = h('span', { class: 'st-fmt' }, s.sheet);
+      const ren = h('button', { type: 'button', class: 'st-act st-ren', 'aria-label': 'Blatt umbenennen', 'data-tip': 'Blatt umbenennen' });
+      ren.innerHTML = icon('edit');
+      ren.onclick = (e) => { e.stopPropagation(); renameSheet(s.id); };
+      tab.append(nm, fmt, ren);
+      if (list.length > 1) {
+        const del = h('button', { type: 'button', class: 'st-act st-del', 'aria-label': 'Blatt löschen', 'data-tip': 'Blatt löschen' });
+        del.innerHTML = icon('close');
+        del.onclick = (e) => { e.stopPropagation(); removeSheet(s.id); };
+        tab.append(del);
+      }
+      tab.onclick = () => selectSheet(s.id);
+      tab.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectSheet(s.id); } };
+      tab.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        UI.menu(tab, [
+          { label: 'Umbenennen …', icon: 'edit', run: () => renameSheet(s.id) },
+          { label: 'Duplizieren', icon: 'copy', run: () => duplicateSheet(s.id) },
+          '-',
+          { label: 'Blatt löschen', icon: 'trash', disabled: list.length <= 1, run: () => removeSheet(s.id) },
+        ]);
+      });
+      tabsBar.append(tab);
+    }
+    const addBtn = h('button', {
+      type: 'button',
+      class: 'sheet-tab-add',
+      id: 'dw-add-sheet',
+      'data-help': 'drawingSheets',
+      'aria-label': 'Blatt hinzufügen',
+      'data-tip': 'Neues Blatt hinzufügen',
+    });
+    addBtn.innerHTML = icon('plus') + '<span>Blatt</span>';
+    addBtn.onclick = () => addSheet();
+    tabsBar.append(addBtn);
+  }
+  function setZoom(z) { zoom = clamp(z, 0.08, 8); if (svg) { const [W, H] = sheetSize(); svg.setAttribute('width', W * zoom * 3.2); svg.setAttribute('height', H * zoom * 3.2); } }
   function fitZoom(noRender) {
     const [W, H] = sheetSize(); const c = $('#center').getBoundingClientRect();
-    zoom = Math.max(0.3, Math.min((c.width - 60) / (W * 3.2), (c.height - 70) / (H * 3.2)));
+    zoom = Math.max(0.08, Math.min((c.width - 60) / (W * 3.2), (c.height - 106) / (H * 3.2)));
     if (!noRender) setZoom(zoom);
   }
-  function sheetSize() { const d = dwg(); const s = SHEETS[d.sheet] || SHEETS.A4; return d.orient === 'portrait' ? [s[1], s[0]] : s; }
+  function sheetSize(sh = dwg()) { const s = SHEETS[sh.sheet] || SHEETS.A4; return sh.orient === 'portrait' ? [s[1], s[0]] : [s[0], s[1]]; }
+  async function ensureProjections() {
+    const needIso = sheets().some((s) => s.views && s.views.iso);
+    const need = App.revision !== projRev || (needIso && (!proj || !proj.views || !proj.views.iso));
+    if (!need) return;
+    if (!Model.activeItems(App.doc).length) { proj = null; projRev = App.revision; return; }
+    if (loadingProj) {
+      while (loadingProj) await new Promise((r) => setTimeout(r, 30));
+      return ensureProjections();
+    }
+    loadingProj = true;
+    try {
+      const views = ['front', 'top', 'left'];
+      if (needIso) views.push('iso');
+      const scene = Model.kernelScene(App.doc);
+      const rev = App.revision;
+      proj = await Kernel.call('project', { scene, views });
+      projId++;
+      projRev = rev;
+    } finally {
+      loadingProj = false;
+    }
+  }
   async function refresh() {
     if (App.mode !== 'drawing') return;
-    const need = App.revision !== projRev;
-    if (need && !loadingProj) {
-      if (!Model.activeItems(App.doc).length) {
-        proj = null; projRev = App.revision;
-        render();
-        return;
-      }
-      loadingProj = true;
-      const d = dwg();
-      try {
-        const views = ['front', 'top', 'left']; if (d.views.iso) views.push('iso');
-        const scene = Model.kernelScene(App.doc);
-        const rev = App.revision;
-        proj = await Kernel.call('project', { scene, views }); projId++;
-        projRev = rev;
-      } catch (e) { UI.toast('Die Ansichten konnten nicht berechnet werden: ' + e.message, { kind: 'bad' }); }
-      loadingProj = false;
-      if (App.revision !== projRev) return refresh();
-    }
+    try {
+      await ensureProjections();
+    } catch (e) { UI.toast('Die Ansichten konnten nicht berechnet werden: ' + e.message, { kind: 'bad' }); }
     render();
   }
   // ---------- Kanten aufräumen ----------
@@ -193,19 +429,19 @@ const Drawing = (() => {
   }
   // ---------- Geometrie der Ansichten ----------
   const geoCache = new Map();
-  function viewGeom(name) {
+  function viewGeom(name, sh = dwg()) {
     if (!proj || !proj.views || !proj.views[name]) return null;
     // beim Bemaßen wird bei jeder Mausbewegung neu gezeichnet – die aufgeräumten Kanten merken
-    const ck = name + '|' + projId + '|' + !!dwg().hidden + '|' + !!dwg().centers;
+    const ck = name + '|' + projId + '|' + !!sh.hidden + '|' + !!sh.centers;
     if (geoCache.has(ck)) return geoCache.get(ck);
     if (geoCache.size > 16) geoCache.clear();
-    const g = viewGeom_(name); geoCache.set(ck, g); return g;
+    const g = viewGeom_(name, sh); geoCache.set(ck, g); return g;
   }
-  function viewGeom_(name) {
+  function viewGeom_(name, sh = dwg()) {
     const v = proj.views[name];
     const raw = (e) => (e.t === 'LINE' && e.a ? { kind: 'line', a: e.a, b: e.b } : e.t === 'CIRCLE' && e.c && e.pts ? { kind: 'arc', c: e.c, r: e.r, full: !!e.full, pts: e.pts } : e.pts ? { kind: 'curve', pts: e.pts } : null);
     // Isometrie wie üblich ohne verdeckte Kanten
-    const showHidden = dwg().hidden && name !== 'iso';
+    const showHidden = sh.hidden && name !== 'iso';
     const cg = cleanGeom(v.visible.map(raw).filter(Boolean), showHidden ? v.hidden.map(raw).filter(Boolean) : []);
     const polys = cg.vis, hidden = cg.hid, circles = [], points = [];
     for (const p of polys) {
@@ -218,7 +454,7 @@ const Drawing = (() => {
     if (!isFinite(x0)) return null;
     // Mittellinien und kosmetische Gewinde (KP-20)
     const centers = [];
-    if (dwg().centers) {
+    if (sh.centers) {
       const dir = new THREE.Vector3(...v.dir), ex = new THREE.Vector3(...v.x), ey = new THREE.Vector3(...v.y);
       const seen = new Set();
       for (const a of proj.axes || []) {
@@ -287,10 +523,10 @@ const Drawing = (() => {
     });
     return out;
   }
-  function freeGeom() {
-    const d = dwg(); if (!d.free.length) return null;
+  function freeGeom(sh = dwg()) {
+    if (!sh.free.length) return null;
     const polys = [], circles = [], points = [];
-    for (const e of d.free) {
+    for (const e of sh.free) {
       if (e.type === 'text') continue;
       for (const s of SK.segsOf(e)) {
         const pts = SK.segPoints(s);
@@ -303,32 +539,34 @@ const Drawing = (() => {
         points.push(pts[0], pts[pts.length - 1]);
       }
     }
-    for (const e of d.free) if (e.type === 'text') points.push(e.p);
+    for (const e of sh.free) if (e.type === 'text') points.push(e.p);
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (const p of polys) for (const q of p.pts) { x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]); }
-    for (const e of d.free) if (e.type === 'text') { x0 = Math.min(x0, e.p[0]); y0 = Math.min(y0, e.p[1]); x1 = Math.max(x1, e.p[0] + 10); y1 = Math.max(y1, e.p[1] + 5); }
+    for (const e of sh.free) if (e.type === 'text') { x0 = Math.min(x0, e.p[0]); y0 = Math.min(y0, e.p[1]); x1 = Math.max(x1, e.p[0] + 10); y1 = Math.max(y1, e.p[1] + 5); }
     if (!isFinite(x0)) { x0 = -10; y0 = -10; x1 = 10; y1 = 10; }
     return { polys, hidden: [], circles, points, centers: [], box: [x0, y0, x1, y1], w: x1 - x0, h: y1 - y0 };
   }
-  function computeLayout() {
-    const d = dwg(); const [W, H] = sheetSize();
-    const frame = { x: 20, y: 10, w: W - 30, h: H - 20 };
+  function computeLayout(sh = dwg()) {
+    const [W, H] = sheetSize(sh);
+    // ISO 5457: Heft-Rand links 20 mm; übrige Ränder 10 mm bei A4–A2, 20 mm bei A1–A0
+    const m = sh.sheet === 'A1' || sh.sheet === 'A0' ? 20 : 10;
+    const frame = { x: 20, y: m, w: W - 20 - m, h: H - 2 * m };
     const tb = { w: Math.min(180, frame.w), h: 32 };
     const area = { x: frame.x + 8, y: frame.y + 8, w: frame.w - 16, h: frame.h - tb.h - 16 };
-    const G = { front: d.views.front ? viewGeom('front') : null, top: d.views.top ? viewGeom('top') : null, left: d.views.left ? viewGeom('left') : null, iso: d.views.iso ? viewGeom('iso') : null, free: freeGeom() };
+    const G = { front: sh.views.front ? viewGeom('front', sh) : null, top: sh.views.top ? viewGeom('top', sh) : null, left: sh.views.left ? viewGeom('left', sh) : null, iso: sh.views.iso ? viewGeom('iso', sh) : null, free: freeGeom(sh) };
     const main = G.front || G.top || G.left;
     let s = 1;
     const gap = 22;
-    const needW = (sc) => (G.front ? G.front.w * sc : G.top ? G.top.w * sc : 0) + (G.left ? gap + G.left.w * sc : 0) + (G.iso && !G.top ? 0 : 0);
+    const needW = (sc) => (G.front ? G.front.w * sc : G.top ? G.top.w * sc : 0) + (G.left ? gap + G.left.w * sc : 0);
     const needH = (sc) => (G.front ? G.front.h * sc : G.left ? G.left.h * sc : 0) + (G.top ? gap + G.top.h * sc : 0);
     const isoRoom = G.iso ? 0.35 : 0;
-    if (d.scale === 'auto') {
+    if (sh.scale === 'auto') {
       s = SCALES[SCALES.length - 1];
       for (const sc of SCALES) {
         if (!main) { s = 1; break; }
         if (needW(sc) + 24 <= area.w * (G.iso && !G.top ? 1 - isoRoom : 1) && needH(sc) + 24 <= area.h) { s = sc; break; }
       }
-    } else s = +d.scale || 1;
+    } else s = +sh.scale || 1;
     const views = {};
     if (main) {
       const fw = G.front ? G.front.w * s : G.top.w * s, fh = G.front ? G.front.h * s : 0;
@@ -337,12 +575,12 @@ const Drawing = (() => {
       const x0 = area.x + Math.max(12, (area.w * (G.iso ? 0.72 : 1) - totalW) / 2), y0 = area.y + Math.max(12, (area.h - totalH) / 2);
       const place = (name, geo, px, py) => { views[name] = { geo, s, ox: px - geo.box[0] * s, oy: py + geo.box[3] * s }; };
       if (G.front) place('front', G.front, x0, y0);
-      if (G.left) { const ref = G.front || G.left; const py = G.front ? y0 + (G.front.box[3] - G.left.box[3]) * s : y0; place('left', G.left, x0 + fw + gap, py); if (G.front) views.left.oy = views.front.oy; }
+      if (G.left) { const py = G.front ? y0 + (G.front.box[3] - G.left.box[3]) * s : y0; place('left', G.left, x0 + fw + gap, py); if (G.front) views.left.oy = views.front.oy; }
       if (G.top) { place('top', G.top, x0, y0 + fh + (G.front ? gap : 0)); if (G.front) views.top.ox = views.front.ox; }
       if (G.iso) {
-        const rx = G.left ? x0 + fw + gap : x0 + fw + gap; const ry = G.top ? y0 + fh + gap : y0;
+        const rx = x0 + fw + gap; const ry = G.top ? y0 + fh + gap : y0;
         const aw = area.x + area.w - rx - 6, ah = area.y + area.h - ry - 6;
-        let si = s; while (si > 0.02 && (G.iso.w * si > aw || G.iso.h * si > ah)) si /= 1.25;
+        let si = s; while (si > 0.01 && (G.iso.w * si > aw || G.iso.h * si > ah)) si /= 1.25;
         if (aw > 20 && ah > 20) views.iso = { geo: G.iso, s: si, ox: rx + (aw - G.iso.w * si) / 2 - G.iso.box[0] * si, oy: ry + (ah - G.iso.h * si) / 2 + G.iso.box[3] * si, noDims: true };
       }
     }
@@ -354,12 +592,12 @@ const Drawing = (() => {
   const toView = (v, P) => [(P[0] - v.ox) / v.s, (v.oy - P[1]) / v.s];
 
   // ---------- Bemaßung ----------
-  function autoDimList() {
-    const d = dwg(); const all = [];
-    for (const dim of d.dims) {
+  function autoDimList(sh = dwg(), lay = layout) {
+    const all = [];
+    for (const dim of sh.dims) {
       if (!dim.auto) { all.push(dim); continue; }
       const out = [];
-      const v = layout.views[dim.view]; if (!v) continue;
+      const v = lay.views[dim.view]; if (!v) continue;
       const b = v.geo.box;
       if (dim.auto === 'width') out.push({ ...dim, type: 'lin', dir: 'h', a: [b[0], b[1]], b: [b[2], b[1]], off: -(9 / v.s) });
       if (dim.auto === 'height') out.push({ ...dim, type: 'lin', dir: 'v', a: [b[0], b[1]], b: [b[0], b[3]], off: -(9 / v.s) });
@@ -399,8 +637,8 @@ const Drawing = (() => {
     }
     return all;
   }
-  function dimSVG(dim, lines, texts) {
-    const v = layout.views[dim.view]; if (!v) return;
+  function dimSVG(dim, lines, texts, lay = layout) {
+    const v = lay.views[dim.view]; if (!v) return;
     const TXT = 3.5, AR = 3, EXT = 2, GAPX = 1;
     if (dim.type === 'lin') {
       const A = toSheet(v, dim.a), B = toSheet(v, dim.b);
@@ -471,17 +709,15 @@ const Drawing = (() => {
   }
 
   // ---------- Zeichnen ----------
-  function render() {
-    if (!holder) return;
-    layout = computeLayout();
-    const { W, H, frame, tb } = layout;
-    const d = dwg();
+  function buildSheetContent(sh, idx, total) {
+    const lay = computeLayout(sh);
+    const { W, H, frame } = lay;
     const lines = [], texts = [];
     // Rahmen
     lines.push({ rect: [0, 0, W, H], cls: 'paper' });
     lines.push({ rect: [frame.x, frame.y, frame.w, frame.h], cls: 'frame' });
     // Ansichten
-    for (const [name, v] of Object.entries(layout.views)) {
+    for (const [name, v] of Object.entries(lay.views)) {
       const asLine = (p, cls) => {
         if (p.c && !p.arc) return { circle: [...toSheet(v, p.c), p.r * v.s], cls };
         const l = { pts: p.pts.map((q) => toSheet(v, q)), cls };
@@ -495,7 +731,7 @@ const Drawing = (() => {
         else { const A = toSheet(v, c.a), B = toSheet(v, c.b); const dx = B[0] - A[0], dy = B[1] - A[1]; const L = Math.hypot(dx, dy) || 1; const e = 2.5; lines.push({ pts: [[A[0] - (dx / L) * e, A[1] - (dy / L) * e], [B[0] + (dx / L) * e, B[1] + (dy / L) * e]], cls: 'ctr' }); }
       }
       // Kosmetische Gewinde nach DIN ISO 6410-1: 3/4-Kreis (Stirnansicht) bzw. dünne parallele Linien (Seitenansicht)
-      const labelSide = name === 'front' || (name === 'left' && !layout.views.front);
+      const labelSide = name === 'front' || (name === 'left' && !lay.views.front);
       for (const th of v.geo.threads || []) {
         if (th.type === 'end') {
           const C = toSheet(v, th.c), rr = th.rThread * v.s;
@@ -521,36 +757,45 @@ const Drawing = (() => {
           }
         }
       }
-      if (name === 'free') for (const e of d.free) if (e.type === 'text') { const P = toSheet(v, e.p); texts.push({ x: P[0], y: P[1], t: e.text, size: e.size || 3.5, rot: 0, anchor: 'start', id: e.id, cls: 'free' }); }
+      if (name === 'free') for (const e of sh.free) if (e.type === 'text') { const P = toSheet(v, e.p); texts.push({ x: P[0], y: P[1], t: e.text, size: e.size || 3.5, rot: 0, anchor: 'start', id: e.id, cls: 'free' }); }
     }
-    if (!Object.keys(layout.views).length) texts.push({ x: W / 2, y: H / 2 - 10, t: 'Noch kein Modell – bau zuerst etwas im Reiter „Modell“.', size: 5, anchor: 'middle', cls: 'note' });
+    if (!Object.keys(lay.views).length) texts.push({ x: W / 2, y: H / 2 - 10, t: 'Noch kein Modell – bau zuerst etwas im Reiter „Modell“.', size: 5, anchor: 'middle', cls: 'note' });
     // Bemaßungen
-    for (const dim of autoDimList()) if (layout.views[dim.view] && !layout.views[dim.view].noDims) dimSVG(dim, lines, texts);
+    for (const dim of autoDimList(sh, lay)) if (lay.views[dim.view] && !lay.views[dim.view].noDims) dimSVG(dim, lines, texts, lay);
     // Schriftfeld
-    titleBlock(lines, texts);
-    // Werkzeug-Vorschau
-    if (tool === 'dim' && toolState) previewDim(lines, texts);
-    buildSVG(lines, texts);
-    const sv = document.getElementById('dw-scale-val'); if (sv) sv.textContent = scaleText(layout.s);
+    titleBlock(sh, lay, idx, total, lines, texts);
+    return { layout: lay, lines, texts };
   }
-  function titleBlock(lines, texts) {
-    const { frame, tb } = layout; const d = dwg(); const T = d.title;
+  function render() {
+    if (!holder) return;
+    const all = sheets(), idx = activeIndex(), sh = all[idx] || dwg();
+    const cur = buildSheetContent(sh, idx, all.length);
+    layout = cur.layout;
+    // Werkzeug-Vorschau
+    if (tool === 'dim' && toolState) previewDim(cur.lines, cur.texts);
+    buildSVG(cur.lines, cur.texts);
+    const sv = document.getElementById('dw-scale-val'); if (sv) sv.textContent = scaleText(layout.s);
+    renderTabs();
+  }
+  function titleBlock(sh, lay, idx, total, lines, texts) {
+    const { frame, tb } = lay; const T = sh.title || {};
     const x1 = frame.x + frame.w, y1 = frame.y + frame.h, x0 = x1 - tb.w, y0 = y1 - tb.h;
     lines.push({ rect: [x0, y0, tb.w, tb.h], cls: 'frame' });
-    // links: 4 Zeilen × 2 Spalten · Mitte: Benennung · rechts: Projektionssymbol
-    const cA = x0, cB = x0 + 32, cC = x0 + 72, cD = x1 - 32;
+    // links: 4 Zeilen × 2 Spalten (Blatt + Format geteilt) · Mitte: Benennung · rechts: Projektionssymbol
+    const cA = x0, cB = x0 + 32, cB2 = x0 + 54, cC = x0 + 72, cD = x1 - 32;
     const rows = [y0, y0 + 8, y0 + 16, y0 + 24, y1];
     for (const r of rows.slice(1, -1)) lines.push({ pts: [[cA, r], [cC, r]], cls: 'thin' });
-    lines.push({ pts: [[cB, y0], [cB, y1]], cls: 'thin' }, { pts: [[cC, y0], [cC, y1]], cls: 'thin' }, { pts: [[cD, y0], [cD, y1]], cls: 'thin' });
+    lines.push({ pts: [[cB, y0], [cB, y1]], cls: 'thin' }, { pts: [[cB2, rows[2]], [cB2, rows[3]]], cls: 'thin' }, { pts: [[cC, y0], [cC, y1]], cls: 'thin' }, { pts: [[cD, y0], [cD, y1]], cls: 'thin' });
     lines.push({ pts: [[cC, y0 + 24], [cD, y0 + 24]], cls: 'thin' }, { pts: [[cD, y0 + 20], [x1, y0 + 20]], cls: 'thin' });
     const lab = (x, y, t) => texts.push({ x: x + 1.2, y: y + 2.6, t, size: 1.9, anchor: 'start', cls: 'lab' });
     const val = (x, y, t, w, size = 3) => { const s = fitSize(t || '', w - 2.6, size, 1.8); texts.push({ x: x + 1.5, y: y + 6.6, t: clipText(t || '', w - 2.6, s), size: s, anchor: 'start', cls: 'val' }); };
     lab(cA, rows[0], 'Gezeichnet'); val(cA, rows[0], T.name, 32, 2.8);
     lab(cB, rows[0], 'Datum'); val(cB, rows[0], T.datum, 40, 2.8);
     lab(cA, rows[1], 'Werkstoff'); val(cA, rows[1], T.werkstoff, 32, 2.8);
-    lab(cB, rows[1], 'Maßstab'); val(cB, rows[1], scaleText(layout.s), 40, 3.2);
+    lab(cB, rows[1], 'Maßstab'); val(cB, rows[1], scaleText(lay.s), 40, 3.2);
     lab(cA, rows[2], 'Firma / Schule'); val(cA, rows[2], T.firma, 32, 2.6);
-    lab(cB, rows[2], 'Blatt'); val(cB, rows[2], T.blatt, 40, 2.8);
+    lab(cB, rows[2], 'Blatt'); val(cB, rows[2], T.blatt ? T.blatt : `${idx + 1}/${total}`, 22, 2.8);
+    lab(cB2, rows[2], 'Format'); val(cB2, rows[2], sh.sheet, 18, 2.8);
     lab(cA, rows[3], 'Zeichnungsnummer'); val(cA, rows[3], T.nummer, 32, 2.8);
     lab(cB, rows[3], 'Allgemeintoleranz'); val(cB, rows[3], 'ISO 2768-m', 40, 2.6);
     // Benennung, bei Bedarf zweizeilig
@@ -565,7 +810,7 @@ const Drawing = (() => {
       texts.push({ x: cC + 1.5, y: rows[0] + 10.5, t: clipText(l1, tw, ts), size: ts, anchor: 'start', cls: 'title' });
       texts.push({ x: cC + 1.5, y: rows[0] + 10.5 + ts * 1.25, t: clipText(l2, tw, ts), size: ts, anchor: 'start', cls: 'title' });
     } else texts.push({ x: cC + 1.5, y: rows[0] + 13.5, t: title, size: ts, anchor: 'start', cls: 'title' });
-    texts.push({ x: cC + 1.5, y: rows[3] + 5.4, t: `Erstellt mit Tracery · Maße in ${Units.label()}`, size: 2, anchor: 'start', cls: 'lab' });
+    texts.push({ x: cC + 1.5, y: rows[3] + 5.4, t: clipText(`Erstellt mit Tracery · ${sh.name} · Maße in ${Units.label()}`, tw, 2), size: 2, anchor: 'start', cls: 'lab' });
     // Projektionssymbol Methode 1 (ISO 5456-2): Kegelstumpf links mit schmalem Ende links, Ansicht von links rechts daneben
     lab(cD, rows[0], 'Projektion');
     const sx = cD + 4.5, cy = y0 + 11.5;
@@ -805,12 +1050,18 @@ const Drawing = (() => {
   // ---------- Menüs ----------
   function set(fn, label) { App.change(label || 'Zeichnung geändert', () => fn(dwg())); refreshSoon(); }
   const refreshSoon = debounce(() => { projRev = -1; refresh(); }, 30);
+  function sheetOptions() {
+    return SHEET_ORDER.map((k) => {
+      const [w, h] = SHEETS[k];
+      return [k, `${k} (${h} × ${w} mm)`];
+    });
+  }
   function sheetMenu(anchor) {
     const d = dwg();
     const box = h('div', { style: { display: 'grid', gap: '12px' } });
     const f = h('div', { class: 'fields' });
-    f.append(UI.selectField({ id: 'dw-sheet', label: T('menu.draw.sheet'), value: d.sheet, options: [['A4', 'A4'], ['A3', 'A3']], onChange: (v) => { set((x) => { x.sheet = v; }); fitZoom(); } }));
-    f.append(UI.selectField({ id: 'dw-orient', label: T('menu.draw.orient'), value: d.orient, options: [['landscape', T('menu.draw.landscape')], ['portrait', T('menu.draw.portrait')]], onChange: (v) => { set((x) => { x.orient = v; }); fitZoom(); } }));
+    f.append(UI.selectField({ id: 'dw-sheet', label: T('menu.draw.sheet'), value: d.sheet, options: sheetOptions(), onChange: (v) => { set((x) => { x.sheet = v; }); fitZoom(); Panels.renderRight(); renderTabs(); } }));
+    f.append(UI.selectField({ id: 'dw-orient', label: T('menu.draw.orient'), value: d.orient, options: [['landscape', T('menu.draw.landscape')], ['portrait', T('menu.draw.portrait')]], onChange: (v) => { set((x) => { x.orient = v; }); fitZoom(); Panels.renderRight(); renderTabs(); } }));
     box.append(f);
     box.append(UI.selectField({ id: 'dw-scale', label: T('menu.draw.scale'), value: String(d.scale), options: [['auto', T('menu.draw.scaleAuto')], ...SCALES.map((s) => [String(s), scaleText(s)])], onChange: (v) => set((x) => { x.scale = v === 'auto' ? 'auto' : +v; }) }));
     box.append(h('div', { class: 'section-h' }, T('menu.draw.viewsHeading')));
@@ -831,54 +1082,165 @@ const Drawing = (() => {
       { label: T('menu.draw.exportDxf'), icon: 'file', run: () => exportDXF() },
     ]);
   }
-  function fileBase() { return Print.safeName((dwg().title.titel || App.doc.name) + ' Zeichnung'); }
+  function fileBase(withSheet = false) {
+    const d = dwg();
+    const base = (d.title.titel || App.doc.name) + ' Zeichnung';
+    return Print.safeName(withSheet && sheets().length > 1 ? `${base} ${d.name}` : base);
+  }
   function exportSVG() {
     if (!svg) return;
     const clone = svg.cloneNode(true); clone.removeAttribute('width'); clone.removeAttribute('height');
     const [W, H] = sheetSize(); clone.setAttribute('width', W + 'mm'); clone.setAttribute('height', H + 'mm');
     clone.querySelectorAll('.sel').forEach((el) => el.classList.remove('sel'));
     const str = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone);
-    Print.save(fileBase() + '.svg', str);
+    Print.save(fileBase(true) + '.svg', str);
   }
-  let jspdfPromise = null;
-  function loadJsPDF() {
-    if (window.jspdf) return Promise.resolve(window.jspdf);
-    if (!jspdfPromise) jspdfPromise = new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'; s.onload = () => res(window.jspdf); s.onerror = () => { jspdfPromise = null; rej(new Error('PDF-Baustein konnte nicht geladen werden.')); }; document.head.append(s); });
-    return jspdfPromise;
+  // Eingebauter PDF-1.4-Writer ohne externe Abhängigkeit: unterstützt mehrere Blätter mit beliebigen Größen (A4–A0, hoch/quer)
+  const PT = 72 / 25.4;
+  const pf = (n) => (Math.round(n * 1000) / 1000).toString();
+  const pf2 = (n) => (Math.round(n * 100) / 100).toFixed(2);
+  function pdfEsc(s) {
+    return latin1(s).replace(/\r?\n/g, ' ').replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+  }
+  function pdfTextW(str, fsPt) {
+    let w = 0;
+    for (let i = 0; i < str.length; i++) {
+      const c = str[i];
+      if ('iIl1.,:;\'|! '.includes(c)) w += 0.28;
+      else if ('MWmwØ'.includes(c)) w += 0.78;
+      else if (c >= 'A' && c <= 'Z') w += 0.64;
+      else w += 0.54;
+    }
+    return w * fsPt;
+  }
+  function toPdfBytes(str) {
+    const out = new Uint8Array(str.length);
+    for (let i = 0; i < str.length; i++) out[i] = str.charCodeAt(i) & 0xff;
+    return out;
+  }
+  function pageStream(W, H, lines, texts) {
+    const out = ['1 J 1 j'];
+    const style = {
+      frame: [0.7, null],
+      thin: [0.25, null],
+      vis: [0.5, null],
+      hid: [0.25, [2.4, 1.2]],
+      ctr: [0.25, [8, 1.2, 0.6, 1.2]],
+      dim: [0.25, null],
+    };
+    const px = (x) => pf(x * PT);
+    const py = (y) => pf((H - y) * PT);
+    for (const l of lines) {
+      if (l.cls === 'paper' || l.cls === 'prev' || l.cls === 'snap') continue;
+      if (l.cls === 'arrow') {
+        const [a, b, c] = l.poly;
+        out.push(`0.067 g ${px(a[0])} ${py(a[1])} m ${px(b[0])} ${py(b[1])} l ${px(c[0])} ${py(c[1])} l h f`);
+        continue;
+      }
+      const st = style[l.cls];
+      if (!st) continue;
+      out.push(`0.067 G ${pf(st[0] * PT)} w`);
+      if (st[1]) out.push(`[${st[1].map((v) => pf(v * PT)).join(' ')}] 0 d`);
+      else out.push('[] 0 d');
+      if (l.rect) {
+        const [rx, ry, rw, rh] = l.rect;
+        out.push(`${px(rx)} ${py(ry + rh)} ${pf(rw * PT)} ${pf(rh * PT)} re S`);
+      } else if (l.circle) {
+        const cx = l.circle[0] * PT, cy = (H - l.circle[1]) * PT, R = l.circle[2] * PT;
+        const k = 0.5522847498 * R;
+        out.push(
+          `${pf(cx + R)} ${pf(cy)} m`,
+          `${pf(cx + R)} ${pf(cy + k)} ${pf(cx + k)} ${pf(cy + R)} ${pf(cx)} ${pf(cy + R)} c`,
+          `${pf(cx - k)} ${pf(cy + R)} ${pf(cx - R)} ${pf(cy + k)} ${pf(cx - R)} ${pf(cy)} c`,
+          `${pf(cx - R)} ${pf(cy - k)} ${pf(cx - k)} ${pf(cy - R)} ${pf(cx)} ${pf(cy - R)} c`,
+          `${pf(cx + k)} ${pf(cy - R)} ${pf(cx + R)} ${pf(cy - k)} ${pf(cx + R)} ${pf(cy)} c S`
+        );
+      } else if (l.pts && l.pts.length > 1) {
+        const seg = [`${px(l.pts[0][0])} ${py(l.pts[0][1])} m`];
+        for (let i = 1; i < l.pts.length; i++) seg.push(`${px(l.pts[i][0])} ${py(l.pts[i][1])} l`);
+        seg.push('S');
+        out.push(seg.join(' '));
+      }
+    }
+    out.push('[] 0 d');
+    for (const t of texts) {
+      if (t.cls === 'note') continue;
+      const raw = latin1(t.t);
+      const esc = pdfEsc(t.t);
+      const fs = t.size * PT;
+      const fnt = t.cls === 'title' ? '/F2' : '/F1';
+      const gray = t.cls === 'lab' ? '0.333' : '0.067';
+      const rad = -((t.rot || 0) * Math.PI) / 180;
+      const c = Math.cos(rad), s = Math.sin(rad);
+      const dx = t.anchor === 'middle' ? -pdfTextW(raw, fs) / 2 : 0;
+      out.push(`${gray} g q ${pf(c)} ${pf(s)} ${pf(-s)} ${pf(c)} ${px(t.x)} ${py(t.y)} cm BT ${fnt} ${pf(fs)} Tf ${pf(dx)} 0 Td (${esc}) Tj ET Q`);
+    }
+    return out.join('\n') + '\n';
+  }
+  function buildPDF(pages, meta = {}) {
+    const objs = [];
+    const addObj = (bodyBytes) => { objs.push(bodyBytes); return objs.length; };
+    const addStr = (s) => addObj(toPdfBytes(s));
+    addStr(''); // 1: Catalog (wird unten gesetzt)
+    addStr(''); // 2: Pages (wird unten gesetzt)
+    const f1 = addStr('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>');
+    const f2 = addStr('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>');
+    const infoId = addStr(`<< /Title (${pdfEsc(meta.title || 'Zeichnung')}) /Creator (Tracery) >>`);
+    const kids = [];
+    for (const p of pages) {
+      const sBytes = toPdfBytes(pageStream(p.W, p.H, p.lines, p.texts));
+      const head = toPdfBytes(`<< /Length ${sBytes.length} >>\nstream\n`);
+      const tail = toPdfBytes('\nendstream');
+      const cObj = new Uint8Array(head.length + sBytes.length + tail.length);
+      cObj.set(head, 0); cObj.set(sBytes, head.length); cObj.set(tail, head.length + sBytes.length);
+      const cId = addObj(cObj);
+      const pId = addStr(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pf2(p.W * PT)} ${pf2(p.H * PT)}] /Resources << /Font << /F1 ${f1} 0 R /F2 ${f2} 0 R >> >> /Contents ${cId} 0 R >>`);
+      kids.push(pId);
+    }
+    objs[0] = toPdfBytes('<< /Type /Catalog /Pages 2 0 R >>');
+    objs[1] = toPdfBytes(`<< /Type /Pages /Kids [${kids.map((k) => `${k} 0 R`).join(' ')}] /Count ${kids.length} >>`);
+    const chunks = [];
+    const hdr = toPdfBytes('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');
+    chunks.push(hdr);
+    let pos = hdr.length;
+    const offsets = [0];
+    for (let i = 0; i < objs.length; i++) {
+      offsets.push(pos);
+      const pre = toPdfBytes(`${i + 1} 0 obj\n`);
+      const post = toPdfBytes('\nendobj\n');
+      chunks.push(pre, objs[i], post);
+      pos += pre.length + objs[i].length + post.length;
+    }
+    const xrefPos = pos;
+    const xrefLines = [`xref\n0 ${objs.length + 1}\n0000000000 65535 f \n`];
+    for (let i = 1; i <= objs.length; i++) {
+      xrefLines.push(String(offsets[i]).padStart(10, '0') + ' 00000 n \n');
+    }
+    xrefLines.push(`trailer\n<< /Size ${objs.length + 1} /Root 1 0 R /Info ${infoId} 0 R >>\nstartxref\n${xrefPos}\n%%EOF\n`);
+    const tailBytes = toPdfBytes(xrefLines.join(''));
+    chunks.push(tailBytes);
+    pos += tailBytes.length;
+    const out = new Uint8Array(pos);
+    let off = 0;
+    for (const c of chunks) { out.set(c, off); off += c.length; }
+    return out;
+  }
+  async function buildPDFBytes() {
+    await ensureProjections();
+    const all = sheets();
+    const pages = all.map((sh, i) => {
+      const content = buildSheetContent(sh, i, all.length);
+      return { W: content.layout.W, H: content.layout.H, lines: content.lines, texts: content.texts };
+    });
+    const active = dwg();
+    return buildPDF(pages, { title: (active.title && active.title.titel) || App.doc.name });
   }
   async function exportPDF() {
     const tst = UI.toast('PDF wird erstellt …', { icon: 'file', ms: 15000 });
     try {
-      const lib = await loadJsPDF(); const { jsPDF } = lib;
-      render();
-      const [W, H] = sheetSize(); const pdf = new jsPDF({ orientation: W > H ? 'landscape' : 'portrait', unit: 'mm', format: [W, H] });
-      pdf.setProperties({ title: dwg().title.titel || App.doc.name, creator: 'Tracery' });
-      const style = { frame: [0.7, null], thin: [0.25, null], vis: [0.5, null], hid: [0.25, [2.4, 1.2]], ctr: [0.25, [8, 1.2, 0.6, 1.2]], dim: [0.25, null] };
-      for (const l of lastLines) {
-        if (l.cls === 'paper' || l.cls === 'prev' || l.cls === 'snap') continue;
-        const st = style[l.cls]; pdf.setDrawColor(17, 17, 17);
-        if (l.cls === 'arrow') { pdf.setFillColor(17, 17, 17); const [a, b, c] = l.poly; pdf.triangle(a[0], a[1], b[0], b[1], c[0], c[1], 'F'); continue; }
-        if (!st) continue;
-        pdf.setLineWidth(st[0]); pdf.setLineDashPattern(st[1] || [], 0);
-        if (l.rect) pdf.rect(l.rect[0], l.rect[1], l.rect[2], l.rect[3], 'S');
-        else if (l.circle) pdf.circle(l.circle[0], l.circle[1], l.circle[2], 'S');
-        else if (l.pts && l.pts.length > 1) {
-          // als ein zusammenhängender Pfad, damit das Strichmuster durchläuft
-          const d = []; for (let i = 1; i < l.pts.length; i++) d.push([l.pts[i][0] - l.pts[i - 1][0], l.pts[i][1] - l.pts[i - 1][1]]);
-          pdf.lines(d, l.pts[0][0], l.pts[0][1], [1, 1], 'S', false);
-        }
-      }
-      pdf.setLineDashPattern([], 0);
-      for (const t of lastTexts) {
-        if (t.cls === 'note') continue;
-        pdf.setFont('helvetica', t.cls === 'title' ? 'bold' : 'normal'); pdf.setFontSize(t.size * 2.83465 / 1.0);
-        pdf.setTextColor(t.cls === 'lab' ? 85 : 17);
-        const opts = { align: t.anchor === 'middle' ? 'center' : 'left', angle: t.rot ? -t.rot : 0, baseline: 'alphabetic' };
-        pdf.text(latin1(t.t), t.x, t.y, opts);
-      }
-      const buf = pdf.output('arraybuffer');
+      const bytes = await buildPDFBytes();
       tst.remove();
-      await Print.save(fileBase() + '.pdf', new Blob([buf]));
+      await Print.save(fileBase(false) + '.pdf', new Blob([bytes], { type: 'application/pdf' }));
     } catch (e) { tst.remove(); UI.toast('PDF hat nicht geklappt: ' + e.message, { kind: 'bad' }); }
   }
   async function exportDXF() {
@@ -918,30 +1280,45 @@ const Drawing = (() => {
     P(0, 'ENDSEC', 0, 'EOF');
     const text = out.join('\r\n') + '\r\n';
     const bytes = new Uint8Array([...text].map((ch) => { const c = ch.charCodeAt(0); return c < 256 ? c : 63; }));
-    const zip = await Zip.make([{ name: fileBase() + '.dxf', data: bytes }]);
-    await Print.save(fileBase() + ' DXF.zip', new Blob([zip]));
+    const zip = await Zip.make([{ name: fileBase(true) + '.dxf', data: bytes }]);
+    await Print.save(fileBase(true) + ' DXF.zip', new Blob([zip]));
   }
   // ---------- Rechte Leiste ----------
   function renderPanel(body) {
-    const d = dwg(); const w = h('div', { class: 'props' });
+    const all = sheets(), idx = activeIndex(), d = all[idx] || dwg();
+    const w = h('div', { class: 'props' });
     const sec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Schriftfeld'));
     const tf = (k, label, ph) => { const f = h('div', { class: 'field' }, h('label', { for: 'tb-' + k }, label), h('div', { class: 'inp' }, h('input', { id: 'tb-' + k, value: d.title[k] || '', placeholder: ph || '', style: { fontFamily: 'var(--font)' } }))); f.querySelector('input').addEventListener('change', (e) => set((x) => { x.title[k] = e.target.value; }, 'Schriftfeld geändert')); f.querySelector('input').addEventListener('keydown', (e) => e.stopPropagation()); return f; };
-    sec.append(tf('titel', 'Benennung', App.doc.name), h('div', { class: 'fields' }, tf('nummer', 'Zeichnungsnummer'), tf('blatt', 'Blatt')), h('div', { class: 'fields' }, tf('name', 'Gezeichnet von'), tf('datum', 'Datum')), h('div', { class: 'fields' }, tf('werkstoff', 'Werkstoff'), tf('firma', 'Firma / Schule')));
+    sec.append(tf('titel', 'Benennung', App.doc.name), h('div', { class: 'fields' }, tf('nummer', 'Zeichnungsnummer'), tf('blatt', 'Blatt', `${idx + 1}/${all.length}`)), h('div', { class: 'fields' }, tf('name', 'Gezeichnet von'), tf('datum', 'Datum')), h('div', { class: 'fields' }, tf('werkstoff', 'Werkstoff'), tf('firma', 'Firma / Schule')));
     w.append(sec);
     const info = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Blatt'));
-    info.append(h('div', { class: 'mini-list' }, h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Format'), h('b', null, d.sheet + ' ' + (d.orient === 'portrait' ? 'hoch' : 'quer'))), h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Maßstab'), h('b', { class: 'mono', id: 'dw-scale-val' }, layout ? scaleText(layout.s) : '–')), h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Maße'), h('b', { class: 'mono' }, String(layout ? autoDimList().length : d.dims.length)))));
-    const b = h('button', { type: 'button', class: 'btn' }); b.innerHTML = icon('sheet') + 'Blatt & Ansichten'; b.onclick = (e) => sheetMenu(e.currentTarget);
-    info.append(h('div', { class: 'btn-row' }, b)); w.append(info);
+    info.append(h('div', { class: 'mini-list' },
+      h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Blattname'), h('b', null, d.name)),
+      h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Blatt'), h('b', { class: 'mono' }, `${idx + 1} / ${all.length}`)),
+      h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Maßstab'), h('b', { class: 'mono', id: 'dw-scale-val' }, layout ? scaleText(layout.s) : '–')),
+      h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Maße'), h('b', { class: 'mono' }, String(layout ? autoDimList(d, layout).length : d.dims.length)))));
+    const flds = h('div', { class: 'fields', 'data-help': 'drawingFormat' });
+    flds.append(UI.selectField({ id: 'dw-panel-sheet', label: T('menu.draw.sheet'), value: d.sheet, options: sheetOptions(), onChange: (v) => { set((x) => { x.sheet = v; }); fitZoom(); renderTabs(); } }));
+    flds.append(UI.selectField({ id: 'dw-panel-orient', label: T('menu.draw.orient'), value: d.orient, options: [['landscape', T('menu.draw.landscape')], ['portrait', T('menu.draw.portrait')]], onChange: (v) => { set((x) => { x.orient = v; }); fitZoom(); renderTabs(); } }));
+    info.append(flds);
+    const b = h('button', { type: 'button', class: 'btn', id: 'dw-sheet-btn', 'data-help': 'drawingFormat' }); b.innerHTML = icon('sheet') + 'Blatt & Ansichten'; b.onclick = (e) => sheetMenu(e.currentTarget);
+    const bAdd = h('button', { type: 'button', class: 'btn', id: 'dw-panel-add', 'data-help': 'drawingSheets' }); bAdd.innerHTML = icon('plus') + 'Neues Blatt'; bAdd.onclick = () => addSheet();
+    info.append(h('div', { class: 'btn-row' }, b, bAdd)); w.append(info);
     if (selDim) {
       const del = h('button', { type: 'button', class: 'btn danger' }); del.innerHTML = icon('trash') + 'Gewähltes löschen'; del.onclick = () => removeSel();
       w.append(h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Auswahl'), h('div', { class: 'btn-row' }, del)));
     }
-    w.append(h('div', { class: 'hint-box', html: 'Die Ansichten stehen nach <b>Projektionsmethode 1</b>: Draufsicht unter der Vorderansicht, Seitenansicht von links rechts daneben. Maß anklicken und <b>Entf</b> drücken zum Löschen.' }));
+    w.append(h('div', { class: 'hint-box', html: 'Die Ansichten stehen nach <b>Projektionsmethode 1</b>: Draufsicht unter der Vorderansicht, Seitenansicht von links rechts daneben. Maß anklicken und <b>Entf</b> drücken zum Löschen. Unten über die Tabs fügst du weitere Blätter hinzu – der PDF-Export enthält alle Blätter.' }));
     body.append(w);
   }
   function tool_(t) { setTool(tool === t ? null : t); }
   App.on('doc', () => { if (App.mode === 'drawing') refreshSoonDoc(); });
-  const refreshSoonDoc = debounce(() => refresh(), 150);
-  return { open, close, refresh, sheetMenu, exportMenu, drawMenu, autoDims, tool: tool_, onKey, renderPanel };
+  const refreshSoonDoc = debounce(async () => { await refresh(); Panels.renderRight(); }, 150);
+  return {
+    open, close, refresh, sheetMenu, exportMenu, drawMenu, autoDims, tool: tool_, onKey, renderPanel,
+    SHEETS, sheets, activeSheet: dwg, addSheet, selectSheet, renameSheet, removeSheet, duplicateSheet,
+    exportPDF, buildPDFBytes,
+    get layout() { return layout; },
+  };
 })();
 

@@ -33,7 +33,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Templates,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,Log,Kernel}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Templates,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,Log,Kernel,Drawing}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -12404,6 +12404,165 @@ def t_a058_eigene_bibliothek(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a062_zeichnung_blaetter(p):
+    import re
+    p.empty()
+    p.ev("App.change('Quader', d => d.items.push(Model.newItem('box', { w: 40, d: 25, h: 15 }, { name: 'Gehäuse' })))")
+    warte_rechnen(p)
+
+    # 1. In Bereich Zeichnung wechseln, Blatt 1 auf A4 hoch stellen → Tabs, Rahmen & Schriftfeld prüfen
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.pg.wait_for_selector('#sheet-tabs .sheet-tab')
+    p.pg.click('#t-sheet'); p.wait(200)
+    p.pg.select_option('#dw-sheet', 'A4')
+    p.pg.select_option('#dw-orient', 'portrait')
+    p.pg.click('#sheet-tabs'); p.wait(300)
+
+    s1 = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const tabs = [...document.querySelectorAll('#sheet-tabs .sheet-tab')];
+      const lay = Drawing.layout;
+      return {
+        vb: svg?.getAttribute('viewBox'),
+        txt: svg?.textContent || '',
+        tabCount: tabs.length,
+        tabName: tabs[0]?.querySelector('.st-name')?.textContent,
+        tabFmt: tabs[0]?.querySelector('.st-fmt')?.textContent,
+        delCount: document.querySelectorAll('#sheet-tabs .st-del').length,
+        frame: lay?.frame,
+        tb: lay?.tb,
+      };
+    """)
+    ok1 = (
+        s1['vb'] == '0 0 210 297'
+        and s1['tabCount'] == 1
+        and s1['tabName'] == 'Blatt 1'
+        and s1['tabFmt'] == 'A4'
+        and s1['delCount'] == 0
+        and s1['frame'] == {'x': 20, 'y': 10, 'w': 180, 'h': 277}
+        and s1['tb'] and s1['tb']['w'] == 180
+        and 'A4' in s1['txt'] and '1/1' in s1['txt']
+    )
+
+    # 2. Zweites Blatt hinzufügen, auf A3 quer stellen, umbenennen & Tab-Wechsel prüfen
+    p.pg.click('#dw-add-sheet'); p.wait(400)
+    p.pg.select_option('#dw-panel-sheet', 'A3')
+    p.pg.select_option('#dw-panel-orient', 'landscape')
+    p.wait(300)
+    p.pg.click('#sheet-tabs .sheet-tab.active .st-ren'); p.wait(200)
+    p.pg.fill('#prompt-inp', 'Detailansicht')
+    p.pg.click('.modal .btn.primary'); p.wait(300)
+
+    s2 = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const tabs = [...document.querySelectorAll('#sheet-tabs .sheet-tab')];
+      return {
+        vb: svg?.getAttribute('viewBox'),
+        txt: svg?.textContent || '',
+        tabCount: tabs.length,
+        names: tabs.map(t => t.querySelector('.st-name')?.textContent),
+        fmts: tabs.map(t => t.querySelector('.st-fmt')?.textContent),
+        delCount: document.querySelectorAll('#sheet-tabs .st-del').length,
+      };
+    """)
+    p.pg.locator('#sheet-tabs .sheet-tab').first.click(); p.wait(300)
+    vb_back1 = p.ev("return { vb: document.querySelector('#sheet .sheet-holder svg')?.getAttribute('viewBox'), txt: document.querySelector('#sheet .sheet-holder svg')?.textContent || '' }")
+    p.pg.locator('#sheet-tabs .sheet-tab').nth(1).click(); p.wait(300)
+    vb_back2 = p.ev("return { vb: document.querySelector('#sheet .sheet-holder svg')?.getAttribute('viewBox'), txt: document.querySelector('#sheet .sheet-holder svg')?.textContent || '' }")
+
+    ok2 = (
+        s2['tabCount'] == 2
+        and s2['names'] == ['Blatt 1', 'Detailansicht']
+        and s2['fmts'] == ['A4', 'A3']
+        and s2['delCount'] == 2
+        and s2['vb'] == '0 0 420 297'
+        and 'A3' in s2['txt'] and '2/2' in s2['txt'] and 'Detailansicht' in s2['txt']
+        and vb_back1['vb'] == '0 0 210 297' and '1/2' in vb_back1['txt']
+        and vb_back2['vb'] == '0 0 420 297' and '2/2' in vb_back2['txt']
+    )
+
+    # 3. Formate A2, A1, A0 (quer & hoch) inkl. Schriftfeld- & Rahmenanpassung prüfen, dann wieder A3 quer
+    fmt_checks = []
+    for fmt, ori, exp_vb, exp_m in [
+        ('A2', 'landscape', '0 0 594 420', 10),
+        ('A1', 'landscape', '0 0 841 594', 20),
+        ('A0', 'landscape', '0 0 1189 841', 20),
+        ('A0', 'portrait', '0 0 841 1189', 20),
+    ]:
+        p.pg.select_option('#dw-panel-sheet', fmt)
+        p.pg.select_option('#dw-panel-orient', ori)
+        p.wait(200)
+        st = p.ev("const s=document.querySelector('#sheet .sheet-holder svg'), l=Drawing.layout; return { vb: s?.getAttribute('viewBox'), txt: s?.textContent || '', frame: l?.frame, tb: l?.tb }")
+        fmt_checks.append(
+            st['vb'] == exp_vb and fmt in st['txt']
+            and st['frame'] and st['frame']['x'] == 20 and st['frame']['y'] == exp_m
+            and st['tb'] and st['tb']['w'] == 180 and st['tb']['w'] <= st['frame']['w']
+        )
+    p.pg.select_option('#dw-panel-sheet', 'A3')
+    p.pg.select_option('#dw-panel-orient', 'landscape')
+    p.wait(250)
+    ok3 = all(fmt_checks)
+
+    # 4. PDF-Export: beide Blätter (A4 hoch, A3 quer) → 2 Seiten mit exakten MediaBox-Größen
+    p.pg.click('#t-dexport'); p.wait(200)
+    with p.pg.expect_download(timeout=30000) as dl_info:
+        p.pg.locator('.menu button', has_text='PDF').click()
+    dl = dl_info.value
+    pdf_path = dl.path()
+    pdf_bytes = open(pdf_path, 'rb').read()
+    mboxes = re.findall(rb'/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)\s*\]', pdf_bytes)
+    pt_to_mm = 25.4 / 72.0
+    sizes_mm = [(float(w) * pt_to_mm, float(h) * pt_to_mm) for w, h in mboxes]
+    ok4 = (
+        dl.suggested_filename.lower().endswith('.pdf')
+        and pdf_bytes.startswith(b'%PDF-1.4')
+        and b'xref' in pdf_bytes and b'%%EOF' in pdf_bytes
+        and b'/Count 2' in pdf_bytes
+        and len(sizes_mm) == 2
+        and abs(sizes_mm[0][0] - 210) < 0.5 and abs(sizes_mm[0][1] - 297) < 0.5
+        and abs(sizes_mm[1][0] - 420) < 0.5 and abs(sizes_mm[1][1] - 297) < 0.5
+        and b'1/2' in pdf_bytes and b'2/2' in pdf_bytes and b'Detailansicht' in pdf_bytes
+    )
+
+    # 5. Löschen, Rückgängig/Wiederholen, Speichern/Laden, Legacy-Migration & Hilfetexte
+    p.pg.click('#sheet-tabs .sheet-tab.active .st-del'); p.wait(300)
+    after_del = p.ev("return { n: Drawing.sheets().length, tabs: document.querySelectorAll('#sheet-tabs .sheet-tab').length, dels: document.querySelectorAll('#sheet-tabs .st-del').length, txt: document.querySelector('#sheet .sheet-holder svg')?.textContent || '' }")
+    p.ev("App.undo()"); p.wait(400)
+    after_undo = p.ev("return { n: Drawing.sheets().length, names: Drawing.sheets().map(s=>s.name), fmts: Drawing.sheets().map(s=>s.sheet+':'+s.orient) }")
+    p.ev("App.redo()"); p.wait(400)
+    after_redo = p.ev("return Drawing.sheets().length")
+    p.ev("App.undo()"); p.wait(400)
+
+    saved = p.ev("return JSON.stringify(App.doc)")
+    p.ev("App.setDoc(JSON.parse(arg), {fit:false})", saved); warte_rechnen(p); p.wait(400)
+    after_reload = p.ev("return { n: Drawing.sheets().length, names: Drawing.sheets().map(s=>s.name), fmts: Drawing.sheets().map(s=>s.sheet+':'+s.orient) }")
+
+    # Legacy-Migration (flaches doc.drawing ohne sheets[])
+    legacy = p.ev("""
+      const d = JSON.parse(JSON.stringify(App.doc));
+      d.drawing = { sheet: 'A3', orient: 'portrait', scale: 'auto', views: { front: true, top: true, left: true, iso: false }, hidden: true, centers: true, dims: [], free: [], title: { titel: 'Alt', nummer: '1', name: '', datum: '', werkstoff: 'PLA', firma: '', blatt: '1/1' } };
+      App.setDoc(d, { fit: false });
+      return { n: Drawing.sheets().length, sh: Drawing.activeSheet().sheet, or: Drawing.activeSheet().orient, blatt: Drawing.activeSheet().title.blatt };
+    """)
+    help_ok = p.ev("""
+      return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(hj => {
+        const keys = ['drawingSheets', 'drawingFormat'];
+        return keys.every(k => hj[k] && hj[k].tip && hj[k].hilfe && hj[k].tipp) && Commands.search('zeichnungsblatt').length >= 1;
+      });
+    """)
+
+    ok5 = (
+        after_del['n'] == 1 and after_del['tabs'] == 1 and after_del['dels'] == 0 and '1/1' in after_del['txt']
+        and after_undo['n'] == 2 and after_undo['names'] == ['Blatt 1', 'Detailansicht'] and after_undo['fmts'] == ['A4:portrait', 'A3:landscape']
+        and after_redo == 1
+        and after_reload['n'] == 2 and after_reload['names'] == ['Blatt 1', 'Detailansicht'] and after_reload['fmts'] == ['A4:portrait', 'A3:landscape']
+        and legacy['n'] == 1 and legacy['sh'] == 'A3' and legacy['or'] == 'portrait' and legacy['blatt'] == ''
+        and help_ok
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -12566,6 +12725,7 @@ TESTS = [
     ('[A-057] Schrauben M10–M24 & Werkstoffe: Sechskantschraube M16×60 SW 24 / M10–M24 Normteile / Werkstoff Messing Dichte 8,4–8,7 / neue Werkstoffe mit Aussehen & Quelle / Suche & Hilfe', t_a057_schrauben_werkstoffe),
     ('[A-059] 3D-Druck: Drucker-Liste, Bauraum-Warnung mit Drehvorschlag & Loch-Ausgleich im STL/3MF', t_a059_drucker_loch_ausgleich),
     ('[A-058] Eigene Teile in die Bibliothek: mit Maß „Breite“ speichern / Vorschaubild / in neuem Projekt einsetzen / Breite ändern passt Körper an / zweite Kopie & Neuladen & Löschen & Hilfe', t_a058_eigene_bibliothek),
+    ('[A-062] Zeichnung: mehrere Blätter, A4 bis A0 & PDF-Export', t_a062_zeichnung_blaetter),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
