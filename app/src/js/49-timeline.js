@@ -128,7 +128,8 @@ const Timeline = (() => {
     el.append(h('div', { class: 'tl-btns' }, bStart, bPrev), track, h('div', { class: 'tl-btns' }, bNext, bEnd), info);
     $('#center').append(el); $('#center').classList.add('has-tl');
     const r = debounce(render, 30);
-    App.on('doc', r); App.on('selection', r); App.on('results', r); App.on('ctx', r); App.on('peek', r);
+    const now = () => { r.cancel(); render(); };
+    App.on('doc', r); App.on('selection', r); App.on('results', r); App.on('ctx', now); App.on('peek', now);
     App.on('doc', () => { clearTimeout(peekT); peekK = null; });
     track.addEventListener('pointerleave', () => { clearTimeout(peekT); peekK = null; App.peek(null); });
     App.on('mode', () => { el.hidden = App.mode !== 'model'; $('#center').classList.toggle('has-tl', App.mode === 'model'); });

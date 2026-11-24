@@ -2125,6 +2125,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Punkt-an-Punkt, Löschen & Rückgängig**: Zwei gewählte Punkte fallen deckungsgleich zusammen; Löschen im Verlauf gibt Teil B wieder frei, `Strg+Z` stellt die Verbindung wieder her; Befehlssuche und Hilfetext `fixedJoint` sind vorhanden.
 - [ ] **Von Hand**: Im Browser zwei Teile über „Verbinden: fest“ (Modus Auto / Fläche / Punkt) verbinden, während der Auswahl die Ansicht mit der rechten Maustaste drehen, Drehwinkel/Abstand rechts testen und das Ergebnis mit mehreren verketteten Teilen prüfen.
 
+## Volltest-Reparatur (Auto [F-11241523])
+
+- [x] **Griff-Schilder bei Frontansicht & Alt-/Rechtsklick**: In der Frontansicht zweier hintereinander liegender Quader weicht das Tiefenschildchen seitlich aus, sodass die Körpermitte frei für `Alt + Klick` bleibt; Alt-Klick und Rechtsklick auf Griff-Schilder wechseln zum Teil dahinter bzw. öffnen das Kontextmenü ohne Zahleneingabe (`t_dahinter`, `[F-11241523]`).
+- [x] **Skizze ohne 3D-Ansichtsknöpfe**: Im Skizzen-Modus ist `.view-btns` per CSS ausgeblendet (`body.sketching .view-btns`), sodass rechts liegende Linien im Verschieben-Werkzeug (`H`) frei anklickbar sind (`t_skizze_verschieben`, `[F-11241523]`).
+- [x] **Zeitleiste sofort bei Bauteil-Wechsel**: `Timeline` reagiert auf `App.on('ctx')` und `App.on('peek')` synchron ohne 30-ms-Entprell-Verzug (`t_bauteil`, `[F-11241523]`).
+- [ ] **Von Hand**: In der Frontansicht auf einem Quader `Alt + Klick` und Rechtsklick auf ein Maßschild prüfen, in eine Skizze wechseln (Ansichtsknöpfe rechts unten bleiben ausgeblendet) und über „Neues Bauteil“ die leere Bauteil-Zeitleiste prüfen.
+
 ## Fehler melden
 
 ```

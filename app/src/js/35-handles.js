@@ -198,23 +198,51 @@ const Handles = (() => {
     hm.userData = { kind: 'fillet', base: wp.clone(), wdir, dir: wdir.toArray() };
     group.add(hm); items.push(hm);
     const el = h('div', { class: 'dimlabel fillet-tip', title: 'Ziehen oder Zahl tippen' }, 'Rundung ziehen');
-    el.addEventListener('pointerdown', (e) => e.stopPropagation());
+    bindLabelPass(el);
+    el.addEventListener('click', (e) => {
+      if (!el.classList.contains('editing') && e.altKey && !App.ctx) {
+        e.stopPropagation();
+        Interact.selectBehind(e.clientX, e.clientY);
+      }
+    });
     overlayEl.append(el); labels.push({ el, handle: hm });
     scaleHandles(); placeLabels();
+  }
+  function bindLabelPass(el) {
+    el.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
+    el.addEventListener('contextmenu', (e) => {
+      if (el.classList.contains('editing')) return;
+      e.preventDefault(); e.stopPropagation();
+      Interact.contextMenu(e.clientX, e.clientY);
+    });
   }
   function addLabel(handle, value) {
     const txt = Units.key() === 'mm' ? Units.fmtLen(value) : Units.fmtLenU(value);
     const el = h('div', { class: 'dimlabel', title: 'Klicken und genaues Maß eintippen' }, txt);
-    el.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
-    el.addEventListener('click', (e) => { e.stopPropagation(); editLabel(el, handle); });
+    bindLabelPass(el);
+    el.addEventListener('click', (e) => {
+      if (!el.classList.contains('editing') && e.altKey && !App.ctx) {
+        e.stopPropagation();
+        Interact.selectBehind(e.clientX, e.clientY);
+        return;
+      }
+      e.stopPropagation(); editLabel(el, handle);
+    });
     overlayEl.append(el);
     labels.push({ el, handle });
   }
   function addAngleLabel(handle, value, factor = 1) {
     const txt = factor === 2 ? `${fmtAngleU(value)} (2×${fmtAngleU(value / 2)})` : fmtAngleU(value);
     const el = h('div', { class: 'dimlabel', title: 'Klicken und genauen Winkel eintippen' }, txt);
-    el.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
-    el.addEventListener('click', (e) => { e.stopPropagation(); editAngleLabel(el, handle); });
+    bindLabelPass(el);
+    el.addEventListener('click', (e) => {
+      if (!el.classList.contains('editing') && e.altKey && !App.ctx) {
+        e.stopPropagation();
+        Interact.selectBehind(e.clientX, e.clientY);
+        return;
+      }
+      e.stopPropagation(); editAngleLabel(el, handle);
+    });
     overlayEl.append(el);
     labels.push({ el, handle });
   }
@@ -250,8 +278,13 @@ const Handles = (() => {
     const i = handle.userData.seg;
     const lenTxt = Units.key() === 'mm' ? Units.fmtLen(len) : Units.fmtLenU(len);
     const el = h('div', { class: 'dimlabel seglabel' + (rule.len != null ? ' fixed' : ''), id: 'seglabel-' + i, title: 'Klicken und Länge dieses Stücks eintippen' }, (rule.ax ? ({ perp: '⊥', par: '∥' }[rule.ax] || rule.ax.toUpperCase()) + ' · ' : '') + lenTxt + (rule.len != null ? ' 🔒' : ''));
-    el.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
+    bindLabelPass(el);
     el.addEventListener('click', (e) => {
+      if (!el.classList.contains('editing') && e.altKey && !App.ctx) {
+        e.stopPropagation();
+        Interact.selectBehind(e.clientX, e.clientY);
+        return;
+      }
       e.stopPropagation(); if (el.classList.contains('editing')) return;
       el.classList.add('editing'); el.textContent = '';
       const initV = rule.len != null ? (typeof rule.len === 'number' ? Units.fmtInput(rule.len) : String(rule.len)) : Units.fmtInput(len);
@@ -320,7 +353,8 @@ const Handles = (() => {
       const p = l.handle.position.clone();
       const a = Viewer.toScreen(p), b = Viewer.toScreen(p.clone().add(l.handle.userData.wdir));
       let dx = b.x - a.x, dy = b.y - a.y; const L = Math.hypot(dx, dy);
-      if (L < 1e-6) { dx = 1; dy = 0; } else { dx /= L; dy /= L; }
+      const ps = Viewer.pixelSizeAt(p);
+      if (L < 1e-6 || (ps > 0 && L * ps < 0.35)) { dx = 1; dy = 0; } else { dx /= L; dy /= L; }
       const w = l.el.offsetWidth || 40, hh = l.el.offsetHeight || 20;
       // Abstand so wählen, dass die Beschriftung den Anfasser nie verdeckt
       const dist = 16 + Math.abs(dx) * w / 2 + Math.abs(dy) * hh / 2;

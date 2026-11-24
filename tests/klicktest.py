@@ -17475,6 +17475,56 @@ def t_a085_verbindung_fest(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_f11241523(p):
+    # 1. Griff-Schilder bei Frontansicht weichen dem Sehstrahl aus und reichen Alt-/Rechtsklick durch
+    p.empty()
+    p.ev("App.change('x', d=>{ const a=Model.newItem('box',{w:30,d:10,h:30},{name:'Deckel'}); a.t.y=-20; d.items.push(a); const b=Model.newItem('box',{w:10,d:10,h:10},{name:'Platine'}); b.t.y=10; b.t.z=10; d.items.push(b); })")
+    warte_rechnen(p)
+    p.ev("App.clearSelection(); Viewer.setView('front', false)"); p.wait(900)
+    x, y = world_screen(p, 0, -25, 15)
+    names = lambda: p.ev("return App.sel.map(id=>Model.find(App.doc,id).item.name)")
+    p.pg.mouse.click(x, y); p.wait(350); n1 = names()
+    p.pg.keyboard.down('Alt'); p.pg.mouse.click(x, y); p.pg.keyboard.up('Alt'); p.wait(350); n2 = names()
+    el_at_mid = p.ev("return document.elementFromPoint(arg[0], arg[1])?.tagName || ''", [x, y])
+    p.pg.keyboard.down('Alt'); p.pg.mouse.click(x, y); p.pg.keyboard.up('Alt'); p.wait(350); n3 = names()
+    lbl_pos = p.ev("const el=[...document.querySelectorAll('#overlay .dimlabel')].find(q=>!q.hidden && q.offsetWidth>0); if(!el) return null; const r=el.getBoundingClientRect(); return [r.left+r.width/2, r.top+r.height/2];")
+    menu_ok = False
+    if lbl_pos:
+        p.pg.mouse.click(lbl_pos[0], lbl_pos[1], button='right'); p.wait(250)
+        menu_ok = p.pg.locator('.menu').count() == 1 and p.pg.locator('.dimlabel input').count() == 0
+        p.pg.keyboard.press('Escape'); p.wait(150)
+    ok1 = n1 == ['Deckel'] and n2 == ['Platine'] and el_at_mid == 'CANVAS' and n3 == ['Deckel'] and menu_ok
+
+    # 2. Skizze blendet 3D-Ansichtsknöpfe (.view-btns) aus, damit sie Linien rechts nicht verdecken
+    p.ev("Start.show()"); p.wait(300)
+    scene(p, [{'id': 'C', 'type': 'circle', 'c': [0, 0], 'r': 5}, {'id': 'L', 'type': 'line', 'a': [22, -4], 'b': [32, -4]}])
+    p.pg.keyboard.press('h'); p.wait(300)
+    vb_hidden = p.ev("const vb=document.querySelector('.view-btns'); return !!vb && getComputedStyle(vb).display==='none'")
+    s = to_screen(p, 27, -4)
+    el_at_line = p.ev("return document.elementFromPoint(arg[0], arg[1])?.tagName || ''", s)
+    p.pg.mouse.click(s[0], s[1]); p.wait(250)
+    picked_l = SS(p, "return S.patSel.includes('L')")
+    make_enabled = p.ev("return document.querySelector('#xm-make')?.disabled === false")
+    ok2 = vb_hidden and el_at_line == 'CANVAS' and picked_l and make_enabled
+    p.ev("Sketch.cancel(true)"); p.wait(300)
+
+    # 3. Zeitleiste reagiert synchron auf Bauteil-Kontextwechsel (App.on('ctx'))
+    p.ev("Start.show()"); p.wait(300)
+    p.empty()
+    p.ev("Actions.addPrimitive('box')"); warte_rechnen(p)
+    sync = p.ev("""
+        Comp.newComponent();
+        const b1 = document.querySelector('.ctx-banner')?.textContent || '';
+        const c1 = document.querySelectorAll('.tl-chip').length;
+        App.setCtx(null);
+        const b2 = document.querySelector('.ctx-banner');
+        const c2 = document.querySelectorAll('.tl-chip').length;
+        return { b1, c1, hasBannerAfter: !!b2, c2 };
+    """)
+    ok3 = ('Bauteil bearbeiten: Bauteil 1' in sync['b1']) and sync['c1'] == 0 and (not sync['hasBannerAfter']) and sync['c2'] == 2
+    return [ok1, ok2, ok3]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -17665,6 +17715,7 @@ TESTS = [
     ('[A-082] Baugruppe & Bauteil als eigene Dokumente: Verweise speichern & Änderungen übernehmen', t_a082_baugruppe_verweise),
     ('[A-083] Baugruppe: Bauteil im Tab öffnen, Länge 40 → 60 & aktualisieren', t_a083_bauteil_im_tab),
     ('[A-085] Verbindung „fest“: Flächen/Punkte, bündig, umdrehen, gesperrt, Verlauf', t_a085_verbindung_fest),
+    ('[F-11241523] Volltest-Reparatur: Griff-Schilder bei Frontansicht & Alt/Rechtsklick / Skizze ohne 3D-Ansichtsleiste / Zeitleiste sofort bei Bauteil-Wechsel', t_f11241523),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
