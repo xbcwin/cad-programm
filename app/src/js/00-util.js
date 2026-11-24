@@ -598,6 +598,7 @@ const IC = {
   zoomIn: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.8-4.8 M10.5 7.5v6 M7.5 10.5h6" />',
   zoomOut: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.8-4.8 M7.5 10.5h6" />',
   stop: '<rect x="7" y="7" width="10" height="10" rx="1.5" fill="currentColor"/>',
+  bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9 M13.73 21a2 2 0 0 1-3.46 0" />',
   cursor: '<path d="M6 3v15l4-4 3 7 2-1-3-7h6z" />',
   play: '<path d="M8 5v14l11-7z" />',
   box3: '<path d="M3 8 12 3l9 5-9 5z M3 8v8l9 5 9-5V8 M12 13v8" />',
@@ -2072,6 +2073,26 @@ const HELP = {
   "tip": "Größe von Schriften, Knöpfen und Leisten (80–150 %)",
   "hilfe": "Vergrößert oder verkleinert die gesamte Bedienoberfläche stufenlos von 80 % bis 150 % oder über die Schnellwahl-Knöpfe. Die 3D-Ansicht bleibt unabhängig davon gestochen scharf.",
   "tipp": "Auf großen oder hochauflösenden Bildschirmen helfen 125 % oder 150 % für entspanntes Lesen."
+ },
+ "fullFillet": {
+  "tip": "Drei Flächen wählen – die mittlere wird nahtlos ganz rund (z. B. Steg-Ende)",
+  "hilfe": "Klicke nacheinander erste Seitenfläche, mittlere Stirnfläche und zweite Seitenfläche eines Körpers an. Tracery rundet die mittlere Fläche mit dem exakten vollen Radius zwischen den beiden Seitenflächen ab.",
+  "tipp": "Ideal für abgerundete Stege, Laschen oder Rippenenden – der Radius passt sich automatisch an, wenn sich die Steg-Dicke später ändert."
+ },
+ "cornerChamfer": {
+  "tip": "Eine Körper-Ecke schräg mit drei verschiedenen Abständen abschneiden",
+  "hilfe": "Klicke eine Ecke an, in der drei Kanten zusammenlaufen. Danach kannst du rechts für jede der drei Kanten einen eigenen Abstand einstellen (oder als Formel eingeben), sodass eine dreieckige schräge Fläche entsteht.",
+  "tipp": "Mit dem Dreh-Symbol neben „Ecken-Fase“ tauschst du die drei Abstände reihum durch die drei Kanten."
+ },
+ "calcCancel": {
+  "tip": "Laufende Berechnung abbrechen und zum letzten guten Stand zurückkehren",
+  "hilfe": "Dauert ein Rechenschritt länger als 2 Sekunden, erscheint hier „Abbrechen“. Ein Klick stoppt den CAD-Kern sofort und stellt automatisch das zuletzt fertig gerechnete Modell wieder her.",
+  "tipp": "Ideal bei versehentlich zu feinen Rundungen, großen Mustern oder komplexen Texten – nichts geht verloren."
+ },
+ "noticeCenter": {
+  "tip": "Meldungs-Zentrale: Fehler und Hinweise dieser Sitzung ansehen",
+  "hilfe": "Die Glocke sammelt alle Rechenfehler, Warnungen und Hinweise dieser Sitzung mit genauer Uhrzeit. Du kannst nach Fehlern oder Hinweisen filtern und bei Schritt-Fehlern mit „Hinspringen“ direkt das betroffene Teil markieren.",
+  "tipp": "Ein roter Punkt zeigt unbehobene oder neue Fehler; über „Leeren“ räumst du die Liste wieder auf."
  }
 };
 

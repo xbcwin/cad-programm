@@ -1353,5 +1353,25 @@
     "tip": "Größe von Schriften, Knöpfen und Leisten (80–150 %)",
     "hilfe": "Vergrößert oder verkleinert die gesamte Bedienoberfläche stufenlos von 80 % bis 150 % oder über die Schnellwahl-Knöpfe. Die 3D-Ansicht bleibt unabhängig davon gestochen scharf.",
     "tipp": "Auf großen oder hochauflösenden Bildschirmen helfen 125 % oder 150 % für entspanntes Lesen."
+  },
+  "fullFillet": {
+    "tip": "Drei Flächen wählen – die mittlere wird nahtlos ganz rund (z. B. Steg-Ende)",
+    "hilfe": "Klicke nacheinander erste Seitenfläche, mittlere Stirnfläche und zweite Seitenfläche eines Körpers an. Tracery rundet die mittlere Fläche mit dem exakten vollen Radius zwischen den beiden Seitenflächen ab.",
+    "tipp": "Ideal für abgerundete Stege, Laschen oder Rippenenden – der Radius passt sich automatisch an, wenn sich die Steg-Dicke später ändert."
+  },
+  "cornerChamfer": {
+    "tip": "Eine Körper-Ecke schräg mit drei verschiedenen Abständen abschneiden",
+    "hilfe": "Klicke eine Ecke an, in der drei Kanten zusammenlaufen. Danach kannst du rechts für jede der drei Kanten einen eigenen Abstand einstellen (oder als Formel eingeben), sodass eine dreieckige schräge Fläche entsteht.",
+    "tipp": "Mit dem Dreh-Symbol neben „Ecken-Fase“ tauschst du die drei Abstände reihum durch die drei Kanten."
+  },
+  "calcCancel": {
+    "tip": "Laufende Berechnung abbrechen und zum letzten guten Stand zurückkehren",
+    "hilfe": "Dauert ein Rechenschritt länger als 2 Sekunden, erscheint hier „Abbrechen“. Ein Klick stoppt den CAD-Kern sofort und stellt automatisch das zuletzt fertig gerechnete Modell wieder her.",
+    "tipp": "Ideal bei versehentlich zu feinen Rundungen, großen Mustern oder komplexen Texten – nichts geht verloren."
+  },
+  "noticeCenter": {
+    "tip": "Meldungs-Zentrale: Fehler und Hinweise dieser Sitzung ansehen",
+    "hilfe": "Die Glocke sammelt alle Rechenfehler, Warnungen und Hinweise dieser Sitzung mit genauer Uhrzeit. Du kannst nach Fehlern oder Hinweisen filtern und bei Schritt-Fehlern mit „Hinspringen“ direkt das betroffene Teil markieren.",
+    "tipp": "Ein roter Punkt zeigt unbehobene oder neue Fehler; über „Leeren“ räumst du die Liste wieder auf."
   }
 }

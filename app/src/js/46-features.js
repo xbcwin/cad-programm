@@ -152,6 +152,7 @@ const Features = (() => {
     if (picking.move) cv.removeEventListener('pointermove', picking.move);
     window.removeEventListener('keydown', picking.key, true);
     Viewer.highlightFace('hover', null, null);
+    if (picking.ghost) Viewer.clearRefGhost();
     cv.style.cursor = ''; UI.hint(null); picking = null;
   }
   // ---------- Rohr im Raum: Punkte auf Körper oder in den Raum klicken ----------
@@ -633,6 +634,224 @@ const Features = (() => {
     });
     App.select([it.id]);
     UI.toast(ex ? 'Öffnung umgeschaltet. Jede Fläche, die du so anklickst, wird offen oder wieder zu.' : 'Ausgehöhlt mit 2 mm Wand. Rechts änderst du die Wandstärke.', { icon: 'check' });
+  }
+  // ---------- Vollrundung (KP-38) und Ecken-Fase mit drei Abständen (KP-41) ----------
+  function finishFaceSigOf(itemId, faceIdx) {
+    const r = App.results.get(itemId);
+    const fi = r && r.data && r.data.faces && r.data.faces[faceIdx];
+    if (!fi || !fi.c) return null;
+    const bb = r.data.bbox;
+    const size = bb ? round(clamp(Math.max(bb[3] - bb[0], bb[4] - bb[1], bb[5] - bb[2]) * 0.6, 8, 60), 2) : 20;
+    return { c: fi.c.map((v) => round(v, 4)), n: fi.n ? fi.n.map((v) => round(v, 5)) : null, size, ...(fi.tid ? { tid: fi.tid } : {}) };
+  }
+  function canonicalEdgeOrder(entries) {
+    const dom = (d) => {
+      const a = [Math.abs(d[0]), Math.abs(d[1]), Math.abs(d[2])];
+      return a[0] >= a[1] && a[0] >= a[2] ? 0 : a[1] >= a[2] ? 1 : 2;
+    };
+    return entries.slice().sort((a, b) => {
+      const da = dom(a.dir), db = dom(b.dir);
+      if (da !== db) return da - db;
+      for (let i = 0; i < 3; i++) if (Math.abs(a.dir[i] - b.dir[i]) > 1e-4) return a.dir[i] - b.dir[i];
+      return a.idx - b.idx;
+    });
+  }
+  function incidentEdgesAt(itemId, localPt) {
+    const r = App.results.get(itemId);
+    const eds = (r && r.data && r.data.edges) || [];
+    const p = localPt;
+    const d3 = (u, q) => Math.hypot(u[0] - q[0], u[1] - q[1], u[2] - q[2]);
+    const out = [];
+    for (let idx = 0; idx < eds.length; idx++) {
+      const g = eds[idx];
+      if (!g || !g.a || !g.b) continue;
+      const da = d3(g.a, p), db = d3(g.b, p);
+      if (Math.min(da, db) > 1e-2) continue;
+      const other = da < db ? g.b : g.a;
+      const vx = other[0] - p[0], vy = other[1] - p[1], vz = other[2] - p[2];
+      const vl = Math.hypot(vx, vy, vz) || 1;
+      const dir = [round(vx / vl, 5), round(vy / vl, 5), round(vz / vl, 5)];
+      const sig = Actions.edgeSigOf(itemId, idx);
+      if (!sig) continue;
+      sig.dir = dir;
+      out.push({ idx, sig, dir, len: g.l || vl, a: g.a, b: g.b });
+    }
+    return canonicalEdgeOrder(out);
+  }
+  function pickCornerAt(cx, cy, filterItemId = null) {
+    const rect = Viewer.canvas.getBoundingClientRect();
+    const px = cx - rect.left, py = cy - rect.top;
+    const camPos = Viewer.setRay(cx, cy).ray.origin.clone();
+    const candidates = [];
+    for (const [id, r] of App.results.entries()) {
+      if (filterItemId && id !== filterItemId) continue;
+      if (!r || !r.data || !Array.isArray(r.data.edges) || !r.data.edges.length) continue;
+      const f = Model.find(App.doc, id);
+      if (!f || f.item.hidden || f.item.role === 'hole' || App.mergedInto(id)) continue;
+      const W = Model.worldMatrix(App.doc, id);
+      const corners = [];
+      for (let idx = 0; idx < r.data.edges.length; idx++) {
+        const g = r.data.edges[idx];
+        if (!g || !g.a || !g.b) continue;
+        for (const pt of [g.a, g.b]) {
+          let c = corners.find((q) => Math.hypot(q.local[0] - pt[0], q.local[1] - pt[1], q.local[2] - pt[2]) < 1e-3);
+          if (!c) {
+            const w = new THREE.Vector3(...pt).applyMatrix4(W);
+            const sc = Viewer.toScreen(w);
+            c = { local: pt, world: w, sc, d2: sc.behind ? Infinity : Math.hypot(sc.x - px, sc.y - py), camD: w.distanceTo(camPos), edgeIdxs: new Set() };
+            corners.push(c);
+          }
+          c.edgeIdxs.add(idx);
+        }
+      }
+      for (const c of corners) {
+        if (c.d2 <= 22 && c.edgeIdxs.size >= 3) candidates.push({ id, ...c });
+      }
+    }
+    if (!candidates.length) return null;
+    candidates.sort((a, b) => {
+      const a3 = a.edgeIdxs.size === 3 ? 0 : 1, b3 = b.edgeIdxs.size === 3 ? 0 : 1;
+      if (a3 !== b3) return a3 - b3;
+      if (Math.abs(a.d2 - b.d2) > 4) return a.d2 - b.d2;
+      return a.camD - b.camD;
+    });
+    const best = candidates[0];
+    const edges = incidentEdgesAt(best.id, best.local);
+    return { id: best.id, localPt: best.local, worldPt: best.world, edges, minLen: Math.min(...edges.map((x) => x.len || 10)) };
+  }
+  function addFullFillet(itemId, faces, opts = {}) {
+    const it = itemId && Model.find(App.doc, itemId)?.item;
+    if (!it || it.role === 'hole') { UI.toast(T('fullFillet.needFace'), { icon: 'info' }); return null; }
+    if (!Array.isArray(faces) || faces.length !== 3) return null;
+    const sigs = faces.map((f) => (typeof f === 'number' ? finishFaceSigOf(itemId, f) : (f && f.idx != null ? finishFaceSigOf(f.id || itemId, f.idx) : f))).filter(Boolean);
+    if (sigs.length !== 3) return null;
+    let finId = opts.replaceFinId || uid('f');
+    App.change(opts.replaceFinId ? 'Vollrundung geändert' : 'Vollrundung', (doc) => {
+      const fn = Model.find(doc, itemId);
+      if (!fn) return false;
+      fn.item.finishes = fn.item.finishes || [];
+      if (opts.replaceFinId) {
+        const ex = fn.item.finishes.find((x) => x.id === opts.replaceFinId);
+        if (!ex) return false;
+        ex.faces = sigs;
+      } else {
+        fn.item.finishes.push({ id: finId, type: 'fullFillet', faces: sigs });
+      }
+    });
+    App.select([itemId]);
+    UI.toast(T('fullFillet.added'), { icon: 'check' });
+    return finId;
+  }
+  function startFullFillet(firstFace = null, opts = {}) {
+    stopPick();
+    let targetId = (firstFace && firstFace.id) || opts.itemId || null;
+    const picked = [];
+    if (firstFace && firstFace.id && firstFace.idx != null) picked.push({ id: firstFace.id, idx: firstFace.idx, info: firstFace.info || App.results.get(firstFace.id)?.data?.faces?.[firstFace.idx] });
+    const updateOverlay = () => {
+      const specs = [];
+      for (const pf of picked) {
+        if (!pf.info || !pf.info.c) continue;
+        const W = Model.worldMatrix(App.doc, pf.id);
+        const o = new THREE.Vector3(...pf.info.c).applyMatrix4(W).toArray();
+        const n = new THREE.Vector3(...(pf.info.n || [0, 0, 1])).transformDirection(W).normalize().toArray();
+        const bb = App.results.get(pf.id)?.data?.bbox;
+        const size = bb ? clamp(Math.max(bb[3] - bb[0], bb[4] - bb[1], bb[5] - bb[2]) * 0.45, 6, 36) : 16;
+        specs.push({ kind: 'plane', o, n, size });
+      }
+      Viewer.setRefGhost(specs);
+      const step = picked.length;
+      UI.hint(step === 0 ? T('fullFillet.hint1') : step === 1 ? T('fullFillet.hint2') : T('fullFillet.hint3'));
+    };
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      if (!hit || hit.faceIdx == null || hit.faceIdx < 0) { UI.toast(T('fullFillet.needFace'), { icon: 'info' }); return; }
+      if (targetId && hit.id !== targetId) { UI.toast(T('fullFillet.needSameBody'), { icon: 'info' }); return; }
+      if (picked.some((x) => x.idx === hit.faceIdx)) { UI.toast(T('fullFillet.alreadyPicked'), { icon: 'info' }); return; }
+      if (!targetId) targetId = hit.id;
+      const fi = App.results.get(hit.id)?.data?.faces?.[hit.faceIdx];
+      picked.push({ id: hit.id, idx: hit.faceIdx, info: fi });
+      if (picked.length >= 3) {
+        stopPick();
+        addFullFillet(targetId, picked, opts);
+      } else {
+        updateOverlay();
+      }
+    };
+    const move = (e) => {
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      const ok = hit && hit.faceIdx >= 0 && (!targetId || hit.id === targetId) && !picked.some((x) => x.idx === hit.faceIdx);
+      Viewer.highlightFace('hover', ok ? hit.id : null, ok ? hit.faceIdx : null);
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, move, key, ghost: true };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    Viewer.canvas.addEventListener('pointermove', move);
+    window.addEventListener('keydown', key, true);
+    updateOverlay();
+  }
+  function addCornerChamfer(itemId, v, dists = null, opts = {}) {
+    const it = itemId && Model.find(App.doc, itemId)?.item;
+    if (!it || it.role === 'hole') return null;
+    const inc = incidentEdgesAt(itemId, v);
+    if (inc.length !== 3) { UI.toast(T('cornerChamfer.needThreeEdges'), { icon: 'info' }); return null; }
+    let ds = Array.isArray(dists) && dists.length === 3 ? dists : null;
+    if (!ds) {
+      const minL = Math.min(...inc.map((x) => x.len || 10));
+      const def = Math.min(2, round(Math.max(0.2, minL * 0.35), 1));
+      ds = [def, def, def];
+    }
+    const finId = opts.replaceFinId || uid('f');
+    const vRounded = v.map((x) => round(x, 5));
+    const edgeSigs = inc.map((x) => x.sig);
+    App.change('Ecken-Fase', (doc) => {
+      const fn = Model.find(doc, itemId);
+      if (!fn) return false;
+      fn.item.finishes = fn.item.finishes || [];
+      if (opts.replaceFinId) {
+        const ex = fn.item.finishes.find((x) => x.id === opts.replaceFinId);
+        if (!ex) return false;
+        ex.v = vRounded; ex.d1 = ds[0]; ex.d2 = ds[1]; ex.d3 = ds[2]; ex.edges = edgeSigs;
+      } else {
+        fn.item.finishes.push({ id: finId, type: 'cornerChamfer', v: vRounded, d1: ds[0], d2: ds[1], d3: ds[2], edges: edgeSigs });
+      }
+    });
+    App.select([itemId]);
+    UI.toast(T('cornerChamfer.added'), { icon: 'check' });
+    return finId;
+  }
+  function startCornerChamfer(itemId = null, opts = {}) {
+    stopPick();
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = pickCornerAt(e.clientX, e.clientY, itemId);
+      if (!hit) { UI.toast(T('cornerChamfer.pickNeed'), { icon: 'info' }); return; }
+      stopPick();
+      addCornerChamfer(hit.id, hit.localPt, opts.dists || null, opts);
+    };
+    const move = (e) => {
+      const hit = pickCornerAt(e.clientX, e.clientY, itemId);
+      if (!hit) { Viewer.clearRefGhost(); return; }
+      const W = Model.worldMatrix(App.doc, hit.id);
+      const pos = [];
+      for (const ed of hit.edges) {
+        const p0 = hit.worldPt.toArray();
+        const dL = Math.min(ed.len * 0.45, Math.max(2, hit.minLen * 0.4));
+        const p1 = new THREE.Vector3(hit.localPt[0] + ed.dir[0] * dL, hit.localPt[1] + ed.dir[1] * dL, hit.localPt[2] + ed.dir[2] * dL).applyMatrix4(W).toArray();
+        pos.push(...p0, ...p1);
+      }
+      Viewer.setRefGhost([{ kind: 'marker', p: hit.worldPt.toArray(), r: 2.2 }, { kind: 'segments', positions: pos, dots: [hit.worldPt.toArray()] }]);
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, move, key, ghost: true };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    Viewer.canvas.addEventListener('pointermove', move);
+    window.addEventListener('keydown', key, true);
+    UI.hint(T('cornerChamfer.hint'));
   }
   // ---------- Einzelne Kopien im Muster auslassen (KP-13) ----------
   let patDots = [];
@@ -2388,5 +2607,5 @@ const Features = (() => {
   }
 
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, startWrap, createWrap, pickWrapFace, sweepFromWrap, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES, helix, renderHelix };
+  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, startWrap, createWrap, pickWrapFace, sweepFromWrap, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, startFullFillet, addFullFillet, startCornerChamfer, addCornerChamfer, renderOp, sizeText, isOp, NAMES, helix, renderHelix };
 })();

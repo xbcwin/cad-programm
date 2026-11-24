@@ -270,6 +270,8 @@ const Commands = (() => {
     add('orient-print', 'Für den Druck ausrichten (wenig Überhang)', 'overhang', 'druck ausrichten drehen ueberhang stuetzen orientieren 3d-druck flach legen', () => Print.orientForPrint(), { group: 'Projekt' });
     add('nozzle-wall', 'Wandstärke gegen Düse prüfen', 'ruler', 'wandstaerke duese 3d-druck duenn warnung pruefen wand', () => Views.thin(true, { limit: round(2 * Print.nozzle(), 2) }), { group: 'Projekt' });
     add('status', 'Modell-Status', 'info', 'status prüfen größe fehler', () => $('#ampel').click(), { group: 'Werkzeuge' });
+    add('notices', 'Meldungs-Zentrale öffnen (Fehler und Hinweise)', 'bell', 'meldungen meldungszentrale glocke fehler hinweise warnung', () => Notices.toggle(), { group: 'Werkzeuge' });
+    add('cancel-calc', 'Laufendes Rechnen abbrechen', 'stop', 'rechnen abbrechen stopp kern langsam', () => { if (!App.cancelRebuild()) UI.toast('Es läuft gerade keine Berechnung.', { icon: 'info', noNotice: true }); }, { group: 'Werkzeuge' });
     add('drop', 'Auf die XY-Ebene setzen', 'push', 'boden unten absetzen z null ebene', () => Actions.dropToPlate(null), { group: 'Werkzeuge' });
     add('ortho', 'Orthografisch / Perspektive', 'viewOrtho', 'ortho perspektive projektion kamera', () => ViewPrefs.toggle('ortho'), { group: 'Ansicht', kbd: 'O' });
     add('gridtoggle', 'Raster ein/aus', 'grid', 'raster gitter grid', () => ViewPrefs.toggle('gridOn'), { group: 'Ansicht', kbd: 'G' });
@@ -362,7 +364,9 @@ const Commands = (() => {
     add('rot', 'Um 90° drehen', 'rotate', 'drehen rotieren', () => Actions.rotate90(null, 'z'), { group: 'Bearbeiten', kbd: 'R', needSel: true });
     add('mirror', 'Spiegeln', 'mirror', 'spiegel umdrehen', () => Actions.mirror(null, 'x'), { group: 'Bearbeiten', needSel: true });
     add('fillet', 'Kanten abrunden', 'fillet', 'runden rundung verrunden fillet', () => { if (App.edges.length) Actions.addFinish('fillet', 1); else if (App.sel.length) Actions.finishAll(App.sel[0], 'fillet', 'all', 1); else UI.toast('Wähle zuerst einen Körper oder eine Kante.', { icon: 'info' }); }, { group: 'Bearbeiten' });
+    add('fullFillet', 'Vollrundung (drei Flächen)', 'fillet', 'vollrundung rundung drei flaechen full round fillet steg ende kp-38', () => { const sf = Actions.selectedFace(); if (sf) Features.startFullFillet(sf); else Features.startFullFillet(null, { itemId: App.sel.length === 1 ? App.sel[0] : null }); }, { group: 'Bearbeiten' });
     add('chamfer', 'Kanten abschrägen', 'chamfer', 'fase anfasen schräge', () => { if (App.edges.length) Actions.addFinish('chamfer', 1); else if (App.sel.length) Actions.finishAll(App.sel[0], 'chamfer', 'all', 1); else UI.toast('Wähle zuerst einen Körper oder eine Kante.', { icon: 'info' }); }, { group: 'Bearbeiten' });
+    add('cornerChamfer', 'Ecken-Fase (drei Abstände)', 'chamfer', 'eckenfase ecken-fase fase ecke drei abstaende vertex chamfer kp-41', () => Features.startCornerChamfer(App.sel.length === 1 ? App.sel[0] : null), { group: 'Bearbeiten' });
     add('fit', 'Alles zeigen', 'fit', 'zoom ansicht einpassen', () => Viewer.fit(), { group: 'Ansicht', kbd: 'F' });
     add('toolbar-customize', 'Werkzeugleiste anpassen', 'sliders', 'werkzeugleiste leiste anpassen favoriten stern sortieren zurücksetzen', () => Toolbar.dialog(), { group: 'Ansicht' });
     add('settings-precision', 'Genauigkeit & Nachkommastellen einstellen', 'sliders', 'genauigkeit nachkommastellen dezimalstellen winkel rundung anzeige', () => ViewPrefs.dialog('general'), { group: 'Ansicht' });

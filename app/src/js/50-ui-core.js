@@ -22,7 +22,11 @@ const UI = (() => {
     }, ms);
   }
   function toast(text, opts = {}) {
-    if (muted && !opts.force) { muted.push(typeof text === 'string' ? text : (text && text.textContent) || ''); return h('div'); }
+    const plain = typeof text === 'string' ? text : (text && text.textContent) || '';
+    if (!muted && typeof Notices !== 'undefined' && Notices.fromToast && !opts.noNotice) {
+      Notices.fromToast(plain, opts);
+    }
+    if (muted && !opts.force) { muted.push(plain); return h('div'); }
     const box = $('#toasts');
     const el = h('div', { class: 'toast' + (opts.kind === 'bad' ? ' bad' : ''), role: 'status' });
     el.innerHTML = icon(opts.icon || (opts.kind === 'bad' ? 'warn' : 'check'));

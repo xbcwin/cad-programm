@@ -21,13 +21,31 @@ function transferList(obj, list = []) {
   return list;
 }
 
+function testDelayMs(items) {
+  let ms = 0;
+  for (const it of items || []) {
+    if (!it || it.hidden) continue;
+    const d = it.p && Number(it.p._testDelayMs);
+    if (Number.isFinite(d) && d > 0) ms += d;
+    if (Array.isArray(it.children)) ms += testDelayMs(it.children);
+  }
+  return Math.min(15000, ms);
+}
+
 self.onmessage = async (ev) => {
   const { id, cmd, args } = ev.data || {};
   try {
     let result;
     if (cmd === 'init') result = await init(args.wasm);
     else if (!kernel) throw new Error('Der CAD-Kern ist noch nicht bereit.');
-    else if (cmd === 'evaluate') result = kernel.evaluate(args.scene, args.known, args.opts);
+    else if (cmd === 'evaluate') {
+      const delay = testDelayMs(args && args.scene && args.scene.items);
+      if (delay > 0) {
+        const end = performance.now() + delay;
+        while (performance.now() < end) {}
+      }
+      result = kernel.evaluate(args.scene, args.known, args.opts);
+    }
     else if (cmd === 'stats') result = kernel.getStats();
     else if (cmd === 'resetStats') result = kernel.resetStats();
     else if (cmd === 'clearCache') result = kernel.clearCache();

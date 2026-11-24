@@ -564,9 +564,11 @@ const Panels = (() => {
           const ferr = errs.find((x) => x.finishId === fin.id);
           const isRef = !!(ferr && RefFix.isRefError(ferr));
           const fr = h('div', { class: 'finish-row' + (isRef ? ' warn' : ferr ? ' bad' : ''), title: ferr ? ferr.message : '' });
-          fr.innerHTML = icon(fin.type === 'chamfer' ? 'chamfer' : fin.type === 'shell' ? 'shell' : 'fillet');
+          fr.innerHTML = icon(fin.type === 'chamfer' || fin.type === 'cornerChamfer' ? 'chamfer' : fin.type === 'shell' ? 'shell' : 'fillet');
           if (fin.type === 'shell') fr.append(h('span', null, T('panel.edges.shellTitle') + ' ' + Units.fmtLenU(Model.num(fin.r, V, 2), 2)));
           else if (fin.type === 'draft') fr.append(h('span', null, T('panel.edges.draft') + ' ' + fmtAngleU(Model.num(fin.r, V, 3))));
+          else if (fin.type === 'fullFillet') fr.append(h('span', null, T('panel.edges.fullFillet') + ' · ' + T('panel.edges.threeFaces')));
+          else if (fin.type === 'cornerChamfer') fr.append(h('span', null, T('panel.edges.cornerChamfer') + ' ' + [fin.d1, fin.d2, fin.d3].map((x) => Units.fmtLen(Model.num(x, V, 2), 2)).join(' / ') + ' ' + Units.label()));
           else {
             const eMap = { all: T('left.tree.finAllEdges'), top: T('left.tree.finTop'), bottom: T('left.tree.finBottom'), vertical: T('left.tree.finVert'), horizontal: T('left.tree.finHoriz') };
             const cnt = (fin.edges || []).length;
@@ -963,7 +965,7 @@ const Panels = (() => {
     const fix = (s) => { if (typeof s !== 'string') return s; const r = s.replace(re, (m, pre) => { hit = true; return pre + repl; }); return /^-?\d+(\.\d+)?$/.test(r.trim()) ? +r : r; };
     for (const q of doc.params) q.expr = fix(q.expr);
     for (const tb of doc.tables || []) for (const r of tb.rows || []) r.val = fix(r.val);
-    Model.walk(doc.items, (it) => { for (const k in it.p || {}) { if ((it.kind === 'transform' && (k === 'target' || k === 'pivot')) || (it.kind === 'scale' && (k === 'target' || k === 'pivot' || k === 'uniform')) || (it.kind === 'deleteBody' && (k === 'targets' || k === 'target')) || (it.kind === 'thicken' && (k === 'target' || k === 'face' || k === 'dir' || k === 'mode')) || (it.kind === 'rib' && (k === 'target' || k === 'side' || k === 'dir')) || (it.kind === 'wrap' && (k === 'target' || k === 'face' || k === 'mode')) || (it.kind === 'emboss' && (k === 'target' || k === 'face' || k === 'mode' || k === 'flip')) || (it.kind === 'helix' && (k === 'form' || k === 'by' || k === 'dir' || k === 'shape' || k === 'prof' || k === 'profName')) || (it.kind === 'extrude' && (k === 'extent' || k === 'dir' || k === 'wallSide'))) continue; it.p[k] = fix(it.p[k]); } for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) f.r = fix(f.r); if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); });
+    Model.walk(doc.items, (it) => { for (const k in it.p || {}) { if ((it.kind === 'transform' && (k === 'target' || k === 'pivot')) || (it.kind === 'scale' && (k === 'target' || k === 'pivot' || k === 'uniform')) || (it.kind === 'deleteBody' && (k === 'targets' || k === 'target')) || (it.kind === 'thicken' && (k === 'target' || k === 'face' || k === 'dir' || k === 'mode')) || (it.kind === 'rib' && (k === 'target' || k === 'side' || k === 'dir')) || (it.kind === 'wrap' && (k === 'target' || k === 'face' || k === 'mode')) || (it.kind === 'emboss' && (k === 'target' || k === 'face' || k === 'mode' || k === 'flip')) || (it.kind === 'helix' && (k === 'form' || k === 'by' || k === 'dir' || k === 'shape' || k === 'prof' || k === 'profName')) || (it.kind === 'extrude' && (k === 'extent' || k === 'dir' || k === 'wallSide'))) continue; it.p[k] = fix(it.p[k]); } for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) { f.r = fix(f.r); if (f.r2 != null) f.r2 = fix(f.r2); if (f.a != null) f.a = fix(f.a); if (f.d1 != null) f.d1 = fix(f.d1); if (f.d2 != null) f.d2 = fix(f.d2); if (f.d3 != null) f.d3 = fix(f.d3); } if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); });
     for (const j of doc.joints || []) if (j.kind === 'distance' && j.dist != null) j.dist = fix(j.dist);
     return hit;
   }
@@ -972,7 +974,7 @@ const Panels = (() => {
     const fix = (s) => typeof s === 'string' ? s.replace(re, (_, a, b) => a + repl + b) : s;
     for (const q of doc.params || []) q.expr = fix(q.expr);
     for (const tb of doc.tables || []) for (const r of tb.rows || []) r.val = fix(r.val);
-    Model.walk(doc.items, (it) => { for (const k in it.p || {}) it.p[k] = fix(it.p[k]); for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) f.r = fix(f.r); if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); });
+    Model.walk(doc.items, (it) => { for (const k in it.p || {}) it.p[k] = fix(it.p[k]); for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) { f.r = fix(f.r); if (f.r2 != null) f.r2 = fix(f.r2); if (f.a != null) f.a = fix(f.a); if (f.d1 != null) f.d1 = fix(f.d1); if (f.d2 != null) f.d2 = fix(f.d2); if (f.d3 != null) f.d3 = fix(f.d3); } if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); });
     for (const j of doc.joints || []) if (j.kind === 'distance' && j.dist != null) j.dist = fix(j.dist);
   }
   function renameTable(id, nv) {
@@ -1383,7 +1385,7 @@ const Panels = (() => {
         }
         if (e.finishId) {
           const fin = (it.finishes || []).find((x) => x.id === e.finishId);
-          const rmLabel = fin && fin.type === 'chamfer' ? T('panel.item.removeChamfer') : fin && fin.type === 'shell' ? T('panel.item.removeShell') : T('panel.item.removeFillet');
+          const rmLabel = fin && fin.type === 'chamfer' ? T('panel.item.removeChamfer') : fin && fin.type === 'cornerChamfer' ? T('panel.item.removeCornerChamfer') : fin && fin.type === 'fullFillet' ? T('panel.item.removeFullFillet') : fin && fin.type === 'shell' ? T('panel.item.removeShell') : T('panel.item.removeFillet');
           const b = h('button', { type: 'button', class: 'btn small' }, rmLabel);
           b.onclick = () => Actions.removeFinish(it.id, e.finishId);
           brow.append(b);
@@ -2099,6 +2101,45 @@ const Panels = (() => {
           del.onclick = () => Actions.removeFinish(it.id, fin.id);
           row.append(nf, del); ks.append(row); continue;
         }
+        if (fin.type === 'fullFillet') {
+          const ttl = h('div', { class: 'mini-row' + (isRef ? ' warn' : err ? ' invalid' : '') }, h('span', { class: 'grow' }, T('panel.edges.fullFillet') + ' · ' + T('panel.edges.threeFaces')));
+          const rp = h('button', { type: 'button', class: 'btn ghost small', id: 'fin-repick-' + fin.id, 'data-help': 'fullFillet' }, T('panel.edges.repickFaces'));
+          rp.onclick = () => Features.startFullFillet(null, { itemId: it.id, replaceFinId: fin.id });
+          row.style.gridTemplateColumns = isRef ? '1fr auto auto auto' : '1fr auto auto';
+          row.append(ttl, rp);
+          if (isRef) {
+            const iss = rightIssues.find((x) => x.finishId === fin.id);
+            if (iss) { const fb = h('button', { type: 'button', class: 'btn small warn-act', 'data-help': 'refFix' }, T('panel.item.pickAgain')); fb.onclick = () => RefFix.start(iss); row.append(fb); }
+          }
+          const del = h('button', { type: 'button', class: 'btn ghost small', 'aria-label': T('common.remove'), 'data-tip': T('common.remove') }); del.innerHTML = icon('trash');
+          del.onclick = () => Actions.removeFinish(it.id, fin.id);
+          row.append(del); ks.append(row); continue;
+        }
+        if (fin.type === 'cornerChamfer') {
+          const ttl = h('div', { class: 'mini-row' + (isRef ? ' warn' : err ? ' invalid' : '') }, h('span', { class: 'grow' }, T('panel.edges.cornerChamfer')));
+          const rot = h('button', { type: 'button', class: 'btn ghost small', id: 'fin-rot-' + fin.id, 'data-tip': T('panel.edges.rotateOrder') });
+          rot.innerHTML = icon('rotate');
+          rot.onclick = () => Actions.setFinish(it.id, fin.id, { d1: fin.d2, d2: fin.d3, d3: fin.d1 });
+          row.style.gridTemplateColumns = isRef ? '1fr auto auto auto' : '1fr auto auto';
+          row.append(ttl, rot);
+          if (isRef) {
+            const iss = rightIssues.find((x) => x.finishId === fin.id);
+            if (iss) { const fb = h('button', { type: 'button', class: 'btn small warn-act', 'data-help': 'refFix' }, T('panel.item.pickAgain')); fb.onclick = () => RefFix.start(iss); row.append(fb); }
+          }
+          const del = h('button', { type: 'button', class: 'btn ghost small', 'aria-label': T('common.remove'), 'data-tip': T('common.remove') }); del.innerHTML = icon('trash');
+          del.onclick = () => Actions.removeFinish(it.id, fin.id);
+          row.append(del); ks.append(row);
+          const ccFields = h('div', { class: 'fields', style: { gridTemplateColumns: '1fr 1fr 1fr' } });
+          for (let k = 1; k <= 3; k++) {
+            const dk = 'd' + k, sig = Array.isArray(fin.edges) ? fin.edges[k - 1] : null;
+            const dVec = sig && Array.isArray(sig.dir) ? sig.dir : null;
+            const axTag = dVec ? (Math.abs(dVec[0]) > 0.9 ? ' (X)' : Math.abs(dVec[1]) > 0.9 ? ' (Y)' : Math.abs(dVec[2]) > 0.9 ? ' (Z)' : '') : '';
+            const cf = UI.numField({ id: `fin-${dk}-${fin.id}`, label: T(`panel.edges.dist${k}`) + axTag, value: fin[dk] != null ? fin[dk] : 2, min: 0.01, vars: V, onCommit: (v) => Actions.setFinish(it.id, fin.id, { [dk]: v }) });
+            if (err) cf.querySelector('.inp').classList.add(isRef ? 'warn' : 'invalid');
+            ccFields.append(cf);
+          }
+          ks.append(ccFields); continue;
+        }
         const edgeSelMap = { all: T('panel.edges.selAll'), top: T('panel.edges.selTop'), bottom: T('panel.edges.selBottom'), vertical: T('panel.edges.selVertical'), horizontal: T('panel.edges.selHorizontal') };
         const eCnt = (fin.edges || []).length;
         const lbl = (fin.type === 'chamfer' ? T('panel.edges.chamfer') : T('panel.edges.fillet')) + (typeof fin.edges === 'string' ? ' · ' + (edgeSelMap[fin.edges] || '') : ' · ' + (eCnt === 1 ? T('panel.edges.oneEdge') : T('panel.edges.manyEdges', { n: eCnt })));
@@ -2134,6 +2175,8 @@ const Panels = (() => {
       const kr = h('div', { class: 'btn-row' });
       const mk = (label, sel) => { const b = h('button', { type: 'button', class: 'btn small', 'data-help': 'fillet' }); b.innerHTML = icon('fillet') + esc(label); b.onclick = () => { Actions.finishAll(it.id, 'fillet', sel, 1); }; return b; };
       kr.append(mk(T('panel.edges.roundAll'), 'all'), mk(T('panel.edges.roundVert'), 'vertical'), mk(T('panel.edges.roundTop'), 'top'));
+      const ffBtn = h('button', { type: 'button', class: 'btn small pro', id: 'btn-full-fillet', 'data-help': 'fullFillet' }); ffBtn.innerHTML = icon('fillet') + esc(T('panel.edges.fullFilletBtn')); ffBtn.onclick = () => Features.startFullFillet(null, { itemId: it.id }); kr.append(ffBtn);
+      const ccBtn = h('button', { type: 'button', class: 'btn small pro', id: 'btn-corner-chamfer', 'data-help': 'cornerChamfer' }); ccBtn.innerHTML = icon('chamfer') + esc(T('panel.edges.cornerChamferBtn')); ccBtn.onclick = () => Features.startCornerChamfer(it.id); kr.append(ccBtn);
       if (!(it.finishes || []).some((x) => x.type === 'draft')) { const db = h('button', { type: 'button', class: 'btn small pro', id: 'btn-draft', 'data-help': 'draft' }); db.innerHTML = icon('chamfer') + esc(T('panel.edges.draftBtn')); db.onclick = () => Actions.finishAll(it.id, 'draft', 'all', 3); kr.append(db); }
       ks.append(kr);
       ks.append(h('div', { class: 'hint-box', html: T('panel.edges.hint') }));
@@ -2432,6 +2475,7 @@ const Panels = (() => {
       else bar.append(h('span', { class: 'lbl' }, App.edges.length > 1 ? T('ctx.edgesCount', { n: App.edges.length }) : T('ctx.edgeOne')));
       b('fillet', T('ctx.fillet'), () => Actions.addFinish('fillet', 1), 'accent', T('ctx.filletTip'));
       b('chamfer', T('ctx.chamfer'), () => Actions.addFinish('chamfer', 1), '', T('ctx.chamferTip'));
+      b('chamfer', T('ctx.cornerChamfer'), () => Features.startCornerChamfer(App.edges[0].id), 'pro', T('ctx.cornerChamferTip')).dataset.help = 'cornerChamfer';
       b('similar', T('ctx.similar'), () => Select.similar(), '', T('ctx.similarEdgesTip'), true);
       b('chainEdges', T('ctx.chain'), () => Select.chain(), '', T('ctx.chainTip'), true);
       b('similar', T('ctx.byKind'), (e) => edgeRuleMenu(App.edges[0].id, e.currentTarget), '', T('ctx.byKindTip'), true);
@@ -2455,6 +2499,10 @@ const Panels = (() => {
       b('holeWizard', T('ctx.hole'), (e) => Place.holeHere(face, e.currentTarget), '', T('ctx.holeTip'));
       b('lift', T('ctx.extrude'), () => Sketch.pushPullFace(face), '', T('ctx.extrudeTip')).dataset.help = 'extrude';
       b('fillet', T('ctx.faceEdges'), (e) => faceEdgeMenu(face, e.currentTarget), '', T('ctx.faceEdgesTip'), true);
+      if (items[0].item.role !== 'hole') {
+        const ffb = b('fillet', T('ctx.fullFillet'), () => Features.startFullFillet(face), 'pro', T('ctx.fullFilletTip'));
+        ffb.id = 'ctx-full-fillet'; ffb.dataset.help = 'fullFillet';
+      }
       if (items[0].item.role !== 'hole' && App.doc.items.some((x) => x.id === face.id)) {
         b('thicken', T('ctx.thicken'), () => Features.thicken(face), '', T('ctx.thickenTip')).dataset.help = 'thickenFace';
         b('emboss', T('ctx.emboss'), () => Features.startEmboss(face), '', T('ctx.embossTip')).dataset.help = 'emboss';
@@ -2491,6 +2539,10 @@ const Panels = (() => {
         tb.dataset.help = 'datumTangent';
       }
       b('fillet', T('ctx.faceEdges'), (e) => faceEdgeMenu(face, e.currentTarget), '', T('ctx.faceEdgesTip'), true);
+      if (items[0].item.role !== 'hole') {
+        const ffb = b('fillet', T('ctx.fullFillet'), () => Features.startFullFillet(face), 'pro', T('ctx.fullFilletTip'));
+        ffb.id = 'ctx-full-fillet'; ffb.dataset.help = 'fullFillet';
+      }
       if (items[0].item.role !== 'hole' && App.doc.items.some((x) => x.id === face.id)) {
         b('thicken', T('ctx.thicken'), () => Features.thicken(face), '', T('ctx.thickenTip')).dataset.help = 'thickenFace';
         b('emboss', T('ctx.emboss'), () => Features.startEmboss(face), '', T('ctx.embossTip')).dataset.help = 'emboss';

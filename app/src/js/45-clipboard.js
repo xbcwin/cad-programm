@@ -112,6 +112,9 @@ const Clipboard = (() => {
       if (typeof f.r === 'string') extractExprTokens(f.r, idsOut, tblsOut);
       if (typeof f.r2 === 'string') extractExprTokens(f.r2, idsOut, tblsOut);
       if (typeof f.a === 'string') extractExprTokens(f.a, idsOut, tblsOut);
+      if (typeof f.d1 === 'string') extractExprTokens(f.d1, idsOut, tblsOut);
+      if (typeof f.d2 === 'string') extractExprTokens(f.d2, idsOut, tblsOut);
+      if (typeof f.d3 === 'string') extractExprTokens(f.d3, idsOut, tblsOut);
     }
     if (typeof it.massG === 'string') extractExprTokens(it.massG, idsOut, tblsOut);
     if (it.userPart && Array.isArray(it.userPart.params)) {
@@ -157,6 +160,9 @@ const Clipboard = (() => {
       if (typeof f.r === 'string') f.r = renameInExpr(f.r, oldName, newName);
       if (typeof f.r2 === 'string') f.r2 = renameInExpr(f.r2, oldName, newName);
       if (typeof f.a === 'string') f.a = renameInExpr(f.a, oldName, newName);
+      if (typeof f.d1 === 'string') f.d1 = renameInExpr(f.d1, oldName, newName);
+      if (typeof f.d2 === 'string') f.d2 = renameInExpr(f.d2, oldName, newName);
+      if (typeof f.d3 === 'string') f.d3 = renameInExpr(f.d3, oldName, newName);
     }
     if (typeof it.massG === 'string') it.massG = renameInExpr(it.massG, oldName, newName);
     if (Array.isArray(it.children)) for (const c of it.children) renameInItem(c, oldName, newName);

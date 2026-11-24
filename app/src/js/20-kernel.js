@@ -8,6 +8,8 @@ const Kernel = (() => {
   let multiWorker = true;
   let lastStats = null;
   let evalStatsSeq = 0;
+  let evalGen = 0;
+  let primaryRespawn = null;
   const pool = []; // [{ index, worker, ready, initPromise, pending, sentBlobs, terminated, lastKernelStats }]
   const keyOwner = new Map(); // resultKey -> workerIndex
   const itemOwner = new Map(); // itemId -> workerIndex
@@ -230,7 +232,7 @@ const Kernel = (() => {
     }
     return new Promise((resolve, reject) => {
       const id = seq++;
-      slot.pending.set(id, { resolve, reject });
+      slot.pending.set(id, { resolve, reject, cmd });
       slot.worker.postMessage({ id, cmd, args: nextArgs }, transfer);
     });
   }
@@ -259,6 +261,7 @@ const Kernel = (() => {
           ok ? p.resolve(result) : p.reject(new Error(error));
         };
         w.onerror = (e) => {
+          if (slot.terminated) return;
           const err = new Error('Der CAD-Kern ist abgestürzt: ' + ((e && e.message) || 'unbekannter Fehler'));
           for (const p of slot.pending.values()) p.reject(err);
           slot.pending.clear();
@@ -343,9 +346,19 @@ const Kernel = (() => {
     return startPromise;
   }
   const start = ensure;
+  const makeCancelError = () => Object.assign(new Error('Rechnen abgebrochen.'), { code: 'cancelled', cancelled: true });
+
+  async function ensurePrimary() {
+    if (!ready) await ensure();
+    if (pool[0] && pool[0].ready && !pool[0].terminated) return pool[0];
+    if (!primaryRespawn) primaryRespawn = createSlot(0).finally(() => { primaryRespawn = null; });
+    await primaryRespawn;
+    if (!pool[0] || !pool[0].ready || pool[0].terminated) throw new Error('Der CAD-Kern ist nicht aktiv.');
+    return pool[0];
+  }
 
   async function ensureWorkers(targetCount) {
-    if (!ready) await ensure();
+    await ensurePrimary();
     const maxW = detectMaxWorkers();
     const limit = Math.min(maxW, Math.max(1, targetCount | 0));
     if (limit <= 1 || !multiWorker || !wasmBytes) return pool[0] ? [pool[0]] : [];
@@ -625,7 +638,7 @@ const Kernel = (() => {
     if (Array.isArray(it.finishes)) {
       for (const f of it.finishes) {
         if (!f) continue;
-        extraPad = Math.max(extraPad, 2 + Math.abs(numOr(f.r, 0)), 2 + Math.abs(numOr(f.r2, 0)));
+        extraPad = Math.max(extraPad, 2 + Math.abs(numOr(f.r, 0)), 2 + Math.abs(numOr(f.r2, 0)), 2 + Math.abs(numOr(f.d1, 0)), 2 + Math.abs(numOr(f.d2, 0)), 2 + Math.abs(numOr(f.d3, 0)));
       }
     }
     return padBox(box, extraPad);
@@ -787,7 +800,9 @@ const Kernel = (() => {
   }
 
   async function evaluateParallel(args = {}) {
-    if (!ready) await ensure();
+    const myGen = evalGen;
+    await ensurePrimary();
+    if (myGen !== evalGen) throw makeCancelError();
     const scene = args.scene || { items: [] };
     const known = args.known || {};
     const opts = args.opts;
@@ -807,6 +822,7 @@ const Kernel = (() => {
 
     const target = Math.min(detectMaxWorkers(), components.length);
     const slots = await ensureWorkers(target);
+    if (myGen !== evalGen) throw makeCancelError();
     if (slots.length <= 1) {
       return evaluateSingleOnSlot(pool[0], scene, known, visible.length, opts);
     }
@@ -858,7 +874,8 @@ const Kernel = (() => {
         try {
           res = await postTo(slot, 'evaluate', { scene: subScene, known: subKnown, opts });
         } catch (err) {
-          if (slot.index !== 0 && pool[0] && pool[0].ready) {
+          if (err && (err.cancelled || err.code === 'cancelled')) throw err;
+          if (slot.index !== 0 && pool[0] && pool[0].ready && !pool[0].terminated) {
             usedIdx = 0;
             const fallbackKnown = {};
             for (const it of comp) {
@@ -940,7 +957,7 @@ const Kernel = (() => {
 
   const KEY_ROUTED = new Set(['remesh', 'faceLoops', 'faceGrid', 'section']);
   async function call(cmd, args = {}, transfer = []) {
-    if (!ready) await ensure();
+    await ensurePrimary();
     if (cmd === 'evaluate') return evaluateParallel(args);
     let slot = pool[0];
     if (KEY_ROUTED.has(cmd) && args && args.key) {
@@ -948,6 +965,33 @@ const Kernel = (() => {
       if (idx != null && pool[idx] && pool[idx].ready && !pool[idx].terminated) slot = pool[idx];
     }
     return postTo(slot, cmd, args, transfer);
+  }
+  function cancel() {
+    evalGen++;
+    let killedPrimary = false;
+    const err = makeCancelError();
+    for (let i = 0; i < pool.length; i++) {
+      const slot = pool[i];
+      if (!slot || slot.terminated) continue;
+      let hasEval = false;
+      for (const p of slot.pending.values()) {
+        if (p && p.cmd === 'evaluate') { hasEval = true; break; }
+      }
+      if (!hasEval) continue;
+      retireSlotStats(slot);
+      slot.terminated = true;
+      slot.ready = false;
+      for (const p of slot.pending.values()) p.reject(err);
+      slot.pending.clear();
+      if (slot.worker) { try { slot.worker.terminate(); } catch (_) {} }
+      pool[i] = null;
+      clearSlotOwnership(i);
+      if (i === 0) killedPrimary = true;
+    }
+    if (killedPrimary && wasmBytes && !primaryRespawn) {
+      primaryRespawn = createSlot(0).catch(() => null).finally(() => { primaryRespawn = null; });
+    }
+    return true;
   }
   function resetPoolStats() {
     totalEvalCalls = 0;
@@ -998,7 +1042,7 @@ const Kernel = (() => {
   }
 
   return {
-    start, ensure, call, on: ev.on,
+    start, ensure, call, cancel, on: ev.on,
     stats, resetStats, resetPoolStats, clearCache, fingerprint,
     setMultiWorker, partitionScene,
     get lastStats() { return lastStats; },

@@ -2288,6 +2288,21 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Hilfen, Befehle, Erklärtext & DE/EN-Schlüssel**: `sweep`, `sweepTwist`, `sweepCut` in `werkzeug-hilfen.json` und `HELP`, DE/EN-Schlüsselgleichheit, `Commands.search('nut')` / `Commands.search('verdrehung')` und `Explain.local` sind vollständig ohne Seitenfehler.
 - [ ] **Von Hand**: Im Browser eine gebogene Kurve als Pfad mit eigener Skizzenform und Verdrehung sowie eine verdrehte Nut auf einer Körperfläche samt Live-Vorschau ausprobieren.
 
+## Rechnen abbrechen und Meldungs-Zentrale (Auto [A-107], BE-27, BE-25)
+
+- [x] **Abbrechen ab > 2 s & letzter guter Stand bleibt**: Künstlich langsamer Schritt (`_testDelayMs: 6000`) zeigt unter 2 s noch kein `#status-cancel`, blendet ab > 2 s „Abbrechen“ ein, stoppt die Berechnung nach Klick sofort (`< 2,5 s`) und hält Dokument, Rückgängig-Stand und 3D-Ansicht beim letzten guten Quader; ein neuer Zylinder danach rechnet fehlerfrei.
+- [x] **Meldungs-Zentrale (Glocke `#status-bell`)**: Sammelt Rechenfehler, Abbruch-Hinweis und Info-Meldungen mit `HH:MM:SS`-Uhrzeit, zeigt Ungelesen-/Fehler-Badge, filtert nach „Alle“ / „Fehler“ / „Hinweise“, springt per „Hinspringen“ direkt zum fehlerhaften Schritt, setzt Ungelesen beim Öffnen zurück und leert über „Leeren“.
+- [x] **Einfach-Modus, Hilfen, DE/EN & Befehle**: Glocke bleibt in „Einfach“ sichtbar; `calcCancel` und `noticeCenter` sind in `werkzeug-hilfen.json`/`HELP` vollständig; DE/EN-Schlüssel sind gleich und `Commands.search` findet `notices` und `cancel-calc`.
+- [ ] **Von Hand**: Im Browser eine sehr rechenintensive Rundung oder große Muster-Kopie auslösen, nach 2 s „Abbrechen“ klicken und in der Glocke bei einem fehlerhaften Schritt auf „Hinspringen“ klicken.
+
+## Vollrundung und Fase an einer Ecke (Auto [A-103], KP-38, KP-41)
+
+- [x] **Vollrundung auf 10-mm-Steg**: Über `#btn-full-fillet` und drei 3D-Flächenklicks angelegt → Stirnfläche wird genau ein Zylinder mit Radius `5 mm`, Volumen `≈ 7785,4 mm³`, keine Mini-Kanten oder Kernfehler; bei Änderung der Stegdicke (`10 → 14 mm`) wächst der Radius automatisch auf `7 mm` mit; verjüngter Steg baut ebenfalls fehlerfrei.
+- [x] **Ecken-Fase 2 / 3 / 4**: Über `#btn-corner-chamfer` und Ecken-Klick am `20×20×20`-Quader angelegt, Abstände `2 / 3 / 4 mm` gesetzt → neue dreieckige Ebene mit exakten Kantenlängen (`√13`, `√20`, `5 mm`) und Volumen `7996 mm³`.
+- [x] **Reihenfolge drehen, Formeln, Fehler & Rückgängig**: `#fin-rot-*` tauscht `d1/d2/d3` reihum, Formeln (`F`, `F*2`, `F+1`) rechnen exakt (`7988 mm³`), zu großer Abstand (`25 mm`) meldet `toobig` ohne Absturz und `App.undo()` stellt den gültigen Zustand wieder her.
+- [x] **Hilfen, Befehle, Erklärtext & DE/EN-Schlüssel**: `fullFillet` und `cornerChamfer` in `werkzeug-hilfen.json` und `HELP`, DE/EN-Schlüsselgleichheit, `Commands.search('vollrundung')` / `Commands.search('ecken-fase')` und `Explain.local` sind vollständig ohne Seitenfehler.
+- [ ] **Von Hand**: Im Browser eine Vollrundung an einem gebogenen Steg oder über das Kontextmenü anlegen und eine Ecken-Fase an einer schrägen Körper-Ecke prüfen.
+
 ## AMF, PLY und Punkte-Dateien (Auto [A-106], IO-12, IO-14)
 
 - [x] **PLY-Export und -Import (binär & ASCII)**: Würfel `25 × 25 × 25` als PLY exportiert (`#ex-ply`, `#ex-each`) und per `Start.openBlob` wieder geöffnet → `0` Fehler, exakt gleiche Dreieckszahl (`12`), gleiche Hüllmaße und gleiche Farbe (`#3f7fd6`); ASCII-PLY-Roundtrip über `Print.buildPLY(..., { ascii: true })` und `Start.parsePLY` konsistent.

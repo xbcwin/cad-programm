@@ -71,7 +71,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,PointClouds,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Assembly,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,ClashCheck,Log,Kernel,Drawing,UI}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,PointClouds,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Assembly,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,ClashCheck,Log,Notices,Kernel,Drawing,UI}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -21179,6 +21179,162 @@ def t_a102_pfad_verdrehung_schnitt(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+# ---------- [A-103] Vollrundung und Fase an einer Ecke (KP-38, KP-41) ----------
+def t_a103_vollrundung_eckenfase(p):
+    import math
+    warte_idle = lambda: warte_rechnen(p, 30)
+    def set_num(sel, val):
+        p.pg.locator(sel).fill(str(val))
+        p.pg.locator(sel).press('Enter')
+        warte_idle()
+
+    p.empty()
+
+    # 1. Vollrundung auf Steg 40 × 10 × 20 über 3D-Flächenklicks
+    steg_id = p.ev("""let id; App.change('Steg', d => {
+      const b = Model.newItem('box', { w: 40, d: 10, h: 20 }, { name: 'Steg' });
+      d.items.push(b); id = b.id;
+    }); return id;""")
+    warte_idle()
+    p.ev("App.select([arg])", steg_id); p.wait(300)
+    p.pg.locator('#btn-full-fillet').click(); p.wait(200)
+    picking_on = p.ev("return Features.picking")
+
+    p.ev("const c=Viewer.controls.target; Viewer.moveCamera(c.clone().set(65, -65, 50), c.clone().set(10, 0, 10), null, false); Viewer.renderNow();"); p.wait(150)
+    s1 = world_screen(p, 0, -5, 10)
+    p.pg.mouse.click(s1[0], s1[1]); p.wait(150)
+    sc = world_screen(p, 20, 0, 10)
+    p.pg.mouse.click(sc[0], sc[1]); p.wait(150)
+    p.ev("const c=Viewer.controls.target; Viewer.moveCamera(c.clone().set(65, 65, 50), c.clone().set(10, 0, 10), null, false); Viewer.renderNow();"); p.wait(150)
+    s2 = world_screen(p, 0, 5, 10)
+    p.pg.mouse.click(s2[0], s2[1]); warte_idle()
+
+    ff_res = p.ev("""const r = App.results.get(arg);
+      const cyls = r.data.faces.filter(f => f.t === 'CYLINDRE' && f.c && f.c[0] > 14);
+      const endPlanes = r.data.faces.filter(f => f.t === 'PLANE' && f.n && f.n[0] > 0.99);
+      const minEdge = Math.min(...r.data.edges.map(e => e.l || 999));
+      return { errs: App.errors.length, cyls, endPlanes: endPlanes.length, minEdge, faceCount: r.data.faces.length };""", steg_id)
+    v_ff = volumen(p)
+    exp_vol_ff = (40 * 10 - (10 * 5 - math.pi * 25 / 2)) * 20  # 7785.398
+    ok1 = (
+        picking_on
+        and ff_res['errs'] == 0
+        and len(ff_res['cyls']) == 1
+        and abs(ff_res['cyls'][0]['r'] - 5.0) < 0.01
+        and ff_res['endPlanes'] == 0
+        and ff_res['minEdge'] > 1.0
+        and v_ff is not None and abs(v_ff - exp_vol_ff) < 0.5
+    )
+
+    # 2. Parametrisch: Steg-Dicke 10 -> 14 mm, Vollrundung wächst mit auf Radius 7 mm; plus verjüngter Steg
+    p.ev("App.change('Dicker', d => { Model.find(d, arg).item.p.d = 14; })", steg_id); warte_idle()
+    ff_res2 = p.ev("""const r = App.results.get(arg);
+      const cyls = r.data.faces.filter(f => f.t === 'CYLINDRE' && f.c && f.c[0] > 12);
+      return { errs: App.errors.length, cyls };""", steg_id)
+    trap_id = p.ev("""let id; App.change('Trapez', d => {
+      const sk = { plane:{o:[0,0,0],x:[1,0,0],n:[0,0,1]}, ents:[
+        {id:'e1',type:'line',a:[-20,-8],b:[20,-5]},
+        {id:'e2',type:'line',a:[20,-5],b:[20,5]},
+        {id:'e3',type:'line',a:[20,5],b:[-20,8]},
+        {id:'e4',type:'line',a:[-20,8],b:[-20,-8]}
+      ], dims:[], cons:[] };
+      const it = Model.newItem('extrude', { sketch: sk, dist: 20, dir: 'normal' }, { name: 'Verjuengt' });
+      d.items.push(it); id = it.id;
+    }); return id;""")
+    warte_idle()
+    p.ev("""const fs = App.results.get(arg).data.faces;
+      const f1 = fs.findIndex(f => f.t === 'PLANE' && f.n[1] < -0.5);
+      const fc = fs.findIndex(f => f.t === 'PLANE' && f.n[0] > 0.99);
+      const f2 = fs.findIndex(f => f.t === 'PLANE' && f.n[1] > 0.5);
+      Features.addFullFillet(arg, [f1, fc, f2]);""", trap_id); warte_idle()
+    trap_ok = p.ev("""const r = App.results.get(arg);
+      return App.errors.length === 0 && r && r.data.faces.some(f => f.t === 'CYLINDRE' && f.r > 4.0);""", trap_id)
+    ok2 = (
+        ff_res2['errs'] == 0
+        and len(ff_res2['cyls']) == 1
+        and abs(ff_res2['cyls'][0]['r'] - 7.0) < 0.01
+        and trap_ok
+    )
+
+    # 3. Ecken-Fase 2 / 3 / 4 auf Quader 20 × 20 × 20 über UI-Ecken-Klick
+    p.ev("App.change('x', d => { d.items = []; })"); warte_idle()
+    box_id = p.ev("""let id; App.change('Wuerfel', d => {
+      const b = Model.newItem('box', { w: 20, d: 20, h: 20 }, { name: 'Quader' });
+      d.items.push(b); id = b.id;
+    }); return id;""")
+    warte_idle()
+    p.ev("App.select([arg])", box_id); p.wait(300)
+    p.ev("const c=Viewer.controls.target; Viewer.moveCamera(c.clone().set(35, 35, 38), c.clone().set(0, 0, 10), null, false); Viewer.renderNow();"); p.wait(150)
+    p.pg.locator('#btn-corner-chamfer').click(); p.wait(200)
+    cc_picking = p.ev("return Features.picking")
+    c_scr = world_screen(p, 10, 10, 20)
+    p.pg.mouse.click(c_scr[0], c_scr[1]); warte_idle()
+
+    fin_id = p.ev("return App.doc.items[0].finishes[0]?.id")
+    set_num(f'#fin-d1-{fin_id}', '2')
+    set_num(f'#fin-d2-{fin_id}', '3')
+    set_num(f'#fin-d3-{fin_id}', '4')
+    v_cc = volumen(p)
+    tri_info = p.ev("""const r = App.results.get(arg);
+      const f = r.data.faces.find(x => x.t === 'PLANE' && x.n && Math.abs(x.n[0]) > 0.1 && Math.abs(x.n[1]) > 0.1 && Math.abs(x.n[2]) > 0.1);
+      if (!f) return null;
+      const dot = (u, v) => u[0]*v[0] + u[1]*v[1] + u[2]*v[2];
+      const onPlane = (pt) => Math.abs(dot(f.n, [pt[0]-f.c[0], pt[1]-f.c[1], pt[2]-f.c[2]])) < 1e-3;
+      const lens = r.data.edges.filter(e => e.a && e.b && onPlane(e.a) && onPlane(e.b) && onPlane(e.m)).map(e => e.l).sort((a,b) => a - b);
+      return { errs: App.errors.length, n: f.n, lens, faces: r.data.faces.length };""", box_id)
+    exp_lens = sorted([math.sqrt(13), math.sqrt(20), 5.0])
+    ok3 = (
+        cc_picking
+        and bool(fin_id)
+        and bool(tri_info)
+        and tri_info['errs'] == 0
+        and tri_info['faces'] == 7
+        and len(tri_info['lens']) == 3
+        and all(abs(tri_info['lens'][i] - exp_lens[i]) < 0.01 for i in range(3))
+        and v_cc is not None and abs(v_cc - 7996.0) < 0.1
+    )
+
+    # 4. Reihenfolge drehen, Formeln, Fehler bei zu großem Abstand & Rückgängig
+    p.pg.locator(f'#fin-rot-{fin_id}').click(); warte_idle()
+    rot_info = p.ev("""const f = App.doc.items[0].finishes[0];
+      const r = App.results.get(arg);
+      const tf = r.data.faces.find(x => x.t === 'PLANE' && x.n && Math.abs(x.n[0]) > 0.1 && Math.abs(x.n[1]) > 0.1 && Math.abs(x.n[2]) > 0.1);
+      return { d1: f.d1, d2: f.d2, d3: f.d3, n: tf && tf.n };""", box_id)
+    v_rot = volumen(p)
+    p.ev("App.change('Mass', d => { d.params.push({ id: 'pm1', name: 'F', expr: 3 }); })"); warte_idle()
+    set_num(f'#fin-d1-{fin_id}', 'F')
+    set_num(f'#fin-d2-{fin_id}', 'F*2')
+    set_num(f'#fin-d3-{fin_id}', 'F+1')
+    v_formula = volumen(p)  # 8000 - (3*6*4)/6 = 7988
+    err_formula = p.ev("return App.errors.length")
+    set_num(f'#fin-d1-{fin_id}', '25')
+    err_toobig = p.ev("return App.errors.some(e => e.code === 'toobig')")
+    p.ev("App.undo()"); warte_idle()
+    v_undo = volumen(p)
+    err_after_undo = p.ev("return App.errors.length")
+    ok4 = (
+        rot_info['d1'] == 3 and rot_info['d2'] == 4 and rot_info['d3'] == 2
+        and v_rot is not None and abs(v_rot - 7996.0) < 0.1
+        and abs(rot_info['n'][0] - tri_info['n'][0]) > 0.05
+        and err_formula == 0
+        and v_formula is not None and abs(v_formula - 7988.0) < 0.1
+        and err_toobig
+        and err_after_undo == 0
+        and v_undo is not None and abs(v_undo - 7988.0) < 0.1
+    )
+
+    # 5. Hilfetexte, DE/EN-Schlüsselgleichheit, Befehlssuche, Erklärtext & keine Seitenfehler
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    i18n_ok = p.pg.evaluate("Promise.all([fetch('data/texte-de.json').then(r=>r.json()), fetch('data/texte-en.json').then(r=>r.json())]).then(([d,e])=>{ const dk=Object.keys(d).sort(), ek=Object.keys(e).sort(); return dk.length===ek.length && dk.every((k,i)=>k===ek[i]); })")
+    cmds_ok = p.ev("return Commands.search('vollrundung').some(c => c.id === 'fullFillet') && Commands.search('ecken-fase').some(c => c.id === 'cornerChamfer')")
+    explain_ok = p.ev("const ex = Explain.local(arg); return !!ex && ex.lines.some(l => l.k === 'fin' && /Ecken-Fase/.test(l.t))", box_id)
+    ok5 = (
+        all(k in hilfen and all(f in hilfen[k] for f in ('tip', 'hilfe', 'tipp')) for k in ('fullFillet', 'cornerChamfer'))
+        and i18n_ok and cmds_ok and explain_ok and not p.errs
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 def t_a106_amf_ply_punkte(p):
     import base64, io, tempfile, zipfile
 
@@ -21727,6 +21883,184 @@ def t_a108_einstellungen_groesse(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+# ---------- [A-107] Rechnen abbrechen & Meldungs-Zentrale (BE-27, BE-25) ----------
+def t_a107_abbrechen_meldungen(p):
+    p.empty()
+
+    # 1. Guten Stand aufbauen (Quader 20x20x20), dann künstlich langsamen Schritt (> 2 s) anstoßen und abbrechen
+    p.ev("App.change('Quader', d=>{ d.items.push(Model.newItem('box',{w:20,d:20,h:20},{name:'Quader'})); })")
+    warte_rechnen(p)
+    good_before = p.ev("""
+      const it = App.doc.items[0], r = App.results.get(it.id);
+      return { id: it.id, n: App.doc.items.length, resN: App.results.size, bbox: r && r.data && r.data.bbox };
+    """)
+
+    p.ev("""
+      App.change('Langsamer Quader', d => {
+        const b = Model.newItem('box', { w: 40, d: 40, h: 40, _testDelayMs: 6000 }, { name: 'Langsam' });
+        b.t.x = 40;
+        d.items.push(b);
+      });
+    """)
+    p.wait(400)
+    early_busy = p.ev("return !!App.busy")
+    early_cancel_vis = p.pg.locator('#status-cancel').is_visible()
+
+    p.pg.locator('#status-cancel').wait_for(state='visible', timeout=4000)
+    cancel_txt = (p.pg.locator('#status-cancel').text_content() or '').strip()
+    t_click = p.ev("return performance.now()")
+    p.pg.locator('#status-cancel').click()
+    p.pg.wait_for_function("()=>!window.__M.App.busy", timeout=2500)
+    cancel_ms = p.ev("return performance.now() - arg;", t_click)
+    p.wait(250)
+
+    after_cancel = p.ev("""
+      return {
+        cancelVis: document.querySelector('#status-cancel') ? !document.querySelector('#status-cancel').hidden : null,
+        calcState: document.querySelector('#status-calc') ? document.querySelector('#status-calc').dataset.state : null,
+        n: App.doc.items.length,
+        firstId: App.doc.items[0] ? App.doc.items[0].id : null,
+        resN: App.results.size,
+        bbox: App.results.get(App.doc.items[0].id)?.data?.bbox || null,
+        hasSlow: App.doc.items.some(x => x.name === 'Langsam'),
+        nodeCount: Viewer.nodes.size,
+      };
+    """)
+    ok1 = (
+        early_busy is True and early_cancel_vis is False
+        and 'Abbrechen' in cancel_txt
+        and cancel_ms < 2500
+        and after_cancel['cancelVis'] is False
+        and after_cancel['calcState'] == 'ready'
+        and after_cancel['n'] == 1
+        and after_cancel['firstId'] == good_before['id']
+        and after_cancel['resN'] == 1
+        and after_cancel['hasSlow'] is False
+        and after_cancel['nodeCount'] == 1
+        and after_cancel['bbox'] == good_before['bbox']
+    )
+
+    # 2. CAD-Kern arbeitet nach dem Abbruch mit einem normalen Körper sofort weiter
+    p.ev("""
+      App.change('Zylinder', d => {
+        const c = Model.newItem('cylinder', { d: 10, h: 20 }, { name: 'Bolzen' });
+        c.t.x = 35;
+        d.items.push(c);
+      });
+    """)
+    warte_rechnen(p)
+    after_ok = p.ev("return { n: App.doc.items.length, resN: App.results.size, errs: App.errors.length };")
+    ok2 = after_ok['n'] == 2 and after_ok['resN'] == 2 and after_ok['errs'] == 0
+
+    # 3. Meldungs-Zentrale: Fehler, Hinweise, Uhrzeit, Filter, Hinspringen & Leeren
+    p.ev("""
+      App.change('Kaputte Rundung', d => {
+        d.items[0].finishes.push({ id: 'f_bad_107', type: 'fillet', r: 999, edges: [0] });
+      });
+    """)
+    warte_rechnen(p)
+    p.ev("UI.toast('Sitzungshinweis Test', { icon: 'info' });")
+    p.wait(200)
+
+    bell_before = p.ev("""
+      const b = document.querySelector('#status-bell');
+      const badge = document.querySelector('#status-bell-badge');
+      return {
+        vis: !!b && b.getBoundingClientRect().width > 0,
+        hasErr: !!b && b.classList.contains('has-err'),
+        badgeHidden: badge ? badge.hidden : null,
+        badgeText: badge ? badge.textContent.trim() : '',
+        unread: Notices.unreadCount(),
+        errCount: Notices.errorCount(),
+      };
+    """)
+    p.pg.locator('#status-bell').click()
+    p.wait(250)
+    pop_info = p.ev("""
+      const rows = [...document.querySelectorAll('#nc-list .nc-row')];
+      const errRow = rows.find(r => r.dataset.level === 'error');
+      const timeTxt = errRow ? (errRow.querySelector('.nc-time')?.textContent || '').trim() : '';
+      const hasJump = !!(errRow && errRow.querySelector('.nc-jump'));
+      const hasInfo = rows.some(r => r.textContent.includes('Sitzungshinweis Test'));
+      const hasCancel = rows.some(r => r.textContent.includes('abgebrochen'));
+      return {
+        open: !!document.querySelector('#notice-center'),
+        total: rows.length,
+        timeOk: /^\\d{2}:\\d{2}:\\d{2}$/.test(timeTxt),
+        hasJump,
+        hasInfo,
+        hasCancel,
+        unreadAfterOpen: Notices.unreadCount(),
+      };
+    """)
+
+    p.pg.locator('#nc-filter-error').click()
+    p.wait(150)
+    only_err = p.ev("const r=[...document.querySelectorAll('#nc-list .nc-row')]; return r.length > 0 && r.every(x => x.dataset.level === 'error');")
+    p.pg.locator('#nc-filter-info').click()
+    p.wait(150)
+    only_info = p.ev("const r=[...document.querySelectorAll('#nc-list .nc-row')]; return r.length > 0 && r.every(x => x.dataset.level !== 'error');")
+    p.pg.locator('#nc-filter-all').click()
+    p.wait(150)
+
+    p.ev("App.clearSelection()")
+    p.pg.locator('#nc-list .nc-row[data-level="error"] .nc-jump').first.click()
+    p.wait(250)
+    jump_res = p.ev("return { open: !!document.querySelector('#notice-center'), sel: App.sel.slice(), targetId: App.doc.items[0].id };")
+
+    p.pg.locator('#status-bell').click()
+    p.wait(200)
+    p.pg.locator('#nc-clear').click()
+    p.wait(200)
+    cleared = p.ev("return { len: Notices.entries().length, emptyVis: !!document.querySelector('#nc-list .nc-empty') };")
+    p.pg.keyboard.press('Escape')
+    p.wait(150)
+
+    ok3 = (
+        bell_before['vis'] and bell_before['hasErr'] and bell_before['badgeHidden'] is False
+        and bell_before['unread'] >= 2 and bell_before['errCount'] >= 1
+        and pop_info['open'] and pop_info['total'] >= 3 and pop_info['timeOk']
+        and pop_info['hasJump'] and pop_info['hasInfo'] and pop_info['hasCancel']
+        and pop_info['unreadAfterOpen'] == 0
+        and only_err and only_info
+        and jump_res['open'] is False and jump_res['targetId'] in jump_res['sel']
+        and cleared['len'] == 0 and cleared['emptyVis'] is True
+    )
+
+    # 4. Einfach-Modus, Hilfetexte, DE/EN-Schlüssel & Befehlssuche
+    p.ev("ViewPrefs.setLevel('simple')")
+    p.wait(200)
+    simple_bell = p.pg.locator('#status-bell').is_visible()
+    p.ev("ViewPrefs.setLevel('pro')")
+    p.wait(200)
+
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    de_txt = p.pg.evaluate("fetch('data/texte-de.json').then(r=>r.json())")
+    en_txt = p.pg.evaluate("fetch('data/texte-en.json').then(r=>r.json())")
+    i18n_eq = sorted(de_txt.keys()) == sorted(en_txt.keys())
+    p.pg.locator('#status-bell').hover()
+    try:
+        p.pg.wait_for_selector('.tooltip.big', timeout=3000)
+        bell_tip_big = p.pg.locator('.tooltip.big').text_content() or ''
+    except Exception:
+        bell_tip_big = ''
+    help_ok = p.ev("""
+      const aOk = document.querySelector('#status-cancel')?.dataset.help === 'calcCancel'
+               && document.querySelector('#status-bell')?.dataset.help === 'noticeCenter';
+      const cmdOk = Commands.search('meldungs').some(c => c.id === 'notices')
+                 && Commands.search('abbrechen').some(c => c.id === 'cancel-calc');
+      return aOk && cmdOk;
+    """)
+    ok4 = (
+        simple_bell is True
+        and i18n_eq
+        and all(k in hilfen and all(f in hilfen[k] for f in ('tip', 'hilfe', 'tipp')) for k in ('calcCancel', 'noticeCenter'))
+        and hilfen['noticeCenter']['hilfe'] in bell_tip_big
+        and help_ok
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -21938,9 +22272,11 @@ TESTS = [
     ('[A-100] Körper als Schritt löschen & Messwert als Maß (KP-51, KP-53)', t_a100_loeschen_messwert),
     ('[A-101] Feder und Spirale: Zylinder-Feder / Kegel-Feder / flache Spirale / Einfach-Modus', t_a101_feder_spirale),
     ('[A-102] Entlang Pfad mit Verdrehung und als Schnitt (KP-28, KP-29)', t_a102_pfad_verdrehung_schnitt),
+    ('[A-103] Vollrundung und Ecken-Fase mit drei Abständen (KP-38, KP-41)', t_a103_vollrundung_eckenfase),
     ('[A-106] AMF, PLY und Punkte-Dateien (IO-12, IO-14)', t_a106_amf_ply_punkte),
     ('[A-105] Schräge- und Hinterschnitt-Analyse (PF-09, PF-10)', t_a105_schraege_hinterschnitt),
     ('[A-108] Einstellungen speichern/laden & Oberflächen-Größe (BE-30, BE-31)', t_a108_einstellungen_groesse),
+    ('[A-107] Rechnen abbrechen & Meldungs-Zentrale (BE-27, BE-25)', t_a107_abbrechen_meldungen),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
