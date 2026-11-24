@@ -353,7 +353,7 @@ const Solver = (() => {
   }
 
   // ---------- Was ist noch beweglich? (Rang des Gleichungssystems) ----------
-  function analyze(sys, X) {
+  function analyze(sys, X, ents) {
     const n = X.length; const active = new Array(n).fill(true);
     const eqs = sys.eqs.filter((q) => !(q.tag && q.tag.pull));
     const J = jacobian({ eqs }, X, active, true);
@@ -374,7 +374,59 @@ const Solver = (() => {
     const loose = new Set(freeCols);
     pivCol.forEach((c, r) => { for (const f of freeCols) if (Math.abs(M[r][f]) > 1e-6) { loose.add(c); break; } });
     const freeEnts = new Set(); for (const j of loose) freeEnts.add(sys.owner[j]);
-    return { rank, dof: n - rank, freeEnts, looseVars: loose };
+    // Nullraum-Basis für die Wackel-Bewegung einzelner freier Stellen
+    const nullBasis = [];
+    if (n <= 400) {
+      for (const f of freeCols) {
+        const v = new Array(n).fill(0);
+        v[f] = 1;
+        pivCol.forEach((c, r) => { if (Math.abs(M[r][f]) > 1e-9) v[c] = -M[r][f]; });
+        nullBasis.push(v);
+      }
+    }
+    // Einzelne noch bewegliche Punkte und Radien sammeln
+    const freePoints = [];
+    const pushPt = (eid, p, xy, vars, kind = 'point') => {
+      if (vars.some((j) => j != null && loose.has(j))) freePoints.push({ eid, p, xy: xy.slice(), vars, kind });
+    };
+    for (const e of ents || []) {
+      const m = sys.idx.get(e.id);
+      if (!m) continue;
+      if (e.type === 'line') {
+        pushPt(e.id, 'a', e.a, [m.a0, m.a1]);
+        pushPt(e.id, 'b', e.b, [m.b0, m.b1]);
+      } else if (e.type === 'arc') {
+        pushPt(e.id, 'a', e.a, [m.a0, m.a1]);
+        pushPt(e.id, 'b', e.b, [m.b0, m.b1]);
+        pushPt(e.id, 'm', e.m, [m.m0, m.m1]);
+      } else if (e.type === 'slot') {
+        pushPt(e.id, 'a', e.a, [m.a0, m.a1]);
+        pushPt(e.id, 'b', e.b, [m.b0, m.b1]);
+        if (loose.has(m.r)) {
+          const L = hyp(e.b[0] - e.a[0], e.b[1] - e.a[1]) || 1;
+          const nx = -(e.b[1] - e.a[1]) / L, ny = (e.b[0] - e.a[0]) / L;
+          pushPt(e.id, 'r', [(e.a[0] + e.b[0]) / 2 + nx * e.r, (e.a[1] + e.b[1]) / 2 + ny * e.r], [m.r], 'radius');
+        }
+      } else if (e.type === 'circle' || e.type === 'poly') {
+        pushPt(e.id, 'c', e.c, [m.c0, m.c1]);
+        if (loose.has(m.r)) pushPt(e.id, 'r', [e.c[0] + e.r, e.c[1]], [m.r], 'radius');
+      } else if (e.type === 'ellipse') {
+        pushPt(e.id, 'c', e.c, [m.c0, m.c1]);
+        const cs = Math.cos(e.rot || 0), sn = Math.sin(e.rot || 0);
+        if (loose.has(m.rx)) pushPt(e.id, 'rx', [e.c[0] + cs * e.rx, e.c[1] + sn * e.rx], [m.rx], 'radius');
+        if (loose.has(m.ry)) pushPt(e.id, 'ry', [e.c[0] - sn * e.ry, e.c[1] + cs * e.ry], [m.ry], 'radius');
+      } else if (e.type === 'rect') {
+        pushPt(e.id, 'k0', [e.a[0], e.a[1]], [m.a0, m.a1]);
+        pushPt(e.id, 'k1', [e.b[0], e.a[1]], [m.b0, m.a1]);
+        pushPt(e.id, 'k2', [e.b[0], e.b[1]], [m.b0, m.b1]);
+        pushPt(e.id, 'k3', [e.a[0], e.b[1]], [m.a0, m.b1]);
+      } else if (e.type === 'spline') {
+        (e.pts || []).forEach((q, i) => pushPt(e.id, 'p' + i, q, [m['p' + i + '_0'], m['p' + i + '_1']]));
+      } else if (e.type === 'point' || e.type === 'text') {
+        pushPt(e.id, 'a', e.a, [m.a0, m.a1]);
+      }
+    }
+    return { rank, dof: n - rank, freeEnts, looseVars: loose, freePoints, nullBasis, varIdx: sys.idx };
   }
 
   // ---------- Öffentlich ----------
@@ -408,7 +460,7 @@ const Solver = (() => {
     const conflicts = new Set();
     sys.eqs.forEach((q, i) => { if (Math.abs(res[i]) > 1e-5 && q.tag) { if (q.tag.con) conflicts.add(q.tag.con); if (q.tag.dim) conflicts.add(q.tag.dim); } });
     const out = { ents, ok: err < 1e-6, err, badDims: sys.badDims, conflicts };
-    if (opts.analyze) Object.assign(out, analyze(sys, X), { nVars: X.length });
+    if (opts.analyze) Object.assign(out, analyze(sys, X, ents), { nVars: X.length });
     ents.badDims = sys.badDims;
     return out;
   }
@@ -417,6 +469,74 @@ const Solver = (() => {
     const before = solve({ ...sketch, cons: sketch.consBefore || sketch.cons, dims: sketch.dimsBefore || sketch.dims }, V, { analyze: true });
     const after = solve(sketch, V, { analyze: true });
     return { ok: after.ok, redundant: after.ok && after.rank === before.rank && after.dof === before.dof, after, before };
+  }
+  // Widerspruch erklären: alle unmittelbar am Konflikt beteiligten Maße und Regeln finden (minimaler Konflikt)
+  function explainConflict(sketch, V, opts = {}) {
+    const base = solve(sketch, V, { noJoin: opts.noJoin });
+    if (base.ok) return { ok: true, items: [], conflicts: new Set() };
+    const dims = sketch.dims || [], cons = sketch.cons || [];
+    const activeDims = dims.filter((d) => !d.ref && d.k !== 'n');
+    const entsCopy = (sketch.ents || []).map((e) => JSON.parse(JSON.stringify(e)));
+    const sys = build(entsCopy, V, { dims, cons, noJoin: opts.noJoin });
+    // Verbundene Gleichungs-Komponente(n) rund um die verletzten Gleichungen per BFS bestimmen
+    const varToEqs = new Map();
+    sys.eqs.forEach((q, i) => {
+      for (const j of q.deps) {
+        if (!varToEqs.has(j)) varToEqs.set(j, []);
+        varToEqs.get(j).push(i);
+      }
+    });
+    const seenEq = new Set(), queue = [], compIds = new Set();
+    sys.eqs.forEach((q, i) => {
+      const id = q.tag && (q.tag.dim || q.tag.con);
+      if (id && base.conflicts.has(id)) { seenEq.add(i); queue.push(i); }
+    });
+    for (let qi = 0; qi < queue.length; qi++) {
+      const q = sys.eqs[queue[qi]];
+      if (q.tag) { if (q.tag.dim) compIds.add(q.tag.dim); if (q.tag.con) compIds.add(q.tag.con); }
+      for (const j of q.deps) {
+        for (const nb of varToEqs.get(j) || []) if (!seenEq.has(nb)) { seenEq.add(nb); queue.push(nb); }
+      }
+    }
+    let candidates = [];
+    const seenCand = new Set();
+    const pushCand = (kind, id) => { if (!seenCand.has(id)) { seenCand.add(id); candidates.push({ kind, id }); } };
+    for (const d of activeDims) if (compIds.has(d.id)) pushCand('dim', d.id);
+    for (const c of cons) if (compIds.has(c.id)) pushCand('con', c.id);
+    if (!candidates.length) {
+      for (const d of activeDims) if (base.conflicts.has(d.id)) pushCand('dim', d.id);
+      for (const c of cons) if (base.conflicts.has(c.id)) pushCand('con', c.id);
+    }
+    if (candidates.length > 35) {
+      const seeds = candidates.filter((x) => base.conflicts.has(x.id) || (opts.keepId && x.id === opts.keepId));
+      const rest = candidates.filter((x) => !base.conflicts.has(x.id) && !(opts.keepId && x.id === opts.keepId));
+      candidates = [...seeds, ...rest].slice(0, 35);
+    }
+    // Nicht-Seeds zuerst prüfen, damit echte Verursacher im minimalen Konflikt bleiben
+    candidates.sort((a, b) => {
+      const ak = opts.keepId && a.id === opts.keepId ? 2 : base.conflicts.has(a.id) ? 1 : 0;
+      const bk = opts.keepId && b.id === opts.keepId ? 2 : base.conflicts.has(b.id) ? 1 : 0;
+      return ak - bk;
+    });
+    let cur = candidates.slice();
+    const buildSubset = (list) => {
+      const ds = new Set(list.filter((x) => x.kind === 'dim').map((x) => x.id));
+      const cs = new Set(list.filter((x) => x.kind === 'con').map((x) => x.id));
+      return { ents: sketch.ents, dims: dims.filter((d) => !d.ref && d.k !== 'n' && ds.has(d.id)), cons: cons.filter((c) => cs.has(c.id)) };
+    };
+    for (const u of candidates) {
+      if (opts.keepId && u.id === opts.keepId) continue;
+      const next = cur.filter((x) => !(x.kind === u.kind && x.id === u.id));
+      if (!next.length) continue;
+      const r = solve(buildSubset(next), V, { noJoin: opts.noJoin });
+      if (!r.ok) cur = next;
+    }
+    for (const bid of base.badDims || []) if (!cur.some((x) => x.kind === 'dim' && x.id === bid)) cur.push({ kind: 'dim', id: bid });
+    if (!cur.length) {
+      for (const d of activeDims) if (base.conflicts.has(d.id)) cur.push({ kind: 'dim', id: d.id });
+      for (const c of cons) if (base.conflicts.has(c.id)) cur.push({ kind: 'con', id: c.id });
+    }
+    return { ok: false, items: cur, conflicts: new Set(cur.map((x) => x.id)) };
   }
   // Zwischenspeicher für den CAD-Kern: dieselbe Skizze mit denselben Werten wird nur einmal gelöst
   const memo = new Map();
@@ -430,5 +550,5 @@ const Solver = (() => {
     memo.set(key, r); if (memo.size > 60) memo.delete(memo.keys().next().value);
     return r;
   }
-  return { solve, trial, cached, VARS, varsOf, getK };
+  return { solve, trial, cached, explainConflict, VARS, varsOf, getK, setK };
 })();

@@ -364,7 +364,7 @@ const Sketch = (() => {
     if (Notes.active) Notes.stop();
     Panels.closeFlyout(); UI.closePop();
     const F = frameWorld(init.plane, init.W);
-    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.mode === 'patpath' ? 'line' : 'rect', draft: null, sels: [], get sel() { return this.sels && this.sels.length === 1 ? this.sels[0] : null; }, set sel(v) { this.sels = v ? [v] : []; }, band: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, off: { count: 1, both: false, corners: 'sharp' }, projOff: 0, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, hoverEnt: null, trimHover: null, check: null, checkFocus: null, autoDef: null };
+    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.mode === 'patpath' ? 'line' : 'rect', draft: null, sels: [], get sel() { return this.sels && this.sels.length === 1 ? this.sels[0] : null; }, set sel(v) { this.sels = v ? [v] : []; }, band: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, off: { count: 1, both: false, corners: 'sharp' }, projOff: 0, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, hoverEnt: null, trimHover: null, check: null, checkFocus: null, autoDef: null, freeMode: false, wiggle: null, lastWiggle: null, conflict: null };
     S.dims = init.dims || []; S.cons = init.cons || []; S.picks = []; S.dimFirst = null; S.selCon = null;
     S.plane0 = deepClone(init.plane); S.pOff = init.pOff || 0; S.pTilt = 0;
     if (S.pOff) applyPlane(false, true);
@@ -580,11 +580,11 @@ const Sketch = (() => {
     return { p: as.p, guides, tip: as.tip, kind: as.angle != null ? 'angle' : null, angle: as.angle, lenStep: as.step };
   }
   // ---------- Zeichnen ----------
-  function pushUndo() { if (S) S.autoDef = null; S.undo.push(JSON.stringify({ ents: S.ents, dims: S.dims, cons: S.cons })); if (S.undo.length > 100) S.undo.shift(); }
+  function pushUndo() { if (S) { S.autoDef = null; S.conflict = null; stopWiggle(true); } S.undo.push(JSON.stringify({ ents: S.ents, dims: S.dims, cons: S.cons })); if (S.undo.length > 100) S.undo.shift(); }
   function sketchUndo() {
     if (S.draft && S.draft.pts && S.draft.pts.length > 1 && S.tool === 'line') { S.draft = null; hideEntry(); updateLineHint(); render(); return; }
     const last = S.undo.pop(); if (last == null) return;
-    const st = JSON.parse(last); S.ents = st.ents; S.dims = st.dims || []; S.cons = st.cons || []; clearSel(); S.selCon = null; S.draft = null; S.picks = []; S.autoDef = null; reapply(); updateLineHint(); render(); Panels.renderRight();
+    const st = JSON.parse(last); S.ents = st.ents; S.dims = st.dims || []; S.cons = st.cons || []; clearSel(); S.selCon = null; S.draft = null; S.picks = []; S.autoDef = null; S.conflict = null; stopWiggle(true); reapply(); updateLineHint(); render(); Panels.renderRight();
   }
   function addEnt(e) { pushUndo(); e.id = uid('e'); if (S.construction) e.con = true; S.ents.push(e); return e; }
   // ---------- Maße und Regeln: der Löser rechnet alles gemeinsam ----------
@@ -604,6 +604,13 @@ const Sketch = (() => {
     refreshTextPaths();
     if (!opts.fast) {
       S.status = r;
+      if (!r.ok) {
+        const prevFocus = S.conflict && S.conflict.focusId;
+        recordConflict(null, { ents: S.ents, dims: S.dims, cons: S.cons }, null);
+        if (prevFocus && S.conflict && S.conflict.items.some((x) => x.id === prevFocus)) S.conflict.focusId = prevFocus;
+      } else if (S.conflict && !S.conflict.pending) {
+        S.conflict = null;
+      }
       if (S.check) {
         S.check = inspectCurrent();
         if (S.checkFocus != null && S.checkFocus >= S.check.issues.length) S.checkFocus = null;
@@ -640,8 +647,13 @@ const Sketch = (() => {
     if (typeof v === 'string' && !Expr.names(v).length) v = round(n, 4);   // reine Rechnung wie 10*3 → 30
     if (sp.k !== 'n') {
       const others = S.dims.filter((d) => !specMatch(d, sp));
-      const tr = Solver.trial({ ents: S.ents, cons: S.cons, dims: [...others, sp.e ? { id: '_neu', e: sp.e, k: sp.k, v } : { id: '_neu', k: sp.k, refs: sp.refs, v }], dimsBefore: others }, vars());
-      if (!tr.ok) { UI.toast(ERRORS.sketchOverConstrained.titel + ': Dieses Maß widerspricht den anderen Regeln. ' + ERRORS.sketchOverConstrained.loesung, { kind: 'bad', ms: 7000, action: { label: 'Nur ablesen', run: () => setRefDim(sp) } }); return false; }
+      const candDim = sp.e ? { id: '_neu', e: sp.e, k: sp.k, v } : { id: '_neu', k: sp.k, refs: sp.refs, v };
+      const tr = Solver.trial({ ents: S.ents, cons: S.cons, dims: [...others, candDim], dimsBefore: others }, vars());
+      if (!tr.ok) {
+        recordConflict({ kind: 'dim', sp, v, raw: candDim }, { ents: S.ents, cons: S.cons, dims: [...others, candDim] }, '_neu');
+        render(); Panels.renderRight();
+        UI.toast(ERRORS.sketchOverConstrained.titel + ': Dieses Maß widerspricht den anderen Regeln. ' + ERRORS.sketchOverConstrained.loesung, { kind: 'bad', ms: 7000, action: { label: 'Nur ablesen', run: () => { clearConflict(); setRefDim(sp); } } }); return false;
+      }
       if (tr.redundant) {
         // schon bestimmt: als Maß zum Ablesen zeigen statt nichts zu tun
         const had = dimFind(sp); if (had && had.ref) { UI.toast('Das liegt schon fest – das Maß bleibt zum Ablesen in Klammern.', { icon: 'info', ms: 4500 }); return false; }
@@ -923,7 +935,11 @@ const Sketch = (() => {
   function addCons(c) {
     const cons2 = [...S.cons, c];
     const tr = Solver.trial({ ents: S.ents, dims: S.dims, cons: cons2, consBefore: S.cons }, vars());
-    if (!tr.ok) { UI.toast(ERRORS.sketchOverConstrained.titel + ': Diese Regel widerspricht den anderen. ' + ERRORS.sketchOverConstrained.loesung, { kind: 'bad', ms: 6000 }); render(); return false; }
+    if (!tr.ok) {
+      recordConflict({ kind: 'con', con: c, raw: c }, { ents: S.ents, dims: S.dims, cons: cons2 }, c.id);
+      render(); Panels.renderRight();
+      UI.toast(ERRORS.sketchOverConstrained.titel + ': Diese Regel widerspricht den anderen. ' + ERRORS.sketchOverConstrained.loesung, { kind: 'bad', ms: 6000 }); return false;
+    }
     if (tr.redundant) { UI.toast('Das liegt schon fest – diese Regel würde nichts ändern.', { icon: 'info' }); render(); return false; }
     pushUndo(); S.cons = cons2; reapply(); render(); Panels.renderRight();
     return true;
@@ -2704,6 +2720,7 @@ const Sketch = (() => {
     const moved = S.dragged; S.drag = null; S.dragged = false;
     if (!moved) S.undo.pop();   // nur geklickt, nicht gezogen
     reapply(); render(); Panels.renderRight();
+    if (!moved && S.freeMode && S.sel && S.status && S.status.freeEnts && S.status.freeEnts.has(S.sel)) wiggleEnt(S.sel);
   }
   // ---------- Zahlen eintippen ----------
   let entry = null;
@@ -2831,6 +2848,8 @@ const Sketch = (() => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); sketchUndo(); return true; }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c' && !e.shiftKey) { e.preventDefault(); copySel(); return true; }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v' && !e.shiftKey) { e.preventDefault(); pasteClip(); return true; }
+    if (e.key === 'Escape' && S.conflict && S.conflict.pending) { clearConflict(); return true; }
+    if (e.key === 'Escape' && S.freeMode && !S.draft && S.tool === 'select' && !selectedIds().length) { setFreeMode(false); return true; }
     if (e.key === 'Escape' && S.autoDef) { cancelAutoDefine(); return true; }
     if (e.key === 'Enter' && S.autoDef) { applyAutoDefine(); return true; }
     if (e.key === 'Escape' && S.band) { clearBand(); return true; }
@@ -2851,14 +2870,15 @@ const Sketch = (() => {
     if (S.draft && S.tool === 'line' && S.lineMode !== 'tan2' && !e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === 'a') { e.preventDefault(); toggleLineArc(); return true; }
     // Beim Zeichnen landet jede Zahl und jeder Buchstabe im Eingabefeld (Formeln wie „breite/2“)
     if (S.draft && !e.ctrlKey && !e.metaKey && !e.altKey && /^[0-9.,\-(A-Za-zÄÖÜäöüß_]$/.test(e.key)) { if (showEntry(e.key)) { e.preventDefault(); return true; } }
+    if (!e.ctrlKey && !e.metaKey && !e.altKey && e.shiftKey && e.key.toLowerCase() === 'f') { toggleFreeSpots(); return true; }
     if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === 'x') { toggleConstruction(); return true; }
     if (!e.ctrlKey && !e.metaKey && !e.altKey) { const t = TOOLS.find((x) => x.key.toLowerCase() === e.key.toLowerCase()); if (t) { setTool(t.id); return true; } }
     return false;
   }
   // ---------- Anzeige ----------
-  let grp = null, labels = [];
+  let grp = null, labels = [], freeGlowMats = [];
   function buildGroup() { grp = Viewer.groups.sketch; clearGroup(); }
-  function clearGroup() { if (!grp) return; for (const o of [...grp.children]) { grp.remove(o); o.traverse((x) => { if (x.geometry) x.geometry.dispose(); if (x.material) { if (x.isLineSegments2 || x.isLine2) Viewer.disposeFat(x); else x.material.dispose(); } }); } for (const l of labels) l.remove(); labels = []; }
+  function clearGroup() { freeGlowMats = []; if (!grp) return; for (const o of [...grp.children]) { grp.remove(o); o.traverse((x) => { if (x.geometry) x.geometry.dispose(); if (x.material) { if (x.isLineSegments2 || x.isLine2) Viewer.disposeFat(x); else x.material.dispose(); } }); } for (const l of labels) l.remove(); labels = []; }
   function lineObj(pts2, color, width, opts = {}) {
     const pos = [];
     for (let i = 0; i < pts2.length - 1; i++) { const a = toWorld(...pts2[i]).addScaledVector(S.F.n, 0.06), b = toWorld(...pts2[i + 1]).addScaledVector(S.F.n, 0.06); pos.push(a.x, a.y, a.z, b.x, b.y, b.z); }
@@ -2875,219 +2895,316 @@ const Sketch = (() => {
   function render() {
     if (!S) return;
     clearGroup();
-    bgDraw();
+    const dispEnts = S.wiggle ? wiggledEnts(S.wiggle, clamp((performance.now() - S.wiggle.t0) / S.wiggle.dur, 0, 1)) : S.ents;
+    const prevEntList = entList;
     const th = Viewer.theme; const ink = th.dark ? '#cfe3df' : '#123b37', acc = th.accent, muted = th.dark ? '#7f8c99' : '#8a96a3';
-    // Raster in der Ebene
-    const b = SK.bounds([...S.ents, ...S.refs]) || [-40, -40, 40, 40];
-    const R = Math.max(60, Math.max(Math.abs(b[0]), Math.abs(b[1]), Math.abs(b[2]), Math.abs(b[3])) + 40);
-    const gpos = [], gpos2 = [];
-    const step = R > 300 ? 10 : 5;
-    for (let v = -Math.ceil(R / step) * step; v <= R; v += step) {
-      const arr = v % (step * 2) === 0 ? gpos2 : gpos;
-      const a = toWorld(v, -R), c = toWorld(v, R), d = toWorld(-R, v), e2 = toWorld(R, v);
-      arr.push(a.x, a.y, a.z, c.x, c.y, c.z, d.x, d.y, d.z, e2.x, e2.y, e2.z);
-    }
-    const mk = (arr, op) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3)); const l = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: new THREE.Color(acc), transparent: true, opacity: op, depthTest: false })); l.renderOrder = 18; grp.add(l); };
-    mk(gpos, 0.08); mk(gpos2, 0.16);
-    // Achsen der Skizze
-    lineObj([[-R, 0], [R, 0]], '#d24a3c', 1.2, { opacity: 0.5, order: 19 });
-    lineObj([[0, -R], [0, R]], '#3a9a3f', 1.2, { opacity: 0.5, order: 19 });
-    // Bezugskanten der Fläche
-    for (const e of S.refs) for (const p of entPts(e)) lineObj(p, muted, 1.5, { dashed: true, order: 20 });
-    // Flächen füllen
-    const regs = SK.regions(S.ents);
-    for (const r of regs) {
-      const chosen = !S.step || !S.step.sel || S.step.sel.includes(r.key);
-      const shape = new THREE.Shape(r.outer.poly.map((p) => new THREE.Vector2(p[0], p[1])));
-      for (const hl of r.holes) shape.holes.push(new THREE.Path(hl.poly.map((p) => new THREE.Vector2(p[0], p[1]))));
-      const g = new THREE.ShapeGeometry(shape);
-      const pos = g.attributes.position; const M = new THREE.Matrix4().makeBasis(S.F.x, S.F.y, S.F.n).setPosition(S.F.o.clone().addScaledVector(S.F.n, 0.04));
-      g.applyMatrix4(M);
-      const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: new THREE.Color(acc), transparent: true, opacity: chosen ? (S.step ? 0.34 : 0.2) : 0.06, depthTest: false, side: THREE.DoubleSide }));
-      m.renderOrder = 21; grp.add(m);
-    }
-    // Elemente: blau = noch beweglich, dunkel = voll bestimmt
-    const free = th.dark ? '#5aa9ff' : '#1c6fd1';
-    const st = S.status;
-    const selSet = new Set(selectedIds());
-    const picked = new Set(S.picks.filter((p) => p.ent || (p.ref && p.ref.e && p.kind !== 'point')).map((p) => p.ref.e));
-    const hov = S.hoverPick;
-    for (const e of S.ents) {
-      const sel = selSet.has(e.id) || picked.has(e.id);
-      const isFree = !st || !st.freeEnts || st.freeEnts.has(e.id);
-      const hot = hov && hov.kind !== 'point' && hov.ent && hov.ent.id === e.id;
-      const col = sel ? acc : isFree ? free : ink;
-      for (const p of entPts(e)) lineObj(p, col, sel ? 3.4 : hot ? 3 : 2.2, { dashed: e.con, order: 25, opacity: hot && !sel ? 0.8 : 1 });
-      if (e.link && !S.step) {   // mit einer Körperkante verbunden: kleines Ketten-Symbol in der Mitte
-        const pl = entPts(e)[0] || []; const q = pl.length === 2 ? [(pl[0][0] + pl[1][0]) / 2, (pl[0][1] + pl[1][1]) / 2] : pl[Math.floor(pl.length / 2)];
-        if (q) { const el = label('', q, 'sklink'); el.innerHTML = icon('link'); el.dataset.tip = 'Mit einer Körperkante verbunden – wandert mit'; }
-      }
-      if (e.type === 'point') { const k = pxSize() * 4; lineObj([[e.a[0] - k, e.a[1]], [e.a[0] + k, e.a[1]]], col, sel ? 3.4 : 2.4, { order: 26 }); lineObj([[e.a[0], e.a[1] - k], [e.a[0], e.a[1] + k]], col, sel ? 3.4 : 2.4, { order: 26 }); }
-      if (hot && e.type === 'rect' && hov.ref && hov.ref.edge != null) { const c = SK.rectCorners(e); lineObj([c[hov.ref.edge], c[(hov.ref.edge + 1) % 4]], acc, 4, { order: 26 }); }
-    }
-    // gewählte und überfahrene Punkte
     const ring = (p, r, col, w = 2) => { const q = SK.circlePoints(p, r, 20); q.push(q[0]); lineObj(q, col, w, { order: 27 }); };
-    for (const p of S.picks) if (p.kind === 'point') ring(p.xy, pxSize() * 5, acc, 2.6);
-    if (S.dimFirst && S.dimFirst.kind === 'point') ring(S.dimFirst.xy, pxSize() * 5, acc, 2.6);
-    if (hov && hov.kind === 'point') ring(hov.xy, pxSize() * 4.5, acc, 1.8);
-    if (hov && hov.kind === 'refent') for (const p of entPts(hov.ent)) lineObj(p, acc, 3, { order: 26 });
-    // feste Maße als Schildchen, anklicken zum Ändern
-    const conflicts = (st && st.conflicts) || new Set();
-    const placed = [];   // Schildchen, die schon stehen – neue rücken nach unten, statt sie zu verdecken
-    if (!S.step) for (const dm of S.dims) {
-      const sp = dm.refs ? { k: dm.k, refs: dm.refs } : { e: dm.e, k: dm.k };
-      const pos = dimPosSpec(dm); if (!pos) continue;
-      if (pos.line) lineObj(pos.line, acc, 1, { dashed: true, opacity: 0.7, dash: 1.2, gap: 1.2 });
-      const val = measureSpec(sp);
-      const isF = typeof dm.v === 'string' && Model.isExpr(dm.v);
-      const bad = !dm.ref && (isNaN(Model.num(dm.v, vars(), NaN)) || conflicts.has(dm.id));
-      const pre = { d: 'Ø ', x: 'X ', y: 'Y ', r: 'R ' }[dm.k] || '';
-      const isLen = dm.k !== 'ang' && dm.k !== 'angLL' && dm.k !== 'n';
-      const unit = dm.k === 'ang' || dm.k === 'angLL' ? '°' : dm.k === 'n' ? ' Ecken' : (Units.key() !== 'mm' ? ' ' + Units.label() : '');
-      const valTxt = isLen ? Units.fmtLen(val, 2) : fmt(val, 2);
-      const el = h('div', { class: 'skdim' + (bad ? ' bad' : '') + (dm.ref ? ' ref' : ''), 'data-tip': bad ? 'Dieses Maß geht nicht auf – klicken zum Ändern' : dm.ref ? DIMLABEL(dm.k) + ' zum Ablesen – legt nichts fest, klicken zum Festlegen' : DIMLABEL(dm.k) + ' – klicken zum Ändern', dataset: { dim: dm.id } });
-      el.innerHTML = dm.ref ? esc('(' + pre + valTxt + unit + ')') : (isF ? `<span class="fx">${esc(dm.v)}&nbsp;=</span>` : '') + esc(pre + valTxt + unit);
-      $('#overlay').append(el); labels.push(el);
-      const spx = Viewer.toScreen(toWorld(pos.p[0], pos.p[1]));
-      const lw = el.offsetWidth || 40, lh = el.offsetHeight || 18; let ly = spx.y;
-      for (let k = 0; k < 8 && placed.some((q) => Math.abs(q[0] - spx.x) < (q[2] + lw) / 2 && Math.abs(q[1] - ly) < (q[3] + lh) / 2); k++) ly += lh + 3;
-      placed.push([spx.x, ly, lw, lh]);
-      el.style.left = spx.x + 'px'; el.style.top = ly + 'px';
-      el.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); });
-      el.addEventListener('click', (e) => { if (sp.e) setSel([sp.e]); render(); Panels.renderRight(); askDim(sp, e.clientX, e.clientY); });
-    }
-    // Regeln als kleine Symbole neben den Elementen
-    const slots = new Map();
-    if (!S.step) {
-      for (const c of S.cons) {
-        for (const a of consAnchors(c)) {
-          const key = Math.round(a[0] / (pxSize() * 12)) + ',' + Math.round(a[1] / (pxSize() * 12));
-          const n = slots.get(key) || 0; slots.set(key, n + 1);
-          const spx = Viewer.toScreen(toWorld(a[0], a[1]));
-          const el = h('div', { class: 'skcon' + (S.selCon === c.id ? ' sel' : '') + (conflicts.has(c.id) ? ' bad' : ''), 'data-tip': (CNAME[c.type] || 'Regel') + ' – anklicken, dann Entf zum Löschen', dataset: { con: c.id } });
-          el.innerHTML = icon(CICON[c.type] || 'info');
-          el.style.left = spx.x + n * 19 + 'px'; el.style.top = spx.y + 'px';
-          el.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); });
-          el.addEventListener('click', () => { S.selCon = c.id; clearSel(); render(); Panels.renderRight(); });
-          $('#overlay').append(el); labels.push(el);
-        }
+    entList = dispEnts;
+    try {
+      bgDraw();
+      // Raster in der Ebene
+      const b = SK.bounds([...dispEnts, ...S.refs]) || [-40, -40, 40, 40];
+      const R = Math.max(60, Math.max(Math.abs(b[0]), Math.abs(b[1]), Math.abs(b[2]), Math.abs(b[3])) + 40);
+      const gpos = [], gpos2 = [];
+      const step = R > 300 ? 10 : 5;
+      for (let v = -Math.ceil(R / step) * step; v <= R; v += step) {
+        const arr = v % (step * 2) === 0 ? gpos2 : gpos;
+        const a = toWorld(v, -R), c = toWorld(v, R), d = toWorld(-R, v), e2 = toWorld(R, v);
+        arr.push(a.x, a.y, a.z, c.x, c.y, c.z, d.x, d.y, d.z, e2.x, e2.y, e2.z);
       }
-    }
-    // Vorschläge von „Fertig bestimmen“ (gestrichelt im Bild)
-    if (S.autoDef && !S.step) {
-      const ad = S.autoDef, origById = new Map(S.ents.map((e) => [e.id, e]));
-      const movedPt = (p, q) => !p || !q || SK.d2(p, q) > 1e-4;
-      const movedEnt = (a, b) => {
-        if (!a || !b || a.type !== b.type) return true;
-        for (const k of ['a', 'b', 'm', 'c']) if (a[k] && movedPt(a[k], b[k])) return true;
-        for (const k of ['r', 'rx', 'ry']) if (a[k] != null && Math.abs(a[k] - b[k]) > 1e-4) return true;
-        if (a.pts && (!b.pts || a.pts.length !== b.pts.length || a.pts.some((q, i) => movedPt(q, b.pts[i])))) return true;
-        return false;
-      };
-      const dimGuide = (en, k, pos) => {
-        if (pos.line) return pos.line;
-        if (!en) return null;
-        if (en.type === 'rect') {
-          const x0 = Math.min(en.a[0], en.b[0]), x1 = Math.max(en.a[0], en.b[0]), y0 = Math.min(en.a[1], en.b[1]), y1 = Math.max(en.a[1], en.b[1]);
-          if (k === 'w') return [[x0, pos.p[1]], [x1, pos.p[1]]];
-          if (k === 'h') return [[pos.p[0], y0], [pos.p[0], y1]];
-        }
-        if ((en.type === 'line' || en.type === 'slot') && k === 'len') {
-          const mx = (en.a[0] + en.b[0]) / 2, my = (en.a[1] + en.b[1]) / 2;
-          const dx = pos.p[0] - mx, dy = pos.p[1] - my;
-          return [[en.a[0] + dx, en.a[1] + dy], [en.b[0] + dx, en.b[1] + dy]];
-        }
-        if ((en.type === 'circle' || en.type === 'poly') && k === 'd') {
-          return [[en.c[0] - Math.SQRT1_2 * en.r, en.c[1] - Math.SQRT1_2 * en.r], pos.p];
-        }
-        if (en.type === 'ellipse' && (k === 'w' || k === 'h')) return [en.c, pos.p];
-        if (en.a) return [en.a, pos.p];
-        return null;
-      };
-      entList = ad.ents;
-      try {
-        for (const eNew of ad.ents) {
-          if (movedEnt(eNew, origById.get(eNew.id))) {
-            for (const pts of entPts(eNew)) lineObj(pts, acc, 2, { dashed: true, opacity: 0.75, dash: 2, gap: 1.6, order: 27 });
+      const mk = (arr, op) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3)); const l = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: new THREE.Color(acc), transparent: true, opacity: op, depthTest: false })); l.renderOrder = 18; grp.add(l); };
+      mk(gpos, 0.08); mk(gpos2, 0.16);
+      // Achsen der Skizze
+      lineObj([[-R, 0], [R, 0]], '#d24a3c', 1.2, { opacity: 0.5, order: 19 });
+      lineObj([[0, -R], [0, R]], '#3a9a3f', 1.2, { opacity: 0.5, order: 19 });
+      // Bezugskanten der Fläche
+      for (const e of S.refs) for (const p of entPts(e)) lineObj(p, muted, 1.5, { dashed: true, order: 20 });
+      // Flächen füllen
+      const regs = SK.regions(dispEnts);
+      for (const r of regs) {
+        const chosen = !S.step || !S.step.sel || S.step.sel.includes(r.key);
+        const shape = new THREE.Shape(r.outer.poly.map((p) => new THREE.Vector2(p[0], p[1])));
+        for (const hl of r.holes) shape.holes.push(new THREE.Path(hl.poly.map((p) => new THREE.Vector2(p[0], p[1]))));
+        const g = new THREE.ShapeGeometry(shape);
+        const M = new THREE.Matrix4().makeBasis(S.F.x, S.F.y, S.F.n).setPosition(S.F.o.clone().addScaledVector(S.F.n, 0.04));
+        g.applyMatrix4(M);
+        const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: new THREE.Color(acc), transparent: true, opacity: chosen ? (S.step ? 0.34 : 0.2) : 0.06, depthTest: false, side: THREE.DoubleSide }));
+        m.renderOrder = 21; grp.add(m);
+      }
+      // Elemente: blau = noch beweglich, dunkel = voll bestimmt, orange = „Freie Stellen“ aktiv
+      const free = th.dark ? '#5aa9ff' : '#1c6fd1', freeOrange = th.dark ? '#ff922b' : '#f08c00';
+      const showFree = !!(S.freeMode && !S.step);
+      const pulsePhase = showFree ? 0.22 + 0.36 * (0.5 + 0.5 * Math.sin(performance.now() / 260)) : 0;
+      const st = S.status;
+      const selSet = new Set(selectedIds());
+      const picked = new Set(S.picks.filter((p) => p.ent || (p.ref && p.ref.e && p.kind !== 'point')).map((p) => p.ref.e));
+      const hov = S.hoverPick;
+      for (const e of dispEnts) {
+        const sel = selSet.has(e.id) || picked.has(e.id);
+        const isFree = !st || !st.freeEnts || st.freeEnts.has(e.id);
+        const hot = hov && hov.kind !== 'point' && hov.ent && hov.ent.id === e.id;
+        const col = sel ? acc : isFree ? (showFree ? freeOrange : free) : ink;
+        if (showFree && isFree) {
+          for (const p of entPts(e)) {
+            const gl = lineObj(p, freeOrange, 6, { dashed: e.con, order: 24, opacity: pulsePhase });
+            if (gl && gl.material) freeGlowMats.push(gl.material);
           }
         }
-        for (const dm of ad.dims) {
-          const sp = dm.refs ? { k: dm.k, refs: dm.refs } : { e: dm.e, k: dm.k };
-          const pos = dimPosSpec(dm); if (!pos) continue;
-          const en = dm.e ? ent(dm.e) : null;
-          const gd = dimGuide(en, dm.k, pos);
-          if (gd) lineObj(gd, acc, 1.3, { dashed: true, opacity: 0.85, dash: 1.4, gap: 1.2, order: 27 });
-          const val = measureSpec(sp);
-          const pre = { d: 'Ø ', x: 'X ', y: 'Y ', r: 'R ' }[dm.k] || '';
-          const unit = dm.k === 'ang' || dm.k === 'angLL' ? '°' : dm.k === 'n' ? ' Ecken' : '';
-          const el = h('div', { class: 'skdim prop', 'data-tip': 'Vorschlag: ' + DIMLABEL(dm.k), dataset: { propDim: dm.id } }, pre + fmt(isFinite(val) ? val : dm.v, 2) + unit);
+        for (const p of entPts(e)) lineObj(p, col, sel ? 3.4 : hot ? 3 : (showFree && isFree ? 2.8 : 2.2), { dashed: e.con, order: 25, opacity: hot && !sel ? 0.8 : 1 });
+        if (e.link && !S.step) {   // mit einer Körperkante verbunden: kleines Ketten-Symbol in der Mitte
+          const pl = entPts(e)[0] || []; const q = pl.length === 2 ? [(pl[0][0] + pl[1][0]) / 2, (pl[0][1] + pl[1][1]) / 2] : pl[Math.floor(pl.length / 2)];
+          if (q) { const el = label('', q, 'sklink'); el.innerHTML = icon('link'); el.dataset.tip = 'Mit einer Körperkante verbunden – wandert mit'; }
+        }
+        if (e.type === 'point') {
+          const k = pxSize() * 4;
+          if (showFree && isFree) {
+            const g1 = lineObj([[e.a[0] - k, e.a[1]], [e.a[0] + k, e.a[1]]], freeOrange, 5.5, { order: 25, opacity: pulsePhase });
+            const g2 = lineObj([[e.a[0], e.a[1] - k], [e.a[0], e.a[1] + k]], freeOrange, 5.5, { order: 25, opacity: pulsePhase });
+            if (g1 && g1.material) freeGlowMats.push(g1.material);
+            if (g2 && g2.material) freeGlowMats.push(g2.material);
+          }
+          lineObj([[e.a[0] - k, e.a[1]], [e.a[0] + k, e.a[1]]], col, sel ? 3.4 : 2.4, { order: 26 });
+          lineObj([[e.a[0], e.a[1] - k], [e.a[0], e.a[1] + k]], col, sel ? 3.4 : 2.4, { order: 26 });
+        }
+        if (hot && e.type === 'rect' && hov.ref && hov.ref.edge != null) { const c = SK.rectCorners(e); lineObj([c[hov.ref.edge], c[(hov.ref.edge + 1) % 4]], acc, 4, { order: 26 }); }
+      }
+      // gewählte und überfahrene Punkte
+      for (const p of S.picks) if (p.kind === 'point') ring(p.xy, pxSize() * 5, acc, 2.6);
+      if (S.dimFirst && S.dimFirst.kind === 'point') ring(S.dimFirst.xy, pxSize() * 5, acc, 2.6);
+      if (hov && hov.kind === 'point') ring(hov.xy, pxSize() * 4.5, acc, 1.8);
+      if (hov && hov.kind === 'refent') for (const p of entPts(hov.ent)) lineObj(p, acc, 3, { order: 26 });
+      // feste Maße als Schildchen, anklicken zum Ändern
+      const confFocusId = !S.step && S.conflict ? S.conflict.focusId : null;
+      const conflicts = new Set((st && st.conflicts) || []);
+      if (!S.step && S.conflict) for (const it of S.conflict.items) conflicts.add(it.id);
+      // Hervorhebung des angeklickten Widerspruch-Eintrags
+      if (confFocusId) {
+        const fi = S.conflict.items.find((x) => x.id === confFocusId);
+        if (fi && fi.raw) {
+          const refs = fi.raw.e ? [{ e: fi.raw.e }] : (fi.kind === 'con' ? conRefs(fi.raw) : fi.raw.refs || []);
+          for (const r of refs) {
+            if (!r) continue;
+            if (r.p || r.at || r.e === 'origin') {
+              const q = refXY(r);
+              if (q) ring(q, pxSize() * 6, '#e03131', 3);
+            } else if (r.edge != null && ent(r.e)) {
+              const L = refLine(r);
+              if (L) lineObj(L, '#e03131', 4.8, { order: 29 });
+            } else if (r.e && ent(r.e)) {
+              for (const pts of entPts(ent(r.e))) lineObj(pts, '#e03131', 4.8, { order: 29 });
+            }
+          }
+        }
+      }
+      const placed = [];   // Schildchen, die schon stehen – neue rücken nach unten, statt sie zu verdecken
+      if (!S.step) for (const dm of S.dims) {
+        const sp = dm.refs ? { k: dm.k, refs: dm.refs } : { e: dm.e, k: dm.k };
+        const pos = dimPosSpec(dm); if (!pos) continue;
+        if (pos.line) lineObj(pos.line, confFocusId === dm.id ? '#e03131' : acc, confFocusId === dm.id ? 2 : 1, { dashed: true, opacity: confFocusId === dm.id ? 0.95 : 0.7, dash: 1.2, gap: 1.2 });
+        const val = measureSpec(sp);
+        const isF = typeof dm.v === 'string' && Model.isExpr(dm.v);
+        const bad = !dm.ref && (isNaN(Model.num(dm.v, vars(), NaN)) || conflicts.has(dm.id));
+        const pre = { d: 'Ø ', x: 'X ', y: 'Y ', r: 'R ' }[dm.k] || '';
+        const isLen = dm.k !== 'ang' && dm.k !== 'angLL' && dm.k !== 'n';
+        const unit = dm.k === 'ang' || dm.k === 'angLL' ? '°' : dm.k === 'n' ? ' Ecken' : (Units.key() !== 'mm' ? ' ' + Units.label() : '');
+        const valTxt = isLen ? Units.fmtLen(val, 2) : fmt(val, 2);
+        const el = h('div', { class: 'skdim' + (bad ? ' bad' : '') + (dm.ref ? ' ref' : '') + (confFocusId === dm.id ? ' conf-focus' : ''), 'data-tip': bad ? 'Dieses Maß geht nicht auf – klicken zum Ändern' : dm.ref ? DIMLABEL(dm.k) + ' zum Ablesen – legt nichts fest, klicken zum Festlegen' : DIMLABEL(dm.k) + ' – klicken zum Ändern', dataset: { dim: dm.id } });
+        el.innerHTML = dm.ref ? esc('(' + pre + valTxt + unit + ')') : (isF ? `<span class="fx">${esc(dm.v)}&nbsp;=</span>` : '') + esc(pre + valTxt + unit);
+        $('#overlay').append(el); labels.push(el);
+        const spx = Viewer.toScreen(toWorld(pos.p[0], pos.p[1]));
+        const lw = el.offsetWidth || 40, lh = el.offsetHeight || 18; let ly = spx.y;
+        for (let k = 0; k < 8 && placed.some((q) => Math.abs(q[0] - spx.x) < (q[2] + lw) / 2 && Math.abs(q[1] - ly) < (q[3] + lh) / 2); k++) ly += lh + 3;
+        placed.push([spx.x, ly, lw, lh]);
+        el.style.left = spx.x + 'px'; el.style.top = ly + 'px';
+        el.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); });
+        el.addEventListener('click', (e) => { if (sp.e) setSel([sp.e]); render(); Panels.renderRight(); askDim(sp, e.clientX, e.clientY); });
+      }
+      // Ausstehendes widersprüchliches Maß ebenfalls als Schildchen anzeigen
+      if (!S.step && S.conflict && S.conflict.pending && S.conflict.pending.kind === 'dim') {
+        const pd = S.conflict.pending.raw;
+        const pos = dimPosSpec(pd);
+        if (pos) {
+          if (pos.line) lineObj(pos.line, '#e03131', 1.5, { dashed: true, opacity: 0.9, dash: 1.2, gap: 1.2 });
+          const val = Model.num(pd.v, vars(), NaN);
+          const pre = { d: 'Ø ', x: 'X ', y: 'Y ', r: 'R ' }[pd.k] || '';
+          const isLen = pd.k !== 'ang' && pd.k !== 'angLL' && pd.k !== 'n';
+          const unit = pd.k === 'ang' || pd.k === 'angLL' ? '°' : pd.k === 'n' ? ' Ecken' : (Units.key() !== 'mm' ? ' ' + Units.label() : '');
+          const valTxt = isFinite(val) ? (isLen ? Units.fmtLen(val, 2) : fmt(val, 2)) : String(pd.v);
+          const el = h('div', { class: 'skdim bad conf-pending' + (confFocusId === '_neu' ? ' conf-focus' : ''), 'data-tip': 'Neues widersprüchliches Maß – klicken zum Hervorheben', dataset: { dim: '_neu' } }, pre + valTxt + unit);
           $('#overlay').append(el); labels.push(el);
           const spx = Viewer.toScreen(toWorld(pos.p[0], pos.p[1]));
           const lw = el.offsetWidth || 40, lh = el.offsetHeight || 18; let ly = spx.y;
           for (let k = 0; k < 8 && placed.some((q) => Math.abs(q[0] - spx.x) < (q[2] + lw) / 2 && Math.abs(q[1] - ly) < (q[3] + lh) / 2); k++) ly += lh + 3;
           placed.push([spx.x, ly, lw, lh]);
           el.style.left = spx.x + 'px'; el.style.top = ly + 'px';
+          el.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); });
+          el.addEventListener('click', () => focusConflictItem('_neu'));
         }
-        for (const c of ad.cons) {
-          if (c.type === 'coincident' && c.refs && c.refs[0]) {
-            const q = refXY(c.refs[0]);
-            if (q) { const rg = SK.circlePoints(q, pxSize() * 6, 20); rg.push(rg[0]); lineObj(rg, acc, 1.8, { dashed: true, dash: 1.2, gap: 1, order: 27 }); }
-          }
+      }
+      // Regeln als kleine Symbole neben den Elementen
+      const slots = new Map();
+      if (!S.step) {
+        for (const c of S.cons) {
           for (const a of consAnchors(c)) {
             const key = Math.round(a[0] / (pxSize() * 12)) + ',' + Math.round(a[1] / (pxSize() * 12));
             const n = slots.get(key) || 0; slots.set(key, n + 1);
             const spx = Viewer.toScreen(toWorld(a[0], a[1]));
-            const el = h('div', { class: 'skcon prop', 'data-tip': 'Vorschlag: ' + (CNAME[c.type] || c.type), dataset: { propCon: c.id, type: c.type } });
+            const el = h('div', { class: 'skcon' + (S.selCon === c.id ? ' sel' : '') + (conflicts.has(c.id) ? ' bad' : '') + (confFocusId === c.id ? ' conf-focus' : ''), 'data-tip': (CNAME[c.type] || 'Regel') + ' – anklicken, dann Entf zum Löschen', dataset: { con: c.id } });
             el.innerHTML = icon(CICON[c.type] || 'info');
             el.style.left = spx.x + n * 19 + 'px'; el.style.top = spx.y + 'px';
+            el.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); });
+            el.addEventListener('click', () => { S.selCon = c.id; clearSel(); render(); Panels.renderRight(); });
             $('#overlay').append(el); labels.push(el);
           }
         }
-      } finally { entList = null; }
-    }
-    // Muster entlang Kurve: wo die Kopien landen (statt „offene Enden“)
-    const pathM = S.ctx.mode === 'patpath' || isPathEdit();
-    if (pathM && !S.step) {
-      const g = pathGroup(), V = Model.vars(App.doc).v;
-      const L = Model.pathPlaces(S.ents, g ? Model.num(g.p.n, V, 5) : 5, g ? Model.num(g.p.d, V, 0) : 0);
-      const bb = SK.bounds(S.ents) || [0, 0, 10, 10], rr = clamp(Math.max(bb[2] - bb[0], bb[3] - bb[1]) * 0.025, 0.6, 4);
-      L.forEach((q, i) => { const ring = []; for (let k = 0; k <= 24; k++) { const a = (k / 24) * Math.PI * 2; ring.push([q.p[0] + Math.cos(a) * rr, q.p[1] + Math.sin(a) * rr]); } lineObj(ring, acc, i ? 2 : 3.2, { order: 26 }); const t = [Math.cos(q.ang) * rr * 1.8, Math.sin(q.ang) * rr * 1.8]; lineObj([q.p, [q.p[0] + t[0], q.p[1] + t[1]]], acc, 2, { order: 26 }); });
-      S.pathCount = L.length; const pc = document.getElementById('path-count'); if (pc) pc.textContent = String(L.length);
-    }
-    // offene Enden markieren
-    if (!pathM && !isLoftLine()) for (const p of SK.openEnds(S.ents)) { const w = toWorld(p[0], p[1]); const l = label('', p, 'snaptip'); l.style.transform = 'translate(-50%,-50%)'; l.style.width = '9px'; l.style.height = '9px'; l.style.padding = '0'; l.style.borderRadius = '50%'; l.style.background = th.hole; l.title = 'Offenes Ende'; }
-    // Skizzen-Prüfer: Fundstellen und hervorgehobene Stelle
-    if (S.check && S.check.issues.length && !S.step) {
-      const ps = pxSize();
-      S.check.issues.forEach((it, idx) => {
-        const focused = S.checkFocus === idx;
-        const col = it.kind === 'dup' ? (focused ? '#e03131' : '#e8833a') : '#e03131';
-        if (it.kind === 'dup') {
-          for (const id of it.ents) {
-            const e = ent(id); if (!e) continue;
-            for (const pts of entPts(e)) lineObj(pts, col, focused ? 5 : 3.2, { order: focused ? 29 : 27, opacity: focused ? 1 : 0.75 });
+      }
+      // Vorschläge von „Fertig bestimmen“ (gestrichelt im Bild)
+      if (S.autoDef && !S.step) {
+        const ad = S.autoDef, origById = new Map(S.ents.map((e) => [e.id, e]));
+        const movedPt = (p, q) => !p || !q || SK.d2(p, q) > 1e-4;
+        const movedEnt = (a, b) => {
+          if (!a || !b || a.type !== b.type) return true;
+          for (const k of ['a', 'b', 'm', 'c']) if (a[k] && movedPt(a[k], b[k])) return true;
+          for (const k of ['r', 'rx', 'ry']) if (a[k] != null && Math.abs(a[k] - b[k]) > 1e-4) return true;
+          if (a.pts && (!b.pts || a.pts.length !== b.pts.length || a.pts.some((q, i) => movedPt(q, b.pts[i])))) return true;
+          return false;
+        };
+        const dimGuide = (en, k, pos) => {
+          if (pos.line) return pos.line;
+          if (!en) return null;
+          if (en.type === 'rect') {
+            const x0 = Math.min(en.a[0], en.b[0]), x1 = Math.max(en.a[0], en.b[0]), y0 = Math.min(en.a[1], en.b[1]), y1 = Math.max(en.a[1], en.b[1]);
+            if (k === 'w') return [[x0, pos.p[1]], [x1, pos.p[1]]];
+            if (k === 'h') return [[pos.p[0], y0], [pos.p[0], y1]];
           }
-          if (focused) ring(it.p, ps * 10, col, 2.8);
-        } else {
-          ring(it.p, ps * (focused ? 10 : 7), col, focused ? 3 : 2);
-          if (focused) {
-            ring(it.p, ps * 16, col, 1.8);
-            for (const id of it.ents) {
-              const e = ent(id); if (!e) continue;
-              for (const pts of entPts(e)) lineObj(pts, '#e8833a', 3.6, { order: 28, opacity: 0.9 });
+          if ((en.type === 'line' || en.type === 'slot') && k === 'len') {
+            const mx = (en.a[0] + en.b[0]) / 2, my = (en.a[1] + en.b[1]) / 2;
+            const dx = pos.p[0] - mx, dy = pos.p[1] - my;
+            return [[en.a[0] + dx, en.a[1] + dy], [en.b[0] + dx, en.b[1] + dy]];
+          }
+          if ((en.type === 'circle' || en.type === 'poly') && k === 'd') {
+            return [[en.c[0] - Math.SQRT1_2 * en.r, en.c[1] - Math.SQRT1_2 * en.r], pos.p];
+          }
+          if (en.type === 'ellipse' && (k === 'w' || k === 'h')) return [en.c, pos.p];
+          if (en.a) return [en.a, pos.p];
+          return null;
+        };
+        const prevAd = entList;
+        entList = ad.ents;
+        try {
+          for (const eNew of ad.ents) {
+            if (movedEnt(eNew, origById.get(eNew.id))) {
+              for (const pts of entPts(eNew)) lineObj(pts, acc, 2, { dashed: true, opacity: 0.75, dash: 2, gap: 1.6, order: 27 });
             }
           }
+          for (const dm of ad.dims) {
+            const sp = dm.refs ? { k: dm.k, refs: dm.refs } : { e: dm.e, k: dm.k };
+            const pos = dimPosSpec(dm); if (!pos) continue;
+            const en = dm.e ? ent(dm.e) : null;
+            const gd = dimGuide(en, dm.k, pos);
+            if (gd) lineObj(gd, acc, 1.3, { dashed: true, opacity: 0.85, dash: 1.4, gap: 1.2, order: 27 });
+            const val = measureSpec(sp);
+            const pre = { d: 'Ø ', x: 'X ', y: 'Y ', r: 'R ' }[dm.k] || '';
+            const unit = dm.k === 'ang' || dm.k === 'angLL' ? '°' : dm.k === 'n' ? ' Ecken' : '';
+            const el = h('div', { class: 'skdim prop', 'data-tip': 'Vorschlag: ' + DIMLABEL(dm.k), dataset: { propDim: dm.id } }, pre + fmt(isFinite(val) ? val : dm.v, 2) + unit);
+            $('#overlay').append(el); labels.push(el);
+            const spx = Viewer.toScreen(toWorld(pos.p[0], pos.p[1]));
+            const lw = el.offsetWidth || 40, lh = el.offsetHeight || 18; let ly = spx.y;
+            for (let k = 0; k < 8 && placed.some((q) => Math.abs(q[0] - spx.x) < (q[2] + lw) / 2 && Math.abs(q[1] - ly) < (q[3] + lh) / 2); k++) ly += lh + 3;
+            placed.push([spx.x, ly, lw, lh]);
+            el.style.left = spx.x + 'px'; el.style.top = ly + 'px';
+          }
+          for (const c of ad.cons) {
+            if (c.type === 'coincident' && c.refs && c.refs[0]) {
+              const q = refXY(c.refs[0]);
+              if (q) { const rg = SK.circlePoints(q, pxSize() * 6, 20); rg.push(rg[0]); lineObj(rg, acc, 1.8, { dashed: true, dash: 1.2, gap: 1, order: 27 }); }
+            }
+            for (const a of consAnchors(c)) {
+              const key = Math.round(a[0] / (pxSize() * 12)) + ',' + Math.round(a[1] / (pxSize() * 12));
+              const n = slots.get(key) || 0; slots.set(key, n + 1);
+              const spx = Viewer.toScreen(toWorld(a[0], a[1]));
+              const el = h('div', { class: 'skcon prop', 'data-tip': 'Vorschlag: ' + (CNAME[c.type] || c.type), dataset: { propCon: c.id, type: c.type } });
+              el.innerHTML = icon(CICON[c.type] || 'info');
+              el.style.left = spx.x + n * 19 + 'px'; el.style.top = spx.y + 'px';
+              $('#overlay').append(el); labels.push(el);
+            }
+          }
+        } finally { entList = prevAd; }
+      }
+      // Freie Stellen (SK-07): pulsierende orange Punkte zum Anklicken + Zähler-Schild
+      if (showFree && st) {
+        const dof = st.dof || 0;
+        const badge = h('div', { class: 'sk-free-badge', id: 'sk-free-badge' }, dof ? `${dof} fehlende ${dof === 1 ? 'Angabe' : 'Angaben'}` : 'Voll bestimmt · 0 fehlende Angaben');
+        $('#overlay').append(badge); labels.push(badge);
+        const byPos = new Map();
+        for (const fp of st.freePoints || []) {
+          const q = freePointXY(fp);
+          const key = Math.round(q[0] * 1e3) + ',' + Math.round(q[1] * 1e3);
+          if (!byPos.has(key)) byPos.set(key, { q, list: [fp] });
+          else byPos.get(key).list.push(fp);
         }
-        if (focused) {
-          const tag = it.kind === 'gap'
-            ? `Lücke ${Units.fmtLenU(it.dist, 3)}`
-            : it.kind === 'dup'
-              ? (it.partial ? 'Überlappende Linie' : ({ line: 'Doppelte Linie', arc: 'Doppelter Bogen', circle: 'Doppelter Kreis', rect: 'Doppeltes Rechteck' }[it.sub] || 'Doppeltes Element'))
-              : 'Offenes Ende';
-          const el = label(tag, [it.p[0], it.p[1] + ps * 18], 'dimlabel live bad sk-chk-tag');
-          el.dataset.issue = String(idx);
+        for (const { q, list } of byPos.values()) {
+          const fp = list[0];
+          const spx = Viewer.toScreen(toWorld(q[0], q[1]));
+          const ptEl = h('button', {
+            type: 'button',
+            class: 'skfree-pt',
+            dataset: { eid: fp.eid, pt: fp.p, kind: fp.kind },
+            'aria-label': 'Freie Stelle – klicken zum Wackeln',
+            'data-tip': 'Freie Stelle – klicken zum Wackeln',
+          });
+          ptEl.style.left = spx.x + 'px'; ptEl.style.top = spx.y + 'px';
+          ptEl.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); });
+          ptEl.addEventListener('click', (e) => { e.stopPropagation(); wiggleFree(fp); });
+          $('#overlay').append(ptEl); labels.push(ptEl);
         }
-      });
+      }
+      // Muster entlang Kurve: wo die Kopien landen (statt „offene Enden“)
+      const pathM = S.ctx.mode === 'patpath' || isPathEdit();
+      if (pathM && !S.step) {
+        const g = pathGroup(), V = Model.vars(App.doc).v;
+        const L = Model.pathPlaces(dispEnts, g ? Model.num(g.p.n, V, 5) : 5, g ? Model.num(g.p.d, V, 0) : 0);
+        const bb = SK.bounds(dispEnts) || [0, 0, 10, 10], rr = clamp(Math.max(bb[2] - bb[0], bb[3] - bb[1]) * 0.025, 0.6, 4);
+        L.forEach((q, i) => { const ringPts = []; for (let k = 0; k <= 24; k++) { const a = (k / 24) * Math.PI * 2; ringPts.push([q.p[0] + Math.cos(a) * rr, q.p[1] + Math.sin(a) * rr]); } lineObj(ringPts, acc, i ? 2 : 3.2, { order: 26 }); const t = [Math.cos(q.ang) * rr * 1.8, Math.sin(q.ang) * rr * 1.8]; lineObj([q.p, [q.p[0] + t[0], q.p[1] + t[1]]], acc, 2, { order: 26 }); });
+        S.pathCount = L.length; const pc = document.getElementById('path-count'); if (pc) pc.textContent = String(L.length);
+      }
+      // offene Enden markieren
+      if (!pathM && !isLoftLine()) for (const p of SK.openEnds(dispEnts)) { const l = label('', p, 'snaptip'); l.style.transform = 'translate(-50%,-50%)'; l.style.width = '9px'; l.style.height = '9px'; l.style.padding = '0'; l.style.borderRadius = '50%'; l.style.background = th.hole; l.title = 'Offenes Ende'; }
+      // Skizzen-Prüfer: Fundstellen und hervorgehobene Stelle
+      if (S.check && S.check.issues.length && !S.step) {
+        const ps = pxSize();
+        S.check.issues.forEach((it, idx) => {
+          const focused = S.checkFocus === idx;
+          const col = it.kind === 'dup' ? (focused ? '#e03131' : '#e8833a') : '#e03131';
+          if (it.kind === 'dup') {
+            for (const id of it.ents) {
+              const e = ent(id); if (!e) continue;
+              for (const pts of entPts(e)) lineObj(pts, col, focused ? 5 : 3.2, { order: focused ? 29 : 27, opacity: focused ? 1 : 0.75 });
+            }
+            if (focused) ring(it.p, ps * 10, col, 2.8);
+          } else {
+            ring(it.p, ps * (focused ? 10 : 7), col, focused ? 3 : 2);
+            if (focused) {
+              ring(it.p, ps * 16, col, 1.8);
+              for (const id of it.ents) {
+                const e = ent(id); if (!e) continue;
+                for (const pts of entPts(e)) lineObj(pts, '#e8833a', 3.6, { order: 28, opacity: 0.9 });
+              }
+            }
+          }
+          if (focused) {
+            const tag = it.kind === 'gap'
+              ? `Lücke ${Units.fmtLenU(it.dist, 3)}`
+              : it.kind === 'dup'
+                ? (it.partial ? 'Überlappende Linie' : ({ line: 'Doppelte Linie', arc: 'Doppelter Bogen', circle: 'Doppelter Kreis', rect: 'Doppeltes Rechteck' }[it.sub] || 'Doppeltes Element'))
+                : 'Offenes Ende';
+            const el = label(tag, [it.p[0], it.p[1] + ps * 18], 'dimlabel live bad sk-chk-tag');
+            el.dataset.issue = String(idx);
+          }
+        });
+      }
+    } finally {
+      entList = prevEntList;
     }
     // Entwurf
     const d = S.draft, cur = S.cursor ? S.cursor.p : null;
@@ -3444,6 +3561,247 @@ const Sketch = (() => {
     return true;
   }
 
+  // ---------- Freie Stellen anzeigen & wackeln (SK-07) ----------
+  let freePulseTimer = 0, wiggleRaf = 0, wiggleDoneTimer = 0;
+  function stopFreePulse() { if (freePulseTimer) { clearInterval(freePulseTimer); freePulseTimer = 0; } }
+  function syncFreePulse() {
+    if (S && S.freeMode && !S.step) {
+      if (!freePulseTimer) {
+        freePulseTimer = setInterval(() => {
+          if (!S || !S.freeMode || S.step) { stopFreePulse(); return; }
+          if (!freeGlowMats.length) return;
+          const op = 0.22 + 0.36 * (0.5 + 0.5 * Math.sin(performance.now() / 260));
+          for (const m of freeGlowMats) m.opacity = op;
+          Viewer.requestRender();
+        }, 60);
+      }
+    } else stopFreePulse();
+  }
+  function stopWiggle(noRender) {
+    if (wiggleRaf) { cancelAnimationFrame(wiggleRaf); wiggleRaf = 0; }
+    if (wiggleDoneTimer) { clearTimeout(wiggleDoneTimer); wiggleDoneTimer = 0; }
+    if (S && S.wiggle) { S.wiggle = null; if (!noRender) render(); }
+  }
+  function freePointXY(fp) {
+    const e = ent(fp.eid);
+    if (!e) return fp.xy;
+    if (fp.kind === 'radius') {
+      if ((e.type === 'circle' || e.type === 'poly') && e.c) return [e.c[0] + e.r, e.c[1]];
+      if (e.type === 'slot' && e.a && e.b) {
+        const L = Math.hypot(e.b[0] - e.a[0], e.b[1] - e.a[1]) || 1;
+        return [(e.a[0] + e.b[0]) / 2 - ((e.b[1] - e.a[1]) / L) * e.r, (e.a[1] + e.b[1]) / 2 + ((e.b[0] - e.a[0]) / L) * e.r];
+      }
+      if (e.type === 'ellipse' && e.c) {
+        const cs = Math.cos(e.rot || 0), sn = Math.sin(e.rot || 0);
+        return fp.p === 'ry' ? [e.c[0] - sn * e.ry, e.c[1] + cs * e.ry] : [e.c[0] + cs * e.rx, e.c[1] + sn * e.rx];
+      }
+      return fp.xy;
+    }
+    if (e.type === 'arc' && fp.p === 'm' && e.m) return e.m;
+    return refXY({ e: fp.eid, p: fp.p }) || fp.xy;
+  }
+  function pickWiggleVectors(varIndices, amp) {
+    const basis = (S && S.status && S.status.nullBasis) || [];
+    if (!basis.length || !varIndices.length) return { dv1: null, dv2: null };
+    const subNorm = (v) => Math.hypot(...varIndices.map((j) => v[j] || 0));
+    let best1 = null, bn1 = 0;
+    for (const v of basis) { const s = subNorm(v); if (s > bn1) { bn1 = s; best1 = v; } }
+    if (!best1 || bn1 < 1e-8) return { dv1: null, dv2: null };
+    const dv1 = best1.map((x) => (x / bn1) * amp);
+    let best2 = null, bn2 = 0;
+    const u1 = varIndices.map((j) => best1[j] / bn1);
+    for (const v of basis) {
+      if (v === best1) continue;
+      const dot = varIndices.reduce((s, j, idx) => s + (v[j] || 0) * u1[idx], 0);
+      const orth = v.map((x, idx) => x - (dot / bn1) * best1[idx]);
+      const s = subNorm(orth);
+      if (s > bn2) { bn2 = s; best2 = orth; }
+    }
+    const dv2 = best2 && bn2 > 1e-6 ? best2.map((x) => (x / bn2) * amp * 0.7) : null;
+    return { dv1, dv2 };
+  }
+  function wiggledEnts(w, u) {
+    const env = Math.sin(u * Math.PI);
+    const s1 = Math.sin(u * Math.PI * 5) * env;
+    const s2 = w.dv2 ? Math.cos(u * Math.PI * 5) * env * 0.6 : 0;
+    const out = deepClone(w.baseEnts);
+    for (const e of out) {
+      const m = w.varIdx && w.varIdx.get(e.id);
+      if (!m) continue;
+      for (const k in m) {
+        const j = m[k];
+        const delta = (w.dv1[j] || 0) * s1 + (w.dv2 ? (w.dv2[j] || 0) * s2 : 0);
+        if (Math.abs(delta) < 1e-9) continue;
+        let val = Solver.getK(e, k) + delta;
+        if (k === 'r' || k === 'rx' || k === 'ry') val = Math.max(0.05, val);
+        Solver.setK(e, k, val);
+      }
+    }
+    return out;
+  }
+  function wiggleFree(fp) {
+    if (!S || S.step || !fp || !S.status || !S.status.varIdx) return false;
+    stopWiggle(true);
+    let amp = clamp(pxSize() * 9, 0.6, 8);
+    if (fp.kind === 'radius') {
+      const e = ent(fp.eid);
+      const curR = e ? (fp.p === 'ry' ? e.ry : fp.p === 'rx' ? e.rx : e.r) : 5;
+      amp = Math.min(amp, Math.max(0.2, (curR || 5) * 0.25));
+    }
+    const { dv1, dv2 } = pickWiggleVectors(fp.vars || [], amp);
+    if (!dv1) return false;
+    const dur = 520;
+    S.wiggle = { eid: fp.eid, p: fp.p, baseEnts: deepClone(S.ents), dv1, dv2, varIdx: S.status.varIdx, t0: performance.now(), dur };
+    S.lastWiggle = { eid: fp.eid, p: fp.p, at: Date.now(), amp };
+    const step = () => {
+      if (!S || !S.wiggle) return;
+      const u = (performance.now() - S.wiggle.t0) / S.wiggle.dur;
+      if (u >= 1) { stopWiggle(false); return; }
+      render();
+      wiggleRaf = requestAnimationFrame(step);
+    };
+    wiggleRaf = requestAnimationFrame(step);
+    wiggleDoneTimer = setTimeout(() => stopWiggle(false), dur + 60);
+    render();
+    return true;
+  }
+  function wiggleEnt(eid) {
+    if (!S || !S.status || !S.status.freePoints) return false;
+    const fp = S.status.freePoints.find((x) => x.eid === eid);
+    return fp ? wiggleFree(fp) : false;
+  }
+  function setFreeMode(on) {
+    if (!S) return false;
+    S.freeMode = !!on;
+    if (!S.freeMode) stopWiggle(true);
+    syncFreePulse();
+    if (!S.step) {
+      UI.hint(S.freeMode ? '<b>Freie Stellen:</b> Orange Punkte und Linien sind noch beweglich. Klick auf einen Punkt, um ihn wackeln zu lassen. <b>Umschalt F</b> schaltet wieder aus.' : HINTS[S.tool]);
+    }
+    render(); Panels.renderRight();
+    return S.freeMode;
+  }
+  function toggleFreeSpots() { return S ? setFreeMode(!S.freeMode) : false; }
+
+  // ---------- Widerspruch erklären & auflösen (SK-08) ----------
+  const ENT_TITLES = { line: 'Linie', rect: 'Rechteck', circle: 'Kreis', arc: 'Bogen', slot: 'Langloch', poly: 'Vieleck', ellipse: 'Ellipse', text: 'Text', point: 'Punkt', spline: 'Spline' };
+  function entName(id, list = S && S.ents) {
+    if (id === 'origin') return 'Ursprung';
+    const arr = list || [];
+    const e = arr.find((x) => x.id === id);
+    if (!e) return 'Element';
+    const nr = arr.filter((x) => x.type === e.type).indexOf(e) + 1;
+    return `${ENT_TITLES[e.type] || e.type} ${nr > 0 ? nr : ''}`.trim();
+  }
+  function describeDim(d, entsList) {
+    const isAng = d.k === 'ang' || d.k === 'angLL';
+    const num = Model.num(d.v, vars(), NaN);
+    const valTxt = isFinite(num) ? (isAng ? fmt(num, 2) + '°' : d.k === 'n' ? String(Math.round(num)) : Units.fmtLenU(num, 2)) : String(d.v);
+    const exprPre = typeof d.v === 'string' && Model.isExpr(d.v) ? `${d.v} = ` : '';
+    const label = `${DIMLABEL(d.k)} = ${exprPre}${valTxt}`;
+    const names = [];
+    if (d.e) names.push(entName(d.e, entsList));
+    for (const r of d.refs || []) {
+      const nm = r && r.e ? entName(r.e, entsList) : r && r.at ? 'Feste Kante' : null;
+      if (nm && !names.includes(nm)) names.push(nm);
+    }
+    return { label, sub: names.join(' ↔ ') || 'Maß' };
+  }
+  function describeCon(c, entsList) {
+    const names = [];
+    for (const r of conRefs(c)) {
+      const nm = r && r.e ? entName(r.e, entsList) : null;
+      if (nm && !names.includes(nm)) names.push(nm);
+    }
+    return { label: 'Regel: ' + (CNAME[c.type] || c.type), sub: names.join(' · ') || 'Bedingung' };
+  }
+  function recordConflict(pending, testSketch, keepId) {
+    if (!S) return null;
+    const res = Solver.explainConflict(testSketch, vars(), { keepId });
+    if (res.ok) { S.conflict = null; return null; }
+    const dimMap = new Map((testSketch.dims || []).map((d) => [d.id, d]));
+    const conMap = new Map((testSketch.cons || []).map((c) => [c.id, c]));
+    const items = [];
+    for (const x of res.items) {
+      if (x.kind === 'dim') {
+        const d = dimMap.get(x.id); if (!d) continue;
+        const info = describeDim(d, testSketch.ents);
+        items.push({ kind: 'dim', id: x.id, label: info.label, sub: info.sub, pending: !!(pending && keepId && x.id === keepId), raw: d });
+      } else {
+        const c = conMap.get(x.id); if (!c) continue;
+        const info = describeCon(c, testSketch.ents);
+        items.push({ kind: 'con', id: x.id, label: info.label, sub: info.sub, pending: !!(pending && keepId && x.id === keepId), raw: c });
+      }
+    }
+    S.conflict = items.length ? { pending, items, focusId: null } : null;
+    return S.conflict;
+  }
+  function clearConflict() {
+    if (!S || !S.conflict) return false;
+    S.conflict = null; render(); Panels.renderRight();
+    return true;
+  }
+  function focusConflictItem(id) {
+    if (!S || !S.conflict) return false;
+    S.conflict.focusId = S.conflict.focusId === id ? null : id;
+    render(); Panels.renderRight();
+    return true;
+  }
+  function removeConflictItem(kind, id) {
+    if (!S || !S.conflict) return false;
+    const item = S.conflict.items.find((x) => x.kind === kind && x.id === id);
+    if (!item) return false;
+    if (item.pending) {
+      clearConflict();
+      UI.toast('Widerspruch gelöst – die neue Angabe wurde verworfen.', { icon: 'check' });
+      return true;
+    }
+    const pending = S.conflict.pending;
+    const label = item.label;
+    pushUndo();
+    if (kind === 'dim') S.dims = S.dims.filter((d) => d.id !== id);
+    else { S.cons = S.cons.filter((c) => c.id !== id); if (S.selCon === id) S.selCon = null; }
+    if (pending) {
+      if (pending.kind === 'dim') {
+        const others = S.dims.filter((d) => !specMatch(d, pending.sp));
+        const tr = Solver.trial({ ents: S.ents, cons: S.cons, dims: [...others, pending.raw], dimsBefore: others }, vars());
+        if (tr.ok) {
+          putDimSpec(pending.sp, pending.v);
+          reapply();
+          S.conflict = null;
+          render(); Panels.renderRight();
+          UI.toast(`Widerspruch gelöst – „${label}“ entfernt.`, { icon: 'check' });
+          return true;
+        }
+        reapply();
+        recordConflict(pending, { ents: S.ents, cons: S.cons, dims: [...others, pending.raw] }, pending.raw.id);
+        render(); Panels.renderRight();
+        UI.toast(`„${label}“ entfernt – es gibt noch einen weiteren Widerspruch.`, { icon: 'info' });
+        return false;
+      }
+      const cons2 = [...S.cons, pending.con];
+      const tr = Solver.trial({ ents: S.ents, dims: S.dims, cons: cons2, consBefore: S.cons }, vars());
+      if (tr.ok) {
+        S.cons = cons2;
+        reapply();
+        S.conflict = null;
+        render(); Panels.renderRight();
+        UI.toast(`Widerspruch gelöst – „${label}“ entfernt.`, { icon: 'check' });
+        return true;
+      }
+      reapply();
+      recordConflict(pending, { ents: S.ents, dims: S.dims, cons: cons2 }, pending.con.id);
+      render(); Panels.renderRight();
+      UI.toast(`„${label}“ entfernt – es gibt noch einen weiteren Widerspruch.`, { icon: 'info' });
+      return false;
+    }
+    const r = reapply();
+    render(); Panels.renderRight();
+    if (r && r.ok) UI.toast(`Widerspruch gelöst – „${label}“ entfernt.`, { icon: 'check' });
+    else UI.toast(`„${label}“ entfernt – ein weiterer Widerspruch bleibt.`, { icon: 'info' });
+    return !!(r && r.ok);
+  }
+
   // ---------- Rechte Leiste ----------
   function renderPanel(body) {
     if (!S) return;
@@ -3453,6 +3811,49 @@ const Sketch = (() => {
     if (S.ctx.mode === 'loftrail2') w.append(h('div', { class: 'ok-box', id: 'loftrail2-hint', html: '<b>Zweite Führungskurve</b> – sie steht quer zur ersten und gibt die Breite in der anderen Richtung vor (z. B. von oben gesehen, wenn die erste von der Seite kommt). Der Übergang folgt beiden, die Umrisse bleiben gleich.' }));
     if (S.ctx.mode === 'loftpath') w.append(h('div', { class: 'ok-box', id: 'loftpath-hint', html: '<b>Mittellinie für den Übergang</b> – die Umrisse bleiben, wo sie sind (die dünnen Hilfskanten zeigen sie), und die Fläche dazwischen folgt der Linie. Sie sollte vom ersten Umriss durch alle anderen bis zum letzten laufen. Zieh die Punkte der Kurve oder zeichne eine neue Linie, einen Bogen oder eine Spline.' }));
     if (S.step) { w.append(h('div', { class: 'hint-box', html: S.step.revolve ? 'Wähle die Achse, um die gedreht wird. Klick im Bild auf Flächen, um sie ab- oder anzuwählen.' : 'Zieh am Pfeil im Bild oder tipp die Höhe ein. Klick auf Flächen, um sie ab- oder anzuwählen.' })); body.append(w); return; }
+    const buildFreeBtn = () => {
+      const dof = S.status && S.status.dof != null ? S.status.dof : 0;
+      const fb = h('button', { type: 'button', class: 'btn sk-free-btn' + (S.freeMode ? ' active' : ''), id: 'sk-free', 'aria-pressed': S.freeMode ? 'true' : 'false', 'data-help': 'sketchFreeSpots', 'data-kbd': 'Umschalt F' });
+      fb.innerHTML = icon('unlock') + `<span>Freie Stellen</span><span class="sk-free-count" id="sk-free-count">${dof}</span>`;
+      fb.onclick = () => toggleFreeSpots();
+      return fb;
+    };
+    const appendFreeInfo = () => {
+      if (!S.freeMode) return;
+      const dof = S.status && S.status.dof != null ? S.status.dof : 0;
+      const pts = S.status && S.status.freePoints ? S.status.freePoints.length : 0;
+      w.append(h('div', { class: 'hint-box sk-free-info', id: 'sk-free-info', html: dof ? `<b>${dof} fehlende ${dof === 1 ? 'Angabe' : 'Angaben'}</b> (${pts} bewegliche ${pts === 1 ? 'Stelle' : 'Stellen'}). Klick auf einen orangen Punkt, damit er kurz wackelt.` : '<b>Alles voll bestimmt</b> – keine beweglichen Stellen mehr.' }));
+    };
+    if (!isLoftLine() && S.ctx.mode !== 'patpath' && !isPathEdit() && S.conflict && S.conflict.items.length) {
+      const cf = S.conflict;
+      const box = h('div', { class: 'err-box sk-conflict-box', id: 'sk-conflict' });
+      const head = h('div', { class: 'sk-conf-head' }, h('b', null, ERRORS.sketchOverConstrained.titel));
+      if (cf.pending) {
+        const cl = h('button', { type: 'button', class: 'btn ghost small', id: 'sk-conf-close', 'aria-label': 'Meldung schließen', 'data-tip': 'Verwerfen' });
+        cl.innerHTML = icon('close'); cl.onclick = () => clearConflict();
+        head.append(cl);
+      }
+      box.append(head, h('span', { style: { fontSize: '12.5px' } }, 'Beteiligte Regeln und Maße – klick zum Hervorheben oder entferne eines davon:'));
+      const list = h('div', { class: 'sk-conf-list' });
+      for (const it of cf.items) {
+        const row = h('div', { class: 'sk-conf-row' + (cf.focusId === it.id ? ' active' : ''), dataset: { confId: it.id, confKind: it.kind } });
+        const pick = h('button', { type: 'button', class: 'sk-conf-pick' });
+        pick.innerHTML = icon(it.kind === 'dim' ? 'dim' : (CICON[it.raw && it.raw.type] || 'info'));
+        pick.append(h('span', { class: 'sk-conf-txt' }, h('b', null, it.label), h('small', null, it.sub + (it.pending ? ' · neu' : ''))));
+        pick.onclick = () => focusConflictItem(it.id);
+        const del = h('button', { type: 'button', class: 'btn small danger sk-conf-del' }, 'Entfernen');
+        del.onclick = () => removeConflictItem(it.kind, it.id);
+        row.append(pick, del);
+        list.append(row);
+      }
+      box.append(list);
+      if (cf.pending && cf.pending.kind === 'dim') {
+        const rb = h('button', { type: 'button', class: 'btn small', id: 'sk-conf-ref' }, 'Nur ablesen ( )');
+        rb.onclick = () => { const sp = cf.pending.sp; clearConflict(); setRefDim(sp); };
+        box.append(h('div', { class: 'btn-row' }, rb));
+      }
+      w.append(box);
+    }
     const sels = selectedIds();
     const sel = sels.length === 1 ? ent(sels[0]) : null;
     const selCon = S.selCon && S.cons.find((c) => c.id === S.selCon);
@@ -3619,6 +4020,8 @@ const Sketch = (() => {
       }
       const isFree = !S.status || !S.status.freeEnts || S.status.freeEnts.has(sel.id);
       w.append(h('div', { class: isFree ? 'hint-box' : 'ok-box', html: isFree ? 'Dieses Element ist noch <b>beweglich</b> (blau).' : 'Dieses Element liegt <b>fest</b> – Maße und Regeln bestimmen es ganz.' }));
+      w.append(h('div', { class: 'btn-row' }, buildFreeBtn()));
+      appendFreeInfo();
       const con = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'se-con', checked: !!sel.con }), 'Hilfslinie (zählt nicht zur Fläche)');
       con.querySelector('input').onchange = (e) => upd((x) => { x.con = e.target.checked; });
       w.append(con);
@@ -3639,9 +4042,9 @@ const Sketch = (() => {
       // Zustand der ganzen Skizze
       const st = S.status;
       if (st && S.ents.length) {
-        if (!st.ok) w.append(h('div', { class: 'err-box', html: '<b>' + ERRORS.sketchOverConstrained.titel + '</b><br>' + ERRORS.sketchOverConstrained.erklaerung + ' ' + ERRORS.sketchOverConstrained.loesung }));
-        else if (st.dof === 0) w.append(h('div', { class: 'ok-box', html: '<b>Voll bestimmt</b> – alles liegt fest. Dunkle Linien können nicht mehr verrutschen.' }));
-        else w.append(h('div', { class: 'hint-box', html: `<b>Noch ${st.dof} ${st.dof === 1 ? 'Freiheit' : 'Freiheiten'}</b> – <span style="color:${Viewer.theme.dark ? '#5aa9ff' : '#1c6fd1'};font-weight:600">blaue</span> Teile lassen sich noch verschieben. Mit Maßen und Regeln legst du sie fest.` }));
+        if (!st.ok && !(S.conflict && S.conflict.items.length)) w.append(h('div', { class: 'err-box', html: '<b>' + ERRORS.sketchOverConstrained.titel + '</b><br>' + ERRORS.sketchOverConstrained.erklaerung + ' ' + ERRORS.sketchOverConstrained.loesung }));
+        else if (st.ok && st.dof === 0) w.append(h('div', { class: 'ok-box', html: '<b>Voll bestimmt</b> – alles liegt fest. Dunkle Linien können nicht mehr verrutschen.' }));
+        else if (st.ok) w.append(h('div', { class: 'hint-box', html: `<b>Noch ${st.dof} ${st.dof === 1 ? 'Freiheit' : 'Freiheiten'}</b> – <span style="color:${Viewer.theme.dark ? '#5aa9ff' : '#1c6fd1'};font-weight:600">blaue</span> Teile lassen sich noch verschieben. Mit Maßen und Regeln legst du sie fest.` }));
       }
       if (!isLoftLine() && S.ctx.mode !== 'patpath' && !isPathEdit()) {
         if (S.autoDef) {
@@ -3666,13 +4069,14 @@ const Sketch = (() => {
           const ap = h('button', { type: 'button', class: 'btn primary', id: 'sk-autodef-apply' }); ap.innerHTML = icon('check') + 'Übernehmen'; ap.onclick = () => applyAutoDefine();
           const ca = h('button', { type: 'button', class: 'btn', id: 'sk-autodef-cancel' }); ca.innerHTML = icon('close') + 'Abbrechen'; ca.onclick = () => cancelAutoDefine();
           box.append(h('div', { class: 'btn-row' }, ap, ca));
-          w.append(box);
+          w.append(box, h('div', { class: 'btn-row' }, buildFreeBtn()));
         } else {
           const adBtn = h('button', { type: 'button', class: 'btn', id: 'sk-autodef', 'data-help': 'sketchAutoDefine' });
           adBtn.innerHTML = icon('lock') + 'Fertig bestimmen';
           adBtn.onclick = () => proposeAutoDefine();
-          w.append(h('div', { class: 'btn-row' }, adBtn));
+          w.append(h('div', { class: 'btn-row' }, adBtn, buildFreeBtn()));
         }
+        appendFreeInfo();
       }
       w.append(h('div', { class: 'hint-box', html: HINTS[S.tool] }));
       if (S.tool === 'corner') {
@@ -4211,6 +4615,7 @@ const Sketch = (() => {
   }
   function finishSession() {
     if (!S) return;
+    stopWiggle(true); stopFreePulse();
     loftPreviewDebounced.cancel(); lpKey = ''; lpPending = '';
     const cam = S.cam, hid = S.hiddenEdit;
     clearGroup(); clearBand(); hideBar(); hideEntry(); hideDimBox();
@@ -4241,6 +4646,6 @@ const Sketch = (() => {
     window.addEventListener('keydown', onModKey);
     window.addEventListener('keyup', onModKey);
   }
-  return { copySel, pasteClip, setRefDim, check: runCheck, repair: repairCheck, focusCheckIssue, autoDefine: proposeAutoDefine, applyAutoDefine, cancelAutoDefine, bandSelect, init, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startPath, startLoftPath, editItem, pushPullFace, renderPanel, onKey, cancel, scaleAll, insertEnts, textToCurves, loadFontFile, setBg, setTool, get angleSnap() { return angleSnapOn; }, setAngleSnap, lengthSnapStep, get active() { return !!S; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
+  return { copySel, pasteClip, setRefDim, setDimSpec, check: runCheck, repair: repairCheck, focusCheckIssue, autoDefine: proposeAutoDefine, applyAutoDefine, cancelAutoDefine, toggleFreeSpots, setFreeMode, wiggleFree, focusConflictItem, removeConflictItem, clearConflict, bandSelect, init, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startPath, startLoftPath, editItem, pushPullFace, renderPanel, onKey, cancel, scaleAll, insertEnts, textToCurves, loadFontFile, setBg, setTool, get angleSnap() { return angleSnapOn; }, setAngleSnap, lengthSnapStep, get active() { return !!S; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
 })();
 

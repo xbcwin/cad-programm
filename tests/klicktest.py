@@ -7402,6 +7402,146 @@ def t_a027_weitere_bezugsebenen(p):
     return [ok1, ok2, ok3, ok4, ok5, ok6]
 
 
+def t_a023_freie_stellen_widerspruch(p):
+    # 1. Linie nur mit Länge -> beide Endpunkte als frei markiert, Zahl > 0
+    scene(p, [{'id': 'L1', 'type': 'line', 'a': [10, 10], 'b': [55, 10]}])
+    click_uv(p, 30, 10, alt=False); p.wait(300)
+    p.pg.fill('#se-len', '40'); p.pg.press('#se-len', 'Enter'); p.wait(400)
+    p.pg.click('#sk-free'); p.wait(300)
+    st1 = SS(p, """
+      const pts = [...document.querySelectorAll('.skfree-pt')].map(el => ({ eid: el.dataset.eid, pt: el.dataset.pt }));
+      const badge = document.getElementById('sk-free-badge');
+      return {
+        freeMode: S.freeMode,
+        cntText: document.getElementById('sk-free-count')?.textContent,
+        badgeText: badge ? badge.textContent : '',
+        hasInfo: !!document.getElementById('sk-free-info'),
+        dof: S.status && S.status.dof,
+        dims: S.dims.length,
+        freeEnt: S.status && S.status.freeEnts && S.status.freeEnts.has('L1'),
+        pts
+      };
+    """)
+    ok1 = (st1['freeMode'] is True and st1['dims'] == 1 and int(st1['cntText'] or 0) == 3 and '3 fehlende' in st1['badgeText']
+           and st1['hasInfo'] and st1['freeEnt']
+           and len(st1['pts']) == 2
+           and {q['pt'] for q in st1['pts']} == {'a', 'b'}
+           and all(q['eid'] == 'L1' for q in st1['pts']))
+
+    # 2. Klick auf freie Stelle lässt sie kurz wackeln; Umschalt F schaltet aus/an; F bleibt Versatz
+    before_wig = SS(p, "const l=E('L1'); return { a: l.a, b: l.b }")
+    p.pg.click('.skfree-pt[data-pt="b"]'); p.wait(120)
+    wig = SS(p, "return S.lastWiggle ? { eid: S.lastWiggle.eid, p: S.lastWiggle.p, amp: S.lastWiggle.amp, active: !!S.wiggle } : null")
+    p.wait(650)
+    after_wig = SS(p, "const l=E('L1'); return { active: !!S.wiggle, a: l.a, b: l.b }")
+    p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('Shift+f'); p.wait(250)
+    off_mode = SS(p, "return S.freeMode")
+    p.pg.keyboard.press('Shift+f'); p.wait(250)
+    on_mode = SS(p, "return S.freeMode")
+    p.pg.keyboard.press('f'); p.wait(200)
+    f_tool = SS(p, "return S.tool")
+    ok2 = (bool(wig) and wig['eid'] == 'L1' and wig['p'] == 'b' and wig['amp'] > 0
+           and after_wig['active'] is False
+           and near(after_wig['a'], before_wig['a'], 1e-4) and near(after_wig['b'], before_wig['b'], 1e-4)
+           and off_mode is False and on_mode is True and f_tool == 'offset')
+
+    # 3. Widersprüchliches drittes Maß -> Liste aller beteiligten Maße, Klick hebt hervor
+    p.ev("""
+      Sketch.cancel(true);
+      App.change('x', d => {
+        d.items[0].p.sketch.ents = [{ id: 'R1', type: 'rect', a: [0, 0], b: [40, 30] }];
+        d.items[0].p.sketch.dims = [{ id: 'dw', e: 'R1', k: 'w', v: 40 }, { id: 'dh', e: 'R1', k: 'h', v: 30 }];
+        d.items[0].p.sketch.cons = [];
+      });
+      Sketch.editItem(App.doc.items[0].id);
+    """); p.wait(800)
+    p.pg.keyboard.press('d'); p.wait(150)
+    s0 = to_screen(p, 0, 0); s2 = to_screen(p, 40, 30)
+    p.pg.mouse.click(s0[0], s0[1]); p.wait(200)
+    p.pg.mouse.click(s2[0], s2[1]); p.wait(300)
+    p.pg.keyboard.press('ControlOrMeta+a'); p.pg.keyboard.type('60'); p.pg.keyboard.press('Enter'); p.wait(500)
+    cf3 = SS(p, """
+      const box = document.getElementById('sk-conflict');
+      const rows = [...document.querySelectorAll('#sk-conflict .sk-conf-row')].map(r => ({
+        id: r.dataset.confId,
+        kind: r.dataset.confKind,
+        txt: r.textContent,
+        hasDel: !!r.querySelector('.sk-conf-del')
+      }));
+      return { hasBox: !!box, rows };
+    """)
+    p.pg.locator('#sk-conflict .sk-conf-row[data-conf-id="dw"] .sk-conf-pick').click(); p.wait(300)
+    foc = SS(p, "return { fid: S.conflict && S.conflict.focusId, cls: document.querySelectorAll('.skdim.conf-focus').length }")
+    ok3 = (cf3['hasBox'] and len(cf3['rows']) == 3
+           and all(r['hasDel'] for r in cf3['rows'])
+           and {r['id'] for r in cf3['rows']} == {'dw', 'dh', '_neu'}
+           and foc['fid'] == 'dw' and foc['cls'] == 1)
+
+    # 4. „Entfernen“ auf Höhe löst den Widerspruch und setzt das neue Maß um
+    p.pg.locator('#sk-conflict .sk-conf-row[data-conf-id="dh"] .sk-conf-del').click(); p.wait(400)
+    st4 = SS(p, """
+      const r = E('R1');
+      return {
+        hasBox: !!document.getElementById('sk-conflict'),
+        ok: !!(S.status && S.status.ok),
+        w: Math.abs(r.b[0] - r.a[0]),
+        h: Math.abs(r.b[1] - r.a[1]),
+        dimKs: S.dims.map(d => d.k).sort()
+      };
+    """)
+    ok4 = (not st4['hasBox'] and st4['ok'] and abs(st4['w'] - 40) < 1e-2
+           and abs(st4['h'] - math.sqrt(60**2 - 40**2)) < 0.05
+           and st4['dimKs'] == ['dist', 'w'])
+
+    # 5. Regel-Widerspruch + Live-Widerspruch + Hilfetext
+    p.ev("""
+      Sketch.cancel(true);
+      App.change('x', d => {
+        d.items[0].p.sketch.ents = [
+          { id: 'L1', type: 'line', a: [0, 0], b: [30, 0] },
+          { id: 'L2', type: 'line', a: [0, 20], b: [30, 20] }
+        ];
+        d.items[0].p.sketch.dims = [{ id: 'm1', e: 'L1', k: 'len', v: 30 }];
+        d.items[0].p.sketch.cons = [{ id: 'k1', type: 'equal', refs: [{ e: 'L1' }, { e: 'L2' }] }];
+      });
+      Sketch.editItem(App.doc.items[0].id);
+    """); p.wait(800)
+    click_uv(p, 15, 20, alt=False); p.wait(300)
+    p.pg.fill('#se-len', '50'); p.pg.press('#se-len', 'Enter'); p.wait(400)
+    cf5 = SS(p, "return [...document.querySelectorAll('#sk-conflict .sk-conf-row')].map(r=>r.dataset.confId)")
+    p.pg.locator('#sk-conflict .sk-conf-row[data-conf-id="k1"] .sk-conf-del').click(); p.wait(400)
+    st5 = SS(p, """
+      const l1 = E('L1'), l2 = E('L2');
+      return {
+        hasBox: !!document.getElementById('sk-conflict'),
+        ok: !!(S.status && S.status.ok),
+        cons: S.cons.length,
+        d1: Math.hypot(l1.b[0]-l1.a[0], l1.b[1]-l1.a[1]),
+        d2: Math.hypot(l2.b[0]-l2.a[0], l2.b[1]-l2.a[1])
+      };
+    """)
+    # Live-Widerspruch beim Öffnen einer widersprüchlichen Skizze
+    p.ev("""
+      Sketch.cancel(true);
+      App.change('x', d => {
+        d.items[0].p.sketch.ents = [{ id: 'L1', type: 'line', a: [0, 0], b: [30, 0] }];
+        d.items[0].p.sketch.dims = [{ id: 'd1', e: 'L1', k: 'len', v: 30 }, { id: 'd2', e: 'L1', k: 'len', v: 45 }];
+        d.items[0].p.sketch.cons = [];
+      });
+      Sketch.editItem(App.doc.items[0].id);
+    """); p.wait(800)
+    cf_live = SS(p, "return [...document.querySelectorAll('#sk-conflict .sk-conf-row')].map(r=>r.dataset.confId)")
+    p.pg.locator('#sk-conflict .sk-conf-row[data-conf-id="d2"] .sk-conf-del').click(); p.wait(400)
+    st_live = SS(p, "return { hasBox: !!document.getElementById('sk-conflict'), ok: !!(S.status && S.status.ok), dims: S.dims.map(d=>d.id) }")
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    ok5 = (set(cf5) == {'k1', 'm1', '_neu'} and not st5['hasBox'] and st5['ok'] and st5['cons'] == 0
+           and abs(st5['d1'] - 30) < 1e-2 and abs(st5['d2'] - 50) < 1e-2
+           and set(cf_live) == {'d1', 'd2'} and not st_live['hasBox'] and st_live['ok'] and st_live['dims'] == ['d1']
+           and 'sketchFreeSpots' in hilfen and p.pg.locator('#sk-free[data-help="sketchFreeSpots"]').count() == 1)
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 def _make_kern_ttf_bytes(kern_val=-200):
     import struct
 
@@ -7732,6 +7872,7 @@ TESTS = [
     ('[A-022] Skizze fertig bestimmen: Rechteck & Kreis / Regeln <2° & <0,05 mm / gestrichelte Vorschau & Abbrechen / Übernehmen & Rückgängig / Einfach & Profi', t_a022_skizze_fertig_bestimmen),
     ('[A-025] Ganze Fläche in die Skizze, mit Versatz: 4 Linien + 1 Kreis / verbunden / Versatz +2 mm (44×34, Ø6) / Versatz −2 mm / folgt Körperänderung & Rückgängig', t_a025_flaeche_uebernehmen),
     ('[A-027] Weitere Bezugsebenen: tangential an Zylinder & Kegel / senkrecht zu Kante & Kurve / durch Kante & Punkt / durch zwei Kanten / folgt Maßen & Hilfe', t_a027_weitere_bezugsebenen),
+    ('[A-023] Freie Stellen & Widerspruch erklären: Linie mit Länge / Wackeln & Umschalt F / 3. Maß Liste & Hervorheben / Entfernen löst / Regel- & Live-Widerspruch', t_a023_freie_stellen_widerspruch),
     ('[A-026] Eigene Schrift laden (TTF): Laden & Körper / Speichern & Neu-Laden / Kerning & Laufweite / CFF-Meldung', t_eigene_schrift),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
