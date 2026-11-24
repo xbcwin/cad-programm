@@ -1832,6 +1832,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Gültiger Import & Hilfetexte**: Ein gültiges STEP zeigt keinen Fehler-Hinweis, meldet im Panel „Alles in Ordnung“, und `importCheck`/`importHeal` stehen vollständig in `werkzeug-hilfen.json`.
 - [ ] **Von Hand**: Echte fehlerhafte STEP-/IGES-Dateien aus dem Internet oder anderen CAD-Programmen importieren, unterschiedliche Näh-Toleranzen rechts testen und die geheilte Geometrie per Ansicht/Messen kontrollieren.
 
+## Werkzeugleiste anpassen und Favoriten (Auto [A-049], BE-04)
+
+- [x] **Rechtsklick & Anpassen-Dialog**: Rechtsklick auf die Werkzeugleiste öffnet das Kontextmenü mit „Anpassen …“; Klick öffnet den Dialog `#tb-dialog` mit aktiver Leiste links und verfügbaren Werkzeugen rechts.
+- [x] **Entfernen, Hinzufügen & Sortieren per Ziehen**: Ziehen eines Werkzeugs aus der aktiven Liste nach rechts entfernt es aus `#tools`; Ziehen aus „Verfügbare Werkzeuge“ fügt z. B. „Abrunden“ hinzu; Ziehen innerhalb der aktiven Liste ändert die Reihenfolge in `#tools`.
+- [x] **Favoriten ganz links & Speichern über Neuladen**: Markieren mit Stern (`★`) setzt das Werkzeug als Favorit mit `.fav` und Trennlinie ganz nach links; nach Neuladen der Seite bleiben Auswahl, Sortierung und Favoriten erhalten.
+- [x] **Zurücksetzen & Hilfe**: „Zurücksetzen“ stellt die Ausgangs-Leiste samt Reihenfolge ohne Favoriten und ohne gespeicherte Anpassung wieder her; Hilfetext `toolbarCustomize` liegt in `werkzeug-hilfen.json`.
+- [ ] **Von Hand**: Werkzeugleiste in beiden Stufen („Einfach“ und „Profi“), bei schmalem Fenster sowie mit Suchfilter im Anpassen-Dialog testen und alle hinzugefügten Werkzeuge einmal anklicken.
+
 ## Fehler melden
 
 ```

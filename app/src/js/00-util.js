@@ -618,6 +618,9 @@ const IC = {
   rib: '<path d="M3 5v14h18V5" /><path d="M5 17L19 9v8z" fill="currentColor" opacity=".25"/><path d="M5 17L19 9" />',
   wrap: '<ellipse cx="12" cy="5.5" rx="6.5" ry="2.2"/><path d="M5.5 5.5v13c0 1.2 2.9 2.2 6.5 2.2s6.5-1 6.5-2.2v-13"/><path d="M5.5 10.5c0 1.2 2.9 2.2 6.5 2.2s6.5-1 6.5-2.2v4.5c0 1.2-2.9 2.2-6.5 2.2s-6.5-1-6.5-2.2z" fill="currentColor" opacity=".25"/>',
   emboss: '<path d="M3 16c4-3.5 14-3.5 18 0" /><path d="M7 14v-3.5c3-1.6 7-1.6 10 0V14" fill="currentColor" opacity=".25"/><path d="M7 14v-3.5c3-1.6 7-1.6 10 0V14M10 10.2V7h4v3.2" />',
+  star: '<path d="M12 3.2l2.6 5.3 5.9.9-4.3 4.1 1 5.9L12 16.6 6.8 19.4l1-5.9-4.3-4.1 5.9-.9z" />',
+  starFill: '<path d="M12 3.2l2.6 5.3 5.9.9-4.3 4.1 1 5.9L12 16.6 6.8 19.4l1-5.9-4.3-4.1 5.9-.9z" fill="currentColor" />',
+  grip: '<circle cx="9" cy="6" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="6" r="1.2" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="9" cy="18" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="18" r="1.2" fill="currentColor" stroke="none"/>',
 };
 function icon(name, extra = '') {
   const body = IC[name] || IC.cube;
@@ -1569,6 +1572,11 @@ const HELP = {
   "tip": "STEP mit Teilenamen, Farben und Baugruppen-Struktur speichern und einlesen",
   "hilfe": "Schreibt alle sichtbaren Körper als exakte B-Rep-Geometrie nach STEP AP214/AP242 (XCAF). Dabei kommen die Namen, Farben sowie Gruppen und Ordner als echte Baugruppen-Struktur mit – andere CAD-Programme wie Fusion, FreeCAD oder SolidWorks zeigen alles direkt sortiert und gefärbt an. Beim erneuten Öffnen in Tracery entstehen Gruppen, Teile, Namen und Farben wieder genauso.",
   "tipp": "Wenn Teile eine Gruppe bilden, bleiben beim Export alle darin enthaltenen Einzelteile mit ihren eigenen Namen und Farben erhalten."
+ },
+ "toolbarCustomize": {
+  "tip": "Werkzeugleiste anpassen, sortieren und Favoriten ganz links anheften",
+  "hilfe": "Mach einen Rechtsklick auf die Werkzeugleiste oben und wähle „Anpassen …“. Links siehst du deine aktiven Werkzeuge, rechts alle weiteren Werkzeuge wie Abrunden, Bohren oder Schnitt. Zieh Werkzeuge per Maus zwischen den Listen hin und her oder sortiere sie neu. Ein Klick auf den Stern markiert ein Werkzeug als Favorit – Favoriten stehen in der Leiste immer ganz links. Alle Änderungen werden in deinem Browser gespeichert; „Zurücksetzen“ stellt den Anfangszustand wieder her.",
+  "tipp": "Mit einem Rechtsklick direkt auf ein Werkzeug in der Leiste kannst du es auch ohne Umweg als Favorit markieren oder entfernen."
  }
 };
 
