@@ -616,6 +616,7 @@ const IC = {
   scaleBody: '<rect x="3" y="13" width="8" height="8" rx="1" opacity=".5"/><rect x="7" y="3" width="14" height="14" rx="1.5" fill="currentColor" opacity=".18"/><rect x="7" y="3" width="14" height="14" rx="1.5"/><path d="M11 13l7-7M14 6h4v4" />',
   thicken: '<path d="M4 15l8 4 8-4-8-4z" opacity=".45" stroke-dasharray="2.5 2"/><path d="M4 9l8 4 8-4-8-4z" fill="currentColor" opacity=".25"/><path d="M4 9l8 4 8-4-8-4zM4 9v6l8 4 8-4V9" />',
   rib: '<path d="M3 5v14h18V5" /><path d="M5 17L19 9v8z" fill="currentColor" opacity=".25"/><path d="M5 17L19 9" />',
+  emboss: '<path d="M3 16c4-3.5 14-3.5 18 0" /><path d="M7 14v-3.5c3-1.6 7-1.6 10 0V14" fill="currentColor" opacity=".25"/><path d="M7 14v-3.5c3-1.6 7-1.6 10 0V14M10 10.2V7h4v3.2" />',
 };
 function icon(name, extra = '') {
   const body = IC[name] || IC.cube;
@@ -1527,6 +1528,11 @@ const HELP = {
   "tip": "Nachschlagetabelle für Formeln anlegen",
   "hilfe": "Legt unter „Maße“ eine kleine Tabelle mit Schlüssel und Wert an – zum Beispiel „Schraube“ mit den Zeilen M3 = 3,4 und M5 = 5,5. In jeder Formel holst du den Wert mit tabelle(Schraube; M5). Außerdem verstehen Formeln wenn(Bedingung; dann; sonst) mit < > <= >= == != sowie runden(x; Stellen), aufrunden und abrunden.",
   "tipp": "Mehrere Angaben in Funktionen trennst du mit Semikolon ; – zum Beispiel runden(2,345; 1) oder wenn(b > 50; 3; 2)."
+ },
+ "emboss": {
+  "tip": "Text oder Logo erhaben oder vertieft auf eine Fläche prägen (auch Zylinder oder Kugel)",
+  "hilfe": "Projiziert geschlossene Flächen aus deiner Skizze – zum Beispiel Text oder ein Logo – senkrecht auf die gewählte ebene oder gewölbte Körperfläche (Zylinder, Kugel, Kegel …) und überträgt sie als Erhöhung (erhaben) oder Gravur (vertieft) mit fester Höhe direkt in den Körper.",
+  "tipp": "Klick zuerst die runde oder ebene Zielfläche an und starte „Prägen“ – Tracery legt die Skizzenebene automatisch passend vor die Fläche."
  }
 };
 
