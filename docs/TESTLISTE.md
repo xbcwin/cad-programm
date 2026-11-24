@@ -1711,6 +1711,22 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Rechteckmuster & Auflösen**: Tasche als 3×2-Rechteckmuster ergibt 6 Taschen im Zielkörper, Auslassen einer Kopie ergibt 5 Taschen, „Auflösen“ behält nur 1 Tasche mit wiederhergestelltem `op: cut`.
 - [ ] **Von Hand**: Im Browser bei einer schräg stehenden Tasche und bei einer Rippe (`rib`) ein Muster anlegen, Kopien per Klick im 3D-Bild durchgestrichen auslassen und mit „Alle aktivieren“ zurücksetzen.
 
+## Fläche aufdicken & Körper skalieren (Auto [A-032])
+
+- [x] **Skalieren gleichmäßig (×2)**: Würfel 10×10×10 über Kontextleiste skaliert (`#sc-s = 2`) ergibt das 8-fache Volumen (8000 mm³) und 20×20×20 mm als Schritt `scale` im Verlauf.
+- [x] **Skalieren je Achse (1/1/3) & Bezugspunkt**: Ungleichmäßiges Skalieren (`#sc-sx/sy/sz`) um Schwerpunkt (`[-5..5, -5..5, -10..20]`) und Ursprung (`[-5..5, -5..5, 0..30]`) ergibt exakt Höhe 30 mm.
+- [x] **Oberseite aufdicken (+3 mm)**: Fläche über Kontextleiste um 3 mm nach außen aufgedickt (`#th-t = 3`) erhöht den Körper exakt auf 33 mm (Volumen 3300 mm³).
+- [x] **Richtungen & Modi sowie gewölbte Fläche**: Eigene Platte (`mode='new'`) außen/innen/mittig, Abzug (`mode='cut'`) nach innen (27 mm), Unterdrücken/Zeitleisten-Marker sowie Aufdicken einer gewölbten Zylinderfläche (Ø 20 → Ø 24 mm) funktionieren ohne Fehler.
+- [x] **Hilfetexte & Befehle**: `scaleBody` und `thickenFace` in `werkzeug-hilfen.json` sowie Befehle `scale-body` und `thicken-face` vorhanden.
+- [ ] **Von Hand**: Im Browser einen Körper mit Rundungen ungleichmäßig skalieren sowie an einer gekrümmten Freiformfläche „Aufdicken“ mit „Andere Fläche wählen“ und „Eigene Platte“ prüfen.
+
+## Kaputter Bezug: neu wählen (Auto [A-035], KP-12)
+
+- [x] **Verlorene Kante bei Rundung & Fase**: Ändert sich ein Maß so, dass die Kante einer Rundung oder Fase verschwindet, zeigen Verlauf (`.node .warn-ref`), Zeitleiste (`.tl-chip.warn`) und Eigenschaften-Panel (`.warn-box`) ein gelbes Warnzeichen samt „Neu wählen“.
+- [x] **Gestrichelte Alt-Lage & Kante neu wählen**: Der Assistent (`RefFix`) blendet die alte Lage gelb gestrichelt im 3D-Bild ein (`Viewer.hasRefGhost()`), übernimmt per Klick eine neue Kante am Körper und rechnet danach fehlerfrei weiter.
+- [x] **Verlorene Skizzen-Bezugsebene & Hilfetext**: Wird die Bezugsebene einer Skizze gelöscht, erscheint das gelbe Warnzeichen; „Neu wählen“ setzt die Skizze wieder auf eine Ebene/Fläche, alles rechnet fehlerfrei weiter und der Hilfetext `refFix` ist vorhanden.
+- [ ] **Von Hand**: Im Browser beim geöffneten „Neu wählen“-Assistenten prüfen, dass sich die Ansicht per linker Maustaste weiterhin drehen lässt und die gestrichelte Alt-Lage beim Überfahren von Ersatzkanten bzw. -flächen gut sichtbar bleibt.
+
 ## Fehler melden
 
 ```

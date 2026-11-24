@@ -33,7 +33,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Panels,Joints,I18n,T,Units}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Panels,Joints,I18n,T,Units}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -8841,6 +8841,266 @@ def t_muster_schritte(p):
     return [ok1, ok2, ok3, ok4, ok5, ok6]
 
 
+def t_a032_aufdicken_skalieren(p):
+    # Würfel 10, Skalieren ×2 → Volumen ×8; je Achse 1/1/3 → Höhe 30; Oberseite 3 mm aufdicken → Höhe +3
+    p.empty()
+    p.ev("Actions.addPrimitive('box', { p: { w: 10, d: 10, h: 10 }, pos: [0, 0] })")
+    warte_rechnen(p, 20); p.wait(300)
+    v0 = volumen(p)
+    b0 = bbox(p, 0)
+
+    # 1. Skalieren ×2 über Kontextleiste → Volumen ×8
+    btn_sc = p.pg.locator('.ctxbar button[aria-label="Skalieren"]')
+    has_sc_help = btn_sc.get_attribute('data-help') == 'scaleBody'
+    btn_sc.click()
+    warte_rechnen(p, 20); p.wait(300)
+    p.pg.fill('#sc-s', '2'); p.pg.press('#sc-s', 'Enter')
+    warte_rechnen(p, 20); p.wait(300)
+    v2 = volumen(p)
+    b2 = bbox(p, 0)
+    st1 = p.ev("return [App.doc.items.length, App.doc.items[1].kind, App.doc.items[1].p.target === App.doc.items[0].id, App.mergedInto(App.doc.items[1].id) === App.doc.items[0].id]")
+    ok1 = (
+        has_sc_help
+        and near(b0, [-5, -5, 0, 5, 5, 10])
+        and abs(v0 - 1000) < 1
+        and st1 == [2, 'scale', True, True]
+        and abs(v2 - v0 * 8) < 5
+        and near([b2[3] - b2[0], b2[4] - b2[1], b2[5] - b2[2]], [20, 20, 20])
+    )
+
+    # 2. Je Achse 1 / 1 / 3 → Höhe 30 (erst Ursprung, auch Schwerpunkt prüfen)
+    p.pg.locator('#sc-uniform').uncheck(); p.wait(200)
+    p.pg.fill('#sc-sx', '1'); p.pg.press('#sc-sx', 'Enter'); p.wait(150)
+    p.pg.fill('#sc-sy', '1'); p.pg.press('#sc-sy', 'Enter'); p.wait(150)
+    p.pg.fill('#sc-sz', '3'); p.pg.press('#sc-sz', 'Enter')
+    warte_rechnen(p, 20); p.wait(300)
+    b_cen = bbox(p, 0)
+    v_cen = volumen(p)
+    p.pg.select_option('#sc-pivot', 'origin')
+    warte_rechnen(p, 20); p.wait(300)
+    b_ori = bbox(p, 0)
+    v_ori = volumen(p)
+    ok2 = (
+        near(b_cen, [-5, -5, -10, 5, 5, 20])
+        and abs(v_cen - 3000) < 2
+        and near(b_ori, [-5, -5, 0, 5, 5, 30])
+        and abs(v_ori - 3000) < 2
+    )
+
+    # 3. Oberseite 3 mm aufdicken → Höhe +3 (33 mm)
+    p.ev("""const id=App.doc.items[0].id, r=App.results.get(id);
+      const fi=r.data.faces.findIndex(f=>f.t==='PLANE'&&f.n[2]>0.9);
+      App.select([id], { face: { id, faceIdx: fi } });""")
+    p.wait(300)
+    btn_th = p.pg.locator('.ctxbar button[aria-label="Aufdicken"]')
+    has_th_help = btn_th.get_attribute('data-help') == 'thickenFace'
+    btn_th.click()
+    warte_rechnen(p, 20); p.wait(300)
+    p.pg.fill('#th-t', '3'); p.pg.press('#th-t', 'Enter')
+    warte_rechnen(p, 20); p.wait(300)
+    b_th = bbox(p, 0)
+    v_th = volumen(p)
+    st3 = p.ev("return [App.doc.items.length, App.doc.items[2].kind, App.mergedInto(App.doc.items[2].id) === App.doc.items[0].id]")
+    ok3 = (
+        has_th_help
+        and st3 == [3, 'thicken', True]
+        and near(b_th, [-5, -5, 0, 5, 5, 33])
+        and abs(v_th - 3300) < 3
+    )
+
+    # 4. Aufdicken nach innen, mittig, als eigene Platte und als Abzug
+    p.pg.select_option('#th-mode', 'new')
+    warte_rechnen(p, 20); p.wait(300)
+    b_p_out = bbox(p, 2)
+    p.pg.select_option('#th-dir', 'in')
+    warte_rechnen(p, 20); p.wait(300)
+    b_p_in = bbox(p, 2)
+    p.pg.select_option('#th-dir', 'mid')
+    warte_rechnen(p, 20); p.wait(300)
+    b_p_mid = bbox(p, 2)
+    p.pg.select_option('#th-dir', 'in'); p.wait(200)
+    p.pg.select_option('#th-mode', 'cut')
+    warte_rechnen(p, 20); p.wait(300)
+    b_cut = bbox(p, 0)
+    v_cut = volumen(p)
+    ok4 = (
+        near(b_p_out, [-5, -5, 30, 5, 5, 33])
+        and near(b_p_in, [-5, -5, 27, 5, 5, 30])
+        and near(b_p_mid, [-5, -5, 28.5, 5, 5, 31.5])
+        and near(b_cut, [-5, -5, 0, 5, 5, 27])
+        and abs(v_cut - 2700) < 3
+    )
+
+    # 5. Zurück auf Vereinigen außen (Höhe 33), Unterdrücken, Marker und gewölbte Fläche
+    p.pg.select_option('#th-dir', 'out'); p.wait(200)
+    p.pg.select_option('#th-mode', 'join')
+    warte_rechnen(p, 20); p.wait(300)
+    p.ev("Timeline.toggleSuppress(App.doc.items[2].id)")
+    warte_rechnen(p, 20); p.wait(300)
+    b_sup = bbox(p, 0)
+    p.ev("Timeline.toggleSuppress(App.doc.items[2].id)")
+    warte_rechnen(p, 20); p.wait(300)
+    p.ev("Timeline.setMarker(1)")
+    warte_rechnen(p, 20); p.wait(300)
+    b_mk1 = bbox(p, 0)
+    p.ev("Timeline.setMarker(3)")
+    warte_rechnen(p, 20); p.wait(300)
+    b_mk3 = bbox(p, 0)
+    # Gewölbte Zylinderfläche aufdicken
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(400)
+    p.ev("Actions.addPrimitive('cylinder', { p: { d: 20, h: 20 }, pos: [0, 0] })")
+    warte_rechnen(p, 20); p.wait(300)
+    p.ev("""const id=App.doc.items[0].id, r=App.results.get(id);
+      const fi=r.data.faces.findIndex(f=>f.t==='CYLINDRE');
+      Features.thicken({ id, idx: fi, info: r.data.faces[fi] }, { t: 2, dir: 'out', mode: 'join' });""")
+    warte_rechnen(p, 20); p.wait(300)
+    b_cyl = bbox(p, 0)
+    ok5 = (
+        near(b_sup, [-5, -5, 0, 5, 5, 30])
+        and near(b_mk1, [-5, -5, 0, 5, 5, 10])
+        and near(b_mk3, [-5, -5, 0, 5, 5, 33])
+        and near(b_cyl, [-12, -12, 0, 12, 12, 20], 0.2)
+    )
+
+    # 6. Hilfetexte, Befehle und keine Fehler
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    ok6 = (
+        p.ev("return App.errors.length === 0") is True
+        and all(k in hilfen and all(x in hilfen[k] for x in ('tip', 'hilfe', 'tipp')) for k in ('scaleBody', 'thickenFace'))
+        and p.ev("return Commands.search('skalieren').some(c=>c.id==='scale-body') && Commands.search('aufdicken').some(c=>c.id==='thicken-face')") is True
+    )
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
+
+
+def t_kaputter_bezug(p):
+    # 1. Quader 20x20x10 anlegen und Kante bei [10, 0, 10] abrunden
+    p.empty()
+    p.ev("Actions.addPrimitive('box', {p:{w:20, d:20, h:10}})")
+    warte_rechnen(p, 30)
+    p.ev("Viewer.fit()")
+    p.wait(500)
+    ei = p.ev("const it=App.doc.items[0]; const r=App.results.get(it.id); return r.data.edges.findIndex(e=>e&&e.m&&Math.hypot(e.m[0]-10,e.m[1],e.m[2]-10)<0.2)")
+    p.ev("Actions.addFinish('fillet', 2, [{id:App.doc.items[0].id, edgeIdx:arg}])", ei)
+    warte_rechnen(p, 30)
+    p.wait(250)
+    ok1 = (
+        ei >= 0
+        and p.ev("return App.errors.length === 0")
+        and p.pg.locator('.node .warn-ref').count() == 0
+        and p.pg.locator('.tl-chip.warn').count() == 0
+    )
+
+    # 2. Maß w auf 40 ändern → alte Kante verschwindet → gelbes Warnzeichen & Neu-wählen-Knopf
+    p.ev("App.change('Breite ändern', d=>{ d.items[0].p.w = 40; })")
+    warte_rechnen(p, 30)
+    p.wait(300)
+    ok2 = (
+        p.ev("return App.errors.some(e=>e.code==='edges')")
+        and p.pg.locator('.node .warn-ref').count() == 1
+        and p.pg.locator('.tl-chip.warn').count() == 1
+        and p.pg.locator('.warn-box button[data-reffix]').count() >= 1
+    )
+
+    # 3. „Neu wählen“ öffnet Assistent und zeigt alte Lage gestrichelt
+    p.pg.locator('.warn-box button[data-reffix]').first.click()
+    p.wait(350)
+    ok3 = (
+        p.pg.locator('#reffix-bar').count() == 1
+        and p.ev("return RefFix.active === true && Viewer.hasRefGhost() === true")
+    )
+
+    # 4. Neue Kante bei [20, 0, 10] anklicken → Fehler weg, Körper rundet sauber
+    p.ev("Viewer.fit()")
+    p.wait(500)
+    sx, sy = world_screen(p, 20, 0, 10)
+    p.pg.mouse.click(sx, sy)
+    warte_rechnen(p, 30)
+    p.wait(300)
+    vol_fillet = volumen(p) or 9999
+    ok4 = (
+        p.pg.locator('#reffix-bar').count() == 0
+        and p.ev("return !RefFix.active && !Viewer.hasRefGhost() && App.errors.length === 0")
+        and p.pg.locator('.node .warn-ref').count() == 0
+        and p.pg.locator('.tl-chip.warn').count() == 0
+        and vol_fillet < 8000
+    )
+
+    # 5. Fase verliert Kante beim Ändern der Höhe → Klick aufs gelbe Zeichen im Verlauf → neu wählen
+    p.ev("Start.newProject(true)")
+    p.wait(700)
+    p.ev("Actions.addPrimitive('box', {p:{w:20, d:20, h:10}})")
+    warte_rechnen(p, 30)
+    ei2 = p.ev("const it=App.doc.items[0]; const r=App.results.get(it.id); return r.data.edges.findIndex(e=>e&&e.m&&Math.hypot(e.m[0],e.m[1]+10,e.m[2]-10)<0.2)")
+    p.ev("Actions.addFinish('chamfer', 1.5, [{id:App.doc.items[0].id, edgeIdx:arg}])", ei2)
+    warte_rechnen(p, 30)
+    p.ev("App.change('Höhe ändern', d=>{ d.items[0].p.h = 20; })")
+    warte_rechnen(p, 30)
+    p.wait(300)
+    ok5_warn = (
+        ei2 >= 0
+        and p.pg.locator('.node .warn-ref').count() == 1
+        and p.ev("return App.errors.some(e=>e.code==='edges')")
+    )
+    p.pg.locator('.node .warn-ref').first.click()
+    p.wait(350)
+    ok5_ghost = p.pg.locator('#reffix-bar').count() == 1 and p.ev("return Viewer.hasRefGhost() === true")
+    p.ev("Viewer.fit()")
+    p.wait(500)
+    sx2, sy2 = world_screen(p, 0, -10, 20)
+    p.pg.mouse.click(sx2, sy2)
+    warte_rechnen(p, 30)
+    p.wait(300)
+    ok5 = (
+        ok5_warn
+        and ok5_ghost
+        and p.ev("return !RefFix.active && App.errors.length === 0")
+        and p.pg.locator('.node .warn-ref').count() == 0
+    )
+
+    # 6. Skizze auf Bezugsebene → Bezugsebene löschen → gelbes Zeichen → neu wählen auf XY + Hilfetext
+    p.ev("Start.newProject(true)")
+    p.wait(700)
+    p.ev("Actions.addPrimitive('box', {p:{w:20, d:20, h:10}})")
+    warte_rechnen(p, 30)
+    did = p.ev("const d=Datums.addOrigin('XY', 10); return d.id")
+    p.wait(300)
+    p.ev("Datums.sketchOn(arg)", did)
+    p.wait(400)
+    p.ev("Sketch.insertEnts([{id:'r_rf', type:'rect', a:[-5,-5], b:[5,5]}])")
+    p.wait(300)
+    p.pg.keyboard.press('Enter')
+    p.wait(1200)
+    p.pg.locator('.stepbox .btn.primary').click()
+    warte_rechnen(p, 30)
+    p.wait(300)
+    p.ev("Datums.remove(arg)", did)
+    p.wait(400)
+    ok6_warn = (
+        p.pg.locator('.node .warn-ref').count() == 1
+        and p.pg.locator('.tl-chip.warn').count() == 1
+        and p.pg.locator('.warn-box button[data-reffix]').count() >= 1
+    )
+    p.pg.locator('.warn-box button[data-reffix]').first.click()
+    p.wait(350)
+    ok6_ghost = p.pg.locator('#reffix-bar').count() == 1 and p.ev("return Viewer.hasRefGhost() === true")
+    p.pg.locator('#reffix-bar button[data-reffix-plane="XY"]').click()
+    warte_rechnen(p, 30)
+    p.wait(300)
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    rf_help = hilfen.get('refFix') or {}
+    help_ok = bool(rf_help.get('tip') and rf_help.get('hilfe') and rf_help.get('tipp'))
+    ok6 = (
+        ok6_warn
+        and ok6_ghost
+        and p.pg.locator('#reffix-bar').count() == 0
+        and p.pg.locator('.node .warn-ref').count() == 0
+        and p.ev("return App.errors.length === 0")
+        and (volumen(p) or 0) > 4000
+        and help_ok
+    )
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -8972,10 +9232,12 @@ TESTS = [
     ('[A-028] Bezugspunkte und Koordinatensystem: Kantenmitte 40 mm → 20 mm / Flächenmitte & x % / Schnitt Kante & Ebene / eigenes KS & Mitwandern / Export STEP, STL & 3MF ab Nullpunkt', t_a028_bezugspunkte_koordinatensystem),
     ('[A-031] Rippe (KP-06): offene Schale mit diagonaler Rippe / einseitig & Formel / Schräge / Zeitleiste, Stützrippe & Hilfe', t_a031_rippe),
     ('[A-030] Drehen mit Winkel und bis Fläche: 90° Viertel-Volumen / symmetrisch 2×45° / beidseitig verschieden & umgekehrt / bis Fläche & Nachführen / Winkel-Ziehgriff & Hilfe', t_a030_drehen_winkel_flaeche),
+    ('[A-032] Fläche aufdicken & Körper skalieren: Skalieren ×2 / je Achse 1/1/3 / Ursprung & Schwerpunkt / Aufdicken +3 mm / innen, mittig & Platte / Verlauf & Hilfe', t_a032_aufdicken_skalieren),
     ('[A-034] Verlauf umsortieren, Ordner, duplizieren: zwei Löcher tauschen / Loch vor Körper rot abgelehnt / Ordner anlegen & zuklappen / Duplizieren & Hilfe', t_a034_verlauf_ordner),
     ('[A-033] Körper-Liste im Teil: 2 Körper / Umbenennen / Färben / Ausblenden / Projektdatei und Export', t_koerper_liste),
     ('[F-11240339] Volltest-Reparatur: Kontextleiste nach Ghost-Auswertung / Gelenk-Abspielen bei rAF-Stau', t_f11240339),
     ('[A-036] Muster von Schritten: Tasche 6× im Kreis / Kopie per Klick auslassen / wieder aktiv & Undo / Rechteckmuster & Auflösen / Hilfe & Speichern', t_muster_schritte),
+    ('[A-035] Kaputter Bezug: neu wählen (Rundung, Fase, Skizze)', t_kaputter_bezug),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

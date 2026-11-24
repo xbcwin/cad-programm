@@ -179,7 +179,7 @@ const Viewer = (() => {
     camera = new THREE.PerspectiveCamera(32, 1, 0.5, 30000);
     camera.up.set(0, 0, 1);
     camera.position.set(170, -250, 190);
-    for (const k of ['ground', 'origin', 'datums', 'nodes', 'compare', 'ghosts', 'overlay', 'measures', 'handles', 'sketch']) { groups[k] = new THREE.Group(); scene.add(groups[k]); }
+    for (const k of ['ground', 'origin', 'datums', 'nodes', 'compare', 'ghosts', 'overlay', 'measures', 'handles', 'sketch', 'reffix']) { groups[k] = new THREE.Group(); scene.add(groups[k]); }
     orthoCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 60000);
     lights.hemi = new THREE.HemisphereLight(0xffffff, 0x6f6252, 1.55); scene.add(lights.hemi);
     const key = new THREE.DirectionalLight(0xffffff, 2.1); key.position.set(0.55, -0.8, 1.25); scene.add(key); scene.add(key.target); lights.key = key;
@@ -1025,6 +1025,67 @@ const Viewer = (() => {
     needsRender = true;
   }
   function clearHover() { highlightFace('hover', null, null); highlightEdge(null, null); highlightBody(null, null); }
+  // Gestrichelte Anzeige der alten Lage eines verlorenen Bezugs (KP-12)
+  function clearRefGhost() {
+    if (!groups.reffix) return;
+    for (const o of [...groups.reffix.children]) {
+      groups.reffix.remove(o);
+      o.traverse((x) => {
+        if (x.isLineSegments2 || fatMaterials.has(x.material)) disposeFat(x);
+        else { if (x.geometry) x.geometry.dispose(); if (x.material) x.material.dispose(); }
+      });
+    }
+    needsRender = true;
+  }
+  function setRefGhost(specs) {
+    clearRefGhost();
+    if (!groups.reffix || !Array.isArray(specs) || !specs.length) return;
+    const col = '#e69500';
+    for (const s of specs) {
+      if (!s) continue;
+      if (s.kind === 'segments' && Array.isArray(s.positions) && s.positions.length >= 6) {
+        const line = makeFat(s.positions, col, 3.5, { dashed: true, dashSize: 2.5, gapSize: 1.8, depthTest: false, order: 25 });
+        groups.reffix.add(line);
+        for (const p of s.dots || []) {
+          const dot = new THREE.Mesh(new THREE.SphereGeometry(s.dotR || 0.85, 10, 8), new THREE.MeshBasicMaterial({ color: col, depthTest: false, transparent: true, opacity: 0.95 }));
+          dot.position.set(p[0], p[1], p[2]); dot.renderOrder = 26;
+          groups.reffix.add(dot);
+        }
+      } else if (s.kind === 'plane' && Array.isArray(s.o) && Array.isArray(s.n)) {
+        const o = new THREE.Vector3(...s.o), n = new THREE.Vector3(...s.n).normalize();
+        let x = Array.isArray(s.x) ? new THREE.Vector3(...s.x).normalize() : null;
+        if (!x || Math.abs(x.dot(n)) > 0.98) x = (Math.abs(n.z) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1).cross(n)).normalize();
+        const y = new THREE.Vector3().crossVectors(n, x).normalize();
+        const h = (s.size || 20) / 2;
+        const c = [
+          o.clone().addScaledVector(x, -h).addScaledVector(y, -h),
+          o.clone().addScaledVector(x, h).addScaledVector(y, -h),
+          o.clone().addScaledVector(x, h).addScaledVector(y, h),
+          o.clone().addScaledVector(x, -h).addScaledVector(y, h),
+        ];
+        const geo = new THREE.BufferGeometry().setFromPoints([c[0], c[1], c[2], c[0], c[2], c[3]]);
+        const mat = new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.16, depthWrite: false, depthTest: false, side: THREE.DoubleSide });
+        const mesh = new THREE.Mesh(geo, mat); mesh.renderOrder = 24;
+        groups.reffix.add(mesh);
+        const pos = [];
+        for (let i = 0; i < 4; i++) { const a = c[i], b = c[(i + 1) % 4]; pos.push(a.x, a.y, a.z, b.x, b.y, b.z); }
+        const nEnd = o.clone().addScaledVector(n, Math.max(4, h * 0.45));
+        pos.push(o.x, o.y, o.z, nEnd.x, nEnd.y, nEnd.z);
+        groups.reffix.add(makeFat(pos, col, 3, { dashed: true, dashSize: 2.2, gapSize: 1.6, depthTest: false, order: 25 }));
+      } else if (s.kind === 'marker' && Array.isArray(s.p)) {
+        const p = new THREE.Vector3(...s.p), r = clamp(s.r || 5, 2, 16), pos = [];
+        const N = 16;
+        for (let i = 0; i < N; i++) {
+          const a1 = (i / N) * Math.PI * 2, a2 = ((i + 1) / N) * Math.PI * 2;
+          pos.push(p.x + Math.cos(a1) * r, p.y + Math.sin(a1) * r, p.z, p.x + Math.cos(a2) * r, p.y + Math.sin(a2) * r, p.z);
+        }
+        pos.push(p.x - r * 0.7, p.y, p.z, p.x + r * 0.7, p.y, p.z, p.x, p.y - r * 0.7, p.z, p.x, p.y + r * 0.7, p.z, p.x, p.y, p.z - r * 0.7, p.x, p.y, p.z + r * 0.7);
+        groups.reffix.add(makeFat(pos, col, 3.2, { dashed: true, dashSize: 1.8, gapSize: 1.4, depthTest: false, order: 25 }));
+      }
+    }
+    needsRender = true;
+  }
+  function hasRefGhost() { return !!(groups.reffix && groups.reffix.children.length); }
 
   // ---------- Auswahl mit der Maus ----------
   const _ndc = new THREE.Vector2();
@@ -1367,7 +1428,7 @@ const Viewer = (() => {
   // Bild in beliebiger Größe: ohne Raster, Achsen, Ebenen und Griffe; Hintergrund durchsichtig oder hell
   function renderImage(w, hgt, opts = {}) {
     const old = renderer.getSize(new THREE.Vector2()), oldPR = renderer.getPixelRatio();
-    const hide = [gridMinor, gridMajor, groups.origin, groups.datums, groups.handles, groups.overlay, groups.measures, groups.sketch].filter(Boolean), was = hide.map((o) => o.visible);
+    const hide = [gridMinor, gridMajor, groups.origin, groups.datums, groups.handles, groups.overlay, groups.measures, groups.sketch, groups.reffix].filter(Boolean), was = hide.map((o) => o.visible);
     hide.forEach((o) => { o.visible = false; });
     const c = cam(), oldAspect = camera.aspect;
     renderer.setPixelRatio(1); renderer.setSize(w, hgt, false);
@@ -1395,7 +1456,7 @@ const Viewer = (() => {
 
   return {
     viewBack, get viewHistory() { return camHist.length; }, useButtons, setMouseStyle, get mouseStyle() { return mouseStyle; }, get leftOrbits() { return !!(controls && controls.mouseButtons.LEFT === THREE.MOUSE.ROTATE); }, setLook, lookOf, get look() { return { ...LOOK }; }, fitShadow, renderImage, lookAtFace, faceIndexOf: (id, fc) => { const n = nodes.get(id); return n ? faceIndexOf(n, fc) : -1; }, cylinderFaceInfo, threadFaceIndex: (id, th) => { const n = nodes.get(id); return n ? threadFaceIndex(n, th) : -1; }, get renderer() { return renderer; },
-    init, requestRender, setClip, setXray, setOffsets, baseBox, renderInset, silhouette, setAdaptive, setCompare, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, highlightBody, setSelectedEdges, clearHover,
+    init, requestRender, setClip, setXray, setOffsets, baseBox, renderInset, silhouette, setAdaptive, setCompare, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, highlightBody, setSelectedEdges, clearHover, setRefGhost, clearRefGhost, hasRefGhost,
     edgePositions, pick, pickAll, pickGhost, pickProxy, setProxies, clearProxies, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, boxVisible, sceneBox, snapshot, makeFat, disposeFat, faceOverlay, faceArea, faceEdges, edgeKinds, wallAt, thinWalls,
     get camera() { syncCamAnim(); return camera; }, get activeCamera() { syncCamAnim(); return cam(); }, get ortho() { return ortho; }, get gridStep() { return gridStep; }, get controls() { return controls; }, get scene() { return scene; }, get groups() { return groups; }, get nodes() { return nodes; }, get canvas() { return renderer.domElement; }, get theme() { return theme; }, get container() { return container; },
     get clip() { return vis.clip; }, get clips() { return vis.clips.slice(); }, get xray() { return vis.xray; }, get lowRes() { return lowRes; },  get pixelRatio() { return renderer.getPixelRatio(); },

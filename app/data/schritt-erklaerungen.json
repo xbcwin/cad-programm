@@ -190,6 +190,16 @@
     "wozu": "Du kannst den Schritt später jederzeit ändern oder unterdrücken, statt die feste Lage des Körpers zu überschreiben.",
     "achtung": "Änderst du das Original weiter vorne im Verlauf, wandert der versetzte Körper oder seine Kopie automatisch mit."
   },
+  "scale": {
+    "was": "Vergrößert oder verkleinert einen Körper gleichmäßig oder je Achse getrennt – um seinen Schwerpunkt oder den Ursprung.",
+    "wozu": "Ideal, um ein Teil an ein anderes Maß anzupassen oder Schwindung und Luftspiel gezielt auszugleichen.",
+    "achtung": "Bei verschiedenen Faktoren je Achse werden runde Flächen elliptisch – im Verlauf bleibt der Schritt jederzeit umkehrbar."
+  },
+  "thicken": {
+    "was": "Macht aus einer gewählten Körperfläche eine Platte mit fester Dicke – nach außen, innen oder mittig.",
+    "wozu": "Damit verstärkst du gezielt eine Wand, setzt eine Deckplatte auf oder erzeugst ein passendes Gegenstück als eigenen Körper.",
+    "achtung": "Wenn du nach innen aufdickst und es sichtbar sein soll, wähle „Eigene Platte“ oder „Vom Körper abziehen“."
+  },
   "rib": {
     "was": "Zieht eine offene Linie aus einer Skizze mit Dicke bis zu den Wänden des Zielkörpers und verschmilzt sie als Versteifungs-Rippe damit.",
     "wozu": "Ideal für stabile Gehäuse-Stege und Winkel-Stützen – ganz ohne die Umrisse genau an runde oder schräge Wände anpassen zu müssen.",

@@ -801,7 +801,7 @@ const Datums = (() => {
   }
   function sketchOn(id) {
     const d = find(id); if (!d) return false;
-    select(null); Sketch.startOnPlaneObj(deepClone(d.plane));
+    select(null); Sketch.startOnPlaneObj(deepClone(d.plane), { datumId: d.id, datumName: d.name });
     UI.toast(`Skizze auf „${d.name}“.`, { icon: 'check', ms: 1800 });
     return true;
   }

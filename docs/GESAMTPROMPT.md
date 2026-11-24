@@ -99,6 +99,7 @@ Leitlinien:
 | `41-dronelib.js` | FPV-Daten, Kaufteile, Herstellerrahmen |
 | `45-actions.js` | Aktionen wie Gruppieren, Ausrichten, Abstand |
 | `46-features.js` | Muster (inkl. „entlang Kurve“, Formschritt-Muster und Kopien auslassen `togglePatternSkip`), Spiegeln an Fläche, Teilen, Boolesch, Wandstärke, Achse im Bild wählen (`pickAxisThen`), Drehen bis Fläche (`pickRevolveFace`) |
+| `46-reffix.js` | Kaputte Bezüge (`RefFix`): gelbe Warnung bei verlorener Kante/Fläche an Rundung, Fase, Wandstärke oder Skizze, gestrichelte Alt-Lage (`Viewer.setRefGhost`) und Assistent „Neu wählen“ |
 | `47-mass.js` | Volumen, Gewicht, Schwerpunkt, Material |
 | `48-joints.js` | Dreh- und Schiebegelenke, Ketten, Anschlag übernehmen, Bewegung abspielen (mit Timer-Fallback und `results`-Nachführung), `add` für die KI |
 | `49-*` | Bauteile im Kontext, Zeitleiste, Protokoll, Zahleneingabe beim Ziehen |
@@ -137,7 +138,7 @@ Leitlinien:
 - **`kind`:**
   - Grundkörper: `box`, `cylinder`, `sphere`, `cone`, `tube`, `torus`, `wedge`, `prism`, `pyramid`, `hemisphere`
   - Skizzenbasiert: `extrude` (p.sketch, dist, dir, sel, thin, wall, wallSide), `revolve` (p.sketch, angle, dir, angle2, toFace, toFaceFlip, axis, axisId, axis3d), `loft` (p.sketches, ruled, tip), `sweep` (p.sketch-Pfad, shape circle/rect/sketch, d, w, h, wall, prof)
-  - Sonstige: `import` (STEP/STL Base64), `part` (Bibliothek, `p.lib`), `group` (children; mit `p.op` = Rechen-Gruppe), `transform` (Verschieben/Drehen/Kopieren als Schritt auf `p.target` mit `dx/dy/dz`, `rx/ry/rz`, `pivot`, `copy`), `rib` (Rippe aus offener Skizzenlinie auf `p.target` mit `thickness`, `side`, `dir`, `flip`, `depth`, `draft`)
+  - Sonstige: `import` (STEP/STL Base64), `part` (Bibliothek, `p.lib`), `group` (children; mit `p.op` = Rechen-Gruppe), `transform` (Verschieben/Drehen/Kopieren als Schritt auf `p.target` mit `dx/dy/dz`, `rx/ry/rz`, `pivot`, `copy`), `scale` (Körper skalieren auf `p.target`, gleichmäßig `s` oder je Achse `sx/sy/sz`, um Schwerpunkt oder Ursprung `pivot`), `thicken` (Fläche aufdicken auf `p.target` mit `face`, Dicke `t`, Richtung `out`/`in`/`mid`, Modus `join`/`new`/`cut`), `rib` (Rippe aus offener Skizzenlinie auf `p.target` mit `thickness`, `side`, `dir`, `flip`, `depth`, `draft`)
 - **Rechen-Gruppen (`p.op`):**
   - `pattern` mit `pt` (optional `skip` für ausgelassene Kopien und `G.op` für gemusterte Formschritte / Rippen; `Model.patternInstances`):
     - `rect` (nx, ny, dx, dy)
@@ -196,7 +197,7 @@ Leitlinien:
 - Messen: Kern `minDistance(scene, ids)` (Worker `distance`, BRepExtrema_DistShapeShape) → `Measure.minDistance`; Teil-Panel zeigt Volumen, Oberfläche, Hüllmaße
 - Dauerhafte Messungen (PF-05): `doc.measures` speichert Bezüge; `Measure.keep`/`relink`/`treeSection`/`renderPanel`, `#measure-keep` in `#measure-bar`, Liste `#measure-tree` im Verlauf, Schilder `.dimlabel.mpin`, `Viewer.groups.measures`, zeigt „verloren“ bei fehlenden Bezügen
 - Verknüpfte Kopien: `it.link` = Kennung des Originals; `Model.syncLinks(doc)` läuft in jedem `App.change` und übernimmt Art, Maße, Kanten, Rolle (`linkLost`, wenn das Original fehlt); `Actions.duplicateLinked`, `Actions.unlink`
-- Bezüge: `Model.dependencies(doc)` → Liste `{from, to, what, datum?}` auf oberster Ebene (Formschritt-Ziel, `link`, übernommene Skizzenkanten, Rohr-`bind`, Bezugsebenen an Flächen); Bereich `details#deps` im Teile-Panel; `Actions.remove` meldet abhängige Teile
+- Bezüge: `Model.dependencies(doc)` → Liste `{from, to, what, datum?}` auf oberster Ebene (Formschritt-Ziel, `link`, übernommene Skizzenkanten, Rohr-`bind`, Bezugsebenen an Flächen); Bereich `details#deps` im Teile-Panel; `Actions.remove` meldet abhängige Teile; `RefFix` (KP-12) erkennt verlorene Kanten/Flächen an Rundungen, Fasen, Wandstärken, Skizzen (`planeRef`, verbundene Kanten) und `toFace`, markiert sie gelb in Verlauf/Zeitleiste und lässt im Assistenten „Neu wählen“ bei gestrichelter Alt-Lage einen neuen Bezug anklicken
 - Zeitleiste:
   - Schritte, Marker zurückrollen, Einfügen am Marker
   - Unterdrücken; Fehler rot mit Klartext und Lösungstipp
@@ -271,7 +272,7 @@ Leitlinien:
 - Rechteckmuster; Kreismuster um Z/X/Y oder eine **im Bild gewählte Achse** (Kante, runder Rand, Welle, Loch)
 - **Muster entlang Kurve** (Kurve zeichnen, Ringe zeigen die Lage, Anzahl/Abstand/Ausrichtung)
 - Spiegeln (Ebene oder **an Fläche**, die Ebene wandert mit der äußersten Fläche mit)
-- Teilen mit Spalt; Boolesch (Vereinigen/Abziehen/Schnittmenge); Verschieben/Drehen/Kopieren als Schritt (`transform` im Verlauf mit Werten, Formeln und Drehpunkt)
+- Teilen mit Spalt; Boolesch (Vereinigen/Abziehen/Schnittmenge); Verschieben/Drehen/Kopieren als Schritt (`transform` im Verlauf mit Werten, Formeln und Drehpunkt); **Skalieren** (`scale`, gleichmäßig oder je Achse um Schwerpunkt oder Ursprung) und **Fläche aufdicken** (`thicken`, eben oder gewölbt nach außen/innen/mittig als Anbau, eigene Platte oder Abzug) im Verlauf (`Features.scale`/`Features.thicken`)
 - **Gelenke:** Drehgelenk und **Schiebegelenk** zwischen zwei Teilen, Regler mit Bereich, **Ketten** (Platte → Arm → Greifer). „Bewegung prüfen“ fragt den Kern in Schritten nach Durchdringungen; „Als Anschlag übernehmen“ und „Bewegung abspielen“.
 
 **Bibliothek („Bauteile“ und Drohne → „Lochbilder und Bausteine“)**

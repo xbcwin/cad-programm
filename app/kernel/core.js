@@ -192,6 +192,334 @@ export function createKernel(R, oc) {
     }
     return [mn[0], mn[1], mn[2], mx[0], mx[1], mx[2]];
   }
+  function shapeCenterOfMass(shape, fallbackBbox) {
+    try {
+      const props = R.measureShapeVolumeProperties(shape);
+      try {
+        if (Math.abs(props.volume) > 1e-9) return props.centerOfMass;
+      } finally { props.delete(); }
+    } catch (_) {}
+    const b = fallbackBbox || bboxOf(shape);
+    return [(b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2];
+  }
+  function scalePt(p, c, s) {
+    return [c[0] + (p[0] - c[0]) * s[0], c[1] + (p[1] - c[1]) * s[1], c[2] + (p[2] - c[2]) * s[2]];
+  }
+  function makeArr1D(vals) {
+    const a = new oc.NCollection_Array1_double(1, vals.length);
+    for (let i = 0; i < vals.length; i++) a.SetValue(i + 1, vals[i]);
+    return a;
+  }
+  function makeArr1I(vals) {
+    const a = new oc.NCollection_Array1_int(1, vals.length);
+    for (let i = 0; i < vals.length; i++) a.SetValue(i + 1, vals[i]);
+    return a;
+  }
+  function buildRuledBSpline(surf, u1, u2, v1, v2, xPt) {
+    const fullU = surf.IsUPeriodic() && Math.abs((u2 - u1) - surf.UPeriod()) < 1e-4;
+    const iso1 = surf.VIso(v1), iso2 = surf.VIso(v2);
+    const c1 = fullU ? iso1 : new oc.Geom_TrimmedCurve(iso1, u1, u2, true, true);
+    const c2 = fullU ? iso2 : new oc.Geom_TrimmedCurve(iso2, u1, u2, true, true);
+    const b1 = oc.GeomConvert.CurveToBSplineCurve(c1, oc.Convert_ParameterisationType.Convert_TgtThetaOver2);
+    const b2 = oc.GeomConvert.CurveToBSplineCurve(c2, oc.Convert_ParameterisationType.Convert_TgtThetaOver2);
+    if (!fullU) { c1.delete(); c2.delete(); }
+    const nu = b1.NbPoles(), nk = b1.NbKnots(), uDeg = b1.Degree(), uPer = b1.IsPeriodic();
+    const poles = new oc.NCollection_Array2_gp_Pnt(1, nu, 1, 2);
+    const weights = new oc.NCollection_Array2_double(1, nu, 1, 2);
+    for (let i = 1; i <= nu; i++) {
+      const p1 = b1.Pole(i), p2 = b2.Pole(i);
+      const q1 = xPt(p1), q2 = xPt(p2);
+      const gp1 = new oc.gp_Pnt(q1[0], q1[1], q1[2]), gp2 = new oc.gp_Pnt(q2[0], q2[1], q2[2]);
+      poles.SetValue(i, 1, gp1); poles.SetValue(i, 2, gp2);
+      weights.SetValue(i, 1, b1.Weight(i)); weights.SetValue(i, 2, b2.Weight(i));
+      gp1.delete(); gp2.delete(); p1.delete(); p2.delete();
+    }
+    const uK = [], uM = [];
+    for (let i = 1; i <= nk; i++) { uK.push(b1.Knot(i)); uM.push(b1.Multiplicity(i)); }
+    const uk = makeArr1D(uK), um = makeArr1I(uM), vk = makeArr1D([v1, v2]), vm = makeArr1I([2, 2]);
+    const bsp = b1.IsRational()
+      ? new oc.Geom_BSplineSurface(poles, weights, uk, vk, um, vm, uDeg, 1, uPer, false)
+      : new oc.Geom_BSplineSurface(poles, uk, vk, um, vm, uDeg, 1, uPer, false);
+    poles.delete(); weights.delete(); uk.delete(); vk.delete(); um.delete(); vm.delete(); b1.delete(); b2.delete();
+    return bsp;
+  }
+  function scaleCurve3d(ew, c, s) {
+    const loc = new oc.TopLoc_Location();
+    const crvRes = oc.BRep_Tool.Curve(ew, loc);
+    const trsf = !loc.IsIdentity() ? loc.Transformation() : null;
+    const trimmed = new oc.Geom_TrimmedCurve(crvRes.returnValue, crvRes.First, crvRes.Last, true, true);
+    const bsp = oc.GeomConvert.CurveToBSplineCurve(trimmed, oc.Convert_ParameterisationType.Convert_TgtThetaOver2);
+    trimmed.delete();
+    const np = bsp.NbPoles();
+    for (let i = 1; i <= np; i++) {
+      const pt = bsp.Pole(i);
+      let x = pt.X(), y = pt.Y(), z = pt.Z();
+      if (trsf) { const p2 = pt.Transformed(trsf); x = p2.X(); y = p2.Y(); z = p2.Z(); p2.delete(); }
+      const q = scalePt([x, y, z], c, s);
+      const gp = new oc.gp_Pnt(q[0], q[1], q[2]);
+      bsp.SetPole(i, gp);
+      gp.delete(); pt.delete();
+    }
+    if (trsf) trsf.delete();
+    loc.delete();
+    return bsp;
+  }
+  function collectWires(fw) {
+    const outerW = oc.BRepTools.OuterWire(fw);
+    const wires = [];
+    const wExp = new oc.TopExp_Explorer(fw, oc.TopAbs_ShapeEnum.TopAbs_WIRE, oc.TopAbs_ShapeEnum.TopAbs_SHAPE);
+    while (wExp.More()) {
+      const w = oc.TopoDS.Wire(wExp.Current());
+      if (w.IsSame(outerW)) wires.unshift(w); else wires.push(w);
+      wExp.Next();
+    }
+    wExp.delete();
+    return wires;
+  }
+  function collectEdges(wire) {
+    const edges = [];
+    const eExp = new oc.TopExp_Explorer(wire, oc.TopAbs_ShapeEnum.TopAbs_EDGE, oc.TopAbs_ShapeEnum.TopAbs_SHAPE);
+    while (eExp.More()) { edges.push(oc.TopoDS.Edge(eExp.Current())); eExp.Next(); }
+    eExp.delete();
+    return edges;
+  }
+  function makeWireFromEdges(edgeList) {
+    const wb = new oc.BRepBuilderAPI_MakeWire();
+    const list = new oc.NCollection_List_TopoDS_Shape();
+    for (const e of edgeList) list.Append(e);
+    wb.Add(list);
+    const out = wb.Wire();
+    list.delete(); wb.delete();
+    return out;
+  }
+  function scaleFace(face, c, s) {
+    const fw = oc.TopoDS.Face(face.wrapped);
+    const fOri = fw.Orientation();
+    const wires = collectWires(fw);
+    if (face.geomType === 'PLANE') {
+      const orig = face.center, n0 = face.normalAt();
+      const ref = Math.abs(n0.z) < 0.9 ? [0, 0, 1] : [1, 0, 0];
+      const u = [ref[1] * n0.z - ref[2] * n0.y, ref[2] * n0.x - ref[0] * n0.z, ref[0] * n0.y - ref[1] * n0.x];
+      const ul = Math.hypot(...u) || 1; u[0] /= ul; u[1] /= ul; u[2] /= ul;
+      const v = [n0.y * u[2] - n0.z * u[1], n0.z * u[0] - n0.x * u[2], n0.x * u[1] - n0.y * u[0]];
+      const tu = [u[0] * s[0], u[1] * s[1], u[2] * s[2]], tv = [v[0] * s[0], v[1] * s[1], v[2] * s[2]];
+      let tn = [tu[1] * tv[2] - tu[2] * tv[1], tu[2] * tv[0] - tu[0] * tv[2], tu[0] * tv[1] - tu[1] * tv[0]];
+      const tl = Math.hypot(...tn) || 1; tn = [tn[0] / tl, tn[1] / tl, tn[2] / tl];
+      const to = scalePt([orig.x, orig.y, orig.z], c, s);
+      const p = new oc.gp_Pnt(to[0], to[1], to[2]), d = new oc.gp_Dir(tn[0], tn[1], tn[2]);
+      const gpPln = new oc.gp_Pln(p, d); p.delete(); d.delete();
+      const buildW = (w) => {
+        const neList = [];
+        for (const ew of collectEdges(w)) {
+          if (oc.BRep_Tool.Degenerated(ew)) continue;
+          const bsp = scaleCurve3d(ew, c, s);
+          const me = new oc.BRepBuilderAPI_MakeEdge(bsp);
+          let ne = me.Edge();
+          if (ew.Orientation() === oc.TopAbs_Orientation.TopAbs_REVERSED) ne = oc.TopoDS.Edge(ne.Reversed());
+          neList.push(ne); me.delete(); bsp.delete();
+        }
+        return makeWireFromEdges(neList);
+      };
+      const mf = new oc.BRepBuilderAPI_MakeFace(gpPln, buildW(wires[0]), true);
+      for (let i = 1; i < wires.length; i++) mf.Add(buildW(wires[i]));
+      let nf = mf.Face(); mf.delete(); gpPln.delete();
+      const sff = new oc.ShapeFix_Face(nf); sff.FixOrientation(); sff.Perform(); nf = sff.Face(); sff.delete();
+      return nf;
+    }
+    const loc = new oc.TopLoc_Location();
+    const surf = oc.BRep_Tool.Surface(fw, loc);
+    const trsf = !loc.IsIdentity() ? loc.Transformation() : null;
+    const uv = oc.BRepTools.UVBounds(fw);
+    const xPt = (pt) => {
+      let x = pt.X(), y = pt.Y(), z = pt.Z();
+      if (trsf) { const p2 = pt.Transformed(trsf); x = p2.X(); y = p2.Y(); z = p2.Z(); p2.delete(); }
+      return scalePt([x, y, z], c, s);
+    };
+    const isRuled = face.geomType === 'CYLINDRE' || face.geomType === 'CONE' || face.geomType === 'EXTRUSION';
+    const isFullNatural = wires.length === 1 && (
+      face.geomType === 'SPHERE' || face.geomType === 'TORUS' ||
+      (isRuled && surf.IsUPeriodic() && Math.abs((uv.UMax - uv.UMin) - surf.UPeriod()) < 1e-4 && collectEdges(wires[0]).length <= 4)
+    );
+    let bspSurf;
+    if (isRuled) {
+      const dv = isFullNatural ? 0 : Math.max(1e-3, (uv.VMax - uv.VMin) * 0.05);
+      bspSurf = buildRuledBSpline(surf, uv.UMin, uv.UMax, uv.VMin - dv, uv.VMax + dv, xPt);
+    } else {
+      try {
+        bspSurf = oc.GeomConvert.SurfaceToBSplineSurface(surf);
+        const nu = bspSurf.NbUPoles(), nv = bspSurf.NbVPoles();
+        for (let u = 1; u <= nu; u++) for (let v = 1; v <= nv; v++) {
+          const pt = bspSurf.Pole(u, v), q = xPt(pt), np = new oc.gp_Pnt(q[0], q[1], q[2]);
+          bspSurf.SetPole(u, v, np); np.delete(); pt.delete();
+        }
+      } catch (_) {
+        const N = 9, du = (uv.UMax - uv.UMin) / (N - 1), dv = (uv.VMax - uv.VMin) / (N - 1);
+        const grid = new oc.NCollection_Array2_gp_Pnt(1, N, 1, N);
+        for (let iu = 0; iu < N; iu++) for (let iv = 0; iv < N; iv++) {
+          const pt = surf.Value(uv.UMin + iu * du, uv.VMin + iv * dv), q = xPt(pt), np = new oc.gp_Pnt(q[0], q[1], q[2]);
+          grid.SetValue(iu + 1, iv + 1, np); np.delete(); pt.delete();
+        }
+        const fit = new oc.GeomAPI_PointsToBSplineSurface();
+        fit.Interpolate(grid);
+        bspSurf = fit.Surface();
+        grid.delete(); fit.delete();
+      }
+    }
+    if (trsf) trsf.delete();
+    loc.delete();
+    if (isFullNatural) {
+      const mf = new oc.BRepBuilderAPI_MakeFace(bspSurf, 1e-6);
+      let nf = mf.Face(); mf.delete();
+      if (fOri === oc.TopAbs_Orientation.TopAbs_REVERSED) nf = oc.TopoDS.Face(nf.Reversed());
+      return nf;
+    }
+    const buildW = (w) => {
+      const neList = [];
+      for (const ew of collectEdges(w)) {
+        const ad = new oc.BRepAdaptor_Curve2d(ew, fw);
+        const pc = ad.Curve();
+        const first = ad.FirstParameter(), last = ad.LastParameter();
+        const me = new oc.BRepBuilderAPI_MakeEdge(pc, bspSurf, first, last);
+        let ne = me.Edge();
+        if (ew.Orientation() === oc.TopAbs_Orientation.TopAbs_REVERSED) ne = oc.TopoDS.Edge(ne.Reversed());
+        neList.push(ne); me.delete(); ad.delete();
+      }
+      return makeWireFromEdges(neList);
+    };
+    const mf = new oc.BRepBuilderAPI_MakeFace(bspSurf, buildW(wires[0]), true);
+    for (let i = 1; i < wires.length; i++) mf.Add(buildW(wires[i]));
+    let nf = mf.Face(); mf.delete();
+    if (fOri === oc.TopAbs_Orientation.TopAbs_REVERSED) nf = oc.TopoDS.Face(nf.Reversed());
+    oc.BRepLib.BuildCurves3d(nf);
+    const sff = new oc.ShapeFix_Face(nf); sff.Perform(); nf = sff.Face(); sff.delete();
+    return nf;
+  }
+  function scaleNonUniform(shape, center, s) {
+    const solids = shape.solids;
+    const outSolids = [];
+    for (const solIn of solids) {
+      const faces = solIn.faces;
+      if (faces.length === 1 && (faces[0].geomType === 'SPHERE' || faces[0].geomType === 'TORUS')) {
+        const nf = scaleFace(faces[0], center, s);
+        const sf = oc.BRep_Tool.Surface(nf);
+        const sh = R.cast(new oc.BRepBuilderAPI_MakeShell(sf, false).Shell());
+        let res = R.makeSolid([sh]);
+        if (R.measureVolume(res) < 0) res = R.cast(res.wrapped.Reversed());
+        outSolids.push(res);
+        continue;
+      }
+      const sew = new oc.BRepBuilderAPI_Sewing(1e-3, true, true, true, false);
+      for (const f of faces) sew.Add(scaleFace(f, center, s));
+      sew.Perform();
+      const sewed = sew.SewedShape(); sew.delete();
+      const sh = oc.TopoDS.Shell(sewed);
+      const ms = new oc.BRepBuilderAPI_MakeSolid(sh);
+      let sol = ms.Solid(); ms.delete();
+      const sfs = new oc.ShapeFix_Solid(sol); sfs.Perform(); sol = oc.TopoDS.Solid(sfs.Solid()); sfs.delete();
+      let res = R.cast(sol);
+      if (R.measureVolume(res) < 0) res = R.cast(sol.Reversed());
+      outSolids.push(res);
+    }
+    return outSolids.length === 1 ? outSolids[0] : R.makeCompound(outSolids);
+  }
+  function applyScale(shape, center, sx, sy, sz) {
+    if (Math.abs(sx - sy) < 1e-9 && Math.abs(sx - sz) < 1e-9) {
+      return shape.clone().scale(sx, center);
+    }
+    return scaleNonUniform(shape, center, [sx, sy, sz]);
+  }
+  function matchFace(shape, spec) {
+    if (!spec || !Array.isArray(spec.c)) return null;
+    const b = bboxOf(shape), tol = 0.05 + 1e-3 * Math.max(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
+    const hasN = Array.isArray(spec.n) && spec.n.length >= 3;
+    const dist = (f) => { const c = vec(f.center); return Math.hypot(c[0] - spec.c[0], c[1] - spec.c[1], c[2] - spec.c[2]); };
+    const dotN = (f) => { if (!hasN) return 1; try { const v = f.normalAt(); return v.x * spec.n[0] + v.y * spec.n[1] + v.z * spec.n[2]; } catch (_) { return 0; } };
+    const faces = shape.faces;
+    let best = null, bd = Infinity;
+    for (const f of faces) {
+      const d = dist(f);
+      if (d < tol && (!hasN || dotN(f) > 0.85) && d < bd) { bd = d; best = f; }
+    }
+    if (best) return best;
+    if (hasN) {
+      const aligned = faces.filter((f) => dotN(f) > 0.99);
+      const pool = spec.t ? aligned.filter((f) => f.geomType === spec.t) : [];
+      const list = pool.length ? pool : aligned;
+      for (const f of list) { const d = dist(f); if (d < bd) { bd = d; best = f; } }
+    }
+    return best;
+  }
+  function thickenFaceShape(face, dist, dir, mode) {
+    const d = Math.abs(dist);
+    if (face.geomType === 'PLANE') {
+      const nv = face.normalAt();
+      const nl = Math.hypot(nv.x, nv.y, nv.z) || 1;
+      const nx = nv.x / nl, ny = nv.y / nl, nz = nv.z / nl;
+      let fStart = face, vecArg;
+      if (dir === 'out') {
+        vecArg = new oc.gp_Vec(nx * d, ny * d, nz * d);
+      } else if (dir === 'in') {
+        if (mode === 'cut') {
+          fStart = face.clone().translate([nx * 1e-3, ny * 1e-3, nz * 1e-3]);
+          vecArg = new oc.gp_Vec(-nx * (d + 1e-3), -ny * (d + 1e-3), -nz * (d + 1e-3));
+        } else {
+          vecArg = new oc.gp_Vec(-nx * d, -ny * d, -nz * d);
+        }
+      } else {
+        fStart = face.clone().translate([-nx * d / 2, -ny * d / 2, -nz * d / 2]);
+        vecArg = new oc.gp_Vec(nx * d, ny * d, nz * d);
+      }
+      const pr = new oc.BRepPrimAPI_MakePrism(fStart.wrapped, vecArg, false, true);
+      let res = R.cast(pr.Shape());
+      pr.delete(); vecArg.delete();
+      if (fStart !== face) fStart.delete();
+      if (R.measureVolume(res) < 0) res = R.cast(res.wrapped.Reversed());
+      return res;
+    }
+    const fw = face.wrapped;
+    const sign = fw.Orientation() === oc.TopAbs_Orientation.TopAbs_REVERSED ? -1 : 1;
+    const makeThick = (sh, off) => {
+      const ts = new oc.BRepOffsetAPI_MakeThickSolid();
+      ts.MakeThickSolidBySimple(sh, off);
+      const raw = ts.Shape();
+      ts.delete();
+      const sfs = new oc.ShapeFix_Solid(oc.TopoDS.Solid(raw));
+      sfs.Perform();
+      let res = R.cast(oc.TopoDS.Solid(sfs.Solid()));
+      sfs.delete();
+      if (R.measureVolume(res) < 0) res = R.cast(res.wrapped.Reversed());
+      return res;
+    };
+    const makeOffset = (sh, off) => {
+      const ob = new oc.BRepOffsetAPI_MakeOffsetShape();
+      ob.PerformBySimple(sh, off);
+      const out = ob.Shape();
+      ob.delete();
+      return out;
+    };
+    if (dir === 'out') {
+      if (mode === 'join') {
+        const offSh = makeOffset(fw, -sign * 1e-3);
+        const res = makeThick(offSh, sign * (d + 1e-3));
+        safeDelete(offSh);
+        return res;
+      }
+      return makeThick(fw, sign * d);
+    }
+    if (dir === 'in') {
+      if (mode === 'cut') {
+        const offSh = makeOffset(fw, sign * 1e-3);
+        const res = makeThick(offSh, -sign * (d + 1e-3));
+        safeDelete(offSh);
+        return res;
+      }
+      return makeThick(fw, -sign * d);
+    }
+    const offSh = makeOffset(fw, -sign * d / 2);
+    const res = makeThick(offSh, sign * d);
+    safeDelete(offSh);
+    return res;
+  }
   const bboxHit = (a, b, m = 0.01) => !(a[3] < b[0] - m || b[3] < a[0] - m || a[4] < b[1] - m || b[4] < a[1] - m || a[5] < b[2] - m || b[5] < a[2] - m);
 
   function fuseAll(shapes, ownInputs = false) {
@@ -518,11 +846,12 @@ export function createKernel(R, oc) {
     };
 
     const pool = (ctx && ctx.pool) || [];
+    const refErr = (m) => { const e = new Error(m); e.code = 'ref'; return e; };
     if (p.extent === 'toFace') {
       const ref = p.toFace;
-      if (!ref) throw new Error('Bis zu gewählter Fläche: Keine Zielfläche gewählt – klick eine Fläche im Bild an.');
+      if (!ref) throw refErr('Bis zu gewählter Fläche: Keine Zielfläche gewählt – klick eine Fläche im Bild an.');
       if (ref.datumId) {
-        if (ref.missing || !ref.plane || !ref.plane.o || !ref.plane.n) throw new Error('Bis zu gewählter Fläche: Die gewählte Bezugsebene fehlt.');
+        if (ref.missing || !ref.plane || !ref.plane.o || !ref.plane.n) throw refErr('Bis zu gewählter Fläche: Die gewählte Bezugsebene fehlt.');
         const r = extrudeToPlane(ref.plane.o, norm(ref.plane.n), 'Bis zu gewählter Fläche');
         return { shape: r.shape, resolved: { dist: Math.round(r.dist * 1e6) / 1e6, targetId: ref.datumId } };
       }
@@ -530,11 +859,11 @@ export function createKernel(R, oc) {
       const wasConsumed = !!(ctx && ctx.consumed && ctx.consumed.has(tid));
       while (tid && ctx && ctx.consumed && ctx.consumed.has(tid)) tid = ctx.consumed.get(tid);
       const T = pool.find((e) => e.ids.has(tid));
-      if (!T) throw new Error('Bis zu gewählter Fläche: Der Zielkörper fehlt oder ist ausgeblendet.');
+      if (!T) throw refErr('Bis zu gewählter Fläche: Der Zielkörper fehlt oder ist ausgeblendet.');
       if (T.id === it.id) throw new Error('Bis zu gewählter Fläche: Das Teil kann nicht bis zu sich selbst hochgezogen werden.');
       const useWorld = wasConsumed && T.id !== ref.id;
       const matched = matchFaceOnShape(useWorld ? T.worldShape : T.localShape, ref, useWorld);
-      if (!matched) throw new Error('Bis zu gewählter Fläche: Die gewählte Fläche wurde nicht mehr gefunden.');
+      if (!matched) throw refErr('Bis zu gewählter Fläche: Die gewählte Fläche wurde nicht mehr gefunden.');
       const fi = matched.info;
       if (fi.t === 'PLANE' && fi.n && fi.c) {
         const pF = useWorld ? fi.c : transformPoint(T.m, fi.c);
@@ -1583,9 +1912,17 @@ export function createKernel(R, oc) {
     const t = num(fin.r, 2);
     const b = bboxOf(shape); const tol = 0.05 + 1e-3 * Math.max(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
     const sigs = (fin.faces || []).filter((f) => f && f.c);
-    const pick = (f) => { const c = vec(f.center); return sigs.some((s) => Math.hypot(c[0] - s.c[0], c[1] - s.c[1], c[2] - s.c[2]) < tol); };
-    let count = 0; try { for (const f of shape.faces) if (pick(f)) count++; } catch (_) {}
-    if (!count) { errors.push({ itemId, finishId: fin.id, code: 'edges', message: 'Die offene Fläche für die Wandstärke gibt es nicht mehr.' }); return shape; }
+    const matchFace = (f, s) => { const c = vec(f.center); return Math.hypot(c[0] - s.c[0], c[1] - s.c[1], c[2] - s.c[2]) < tol; };
+    const pick = (f) => sigs.some((s) => matchFace(f, s));
+    let count = 0;
+    const faceArr = [];
+    try { for (const f of shape.faces) { faceArr.push(f); if (pick(f)) count++; } } catch (_) {}
+    const missing = [];
+    sigs.forEach((s, i) => { if (!faceArr.some((f) => matchFace(f, s))) missing.push(i); });
+    if (!count) { errors.push({ itemId, finishId: fin.id, code: 'edges', refType: 'face', missing: sigs.map((_, i) => i), message: 'Die offene Fläche für die Wandstärke gibt es nicht mehr.' }); return shape; }
+    if (missing.length) {
+      errors.push({ itemId, finishId: fin.id, code: 'edges', refType: 'face', partial: true, missing, message: `${missing.length} von ${sigs.length} offenen Flächen für die Wandstärke gibt es nicht mehr.` });
+    }
     const minDim = Math.min(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
     if (!(t > 0) || 2 * t >= minDim - 1e-6) { errors.push({ itemId, finishId: fin.id, code: 'shell', message: `Die Wandstärke ist zu dick für dieses Teil – möglich sind weniger als ${String(Math.floor(minDim * 5) / 10).replace('.', ',')} mm.` }); return shape; }
     try {
@@ -1604,9 +1941,30 @@ export function createKernel(R, oc) {
       if (!(r > 0)) continue;
       let matcher;
       try { matcher = makeEdgeMatcher(fin.edges, shape); } catch (e) { continue; }
+      const shapeEdges = [];
       let count = 0;
-      try { for (const e of shape.edges) if (matcher(e)) count++; } catch (_) {}
-      if (!count) { errors.push({ itemId, finishId: fin.id, code: 'edges', message: 'Die gewählten Kanten gibt es nicht mehr.' }); continue; }
+      try { for (const e of shape.edges) { shapeEdges.push(e); if (matcher(e)) count++; } } catch (_) {}
+      const missing = [];
+      if (Array.isArray(fin.edges)) {
+        const mids = shapeEdges.map((e) => { try { return vec(e.pointAt(0.5)); } catch (_) { return null; } });
+        fin.edges.forEach((s, i) => {
+          if (!s || !s.m) { missing.push(i); return; }
+          const tol = 0.02 + 0.002 * num(s.l, 1);
+          const ok = mids.some((m) => m && Math.hypot(m[0] - s.m[0], m[1] - s.m[1], m[2] - s.m[2]) < tol);
+          if (!ok) missing.push(i);
+        });
+      }
+      const kindTxt = fin.type === 'chamfer' ? 'Fase' : 'Rundung';
+      if (!count) {
+        const msg = Array.isArray(fin.edges) && fin.edges.length === 1
+          ? `Die gewählte Kante der ${kindTxt} gibt es nicht mehr.`
+          : `Die gewählten Kanten der ${kindTxt} gibt es nicht mehr.`;
+        errors.push({ itemId, finishId: fin.id, code: 'edges', refType: 'edge', missing: Array.isArray(fin.edges) ? fin.edges.map((_, i) => i) : null, message: msg });
+        continue;
+      }
+      if (missing.length) {
+        errors.push({ itemId, finishId: fin.id, code: 'edges', refType: 'edge', partial: true, missing, message: `${missing.length} von ${fin.edges.length} gewählten Kanten der ${kindTxt} gibt es nicht mehr.` });
+      }
       try {
         shape = tryFinish(shape, fin.type, r, matcher, fin);
       } catch (err) {
@@ -1746,7 +2104,7 @@ export function createKernel(R, oc) {
     return keyOf({ k: it.kind, p, f: it.finishes || null, mir: it.mir || null, c: it.children ? it.children.filter((c) => !c.hidden).map((c) => [defKey(c), c.role, c.m]) : null });
   }
   function evalItem(it, errors, parentWorldM = null, ctx = null) {
-    if (it.kind === 'transform' || it.kind === 'rib') return { shape: null, key: defKey(it) };
+    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'thicken' || it.kind === 'rib') return { shape: null, key: defKey(it) };
     const dyn = hasDynamicExtent(it);
     const W = dyn ? (parentWorldM ? matMul(parentWorldM, it.m) : it.m) : null;
     const key = dyn
@@ -1812,7 +2170,7 @@ export function createKernel(R, oc) {
         if (it.mir[2] < 0) shape = shape.mirror('XY', [0, 0, 0]);
       }
     } catch (err) {
-      errors.push({ itemId: it.id, code: err && err.code === 'split' ? 'split' : 'build', message: friendlyError(err) });
+      errors.push({ itemId: it.id, code: err && (err.code === 'split' || err.code === 'ref') ? err.code : 'build', message: friendlyError(err) });
       shape = null;
     }
     if (shape) cachePut(key, shape, errors.slice(e0).map((x) => ({ ...x, itemId: x.itemId === it.id ? '$self' : x.itemId })), resolvedInfo, baseBox);
@@ -2442,6 +2800,130 @@ export function createKernel(R, oc) {
             src.shape = next; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
             bodies.set(tid, src);
           }
+        }
+        continue;
+      }
+      if (it.kind === 'scale') {
+        const p = it.p || {};
+        let tid = p.target;
+        while (tid && consumed.has(tid)) tid = consumed.get(tid);
+        const t = tid ? byId.get(tid) : null, src = tid ? live.get(tid) : null;
+        if (!t || t.i >= i || !src || !src.shape) {
+          if (tid && hiddenIds && hiddenIds.has(tid)) { consumed.set(it.id, tid); continue; }
+          errors.push({ itemId: it.id, code: 'op', message: 'Skalieren: Der Zielkörper fehlt oder kommt erst später im Verlauf.' });
+          continue;
+        }
+        const uniform = p.uniform !== false;
+        const s0 = num(p.s, 1);
+        const sx = uniform ? s0 : num(p.sx, 1);
+        const sy = uniform ? s0 : num(p.sy, 1);
+        const sz = uniform ? s0 : num(p.sz, 1);
+        if (!(sx > 0 && sy > 0 && sz > 0 && isFinite(sx) && isFinite(sy) && isFinite(sz))) {
+          errors.push({ itemId: it.id, code: 'op', message: 'Skalieren: Alle Faktoren müssen größer als 0 sein.' });
+          continue;
+        }
+        consumed.set(it.id, tid);
+        if (Math.abs(sx - 1) > 1e-9 || Math.abs(sy - 1) > 1e-9 || Math.abs(sz - 1) > 1e-9) {
+          const pv = p.pivot === 'origin' ? 'origin' : 'centroid';
+          const k = keyOf([src.key, 'scale', Math.round(sx * 1e6) / 1e6, Math.round(sy * 1e6) / 1e6, Math.round(sz * 1e6) / 1e6, pv, src.m.map((v) => Math.round(v * 1e6) / 1e6)]);
+          let next = cacheGet(k);
+          if (!next) {
+            try {
+              const idM = isIdentity(src.m);
+              const wShape = idM ? src.shape : applyMatrix(src.shape, src.m);
+              const center = pv === 'origin' ? [0, 0, 0] : shapeCenterOfMass(wShape, src.wb);
+              const wScaled = applyScale(wShape, center, sx, sy, sz);
+              if (!idM) safeDelete(wShape);
+              if (idM) {
+                next = wScaled;
+              } else {
+                next = applyMatrix(wScaled, matInvRigid(src.m));
+                safeDelete(wScaled);
+              }
+              cachePut(k, next);
+            } catch (err) {
+              errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) });
+              continue;
+            }
+          }
+          src.shape = next; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
+          bodies.set(tid, src);
+        }
+        continue;
+      }
+      if (it.kind === 'thicken') {
+        const p = it.p || {};
+        let tid = p.target;
+        while (tid && consumed.has(tid)) tid = consumed.get(tid);
+        const t = tid ? byId.get(tid) : null, src = tid ? live.get(tid) : null;
+        const mode = p.mode === 'new' || p.mode === 'cut' ? p.mode : 'join';
+        const dir = p.dir === 'in' || p.dir === 'mid' ? p.dir : 'out';
+        const dist = num(p.t, 2);
+        if (!t || t.i >= i || !src || !src.shape) {
+          if (mode !== 'new' && tid && hiddenIds && hiddenIds.has(tid)) { consumed.set(it.id, tid); continue; }
+          errors.push({ itemId: it.id, code: 'op', message: 'Aufdicken: Der Zielkörper fehlt oder kommt erst später im Verlauf.' });
+          continue;
+        }
+        if (!(dist > 1e-6 && isFinite(dist))) {
+          if (mode !== 'new') consumed.set(it.id, tid);
+          errors.push({ itemId: it.id, code: 'op', message: 'Aufdicken: Die Dicke muss größer als 0 sein.' });
+          continue;
+        }
+        if (!p.face || !Array.isArray(p.face.c)) {
+          if (mode !== 'new') consumed.set(it.id, tid);
+          errors.push({ itemId: it.id, code: 'edges', message: 'Aufdicken: Es ist keine Fläche gewählt.' });
+          continue;
+        }
+        if (mode === 'new') {
+          const rel = matMul(matInvRigid(it.m), src.m);
+          const kBase = keyOf([src.key, 'thickenNew', p.face, Math.round(dist * 1e6) / 1e6, dir, rel.map((v) => Math.round(v * 1e6) / 1e6)]);
+          let shape = cacheGet(kBase), key = kBase;
+          if (!shape) {
+            const f = matchFace(src.shape, p.face);
+            if (!f) { errors.push({ itemId: it.id, code: 'edges', message: 'Aufdicken: Die gewählte Fläche gibt es nicht mehr.' }); continue; }
+            try {
+              const plate = thickenFaceShape(f, dist, dir, 'new');
+              if (isIdentity(rel)) shape = plate;
+              else { shape = applyMatrix(plate, rel); safeDelete(plate); }
+              cachePut(kBase, shape);
+            } catch (err) {
+              errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) });
+              continue;
+            }
+          }
+          if (it.finishes && it.finishes.length) {
+            const kFin = keyOf([key, 'fin', it.finishes]);
+            const hitF = cacheGet(kFin);
+            if (hitF) { shape = hitF; key = kFin; }
+            else {
+              const e0 = errors.length;
+              const sf = applyFinishes(shape, it.finishes, errors, it.id);
+              if (sf && sf !== shape) { cachePut(kFin, sf, errors.slice(e0).map((x) => ({ ...x, itemId: x.itemId === it.id ? '$self' : x.itemId }))); shape = sf; key = kFin; }
+            }
+          }
+          const wb = bboxTransform(bboxCached(key, shape), it.m);
+          const entry = { shape, key, wb, m: it.m, it };
+          live.set(it.id, entry);
+          bodies.set(it.id, entry);
+        } else {
+          consumed.set(it.id, tid);
+          const k = keyOf([src.key, 'thicken', mode, p.face, Math.round(dist * 1e6) / 1e6, dir]);
+          let next = cacheGet(k);
+          if (!next) {
+            const f = matchFace(src.shape, p.face);
+            if (!f) { errors.push({ itemId: it.id, code: 'edges', message: 'Aufdicken: Die gewählte Fläche gibt es nicht mehr.' }); continue; }
+            try {
+              const plate = thickenFaceShape(f, dist, dir, mode);
+              next = mode === 'cut' ? src.shape.cut(plate) : src.shape.fuse(plate);
+              safeDelete(plate);
+              cachePut(k, next);
+            } catch (err) {
+              errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) });
+              continue;
+            }
+          }
+          src.shape = next; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
+          bodies.set(tid, src);
         }
         continue;
       }
