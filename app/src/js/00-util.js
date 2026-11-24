@@ -1806,6 +1806,11 @@ const HELP = {
   "tip": "Unabhängige Körper gleichzeitig auf mehreren Rechen-Helfern berechnen",
   "hilfe": "Enthält dein Projekt mehrere unabhängige Körper, verteilt Tracery sie automatisch auf bis zu 4 eigene Rechen-Helfer (je nach Anzahl der Kerne deines Rechners), ohne etwas aus dem Netz nachzuladen. Bei Bedarf kannst du das hier in den Profi-Einstellungen abschalten.",
   "tipp": "Körper, die voneinander abhängen (z. B. durch Vereinigen, Abziehen oder „Bis zur Fläche“), werden automatisch zusammen auf demselben Helfer gerechnet."
+ },
+ "language": {
+  "tip": "Sprache der Oberfläche zwischen Deutsch und Englisch umschalten",
+  "hilfe": "Stellt die Sprache von Menüs, Werkzeugen, Panels und Meldungen sofort um. Standardmäßig nutzt Tracery die Sprache deines Browsers (Englisch oder Deutsch, sonst Deutsch). Fehlt eine Übersetzung, erscheint automatisch der deutsche Text.",
+  "tipp": "Du kannst jederzeit zwischen „Wie der Browser“, „Deutsch“ und „English“ wechseln – die Einstellung wird in deinem Browser gespeichert."
  }
 };
 

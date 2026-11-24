@@ -293,6 +293,7 @@ const Commands = (() => {
     add('fit', 'Alles zeigen', 'fit', 'zoom ansicht einpassen', () => Viewer.fit(), { group: 'Ansicht', kbd: 'F' });
     add('toolbar-customize', 'Werkzeugleiste anpassen', 'sliders', 'werkzeugleiste leiste anpassen favoriten stern sortieren zurücksetzen', () => Toolbar.dialog(), { group: 'Ansicht' });
     add('settings-precision', 'Genauigkeit & Nachkommastellen einstellen', 'sliders', 'genauigkeit nachkommastellen dezimalstellen winkel rundung anzeige', () => ViewPrefs.dialog('general'), { group: 'Ansicht' });
+    add('settings-language', 'Sprache ändern (Deutsch / English)', 'sliders', 'sprache language english deutsch uebersetzung translation einstellungen', () => ViewPrefs.dialog('general', { focus: 'set-lang' }), { group: 'Ansicht' });
     for (const [v, l] of [['front', 'Vorne'], ['top', 'Oben'], ['right', 'Rechts'], ['left', 'Links'], ['back', 'Hinten'], ['iso', 'Schräg']]) add('view-' + v, 'Ansicht ' + l, 'eye', 'ansicht kamera blick ' + l, () => Viewer.setView(v), { group: 'Ansicht' });
     add('new', 'Neues Projekt', 'newfile', 'neu leer vorlage vorlagen zoll 3d-druck laser gehäuse anfangen', () => Start.newProjectDialog(), { group: 'Projekt' });
     add('save-template', 'Als Vorlage speichern', 'save', 'vorlage speichern eigene vorlage template', () => Start.saveAsTemplate(), { group: 'Projekt' });

@@ -22,8 +22,8 @@ def report(name, ok, note=''):
 
 
 class Page:
-    def __init__(self, browser, clear=True):
-        self.ctx = browser.new_context(viewport={'width': 1400, 'height': 850}, accept_downloads=True)
+    def __init__(self, browser, clear=True, locale='de-DE'):
+        self.ctx = browser.new_context(viewport={'width': 1400, 'height': 850}, accept_downloads=True, locale=locale)
         self.pg = self.ctx.new_page()
         self.errs = []
         self.pg.on('pageerror', lambda e: self.errs.append(str(e)))
@@ -16453,6 +16453,162 @@ def t_a078_mehrere_rechenhelfer(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a081_englische_oberflaeche(p):
+    # 1. texte-de.json & texte-en.json (Dateien + eingebettete Packs) haben exakt dieselben Schlüssel & Platzhalter
+    parity = p.pg.evaluate("""async () => {
+      const [de, en] = await Promise.all([
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const { I18n } = window.__M;
+      const checkPair = (a, b) => {
+        const ka = Object.keys(a), kb = Object.keys(b);
+        const sa = new Set(ka), sb = new Set(kb);
+        const missing = ka.filter(k => !sb.has(k));
+        const extra = kb.filter(k => !sa.has(k));
+        const empty = kb.filter(k => typeof b[k] !== 'string' || !b[k].trim());
+        const phMismatch = [];
+        for (const k of ka) {
+          if (!sb.has(k)) continue;
+          const pa = [...String(a[k]).matchAll(/\\{(\\w+)\\}/g)].map(m => m[1]).sort().join(',');
+          const pb = [...String(b[k]).matchAll(/\\{(\\w+)\\}/g)].map(m => m[1]).sort().join(',');
+          if (pa !== pb) phMismatch.push(k);
+        }
+        return { countA: ka.length, countB: kb.length, missing, extra, empty, phMismatch };
+      };
+      return {
+        files: checkPair(de, en),
+        packs: checkPair(I18n.packs.de, I18n.packs.en),
+        sketchEn: en['tool.sketch'],
+      };
+    }""")
+    ok1 = (
+        parity['files']['countA'] > 2000
+        and parity['files']['countA'] == parity['files']['countB']
+        and not parity['files']['missing']
+        and not parity['files']['extra']
+        and not parity['files']['empty']
+        and not parity['files']['phMismatch']
+        and not parity['packs']['missing']
+        and not parity['packs']['extra']
+        and parity['sketchEn'] == 'Sketch'
+    )
+
+    # 2. Sprache in den Einstellungen auf Englisch umschalten → Knopf „Skizze“ heißt „Sketch“, bleibt beim Neuladen
+    p.empty()
+    de_sketch = p.pg.locator('#t-sketch').text_content()
+    p.ev("ViewPrefs.dialog();")
+    p.wait(250)
+    init_sel = p.pg.locator('#set-lang').input_value()
+    p.pg.select_option('#set-lang', 'en')
+    p.wait(300)
+    en_ui = p.ev("""return {
+      lang: I18n.lang,
+      docLang: document.documentElement.lang,
+      sketch: document.querySelector('#t-sketch')?.textContent,
+      model: document.querySelector('#tab-model')?.textContent,
+      drawing: document.querySelector('#tab-drawing')?.textContent,
+      dlgTitle: document.querySelector('.modal h2')?.textContent,
+    };""")
+    p.pg.keyboard.press('Escape')
+    p.wait(200)
+    p.pg.reload()
+    p.wait(2500)
+    after_reload = p.ev("return { lang: I18n.lang, sketch: document.querySelector('#t-sketch')?.textContent, pref: ViewPrefs.lang };")
+    ok2 = (
+        de_sketch == 'Skizze'
+        and init_sel == 'auto'
+        and en_ui['lang'] == 'en'
+        and en_ui['docLang'] == 'en'
+        and en_ui['sketch'] == 'Sketch'
+        and en_ui['model'] == 'Model'
+        and en_ui['drawing'] == 'Drawing'
+        and en_ui['dlgTitle'] == 'Settings'
+        and after_reload['lang'] == 'en'
+        and after_reload['sketch'] == 'Sketch'
+        and after_reload['pref'] == 'en'
+    )
+
+    # 3. Fallback auf Deutsch, wenn ein Schlüssel im Englischen fehlt
+    fb = p.ev("""
+      const savedParts = I18n.packs.en['tool.parts'];
+      const savedEdges = I18n.packs.en['ctx.edgesCount'];
+      delete I18n.packs.en['tool.parts'];
+      delete I18n.packs.en['ctx.edgesCount'];
+      const r1 = T('tool.parts');
+      const r2 = T('ctx.edgesCount', { n: 3 });
+      const r3 = T('unbekannt.a081');
+      I18n.packs.en['tool.parts'] = savedParts;
+      I18n.packs.en['ctx.edgesCount'] = savedEdges;
+      return { r1, r2, r3 };
+    """)
+    ok3 = fb['r1'] == 'Bauteile' and fb['r2'] == '3 Kanten' and fb['r3'] == 'unbekannt.a081'
+
+    # 4. Standard: Browser-Sprache (en-US → Englisch, fr-FR → Deutsch als Ersatz)
+    auto_en = auto_fr = None
+    c_en = c_fr = None
+    try:
+        br = p.ctx.browser
+        c_en = br.new_context(viewport={'width': 1400, 'height': 850}, locale='en-US')
+        pg_en = c_en.new_page()
+        pg_en.add_init_script("try{localStorage.clear();}catch(e){}")
+        pg_en.goto(URL)
+        pg_en.wait_for_timeout(2500)
+        auto_en = pg_en.evaluate("""() => ({
+          lang: window.__M.I18n.lang,
+          docLang: document.documentElement.lang,
+          sketch: document.querySelector('#t-sketch')?.textContent,
+          startEmpty: document.querySelector('.start .card.new b')?.textContent,
+        })""")
+
+        c_fr = br.new_context(viewport={'width': 1400, 'height': 850}, locale='fr-FR')
+        pg_fr = c_fr.new_page()
+        pg_fr.add_init_script("try{localStorage.clear();}catch(e){}")
+        pg_fr.goto(URL)
+        pg_fr.wait_for_timeout(2500)
+        auto_fr = pg_fr.evaluate("""() => ({
+          lang: window.__M.I18n.lang,
+          docLang: document.documentElement.lang,
+          sketch: document.querySelector('#t-sketch')?.textContent,
+          startEmpty: document.querySelector('.start .card.new b')?.textContent,
+        })""")
+    finally:
+        if c_en:
+            c_en.close()
+        if c_fr:
+            c_fr.close()
+    ok4 = (
+        auto_en is not None and auto_fr is not None
+        and auto_en['lang'] == 'en' and auto_en['docLang'] == 'en'
+        and auto_en['sketch'] == 'Sketch' and auto_en['startEmpty'] == 'Empty Project'
+        and auto_fr['lang'] == 'de' and auto_fr['docLang'] == 'de'
+        and auto_fr['sketch'] == 'Skizze' and auto_fr['startEmpty'] == 'Leeres Projekt'
+    )
+
+    # 5. Zurück auf Deutsch in den Einstellungen + Hilfetext & Befehlssuche
+    p.ev("Start.hide(); ViewPrefs.dialog();")
+    p.wait(250)
+    has_help_attr = p.pg.locator('[data-help="language"]').count() == 1
+    p.pg.select_option('#set-lang', 'de')
+    p.wait(300)
+    p.pg.locator('#set-lang').hover()
+    p.wait(550)
+    tip_text = p.pg.locator('.tooltip').text_content() if p.pg.locator('.tooltip').count() else ''
+    back_de = p.ev("return { lang: I18n.lang, sketch: document.querySelector('#t-sketch')?.textContent, cmdOk: Commands.search('language').some(c => c.id === 'settings-language') };")
+    p.pg.keyboard.press('Escape')
+    p.wait(200)
+    help_json = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(d => !!(d.language && d.language.tip && d.language.hilfe && d.language.tipp))")
+    ok5 = (
+        has_help_attr
+        and 'Deutsch und Englisch' in tip_text
+        and back_de['lang'] == 'de'
+        and back_de['sketch'] == 'Skizze'
+        and back_de['cmdOk']
+        and help_json
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -16637,6 +16793,7 @@ TESTS = [
     ('[A-078] Mehrere Rechen-Helfer: 4 unabhängige Körper mit Bohrungsmustern verteilt & ergebnisgleich, Einstellung (Profi), kein Nachladen', t_a078_mehrere_rechenhelfer),
     ('[A-077] Große Modelle: nur neu rechnen, was sich geändert hat (Fingerabdruck & Kern-Zähler)', t_a077_nur_geandertes_rechnen),
     ('[F-11241334] Volltest-Reparatur: Veraltete mergedInto-Bezüge beim Löschen ohne Seitenfehler in Verlauf & Eigenschaften', t_f11241334),
+    ('[A-081] Englische Oberfläche: texte-en.json Schlüsselgleichheit / Einstellungen / Sketch / Fallback / Browser-Sprache', t_a081_englische_oberflaeche),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

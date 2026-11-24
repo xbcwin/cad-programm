@@ -2082,6 +2082,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Einstellung (Profi), Abhängigkeiten & Hilfe**: Das Häkchen `#set-multiWorker` ist nur in „Profi“ sichtbar (in „Einfach“ ausgeblendet); abhängige Körper (`op.target`) bleiben auf demselben Helfer und der Hilfetext `multiWorker` ist vorhanden.
 - [ ] **Von Hand**: Im Browser auf einem Mehrkern-Rechner eine große Baugruppe mit mehreren unabhängigen Körpern öffnen, in den Profi-Einstellungen „Mehrere Rechen-Helfer nutzen“ aus- und einschalten und im Task-Manager / Entwicklerwerkzeug die parallele Auslastung der Worker beobachten.
 
+## Englische Oberfläche (Auto [A-081], BE-16)
+
+- [x] **Schlüsselgleichheit `texte-en.json` ↔ `texte-de.json`**: Alle Schlüssel und `{Platzhalter}` stimmen in Dateien und eingebetteten Sprachpaketen überein; jeder Eintrag ist gefüllt und `"tool.sketch"` ist `"Sketch"`.
+- [x] **Sprach-Umschalter in den Einstellungen**: Umschalten auf `English` (`#set-lang`) ändert die Oberfläche sofort (Knopf „Skizze“ heißt „Sketch“, „Modell“/„Zeichnung“ werden „Model“/„Drawing“, `html[lang="en"]`), bleibt beim Neuladen erhalten und schaltet sauber auf `Deutsch` zurück.
+- [x] **Fallback & Browser-Sprache**: Fehlende Schlüssel in `I18n.packs.en` fallen automatisch auf den deutschen Text zurück; ohne gesetzte Einstellung startet ein englischer Browser (`en-US`) auf Englisch und ein nicht unterstützter Browser (`fr-FR`) auf Deutsch.
+- [ ] **Von Hand**: Im Browser in den Einstellungen zwischen „Wie der Browser“, „Deutsch“ und „English“ umschalten und stichprobenartig Skizze, Zeichnung, Export-Dialog und Tooltips auf verständliche englische Texte prüfen.
+
 ## Fehler melden
 
 ```

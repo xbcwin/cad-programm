@@ -2300,5 +2300,13 @@
   "draw.panel.balloonTipDot": "Punkt (Fläche)",
   "draw.panel.balloonTipArrow": "Pfeil (Kante)",
   "draw.panel.bomPositions": "Positionen",
-  "draw.panel.bomPosReset": "Lage zurücksetzen"
+  "draw.panel.bomPosReset": "Lage zurücksetzen",
+  "dlg.settings.langLabel": "Sprache",
+  "dlg.settings.langAuto": "Wie der Browser ({lang})",
+  "dlg.settings.langDe": "Deutsch",
+  "dlg.settings.langEn": "English",
+  "dlg.settings.langHint": "Wechselt sofort die Sprache der Oberfläche. Fehlt eine Übersetzung, erscheint Deutsch.",
+  "dlg.settings.langToastDe": "Sprache: Deutsch",
+  "dlg.settings.langToastEn": "Sprache: English",
+  "dlg.settings.langToastAuto": "Sprache: automatisch ({lang})"
 }
