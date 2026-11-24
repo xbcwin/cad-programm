@@ -1701,6 +1701,11 @@ const HELP = {
   "tip": "Blattformat A4 bis A0 im Hoch- oder Querformat wählen",
   "hilfe": "Du kannst jedes Blatt einzeln auf DIN A4, A3, A2, A1 oder A0 sowie zwischen Quer- und Hochformat umstellen. Rahmen (20 mm Heftrand links, 10 bzw. 20 mm Außenrand) und das Schriftfeld passen sich der gewählten Blattgröße automatisch an.",
   "tipp": "Größere Formate wie A2, A1 oder A0 eignen sich besonders für Baugruppen oder große Werkstücke im Maßstab 1:1."
+ },
+ "drawingSection": {
+  "tip": "Schnittlinie A–A durch eine Ansicht ziehen – Schnittansicht mit Schraffur erzeugen",
+  "hilfe": "Klicke „Schnittansicht“ (Taste S) und ziehe mit gedrückter Maus oder zwei Klicks eine Schnittlinie quer durch eine Ansicht. Tracery schneidet das 3D-Modell an dieser Ebene, legt eine Schnittansicht („Schnitt A–A“) an und füllt alle geschnittenen Flächen mit normgerechter 45°-Schraffur.",
+  "tipp": "Löcher und Hohlräume bleiben un-schraffiert. Rechts im Panel kannst du die Blickrichtung der Pfeile umkehren oder weitere Schnitte (B–B, C–C …) hinzufügen."
  }
 };
 

@@ -12563,6 +12563,219 @@ def t_a062_zeichnung_blaetter(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a063_schnittansicht(p):
+    p.empty()
+    p.ev("""
+      App.change('Quader mit Bohrung', d => {
+        d.items.push(Model.newItem('box', { w: 40, d: 30, h: 20 }, { name: 'Block' }));
+        d.items.push(Model.newItem('cylinder', { d: 10, h: 24 }, { name: 'Bohrung', role: 'hole', t: { x: 0, y: 0, z: -2, rx: 0, ry: 0, rz: 0 } }));
+      });
+    """)
+    warte_rechnen(p)
+
+    # 1. In Zeichnung wechseln, Schnittlinie A–A durch Bohrungsmitte in der Draufsicht ziehen
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.wait(300)
+    p.ev("return Drawing.waitReady()")
+
+    drag_pts = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const v = Drawing.layout.views.top;
+      const toScreen = (u, vv) => {
+        const pt = svg.createSVGPoint();
+        pt.x = v.ox + u * v.s;
+        pt.y = v.oy - vv * v.s;
+        const q = pt.matrixTransform(svg.getScreenCTM());
+        return [q.x, q.y];
+      };
+      return [toScreen(-24, 0), toScreen(24, 0)];
+    """)
+    p.pg.click('#t-section'); p.wait(150)
+    p.pg.mouse.move(drag_pts[0][0], drag_pts[0][1])
+    p.pg.mouse.down()
+    p.pg.mouse.move(drag_pts[1][0], drag_pts[1][1], steps=8)
+    p.pg.mouse.up()
+    p.wait(200)
+    p.ev("return Drawing.waitReady()")
+    p.wait(150)
+
+    s1 = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const secs = Drawing.sections();
+      const sec = secs[0];
+      const v = sec ? Drawing.layout.views['sec_' + sec.id] : null;
+      const hatches = sec ? [...svg.querySelectorAll(`polyline.hatch[data-sec="${sec.id}"]`)].map(el => {
+        const pts = el.getAttribute('points').trim().split(/\\s+/).map(s => s.split(',').map(Number));
+        const ux0 = (pts[0][0] - v.ox) / v.s, ux1 = (pts[1][0] - v.ox) / v.s;
+        return {
+          cap: Number(el.dataset.cap),
+          sx0: pts[0][0], sy0: pts[0][1], sx1: pts[1][0], sy1: pts[1][1],
+          uMin: Math.min(ux0, ux1), uMax: Math.max(ux0, ux1),
+        };
+      }) : [];
+      const cap0 = hatches.filter(h => h.cap === 0);
+      const cap1 = hatches.filter(h => h.cap === 1);
+      const range = (arr) => arr.length ? [Math.min(...arr.map(h => h.uMin)), Math.max(...arr.map(h => h.uMax))] : null;
+      const r0 = range(cap0), r1 = range(cap1);
+      let gap = null;
+      if (r0 && r1) {
+        const pair = r0[0] < r1[0] ? [r0, r1] : [r1, r0];
+        gap = pair[1][0] - pair[0][1];
+      }
+      const crossesHole = hatches.some(h => h.uMin < 0 && h.uMax > 0);
+      const angleOk = hatches.length >= 6 && hatches.every(h => {
+        const dx = h.sx1 - h.sx0, dy = h.sy1 - h.sy0;
+        const L = Math.hypot(dx, dy);
+        return L > 0.1 && Math.abs(Math.abs(dx) - Math.abs(dy)) / L < 0.02 && (dx * dy) < 0;
+      });
+      return {
+        n: secs.length,
+        label: sec?.label,
+        parent: sec?.parent,
+        hasView: !!v,
+        capsCount: v?.geo?.caps?.length || 0,
+        cap0Count: cap0.length,
+        cap1Count: cap1.length,
+        gap,
+        crossesHole,
+        angleOk,
+        cutlines: svg.querySelectorAll('polyline.cutline').length,
+        cutends: svg.querySelectorAll('polyline.cutend').length,
+        arrows: svg.querySelectorAll('polygon.arrow[data-sec]').length,
+        cutlabels: [...svg.querySelectorAll('text.cutlabel')].map(el => el.textContent),
+        txt: svg.textContent || '',
+      };
+    """)
+    ok1 = (
+        s1['n'] == 1 and s1['label'] == 'A' and s1['parent'] == 'top'
+        and s1['hasView'] and s1['capsCount'] == 2
+        and s1['cap0Count'] >= 2 and s1['cap1Count'] >= 2
+        and s1['gap'] is not None and abs(s1['gap'] - 10.0) < 0.35
+        and not s1['crossesHole']
+        and s1['angleOk']
+        and s1['cutlines'] == 1 and s1['cutends'] == 2 and s1['arrows'] == 2
+        and s1['cutlabels'] == ['A', 'A']
+        and 'Schnitt A–A' in s1['txt']
+    )
+
+    # 2. Schraffurabstand ändert sich nach Maßstab (2:1 vs. 1:2)
+    def measure_spacing(scale_val):
+        p.pg.click('#t-sheet'); p.wait(150)
+        p.pg.select_option('#dw-scale', str(scale_val))
+        p.pg.click('#sheet-tabs'); p.wait(250)
+        p.ev("return Drawing.waitReady()")
+        return p.ev("""
+          const svg = document.querySelector('#sheet .sheet-holder svg');
+          const sec = Drawing.sections()[0];
+          const v = Drawing.layout.views['sec_' + sec.id];
+          const expected = Drawing.hatchStepSheet(v.s, v.geo);
+          const bs = [...svg.querySelectorAll(`polyline.hatch[data-sec="${sec.id}"][data-cap="0"]`)].map(el => {
+            const pts = el.getAttribute('points').trim().split(/\\s+/).map(s => s.split(',').map(Number));
+            const mx = (pts[0][0] + pts[1][0]) * 0.5, my = (pts[0][1] + pts[1][1]) * 0.5;
+            return (mx + my) * Math.SQRT1_2;
+          }).sort((a, b) => a - b);
+          const diffs = [];
+          for (let i = 1; i < bs.length; i++) if (bs[i] - bs[i - 1] > 0.1) diffs.push(bs[i] - bs[i - 1]);
+          return { expected, measured: diffs[0] || 0, count: bs.length };
+        """)
+
+    sp_big = measure_spacing('2')
+    sp_small = measure_spacing('0.5')
+    p.pg.click('#t-sheet'); p.wait(150)
+    p.pg.select_option('#dw-scale', 'auto')
+    p.pg.click('#sheet-tabs'); p.wait(250)
+    p.ev("return Drawing.waitReady()")
+
+    ok2 = (
+        sp_big['count'] >= 2 and sp_small['count'] >= 2
+        and sp_big['expected'] > sp_small['expected']
+        and sp_big['measured'] > sp_small['measured']
+        and abs(sp_big['measured'] - sp_big['expected']) < 0.15
+        and abs(sp_small['measured'] - sp_small['expected']) < 0.15
+    )
+
+    # 3. Blickrichtung umkehren & zweiter Schnitt B–B senkrecht durch Vorderansicht
+    p.pg.locator('#right-body .sec-flip').first.click(); p.wait(200)
+    p.ev("return Drawing.waitReady()")
+    after_flip = p.ev("const s = Drawing.sections()[0], v = Drawing.layout.views['sec_' + s.id]; return { flip: s.flip, caps: v?.geo?.caps?.length || 0 };")
+
+    front_pts = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const v = Drawing.layout.views.front;
+      const toScreen = (u, vv) => {
+        const pt = svg.createSVGPoint();
+        pt.x = v.ox + u * v.s;
+        pt.y = v.oy - vv * v.s;
+        const q = pt.matrixTransform(svg.getScreenCTM());
+        return [q.x, q.y];
+      };
+      return [toScreen(0, -2), toScreen(0, 22)];
+    """)
+    p.pg.click('#t-section'); p.wait(150)
+    p.pg.mouse.move(front_pts[0][0], front_pts[0][1])
+    p.pg.mouse.down()
+    p.pg.mouse.move(front_pts[1][0], front_pts[1][1], steps=8)
+    p.pg.mouse.up()
+    p.wait(200)
+    p.ev("return Drawing.waitReady()")
+
+    sec2 = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const secs = Drawing.sections();
+      const sb = secs[1];
+      const vb = sb ? Drawing.layout.views['sec_' + sb.id] : null;
+      return {
+        n: secs.length,
+        labels: secs.map(x => x.label),
+        capsB: vb?.geo?.caps?.length || 0,
+        txt: svg.textContent || '',
+      };
+    """)
+    ok3 = (
+        after_flip['flip'] is True and after_flip['caps'] == 2
+        and sec2['n'] == 2 and sec2['labels'] == ['A', 'B']
+        and sec2['capsB'] == 2
+        and 'Schnitt B–B' in sec2['txt']
+    )
+
+    # 4. PDF-Export, Löschen/Rückgängig/Wiederholen, Speichern/Laden, Suche & Hilfetext
+    pdf_ok = p.ev("""
+      return Drawing.buildPDFBytes().then(bytes => {
+        const str = new TextDecoder('latin1').decode(bytes);
+        return str.startsWith('%PDF-1.4') && str.includes('Schnitt A-A') && str.includes('Schnitt B-B');
+      });
+    """)
+    p.pg.locator('#right-body .sec-del').nth(1).click(); p.wait(200)
+    n_del = p.ev("return Drawing.sections().length")
+    p.ev("App.undo()"); p.wait(250); p.ev("return Drawing.waitReady()")
+    n_undo = p.ev("return Drawing.sections().length")
+    p.ev("App.redo()"); p.wait(250)
+    n_redo = p.ev("return Drawing.sections().length")
+    p.ev("App.undo()"); p.wait(250); p.ev("return Drawing.waitReady()")
+
+    saved = p.ev("return JSON.stringify(App.doc)")
+    p.ev("App.setDoc(JSON.parse(arg), {fit:false})", saved); warte_rechnen(p); p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    after_reload = p.ev("const svg = document.querySelector('#sheet .sheet-holder svg'); return { n: Drawing.sections().length, hatches: svg.querySelectorAll('polyline.hatch').length, txt: svg.textContent || '' };")
+
+    cmd_help_ok = p.ev("""
+      return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(hj => {
+        const h = hj['drawingSection'];
+        const tSec = document.querySelector('#t-section');
+        const pSec = document.querySelector('#dw-add-section');
+        return !!(h && h.tip && h.hilfe && h.tipp && tSec && tSec.dataset.help === 'drawingSection' && pSec && pSec.dataset.help === 'drawingSection' && Commands.search('schnittansicht').length >= 1);
+      });
+    """)
+    ok4 = (
+        pdf_ok and n_del == 1 and n_undo == 2 and n_redo == 1
+        and after_reload['n'] == 2 and after_reload['hatches'] >= 8
+        and 'Schnitt A–A' in after_reload['txt'] and 'Schnitt B–B' in after_reload['txt']
+        and cmd_help_ok
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 def t_a073_pycache(p):
     import subprocess
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -12738,6 +12951,7 @@ TESTS = [
     ('[A-059] 3D-Druck: Drucker-Liste, Bauraum-Warnung mit Drehvorschlag & Loch-Ausgleich im STL/3MF', t_a059_drucker_loch_ausgleich),
     ('[A-058] Eigene Teile in die Bibliothek: mit Maß „Breite“ speichern / Vorschaubild / in neuem Projekt einsetzen / Breite ändern passt Körper an / zweite Kopie & Neuladen & Löschen & Hilfe', t_a058_eigene_bibliothek),
     ('[A-062] Zeichnung: mehrere Blätter, A4 bis A0 & PDF-Export', t_a062_zeichnung_blaetter),
+    ('[A-063] Zeichnung: Schnittansicht (A–A) mit Schraffur, Pfeilen & Bohrungs-Lücke', t_a063_schnittansicht),
     ('[A-073] Python-Cache: .gitignore enthält __pycache__/ & *.pyc / keine .pyc in git ls-files tests', t_a073_pycache),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),

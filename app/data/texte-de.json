@@ -106,6 +106,8 @@
   "tool.exportTip": "Als STEP, STL, 3MF, OBJ, GLB oder DXF speichern (ZIP)",
   "tool.sheet": "Blatt",
   "tool.sheetTip": "Blattgröße, Maßstab und Ansichten",
+  "tool.dsection": "Schnittansicht",
+  "tool.dsectionTip": "Schnittlinie A–A durch eine Ansicht ziehen – erzeugt eine Schnittansicht mit Schraffur",
   "tool.dim": "Maß",
   "tool.dimTip": "Bemaßung hinzufügen: zwei Punkte oder einen Kreis anklicken",
   "tool.autodim": "Automatisch bemaßen",
