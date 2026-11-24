@@ -1617,6 +1617,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Verbundene Nachführung mit Versatz**: Nach dem Hochziehen und Verbreitern des Quaders auf 50 mm wächst die mit +2 mm Versatz übernommene Kontur automatisch auf 54×34 mit (Loch bleibt Ø6).
 - [ ] **Von Hand**: Bei gedrückter Umschalt-Taste die Flächen-Hervorhebung vor dem Klick sowie die Übernahme einer komplexeren ebenen Fläche mit mehreren Bögen und Langlöchern bei positivem und negativem Versatz prüfen.
 
+## Weitere Bezugsebenen (Auto [A-027])
+
+- [x] **Tangential an Zylinder und Kegel (BZ-03)**: Tangentiale Bezugsebene berührt den Zylindermantel (Abstand Achse–Ebene = Radius, Punkt auf Ebene) sowie den Kegelmantel samt Spitze und Neigung; nach Durchmesser-/Lageänderung wandert sie exakt mit und lässt sich über `#datum-angle` um die Achse drehen.
+- [x] **Senkrecht zu Kante oder Kurve (BZ-04)**: Senkrechte Ebene an einer Quaderkante (Mitte, Anfang, Ende, Prozentwert `#datum-pos-mode` / `#datum-percent`) und an einer Kreiskante; Normale liegt entlang der Kante/Tangente, wandert bei Größenänderung mit und erlaubt direktes Skizzieren und Hochziehen.
+- [x] **Durch Kante und Punkt / durch zwei Kanten (BZ-05)**: Ebene durch Kante + Punkt und durch zwei parallele oder sich schneidende Kanten enthält alle Bezüge, folgt Höhenänderungen und weist kollineare Punkte sowie windschiefe Kanten ab.
+- [x] **Dialog, Abhängigkeiten, Fehlerzustand & Hilfetexte**: Alle vier Knöpfe im Bezugsebenen-Dialog (`#dp-tangent`, `#dp-normal-curve`, `#dp-edge-point`, `#dp-two-edges`), `Model.dependencies`, Anzeige „Bezug fehlt“ samt Rückgängig, Befehle und Hilfetexte (`datumTangent`, `datumNormalCurve`, `datumEdgePoint`, `datumTwoEdges`) geprüft.
+- [ ] **Von Hand**: Interaktives Anklicken im 3D-Bild für alle vier Arten (Kontextleiste „Ebene tangential“ / „Ebene senkrecht“ / „Ebene durch 2 Kanten“ sowie Punkt-Einrasten bei „Durch Kante & Punkt“).
+
 ## Fehler melden
 
 ```

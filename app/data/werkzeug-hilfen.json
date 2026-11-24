@@ -778,5 +778,25 @@
     "tip": "Fehlende Regeln und Maße automatisch vorschlagen",
     "hilfe": "Prüft deine Skizze und schlägt fehlende Regeln vor: Waagerecht oder Senkrecht bei Linien unter 2° Abweichung, Deckungsgleich bei Punkten unter 0,05 mm Abstand, dazu fehlende Maße für Längen, Durchmesser, Radien und die Lage zum Ursprung. Alle Vorschläge erscheinen zuerst gestrichelt im Bild – „Übernehmen“ legt alles in einem einzigen Rückgängig-Schritt an, „Abbrechen“ verwirft sie.",
     "tipp": "Danach ist die Skizze voll bestimmt (alle Linien dunkel) und kann nicht mehr aus Versehen verrutschen."
+  },
+  "datumTangent": {
+    "tip": "Bezugsebene tangential an Zylinder oder Kegel anlegen",
+    "hilfe": "Klick auf die runde Fläche eines Zylinders oder Kegels. Die neue Ebene berührt die Fläche genau an dieser Stelle und folgt der Rundung, wenn sich der Durchmesser oder die Lage ändert.",
+    "tipp": "Rechts im Feld „Winkel um Achse“ drehst du die Ebene jederzeit rund um das Teil – praktisch für seitliche Bohrungen oder Aufsätze auf Rohren."
+  },
+  "datumNormalCurve": {
+    "tip": "Bezugsebene senkrecht zu einer Kante oder Kurve",
+    "hilfe": "Wählt eine gerade Kante, einen Bogen, Kreis oder eine Kurve. Die Ebene steht senkrecht auf der Kante – am Anfang, in der Mitte, am Ende oder an jedem Prozentwert dazwischen.",
+    "tipp": "Ideal, um ein Profil genau am Ende oder auf halbem Weg einer Kante aufzubauen; wächst die Kante, wandert die Ebene mit."
+  },
+  "datumEdgePoint": {
+    "tip": "Bezugsebene durch eine gerade Kante und einen Punkt",
+    "hilfe": "Klick zuerst eine gerade Körperkante und dann einen Punkt (Ecken und Kantenmitten rasten ein). Die Ebene spannt sich genau zwischen beiden auf und wandert mit dem Körper mit.",
+    "tipp": "Damit legst du schräge Schnitte oder Skizzenebenen diagonal durch ein Bauteil."
+  },
+  "datumTwoEdges": {
+    "tip": "Bezugsebene durch zwei gerade Kanten",
+    "hilfe": "Wählt zwei gerade Kanten, die parallel sind oder sich schneiden. Die Ebene läuft durch beide Kanten und passt sich an, sobald sich die Maße des Körpers ändern.",
+    "tipp": "Windschiefe Kanten (die aneinander vorbeilaufen) liegen nicht in einer Ebene – nutze dort lieber „Durch Kante & Punkt“."
   }
 }

@@ -1318,10 +1318,43 @@ export function createKernel(R, oc) {
         info.axis = [l.X(), l.Y(), l.Z(), d.X(), d.Y(), d.Z()]; info.r = cy.Radius();
         ad.delete();
       } else if (type === 'CONE') {
-        const ad = new oc.BRepAdaptor_Surface(face.wrapped, false);
-        const co = ad.Cone(); const ax = co.Axis(); const l = ax.Location(), d = ax.Direction();
-        info.axis = [l.X(), l.Y(), l.Z(), d.X(), d.Y(), d.Z()];
-        ad.delete();
+        const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+        const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+        const crs = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+        const pt = (u, v) => { const p = face.pointOnSurface(u, v); return [p.x, p.y, p.z]; };
+        const tri = (v, swap) => {
+          const A = swap ? pt(v, 0.15) : pt(0.15, v);
+          const B = swap ? pt(v, 0.45) : pt(0.45, v);
+          const C = swap ? pt(v, 0.75) : pt(0.75, v);
+          const a = sub(B, A), b = sub(C, A), n = crs(a, b), n2 = dot(n, n);
+          return { A, a, b, n, n2, v, swap };
+        };
+        let best = tri(0.25, false);
+        const alt = tri(0.75, false);
+        if (alt.n2 > best.n2) best = alt;
+        if (best.n2 < 1e-10) {
+          const s1 = tri(0.25, true), s2 = tri(0.75, true);
+          best = s2.n2 > s1.n2 ? s2 : s1;
+        }
+        if (best.n2 >= 1e-10) {
+          const { A, a, b, n, n2, v, swap } = best;
+          const a2 = dot(a, a), b2 = dot(b, b), bn = crs(b, n), na = crs(n, a);
+          const x = [0, 1, 2].map((k) => (a2 * bn[k] + b2 * na[k]) / (2 * n2));
+          const O1 = [A[0] + x[0], A[1] + x[1], A[2] + x[2]];
+          const R1 = Math.hypot(x[0], x[1], x[2]);
+          const nl = Math.sqrt(n2);
+          const D = [n[0] / nl, n[1] / nl, n[2] / nl];
+          const v2 = v === 0.25 ? 0.75 : 0.25;
+          const Q = swap ? pt(v2, 0.45) : pt(0.45, v2);
+          const vq = sub(Q, O1), z2 = dot(vq, D);
+          const R2 = Math.hypot(vq[0] - z2 * D[0], vq[1] - z2 * D[1], vq[2] - z2 * D[2]);
+          info.axis = [O1[0], O1[1], O1[2], D[0], D[1], D[2]];
+          if (Math.abs(z2) > 1e-7) {
+            const slope = (R2 - R1) / z2;
+            info.coneR = R1;
+            info.semiAngle = Math.atan(slope);
+          }
+        }
       } else if (type === 'TORUS') {
         const ad = new oc.BRepAdaptor_Surface(face.wrapped, false);
         const to = ad.Torus(); const ax = to.Axis(); const l = ax.Location(), d = ax.Direction();

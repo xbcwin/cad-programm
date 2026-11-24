@@ -1120,9 +1120,16 @@ const Panels = (() => {
       b('similar', T('ctx.similar'), () => Select.similar(), '', T('ctx.similarEdgesTip'), true);
       b('chainEdges', T('ctx.chain'), () => Select.chain(), '', T('ctx.chainTip'), true);
       b('similar', T('ctx.byKind'), (e) => edgeRuleMenu(App.edges[0].id, e.currentTarget), '', T('ctx.byKindTip'), true);
-      if (App.edges.length === 1 && one && one.t === 'LINE') {
-        const eb = b('originPlanes', T('ctx.planeAngle'), () => Datums.startEdgeAnglePick(30, App.edges[0]), 'pro', T('ctx.planeAngleTip'));
-        eb.dataset.help = 'datumEdgeAngle';
+      if (App.edges.length === 1 && one) {
+        if (one.t === 'LINE') {
+          const eb = b('originPlanes', T('ctx.planeAngle'), () => Datums.startEdgeAnglePick(30, App.edges[0]), 'pro', T('ctx.planeAngleTip'));
+          eb.dataset.help = 'datumEdgeAngle';
+        }
+        const nb = b('originPlanes', T('ctx.planeNormal'), () => Datums.addNormalToCurve(App.edges[0], 'mid'), 'pro', T('ctx.planeNormalTip'));
+        nb.dataset.help = 'datumNormalCurve';
+      } else if (App.edges.length === 2 && eds.length === 2 && eds[0].t === 'LINE' && eds[1].t === 'LINE') {
+        const tb = b('originPlanes', T('ctx.planeTwoEdges'), () => Datums.addTwoEdges(App.edges[0], App.edges[1]), 'pro', T('ctx.planeTwoEdgesTip'));
+        tb.dataset.help = 'datumTwoEdges';
       }
       sep();
     } else if (face && items.length === 1 && face.info.t === 'PLANE') {
@@ -1147,6 +1154,10 @@ const Panels = (() => {
       if (face.info.t === 'CYLINDRE') {
         const ab = b('axes', T('ctx.axis'), () => Datums.addAxisFromFace(face), 'pro', T('ctx.axisTip'));
         ab.dataset.help = 'datumAxis';
+      }
+      if (face.info.t === 'CYLINDRE' || face.info.t === 'CONE') {
+        const tb = b('originPlanes', T('ctx.planeTangent'), () => Datums.startTangentPick(face), 'pro', T('ctx.planeTangentTip'));
+        tb.dataset.help = 'datumTangent';
       }
       b('fillet', T('ctx.faceEdges'), (e) => faceEdgeMenu(face, e.currentTarget), '', T('ctx.faceEdgesTip'), true);
       sep();
