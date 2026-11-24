@@ -71,7 +71,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,PointClouds,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Assembly,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,ClashCheck,Log,Notices,Kernel,Drawing,UI}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,PointClouds,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Assembly,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,ClashCheck,InnerRadius,SymmetryCheck,Log,Notices,Kernel,Drawing,UI}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -22184,6 +22184,326 @@ def t_a109_lizenz_fremde_bausteine(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a112_kruemmung_g2(p):
+    # 1. Nur Profi: in Einfach ausgeblendet, in Profi sichtbar
+    p.empty()
+    p.ev("ViewPrefs.set({ level: 'simple', firstStart: false }); Sketch.startOnPlane('XY')")
+    p.wait(1000)
+    vis_simple = not sichtbar(p, '#sk-curv-comb') and not sichtbar(p, '.consbar [data-tool="c:curvature"]')
+    p.ev("ViewPrefs.set({ level: 'pro', firstStart: false }); Sketch.refreshUI()")
+    p.wait(300)
+    vis_pro = sichtbar(p, '#sk-curv-comb') and sichtbar(p, '.consbar [data-tool="c:curvature"]')
+    ok1 = vis_simple and vis_pro
+    p.ev("Sketch.cancel(true); Start.show()")
+    p.wait(300)
+
+    # 2. Krümmungskamm an/aus und Maßstab: Kamm-Linien sichtbar, aus: weg
+    scene_cons(p, [
+        {'id': 'A1', 'type': 'arc', 'a': [0, 10], 'm': [7.071068, 7.071068], 'b': [10, 0]},
+        {'id': 'S1', 'type': 'spline', 'pts': [[10, 0], [12, -5], [8, -11], [0, -14]], 'closed': False},
+    ], [])
+    p.wait(300)
+    comb0 = p.ev("""
+      const S = Sketch.state;
+      const objs = Viewer.groups.sketch.children.filter(c => c.userData && c.userData.curvComb);
+      return { show: !!S.showCurv, cnt: S.curvCombCount, objs: objs.length };
+    """)
+    p.pg.check('#sk-curv-comb')
+    p.wait(250)
+    comb1 = p.ev("""
+      const S = Sketch.state;
+      const objs = Viewer.groups.sketch.children.filter(c => c.userData && c.userData.curvComb);
+      const teeth = objs.filter(c => c.userData.curvComb === 'teeth');
+      const envs = objs.filter(c => c.userData.curvComb === 'envelope');
+      const arcTooth = teeth.find(c => c.userData.entId === 'A1');
+      let len1 = 0;
+      if (arcTooth) {
+        const a = arcTooth.geometry.attributes.position.array;
+        len1 = Math.hypot(a[3] - a[0], a[4] - a[1], a[5] - a[2]);
+      }
+      return { show: !!S.showCurv, cnt: S.curvCombCount, objs: objs.length, teeth: teeth.length, envs: envs.length, allVis: objs.every(c => c.visible), len1 };
+    """)
+    p.pg.fill('#sk-curv-scale', '2')
+    p.pg.press('#sk-curv-scale', 'Enter')
+    p.wait(250)
+    comb_scaled = p.ev("""
+      const arcTooth = Viewer.groups.sketch.children.find(c => c.userData && c.userData.curvComb === 'teeth' && c.userData.entId === 'A1');
+      if (!arcTooth) return { scale: Sketch.state.curvScale, len2: 0 };
+      const a = arcTooth.geometry.attributes.position.array;
+      return { scale: Sketch.state.curvScale, len2: Math.hypot(a[3] - a[0], a[4] - a[1], a[5] - a[2]) };
+    """)
+    p.pg.uncheck('#sk-curv-comb')
+    p.wait(250)
+    comb_off = p.ev("""
+      const S = Sketch.state;
+      const objs = Viewer.groups.sketch.children.filter(c => c.userData && c.userData.curvComb);
+      return { show: !!S.showCurv, cnt: S.curvCombCount, objs: objs.length };
+    """)
+    ok2 = (
+        (not comb0['show']) and comb0['cnt'] == 0 and comb0['objs'] == 0
+        and comb1['show'] and comb1['cnt'] > 0 and comb1['teeth'] >= 2 and comb1['envs'] >= 2 and comb1['allVis'] and comb1['len1'] > 0.1
+        and abs(comb_scaled['scale'] - 2) < 1e-6 and abs(comb_scaled['len2'] / comb1['len1'] - 2) < 0.05
+        and (not comb_off['show']) and comb_off['cnt'] == 0 and comb_off['objs'] == 0
+    )
+    p.ev("Sketch.cancel(true); Start.show()")
+    p.wait(300)
+
+    # 3. Regel „Krümmungsglatt (G2)“ zwischen Spline und Bogen r=10 (über Klick auf die Regel-Leiste)
+    scene_cons(p, [
+        {'id': 'A1', 'type': 'arc', 'a': [0, 10], 'm': [7.071068, 7.071068], 'b': [10, 0]},
+        {'id': 'S1', 'type': 'spline', 'pts': [[12, -1], [12, -6], [12, -11], [0, -14]], 'closed': False},
+    ], [
+        {'id': 'k1', 'type': 'fix', 'refs': [{'e': 'A1', 'p': 'a'}], 'at': [0, 10]},
+        {'id': 'k2', 'type': 'fix', 'refs': [{'e': 'A1', 'p': 'b'}], 'at': [10, 0]},
+    ])
+    SS(p, "Sketch.setDimSpec({ e: 'A1', k: 'r' }, 10)")
+    p.wait(300)
+    pre_k = SS(p, "return Math.abs(Solver.curveEndState(E('S1'), 'a').k)")
+    p.pg.click('.consbar [data-tool="c:curvature"]')
+    p.wait(200)
+    sp_mid = to_screen(p, *SS(p, "const pts=SK.splinePoints(E('S1').pts,false); return pts[Math.floor(pts.length/2)];"))
+    arc_mid = to_screen(p, *SS(p, "return E('A1').m;"))
+    p.pg.mouse.click(sp_mid[0], sp_mid[1]); p.wait(250)
+    p.pg.mouse.click(arc_mid[0], arc_mid[1]); p.wait(400)
+    g2_10 = SS(p, """
+      const sp = E('S1'), arc = E('A1');
+      const sa = Solver.curveEndState(sp, 'a'), sb = Solver.curveEndState(arc, 'b');
+      const ai = SK.arcInfo(arc.a, arc.m, arc.b);
+      // Unabhängige Krümmungsprüfung direkt über SK.splineBez (t = 0)
+      const bz = SK.splineBez(sp.pts, false)[0];
+      const dx = 3 * (bz.c1[0] - bz.a[0]), dy = 3 * (bz.c1[1] - bz.a[1]);
+      const ddx = 6 * (bz.c2[0] - 2 * bz.c1[0] + bz.a[0]), ddy = 6 * (bz.c2[1] - 2 * bz.c1[1] + bz.a[1]);
+      const kBez = Math.abs(dx * ddy - dy * ddx) / Math.pow(dx * dx + dy * dy, 1.5);
+      const kArc = 1 / ai.r;
+      const g0 = SK.d2(sa.p, sb.p);
+      const dotT = -(sa.t[0] * sb.t[0] + sa.t[1] * sb.t[1]);
+      const nA = Math.hypot(...sa.K), nB = Math.hypot(...sb.K);
+      const dotK = (sa.K[0] * sb.K[0] + sa.K[1] * sb.K[1]) / (nA * nB || 1);
+      return {
+        hasCon: S.cons.some(c => c.type === 'curvature'),
+        ok: !!(S.status && S.status.ok),
+        g0, dotT, dotK,
+        kSp: Math.abs(sa.k), kBez, kArc,
+        relErr: Math.abs(kBez - kArc) / kArc,
+      };
+    """)
+    # Kamm an + Radius auf 20 ändern -> Krümmung geht auf 0.05 (< 1 % Abweichung)
+    p.pg.check('#sk-curv-comb')
+    p.wait(200)
+    comb_g2 = SS(p, "return S.curvCombCount")
+    SS(p, "Sketch.setDimSpec({ e: 'A1', k: 'r' }, 20)")
+    p.wait(350)
+    g2_20 = SS(p, """
+      const sp = E('S1'), arc = E('A1');
+      const sa = Solver.curveEndState(sp, 'a'), ai = SK.arcInfo(arc.a, arc.m, arc.b);
+      const kSp = Math.abs(sa.k), kArc = 1 / ai.r;
+      return { ok: !!(S.status && S.status.ok), r: ai.r, kSp, kArc, relErr: Math.abs(kSp - kArc) / kArc };
+    """)
+    p.ev("Sketch.setTool('select')")
+    p.wait(150)
+    SS(p, "S.selCon=S.cons.find(c=>c.type==='curvature').id; Panels.renderRight()")
+    p.wait(250)
+    con_panel_txt = p.pg.locator('#right').text_content() or ''
+    ok3 = (
+        abs(pre_k - 0.1) > 0.02
+        and g2_10['hasCon'] and g2_10['ok']
+        and g2_10['g0'] < 1e-4 and g2_10['dotT'] > 0.9999 and g2_10['dotK'] > 0.999
+        and abs(g2_10['kArc'] - 0.1) < 1e-4 and g2_10['relErr'] < 0.01
+        and comb_g2 > 0
+        and g2_20['ok'] and abs(g2_20['r'] - 20) < 1e-4 and g2_20['relErr'] < 0.01
+        and ('Krümmungsglatt (G2)' in con_panel_txt)
+    )
+    p.ev("Sketch.cancel(true); Start.show()")
+    p.wait(300)
+
+    # 4. G2 an Gerade (Krümmung ≈ 0) und Abweisung einer 2-Punkt-Spline
+    scene_cons(p, [
+        {'id': 'L1', 'type': 'line', 'a': [-20, 0], 'b': [0, 0]},
+        {'id': 'S1', 'type': 'spline', 'pts': [[0, 0], [5, 2], [12, 5], [20, 4]], 'closed': False},
+        {'id': 'S2', 'type': 'spline', 'pts': [[0, 12], [12, 16]], 'closed': False},
+    ], [{'id': 'k1', 'type': 'fix', 'refs': [{'e': 'L1'}], 'at': {'a0': -20, 'a1': 0, 'b0': 0, 'b1': 0}}])
+    p.wait(300)
+    p.pg.click('.consbar [data-tool="c:curvature"]')
+    p.wait(200)
+    sp1_mid = to_screen(p, *SS(p, "const pts=SK.splinePoints(E('S1').pts,false); return pts[Math.floor(pts.length/2)];"))
+    ln1_mid = to_screen(p, -10, 0)
+    p.pg.mouse.click(sp1_mid[0], sp1_mid[1]); p.wait(200)
+    p.pg.mouse.click(ln1_mid[0], ln1_mid[1]); p.wait(350)
+    line_g2 = SS(p, "const sa=Solver.curveEndState(E('S1'),'a'); return { ok: !!(S.status&&S.status.ok), k: Math.abs(sa.k), tx: sa.t[0], ty: sa.t[1] };")
+    # 2-Punkt-Spline anklicken -> Hinweis & keine neue Regel
+    p.pg.click('.consbar [data-tool="c:curvature"]')
+    p.wait(150)
+    sp2_mid = to_screen(p, 6, 14)
+    p.pg.mouse.click(sp2_mid[0], sp2_mid[1]); p.wait(250)
+    toasts = ' '.join(p.pg.locator('.toast').all_text_contents())
+    cnt_curv = SS(p, "return S.cons.filter(c=>c.type==='curvature').length")
+    ok4 = (
+        line_g2['ok'] and line_g2['k'] < 1e-4 and line_g2['tx'] > 0.9999 and abs(line_g2['ty']) < 1e-4
+        and 'mindestens 3 Punkte' in toasts and cnt_curv == 1
+    )
+
+    # 5. Hilfetexte, DE/EN-Schlüsselgleichheit, Befehlssuche & keine Seitenfehler
+    p.pg.check('#sk-curv-comb')
+    p.wait(150)
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    i18n_ok = p.pg.evaluate("Promise.all([fetch('data/texte-de.json').then(r=>r.json()), fetch('data/texte-en.json').then(r=>r.json())]).then(([d,e])=>{ const dk=Object.keys(d).sort(), ek=Object.keys(e).sort(); return dk.length===ek.length && dk.every((k,i)=>k===ek[i]); })")
+    dom_help = p.ev("return !!document.querySelector('[data-help=\"curvatureComb\"]') && !!document.querySelector('[data-help=\"cCurvature\"]')")
+    cmds_ok = p.ev("return Commands.search('Krümmungskamm').some(c=>c.id==='sketch-curvature') && Commands.search('Krümmungsglatt').some(c=>c.id==='sketch-g2')")
+    p.ev("Sketch.cancel(true)")
+    ok5 = all(k in hilfen and hilfen[k].get('tip') and hilfen[k].get('hilfe') and hilfen[k].get('tipp') for k in ['curvatureComb', 'cCurvature']) and i18n_ok and dom_help and cmds_ok and not p.errs
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
+def t_a104_innenradius_symmetrie(p):
+    p.empty()
+    # 1. Quader 40x40x16 mit Tasche 20x20x10 (Ecken-Innenradius 2) und Fräser-Radius 3 → alle 4 Eckenflächen rot markiert
+    p.ev("""
+      App.change('pocket-r2', d => {
+        const b = Model.newItem('box', { w: 40, d: 40, h: 16 }, { name: 'Gehaeuse' });
+        b.t.x = 0; b.t.y = 0; b.t.z = 0;
+        const s2 = Math.SQRT2;
+        const pocket = Model.newItem('extrude', {}, { role: 'hole', name: 'Tasche' });
+        pocket.p = {
+          sketch: {
+            plane: { o: [0, 0, 6], x: [1, 0, 0], n: [0, 0, 1] },
+            ents: [
+              { id: 'a1', type: 'arc', a: [10, 8], m: [8 + s2, 8 + s2], b: [8, 10] },
+              { id: 'l1', type: 'line', a: [8, 10], b: [-8, 10] },
+              { id: 'a2', type: 'arc', a: [-8, 10], m: [-8 - s2, 8 + s2], b: [-10, 8] },
+              { id: 'l2', type: 'line', a: [-10, 8], b: [-10, -8] },
+              { id: 'a3', type: 'arc', a: [-10, -8], m: [-8 - s2, -8 - s2], b: [-8, -10] },
+              { id: 'l3', type: 'line', a: [-8, -10], b: [8, -10] },
+              { id: 'a4', type: 'arc', a: [8, -10], m: [8 + s2, -8 - s2], b: [10, -8] },
+              { id: 'l4', type: 'line', a: [10, -8], b: [10, 8] }
+            ],
+            dims: [], cons: []
+          },
+          dist: 12,
+          dir: 'normal'
+        };
+        const g = Model.newItem('group', {}, { name: 'Taschenkoerper' });
+        g.children = [b, pocket];
+        d.items.push(g);
+      });
+    """)
+    warte_rechnen(p, 30)
+    p.pg.click('#t-check'); p.wait(250)
+    p.pg.click('#check-inner-radius'); p.wait(300)
+    p.pg.locator('#inner-radius-bar').wait_for(state='visible', timeout=5000)
+    ir1 = p.ev("return InnerRadius.info")
+    sum1 = (p.pg.locator('#ir-summary').text_content() or '').lower()
+    ok1 = (
+        ir1 is not None and ir1['active'] and ir1['hasRedMesh']
+        and abs(ir1['cutterRadius'] - 3) < 1e-6
+        and ir1['tooSmallCount'] == 4 and ir1['okCount'] == 0
+        and ir1['minRadius'] is not None and abs(ir1['minRadius'] - 2) < 0.05
+        and all(f['status'] == 'tooSmall' and abs(f['r'] - 2) < 0.05 for f in ir1['faces'])
+        and p.pg.locator('#t-check.active').count() == 1
+        and p.pg.locator('#inner-radius-bar').get_attribute('data-help') == 'innerRadius'
+        and p.pg.locator('#ir-list [data-ir-status="tooSmall"]').count() == 4
+        and 'kleiner' in sum1
+    )
+
+    # 2. Fräser auf 1,5 mm verringern → passt; äußere Rundung zählt nicht als Innenradius; Fokus + Schließen
+    p.pg.fill('#ir-cutter', '1.5')
+    p.pg.locator('#ir-cutter').dispatch_event('change')
+    p.wait(250)
+    ir2a = p.ev("return InnerRadius.info")
+    p.ev("""
+      App.change('outer-fillet-test', d => {
+        const b = d.items[0].children[0];
+        b.finishes.push({ id: 'of1', type: 'fillet', r: 2, edges: 'all' });
+      });
+    """)
+    warte_rechnen(p, 30)
+    p.pg.wait_for_function("() => { const id = window.__M.App.doc.items[0].id; const r = window.__M.App.results.get(id); return window.__M.App.errors.length === 0 && r && r.data && r.data.faces && r.data.faces.length > 14; }", timeout=15000)
+    p.wait(300)
+    ir2b = p.ev("return InnerRadius.info")
+    p.pg.locator('#ir-list [data-ir-idx="0"]').click(); p.wait(250)
+    ir2c = p.ev("return InnerRadius.info")
+    p.pg.click('#ir-close'); p.wait(200)
+    ok2 = (
+        ir2a is not None and ir2a['tooSmallCount'] == 0 and ir2a['okCount'] == 4 and not ir2a['hasRedMesh']
+        and ir2b is not None and ir2b['totalCount'] == 4 and ir2b['okCount'] == 4
+        and ir2c is not None and ir2c['focused'] == 0
+        and not p.ev("return InnerRadius.active")
+    )
+
+    # 3. Symmetrischer Quader 30x20x15 → „symmetrisch“ an YZ-Ebene
+    p.ev("""
+      App.change('sym-box', d => {
+        d.items = [];
+        const b = Model.newItem('box', { w: 30, d: 20, h: 15 }, { name: 'Quader' });
+        b.t.x = 0; b.t.y = 0; b.t.z = 0;
+        d.items.push(b);
+      });
+    """)
+    warte_rechnen(p, 30)
+    p.pg.click('#t-check'); p.wait(250)
+    p.pg.click('#check-symmetry'); p.wait(300)
+    p.pg.locator('#sym-check-bar').wait_for(state='visible', timeout=5000)
+    p.pg.wait_for_function("() => window.__M.SymmetryCheck.active && !window.__M.SymmetryCheck.busy && !!window.__M.SymmetryCheck.last", timeout=15000)
+    sym3 = p.ev("return SymmetryCheck.last")
+    st3 = (p.pg.locator('#sym-status').text_content() or '').lower()
+    ok3 = (
+        sym3 is not None and sym3['symmetric'] is True
+        and sym3['diffVolume'] < 0.05
+        and abs(sym3['symPercent'] - 100) < 0.01
+        and not p.ev("return SymmetryCheck.hasOverlay")
+        and p.pg.locator('#sym-status[data-sym="ok"]').count() == 1
+        and 'symmetrisch' in st3 and 'nicht symmetrisch' not in st3
+        and p.pg.locator('#sym-check-bar').get_attribute('data-help') == 'symmetryCheck'
+        and p.pg.locator('#t-check.active').count() == 1
+    )
+
+    # 4. Seitliche Bohrung (x = 8, y = 0) → nicht symmetrisch zu YZ mit farbigen Abweichungen; zu XZ weiterhin symmetrisch
+    p.ev("""
+      App.change('sym-side-hole', d => {
+        const b = d.items[0];
+        const h = Model.newItem('cylinder', { d: 8, h: 20 }, { role: 'hole', name: 'SeitlicheBohrung' });
+        h.t.x = 8; h.t.y = 0; h.t.z = -1;
+        const g = Model.newItem('group', {}, { name: 'TeilMitBohrung' });
+        g.children = [b, h];
+        d.items = [g];
+      });
+    """)
+    warte_rechnen(p, 30)
+    p.pg.wait_for_function("() => !window.__M.SymmetryCheck.busy && window.__M.SymmetryCheck.last && window.__M.SymmetryCheck.last.symmetric === false", timeout=15000)
+    sym4a = p.ev("return SymmetryCheck.last")
+    st4a = (p.pg.locator('#sym-status').text_content() or '').lower()
+    bad_badge4a = p.pg.locator('#sym-status[data-sym="bad"]').count() == 1
+    has_ov4a = p.ev("return SymmetryCheck.hasOverlay")
+    p.pg.select_option('#sym-plane', 'XZ')
+    p.pg.wait_for_function("() => !window.__M.SymmetryCheck.busy && window.__M.SymmetryCheck.last && window.__M.SymmetryCheck.last.planeKey === 'XZ'", timeout=15000)
+    sym4b = p.ev("return SymmetryCheck.last")
+    p.pg.click('#sym-close'); p.wait(200)
+    ok4 = (
+        sym4a is not None and sym4a['symmetric'] is False
+        and sym4a['diffVolume'] > 500
+        and sym4a['hasOrigMesh'] and sym4a['hasMirrMesh']
+        and has_ov4a is True
+        and bad_badge4a
+        and 'nicht symmetrisch' in st4a
+        and len(sym4a['deviations']) >= 1
+        and sym4b is not None and sym4b['symmetric'] is True
+        and not p.ev("return SymmetryCheck.active")
+    )
+
+    # 5. Befehle, Hilfetexte und DE/EN-Schlüsselgleichheit
+    cmds_ok = p.ev("return Commands.search('innenradius').some(c => c.id === 'inner-radius') && Commands.search('symmetrie').some(c => c.id === 'symmetry-check')")
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    de_list = p.pg.evaluate("fetch('data/texte-de.json').then(r=>r.json()).then(d=>Object.keys(d).sort())")
+    en_list = p.pg.evaluate("fetch('data/texte-en.json').then(r=>r.json()).then(d=>Object.keys(d).sort())")
+    ok5 = (
+        cmds_ok is True
+        and 'innerRadius' in hilfen and all(k in hilfen['innerRadius'] for k in ('tip', 'hilfe', 'tipp'))
+        and 'symmetryCheck' in hilfen and all(k in hilfen['symmetryCheck'] for k in ('tip', 'hilfe', 'tipp'))
+        and de_list == en_list
+        and not p.errs
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 def t_a110_strecken_live_spiegeln(p):
     # 1. Start in neuer XY-Skizze, Profi-Sichtbarkeit prüfen
     sketch_xy(p)
@@ -22821,9 +23141,11 @@ TESTS = [
     ('[A-103] Vollrundung und Ecken-Fase mit drei Abständen (KP-38, KP-41)', t_a103_vollrundung_eckenfase),
     ('[A-106] AMF, PLY und Punkte-Dateien (IO-12, IO-14)', t_a106_amf_ply_punkte),
     ('[A-105] Schräge- und Hinterschnitt-Analyse (PF-09, PF-10)', t_a105_schraege_hinterschnitt),
+    ('[A-104] Kleinster Innenradius und Symmetrie prüfen (PF-11, PF-16)', t_a104_innenradius_symmetrie),
     ('[A-108] Einstellungen speichern/laden & Oberflächen-Größe (BE-30, BE-31)', t_a108_einstellungen_groesse),
     ('[A-107] Rechnen abbrechen & Meldungs-Zentrale (BE-27, BE-25)', t_a107_abbrechen_meldungen),
     ('[A-109] Lizenz „Alle Rechte vorbehalten“ & Fremde Bausteine (PL-02)', t_a109_lizenz_fremde_bausteine),
+    ('[A-112] Krümmungskamm und Regel „krümmungsglatt“ (SK-34, SK-35)', t_a112_kruemmung_g2),
     ('[A-110] Strecken und Live-Spiegeln (SK-30, SK-46)', t_a110_strecken_live_spiegeln),
     ('[A-113] Kegelschnitt und Brückenkurve (SK-36, SK-40)', t_a113_kegelschnitt_bruecke),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),

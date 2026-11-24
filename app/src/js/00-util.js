@@ -640,6 +640,7 @@ const IC = {
   cCollinear: '<path d="M3 19 9.5 12.5M14.5 7.5 21 1" /><circle cx="12" cy="10" r="1.2" />',
   cPerp: '<path d="M12 14h5v5" opacity=".5"/><path d="M4 19h16M12 19V5" />',
   cTangent: '<circle cx="10" cy="14" r="6"/><path d="M5.6 3.2 20 14"/><circle cx="13.6" cy="9.2" r="1.8" fill="currentColor" stroke="none"/>',
+  cCurvature: '<path d="M3 18a7 7 0 0 1 7-7c4 0 7-2 11-7"/><path d="M5 13l-2.5-1M8 11l-1-2.5M12 11l.5-2.5M16 9l1.5-2" opacity=".55"/><circle cx="10" cy="11" r="1.8" fill="currentColor" stroke="none"/>',
   cEqual: '<path d="M10 10h4M10 14h4" opacity=".6"/><path d="M4 19 9 5M15 19l5-14" />',
   cSymmetric: '<path d="M12 3v18" stroke-dasharray="3 2.5" opacity=".5"/><path d="M8 7 4 12l4 5M16 7l4 5-4 5" />',
   cMid: '<path d="M4 17 20 7" /><circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none"/>',
@@ -2121,6 +2122,26 @@ const HELP = {
   "tip": "Brückenkurve: weicher Übergang zwischen zwei offenen Kurvenenden",
   "hilfe": "Klicke im Profi-Modus nacheinander zwei offene Kurvenenden (Linie, Bogen, Teil-Ellipse, Spline, Kegelschnitt oder Brücke) an. Wähle rechts „Tangential (G1)“ für einen knickfreien Übergang oder „Krümmungsglatt (G2)“, wenn auch die Krümmung ohne Sprung anschließen soll.",
   "tipp": "Mit „Stärke 1“ und „Stärke 2“ steuerst du, wie weit die Brückenkurve an jedem Ende in die bestehende Richtung weiterläuft. Änderst du später eine der beiden Kurven, wandert die Brücke automatisch mit."
+ },
+ "curvatureComb": {
+  "tip": "Krümmungskamm an Splines, Bögen und Ellipsen ein- oder ausblenden (Profi)",
+  "hilfe": "Zeigt entlang von Splines, Kreisbögen, Ellipsen und Teil-Ellipsen feine Striche nach außen, deren Länge genau der Krümmung an jeder Stelle entspricht. Je länger die Zähne, desto stärker die Biegung – Sprünge oder Wellen in einer Kurve werden sofort sichtbar.",
+  "tipp": "Ideal zum Prüfen weicher Übergänge (z. B. nach „Krümmungsglatt (G2)“): Stoßen zwei Kurven glatt aneinander, treffen auch ihre Krümmungskämme genau auf gleicher Höhe zusammen."
+ },
+ "cCurvature": {
+  "tip": "Krümmungsglatt (G2): Spline geht nicht nur glatt, sondern auch mit gleicher Krümmung in die Nachbarkurve über (Profi)",
+  "hilfe": "Verbindet ein Ende einer offenen Spline (mit mindestens 3 Punkten) mit einem Bogen, einer Linie, einer anderen Spline oder einem Kreis, sodass am Übergang Punkt, Richtung (Tangente) und Krümmungsradius nahtlos übereinstimmen.",
+  "tipp": "Schalte „Krümmung zeigen“ ein, um den nahtlosen Übergang direkt als gleich hohen Krümmungskamm zu prüfen."
+ },
+ "innerRadius": {
+  "tip": "Innenrundungen prüfen: Sind alle Ecken groß genug für den Fräser?",
+  "hilfe": "Misst alle nach innen gewölbten Rundungen und Bohrungen am Modell und vergleicht sie mit deinem eingestellten Fräser-Radius. Alles, was kleiner als der Fräser ist, leuchtet rot auf und erscheint in der Liste – so siehst du sofort, wo der Fräser nicht hineinkommt.",
+  "tipp": "Mit „Bohrungen mitprüfen“ kannst du festlegen, ob kreisrunde Löcher (die meist gebohrt werden) mitgezählt werden oder nur gefräste Taschen-Ecken."
+ },
+ "symmetryCheck": {
+  "tip": "Prüft, ob das Modell zu einer gewählten Ebene genau spiegelgleich ist",
+  "hilfe": "Spiegelt alle sichtbaren Körper an einer Grundebene (YZ, XZ, XY), einer Bezugsebene oder einer ebenen Fläche und vergleicht sie exakt mit dem Original. Unterschiede erscheinen farbig im Bild: Rot liegt nur auf dieser Seite, Blau fehlt auf der Gegenseite.",
+  "tipp": "Liegt dein Teil nicht genau auf dem Nullpunkt, klick auf „Mitte“, um die Prüfebene automatisch in die Bauteilmitte zu schieben."
  }
 };
 

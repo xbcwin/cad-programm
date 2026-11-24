@@ -4788,6 +4788,8 @@ export function createKernel(R, oc) {
         const ad = new oc.BRepAdaptor_Surface(face.wrapped, false);
         const to = ad.Torus(); const ax = to.Axis(); const l = ax.Location(), d = ax.Direction();
         info.axis = [l.X(), l.Y(), l.Z(), d.X(), d.Y(), d.Z()];
+        try { info.r = to.MinorRadius(); } catch (_) {}
+        try { info.majorR = to.MajorRadius(); } catch (_) {}
         ad.delete();
       } else if (type === 'SPHERE') {
         const ad = new oc.BRepAdaptor_Surface(face.wrapped, false);
@@ -9004,6 +9006,204 @@ export function createKernel(R, oc) {
     issues.sort((a, b) => (order[a.kind] - order[b.kind]) || ((a.length || 0) - (b.length || 0)));
     return { issues, checkedCount: targets.length, minEdge, truncated, errors };
   }
+  // ---------- Symmetrie prüfen (PF-16): Vergleich des Körpers mit seinem Spiegelbild an einer Ebene ----------
+  function mirrorShapeByPlane(shape, o, n) {
+    const nn = norm(n);
+    const p0 = new oc.gp_Pnt(o[0], o[1], o[2]);
+    const d0 = new oc.gp_Dir(nn[0], nn[1], nn[2]);
+    const ax2 = new oc.gp_Ax2(p0, d0);
+    const trsf = new oc.gp_Trsf();
+    trsf.SetMirror(ax2);
+    const tr = new oc.BRepBuilderAPI_Transform(shape.wrapped, trsf, true, false);
+    try {
+      return R.cast(tr.ModifiedShape(shape.wrapped));
+    } finally {
+      tr.delete(); trsf.delete(); ax2.delete(); d0.delete(); p0.delete();
+    }
+  }
+  function reflectPointByPlane(p, o, n) {
+    const d = (p[0] - o[0]) * n[0] + (p[1] - o[1]) * n[1] + (p[2] - o[2]) * n[2];
+    return [p[0] - 2 * d * n[0], p[1] - 2 * d * n[1], p[2] - 2 * d * n[2]];
+  }
+  function reflectBboxByPlane(bb, o, n) {
+    if (!bb || bb.length < 6) return null;
+    const mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity];
+    for (let i = 0; i < 8; i++) {
+      const rp = reflectPointByPlane([i & 1 ? bb[3] : bb[0], i & 2 ? bb[4] : bb[1], i & 4 ? bb[5] : bb[2]], o, n);
+      for (let k = 0; k < 3; k++) { mn[k] = Math.min(mn[k], rp[k]); mx[k] = Math.max(mx[k], rp[k]); }
+    }
+    return [mn[0], mn[1], mn[2], mx[0], mx[1], mx[2]];
+  }
+  function reflectMeshByPlane(mesh, o, n) {
+    if (!mesh || !mesh.vertices || !mesh.triangles) return null;
+    const srcV = mesh.vertices, srcN = mesh.normals, srcT = mesh.triangles, srcL = mesh.lines;
+    const vertices = new Float32Array(srcV.length);
+    for (let i = 0; i < srcV.length; i += 3) {
+      const dx = srcV[i] - o[0], dy = srcV[i + 1] - o[1], dz = srcV[i + 2] - o[2];
+      const d = 2 * (dx * n[0] + dy * n[1] + dz * n[2]);
+      vertices[i] = srcV[i] - d * n[0];
+      vertices[i + 1] = srcV[i + 1] - d * n[1];
+      vertices[i + 2] = srcV[i + 2] - d * n[2];
+    }
+    const normals = new Float32Array(srcN && srcN.length === srcV.length ? srcN.length : 0);
+    if (normals.length) {
+      for (let i = 0; i < srcN.length; i += 3) {
+        const d = 2 * (srcN[i] * n[0] + srcN[i + 1] * n[1] + srcN[i + 2] * n[2]);
+        normals[i] = srcN[i] - d * n[0];
+        normals[i + 1] = srcN[i + 1] - d * n[1];
+        normals[i + 2] = srcN[i + 2] - d * n[2];
+      }
+    }
+    const triangles = new Uint32Array(srcT.length);
+    for (let i = 0; i + 2 < srcT.length; i += 3) {
+      triangles[i] = srcT[i];
+      triangles[i + 1] = srcT[i + 2];
+      triangles[i + 2] = srcT[i + 1];
+    }
+    const lines = new Float32Array(srcL ? srcL.length : 0);
+    if (lines.length) {
+      for (let i = 0; i < srcL.length; i += 3) {
+        const dx = srcL[i] - o[0], dy = srcL[i + 1] - o[1], dz = srcL[i + 2] - o[2];
+        const d = 2 * (dx * n[0] + dy * n[1] + dz * n[2]);
+        lines[i] = srcL[i] - d * n[0];
+        lines[i + 1] = srcL[i + 1] - d * n[1];
+        lines[i + 2] = srcL[i + 2] - d * n[2];
+      }
+    }
+    return { vertices, normals, triangles, lines };
+  }
+  function checkSymmetry(scene, opts = {}) {
+    ingestBlobs(scene);
+    const errors = [];
+    const only = Array.isArray(opts.only) ? opts.only : null;
+    const rawSolids = evaluateShapes(scene, errors);
+    const solids = [];
+    for (const s of rawSolids) {
+      if (only && !only.includes(s.id)) safeDelete(s.shape);
+      else solids.push(s);
+    }
+    const rawO = Array.isArray(opts.origin) && opts.origin.length >= 3 ? opts.origin : [0, 0, 0];
+    const rawN = Array.isArray(opts.normal) && opts.normal.length >= 3 ? opts.normal : [1, 0, 0];
+    const O = [num(rawO[0], 0), num(rawO[1], 0), num(rawO[2], 0)];
+    const nLen = Math.hypot(num(rawN[0], 0), num(rawN[1], 0), num(rawN[2], 0));
+    const N = nLen > 1e-9 ? [num(rawN[0], 0) / nLen, num(rawN[1], 0) / nLen, num(rawN[2], 0) / nLen] : [1, 0, 0];
+
+    if (!solids.length) {
+      return {
+        checkedCount: 0, symmetric: true, totalVolume: 0, diffVolume: 0, symPercent: 100,
+        bbox: null, origin: O, normal: N, onlyOrigMesh: null, onlyMirrMesh: null, deviations: [], errors,
+      };
+    }
+
+    let totalVolume = 0;
+    const sceneBbox = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+    for (const s of solids) {
+      try { totalVolume += Math.max(0, R.measureVolume(s.shape)); } catch (_) {}
+      try {
+        const bb = bboxOf(s.shape);
+        for (let k = 0; k < 3; k++) {
+          sceneBbox[k] = Math.min(sceneBbox[k], bb[k]);
+          sceneBbox[k + 3] = Math.max(sceneBbox[k + 3], bb[k + 3]);
+        }
+      } catch (_) {}
+    }
+
+    let combined = null, ownsCombined = false, mirrored = null, diffOrig = null;
+    let diffVol = 0, onlyOrigMesh = null, onlyMirrMesh = null;
+    const deviations = [];
+    try {
+      const shapes = solids.map((s) => s.shape);
+      if (shapes.length === 1) {
+        combined = shapes[0];
+      } else {
+        try {
+          combined = fuseAll(shapes, false);
+          ownsCombined = true;
+        } catch (_) {
+          combined = R.makeCompound(shapes);
+          ownsCombined = true;
+        }
+      }
+      mirrored = mirrorShapeByPlane(combined, O, N);
+      try {
+        diffOrig = combined.cut(mirrored);
+        diffVol = Math.max(0, R.measureVolume(diffOrig));
+      } catch (_) {
+        diffVol = 0;
+      }
+
+      const tolVol = opts.tolVol != null ? Number(opts.tolVol) : 0.05;
+      const tolRel = opts.tolRel != null ? Number(opts.tolRel) : 1e-4;
+      const epsVol = Math.max(tolVol, totalVolume * tolRel);
+      const symmetric = diffVol <= epsVol;
+      const symPercent = totalVolume > 1e-9
+        ? Math.max(0, Math.min(100, (1 - diffVol / totalVolume) * 100))
+        : 100;
+
+      if (!symmetric && diffOrig) {
+        try {
+          const dbbox = bboxOf(diffOrig);
+          if (isFinite(dbbox[0]) && dbbox[3] >= dbbox[0] - 1e-6) {
+            const tol = Math.max(0.02, Math.min(meshTol(dbbox), 0.35));
+            const ang = Math.min(Q.ang, 0.25);
+            const m = diffOrig.mesh({ tolerance: tol, angularTolerance: ang });
+            const e = diffOrig.meshEdges({ tolerance: tol, angularTolerance: ang });
+            if (m && m.vertices && m.vertices.length && m.triangles && m.triangles.length) {
+              onlyOrigMesh = {
+                vertices: new Float32Array(m.vertices),
+                normals: new Float32Array(m.normals),
+                triangles: new Uint32Array(m.triangles),
+                lines: new Float32Array(e && e.lines ? e.lines : []),
+              };
+              onlyMirrMesh = reflectMeshByPlane(onlyOrigMesh, O, N);
+            }
+          }
+        } catch (_) {}
+
+        const parts = sortedSolids(diffOrig);
+        try {
+          for (const part of parts) {
+            let v = 0;
+            try { v = Math.max(0, R.measureVolume(part.shape)); } catch (_) { v = 0; }
+            if (v <= tolVol * 0.25) continue;
+            const bb = part.bbox;
+            const center = shapeCenterOfMass(part.shape, bb);
+            deviations.push({
+              volume: v,
+              center,
+              mirrorCenter: reflectPointByPlane(center, O, N),
+              bbox: bb,
+              mirrorBbox: reflectBboxByPlane(bb, O, N),
+            });
+          }
+          deviations.sort((a, b) => b.volume - a.volume);
+          if (deviations.length > 30) deviations.length = 30;
+        } finally {
+          for (const part of parts) safeDelete(part.shape);
+        }
+      }
+
+      return {
+        checkedCount: solids.length,
+        symmetric,
+        totalVolume,
+        diffVolume: symmetric ? 0 : diffVol,
+        symPercent: symmetric ? 100 : symPercent,
+        bbox: isFinite(sceneBbox[0]) ? sceneBbox : null,
+        origin: O,
+        normal: N,
+        onlyOrigMesh: symmetric ? null : onlyOrigMesh,
+        onlyMirrMesh: symmetric ? null : onlyMirrMesh,
+        deviations: symmetric ? [] : deviations,
+        errors,
+      };
+    } finally {
+      safeDelete(diffOrig);
+      safeDelete(mirrored);
+      if (ownsCombined) safeDelete(combined);
+      for (const s of solids) safeDelete(s.shape);
+    }
+  }
   // ---------- Import prüfen & heilen (IO-10: BRepCheck, ShapeFix, Nähen mit Toleranz) ----------
   function uniqueShapes(raw, shapeEnum) {
     const TA = oc.TopAbs_ShapeEnum;
@@ -9420,5 +9620,5 @@ export function createKernel(R, oc) {
     }
   }
 
-  return { evaluate, remesh, exportMeshes, exportSTEP, exportIGES, exportBREP, measure, minDistance, project, clashes, holeWalls, faceLoopsOf, faceGridOf, sectionOf, checkGeometry, checkImport, healImport, getStats, resetStats, clearCache, _cache: cache };
+  return { evaluate, remesh, exportMeshes, exportSTEP, exportIGES, exportBREP, measure, minDistance, project, clashes, holeWalls, faceLoopsOf, faceGridOf, sectionOf, checkGeometry, checkSymmetry, checkImport, healImport, getStats, resetStats, clearCache, _cache: cache };
 }

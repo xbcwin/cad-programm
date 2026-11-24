@@ -41,6 +41,7 @@ const Sketch = (() => {
     { id: 'perpendicular', icon: 'cPerp', get label() { return T('sk.con.perpendicular'); }, help: 'cPerp' },
     { id: 'collinear', icon: 'cCollinear', get label() { return T('sk.con.collinear'); }, help: 'cCollinear' },
     { id: 'tangent', icon: 'cTangent', get label() { return T('sk.con.tangent'); }, help: 'cTangent' },
+    { id: 'curvature', icon: 'cCurvature', get label() { return T('sk.con.curvature'); }, help: 'cCurvature', pro: true },
     { id: 'equal', icon: 'cEqual', get label() { return T('sk.con.equal'); }, help: 'cEqual' },
     { id: 'symmetric', icon: 'cSymmetric', get label() { return T('sk.con.symmetric'); }, help: 'cSymmetric' },
     { id: 'coincident', icon: 'cCoincident', get label() { return T('sk.con.coincident'); }, help: 'cCoincident' },
@@ -379,7 +380,7 @@ const Sketch = (() => {
     if (Notes.active) Notes.stop();
     Panels.closeFlyout(); UI.closePop();
     const F = frameWorld(init.plane, init.W);
-    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.embossMode ? 'text' : (init.ctx.mode === 'patpath' || init.ctx.ribMode) ? 'line' : 'rect', draft: null, sels: [], get sel() { return this.sels && this.sels.length === 1 ? this.sels[0] : null; }, set sel(v) { this.sels = v ? [v] : []; }, band: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, locked: !!init.locked, lockedDrag: null, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, stretch: { box: null, sel: null, dir: 'x', dist: 5, dx: 5, dy: 0, ang: 0 }, off: { count: 1, both: false, corners: 'sharp' }, projOff: 0, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: init.ctx.embossMode ? 'm' : 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, ellArcCW: false, conicRho: 0.5, bridge: { mode: 'g1', s1: 1, s2: 1, first: null, hoverEnd: null }, shape: { type: 'star', p: { ...SKO.SHAPES.star.p } }, shapesOpen: false, formula: { preset: 'sinus', ...SKO.FORMULA_CURVES.sinus }, formulaOpen: false, csv: { kind: 'spline', closed: false, text: '' }, csvOpen: false, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, liveMir: null, liveMirPick: false, hoverEnt: null, trimHover: null, check: null, checkFocus: null, autoDef: null, freeMode: false, wiggle: null, lastWiggle: null, conflict: null };
+    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.embossMode ? 'text' : (init.ctx.mode === 'patpath' || init.ctx.ribMode) ? 'line' : 'rect', draft: null, sels: [], get sel() { return this.sels && this.sels.length === 1 ? this.sels[0] : null; }, set sel(v) { this.sels = v ? [v] : []; }, band: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, locked: !!init.locked, lockedDrag: null, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, stretch: { box: null, sel: null, dir: 'x', dist: 5, dx: 5, dy: 0, ang: 0 }, off: { count: 1, both: false, corners: 'sharp' }, projOff: 0, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: init.ctx.embossMode ? 'm' : 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, ellArcCW: false, conicRho: 0.5, bridge: { mode: 'g1', s1: 1, s2: 1, first: null, hoverEnd: null }, shape: { type: 'star', p: { ...SKO.SHAPES.star.p } }, shapesOpen: false, formula: { preset: 'sinus', ...SKO.FORMULA_CURVES.sinus }, formulaOpen: false, csv: { kind: 'spline', closed: false, text: '' }, csvOpen: false, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, liveMir: null, liveMirPick: false, hoverEnt: null, trimHover: null, check: null, checkFocus: null, autoDef: null, freeMode: false, wiggle: null, lastWiggle: null, conflict: null, showCurv: false, curvScale: 1, curvCombCount: 0 };
     S.dims = init.dims || []; S.cons = init.cons || []; S.picks = []; S.dimFirst = null; S.dimMode = 'auto'; S.dimCircMode = 'center'; S.dimPicks = []; S.ordBase = null; S.ordAxis = 'auto'; S.selCon = null;
     S.plane0 = deepClone(init.plane); S.pOff = init.pOff || 0; S.pTilt = 0;
     if (S.pOff) applyPlane(false, true);
@@ -432,7 +433,7 @@ const Sketch = (() => {
     cbar.append(h('span', { class: 'title' }, T('sk.bar.rulesTitle')));
     for (const t of CTOOLS) {
       if (t.id === 'project' && !S.refs.length) continue;
-      const b = h('button', { type: 'button', class: 'tool' + (S.tool === 'c:' + t.id ? ' active' : ''), 'data-tip': t.label, 'aria-label': t.label, dataset: { tool: 'c:' + t.id, help: t.help } });
+      const b = h('button', { type: 'button', class: 'tool' + (t.pro ? ' pro' : '') + (S.tool === 'c:' + t.id ? ' active' : ''), 'data-tip': t.label, 'aria-label': t.label, dataset: { tool: 'c:' + t.id, help: t.help } });
       b.innerHTML = icon(t.icon);
       b.onclick = () => quickOrTool(t.id);
       cbar.append(b);
@@ -508,6 +509,7 @@ const Sketch = (() => {
   function setTool(id) {
     if (!S) return;
     if (S.locked && id !== 'select') { guardLocked(); return; }
+    if (id === 'c:curvature' && isSimpleMode()) { UI.toast(T('sk.toast.curvProOnly'), { icon: 'info' }); return; }
     if ((id === 'stretch' || id === 'conic' || id === 'bridge') && isSimpleMode()) { UI.toast(T('sk.toast.proOnly'), { icon: 'info' }); return; }
     commitDraftPolyline();
     clearBand();
@@ -552,6 +554,25 @@ const Sketch = (() => {
       S.cursor = linePoint(lastMouse.uv, lastMouse.e);
       render();
     }
+  }
+  function setShowCurvature(on) {
+    if (!S) return false;
+    if (on && isSimpleMode()) { UI.toast(T('sk.toast.curvProOnly'), { icon: 'info' }); return false; }
+    S.showCurv = !!on;
+    render(); Panels.renderRight();
+    return S.showCurv;
+  }
+  function toggleCurvature() {
+    if (!S) return false;
+    const next = setShowCurvature(!S.showCurv);
+    if (!isSimpleMode()) UI.toast(T(next ? 'sk.toast.curvOn' : 'sk.toast.curvOff'), { icon: 'info', ms: 2000 });
+    return next;
+  }
+  function setCurvatureScale(v) {
+    if (!S || !(v > 0)) return false;
+    S.curvScale = clamp(Number(v) || 1, 0.1, 20);
+    render();
+    return S.curvScale;
   }
   let crossCache = null;
   function crossings() {
@@ -854,7 +875,7 @@ const Sketch = (() => {
   // Fertige Elemente (z. B. aus einer DXF oder SVG) in die offene Skizze legen – ein Rückgängig-Schritt
   // ---------- Kopieren und Einfügen (SK-12): Elemente mit ihren Regeln und Maßen untereinander ----------
   let clip = null;
-  const CLIPCONS = new Set(['horizontal', 'vertical', 'parallel', 'perpendicular', 'collinear', 'tangent', 'equal', 'symmetric', 'coincident', 'midpoint', 'concentric']);
+  const CLIPCONS = new Set(['horizontal', 'vertical', 'parallel', 'perpendicular', 'collinear', 'tangent', 'curvature', 'equal', 'symmetric', 'coincident', 'midpoint', 'concentric']);
   function copySel() {
     const ids = (S.patSel && S.patSel.length ? S.patSel : selectedIds()).filter((id) => ent(id));
     if (!ids.length) { UI.toast(T('sk.toast.copyEmpty'), { icon: 'info' }); return 0; }
@@ -1190,6 +1211,39 @@ const Sketch = (() => {
       if (P[0].kind === 'line' && P[1].kind === 'line') return fail();
       c = { refs: [P[0].ref, P[1].ref] };
       if (P[0].kind === 'circle' && P[1].kind === 'circle') { const A = refCircle(P[0].ref), B = refCircle(P[1].ref); c.mode = SK.d2(A.c, B.c) < Math.max(A.r, B.r) ? 'int' : 'ext'; }
+    } else if (t === 'curvature') {
+      const pe = last.ent || (last.ref && last.ref.e && last.ref.e !== 'origin' ? ent(last.ref.e) : null);
+      const isG2Spline = (x) => x && x.type === 'spline' && !x.closed && (x.pts || []).length >= 3;
+      const isG2Curve = (x, ref) => x && ((x.type === 'spline' && !x.closed && (x.pts || []).length >= 2) || (x.type === 'arc' && !!SK.arcInfo(x.a, x.m, x.b)) || x.type === 'line' || x.type === 'ellarc' || x.type === 'circle' || (x.type === 'rect' && ref && ref.edge != null));
+      if (pe && pe.type === 'spline' && pe.closed) { UI.toast(T('sk.toast.curvNeedOpen'), { icon: 'info' }); S.picks = []; render(); return; }
+      if (pe && pe.type === 'spline' && (pe.pts || []).length < 3) { UI.toast(T('sk.toast.curvNeedSpline3'), { icon: 'info' }); S.picks = []; render(); return; }
+      if (!isG2Curve(pe, last.ref)) return fail();
+      if (n < 2) return wait();
+      const e0 = P[0].ent || (P[0].ref && ent(P[0].ref.e)), e1 = P[1].ent || (P[1].ref && ent(P[1].ref.e));
+      if (!e0 || !e1 || e0.id === e1.id) return fail();
+      if (!isG2Spline(e0) && !isG2Spline(e1)) return fail();
+      const [sp, spRef, nb, nbRef] = isG2Spline(e0) ? [e0, P[0].ref, e1, P[1].ref] : [e1, P[1].ref, e0, P[0].ref];
+      const endPt = (en, ref, ep) => {
+        if (en.type === 'rect' && ref && ref.edge != null) {
+          const cs = SK.rectCorners(en), i = ((ref.edge % 4) + 4) % 4;
+          return ep === 'a' ? cs[i] : cs[(i + 1) % 4];
+        }
+        return ep === 'a' ? SK.endA(en) : SK.endB(en);
+      };
+      if (nb.type === 'circle') {
+        const da = Math.abs(SK.d2(endPt(sp, spRef, 'a'), nb.c) - nb.r);
+        const db = Math.abs(SK.d2(endPt(sp, spRef, 'b'), nb.c) - nb.r);
+        c = { refs: [{ e: sp.id, p: da <= db ? 'a' : 'b' }, { e: nb.id }] };
+      } else {
+        let best = ['a', 'a'], bd = Infinity;
+        for (const ep1 of ['a', 'b']) for (const ep2 of ['a', 'b']) {
+          const d = SK.d2(endPt(sp, spRef, ep1), endPt(nb, nbRef, ep2));
+          if (d < bd) { bd = d; best = [ep1, ep2]; }
+        }
+        const r2 = { e: nb.id, p: best[1] };
+        if (nbRef && nbRef.edge != null) r2.edge = nbRef.edge;
+        c = { refs: [{ e: sp.id, p: best[0] }, r2] };
+      }
     } else if (t === 'coincident') {
       if (n === 1) { if (isPt(last) || last.kind === 'line' || last.kind === 'circle') return wait(); return fail(); }
       if (isPt(P[0]) && (isPt(P[1]) || P[1].kind === 'line' || P[1].kind === 'circle')) c = { refs: [P[0].ref, P[1].ref] };
@@ -2246,7 +2300,7 @@ const Sketch = (() => {
       e.preventDefault();
       askDim({ e: pk.ent.id, k }, e.clientX, e.clientY); return;
     }
-    if (t.startsWith('c:')) { consPick(t === 'c:project' ? null : pickAt(uv0), e); return; }
+    if (t.startsWith('c:')) { consPick(t === 'c:project' ? null : pickAt(uv0, { points: t !== 'c:curvature' }), e); return; }
     if (t === 'select') {
       const tol = pxSize() * (e.pointerType === 'touch' ? 16 : 9);
       if (S.locked) {
@@ -3518,7 +3572,7 @@ const Sketch = (() => {
       }
       S.cursor = null; render(); return;
     }
-    if (S.tool === 'dim' || S.tool.startsWith('c:')) { S.hoverPick = pickAt(uv0, { refs: S.tool === 'c:project', points: S.tool !== 'c:project' && !(S.tool === 'dim' && S.dimMode === 'arcLen') }); S.cursor = null; render(); return; }
+    if (S.tool === 'dim' || S.tool.startsWith('c:')) { S.hoverPick = pickAt(uv0, { refs: S.tool === 'c:project', points: S.tool !== 'c:project' && S.tool !== 'c:curvature' && !(S.tool === 'dim' && S.dimMode === 'arcLen') }); S.cursor = null; render(); return; }
     if (S.tool === 'select') { S.cursor = null; if (isLoftLine()) loftPreview(); return; }
     if (S.tool === 'line' && S.lineMode !== 'tan2' && S.draft && !S.draft.arc) {
       S.cursor = linePoint(uv0, e);
@@ -3906,6 +3960,54 @@ const Sketch = (() => {
         if (sel && e.type === 'conic' && !S.step) {
           lineObj([e.a, e.m, e.b], acc, 1.2, { dashed: true, opacity: 0.55, order: 24 });
           ring(e.m, pxSize() * 3.8, acc, 1.8);
+        }
+      }
+      // Krümmungskamm (SK-34, nur Profi): Zähne zeigen nach außen (-K) mit gemeinsamem Maßstab über alle Kurven
+      S.curvCombCount = 0;
+      if (S.showCurv && !S.step && !isSimpleMode()) {
+        const combList = [];
+        for (const e of dispEnts) {
+          if (e.type !== 'spline' && e.type !== 'arc' && e.type !== 'ellarc' && e.type !== 'ellipse') continue;
+          const data = Solver.curvatureSamples(e);
+          if (data && data.samples && data.samples.length) combList.push({ e, data });
+        }
+        if (combList.length) {
+          const span = b ? Math.max(b[2] - b[0], b[3] - b[1], 10) : 40;
+          const targetH = clamp(span * 0.14, 3, 25);
+          const ks = [];
+          for (const it of combList) for (const s of it.data.samples) if (s.kAbs > 1e-7) ks.push(s.kAbs);
+          ks.sort((a, c) => a - c);
+          const kRef = ks.length ? ks[Math.min(ks.length - 1, Math.floor(ks.length * 0.9))] : 0.1;
+          const scaleMul = clamp(Number(S.curvScale) || 1, 0.1, 20);
+          const gain = (targetH / Math.max(kRef, 1e-5)) * scaleMul;
+          const maxTooth = targetH * 2.5 * scaleMul;
+          const combCol = th.dark ? '#f783ac' : '#d6336c';
+          for (const { e, data } of combList) {
+            const teethPos = [], tips = [];
+            for (const s of data.samples) {
+              let vx = -s.K[0] * gain, vy = -s.K[1] * gain;
+              const L = Math.hypot(vx, vy);
+              if (L > maxTooth && L > 1e-12) { const f = maxTooth / L; vx *= f; vy *= f; }
+              const tip = [s.p[0] + vx, s.p[1] + vy];
+              tips.push(tip);
+              const w0 = toWorld(s.p[0], s.p[1]).addScaledVector(S.F.n, 0.055);
+              const w1 = toWorld(tip[0], tip[1]).addScaledVector(S.F.n, 0.055);
+              teethPos.push(w0.x, w0.y, w0.z, w1.x, w1.y, w1.z);
+              S.curvCombCount++;
+            }
+            if (teethPos.length) {
+              const g = new THREE.BufferGeometry();
+              g.setAttribute('position', new THREE.Float32BufferAttribute(teethPos, 3));
+              const tl = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: new THREE.Color(combCol), transparent: true, opacity: e.con ? 0.35 : 0.65, depthTest: false }));
+              tl.renderOrder = 23;
+              tl.userData.curvComb = 'teeth';
+              tl.userData.entId = e.id;
+              grp.add(tl);
+            }
+            const envPts = data.closed && tips.length > 2 ? [...tips, tips[0]] : tips;
+            const env = lineObj(envPts, combCol, 1.5, { order: 23, opacity: e.con ? 0.45 : 0.9 });
+            if (env) { env.userData.curvComb = 'envelope'; env.userData.entId = e.id; }
+          }
         }
       }
       // gewählte und überfahrene Punkte
@@ -4471,7 +4573,7 @@ const Sketch = (() => {
   // Wo stehen die Symbole einer Regel? (Skizzen-Koordinaten)
   function consAnchors(c) {
     const px = pxSize(); const out = [];
-    const refs = c.type === 'xform' || c.type === 'offset' ? [c.refs[1]] : c.type === 'symmetric' ? [c.refs[2]] : c.type === 'coincident' || c.type === 'midpoint' ? [c.refs[0]] : c.type === 'concentric' ? [{ e: c.refs[1].e, p: 'c' }] : (c.type === 'horizontal' || c.type === 'vertical') && c.refs.length === 2 ? [c.refs[0]] : c.refs;
+    const refs = c.type === 'xform' || c.type === 'offset' ? [c.refs[1]] : c.type === 'symmetric' ? [c.refs[2]] : c.type === 'coincident' || c.type === 'midpoint' || c.type === 'curvature' ? [c.refs[0]] : c.type === 'concentric' ? [{ e: c.refs[1].e, p: 'c' }] : (c.type === 'horizontal' || c.type === 'vertical') && c.refs.length === 2 ? [c.refs[0]] : c.refs;
     for (const r of refs || []) {
       if (!r) continue;
       if (r.p || r.at || r.e === 'origin') { const q = refXY(r); if (q) out.push([q[0] + px * 12, q[1] - px * 12]); continue; }
@@ -5104,6 +5206,19 @@ const Sketch = (() => {
       }
       w.append(box);
     }
+    const appendCurvControls = (parent) => {
+      const cb = h('label', { class: 'check pro', 'data-help': 'curvatureComb' },
+        h('input', { type: 'checkbox', id: 'sk-curv-comb', checked: !!S.showCurv }),
+        T('sk.panel.showCurv')
+      );
+      cb.querySelector('input').onchange = (e) => { setShowCurvature(e.target.checked); };
+      parent.append(cb);
+      if (S.showCurv) {
+        const fc = h('div', { class: 'fields pro' });
+        fc.append(UI.numField({ id: 'sk-curv-scale', label: T('sk.panel.curvScale'), value: S.curvScale || 1, unit: '×', expr: false, min: 0.1, onCommit: (v) => setCurvatureScale(v) }));
+        parent.append(fc);
+      }
+    };
     const sels = selectedIds();
     const sel = sels.length === 1 ? ent(sels[0]) : null;
     const selCon = S.selCon && S.cons.find((c) => c.id === S.selCon);
@@ -5304,6 +5419,7 @@ const Sketch = (() => {
         ra.querySelector('input').onchange = (e) => setRevAxis(sel.id, e.target.checked);
         w.append(ra);
       }
+      if (sel.type === 'spline' || sel.type === 'arc' || sel.type === 'ellarc' || sel.type === 'ellipse') appendCurvControls(w);
       const del = h('button', { type: 'button', class: 'btn danger' }); del.innerHTML = icon('trash') + esc(T('common.delete'));
       del.onclick = () => deleteEnt(sel.id);
       w.append(h('div', { class: 'btn-row' }, del));
@@ -5576,6 +5692,7 @@ const Sketch = (() => {
       );
       angSnap.querySelector('input').onchange = (e) => { setAngleSnap(e.target.checked); };
       w.append(angSnap);
+      appendCurvControls(w);
       // Größe der ganzen Skizze – Breite ändern skaliert alles mit (z. B. ein importiertes Logo passend machen)
       const bb = S.tool === 'select' && S.ctx.mode !== 'pushpull' ? SK.bounds(S.ents.filter((e) => !e.con)) : null;
       if (bb && bb[2] - bb[0] > 1e-6 && bb[3] - bb[1] > 1e-6) {
@@ -6634,6 +6751,6 @@ const Sketch = (() => {
     UI.hint(hintFor(S.tool));
     Panels.renderRight();
   }
-  return { isLinkLost, rebindLink, linkPointsWorld, copySel, pasteClip, setRefDim, setDimSpec, setDimMode, setDimCircMode, setLocked, toggleLocked, setRevAxis, stretchBox, applyStretch, setLiveMirror, toggleLiveMirror, get liveMirror() { return S && S.liveMir ? S.liveMir.axis : null; }, check: runCheck, repair: repairCheck, focusCheckIssue, autoDefine: proposeAutoDefine, applyAutoDefine, cancelAutoDefine, toggleFreeSpots, setFreeMode, wiggleFree, focusConflictItem, removeConflictItem, clearConflict, bandSelect, init, refreshUI, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startEmboss, startPath, startLoftPath, editItem, pushPullFace, render, renderPanel, onKey, cancel, scaleAll, insertEnts, insertShape, insertFormulaCurve, insertPointsCSV, openFormulaPanel, openCsvPanel, textToCurves, loadFontFile, setBg, setTool, get angleSnap() { return angleSnapOn; }, setAngleSnap, lengthSnapStep, get active() { return !!S; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
+  return { isLinkLost, rebindLink, linkPointsWorld, copySel, pasteClip, setRefDim, setDimSpec, setDimMode, setDimCircMode, setLocked, toggleLocked, setRevAxis, stretchBox, applyStretch, setLiveMirror, toggleLiveMirror, get liveMirror() { return S && S.liveMir ? S.liveMir.axis : null; }, check: runCheck, repair: repairCheck, focusCheckIssue, autoDefine: proposeAutoDefine, applyAutoDefine, cancelAutoDefine, toggleFreeSpots, setFreeMode, wiggleFree, focusConflictItem, removeConflictItem, clearConflict, bandSelect, init, refreshUI, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startEmboss, startPath, startLoftPath, editItem, pushPullFace, render, renderPanel, onKey, cancel, scaleAll, insertEnts, insertShape, insertFormulaCurve, insertPointsCSV, openFormulaPanel, openCsvPanel, textToCurves, loadFontFile, setBg, setTool, get angleSnap() { return angleSnapOn; }, setAngleSnap, setShowCurvature, toggleCurvature, setCurvatureScale, lengthSnapStep, get active() { return !!S; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
 })();
 

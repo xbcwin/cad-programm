@@ -2326,6 +2326,21 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Hilfen, Befehle & Übersetzung**: `settingsFile` und `uiScale` in `werkzeug-hilfen.json` und `HELP`, DE/EN-Schlüsselgleichheit, Befehlssuche (`settings-export`, `settings-import`, `settings-scale`) und i18n-Testmodus im Einstellungsfenster ohne Seitenfehler.
 - [ ] **Von Hand**: Im Browser auf einem großen Monitor die Oberflächen-Größe auf 125 % und 150 % stellen, Modell, Skizze und Zeichnung auf saubere Lesbarkeit ohne Überlappung prüfen und eine gesicherte `.json`-Einstellungsdatei ins Fenster ziehen.
 
+## Krümmungskamm und Regel „krümmungsglatt“ (Auto [A-112], SK-34, SK-35)
+
+- [x] **Nur im Profi-Modus sichtbar**: In „Einfach“ sind `#sk-curv-comb` und `.consbar [data-tool="c:curvature"]` ausgeblendet, nach Umschalten auf „Profi“ werden beide sichtbar.
+- [x] **Krümmungskamm an/aus & Maßstab**: „Krümmung zeigen“ blendet für Spline und Bogen Kamm-Zähne und Hüllkurve in `Viewer.groups.sketch` ein (`curvCombCount > 0`), `#sk-curv-scale = 2` verdoppelt die Zahnlänge, Ausschalten entfernt alle Kamm-Linien rückstandslos (`0` Linien).
+- [x] **Regel „Krümmungsglatt (G2)“ am Bogen (R = 10 → R = 20) & an Linie**: 4-Punkt-Spline an Bogen `r = 10` per Regel-Leiste verbunden → Endpunkte deckungsgleich, Tangenten glatt (`dot > 0,9999`), Krümmung am Übergang gleich `0,1` (Abweichung unter `1 %`, zusätzlich unabhängig an `SK.splineBez` geprüft); Änderung auf `r = 20` führt die Krümmung exakt auf `0,05` (`< 1 %`) mit; G2 an Gerade ergibt `|κ| < 1e-4`; 2-Punkt-Spline wird mit Hinweis abgewiesen.
+- [x] **Hilfetexte, Befehle & DE/EN-Schlüssel**: `curvatureComb` und `cCurvature` in `werkzeug-hilfen.json` und `HELP`, DE/EN-Schlüsselgleichheit und Befehlssuche (`sketch-curvature`, `sketch-g2`) ohne Seitenfehler.
+- [ ] **Von Hand**: Im Browser eine geschwungene Spline an einen Bogen und eine Gerade zeichnen, „Krümmung zeigen“ einschalten, „Krümmungsglatt (G2)“ setzen und beim Ziehen der mittleren Spline-Punkte beobachten, wie die Krümmungskämme am Übergang gleich hoch bleiben.
+
+## Kleinster Innenradius und Symmetrie prüfen (Auto [A-104], PF-11, PF-16)
+
+- [x] **Kleinster Innenradius (Tasche R 2, Fräser R 3 → 1,5)**: Prüfen-Menü → „Kleinster Innenradius“ erkennt alle 4 Taschen-Ecken (`R 2`) als zu klein für Fräser `R 3` (rot markiert, `tooSmallCount == 4`, `minRadius == 2`), schaltet bei Fräser `R 1,5` auf grün um und zählt äußere Rundungen (`R 2` an der Außenecke) nicht mit; Klick in der Liste hebt die Fläche im Modell hervor.
+- [x] **Symmetrie prüfen (Quader & seitliche Bohrung)**: Symmetrischer Quader `30 × 20 × 15` ergibt an der YZ-Ebene „Symmetrisch“ (`100 %`, keine Abweichung). Eine seitliche Bohrung (`Ø 8` bei `X = 8, Y = 0`) meldet „Nicht symmetrisch“ mit roter/blauer Abweichungs-Überlagerung an YZ, bleibt an XZ weiterhin symmetrisch.
+- [x] **Hilfen, Befehle & Übersetzung**: `innerRadius` und `symmetryCheck` in `werkzeug-hilfen.json` und `HELP`, DE/EN-Schlüsselgleichheit sowie Befehlssuche (`innenradius`, `symmetrie`) ohne Seitenfehler.
+- [ ] **Von Hand**: Im Browser bei einem Bauteil mit Freiform-Rundungen, Bohrungen und Versatz-Symmetrieebene („Fläche“ und „Mitte“) die rote/blaue Hervorhebung und das Anspringen der Liste im 3D-Fenster prüfen.
+
 ## Strecken und Live-Spiegeln (Auto [A-110], SK-30, SK-46)
 - [x] **Profi-Modus**: Werkzeug „Strecken“ (`[data-tool="stretch"]`), Schalter `#sk-live-mir-btn` und Panel-Bereich `#sk-live-mir-box` sind im Modus „Einfach“ ausgeblendet und im Modus „Profi“ sichtbar.
 - [x] **Strecken am Rechteck und geregeltem Linienzug**: Auswahlrahmen per Maus aufziehen, Richtung X + Weg 5 mm anwenden → nur die rechte Kante wandert um 5 mm (Breite 25, linke Kante unverändert), vorhandene Regeln (`horizontal`, `vertical`, `coincident`, `fix`) bleiben gültig, `Strg+Z` macht rückgängig.
