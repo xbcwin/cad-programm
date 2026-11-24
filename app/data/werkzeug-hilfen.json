@@ -1398,5 +1398,15 @@
     "tip": "Live-Spiegeln: Alles neu Gezeichnete entsteht sofort auch gespiegelt",
     "hilfe": "Schalte im Profi-Modus „Live-Spiegeln“ ein und wähle eine vorhandene Linie (oder die X-/Y-Achse). Jede Linie, jeder Kreis, Bogen, Spline oder Umriss, den du danach zeichnest, entsteht sofort auch gespiegelt mit der Regel „Symmetrisch“ – so bleiben beide Seiten dauerhaft verknüpft.",
     "tipp": "Klick oben oder rechts erneut auf „Live-Spiegeln“, um das automatische Spiegeln wieder auszuschalten."
+  },
+  "curvatureComb": {
+    "tip": "Krümmungskamm an Splines, Bögen und Ellipsen ein- oder ausblenden (Profi)",
+    "hilfe": "Zeigt entlang von Splines, Kreisbögen, Ellipsen und Teil-Ellipsen feine Striche nach außen, deren Länge genau der Krümmung an jeder Stelle entspricht. Je länger die Zähne, desto stärker die Biegung – Sprünge oder Wellen in einer Kurve werden sofort sichtbar.",
+    "tipp": "Ideal zum Prüfen weicher Übergänge (z. B. nach „Krümmungsglatt (G2)“): Stoßen zwei Kurven glatt aneinander, treffen auch ihre Krümmungskämme genau auf gleicher Höhe zusammen."
+  },
+  "cCurvature": {
+    "tip": "Krümmungsglatt (G2): Spline geht nicht nur glatt, sondern auch mit gleicher Krümmung in die Nachbarkurve über (Profi)",
+    "hilfe": "Verbindet ein Ende einer offenen Spline (mit mindestens 3 Punkten) mit einem Bogen, einer Linie, einer anderen Spline oder einem Kreis, sodass am Übergang Punkt, Richtung (Tangente) und Krümmungsradius nahtlos übereinstimmen.",
+    "tipp": "Schalte „Krümmung zeigen“ ein, um den nahtlosen Übergang direkt als gleich hohen Krümmungskamm zu prüfen."
   }
 }

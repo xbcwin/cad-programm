@@ -2333,6 +2333,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Einfach-Modus, Hilfetexte & Übersetzung**: Im Modus „Einfach“ sind Kontrollpunkt-Spline und Tangenten-Griffe ausgeblendet; `splineControl` und `splineHandles` in `HELP` sowie alle neuen DE/EN-Texte vorhanden, ohne JavaScript-Fehler.
 - [ ] **Von Hand**: Im Browser im Profi-Modus eine geschwungene Kontrollpunkt-Spline und eine Durchgangs-Spline mit mehreren angepassten Tangenten-Griffen zeichnen, per Ziehen und Formel-Maß formen und als Körper hochziehen.
 
+## Krümmungskamm und Regel „krümmungsglatt“ (Auto [A-112], SK-34, SK-35)
+
+- [x] **Nur im Profi-Modus sichtbar**: In „Einfach“ sind `#sk-curv-comb` und `.consbar [data-tool="c:curvature"]` ausgeblendet, nach Umschalten auf „Profi“ werden beide sichtbar.
+- [x] **Krümmungskamm an/aus & Maßstab**: „Krümmung zeigen“ blendet für Spline und Bogen Kamm-Zähne und Hüllkurve in `Viewer.groups.sketch` ein (`curvCombCount > 0`), `#sk-curv-scale = 2` verdoppelt die Zahnlänge, Ausschalten entfernt alle Kamm-Linien rückstandslos (`0` Linien).
+- [x] **Regel „Krümmungsglatt (G2)“ am Bogen (R = 10 → R = 20) & an Linie**: 4-Punkt-Spline an Bogen `r = 10` per Regel-Leiste verbunden → Endpunkte deckungsgleich, Tangenten glatt (`dot > 0,9999`), Krümmung am Übergang gleich `0,1` (Abweichung unter `1 %`, zusätzlich unabhängig an `SK.splineBez` geprüft); Änderung auf `r = 20` führt die Krümmung exakt auf `0,05` (`< 1 %`) mit; G2 an Gerade ergibt `|κ| < 1e-4`; 2-Punkt-Spline wird mit Hinweis abgewiesen.
+- [x] **Hilfetexte, Befehle & DE/EN-Schlüssel**: `curvatureComb` und `cCurvature` in `werkzeug-hilfen.json` und `HELP`, DE/EN-Schlüsselgleichheit und Befehlssuche (`sketch-curvature`, `sketch-g2`) ohne Seitenfehler.
+- [ ] **Von Hand**: Im Browser eine geschwungene Spline an einen Bogen und eine Gerade zeichnen, „Krümmung zeigen“ einschalten, „Krümmungsglatt (G2)“ setzen und beim Ziehen der mittleren Spline-Punkte beobachten, wie die Krümmungskämme am Übergang gleich hoch bleiben.
+
 ## Strecken und Live-Spiegeln (Auto [A-110], SK-30, SK-46)
 - [x] **Profi-Modus**: Werkzeug „Strecken“ (`[data-tool="stretch"]`), Schalter `#sk-live-mir-btn` und Panel-Bereich `#sk-live-mir-box` sind im Modus „Einfach“ ausgeblendet und im Modus „Profi“ sichtbar.
 - [x] **Strecken am Rechteck und geregeltem Linienzug**: Auswahlrahmen per Maus aufziehen, Richtung X + Weg 5 mm anwenden → nur die rechte Kante wandert um 5 mm (Breite 25, linke Kante unverändert), vorhandene Regeln (`horizontal`, `vertical`, `coincident`, `fix`) bleiben gültig, `Strg+Z` macht rückgängig.
