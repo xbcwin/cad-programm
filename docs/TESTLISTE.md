@@ -538,6 +538,15 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Kette mit runden Ecken & Rückgängig**: L-Kette mit „Beidseitig“ und „Ecken: Rund“ → äußere Ecke gerundet (Bogen R = 4 mm), innere Ecke spitz; ein Rückgängig räumt alles auf.
 - [ ] **Von Hand**: Bei Vieleck, gemischten Ketten (Linie + Bogen) und gedrücktem Rückgängig prüfen, ob Vorschau-Schildchen, Eckenbögen und Hinweistexte klar wirken.
 
+## Schräge- und Hinterschnitt-Analyse (Auto [A-105])
+
+- [x] **Quader mit 3° Schräge, Grenze 1°**: Über Prüfen → „Schräge & Hinterschnitte“ zeigen alle vier Seitenflächen grün (`ok`, Schrägewinkel ~3°) ohne Warnung oder Hinterschnitt.
+- [x] **Grenzwinkel einstellbar**: Grenze von 1° auf 5° stellen färbt die 3°-Seitenflächen gelb (`warn`); zurück auf 1° wieder grün.
+- [x] **Quader mit seitlicher Nut → Hinterschnitt rot**: Nut-Decke, Nut-Boden und Nut-Rückwand werden rot als Hinterschnitt markiert (~720 mm²), senkrechte Außenwände gelb, Ober-/Unterseite grün.
+- [x] **Entformungsrichtung & Ein-/Zweiteilige Form**: Wechsel auf `+X` löst den Hinterschnitt der Nut auf; Abschalten von „Zweiteilige Form“ markiert auch die Unterseite als Hinterschnitt.
+- [x] **Befehlssuche, Hilfe & Schließen**: `Commands.search('hinterschnitt')` findet die Analyse, `HELP.draftAnalysis` ist vorhanden und Schließen räumt Overlay und Leiste auf.
+- [ ] **Von Hand**: Bei einem geschwungenen Gehäuse mit Rippen, Bohrungen und gewählter schräger Bezugsfläche Entformungsrichtung per „Fläche“ anklicken und prüfen, ob Farben, Richtungspfeil und Flächenwerte klar lesbar sind.
+
 ## Bohrungs-Arten (Auto [A-008])
 
 - [x] **Sackloch Ø 5 × 10 mit 118°-Bohrspitze**: Volumen des abgezogenen Teils stimmt bis auf < 0,05 mm³ mit Zylinder + 118°-Kegel überein, das Loch bleibt im Körper blind, Querschnitts-Vorschau zeigt `118°` und Gesamttiefe.
@@ -2286,6 +2295,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Reihenfolge drehen, Formeln, Fehler & Rückgängig**: `#fin-rot-*` tauscht `d1/d2/d3` reihum, Formeln (`F`, `F*2`, `F+1`) rechnen exakt (`7988 mm³`), zu großer Abstand (`25 mm`) meldet `toobig` ohne Absturz und `App.undo()` stellt den gültigen Zustand wieder her.
 - [x] **Hilfen, Befehle, Erklärtext & DE/EN-Schlüssel**: `fullFillet` und `cornerChamfer` in `werkzeug-hilfen.json` und `HELP`, DE/EN-Schlüsselgleichheit, `Commands.search('vollrundung')` / `Commands.search('ecken-fase')` und `Explain.local` sind vollständig ohne Seitenfehler.
 - [ ] **Von Hand**: Im Browser eine Vollrundung an einem gebogenen Steg oder über das Kontextmenü anlegen und eine Ecken-Fase an einer schrägen Körper-Ecke prüfen.
+
+## AMF, PLY und Punkte-Dateien (Auto [A-106], IO-12, IO-14)
+
+- [x] **PLY-Export und -Import (binär & ASCII)**: Würfel `25 × 25 × 25` als PLY exportiert (`#ex-ply`, `#ex-each`) und per `Start.openBlob` wieder geöffnet → `0` Fehler, exakt gleiche Dreieckszahl (`12`), gleiche Hüllmaße und gleiche Farbe (`#3f7fd6`); ASCII-PLY-Roundtrip über `Print.buildPLY(..., { ascii: true })` und `Start.parsePLY` konsistent.
+- [x] **AMF-Export und -Import (XML & ZIP-AMF mit Zoll)**: Export (`#ex-amf`) und Re-Import liefert exakt `12` Dreiecke, gleiche Hüllmaße, Namen und Farbe; komprimierte AMF-Datei mit `unit="inch"` rechnet sauber auf `25,4 × 25,4 × 25,4 mm` um.
+- [x] **CSV und XYZ als Punktwolke oder Skizzenpunkte**: 10-Punkte-CSV über `#points-import-dialog` als 3D-Punktwolke (`PointClouds` mit Verlauf, 3D-Anzeige und Rückgängig/Wiederholen) sowie als `10` Skizzenpunkte auf `XY` geladen; `#sk-csv` (`#csv-kind = 'points'`) fügt `10` Skizzenpunkte ein; 10-Punkte-`.xyz`-Datei importiert fehlerfrei als Punktwolke.
+- [x] **Hilfen, Befehle & DE/EN-Schlüssel**: `exportAmfPly`, `pointCloudImport` und `importCad` in `werkzeug-hilfen.json`, DE/EN-Schlüsselgleichheit und Befehlssuche (`ply`, `amf`, `xyz`) vollständig ohne JavaScript-Fehler.
+- [ ] **Von Hand**: Im Browser eine farbige PLY-Punktwolke oder ein Mesh aus MeshLab/Blender sowie eine eigene CSV-/XYZ-Messdatei per Ziehen ins Fenster öffnen, Punktgröße und Farbe rechts anpassen und „Als Skizzenpunkte übernehmen“ prüfen.
 
 ## Fehler melden
 

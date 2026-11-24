@@ -893,14 +893,15 @@ const Sketch = (() => {
   }
   function insertPointsCSV(text, opts = {}) {
     if (!S || S.step || guardLocked()) return [];
-    const res = SKO.parsePointsCSV(text);
-    if (!res.ok) { UI.toast(res.error, { kind: 'bad' }); return []; }
     const kind = opts.kind || (S.csv && S.csv.kind) || 'spline';
+    const res = SKO.parsePointsCSV(text, { minPoints: kind === 'points' ? 1 : 2 });
+    if (!res.ok) { UI.toast(res.error, { kind: 'bad' }); return []; }
     const closed = opts.closed != null ? !!opts.closed : !!(S.csv && S.csv.closed);
     const ents = SKO.pointsToCurveEnts(res.pts, { kind, closed, con: !!S.construction });
     if (!ents.length) return [];
     pushUndo(); S.ents.push(...ents); clearSel(); reapply(); render(); Panels.renderRight();
-    UI.toast(T(kind === 'polyline' ? 'sk.toast.csvInsertedPoly' : 'sk.toast.csvInsertedSpline', { n: res.pts.length }), { icon: 'check', ms: 2600 });
+    const msgKey = kind === 'points' ? 'sk.toast.csvInsertedPoints' : (kind === 'polyline' ? 'sk.toast.csvInsertedPoly' : 'sk.toast.csvInsertedSpline');
+    UI.toast(T(msgKey, { n: res.pts.length }), { icon: 'check', ms: 2600 });
     return ents;
   }
   function openFormulaPanel() {
@@ -5094,11 +5095,11 @@ const Sketch = (() => {
         cv.open = !!S.csvOpen;
         cv.addEventListener('toggle', () => { S.csvOpen = cv.open; });
         const C = S.csv;
-        cv.append(UI.selectField({ id: 'csv-kind', label: T('sk.panel.curveKind'), value: C.kind || 'spline', options: [['spline', T('sk.panel.curveSpline')], ['polyline', T('sk.panel.curvePolyline')]], onChange: (v) => { C.kind = v; } }));
+        cv.append(UI.selectField({ id: 'csv-kind', label: T('sk.panel.curveKind'), value: C.kind || 'spline', options: [['spline', T('sk.panel.curveSpline')], ['polyline', T('sk.panel.curvePolyline')], ['points', T('sk.panel.curvePoints')]], onChange: (v) => { C.kind = v; } }));
         const cvCl = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'csv-closed', checked: !!C.closed }), T('sk.panel.curveClosed'));
         cvCl.querySelector('input').onchange = (e) => { C.closed = e.target.checked; };
         cv.append(cvCl);
-        const csvFileInp = h('input', { type: 'file', id: 'csv-file', accept: '.csv,.txt,.dat,text/csv,text/plain', style: { display: 'none' } });
+        const csvFileInp = h('input', { type: 'file', id: 'csv-file', accept: '.csv,.xyz,.txt,.dat,text/csv,text/plain', style: { display: 'none' } });
         csvFileInp.onchange = async () => {
           const f = csvFileInp.files && csvFileInp.files[0];
           csvFileInp.value = '';

@@ -71,7 +71,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Assembly,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,ClashCheck,Log,Kernel,Drawing,UI}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,PointClouds,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Assembly,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,ClashCheck,Log,Kernel,Drawing,UI}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -21335,6 +21335,312 @@ def t_a103_vollrundung_eckenfase(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a106_amf_ply_punkte(p):
+    import base64, io, tempfile, zipfile
+
+    def same_bb(a, b, tol=0.05):
+        return a and b and len(a) == 6 and len(b) == 6 and all(abs(a[i] - b[i]) <= tol for i in range(6))
+
+    # 1. Würfel 25×25×25 als PLY (binär & ASCII) und AMF speichern und wieder öffnen -> gleiche Dreieckszahl & Hüllmaße
+    p.empty()
+    p.ev("""App.change('Wuerfel', d => {
+      const b = Model.newItem('box', { w: 25, d: 25, h: 25 }, { name: 'Würfel', color: '#3f7fd6' });
+      b.colorSet = true;
+      d.items.push(b);
+    })""")
+    warte_rechnen(p, 30)
+    orig = p.ev("""const it = App.doc.items[0]; const r = App.results.get(it.id);
+      return {
+        tris: r && r.data && r.data.triangles ? (r.data.triangles.length / 3) : 0,
+        bbox: r && r.data ? r.data.bbox : null,
+      };""")
+
+    p.pg.get_by_role('button', name='Exportieren').first.click(); p.wait(400)
+    dh_amf = p.pg.locator('#ex-amf').locator('xpath=ancestor::label').get_attribute('data-help')
+    dh_ply = p.pg.locator('#ex-ply').locator('xpath=ancestor::label').get_attribute('data-help')
+    p.pg.uncheck('#ex-step'); p.pg.check('#ex-amf'); p.pg.check('#ex-ply'); p.pg.check('#ex-each'); p.wait(100)
+    with p.pg.expect_download(timeout=90000) as dl:
+        p.pg.get_by_role('button', name='Als ZIP speichern').click()
+    zpath = os.path.join(tempfile.gettempdir(), 'tracery-a106.zip')
+    dl.value.save_as(zpath)
+    zf = zipfile.ZipFile(zpath)
+    names = zf.namelist()
+    ply_names = [n for n in names if '/' not in n and n.endswith('.ply')]
+    amf_names = [n for n in names if '/' not in n and n.endswith('.amf')]
+    einzeln_ok = 'Einzeln/Würfel.ply' in names and 'Einzeln/Würfel.amf' in names
+    ply_bytes = zf.read(ply_names[0]) if ply_names else b''
+    amf_bytes = zf.read(amf_names[0]) if amf_names else b''
+
+    # PLY wieder öffnen -> gleiche Dreieckszahl, Hüllmaße & Farbe
+    p.ev("App.change('leer', d => { d.items = []; })"); p.wait(300)
+    p.pg.evaluate("""(b64) => {
+      const bin = atob(b64), u = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+      return window.__masswerk.Start.openBlob(new File([u], 'Wuerfel.ply'));
+    }""", base64.b64encode(ply_bytes).decode('ascii'))
+    warte_rechnen(p, 30)
+    ply_imp = p.ev("""const it = App.doc.items[0]; const r = it && App.results.get(it.id);
+      return {
+        errs: App.errors.length,
+        n: App.doc.items.length,
+        kind: it && it.kind,
+        color: it && it.color,
+        tris: r && r.data && r.data.triangles ? (r.data.triangles.length / 3) : 0,
+        bbox: r && r.data ? r.data.bbox : null,
+      };""")
+    ascii_chk = p.ev("""const r = App.results.get(App.doc.items[0].id);
+      const asciiBytes = Print.buildPLY([{ vertices: r.data.vertices, triangles: r.data.triangles, name: 'W', color: '#3f7fd6' }], 'W', { ascii: true });
+      const parsed = Start.parsePLY(asciiBytes);
+      return { tris: parsed.triangles.length / 3, verts: parsed.vertexCount, color: parsed.color };""")
+    ok1 = (
+        dh_amf == 'exportAmfPly' and dh_ply == 'exportAmfPly'
+        and len(ply_names) == 1 and len(amf_names) == 1 and einzeln_ok
+        and orig['tris'] == 12
+        and ply_imp['errs'] == 0 and ply_imp['n'] == 1 and ply_imp['kind'] == 'import'
+        and ply_imp['tris'] == orig['tris']
+        and same_bb(ply_imp['bbox'], orig['bbox'], 0.05)
+        and ply_imp['color'] == '#3f7fd6'
+        and ascii_chk['tris'] == orig['tris'] and ascii_chk['verts'] == 8 and ascii_chk['color'] == '#3f7fd6'
+    )
+
+    # 2. AMF wieder öffnen + gezipptes AMF in Zoll -> Hüllmaß 25,4 mm
+    p.ev("App.change('leer', d => { d.items = []; })"); p.wait(300)
+    p.pg.evaluate("""(b64) => {
+      const bin = atob(b64), u = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+      return window.__masswerk.Start.openBlob(new File([u], 'Wuerfel.amf'));
+    }""", base64.b64encode(amf_bytes).decode('ascii'))
+    warte_rechnen(p, 30)
+    amf_imp = p.ev("""const it = App.doc.items[0]; const r = it && App.results.get(it.id);
+      return {
+        errs: App.errors.length,
+        n: App.doc.items.length,
+        name: it && it.name,
+        color: it && it.color,
+        tris: r && r.data && r.data.triangles ? (r.data.triangles.length / 3) : 0,
+        bbox: r && r.data ? r.data.bbox : null,
+      };""")
+
+    cube_v = [(0,0,0),(1,0,0),(1,1,0),(0,1,0),(0,0,1),(1,0,1),(1,1,1),(0,1,1)]
+    cube_t = [(0,2,1),(0,3,2),(4,5,6),(4,6,7),(0,1,5),(0,5,4),(1,2,6),(1,6,5),(2,3,7),(2,7,6),(3,0,4),(3,4,7)]
+    amf_v_xml = ''.join(f'<vertex><coordinates><x>{x}</x><y>{y}</y><z>{z}</z></coordinates></vertex>' for x, y, z in cube_v)
+    amf_t_xml = ''.join(f'<triangle><v1>{a}</v1><v2>{b}</v2><v3>{c}</v3></triangle>' for a, b, c in cube_t)
+    inch_amf = f'''<?xml version="1.0" encoding="UTF-8"?>
+<amf unit="inch" version="1.1">
+  <object id="0">
+    <metadata type="name">ZollAMF</metadata>
+    <color><r>0.91</r><g>0.51</g><b>0.23</b></color>
+    <mesh><vertices>{amf_v_xml}</vertices><volume>{amf_t_xml}</volume></mesh>
+  </object>
+</amf>'''
+    zbuf = io.BytesIO()
+    with zipfile.ZipFile(zbuf, 'w', zipfile.ZIP_DEFLATED) as az:
+        az.writestr('zoll.amf', inch_amf)
+    p.ev("App.change('leer', d => { d.items = []; })"); p.wait(250)
+    p.pg.evaluate("""(b64) => {
+      const bin = atob(b64), u = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+      return window.__masswerk.Start.openBlob(new File([u], 'zoll.amf'));
+    }""", base64.b64encode(zbuf.getvalue()).decode('ascii'))
+    warte_rechnen(p, 30)
+    inch_res = p.ev("""const it = App.doc.items[0]; const r = it && App.results.get(it.id);
+      return { errs: App.errors.length, name: it && it.name, bbox: r && r.data ? r.data.bbox : null };""")
+    ok2 = (
+        amf_imp['errs'] == 0 and amf_imp['n'] == 1
+        and amf_imp['name'] == 'Würfel' and amf_imp['color'] == '#3f7fd6'
+        and amf_imp['tris'] == orig['tris'] and same_bb(amf_imp['bbox'], orig['bbox'], 0.05)
+        and inch_res['errs'] == 0 and inch_res['name'] == 'ZollAMF'
+        and same_bb(inch_res['bbox'], [0, 0, 0, 25.4, 25.4, 25.4], 0.15)
+    )
+
+    # 3. CSV mit 10 Punkten -> 10 Punkte (als 3D-Punktwolke UND als Skizzenpunkte) + XYZ-Datei
+    csv10 = "x;y;z\n" + "\n".join(f"{i * 5};{round(math.sin(i * 0.5) * 10, 2).as_integer_ratio()[0] if False else str(round(math.sin(i * 0.5) * 10, 2)).replace('.', ',')};{i * 2}" for i in range(10))
+    p.ev("App.change('leer', d => { d.items = []; d.pointClouds = []; })"); p.wait(300)
+    p.pg.evaluate("(txt) => window.__masswerk.Start.openBlob(new File([txt], 'messung.csv', { type: 'text/csv' }))", csv10)
+    p.pg.locator('#points-import-dialog').wait_for(state='visible', timeout=5000)
+    dlg_txt = p.pg.locator('#points-import-dialog').text_content() or ''
+    p.pg.select_option('#pts-imp-mode', 'pointCloud'); p.wait(100)
+    p.pg.click('#pts-imp-ok'); p.wait(350)
+    pc_info = p.ev("""const pcs = PointClouds.list();
+      const pc = pcs[0];
+      return {
+        n: pcs.length,
+        pts: pc ? pc.points.length : 0,
+        meshCnt: Viewer.groups.pointClouds.children.length,
+        treeCnt: document.querySelectorAll('#pointcloud-tree .pointcloud-row').length,
+        bbox: pc ? PointClouds.bboxOf(pc).size : null,
+      };""")
+    p.ev("App.undo()"); p.wait(200)
+    pc_after_undo = p.ev("return PointClouds.list().length")
+    p.ev("App.redo()"); p.wait(200)
+    pc_after_redo = p.ev("return PointClouds.list().length")
+
+    # Dieselbe 10-Punkte-CSV über Dialog als Skizzenpunkte importieren
+    p.pg.evaluate("(txt) => window.__masswerk.Start.openBlob(new File([txt], 'skizze10.csv', { type: 'text/csv' }))", csv10)
+    p.pg.locator('#points-import-dialog').wait_for(state='visible', timeout=5000)
+    p.pg.select_option('#pts-imp-mode', 'sketchPoints'); p.wait(100)
+    p.pg.click('#pts-imp-ok'); p.wait(500)
+    sk_pts = p.ev("""const S = Sketch.state;
+      return {
+        active: Sketch.active,
+        total: S ? S.ents.length : 0,
+        points: S ? S.ents.filter(e => e.type === 'point').length : 0,
+      };""")
+
+    # Im Skizzen-Modus über #sk-csv mit #csv-kind = 'points' weitere 10 Punkte einfügen
+    p.ev("Sketch.cancel(true); Sketch.startOnPlane('XY')"); p.wait(700)
+    p.pg.click('#sk-csv summary'); p.wait(150)
+    p.pg.select_option('#csv-kind', 'points'); p.wait(100)
+    p.pg.set_input_files('#csv-file', {
+        'name': 'punkte10.csv',
+        'mimeType': 'text/csv',
+        'buffer': ("\n".join(f"{i * 3},{i * 2}" for i in range(10))).encode('utf-8'),
+    })
+    p.wait(450)
+    sk_csv_pts = SS(p, "return [S.ents.length, S.ents.filter(e => e.type === 'point').length]")
+    p.ev("Sketch.cancel(true)"); p.wait(250)
+
+    # XYZ-Datei (10 Punkte, mit Punktzahl-Kopfzeile) als Punktwolke
+    xyz10 = "10\n# Scan\n" + "\n".join(f"{i * 4} {i * 3} {i}" for i in range(10))
+    p.pg.evaluate("(txt) => window.__masswerk.Start.openBlob(new File([txt], 'scan.xyz'), { target: 'pointCloud' })", xyz10)
+    p.wait(300)
+    xyz_info = p.ev("""const pcs = PointClouds.list();
+      const last = pcs[pcs.length - 1];
+      return { n: pcs.length, pts: last ? last.points.length : 0, bbox: last ? PointClouds.bboxOf(last).size : null };""")
+
+    ok3 = (
+        '10' in dlg_txt
+        and pc_info['n'] == 1 and pc_info['pts'] == 10 and pc_info['meshCnt'] == 1 and pc_info['treeCnt'] == 1
+        and pc_info['bbox'] and abs(pc_info['bbox'][0] - 45) < 0.1 and abs(pc_info['bbox'][2] - 18) < 0.1
+        and pc_after_undo == 0 and pc_after_redo == 1
+        and sk_pts['active'] and sk_pts['total'] == 10 and sk_pts['points'] == 10
+        and sk_csv_pts == [10, 10]
+        and xyz_info['n'] == 2 and xyz_info['pts'] == 10
+        and xyz_info['bbox'] and abs(xyz_info['bbox'][0] - 36) < 0.1 and abs(xyz_info['bbox'][2] - 9) < 0.1
+    )
+
+    # 4. Hilfetexte, DE/EN-Schlüsselgleichheit, Befehlssuche & keine Seitenfehler
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    i18n_ok = p.pg.evaluate("Promise.all([fetch('data/texte-de.json').then(r=>r.json()), fetch('data/texte-en.json').then(r=>r.json())]).then(([d,e])=>{ const dk=Object.keys(d).sort(), ek=Object.keys(e).sort(); return dk.length===ek.length && dk.every((k,i)=>k===ek[i]); })")
+    cmds_ok = p.ev("return Commands.search('ply').some(c => c.id === 'export') && Commands.search('amf').some(c => c.id === 'import') && Commands.search('xyz').some(c => c.id === 'import-points')")
+    ok4 = (
+        all(k in hilfen and all(f in hilfen[k] for f in ('tip', 'hilfe', 'tipp')) for k in ('exportAmfPly', 'pointCloudImport', 'importCad'))
+        and i18n_ok and cmds_ok and not p.errs
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
+def t_a105_schraege_hinterschnitt(p):
+    p.empty()
+    # 1. Quader 20x20x10 mit 3° Entformungsschräge, Grenze 1° → alle 4 Seitenflächen grün
+    p.ev("""
+      App.change('draft-box', d => {
+        const b = Model.newItem('box', { w: 20, d: 20, h: 10 });
+        b.t.x = 0; b.t.y = 0;
+        b.finishes.push({ id: 'f_d1', type: 'draft', r: 3 });
+        d.items.push(b);
+      });
+    """)
+    warte_rechnen(p, 30)
+    p.pg.click('#t-check'); p.wait(250)
+    p.pg.click('#check-draft'); p.wait(400)
+    p.pg.locator('#draft-bar').wait_for(state='visible', timeout=5000)
+    info1 = p.ev("return Measure.draftInfo")
+    sides1 = [f for f in (info1 and info1.get('faces') or []) if abs(f['normal'][2]) < 0.5]
+    ok1 = (
+        info1 is not None and info1['active'] and info1['hasMesh']
+        and info1['minAngle'] == 1
+        and len(sides1) == 4
+        and all(f['status'] == 'ok' and 2.5 <= f['angle'] <= 3.5 for f in sides1)
+        and info1['areas']['warn'] < 0.05
+        and info1['areas']['undercut'] < 0.05
+        and p.pg.locator('#t-check.active').count() == 1
+    )
+
+    # 2. Winkel-Grenze auf 5° erhöhen → 3°-Seitenflächen gelb; zurück auf 1° → wieder grün
+    p.pg.fill('#draft-angle', '5')
+    p.pg.locator('#draft-angle').dispatch_event('change')
+    p.wait(300)
+    info2a = p.ev("return Measure.draftInfo")
+    sides2a = [f for f in (info2a and info2a.get('faces') or []) if abs(f['normal'][2]) < 0.5]
+    p.pg.fill('#draft-angle', '1')
+    p.pg.locator('#draft-angle').dispatch_event('change')
+    p.wait(300)
+    info2b = p.ev("return Measure.draftInfo")
+    ok2 = (
+        info2a is not None and info2a['minAngle'] == 5
+        and len(sides2a) == 4
+        and all(f['status'] == 'warn' for f in sides2a)
+        and info2a['areas']['warn'] > 700
+        and info2a['areas']['undercut'] < 0.05
+        and info2b is not None and info2b['areas']['warn'] < 0.05
+    )
+
+    # 3. Quader 30x30x30 mit seitlicher Nut (+X-Seite, x=[7..15], z=[11..19]) → Nut-Flächen rot (Hinterschnitt)
+    p.ev("""
+      App.change('groove-box', d => {
+        d.items = [];
+        const b = Model.newItem('box', { w: 30, d: 30, h: 30 }, { name: 'Block' });
+        b.t.x = 0; b.t.y = 0; b.t.z = 0;
+        const h = Model.newItem('box', { w: 10, d: 34, h: 8 }, { role: 'hole', name: 'Nut' });
+        h.t.x = 12; h.t.y = 0; h.t.z = 11;
+        const g = Model.newItem('group', {}, { name: 'Nutkoerper' });
+        g.children = [b, h];
+        d.items.push(g);
+      });
+    """)
+    warte_rechnen(p, 30)
+    p.wait(300)
+    info3 = p.ev("return Measure.draftInfo")
+    faces3 = info3 and info3.get('faces') or []
+    groove_ceil = [f for f in faces3 if f['normal'][2] < -0.9 and f['center'][2] > 15 and f['center'][2] < 25]
+    groove_floor = [f for f in faces3 if f['normal'][2] > 0.9 and f['center'][2] > 5 and f['center'][2] < 15]
+    groove_back = [f for f in faces3 if f['normal'][0] > 0.9 and abs(f['center'][0] - 7) < 0.5]
+    left_outer = [f for f in faces3 if f['normal'][0] < -0.9 and abs(f['center'][0] + 15) < 0.5]
+    top_face = [f for f in faces3 if f['normal'][2] > 0.9 and abs(f['center'][2] - 30) < 0.5]
+    sum_txt3 = (p.pg.locator('#draft-summary').text_content() or '').lower()
+    ok3 = (
+        len(groove_ceil) == 1 and groove_ceil[0]['status'] == 'undercut'
+        and len(groove_floor) == 1 and groove_floor[0]['status'] == 'undercut'
+        and len(groove_back) == 1 and groove_back[0]['status'] == 'undercut'
+        and len(left_outer) == 1 and left_outer[0]['status'] == 'warn'
+        and len(top_face) == 1 and top_face[0]['status'] == 'ok'
+        and 680 < info3['areas']['undercut'] < 760
+        and 'hinterschnitt' in sum_txt3
+    )
+
+    # 4. Richtung +X: Nut öffnet sich nach +X → kein Hinterschnitt; zurück auf +Z & Einseitig → Unterseite rot
+    p.pg.select_option('#draft-dir', '+X'); p.wait(300)
+    info4a = p.ev("return Measure.draftInfo")
+    p.pg.select_option('#draft-dir', '+Z'); p.wait(200)
+    p.pg.uncheck('#draft-two-sided'); p.wait(300)
+    info4b = p.ev("return Measure.draftInfo")
+    bottom4b = [f for f in (info4b and info4b.get('faces') or []) if f['normal'][2] < -0.9 and abs(f['center'][2]) < 0.5]
+    ok4 = (
+        info4a is not None and info4a['dirKey'] == '+X' and info4a['areas']['undercut'] < 0.05
+        and info4b is not None and info4b['twoSided'] is False
+        and len(bottom4b) == 1 and bottom4b[0]['status'] == 'undercut'
+        and info4b['areas']['undercut'] > 1500
+    )
+
+    # 5. Befehlssuche, Hilfe & Schließen über #draft-close
+    cmds_ok = p.ev("return Commands.search('hinterschnitt').some(c => c.id === 'draft-analysis')")
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    help_ok = (
+        'draftAnalysis' in hilfen
+        and all(f in hilfen['draftAnalysis'] for f in ('tip', 'hilfe', 'tipp'))
+        and p.pg.locator('#draft-bar').get_attribute('data-help') == 'draftAnalysis'
+    )
+    p.pg.click('#draft-close'); p.wait(250)
+    ok5 = (
+        cmds_ok and help_ok
+        and p.ev("return !Measure.draftActive && Measure.draftInfo === null")
+        and p.pg.locator('#draft-bar').count() == 0
+        and p.pg.locator('#t-check.active').count() == 0
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -21547,6 +21853,8 @@ TESTS = [
     ('[A-101] Feder und Spirale: Zylinder-Feder / Kegel-Feder / flache Spirale / Einfach-Modus', t_a101_feder_spirale),
     ('[A-102] Entlang Pfad mit Verdrehung und als Schnitt (KP-28, KP-29)', t_a102_pfad_verdrehung_schnitt),
     ('[A-103] Vollrundung und Ecken-Fase mit drei Abständen (KP-38, KP-41)', t_a103_vollrundung_eckenfase),
+    ('[A-106] AMF, PLY und Punkte-Dateien (IO-12, IO-14)', t_a106_amf_ply_punkte),
+    ('[A-105] Schräge- und Hinterschnitt-Analyse (PF-09, PF-10)', t_a105_schraege_hinterschnitt),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

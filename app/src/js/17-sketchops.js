@@ -457,7 +457,8 @@ const SKO = (() => {
     out.push(cur.trim());
     return out;
   }
-  function parsePointsCSV(text) {
+  function parsePointsCSV(text, opts = {}) {
+    const minPoints = opts && opts.minPoints === 1 ? 1 : 2;
     const lines = String(text ?? '').replace(/^\ufeff/, '').split(/\r?\n/)
       .map((l) => l.trim())
       .filter((l) => l && !l.startsWith('#') && !l.startsWith('//'));
@@ -475,8 +476,15 @@ const SKO = (() => {
     const firstCells = splitCsvLine(lines[0], sep);
     const hasHeader = firstCells.length < 2 || isNaN(parseNum(firstCells[0])) || isNaN(parseNum(firstCells[1]));
     let colX = 0, colY = 1;
-    if (hasHeader && firstCells.length >= 3 && /^(id|nr|no|index|punkt|point|name|#)$/i.test(firstCells[0])) {
-      colX = 1; colY = 2;
+    if (hasHeader) {
+      const lower = firstCells.map((c) => c.trim().toLowerCase());
+      const ix = lower.indexOf('x');
+      const iy = lower.indexOf('y');
+      if (ix >= 0 && iy >= 0 && ix !== iy) {
+        colX = ix; colY = iy;
+      } else if (firstCells.length >= 3 && /^(id|nr|no|index|punkt|point|name|#)$/i.test(firstCells[0])) {
+        colX = 1; colY = 2;
+      }
     }
     const startIdx = hasHeader ? 1 : 0;
     const pts = []; let skipped = 0;
@@ -487,11 +495,22 @@ const SKO = (() => {
       if (!isFinite(x) || !isFinite(y)) { skipped++; continue; }
       pts.push(pr([x, y]));
     }
-    if (pts.length < 2) return { ok: false, pts: [], error: 'Mindestens 2 gültige Punkte (X und Y je Zeile) erforderlich.' };
-    if (pts.length > 1000) return { ok: false, pts: [], error: 'Zu viele Punkte in der CSV-Datei (höchstens 1000).' };
+    if (pts.length < minPoints) {
+      return { ok: false, pts: [], error: minPoints === 1 ? 'Mindestens 1 gültiger Punkt (X und Y je Zeile) erforderlich.' : 'Mindestens 2 gültige Punkte (X und Y je Zeile) erforderlich.' };
+    }
+    if (pts.length > 5000) return { ok: false, pts: [], error: 'Zu viele Punkte in der Datei (höchstens 5000).' };
     return { ok: true, pts, skipped, header: hasHeader };
   }
   function pointsToCurveEnts(pts, { kind = 'spline', closed = false, con = false } = {}) {
+    const base = con ? { con: true } : {};
+    if (kind === 'points') {
+      const out = [];
+      for (const p of pts || []) {
+        if (!Array.isArray(p) || p.length < 2 || !isFinite(p[0]) || !isFinite(p[1])) continue;
+        out.push({ id: uid('e'), type: 'point', a: pr(p), ...base });
+      }
+      return out;
+    }
     const clean = [];
     for (const p of pts || []) {
       if (!Array.isArray(p) || p.length < 2 || !isFinite(p[0]) || !isFinite(p[1])) continue;
@@ -499,7 +518,6 @@ const SKO = (() => {
       if (!clean.length || d2(clean[clean.length - 1], q) >= 1e-7) clean.push(q);
     }
     if (clean.length < 2) return [];
-    const base = con ? { con: true } : {};
     if (kind === 'polyline') {
       const ents = [];
       for (let i = 0; i < clean.length - 1; i++) {

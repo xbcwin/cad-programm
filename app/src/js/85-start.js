@@ -263,7 +263,8 @@ const Start = (() => {
     return Model.countItems(doc) === 0
       && !(doc.params && doc.params.length)
       && !(doc.tables && doc.tables.length)
-      && !(doc.notes && doc.notes.length);
+      && !(doc.notes && doc.notes.length)
+      && !(doc.pointClouds && doc.pointClouds.length);
   }
   function formatRecoveryTime(ts) {
     if (!ts) return '';
@@ -1206,10 +1207,12 @@ const Start = (() => {
     if (Sketch.active) Sketch.cancel(true);
     if (App.mode !== 'model' && typeof Commands !== 'undefined' && Commands.setMode) Commands.setMode('model');
   }
-  // STEP, IGES, BREP, STL, 3MF oder OBJ als neues Teil (oder mehrere Teile) ins Projekt holen
+  // STEP, IGES, BREP, STL, 3MF, OBJ, AMF oder PLY als neues Teil (oder mehrere Teile) ins Projekt holen
   async function importCAD(f) {
     if (/\.3mf$/i.test(f.name)) return import3MF(f);
     if (/\.obj$/i.test(f.name)) return importOBJ(f);
+    if (/\.amf$/i.test(f.name)) return importAMF(f);
+    if (/\.ply$/i.test(f.name)) return importPLY(f);
     const fmt = /\.stl$/i.test(f.name) ? 'stl'
       : /\.(igs|iges)$/i.test(f.name) ? 'iges'
       : /\.brep$/i.test(f.name) ? 'brep'
@@ -1580,6 +1583,662 @@ const Start = (() => {
       if (!box.isEmpty()) Viewer.fit(items.map((x) => x.id));
     }, 1500);
   }
+  // ---------- AMF lesen: XML oder komprimiertes ZIP-AMF mit Einheiten, Materialien, Farben & Konstellationen ----------
+  async function parseAMF(buf) {
+    const bytes = buf instanceof Uint8Array ? buf : ArrayBuffer.isView(buf) ? new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength) : new Uint8Array(buf);
+    let xmlText = '';
+    if (bytes.length >= 2 && bytes[0] === 0x50 && bytes[1] === 0x4b) {
+      const files = await Zip.read(bytes);
+      const entryName = [...files.keys()].find((k) => /\.amf$/i.test(k))
+        || [...files.keys()].find((k) => /\.xml$/i.test(k))
+        || [...files.keys()][0];
+      if (!entryName) throw new Error('In der komprimierten AMF-Datei fehlt der XML-Inhalt.');
+      xmlText = new TextDecoder('utf-8').decode(files.get(entryName));
+    } else {
+      xmlText = new TextDecoder('utf-8').decode(bytes);
+    }
+    const doc = new DOMParser().parseFromString(xmlText.replace(/^\uFEFF/, ''), 'application/xml');
+    const root = doc.documentElement;
+    if (!root || root.localName !== 'amf' || doc.querySelector('parsererror')) {
+      throw new Error('Die AMF-XML-Datei ist ungültig oder beschädigt.');
+    }
+    const UNITS = { micron: 0.001, millimeter: 1, centimeter: 10, inch: 25.4, foot: 304.8, feet: 304.8, meter: 1000 };
+    const unitName = (root.getAttribute('unit') || 'millimeter').trim().toLowerCase();
+    const unitScale = UNITS[unitName] || 1;
+    const kids = (node, name) => [...((node && node.children) || [])].filter((c) => c.localName === name);
+    const childText = (node, name) => { const c = kids(node, name)[0]; return c ? (c.textContent || '').trim() : ''; };
+    const toHex = (r, g, b) => {
+      const c = (v) => clamp(Math.round((Number(v) || 0) * 255), 0, 255).toString(16).padStart(2, '0');
+      return `#${c(r)}${c(g)}${c(b)}`;
+    };
+    const readColor = (node) => {
+      const ce = kids(node, 'color')[0];
+      if (!ce) return null;
+      const r = parseFloat(childText(ce, 'r')), g = parseFloat(childText(ce, 'g')), b = parseFloat(childText(ce, 'b'));
+      if (!Number.isFinite(r) || !Number.isFinite(g) || !Number.isFinite(b)) return null;
+      return toHex(r, g, b);
+    };
+    const readMetaName = (node) => {
+      for (const m of kids(node, 'metadata')) {
+        if ((m.getAttribute('type') || '').toLowerCase() === 'name') {
+          const t = (m.textContent || '').trim();
+          if (t) return t;
+        }
+      }
+      return '';
+    };
+
+    const materials = new Map();
+    for (const mat of kids(root, 'material')) {
+      const mid = mat.getAttribute('id');
+      if (!mid) continue;
+      materials.set(mid, { name: readMetaName(mat), color: readColor(mat) });
+    }
+
+    const objects = new Map();
+    const objectOrder = [];
+    for (const ob of kids(root, 'object')) {
+      const oid = ob.getAttribute('id') || String(objectOrder.length);
+      const objName = readMetaName(ob);
+      const objColor = readColor(ob);
+      const objParts = [];
+      for (const mesh of kids(ob, 'mesh')) {
+        const vertsEl = kids(mesh, 'vertices')[0];
+        if (!vertsEl) continue;
+        const rawVerts = [];
+        for (const ve of kids(vertsEl, 'vertex')) {
+          const ce = kids(ve, 'coordinates')[0];
+          const x = ce ? parseFloat(childText(ce, 'x')) : NaN;
+          const y = ce ? parseFloat(childText(ce, 'y')) : NaN;
+          const z = ce ? parseFloat(childText(ce, 'z')) : NaN;
+          rawVerts.push(
+            (Number.isFinite(x) ? x : 0) * unitScale,
+            (Number.isFinite(y) ? y : 0) * unitScale,
+            (Number.isFinite(z) ? z : 0) * unitScale,
+          );
+        }
+        const nRawV = (rawVerts.length / 3) | 0;
+        const volumes = kids(mesh, 'volume');
+        for (let vi = 0; vi < volumes.length; vi++) {
+          const vol = volumes[vi];
+          const mid = vol.getAttribute('materialid');
+          const matInfo = mid && materials.has(mid) ? materials.get(mid) : null;
+          const col = readColor(vol) || (matInfo && matInfo.color) || objColor || null;
+          const triEls = kids(vol, 'triangle');
+          const remap = new Map();
+          const vOut = [];
+          const tOut = [];
+          const getV = (idx) => {
+            if (!Number.isFinite(idx) || idx < 0 || idx >= nRawV) return -1;
+            let mapped = remap.get(idx);
+            if (mapped === undefined) {
+              mapped = (vOut.length / 3) | 0;
+              remap.set(idx, mapped);
+              vOut.push(rawVerts[idx * 3], rawVerts[idx * 3 + 1], rawVerts[idx * 3 + 2]);
+            }
+            return mapped;
+          };
+          for (const te of triEls) {
+            const a = getV(parseInt(childText(te, 'v1'), 10));
+            const b = getV(parseInt(childText(te, 'v2'), 10));
+            const c = getV(parseInt(childText(te, 'v3'), 10));
+            if (a >= 0 && b >= 0 && c >= 0 && a !== b && b !== c && a !== c) tOut.push(a, b, c);
+          }
+          if (tOut.length >= 3 && vOut.length >= 9) {
+            const vName = volumes.length > 1 && matInfo && matInfo.name ? `${objName || 'Teil'} – ${matInfo.name}` : objName;
+            objParts.push({ name: vName, color: col, vertices: new Float32Array(vOut), triangles: new Uint32Array(tOut) });
+          }
+        }
+      }
+      if (objParts.length) {
+        objects.set(oid, objParts);
+        objectOrder.push(oid);
+      }
+    }
+
+    const parts = [];
+    const constellations = kids(root, 'constellation');
+    const applyInst = (src, inst) => {
+      const dx = (parseFloat(childText(inst, 'deltax')) || 0) * unitScale;
+      const dy = (parseFloat(childText(inst, 'deltay')) || 0) * unitScale;
+      const dz = (parseFloat(childText(inst, 'deltaz')) || 0) * unitScale;
+      const rx = (parseFloat(childText(inst, 'rx')) || 0) * (Math.PI / 180);
+      const ry = (parseFloat(childText(inst, 'ry')) || 0) * (Math.PI / 180);
+      const rz = (parseFloat(childText(inst, 'rz')) || 0) * (Math.PI / 180);
+      const hasRot = Math.abs(rx) > 1e-9 || Math.abs(ry) > 1e-9 || Math.abs(rz) > 1e-9;
+      const hasShift = Math.abs(dx) > 1e-9 || Math.abs(dy) > 1e-9 || Math.abs(dz) > 1e-9;
+      if (!hasRot && !hasShift) {
+        return { name: src.name, color: src.color, vertices: src.vertices.slice(), triangles: src.triangles.slice() };
+      }
+      const m = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(rx, ry, rz, 'XYZ'));
+      const e = m.elements;
+      const outV = new Float32Array(src.vertices.length);
+      for (let i = 0; i < src.vertices.length; i += 3) {
+        const x = src.vertices[i], y = src.vertices[i + 1], z = src.vertices[i + 2];
+        outV[i] = e[0] * x + e[4] * y + e[8] * z + dx;
+        outV[i + 1] = e[1] * x + e[5] * y + e[9] * z + dy;
+        outV[i + 2] = e[2] * x + e[6] * y + e[10] * z + dz;
+      }
+      return { name: src.name, color: src.color, vertices: outV, triangles: src.triangles.slice() };
+    };
+    if (constellations.length) {
+      for (const con of constellations) {
+        for (const inst of kids(con, 'instance')) {
+          const oid = inst.getAttribute('objectid');
+          const arr = oid ? objects.get(oid) : null;
+          if (!arr) continue;
+          for (const src of arr) parts.push(applyInst(src, inst));
+        }
+      }
+    }
+    if (!parts.length) {
+      for (const oid of objectOrder) parts.push(...objects.get(oid));
+    }
+    return { parts, unit: unitName, unitScale };
+  }
+  async function importAMF(f) {
+    if (f.size > 100e6) { UI.toast('Die Datei ist zu groß (über 100 MB).', { kind: 'bad' }); return; }
+    let parsed;
+    try { parsed = await parseAMF(await f.arrayBuffer()); } catch (e) {
+      UI.toast('Diese AMF-Datei kann ich nicht lesen: ' + (e && e.message ? e.message : 'unbekannter Fehler'), { kind: 'bad', ms: 7000 });
+      console.warn(e); return;
+    }
+    if (!parsed.parts.length) { UI.toast('In der AMF-Datei habe ich keine 3D-Körper gefunden.', { kind: 'bad', ms: 6000 }); return; }
+    ensureModelMode();
+    if (el) newProject(true);
+    const base = f.name.replace(/\.amf$/i, '');
+    const items = [];
+    for (let i = 0; i < parsed.parts.length; i++) {
+      const pt = parsed.parts[i];
+      const name = pt.name || (parsed.parts.length === 1 ? base : `${base} ${i + 1}`);
+      const stl = Print.buildSTL([{ vertices: pt.vertices, triangles: pt.triangles }], name);
+      const blobId = await Store.putBlob(stl);
+      const extra = pt.color ? { color: pt.color, more: { colorSet: true } } : {};
+      items.push(Model.newItem('import', { fmt: 'stl', blobId, size: stl.byteLength, file: f.name, scale: 1 }, { name, ...extra }));
+    }
+    App.change('AMF importiert', (doc) => { doc.items.push(...items); });
+    App.select(items.map((x) => x.id));
+    checkImportedList(items.map((x) => x.id));
+    const unitNote = parsed.unitScale !== 1 ? ` (von ${parsed.unit} in Millimeter umgerechnet)` : '';
+    UI.toast(`„${f.name}“ importiert: ${items.length} ${items.length === 1 ? 'Teil' : 'Teile'}${unitNote}.`, { icon: 'folder', ms: 6000 });
+    setTimeout(() => {
+      const box = new THREE.Box3();
+      for (const it of items) { const b = Actions.worldBox(it.id); if (b && !b.isEmpty()) box.union(b); }
+      if (!box.isEmpty()) Viewer.fit(items.map((x) => x.id));
+    }, 1500);
+  }
+  // ---------- PLY lesen: ASCII sowie binär Little-/Big-Endian (Dreiecksnetze und reine Punktwolken) ----------
+  function parsePLY(buf) {
+    const bytes = typeof buf === 'string'
+      ? new TextEncoder().encode(buf)
+      : buf instanceof Uint8Array ? buf : ArrayBuffer.isView(buf) ? new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength) : new Uint8Array(buf);
+    if (bytes.length < 16) throw new Error('Die PLY-Datei ist zu kurz.');
+    const dec = new TextDecoder('utf-8');
+    const hdrLines = [];
+    let pos = 0, foundEnd = false;
+    while (pos < bytes.length) {
+      let nl = pos;
+      while (nl < bytes.length && bytes[nl] !== 10) nl++;
+      const lineBytes = bytes.subarray(pos, nl > pos && bytes[nl - 1] === 13 ? nl - 1 : nl);
+      const line = dec.decode(lineBytes);
+      pos = nl < bytes.length ? nl + 1 : bytes.length;
+      if (line.trim() === 'end_header') { foundEnd = true; break; }
+      hdrLines.push(line.trim());
+    }
+    if (!foundEnd || !hdrLines.length || hdrLines[0].toLowerCase() !== 'ply') {
+      throw new Error('Ungültiger PLY-Kopf (ply / end_header fehlt).');
+    }
+    const UNITS = { micron: 0.001, millimeter: 1, mm: 1, centimeter: 10, cm: 10, inch: 25.4, in: 25.4, foot: 304.8, ft: 304.8, meter: 1000, m: 1000 };
+    const TYPE_NORM = {
+      char: 'int8', int8: 'int8', uchar: 'uint8', uint8: 'uint8',
+      short: 'int16', int16: 'int16', ushort: 'uint16', uint16: 'uint16',
+      int: 'int32', int32: 'int32', uint: 'uint32', uint32: 'uint32',
+      float: 'float32', float32: 'float32', double: 'float64', float64: 'float64',
+    };
+    const TYPE_SIZE = { int8: 1, uint8: 1, int16: 2, uint16: 2, int32: 4, uint32: 4, float32: 4, float64: 8 };
+    let format = null, unitScale = 1;
+    const elements = [];
+    let curEl = null;
+    for (let i = 1; i < hdrLines.length; i++) {
+      const line = hdrLines[i];
+      if (!line) continue;
+      const tok = line.split(/\s+/);
+      const kw = tok[0].toLowerCase();
+      if (kw === 'comment' || kw === 'obj_info') {
+        if (tok[1] && tok[1].toLowerCase() === 'unit' && tok[2]) {
+          const u = UNITS[tok[2].toLowerCase()];
+          if (u) unitScale = u;
+        }
+      } else if (kw === 'format') {
+        format = (tok[1] || '').toLowerCase();
+      } else if (kw === 'element') {
+        curEl = { name: (tok[1] || '').toLowerCase(), count: Math.max(0, parseInt(tok[2], 10) || 0), props: [] };
+        elements.push(curEl);
+      } else if (kw === 'property' && curEl) {
+        if ((tok[1] || '').toLowerCase() === 'list') {
+          const ct = TYPE_NORM[(tok[2] || '').toLowerCase()];
+          const it = TYPE_NORM[(tok[3] || '').toLowerCase()];
+          if (!ct || !it) throw new Error('Unbekannter PLY-Listentyp.');
+          curEl.props.push({ kind: 'list', countType: ct, itemType: it, name: (tok[4] || '').toLowerCase() });
+        } else {
+          const t = TYPE_NORM[(tok[1] || '').toLowerCase()];
+          if (!t) throw new Error('Unbekannter PLY-Typ: ' + tok[1]);
+          curEl.props.push({ kind: 'scalar', type: t, name: (tok[2] || '').toLowerCase() });
+        }
+      }
+    }
+    if (!['ascii', 'binary_little_endian', 'binary_big_endian'].includes(format)) {
+      throw new Error('Nicht unterstütztes PLY-Format: ' + (format || 'unbekannt'));
+    }
+
+    const vEl = elements.find((e) => e.name === 'vertex');
+    const vCount = vEl ? vEl.count : 0;
+    const vertices = new Float32Array(vCount * 3);
+    const hasCol = !!(vEl && ['red', 'r'].some((k) => vEl.props.some((p) => p.name === k))
+      && ['green', 'g'].some((k) => vEl.props.some((p) => p.name === k))
+      && ['blue', 'b'].some((k) => vEl.props.some((p) => p.name === k)));
+    const colors = hasCol ? new Uint8Array(vCount * 3) : null;
+    const triList = [];
+    let faceCount = 0;
+
+    if (format === 'ascii') {
+      const bodyLines = dec.decode(bytes.subarray(pos)).split(/\r\n|\r|\n/);
+      let li = 0;
+      const nextLine = () => {
+        while (li < bodyLines.length) {
+          const s = bodyLines[li++].trim();
+          if (s && !s.startsWith('comment')) return s;
+        }
+        return null;
+      };
+      for (const elDef of elements) {
+        if (elDef.name === 'vertex') {
+          let rSum = 0, gSum = 0, bSum = 0;
+          for (let i = 0; i < elDef.count; i++) {
+            const s = nextLine(); if (s == null) break;
+            const cols = s.split(/\s+/);
+            let ci = 0, x = 0, y = 0, z = 0, rr = 0, gg = 0, bb = 0, floatCol = false;
+            for (const p of elDef.props) {
+              if (p.kind === 'list') { const cnt = parseInt(cols[ci++], 10) || 0; ci += cnt; continue; }
+              const v = parseFloat(cols[ci++]);
+              if (p.name === 'x') x = v;
+              else if (p.name === 'y') y = v;
+              else if (p.name === 'z') z = v;
+              else if (p.name === 'red' || p.name === 'r') { rr = v; floatCol = floatCol || p.type === 'float32' || p.type === 'float64'; }
+              else if (p.name === 'green' || p.name === 'g') { gg = v; floatCol = floatCol || p.type === 'float32' || p.type === 'float64'; }
+              else if (p.name === 'blue' || p.name === 'b') { bb = v; floatCol = floatCol || p.type === 'float32' || p.type === 'float64'; }
+            }
+            vertices[i * 3] = (Number.isFinite(x) ? x : 0) * unitScale;
+            vertices[i * 3 + 1] = (Number.isFinite(y) ? y : 0) * unitScale;
+            vertices[i * 3 + 2] = (Number.isFinite(z) ? z : 0) * unitScale;
+            if (colors) {
+              const sc = floatCol && rr <= 1.0001 && gg <= 1.0001 && bb <= 1.0001 ? 255 : 1;
+              const cr = clamp(Math.round((Number.isFinite(rr) ? rr : 0) * sc), 0, 255);
+              const cg = clamp(Math.round((Number.isFinite(gg) ? gg : 0) * sc), 0, 255);
+              const cb = clamp(Math.round((Number.isFinite(bb) ? bb : 0) * sc), 0, 255);
+              colors[i * 3] = cr; colors[i * 3 + 1] = cg; colors[i * 3 + 2] = cb;
+              rSum += cr; gSum += cg; bSum += cb;
+            }
+          }
+          elDef._avgCol = colors && vCount > 0 ? `#${Math.round(rSum / vCount).toString(16).padStart(2, '0')}${Math.round(gSum / vCount).toString(16).padStart(2, '0')}${Math.round(bSum / vCount).toString(16).padStart(2, '0')}` : null;
+        } else if (elDef.name === 'face') {
+          faceCount = elDef.count;
+          for (let i = 0; i < elDef.count; i++) {
+            const s = nextLine(); if (s == null) break;
+            const cols = s.split(/\s+/);
+            let ci = 0;
+            for (const p of elDef.props) {
+              if (p.kind === 'list') {
+                const cnt = parseInt(cols[ci++], 10) || 0;
+                if (p.name === 'vertex_indices' || p.name === 'vertex_index') {
+                  const poly = [];
+                  for (let k = 0; k < cnt; k++) {
+                    const vi = parseInt(cols[ci + k], 10);
+                    if (Number.isFinite(vi) && vi >= 0 && vi < vCount) poly.push(vi);
+                  }
+                  for (let k = 1; k + 1 < poly.length; k++) {
+                    const a = poly[0], b = poly[k], c = poly[k + 1];
+                    if (a !== b && b !== c && a !== c) triList.push(a, b, c);
+                  }
+                }
+                ci += cnt;
+              } else {
+                ci++;
+              }
+            }
+          }
+        } else {
+          for (let i = 0; i < elDef.count; i++) { if (nextLine() == null) break; }
+        }
+      }
+    } else {
+      const le = format === 'binary_little_endian';
+      const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      let off = pos;
+      const readVal = (t) => {
+        const sz = TYPE_SIZE[t];
+        if (off + sz > bytes.length) throw new Error('Die binäre PLY-Datei ist unvollständig.');
+        let v = 0;
+        if (t === 'int8') v = dv.getInt8(off);
+        else if (t === 'uint8') v = dv.getUint8(off);
+        else if (t === 'int16') v = dv.getInt16(off, le);
+        else if (t === 'uint16') v = dv.getUint16(off, le);
+        else if (t === 'int32') v = dv.getInt32(off, le);
+        else if (t === 'uint32') v = dv.getUint32(off, le);
+        else if (t === 'float32') v = dv.getFloat32(off, le);
+        else if (t === 'float64') v = dv.getFloat64(off, le);
+        off += sz;
+        return v;
+      };
+      for (const elDef of elements) {
+        if (elDef.name === 'vertex') {
+          let rSum = 0, gSum = 0, bSum = 0;
+          for (let i = 0; i < elDef.count; i++) {
+            let x = 0, y = 0, z = 0, rr = 0, gg = 0, bb = 0, floatCol = false;
+            for (const p of elDef.props) {
+              if (p.kind === 'list') {
+                const cnt = readVal(p.countType) | 0;
+                off += Math.max(0, cnt) * TYPE_SIZE[p.itemType];
+                continue;
+              }
+              const v = readVal(p.type);
+              if (p.name === 'x') x = v;
+              else if (p.name === 'y') y = v;
+              else if (p.name === 'z') z = v;
+              else if (p.name === 'red' || p.name === 'r') { rr = v; floatCol = floatCol || p.type === 'float32' || p.type === 'float64'; }
+              else if (p.name === 'green' || p.name === 'g') { gg = v; floatCol = floatCol || p.type === 'float32' || p.type === 'float64'; }
+              else if (p.name === 'blue' || p.name === 'b') { bb = v; floatCol = floatCol || p.type === 'float32' || p.type === 'float64'; }
+            }
+            vertices[i * 3] = (Number.isFinite(x) ? x : 0) * unitScale;
+            vertices[i * 3 + 1] = (Number.isFinite(y) ? y : 0) * unitScale;
+            vertices[i * 3 + 2] = (Number.isFinite(z) ? z : 0) * unitScale;
+            if (colors) {
+              const sc = floatCol && rr <= 1.0001 && gg <= 1.0001 && bb <= 1.0001 ? 255 : 1;
+              const cr = clamp(Math.round((Number.isFinite(rr) ? rr : 0) * sc), 0, 255);
+              const cg = clamp(Math.round((Number.isFinite(gg) ? gg : 0) * sc), 0, 255);
+              const cb = clamp(Math.round((Number.isFinite(bb) ? bb : 0) * sc), 0, 255);
+              colors[i * 3] = cr; colors[i * 3 + 1] = cg; colors[i * 3 + 2] = cb;
+              rSum += cr; gSum += cg; bSum += cb;
+            }
+          }
+          elDef._avgCol = colors && vCount > 0 ? `#${Math.round(rSum / vCount).toString(16).padStart(2, '0')}${Math.round(gSum / vCount).toString(16).padStart(2, '0')}${Math.round(bSum / vCount).toString(16).padStart(2, '0')}` : null;
+        } else if (elDef.name === 'face') {
+          faceCount = elDef.count;
+          for (let i = 0; i < elDef.count; i++) {
+            for (const p of elDef.props) {
+              if (p.kind === 'list') {
+                const cnt = Math.max(0, readVal(p.countType) | 0);
+                if (p.name === 'vertex_indices' || p.name === 'vertex_index') {
+                  const poly = [];
+                  for (let k = 0; k < cnt; k++) {
+                    const vi = readVal(p.itemType) | 0;
+                    if (vi >= 0 && vi < vCount) poly.push(vi);
+                  }
+                  for (let k = 1; k + 1 < poly.length; k++) {
+                    const a = poly[0], b = poly[k], c = poly[k + 1];
+                    if (a !== b && b !== c && a !== c) triList.push(a, b, c);
+                  }
+                } else {
+                  off += cnt * TYPE_SIZE[p.itemType];
+                }
+              } else {
+                off += TYPE_SIZE[p.type];
+              }
+            }
+          }
+        } else {
+          for (let i = 0; i < elDef.count; i++) {
+            for (const p of elDef.props) {
+              if (p.kind === 'list') {
+                const cnt = Math.max(0, readVal(p.countType) | 0);
+                off += cnt * TYPE_SIZE[p.itemType];
+              } else {
+                off += TYPE_SIZE[p.type];
+              }
+            }
+          }
+        }
+      }
+    }
+    return {
+      vertices,
+      triangles: new Uint32Array(triList),
+      colors,
+      color: (vEl && vEl._avgCol) || null,
+      vertexCount: vCount,
+      faceCount,
+      isPointCloud: triList.length === 0 && vCount > 0,
+      unitScale,
+    };
+  }
+  async function importPLY(f) {
+    if (f.size > 100e6) { UI.toast('Die Datei ist zu groß (über 100 MB).', { kind: 'bad' }); return; }
+    let parsed;
+    try { parsed = parsePLY(await f.arrayBuffer()); } catch (e) {
+      UI.toast('Diese PLY-Datei kann ich nicht lesen: ' + (e && e.message ? e.message : 'unbekannter Fehler'), { kind: 'bad', ms: 7000 });
+      console.warn(e); return;
+    }
+    const base = f.name.replace(/\.ply$/i, '');
+    if (parsed.triangles.length >= 3) {
+      ensureModelMode();
+      if (el) newProject(true);
+      const stl = Print.buildSTL([{ vertices: parsed.vertices, triangles: parsed.triangles }], base);
+      const blobId = await Store.putBlob(stl);
+      const extra = parsed.color ? { color: parsed.color, more: { colorSet: true } } : {};
+      const it = Model.newItem('import', { fmt: 'stl', blobId, size: stl.byteLength, file: f.name, scale: 1 }, { name: base, ...extra });
+      App.change('PLY importiert', (doc) => { doc.items.push(it); });
+      App.select([it.id]);
+      checkImport(it.id).catch(() => {});
+      UI.toast(`„${f.name}“ importiert (${parsed.triangles.length / 3} Dreiecke).`, { icon: 'folder', ms: 5500 });
+      setTimeout(() => { const b = Actions.worldBox(it.id); if (b && !b.isEmpty()) Viewer.fit([it.id]); }, 1500);
+      return it;
+    }
+    if (parsed.vertexCount > 0 && typeof PointClouds !== 'undefined') {
+      ensureModelMode();
+      if (el) newProject(true);
+      const pts = [];
+      const cols = parsed.colors ? [] : null;
+      for (let i = 0; i < parsed.vertexCount; i++) {
+        pts.push([parsed.vertices[i * 3], parsed.vertices[i * 3 + 1], parsed.vertices[i * 3 + 2]]);
+        if (cols) cols.push([parsed.colors[i * 3], parsed.colors[i * 3 + 1], parsed.colors[i * 3 + 2]]);
+      }
+      const pc = PointClouds.add(pts, { name: base, file: f.name, colors: cols, color: parsed.color || undefined });
+      UI.toast(`„${f.name}“ als Punktwolke importiert (${pc ? pc.points.length : pts.length} Punkte).`, { icon: 'folder', ms: 5500 });
+      return pc;
+    }
+    UI.toast('In der PLY-Datei habe ich weder Dreiecke noch Punkte gefunden.', { kind: 'bad', ms: 6000 });
+    return null;
+  }
+  // ---------- Punkte-Datei (CSV / XYZ) einlesen: 3D-Punktwolke oder Skizzenpunkte (IO-14) ----------
+  function parsePointsFile(text) {
+    const rawLines = String(text ?? '').replace(/^\ufeff/, '').split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith('#') && !l.startsWith('//'));
+    if (!rawLines.length) return { ok: false, points: [], error: 'Die Punkte-Datei ist leer.' };
+    const splitRow = (line, sep) => {
+      if (sep === 'ws') return line.split(/\s+/).filter(Boolean);
+      const out = []; let cur = ''; let inQ = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') { if (inQ && line[i + 1] === '"') { cur += '"'; i++; } else inQ = !inQ; }
+        else if (ch === sep && !inQ) { out.push(cur.trim()); cur = ''; }
+        else cur += ch;
+      }
+      out.push(cur.trim());
+      return out;
+    };
+    const numOf = (s, commaDecimal) => {
+      let t = String(s ?? '').trim().replace(/^["']|["']$/g, '').replace(/\s+/g, '');
+      if (!t) return NaN;
+      if (commaDecimal && !t.includes('.')) t = t.replace(',', '.');
+      else if (commaDecimal && t.includes(',') && t.includes('.')) t = t.replace(/\./g, '').replace(',', '.');
+      return /^[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?$/.test(t) ? Number(t) : NaN;
+    };
+    // Optionale XYZ-Kopfzeile (nur Punktzahl in Zeile 1) überspringen
+    let lines = rawLines;
+    if (lines.length >= 2 && /^\d+$/.test(lines[0])) {
+      lines = lines.slice(1);
+    }
+    let sep = 'ws';
+    if (lines.some((l) => l.includes(';'))) sep = ';';
+    else if (lines.some((l) => l.includes('\t'))) sep = '\t';
+    else if (lines.some((l) => l.includes(','))) {
+      const sample = lines[lines.length - 1];
+      const byComma = splitRow(sample, ',');
+      if (byComma.length >= 2 && byComma.slice(0, 2).every((c) => !isNaN(numOf(c, false)))) sep = ',';
+      else if (/\s+/.test(sample)) sep = 'ws';
+      else sep = ',';
+    }
+    const commaDecimal = sep !== ',';
+    const firstCells = splitRow(lines[0], sep);
+    const numCount0 = firstCells.filter((c) => !isNaN(numOf(c, commaDecimal))).length;
+    const hasHeader = firstCells.length >= 2 && numCount0 < 2;
+    let colX = 0, colY = 1, colZ = -1, colR = -1, colG = -1, colB = -1;
+    if (hasHeader) {
+      const lower = firstCells.map((c) => c.trim().toLowerCase());
+      const findCol = (...names) => lower.findIndex((c) => names.includes(c));
+      const ix = findCol('x', 'px', 'coord_x');
+      const iy = findCol('y', 'py', 'coord_y');
+      const iz = findCol('z', 'pz', 'coord_z');
+      const ir = findCol('r', 'red', 'rot');
+      const ig = findCol('g', 'green', 'gruen', 'grün');
+      const ib = findCol('b', 'blue', 'blau');
+      if (ix >= 0 && iy >= 0) {
+        colX = ix; colY = iy; colZ = iz;
+        if (ir >= 0 && ig >= 0 && ib >= 0) { colR = ir; colG = ig; colB = ib; }
+      } else if (firstCells.length >= 3 && /^(id|nr|no|index|punkt|point|name|label|#)$/i.test(firstCells[0])) {
+        colX = 1; colY = 2; colZ = firstCells.length >= 4 ? 3 : -1;
+      }
+    } else if (firstCells.length >= 3 && isNaN(numOf(firstCells[0], commaDecimal)) && !isNaN(numOf(firstCells[1], commaDecimal)) && !isNaN(numOf(firstCells[2], commaDecimal))) {
+      // Führende Text-/Atom-Spalte (z. B. XYZ-Molekül-/Messformat: Label x y z)
+      colX = 1; colY = 2; colZ = firstCells.length >= 4 && !isNaN(numOf(firstCells[3], commaDecimal)) ? 3 : -1;
+    } else {
+      colZ = firstCells.length >= 3 ? 2 : -1;
+      if (firstCells.length >= 6 && [3, 4, 5].every((k) => !isNaN(numOf(firstCells[k], commaDecimal)))) {
+        colR = 3; colG = 4; colB = 5;
+      }
+    }
+    const startIdx = hasHeader ? 1 : 0;
+    const points = [], rawCols = colR >= 0 ? [] : null;
+    let is3D = false, skipped = 0;
+    for (let i = startIdx; i < lines.length; i++) {
+      const cells = splitRow(lines[i], sep);
+      let cx = colX, cy = colY, cz = colZ;
+      if (!hasHeader && cells.length >= 3 && isNaN(numOf(cells[0], commaDecimal)) && !isNaN(numOf(cells[1], commaDecimal)) && !isNaN(numOf(cells[2], commaDecimal))) {
+        cx = 1; cy = 2; cz = cells.length >= 4 ? 3 : -1;
+      }
+      if (cells.length <= Math.max(cx, cy)) { skipped++; continue; }
+      const x = numOf(cells[cx], commaDecimal);
+      const y = numOf(cells[cy], commaDecimal);
+      const z = cz >= 0 && cells.length > cz ? numOf(cells[cz], commaDecimal) : NaN;
+      if (!Number.isFinite(x) || !Number.isFinite(y)) { skipped++; continue; }
+      const zv = Number.isFinite(z) ? (is3D = true, z) : 0;
+      points.push([round(x, 4), round(y, 4), round(zv, 4)]);
+      if (rawCols) {
+        const rr = numOf(cells[colR], commaDecimal), gg = numOf(cells[colG], commaDecimal), bb = numOf(cells[colB], commaDecimal);
+        rawCols.push(Number.isFinite(rr) && Number.isFinite(gg) && Number.isFinite(bb) ? [rr, gg, bb] : null);
+      }
+      if (points.length >= 100000) break;
+    }
+    if (!points.length) return { ok: false, points: [], error: 'Keine gültigen Punkte (X, Y[, Z]) gefunden.' };
+    let colors = null;
+    if (rawCols && rawCols.some(Boolean)) {
+      const maxC = rawCols.reduce((m, c) => (c ? Math.max(m, c[0], c[1], c[2]) : m), 0);
+      const scaleC = maxC > 0 && maxC <= 1.0001 ? 255 : 1;
+      colors = rawCols.map((c) => c ? [
+        clamp(Math.round(c[0] * scaleC), 0, 255),
+        clamp(Math.round(c[1] * scaleC), 0, 255),
+        clamp(Math.round(c[2] * scaleC), 0, 255),
+      ] : [63, 127, 214]);
+    }
+    let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
+    for (const p of points) {
+      if (p[0] < x0) x0 = p[0]; if (p[0] > x1) x1 = p[0];
+      if (p[1] < y0) y0 = p[1]; if (p[1] > y1) y1 = p[1];
+      if (p[2] < z0) z0 = p[2]; if (p[2] > z1) z1 = p[2];
+    }
+    return { ok: true, points, is3D, colors, skipped, hasHeader, bbox: [x0, y0, z0, x1, y1, z1], error: null };
+  }
+  async function importPoints(f, opts = {}) {
+    if (f.size > 50e6) { UI.toast('Die Punkte-Datei ist zu groß (über 50 MB).', { kind: 'bad' }); return null; }
+    let txt;
+    try { txt = await f.text(); } catch (_) { UI.toast('Die Punkte-Datei konnte nicht gelesen werden.', { kind: 'bad' }); return null; }
+    if (!opts.target && Sketch.active) {
+      if (Sketch.state && Sketch.state.step) {
+        UI.toast('Klick zuerst „Zurück zur Skizze“, um die Punkte in die Skizze einzufügen.', { icon: 'info', ms: 5000 });
+        return null;
+      }
+      if (/\.xyz$/i.test(f.name)) return Sketch.insertPointsCSV(txt, { kind: 'points', name: f.name });
+      return Sketch.insertPointsCSV(txt, { name: f.name });
+    }
+    const parsed = parsePointsFile(txt);
+    if (!parsed.ok) { UI.toast(parsed.error, { kind: 'bad', ms: 6000 }); return null; }
+    const base = f.name.replace(/\.(csv|xyz|txt|dat)$/i, '') || 'Punkte';
+    const applyMode = (mode, scale = 1) => {
+      const s = Number(scale) > 0 ? Number(scale) : 1;
+      if (mode === 'sketchPoints' || mode === 'sketchSpline') {
+        const pts2d = parsed.points.slice(0, 5000).map((p) => [round(p[0] * s, 4), round(p[1] * s, 4)]);
+        if (!Sketch.active) {
+          ensureModelMode();
+          if (el) newProject(true);
+          Sketch.startOnPlane('XY');
+        }
+        const ents = SKO.pointsToCurveEnts(pts2d, { kind: mode === 'sketchPoints' ? 'points' : 'spline', closed: false });
+        const n = Sketch.insertEnts(ents);
+        UI.toast(mode === 'sketchPoints'
+          ? `${pts2d.length} Skizzenpunkte aus „${f.name}“ eingefügt.`
+          : `Spline durch ${pts2d.length} Punkte aus „${f.name}“ eingefügt.`, { icon: 'check', ms: 4000 });
+        return n;
+      }
+      ensureModelMode();
+      if (el) newProject(true);
+      const pc = PointClouds.add(parsed.points, { name: base, file: f.name, colors: parsed.colors, scale: s });
+      UI.toast(`„${f.name}“ als Punktwolke importiert (${pc ? pc.points.length : parsed.points.length} Punkte).`, { icon: 'folder', ms: 5000 });
+      return pc;
+    };
+    if (opts.target) return applyMode(opts.target, opts.scale || 1);
+    const st = { mode: 'pointCloud', scale: 1 };
+    const bb = parsed.bbox;
+    const dx = round(bb[3] - bb[0], 2), dy = round(bb[4] - bb[1], 2), dz = round(bb[5] - bb[2], 2);
+    const sumKey = parsed.is3D ? 'dlg.pts.summary3d' : 'dlg.pts.summary2d';
+    const body = h('div', { id: 'points-import-dialog', style: { display: 'grid', gap: '12px' }, 'data-help': 'pointCloudImport' },
+      h('div', { class: 'hint-box' }, T(sumKey, { file: f.name, n: parsed.points.length, dx: fmt(dx, 2), dy: fmt(dy, 2), dz: fmt(dz, 2) })),
+      UI.selectField({
+        id: 'pts-imp-mode',
+        label: T('dlg.pts.modeLabel'),
+        value: st.mode,
+        options: [
+          ['pointCloud', T('dlg.pts.modeCloud')],
+          ['sketchPoints', T('dlg.pts.modeSketchPts')],
+          ['sketchSpline', T('dlg.pts.modeSketchSpline')],
+        ],
+        onChange: (v) => { st.mode = v; },
+      }),
+      UI.selectField({
+        id: 'pts-imp-scale',
+        label: T('dlg.pts.scaleLabel'),
+        value: '1',
+        options: [['1', T('unit.mmShort')], ['10', T('unit.cmShort')], ['25.4', T('unit.inShort')], ['1000', T('unit.mShort')]],
+        onChange: (v) => { st.scale = parseFloat(v) || 1; },
+      }),
+      h('div', { class: 'hint-box' }, T('dlg.pts.hint')),
+    );
+    UI.modal({
+      title: T('dlg.pts.title'),
+      body,
+      actions: [
+        { label: T('common.cancel'), value: false },
+        { label: T('dlg.pts.importBtn'), id: 'pts-imp-ok', primary: true, value: true, run: () => applyMode(st.mode, st.scale) },
+      ],
+    });
+    return parsed;
+  }
+  function openPointsFile(opts = {}) {
+    const inp = h('input', { type: 'file', accept: '.csv,.xyz,text/csv,text/plain', style: { display: 'none' } });
+    inp.onchange = () => { const f = inp.files && inp.files[0]; inp.remove(); if (f) importPoints(f, opts); };
+    document.body.append(inp); inp.click();
+    setTimeout(() => { if (inp.isConnected) inp.remove(); }, 60000);
+  }
   // ---------- DXF lesen: Linien, Kreise, Bögen, Polylinien, Ellipsen und Splines werden eine Skizze ----------
   function parseDXF(txt) {
     const L = txt.split(/\r\n|\r|\n/), P = [];
@@ -1840,20 +2499,8 @@ const Start = (() => {
       }
       return importDXF(f);
     }
-    if (/\.csv$/i.test(f.name) && Sketch.active) {
-      if (Sketch.state && Sketch.state.step) {
-        UI.toast('Klick zuerst „Zurück zur Skizze“, um die CSV-Punkte in die Skizze einzufügen.', { icon: 'info', ms: 5000 });
-        return;
-      }
-      try {
-        const txt = await f.text();
-        Sketch.insertPointsCSV(txt, { name: f.name });
-      } catch (_) {
-        UI.toast('Die CSV-Datei konnte nicht gelesen werden.', { kind: 'bad' });
-      }
-      return;
-    }
-    if (/\.(step|stp|igs|iges|brep|stl|3mf|obj)$/i.test(f.name)) return importCAD(f);
+    if (/\.(csv|xyz)$/i.test(f.name)) return importPoints(f, opts);
+    if (/\.(step|stp|igs|iges|brep|stl|3mf|obj|amf|ply)$/i.test(f.name)) return importCAD(f);
     try {
       const txt = await f.text(); const doc = JSON.parse(txt);
       if (!doc || typeof doc !== 'object' || Array.isArray(doc) || (!Array.isArray(doc.items) && doc.format !== 'masswerk')) {
@@ -1876,13 +2523,13 @@ const Start = (() => {
     } catch (e) { const E = ERRORS.importFailed; UI.toast(`${E.titel}. ${E.erklaerung} ${E.loesung}`, { kind: 'bad', ms: 7000 }); console.warn(e); }
   }
   function openFile(opts = {}) {
-    const inp = h('input', { type: 'file', accept: '.json,application/json,.step,.stp,.igs,.iges,.brep,.stl,.3mf,.obj,.dxf,.svg', style: { display: 'none' } });
+    const inp = h('input', { type: 'file', accept: '.json,application/json,.step,.stp,.igs,.iges,.brep,.stl,.3mf,.obj,.amf,.ply,.dxf,.svg,.csv,.xyz', style: { display: 'none' } });
     inp.onchange = () => { const f = inp.files && inp.files[0]; inp.remove(); if (f) openBlob(f, opts); };
     document.body.append(inp); inp.click();
     setTimeout(() => { if (inp.isConnected) inp.remove(); }, 60000);
   }
-  // Dateien einfach ins Fenster ziehen (Projektdatei, 3D-Import oder 2D-Skizze)
-  const DROP_RE = /\.(json|step|stp|igs|iges|brep|stl|3mf|obj|dxf|svg)$/i;
+  // Dateien einfach ins Fenster ziehen (Projektdatei, 3D-Import, Punktwolke oder 2D-Skizze)
+  const DROP_RE = /\.(json|step|stp|igs|iges|brep|stl|3mf|obj|amf|ply|dxf|svg|csv|xyz)$/i;
   let dropEl = null, dragDepth = 0;
   function isFileDrag(e) {
     const dt = e && e.dataTransfer;
@@ -1914,10 +2561,10 @@ const Start = (() => {
     const title = ov.querySelector('.drop-title');
     const sub = ov.querySelector('.drop-sub');
     if (ico) ico.innerHTML = icon(inSketch ? 'sketch' : 'folder');
-    if (title) title.textContent = inSketch ? 'DXF oder SVG in diese Skizze einfügen' : 'Datei hier ablegen';
+    if (title) title.textContent = inSketch ? 'DXF, SVG oder Punkte in diese Skizze einfügen' : 'Datei hier ablegen';
     if (sub) sub.textContent = inSketch
-      ? 'Projekt (.json) oder 3D-Import (STEP, IGES, BREP, STL, 3MF, OBJ) öffnet bzw. importiert ebenfalls.'
-      : 'Projekt (.json) · 3D-Import (STEP, IGES, BREP, STL, 3MF, OBJ) · 2D-Skizze (DXF, SVG)';
+      ? 'Projekt (.json) oder 3D-Import (STEP, IGES, BREP, STL, 3MF, OBJ, AMF, PLY) öffnet bzw. importiert ebenfalls.'
+      : 'Projekt (.json) · 3D-Import (STEP, IGES, BREP, STL, 3MF, OBJ, AMF, PLY) · Punkte (CSV, XYZ) · 2D-Skizze (DXF, SVG)';
     ov.hidden = false;
     ov.setAttribute('aria-hidden', 'false');
   }
@@ -1934,7 +2581,7 @@ const Start = (() => {
       else if (f && f.name) unsupported.push(f.name);
     }
     if (!supported.length) {
-      UI.toast('Dieses Dateiformat kann ich nicht öffnen. Ziehe eine Projektdatei (.json), STEP, IGES, BREP, STL, 3MF, OBJ, DXF oder SVG ins Fenster.', { kind: 'bad', ms: 6000 });
+      UI.toast('Dieses Dateiformat kann ich nicht öffnen. Ziehe eine Projektdatei (.json), STEP, IGES, BREP, STL, 3MF, OBJ, AMF, PLY, CSV/XYZ, DXF oder SVG ins Fenster.', { kind: 'bad', ms: 6000 });
       return;
     }
     const projects = supported.filter((f) => /\.json$/i.test(f.name));
@@ -2506,7 +3153,7 @@ const Start = (() => {
     window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && dropEl && !dropEl.hidden) hideDropOverlay(); });
   }
   return {
-    init, importCAD, parseSTEP, import3MF, parse3MF, importOBJ, parseOBJ, importDXF, parseDXF, parseSVG, show, hide, newProject, newAssembly, openNewTab, openStoredInTab, renderTabs, openTabAddMenu, newProjectDialog, saveAsTemplate, openTemplate, openFile, openBlob, saveFile,
+    init, importCAD, parseSTEP, import3MF, parse3MF, importOBJ, parseOBJ, importAMF, parseAMF, importPLY, parsePLY, importPoints, parsePointsFile, openPointsFile, importDXF, parseDXF, parseSVG, show, hide, newProject, newAssembly, openNewTab, openStoredInTab, renderTabs, openTabAddMenu, newProjectDialog, saveAsTemplate, openTemplate, openFile, openBlob, saveFile,
     checkImport, healImport, importCheckOf, setImportHealOpts, dismissImportBanner,
     folderSupported, folderInfo, saveToFolder, saveToFolderNow, disconnectFolder,
     checkRecoveryOnBoot, startRecoveryTracking, restoreRecovery, dismissRecovery, flushRecovery,
