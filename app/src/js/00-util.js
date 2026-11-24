@@ -1767,6 +1767,11 @@ const HELP = {
   "hilfe": "Wähle ein Passungs-Kurzzeichen nach DIN EN ISO 286-2:2010: Großbuchstaben (z. B. H7, K7, P7) für Bohrungen, Kleinbuchstaben (z. B. g6, h6, k6, m6, p6) für Wellen. Tracery schlägt die Abmaße passend zum Nennmaß automatisch in der Tabelle nach (z. B. Ø20 H7 → +0,021 / 0 und Ø20 g6 → −0,007 / −0,020) und zeigt die Grenzmaße direkt daneben.",
   "tipp": "Unter „Anzeige“ stellst du ein, ob Kurzzeichen samt Abmaßen, nur das Kurzzeichen, nur Abmaße oder die Grenzmaße auf dem Blatt stehen."
  },
+ "drawingLostDims": {
+  "tip": "Verlorene Maße bei Modelländerungen erkennen, neu zuordnen oder löschen",
+  "hilfe": "Änderst du das 3D-Modell, rechnen sich alle Ansichten und Maße automatisch neu aus – veränderte Längen, Durchmesser oder Radien zeigen direkt den neuen Wert. Fehlt eine Bohrung, Rundung oder Kante nach einer Änderung, wird ihr Maß auf dem Blatt rot markiert und oben rechts in der Liste „Verlorene Maße“ angezeigt.",
+  "tipp": "Klicke in der Liste „Verlorene Maße“ auf „Neu zuordnen“, um das Maß samt Toleranz an eine andere Kante oder Bohrung zu hängen, oder auf „Löschen“."
+ },
  "drawingExportDxf": {
   "tip": "Zeichnung als DXF-Datei mit Layern je Linienart speichern",
   "hilfe": "Speichert das aktive Zeichnungsblatt als DXF-Datei (AC1009/R12) in Millimetern mit echten Linien, Kreisen, Bögen, Texten und dem Schriftfeld. Sichtbare Kanten, verdeckte Kanten, Tangentialkanten, Mittellinien, Schraffuren, Schnittlinien, Bemaßungen und der Rahmen liegen auf eigenen Layern mit passenden Linienarten.",

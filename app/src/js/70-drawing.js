@@ -41,6 +41,7 @@ const Drawing = (() => {
   let noteDraft = { tip: 'auto', text: '' };
   let balloonViewPref = 'auto';
   let centersListOpen = false;
+  let lastLostKey = '';
   function normDimStyle(raw, tpl = null) {
     const t = (tpl && tpl.dimStyle) || DEFAULT_DIM_STYLE;
     const rawArrow = raw && raw.arrow;
@@ -421,10 +422,15 @@ const Drawing = (() => {
       const nm = h('span', { class: 'st-name', title: s.name }, s.name);
       nm.ondblclick = (e) => { e.stopPropagation(); renameSheet(s.id); };
       const fmt = h('span', { class: 'st-fmt' }, s.sheet);
+      tab.append(nm, fmt);
+      if (proj) {
+        const nLost = lostDims(s).length;
+        if (nLost > 0) tab.append(h('span', { class: 'st-lost', title: `${nLost} ${nLost === 1 ? 'verlorenes Maß' : 'verlorene Maße'}` }, String(nLost)));
+      }
       const ren = h('button', { type: 'button', class: 'st-act st-ren', 'aria-label': 'Blatt umbenennen', 'data-tip': 'Blatt umbenennen' });
       ren.innerHTML = icon('edit');
       ren.onclick = (e) => { e.stopPropagation(); renameSheet(s.id); };
-      tab.append(nm, fmt, ren);
+      tab.append(ren);
       if (list.length > 1) {
         const del = h('button', { type: 'button', class: 'st-act st-del', 'aria-label': 'Blatt löschen', 'data-tip': 'Blatt löschen' });
         del.innerHTML = icon('close');
@@ -764,15 +770,29 @@ const Drawing = (() => {
   async function waitReady() {
     if (loadingProjPromise) await loadingProjPromise;
     await ensureProjections();
-    if (holder) render();
+    if (holder) {
+      render();
+      if (App.mode === 'drawing') Panels.renderRight();
+    }
   }
   async function refresh() {
     if (App.mode !== 'drawing') return;
+    const prevProjId = projId;
     try {
       await ensureProjections();
     } catch (e) { UI.toast('Die Ansichten konnten nicht berechnet werden: ' + e.message, { kind: 'bad' }); }
     render();
     Panels.renderRight();
+    const curLost = layout ? lostDims(dwg()) : [];
+    const curLostKey = curLost.map((x) => x.id).sort().join(',');
+    if (projId !== prevProjId && curLost.length) {
+      const prevSet = new Set(lastLostKey ? lastLostKey.split(',') : []);
+      const newlyLost = curLost.filter((x) => !prevSet.has(x.id));
+      if (newlyLost.length) {
+        UI.toast(`${newlyLost.length === 1 ? '1 Maß hat seine Kante verloren' : newlyLost.length + ' Maße haben ihre Kante verloren'} – siehe „Verlorene Maße“.`, { icon: 'warn', kind: 'warn', ms: 4000 });
+      }
+    }
+    lastLostKey = curLostKey;
   }
   // ---------- Kanten aufräumen ----------
   // Die Projektion liefert viele Kanten doppelt (Vorder- und Hinterkante liegen übereinander) und verdeckte
@@ -1835,12 +1855,12 @@ const Drawing = (() => {
     const wStack = Math.max(textW(tolInfo.upStr, SUB), textW(tolInfo.loStr, SUB)) * 0.95;
     return { totalW: wMain + gap + wStack };
   }
-  function emitDimTexts(texts, cx, cy, ang, dim, mainLabel, prefix, tolInfo, TXT) {
+  function emitDimTexts(texts, cx, cy, ang, dim, mainLabel, prefix, tolInfo, TXT, isLost = !!(dim && dim.lost)) {
     const rad = (ang * Math.PI) / 180;
     const exX = Math.cos(rad), exY = Math.sin(rad);
     const euX = Math.sin(rad), euY = -Math.cos(rad);
     const pt = (lx, ly) => [cx + exX * lx + euX * ly, cy + exY * lx + euY * ly];
-    const base = { rot: ang, id: dim.id, view: dim.view };
+    const base = { rot: ang, id: dim.id, view: dim.view, ...(isLost ? { lost: true } : {}) };
     if (!tolInfo) {
       texts.push({ ...base, x: cx, y: cy, t: mainLabel, size: TXT, anchor: 'middle', cls: 'dimtext' });
       return;
@@ -1885,11 +1905,374 @@ const Drawing = (() => {
     Panels.renderRight();
     return next;
   }
+  // ---------- Modelländerungen & verlorene Maße (ZE-14) ----------
+  function viewCirclesPool(v) {
+    if (!v || !v.geo) return [];
+    return [
+      ...(v.geo.circles || []),
+      ...(v.geo.hidden || []).filter((p) => p.c).map((p) => ({ c: p.c, r: p.r, full: !p.arc, arc: p.arc, hidden: true })),
+    ];
+  }
+  function viewVertexPoints(v) {
+    if (!v || !v.geo) return [];
+    const pts = [];
+    const addPt = (p) => {
+      if (!p) return;
+      if (!pts.some((q) => Math.hypot(q[0] - p[0], q[1] - p[1]) < 0.02)) pts.push([p[0], p[1]]);
+    };
+    for (const arr of [v.geo.polys, v.geo.tangents || [], v.geo.hidden || []]) {
+      for (const p of arr || []) {
+        if (!p.pts || !p.pts.length || (p.c && !p.arc)) continue;
+        addPt(p.pts[0]);
+        addPt(p.pts[p.pts.length - 1]);
+      }
+    }
+    return pts;
+  }
+  function isCircleInner(c, box) {
+    return Boolean(box && c && c.c[0] - c.r > box[0] + 0.15 && c.c[0] + c.r < box[2] - 0.15 && c.c[1] - c.r > box[1] + 0.15 && c.c[1] + c.r < box[3] - 0.15);
+  }
+  function incidentDirs(v, pt) {
+    const dirs = [];
+    for (const s of straightSegsOf(v, true)) {
+      let u = null;
+      if (Math.hypot(s.a[0] - pt[0], s.a[1] - pt[1]) <= 0.05) u = [(s.b[0] - s.a[0]) / s.L, (s.b[1] - s.a[1]) / s.L];
+      else if (Math.hypot(s.b[0] - pt[0], s.b[1] - pt[1]) <= 0.05) u = [(s.a[0] - s.b[0]) / s.L, (s.a[1] - s.b[1]) / s.L];
+      if (u && !dirs.some((d) => d[0] * u[0] + d[1] * u[1] > 0.99)) dirs.push(u);
+    }
+    return dirs;
+  }
+  function dirMatchScore(d1, d2) {
+    if (!d1 || !d1.length || !d2 || !d2.length) return 0;
+    let n = 0;
+    for (const u of d1) if (d2.some((w) => u[0] * w[0] + u[1] * w[1] > 0.985)) n++;
+    return n;
+  }
+  function angleDiff(a, b) {
+    let d = Math.abs((((a - b) % TWO_PI) + TWO_PI) % TWO_PI);
+    return Math.min(d, TWO_PI - d);
+  }
+  function makeCircleRef(v, c) {
+    const b = (v && v.geo && v.geo.box) || [0, 0, 0, 0];
+    const nearX = Math.abs((c.c[0] - c.r) - b[0]) <= 0.25 ? 'min' : Math.abs((c.c[0] + c.r) - b[2]) <= 0.25 ? 'max' : null;
+    const nearY = Math.abs((c.c[1] - c.r) - b[1]) <= 0.25 ? 'min' : Math.abs((c.c[1] + c.r) - b[3]) <= 0.25 ? 'max' : null;
+    const arcMid = c.arc ? (c.arc[0] + c.arc[1]) * 0.5 : null;
+    return {
+      kind: 'circle',
+      c: [c.c[0], c.c[1]],
+      r: c.r,
+      full: !!c.full,
+      isInner: isCircleInner(c, b),
+      arcMid,
+      nearX,
+      nearY,
+      box: [...b],
+    };
+  }
+  function makePointRef(v, pt, edge = null) {
+    const b = (v && v.geo && v.geo.box) || [0, 0, 0, 0];
+    const [x0, y0, x1, y1] = b;
+    if (!edge) {
+      const verts = viewVertexPoints(v);
+      const nearVert = verts.some((q) => Math.hypot(q[0] - pt[0], q[1] - pt[1]) <= 0.05);
+      if (!nearVert) {
+        const hitC = viewCirclesPool(v).find((c) => Math.hypot(c.c[0] - pt[0], c.c[1] - pt[1]) <= 0.05);
+        if (hitC) return { kind: 'circleCenter', circle: makeCircleRef(v, hitC), p: [pt[0], pt[1]], box: [...b] };
+      }
+    }
+    const sideOf = (val, minV, maxV) => {
+      if (Math.abs(val - minV) <= 0.08) return 'min';
+      if (Math.abs(val - maxV) <= 0.08) return 'max';
+      if (Math.abs(val - (minV + maxV) * 0.5) <= 0.08) return 'mid';
+      return null;
+    };
+    const xSide = sideOf(pt[0], x0, x1);
+    const ySide = sideOf(pt[1], y0, y1);
+    const dxMin = pt[0] - x0, dxMax = pt[0] - x1, dyMin = pt[1] - y0, dyMax = pt[1] - y1;
+    if (edge && edge.a && edge.b) {
+      const L = Math.hypot(edge.b[0] - edge.a[0], edge.b[1] - edge.a[1]) || 1;
+      const edgeDir = [(edge.b[0] - edge.a[0]) / L, (edge.b[1] - edge.a[1]) / L];
+      return { kind: 'edgePt', p: [pt[0], pt[1]], edgeDir, xSide, ySide, dxMin, dxMax, dyMin, dyMax, box: [...b] };
+    }
+    return { kind: 'vertex', p: [pt[0], pt[1]], xSide, ySide, dxMin, dxMax, dyMin, dyMax, dirs: incidentDirs(v, pt), box: [...b] };
+  }
+  function makeEdgeRef(v, seg) {
+    const b = (v && v.geo && v.geo.box) || [0, 0, 0, 0];
+    const L = Math.hypot(seg.b[0] - seg.a[0], seg.b[1] - seg.a[1]) || 1;
+    return {
+      kind: 'edge',
+      a: [...seg.a],
+      b: [...seg.b],
+      dir: [(seg.b[0] - seg.a[0]) / L, (seg.b[1] - seg.a[1]) / L],
+      aRef: makePointRef(v, seg.a),
+      bRef: makePointRef(v, seg.b),
+      box: [...b],
+    };
+  }
+  function makeChamferRef(v, seg, info) {
+    const b = (v && v.geo && v.geo.box) || [0, 0, 0, 0];
+    return {
+      kind: 'chamfer',
+      a: [...seg.a],
+      b: [...seg.b],
+      aRef: makePointRef(v, seg.a),
+      bRef: makePointRef(v, seg.b),
+      dir: [...info.dir],
+      p: [...info.p],
+      dist: info.dist,
+      ang: info.ang,
+      box: [...b],
+    };
+  }
+  function buildDimRef(dim, v) {
+    if (!dim || !v || !v.geo) return null;
+    if (dim.type === 'dia' || dim.type === 'rad') {
+      const hit = viewCirclesPool(v).find((c) => Math.hypot(c.c[0] - dim.c[0], c.c[1] - dim.c[1]) <= 0.2 && Math.abs(c.r - dim.r) <= 0.2)
+        || { c: dim.c, r: dim.r, full: !dim.partial };
+      return makeCircleRef(v, hit);
+    }
+    if (dim.type === 'lin') {
+      return { kind: 'lin', a: makePointRef(v, dim.a), b: makePointRef(v, dim.b) };
+    }
+    if (dim.type === 'chamfer') {
+      const seg = straightSegsOf(v, false).find((s) => Math.hypot((s.a[0] + s.b[0]) * 0.5 - dim.p[0], (s.a[1] + s.b[1]) * 0.5 - dim.p[1]) <= 0.5)
+        || { a: dim.p, b: dim.p };
+      return makeChamferRef(v, seg, { dir: dim.dir || [1, 1], p: dim.p, dist: dim.dist, ang: dim.ang });
+    }
+    if (dim.type === 'ang' && dim.e1 && dim.e2) {
+      return { kind: 'ang', e1: makeEdgeRef(v, { a: dim.e1[0], b: dim.e1[1] }), e2: makeEdgeRef(v, { a: dim.e2[0], b: dim.e2[1] }) };
+    }
+    if (dim.type === 'chain') {
+      return { kind: 'chain', pts: (dim.pts || []).map((p) => makePointRef(v, p)) };
+    }
+    if (dim.type === 'base' && dim.base) {
+      return { kind: 'base', base: makePointRef(v, dim.base), pts: (dim.pts || []).map((p) => makePointRef(v, p)) };
+    }
+    return null;
+  }
+  function resolveCircleRef(v, ref) {
+    if (!v || !v.geo || !ref) return null;
+    const pool = viewCirclesPool(v);
+    const b = v.geo.box, oldB = ref.box;
+    const cands = pool.filter((c) => {
+      if (ref.full && !c.full) return false;
+      if (ref.isInner === true && !isCircleInner(c, b)) return false;
+      return true;
+    });
+    const arcMidOf = (c) => (c.arc ? (c.arc[0] + c.arc[1]) * 0.5 : null);
+    const pickBest = (list, targetFn, tol = 0.35, maxAngDiff = 0.8) => {
+      let best = null, bestScore = Infinity;
+      for (const c of list) {
+        const tp = targetFn(c);
+        const d = Math.hypot(c.c[0] - tp[0], c.c[1] - tp[1]);
+        if (d > tol) continue;
+        if (!ref.full && ref.arcMid != null && c.arc) {
+          if (angleDiff(arcMidOf(c), ref.arcMid) > maxAngDiff) continue;
+        }
+        const outerBias = (ref.isInner === false && ref.full && isCircleInner(c, b)) ? 50 : 0;
+        const score = d * 20 + Math.abs(c.r - ref.r) + outerBias;
+        if (score < bestScore) { bestScore = score; best = c; }
+      }
+      return best;
+    };
+    let hit = pickBest(cands, () => ref.c, 0.35, 0.8);
+    if (!hit && !ref.full && (ref.nearX || ref.nearY)) {
+      hit = pickBest(cands, (c) => [
+        ref.nearX === 'min' ? b[0] + c.r : ref.nearX === 'max' ? b[2] - c.r : ref.c[0],
+        ref.nearY === 'min' ? b[1] + c.r : ref.nearY === 'max' ? b[3] - c.r : ref.c[1],
+      ], 0.35, 0.6);
+    }
+    if (!hit && oldB && Math.abs((b[2] - b[0]) - (oldB[2] - oldB[0])) <= 0.1 && Math.abs((b[3] - b[1]) - (oldB[3] - oldB[1])) <= 0.1) {
+      const dx = b[0] - oldB[0], dy = b[1] - oldB[1];
+      hit = pickBest(cands, () => [ref.c[0] + dx, ref.c[1] + dy], 0.35, 0.8);
+    }
+    return hit ? { c: [hit.c[0], hit.c[1]], r: hit.r, full: !!hit.full, arc: hit.arc } : null;
+  }
+  function resolvePointRef(v, ref) {
+    if (!v || !v.geo || !ref) return null;
+    if (ref.kind === 'circleCenter') {
+      const cr = resolveCircleRef(v, ref.circle);
+      return cr ? cr.c : null;
+    }
+    const b = v.geo.box, [x0, y0, x1, y1] = b, oldB = ref.box;
+    const expX = ref.xSide === 'min' ? x0 : ref.xSide === 'max' ? x1 : ref.xSide === 'mid' ? (x0 + x1) * 0.5 : ref.p[0];
+    const expY = ref.ySide === 'min' ? y0 : ref.ySide === 'max' ? y1 : ref.ySide === 'mid' ? (y0 + y1) * 0.5 : ref.p[1];
+    if (ref.kind === 'edgePt') {
+      const segs = straightSegsOf(v, true);
+      const targets = [[expX, expY]];
+      if (oldB && Math.abs((x1 - x0) - (oldB[2] - oldB[0])) <= 0.1 && Math.abs((y1 - y0) - (oldB[3] - oldB[1])) <= 0.1) {
+        targets.push([ref.p[0] + (x0 - oldB[0]), ref.p[1] + (y0 - oldB[1])]);
+      }
+      for (const tp of targets) {
+        let best = null, bd = 0.25;
+        for (const s of segs) {
+          const ux = (s.b[0] - s.a[0]) / s.L, uy = (s.b[1] - s.a[1]) / s.L;
+          if (Math.abs(ux * ref.edgeDir[0] + uy * ref.edgeDir[1]) <= 0.995) continue;
+          const tRaw = (tp[0] - s.a[0]) * ux + (tp[1] - s.a[1]) * uy;
+          if (tRaw < -0.25 || tRaw > s.L + 0.25) continue;
+          const t = clamp(tRaw, 0, s.L);
+          const px = s.a[0] + ux * t, py = s.a[1] + uy * t;
+          const d = Math.hypot(px - tp[0], py - tp[1]);
+          if (d < bd) { bd = d; best = [px, py]; }
+        }
+        if (best) return best;
+      }
+      return null;
+    }
+    const verts = viewVertexPoints(v);
+    const findNear = (target, tol = 0.2, requireDir = false) => {
+      let best = null, bestScore = Infinity;
+      for (const pt of verts) {
+        const d = Math.hypot(pt[0] - target[0], pt[1] - target[1]);
+        if (d > tol) continue;
+        const dScore = ref.dirs && ref.dirs.length ? dirMatchScore(incidentDirs(v, pt), ref.dirs) : 0;
+        if (requireDir && ref.dirs && ref.dirs.length && dScore <= 0) continue;
+        const score = d - dScore * 0.05;
+        if (score < bestScore) { bestScore = score; best = [pt[0], pt[1]]; }
+      }
+      return best;
+    };
+    let hit = findNear([expX, expY], 0.2);
+    if (!hit && oldB) {
+      const dw = (x1 - x0) - (oldB[2] - oldB[0]), dh = (y1 - y0) - (oldB[3] - oldB[1]);
+      if (Math.abs(dw) > 0.1 || Math.abs(dh) > 0.1) {
+        const cands = [];
+        if (ref.ySide) {
+          if (ref.dxMin != null) cands.push([x0 + ref.dxMin, expY]);
+          if (ref.dxMax != null) cands.push([x1 + ref.dxMax, expY]);
+        }
+        if (ref.xSide) {
+          if (ref.dyMin != null) cands.push([expX, y0 + ref.dyMin]);
+          if (ref.dyMax != null) cands.push([expX, y1 + ref.dyMax]);
+        }
+        for (const tp of cands) {
+          hit = findNear(tp, 0.15, true);
+          if (hit) break;
+        }
+      } else {
+        hit = findNear([ref.p[0] + (x0 - oldB[0]), ref.p[1] + (y0 - oldB[1])], 0.2);
+      }
+    }
+    return hit;
+  }
+  function resolveEdgeRef(v, ref) {
+    if (!v || !v.geo || !ref) return null;
+    const segs = straightSegsOf(v, true);
+    const a = resolvePointRef(v, ref.aRef), b = resolvePointRef(v, ref.bRef);
+    const matchesDir = (s) => {
+      const ux = (s.b[0] - s.a[0]) / s.L, uy = (s.b[1] - s.a[1]) / s.L;
+      return Math.abs(ux * ref.dir[0] + uy * ref.dir[1]) > 0.995;
+    };
+    const onSeg = (s, pt, tol = 0.2) => {
+      const ux = (s.b[0] - s.a[0]) / s.L, uy = (s.b[1] - s.a[1]) / s.L;
+      const nx = -uy, ny = ux;
+      if (Math.abs((pt[0] - s.a[0]) * nx + (pt[1] - s.a[1]) * ny) > tol) return false;
+      const t = (pt[0] - s.a[0]) * ux + (pt[1] - s.a[1]) * uy;
+      return t >= -tol && t <= s.L + tol;
+    };
+    if (a && b) {
+      const direct = segs.find((s) => matchesDir(s) && onSeg(s, a) && onSeg(s, b));
+      if (direct) return { a: [...direct.a], b: [...direct.b] };
+    }
+    const anchor = a || b || [(ref.a[0] + ref.b[0]) * 0.5, (ref.a[1] + ref.b[1]) * 0.5];
+    const cand = segs.find((s) => matchesDir(s) && onSeg(s, anchor, 0.25));
+    return cand ? { a: [...cand.a], b: [...cand.b] } : null;
+  }
+  function resolveChamferRef(v, ref) {
+    if (!v || !v.geo || !ref) return null;
+    const b = v.geo.box, oldB = ref.box;
+    let dx = 0, dy = 0;
+    if (oldB) {
+      const xSide = (ref.aRef && ref.aRef.xSide === 'max') || (ref.bRef && ref.bRef.xSide === 'max') ? 'max'
+        : ((ref.aRef && ref.aRef.xSide === 'min') || (ref.bRef && ref.bRef.xSide === 'min') ? 'min' : null);
+      const ySide = (ref.aRef && ref.aRef.ySide === 'max') || (ref.bRef && ref.bRef.ySide === 'max') ? 'max'
+        : ((ref.aRef && ref.aRef.ySide === 'min') || (ref.bRef && ref.bRef.ySide === 'min') ? 'min' : null);
+      if (xSide === 'min') dx = b[0] - oldB[0];
+      else if (xSide === 'max') dx = b[2] - oldB[2];
+      if (ySide === 'min') dy = b[1] - oldB[1];
+      else if (ySide === 'max') dy = b[3] - oldB[3];
+    }
+    const expP = [ref.p[0] + dx, ref.p[1] + dy];
+    let best = null, bd = Infinity;
+    for (const seg of straightSegsOf(v, false)) {
+      const info = analyzeChamfer(v, seg);
+      if (!info) continue;
+      if (info.dir[0] * ref.dir[0] + info.dir[1] * ref.dir[1] <= 0.85) continue;
+      const d = Math.hypot(info.p[0] - expP[0], info.p[1] - expP[1]);
+      const tol = Math.max(1.5, Math.max(ref.dist || 1, info.dist || 1) * 1.5);
+      if (d <= tol && d < bd) { bd = d; best = info; }
+    }
+    return best;
+  }
+  function resolveManualDim(dim, lay, sh = dwg()) {
+    if (!dim || dim.auto) return dim;
+    if (dim.view === 'free' || !dim.view) return { ...dim, lost: false };
+    if (['front', 'top', 'left', 'iso'].includes(dim.view) && sh.views && !sh.views[dim.view]) {
+      return { ...dim, lost: false, hiddenView: true };
+    }
+    const v = lay && lay.views ? lay.views[dim.view] : null;
+    if (!v || !v.geo) return { ...dim, lost: true, lostReason: 'Ansicht leer' };
+    if (!dim.ref) return { ...dim, lost: false };
+    if (dim.type === 'dia' || dim.type === 'rad') {
+      const c = resolveCircleRef(v, dim.ref);
+      if (!c) return { ...dim, lost: true, lostReason: dim.type === 'dia' ? 'Bohrung/Kreis fehlt' : 'Rundung/Bogen fehlt' };
+      return { ...dim, c: c.c, r: c.r, partial: !c.full, lost: false };
+    }
+    if (dim.type === 'lin') {
+      const a = resolvePointRef(v, dim.ref.a), b = resolvePointRef(v, dim.ref.b);
+      if (!a || !b || Math.hypot(b[0] - a[0], b[1] - a[1]) < 1e-4) return { ...dim, lost: true, lostReason: 'Kante oder Punkt fehlt' };
+      return { ...dim, a, b, lost: false };
+    }
+    if (dim.type === 'chamfer') {
+      const ch = resolveChamferRef(v, dim.ref);
+      if (!ch) return { ...dim, lost: true, lostReason: 'Fase fehlt' };
+      return { ...dim, p: ch.p, dir: ch.dir, dist: ch.dist, ang: ch.ang, lost: false };
+    }
+    if (dim.type === 'ang') {
+      const e1 = resolveEdgeRef(v, dim.ref.e1), e2 = resolveEdgeRef(v, dim.ref.e2);
+      if (!e1 || !e2) return { ...dim, lost: true, lostReason: 'Kante fehlt' };
+      const V = lineIntersect2D(e1.a, e1.b, e2.a, e2.b);
+      if (!V) return { ...dim, lost: true, lostReason: 'Kanten parallel' };
+      const mid = (dim.a0 + dim.a1) * 0.5;
+      const r = Math.max(4, dim.r || 10);
+      const sec = angularSector(V, e1, e2, [V[0] + Math.cos(mid) * r, V[1] + Math.sin(mid) * r]);
+      return { ...dim, v: V, e1: [e1.a, e1.b], e2: [e2.a, e2.b], a0: sec.a0, a1: sec.a1, lost: false };
+    }
+    if (dim.type === 'chain') {
+      const pts = (dim.ref.pts || []).map((pr) => resolvePointRef(v, pr));
+      if (pts.length < 2 || pts.some((p) => !p)) return { ...dim, lost: true, lostReason: 'Kante oder Punkt fehlt' };
+      return { ...dim, pts, lost: false };
+    }
+    if (dim.type === 'base') {
+      const base = resolvePointRef(v, dim.ref.base);
+      const pts = (dim.ref.pts || []).map((pr) => resolvePointRef(v, pr));
+      if (!base || !pts.length || pts.some((p) => !p)) return { ...dim, lost: true, lostReason: 'Bezugspunkt oder Kante fehlt' };
+      return { ...dim, base, pts, lost: false };
+    }
+    return { ...dim, lost: false };
+  }
+  function dimSummaryLabel(dim, st = sheetDimStyle()) {
+    if (!dim) return 'Maß';
+    if (dim.type === 'dia' || dim.type === 'rad') return dimLabelParts(dim, dimNominal(dim), st).mainLabel;
+    if (dim.type === 'lin') return fmtDim(dimNominal(dim), st);
+    if (dim.type === 'chamfer') {
+      const angTxt = Math.abs(dim.ang - 45) < 0.1 && st.decimals == null ? '45°' : fmtDimAngle(dim.ang, st);
+      return `${fmtDim(dim.dist, st)}×${angTxt}`;
+    }
+    if (dim.type === 'ang') return fmtDimAngle(((dim.a1 - dim.a0) * 180) / Math.PI, st);
+    if (dim.type === 'chain') return 'Kettenmaß';
+    if (dim.type === 'base') return 'Bezugsmaß';
+    return 'Maß';
+  }
+  function lostDims(sh = dwg()) {
+    const lay = (sh === dwg() && layout) ? layout : computeLayout(sh);
+    return autoDimList(sh, lay).filter((x) => x.lost);
+  }
   function autoDimList(sh = dwg(), lay = layout) {
     const all = [];
     const st = sheetDimStyle(sh);
     for (const dim of sh.dims) {
-      if (!dim.auto) { all.push(dim); continue; }
+      if (!dim.auto) { all.push(resolveManualDim(dim, lay, sh)); continue; }
       const out = [];
       const v = lay.views[dim.view]; if (!v) continue;
       const b = v.geo.box;
@@ -1941,18 +2324,19 @@ const Drawing = (() => {
     }
     return all;
   }
-  function drawSpanDim(lines, texts, P1, P2, val, dimOrId, outerTail = true, st = sheetDimStyle()) {
+  function drawSpanDim(lines, texts, P1, P2, val, dimOrId, outerTail = true, st = sheetDimStyle(), isLost = !!(dimOrId && typeof dimOrId === 'object' && dimOrId.lost)) {
     const dim = dimOrId && typeof dimOrId === 'object' ? dimOrId : null;
     const id = dim ? dim.id : dimOrId;
+    const lostObj = isLost ? { lost: true } : {};
     const TXT = st.fontSize, AR = clamp(TXT * 0.85, 2, 7), aStyle = st.arrow;
-    lines.push({ pts: [P1, P2], cls: 'dim', id });
+    lines.push({ pts: [P1, P2], cls: 'dim', id, ...lostObj });
     const L = Math.hypot(P2[0] - P1[0], P2[1] - P1[1]);
     const inside = (aStyle === 'slash' || aStyle === 'dot') ? true : L > AR * 2.6;
-    arrowHead(lines, P1, P2, AR, inside, id, null, aStyle);
-    arrowHead(lines, P2, P1, AR, inside, id, null, aStyle);
+    arrowHead(lines, P1, P2, AR, inside, id, null, aStyle, null, null, isLost);
+    arrowHead(lines, P2, P1, AR, inside, id, null, aStyle, null, null, isLost);
     if (!inside && outerTail) {
       const ux = (P2[0] - P1[0]) / (L || 1), uy = (P2[1] - P1[1]) / (L || 1);
-      lines.push({ pts: [[P1[0] - ux * AR * 2.4, P1[1] - uy * AR * 2.4], P1], cls: 'dim', id }, { pts: [P2, [P2[0] + ux * AR * 2.4, P2[1] + uy * AR * 2.4]], cls: 'dim', id });
+      lines.push({ pts: [[P1[0] - ux * AR * 2.4, P1[1] - uy * AR * 2.4], P1], cls: 'dim', id, ...lostObj }, { pts: [P2, [P2[0] + ux * AR * 2.4, P2[1] + uy * AR * 2.4]], cls: 'dim', id, ...lostObj });
     }
     const mx = (P1[0] + P2[0]) / 2, my = (P1[1] + P2[1]) / 2;
     // Maßzahl lesbar von unten oder von rechts (ISO 129): Winkel in [-90°, 90°)
@@ -1964,14 +2348,15 @@ const Drawing = (() => {
     if (dim) {
       const { mainLabel, prefix } = dimLabelParts(dim, val, st);
       const tolInfo = resolveDimTol(dim, val);
-      emitDimTexts(texts, tx, ty, ang, dim, mainLabel, prefix, tolInfo, TXT);
+      emitDimTexts(texts, tx, ty, ang, dim, mainLabel, prefix, tolInfo, TXT, isLost);
     } else {
-      texts.push({ x: tx, y: ty, t: fmtDim(val, st), size: TXT, rot: ang, anchor: 'middle', id, cls: 'dimtext' });
+      texts.push({ x: tx, y: ty, t: fmtDim(val, st), size: TXT, rot: ang, anchor: 'middle', id, cls: 'dimtext', ...lostObj });
     }
   }
   function dimSVG(dim, lines, texts, lay = layout, sh = dwg()) {
     const v = lay.views[dim.view]; if (!v) return;
     const st = sheetDimStyle(sh);
+    const isLost = !!dim.lost, lostObj = isLost ? { lost: true } : {};
     const TXT = st.fontSize, AR = clamp(TXT * 0.85, 2, 7), EXT = Math.max(2, TXT * 0.55), GAPX = 1, TGAP = Math.max(1.2, TXT * 0.34), aStyle = st.arrow;
     if (dim.type === 'lin') {
       const A = toSheet(v, dim.a), B = toSheet(v, dim.b);
@@ -1992,8 +2377,8 @@ const Drawing = (() => {
         const sg = Math.sign(off) || 1;
         E1s = [[A[0] + nx * sg * GAPX, A[1] + ny * sg * GAPX], [P1[0] + nx * sg * EXT, P1[1] + ny * sg * EXT]]; E2s = [[B[0] + nx * sg * GAPX, B[1] + ny * sg * GAPX], [P2[0] + nx * sg * EXT, P2[1] + ny * sg * EXT]];
       }
-      lines.push({ pts: E1s, cls: 'dim', id: dim.id }, { pts: E2s, cls: 'dim', id: dim.id });
-      drawSpanDim(lines, texts, P1, P2, val, dim, true, st);
+      lines.push({ pts: E1s, cls: 'dim', id: dim.id, ...lostObj }, { pts: E2s, cls: 'dim', id: dim.id, ...lostObj });
+      drawSpanDim(lines, texts, P1, P2, val, dim, true, st, isLost);
     } else if (dim.type === 'dia' || dim.type === 'rad') {
       const C = toSheet(v, dim.c); const R = dim.r * v.s; const ang = ((dim.ang ?? 45) * Math.PI) / 180;
       const ux = Math.cos(ang), uy = -Math.sin(ang);
@@ -2014,25 +2399,25 @@ const Drawing = (() => {
       if (dim.type === 'dia') {
         const Q = [C[0] - ux * R, C[1] - uy * R];
         if (dim.partial) {
-          lines.push({ pts: [C, P], cls: 'dim', id: dim.id });
-          arrowHead(lines, P, R >= AR * 1.3 ? C : out, AR, true, dim.id, null, aStyle);
+          lines.push({ pts: [C, P], cls: 'dim', id: dim.id, ...lostObj });
+          arrowHead(lines, P, R >= AR * 1.3 ? C : out, AR, true, dim.id, null, aStyle, null, null, isLost);
         } else if (2 * R >= AR * 2.6 || aStyle === 'slash' || aStyle === 'dot') {
-          lines.push({ pts: [Q, P], cls: 'dim', id: dim.id });
-          arrowHead(lines, Q, P, AR, true, dim.id, null, aStyle);
-          arrowHead(lines, P, Q, AR, true, dim.id, null, aStyle);
+          lines.push({ pts: [Q, P], cls: 'dim', id: dim.id, ...lostObj });
+          arrowHead(lines, Q, P, AR, true, dim.id, null, aStyle, null, null, isLost);
+          arrowHead(lines, P, Q, AR, true, dim.id, null, aStyle, null, null, isLost);
         } else {
           // kleine Kreise: Pfeile von außen
           const Q2 = [Q[0] - ux * AR * 2.2, Q[1] - uy * AR * 2.2];
-          lines.push({ pts: [Q2, P], cls: 'dim', id: dim.id });
-          arrowHead(lines, Q, Q2, AR, true, dim.id, null, aStyle);
-          arrowHead(lines, P, out, AR, true, dim.id, null, aStyle);
+          lines.push({ pts: [Q2, P], cls: 'dim', id: dim.id, ...lostObj });
+          arrowHead(lines, Q, Q2, AR, true, dim.id, null, aStyle, null, null, isLost);
+          arrowHead(lines, P, out, AR, true, dim.id, null, aStyle, null, null, isLost);
         }
       } else if (R >= AR * 1.3) {
-        lines.push({ pts: [C, P], cls: 'dim', id: dim.id });
-        arrowHead(lines, P, C, AR, true, dim.id, null, aStyle);
-      } else arrowHead(lines, P, out, AR, true, dim.id, null, aStyle);
-      lines.push({ pts: [P, out, tail], cls: 'dim', id: dim.id });
-      emitDimTexts(texts, (out[0] + tail[0]) / 2, out[1] - TGAP, 0, dim, mainLabel, prefix, tolInfo, TXT);
+        lines.push({ pts: [C, P], cls: 'dim', id: dim.id, ...lostObj });
+        arrowHead(lines, P, C, AR, true, dim.id, null, aStyle, null, null, isLost);
+      } else arrowHead(lines, P, out, AR, true, dim.id, null, aStyle, null, null, isLost);
+      lines.push({ pts: [P, out, tail], cls: 'dim', id: dim.id, ...lostObj });
+      emitDimTexts(texts, (out[0] + tail[0]) / 2, out[1] - TGAP, 0, dim, mainLabel, prefix, tolInfo, TXT, isLost);
     } else if (dim.type === 'chamfer') {
       const P = toSheet(v, dim.p);
       const ux = dim.dir[0], uy = -dim.dir[1];
@@ -2046,9 +2431,9 @@ const Drawing = (() => {
       const label = `${fmtDim(dim.dist, st)}×${angTxt}`;
       const tl = textW(label, TXT) * 0.92 + 2;
       const tail = [out[0] + (ux >= 0 ? tl : -tl), out[1]];
-      arrowHead(lines, P, out, AR, true, dim.id, null, aStyle);
-      lines.push({ pts: [P, out, tail], cls: 'dim', id: dim.id });
-      texts.push({ x: (out[0] + tail[0]) / 2, y: out[1] - TGAP, t: label, size: TXT, rot: 0, anchor: 'middle', id: dim.id, cls: 'dimtext' });
+      arrowHead(lines, P, out, AR, true, dim.id, null, aStyle, null, null, isLost);
+      lines.push({ pts: [P, out, tail], cls: 'dim', id: dim.id, ...lostObj });
+      texts.push({ x: (out[0] + tail[0]) / 2, y: out[1] - TGAP, t: label, size: TXT, rot: 0, anchor: 'middle', id: dim.id, cls: 'dimtext', ...lostObj });
     } else if (dim.type === 'ang') {
       const VC = toSheet(v, dim.v), R = Math.max(3, dim.r * v.s), rModel = R / v.s;
       const a0 = dim.a0, a1 = dim.a1;
@@ -2064,26 +2449,26 @@ const Drawing = (() => {
         const tMin = Math.min(tA, tB), tMax = Math.max(tA, tB);
         if (rModel > tMax + 1e-3) {
           const s0 = Math.max(0, tMax) + GAPX / v.s, s1 = rModel + EXT / v.s;
-          lines.push({ pts: [toSheet(v, [dim.v[0] + ux * s0, dim.v[1] + uy * s0]), toSheet(v, [dim.v[0] + ux * s1, dim.v[1] + uy * s1])], cls: 'dim', id: dim.id });
+          lines.push({ pts: [toSheet(v, [dim.v[0] + ux * s0, dim.v[1] + uy * s0]), toSheet(v, [dim.v[0] + ux * s1, dim.v[1] + uy * s1])], cls: 'dim', id: dim.id, ...lostObj });
         } else if (rModel < tMin - 1e-3) {
           const s0 = Math.max(0, rModel - EXT / v.s), s1 = tMin - GAPX / v.s;
-          if (s1 > s0) lines.push({ pts: [toSheet(v, [dim.v[0] + ux * s0, dim.v[1] + uy * s0]), toSheet(v, [dim.v[0] + ux * s1, dim.v[1] + uy * s1])], cls: 'dim', id: dim.id });
+          if (s1 > s0) lines.push({ pts: [toSheet(v, [dim.v[0] + ux * s0, dim.v[1] + uy * s0]), toSheet(v, [dim.v[0] + ux * s1, dim.v[1] + uy * s1])], cls: 'dim', id: dim.id, ...lostObj });
         }
       }
       const nA0 = ((a0 % TWO_PI) + TWO_PI) % TWO_PI;
       const nA1 = nA0 + span;
       const aPts = arcPts(dim.v, rModel, a0, a1).map((q) => toSheet(v, q));
-      lines.push({ pts: aPts, arc: { c: VC, r: R, a: [nA0, nA1 <= TWO_PI ? nA1 : nA1 - TWO_PI] }, cls: 'dim', id: dim.id });
+      lines.push({ pts: aPts, arc: { c: VC, r: R, a: [nA0, nA1 <= TWO_PI ? nA1 : nA1 - TWO_PI] }, cls: 'dim', id: dim.id, ...lostObj });
       const inside = (aStyle === 'slash' || aStyle === 'dot') ? true : span * R > AR * 2.6;
       const from0 = [P0[0] - Math.sin(a0) * AR, P0[1] - Math.cos(a0) * AR];
       const from1 = [P1[0] + Math.sin(a1) * AR, P1[1] + Math.cos(a1) * AR];
-      arrowHead(lines, P0, from0, AR, inside, dim.id, null, aStyle);
-      arrowHead(lines, P1, from1, AR, inside, dim.id, null, aStyle);
+      arrowHead(lines, P0, from0, AR, inside, dim.id, null, aStyle, null, null, isLost);
+      arrowHead(lines, P1, from1, AR, inside, dim.id, null, aStyle, null, null, isLost);
       if (!inside) {
         const extA = (AR * 2.4) / R;
         lines.push(
-          { pts: arcPts(dim.v, rModel, a0 - extA, a0).map((q) => toSheet(v, q)), cls: 'dim', id: dim.id },
-          { pts: arcPts(dim.v, rModel, a1, a1 + extA).map((q) => toSheet(v, q)), cls: 'dim', id: dim.id }
+          { pts: arcPts(dim.v, rModel, a0 - extA, a0).map((q) => toSheet(v, q)), cls: 'dim', id: dim.id, ...lostObj },
+          { pts: arcPts(dim.v, rModel, a1, a1 + extA).map((q) => toSheet(v, q)), cls: 'dim', id: dim.id, ...lostObj }
         );
       }
       const deg = (span * 180) / Math.PI;
@@ -2092,7 +2477,7 @@ const Drawing = (() => {
       const radOut = R + Math.max(3.2, TXT * 0.95);
       const tx = VC[0] + Math.cos(am) * radOut;
       const ty = VC[1] - Math.sin(am) * radOut + TXT * 0.34;
-      texts.push({ x: tx, y: ty, t: label, size: TXT, rot: 0, anchor: 'middle', id: dim.id, cls: 'dimtext' });
+      texts.push({ x: tx, y: ty, t: label, size: TXT, rot: 0, anchor: 'middle', id: dim.id, cls: 'dimtext', ...lostObj });
     } else if (dim.type === 'chain') {
       const pts = [...(dim.pts || [])];
       if (pts.length < 2) return;
@@ -2102,11 +2487,11 @@ const Drawing = (() => {
         const SP = pts.map((p) => toSheet(v, p));
         for (const P of SP) {
           const sgn = Math.sign(yl - P[1]) || 1;
-          lines.push({ pts: [[P[0], P[1] + sgn * GAPX], [P[0], yl + sgn * EXT]], cls: 'dim', id: dim.id });
+          lines.push({ pts: [[P[0], P[1] + sgn * GAPX], [P[0], yl + sgn * EXT]], cls: 'dim', id: dim.id, ...lostObj });
         }
         for (let i = 0; i < SP.length - 1; i++) {
           const val = Math.abs(pts[i + 1][0] - pts[i][0]);
-          drawSpanDim(lines, texts, [SP[i][0], yl], [SP[i + 1][0], yl], val, dim.id, i === 0 || i === SP.length - 2, st);
+          drawSpanDim(lines, texts, [SP[i][0], yl], [SP[i + 1][0], yl], val, dim.id, i === 0 || i === SP.length - 2, st, isLost);
         }
       } else {
         pts.sort((p, q) => p[1] - q[1]);
@@ -2114,11 +2499,11 @@ const Drawing = (() => {
         const SP = pts.map((p) => toSheet(v, p));
         for (const P of SP) {
           const sgn = Math.sign(xl - P[0]) || -1;
-          lines.push({ pts: [[P[0] + sgn * GAPX, P[1]], [xl + sgn * EXT, P[1]]], cls: 'dim', id: dim.id });
+          lines.push({ pts: [[P[0] + sgn * GAPX, P[1]], [xl + sgn * EXT, P[1]]], cls: 'dim', id: dim.id, ...lostObj });
         }
         for (let i = 0; i < SP.length - 1; i++) {
           const val = Math.abs(pts[i + 1][1] - pts[i][1]);
-          drawSpanDim(lines, texts, [xl, SP[i][1]], [xl, SP[i + 1][1]], val, dim.id, i === 0 || i === SP.length - 2, st);
+          drawSpanDim(lines, texts, [xl, SP[i][1]], [xl, SP[i + 1][1]], val, dim.id, i === 0 || i === SP.length - 2, st, isLost);
         }
       }
     } else if (dim.type === 'base') {
@@ -2132,26 +2517,26 @@ const Drawing = (() => {
         const yl0 = toSheet(v, [0, dim.linePos])[1];
         const outSign = yl0 >= B0[1] ? 1 : -1;
         const ylLast = yl0 + (pts.length - 1) * outSign * STEP_SHEET;
-        lines.push({ pts: [[B0[0], B0[1] + outSign * GAPX], [B0[0], ylLast + outSign * EXT]], cls: 'dim', id: dim.id });
+        lines.push({ pts: [[B0[0], B0[1] + outSign * GAPX], [B0[0], ylLast + outSign * EXT]], cls: 'dim', id: dim.id, ...lostObj });
         for (let i = 0; i < pts.length; i++) {
           const P = toSheet(v, pts[i]);
           const yli = yl0 + i * outSign * STEP_SHEET;
           const sgn = Math.sign(yli - P[1]) || outSign;
-          lines.push({ pts: [[P[0], P[1] + sgn * GAPX], [P[0], yli + sgn * EXT]], cls: 'dim', id: dim.id });
-          drawSpanDim(lines, texts, [B0[0], yli], [P[0], yli], Math.abs(pts[i][0] - basePt[0]), dim.id, true, st);
+          lines.push({ pts: [[P[0], P[1] + sgn * GAPX], [P[0], yli + sgn * EXT]], cls: 'dim', id: dim.id, ...lostObj });
+          drawSpanDim(lines, texts, [B0[0], yli], [P[0], yli], Math.abs(pts[i][0] - basePt[0]), dim.id, true, st, isLost);
         }
       } else {
         pts.sort((p, q) => Math.abs(p[1] - basePt[1]) - Math.abs(q[1] - basePt[1]));
         const xl0 = toSheet(v, [dim.linePos, 0])[0];
         const outSign = xl0 <= B0[0] ? -1 : 1;
         const xlLast = xl0 + (pts.length - 1) * outSign * STEP_SHEET;
-        lines.push({ pts: [[B0[0] + outSign * GAPX, B0[1]], [xlLast + outSign * EXT, B0[1]]], cls: 'dim', id: dim.id });
+        lines.push({ pts: [[B0[0] + outSign * GAPX, B0[1]], [xlLast + outSign * EXT, B0[1]]], cls: 'dim', id: dim.id, ...lostObj });
         for (let i = 0; i < pts.length; i++) {
           const P = toSheet(v, pts[i]);
           const xli = xl0 + i * outSign * STEP_SHEET;
           const sgn = Math.sign(xli - P[0]) || outSign;
-          lines.push({ pts: [[P[0] + sgn * GAPX, P[1]], [xli + sgn * EXT, P[1]]], cls: 'dim', id: dim.id });
-          drawSpanDim(lines, texts, [xli, B0[1]], [xli, P[1]], Math.abs(pts[i][1] - basePt[1]), dim.id, true, st);
+          lines.push({ pts: [[P[0] + sgn * GAPX, P[1]], [xli + sgn * EXT, P[1]]], cls: 'dim', id: dim.id, ...lostObj });
+          drawSpanDim(lines, texts, [xli, B0[1]], [xli, P[1]], Math.abs(pts[i][1] - basePt[1]), dim.id, true, st, isLost);
         }
       }
     }
@@ -2165,10 +2550,10 @@ const Drawing = (() => {
     if (st && st.decimals != null) return fmtFixed(deg, st.decimals) + '°';
     return Math.abs(deg - Math.round(deg)) < 0.05 ? `${Math.round(deg)}°` : fmtAngleU(deg);
   }
-  function arrowHead(lines, tip, from, len, inside, id, secId, style = 'filled', clsOverride = null, view = null) {
+  function arrowHead(lines, tip, from, len, inside, id, secId, style = 'filled', clsOverride = null, view = null, isLost = false) {
     const dx = from[0] - tip[0], dy = from[1] - tip[1]; const L = Math.hypot(dx, dy) || 1; let ux = dx / L, uy = dy / L;
     if (!inside && (style === 'filled' || style === 'open')) { ux = -ux; uy = -uy; }
-    const extra = { id, ...(secId ? { secId } : {}), ...(view ? { view } : {}) };
+    const extra = { id, ...(secId ? { secId } : {}), ...(view ? { view } : {}), ...(isLost ? { lost: true } : {}) };
     if (style === 'open') {
       const w = len * 0.32;
       const b = [tip[0] + ux * len, tip[1] + uy * len];
@@ -2591,7 +2976,7 @@ const Drawing = (() => {
   function textW(t, size) { return String(t).length * size * 0.56; }
   function fitSize(t, w, max, min) { const n = String(t).length || 1; return Math.max(min, Math.min(max, w / (n * 0.56))); }
   function clipText(t, w, size) { t = String(t); if (textW(t, size) <= w) return t; const n = Math.max(1, Math.floor(w / (size * 0.56)) - 1); return t.slice(0, n) + '…'; }
-  const SHEET_SVG_CSS = `.paper{fill:#fff;stroke:none}.frame{fill:none;stroke:#111;stroke-width:.7}.thin{fill:none;stroke:#111;stroke-width:.25}.vis{fill:none;stroke:#111;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round}.tan{fill:none;stroke:#444;stroke-width:.2;stroke-linecap:round;stroke-linejoin:round}.hid{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:2.4 1.2}.ctr{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:5 1.2 .6 1.2}.ctr[data-id]{cursor:pointer}.ctr.sel{stroke:#0c7a70;stroke-width:.45}.hatch{fill:none;stroke:#111;stroke-width:.22}.cutline{fill:none;stroke:#111;stroke-width:.35;stroke-dasharray:7 1.2 .7 1.2}.cutend{fill:none;stroke:#111;stroke-width:.7;stroke-linecap:square}.dim{fill:none;stroke:#111;stroke-width:.25}.arrow{fill:#111;stroke:none}.arrow-open{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round}.arrow-slash{fill:none;stroke:#111;stroke-width:.45;stroke-linecap:round}.arrow-dot,.leader-dot,.leader-arrow,.balloon-dot,.balloon-arrow{fill:#111;stroke:none}.leader,.balloon-line{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.balloon-circle{fill:#fff;stroke:#111;stroke-width:.35;cursor:grab}.bom-bg{fill:#fff;stroke:none;cursor:grab}.bom-frame{fill:none;stroke:#111;stroke-width:.5;cursor:grab}.bom-head-line{fill:none;stroke:#111;stroke-width:.35}.bom-grid{fill:none;stroke:#111;stroke-width:.22}.bom-frame.sel,.bom-head-line.sel,.bom-grid.sel{stroke:#0c7a70}.view-sel{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:2 1.5;pointer-events:none}.detail{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.detail-border{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:3 1.5;cursor:grab}.detail.sel,.detail-border.sel{stroke:#0c7a70;stroke-width:.45}.sel .dim,.dim.sel,.cutline.sel,.cutend.sel,.hatch.sel,.arrow-open.sel,.arrow-slash.sel,.balloon-circle.sel{stroke:#0c7a70}.dim.sel,.leader.sel,.balloon-line.sel{stroke:#0c7a70;stroke-width:.4}.arrow.sel,.arrow-dot.sel,.leader-dot.sel,.leader-arrow.sel,.balloon-dot.sel,.balloon-arrow.sel{fill:#0c7a70}text{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif;fill:#111}text.dimtext{cursor:pointer}text.lab{fill:#555}text.note{fill:#888}text.vlabel{fill:#333;font-weight:500}text.cutlabel,text.viewlabel,text.bom-th{font-weight:700}text.balloon-text{font-weight:600;cursor:grab}text.bom-td{cursor:grab}text.sel{fill:#0c7a70}text.detail-lbl{font-weight:600;cursor:pointer}text.leadertext{cursor:grab}.prev{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:1.5 1}.snap{fill:none;stroke:#0c7a70;stroke-width:.4}`;
+  const SHEET_SVG_CSS = `.paper{fill:#fff;stroke:none}.frame{fill:none;stroke:#111;stroke-width:.7}.thin{fill:none;stroke:#111;stroke-width:.25}.vis{fill:none;stroke:#111;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round}.tan{fill:none;stroke:#444;stroke-width:.2;stroke-linecap:round;stroke-linejoin:round}.hid{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:2.4 1.2}.ctr{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:5 1.2 .6 1.2}.ctr[data-id]{cursor:pointer}.ctr.sel{stroke:#0c7a70;stroke-width:.45}.hatch{fill:none;stroke:#111;stroke-width:.22}.cutline{fill:none;stroke:#111;stroke-width:.35;stroke-dasharray:7 1.2 .7 1.2}.cutend{fill:none;stroke:#111;stroke-width:.7;stroke-linecap:square}.dim{fill:none;stroke:#111;stroke-width:.25}.arrow{fill:#111;stroke:none}.arrow-open{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round}.arrow-slash{fill:none;stroke:#111;stroke-width:.45;stroke-linecap:round}.arrow-dot,.leader-dot,.leader-arrow,.balloon-dot,.balloon-arrow{fill:#111;stroke:none}.leader,.balloon-line{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.balloon-circle{fill:#fff;stroke:#111;stroke-width:.35;cursor:grab}.bom-bg{fill:#fff;stroke:none;cursor:grab}.bom-frame{fill:none;stroke:#111;stroke-width:.5;cursor:grab}.bom-head-line{fill:none;stroke:#111;stroke-width:.35}.bom-grid{fill:none;stroke:#111;stroke-width:.22}.bom-frame.sel,.bom-head-line.sel,.bom-grid.sel{stroke:#0c7a70}.view-sel{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:2 1.5;pointer-events:none}.detail{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.detail-border{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:3 1.5;cursor:grab}.detail.sel,.detail-border.sel{stroke:#0c7a70;stroke-width:.45}.sel .dim,.dim.sel,.cutline.sel,.cutend.sel,.hatch.sel,.arrow-open.sel,.arrow-slash.sel,.balloon-circle.sel{stroke:#0c7a70}.dim.sel,.leader.sel,.balloon-line.sel{stroke:#0c7a70;stroke-width:.4}.arrow.sel,.arrow-dot.sel,.leader-dot.sel,.leader-arrow.sel,.balloon-dot.sel,.balloon-arrow.sel{fill:#0c7a70}.dim.lost,.arrow-open.lost,.arrow-slash.lost{stroke:#c9372e;stroke-width:.38}.dim.lost{stroke-dasharray:2 1}.arrow.lost,.arrow-dot.lost{fill:#c9372e}text{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif;fill:#111}text.dimtext{cursor:pointer}text.lab{fill:#555}text.note{fill:#888}text.vlabel{fill:#333;font-weight:500}text.cutlabel,text.viewlabel,text.bom-th{font-weight:700}text.balloon-text{font-weight:600;cursor:grab}text.bom-td{cursor:grab}text.sel{fill:#0c7a70}text.dimtext.lost{fill:#c9372e;font-weight:600}.dim.lost.sel,.arrow-open.lost.sel,.arrow-slash.lost.sel{stroke:#991b1b;stroke-width:.5}.arrow.lost.sel,.arrow-dot.lost.sel{fill:#991b1b}text.dimtext.lost.sel{fill:#991b1b}text.detail-lbl{font-weight:600;cursor:pointer}text.leadertext{cursor:grab}.prev{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:1.5 1}.snap{fill:none;stroke:#0c7a70;stroke-width:.4}`;
   function buildSheetSVGElement(cur, { widthAttr, heightAttr, transparent = false, interactive = false } = {}) {
     const { W, H } = cur.layout;
     const lines = cur.lines || [], texts = cur.texts || [], images = cur.images || [];
@@ -2617,9 +3002,10 @@ const Drawing = (() => {
       else if (l.circle) { el = document.createElementNS(NS, 'circle'); el.setAttribute('cx', f(l.circle[0])); el.setAttribute('cy', f(l.circle[1])); el.setAttribute('r', f(l.circle[2])); }
       else if (l.poly) { el = document.createElementNS(NS, 'polygon'); el.setAttribute('points', l.poly.map((p) => f(p[0]) + ',' + f(p[1])).join(' ')); }
       else { el = document.createElementNS(NS, 'polyline'); el.setAttribute('points', l.pts.map((p) => f(p[0]) + ',' + f(p[1])).join(' ')); }
-      el.setAttribute('class', l.cls + (sel ? ' sel' : ''));
+      el.setAttribute('class', l.cls + (l.lost ? ' lost' : '') + (sel ? ' sel' : ''));
       if (interactive) {
         if (l.id) el.dataset.id = l.id;
+        if (l.lost) el.dataset.lost = '1';
         if (l.view) el.dataset.view = l.view;
         if (l.ctrType) el.dataset.ctr = l.ctrType;
         if (l.secId) el.dataset.sec = l.secId;
@@ -2649,9 +3035,10 @@ const Drawing = (() => {
       const el = document.createElementNS(NS, 'text');
       el.setAttribute('x', f(t.x)); el.setAttribute('y', f(t.y)); el.setAttribute('font-size', f(t.size)); el.setAttribute('text-anchor', t.anchor || 'start');
       if (t.rot) el.setAttribute('transform', `rotate(${f(t.rot)} ${f(t.x)} ${f(t.y)})`);
-      el.setAttribute('class', (t.cls || '') + (interactive && t.id && t.id === selDim ? ' sel' : ''));
+      el.setAttribute('class', (t.cls || '') + (t.lost ? ' lost' : '') + (interactive && t.id && t.id === selDim ? ' sel' : ''));
       if (interactive) {
         if (t.id) el.dataset.id = t.id;
+        if (t.lost) el.dataset.lost = '1';
         if (t.view) el.dataset.view = t.view;
         if (t.secId) el.dataset.sec = t.secId;
         if (t.tolPart) el.dataset.tol = t.tolPart;
@@ -4010,14 +4397,14 @@ const Drawing = (() => {
       const name = viewAt(P); if (!name) return;
       const c = circleAt(name, P, true);
       if (!c) { UI.toast('Klick auf einen Kreis, eine Bohrung oder eine Rundung.', { icon: 'info', ms: 2000 }); return; }
-      addDim({ view: name, type: dimMode, c: c.c, r: c.r, ang: Math.round(c.ang), ...(c.full ? {} : { partial: true }) });
+      addDim({ view: name, type: dimMode, c: c.c, r: c.r, ang: Math.round(c.ang), ...(c.full ? {} : { partial: true }), ref: makeCircleRef(layout.views[name], c) });
       return;
     }
     if (dimMode === 'chamfer') {
       const name = viewAt(P); if (!name) return;
       const ch = chamferEdgeAt(name, P);
       if (!ch) { UI.toast('Klick auf eine schräge Fasen-Kante (z. B. 45°).', { icon: 'info', ms: 2000 }); return; }
-      addDim({ view: name, type: 'chamfer', p: ch.info.p, dir: ch.info.dir, dist: ch.info.dist, ang: ch.info.ang });
+      addDim({ view: name, type: 'chamfer', p: ch.info.p, dir: ch.info.dir, dist: ch.info.dist, ang: ch.info.ang, ref: makeChamferRef(layout.views[name], ch.seg, ch.info) });
       return;
     }
     if (dimMode === 'ang') {
@@ -4025,18 +4412,18 @@ const Drawing = (() => {
         const name = viewAt(P); if (!name) return;
         const ed = edgeAt(name, P, true);
         if (!ed) { UI.toast('Klick auf die erste Kante.', { icon: 'info', ms: 1800 }); return; }
-        toolState = { stage: 1, view: name, e1: ed, P };
+        toolState = { ...st, stage: 1, view: name, e1: ed, P };
       } else if (st.stage === 1) {
         const ed = edgeAt(st.view, P, true);
         if (!ed) { UI.toast('Klick auf die zweite Kante in derselben Ansicht.', { icon: 'info', ms: 1800 }); return; }
         const V = lineIntersect2D(st.e1.a, st.e1.b, ed.a, ed.b);
         if (!V) { UI.toast('Diese beiden Kanten sind parallel – wähle zwei Kanten im Winkel zueinander.', { icon: 'info', ms: 2200 }); return; }
-        toolState = { stage: 2, view: st.view, e1: st.e1, e2: ed, v: V, P };
+        toolState = { ...st, stage: 2, view: st.view, e1: st.e1, e2: ed, v: V, P };
       } else if (st.stage === 2) {
         const v = layout.views[st.view]; if (!v) return;
         const q = toView(v, P);
         const sec = angularSector(st.v, st.e1, st.e2, q);
-        addDim({ view: st.view, type: 'ang', v: st.v, e1: sec.e1, e2: sec.e2, a0: sec.a0, a1: sec.a1, r: sec.r });
+        addDim({ view: st.view, type: 'ang', v: st.v, e1: sec.e1, e2: sec.e2, a0: sec.a0, a1: sec.a1, r: sec.r, ref: { kind: 'ang', e1: makeEdgeRef(v, st.e1), e2: makeEdgeRef(v, st.e2) } });
         return;
       }
       render();
@@ -4048,23 +4435,41 @@ const Drawing = (() => {
         const name = viewAt(P); if (!name) return;
         const sn = pickDimPoint(name, P);
         if (!sn) { UI.toast(isBase ? 'Klick auf eine Bezugskante oder einen Bezugspunkt.' : 'Klick auf einen Punkt oder eine Kante.', { icon: 'info', ms: 2000 }); return; }
-        toolState = { stage: 1, view: name, a: sn.p, preferDir: sn.preferDir || null, P };
+        toolState = { ...st, stage: 1, view: name, a: sn.p, aEdge: sn.edge || null, preferDir: sn.preferDir || null, P };
       } else if (st.stage === 1) {
         const sn = pickDimPoint(st.view, P); if (!sn) return;
         if (Math.hypot(sn.p[0] - st.a[0], sn.p[1] - st.a[1]) < 1e-4) return;
-        toolState = { ...st, stage: 2, b: sn.p, P };
+        toolState = { ...st, stage: 2, b: sn.p, bEdge: sn.edge || null, P };
       } else if (st.stage === 2) {
         const v = layout.views[st.view]; if (!v) return;
         const q = toView(v, P);
         const dir = chainDir(st.a, st.b, q, st.preferDir);
         const linePos = dir === 'h' ? q[1] : q[0];
-        const dim = isBase
-          ? { id: uid('d'), view: st.view, type: 'base', dir, linePos, base: st.a, pts: [st.b] }
-          : { id: uid('d'), view: st.view, type: 'chain', dir, linePos, pts: [st.a, st.b] };
-        App.change(isBase ? 'Bezugsmaß hinzugefügt' : 'Kettenmaß hinzugefügt', () => { dwg().dims.push(dim); });
-        selDim = dim.id;
-        toolState = { stage: 3, view: st.view, dimId: dim.id, dir, linePos, P };
-        Panels.renderRight();
+        const aRef = makePointRef(v, st.a, st.aEdge), bRef = makePointRef(v, st.b, st.bEdge);
+        const dimData = isBase
+          ? { view: st.view, type: 'base', dir, linePos, base: st.a, pts: [st.b], ref: { kind: 'base', base: aRef, pts: [bRef] } }
+          : { view: st.view, type: 'chain', dir, linePos, pts: [st.a, st.b], ref: { kind: 'chain', pts: [aRef, bRef] } };
+        if (st.rebindId) {
+          const targetId = st.rebindId;
+          App.change('Maß neu zugeordnet', () => {
+            const d = dwg();
+            const idx = (d.dims || []).findIndex((x) => x.id === targetId);
+            if (idx >= 0) {
+              const old = d.dims[idx];
+              d.dims[idx] = { ...dimData, id: old.id, ...(old.tol ? { tol: old.tol } : {}) };
+            }
+          });
+          selDim = targetId;
+          toolState = { stage: 3, view: st.view, dimId: targetId, dir, linePos, P };
+          lastLostKey = lostDims(dwg()).map((x) => x.id).sort().join(',');
+          Panels.renderRight();
+        } else {
+          const dim = { id: uid('d'), ...dimData };
+          App.change(isBase ? 'Bezugsmaß hinzugefügt' : 'Kettenmaß hinzugefügt', () => { dwg().dims.push(dim); });
+          selDim = dim.id;
+          toolState = { stage: 3, view: st.view, dimId: dim.id, dir, linePos, P };
+          Panels.renderRight();
+        }
       } else if (st.stage === 3) {
         const hitView = viewAt(P);
         if (hitView && hitView !== st.view) { toolState = { stage: 0 }; render(); Panels.renderRight(); return; }
@@ -4078,9 +4483,14 @@ const Drawing = (() => {
         const coord = st.dir === 'h' ? sn.p[0] : sn.p[1];
         const existing = [...(cur.pts || []), ...(cur.base ? [cur.base] : [])];
         if (existing.some((p) => Math.abs((st.dir === 'h' ? p[0] : p[1]) - coord) < 1e-4)) return;
+        const v = layout.views[st.view];
+        const ptRef = v ? makePointRef(v, sn.p, sn.edge || null) : null;
         App.change(isBase ? 'Bezugsmaß erweitert' : 'Kettenmaß erweitert', () => {
           const d = dwg().dims.find((x) => x.id === st.dimId);
-          if (d) d.pts.push(sn.p);
+          if (d) {
+            d.pts.push(sn.p);
+            if (ptRef && d.ref && Array.isArray(d.ref.pts)) d.ref.pts.push(ptRef);
+          }
         });
       }
       render();
@@ -4089,8 +4499,16 @@ const Drawing = (() => {
     if (st.stage === 0) {
       const name = viewAt(P); if (!name) return;
       const sn = snapIn(name, P);
-      if (!sn) { const c = circleAt(name, P); if (c) { addDim({ view: name, type: c.full ? 'dia' : 'rad', c: c.c, r: c.r, ang: Math.round(c.ang) }); return; } UI.toast('Klick auf einen Eckpunkt, eine Linie, einen Kreis oder eine Rundung.', { icon: 'info', ms: 2000 }); return; }
-      toolState = { stage: 1, view: name, a: sn.p, P };
+      if (!sn) {
+        const c = circleAt(name, P);
+        if (c) {
+          addDim({ view: name, type: c.full ? 'dia' : 'rad', c: c.c, r: c.r, ang: Math.round(c.ang), ...(c.full ? {} : { partial: true }), ref: makeCircleRef(layout.views[name], c) });
+          return;
+        }
+        UI.toast('Klick auf einen Eckpunkt, eine Linie, einen Kreis oder eine Rundung.', { icon: 'info', ms: 2000 });
+        return;
+      }
+      toolState = { ...st, stage: 1, view: name, a: sn.p, P };
     } else if (st.stage === 1) {
       const sn = snapIn(st.view, P); if (!sn) return;
       if (Math.hypot(sn.p[0] - st.a[0], sn.p[1] - st.a[1]) < 1e-6) return;
@@ -4098,7 +4516,7 @@ const Drawing = (() => {
     } else if (st.stage === 2) {
       const v = layout.views[st.view]; const q = toView(v, P);
       const dimObj = placeDim(st.a, st.b, q);
-      addDim({ view: st.view, ...dimObj });
+      addDim({ view: st.view, ...dimObj, ref: { kind: 'lin', a: makePointRef(v, st.a), b: makePointRef(v, st.b) } });
     }
     render();
   }
@@ -4180,10 +4598,114 @@ const Drawing = (() => {
     if (st.stage === 2 && st.P) { const v = layout.views[st.view]; const q = toView(v, st.P); const d = { id: '__prev', view: st.view, ...placeDim(st.a, st.b, q) }; dimSVG(d, lines, texts); }
   }
   function addDim(dim) {
-    App.change('Maß hinzugefügt', () => { dwg().dims.push({ id: uid('d'), ...dim }); });
+    if (tool === 'dim' && toolState && toolState.rebindId) {
+      rebindDim(toolState.rebindId, dim);
+      return;
+    }
+    const next = { id: uid('d'), ...dim };
+    if (!next.ref && !next.auto && layout && layout.views && layout.views[next.view]) {
+      const r = buildDimRef(next, layout.views[next.view]);
+      if (r) next.ref = r;
+    }
+    App.change('Maß hinzugefügt', () => { dwg().dims.push(next); });
     selDim = null;
     toolState = { stage: 0 };
     render();
+    Panels.renderRight();
+  }
+  function removeDim(id) {
+    if (!id) return false;
+    const d = dwg();
+    const cur = (d.dims || []).find((x) => x.id === id);
+    if (!cur) return false;
+    App.change('Verlorenes Maß gelöscht', () => {
+      const sh = dwg();
+      sh.dims = (sh.dims || []).filter((x) => x.id !== id);
+    });
+    if (selDim === id) selDim = null;
+    if (tool === 'dim' && toolState && toolState.rebindId === id) {
+      setTool(null);
+      return true;
+    }
+    render();
+    lastLostKey = layout ? lostDims(dwg()).map((x) => x.id).sort().join(',') : '';
+    Panels.renderRight();
+    return true;
+  }
+  function removeLostDims() {
+    const lost = lostDims(dwg());
+    if (!lost.length) return 0;
+    const ids = new Set(lost.filter((x) => !x.auto).map((x) => x.id));
+    if (!ids.size) return 0;
+    App.change('Verlorene Maße gelöscht', () => {
+      const sh = dwg();
+      sh.dims = (sh.dims || []).filter((x) => !ids.has(x.id));
+    });
+    if (selDim && ids.has(selDim)) selDim = null;
+    if (tool === 'dim' && toolState && toolState.rebindId && ids.has(toolState.rebindId)) {
+      tool = null; toolState = null; if (svg) svg.style.cursor = ''; UI.hint(null); Panels.renderTools();
+    }
+    render();
+    lastLostKey = '';
+    Panels.renderRight();
+    UI.toast(`${ids.size} ${ids.size === 1 ? 'verlorenes Maß' : 'verlorene Maße'} gelöscht.`, { icon: 'trash', ms: 2000 });
+    return ids.size;
+  }
+  function rebindDim(id, newDim) {
+    if (!id || !newDim) return false;
+    let updated = false;
+    App.change('Maß neu zugeordnet', () => {
+      const d = dwg();
+      const idx = (d.dims || []).findIndex((x) => x.id === id);
+      if (idx < 0) return;
+      const old = d.dims[idx];
+      const keep = { id: old.id };
+      if (old.tol) keep.tol = old.tol;
+      const next = { ...newDim, ...keep };
+      delete next.auto;
+      delete next.lost;
+      delete next.lostReason;
+      delete next.hiddenView;
+      if (!next.ref && layout && layout.views && layout.views[next.view]) {
+        const r = buildDimRef(next, layout.views[next.view]);
+        if (r) next.ref = r;
+      }
+      d.dims[idx] = next;
+      updated = true;
+    });
+    if (!updated) return false;
+    tool = null;
+    toolState = null;
+    if (svg) svg.style.cursor = '';
+    UI.hint(null);
+    selDim = id;
+    render();
+    lastLostKey = layout ? lostDims(dwg()).map((x) => x.id).sort().join(',') : '';
+    Panels.renderTools();
+    Panels.renderRight();
+    UI.toast('Maß neu zugeordnet.', { icon: 'check', ms: 2000 });
+    return true;
+  }
+  function startRebind(id) {
+    const d = dwg();
+    const dim = (d.dims || []).find((x) => x.id === id && !x.auto);
+    if (!dim) return false;
+    selDim = id;
+    dragDetail = null; dragNote = null; dragView = null;
+    dimMode = DIM_MODES.some((x) => x.key === dim.type) ? dim.type : 'lin';
+    tool = 'dim';
+    toolState = { stage: 0, rebindId: id };
+    if (svg) svg.style.cursor = 'crosshair';
+    const what = dimMode === 'dia' ? 'die neue Bohrung oder den Kreis'
+      : dimMode === 'rad' ? 'die neue Rundung oder den Bogen'
+        : dimMode === 'chamfer' ? 'die neue Fasen-Kante'
+          : dimMode === 'ang' ? 'zwei neue Kanten im Winkel'
+            : 'neue Punkte oder Kanten';
+    UI.hint(`<b>Maß neu zuordnen:</b> Klicke auf ${what} in einer Ansicht. <b>Esc</b> bricht ab.`);
+    Panels.renderTools();
+    Panels.renderRight();
+    render();
+    return true;
   }
   function flipAngleDim(id) {
     let changed = false;
@@ -4321,7 +4843,11 @@ const Drawing = (() => {
       else d.dims = d.dims.filter((x) => x.id !== id);
       d.free = d.free.filter((x) => x.id !== id);
     });
-    selDim = null; render(); Panels.renderRight();
+    selDim = null;
+    if (tool === 'dim' && toolState && toolState.rebindId === id) { setTool(null); return; }
+    render();
+    lastLostKey = layout ? lostDims(dwg()).map((x) => x.id).sort().join(',') : '';
+    Panels.renderRight();
   }
   function dimHint(mode) {
     const m = DIM_MODES.find((x) => x.key === mode);
@@ -4595,14 +5121,14 @@ const Drawing = (() => {
       }
       if (l.cls === 'arrow' || l.cls === 'leader-arrow' || l.cls === 'balloon-arrow') {
         const [a, b, c] = l.poly;
-        out.push(`0.067 g ${px(a[0])} ${py(a[1])} m ${px(b[0])} ${py(b[1])} l ${px(c[0])} ${py(c[1])} l h f`);
+        out.push(`${l.lost ? '0.788 0.216 0.180' : '0.067'} g ${px(a[0])} ${py(a[1])} m ${px(b[0])} ${py(b[1])} l ${px(c[0])} ${py(c[1])} l h f`);
         continue;
       }
       if ((l.cls === 'arrow-dot' || l.cls === 'leader-dot' || l.cls === 'balloon-dot') && l.circle) {
         const cx = l.circle[0] * PT, cy = (H - l.circle[1]) * PT, R = l.circle[2] * PT;
         const k = 0.5522847498 * R;
         out.push(
-          `0.067 g ${pf(cx + R)} ${pf(cy)} m`,
+          `${l.lost ? '0.788 0.216 0.180' : '0.067'} g ${pf(cx + R)} ${pf(cy)} m`,
           `${pf(cx + R)} ${pf(cy + k)} ${pf(cx + k)} ${pf(cy + R)} ${pf(cx)} ${pf(cy + R)} c`,
           `${pf(cx - k)} ${pf(cy + R)} ${pf(cx - R)} ${pf(cy + k)} ${pf(cx - R)} ${pf(cy)} c`,
           `${pf(cx - R)} ${pf(cy - k)} ${pf(cx - k)} ${pf(cy - R)} ${pf(cx)} ${pf(cy - R)} c`,
@@ -4612,8 +5138,9 @@ const Drawing = (() => {
       }
       const st = style[l.cls];
       if (!st) continue;
-      out.push(`${l.cls === 'tan' ? '0.267' : '0.067'} G ${pf(st[0] * PT)} w`);
-      if (st[1]) out.push(`[${st[1].map((v) => pf(v * PT)).join(' ')}] 0 d`);
+      out.push(`${l.lost ? '0.788 0.216 0.180' : (l.cls === 'tan' ? '0.267' : '0.067')} G ${pf(st[0] * PT)} w`);
+      if (l.lost && l.cls === 'dim') out.push(`[${pf(2 * PT)} ${pf(1 * PT)}] 0 d`);
+      else if (st[1]) out.push(`[${st[1].map((v) => pf(v * PT)).join(' ')}] 0 d`);
       else out.push('[] 0 d');
       if (l.rect) {
         const [rx, ry, rw, rh] = l.rect;
@@ -4644,11 +5171,11 @@ const Drawing = (() => {
       const esc = pdfEsc(t.t);
       const fs = t.size * PT;
       const fnt = (t.cls === 'title' || t.cls === 'detail-lbl' || t.cls === 'cutlabel' || t.cls === 'viewlabel' || t.cls === 'bom-th' || t.cls === 'balloon-text') ? '/F2' : '/F1';
-      const gray = t.cls === 'lab' ? '0.333' : '0.067';
+      const gray = t.lost ? '0.788 0.216 0.180' : (t.cls === 'lab' ? '0.333' : '0.067');
       const rad = -((t.rot || 0) * Math.PI) / 180;
       const c = Math.cos(rad), s = Math.sin(rad);
       const dx = t.anchor === 'middle' ? -pdfTextW(raw, fs) / 2 : t.anchor === 'end' ? -pdfTextW(raw, fs) : 0;
-      out.push(`${gray} g q ${pf(c)} ${pf(s)} ${pf(-s)} ${pf(c)} ${px(t.x)} ${py(t.y)} cm BT ${fnt} ${pf(fs)} Tf ${pf(dx)} 0 Td (${esc}) Tj ET Q`);
+      out.push(`${gray} ${t.lost ? 'rg' : 'g'} q ${pf(c)} ${pf(s)} ${pf(-s)} ${pf(c)} ${px(t.x)} ${py(t.y)} cm BT ${fnt} ${pf(fs)} Tf ${pf(dx)} 0 Td (${esc}) Tj ET Q`);
     }
     return out.join('\n') + '\n';
   }
@@ -5074,6 +5601,55 @@ const Drawing = (() => {
   function renderPanel(body) {
     const all = sheets(), idx = activeIndex(), d = all[idx] || dwg();
     const w = h('div', { class: 'props' });
+    const lostList = layout ? lostDims(d) : [];
+    if (lostList.length) {
+      const dsLost = sheetDimStyle(d);
+      const lostSec = h('div', { class: 'section dw-lost-sec', id: 'dw-lost-sec', 'data-help': 'drawingLostDims' });
+      lostSec.append(h('div', { class: 'section-h dw-lost-h' }, `Verlorene Maße (${lostList.length})`));
+      const lWrap = h('div', { class: 'dw-lost-list', id: 'dw-lost-list' });
+      for (const ld of lostList) {
+        const isRebinding = tool === 'dim' && toolState && toolState.rebindId === ld.id;
+        const row = h('div', {
+          class: 'dw-lost-row' + (selDim === ld.id ? ' active' : ''),
+          'data-dim-id': ld.id,
+        });
+        row.append(
+          h('div', { class: 'dw-lost-top' },
+            h('span', { class: 'dw-lost-val' }, dimSummaryLabel(ld, dsLost)),
+            h('span', { class: 'dw-lost-view' }, viewLabel(ld.view, d)),
+          ),
+          h('div', { class: 'dw-lost-reason' }, ld.lostReason || 'Kante fehlt'),
+        );
+        const acts = h('div', { class: 'dw-lost-acts' });
+        const bRebind = h('button', {
+          type: 'button',
+          class: 'btn dw-lost-rebind' + (isRebinding ? ' active' : ''),
+          'data-dim-id': ld.id,
+        }, isRebinding ? 'Abbrechen' : 'Neu zuordnen');
+        bRebind.onclick = (e) => {
+          e.stopPropagation();
+          if (isRebinding) setTool(null);
+          else startRebind(ld.id);
+        };
+        const bDel = h('button', {
+          type: 'button',
+          class: 'btn danger dw-lost-del',
+          'data-dim-id': ld.id,
+        }, 'Löschen');
+        bDel.onclick = (e) => { e.stopPropagation(); removeDim(ld.id); };
+        acts.append(bRebind, bDel);
+        row.append(acts);
+        row.onclick = () => { selDim = ld.id; render(); Panels.renderRight(); };
+        lWrap.append(row);
+      }
+      lostSec.append(lWrap);
+      if (lostList.length > 1) {
+        const bDelAll = h('button', { type: 'button', class: 'btn danger', id: 'dw-lost-del-all', style: { marginTop: '6px', width: '100%' } }, 'Alle verlorenen Maße löschen');
+        bDelAll.onclick = () => removeLostDims();
+        lostSec.append(bDelAll);
+      }
+      w.append(lostSec);
+    }
     const vSec = h('div', { class: 'section', 'data-help': 'drawingViews' }, h('div', { class: 'section-h' }, 'Ansichten'));
     const bIso = h('button', { type: 'button', class: 'btn', id: 'dw-add-iso', 'data-help': 'drawingViews' });
     bIso.innerHTML = icon('plus') + 'Isometrie';
@@ -5402,7 +5978,8 @@ const Drawing = (() => {
       const isBomSel = selDim === '__bom__';
       const selCtr = String(selDim).startsWith('ctr|') ? findCenterById(selDim) : null;
       const selDimInfo = !selDet && !isSec && !selNote && !selBalloon && !isBomSel && !selCtr ? findDimById(selDim, d, layout) : null;
-      const selSec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, selDet ? `Detail ${selDet.label}` : selNote ? 'Hinweislinie' : selBalloon ? `Positionsnummer ${resolveBalloonPos(selBalloon, bomData)}` : isBomSel ? 'Stückliste auf dem Blatt' : selCtr ? (selCtr.type === 'cross' ? 'Mittelkreuz' : 'Mittellinie') : selDimInfo ? `Maß ${selDimInfo.label}` : 'Auswahl'));
+      const selResolved = selDimInfo ? selDimInfo.dim : (!selDet && !isSec && !selNote && !selBalloon && !isBomSel && !selCtr && selD && layout ? autoDimList(d, layout).find((x) => x.id === selDim) : null);
+      const selSec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, selDet ? `Detail ${selDet.label}` : selNote ? 'Hinweislinie' : selBalloon ? `Positionsnummer ${resolveBalloonPos(selBalloon, bomData)}` : isBomSel ? 'Stückliste auf dem Blatt' : selCtr ? (selCtr.type === 'cross' ? 'Mittelkreuz' : 'Mittellinie') : selDimInfo ? `Maß ${selDimInfo.label}` : selResolved ? `Maß ${dimSummaryLabel(selResolved, sheetDimStyle(d))}` : 'Auswahl'));
       if (selBalloon) {
         const curPos = resolveBalloonPos(selBalloon, bomData);
         const posOpts = bomRowsList.length
@@ -5585,7 +6162,16 @@ const Drawing = (() => {
         }
         selSec.append(tolBox);
       }
+      if (selResolved && selResolved.lost) {
+        selSec.append(h('div', { class: 'hint-box', id: 'dw-dim-lost-hint', html: `<b>Bezug verloren:</b> ${esc(selResolved.lostReason || 'Die zugehörige Kante oder Bohrung gibt es im Modell nicht mehr.')}` }));
+      }
       const row = h('div', { class: 'btn-row' });
+      if (selResolved && selResolved.lost && !selResolved.auto) {
+        const isRb = tool === 'dim' && toolState && toolState.rebindId === selResolved.id;
+        const rb = h('button', { type: 'button', class: 'btn' + (isRb ? ' active' : ''), id: 'dw-dim-rebind' }, isRb ? 'Abbrechen' : 'Neu zuordnen');
+        rb.onclick = () => { if (isRb) setTool(null); else startRebind(selResolved.id); };
+        row.append(rb);
+      }
       if (isSec) {
         const fl = h('button', { type: 'button', class: 'btn', id: 'dw-sec-flip' }, 'Blickrichtung umkehren');
         fl.onclick = () => flipSection(selDim);
@@ -5623,6 +6209,7 @@ const Drawing = (() => {
   }
   function tool_(t) { setTool(tool === t ? null : t); }
   App.on('doc', () => { if (App.mode === 'drawing') refreshSoonDoc(); });
+  App.on('docLoaded', () => { lastLostKey = ''; });
   const refreshSoonDoc = debounce(async () => { await refresh(); Panels.renderRight(); }, 150);
   return {
     open, close, refresh, sheetMenu, viewMenu, bomMenu, exportMenu, drawMenu, autoDims, tool: tool_, setDimMode, dimMenu, flipAngleDim, onKey, renderPanel,
@@ -5642,6 +6229,7 @@ const Drawing = (() => {
     centers, allCenters, setCenters, hideCenter, showCenter, toggleCenter, showAllCenters,
     iso286, ISO286: ISO286_DATA,
     dims: () => autoDimList(dwg(), layout || computeLayout(dwg())).map((x) => ({ ...x, nominalMm: dimNominal(x) })),
+    lostDims, removeDim, removeLostDims, startRebind, rebindDim, addDim,
     getDimTol, setDimTol,
     exportPDF, buildPDFBytes, exportSVG, exportDXF, buildDXF, exportPNG, buildPNG, pngDialog, pngDimensions,
     get lastDXF() { return lastDXF; },

@@ -619,6 +619,20 @@ body.sketching .timeline{display:none}
 .dw-dim-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
 .dw-dim-grid .btn{justify-content:flex-start;padding:6px 8px;font-size:12.5px}
 .dw-dim-grid .btn.active{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent);font-weight:600}
+.sheet-tab .st-lost{font:700 10.5px/1 var(--font-mono);color:#fff;background:var(--bad);padding:2px 5px;border-radius:99px}
+.dw-lost-sec{background:var(--bad-soft);border:1px solid color-mix(in srgb,var(--bad) 35%,transparent);border-radius:9px;padding:9px;margin-bottom:10px}
+.dw-lost-h{color:var(--bad);display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.dw-lost-list{display:grid;gap:6px}
+.dw-lost-row{display:grid;gap:4px;padding:7px 8px;border:1px solid color-mix(in srgb,var(--bad) 30%,var(--line));border-radius:7px;background:var(--surface);cursor:pointer}
+.dw-lost-row:hover{border-color:var(--bad)}
+.dw-lost-row.active{border-color:var(--bad);box-shadow:0 0 0 1px var(--bad)}
+.dw-lost-top{display:flex;align-items:center;gap:6px}
+.dw-lost-val{font:700 12.5px/1.2 var(--font-mono);color:var(--bad);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dw-lost-view{font:500 11px/1.2 var(--font);color:var(--muted)}
+.dw-lost-reason{font:400 11.5px/1.25 var(--font);color:var(--ink-2)}
+.dw-lost-acts{display:flex;gap:6px;margin-top:2px}
+.dw-lost-acts .btn{padding:3px 8px;font-size:11.5px;flex:1}
+.dw-lost-acts .btn.active{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent);font-weight:600}
 
 /* Kopfzeile: bei weniger Platz zeigen erst die Nebenwerkzeuge, dann alle außer „Exportieren“ nur ihr Symbol */
 @media (max-width: 1500px) and (min-width: 901px){ .tool.minor span{display:none} .tool.minor{padding:7px 9px} }
