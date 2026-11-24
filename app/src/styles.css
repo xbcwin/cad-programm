@@ -815,3 +815,10 @@ body.presenting .dimlabel.mpin,body.presenting .measurebar{display:none!importan
 .folder-badge.pending{border-color:var(--accent-line);color:var(--accent);background:var(--accent-soft)}
 .folder-badge.saving{border-color:var(--accent-line);color:var(--accent)}
 .folder-badge.error{border-color:var(--bad);color:var(--bad);background:var(--bad-soft)}
+
+/* Skizze fertig bestimmen (SK-06) */
+.sk-autodef-box{display:grid;gap:8px;padding:10px;border:1.5px dashed var(--accent);border-radius:10px;background:color-mix(in srgb,var(--accent) 6%,var(--surface))}
+.sk-autodef-head{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13.5px}
+.sk-autodef-list{display:grid;gap:3px;font-size:12.5px;color:var(--ink-2)}
+.skdim.prop{border-style:dashed;background:color-mix(in srgb,var(--accent) 12%,var(--surface));color:var(--accent);pointer-events:none}
+.skcon.prop{border-style:dashed;border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--surface));color:var(--accent);pointer-events:none}

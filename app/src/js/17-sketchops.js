@@ -869,5 +869,194 @@ const SKO = (() => {
     return { regions, error: null };
   }
 
-  return { TEMPLATES, TPLNAMES, tplEnts, curve, inter, intersections, partsOf, nearestOn, closest, perpFeet, tangentFeet, trimPlan, trimPieces, trimRemoved, explode, chainOf, offsetChain, offsetShape, linkPoints, hasRadius, mirrorEnt, mirrorPoint, moveEnt, rotateEnt, rotPt, pr, inspect, thinRegions };
+  // ---------- Skizze fertig bestimmen (SK-06): fehlende Regeln & Maße vorschlagen ----------
+  function autoDefine(sketch, V, opts = {}) {
+    const angleTol = opts.angleTol != null ? opts.angleTol : 2;
+    const gapTol = opts.gapTol != null ? opts.gapTol : 0.05;
+    let wEnts = JSON.parse(JSON.stringify(sketch.ents || []));
+    let wDims = JSON.parse(JSON.stringify(sketch.dims || []));
+    let wCons = JSON.parse(JSON.stringify(sketch.cons || []));
+    const r4 = (x) => { const v = Math.round(x * 1e4) / 1e4; return Math.abs(v) < 1e-6 ? 0 : v; };
+
+    if (!wEnts.length) return { ok: true, empty: true, alreadyFull: true, cons: [], dims: [], ents: wEnts, dofBefore: 0, dofAfter: 0 };
+    let cur = Solver.solve({ ents: wEnts, dims: wDims, cons: wCons }, V, { analyze: true });
+    if (!cur.ok) return { ok: false, overConstrained: true, cons: [], dims: [], ents: wEnts, dofBefore: cur.dof, dofAfter: cur.dof };
+    const dofBefore = cur.dof;
+    if (cur.dof === 0) return { ok: true, alreadyFull: true, cons: [], dims: [], ents: wEnts, dofBefore: 0, dofAfter: 0 };
+    wEnts = cur.ents;
+
+    const propCons = [], propDims = [];
+    const byId = (id) => wEnts.find((e) => e.id === id);
+    const hasDim = (eid, k) => wDims.some((d) => !d.ref && d.e === eid && d.k === k);
+    const collapsed = (ents) => ents.some((e) => {
+      if (e.type === 'circle' || e.type === 'poly' || e.type === 'slot') return !(e.r > 1e-5);
+      if (e.type === 'ellipse') return !(e.rx > 1e-5 && e.ry > 1e-5);
+      if (e.type === 'text') return !(e.h > 1e-5);
+      if (e.type === 'rect') return !(Math.abs(e.b[0] - e.a[0]) > 1e-5 && Math.abs(e.b[1] - e.a[1]) > 1e-5);
+      return false;
+    });
+    const tryAdd = (kind, item) => {
+      if (cur.dof <= 0) return false;
+      const nextCons = kind === 'con' ? [...wCons, item] : wCons;
+      const nextDims = kind === 'dim' ? [...wDims, item] : wDims;
+      const res = Solver.solve({ ents: wEnts, dims: nextDims, cons: nextCons }, V, { analyze: true });
+      if (!res.ok || res.dof >= cur.dof || collapsed(res.ents)) return false;
+      wEnts = res.ents;
+      if (kind === 'con') { wCons = nextCons; propCons.push(item); }
+      else { wDims = nextDims; propDims.push(item); }
+      cur = res;
+      return true;
+    };
+    const refXY = (ref) => {
+      if (!ref) return null;
+      if (ref.e === 'origin') return [0, 0];
+      const e = byId(ref.e); if (!e) return null;
+      const p = ref.p || 'c';
+      if (e.type === 'line' || e.type === 'slot') return p === 'a' ? e.a : p === 'b' ? e.b : null;
+      if (e.type === 'arc') {
+        if (p === 'a' || p === 'b') return e[p];
+        if (p === 'c') { const ai = SK.arcInfo(e.a, e.m, e.b); return ai ? ai.c : null; }
+        return null;
+      }
+      if (e.type === 'rect') {
+        const c = SK.rectCorners(e);
+        if (p === 'a' || p === 'k0') return c[0];
+        if (p === 'k1') return c[1];
+        if (p === 'b' || p === 'k2') return c[2];
+        if (p === 'k3') return c[3];
+        if (p === 'c') return [(e.a[0] + e.b[0]) / 2, (e.a[1] + e.b[1]) / 2];
+        return null;
+      }
+      if (e.type === 'circle' || e.type === 'ellipse' || e.type === 'poly') return p === 'c' ? e.c : null;
+      if (e.type === 'point' || e.type === 'text') return p === 'a' ? e.a : null;
+      if (e.type === 'spline' && /^p\d+$/.test(p)) return e.pts[+p.slice(1)] || null;
+      return null;
+    };
+
+    // Phase 1a: Deckungsgleich für Punkte mit < gapTol (0,05 mm) Abstand
+    const pts = [];
+    for (const e of wEnts) {
+      const addP = (p, xy) => { if (xy) pts.push({ e: e.id, type: e.type, npts: e.pts ? e.pts.length : 0, p, ref: { e: e.id, p }, xy }); };
+      if (e.type === 'line' || e.type === 'slot') { addP('a', e.a); addP('b', e.b); }
+      else if (e.type === 'arc') { addP('a', e.a); addP('b', e.b); const ai = SK.arcInfo(e.a, e.m, e.b); if (ai) addP('c', ai.c); }
+      else if (e.type === 'rect') { SK.rectCorners(e).forEach((q, i) => addP('k' + i, q)); addP('c', [(e.a[0] + e.b[0]) / 2, (e.a[1] + e.b[1]) / 2]); }
+      else if (e.type === 'circle' || e.type === 'ellipse' || e.type === 'poly') addP('c', e.c);
+      else if (e.type === 'point' || e.type === 'text') addP('a', e.a);
+      else if (e.type === 'spline') (e.pts || []).forEach((q, i) => addP('p' + i, q));
+    }
+    const cands = [];
+    for (let i = 0; i < pts.length; i++) {
+      const P = pts[i];
+      if (cur.freeEnts.has(P.e)) {
+        const d0 = d2(P.xy, [0, 0]);
+        if (d0 < gapTol) cands.push({ a: P.ref, b: { e: 'origin' }, d: d0 });
+      }
+      for (let j = i + 1; j < pts.length; j++) {
+        const Q = pts[j];
+        if (P.e === Q.e) {
+          const splineEnd = P.type === 'spline' && P.npts >= 3 && ((P.p === 'p0' && Q.p === 'p' + (P.npts - 1)) || (Q.p === 'p0' && P.p === 'p' + (P.npts - 1)));
+          if (!splineEnd) continue;
+        }
+        if (!cur.freeEnts.has(P.e) && !cur.freeEnts.has(Q.e)) continue;
+        if (Math.abs(P.xy[0] - Q.xy[0]) >= gapTol || Math.abs(P.xy[1] - Q.xy[1]) >= gapTol) continue;
+        const dist = d2(P.xy, Q.xy);
+        if (dist < gapTol) cands.push({ a: P.ref, b: Q.ref, d: dist });
+      }
+    }
+    cands.sort((a, b) => a.d - b.d);
+    for (const c of cands) {
+      if (cur.dof <= 0) break;
+      const pa = refXY(c.a), pb = refXY(c.b);
+      if (pa && pb && d2(pa, pb) < gapTol) tryAdd('con', { id: uid('k'), type: 'coincident', refs: [c.a, c.b] });
+    }
+
+    // Phase 1b: Waagerecht / Senkrecht für Linien und Langlöcher mit < angleTol (2°) Abweichung
+    const ids = wEnts.map((e) => e.id);
+    for (const id of ids) {
+      if (cur.dof <= 0) break;
+      const e = byId(id);
+      if (!e || (e.type !== 'line' && e.type !== 'slot') || !cur.freeEnts.has(id)) continue;
+      const dx = e.b[0] - e.a[0], dy = e.b[1] - e.a[1], L = Math.hypot(dx, dy);
+      if (L < 1e-6) continue;
+      const degH = (Math.atan2(Math.abs(dy), Math.abs(dx)) * 180) / Math.PI;
+      const degV = 90 - degH;
+      if (degH < angleTol) tryAdd('con', { id: uid('k'), type: 'horizontal', refs: [{ e: id }] });
+      else if (degV < angleTol) tryAdd('con', { id: uid('k'), type: 'vertical', refs: [{ e: id }] });
+    }
+
+    const tryDim = (eid, k, val) => {
+      if (hasDim(eid, k) || !isFinite(val)) return false;
+      const signed = k === 'x' || k === 'y' || k === 'ang';
+      if (!signed && val <= 1e-5) return false;
+      return tryAdd('dim', { id: uid('m'), e: eid, k, v: r4(val) });
+    };
+
+    // Phase 2: Fehlende Größenmaße (Längen, Breiten, Höhen, Durchmesser, Radien)
+    for (const id of ids) {
+      if (cur.dof <= 0) break;
+      if (!cur.freeEnts.has(id)) continue;
+      const e = byId(id); if (!e) continue;
+      if (e.type === 'rect') {
+        tryDim(id, 'w', Math.abs(e.b[0] - e.a[0]));
+        tryDim(id, 'h', Math.abs(e.b[1] - e.a[1]));
+      } else if (e.type === 'circle' || e.type === 'poly') {
+        tryDim(id, 'd', 2 * e.r);
+      } else if (e.type === 'arc') {
+        const ai = SK.arcInfo(e.a, e.m, e.b);
+        if (ai) tryDim(id, 'r', ai.r);
+      } else if (e.type === 'line') {
+        tryDim(id, 'len', d2(e.a, e.b));
+      } else if (e.type === 'slot') {
+        tryDim(id, 'len', d2(e.a, e.b));
+        tryDim(id, 'w', 2 * e.r);
+      } else if (e.type === 'ellipse') {
+        tryDim(id, 'w', 2 * e.rx);
+        tryDim(id, 'h', 2 * e.ry);
+      } else if (e.type === 'text') {
+        tryDim(id, 'h', e.h);
+      }
+    }
+
+    // Phase 3: Lage zum Ursprung (X, Y)
+    for (const id of ids) {
+      if (cur.dof <= 0) break;
+      if (!cur.freeEnts.has(id)) continue;
+      const e = byId(id); if (!e) continue;
+      const p = SK.anchorOf(e);
+      if (!p) continue;
+      tryDim(id, 'x', p[0]);
+      tryDim(id, 'y', p[1]);
+    }
+
+    // Phase 4: Winkel für schräge Linien und Langlöcher
+    for (const id of ids) {
+      if (cur.dof <= 0) break;
+      if (!cur.freeEnts.has(id)) continue;
+      const e = byId(id); if (!e) continue;
+      if (e.type === 'line' || e.type === 'slot') tryDim(id, 'ang', SK.measure(e, 'ang'));
+    }
+
+    // Phase 5: Restliche Freiheiten (z. B. Bogen-Endpunkt oder Spline-Kontrollpunkte)
+    for (const id of ids) {
+      if (cur.dof <= 0) break;
+      if (!cur.freeEnts.has(id)) continue;
+      const e = byId(id); if (!e) continue;
+      const fixP = (pName, xy) => { if (xy) tryAdd('con', { id: uid('k'), type: 'fix', refs: [{ e: id, p: pName }], at: xy.map(r4) }); };
+      if (e.type === 'arc') { fixP('b', e.b); fixP('a', e.a); }
+      else if (e.type === 'spline') (e.pts || []).forEach((q, i) => { if (cur.dof > 0) fixP('p' + i, q); });
+      else if (e.type === 'line' || e.type === 'slot') { fixP('b', e.b); fixP('a', e.a); }
+      else if (e.type === 'rect') { const c = SK.rectCorners(e); fixP('k2', c[2]); fixP('k0', c[0]); }
+      else if (e.type === 'circle' || e.type === 'poly' || e.type === 'ellipse') fixP('c', e.c);
+      else if (e.type === 'point' || e.type === 'text') fixP('a', e.a);
+      for (const k of Solver.varsOf(e) || []) {
+        if (cur.dof <= 0 || !cur.freeEnts.has(id)) break;
+        const curE = byId(id);
+        if (curE) tryAdd('con', { id: uid('k'), type: 'fix', refs: [{ e: id }], at: { [k]: r4(Solver.getK(curE, k)) } });
+      }
+    }
+
+    return { ok: cur.ok, alreadyFull: false, cons: propCons, dims: propDims, ents: wEnts, dofBefore, dofAfter: cur.dof };
+  }
+
+  return { TEMPLATES, TPLNAMES, tplEnts, curve, inter, intersections, partsOf, nearestOn, closest, perpFeet, tangentFeet, trimPlan, trimPieces, trimRemoved, explode, chainOf, offsetChain, offsetShape, linkPoints, hasRadius, mirrorEnt, mirrorPoint, moveEnt, rotateEnt, rotPt, pr, inspect, thinRegions, autoDefine };
 })();

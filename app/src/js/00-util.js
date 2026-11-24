@@ -1174,6 +1174,11 @@ const HELP = {
   "tip": "Linien in 15°-Schritten und runden Längen fangen",
   "hilfe": "Rastet Linien und Linienzüge beim Zeichnen mit der Maus in 15°-Schritten mit Hilfslinie und Winkel-Schild ein und rundet die Länge auf 1 mm (bei starkem Zoom auf 0,5 oder 0,1 mm). Die Einstellung wird für diesen Browser gespeichert.",
   "tipp": "Halte beim Zeichnen die Umschalttaste gedrückt, um Winkelfang und runde Längen vorübergehend abzuschalten."
+ },
+ "sketchAutoDefine": {
+  "tip": "Fehlende Regeln und Maße automatisch vorschlagen",
+  "hilfe": "Prüft deine Skizze und schlägt fehlende Regeln vor: Waagerecht oder Senkrecht bei Linien unter 2° Abweichung, Deckungsgleich bei Punkten unter 0,05 mm Abstand, dazu fehlende Maße für Längen, Durchmesser, Radien und die Lage zum Ursprung. Alle Vorschläge erscheinen zuerst gestrichelt im Bild – „Übernehmen“ legt alles in einem einzigen Rückgängig-Schritt an, „Abbrechen“ verwirft sie.",
+  "tipp": "Danach ist die Skizze voll bestimmt (alle Linien dunkel) und kann nicht mehr aus Versehen verrutschen."
  }
 };
 
