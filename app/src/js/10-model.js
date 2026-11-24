@@ -33,6 +33,7 @@ const KINDS = {
   wrap: { get label() { return T('kind.wrap'); }, params: [] },
   emboss: { get label() { return T('kind.emboss'); }, params: [] },
   mirrorStep: { get label() { return T('kind.mirrorStep'); }, params: [] },
+  deleteBody: { get label() { return T('kind.deleteBody'); }, params: [] },
   ref: { get label() { return T('kind.ref'); }, params: [] },
 };
 const PRIMITIVE_ORDER = ['box', 'cylinder', 'sphere', 'cone', 'pyramid', 'wedge', 'tube', 'torus', 'prism', 'hemisphere'];
@@ -229,6 +230,9 @@ const Model = (() => {
     const tables = (doc && Array.isArray(doc.tables)) ? doc.tables : [];
     Object.defineProperty(v, '__tables', { value: tables, enumerable: false, configurable: true });
     for (const p of doc.params || []) {
+      if (p && p.measure && typeof p.expr === 'number' && isFinite(p.expr)) v[p.name] = p.expr;
+    }
+    for (const p of doc.params || []) {
       try { v[p.name] = Expr.eval(String(p.expr), v, tables); }
       catch (e) { errors[p.id] = e.message; v[p.name] = 0; }
     }
@@ -307,12 +311,36 @@ const Model = (() => {
   // an Körpern hängende Rohr-Punkte, Bezugsebenen an Flächen. Ergebnis: Liste {from, to, what}
   function dependencies(doc) {
     const out = [], top = (id) => { const t = topOf(doc, id); return t ? t.id : id; };
+    const measParams = new Map();
+    for (const q of doc.params || []) {
+      if (q && q.measure && q.measure.id && q.name) measParams.set(String(q.name).toLowerCase(), q);
+    }
     walk(doc.items, (it) => {
       const me = top(it.id);
       if (it.op && it.op.target) out.push({ from: me, to: top(it.op.target), what: { join: 'vereinigt mit', cut: 'abgezogen von', common: 'Schnittmenge mit' }[it.op.type] || 'verrechnet mit' });
       if (it.p && it.p.extent === 'toFace' && it.p.toFace && it.p.toFace.id) out.push({ from: me, to: top(it.p.toFace.id), what: 'hochgezogen bis Fläche von' });
       if (it.kind === 'transform' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: it.p.copy ? 'versetzte Kopie von' : 'versetzt' });
       if (it.kind === 'scale' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'skaliert' });
+      if (it.kind === 'deleteBody' && it.p) {
+        const tgs = Array.isArray(it.p.targets) ? it.p.targets : (it.p.target ? [it.p.target] : []);
+        for (const tid of tgs) if (tid) out.push({ from: me, to: top(tid), what: 'löscht Körper' });
+      }
+      if (measParams.size && typeof Expr !== 'undefined' && Expr.names) {
+        const scanObj = (obj) => {
+          for (const k in obj || {}) {
+            const val = obj[k];
+            if (typeof val === 'string') {
+              for (const nm of Expr.names(val)) {
+                const mp = measParams.get(String(nm).toLowerCase());
+                if (mp && mp.measure && mp.measure.id) out.push({ from: me, to: top(mp.measure.id), what: 'übernimmt Messwert von' });
+              }
+            }
+          }
+        };
+        scanObj(it.p); scanObj(it.t);
+        for (const f of it.finishes || []) scanObj(f);
+        if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) if (typeof d.v === 'string') scanObj({ v: d.v });
+      }
       if (it.kind === 'thicken' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: it.p.mode === 'new' ? 'Platte von Fläche aus' : 'dickt Fläche auf von' });
       if (it.kind === 'rib' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Rippe an' });
       if (it.kind === 'wrap' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'wickelt um' });
@@ -477,6 +505,10 @@ const Model = (() => {
         };
       } else if (it.kind === 'mirrorStep') {
         o.p = mirrorStepParams(it, ownV);
+      } else if (it.kind === 'deleteBody') {
+        const p = it.p || {};
+        const targets = Array.isArray(p.targets) ? p.targets.filter(Boolean) : (p.target ? [p.target] : []);
+        o.p = { targets };
       }
       else {
         o.p = resolveP(it.p, ownV);
@@ -1194,6 +1226,17 @@ const Model = (() => {
         const off = num(mp.off, V, 0);
         return Math.abs(off) > 1e-6 ? `${pl} (${off > 0 ? '+' : ''}${f(off)}${u})` : `${pl}-Ebene`;
       }
+      case 'deleteBody': {
+        const mp = it.p || {};
+        const tgs = Array.isArray(mp.targets) ? mp.targets.filter(Boolean) : (mp.target ? [mp.target] : []);
+        if (!tgs.length) return 'kein Körper';
+        const d = typeof App !== 'undefined' ? App.doc : null;
+        if (tgs.length === 1) {
+          const tf = d ? find(d, tgs[0]) : null;
+          return tf ? label(tf.item) : 'fehlt';
+        }
+        return `${tgs.length} Körper`;
+      }
       case 'group': {
         const ft = typeof Features !== 'undefined' && Features.sizeText(it, V);
         if (ft) return ft;
@@ -1353,7 +1396,7 @@ const Model = (() => {
     if (mode === 'into') {
       if (dst.item.kind !== 'group' || srcs.length !== 1) return { ok: false, reason: '' };
       const s = srcs[0];
-      if ((s.item.op && s.item.op.target) || s.item.kind === 'transform' || s.item.kind === 'rib' || s.item.kind === 'wrap' || s.item.kind === 'emboss' || (!s.parent && s.item.kind === 'mirrorStep')) {
+      if ((s.item.op && s.item.op.target) || s.item.kind === 'transform' || s.item.kind === 'rib' || s.item.kind === 'wrap' || s.item.kind === 'emboss' || s.item.kind === 'deleteBody' || (!s.parent && s.item.kind === 'mirrorStep')) {
         return { ok: false, reason: 'Dieser Schritt muss auf oberster Ebene bleiben.' };
       }
       if (!s.parent && !dst.parent) {

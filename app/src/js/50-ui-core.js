@@ -232,7 +232,7 @@ const UI = (() => {
     if (typeof Measure !== 'undefined' && Measure.setCalcBusy) Measure.setCalcBusy(!!on);
   }
   // ---------- Eingabefelder ----------
-  function numField({ id, label, value, unit = 'mm', len, axis, onCommit, min, int, placeholder, expr = true, step, vars }) {
+  function numField({ id, label, value, unit = 'mm', len, axis, onCommit, min, int, placeholder, expr = true, step, vars, measurePick }) {
     const getV = () => (typeof vars === 'function' ? vars() : vars) || Model.vars(App.doc).v;
     const V = getV();
     const isLen = len != null ? !!len : unit === 'mm';
@@ -240,9 +240,10 @@ const UI = (() => {
     const dispUnit = isLen && unit === 'mm' ? Units.label() : unit;
     const fmtDisp = (val) => (int ? String(Math.round(val)) : isLen ? Units.fmtLen(val) : isAng ? fmtAngle(val) : fmt(val));
     const isE = typeof value === 'string' && Model.isExpr(value);
+    const isMeasRef = isE && typeof App !== 'undefined' && App.doc && Array.isArray(App.doc.params) && App.doc.params.some((mp) => mp && mp.measure && typeof Expr !== 'undefined' && Expr.names && Expr.names(value).some((n) => n.toLowerCase() === String(mp.name || '').toLowerCase()));
     const wrap = h('div', { class: 'field' });
     if (label) wrap.append(h('label', { for: id }, label));
-    const box = h('div', { class: 'inp' + (isE ? ' expr' : '') });
+    const box = h('div', { class: 'inp' + (isE ? ' expr' : '') + (isMeasRef ? ' measured' : '') });
     if (axis) box.append(h('span', { class: 'axis ' + axis }, axis.toUpperCase()));
     const dispVal = typeof value === 'number' ? fmtDisp(value) : (value ?? '');
     const inp = h('input', { id, type: 'text', inputmode: 'decimal', value: dispVal, placeholder: placeholder || '', autocomplete: 'off', spellcheck: 'false' });
@@ -262,6 +263,35 @@ const UI = (() => {
         box.append(h('span', { class: 'fx bad', title: res.error }, T('hint.formulaErrShort')));
       }
     } else if (dispUnit) box.append(h('span', { class: 'unit' }, dispUnit));
+    const canMeasure = measurePick !== false && expr !== false && !int && (isLen || unit === '') && typeof Measure !== 'undefined' && typeof Measure.pickEdgeForField === 'function' && App.mode === 'model';
+    if (canMeasure) {
+      const mb = h('button', {
+        type: 'button',
+        class: 'meas-btn',
+        id: id ? id + '-meas' : null,
+        'data-measure-for': id || '',
+        'data-help': 'measureParam',
+        'data-tip': T('measure.pickForFieldTip'),
+        'aria-label': T('measure.pickForFieldAria'),
+      });
+      mb.innerHTML = icon('measure');
+      mb.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); });
+      mb.addEventListener('click', (e) => {
+        e.stopPropagation();
+        Measure.pickEdgeForField({
+          fieldId: id || null,
+          btn: mb,
+          onPick: (paramName) => {
+            orig = paramName;
+            inp.value = paramName;
+            box.classList.remove('invalid');
+            box.classList.add('expr', 'measured');
+            onCommit(paramName);
+          },
+        });
+      });
+      box.append(mb);
+    }
     wrap.append(box);
     if (badErr) wrap.append(h('div', { class: 'field-err' }, badErr));
     let orig = inp.value, lastBad = null;

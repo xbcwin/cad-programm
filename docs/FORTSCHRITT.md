@@ -255,6 +255,7 @@ Fertig.
 - [x] Varianten schalten Schritte (Auto [A-040], KP-21): Varianten unter „Maße“ speichern neben Maßwerten auch unterdrückte Schritte (`v.suppressed`), bieten pro Variante direkte An-/Aus-Häkchen (`#var-steps`) samt Abweichungserkennung beim Ändern in Zeitleiste/Verlauf, schalten Schritte samt Maßen mit Rückgängig um und berücksichtigen sie im Varianten-Vergleich
 - [x] Formeln: wenn, runden, Tabelle (Auto [A-041], KP-22): `wenn(Bedingung; dann; sonst)` mit `< > <= >= == !=`, `runden(x; Stellen)`, `aufrunden` und `abrunden` sowie `tabelle(Name; Schlüssel)` aus zweispaltigen Tabellen unter „Maße“ (`doc.tables`); Fehler erscheinen im Klartext am Feld, unter „Maße“ und als Meldung
 - [x] Wickeln um Zylinder (Auto [A-043], KP-34): neuer Schritt `wrap` legt ebene Skizzen ohne Verzerrung nach Bogenlänge um eine Zylinderfläche – als erhabene (`emboss`) oder vertiefte (`deboss`) Prägung sowie als Linie (`line`) für weitere Schritte inkl. „Entlang Pfad ziehen“ (`sweep` mit `wrapId`)
+- [x] Körper als Schritt löschen & Messwert als Maß (Auto [A-100], KP-51, KP-53): neuer abschaltbarer Verlaufsschritt `deleteBody` (`Features.deleteBody`, entfernt frühere Körper ab diesem Schritt und holt sie beim Unterdrücken oder Zurückrollen zurück) sowie „aus Messung“ an Maßfeldern (`Measure.pickEdgeForField`, `syncMeasuredParams`: verknüpfter Messwert-Parameter in `doc.params`, der beim Ändern der Kante automatisch mitwandert)
 - [ ] Versionen in der Cloud (mit Stufe 6 – Konten)
 
 ### Stufe 4 – Drohnen-Modul

@@ -31,6 +31,269 @@ const Measure = (() => {
     UI.hint(null); Viewer.canvas.style.cursor = '';
     Handles.rebuild();
   }
+  // ---------- Messwert als Maß (KP-53): Kante im Bild wählen & automatisch nachführen ----------
+  let fieldPick = null, hoverLine = null, syncParamRounds = 0;
+  function edgeDirOf(e) {
+    if (!e || e.t !== 'LINE' || !e.a || !e.b) return null;
+    const dx = e.b[0] - e.a[0], dy = e.b[1] - e.a[1], dz = e.b[2] - e.a[2];
+    const l = Math.hypot(dx, dy, dz);
+    return l > 1e-9 ? [dx / l, dy / l, dz / l] : null;
+  }
+  function edgeLenOf(e) {
+    if (!e) return null;
+    if (typeof e.l === 'number' && isFinite(e.l) && e.l > 0) return round(e.l, 6);
+    if (e.a && e.b) { const d = dist3(e.a, e.b); return d > 0 ? round(d, 6) : null; }
+    return null;
+  }
+  function buildEdgeMeasureRef(itemId, edgeIdx) {
+    const r = App.results.get(itemId);
+    const e = r && r.data && Array.isArray(r.data.edges) ? r.data.edges[edgeIdx] : null;
+    if (!e) return null;
+    const len = edgeLenOf(e);
+    if (!(len > 0)) return null;
+    const bbox = r.data.bbox;
+    const f = Model.find(App.doc, itemId);
+    const dir = edgeDirOf(e);
+    return {
+      len,
+      ref: {
+        kind: 'edgeLen',
+        id: itemId,
+        tid: e.tid || null,
+        t: e.t || 'LINE',
+        a: r6(e.a),
+        b: r6(e.b),
+        m: r6(e.m),
+        dir: dir ? r6(dir) : null,
+        c: e.c ? r6(e.c) : null,
+        n: e.n ? r6(e.n) : null,
+        r: e.r != null ? round(e.r, 6) : null,
+        mFrac: fracOf(e.m, bbox),
+        label: (f ? Model.label(f.item) : 'Körper') + ' · Kante',
+      },
+    };
+  }
+  function resolveMeasuredEdge(mRef) {
+    if (!mRef || !mRef.id) return null;
+    let rid = mRef.id;
+    while (rid && App.mergedInto && App.mergedInto(rid)) rid = App.mergedInto(rid);
+    const r = App.results.get(rid) || App.results.get(mRef.id);
+    if (!r || !r.data || !Array.isArray(r.data.edges) || !r.data.edges.length) return null;
+    const bbox = r.data.bbox;
+    const all = r.data.edges.map((e, idx) => ({ e, idx, c: e.m }));
+    const mk = (x) => {
+      if (!x) return null;
+      const len = edgeLenOf(x.e);
+      return len > 0 ? { len, edge: x.e, idx: x.idx, rid, bbox } : null;
+    };
+    if (mRef.tid) {
+      const byTid = all.filter((x) => x.e.tid === mRef.tid && (!mRef.t || x.e.t === mRef.t));
+      if (byTid.length === 1) return mk(byTid[0]);
+      if (byTid.length > 1) {
+        const sub = mRef.dir && mRef.t === 'LINE'
+          ? byTid.filter((x) => { const d = edgeDirOf(x.e); return d && Math.abs(V3(d).dot(V3(mRef.dir))) >= 0.99; })
+          : byTid;
+        const b = pickBest(sub.length ? sub : byTid, mRef.m, mRef.mFrac, bbox);
+        if (b) return mk(b);
+      }
+    }
+    const cands = [];
+    for (const x of all) {
+      if (mRef.t && x.e.t !== mRef.t) continue;
+      if (mRef.t === 'LINE' && mRef.dir) {
+        const d = edgeDirOf(x.e);
+        if (!d || Math.abs(V3(d).dot(V3(mRef.dir))) < 0.99) continue;
+      } else if (mRef.t === 'CIRCLE' && mRef.n && x.e.n) {
+        if (Math.abs(V3(x.e.n).normalize().dot(V3(mRef.n).normalize())) < 0.99) continue;
+      }
+      cands.push(x);
+    }
+    if (cands.length) return mk(pickBest(cands, mRef.m, mRef.mFrac, bbox));
+    const sameType = mRef.t ? all.filter((x) => x.e.t === mRef.t) : all;
+    return mk(pickBest(sameType.length ? sameType : all, mRef.m, mRef.mFrac, bbox));
+  }
+  function sameEdgeRef(a, b) {
+    if (!a || !b || a.kind !== 'edgeLen' || b.kind !== 'edgeLen' || a.id !== b.id) return false;
+    if (a.tid && b.tid && a.tid === b.tid && a.t === b.t) return true;
+    if (a.t !== b.t || !a.m || !b.m || dist3(a.m, b.m) >= 0.05) return false;
+    if (a.dir && b.dir && Math.abs(V3(a.dir).dot(V3(b.dir))) < 0.995) return false;
+    return true;
+  }
+  function ensureMeasuredParam(spec, len, opts = {}) {
+    const existing = !opts.forceNew ? (App.doc.params || []).find((p) => p && p.measure && sameEdgeRef(p.measure, spec)) : null;
+    if (existing) {
+      if (Math.abs(Number(existing.expr) - len) > 1e-5 || existing.measure.lost) {
+        App.change('Messwert aktualisiert', (doc) => {
+          const p = (doc.params || []).find((x) => x.id === existing.id);
+          if (!p) return false;
+          p.expr = len;
+          p.measure = deepClone(spec);
+        });
+      }
+      return existing.name;
+    }
+    let n = 1;
+    const used = new Set((App.doc.params || []).map((x) => String(x.name || '').toLowerCase()));
+    while (used.has(('messung_' + n))) n++;
+    const name = 'Messung_' + n;
+    App.change(`Messwert „${name}“ angelegt`, (doc) => {
+      doc.params = doc.params || [];
+      doc.params.push({ id: uid('m'), name, expr: len, measure: deepClone(spec) });
+    });
+    return name;
+  }
+  function syncMeasuredParams() {
+    if (!App.doc || !Array.isArray(App.doc.params) || !App.doc.params.length) { syncParamRounds = 0; return; }
+    const jobs = [];
+    for (const p of App.doc.params) {
+      if (!p || !p.measure || p.measure.kind !== 'edgeLen') continue;
+      const res = resolveMeasuredEdge(p.measure);
+      if (!res) {
+        if (!p.measure.lost) jobs.push({ id: p.id, lost: true });
+        continue;
+      }
+      if (p.measure.lost || typeof p.expr !== 'number' || Math.abs(p.expr - res.len) > 1e-5) {
+        jobs.push({ id: p.id, lost: false, len: res.len, edge: res.edge, bbox: res.bbox });
+      }
+    }
+    if (!jobs.length) { syncParamRounds = 0; return; }
+    if (++syncParamRounds > 4) {
+      syncParamRounds = 0;
+      UI.toast(T('measure.cycleWarn'), { icon: 'warn' });
+      return;
+    }
+    App.change('Messwert nachgeführt', (doc) => {
+      for (const j of jobs) {
+        const p = (doc.params || []).find((x) => x.id === j.id);
+        if (!p || !p.measure) continue;
+        if (j.lost) {
+          p.measure.lost = true;
+        } else {
+          p.expr = j.len;
+          delete p.measure.lost;
+          if (j.edge) {
+            const e = j.edge;
+            p.measure.t = e.t || p.measure.t;
+            p.measure.a = r6(e.a);
+            p.measure.b = r6(e.b);
+            p.measure.m = r6(e.m);
+            const dir = edgeDirOf(e);
+            p.measure.dir = dir ? r6(dir) : null;
+            if (e.c) p.measure.c = r6(e.c);
+            if (e.n) p.measure.n = r6(e.n);
+            if (e.r != null) p.measure.r = round(e.r, 6);
+            if (e.tid) p.measure.tid = e.tid;
+            if (j.bbox) p.measure.mFrac = fracOf(e.m, j.bbox);
+          }
+        }
+      }
+    }, { amend: true });
+  }
+  function unlinkMeasuredParam(paramId) {
+    App.change('Messwert-Verknüpfung gelöst', (doc) => {
+      const p = (doc.params || []).find((x) => x.id === paramId);
+      if (!p || !p.measure) return false;
+      delete p.measure;
+    });
+  }
+  function clearHoverEdge() {
+    if (hoverLine) {
+      Viewer.groups.overlay.remove(hoverLine);
+      Viewer.disposeFat(hoverLine);
+      hoverLine = null;
+      Viewer.requestRender();
+    }
+  }
+  function stopFieldPick() {
+    if (!fieldPick) return;
+    const cv = Viewer.canvas;
+    cv.removeEventListener('pointerdown', fieldPick.down, true);
+    cv.removeEventListener('pointermove', fieldPick.move);
+    window.removeEventListener('keydown', fieldPick.key, true);
+    if (fieldPick.btn) fieldPick.btn.classList.remove('active');
+    clearHoverEdge();
+    cv.style.cursor = '';
+    UI.hint(null);
+    fieldPick = null;
+  }
+  function pickEdgeForField(opts = {}) {
+    const fieldId = opts.fieldId || null;
+    if (fieldPick && fieldPick.fieldId === fieldId && !opts.repickParamId) {
+      stopFieldPick();
+      return false;
+    }
+    stopFieldPick();
+    if (on) stop();
+    const btn = opts.btn || (fieldId ? document.getElementById(fieldId + '-meas') : null);
+    if (btn) btn.classList.add('active');
+    const cv = Viewer.canvas;
+    const move = (e) => {
+      const hit = Viewer.pick(e.clientX, e.clientY, { edgePx: 11 });
+      clearHoverEdge();
+      if (hit && hit.edgeIdx != null) {
+        const g = hit.node.data.edgeGroups && hit.node.data.edgeGroups.find((x) => x[2] === hit.edgeIdx);
+        const edge = hit.node.data.edges && hit.node.data.edges[hit.edgeIdx];
+        if (g) {
+          hoverLine = Viewer.makeFat(hit.node.data.lines.slice(g[0] * 3, (g[0] + g[1]) * 3), Viewer.theme.accent, 4.5, { depthTest: false, order: 36 });
+          hoverLine.matrixAutoUpdate = false;
+          hoverLine.matrix.copy(hit.node.obj.matrixWorld);
+          Viewer.groups.overlay.add(hoverLine);
+          Viewer.requestRender();
+        }
+        const len = edgeLenOf(edge);
+        if (len > 0) UI.hint(`${T('measure.pickFieldHint')} · <b>${Units.fmtLenU(len, 2)}</b>`);
+        else UI.hint(T('measure.pickFieldHint'));
+      } else {
+        UI.hint(T('measure.pickFieldHint'));
+      }
+    };
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { edgePx: 11 });
+      if (!hit || hit.edgeIdx == null) {
+        UI.toast(T('measure.pickEdgeNeedEdge'), { icon: 'info' });
+        return;
+      }
+      const info = buildEdgeMeasureRef(hit.id, hit.edgeIdx);
+      if (!info) {
+        UI.toast(T('measure.pickEdgeNeedEdge'), { icon: 'info' });
+        return;
+      }
+      stopFieldPick();
+      if (opts.repickParamId) {
+        App.change('Messwert neu verknüpft', (doc) => {
+          const p = (doc.params || []).find((x) => x.id === opts.repickParamId);
+          if (!p) return false;
+          p.expr = info.len;
+          p.measure = deepClone(info.ref);
+        });
+        UI.toast(T('measure.linkedToast', { name: ((App.doc.params || []).find((x) => x.id === opts.repickParamId) || {}).name || '', val: Units.fmtLenU(info.len, 2) }), { icon: 'check' });
+        return;
+      }
+      const depth = App.undoStack.length;
+      const name = ensureMeasuredParam(info.ref, info.len);
+      if (typeof opts.onPick === 'function') opts.onPick(name, info.len);
+      if (App.undoStack.length > depth + 1) App.squash(depth, `Maß aus Messung (${name})`);
+      UI.toast(T('measure.linkedToast', { name, val: Units.fmtLenU(info.len, 2) }), { icon: 'check' });
+    };
+    const key = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        stopFieldPick();
+        if (typeof opts.onCancel === 'function') opts.onCancel();
+      }
+    };
+    fieldPick = { fieldId, btn, move, down, key };
+    cv.addEventListener('pointerdown', down, true);
+    cv.addEventListener('pointermove', move);
+    window.addEventListener('keydown', key, true);
+    cv.style.cursor = 'crosshair';
+    UI.hint(T('measure.pickFieldHint'));
+    return true;
+  }
   function showBar() {
     hideBar();
     bar = h('div', { class: 'sketchbar measurebar', id: 'measure-bar' });
@@ -738,9 +1001,10 @@ const Measure = (() => {
       if (sel && App.sel.length) { sel = null; drawSaved(); }
       updateStatus();
     });
-    App.on('results', () => { relink(); updateStatus(); });
+    App.on('results', () => { relink(); syncMeasuredParams(); updateStatus(); });
     App.on('remeshed', relink);
     App.on('rebuilt', updateCalc);
+    App.on('docLoaded', stopFieldPick);
     let lastUnit = Units.key();
     let lastFmt = `${FMT.dec}:${FMT.angle}`;
     if (typeof ViewPrefs !== 'undefined' && ViewPrefs.on) {
@@ -757,7 +1021,7 @@ const Measure = (() => {
       drawSaved();
       updateStatus();
     });
-    App.on('mode', () => { if (App.mode !== 'model' && on) stop(); drawSaved(); updateStatus(); });
+    App.on('mode', () => { if (App.mode !== 'model') { if (on) stop(); stopFieldPick(); } drawSaved(); updateStatus(); });
     App.on('sketch', updateStatus);
     App.on('sketchSel', updateStatus);
     App.on('calc', (b) => { calcBusy = !!b; updateCalc(); });
@@ -831,6 +1095,7 @@ const Measure = (() => {
     showCoords, get coords() { return coordsNow; }, updateStatus, setCalcBusy, get statusInfo() { return { ...statusState }; }, copyText, copyValue, get copied() { return copied; }, minDistance, clearDist, init, toggle, start, stop, refreshDisplay,
     get active() { return on; }, get result() { return last ? last.text : (els[0] ? els[0].textContent : null); },
     list, find, keep, relink, setHidden, rename, remove, select, drawSaved, treeSection, renderPanel, get selected() { return sel; },
+    pickEdgeForField, stopFieldPick, syncMeasuredParams, unlinkMeasuredParam, buildEdgeMeasureRef, resolveMeasuredEdge, get pickingField() { return !!fieldPick; },
   };
 })();
 

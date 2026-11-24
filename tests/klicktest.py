@@ -20691,6 +20691,186 @@ def t_a099_bezuege_schwerpunkt_schar(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+# ---------- [A-100] Körper als Schritt löschen & Messwert als Maß (KP-51, KP-53) ----------
+def t_a100_loeschen_messwert(p):
+    def warte_idle(n=50):
+        for _ in range(n):
+            p.wait(300)
+            if p.ev("return !App.busy"):
+                break
+        p.wait(600)
+
+    def gesamt_vol():
+        return p.ev("return Mass.measure().then(r => (r && r.parts ? r.parts.reduce((s, x) => s + (x.volume || 0), 0) : 0))")
+
+    # 1. KP-51: Zwei Quader → Quader 1 über Kontextleiste als Schritt löschen → abschalten → Marker davor → Undo
+    p.empty()
+    p.ev("""App.change('Zwei Quader', d => {
+      const a = Model.newItem('box', { w: 40, d: 20, h: 10 }, { name: 'Block A' });
+      const b = Model.newItem('box', { w: 20, d: 20, h: 20 }, { name: 'Block B' });
+      b.t.x = 50;
+      d.items.push(a, b);
+    })""")
+    warte_rechnen(p)
+    b1, b2 = p.ev("return App.doc.items.map(x => x.id)")
+    v0 = gesamt_vol()
+
+    p.ev("App.select([arg])", b1); p.wait(300)
+    p.pg.locator('.ctxbar [data-help="deleteBody"]').click()
+    warte_idle()
+    del_id = p.ev("return (App.doc.items.find(x => x.kind === 'deleteBody') || {}).id")
+    has_b1_after_del = p.ev("return App.results.has(arg) || Viewer.nodes.has(arg)", b1)
+    del_by = p.ev("return App.deletedBy(arg)", b1)
+    v_del = gesamt_vol()
+
+    # Löschen-Schritt abschalten (über Button im rechten Panel) → Körper kommt zurück
+    p.ev("App.select([arg])", del_id); p.wait(300)
+    p.pg.locator('#db-suppress').click()
+    warte_idle()
+    has_b1_restored = p.ev("return App.results.has(arg) && Viewer.nodes.has(arg)", b1)
+    v_restored = gesamt_vol()
+
+    # Wieder einschalten und Marker davor schieben → Körper wieder da
+    p.pg.locator('#db-suppress').click()
+    warte_idle()
+    v_del2 = gesamt_vol()
+    p.ev("Timeline.setMarker(2)")
+    warte_idle()
+    v_rolled = gesamt_vol()
+    p.ev("Timeline.setMarker(3)")
+    warte_idle()
+    ok1 = (
+        abs(v0 - 16000) < 1
+        and bool(del_id)
+        and not has_b1_after_del
+        and del_by == del_id
+        and abs(v_del - 8000) < 1
+        and has_b1_restored
+        and abs(v_restored - 16000) < 1
+        and abs(v_del2 - 8000) < 1
+        and abs(v_rolled - 16000) < 1
+    )
+
+    # 2. KP-51: Versetzte Kopie vor dem Löschen bleibt erhalten; Umsortieren vor Zielkörper verboten
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(400)
+    p.ev("""App.change('Quader', d => {
+      const a = Model.newItem('box', { w: 10, d: 10, h: 10 }, { name: 'Quelle' });
+      d.items.push(a);
+    })""")
+    warte_rechnen(p)
+    q1 = p.ev("return App.doc.items[0].id")
+    cp_id = p.ev("const s = Features.transform([arg], { dx: 30, copy: true }); return s && s.id", q1)
+    warte_rechnen(p)
+    del2_id = p.ev("const s = Features.deleteBody([arg]); return s && s.id", q1)
+    warte_idle()
+    v_copy = gesamt_vol()
+    has_q1 = p.ev("return App.results.has(arg)", q1)
+    has_cp = p.ev("return App.results.has(arg)", cp_id)
+    bad_order = p.ev("return Model.validateMove(App.doc, [arg[0]], arg[1], 'before').ok", [del2_id, q1])
+    ok2 = not has_q1 and has_cp and abs(v_copy - 1000) < 1 and (bad_order is False)
+
+    # 3. KP-53: Höhe = Länge einer Kante (40), Kante auf 50 ändern → Höhe 50; Formel & 1× Undo
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(400)
+    p.ev("""App.change('Mess-Test', d => {
+      const a = Model.newItem('box', { w: 40, d: 20, h: 10 }, { name: 'Geber' });
+      const b = Model.newItem('box', { w: 15, d: 15, h: 10 }, { name: 'Nehmer' });
+      b.t.x = 60;
+      d.items.push(a, b);
+    })""")
+    warte_rechnen(p)
+    g1, g2 = p.ev("return App.doc.items.map(x => x.id)")
+    p.ev("Viewer.setView('iso'); Viewer.fit(null, false); Viewer.renderNow();"); p.wait(400)
+    p.ev("App.select([arg])", g2); p.wait(300)
+
+    # Knopf „aus Messung“ am Höhenfeld #p-h klicken
+    p.pg.locator('#p-h-meas').click(); p.wait(200)
+    pick_active = p.ev("return Measure.pickingField")
+    pt_40 = p.ev("""
+      const r = App.results.get(arg);
+      const node = Viewer.nodes.get(arg);
+      if (!r || !node) return null;
+      const rect = Viewer.canvas.getBoundingClientRect();
+      for (let idx = 0; idx < r.data.edges.length; idx++) {
+        const e = r.data.edges[idx];
+        if (Math.abs((e.l || 0) - 40) > 0.1) continue;
+        const w = Viewer.camera.position.clone().set(e.m[0], e.m[1], e.m[2]).applyMatrix4(node.obj.matrixWorld);
+        const s = Viewer.toScreen(w);
+        const sx = rect.left + s.x, sy = rect.top + s.y;
+        const hit = Viewer.pick(sx, sy, { edgePx: 11 });
+        if (hit && hit.id === arg && hit.edgeIdx === idx) return [sx, sy];
+      }
+      return null;
+    """, g1)
+    if pt_40:
+        p.pg.mouse.move(pt_40[0], pt_40[1]); p.wait(150)
+        p.pg.mouse.click(pt_40[0], pt_40[1])
+    warte_rechnen(p)
+
+    par0 = p.ev("return App.doc.params[0]")
+    g2_h_expr = p.ev("return Model.find(App.doc, arg).item.p.h", g2)
+    h_40 = p.ev("const b = App.results.get(arg).data.bbox; return b[5] - b[2]", g2)
+
+    # Geber-Kante von 40 auf 50 ändern → Maß & Höhe von Nehmer wandern automatisch auf 50
+    p.ev("App.select([arg])", g1); p.wait(300)
+    p.pg.fill('#p-w', '50'); p.pg.press('#p-w', 'Enter')
+    warte_idle()
+    par_val_50 = p.ev("return App.doc.params[0].expr")
+    h_50 = p.ev("const b = App.results.get(arg).data.bbox; return b[5] - b[2]", g2)
+    vol_g2_50 = p.ev("return Mass.measure().then(r => Mass.partOf(r, arg).volume)", g2)
+
+    # Formel mit Messwert (Messung_1 / 2) + Änderung auf 60 + 1× Undo auf 50
+    p.ev("App.select([arg])", g2); p.wait(300)
+    p.pg.fill('#p-h', f"{par0['name']} / 2"); p.pg.press('#p-h', 'Enter')
+    warte_idle()
+    p.ev("App.select([arg])", g1); p.wait(300)
+    p.pg.fill('#p-w', '60'); p.pg.press('#p-w', 'Enter')
+    warte_idle()
+    h_30 = p.ev("const b = App.results.get(arg).data.bbox; return b[5] - b[2]", g2)
+    p.ev("App.undo()")
+    warte_idle()
+    w_undo = p.ev("return Model.find(App.doc, arg).item.p.w", g1)
+    h_undo = p.ev("const b = App.results.get(arg).data.bbox; return b[5] - b[2]", g2)
+
+    ok3 = (
+        pick_active
+        and pt_40 is not None
+        and par0 is not None
+        and abs(par0.get('expr', 0) - 40) < 0.05
+        and g2_h_expr == par0['name']
+        and abs(h_40 - 40) < 0.05
+        and abs(par_val_50 - 50) < 0.05
+        and abs(h_50 - 50) < 0.05
+        and abs(vol_g2_50 - 11250) < 5
+        and abs(h_30 - 30) < 0.05
+        and abs(w_undo - 50) < 0.05
+        and abs(h_undo - 25) < 0.05
+    )
+
+    # 4. KP-53: Maße-Panel zeigt Quelle, verlorene Mess-Kante bei Löschen & Erholung, Lösen
+    p.pg.locator('#lt-params').click(); p.wait(300)
+    info_txt = (p.pg.locator('.meas-param-info').first.text_content() or '').lower()
+    del_g1_id = p.ev("const s = Features.deleteBody([arg]); return s && s.id", g1)
+    warte_idle()
+    lost_flag = p.ev("return !!(App.doc.params[0].measure && App.doc.params[0].measure.lost)")
+    lost_val = p.ev("return App.doc.params[0].expr")
+    has_lost_cls = p.pg.locator('.meas-param-info.lost').count() == 1
+    p.ev("Timeline.toggleSuppress(arg)", del_g1_id)
+    warte_idle()
+    recovered_flag = not p.ev("return !!(App.doc.params[0].measure && App.doc.params[0].measure.lost)")
+    pid = p.ev("return App.doc.params[0].id")
+    p.pg.locator(f'#pm-unlink-{pid}').click(); p.wait(300)
+    unlinked = p.ev("return !App.doc.params[0].measure")
+    ok4 = ('messung' in info_txt) and lost_flag and abs(lost_val - 50) < 0.05 and has_lost_cls and recovered_flag and unlinked
+
+    # 5. Hilfetexte, DE/EN-Schlüsselgleichheit, Befehlssuche, Erklärtext & keine Seitenfehler
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    i18n_ok = p.pg.evaluate("Promise.all([fetch('data/texte-de.json').then(r=>r.json()), fetch('data/texte-en.json').then(r=>r.json())]).then(([d,e])=>{ const dk=Object.keys(d).sort(), ek=Object.keys(e).sort(); return dk.length===ek.length && dk.every((k,i)=>k===ek[i]); })")
+    cmds_ok = p.ev("return Commands.search('Körper als Schritt löschen').some(c => c.id === 'delete-body')")
+    explain_ok = p.ev("const ex = Explain.local(arg); return !!ex && ex.lines.some(l => l.k === 'op' && /Geber/.test(l.t)) && !ex.lines.some(l => l.k === 'material')", del_g1_id)
+    ok5 = all(k in hilfen and all(f in hilfen[k] for f in ('tip', 'hilfe', 'tipp')) for k in ['deleteBody', 'measureParam']) and i18n_ok and cmds_ok and explain_ok and not p.errs
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -20899,6 +21079,7 @@ TESTS = [
     ('[A-097] Teil-Ellipse (elliptischer Bogen) & Formen-Sammlung (SK-37, SK-41)', t_a097_teilellipse_formen),
     ('[A-098] Kurve aus Formel und aus Tabelle (SK-38, SK-39)', t_a098_formel_und_csv_kurve),
     ('[A-099] Schwerpunkt als Bezugspunkt, Ebenen ziehen & einfärben, Ebenen-Schar (BZ-11, BZ-12, BZ-13)', t_a099_bezuege_schwerpunkt_schar),
+    ('[A-100] Körper als Schritt löschen & Messwert als Maß (KP-51, KP-53)', t_a100_loeschen_messwert),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

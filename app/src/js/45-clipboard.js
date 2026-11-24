@@ -190,7 +190,7 @@ const Clipboard = (() => {
     if (!it) return false;
     if (it.op && it.op.target) return true;
     if (it.kind === 'transform' && !(it.p && it.p.copy)) return true;
-    if (it.kind === 'scale') return true;
+    if (it.kind === 'scale' || it.kind === 'deleteBody') return true;
     if (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) return true;
     if (it.kind === 'rib' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'mirrorStep') return true;
     if (it.kind === 'group' && it.p && it.p.op === 'pattern' && (it.children || []).some((c) => c.kind === 'rib')) return true;
@@ -204,6 +204,10 @@ const Clipboard = (() => {
     if (it.p) {
       if ((it.kind === 'transform' && !it.p.copy) || it.kind === 'scale' || (it.kind === 'thicken' && it.p.mode !== 'new') || it.kind === 'rib' || it.kind === 'wrap' || it.kind === 'emboss') {
         if (it.p.target) out.push(it.p.target);
+      }
+      if (it.kind === 'deleteBody') {
+        const tgs = Array.isArray(it.p.targets) ? it.p.targets : (it.p.target ? [it.p.target] : []);
+        for (const tid of tgs) if (tid) out.push(tid);
       }
       if (it.kind === 'group' && it.p.op === 'pattern') {
         for (const c of it.children || []) if (c.kind === 'rib' && c.p && c.p.target) out.push(c.p.target);

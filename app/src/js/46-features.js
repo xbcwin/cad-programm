@@ -18,7 +18,7 @@ const Features = (() => {
   }
   // Objekte in eine Feature-Gruppe im Ursprung ihrer Ebene packen
   function sharedFeatureOp(items) {
-    if (items.some((x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'wrap' || x.kind === 'emboss')) {
+    if (items.some((x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'deleteBody')) {
       UI.toast('Verschieben-, Skalieren-, Aufdicken-, Präge- und Wickel-Schritte lassen sich nicht als Muster anlegen.', { icon: 'info' });
       return { ok: false };
     }
@@ -1116,7 +1116,7 @@ const Features = (() => {
     UI.pop(anchor || $('#center'), box);
   }
   // ---------- Verschieben / Drehen / Kopieren als Schritt (KP-08) ----------
-  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'mirrorStep';
+  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'wrap' || x.kind === 'emboss' || x.kind === 'mirrorStep' || x.kind === 'deleteBody';
   function insertAtMarker(doc, step) {
     const at = doc.rollback != null ? clamp(doc.rollback, 0, doc.items.length) : doc.items.length;
     doc.items.splice(at, 0, step);
@@ -1251,6 +1251,75 @@ const Features = (() => {
       sec.append(h('div', { class: 'btn-row' }, gb));
     }
     sec.append(h('div', { class: 'hint-box', html: 'Skaliert den Zielkörper um seinen <b>Schwerpunkt</b> oder den <b>Ursprung</b> – gleichmäßig oder je Achse getrennt. Im Verlauf jederzeit änderbar, unterdrückbar und rückrollbar.' }));
+  }
+  // ---------- Körper als Schritt löschen (KP-51) ----------
+  function deleteBody(targetOrIds, opts = {}) {
+    if (App.ctx) { UI.toast('Schritte zum Löschen eines Körpers gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return null; }
+    const rawList = Array.isArray(targetOrIds) ? targetOrIds : (targetOrIds ? [targetOrIds] : App.sel);
+    const tgts = [], seen = new Set();
+    for (const id of rawList) {
+      const t = resolveTopTarget(id);
+      if (!t || seen.has(t.id) || isModifierStep(t) || (t.op && t.op.target)) continue;
+      if (App.deletedBy && App.deletedBy(t.id)) continue;
+      seen.add(t.id);
+      tgts.push(t);
+    }
+    if (!tgts.length) { UI.toast('Wähle zuerst einen Körper aus.', { icon: 'info' }); return null; }
+    const p = { targets: tgts.map((x) => x.id) };
+    let step;
+    App.change('Körper als Schritt löschen', (doc) => {
+      step = Model.newItem('deleteBody', p, { name: opts.name || T('kind.deleteBody'), color: tgts[0].color, role: 'solid' });
+      insertAtMarker(doc, step);
+    });
+    if (step) {
+      App.select([step.id]);
+      UI.toast(T('toast.deleteBodyAdded'), { icon: 'check' });
+    }
+    return step || null;
+  }
+  function renderDeleteBody(it, sec) {
+    const p = it.p || {};
+    const curIds = Array.isArray(p.targets) ? p.targets.slice() : (p.target ? [p.target] : []);
+    const curSet = new Set(curIds);
+    const cands = activeTargetsBefore(it);
+    for (const cid of curIds) {
+      if (!cands.some((x) => x.id === cid)) {
+        const f = Model.find(App.doc, cid);
+        if (f) cands.push(f.item);
+      }
+    }
+    const listBox = h('div', { class: 'db-list', id: 'db-targets' });
+    listBox.append(h('div', { class: 'section-h', style: { marginBottom: '4px' } }, T('panel.deleteBody.targetsTitle')));
+    if (cands.length) {
+      for (const c of cands) {
+        const lbl = h('label', { class: 'check' }, h('input', { type: 'checkbox', value: c.id, checked: curSet.has(c.id) }), Model.label(c));
+        lbl.querySelector('input').onchange = (e) => {
+          const next = new Set(curSet);
+          if (e.target.checked) next.add(c.id); else next.delete(c.id);
+          App.change('Zu löschende Körper geändert', (doc) => {
+            const fn = Model.find(doc, it.id); if (!fn) return false;
+            fn.item.p.targets = [...next];
+          });
+        };
+        listBox.append(lbl);
+      }
+    } else {
+      listBox.append(h('div', { class: 'hint-box' }, 'Keine früheren Körper vorhanden.'));
+    }
+    sec.append(listBox);
+    const row = h('div', { class: 'btn-row', style: { marginTop: '8px' } });
+    const sb = h('button', { type: 'button', class: 'btn', id: 'db-suppress' });
+    sb.innerHTML = icon(it.suppressed ? 'eye' : 'suppress') + esc(it.suppressed ? T('common.unsuppress') : T('panel.deleteBody.suppressRestore'));
+    sb.onclick = () => Timeline.toggleSuppress(it.id);
+    row.append(sb);
+    if (curIds.length === 1 && Model.find(App.doc, curIds[0])) {
+      const gb = h('button', { type: 'button', class: 'btn small', id: 'db-goto' });
+      gb.innerHTML = icon('pointer') + esc(T('ctx.targetBody'));
+      gb.onclick = () => App.select([curIds[0]]);
+      row.append(gb);
+    }
+    sec.append(row);
+    sec.append(h('div', { class: 'hint-box', html: T('panel.deleteBody.hint') }));
   }
   // ---------- Fläche aufdicken (KP-07) ----------
   function faceSigOf(face) {
@@ -2115,5 +2184,5 @@ const Features = (() => {
   }
 
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, startWrap, createWrap, pickWrapFace, sweepFromWrap, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
+  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, startWrap, createWrap, pickWrapFace, sweepFromWrap, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
 })();

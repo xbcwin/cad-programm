@@ -2255,6 +2255,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Befehlssuche, Hilfetexte & Seitenfehler**: `datum-series` und `datum-point-com` sind suchbar; Hilfetexte `datumPointCom`, `datumStyle` und `datumSeries` sind vollständig ohne JavaScript-Fehler vorhanden.
 - [ ] **Von Hand**: Im Browser eine Bezugsebene schräg im 3D-Bild an einer Ecke größer ziehen, einfärben, danach eine Ebenen-Schar ab einer Körperfläche anlegen und den Schwerpunkt-Punkt an einem zusammengesetzten Teil prüfen.
 
+## Körper als Schritt löschen & Messwert als Maß (Auto [A-100], KP-51, KP-53)
+
+- [x] **Körper als Schritt löschen (KP-51)**: Klick auf „Als Schritt löschen“ entfernt den Zielkörper aus Szene und Volumen (`8000` statt `16000`); `#db-suppress` schaltet den Schritt ab und holt den Körper wieder zurück; Marker vor dem Schritt stellt ihn ebenfalls wieder her; frühere versetzte Kopien vor dem Löschen bleiben sichtbar und Reihenfolge-Validierung lehnt das Verschieben vor den Zielkörper ab.
+- [x] **Messwert als Maß & Mitwandern (KP-53)**: Knopf `#p-h-meas` („aus Messung“) und Klick auf eine 40-mm-Kante eines anderen Quaders legt einen verknüpften Messwert-Parameter an und setzt die Höhe auf `40`; Änderung der Quader-Breite auf `50` führt Parameter und abhängige Höhe automatisch auf `50` (Volumen `11250`) mit; Formeln (`Messung_1 / 2`) und ein gemeinsames `App.undo()` funktionieren.
+- [x] **Maße-Panel, verlorener Bezug & Lösen**: Tab „Maße“ zeigt `.meas-param-info`; Löschen der Quellkante markiert den Parameter als verloren (`lost`), nach Wiederherstellung erholt er sich und „Lösen“ entfernt die Verknüpfung; Hilfetexte (`deleteBody`, `measureParam`), DE/EN-Schlüsselgleichheit, Befehlssuche und Erklärtext sind vorhanden.
+- [ ] **Von Hand**: Im Browser an einem beliebigen Maßfeld auf das Lineal-Symbol klicken, eine schräge oder runde Kante im 3D-Bild anfahren (Vorschau-Linie prüfen), anklicken und anschließend über „Neu wählen“ eine andere Kante zuweisen.
+
 ## Fehler melden
 
 ```

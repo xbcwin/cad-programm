@@ -182,6 +182,7 @@ const Commands = (() => {
     add('split', 'Körper teilen', 'split', 'teilen schneiden trennen hälfte', () => Features.split(), { group: 'Bearbeiten' });
     add('move-step', 'Verschieben/Drehen als Schritt', 'moveStep', 'verschieben drehen kopieren schritt transform versetzen bewegen lage verlauf', () => Features.transform(), { group: 'Bearbeiten' });
     add('scale-body', 'Körper skalieren (als Schritt)', 'scaleBody', 'skalieren groesser kleiner faktor achse strecken stauchen verlauf', () => Features.scale(), { group: 'Bearbeiten' });
+    add('delete-body', 'Körper als Schritt löschen', 'deleteBody', 'koerper loeschen entfernen schritt verlauf unterdruecken rueckgaengig', () => Features.deleteBody(), { group: 'Bearbeiten' });
     add('thicken-face', 'Fläche aufdicken (als Schritt)', 'thicken', 'aufdicken flaeche platte dicke schale wand aussen innen mittig verlauf', () => { const f = Actions.selectedFace(); if (f) Features.thicken(f); else UI.toast('Klick zuerst eine Fläche an, die aufgedickt werden soll.', { icon: 'info' }); }, { group: 'Bearbeiten' });
     add('bool-sub', 'Abziehen (Boolesch)', 'boolSubtract', 'boolesch abziehen differenz', () => Features.boolean('subtract'), { group: 'Bearbeiten' });
     add('bool-int', 'Schnittmenge (Boolesch)', 'boolIntersect', 'boolesch schnittmenge', () => Features.boolean('intersect'), { group: 'Bearbeiten' });

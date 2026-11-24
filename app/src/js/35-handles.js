@@ -40,7 +40,7 @@ const Handles = (() => {
     sphere: { x: 'd', y: 'd', z: 'd' }, hemisphere: { x: 'd', y: 'd', z: 'd' }, torus: { x: 'd', y: 'd', z: 't' },
   };
   const LABELS = { w: 'Breite', d: 'Durchmesser', h: 'Höhe', d1: 'Durchmesser', t: 'Ringdicke', dist: 'Höhe' };
-  const isStepMod = (x) => x.kind === 'transform' || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'emboss' || x.kind === 'mirrorStep';
+  const isStepMod = (x) => x.kind === 'transform' || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'emboss' || x.kind === 'mirrorStep' || x.kind === 'deleteBody';
   function current() {
     if (App.mode !== 'model' || Sketch.active || App.sel.length !== 1 || Views.exploded) return null;
     const f = Model.find(App.doc, App.sel[0]); if (!f || f.item.locked || isStepMod(f.item)) return null;
@@ -648,7 +648,7 @@ const Interact = (() => {
     window.addEventListener('keydown', onKey, true);
     window.addEventListener('pointermove', (e) => { lastPtr = { x: e.clientX, y: e.clientY }; }, { passive: true });
   }
-  function modelActive() { return App.mode === 'model' && !Sketch.active && !Place.active && !Measure.active && !Notes.active && !Features.picking && !Sketch.picking && !Datums.picking && !RefFix.picking && !(typeof Joints !== 'undefined' && Joints.picking); }
+  function modelActive() { return App.mode === 'model' && !Sketch.active && !Place.active && !Measure.active && !Measure.pickingField && !Notes.active && !Features.picking && !Sketch.picking && !Datums.picking && !RefFix.picking && !(typeof Joints !== 'undefined' && Joints.picking); }
   function onDown(e) {
     if (e.pointerType === 'touch') {
       activeTouches.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -751,7 +751,7 @@ const Interact = (() => {
       Viewer.canvas.style.cursor = hit ? 'pointer' : '';
     });
   }
-  const isStepMod = (x) => x.kind === 'transform' || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'emboss' || x.kind === 'mirrorStep';
+  const isStepMod = (x) => x.kind === 'transform' || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'emboss' || x.kind === 'mirrorStep' || x.kind === 'deleteBody';
   function startMove(e) {
     if (typeof Joints !== 'undefined' && Joints.closeDockPrompt) Joints.closeDockPrompt();
     const hit = down.hit; const top = App.doc.items.find((x) => x.id === hit.id);
@@ -1223,6 +1223,7 @@ const Interact = (() => {
         { icon: 'copy', label: T('common.duplicate'), kbd: 'Strg D', id: 'cm-dup', run: () => Actions.duplicate() },
         { icon: 'moveStep', label: T('common.moveStep'), id: 'cm-movestep', help: 'moveStep', run: () => Features.transform([top.id]) },
         { icon: 'scaleBody', label: T('common.scaleStep'), id: 'cm-scale', help: 'scaleBody', hidden: !App.doc.items.includes(top), run: () => Features.scale([top.id]) },
+        { icon: 'deleteBody', label: T('common.deleteBodyStep'), id: 'cm-deletebody', help: 'deleteBody', hidden: !App.doc.items.includes(top), run: () => Features.deleteBody([top.id]) },
         { icon: 'copy', label: T('menu.ctx.dupLinked'), kbd: 'Strg Umschalt D', id: 'cm-duplink', hidden: it.kind === 'group', run: () => Actions.duplicateLinked() },
         ...(UserLib.canSave(top) ? [{ icon: 'save', label: 'In meine Bibliothek', id: 'cm-userlib', help: 'userLibrary', run: () => UserLib.saveDialog(top.id) }] : []),
         { icon: it.role === 'hole' ? 'solid' : 'hole', label: it.role === 'hole' ? T('menu.ctx.toSolid') : T('menu.ctx.toHole'), kbd: 'H', id: 'cm-role', run: () => Actions.toggleRole() },

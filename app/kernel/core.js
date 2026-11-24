@@ -3347,7 +3347,7 @@ export function createKernel(R, oc) {
     return ctx.poolKey || '';
   }
   function evalItem(it, errors, parentWorldM = null, ctx = null, track = null) {
-    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'thicken' || it.kind === 'rib' || it.kind === 'emboss' || it.kind === 'mirrorStep' || it.kind === 'wrap' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it), topo: null };
+    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'thicken' || it.kind === 'rib' || it.kind === 'emboss' || it.kind === 'mirrorStep' || it.kind === 'wrap' || it.kind === 'deleteBody' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it), topo: null };
     const dyn = hasDynamicExtent(it);
     const W = dyn ? (parentWorldM ? matMul(parentWorldM, it.m) : it.m) : null;
     const key = dyn
@@ -4982,6 +4982,31 @@ export function createKernel(R, oc) {
     const NAMES = { join: 'Vereinigen', cut: 'Abziehen', common: 'Schnittmenge' };
     for (let i = 0; i < evald.length; i++) {
       const e = evald[i], it = e.it;
+      if (it.kind === 'deleteBody') {
+        const p = it.p || {};
+        const targets = Array.isArray(p.targets) ? p.targets.filter(Boolean) : (p.target ? [p.target] : []);
+        if (!targets.length) {
+          errors.push({ itemId: it.id, code: 'op', message: 'Körper löschen: Kein Zielkörper gewählt.' });
+          continue;
+        }
+        const delKeys = [];
+        for (const rawTid of targets) {
+          let tid = rawTid;
+          while (tid && consumed.has(tid)) tid = consumed.get(tid);
+          const t = tid ? byId.get(tid) : null, src = tid ? live.get(tid) : null;
+          if (!t || t.i >= i || !src || !src.shape) {
+            if (tid && hiddenIds && hiddenIds.has(tid)) { delKeys.push(tid); continue; }
+            errors.push({ itemId: it.id, code: 'op', message: 'Körper löschen: Der Zielkörper fehlt oder kommt erst später im Verlauf.' });
+            continue;
+          }
+          live.delete(tid);
+          const kDel = keyOf([src.key, 'deletedBy', it.id]);
+          bodies.set(tid, { shape: null, topo: null, key: kDel, wb: null, deletedBy: it.id });
+          delKeys.push(kDel);
+        }
+        if (track && track.stepKeys) track.stepKeys.set(it.id, keyOf(['deleteBody', delKeys]));
+        continue;
+      }
       if (it.kind === 'transform') {
         const p = it.p || {};
         let tid = p.target;
@@ -5611,7 +5636,7 @@ export function createKernel(R, oc) {
         const tOps = now();
         const { bodies, consumed } = resolveOps(evald, errors, hiddenIds, resolved, track);
         if (bodies.size && times) { const d = now() - tOps; if (d > 0.5) for (const id of bodies.keys()) times[id] = (times[id] || 0) + d / bodies.size; }
-        for (const e of evald) { const b = bodies.get(e.it.id); if (b) { e.shape = b.shape; e.topo = b.topo || null; e.key = b.key; e.wb = b.wb; } }
+        for (const e of evald) { const b = bodies.get(e.it.id); if (b) { e.shape = b.shape; e.topo = b.topo || null; e.key = b.key; e.wb = b.wb; if (b.deletedBy) e.deletedBy = b.deletedBy; } }
         return { evald, consumed, resolved, opsModified: new Set(bodies.keys()) };
       } finally {
         if (!keepStepCache) clearStepReaderCache();
@@ -5641,7 +5666,7 @@ export function createKernel(R, oc) {
 
     const pass1Snap = pass1Evald.map((e) => ({ ...e }));
     const { bodies: p1Bodies, consumed: p1Consumed } = resolveOps(pass1Snap, [], hiddenIds, null, track ? { rebuilt: track.rebuilt, stepKeys: null } : null);
-    for (const e of pass1Snap) { const b = p1Bodies.get(e.it.id); if (b) { e.shape = b.shape; e.key = b.key; e.wb = b.wb; } }
+    for (const e of pass1Snap) { const b = p1Bodies.get(e.it.id); if (b) { e.shape = b.shape; e.key = b.key; e.wb = b.wb; if (b.deletedBy) e.deletedBy = b.deletedBy; } }
 
     const pool = [];
     const poolKeyOf = () => keyOf(pool.map((x) => [x.id, x.key, x.m.map((v) => Math.round(v * 1e6) / 1e6)]));
@@ -5687,7 +5712,7 @@ export function createKernel(R, oc) {
       const tOps = now();
       const { bodies, consumed } = resolveOps(evald, errors, hiddenIds, ctx.resolved, track);
       if (bodies.size && times) { const d = now() - tOps; if (d > 0.5) for (const id of bodies.keys()) times[id] = (times[id] || 0) + d / bodies.size; }
-      for (const e of evald) { const b = bodies.get(e.it.id); if (b) { e.shape = b.shape; e.topo = b.topo || null; e.key = b.key; e.wb = b.wb; } }
+      for (const e of evald) { const b = bodies.get(e.it.id); if (b) { e.shape = b.shape; e.topo = b.topo || null; e.key = b.key; e.wb = b.wb; if (b.deletedBy) e.deletedBy = b.deletedBy; } }
       return { evald, consumed, resolved: ctx.resolved, opsModified: new Set(bodies.keys()) };
     } finally {
       for (const x of pool) safeDelete(x.worldShape);
@@ -5756,7 +5781,7 @@ export function createKernel(R, oc) {
       }
       if (!e.shape) {
         fingerprints[it.id] = track.stepKeys.get(it.id) || e.key || defKey(it);
-        nodes.push({ id: it.id, key: null, empty: true });
+        nodes.push({ id: it.id, key: null, empty: true, ...(e.deletedBy ? { deletedBy: e.deletedBy } : {}) });
         continue;
       }
       let resultKey = e.key, result = e.shape, resultTopo = e.topo || null;

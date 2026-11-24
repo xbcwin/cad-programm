@@ -34,7 +34,7 @@ const UserLib = (() => {
   function canSave(it) {
     if (!it) return false;
     if (it.kind === 'transform' && !(it.p && it.p.copy)) return false;
-    if (it.kind === 'scale') return false;
+    if (it.kind === 'scale' || it.kind === 'deleteBody') return false;
     if (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) return false;
     if (it.kind === 'rib' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'mirrorStep') return false;
     return true;

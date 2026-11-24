@@ -689,6 +689,7 @@ const IC = {
   bearing: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.2"/><circle cx="12" cy="5.4" r="1.3" fill="currentColor" stroke="none"/><circle cx="17.7" cy="8.7" r="1.3" fill="currentColor" stroke="none"/><circle cx="17.7" cy="15.3" r="1.3" fill="currentColor" stroke="none"/><circle cx="12" cy="18.6" r="1.3" fill="currentColor" stroke="none"/><circle cx="6.3" cy="15.3" r="1.3" fill="currentColor" stroke="none"/><circle cx="6.3" cy="8.7" r="1.3" fill="currentColor" stroke="none"/>',
   sleeve: '<ellipse cx="12" cy="6" rx="6.5" ry="2.6" fill="currentColor" opacity=".2"/><path d="M5.5 6v12c0 1.4 2.9 2.6 6.5 2.6s6.5-1.2 6.5-2.6V6"/><ellipse cx="12" cy="6" rx="6.5" ry="2.6"/><ellipse cx="12" cy="6" rx="3.4" ry="1.3"/>',
   replace: '<path d="M16 3l4 4-4 4 M20 7H8a4 4 0 0 0-4 4v1 M8 21l-4-4 4-4 M4 17h12a4 4 0 0 0 4-4v-1"/>',
+  deleteBody: '<path d="M12 3 4 7.5v9L12 21l8-4.5v-9z" stroke-dasharray="2.5 2" opacity=".55"/><path d="M9 9l6 6M15 9l-6 6" />',
 };
 function icon(name, extra = '') {
   const body = IC[name] || IC.cube;
@@ -2020,6 +2021,16 @@ const HELP = {
   "tip": "Mehrere parallele Bezugsebenen im gleichen Abstand auf einmal anlegen",
   "hilfe": "Erzeugt eine Ebenen-Schar aus beliebig vielen parallelen Bezugsebenen (z. B. 4 Ebenen alle 10 mm) ausgehend von einer Grundebene, einer gewählten ebenen Fläche oder einer bestehenden Bezugsebene – alles in einem Rückgängig-Schritt.",
   "tipp": "Ideal für Spanten, Rippen oder Schnitte in festen Abständen; als Abstand kannst du auch eine Formel mit Projektmaßen eingeben."
+ },
+ "deleteBody": {
+  "tip": "Körper als Schritt im Verlauf löschen (abschaltbar – kommt beim Unterdrücken zurück)",
+  "hilfe": "Entfernt den gewählten Körper ab diesem Schritt aus dem Modell, ohne ihn aus der Zeitleiste zu tilgen. Frühere Schritte wie Kopien oder Ableitungen bleiben erhalten, und durch Unterdrücken oder Zurückrollen des Markers ist der Körper sofort wieder da.",
+  "tipp": "Ideal für Hilfskörper zum Ausrichten oder Verrechnen, die am Ende nicht mehr im fertigen Bauteil erscheinen sollen."
+ },
+ "measureParam": {
+  "tip": "Maß direkt aus einer Kantenlänge am Modell übernehmen (wandert mit)",
+  "hilfe": "Klicke auf das Lineal-Symbol und wähle danach eine Kante im 3D-Bild. Tracery legt unter „Maße“ einen verknüpften Messwert an und trägt ihn als Formel hier ein. Ändert sich die Kante später, wächst oder schrumpft dieses Maß automatisch mit.",
+  "tipp": "Du kannst den angelegten Messwert-Namen im Feld auch weiterrechnen lassen, zum Beispiel als „Messung_1 / 2“ oder „Messung_1 + 2“."
  }
 };
 

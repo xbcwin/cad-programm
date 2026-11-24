@@ -259,5 +259,10 @@
     "was": "Erzeugt eine flache Unterlegscheibe nach ISO 7089 Form A (M1.6–M24) aus Edelstahl.",
     "wozu": "Verteilt Schraubenkräfte und berücksichtigt die Scheibendicke im Bauraum.",
     "achtung": "Prüfe bei Senkbohrungen, dass unter dem Schraubenkopf noch genug Tiefe vorhanden ist."
+  },
+  "deleteBody": {
+    "was": "Entfernt einen oder mehrere Körper ab diesem Schritt aus dem aktuellen Modell, ohne sie dauerhaft zu löschen.",
+    "wozu": "Nützlich für Hilfs- und Werkzeugkörper, Zwischenschritte oder Baugruppen-Varianten, die später im Verlauf nicht mehr gebraucht werden.",
+    "achtung": "Unterdrückst du diesen Schritt oder schiebst den Zeitleisten-Marker davor, sind die Körper sofort wieder da."
   }
 }

@@ -222,7 +222,7 @@ const App = (() => {
 
   const S = {
     doc: Model.newDoc(), sel: [], face: null, edges: [], mode: 'model', tool: null,
-    results: new Map(), resolved: new Map(), baseBoxes: new Map(), ownBoxes: new Map(), stepStats: new Map(), evalStats: null, errors: [], undo: [], redo: [], undoBytes: 0, redoBytes: 0, extra: [], hideIds: new Set(), revision: 1, cleanRev: 1, lastSavedRev: -1, fileSavedRev: -1,
+    results: new Map(), resolved: new Map(), baseBoxes: new Map(), ownBoxes: new Map(), deletedBy: new Map(), stepStats: new Map(), evalStats: null, errors: [], undo: [], redo: [], undoBytes: 0, redoBytes: 0, extra: [], hideIds: new Set(), revision: 1, cleanRev: 1, lastSavedRev: -1, fileSavedRev: -1,
     ctx: null, iso: null,   // gerade bearbeitetes Bauteil / isoliertes Teil (nur Ansicht, nicht gespeichert)
   };
   const ev = makeEmitter();
@@ -376,7 +376,7 @@ const App = (() => {
     }
     Model.useVars(Model.vars(S.doc).v);
     for (const id of [...S.results.keys()]) Viewer.removeNode(id);
-    S.results.clear(); S.resolved.clear(); S.baseBoxes.clear(); S.ownBoxes.clear(); S.errors = []; S.merged = new Map();
+    S.results.clear(); S.resolved.clear(); S.baseBoxes.clear(); S.ownBoxes.clear(); S.deletedBy = new Map(); S.errors = []; S.merged = new Map();
     Viewer.clearGhosts();
     if (Viewer.clearProxies) Viewer.clearProxies();
     Views.reset();
@@ -667,11 +667,14 @@ const App = (() => {
     if (doc.rollback >= doc.items.length) doc.rollback = null;
   }
   function pruneMerged() {
-    if (!S.merged || !S.merged.size) return;
+    if ((!S.merged || !S.merged.size) && (!S.deletedBy || !S.deletedBy.size)) return;
     const valid = new Set();
     Model.walk(S.doc.items, (it) => valid.add(it.id));
-    for (const [k, v] of S.merged) {
+    if (S.merged) for (const [k, v] of S.merged) {
       if (!valid.has(k) || !valid.has(v)) S.merged.delete(k);
+    }
+    if (S.deletedBy) for (const [k, v] of S.deletedBy) {
+      if (!valid.has(k) || !valid.has(v)) S.deletedBy.delete(k);
     }
   }
   function touched(noRebuild, keepModified) {
@@ -905,6 +908,7 @@ const App = (() => {
   function apply(res) {
     const seen = new Set();
     S.merged = new Map();
+    S.deletedBy = new Map();
     S.resolved = new Map(Object.entries(res.resolved || {}));
     S.baseBoxes = new Map();
     S.ownBoxes = new Map();
@@ -937,6 +941,7 @@ const App = (() => {
     for (const n of res.nodes) {
       seen.add(n.id);
       if (n.merged) S.merged.set(n.id, n.merged);
+      if (n.deletedBy) S.deletedBy.set(n.id, n.deletedBy);
       if (n.baseBox) S.baseBoxes.set(n.id, n.baseBox);
       if (n.ownBox) S.ownBoxes.set(n.id, n.ownBox);
       const it = topItem(n.id); if (!it) continue;
@@ -1114,6 +1119,10 @@ const App = (() => {
     mergedInto(id) {
       const to = S.merged && S.merged.get(id);
       return to && Model.find(S.doc, to) ? to : null;
+    },
+    deletedBy(id) {
+      const by = S.deletedBy && S.deletedBy.get(id);
+      return by && Model.find(S.doc, by) ? by : null;
     },
     baseBox(id) { return (S.baseBoxes && S.baseBoxes.get(id)) || null; },
     ownBox(id) { return (S.ownBoxes && S.ownBoxes.get(id)) || null; },

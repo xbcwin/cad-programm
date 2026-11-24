@@ -434,7 +434,8 @@ const Panels = (() => {
       const isSubAsm = Model.isSubAssemblyRef(it);
       const subDoc = isSubAsm ? Model.resolveDoc(it.p && it.p.docId) : null;
       const hasSubKids = !!(subDoc && (subDoc.items || []).some((x) => x && !x.suppressed));
-      const row = h('div', { class: 'node' + (selSet.has(it.id) ? ' sel' : '') + (it.hidden ? ' hidden-item' : '') + (it.locked ? ' grounded' : '') + (it.suppressed ? ' supp' : '') + (rolled ? ' rolled' : '') + (ctxTop && !inCtx ? ' ctx-other' : '') + (ctxTop === it ? ' ctx-active' : ''), draggable: 'true', dataset: { id: it.id } });
+      const delBy = App.deletedBy && App.deletedBy(it.id);
+      const row = h('div', { class: 'node' + (selSet.has(it.id) ? ' sel' : '') + (it.hidden ? ' hidden-item' : '') + (delBy ? ' dim' : '') + (it.locked ? ' grounded' : '') + (it.suppressed ? ' supp' : '') + (rolled ? ' rolled' : '') + (ctxTop && !inCtx ? ' ctx-other' : '') + (ctxTop === it ? ' ctx-active' : ''), draggable: 'true', dataset: { id: it.id } });
       const tw = h('button', { type: 'button', class: 'tw' + (expanded.has(it.id) ? ' open' : ''), 'aria-label': T('left.tree.expand') });
       if ((it.kind === 'group' && !it.partRef) || (it.finishes || []).length || hasSubKids) { tw.innerHTML = icon('chevR'); tw.onclick = (e) => { e.stopPropagation(); expanded.has(it.id) ? expanded.delete(it.id) : expanded.add(it.id); renderLeft(); }; }
       else tw.style.visibility = 'hidden';
@@ -445,7 +446,8 @@ const Panels = (() => {
       const nm = h('span', { class: 'nm', title: Model.label(it) }, Model.label(it));
       const into = App.mergedInto(it.id), intoF = into ? Model.find(App.doc, into) : null, OPI = { join: '∪', cut: '−', common: '∩' };
       const patTxt = Features.isOp(it) ? Model.sizeText(it, V) : '';
-      const sub = h('span', { class: 'sub mono' }, intoF && it.op ? `${patTxt ? patTxt + ' · ' : ''}${OPI[it.op.type]} ${Model.label(intoF.item)}` : (it.link ? '↔ ' : '') + Model.sizeText(it, V));
+      const subText = intoF && it.op ? `${patTxt ? patTxt + ' · ' : ''}${OPI[it.op.type]} ${Model.label(intoF.item)}` : (it.link ? '↔ ' : '') + Model.sizeText(it, V);
+      const sub = h('span', { class: 'sub mono' }, delBy ? `${subText ? subText + ' · ' : ''}gelöscht` : subText);
       const acts = h('span', { class: 'acts' });
       const dup = h('button', { type: 'button', class: 'act-dup', 'aria-label': T('common.duplicate'), 'data-tip': T('ctx.dupTip'), 'data-help': 'treeDuplicate' });
       dup.innerHTML = icon('copy');
@@ -495,8 +497,8 @@ const Panels = (() => {
           { icon: 'copy', label: T('common.duplicate'), id: 'tm-dup', kbd: 'Strg D', help: 'treeDuplicate', run: () => Actions.duplicate([it.id]) },
           ...(it.kind !== 'ref' && UserLib.canSave(it) ? [{ icon: 'save', label: T('left.tree.toMyLib'), id: 'tm-userlib', help: 'userLibrary', run: () => UserLib.saveDialog(it.id) }] : []),
           ...(it.kind !== 'ref' && Features.canMirrorStep(it, (Model.find(App.doc, it.id) || {}).parent) ? [{ icon: 'mirror', label: T('common.mirrorStep'), id: 'tm-mirrorstep', help: 'mirrorStep', run: () => Features.mirrorStep([it.id]) }] : []),
-          ...(it.kind !== 'ref' && topIdx >= 0 ? [{ icon: 'moveStep', label: T('common.moveStep'), help: 'moveStep', run: () => Features.transform([it.id]) }, { icon: 'scaleBody', label: T('common.scaleStep'), help: 'scaleBody', run: () => Features.scale([it.id]) }] : []),
-          ...(it.kind !== 'ref' && !((it.kind === 'transform' && !(it.p && it.p.copy)) || it.kind === 'scale' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'wrap' || it.kind === 'emboss') ? [{ icon: 'patternRect', label: T('ctx.patRect'), id: 'tm-pat-rect', help: 'patternRect', run: () => Features.pattern('rect', [it.id]) }, { icon: 'patternCirc', label: T('ctx.patCirc'), id: 'tm-pat-circ', help: 'patternCirc', run: () => Features.pattern('circ', [it.id]) }] : []),
+          ...(it.kind !== 'ref' && it.kind !== 'deleteBody' && topIdx >= 0 ? [{ icon: 'moveStep', label: T('common.moveStep'), help: 'moveStep', run: () => Features.transform([it.id]) }, { icon: 'scaleBody', label: T('common.scaleStep'), help: 'scaleBody', run: () => Features.scale([it.id]) }, { icon: 'deleteBody', label: T('common.deleteBodyStep'), id: 'tm-deletebody', help: 'deleteBody', run: () => Features.deleteBody([it.id]) }] : []),
+          ...(it.kind !== 'ref' && !((it.kind === 'transform' && !(it.p && it.p.copy)) || it.kind === 'scale' || it.kind === 'deleteBody' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'wrap' || it.kind === 'emboss') ? [{ icon: 'patternRect', label: T('ctx.patRect'), id: 'tm-pat-rect', help: 'patternRect', run: () => Features.pattern('rect', [it.id]) }, { icon: 'patternCirc', label: T('ctx.patCirc'), id: 'tm-pat-circ', help: 'patternCirc', run: () => Features.pattern('circ', [it.id]) }] : []),
           ...(topSelNow.length >= 2 && !App.ctx ? [{ icon: 'folder', label: T('menu.tree.toFolder'), id: 'tm-folder', help: 'treeFolder', run: () => Actions.createFolder(topSelNow) }] : []),
           ...(inFld ? [{ icon: 'ungroup', label: T('menu.tree.fromFolder'), id: 'tm-unfolder', run: () => Actions.removeFromFolder([it.id]) }] : []),
           { icon: 'edit', label: T('common.rename'), run: async () => { const n = await UI.prompt(T('common.rename'), T('common.name'), Model.label(it), T('common.rename')); if (n && n.trim()) App.change('Umbenannt', (doc) => { Model.find(doc, it.id).item.name = n.trim(); }); } },
@@ -770,9 +772,19 @@ const Panels = (() => {
         if (!/^[A-Za-zÄÖÜäöüß_][A-Za-zÄÖÜäöüß_0-9]*$/.test(nv)) { UI.toast(T('left.par.badName'), { kind: 'bad' }); e.target.value = p.name; return; }
         renameParam(p.id, nv);
       });
-      const valF = UI.numField({ id: 'pv-' + p.id, label: T('common.value'), value: p.expr, unit: '', onCommit: (val) => App.change('Maß geändert', (doc) => { doc.params.find((x) => x.id === p.id).expr = val; }, { merge: 'param:' + p.id }) });
+      const valF = UI.numField({ id: 'pv-' + p.id, label: T('common.value'), value: p.expr, unit: '', measurePick: !p.measure, onCommit: (val) => App.change('Maß geändert', (doc) => { const tgt = doc.params.find((x) => x.id === p.id); if (!tgt) return false; tgt.expr = val; if (tgt.measure) delete tgt.measure; }, { merge: 'param:' + p.id }) });
       f.append(nameIn, valF);
       row.append(f);
+      if (p.measure) {
+        const mInfo = h('div', { class: 'meas-param-info' + (p.measure.lost ? ' lost' : '') });
+        const mTxt = h('span', { class: 'grow' }, p.measure.lost ? T('measure.paramLost') : T('measure.paramFrom', { src: p.measure.label || 'Kante' }));
+        const mPick = h('button', { type: 'button', class: 'btn ghost small', id: 'pm-repick-' + p.id, 'data-tip': T('measure.paramRepick') }, T('measure.paramRepick'));
+        mPick.onclick = () => Measure.pickEdgeForField({ repickParamId: p.id });
+        const mUnlink = h('button', { type: 'button', class: 'btn ghost small', id: 'pm-unlink-' + p.id, 'data-tip': T('measure.paramUnlink') }, T('measure.paramUnlink'));
+        mUnlink.onclick = () => Measure.unlinkMeasuredParam(p.id);
+        mInfo.append(iconEl('measure'), mTxt, mPick, mUnlink);
+        row.append(mInfo);
+      }
       const info = h('div', { class: 'btn-row', style: { justifyContent: 'space-between', alignItems: 'center' } });
       info.append(h('span', { class: 'mono', style: { color: errors[p.id] ? 'var(--bad)' : 'var(--muted)', fontSize: '12.5px' } }, errors[p.id] ? errors[p.id] : '= ' + fmt(v[p.name], 3)));
       const del = h('button', { type: 'button', class: 'btn ghost small danger' }); del.innerHTML = icon('trash') + esc(T('common.remove'));
@@ -947,7 +959,7 @@ const Panels = (() => {
     const fix = (s) => { if (typeof s !== 'string') return s; const r = s.replace(re, (m, pre) => { hit = true; return pre + repl; }); return /^-?\d+(\.\d+)?$/.test(r.trim()) ? +r : r; };
     for (const q of doc.params) q.expr = fix(q.expr);
     for (const tb of doc.tables || []) for (const r of tb.rows || []) r.val = fix(r.val);
-    Model.walk(doc.items, (it) => { for (const k in it.p || {}) { if ((it.kind === 'transform' && (k === 'target' || k === 'pivot')) || (it.kind === 'scale' && (k === 'target' || k === 'pivot' || k === 'uniform')) || (it.kind === 'thicken' && (k === 'target' || k === 'face' || k === 'dir' || k === 'mode')) || (it.kind === 'rib' && (k === 'target' || k === 'side' || k === 'dir')) || (it.kind === 'wrap' && (k === 'target' || k === 'face' || k === 'mode')) || (it.kind === 'emboss' && (k === 'target' || k === 'face' || k === 'mode' || k === 'flip')) || (it.kind === 'extrude' && (k === 'extent' || k === 'dir' || k === 'wallSide'))) continue; it.p[k] = fix(it.p[k]); } for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) f.r = fix(f.r); if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); });
+    Model.walk(doc.items, (it) => { for (const k in it.p || {}) { if ((it.kind === 'transform' && (k === 'target' || k === 'pivot')) || (it.kind === 'scale' && (k === 'target' || k === 'pivot' || k === 'uniform')) || (it.kind === 'deleteBody' && (k === 'targets' || k === 'target')) || (it.kind === 'thicken' && (k === 'target' || k === 'face' || k === 'dir' || k === 'mode')) || (it.kind === 'rib' && (k === 'target' || k === 'side' || k === 'dir')) || (it.kind === 'wrap' && (k === 'target' || k === 'face' || k === 'mode')) || (it.kind === 'emboss' && (k === 'target' || k === 'face' || k === 'mode' || k === 'flip')) || (it.kind === 'extrude' && (k === 'extent' || k === 'dir' || k === 'wallSide'))) continue; it.p[k] = fix(it.p[k]); } for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) f.r = fix(f.r); if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); });
     for (const j of doc.joints || []) if (j.kind === 'distance' && j.dist != null) j.dist = fix(j.dist);
     return hit;
   }
@@ -1263,8 +1275,8 @@ const Panels = (() => {
   function opSection(it) {
     const idx = App.doc.items.indexOf(it);
     const isPatOp = Features.isOp(it) && it.p.op === 'pattern' && !(it.children || []).some((c) => c.kind === 'rib');
-    if (idx < 0 || (it.kind === 'group' && !isPatOp) || it.kind === 'transform' || it.kind === 'scale' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'rib' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'mirrorStep') return null;
-    const targets = App.doc.items.slice(0, idx).filter((x) => x.role !== 'hole' && !x.suppressed && x.kind !== 'group' && x.kind !== 'rib' && x.kind !== 'wrap' && x.kind !== 'emboss' && x.kind !== 'mirrorStep' && !(x.kind === 'transform' && !(x.p && x.p.copy)) && x.kind !== 'scale' && !(x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) && !(x.op && x.op.target === it.id));
+    if (idx < 0 || (it.kind === 'group' && !isPatOp) || it.kind === 'transform' || it.kind === 'scale' || it.kind === 'deleteBody' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'rib' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'mirrorStep') return null;
+    const targets = App.doc.items.slice(0, idx).filter((x) => x.role !== 'hole' && !x.suppressed && x.kind !== 'group' && x.kind !== 'rib' && x.kind !== 'wrap' && x.kind !== 'emboss' && x.kind !== 'mirrorStep' && x.kind !== 'deleteBody' && !(x.kind === 'transform' && !(x.p && x.p.copy)) && x.kind !== 'scale' && !(x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) && !(x.op && x.op.target === it.id));
     if (!targets.length && !it.op) return null;
     const sec = h('div', { class: 'section', id: 'op-sec', 'data-help': 'bodyOp' }, h('div', { class: 'section-h' }, T('panel.op.title')));
     const type = it.op ? it.op.type : 'new';
@@ -1405,7 +1417,7 @@ const Panels = (() => {
         const nm = (id) => { const f = Model.find(App.doc, id); return f ? Model.label(f.item) : '–'; };
         const line = (txt, id) => { const r = h('div', { class: 'mini-row dep-row' }, h('span', { class: 'grow' }, txt)); if (id && Model.find(App.doc, id)) { r.style.cursor = 'pointer'; r.onclick = () => App.select([id]); } return r; };
         for (const x of up) ds.append(line(`${x.what} „${nm(x.to)}“`, x.to));
-        const back = { 'abgezogen von': 'wird hiervon abgezogen', 'vereinigt mit': 'ist hiermit vereinigt', 'Schnittmenge mit': 'bildet hiermit die Schnittmenge', 'verrechnet mit': 'ist hiermit verrechnet', 'versetzt': 'versetzt diesen Körper', 'versetzte Kopie von': 'ist eine versetzte Kopie hiervon', 'skaliert': 'skaliert diesen Körper', 'dickt Fläche auf von': 'dickt eine Fläche hiervon auf', 'Platte von Fläche aus': 'ist eine aufgedickte Platte hiervon', 'Rippe an': 'verstärkt diesen Körper als Rippe', 'wickelt um': 'wickelt eine Skizze hierum', 'folgt gewickelter Linie von': 'läuft als Profil an dieser Wickel-Linie entlang', 'spiegelt Schritt': 'wird hiervon gespiegelt', 'spiegelt an Fläche von': 'spiegelt an einer Fläche hiervon', 'verknüpfte Kopie von': 'ist eine verknüpfte Kopie hiervon', 'Skizze übernimmt Kante von': 'übernimmt Kanten hiervon', 'Rohr hängt an': 'hat Rohrpunkte hieran', 'hochgezogen bis Fläche von': 'wird bis zu dieser Fläche hochgezogen', 'dreht bis Fläche von': 'dreht bis zu einer Fläche hiervon' };
+        const back = { 'abgezogen von': 'wird hiervon abgezogen', 'vereinigt mit': 'ist hiermit vereinigt', 'Schnittmenge mit': 'bildet hiermit die Schnittmenge', 'verrechnet mit': 'ist hiermit verrechnet', 'versetzt': 'versetzt diesen Körper', 'versetzte Kopie von': 'ist eine versetzte Kopie hiervon', 'skaliert': 'skaliert diesen Körper', 'löscht Körper': 'löscht diesen Körper als Schritt', 'übernimmt Messwert von': 'übernimmt einen Messwert hiervon', 'dickt Fläche auf von': 'dickt eine Fläche hiervon auf', 'Platte von Fläche aus': 'ist eine aufgedickte Platte hiervon', 'Rippe an': 'verstärkt diesen Körper als Rippe', 'wickelt um': 'wickelt eine Skizze hierum', 'folgt gewickelter Linie von': 'läuft als Profil an dieser Wickel-Linie entlang', 'spiegelt Schritt': 'wird hiervon gespiegelt', 'spiegelt an Fläche von': 'spiegelt an einer Fläche hiervon', 'verknüpfte Kopie von': 'ist eine verknüpfte Kopie hiervon', 'Skizze übernimmt Kante von': 'übernimmt Kanten hiervon', 'Rohr hängt an': 'hat Rohrpunkte hieran', 'hochgezogen bis Fläche von': 'wird bis zu dieser Fläche hochgezogen', 'dreht bis Fläche von': 'dreht bis zu einer Fläche hiervon' };
         for (const x of down) ds.append(line(x.datum ? T('panel.item.depDatum', { name: x.datum }) : x.axis ? T('panel.item.depAxis', { name: x.axis }) : x.point ? T('panel.item.depPoint', { name: x.point }) : x.csys ? T('panel.item.depCsys', { name: x.csys }) : T('panel.item.depChild', { name: nm(x.from), what: back[x.what] || T('panel.item.depDefault') }), x.datum || x.axis || x.point || x.csys ? null : x.from));
         if (down.length) ds.open = true;
         w.append(ds);
@@ -1414,7 +1426,7 @@ const Panels = (() => {
     const copies = []; Model.walk(App.doc.items, (x) => { if (x.link === it.id) copies.push(x); });
     if (copies.length) w.append(h('div', { class: 'hint-box', id: 'link-count' }, copies.length === 1 ? T('panel.item.linkedCountOne') : T('panel.item.linkedCountMany', { n: copies.length })));
     const isRef = it.kind === 'ref';
-    const isMoveOnly = (it.kind === 'transform' && !(it.p && it.p.copy)) || it.kind === 'scale' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'mirrorStep';
+    const isMoveOnly = (it.kind === 'transform' && !(it.p && it.p.copy)) || it.kind === 'scale' || it.kind === 'deleteBody' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'mirrorStep';
     const isMergedStep = isMoveOnly || it.kind === 'rib' || it.kind === 'wrap' || it.kind === 'emboss';
     if (!isMergedStep && !isRef) w.append(roleSwitch(it.role, (r) => Actions.setRole([it.id], r)));
     if (!isRef) { const opSec = opSection(it); if (opSec) w.append(opSec); }
@@ -1949,6 +1961,9 @@ const Panels = (() => {
     } else if (it.kind === 'scale') {
       sec.firstChild.textContent = T('kind.scale');
       Features.renderScale(it, sec, setP); w.append(sec);
+    } else if (it.kind === 'deleteBody') {
+      sec.firstChild.textContent = T('kind.deleteBody');
+      Features.renderDeleteBody(it, sec, setP); w.append(sec);
     } else if (it.kind === 'thicken') {
       sec.firstChild.textContent = T('kind.thicken');
       Features.renderThicken(it, sec, setP); w.append(sec);
@@ -2009,7 +2024,7 @@ const Panels = (() => {
       }, { merge: 't:' + it.id + ':' + k });
       const fp = h('div', { class: 'fields three' });
       for (const k of ['x', 'y', 'z']) {
-        const nf = UI.numField({ id: 't-' + k, value: it.t[k], axis: k, unit: '', len: true, onCommit: (v) => setT(k, v) });
+        const nf = UI.numField({ id: 't-' + k, value: it.t[k], axis: k, unit: '', len: true, measurePick: !posLocked, onCommit: (v) => setT(k, v) });
         if (posLocked) nf.querySelector('input').disabled = true;
         fp.append(nf);
       }
@@ -2290,7 +2305,7 @@ const Panels = (() => {
     if (App.mode !== 'model' || Sketch.active || Place.active || Handles.dragging) { Features.syncPatternMarkers(); return; }
     const items = App.selectedItems(); if (!items.length) { Features.syncPatternMarkers(); return; }
     const bar = h('div', { class: 'ctxbar', role: 'toolbar', 'aria-label': T('ctx.toolbarAria') });
-    const PRO = ['similar', 'shell', 'patternCirc', 'split', 'boolSubtract', 'layers', 'moveStep', 'scaleBody', 'thicken', 'wrap'];
+    const PRO = ['similar', 'shell', 'patternCirc', 'split', 'boolSubtract', 'layers', 'moveStep', 'scaleBody', 'deleteBody', 'thicken', 'wrap'];
     const b = (ic, label, fn, cls = '', tip, iconOnly) => { const x = h('button', { type: 'button', class: cls + (PRO.includes(ic) ? ' pro' : ''), 'data-tip': tip || (iconOnly ? label : null), 'aria-label': label || tip, 'data-help': HELP[ic] ? ic : null }); x.innerHTML = icon(ic) + (label && !iconOnly ? `<span>${label}</span>` : ''); x.onclick = (e) => { e.stopPropagation(); fn(e); }; bar.append(x); return x; };
     const sep = () => bar.append(h('span', { class: 'vsep' }));
     // Schritt hinter dem Marker oder unterdrückt: nichts zum Bearbeiten, nur zurückholen
@@ -2300,6 +2315,18 @@ const Panels = (() => {
       bar.append(h('span', { class: 'lbl' }, off.suppressed ? T('ctx.suppressed') : T('ctx.behindMarker')));
       if (off.suppressed) b('eye', T('ctx.enableAgain'), () => Timeline.toggleSuppress(off.id), 'accent', T('ctx.enableAgainTip'));
       else b('rollback', T('ctx.markerAfter'), () => Timeline.setMarker(App.doc.items.indexOf(off) + 1, `Zeitleiste: bis „${Model.label(off)}“`), 'accent', T('ctx.markerAfterTip'));
+      $('#overlay').append(bar); ctx = bar;
+      placeCtx();
+      Features.syncPatternMarkers();
+      return;
+    }
+    if (items.length === 1 && items[0].item.kind === 'deleteBody') {
+      const it = items[0].item;
+      const tgs = Array.isArray(it.p && it.p.targets) ? it.p.targets : (it.p && it.p.target ? [it.p.target] : []);
+      bar.append(h('span', { class: 'lbl' }, T('ctx.deleteBodyStepLabel')));
+      if (tgs.length === 1 && Model.find(App.doc, tgs[0])) b('pointer', T('ctx.targetBody'), () => App.select([tgs[0]]), '', T('ctx.targetBodyTip'));
+      b('suppress', T('common.suppress'), () => Timeline.toggleSuppress(it.id), 'accent', T('ctx.suppressTip'));
+      b('trash', T('common.delete'), () => Actions.remove(), 'danger', T('ctx.deleteTip'), true);
       $('#overlay').append(bar); ctx = bar;
       placeCtx();
       Features.syncPatternMarkers();
@@ -2497,6 +2524,7 @@ const Panels = (() => {
       b('copy', T('common.duplicate'), () => Actions.duplicate(), '', T('ctx.dupTip'), true);
       if (App.doc.items.includes(it)) b('moveStep', T('ctx.moveStep'), () => Features.transform(), '', T('ctx.moveStepTip'), true);
       if (App.doc.items.includes(it)) b('scaleBody', T('ctx.scale'), () => Features.scale(), '', T('ctx.scaleTip'), true).dataset.help = 'scaleBody';
+      if (App.doc.items.includes(it)) b('deleteBody', T('ctx.deleteBody'), () => Features.deleteBody([it.id]), '', T('ctx.deleteBodyTip'), true).dataset.help = 'deleteBody';
       if (Features.canMirrorStep(it, items[0].parent)) b('mirror', T('ctx.mirrorStep'), () => Features.mirrorStep([it.id]), 'pro', T('ctx.mirrorStepTip')).dataset.help = 'mirrorStep';
       b('patternCirc', T('ctx.pattern'), (e) => UI.menu(e.currentTarget, [{ label: T('ctx.patRect'), icon: 'patternRect', run: () => Features.pattern('rect') }, { label: T('ctx.patCirc'), icon: 'patternCirc', run: () => Features.pattern('circ') }, { label: T('ctx.patPath'), icon: 'patternPath', run: () => Features.patternPath() }, { label: T('ctx.patMirror'), icon: 'mirror', run: () => Features.pattern('mirror') }, ...(Features.canMirrorStep(it, items[0].parent) ? [{ label: T('ctx.mirrorStep'), icon: 'mirror', help: 'mirrorStep', run: () => Features.mirrorStep([it.id]) }] : [])]), '', hole ? T('ctx.patternHoleTip') : T('ctx.patternTip'), true);
       if (!hole) b('split', T('ctx.split'), () => Features.split(), '', T('ctx.splitTip'), true);
@@ -2513,6 +2541,7 @@ const Panels = (() => {
       const hasRef = items.some((x) => x.item.kind === 'ref');
       if (!hasRef) b('group', T('ctx.group'), () => Actions.group(), 'accent', T('ctx.groupTip'));
       if (!hasRef && items.every((x) => x.list === items[0].list && Features.canMirrorStep(x.item, x.parent))) b('mirror', T('ctx.mirrorStep'), () => Features.mirrorStep(items.map((x) => x.item.id)), 'pro', T('ctx.mirrorStepTip')).dataset.help = 'mirrorStep';
+      if (!hasRef && items.every((x) => App.doc.items.includes(x.item))) b('deleteBody', T('ctx.deleteBody'), () => Features.deleteBody(items.map((x) => x.item.id)), '', T('ctx.deleteBodyTip'), true).dataset.help = 'deleteBody';
       if (items.length === 2) b('dim', T('ctx.gap'), (e) => gapPop(e.currentTarget), '', T('ctx.gapTip'), true);
       if (items.length === 2 && !Model.parentsOf(App.doc, items[0].item.id).some((q) => q.id === items[1].item.id) && !Model.parentsOf(App.doc, items[1].item.id).some((q) => q.id === items[0].item.id)) {
         const fj = b('lock', T('ctx.fixedJoint'), () => Joints.startFixed(), '', T('ctx.fixedJointTip'));

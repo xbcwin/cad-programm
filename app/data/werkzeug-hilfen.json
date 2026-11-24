@@ -1303,5 +1303,15 @@
     "tip": "Mehrere parallele Bezugsebenen im gleichen Abstand auf einmal anlegen",
     "hilfe": "Erzeugt eine Ebenen-Schar aus beliebig vielen parallelen Bezugsebenen (z. B. 4 Ebenen alle 10 mm) ausgehend von einer Grundebene, einer gewählten ebenen Fläche oder einer bestehenden Bezugsebene – alles in einem Rückgängig-Schritt.",
     "tipp": "Ideal für Spanten, Rippen oder Schnitte in festen Abständen; als Abstand kannst du auch eine Formel mit Projektmaßen eingeben."
+  },
+  "deleteBody": {
+    "tip": "Körper als Schritt im Verlauf löschen (abschaltbar – kommt beim Unterdrücken zurück)",
+    "hilfe": "Entfernt den gewählten Körper ab diesem Schritt aus dem Modell, ohne ihn aus der Zeitleiste zu tilgen. Frühere Schritte wie Kopien oder Ableitungen bleiben erhalten, und durch Unterdrücken oder Zurückrollen des Markers ist der Körper sofort wieder da.",
+    "tipp": "Ideal für Hilfskörper zum Ausrichten oder Verrechnen, die am Ende nicht mehr im fertigen Bauteil erscheinen sollen."
+  },
+  "measureParam": {
+    "tip": "Maß direkt aus einer Kantenlänge am Modell übernehmen (wandert mit)",
+    "hilfe": "Klicke auf das Lineal-Symbol und wähle danach eine Kante im 3D-Bild. Tracery legt unter „Maße“ einen verknüpften Messwert an und trägt ihn als Formel hier ein. Ändert sich die Kante später, wächst oder schrumpft dieses Maß automatisch mit.",
+    "tipp": "Du kannst den angelegten Messwert-Namen im Feld auch weiterrechnen lassen, zum Beispiel als „Messung_1 / 2“ oder „Messung_1 + 2“."
   }
 }

@@ -660,12 +660,13 @@ const Kernel = (() => {
       if (ti != null) union(idx, ti);
     };
 
-    const TARGET_KINDS = new Set(['transform', 'scale', 'thicken', 'rib', 'wrap', 'emboss']);
+    const TARGET_KINDS = new Set(['transform', 'scale', 'thicken', 'rib', 'wrap', 'emboss', 'deleteBody']);
     const walkDeps = (x, topIdx, isTop) => {
       if (!x || x.hidden) return;
       const p = x.p || {};
       if (x.op && x.op.target) unionRef(topIdx, x.op.target);
       if (TARGET_KINDS.has(x.kind) && p.target) unionRef(topIdx, p.target);
+      if (x.kind === 'deleteBody' && Array.isArray(p.targets)) for (const tid of p.targets) unionRef(topIdx, tid);
       if (x.kind === 'sweep' && p.wrapId) unionRef(topIdx, p.wrapId);
       if (x.kind === 'extrude' && p.extent === 'toFace' && p.toFace && p.toFace.id) unionRef(topIdx, p.toFace.id);
       if (x.kind === 'revolve' && p.dir === 'toFace' && p.toFace && p.toFace.targetId) unionRef(topIdx, p.toFace.targetId);
