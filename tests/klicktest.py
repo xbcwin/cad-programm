@@ -8139,6 +8139,137 @@ def t_a030_drehen_winkel_flaeche(p):
     return [ok1, ok2, ok3, ok4, ok5, ok6]
 
 
+def t_a032_aufdicken_skalieren(p):
+    # Würfel 10, Skalieren ×2 → Volumen ×8; je Achse 1/1/3 → Höhe 30; Oberseite 3 mm aufdicken → Höhe +3
+    p.empty()
+    p.ev("Actions.addPrimitive('box', { p: { w: 10, d: 10, h: 10 }, pos: [0, 0] })")
+    warte_rechnen(p, 20); p.wait(300)
+    v0 = volumen(p)
+    b0 = bbox(p, 0)
+
+    # 1. Skalieren ×2 über Kontextleiste → Volumen ×8
+    btn_sc = p.pg.locator('.ctxbar button[aria-label="Skalieren"]')
+    has_sc_help = btn_sc.get_attribute('data-help') == 'scaleBody'
+    btn_sc.click()
+    warte_rechnen(p, 20); p.wait(300)
+    p.pg.fill('#sc-s', '2'); p.pg.press('#sc-s', 'Enter')
+    warte_rechnen(p, 20); p.wait(300)
+    v2 = volumen(p)
+    b2 = bbox(p, 0)
+    st1 = p.ev("return [App.doc.items.length, App.doc.items[1].kind, App.doc.items[1].p.target === App.doc.items[0].id, App.mergedInto(App.doc.items[1].id) === App.doc.items[0].id]")
+    ok1 = (
+        has_sc_help
+        and near(b0, [-5, -5, 0, 5, 5, 10])
+        and abs(v0 - 1000) < 1
+        and st1 == [2, 'scale', True, True]
+        and abs(v2 - v0 * 8) < 5
+        and near([b2[3] - b2[0], b2[4] - b2[1], b2[5] - b2[2]], [20, 20, 20])
+    )
+
+    # 2. Je Achse 1 / 1 / 3 → Höhe 30 (erst Ursprung, auch Schwerpunkt prüfen)
+    p.pg.locator('#sc-uniform').uncheck(); p.wait(200)
+    p.pg.fill('#sc-sx', '1'); p.pg.press('#sc-sx', 'Enter'); p.wait(150)
+    p.pg.fill('#sc-sy', '1'); p.pg.press('#sc-sy', 'Enter'); p.wait(150)
+    p.pg.fill('#sc-sz', '3'); p.pg.press('#sc-sz', 'Enter')
+    warte_rechnen(p, 20); p.wait(300)
+    b_cen = bbox(p, 0)
+    v_cen = volumen(p)
+    p.pg.select_option('#sc-pivot', 'origin')
+    warte_rechnen(p, 20); p.wait(300)
+    b_ori = bbox(p, 0)
+    v_ori = volumen(p)
+    ok2 = (
+        near(b_cen, [-5, -5, -10, 5, 5, 20])
+        and abs(v_cen - 3000) < 2
+        and near(b_ori, [-5, -5, 0, 5, 5, 30])
+        and abs(v_ori - 3000) < 2
+    )
+
+    # 3. Oberseite 3 mm aufdicken → Höhe +3 (33 mm)
+    p.ev("""const id=App.doc.items[0].id, r=App.results.get(id);
+      const fi=r.data.faces.findIndex(f=>f.t==='PLANE'&&f.n[2]>0.9);
+      App.select([id], { face: { id, faceIdx: fi } });""")
+    p.wait(300)
+    btn_th = p.pg.locator('.ctxbar button[aria-label="Aufdicken"]')
+    has_th_help = btn_th.get_attribute('data-help') == 'thickenFace'
+    btn_th.click()
+    warte_rechnen(p, 20); p.wait(300)
+    p.pg.fill('#th-t', '3'); p.pg.press('#th-t', 'Enter')
+    warte_rechnen(p, 20); p.wait(300)
+    b_th = bbox(p, 0)
+    v_th = volumen(p)
+    st3 = p.ev("return [App.doc.items.length, App.doc.items[2].kind, App.mergedInto(App.doc.items[2].id) === App.doc.items[0].id]")
+    ok3 = (
+        has_th_help
+        and st3 == [3, 'thicken', True]
+        and near(b_th, [-5, -5, 0, 5, 5, 33])
+        and abs(v_th - 3300) < 3
+    )
+
+    # 4. Aufdicken nach innen, mittig, als eigene Platte und als Abzug
+    p.pg.select_option('#th-mode', 'new')
+    warte_rechnen(p, 20); p.wait(300)
+    b_p_out = bbox(p, 2)
+    p.pg.select_option('#th-dir', 'in')
+    warte_rechnen(p, 20); p.wait(300)
+    b_p_in = bbox(p, 2)
+    p.pg.select_option('#th-dir', 'mid')
+    warte_rechnen(p, 20); p.wait(300)
+    b_p_mid = bbox(p, 2)
+    p.pg.select_option('#th-dir', 'in'); p.wait(200)
+    p.pg.select_option('#th-mode', 'cut')
+    warte_rechnen(p, 20); p.wait(300)
+    b_cut = bbox(p, 0)
+    v_cut = volumen(p)
+    ok4 = (
+        near(b_p_out, [-5, -5, 30, 5, 5, 33])
+        and near(b_p_in, [-5, -5, 27, 5, 5, 30])
+        and near(b_p_mid, [-5, -5, 28.5, 5, 5, 31.5])
+        and near(b_cut, [-5, -5, 0, 5, 5, 27])
+        and abs(v_cut - 2700) < 3
+    )
+
+    # 5. Zurück auf Vereinigen außen (Höhe 33), Unterdrücken, Marker und gewölbte Fläche
+    p.pg.select_option('#th-dir', 'out'); p.wait(200)
+    p.pg.select_option('#th-mode', 'join')
+    warte_rechnen(p, 20); p.wait(300)
+    p.ev("Timeline.toggleSuppress(App.doc.items[2].id)")
+    warte_rechnen(p, 20); p.wait(300)
+    b_sup = bbox(p, 0)
+    p.ev("Timeline.toggleSuppress(App.doc.items[2].id)")
+    warte_rechnen(p, 20); p.wait(300)
+    p.ev("Timeline.setMarker(1)")
+    warte_rechnen(p, 20); p.wait(300)
+    b_mk1 = bbox(p, 0)
+    p.ev("Timeline.setMarker(3)")
+    warte_rechnen(p, 20); p.wait(300)
+    b_mk3 = bbox(p, 0)
+    # Gewölbte Zylinderfläche aufdicken
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(400)
+    p.ev("Actions.addPrimitive('cylinder', { p: { d: 20, h: 20 }, pos: [0, 0] })")
+    warte_rechnen(p, 20); p.wait(300)
+    p.ev("""const id=App.doc.items[0].id, r=App.results.get(id);
+      const fi=r.data.faces.findIndex(f=>f.t==='CYLINDRE');
+      Features.thicken({ id, idx: fi, info: r.data.faces[fi] }, { t: 2, dir: 'out', mode: 'join' });""")
+    warte_rechnen(p, 20); p.wait(300)
+    b_cyl = bbox(p, 0)
+    ok5 = (
+        near(b_sup, [-5, -5, 0, 5, 5, 30])
+        and near(b_mk1, [-5, -5, 0, 5, 5, 10])
+        and near(b_mk3, [-5, -5, 0, 5, 5, 33])
+        and near(b_cyl, [-12, -12, 0, 12, 12, 20], 0.2)
+    )
+
+    # 6. Hilfetexte, Befehle und keine Fehler
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    ok6 = (
+        p.ev("return App.errors.length === 0") is True
+        and all(k in hilfen and all(x in hilfen[k] for x in ('tip', 'hilfe', 'tipp')) for k in ('scaleBody', 'thickenFace'))
+        and p.ev("return Commands.search('skalieren').some(c=>c.id==='scale-body') && Commands.search('aufdicken').some(c=>c.id==='thicken-face')") is True
+    )
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -8268,6 +8399,7 @@ TESTS = [
     ('[F-11240211] Volltest-Reparatur: Schildchen ohne Re-Entranz bei überfälliger Kamera-Animation / Eigenschaften-Panel sofort bei Auswahl', t_f11240211),
     ('[A-028] Bezugspunkte und Koordinatensystem: Kantenmitte 40 mm → 20 mm / Flächenmitte & x % / Schnitt Kante & Ebene / eigenes KS & Mitwandern / Export STEP, STL & 3MF ab Nullpunkt', t_a028_bezugspunkte_koordinatensystem),
     ('[A-030] Drehen mit Winkel und bis Fläche: 90° Viertel-Volumen / symmetrisch 2×45° / beidseitig verschieden & umgekehrt / bis Fläche & Nachführen / Winkel-Ziehgriff & Hilfe', t_a030_drehen_winkel_flaeche),
+    ('[A-032] Fläche aufdicken & Körper skalieren: Skalieren ×2 / je Achse 1/1/3 / Ursprung & Schwerpunkt / Aufdicken +3 mm / innen, mittig & Platte / Verlauf & Hilfe', t_a032_aufdicken_skalieren),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

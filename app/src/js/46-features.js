@@ -728,12 +728,26 @@ const Features = (() => {
     UI.pop(anchor || $('#center'), box);
   }
   // ---------- Verschieben / Drehen / Kopieren als Schritt (KP-08) ----------
-  function transform(targetOrIds, opts = {}) {
-    if (App.ctx) { UI.toast('Schritte zum Verschieben/Drehen gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return null; }
+  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new'));
+  function insertAtMarker(doc, step) {
+    const at = doc.rollback != null ? clamp(doc.rollback, 0, doc.items.length) : doc.items.length;
+    doc.items.splice(at, 0, step);
+    if (doc.rollback != null) doc.rollback = at + 1;
+  }
+  function resolveTopTarget(targetOrIds) {
     const raw = Array.isArray(targetOrIds) ? targetOrIds[0] : (targetOrIds || App.sel[0]);
     const top = raw ? Model.topOf(App.doc, raw) : null;
     const tid = top ? (App.mergedInto(top.id) || top.id) : null;
-    const tgt = tid ? App.doc.items.find((x) => x.id === tid) : null;
+    return tid ? App.doc.items.find((x) => x.id === tid) || null : null;
+  }
+  function activeTargetsBefore(it) {
+    const idx = App.doc.items.indexOf(it);
+    const prev = idx >= 0 ? App.doc.items.slice(0, idx) : [];
+    return prev.filter((x) => !x.suppressed && !(x.op && x.op.target) && !isModifierStep(x));
+  }
+  function transform(targetOrIds, opts = {}) {
+    if (App.ctx) { UI.toast('Schritte zum Verschieben/Drehen gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return null; }
+    const tgt = resolveTopTarget(targetOrIds);
     if (!tgt) { UI.toast('Wähle zuerst einen Körper aus.', { icon: 'info' }); return null; }
     const p = {
       target: tgt.id,
@@ -756,9 +770,7 @@ const Features = (() => {
   }
   function renderTransform(it, sec, setP) {
     const p = it.p || {};
-    const idx = App.doc.items.indexOf(it);
-    const prev = idx >= 0 ? App.doc.items.slice(0, idx) : [];
-    const targets = prev.filter((x) => !x.suppressed && !(x.op && x.op.target) && !(x.kind === 'transform' && !(x.p && x.p.copy)));
+    const targets = activeTargetsBefore(it);
     const opts = targets.map((x) => [x.id, Model.label(x)]);
     if (p.target && !targets.some((x) => x.id === p.target)) {
       const f = Model.find(App.doc, p.target);
@@ -789,6 +801,151 @@ const Features = (() => {
     }
     sec.append(h('div', { class: 'hint-box', html: p.copy ? 'Erzeugt eine versetzte oder gedrehte <b>Kopie</b>. Ändert sich der Zielkörper, wandert die Kopie mit.' : 'Versetzt den Zielkörper als Schritt im Verlauf. Unterdrückst du diesen Schritt oder rollst den Marker davor, springt der Körper zurück.' }));
   }
+  // ---------- Körper skalieren (KP-07) ----------
+  function scale(targetOrIds, opts = {}) {
+    if (App.ctx) { UI.toast('Schritte zum Skalieren gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return null; }
+    const tgt = resolveTopTarget(targetOrIds);
+    if (!tgt) { UI.toast('Wähle zuerst einen Körper aus.', { icon: 'info' }); return null; }
+    const uniform = opts.uniform !== undefined ? !!opts.uniform : (opts.sx == null && opts.sy == null && opts.sz == null);
+    const s0 = opts.s ?? 1;
+    const p = {
+      target: tgt.id,
+      uniform,
+      s: s0,
+      sx: opts.sx ?? s0, sy: opts.sy ?? s0, sz: opts.sz ?? s0,
+      pivot: opts.pivot === 'origin' ? 'origin' : 'centroid',
+    };
+    let step;
+    App.change('Skalieren angelegt', (doc) => {
+      step = Model.newItem('scale', p, { name: opts.name || 'Skalieren', color: tgt.color, role: tgt.role, mat: tgt.mat });
+      insertAtMarker(doc, step);
+    });
+    if (step) {
+      App.select([step.id]);
+      UI.toast('Schritt „Skalieren“ angelegt. Rechts stellst du Faktor, Achsen und Bezugspunkt ein.', { icon: 'check' });
+    }
+    return step || null;
+  }
+  function renderScale(it, sec, setP) {
+    const p = it.p || {};
+    const targets = activeTargetsBefore(it);
+    const opts = targets.map((x) => [x.id, Model.label(x)]);
+    if (p.target && !targets.some((x) => x.id === p.target)) {
+      const f = Model.find(App.doc, p.target);
+      opts.unshift([p.target, f ? Model.label(f.item) + ' (inaktiv)' : 'Fehlender Körper']);
+    }
+    if (opts.length) {
+      sec.append(UI.selectField({ id: 'sc-target', label: 'Zielkörper', value: p.target || '', options: opts, onChange: (v) => App.change('Zielkörper gewählt', (doc) => { Model.find(doc, it.id).item.p.target = v; }) }));
+    }
+    const uni = p.uniform !== false;
+    const uniL = h('label', { class: 'check', style: { marginTop: '8px' } }, h('input', { type: 'checkbox', id: 'sc-uniform', checked: uni }), 'Gleichmäßig (alle Achsen gleich)');
+    uniL.querySelector('input').onchange = (e) => App.change(e.target.checked ? 'Gleichmäßig skalieren' : 'Je Achse skalieren', (doc) => {
+      const T = Model.find(doc, it.id).item;
+      const u = e.target.checked;
+      T.p.uniform = u;
+      if (!u && (T.p.sx == null || (T.p.sx === 1 && T.p.sy === 1 && T.p.sz === 1 && T.p.s !== 1))) {
+        const s0 = T.p.s ?? 1;
+        T.p.sx = s0; T.p.sy = s0; T.p.sz = s0;
+      }
+    });
+    sec.append(uniL);
+    if (uni) {
+      sec.append(h('div', { class: 'fields', style: { marginTop: '8px' } }, UI.numField({ id: 'sc-s', label: 'Faktor', value: p.s ?? 1, unit: '×', min: 0.01, step: 0.1, onCommit: (v) => setP('s', v) })));
+    } else {
+      const fa = h('div', { class: 'fields three' });
+      for (const k of ['sx', 'sy', 'sz']) fa.append(UI.numField({ id: 'sc-' + k, value: p[k] ?? 1, axis: k[1], unit: '×', min: 0.01, step: 0.1, onCommit: (v) => setP(k, v) }));
+      sec.append(h('div', { class: 'field', style: { marginTop: '8px' } }, h('label', null, 'Faktor je Achse'), fa));
+    }
+    sec.append(UI.selectField({ id: 'sc-pivot', label: 'Bezugspunkt', value: p.pivot === 'origin' ? 'origin' : 'centroid', options: [['centroid', 'Schwerpunkt'], ['origin', 'Ursprung (0 · 0 · 0)']], onChange: (v) => App.change('Bezugspunkt geändert', (doc) => { Model.find(doc, it.id).item.p.pivot = v; }) }));
+    if (p.target && Model.find(App.doc, p.target)) {
+      const gb = h('button', { type: 'button', class: 'btn small', id: 'sc-goto' }); gb.innerHTML = icon('pointer') + 'Zielkörper wählen';
+      gb.onclick = () => App.select([p.target]);
+      sec.append(h('div', { class: 'btn-row' }, gb));
+    }
+    sec.append(h('div', { class: 'hint-box', html: 'Skaliert den Zielkörper um seinen <b>Schwerpunkt</b> oder den <b>Ursprung</b> – gleichmäßig oder je Achse getrennt. Im Verlauf jederzeit änderbar, unterdrückbar und rückrollbar.' }));
+  }
+  // ---------- Fläche aufdicken (KP-07) ----------
+  function faceSigOf(face) {
+    if (!face || !face.info || !Array.isArray(face.info.c)) return null;
+    return {
+      c: face.info.c.map((v) => round(v, 6)),
+      n: Array.isArray(face.info.n) ? face.info.n.map((v) => round(v, 6)) : null,
+      t: face.info.t || null,
+    };
+  }
+  function thicken(face, opts = {}) {
+    if (App.ctx) { UI.toast('Aufdicken als Schritt gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return null; }
+    face = face || Actions.selectedFace();
+    const tgt = face ? resolveTopTarget(face.id) : null;
+    const sig = faceSigOf(face);
+    if (!tgt || tgt.role === 'hole' || !sig) { UI.toast('Klick zuerst eine Fläche eines Körpers an.', { icon: 'info' }); return null; }
+    const p = {
+      target: tgt.id,
+      face: sig,
+      t: opts.t ?? 2,
+      dir: opts.dir === 'in' || opts.dir === 'mid' ? opts.dir : 'out',
+      mode: opts.mode === 'new' || opts.mode === 'cut' ? opts.mode : 'join',
+    };
+    let step;
+    App.change('Aufdicken angelegt', (doc) => {
+      step = Model.newItem('thicken', p, { name: opts.name || 'Aufdicken', color: tgt.color, role: 'solid', mat: tgt.mat });
+      insertAtMarker(doc, step);
+    });
+    if (step) {
+      App.select([step.id]);
+      UI.toast('Fläche aufgedickt. Rechts stellst du Dicke, Richtung und Modus ein.', { icon: 'check' });
+    }
+    return step || null;
+  }
+  function pickThickenFace(stepId) {
+    stopPick();
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true });
+      if (hit && hit.id !== stepId && hit.faceIdx >= 0) {
+        const tgt = resolveTopTarget(hit.id);
+        const fi = App.results.get(hit.id)?.data?.faces?.[hit.faceIdx];
+        if (tgt && tgt.role !== 'hole' && fi && Array.isArray(fi.c)) {
+          stopPick();
+          const sig = faceSigOf({ info: fi });
+          App.change('Fläche für Aufdicken gewählt', (doc) => {
+            const f = Model.find(doc, stepId); if (!f) return false;
+            f.item.p.target = tgt.id;
+            f.item.p.face = sig;
+          });
+          UI.toast('Fläche aktualisiert.', { icon: 'check' });
+          return;
+        }
+      }
+      UI.toast('Bitte klick auf eine Fläche eines Körpers.', { icon: 'info' });
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true); window.addEventListener('keydown', key, true);
+    UI.hint('<b>Fläche wählen:</b> Klick auf eine Fläche des Körpers. <b>Esc</b> bricht ab.');
+  }
+  function renderThicken(it, sec, setP) {
+    const p = it.p || {};
+    const fl = h('div', { class: 'fields' });
+    fl.append(UI.numField({ id: 'th-t', label: 'Dicke', value: p.t ?? 2, min: 0.1, unit: 'mm', onCommit: (v) => setP('t', v) }));
+    fl.append(UI.selectField({ id: 'th-dir', label: 'Richtung', value: p.dir === 'in' || p.dir === 'mid' ? p.dir : 'out', options: [['out', 'Nach außen'], ['in', 'Nach innen'], ['mid', 'Mittig']], onChange: (v) => App.change('Aufdick-Richtung geändert', (doc) => { Model.find(doc, it.id).item.p.dir = v; }) }));
+    fl.append(UI.selectField({ id: 'th-mode', label: 'Ergebnis', value: p.mode === 'new' || p.mode === 'cut' ? p.mode : 'join', options: [['join', 'Mit Körper vereinigen'], ['new', 'Eigene Platte (neuer Körper)'], ['cut', 'Vom Körper abziehen']], onChange: (v) => App.change('Aufdick-Modus geändert', (doc) => { Model.find(doc, it.id).item.p.mode = v; }) }));
+    sec.append(fl);
+    const row = h('div', { class: 'btn-row' });
+    const pb = h('button', { type: 'button', class: 'btn small', id: 'th-pick' }); pb.innerHTML = icon('cursor') + 'Andere Fläche wählen';
+    pb.onclick = () => pickThickenFace(it.id);
+    row.append(pb);
+    if (p.target && Model.find(App.doc, p.target)) {
+      const gb = h('button', { type: 'button', class: 'btn small', id: 'th-goto' }); gb.innerHTML = icon('pointer') + 'Zielkörper wählen';
+      gb.onclick = () => App.select([p.target]);
+      row.append(gb);
+    }
+    sec.append(row);
+    const inJoinHint = p.dir === 'in' && (p.mode || 'join') === 'join' ? ' Hinweis: „Nach innen“ mit „Vereinigen“ liegt im Körper – wähle „Eigene Platte“ oder „Vom Körper abziehen“, um es sichtbar zu machen.' : '';
+    sec.append(h('div', { class: 'hint-box', html: 'Macht aus der gewählten Fläche (eben oder gebogen) eine Platte mit fester Dicke – nach außen, innen oder mittig.' + inJoinHint }));
+  }
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
+  return { pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
 })();

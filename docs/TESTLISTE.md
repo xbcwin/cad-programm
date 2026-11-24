@@ -1665,6 +1665,15 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Ziehgriff für den Winkel & Hilfe**: Teil-Umdrehungen zeigen den Ziehgriff `revAngle` (bei 360° ausgeblendet), Ziehen mit der Maus ändert den Winkel (mit Rückgängig), Hilfetext `revolveOptions` ist vorhanden.
 - [ ] **Von Hand**: Im Browser beim Drehen einer Skizze direkt am orangefarbenen Winkel-Pfeil ziehen, Zahleneingabe beim Ziehen testen und das Anklicken einer Fläche im Skizzen-Abschlussdialog ausprobieren.
 
+## Fläche aufdicken & Körper skalieren (Auto [A-032])
+
+- [x] **Skalieren gleichmäßig (×2)**: Würfel 10×10×10 über Kontextleiste skaliert (`#sc-s = 2`) ergibt das 8-fache Volumen (8000 mm³) und 20×20×20 mm als Schritt `scale` im Verlauf.
+- [x] **Skalieren je Achse (1/1/3) & Bezugspunkt**: Ungleichmäßiges Skalieren (`#sc-sx/sy/sz`) um Schwerpunkt (`[-5..5, -5..5, -10..20]`) und Ursprung (`[-5..5, -5..5, 0..30]`) ergibt exakt Höhe 30 mm.
+- [x] **Oberseite aufdicken (+3 mm)**: Fläche über Kontextleiste um 3 mm nach außen aufgedickt (`#th-t = 3`) erhöht den Körper exakt auf 33 mm (Volumen 3300 mm³).
+- [x] **Richtungen & Modi sowie gewölbte Fläche**: Eigene Platte (`mode='new'`) außen/innen/mittig, Abzug (`mode='cut'`) nach innen (27 mm), Unterdrücken/Zeitleisten-Marker sowie Aufdicken einer gewölbten Zylinderfläche (Ø 20 → Ø 24 mm) funktionieren ohne Fehler.
+- [x] **Hilfetexte & Befehle**: `scaleBody` und `thickenFace` in `werkzeug-hilfen.json` sowie Befehle `scale-body` und `thicken-face` vorhanden.
+- [ ] **Von Hand**: Im Browser einen Körper mit Rundungen ungleichmäßig skalieren sowie an einer gekrümmten Freiformfläche „Aufdicken“ mit „Andere Fläche wählen“ und „Eigene Platte“ prüfen.
+
 ## Fehler melden
 
 ```

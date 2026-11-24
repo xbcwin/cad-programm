@@ -27,6 +27,8 @@ const KINDS = {
   group: { label: 'Gruppe', params: [] },
   part: { label: 'Bauteil', params: [] },
   transform: { label: 'Verschieben/Drehen', params: [] },
+  scale: { label: 'Skalieren', params: [] },
+  thicken: { label: 'Aufdicken', params: [] },
 };
 const PRIMITIVE_ORDER = ['box', 'cylinder', 'sphere', 'cone', 'pyramid', 'wedge', 'tube', 'torus', 'prism', 'hemisphere'];
 
@@ -221,6 +223,8 @@ const Model = (() => {
       const me = top(it.id);
       if (it.op && it.op.target) out.push({ from: me, to: top(it.op.target), what: { join: 'vereinigt mit', cut: 'abgezogen von', common: 'Schnittmenge mit' }[it.op.type] || 'verrechnet mit' });
       if (it.kind === 'transform' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: it.p.copy ? 'versetzte Kopie von' : 'versetzt' });
+      if (it.kind === 'scale' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'skaliert' });
+      if (it.kind === 'thicken' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: it.p.mode === 'new' ? 'Platte von Fläche aus' : 'dickt Fläche auf von' });
       if (it.link) out.push({ from: me, to: top(it.link), what: 'verknüpfte Kopie von' });
       const sk = it.p && it.p.sketch;
       for (const e of (sk && sk.ents) || []) if (e.link && e.link.id) out.push({ from: me, to: top(e.link.id), what: 'Skizze übernimmt Kante von' });
@@ -298,6 +302,24 @@ const Model = (() => {
         pivot: p.pivot === 'origin' || p.pivot === 'point' ? p.pivot : 'center',
         px: num(p.px, V, 0), py: num(p.py, V, 0), pz: num(p.pz, V, 0),
         copy: !!p.copy,
+      };
+    } else if (it.kind === 'scale') {
+      const p = it.p || {};
+      o.p = {
+        target: p.target || null,
+        uniform: p.uniform !== false,
+        s: num(p.s, V, 1),
+        sx: num(p.sx, V, 1), sy: num(p.sy, V, 1), sz: num(p.sz, V, 1),
+        pivot: p.pivot === 'origin' ? 'origin' : 'centroid',
+      };
+    } else if (it.kind === 'thicken') {
+      const p = it.p || {};
+      o.p = {
+        target: p.target || null,
+        face: p.face || null,
+        t: num(p.t, V, 2),
+        dir: p.dir === 'in' || p.dir === 'mid' ? p.dir : 'out',
+        mode: p.mode === 'new' || p.mode === 'cut' ? p.mode : 'join',
       };
     }
     else o.p = resolveP(it.p, V);
@@ -688,6 +710,8 @@ const Model = (() => {
         const s = parts.length ? parts.join(' ') : '0 mm';
         return p.copy ? 'Kopie · ' + s : s;
       }
+      case 'scale': return it.p && it.p.uniform === false ? `×${fmt(p.sx ?? 1, 2)} / ${fmt(p.sy ?? 1, 2)} / ${fmt(p.sz ?? 1, 2)}` : `×${fmt(p.s ?? 1, 2)}`;
+      case 'thicken': return `${f(p.t ?? 2)}${u} · ${{ out: 'außen', in: 'innen', mid: 'mittig' }[(it.p && it.p.dir) || 'out'] || 'außen'}`;
       case 'group': return (typeof Features !== 'undefined' && Features.sizeText(it, V)) || `${(it.children || []).length} Teile`;
       case 'part': {
         const L = String(p.lib || '');
