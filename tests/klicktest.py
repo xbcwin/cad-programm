@@ -9724,6 +9724,128 @@ def t_f11240521(p):
     return [ok1, ok2, ok3]
 
 
+def t_a044_iges_brep(p):
+    import zipfile, tempfile
+    p.empty()
+
+    # 1. BREP-Roundtrip am Quader (30 x 20 x 15 = 9000 mm^3)
+    p.ev("App.change('x', d=>{ d.items.push(Model.newItem('box',{w:30,d:20,h:15},{name:'Quader'})); })")
+    warte_rechnen(p, 30)
+    v0 = volumen(p)
+    brep_ok = p.pg.evaluate("""async () => {
+      const { Kernel, Model, App } = window.__masswerk;
+      const r = await Kernel.call('exportBREP', { scene: Model.kernelScene(App.doc) });
+      window.__brepBytes = new Uint8Array(r.data);
+      const head = new TextDecoder().decode(window.__brepBytes.slice(0, 64));
+      return window.__brepBytes.byteLength > 200 && head.includes('CASCADE');
+    }""")
+    p.ev("App.change('x', d=>{ d.items=[]; })"); p.wait(300)
+    p.pg.evaluate("() => window.__masswerk.Start.openBlob(new File([window.__brepBytes], 'Quader.brep'))")
+    warte_rechnen(p, 30)
+    it_brep = p.ev("const it=App.doc.items[0]; const r=it && App.results.get(it.id); return { kind:it&&it.kind, name:it&&it.name, fmt:it&&it.p&&it.p.fmt, errs:App.errors.length, bb:r&&r.data&&r.data.bbox }")
+    v_brep = volumen(p)
+    ok1 = (bool(brep_ok) and v0 is not None and abs(v0 - 9000) < 0.1
+           and it_brep['kind'] == 'import' and it_brep['name'] == 'Quader' and it_brep['fmt'] == 'brep'
+           and it_brep['errs'] == 0 and v_brep is not None and abs(v_brep - v0) / v0 < 0.001
+           and it_brep['bb'] is not None and abs((it_brep['bb'][3] - it_brep['bb'][0]) - 30) < 0.05)
+
+    # 2. IGES-Roundtrip am Quader (.igs und .iges)
+    p.ev("App.change('x', d=>{ d.items=[]; d.items.push(Model.newItem('box',{w:30,d:20,h:15},{name:'Quader'})); })")
+    warte_rechnen(p, 30)
+    iges_ok = p.pg.evaluate("""async () => {
+      const { Kernel, Model, App } = window.__masswerk;
+      const r = await Kernel.call('exportIGES', { scene: Model.kernelScene(App.doc) });
+      window.__igesBytes = new Uint8Array(r.data);
+      const txt = new TextDecoder().decode(window.__igesBytes);
+      return txt.includes('S      1') && txt.includes('G      1') && txt.includes('D      1') && txt.includes('P      1') && txt.includes('T      1') && txt.includes('144,');
+    }""")
+    p.ev("App.change('x', d=>{ d.items=[]; })"); p.wait(300)
+    p.pg.evaluate("() => window.__masswerk.Start.openBlob(new File([window.__igesBytes], 'Quader.igs'))")
+    warte_rechnen(p, 30)
+    it_igs = p.ev("const it=App.doc.items[0]; const r=it && App.results.get(it.id); return { kind:it&&it.kind, name:it&&it.name, fmt:it&&it.p&&it.p.fmt, errs:App.errors.length, bb:r&&r.data&&r.data.bbox }")
+    v_igs = volumen(p)
+    p.ev("App.change('x', d=>{ d.items=[]; })"); p.wait(300)
+    p.pg.evaluate("() => window.__masswerk.Start.openBlob(new File([window.__igesBytes], 'Quader2.iges'))")
+    warte_rechnen(p, 30)
+    it_iges = p.ev("const it=App.doc.items[0]; return { name:it&&it.name, fmt:it&&it.p&&it.p.fmt, errs:App.errors.length }")
+    v_iges = volumen(p)
+    ok2 = (bool(iges_ok)
+           and it_igs['kind'] == 'import' and it_igs['name'] == 'Quader' and it_igs['fmt'] == 'iges'
+           and it_igs['errs'] == 0 and v_igs is not None and abs(v_igs - v0) / v0 < 0.001
+           and it_igs['bb'] is not None and abs((it_igs['bb'][3] - it_igs['bb'][0]) - 30) < 0.05
+           and it_iges['name'] == 'Quader2' and it_iges['fmt'] == 'iges' and it_iges['errs'] == 0
+           and v_iges is not None and abs(v_iges - v0) / v0 < 0.001)
+
+    # 3. Gekrümmter Körper mit Durchgangsbohrung (Quader 30x20x15 - Zylinder D8): IGES und BREP
+    p.ev("""App.change('x', d=>{
+      d.items=[];
+      const g=Model.newItem('group',{},{name:'Lochteil'});
+      const b=Model.newItem('box',{w:30,d:20,h:15});
+      const c=Model.newItem('cylinder',{d:8,h:20},{role:'hole'}); c.t.z=-2;
+      g.children=[b,c]; d.items.push(g);
+    })""")
+    warte_rechnen(p, 30)
+    v_hole0 = volumen(p)
+    p.pg.evaluate("""async () => {
+      const { Kernel, Model, App } = window.__masswerk;
+      const ri = await Kernel.call('exportIGES', { scene: Model.kernelScene(App.doc) });
+      const rb = await Kernel.call('exportBREP', { scene: Model.kernelScene(App.doc) });
+      window.__holeIges = new Uint8Array(ri.data);
+      window.__holeBrep = new Uint8Array(rb.data);
+    }""")
+    p.ev("App.change('x', d=>{ d.items=[]; })"); p.wait(300)
+    p.pg.evaluate("() => window.__masswerk.Start.openBlob(new File([window.__holeIges], 'Loch.igs'))")
+    warte_rechnen(p, 30)
+    v_hole_igs = volumen(p)
+    err_hole_igs = p.ev("return App.errors.length")
+    p.ev("App.change('x', d=>{ d.items=[]; })"); p.wait(300)
+    p.pg.evaluate("() => window.__masswerk.Start.openBlob(new File([window.__holeBrep], 'Loch.brep'))")
+    warte_rechnen(p, 30)
+    v_hole_brep = volumen(p)
+    err_hole_brep = p.ev("return App.errors.length")
+    ok3 = (v_hole0 is not None and abs(v_hole0 - (9000 - math.pi * 16 * 15)) < 1.0
+           and err_hole_igs == 0 and v_hole_igs is not None and abs(v_hole_igs - v_hole0) / v_hole0 < 0.001
+           and err_hole_brep == 0 and v_hole_brep is not None and abs(v_hole_brep - v_hole0) / v_hole0 < 0.001)
+
+    # 4. Export-Dialog, ZIP-Download, Einheit (#p-scale), Hilfe & Fehlerbehandlung
+    p.ev("App.change('x', d=>{ d.items=[]; d.items.push(Model.newItem('box',{w:30,d:20,h:15},{name:'ExportTeil'})); })")
+    warte_rechnen(p, 30)
+    help_ok = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json()).then(d=>{ const h=d.exportIgesBrep; return !!(h && h.tip && h.hilfe && h.tipp); })")
+    p.pg.get_by_role('button', name='Exportieren').first.click(); p.wait(400)
+    dlg_ok = (p.pg.locator('#ex-iges').count() == 1 and p.pg.locator('#ex-brep').count() == 1
+              and p.pg.locator('[data-help="exportIgesBrep"]').count() == 2)
+    p.pg.uncheck('#ex-step'); p.pg.check('#ex-iges'); p.pg.check('#ex-brep'); p.wait(100)
+    with p.pg.expect_download(timeout=90000) as dl:
+        p.pg.get_by_role('button', name='Als ZIP speichern').click()
+    zpath = os.path.join(tempfile.gettempdir(), 'tracery-a044.zip')
+    dl.value.save_as(zpath)
+    names = zipfile.ZipFile(zpath).namelist()
+    igs_in_zip = [n for n in names if n.endswith('.igs')]
+    brep_in_zip = [n for n in names if n.endswith('.brep')]
+    zip_ok = len(igs_in_zip) == 1 and len(brep_in_zip) == 1 and len(zipfile.ZipFile(zpath).read(igs_in_zip[0])) > 500 and len(zipfile.ZipFile(zpath).read(brep_in_zip[0])) > 200
+
+    # Einheit cm (10x) am importierten BREP + defekte Dateien melden Fehler ohne Absturz
+    p.ev("App.change('x', d=>{ d.items=[]; })"); p.wait(300)
+    p.pg.evaluate("() => window.__masswerk.Start.openBlob(new File([window.__brepBytes], 'Skal.brep'))")
+    warte_rechnen(p, 30)
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(300)
+    p.pg.select_option('#p-scale', '10'); warte_rechnen(p, 30)
+    bb_cm = p.ev("const r=App.results.get(App.doc.items[0].id); return r && r.data.bbox")
+    scale_ok = bb_cm is not None and abs((bb_cm[3] - bb_cm[0]) - 300) < 0.2
+
+    p.ev("App.change('x', d=>{ d.items=[]; })"); p.wait(300)
+    p.pg.evaluate("() => window.__masswerk.Start.openBlob(new File(['ungueltig'], 'kaputt.brep'))")
+    warte_rechnen(p, 30)
+    err_brep = p.ev("return App.errors.length") > 0
+    p.ev("App.change('x', d=>{ d.items=[]; })"); p.wait(300)
+    p.pg.evaluate("() => window.__masswerk.Start.openBlob(new File(['ungueltig'], 'kaputt.igs'))")
+    warte_rechnen(p, 30)
+    err_igs = p.ev("return App.errors.length") > 0
+
+    ok4 = help_ok and dlg_ok and zip_ok and scale_ok and err_brep and err_igs
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -9867,6 +9989,7 @@ TESTS = [
     ('[A-040] Varianten schalten Schritte: ohne Loch / Volumen & zurück / Vergleich / Maße & Schritte / Abweichung & Undo', t_a040_varianten_schritte),
     ('[A-041] Formeln: wenn, runden, aufrunden, abrunden, Tabelle & Klartext-Fehler', t_a041_formeln),
     ('[F-11240521] Volltest-Reparatur: Drehteller-Video bei rAF-Stau / Einführung reagiert sofort auf Skizze', t_f11240521),
+    ('[A-044] IGES und BREP: Export und Import (Quader, Loch, Dialog)', t_a044_iges_brep),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

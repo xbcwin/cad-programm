@@ -213,7 +213,7 @@ const Commands = (() => {
     add('datum-point-curve-pct', 'Bezugspunkt: auf Kurve bei x %', 'point', 'bezugspunkt punkt kurve kante prozent anteil entlang', () => { const e = App.edges && App.edges.length === 1 ? App.edges[0] : null; if (e) Datums.addPointOnCurve(e, 50); else Datums.startPointPick('curvePercent', { percent: 50 }); }, { group: 'Werkzeuge' });
     add('datum-csys', 'Eigenes Koordinatensystem anlegen', 'axes', 'koordinatensystem nullpunkt ursprung achsen export step stl 3mf', () => Datums.csysDialog(), { group: 'Werkzeuge' });
     add('image', 'Bild speichern (PNG)', 'image', 'bild png foto screenshot rendering präsentation hintergrund durchsichtig', () => Print.imageDialog(), { group: 'Werkzeuge' });
-    add('export', 'Exportieren (STEP, STL, 3MF, OBJ, GLB, DXF)', 'export', 'step stl 3mf obj mtl glb gltf dxf platten fräse laser exportieren speichern download', () => Print.exportDialog(), { group: 'Werkzeuge', kbd: 'Strg E' });
+    add('export', 'Exportieren (STEP, IGES, BREP, STL, 3MF, OBJ, GLB, DXF)', 'export', 'step igs iges brep stl 3mf obj mtl glb gltf dxf platten fräse laser exportieren speichern download', () => Print.exportDialog(), { group: 'Werkzeuge', kbd: 'Strg E' });
     add('status', 'Modell-Status', 'info', 'status prüfen größe fehler', () => $('#ampel').click(), { group: 'Werkzeuge' });
     add('drop', 'Auf die XY-Ebene setzen', 'push', 'boden unten absetzen z null ebene', () => Actions.dropToPlate(null), { group: 'Werkzeuge' });
     add('ortho', 'Orthografisch / Perspektive', 'viewOrtho', 'ortho perspektive projektion kamera', () => ViewPrefs.toggle('ortho'), { group: 'Ansicht', kbd: 'O' });
@@ -265,7 +265,7 @@ const Commands = (() => {
     add('gap', 'Abstand zwischen zwei Teilen setzen', 'dim', 'abstand lücke distanz zwischen zwei teile', () => { if (App.sel.length === 2) $('.ctxbar button[aria-label="Abstand"]') && $('.ctxbar button[aria-label="Abstand"]').click(); else UI.toast('Wähle genau zwei Teile.', { icon: 'info' }); }, { group: 'Bearbeiten', needSel: true });
     add('route3d', 'Rohr im Raum: Punkte auf Körper oder in den Raum klicken', 'sweep', 'rohr raum 3d pfad kabel kanal punkte biegen', () => Features.route3d(), { group: 'Werkzeuge' });
     add('sweep-help', 'Rohr oder Kanal entlang Pfad (Sweep)', 'sweep', 'sweep pfad rohr kabelkanal bügel entlang', () => { Sketch.chooseAndStart(); UI.toast('Zeichne einen offenen Pfad und klick „Fertig“ – daraus wird ein Rohr.', { icon: 'info', ms: 5000 }); }, { group: 'Werkzeuge' });
-    add('import', 'STEP, STL oder 3MF importieren', 'folder', 'import step stp stl 3mf datei einlesen', () => Start.openFile(), { group: 'Projekt' });
+    add('import', 'STEP, IGES, BREP, STL oder 3MF importieren', 'folder', 'import step stp igs iges brep stl 3mf datei einlesen', () => Start.openFile(), { group: 'Projekt' });
     add('save', 'Projekt als Datei speichern', 'save', 'sichern json datei', () => Start.saveFile(), { group: 'Projekt', kbd: 'Strg S' });
     add('save-folder', 'In Ordner speichern …', 'folder', 'ordner automatisch speichern sichern sync datei', () => Start.saveToFolder(), { group: 'Projekt', when: () => Start.folderSupported() });
     add('start', 'Startseite und Vorlagen', 'home', 'vorlagen beispiele start', () => Start.show(), { group: 'Projekt' });

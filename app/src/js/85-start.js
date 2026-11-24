@@ -194,15 +194,18 @@ const Start = (() => {
     hide();
     if (!silent) UI.toast('Neues Projekt. Fang mit einem Körper an – oder beschreib unten, was du bauen willst.', { icon: 'newfile', ms: 4500 });
   }
-  // STEP, STL oder 3MF als neues Teil (oder mehrere Teile) ins Projekt holen
+  // STEP, IGES, BREP, STL oder 3MF als neues Teil (oder mehrere Teile) ins Projekt holen
   async function importCAD(f) {
     if (/\.3mf$/i.test(f.name)) return import3MF(f);
-    const fmt = /\.stl$/i.test(f.name) ? 'stl' : 'step';
+    const fmt = /\.stl$/i.test(f.name) ? 'stl'
+      : /\.(igs|iges)$/i.test(f.name) ? 'iges'
+      : /\.brep$/i.test(f.name) ? 'brep'
+      : 'step';
     if (f.size > 100e6) { UI.toast('Die Datei ist zu groß (über 100 MB).', { kind: 'bad' }); return; }
     if (el) newProject(true);
     const bytes = new Uint8Array(await f.arrayBuffer());
     const blobId = await Store.putBlob(bytes);
-    const it = Model.newItem('import', { fmt, blobId, size: bytes.byteLength, file: f.name, scale: 1 }, { name: f.name.replace(/\.(step|stp|stl)$/i, '') });
+    const it = Model.newItem('import', { fmt, blobId, size: bytes.byteLength, file: f.name, scale: 1 }, { name: f.name.replace(/\.(step|stp|igs|iges|brep|stl)$/i, '') });
     App.change('Importiert', (doc) => { doc.items.push(it); });
     App.select([it.id]);
     UI.toast(`„${f.name}“ importiert. Mit „Auf die XY-Ebene setzen“ legst du es auf den Boden.`, { icon: 'folder', ms: 5000 });
@@ -664,7 +667,7 @@ const Start = (() => {
   }
   async function openBlob(f) {
     if (/\.(dxf|svg)$/i.test(f.name)) return Sketch.active ? insertOutline(f) : importDXF(f);
-    if (/\.(step|stp|stl|3mf)$/i.test(f.name)) return importCAD(f);
+    if (/\.(step|stp|igs|iges|brep|stl|3mf)$/i.test(f.name)) return importCAD(f);
     try {
       const txt = await f.text(); const doc = JSON.parse(txt);
       Model.migrate(doc);
@@ -678,7 +681,7 @@ const Start = (() => {
     } catch (e) { const E = ERRORS.importFailed; UI.toast(`${E.titel}. ${E.erklaerung} ${E.loesung}`, { kind: 'bad', ms: 7000 }); console.warn(e); }
   }
   function openFile() {
-    const inp = h('input', { type: 'file', accept: '.json,application/json,.step,.stp,.stl,.3mf,.dxf,.svg', style: { display: 'none' } });
+    const inp = h('input', { type: 'file', accept: '.json,application/json,.step,.stp,.igs,.iges,.brep,.stl,.3mf,.dxf,.svg', style: { display: 'none' } });
     inp.onchange = () => { const f = inp.files && inp.files[0]; inp.remove(); if (f) openBlob(f); };
     document.body.append(inp); inp.click();
   }
@@ -686,7 +689,7 @@ const Start = (() => {
   addEventListener('dragover', (e) => { if (e.dataTransfer && [...e.dataTransfer.types].includes('Files')) e.preventDefault(); });
   addEventListener('drop', (e) => {
     const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-    if (!f || !/\.(json|step|stp|stl|3mf|dxf|svg)$/i.test(f.name)) return;
+    if (!f || !/\.(json|step|stp|igs|iges|brep|stl|3mf|dxf|svg)$/i.test(f.name)) return;
     e.preventDefault(); openBlob(f);
   });
   function projectFileName() {

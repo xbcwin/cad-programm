@@ -361,13 +361,15 @@ const Print = (() => {
     const plates = Plates.candidates();
     const csysAll = typeof Datums !== 'undefined' ? Datums.csysList().filter((c) => c.csys) : [];
     const initCsys = preset.csysId && csysAll.some((c) => c.id === preset.csysId) ? preset.csysId : '';
-    const opts = { step: true, stl: false, mf: false, obj: false, glb: false, dxf: false, plates: plates.map((p) => p.id), csysId: initCsys };
+    const opts = { step: true, iges: false, brep: false, stl: false, mf: false, obj: false, glb: false, dxf: false, plates: plates.map((p) => p.id), csysId: initCsys };
     const body = h('div', { style: { display: 'grid', gap: '12px' } });
     body.append(h('p', null, 'Die Dateien kommen zusammen als ZIP.'));
     const mk = (k, label, sub) => { const l = h('label', { class: 'check', style: { alignItems: 'flex-start' } }, h('input', { type: 'checkbox', id: 'ex-' + k, checked: opts[k] }), h('span', null, h('b', null, label), h('br'), h('small', { style: { color: 'var(--muted)' } }, sub))); l.querySelector('input').onchange = (e) => { opts[k] = e.target.checked; }; return l; };
+    const igesRow = mk('iges', 'IGES (.igs)', 'Exakte Flächen und Körper – für ältere CAD- und CAM-Programme'); igesRow.setAttribute('data-help', 'exportIgesBrep');
+    const brepRow = mk('brep', 'BREP (.brep)', 'Eigenes Format des OpenCascade-Kerns – verlustfrei für FreeCAD und Tracery'); brepRow.setAttribute('data-help', 'exportIgesBrep');
     const objRow = mk('obj', 'OBJ (+ MTL)', 'Dreiecksnetz mit Farben – für Blender, Rendering und viele 3D-Programme'); objRow.setAttribute('data-help', 'exportObjGlb');
     const glbRow = mk('glb', 'GLB (glTF)', '3D-Datei mit Material-Aussehen und Teilenamen – für Web, Blender und Vorschau'); glbRow.setAttribute('data-help', 'exportObjGlb');
-    body.append(mk('step', 'STEP', 'Exakte Geometrie – für Fusion, FreeCAD, SolidWorks und Fertiger'), mk('stl', 'STL', 'Dreiecksnetz, z. B. für Renderings oder 3D-Druck'), mk('mf', '3MF', 'Dreiecksnetz mit Farben und Maßeinheit'), objRow, glbRow);
+    body.append(mk('step', 'STEP', 'Exakte Geometrie – für Fusion, FreeCAD, SolidWorks und Fertiger'), igesRow, brepRow, mk('stl', 'STL', 'Dreiecksnetz, z. B. für Renderings oder 3D-Druck'), mk('mf', '3MF', 'Dreiecksnetz mit Farben und Maßeinheit'), objRow, glbRow);
     // Was kommt in die Dateien? (IO-07)
     const selTops = exportSelection();
     if (selTops.length) { opts.onlySel = false; const l = mk('onlySel', `Nur die Auswahl (${selTops.length} ${selTops.length === 1 ? 'Teil' : 'Teile'})`, 'Alles andere bleibt draußen – Löcher und Formschritte an den gewählten Teilen zählen mit'); l.setAttribute('data-help', 'exportSelection'); body.append(l); }
@@ -550,7 +552,7 @@ const Print = (() => {
   }
   let lastExport = null, lastTris = 0;
   async function runExport(opts) {
-    if (!opts.stl && !opts.mf && !opts.obj && !opts.glb && !opts.step && !(opts.dxf && opts.plates.length)) { UI.toast('Wähle mindestens ein Format.', { kind: 'bad' }); return; }
+    if (!opts.stl && !opts.mf && !opts.obj && !opts.glb && !opts.step && !opts.iges && !opts.brep && !(opts.dxf && opts.plates.length)) { UI.toast('Wähle mindestens ein Format.', { kind: 'bad' }); return; }
     const tst = UI.toast('Dateien werden erstellt …', { icon: 'export', ms: 20000 });
     try {
       const scene = Model.kernelScene(App.doc);
@@ -584,8 +586,10 @@ const Print = (() => {
         }
       }
       if (opts.step) { const r = await Kernel.call('exportSTEP', { scene, only, originMat }); files.push({ name: name + '.step', data: new Uint8Array(r.data) }); }
+      if (opts.iges) { const r = await Kernel.call('exportIGES', { scene, only, originMat }); files.push({ name: name + '.igs', data: new Uint8Array(r.data) }); }
+      if (opts.brep) { const r = await Kernel.call('exportBREP', { scene, only, originMat }); files.push({ name: name + '.brep', data: new Uint8Array(r.data) }); }
       if (opts.dxf) for (const id of opts.plates) { const f = await Plates.file(id); if (f && f.count) files.push({ name: 'DXF/' + f.name, data: f.data }); }
-      files.push({ name: 'LIESMICH.txt', data: new TextEncoder().encode(`${App.doc.name}\nErstellt mit Tracery am ${new Date().toLocaleString('de-DE')}\n${csysObj ? `Nullpunkt: ${csysObj.name}\n` : ''}\nSTEP: exakte Geometrie für andere CAD-Programme\nSTL / 3MF: Dreiecksnetz (Millimeter)\nOBJ / MTL: Dreiecksnetz mit Farben (Millimeter)\nGLB: glTF 2.0 binär mit Werkstoff-Aussehen und Teilenamen (Meter)\n` + (opts.dxf ? 'DXF: Draufsicht jeder Platte in Originalgröße (Millimeter, Ebene KONTUR) – Dicke steht im Dateinamen\n' : '')) });
+      files.push({ name: 'LIESMICH.txt', data: new TextEncoder().encode(`${App.doc.name}\nErstellt mit Tracery am ${new Date().toLocaleString('de-DE')}\n${csysObj ? `Nullpunkt: ${csysObj.name}\n` : ''}\nSTEP / IGES / BREP: exakte Geometrie für andere CAD-Programme (BREP = OpenCascade-Format)\nSTL / 3MF: Dreiecksnetz (Millimeter)\nOBJ / MTL: Dreiecksnetz mit Farben (Millimeter)\nGLB: glTF 2.0 binär mit Werkstoff-Aussehen und Teilenamen (Meter)\n` + (opts.dxf ? 'DXF: Draufsicht jeder Platte in Originalgröße (Millimeter, Ebene KONTUR) – Dicke steht im Dateinamen\n' : '')) });
       lastExport = files.map((f) => f.name);
       const zip = await Zip.make(files);
       tst.remove();

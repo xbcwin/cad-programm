@@ -1029,9 +1029,9 @@ const HELP = {
   "tipp": "Halte Strg (Mac: cmd) gedrückt, um frei ohne Einrasten zu ziehen. Ganz abschalten kannst du es im Projekt rechts unter „Fangen beim Verschieben“."
  },
  "importCad": {
-  "tip": "STEP-, STL-, 3MF-, DXF- oder SVG-Datei als Teil holen",
-  "hilfe": "Über „Datei öffnen“ oder einfach ins Fenster ziehen: Eine .step-, .stp-, .stl- oder .3mf-Datei wird als Teil ins Projekt geladen – bei .3mf entstehen für mehrere Objekte eigene Teile mit Namen, Farben und umgerechneter Maßeinheit. Bei STEP und STL stellst du rechts ein, in welcher Einheit die Datei gemessen ist. Eine .dxf-Datei (2D-Zeichnung, zum Beispiel ein Platten-Umriss) wird eine 3 mm dicke Platte: Der Umriss liegt als Skizze dahinter und lässt sich mit „Skizze bearbeiten“ ändern, Löcher bleiben Löcher. Eine .svg-Datei (zum Beispiel ein Logo) wird genauso eine dünne Platte (1 mm) – als „Loch“ in eine andere Platte gesetzt ergibt das eine Gravur.",
-  "tipp": "STEP ist genauer als STL und 3MF: Kanten lassen sich runden und Bohrungen erkennen. STL und 3MF sind Dreiecksnetze und eignen sich vor allem zum Anschauen, Ausrichten oder Weiterbearbeiten von Druckmodellen (3MF bringt Farben und Teile-Namen direkt mit). DXF muss als Text (ASCII) gespeichert sein; Zoll, Zentimeter und Meter werden in Millimeter umgerechnet. Zeichnungen in Blöcken vorher im anderen Programm auflösen. In SVG-Dateien muss Text vorher in Pfade umgewandelt sein. Stimmt die Größe nicht: „Skizze bearbeiten“ und rechts unter „Größe der Skizze“ die Breite eintippen – alles wächst mit. Ist gerade eine Skizze offen, landet die DXF oder SVG in dieser Skizze statt als neue Platte – praktisch für ein Logo auf einer Fläche."
+  "tip": "STEP-, IGES-, BREP-, STL-, 3MF-, DXF- oder SVG-Datei als Teil holen",
+  "hilfe": "Über „Datei öffnen“ oder einfach ins Fenster ziehen: Eine .step-, .stp-, .igs-, .iges-, .brep-, .stl- oder .3mf-Datei wird als Teil ins Projekt geladen – bei .3mf entstehen für mehrere Objekte eigene Teile mit Namen, Farben und umgerechneter Maßeinheit. Bei STEP, IGES, BREP und STL stellst du rechts ein, in welcher Einheit die Datei gemessen ist. Eine .dxf-Datei (2D-Zeichnung, zum Beispiel ein Platten-Umriss) wird eine 3 mm dicke Platte: Der Umriss liegt als Skizze dahinter und lässt sich mit „Skizze bearbeiten“ ändern, Löcher bleiben Löcher. Eine .svg-Datei (zum Beispiel ein Logo) wird genauso eine dünne Platte (1 mm) – als „Loch“ in eine andere Platte gesetzt ergibt das eine Gravur.",
+  "tipp": "STEP, IGES und BREP sind genauer als STL und 3MF: Kanten lassen sich runden und Bohrungen erkennen. BREP ist das direkte Format des OpenCascade-Kerns (verlustfrei, auch für FreeCAD), IGES hilft bei älteren CAD-/CAM-Programmen. STL und 3MF sind Dreiecksnetze und eignen sich vor allem zum Anschauen, Ausrichten oder Weiterbearbeiten von Druckmodellen (3MF bringt Farben und Teile-Namen direkt mit). DXF muss als Text (ASCII) gespeichert sein; Zoll, Zentimeter und Meter werden in Millimeter umgerechnet. Zeichnungen in Blöcken vorher im anderen Programm auflösen. In SVG-Dateien muss Text vorher in Pfade umgewandelt sein. Stimmt die Größe nicht: „Skizze bearbeiten“ und rechts unter „Größe der Skizze“ die Breite eintippen – alles wächst mit. Ist gerade eine Skizze offen, landet die DXF oder SVG in dieser Skizze statt als neue Platte – praktisch für ein Logo auf einer Fläche."
  },
  "sketchTemplate": {
   "tip": "Fertige Umrisse mit echten Maßen einsetzen",
@@ -1532,6 +1532,11 @@ const HELP = {
   "tip": "Nachschlagetabelle für Formeln anlegen",
   "hilfe": "Legt unter „Maße“ eine kleine Tabelle mit Schlüssel und Wert an – zum Beispiel „Schraube“ mit den Zeilen M3 = 3,4 und M5 = 5,5. In jeder Formel holst du den Wert mit tabelle(Schraube; M5). Außerdem verstehen Formeln wenn(Bedingung; dann; sonst) mit < > <= >= == != sowie runden(x; Stellen), aufrunden und abrunden.",
   "tipp": "Mehrere Angaben in Funktionen trennst du mit Semikolon ; – zum Beispiel runden(2,345; 1) oder wenn(b > 50; 3; 2)."
+ },
+ "exportIgesBrep": {
+  "tip": "Als IGES (.igs) oder BREP (.brep) speichern",
+  "hilfe": "IGES (.igs) speichert exakte Flächen und Körper im verbreiteten Austauschformat – besonders hilfreich für ältere CAD- und CAM-Programme. BREP (.brep) ist das eigene, verlustfreie Format des OpenCascade-Kerns (zum Beispiel für FreeCAD oder zum exakten Wiederladen in Tracery). Beide beachten „Nur die Auswahl“ und einen gewählten Nullpunkt.",
+  "tipp": "Für den Austausch mit Fusion, SolidWorks oder Onshape ist meist STEP die erste Wahl; IGES hilft bei älteren CAM-Programmen und BREP bei direktem Austausch mit FreeCAD."
  }
 };
 
