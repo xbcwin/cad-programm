@@ -685,7 +685,14 @@ const App = (() => {
     Viewer.clearGhosts();
     if (childIds.length && Kernel.ready) {
       const { v } = Model.vars(S.doc);
-      const items = childIds.map((id) => { const f = Model.find(S.doc, id); if (!f) return null; const ki = Model.kernelItem(f.item, v); ki.m = Model.matArr(Model.worldMatrix(S.doc, id)); ki.role = 'solid'; ki.hidden = false; return ki; }).filter(Boolean);
+      const items = childIds.map((id) => {
+        const f = Model.find(S.doc, id); if (!f) return null;
+        let pv = v;
+        for (const anc of Model.parentsOf(S.doc, id)) if (anc.userPart) pv = Model.scopeVars(pv, anc.userPart);
+        const ki = Model.kernelItem(f.item, pv);
+        ki.m = Model.matArr(Model.worldMatrix(S.doc, id)); ki.role = 'solid'; ki.hidden = false;
+        return ki;
+      }).filter(Boolean);
       try {
         const res = await Kernel.call('evaluate', { scene: { items }, known: {} });
         if (req !== ghostReq.n) return;
@@ -697,7 +704,7 @@ const App = (() => {
   function selectedItems() { return S.sel.map((id) => Model.find(S.doc, id)).filter(Boolean); }
   function localBox(id) {
     const f = Model.find(S.doc, id); if (!f) return null;
-    const { v } = Model.vars(S.doc);
+    const v = Model.itemVars(S.doc, id);
     const pb = Model.primitiveBox(f.item.kind, Model.resolveP(f.item.p, v));
     if (pb) return pb;
     const r = S.results.get(id); if (r && r.data.bbox) return r.data.bbox;

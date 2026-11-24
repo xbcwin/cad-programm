@@ -33,7 +33,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Templates,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Templates,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -11789,6 +11789,169 @@ def t_a056_normteile_stifte_lager(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a058_eigene_bibliothek(p):
+    # 1. Teil mit Maß „Breite“ (40 mm) und Loch per Rechtsklick → „In meine Bibliothek“ speichern
+    p.empty()
+    p.ev("""
+      UserLib.clear();
+      App.change('Teil mit Breite', d => {
+        d.params = [{ id: 'm_breite', name: 'Breite', expr: 40 }];
+        const g = Model.newItem('group', {}, { name: 'Halterung', color: '#2f9e91' });
+        const b = Model.newItem('box', { w: 'Breite', d: 20, h: 10 }, { name: 'Platte', color: '#2f9e91' });
+        const h1 = Model.newItem('cylinder', { d: 5, h: 14 }, { name: 'Loch', role: 'hole', t: { x: 'Breite/4', y: 0, z: -2 } });
+        g.children = [b, h1];
+        d.items = [g];
+      });
+    """)
+    warte_rechnen(p)
+    p.ev("Viewer.setView('iso', false); Viewer.fit(null, false); Viewer.renderNow();")
+    p.wait(300)
+
+    # Echter Rechtsklick auf das Teil im 3D-Bild → „In meine Bibliothek“
+    sx, sy = world_screen(p, -8, 0, 10)
+    p.pg.mouse.click(sx, sy, button='right')
+    p.pg.wait_for_selector('#cm-userlib')
+    cm_has = p.pg.locator('#cm-userlib').count() > 0
+    p.pg.locator('#cm-userlib').click()
+    p.pg.wait_for_selector('#userlib-save-dialog')
+    dlg = p.ev("""
+      const img = document.querySelector('#userlib-save-dialog .ul-save-preview img');
+      const chks = [...document.querySelectorAll('#ul-params .ul-param-row')].map(r => ({
+        name: r.querySelector('.ul-p-name').value,
+        val: r.querySelector('.ul-p-val').value,
+        checked: r.querySelector('.ul-p-chk').checked,
+      }));
+      return { thumb: img ? img.src : '', chks };
+    """)
+    p.pg.locator('#ul-name').fill('Halterung A')
+    p.pg.locator('#ul-save-ok').click()
+    p.pg.wait_for_selector('#userlib-save-dialog', state='detached')
+
+    # Verlauf-Kontextmenü enthält ebenfalls #tm-userlib; einfacher Grundkörper erkennt Durchmesser/Höhe
+    p.ev("document.querySelector('#left-body .node')?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 80, clientY: 160 }))")
+    tm_has = p.pg.locator('#tm-userlib').count() > 0
+    p.pg.keyboard.press('Escape')
+    p.ev("App.change('Zyl', d => { d.items.push(Model.newItem('cylinder', { d: 12, h: 18 }, { name: 'Bolzen', t: { x: 60 } })); })")
+    warte_rechnen(p)
+    cyl_det = p.ev("return UserLib.detectParams(App.doc.items[1], App.doc).candidates.map(c => c.name)")
+    ok1 = (
+        cm_has and tm_has
+        and dlg['thumb'].startswith('data:image/png;base64,') and len(dlg['thumb']) > 200
+        and any(c['name'] == 'Breite' and c['checked'] and c['val'] == '40' for c in dlg['chks'])
+        and 'Durchmesser' in cyl_det and 'Höhe' in cyl_det
+    )
+
+    # 2. Neues Projekt öffnen → unter „Meine Teile“ mit Vorschaubild einsetzen → Breite ändern passt Körper an
+    p.ev("Start.show()")
+    p.wait(250)
+    p.empty()
+    p.pg.locator('#t-parts').click()
+    p.pg.wait_for_selector('#my-parts-head')
+    fly = p.ev("""
+      const head = document.querySelector('#my-parts-head')?.textContent || '';
+      const tile = document.querySelector('#my-parts-grid .tile.user-tile');
+      const img = tile ? tile.querySelector('img.ul-thumb') : null;
+      return {
+        head,
+        hasTile: !!tile,
+        label: tile ? tile.querySelector('.lbl')?.textContent : '',
+        thumbOk: !!(img && img.src.startsWith('data:image/png;base64,')),
+      };
+    """)
+    p.pg.locator('#my-parts-grid .tile.user-tile').first.click()
+    warte_rechnen(p)
+
+    info_before = p.ev("""
+      return Mass.measure().then(m => {
+        const id = App.doc.items[0]?.id;
+        const b = id && Actions.worldBox(id);
+        return {
+          paramsLen: App.doc.params.length,
+          dx: b ? b.max.x - b.min.x : 0,
+          dy: b ? b.max.y - b.min.y : 0,
+          dz: b ? b.max.z - b.min.z : 0,
+          vol: m?.volume || 0,
+          upTitle: document.querySelector('#userpart-sec .section-h')?.textContent || '',
+          upInputName: document.querySelector('#up-0')?.dataset?.upName || '',
+          upVal: document.querySelector('#up-0')?.value || '',
+        };
+      });
+    """)
+
+    # Breite im Eigenschaften-Panel von 40 auf 80 ändern
+    inp = p.pg.locator('#up-0')
+    inp.click()
+    inp.fill('80')
+    inp.press('Enter')
+    warte_rechnen(p)
+
+    info_after = p.ev("""
+      return Mass.measure().then(m => {
+        const id = App.doc.items[0]?.id;
+        const b = id && Actions.worldBox(id);
+        return {
+          paramsLen: App.doc.params.length,
+          dx: b ? b.max.x - b.min.x : 0,
+          dy: b ? b.max.y - b.min.y : 0,
+          dz: b ? b.max.z - b.min.z : 0,
+          vol: m?.volume || 0,
+        };
+      });
+    """)
+    ok2 = (
+        'Meine Teile' in fly['head'] and fly['hasTile'] and fly['label'] == 'Halterung A' and fly['thumbOk']
+        and info_before['paramsLen'] == 0 and info_before['upInputName'] == 'Breite' and info_before['upVal'] == '40'
+        and abs(info_before['dx'] - 40) < 0.2 and abs(info_before['dy'] - 20) < 0.2 and abs(info_before['dz'] - 10) < 0.2
+        and info_after['paramsLen'] == 0
+        and abs(info_after['dx'] - 80) < 0.2 and abs(info_after['dy'] - 20) < 0.2
+        and info_after['vol'] > info_before['vol'] * 1.8
+    )
+
+    # 3. Zweite Kopie einsetzen → behält eigene Breite 40, während erste 80 bleibt
+    p.pg.locator('#t-parts').click()
+    p.pg.wait_for_selector('#my-parts-grid .tile.user-tile')
+    p.pg.locator('#my-parts-grid .tile.user-tile').first.click()
+    warte_rechnen(p)
+    two = p.ev("""
+      const boxes = App.doc.items.map(it => {
+        const b = Actions.worldBox(it.id);
+        return b ? b.max.x - b.min.x : 0;
+      });
+      return { count: App.doc.items.length, boxes };
+    """)
+    ok3 = two['count'] == 2 and abs(two['boxes'][0] - 80) < 0.2 and abs(two['boxes'][1] - 40) < 0.2
+
+    # 4. Neuladen → Bibliothek bleibt erhalten, Teil löschen & Hilfetext prüfen
+    p.pg.reload(wait_until='domcontentloaded')
+    p.pg.wait_for_function("() => !!(window.__M && window.__M.UserLib && window.__M.Commands && window.__M.App)", timeout=15000)
+    p.ev("Start.hide()")
+    persisted = p.ev("""
+      return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(helpJson => {
+        const list = UserLib.list();
+        return {
+          n: list.length,
+          name: list[0]?.name,
+          hasThumb: !!(list[0]?.thumb && list[0].thumb.startsWith('data:image/png;base64,')),
+          hasBreite: (list[0]?.params || []).some(q => q.name === 'Breite'),
+          cmds: Commands.search('meine bibliothek').length + Commands.search('meine teile').length,
+          helpOk: !!(helpJson.userLibrary && helpJson.userLibrary.tip && helpJson.userLibrary.hilfe && helpJson.userLibrary.tipp),
+        };
+      });
+    """)
+    p.pg.locator('#t-parts').click()
+    p.pg.wait_for_selector('#my-parts-grid .tile.user-tile .ul-del')
+    p.pg.locator('#my-parts-grid .tile.user-tile .ul-del').first.click()
+    after_del = p.ev("return { n: UserLib.list().length, emptyTxt: document.querySelector('#my-parts-grid')?.textContent || '' }")
+    p.ev("UserLib.clear()")
+    ok4 = (
+        persisted['n'] == 1 and persisted['name'] == 'Halterung A'
+        and persisted['hasThumb'] and persisted['hasBreite']
+        and persisted['cmds'] >= 2 and persisted['helpOk']
+        and after_del['n'] == 0 and 'Noch keine eigenen Teile' in after_del['emptyTxt']
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -11947,6 +12110,7 @@ TESTS = [
     ('[A-051] Wiederherstellen nach Absturz: Meldung mit Zeit & Projektname / Wiederherstellen / Verwerfen / großes Projekt aus IndexedDB / sauber gespeichert ohne Meldung', t_a051_absturz_wiederherstellen),
     ('[A-055] Sparsames Rückgängig: 200 Änderungen als Patches / Speicher viel kleiner / 200× Rückgängig exakt / Redo & Speicherlimit', t_a055_sparsames_rueckgaengig),
     ('[A-056] Normteile: Passstifte, Passfedern mit Nut, Kugel- und Gleitlager', t_a056_normteile_stifte_lager),
+    ('[A-058] Eigene Teile in die Bibliothek: mit Maß „Breite“ speichern / Vorschaubild / in neuem Projekt einsetzen / Breite ändern passt Körper an / zweite Kopie & Neuladen & Löschen & Hilfe', t_a058_eigene_bibliothek),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

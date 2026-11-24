@@ -1895,6 +1895,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Bibliothek, Suche, Hilfen & Geometrie-Prüfung**: Alle fünf Normteile erscheinen im Bauteile-Flyout unter „Normteile“, sind über die Befehlssuche auffindbar, besitzen vollständige Hilfetexte (`stdPin`, `stdKey`, `stdKeyway`, `stdBearing`, `stdSleeve`) und bestehen `GeomCheck` ohne Geometriefehler.
 - [ ] **Von Hand**: Im Browser ein Kugellager (offen und geschlossen), einen Zylinderstift sowie Passfeder samt Nut auf eine Welle setzen und im Schnitt sowie bei der Stückliste prüfen.
 
+## Eigene Teile in die Bibliothek (Auto [A-058], BI-08)
+
+- [x] **In meine Bibliothek speichern**: Rechtsklick im 3D-Bild (`#cm-userlib`) und im Verlauf (`#tm-userlib`) öffnen `#userlib-save-dialog` mit gerendertem PNG-Vorschaubild und erkannten Maßen (z. B. `Breite` aus Parametern oder direkte Zahlenmaße).
+- [x] **In neuem Projekt einsetzen & Maße ändern**: Unter „Bauteile → Meine Teile“ (`#my-parts-grid`) erscheint das Teil mit Vorschaubild und lässt sich in ein leeres Projekt einsetzen, ohne `doc.params` zu füllen; Ändern des Eingabefelds `Breite` im Eigenschaften-Panel (`#userpart-sec`) passt den 3D-Körper direkt an.
+- [x] **Unabhängige Kopien, Neuladen, Löschen & Hilfe**: Eine zweite eingesetzte Kopie behält ihr eigenes Maß unabhängig von der ersten; gespeicherte Teile bleiben nach Neuladen erhalten, lassen sich über den Papierkorb entfernen und haben den Hilfetext `userLibrary`.
+- [ ] **Von Hand**: Ein selbst konstruiertes Teil mit mehreren Körpern und Formeln speichern, in ein anderes Projekt auf eine Körperfläche ziehen und dort die Maße variieren.
+
 ## Fehler melden
 
 ```

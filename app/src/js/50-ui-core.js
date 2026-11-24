@@ -168,8 +168,9 @@ const UI = (() => {
     if (typeof Measure !== 'undefined' && Measure.setCalcBusy) Measure.setCalcBusy(!!on);
   }
   // ---------- Eingabefelder ----------
-  function numField({ id, label, value, unit = 'mm', len, axis, onCommit, min, int, placeholder, expr = true, step }) {
-    const V = Model.vars(App.doc).v;
+  function numField({ id, label, value, unit = 'mm', len, axis, onCommit, min, int, placeholder, expr = true, step, vars }) {
+    const getV = () => (typeof vars === 'function' ? vars() : vars) || Model.vars(App.doc).v;
+    const V = getV();
     const isLen = len != null ? !!len : unit === 'mm';
     const isAng = !isLen && unit === '°';
     const dispUnit = isLen && unit === 'mm' ? Units.label() : unit;
@@ -205,14 +206,14 @@ const UI = (() => {
       if (raw === orig) { if (!badErr) box.classList.remove('invalid'); lastBad = null; return; }
       let val;
       if (isLen) {
-        const p = Units.parseLen(raw, Model.vars(App.doc).v, { expr });
+        const p = Units.parseLen(raw, getV(), { expr });
         if (!p.ok) { box.classList.add('invalid'); if (expr && lastBad !== raw) toast('Das kann ich nicht ausrechnen: ' + (p.error || '„' + raw + '“ – prüf die Schreibweise oder den Namen.'), { kind: 'bad' }); lastBad = raw; return; }
         val = p.value;
       } else {
         val = parseNum(raw);
         if (isNaN(val)) {
           if (!expr) { box.classList.add('invalid'); return; }
-          const res = Expr.tryEval(raw, Model.vars(App.doc).v);
+          const res = Expr.tryEval(raw, getV());
           if (!res.ok) { box.classList.add('invalid'); if (lastBad !== raw) toast('Das kann ich nicht ausrechnen: ' + res.error, { kind: 'bad' }); lastBad = raw; return; }
           val = raw;
         }
