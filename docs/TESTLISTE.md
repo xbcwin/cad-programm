@@ -1903,6 +1903,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Bibliothek, Suche, Hilfen & Geometrie-Prüfung**: Alle fünf Normteile erscheinen im Bauteile-Flyout unter „Normteile“, sind über die Befehlssuche auffindbar, besitzen vollständige Hilfetexte (`stdPin`, `stdKey`, `stdKeyway`, `stdBearing`, `stdSleeve`) und bestehen `GeomCheck` ohne Geometriefehler.
 - [ ] **Von Hand**: Im Browser ein Kugellager (offen und geschlossen), einen Zylinderstift sowie Passfeder samt Nut auf eine Welle setzen und im Schnitt sowie bei der Stückliste prüfen.
 
+## Schrauben M10–M24 & mehr Werkstoffe (Auto [A-057], BI-06, BI-07)
+
+- [x] **Sechskantschraube M16×60 (ISO 4017)**: Schlüsselweite 24 mm (`ySpan = 24 mm`), Kopfhöhe 10 mm, Schaftlänge 60 mm sowie Normhinweis im Panel.
+- [x] **Schrauben, Muttern & Scheiben bis M24**: Zylinderschraube M10×30, Senkschraube M24×50 (DIN 7991) inkl. kurzer Länge, Sechskantmuttern M16 (SW 24) & M24 (SW 36) sowie Unterlegscheiben M12 & M24 bauen maßgenau ohne Fehler und bestehen `GeomCheck`.
+- [x] **Werkstoff „Messing“**: Dichte liegt bei 8,47 g/cm³ (8,4–8,7 g/cm³), 1 cm³ Quader wiegt 8,47 g, Quellenangabe und metallischer Studio-Look stimmen.
+- [x] **Erweiterte Werkstoff-Sammlung & Kategorien**: Alle 26 Werkstoffe (Stähle, Edelstahl, Messing, Kupfer, POM, PA6, PC, ABS, PETG, TPU, Sperrholz, MDF …) haben Dichte, Studio-Aussehen, Quelle und erscheinen gruppiert in der Auswahl; Suche und Hilfetexte sind aktuell.
+- [ ] **Von Hand**: Im Browser eine Sechskantschraube M16×60 samt M16-Scheibe und -Mutter zusammensetzen sowie verschiedene Werkstoffe (z. B. Kupfer, MDF, V4A Edelstahl) im Studio-Look betrachten.
+
 ## 3D-Druck: Drucker und Loch-Ausgleich (Auto [A-059], DR-01, DR-02)
 
 - [x] **Drucker-Liste & Bauraum**: Alle geforderten Drucker (Bambu A1 / A1 mini / P1S / X1C, Prusa MK4 / Mini, Ender 3, Voron 2.4) lassen sich im Projekt-Panel (`#proj-printer`) und über die Befehlssuche wählen; Bauraum und Düse werden übernommen und im 3D-Rahmen angezeigt.
@@ -1910,6 +1918,21 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Loch-Ausgleich im STL & 3MF**: Bei Loch-Ausgleich `+0,20 mm` hat ein Loch Ø 5 mm im exportierten STL und 3MF exakt Ø 5,20 mm, während ein Außenzapfen Ø 5 mm bei Ø 5,00 mm bleibt und das CAD-Modell unverändert Ø 5,00 mm behält.
 - [x] **Hilfetexte**: `printerSelect` und `holeComp` sind in `werkzeug-hilfen.json` und `HELP` vollständig gepflegt.
 - [ ] **Von Hand**: Im Browser ein Druckteil mit Bohrung und Senkung auf „Bambu Lab A1 mini“ prüfen, per „So drehen“ ausrichten und die exportierte 3MF/STL-Datei im Slicer (z. B. Bambu Studio oder PrusaSlicer) nachmessen.
+
+## Eigene Teile in die Bibliothek (Auto [A-058], BI-08)
+
+- [x] **In meine Bibliothek speichern**: Rechtsklick im 3D-Bild (`#cm-userlib`) und im Verlauf (`#tm-userlib`) öffnen `#userlib-save-dialog` mit gerendertem PNG-Vorschaubild und erkannten Maßen (z. B. `Breite` aus Parametern oder direkte Zahlenmaße).
+- [x] **In neuem Projekt einsetzen & Maße ändern**: Unter „Bauteile → Meine Teile“ (`#my-parts-grid`) erscheint das Teil mit Vorschaubild und lässt sich in ein leeres Projekt einsetzen, ohne `doc.params` zu füllen; Ändern des Eingabefelds `Breite` im Eigenschaften-Panel (`#userpart-sec`) passt den 3D-Körper direkt an.
+- [x] **Unabhängige Kopien, Neuladen, Löschen & Hilfe**: Eine zweite eingesetzte Kopie behält ihr eigenes Maß unabhängig von der ersten; gespeicherte Teile bleiben nach Neuladen erhalten, lassen sich über den Papierkorb entfernen und haben den Hilfetext `userLibrary`.
+- [ ] **Von Hand**: Ein selbst konstruiertes Teil mit mehreren Körpern und Formeln speichern, in ein anderes Projekt auf eine Körperfläche ziehen und dort die Maße variieren.
+
+## Zeichnung: mehrere Blätter, A4 bis A0 (Auto [A-062], ZE-01)
+
+- [x] **Blatt-Tabs unten**: Im Bereich „Zeichnung“ lassen sich über `#sheet-tabs` und `#dw-add-sheet` neue Blätter anlegen, per Klick wechseln, umbenennen (`.st-ren`) und (ab dem zweiten Blatt) wieder löschen (`.st-del`) – jeweils rückgängig machbar und in der Projektdatei gespeichert.
+- [x] **Formate A4 bis A0 (hoch & quer)**: Jedes Blatt lässt sich einzeln auf A4, A3, A2, A1 oder A0 im Hoch- oder Querformat umstellen; Rahmen (20 mm Heftrand, 10/20 mm Außenrand) und Schriftfeld (mit Format-Feld und automatischer Zählung `i/N`) passen sich an.
+- [x] **Mehrseitiger PDF-Export**: Der PDF-Export erzeugt ohne externes Nachladen eine mehrseitige PDF-Datei (`%PDF-1.4`) mit allen Blättern in ihren exakten Seitengrößen (z. B. Seite 1 A4 hoch `210 × 297 mm`, Seite 2 A3 quer `420 × 297 mm`).
+- [x] **Rückwärtskompatibilität & Hilfen**: Alte Ein-Blatt-Projekte werden beim Öffnen nahtlos übernommen; `drawingSheets` und `drawingFormat` sind in `werkzeug-hilfen.json` und `HELP` gepflegt.
+- [ ] **Von Hand**: Im Browser eine Zeichnung mit drei Blättern (z. B. A4 hoch, A3 quer, A1 quer) anlegen, unterschiedlich bemaßen, als PDF exportieren und die Seitengrößen im PDF-Betrachter prüfen.
 
 ## 3D-Druck: Passungen, Düsen-Wand und Ausrichten (Auto [A-060], DR-03, DR-04, DR-05)
 

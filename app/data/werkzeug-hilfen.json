@@ -530,18 +530,18 @@
     "tipp": "Der Umfang ist zum Beispiel die Schnittlänge für Laser oder Fräse."
   },
   "stdScrew": {
-    "tip": "Echte Schraube nach Norm",
-    "hilfe": "Bauteile → „Schraube (Norm)“: Zylinderkopf (ISO 4762) oder Senkkopf (ISO 10642) mit Innensechskant. Größe M1.6 bis M8 und Länge wählst du rechts. Der Kopf sitzt auf der Fläche, der Schaft zeigt nach unten.",
+    "tip": "Echte Schraube nach Norm (M1.6–M24)",
+    "hilfe": "Bauteile → „Schraube (Norm)“: Zylinderkopf (ISO 4762), Sechskantkopf (ISO 4017) oder Senkkopf (ISO 10642, ab M3; M24 DIN 7991). Größe M1.6 bis M24 und Länge wählst du rechts. Der Kopf sitzt auf der Fläche, der Schaft zeigt nach unten.",
     "tipp": "Normteile sind aus Edelstahl und zählen mit ihrem Gewicht in der Stückliste. Das Gewinde ist nur angedeutet – für ein gedrucktes Gewinde nimm „Gewindebolzen“."
   },
   "stdNut": {
-    "tip": "Sechskantmutter nach Norm",
-    "hilfe": "Bauteile → „Mutter (Norm)“: Sechskantmutter ISO 4032, M1.6 bis M8.",
+    "tip": "Sechskantmutter nach Norm (M1.6–M24)",
+    "hilfe": "Bauteile → „Mutter (Norm)“: Sechskantmutter ISO 4032, M1.6 bis M24.",
     "tipp": "Normteile sind aus Edelstahl und zählen mit ihrem Gewicht in der Stückliste. Das Gewinde ist nur angedeutet – für ein gedrucktes Gewinde nimm „Gewindebolzen“."
   },
   "stdWasher": {
-    "tip": "Unterlegscheibe nach Norm",
-    "hilfe": "Bauteile → „Scheibe (Norm)“: Unterlegscheibe ISO 7089, M1.6 bis M8.",
+    "tip": "Unterlegscheibe nach Norm (M1.6–M24)",
+    "hilfe": "Bauteile → „Scheibe (Norm)“: Unterlegscheibe ISO 7089, M1.6 bis M24.",
     "tipp": "Normteile sind aus Edelstahl und zählen mit ihrem Gewicht in der Stückliste. Das Gewinde ist nur angedeutet – für ein gedrucktes Gewinde nimm „Gewindebolzen“."
   },
   "minDistance": {
@@ -1028,5 +1028,20 @@
     "tip": "Dreht das Teil automatisch so, dass möglichst wenig Überhang entsteht",
     "hilfe": "„Für den Druck ausrichten“ prüft alle sinnvollen Liegerichtungen des Teils und dreht es in die Lage mit der kleinsten Überhangfläche und sicherem Stand auf dem Druckbett (Z = 0).",
     "tipp": "Wähle ein einzelnes Teil aus oder richte das ganze Modell auf einmal aus – ein Klick auf Rückgängig dreht es wieder zurück."
+  },
+  "userLibrary": {
+    "tip": "Eigene Teile mit Vorschaubild und Maßen lokal speichern und überall einsetzen",
+    "hilfe": "Rechtsklick auf ein Teil → „In meine Bibliothek“: Das Teil wird samt Vorschaubild in diesem Browser gespeichert. Alle benutzten Maße mit Namen (oder Zahlenmaße) wählst du als Eingabefelder aus. Unter „Bauteile → Meine Teile“ lässt es sich in jedes andere Projekt einsetzen und dort je Kopie mit eigenen Maßen anpassen.",
+    "tipp": "Ideal für wiederkehrende Halterungen, Stecker-Ausschnitte oder fertige Baugruppen-Teile."
+  },
+  "drawingSheets": {
+    "tip": "Mehrere Zeichnungsblätter unten über Tabs verwalten",
+    "hilfe": "In der Tab-Leiste unten legst du mit „+ Blatt“ weitere Blätter an, wechselst zwischen ihnen, benennst sie um (Stift-Symbol oder Doppelklick) oder löschst einzelne Blätter. Beim PDF-Export landen alle Blätter nacheinander in einer einzigen PDF-Datei – jedes in seiner eigenen Seitengröße.",
+    "tipp": "Wenn das Feld „Blatt“ im Schriftfeld leer bleibt, zählt Tracery automatisch als 1/2, 2/2 usw."
+  },
+  "drawingFormat": {
+    "tip": "Blattformat A4 bis A0 im Hoch- oder Querformat wählen",
+    "hilfe": "Du kannst jedes Blatt einzeln auf DIN A4, A3, A2, A1 oder A0 sowie zwischen Quer- und Hochformat umstellen. Rahmen (20 mm Heftrand links, 10 bzw. 20 mm Außenrand) und das Schriftfeld passen sich der gewählten Blattgröße automatisch an.",
+    "tipp": "Größere Formate wie A2, A1 oder A0 eignen sich besonders für Baugruppen oder große Werkstücke im Maßstab 1:1."
   }
 }

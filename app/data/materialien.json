@@ -3,6 +3,7 @@
     {
       "name": "CFK-Platte (Kohlefaser, gewebt, ca. 60 % Faser)",
       "kurzname": "CFK",
+      "kategorie": "Faserverbund",
       "dichte_g_cm3": 1.55,
       "e_modul_gpa": 70.0,
       "zugfestigkeit_mpa": 600,
@@ -12,11 +13,14 @@
         "zugfestigkeit_mpa": "500–800"
       },
       "typische_verwendung": "Extrem leichte und steife Platten und Bauteile für Modellbau, Technik und Leichtbau.",
-      "farbe_hex": "#2B2B2B"
+      "farbe_hex": "#2B2B2B",
+      "aussehen": { "col": "#25272a", "metal": 0, "rough": 0.36, "clear": 0.9, "clearRough": 0.18, "nat": true },
+      "quelle": "R&G Faserverbundwerkstoffe Handbuch (CFK-Gewebeplatte ~60 % Faser)"
     },
     {
       "name": "GFK (Glasfaserverstärkter Kunststoff, Gewebe)",
       "kurzname": "GFK",
+      "kategorie": "Faserverbund",
       "dichte_g_cm3": 1.85,
       "e_modul_gpa": 22.0,
       "zugfestigkeit_mpa": 350,
@@ -26,29 +30,38 @@
         "zugfestigkeit_mpa": "250–450"
       },
       "typische_verwendung": "Robuste, elektrisch isolierende Platten, Platinen (FR4) und Gehäuse.",
-      "farbe_hex": "#7A9A8B"
+      "farbe_hex": "#7A9A8B",
+      "aussehen": { "col": "#7a9a8b", "metal": 0, "rough": 0.42, "clear": 0.6, "clearRough": 0.25, "nat": true },
+      "quelle": "R&G Faserverbundwerkstoffe / NEMA FR4 Datenblatt"
     },
     {
       "name": "Aluminium 6061-T6 (EN AW-6061)",
       "kurzname": "Alu 6061",
+      "kategorie": "Metalle",
       "dichte_g_cm3": 2.70,
       "e_modul_gpa": 68.9,
       "zugfestigkeit_mpa": 310,
       "typische_verwendung": "Standard-Aluminium für gut fräsbare und schweißbare Konstruktionsteile.",
-      "farbe_hex": "#C0C5CA"
+      "farbe_hex": "#C0C5CA",
+      "aussehen": { "col": "#c9ced3", "metal": 1, "rough": 0.3, "nat": true },
+      "quelle": "ASM MatWeb / EN 573-3 & EN 485-2 (EN AW-6061-T6)"
     },
     {
       "name": "Aluminium 7075-T6 (EN AW-7075)",
       "kurzname": "Alu 7075",
+      "kategorie": "Metalle",
       "dichte_g_cm3": 2.81,
       "e_modul_gpa": 71.7,
       "zugfestigkeit_mpa": 572,
       "typische_verwendung": "Hochfestes Luftfahrt-Aluminium für stark belastete Zahnräder und Fahrwerksteile.",
-      "farbe_hex": "#A6AEB5"
+      "farbe_hex": "#A6AEB5",
+      "aussehen": { "col": "#b9c0c7", "metal": 1, "rough": 0.34, "nat": true },
+      "quelle": "ASM MatWeb / EN 573-3 & EN 485-2 (EN AW-7075-T6)"
     },
     {
       "name": "Titan Grade 5 (Ti6Al4V)",
       "kurzname": "Titan Gr. 5",
+      "kategorie": "Metalle",
       "dichte_g_cm3": 4.43,
       "e_modul_gpa": 114.0,
       "zugfestigkeit_mpa": 950,
@@ -56,11 +69,14 @@
         "zugfestigkeit_mpa": "900–1050"
       },
       "typische_verwendung": "Hochfeste, korrosionsbeständige High-End-Bauteile bei geringem Gewicht.",
-      "farbe_hex": "#8B8E94"
+      "farbe_hex": "#8B8E94",
+      "aussehen": { "col": "#9a9590", "metal": 1, "rough": 0.4, "nat": true },
+      "quelle": "ASTM B348 / DIN 17851 (Ti-6Al-4V, 3.7165)"
     },
     {
       "name": "Stahl (Baustahl S235JR)",
       "kurzname": "Baustahl",
+      "kategorie": "Metalle",
       "dichte_g_cm3": 7.85,
       "e_modul_gpa": 210.0,
       "zugfestigkeit_mpa": 410,
@@ -68,11 +84,59 @@
         "zugfestigkeit_mpa": "360–510"
       },
       "typische_verwendung": "Klassischer, günstiger Stahl für geschweißte Rahmen, Achsen und Halterungen.",
-      "farbe_hex": "#5C636A"
+      "farbe_hex": "#5C636A",
+      "aussehen": { "col": "#71777d", "metal": 1, "rough": 0.48, "nat": true },
+      "quelle": "DIN EN 10025-2 (S235JR / 1.0038)"
+    },
+    {
+      "name": "Baustahl S355JR (1.0045)",
+      "kurzname": "Stahl S355",
+      "kategorie": "Metalle",
+      "dichte_g_cm3": 7.85,
+      "e_modul_gpa": 210.0,
+      "zugfestigkeit_mpa": 510,
+      "bereich": {
+        "zugfestigkeit_mpa": "470–630"
+      },
+      "typische_verwendung": "Höherfester Baustahl für tragende Gestelle, Maschinenrahmen und Schweißkonstruktionen.",
+      "farbe_hex": "#545B62",
+      "aussehen": { "col": "#697077", "metal": 1, "rough": 0.44, "nat": true },
+      "quelle": "DIN EN 10025-2 (S355JR / 1.0045)"
+    },
+    {
+      "name": "Vergütungsstahl C45 (1.0503)",
+      "kurzname": "Stahl C45",
+      "kategorie": "Metalle",
+      "dichte_g_cm3": 7.85,
+      "e_modul_gpa": 210.0,
+      "zugfestigkeit_mpa": 650,
+      "bereich": {
+        "zugfestigkeit_mpa": "580–750"
+      },
+      "typische_verwendung": "Gängiger Maschinenbaustahl für Wellen, Zahnräder, Bolzen und Passfedern.",
+      "farbe_hex": "#6E757C",
+      "aussehen": { "col": "#7d838a", "metal": 1, "rough": 0.34, "nat": true },
+      "quelle": "DIN EN ISO 683-1 (C45 / 1.0503)"
+    },
+    {
+      "name": "Vergütungsstahl 42CrMo4 (1.7225)",
+      "kurzname": "Stahl 42CrMo4",
+      "kategorie": "Metalle",
+      "dichte_g_cm3": 7.85,
+      "e_modul_gpa": 210.0,
+      "zugfestigkeit_mpa": 1050,
+      "bereich": {
+        "zugfestigkeit_mpa": "900–1200"
+      },
+      "typische_verwendung": "Hochfester, zäher Vergütungsstahl für hochbelastete Achsen, Spindeln und Schrauben.",
+      "farbe_hex": "#596068",
+      "aussehen": { "col": "#626870", "metal": 1, "rough": 0.32, "nat": true },
+      "quelle": "DIN EN ISO 683-2 (42CrMo4 / 1.7225)"
     },
     {
       "name": "Edelstahl 1.4301 (V2A / AISI 304)",
       "kurzname": "V2A Edelstahl",
+      "kategorie": "Metalle",
       "dichte_g_cm3": 7.90,
       "e_modul_gpa": 200.0,
       "zugfestigkeit_mpa": 600,
@@ -80,11 +144,29 @@
         "zugfestigkeit_mpa": "500–700"
       },
       "typische_verwendung": "Rostfreie Schrauben, Bleche sowie Teile für Küche und Außenbereich.",
-      "farbe_hex": "#B4BBC2"
+      "farbe_hex": "#B4BBC2",
+      "aussehen": { "col": "#cdd2d7", "metal": 1, "rough": 0.2, "nat": true },
+      "quelle": "DIN EN 10088-3 (X5CrNi18-10 / 1.4301)"
+    },
+    {
+      "name": "Edelstahl 1.4404 (V4A / AISI 316L)",
+      "kurzname": "V4A Edelstahl",
+      "kategorie": "Metalle",
+      "dichte_g_cm3": 8.00,
+      "e_modul_gpa": 200.0,
+      "zugfestigkeit_mpa": 600,
+      "bereich": {
+        "zugfestigkeit_mpa": "500–700"
+      },
+      "typische_verwendung": "Besonders korrosionsbeständiger Edelstahl für Salzwasser, Chemie und Außenbereich.",
+      "farbe_hex": "#C0C7CE",
+      "aussehen": { "col": "#cfd5db", "metal": 1, "rough": 0.18, "nat": true },
+      "quelle": "DIN EN 10088-3 (X2CrNiMo17-12-2 / 1.4404)"
     },
     {
       "name": "Messing (CuZn39Pb3 / CW614N)",
       "kurzname": "Messing",
+      "kategorie": "Metalle",
       "dichte_g_cm3": 8.47,
       "e_modul_gpa": 100.0,
       "zugfestigkeit_mpa": 430,
@@ -93,11 +175,30 @@
         "zugfestigkeit_mpa": "360–500"
       },
       "typische_verwendung": "Sehr gut drehbare Buchsen, Gewindeeinsätze, Kontakte und Dekorteile.",
-      "farbe_hex": "#D4AF37"
+      "farbe_hex": "#D4AF37",
+      "aussehen": { "col": "#d8b552", "metal": 1, "rough": 0.28, "nat": true },
+      "quelle": "DIN EN 12164 / Deutsches Kupferinstitut (CuZn39Pb3 / CW614N)"
+    },
+    {
+      "name": "Kupfer Cu-ETP (CW004A / 2.0060)",
+      "kurzname": "Kupfer",
+      "kategorie": "Metalle",
+      "dichte_g_cm3": 8.96,
+      "e_modul_gpa": 120.0,
+      "zugfestigkeit_mpa": 250,
+      "bereich": {
+        "e_modul_gpa": "110.0–130.0",
+        "zugfestigkeit_mpa": "200–360"
+      },
+      "typische_verwendung": "Stromschienen, Kühlkörper, Dichtringe und Kontakte mit hoher Leitfähigkeit.",
+      "farbe_hex": "#C8754B",
+      "aussehen": { "col": "#d47c54", "metal": 1, "rough": 0.24, "nat": true },
+      "quelle": "DIN EN 13601 / Deutsches Kupferinstitut (Cu-ETP / CW004A)"
     },
     {
       "name": "PLA (Polylactid)",
       "kurzname": "PLA",
+      "kategorie": "Kunststoffe",
       "dichte_g_cm3": 1.24,
       "e_modul_gpa": 3.5,
       "zugfestigkeit_mpa": 55,
@@ -106,11 +207,14 @@
         "zugfestigkeit_mpa": "45–65"
       },
       "typische_verwendung": "Standard-Filament im 3D-Druck für Prototypen, Figuren und Deko ohne Hitzebelastung.",
-      "farbe_hex": "#3B82F6"
+      "farbe_hex": "#3B82F6",
+      "aussehen": { "rough": 0.42, "clear": 0.15 },
+      "quelle": "NatureWorks Ingeo / Prusament PLA Datenblatt (ISO 1183)"
     },
     {
       "name": "PETG (Polyethylenterephthalat-Glykol)",
       "kurzname": "PETG",
+      "kategorie": "Kunststoffe",
       "dichte_g_cm3": 1.27,
       "e_modul_gpa": 2.1,
       "zugfestigkeit_mpa": 50,
@@ -119,11 +223,14 @@
         "zugfestigkeit_mpa": "45–55"
       },
       "typische_verwendung": "Zähes, wasserfestes 3D-Druck-Material für mechanische Halter und Funktionsteile.",
-      "farbe_hex": "#10B981"
+      "farbe_hex": "#10B981",
+      "aussehen": { "rough": 0.26, "clear": 0.45 },
+      "quelle": "Eastman / Prusament PETG Datenblatt (ISO 1183)"
     },
     {
       "name": "ABS (Acrylnitril-Butadien-Styrol)",
       "kurzname": "ABS",
+      "kategorie": "Kunststoffe",
       "dichte_g_cm3": 1.04,
       "e_modul_gpa": 2.2,
       "zugfestigkeit_mpa": 42,
@@ -132,11 +239,14 @@
         "zugfestigkeit_mpa": "35–50"
       },
       "typische_verwendung": "Schlagfeste und temperaturbeständige Gehäuse (bekannt von Klemmbausteinen).",
-      "farbe_hex": "#EF4444"
+      "farbe_hex": "#EF4444",
+      "aussehen": { "rough": 0.55 },
+      "quelle": "INEOS Terluran / ISO 19062-1 Datenblatt (ISO 1183)"
     },
     {
       "name": "ASA (Acrylnitril-Styrol-Acrylat)",
       "kurzname": "ASA",
+      "kategorie": "Kunststoffe",
       "dichte_g_cm3": 1.07,
       "e_modul_gpa": 2.2,
       "zugfestigkeit_mpa": 45,
@@ -145,11 +255,14 @@
         "zugfestigkeit_mpa": "40–50"
       },
       "typische_verwendung": "Wie ABS, aber extrem UV- und wetterfest für langlebige Teile im Freien.",
-      "farbe_hex": "#F59E0B"
+      "farbe_hex": "#F59E0B",
+      "aussehen": { "rough": 0.68 },
+      "quelle": "INEOS Luran S / Prusament ASA Datenblatt (ISO 1183)"
     },
     {
       "name": "TPU 95A (Thermoplastisches Polyurethan)",
       "kurzname": "TPU 95A",
+      "kategorie": "Kunststoffe",
       "dichte_g_cm3": 1.21,
       "e_modul_gpa": 0.04,
       "zugfestigkeit_mpa": 35,
@@ -159,11 +272,31 @@
         "zugfestigkeit_mpa": "25–45"
       },
       "typische_verwendung": "Gummiartiges, biegsames Material für Reifen, Dämpfer, Dichtungen und Schutzhüllen.",
-      "farbe_hex": "#8B5CF6"
+      "farbe_hex": "#8B5CF6",
+      "aussehen": { "rough": 0.75 },
+      "quelle": "BASF Elastollan / UltiMaker TPU 95A Datenblatt (ISO 1183)"
+    },
+    {
+      "name": "Polyamid 6 (Nylon PA6)",
+      "kurzname": "PA6",
+      "kategorie": "Kunststoffe",
+      "dichte_g_cm3": 1.14,
+      "e_modul_gpa": 2.8,
+      "zugfestigkeit_mpa": 70,
+      "bereich": {
+        "dichte_g_cm3": "1.12–1.15",
+        "e_modul_gpa": "1.5–3.3",
+        "zugfestigkeit_mpa": "60–80"
+      },
+      "typische_verwendung": "Zähes, abriebfestes Nylon für Zahnräder, Gleitstücke und mechanische Druck- oder Frästeile.",
+      "farbe_hex": "#DCDFE4",
+      "aussehen": { "rough": 0.72, "clear": 0.08 },
+      "quelle": "Ensinger TECAMID 6 / BASF Ultramid B Datenblatt (ISO 1183)"
     },
     {
       "name": "Nylon PA12 (Polyamid 12)",
       "kurzname": "PA12",
+      "kategorie": "Kunststoffe",
       "dichte_g_cm3": 1.02,
       "e_modul_gpa": 1.6,
       "zugfestigkeit_mpa": 50,
@@ -172,11 +305,14 @@
         "zugfestigkeit_mpa": "45–55"
       },
       "typische_verwendung": "Abriebfeste Zahnräder, Gelenke und extrem belastbare SLS-3D-Druckteile.",
-      "farbe_hex": "#E5E7EB"
+      "farbe_hex": "#E5E7EB",
+      "aussehen": { "rough": 0.88 },
+      "quelle": "EOS PA 2200 / Evonik VESTAMID L Datenblatt (ISO 1183)"
     },
     {
       "name": "Polycarbonat (PC)",
       "kurzname": "PC",
+      "kategorie": "Kunststoffe",
       "dichte_g_cm3": 1.20,
       "e_modul_gpa": 2.4,
       "zugfestigkeit_mpa": 65,
@@ -184,11 +320,14 @@
         "zugfestigkeit_mpa": "60–70"
       },
       "typische_verwendung": "Nahezu unzerbrechliche Schutzscheiben, Abdeckungen und hochhitzefeste Bauteile.",
-      "farbe_hex": "#A5F3FC"
+      "farbe_hex": "#A5F3FC",
+      "aussehen": { "col": "#e6f6fb", "rough": 0.05, "clear": 1, "clearRough": 0.05, "glass": 0.45, "nat": true },
+      "quelle": "Covestro Makrolon Datenblatt (ISO 1183)"
     },
     {
       "name": "POM (Polyoxymethylen / Delrin)",
       "kurzname": "POM",
+      "kategorie": "Kunststoffe",
       "dichte_g_cm3": 1.41,
       "e_modul_gpa": 2.9,
       "zugfestigkeit_mpa": 65,
@@ -197,11 +336,14 @@
         "zugfestigkeit_mpa": "60–70"
       },
       "typische_verwendung": "Reibungsarmer technischer Kunststoff zum Fräsen und Drehen von Gleitlagern und Rollen.",
-      "farbe_hex": "#F3F4F6"
+      "farbe_hex": "#F3F4F6",
+      "aussehen": { "rough": 0.38, "clear": 0.2 },
+      "quelle": "Ensinger TECAFORM AH / Delrin POM-C Datenblatt (ISO 1183)"
     },
     {
       "name": "Holz Buche (getrocknet, ca. 12 % Holzfeuchte)",
       "kurzname": "Buche",
+      "kategorie": "Holz & Platten",
       "dichte_g_cm3": 0.69,
       "e_modul_gpa": 14.0,
       "zugfestigkeit_mpa": 120,
@@ -211,11 +353,14 @@
         "zugfestigkeit_mpa": "100–135"
       },
       "typische_verwendung": "Hartes, stabiles Massivholz für Werkbänke, Möbel, Griffe und Holzspielzeug.",
-      "farbe_hex": "#C89D70"
+      "farbe_hex": "#C89D70",
+      "aussehen": { "col": "#c99a6a", "rough": 0.72, "nat": true, "wood": true },
+      "quelle": "DIN 68364 / Holz-Datenbank (Rotbuche, 12 % Holzfeuchte)"
     },
     {
       "name": "Sperrholz Pappel",
       "kurzname": "Pappel-Sperrholz",
+      "kategorie": "Holz & Platten",
       "dichte_g_cm3": 0.42,
       "e_modul_gpa": 4.5,
       "zugfestigkeit_mpa": 35,
@@ -225,7 +370,43 @@
         "zugfestigkeit_mpa": "25–45"
       },
       "typische_verwendung": "Sehr leichtes Bastelholz, ideal für den Lasercutter, Architekturmodelle und Laubsägearbeiten.",
-      "farbe_hex": "#E6D2B5"
+      "farbe_hex": "#E6D2B5",
+      "aussehen": { "col": "#dcc196", "rough": 0.76, "nat": true, "wood": true },
+      "quelle": "DIN EN 636 / Sperrholz-Datenblatt (Pappel-Furniersperrholz)"
+    },
+    {
+      "name": "Sperrholz Birke (Multiplex)",
+      "kurzname": "Birken-Sperrholz",
+      "kategorie": "Holz & Platten",
+      "dichte_g_cm3": 0.68,
+      "e_modul_gpa": 8.5,
+      "zugfestigkeit_mpa": 40,
+      "bereich": {
+        "dichte_g_cm3": "0.64–0.72",
+        "e_modul_gpa": "7.0–10.0",
+        "zugfestigkeit_mpa": "30–50"
+      },
+      "typische_verwendung": "Stabiles, hartes Sperrholz für CNC-Frästeile, Vorrichtungen, Kisten und Möbelbau.",
+      "farbe_hex": "#D9B98B",
+      "aussehen": { "col": "#d6b482", "rough": 0.74, "nat": true, "wood": true },
+      "quelle": "DIN EN 636 / UPM WISA-Birch Datenblatt"
+    },
+    {
+      "name": "MDF (Mitteldichte Faserplatte)",
+      "kurzname": "MDF",
+      "kategorie": "Holz & Platten",
+      "dichte_g_cm3": 0.72,
+      "e_modul_gpa": 3.2,
+      "zugfestigkeit_mpa": 15,
+      "bereich": {
+        "dichte_g_cm3": "0.65–0.78",
+        "e_modul_gpa": "2.5–4.0",
+        "zugfestigkeit_mpa": "10–20"
+      },
+      "typische_verwendung": "Gleichmäßige Holzfaserplatte für Schablonen, Fräsformen, Lautsprecher- und Möbelbau.",
+      "farbe_hex": "#A6845E",
+      "aussehen": { "col": "#9e7c58", "rough": 0.88, "nat": true, "wood": true },
+      "quelle": "DIN EN 622-5 / EGGER MDF-STD Datenblatt"
     }
   ]
 }

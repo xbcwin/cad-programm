@@ -115,9 +115,15 @@ const Model = (() => {
     const chain = parentsOf(doc, id);
     const f = find(doc, id);
     const m = new THREE.Matrix4();
-    for (const p of chain) m.multiply(localMatrix(p, new THREE.Matrix4()));
-    if (f) m.multiply(localMatrix(f.item, new THREE.Matrix4()));
-    return m;
+    const prev = curV;
+    try {
+      for (const p of chain) {
+        m.multiply(localMatrix(p, new THREE.Matrix4()));
+        if (p.userPart) curV = scopeVars(curV, p.userPart);
+      }
+      if (f) m.multiply(localMatrix(f.item, new THREE.Matrix4()));
+      return m;
+    } finally { curV = prev; }
   }
   // Alle Kopie-Instanzen einer Muster-Gruppe (inkl. skipped-Flag) – genau wie der Kern sie baut
   function patternInstances(g, V) {
@@ -172,7 +178,9 @@ const Model = (() => {
     try {
       let mats = [new THREE.Matrix4()];
       for (const g of chain) {
-        const L = localMatrix(g, new THREE.Matrix4()), P = patternMatrices(g, V), next = [];
+        const L = localMatrix(g, new THREE.Matrix4());
+        if (g.userPart) curV = scopeVars(curV, g.userPart);
+        const P = patternMatrices(g, curV), next = [];
         for (const m of mats) for (const q of P) next.push(m.clone().multiply(L).multiply(q));
         mats = next.slice(0, 2000);
       }
@@ -183,8 +191,14 @@ const Model = (() => {
   function parentWorld(doc, id) {
     const chain = parentsOf(doc, id);
     const m = new THREE.Matrix4();
-    for (const p of chain) m.multiply(localMatrix(p, new THREE.Matrix4()));
-    return m;
+    const prev = curV;
+    try {
+      for (const p of chain) {
+        m.multiply(localMatrix(p, new THREE.Matrix4()));
+        if (p.userPart) curV = scopeVars(curV, p.userPart);
+      }
+      return m;
+    } finally { curV = prev; }
   }
   function setFromMatrix(it, m) {
     const pos = new THREE.Vector3(), q = new THREE.Quaternion(), sc = new THREE.Vector3();
@@ -204,6 +218,29 @@ const Model = (() => {
       catch (e) { errors[p.id] = e.message; v[p.name] = 0; }
     }
     return { v, errors };
+  }
+  function scopeVars(baseV, userPart) {
+    const v = { ...(baseV || {}) };
+    const baseTables = (baseV && Array.isArray(baseV.__tables)) ? baseV.__tables : [];
+    const ownTables = (userPart && Array.isArray(userPart.tables)) ? userPart.tables : [];
+    const mergedTables = ownTables.length ? [...baseTables, ...ownTables] : baseTables;
+    Object.defineProperty(v, '__tables', { value: mergedTables, enumerable: false, configurable: true });
+    for (const p of (userPart && Array.isArray(userPart.params)) ? userPart.params : []) {
+      if (!p || !p.name) continue;
+      let val = 0;
+      try { val = Expr.eval(String(p.expr), v, mergedTables); } catch (_) { val = 0; }
+      const low = String(p.name).toLowerCase();
+      for (const k of Object.keys(v)) if (k.toLowerCase() === low && k !== p.name) delete v[k];
+      v[p.name] = val;
+    }
+    return v;
+  }
+  function itemVars(doc, id) {
+    let v = vars(doc).v;
+    for (const p of parentsOf(doc, id)) if (p.userPart) v = scopeVars(v, p.userPart);
+    const f = find(doc, id);
+    if (f && f.item && f.item.userPart) v = scopeVars(v, f.item.userPart);
+    return v;
   }
   function evalInfo(val, V) {
     if (typeof val === 'number') return isFinite(val) ? { ok: true, value: val } : { ok: false, error: 'Ergebnis ist keine gültige Zahl.' };
@@ -333,88 +370,94 @@ const Model = (() => {
     return it.color || '#2f9e91';
   }
   function kernelItem(it, V) {
-    const o = { id: it.id, kind: it.kind, role: it.role, hidden: !!it.hidden, name: label(it), color: displayColor(it), m: matArr(localMatrix(it)) };
-    if (it.opacity != null && it.opacity < 1) o.opacity = Math.max(0.05, it.opacity);
-    if (it.comp) o.comp = true;
-    if (it.kind === 'group') {
-      let kids = it.children || [];
-      if (it.rollback != null) kids = kids.slice(0, clamp(it.rollback, 0, kids.length));
-      o.children = kids.filter((c) => !c.suppressed).map((c) => kernelItem(c, V));
-      if (it.p && it.p.op) o.p = it.p.op === 'pattern' && it.p.pt === 'path' ? pathPatternParams(it, V) : resolveP(it.p, V);
-      if (it.p && it.p.assembly) o.p = { ...(o.p || {}), assembly: true };
-    }
-    else if (it.kind === 'extrude' || it.kind === 'revolve') o.p = sketchParams(it, V);
-    else if (it.kind === 'loft') o.p = loftParams(it, V);
-    else if (it.kind === 'sweep') o.p = sweepParams(it, V);
-    else if (it.kind === 'rib') o.p = ribParams(it, V);
-    else if (it.kind === 'wrap') o.p = wrapParams(it, V);
-    else if (it.kind === 'emboss') o.p = embossParams(it, V);
-    else if (it.kind === 'import') {
-      o.p = { fmt: it.p.fmt, scale: num(it.p.scale, V, 1) };
-      if (it.p.blobId) o.p.blobId = it.p.blobId;
-      else if (it.p.data) o.p.data = it.p.data;
-      if (it.p.stepEntity != null) o.p.stepEntity = it.p.stepEntity;
-      if (Array.isArray(it.p.stepMat) && it.p.stepMat.length === 16) o.p.stepMat = it.p.stepMat;
-    } else if (it.kind === 'transform') {
-      const p = it.p || {};
-      o.p = {
-        target: p.target || null,
-        dx: num(p.dx, V, 0), dy: num(p.dy, V, 0), dz: num(p.dz, V, 0),
-        rx: num(p.rx, V, 0), ry: num(p.ry, V, 0), rz: num(p.rz, V, 0),
-        pivot: p.pivot === 'origin' || p.pivot === 'point' ? p.pivot : 'center',
-        px: num(p.px, V, 0), py: num(p.py, V, 0), pz: num(p.pz, V, 0),
-        copy: !!p.copy,
-      };
-    } else if (it.kind === 'scale') {
-      const p = it.p || {};
-      o.p = {
-        target: p.target || null,
-        uniform: p.uniform !== false,
-        s: num(p.s, V, 1),
-        sx: num(p.sx, V, 1), sy: num(p.sy, V, 1), sz: num(p.sz, V, 1),
-        pivot: p.pivot === 'origin' ? 'origin' : 'centroid',
-      };
-    } else if (it.kind === 'thicken') {
-      const p = it.p || {};
-      o.p = {
-        target: p.target || null,
-        face: p.face || null,
-        t: num(p.t, V, 2),
-        dir: p.dir === 'in' || p.dir === 'mid' ? p.dir : 'out',
-        mode: p.mode === 'new' || p.mode === 'cut' ? p.mode : 'join',
-      };
-    } else if (it.kind === 'mirrorStep') {
-      o.p = mirrorStepParams(it, V);
-    }
-    else {
-      o.p = resolveP(it.p, V);
-      if (it.p && typeof it.p.printFit === 'string') o.p.printFit = it.p.printFit;
-      if (it.kind === 'cylinder' && o.p.printFit) o.p.printFitSign = it.role === 'hole' ? 1 : -1;
-      if (it.kind === 'part') {
-        if (it.p && typeof it.p.size === 'string') o.p.size = it.p.size;
-        if (o.p.lib === 'screwHole' && typeof threadEntry === 'function') {
-          const te = threadEntry(o.p.size);
-          if (te) o.p.spec = { fine: te.durchgang_fein_mm, hole: te.durchgang_mittel_mm, coarse: te.durchgang_grob_mm, tap: te.kernloch_mm, csk: te.senkung_senk_d_mm || 0, cskAngle: te.senkung_winkel_grad || 90, cbD: te.senkung_zyl_d_mm || 0, cbH: te.senkung_zyl_t_mm || 0 };
-        } else if (o.p.lib === 'stdPin' && typeof pinEntry === 'function') {
-          const pe = pinEntry(o.p.size ?? o.p.d);
-          if (pe) o.p.spec = { d: pe.d_mm, c: pe.c_mm };
-        } else if ((o.p.lib === 'stdKey' || o.p.lib === 'stdKeyway') && typeof keyEntry === 'function') {
-          const ke = keyEntry(o.p.size);
-          if (ke) o.p.spec = { b: ke.b_mm, h: ke.h_mm, t1: ke.t1_mm, t2: ke.t2_mm };
-        } else if (o.p.lib === 'stdBearing' && typeof bearingEntry === 'function') {
-          const be = bearingEntry(o.p.size);
-          if (be) o.p.spec = { d: be.d_mm, D: be.D_mm, B: be.B_mm, r: be.r_min_mm, balls: be.kugeln_richtwert || 8 };
-        } else if (o.p.lib === 'stdSleeve' && typeof sleeveEntry === 'function') {
-          const se = sleeveEntry(o.p.size);
-          if (se) o.p.spec = { d: se.d_mm, D: se.D_mm, wall: se.wand_mm, fD: se.flansch_d_mm || (se.D_mm + 4 * se.wand_mm) };
+    const prev = curV; curV = V;
+    try {
+      const m = matArr(localMatrix(it));
+      const ownV = it.userPart ? scopeVars(V, it.userPart) : V;
+      curV = ownV;
+      const o = { id: it.id, kind: it.kind, role: it.role, hidden: !!it.hidden, name: label(it), color: displayColor(it), m };
+      if (it.opacity != null && it.opacity < 1) o.opacity = Math.max(0.05, it.opacity);
+      if (it.comp) o.comp = true;
+      if (it.kind === 'group') {
+        let kids = it.children || [];
+        if (it.rollback != null) kids = kids.slice(0, clamp(it.rollback, 0, kids.length));
+        o.children = kids.filter((c) => !c.suppressed).map((c) => kernelItem(c, ownV));
+        if (it.p && it.p.op) o.p = it.p.op === 'pattern' && it.p.pt === 'path' ? pathPatternParams(it, ownV) : resolveP(it.p, ownV);
+        if (it.p && it.p.assembly) o.p = { ...(o.p || {}), assembly: true };
+      }
+      else if (it.kind === 'extrude' || it.kind === 'revolve') o.p = sketchParams(it, ownV);
+      else if (it.kind === 'loft') o.p = loftParams(it, ownV);
+      else if (it.kind === 'sweep') o.p = sweepParams(it, ownV);
+      else if (it.kind === 'rib') o.p = ribParams(it, ownV);
+      else if (it.kind === 'wrap') o.p = wrapParams(it, ownV);
+      else if (it.kind === 'emboss') o.p = embossParams(it, ownV);
+      else if (it.kind === 'import') {
+        o.p = { fmt: it.p.fmt, scale: num(it.p.scale, ownV, 1) };
+        if (it.p.blobId) o.p.blobId = it.p.blobId;
+        else if (it.p.data) o.p.data = it.p.data;
+        if (it.p.stepEntity != null) o.p.stepEntity = it.p.stepEntity;
+        if (Array.isArray(it.p.stepMat) && it.p.stepMat.length === 16) o.p.stepMat = it.p.stepMat;
+      } else if (it.kind === 'transform') {
+        const p = it.p || {};
+        o.p = {
+          target: p.target || null,
+          dx: num(p.dx, ownV, 0), dy: num(p.dy, ownV, 0), dz: num(p.dz, ownV, 0),
+          rx: num(p.rx, ownV, 0), ry: num(p.ry, ownV, 0), rz: num(p.rz, ownV, 0),
+          pivot: p.pivot === 'origin' || p.pivot === 'point' ? p.pivot : 'center',
+          px: num(p.px, ownV, 0), py: num(p.py, ownV, 0), pz: num(p.pz, ownV, 0),
+          copy: !!p.copy,
+        };
+      } else if (it.kind === 'scale') {
+        const p = it.p || {};
+        o.p = {
+          target: p.target || null,
+          uniform: p.uniform !== false,
+          s: num(p.s, ownV, 1),
+          sx: num(p.sx, ownV, 1), sy: num(p.sy, ownV, 1), sz: num(p.sz, ownV, 1),
+          pivot: p.pivot === 'origin' ? 'origin' : 'centroid',
+        };
+      } else if (it.kind === 'thicken') {
+        const p = it.p || {};
+        o.p = {
+          target: p.target || null,
+          face: p.face || null,
+          t: num(p.t, ownV, 2),
+          dir: p.dir === 'in' || p.dir === 'mid' ? p.dir : 'out',
+          mode: p.mode === 'new' || p.mode === 'cut' ? p.mode : 'join',
+        };
+      } else if (it.kind === 'mirrorStep') {
+        o.p = mirrorStepParams(it, ownV);
+      }
+      else {
+        o.p = resolveP(it.p, ownV);
+        if (it.p && typeof it.p.printFit === 'string') o.p.printFit = it.p.printFit;
+        if (it.kind === 'cylinder' && o.p.printFit) o.p.printFitSign = it.role === 'hole' ? 1 : -1;
+        if (it.kind === 'part') {
+          if (it.p && typeof it.p.size === 'string') o.p.size = it.p.size;
+          if (o.p.lib === 'screwHole' && typeof threadEntry === 'function') {
+            const te = threadEntry(o.p.size);
+            if (te) o.p.spec = { fine: te.durchgang_fein_mm, hole: te.durchgang_mittel_mm, coarse: te.durchgang_grob_mm, tap: te.kernloch_mm, csk: te.senkung_senk_d_mm || 0, cskAngle: te.senkung_winkel_grad || 90, cbD: te.senkung_zyl_d_mm || 0, cbH: te.senkung_zyl_t_mm || 0 };
+          } else if (o.p.lib === 'stdPin' && typeof pinEntry === 'function') {
+            const pe = pinEntry(o.p.size ?? o.p.d);
+            if (pe) o.p.spec = { d: pe.d_mm, c: pe.c_mm };
+          } else if ((o.p.lib === 'stdKey' || o.p.lib === 'stdKeyway') && typeof keyEntry === 'function') {
+            const ke = keyEntry(o.p.size);
+            if (ke) o.p.spec = { b: ke.b_mm, h: ke.h_mm, t1: ke.t1_mm, t2: ke.t2_mm };
+          } else if (o.p.lib === 'stdBearing' && typeof bearingEntry === 'function') {
+            const be = bearingEntry(o.p.size);
+            if (be) o.p.spec = { d: be.d_mm, D: be.D_mm, B: be.B_mm, r: be.r_min_mm, balls: be.kugeln_richtwert || 8 };
+          } else if (o.p.lib === 'stdSleeve' && typeof sleeveEntry === 'function') {
+            const se = sleeveEntry(o.p.size);
+            if (se) o.p.spec = { d: se.d_mm, D: se.D_mm, wall: se.wand_mm, fD: se.flansch_d_mm || (se.D_mm + 4 * se.wand_mm) };
+          }
         }
       }
-    }
-    if (it.mir) o.mir = it.mir;
-    if (it.op && OPS[it.op.type] && it.op.target) o.op = { type: it.op.type, target: it.op.target };
-    if (it.finishes && it.finishes.length) o.finishes = it.finishes.filter((f) => !f.off).map((f) => { const x = { id: f.id, type: f.type, r: num(f.r, V, 1), edges: f.edges, faces: f.faces }; if (f.vr) { x.vr = true; x.r2 = num(f.r2, V, x.r); } if (f.cm) { x.cm = f.cm; if (f.cm === 'two') x.r2 = num(f.r2, V, x.r); else x.a = num(f.a, V, 45); } if (f.side) x.side = 1; return x; });
-    if (it.bodies && it.bodies.length) o.bodies = it.bodies.map((b) => ({ idx: b.idx, c: b.c, name: b.name, color: b.color, hidden: !!b.hidden }));
-    return o;
+      if (it.mir) o.mir = it.mir;
+      if (it.op && OPS[it.op.type] && it.op.target) o.op = { type: it.op.type, target: it.op.target };
+      if (it.finishes && it.finishes.length) o.finishes = it.finishes.filter((f) => !f.off).map((f) => { const x = { id: f.id, type: f.type, r: num(f.r, ownV, 1), edges: f.edges, faces: f.faces }; if (f.vr) { x.vr = true; x.r2 = num(f.r2, ownV, x.r); } if (f.cm) { x.cm = f.cm; if (f.cm === 'two') x.r2 = num(f.r2, ownV, x.r); else x.a = num(f.a, ownV, 45); } if (f.side) x.side = 1; return x; });
+      if (it.bodies && it.bodies.length) o.bodies = it.bodies.map((b) => ({ idx: b.idx, c: b.c, name: b.name, color: b.color, hidden: !!b.hidden }));
+      return o;
+    } finally { curV = prev; }
   }
   function sketchParams(it, V) {
     const p = it.p || {};
@@ -925,10 +968,26 @@ const Model = (() => {
         if (L === 'buyProp') { const r = (n('zoll', 5) * 25.4) / 2; return [-r, -r, 0, r, r, n('zoll', 5) * 1.2 + 0.5]; }
         if (L === 'motorFairing') { const r = n('d', 28) / 2 + Math.max(0, n('gap', 0.5)) + n('wall', 1.2); return [-r, -r, -n('at', 5) - n('tail', 30), r, r, n('h', 18)]; }
         if (L === 'stdScrew' || L === 'stdNut' || L === 'stdWasher') {
-          const D = { 'M1.6': [3, 1.6, 3.2, 1.3, 4, 0.3], M2: [3.8, 2, 4, 1.6, 5, 0.3], 'M2.5': [4.5, 2.5, 5, 2, 6, 0.5], M3: [5.5, 3, 5.5, 2.4, 7, 0.5], M4: [7, 4, 7, 3.2, 9, 0.8], M5: [8.5, 5, 8, 4.7, 10, 1], M6: [10, 6, 10, 5.2, 12, 1.6], M8: [13, 8, 13, 6.8, 16, 1.6] }[p.size] || [5.5, 3, 5.5, 2.4, 7, 0.5];
-          if (L === 'stdNut') { const r = D[2] / Math.sqrt(3); return [-r, -r, 0, r, r, D[3]]; }
-          if (L === 'stdWasher') { const r = D[4] / 2; return [-r, -r, 0, r, r, D[5]]; }
-          const r = D[0] / 2, len = n('length', 10); return p.head === 'senk' ? [-r, -r, -len, r, r, 0] : [-r, -r, -len, r, r, D[1]];
+          const se = typeof screwEntry === 'function' ? screwEntry(p.size) : null;
+          if (L === 'stdNut') {
+            const sw = (se && se.mutter && se.mutter.schluesselweite_mm) || 5.5, h = (se && se.mutter && se.mutter.hoehe_mm) || 2.4;
+            const r = sw / Math.sqrt(3); return [-r, -sw / 2, 0, r, sw / 2, h];
+          }
+          if (L === 'stdWasher') {
+            const w2 = (se && se.scheibe && se.scheibe.aussen_d_mm) || 7.0, wh = (se && se.scheibe && se.scheibe.dicke_mm) || 0.5;
+            const r = w2 / 2; return [-r, -r, 0, r, r, wh];
+          }
+          const len0 = n('length', 10);
+          if (p.head === 'hex') {
+            const sw = (se && se.sechskantkopf && se.sechskantkopf.schluesselweite_mm) || 5.5, hk = (se && se.sechskantkopf && se.sechskantkopf.kopf_h_mm) || 2.0;
+            const rx = sw / Math.sqrt(3), ry = sw / 2; return [-rx, -ry, -len0, rx, ry, hk];
+          }
+          if (p.head === 'senk') {
+            const dk = (se && se.senkkopf && se.senkkopf.kopf_d_mm) || 6.72, ck = (se && se.senkkopf && se.senkkopf.kopf_h_mm) || 1.86;
+            const r = dk / 2, len = Math.max(len0, ck + 0.5); return [-r, -r, -len, r, r, 0];
+          }
+          const hd = (se && se.zylinderkopf && se.zylinderkopf.kopf_d_mm) || 5.5, hk = (se && se.zylinderkopf && se.zylinderkopf.kopf_h_mm) || 3.0;
+          const r = hd / 2; return [-r, -r, -len0, r, r, hk];
         }
         if (L === 'stdPin') { const pe = typeof pinEntry === 'function' ? pinEntry(p.size ?? p.d) : null; const r = (pe ? pe.d_mm : 6) / 2, len = n('length', 20); return [-r, -r, 0, r, r, len]; }
         if (L === 'stdKey') { const ke = typeof keyEntry === 'function' ? keyEntry(p.size) : null; const b = ke ? ke.b_mm : 6, h = ke ? ke.h_mm : 6, len = n('length', 20); return [-len / 2, -b / 2, 0, len / 2, b / 2, h]; }
@@ -945,6 +1004,7 @@ const Model = (() => {
   }
   function itemLocalBox(it, V = {}) {
     if (!it) return null;
+    if (it.userPart) V = scopeVars(V, it.userPart);
     const pb = primitiveBox(it.kind, resolveP(it.p, V));
     if (pb) return pb;
     if ((it.kind === 'extrude' || it.kind === 'rib' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'revolve') && it.p && it.p.sketch) {
@@ -985,6 +1045,7 @@ const Model = (() => {
   }
   function label(it) { return it.name || (KINDS[it.kind] && KINDS[it.kind].label) || 'Objekt'; }
   function sizeText(it, V) {
+    if (it && it.userPart) V = scopeVars(V || {}, it.userPart);
     const p = resolveP(it.p || {}, V || {});
     const f = (x) => Units.fmtLen(x, 1);
     const u = Units.key() !== 'mm' ? ' ' + Units.label() : '';
@@ -1044,7 +1105,14 @@ const Model = (() => {
         const off = num(mp.off, V, 0);
         return Math.abs(off) > 1e-6 ? `${pl} (${off > 0 ? '+' : ''}${f(off)}${u})` : `${pl}-Ebene`;
       }
-      case 'group': return (typeof Features !== 'undefined' && Features.sizeText(it, V)) || `${(it.children || []).length} Teile`;
+      case 'group': {
+        const ft = typeof Features !== 'undefined' && Features.sizeText(it, V);
+        if (ft) return ft;
+        if (it.userPart && Array.isArray(it.userPart.params) && it.userPart.params.length) {
+          return it.userPart.params.slice(0, 2).map((q) => `${q.label || q.name} ${f(num(q.expr, V, 0))}${u}`).join(' · ');
+        }
+        return `${(it.children || []).length} Teile`;
+      }
       case 'part': {
         const L = String(p.lib || '');
         if (L === 'buyMotor' || L === 'buyCap') return `Ø ${f(p.d)} × ${f(p.h)}${u}`;
@@ -1384,6 +1452,6 @@ const Model = (() => {
     if (aPos != null && aNeg != null) return aNeg < aPos;
     return aPos == null && aNeg != null;
   }
-  return { matchBodies, displayColor, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, railStart, railSections, bez3, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, loftParams, loftPathAngles, pathPatternParams, pathPlaces, wrapAngleInfo, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, evalInfo, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  return { matchBodies, displayColor, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, railStart, railSections, bez3, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, loftParams, loftPathAngles, pathPatternParams, pathPlaces, wrapAngleInfo, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, scopeVars, itemVars, evalInfo, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 

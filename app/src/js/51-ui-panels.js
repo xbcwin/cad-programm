@@ -21,7 +21,8 @@ const Panels = (() => {
     if (App.mode === 'model') {
       Toolbar.renderModelTools(el);
     } else {
-      btn('t-sheet', 'sheet', T('tool.sheet'), T('tool.sheetTip'), '', (e) => Drawing.sheetMenu(e.currentTarget));
+      const sheetBtn = btn('t-sheet', 'sheet', T('tool.sheet'), T('tool.sheetTip'), '', (e) => Drawing.sheetMenu(e.currentTarget));
+      sheetBtn.dataset.help = 'drawingFormat';
       btn('t-dim', 'dim', T('tool.dim'), T('tool.dimTip'), 'D', () => Drawing.tool('dim'));
       btn('t-autodim', 'target', T('tool.autodim'), T('tool.autodimTip'), '', () => Drawing.autoDims(), '', T('tool.autodimShort'));
       btn('t-draw', 'line', T('tool.draw2d'), T('tool.draw2dTip'), '', (e) => Drawing.drawMenu(e.currentTarget));
@@ -32,6 +33,25 @@ const Panels = (() => {
   // weiche Trennstellen für lange Wörter auf schmalen Kacheln (nur Anzeige)
   const HY = { Schraubenloch: 'Schrauben\u00ADloch', Mutternfalle: 'Muttern\u00ADfalle', Gewindeeinsatz: 'Gewinde\u00ADeinsatz', Schnapphaken: 'Schnapp\u00ADhaken', Halbkugel: 'Halb\u00ADkugel' };
   const hyph = (s) => HY[s] || s;
+  const MAT_CATS = ['Metalle', 'Kunststoffe', 'Faserverbund', 'Holz & Platten'];
+  function materialOptions(extra = []) {
+    const out = [...extra];
+    for (const cat of MAT_CATS) {
+      const items = MATERIALS.filter((m) => m.cat === cat);
+      if (items.length) out.push({ group: cat, options: items.map((m) => [m.k, `${m.k} · ${fmtFixed(m.rho, 2)} g/cm³`]) });
+    }
+    const rest = MATERIALS.filter((m) => !MAT_CATS.includes(m.cat));
+    if (rest.length) out.push({ group: 'Sonstige', options: rest.map((m) => [m.k, `${m.k} · ${fmtFixed(m.rho, 2)} g/cm³`]) });
+    return out;
+  }
+  function materialInfoBox(mat, id) {
+    if (!mat) return h('div', { id, hidden: true });
+    const parts = [`Dichte <b>${fmtFixed(mat.rho, 2)} g/cm³</b>`];
+    if (mat.e != null) parts.push(`E-Modul ${fmt(mat.e, 1)} GPa`);
+    if (mat.rm != null) parts.push(`R<sub>m</sub> ${fmt(mat.rm, 0)} MPa`);
+    const srcHtml = mat.src ? `<br><span style="color:var(--muted)">Quelle: ${esc(mat.src)}</span>` : '';
+    return h('div', { class: 'hint-box', id, style: { marginTop: '6px' }, html: `<b>${esc(mat.name || mat.k)}</b><br>${parts.join(' · ')}${srcHtml}` });
+  }
   function closeFlyout() { if (flyout) { flyout.el.remove(); const b = flyout.btn; b && b.setAttribute('aria-expanded', 'false'); flyout = null; document.removeEventListener('pointerdown', flyOutside, true); } }
   function flyOutside(e) { if (flyout && !flyout.el.contains(e.target) && !(flyout.btn && flyout.btn.contains(e.target))) closeFlyout(); }
   function toggleFlyout(kind, btn) {
@@ -82,6 +102,46 @@ const Panels = (() => {
         for (const d of stds) stdTiles.append(makeTile(d));
         el.append(stdTiles);
       }
+      el.append(h('h3', { id: 'my-parts-head', 'data-help': 'userLibrary' }, 'Meine Teile'));
+      const myGrid = h('div', { class: 'tiles user-tiles', id: 'my-parts-grid' });
+      const renderMyParts = () => {
+        myGrid.innerHTML = '';
+        const list = UserLib.list();
+        if (!list.length) {
+          myGrid.append(h('div', { class: 'hint-box', style: { gridColumn: '1 / -1' } }, 'Noch keine eigenen Teile. Rechtsklick auf ein Teil → „In meine Bibliothek“.'));
+          return;
+        }
+        for (const entry of list) {
+          const pCount = Array.isArray(entry.params) ? entry.params.length : 0;
+          const tipTxt = entry.desc || (pCount ? `${pCount} änderbare ${pCount === 1 ? 'Maß' : 'Maße'} – klicken oder auf einen Körper ziehen` : 'Klicken oder auf einen Körper ziehen');
+          const tile = h('div', { class: 'tile user-tile' + (entry.role === 'hole' ? ' hole-part' : ''), role: 'button', tabindex: '0', dataset: { userLibId: entry.id }, 'data-tip': tipTxt, 'data-help': 'userLibrary' });
+          tile.append(h('div', { class: 'ul-thumb-wrap', html: UserLib.thumbHTML(entry) }), h('span', { class: 'lbl' }, entry.name), h('span', { class: 'role' }, pCount ? `${pCount} ${pCount === 1 ? 'Maß' : 'Maße'}` : (entry.role === 'hole' ? T('common.hole') : T('common.body'))));
+          const delBtn = h('button', { type: 'button', class: 'ul-del', 'aria-label': 'Aus meiner Bibliothek entfernen', 'data-tip': 'Aus meiner Bibliothek entfernen' });
+          delBtn.innerHTML = icon('trash');
+          delBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+          delBtn.addEventListener('click', (e) => {
+            e.preventDefault(); e.stopPropagation();
+            UserLib.remove(entry.id);
+            renderMyParts();
+            UI.toast(`„${entry.name}“ aus „Meine Teile“ entfernt.`, { icon: 'info' });
+          });
+          tile.append(delBtn);
+          Place.bindTile(tile, { userPart: entry });
+          tile.addEventListener('keydown', (e) => { if (e.key === 'Enter') { UserLib.insert(entry); closeFlyout(); } });
+          tile.addEventListener('contextmenu', (e) => {
+            e.preventDefault(); e.stopPropagation();
+            UI.menu(tile, [
+              { icon: 'plus', label: 'Einsetzen', run: () => { UserLib.insert(entry); closeFlyout(); } },
+              { icon: 'edit', label: 'Umbenennen', run: async () => { const n = await UI.prompt('Teil umbenennen', 'Name', entry.name, 'Umbenennen'); if (n && n.trim()) { UserLib.rename(entry.id, n.trim()); renderMyParts(); } } },
+              '-',
+              { icon: 'trash', label: 'Entfernen', run: () => { UserLib.remove(entry.id); renderMyParts(); } },
+            ]);
+          });
+          myGrid.append(tile);
+        }
+      };
+      renderMyParts();
+      el.append(myGrid);
       el.append(h('div', { class: 'foot' }, T('tool.fly.partsFoot')));
     }
     $('#center').append(el);
@@ -341,6 +401,7 @@ const Panels = (() => {
           ...(refIssues.length ? [{ icon: 'warn', label: 'Neu wählen (kaputter Bezug)', id: 'tm-reffix', help: 'refFix', run: () => RefFix.start(refIssues[0]) }] : []),
           { icon: 'help', label: T('common.explainStep'), help: 'explainStep', run: () => Explain.dialog(it.id) },
           { icon: 'copy', label: T('common.duplicate'), id: 'tm-dup', kbd: 'Strg D', help: 'treeDuplicate', run: () => Actions.duplicate([it.id]) },
+          ...(UserLib.canSave(it) ? [{ icon: 'save', label: 'In meine Bibliothek', id: 'tm-userlib', help: 'userLibrary', run: () => UserLib.saveDialog(it.id) }] : []),
           ...(Features.canMirrorStep(it, (Model.find(App.doc, it.id) || {}).parent) ? [{ icon: 'mirror', label: T('common.mirrorStep'), id: 'tm-mirrorstep', help: 'mirrorStep', run: () => Features.mirrorStep([it.id]) }] : []),
           ...(topIdx >= 0 ? [{ icon: 'moveStep', label: T('common.moveStep'), help: 'moveStep', run: () => Features.transform([it.id]) }, { icon: 'scaleBody', label: T('common.scaleStep'), help: 'scaleBody', run: () => Features.scale([it.id]) }] : []),
           ...(!((it.kind === 'transform' && !(it.p && it.p.copy)) || it.kind === 'scale' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'wrap' || it.kind === 'emboss') ? [{ icon: 'patternRect', label: T('ctx.patRect'), id: 'tm-pat-rect', help: 'patternRect', run: () => Features.pattern('rect', [it.id]) }, { icon: 'patternCirc', label: T('ctx.patCirc'), id: 'tm-pat-circ', help: 'patternCirc', run: () => Features.pattern('circ', [it.id]) }] : []),
@@ -1002,7 +1063,8 @@ const Panels = (() => {
     // Material und Gewicht des ganzen Projekts (exaktes Volumen aus dem CAD-Kern)
     const curMat = App.doc.settings.material || 'CFK';
     const ms = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Material und Gewicht'));
-    ms.append(UI.selectField({ id: 'proj-mat', label: 'Material', value: curMat, options: MATERIALS.map((m) => [m.k, `${m.k} · ${String(m.rho).replace('.', ',')} g/cm³`]), onChange: (v) => App.change('Material gewählt', (doc) => { doc.settings.material = v; }) }));
+    ms.append(UI.selectField({ id: 'proj-mat', label: 'Material', value: curMat, options: materialOptions(), onChange: (v) => App.change('Material gewählt', (doc) => { doc.settings.material = v; }) }));
+    ms.append(materialInfoBox(Mass.projectMaterial(), 'proj-mat-info'));
     const vRow = h('b', { class: 'mono' }, '…'), gRow = h('b', { class: 'mono' }, '…');
     ms.append(h('div', { class: 'mini-list', style: { marginTop: '8px' } },
       h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Volumen'), vRow),
@@ -1128,7 +1190,12 @@ const Panels = (() => {
     ]);
   }
   function renderItem(body, f) {
-    const it = f.item; const V = Model.vars(App.doc).v;
+    const it = f.item; const V = Model.itemVars(App.doc, it.id);
+    const outerV = (() => {
+      let v = Model.vars(App.doc).v;
+      for (const anc of Model.parentsOf(App.doc, it.id)) if (anc.userPart) v = Model.scopeVars(v, anc.userPart);
+      return v;
+    })();
     const w = h('div', { class: 'props' });
     const title = h('div', { class: 'prop-title' });
     const nameInp = h('input', { id: 'item-name', value: Model.label(it), 'aria-label': 'Name' });
@@ -1220,13 +1287,41 @@ const Panels = (() => {
     const isMergedStep = isMoveOnly || it.kind === 'rib' || it.kind === 'wrap' || it.kind === 'emboss';
     if (!isMergedStep) w.append(roleSwitch(it.role, (r) => Actions.setRole([it.id], r)));
     const opSec = opSection(it); if (opSec) w.append(opSec);
+    // Maße aus „Meine Teile“ (lokale Parameter je eingesetztem Teil)
+    if (it.userPart && Array.isArray(it.userPart.params) && it.userPart.params.length) {
+      const upSec = h('div', { class: 'section', id: 'userpart-sec', 'data-help': 'userLibrary' },
+        h('div', { class: 'section-h' }, 'Maße · ' + (it.userPart.name || 'Mein Teil')));
+      const upFields = h('div', { class: 'fields', id: 'userpart-fields' });
+      let runV = outerV;
+      it.userPart.params.forEach((qp, idx) => {
+        const evalScope = runV;
+        const nf = UI.numField({
+          id: 'up-' + idx,
+          label: qp.label || qp.name,
+          value: qp.expr,
+          unit: qp.unit ?? 'mm',
+          vars: evalScope,
+          onCommit: (val) => App.change('Maß geändert', (doc) => {
+            const x = Model.find(doc, it.id);
+            if (!x || !x.item.userPart || !x.item.userPart.params[idx]) return false;
+            x.item.userPart.params[idx].expr = val;
+          }, { merge: 'up:' + it.id + ':' + idx }),
+        });
+        const inp = nf.querySelector('input');
+        if (inp) inp.dataset.upName = qp.name;
+        upFields.append(nf);
+        runV = Model.scopeVars(runV, { params: [qp], tables: it.userPart.tables });
+      });
+      upSec.append(upFields);
+      w.append(upSec);
+    }
     // Maße
     const three = !!(KINDS[it.kind] && KINDS[it.kind].params.length === 3);
     const sec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, three ? `Maße (${Units.label()})` : 'Maße'));
     const setP = (k, val) => App.change('Maß geändert', (doc) => { Model.find(doc, it.id).item.p[k] = val; }, { merge: 'p:' + it.id + ':' + k });
     if (KINDS[it.kind] && KINDS[it.kind].params.length) {
       const fl = h('div', { class: 'fields' + (KINDS[it.kind].params.length === 3 ? ' three' : '') });
-      for (const q of KINDS[it.kind].params) fl.append(UI.numField({ id: 'p-' + q.k, label: q.label, value: it.p[q.k], unit: q.unit, axis: q.axis, min: q.min, int: q.int, onCommit: (val) => setP(q.k, val) }));
+      for (const q of KINDS[it.kind].params) fl.append(UI.numField({ id: 'p-' + q.k, label: q.label, value: it.p[q.k], unit: q.unit, axis: q.axis, min: q.min, int: q.int, vars: V, onCommit: (val) => setP(q.k, val) }));
       sec.append(fl);
       if (it.kind === 'cylinder') {
         const pfVal = it.p.printFit || '';
@@ -1253,7 +1348,7 @@ const Panels = (() => {
         for (const q of def.params) {
           let fld;
           if (q.type === 'select') fld = UI.selectField({ id: 'lp-' + q.k, label: q.label, value: it.p[q.k] ?? q.def ?? '', options: q.options, onChange: (v) => setP(q.k, q.k === 'tipAngle' ? Number(v) : v) });
-          else fld = UI.numField({ id: 'lp-' + q.k, label: q.label, value: it.p[q.k] ?? '', unit: q.unit ?? 'mm', int: q.int, placeholder: q.auto ? 'passend' : '', onCommit: (v) => setP(q.k, v) });
+          else fld = UI.numField({ id: 'lp-' + q.k, label: q.label, value: it.p[q.k] ?? '', unit: q.unit ?? 'mm', int: q.int, vars: V, placeholder: q.auto ? 'passend' : '', onCommit: (v) => setP(q.k, v) });
           if (q.k === 'printFit') fld.setAttribute('data-help', 'printFit');
           fl.append(fld);
         }
@@ -1335,6 +1430,33 @@ const Panels = (() => {
             const h7Txt = h7.um != null ? ` · Gehäusebohrung: <b>Ø ${Units.fmtLenU(se.D_mm, 2)} H7</b>` : '';
             sec.append(h('div', { id: 'p-stdsleeve-hint', class: 'hint-box', html: `<b>Gleitlager ${esc(se.id)}</b> (${it.p.flange === 'flange' ? 'Form F mit Bund' : 'Form C zylindrisch'})<br>Innen-Ø d = <b>${Units.fmtLenU(se.d_mm, 2)}</b> · Außen-Ø D = <b>${Units.fmtLenU(se.D_mm, 2)}</b> · Wand s₃ = <b>${Units.fmtLenU(se.wand_mm, 2)}</b><br>${flTxt}${h7Txt}<br><span style="color:var(--muted)">Norm: ISO 3547-1 / DIN 1850</span>` }));
           }
+        } else if (def.lib === 'stdScrew' && typeof screwEntry === 'function') {
+          const se = screwEntry(it.p.size);
+          if (se) {
+            const L = Model.num(it.p.length, V, 10);
+            const dNenn = parseFloat(String(se.groesse).slice(1)) || 3;
+            let txt = '';
+            if (it.p.head === 'hex' && se.sechskantkopf) {
+              txt = `<b>Sechskantschraube ${esc(se.groesse)} × ${Units.fmtLenU(L, 1)}</b> (${esc(se.sechskantkopf.norm)})<br>Schlüsselweite s = <b>${Units.fmtLenU(se.sechskantkopf.schluesselweite_mm, 1)}</b> · Kopfhöhe k = <b>${Units.fmtLenU(se.sechskantkopf.kopf_h_mm, 2)}</b> · Schaft Ø ${Units.fmtLenU(dNenn, 2)}`;
+            } else if (it.p.head === 'senk' && se.senkkopf && se.senkkopf.kopf_h_mm) {
+              const sk = se.senkkopf;
+              txt = `<b>Senkschraube ${esc(se.groesse)} × ${Units.fmtLenU(L, 1)}</b> (${esc(sk.norm)})<br>Kopf-Ø d<sub>k</sub> = <b>${Units.fmtLenU(sk.kopf_d_mm, 2)}</b> · Kopfhöhe k = <b>${Units.fmtLenU(sk.kopf_h_mm, 2)}</b>${sk.innensechskant_mm ? ` · Innensechskant s = <b>${Units.fmtLenU(sk.innensechskant_mm, 1)}</b>` : ''} (${sk.winkel_grad || 90}°)`;
+            } else if (se.zylinderkopf) {
+              const zk = se.zylinderkopf;
+              txt = `<b>Zylinderschraube ${esc(se.groesse)} × ${Units.fmtLenU(L, 1)}</b> (ISO 4762)<br>Kopf-Ø d<sub>k</sub> = <b>${Units.fmtLenU(zk.kopf_d_mm, 2)}</b> · Kopfhöhe k = <b>${Units.fmtLenU(zk.kopf_h_mm, 2)}</b>${zk.innensechskant_mm ? ` · Innensechskant s = <b>${Units.fmtLenU(zk.innensechskant_mm, 1)}</b>` : ''}`;
+            }
+            if (txt) sec.append(h('div', { id: 'p-stdscrew-hint', class: 'hint-box', html: `${txt}<br><span style="color:var(--muted)">Steigung P = ${fmt(se.steigung_mm, 2)} mm</span>` }));
+          }
+        } else if (def.lib === 'stdNut' && typeof screwEntry === 'function') {
+          const se = screwEntry(it.p.size);
+          if (se && se.mutter) {
+            sec.append(h('div', { id: 'p-stdnut-hint', class: 'hint-box', html: `<b>Sechskantmutter ${esc(se.groesse)}</b> (${esc(se.mutter.norm)})<br>Schlüsselweite s = <b>${Units.fmtLenU(se.mutter.schluesselweite_mm, 1)}</b> · Höhe m = <b>${Units.fmtLenU(se.mutter.hoehe_mm, 2)}</b>` }));
+          }
+        } else if (def.lib === 'stdWasher' && typeof screwEntry === 'function') {
+          const se = screwEntry(it.p.size);
+          if (se && se.scheibe) {
+            sec.append(h('div', { id: 'p-stdwasher-hint', class: 'hint-box', html: `<b>Unterlegscheibe ${esc(se.groesse)}</b> (${esc(se.scheibe.norm)})<br>Innen-Ø d₁ = <b>${Units.fmtLenU(se.scheibe.innen_d_mm, 2)}</b> · Außen-Ø d₂ = <b>${Units.fmtLenU(se.scheibe.aussen_d_mm, 1)}</b> · Dicke h = <b>${Units.fmtLenU(se.scheibe.dicke_mm, 2)}</b>` }));
+          }
         }
         w.append(sec);
       }
@@ -1369,12 +1491,12 @@ const Panels = (() => {
         });
         extField.setAttribute('data-help', 'extrudeToFace');
         fl.append(extField);
-        if (ext === 'dist' && !it.p.thru) fl.append(UI.numField({ id: 'p-dist', label: it.p.dir === 'two' ? 'Höhe Seite 1' : 'Höhe', value: it.p.dist, onCommit: (v) => setP('dist', v) }));
+        if (ext === 'dist' && !it.p.thru) fl.append(UI.numField({ id: 'p-dist', label: it.p.dir === 'two' ? 'Höhe Seite 1' : 'Höhe', value: it.p.dist, vars: V, onCommit: (v) => setP('dist', v) }));
         const dirOpts = ext === 'dist'
           ? [['normal', 'Nach außen'], ['reverse', 'Nach innen'], ['both', 'Beidseitig gleich'], ['two', 'Beidseitig verschieden']]
           : [['normal', 'Nach außen'], ['reverse', 'Nach innen'], ['two', 'Beidseitig (Seite 2 fest)']];
         fl.append(UI.selectField({ id: 'p-dir', label: 'Richtung', value: it.p.dir || 'normal', options: dirOpts, onChange: (v) => setP('dir', v) }));
-        if (it.p.dir === 'two' && !it.p.thru) fl.append(UI.numField({ id: 'p-dist2', label: 'Höhe Seite 2', value: it.p.dist2 ?? it.p.dist, onCommit: (v) => setP('dist2', v) }));
+        if (it.p.dir === 'two' && !it.p.thru) fl.append(UI.numField({ id: 'p-dist2', label: 'Höhe Seite 2', value: it.p.dist2 ?? it.p.dist, vars: V, onCommit: (v) => setP('dist2', v) }));
         if (ext === 'dist' && (cuts || it.p.thru)) { const l = h('label', { class: 'check', 'data-help': 'thruAll' }, h('input', { type: 'checkbox', id: 'p-thru', checked: !!it.p.thru }), 'Durch alles'); l.querySelector('input').onchange = (e) => App.change(e.target.checked ? 'Durch alles' : 'Feste Tiefe', (doc) => { const T = Model.find(doc, it.id).item; if (e.target.checked) T.p.thru = true; else delete T.p.thru; }); fl.append(l); }
         if (ext !== 'dist') {
           const rd = App.resolvedDist(it.id);
@@ -1394,7 +1516,7 @@ const Panels = (() => {
             fl.append(pb);
           }
         }
-        const hasRegs = SK.regions(it.p.sketch ? Solver.cached(it.p.sketch, Model.vars(App.doc).v).ents : []).length > 0;
+        const hasRegs = SK.regions(it.p.sketch ? Solver.cached(it.p.sketch, V).ents : []).length > 0;
         const tl = h('label', { class: 'check', 'data-help': 'thinWall' }, h('input', { type: 'checkbox', id: 'p-thin', checked: !!it.p.thin, disabled: !!it.p.thin && !hasRegs }), 'Dünne Wand');
         tl.querySelector('input').onchange = (e) => App.change(e.target.checked ? 'Dünne Wand an' : 'Dünne Wand aus', (doc) => {
           const T = Model.find(doc, it.id).item;
@@ -1403,7 +1525,7 @@ const Panels = (() => {
         });
         fl.append(tl);
         if (it.p.thin) {
-          fl.append(UI.numField({ id: 'p-wall', label: 'Wandstärke', value: it.p.wall ?? 2, min: 0.1, onCommit: (v) => setP('wall', v) }));
+          fl.append(UI.numField({ id: 'p-wall', label: 'Wandstärke', value: it.p.wall ?? 2, min: 0.1, vars: V, onCommit: (v) => setP('wall', v) }));
           fl.append(UI.selectField({ id: 'p-wall-side', label: 'Wand-Lage', value: it.p.wallSide || 'center', options: [['center', 'Mittig'], ['in', 'Nach innen'], ['out', 'Nach außen']], onChange: (v) => setP('wallSide', v) }));
         }
       } else {
@@ -1429,12 +1551,12 @@ const Panels = (() => {
         if (dir !== 'toFace') {
           const angLbl = dir === 'both' ? 'Gesamtwinkel' : dir === 'two' ? 'Winkel Seite 1' : 'Winkel';
           const minA = dir === 'two' ? 0 : 0.1;
-          fl.append(UI.numField({ id: 'p-angle', label: angLbl, value: it.p.angle, unit: '°', min: minA, onCommit: (v) => setP('angle', typeof v === 'number' ? clamp(v, minA, 360) : v) }));
+          fl.append(UI.numField({ id: 'p-angle', label: angLbl, value: it.p.angle, unit: '°', min: minA, vars: V, onCommit: (v) => setP('angle', typeof v === 'number' ? clamp(v, minA, 360) : v) }));
           if (dir === 'both') {
             fl.append(h('div', { class: 'mini-row', id: 'p-rev-sym-info' }, h('span', { class: 'grow' }, 'Symmetrisch'), h('b', { class: 'mono' }, `je Seite ${fmtAngleU(Model.num(it.p.angle, V, 360) / 2)}`)));
           }
           if (dir === 'two') {
-            fl.append(UI.numField({ id: 'p-angle2', label: 'Winkel Seite 2', value: it.p.angle2 ?? it.p.angle, unit: '°', min: 0, onCommit: (v) => setP('angle2', typeof v === 'number' ? clamp(v, 0, 360) : v) }));
+            fl.append(UI.numField({ id: 'p-angle2', label: 'Winkel Seite 2', value: it.p.angle2 ?? it.p.angle, unit: '°', min: 0, vars: V, onCommit: (v) => setP('angle2', typeof v === 'number' ? clamp(v, 0, 360) : v) }));
           }
         } else {
           const tf = it.p.toFace;
@@ -1709,7 +1831,7 @@ const Panels = (() => {
         const isRef = !!(err && RefFix.isRefError(err));
         const sh = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Wandstärke'));
         const row = h('div', { class: 'fields', style: { gridTemplateColumns: isRef ? '1fr auto auto' : '1fr auto', alignItems: 'end' } });
-        const nf = UI.numField({ id: 'fin-' + fin.id, label: `Wand · ${(fin.faces || []).length} Öffnung${(fin.faces || []).length === 1 ? '' : 'en'}`, value: fin.r, onCommit: (v) => Actions.setFinish(it.id, fin.id, { r: v }) });
+        const nf = UI.numField({ id: 'fin-' + fin.id, label: `Wand · ${(fin.faces || []).length} Öffnung${(fin.faces || []).length === 1 ? '' : 'en'}`, value: fin.r, vars: V, onCommit: (v) => Actions.setFinish(it.id, fin.id, { r: v }) });
         if (err) nf.querySelector('.inp').classList.add(isRef ? 'warn' : 'invalid');
         row.append(nf);
         if (isRef) {
@@ -1735,7 +1857,7 @@ const Panels = (() => {
         }
         const lbl = (fin.type === 'chamfer' ? 'Fase' : 'Rundung') + (typeof fin.edges === 'string' ? ' · ' + ({ all: 'alle', top: 'oben', bottom: 'unten', vertical: 'senkrecht', horizontal: 'waagerecht' }[fin.edges] || '') : ` · ${(fin.edges || []).length} Kante${(fin.edges || []).length === 1 ? '' : 'n'}`);
         const ch = fin.type === 'chamfer', vr = !ch && !!fin.vr, cm = ch ? fin.cm || '' : '';
-        const nf = UI.numField({ id: 'fin-' + fin.id, label: vr ? lbl + ' · von' : cm ? lbl + ' · Abstand' : lbl, value: fin.r, onCommit: (v) => Actions.setFinish(it.id, fin.id, { r: v }) });
+        const nf = UI.numField({ id: 'fin-' + fin.id, label: vr ? lbl + ' · von' : cm ? lbl + ' · Abstand' : lbl, value: fin.r, vars: V, onCommit: (v) => Actions.setFinish(it.id, fin.id, { r: v }) });
         if (err) nf.querySelector('.inp').classList.add(isRef ? 'warn' : 'invalid');
         row.append(nf);
         if (isRef) {
@@ -1750,11 +1872,11 @@ const Panels = (() => {
         const mo = h('div', { class: 'fields pro fin-more' });
         if (ch) {
           mo.append(UI.selectField({ id: 'fin-mode-' + fin.id, label: 'Art der Fase', value: cm, options: [['', 'Gleich'], ['two', 'Zwei Abstände'], ['angle', 'Mit Winkel']], onChange: (v) => Actions.setFinish(it.id, fin.id, v === 'two' ? { cm: 'two', r2: fin.r2 != null ? fin.r2 : round(r0 * 2, 3) } : v === 'angle' ? { cm: 'angle', a: fin.a != null ? fin.a : 30 } : { cm: null }) }));
-          if (cm === 'two') mo.append(UI.numField({ id: 'fin-r2-' + fin.id, label: 'Zweiter Abstand', value: fin.r2 != null ? fin.r2 : r0, onCommit: (v) => Actions.setFinish(it.id, fin.id, { r2: v }) }));
-          if (cm === 'angle') mo.append(UI.numField({ id: 'fin-a-' + fin.id, label: 'Winkel', value: fin.a != null ? fin.a : 45, unit: '°', onCommit: (v) => Actions.setFinish(it.id, fin.id, { a: v }) }));
+          if (cm === 'two') mo.append(UI.numField({ id: 'fin-r2-' + fin.id, label: 'Zweiter Abstand', value: fin.r2 != null ? fin.r2 : r0, vars: V, onCommit: (v) => Actions.setFinish(it.id, fin.id, { r2: v }) }));
+          if (cm === 'angle') mo.append(UI.numField({ id: 'fin-a-' + fin.id, label: 'Winkel', value: fin.a != null ? fin.a : 45, unit: '°', vars: V, onCommit: (v) => Actions.setFinish(it.id, fin.id, { a: v }) }));
         } else {
           mo.append(UI.selectField({ id: 'fin-mode-' + fin.id, label: 'Art der Rundung', value: vr ? 'var' : '', options: [['', 'Gleichmäßig'], ['var', 'Von … bis']], onChange: (v) => Actions.setFinish(it.id, fin.id, v === 'var' ? { vr: true, r2: fin.r2 != null ? fin.r2 : round(r0 / 2, 3) } : { vr: null }) }));
-          if (vr) mo.append(UI.numField({ id: 'fin-r2-' + fin.id, label: 'bis', value: fin.r2 != null ? fin.r2 : r0, onCommit: (v) => Actions.setFinish(it.id, fin.id, { r2: v }) }));
+          if (vr) mo.append(UI.numField({ id: 'fin-r2-' + fin.id, label: 'bis', value: fin.r2 != null ? fin.r2 : r0, vars: V, onCommit: (v) => Actions.setFinish(it.id, fin.id, { r2: v }) }));
         }
         ks.append(mo);
         if (vr || cm) {
@@ -1835,10 +1957,11 @@ const Panels = (() => {
       const pm = Mass.projectMaterial();
       const ms = h('div', { class: 'section pro' }, h('div', { class: 'section-h' }, 'Material und Gewicht'));
       const fixed = Mass.fixedOf(it);
-      ms.append(UI.selectField({ id: 'p-mat', label: 'Material', value: fixed ? '__fix' : it.mat || '', options: [['', `Wie das Projekt (${pm.k})`], ['__fix', 'Kaufteil: festes Gewicht'], ...MATERIALS.map((m) => [m.k, `${m.k} · ${String(m.rho).replace('.', ',')} g/cm³`])], onChange: (v) => {
+      ms.append(UI.selectField({ id: 'p-mat', label: 'Material', value: fixed ? '__fix' : it.mat || '', options: materialOptions([['', `Wie das Projekt (${pm.k})`], ['__fix', 'Kaufteil: festes Gewicht']]), onChange: (v) => {
         if (v === '__fix') { Mass.measure().then((r) => { const p = Mass.partOf(r, it.id); App.change('Festes Gewicht', (doc) => { const T = Model.find(doc, it.id).item; delete T.mat; T.massG = p ? round(p.mass, 1) : 10; }); }); return; }
         App.change('Material gewählt', (doc) => { const T = Model.find(doc, it.id).item; delete T.massG; delete T.colorSet; if (v) T.mat = v; else delete T.mat; });
       } }));
+      if (!fixed) ms.append(materialInfoBox(Mass.materialFor(it), 'p-mat-info'));
       if (fixed) {
         ms.append(h('div', { class: 'fields', style: { marginTop: '8px' } }, UI.numField({ id: 'p-massg', label: 'Gewicht (Datenblatt)', value: it.massG, unit: 'g', onCommit: (v) => App.change('Gewicht geändert', (doc) => { Model.find(doc, it.id).item.massG = v; }, { merge: 'massg:' + it.id }) })));
         ms.append(h('div', { class: 'hint-box' + (it.massG === '' ? ' warn' : ''), html: it.massG === '' ? '<b>Gewicht fehlt:</b> Trag das Gewicht aus dem Datenblatt ein – bis dahin zählt dieses Teil mit 0 g.' : 'Für gekaufte Teile wie Lager, Schrauben oder Elektronik: Das Gewicht kommt aus dem Datenblatt, nicht aus der Form. Auch Formeln gehen, z. B. <b>4*33,8</b>.' }));

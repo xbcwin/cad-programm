@@ -33,7 +33,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Templates,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,Log,Kernel}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Templates,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,Log,Kernel,Drawing}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -11942,6 +11942,164 @@ def t_a056_normteile_stifte_lager(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+# ---------- [A-057] Schrauben M10–M24 & mehr Werkstoffe (BI-06, BI-07) ----------
+def t_a057_schrauben_werkstoffe(p):
+    p.empty()
+    # 1. Sechskantschraube M16×60 (ISO 4017) -> Schlüsselweite 24 mm, Kopfhöhe 10 mm, Schaftlänge 60 mm
+    p.ev("""App.change('Sechskantschraube M16x60', d=>{
+      const s = Model.newItem('part', { lib:'stdScrew', size:'M16', head:'hex', length:60 }, { name:'M16x60' });
+      d.items.push(s);
+    })""")
+    warte_rechnen(p, 40)
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(400)
+    r1 = p.ev("""
+      const it = App.doc.items[0], d = App.results.get(it.id)?.data, bb = d?.bbox || [];
+      return {
+        errs: App.errors.length,
+        mat: it.mat,
+        xSpan: bb[3] - bb[0],
+        ySpan: bb[4] - bb[1],
+        zMin: bb[2],
+        zMax: bb[5],
+      };
+    """)
+    hint1 = p.pg.locator('#p-stdscrew-hint').text_content() or ''
+    ok1 = (
+        r1['errs'] == 0
+        and r1['mat'] == 'V2A Edelstahl'
+        and abs(r1['ySpan'] - 24.0) < 0.02
+        and abs(r1['xSpan'] - (24.0 * 2.0 / math.sqrt(3))) < 0.05
+        and abs(r1['zMin'] + 60.0) < 0.02
+        and abs(r1['zMax'] - 10.0) < 0.02
+        and 'ISO 4017' in hint1 and '24' in hint1
+    )
+
+    # 2. Normteile M10–M24 (Zylinder, Senkkopf inkl. kurzem M24, Mutter, Scheibe) & Geometrie-Prüfung
+    p.ev("""App.change('Normteile bis M24', d=>{
+      d.items = [
+        Model.newItem('part', { lib:'stdScrew', size:'M10', head:'zyl', length:30 }, { name:'Zyl_M10' }),
+        Model.newItem('part', { lib:'stdScrew', size:'M24', head:'senk', length:50 }, { name:'Senk_M24' }),
+        Model.newItem('part', { lib:'stdScrew', size:'M24', head:'senk', length:10 }, { name:'Senk_M24_kurz' }),
+        Model.newItem('part', { lib:'stdNut', size:'M16' }, { name:'Mutter_M16' }),
+        Model.newItem('part', { lib:'stdNut', size:'M24' }, { name:'Mutter_M24' }),
+        Model.newItem('part', { lib:'stdWasher', size:'M12' }, { name:'Scheibe_M12' }),
+        Model.newItem('part', { lib:'stdWasher', size:'M24' }, { name:'Scheibe_M24' }),
+      ];
+      d.items.forEach((it, idx) => { it.t.x = idx * 60; });
+    })""")
+    warte_rechnen(p, 60)
+    r2 = p.ev("""
+      const boxes = App.doc.items.map(it => {
+        const bb = App.results.get(it.id)?.data?.bbox || [0,0,0,0,0,0];
+        return { w: bb[3]-bb[0], dp: bb[4]-bb[1], z0: bb[2], z1: bb[5] };
+      });
+      return GeomCheck.run({ silent: true }).then(gc => ({
+        errs: App.errors.length,
+        boxes,
+        gcIssues: gc.issues.length,
+        gcChecked: gc.checkedCount,
+      }));
+    """)
+    bx = r2['boxes']
+    ok2 = (
+        r2['errs'] == 0
+        and abs(bx[0]['w'] - 16.0) < 0.02 and abs(bx[0]['z0'] + 30.0) < 0.02 and abs(bx[0]['z1'] - 10.0) < 0.02
+        and abs(bx[1]['w'] - 39.0) < 0.03 and abs(bx[1]['z0'] + 50.0) < 0.02 and abs(bx[1]['z1']) < 0.02
+        and abs(bx[2]['w'] - 39.0) < 0.03 and bx[2]['z0'] < -14.0
+        and abs(bx[3]['dp'] - 24.0) < 0.02 and abs(bx[3]['z1'] - 14.8) < 0.02
+        and abs(bx[4]['dp'] - 36.0) < 0.02 and abs(bx[4]['z1'] - 21.5) < 0.02
+        and abs(bx[5]['w'] - 24.0) < 0.02 and abs(bx[5]['z1'] - 2.5) < 0.02
+        and abs(bx[6]['w'] - 44.0) < 0.02 and abs(bx[6]['z1'] - 4.0) < 0.02
+        and r2['gcIssues'] == 0 and r2['gcChecked'] == 7
+    )
+
+    # 3. Werkstoff „Messing“ -> Dichte 8,4–8,7 g/cm³ (8,47 g/cm³) & Studio-Aussehen
+    p.ev("""App.change('Messing-Würfel', d=>{
+      d.items = [Model.newItem('box', { w:10, d:10, h:10 }, { name:'Wuerfel' })];
+    })""")
+    warte_rechnen(p, 25)
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(350)
+    p.pg.select_option('#p-mat', 'Messing'); p.wait(1200)
+    mass_txt = (p.pg.locator('#p-mass').text_content() or '').strip()
+    mat_info = (p.pg.locator('#p-mat-info').text_content() or '').strip()
+    r3 = p.ev("""
+      const it = App.doc.items[0];
+      const matObj = Mass.matOf('Messing');
+      const m = Viewer.nodes.get(it.id)?.mesh?.material;
+      return Mass.measure().then(res => ({
+        rho: matObj ? matObj.rho : null,
+        src: matObj ? matObj.src : '',
+        mass: res?.parts?.find(q => q.id === it.id)?.mass ?? null,
+        metal: m ? m.metalness : null,
+        col: m ? '#' + m.color.getHexString() : null,
+      }));
+    """)
+    ok3 = (
+        r3['rho'] is not None and 8.4 <= r3['rho'] <= 8.7
+        and r3['mass'] is not None and 8.4 <= r3['mass'] <= 8.7
+        and '8,47 g' in mass_txt
+        and '8,47' in mat_info and 'Quelle:' in mat_info
+        and r3['metal'] == 1 and r3['col'] == '#d8b552'
+    )
+
+    # 4. Erweiterte Werkstoff-Sammlung: Stähle, Edelstahl, Messing, Kupfer, POM, PA6, PC, ABS, PETG, TPU, Sperrholz, MDF
+    p.ev("""App.change('Werkstoff-Stichproben', d=>{
+      const mats = ['Kupfer', 'MDF', 'PA6', 'Stahl C45', 'V4A Edelstahl', 'Birken-Sperrholz'];
+      d.items = mats.map((mk, idx) => {
+        const b = Model.newItem('box', { w:10, d:10, h:10 }, { name:mk });
+        b.mat = mk; b.t.x = idx * 20; return b;
+      });
+    })""")
+    warte_rechnen(p, 35)
+    r4 = p.ev("""
+      return Promise.all([
+        fetch('data/materialien.json').then(r => r.json()),
+        Mass.bom(),
+      ]).then(([mj, bom]) => {
+        const list = mj.materialien || [];
+        const samples = App.doc.items.map(it => {
+          const m = Viewer.nodes.get(it.id)?.mesh?.material;
+          const def = Mass.matOf(it.mat);
+          return { k: it.mat, rho: def?.rho, metal: m?.metalness, rough: m?.roughness, col: m ? '#' + m.color.getHexString() : null };
+        });
+        return {
+          keys: Mass.materials.map(m => m.k),
+          allValid: list.length >= 26 && list.every(m => m.dichte_g_cm3 > 0 && m.quelle && m.aussehen && m.kategorie) && Mass.materials.every(m => m.rho > 0 && m.src && Viewer.lookOf(m.k)),
+          filament: (bom?.filament || []).map(f => f.mat),
+          samples,
+        };
+      });
+    """)
+    need_mats = {'Baustahl', 'Stahl S355', 'Stahl C45', 'Stahl 42CrMo4', 'V2A Edelstahl', 'V4A Edelstahl', 'Messing', 'Kupfer', 'POM', 'PA6', 'PC', 'ABS', 'PETG', 'TPU 95A', 'Pappel-Sperrholz', 'Birken-Sperrholz', 'MDF'}
+    sm = {s['k']: s for s in r4['samples']}
+    ok4 = (
+        need_mats <= set(r4['keys'])
+        and r4['allValid']
+        and 'PA6' in r4['filament']
+        and sm['Kupfer']['rho'] == 8.96 and sm['Kupfer']['metal'] == 1 and sm['Kupfer']['col'] == '#d47c54'
+        and sm['MDF']['rho'] == 0.72 and sm['MDF']['metal'] == 0 and sm['MDF']['rough'] >= 0.8
+        and sm['PA6']['rho'] == 1.14 and sm['Stahl C45']['rho'] == 7.85 and sm['Stahl C45']['metal'] == 1
+        and sm['V4A Edelstahl']['rho'] == 8.0 and sm['V4A Edelstahl']['metal'] == 1
+        and sm['Birken-Sperrholz']['rho'] == 0.68 and sm['Birken-Sperrholz']['metal'] == 0
+    )
+
+    # 5. UI-Kategorien (optgroup), Suche & Hilfetexte
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(350)
+    groups = p.pg.evaluate("[...document.querySelectorAll('#p-mat optgroup')].map(g=>g.label)")
+    r5 = p.ev("""
+      return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(hj => ({
+        cmds: Commands.search('sechskantschraube').length,
+        helpOk: ['stdScrew', 'stdNut', 'stdWasher'].every(k => hj[k] && hj[k].tip && hj[k].hilfe && hj[k].tipp && hj[k].hilfe.includes('M24')),
+      }));
+    """)
+    ok5 = (
+        {'Metalle', 'Kunststoffe', 'Faserverbund', 'Holz & Platten'} <= set(groups)
+        and r5['cmds'] >= 1
+        and r5['helpOk']
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 # ---------- [A-059] 3D-Druck: Drucker und Loch-Ausgleich (DR-01, DR-02) ----------
 def t_a059_drucker_loch_ausgleich(p):
     import io, zipfile, tempfile, struct, re
@@ -12081,6 +12239,340 @@ def t_a059_drucker_loch_ausgleich(p):
     }))""")
     ok4 = bool(help_ok['json'] and help_ok['dom'])
     return [ok1, ok2, ok3, ok4]
+
+
+def t_a058_eigene_bibliothek(p):
+    # 1. Teil mit Maß „Breite“ (40 mm) und Loch per Rechtsklick → „In meine Bibliothek“ speichern
+    p.empty()
+    p.ev("""
+      UserLib.clear();
+      App.change('Teil mit Breite', d => {
+        d.params = [{ id: 'm_breite', name: 'Breite', expr: 40 }];
+        const g = Model.newItem('group', {}, { name: 'Halterung', color: '#2f9e91' });
+        const b = Model.newItem('box', { w: 'Breite', d: 20, h: 10 }, { name: 'Platte', color: '#2f9e91' });
+        const h1 = Model.newItem('cylinder', { d: 5, h: 14 }, { name: 'Loch', role: 'hole', t: { x: 'Breite/4', y: 0, z: -2 } });
+        g.children = [b, h1];
+        d.items = [g];
+      });
+    """)
+    warte_rechnen(p)
+    p.ev("Viewer.setView('iso', false); Viewer.fit(null, false); Viewer.renderNow();")
+    p.wait(300)
+
+    # Echter Rechtsklick auf das Teil im 3D-Bild → „In meine Bibliothek“
+    sx, sy = world_screen(p, -8, 0, 10)
+    p.pg.mouse.click(sx, sy, button='right')
+    p.pg.wait_for_selector('#cm-userlib')
+    cm_has = p.pg.locator('#cm-userlib').count() > 0
+    p.pg.locator('#cm-userlib').click()
+    p.pg.wait_for_selector('#userlib-save-dialog')
+    dlg = p.ev("""
+      const img = document.querySelector('#userlib-save-dialog .ul-save-preview img');
+      const chks = [...document.querySelectorAll('#ul-params .ul-param-row')].map(r => ({
+        name: r.querySelector('.ul-p-name').value,
+        val: r.querySelector('.ul-p-val').value,
+        checked: r.querySelector('.ul-p-chk').checked,
+      }));
+      return { thumb: img ? img.src : '', chks };
+    """)
+    p.pg.locator('#ul-name').fill('Halterung A')
+    p.pg.locator('#ul-save-ok').click()
+    p.pg.wait_for_selector('#userlib-save-dialog', state='detached')
+
+    # Verlauf-Kontextmenü enthält ebenfalls #tm-userlib; einfacher Grundkörper erkennt Durchmesser/Höhe
+    p.ev("document.querySelector('#left-body .node')?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 80, clientY: 160 }))")
+    tm_has = p.pg.locator('#tm-userlib').count() > 0
+    p.pg.keyboard.press('Escape')
+    p.ev("App.change('Zyl', d => { d.items.push(Model.newItem('cylinder', { d: 12, h: 18 }, { name: 'Bolzen', t: { x: 60 } })); })")
+    warte_rechnen(p)
+    cyl_det = p.ev("return UserLib.detectParams(App.doc.items[1], App.doc).candidates.map(c => c.name)")
+    ok1 = (
+        cm_has and tm_has
+        and dlg['thumb'].startswith('data:image/png;base64,') and len(dlg['thumb']) > 200
+        and any(c['name'] == 'Breite' and c['checked'] and c['val'] == '40' for c in dlg['chks'])
+        and 'Durchmesser' in cyl_det and 'Höhe' in cyl_det
+    )
+
+    # 2. Neues Projekt öffnen → unter „Meine Teile“ mit Vorschaubild einsetzen → Breite ändern passt Körper an
+    p.ev("Start.show()")
+    p.wait(250)
+    p.empty()
+    p.pg.locator('#t-parts').click()
+    p.pg.wait_for_selector('#my-parts-head')
+    fly = p.ev("""
+      const head = document.querySelector('#my-parts-head')?.textContent || '';
+      const tile = document.querySelector('#my-parts-grid .tile.user-tile');
+      const img = tile ? tile.querySelector('img.ul-thumb') : null;
+      return {
+        head,
+        hasTile: !!tile,
+        label: tile ? tile.querySelector('.lbl')?.textContent : '',
+        thumbOk: !!(img && img.src.startsWith('data:image/png;base64,')),
+      };
+    """)
+    p.pg.locator('#my-parts-grid .tile.user-tile').first.click()
+    warte_rechnen(p)
+
+    info_before = p.ev("""
+      return Mass.measure().then(m => {
+        const id = App.doc.items[0]?.id;
+        const b = id && Actions.worldBox(id);
+        return {
+          paramsLen: App.doc.params.length,
+          dx: b ? b.max.x - b.min.x : 0,
+          dy: b ? b.max.y - b.min.y : 0,
+          dz: b ? b.max.z - b.min.z : 0,
+          vol: m?.volume || 0,
+          upTitle: document.querySelector('#userpart-sec .section-h')?.textContent || '',
+          upInputName: document.querySelector('#up-0')?.dataset?.upName || '',
+          upVal: document.querySelector('#up-0')?.value || '',
+        };
+      });
+    """)
+
+    # Breite im Eigenschaften-Panel von 40 auf 80 ändern
+    inp = p.pg.locator('#up-0')
+    inp.click()
+    inp.fill('80')
+    inp.press('Enter')
+    warte_rechnen(p)
+
+    info_after = p.ev("""
+      return Mass.measure().then(m => {
+        const id = App.doc.items[0]?.id;
+        const b = id && Actions.worldBox(id);
+        return {
+          paramsLen: App.doc.params.length,
+          dx: b ? b.max.x - b.min.x : 0,
+          dy: b ? b.max.y - b.min.y : 0,
+          dz: b ? b.max.z - b.min.z : 0,
+          vol: m?.volume || 0,
+        };
+      });
+    """)
+    ok2 = (
+        'Meine Teile' in fly['head'] and fly['hasTile'] and fly['label'] == 'Halterung A' and fly['thumbOk']
+        and info_before['paramsLen'] == 0 and info_before['upInputName'] == 'Breite' and info_before['upVal'] == '40'
+        and abs(info_before['dx'] - 40) < 0.2 and abs(info_before['dy'] - 20) < 0.2 and abs(info_before['dz'] - 10) < 0.2
+        and info_after['paramsLen'] == 0
+        and abs(info_after['dx'] - 80) < 0.2 and abs(info_after['dy'] - 20) < 0.2
+        and info_after['vol'] > info_before['vol'] * 1.8
+    )
+
+    # 3. Zweite Kopie einsetzen → behält eigene Breite 40, während erste 80 bleibt
+    p.pg.locator('#t-parts').click()
+    p.pg.wait_for_selector('#my-parts-grid .tile.user-tile')
+    p.pg.locator('#my-parts-grid .tile.user-tile').first.click()
+    warte_rechnen(p)
+    two = p.ev("""
+      const boxes = App.doc.items.map(it => {
+        const b = Actions.worldBox(it.id);
+        return b ? b.max.x - b.min.x : 0;
+      });
+      return { count: App.doc.items.length, boxes };
+    """)
+    ok3 = two['count'] == 2 and abs(two['boxes'][0] - 80) < 0.2 and abs(two['boxes'][1] - 40) < 0.2
+
+    # 4. Neuladen → Bibliothek bleibt erhalten, Teil löschen & Hilfetext prüfen
+    p.pg.reload(wait_until='domcontentloaded')
+    p.pg.wait_for_function("() => !!(window.__M && window.__M.UserLib && window.__M.Commands && window.__M.App)", timeout=15000)
+    p.ev("Start.hide()")
+    persisted = p.ev("""
+      return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(helpJson => {
+        const list = UserLib.list();
+        return {
+          n: list.length,
+          name: list[0]?.name,
+          hasThumb: !!(list[0]?.thumb && list[0].thumb.startsWith('data:image/png;base64,')),
+          hasBreite: (list[0]?.params || []).some(q => q.name === 'Breite'),
+          cmds: Commands.search('meine bibliothek').length + Commands.search('meine teile').length,
+          helpOk: !!(helpJson.userLibrary && helpJson.userLibrary.tip && helpJson.userLibrary.hilfe && helpJson.userLibrary.tipp),
+        };
+      });
+    """)
+    p.pg.locator('#t-parts').click()
+    p.pg.wait_for_selector('#my-parts-grid .tile.user-tile .ul-del')
+    p.pg.locator('#my-parts-grid .tile.user-tile .ul-del').first.click()
+    after_del = p.ev("return { n: UserLib.list().length, emptyTxt: document.querySelector('#my-parts-grid')?.textContent || '' }")
+    p.ev("UserLib.clear()")
+    ok4 = (
+        persisted['n'] == 1 and persisted['name'] == 'Halterung A'
+        and persisted['hasThumb'] and persisted['hasBreite']
+        and persisted['cmds'] >= 2 and persisted['helpOk']
+        and after_del['n'] == 0 and 'Noch keine eigenen Teile' in after_del['emptyTxt']
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
+def t_a062_zeichnung_blaetter(p):
+    import re
+    p.empty()
+    p.ev("App.change('Quader', d => d.items.push(Model.newItem('box', { w: 40, d: 25, h: 15 }, { name: 'Gehäuse' })))")
+    warte_rechnen(p)
+
+    # 1. In Bereich Zeichnung wechseln, Blatt 1 auf A4 hoch stellen → Tabs, Rahmen & Schriftfeld prüfen
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.pg.wait_for_selector('#sheet-tabs .sheet-tab')
+    p.pg.click('#t-sheet'); p.wait(200)
+    p.pg.select_option('#dw-sheet', 'A4')
+    p.pg.select_option('#dw-orient', 'portrait')
+    p.pg.click('#sheet-tabs'); p.wait(300)
+
+    s1 = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const tabs = [...document.querySelectorAll('#sheet-tabs .sheet-tab')];
+      const lay = Drawing.layout;
+      return {
+        vb: svg?.getAttribute('viewBox'),
+        txt: svg?.textContent || '',
+        tabCount: tabs.length,
+        tabName: tabs[0]?.querySelector('.st-name')?.textContent,
+        tabFmt: tabs[0]?.querySelector('.st-fmt')?.textContent,
+        delCount: document.querySelectorAll('#sheet-tabs .st-del').length,
+        frame: lay?.frame,
+        tb: lay?.tb,
+      };
+    """)
+    ok1 = (
+        s1['vb'] == '0 0 210 297'
+        and s1['tabCount'] == 1
+        and s1['tabName'] == 'Blatt 1'
+        and s1['tabFmt'] == 'A4'
+        and s1['delCount'] == 0
+        and s1['frame'] == {'x': 20, 'y': 10, 'w': 180, 'h': 277}
+        and s1['tb'] and s1['tb']['w'] == 180
+        and 'A4' in s1['txt'] and '1/1' in s1['txt']
+    )
+
+    # 2. Zweites Blatt hinzufügen, auf A3 quer stellen, umbenennen & Tab-Wechsel prüfen
+    p.pg.click('#dw-add-sheet'); p.wait(400)
+    p.pg.select_option('#dw-panel-sheet', 'A3')
+    p.pg.select_option('#dw-panel-orient', 'landscape')
+    p.wait(300)
+    p.pg.click('#sheet-tabs .sheet-tab.active .st-ren'); p.wait(200)
+    p.pg.fill('#prompt-inp', 'Detailansicht')
+    p.pg.click('.modal .btn.primary'); p.wait(300)
+
+    s2 = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const tabs = [...document.querySelectorAll('#sheet-tabs .sheet-tab')];
+      return {
+        vb: svg?.getAttribute('viewBox'),
+        txt: svg?.textContent || '',
+        tabCount: tabs.length,
+        names: tabs.map(t => t.querySelector('.st-name')?.textContent),
+        fmts: tabs.map(t => t.querySelector('.st-fmt')?.textContent),
+        delCount: document.querySelectorAll('#sheet-tabs .st-del').length,
+      };
+    """)
+    p.pg.locator('#sheet-tabs .sheet-tab').first.click(); p.wait(300)
+    vb_back1 = p.ev("return { vb: document.querySelector('#sheet .sheet-holder svg')?.getAttribute('viewBox'), txt: document.querySelector('#sheet .sheet-holder svg')?.textContent || '' }")
+    p.pg.locator('#sheet-tabs .sheet-tab').nth(1).click(); p.wait(300)
+    vb_back2 = p.ev("return { vb: document.querySelector('#sheet .sheet-holder svg')?.getAttribute('viewBox'), txt: document.querySelector('#sheet .sheet-holder svg')?.textContent || '' }")
+
+    ok2 = (
+        s2['tabCount'] == 2
+        and s2['names'] == ['Blatt 1', 'Detailansicht']
+        and s2['fmts'] == ['A4', 'A3']
+        and s2['delCount'] == 2
+        and s2['vb'] == '0 0 420 297'
+        and 'A3' in s2['txt'] and '2/2' in s2['txt'] and 'Detailansicht' in s2['txt']
+        and vb_back1['vb'] == '0 0 210 297' and '1/2' in vb_back1['txt']
+        and vb_back2['vb'] == '0 0 420 297' and '2/2' in vb_back2['txt']
+    )
+
+    # 3. Formate A2, A1, A0 (quer & hoch) inkl. Schriftfeld- & Rahmenanpassung prüfen, dann wieder A3 quer
+    fmt_checks = []
+    for fmt, ori, exp_vb, exp_m in [
+        ('A2', 'landscape', '0 0 594 420', 10),
+        ('A1', 'landscape', '0 0 841 594', 20),
+        ('A0', 'landscape', '0 0 1189 841', 20),
+        ('A0', 'portrait', '0 0 841 1189', 20),
+    ]:
+        p.pg.select_option('#dw-panel-sheet', fmt)
+        p.pg.select_option('#dw-panel-orient', ori)
+        p.wait(200)
+        st = p.ev("const s=document.querySelector('#sheet .sheet-holder svg'), l=Drawing.layout; return { vb: s?.getAttribute('viewBox'), txt: s?.textContent || '', frame: l?.frame, tb: l?.tb }")
+        fmt_checks.append(
+            st['vb'] == exp_vb and fmt in st['txt']
+            and st['frame'] and st['frame']['x'] == 20 and st['frame']['y'] == exp_m
+            and st['tb'] and st['tb']['w'] == 180 and st['tb']['w'] <= st['frame']['w']
+        )
+    p.pg.select_option('#dw-panel-sheet', 'A3')
+    p.pg.select_option('#dw-panel-orient', 'landscape')
+    p.wait(250)
+    ok3 = all(fmt_checks)
+
+    # 4. PDF-Export: beide Blätter (A4 hoch, A3 quer) → 2 Seiten mit exakten MediaBox-Größen
+    p.pg.click('#t-dexport'); p.wait(200)
+    with p.pg.expect_download(timeout=30000) as dl_info:
+        p.pg.locator('.menu button', has_text='PDF').click()
+    dl = dl_info.value
+    pdf_path = dl.path()
+    pdf_bytes = open(pdf_path, 'rb').read()
+    mboxes = re.findall(rb'/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)\s*\]', pdf_bytes)
+    pt_to_mm = 25.4 / 72.0
+    sizes_mm = [(float(w) * pt_to_mm, float(h) * pt_to_mm) for w, h in mboxes]
+    ok4 = (
+        dl.suggested_filename.lower().endswith('.pdf')
+        and pdf_bytes.startswith(b'%PDF-1.4')
+        and b'xref' in pdf_bytes and b'%%EOF' in pdf_bytes
+        and b'/Count 2' in pdf_bytes
+        and len(sizes_mm) == 2
+        and abs(sizes_mm[0][0] - 210) < 0.5 and abs(sizes_mm[0][1] - 297) < 0.5
+        and abs(sizes_mm[1][0] - 420) < 0.5 and abs(sizes_mm[1][1] - 297) < 0.5
+        and b'1/2' in pdf_bytes and b'2/2' in pdf_bytes and b'Detailansicht' in pdf_bytes
+    )
+
+    # 5. Löschen, Rückgängig/Wiederholen, Speichern/Laden, Legacy-Migration & Hilfetexte
+    p.pg.click('#sheet-tabs .sheet-tab.active .st-del'); p.wait(300)
+    after_del = p.ev("return { n: Drawing.sheets().length, tabs: document.querySelectorAll('#sheet-tabs .sheet-tab').length, dels: document.querySelectorAll('#sheet-tabs .st-del').length, txt: document.querySelector('#sheet .sheet-holder svg')?.textContent || '' }")
+    p.ev("App.undo()"); p.wait(400)
+    after_undo = p.ev("return { n: Drawing.sheets().length, names: Drawing.sheets().map(s=>s.name), fmts: Drawing.sheets().map(s=>s.sheet+':'+s.orient) }")
+    p.ev("App.redo()"); p.wait(400)
+    after_redo = p.ev("return Drawing.sheets().length")
+    p.ev("App.undo()"); p.wait(400)
+
+    saved = p.ev("return JSON.stringify(App.doc)")
+    p.ev("App.setDoc(JSON.parse(arg), {fit:false})", saved); warte_rechnen(p); p.wait(400)
+    after_reload = p.ev("return { n: Drawing.sheets().length, names: Drawing.sheets().map(s=>s.name), fmts: Drawing.sheets().map(s=>s.sheet+':'+s.orient) }")
+
+    # Legacy-Migration (flaches doc.drawing ohne sheets[])
+    legacy = p.ev("""
+      const d = JSON.parse(JSON.stringify(App.doc));
+      d.drawing = { sheet: 'A3', orient: 'portrait', scale: 'auto', views: { front: true, top: true, left: true, iso: false }, hidden: true, centers: true, dims: [], free: [], title: { titel: 'Alt', nummer: '1', name: '', datum: '', werkstoff: 'PLA', firma: '', blatt: '1/1' } };
+      App.setDoc(d, { fit: false });
+      return { n: Drawing.sheets().length, sh: Drawing.activeSheet().sheet, or: Drawing.activeSheet().orient, blatt: Drawing.activeSheet().title.blatt };
+    """)
+    help_ok = p.ev("""
+      return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(hj => {
+        const keys = ['drawingSheets', 'drawingFormat'];
+        return keys.every(k => hj[k] && hj[k].tip && hj[k].hilfe && hj[k].tipp) && Commands.search('zeichnungsblatt').length >= 1;
+      });
+    """)
+
+    ok5 = (
+        after_del['n'] == 1 and after_del['tabs'] == 1 and after_del['dels'] == 0 and '1/1' in after_del['txt']
+        and after_undo['n'] == 2 and after_undo['names'] == ['Blatt 1', 'Detailansicht'] and after_undo['fmts'] == ['A4:portrait', 'A3:landscape']
+        and after_redo == 1
+        and after_reload['n'] == 2 and after_reload['names'] == ['Blatt 1', 'Detailansicht'] and after_reload['fmts'] == ['A4:portrait', 'A3:landscape']
+        and legacy['n'] == 1 and legacy['sh'] == 'A3' and legacy['or'] == 'portrait' and legacy['blatt'] == ''
+        and help_ok
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
+def t_a073_pycache(p):
+    import subprocess
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    with open(os.path.join(root, '.gitignore'), encoding='utf-8') as f:
+        lines = [l.strip() for l in f.read().splitlines()]
+    ok1 = '__pycache__/' in lines and '*.pyc' in lines
+    res = subprocess.run(['git', 'ls-files', 'tests'], cwd=root, capture_output=True, text=True, check=True)
+    files = [l.strip() for l in res.stdout.splitlines() if l.strip()]
+    ok2 = len(files) > 0 and not any(f.endswith('.pyc') for f in files)
+    return [ok1, ok2]
 
 
 # ---------- [A-060] 3D-Druck: Passungen, Düsen-Wandstärken-Check, Ausrichten (DR-03, DR-04, DR-05) ----------
@@ -12412,8 +12904,12 @@ TESTS = [
     ('[A-054] Schneller Start: Oberfläche sofort / Skizzieren ohne Kern / Kern & Schrift bei Bedarf / Protokoll', t_a054_schneller_start),
     ('[A-055] Sparsames Rückgängig: 200 Änderungen als Patches / Speicher viel kleiner / 200× Rückgängig exakt / Redo & Speicherlimit', t_a055_sparsames_rueckgaengig),
     ('[A-056] Normteile: Passstifte, Passfedern mit Nut, Kugel- und Gleitlager', t_a056_normteile_stifte_lager),
+    ('[A-057] Schrauben M10–M24 & Werkstoffe: Sechskantschraube M16×60 SW 24 / M10–M24 Normteile / Werkstoff Messing Dichte 8,4–8,7 / neue Werkstoffe mit Aussehen & Quelle / Suche & Hilfe', t_a057_schrauben_werkstoffe),
     ('[A-059] 3D-Druck: Drucker-Liste, Bauraum-Warnung mit Drehvorschlag & Loch-Ausgleich im STL/3MF', t_a059_drucker_loch_ausgleich),
     ('[A-060] 3D-Druck: Passungs-Vorgaben, Düsen-Wandstärken-Check & Für den Druck ausrichten', t_a060_druck_passung_wand_ausrichten),
+    ('[A-058] Eigene Teile in die Bibliothek: mit Maß „Breite“ speichern / Vorschaubild / in neuem Projekt einsetzen / Breite ändern passt Körper an / zweite Kopie & Neuladen & Löschen & Hilfe', t_a058_eigene_bibliothek),
+    ('[A-062] Zeichnung: mehrere Blätter, A4 bis A0 & PDF-Export', t_a062_zeichnung_blaetter),
+    ('[A-073] Python-Cache: .gitignore enthält __pycache__/ & *.pyc / keine .pyc in git ls-files tests', t_a073_pycache),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

@@ -1467,6 +1467,11 @@ export function createKernel(R, oc) {
     M5: { fine: 5.3, hole: 5.5, coarse: 5.8, tap: 4.2, csk: 11.2, cbD: 10.0, cbH: 5.4, nutSW: 8.0, nutH: 4.7, ins: 6.4, insL: 10.5 },
     M6: { fine: 6.4, hole: 6.6, coarse: 7.0, tap: 5.0, csk: 13.44, cbD: 11.0, cbH: 6.4, nutSW: 10.0, nutH: 5.2, ins: 8.0, insL: 12.7 },
     M8: { fine: 8.4, hole: 9.0, coarse: 10.0, tap: 6.8, csk: 17.92, cbD: 15.0, cbH: 8.6, nutSW: 13.0, nutH: 6.8, ins: 9.7, insL: 12.7 },
+    M10: { fine: 10.5, hole: 11.0, coarse: 12.0, tap: 8.5, csk: 22.4, cbD: 18.0, cbH: 10.6, nutSW: 16.0, nutH: 8.4, ins: null, insL: null },
+    M12: { fine: 13.0, hole: 13.5, coarse: 14.5, tap: 10.2, csk: 26.88, cbD: 20.0, cbH: 12.6, nutSW: 18.0, nutH: 10.8, ins: null, insL: null },
+    M16: { fine: 17.0, hole: 17.5, coarse: 18.5, tap: 14.0, csk: 33.6, cbD: 26.0, cbH: 16.6, nutSW: 24.0, nutH: 14.8, ins: null, insL: null },
+    M20: { fine: 21.0, hole: 22.0, coarse: 24.0, tap: 17.5, csk: 40.32, cbD: 33.0, cbH: 20.6, nutSW: 30.0, nutH: 18.0, ins: null, insL: null },
+    M24: { fine: 25.0, hole: 26.0, coarse: 28.0, tap: 21.0, csk: 39.0, cskAngle: 60, cbD: 40.0, cbH: 24.8, nutSW: 36.0, nutH: 21.5, ins: null, insL: null },
   };
   // Zentrierbohrungen nach DIN 332 Form A (60°-Kegel + Führungsbohrung mit 118°-Bohrspitze)
   const CENTER_DRILL = {
@@ -1479,25 +1484,36 @@ export function createKernel(R, oc) {
     A5: { d1: 5.0, d2: 10.60, t1: 6.3 },
     'A6.3': { d1: 6.3, d2: 13.20, t1: 8.0 },
   };
-  // Normteile: Kopf Zylinderschraube ISO 4762 (Ø, Höhe, Innensechskant), Senkschraube ISO 10642 (Kopfhöhe, Innensechskant),
-  // Scheibe ISO 7089 (innen, außen, Dicke). Kopf und Scheibe aus app/data/schrauben.json bzw. Normtabellen (Nennmaße).
+  // Normteile: Kopf Zylinderschraube ISO 4762 (Ø, Höhe, Innensechskant), Senkschraube ISO 10642 / DIN 7991 (Kopfhöhe, Innensechskant),
+  // Sechskantschraube ISO 4017 (Schlüsselweite, Kopfhöhe), Scheibe ISO 7089 (innen, außen, Dicke). Kopf und Scheibe aus app/data/schrauben.json.
   const NORM = {
-    'M1.6': { hd: 3.0, hk: 1.6, hs: 1.5, w1: 1.7, w2: 4.0, wh: 0.3 },
-    M2: { hd: 3.8, hk: 2.0, hs: 1.5, w1: 2.2, w2: 5.0, wh: 0.3 },
-    'M2.5': { hd: 4.5, hk: 2.5, hs: 2.0, w1: 2.7, w2: 6.0, wh: 0.5 },
-    M3: { hd: 5.5, hk: 3.0, hs: 2.5, ck: 1.86, cs: 2.0, w1: 3.2, w2: 7.0, wh: 0.5 },
-    M4: { hd: 7.0, hk: 4.0, hs: 3.0, ck: 2.48, cs: 2.5, w1: 4.3, w2: 9.0, wh: 0.8 },
-    M5: { hd: 8.5, hk: 5.0, hs: 4.0, ck: 3.1, cs: 3.0, w1: 5.3, w2: 10.0, wh: 1.0 },
-    M6: { hd: 10.0, hk: 6.0, hs: 5.0, ck: 3.72, cs: 4.0, w1: 6.4, w2: 12.0, wh: 1.6 },
-    M8: { hd: 13.0, hk: 8.0, hs: 6.0, ck: 4.96, cs: 5.0, w1: 8.4, w2: 16.0, wh: 1.6 },
+    'M1.6': { hd: 3.0, hk: 1.6, hs: 1.5, hexSW: 3.2, hexK: 1.1, w1: 1.7, w2: 4.0, wh: 0.3 },
+    M2: { hd: 3.8, hk: 2.0, hs: 1.5, hexSW: 4.0, hexK: 1.4, w1: 2.2, w2: 5.0, wh: 0.3 },
+    'M2.5': { hd: 4.5, hk: 2.5, hs: 2.0, hexSW: 5.0, hexK: 1.7, w1: 2.7, w2: 6.0, wh: 0.5 },
+    M3: { hd: 5.5, hk: 3.0, hs: 2.5, ck: 1.86, cs: 2.0, hexSW: 5.5, hexK: 2.0, w1: 3.2, w2: 7.0, wh: 0.5 },
+    M4: { hd: 7.0, hk: 4.0, hs: 3.0, ck: 2.48, cs: 2.5, hexSW: 7.0, hexK: 2.8, w1: 4.3, w2: 9.0, wh: 0.8 },
+    M5: { hd: 8.5, hk: 5.0, hs: 4.0, ck: 3.1, cs: 3.0, hexSW: 8.0, hexK: 3.5, w1: 5.3, w2: 10.0, wh: 1.0 },
+    M6: { hd: 10.0, hk: 6.0, hs: 5.0, ck: 3.72, cs: 4.0, hexSW: 10.0, hexK: 4.0, w1: 6.4, w2: 12.0, wh: 1.6 },
+    M8: { hd: 13.0, hk: 8.0, hs: 6.0, ck: 4.96, cs: 5.0, hexSW: 13.0, hexK: 5.3, w1: 8.4, w2: 16.0, wh: 1.6 },
+    M10: { hd: 16.0, hk: 10.0, hs: 8.0, ck: 6.2, cs: 6.0, hexSW: 16.0, hexK: 6.4, w1: 10.5, w2: 20.0, wh: 2.0 },
+    M12: { hd: 18.0, hk: 12.0, hs: 10.0, ck: 7.44, cs: 8.0, hexSW: 18.0, hexK: 7.5, w1: 13.0, w2: 24.0, wh: 2.5 },
+    M16: { hd: 24.0, hk: 16.0, hs: 14.0, ck: 8.8, cs: 10.0, hexSW: 24.0, hexK: 10.0, w1: 17.0, w2: 30.0, wh: 3.0 },
+    M20: { hd: 30.0, hk: 20.0, hs: 17.0, ck: 10.16, cs: 12.0, hexSW: 30.0, hexK: 12.5, w1: 21.0, w2: 37.0, wh: 3.0 },
+    M24: { hd: 36.0, hk: 24.0, hs: 19.0, ck: 14.0, cs: 14.0, hexSW: 36.0, hexK: 15.0, w1: 25.0, w2: 44.0, wh: 4.0 },
   };
   const nomD = (size) => parseFloat(String(size).slice(1)) || 3;
-  // Schraube: Kopf oben auf z = 0 aufgesetzt (Zylinderkopf) bzw. bündig mit z = 0 (Senkkopf), Schaft nach unten (Gewinde nur angedeutet)
+  // Schraube: Kopf oben auf z = 0 aufgesetzt (Zylinder-/Sechskantkopf) bzw. bündig mit z = 0 (Senkkopf), Schaft nach unten (Gewinde nur angedeutet)
   function buildStdScrew(p) {
     const size = NORM[p.size] ? p.size : 'M3', n = NORM[size], s = SCREW[size], d = nomD(size), L = pos(p.length, 10);
+    if (p.head === 'hex') {
+      const head = hexPrism(n.hexSW, 0, n.hexK);
+      const shaft = R.makeCylinder(d / 2, L, [0, 0, -L], [0, 0, 1]);
+      const out = head.fuse(shaft); safeDelete(head); safeDelete(shaft);
+      return out;
+    }
     if (p.head === 'senk' && n.ck) {
-      const rT = s.csk / 2, k = n.ck;
-      let body = revolveProfile([[0, 0], [rT, 0], [d / 2, -k], [d / 2, -L], [0, -L]]);
+      const rT = s.csk / 2, k = n.ck, len = Math.max(L, k + 0.5);
+      let body = revolveProfile([[0, 0], [rT, 0], [d / 2, -k], [d / 2, -len], [0, -len]]);
       const sock = hexPrism(n.cs, -k * 0.75, 0.01); const r = body.cut(sock); safeDelete(body); safeDelete(sock); body = r;
       return body;
     }

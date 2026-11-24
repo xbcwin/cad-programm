@@ -3,6 +3,10 @@ const Place = (() => {
   let st = null; // { spec, preview, onFace, pos }
   let magnetOff = false;
   function specBox(spec) {
+    if (spec.userPart) {
+      const e = spec.userPart;
+      return Model.itemLocalBox(e.item, Model.scopeVars({}, { params: e.params, tables: e.tables })) || [-15, -15, 0, 15, 15, 20];
+    }
     if (spec.kind) return Model.primitiveBox(spec.kind, spec.p ? { ...Model.newItem(spec.kind).p, ...spec.p } : Model.newItem(spec.kind).p) || [-10, -10, 0, 10, 10, 20];
     const d = spec.part; const p = spec.params || libDefaults(d);
     if (d.lib === 'holePattern') return [-17, -17, -(p.depth || 10), 17, 17, 0.2];
@@ -18,7 +22,7 @@ const Place = (() => {
     if (d.lib === 'blindHole') { const r = (Number(p.d) || 5) / 2, tip = blindTipHeight(Number(p.d) || 5, p.tipAngle ?? 118); return [-r, -r, -((Number(p.depth) || 10) + tip), r, r, 0.2]; }
     if (d.lib === 'fitHole') { const r = (Number(p.d) || 6) / 2; return [-r, -r, -(Number(p.depth) || 10), r, r, 0.2]; }
     if (d.lib === 'centerHole') { const m = centerHoleMetrics(p.size), r = m.d2 / 2; return [-r, -r, -m.totalDepth, r, r, 0.2]; }
-    if (d.lib === 'stdPin' || d.lib === 'stdKey' || d.lib === 'stdKeyway' || d.lib === 'stdBearing' || d.lib === 'stdSleeve') {
+    if (d.lib === 'stdScrew' || d.lib === 'stdNut' || d.lib === 'stdWasher' || d.lib === 'stdPin' || d.lib === 'stdKey' || d.lib === 'stdKeyway' || d.lib === 'stdBearing' || d.lib === 'stdSleeve') {
       return Model.primitiveBox('part', { lib: d.lib, ...p }) || [-10, -10, 0, 10, 10, 10];
     }
     if (d.lib === 'threadHole') return [-3.5, -3.5, -(p.length || 10), 3.5, 3.5, 0.2];
@@ -33,7 +37,7 @@ const Place = (() => {
     const b = specBox(spec);
     const g = new THREE.BoxGeometry(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
     g.translate((b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2);
-    const hole = spec.part ? spec.part.role === 'hole' : false;
+    const hole = spec.userPart ? spec.userPart.role === 'hole' : spec.part ? spec.part.role === 'hole' : false;
     const col = new THREE.Color(hole ? Viewer.theme.hole : Viewer.theme.accent);
     const mesh = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.22, depthWrite: false }));
     const edges = new THREE.LineSegments(new THREE.EdgesGeometry(g), new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.95 }));
@@ -57,7 +61,8 @@ const Place = (() => {
         if (st) { finish(ev.clientX, ev.clientY); return; }
         // einfacher Klick: in die Mitte setzen
         Panels.closeFlyout();
-        if (spec.buy) Actions.addBuyPart(spec);
+        if (spec.userPart) UserLib.insert(spec.userPart);
+        else if (spec.buy) Actions.addBuyPart(spec);
         else if (spec.kind) Actions.addPrimitive(spec.kind);
         else Actions.addPart(spec.part, spec.params || libDefaults(spec.part), { name: spec.name });
         setTimeout(() => { const id = App.sel[0]; const b = id && Actions.worldBox(id); if (b && !Viewer.inView(b)) Viewer.fit(App.doc.items.map((x) => x.id)); }, 400);
@@ -70,6 +75,7 @@ const Place = (() => {
   // Löcher bleiben beim Kasten – sie würden sonst schon beim Ziehen in Körper schneiden.
   const DP = '__dragprev';
   function previewItem(spec) {
+    if (spec.userPart && spec.userPart.role !== 'hole') return UserLib.previewItem(spec.userPart);
     if (spec.buy) return Model.newItem(spec.kind, { ...Model.newItem(spec.kind).p, ...spec.p }, { name: spec.name, color: spec.color });
     if (spec.kind) return Model.newItem(spec.kind, spec.p || {});
     if (spec.part && spec.part.role !== 'hole') return Model.newItem('part', { lib: spec.part.lib, ...(spec.params || libDefaults(spec.part)) }, { role: spec.part.role });
@@ -121,6 +127,7 @@ const Place = (() => {
   function finish(x, y) {
     const s = st; cleanup();
     if (!inCanvas(x, y) || (!s.onFace && !s.pos)) return;
+    if (s.spec.userPart) { UserLib.insert(s.spec.userPart, s.onFace ? { onFace: s.onFace } : { pos: s.pos }); if (s.onFace) UI.toast('Abgelegt – es ist jetzt Teil des Körpers darunter.', { icon: 'check' }); return; }
     if (s.spec.buy) { Actions.addBuyPart(s.spec, s.onFace ? { onFace: s.onFace } : { pos: s.pos }); return; }
     if (s.spec.kind) Actions.addPrimitive(s.spec.kind, s.onFace ? { onFace: s.onFace } : { pos: s.pos });
     else Actions.addPart(s.spec.part, s.spec.params || libDefaults(s.spec.part), { ...(s.onFace ? { onFace: s.onFace } : { pos: s.pos }), name: s.spec.name });
@@ -336,7 +343,7 @@ const Place = (() => {
         body.append(thru);
         if (!o.thru) body.append(UI.numField({ id: 'hw-depth', label: 'Tiefe', value: o.depth, onCommit: (v) => { o.depth = v; } }));
       } else {
-        const sizes = o.type === 'insert' ? SIZES.filter((x) => x !== 'M1.6') : SIZES;
+        const sizes = o.type === 'insert' ? ['M2', 'M2.5', 'M3', 'M4', 'M5', 'M6', 'M8'] : SIZES;
         if (!sizes.includes(o.size)) o.size = 'M3';
         body.append(UI.selectField({ id: 'hw-size', label: o.type === 'nut' ? 'Mutter' : 'Gewinde', value: o.size, options: sizes, onChange: (v) => { o.size = v; updatePreview(); } }));
         const thru = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'hw-thru', checked: !!o.thru }), o.type === 'insert' ? 'So tief wie der Körper' : 'Ganz durch den Körper');
