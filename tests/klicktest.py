@@ -9830,6 +9830,138 @@ def t_f11240521(p):
     return [ok1, ok2, ok3]
 
 
+def t_a043_wickeln_zylinder(p):
+    # 1. Zylinder Ø20 × 20 → Zylinderfläche anklicken → „Wickeln“ → Rechteck 31,4 × 8 mm → Prägung erhaben (+2 mm) → 180° ± 2°
+    p.empty()
+    p.ev("Actions.addPrimitive('cylinder')")
+    warte_rechnen(p, 30); p.wait(400)
+    pt = world_screen(p, 0, -10, 10)
+    p.pg.mouse.click(pt[0], pt[1]); p.wait(350)
+    p.pg.locator('.ctxbar').get_by_role('button', name='Wickeln').click(); p.wait(1000)
+    p.ev("Sketch.state.ents.push({id:'r1',type:'rect',a:[-15.7,-4],b:[15.7,4]})")
+    p.pg.keyboard.press('Enter'); p.wait(500)
+    has_step_help = p.pg.locator('#st-mode-wrap').get_attribute('data-help') == 'wrapCyl'
+    p.pg.locator('.stepbox .btn.primary').click(); warte_rechnen(p, 30); p.wait(300)
+
+    def span_deg(r_min, r_max):
+        return p.ev("""const r=App.results.get(App.doc.items[0].id);
+          if(!r||!r.data||!r.data.vertices) return null;
+          const v=r.data.vertices; const angs=[];
+          for(let i=0;i<v.length;i+=3){
+            const x=v[i], y=v[i+1], rr=Math.hypot(x,y);
+            if(rr>arg[0] && rr<arg[1]) angs.push(Math.atan2(x,-y)*180/Math.PI);
+          }
+          if(!angs.length) return null;
+          angs.sort((a,b)=>a-b);
+          let maxGap=0, gapAt=0;
+          for(let i=0;i<angs.length;i++){
+            const nxt=i+1<angs.length?angs[i+1]:angs[0]+360;
+            const g=nxt-angs[i];
+            if(g>maxGap){maxGap=g;gapAt=(i+1)%angs.length;}
+          }
+          const span=360-maxGap;
+          const mid=(angs[gapAt]+span/2+180)%360-180;
+          return {span, mid, n:angs.length};""", [r_min, r_max])
+
+    m_emb = p.ev("return Mass.measureDoc(App.doc)")
+    st_emb = p.ev("const its=App.doc.items; return {len:its.length, kind:its[1]&&its[1].kind, merged:App.mergedInto(its[1]&&its[1].id)===its[0].id, errs:App.errors.length}")
+    sp_emb = span_deg(10.5, 12.5)
+    info_emb = p.pg.locator('#wrap-angle-info').text_content()
+    exp_emb = math.pi * 100 * 20 + math.pi * (144 - 100) * 8 * (31.4 / (2 * math.pi * 10))
+    ok1 = (
+        has_step_help
+        and st_emb == {'len': 2, 'kind': 'wrap', 'merged': True, 'errs': 0}
+        and m_emb and m_emb['count'] == 1 and abs(m_emb['volume'] - exp_emb) < 5
+        and sp_emb is not None and abs(sp_emb['span'] - 180.0) <= 2.0 and abs(sp_emb['mid']) <= 2.0
+        and '179,9' in info_emb
+    )
+
+    # 2. Vertieft (deboss, 2 mm), Startwinkel 90° und Zylinder Ø40 → halber Winkel (90° ± 2°)
+    p.pg.select_option('#wrap-mode', 'deboss'); warte_rechnen(p, 30); p.wait(300)
+    m_deb = p.ev("return Mass.measureDoc(App.doc)")
+    sp_deb = span_deg(7.5, 9.5)
+    exp_deb = math.pi * 100 * 20 - math.pi * (100 - 64) * 8 * (31.4 / (2 * math.pi * 10))
+
+    field(p, '#wrap-angle', 90); warte_rechnen(p, 30); p.wait(250)
+    sp_rot = span_deg(7.5, 9.5)
+
+    p.ev("App.change('Ø40', d => { d.items[0].p.d = 40; })"); warte_rechnen(p, 30); p.wait(300)
+    sp_40 = span_deg(17.5, 19.5)
+    p.ev("App.select([App.doc.items[1].id])"); p.wait(250)
+    info_40 = p.pg.locator('#wrap-angle-info').text_content()
+    ok2 = (
+        m_deb and m_deb['count'] == 1 and abs(m_deb['volume'] - exp_deb) < 5
+        and sp_deb is not None and abs(sp_deb['span'] - 180.0) <= 2.0
+        and sp_rot is not None and abs(sp_rot['span'] - 180.0) <= 2.0 and abs(sp_rot['mid'] - 90.0) <= 2.0
+        and sp_40 is not None and abs(sp_40['span'] - 90.0) <= 2.0
+        and ('90°' in info_40 or '90,0°' in info_40 or '89,9°' in info_40)
+        and p.ev("return App.errors.length") == 0
+    )
+
+    # 3. Zurück auf Ø20 & Modus „Linie“ → Fläche geteilt + Bogenkante 31,4 mm + „Entlang Pfad“ + offene Helix
+    p.ev("App.change('Ø20', d => { d.items[0].p.d = 20; d.items[1].p.angle = 0; })"); warte_rechnen(p, 30); p.wait(250)
+    p.ev("App.select([App.doc.items[1].id])"); p.wait(250)
+    p.pg.select_option('#wrap-mode', 'line'); warte_rechnen(p, 30); p.wait(300)
+    m_line = p.ev("return Mass.measureDoc(App.doc)")
+    line_info = p.ev("""const d=App.results.get(App.doc.items[0].id).data;
+      return {faces:d.faces.length, edges:d.edges.length, hasArc314:d.edges.some(e=>Math.abs((e.l||0)-31.4)<0.15)};""")
+    p.pg.locator('#wrap-to-sweep').click(); warte_rechnen(p, 30); p.wait(300)
+    m_sw = p.ev("return Mass.measureDoc(App.doc)")
+    sw_ok = p.ev("const it=App.doc.items[2]; return !!it && it.kind==='sweep' && it.p.wrapId===App.doc.items[1].id && App.errors.length===0")
+
+    # Offene Helix-Linie um Ø20 + Sweep
+    p.ev("""App.change('Helix', d => {
+      const w = d.items[1];
+      w.p.sketch.ents = [{id:'l1',type:'line',a:[-31.4,-6],b:[31.4,6]}];
+    })"""); warte_rechnen(p, 30); p.wait(300)
+    m_hx = p.ev("return Mass.measureDoc(App.doc)")
+    helix_ok = p.ev("return App.errors.length === 0") and m_hx and m_hx['count'] == 2 and m_hx['parts'][1]['volume'] > 100
+
+    ok3 = (
+        m_line and abs(m_line['volume'] - math.pi * 100 * 20) < 5
+        and line_info['faces'] >= 4 and line_info['edges'] >= 6 and line_info['hasArc314']
+        and sw_ok and m_sw and m_sw['count'] == 2 and m_sw['parts'][1]['volume'] > 100
+        and helix_ok
+    )
+
+    # 4. Zeitleiste (Unterdrücken & Marker), Skizze bearbeiten, Bezüge, Erklären, Befehlssuche & Hilfe
+    p.ev("App.change('Rect wieder', d => { d.items.splice(2,1); d.items[1].p.sketch.ents=[{id:'r1',type:'rect',a:[-15.7,-4],b:[15.7,4]}]; d.items[1].p.mode='emboss'; })")
+    warte_rechnen(p, 30); p.wait(250)
+    p.pg.locator('.tl-chip').nth(1).click(button='right'); p.wait(300)
+    p.pg.locator('.pop').get_by_role('button', name='Unterdrücken').click()
+    warte_rechnen(p, 30); p.wait(250)
+    v_sup = volumen(p)
+    p.pg.locator('.tl-chip').nth(1).click(button='right'); p.wait(300)
+    p.pg.locator('.pop').get_by_role('button', name='Wieder aktivieren').click()
+    warte_rechnen(p, 30); p.wait(250)
+    v_unsup = volumen(p)
+    p.ev("Timeline.setMarker(1)"); warte_rechnen(p, 30); p.wait(200)
+    v_mk1 = volumen(p)
+    p.ev("Timeline.setMarker(2)"); warte_rechnen(p, 30); p.wait(200)
+    v_mk2 = volumen(p)
+
+    p.ev("Sketch.editItem(App.doc.items[1].id)"); p.wait(1000)
+    edit_ok = p.ev("return Sketch.active && Sketch.state.ents.length === 1")
+    p.pg.keyboard.press('Enter'); p.wait(800); warte_rechnen(p, 30)
+
+    deps = p.ev("return Model.dependencies(App.doc)")
+    expl = p.ev("return Explain.local(App.doc.items[1].id)")
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    cmd_ok = p.ev("return Commands.search('Wickeln').some(c=>c.id==='wrap-cyl')")
+    ok4 = (
+        v_sup is not None and abs(v_sup - math.pi * 100 * 20) < 5
+        and v_unsup is not None and abs(v_unsup - exp_emb) < 5
+        and v_mk1 is not None and abs(v_mk1 - math.pi * 100 * 20) < 5
+        and v_mk2 is not None and abs(v_mk2 - exp_emb) < 5
+        and edit_ok
+        and any(d.get('what') == 'wickelt um' for d in (deps or []))
+        and expl and any('Wickelt' in l['t'] for l in expl['lines'])
+        and cmd_ok
+        and 'wrapCyl' in hilfen and all(k in hilfen['wrapCyl'] for k in ('tip', 'hilfe', 'tipp'))
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 def t_a044_iges_brep(p):
     import zipfile, tempfile
     p.empty()
@@ -10279,6 +10411,7 @@ TESTS = [
     ('[A-041] Formeln: wenn, runden, aufrunden, abrunden, Tabelle & Klartext-Fehler', t_a041_formeln),
     ('[A-042] Prägen auf gewölbter Fläche: Text auf Zylindermantel vertieft / erhaben ein Stück / Höhe, Unterdrücken & Marker / Kugel & Hilfe', t_a042_praegen),
     ('[F-11240521] Volltest-Reparatur: Drehteller-Video bei rAF-Stau / Einführung reagiert sofort auf Skizze', t_f11240521),
+    ('[A-043] Wickeln um Zylinder (KP-34): Rechteck 31,4 mm auf Ø20 → 180° ± 2° / vertieft, Winkel & Ø40 / Linie & Entlang Pfad / Verlauf & Hilfe', t_a043_wickeln_zylinder),
     ('[A-044] IGES und BREP: Export und Import (Quader, Loch, Dialog)', t_a044_iges_brep),
     ('[A-046] Dateien ins Fenster ziehen: Hinweis-Rahmen / STL / Projektdatei / OBJ / DXF & SVG / unbekannte Datei', t_a046_dateien_ziehen),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),

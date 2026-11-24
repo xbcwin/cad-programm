@@ -67,7 +67,7 @@ export function createKernel(R, oc) {
   function gc() {
     // Formen entfernen, die mehrere Durchläufe nicht gebraucht wurden
     for (const [k, e] of cache) {
-      if (gen - e.gen > 6) { try { e.shape.delete(); } catch (_) {} cache.delete(k); }
+      if (gen - e.gen > 6) { try { if (Array.isArray(e.shape)) e.shape.forEach(safeDelete); else e.shape.delete(); } catch (_) {} cache.delete(k); }
     }
     if (meshCache.size > 400) {
       const drop = meshCache.size - 300; let i = 0;
@@ -2200,7 +2200,7 @@ export function createKernel(R, oc) {
     return keyOf({ k: it.kind, p, f: it.finishes || null, mir: it.mir || null, c: it.children ? it.children.filter((c) => !c.hidden).map((c) => [defKey(c), c.role, c.m]) : null });
   }
   function evalItem(it, errors, parentWorldM = null, ctx = null) {
-    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'thicken' || it.kind === 'rib' || it.kind === 'emboss' || it.kind === 'mirrorStep') return { shape: null, key: defKey(it) };
+    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'thicken' || it.kind === 'rib' || it.kind === 'emboss' || it.kind === 'mirrorStep' || it.kind === 'wrap' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it) };
     const dyn = hasDynamicExtent(it);
     const W = dyn ? (parentWorldM ? matMul(parentWorldM, it.m) : it.m) : null;
     const key = dyn
@@ -2869,6 +2869,396 @@ export function createKernel(R, oc) {
     return res;
   }
 
+  // ---------- Wickeln um Zylinder (KP-34) ----------
+  function matchCylFace(shape, spec) {
+    const cyls = [];
+    for (const f of shape.faces) {
+      if (f.geomType !== 'CYLINDRE') continue;
+      try {
+        const ad = new oc.BRepAdaptor_Surface(f.wrapped, false);
+        const cy = ad.Cylinder(), ax = cy.Axis(), l = ax.Location(), d = ax.Direction();
+        const o = [l.X(), l.Y(), l.Z()], dir = norm([d.X(), d.Y(), d.Z()]), r = cy.Radius();
+        ad.delete();
+        const c = vec(f.center);
+        const ori = f.wrapped.Orientation() === oc.TopAbs_Orientation.TopAbs_REVERSED ? -1 : 1;
+        cyls.push({ face: f, o, d: dir, r, c, ori });
+      } catch (_) {}
+    }
+    if (!cyls.length) return null;
+    if (cyls.length === 1) return cyls[0].face;
+    const sAxis = spec && Array.isArray(spec.axis) && spec.axis.length >= 6 ? spec.axis : null;
+    const sO = sAxis ? sAxis.slice(0, 3) : null;
+    const sD = sAxis ? norm(sAxis.slice(3, 6)) : null;
+    const sR = spec && typeof spec.r === 'number' ? spec.r : null;
+    const sC = spec && Array.isArray(spec.c) && spec.c.length >= 3 ? spec.c : null;
+    const sOri = spec && typeof spec.ori === 'number' ? spec.ori : null;
+    const distLine = (p, o, d) => { const v = sub(p, o); return len(sub(v, mul(d, dot(v, d)))); };
+    let best = null, bs = Infinity;
+    for (const item of cyls) {
+      let score = 0;
+      if (sOri != null && item.ori !== sOri) score += 1000;
+      if (sD) score += (1 - Math.abs(dot(item.d, sD))) * 500;
+      if (sO && sD) score += distLine(item.o, sO, sD) * 20;
+      if (sR != null) score += Math.abs(item.r - sR) * 5;
+      if (sC) score += len(sub(item.c, sC));
+      if (score < bs) { bs = score; best = item.face; }
+    }
+    return best;
+  }
+  function cylFrameOf(face, spec) {
+    const ad = new oc.BRepAdaptor_Surface(face.wrapped, false);
+    const cy = ad.Cylinder(), ax = cy.Axis(), l = ax.Location(), d = ax.Direction();
+    const O = [l.X(), l.Y(), l.Z()];
+    let A = norm([d.X(), d.Y(), d.Z()]);
+    const r = cy.Radius();
+    ad.delete();
+    if (Math.abs(A[2]) > 0.001 ? A[2] < 0 : Math.abs(A[1]) > 0.001 ? A[1] < 0 : A[0] < 0) A = mul(A, -1);
+    const isInner = face.wrapped.Orientation() === oc.TopAbs_Orientation.TopAbs_REVERSED;
+    let vMin = Infinity, vMax = -Infinity;
+    for (const ed of face.edges) {
+      for (const t of [0, 0.25, 0.5, 0.75, 1]) {
+        const pt = vec(ed.pointAt(t));
+        const q = dot(sub(pt, O), A);
+        if (q < vMin) vMin = q;
+        if (q > vMax) vMax = q;
+      }
+    }
+    if (!isFinite(vMin)) { vMin = 0; vMax = 20; }
+    const vMid = (vMin + vMax) / 2;
+    let ref = spec && Array.isArray(spec.refDir) && spec.refDir.length >= 3
+      ? spec.refDir.map(Number)
+      : (Math.abs(A[2]) > 0.9 ? [0, -1, 0] : [0, 0, 1]);
+    let proj = sub(ref, mul(A, dot(ref, A)));
+    if (len(proj) < 1e-4) {
+      ref = Math.abs(A[1]) < 0.9 ? [0, -1, 0] : [1, 0, 0];
+      proj = sub(ref, mul(A, dot(ref, A)));
+    }
+    const R0 = norm(proj);
+    const T0 = norm(cross(A, R0));
+    return { O, A, R: r, R0, T0, vMin, vMax, vMid, isInner };
+  }
+  function arcToBeziers2D(a, m, b) {
+    const ai = arcInfo2D(a, m, b);
+    if (!ai) return [{ a, c1: [a[0] + (b[0] - a[0]) / 3, a[1] + (b[1] - a[1]) / 3], c2: [a[0] + (2 * (b[0] - a[0])) / 3, a[1] + (2 * (b[1] - a[1])) / 3], b }];
+    const n = Math.max(1, Math.ceil(Math.abs(ai.sweep) / (Math.PI / 4)));
+    const step = ai.sweep / n;
+    const a0 = Math.atan2(a[1] - ai.c[1], a[0] - ai.c[0]);
+    const k = (4 / 3) * Math.tan(step / 4);
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const t1 = a0 + i * step, t2 = a0 + (i + 1) * step;
+      const c1a = Math.cos(t1), s1a = Math.sin(t1), c2a = Math.cos(t2), s2a = Math.sin(t2);
+      const p1 = i === 0 ? a.slice() : [ai.c[0] + ai.r * c1a, ai.c[1] + ai.r * s1a];
+      const p2 = i === n - 1 ? b.slice() : [ai.c[0] + ai.r * c2a, ai.c[1] + ai.r * s2a];
+      const cp1 = [p1[0] - k * ai.r * s1a, p1[1] + k * ai.r * c1a];
+      const cp2 = [p2[0] + k * ai.r * s2a, p2[1] - k * ai.r * c2a];
+      out.push({ a: p1, c1: cp1, c2: cp2, b: p2 });
+    }
+    return out;
+  }
+  function ellipseToBeziers2D(E) {
+    const rx = E.rx, ry = E.ry, rot = E.rot || 0, c = E.c;
+    const cr = Math.cos(rot), sr = Math.sin(rot);
+    const mapPt = (x, y) => [c[0] + x * cr - y * sr, c[1] + x * sr + y * cr];
+    const n = 8, step = (Math.PI * 2) / n, k = (4 / 3) * Math.tan(step / 4);
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const t1 = i * step, t2 = (i + 1) * step;
+      const c1 = Math.cos(t1), s1 = Math.sin(t1), c2 = Math.cos(t2), s2 = Math.sin(t2);
+      const p1 = mapPt(rx * c1, ry * s1);
+      const p2 = mapPt(rx * c2, ry * s2);
+      const cp1 = mapPt(rx * (c1 - k * s1), ry * (s1 + k * c1));
+      const cp2 = mapPt(rx * (c2 + k * s2), ry * (s2 - k * c2));
+      out.push({ a: p1, c1: cp1, c2: cp2, b: p2 });
+    }
+    return out;
+  }
+  function wrap2dTransform(pt, rotRad, flip) {
+    let x = flip ? -pt[0] : pt[0], y = pt[1];
+    if (Math.abs(rotRad) > 1e-9) {
+      const co = Math.cos(rotRad), si = Math.sin(rotRad);
+      const nx = x * co - y * si, ny = x * si + y * co;
+      x = nx; y = ny;
+    }
+    return [x, y];
+  }
+  function wrapSegsOfLoop(loop, rotRad, flip) {
+    const xf = (q) => wrap2dTransform(q, rotRad, flip);
+    if (loop.ellipse) {
+      return ellipseToBeziers2D(loop.ellipse).map((s) => ({ t: 'bez', a: xf(s.a), c1: xf(s.c1), c2: xf(s.c2), b: xf(s.b) }));
+    }
+    if (loop.circle) {
+      const { c, r } = loop.circle;
+      return ellipseToBeziers2D({ c, rx: r, ry: r, rot: 0 }).map((s) => ({ t: 'bez', a: xf(s.a), c1: xf(s.c1), c2: xf(s.c2), b: xf(s.b) }));
+    }
+    return (loop.segs || []).map((s) => {
+      if (s.t === 'bez') return { t: 'bez', a: xf(s.a), c1: xf(s.c1), c2: xf(s.c2), b: xf(s.b) };
+      if (s.t === 'arc') return { t: 'arc', a: xf(s.a), m: xf(s.m), b: xf(s.b) };
+      return { t: 'line', a: xf(s.a), b: xf(s.b) };
+    });
+  }
+  function wrapLoopUBounds(loop, rotRad, flip, R, theta0) {
+    let uMin = Infinity, uMax = -Infinity;
+    const addX = (x) => { const u = theta0 + x / R; if (u < uMin) uMin = u; if (u > uMax) uMax = u; };
+    if (loop.circle) {
+      const c = wrap2dTransform(loop.circle.c, rotRad, flip);
+      addX(c[0] - loop.circle.r);
+      addX(c[0] + loop.circle.r);
+      return [uMin, uMax];
+    }
+    for (const s of wrapSegsOfLoop(loop, rotRad, flip)) {
+      if (s.t === 'arc') { for (const q of arcSample(s.a, s.m, s.b, 16)) addX(q[0]); }
+      else if (s.t === 'bez') {
+        for (let i = 0; i <= 12; i++) {
+          const t = i / 12, u = 1 - t;
+          addX(u * u * u * s.a[0] + 3 * u * u * t * s.c1[0] + 3 * u * t * t * s.c2[0] + t * t * t * s.b[0]);
+        }
+      } else { addX(s.a[0]); addX(s.b[0]); }
+    }
+    return [uMin, uMax];
+  }
+  function buildWrappedWire2d(loopOrSegs, isClosed, surf, R, theta0, uShift, vMid, shiftY, rotRad, flip, ccw) {
+    const toUV = (pt) => [theta0 + pt[0] / R + uShift, vMid + shiftY + pt[1]];
+    const makeBez2dEdge = (a, c1, c2, b) => {
+      const p1 = toUV(a), p2 = toUV(c1), p3 = toUV(c2), p4 = toUV(b);
+      const arr = new oc.NCollection_Array1_gp_Pnt2d(1, 4);
+      const g1 = new oc.gp_Pnt2d(p1[0], p1[1]), g2 = new oc.gp_Pnt2d(p2[0], p2[1]), g3 = new oc.gp_Pnt2d(p3[0], p3[1]), g4 = new oc.gp_Pnt2d(p4[0], p4[1]);
+      arr.SetValue(1, g1); arr.SetValue(2, g2); arr.SetValue(3, g3); arr.SetValue(4, g4);
+      const bz = new oc.Geom2d_BezierCurve(arr);
+      const me = new oc.BRepBuilderAPI_MakeEdge(bz, surf);
+      const ed = me.Edge();
+      me.delete(); bz.delete(); arr.delete(); g1.delete(); g2.delete(); g3.delete(); g4.delete();
+      return ed;
+    };
+    if (!Array.isArray(loopOrSegs) && loopOrSegs.circle) {
+      const c2 = wrap2dTransform(loopOrSegs.circle.c, rotRad, flip);
+      const uv = toUV(c2);
+      const ru = loopOrSegs.circle.r / R, rv = loopOrSegs.circle.r;
+      const pnt = new oc.gp_Pnt2d(uv[0], uv[1]);
+      let d1, d2, maj, min;
+      if (rv >= ru) {
+        d1 = new oc.gp_Dir2d(0, 1); d2 = new oc.gp_Dir2d(-1, 0); maj = rv; min = ru;
+      } else {
+        d1 = new oc.gp_Dir2d(1, 0); d2 = new oc.gp_Dir2d(0, 1); maj = ru; min = rv;
+      }
+      const ax22 = new oc.gp_Ax22d(pnt, d1, d2);
+      const gpEl = new oc.gp_Elips2d(ax22, maj, min);
+      const el = new oc.Geom2d_Ellipse(gpEl);
+      const me = new oc.BRepBuilderAPI_MakeEdge(el, surf);
+      let ed = me.Edge();
+      if (!ccw) ed = oc.TopoDS.Edge(ed.Reversed());
+      const wb = new oc.BRepBuilderAPI_MakeWire(ed);
+      const wire = wb.Wire();
+      wb.delete(); me.delete(); el.delete(); gpEl.delete(); ax22.delete(); d1.delete(); d2.delete(); pnt.delete();
+      oc.BRepLib.BuildCurves3d(wire);
+      return wire;
+    }
+    let segs = Array.isArray(loopOrSegs) ? loopOrSegs.map((s) => {
+      const xf = (q) => wrap2dTransform(q, rotRad, flip);
+      if (s.t === 'bez') return { t: 'bez', a: xf(s.a), c1: xf(s.c1), c2: xf(s.c2), b: xf(s.b) };
+      if (s.t === 'arc') return { t: 'arc', a: xf(s.a), m: xf(s.m), b: xf(s.b) };
+      return { t: 'line', a: xf(s.a), b: xf(s.b) };
+    }) : wrapSegsOfLoop(loopOrSegs, rotRad, flip);
+    if (isClosed) {
+      const area = loopArea({ segs });
+      if ((area > 0) !== ccw) {
+        segs = segs.slice().reverse().map((s) => (s.t === 'bez' ? { ...s, a: s.b, b: s.a, c1: s.c2, c2: s.c1 } : { ...s, a: s.b, b: s.a }));
+      }
+    }
+    const edges = [];
+    for (const s of segs) {
+      if (s.t === 'line') {
+        const p1 = toUV(s.a), p2 = toUV(s.b);
+        if (Math.hypot(p2[0] - p1[0], p2[1] - p1[1]) < 1e-7) continue;
+        const g1 = new oc.gp_Pnt2d(p1[0], p1[1]), g2 = new oc.gp_Pnt2d(p2[0], p2[1]);
+        const ms = new oc.GC_MakeSegment2d(g1, g2);
+        const me = new oc.BRepBuilderAPI_MakeEdge(ms.Value(), surf);
+        edges.push(me.Edge());
+        me.delete(); ms.delete(); g1.delete(); g2.delete();
+      } else if (s.t === 'arc') {
+        for (const bz of arcToBeziers2D(s.a, s.m, s.b)) edges.push(makeBez2dEdge(bz.a, bz.c1, bz.c2, bz.b));
+      } else if (s.t === 'bez') {
+        edges.push(makeBez2dEdge(s.a, s.c1, s.c2, s.b));
+      }
+    }
+    if (!edges.length) return null;
+    const wire = makeWireFromEdges(edges);
+    oc.BRepLib.BuildCurves3d(wire);
+    return wire;
+  }
+  function makeCylAx3(O, A, R0, T0, rotU) {
+    const co = Math.cos(rotU), si = Math.sin(rotU);
+    const xDir = norm(add(mul(R0, co), mul(T0, si)));
+    const pO = R.asPnt(O), dA = R.asDir(A), dX = R.asDir(xDir);
+    const ax3 = new oc.gp_Ax3(pO, dA, dX);
+    pO.delete(); dA.delete(); dX.delete();
+    return ax3;
+  }
+  function fixWrapSolid(raw) {
+    const sfs = new oc.ShapeFix_Solid(oc.TopoDS.Solid(raw));
+    sfs.Perform();
+    let res = R.cast(oc.TopoDS.Solid(sfs.Solid()));
+    sfs.delete();
+    if (R.measureVolume(res) < 0) res = R.cast(res.wrapped.Reversed());
+    return res;
+  }
+  function buildWrapOn(srcShape, p) {
+    const cylFace = matchCylFace(srcShape, p.face);
+    if (!cylFace) { const e = new Error('Wickeln: Die gewählte Zylinderfläche gibt es nicht mehr.'); e.code = 'ref'; throw e; }
+    const F = cylFrameOf(cylFace, p.face);
+    const mode = p.mode === 'deboss' || p.mode === 'line' ? p.mode : 'emboss';
+    const depth = num(p.depth, 2);
+    const theta0 = (num(p.angle, 0) * Math.PI) / 180;
+    const shiftY = num(p.shiftY, 0);
+    const rotRad = (num(p.rot, 0) * Math.PI) / 180;
+    const flip = !!p.flip;
+    const regions = Array.isArray(p.regions) ? p.regions : [];
+    const chains = Array.isArray(p.chains) ? p.chains : [];
+
+    if (mode !== 'line') {
+      if (!regions.length) throw new Error('Wickeln als Prägung braucht mindestens eine geschlossene Skizzenfläche.');
+      if (!(depth > 1e-4 && isFinite(depth))) throw new Error('Wickeln: Die Tiefe muss größer als 0 sein.');
+      const outward = mode === 'emboss' ? !F.isInner : F.isInner;
+      if (!outward && depth >= F.R - 0.05) throw new Error('Wickeln: Die Tiefe darf höchstens etwas kleiner als der Zylinderradius sein.');
+      const eps = Math.min(0.05, F.R * 0.05, depth * 0.25);
+      const solids = [];
+      try {
+        for (const rg of regions) {
+          const [uMin, uMax] = wrapLoopUBounds(rg.outer, rotRad, flip, F.R, theta0);
+          if (uMax - uMin >= 2 * Math.PI - 1e-3) {
+            throw new Error('Wickeln: Der Umriss ist breiter als der Zylinderumfang (360°) und würde sich überschneiden.');
+          }
+          const uShift = Math.PI - (uMin + uMax) / 2;
+          const ax3 = makeCylAx3(F.O, F.A, F.R0, F.T0, -uShift);
+          const surf = new oc.Geom_CylindricalSurface(ax3, F.R);
+          let wf = null;
+          try {
+            const outerW = buildWrappedWire2d(rg.outer, true, surf, F.R, theta0, uShift, F.vMid, shiftY, rotRad, flip, true);
+            if (!outerW) continue;
+            const mf = new oc.BRepBuilderAPI_MakeFace(surf, outerW, true);
+            outerW.delete();
+            for (const hLoop of rg.holes || []) {
+              const hw = buildWrappedWire2d(hLoop, true, surf, F.R, theta0, uShift, F.vMid, shiftY, rotRad, flip, false);
+              if (hw) { mf.Add(hw); hw.delete(); }
+            }
+            wf = mf.Face(); mf.delete();
+            oc.BRepLib.BuildCurves3d(wf);
+            const sff = new oc.ShapeFix_Face(wf); sff.FixOrientation(); sff.Perform();
+            const fixedF = sff.Face(); sff.delete(); wf.delete(); wf = fixedF;
+            const ob = new oc.BRepOffsetAPI_MakeOffsetShape();
+            ob.PerformBySimple(wf, outward ? -eps : eps);
+            const offSh = ob.Shape(); ob.delete();
+            const ts = new oc.BRepOffsetAPI_MakeThickSolid();
+            ts.MakeThickSolidBySimple(offSh, outward ? (depth + eps) : -(depth + eps));
+            const rawSol = ts.Shape(); ts.delete(); safeDelete(offSh);
+            solids.push(fixWrapSolid(rawSol));
+            safeDelete(rawSol);
+          } finally {
+            safeDelete(wf); surf.delete(); ax3.delete();
+          }
+        }
+        if (!solids.length) throw new Error('Wickeln: Aus der Skizze ließ sich keine Fläche erzeugen.');
+        const toolShape = solids.length === 1 ? solids[0] : fuseAll(solids, true);
+        const next = mode === 'deboss' ? srcShape.cut(toolShape) : srcShape.fuse(toolShape);
+        return { shape: next, toolShape, wires: null, radius: F.R };
+      } catch (err) {
+        for (const s of solids) safeDelete(s);
+        throw err;
+      }
+    }
+
+    // Modus „Linie“: geschlossene Umrisse und offene Pfade auf den Zylinder legen und die Fläche daran teilen
+    const rawWires = [];
+    const wireShapes = [];
+    const buildRegionWire = (loop, ccw) => {
+      const [uMin, uMax] = wrapLoopUBounds(loop, rotRad, flip, F.R, theta0);
+      const uShift = uMax - uMin < 2 * Math.PI - 1e-3 ? Math.PI - (uMin + uMax) / 2 : 0;
+      const ax3 = makeCylAx3(F.O, F.A, F.R0, F.T0, -uShift);
+      const surf = new oc.Geom_CylindricalSurface(ax3, F.R);
+      try {
+        const w = buildWrappedWire2d(loop, true, surf, F.R, theta0, uShift, F.vMid, shiftY, rotRad, flip, ccw);
+        if (w) { rawWires.push(w); wireShapes.push(R.cast(w)); }
+      } finally { surf.delete(); ax3.delete(); }
+    };
+    for (const rg of regions) {
+      buildRegionWire(rg.outer, true);
+      for (const hLoop of rg.holes || []) buildRegionWire(hLoop, false);
+    }
+    if (chains.length) {
+      const ax3 = makeCylAx3(F.O, F.A, F.R0, F.T0, 0);
+      const surf = new oc.Geom_CylindricalSurface(ax3, F.R);
+      try {
+        for (const ch of chains) {
+          if (!ch || !Array.isArray(ch.segs) || !ch.segs.length) continue;
+          const w = buildWrappedWire2d(ch.segs, false, surf, F.R, theta0, 0, F.vMid, shiftY, rotRad, flip, true);
+          if (w) { rawWires.push(w); wireShapes.push(R.cast(w)); }
+        }
+      } finally { surf.delete(); ax3.delete(); }
+    }
+    if (!rawWires.length) throw new Error('Wickeln: Die Skizze enthält keine Linie und keinen Umriss.');
+    const args = new oc.NCollection_List_TopoDS_Shape();
+    args.Append(srcShape.wrapped);
+    const tools = new oc.NCollection_List_TopoDS_Shape();
+    for (const w of rawWires) tools.Append(w);
+    const spl = new oc.BRepAlgoAPI_Splitter();
+    spl.SetArguments(args);
+    spl.SetTools(tools);
+    spl.Build();
+    let resShape = null;
+    try {
+      if (spl.HasErrors()) throw new Error('Wickeln: Die Linie ließ sich nicht auf die Zylinderfläche legen.');
+      resShape = R.cast(spl.Shape());
+    } finally {
+      spl.delete(); args.delete(); tools.delete();
+    }
+    return { shape: resShape, toolShape: null, wires: wireShapes, radius: F.R };
+  }
+  function buildSweepAlongWires(wires, p) {
+    if (!wires || !wires.length) throw new Error('Entlang Pfad: Die gewickelte Linie ist leer.');
+    const solids = [];
+    for (const spine of wires) {
+      const ed = spine.edges && spine.edges[0];
+      if (!ed) continue;
+      const P0 = vec(ed.startPoint);
+      const T = norm(vec(ed.tangentAt(0)));
+      const up = Math.abs(T[2]) < 0.99 ? [0, 0, 1] : [1, 0, 0];
+      const d = dot(T, up);
+      const N = norm([up[0] - T[0] * d, up[1] - T[1] * d, up[2] - T[2] * d]);
+      const V = cross(T, N);
+      const prof = (inset) => {
+        if (p.shape === 'sketch' && p.prof) {
+          if (inset > 0) return null;
+          const Y = cross(T, V);
+          const o = [0, 1, 2].map((k) => P0[k] - V[k] * p.prof.c[0] - Y[k] * p.prof.c[1]);
+          return loopWire(p.prof.outer, planeMap({ o, x: V, n: T }), true);
+        }
+        if (p.shape === 'rect') {
+          const w = pos(p.w, 3) / 2 - inset, h = pos(p.h, 2) / 2 - inset;
+          if (w <= 0 || h <= 0) return null;
+          const q = (a, b) => [0, 1, 2].map((k) => P0[k] + V[k] * a + N[k] * b);
+          const c = [q(-w, -h), q(w, -h), q(w, h), q(-w, h)];
+          return R.assembleWire([R.makeLine(c[0], c[1]), R.makeLine(c[1], c[2]), R.makeLine(c[2], c[3]), R.makeLine(c[3], c[0])]);
+        }
+        const r = pos(p.d, 2) / 2 - inset;
+        if (r <= 0) return null;
+        return R.assembleWire([R.makeCircle(r, P0, T)]);
+      };
+      const doSweep = (w) => R.genericSweep(w, spine, { transitionMode: 'round', forceProfileSpineOthogonality: true });
+      let sh = doSweep(prof(0));
+      const wall = num(p.wall, 0);
+      if (wall > 0 && p.shape !== 'sketch') {
+        const inner = prof(wall);
+        if (!inner) { safeDelete(sh); throw new Error('Die Wand ist dicker als das halbe Rohr.'); }
+        const cutter = doSweep(inner);
+        const res = sh.cut(cutter);
+        safeDelete(sh); safeDelete(cutter);
+        sh = res;
+      }
+      solids.push(sh);
+    }
+    if (!solids.length) throw new Error('Entlang Pfad: Die gewickelte Linie ließ sich nicht ziehen.');
+    return solids.length === 1 ? solids[0] : fuseAll(solids, true);
+  }
   function buildEmbossOn(baseShape, rel, p) {
     const regions = p.regions || [];
     if (!regions.length) throw new Error('Prägen: Die Skizze hat keine geschlossene Fläche (z. B. Text oder Logo).');
@@ -2991,9 +3381,9 @@ export function createKernel(R, oc) {
   // Formschritte mit Modus: Ein Teil mit op = {type: 'join' | 'cut' | 'common', target} wird mit einem früheren
   // Körper verrechnet und verschwindet als eigenes Teil. Ketten (B in A, C in B) landen alle im ersten Körper.
   // Ergebnis: bodies (id → {shape, key, wb} im Koordinatensystem des Zielkörpers), consumed (id → Ziel-id)
-  function resolveOps(evald, errors, hiddenIds) {
+  function resolveOps(evald, errors, hiddenIds, resolved = null) {
     const byId = new Map(evald.map((e, i) => [e.it.id, { e, i }]));
-    const consumed = new Map(), live = new Map(), bodies = new Map(), featureOps = new Map();
+    const consumed = new Map(), live = new Map(), bodies = new Map(), featureOps = new Map(), wrapWires = new Map();
     const anyMirror = evald.some((e) => e.it.kind === 'mirrorStep');
     const r6 = (v) => Math.round(v * 1e6) / 1e6;
     const ID_MAT = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
@@ -3215,6 +3605,53 @@ export function createKernel(R, oc) {
         bodies.set(tid, src);
         continue;
       }
+      if (it.kind === 'wrap') {
+        const p = it.p || {};
+        let tid = p.target;
+        while (tid && consumed.has(tid)) tid = consumed.get(tid);
+        const t = tid ? byId.get(tid) : null, src = tid ? live.get(tid) : null;
+        if (!t || t.i >= i || !src || !src.shape || src.it.role === 'hole') {
+          if (tid && hiddenIds && hiddenIds.has(tid)) { consumed.set(it.id, tid); continue; }
+          errors.push({ itemId: it.id, code: 'op', message: 'Wickeln: Der Zielkörper fehlt oder kommt erst später im Verlauf.' });
+          continue;
+        }
+        consumed.set(it.id, tid);
+        const mode = p.mode === 'deboss' || p.mode === 'line' ? p.mode : 'emboss';
+        const k = keyOf([src.key, 'wrap', p]);
+        const kTool = keyOf([src.key, 'wrapTool', p]);
+        const kWires = keyOf([src.key, 'wrapWires', p]);
+        let next = cacheGet(k);
+        let tool = mode !== 'line' && anyMirror ? cacheGet(kTool) : null;
+        let wires = mode === 'line' ? cacheGet(kWires) : null;
+        let wrapRad = next && cache.get(k)?.resolved ? cache.get(k).resolved.radius : null;
+        if (!next || (mode === 'line' && !wires) || (mode !== 'line' && anyMirror && !tool)) {
+          try {
+            const built = buildWrapOn(src.shape, p);
+            wrapRad = built.radius || null;
+            if (!next) { next = built.shape; cachePut(k, next, null, wrapRad ? { radius: wrapRad } : null); }
+            else safeDelete(built.shape);
+            if (mode === 'line') {
+              if (!wires && built.wires) { wires = built.wires; cachePut(kWires, wires); }
+            } else if (anyMirror) {
+              if (!tool && built.toolShape) { tool = built.toolShape; cachePut(kTool, tool); }
+              else safeDelete(built.toolShape);
+            } else {
+              safeDelete(built.toolShape);
+            }
+          } catch (err) {
+            errors.push({ itemId: it.id, code: err && err.code === 'ref' ? 'ref' : 'build', message: friendlyError(err) });
+            continue;
+          }
+        }
+        if (resolved && wrapRad) resolved[it.id] = { radius: wrapRad };
+        if (mode === 'line' && wires) wrapWires.set(it.id, { wires, m: src.m, key: kWires });
+        if (mode !== 'line' && anyMirror && tool) {
+          featureOps.set(it.id, { targetId: tid, opType: mode === 'deboss' ? 'cut' : 'join', tools: [{ shape: tool, m: src.m, key: kTool }] });
+        }
+        src.shape = next; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
+        bodies.set(tid, src);
+        continue;
+      }
       if (it.kind === 'emboss') {
         const p = it.p || {};
         let tid = p.target;
@@ -3246,6 +3683,41 @@ export function createKernel(R, oc) {
         src.shape = next; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
         bodies.set(tid, src);
         continue;
+      }
+      if (it.kind === 'sweep' && it.p && it.p.wrapId) {
+        const ww = wrapWires.get(it.p.wrapId);
+        if (!ww || !ww.wires || !ww.wires.length) {
+          errors.push({ itemId: it.id, code: 'op', message: 'Entlang Pfad: Die gewickelte Linie fehlt oder ist nicht im Modus „Linie“.' });
+          continue;
+        }
+        const rel = matMul(matInvRigid(it.m), ww.m);
+        const kBase = keyOf([ww.key, 'wrapSweep', it.p, rel.map(r6)]);
+        let shape = cacheGet(kBase), key = kBase;
+        if (!shape) {
+          try {
+            const sw = buildSweepAlongWires(ww.wires, it.p);
+            if (isIdentity(rel)) shape = sw;
+            else { shape = applyMatrix(sw, rel); safeDelete(sw); }
+            cachePut(kBase, shape);
+          } catch (err) {
+            errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) });
+            continue;
+          }
+        }
+        if (it.finishes && it.finishes.length) {
+          const kFin = keyOf([key, 'fin', it.finishes]);
+          const hitF = cacheGet(kFin);
+          if (hitF) { shape = hitF; key = kFin; }
+          else {
+            const e0 = errors.length;
+            const sf = applyFinishes(shape, it.finishes, errors, it.id);
+            if (sf && sf !== shape) { cachePut(kFin, sf, errors.slice(e0).map((x) => ({ ...x, itemId: x.itemId === it.id ? '$self' : x.itemId }))); shape = sf; key = kFin; }
+          }
+        }
+        const wb = bboxTransform(bboxCached(key, shape), it.m);
+        const entry = { shape, key, wb, m: it.m, it };
+        live.set(it.id, entry);
+        bodies.set(it.id, entry);
       }
       if (it.kind === 'mirrorStep') {
         const p = it.p || {};
@@ -3448,10 +3920,11 @@ export function createKernel(R, oc) {
         return { it, ...r, wb };
       });
       const tOps = now();
-      const { bodies, consumed } = resolveOps(evald, errors, hiddenIds);
+      const resolved = {};
+      const { bodies, consumed } = resolveOps(evald, errors, hiddenIds, resolved);
       if (bodies.size && times) { const d = now() - tOps; if (d > 0.5) for (const id of bodies.keys()) times[id] = (times[id] || 0) + d / bodies.size; }
       for (const e of evald) { const b = bodies.get(e.it.id); if (b) { e.shape = b.shape; e.key = b.key; e.wb = b.wb; } }
-      return { evald, consumed, resolved: {} };
+      return { evald, consumed, resolved };
     }
 
     // Zwei-Pass-Auswertung: Pass 1 liefert alle festen Körper samt versetzten/verrechneten Zielen,
@@ -3521,7 +3994,7 @@ export function createKernel(R, oc) {
         }
       }
       const tOps = now();
-      const { bodies, consumed } = resolveOps(evald, errors, hiddenIds);
+      const { bodies, consumed } = resolveOps(evald, errors, hiddenIds, ctx.resolved);
       if (bodies.size && times) { const d = now() - tOps; if (d > 0.5) for (const id of bodies.keys()) times[id] = (times[id] || 0) + d / bodies.size; }
       for (const e of evald) { const b = bodies.get(e.it.id); if (b) { e.shape = b.shape; e.key = b.key; e.wb = b.wb; } }
       return { evald, consumed, resolved: ctx.resolved };

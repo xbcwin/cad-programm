@@ -616,6 +616,7 @@ const IC = {
   scaleBody: '<rect x="3" y="13" width="8" height="8" rx="1" opacity=".5"/><rect x="7" y="3" width="14" height="14" rx="1.5" fill="currentColor" opacity=".18"/><rect x="7" y="3" width="14" height="14" rx="1.5"/><path d="M11 13l7-7M14 6h4v4" />',
   thicken: '<path d="M4 15l8 4 8-4-8-4z" opacity=".45" stroke-dasharray="2.5 2"/><path d="M4 9l8 4 8-4-8-4z" fill="currentColor" opacity=".25"/><path d="M4 9l8 4 8-4-8-4zM4 9v6l8 4 8-4V9" />',
   rib: '<path d="M3 5v14h18V5" /><path d="M5 17L19 9v8z" fill="currentColor" opacity=".25"/><path d="M5 17L19 9" />',
+  wrap: '<ellipse cx="12" cy="5.5" rx="6.5" ry="2.2"/><path d="M5.5 5.5v13c0 1.2 2.9 2.2 6.5 2.2s6.5-1 6.5-2.2v-13"/><path d="M5.5 10.5c0 1.2 2.9 2.2 6.5 2.2s6.5-1 6.5-2.2v4.5c0 1.2-2.9 2.2-6.5 2.2s-6.5-1-6.5-2.2z" fill="currentColor" opacity=".25"/>',
   emboss: '<path d="M3 16c4-3.5 14-3.5 18 0" /><path d="M7 14v-3.5c3-1.6 7-1.6 10 0V14" fill="currentColor" opacity=".25"/><path d="M7 14v-3.5c3-1.6 7-1.6 10 0V14M10 10.2V7h4v3.2" />',
 };
 function icon(name, extra = '') {
@@ -1459,6 +1460,21 @@ const HELP = {
   "hilfe": "Legt ein eigenes rechtshändiges Koordinatensystem mit Ursprung an einem Punkt und Achsen entlang gewählter Kanten an. Beim Exportieren (STEP, STL, 3MF, OBJ, GLB) kannst du dieses System als Nullpunkt wählen.",
   "tipp": "Ideal für den 3D-Druck, CNC oder Baugruppen: Lege das Koordinatensystem an eine Ecke und zwei Kanten – dann beginnen die exportierten Maße genau bei 0."
  },
+ "revolveOptions": {
+  "tip": "Drehen mit Winkel, symmetrisch, beidseitig oder bis zu einer Fläche",
+  "hilfe": "Bestimmt, wie weit und in welche Richtung sich deine Skizze um die Achse dreht: in eine Richtung, umgekehrt, symmetrisch zu beiden Seiten (z. B. 90° als 2×45°), mit zwei eigenen Winkeln oder bis zu einer gewählten Körperfläche bzw. Bezugsebene. Bei Teil-Umdrehungen erscheint ein Ziehgriff für den Winkel.",
+  "tipp": "Wenn sich das Zielteil später verschiebt, wandert der Drehkörper bei „Bis zu gewählter Fläche“ automatisch mit."
+ },
+ "scaleBody": {
+  "tip": "Körper gleichmäßig oder je Achse als Schritt skalieren",
+  "hilfe": "Legt einen Schritt „Skalieren“ im Verlauf an. Rechts stellst du einen gemeinsamen Faktor (z. B. ×2) oder getrennte Faktoren für X, Y und Z ein sowie den Bezugspunkt: Schwerpunkt des Körpers oder Ursprung (0 · 0 · 0).",
+  "tipp": "Als Schritt im Verlauf kannst du das Skalieren jederzeit ändern, unterdrücken oder den Marker davor schieben."
+ },
+ "thickenFace": {
+  "tip": "Fläche zu einer Platte mit fester Dicke aufdicken",
+  "hilfe": "Macht aus einer gewählten ebenen oder gewölbten Körperfläche eine feste Platte mit Dicke – nach außen, nach innen oder mittig. Rechts wählst du, ob sie mit dem Körper vereinigt, als eigene Platte angelegt oder abgezogen wird.",
+  "tipp": "Wenn du nach innen aufdickst, siehst du das Ergebnis nur als „Eigene Platte“ oder „Vom Körper abziehen“."
+ },
  "rib": {
   "tip": "Offene Skizzenlinie als Versteifungs-Rippe bis an die Wände ziehen",
   "hilfe": "Verlängert eine offene Linie, einen Bogen oder eine Kurve in deiner Skizze mit einstellbarer Dicke (mittig oder einseitig) bis zu den angrenzenden Wänden des Zielkörpers und verschmilzt sie direkt damit. Optional kannst du eine Schräge und feste Tiefe angeben oder von senkrecht (Steg in einer Schale) auf in der Ebene (Stützrippe) umschalten.",
@@ -1469,10 +1485,10 @@ const HELP = {
   "hilfe": "Unter „Bis“ wählst du beim Hochziehen statt einer festen Höhe „Bis zur nächsten Fläche“ (stößt an die erste Fläche in Ziehrichtung) oder „Bis zu gewählter Fläche“ (du klickst eine Körperfläche oder Bezugsebene im Bild an). Wandert die Zielfläche später oder ändert sich die Größe des Zielkörpers, wächst das Teil von selbst mit.",
   "tipp": "Ideal für Stege, Bolzen und Taschen zwischen zwei Platten – du brauchst keinen Abstand auszurechnen, und beim Verschieben der Platte passt die Höhe weiter."
  },
- "revolveOptions": {
-  "tip": "Drehen mit Winkel, symmetrisch, beidseitig oder bis zu einer Fläche",
-  "hilfe": "Bestimmt, wie weit und in welche Richtung sich deine Skizze um die Achse dreht: in eine Richtung, umgekehrt, symmetrisch zu beiden Seiten (z. B. 90° als 2×45°), mit zwei eigenen Winkeln oder bis zu einer gewählten Körperfläche bzw. Bezugsebene. Bei Teil-Umdrehungen erscheint ein Ziehgriff für den Winkel.",
-  "tipp": "Wenn sich das Zielteil später verschiebt, wandert der Drehkörper bei „Bis zu gewählter Fläche“ automatisch mit."
+ "bodyList": {
+  "tip": "Mehrere getrennte Körper in einem Teil verwalten",
+  "hilfe": "Enthält ein Teil mehrere getrennte Körper (zum Beispiel zwei Inseln aus einer Skizze oder nach dem Teilen), zeigt der Verlauf darunter jeden Körper einzeln. Du kannst ihn benennen, einfärben sowie ein- und ausblenden – beim Export „Jeder Körper als eigene Datei“ übernimmt Tracery die Namen.",
+  "tipp": "Ein Doppelklick auf den Körpernamen benennt ihn direkt um, ein Klick auf das Farbfeld daneben ändert seine Farbe."
  },
  "treeReorder": {
   "tip": "Schritte im Verlauf per Ziehen umsortieren",
@@ -1489,40 +1505,20 @@ const HELP = {
   "hilfe": "Legt direkt hinter dem gewählten Schritt eine exakte Kopie mit denselben Maßen und derselben Rolle an (10 mm versetzt). Steckt der Schritt in einem Ordner, landet die Kopie direkt daneben im selben Ordner.",
   "tipp": "Du kannst dafür auch das Kopieren-Symbol in der Zeile oder Strg + D nutzen."
  },
- "bodyList": {
-  "tip": "Mehrere getrennte Körper in einem Teil verwalten",
-  "hilfe": "Enthält ein Teil mehrere getrennte Körper (zum Beispiel zwei Inseln aus einer Skizze oder nach dem Teilen), zeigt der Verlauf darunter jeden Körper einzeln. Du kannst ihn benennen, einfärben sowie ein- und ausblenden – beim Export „Jeder Körper als eigene Datei“ übernimmt Tracery die Namen.",
-  "tipp": "Ein Doppelklick auf den Körpernamen benennt ihn direkt um, ein Klick auf das Farbfeld daneben ändert seine Farbe."
+ "mirrorStep": {
+  "tip": "Einzelnen Formschritt an einer Ebene oder Fläche im selben Körper spiegeln",
+  "hilfe": "Spiegelt nur den gewählten Formschritt – zum Beispiel eine Tasche, Erhöhung, Rippe, ein Loch oder Aufdicken – an einer Grundebene, einer Bezugsebene oder einer gewählten ebenen Körperfläche direkt im selben Körper. Rechts wählst du Spiegelebene, Abstand oder weitere Schritte.",
+  "tipp": "Änderst du später Tiefe, Größe oder Form des ursprünglichen Schritts, passt sich die gespiegelte Seite automatisch mit an."
  },
  "patternSkip": {
   "tip": "Einzelne Kopien im Muster auslassen oder wieder einschalten",
   "hilfe": "Rechteck-, Kreis- und Kurvenmuster funktionieren nicht nur für ganze Körper, sondern auch für Formschritte wie Taschen, Nuten oder Rippen – alle Kopien schneiden oder verstärken denselben Zielkörper. Klicke im 3D-Bild auf einen kleinen Zahlen-Punkt oder rechts unter „Kopien“ auf ein Feld, um genau diese Kopie auszulassen (durchgestrichen) oder wieder einzuschalten.",
   "tipp": "Praktisch, wenn an einer Stelle ein Steg, eine Schraube oder ein Bauteil im Weg ist: Mindestens eine Kopie bleibt immer aktiv, und jede Änderung lässt sich rückgängig machen."
  },
- "scaleBody": {
-  "tip": "Körper gleichmäßig oder je Achse als Schritt skalieren",
-  "hilfe": "Legt einen Schritt „Skalieren“ im Verlauf an. Rechts stellst du einen gemeinsamen Faktor (z. B. ×2) oder getrennte Faktoren für X, Y und Z ein sowie den Bezugspunkt: Schwerpunkt des Körpers oder Ursprung (0 · 0 · 0).",
-  "tipp": "Als Schritt im Verlauf kannst du das Skalieren jederzeit ändern, unterdrücken oder den Marker davor schieben."
- },
- "thickenFace": {
-  "tip": "Fläche zu einer Platte mit fester Dicke aufdicken",
-  "hilfe": "Macht aus einer gewählten ebenen oder gewölbten Körperfläche eine feste Platte mit Dicke – nach außen, nach innen oder mittig. Rechts wählst du, ob sie mit dem Körper vereinigt, als eigene Platte angelegt oder abgezogen wird.",
-  "tipp": "Wenn du nach innen aufdickst, siehst du das Ergebnis nur als „Eigene Platte“ oder „Vom Körper abziehen“."
- },
  "refFix": {
   "tip": "Verlorene Kante oder Fläche neu wählen",
   "hilfe": "Verliert eine Rundung, Fase, Wandstärke oder Skizze ihre ursprüngliche Kante oder Fläche (etwa weil ein früheres Maß geändert wurde), erscheint im Verlauf ein gelbes Warnzeichen. Mit „Neu wählen“ blendet Tracery die alte Lage gelb gestrichelt ein – ein Klick auf die neue Kante oder Fläche repariert den Bezug, und alles rechnet weiter.",
   "tipp": "Du kannst die Ansicht währenddessen wie gewohnt drehen, um die gewünschte Kante oder Fläche gut anzuklicken."
- },
- "threadFace": {
-  "tip": "Echtes oder kosmetisches Gewinde direkt auf eine runde Fläche setzen",
-  "hilfe": "Rechtsklick auf einen Bolzen (außen) oder eine Bohrung (innen) → „Gewinde …“. Tracery schlägt die passende metrische Größe (M2 bis M24) samt Regelsteigung direkt aus dem Durchmesser vor. Du kannst Länge, Steigung und Ende wählen sowie zwischen echtem 3D-Gewinde und schneller Markierung umschalten.",
-  "tipp": "Bei gedruckten Innengewinden hilft ein kleines Spiel (Standard 0,3 mm), damit Schrauben leicht hineingehen."
- },
- "mirrorStep": {
-  "tip": "Einzelnen Formschritt an einer Ebene oder Fläche im selben Körper spiegeln",
-  "hilfe": "Spiegelt nur den gewählten Formschritt – zum Beispiel eine Tasche, Erhöhung, Rippe, ein Loch oder Aufdicken – an einer Grundebene, einer Bezugsebene oder einer gewählten ebenen Körperfläche direkt im selben Körper. Rechts wählst du Spiegelebene, Abstand oder weitere Schritte.",
-  "tipp": "Änderst du später Tiefe, Größe oder Form des ursprünglichen Schritts, passt sich die gespiegelte Seite automatisch mit an."
  },
  "threadStandards": {
   "tip": "Metrische Regel-, Feingewinde, Zoll UNC/UNF und Rohrgewinde G",
@@ -1534,15 +1530,25 @@ const HELP = {
   "hilfe": "Legt unter „Maße“ eine kleine Tabelle mit Schlüssel und Wert an – zum Beispiel „Schraube“ mit den Zeilen M3 = 3,4 und M5 = 5,5. In jeder Formel holst du den Wert mit tabelle(Schraube; M5). Außerdem verstehen Formeln wenn(Bedingung; dann; sonst) mit < > <= >= == != sowie runden(x; Stellen), aufrunden und abrunden.",
   "tipp": "Mehrere Angaben in Funktionen trennst du mit Semikolon ; – zum Beispiel runden(2,345; 1) oder wenn(b > 50; 3; 2)."
  },
- "exportIgesBrep": {
-  "tip": "Als IGES (.igs) oder BREP (.brep) speichern",
-  "hilfe": "IGES (.igs) speichert exakte Flächen und Körper im verbreiteten Austauschformat – besonders hilfreich für ältere CAD- und CAM-Programme. BREP (.brep) ist das eigene, verlustfreie Format des OpenCascade-Kerns (zum Beispiel für FreeCAD oder zum exakten Wiederladen in Tracery). Beide beachten „Nur die Auswahl“ und einen gewählten Nullpunkt.",
-  "tipp": "Für den Austausch mit Fusion, SolidWorks oder Onshape ist meist STEP die erste Wahl; IGES hilft bei älteren CAM-Programmen und BREP bei direktem Austausch mit FreeCAD."
+ "wrapCyl": {
+  "tip": "Ebene Skizze ohne Verzerrung um einen Zylinder wickeln",
+  "hilfe": "Legt deine 2D-Skizze exakt nach Bogenlänge um eine gewählte Zylinderfläche – wahlweise als erhabene oder vertiefte Prägung oder als Linie auf der Oberfläche (auch für „Entlang Pfad“). Eine Breite von genau π × Ø umschließt den ganzen Umfang (360°), die halbe Breite genau 180°.",
+  "tipp": "Wähle im Modus „Linie“ danach „Entlang Pfad ziehen“, um zum Beispiel eine schräge Nut oder eine Spirale um den Zylinder zu führen."
+ },
+ "threadFace": {
+  "tip": "Echtes oder kosmetisches Gewinde direkt auf eine runde Fläche setzen",
+  "hilfe": "Rechtsklick auf einen Bolzen (außen) oder eine Bohrung (innen) → „Gewinde …“. Tracery schlägt die passende metrische Größe (M2 bis M24) samt Regelsteigung direkt aus dem Durchmesser vor. Du kannst Länge, Steigung und Ende wählen sowie zwischen echtem 3D-Gewinde und schneller Markierung umschalten.",
+  "tipp": "Bei gedruckten Innengewinden hilft ein kleines Spiel (Standard 0,3 mm), damit Schrauben leicht hineingehen."
  },
  "emboss": {
   "tip": "Text oder Logo erhaben oder vertieft auf eine Fläche prägen (auch Zylinder oder Kugel)",
   "hilfe": "Projiziert geschlossene Flächen aus deiner Skizze – zum Beispiel Text oder ein Logo – senkrecht auf die gewählte ebene oder gewölbte Körperfläche (Zylinder, Kugel, Kegel …) und überträgt sie als Erhöhung (erhaben) oder Gravur (vertieft) mit fester Höhe direkt in den Körper.",
   "tipp": "Klick zuerst die runde oder ebene Zielfläche an und starte „Prägen“ – Tracery legt die Skizzenebene automatisch passend vor die Fläche."
+ },
+ "exportIgesBrep": {
+  "tip": "Als IGES (.igs) oder BREP (.brep) speichern",
+  "hilfe": "IGES (.igs) speichert exakte Flächen und Körper im verbreiteten Austauschformat – besonders hilfreich für ältere CAD- und CAM-Programme. BREP (.brep) ist das eigene, verlustfreie Format des OpenCascade-Kerns (zum Beispiel für FreeCAD oder zum exakten Wiederladen in Tracery). Beide beachten „Nur die Auswahl“ und einen gewählten Nullpunkt.",
+  "tipp": "Für den Austausch mit Fusion, SolidWorks oder Onshape ist meist STEP die erste Wahl; IGES hilft bei älteren CAM-Programmen und BREP bei direktem Austausch mit FreeCAD."
  }
 };
 

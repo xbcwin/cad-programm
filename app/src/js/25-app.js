@@ -315,7 +315,7 @@ const App = (() => {
       const top = Model.topOf(S.doc, id);
       if (top) {
         selTop.add(top.id);
-        if ((top.kind === 'transform' || top.kind === 'scale' || top.kind === 'thicken' || top.kind === 'rib' || top.kind === 'emboss' || top.kind === 'mirrorStep') && S.merged && S.merged.has(top.id)) selTop.add(S.merged.get(top.id));
+        if ((top.kind === 'transform' || top.kind === 'scale' || top.kind === 'thicken' || top.kind === 'rib' || top.kind === 'wrap' || top.kind === 'emboss' || top.kind === 'mirrorStep') && S.merged && S.merged.has(top.id)) selTop.add(S.merged.get(top.id));
       }
       selTop.add('__ex:' + id);
     }
