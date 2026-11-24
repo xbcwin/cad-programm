@@ -22184,6 +22184,225 @@ def t_a109_lizenz_fremde_bausteine(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a110_strecken_live_spiegeln(p):
+    # 1. Start in neuer XY-Skizze, Profi-Sichtbarkeit prüfen
+    sketch_xy(p)
+    p.ev("ViewPrefs.setLevel('simple')")
+    p.wait(100)
+    simple_hidden = (
+        not sichtbar(p, '.sketchbar .tool[data-tool="stretch"]')
+        and not sichtbar(p, '#sk-live-mir-btn')
+        and not sichtbar(p, '#sk-live-mir-box')
+    )
+    p.ev("ViewPrefs.setLevel('pro')")
+    p.wait(100)
+    pro_shown = (
+        sichtbar(p, '.sketchbar .tool[data-tool="stretch"]')
+        and sichtbar(p, '#sk-live-mir-btn')
+        and sichtbar(p, '#sk-live-mir-box')
+    )
+    ok1 = simple_hidden and pro_shown
+
+    # 2. Strecken am 20x10-Rechteck (rect) per Rahmenziehen + Richtung/Weg + Strg+Z
+    SS(p, """
+      S.ents = [{ id: 'R1', type: 'rect', a: [0, 0], b: [20, 10] }];
+      S.cons = [];
+      S.dims = [];
+      Sketch.render(); Panels.renderRight();
+    """)
+    p.wait(80)
+    p.pg.click('.sketchbar .tool[data-tool="stretch"]')
+    p.wait(80)
+    a0 = to_screen(p, 15, -3)
+    a1 = to_screen(p, 24, 13)
+    p.pg.mouse.move(a0[0], a0[1])
+    p.pg.mouse.down()
+    p.pg.mouse.move(a1[0], a1[1], steps=4)
+    p.pg.mouse.up()
+    p.wait(100)
+    p.pg.select_option('#str-dir', 'x')
+    p.pg.fill('#str-dist', '5')
+    p.pg.press('#str-dist', 'Enter')
+    p.pg.click('#str-apply')
+    p.wait(100)
+    r_after = SS(p, "const r = S.ents.find((e) => e.id === 'R1'); return r ? { ax: r.a[0], ay: r.a[1], bx: r.b[0], by: r.b[1] } : null;")
+    p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('Control+z')
+    p.wait(100)
+    r_undo = SS(p, "const r = S.ents.find((e) => e.id === 'R1'); return r ? { ax: r.a[0], bx: r.b[0] } : null;")
+
+    # 3. Strecken am 4-Linien-Rechteck mit Regeln (horizontal, vertical, coincident, fix): Regeln bleiben erhalten
+    SS(p, """
+      S.ents = [
+        { id: 'l1', type: 'line', a: [0, 0], b: [20, 0] },
+        { id: 'l2', type: 'line', a: [20, 0], b: [20, 10] },
+        { id: 'l3', type: 'line', a: [20, 10], b: [0, 10] },
+        { id: 'l4', type: 'line', a: [0, 10], b: [0, 0] },
+      ];
+      S.cons = [
+        { id: 'c1', type: 'horizontal', refs: [{ e: 'l1' }] },
+        { id: 'c2', type: 'vertical', refs: [{ e: 'l2' }] },
+        { id: 'c3', type: 'horizontal', refs: [{ e: 'l3' }] },
+        { id: 'c4', type: 'vertical', refs: [{ e: 'l4' }] },
+        { id: 'c5', type: 'coincident', refs: [{ e: 'l1', p: 'b' }, { e: 'l2', p: 'a' }] },
+        { id: 'c6', type: 'coincident', refs: [{ e: 'l2', p: 'b' }, { e: 'l3', p: 'a' }] },
+        { id: 'c7', type: 'coincident', refs: [{ e: 'l3', p: 'b' }, { e: 'l4', p: 'a' }] },
+        { id: 'c8', type: 'coincident', refs: [{ e: 'l4', p: 'b' }, { e: 'l1', p: 'a' }] },
+        { id: 'c9', type: 'fix', refs: [{ e: 'l4', p: 'a' }] },
+        { id: 'c10', type: 'fix', refs: [{ e: 'l4', p: 'b' }] },
+      ];
+      S.dims = [];
+      Sketch.stretchBox(16, -2, 24, 12);
+      return Sketch.applyStretch({ dir: 'x', dist: 5 });
+    """)
+    p.wait(100)
+    poly_res = SS(p, """
+      const byId = Object.fromEntries(S.ents.map((e) => [e.id, e]));
+      return {
+        nCons: S.cons.length,
+        ok: !!(S.status && S.status.ok),
+        l1ax: byId.l1.a[0], l1bx: byId.l1.b[0],
+        l2ax: byId.l2.a[0], l2bx: byId.l2.b[0],
+        l3ax: byId.l3.a[0], l4ax: byId.l4.a[0], l4bx: byId.l4.b[0],
+      };
+    """)
+    ok2 = (
+        r_after is not None
+        and abs(r_after['ax'] - 0) < 1e-4
+        and abs(r_after['bx'] - 25) < 1e-4
+        and abs(r_after['by'] - 10) < 1e-4
+        and r_undo is not None
+        and abs(r_undo['ax'] - 0) < 1e-4
+        and abs(r_undo['bx'] - 20) < 1e-4
+        and poly_res['nCons'] == 10
+        and poly_res['ok'] is True
+        and abs(poly_res['l4ax']) < 1e-4
+        and abs(poly_res['l4bx']) < 1e-4
+        and abs(poly_res['l1ax']) < 1e-4
+        and abs(poly_res['l1bx'] - 25) < 1e-4
+        and abs(poly_res['l2ax'] - 25) < 1e-4
+        and abs(poly_res['l2bx'] - 25) < 1e-4
+        and abs(poly_res['l3ax'] - 25) < 1e-4
+    )
+
+    # 4. Live-Spiegeln an der Y-Achse: Linie zeichnen -> gespiegelte Linie + Regel "symmetrisch"
+    SS(p, "S.ents = []; S.cons = []; S.dims = []; S.undo = []; Sketch.setLiveMirror(false); Sketch.render(); Panels.renderRight();")
+    p.wait(80)
+    p.pg.click('#lm-y')
+    p.wait(80)
+    lm_active_y = p.ev("return Sketch.liveMirror")
+    lm_dir_y = SS(p, "return S.liveMir && S.liveMir.axisDir")
+    badge_vis = sichtbar(p, '#sk-live-mir-badge')
+    p.pg.click('.sketchbar .tool[data-tool="line"]')
+    p.wait(60)
+    click_uv(p, 10, 5, alt=True)
+    click_uv(p, 25, 15, alt=True)
+    p.pg.keyboard.press('Escape')
+    p.wait(100)
+    mir_line = SS(p, """
+      const lines = S.ents.filter((e) => e.type === 'line' && !e.con);
+      const syms = S.cons.filter((c) => c.type === 'symmetric');
+      const ax = S.ents.find((e) => e.type === 'line' && e.con);
+      lines.sort((u, v) => u.a[0] - v.a[0]);
+      return {
+        nLines: lines.length,
+        hasAxis: !!ax,
+        nSym: syms.length,
+        ok: !!(S.status && S.status.ok),
+        l0: lines[0] ? { a: lines[0].a, b: lines[0].b } : null,
+        l1: lines[1] ? { a: lines[1].a, b: lines[1].b } : null,
+      };
+    """)
+    # Undo der gezeichneten Linie entfernt Original + Spiegelbild gemeinsam
+    p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('Control+z')
+    p.wait(100)
+    after_mir_undo = SS(p, "return S.ents.filter((e) => e.type === 'line' && !e.con).length;")
+
+    # 5. Live-Spiegeln an eigener gewählter Linie + Kreis + Ausschalten
+    SS(p, """
+      Sketch.setLiveMirror(false);
+      S.ents = [{ id: 'ax1', type: 'line', a: [0, -20], b: [0, 20], con: true }];
+      S.cons = [];
+      S.dims = [];
+      S.sel = 'ax1';
+      Sketch.render();
+      Panels.renderRight();
+    """)
+    p.wait(80)
+    p.pg.click('#lm-use-sel')
+    p.wait(80)
+    p.pg.click('.sketchbar .tool[data-tool="circle"]')
+    p.wait(60)
+    click_uv(p, 12, 4, alt=True)
+    click_uv(p, 17, 4, alt=True)
+    p.wait(100)
+    mir_circle = SS(p, """
+      const cs = S.ents.filter((e) => e.type === 'circle').sort((u, v) => u.c[0] - v.c[0]);
+      return {
+        n: cs.length,
+        syms: S.cons.filter((c) => c.type === 'symmetric').length,
+        eqs: S.cons.filter((c) => c.type === 'equal').length,
+        ok: !!(S.status && S.status.ok),
+        c0: cs[0] ? { c: cs[0].c, r: cs[0].r } : null,
+        c1: cs[1] ? { c: cs[1].c, r: cs[1].r } : null,
+      };
+    """)
+    p.pg.click('#lm-off')
+    p.wait(60)
+    p.pg.click('.sketchbar .tool[data-tool="line"]')
+    p.wait(60)
+    click_uv(p, 5, -5, alt=True)
+    click_uv(p, 15, -5, alt=True)
+    p.pg.keyboard.press('Escape')
+    p.wait(80)
+    after_off_lines = SS(p, "return S.ents.filter((e) => e.type === 'line' && !e.con).length;")
+
+    ok3 = (
+        isinstance(lm_active_y, str) and len(lm_active_y) > 0
+        and lm_dir_y == 'y'
+        and badge_vis
+        and mir_line['nLines'] == 2
+        and mir_line['hasAxis']
+        and mir_line['nSym'] == 2
+        and mir_line['ok'] is True
+        and mir_line['l0'] is not None and mir_line['l1'] is not None
+        and abs(mir_line['l1']['a'][0] - 10) < 0.6
+        and abs(mir_line['l1']['b'][0] - 25) < 0.6
+        and abs(mir_line['l0']['a'][0] + mir_line['l1']['a'][0]) < 1e-3
+        and abs(mir_line['l0']['b'][0] + mir_line['l1']['b'][0]) < 1e-3
+        and abs(mir_line['l0']['a'][1] - mir_line['l1']['a'][1]) < 1e-3
+        and abs(mir_line['l0']['b'][1] - mir_line['l1']['b'][1]) < 1e-3
+        and after_mir_undo == 0
+        and mir_circle['n'] == 2
+        and mir_circle['syms'] >= 1
+        and mir_circle['eqs'] >= 1
+        and mir_circle['ok'] is True
+        and mir_circle['c0'] is not None and mir_circle['c1'] is not None
+        and abs(mir_circle['c1']['c'][0] - 12) < 0.6
+        and abs(mir_circle['c0']['c'][0] + mir_circle['c1']['c'][0]) < 1e-3
+        and abs(mir_circle['c0']['r'] - mir_circle['c1']['r']) < 1e-3
+        and after_off_lines == 1
+    )
+
+    # 6. Hilfetexte, DE/EN-Schlüsselgleichheit und Befehlssuche
+    hilfen = json.load(open('app/data/werkzeug-hilfen.json', encoding='utf-8'))
+    de_keys = set(json.load(open('app/data/texte-de.json', encoding='utf-8')).keys())
+    en_keys = set(json.load(open('app/data/texte-en.json', encoding='utf-8')).keys())
+    i18n_eq = de_keys == en_keys
+    cmd_ok = p.ev("""
+      const a = Commands.search('strecken').some((c) => c.id === 'sketch-stretch');
+      const b = Commands.search('live-spiegeln').some((c) => c.id === 'sketch-live-mirror');
+      return a && b;
+    """)
+    help_ok = all(
+        k in hilfen and all(f in hilfen[k] for f in ('tip', 'hilfe', 'tipp'))
+        for k in ('stretch2d', 'liveMirror')
+    )
+    ok4 = i18n_eq and cmd_ok and help_ok and len(p.errs) == 0
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -22401,6 +22620,7 @@ TESTS = [
     ('[A-108] Einstellungen speichern/laden & Oberflächen-Größe (BE-30, BE-31)', t_a108_einstellungen_groesse),
     ('[A-107] Rechnen abbrechen & Meldungs-Zentrale (BE-27, BE-25)', t_a107_abbrechen_meldungen),
     ('[A-109] Lizenz „Alle Rechte vorbehalten“ & Fremde Bausteine (PL-02)', t_a109_lizenz_fremde_bausteine),
+    ('[A-110] Strecken und Live-Spiegeln (SK-30, SK-46)', t_a110_strecken_live_spiegeln),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

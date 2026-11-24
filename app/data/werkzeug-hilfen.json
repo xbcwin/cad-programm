@@ -1378,5 +1378,15 @@
     "tip": "Liste aller mitgelieferten fremden Bausteine mit Lizenz und Lizenztext anzeigen",
     "hilfe": "Zeigt alle fremden Bibliotheken und Schriften an, die Tracery mitliefert – zum Beispiel three.js für die 3D-Ansicht, die Schrift Inter sowie OpenCascade und replicad – jeweils mit Urheber, Lizenzart und dem zugehörigen Lizenztext.",
     "tipp": "Klick bei einem Baustein auf „Lizenztext anzeigen“, um die vollständigen Bedingungen einzublenden."
+  },
+  "stretch2d": {
+    "tip": "Einen Teil der Skizze per Rahmen in eine Richtung strecken",
+    "hilfe": "Zieh im Profi-Modus einen Rahmen über die Endpunkte oder Kanten, die wandern sollen. Danach gibst du rechts die Richtung (X, Y, Winkel oder X/Y) und den Weg ein. Nur die Punkte im Rahmen verschieben sich, der Rest bleibt stehen und bestehende Regeln sowie Maße bleiben erhalten.",
+    "tipp": "Zieh den Rahmen zum Beispiel nur über die rechte Kante eines Rechtecks und gib 5 mm in X ein – die linke Kante bleibt stehen und die Breite wächst um 5 mm."
+  },
+  "liveMirror": {
+    "tip": "Live-Spiegeln: Alles neu Gezeichnete entsteht sofort auch gespiegelt",
+    "hilfe": "Schalte im Profi-Modus „Live-Spiegeln“ ein und wähle eine vorhandene Linie (oder die X-/Y-Achse). Jede Linie, jeder Kreis, Bogen, Spline oder Umriss, den du danach zeichnest, entsteht sofort auch gespiegelt mit der Regel „Symmetrisch“ – so bleiben beide Seiten dauerhaft verknüpft.",
+    "tipp": "Klick oben oder rechts erneut auf „Live-Spiegeln“, um das automatische Spiegeln wieder auszuschalten."
   }
 }
