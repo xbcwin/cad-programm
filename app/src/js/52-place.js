@@ -18,7 +18,7 @@ const Place = (() => {
     if (d.lib === 'blindHole') { const r = (Number(p.d) || 5) / 2, tip = blindTipHeight(Number(p.d) || 5, p.tipAngle ?? 118); return [-r, -r, -((Number(p.depth) || 10) + tip), r, r, 0.2]; }
     if (d.lib === 'fitHole') { const r = (Number(p.d) || 6) / 2; return [-r, -r, -(Number(p.depth) || 10), r, r, 0.2]; }
     if (d.lib === 'centerHole') { const m = centerHoleMetrics(p.size), r = m.d2 / 2; return [-r, -r, -m.totalDepth, r, r, 0.2]; }
-    if (d.lib === 'stdPin' || d.lib === 'stdKey' || d.lib === 'stdKeyway' || d.lib === 'stdBearing' || d.lib === 'stdSleeve') {
+    if (d.lib === 'stdScrew' || d.lib === 'stdNut' || d.lib === 'stdWasher' || d.lib === 'stdPin' || d.lib === 'stdKey' || d.lib === 'stdKeyway' || d.lib === 'stdBearing' || d.lib === 'stdSleeve') {
       return Model.primitiveBox('part', { lib: d.lib, ...p }) || [-10, -10, 0, 10, 10, 10];
     }
     if (d.lib === 'threadHole') return [-3.5, -3.5, -(p.length || 10), 3.5, 3.5, 0.2];
@@ -327,7 +327,7 @@ const Place = (() => {
         body.append(thru);
         if (!o.thru) body.append(UI.numField({ id: 'hw-depth', label: 'Tiefe', value: o.depth, onCommit: (v) => { o.depth = v; } }));
       } else {
-        const sizes = o.type === 'insert' ? SIZES.filter((x) => x !== 'M1.6') : SIZES;
+        const sizes = o.type === 'insert' ? ['M2', 'M2.5', 'M3', 'M4', 'M5', 'M6', 'M8'] : SIZES;
         if (!sizes.includes(o.size)) o.size = 'M3';
         body.append(UI.selectField({ id: 'hw-size', label: o.type === 'nut' ? 'Mutter' : 'Gewinde', value: o.size, options: sizes, onChange: (v) => { o.size = v; updatePreview(); } }));
         const thru = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'hw-thru', checked: !!o.thru }), o.type === 'insert' ? 'So tief wie der Körper' : 'Ganz durch den Körper');

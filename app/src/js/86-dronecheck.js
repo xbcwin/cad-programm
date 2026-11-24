@@ -199,7 +199,7 @@ const DroneCheck = (() => {
 // ---------- Platten als DXF für die Fräse ----------
 const Plates = (() => {
   // flache Teile der obersten Ebene: höchstens 12 mm dick, kein Kaufteil, kein Loch, nichts Gedrucktes (z. B. Motorkeile)
-  const PRINTED = ['PLA', 'PETG', 'ABS', 'ASA', 'TPU 95A', 'PA12', 'PC', 'POM'];
+  const PRINTED = ['PLA', 'PETG', 'ABS', 'ASA', 'TPU 95A', 'PA6', 'PA12', 'PC', 'POM'];
   function candidates() {
     const out = [];
     for (const it of App.doc.items) {

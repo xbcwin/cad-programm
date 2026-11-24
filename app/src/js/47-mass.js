@@ -95,7 +95,7 @@ const Mass = (() => {
     ViewPrefs.on('change', refreshMarker);
   }
   // ---------- Stückliste: alle Teile ganz oben im Verlauf, gleiche zusammengefasst ----------
-  const PRINTMATS = ['PLA', 'PETG', 'ABS', 'ASA', 'TPU 95A', 'PA12', 'PC'];
+  const PRINTMATS = ['PLA', 'PETG', 'ABS', 'ASA', 'TPU 95A', 'PA6', 'PA12', 'PC'];
   async function bom(doc = App.doc) {
     const r = doc === App.doc ? await measure() : await measureDoc(doc); if (!r) return null;
     const map = new Map();
@@ -214,5 +214,5 @@ const Mass = (() => {
     if (B.filament.length) body.append(h('div', { class: 'ok-box', id: 'bom-filament', html: '<b>Filament für die Druckteile:</b> ' + B.filament.map((x) => `${x.mat} ${gText(x.g)} ≈ ${filLen(x.m)}`).join(' · ') + ' (Draht 1,75 mm, massiv gerechnet – mit weniger Füllung brauchst du weniger; Stützen und Rand kommen dazu).' }));
     body.append(h('div', { class: 'hint-box', html: 'Gleiche Teile (gleicher Name ohne Nummer, gleiches Gewicht) stehen in einer Zeile. Klick auf eine Zeile wählt die Teile im Bild aus. <b>Kaufteile</b> zählen mit dem Gewicht aus dem Datenblatt, alles andere mit Volumen × Material.' + (B.rows.some((x) => x.missing) ? ' Bei Teilen mit „fehlt“ ist noch kein Gewicht eingetragen.' : '') }));
   }
-  return { stability, hull2,  init, measure, measureDoc, bom, bomCSV, bomDialog, screws, threads, materialFor, projectMaterial, partOf, gText, fixedOf, on: ev.on, get markerShown() { return !!marker; }, get markerPos() { return marker ? marker.position.toArray() : null; } };
+  return { stability, hull2, init, measure, measureDoc, bom, bomCSV, bomDialog, screws, threads, matOf, get materials() { return MATERIALS; }, materialFor, projectMaterial, partOf, gText, fixedOf, on: ev.on, get markerShown() { return !!marker; }, get markerPos() { return marker ? marker.position.toArray() : null; } };
 })();

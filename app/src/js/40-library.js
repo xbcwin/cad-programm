@@ -1,5 +1,9 @@
 // ================= Bauteil-Bibliothek (Definitionen für die Oberfläche) =================
-const SIZES = ['M1.6', 'M2', 'M2.5', 'M3', 'M4', 'M5', 'M6', 'M8'];
+const SIZES = ['M1.6', 'M2', 'M2.5', 'M3', 'M4', 'M5', 'M6', 'M8', 'M10', 'M12', 'M16', 'M20', 'M24'];
+const SCREW_DATA = /*JSON:schrauben.json*/null;
+const SCREW_LIST = (SCREW_DATA && SCREW_DATA.schrauben) || [];
+const SCREW_BY_ID = new Map(SCREW_LIST.map((x) => [String(x.groesse), x]));
+function screwEntry(size) { return SCREW_BY_ID.get(String(size || 'M3')) || SCREW_BY_ID.get('M3') || SCREW_LIST[0] || null; }
 const THREAD_DATA = /*JSON:gewinde.json*/null;
 const PIN_DATA = /*JSON:passstifte.json*/null;
 const KEY_DATA = /*JSON:passfedern.json*/null;
@@ -150,15 +154,15 @@ const LIB = [
   { lib: 'centerHole', label: 'Zentrierbohrung', role: 'hole', icon: 'holeWizard', desc: 'Zentrierbohrung nach DIN 332 Form A (60°-Kegel + Führungsbohrung)', params: [
     { k: 'size', label: 'Größe (DIN 332 A)', type: 'select', options: CENTER_SIZES, def: 'A2.5' },
   ] },
-  { lib: 'stdScrew', label: 'Schraube (Norm)', role: 'solid', icon: 'bolt', mat: 'V2A Edelstahl', std: true, desc: 'Echte Schraube mit Innensechskant: Zylinderkopf ISO 4762 oder Senkkopf ISO 10642 – Gewinde nur angedeutet', params: [
+  { lib: 'stdScrew', label: 'Schraube (Norm)', role: 'solid', icon: 'bolt', mat: 'V2A Edelstahl', std: true, desc: 'Normschraube M1.6–M24: Zylinderkopf (ISO 4762), Sechskantschraube (ISO 4017) oder Senkkopf (ISO 10642) – Gewinde nur angedeutet', params: [
     { k: 'size', label: 'Größe', type: 'select', options: SIZES, def: 'M3' },
-    { k: 'head', label: 'Kopf', type: 'select', options: [['zyl', 'Zylinderkopf (ISO 4762)'], ['senk', 'Senkkopf (ISO 10642, ab M3)']], def: 'zyl' },
+    { k: 'head', label: 'Kopf', type: 'select', options: [['zyl', 'Zylinderkopf (ISO 4762)'], ['hex', 'Sechskantkopf (ISO 4017)'], ['senk', 'Senkkopf (ISO 10642, ab M3)']], def: 'zyl' },
     { k: 'length', label: 'Länge', type: 'num', def: 10 },
   ] },
-  { lib: 'stdNut', label: 'Mutter (Norm)', role: 'solid', icon: 'hex', mat: 'V2A Edelstahl', std: true, desc: 'Sechskantmutter ISO 4032', params: [
+  { lib: 'stdNut', label: 'Mutter (Norm)', role: 'solid', icon: 'hex', mat: 'V2A Edelstahl', std: true, desc: 'Sechskantmutter ISO 4032 (M1.6–M24)', params: [
     { k: 'size', label: 'Größe', type: 'select', options: SIZES, def: 'M3' },
   ] },
-  { lib: 'stdWasher', label: 'Scheibe (Norm)', role: 'solid', icon: 'circle', mat: 'V2A Edelstahl', std: true, desc: 'Unterlegscheibe ISO 7089', params: [
+  { lib: 'stdWasher', label: 'Scheibe (Norm)', role: 'solid', icon: 'circle', mat: 'V2A Edelstahl', std: true, desc: 'Unterlegscheibe ISO 7089 (M1.6–M24)', params: [
     { k: 'size', label: 'Größe', type: 'select', options: SIZES, def: 'M3' },
   ] },
   { lib: 'stdPin', label: 'Zylinderstift (ISO 2338)', role: 'solid', icon: 'pin', mat: 'V2A Edelstahl', std: true, desc: 'Zylinderstift nach ISO 2338 mit 15°-Endfasen (m6 oder h8)', params: [

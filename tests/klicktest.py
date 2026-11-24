@@ -11789,6 +11789,164 @@ def t_a056_normteile_stifte_lager(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+# ---------- [A-057] Schrauben M10–M24 & mehr Werkstoffe (BI-06, BI-07) ----------
+def t_a057_schrauben_werkstoffe(p):
+    p.empty()
+    # 1. Sechskantschraube M16×60 (ISO 4017) -> Schlüsselweite 24 mm, Kopfhöhe 10 mm, Schaftlänge 60 mm
+    p.ev("""App.change('Sechskantschraube M16x60', d=>{
+      const s = Model.newItem('part', { lib:'stdScrew', size:'M16', head:'hex', length:60 }, { name:'M16x60' });
+      d.items.push(s);
+    })""")
+    warte_rechnen(p, 40)
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(400)
+    r1 = p.ev("""
+      const it = App.doc.items[0], d = App.results.get(it.id)?.data, bb = d?.bbox || [];
+      return {
+        errs: App.errors.length,
+        mat: it.mat,
+        xSpan: bb[3] - bb[0],
+        ySpan: bb[4] - bb[1],
+        zMin: bb[2],
+        zMax: bb[5],
+      };
+    """)
+    hint1 = p.pg.locator('#p-stdscrew-hint').text_content() or ''
+    ok1 = (
+        r1['errs'] == 0
+        and r1['mat'] == 'V2A Edelstahl'
+        and abs(r1['ySpan'] - 24.0) < 0.02
+        and abs(r1['xSpan'] - (24.0 * 2.0 / math.sqrt(3))) < 0.05
+        and abs(r1['zMin'] + 60.0) < 0.02
+        and abs(r1['zMax'] - 10.0) < 0.02
+        and 'ISO 4017' in hint1 and '24' in hint1
+    )
+
+    # 2. Normteile M10–M24 (Zylinder, Senkkopf inkl. kurzem M24, Mutter, Scheibe) & Geometrie-Prüfung
+    p.ev("""App.change('Normteile bis M24', d=>{
+      d.items = [
+        Model.newItem('part', { lib:'stdScrew', size:'M10', head:'zyl', length:30 }, { name:'Zyl_M10' }),
+        Model.newItem('part', { lib:'stdScrew', size:'M24', head:'senk', length:50 }, { name:'Senk_M24' }),
+        Model.newItem('part', { lib:'stdScrew', size:'M24', head:'senk', length:10 }, { name:'Senk_M24_kurz' }),
+        Model.newItem('part', { lib:'stdNut', size:'M16' }, { name:'Mutter_M16' }),
+        Model.newItem('part', { lib:'stdNut', size:'M24' }, { name:'Mutter_M24' }),
+        Model.newItem('part', { lib:'stdWasher', size:'M12' }, { name:'Scheibe_M12' }),
+        Model.newItem('part', { lib:'stdWasher', size:'M24' }, { name:'Scheibe_M24' }),
+      ];
+      d.items.forEach((it, idx) => { it.t.x = idx * 60; });
+    })""")
+    warte_rechnen(p, 60)
+    r2 = p.ev("""
+      const boxes = App.doc.items.map(it => {
+        const bb = App.results.get(it.id)?.data?.bbox || [0,0,0,0,0,0];
+        return { w: bb[3]-bb[0], dp: bb[4]-bb[1], z0: bb[2], z1: bb[5] };
+      });
+      return GeomCheck.run({ silent: true }).then(gc => ({
+        errs: App.errors.length,
+        boxes,
+        gcIssues: gc.issues.length,
+        gcChecked: gc.checkedCount,
+      }));
+    """)
+    bx = r2['boxes']
+    ok2 = (
+        r2['errs'] == 0
+        and abs(bx[0]['w'] - 16.0) < 0.02 and abs(bx[0]['z0'] + 30.0) < 0.02 and abs(bx[0]['z1'] - 10.0) < 0.02
+        and abs(bx[1]['w'] - 39.0) < 0.03 and abs(bx[1]['z0'] + 50.0) < 0.02 and abs(bx[1]['z1']) < 0.02
+        and abs(bx[2]['w'] - 39.0) < 0.03 and bx[2]['z0'] < -14.0
+        and abs(bx[3]['dp'] - 24.0) < 0.02 and abs(bx[3]['z1'] - 14.8) < 0.02
+        and abs(bx[4]['dp'] - 36.0) < 0.02 and abs(bx[4]['z1'] - 21.5) < 0.02
+        and abs(bx[5]['w'] - 24.0) < 0.02 and abs(bx[5]['z1'] - 2.5) < 0.02
+        and abs(bx[6]['w'] - 44.0) < 0.02 and abs(bx[6]['z1'] - 4.0) < 0.02
+        and r2['gcIssues'] == 0 and r2['gcChecked'] == 7
+    )
+
+    # 3. Werkstoff „Messing“ -> Dichte 8,4–8,7 g/cm³ (8,47 g/cm³) & Studio-Aussehen
+    p.ev("""App.change('Messing-Würfel', d=>{
+      d.items = [Model.newItem('box', { w:10, d:10, h:10 }, { name:'Wuerfel' })];
+    })""")
+    warte_rechnen(p, 25)
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(350)
+    p.pg.select_option('#p-mat', 'Messing'); p.wait(1200)
+    mass_txt = (p.pg.locator('#p-mass').text_content() or '').strip()
+    mat_info = (p.pg.locator('#p-mat-info').text_content() or '').strip()
+    r3 = p.ev("""
+      const it = App.doc.items[0];
+      const matObj = Mass.matOf('Messing');
+      const m = Viewer.nodes.get(it.id)?.mesh?.material;
+      return Mass.measure().then(res => ({
+        rho: matObj ? matObj.rho : null,
+        src: matObj ? matObj.src : '',
+        mass: res?.parts?.find(q => q.id === it.id)?.mass ?? null,
+        metal: m ? m.metalness : null,
+        col: m ? '#' + m.color.getHexString() : null,
+      }));
+    """)
+    ok3 = (
+        r3['rho'] is not None and 8.4 <= r3['rho'] <= 8.7
+        and r3['mass'] is not None and 8.4 <= r3['mass'] <= 8.7
+        and '8,47 g' in mass_txt
+        and '8,47' in mat_info and 'Quelle:' in mat_info
+        and r3['metal'] == 1 and r3['col'] == '#d8b552'
+    )
+
+    # 4. Erweiterte Werkstoff-Sammlung: Stähle, Edelstahl, Messing, Kupfer, POM, PA6, PC, ABS, PETG, TPU, Sperrholz, MDF
+    p.ev("""App.change('Werkstoff-Stichproben', d=>{
+      const mats = ['Kupfer', 'MDF', 'PA6', 'Stahl C45', 'V4A Edelstahl', 'Birken-Sperrholz'];
+      d.items = mats.map((mk, idx) => {
+        const b = Model.newItem('box', { w:10, d:10, h:10 }, { name:mk });
+        b.mat = mk; b.t.x = idx * 20; return b;
+      });
+    })""")
+    warte_rechnen(p, 35)
+    r4 = p.ev("""
+      return Promise.all([
+        fetch('data/materialien.json').then(r => r.json()),
+        Mass.bom(),
+      ]).then(([mj, bom]) => {
+        const list = mj.materialien || [];
+        const samples = App.doc.items.map(it => {
+          const m = Viewer.nodes.get(it.id)?.mesh?.material;
+          const def = Mass.matOf(it.mat);
+          return { k: it.mat, rho: def?.rho, metal: m?.metalness, rough: m?.roughness, col: m ? '#' + m.color.getHexString() : null };
+        });
+        return {
+          keys: Mass.materials.map(m => m.k),
+          allValid: list.length >= 26 && list.every(m => m.dichte_g_cm3 > 0 && m.quelle && m.aussehen && m.kategorie) && Mass.materials.every(m => m.rho > 0 && m.src && Viewer.lookOf(m.k)),
+          filament: (bom?.filament || []).map(f => f.mat),
+          samples,
+        };
+      });
+    """)
+    need_mats = {'Baustahl', 'Stahl S355', 'Stahl C45', 'Stahl 42CrMo4', 'V2A Edelstahl', 'V4A Edelstahl', 'Messing', 'Kupfer', 'POM', 'PA6', 'PC', 'ABS', 'PETG', 'TPU 95A', 'Pappel-Sperrholz', 'Birken-Sperrholz', 'MDF'}
+    sm = {s['k']: s for s in r4['samples']}
+    ok4 = (
+        need_mats <= set(r4['keys'])
+        and r4['allValid']
+        and 'PA6' in r4['filament']
+        and sm['Kupfer']['rho'] == 8.96 and sm['Kupfer']['metal'] == 1 and sm['Kupfer']['col'] == '#d47c54'
+        and sm['MDF']['rho'] == 0.72 and sm['MDF']['metal'] == 0 and sm['MDF']['rough'] >= 0.8
+        and sm['PA6']['rho'] == 1.14 and sm['Stahl C45']['rho'] == 7.85 and sm['Stahl C45']['metal'] == 1
+        and sm['V4A Edelstahl']['rho'] == 8.0 and sm['V4A Edelstahl']['metal'] == 1
+        and sm['Birken-Sperrholz']['rho'] == 0.68 and sm['Birken-Sperrholz']['metal'] == 0
+    )
+
+    # 5. UI-Kategorien (optgroup), Suche & Hilfetexte
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(350)
+    groups = p.pg.evaluate("[...document.querySelectorAll('#p-mat optgroup')].map(g=>g.label)")
+    r5 = p.ev("""
+      return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(hj => ({
+        cmds: Commands.search('sechskantschraube').length,
+        helpOk: ['stdScrew', 'stdNut', 'stdWasher'].every(k => hj[k] && hj[k].tip && hj[k].hilfe && hj[k].tipp && hj[k].hilfe.includes('M24')),
+      }));
+    """)
+    ok5 = (
+        {'Metalle', 'Kunststoffe', 'Faserverbund', 'Holz & Platten'} <= set(groups)
+        and r5['cmds'] >= 1
+        and r5['helpOk']
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -11947,6 +12105,7 @@ TESTS = [
     ('[A-051] Wiederherstellen nach Absturz: Meldung mit Zeit & Projektname / Wiederherstellen / Verwerfen / großes Projekt aus IndexedDB / sauber gespeichert ohne Meldung', t_a051_absturz_wiederherstellen),
     ('[A-055] Sparsames Rückgängig: 200 Änderungen als Patches / Speicher viel kleiner / 200× Rückgängig exakt / Redo & Speicherlimit', t_a055_sparsames_rueckgaengig),
     ('[A-056] Normteile: Passstifte, Passfedern mit Nut, Kugel- und Gleitlager', t_a056_normteile_stifte_lager),
+    ('[A-057] Schrauben M10–M24 & Werkstoffe: Sechskantschraube M16×60 SW 24 / M10–M24 Normteile / Werkstoff Messing Dichte 8,4–8,7 / neue Werkstoffe mit Aussehen & Quelle / Suche & Hilfe', t_a057_schrauben_werkstoffe),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

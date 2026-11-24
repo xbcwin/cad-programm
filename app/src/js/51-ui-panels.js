@@ -32,6 +32,25 @@ const Panels = (() => {
   // weiche Trennstellen für lange Wörter auf schmalen Kacheln (nur Anzeige)
   const HY = { Schraubenloch: 'Schrauben\u00ADloch', Mutternfalle: 'Muttern\u00ADfalle', Gewindeeinsatz: 'Gewinde\u00ADeinsatz', Schnapphaken: 'Schnapp\u00ADhaken', Halbkugel: 'Halb\u00ADkugel' };
   const hyph = (s) => HY[s] || s;
+  const MAT_CATS = ['Metalle', 'Kunststoffe', 'Faserverbund', 'Holz & Platten'];
+  function materialOptions(extra = []) {
+    const out = [...extra];
+    for (const cat of MAT_CATS) {
+      const items = MATERIALS.filter((m) => m.cat === cat);
+      if (items.length) out.push({ group: cat, options: items.map((m) => [m.k, `${m.k} · ${fmtFixed(m.rho, 2)} g/cm³`]) });
+    }
+    const rest = MATERIALS.filter((m) => !MAT_CATS.includes(m.cat));
+    if (rest.length) out.push({ group: 'Sonstige', options: rest.map((m) => [m.k, `${m.k} · ${fmtFixed(m.rho, 2)} g/cm³`]) });
+    return out;
+  }
+  function materialInfoBox(mat, id) {
+    if (!mat) return h('div', { id, hidden: true });
+    const parts = [`Dichte <b>${fmtFixed(mat.rho, 2)} g/cm³</b>`];
+    if (mat.e != null) parts.push(`E-Modul ${fmt(mat.e, 1)} GPa`);
+    if (mat.rm != null) parts.push(`R<sub>m</sub> ${fmt(mat.rm, 0)} MPa`);
+    const srcHtml = mat.src ? `<br><span style="color:var(--muted)">Quelle: ${esc(mat.src)}</span>` : '';
+    return h('div', { class: 'hint-box', id, style: { marginTop: '6px' }, html: `<b>${esc(mat.name || mat.k)}</b><br>${parts.join(' · ')}${srcHtml}` });
+  }
   function closeFlyout() { if (flyout) { flyout.el.remove(); const b = flyout.btn; b && b.setAttribute('aria-expanded', 'false'); flyout = null; document.removeEventListener('pointerdown', flyOutside, true); } }
   function flyOutside(e) { if (flyout && !flyout.el.contains(e.target) && !(flyout.btn && flyout.btn.contains(e.target))) closeFlyout(); }
   function toggleFlyout(kind, btn) {
@@ -916,7 +935,8 @@ const Panels = (() => {
     // Material und Gewicht des ganzen Projekts (exaktes Volumen aus dem CAD-Kern)
     const curMat = App.doc.settings.material || 'CFK';
     const ms = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Material und Gewicht'));
-    ms.append(UI.selectField({ id: 'proj-mat', label: 'Material', value: curMat, options: MATERIALS.map((m) => [m.k, `${m.k} · ${String(m.rho).replace('.', ',')} g/cm³`]), onChange: (v) => App.change('Material gewählt', (doc) => { doc.settings.material = v; }) }));
+    ms.append(UI.selectField({ id: 'proj-mat', label: 'Material', value: curMat, options: materialOptions(), onChange: (v) => App.change('Material gewählt', (doc) => { doc.settings.material = v; }) }));
+    ms.append(materialInfoBox(Mass.projectMaterial(), 'proj-mat-info'));
     const vRow = h('b', { class: 'mono' }, '…'), gRow = h('b', { class: 'mono' }, '…');
     ms.append(h('div', { class: 'mini-list', style: { marginTop: '8px' } },
       h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Volumen'), vRow),
@@ -1215,6 +1235,33 @@ const Panels = (() => {
             const h7 = h7Info(se.D_mm);
             const h7Txt = h7.um != null ? ` · Gehäusebohrung: <b>Ø ${Units.fmtLenU(se.D_mm, 2)} H7</b>` : '';
             sec.append(h('div', { id: 'p-stdsleeve-hint', class: 'hint-box', html: `<b>Gleitlager ${esc(se.id)}</b> (${it.p.flange === 'flange' ? 'Form F mit Bund' : 'Form C zylindrisch'})<br>Innen-Ø d = <b>${Units.fmtLenU(se.d_mm, 2)}</b> · Außen-Ø D = <b>${Units.fmtLenU(se.D_mm, 2)}</b> · Wand s₃ = <b>${Units.fmtLenU(se.wand_mm, 2)}</b><br>${flTxt}${h7Txt}<br><span style="color:var(--muted)">Norm: ISO 3547-1 / DIN 1850</span>` }));
+          }
+        } else if (def.lib === 'stdScrew' && typeof screwEntry === 'function') {
+          const se = screwEntry(it.p.size);
+          if (se) {
+            const L = Model.num(it.p.length, V, 10);
+            const dNenn = parseFloat(String(se.groesse).slice(1)) || 3;
+            let txt = '';
+            if (it.p.head === 'hex' && se.sechskantkopf) {
+              txt = `<b>Sechskantschraube ${esc(se.groesse)} × ${Units.fmtLenU(L, 1)}</b> (${esc(se.sechskantkopf.norm)})<br>Schlüsselweite s = <b>${Units.fmtLenU(se.sechskantkopf.schluesselweite_mm, 1)}</b> · Kopfhöhe k = <b>${Units.fmtLenU(se.sechskantkopf.kopf_h_mm, 2)}</b> · Schaft Ø ${Units.fmtLenU(dNenn, 2)}`;
+            } else if (it.p.head === 'senk' && se.senkkopf && se.senkkopf.kopf_h_mm) {
+              const sk = se.senkkopf;
+              txt = `<b>Senkschraube ${esc(se.groesse)} × ${Units.fmtLenU(L, 1)}</b> (${esc(sk.norm)})<br>Kopf-Ø d<sub>k</sub> = <b>${Units.fmtLenU(sk.kopf_d_mm, 2)}</b> · Kopfhöhe k = <b>${Units.fmtLenU(sk.kopf_h_mm, 2)}</b>${sk.innensechskant_mm ? ` · Innensechskant s = <b>${Units.fmtLenU(sk.innensechskant_mm, 1)}</b>` : ''} (${sk.winkel_grad || 90}°)`;
+            } else if (se.zylinderkopf) {
+              const zk = se.zylinderkopf;
+              txt = `<b>Zylinderschraube ${esc(se.groesse)} × ${Units.fmtLenU(L, 1)}</b> (ISO 4762)<br>Kopf-Ø d<sub>k</sub> = <b>${Units.fmtLenU(zk.kopf_d_mm, 2)}</b> · Kopfhöhe k = <b>${Units.fmtLenU(zk.kopf_h_mm, 2)}</b>${zk.innensechskant_mm ? ` · Innensechskant s = <b>${Units.fmtLenU(zk.innensechskant_mm, 1)}</b>` : ''}`;
+            }
+            if (txt) sec.append(h('div', { id: 'p-stdscrew-hint', class: 'hint-box', html: `${txt}<br><span style="color:var(--muted)">Steigung P = ${fmt(se.steigung_mm, 2)} mm</span>` }));
+          }
+        } else if (def.lib === 'stdNut' && typeof screwEntry === 'function') {
+          const se = screwEntry(it.p.size);
+          if (se && se.mutter) {
+            sec.append(h('div', { id: 'p-stdnut-hint', class: 'hint-box', html: `<b>Sechskantmutter ${esc(se.groesse)}</b> (${esc(se.mutter.norm)})<br>Schlüsselweite s = <b>${Units.fmtLenU(se.mutter.schluesselweite_mm, 1)}</b> · Höhe m = <b>${Units.fmtLenU(se.mutter.hoehe_mm, 2)}</b>` }));
+          }
+        } else if (def.lib === 'stdWasher' && typeof screwEntry === 'function') {
+          const se = screwEntry(it.p.size);
+          if (se && se.scheibe) {
+            sec.append(h('div', { id: 'p-stdwasher-hint', class: 'hint-box', html: `<b>Unterlegscheibe ${esc(se.groesse)}</b> (${esc(se.scheibe.norm)})<br>Innen-Ø d₁ = <b>${Units.fmtLenU(se.scheibe.innen_d_mm, 2)}</b> · Außen-Ø d₂ = <b>${Units.fmtLenU(se.scheibe.aussen_d_mm, 1)}</b> · Dicke h = <b>${Units.fmtLenU(se.scheibe.dicke_mm, 2)}</b>` }));
           }
         }
         w.append(sec);
@@ -1716,10 +1763,11 @@ const Panels = (() => {
       const pm = Mass.projectMaterial();
       const ms = h('div', { class: 'section pro' }, h('div', { class: 'section-h' }, 'Material und Gewicht'));
       const fixed = Mass.fixedOf(it);
-      ms.append(UI.selectField({ id: 'p-mat', label: 'Material', value: fixed ? '__fix' : it.mat || '', options: [['', `Wie das Projekt (${pm.k})`], ['__fix', 'Kaufteil: festes Gewicht'], ...MATERIALS.map((m) => [m.k, `${m.k} · ${String(m.rho).replace('.', ',')} g/cm³`])], onChange: (v) => {
+      ms.append(UI.selectField({ id: 'p-mat', label: 'Material', value: fixed ? '__fix' : it.mat || '', options: materialOptions([['', `Wie das Projekt (${pm.k})`], ['__fix', 'Kaufteil: festes Gewicht']]), onChange: (v) => {
         if (v === '__fix') { Mass.measure().then((r) => { const p = Mass.partOf(r, it.id); App.change('Festes Gewicht', (doc) => { const T = Model.find(doc, it.id).item; delete T.mat; T.massG = p ? round(p.mass, 1) : 10; }); }); return; }
         App.change('Material gewählt', (doc) => { const T = Model.find(doc, it.id).item; delete T.massG; delete T.colorSet; if (v) T.mat = v; else delete T.mat; });
       } }));
+      if (!fixed) ms.append(materialInfoBox(Mass.materialFor(it), 'p-mat-info'));
       if (fixed) {
         ms.append(h('div', { class: 'fields', style: { marginTop: '8px' } }, UI.numField({ id: 'p-massg', label: 'Gewicht (Datenblatt)', value: it.massG, unit: 'g', onCommit: (v) => App.change('Gewicht geändert', (doc) => { Model.find(doc, it.id).item.massG = v; }, { merge: 'massg:' + it.id }) })));
         ms.append(h('div', { class: 'hint-box' + (it.massG === '' ? ' warn' : ''), html: it.massG === '' ? '<b>Gewicht fehlt:</b> Trag das Gewicht aus dem Datenblatt ein – bis dahin zählt dieses Teil mit 0 g.' : 'Für gekaufte Teile wie Lager, Schrauben oder Elektronik: Das Gewicht kommt aus dem Datenblatt, nicht aus der Form. Auch Formeln gehen, z. B. <b>4*33,8</b>.' }));

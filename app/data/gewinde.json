@@ -147,6 +147,45 @@
           "senkung_zyl_t_mm": 12.6,
           "senkung_senk_d_mm": 26.88,
           "senkung_winkel_grad": 90
+        },
+        {
+          "id": "M16",
+          "nenn_d_mm": 16.0,
+          "steigung_mm": 2.0,
+          "kernloch_mm": 14.0,
+          "durchgang_fein_mm": 17.0,
+          "durchgang_mittel_mm": 17.5,
+          "durchgang_grob_mm": 18.5,
+          "senkung_zyl_d_mm": 26.0,
+          "senkung_zyl_t_mm": 16.6,
+          "senkung_senk_d_mm": 33.6,
+          "senkung_winkel_grad": 90
+        },
+        {
+          "id": "M20",
+          "nenn_d_mm": 20.0,
+          "steigung_mm": 2.5,
+          "kernloch_mm": 17.5,
+          "durchgang_fein_mm": 21.0,
+          "durchgang_mittel_mm": 22.0,
+          "durchgang_grob_mm": 24.0,
+          "senkung_zyl_d_mm": 33.0,
+          "senkung_zyl_t_mm": 20.6,
+          "senkung_senk_d_mm": 40.32,
+          "senkung_winkel_grad": 90
+        },
+        {
+          "id": "M24",
+          "nenn_d_mm": 24.0,
+          "steigung_mm": 3.0,
+          "kernloch_mm": 21.0,
+          "durchgang_fein_mm": 25.0,
+          "durchgang_mittel_mm": 26.0,
+          "durchgang_grob_mm": 28.0,
+          "senkung_zyl_d_mm": 40.0,
+          "senkung_zyl_t_mm": 24.8,
+          "senkung_senk_d_mm": 39.0,
+          "senkung_winkel_grad": 60
         }
       ]
     },

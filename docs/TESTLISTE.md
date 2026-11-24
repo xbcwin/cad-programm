@@ -1895,6 +1895,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Bibliothek, Suche, Hilfen & Geometrie-Prüfung**: Alle fünf Normteile erscheinen im Bauteile-Flyout unter „Normteile“, sind über die Befehlssuche auffindbar, besitzen vollständige Hilfetexte (`stdPin`, `stdKey`, `stdKeyway`, `stdBearing`, `stdSleeve`) und bestehen `GeomCheck` ohne Geometriefehler.
 - [ ] **Von Hand**: Im Browser ein Kugellager (offen und geschlossen), einen Zylinderstift sowie Passfeder samt Nut auf eine Welle setzen und im Schnitt sowie bei der Stückliste prüfen.
 
+## Schrauben M10–M24 & mehr Werkstoffe (Auto [A-057], BI-06, BI-07)
+
+- [x] **Sechskantschraube M16×60 (ISO 4017)**: Schlüsselweite 24 mm (`ySpan = 24 mm`), Kopfhöhe 10 mm, Schaftlänge 60 mm sowie Normhinweis im Panel.
+- [x] **Schrauben, Muttern & Scheiben bis M24**: Zylinderschraube M10×30, Senkschraube M24×50 (DIN 7991) inkl. kurzer Länge, Sechskantmuttern M16 (SW 24) & M24 (SW 36) sowie Unterlegscheiben M12 & M24 bauen maßgenau ohne Fehler und bestehen `GeomCheck`.
+- [x] **Werkstoff „Messing“**: Dichte liegt bei 8,47 g/cm³ (8,4–8,7 g/cm³), 1 cm³ Quader wiegt 8,47 g, Quellenangabe und metallischer Studio-Look stimmen.
+- [x] **Erweiterte Werkstoff-Sammlung & Kategorien**: Alle 26 Werkstoffe (Stähle, Edelstahl, Messing, Kupfer, POM, PA6, PC, ABS, PETG, TPU, Sperrholz, MDF …) haben Dichte, Studio-Aussehen, Quelle und erscheinen gruppiert in der Auswahl; Suche und Hilfetexte sind aktuell.
+- [ ] **Von Hand**: Im Browser eine Sechskantschraube M16×60 samt M16-Scheibe und -Mutter zusammensetzen sowie verschiedene Werkstoffe (z. B. Kupfer, MDF, V4A Edelstahl) im Studio-Look betrachten.
+
 ## Fehler melden
 
 ```

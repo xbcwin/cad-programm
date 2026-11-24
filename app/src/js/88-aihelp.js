@@ -167,7 +167,7 @@ const Weak = (() => {
     ['3D-Demand: Wandstärke beim FDM-Druck', 'https://www.3d-demand.com/blog/design-guidelines-for-fdm-3d-printing-wall-thickness-tolerances-file-prep'],
     ['3Dbite: Gewindeeinsätze', 'https://3dbite.com/brass-heat-set-inserts-3d-printing-guide/'],
   ];
-  const CLASS = { PLA: 'print', PETG: 'print', ABS: 'print', ASA: 'print', 'TPU 95A': 'tpu', PA12: 'print', PC: 'print', POM: 'print', CFK: 'fiber', GFK: 'fiber', 'Alu 6061': 'metal', 'Alu 7075': 'metal', 'Titan Gr. 5': 'metal', Baustahl: 'metal', 'V2A Edelstahl': 'metal', Messing: 'metal', Buche: 'wood', 'Pappel-Sperrholz': 'wood' };
+  const CLASS = { PLA: 'print', PETG: 'print', ABS: 'print', ASA: 'print', 'TPU 95A': 'tpu', PA6: 'print', PA12: 'print', PC: 'print', POM: 'print', CFK: 'fiber', GFK: 'fiber', 'Alu 6061': 'metal', 'Alu 7075': 'metal', 'Titan Gr. 5': 'metal', Baustahl: 'metal', 'Stahl S355': 'metal', 'Stahl C45': 'metal', 'Stahl 42CrMo4': 'metal', 'V2A Edelstahl': 'metal', 'V4A Edelstahl': 'metal', Messing: 'metal', Kupfer: 'metal', Buche: 'wood', 'Pappel-Sperrholz': 'wood', 'Birken-Sperrholz': 'wood', MDF: 'wood' };
   let last = null, marks = [], markTimer = null;
   const ev = makeEmitter();
   // Abstand Punkt – Strecke

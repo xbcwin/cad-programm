@@ -530,18 +530,18 @@
     "tipp": "Der Umfang ist zum Beispiel die Schnittlänge für Laser oder Fräse."
   },
   "stdScrew": {
-    "tip": "Echte Schraube nach Norm",
-    "hilfe": "Bauteile → „Schraube (Norm)“: Zylinderkopf (ISO 4762) oder Senkkopf (ISO 10642) mit Innensechskant. Größe M1.6 bis M8 und Länge wählst du rechts. Der Kopf sitzt auf der Fläche, der Schaft zeigt nach unten.",
+    "tip": "Echte Schraube nach Norm (M1.6–M24)",
+    "hilfe": "Bauteile → „Schraube (Norm)“: Zylinderkopf (ISO 4762), Sechskantkopf (ISO 4017) oder Senkkopf (ISO 10642, ab M3; M24 DIN 7991). Größe M1.6 bis M24 und Länge wählst du rechts. Der Kopf sitzt auf der Fläche, der Schaft zeigt nach unten.",
     "tipp": "Normteile sind aus Edelstahl und zählen mit ihrem Gewicht in der Stückliste. Das Gewinde ist nur angedeutet – für ein gedrucktes Gewinde nimm „Gewindebolzen“."
   },
   "stdNut": {
-    "tip": "Sechskantmutter nach Norm",
-    "hilfe": "Bauteile → „Mutter (Norm)“: Sechskantmutter ISO 4032, M1.6 bis M8.",
+    "tip": "Sechskantmutter nach Norm (M1.6–M24)",
+    "hilfe": "Bauteile → „Mutter (Norm)“: Sechskantmutter ISO 4032, M1.6 bis M24.",
     "tipp": "Normteile sind aus Edelstahl und zählen mit ihrem Gewicht in der Stückliste. Das Gewinde ist nur angedeutet – für ein gedrucktes Gewinde nimm „Gewindebolzen“."
   },
   "stdWasher": {
-    "tip": "Unterlegscheibe nach Norm",
-    "hilfe": "Bauteile → „Scheibe (Norm)“: Unterlegscheibe ISO 7089, M1.6 bis M8.",
+    "tip": "Unterlegscheibe nach Norm (M1.6–M24)",
+    "hilfe": "Bauteile → „Scheibe (Norm)“: Unterlegscheibe ISO 7089, M1.6 bis M24.",
     "tipp": "Normteile sind aus Edelstahl und zählen mit ihrem Gewicht in der Stückliste. Das Gewinde ist nur angedeutet – für ein gedrucktes Gewinde nimm „Gewindebolzen“."
   },
   "minDistance": {

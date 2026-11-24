@@ -244,5 +244,20 @@
     "was": "Erstellt eine zylindrische Gleitlagerbuchse (Form C) oder Bundbuchse (Form F) nach ISO 3547 / DIN 1850 aus Messing.",
     "wozu": "Führt Wellen und Bolzen platzsparend und reibungsarm ohne Kugellager.",
     "achtung": "Im Betrieb oder 3D-Druck brauchen Welle und Bohrung ausreichend Spiel bzw. eine H7-Aufnahme."
+  },
+  "stdScrew": {
+    "was": "Erzeugt eine genormte Schraube (M1.6–M24) aus Edelstahl mit Zylinderkopf (ISO 4762), Sechskantkopf (ISO 4017) oder Senkkopf (ISO 10642 / DIN 7991).",
+    "wozu": "Für Baugruppen, Bauraumprüfungen und genaue Gewichtsberechnungen samt Stückliste.",
+    "achtung": "Das Gewinde ist nur als glatter Schaft angedeutet; für ein druckbares 3D-Gewinde nimm „Gewindebolzen“."
+  },
+  "stdNut": {
+    "was": "Erzeugt eine genormte Sechskantmutter nach ISO 4032 (M1.6–M24) aus Edelstahl mit exakter Schlüsselweite und Höhe.",
+    "wozu": "Passend zu Normschrauben für Befestigungsprüfungen, Baugruppen und die Stückliste.",
+    "achtung": "Für eine Sechskant-Tasche als Ausschnitt in einem Bauteil nimm „Mutternfalle“."
+  },
+  "stdWasher": {
+    "was": "Erzeugt eine flache Unterlegscheibe nach ISO 7089 Form A (M1.6–M24) aus Edelstahl.",
+    "wozu": "Verteilt Schraubenkräfte und berücksichtigt die Scheibendicke im Bauraum.",
+    "achtung": "Prüfe bei Senkbohrungen, dass unter dem Schraubenkopf noch genug Tiefe vorhanden ist."
   }
 }

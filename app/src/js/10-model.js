@@ -923,10 +923,26 @@ const Model = (() => {
         if (L === 'buyProp') { const r = (n('zoll', 5) * 25.4) / 2; return [-r, -r, 0, r, r, n('zoll', 5) * 1.2 + 0.5]; }
         if (L === 'motorFairing') { const r = n('d', 28) / 2 + Math.max(0, n('gap', 0.5)) + n('wall', 1.2); return [-r, -r, -n('at', 5) - n('tail', 30), r, r, n('h', 18)]; }
         if (L === 'stdScrew' || L === 'stdNut' || L === 'stdWasher') {
-          const D = { 'M1.6': [3, 1.6, 3.2, 1.3, 4, 0.3], M2: [3.8, 2, 4, 1.6, 5, 0.3], 'M2.5': [4.5, 2.5, 5, 2, 6, 0.5], M3: [5.5, 3, 5.5, 2.4, 7, 0.5], M4: [7, 4, 7, 3.2, 9, 0.8], M5: [8.5, 5, 8, 4.7, 10, 1], M6: [10, 6, 10, 5.2, 12, 1.6], M8: [13, 8, 13, 6.8, 16, 1.6] }[p.size] || [5.5, 3, 5.5, 2.4, 7, 0.5];
-          if (L === 'stdNut') { const r = D[2] / Math.sqrt(3); return [-r, -r, 0, r, r, D[3]]; }
-          if (L === 'stdWasher') { const r = D[4] / 2; return [-r, -r, 0, r, r, D[5]]; }
-          const r = D[0] / 2, len = n('length', 10); return p.head === 'senk' ? [-r, -r, -len, r, r, 0] : [-r, -r, -len, r, r, D[1]];
+          const se = typeof screwEntry === 'function' ? screwEntry(p.size) : null;
+          if (L === 'stdNut') {
+            const sw = (se && se.mutter && se.mutter.schluesselweite_mm) || 5.5, h = (se && se.mutter && se.mutter.hoehe_mm) || 2.4;
+            const r = sw / Math.sqrt(3); return [-r, -sw / 2, 0, r, sw / 2, h];
+          }
+          if (L === 'stdWasher') {
+            const w2 = (se && se.scheibe && se.scheibe.aussen_d_mm) || 7.0, wh = (se && se.scheibe && se.scheibe.dicke_mm) || 0.5;
+            const r = w2 / 2; return [-r, -r, 0, r, r, wh];
+          }
+          const len0 = n('length', 10);
+          if (p.head === 'hex') {
+            const sw = (se && se.sechskantkopf && se.sechskantkopf.schluesselweite_mm) || 5.5, hk = (se && se.sechskantkopf && se.sechskantkopf.kopf_h_mm) || 2.0;
+            const rx = sw / Math.sqrt(3), ry = sw / 2; return [-rx, -ry, -len0, rx, ry, hk];
+          }
+          if (p.head === 'senk') {
+            const dk = (se && se.senkkopf && se.senkkopf.kopf_d_mm) || 6.72, ck = (se && se.senkkopf && se.senkkopf.kopf_h_mm) || 1.86;
+            const r = dk / 2, len = Math.max(len0, ck + 0.5); return [-r, -r, -len, r, r, 0];
+          }
+          const hd = (se && se.zylinderkopf && se.zylinderkopf.kopf_d_mm) || 5.5, hk = (se && se.zylinderkopf && se.zylinderkopf.kopf_h_mm) || 3.0;
+          const r = hd / 2; return [-r, -r, -len0, r, r, hk];
         }
         if (L === 'stdPin') { const pe = typeof pinEntry === 'function' ? pinEntry(p.size ?? p.d) : null; const r = (pe ? pe.d_mm : 6) / 2, len = n('length', 20); return [-r, -r, 0, r, r, len]; }
         if (L === 'stdKey') { const ke = typeof keyEntry === 'function' ? keyEntry(p.size) : null; const b = ke ? ke.b_mm : 6, h = ke ? ke.h_mm : 6, len = n('length', 20); return [-len / 2, -b / 2, 0, len / 2, b / 2, h]; }

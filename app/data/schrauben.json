@@ -1,5 +1,16 @@
 {
-  "_hinweis": "Entwurf Gemini, geprüft am 17.10.2026. Durchgangslöcher ISO 273, Kernloch = Nenn-Ø minus Steigung, Zylinderkopf ISO 4762, Senkbohrung DIN 974-1 Reihe 1, Senkkopf ISO 10642 (M1.6–M2.5 nach DIN 965, weil ISO 10642 erst ab M3 gilt), Mutter ISO 4032. Gewindeeinsätze sind Richtwerte – das Datenblatt des Herstellers geht vor.",
+  "_hinweis": "Normmaße für Schrauben, Muttern und Scheiben M1.6–M24 (alle Maße in mm, Winkel in Grad). Durchgangslöcher ISO 273, Kernloch DIN 336 (= Nenn-Ø minus Steigung), Zylinderkopf ISO 4762 (DIN 912), Senkbohrung DIN 974-1 Reihe 1, Senkkopf ISO 10642 (M1.6–M2.5 DIN 965, M24 DIN 7991), Sechskantkopf ISO 4017, Mutter ISO 4032, Scheibe ISO 7089. Gewindeeinsätze sind Richtwerte – das Datenblatt des Herstellers geht vor.",
+  "_quellen": [
+    "ISO 261 / DIN 13-1: Metrische ISO-Regelgewinde M1.6–M24",
+    "DIN 336: Kernlochdurchmesser zum Gewindeschneiden",
+    "ISO 273: Durchgangslöcher für Schrauben (fein, mittel, grob)",
+    "ISO 4762 (DIN 912): Zylinderschrauben mit Innensechskant",
+    "DIN 974-1 Reihe 1: Zylindersenkungen für Zylinderschrauben",
+    "ISO 10642 / DIN 965 / DIN 7991: Senkschrauben (M1.6–M2.5 DIN 965, M3–M20 ISO 10642 90°, M24 DIN 7991 60°)",
+    "ISO 4017: Sechskantschrauben mit Gewinde bis Kopf",
+    "ISO 4032: Sechskantmuttern (Typ 1)",
+    "ISO 7089: Flache Scheiben, normale Reihe (Form A)"
+  ],
   "schrauben": [
     {
       "groesse": "M1.6",
@@ -11,6 +22,7 @@
       "zylinderkopf": {
         "kopf_d_mm": 3.0,
         "kopf_h_mm": 1.6,
+        "innensechskant_mm": 1.5,
         "senkung_d_mm": 3.5,
         "senkung_t_mm": 1.8,
         "unsicher_senkung_t": true,
@@ -21,10 +33,21 @@
         "winkel_grad": 90,
         "norm": "DIN 965"
       },
+      "sechskantkopf": {
+        "schluesselweite_mm": 3.2,
+        "kopf_h_mm": 1.1,
+        "norm": "ISO 4017"
+      },
       "mutter": {
         "schluesselweite_mm": 3.2,
         "hoehe_mm": 1.3,
         "norm": "ISO 4032"
+      },
+      "scheibe": {
+        "innen_d_mm": 1.7,
+        "aussen_d_mm": 4.0,
+        "dicke_mm": 0.3,
+        "norm": "ISO 7089"
       },
       "gewindeeinsatz": null
     },
@@ -38,6 +61,7 @@
       "zylinderkopf": {
         "kopf_d_mm": 3.8,
         "kopf_h_mm": 2.0,
+        "innensechskant_mm": 1.5,
         "senkung_d_mm": 4.4,
         "senkung_t_mm": 2.4,
         "unsicher_senkung_t": true,
@@ -48,10 +72,21 @@
         "winkel_grad": 90,
         "norm": "DIN 965"
       },
+      "sechskantkopf": {
+        "schluesselweite_mm": 4.0,
+        "kopf_h_mm": 1.4,
+        "norm": "ISO 4017"
+      },
       "mutter": {
         "schluesselweite_mm": 4.0,
         "hoehe_mm": 1.6,
         "norm": "ISO 4032"
+      },
+      "scheibe": {
+        "innen_d_mm": 2.2,
+        "aussen_d_mm": 5.0,
+        "dicke_mm": 0.3,
+        "norm": "ISO 7089"
       },
       "gewindeeinsatz": {
         "loch_d_mm": 3.2,
@@ -70,6 +105,7 @@
       "zylinderkopf": {
         "kopf_d_mm": 4.5,
         "kopf_h_mm": 2.5,
+        "innensechskant_mm": 2.0,
         "senkung_d_mm": 5.5,
         "senkung_t_mm": 2.9,
         "unsicher_senkung_t": true,
@@ -80,10 +116,21 @@
         "winkel_grad": 90,
         "norm": "DIN 965"
       },
+      "sechskantkopf": {
+        "schluesselweite_mm": 5.0,
+        "kopf_h_mm": 1.7,
+        "norm": "ISO 4017"
+      },
       "mutter": {
         "schluesselweite_mm": 5.0,
         "hoehe_mm": 2.0,
         "norm": "ISO 4032"
+      },
+      "scheibe": {
+        "innen_d_mm": 2.7,
+        "aussen_d_mm": 6.0,
+        "dicke_mm": 0.5,
+        "norm": "ISO 7089"
       },
       "gewindeeinsatz": {
         "loch_d_mm": 4.0,
@@ -102,19 +149,33 @@
       "zylinderkopf": {
         "kopf_d_mm": 5.5,
         "kopf_h_mm": 3.0,
+        "innensechskant_mm": 2.5,
         "senkung_d_mm": 6.5,
         "senkung_t_mm": 3.4,
         "norm": "ISO 4762, Senkung DIN 974-1"
       },
       "senkkopf": {
         "kopf_d_mm": 6.72,
+        "kopf_h_mm": 1.86,
+        "innensechskant_mm": 2.0,
         "winkel_grad": 90,
         "norm": "ISO 10642"
+      },
+      "sechskantkopf": {
+        "schluesselweite_mm": 5.5,
+        "kopf_h_mm": 2.0,
+        "norm": "ISO 4017"
       },
       "mutter": {
         "schluesselweite_mm": 5.5,
         "hoehe_mm": 2.4,
         "norm": "ISO 4032"
+      },
+      "scheibe": {
+        "innen_d_mm": 3.2,
+        "aussen_d_mm": 7.0,
+        "dicke_mm": 0.5,
+        "norm": "ISO 7089"
       },
       "gewindeeinsatz": {
         "loch_d_mm": 4.0,
@@ -133,19 +194,33 @@
       "zylinderkopf": {
         "kopf_d_mm": 7.0,
         "kopf_h_mm": 4.0,
+        "innensechskant_mm": 3.0,
         "senkung_d_mm": 8.0,
         "senkung_t_mm": 4.4,
         "norm": "ISO 4762, Senkung DIN 974-1"
       },
       "senkkopf": {
         "kopf_d_mm": 8.96,
+        "kopf_h_mm": 2.48,
+        "innensechskant_mm": 2.5,
         "winkel_grad": 90,
         "norm": "ISO 10642"
+      },
+      "sechskantkopf": {
+        "schluesselweite_mm": 7.0,
+        "kopf_h_mm": 2.8,
+        "norm": "ISO 4017"
       },
       "mutter": {
         "schluesselweite_mm": 7.0,
         "hoehe_mm": 3.2,
         "norm": "ISO 4032"
+      },
+      "scheibe": {
+        "innen_d_mm": 4.3,
+        "aussen_d_mm": 9.0,
+        "dicke_mm": 0.8,
+        "norm": "ISO 7089"
       },
       "gewindeeinsatz": {
         "loch_d_mm": 5.6,
@@ -164,19 +239,33 @@
       "zylinderkopf": {
         "kopf_d_mm": 8.5,
         "kopf_h_mm": 5.0,
+        "innensechskant_mm": 4.0,
         "senkung_d_mm": 10.0,
         "senkung_t_mm": 5.4,
         "norm": "ISO 4762, Senkung DIN 974-1"
       },
       "senkkopf": {
         "kopf_d_mm": 11.2,
+        "kopf_h_mm": 3.1,
+        "innensechskant_mm": 3.0,
         "winkel_grad": 90,
         "norm": "ISO 10642"
+      },
+      "sechskantkopf": {
+        "schluesselweite_mm": 8.0,
+        "kopf_h_mm": 3.5,
+        "norm": "ISO 4017"
       },
       "mutter": {
         "schluesselweite_mm": 8.0,
         "hoehe_mm": 4.7,
         "norm": "ISO 4032"
+      },
+      "scheibe": {
+        "innen_d_mm": 5.3,
+        "aussen_d_mm": 10.0,
+        "dicke_mm": 1.0,
+        "norm": "ISO 7089"
       },
       "gewindeeinsatz": {
         "loch_d_mm": 6.4,
@@ -195,19 +284,33 @@
       "zylinderkopf": {
         "kopf_d_mm": 10.0,
         "kopf_h_mm": 6.0,
+        "innensechskant_mm": 5.0,
         "senkung_d_mm": 11.0,
         "senkung_t_mm": 6.4,
         "norm": "ISO 4762, Senkung DIN 974-1"
       },
       "senkkopf": {
         "kopf_d_mm": 13.44,
+        "kopf_h_mm": 3.72,
+        "innensechskant_mm": 4.0,
         "winkel_grad": 90,
         "norm": "ISO 10642"
+      },
+      "sechskantkopf": {
+        "schluesselweite_mm": 10.0,
+        "kopf_h_mm": 4.0,
+        "norm": "ISO 4017"
       },
       "mutter": {
         "schluesselweite_mm": 10.0,
         "hoehe_mm": 5.2,
         "norm": "ISO 4032"
+      },
+      "scheibe": {
+        "innen_d_mm": 6.4,
+        "aussen_d_mm": 12.0,
+        "dicke_mm": 1.6,
+        "norm": "ISO 7089"
       },
       "gewindeeinsatz": {
         "loch_d_mm": 8.0,
@@ -226,19 +329,233 @@
       "zylinderkopf": {
         "kopf_d_mm": 13.0,
         "kopf_h_mm": 8.0,
+        "innensechskant_mm": 6.0,
         "senkung_d_mm": 15.0,
         "senkung_t_mm": 8.6,
         "norm": "ISO 4762, Senkung DIN 974-1"
       },
       "senkkopf": {
         "kopf_d_mm": 17.92,
+        "kopf_h_mm": 4.96,
+        "innensechskant_mm": 5.0,
         "winkel_grad": 90,
         "norm": "ISO 10642"
+      },
+      "sechskantkopf": {
+        "schluesselweite_mm": 13.0,
+        "kopf_h_mm": 5.3,
+        "norm": "ISO 4017"
       },
       "mutter": {
         "schluesselweite_mm": 13.0,
         "hoehe_mm": 6.8,
         "norm": "ISO 4032"
+      },
+      "scheibe": {
+        "innen_d_mm": 8.4,
+        "aussen_d_mm": 16.0,
+        "dicke_mm": 1.6,
+        "norm": "ISO 7089"
+      },
+      "gewindeeinsatz": null
+    },
+    {
+      "groesse": "M10",
+      "steigung_mm": 1.5,
+      "kernloch_mm": 8.5,
+      "durchgang_fein_mm": 10.5,
+      "durchgang_mittel_mm": 11.0,
+      "durchgang_grob_mm": 12.0,
+      "zylinderkopf": {
+        "kopf_d_mm": 16.0,
+        "kopf_h_mm": 10.0,
+        "innensechskant_mm": 8.0,
+        "senkung_d_mm": 18.0,
+        "senkung_t_mm": 10.6,
+        "norm": "ISO 4762, Senkung DIN 974-1"
+      },
+      "senkkopf": {
+        "kopf_d_mm": 22.4,
+        "kopf_h_mm": 6.2,
+        "innensechskant_mm": 6.0,
+        "winkel_grad": 90,
+        "norm": "ISO 10642"
+      },
+      "sechskantkopf": {
+        "schluesselweite_mm": 16.0,
+        "kopf_h_mm": 6.4,
+        "norm": "ISO 4017"
+      },
+      "mutter": {
+        "schluesselweite_mm": 16.0,
+        "hoehe_mm": 8.4,
+        "norm": "ISO 4032"
+      },
+      "scheibe": {
+        "innen_d_mm": 10.5,
+        "aussen_d_mm": 20.0,
+        "dicke_mm": 2.0,
+        "norm": "ISO 7089"
+      },
+      "gewindeeinsatz": null
+    },
+    {
+      "groesse": "M12",
+      "steigung_mm": 1.75,
+      "kernloch_mm": 10.2,
+      "durchgang_fein_mm": 13.0,
+      "durchgang_mittel_mm": 13.5,
+      "durchgang_grob_mm": 14.5,
+      "zylinderkopf": {
+        "kopf_d_mm": 18.0,
+        "kopf_h_mm": 12.0,
+        "innensechskant_mm": 10.0,
+        "senkung_d_mm": 20.0,
+        "senkung_t_mm": 12.6,
+        "norm": "ISO 4762, Senkung DIN 974-1"
+      },
+      "senkkopf": {
+        "kopf_d_mm": 26.88,
+        "kopf_h_mm": 7.44,
+        "innensechskant_mm": 8.0,
+        "winkel_grad": 90,
+        "norm": "ISO 10642"
+      },
+      "sechskantkopf": {
+        "schluesselweite_mm": 18.0,
+        "kopf_h_mm": 7.5,
+        "norm": "ISO 4017"
+      },
+      "mutter": {
+        "schluesselweite_mm": 18.0,
+        "hoehe_mm": 10.8,
+        "norm": "ISO 4032"
+      },
+      "scheibe": {
+        "innen_d_mm": 13.0,
+        "aussen_d_mm": 24.0,
+        "dicke_mm": 2.5,
+        "norm": "ISO 7089"
+      },
+      "gewindeeinsatz": null
+    },
+    {
+      "groesse": "M16",
+      "steigung_mm": 2.0,
+      "kernloch_mm": 14.0,
+      "durchgang_fein_mm": 17.0,
+      "durchgang_mittel_mm": 17.5,
+      "durchgang_grob_mm": 18.5,
+      "zylinderkopf": {
+        "kopf_d_mm": 24.0,
+        "kopf_h_mm": 16.0,
+        "innensechskant_mm": 14.0,
+        "senkung_d_mm": 26.0,
+        "senkung_t_mm": 16.6,
+        "norm": "ISO 4762, Senkung DIN 974-1"
+      },
+      "senkkopf": {
+        "kopf_d_mm": 33.6,
+        "kopf_h_mm": 8.8,
+        "innensechskant_mm": 10.0,
+        "winkel_grad": 90,
+        "norm": "ISO 10642"
+      },
+      "sechskantkopf": {
+        "schluesselweite_mm": 24.0,
+        "kopf_h_mm": 10.0,
+        "norm": "ISO 4017"
+      },
+      "mutter": {
+        "schluesselweite_mm": 24.0,
+        "hoehe_mm": 14.8,
+        "norm": "ISO 4032"
+      },
+      "scheibe": {
+        "innen_d_mm": 17.0,
+        "aussen_d_mm": 30.0,
+        "dicke_mm": 3.0,
+        "norm": "ISO 7089"
+      },
+      "gewindeeinsatz": null
+    },
+    {
+      "groesse": "M20",
+      "steigung_mm": 2.5,
+      "kernloch_mm": 17.5,
+      "durchgang_fein_mm": 21.0,
+      "durchgang_mittel_mm": 22.0,
+      "durchgang_grob_mm": 24.0,
+      "zylinderkopf": {
+        "kopf_d_mm": 30.0,
+        "kopf_h_mm": 20.0,
+        "innensechskant_mm": 17.0,
+        "senkung_d_mm": 33.0,
+        "senkung_t_mm": 20.6,
+        "norm": "ISO 4762, Senkung DIN 974-1"
+      },
+      "senkkopf": {
+        "kopf_d_mm": 40.32,
+        "kopf_h_mm": 10.16,
+        "innensechskant_mm": 12.0,
+        "winkel_grad": 90,
+        "norm": "ISO 10642"
+      },
+      "sechskantkopf": {
+        "schluesselweite_mm": 30.0,
+        "kopf_h_mm": 12.5,
+        "norm": "ISO 4017"
+      },
+      "mutter": {
+        "schluesselweite_mm": 30.0,
+        "hoehe_mm": 18.0,
+        "norm": "ISO 4032"
+      },
+      "scheibe": {
+        "innen_d_mm": 21.0,
+        "aussen_d_mm": 37.0,
+        "dicke_mm": 3.0,
+        "norm": "ISO 7089"
+      },
+      "gewindeeinsatz": null
+    },
+    {
+      "groesse": "M24",
+      "steigung_mm": 3.0,
+      "kernloch_mm": 21.0,
+      "durchgang_fein_mm": 25.0,
+      "durchgang_mittel_mm": 26.0,
+      "durchgang_grob_mm": 28.0,
+      "zylinderkopf": {
+        "kopf_d_mm": 36.0,
+        "kopf_h_mm": 24.0,
+        "innensechskant_mm": 19.0,
+        "senkung_d_mm": 40.0,
+        "senkung_t_mm": 24.8,
+        "norm": "ISO 4762, Senkung DIN 974-1"
+      },
+      "senkkopf": {
+        "kopf_d_mm": 39.0,
+        "kopf_h_mm": 14.0,
+        "innensechskant_mm": 14.0,
+        "winkel_grad": 60,
+        "norm": "DIN 7991"
+      },
+      "sechskantkopf": {
+        "schluesselweite_mm": 36.0,
+        "kopf_h_mm": 15.0,
+        "norm": "ISO 4017"
+      },
+      "mutter": {
+        "schluesselweite_mm": 36.0,
+        "hoehe_mm": 21.5,
+        "norm": "ISO 4032"
+      },
+      "scheibe": {
+        "innen_d_mm": 25.0,
+        "aussen_d_mm": 44.0,
+        "dicke_mm": 4.0,
+        "norm": "ISO 7089"
       },
       "gewindeeinsatz": null
     }

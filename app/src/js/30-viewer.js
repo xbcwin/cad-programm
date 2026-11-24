@@ -277,21 +277,8 @@ const Viewer = (() => {
   const lights = {};
   let shadowFloor = null, envTex = null, envMood = null, pmrem = null;
   const LOOK = { look: 'studio', mood: 'studio', shadows: true, display: 'edges' };
-  // Werkstoff → Oberfläche. nat = der Werkstoff hat eine eigene Farbe (Metall, Kohlefaser, Holz, Glas)
-  const LOOKS = {
-    'CFK': { col: '#25272a', metal: 0, rough: 0.36, clear: 0.9, clearRough: 0.18, nat: true },
-    'GFK': { col: '#7a9a8b', metal: 0, rough: 0.42, clear: 0.6, clearRough: 0.25, nat: true },
-    'Alu 6061': { col: '#c9ced3', metal: 1, rough: 0.3, nat: true },
-    'Alu 7075': { col: '#b9c0c7', metal: 1, rough: 0.34, nat: true },
-    'Titan Gr. 5': { col: '#9a9590', metal: 1, rough: 0.4, nat: true },
-    'Baustahl': { col: '#71777d', metal: 1, rough: 0.48, nat: true },
-    'V2A Edelstahl': { col: '#cdd2d7', metal: 1, rough: 0.2, nat: true },
-    'Messing': { col: '#d8b552', metal: 1, rough: 0.28, nat: true },
-    'PLA': { rough: 0.42, clear: 0.15 }, 'PETG': { rough: 0.26, clear: 0.45 }, 'ABS': { rough: 0.55 }, 'ASA': { rough: 0.68 },
-    'TPU 95A': { rough: 0.75 }, 'PA12': { rough: 0.88 }, 'POM': { rough: 0.38, clear: 0.2 },
-    'PC': { col: '#e6f6fb', rough: 0.05, clear: 1, clearRough: 0.05, glass: 0.45, nat: true },
-    'Buche': { col: '#c99a6a', rough: 0.72, nat: true, wood: true }, 'Pappel-Sperrholz': { col: '#dcc196', rough: 0.76, nat: true, wood: true },
-  };
+  // Werkstoff → Oberfläche (aus app/data/materialien.json). nat = der Werkstoff hat eine eigene Farbe (Metall, Kohlefaser, Holz, Glas)
+  const LOOKS = Object.fromEntries((typeof MATERIALS !== 'undefined' ? MATERIALS : []).filter((m) => m.look).map((m) => [m.k, m.look]));
   const PLASTIC = { rough: 0.45, clear: 0.15 };
   function lookOf(mat) { return (mat && LOOKS[mat]) || PLASTIC; }
   // Licht-Stimmungen als kleiner Raum mit Leuchtflächen – daraus wird die Spiegel-Umgebung
