@@ -2651,7 +2651,13 @@ const Sketch = (() => {
   let lastMouse = null;
   function onMove(e) {
     if (!S) return;
-    if (S.step) return stepMove(e);
+    if (S.step) {
+      if (S.step.pickingFace) {
+        const h2 = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true, exclude: new Set(['__preview']) });
+        Viewer.highlightFace('hover', h2 && h2.faceIdx >= 0 ? h2.id : null, h2 && h2.faceIdx >= 0 ? h2.faceIdx : null);
+      }
+      return stepMove(e);
+    }
     if (S.band) return;
     const uv0 = mouseUV(e); if (!uv0) return;
     lastMouse = { e, uv: uv0 };
@@ -2844,7 +2850,20 @@ const Sketch = (() => {
     if (!S) return false;
     const tag = (e.target && e.target.tagName) || '';
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return false;
-    if (S.step) { if (e.key === 'Escape') { stepBack(); return true; } if (e.key === 'Enter') { stepOK(); return true; } return false; }
+    if (S.step) {
+      if (e.key === 'Escape') {
+        if (S.step.pickingFace) {
+          S.step.pickingFace = false;
+          Viewer.canvas.style.cursor = '';
+          Viewer.highlightFace('hover', null, null);
+          renderStep();
+          return true;
+        }
+        stepBack(); return true;
+      }
+      if (e.key === 'Enter') { stepOK(); return true; }
+      return false;
+    }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); sketchUndo(); return true; }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c' && !e.shiftKey) { e.preventDefault(); copySel(); return true; }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v' && !e.shiftKey) { e.preventDefault(); pasteClip(); return true; }
@@ -4395,16 +4414,28 @@ const Sketch = (() => {
     const regs = SK.regions(S.ents);
     const openOnly = !!opts.openOnly || !regs.length;
     const tgt = S.ctx.targetId ? Model.find(App.doc, S.ctx.targetId) : null;
-    S.step = { dist: opts.dist, dir: opts.dir, sel: regs.map((r) => r.key), revolve: false, sweep: false, openOnly, thin: openOnly ? true : !!opts.thin, wall: opts.wall || 2, wallSide: opts.wallSide || 'center', axis: 'y', angle: 360, fromPushPull: !!opts.fromPushPull, color: tgt ? tgt.item.color : nextColor() };
+    S.step = { dist: opts.dist, dir: opts.dir, extent: opts.extent || 'dist', toFace: opts.toFace || null, pickingFace: false, sel: regs.map((r) => r.key), revolve: false, sweep: false, openOnly, thin: openOnly ? true : !!opts.thin, wall: opts.wall || 2, wallSide: opts.wallSide || 'center', axis: 'y', angle: 360, fromPushPull: !!opts.fromPushPull, color: tgt ? tgt.item.color : nextColor() };
     stepBox = h('div', { class: 'stepbox' });
     renderStep();
     $('#overlay').append(stepBox);
     Panels.renderRight();
     updatePreview(); render();
   }
+  function updateStepExtInfo() {
+    const box = stepBox && stepBox.querySelector('#st-ext-info');
+    if (!box || !S || !S.step) return;
+    const st = S.step;
+    const rd = App.resolvedDist('__preview');
+    const err = App.errorsFor('__preview')[0];
+    box.className = err ? 'err-box' : 'hint-box';
+    if (err) { box.textContent = err.message; return; }
+    if (st.extent === 'toFace' && !st.toFace) { box.textContent = 'Klick im 3D-Bild auf die Zielfläche oder eine Bezugsebene.'; return; }
+    const tgt = st.extent === 'toFace' && st.toFace && st.toFace.label ? ` (${st.toFace.label})` : '';
+    box.textContent = rd != null ? `Berechnete Höhe: ${Units.fmtLenU(rd, 2)}${tgt}` : 'Berechnet die Höhe bis zur Zielfläche …';
+  }
   function renderStep() {
     const st = S.step; stepBox.innerHTML = '';
-    UI.hint(st.sweep ? 'Zieht ein <b>Rohr (Ø 6 mm)</b> entlang deiner offenen Kurve. Form, Größe und Wand stellst du danach rechts ein.' : st.revolve ? 'Wähl die <b>Achse</b> und den <b>Winkel</b> – 360° ergibt einen ganzen Drehkörper, zum Beispiel eine Schale oder einen Knopf.' : st.thin ? 'Zieh am <b>Pfeil</b> oder tipp Höhe, <b>Wandstärke</b> und <b>Wand-Lage</b> ein.' : 'Zieh am <b>Pfeil</b> oder tipp die Höhe ein. Nach innen wird es ein <b>Loch</b>.');
+    UI.hint(st.pickingFace ? '<b>Zielfläche wählen:</b> Klick auf die gewünschte Fläche oder Bezugsebene im Bild. <b>Esc</b> bricht ab.' : st.sweep ? 'Zieht ein <b>Rohr (Ø 6 mm)</b> entlang deiner offenen Kurve. Form, Größe und Wand stellst du danach rechts ein.' : st.revolve ? 'Wähl die <b>Achse</b> und den <b>Winkel</b> – 360° ergibt einen ganzen Drehkörper, zum Beispiel eine Schale oder einen Knopf.' : st.thin ? 'Zieh am <b>Pfeil</b> oder tipp Höhe, <b>Wandstärke</b> und <b>Wand-Lage</b> ein.' : 'Zieh am <b>Pfeil</b> oder tipp die Höhe ein. Nach innen wird es ein <b>Loch</b>.');
     stepBox.append(h('h3', null, st.sweep ? 'Entlang Pfad' : st.revolve ? 'Drehen' : st.dir === 'reverse' ? 'Hineindrücken (Loch)' : st.thin ? 'Dünne Wand' : 'Hochziehen'));
     const seg = h('div', { class: 'role-switch' });
     if (st.openOnly) {
@@ -4413,14 +4444,58 @@ const Sketch = (() => {
       seg.append(a, b); stepBox.append(seg);
     } else if (!st.fromPushPull) {
       const a = h('button', { type: 'button', 'aria-pressed': !st.revolve ? 'true' : 'false' }); a.innerHTML = icon('lift') + 'Hochziehen'; a.onclick = () => { st.revolve = false; renderStep(); updatePreview(); };
-      const b = h('button', { type: 'button', 'aria-pressed': st.revolve ? 'true' : 'false' }); b.innerHTML = icon('rotate') + 'Drehen'; b.onclick = () => { st.revolve = true; renderStep(); updatePreview(); };
+      const b = h('button', { type: 'button', 'aria-pressed': st.revolve ? 'true' : 'false' }); b.innerHTML = icon('rotate') + 'Drehen'; b.onclick = () => { st.revolve = true; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
       seg.append(a, b); stepBox.append(seg);
     }
     if (st.sweep) {
       stepBox.append(h('p', null, 'Zieht ein Rohr Ø 6 mm entlang des offenen Pfads. Form, Größe und Wand kannst du danach rechts einstellen.'));
     } else if (!st.revolve) {
-      stepBox.append(UI.numField({ id: 'st-dist', label: 'Höhe', value: st.dist, onCommit: (v) => { st.dist = v; updatePreview(); } }));
-      stepBox.append(UI.selectField({ id: 'st-dir', label: 'Richtung', value: st.dir, options: [['normal', S.ctx.targetId ? 'Nach außen (Körper)' : 'Nach oben'], ['reverse', S.ctx.targetId ? 'Nach innen (Loch)' : 'Nach unten'], ['both', 'Beidseitig']], onChange: (v) => { st.dir = v; renderStep(); updatePreview(); } }));
+      const ext = st.extent === 'toNext' || st.extent === 'toFace' ? st.extent : 'dist';
+      const exF = UI.selectField({
+        id: 'st-extent',
+        label: 'Bis',
+        value: ext,
+        options: [['dist', 'Feste Höhe'], ['toNext', 'Bis zur nächsten Fläche'], ['toFace', 'Bis zu gewählter Fläche']],
+        onChange: (v) => {
+          st.extent = v;
+          if (v === 'dist') {
+            const rd = App.resolvedDist('__preview');
+            if (rd != null) st.dist = round(rd, 4);
+            st.pickingFace = false;
+            Viewer.canvas.style.cursor = '';
+            Viewer.highlightFace('hover', null, null);
+          } else {
+            if (st.dir === 'both') st.dir = 'normal';
+            if (v === 'toNext') { st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); }
+            else if (v === 'toFace' && !st.toFace) { st.pickingFace = true; Viewer.canvas.style.cursor = 'crosshair'; }
+          }
+          renderStep(); updatePreview();
+        },
+      });
+      exF.setAttribute('data-help', 'extrudeToFace');
+      stepBox.append(exF);
+      if (ext === 'dist') {
+        stepBox.append(UI.numField({ id: 'st-dist', label: 'Höhe', value: st.dist, onCommit: (v) => { st.dist = v; updatePreview(); } }));
+      }
+      const dirOpts = ext === 'dist'
+        ? [['normal', S.ctx.targetId ? 'Nach außen (Körper)' : 'Nach oben'], ['reverse', S.ctx.targetId ? 'Nach innen (Loch)' : 'Nach unten'], ['both', 'Beidseitig']]
+        : [['normal', S.ctx.targetId ? 'Nach außen (Körper)' : 'Nach oben'], ['reverse', S.ctx.targetId ? 'Nach innen (Loch)' : 'Nach unten']];
+      stepBox.append(UI.selectField({ id: 'st-dir', label: 'Richtung', value: st.dir === 'both' && ext !== 'dist' ? 'normal' : st.dir, options: dirOpts, onChange: (v) => { st.dir = v; renderStep(); updatePreview(); } }));
+      if (ext === 'toFace') {
+        const pb = h('button', { type: 'button', class: 'btn' + (st.pickingFace ? ' primary' : ''), id: 'st-pick-face' });
+        pb.innerHTML = icon('pointer') + (st.pickingFace ? 'Klick auf eine Fläche …' : st.toFace ? 'Andere Fläche wählen' : 'Fläche im Bild wählen');
+        pb.onclick = () => {
+          st.pickingFace = !st.pickingFace;
+          Viewer.canvas.style.cursor = st.pickingFace ? 'crosshair' : '';
+          if (!st.pickingFace) Viewer.highlightFace('hover', null, null);
+          renderStep();
+        };
+        stepBox.append(pb);
+      }
+      if (ext !== 'dist') {
+        stepBox.append(h('div', { class: 'hint-box', id: 'st-ext-info' }));
+        updateStepExtInfo();
+      }
       if (!st.openOnly && !st.fromPushPull) {
         const tl = h('label', { class: 'check', 'data-help': 'thinWall' }, h('input', { type: 'checkbox', id: 'st-thin', checked: !!st.thin }), 'Dünne Wand');
         tl.querySelector('input').onchange = (e) => { st.thin = e.target.checked; renderStep(); updatePreview(); };
@@ -4465,7 +4540,13 @@ const Sketch = (() => {
     const it = Model.newItem(kind, {}, { name, role, color: st.color });
     const p = { sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons), ...(S.bg ? { bg: deepClone(S.bg) } : {}) }, sel };
     if (kind === 'extrude') {
-      p.dist = st.dist; p.dir = st.dir;
+      const rd = (st.extent === 'toNext' || st.extent === 'toFace') ? App.resolvedDist('__preview') : null;
+      p.dist = rd != null ? round(rd, 4) : st.dist;
+      p.dir = st.dir;
+      if (st.extent === 'toNext' || st.extent === 'toFace') {
+        p.extent = st.extent;
+        if (st.extent === 'toFace' && st.toFace) p.toFace = deepClone(st.toFace);
+      }
       if (role === 'hole') p.extra = 0.05; else if (S.ctx.targetId) p.extra = 0.02;
       if (st.thin) { p.thin = true; p.wall = st.wall; p.wallSide = st.wallSide || 'center'; }
     }
@@ -4518,7 +4599,7 @@ const Sketch = (() => {
   function placeArrow() {
     if (arrow) { arrow.remove(); arrow = null; }
     for (const l of labels.filter((x) => x.classList.contains('steplabel'))) l.remove();
-    if (!S || !S.step || S.step.revolve || S.step.sweep) { Viewer.requestRender(); return; }
+    if (!S || !S.step || S.step.revolve || S.step.sweep || S.step.extent === 'toNext' || S.step.extent === 'toFace') { Viewer.requestRender(); return; }
     const p = arrowPos();
     const dir = S.F.n.clone().multiplyScalar(S.step.dir === 'reverse' ? -1 : 1);
     const ps = Viewer.pixelSizeAt(p);
@@ -4550,6 +4631,18 @@ const Sketch = (() => {
   Viewer.on('camera', () => { if (S && S.step && !S.step.dragging) placeArrow(); });
   function stepDown(e) {
     if (e.button !== 0 || !S.step) return;
+    if (S.step.pickingFace) {
+      e.preventDefault(); e.stopPropagation();
+      const ref = Features.pickTargetFaceAt(e.clientX, e.clientY, new Set(['__preview']));
+      if (!ref) { UI.toast('Klick auf eine Körperfläche oder Bezugsebene.', { icon: 'info' }); return; }
+      S.step.toFace = ref;
+      S.step.pickingFace = false;
+      Viewer.canvas.style.cursor = '';
+      Viewer.highlightFace('hover', null, null);
+      S.step.dir = Features.autoFlipDirForFace(S.plane, S.W, S.step.dir || 'normal', ref);
+      renderStep(); updatePreview();
+      return;
+    }
     // Fläche an-/abwählen
     const uv = mouseUV(e); if (!uv) return;
     const r = SK.regionAt(SK.regions(S.ents), uv);
@@ -4584,6 +4677,7 @@ const Sketch = (() => {
   const placeArrowSoon = throttle(() => { if (S && S.step) { const d = S.step.dragging; placeArrow(); if (d) S.step.dragging = d; } }, 50);
   function stepUp() { if (S && S.step && S.step.dragging) { S.step.dragging = null; renderStep(); } }
   function stepBack() {
+    Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null);
     if (S.step.fromPushPull) { cancel(); return; }
     S.step = null; App.extra = []; App.rebuild();
     if (stepBox) { stepBox.remove(); stepBox = null; }
@@ -4591,6 +4685,7 @@ const Sketch = (() => {
     placeArrow(); showBar(); Panels.renderRight(); UI.hint(HINTS[S.tool]); render();
   }
   function stepOK() {
+    if (S.step.extent === 'toFace' && !S.step.toFace && !S.step.revolve && !S.step.sweep) { UI.toast('Klick zuerst eine Zielfläche im Bild an.', { icon: 'info' }); return; }
     const it = stepItem();
     const ctx = S.ctx;
     App.extra = [];
@@ -4620,6 +4715,7 @@ const Sketch = (() => {
     const cam = S.cam, hid = S.hiddenEdit;
     clearGroup(); clearBand(); hideBar(); hideEntry(); hideDimBox();
     Viewer.highlightFace('hover', null, null);
+    Viewer.canvas.style.cursor = '';
     if (stepBox) { stepBox.remove(); stepBox = null; }
     S = null; lastMouse = null; placeArrow();
     if (hid) Viewer.updateNode(hid, { visible: true });
@@ -4629,7 +4725,7 @@ const Sketch = (() => {
     UI.hint(null); App.emit('mode'); Panels.renderRight(); Handles.rebuild();
   }
   function init() {
-    App.on('results', relinkAll);
+    App.on('results', () => { relinkAll(); if (S && S.step) updateStepExtInfo(); });
     const cv = Viewer.canvas;
     cv.addEventListener('pointerdown', (e) => { if (S) { onDown(e); } }, true);
     cv.addEventListener('pointermove', (e) => { if (S) onMove(e); });

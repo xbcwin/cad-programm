@@ -62,7 +62,7 @@ export function createKernel(R, oc) {
     if (e) { e.gen = gen; return e.shape; }
     return null;
   }
-  function cachePut(key, shape, errs) { cache.set(key, { shape, gen, errs: errs && errs.length ? errs : null }); return shape; }
+  function cachePut(key, shape, errs, resolved) { cache.set(key, { shape, gen, errs: errs && errs.length ? errs : null, resolved: resolved || null }); return shape; }
 
   function gc() {
     // Formen entfernen, die mehrere Durchläufe nicht gebraucht wurden
@@ -109,6 +109,9 @@ export function createKernel(R, oc) {
   }
   function transformPoint(m, p) {
     return [m[0] * p[0] + m[4] * p[1] + m[8] * p[2] + m[12], m[1] * p[0] + m[5] * p[1] + m[9] * p[2] + m[13], m[2] * p[0] + m[6] * p[1] + m[10] * p[2] + m[14]];
+  }
+  function transformDir(m, v) {
+    return norm([m[0] * v[0] + m[4] * v[1] + m[8] * v[2], m[1] * v[0] + m[5] * v[1] + m[9] * v[2], m[2] * v[0] + m[6] * v[1] + m[10] * v[2]]);
   }
   function matTrans(x, y, z) { return [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, x, y, z, 1]; }
   function matRotXYZ(rx, ry, rz) {
@@ -297,6 +300,339 @@ export function createKernel(R, oc) {
     }
     if (!solids.length) throw new Error(p.thin ? 'Die Skizze hat keine Linie und keinen Umriss für eine dünne Wand.' : 'Die Skizze hat keine geschlossene Fläche.');
     return fuseAll(solids);
+  }
+  function isDynamicExtent(p) { return !!(p && (p.extent === 'toNext' || p.extent === 'toFace')); }
+  function hasDynamicExtent(it) {
+    if (!it || it.hidden) return false;
+    if (it.kind === 'extrude') return isDynamicExtent(it.p);
+    if (it.kind === 'group') return (it.children || []).some((c) => !c.hidden && hasDynamicExtent(c));
+    return false;
+  }
+  function relInBox(p, bb) {
+    return [0, 1, 2].map((k) => { const sp = bb[k + 3] - bb[k]; return sp > 1e-6 ? (p[k] - bb[k]) / sp : 0.5; });
+  }
+  function cornersOf(b) {
+    return [
+      [b[0], b[1], b[2]], [b[3], b[1], b[2]], [b[0], b[4], b[2]], [b[3], b[4], b[2]],
+      [b[0], b[1], b[5]], [b[3], b[1], b[5]], [b[0], b[4], b[5]], [b[3], b[4], b[5]],
+    ];
+  }
+  function alignedFrameInv(oW, dirW) {
+    const z = norm(dirW);
+    const ref = Math.abs(z[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
+    const x = norm(cross(ref, z));
+    const y = cross(z, x);
+    return matInvRigid([x[0], x[1], x[2], 0, y[0], y[1], y[2], 0, z[0], z[1], z[2], 0, oW[0], oW[1], oW[2], 1]);
+  }
+  function alignedTBounds(shape, FInv) {
+    const tr = applyMatrix(shape, FInv);
+    const b = bboxOf(tr);
+    safeDelete(tr);
+    return [b[2], b[5]];
+  }
+  function extractSolids(shape) {
+    if (!shape || !shape.wrapped) return [];
+    const TA = oc.TopAbs_ShapeEnum;
+    const ex = new oc.TopExp_Explorer(shape.wrapped, TA.TopAbs_SOLID, TA.TopAbs_SHAPE);
+    const out = [];
+    try {
+      while (ex.More()) {
+        try { out.push(R.cast(ex.Current())); } catch (_) {}
+        ex.Next();
+      }
+    } finally { ex.delete(); }
+    return out;
+  }
+  function sliceWithPlane(shape, pPt, pDir, span) {
+    const n = norm(pDir);
+    const b = bboxOf(shape);
+    const sc = [(b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2];
+    const proj = sub(sc, mul(n, dot(sub(sc, pPt), n)));
+    const ref = Math.abs(n[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
+    const u = norm(cross(ref, n)), v = cross(n, u);
+    const diag = Math.hypot(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
+    const S = Math.max(500, span * 4, diag * 4);
+    const pts = [[-S, -S], [S, -S], [S, S], [-S, S]].map(([a, c]) => [
+      proj[0] + u[0] * a + v[0] * c,
+      proj[1] + u[1] * a + v[1] * c,
+      proj[2] + u[2] * a + v[2] * c,
+    ]);
+    const face = polygonFace(pts);
+    const halfBox = R.basicFaceExtrusion(face, new R.Vector(mul(n, S)));
+    try { return shape.cut(halfBox); } finally { safeDelete(halfBox); }
+  }
+  function matchFaceOnShape(shape, ref, useWorld = false) {
+    const fl = topoList(shape, 'face');
+    const bb = bboxOf(shape);
+    const refC = useWorld && ref.wc ? ref.wc : ref.c;
+    const refN = useWorld && ref.wn ? ref.wn : ref.n;
+    const cands = [];
+    try {
+      for (let idx = 0; idx < fl.length; idx++) {
+        const info = faceInfo(fl[idx].shape);
+        if (ref.t && info.t !== ref.t) continue;
+        if (info.t === 'PLANE' && refN && info.n && dot(info.n, refN) < 0.99) continue;
+        const dd = refC && info.c ? len(sub(info.c, refC)) : 0;
+        let relDist = 0;
+        if (!useWorld && ref.rel && info.c) {
+          const gr = relInBox(info.c, bb);
+          relDist = Math.hypot(gr[0] - ref.rel[0], gr[1] - ref.rel[1], gr[2] - ref.rel[2]);
+        }
+        cands.push({ idx, info, dd, relDist });
+      }
+      if (cands.length) {
+        cands.sort((a, b) => {
+          const aEx = a.dd < 1e-3 ? 0 : 1, bEx = b.dd < 1e-3 ? 0 : 1;
+          if (aEx !== bEx) return aEx - bEx;
+          if (!useWorld && ref.rel && Math.abs(a.relDist - b.relDist) > 0.02) return a.relDist - b.relDist;
+          if (Math.abs(a.dd - b.dd) > 1e-3) return a.dd - b.dd;
+          return (a.idx === ref.idx ? 0 : 1) - (b.idx === ref.idx ? 0 : 1);
+        });
+        return { faceIdx: cands[0].idx, info: cands[0].info };
+      }
+      if (ref.idx != null && fl[ref.idx]) {
+        const info = faceInfo(fl[ref.idx].shape);
+        if (!ref.t || info.t === ref.t) return { faceIdx: ref.idx, info };
+      }
+      return null;
+    } finally {
+      for (const x of fl) x.shape.delete();
+    }
+  }
+  function sampleRegionsLocal(regions, M) {
+    const pts = [];
+    let sx = 0, sy = 0, cnt = 0;
+    const addUV = (uv) => { pts.push(M.P(uv)); sx += uv[0]; sy += uv[1]; cnt++; };
+    for (const rg of regions || []) {
+      const lp = rg.outer; if (!lp) continue;
+      if (lp.circle) {
+        const { c, r } = lp.circle;
+        addUV(c);
+        for (let i = 0; i < 8; i++) { const a = (i * Math.PI) / 4; addUV([c[0] + r * Math.cos(a), c[1] + r * Math.sin(a)]); }
+      } else if (lp.ellipse) {
+        const { c, rx, ry, rot = 0 } = lp.ellipse;
+        const co = Math.cos(rot), si = Math.sin(rot);
+        addUV(c);
+        for (let i = 0; i < 8; i++) {
+          const a = (i * Math.PI) / 4, lx = rx * Math.cos(a), ly = ry * Math.sin(a);
+          addUV([c[0] + lx * co - ly * si, c[1] + lx * si + ly * co]);
+        }
+      } else if (Array.isArray(lp.segs)) {
+        for (const s of lp.segs) { if (s.a) addUV(s.a); if (s.m) addUV(s.m); if (s.b) addUV(s.b); }
+      }
+    }
+    const center = cnt ? M.P([sx / cnt, sy / cnt]) : M.o.slice();
+    if (!pts.length) pts.push(M.o.slice());
+    return { center, pts };
+  }
+  // Hochziehen bis zur nächsten Fläche („toNext“) oder bis zu einer gewählten Fläche („toFace“)
+  function buildExtrudeToTarget(it, W, ctx) {
+    const p = it.p || {};
+    if (p.thinError) throw new Error(p.thinError);
+    if (!(p.regions && p.regions.length)) throw new Error(p.thin ? 'Die Skizze hat keine Linie und keinen Umriss für eine dünne Wand.' : 'Die Skizze hat keine geschlossene Fläche.');
+    const M = planeMap(p.plane);
+    const dir = p.dir || 'normal';
+    const sgn = dir === 'reverse' ? -1 : 1;
+    const dirL = mul(M.n, sgn);
+    const extra = num(p.extra, 0);
+    const backShift = dir === 'two' ? pos(p.dist2, 10) : extra;
+    const oW = transformPoint(W, M.o);
+    const dirW = mul(transformDir(W, M.n), sgn);
+    const WInv = matInvRigid(W);
+    const samples = sampleRegionsLocal(p.regions, M);
+    const centerW = transformPoint(W, samples.center);
+    const samplePtsW = samples.pts.map((q) => transformPoint(W, q));
+
+    const buildPrism = (dist, back = backShift) => {
+      const d = Math.max(0.01, dist);
+      const solids = [];
+      for (const rg of p.regions) {
+        let face = regionFace(rg, M);
+        if (back > 0) face = face.translate(mul(dirL, -back));
+        else if (back < 0) face = face.translate(mul(dirL, -back));
+        solids.push(R.basicFaceExtrusion(face, new R.Vector(mul(dirL, d + back))));
+      }
+      return fuseAll(solids, true);
+    };
+    const extrudeToPlane = (pF, nF, label) => {
+      const cosA = dot(dirW, nF);
+      if (Math.abs(cosA) < 1e-4) throw new Error(`${label}: Die Zielfläche liegt parallel zur Ziehrichtung.`);
+      const ts = samplePtsW.map((q) => dot(sub(pF, q), nF) / cosA);
+      const tCenter = dot(sub(pF, centerW), nF) / cosA;
+      const tMax = Math.max(tCenter, ...ts);
+      if (tMax <= 1e-4) throw new Error(`${label}: Die Zielfläche liegt hinter der Skizze – dreh die Richtung um oder wähl eine andere Fläche.`);
+      if (Math.abs(Math.abs(cosA) - 1) < 1e-5) {
+        const d = Math.max(0.01, tCenter);
+        return { shape: buildPrism(d), dist: d };
+      }
+      const raw = buildPrism(tMax + 10);
+      const pFL = transformPoint(WInv, pF), nFL = transformDir(WInv, nF);
+      const nOut = dot(nFL, dirL) > 0 ? nFL : mul(nFL, -1);
+      try {
+        const sliced = sliceWithPlane(raw, pFL, nOut, tMax + 20);
+        return { shape: sliced, dist: Math.max(0.01, tCenter) };
+      } finally { safeDelete(raw); }
+    };
+
+    const pool = (ctx && ctx.pool) || [];
+    if (p.extent === 'toFace') {
+      const ref = p.toFace;
+      if (!ref) throw new Error('Bis zu gewählter Fläche: Keine Zielfläche gewählt – klick eine Fläche im Bild an.');
+      if (ref.datumId) {
+        if (ref.missing || !ref.plane || !ref.plane.o || !ref.plane.n) throw new Error('Bis zu gewählter Fläche: Die gewählte Bezugsebene fehlt.');
+        const r = extrudeToPlane(ref.plane.o, norm(ref.plane.n), 'Bis zu gewählter Fläche');
+        return { shape: r.shape, resolved: { dist: Math.round(r.dist * 1e6) / 1e6, targetId: ref.datumId } };
+      }
+      let tid = ref.id;
+      const wasConsumed = !!(ctx && ctx.consumed && ctx.consumed.has(tid));
+      while (tid && ctx && ctx.consumed && ctx.consumed.has(tid)) tid = ctx.consumed.get(tid);
+      const T = pool.find((e) => e.ids.has(tid));
+      if (!T) throw new Error('Bis zu gewählter Fläche: Der Zielkörper fehlt oder ist ausgeblendet.');
+      if (T.id === it.id) throw new Error('Bis zu gewählter Fläche: Das Teil kann nicht bis zu sich selbst hochgezogen werden.');
+      const useWorld = wasConsumed && T.id !== ref.id;
+      const matched = matchFaceOnShape(useWorld ? T.worldShape : T.localShape, ref, useWorld);
+      if (!matched) throw new Error('Bis zu gewählter Fläche: Die gewählte Fläche wurde nicht mehr gefunden.');
+      const fi = matched.info;
+      if (fi.t === 'PLANE' && fi.n && fi.c) {
+        const pF = useWorld ? fi.c : transformPoint(T.m, fi.c);
+        const nF = useWorld ? norm(fi.n) : transformDir(T.m, fi.n);
+        const r = extrudeToPlane(pF, nF, 'Bis zu gewählter Fläche');
+        return { shape: r.shape, resolved: { dist: Math.round(r.dist * 1e6) / 1e6, targetId: T.id } };
+      }
+      // gekrümmte Zielfläche (Zylinder, Kegel, Kugel, Ring)
+      const L = Math.max(10, ...cornersOf(T.wb).map((c) => dot(sub(c, oW), dirW))) + 20;
+      const probeLocal = buildPrism(L, -1e-3);
+      const probeW = applyMatrix(probeLocal, W);
+      safeDelete(probeLocal);
+      let inter = null;
+      try { inter = probeW.intersect(T.worldShape); } catch (_) { inter = null; } finally { safeDelete(probeW); }
+      const sols = extractSolids(inter);
+      safeDelete(inter);
+      const FInv = alignedFrameInv(oW, dirW);
+      let bestT = Infinity, bestMode = 'outside';
+      for (const s of sols) {
+        const [t0, t1] = alignedTBounds(s, FInv);
+        safeDelete(s);
+        if (t1 - t0 < 1e-4) continue;
+        const mode = t0 <= 2e-3 ? 'inside' : 'outside';
+        const d = mode === 'inside' ? t1 : t0;
+        if (d > 1e-4 && d < bestT) { bestT = d; bestMode = mode; }
+      }
+      if (!isFinite(bestT)) throw new Error('Bis zu gewählter Fläche: Die Skizze trifft den Zielkörper in dieser Richtung nicht.');
+      const tLocal = applyMatrix(T.worldShape, WInv);
+      const fullLocal = buildPrism(L, backShift);
+      const FLocInv = alignedFrameInv(M.o, dirL);
+      try {
+        const boolRes = bestMode === 'outside' ? fullLocal.cut(tLocal) : fullLocal.intersect(tLocal);
+        const bSols = extractSolids(boolRes);
+        safeDelete(boolRes);
+        let picked = null, pickedT1 = 0;
+        for (const s of bSols) {
+          const [t0, t1] = alignedTBounds(s, FLocInv);
+          if (t0 <= 0.1 && t1 > 1e-4 && (!picked || t1 < pickedT1)) { if (picked) safeDelete(picked); picked = s; pickedT1 = t1; }
+          else safeDelete(s);
+        }
+        if (picked && pickedT1 < L - 1) return { shape: picked, resolved: { dist: Math.round(pickedT1 * 1e6) / 1e6, targetId: T.id } };
+        if (picked) safeDelete(picked);
+        return { shape: buildPrism(bestT), resolved: { dist: Math.round(bestT * 1e6) / 1e6, targetId: T.id } };
+      } finally { safeDelete(tLocal); safeDelete(fullLocal); }
+    }
+
+    // „Bis zur nächsten Fläche“
+    const cands = [];
+    let maxProj = 0;
+    for (const C of pool) {
+      if (C.id === it.id) continue;
+      let mp = -Infinity;
+      for (const q of cornersOf(C.wb)) mp = Math.max(mp, dot(sub(q, oW), dirW));
+      if (mp > 1e-3) { cands.push(C); maxProj = Math.max(maxProj, mp); }
+    }
+    if (!cands.length) throw new Error('Bis zur nächsten Fläche: In dieser Richtung liegt kein Körper – prüf die Richtung oder wähl eine feste Höhe.');
+    const L = maxProj + 20;
+    const probeLocal = buildPrism(L, -1e-3);
+    const probeW = applyMatrix(probeLocal, W);
+    safeDelete(probeLocal);
+    const probeWB = bboxOf(probeW);
+    const FInv = alignedFrameInv(oW, dirW);
+    let best = null;
+    try {
+      for (const C of cands) {
+        if (!bboxHit(probeWB, C.wb)) continue;
+        let inter = null;
+        try { inter = probeW.intersect(C.worldShape); } catch (_) { continue; }
+        const sols = extractSolids(inter);
+        safeDelete(inter);
+        for (const s of sols) {
+          const [t0, t1] = alignedTBounds(s, FInv);
+          if (t1 - t0 < 1e-4) { safeDelete(s); continue; }
+          const mode = t0 <= 2e-3 ? 'inside' : 'outside';
+          const d = mode === 'inside' ? t1 : t0;
+          if (d > 1e-4 && (!best || d < best.t)) {
+            if (best) safeDelete(best.solid);
+            best = { C, solid: s, mode, t: d, tMax: t1 };
+          } else safeDelete(s);
+        }
+      }
+    } finally { safeDelete(probeW); }
+    if (!best) throw new Error('Bis zur nächsten Fläche: In dieser Richtung liegt keine Fläche vor der Skizze – prüf die Richtung oder wähl eine feste Höhe.');
+
+    let shape = null, resolvedDist = best.t;
+    try {
+      const fl = topoList(best.solid, 'face');
+      const hitFaces = [];
+      try {
+        for (const f of fl) {
+          const info = faceInfo(f.shape);
+          if (info.t === 'CYLINDRE' && Array.isArray(info.axis) && Math.abs(dot(norm(info.axis.slice(3, 6)), dirW)) > 1 - 1e-4) continue;
+          if (best.mode === 'outside') {
+            if (info.t === 'PLANE' && info.n && dot(info.n, dirW) < -1e-4) hitFaces.push(info);
+            else if (info.t !== 'PLANE') hitFaces.push(info);
+          } else {
+            if (info.t === 'PLANE' && info.n && dot(info.n, dirW) > 1e-4) hitFaces.push(info);
+            else if (info.t !== 'PLANE') hitFaces.push(info);
+          }
+        }
+      } finally { for (const f of fl) f.shape.delete(); }
+
+      const planeHits = hitFaces.filter((f) => f.t === 'PLANE' && f.n && f.c);
+      const perpHits = planeHits.filter((f) => Math.abs(dot(f.n, dirW)) > 1 - 1e-4 && Math.abs(dot(sub(f.c, oW), dirW) - best.t) < 2e-3);
+      if (perpHits.length === 1) {
+        const d = Math.max(0.01, dot(sub(perpHits[0].c, oW), dirW));
+        shape = buildPrism(d);
+        resolvedDist = d;
+      } else if (best.mode === 'outside' && planeHits.length === 1 && hitFaces.length === 1) {
+        const r = extrudeToPlane(planeHits[0].c, planeHits[0].n, 'Bis zur nächsten Fläche');
+        shape = r.shape; resolvedDist = r.dist;
+      } else if (best.mode === 'inside' && planeHits.length === 1 && hitFaces.length === 1) {
+        const r = extrudeToPlane(planeHits[0].c, planeHits[0].n, 'Bis zur nächsten Fläche');
+        shape = r.shape; resolvedDist = r.dist;
+      } else if (best.mode === 'outside') {
+        const tLocal = applyMatrix(best.C.worldShape, WInv);
+        const fullLocal = buildPrism(L, backShift);
+        const FLocInv = alignedFrameInv(M.o, dirL);
+        try {
+          const cut = fullLocal.cut(tLocal);
+          const cutSols = extractSolids(cut);
+          safeDelete(cut);
+          let picked = null, pickedT1 = 0;
+          for (const s of cutSols) {
+            const [t0, t1] = alignedTBounds(s, FLocInv);
+            if (t0 <= 0.1 && t1 > 1e-4 && (!picked || t1 < pickedT1)) { if (picked) safeDelete(picked); picked = s; pickedT1 = t1; }
+            else safeDelete(s);
+          }
+          if (picked && pickedT1 < L - 1) { shape = picked; resolvedDist = pickedT1; }
+          else { if (picked) safeDelete(picked); shape = buildPrism(best.t); resolvedDist = best.t; }
+        } finally { safeDelete(tLocal); safeDelete(fullLocal); }
+      } else {
+        const inLoc = applyMatrix(best.solid, WInv);
+        if (backShift > 0) {
+          const tail = buildPrism(0.02, backShift);
+          try { shape = fuseAll([tail, inLoc], true); } catch (_) { safeDelete(tail); shape = inLoc; }
+        } else shape = inLoc;
+        resolvedDist = best.t;
+      }
+      return { shape, resolved: { dist: Math.round(resolvedDist * 1e6) / 1e6, targetId: best.C.id } };
+    } finally { safeDelete(best.solid); }
   }
   function buildRevolve(p) {
     const M = planeMap(p.plane);
@@ -1200,27 +1536,41 @@ export function createKernel(R, oc) {
     }
     return keyOf({ k: it.kind, p, f: it.finishes || null, mir: it.mir || null, c: it.children ? it.children.filter((c) => !c.hidden).map((c) => [defKey(c), c.role, c.m]) : null });
   }
-  function evalItem(it, errors) {
+  function evalItem(it, errors, parentWorldM = null, ctx = null) {
     if (it.kind === 'transform') return { shape: null, key: defKey(it) };
-    const key = defKey(it);
+    const dyn = hasDynamicExtent(it);
+    const W = dyn ? (parentWorldM ? matMul(parentWorldM, it.m) : it.m) : null;
+    const key = dyn
+      ? keyOf([defKey(it), W.map((v) => Math.round(v * 1e6) / 1e6), ctx ? ctx.poolKey : ''])
+      : defKey(it);
     const hit = cacheGet(key);
     if (hit) {
       // Meldungen beim Bauen (z. B. „Rundung zu groß“) gelten weiter, auch wenn die Form aus dem Speicher kommt
-      const e = cache.get(key).errs;
-      if (e) for (const x of e) errors.push({ ...x, itemId: x.itemId === '$self' ? it.id : x.itemId });
+      const ce = cache.get(key);
+      if (ce.errs) for (const x of ce.errs) errors.push({ ...x, itemId: x.itemId === '$self' ? it.id : x.itemId });
+      if (ce.resolved && ctx && ctx.resolved) {
+        if (it.kind === 'group') Object.assign(ctx.resolved, ce.resolved);
+        else ctx.resolved[it.id] = ce.resolved;
+      }
       return { shape: hit, key };
     }
     const e0 = errors.length;
-    let shape;
+    let shape, resolvedInfo = null;
     try {
       if (it.kind === 'group') {
         const kids = (it.children || []).filter((c) => !c.hidden);
         const solids = [], holes = [];
+        const beforeRes = ctx && ctx.resolved ? new Set(Object.keys(ctx.resolved)) : null;
         for (const c of kids) {
-          const r = evalItem(c, errors);
+          const r = evalItem(c, errors, W, ctx);
           if (!r.shape) continue;
           const s = applyMatrix(r.shape, c.m);
           (c.role === 'hole' ? holes : solids).push(s);
+        }
+        if (beforeRes && ctx && ctx.resolved) {
+          const subRes = {};
+          for (const k of Object.keys(ctx.resolved)) if (!beforeRes.has(k)) subRes[k] = ctx.resolved[k];
+          if (Object.keys(subRes).length) resolvedInfo = subRes;
         }
         const op = it.p && it.p.op;
         if (solids.length) {
@@ -1234,6 +1584,11 @@ export function createKernel(R, oc) {
         else shape = null;
         if (shape && op === 'pattern') shape = patternShape(shape, it.p);
         if (shape && op === 'split') shape = splitBody(shape, it.p);
+      } else if (it.kind === 'extrude' && isDynamicExtent(it.p)) {
+        const res = buildExtrudeToTarget(it, W || it.m, ctx);
+        shape = res.shape;
+        resolvedInfo = res.resolved;
+        if (ctx && ctx.resolved && resolvedInfo) ctx.resolved[it.id] = resolvedInfo;
       } else if (it.kind === 'extrude') shape = buildExtrude(it.p);
       else if (it.kind === 'revolve') shape = buildRevolve(it.p);
       else if (it.kind === 'loft') shape = buildLoft(it.p);
@@ -1251,7 +1606,7 @@ export function createKernel(R, oc) {
       errors.push({ itemId: it.id, code: err && err.code === 'split' ? 'split' : 'build', message: friendlyError(err) });
       shape = null;
     }
-    if (shape) cachePut(key, shape, errors.slice(e0).map((x) => ({ ...x, itemId: x.itemId === it.id ? '$self' : x.itemId })));
+    if (shape) cachePut(key, shape, errors.slice(e0).map((x) => ({ ...x, itemId: x.itemId === it.id ? '$self' : x.itemId })), resolvedInfo);
     return { shape, key };
   }
   function friendlyError(err) {
@@ -1511,31 +1866,126 @@ export function createKernel(R, oc) {
     }
     return { bodies, consumed };
   }
+  function collectIds(it, skipDynamic = false) {
+    const ids = new Set();
+    const walk = (x) => {
+      if (!x || x.hidden || (skipDynamic && hasDynamicExtent(x) && x.kind !== 'group')) return;
+      ids.add(x.id);
+      if (x.children) for (const c of x.children) walk(c);
+    };
+    walk(it);
+    return ids;
+  }
+  function stripDynamic(it) {
+    if (!it || it.kind !== 'group') return it;
+    return { ...it, children: (it.children || []).filter((c) => !c.hidden && !hasDynamicExtent(c)).map(stripDynamic) };
+  }
+  function evalSceneCore(scene, errors, times = null) {
+    const hiddenIds = new Set((scene.items || []).filter((it) => it.hidden).map((it) => it.id));
+    const tops = (scene.items || []).filter((it) => !it.hidden);
+    const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    const addT = (id, t0) => { if (!times) return; const d = now() - t0; if (d > 0.5) times[id] = (times[id] || 0) + d; };
+    const anyDyn = tops.some(hasDynamicExtent);
+    if (!anyDyn) {
+      const evald = tops.map((it) => {
+        const t0 = now();
+        const r = evalItem(it, errors);
+        let wb = null;
+        if (r.shape) wb = bboxTransform(bboxCached(r.key, r.shape), it.m);
+        addT(it.id, t0);
+        return { it, ...r, wb };
+      });
+      const tOps = now();
+      const { bodies, consumed } = resolveOps(evald, errors, hiddenIds);
+      if (bodies.size && times) { const d = now() - tOps; if (d > 0.5) for (const id of bodies.keys()) times[id] = (times[id] || 0) + d / bodies.size; }
+      for (const e of evald) { const b = bodies.get(e.it.id); if (b) { e.shape = b.shape; e.key = b.key; e.wb = b.wb; } }
+      return { evald, consumed, resolved: {} };
+    }
+
+    // Zwei-Pass-Auswertung: Pass 1 liefert alle festen Körper samt versetzten/verrechneten Zielen,
+    // Pass 2 zieht dynamische Schritte („bis zur nächsten / gewählten Fläche“) exakt bis zu ihnen.
+    const pass1Evald = tops.map((it) => {
+      if (!hasDynamicExtent(it)) {
+        const t0 = now();
+        const r = evalItem(it, errors);
+        let wb = null;
+        if (r.shape) wb = bboxTransform(bboxCached(r.key, r.shape), it.m);
+        addT(it.id, t0);
+        return { it, ...r, wb, dyn: false };
+      }
+      if (it.kind === 'group') {
+        const baseIt = stripDynamic(it);
+        const r = baseIt.children.length ? evalItem(baseIt, []) : { shape: null, key: defKey(baseIt) };
+        let wb = null;
+        if (r.shape) wb = bboxTransform(bboxCached(r.key, r.shape), it.m);
+        return { it, ...r, wb, dyn: true, dynGroup: true };
+      }
+      return { it, shape: null, key: defKey(it), wb: null, dyn: true };
+    });
+
+    const pass1Snap = pass1Evald.map((e) => ({ ...e }));
+    const { bodies: p1Bodies, consumed: p1Consumed } = resolveOps(pass1Snap, [], hiddenIds);
+    for (const e of pass1Snap) { const b = p1Bodies.get(e.it.id); if (b) { e.shape = b.shape; e.key = b.key; e.wb = b.wb; } }
+
+    const pool = [];
+    const poolKeyOf = () => keyOf(pool.map((x) => [x.id, x.key, x.m.map((v) => Math.round(v * 1e6) / 1e6)]));
+    for (const e of pass1Snap) {
+      if (p1Consumed.has(e.it.id) || !e.shape || e.it.role === 'hole' || e.it.id === '__preview') continue;
+      if (e.dyn && !e.dynGroup) continue;
+      pool.push({
+        id: e.it.id,
+        ids: collectIds(e.it, true),
+        localShape: e.shape,
+        m: e.it.m,
+        worldShape: applyMatrix(e.shape, e.it.m),
+        wb: e.wb,
+        key: e.key,
+      });
+    }
+    const ctx = { pool, poolKey: poolKeyOf(), consumed: p1Consumed, resolved: {} };
+    const evald = pass1Evald.map((e) => ({ it: e.it, shape: e.shape, key: e.key, wb: e.wb }));
+    try {
+      for (let i = 0; i < tops.length; i++) {
+        if (!pass1Evald[i].dyn) continue;
+        const it = tops[i], t0 = now();
+        const r = evalItem(it, errors, null, ctx);
+        let wb = null;
+        if (r.shape) wb = bboxTransform(bboxCached(r.key, r.shape), it.m);
+        addT(it.id, t0);
+        evald[i] = { it, ...r, wb };
+        if (r.shape && it.role !== 'hole' && it.id !== '__preview') {
+          const idxOld = pool.findIndex((x) => x.id === it.id);
+          if (idxOld >= 0) { safeDelete(pool[idxOld].worldShape); pool.splice(idxOld, 1); }
+          pool.push({
+            id: it.id,
+            ids: collectIds(it, false),
+            localShape: r.shape,
+            m: it.m,
+            worldShape: applyMatrix(r.shape, it.m),
+            wb,
+            key: r.key,
+          });
+          ctx.poolKey = poolKeyOf();
+        }
+      }
+      const tOps = now();
+      const { bodies, consumed } = resolveOps(evald, errors, hiddenIds);
+      if (bodies.size && times) { const d = now() - tOps; if (d > 0.5) for (const id of bodies.keys()) times[id] = (times[id] || 0) + d / bodies.size; }
+      for (const e of evald) { const b = bodies.get(e.it.id); if (b) { e.shape = b.shape; e.key = b.key; e.wb = b.wb; } }
+      return { evald, consumed, resolved: ctx.resolved };
+    } finally {
+      for (const x of pool) safeDelete(x.worldShape);
+    }
+  }
   function evaluate(scene, known = {}) {
     gen++;
     ingestBlobs(scene);
     if (scene.quality) setQuality(scene.quality);
     const errors = [];
-    const hiddenIds = new Set((scene.items || []).filter((it) => it.hidden).map((it) => it.id));
-    const tops = (scene.items || []).filter((it) => !it.hidden);
     // Rechenzeit je Schritt (BE-26): nur, was wirklich neu gerechnet wurde, zählt
     const times = {}, now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
     const addT = (id, t0) => { const d = now() - t0; if (d > 0.5) times[id] = (times[id] || 0) + d; };
-    const evald = tops.map((it) => {
-      const t0 = now();
-      const r = evalItem(it, errors);
-      let wb = null;
-      if (r.shape) {
-        const lb = bboxCached(r.key, r.shape);
-        wb = bboxTransform(lb, it.m);
-      }
-      addT(it.id, t0);
-      return { it, ...r, wb };
-    });
-    const tOps = now();
-    const { bodies, consumed } = resolveOps(evald, errors, hiddenIds);
-    if (bodies.size) { const d = now() - tOps; if (d > 0.5) for (const id of bodies.keys()) times[id] = (times[id] || 0) + d / bodies.size; }
-    for (const e of evald) { const b = bodies.get(e.it.id); if (b) { e.shape = b.shape; e.key = b.key; e.wb = b.wb; } }
+    const { evald, consumed, resolved } = evalSceneCore(scene, errors, times);
     const holes = evald.filter((e) => e.it.role === 'hole' && e.shape);
     const nodes = [];
     for (const e of evald) {
@@ -1577,7 +2027,7 @@ export function createKernel(R, oc) {
       nodes.push({ id: it.id, key: resultKey, ...clonePayload(payload) });
     }
     gc();
-    return { nodes, errors, times };
+    return { nodes, errors, times, resolved };
   }
   const bboxMemo = new Map();
   function bboxCached(key, shape) {
@@ -1695,16 +2145,7 @@ export function createKernel(R, oc) {
     return res;
   }
   function evaluateShapes(scene, errors) {
-    const hiddenIds = new Set((scene.items || []).filter((it) => it.hidden).map((it) => it.id));
-    const tops = (scene.items || []).filter((it) => !it.hidden);
-    const evald = tops.map((it) => {
-      const r = evalItem(it, errors);
-      let wb = null;
-      if (r.shape) wb = bboxTransform(bboxCached(r.key, r.shape), it.m);
-      return { it, ...r, wb };
-    });
-    const { bodies, consumed } = resolveOps(evald, errors || [], hiddenIds);
-    for (const e of evald) { const b = bodies.get(e.it.id); if (b) { e.shape = b.shape; e.key = b.key; e.wb = b.wb; } }
+    const { evald, consumed } = evalSceneCore(scene, errors || []);
     const holes = evald.filter((e) => e.it.role === 'hole' && e.shape);
     const out = [];
     for (const e of evald) {

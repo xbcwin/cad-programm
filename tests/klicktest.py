@@ -7748,6 +7748,143 @@ def t_eigene_schrift(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a029_hochziehen_bis_flaeche(p):
+    # 1. Pflicht-Szenario Teil 1: Platte (z=0..5), darüber im Abstand 15 ein Quader (z=20..30).
+    # Kreis-Skizze auf der Platte mit „Bis zur nächsten Fläche“ → Höhe 15
+    p.empty()
+    p.ev("""App.change('x', d => {
+      const a = Model.newItem('box', { w: 60, d: 60, h: 5 }, { name: 'Platte' }); d.items.push(a);
+      const b = Model.newItem('box', { w: 40, d: 40, h: 10 }, { name: 'Quader' }); b.t.z = 20; d.items.push(b);
+    })"""); warte_rechnen(p)
+    p.ev("const r=App.results.get(App.doc.items[0].id); const fi=r.data.faces.findIndex(f=>f.t==='PLANE'&&f.n[2]>0.99); return Sketch.startOnFace({id:App.doc.items[0].id, idx:fi, info:r.data.faces[fi]})")
+    p.wait(1200)
+    p.ev("Sketch.state.ents.push({id:'c1',type:'circle',c:[0,0],r:8})")
+    p.pg.keyboard.press('Enter'); p.wait(600)
+    p.pg.select_option('#st-extent', 'toNext'); p.wait(500); warte_rechnen(p)
+    prev_dist = p.ev("return App.resolvedDist('__preview')")
+    prev_txt = p.pg.locator('#st-ext-info').inner_text()
+    p.pg.locator('.stepbox .btn.primary').click(); p.wait(800); warte_rechnen(p)
+
+    info1 = p.ev("""const g=App.doc.items[0]; const ext=g.children && g.children[1];
+      return {
+        isGrp: g.kind==='group',
+        ext: ext ? ext.p.extent : null,
+        id: ext ? ext.id : null,
+        dist: ext ? App.resolvedDist(ext.id) : null,
+        bb: App.results.get(g.id) && App.results.get(g.id).data.bbox,
+        errs: App.errors.length
+      }""")
+    vol_map = lambda: p.ev("return Mass.measure().then(r=>Object.fromEntries((r.parts||[]).map(q=>[q.id, q.volume])))")
+    v1 = vol_map()
+    exp_v1 = 60 * 60 * 5 + math.pi * 64 * 15
+    ok1 = (
+        prev_dist is not None and abs(prev_dist - 15) < 0.05 and '15' in prev_txt
+        and info1['isGrp'] and info1['ext'] == 'toNext' and info1['errs'] == 0
+        and info1['dist'] is not None and abs(info1['dist'] - 15) < 0.05
+        and info1['bb'] is not None and abs(info1['bb'][5] - 20) < 0.05
+        and abs(v1.get(p.ev("return App.doc.items[0].id"), 0) - exp_v1) < 15
+    )
+
+    # 2. Pflicht-Szenario Teil 2: Quader um 5 nach oben verschieben → Höhe wächst auf 20
+    p.ev("App.change('Quader hoch', d => { d.items[1].t.z = 25; })"); warte_rechnen(p)
+    ext_id = info1['id']
+    info2 = p.ev("return { dist: App.resolvedDist(arg), bb: App.results.get(App.doc.items[0].id).data.bbox, errs: App.errors.length }", ext_id)
+    v2 = vol_map()
+    exp_v2 = 60 * 60 * 5 + math.pi * 64 * 20
+    p.ev("App.select([arg])", ext_id); p.wait(400)
+    panel_txt = p.pg.locator('#p-ext-info').inner_text() if p.pg.locator('#p-ext-info').count() else ''
+    ok2 = (
+        info2['errs'] == 0 and info2['dist'] is not None and abs(info2['dist'] - 20) < 0.05
+        and abs(info2['bb'][5] - 25) < 0.05
+        and abs(v2.get(p.ev("return App.doc.items[0].id"), 0) - exp_v2) < 15
+        and p.pg.locator('#p-extent').input_value() == 'toNext' and '20' in panel_txt
+    )
+
+    # 3. Verschieben als Schritt (transform) um +5 → Höhe wächst mit auf 25
+    p.ev("""App.change('Transform', d => {
+      const xf = Model.newItem('transform', { target: d.items[1].id, dz: 5 }); d.items.push(xf);
+    })"""); warte_rechnen(p)
+    info3 = p.ev("return { dist: App.resolvedDist(arg), bb: App.results.get(App.doc.items[0].id).data.bbox }", ext_id)
+    v3 = vol_map()
+    exp_v3 = 60 * 60 * 5 + math.pi * 64 * 25
+    ok3 = (
+        info3['dist'] is not None and abs(info3['dist'] - 25) < 0.05
+        and abs(info3['bb'][5] - 30) < 0.05
+        and abs(v3.get(p.ev("return App.doc.items[0].id"), 0) - exp_v3) < 15
+    )
+
+    # 4. „Bis zu gewählter Fläche“ per echtem Klick im 3D auf Oberseite des Quaders (z=35) + Größenänderung (h: 10→16)
+    p.ev("App.change('Transform weg', d => { d.items.splice(2, 1); })"); warte_rechnen(p)
+    p.ev("Viewer.setView('iso', false); Viewer.fit(); App.select([arg])", ext_id); p.wait(600)
+    p.pg.select_option('#p-extent', 'toFace'); p.wait(300)
+    top_pt = world_screen(p, 0, 0, 35)
+    p.pg.mouse.click(top_pt[0], top_pt[1]); p.wait(600); warte_rechnen(p)
+    info4a = p.ev("return { ext: Model.find(App.doc, arg).item.p.extent, dist: App.resolvedDist(arg), bb: App.results.get(App.doc.items[0].id).data.bbox }", ext_id)
+    p.ev("App.change('Quader höher', d => { d.items[1].p.h = 16; })"); warte_rechnen(p)
+    info4b = p.ev("return { dist: App.resolvedDist(arg), bb: App.results.get(App.doc.items[0].id).data.bbox, deps: Model.dependencies(App.doc) }", ext_id)
+    ok4 = (
+        info4a['ext'] == 'toFace' and info4a['dist'] is not None and abs(info4a['dist'] - 30) < 0.05
+        and abs(info4a['bb'][5] - 35) < 0.05
+        and info4b['dist'] is not None and abs(info4b['dist'] - 36) < 0.05
+        and abs(info4b['bb'][5] - 41) < 0.05
+        and any(x['what'] == 'hochgezogen bis Fläche von' for x in info4b['deps'])
+    )
+
+    # 5. Formschritt mit Modus (join & cut) mit „Bis zur nächsten Fläche“
+    p.ev("""App.change('Modus', d => {
+      d.items = [];
+      const pl = Model.newItem('box', { w: 60, d: 60, h: 5 }, { name: 'Platte' }); d.items.push(pl);
+      const q = Model.newItem('box', { w: 40, d: 40, h: 10 }, { name: 'Quader' }); q.t.z = 20; d.items.push(q);
+      const k = Model.newItem('extrude', {
+        sketch: { plane: { o: [0, 0, 5], x: [1, 0, 0], n: [0, 0, 1] }, ents: [{ id: 'c', type: 'circle', c: [0, 0], r: 6 }], dims: [], cons: [] },
+        dist: 5, dir: 'normal', extent: 'toNext'
+      }, { name: 'Bolzen' });
+      k.op = { type: 'join', target: pl.id };
+      d.items.push(k);
+    })"""); warte_rechnen(p)
+    v5a = vol_map()
+    pl_id, k_id = p.ev("return [App.doc.items[0].id, App.doc.items[2].id]")
+    m5a = p.ev("return [App.mergedInto(arg), App.resolvedDist(arg)]", k_id)
+    p.ev("App.change('Quader hoch', d => { d.items[1].t.z = 25; })"); warte_rechnen(p)
+    v5b = vol_map()
+    p.ev("App.change('Cut', d => { d.items[2].p.dir = 'reverse'; d.items[2].op = { type: 'cut', target: d.items[0].id }; })"); warte_rechnen(p)
+    v5c = vol_map()
+    d5c = p.ev("return App.resolvedDist(arg)", k_id)
+    ok5 = (
+        m5a[0] == pl_id and m5a[1] is not None and abs(m5a[1] - 15) < 0.05
+        and abs(v5a.get(pl_id, 0) - (60 * 60 * 5 + math.pi * 36 * 15)) < 15
+        and abs(v5b.get(pl_id, 0) - (60 * 60 * 5 + math.pi * 36 * 20)) < 15
+        and d5c is not None and abs(d5c - 5) < 0.05
+        and abs(v5c.get(pl_id, 0) - (60 * 60 * 5 - math.pi * 36 * 5)) < 15
+    )
+
+    # 6. Schräge Zielfläche + Wechsel zu fester Höhe mit Rückgängig + Hilfetext
+    p.ev("""App.change('Schräg', d => {
+      d.items = [];
+      const q = Model.newItem('box', { w: 40, d: 40, h: 10 }, { name: 'Dach' }); q.t.z = 20; q.t.rx = 15; d.items.push(q);
+      const k = Model.newItem('extrude', {
+        sketch: { plane: { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] }, ents: [{ id: 'c', type: 'circle', c: [0, 0], r: 6 }], dims: [], cons: [] },
+        dist: 5, dir: 'normal', extent: 'toNext'
+      }, { name: 'Säule' });
+      d.items.push(k);
+    })"""); warte_rechnen(p)
+    k6_id = p.ev("return App.doc.items[1].id")
+    info6 = p.ev("return { errs: App.errors.length, dist: App.resolvedDist(arg), bb: App.results.get(arg) && App.results.get(arg).data.bbox }", k6_id)
+    p.ev("App.select([arg])", k6_id); p.wait(400)
+    p.pg.select_option('#p-extent', 'dist'); p.wait(400); warte_rechnen(p)
+    has_dist_inp = p.pg.locator('#p-dist').count() == 1 and p.ev("return App.doc.items[1].p.extent == null")
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('Control+z'); p.wait(600); warte_rechnen(p)
+    undo_ok = p.ev("return App.doc.items[1].p.extent === 'toNext'")
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    help_ok = 'extrudeToFace' in hilfen and all(k in hilfen['extrudeToFace'] for k in ('tip', 'hilfe', 'tipp')) and p.pg.locator('[data-help="extrudeToFace"]').count() == 1
+    ok6 = (
+        info6['errs'] == 0 and info6['dist'] is not None and 15 < info6['dist'] < 25
+        and info6['bb'] is not None and info6['bb'][5] > 18
+        and has_dist_inp and undo_ok and help_ok
+    )
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -7874,6 +8011,7 @@ TESTS = [
     ('[A-027] Weitere Bezugsebenen: tangential an Zylinder & Kegel / senkrecht zu Kante & Kurve / durch Kante & Punkt / durch zwei Kanten / folgt Maßen & Hilfe', t_a027_weitere_bezugsebenen),
     ('[A-023] Freie Stellen & Widerspruch erklären: Linie mit Länge / Wackeln & Umschalt F / 3. Maß Liste & Hervorheben / Entfernen löst / Regel- & Live-Widerspruch', t_a023_freie_stellen_widerspruch),
     ('[A-026] Eigene Schrift laden (TTF): Laden & Körper / Speichern & Neu-Laden / Kerning & Laufweite / CFF-Meldung', t_eigene_schrift),
+    ('[A-029] Hochziehen bis Fläche: bis zur nächsten Fläche (15→20) / Transform (+5→25) / gewählte Fläche & Größenänderung / Formschritt mit Modus / schräge Fläche / Rückgängig & Hilfe', t_a029_hochziehen_bis_flaeche),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

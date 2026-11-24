@@ -59,7 +59,7 @@ const Handles = (() => {
       defs.push({ ax: 'x', dir: [1, 0, 0], p: [x1, cy, z0], param: map.x }, { ax: 'x', dir: [-1, 0, 0], p: [x0, cy, z0], param: map.x });
       defs.push({ ax: 'y', dir: [0, 1, 0], p: [cx, y1, z0], param: map.y }, { ax: 'y', dir: [0, -1, 0], p: [cx, y0, z0], param: map.y });
       defs.push({ ax: 'z', dir: [0, 0, 1], p: [cx, cy, z1], param: map.z });
-    } else if (it.kind === 'extrude' && it.p && it.p.sketch) {
+    } else if (it.kind === 'extrude' && it.p && it.p.sketch && !(it.p.extent === 'toNext' || it.p.extent === 'toFace' || it.p.thru)) {
       const pl = it.p.sketch.plane; const n = new THREE.Vector3(...pl.n).normalize();
       const dirSign = it.p.dir === 'reverse' ? -1 : 1;
       const ents = Solver.cached(it.p.sketch, Model.vars(App.doc).v).ents;

@@ -1641,6 +1641,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **CFF/OTF-Hinweis & Hilfe**: Eine CFF/OTF-Datei meldet „noch nicht unterstützt“ ohne das Projekt zu verändern; Hilfetext `loadFont` vorhanden.
 - [ ] **Von Hand**: Im Browser eine dekorative TrueType-Schrift vom eigenen Rechner auf einem Schild im Bogen und entlang einer Kurve testen sowie die lesbare Schrift-Auswahl nach „In Kurven umwandeln“ prüfen.
 
+## Hochziehen bis Fläche (Auto [A-029])
+
+- [x] **Bis zur nächsten Fläche (15 → 20 mm)**: Kreis-Skizze auf Platte mit „Bis zur nächsten Fläche“ zieht exakt 15 mm bis zum darüberliegenden Quader hoch (`App.resolvedDist` = 15); Verschieben des Quaders um 5 mm lässt die Höhe automatisch auf 20 mm mitwachsen.
+- [x] **Verschieben als Schritt (`transform`)**: Ein `transform`-Schritt (`dz: 5`) am Zielkörper führt die Höhe sofort auf 25 mm nach.
+- [x] **Bis zu gewählter Fläche (Klick im 3D & Größenänderung)**: „Bis zu gewählter Fläche“ per Klick auf die Oberseite des Quaders zieht exakt bis dorthin hoch und wächst mit, wenn sich die Höhe des Quaders ändert; Bezug erscheint unter `Model.dependencies`.
+- [x] **Formschritt mit Modus, schräge Fläche, Rückgängig & Hilfe**: Vereinigen (`join`) und Abziehen (`cut`) mit `toNext`, schräge Zielfläche (gedrehter Quader), Wechsel zurück zu fester Höhe mit Rückgängig sowie Hilfetext `extrudeToFace` geprüft.
+- [ ] **Von Hand**: Interaktives Überfahren und Anklicken einer gekrümmten Fläche (Zylinder/Kugel) und einer Bezugsebene beim „Bis zu gewählter Fläche“-Hochziehen prüfen.
+
 ## Fehler melden
 
 ```

@@ -89,7 +89,10 @@ const Features = (() => {
   function stopPick() {
     if (!picking) return;
     const cv = Viewer.canvas;
-    cv.removeEventListener('pointerdown', picking.down, true); window.removeEventListener('keydown', picking.key, true);
+    cv.removeEventListener('pointerdown', picking.down, true);
+    if (picking.move) cv.removeEventListener('pointermove', picking.move);
+    window.removeEventListener('keydown', picking.key, true);
+    Viewer.highlightFace('hover', null, null);
     cv.style.cursor = ''; UI.hint(null); picking = null;
   }
   // ---------- Rohr im Raum: Punkte auf Körper oder in den Raum klicken ----------
@@ -235,6 +238,117 @@ const Features = (() => {
     Viewer.canvas.style.cursor = 'crosshair';
     Viewer.canvas.addEventListener('pointerdown', down, true); window.addEventListener('keydown', key, true);
     UI.hint(hint || '<b>Achse wählen:</b> Klick auf eine gerade Kante, einen runden Rand, eine runde Fläche oder eine Bezugsachse. <b>Esc</b> bricht ab.');
+  }
+  function pickExtrudeFace(itemId) {
+    const f = Model.find(App.doc, itemId);
+    if (!f || f.item.kind !== 'extrude') return false;
+    const top = Model.topOf(App.doc, itemId);
+    const exclude = top && top.id === itemId ? new Set([itemId, '__preview']) : new Set(['__preview']);
+    pickFaceThen((ref) => {
+      setExtrudeToFace(itemId, ref);
+      UI.toast('Zielfläche gewählt: ' + (ref.label || 'Fläche') + '.', { icon: 'check' });
+    }, { exclude });
+    return true;
+  }
+  function makeFaceRef(hit) {
+    if (!hit || !hit.node || hit.faceIdx == null || hit.faceIdx < 0) return null;
+    const n = hit.node, data = n.data || {}, fi = (data.faces || [])[hit.faceIdx];
+    if (!fi) return null;
+    const bb = data.bbox;
+    const rel = bb && fi.c ? [0, 1, 2].map((k) => { const sp = bb[k + 3] - bb[k]; return sp > 1e-6 ? round((fi.c[k] - bb[k]) / sp, 6) : 0.5; }) : null;
+    const W = n.obj.matrixWorld;
+    const wc = fi.c ? new THREE.Vector3(...fi.c).applyMatrix4(W).toArray().map((v) => round(v, 6)) : null;
+    const wn = fi.n ? new THREE.Vector3(...fi.n).transformDirection(W).normalize().toArray().map((v) => round(v, 6)) : null;
+    const f = Model.find(App.doc, hit.id);
+    return {
+      id: hit.id,
+      idx: hit.faceIdx,
+      t: fi.t,
+      c: fi.c ? fi.c.map((v) => round(v, 6)) : null,
+      n: fi.n ? fi.n.map((v) => round(v, 6)) : null,
+      rel,
+      wc,
+      wn,
+      label: f ? Model.label(f.item) : 'Körper',
+    };
+  }
+  function pickTargetFaceAt(cx, cy, exclude) {
+    const hit = Viewer.pick(cx, cy, { solidsOnly: true, noEdges: true, exclude });
+    if (hit && hit.faceIdx >= 0) {
+      const ref = makeFaceRef(hit);
+      if (ref) return ref;
+    }
+    if (Viewer.groups && Viewer.groups.datums && Viewer.groups.datums.children.length && typeof Datums !== 'undefined') {
+      const rc = Viewer.setRay(cx, cy);
+      const dh = rc.intersectObjects(Viewer.groups.datums.children, true);
+      for (const x of dh) {
+        let o = x.object;
+        while (o && !o.userData.datum) o = o.parent;
+        if (o && o.userData.datum) {
+          const d = Datums.find(o.userData.datum);
+          if (d && d.plane) return { datumId: d.id, label: 'Bezugsebene „' + d.name + '“' };
+        }
+      }
+    }
+    return null;
+  }
+  function pickFaceThen(cb, opts = {}) {
+    stopPick();
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const ref = pickTargetFaceAt(e.clientX, e.clientY, opts.exclude);
+      if (!ref) { UI.toast('Klick auf eine Körperfläche oder Bezugsebene.', { icon: 'info' }); return; }
+      stopPick();
+      cb(ref);
+    };
+    const move = (e) => {
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true, exclude: opts.exclude });
+      Viewer.highlightFace('hover', hit && hit.faceIdx >= 0 ? hit.id : null, hit && hit.faceIdx >= 0 ? hit.faceIdx : null);
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, move, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    Viewer.canvas.addEventListener('pointermove', move);
+    window.addEventListener('keydown', key, true);
+    UI.hint(opts.hint || '<b>Zielfläche wählen:</b> Klick auf eine Fläche eines Körpers oder eine Bezugsebene. <b>Esc</b> bricht ab.');
+  }
+  function autoFlipDirForFace(plane, W, curDir, ref) {
+    if (!plane || !ref || (curDir !== 'normal' && curDir !== 'reverse')) return curDir;
+    const oW = new THREE.Vector3(...plane.o).applyMatrix4(W);
+    const nW = new THREE.Vector3(...plane.n).transformDirection(W).normalize();
+    let pW = null;
+    if (ref.datumId && typeof Datums !== 'undefined') {
+      const d = Datums.find(ref.datumId);
+      if (d && d.plane) pW = new THREE.Vector3(...d.plane.o);
+    } else if (Array.isArray(ref.wc)) {
+      pW = new THREE.Vector3(...ref.wc);
+    } else if (Array.isArray(ref.c) && ref.id && Model.find(App.doc, ref.id)) {
+      pW = new THREE.Vector3(...ref.c).applyMatrix4(Model.worldMatrix(App.doc, ref.id));
+    }
+    if (!pW) return curDir;
+    const d = pW.sub(oW).dot(nW);
+    if (d > 1e-3) return 'normal';
+    if (d < -1e-3) return 'reverse';
+    return curDir;
+  }
+  function setExtrudeToFace(itemId, ref) {
+    if (!ref) return false;
+    const f = Model.find(App.doc, itemId);
+    if (!f || f.item.kind !== 'extrude') return false;
+    App.change('Bis Fläche gewählt', (doc) => {
+      const T = Model.find(doc, itemId).item;
+      T.p.extent = 'toFace';
+      T.p.toFace = ref;
+      delete T.p.thru;
+      if (T.p.dir === 'both') T.p.dir = 'normal';
+      if (T.p.sketch && T.p.sketch.plane) {
+        T.p.dir = autoFlipDirForFace(T.p.sketch.plane, Model.worldMatrix(doc, itemId), T.p.dir || 'normal', ref);
+      }
+    });
+    App.select([itemId]);
+    return true;
   }
   function setPatternAxis(gid, axisId) {
     const ax = typeof Datums !== 'undefined' ? Datums.findAxis(axisId) : null;
@@ -648,5 +762,5 @@ const Features = (() => {
     sec.append(h('div', { class: 'hint-box', html: p.copy ? 'Erzeugt eine versetzte oder gedrehte <b>Kopie</b>. Ändert sich der Zielkörper, wandert die Kopie mit.' : 'Versetzt den Zielkörper als Schritt im Verlauf. Unterdrückst du diesen Schritt oder rollst den Marker davor, springt der Körper zurück.' }));
   }
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { transform, renderTransform, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
+  return { transform, renderTransform, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
 })();
