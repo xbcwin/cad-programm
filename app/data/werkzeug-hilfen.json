@@ -1388,5 +1388,15 @@
     "tip": "Prüft, ob das Modell zu einer gewählten Ebene genau spiegelgleich ist",
     "hilfe": "Spiegelt alle sichtbaren Körper an einer Grundebene (YZ, XZ, XY), einer Bezugsebene oder einer ebenen Fläche und vergleicht sie exakt mit dem Original. Unterschiede erscheinen farbig im Bild: Rot liegt nur auf dieser Seite, Blau fehlt auf der Gegenseite.",
     "tipp": "Liegt dein Teil nicht genau auf dem Nullpunkt, klick auf „Mitte“, um die Prüfebene automatisch in die Bauteilmitte zu schieben."
+  },
+  "stretch2d": {
+    "tip": "Einen Teil der Skizze per Rahmen in eine Richtung strecken",
+    "hilfe": "Zieh im Profi-Modus einen Rahmen über die Endpunkte oder Kanten, die wandern sollen. Danach gibst du rechts die Richtung (X, Y, Winkel oder X/Y) und den Weg ein. Nur die Punkte im Rahmen verschieben sich, der Rest bleibt stehen und bestehende Regeln sowie Maße bleiben erhalten.",
+    "tipp": "Zieh den Rahmen zum Beispiel nur über die rechte Kante eines Rechtecks und gib 5 mm in X ein – die linke Kante bleibt stehen und die Breite wächst um 5 mm."
+  },
+  "liveMirror": {
+    "tip": "Live-Spiegeln: Alles neu Gezeichnete entsteht sofort auch gespiegelt",
+    "hilfe": "Schalte im Profi-Modus „Live-Spiegeln“ ein und wähle eine vorhandene Linie (oder die X-/Y-Achse). Jede Linie, jeder Kreis, Bogen, Spline oder Umriss, den du danach zeichnest, entsteht sofort auch gespiegelt mit der Regel „Symmetrisch“ – so bleiben beide Seiten dauerhaft verknüpft.",
+    "tipp": "Klick oben oder rechts erneut auf „Live-Spiegeln“, um das automatische Spiegeln wieder auszuschalten."
   }
 }

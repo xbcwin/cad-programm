@@ -1310,5 +1310,104 @@ const SKO = (() => {
     return { ok: cur.ok, alreadyFull: false, cons: propCons, dims: propDims, ents: wEnts, dofBefore, dofAfter: cur.dof };
   }
 
-  return { TEMPLATES, TPLNAMES, tplEnts, SHAPES, SHAPENAMES, shapeEnts, FORMULA_CURVES, evalFormulaCurve, parsePointsCSV, pointsToCurveEnts, curve, inter, intersections, partsOf, nearestOn, closest, perpFeet, tangentFeet, trimPlan, trimPieces, trimRemoved, explode, chainOf, offsetChain, offsetShape, linkPoints, hasRadius, mirrorEnt, mirrorPoint, moveEnt, rotateEnt, rotPt, pr, inspect, thinRegions, autoDefine };
+  // ---------- Strecken (SK-30): Punkte im Rahmen wählen und verschieben ----------
+  function stretchSelect(ents, box) {
+    if (!Array.isArray(box) || box.length < 4) return { items: [], pointCount: 0, entCount: 0, pts: [] };
+    const x0 = Math.min(box[0], box[2]), x1 = Math.max(box[0], box[2]);
+    const y0 = Math.min(box[1], box[3]), y1 = Math.max(box[1], box[3]);
+    const inBox = (p) => Array.isArray(p) && p[0] >= x0 - 1e-6 && p[0] <= x1 + 1e-6 && p[1] >= y0 - 1e-6 && p[1] <= y1 + 1e-6;
+    const items = [], pts = [];
+    const addMove = (moves, k, axis, scale = 1) => moves.push({ k, axis, scale });
+    for (const e of ents || []) {
+      if (!e || e.link) continue;
+      const moves = [], ePts = [];
+      if (e.type === 'line' || e.type === 'slot') {
+        if (inBox(e.a)) { addMove(moves, 'a0', 0); addMove(moves, 'a1', 1); ePts.push(e.a.slice()); }
+        if (inBox(e.b)) { addMove(moves, 'b0', 0); addMove(moves, 'b1', 1); ePts.push(e.b.slice()); }
+      } else if (e.type === 'point' || e.type === 'text') {
+        if (inBox(e.a)) { addMove(moves, 'a0', 0); addMove(moves, 'a1', 1); ePts.push(e.a.slice()); }
+      } else if (e.type === 'circle' || e.type === 'poly' || e.type === 'ellipse' || e.type === 'ellarc') {
+        if (inBox(e.c)) { addMove(moves, 'c0', 0); addMove(moves, 'c1', 1); ePts.push(e.c.slice()); }
+      } else if (e.type === 'arc') {
+        const inA = inBox(e.a), inB = inBox(e.b), inM = inBox(e.m);
+        if (inA) { addMove(moves, 'a0', 0); addMove(moves, 'a1', 1); ePts.push(e.a.slice()); }
+        if (inB) { addMove(moves, 'b0', 0); addMove(moves, 'b1', 1); ePts.push(e.b.slice()); }
+        if ((inA && inB) || inM) {
+          addMove(moves, 'm0', 0, 1); addMove(moves, 'm1', 1, 1);
+          if (inM) ePts.push(e.m.slice());
+        } else if (inA || inB) {
+          // Bogenmitte halb mitführen, damit die Krümmung beim Strecken eines Endpunkts sauber bleibt
+          addMove(moves, 'm0', 0, 0.5); addMove(moves, 'm1', 1, 0.5);
+        }
+      } else if (e.type === 'spline') {
+        (e.pts || []).forEach((q, i) => {
+          if (inBox(q)) { addMove(moves, 'p' + i + '_0', 0); addMove(moves, 'p' + i + '_1', 1); ePts.push(q.slice()); }
+        });
+      } else if (e.type === 'rect') {
+        const cs = SK.rectCorners(e);
+        const inC = cs.map(inBox);
+        const cnt = inC.filter(Boolean).length;
+        for (let i = 0; i < 4; i++) if (inC[i]) ePts.push(cs[i].slice());
+        if (cnt > 0) {
+          const mvA0 = (inC[0] && inC[3]) || (cnt === 1 && (inC[0] || inC[3]));
+          const mvB0 = (inC[1] && inC[2]) || (cnt === 1 && (inC[1] || inC[2]));
+          const mvA1 = (inC[0] && inC[1]) || (cnt === 1 && (inC[0] || inC[1]));
+          const mvB1 = (inC[2] && inC[3]) || (cnt === 1 && (inC[2] || inC[3]));
+          if (mvA0) addMove(moves, 'a0', 0);
+          if (mvB0) addMove(moves, 'b0', 0);
+          if (mvA1) addMove(moves, 'a1', 1);
+          if (mvB1) addMove(moves, 'b1', 1);
+        }
+      }
+      if (moves.length) {
+        items.push({ id: e.id, type: e.type, moves, pts: ePts });
+        pts.push(...ePts);
+      }
+    }
+    return { items, pointCount: pts.length, entCount: items.length, pts };
+  }
+
+  function stretchPreview(ents, sel, dx, dy) {
+    if (!sel || !sel.items || !sel.items.length) return { ok: true, ents: [], movedVars: [] };
+    const byId = new Map((ents || []).map((e) => [e.id, e]));
+    const out = [], movedVars = [];
+    for (const it of sel.items) {
+      const src = byId.get(it.id);
+      if (!src) continue;
+      const ne = JSON.parse(JSON.stringify(src));
+      for (const mv of it.moves) {
+        const delta = (mv.axis === 0 ? dx : dy) * (mv.scale != null ? mv.scale : 1);
+        if (Math.abs(delta) < 1e-12) continue;
+        const nv = r6(Solver.getK(ne, mv.k) + delta);
+        Solver.setK(ne, mv.k, nv);
+        movedVars.push([ne.id, mv.k, nv]);
+      }
+      if (ne.type === 'rect' && (Math.abs(ne.b[0] - ne.a[0]) < 1e-4 || Math.abs(ne.b[1] - ne.a[1]) < 1e-4)) {
+        return { ok: false, why: 'Das Rechteck würde durch das Strecken zusammenfallen.' };
+      }
+      if ((ne.type === 'line' || ne.type === 'slot') && d2(ne.a, ne.b) < 1e-4) {
+        return { ok: false, why: 'Eine Linie würde auf Länge 0 schrumpfen.' };
+      }
+      if (ne.type === 'arc' && (d2(ne.a, ne.b) < 1e-4 || !SK.arcInfo(ne.a, ne.m, ne.b))) {
+        return { ok: false, why: 'Ein Bogen wäre nach dem Strecken ungültig.' };
+      }
+      out.push(ne);
+    }
+    return { ok: true, ents: out, movedVars };
+  }
+
+  function isMirrorSelf(e, A, B) {
+    if (!e) return false;
+    if (e.type === 'point' || e.type === 'circle') {
+      const p = e.a || e.c;
+      return !!p && d2(p, mirrorPoint(p, A, B)) < 1e-5;
+    }
+    if (e.type === 'line' || e.type === 'slot') {
+      const fa = mirrorPoint(e.a, A, B), fb = mirrorPoint(e.b, A, B);
+      return (d2(e.a, fa) < 1e-5 && d2(e.b, fb) < 1e-5) || (d2(e.a, fb) < 1e-5 && d2(e.b, fa) < 1e-5);
+    }
+    return false;
+  }
+
+  return { TEMPLATES, TPLNAMES, tplEnts, SHAPES, SHAPENAMES, shapeEnts, FORMULA_CURVES, evalFormulaCurve, parsePointsCSV, pointsToCurveEnts, curve, inter, intersections, partsOf, nearestOn, closest, perpFeet, tangentFeet, trimPlan, trimPieces, trimRemoved, explode, chainOf, offsetChain, offsetShape, linkPoints, hasRadius, mirrorEnt, mirrorPoint, isMirrorSelf, moveEnt, rotateEnt, rotPt, stretchSelect, stretchPreview, pr, inspect, thinRegions, autoDefine };
 })();

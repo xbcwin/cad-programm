@@ -26,10 +26,11 @@ const Sketch = (() => {
     { id: 'patrect', icon: 'patternRect', get label() { return T('sk.tool.patrect'); }, key: 'Q', get tip() { return T('sk.toolTip.patrect'); } },
     { id: 'patcirc', icon: 'patternCirc', get label() { return T('sk.tool.patcirc'); }, key: 'W', get tip() { return T('sk.toolTip.patcirc'); } },
     { id: 'xmove', icon: 'arrowR', get label() { return T('sk.tool.xmove'); }, key: 'H', get tip() { return T('sk.toolTip.xmove'); } },
+    { id: 'stretch', icon: 'stretch', get label() { return T('sk.tool.stretch'); }, key: '', get tip() { return T('sk.toolTip.stretch'); }, pro: true },
     { id: 'dim', icon: 'dim', get label() { return T('sk.tool.dim'); }, key: 'D', get tip() { return T('sk.toolTip.dim'); }, sep: true },
     { id: 'bg', icon: 'image', get label() { return T('sk.tool.bg'); }, key: 'I', get tip() { return T('sk.toolTip.bg'); } },
   ];
-  const HELPKEY = { wall: 'wall2d', project: 'project2d', splitl: 'split2d', extend: 'extend2d', tpl: 'sketchTemplate', ellarc: 'ellipseArc', corner: 'corner2d', text: 'sketchText', bg: 'sketchImage', poly: 'polygon', dim: 'dimension', offset: 'offset2d', mirror: 'mirror2d', patrect: 'patternRect2d', patcirc: 'patternCirc2d' };
+  const HELPKEY = { wall: 'wall2d', project: 'project2d', splitl: 'split2d', extend: 'extend2d', tpl: 'sketchTemplate', ellarc: 'ellipseArc', corner: 'corner2d', text: 'sketchText', bg: 'sketchImage', poly: 'polygon', dim: 'dimension', offset: 'offset2d', mirror: 'mirror2d', patrect: 'patternRect2d', patcirc: 'patternCirc2d', stretch: 'stretch2d' };
   // Bedingungen (Regeln): zweite Leiste unter den Zeichenwerkzeugen
   const CTOOLS = [
     { id: 'horizontal', icon: 'cHoriz', get label() { return T('sk.con.horizontal'); }, help: 'cHoriz' },
@@ -51,6 +52,10 @@ const Sketch = (() => {
   const hintFor = (id) => {
     if (!id) return null;
     if (id.startsWith('c:')) { const k = id.slice(2); return `<b>${cname(k)}:</b> ${chint(k)}`; }
+    if (id === 'stretch' && S && S.stretch && S.stretch.sel && S.stretch.sel.pointCount > 0) {
+      const n = S.stretch.sel.pointCount;
+      return T('sk.hint.stretchReady', { n, unit: T(n === 1 ? 'sk.panel.stretchPtOne' : 'sk.panel.stretchPtMany') });
+    }
     if (id === 'dim' && S) {
       if (S.dimMode === 'arcLen') return T('sk.hint.dimArcLen');
       if (S.dimMode === 'ang3') return T('sk.hint.dimAng3_' + Math.min(2, (S.dimPicks || []).length));
@@ -367,7 +372,7 @@ const Sketch = (() => {
     if (Notes.active) Notes.stop();
     Panels.closeFlyout(); UI.closePop();
     const F = frameWorld(init.plane, init.W);
-    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.embossMode ? 'text' : (init.ctx.mode === 'patpath' || init.ctx.ribMode) ? 'line' : 'rect', draft: null, sels: [], get sel() { return this.sels && this.sels.length === 1 ? this.sels[0] : null; }, set sel(v) { this.sels = v ? [v] : []; }, band: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, locked: !!init.locked, lockedDrag: null, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, off: { count: 1, both: false, corners: 'sharp' }, projOff: 0, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: init.ctx.embossMode ? 'm' : 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, ellArcCW: false, shape: { type: 'star', p: { ...SKO.SHAPES.star.p } }, shapesOpen: false, formula: { preset: 'sinus', ...SKO.FORMULA_CURVES.sinus }, formulaOpen: false, csv: { kind: 'spline', closed: false, text: '' }, csvOpen: false, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, hoverEnt: null, trimHover: null, check: null, checkFocus: null, autoDef: null, freeMode: false, wiggle: null, lastWiggle: null, conflict: null };
+    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.embossMode ? 'text' : (init.ctx.mode === 'patpath' || init.ctx.ribMode) ? 'line' : 'rect', draft: null, sels: [], get sel() { return this.sels && this.sels.length === 1 ? this.sels[0] : null; }, set sel(v) { this.sels = v ? [v] : []; }, band: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, locked: !!init.locked, lockedDrag: null, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, stretch: { box: null, sel: null, dir: 'x', dist: 5, dx: 5, dy: 0, ang: 0 }, off: { count: 1, both: false, corners: 'sharp' }, projOff: 0, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: init.ctx.embossMode ? 'm' : 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, ellArcCW: false, shape: { type: 'star', p: { ...SKO.SHAPES.star.p } }, shapesOpen: false, formula: { preset: 'sinus', ...SKO.FORMULA_CURVES.sinus }, formulaOpen: false, csv: { kind: 'spline', closed: false, text: '' }, csvOpen: false, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, liveMir: null, liveMirPick: false, hoverEnt: null, trimHover: null, check: null, checkFocus: null, autoDef: null, freeMode: false, wiggle: null, lastWiggle: null, conflict: null };
     S.dims = init.dims || []; S.cons = init.cons || []; S.picks = []; S.dimFirst = null; S.dimMode = 'auto'; S.dimCircMode = 'center'; S.dimPicks = []; S.ordBase = null; S.ordAxis = 'auto'; S.selCon = null;
     S.plane0 = deepClone(init.plane); S.pOff = init.pOff || 0; S.pTilt = 0;
     if (S.pOff) applyPlane(false, true);
@@ -398,14 +403,16 @@ const Sketch = (() => {
     for (const t of TOOLS) {
       if (t.sep) bar.append(vsep());
       const hk = HELPKEY[t.id] || t.id;
-      const b = h('button', { type: 'button', class: 'tool' + (S.tool === t.id ? ' active' : ''), 'data-tip': t.tip, 'data-kbd': t.key || null, 'aria-label': t.label, dataset: { tool: t.id, help: hk } });
+      const b = h('button', { type: 'button', class: 'tool' + (t.pro ? ' pro' : '') + (S.tool === t.id ? ' active' : ''), 'data-tip': t.tip, 'data-kbd': t.key || null, 'aria-label': t.label, dataset: { tool: t.id, help: hk } });
       b.innerHTML = icon(t.icon) + `<span>${esc(t.label)}</span>`;
       b.onclick = () => setTool(t.id);
       bar.append(b);
     }
     const cb = h('button', { type: 'button', class: 'tool conmode' + (S.construction ? ' active' : ''), 'aria-pressed': S.construction ? 'true' : 'false', 'data-tip': T('sk.bar.conTip'), 'data-kbd': 'X', 'aria-label': T('sk.bar.con'), dataset: { help: 'construct2d' } });
     cb.innerHTML = icon('construct') + `<span>${esc(T('sk.bar.con'))}</span>`; cb.onclick = () => toggleConstruction();
-    bar.append(vsep(), cb, vsep());
+    const lm = h('button', { type: 'button', class: 'tool livemirror pro' + (S.liveMir ? ' active' : ''), id: 'sk-live-mir-btn', 'aria-pressed': S.liveMir ? 'true' : 'false', 'data-tip': T('sk.bar.liveMirTip'), 'aria-label': T('sk.bar.liveMir'), dataset: { help: 'liveMirror' } });
+    lm.innerHTML = icon('cSymmetric') + `<span>${esc(T('sk.bar.liveMir'))}</span>`; lm.onclick = () => toggleLiveMirror();
+    bar.append(vsep(), cb, lm, vsep());
     const un = h('button', { type: 'button', class: 'tool', 'data-tip': T('topbar.undo'), 'data-kbd': 'Strg Z', 'aria-label': T('topbar.undo') }); un.innerHTML = icon('undo'); un.onclick = () => sketchUndo();
     const cn = h('button', { type: 'button', class: 'tool', 'data-tip': T('sk.bar.cancelTip'), 'aria-label': T('common.cancel') }); cn.innerHTML = icon('close'); cn.onclick = () => cancel();
     const ok = h('button', { type: 'button', class: 'tool primary', 'data-tip': T('sk.bar.doneTip'), 'data-kbd': 'Enter' }); ok.innerHTML = icon('check') + `<span>${esc(T('common.done'))}</span>`; ok.onclick = () => done();
@@ -474,7 +481,8 @@ const Sketch = (() => {
     if (next) {
       S.draft = null; S.drag = null; S.dragPins = null; S.dragged = false;
       S.picks = []; S.dimFirst = null; S.dimPicks = []; S.ordBase = null;
-      S.autoDef = null; S.mir = null; S.patPick = false;
+      S.autoDef = null; S.mir = null; S.liveMirPick = false; S.patPick = false;
+      if (S.stretch) { S.stretch.box = null; S.stretch.sel = null; }
       stopWiggle(true);
       if (S.freeMode) setFreeMode(false);
       hideEntry(); hideDimBox();
@@ -492,12 +500,14 @@ const Sketch = (() => {
   function setTool(id) {
     if (!S) return;
     if (S.locked && id !== 'select') { guardLocked(); return; }
+    if (id === 'stretch' && isSimpleMode()) { UI.toast(T('sk.toast.proOnly'), { icon: 'info' }); return; }
     commitDraftPolyline();
     clearBand();
     const carry = (id === 'xmove' || id === 'patrect' || id === 'patcirc') ? selectedIds() : [];
     S.tool = id; S.draft = null; S.picks = []; S.dimFirst = null; S.dimPicks = []; S.ordBase = null; hideEntry(); hideDimBox();
     if (isSimpleMode() && S.dimMode === 'ord') S.dimMode = 'auto';
-    S.mir = null; S.patSel = carry; S.patPick = false; S.trimHover = null; S.trimming = false; S.hoverEnt = null; S.autoDef = null;
+    S.mir = null; S.liveMirPick = false; S.patSel = carry; S.patPick = false; S.trimHover = null; S.trimming = false; S.hoverEnt = null; S.autoDef = null;
+    if (S.stretch) { S.stretch.box = null; S.stretch.sel = null; }
     Viewer.highlightFace('hover', null, null);
     if (id !== 'select') clearSel();
     for (const el of [bar, cbar]) if (el) $$('.tool[data-tool]', el).forEach((b) => b.classList.toggle('active', b.dataset.tool === id));
@@ -642,9 +652,20 @@ const Sketch = (() => {
     if (guardLocked()) return;
     if (S.draft && S.draft.pts && S.draft.pts.length > 1 && S.tool === 'line') { S.draft = null; hideEntry(); updateLineHint(); render(); return; }
     const last = S.undo.pop(); if (last == null) return;
-    const st = JSON.parse(last); S.ents = st.ents; S.dims = st.dims || []; S.cons = st.cons || []; clearSel(); S.selCon = null; S.draft = null; S.picks = []; S.dimPicks = []; S.ordBase = null; S.autoDef = null; S.conflict = null; stopWiggle(true); reapply(); updateLineHint(); render(); Panels.renderRight();
+    const st = JSON.parse(last); S.ents = st.ents; S.dims = st.dims || []; S.cons = st.cons || []; clearSel(); S.selCon = null; S.draft = null; S.picks = []; S.dimPicks = []; S.ordBase = null; S.autoDef = null; S.conflict = null;
+    if (S.liveMir && !ent(S.liveMir.axis)) { S.liveMir = null; S.liveMirPick = false; syncLiveMirBtn(); }
+    if (S.stretch) { S.stretch.box = null; S.stretch.sel = null; }
+    stopWiggle(true); reapply(); updateLineHint(); render(); Panels.renderRight();
   }
-  function addEnt(e) { pushUndo(); e.id = uid('e'); if (S.construction) e.con = true; S.ents.push(e); App.emit('sketch'); return e; }
+  function addEnt(e, opts = {}) {
+    pushUndo();
+    e.id = uid('e');
+    if (S.construction) e.con = true;
+    S.ents.push(e);
+    if (!opts.noMirror) liveMirrorEnts([e]);
+    App.emit('sketch');
+    return e;
+  }
   // ---------- Maße und Regeln: der Löser rechnet alles gemeinsam ----------
   const vars = () => Model.vars(App.doc).v;
   // fast: beim Ziehen ohne Beweglichkeits-Analyse (die kommt beim Loslassen)
@@ -948,6 +969,10 @@ const Sketch = (() => {
     if (S.sels && S.sels.length) S.sels = S.sels.filter((x) => x !== id);
     if (S.ordBase && S.ordBase.ref && S.ordBase.ref.e === id) S.ordBase = null;
     S.patSel = (S.patSel || []).filter((x) => x !== id);
+    if (S.liveMir && S.liveMir.axis === id) {
+      S.liveMir = null; S.liveMirPick = false; syncLiveMirBtn();
+      UI.toast(T('sk.toast.liveMirLost'), { icon: 'info', ms: 2600 });
+    }
   }
   function deleteEnts(ids) {
     if (guardLocked()) return 0;
@@ -1758,6 +1783,173 @@ const Sketch = (() => {
     UI.hint(hintFor('mirror')); render(); Panels.renderRight();
     return n;
   }
+  // ---------- Live-Spiegeln (SK-46): alles neu Gezeichnete sofort spiegeln ----------
+  function syncLiveMirBtn() {
+    const on = !!(S && S.liveMir);
+    for (const b of document.querySelectorAll('.tool.livemirror')) {
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+  }
+  function liveMirAxisLabel() {
+    if (!S || !S.liveMir) return '';
+    if (S.liveMir.axisDir === 'x') return T('sk.panel.liveMirAxisX');
+    if (S.liveMir.axisDir === 'y') return T('sk.panel.liveMirAxisY');
+    return entName(S.liveMir.axis);
+  }
+  function ensureOriginAxis(dir) {
+    const isX = dir === 'x';
+    const existing = S.ents.find((e) => e.type === 'line' && e.con && (isX ? (Math.abs(e.a[1]) < 1e-6 && Math.abs(e.b[1]) < 1e-6) : (Math.abs(e.a[0]) < 1e-6 && Math.abs(e.b[0]) < 1e-6)));
+    if (existing) return existing;
+    const b = SK.bounds(S.ents) || [-20, -20, 20, 20];
+    const L = Math.max(20, Math.abs(b[0]), Math.abs(b[1]), Math.abs(b[2]), Math.abs(b[3])) + 10;
+    pushUndo();
+    const ax = { id: uid('e'), type: 'line', con: true, a: isX ? [-L, 0] : [0, -L], b: isX ? [L, 0] : [0, L] };
+    S.ents.push(ax);
+    S.cons.push({ id: uid('k'), type: 'fix', refs: [{ e: ax.id }], at: Object.fromEntries((Solver.varsOf(ax) || []).map((k) => [k, Solver.getK(ax, k)])) });
+    reapply();
+    return ax;
+  }
+  function setLiveMirror(target) {
+    if (!S || S.step || guardLocked()) return false;
+    if (target && isSimpleMode()) { UI.toast(T('sk.toast.proOnly'), { icon: 'info' }); return false; }
+    if (!target) {
+      S.liveMir = null; S.liveMirPick = false; syncLiveMirBtn();
+      UI.hint(hintFor(S.tool)); render(); Panels.renderRight();
+      UI.toast(T('sk.toast.liveMirOff'), { icon: 'info', ms: 2000 });
+      return true;
+    }
+    const axisDir = (target === 'x' || target === 'y') ? target : null;
+    const ax = axisDir ? ensureOriginAxis(axisDir) : ent(target);
+    if (!ax || ax.type !== 'line') {
+      UI.toast(T('sk.toast.liveMirPickLine'), { icon: 'info' });
+      return false;
+    }
+    S.liveMir = { axis: ax.id, axisDir };
+    S.liveMirPick = false;
+    syncLiveMirBtn();
+    UI.hint(hintFor(S.tool)); render(); Panels.renderRight();
+    UI.toast(T('sk.toast.liveMirOn', { axis: liveMirAxisLabel() }), { icon: 'check', ms: 2600 });
+    return ax.id;
+  }
+  function startLiveMirrorPick() {
+    if (!S || S.step || guardLocked()) return false;
+    if (isSimpleMode()) { UI.toast(T('sk.toast.proOnly'), { icon: 'info' }); return false; }
+    S.liveMirPick = true;
+    UI.hint(T('sk.hint.liveMirPick')); render(); Panels.renderRight();
+    return true;
+  }
+  function toggleLiveMirror() {
+    if (!S || S.step || guardLocked()) return false;
+    if (isSimpleMode()) { UI.toast(T('sk.toast.proOnly'), { icon: 'info' }); return false; }
+    if (S.liveMir) return setLiveMirror(false);
+    const sel = S.sel && ent(S.sel);
+    if (sel && sel.type === 'line') return setLiveMirror(sel.id);
+    if (S.liveMirPick) { S.liveMirPick = false; UI.hint(hintFor(S.tool)); render(); Panels.renderRight(); return false; }
+    return startLiveMirrorPick();
+  }
+  function liveMirrorEnts(list) {
+    if (!S || !S.liveMir || isSimpleMode()) return [];
+    const ax = ent(S.liveMir.axis);
+    if (!ax || ax.type !== 'line') { S.liveMir = null; syncLiveMirBtn(); return []; }
+    const created = [], newCons = [];
+    for (const e of list || []) {
+      if (!e || e.id === ax.id || e.link || SKO.isMirrorSelf(e, ax.a, ax.b)) continue;
+      const r = SKO.mirrorEnt(e, ax.a, ax.b);
+      S.ents.push(...r.ents);
+      created.push(...r.ents);
+      for (const [p, q] of r.pairs) newCons.push({ id: uid('k'), type: 'symmetric', refs: [p, q, { e: ax.id }] });
+      for (const [p, q] of r.rad) newCons.push({ id: uid('k'), type: 'equal', refs: [{ ...p, k: 'r' }, { ...q, k: 'r' }] });
+    }
+    if (newCons.length) S.cons.push(...newCons);
+    return created;
+  }
+  // ---------- Strecken (SK-30): Bereich im Rahmen verschieben, Regeln bleiben erhalten ----------
+  function stretchDelta(st = S && S.stretch) {
+    if (!st) return { dx: 0, dy: 0 };
+    if (st.dir === 'x') return { dx: Number(st.dist) || 0, dy: 0 };
+    if (st.dir === 'y') return { dx: 0, dy: Number(st.dist) || 0 };
+    if (st.dir === 'ang') {
+      const d = Number(st.dist) || 0, rad = ((Number(st.ang) || 0) * Math.PI) / 180;
+      return { dx: round(Math.cos(rad) * d, 6), dy: round(Math.sin(rad) * d, 6) };
+    }
+    return { dx: Number(st.dx) || 0, dy: Number(st.dy) || 0 };
+  }
+  function stretchBox(x0, y0, x1, y1) {
+    if (!S || S.step || guardLocked() || isSimpleMode()) return null;
+    const box = [Math.min(x0, x1), Math.min(y0, y1), Math.max(x0, x1), Math.max(y0, y1)];
+    const sel = SKO.stretchSelect(S.ents, box);
+    if (!sel.pointCount) {
+      S.stretch.box = null; S.stretch.sel = null;
+      UI.toast(T('sk.toast.stretchEmpty'), { icon: 'info', ms: 2400 });
+      UI.hint(hintFor('stretch')); render(); Panels.renderRight();
+      return null;
+    }
+    S.stretch.box = box;
+    S.stretch.sel = sel;
+    UI.hint(hintFor('stretch')); render(); Panels.renderRight();
+    return sel;
+  }
+  function applyStretch(opts = {}) {
+    if (!S || S.step || guardLocked() || isSimpleMode()) return 0;
+    const st = S.stretch;
+    if (!st || !st.sel || !st.sel.pointCount) {
+      UI.toast(T('sk.toast.stretchEmpty'), { icon: 'info' });
+      return 0;
+    }
+    if (opts.dir) st.dir = opts.dir;
+    if (opts.dist != null) st.dist = opts.dist;
+    if (opts.ang != null) st.ang = opts.ang;
+    if (opts.dx != null && opts.dy != null) { st.dir = 'xy'; st.dx = opts.dx; st.dy = opts.dy; }
+    else if (opts.dx != null) { st.dir = 'x'; st.dist = opts.dx; }
+    else if (opts.dy != null) { st.dir = 'y'; st.dist = opts.dy; }
+    const { dx, dy } = stretchDelta(st);
+    if (Math.hypot(dx, dy) < 1e-9) { UI.toast(T('sk.toast.stretchZero'), { icon: 'info' }); return 0; }
+    const pv = SKO.stretchPreview(S.ents, st.sel, dx, dy);
+    if (!pv.ok) { UI.toast(pv.why, { kind: 'bad' }); return 0; }
+    if (!pv.movedVars.length) { UI.toast(T('sk.toast.stretchNoEffect'), { icon: 'info' }); return 0; }
+    pushUndo();
+    const beforeDims = new Map();
+    for (const d of S.dims) {
+      if (!d.ref && typeof d.v === 'number' && d.k !== 'n') beforeDims.set(d.id, measureSpec(dimSpecOf(d)));
+    }
+    const movedMap = new Map();
+    for (const [eid, k, val] of pv.movedVars) {
+      const e = ent(eid);
+      if (!e) continue;
+      Solver.setK(e, k, val);
+      if (!movedMap.has(eid)) movedMap.set(eid, new Set());
+      movedMap.get(eid).add(k);
+    }
+    for (const c of S.cons) {
+      if (c.type !== 'fix' || !c.refs || !c.refs[0] || !c.refs[0].e) continue;
+      const r0 = c.refs[0], ks = movedMap.get(r0.e);
+      if (!ks) continue;
+      if (r0.p && Array.isArray(c.at)) {
+        const pt = refXY(r0);
+        if (pt) c.at = pt.map((v) => round(v, 6));
+      } else if (c.at && typeof c.at === 'object') {
+        const e = ent(r0.e);
+        if (e) for (const k of Object.keys(c.at)) if (ks.has(k)) c.at[k] = Solver.getK(e, k);
+      }
+    }
+    for (const d of S.dims) {
+      if (!beforeDims.has(d.id)) continue;
+      const now = measureSpec(dimSpecOf(d));
+      if (isFinite(now) && Math.abs(now - beforeDims.get(d.id)) > 1e-6) d.v = round(now, 4);
+    }
+    const r = reapply({ pins: pv.movedVars });
+    if (r && !r.ok) {
+      sketchUndo();
+      UI.toast(T('sk.toast.stretchConflict'), { kind: 'bad', ms: 4200 });
+      return 0;
+    }
+    const cnt = st.sel.pointCount;
+    st.box = null; st.sel = null;
+    UI.hint(hintFor(S.tool)); render(); Panels.renderRight();
+    UI.toast(T('sk.toast.stretchDone', { n: cnt, unit: T(cnt === 1 ? 'sk.panel.stretchPtOne' : 'sk.panel.stretchPtMany') }), { icon: 'check', ms: 2600 });
+    return cnt;
+  }
   // ---------- Muster ----------
   let lastPatClick = null;
   function patternDown(uv, p) {
@@ -1906,6 +2098,19 @@ const Sketch = (() => {
     let p = sn.p;
     const t = S.tool;
     if (S.locked && t !== 'select') { guardLocked(); return; }
+    if (S.liveMirPick) {
+      const hit = SK.hit(S.ents, uv0, tolPx());
+      if (hit && hit.type === 'line') setLiveMirror(hit.id);
+      else UI.toast(T('sk.toast.liveMirPickLine'), { icon: 'info' });
+      return;
+    }
+    if (t === 'stretch') {
+      if (isSimpleMode()) { UI.toast(T('sk.toast.proOnly'), { icon: 'info' }); return; }
+      clearBand();
+      S.band = { x: e.clientX, y: e.clientY, mode: 'stretch', el: null, moved: false };
+      try { Viewer.canvas.setPointerCapture(e.pointerId); } catch (_) {}
+      return;
+    }
     if (t === 'dim') {
       const dmMode = (S.dimMode === 'ord' && isSimpleMode()) ? 'auto' : (S.dimMode || 'auto');
       const dimPointOf = (q) => {
@@ -2183,7 +2388,22 @@ const Sketch = (() => {
         reapply(); render(); Panels.renderRight(); return;
       }
       if (!S.draft) S.draft = { a: p, mid: S.rectMid };
-      else { const q = rectDraft(S.draft, p); if (Math.abs(q.b[0] - q.a[0]) > 1e-6 && Math.abs(q.b[1] - q.a[1]) > 1e-6) { const en = addEnt({ type: 'rect', a: q.a, b: q.b }); if (S.draft.mid) midCons(en, S.draft.a); if (S.rectR > 0) roundRect(en, S.rectR, false); } S.draft = null; hideEntry(); }
+      else {
+        const q = rectDraft(S.draft, p);
+        if (Math.abs(q.b[0] - q.a[0]) > 1e-6 && Math.abs(q.b[1] - q.a[1]) > 1e-6) {
+          if (S.rectR > 0) {
+            const beforeIds = new Set(S.ents.map((x) => x.id));
+            const en = addEnt({ type: 'rect', a: q.a, b: q.b }, { noMirror: true });
+            if (S.draft.mid) midCons(en, S.draft.a);
+            roundRect(en, S.rectR, false);
+            liveMirrorEnts(S.ents.filter((x) => !beforeIds.has(x.id)));
+          } else {
+            const en = addEnt({ type: 'rect', a: q.a, b: q.b });
+            if (S.draft.mid) midCons(en, S.draft.a);
+          }
+        }
+        S.draft = null; hideEntry();
+      }
     } else if (t === 'ellipse') {
       if (!S.draft) S.draft = { c: p };
       else if (!S.draft.ax) { if (SK.d2(S.draft.c, p) > 1e-6) S.draft.ax = p; }
@@ -2358,6 +2578,7 @@ const Sketch = (() => {
     for (let i = 0; i < 4; i++) S.ents.push({ id: ids[i], type: 'line', a: c[i], b: c[(i + 1) % 4], ...(S.construction ? { con: true } : {}) });
     for (let i = 0; i < 4; i++) S.cons.push({ id: uid('k'), type: 'coincident', refs: [{ e: ids[i], p: 'b' }, { e: ids[(i + 1) % 4], p: 'a' }] });
     S.cons.push({ id: uid('k'), type: 'perpendicular', refs: [{ e: ids[0] }, { e: ids[1] }] }, { id: uid('k'), type: 'parallel', refs: [{ e: ids[0] }, { e: ids[2] }] }, { id: uid('k'), type: 'parallel', refs: [{ e: ids[1] }, { e: ids[3] }] });
+    liveMirrorEnts(ids.map((id) => ent(id)).filter(Boolean));
   }
   // Gebogenes Langloch: Mitte, Start, Ende (Richtung gegen den Uhrzeigersinn), dann Breite
   function arcSlotGeom(d, wp) {
@@ -2387,6 +2608,7 @@ const Sketch = (() => {
       S.cons.push({ id: uid('k'), type: 'coincident', refs: [{ e: ids[i], p: 'b' }, { e: ids[j], p: 'a' }] }, { id: uid('k'), type: 'tangent', refs: [{ e: ids[i] }, { e: ids[j] }], mode: i === 0 || i === 3 ? 'int' : 'ext' });
     }
     S.cons.push({ id: uid('k'), type: 'concentric', refs: [{ e: ids[0] }, { e: ids[2] }] }, { id: uid('k'), type: 'equal', refs: [{ e: ids[1], k: 'r' }, { e: ids[3], k: 'r' }] });
+    liveMirrorEnts(ids.map((id) => ent(id)).filter(Boolean));
     const r = reapply();
     if (r && !r.ok) { // ohne Regeln, nur die Form
       S.cons = S.cons.filter((c) => !c.refs || !c.refs.some((x) => x && ids.includes(x.e)) || c.type === 'coincident');
@@ -2643,7 +2865,7 @@ const Sketch = (() => {
     // verbunden: wandert mit, wenn sich der Körper ändert (nicht beim Körper, zu dem diese Skizze selbst gehört)
     const own = S.ctx.editId ? Model.topOf(App.doc, S.ctx.editId) : null;
     if (Model.find(App.doc, hit.id) && !(own && own.id === hit.id)) en.link = edgeLink(hit.id, g, pts3);
-    const ne = addEnt(en);
+    const ne = addEnt(en, { noMirror: true });
     const ks = Solver.varsOf(ne);
     if (ne.type !== 'spline' && ks) S.cons.push({ id: uid('k'), type: 'fix', refs: [{ e: ne.id }], at: Object.fromEntries(ks.map((k) => [k, Solver.getK(ne, k)])) });
     const r = reapply(); if (r && !r.ok) { S.cons = S.cons.filter((c) => !(c.type === 'fix' && c.refs[0].e === ne.id)); reapply(); }
@@ -3090,7 +3312,8 @@ const Sketch = (() => {
     if (!b.el) { b.el = h('div', { class: 'sel-band' }); document.body.append(b.el); }
     const x0 = Math.min(b.x, e.clientX), y0 = Math.min(b.y, e.clientY), cross = e.clientX < b.x;
     Object.assign(b.el.style, { left: x0 + 'px', top: y0 + 'px', width: Math.abs(e.clientX - b.x) + 'px', height: Math.abs(e.clientY - b.y) + 'px' });
-    b.el.classList.toggle('cross', cross);
+    if (b.mode === 'stretch') { b.el.classList.remove('cross'); b.el.classList.add('stretch'); }
+    else { b.el.classList.remove('stretch'); b.el.classList.toggle('cross', cross); }
   }
   function bandSelect(x1, y1, x2, y2, additive = false) {
     if (!S) return [];
@@ -3171,6 +3394,12 @@ const Sketch = (() => {
     if (S.tool === 'corner') { S.cornerHover = S.corner.mode === 'meet' ? null : cornerFind(uv0); if (S.corner.mode === 'meet') { const hv = SK.hit(S.ents, uv0, tolPx()); S.hoverEnt = hv && hv.type === 'line' ? hv.id : null; } S.cursor = null; render(); return; }
     if (S.tool === 'extend') { const T = extendTarget(uv0); S.extHover = T && !T.none ? T : null; S.cursor = null; render(); return; }
     if (S.tool === 'offset' && S.draft && S.draft.off) { S.offUV = uv0; S.cursor = null; render(); return; }
+    if (S.liveMirPick) {
+      const hv = SK.hit(S.ents, uv0, pxSize() * 9);
+      S.hoverEnt = hv && hv.type === 'line' ? hv.id : null;
+      S.cursor = null; render(); return;
+    }
+    if (S.tool === 'stretch') { S.cursor = null; return; }
     if (S.tool === 'offset' || S.tool === 'mirror' || S.tool === 'patrect' || S.tool === 'patcirc' || S.tool === 'xmove') {
       const hv = SK.hit(S.ents, uv0, pxSize() * 9); S.hoverEnt = hv ? hv.id : null;
       S.cursor = (S.tool === 'patcirc' || S.tool === 'xmove') && S.patPick ? snap(uv0, { fine: e.shiftKey, off: e.altKey }) : null;
@@ -3210,6 +3439,23 @@ const Sketch = (() => {
     }
     if (S && S.band) {
       const b = S.band; clearBand();
+      if (b.mode === 'stretch') {
+        if (b.moved && e) {
+          const L = Math.min(b.x, e.clientX), R = Math.max(b.x, e.clientX), T0 = Math.min(b.y, e.clientY), B = Math.max(b.y, e.clientY);
+          const corners = [[L, T0], [R, T0], [R, B], [L, B]].map(([cx, cy]) => {
+            const wp = Viewer.rayPlane(cx, cy, S.F.o, S.F.n);
+            return wp ? toUV(wp) : null;
+          }).filter(Boolean);
+          if (corners.length === 4) {
+            const xs = corners.map((q) => q[0]), ys = corners.map((q) => q[1]);
+            stretchBox(Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys));
+          }
+        } else {
+          S.stretch.box = null; S.stretch.sel = null;
+          UI.hint(hintFor('stretch')); render(); Panels.renderRight();
+        }
+        return;
+      }
       if (b.moved && e) {
         bandSelect(b.x, b.y, e.clientX, e.clientY, !!(b.shift || e.shiftKey));
       } else if (!b.shift) {
@@ -3314,10 +3560,12 @@ const Sketch = (() => {
       if (isNaN(w) || w <= 0) { UI.toast('Bitte eine Breite eingeben.', { kind: 'bad' }); return; }
       if (isNaN(hh) || hh <= 0) hh = w;
       const sx = cur && cur[0] < d.a[0] ? -1 : 1, sy = cur && cur[1] < d.a[1] ? -1 : 1;
-      const en = d.mid ? addEnt({ type: 'rect', a: [round(d.a[0] - w / 2, 4), round(d.a[1] - hh / 2, 4)], b: [round(d.a[0] + w / 2, 4), round(d.a[1] + hh / 2, 4)] })
-        : addEnt({ type: 'rect', a: d.a, b: [round(d.a[0] + sx * w, 4), round(d.a[1] + sy * hh, 4)] });
+      const hasRR = S.rectR > 0;
+      const beforeIds = hasRR ? new Set(S.ents.map((x) => x.id)) : null;
+      const en = d.mid ? addEnt({ type: 'rect', a: [round(d.a[0] - w / 2, 4), round(d.a[1] - hh / 2, 4)], b: [round(d.a[0] + w / 2, 4), round(d.a[1] + hh / 2, 4)] }, { noMirror: hasRR })
+        : addEnt({ type: 'rect', a: d.a, b: [round(d.a[0] + sx * w, 4), round(d.a[1] + sy * hh, 4)] }, { noMirror: hasRR });
       fix(en, 'w', 'w'); fix(en, 'h', 'h'); if (d.mid) midCons(en, d.a); S.draft = null;
-      if (S.rectR > 0) roundRect(en, S.rectR, true);
+      if (hasRR) { roundRect(en, S.rectR, true); liveMirrorEnts(S.ents.filter((x) => !beforeIds.has(x.id))); }
     } else if (t === 'ellipse') {
       let w = val('w'), hh = val('h');
       if (isNaN(w) || w <= 0) { UI.toast('Bitte eine Breite eingeben.', { kind: 'bad' }); return; }
@@ -3403,13 +3651,16 @@ const Sketch = (() => {
     if (e.key === 'Escape' && S.autoDef) { cancelAutoDefine(); return true; }
     if (e.key === 'Enter' && S.autoDef) { applyAutoDefine(); return true; }
     if (e.key === 'Escape' && S.band) { clearBand(); return true; }
+    if (e.key === 'Escape' && S.liveMirPick) { S.liveMirPick = false; UI.hint(hintFor(S.tool)); render(); Panels.renderRight(); return true; }
     if (e.key === 'Escape' && S.mir) { S.mir = null; UI.hint(hintFor('mirror')); render(); return true; }
+    if (e.key === 'Escape' && S.tool === 'stretch' && S.stretch && S.stretch.box) { S.stretch.box = null; S.stretch.sel = null; UI.hint(hintFor('stretch')); render(); Panels.renderRight(); return true; }
     if (e.key === 'Escape' && S.patPick) { S.patPick = false; UI.hint(hintFor(S.tool)); render(); Panels.renderRight(); return true; }
     if (e.key === 'Escape' && S.patSel && S.patSel.length) { S.patSel = []; render(); Panels.renderRight(); return true; }
     if (e.key === 'Escape' && S.tool === 'select' && S.sels && S.sels.length > 1) { clearSel(); render(); Panels.renderRight(); return true; }
     if (e.key === 'Escape') { if (S.draft) { S.draft = null; hideEntry(); if (S.tool === 'line') updateLineHint(); render(); } else if (S.picks.length || S.dimFirst || (S.dimPicks && S.dimPicks.length) || S.ordBase) { S.picks = []; S.dimFirst = null; S.dimPicks = []; S.ordBase = null; UI.hint(hintFor(S.tool)); render(); Panels.renderRight(); } else if (S.tool !== 'select') setTool('select'); else cancel(); return true; }
     if (e.key === 'Enter' && S.draft && S.tool === 'spline') { finishSpline(false); return true; }
     if (e.key === 'Enter' && S.tool === 'mirror' && S.mir) { mirrorAll(); return true; }
+    if (e.key === 'Enter' && S.tool === 'stretch' && S.stretch && S.stretch.sel && S.stretch.sel.pointCount > 0) { applyStretch(); return true; }
     if (e.key === 'Enter' && (S.tool === 'patrect' || S.tool === 'patcirc') && S.patSel.length) { createPattern(); return true; }
     if (e.key === 'Enter' && S.tool === 'xmove' && S.patSel.length) { applyXmove(); return true; }
     if (e.key === 'Enter') { if (S.draft && S.tool === 'line') { S.draft = null; hideEntry(); updateLineHint(); render(); } else done(); return true; }
@@ -3733,6 +3984,20 @@ const Sketch = (() => {
         badge.innerHTML = icon('lock') + `<span>${esc(T('sk.panel.lockedBadge'))}</span>`;
         $('#overlay').append(badge); labels.push(badge);
       }
+      if (S.liveMir && !S.step && !isSimpleMode()) {
+        const ax = ent(S.liveMir.axis);
+        if (ax && ax.type === 'line') {
+          const lmCol = th.dark ? '#f06595' : '#c2255c';
+          const L = Math.max(SK.d2(ax.a, ax.b), 1), u = [(ax.b[0] - ax.a[0]) / L, (ax.b[1] - ax.a[1]) / L], ext = L * 0.15 + pxSize() * 30;
+          lineObj([[ax.a[0] - u[0] * ext, ax.a[1] - u[1] * ext], [ax.b[0] + u[0] * ext, ax.b[1] + u[1] * ext]], lmCol, 3, { order: 27, dashed: true });
+          const lmBadge = h('div', { class: 'sk-live-mir-badge', id: 'sk-live-mir-badge' });
+          lmBadge.innerHTML = icon('cSymmetric') + `<span>${esc(T('sk.panel.liveMirBadge', { axis: liveMirAxisLabel() }))}</span>`;
+          $('#overlay').append(lmBadge); labels.push(lmBadge);
+        }
+      }
+      if (S.liveMirPick && S.hoverEnt && ent(S.hoverEnt) && !S.step) {
+        for (const p of entPts(ent(S.hoverEnt))) lineObj(p, acc, 3.4, { order: 28, opacity: 0.85 });
+      }
       // Freie Stellen (SK-07): pulsierende orange Punkte zum Anklicken + Zähler-Schild
       if (showFree && st) {
         const dof = st.dof || 0;
@@ -3865,6 +4130,55 @@ const Sketch = (() => {
         else if (!d.e) { const g = arcSlotGeom({ ...d, e: cur }, null); if (g) lineObj(SK.arcPoints(g.s, g.m, g.e), acc, 1.4, { dashed: true }); }
         else { const g = arcSlotGeom(d, cur); if (g) { for (const a of g.arcs) lineObj(SK.arcPoints(a.a, a.m, a.b), acc, 2.2); label(`Breite ${Units.fmtLen(2 * g.w, 2)}`, cur); } }
       } else if (t === 'slot') { if (!d.b) { lineObj([d.a, cur], acc, 1.4, { dashed: true }); label(`${S.slotTotal ? 'gesamt ' : ''}${Units.fmtLenU(SK.d2(d.a, cur), 2)}`, cur); } else { const r = slotR(d.a, d.b, cur); const q = S.slotTotal ? slotInset(d.a, d.b, r) : { a: d.a, b: d.b }; if (S.slotTotal) lineObj([d.a, d.b], acc, 1, { dashed: true }); if (r > 1e-6 && q) { const e = { type: 'slot', a: q.a, b: q.b, r }; for (const p of entPts(e)) lineObj(p, acc, 2.2); label(`Breite ${Units.fmtLen(2 * r, 2)}`, cur); } } }
+      // Live-Spiegeln: gespiegelte Entwurfsvorschau gestrichelt
+      const lmAx = S.liveMir && !isSimpleMode() ? ent(S.liveMir.axis) : null;
+      if (lmAx && lmAx.type === 'line') {
+        let pvEnts = [];
+        if (t === 'line' && d.arc) {
+          const st = draftTan(), g = st ? tanArc(st, cur) : null;
+          if (g) pvEnts.push({ id: '_pv', type: 'arc', a: st.p, m: g.m, b: cur });
+        } else if (t === 'line') {
+          const a = d.pts[d.pts.length - 1];
+          if (SK.d2(a, cur) > 1e-6) pvEnts.push({ id: '_pv', type: 'line', a, b: cur });
+        } else if (t === 'rect' && d.r3 && d.r3.length === 2) {
+          const c = rect3Corners(d.r3[0], d.r3[1], cur);
+          if (c) for (let i = 0; i < 4; i++) pvEnts.push({ id: '_pv' + i, type: 'line', a: c[i], b: c[(i + 1) % 4] });
+        } else if (t === 'rect' && !d.r3) {
+          const q = rectDraft(d, cur);
+          if (Math.abs(q.b[0] - q.a[0]) > 1e-6 && Math.abs(q.b[1] - q.a[1]) > 1e-6) pvEnts.push({ id: '_pv', type: 'rect', a: q.a, b: q.b });
+        } else if (t === 'circle' && d.pts) {
+          const ci = circOfDraft([...d.pts, cur]);
+          if (ci && d.pts.length + 1 >= (S.circMode === '3p' ? 3 : 2) && ci.r > 1e-6) pvEnts.push({ id: '_pv', type: 'circle', c: ci.c, r: ci.r });
+        } else if (t === 'circle') {
+          const r = SK.d2(d.c, cur);
+          if (r > 1e-6) pvEnts.push({ id: '_pv', type: 'circle', c: d.c, r });
+        } else if (t === 'poly') {
+          const r = SK.d2(d.c, cur);
+          if (r > 1e-6) pvEnts.push({ id: '_pv', type: 'poly', c: d.c, r, n: S.polySides, rot: Math.atan2(cur[1] - d.c[1], cur[0] - d.c[0]) - Math.PI / 2 });
+        } else if (t === 'arc' && d.tan) {
+          const g = tanArc(d.tan, cur);
+          if (g) pvEnts.push({ id: '_pv', type: 'arc', a: d.tan.p, m: g.m, b: cur });
+        } else if (t === 'arc' && d.ctr && d.s) {
+          const g = centerArc(d, cur);
+          if (g) pvEnts.push({ id: '_pv', type: 'arc', a: g.a, m: g.m, b: g.b });
+        } else if (t === 'arc' && !d.tan && !d.ctr && d.b && SK.arcInfo(d.a, cur, d.b)) {
+          pvEnts.push({ id: '_pv', type: 'arc', a: d.a, m: cur, b: d.b });
+        } else if (t === 'ellipse' && d.ax) {
+          const q = ellDraft(d, cur);
+          if (q.ry > 1e-6) pvEnts.push({ id: '_pv', type: 'ellipse', c: d.c, rx: q.rx, ry: q.ry, rot: q.rot });
+        } else if (t === 'ellarc' && d.ry && d.a0 != null) {
+          const a = ellParamAt(d.c, d.rx, d.ry, d.rot, cur);
+          if (Math.abs(SK.ellArcSweep(d.a0, a, !S.ellArcCW)) > 1e-4) pvEnts.push({ id: '_pv', type: 'ellarc', c: d.c, rx: d.rx, ry: d.ry, rot: d.rot, a0: d.a0, a1: a, ccw: !S.ellArcCW });
+        } else if (t === 'slot' && !d.arcslot && d.b) {
+          const r = slotR(d.a, d.b, cur);
+          const q = S.slotTotal ? slotInset(d.a, d.b, r) : { a: d.a, b: d.b };
+          if (r > 1e-6 && q) pvEnts.push({ id: '_pv', type: 'slot', a: q.a, b: q.b, r });
+        }
+        const lmCol = th.dark ? '#f06595' : '#c2255c';
+        for (const pe of pvEnts) {
+          for (const me of SKO.mirrorEnt(pe, lmAx.a, lmAx.b).ents) for (const pts of entPts(me)) lineObj(pts, lmCol, 1.8, { dashed: true, opacity: 0.65, order: 26 });
+        }
+      }
     }
     // Verlängern-Vorschau
     if (S.tool === 'extend' && S.extHover) lineObj([S.extHover.line[S.extHover.k], S.extHover.p], th.accent, 2.4, { dashed: true });
@@ -3941,6 +4255,25 @@ const Sketch = (() => {
         if (S.tool === 'patcirc' || (S.tool === 'xmove' && S.xm.mode === 'rot')) { ring(C.xy, pxSize() * 6, acc, 2); }
         const jobs = S.tool === 'xmove' ? [xmoveJob()] : patternJobs();
         if (jobs.length * S.patSel.length <= 240) for (const job of jobs) for (const id of S.patSel) { const e = ent(id); if (!e) continue; for (const ne of patternCopy(e, job, C).ents) for (const p of entPts(ne)) lineObj(p, acc, 1.6, { dashed: true, opacity: 0.55, order: 26 }); }
+      }
+    }
+    // Strecken: Auswahlrahmen, markierte Punkte & Vorschau
+    if (S.tool === 'stretch' && S.stretch && S.stretch.box && !S.step) {
+      const [bx0, by0, bx1, by1] = S.stretch.box;
+      lineObj([[bx0, by0], [bx1, by0], [bx1, by1], [bx0, by1], [bx0, by0]], '#e67700', 2, { dashed: true, order: 27 });
+      const sel = S.stretch.sel;
+      if (sel && sel.pts) {
+        for (const pt of sel.pts) ring(pt, pxSize() * 5, '#e67700', 2.4);
+        const { dx, dy } = stretchDelta(S.stretch);
+        if (Math.hypot(dx, dy) >= 1e-9) {
+          const pv = SKO.stretchPreview(S.ents, sel, dx, dy);
+          if (pv.ok) {
+            for (const ne of pv.ents) for (const p of entPts(ne)) lineObj(p, acc, 2, { dashed: true, opacity: 0.72, order: 27 });
+            const cx = (bx0 + bx1) / 2, cy = (by0 + by1) / 2;
+            lineObj([[cx, cy], [cx + dx, cy + dy]], '#e67700', 2.2, { dashed: true, order: 28 });
+            ring([cx + dx, cy + dy], pxSize() * 4, '#e67700', 2);
+          }
+        }
       }
     }
     // Einrast-Markierung
@@ -4541,6 +4874,34 @@ const Sketch = (() => {
     lockBtn.onclick = () => toggleLocked();
     w.append(h('div', { class: 'btn-row' }, lockBtn));
     if (S.locked) w.append(h('div', { class: 'hint-box sk-lock-info', id: 'sk-lock-info', html: T('sk.panel.lockedInfo') }));
+    if (!S.locked && !isLoftLine() && S.ctx.mode !== 'patpath' && !isPathEdit() && S.ctx.mode !== 'pushpull') {
+      const lmBox = h('div', { class: 'pro sk-lm-box', id: 'sk-live-mir-box', dataset: { help: 'liveMirror' } });
+      if (S.liveMir) {
+        lmBox.append(h('div', { class: 'ok-box', id: 'sk-live-mir-active', html: T('sk.panel.liveMirActive', { axis: esc(liveMirAxisLabel()) }) }));
+        const bOff = h('button', { type: 'button', class: 'btn', id: 'lm-off' }, T('sk.panel.liveMirOff'));
+        bOff.onclick = () => setLiveMirror(false);
+        const bChg = h('button', { type: 'button', class: 'btn' + (S.liveMirPick ? ' primary' : ''), id: 'lm-pick' }, T(S.liveMirPick ? 'sk.panel.liveMirPicking' : 'sk.panel.liveMirChange'));
+        bChg.onclick = () => startLiveMirrorPick();
+        lmBox.append(h('div', { class: 'btn-row' }, bOff, bChg));
+      } else {
+        const row = h('div', { class: 'btn-row' });
+        const bPick = h('button', { type: 'button', class: 'btn' + (S.liveMirPick ? ' primary' : ''), id: 'lm-pick' }, T(S.liveMirPick ? 'sk.panel.liveMirPicking' : 'sk.panel.liveMirPick'));
+        bPick.onclick = () => { if (S.liveMirPick) { S.liveMirPick = false; UI.hint(hintFor(S.tool)); render(); Panels.renderRight(); } else startLiveMirrorPick(); };
+        const bY = h('button', { type: 'button', class: 'btn', id: 'lm-y' }, T('sk.panel.liveMirAxisY'));
+        bY.onclick = () => setLiveMirror('y');
+        const bX = h('button', { type: 'button', class: 'btn', id: 'lm-x' }, T('sk.panel.liveMirAxisX'));
+        bX.onclick = () => setLiveMirror('x');
+        row.append(bPick, bY, bX);
+        const selLine = selectedIds().length === 1 ? ent(selectedIds()[0]) : null;
+        if (selLine && selLine.type === 'line') {
+          const bSel = h('button', { type: 'button', class: 'btn primary', id: 'lm-use-sel' }, T('sk.panel.liveMirUseSel'));
+          bSel.onclick = () => setLiveMirror(selLine.id);
+          lmBox.append(h('div', { class: 'btn-row' }, bSel));
+        }
+        lmBox.append(row);
+      }
+      w.append(lmBox);
+    }
     const buildFreeBtn = () => {
       const dof = S.status && S.status.dof != null ? S.status.dof : 0;
       const fb = h('button', { type: 'button', class: 'btn sk-free-btn' + (S.freeMode ? ' active' : ''), id: 'sk-free', 'aria-pressed': S.freeMode ? 'true' : 'false', 'data-help': 'sketchFreeSpots', 'data-kbd': 'Umschalt F' });
@@ -4981,6 +5342,44 @@ const Sketch = (() => {
       if (S.tool === 'mirror' && S.mir) {
         const ok = h('button', { type: 'button', class: 'btn primary', id: 'mir-make' }, S.mir.sel.length ? T('sk.panel.mirSel', { n: S.mir.sel.length }) : T('sk.panel.mirAll'));
         ok.onclick = () => mirrorAll(); w.append(h('div', { class: 'btn-row' }, ok));
+      }
+      if (S.tool === 'stretch' && !isSimpleMode()) {
+        const st = S.stretch;
+        const dirField = UI.selectField({
+          id: 'str-dir', label: T('sk.panel.stretchDir'), value: st.dir,
+          options: [['x', T('sk.panel.stretchDirX')], ['y', T('sk.panel.stretchDirY')], ['ang', T('sk.panel.stretchDirAng')], ['xy', T('sk.panel.stretchDirXY')]],
+          onChange: (v) => { st.dir = v; Panels.renderRight(); render(); },
+        });
+        w.append(dirField);
+        const fstr = h('div', { class: 'fields' });
+        if (st.dir === 'xy') {
+          fstr.append(UI.numField({ id: 'str-dx', label: T('sk.panel.dx'), value: st.dx, unit: 'mm', expr: false, onCommit: (v) => { st.dx = v; render(); } }));
+          fstr.append(UI.numField({ id: 'str-dy', label: T('sk.panel.dy'), value: st.dy, unit: 'mm', expr: false, onCommit: (v) => { st.dy = v; render(); } }));
+        } else {
+          fstr.append(UI.numField({ id: 'str-dist', label: T('sk.panel.stretchDist'), value: st.dist, unit: 'mm', expr: false, onCommit: (v) => { st.dist = v; render(); } }));
+          if (st.dir === 'ang') fstr.append(UI.numField({ id: 'str-ang', label: T('sk.panel.stretchAng'), value: st.ang, unit: '°', expr: false, onCommit: (v) => { st.ang = v; render(); } }));
+        }
+        w.append(fstr);
+        const nPts = st.sel ? st.sel.pointCount : 0;
+        const nEnts = st.sel ? st.sel.entCount : 0;
+        w.append(h('div', {
+          class: nPts ? 'ok-box' : 'hint-box',
+          id: 'str-info',
+          html: nPts
+            ? T('sk.panel.stretchCount', { n: nPts, unit: T(nPts === 1 ? 'sk.panel.stretchPtOne' : 'sk.panel.stretchPtMany'), ents: nEnts, entWord: T(nEnts === 1 ? 'sk.toast.elOne' : 'sk.toast.elMany') })
+            : T('sk.panel.stretchNone'),
+        }));
+        const bRow = h('div', { class: 'btn-row' });
+        const ap = h('button', { type: 'button', class: 'btn primary', id: 'str-apply' }, T('sk.panel.stretchApply'));
+        ap.disabled = !nPts;
+        ap.onclick = () => applyStretch();
+        bRow.append(ap);
+        if (st.box) {
+          const cl = h('button', { type: 'button', class: 'btn', id: 'str-clear' }, T('sk.panel.stretchClear'));
+          cl.onclick = () => { st.box = null; st.sel = null; UI.hint(hintFor('stretch')); render(); Panels.renderRight(); };
+          bRow.append(cl);
+        }
+        w.append(bRow);
       }
       const con = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'sk-con', checked: S.construction }), T('sk.panel.drawCon'));
       con.querySelector('input').onchange = (e) => { S.construction = e.target.checked; syncConBtn(); };
@@ -6041,10 +6440,14 @@ const Sketch = (() => {
   function refreshUI() {
     if (!S) return;
     if (S.step) { renderStep(); return; }
+    if (isSimpleMode()) {
+      S.liveMir = null; S.liveMirPick = false;
+      if (S.tool === 'stretch') { S.tool = 'select'; S.stretch.box = null; S.stretch.sel = null; }
+    }
     showBar();
     UI.hint(hintFor(S.tool));
     Panels.renderRight();
   }
-  return { isLinkLost, rebindLink, linkPointsWorld, copySel, pasteClip, setRefDim, setDimSpec, setDimMode, setDimCircMode, setLocked, toggleLocked, setRevAxis, check: runCheck, repair: repairCheck, focusCheckIssue, autoDefine: proposeAutoDefine, applyAutoDefine, cancelAutoDefine, toggleFreeSpots, setFreeMode, wiggleFree, focusConflictItem, removeConflictItem, clearConflict, bandSelect, init, refreshUI, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startEmboss, startPath, startLoftPath, editItem, pushPullFace, render, renderPanel, onKey, cancel, scaleAll, insertEnts, insertShape, insertFormulaCurve, insertPointsCSV, openFormulaPanel, openCsvPanel, textToCurves, loadFontFile, setBg, setTool, get angleSnap() { return angleSnapOn; }, setAngleSnap, lengthSnapStep, get active() { return !!S; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
+  return { isLinkLost, rebindLink, linkPointsWorld, copySel, pasteClip, setRefDim, setDimSpec, setDimMode, setDimCircMode, setLocked, toggleLocked, setRevAxis, stretchBox, applyStretch, setLiveMirror, toggleLiveMirror, get liveMirror() { return S && S.liveMir ? S.liveMir.axis : null; }, check: runCheck, repair: repairCheck, focusCheckIssue, autoDefine: proposeAutoDefine, applyAutoDefine, cancelAutoDefine, toggleFreeSpots, setFreeMode, wiggleFree, focusConflictItem, removeConflictItem, clearConflict, bandSelect, init, refreshUI, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startEmboss, startPath, startLoftPath, editItem, pushPullFace, render, renderPanel, onKey, cancel, scaleAll, insertEnts, insertShape, insertFormulaCurve, insertPointsCSV, openFormulaPanel, openCsvPanel, textToCurves, loadFontFile, setBg, setTool, get angleSnap() { return angleSnapOn; }, setAngleSnap, lengthSnapStep, get active() { return !!S; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
 })();
 

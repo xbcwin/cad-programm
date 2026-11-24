@@ -2333,6 +2333,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Hilfen, Befehle & Übersetzung**: `innerRadius` und `symmetryCheck` in `werkzeug-hilfen.json` und `HELP`, DE/EN-Schlüsselgleichheit sowie Befehlssuche (`innenradius`, `symmetrie`) ohne Seitenfehler.
 - [ ] **Von Hand**: Im Browser bei einem Bauteil mit Freiform-Rundungen, Bohrungen und Versatz-Symmetrieebene („Fläche“ und „Mitte“) die rote/blaue Hervorhebung und das Anspringen der Liste im 3D-Fenster prüfen.
 
+## Strecken und Live-Spiegeln (Auto [A-110], SK-30, SK-46)
+- [x] **Profi-Modus**: Werkzeug „Strecken“ (`[data-tool="stretch"]`), Schalter `#sk-live-mir-btn` und Panel-Bereich `#sk-live-mir-box` sind im Modus „Einfach“ ausgeblendet und im Modus „Profi“ sichtbar.
+- [x] **Strecken am Rechteck und geregeltem Linienzug**: Auswahlrahmen per Maus aufziehen, Richtung X + Weg 5 mm anwenden → nur die rechte Kante wandert um 5 mm (Breite 25, linke Kante unverändert), vorhandene Regeln (`horizontal`, `vertical`, `coincident`, `fix`) bleiben gültig, `Strg+Z` macht rückgängig.
+- [x] **Live-Spiegeln an Y-Achse und eigener Linie**: Gezeichnete Linie wird sofort an der Y-Achse gespiegelt samt `symmetric`-Regeln erzeugt (und mit `Strg+Z` gemeinsam entfernt); gezeichneter Kreis an gewählter Linie erhält `symmetric`- und `equal`-Regeln; nach `#lm-off` wird nicht mehr gespiegelt.
+- [x] **Hilfen, Befehle & DE/EN-Schlüssel**: `stretch2d` und `liveMirror` in `werkzeug-hilfen.json`, DE/EN-Schlüsselgleichheit und Befehlssuche (`strecken`, `live-spiegeln`) ohne Fehler.
+- [ ] **Von Hand**: In einer Skizze mit gemischtem Profil einen Rahmen schräg mit Winkel/Weg strecken und Live-Spiegeln an einer schrägen Hilfslinie beim freien Zeichnen testen.
+
 ## Fehler melden
 
 ```
