@@ -743,6 +743,7 @@ body.sketching .timeline{display:none}
 .var-step-tag{font-size:11px;color:var(--warn);flex:none}
 .vtable td.var-cmp-sup{color:var(--muted);text-decoration:line-through}
 .vtable td.var-cmp-on{color:var(--ok);font-weight:600}
+.vtable td.bom-desc{white-space:normal;max-width:200px}
 /* KI-Schritte, Erklären, Schwachstellen */
 .tl-chip .ai-badge{position:absolute;top:-5px;left:-5px;width:15px;height:15px;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;border:2px solid var(--surface)}
 .tl-chip .ai-badge svg{width:9px;height:9px}

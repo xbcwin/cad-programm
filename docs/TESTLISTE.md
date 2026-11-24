@@ -2199,6 +2199,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Festgesetztes Kind (umgekehrtes Ziehen)**: Ist das Kind-Teil (`Arm B`) festgesetzt und wird das Elternteil (`Arm A`) gezogen, bleibt `Arm B` exakt stehen, während `Arm A` um das Gelenk dreht.
 - [ ] **Von Hand**: Im Browser zwei oder drei Teile über Dreh-, Schiebe- und Kugelgelenke verketten, am freien Ende mit der Maus ziehen (inkl. sichtbarem Gelenk-Overlay während des Ziehens) und prüfen, dass sich alles flüssig ohne Ruckeln mitbewegt.
 
+## Eigenschaften je Teil (Auto [A-093], BG-12)
+
+- [x] **Teileigenschaften im Panel rechts**: Für Teile oberster Ebene erscheinen Teilenummer (`#p-partno`), Preis (`#p-price`), Lieferant (`#p-supplier`) und Beschreibung (`#p-desc`) unter `#part-props-sec` und werden rückgängig machbar in `it.props` gespeichert; ungültige Preiseingaben markieren das Feld als `.invalid`.
+- [x] **Stückliste mit Spalten & Gesamtpreis**: Zwei Teile mit Preis `2,50 €` (zweimal vorhanden) und `4,00 €` (einmal vorhanden) zeigen in `Mass.bom()` und im Stücklisten-Dialog (`#bom`) alle Spalten sowie den Gesamtpreis `9,00 €` in `#bom-total-price` und `#bom-price-sum`.
+- [x] **CSV-Export, Rückgängig, Speichern/Laden & Hilfe**: `Mass.bomCSV()` enthält die Spalten `Teilenummer`, `Beschreibung`, `Lieferant`, `Preis je Stück (€)`, `Preis gesamt (€)` samt `9,00` in der Summenzeile bei einheitlicher Spaltenzahl; Undo/Redo, JSON-Roundtrip und Hilfetext `partProps` arbeiten ohne Seitenfehler.
+- [ ] **Von Hand**: Im Browser zwei Teile mit Teilenummer, Beschreibung, Lieferant und Preis versehen, die Stückliste öffnen, eine Zeile zum Auswählen anklicken und die gespeicherte `.csv`-Datei in Excel oder Numbers prüfen.
+
 ## Fehler melden
 
 ```
