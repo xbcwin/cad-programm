@@ -30,6 +30,7 @@ const KINDS = {
   scale: { label: 'Skalieren', params: [] },
   thicken: { label: 'Aufdicken', params: [] },
   rib: { label: 'Rippe', params: [] },
+  emboss: { label: 'Prägen', params: [] },
   mirrorStep: { label: 'Schritt spiegeln', params: [] },
 };
 const PRIMITIVE_ORDER = ['box', 'cylinder', 'sphere', 'cone', 'pyramid', 'wedge', 'tube', 'torus', 'prism', 'hemisphere'];
@@ -255,6 +256,7 @@ const Model = (() => {
       if (it.kind === 'scale' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'skaliert' });
       if (it.kind === 'thicken' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: it.p.mode === 'new' ? 'Platte von Fläche aus' : 'dickt Fläche auf von' });
       if (it.kind === 'rib' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Rippe an' });
+      if (it.kind === 'emboss' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'prägt auf' });
       if (it.kind === 'mirrorStep' && it.p) {
         for (const fid of Array.isArray(it.p.features) ? it.p.features : []) if (fid) out.push({ from: me, to: top(fid), what: 'spiegelt Schritt' });
         if (it.p.plane === 'FACE' && it.p.faceRef && it.p.faceRef.id) out.push({ from: me, to: top(it.p.faceRef.id), what: 'spiegelt an Fläche von' });
@@ -324,6 +326,7 @@ const Model = (() => {
     else if (it.kind === 'loft') o.p = loftParams(it, V);
     else if (it.kind === 'sweep') o.p = sweepParams(it, V);
     else if (it.kind === 'rib') o.p = ribParams(it, V);
+    else if (it.kind === 'emboss') o.p = embossParams(it, V);
     else if (it.kind === 'import') {
       o.p = { fmt: it.p.fmt, scale: num(it.p.scale, V, 1) };
       if (it.p.blobId) o.p.blobId = it.p.blobId;
@@ -440,6 +443,23 @@ const Model = (() => {
       flip: !!p.flip,
       depth: Math.max(0, num(p.depth, V, 0)),
       draft: num(p.draft, V, 0),
+    };
+  }
+  function embossParams(it, V) {
+    const p = it.p || {};
+    const ents = p.sketch ? Solver.cached(p.sketch, V).ents : [];
+    const plane = p.sketch ? p.sketch.plane : { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] };
+    const regs = SK.regions(ents);
+    let chosen = regs;
+    if (Array.isArray(p.sel) && p.sel.length) { const f = regs.filter((r) => p.sel.includes(r.key)); if (f.length) chosen = f; }
+    return {
+      target: p.target || null,
+      face: p.face || null,
+      plane,
+      regions: chosen.map((r) => ({ outer: r.outer.k, holes: r.holes.map((h) => h.k) })),
+      height: num(p.height, V, 1),
+      mode: p.mode === 'deboss' ? 'deboss' : 'emboss',
+      flip: !!p.flip,
     };
   }
   function mirrorStepParams(it, V) {
@@ -795,7 +815,7 @@ const Model = (() => {
     if (!it) return null;
     const pb = primitiveBox(it.kind, resolveP(it.p, V));
     if (pb) return pb;
-    if ((it.kind === 'extrude' || it.kind === 'rib' || it.kind === 'revolve') && it.p && it.p.sketch) {
+    if ((it.kind === 'extrude' || it.kind === 'rib' || it.kind === 'emboss' || it.kind === 'revolve') && it.p && it.p.sketch) {
       const ents = typeof Solver !== 'undefined' ? Solver.cached(it.p.sketch, V).ents : it.p.sketch.ents || [];
       const b = typeof SK !== 'undefined' ? SK.bounds(ents) : null;
       if (b) {
@@ -871,6 +891,7 @@ const Model = (() => {
         const dr = Math.abs(p.draft || 0) > 1e-6 ? ' · ' + fmt(p.draft, 1) + '°' : '';
         return `${t}${u} dick${dr}`;
       }
+      case 'emboss': return `${f(p.height ?? 1)}${u} · ${(it.p && it.p.mode) === 'deboss' ? 'vertieft' : 'erhaben'}`;
       case 'scale': return it.p && it.p.uniform === false ? `×${fmt(p.sx ?? 1, 2)} / ${fmt(p.sy ?? 1, 2)} / ${fmt(p.sz ?? 1, 2)}` : `×${fmt(p.s ?? 1, 2)}`;
       case 'thicken': return `${f(p.t ?? 2)}${u} · ${{ out: 'außen', in: 'innen', mid: 'mittig' }[(it.p && it.p.dir) || 'out'] || 'außen'}`;
       case 'mirrorStep': {
@@ -1009,7 +1030,7 @@ const Model = (() => {
     if (mode === 'into') {
       if (dst.item.kind !== 'group' || srcs.length !== 1) return { ok: false, reason: '' };
       const s = srcs[0];
-      if ((s.item.op && s.item.op.target) || s.item.kind === 'transform' || s.item.kind === 'rib' || (!s.parent && s.item.kind === 'mirrorStep')) {
+      if ((s.item.op && s.item.op.target) || s.item.kind === 'transform' || s.item.kind === 'rib' || s.item.kind === 'emboss' || (!s.parent && s.item.kind === 'mirrorStep')) {
         return { ok: false, reason: 'Dieser Schritt muss auf oberster Ebene bleiben.' };
       }
       if (!s.parent && !dst.parent) {

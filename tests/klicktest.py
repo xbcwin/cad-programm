@@ -9684,6 +9684,112 @@ def t_a041_formeln(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a042_praegen(p):
+    # 1. Text auf einem Zylindermantel (Ø 30 × 40), 1 mm vertieft → Volumen nimmt ab, Körper bleibt ein Stück
+    p.empty()
+    p.ev("Actions.addPrimitive('cylinder', { p: { d: 30, h: 40 }, pos: [0, 0] })")
+    warte_rechnen(p, 20); p.wait(300)
+    v0 = volumen(p)
+    p.ev("""const id = App.doc.items[0].id, r = App.results.get(id);
+      const fi = r.data.faces.findIndex(f => f.t === 'CYLINDRE');
+      App.select([id], { face: { id, faceIdx: fi } });""")
+    p.wait(300)
+    btn_em = p.pg.locator('.ctxbar button[aria-label="Prägen"]')
+    has_btn_help = btn_em.count() == 1 and btn_em.get_attribute('data-help') == 'emboss'
+    btn_em.click(); p.wait(1200)
+    sk_active = p.ev("return Sketch.active && Sketch.state.tool === 'text'")
+    p.pg.fill('#tx-s', 'HI'); p.wait(150)
+    p.pg.fill('#tx-h', '7'); p.pg.press('#tx-h', 'Enter'); p.wait(200)
+    sx, sy = to_screen(p, 0, -3.5)
+    p.pg.mouse.click(sx, sy); p.wait(400)
+    p.pg.locator('.sketchbar .tool.primary').click(); p.wait(700)
+    p.pg.locator('#st-emb-deboss').click(); p.wait(250)
+    p.pg.fill('#st-emb-h', '1'); p.pg.press('#st-emb-h', 'Enter'); p.wait(300)
+    p.pg.locator('.stepbox .btn.primary').click()
+    warte_rechnen(p, 35); p.wait(400)
+    v_deb = volumen(p)
+    st1 = p.ev("""const id = App.doc.items[0].id, eid = App.doc.items[1].id, r = App.results.get(id);
+      const bodies = (r && r.data && r.data.bodies) ? r.data.bodies.length : 1;
+      return [App.errors.length, App.doc.items.length, App.doc.items[1].kind, App.mergedInto(eid) === id, bodies];""")
+    ok1 = (
+        has_btn_help and sk_active is True
+        and st1 == [0, 2, 'emboss', True, 1]
+        and v0 is not None and v_deb is not None and v_deb < v0 - 5
+    )
+
+    # 2. Auf Erhaben umschalten → Volumen nimmt zu und der Körper bleibt ein Stück
+    p.pg.select_option('#emb-mode', 'emboss')
+    warte_rechnen(p, 35); p.wait(400)
+    v_emb = volumen(p)
+    st2 = p.ev("""const id = App.doc.items[0].id, r = App.results.get(id);
+      const bodies = (r && r.data && r.data.bodies) ? r.data.bodies.length : 1;
+      let maxR = 0;
+      const v = r && r.data && r.data.vertices;
+      if (v) for (let i = 0; i < v.length; i += 3) maxR = Math.max(maxR, Math.hypot(v[i], v[i + 1]));
+      return [App.errors.length, bodies, Math.round(maxR * 100) / 100];""")
+    ok2 = (
+        st2[:2] == [0, 1]
+        and v_emb is not None and v_emb > v0 + 5
+        and st2[2] > 15.8
+    )
+
+    # 3. Höhe ändern (2 mm), Unterdrücken und Zeitleisten-Marker
+    p.pg.fill('#emb-h', '2'); p.pg.press('#emb-h', 'Enter')
+    warte_rechnen(p, 35); p.wait(300)
+    v_h2 = volumen(p)
+    p.ev("Timeline.toggleSuppress(App.doc.items[1].id)")
+    warte_rechnen(p, 20); p.wait(250)
+    v_sup = volumen(p)
+    p.ev("Timeline.toggleSuppress(App.doc.items[1].id)")
+    warte_rechnen(p, 30); p.wait(250)
+    p.ev("Timeline.setMarker(1)")
+    warte_rechnen(p, 20); p.wait(250)
+    v_mk1 = volumen(p)
+    p.ev("Timeline.setMarker(2)")
+    warte_rechnen(p, 30); p.wait(250)
+    v_mk2 = volumen(p)
+    ok3 = (
+        v_h2 is not None and v_h2 > v_emb + 5
+        and abs(v_sup - v0) < 1
+        and abs(v_mk1 - v0) < 1
+        and abs(v_mk2 - v_h2) < 1
+    )
+
+    # 4. Kugel (Ø 30): vertieft + erhaben je ein Stück, Hilfetext & Schritt-Erklärung
+    info_em = p.ev("return Explain.local(App.doc.items[1].id).lines.map(l=>l.t).join(' ')")
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(400)
+    p.ev("Actions.addPrimitive('sphere', { p: { d: 30 }, pos: [0, 0] })")
+    warte_rechnen(p, 20); p.wait(300)
+    v_sph = volumen(p)
+    p.ev("""const id = App.doc.items[0].id, r = App.results.get(id);
+      const fi = r.data.faces.findIndex(f => f.t === 'SPHERE');
+      App.select([id], { face: { id, faceIdx: fi } });""")
+    p.wait(300)
+    p.pg.locator('.ctxbar button[aria-label="Prägen"]').click(); p.wait(1200)
+    p.ev("Sketch.insertEnts([{ type: 'circle', c: [0, 0], r: 4 }]);")
+    p.wait(300)
+    p.pg.locator('.sketchbar .tool.primary').click(); p.wait(700)
+    p.pg.locator('#st-emb-deboss').click(); p.wait(200)
+    p.pg.fill('#st-emb-h', '1'); p.pg.press('#st-emb-h', 'Enter'); p.wait(200)
+    p.pg.locator('.stepbox .btn.primary').click()
+    warte_rechnen(p, 35); p.wait(400)
+    v_sph_deb = volumen(p)
+    st_sph1 = p.ev("const r=App.results.get(App.doc.items[0].id); return [App.errors.length, (r&&r.data&&r.data.bodies)?r.data.bodies.length:1];")
+    p.pg.select_option('#emb-mode', 'emboss')
+    warte_rechnen(p, 35); p.wait(400)
+    v_sph_emb = volumen(p)
+    st_sph2 = p.ev("const r=App.results.get(App.doc.items[0].id); return [App.errors.length, (r&&r.data&&r.data.bodies)?r.data.bodies.length:1];")
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    help_ok = 'emboss' in hilfen and all(k in hilfen['emboss'] for k in ('tip', 'hilfe', 'tipp'))
+    ok4 = (
+        st_sph1 == [0, 1] and st_sph2 == [0, 1]
+        and v_sph_deb is not None and v_sph_deb < v_sph - 5
+        and v_sph_emb is not None and v_sph_emb > v_sph + 5
+        and help_ok and 'Prägt' in info_em
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 # ---------- [F-11240521] Volltest-Reparatur: Drehteller-Video bei rAF-Stau / Einführung ----------
 def t_f11240521(p):
     # 1. Drehteller-Video bei komplett blockiertem requestAnimationFrame
@@ -9988,6 +10094,7 @@ TESTS = [
     ('[A-038] Bohrungs-Assistent mehr Gewinde: Feingewinde M10×1,25 (8,8 mm) / 1/4"-20 UNC (5,1 mm) / Rohrgewinde G1/4 / Tabelle & Hilfe', t_a038_mehr_gewinde),
     ('[A-040] Varianten schalten Schritte: ohne Loch / Volumen & zurück / Vergleich / Maße & Schritte / Abweichung & Undo', t_a040_varianten_schritte),
     ('[A-041] Formeln: wenn, runden, aufrunden, abrunden, Tabelle & Klartext-Fehler', t_a041_formeln),
+    ('[A-042] Prägen auf gewölbter Fläche: Text auf Zylindermantel vertieft / erhaben ein Stück / Höhe, Unterdrücken & Marker / Kugel & Hilfe', t_a042_praegen),
     ('[F-11240521] Volltest-Reparatur: Drehteller-Video bei rAF-Stau / Einführung reagiert sofort auf Skizze', t_f11240521),
     ('[A-044] IGES und BREP: Export und Import (Quader, Loch, Dialog)', t_a044_iges_brep),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),

@@ -349,7 +349,7 @@ const Panels = (() => {
           { icon: 'copy', label: T('common.duplicate'), id: 'tm-dup', kbd: 'Strg D', help: 'treeDuplicate', run: () => Actions.duplicate([it.id]) },
           ...(Features.canMirrorStep(it, (Model.find(App.doc, it.id) || {}).parent) ? [{ icon: 'mirror', label: T('common.mirrorStep'), id: 'tm-mirrorstep', help: 'mirrorStep', run: () => Features.mirrorStep([it.id]) }] : []),
           ...(topIdx >= 0 ? [{ icon: 'moveStep', label: T('common.moveStep'), help: 'moveStep', run: () => Features.transform([it.id]) }, { icon: 'scaleBody', label: T('common.scaleStep'), help: 'scaleBody', run: () => Features.scale([it.id]) }] : []),
-          ...(!((it.kind === 'transform' && !(it.p && it.p.copy)) || it.kind === 'scale' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new'))) ? [{ icon: 'patternRect', label: T('ctx.patRect'), id: 'tm-pat-rect', help: 'patternRect', run: () => Features.pattern('rect', [it.id]) }, { icon: 'patternCirc', label: T('ctx.patCirc'), id: 'tm-pat-circ', help: 'patternCirc', run: () => Features.pattern('circ', [it.id]) }] : []),
+          ...(!((it.kind === 'transform' && !(it.p && it.p.copy)) || it.kind === 'scale' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'emboss') ? [{ icon: 'patternRect', label: T('ctx.patRect'), id: 'tm-pat-rect', help: 'patternRect', run: () => Features.pattern('rect', [it.id]) }, { icon: 'patternCirc', label: T('ctx.patCirc'), id: 'tm-pat-circ', help: 'patternCirc', run: () => Features.pattern('circ', [it.id]) }] : []),
           ...(topSelNow.length >= 2 && !App.ctx ? [{ icon: 'folder', label: T('menu.tree.toFolder'), id: 'tm-folder', help: 'treeFolder', run: () => Actions.createFolder(topSelNow) }] : []),
           ...(inFld ? [{ icon: 'ungroup', label: T('menu.tree.fromFolder'), id: 'tm-unfolder', run: () => Actions.removeFromFolder([it.id]) }] : []),
           { icon: 'edit', label: T('common.rename'), run: async () => { const n = await UI.prompt(T('common.rename'), T('common.name'), Model.label(it), T('common.rename')); if (n && n.trim()) App.change('Umbenannt', (doc) => { Model.find(doc, it.id).item.name = n.trim(); }); } },
@@ -772,7 +772,7 @@ const Panels = (() => {
     const fix = (s) => { if (typeof s !== 'string') return s; const r = s.replace(re, (m, pre) => { hit = true; return pre + repl; }); return /^-?\d+(\.\d+)?$/.test(r.trim()) ? +r : r; };
     for (const q of doc.params) q.expr = fix(q.expr);
     for (const tb of doc.tables || []) for (const r of tb.rows || []) r.val = fix(r.val);
-    Model.walk(doc.items, (it) => { for (const k in it.p || {}) { if ((it.kind === 'transform' && (k === 'target' || k === 'pivot')) || (it.kind === 'scale' && (k === 'target' || k === 'pivot' || k === 'uniform')) || (it.kind === 'thicken' && (k === 'target' || k === 'face' || k === 'dir' || k === 'mode')) || (it.kind === 'rib' && (k === 'target' || k === 'side' || k === 'dir')) || (it.kind === 'extrude' && (k === 'extent' || k === 'dir' || k === 'wallSide'))) continue; it.p[k] = fix(it.p[k]); } for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) f.r = fix(f.r); if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); });
+    Model.walk(doc.items, (it) => { for (const k in it.p || {}) { if ((it.kind === 'transform' && (k === 'target' || k === 'pivot')) || (it.kind === 'scale' && (k === 'target' || k === 'pivot' || k === 'uniform')) || (it.kind === 'thicken' && (k === 'target' || k === 'face' || k === 'dir' || k === 'mode')) || (it.kind === 'rib' && (k === 'target' || k === 'side' || k === 'dir')) || (it.kind === 'emboss' && (k === 'target' || k === 'face' || k === 'mode' || k === 'flip')) || (it.kind === 'extrude' && (k === 'extent' || k === 'dir' || k === 'wallSide'))) continue; it.p[k] = fix(it.p[k]); } for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) f.r = fix(f.r); if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); });
     return hit;
   }
   function replaceTableName(doc, old, repl) {
@@ -949,8 +949,8 @@ const Panels = (() => {
   function opSection(it) {
     const idx = App.doc.items.indexOf(it);
     const isPatOp = Features.isOp(it) && it.p.op === 'pattern' && !(it.children || []).some((c) => c.kind === 'rib');
-    if (idx < 0 || (it.kind === 'group' && !isPatOp) || it.kind === 'transform' || it.kind === 'scale' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'rib' || it.kind === 'mirrorStep') return null;
-    const targets = App.doc.items.slice(0, idx).filter((x) => x.role !== 'hole' && !x.suppressed && x.kind !== 'group' && x.kind !== 'rib' && x.kind !== 'mirrorStep' && !(x.kind === 'transform' && !(x.p && x.p.copy)) && x.kind !== 'scale' && !(x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) && !(x.op && x.op.target === it.id));
+    if (idx < 0 || (it.kind === 'group' && !isPatOp) || it.kind === 'transform' || it.kind === 'scale' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'rib' || it.kind === 'emboss' || it.kind === 'mirrorStep') return null;
+    const targets = App.doc.items.slice(0, idx).filter((x) => x.role !== 'hole' && !x.suppressed && x.kind !== 'group' && x.kind !== 'rib' && x.kind !== 'emboss' && x.kind !== 'mirrorStep' && !(x.kind === 'transform' && !(x.p && x.p.copy)) && x.kind !== 'scale' && !(x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) && !(x.op && x.op.target === it.id));
     if (!targets.length && !it.op) return null;
     const sec = h('div', { class: 'section', id: 'op-sec', 'data-help': 'bodyOp' }, h('div', { class: 'section-h' }, 'Körper'));
     const type = it.op ? it.op.type : 'new';
@@ -1095,7 +1095,7 @@ const Panels = (() => {
     const copies = []; Model.walk(App.doc.items, (x) => { if (x.link === it.id) copies.push(x); });
     if (copies.length) w.append(h('div', { class: 'hint-box', id: 'link-count' }, `${copies.length} verknüpfte ${copies.length === 1 ? 'Kopie folgt' : 'Kopien folgen'} diesem Teil.`));
     const isMoveOnly = (it.kind === 'transform' && !(it.p && it.p.copy)) || it.kind === 'scale' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'mirrorStep';
-    const isMergedStep = isMoveOnly || it.kind === 'rib';
+    const isMergedStep = isMoveOnly || it.kind === 'rib' || it.kind === 'emboss';
     if (!isMergedStep) w.append(roleSwitch(it.role, (r) => Actions.setRole([it.id], r)));
     const opSec = opSection(it); if (opSec) w.append(opSec);
     // Maße
@@ -1413,6 +1413,9 @@ const Panels = (() => {
     } else if (it.kind === 'rib') {
       sec.firstChild.textContent = 'Rippe';
       Features.renderRib(it, sec, setP); w.append(sec);
+    } else if (it.kind === 'emboss') {
+      sec.firstChild.textContent = 'Prägen';
+      Features.renderEmboss(it, sec, setP); w.append(sec);
     } else if (it.kind === 'mirrorStep') {
       sec.firstChild.textContent = 'Schritt spiegeln';
       Features.renderMirrorStep(it, sec, setP); w.append(sec);
@@ -1668,6 +1671,19 @@ const Panels = (() => {
       Features.syncPatternMarkers();
       return;
     }
+    if (items.length === 1 && items[0].item.kind === 'emboss') {
+      const it = items[0].item;
+      bar.append(h('span', { class: 'lbl' }, 'Prägen'));
+      b('edit', 'Skizze bearbeiten', () => Sketch.editItem(it.id), 'accent', 'Skizze dieses Prägens bearbeiten');
+      b('mirror', T('ctx.mirrorStep'), () => Features.mirrorStep([it.id]), 'pro', T('ctx.mirrorStepTip')).dataset.help = 'mirrorStep';
+      if (it.p && it.p.target && Model.find(App.doc, it.p.target)) b('pointer', T('ctx.targetBody'), () => App.select([it.p.target]), '', T('ctx.targetBodyTip'));
+      b('suppress', T('common.suppress'), () => Timeline.toggleSuppress(it.id), '', T('ctx.suppressTip'));
+      b('trash', T('common.delete'), () => Actions.remove(), 'danger', T('ctx.deleteTip'), true);
+      $('#overlay').append(bar); ctx = bar;
+      placeCtx();
+      Features.syncPatternMarkers();
+      return;
+    }
     if (items.length === 1 && items[0].item.kind === 'mirrorStep') {
       const it = items[0].item;
       bar.append(h('span', { class: 'lbl' }, T('ctx.mirrorStepLabel')));
@@ -1726,6 +1742,7 @@ const Panels = (() => {
       b('fillet', T('ctx.faceEdges'), (e) => faceEdgeMenu(face, e.currentTarget), '', T('ctx.faceEdgesTip'), true);
       if (items[0].item.role !== 'hole' && App.doc.items.some((x) => x.id === face.id)) {
         b('thicken', T('ctx.thicken'), () => Features.thicken(face), '', T('ctx.thickenTip')).dataset.help = 'thickenFace';
+        b('emboss', T('ctx.emboss'), () => Features.startEmboss(face), '', T('ctx.embossTip')).dataset.help = 'emboss';
         b('shell', T('ctx.shell'), () => Features.shell(face), '', T('ctx.shellTip'));
         b('rib', 'Rippe', () => Features.startRib(face), 'pro', 'Offene Linie als Rippe bis zu den Wänden ziehen').dataset.help = 'rib';
       }
@@ -1752,7 +1769,10 @@ const Panels = (() => {
         tb.dataset.help = 'datumTangent';
       }
       b('fillet', T('ctx.faceEdges'), (e) => faceEdgeMenu(face, e.currentTarget), '', T('ctx.faceEdgesTip'), true);
-      if (items[0].item.role !== 'hole' && App.doc.items.some((x) => x.id === face.id)) b('thicken', T('ctx.thicken'), () => Features.thicken(face), '', T('ctx.thickenTip')).dataset.help = 'thickenFace';
+      if (items[0].item.role !== 'hole' && App.doc.items.some((x) => x.id === face.id)) {
+        b('thicken', T('ctx.thicken'), () => Features.thicken(face), '', T('ctx.thickenTip')).dataset.help = 'thickenFace';
+        b('emboss', T('ctx.emboss'), () => Features.startEmboss(face), '', T('ctx.embossTip')).dataset.help = 'emboss';
+      }
       const pf = b('point', T('ctx.pointFaceCenter'), () => Datums.addPointFaceCenter(face), 'pro', T('ctx.pointFaceCenterTip'));
       pf.dataset.help = 'datumPoint';
       sep();

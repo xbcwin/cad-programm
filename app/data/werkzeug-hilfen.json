@@ -898,5 +898,10 @@
     "tip": "Als IGES (.igs) oder BREP (.brep) speichern",
     "hilfe": "IGES (.igs) speichert exakte Flächen und Körper im verbreiteten Austauschformat – besonders hilfreich für ältere CAD- und CAM-Programme. BREP (.brep) ist das eigene, verlustfreie Format des OpenCascade-Kerns (zum Beispiel für FreeCAD oder zum exakten Wiederladen in Tracery). Beide beachten „Nur die Auswahl“ und einen gewählten Nullpunkt.",
     "tipp": "Für den Austausch mit Fusion, SolidWorks oder Onshape ist meist STEP die erste Wahl; IGES hilft bei älteren CAM-Programmen und BREP bei direktem Austausch mit FreeCAD."
+  },
+  "emboss": {
+    "tip": "Text oder Logo erhaben oder vertieft auf eine Fläche prägen (auch Zylinder oder Kugel)",
+    "hilfe": "Projiziert geschlossene Flächen aus deiner Skizze – zum Beispiel Text oder ein Logo – senkrecht auf die gewählte ebene oder gewölbte Körperfläche (Zylinder, Kugel, Kegel …) und überträgt sie als Erhöhung (erhaben) oder Gravur (vertieft) mit fester Höhe direkt in den Körper.",
+    "tipp": "Klick zuerst die runde oder ebene Zielfläche an und starte „Prägen“ – Tracery legt die Skizzenebene automatisch passend vor die Fläche."
   }
 }

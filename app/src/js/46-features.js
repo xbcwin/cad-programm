@@ -18,8 +18,8 @@ const Features = (() => {
   }
   // Objekte in eine Feature-Gruppe im Ursprung ihrer Ebene packen
   function sharedFeatureOp(items) {
-    if (items.some((x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')))) {
-      UI.toast('Verschieben-, Skalieren- und Aufdicken-Schritte lassen sich nicht als Muster anlegen.', { icon: 'info' });
+    if (items.some((x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'emboss')) {
+      UI.toast('Verschieben-, Skalieren-, Aufdicken- und Präge-Schritte lassen sich nicht als Muster anlegen.', { icon: 'info' });
       return { ok: false };
     }
     if (items.some((x) => x.kind === 'rib')) {
@@ -1116,7 +1116,7 @@ const Features = (() => {
     UI.pop(anchor || $('#center'), box);
   }
   // ---------- Verschieben / Drehen / Kopieren als Schritt (KP-08) ----------
-  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'mirrorStep';
+  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'emboss' || x.kind === 'mirrorStep';
   function insertAtMarker(doc, step) {
     const at = doc.rollback != null ? clamp(doc.rollback, 0, doc.items.length) : doc.items.length;
     doc.items.splice(at, 0, step);
@@ -1385,11 +1385,161 @@ const Features = (() => {
     sec.append(row);
     sec.append(h('div', { class: 'hint-box', html: 'Die offene Linie wird mit Dicke bis an die angrenzenden Wände verlängert und direkt mit dem Zielkörper vereinigt. Mit <b>Schräge</b> wird die Rippe zum Boden breiter.' }));
   }
+  // ---------- Prägen (KP-33) ----------
+  function embossPlaneForFace(face, tgt) {
+    const info = (face && face.info) || {};
+    if (info.t === 'PLANE' && Array.isArray(info.n) && Array.isArray(info.c)) {
+      const fr = Actions.faceFrame(info);
+      return { o: fr.o, x: fr.x, n: fr.n };
+    }
+    const frameFromON = (oVec, nVec) => {
+      const n = nVec.clone().normalize();
+      const refUp = Math.abs(n.z) < 0.9 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0);
+      let x = new THREE.Vector3().crossVectors(refUp, n);
+      if (x.lengthSq() < 1e-6) x.set(1, 0, 0);
+      x.normalize();
+      return {
+        o: oVec.toArray().map((v) => round(v, 6)),
+        x: x.toArray().map((v) => round(v, 9)),
+        n: n.toArray().map((v) => round(v, 9)),
+      };
+    };
+    const camLocal = () => {
+      const inv = Model.worldMatrix(App.doc, tgt.id).invert();
+      return Viewer.camera.position.clone().applyMatrix4(inv);
+    };
+    const c = new THREE.Vector3(...(Array.isArray(info.c) ? info.c : [0, 0, 0]));
+    if ((info.t === 'CYLINDRE' || info.t === 'CONE') && Array.isArray(info.axis) && info.axis.length >= 6) {
+      const axO = new THREE.Vector3(info.axis[0], info.axis[1], info.axis[2]);
+      const axD = new THREE.Vector3(info.axis[3], info.axis[4], info.axis[5]).normalize();
+      const midOnAxis = axO.clone().addScaledVector(axD, c.clone().sub(axO).dot(axD));
+      const cVec = c.clone().sub(midOnAxis);
+      const r = info.r || info.coneR || cVec.length() || 5;
+      let rad;
+      if (cVec.length() > 0.15 * r) {
+        rad = cVec.normalize();
+      } else {
+        const cl = camLocal().sub(midOnAxis);
+        cl.addScaledVector(axD, -cl.dot(axD));
+        if (cl.lengthSq() > 1e-6) rad = cl.normalize();
+        else rad = Math.abs(axD.y) < 0.9 ? new THREE.Vector3(0, -1, 0) : new THREE.Vector3(1, 0, 0);
+        rad.addScaledVector(axD, -rad.dot(axD)).normalize();
+      }
+      return frameFromON(midOnAxis.clone().addScaledVector(rad, r), rad);
+    }
+    if (info.t === 'SPHERE' && Array.isArray(info.sc) && info.sc.length >= 3) {
+      const sc = new THREE.Vector3(info.sc[0], info.sc[1], info.sc[2]);
+      const r = info.r || 5;
+      const cVec = c.clone().sub(sc);
+      let rad;
+      if (cVec.length() > 0.15 * r) {
+        rad = cVec.normalize();
+      } else {
+        const cl = camLocal().sub(sc);
+        rad = cl.lengthSq() > 1e-6 ? cl.normalize() : new THREE.Vector3(0, -1, 0);
+      }
+      return frameFromON(sc.clone().addScaledVector(rad, r), rad);
+    }
+    const n = Array.isArray(info.n) && info.n.length >= 3
+      ? new THREE.Vector3(...info.n).normalize()
+      : (() => { const cl = camLocal().sub(c); return cl.lengthSq() > 1e-6 ? cl.normalize() : new THREE.Vector3(0, -1, 0); })();
+    return frameFromON(c, n);
+  }
+  function startEmboss(face, opts = {}) {
+    if (App.ctx) { UI.toast('Prägen gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return false; }
+    face = face || Actions.selectedFace();
+    const tgt = face ? resolveTopTarget(face.id) : null;
+    const sig = faceSigOf(face);
+    if (!tgt || tgt.role === 'hole' || !sig) {
+      UI.toast('Klick zuerst eine Fläche eines Körpers an (z. B. einen Zylindermantel oder eine Kugel).', { icon: 'info' });
+      return false;
+    }
+    const plane = embossPlaneForFace(face, tgt);
+    Sketch.startEmboss(face, plane, { ...opts, targetId: tgt.id, faceSig: sig });
+    UI.toast('Zeichne Text oder ein Logo für das Prägen und klick „Fertig“.', { icon: 'info', ms: 4200 });
+    return true;
+  }
+  function emboss(face, sketch, opts = {}) {
+    if (App.ctx) { UI.toast('Prägen gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return null; }
+    face = face || Actions.selectedFace();
+    const tgt = face ? resolveTopTarget(face.id) : null;
+    const sig = faceSigOf(face);
+    if (!tgt || tgt.role === 'hole' || !sig || !sketch) return null;
+    const p = {
+      target: tgt.id,
+      face: sig,
+      sketch: deepClone(sketch),
+      height: opts.height ?? 1,
+      mode: opts.mode === 'deboss' ? 'deboss' : 'emboss',
+      flip: !!opts.flip,
+    };
+    let step;
+    App.change('Prägen angelegt', (doc) => {
+      step = Model.newItem('emboss', p, { name: opts.name || 'Prägen', color: tgt.color, role: 'solid', mat: tgt.mat });
+      Model.setFromMatrix(step, Model.worldMatrix(doc, tgt.id));
+      insertAtMarker(doc, step);
+    });
+    if (step) App.select([step.id]);
+    return step || null;
+  }
+  function pickEmbossFace(stepId) {
+    stopPick();
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true });
+      if (hit && hit.id !== stepId && hit.faceIdx >= 0) {
+        const tgt = resolveTopTarget(hit.id);
+        const fi = App.results.get(hit.id)?.data?.faces?.[hit.faceIdx];
+        if (tgt && tgt.role !== 'hole' && fi && Array.isArray(fi.c)) {
+          stopPick();
+          const sig = faceSigOf({ info: fi });
+          App.change('Zielfläche für Prägen gewählt', (doc) => {
+            const f = Model.find(doc, stepId); if (!f) return false;
+            f.item.p.target = tgt.id;
+            f.item.p.face = sig;
+          });
+          UI.toast('Zielfläche aktualisiert.', { icon: 'check' });
+          return;
+        }
+      }
+      UI.toast('Bitte klick auf eine Fläche eines Körpers.', { icon: 'info' });
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true); window.addEventListener('keydown', key, true);
+    UI.hint('<b>Fläche wählen:</b> Klick auf eine Fläche des Körpers. <b>Esc</b> bricht ab.');
+  }
+  function renderEmboss(it, sec, setP) {
+    const p = it.p || {};
+    const fl = h('div', { class: 'fields' });
+    fl.append(UI.selectField({ id: 'emb-mode', label: 'Art', value: p.mode === 'deboss' ? 'deboss' : 'emboss', options: [['emboss', 'Erhaben (heraus)'], ['deboss', 'Vertieft (hinein)']], onChange: (v) => App.change('Präge-Art geändert', (doc) => { Model.find(doc, it.id).item.p.mode = v; }) }));
+    fl.append(UI.numField({ id: 'emb-h', label: 'Höhe', value: p.height ?? 1, min: 0.1, unit: 'mm', onCommit: (v) => setP('height', v) }));
+    sec.append(fl);
+    const flipL = h('label', { class: 'check', style: { marginTop: '8px' } }, h('input', { type: 'checkbox', id: 'emb-flip', checked: !!p.flip }), 'Andere Seite');
+    flipL.querySelector('input').onchange = (e) => App.change('Präge-Seite umgekehrt', (doc) => { Model.find(doc, it.id).item.p.flip = e.target.checked; });
+    sec.append(flipL);
+    const row = h('div', { class: 'btn-row', style: { marginTop: '8px' } });
+    const eb = h('button', { type: 'button', class: 'btn', id: 'emb-edit-sketch' }); eb.innerHTML = icon('edit') + 'Skizze bearbeiten';
+    eb.onclick = () => Sketch.editItem(it.id);
+    const pb = h('button', { type: 'button', class: 'btn small', id: 'emb-pick' }); pb.innerHTML = icon('cursor') + 'Andere Fläche wählen';
+    pb.onclick = () => pickEmbossFace(it.id);
+    row.append(eb, pb);
+    if (p.target && Model.find(App.doc, p.target)) {
+      const gb = h('button', { type: 'button', class: 'btn small', id: 'emb-goto' }); gb.innerHTML = icon('pointer') + 'Zielkörper wählen';
+      gb.onclick = () => App.select([p.target]);
+      row.append(gb);
+    }
+    sec.append(row);
+    sec.append(h('div', { class: 'hint-box', html: 'Projiziert die Skizze (Text, Logo oder Form) auf die gewählte Fläche – auch auf Zylinder, Kugel oder Kegel – und überträgt sie erhaben oder vertieft.' }));
+  }
   // ---------- Schritt spiegeln (KP-14) ----------
   function canMirrorStep(it, parent) {
     if (!it) return false;
     if (it.op && it.op.target) return true;
     if (it.kind === 'rib') return true;
+    if (it.kind === 'emboss') return true;
     if (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) return true;
     if (it.kind === 'mirrorStep') return true;
     if (it.role === 'hole') return true;
@@ -1435,7 +1585,7 @@ const Features = (() => {
       const bid = found[0].item.id;
       const cand = App.doc.items.filter((x) => !x.suppressed && (
         (x.op && x.op.target === bid) ||
-        ((x.kind === 'rib' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new'))) && x.p && x.p.target === bid)
+        ((x.kind === 'rib' || x.kind === 'emboss' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new'))) && x.p && x.p.target === bid)
       ));
       if (cand.length) picked = [{ item: cand[cand.length - 1], parent: null, list: App.doc.items }];
     }
@@ -1694,5 +1844,5 @@ const Features = (() => {
     sec.append(h('div', { class: 'hint-box', html: 'Spiegelt nur die gewählten Formschritte (z. B. eine Tasche, Erhöhung oder Rippe) direkt im selben Körper. Änderst du das Original, wandert das Spiegelbild automatisch mit.' }));
   }
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
+  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
 })();

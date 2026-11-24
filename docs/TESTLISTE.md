@@ -1766,6 +1766,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Fehlermeldungen in Klartext**: Fehlende Tabellen, fehlende Schlüssel, falsche Argumentanzahl, `=` statt `==`, Division durch 0 und ungültige Nachkommastellen werden in Klartext im Feld, unter „Maße“ und als Meldung angezeigt; Hilfetext `formulaTable` vorhanden.
 - [ ] **Von Hand**: Im Browser unter „Maße“ eine neue Tabelle anlegen, in „Formel-Beispiele“ den Hinweistext lesen und in einer offenen Skizze ein Maß direkt mit `tabelle(…)` und `wenn(…)` bemaßen.
 
+## Prägen auf gewölbter Fläche (Auto [A-042], KP-33)
+
+- [x] **Text auf Zylindermantel vertieft**: Zylindermantel wählen → „Prägen“ öffnet Skizze mit Text-Werkzeug vor dem Mantel; Text 1 mm vertieft (`deboss`) verringert das Volumen messbar und hält den Zylinder als ein Stück.
+- [x] **Erhaben auf Zylindermantel**: Umschalten auf `emboss` („Erhaben“) vergrößert das Volumen messbar, steht radial über den Mantel hinaus und der Körper bleibt ein Stück.
+- [x] **Höhe, Unterdrücken & Zeitleiste**: Ändern der Prägehöhe (1 → 2 mm) vergrößert den Auftrag weiter; Unterdrücken und Zurückrollen des Zeitleisten-Markers stellen das Ausgangsvolumen exakt wieder her.
+- [x] **Kugel & Hilfetext**: Kreis auf Kugel 1 mm vertieft und erhaben prägen funktioniert ohne Fehler als ein Stück; `emboss` steht mit `tip`/`hilfe`/`tipp` in `werkzeug-hilfen.json` und `Explain.local` erklärt den Schritt.
+- [ ] **Von Hand**: Im Browser auf einer Kugel oder einem Zylindermantel „Prägen“ starten, eigenen Text tippen und platzieren, zwischen „Erhaben“ und „Vertieft“ wechseln und prüfen, dass die Vorschau nur die Vorderseite prägt.
+
 ## Volltest-Reparatur (Auto [F-11240521])
 
 - [x] **Drehteller-Video bei rAF-Stau**: Auch bei blockiertem `requestAnimationFrame` zeichnet `Print.turntable()` alle Zwischenbilder synchron über `Viewer.renderNow()` samt `track.requestFrame()` und Timer-Fallback, erzeugt ein gültiges Video (`> 1000` Bytes) und stellt die Ausgangskamera exakt wieder her.

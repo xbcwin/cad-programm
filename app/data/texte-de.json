@@ -385,5 +385,8 @@
   "ctx.alignFront": "Vorne bündig",
   "ctx.alignCy": "Mittig (Y)",
   "ctx.alignBack": "Hinten bündig",
-  "ctx.alignBottom": "Unten bündig"
+  "ctx.alignBottom": "Unten bündig",
+  "common.emboss": "Prägen",
+  "ctx.emboss": "Prägen",
+  "ctx.embossTip": "Skizze (Text oder Logo) erhaben oder vertieft auf diese Fläche projizieren"
 }
