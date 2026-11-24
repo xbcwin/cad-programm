@@ -2198,6 +2198,21 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Aus Datei einfügen (STEP & Tracery-Projekt)**: `#t-insert-file` / `#asm-insert-file-input` fügen sowohl eine STEP-Datei (`50×15×12`) als auch eine `.tracery.json`-Projektdatei (`24×18×14`, als verknüpfter `ref`) ins laufende Modell ein; Hilfetexte (`replacePart`, `insertFromFile`), DE/EN-Schlüsselgleichheit und Befehlssuche (`replace-part`, `insert-from-file`) sind ohne Seitenfehler vorhanden.
 - [ ] **Von Hand**: Im Browser eine eigene STEP-Datei per „Aus Datei einfügen …“ in eine Baugruppe laden, mit einem anderen Teil fest verbinden und anschließend über Rechtsklick → „Teil ersetzen …“ gegen ein anderes Bauteil austauschen.
 
+## Teile mit der Maus bewegen, Verbindungen rechnen mit (Auto [A-091], BG-09)
+
+- [x] **Drehgelenk beim Ziehen mit der Maus**: Zwei Arme über ein Drehgelenk verbunden (`Arm A` festgesetzt, `Arm B` frei); Ziehen am freien Ende von `Arm B` dreht den Arm um die Gelenkachse, der Gelenkpunkt bleibt exakt an seiner Stelle (`< 0,01 mm`), der festgesetzte Arm bewegt sich nicht.
+- [x] **Anschlag, Lage-Felder & Rückgängig**: Ziehen über den Anschlag (`+120°`) stoppt exakt am Anschlag; Änderungen über `#t-x` projizieren zurück auf das Gelenk, und `Strg+Z` stellt die vorige Stellung wieder her.
+- [x] **3er-Kette & Schiebegelenk**: Ziehen am mittleren Arm nimmt den dritten Arm samt zweiter Gelenkachse exakt mit; Ziehen am dritten Arm lässt den mittleren Arm stehen. Ein Teil am Schiebegelenk gleitet beim schrägen Ziehen nur entlang der Führungsachse, während Ziehen der ungesperrten Schiene das verbundene Teil mitnimmt.
+- [x] **Festgesetztes Kind (umgekehrtes Ziehen)**: Ist das Kind-Teil (`Arm B`) festgesetzt und wird das Elternteil (`Arm A`) gezogen, bleibt `Arm B` exakt stehen, während `Arm A` um das Gelenk dreht.
+- [ ] **Von Hand**: Im Browser zwei oder drei Teile über Dreh-, Schiebe- und Kugelgelenke verketten, am freien Ende mit der Maus ziehen (inkl. sichtbarem Gelenk-Overlay während des Ziehens) und prüfen, dass sich alles flüssig ohne Ruckeln mitbewegt.
+
+## Eigenschaften je Teil (Auto [A-093], BG-12)
+
+- [x] **Teileigenschaften im Panel rechts**: Für Teile oberster Ebene erscheinen Teilenummer (`#p-partno`), Preis (`#p-price`), Lieferant (`#p-supplier`) und Beschreibung (`#p-desc`) unter `#part-props-sec` und werden rückgängig machbar in `it.props` gespeichert; ungültige Preiseingaben markieren das Feld als `.invalid`.
+- [x] **Stückliste mit Spalten & Gesamtpreis**: Zwei Teile mit Preis `2,50 €` (zweimal vorhanden) und `4,00 €` (einmal vorhanden) zeigen in `Mass.bom()` und im Stücklisten-Dialog (`#bom`) alle Spalten sowie den Gesamtpreis `9,00 €` in `#bom-total-price` und `#bom-price-sum`.
+- [x] **CSV-Export, Rückgängig, Speichern/Laden & Hilfe**: `Mass.bomCSV()` enthält die Spalten `Teilenummer`, `Beschreibung`, `Lieferant`, `Preis je Stück (€)`, `Preis gesamt (€)` samt `9,00` in der Summenzeile bei einheitlicher Spaltenzahl; Undo/Redo, JSON-Roundtrip und Hilfetext `partProps` arbeiten ohne Seitenfehler.
+- [ ] **Von Hand**: Im Browser zwei Teile mit Teilenummer, Beschreibung, Lieferant und Preis versehen, die Stückliste öffnen, eine Zeile zum Auswählen anklicken und die gespeicherte `.csv`-Datei in Excel oder Numbers prüfen.
+
 ## Fehler melden
 
 ```

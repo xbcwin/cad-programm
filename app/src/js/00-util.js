@@ -1912,6 +1912,11 @@ const HELP = {
   "tip": "Setzt eine STEP-Datei oder ein gespeichertes Tracery-Projekt als Teil ins offene Modell ein",
   "hilfe": "Lädt eine CAD-Datei (.step, .iges, .brep, .stl) oder ein anderes Tracery-Projekt (.tracery.json) direkt in das laufende Projekt, ohne dein bisheriges Modell zu schließen. Eingefügte Tracery-Projekte bleiben als verknüpfte Bauteile bearbeitbar.",
   "tipp": "Ideal, um Zukaufteile aus dem Netz (STEP) oder fertige eigene Bauteile direkt in deine Baugruppe einzusetzen."
+ },
+ "partProps": {
+  "tip": "Teilenummer, Beschreibung, Lieferant und Stückpreis für dieses Teil eintragen",
+  "hilfe": "Hier hinterlegst du feste Angaben zum Teil – wie Teilenummer, kurze Beschreibung, Lieferant und Stückpreis in Euro. Alle Werte erscheinen als eigene Spalten in der Stückliste und im CSV-Export, und die Stückliste rechnet automatisch den Gesamtpreis aller Teile aus.",
+  "tipp": "Gleiche Teile mit denselben Angaben werden in der Stückliste automatisch zusammengefasst und mit ihrer Stückzahl malgenommen."
  }
 };
 

@@ -574,6 +574,138 @@ const Joints = (() => {
     }
   }
 
+  function subtreeHasLocked(doc, rootId) {
+    const r = top(rootId, doc);
+    if (r && r.locked) return true;
+    return downstream(doc, rootId).some((k) => {
+      if (isLoose(k)) return false;
+      const kb = top(k.b, doc);
+      return !!(kb && kb.locked);
+    });
+  }
+
+  function dragContext(doc, itemId) {
+    doc = doc || App.doc;
+    const it = top(itemId, doc);
+    if (!it) return { blocked: true, reason: 'missing', name: '' };
+    if (it.locked) return { blocked: true, reason: 'grounded', name: Model.label(it) };
+    if (isFixedPart(itemId, doc)) return { blocked: true, reason: 'fixed', name: Model.label(it) };
+    const mj = drivingOf(itemId, doc);
+    const groundedChildren = list(doc).filter((k) => k.a === itemId && !isLoose(k) && subtreeHasLocked(doc, k.b));
+    if (groundedChildren.length > 1) return { blocked: true, reason: 'groundedChain', name: Model.label(it) };
+    if (groundedChildren.length === 1) {
+      const jd = groundedChildren[0];
+      if (isConstraint(jd) || mj) return { blocked: true, reason: 'groundedChain', name: Model.label(it) };
+      return { blocked: false, mode: 'joint', joint: jd, kind: kindOf(jd), reverse: true, itemId };
+    }
+    if (mj) {
+      const k = kindOf(mj);
+      if (isConstraint(mj)) return { blocked: false, mode: 'constrainedFree', joint: mj, kind: k, reverse: false, itemId };
+      return { blocked: false, mode: 'joint', joint: mj, kind: k, reverse: false, itemId };
+    }
+    return { blocked: false, mode: 'free', joint: null, kind: null, reverse: false, itemId };
+  }
+
+  function captureChain(doc, rootId, opts = {}) {
+    const js = list(doc), entries = [], seen = new Set([rootId]), moved = new Set([rootId]), q = [rootId];
+    const ex = opts && opts.excludeBranch ? opts.excludeBranch : null;
+    while (q.length) {
+      const a = q.shift();
+      for (const k of js) {
+        if (k.a !== a || seen.has(k.b) || (ex && k.b === ex)) continue;
+        const kb = top(k.b, doc);
+        if (kb && kb.locked) continue;
+        seen.add(k.b);
+        moved.add(k.b);
+        q.push(k.b);
+        const carried = Model.parentsOf(doc, k.b).some((p) => moved.has(p.id));
+        if (kb && !carried && !isConstraint(k) && !isLoose(k)) syncHome(kb, k, doc);
+        entries.push({
+          id: k.id,
+          bId: k.b,
+          ao: Array.isArray(k.ao) ? [...k.ao] : null,
+          ad: Array.isArray(k.ad) ? [...k.ad] : null,
+          au: Array.isArray(k.au) ? [...k.au] : null,
+          home: Array.isArray(k.home) ? [...k.home] : null,
+          isCon: isConstraint(k),
+          isLoose: isLoose(k),
+          isAngOrCtr: isAngle(k) || isCenter(k),
+          bW0: kb ? Model.worldMatrix(doc, kb.id).clone() : null,
+          carried,
+        });
+      }
+    }
+    return { rootId, entries };
+  }
+
+  function applyChainDelta(doc, snap, D, opts = {}) {
+    if (!snap || !snap.entries || !snap.entries.length) return;
+    const V = Model.vars(doc).v;
+    for (const e of snap.entries) {
+      const k = list(doc).find((x) => x.id === e.id);
+      if (!k) continue;
+      const kb = top(e.bId, doc);
+      if (Array.isArray(e.ao)) k.ao = r6(new THREE.Vector3(...e.ao).applyMatrix4(D).toArray());
+      if (Array.isArray(e.ad)) k.ad = r9(new THREE.Vector3(...e.ad).transformDirection(D).normalize().toArray());
+      if (Array.isArray(e.au)) k.au = r9(new THREE.Vector3(...e.au).transformDirection(D).normalize().toArray());
+      if (e.carried || !kb || kb.locked) continue;
+      if (e.isLoose) {
+        solvePartConstraints(doc, e.bId, V);
+        if (opts.live && isTop(kb.id, doc)) Viewer.updateNode(kb.id, { matrix: Model.localMatrix(kb) });
+        continue;
+      }
+      if (e.isCon) {
+        if (e.isAngOrCtr && e.bW0) {
+          const WbNew0 = D.clone().multiply(e.bW0);
+          Model.setFromMatrix(kb, Model.parentWorld(doc, kb.id).invert().multiply(WbNew0));
+        }
+        const sol = solveConstraintPose(doc, k);
+        if (sol) {
+          Model.setFromMatrix(kb, Model.parentWorld(doc, kb.id).invert().multiply(sol.WbNew));
+          k.home = r9(Model.localMatrix(kb).toArray());
+          k.ao = r6(sol.ao.toArray());
+          k.ad = r9(sol.ad.toArray());
+          if (opts.live && isTop(kb.id, doc)) Viewer.updateNode(kb.id, { matrix: Model.localMatrix(kb) });
+        }
+        continue;
+      }
+      if (!e.home) continue;
+      k.home = r9(conj(doc, k.b, D).multiply(new THREE.Matrix4().fromArray(e.home)).toArray());
+      Model.setFromMatrix(kb, pose(k, stateOf(k), null, doc));
+      if (opts.live && isTop(kb.id, doc)) Viewer.updateNode(kb.id, { matrix: Model.localMatrix(kb) });
+    }
+  }
+
+  function captureReverseDrag(doc, jid) {
+    const j = list(doc).find((x) => x.id === jid);
+    if (!j) return null;
+    const A = top(j.a, doc), B = top(j.b, doc);
+    if (!A || !B) return null;
+    syncHome(B, j, doc);
+    return {
+      jid: j.id,
+      aId: A.id,
+      bId: B.id,
+      kind: kindOf(j),
+      j0: {
+        kind: j.kind,
+        ao: [...j.ao],
+        ad: [...j.ad],
+        au: Array.isArray(j.au) ? [...j.au] : null,
+        min: j.min, max: j.max,
+        minPos: j.minPos, maxPos: j.maxPos,
+        minU: j.minU, maxU: j.maxU,
+        minV: j.minV, maxV: j.maxV,
+        minRx: j.minRx, maxRx: j.maxRx,
+        minRy: j.minRy, maxRy: j.maxRy,
+      },
+      st0: stateOf(j),
+      home0: [...j.home],
+      aW0: Model.worldMatrix(doc, A.id).clone(),
+      sideChain: captureChain(doc, A.id, { excludeBranch: B.id }),
+    };
+  }
+
   // ---------- Feste Verbindung (BG-05) ----------
   function solveFixedPose(doc, j) {
     const A = top(j.a, doc), B = top(j.b, doc);
@@ -2577,6 +2709,7 @@ const Joints = (() => {
   // ---------- Interaktives Wählen im Bild ----------
   let pickState = null, pickBar = null, pickObjs = [];
   let selJoint = null, visObjs = [];
+  let dragVisJid = null, dragVisObjs = [];
 
   function clearPickVis() {
     for (const o of pickObjs) { Viewer.groups.overlay.remove(o); Viewer.disposeFat(o); }
@@ -2589,10 +2722,13 @@ const Joints = (() => {
     visObjs = [];
     Viewer.requestRender();
   }
-  function drawSelectedJoint() {
-    clearSelVis();
-    if (!selJoint || App.mode !== 'model' || (typeof Sketch !== 'undefined' && Sketch.active)) return;
-    const j = list().find((x) => x.id === selJoint);
+  function clearDragVis() {
+    for (const o of dragVisObjs) { Viewer.groups.overlay.remove(o); Viewer.disposeFat(o); }
+    dragVisObjs = [];
+    dragVisJid = null;
+    Viewer.requestRender();
+  }
+  function drawJointVis(j, targetArr) {
     if (!j || !Array.isArray(j.ao)) return;
     const p = new THREE.Vector3(...j.ao);
     if (isSlot(j)) {
@@ -2603,20 +2739,18 @@ const Joints = (() => {
       const d1 = Viewer.makeFat([a.x, a.y, a.z, a.x, a.y, a.z + 0.001], '#f08c00', 8, { depthTest: false });
       const d2 = Viewer.makeFat([b.x, b.y, b.z, b.x, b.y, b.z + 0.001], '#f08c00', 8, { depthTest: false });
       const dc = Viewer.makeFat([cur.x, cur.y, cur.z, cur.x, cur.y, cur.z + 0.001], '#0c7a70', 11, { depthTest: false });
-      Viewer.groups.overlay.add(line, d1, d2, dc); visObjs.push(line, d1, d2, dc);
-      Viewer.requestRender();
+      Viewer.groups.overlay.add(line, d1, d2, dc); targetArr.push(line, d1, d2, dc);
       return;
     }
     const pt = Viewer.makeFat([p.x, p.y, p.z, p.x, p.y, p.z + 0.001], '#f08c00', 11, { depthTest: false });
-    Viewer.groups.overlay.add(pt); visObjs.push(pt);
+    Viewer.groups.overlay.add(pt); targetArr.push(pt);
     if (isBall(j)) {
       const pf = planeFrame(j);
       for (const [ax, col] of [[pf.u, '#e03131'], [pf.v, '#2f9e44'], [pf.n, '#1971c2']]) {
         const q = p.clone().addScaledVector(ax, 7);
         const ln = Viewer.makeFat([p.x, p.y, p.z, q.x, q.y, q.z], col, 2.5, { depthTest: false });
-        Viewer.groups.overlay.add(ln); visObjs.push(ln);
+        Viewer.groups.overlay.add(ln); targetArr.push(ln);
       }
-      Viewer.requestRender();
       return;
     }
     if (isDistance(j) && Array.isArray(j.bo)) {
@@ -2628,8 +2762,25 @@ const Joints = (() => {
       const d = new THREE.Vector3(...j.ad).normalize();
       const b = p.clone().addScaledVector(d, 10);
       const ln = Viewer.makeFat([p.x, p.y, p.z, b.x, b.y, b.z], '#f08c00', 3, { depthTest: false });
-      Viewer.groups.overlay.add(ln); visObjs.push(ln);
+      Viewer.groups.overlay.add(ln); targetArr.push(ln);
     }
+  }
+  function drawSelectedJoint() {
+    clearSelVis();
+    if (!selJoint || App.mode !== 'model' || (typeof Sketch !== 'undefined' && Sketch.active)) return;
+    const j = list().find((x) => x.id === selJoint);
+    if (!j || !Array.isArray(j.ao)) return;
+    drawJointVis(j, visObjs);
+    Viewer.requestRender();
+  }
+  function showDragVis(jid) {
+    clearDragVis();
+    if (!jid || App.mode !== 'model' || (typeof Sketch !== 'undefined' && Sketch.active)) return;
+    dragVisJid = jid;
+    if (jid === selJoint) return;
+    const j = list().find((x) => x.id === jid);
+    if (!j || !Array.isArray(j.ao)) return;
+    drawJointVis(j, dragVisObjs);
     Viewer.requestRender();
   }
   function addPickDot(p, color = '#0c7a70') {
@@ -3770,12 +3921,12 @@ const Joints = (() => {
     return deg;
   }
 
-  // Verschieben/Drehen eines verbundenen Teils auf die erlaubten Freiheitsgrade von 'cyl'/'planar'/'ball'/'slot'/'angle'/'center' sowie lockere Verbindungen projizieren
+  // Verschieben/Drehen eines verbundenen Teils auf die erlaubten Freiheitsgrade von 'rot'/'slide'/'cyl'/'planar'/'ball'/'slot'/'angle'/'center' sowie lockere Verbindungen projizieren
   function constrain(doc, itemId) {
     const j = drivingOf(itemId, doc);
     const hasLoose = looseOf(itemId, doc).length > 0;
-    if (!j || (j.kind !== 'cyl' && j.kind !== 'planar' && j.kind !== 'ball' && j.kind !== 'slot' && j.kind !== 'angle' && j.kind !== 'center')) {
-      if (!hasLoose) return false;
+    if (!j || fixed(j)) {
+      if (!hasLoose || (j && fixed(j))) return false;
       const b = top(itemId, doc); if (!b || b.locked) return false;
       const WbOld = Model.worldMatrix(doc, itemId);
       const sol = solvePartConstraints(doc, itemId, Model.vars(doc).v);
@@ -3810,8 +3961,15 @@ const Joints = (() => {
     const o = new THREE.Vector3(...j.ao);
     const oCur = o.clone().applyMatrix4(D_want);
     const dp = oCur.sub(o);
+    const k = kindOf(j);
 
-    if (j.kind === 'cyl') {
+    if (k === 'rot') {
+      const d = new THREE.Vector3(...j.ad).normalize();
+      j.ang = clamp(round(twistDegAround(D_want, d), 4), j.min ?? -180, j.max ?? 180);
+    } else if (k === 'slide') {
+      const d = new THREE.Vector3(...j.ad).normalize();
+      j.ang = clamp(round(dp.dot(d), 4), j.min ?? -20, j.max ?? 20);
+    } else if (k === 'cyl') {
       const d = new THREE.Vector3(...j.ad).normalize();
       let posNew = round(dp.dot(d), 4);
       let angNew = round(twistDegAround(D_want, d), 4);
@@ -3884,11 +4042,7 @@ const Joints = (() => {
     return true;
   }
 
-  // Live-Ziehen in der 3D-Ansicht (ohne eigenes App.change – Interact.onUp speichert den Rückgängig-Schritt)
-  function applyDrag(jid, patch) {
-    const j = list(App.doc).find((x) => x.id === jid); if (!j || isConstraint(j) || isLoose(j)) return null;
-    const b = top(j.b, App.doc); if (!b || b.locked) return null;
-    const prev = stateOf(j);
+  function computeDragState(j, patch) {
     const k = kindOf(j);
     if (k === 'cyl' && patch.pos != null) {
       let p = round(Number(patch.pos) || 0, 4);
@@ -3929,31 +4083,58 @@ const Joints = (() => {
         while (dg < -180) dg += 360;
         return dg;
       };
-      if (patch.rx != null) {
-        const rx = wrapDeg(patch.rx);
-        j.rx = j.stopsLocked ? clamp(rx, j.minRx ?? -180, j.maxRx ?? 180) : clamp(rx, j.minRx ?? -180, j.maxRx ?? 180);
-      }
-      if (patch.ry != null) {
-        const ry = wrapDeg(patch.ry);
-        j.ry = j.stopsLocked ? clamp(ry, j.minRy ?? -180, j.maxRy ?? 180) : clamp(ry, j.minRy ?? -180, j.maxRy ?? 180);
-      }
+      if (patch.rx != null) j.rx = clamp(wrapDeg(patch.rx), j.minRx ?? -180, j.maxRx ?? 180);
+      if (patch.ry != null) j.ry = clamp(wrapDeg(patch.ry), j.minRy ?? -180, j.maxRy ?? 180);
     }
     if (patch.ang != null) {
-      j.ang = round(clamp(Number(patch.ang) || 0, j.min ?? -180, j.max ?? 180), 4);
+      const lo = j.min ?? (k === 'slide' ? -20 : -180);
+      const hi = j.max ?? (k === 'slide' ? 20 : 180);
+      j.ang = round(clamp(Number(patch.ang) || 0, lo, hi), 4);
     }
-    let next = stateOf(j);
+    return stateOf(j);
+  }
+
+  function applyReverseDrag(j, patch, revSnap) {
+    const doc = App.doc, A = top(revSnap.aId, doc), B = top(revSnap.bId, doc);
+    if (!A || !B || A.locked) return null;
+    const next = computeDragState(j, patch || {});
+    const D_fwd = stateMatrix(revSnap.j0, next).multiply(stateMatrix(revSnap.j0, revSnap.st0).invert());
+    const D_A = D_fwd.clone().invert();
+    const WaNew = D_A.clone().multiply(revSnap.aW0);
+    Model.setFromMatrix(A, Model.parentWorld(doc, A.id).invert().multiply(WaNew));
+    j.ao = r6(new THREE.Vector3(...revSnap.j0.ao).applyMatrix4(D_A).toArray());
+    j.ad = r9(new THREE.Vector3(...revSnap.j0.ad).transformDirection(D_A).normalize().toArray());
+    if (Array.isArray(revSnap.j0.au)) j.au = r9(new THREE.Vector3(...revSnap.j0.au).transformDirection(D_A).normalize().toArray());
+    j.home = r9(conj(doc, j.b, D_A).multiply(new THREE.Matrix4().fromArray(revSnap.home0)).toArray());
+    writeState(j, next);
+    if (isTop(A.id, doc)) Viewer.updateNode(A.id, { matrix: Model.localMatrix(A) });
+    applyChainDelta(doc, revSnap.sideChain, D_A, { live: true });
+    drawSelectedJoint();
+    if (dragVisJid === j.id) showDragVis(j.id);
+    return next;
+  }
+
+  // Live-Ziehen in der 3D-Ansicht (ohne eigenes App.change – Interact.onUp speichert den Rückgängig-Schritt)
+  function applyDrag(jid, patch, opts = {}) {
+    const j = list(App.doc).find((x) => x.id === jid); if (!j || isConstraint(j) || isLoose(j)) return null;
+    if (opts && opts.reverse && opts.snap) return applyReverseDrag(j, patch, opts.snap);
+    const b = top(j.b, App.doc); if (!b || b.locked) return null;
+    const prev = stateOf(j);
+    const k = kindOf(j);
+    let next = computeDragState(j, patch || {});
     Model.setFromMatrix(b, pose(j, next, null, App.doc));
     if (looseOf(j.b, App.doc).length) {
       solvePartConstraints(App.doc, j.b, Model.vars(App.doc).v);
       next = stateOf(j);
     }
-    if (stateChanged(prev, next, k)) moveChain(App.doc, j.b, deltaMatrix(j, prev, next));
-    Viewer.updateNode(b.id, { matrix: Model.localMatrix(b) });
+    if (stateChanged(prev, next, k)) moveChain(App.doc, j.b, deltaMatrix(j, prev, next), { live: true });
+    if (isTop(b.id, App.doc)) Viewer.updateNode(b.id, { matrix: Model.localMatrix(b) });
     for (const d of downstream(App.doc, j.b, { stopAtLocked: true })) {
       const db = top(d.b, App.doc);
-      if (db) Viewer.updateNode(db.id, { matrix: Model.localMatrix(db) });
+      if (db && isTop(db.id, App.doc)) Viewer.updateNode(db.id, { matrix: Model.localMatrix(db) });
     }
     drawSelectedJoint();
+    if (dragVisJid === j.id) showDragVis(j.id);
     return next;
   }
 
@@ -4592,8 +4773,8 @@ const Joints = (() => {
       relinkFixed();
       drawSelectedJoint();
     });
-    App.on('docLoaded', () => { stopPick(); closeDockPrompt(); });
-    App.on('mode', () => { stopPick(); closeDockPrompt(); });
+    App.on('docLoaded', () => { stopPick(); clearDragVis(); closeDockPrompt(); });
+    App.on('mode', () => { stopPick(); clearDragVis(); closeDockPrompt(); });
   }
 
   return {
@@ -4651,6 +4832,13 @@ const Joints = (() => {
     flip,
     constrain,
     applyDrag,
+    dragContext,
+    captureChain,
+    applyChainDelta,
+    captureReverseDrag,
+    showDragVis,
+    clearDragVis,
+    syncHome,
     projectAxisRay,
     frameOf,
     stateOf,

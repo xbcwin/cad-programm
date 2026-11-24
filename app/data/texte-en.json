@@ -2485,5 +2485,22 @@
   "asm.fileBadFormat": "Please choose a STEP, IGES, BREP, STL or Tracery project file (.json).",
   "asm.fileEmptyErr": "This project does not contain any parts yet.",
   "asm.fileTooBig": "The file is too large (over 100 MB).",
-  "asm.fileReadErr": "Could not read the file."
+  "asm.fileReadErr": "Could not read the file.",
+  "panel.partProps.title": "Part properties",
+  "panel.partProps.partNo": "Part number",
+  "panel.partProps.partNoPh": "e.g. PN-100",
+  "panel.partProps.desc": "Description",
+  "panel.partProps.descPh": "Short description",
+  "panel.partProps.supplier": "Supplier",
+  "panel.partProps.supplierPh": "e.g. Manufacturer or shop",
+  "panel.partProps.price": "Price",
+  "panel.partProps.pricePh": "0.00",
+  "panel.partProps.priceErr": "Please enter a valid number for the price.",
+  "panel.partProps.undo": "Part properties changed",
+  "dlg.bom.colPartNo": "Part no.",
+  "dlg.bom.colDesc": "Description",
+  "dlg.bom.colSupplier": "Supplier",
+  "dlg.bom.colPriceEach": "Unit price",
+  "dlg.bom.colPriceTotal": "Total price",
+  "dlg.bom.totalPriceHtml": "<b>Total price:</b> {total}"
 }

@@ -455,8 +455,21 @@ const Commands = (() => {
         for (const id of App.sel) {
           const f = Model.find(doc, id); if (!f) continue;
           if (f.item.locked) { if (!lockedName) lockedName = Model.label(f.item); continue; }
+          const dctx = typeof Joints !== 'undefined' && Joints.dragContext ? Joints.dragContext(doc, id) : null;
+          if (dctx && (dctx.blocked || (dctx.mode === 'joint' && dctx.reverse))) {
+            if (dctx.reason === 'grounded') { if (!lockedName) lockedName = Model.label(f.item); }
+            else if (!blockedName) blockedName = Model.label(f.item);
+            continue;
+          }
           if (typeof Joints !== 'undefined' && Joints.isFixedPart(id)) { if (!blockedName) blockedName = Model.label(f.item); continue; }
+          const W0 = typeof Joints !== 'undefined' && Joints.captureChain ? Model.worldMatrix(doc, id).clone() : null;
+          const chain = typeof Joints !== 'undefined' && Joints.captureChain ? Joints.captureChain(doc, id) : null;
           const PW = Model.parentWorld(doc, id); const q = new THREE.Quaternion(); PW.decompose(new THREE.Vector3(), q, new THREE.Vector3()); const v = new THREE.Vector3(...d).applyQuaternion(q.invert()); const tn = Model.tNumeric(f.item); f.item.t.x = round(tn.x + v.x, 4); f.item.t.y = round(tn.y + v.y, 4); f.item.t.z = round(tn.z + v.z, 4);
+          const constrained = typeof Joints !== 'undefined' && Joints.constrain ? Joints.constrain(doc, id) : false;
+          if (!constrained && chain && chain.entries.length && W0) {
+            const D = Model.worldMatrix(doc, id).multiply(W0.invert());
+            Joints.applyChainDelta(doc, chain, D);
+          }
           any = true;
         }
         if (!any) return false;

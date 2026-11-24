@@ -2485,5 +2485,22 @@
   "asm.fileBadFormat": "Bitte wähle eine STEP-, IGES-, BREP-, STL- oder Tracery-Projektdatei (.json).",
   "asm.fileEmptyErr": "Dieses Projekt enthält noch keine Teile.",
   "asm.fileTooBig": "Die Datei ist zu groß (über 100 MB).",
-  "asm.fileReadErr": "Die Datei konnte nicht gelesen werden."
+  "asm.fileReadErr": "Die Datei konnte nicht gelesen werden.",
+  "panel.partProps.title": "Teileigenschaften",
+  "panel.partProps.partNo": "Teilenummer",
+  "panel.partProps.partNoPh": "z. B. TN-100",
+  "panel.partProps.desc": "Beschreibung",
+  "panel.partProps.descPh": "Kurze Beschreibung",
+  "panel.partProps.supplier": "Lieferant",
+  "panel.partProps.supplierPh": "z. B. Hersteller oder Shop",
+  "panel.partProps.price": "Preis",
+  "panel.partProps.pricePh": "0,00",
+  "panel.partProps.priceErr": "Bitte eine gültige Zahl als Preis eingeben.",
+  "panel.partProps.undo": "Teileigenschaften geändert",
+  "dlg.bom.colPartNo": "Teilenummer",
+  "dlg.bom.colDesc": "Beschreibung",
+  "dlg.bom.colSupplier": "Lieferant",
+  "dlg.bom.colPriceEach": "Preis je Stück",
+  "dlg.bom.colPriceTotal": "Preis gesamt",
+  "dlg.bom.totalPriceHtml": "<b>Gesamtpreis:</b> {total}"
 }
