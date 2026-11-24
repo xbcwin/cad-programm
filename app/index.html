@@ -2982,6 +2982,11 @@ const HELP = {
   "tip": "Stückliste (Pos., Menge, Name, Werkstoff) direkt auf dem Zeichnungsblatt einblenden",
   "hilfe": "Zeigt die Stückliste des Modells als normgerechte Tabelle mit Positionsnummer, Menge, Teilename und Werkstoff (oder Kaufteil) auf dem Zeichnungsblatt – passend zur Stückliste unter „Projekt“. Die Tabelle steht standardmäßig über dem Schriftfeld und lässt sich auf dem Blatt frei verschieben.",
   "tipp": "Ändern sich Namen, Mengen oder Werkstoffe im Modell, aktualisieren sich Tabelle und Positionsnummern automatisch – auch in PDF, SVG und DXF."
+ },
+ "copyBetweenTabs": {
+  "tip": "Ausgewählte Körper mit Strg C / Strg V in andere Projekte oder Tabs kopieren",
+  "hilfe": "Kopiert die gewählten Körper samt ihren zugehörigen Schritten, Bohrungen, Rundungen, Werkstoffen, Farben und verwendeten Maßen in die Zwischenablage. Im anderen Projekt oder Browser-Tab fügt Strg V (oder Rechtsklick → Einfügen) alles wieder ein. Hängt ein Teil an Bezügen außerhalb der Auswahl, wird es automatisch als feste Form (BREP) mitgenommen.",
+  "tipp": "Im selben Projekt rückt eingefügter Ersatz um 10 mm zur Seite; in einem anderen Tab landet der Körper genau an seiner ursprünglichen Stelle."
  }
 };
 
@@ -2998,7 +3003,7 @@ const Bus = makeEmitter();
 
 // ---- 01-i18n.js ----
 // ================= Übersetzbare Oberfläche =================
-const TEXTS_DE = {"common.ok":"OK","common.cancel":"Abbrechen","common.close":"Schließen","common.delete":"Löschen","common.rename":"Umbenennen","common.save":"Speichern","common.name":"Name","common.body":"Körper","common.hole":"Loch","common.edit":"Bearbeiten","common.suppress":"Unterdrücken","common.unsuppress":"Wieder aktivieren","common.explainStep":"Erklär diesen Schritt","common.moveStep":"Verschieben/Drehen (Schritt)","common.scaleStep":"Skalieren (Schritt)","common.thicken":"Aufdicken","common.mirrorStep":"Schritt spiegeln","common.duplicate":"Duplizieren","common.hide":"Ausblenden","common.isolate":"Isolieren","topbar.showTree":"Verlauf zeigen","topbar.tree":"Verlauf","topbar.brandAria":"Tracery – Startseite","topbar.workspace":"Arbeitsbereich","topbar.model":"Modell","topbar.drawing":"Zeichnung","topbar.undo":"Rückgängig","topbar.undoLabel":"Rückgängig: {label}","topbar.redo":"Wiederholen","topbar.project":"Projekt","topbar.menu":"Menü","topbar.showProps":"Eigenschaften zeigen","topbar.props":"Eigenschaften","topbar.params":"Maße","topbar.log":"Protokoll","topbar.cmdPlaceholder":"Werkzeug suchen oder beschreiben, was du bauen willst …","topbar.cmdAria":"Werkzeug suchen oder der KI beschreiben","topbar.cmdGo":"Ausführen","level.simple":"Einfach","level.pro":"Profi","level.tipSimple":"Stufe: Einfach – klicken zum Wechseln auf Profi","level.tipPro":"Stufe: Profi – klicken zum Wechseln auf Einfach","level.chooseAria":"Stufe wählen","level.simpleDesc":"wenige, große Knöpfe, alles erklärt","level.proDesc":"alle Werkzeuge, Tastenkürzel, Maus wie in deinem CAD","start.aria":"Startseite","start.subtitle":"CAD im Browser – kostenlos, ohne Konto","start.newProject":"Neues Projekt","start.openFile":"Datei öffnen","start.tourBasics":"Einführung (3 Minuten)","start.tourSketch":"Erste Skizze (5 Minuten)","start.welcomeTitle":"Wie möchtest du mit Tracery arbeiten?","start.welcomeSub":"Du kannst jederzeit oben rechts zwischen beiden Stufen wechseln.","start.surfaceAria":"Oberfläche","start.surfaceLabel":"Oberfläche:","start.simpleOption":"Einfach – für Einsteiger","start.proOption":"Profi – alle Werkzeuge","start.recentHeading":"Weiterarbeiten","start.recentMetaOne":"{n} Objekt · {date}","start.recentMetaMany":"{n} Objekte · {date}","start.deleteFromBrowserAria":"Aus dem Browser löschen","start.deleteFromBrowserTip":"Aus diesem Browser löschen","start.deleteConfirmTitle":"Projekt löschen?","start.deleteConfirmBody":"„{name}“ wird aus diesem Browser gelöscht. Gespeicherte Dateien bleiben erhalten.","start.projectMissing":"Das Projekt ist nicht mehr da.","start.templatesHeading":"Vorlagen","start.emptyTitle":"Leeres Projekt","start.emptyDesc":"Von null anfangen.","start.templateLoaded":"Vorlage geladen. Klick einen Teil an, um ihn zu ändern.","start.footHtml":"Projekte werden automatisch in diesem Browser gesichert. Zum sicheren Aufbewahren und Teilen: <b>Projekt als Datei speichern</b>.<br>Tracery rechnet mit OpenCascade (LGPL-2.1) über replicad (MIT) und zeigt 3D mit three.js (MIT).","start.tpl.box.name":"Box mit Deckel","start.tpl.box.desc":"Mit Maßen wie Wandstärke und Spiel – änderst du sie, passt sich alles an.","start.tpl.sign.name":"Schild mit Loch","start.tpl.sign.desc":"Flache Platte mit runden Ecken und einem Loch zum Aufhängen.","start.tpl.phone.name":"Handyhalter","start.tpl.phone.desc":"Schräge Lehne, Ablage vorne und ein Schlitz fürs Kabel.","start.tpl.bracket.name":"Winkel zum Anschrauben","start.tpl.bracket.desc":"L-Winkel mit Senkkopf-Schraublöchern und Versteifung.","start.tpl.gear.name":"Zahnradpaar","start.tpl.gear.desc":"Zwei passende Zahnräder mit Bohrung.","start.tpl.hinge.name":"Scharnier","start.tpl.hinge.desc":"Aus einem Stück, mit Spiel zwischen den Teilen.","tool.body":"Körper","tool.bodyTip":"Grundkörper hinzufügen – anklicken oder auf die Fläche ziehen","tool.sketch":"Skizze","tool.sketchTip":"Eine 2D-Skizze zeichnen und daraus einen Körper machen","tool.parts":"Bauteile","tool.partsTip":"Schraubenlöcher, Mutternfallen, Scharniere, Zahnräder …","tool.measure":"Messen","tool.measureTip":"Messen: Abstände, Winkel, Flächen und Durchmesser","tool.notes":"Notizen","tool.notesTip":"Notizstift: frei malen und Text hinschreiben – ohne technische Bedeutung","tool.views":"Ansicht","tool.viewsTip":"Ansicht: Schnitt, Röntgen, Explosion und Fokus-Vorschau – ändert nur die Anzeige","tool.check":"Prüfen","tool.checkTip":"Prüfen: Geometrie prüfen, Schwachstellen, Wandstärke und Überhänge","tool.more":"Mehr","tool.moreTip":"Weitere Werkzeuge: Messen, Notizen, Ansicht – oder alle Werkzeuge zeigen","tool.export":"Exportieren","tool.exportShort":"Export","tool.exportTip":"Als STEP, STL, 3MF, OBJ, GLB oder DXF speichern (ZIP)","tool.sheet":"Blatt","tool.sheetTip":"Blattgröße, Maßstab und Ansichten","tool.viewAdd":"Ansicht +","tool.viewAddTip":"Isometrische oder aktuelle 3D-Ansicht hinzufügen","tool.detail":"Detailansicht","tool.detailTip":"Ausschnitt einer Ansicht mit Kreis vergrößern (Detail Z)","tool.dsection":"Schnittansicht","tool.dsectionTip":"Schnittlinie A–A durch eine Ansicht ziehen – erzeugt eine Schnittansicht mit Schraffur","tool.dim":"Maß","tool.dimTip":"Bemaßung hinzufügen: zwei Punkte oder einen Kreis anklicken","tool.dimKinds":"Maß-Arten","tool.dimKindsTip":"Kettenmaß, Bezugsmaß, Winkel, Radius, Durchmesser oder Fase","tool.autodim":"Automatisch bemaßen","tool.autodimShort":"Auto-Maße","tool.autodimTip":"Gesamtmaße und Bohrungen automatisch bemaßen","tool.dnote":"Hinweislinie","tool.dnoteTip":"Notiz mit Hinweislinie (Pfeil oder Punkt an einer Kante oder Fläche)","tool.balloons":"Positionsnummern","tool.balloonsShort":"Pos.-Nr.","tool.balloonsTip":"Positionsnummern und Stückliste auf dem Blatt","tool.draw2d":"2D zeichnen","tool.draw2dTip":"Linien, Kreise und Text frei auf das Blatt zeichnen","tool.dexport":"Zeichnung speichern","tool.dexportShort":"Speichern","tool.dexportTip":"Als PDF, SVG, DXF oder PNG speichern","tool.fly.bodiesTitle":"Grundkörper","tool.fly.tileTip":"Klicken fügt ihn ein, Ziehen setzt ihn genau hin","tool.fly.cylHole":"Zylinder als Loch","tool.fly.boxHole":"Quader als Loch","tool.fly.route3d":"Rohr im Raum","tool.fly.bodiesFoot":"Tipp: Jeder Körper kann mit einem Klick zum Loch werden.","tool.fly.partsTitle":"Bauteile","tool.fly.partsFoot":"Löcher auf eine Fläche ziehen – sie richten sich automatisch aus.","menu.proj.rename":"Projekt umbenennen","menu.proj.saveFile":"Als Datei speichern","menu.proj.saveInFolderNow":"Jetzt in „{name}“ speichern","menu.proj.changeFolder":"Anderen Ordner wählen …","menu.proj.disconnectFolder":"Ordner-Verbindung trennen","menu.proj.saveToFolder":"In Ordner speichern …","menu.proj.openImport":"Datei öffnen / STEP, IGES, BREP, STL, 3MF, OBJ importieren …","menu.proj.versions":"Versionen …","menu.proj.newProject":"Neues Projekt","menu.proj.startAndTemplates":"Startseite und Vorlagen","menu.folder.saveNow":"Jetzt in Ordner speichern","menu.folder.changeFolder":"Anderen Ordner wählen …","menu.folder.disconnect":"Ordner-Verbindung trennen","menu.main.tourBasics":"Einführung starten","menu.main.tourSketch":"Einführung: Erste Skizze","menu.main.settings":"Einstellungen","menu.main.shortcuts":"Tastenkürzel","menu.main.export":"Exportieren","menu.main.saveImage":"Bild speichern (PNG)","menu.main.about":"Über Tracery","menu.main.aboutP1":"Tracery ist ein kostenloses, parametrisches CAD im Browser – ohne Konto, mit exaktem Geometrie-Kern und technischen Zeichnungen.","menu.main.aboutP2":"Der Name: „Tracery“ ist das englische Wort für Maßwerk – die filigranen, exakt konstruierten Ornamente in gotischen Kirchenfenstern. Genau so sollen deine Teile werden.","menu.main.aboutP3":"Gerechnet wird mit dem CAD-Kern OpenCascade (LGPL-2.1) über die Bibliothek replicad (MIT). Die 3D-Anzeige nutzt three.js (MIT), die PDF-Ausgabe jsPDF (MIT).","menu.main.aboutP4":"Deine Projekte bleiben in deinem Browser. Der KI-Helfer nutzt dein Claude-Konto.","menu.more.measure":"Messen","menu.more.notes":"Notizstift","menu.more.views":"Ansicht: Schnitt, Röntgen, Explosion …","menu.more.weakSpots":"Schwachstellen suchen","menu.more.showAllPro":"Alle Werkzeuge zeigen (Profi)","menu.view.section":"Schnitt","menu.view.xray":"Röntgen","menu.view.explode":"Explosion","menu.view.focus":"Fokus-Vorschau","menu.view.overhang":"Überhänge (3D-Druck)","menu.view.thin":"Wandstärke (3D-Druck)","menu.view.present":"Vorführen (Vollbild)","menu.view.turntable":"Drehteller-Video …","menu.view.lightPrefix":"Licht: {name}","menu.view.shadows":"Schatten","menu.view.viewBack":"Vorige Ansicht","menu.view.saveView":"Ansicht speichern …","menu.view.savedViewPrefix":"Ansicht: {name}","menu.view.disp.edges":"Flächen mit Kanten","menu.view.disp.shaded":"Nur Flächen","menu.view.disp.wire":"Drahtgitter (nur Kanten)","menu.view.disp.hidden":"Verdeckte Kanten zeigen","menu.view.look.studio":"Studio-Look (Werkstoff, Licht, Schatten)","menu.view.look.plain":"Einfach (matt, schnell)","menu.view.look.clay":"Prüfen: Ton","menu.view.look.chrome":"Prüfen: Chrom-Streifen","menu.view.mood.studio":"Studio","menu.view.mood.hell":"Hell","menu.view.mood.werkstatt":"Werkstatt","menu.check.geom":"Geometrie prüfen","menu.check.weak":"Schwachstellen suchen","menu.check.thin":"Wandstärke (3D-Druck)","menu.check.overhang":"Überhänge (3D-Druck)","menu.select.all":"Alles","menu.select.body":"Nur Körper","menu.select.face":"Nur Flächen","menu.select.edge":"Nur Kanten","menu.select.tip":"Wählen: {name}","menu.edge.convex":"Alle äußeren Kanten","menu.edge.concave":"Alle inneren Kanten","menu.edge.all":"Alle Kanten","menu.edge.faceSelect":"Alle {n} Kanten wählen","menu.edge.faceFillet":"Alle abrunden ({v})","menu.edge.faceChamfer":"Alle abschrägen ({v})","menu.edge.faceNone":"An dieser Fläche habe ich keine Kanten gefunden.","menu.ctx.editSketch":"Skizze bearbeiten","menu.ctx.lookAtFace":"Blick senkrecht auf die Fläche","menu.ctx.faceDxf":"Fläche als DXF speichern","menu.ctx.faceSvg":"Fläche als SVG speichern","menu.ctx.sketchOnFace":"Skizze auf dieser Fläche","menu.ctx.thread":"Gewinde …","menu.ctx.markThread":"Gewinde markieren …","menu.ctx.dupLinked":"Verknüpft duplizieren","menu.ctx.toSolid":"Zum Körper machen","menu.ctx.toHole":"Zum Loch machen","menu.ctx.selectSimilar":"Ähnliche wählen","menu.ctx.zoomFit":"Heranzoomen","menu.ctx.saveSelection":"Auswahl speichern …","menu.ctx.behind":"Dahinter wählen: „{name}“","menu.ctx.showAll":"Alles einblenden","menu.ctx.showAllCount":"Alles einblenden ({n})","menu.ctx.selectAll":"Alles wählen","menu.ctx.fitAll":"Alles zeigen","menu.ctx.selSet":"Auswahl: {name}","menu.ctx.viewBack":"Vorige Ansicht","menu.ctx.newSketch":"Neue Skizze","menu.ctx.saveImage":"Bild speichern (PNG)","menu.ctx.repeat":"Wiederholen: {label}","menu.tl.markerAfter":"Marker hinter diesen Schritt","menu.tl.markerBefore":"Marker vor diesen Schritt","menu.tree.toFolder":"In Ordner","menu.tree.fromFolder":"Aus Ordner nehmen","menu.tree.dissolveFolder":"Ordner auflösen","menu.tree.collapseFolder":"Ordner zuklappen","menu.tree.expandFolder":"Ordner aufklappen","menu.tree.selectFolder":"Alle Schritte wählen","menu.draw.line":"Linie","menu.draw.rect":"Rechteck","menu.draw.circle":"Kreis","menu.draw.text":"Text","menu.draw.clearAll":"Alles Gezeichnete löschen","menu.draw.clearTitle":"Gezeichnetes löschen?","menu.draw.clearBody":"Alle frei gezeichneten Linien und Texte werden entfernt.","menu.draw.sheet":"Blatt","menu.draw.orient":"Ausrichtung","menu.draw.landscape":"Quer","menu.draw.portrait":"Hoch","menu.draw.scale":"Maßstab","menu.draw.scaleAuto":"Automatisch","menu.draw.viewsHeading":"Ansichten","menu.draw.vFront":"Vorderansicht","menu.draw.vTop":"Draufsicht","menu.draw.vLeft":"Seitenansicht von links","menu.draw.vIso":"Isometrie (3D-Bild)","menu.draw.hiddenEdges":"Verdeckte Kanten (gestrichelt)","menu.draw.tangentEdges":"Tangentiale Kanten","menu.draw.shaded":"Schattiert","menu.draw.scaleSheet":"Wie Blatt","menu.draw.addIso":"Isometrische Ansicht","menu.draw.addIsoShaded":"Isometrische Ansicht (schattiert)","menu.draw.addFree":"Aktuelle 3D-Ansicht","menu.draw.addFreeShaded":"Aktuelle 3D-Ansicht (schattiert)","menu.draw.centers":"Mittellinien","menu.draw.exportPdf":"Als PDF speichern","menu.draw.exportSvg":"Als SVG speichern","menu.draw.exportDxf":"Als DXF speichern","menu.draw.exportDxfAll":"Alle Blätter als DXF (ZIP)","menu.draw.exportPng":"Als PNG speichern …","menu.draw.detail":"Detailansicht","menu.draw.detailScale":"Detail-Maßstab","menu.draw.dimLin":"Abstand (Standard)","menu.draw.dimChain":"Kettenmaß","menu.draw.dimBase":"Bezugsmaß (von einer Kante aus)","menu.draw.dimAng":"Winkelmaß","menu.draw.dimRad":"Radius (R)","menu.draw.dimDia":"Durchmesser (Ø)","menu.draw.dimChamfer":"Fase (1×45°)","menu.draw.autoBalloons":"Positionsnummern automatisch setzen","menu.draw.addBalloon":"Positionsnummer einzeln setzen","menu.draw.bomTable":"Stückliste auf dem Blatt","menu.draw.clearBalloons":"Alle Positionsnummern entfernen","ctx.toolbarAria":"Aktionen","ctx.suppressed":"Unterdrückt","ctx.behindMarker":"Hinter dem Marker","ctx.enableAgain":"Wieder einschalten","ctx.enableAgainTip":"Diesen Schritt wieder mitrechnen","ctx.markerAfter":"Marker dahinter","ctx.markerAfterTip":"Den Marker hinter diesen Schritt ziehen – dann wird er wieder mitgerechnet","ctx.moveStepLabel":"Verschieben/Drehen","ctx.scaleStepLabel":"Skalieren","ctx.thickenStepLabel":"Aufdicken","ctx.mirrorStepLabel":"Schritt spiegeln","ctx.targetBody":"Zielkörper","ctx.targetBodyTip":"Zum Zielkörper wechseln","ctx.suppressTip":"Diesen Schritt unterdrücken – der Körper springt zurück","ctx.deleteTip":"Löschen (Entf)","ctx.copyValTip":"{tip} – klicken kopiert den Wert","ctx.edgeDia":"Kante Ø","ctx.edgeDiaTip":"Kreis mit Radius {r}, Umfang {total}","ctx.edgeOne":"Kante","ctx.edgesCount":"{n} Kanten","ctx.edgesTotalTip":"Gesamtlänge der gewählten Kanten","ctx.edgeLenTip":"Länge der Kante","ctx.edgeArcTip":"Länge der Kante (Bogen, R {r})","ctx.fillet":"Abrunden","ctx.filletTip":"Kante abrunden (1 mm, danach änderbar)","ctx.chamfer":"Abschrägen","ctx.chamferTip":"Kante abschrägen (1 mm, danach änderbar)","ctx.similar":"Ähnliche","ctx.similarEdgesTip":"Alle gleich langen Kanten dazuwählen (A)","ctx.chain":"Kette","ctx.chainTip":"Alle Kanten dazuwählen, die ohne Knick weiterlaufen (z. B. ein gerundeter Umriss)","ctx.byKind":"Nach Art","ctx.byKindTip":"Alle äußeren oder alle inneren Kanten dieses Teils wählen","ctx.planeAngle":"Ebene im Winkel","ctx.planeAngleTip":"Bezugsebene durch diese Kante im Winkel zu einer Fläche anlegen","ctx.planeNormal":"Ebene senkrecht","ctx.planeNormalTip":"Bezugsebene senkrecht auf diese Kante (in der Mitte, danach änderbar)","ctx.planeTwoEdges":"Ebene durch 2 Kanten","ctx.planeTwoEdgesTip":"Bezugsebene durch beide gewählten geraden Kanten anlegen","ctx.planeTangent":"Ebene tangential","ctx.planeTangentTip":"Bezugsebene tangential an diese runde Fläche anlegen","ctx.pointEdgeMid":"Punkt Kantenmitte","ctx.pointEdgeMidTip":"Bezugspunkt genau in der Mitte dieser Kante anlegen","ctx.pointFaceCenter":"Punkt Flächenmitte","ctx.pointFaceCenterTip":"Bezugspunkt in der Mitte dieser Fläche anlegen","ctx.face":"Fläche","ctx.sketchHere":"Skizze hierauf","ctx.sketchHereTip":"Auf dieser Fläche zeichnen","ctx.hole":"Bohrung","ctx.holeTip":"Bohrungs-Assistent: Durchgang, Kernloch, Sackloch mit Spitze, Passbohrung H7, Zentrierbohrung, Einsatz oder Mutternfalle","ctx.extrude":"Hochziehen","ctx.extrudeTip":"Die Fläche herausziehen oder hineindrücken","ctx.faceEdges":"Ihre Kanten","ctx.faceEdgesTip":"Alle Kanten dieser Fläche wählen, abrunden oder abschrägen","ctx.shell":"Aushöhlen","ctx.shellTip":"Körper aushöhlen – diese Fläche wird die Öffnung","ctx.sectionHere":"Schnitt hier","ctx.sectionHereTip":"Schnitt parallel zu dieser Fläche – den Abstand stellst du in der Schnitt-Leiste ein","ctx.mirrorFace":"An Fläche spiegeln","ctx.mirrorFaceTip":"Gespiegelte Kopie an dieser Fläche – z. B. die zweite Hälfte eines symmetrischen Teils","ctx.sphereDia":"Kugel Ø","ctx.roundFaceDia":"Runde Fläche Ø","ctx.roundFaceDiaTip":"Radius {r}","ctx.roundFace":"Runde Fläche","ctx.holeRoundTip":"Bohrungs-Assistent: Loch senkrecht in die runde Fläche (Schraube, Sackloch, Passbohrung H7, Zentrierung …) – der Magnet rastet ganz oben, an den Seiten und in der Mitte ein","ctx.threadEdit":"Gewinde ändern","ctx.threadMark":"Gewinde markieren","ctx.threadTip":"Kosmetisches Gewinde auf dieser runden Fläche markieren (rechnet schnell)","ctx.axis":"Achse","ctx.axisTip":"Bezugsachse durch die Mitte dieser runden Fläche anlegen","ctx.toBody":"Zum Körper","ctx.toHole":"Zum Loch","ctx.toBodyTip":"Wieder zum festen Körper machen (H)","ctx.toHoleTip":"Zum Loch machen – schneidet dann in andere Körper (H)","ctx.rotate":"Drehen","ctx.rotateTip":"Um 90° drehen oder kippen","ctx.rotZ":"Um 90° drehen (flach)","ctx.rotX":"Nach vorne kippen","ctx.rotY":"Zur Seite kippen","ctx.mirror":"Spiegeln","ctx.mirrorTip":"Spiegeln","ctx.mirrorX":"Links ↔ rechts","ctx.mirrorY":"Vorne ↔ hinten","ctx.mirrorZ":"Oben ↔ unten","ctx.dupTip":"Duplizieren (Strg D)","ctx.moveStep":"Verschieben/Drehen","ctx.moveStepTip":"Als Schritt verschieben, drehen oder kopieren (bleibt im Verlauf änderbar)","ctx.scale":"Skalieren","ctx.scaleTip":"Körper als Schritt im Verlauf vergrößern oder verkleinern (gleichmäßig oder je Achse)","ctx.thicken":"Aufdicken","ctx.thickenTip":"Fläche zu einer Platte mit fester Dicke aufdicken (nach außen, innen oder mittig)","ctx.mirrorStep":"Schritt spiegeln","ctx.mirrorStepTip":"Diesen Formschritt (z. B. eine Tasche oder Rippe) an einer Ebene oder Fläche im selben Körper spiegeln","ctx.pickMirrorPlane":"Ebene / Fläche","ctx.pickMirrorPlaneTip":"Ebene Körperfläche oder Bezugsebene als Spiegelebene wählen","ctx.pattern":"Muster","ctx.patternHoleTip":"Loch als Muster oder gespiegelt vervielfachen","ctx.patternTip":"Muster oder gespiegelte Kopie","ctx.patRect":"Rechteckmuster","ctx.patCirc":"Kreismuster","ctx.patPath":"Muster entlang Kurve","ctx.patMirror":"Gespiegelte Kopie","ctx.split":"Teilen","ctx.splitTip":"Körper an einer Ebene teilen","ctx.toTip":"Zur Spitze","ctx.toTipTip":"Den Umriss zu einer Spitze zusammenlaufen lassen (Übergang mit Spitze)","ctx.similarPartsTip":"Alle gleichen Teile wählen (A)","ctx.selectEdges":"Kanten wählen","ctx.selectEdgesTip":"Alle äußeren, alle inneren oder alle Kanten dieses Teils wählen – dann zusammen abrunden","ctx.ungroup":"Gruppe lösen","ctx.ungroupTip":"Gruppe lösen","ctx.group":"Gruppieren","ctx.groupTip":"Zu einem Körper verbinden (Strg G)","ctx.gap":"Abstand","ctx.gapTip":"Abstand zwischen den beiden Teilen genau setzen (der zuletzt gewählte bewegt sich)","ctx.joint":"Gelenk","ctx.jointTip":"Drehgelenk: das zuletzt gewählte Teil dreht sich um eine Achse, die du im Bild wählst","ctx.loft":"Übergang","ctx.loftTip":"Weicher Übergang durch die Umrisse – in der Reihenfolge, in der du sie gewählt hast","ctx.boolean":"Boolesch","ctx.booleanTip":"Körper vereinigen, abziehen oder schneiden","ctx.boolUnion":"Vereinigen","ctx.boolSub":"Abziehen (der zuerst gewählte bleibt)","ctx.boolInt":"Schnittmenge","ctx.align":"Ausrichten","ctx.alignTip":"Objekte aneinander ausrichten","ctx.alignLeft":"Links bündig","ctx.alignCx":"Mittig (X)","ctx.alignRight":"Rechts bündig","ctx.alignFront":"Vorne bündig","ctx.alignCy":"Mittig (Y)","ctx.alignBack":"Hinten bündig","ctx.alignBottom":"Unten bündig","common.emboss":"Prägen","ctx.emboss":"Prägen","ctx.embossTip":"Skizze (Text oder Logo) erhaben oder vertieft auf diese Fläche projizieren","menu.proj.saveTemplate":"Als Vorlage speichern …","start.projTpl.emptyMm.name":"Leer (mm)","start.projTpl.emptyMm.desc":"Leeres Projekt in Millimetern.","start.projTpl.emptyIn.name":"Leer (Zoll)","start.projTpl.emptyIn.desc":"Leeres Projekt in Zoll (in) für US-Maße.","start.projTpl.print3d.name":"3D-Druck","start.projTpl.print3d.desc":"Druckbett 220 × 220 × 250 mm sichtbar, 0,4-mm-Düse, PLA.","start.projTpl.laser.name":"Laser (Platte 3 mm)","start.projTpl.laser.desc":"3-mm-Sperrholzplatte mit Schnittspalt-Maß für den Laser.","start.projTpl.enclosure.name":"Gehäuse","start.projTpl.enclosure.desc":"Gehäuse 80 × 50 × 30 mm mit Deckel, Wandstärke und Spiel.","tpl.newDialogTitle":"Neues Projekt aus Vorlage","tpl.builtinHeading":"Projekt-Vorlagen","tpl.customHeading":"Eigene Vorlagen","tpl.customEmpty":"Noch keine eigenen Vorlagen. Über das Projektmenü → „Als Vorlage speichern …“ legst du hier eigene Startpunkte ab.","tpl.customNoDesc":"Eigene Vorlage (lokal gespeichert)","tpl.saveCurrent":"Aktuelles Projekt als Vorlage speichern","tpl.saveDialogTitle":"Als Vorlage speichern","tpl.saveNameLabel":"Name der Vorlage","tpl.saveDescLabel":"Kurze Beschreibung (optional)","tpl.saveDescPh":"z. B. Drucker mit 0,6-mm-Düse, Gehäuse-Grundmaß …","tpl.saveNameEmpty":"Bitte gib der Vorlage einen Namen.","tpl.saveFailed":"Die Vorlage konnte nicht lokal gespeichert werden.","tpl.saved":"Vorlage „{name}“ gespeichert.","tpl.deleteAria":"Vorlage „{name}“ löschen","tpl.deleteTip":"Vorlage löschen","tpl.deleteTitle":"Vorlage löschen?","tpl.deleteBody":"„{name}“ wird aus deinen gespeicherten Vorlagen entfernt.","tpl.deleted":"Vorlage „{name}“ gelöscht.","tpl.missing":"Die Vorlage wurde nicht gefunden.","tpl.loadedPrint3d":"Vorlage „3D-Druck“ geladen: Druckbett {x} × {y} × {z} mm, Düse {nozzle} mm.","tpl.loadedEmpty":"Neues leeres Projekt ({unit}) gestartet.","tpl.loadedNamed":"Vorlage „{name}“ geladen.","recovery.title":"Tracery wurde nicht richtig beendet – letzten Stand wiederherstellen?","recovery.metaOne":"Projekt „{name}“ · {time} · 1 Objekt","recovery.metaMany":"Projekt „{name}“ · {time} · {n} Objekte","recovery.restore":"Wiederherstellen","recovery.dismiss":"Verwerfen","recovery.restored":"Letzter Stand von „{name}“ wiederhergestellt.","recovery.discarded":"Wiederherstellungs-Stand verworfen.","recovery.failed":"Der letzte Stand konnte nicht wiederhergestellt werden."};
+const TEXTS_DE = {"common.ok":"OK","common.cancel":"Abbrechen","common.close":"Schließen","common.delete":"Löschen","common.rename":"Umbenennen","common.save":"Speichern","common.name":"Name","common.body":"Körper","common.hole":"Loch","common.edit":"Bearbeiten","common.suppress":"Unterdrücken","common.unsuppress":"Wieder aktivieren","common.explainStep":"Erklär diesen Schritt","common.moveStep":"Verschieben/Drehen (Schritt)","common.scaleStep":"Skalieren (Schritt)","common.thicken":"Aufdicken","common.mirrorStep":"Schritt spiegeln","common.duplicate":"Duplizieren","common.hide":"Ausblenden","common.isolate":"Isolieren","topbar.showTree":"Verlauf zeigen","topbar.tree":"Verlauf","topbar.brandAria":"Tracery – Startseite","topbar.workspace":"Arbeitsbereich","topbar.model":"Modell","topbar.drawing":"Zeichnung","topbar.undo":"Rückgängig","topbar.undoLabel":"Rückgängig: {label}","topbar.redo":"Wiederholen","topbar.project":"Projekt","topbar.menu":"Menü","topbar.showProps":"Eigenschaften zeigen","topbar.props":"Eigenschaften","topbar.params":"Maße","topbar.log":"Protokoll","topbar.cmdPlaceholder":"Werkzeug suchen oder beschreiben, was du bauen willst …","topbar.cmdAria":"Werkzeug suchen oder der KI beschreiben","topbar.cmdGo":"Ausführen","level.simple":"Einfach","level.pro":"Profi","level.tipSimple":"Stufe: Einfach – klicken zum Wechseln auf Profi","level.tipPro":"Stufe: Profi – klicken zum Wechseln auf Einfach","level.chooseAria":"Stufe wählen","level.simpleDesc":"wenige, große Knöpfe, alles erklärt","level.proDesc":"alle Werkzeuge, Tastenkürzel, Maus wie in deinem CAD","start.aria":"Startseite","start.subtitle":"CAD im Browser – kostenlos, ohne Konto","start.newProject":"Neues Projekt","start.openFile":"Datei öffnen","start.tourBasics":"Einführung (3 Minuten)","start.tourSketch":"Erste Skizze (5 Minuten)","start.welcomeTitle":"Wie möchtest du mit Tracery arbeiten?","start.welcomeSub":"Du kannst jederzeit oben rechts zwischen beiden Stufen wechseln.","start.surfaceAria":"Oberfläche","start.surfaceLabel":"Oberfläche:","start.simpleOption":"Einfach – für Einsteiger","start.proOption":"Profi – alle Werkzeuge","start.recentHeading":"Weiterarbeiten","start.recentMetaOne":"{n} Objekt · {date}","start.recentMetaMany":"{n} Objekte · {date}","start.deleteFromBrowserAria":"Aus dem Browser löschen","start.deleteFromBrowserTip":"Aus diesem Browser löschen","start.deleteConfirmTitle":"Projekt löschen?","start.deleteConfirmBody":"„{name}“ wird aus diesem Browser gelöscht. Gespeicherte Dateien bleiben erhalten.","start.projectMissing":"Das Projekt ist nicht mehr da.","start.templatesHeading":"Vorlagen","start.emptyTitle":"Leeres Projekt","start.emptyDesc":"Von null anfangen.","start.templateLoaded":"Vorlage geladen. Klick einen Teil an, um ihn zu ändern.","start.footHtml":"Projekte werden automatisch in diesem Browser gesichert. Zum sicheren Aufbewahren und Teilen: <b>Projekt als Datei speichern</b>.<br>Tracery rechnet mit OpenCascade (LGPL-2.1) über replicad (MIT) und zeigt 3D mit three.js (MIT).","start.tpl.box.name":"Box mit Deckel","start.tpl.box.desc":"Mit Maßen wie Wandstärke und Spiel – änderst du sie, passt sich alles an.","start.tpl.sign.name":"Schild mit Loch","start.tpl.sign.desc":"Flache Platte mit runden Ecken und einem Loch zum Aufhängen.","start.tpl.phone.name":"Handyhalter","start.tpl.phone.desc":"Schräge Lehne, Ablage vorne und ein Schlitz fürs Kabel.","start.tpl.bracket.name":"Winkel zum Anschrauben","start.tpl.bracket.desc":"L-Winkel mit Senkkopf-Schraublöchern und Versteifung.","start.tpl.gear.name":"Zahnradpaar","start.tpl.gear.desc":"Zwei passende Zahnräder mit Bohrung.","start.tpl.hinge.name":"Scharnier","start.tpl.hinge.desc":"Aus einem Stück, mit Spiel zwischen den Teilen.","tool.body":"Körper","tool.bodyTip":"Grundkörper hinzufügen – anklicken oder auf die Fläche ziehen","tool.sketch":"Skizze","tool.sketchTip":"Eine 2D-Skizze zeichnen und daraus einen Körper machen","tool.parts":"Bauteile","tool.partsTip":"Schraubenlöcher, Mutternfallen, Scharniere, Zahnräder …","tool.measure":"Messen","tool.measureTip":"Messen: Abstände, Winkel, Flächen und Durchmesser","tool.notes":"Notizen","tool.notesTip":"Notizstift: frei malen und Text hinschreiben – ohne technische Bedeutung","tool.views":"Ansicht","tool.viewsTip":"Ansicht: Schnitt, Röntgen, Explosion und Fokus-Vorschau – ändert nur die Anzeige","tool.check":"Prüfen","tool.checkTip":"Prüfen: Geometrie prüfen, Schwachstellen, Wandstärke und Überhänge","tool.more":"Mehr","tool.moreTip":"Weitere Werkzeuge: Messen, Notizen, Ansicht – oder alle Werkzeuge zeigen","tool.export":"Exportieren","tool.exportShort":"Export","tool.exportTip":"Als STEP, STL, 3MF, OBJ, GLB oder DXF speichern (ZIP)","tool.sheet":"Blatt","tool.sheetTip":"Blattgröße, Maßstab und Ansichten","tool.viewAdd":"Ansicht +","tool.viewAddTip":"Isometrische oder aktuelle 3D-Ansicht hinzufügen","tool.detail":"Detailansicht","tool.detailTip":"Ausschnitt einer Ansicht mit Kreis vergrößern (Detail Z)","tool.dsection":"Schnittansicht","tool.dsectionTip":"Schnittlinie A–A durch eine Ansicht ziehen – erzeugt eine Schnittansicht mit Schraffur","tool.dim":"Maß","tool.dimTip":"Bemaßung hinzufügen: zwei Punkte oder einen Kreis anklicken","tool.dimKinds":"Maß-Arten","tool.dimKindsTip":"Kettenmaß, Bezugsmaß, Winkel, Radius, Durchmesser oder Fase","tool.autodim":"Automatisch bemaßen","tool.autodimShort":"Auto-Maße","tool.autodimTip":"Gesamtmaße und Bohrungen automatisch bemaßen","tool.dnote":"Hinweislinie","tool.dnoteTip":"Notiz mit Hinweislinie (Pfeil oder Punkt an einer Kante oder Fläche)","tool.balloons":"Positionsnummern","tool.balloonsShort":"Pos.-Nr.","tool.balloonsTip":"Positionsnummern und Stückliste auf dem Blatt","tool.draw2d":"2D zeichnen","tool.draw2dTip":"Linien, Kreise und Text frei auf das Blatt zeichnen","tool.dexport":"Zeichnung speichern","tool.dexportShort":"Speichern","tool.dexportTip":"Als PDF, SVG, DXF oder PNG speichern","tool.fly.bodiesTitle":"Grundkörper","tool.fly.tileTip":"Klicken fügt ihn ein, Ziehen setzt ihn genau hin","tool.fly.cylHole":"Zylinder als Loch","tool.fly.boxHole":"Quader als Loch","tool.fly.route3d":"Rohr im Raum","tool.fly.bodiesFoot":"Tipp: Jeder Körper kann mit einem Klick zum Loch werden.","tool.fly.partsTitle":"Bauteile","tool.fly.partsFoot":"Löcher auf eine Fläche ziehen – sie richten sich automatisch aus.","menu.proj.rename":"Projekt umbenennen","menu.proj.saveFile":"Als Datei speichern","menu.proj.saveInFolderNow":"Jetzt in „{name}“ speichern","menu.proj.changeFolder":"Anderen Ordner wählen …","menu.proj.disconnectFolder":"Ordner-Verbindung trennen","menu.proj.saveToFolder":"In Ordner speichern …","menu.proj.openImport":"Datei öffnen / STEP, IGES, BREP, STL, 3MF, OBJ importieren …","menu.proj.versions":"Versionen …","menu.proj.newProject":"Neues Projekt","menu.proj.startAndTemplates":"Startseite und Vorlagen","menu.folder.saveNow":"Jetzt in Ordner speichern","menu.folder.changeFolder":"Anderen Ordner wählen …","menu.folder.disconnect":"Ordner-Verbindung trennen","menu.main.tourBasics":"Einführung starten","menu.main.tourSketch":"Einführung: Erste Skizze","menu.main.settings":"Einstellungen","menu.main.shortcuts":"Tastenkürzel","menu.main.export":"Exportieren","menu.main.saveImage":"Bild speichern (PNG)","menu.main.about":"Über Tracery","menu.main.aboutP1":"Tracery ist ein kostenloses, parametrisches CAD im Browser – ohne Konto, mit exaktem Geometrie-Kern und technischen Zeichnungen.","menu.main.aboutP2":"Der Name: „Tracery“ ist das englische Wort für Maßwerk – die filigranen, exakt konstruierten Ornamente in gotischen Kirchenfenstern. Genau so sollen deine Teile werden.","menu.main.aboutP3":"Gerechnet wird mit dem CAD-Kern OpenCascade (LGPL-2.1) über die Bibliothek replicad (MIT). Die 3D-Anzeige nutzt three.js (MIT), die PDF-Ausgabe jsPDF (MIT).","menu.main.aboutP4":"Deine Projekte bleiben in deinem Browser. Der KI-Helfer nutzt dein Claude-Konto.","menu.more.measure":"Messen","menu.more.notes":"Notizstift","menu.more.views":"Ansicht: Schnitt, Röntgen, Explosion …","menu.more.weakSpots":"Schwachstellen suchen","menu.more.showAllPro":"Alle Werkzeuge zeigen (Profi)","menu.view.section":"Schnitt","menu.view.xray":"Röntgen","menu.view.explode":"Explosion","menu.view.focus":"Fokus-Vorschau","menu.view.overhang":"Überhänge (3D-Druck)","menu.view.thin":"Wandstärke (3D-Druck)","menu.view.present":"Vorführen (Vollbild)","menu.view.turntable":"Drehteller-Video …","menu.view.lightPrefix":"Licht: {name}","menu.view.shadows":"Schatten","menu.view.viewBack":"Vorige Ansicht","menu.view.saveView":"Ansicht speichern …","menu.view.savedViewPrefix":"Ansicht: {name}","menu.view.disp.edges":"Flächen mit Kanten","menu.view.disp.shaded":"Nur Flächen","menu.view.disp.wire":"Drahtgitter (nur Kanten)","menu.view.disp.hidden":"Verdeckte Kanten zeigen","menu.view.look.studio":"Studio-Look (Werkstoff, Licht, Schatten)","menu.view.look.plain":"Einfach (matt, schnell)","menu.view.look.clay":"Prüfen: Ton","menu.view.look.chrome":"Prüfen: Chrom-Streifen","menu.view.mood.studio":"Studio","menu.view.mood.hell":"Hell","menu.view.mood.werkstatt":"Werkstatt","menu.check.geom":"Geometrie prüfen","menu.check.weak":"Schwachstellen suchen","menu.check.thin":"Wandstärke (3D-Druck)","menu.check.overhang":"Überhänge (3D-Druck)","menu.select.all":"Alles","menu.select.body":"Nur Körper","menu.select.face":"Nur Flächen","menu.select.edge":"Nur Kanten","menu.select.tip":"Wählen: {name}","menu.edge.convex":"Alle äußeren Kanten","menu.edge.concave":"Alle inneren Kanten","menu.edge.all":"Alle Kanten","menu.edge.faceSelect":"Alle {n} Kanten wählen","menu.edge.faceFillet":"Alle abrunden ({v})","menu.edge.faceChamfer":"Alle abschrägen ({v})","menu.edge.faceNone":"An dieser Fläche habe ich keine Kanten gefunden.","menu.ctx.editSketch":"Skizze bearbeiten","menu.ctx.lookAtFace":"Blick senkrecht auf die Fläche","menu.ctx.faceDxf":"Fläche als DXF speichern","menu.ctx.faceSvg":"Fläche als SVG speichern","menu.ctx.sketchOnFace":"Skizze auf dieser Fläche","menu.ctx.thread":"Gewinde …","menu.ctx.markThread":"Gewinde markieren …","menu.ctx.dupLinked":"Verknüpft duplizieren","menu.ctx.copyBody":"Kopieren","menu.ctx.pasteBody":"Einfügen","menu.ctx.toSolid":"Zum Körper machen","menu.ctx.toHole":"Zum Loch machen","menu.ctx.selectSimilar":"Ähnliche wählen","menu.ctx.zoomFit":"Heranzoomen","menu.ctx.saveSelection":"Auswahl speichern …","menu.ctx.behind":"Dahinter wählen: „{name}“","menu.ctx.showAll":"Alles einblenden","menu.ctx.showAllCount":"Alles einblenden ({n})","menu.ctx.selectAll":"Alles wählen","menu.ctx.fitAll":"Alles zeigen","menu.ctx.selSet":"Auswahl: {name}","menu.ctx.viewBack":"Vorige Ansicht","menu.ctx.newSketch":"Neue Skizze","menu.ctx.saveImage":"Bild speichern (PNG)","menu.ctx.repeat":"Wiederholen: {label}","menu.tl.markerAfter":"Marker hinter diesen Schritt","menu.tl.markerBefore":"Marker vor diesen Schritt","menu.tree.toFolder":"In Ordner","menu.tree.fromFolder":"Aus Ordner nehmen","menu.tree.dissolveFolder":"Ordner auflösen","menu.tree.collapseFolder":"Ordner zuklappen","menu.tree.expandFolder":"Ordner aufklappen","menu.tree.selectFolder":"Alle Schritte wählen","menu.draw.line":"Linie","menu.draw.rect":"Rechteck","menu.draw.circle":"Kreis","menu.draw.text":"Text","menu.draw.clearAll":"Alles Gezeichnete löschen","menu.draw.clearTitle":"Gezeichnetes löschen?","menu.draw.clearBody":"Alle frei gezeichneten Linien und Texte werden entfernt.","menu.draw.sheet":"Blatt","menu.draw.orient":"Ausrichtung","menu.draw.landscape":"Quer","menu.draw.portrait":"Hoch","menu.draw.scale":"Maßstab","menu.draw.scaleAuto":"Automatisch","menu.draw.viewsHeading":"Ansichten","menu.draw.vFront":"Vorderansicht","menu.draw.vTop":"Draufsicht","menu.draw.vLeft":"Seitenansicht von links","menu.draw.vIso":"Isometrie (3D-Bild)","menu.draw.hiddenEdges":"Verdeckte Kanten (gestrichelt)","menu.draw.tangentEdges":"Tangentiale Kanten","menu.draw.shaded":"Schattiert","menu.draw.scaleSheet":"Wie Blatt","menu.draw.addIso":"Isometrische Ansicht","menu.draw.addIsoShaded":"Isometrische Ansicht (schattiert)","menu.draw.addFree":"Aktuelle 3D-Ansicht","menu.draw.addFreeShaded":"Aktuelle 3D-Ansicht (schattiert)","menu.draw.centers":"Mittellinien","menu.draw.exportPdf":"Als PDF speichern","menu.draw.exportSvg":"Als SVG speichern","menu.draw.exportDxf":"Als DXF speichern","menu.draw.exportDxfAll":"Alle Blätter als DXF (ZIP)","menu.draw.exportPng":"Als PNG speichern …","menu.draw.detail":"Detailansicht","menu.draw.detailScale":"Detail-Maßstab","menu.draw.dimLin":"Abstand (Standard)","menu.draw.dimChain":"Kettenmaß","menu.draw.dimBase":"Bezugsmaß (von einer Kante aus)","menu.draw.dimAng":"Winkelmaß","menu.draw.dimRad":"Radius (R)","menu.draw.dimDia":"Durchmesser (Ø)","menu.draw.dimChamfer":"Fase (1×45°)","menu.draw.autoBalloons":"Positionsnummern automatisch setzen","menu.draw.addBalloon":"Positionsnummer einzeln setzen","menu.draw.bomTable":"Stückliste auf dem Blatt","menu.draw.clearBalloons":"Alle Positionsnummern entfernen","ctx.toolbarAria":"Aktionen","ctx.suppressed":"Unterdrückt","ctx.behindMarker":"Hinter dem Marker","ctx.enableAgain":"Wieder einschalten","ctx.enableAgainTip":"Diesen Schritt wieder mitrechnen","ctx.markerAfter":"Marker dahinter","ctx.markerAfterTip":"Den Marker hinter diesen Schritt ziehen – dann wird er wieder mitgerechnet","ctx.moveStepLabel":"Verschieben/Drehen","ctx.scaleStepLabel":"Skalieren","ctx.thickenStepLabel":"Aufdicken","ctx.mirrorStepLabel":"Schritt spiegeln","ctx.targetBody":"Zielkörper","ctx.targetBodyTip":"Zum Zielkörper wechseln","ctx.suppressTip":"Diesen Schritt unterdrücken – der Körper springt zurück","ctx.deleteTip":"Löschen (Entf)","ctx.copyValTip":"{tip} – klicken kopiert den Wert","ctx.edgeDia":"Kante Ø","ctx.edgeDiaTip":"Kreis mit Radius {r}, Umfang {total}","ctx.edgeOne":"Kante","ctx.edgesCount":"{n} Kanten","ctx.edgesTotalTip":"Gesamtlänge der gewählten Kanten","ctx.edgeLenTip":"Länge der Kante","ctx.edgeArcTip":"Länge der Kante (Bogen, R {r})","ctx.fillet":"Abrunden","ctx.filletTip":"Kante abrunden (1 mm, danach änderbar)","ctx.chamfer":"Abschrägen","ctx.chamferTip":"Kante abschrägen (1 mm, danach änderbar)","ctx.similar":"Ähnliche","ctx.similarEdgesTip":"Alle gleich langen Kanten dazuwählen (A)","ctx.chain":"Kette","ctx.chainTip":"Alle Kanten dazuwählen, die ohne Knick weiterlaufen (z. B. ein gerundeter Umriss)","ctx.byKind":"Nach Art","ctx.byKindTip":"Alle äußeren oder alle inneren Kanten dieses Teils wählen","ctx.planeAngle":"Ebene im Winkel","ctx.planeAngleTip":"Bezugsebene durch diese Kante im Winkel zu einer Fläche anlegen","ctx.planeNormal":"Ebene senkrecht","ctx.planeNormalTip":"Bezugsebene senkrecht auf diese Kante (in der Mitte, danach änderbar)","ctx.planeTwoEdges":"Ebene durch 2 Kanten","ctx.planeTwoEdgesTip":"Bezugsebene durch beide gewählten geraden Kanten anlegen","ctx.planeTangent":"Ebene tangential","ctx.planeTangentTip":"Bezugsebene tangential an diese runde Fläche anlegen","ctx.pointEdgeMid":"Punkt Kantenmitte","ctx.pointEdgeMidTip":"Bezugspunkt genau in der Mitte dieser Kante anlegen","ctx.pointFaceCenter":"Punkt Flächenmitte","ctx.pointFaceCenterTip":"Bezugspunkt in der Mitte dieser Fläche anlegen","ctx.face":"Fläche","ctx.sketchHere":"Skizze hierauf","ctx.sketchHereTip":"Auf dieser Fläche zeichnen","ctx.hole":"Bohrung","ctx.holeTip":"Bohrungs-Assistent: Durchgang, Kernloch, Sackloch mit Spitze, Passbohrung H7, Zentrierbohrung, Einsatz oder Mutternfalle","ctx.extrude":"Hochziehen","ctx.extrudeTip":"Die Fläche herausziehen oder hineindrücken","ctx.faceEdges":"Ihre Kanten","ctx.faceEdgesTip":"Alle Kanten dieser Fläche wählen, abrunden oder abschrägen","ctx.shell":"Aushöhlen","ctx.shellTip":"Körper aushöhlen – diese Fläche wird die Öffnung","ctx.sectionHere":"Schnitt hier","ctx.sectionHereTip":"Schnitt parallel zu dieser Fläche – den Abstand stellst du in der Schnitt-Leiste ein","ctx.mirrorFace":"An Fläche spiegeln","ctx.mirrorFaceTip":"Gespiegelte Kopie an dieser Fläche – z. B. die zweite Hälfte eines symmetrischen Teils","ctx.sphereDia":"Kugel Ø","ctx.roundFaceDia":"Runde Fläche Ø","ctx.roundFaceDiaTip":"Radius {r}","ctx.roundFace":"Runde Fläche","ctx.holeRoundTip":"Bohrungs-Assistent: Loch senkrecht in die runde Fläche (Schraube, Sackloch, Passbohrung H7, Zentrierung …) – der Magnet rastet ganz oben, an den Seiten und in der Mitte ein","ctx.threadEdit":"Gewinde ändern","ctx.threadMark":"Gewinde markieren","ctx.threadTip":"Kosmetisches Gewinde auf dieser runden Fläche markieren (rechnet schnell)","ctx.axis":"Achse","ctx.axisTip":"Bezugsachse durch die Mitte dieser runden Fläche anlegen","ctx.toBody":"Zum Körper","ctx.toHole":"Zum Loch","ctx.toBodyTip":"Wieder zum festen Körper machen (H)","ctx.toHoleTip":"Zum Loch machen – schneidet dann in andere Körper (H)","ctx.rotate":"Drehen","ctx.rotateTip":"Um 90° drehen oder kippen","ctx.rotZ":"Um 90° drehen (flach)","ctx.rotX":"Nach vorne kippen","ctx.rotY":"Zur Seite kippen","ctx.mirror":"Spiegeln","ctx.mirrorTip":"Spiegeln","ctx.mirrorX":"Links ↔ rechts","ctx.mirrorY":"Vorne ↔ hinten","ctx.mirrorZ":"Oben ↔ unten","ctx.dupTip":"Duplizieren (Strg D)","ctx.moveStep":"Verschieben/Drehen","ctx.moveStepTip":"Als Schritt verschieben, drehen oder kopieren (bleibt im Verlauf änderbar)","ctx.scale":"Skalieren","ctx.scaleTip":"Körper als Schritt im Verlauf vergrößern oder verkleinern (gleichmäßig oder je Achse)","ctx.thicken":"Aufdicken","ctx.thickenTip":"Fläche zu einer Platte mit fester Dicke aufdicken (nach außen, innen oder mittig)","ctx.mirrorStep":"Schritt spiegeln","ctx.mirrorStepTip":"Diesen Formschritt (z. B. eine Tasche oder Rippe) an einer Ebene oder Fläche im selben Körper spiegeln","ctx.pickMirrorPlane":"Ebene / Fläche","ctx.pickMirrorPlaneTip":"Ebene Körperfläche oder Bezugsebene als Spiegelebene wählen","ctx.pattern":"Muster","ctx.patternHoleTip":"Loch als Muster oder gespiegelt vervielfachen","ctx.patternTip":"Muster oder gespiegelte Kopie","ctx.patRect":"Rechteckmuster","ctx.patCirc":"Kreismuster","ctx.patPath":"Muster entlang Kurve","ctx.patMirror":"Gespiegelte Kopie","ctx.split":"Teilen","ctx.splitTip":"Körper an einer Ebene teilen","ctx.toTip":"Zur Spitze","ctx.toTipTip":"Den Umriss zu einer Spitze zusammenlaufen lassen (Übergang mit Spitze)","ctx.similarPartsTip":"Alle gleichen Teile wählen (A)","ctx.selectEdges":"Kanten wählen","ctx.selectEdgesTip":"Alle äußeren, alle inneren oder alle Kanten dieses Teils wählen – dann zusammen abrunden","ctx.ungroup":"Gruppe lösen","ctx.ungroupTip":"Gruppe lösen","ctx.group":"Gruppieren","ctx.groupTip":"Zu einem Körper verbinden (Strg G)","ctx.gap":"Abstand","ctx.gapTip":"Abstand zwischen den beiden Teilen genau setzen (der zuletzt gewählte bewegt sich)","ctx.joint":"Gelenk","ctx.jointTip":"Drehgelenk: das zuletzt gewählte Teil dreht sich um eine Achse, die du im Bild wählst","ctx.loft":"Übergang","ctx.loftTip":"Weicher Übergang durch die Umrisse – in der Reihenfolge, in der du sie gewählt hast","ctx.boolean":"Boolesch","ctx.booleanTip":"Körper vereinigen, abziehen oder schneiden","ctx.boolUnion":"Vereinigen","ctx.boolSub":"Abziehen (der zuerst gewählte bleibt)","ctx.boolInt":"Schnittmenge","ctx.align":"Ausrichten","ctx.alignTip":"Objekte aneinander ausrichten","ctx.alignLeft":"Links bündig","ctx.alignCx":"Mittig (X)","ctx.alignRight":"Rechts bündig","ctx.alignFront":"Vorne bündig","ctx.alignCy":"Mittig (Y)","ctx.alignBack":"Hinten bündig","ctx.alignBottom":"Unten bündig","common.emboss":"Prägen","ctx.emboss":"Prägen","ctx.embossTip":"Skizze (Text oder Logo) erhaben oder vertieft auf diese Fläche projizieren","menu.proj.saveTemplate":"Als Vorlage speichern …","start.projTpl.emptyMm.name":"Leer (mm)","start.projTpl.emptyMm.desc":"Leeres Projekt in Millimetern.","start.projTpl.emptyIn.name":"Leer (Zoll)","start.projTpl.emptyIn.desc":"Leeres Projekt in Zoll (in) für US-Maße.","start.projTpl.print3d.name":"3D-Druck","start.projTpl.print3d.desc":"Druckbett 220 × 220 × 250 mm sichtbar, 0,4-mm-Düse, PLA.","start.projTpl.laser.name":"Laser (Platte 3 mm)","start.projTpl.laser.desc":"3-mm-Sperrholzplatte mit Schnittspalt-Maß für den Laser.","start.projTpl.enclosure.name":"Gehäuse","start.projTpl.enclosure.desc":"Gehäuse 80 × 50 × 30 mm mit Deckel, Wandstärke und Spiel.","tpl.newDialogTitle":"Neues Projekt aus Vorlage","tpl.builtinHeading":"Projekt-Vorlagen","tpl.customHeading":"Eigene Vorlagen","tpl.customEmpty":"Noch keine eigenen Vorlagen. Über das Projektmenü → „Als Vorlage speichern …“ legst du hier eigene Startpunkte ab.","tpl.customNoDesc":"Eigene Vorlage (lokal gespeichert)","tpl.saveCurrent":"Aktuelles Projekt als Vorlage speichern","tpl.saveDialogTitle":"Als Vorlage speichern","tpl.saveNameLabel":"Name der Vorlage","tpl.saveDescLabel":"Kurze Beschreibung (optional)","tpl.saveDescPh":"z. B. Drucker mit 0,6-mm-Düse, Gehäuse-Grundmaß …","tpl.saveNameEmpty":"Bitte gib der Vorlage einen Namen.","tpl.saveFailed":"Die Vorlage konnte nicht lokal gespeichert werden.","tpl.saved":"Vorlage „{name}“ gespeichert.","tpl.deleteAria":"Vorlage „{name}“ löschen","tpl.deleteTip":"Vorlage löschen","tpl.deleteTitle":"Vorlage löschen?","tpl.deleteBody":"„{name}“ wird aus deinen gespeicherten Vorlagen entfernt.","tpl.deleted":"Vorlage „{name}“ gelöscht.","tpl.missing":"Die Vorlage wurde nicht gefunden.","tpl.loadedPrint3d":"Vorlage „3D-Druck“ geladen: Druckbett {x} × {y} × {z} mm, Düse {nozzle} mm.","tpl.loadedEmpty":"Neues leeres Projekt ({unit}) gestartet.","tpl.loadedNamed":"Vorlage „{name}“ geladen.","recovery.title":"Tracery wurde nicht richtig beendet – letzten Stand wiederherstellen?","recovery.metaOne":"Projekt „{name}“ · {time} · 1 Objekt","recovery.metaMany":"Projekt „{name}“ · {time} · {n} Objekte","recovery.restore":"Wiederherstellen","recovery.dismiss":"Verwerfen","recovery.restored":"Letzter Stand von „{name}“ wiederhergestellt.","recovery.discarded":"Wiederherstellungs-Stand verworfen.","recovery.failed":"Der letzte Stand konnte nicht wiederhergestellt werden."};
 
 const I18n = (() => {
   let lang = 'de';
@@ -11390,6 +11395,7 @@ const Interact = (() => {
         { icon: 'thicken', label: T('common.thicken'), id: 'cm-thicken', help: 'thickenFace', hidden: !hit || hit.faceIdx == null || top.role === 'hole' || !App.doc.items.includes(top), run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) Features.thicken({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }); } },
         { icon: 'emboss', label: T('common.emboss'), id: 'cm-emboss', help: 'emboss', hidden: !hit || hit.faceIdx == null || top.role === 'hole' || !App.doc.items.includes(top), run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) Features.startEmboss({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }); } },
         '-',
+        { icon: 'copy', label: T('menu.ctx.copyBody'), kbd: Commands.keyLabel('copy'), id: 'cm-copy', help: 'copyBetweenTabs', run: () => Clipboard.copy() },
         { icon: 'copy', label: T('common.duplicate'), kbd: 'Strg D', id: 'cm-dup', run: () => Actions.duplicate() },
         { icon: 'moveStep', label: T('common.moveStep'), id: 'cm-movestep', help: 'moveStep', run: () => Features.transform([top.id]) },
         { icon: 'scaleBody', label: T('common.scaleStep'), id: 'cm-scale', help: 'scaleBody', hidden: !App.doc.items.includes(top), run: () => Features.scale([top.id]) },
@@ -11409,6 +11415,7 @@ const Interact = (() => {
       let hidden = App.doc.items.filter((x) => x.hidden).length;
       Model.walk(App.doc.items, (x) => { if (!x.hidden && x.bodies) hidden += x.bodies.filter((b) => b && b.hidden).length; });
       items = [
+        { icon: 'copy', label: T('menu.ctx.pasteBody'), kbd: Commands.keyLabel('paste'), id: 'cm-paste', help: 'copyBetweenTabs', disabled: !Clipboard.hasData(), run: () => Clipboard.paste() },
         { icon: 'eye', label: hidden ? T('menu.ctx.showAllCount', { n: hidden }) : T('menu.ctx.showAll'), id: 'cm-showall', disabled: !hidden, run: () => Actions.showAll() },
         { icon: 'pointer', label: T('menu.ctx.selectAll'), kbd: 'Strg A', id: 'cm-all', run: () => App.select(App.doc.items.filter((x) => !x.hidden && !App.mergedInto(x.id)).map((x) => x.id)) },
         { icon: 'fit', label: T('menu.ctx.fitAll'), kbd: 'F', id: 'cm-fitall', run: () => Viewer.fit() },
@@ -13218,6 +13225,866 @@ const Actions = (() => {
   return { setBody, showOnlyBody, showAllBodies, reorder, createFolder, toggleFolder, renameFolder, ungroupFolder, removeFromFolder, replaneSketch, duplicateLinked, unlink, hideSelected, showAll, invertSelection, setOp, gapOf, setGap, loft, addPrimitive, addPart, addBuyPart, addUserPart, remove, duplicate, setRole, toggleRole, group, groupAll, ungroup, rotate90, rotate, center, mirror, dropToPlate, align, addFinish, finishAll, setFinish, removeFinish, edgeSigOf, faceFrame, selectedFace, onFaceTransform, attach, worldBox, selBox, cuttersOf, viewCenter };
 })();
 
+// ---- 45-clipboard.js ----
+// ================= Zwischenablage: Körper mit Schritten zwischen Projekten / Tabs kopieren (BE-13) =================
+const Clipboard = (() => {
+  const CLIP_KEY = 'tracery.bodyClip';
+  const MAX_INLINE_BYTES = 1500000;
+  const RESERVED_IDS = new Set(['wenn', 'if', 'runden', 'round', 'aufrunden', 'ceil', 'abrunden', 'floor', 'tabelle', 'pi', 'e', 'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'atan2', 'sqrt', 'abs', 'min', 'max', 'pow', 'log', 'exp', 'mm', 'cm', 'm', 'in', 'zoll']);
+  const SKIP_P_KEYS = new Set(['lib', 'op', 'pt', 'plane', 'extent', 'dir', 'wallSide', 'shape', 'profName', 'target', 'pivot', 'mode', 'side', 'face', 'toFace', 'axisId', 'axis3d', 'axis', 'wrapId', 'blobId', 'fmt', 'data', 'stepEntity', 'stepMat', 'sketch', 'sketches', 'path', 'rail', 'rail2', 'prof', 'path3d', 'features', 'datumId', 'faceRef', 'bind', 'places', 'skip', 'assembly', 'uniform', 'flip', 'ruled', 'head', 'fit', 'size', 'tipAngle', 'kind', 'seal', 'flange', 'pat', 'nut', 'form', 'conn', 'tol', 'align', 'sel']);
+
+  let memClip = null;
+  let pendingCopy = null;
+  let lastPasteClipId = null;
+  let pasteCount = 0;
+
+  function writeClip(payload) {
+    memClip = payload;
+    try {
+      storageSet(CLIP_KEY, JSON.stringify(payload));
+      return true;
+    } catch (_) {
+      try {
+        const slim = deepClone(payload);
+        for (const b of slim.bundles || []) {
+          for (const it of b.items || []) {
+            Model.walk([it], (x) => {
+              if (x && x.kind === 'import' && x.p && x.p.blobId && x.p.data) delete x.p.data;
+            });
+          }
+        }
+        memClip = slim;
+        return storageSet(CLIP_KEY, JSON.stringify(slim));
+      } catch (__) {
+        return false;
+      }
+    }
+  }
+
+  function readClip() {
+    let ls = null;
+    try {
+      const raw = storageGet(CLIP_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.format === 'tracery-clip' && Array.isArray(parsed.bundles)) ls = parsed;
+      }
+    } catch (_) {}
+    if (memClip && ls) return (ls.ts || 0) >= (memClip.ts || 0) ? ls : memClip;
+    return ls || memClip || null;
+  }
+
+  function hasData() {
+    const c = readClip();
+    return !!(c && Array.isArray(c.bundles) && c.bundles.length);
+  }
+
+  function clear() {
+    memClip = null;
+    lastPasteClipId = null;
+    pasteCount = 0;
+    storageDel(CLIP_KEY);
+  }
+
+  function whenReady() {
+    return pendingCopy ? pendingCopy.catch(() => null) : Promise.resolve(readClip());
+  }
+
+  // ---------- Ausdrücke, Parameter, Tabellen & Schriften sammeln ----------
+  function extractExprTokens(str, idsOut, tblsOut) {
+    if (typeof str !== 'string' || !str.trim()) return;
+    const tblRe = /tabelle\s*\(\s*["']?([^"';)]+)["']?\s*;/gi;
+    let tm;
+    while ((tm = tblRe.exec(str))) tblsOut.add(tm[1].trim().toLowerCase());
+    const stripped = str.replace(/"[^"]*"|'[^']*'/g, ' ');
+    const idRe = /[A-Za-zÄÖÜäöüß_][A-Za-zÄÖÜäöüß_0-9]*/g;
+    let m;
+    while ((m = idRe.exec(stripped))) {
+      const low = m[0].toLowerCase();
+      if (!RESERVED_IDS.has(low)) idsOut.add(low);
+    }
+  }
+
+  function collectSketchRefs(sk, idsOut, tblsOut, fontsOut) {
+    if (!sk) return;
+    for (const d of sk.dims || []) if (d && typeof d.v === 'string') extractExprTokens(d.v, idsOut, tblsOut);
+    for (const e of sk.ents || []) if (e && e.type === 'text' && e.font) fontsOut.add(e.font);
+  }
+
+  function collectItemRefs(it, idsOut, tblsOut, fontsOut) {
+    if (!it || typeof it !== 'object') return;
+    if (it.p) {
+      for (const k of Object.keys(it.p)) {
+        if (!SKIP_P_KEYS.has(k) && typeof it.p[k] === 'string') extractExprTokens(it.p[k], idsOut, tblsOut);
+      }
+      if (it.p.pt && it.p.op === 'pattern') {
+        for (const k of ['nx', 'ny', 'dx', 'dy', 'n', 'ang', 'cx', 'cy', 'cz', 'd', 'off']) {
+          if (typeof it.p[k] === 'string') extractExprTokens(it.p[k], idsOut, tblsOut);
+        }
+      }
+      collectSketchRefs(it.p.sketch, idsOut, tblsOut, fontsOut);
+      if (Array.isArray(it.p.sketches)) for (const s of it.p.sketches) collectSketchRefs(s, idsOut, tblsOut, fontsOut);
+      collectSketchRefs(it.p.path, idsOut, tblsOut, fontsOut);
+      collectSketchRefs(it.p.rail, idsOut, tblsOut, fontsOut);
+      collectSketchRefs(it.p.rail2, idsOut, tblsOut, fontsOut);
+      collectSketchRefs(it.p.prof, idsOut, tblsOut, fontsOut);
+      if (it.p.path3d) {
+        for (const pt of it.p.path3d.pts || []) for (const c of pt || []) if (typeof c === 'string') extractExprTokens(c, idsOut, tblsOut);
+        for (const r of it.p.path3d.rules || []) if (r && typeof r.len === 'string') extractExprTokens(r.len, idsOut, tblsOut);
+      }
+    }
+    if (it.t) {
+      for (const k of ['x', 'y', 'z', 'rx', 'ry', 'rz']) if (typeof it.t[k] === 'string') extractExprTokens(it.t[k], idsOut, tblsOut);
+    }
+    for (const f of it.finishes || []) {
+      if (typeof f.r === 'string') extractExprTokens(f.r, idsOut, tblsOut);
+      if (typeof f.r2 === 'string') extractExprTokens(f.r2, idsOut, tblsOut);
+      if (typeof f.a === 'string') extractExprTokens(f.a, idsOut, tblsOut);
+    }
+    if (typeof it.massG === 'string') extractExprTokens(it.massG, idsOut, tblsOut);
+    if (it.userPart && Array.isArray(it.userPart.params)) {
+      for (const up of it.userPart.params) if (up && typeof up.expr === 'string') extractExprTokens(up.expr, idsOut, tblsOut);
+    }
+    if (Array.isArray(it.children)) for (const c of it.children) collectItemRefs(c, idsOut, tblsOut, fontsOut);
+  }
+
+  function escapeRe(s) {
+    return String(s).replace(/[$^.*+?()[\]{}|\\]/g, '\\$&');
+  }
+
+  function renameInExpr(expr, oldName, newName) {
+    if (typeof expr !== 'string' || !oldName || oldName === newName) return expr;
+    const re = new RegExp('(^|[^A-Za-zÄÖÜäöüß_0-9])' + escapeRe(oldName) + '(?![A-Za-zÄÖÜäöüß_0-9])', 'gi');
+    return expr.replace(re, (_, pre) => pre + newName);
+  }
+
+  function renameInItem(it, oldName, newName) {
+    if (!it || typeof it !== 'object' || !oldName || oldName === newName) return;
+    if (it.p) {
+      for (const k of Object.keys(it.p)) {
+        if (!SKIP_P_KEYS.has(k) && typeof it.p[k] === 'string') it.p[k] = renameInExpr(it.p[k], oldName, newName);
+      }
+      if (it.p.pt && it.p.op === 'pattern') {
+        for (const k of ['nx', 'ny', 'dx', 'dy', 'n', 'ang', 'cx', 'cy', 'cz', 'd', 'off']) {
+          if (typeof it.p[k] === 'string') it.p[k] = renameInExpr(it.p[k], oldName, newName);
+        }
+      }
+      const fixSk = (sk) => { if (sk && Array.isArray(sk.dims)) for (const d of sk.dims) if (d && typeof d.v === 'string') d.v = renameInExpr(d.v, oldName, newName); };
+      fixSk(it.p.sketch);
+      if (Array.isArray(it.p.sketches)) for (const s of it.p.sketches) fixSk(s);
+      fixSk(it.p.path); fixSk(it.p.rail); fixSk(it.p.rail2); fixSk(it.p.prof);
+      if (it.p.path3d) {
+        for (const pt of it.p.path3d.pts || []) for (let i = 0; i < (pt || []).length; i++) if (typeof pt[i] === 'string') pt[i] = renameInExpr(pt[i], oldName, newName);
+        for (const r of it.p.path3d.rules || []) if (r && typeof r.len === 'string') r.len = renameInExpr(r.len, oldName, newName);
+      }
+    }
+    if (it.t) {
+      for (const k of ['x', 'y', 'z', 'rx', 'ry', 'rz']) if (typeof it.t[k] === 'string') it.t[k] = renameInExpr(it.t[k], oldName, newName);
+    }
+    for (const f of it.finishes || []) {
+      if (typeof f.r === 'string') f.r = renameInExpr(f.r, oldName, newName);
+      if (typeof f.r2 === 'string') f.r2 = renameInExpr(f.r2, oldName, newName);
+      if (typeof f.a === 'string') f.a = renameInExpr(f.a, oldName, newName);
+    }
+    if (typeof it.massG === 'string') it.massG = renameInExpr(it.massG, oldName, newName);
+    if (Array.isArray(it.children)) for (const c of it.children) renameInItem(c, oldName, newName);
+  }
+
+  // ---------- Geometrie- und Schritt-Hilfen ----------
+  function worldBoxOf(doc, id) {
+    if (typeof Actions !== 'undefined' && Actions.worldBox) {
+      const b = Actions.worldBox(id);
+      if (b && !b.isEmpty()) return b;
+    }
+    const ob = typeof App !== 'undefined' && App.ownBox ? App.ownBox(id) : null;
+    if (Array.isArray(ob) && ob.length === 6) {
+      return new THREE.Box3(new THREE.Vector3(ob[0], ob[1], ob[2]), new THREE.Vector3(ob[3], ob[4], ob[5]));
+    }
+    const f = Model.find(doc, id);
+    if (!f) return null;
+    const lb = Model.itemLocalBox(f.item, Model.itemVars(doc, id));
+    if (!lb) return null;
+    return new THREE.Box3(new THREE.Vector3(lb[0], lb[1], lb[2]), new THREE.Vector3(lb[3], lb[4], lb[5])).applyMatrix4(Model.worldMatrix(doc, id));
+  }
+
+  function boxesOverlap(a, b, tol = 1e-3) {
+    if (!a || !b || a.isEmpty() || b.isEmpty()) return false;
+    return a.min.x <= b.max.x + tol && a.max.x >= b.min.x - tol
+      && a.min.y <= b.max.y + tol && a.max.y >= b.min.y - tol
+      && a.min.z <= b.max.z + tol && a.max.z >= b.min.z - tol;
+  }
+
+  function isMergedStep(it) {
+    if (!it) return false;
+    if (it.op && it.op.target) return true;
+    if (it.kind === 'transform' && !(it.p && it.p.copy)) return true;
+    if (it.kind === 'scale') return true;
+    if (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) return true;
+    if (it.kind === 'rib' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'mirrorStep') return true;
+    if (it.kind === 'group' && it.p && it.p.op === 'pattern' && (it.children || []).some((c) => c.kind === 'rib')) return true;
+    return false;
+  }
+
+  function stepTargets(it) {
+    const out = [];
+    if (!it) return out;
+    if (it.op && it.op.target) out.push(it.op.target);
+    if (it.p) {
+      if ((it.kind === 'transform' && !it.p.copy) || it.kind === 'scale' || (it.kind === 'thicken' && it.p.mode !== 'new') || it.kind === 'rib' || it.kind === 'wrap' || it.kind === 'emboss') {
+        if (it.p.target) out.push(it.p.target);
+      }
+      if (it.kind === 'group' && it.p.op === 'pattern') {
+        for (const c of it.children || []) if (c.kind === 'rib' && c.p && c.p.target) out.push(c.p.target);
+      }
+      if (it.kind === 'mirrorStep' && Array.isArray(it.p.features)) {
+        for (const fid of it.p.features) if (fid) out.push(fid);
+      }
+      if (it.kind === 'sweep' && it.p.wrapId) out.push(it.p.wrapId);
+    }
+    return out;
+  }
+
+  function resolveSelectedEntries(doc, rawIds) {
+    const topById = new Map((doc.items || []).map((x, idx) => [x.id, { item: x, idx }]));
+    const active = Model.activeItems(doc);
+    const activeSet = new Set(active.map((x) => x.id));
+    const seen = new Set();
+    const entries = [];
+
+    for (const rawId of rawIds) {
+      const f = Model.find(doc, rawId);
+      if (!f) continue;
+      if (!f.parent) {
+        let curId = f.item.id;
+        if (typeof App !== 'undefined' && App.mergedInto && App.mergedInto(curId)) {
+          curId = App.mergedInto(curId);
+        } else if (isMergedStep(f.item)) {
+          const guard = new Set([curId]);
+          let safety = 0;
+          while (safety++ < 64) {
+            const cur = topById.get(curId);
+            if (!cur || !isMergedStep(cur.item)) break;
+            const tgts = stepTargets(cur.item).filter((t) => topById.has(t) && !guard.has(t));
+            if (!tgts.length) break;
+            curId = tgts[0];
+            guard.add(curId);
+          }
+        }
+        const resolved = topById.get(curId);
+        if (!resolved || seen.has(curId)) continue;
+        seen.add(curId);
+        entries.push({ mode: 'top', root: resolved.item, order: resolved.idx });
+      } else {
+        if (seen.has(rawId)) continue;
+        seen.add(rawId);
+        const top = Model.topOf(doc, rawId);
+        entries.push({ mode: 'child', root: f.item, order: top ? (topById.get(top.id) || { idx: 9999 }).idx : 9999 });
+      }
+    }
+
+    entries.sort((a, b) => a.order - b.order);
+    return { entries, active, activeSet };
+  }
+
+  function collectBundleForTop(doc, root, active, otherSelectedRoots) {
+    const idSet = new Set([root.id]);
+    const stepItems = [root];
+    let added = true;
+    while (added) {
+      added = false;
+      for (const it of active) {
+        if (idSet.has(it.id) || otherSelectedRoots.has(it.id)) continue;
+        const tgts = stepTargets(it);
+        if (tgts.some((tid) => idSet.has(tid))) {
+          idSet.add(it.id);
+          stepItems.push(it);
+          added = true;
+        }
+      }
+    }
+    const orderMap = new Map(active.map((x, idx) => [x.id, idx]));
+    stepItems.sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
+
+    // Lose oberste Löcher im Zielkörper (falls root ein Körper ist): an diesen Körper binden, damit sie im Ziel-Tab nicht fremde Körper anschneiden
+    const attachedHoles = [];
+    if (root.role !== 'hole') {
+      const rootBox = worldBoxOf(doc, root.id);
+      for (const h of active) {
+        if (h.role !== 'hole' || h.hidden || idSet.has(h.id) || otherSelectedRoots.has(h.id)) continue;
+        const hBox = worldBoxOf(doc, h.id);
+        if (boxesOverlap(rootBox, hBox)) {
+          attachedHoles.push(h);
+          idSet.add(h.id);
+        }
+      }
+    }
+    return { root, stepItems, attachedHoles, idSet };
+  }
+
+  function effectiveMaterial(doc, it) {
+    if (!it || it.role === 'hole' || it.massG != null) return it && it.mat ? it.mat : null;
+    if (it.mat) return it.mat;
+    return doc && doc.settings && doc.settings.material ? doc.settings.material : null;
+  }
+
+  function freezeExternalRefs(doc, clone, origId, idSet) {
+    // Bezugsachsen aus doc.axes einfrieren, damit Revolve & Kreismuster im anderen Projekt exakt gleich drehen
+    const axMap = new Map((doc.axes || []).map((a) => [a.id, a]));
+    const walkFreeze = (it, curOrigId) => {
+      if (!it) return;
+      if (it.p && it.p.axisId) {
+        const ax = axMap.get(it.p.axisId);
+        if (ax && ax.axis && Array.isArray(ax.axis.o) && Array.isArray(ax.axis.d)) {
+          const inv = Model.worldMatrix(doc, curOrigId || it.id).invert();
+          const lo = new THREE.Vector3(...ax.axis.o).applyMatrix4(inv).toArray().map((v) => round(v, 6));
+          const ld = new THREE.Vector3(...ax.axis.d).transformDirection(inv).normalize().toArray().map((v) => round(v, 6));
+          if (it.kind === 'group' && it.p.op === 'pattern' && it.p.pt === 'circ') {
+            it.p.axis = 'pick'; it.p.ao = lo; it.p.ad = ld;
+          } else if (it.kind === 'revolve') {
+            it.p.axis3d = { o: lo, d: ld };
+          }
+        }
+        delete it.p.axisId;
+      }
+      if (it.link && !idSet.has(it.link)) delete it.link;
+      delete it.linkLost;
+      delete it.ai;
+      if (it.p) {
+        const cleanSk = (sk) => {
+          if (!sk || !Array.isArray(sk.ents)) return;
+          for (const e of sk.ents) if (e && e.link && e.link.id && !idSet.has(e.link.id)) delete e.link;
+        };
+        if (it.p.planeRef && it.p.planeRef.kind === 'face' && it.p.planeRef.id && !idSet.has(it.p.planeRef.id)) delete it.p.planeRef;
+        cleanSk(it.p.sketch);
+        if (Array.isArray(it.p.sketches)) for (const s of it.p.sketches) cleanSk(s);
+        cleanSk(it.p.path); cleanSk(it.p.rail); cleanSk(it.p.rail2); cleanSk(it.p.prof);
+        if (it.p.path3d && Array.isArray(it.p.path3d.bind)) {
+          it.p.path3d.bind = it.p.path3d.bind.map((b) => (b && b.id && !idSet.has(b.id) ? null : b));
+        }
+      }
+      if (Array.isArray(it.children)) for (const c of it.children) walkFreeze(c, c.id);
+    };
+    walkFreeze(clone, origId);
+  }
+
+  function needsBake(bundle, doc, forceBake) {
+    if (bundle.root.role === 'hole') return false;
+    if (forceBake) return true;
+    const { root, stepItems, idSet } = bundle;
+    if (root.kind === 'transform' && root.p && root.p.copy && root.p.target && !idSet.has(root.p.target)) return true;
+    if (root.kind === 'thicken' && root.p && root.p.mode === 'new' && root.p.target && !idSet.has(root.p.target)) return true;
+    if (root.kind === 'sweep' && root.p && root.p.wrapId && !idSet.has(root.p.wrapId)) return true;
+    for (const it of stepItems) {
+      const p = it.p || {};
+      if (it.kind === 'extrude' && (p.extent === 'toNext' || (p.extent === 'toFace' && (!p.toFace || !idSet.has(p.toFace.targetId || p.toFace.id))))) return true;
+      if (it.kind === 'revolve' && p.dir === 'toFace' && (!p.toFace || !idSet.has(p.toFace.targetId || p.toFace.id))) return true;
+      if (it.kind === 'mirrorStep') {
+        if (p.plane === 'DATUM') return true;
+        if (p.plane === 'FACE' && (!p.faceRef || !idSet.has(p.faceRef.id))) return true;
+      }
+      if (it.kind === 'import' && !p.data && !(p.blobId && typeof Store !== 'undefined' && Store.getBlobSync && Store.getBlobSync(p.blobId))) return true;
+    }
+    return false;
+  }
+
+  function collectParamsAndTablesAndFonts(doc, bundles) {
+    const ids = new Set();
+    const tbls = new Set();
+    const fonts = new Set();
+    for (const b of bundles) {
+      for (const it of b.items) collectItemRefs(it, ids, tbls, fonts);
+    }
+    const docParams = Array.isArray(doc.params) ? doc.params : [];
+    const needed = new Set();
+    let added = true;
+    while (added) {
+      added = false;
+      for (const dp of docParams) {
+        const low = String(dp.name || '').toLowerCase();
+        if (!low || needed.has(low)) continue;
+        if (ids.has(low)) {
+          needed.add(low);
+          added = true;
+          if (typeof dp.expr === 'string') extractExprTokens(dp.expr, ids, tbls);
+        }
+      }
+    }
+    const V = Model.vars(doc).v;
+    const params = [];
+    for (const dp of docParams) {
+      const low = String(dp.name || '').toLowerCase();
+      if (!needed.has(low)) continue;
+      params.push({ name: dp.name, expr: dp.expr, val: Model.num(dp.expr, V, 0) });
+    }
+    const tables = [];
+    const seenT = new Set();
+    for (const tb of doc.tables || []) {
+      if (!tb || !tb.name) continue;
+      const low = tb.name.toLowerCase();
+      if (tbls.has(low) && !seenT.has(low)) { seenT.add(low); tables.push(deepClone(tb)); }
+    }
+    const fontList = [];
+    for (const f of doc.fonts || []) {
+      if (f && fonts.has(f.id)) fontList.push(deepClone(f));
+    }
+    return { params, tables, fonts: fontList };
+  }
+
+  function syncInlineImportBlobs(items) {
+    if (typeof Store === 'undefined') return;
+    for (const it of items) {
+      Model.walk([it], (x) => {
+        if (!x || x.kind !== 'import' || !x.p) return;
+        if (x.p.blobId && !x.p.data && Store.getBlobSync) {
+          const u8 = Store.getBlobSync(x.p.blobId);
+          if (u8 && u8.byteLength <= MAX_INLINE_BYTES) x.p.data = Store.bytesToBase64(u8);
+        }
+      });
+    }
+  }
+
+  function transformFaceColors(faceColors, m) {
+    if (!Array.isArray(faceColors) || !faceColors.length || !m) return faceColors;
+    const nMat = new THREE.Matrix3().getNormalMatrix(m);
+    return faceColors.map((fc) => {
+      if (!fc) return fc;
+      const out = { ...fc };
+      if (Array.isArray(fc.c) && fc.c.length >= 3) {
+        out.c = new THREE.Vector3(fc.c[0], fc.c[1], fc.c[2]).applyMatrix4(m).toArray().map((v) => round(v, 6));
+      }
+      if (Array.isArray(fc.n) && fc.n.length >= 3) {
+        out.n = new THREE.Vector3(fc.n[0], fc.n[1], fc.n[2]).applyMatrix3(nMat).normalize().toArray().map((v) => round(v, 6));
+      }
+      return out;
+    });
+  }
+
+  async function bakeRootToImport(doc, root) {
+    if (typeof Kernel !== 'undefined' && Kernel.ensure) await Kernel.ensure();
+    const res = await Kernel.call('exportBREP', { scene: Model.kernelScene(doc), only: [root.id] });
+    const bytes = new Uint8Array(res.data);
+    let blobId = null;
+    if (typeof Store !== 'undefined' && Store.putBlob) blobId = await Store.putBlob(bytes);
+    const data = bytes.byteLength <= MAX_INLINE_BYTES && typeof Store !== 'undefined' && Store.bytesToBase64
+      ? Store.bytesToBase64(bytes)
+      : undefined;
+    const mat = effectiveMaterial(doc, root);
+    const imp = Model.newItem(
+      'import',
+      {
+        fmt: 'brep',
+        name: Model.label(root) + '.brep',
+        ...(blobId ? { blobId } : {}),
+        size: bytes.byteLength,
+        ...(data ? { data } : {}),
+      },
+      { name: Model.label(root), color: root.color, mat: mat || undefined }
+    );
+    imp.id = root.id;
+    imp.t = Model.T0();
+    if (root.colorSet) imp.colorSet = true;
+    if (root.opacity != null) imp.opacity = root.opacity;
+    if (root.massG != null) imp.massG = root.massG;
+    if (Array.isArray(root.faceColors) && root.faceColors.length) {
+      imp.faceColors = transformFaceColors(root.faceColors, Model.worldMatrix(doc, root.id));
+    }
+    return imp;
+  }
+
+  function buildPlainBundle(doc, entry, active, otherSelectedRoots) {
+    if (entry.mode === 'child') {
+      const root = entry.root;
+      const clone = deepClone(root);
+      const wm = Model.worldMatrix(doc, root.id);
+      Model.setFromMatrix(clone, wm);
+      const parents = Model.parentsOf(doc, root.id);
+      if (!clone.mat && clone.role !== 'hole' && clone.massG == null) {
+        for (let i = parents.length - 1; i >= 0; i--) {
+          if (parents[i].mat) { clone.mat = parents[i].mat; break; }
+        }
+        if (!clone.mat && doc.settings && doc.settings.material) clone.mat = doc.settings.material;
+      }
+      if (!clone.colorSet) {
+        for (let i = parents.length - 1; i >= 0; i--) {
+          if (parents[i].color && !clone.color) clone.color = parents[i].color;
+          if (parents[i].colorSet && !root.color) { clone.color = parents[i].color; clone.colorSet = true; break; }
+        }
+      }
+      freezeExternalRefs(doc, clone, root.id, new Set([root.id]));
+      const items = [clone];
+      syncInlineImportBlobs(items);
+      return { rootId: clone.id, items, baked: false, label: Model.label(root) };
+    }
+
+    const bundle = collectBundleForTop(doc, entry.root, active, otherSelectedRoots);
+    const mat = effectiveMaterial(doc, entry.root);
+    const clones = [];
+    for (const st of bundle.stepItems) {
+      const c = deepClone(st);
+      if (st.id === entry.root.id && mat && !c.mat) c.mat = mat;
+      freezeExternalRefs(doc, c, st.id, bundle.idSet);
+      clones.push(c);
+    }
+    for (const h of bundle.attachedHoles) {
+      const hc = deepClone(h);
+      freezeExternalRefs(doc, hc, h.id, bundle.idSet);
+      hc.role = 'solid';
+      hc.op = { type: 'cut', target: entry.root.id };
+      clones.push(hc);
+    }
+    syncInlineImportBlobs(clones);
+    return { rootId: entry.root.id, items: clones, baked: false, label: Model.label(entry.root) };
+  }
+
+  function finalizePayload(doc, bundles) {
+    const deps = collectParamsAndTablesAndFonts(doc, bundles);
+    return {
+      format: 'tracery-clip',
+      version: 1,
+      id: uid('clip'),
+      ts: Date.now(),
+      sourceDocId: doc.id,
+      sourceName: doc.name || 'Projekt',
+      params: deps.params,
+      tables: deps.tables,
+      fonts: deps.fonts,
+      bundles,
+    };
+  }
+
+  function copyToastText(bundles) {
+    const anyBaked = bundles.some((b) => b.baked);
+    const suffix = anyBaked ? ' (als feste Form)' : '';
+    if (bundles.length === 1) {
+      return `„${bundles[0].label}“${suffix} kopiert – mit Strg V einfügen, auch in einem anderen Tab.`;
+    }
+    return `${bundles.length} Körper${suffix} kopiert – mit Strg V einfügen, auch in einem anderen Tab.`;
+  }
+
+  function copy(ids = null, opts = {}) {
+    const doc = App.doc;
+    const rawIds = (ids && ids.length ? ids : App.sel).filter(Boolean);
+    if (!rawIds.length) {
+      UI.toast('Wähle zuerst einen oder mehrere Körper zum Kopieren aus.', { icon: 'info' });
+      return null;
+    }
+    const { entries, active } = resolveSelectedEntries(doc, rawIds);
+    if (!entries.length) {
+      UI.toast('Die Auswahl konnte nicht kopiert werden.', { icon: 'info' });
+      return null;
+    }
+    const selectedTopIds = new Set(entries.filter((e) => e.mode === 'top').map((e) => e.root.id));
+    const specs = entries.map((entry) => {
+      if (entry.mode === 'child') return { entry, bake: false, bundle: null };
+      const otherSelected = new Set(selectedTopIds);
+      otherSelected.delete(entry.root.id);
+      const rawBundle = collectBundleForTop(doc, entry.root, active, otherSelected);
+      return { entry, bake: needsBake(rawBundle, doc, !!opts.bake), otherSelected };
+    });
+
+    if (!specs.some((s) => s.bake)) {
+      const bundles = specs.map((s) => buildPlainBundle(doc, s.entry, active, s.otherSelected));
+      const payload = finalizePayload(doc, bundles);
+      writeClip(payload);
+      if (!opts.silent) UI.toast(copyToastText(bundles), { icon: 'copy' });
+      return payload;
+    }
+
+    const job = (async () => {
+      const bundles = [];
+      for (const s of specs) {
+        if (s.bake) {
+          const imp = await bakeRootToImport(doc, s.entry.root);
+          bundles.push({ rootId: imp.id, items: [imp], baked: true, label: Model.label(s.entry.root) });
+        } else {
+          bundles.push(buildPlainBundle(doc, s.entry, active, s.otherSelected));
+        }
+      }
+      const payload = finalizePayload(doc, bundles);
+      writeClip(payload);
+      if (!opts.silent) UI.toast(copyToastText(bundles), { icon: 'copy' });
+      return payload;
+    })();
+    pendingCopy = job.finally(() => { if (pendingCopy === job) pendingCopy = null; });
+    return pendingCopy;
+  }
+
+  // ---------- Einfügen ----------
+  async function ensureClipBlobs(clip) {
+    if (typeof Store === 'undefined') return;
+    for (const b of clip.bundles || []) {
+      for (const it of b.items || []) {
+        const imports = [];
+        Model.walk([it], (x) => { if (x && x.kind === 'import' && x.p) imports.push(x); });
+        for (const imp of imports) {
+          if (imp.p.blobId && Store.getBlobSync && Store.getBlobSync(imp.p.blobId)) continue;
+          if (imp.p.blobId && Store.getBlob) {
+            const got = await Store.getBlob(imp.p.blobId);
+            if (got) continue;
+          }
+          if (typeof imp.p.data === 'string' && imp.p.data.length && Store.base64ToBytes && Store.registerBlob) {
+            const u8 = Store.base64ToBytes(imp.p.data);
+            imp.p.blobId = Store.registerBlob(u8);
+            imp.p.size = u8.byteLength;
+          }
+        }
+      }
+    }
+  }
+
+  function shiftExpr(val, delta) {
+    if (!delta) return val;
+    if (typeof val === 'number') return round(val + delta, 4);
+    if (typeof val === 'string' && val.trim() !== '') {
+      const n = parseNum(val);
+      if (!isNaN(n)) return round(n + delta, 4);
+      const s = String(round(delta, 4)).replace('.', ',');
+      return delta >= 0 ? `(${val}) + ${s}` : `(${val}) - ${s.slice(1)}`;
+    }
+    return round(delta, 4);
+  }
+
+  function remapTid(tid, idMap) {
+    if (typeof tid !== 'string') return tid;
+    const slash = tid.indexOf('/');
+    if (slash > 0) {
+      const head = tid.slice(0, slash);
+      if (idMap.has(head)) return idMap.get(head) + tid.slice(slash);
+    }
+    return tid;
+  }
+
+  function remapItemTree(it, idMap, renames) {
+    for (const [oldN, newN] of renames) renameInItem(it, oldN, newN);
+    Model.walk([it], (x) => {
+      if (!x) return;
+      if (x.id && idMap.has(x.id)) x.id = idMap.get(x.id);
+      if (Array.isArray(x.finishes)) {
+        for (const f of x.finishes) {
+          if (!f) continue;
+          f.id = uid('f');
+          for (const key of ['edges', 'faces']) {
+            if (Array.isArray(f[key])) {
+              for (const r of f[key]) if (r && r.tid) r.tid = remapTid(r.tid, idMap);
+            }
+          }
+        }
+      }
+      if (x.op && x.op.target && idMap.has(x.op.target)) x.op.target = idMap.get(x.op.target);
+      if (x.link && idMap.has(x.link)) x.link = idMap.get(x.link);
+      if (x.p) {
+        if (x.p.target && idMap.has(x.p.target)) x.p.target = idMap.get(x.p.target);
+        if (x.p.wrapId && idMap.has(x.p.wrapId)) x.p.wrapId = idMap.get(x.p.wrapId);
+        if (Array.isArray(x.p.features)) x.p.features = x.p.features.map((fid) => (idMap.has(fid) ? idMap.get(fid) : fid));
+        if (x.p.faceRef && x.p.faceRef.id && idMap.has(x.p.faceRef.id)) x.p.faceRef.id = idMap.get(x.p.faceRef.id);
+        if (x.p.toFace) {
+          if (x.p.toFace.id && idMap.has(x.p.toFace.id)) x.p.toFace.id = idMap.get(x.p.toFace.id);
+          if (x.p.toFace.targetId && idMap.has(x.p.toFace.targetId)) x.p.toFace.targetId = idMap.get(x.p.toFace.targetId);
+        }
+        if (x.p.planeRef && x.p.planeRef.id && idMap.has(x.p.planeRef.id)) x.p.planeRef.id = idMap.get(x.p.planeRef.id);
+        const fixSk = (sk) => {
+          if (!sk || !Array.isArray(sk.ents)) return;
+          for (const e of sk.ents) if (e && e.link && e.link.id && idMap.has(e.link.id)) e.link.id = idMap.get(e.link.id);
+        };
+        fixSk(x.p.sketch);
+        if (Array.isArray(x.p.sketches)) for (const s of x.p.sketches) fixSk(s);
+        fixSk(x.p.path); fixSk(x.p.rail); fixSk(x.p.rail2); fixSk(x.p.prof);
+        if (x.p.path3d && Array.isArray(x.p.path3d.bind)) {
+          for (const b of x.p.path3d.bind) if (b && b.id && idMap.has(b.id)) b.id = idMap.get(b.id);
+        }
+      }
+    });
+  }
+
+  function shiftPastedItem(it, dx, dy) {
+    if (!dx && !dy) return;
+    if (it.kind === 'import' && it.p && it.p.fmt === 'brep' && it.t) {
+      it.t.x = shiftExpr(it.t.x || 0, dx);
+      it.t.y = shiftExpr(it.t.y || 0, dy);
+      return;
+    }
+    if (it.kind !== 'transform' && it.kind !== 'scale' && it.kind !== 'thicken' && it.kind !== 'rib' && it.kind !== 'wrap' && it.kind !== 'emboss' && it.kind !== 'mirrorStep' && !(it.p && it.p.op)) {
+      it.t = it.t || Model.T0();
+      it.t.x = shiftExpr(it.t.x || 0, dx);
+      it.t.y = shiftExpr(it.t.y || 0, dy);
+    } else if (it.kind === 'transform' && it.p) {
+      if (it.p.copy) {
+        it.p.dx = shiftExpr(it.p.dx || 0, dx);
+        it.p.dy = shiftExpr(it.p.dy || 0, dy);
+      } else if (it.p.pivot === 'point') {
+        it.p.px = shiftExpr(it.p.px || 0, dx);
+        it.p.py = shiftExpr(it.p.py || 0, dy);
+      }
+    } else if (it.kind === 'mirrorStep' && it.p) {
+      if (it.p.plane === 'YZ') it.p.off = shiftExpr(it.p.off || 0, dx);
+      else if (it.p.plane === 'XZ') it.p.off = shiftExpr(it.p.off || 0, dy);
+      else if (Array.isArray(it.p.mo) && it.p.mo.length >= 2) {
+        it.p.mo[0] = round(Number(it.p.mo[0] || 0) + dx, 4);
+        it.p.mo[1] = round(Number(it.p.mo[1] || 0) + dy, 4);
+      }
+    } else if (it.kind === 'group' && it.p && it.p.op) {
+      it.t = it.t || Model.T0();
+      it.t.x = shiftExpr(it.t.x || 0, dx);
+      it.t.y = shiftExpr(it.t.y || 0, dy);
+      if (it.p.op === 'pattern' && it.p.pt === 'mirror') {
+        if (it.p.plane === 'YZ') it.p.off = shiftExpr(it.p.off || 0, dx);
+        else if (it.p.plane === 'XZ') it.p.off = shiftExpr(it.p.off || 0, dy);
+      }
+    }
+  }
+
+  function mergeParamsIntoDoc(doc, clipParams) {
+    const renames = [];
+    if (!Array.isArray(clipParams) || !clipParams.length) return renames;
+    doc.params = doc.params || [];
+    const targetV = Model.vars(doc).v;
+    const usedLower = new Set(doc.params.map((p) => String(p.name || '').toLowerCase()));
+    const toAdd = [];
+
+    for (const cp of clipParams) {
+      if (!cp || !cp.name) continue;
+      const low = cp.name.toLowerCase();
+      const existing = doc.params.find((p) => String(p.name || '').toLowerCase() === low);
+      if (!existing) {
+        usedLower.add(low);
+        toAdd.push({ id: uid('m'), name: cp.name, expr: cp.expr });
+      } else {
+        const curVal = Model.num(existing.expr, targetV, NaN);
+        const clipVal = typeof cp.val === 'number' ? cp.val : NaN;
+        if (!isFinite(curVal) || !isFinite(clipVal) || Math.abs(curVal - clipVal) > 1e-6) {
+          let n = 2;
+          let cand = `${cp.name}_${n}`;
+          while (usedLower.has(cand.toLowerCase()) || RESERVED_IDS.has(cand.toLowerCase())) {
+            n++;
+            cand = `${cp.name}_${n}`;
+          }
+          usedLower.add(cand.toLowerCase());
+          renames.push([cp.name, cand]);
+          toAdd.push({ id: uid('m'), name: cand, expr: cp.expr });
+        }
+      }
+    }
+    for (const entry of toAdd) {
+      let expr = entry.expr;
+      for (const [oldN, newN] of renames) expr = renameInExpr(expr, oldN, newN);
+      doc.params.push({ id: entry.id, name: entry.name, expr });
+    }
+    return renames;
+  }
+
+  function mergeTablesAndFonts(doc, clip) {
+    if (Array.isArray(clip.tables) && clip.tables.length) {
+      doc.tables = doc.tables || [];
+      const haveT = new Set(doc.tables.map((t) => String(t.name || '').toLowerCase()));
+      for (const tb of clip.tables) {
+        if (!tb || !tb.name || haveT.has(tb.name.toLowerCase())) continue;
+        haveT.add(tb.name.toLowerCase());
+        const tc = deepClone(tb);
+        tc.id = uid('tbl');
+        doc.tables.push(tc);
+      }
+    }
+    if (Array.isArray(clip.fonts) && clip.fonts.length) {
+      doc.fonts = doc.fonts || [];
+      const haveF = new Set(doc.fonts.map((f) => f && f.id));
+      for (const f of clip.fonts) {
+        if (!f || !f.id || haveF.has(f.id)) continue;
+        haveF.add(f.id);
+        doc.fonts.push(deepClone(f));
+      }
+      if (typeof SK !== 'undefined' && SK.syncFonts) SK.syncFonts(doc.fonts);
+    }
+  }
+
+  async function paste(opts = {}) {
+    if (pendingCopy) await whenReady();
+    const clip = readClip();
+    if (!clip || !Array.isArray(clip.bundles) || !clip.bundles.length) {
+      if (!opts.silent) UI.toast('Die Zwischenablage ist leer – wähle zuerst einen Körper und drücke Strg C.', { icon: 'info' });
+      return [];
+    }
+    await ensureClipBlobs(clip);
+
+    const sameDoc = clip.sourceDocId === App.doc.id;
+    if (sameDoc) {
+      pasteCount = lastPasteClipId === clip.id ? pasteCount + 1 : 1;
+      lastPasteClipId = clip.id;
+    } else {
+      lastPasteClipId = null;
+      pasteCount = 0;
+      if (!App.doc.items.some((x) => x.role !== 'hole' && !x.hidden)) App.fitAfterBuild();
+    }
+    const dx = sameDoc ? 10 * pasteCount : 0;
+    const dy = sameDoc ? 10 * pasteCount : 0;
+
+    const pastedRootIds = [];
+    const label = clip.bundles.length === 1 ? `Eingefügt: ${clip.bundles[0].label || 'Körper'}` : `${clip.bundles.length} Körper eingefügt`;
+
+    App.change(label, (doc) => {
+      const renames = sameDoc ? [] : mergeParamsIntoDoc(doc, clip.params);
+      if (!sameDoc) mergeTablesAndFonts(doc, clip);
+
+      for (const bundle of clip.bundles) {
+        const clones = (bundle.items || []).map(deepClone);
+        const idMap = new Map();
+        for (const it of clones) {
+          Model.walk([it], (x) => {
+            if (x && x.id) idMap.set(x.id, uid('i'));
+            if (x && x.kind === 'import' && x.p && x.p.blobId && typeof Store !== 'undefined' && Store.getBlobSync && Store.getBlobSync(x.p.blobId)) {
+              delete x.p.data;
+            }
+          });
+        }
+        for (const it of clones) {
+          remapItemTree(it, idMap, renames);
+          if (sameDoc) shiftPastedItem(it, dx, dy);
+          doc.items.push(it);
+        }
+        const newRootId = idMap.get(bundle.rootId);
+        if (newRootId) pastedRootIds.push(newRootId);
+      }
+    });
+
+    if (pastedRootIds.length) App.select(pastedRootIds);
+    if (!opts.silent) {
+      const anyBaked = clip.bundles.some((b) => b.baked);
+      const bakedNote = anyBaked ? ' (als feste Form)' : '';
+      const fromSrc = !sameDoc && clip.sourceName ? ` aus „${clip.sourceName}“` : '';
+      const msg = clip.bundles.length === 1
+        ? `„${clip.bundles[0].label}“${fromSrc}${bakedNote} eingefügt.`
+        : `${clip.bundles.length} Körper${fromSrc}${bakedNote} eingefügt.`;
+      UI.toast(msg, { icon: 'copy' });
+    }
+    return pastedRootIds;
+  }
+
+  function copyFromShortcut() {
+    if (!App.sel.length) {
+      const selTxt = window.getSelection ? String(window.getSelection()).trim() : '';
+      if (selTxt) return false;
+    }
+    copy();
+    return true;
+  }
+
+  function pasteFromShortcut() {
+    paste();
+    return true;
+  }
+
+  return {
+    CLIP_KEY,
+    copy,
+    paste,
+    copyFromShortcut,
+    pasteFromShortcut,
+    hasData,
+    peek: readClip,
+    clear,
+    whenReady,
+    get busy() { return !!pendingCopy; },
+  };
+})();
 // ---- 46-features.js ----
 // ================= Features: Muster, Spiegeln mit Kopie, Teilen, Schnittmenge, Wandstärke =================
 // Muster, Spiegelung, Teilen und Schnittmenge sind Gruppen mit einer Rechenvorschrift (p.op).
@@ -31046,6 +31913,8 @@ const Commands = (() => {
     { id: 'similar', group: 'Modell', label: 'Ähnliche auswählen', def: 'a', run: () => { if (App.sel.length || App.edges.length) Select.similar(); else return false; } },
     { id: 'rot', group: 'Modell', label: 'Um 90° drehen', def: 'r', run: () => { if (App.sel.length) Actions.rotate90(null, 'z'); else return false; } },
     { id: 'dup', group: 'Modell', label: 'Duplizieren', def: 'ctrl+d', run: () => Actions.duplicate() },
+    { id: 'copy', group: 'Modell', label: 'Körper kopieren', def: 'ctrl+c', run: () => Clipboard.copyFromShortcut() },
+    { id: 'paste', group: 'Modell', label: 'Körper einfügen', def: 'ctrl+v', run: () => Clipboard.pasteFromShortcut() },
     { id: 'group', group: 'Modell', label: 'Gruppieren', def: 'ctrl+g', run: () => Actions.group() },
     { id: 'ungroup', group: 'Modell', label: 'Gruppe lösen', def: 'ctrl+shift+g', run: () => Actions.ungroup() },
     { id: 'selectAll', group: 'Modell', label: 'Alles auswählen', def: 'ctrl+a', run: () => App.select(App.doc.items.filter((x) => !x.hidden && !App.mergedInto(x.id)).map((x) => x.id)) },
@@ -31069,6 +31938,7 @@ const Commands = (() => {
     invertSel: 'invertSel', repeat: 'repeat', export: 'export', ortho: 'ortho',
     gridtoggle: 'gridtoggle', section: 'section', xray: 'xray', explode: 'explode',
     isolate: 'isolate', undo: 'undo', redo: 'redo', delete: 'delete', dup: 'dup',
+    copy: 'copy', paste: 'paste',
     group: 'group', ungroup: 'ungroup', hole: 'hole', rot: 'rot', fit: 'fit', save: 'save',
   };
 
@@ -31290,6 +32160,8 @@ const Commands = (() => {
     add('undo', 'Rückgängig', 'undo', 'zurück', () => App.undo(), { group: 'Bearbeiten', kbd: 'Strg Z' });
     add('redo', 'Wiederholen', 'redo', 'vor', () => App.redo(), { group: 'Bearbeiten', kbd: 'Strg Y' });
     add('delete', 'Auswahl löschen', 'trash', 'entfernen weg', () => Actions.remove(), { group: 'Bearbeiten', kbd: 'Entf', needSel: true });
+    add('copy', 'Körper kopieren (auch für andere Tabs)', 'copy', 'kopieren kopie zwischenablage tab projekt strg c', () => Clipboard.copy(), { group: 'Bearbeiten', kbd: 'Strg C', needSel: true });
+    add('paste', 'Kopierte Körper einfügen', 'copy', 'einfügen einfuegen zwischenablage tab projekt strg v', () => Clipboard.paste(), { group: 'Bearbeiten', kbd: 'Strg V' });
     add('dup', 'Duplizieren', 'copy', 'kopieren kopie', () => Actions.duplicate(), { group: 'Bearbeiten', kbd: 'Strg D', needSel: true });
     add('tree-folder', 'In Ordner legen', 'folder', 'ordner verlauf schritte zusammenfassen gruppieren', () => Actions.createFolder(), { group: 'Verlauf', needSel: true });
     add('group', 'Gruppieren', 'group', 'verbinden vereinen zusammenfügen kombinieren', () => Actions.group(), { group: 'Bearbeiten', kbd: 'Strg G', needSel: true });
@@ -31435,7 +32307,7 @@ const Commands = (() => {
     const K = (id) => keyLabel(id, true);
     const groups = [
       ['Ansicht', [['Linke Maustaste ziehen', 'Ansicht drehen'], ['Rechte Maustaste ziehen', 'Ansicht verschieben'], ['Mausrad', 'Zoomen'], [K('fit'), 'Auswahl oder alles zeigen'], [K('viewBack'), 'Vorige Ansicht'], [K('present'), 'Vorführen (Vollbild, dreht langsam)'], [`${K('view-front')} · ${K('view-right')} · ${K('view-top')} · ${K('view-iso')}`, 'Ansicht vorne · rechts · oben · schräg'], [K('ortho'), 'Orthografisch / Perspektive'], [K('gridtoggle'), 'Raster ein / aus'], [K('section'), 'Schnitt ein / aus'], [K('xray'), 'Röntgen ein / aus'], [K('explode'), 'Explosion ein / aus'], [K('isolate'), 'Gewähltes Teil isolieren / alle zeigen']]],
-      ['Modell', [['Klicken', 'Körper, Fläche oder Kante wählen'], ['Umschalt + Klick', 'Mehrere wählen'], ['Alt + Klick', 'Das Teil dahinter wählen (nochmal: noch weiter dahinter)'], ['Umschalt + Ziehen im Leeren', 'Rahmen: nach rechts ganz drin, nach links berührt'], ['Rechtsklick', 'Menü zum Teil oder zum Bild'], [K('repeat'), 'Letzten Befehl wiederholen'], [K('hideSel'), 'Auswahl ausblenden · ohne Auswahl alles einblenden'], [K('invertSel'), 'Auswahl umkehren'], [K('dupLinked'), 'Verknüpft duplizieren'], ['Ziehen', 'Körper verschieben – dabei Zahl tippen für genaue Werte'], ['Doppelklick', 'Skizze eines Skizzenkörpers bearbeiten · auf eine ebene Fläche: darauf zeichnen'], [K('editItem'), 'Skizze bzw. Bauteil bearbeiten'], ['Esc', 'Auswahl aufheben · Bauteil verlassen'], [K('delete'), 'Löschen'], [K('hole'), 'Körper ↔ Loch'], [K('similar'), 'Ähnliche auswählen (gleiche Teile oder Kanten)'], [K('rot'), 'Um 90° drehen'], ['Pfeiltasten', 'Um einen Rasterschritt verschieben (Umschalt: 10)'], ['Bild ↑ / Bild ↓', 'Anheben / Absenken'], [K('dup'), 'Duplizieren'], [`${K('group')} · ${K('ungroup')}`, 'Gruppieren · Gruppe lösen'], [K('selectAll'), 'Alles wählen']]],
+      ['Modell', [['Klicken', 'Körper, Fläche oder Kante wählen'], ['Umschalt + Klick', 'Mehrere wählen'], ['Alt + Klick', 'Das Teil dahinter wählen (nochmal: noch weiter dahinter)'], ['Umschalt + Ziehen im Leeren', 'Rahmen: nach rechts ganz drin, nach links berührt'], ['Rechtsklick', 'Menü zum Teil oder zum Bild'], [K('repeat'), 'Letzten Befehl wiederholen'], [K('hideSel'), 'Auswahl ausblenden · ohne Auswahl alles einblenden'], [K('invertSel'), 'Auswahl umkehren'], [K('dupLinked'), 'Verknüpft duplizieren'], ['Ziehen', 'Körper verschieben – dabei Zahl tippen für genaue Werte'], ['Doppelklick', 'Skizze eines Skizzenkörpers bearbeiten · auf eine ebene Fläche: darauf zeichnen'], [K('editItem'), 'Skizze bzw. Bauteil bearbeiten'], ['Esc', 'Auswahl aufheben · Bauteil verlassen'], [K('delete'), 'Löschen'], [K('hole'), 'Körper ↔ Loch'], [K('similar'), 'Ähnliche auswählen (gleiche Teile oder Kanten)'], [K('rot'), 'Um 90° drehen'], ['Pfeiltasten', 'Um einen Rasterschritt verschieben (Umschalt: 10)'], ['Bild ↑ / Bild ↓', 'Anheben / Absenken'], [`${K('copy')} · ${K('paste')}`, 'Körper kopieren · einfügen (auch zwischen Tabs)'], [K('dup'), 'Duplizieren'], [`${K('group')} · ${K('ungroup')}`, 'Gruppieren · Gruppe lösen'], [K('selectAll'), 'Alles wählen']]],
       ['Werkzeuge', [[K('sketch'), 'Skizze'], [K('measure'), 'Messen'], [K('notes'), 'Notizstift (P Stift · T Text · E Radierer)'], [K('bodies'), 'Körper'], [K('parts'), 'Bauteile'], ['/ oder ' + K('cmdFocus'), 'Eingabezeile']]],
       ['In der Skizze', [['V', 'Auswahl'], ['L · R · C · A', 'Linie · Rechteck · Kreis · Bogen'], ['A (beim Linienzug)', 'Zwischen Linie und tangentialem Bogen wechseln'], ['G · P · S', 'Langloch · Vieleck · Spline'], ['T · F', 'Trimmen · Versatz'], ['M · Q · W', 'Spiegeln · Rechteckmuster · Kreismuster'], ['H', 'Verschieben oder drehen (Doppelklick wählt die ganze Kette)'], ['Umschalt F', 'Freie Stellen zeigen (wo noch ein Maß fehlt)'], [M + ' C · V', 'Elemente kopieren · einfügen (auch in eine andere Skizze)'], ['X', 'Hilfslinie (neue Elemente oder das gewählte)'], ['Alt halten', 'Nicht einrasten'], ['D', 'Maß festlegen (auch Formel)'], ['Zahl tippen', 'Genaue Länge beim Zeichnen'], ['Tab', 'Nächstes Eingabefeld'], ['Umschalt halten', 'Feiner einrasten'], ['Enter', 'Linienzug beenden · Skizze fertig'], ['Esc', 'Zeichnen abbrechen · Skizze verlassen']]],
       ['Dateien und Verlauf', [[K('undo'), 'Rückgängig'], [K('redo'), 'Wiederholen'], [K('save'), 'Projekt speichern'], [K('export'), 'Exportieren (STEP und mehr)'], ['?', 'Diese Übersicht']]],
@@ -44020,11 +44892,11 @@ ${AI.modelText()}`;
   $('#btn-undo').innerHTML = icon('undo'); $('#btn-redo').innerHTML = icon('redo'); $('#btn-menu').innerHTML = icon('menu');
   $('#btn-left').innerHTML = icon('list'); $('#btn-right').innerHTML = icon('sliders');
 
-  window.__masswerk = { App, Viewer, Model, Actions, Sketch, SK, TTF, THREE, Print, Drawing, Kernel, UI, Commands, Toolbar, Panels, Handles, Start, Templates, AI, Measure, Place, Store, I18n, T, Units, RefFix, Expr, GeomCheck, UserLib };
+  window.__masswerk = { App, Viewer, Model, Actions, Clipboard, Sketch, SK, TTF, THREE, Print, Drawing, Kernel, UI, Commands, Toolbar, Panels, Handles, Start, Templates, AI, Measure, Place, Store, I18n, T, Units, RefFix, Expr, GeomCheck, UserLib };
   UI.initTips();
   I18n.applyDom();
   Viewer.init($('#viewport'));
-  window.__V = Viewer; window.__M = { Store, Interact, Measure, Datums, RefFix, Print, ViewPrefs, App, Actions, Model, Timeline, Start, Templates, Comp, Handles, Sketch, SK, TTF, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views, Mass, Select, Versions, DroneTpl, DroneUI, DroneLib, UserLib, DroneCheck, Plates, Variants, Explain, Weak, AI, Snap, Toolbar, Panels, Joints, I18n, T, Units, Expr, Tour, GeomCheck, Log, Kernel, Drawing }; window.__S = Start; // für automatische Tests
+  window.__V = Viewer; window.__M = { Store, Interact, Measure, Datums, RefFix, Print, ViewPrefs, App, Actions, Clipboard, Model, Timeline, Start, Templates, Comp, Handles, Sketch, SK, TTF, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views, Mass, Select, Versions, DroneTpl, DroneUI, DroneLib, UserLib, DroneCheck, Plates, Variants, Explain, Weak, AI, Snap, Toolbar, Panels, Joints, I18n, T, Units, Expr, Tour, GeomCheck, Log, Kernel, Drawing }; window.__S = Start; // für automatische Tests
   Panels.init(); Datums.init(); RefFix.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Notes.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init(); Refine.init(); Comp.init(); Views.init(); GeomCheck.init(); Mass.init(); Joints.init(); Versions.init(); Start.init();
 
   // Kopfzeile

@@ -33,7 +33,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Templates,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,Log,Kernel,Drawing}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,Log,Kernel,Drawing}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -15511,6 +15511,276 @@ def t_a070_positionsnummern_stueckliste(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a076_kopieren_projekte(p):
+    # [A-076] Mehrere Projekte in Tabs, Schritt 2: Kopieren zwischen Projekten (BE-13)
+    def ev2(pg, js, arg=None):
+        return pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,Log,Kernel,Drawing}=window.__M; " + js + "}", arg)
+
+    def wait_eval(pg):
+        pg.wait_for_timeout(1500)
+        for _ in range(30):
+            busy = ev2(pg, "return App.busy || Clipboard.busy")
+            if not busy:
+                break
+            pg.wait_for_timeout(300)
+        pg.wait_for_timeout(500)
+
+    p.empty()
+    # 1. Tab 1 -> echter Browser-Tab 2: Quader (40x30x20) mit Bohrung (Ø10) als Gruppe, Farbe #d6574c, Werkstoff PLA
+    p.ev("""
+      App.change('Quader mit Bohrung', (doc) => {
+        doc.name = 'Tab 1';
+        const b = Model.newItem('box', { w: 40, d: 30, h: 20 }, { name: 'Block', color: '#d6574c', mat: 'PLA' });
+        b.colorSet = true;
+        const h = Model.newItem('cylinder', { d: 10, h: 30 }, { name: 'Bohrung', role: 'hole' });
+        h.t.z = -5;
+        const g = Model.newItem('group', {}, { name: 'Halterblock', color: '#d6574c', mat: 'PLA' });
+        g.colorSet = true;
+        g.children = [b, h];
+        doc.items.push(g);
+      });
+    """)
+    wait_eval(p.pg)
+    src1 = p.ev("return Mass.measure().then(r => ({ id: App.doc.items[0].id, vol: r && r.parts && r.parts[0] ? r.parts[0].volume : 0 }))")
+    p.pg.locator('canvas').first.click(position={'x': 20, 'y': 20})
+    p.ev("App.select([arg])", src1['id'])
+    p.pg.keyboard.press('ControlOrMeta+c')
+    p.wait(400)
+
+    pg2 = p.ctx.new_page()
+    try:
+        pg2.goto(URL)
+        pg2.wait_for_timeout(2500)
+        if pg2.locator('.start').count() > 0 and pg2.get_by_text('Leeres Projekt').count() > 0:
+            pg2.get_by_text('Leeres Projekt').first.click()
+            pg2.wait_for_timeout(4000)
+        else:
+            ev2(pg2, "if (Start.open) Start.hide(); App.setDoc(Model.newDoc('Tab 2'));")
+            pg2.wait_for_timeout(1500)
+        try:
+            pg2.locator('.loading').wait_for(state='detached', timeout=15000)
+        except Exception:
+            pass
+        ev2(pg2, "App.change('Name', d => { d.name = 'Tab 2'; });")
+        pg2.locator('canvas').first.click(position={'x': 20, 'y': 20})
+        pg2.keyboard.press('ControlOrMeta+v')
+        wait_eval(pg2)
+
+        dst1 = ev2(pg2, """
+          return Mass.measure().then(r => {
+            const it = App.doc.items[0];
+            return {
+              len: App.doc.items.length,
+              kind: it && it.kind,
+              kids: it && it.children ? it.children.map(c => c.kind + ':' + c.role) : [],
+              color: it && it.color,
+              colorSet: !!(it && it.colorSet),
+              mat: it && it.mat,
+              vol: r && r.parts && r.parts[0] ? r.parts[0].volume : 0,
+              errs: App.errors.length
+            };
+          });
+        """)
+        ok1 = (
+            src1['vol'] > 20000
+            and dst1['len'] == 1
+            and dst1['kind'] == 'group'
+            and dst1['kids'] == ['box:solid', 'cylinder:hole']
+            and dst1['color'] == '#d6574c'
+            and dst1['colorSet'] is True
+            and dst1['mat'] == 'PLA'
+            and dst1['errs'] == 0
+            and abs(dst1['vol'] - src1['vol']) < 1.0
+        )
+
+        # Undo / Redo in Tab 2
+        ev2(pg2, "App.undo()")
+        wait_eval(pg2)
+        after_undo = ev2(pg2, "return App.doc.items.length")
+        ev2(pg2, "App.redo()")
+        wait_eval(pg2)
+        after_redo = ev2(pg2, "return App.doc.items.length")
+        ok1 = ok1 and after_undo == 0 and after_redo == 1
+
+        # 2. Formschritt (op: 'cut') + Formel-Maß (breite = 50) + Farbe #3f7fd6 + Werkstoff Alu 6061 -> In-App Projektwechsel
+        p.ev("""
+          App.setDoc(Model.newDoc('Projekt A'));
+          App.change('Formschritt mit Maß', (doc) => {
+            doc.params.push({ id: 'm_test1', name: 'breite', expr: 50 });
+            const b = Model.newItem('box', { w: 'breite', d: 20, h: 10 }, { name: 'Platte', color: '#3f7fd6', mat: 'Alu 6061' });
+            b.colorSet = true;
+            const c = Model.newItem('cylinder', { d: 8, h: 20 }, { name: 'Schnitt' });
+            c.t.z = -5;
+            c.op = { type: 'cut', target: b.id };
+            doc.items.push(b, c);
+          });
+        """)
+        wait_eval(p.pg)
+        src2 = p.ev("return Mass.measure().then(r => ({ id: App.doc.items[0].id, vol: r && r.parts && r.parts[0] ? r.parts[0].volume : 0 }))")
+        p.pg.locator('canvas').first.click(position={'x': 20, 'y': 20})
+        p.ev("App.select([arg])", src2['id'])
+        p.pg.keyboard.press('ControlOrMeta+c')
+        p.wait(400)
+
+        p.ev("App.setDoc(Model.newDoc('Projekt B'))")
+        p.wait(600)
+        p.pg.locator('canvas').first.click(position={'x': 20, 'y': 20})
+        p.pg.keyboard.press('ControlOrMeta+v')
+        wait_eval(p.pg)
+        dst2 = p.ev("""
+          return Mass.measure().then(r => {
+            const b = App.doc.items[0], c = App.doc.items[1];
+            return {
+              len: App.doc.items.length,
+              hasParam: (App.doc.params || []).some(q => q.name === 'breite' && Number(q.expr) === 50),
+              cutTargetOk: !!(c && c.op && c.op.type === 'cut' && b && c.op.target === b.id),
+              color: b && b.color,
+              mat: b && b.mat,
+              vol: r && r.parts && r.parts[0] ? r.parts[0].volume : 0
+            };
+          });
+        """)
+        ok2 = (
+            src2['vol'] > 9000
+            and dst2['len'] == 2
+            and dst2['hasParam'] is True
+            and dst2['cutTargetOk'] is True
+            and dst2['color'] == '#3f7fd6'
+            and dst2['mat'] == 'Alu 6061'
+            and abs(dst2['vol'] - src2['vol']) < 1.0
+        )
+
+        # 3. Loses oberstes Loch (role: 'hole') am Quader (PETG, #5b9f55): darf im Ziel-Tab keinen fremden Körper anschneiden
+        p.ev("""
+          App.setDoc(Model.newDoc('Projekt L1'));
+          App.change('Quader und loses Loch', (doc) => {
+            const b = Model.newItem('box', { w: 30, d: 30, h: 10 }, { name: 'Grundplatte', color: '#5b9f55', mat: 'PETG' });
+            b.colorSet = true;
+            const h = Model.newItem('cylinder', { d: 10, h: 20 }, { name: 'Loch', role: 'hole' });
+            h.t.z = -5;
+            doc.items.push(b, h);
+          });
+        """)
+        wait_eval(p.pg)
+        src3 = p.ev("return Mass.measure().then(r => ({ id: App.doc.items[0].id, vol: r && r.parts && r.parts[0] ? r.parts[0].volume : 0 }))")
+        p.pg.locator('canvas').first.click(position={'x': 20, 'y': 20})
+        p.ev("App.select([arg])", src3['id'])
+        p.pg.keyboard.press('ControlOrMeta+c')
+        p.wait(400)
+
+        p.ev("""
+          App.setDoc(Model.newDoc('Projekt L2'));
+          App.change('Bestehender Block', (doc) => {
+            doc.items.push(Model.newItem('box', { w: 15, d: 15, h: 10 }, { name: 'Fremd', color: '#8a6ad1' }));
+          });
+        """)
+        wait_eval(p.pg)
+        p.pg.locator('canvas').first.click(position={'x': 20, 'y': 20})
+        p.pg.keyboard.press('ControlOrMeta+v')
+        wait_eval(p.pg)
+        dst3 = p.ev("""
+          return Mass.measure().then(r => {
+            const fremd = App.doc.items.find(x => x.name === 'Fremd');
+            const copy = App.doc.items.find(x => x.name === 'Grundplatte');
+            const pf = fremd ? Mass.partOf(r, fremd.id) : null;
+            const pc = copy ? Mass.partOf(r, copy.id) : null;
+            return {
+              fremdVol: pf ? pf.volume : 0,
+              copyVol: pc ? pc.volume : 0,
+              color: copy && copy.color,
+              mat: copy && copy.mat
+            };
+          });
+        """)
+        ok3 = (
+            abs(dst3['fremdVol'] - 2250.0) < 0.5
+            and abs(dst3['copyVol'] - src3['vol']) < 1.0
+            and dst3['color'] == '#5b9f55'
+            and dst3['mat'] == 'PETG'
+        )
+
+        # 4. Feste Form (BREP-Fallback) bei externem Bezug (transform-Kopie ohne Original) -> Tab 2
+        p.ev("""
+          App.setDoc(Model.newDoc('Projekt Bake'));
+          App.change('Transform-Kopie', (doc) => {
+            const b = Model.newItem('box', { w: 20, d: 15, h: 10 }, { name: 'Basis' });
+            const xf = Model.newItem('transform', { target: b.id, copy: true, dx: 40, dy: 5, dz: 0, rx: 0, ry: 0, rz: 0 }, { name: 'GebakeneKopie', color: '#e8833a', mat: 'Messing' });
+            xf.colorSet = true;
+            doc.items.push(b, xf);
+          });
+        """)
+        wait_eval(p.pg)
+        src4 = p.ev("return Mass.measure().then(r => { const xf = App.doc.items[1]; const pt = Mass.partOf(r, xf.id); return { id: xf.id, vol: pt ? pt.volume : 0 }; })")
+        p.pg.locator('canvas').first.click(position={'x': 20, 'y': 20})
+        p.ev("App.select([arg])", src4['id'])
+        p.pg.keyboard.press('ControlOrMeta+c')
+        p.ev("return Clipboard.whenReady()")
+        p.wait(300)
+
+        ev2(pg2, "App.setDoc(Model.newDoc('Tab 2 Bake'))")
+        pg2.wait_for_timeout(600)
+        pg2.locator('canvas').first.click(position={'x': 20, 'y': 20})
+        pg2.keyboard.press('ControlOrMeta+v')
+        wait_eval(pg2)
+        dst4 = ev2(pg2, """
+          return Mass.measure().then(r => {
+            const it = App.doc.items[0];
+            const pt = it ? Mass.partOf(r, it.id) : null;
+            return {
+              kind: it && it.kind,
+              fmt: it && it.p && it.p.fmt,
+              color: it && it.color,
+              mat: it && it.mat,
+              vol: pt ? pt.volume : 0,
+              errs: App.errors.length
+            };
+          });
+        """)
+        ok4 = (
+            abs(src4['vol'] - 3000.0) < 1.0
+            and dst4['kind'] == 'import'
+            and dst4['fmt'] == 'brep'
+            and dst4['color'] == '#e8833a'
+            and dst4['mat'] == 'Messing'
+            and dst4['errs'] == 0
+            and abs(dst4['vol'] - src4['vol']) < 1.0
+        )
+
+        # 5. Kontextmenü (#cm-copy / #cm-paste), Befehlssuche & Hilfetext
+        p.ev("Viewer.fit(null, false)")
+        p.wait(400)
+        meta = p.ev("""
+          return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(d => {
+            const b = App.doc.items[0];
+            const box = Actions.worldBox(b.id);
+            const ctr = box.min.clone().add(box.max).multiplyScalar(0.5);
+            const sc = Viewer.toScreen(ctr);
+            const rc = Viewer.canvas.getBoundingClientRect();
+            const onBody = Interact.contextMenu(sc.x + rc.left, sc.y + rc.top).map(x => x && x.id).filter(Boolean);
+            const hasHelpAttr = !!document.querySelector('#cm-copy[data-help="copyBetweenTabs"]');
+            document.querySelector('.menu')?.remove();
+            App.select([b.id]);
+            const cmdCopy = Commands.search('körper kopieren').some(c => c.id === 'copy');
+            App.clearSelection();
+            const onEmpty = Interact.contextMenu(rc.left + 20, rc.top + 20).map(x => x && x.id).filter(Boolean);
+            document.querySelector('.menu')?.remove();
+            const cmdPaste = Commands.search('kopierte körper einfügen').some(c => c.id === 'paste');
+            return {
+              hasCmCopy: onBody.includes('cm-copy'),
+              hasCmPaste: onEmpty.includes('cm-paste'),
+              hasHelpAttr,
+              cmdCopy,
+              cmdPaste,
+              helpJson: !!(d.copyBetweenTabs && d.copyBetweenTabs.tip && d.copyBetweenTabs.hilfe && d.copyBetweenTabs.tipp)
+            };
+          });
+        """)
+        ok5 = bool(all(meta.values()))
+        return [ok1, ok2, ok3, ok4, ok5]
+    finally:
+        pg2.close()
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -15689,6 +15959,7 @@ TESTS = [
     ('[F-11241146] Volltest-Reparatur: Adaptive Auflösung bei rAF-Stau / askDim behält Eingabe bei verzögertem rAF-Fokus', t_f11241146),
     ('[A-071] Zeichnung als DXF (LINE, CIRCLE, ARC, Layer & Schriftfeld) und PNG (wählbare Breite & Transparenz)', t_a071_zeichnung_dxf_png),
     ('[A-070] Zeichnung: Positionsnummern und Stückliste (ZE-12)', t_a070_positionsnummern_stueckliste),
+    ('[A-076] Kopieren zwischen Projekten: Quader mit Bohrung in Tab 1 → Tab 2 (Volumen, Farbe, Werkstoff, Schritte, feste Form, Rückgängig)', t_a076_kopieren_projekte),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

@@ -223,6 +223,8 @@
   "menu.ctx.thread": "Gewinde …",
   "menu.ctx.markThread": "Gewinde markieren …",
   "menu.ctx.dupLinked": "Verknüpft duplizieren",
+  "menu.ctx.copyBody": "Kopieren",
+  "menu.ctx.pasteBody": "Einfügen",
   "menu.ctx.toSolid": "Zum Körper machen",
   "menu.ctx.toHole": "Zum Loch machen",
   "menu.ctx.selectSimilar": "Ähnliche wählen",

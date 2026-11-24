@@ -99,6 +99,7 @@ Leitlinien:
 | `41-dronelib.js` | FPV-Daten, Kaufteile, Herstellerrahmen |
 | `42-userlib.js` (`UserLib`) | Eigene Teile-Bibliothek (`tracery-bibliothek` in `localStorage`, Vorschaubild, lokale Maße) |
 | `45-actions.js` | Aktionen wie Gruppieren, Ausrichten, Abstand |
+| `45-clipboard.js` | Zwischenablage (`Clipboard`) zum Kopieren/Einfügen von Körpern samt Schritten, Werkstoff, Farbe und Maßen (oder als feste BREP-Form) zwischen Projekten und Browser-Tabs (BE-13) |
 | `46-features.js` | Muster (inkl. „entlang Kurve“, Formschritt-Muster und Kopien auslassen `togglePatternSkip`), Spiegeln an Fläche, Teilen, Boolesch, Wandstärke, Achse im Bild wählen (`pickAxisThen`), Drehen bis Fläche (`pickRevolveFace`) |
 | `46-reffix.js` | Kaputte Bezüge (`RefFix`): gelbe Warnung bei verlorener Kante/Fläche an Rundung, Fase, Wandstärke oder Skizze, gestrichelte Alt-Lage (`Viewer.setRefGhost`) und Assistent „Neu wählen“ |
 | `47-mass.js` | Volumen, Gewicht, Schwerpunkt, Material |
