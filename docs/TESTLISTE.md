@@ -1558,6 +1558,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Trennen & Projektwechsel**: Über das Menü an `#btn-folder-status` („Ordner-Verbindung trennen“) sowie beim Start eines neuen Projekts wird die Verbindung sauber beendet.
 - [ ] **Von Hand**: In Chrome oder Edge einen echten Ordner wählen, Änderungen machen, 10 s warten und prüfen, ob die `.tracery.json`-Datei auf der Festplatte aktuell ist.
 
+## Körper verschieben/drehen/kopieren als Schritt (Auto [A-018])
+
+- [x] **Schritt anlegen & Werte ändern**: „Verschieben/Drehen“ legt `transform`-Schritt an, ohne `t` des Originals zu verändern; X/Y/Z-Werte und Drehung (um Mitte) versetzen den Körper exakt.
+- [x] **Unterdrücken & Zeitleisten-Marker**: Unterdrücken im Verlauf sowie Zurückrollen des Markers vor den Schritt setzen den Körper wieder exakt an seinen alten Platz; Wiederaktivieren versetzt ihn erneut.
+- [x] **Als Kopie, Formeln & Rückgängig**: „Als Kopie“ behält das Original und erzeugt einen mitwachsenden versetzten Körper; Formeln wie `Hub * 2` und Rückgängig funktionieren; Hilfetext `moveStep` vorhanden.
+- [ ] **Von Hand**: Drehpunkt „Ursprung“ und „Eigener Punkt“ zusammen mit einem späteren Vereinigen-Schritt und anschließendem Umbenennen/Verschieben im Verlauf prüfen.
+
 ## Ebene im Winkel und Achsen (Auto [A-017])
 
 - [x] **Ebene 30° an einer Quaderkante (BZ-02)**: Ebene liegt auf der gewählten Kante, bildet exakt 30° zur Bezugsfläche, wandert beim Ändern der Quaderhöhe mit, lässt sich rechts auf 60° ändern und direkt als Skizzenebene hochziehen.

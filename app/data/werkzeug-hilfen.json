@@ -749,6 +749,11 @@
     "hilfe": "Wählt einen Ordner auf deinem Rechner (in Chrome und Edge). Tracery legt die Projektdatei dort ab und schreibt Änderungen automatisch mit – gebündelt alle 10 Sekunden. Oben in der Leiste siehst du, in welchen Ordner gespeichert wird.",
     "tipp": "Klick oben auf „gespeichert in …“, um sofort zu speichern, den Ordner zu wechseln oder die Verbindung zu trennen."
   },
+  "moveStep": {
+    "tip": "Körper als Schritt im Verlauf verschieben, drehen oder kopieren",
+    "hilfe": "Legt einen eigenen Schritt „Verschieben/Drehen“ im Verlauf an. Rechts stellst du Verschiebung (X/Y/Z), Drehung um die Mitte, den Ursprung oder einen Punkt sowie „Als Kopie“ ein – auch mit Formeln.",
+    "tipp": "Wenn du diesen Schritt unterdrückst oder den Marker davor schiebst, springt der Körper sofort an seinen alten Platz zurück."
+  },
   "datumEdgeAngle": {
     "tip": "Bezugsebene durch eine gerade Kante im Winkel zu einer Fläche",
     "hilfe": "Wählt eine gerade Körperkante und eine ebene Fläche als Winkel-Bezug. Die Ebene läuft durch die Kante und kippt um den eingestellten Winkel (z. B. 30°) zur Fläche. Ändert sich der Körper, wandert die Ebene mit.",

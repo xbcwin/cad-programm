@@ -1270,6 +1270,7 @@ const IC = {
   standoff: '<path d="M10 3v4h4V3M10 21v-4h4v4" opacity=".5"/><rect x="8" y="3" width="8" height="18" rx="1"/><path d="M8 10h8M8 14h8" />',
   strap: '<path d="M10 7v3M13 7v3" opacity=".5"/><rect x="3" y="7" width="4" height="10" rx="1"/><path d="M7 15h10a4 4 0 0 0 0-8H7M7 10h8V7" />',
   thread: '<rect x="6" y="3" width="12" height="18" rx="2"/><path d="M6 8l12-2M6 12l12-2M6 16l12-2M6 19l8-1.3"/>',
+  moveStep: '<path d="M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3" />',
 };
 function icon(name, extra = '') {
   const body = IC[name] || IC.cube;
@@ -2042,6 +2043,11 @@ const HELP = {
   "hilfe": "Wählt einen Ordner auf deinem Rechner (in Chrome und Edge). Tracery legt die Projektdatei dort ab und schreibt Änderungen automatisch mit – gebündelt alle 10 Sekunden. Oben in der Leiste siehst du, in welchen Ordner gespeichert wird.",
   "tipp": "Klick oben auf „gespeichert in …“, um sofort zu speichern, den Ordner zu wechseln oder die Verbindung zu trennen."
  },
+ "moveStep": {
+  "tip": "Körper als Schritt im Verlauf verschieben, drehen oder kopieren",
+  "hilfe": "Legt einen eigenen Schritt „Verschieben/Drehen“ im Verlauf an. Rechts stellst du Verschiebung (X/Y/Z), Drehung um die Mitte, den Ursprung oder einen Punkt sowie „Als Kopie“ ein – auch mit Formeln.",
+  "tipp": "Wenn du diesen Schritt unterdrückst oder den Marker davor schiebst, springt der Körper sofort an seinen alten Platz zurück."
+ },
  "datumEdgeAngle": {
   "tip": "Bezugsebene durch eine gerade Kante im Winkel zu einer Fläche",
   "hilfe": "Wählt eine gerade Körperkante und eine ebene Fläche als Winkel-Bezug. Die Ebene läuft durch die Kante und kippt um den eingestellten Winkel (z. B. 30°) zur Fläche. Ändert sich der Körper, wandert die Ebene mit.",
@@ -2579,6 +2585,7 @@ const KINDS = {
   import: { label: 'Importiert', params: [] },
   group: { label: 'Gruppe', params: [] },
   part: { label: 'Bauteil', params: [] },
+  transform: { label: 'Verschieben/Drehen', params: [] },
 };
 const PRIMITIVE_ORDER = ['box', 'cylinder', 'sphere', 'cone', 'pyramid', 'wedge', 'tube', 'torus', 'prism', 'hemisphere'];
 
@@ -2772,6 +2779,7 @@ const Model = (() => {
     walk(doc.items, (it) => {
       const me = top(it.id);
       if (it.op && it.op.target) out.push({ from: me, to: top(it.op.target), what: { join: 'vereinigt mit', cut: 'abgezogen von', common: 'Schnittmenge mit' }[it.op.type] || 'verrechnet mit' });
+      if (it.kind === 'transform' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: it.p.copy ? 'versetzte Kopie von' : 'versetzt' });
       if (it.link) out.push({ from: me, to: top(it.link), what: 'verknüpfte Kopie von' });
       const sk = it.p && it.p.sketch;
       for (const e of (sk && sk.ents) || []) if (e.link && e.link.id) out.push({ from: me, to: top(e.link.id), what: 'Skizze übernimmt Kante von' });
@@ -2813,6 +2821,16 @@ const Model = (() => {
       o.p = { fmt: it.p.fmt, scale: num(it.p.scale, V, 1) };
       if (it.p.blobId) o.p.blobId = it.p.blobId;
       else if (it.p.data) o.p.data = it.p.data;
+    } else if (it.kind === 'transform') {
+      const p = it.p || {};
+      o.p = {
+        target: p.target || null,
+        dx: num(p.dx, V, 0), dy: num(p.dy, V, 0), dz: num(p.dz, V, 0),
+        rx: num(p.rx, V, 0), ry: num(p.ry, V, 0), rz: num(p.rz, V, 0),
+        pivot: p.pivot === 'origin' || p.pivot === 'point' ? p.pivot : 'center',
+        px: num(p.px, V, 0), py: num(p.py, V, 0), pz: num(p.pz, V, 0),
+        copy: !!p.copy,
+      };
     }
     else o.p = resolveP(it.p, V);
     if (it.mir) o.mir = it.mir;
@@ -3179,6 +3197,13 @@ const Model = (() => {
       case 'torus': return `Ø ${f(p.d)}${u}`;
       case 'extrude': return p.thin ? `${f(p.dist)}${u} hoch · Wand ${f(p.wall || 2)}${u}` : `${f(p.dist)}${u} hoch`;
       case 'revolve': return `${fmt(p.angle, 1)}°`;
+      case 'transform': {
+        const parts = [];
+        for (const k of ['dx', 'dy', 'dz']) if (Math.abs(p[k] || 0) > 1e-6) parts.push(`${k[1].toUpperCase()} ${p[k] > 0 ? '+' : ''}${fmt(p[k], 1)}`);
+        for (const k of ['rx', 'ry', 'rz']) if (Math.abs(p[k] || 0) > 1e-6) parts.push(`↻${k[1].toUpperCase()} ${fmt(p[k], 1)}°`);
+        const s = parts.length ? parts.join(' ') : '0 mm';
+        return p.copy ? 'Kopie · ' + s : s;
+      }
       case 'group': return (typeof Features !== 'undefined' && Features.sizeText(it, V)) || `${(it.children || []).length} Teile`;
       case 'part': {
         const L = String(p.lib || '');
@@ -5429,7 +5454,14 @@ const App = (() => {
   const ghostReq = { n: 0 };
   async function refreshSelectionVisuals() {
     const selTop = new Set();
-    for (const id of S.sel) { const top = Model.topOf(S.doc, id); if (top) selTop.add(top.id); selTop.add('__ex:' + id); }
+    for (const id of S.sel) {
+      const top = Model.topOf(S.doc, id);
+      if (top) {
+        selTop.add(top.id);
+        if (top.kind === 'transform' && S.merged && S.merged.has(top.id)) selTop.add(S.merged.get(top.id));
+      }
+      selTop.add('__ex:' + id);
+    }
     for (const [id] of Viewer.nodes) Viewer.updateNode(id, { selected: selTop.has(id) });
     Viewer.highlightFace('sel', S.face ? S.face.id : null, S.face ? S.face.faceIdx : null);
     Viewer.setSelectedEdges(S.edges);
@@ -6780,7 +6812,7 @@ const Handles = (() => {
   const LABELS = { w: 'Breite', d: 'Durchmesser', h: 'Höhe', d1: 'Durchmesser', t: 'Ringdicke', dist: 'Höhe' };
   function current() {
     if (App.mode !== 'model' || Sketch.active || App.sel.length !== 1 || Views.exploded) return null;
-    const f = Model.find(App.doc, App.sel[0]); if (!f || f.item.locked) return null;
+    const f = Model.find(App.doc, App.sel[0]); if (!f || f.item.locked || f.item.kind === 'transform') return null;
     const box = App.localBox(f.item.id); if (!box) return null;
     return { f, it: f.item, box, W: Model.worldMatrix(App.doc, f.item.id) };
   }
@@ -7251,9 +7283,9 @@ const Interact = (() => {
   }
   function startMove(e) {
     const hit = down.hit; const top = App.doc.items.find((x) => x.id === hit.id);
-    if (!top || top.locked) { down = null; Viewer.controls.enabled = true; return; }
+    if (!top || top.locked || top.kind === 'transform') { down = null; Viewer.controls.enabled = true; return; }
     if (!App.sel.includes(top.id)) App.select([top.id]);
-    const ids = App.sel.map((id) => App.doc.items.find((x) => x.id === id)).filter((x) => x && !x.locked);
+    const ids = App.sel.map((id) => App.doc.items.find((x) => x.id === id)).filter((x) => x && !x.locked && x.kind !== 'transform');
     const planeZ = hit.point.z;
     moving = { ids, before: App.snapshot(), start: hit.point.clone(), planeZ, t0: new Map(ids.map((it) => [it.id, Model.tNumeric(it)])), box0: Actions.selBox(ids.map((it) => it.id)) };
     Viewer.canvas.style.cursor = 'grabbing';
@@ -7420,6 +7452,7 @@ const Interact = (() => {
         { icon: 'thread', label: 'Gewinde markieren …', id: 'cm-thread', help: 'cosmeticThread', hidden: !hit || hit.faceIdx == null || top.role === 'hole' || ((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).t !== 'CYLINDRE', run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) { const a = h('div', { style: { position: 'fixed', left: cx + 'px', top: cy + 'px', width: '1px', height: '1px' } }); document.body.append(a); Features.threadPop({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }, a); setTimeout(() => a.remove(), 0); } } },
         '-',
         { icon: 'copy', label: 'Duplizieren', kbd: 'Strg D', id: 'cm-dup', run: () => Actions.duplicate() },
+        { icon: 'moveStep', label: 'Verschieben/Drehen (Schritt)', id: 'cm-movestep', help: 'moveStep', run: () => Features.transform([top.id]) },
         { icon: 'copy', label: 'Verknüpft duplizieren', kbd: 'Strg Umschalt D', id: 'cm-duplink', hidden: it.kind === 'group', run: () => Actions.duplicateLinked() },
         { icon: it.role === 'hole' ? 'solid' : 'hole', label: it.role === 'hole' ? 'Zum Körper machen' : 'Zum Loch machen', kbd: 'H', id: 'cm-role', run: () => Actions.toggleRole() },
         { icon: 'eyeOff', label: 'Ausblenden', id: 'cm-hide', run: () => Actions.hideSelected() },
@@ -7817,7 +7850,7 @@ const Actions = (() => {
   function tops(ids) { return ids.map((id) => App.doc.items.find((x) => x.id === id)).filter(Boolean); }
   function findSel() { return App.selectedItems(); }
   function worldBox(id) {
-    const n = Viewer.nodes.get(id);
+    const n = Viewer.nodes.get(id) || (App.mergedInto(id) ? Viewer.nodes.get(App.mergedInto(id)) : null);
     if (n) return n.mesh.geometry.boundingBox.clone().applyMatrix4(n.obj.matrix);
     const b = App.localBox(id); if (!b) return null;
     const box = new THREE.Box3(new THREE.Vector3(b[0], b[1], b[2]), new THREE.Vector3(b[3], b[4], b[5]));
@@ -8876,8 +8909,70 @@ const Features = (() => {
     box.append(h('div', { class: 'hint-box' }, 'Nur Markierung – rechnet sofort und steht in Stückliste und Zeichnung.'));
     UI.pop(anchor || $('#center'), box);
   }
+  // ---------- Verschieben / Drehen / Kopieren als Schritt (KP-08) ----------
+  function transform(targetOrIds, opts = {}) {
+    if (App.ctx) { UI.toast('Schritte zum Verschieben/Drehen gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return null; }
+    const raw = Array.isArray(targetOrIds) ? targetOrIds[0] : (targetOrIds || App.sel[0]);
+    const top = raw ? Model.topOf(App.doc, raw) : null;
+    const tid = top ? (App.mergedInto(top.id) || top.id) : null;
+    const tgt = tid ? App.doc.items.find((x) => x.id === tid) : null;
+    if (!tgt) { UI.toast('Wähle zuerst einen Körper aus.', { icon: 'info' }); return null; }
+    const p = {
+      target: tgt.id,
+      dx: opts.dx ?? 0, dy: opts.dy ?? 0, dz: opts.dz ?? 0,
+      rx: opts.rx ?? 0, ry: opts.ry ?? 0, rz: opts.rz ?? 0,
+      pivot: opts.pivot || 'center',
+      px: opts.px ?? 0, py: opts.py ?? 0, pz: opts.pz ?? 0,
+      copy: !!opts.copy,
+    };
+    let step;
+    App.change('Verschieben/Drehen angelegt', (doc) => {
+      step = Model.newItem('transform', p, { name: opts.name || 'Verschieben/Drehen', color: tgt.color, role: tgt.role, mat: tgt.mat });
+      doc.items.push(step);
+    });
+    if (step) {
+      App.select([step.id]);
+      UI.toast('Schritt „Verschieben/Drehen“ angelegt. Rechts stellst du Verschiebung, Drehung und „Als Kopie“ ein.', { icon: 'check' });
+    }
+    return step || null;
+  }
+  function renderTransform(it, sec, setP) {
+    const p = it.p || {};
+    const idx = App.doc.items.indexOf(it);
+    const prev = idx >= 0 ? App.doc.items.slice(0, idx) : [];
+    const targets = prev.filter((x) => !x.suppressed && !(x.op && x.op.target) && !(x.kind === 'transform' && !(x.p && x.p.copy)));
+    const opts = targets.map((x) => [x.id, Model.label(x)]);
+    if (p.target && !targets.some((x) => x.id === p.target)) {
+      const f = Model.find(App.doc, p.target);
+      opts.unshift([p.target, f ? Model.label(f.item) + ' (inaktiv)' : 'Fehlender Körper']);
+    }
+    if (opts.length) {
+      sec.append(UI.selectField({ id: 'xf-target', label: 'Zielkörper', value: p.target || '', options: opts, onChange: (v) => App.change('Zielkörper gewählt', (doc) => { const T = Model.find(doc, it.id).item; T.p.target = v; }) }));
+    }
+    const copyL = h('label', { class: 'check', style: { marginTop: '8px' } }, h('input', { type: 'checkbox', id: 'xf-copy', checked: !!p.copy }), 'Als Kopie (Original bleibt an seinem Platz)');
+    copyL.querySelector('input').onchange = (e) => App.change(e.target.checked ? 'Als Kopie' : 'Original versetzen', (doc) => { Model.find(doc, it.id).item.p.copy = e.target.checked; });
+    sec.append(copyL);
+    const ft = h('div', { class: 'fields three' });
+    for (const k of ['dx', 'dy', 'dz']) ft.append(UI.numField({ id: 'xf-' + k, value: p[k] ?? 0, axis: k[1], unit: '', onCommit: (v) => setP(k, v) }));
+    const fr = h('div', { class: 'fields three' });
+    for (const k of ['rx', 'ry', 'rz']) fr.append(UI.numField({ id: 'xf-' + k, value: p[k] ?? 0, axis: k[1], unit: '°', onCommit: (v) => setP(k, v) }));
+    sec.append(h('div', { class: 'field', style: { marginTop: '8px' } }, h('label', null, 'Verschiebung (mm)'), ft), h('div', { class: 'field' }, h('label', null, 'Drehung (°)'), fr));
+    const pv = p.pivot || 'center';
+    sec.append(UI.selectField({ id: 'xf-pivot', label: 'Drehpunkt', value: pv, options: [['center', 'Mitte des Körpers'], ['origin', 'Ursprung (0 · 0 · 0)'], ['point', 'Eigener Punkt']], onChange: (v) => App.change('Drehpunkt geändert', (doc) => { Model.find(doc, it.id).item.p.pivot = v; }) }));
+    if (pv === 'point') {
+      const fp = h('div', { class: 'fields three' });
+      for (const k of ['px', 'py', 'pz']) fp.append(UI.numField({ id: 'xf-' + k, value: p[k] ?? 0, axis: k[1], unit: '', onCommit: (v) => setP(k, v) }));
+      sec.append(h('div', { class: 'field' }, h('label', null, 'Punkt (mm)'), fp));
+    }
+    if (p.target && Model.find(App.doc, p.target)) {
+      const gb = h('button', { type: 'button', class: 'btn small', id: 'xf-goto' }); gb.innerHTML = icon('pointer') + 'Zielkörper wählen';
+      gb.onclick = () => App.select([p.target]);
+      sec.append(h('div', { class: 'btn-row' }, gb));
+    }
+    sec.append(h('div', { class: 'hint-box', html: p.copy ? 'Erzeugt eine versetzte oder gedrehte <b>Kopie</b>. Ändert sich der Zielkörper, wandert die Kopie mit.' : 'Versetzt den Zielkörper als Schritt im Verlauf. Unterdrückst du diesen Schritt oder rollst den Marker davor, springt der Körper zurück.' }));
+  }
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { guessThreadSize, threadOnFace, markThread, updateThread, removeThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
+  return { transform, renderTransform, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
 })();
 // ---- 46-datums.js ----
 // ================= Bezugsebenen & Bezugsachsen: eigene Ebenen und Achsen im Projekt =================
@@ -10379,7 +10474,7 @@ const Timeline = (() => {
   let el, track, info, bStart, bPrev, bNext, bEnd, drag = null, peekT = null, peekK = null;
   function iconFor(it) {
     if (it.kind === 'part') { const d = LIBMAP[(it.p || {}).lib]; return d && d.icon ? d.icon : 'bolt'; }
-    return ({ box: 'cube', cylinder: 'circle', tube: 'circle', sphere: 'circle', hemisphere: 'circle', torus: 'circle', cone: 'polygon', pyramid: 'polygon', prism: 'hex', wedge: 'chamfer', extrude: 'extrude', revolve: 'revolve', loft: 'loft', sweep: 'sweep', import: 'folder', group: 'group' })[it.kind] || 'cube';
+    return ({ box: 'cube', cylinder: 'circle', tube: 'circle', sphere: 'circle', hemisphere: 'circle', torus: 'circle', cone: 'polygon', pyramid: 'polygon', prism: 'hex', wedge: 'chamfer', extrude: 'extrude', revolve: 'revolve', loft: 'loft', sweep: 'sweep', import: 'folder', group: 'group', transform: 'moveStep' })[it.kind] || 'cube';
   }
   // Zeitleiste des Projekts – oder des Bauteils, das gerade bearbeitet wird
   function owner(doc = App.doc) { const c = App.ctx ? doc.items.find((x) => x.id === App.ctx) : null; return c || doc; }
@@ -11079,6 +11174,7 @@ const Panels = (() => {
           e.preventDefault(); if (!selSet.has(it.id)) App.select([it.id]);
           UI.menu(row, [
             { icon: 'help', label: 'Erklär diesen Schritt', help: 'explainStep', run: () => Explain.dialog(it.id) },
+            ...(topIdx >= 0 ? [{ icon: 'moveStep', label: 'Verschieben/Drehen (Schritt)', help: 'moveStep', run: () => Features.transform([it.id]) }] : []),
             { icon: 'edit', label: 'Umbenennen', run: async () => { const n = await UI.prompt('Umbenennen', 'Name', Model.label(it), 'Umbenennen'); if (n && n.trim()) App.change('Umbenannt', (doc) => { Model.find(doc, it.id).item.name = n.trim(); }); } },
             ...(ownIdx >= 0 ? [{ icon: 'suppress', label: it.suppressed ? 'Wieder aktivieren' : 'Unterdrücken', run: () => Timeline.toggleSuppress(it.id) }] : []),
             '-', { icon: 'trash', label: 'Löschen', run: () => Actions.remove([it.id]) },
@@ -11274,7 +11370,7 @@ const Panels = (() => {
     let hit = false;
     const fix = (s) => { if (typeof s !== 'string') return s; const r = s.replace(re, (m, pre) => { hit = true; return pre + repl; }); return /^-?\d+(\.\d+)?$/.test(r.trim()) ? +r : r; };
     for (const q of doc.params) q.expr = fix(q.expr);
-    Model.walk(doc.items, (it) => { for (const k in it.p || {}) it.p[k] = fix(it.p[k]); for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) f.r = fix(f.r); if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); });
+    Model.walk(doc.items, (it) => { for (const k in it.p || {}) { if (it.kind === 'transform' && (k === 'target' || k === 'pivot')) continue; it.p[k] = fix(it.p[k]); } for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) f.r = fix(f.r); if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); });
     return hit;
   }
   function renameParam(id, nv) {
@@ -11423,8 +11519,8 @@ const Panels = (() => {
   // Formschritt mit Modus: eigener Körper oder mit einem früheren Körper verrechnen (nur Teile ganz oben im Verlauf)
   function opSection(it) {
     const idx = App.doc.items.indexOf(it);
-    if (idx < 0 || it.kind === 'group') return null;
-    const targets = App.doc.items.slice(0, idx).filter((x) => x.role !== 'hole' && !x.suppressed && x.kind !== 'group' && !(x.op && x.op.target === it.id));
+    if (idx < 0 || it.kind === 'group' || it.kind === 'transform') return null;
+    const targets = App.doc.items.slice(0, idx).filter((x) => x.role !== 'hole' && !x.suppressed && x.kind !== 'group' && !(x.kind === 'transform' && !(x.p && x.p.copy)) && !(x.op && x.op.target === it.id));
     if (!targets.length && !it.op) return null;
     const sec = h('div', { class: 'section', id: 'op-sec', 'data-help': 'bodyOp' }, h('div', { class: 'section-h' }, 'Körper'));
     const type = it.op ? it.op.type : 'new';
@@ -11526,7 +11622,7 @@ const Panels = (() => {
         const nm = (id) => { const f = Model.find(App.doc, id); return f ? Model.label(f.item) : '–'; };
         const line = (txt, id) => { const r = h('div', { class: 'mini-row dep-row' }, h('span', { class: 'grow' }, txt)); if (id && Model.find(App.doc, id)) { r.style.cursor = 'pointer'; r.onclick = () => App.select([id]); } return r; };
         for (const x of up) ds.append(line(`${x.what} „${nm(x.to)}“`, x.to));
-        const back = { 'abgezogen von': 'wird hiervon abgezogen', 'vereinigt mit': 'ist hiermit vereinigt', 'Schnittmenge mit': 'bildet hiermit die Schnittmenge', 'verrechnet mit': 'ist hiermit verrechnet', 'verknüpfte Kopie von': 'ist eine verknüpfte Kopie hiervon', 'Skizze übernimmt Kante von': 'übernimmt Kanten hiervon', 'Rohr hängt an': 'hat Rohrpunkte hieran' };
+        const back = { 'abgezogen von': 'wird hiervon abgezogen', 'vereinigt mit': 'ist hiermit vereinigt', 'Schnittmenge mit': 'bildet hiermit die Schnittmenge', 'verrechnet mit': 'ist hiermit verrechnet', 'versetzt': 'versetzt diesen Körper', 'versetzte Kopie von': 'ist eine versetzte Kopie hiervon', 'verknüpfte Kopie von': 'ist eine verknüpfte Kopie hiervon', 'Skizze übernimmt Kante von': 'übernimmt Kanten hiervon', 'Rohr hängt an': 'hat Rohrpunkte hieran' };
         for (const x of down) ds.append(line(x.datum ? `Bezugsebene „${x.datum}“ hängt hieran` : x.axis ? `Bezugsachse „${x.axis}“ hängt hieran` : `„${nm(x.from)}“ ${back[x.what] || 'hängt hieran'}`, x.datum || x.axis ? null : x.from));
         if (down.length) ds.open = true;
         w.append(ds);
@@ -11534,7 +11630,8 @@ const Panels = (() => {
     }
     const copies = []; Model.walk(App.doc.items, (x) => { if (x.link === it.id) copies.push(x); });
     if (copies.length) w.append(h('div', { class: 'hint-box', id: 'link-count' }, `${copies.length} verknüpfte ${copies.length === 1 ? 'Kopie folgt' : 'Kopien folgen'} diesem Teil.`));
-    w.append(roleSwitch(it.role, (r) => Actions.setRole([it.id], r)));
+    const isMoveOnly = it.kind === 'transform' && !(it.p && it.p.copy);
+    if (!isMoveOnly) w.append(roleSwitch(it.role, (r) => Actions.setRole([it.id], r)));
     const opSec = opSection(it); if (opSec) w.append(opSec);
     // Maße
     const three = !!(KINDS[it.kind] && KINDS[it.kind].params.length === 3);
@@ -11727,6 +11824,9 @@ const Panels = (() => {
       }
       if (hasRail) { ml.innerHTML = ''; ml.append(h('div', { class: 'section-h' }, 'Mittellinie'), h('div', { class: 'hint-box', html: 'Mit Führungskurve geht keine Mittellinie – erst „Ohne Führungskurve“.' })); }
       w.append(sec, ml, fk); if (fk2) w.append(fk2);
+    } else if (it.kind === 'transform') {
+      sec.firstChild.textContent = 'Verschieben/Drehen';
+      Features.renderTransform(it, sec, setP); w.append(sec);
     } else if (Features.isOp(it)) {
       sec.firstChild.textContent = Features.NAMES[it.p.op === 'pattern' ? it.p.pt : it.p.op] || 'Feature';
       Features.renderOp(it, sec, setP); w.append(sec);
@@ -11737,23 +11837,25 @@ const Panels = (() => {
     }
     const jsec = Joints.panel(it); if (jsec) w.append(jsec);
     // Lage
-    const pos = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Lage'));
-    const setT = (k, val) => App.change(k.startsWith('r') ? 'Gedreht' : 'Verschoben', (doc) => { Model.find(doc, it.id).item.t[k] = val; }, { merge: 't:' + it.id + ':' + k });
-    const fp = h('div', { class: 'fields three' });
-    for (const k of ['x', 'y', 'z']) fp.append(UI.numField({ id: 't-' + k, value: it.t[k], axis: k, unit: '', len: true, onCommit: (v) => setT(k, v) }));
-    const fr = h('div', { class: 'fields three' });
-    for (const k of ['rx', 'ry', 'rz']) fr.append(UI.numField({ id: 't-' + k, value: it.t[k], axis: k[1], unit: '°', onCommit: (v) => setT(k, v) }));
-    pos.append(h('div', { class: 'field' }, h('label', null, `Position (${Units.label()})`), fp), h('div', { class: 'field' }, h('label', null, 'Drehung (°)'), fr));
-    const qa = h('div', { class: 'btn-row' });
-    const drop = h('button', { type: 'button', class: 'btn small', 'data-tip': 'Unterkante auf Höhe 0 setzen' }); drop.innerHTML = icon('push') + 'Auf XY-Ebene';
-    drop.onclick = () => Actions.dropToPlate([it.id]);
-    const rz = h('button', { type: 'button', class: 'btn small', 'data-tip': 'Um 90° drehen (um Z)', 'data-kbd': 'R' }); rz.innerHTML = icon('rotate') + '90°';
-    rz.onclick = () => Actions.rotate90([it.id], 'z');
-    if (!f.parent) qa.append(drop);
-    qa.append(rz); pos.append(qa);
-    w.append(pos);
+    if (it.kind !== 'transform') {
+      const pos = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Lage'));
+      const setT = (k, val) => App.change(k.startsWith('r') ? 'Gedreht' : 'Verschoben', (doc) => { Model.find(doc, it.id).item.t[k] = val; }, { merge: 't:' + it.id + ':' + k });
+      const fp = h('div', { class: 'fields three' });
+      for (const k of ['x', 'y', 'z']) fp.append(UI.numField({ id: 't-' + k, value: it.t[k], axis: k, unit: '', len: true, onCommit: (v) => setT(k, v) }));
+      const fr = h('div', { class: 'fields three' });
+      for (const k of ['rx', 'ry', 'rz']) fr.append(UI.numField({ id: 't-' + k, value: it.t[k], axis: k[1], unit: '°', onCommit: (v) => setT(k, v) }));
+      pos.append(h('div', { class: 'field' }, h('label', null, `Position (${Units.label()})`), fp), h('div', { class: 'field' }, h('label', null, 'Drehung (°)'), fr));
+      const qa = h('div', { class: 'btn-row' });
+      const drop = h('button', { type: 'button', class: 'btn small', 'data-tip': 'Unterkante auf Höhe 0 setzen' }); drop.innerHTML = icon('push') + 'Auf XY-Ebene';
+      drop.onclick = () => Actions.dropToPlate([it.id]);
+      const rz = h('button', { type: 'button', class: 'btn small', 'data-tip': 'Um 90° drehen (um Z)', 'data-kbd': 'R' }); rz.innerHTML = icon('rotate') + '90°';
+      rz.onclick = () => Actions.rotate90([it.id], 'z');
+      if (!f.parent) qa.append(drop);
+      qa.append(rz); pos.append(qa);
+      w.append(pos);
+    }
     // Kanten
-    if (it.role !== 'hole') {
+    if (it.role !== 'hole' && !isMoveOnly) {
       const ks = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Kanten'));
       for (const fin of (it.finishes || []).filter((x) => x.type === 'shell')) {
         const err = App.errorsFor(it.id).find((x) => x.finishId === fin.id);
@@ -11810,63 +11912,65 @@ const Panels = (() => {
       ks.append(h('div', { class: 'hint-box', html: 'Oder klick im Modell <b>direkt auf eine Kante</b> und wähle Abrunden.' }));
       w.append(ks);
     }
-    w.append(colorSection((c) => App.change(c ? 'Farbe geändert' : 'Farbe vom Werkstoff', (doc) => { const T = Model.find(doc, it.id).item; if (c) { T.color = c; T.colorSet = true; } else delete T.colorSet; }), it.color, !!it.colorSet, it));
-    // Farbe der gewählten Fläche
-    const sf = Actions.selectedFace();
-    if (sf && sf.id === it.id && it.role !== 'hole') {
-      const fsec = h('div', { class: 'section', id: 'face-color', 'data-help': 'faceColor' }, h('div', { class: 'section-h' }, 'Farbe dieser Fläche'));
-      const key = { n: sf.info.n || null, c: sf.info.c };
-      const cur = (it.faceColors || []).find((x) => Viewer.faceIndexOf(it.id, x) === sf.idx);
-      const setFace = (col) => App.change(col ? 'Flächenfarbe' : 'Flächenfarbe entfernt', (doc) => {
-        const T = Model.find(doc, it.id).item; const list = (T.faceColors || []).filter((x) => Viewer.faceIndexOf(it.id, x) !== sf.idx);
-        if (col) list.push({ ...key, col });
-        if (list.length) T.faceColors = list; else delete T.faceColors;
-      });
-      const row = h('div', { class: 'colors' });
-      for (const c of COLORS) { const b = h('button', { type: 'button', 'aria-label': c.n, 'data-tip': c.n, 'aria-pressed': cur && cur.col === c.c ? 'true' : 'false', style: { background: c.c } }); b.onclick = () => setFace(c.c); row.append(b); }
-      const free = h('input', { type: 'color', id: 'face-color-inp', value: cur ? cur.col : '#e03131', 'aria-label': 'Eigene Flächenfarbe' });
-      free.addEventListener('change', () => setFace(free.value.toLowerCase()));
-      row.append(h('label', { class: 'color-free', 'data-tip': 'Jede Farbe' }, free));
-      fsec.append(row);
-      if (cur) { const b = h('button', { type: 'button', class: 'btn ghost', id: 'face-color-off' }); b.innerHTML = icon('undo') + 'Flächenfarbe entfernen'; b.onclick = () => setFace(null); fsec.append(h('div', { class: 'btn-row' }, b)); }
-      w.append(fsec);
-    }
-    // Kosmetische Gewinde (KP-20)
-    const isCylFace = !!(sf && sf.id === it.id && sf.info.t === 'CYLINDRE');
-    if (it.role !== 'hole' && (isCylFace || (it.threads && it.threads.length))) {
-      const tsec = h('div', { class: 'section', id: 'thread-sec', 'data-help': 'cosmeticThread' }, h('div', { class: 'section-h' }, 'Gewinde (Markierung)'));
-      if (isCylFace && !Features.threadOnFace(it.id, sf.idx)) {
-        const mb = h('button', { type: 'button', class: 'btn small', id: 'btn-mark-thread' });
-        mb.innerHTML = icon('thread') + 'Gewinde auf dieser Fläche markieren';
-        mb.onclick = (e) => Features.threadPop(sf, e.currentTarget);
-        tsec.append(h('div', { class: 'btn-row' }, mb));
+    if (!isMoveOnly) {
+      w.append(colorSection((c) => App.change(c ? 'Farbe geändert' : 'Farbe vom Werkstoff', (doc) => { const T = Model.find(doc, it.id).item; if (c) { T.color = c; T.colorSet = true; } else delete T.colorSet; }), it.color, !!it.colorSet, it));
+      // Farbe der gewählten Fläche
+      const sf = Actions.selectedFace();
+      if (sf && sf.id === it.id && it.role !== 'hole') {
+        const fsec = h('div', { class: 'section', id: 'face-color', 'data-help': 'faceColor' }, h('div', { class: 'section-h' }, 'Farbe dieser Fläche'));
+        const key = { n: sf.info.n || null, c: sf.info.c };
+        const cur = (it.faceColors || []).find((x) => Viewer.faceIndexOf(it.id, x) === sf.idx);
+        const setFace = (col) => App.change(col ? 'Flächenfarbe' : 'Flächenfarbe entfernt', (doc) => {
+          const T = Model.find(doc, it.id).item; const list = (T.faceColors || []).filter((x) => Viewer.faceIndexOf(it.id, x) !== sf.idx);
+          if (col) list.push({ ...key, col });
+          if (list.length) T.faceColors = list; else delete T.faceColors;
+        });
+        const row = h('div', { class: 'colors' });
+        for (const c of COLORS) { const b = h('button', { type: 'button', 'aria-label': c.n, 'data-tip': c.n, 'aria-pressed': cur && cur.col === c.c ? 'true' : 'false', style: { background: c.c } }); b.onclick = () => setFace(c.c); row.append(b); }
+        const free = h('input', { type: 'color', id: 'face-color-inp', value: cur ? cur.col : '#e03131', 'aria-label': 'Eigene Flächenfarbe' });
+        free.addEventListener('change', () => setFace(free.value.toLowerCase()));
+        row.append(h('label', { class: 'color-free', 'data-tip': 'Jede Farbe' }, free));
+        fsec.append(row);
+        if (cur) { const b = h('button', { type: 'button', class: 'btn ghost', id: 'face-color-off' }); b.innerHTML = icon('undo') + 'Flächenfarbe entfernen'; b.onclick = () => setFace(null); fsec.append(h('div', { class: 'btn-row' }, b)); }
+        w.append(fsec);
       }
-      for (const th of it.threads || []) {
-        const sp = THREAD_MAP[th.size] || { pitch: 1 };
-        const box = h('div', { class: 'thread-item', style: { display: 'grid', gap: '6px', padding: '6px 0', borderTop: '1px solid var(--line)' } });
-        box.append(h('div', { class: 'mini-row' }, h('b', null, `${th.size} × ${Units.fmtLenU(th.length, 1)}`), h('span', { class: 'grow muted', style: { marginLeft: '6px', fontSize: '11px' } }, `${th.kind === 'int' ? 'Innengewinde' : 'Außengewinde'} · P ${fmt(sp.pitch, 2)}`)));
-        const fs = h('div', { class: 'fields' });
-        fs.append(UI.selectField({ id: 'th-size-' + th.id, label: 'M-Größe', value: th.size, options: THREAD_SPECS.map((s) => [s.size, s.size]), onChange: (v) => Features.updateThread(it.id, th.id, { size: v }) }));
-        fs.append(UI.numField({ id: 'th-len-' + th.id, label: 'Länge', value: th.length, min: 0.5, unit: 'mm', expr: false, onCommit: (v) => Features.updateThread(it.id, th.id, { length: v }) }));
-        fs.append(UI.selectField({ id: 'th-from-' + th.id, label: 'Ende', value: th.from || 'top', options: [['top', 'Ende 1'], ['bottom', 'Ende 2']], onChange: (v) => Features.updateThread(it.id, th.id, { from: v }) }));
-        box.append(fs);
-        const br = h('div', { class: 'btn-row' });
-        const rb = h('button', { type: 'button', class: 'btn small', id: 'th-real-' + th.id }); rb.innerHTML = icon('bolt') + 'Echt machen'; rb.onclick = () => Features.makeThreadReal(it.id, th.id);
-        const db = h('button', { type: 'button', class: 'btn ghost small', id: 'th-del-' + th.id, 'aria-label': 'Gewinde entfernen', 'data-tip': 'Entfernen' }); db.innerHTML = icon('trash'); db.onclick = () => Features.removeThread(it.id, th.id);
-        br.append(rb, db);
-        box.append(br);
-        tsec.append(box);
+      // Kosmetische Gewinde (KP-20)
+      const isCylFace = !!(sf && sf.id === it.id && sf.info.t === 'CYLINDRE');
+      if (it.role !== 'hole' && (isCylFace || (it.threads && it.threads.length))) {
+        const tsec = h('div', { class: 'section', id: 'thread-sec', 'data-help': 'cosmeticThread' }, h('div', { class: 'section-h' }, 'Gewinde (Markierung)'));
+        if (isCylFace && !Features.threadOnFace(it.id, sf.idx)) {
+          const mb = h('button', { type: 'button', class: 'btn small', id: 'btn-mark-thread' });
+          mb.innerHTML = icon('thread') + 'Gewinde auf dieser Fläche markieren';
+          mb.onclick = (e) => Features.threadPop(sf, e.currentTarget);
+          tsec.append(h('div', { class: 'btn-row' }, mb));
+        }
+        for (const th of it.threads || []) {
+          const sp = THREAD_MAP[th.size] || { pitch: 1 };
+          const box = h('div', { class: 'thread-item', style: { display: 'grid', gap: '6px', padding: '6px 0', borderTop: '1px solid var(--line)' } });
+          box.append(h('div', { class: 'mini-row' }, h('b', null, `${th.size} × ${Units.fmtLenU(th.length, 1)}`), h('span', { class: 'grow muted', style: { marginLeft: '6px', fontSize: '11px' } }, `${th.kind === 'int' ? 'Innengewinde' : 'Außengewinde'} · P ${fmt(sp.pitch, 2)}`)));
+          const fs = h('div', { class: 'fields' });
+          fs.append(UI.selectField({ id: 'th-size-' + th.id, label: 'M-Größe', value: th.size, options: THREAD_SPECS.map((s) => [s.size, s.size]), onChange: (v) => Features.updateThread(it.id, th.id, { size: v }) }));
+          fs.append(UI.numField({ id: 'th-len-' + th.id, label: 'Länge', value: th.length, min: 0.5, unit: 'mm', expr: false, onCommit: (v) => Features.updateThread(it.id, th.id, { length: v }) }));
+          fs.append(UI.selectField({ id: 'th-from-' + th.id, label: 'Ende', value: th.from || 'top', options: [['top', 'Ende 1'], ['bottom', 'Ende 2']], onChange: (v) => Features.updateThread(it.id, th.id, { from: v }) }));
+          box.append(fs);
+          const br = h('div', { class: 'btn-row' });
+          const rb = h('button', { type: 'button', class: 'btn small', id: 'th-real-' + th.id }); rb.innerHTML = icon('bolt') + 'Echt machen'; rb.onclick = () => Features.makeThreadReal(it.id, th.id);
+          const db = h('button', { type: 'button', class: 'btn ghost small', id: 'th-del-' + th.id, 'aria-label': 'Gewinde entfernen', 'data-tip': 'Entfernen' }); db.innerHTML = icon('trash'); db.onclick = () => Features.removeThread(it.id, th.id);
+          br.append(rb, db);
+          box.append(br);
+          tsec.append(box);
+        }
+        tsec.append(h('div', { class: 'hint-box' }, 'Nur Anzeige – rechnet sofort, steht in Stückliste und Zeichnung. „Echt machen“ wandelt in ein druckbares 3D-Gewinde.'));
+        w.append(tsec);
       }
-      tsec.append(h('div', { class: 'hint-box' }, 'Nur Anzeige – rechnet sofort, steht in Stückliste und Zeichnung. „Echt machen“ wandelt in ein druckbares 3D-Gewinde.'));
-      w.append(tsec);
-    }
-    if (it.role !== 'hole') {
-      const op = h('div', { class: 'fields', 'data-help': 'opacity' });
-      op.append(UI.numField({ id: 'item-opacity', label: 'Sichtbarkeit (100 % = undurchsichtig)', value: Math.round((it.opacity ?? 1) * 100), unit: '%', expr: false, min: 5, onCommit: (v) => App.change('Durchsichtigkeit', (doc) => { const T = Model.find(doc, it.id).item; const o = clamp(v, 5, 100) / 100; if (o >= 1) delete T.opacity; else T.opacity = o; }, { merge: 'op:' + it.id }) }));
-      w.lastChild.append(op);
+      if (it.role !== 'hole') {
+        const op = h('div', { class: 'fields', 'data-help': 'opacity' });
+        op.append(UI.numField({ id: 'item-opacity', label: 'Sichtbarkeit (100 % = undurchsichtig)', value: Math.round((it.opacity ?? 1) * 100), unit: '%', expr: false, min: 5, onCommit: (v) => App.change('Durchsichtigkeit', (doc) => { const T = Model.find(doc, it.id).item; const o = clamp(v, 5, 100) / 100; if (o >= 1) delete T.opacity; else T.opacity = o; }, { merge: 'op:' + it.id }) }));
+        w.lastChild.append(op);
+      }
     }
     // Material und Gewicht dieses Teils (nur Teile der obersten Ebene)
-    if (!f.parent && it.role !== 'hole') {
+    if (!f.parent && it.role !== 'hole' && !isMoveOnly) {
       const pm = Mass.projectMaterial();
       const ms = h('div', { class: 'section pro' }, h('div', { class: 'section-h' }, 'Material und Gewicht'));
       const fixed = Mass.fixedOf(it);
@@ -11920,7 +12024,7 @@ const Panels = (() => {
     if (App.mode !== 'model' || Sketch.active || Place.active || Handles.dragging) return;
     const items = App.selectedItems(); if (!items.length) return;
     const bar = h('div', { class: 'ctxbar', role: 'toolbar', 'aria-label': 'Aktionen' });
-    const PRO = ['similar', 'shell', 'patternCirc', 'split', 'boolSubtract', 'layers'];
+    const PRO = ['similar', 'shell', 'patternCirc', 'split', 'boolSubtract', 'layers', 'moveStep'];
     const b = (ic, label, fn, cls = '', tip, iconOnly) => { const x = h('button', { type: 'button', class: cls + (PRO.includes(ic) ? ' pro' : ''), 'data-tip': tip || (iconOnly ? label : null), 'aria-label': label || tip, 'data-help': HELP[ic] ? ic : null }); x.innerHTML = icon(ic) + (label && !iconOnly ? `<span>${label}</span>` : ''); x.onclick = (e) => { e.stopPropagation(); fn(e); }; bar.append(x); return x; };
     const sep = () => bar.append(h('span', { class: 'vsep' }));
     // Schritt hinter dem Marker oder unterdrückt: nichts zum Bearbeiten, nur zurückholen
@@ -11930,6 +12034,16 @@ const Panels = (() => {
       bar.append(h('span', { class: 'lbl' }, off.suppressed ? 'Unterdrückt' : 'Hinter dem Marker'));
       if (off.suppressed) b('eye', 'Wieder einschalten', () => Timeline.toggleSuppress(off.id), 'accent', 'Diesen Schritt wieder mitrechnen');
       else b('rollback', 'Marker dahinter', () => Timeline.setMarker(App.doc.items.indexOf(off) + 1, `Zeitleiste: bis „${Model.label(off)}“`), 'accent', 'Den Marker hinter diesen Schritt ziehen – dann wird er wieder mitgerechnet');
+      $('#overlay').append(bar); ctx = bar;
+      placeCtx();
+      return;
+    }
+    if (items.length === 1 && items[0].item.kind === 'transform' && !(items[0].item.p && items[0].item.p.copy)) {
+      const it = items[0].item;
+      bar.append(h('span', { class: 'lbl' }, 'Verschieben/Drehen'));
+      if (it.p && it.p.target && Model.find(App.doc, it.p.target)) b('pointer', 'Zielkörper', () => App.select([it.p.target]), 'accent', 'Zum Zielkörper wechseln');
+      b('suppress', 'Unterdrücken', () => Timeline.toggleSuppress(it.id), '', 'Diesen Schritt unterdrücken – der Körper springt zurück');
+      b('trash', 'Löschen', () => Actions.remove(), 'danger', 'Löschen (Entf)', true);
       $('#overlay').append(bar); ctx = bar;
       placeCtx();
       return;
@@ -11995,6 +12109,7 @@ const Panels = (() => {
       b('rotate', 'Drehen', (e) => UI.menu(e.currentTarget, [{ label: 'Um 90° drehen (flach)', icon: 'rotate', kbd: 'R', run: () => Actions.rotate90(null, 'z') }, { label: 'Nach vorne kippen', icon: 'rotate', run: () => Actions.rotate90(null, 'x') }, { label: 'Zur Seite kippen', icon: 'rotate', run: () => Actions.rotate90(null, 'y') }]), '', 'Um 90° drehen oder kippen', true);
       b('mirror', 'Spiegeln', (e) => UI.menu(e.currentTarget, [{ label: 'Links ↔ rechts', icon: 'mirror', run: () => Actions.mirror(null, 'x') }, { label: 'Vorne ↔ hinten', icon: 'mirror', run: () => Actions.mirror(null, 'y') }, { label: 'Oben ↔ unten', icon: 'mirror', run: () => Actions.mirror(null, 'z') }]), '', 'Spiegeln', true);
       b('copy', 'Duplizieren', () => Actions.duplicate(), '', 'Duplizieren (Strg D)', true);
+      if (App.doc.items.includes(it)) b('moveStep', 'Verschieben/Drehen', () => Features.transform(), '', 'Als Schritt verschieben, drehen oder kopieren (bleibt im Verlauf änderbar)', true);
       b('patternCirc', 'Muster', (e) => UI.menu(e.currentTarget, [{ label: 'Rechteckmuster', icon: 'patternRect', run: () => Features.pattern('rect') }, { label: 'Kreismuster', icon: 'patternCirc', run: () => Features.pattern('circ') }, { label: 'Muster entlang Kurve', icon: 'patternPath', run: () => Features.patternPath() }, { label: 'Gespiegelte Kopie', icon: 'mirror', run: () => Features.pattern('mirror') }]), '', hole ? 'Loch als Muster oder gespiegelt vervielfachen' : 'Muster oder gespiegelte Kopie', true);
       if (!hole) b('split', 'Teilen', () => Features.split(), '', 'Körper an einer Ebene teilen', true);
       if (!hole && it.kind === 'extrude' && it.p && it.p.sketch) b('loft', 'Zur Spitze', () => Actions.loft([it.id], { tip: 10 }), '', 'Den Umriss zu einer Spitze zusammenlaufen lassen (Übergang mit Spitze)', true);
@@ -18755,6 +18870,7 @@ const Commands = (() => {
     add('pattern-path', 'Muster entlang Kurve', 'patternPath', 'muster kurve pfad bogen entlang linie spline kette kopien löcher zähne', () => Features.patternPath(), { group: 'Bearbeiten' });
     add('mirror-copy', 'Gespiegelte Kopie', 'mirror', 'spiegeln kopie symmetrisch', () => Features.pattern('mirror'), { group: 'Bearbeiten' });
     add('split', 'Körper teilen', 'split', 'teilen schneiden trennen hälfte', () => Features.split(), { group: 'Bearbeiten' });
+    add('move-step', 'Verschieben/Drehen als Schritt', 'moveStep', 'verschieben drehen kopieren schritt transform versetzen bewegen lage verlauf', () => Features.transform(), { group: 'Bearbeiten' });
     add('bool-sub', 'Abziehen (Boolesch)', 'boolSubtract', 'boolesch abziehen differenz', () => Features.boolean('subtract'), { group: 'Bearbeiten' });
     add('bool-int', 'Schnittmenge (Boolesch)', 'boolIntersect', 'boolesch schnittmenge', () => Features.boolean('intersect'), { group: 'Bearbeiten' });
     add('shell', 'Aushöhlen / Wandstärke', 'shell', 'wandstärke aushöhlen schale hohl gehäuse', () => { const f = Actions.selectedFace(); if (f) Features.shell(f); else UI.toast('Klick zuerst die Fläche an, die offen sein soll.', { icon: 'info' }); }, { group: 'Bearbeiten' });
@@ -23404,7 +23520,7 @@ const Variants = (() => {
 // die sich mit einem Klick als markierte Schritte umsetzen lassen.
 
 // Kurztexte je Schritt-Art: was, wozu (bei Drohnen), achtung (Entwurf Gemini, Prompt H; gegen Tracery geprüft)
-const STEP_TEXT = {"_hinweis":"Kurztexte je Schritt-Art: was, wozu, achtung – allgemein für CAD (überarbeitet für A-001).","box":{"was":"Erstellt einen einfachen Kasten mit frei wählbarer Länge, Breite und Höhe.","wozu":"Super als Basis für eine Grundplatte, ein Gehäuse oder einen Winkel.","achtung":"Mach Platten und Wände nicht zu dünn, sonst brechen sie unter Belastung."},"cylinder":{"was":"Erzeugt eine runde Säule mit festem Durchmesser und beliebiger Höhe.","wozu":"Ideal für Bolzen, Abstandshalter, Wellen oder runde Füße.","achtung":"Als Loch umgeschaltet wird aus dem Zylinder im Handumdrehen eine runde Bohrung."},"tube":{"was":"Erstellt ein rundes Rohr, das innen komplett hohl ist.","wozu":"Perfekt für Buchsen, Abstandshülsen oder Schutzröhrchen für Kabel.","achtung":"Wähle Außendurchmesser und Wand so, dass innen Kabel oder Welle samt Spiel durchpassen."},"sphere":{"was":"Formt einen komplett runden Ball in deiner gewünschten Größe.","wozu":"Nützlich für runde Knöpfe, Füße oder Kugelgelenke.","achtung":"Eine Kugel liegt nur auf einem Punkt auf – schneide sie zum 3D-Drucken unten etwas flach ab."},"hemisphere":{"was":"Erstellt eine halbe Kugel mit einer flachen Unterseite.","wozu":"Gut für Kuppeln, Abdeckkappen oder abgerundete Endstücke.","achtung":"Höhle sie mit „Wandstärke“ aus, wenn sie als hohle Kappe dienen soll."},"cone":{"was":"Baut einen Kegel, der unten rund ist und nach oben spitz oder flach zuläuft.","wozu":"Gut für Trichter, Düsen, Übergänge oder Zentrierhilfen.","achtung":"Ganz spitze Enden brechen leicht ab – gib oben lieber einen kleinen Durchmesser an."},"pyramid":{"was":"Erzeugt einen eckigen Körper, der nach oben hin spitz zusammenläuft.","wozu":"Praktisch für abgeschrägte Kappen, Füße oder Design-Elemente.","achtung":"Achte darauf, dass spitze Ecken beim Drucken oder Fräsen stabil genug bleiben."},"torus":{"was":"Formt einen runden Ring, der aussieht wie ein kleiner Donut oder Reifen.","wozu":"Perfekt für Dichtungsringe, Griffringe oder runde Ösen.","achtung":"Für einen guten Halt am Nachbarteil schiebe den Ring ein kleines Stück in den anderen Körper."},"prism":{"was":"Erstellt eine Säule mit mehreren Ecken, zum Beispiel ein Sechskant.","wozu":"Ideal für sechseckige Abstandshalter, Wellen oder Griffe, die sich mit einem Schlüssel festhalten lassen.","achtung":"Der Durchmesser zählt hier von Ecke zu Ecke, nicht von Fläche zu Fläche – wichtig fürs Schlüsselmaß."},"wedge":{"was":"Baut einen schrägen Keil wie eine kleine Rampe.","wozu":"Gut als schräge Auflage, Versteifungsrippe oder geneigte Halterung.","achtung":"Drehe den Keil bei Bedarf in 90°-Schritten, damit die Schräge in die gewünschte Richtung zeigt."},"extrude":{"was":"Zieht eine flache 2D-Zeichnung in die Höhe, sodass ein 3D-Körper entsteht.","wozu":"Damit machst du aus einer beliebigen Skizze eine Platte, ein Profil oder ein Gehäuse.","achtung":"Deine Skizze muss komplett geschlossen sein, sonst kann sie nicht hochgezogen werden."},"revolve":{"was":"Dreht ein flaches Profil im Kreis um eine Achse und formt so einen runden Körper.","wozu":"Super für Räder, Flaschen, Hülsen, Drehknöpfe oder runde Kappen.","achtung":"Die Zeichnung darf die Drehachse nicht kreuzen, sonst überschneidet sich das Bauteil."},"group":{"was":"Verschmilzt mehrere Einzelteile und zieht alle Loch-Körper davon ab.","wozu":"Verbindet mehrere Grundformen und Bohrungen zu einem fertigen Bauteil.","achtung":"Löcher in einer Gruppe schneiden nur Körper derselben Gruppe – zieh fehlende Teile im Verlauf hinein."},"hole":{"was":"Verwandelt einen Körper in ein Werkzeug zum Ausschneiden – du siehst ihn gestreift.","wozu":"Schneidet zum Beispiel Ausschnitte, Fenster oder Taschen in einen Körper.","achtung":"Ein Loch schneidet nur, was es berührt: Lass es oben und unten etwas überstehen, damit es sauber durchgeht."},"pattern_rect":{"was":"Kopiert ein Teil mehrfach in geraden Reihen und Spalten nebeneinander.","wozu":"Erstellt blitzschnell Lüftungsschlitze, Lochraster oder gleichmäßige Rippen.","achtung":"Lass genug Material zwischen den Kopien stehen, sonst bricht das Gitter leicht durch."},"pattern_circ":{"was":"Verteilt Kopien eines Bauteils gleichmäßig im Kreis um eine Achse.","wozu":"Perfekt für Lochkreise, Speichen oder sternförmige Halterungen.","achtung":"Leg Mittelpunkt und Drehachse genau fest, sonst sitzen die Kopien schief."},"pattern_path":{"was":"Setzt Kopien eines Teils der Reihe nach entlang einer gezeichneten Kurve – Linie, Bogen, Spline oder Kreis.","wozu":"Löcher, Rippen oder Zähne folgen sauber einer beliebigen Bahn.","achtung":"Mit Ausrichtung „Mit der Kurve“ drehen sich die Kopien mit. Für runde Löcher ist das egal – für Rippen und Zähne nicht."},"mirror":{"was":"Erstellt eine spiegelverkehrte Kopie deines Bauteils auf der gegenüberliegenden Seite.","wozu":"Baue nur eine Hälfte eines symmetrischen Teils und spiegle sie auf die andere Seite.","achtung":"Wähle die richtige Spiegelebene, sonst landet die Kopie am falschen Ort."},"split":{"was":"Schneidet einen Körper an einer flachen Ebene in zwei getrennte Teile durch.","wozu":"Teilt ein großes Gehäuse in Ober- und Unterteil, damit du es einfacher drucken oder fertigen kannst.","achtung":"Überlege dir vorher, wie du die geteilten Hälften später wieder verbindest."},"intersect":{"was":"Behält nur genau den Bereich übrig, in dem sich zwei Körper überschneiden.","wozu":"Formt komplexe Körper, indem du zwei Profile aus verschiedenen Richtungen kombinierst.","achtung":"Berühren sich die beiden Ausgangskörper gar nicht, bleibt am Ende nichts übrig."},"shell":{"was":"Höhlt einen massiven Körper von innen aus und lässt nur eine bestimmte Wandstärke stehen.","wozu":"Macht aus einem massiven Klotz im Handumdrehen ein hohles Gehäuse oder eine Schale.","achtung":"Prüf die Wand mit „Schwachstellen suchen“ oder „Wandstärke“ – zu dünne Wände brechen leicht."},"fillet":{"was":"Rundet scharfe Kanten weich ab, damit Übergänge fließend werden.","wozu":"Macht Innenecken stabiler gegen Brüche und sorgt für angenehme, glatte Außenkanten.","achtung":"Rundest du die Kante an einer dünnen Platte zu stark ab, entsteht ein Fehler."},"chamfer":{"was":"Schneidet eine scharfe Kante schräg ab, sodass eine kleine flache Schräge entsteht.","wozu":"Entschärft Kanten an Platten und Gehäusen oder erleichtert das Einstecken von Teilen.","achtung":"Mach die Schräge an dünnen Teilen nur klein, sonst bleibt keine gerade Fläche übrig."},"screwHole":{"was":"Bohrt ein rundes Loch, das genau für eine bestimmte Schraubengröße wie M2 oder M3 passt.","wozu":"Ideal, um Teile sauber mit Senk- oder Zylinderkopfschrauben zu verschrauben.","achtung":"Nimm die Passung „Mittel“: Das Loch ist dann etwas größer als die Schraube. „Eng“ klemmt leicht."},"nutTrap":{"was":"Schneidet eine sechseckige Tasche aus, in der eine Mutter festsitzt.","wozu":"Hält Muttern im Bauteil fest, damit du beim Schrauben keinen Schlüssel zum Gegenhalten brauchst.","achtung":"Mach die Tasche nicht zu weit, sonst dreht die Mutter beim Festziehen durch."},"insert":{"was":"Erstellt ein spezielles Loch, in das man ein Messing-Gewinde mit dem Lötkolben einschmilzt.","wozu":"Gibt dir sehr stabile Metallgewinde direkt in deinen 3D-gedruckten Kunststoffteilen.","achtung":"Das Loch muss etwas kleiner als der Einsatz sein, damit das Plastik ihn gut festhält."},"blindHole":{"was":"Bohrt ein Sackloch bis zu einer festen Tiefe, mit spitzem Boden wie von einem 118°-Spiralbohrer.","wozu":"Ideal für Bohrungen, die nicht auf der Rückseite wieder heraustreten dürfen.","achtung":"Die Gesamttiefe ist die Zylindertiefe plus die Höhe der Bohrspitze – lass genug Material bis zur Rückseite."},"fitHole":{"was":"Bohrt ein rundes Loch genau mit dem gewählten Nennmaß für eine H7-Passung (ISO 286).","wozu":"Für Passstifte, Wellen und Lager, die spielfrei oder genau geführt sitzen sollen.","achtung":"Im 3D-Modell steht das genaue Nennmaß – beim Fräsen oder Drehen wird danach mit der Reibahle auf H7 gerieben."},"centerHole":{"was":"Erzeugt eine genormte Zentrierbohrung nach DIN 332 Form A mit 60°-Kegel und kleiner Führungsbohrung.","wozu":"Nimmt die Drehbank-Spitze auf oder dient beim Bohren als genaue Anbohrung.","achtung":"Wähle die Größe passend zum Wellendurchmesser – die Maße sind fest durch DIN 332 vorgegeben."},"slotHole":{"was":"Bohrt ein längliches Loch, in dem eine Schraube hin und her geschoben werden kann.","wozu":"Super für verstellbare Halterungen und Anschläge.","achtung":"Zieh die Schrauben im Langloch später gut fest und nutze Unterlegscheiben gegen Verrutschen."},"holePattern":{"was":"Erzeugt vier passende Schraubenlöcher im Quadrat oder Lochkreis.","wozu":"Bohrt mit einem Klick ein fertiges Vier-Loch-Muster mit optionalem Mittelloch.","achtung":"Prüfe vorab genau, ob Lochabstand und Schraubengröße zu deinem Gegenstück passen."},"zipTie":{"was":"Schneidet zwei Schlitze für einen Kabelbinder in dein Bauteil.","wozu":"Ideal, um Kabel, Schläuche oder kleine Module sicher an einer Platte festzumachen.","achtung":"Setze Schlitze nicht zu nah an den Rand der Platte, sonst reißt der Steg aus."},"snapHook":{"was":"Baut einen kleinen federnden Haken, der an einer Kante einrasten kann.","wozu":"Perfekt für Deckel, Gehäuse oder Klappen, die du ohne Werkzeug öffnen willst.","achtung":"Drucke den Haken liegend, damit die Schichten längs laufen – sonst bricht er beim ersten Biegen ab."},"hinge":{"was":"Erzeugt ein bewegliches Gelenk, mit dem du zwei Bauteile klappbar verbindest.","wozu":"Nützlich für aufklappbare Deckel, Boxen oder bewegliche Halterungen.","achtung":"Lass im Gelenk etwas Spiel (Einstellung „Spiel“), sonst verschmilzt es beim Drucken."},"gear":{"was":"Erstellt ein rundes Rad mit Zähnen am Rand, das in ein anderes Zahnrad greift.","wozu":"Brauchst du für Getriebe, Antriebe und mechanische Bewegungen.","achtung":"Beide Zahnräder brauchen exakt die gleiche Zahngröße (Modul), sonst klemmen sie sofort."},"buy":{"was":"Fügt ein fertiges Teil mit festem Gewicht aus dem Datenblatt ein.","wozu":"Zeigt dir sofort, ob alle Bauteile zusammenpassen und wo der Schwerpunkt liegt.","achtung":"Beim DXF-Export bleiben Kaufteile von selbst weg; für STL blende sie vor dem Export aus."},"aeroBody":{"was":"Erstellt einen hohlen Körper in Tropfenform: runde Nase, gerades Mittelteil und ein langes Heck, das spitz ausläuft.","wozu":"Ergibt eine strömungsgünstige Verkleidung mit rundem Querschnitt.","achtung":"Achte auf eine ausreichende Wandstärke, wenn das Teil 3D-gedruckt wird."}};
+const STEP_TEXT = {"_hinweis":"Kurztexte je Schritt-Art: was, wozu, achtung – allgemein für CAD (überarbeitet für A-001).","box":{"was":"Erstellt einen einfachen Kasten mit frei wählbarer Länge, Breite und Höhe.","wozu":"Super als Basis für eine Grundplatte, ein Gehäuse oder einen Winkel.","achtung":"Mach Platten und Wände nicht zu dünn, sonst brechen sie unter Belastung."},"cylinder":{"was":"Erzeugt eine runde Säule mit festem Durchmesser und beliebiger Höhe.","wozu":"Ideal für Bolzen, Abstandshalter, Wellen oder runde Füße.","achtung":"Als Loch umgeschaltet wird aus dem Zylinder im Handumdrehen eine runde Bohrung."},"tube":{"was":"Erstellt ein rundes Rohr, das innen komplett hohl ist.","wozu":"Perfekt für Buchsen, Abstandshülsen oder Schutzröhrchen für Kabel.","achtung":"Wähle Außendurchmesser und Wand so, dass innen Kabel oder Welle samt Spiel durchpassen."},"sphere":{"was":"Formt einen komplett runden Ball in deiner gewünschten Größe.","wozu":"Nützlich für runde Knöpfe, Füße oder Kugelgelenke.","achtung":"Eine Kugel liegt nur auf einem Punkt auf – schneide sie zum 3D-Drucken unten etwas flach ab."},"hemisphere":{"was":"Erstellt eine halbe Kugel mit einer flachen Unterseite.","wozu":"Gut für Kuppeln, Abdeckkappen oder abgerundete Endstücke.","achtung":"Höhle sie mit „Wandstärke“ aus, wenn sie als hohle Kappe dienen soll."},"cone":{"was":"Baut einen Kegel, der unten rund ist und nach oben spitz oder flach zuläuft.","wozu":"Gut für Trichter, Düsen, Übergänge oder Zentrierhilfen.","achtung":"Ganz spitze Enden brechen leicht ab – gib oben lieber einen kleinen Durchmesser an."},"pyramid":{"was":"Erzeugt einen eckigen Körper, der nach oben hin spitz zusammenläuft.","wozu":"Praktisch für abgeschrägte Kappen, Füße oder Design-Elemente.","achtung":"Achte darauf, dass spitze Ecken beim Drucken oder Fräsen stabil genug bleiben."},"torus":{"was":"Formt einen runden Ring, der aussieht wie ein kleiner Donut oder Reifen.","wozu":"Perfekt für Dichtungsringe, Griffringe oder runde Ösen.","achtung":"Für einen guten Halt am Nachbarteil schiebe den Ring ein kleines Stück in den anderen Körper."},"prism":{"was":"Erstellt eine Säule mit mehreren Ecken, zum Beispiel ein Sechskant.","wozu":"Ideal für sechseckige Abstandshalter, Wellen oder Griffe, die sich mit einem Schlüssel festhalten lassen.","achtung":"Der Durchmesser zählt hier von Ecke zu Ecke, nicht von Fläche zu Fläche – wichtig fürs Schlüsselmaß."},"wedge":{"was":"Baut einen schrägen Keil wie eine kleine Rampe.","wozu":"Gut als schräge Auflage, Versteifungsrippe oder geneigte Halterung.","achtung":"Drehe den Keil bei Bedarf in 90°-Schritten, damit die Schräge in die gewünschte Richtung zeigt."},"extrude":{"was":"Zieht eine flache 2D-Zeichnung in die Höhe, sodass ein 3D-Körper entsteht.","wozu":"Damit machst du aus einer beliebigen Skizze eine Platte, ein Profil oder ein Gehäuse.","achtung":"Deine Skizze muss komplett geschlossen sein, sonst kann sie nicht hochgezogen werden."},"revolve":{"was":"Dreht ein flaches Profil im Kreis um eine Achse und formt so einen runden Körper.","wozu":"Super für Räder, Flaschen, Hülsen, Drehknöpfe oder runde Kappen.","achtung":"Die Zeichnung darf die Drehachse nicht kreuzen, sonst überschneidet sich das Bauteil."},"group":{"was":"Verschmilzt mehrere Einzelteile und zieht alle Loch-Körper davon ab.","wozu":"Verbindet mehrere Grundformen und Bohrungen zu einem fertigen Bauteil.","achtung":"Löcher in einer Gruppe schneiden nur Körper derselben Gruppe – zieh fehlende Teile im Verlauf hinein."},"hole":{"was":"Verwandelt einen Körper in ein Werkzeug zum Ausschneiden – du siehst ihn gestreift.","wozu":"Schneidet zum Beispiel Ausschnitte, Fenster oder Taschen in einen Körper.","achtung":"Ein Loch schneidet nur, was es berührt: Lass es oben und unten etwas überstehen, damit es sauber durchgeht."},"pattern_rect":{"was":"Kopiert ein Teil mehrfach in geraden Reihen und Spalten nebeneinander.","wozu":"Erstellt blitzschnell Lüftungsschlitze, Lochraster oder gleichmäßige Rippen.","achtung":"Lass genug Material zwischen den Kopien stehen, sonst bricht das Gitter leicht durch."},"pattern_circ":{"was":"Verteilt Kopien eines Bauteils gleichmäßig im Kreis um eine Achse.","wozu":"Perfekt für Lochkreise, Speichen oder sternförmige Halterungen.","achtung":"Leg Mittelpunkt und Drehachse genau fest, sonst sitzen die Kopien schief."},"pattern_path":{"was":"Setzt Kopien eines Teils der Reihe nach entlang einer gezeichneten Kurve – Linie, Bogen, Spline oder Kreis.","wozu":"Löcher, Rippen oder Zähne folgen sauber einer beliebigen Bahn.","achtung":"Mit Ausrichtung „Mit der Kurve“ drehen sich die Kopien mit. Für runde Löcher ist das egal – für Rippen und Zähne nicht."},"mirror":{"was":"Erstellt eine spiegelverkehrte Kopie deines Bauteils auf der gegenüberliegenden Seite.","wozu":"Baue nur eine Hälfte eines symmetrischen Teils und spiegle sie auf die andere Seite.","achtung":"Wähle die richtige Spiegelebene, sonst landet die Kopie am falschen Ort."},"split":{"was":"Schneidet einen Körper an einer flachen Ebene in zwei getrennte Teile durch.","wozu":"Teilt ein großes Gehäuse in Ober- und Unterteil, damit du es einfacher drucken oder fertigen kannst.","achtung":"Überlege dir vorher, wie du die geteilten Hälften später wieder verbindest."},"intersect":{"was":"Behält nur genau den Bereich übrig, in dem sich zwei Körper überschneiden.","wozu":"Formt komplexe Körper, indem du zwei Profile aus verschiedenen Richtungen kombinierst.","achtung":"Berühren sich die beiden Ausgangskörper gar nicht, bleibt am Ende nichts übrig."},"shell":{"was":"Höhlt einen massiven Körper von innen aus und lässt nur eine bestimmte Wandstärke stehen.","wozu":"Macht aus einem massiven Klotz im Handumdrehen ein hohles Gehäuse oder eine Schale.","achtung":"Prüf die Wand mit „Schwachstellen suchen“ oder „Wandstärke“ – zu dünne Wände brechen leicht."},"fillet":{"was":"Rundet scharfe Kanten weich ab, damit Übergänge fließend werden.","wozu":"Macht Innenecken stabiler gegen Brüche und sorgt für angenehme, glatte Außenkanten.","achtung":"Rundest du die Kante an einer dünnen Platte zu stark ab, entsteht ein Fehler."},"chamfer":{"was":"Schneidet eine scharfe Kante schräg ab, sodass eine kleine flache Schräge entsteht.","wozu":"Entschärft Kanten an Platten und Gehäusen oder erleichtert das Einstecken von Teilen.","achtung":"Mach die Schräge an dünnen Teilen nur klein, sonst bleibt keine gerade Fläche übrig."},"screwHole":{"was":"Bohrt ein rundes Loch, das genau für eine bestimmte Schraubengröße wie M2 oder M3 passt.","wozu":"Ideal, um Teile sauber mit Senk- oder Zylinderkopfschrauben zu verschrauben.","achtung":"Nimm die Passung „Mittel“: Das Loch ist dann etwas größer als die Schraube. „Eng“ klemmt leicht."},"nutTrap":{"was":"Schneidet eine sechseckige Tasche aus, in der eine Mutter festsitzt.","wozu":"Hält Muttern im Bauteil fest, damit du beim Schrauben keinen Schlüssel zum Gegenhalten brauchst.","achtung":"Mach die Tasche nicht zu weit, sonst dreht die Mutter beim Festziehen durch."},"insert":{"was":"Erstellt ein spezielles Loch, in das man ein Messing-Gewinde mit dem Lötkolben einschmilzt.","wozu":"Gibt dir sehr stabile Metallgewinde direkt in deinen 3D-gedruckten Kunststoffteilen.","achtung":"Das Loch muss etwas kleiner als der Einsatz sein, damit das Plastik ihn gut festhält."},"blindHole":{"was":"Bohrt ein Sackloch bis zu einer festen Tiefe, mit spitzem Boden wie von einem 118°-Spiralbohrer.","wozu":"Ideal für Bohrungen, die nicht auf der Rückseite wieder heraustreten dürfen.","achtung":"Die Gesamttiefe ist die Zylindertiefe plus die Höhe der Bohrspitze – lass genug Material bis zur Rückseite."},"fitHole":{"was":"Bohrt ein rundes Loch genau mit dem gewählten Nennmaß für eine H7-Passung (ISO 286).","wozu":"Für Passstifte, Wellen und Lager, die spielfrei oder genau geführt sitzen sollen.","achtung":"Im 3D-Modell steht das genaue Nennmaß – beim Fräsen oder Drehen wird danach mit der Reibahle auf H7 gerieben."},"centerHole":{"was":"Erzeugt eine genormte Zentrierbohrung nach DIN 332 Form A mit 60°-Kegel und kleiner Führungsbohrung.","wozu":"Nimmt die Drehbank-Spitze auf oder dient beim Bohren als genaue Anbohrung.","achtung":"Wähle die Größe passend zum Wellendurchmesser – die Maße sind fest durch DIN 332 vorgegeben."},"slotHole":{"was":"Bohrt ein längliches Loch, in dem eine Schraube hin und her geschoben werden kann.","wozu":"Super für verstellbare Halterungen und Anschläge.","achtung":"Zieh die Schrauben im Langloch später gut fest und nutze Unterlegscheiben gegen Verrutschen."},"holePattern":{"was":"Erzeugt vier passende Schraubenlöcher im Quadrat oder Lochkreis.","wozu":"Bohrt mit einem Klick ein fertiges Vier-Loch-Muster mit optionalem Mittelloch.","achtung":"Prüfe vorab genau, ob Lochabstand und Schraubengröße zu deinem Gegenstück passen."},"zipTie":{"was":"Schneidet zwei Schlitze für einen Kabelbinder in dein Bauteil.","wozu":"Ideal, um Kabel, Schläuche oder kleine Module sicher an einer Platte festzumachen.","achtung":"Setze Schlitze nicht zu nah an den Rand der Platte, sonst reißt der Steg aus."},"snapHook":{"was":"Baut einen kleinen federnden Haken, der an einer Kante einrasten kann.","wozu":"Perfekt für Deckel, Gehäuse oder Klappen, die du ohne Werkzeug öffnen willst.","achtung":"Drucke den Haken liegend, damit die Schichten längs laufen – sonst bricht er beim ersten Biegen ab."},"hinge":{"was":"Erzeugt ein bewegliches Gelenk, mit dem du zwei Bauteile klappbar verbindest.","wozu":"Nützlich für aufklappbare Deckel, Boxen oder bewegliche Halterungen.","achtung":"Lass im Gelenk etwas Spiel (Einstellung „Spiel“), sonst verschmilzt es beim Drucken."},"gear":{"was":"Erstellt ein rundes Rad mit Zähnen am Rand, das in ein anderes Zahnrad greift.","wozu":"Brauchst du für Getriebe, Antriebe und mechanische Bewegungen.","achtung":"Beide Zahnräder brauchen exakt die gleiche Zahngröße (Modul), sonst klemmen sie sofort."},"buy":{"was":"Fügt ein fertiges Teil mit festem Gewicht aus dem Datenblatt ein.","wozu":"Zeigt dir sofort, ob alle Bauteile zusammenpassen und wo der Schwerpunkt liegt.","achtung":"Beim DXF-Export bleiben Kaufteile von selbst weg; für STL blende sie vor dem Export aus."},"aeroBody":{"was":"Erstellt einen hohlen Körper in Tropfenform: runde Nase, gerades Mittelteil und ein langes Heck, das spitz ausläuft.","wozu":"Ergibt eine strömungsgünstige Verkleidung mit rundem Querschnitt.","achtung":"Achte auf eine ausreichende Wandstärke, wenn das Teil 3D-gedruckt wird."},"transform":{"was":"Verschiebt oder dreht einen Körper als eigenen Schritt im Verlauf – wahlweise auch als Kopie.","wozu":"Du kannst den Schritt später jederzeit ändern oder unterdrücken, statt die feste Lage des Körpers zu überschreiben.","achtung":"Änderst du das Original weiter vorne im Verlauf, wandert der versetzte Körper oder seine Kopie automatisch mit."}};
 
 const Explain = (() => {
   function keyOf(it) {
@@ -23447,12 +23563,16 @@ const Explain = (() => {
       else if (c.holes && c.solids) lines.push({ k: 'kinder', t: `Aus ${c.solids} ${c.solids === 1 ? 'Körper' : 'Körpern'} ${c.holes === 1 ? 'wird 1 Loch' : `werden ${c.holes} Löcher`} geschnitten.` });
       else if (c.solids) lines.push({ k: 'kinder', t: `Besteht aus ${c.solids} ${c.solids === 1 ? 'Körper' : 'Körpern'}.` });
     }
+    if (it.kind === 'transform') {
+      const p = it.p || {}, tf = p.target ? Model.find(doc, p.target) : null;
+      lines.push({ k: 'op', t: `${p.copy ? 'Erzeugt eine versetzte Kopie von' : 'Versetzt'} „${tf ? Model.label(tf.item) : 'fehlendes Ziel'}“${size ? ' (' + size + ')' : ''}.` });
+    }
     if (it.role === 'hole' && top >= 0) lines.push({ k: 'loch', t: 'Als Loch auf oberster Ebene schneidet es jeden Körper, den es berührt.' });
     for (const fin of it.finishes || []) lines.push({ k: 'fin', t: fin.type === 'shell' ? `Ausgehöhlt mit ${Units.fmtLenU(Model.num(fin.r, V, 2), 2, doc)} Wand.` : `${fin.type === 'chamfer' ? 'Fase' : 'Rundung'} ${Units.fmtLenU(Model.num(fin.r, V, 1), 2, doc)} an den Kanten.` });
     const used = paramsUsed(it, doc);
     if (used.length) lines.push({ k: 'masse', t: `Hängt an ${used.length === 1 ? 'dem Maß' : 'den Maßen'} ${used.slice(0, 6).join(', ')}${used.length > 6 ? ` und ${used.length - 6} weiteren` : ''}. Änderst du ${used.length === 1 ? 'es' : 'eines'} unter „Maße“, rechnet Tracery diesen Schritt neu.` });
     if (top >= 0 && Mass.fixedOf(it)) lines.push({ k: 'gewicht', t: it.massG === '' ? 'Kaufteil: Das Gewicht fehlt noch – trag es rechts ein.' : `Kaufteil mit festem Gewicht ${fmt(Model.num(it.massG, V, 0), 1)} g.` });
-    else if (top >= 0 && it.role !== 'hole') lines.push({ k: 'material', t: `Material: ${Mass.materialFor(it, doc).k}.` });
+    else if (top >= 0 && it.role !== 'hole' && !(it.kind === 'transform' && !(it.p && it.p.copy))) lines.push({ k: 'material', t: `Material: ${Mass.materialFor(it, doc).k}.` });
     if (it.suppressed) lines.push({ k: 'status', t: 'Dieser Schritt ist unterdrückt und zählt gerade nicht mit.' });
     else if (top >= 0 && doc === App.doc && top >= Timeline.markerPos()) lines.push({ k: 'status', t: 'Dieser Schritt liegt hinter dem Marker der Zeitleiste und wird gerade nicht gerechnet.' });
     if (it.ai) lines.push({ k: 'ki', t: (it.ai.edit ? 'Zuletzt von der KI geändert' : 'Von der KI gebaut') + ` – auf die Bitte „${it.ai.q}“.` });

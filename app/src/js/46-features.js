@@ -585,6 +585,68 @@ const Features = (() => {
     box.append(h('div', { class: 'hint-box' }, 'Nur Markierung – rechnet sofort und steht in Stückliste und Zeichnung.'));
     UI.pop(anchor || $('#center'), box);
   }
+  // ---------- Verschieben / Drehen / Kopieren als Schritt (KP-08) ----------
+  function transform(targetOrIds, opts = {}) {
+    if (App.ctx) { UI.toast('Schritte zum Verschieben/Drehen gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return null; }
+    const raw = Array.isArray(targetOrIds) ? targetOrIds[0] : (targetOrIds || App.sel[0]);
+    const top = raw ? Model.topOf(App.doc, raw) : null;
+    const tid = top ? (App.mergedInto(top.id) || top.id) : null;
+    const tgt = tid ? App.doc.items.find((x) => x.id === tid) : null;
+    if (!tgt) { UI.toast('Wähle zuerst einen Körper aus.', { icon: 'info' }); return null; }
+    const p = {
+      target: tgt.id,
+      dx: opts.dx ?? 0, dy: opts.dy ?? 0, dz: opts.dz ?? 0,
+      rx: opts.rx ?? 0, ry: opts.ry ?? 0, rz: opts.rz ?? 0,
+      pivot: opts.pivot || 'center',
+      px: opts.px ?? 0, py: opts.py ?? 0, pz: opts.pz ?? 0,
+      copy: !!opts.copy,
+    };
+    let step;
+    App.change('Verschieben/Drehen angelegt', (doc) => {
+      step = Model.newItem('transform', p, { name: opts.name || 'Verschieben/Drehen', color: tgt.color, role: tgt.role, mat: tgt.mat });
+      doc.items.push(step);
+    });
+    if (step) {
+      App.select([step.id]);
+      UI.toast('Schritt „Verschieben/Drehen“ angelegt. Rechts stellst du Verschiebung, Drehung und „Als Kopie“ ein.', { icon: 'check' });
+    }
+    return step || null;
+  }
+  function renderTransform(it, sec, setP) {
+    const p = it.p || {};
+    const idx = App.doc.items.indexOf(it);
+    const prev = idx >= 0 ? App.doc.items.slice(0, idx) : [];
+    const targets = prev.filter((x) => !x.suppressed && !(x.op && x.op.target) && !(x.kind === 'transform' && !(x.p && x.p.copy)));
+    const opts = targets.map((x) => [x.id, Model.label(x)]);
+    if (p.target && !targets.some((x) => x.id === p.target)) {
+      const f = Model.find(App.doc, p.target);
+      opts.unshift([p.target, f ? Model.label(f.item) + ' (inaktiv)' : 'Fehlender Körper']);
+    }
+    if (opts.length) {
+      sec.append(UI.selectField({ id: 'xf-target', label: 'Zielkörper', value: p.target || '', options: opts, onChange: (v) => App.change('Zielkörper gewählt', (doc) => { const T = Model.find(doc, it.id).item; T.p.target = v; }) }));
+    }
+    const copyL = h('label', { class: 'check', style: { marginTop: '8px' } }, h('input', { type: 'checkbox', id: 'xf-copy', checked: !!p.copy }), 'Als Kopie (Original bleibt an seinem Platz)');
+    copyL.querySelector('input').onchange = (e) => App.change(e.target.checked ? 'Als Kopie' : 'Original versetzen', (doc) => { Model.find(doc, it.id).item.p.copy = e.target.checked; });
+    sec.append(copyL);
+    const ft = h('div', { class: 'fields three' });
+    for (const k of ['dx', 'dy', 'dz']) ft.append(UI.numField({ id: 'xf-' + k, value: p[k] ?? 0, axis: k[1], unit: '', onCommit: (v) => setP(k, v) }));
+    const fr = h('div', { class: 'fields three' });
+    for (const k of ['rx', 'ry', 'rz']) fr.append(UI.numField({ id: 'xf-' + k, value: p[k] ?? 0, axis: k[1], unit: '°', onCommit: (v) => setP(k, v) }));
+    sec.append(h('div', { class: 'field', style: { marginTop: '8px' } }, h('label', null, 'Verschiebung (mm)'), ft), h('div', { class: 'field' }, h('label', null, 'Drehung (°)'), fr));
+    const pv = p.pivot || 'center';
+    sec.append(UI.selectField({ id: 'xf-pivot', label: 'Drehpunkt', value: pv, options: [['center', 'Mitte des Körpers'], ['origin', 'Ursprung (0 · 0 · 0)'], ['point', 'Eigener Punkt']], onChange: (v) => App.change('Drehpunkt geändert', (doc) => { Model.find(doc, it.id).item.p.pivot = v; }) }));
+    if (pv === 'point') {
+      const fp = h('div', { class: 'fields three' });
+      for (const k of ['px', 'py', 'pz']) fp.append(UI.numField({ id: 'xf-' + k, value: p[k] ?? 0, axis: k[1], unit: '', onCommit: (v) => setP(k, v) }));
+      sec.append(h('div', { class: 'field' }, h('label', null, 'Punkt (mm)'), fp));
+    }
+    if (p.target && Model.find(App.doc, p.target)) {
+      const gb = h('button', { type: 'button', class: 'btn small', id: 'xf-goto' }); gb.innerHTML = icon('pointer') + 'Zielkörper wählen';
+      gb.onclick = () => App.select([p.target]);
+      sec.append(h('div', { class: 'btn-row' }, gb));
+    }
+    sec.append(h('div', { class: 'hint-box', html: p.copy ? 'Erzeugt eine versetzte oder gedrehte <b>Kopie</b>. Ändert sich der Zielkörper, wandert die Kopie mit.' : 'Versetzt den Zielkörper als Schritt im Verlauf. Unterdrückst du diesen Schritt oder rollst den Marker davor, springt der Körper zurück.' }));
+  }
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { guessThreadSize, threadOnFace, markThread, updateThread, removeThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
+  return { transform, renderTransform, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
 })();

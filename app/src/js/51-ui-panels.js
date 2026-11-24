@@ -224,6 +224,7 @@ const Panels = (() => {
           e.preventDefault(); if (!selSet.has(it.id)) App.select([it.id]);
           UI.menu(row, [
             { icon: 'help', label: 'Erklär diesen Schritt', help: 'explainStep', run: () => Explain.dialog(it.id) },
+            ...(topIdx >= 0 ? [{ icon: 'moveStep', label: 'Verschieben/Drehen (Schritt)', help: 'moveStep', run: () => Features.transform([it.id]) }] : []),
             { icon: 'edit', label: 'Umbenennen', run: async () => { const n = await UI.prompt('Umbenennen', 'Name', Model.label(it), 'Umbenennen'); if (n && n.trim()) App.change('Umbenannt', (doc) => { Model.find(doc, it.id).item.name = n.trim(); }); } },
             ...(ownIdx >= 0 ? [{ icon: 'suppress', label: it.suppressed ? 'Wieder aktivieren' : 'Unterdrücken', run: () => Timeline.toggleSuppress(it.id) }] : []),
             '-', { icon: 'trash', label: 'Löschen', run: () => Actions.remove([it.id]) },
@@ -419,7 +420,7 @@ const Panels = (() => {
     let hit = false;
     const fix = (s) => { if (typeof s !== 'string') return s; const r = s.replace(re, (m, pre) => { hit = true; return pre + repl; }); return /^-?\d+(\.\d+)?$/.test(r.trim()) ? +r : r; };
     for (const q of doc.params) q.expr = fix(q.expr);
-    Model.walk(doc.items, (it) => { for (const k in it.p || {}) it.p[k] = fix(it.p[k]); for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) f.r = fix(f.r); if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); });
+    Model.walk(doc.items, (it) => { for (const k in it.p || {}) { if (it.kind === 'transform' && (k === 'target' || k === 'pivot')) continue; it.p[k] = fix(it.p[k]); } for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) f.r = fix(f.r); if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); });
     return hit;
   }
   function renameParam(id, nv) {
@@ -568,8 +569,8 @@ const Panels = (() => {
   // Formschritt mit Modus: eigener Körper oder mit einem früheren Körper verrechnen (nur Teile ganz oben im Verlauf)
   function opSection(it) {
     const idx = App.doc.items.indexOf(it);
-    if (idx < 0 || it.kind === 'group') return null;
-    const targets = App.doc.items.slice(0, idx).filter((x) => x.role !== 'hole' && !x.suppressed && x.kind !== 'group' && !(x.op && x.op.target === it.id));
+    if (idx < 0 || it.kind === 'group' || it.kind === 'transform') return null;
+    const targets = App.doc.items.slice(0, idx).filter((x) => x.role !== 'hole' && !x.suppressed && x.kind !== 'group' && !(x.kind === 'transform' && !(x.p && x.p.copy)) && !(x.op && x.op.target === it.id));
     if (!targets.length && !it.op) return null;
     const sec = h('div', { class: 'section', id: 'op-sec', 'data-help': 'bodyOp' }, h('div', { class: 'section-h' }, 'Körper'));
     const type = it.op ? it.op.type : 'new';
@@ -671,7 +672,7 @@ const Panels = (() => {
         const nm = (id) => { const f = Model.find(App.doc, id); return f ? Model.label(f.item) : '–'; };
         const line = (txt, id) => { const r = h('div', { class: 'mini-row dep-row' }, h('span', { class: 'grow' }, txt)); if (id && Model.find(App.doc, id)) { r.style.cursor = 'pointer'; r.onclick = () => App.select([id]); } return r; };
         for (const x of up) ds.append(line(`${x.what} „${nm(x.to)}“`, x.to));
-        const back = { 'abgezogen von': 'wird hiervon abgezogen', 'vereinigt mit': 'ist hiermit vereinigt', 'Schnittmenge mit': 'bildet hiermit die Schnittmenge', 'verrechnet mit': 'ist hiermit verrechnet', 'verknüpfte Kopie von': 'ist eine verknüpfte Kopie hiervon', 'Skizze übernimmt Kante von': 'übernimmt Kanten hiervon', 'Rohr hängt an': 'hat Rohrpunkte hieran' };
+        const back = { 'abgezogen von': 'wird hiervon abgezogen', 'vereinigt mit': 'ist hiermit vereinigt', 'Schnittmenge mit': 'bildet hiermit die Schnittmenge', 'verrechnet mit': 'ist hiermit verrechnet', 'versetzt': 'versetzt diesen Körper', 'versetzte Kopie von': 'ist eine versetzte Kopie hiervon', 'verknüpfte Kopie von': 'ist eine verknüpfte Kopie hiervon', 'Skizze übernimmt Kante von': 'übernimmt Kanten hiervon', 'Rohr hängt an': 'hat Rohrpunkte hieran' };
         for (const x of down) ds.append(line(x.datum ? `Bezugsebene „${x.datum}“ hängt hieran` : x.axis ? `Bezugsachse „${x.axis}“ hängt hieran` : `„${nm(x.from)}“ ${back[x.what] || 'hängt hieran'}`, x.datum || x.axis ? null : x.from));
         if (down.length) ds.open = true;
         w.append(ds);
@@ -679,7 +680,8 @@ const Panels = (() => {
     }
     const copies = []; Model.walk(App.doc.items, (x) => { if (x.link === it.id) copies.push(x); });
     if (copies.length) w.append(h('div', { class: 'hint-box', id: 'link-count' }, `${copies.length} verknüpfte ${copies.length === 1 ? 'Kopie folgt' : 'Kopien folgen'} diesem Teil.`));
-    w.append(roleSwitch(it.role, (r) => Actions.setRole([it.id], r)));
+    const isMoveOnly = it.kind === 'transform' && !(it.p && it.p.copy);
+    if (!isMoveOnly) w.append(roleSwitch(it.role, (r) => Actions.setRole([it.id], r)));
     const opSec = opSection(it); if (opSec) w.append(opSec);
     // Maße
     const three = !!(KINDS[it.kind] && KINDS[it.kind].params.length === 3);
@@ -872,6 +874,9 @@ const Panels = (() => {
       }
       if (hasRail) { ml.innerHTML = ''; ml.append(h('div', { class: 'section-h' }, 'Mittellinie'), h('div', { class: 'hint-box', html: 'Mit Führungskurve geht keine Mittellinie – erst „Ohne Führungskurve“.' })); }
       w.append(sec, ml, fk); if (fk2) w.append(fk2);
+    } else if (it.kind === 'transform') {
+      sec.firstChild.textContent = 'Verschieben/Drehen';
+      Features.renderTransform(it, sec, setP); w.append(sec);
     } else if (Features.isOp(it)) {
       sec.firstChild.textContent = Features.NAMES[it.p.op === 'pattern' ? it.p.pt : it.p.op] || 'Feature';
       Features.renderOp(it, sec, setP); w.append(sec);
@@ -882,23 +887,25 @@ const Panels = (() => {
     }
     const jsec = Joints.panel(it); if (jsec) w.append(jsec);
     // Lage
-    const pos = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Lage'));
-    const setT = (k, val) => App.change(k.startsWith('r') ? 'Gedreht' : 'Verschoben', (doc) => { Model.find(doc, it.id).item.t[k] = val; }, { merge: 't:' + it.id + ':' + k });
-    const fp = h('div', { class: 'fields three' });
-    for (const k of ['x', 'y', 'z']) fp.append(UI.numField({ id: 't-' + k, value: it.t[k], axis: k, unit: '', len: true, onCommit: (v) => setT(k, v) }));
-    const fr = h('div', { class: 'fields three' });
-    for (const k of ['rx', 'ry', 'rz']) fr.append(UI.numField({ id: 't-' + k, value: it.t[k], axis: k[1], unit: '°', onCommit: (v) => setT(k, v) }));
-    pos.append(h('div', { class: 'field' }, h('label', null, `Position (${Units.label()})`), fp), h('div', { class: 'field' }, h('label', null, 'Drehung (°)'), fr));
-    const qa = h('div', { class: 'btn-row' });
-    const drop = h('button', { type: 'button', class: 'btn small', 'data-tip': 'Unterkante auf Höhe 0 setzen' }); drop.innerHTML = icon('push') + 'Auf XY-Ebene';
-    drop.onclick = () => Actions.dropToPlate([it.id]);
-    const rz = h('button', { type: 'button', class: 'btn small', 'data-tip': 'Um 90° drehen (um Z)', 'data-kbd': 'R' }); rz.innerHTML = icon('rotate') + '90°';
-    rz.onclick = () => Actions.rotate90([it.id], 'z');
-    if (!f.parent) qa.append(drop);
-    qa.append(rz); pos.append(qa);
-    w.append(pos);
+    if (it.kind !== 'transform') {
+      const pos = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Lage'));
+      const setT = (k, val) => App.change(k.startsWith('r') ? 'Gedreht' : 'Verschoben', (doc) => { Model.find(doc, it.id).item.t[k] = val; }, { merge: 't:' + it.id + ':' + k });
+      const fp = h('div', { class: 'fields three' });
+      for (const k of ['x', 'y', 'z']) fp.append(UI.numField({ id: 't-' + k, value: it.t[k], axis: k, unit: '', len: true, onCommit: (v) => setT(k, v) }));
+      const fr = h('div', { class: 'fields three' });
+      for (const k of ['rx', 'ry', 'rz']) fr.append(UI.numField({ id: 't-' + k, value: it.t[k], axis: k[1], unit: '°', onCommit: (v) => setT(k, v) }));
+      pos.append(h('div', { class: 'field' }, h('label', null, `Position (${Units.label()})`), fp), h('div', { class: 'field' }, h('label', null, 'Drehung (°)'), fr));
+      const qa = h('div', { class: 'btn-row' });
+      const drop = h('button', { type: 'button', class: 'btn small', 'data-tip': 'Unterkante auf Höhe 0 setzen' }); drop.innerHTML = icon('push') + 'Auf XY-Ebene';
+      drop.onclick = () => Actions.dropToPlate([it.id]);
+      const rz = h('button', { type: 'button', class: 'btn small', 'data-tip': 'Um 90° drehen (um Z)', 'data-kbd': 'R' }); rz.innerHTML = icon('rotate') + '90°';
+      rz.onclick = () => Actions.rotate90([it.id], 'z');
+      if (!f.parent) qa.append(drop);
+      qa.append(rz); pos.append(qa);
+      w.append(pos);
+    }
     // Kanten
-    if (it.role !== 'hole') {
+    if (it.role !== 'hole' && !isMoveOnly) {
       const ks = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Kanten'));
       for (const fin of (it.finishes || []).filter((x) => x.type === 'shell')) {
         const err = App.errorsFor(it.id).find((x) => x.finishId === fin.id);
@@ -955,63 +962,65 @@ const Panels = (() => {
       ks.append(h('div', { class: 'hint-box', html: 'Oder klick im Modell <b>direkt auf eine Kante</b> und wähle Abrunden.' }));
       w.append(ks);
     }
-    w.append(colorSection((c) => App.change(c ? 'Farbe geändert' : 'Farbe vom Werkstoff', (doc) => { const T = Model.find(doc, it.id).item; if (c) { T.color = c; T.colorSet = true; } else delete T.colorSet; }), it.color, !!it.colorSet, it));
-    // Farbe der gewählten Fläche
-    const sf = Actions.selectedFace();
-    if (sf && sf.id === it.id && it.role !== 'hole') {
-      const fsec = h('div', { class: 'section', id: 'face-color', 'data-help': 'faceColor' }, h('div', { class: 'section-h' }, 'Farbe dieser Fläche'));
-      const key = { n: sf.info.n || null, c: sf.info.c };
-      const cur = (it.faceColors || []).find((x) => Viewer.faceIndexOf(it.id, x) === sf.idx);
-      const setFace = (col) => App.change(col ? 'Flächenfarbe' : 'Flächenfarbe entfernt', (doc) => {
-        const T = Model.find(doc, it.id).item; const list = (T.faceColors || []).filter((x) => Viewer.faceIndexOf(it.id, x) !== sf.idx);
-        if (col) list.push({ ...key, col });
-        if (list.length) T.faceColors = list; else delete T.faceColors;
-      });
-      const row = h('div', { class: 'colors' });
-      for (const c of COLORS) { const b = h('button', { type: 'button', 'aria-label': c.n, 'data-tip': c.n, 'aria-pressed': cur && cur.col === c.c ? 'true' : 'false', style: { background: c.c } }); b.onclick = () => setFace(c.c); row.append(b); }
-      const free = h('input', { type: 'color', id: 'face-color-inp', value: cur ? cur.col : '#e03131', 'aria-label': 'Eigene Flächenfarbe' });
-      free.addEventListener('change', () => setFace(free.value.toLowerCase()));
-      row.append(h('label', { class: 'color-free', 'data-tip': 'Jede Farbe' }, free));
-      fsec.append(row);
-      if (cur) { const b = h('button', { type: 'button', class: 'btn ghost', id: 'face-color-off' }); b.innerHTML = icon('undo') + 'Flächenfarbe entfernen'; b.onclick = () => setFace(null); fsec.append(h('div', { class: 'btn-row' }, b)); }
-      w.append(fsec);
-    }
-    // Kosmetische Gewinde (KP-20)
-    const isCylFace = !!(sf && sf.id === it.id && sf.info.t === 'CYLINDRE');
-    if (it.role !== 'hole' && (isCylFace || (it.threads && it.threads.length))) {
-      const tsec = h('div', { class: 'section', id: 'thread-sec', 'data-help': 'cosmeticThread' }, h('div', { class: 'section-h' }, 'Gewinde (Markierung)'));
-      if (isCylFace && !Features.threadOnFace(it.id, sf.idx)) {
-        const mb = h('button', { type: 'button', class: 'btn small', id: 'btn-mark-thread' });
-        mb.innerHTML = icon('thread') + 'Gewinde auf dieser Fläche markieren';
-        mb.onclick = (e) => Features.threadPop(sf, e.currentTarget);
-        tsec.append(h('div', { class: 'btn-row' }, mb));
+    if (!isMoveOnly) {
+      w.append(colorSection((c) => App.change(c ? 'Farbe geändert' : 'Farbe vom Werkstoff', (doc) => { const T = Model.find(doc, it.id).item; if (c) { T.color = c; T.colorSet = true; } else delete T.colorSet; }), it.color, !!it.colorSet, it));
+      // Farbe der gewählten Fläche
+      const sf = Actions.selectedFace();
+      if (sf && sf.id === it.id && it.role !== 'hole') {
+        const fsec = h('div', { class: 'section', id: 'face-color', 'data-help': 'faceColor' }, h('div', { class: 'section-h' }, 'Farbe dieser Fläche'));
+        const key = { n: sf.info.n || null, c: sf.info.c };
+        const cur = (it.faceColors || []).find((x) => Viewer.faceIndexOf(it.id, x) === sf.idx);
+        const setFace = (col) => App.change(col ? 'Flächenfarbe' : 'Flächenfarbe entfernt', (doc) => {
+          const T = Model.find(doc, it.id).item; const list = (T.faceColors || []).filter((x) => Viewer.faceIndexOf(it.id, x) !== sf.idx);
+          if (col) list.push({ ...key, col });
+          if (list.length) T.faceColors = list; else delete T.faceColors;
+        });
+        const row = h('div', { class: 'colors' });
+        for (const c of COLORS) { const b = h('button', { type: 'button', 'aria-label': c.n, 'data-tip': c.n, 'aria-pressed': cur && cur.col === c.c ? 'true' : 'false', style: { background: c.c } }); b.onclick = () => setFace(c.c); row.append(b); }
+        const free = h('input', { type: 'color', id: 'face-color-inp', value: cur ? cur.col : '#e03131', 'aria-label': 'Eigene Flächenfarbe' });
+        free.addEventListener('change', () => setFace(free.value.toLowerCase()));
+        row.append(h('label', { class: 'color-free', 'data-tip': 'Jede Farbe' }, free));
+        fsec.append(row);
+        if (cur) { const b = h('button', { type: 'button', class: 'btn ghost', id: 'face-color-off' }); b.innerHTML = icon('undo') + 'Flächenfarbe entfernen'; b.onclick = () => setFace(null); fsec.append(h('div', { class: 'btn-row' }, b)); }
+        w.append(fsec);
       }
-      for (const th of it.threads || []) {
-        const sp = THREAD_MAP[th.size] || { pitch: 1 };
-        const box = h('div', { class: 'thread-item', style: { display: 'grid', gap: '6px', padding: '6px 0', borderTop: '1px solid var(--line)' } });
-        box.append(h('div', { class: 'mini-row' }, h('b', null, `${th.size} × ${Units.fmtLenU(th.length, 1)}`), h('span', { class: 'grow muted', style: { marginLeft: '6px', fontSize: '11px' } }, `${th.kind === 'int' ? 'Innengewinde' : 'Außengewinde'} · P ${fmt(sp.pitch, 2)}`)));
-        const fs = h('div', { class: 'fields' });
-        fs.append(UI.selectField({ id: 'th-size-' + th.id, label: 'M-Größe', value: th.size, options: THREAD_SPECS.map((s) => [s.size, s.size]), onChange: (v) => Features.updateThread(it.id, th.id, { size: v }) }));
-        fs.append(UI.numField({ id: 'th-len-' + th.id, label: 'Länge', value: th.length, min: 0.5, unit: 'mm', expr: false, onCommit: (v) => Features.updateThread(it.id, th.id, { length: v }) }));
-        fs.append(UI.selectField({ id: 'th-from-' + th.id, label: 'Ende', value: th.from || 'top', options: [['top', 'Ende 1'], ['bottom', 'Ende 2']], onChange: (v) => Features.updateThread(it.id, th.id, { from: v }) }));
-        box.append(fs);
-        const br = h('div', { class: 'btn-row' });
-        const rb = h('button', { type: 'button', class: 'btn small', id: 'th-real-' + th.id }); rb.innerHTML = icon('bolt') + 'Echt machen'; rb.onclick = () => Features.makeThreadReal(it.id, th.id);
-        const db = h('button', { type: 'button', class: 'btn ghost small', id: 'th-del-' + th.id, 'aria-label': 'Gewinde entfernen', 'data-tip': 'Entfernen' }); db.innerHTML = icon('trash'); db.onclick = () => Features.removeThread(it.id, th.id);
-        br.append(rb, db);
-        box.append(br);
-        tsec.append(box);
+      // Kosmetische Gewinde (KP-20)
+      const isCylFace = !!(sf && sf.id === it.id && sf.info.t === 'CYLINDRE');
+      if (it.role !== 'hole' && (isCylFace || (it.threads && it.threads.length))) {
+        const tsec = h('div', { class: 'section', id: 'thread-sec', 'data-help': 'cosmeticThread' }, h('div', { class: 'section-h' }, 'Gewinde (Markierung)'));
+        if (isCylFace && !Features.threadOnFace(it.id, sf.idx)) {
+          const mb = h('button', { type: 'button', class: 'btn small', id: 'btn-mark-thread' });
+          mb.innerHTML = icon('thread') + 'Gewinde auf dieser Fläche markieren';
+          mb.onclick = (e) => Features.threadPop(sf, e.currentTarget);
+          tsec.append(h('div', { class: 'btn-row' }, mb));
+        }
+        for (const th of it.threads || []) {
+          const sp = THREAD_MAP[th.size] || { pitch: 1 };
+          const box = h('div', { class: 'thread-item', style: { display: 'grid', gap: '6px', padding: '6px 0', borderTop: '1px solid var(--line)' } });
+          box.append(h('div', { class: 'mini-row' }, h('b', null, `${th.size} × ${Units.fmtLenU(th.length, 1)}`), h('span', { class: 'grow muted', style: { marginLeft: '6px', fontSize: '11px' } }, `${th.kind === 'int' ? 'Innengewinde' : 'Außengewinde'} · P ${fmt(sp.pitch, 2)}`)));
+          const fs = h('div', { class: 'fields' });
+          fs.append(UI.selectField({ id: 'th-size-' + th.id, label: 'M-Größe', value: th.size, options: THREAD_SPECS.map((s) => [s.size, s.size]), onChange: (v) => Features.updateThread(it.id, th.id, { size: v }) }));
+          fs.append(UI.numField({ id: 'th-len-' + th.id, label: 'Länge', value: th.length, min: 0.5, unit: 'mm', expr: false, onCommit: (v) => Features.updateThread(it.id, th.id, { length: v }) }));
+          fs.append(UI.selectField({ id: 'th-from-' + th.id, label: 'Ende', value: th.from || 'top', options: [['top', 'Ende 1'], ['bottom', 'Ende 2']], onChange: (v) => Features.updateThread(it.id, th.id, { from: v }) }));
+          box.append(fs);
+          const br = h('div', { class: 'btn-row' });
+          const rb = h('button', { type: 'button', class: 'btn small', id: 'th-real-' + th.id }); rb.innerHTML = icon('bolt') + 'Echt machen'; rb.onclick = () => Features.makeThreadReal(it.id, th.id);
+          const db = h('button', { type: 'button', class: 'btn ghost small', id: 'th-del-' + th.id, 'aria-label': 'Gewinde entfernen', 'data-tip': 'Entfernen' }); db.innerHTML = icon('trash'); db.onclick = () => Features.removeThread(it.id, th.id);
+          br.append(rb, db);
+          box.append(br);
+          tsec.append(box);
+        }
+        tsec.append(h('div', { class: 'hint-box' }, 'Nur Anzeige – rechnet sofort, steht in Stückliste und Zeichnung. „Echt machen“ wandelt in ein druckbares 3D-Gewinde.'));
+        w.append(tsec);
       }
-      tsec.append(h('div', { class: 'hint-box' }, 'Nur Anzeige – rechnet sofort, steht in Stückliste und Zeichnung. „Echt machen“ wandelt in ein druckbares 3D-Gewinde.'));
-      w.append(tsec);
-    }
-    if (it.role !== 'hole') {
-      const op = h('div', { class: 'fields', 'data-help': 'opacity' });
-      op.append(UI.numField({ id: 'item-opacity', label: 'Sichtbarkeit (100 % = undurchsichtig)', value: Math.round((it.opacity ?? 1) * 100), unit: '%', expr: false, min: 5, onCommit: (v) => App.change('Durchsichtigkeit', (doc) => { const T = Model.find(doc, it.id).item; const o = clamp(v, 5, 100) / 100; if (o >= 1) delete T.opacity; else T.opacity = o; }, { merge: 'op:' + it.id }) }));
-      w.lastChild.append(op);
+      if (it.role !== 'hole') {
+        const op = h('div', { class: 'fields', 'data-help': 'opacity' });
+        op.append(UI.numField({ id: 'item-opacity', label: 'Sichtbarkeit (100 % = undurchsichtig)', value: Math.round((it.opacity ?? 1) * 100), unit: '%', expr: false, min: 5, onCommit: (v) => App.change('Durchsichtigkeit', (doc) => { const T = Model.find(doc, it.id).item; const o = clamp(v, 5, 100) / 100; if (o >= 1) delete T.opacity; else T.opacity = o; }, { merge: 'op:' + it.id }) }));
+        w.lastChild.append(op);
+      }
     }
     // Material und Gewicht dieses Teils (nur Teile der obersten Ebene)
-    if (!f.parent && it.role !== 'hole') {
+    if (!f.parent && it.role !== 'hole' && !isMoveOnly) {
       const pm = Mass.projectMaterial();
       const ms = h('div', { class: 'section pro' }, h('div', { class: 'section-h' }, 'Material und Gewicht'));
       const fixed = Mass.fixedOf(it);
@@ -1065,7 +1074,7 @@ const Panels = (() => {
     if (App.mode !== 'model' || Sketch.active || Place.active || Handles.dragging) return;
     const items = App.selectedItems(); if (!items.length) return;
     const bar = h('div', { class: 'ctxbar', role: 'toolbar', 'aria-label': 'Aktionen' });
-    const PRO = ['similar', 'shell', 'patternCirc', 'split', 'boolSubtract', 'layers'];
+    const PRO = ['similar', 'shell', 'patternCirc', 'split', 'boolSubtract', 'layers', 'moveStep'];
     const b = (ic, label, fn, cls = '', tip, iconOnly) => { const x = h('button', { type: 'button', class: cls + (PRO.includes(ic) ? ' pro' : ''), 'data-tip': tip || (iconOnly ? label : null), 'aria-label': label || tip, 'data-help': HELP[ic] ? ic : null }); x.innerHTML = icon(ic) + (label && !iconOnly ? `<span>${label}</span>` : ''); x.onclick = (e) => { e.stopPropagation(); fn(e); }; bar.append(x); return x; };
     const sep = () => bar.append(h('span', { class: 'vsep' }));
     // Schritt hinter dem Marker oder unterdrückt: nichts zum Bearbeiten, nur zurückholen
@@ -1075,6 +1084,16 @@ const Panels = (() => {
       bar.append(h('span', { class: 'lbl' }, off.suppressed ? 'Unterdrückt' : 'Hinter dem Marker'));
       if (off.suppressed) b('eye', 'Wieder einschalten', () => Timeline.toggleSuppress(off.id), 'accent', 'Diesen Schritt wieder mitrechnen');
       else b('rollback', 'Marker dahinter', () => Timeline.setMarker(App.doc.items.indexOf(off) + 1, `Zeitleiste: bis „${Model.label(off)}“`), 'accent', 'Den Marker hinter diesen Schritt ziehen – dann wird er wieder mitgerechnet');
+      $('#overlay').append(bar); ctx = bar;
+      placeCtx();
+      return;
+    }
+    if (items.length === 1 && items[0].item.kind === 'transform' && !(items[0].item.p && items[0].item.p.copy)) {
+      const it = items[0].item;
+      bar.append(h('span', { class: 'lbl' }, 'Verschieben/Drehen'));
+      if (it.p && it.p.target && Model.find(App.doc, it.p.target)) b('pointer', 'Zielkörper', () => App.select([it.p.target]), 'accent', 'Zum Zielkörper wechseln');
+      b('suppress', 'Unterdrücken', () => Timeline.toggleSuppress(it.id), '', 'Diesen Schritt unterdrücken – der Körper springt zurück');
+      b('trash', 'Löschen', () => Actions.remove(), 'danger', 'Löschen (Entf)', true);
       $('#overlay').append(bar); ctx = bar;
       placeCtx();
       return;
@@ -1140,6 +1159,7 @@ const Panels = (() => {
       b('rotate', 'Drehen', (e) => UI.menu(e.currentTarget, [{ label: 'Um 90° drehen (flach)', icon: 'rotate', kbd: 'R', run: () => Actions.rotate90(null, 'z') }, { label: 'Nach vorne kippen', icon: 'rotate', run: () => Actions.rotate90(null, 'x') }, { label: 'Zur Seite kippen', icon: 'rotate', run: () => Actions.rotate90(null, 'y') }]), '', 'Um 90° drehen oder kippen', true);
       b('mirror', 'Spiegeln', (e) => UI.menu(e.currentTarget, [{ label: 'Links ↔ rechts', icon: 'mirror', run: () => Actions.mirror(null, 'x') }, { label: 'Vorne ↔ hinten', icon: 'mirror', run: () => Actions.mirror(null, 'y') }, { label: 'Oben ↔ unten', icon: 'mirror', run: () => Actions.mirror(null, 'z') }]), '', 'Spiegeln', true);
       b('copy', 'Duplizieren', () => Actions.duplicate(), '', 'Duplizieren (Strg D)', true);
+      if (App.doc.items.includes(it)) b('moveStep', 'Verschieben/Drehen', () => Features.transform(), '', 'Als Schritt verschieben, drehen oder kopieren (bleibt im Verlauf änderbar)', true);
       b('patternCirc', 'Muster', (e) => UI.menu(e.currentTarget, [{ label: 'Rechteckmuster', icon: 'patternRect', run: () => Features.pattern('rect') }, { label: 'Kreismuster', icon: 'patternCirc', run: () => Features.pattern('circ') }, { label: 'Muster entlang Kurve', icon: 'patternPath', run: () => Features.patternPath() }, { label: 'Gespiegelte Kopie', icon: 'mirror', run: () => Features.pattern('mirror') }]), '', hole ? 'Loch als Muster oder gespiegelt vervielfachen' : 'Muster oder gespiegelte Kopie', true);
       if (!hole) b('split', 'Teilen', () => Features.split(), '', 'Körper an einer Ebene teilen', true);
       if (!hole && it.kind === 'extrude' && it.p && it.p.sketch) b('loft', 'Zur Spitze', () => Actions.loft([it.id], { tip: 10 }), '', 'Den Umriss zu einer Spitze zusammenlaufen lassen (Übergang mit Spitze)', true);

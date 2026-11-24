@@ -42,7 +42,7 @@ const Handles = (() => {
   const LABELS = { w: 'Breite', d: 'Durchmesser', h: 'Höhe', d1: 'Durchmesser', t: 'Ringdicke', dist: 'Höhe' };
   function current() {
     if (App.mode !== 'model' || Sketch.active || App.sel.length !== 1 || Views.exploded) return null;
-    const f = Model.find(App.doc, App.sel[0]); if (!f || f.item.locked) return null;
+    const f = Model.find(App.doc, App.sel[0]); if (!f || f.item.locked || f.item.kind === 'transform') return null;
     const box = App.localBox(f.item.id); if (!box) return null;
     return { f, it: f.item, box, W: Model.worldMatrix(App.doc, f.item.id) };
   }
@@ -513,9 +513,9 @@ const Interact = (() => {
   }
   function startMove(e) {
     const hit = down.hit; const top = App.doc.items.find((x) => x.id === hit.id);
-    if (!top || top.locked) { down = null; Viewer.controls.enabled = true; return; }
+    if (!top || top.locked || top.kind === 'transform') { down = null; Viewer.controls.enabled = true; return; }
     if (!App.sel.includes(top.id)) App.select([top.id]);
-    const ids = App.sel.map((id) => App.doc.items.find((x) => x.id === id)).filter((x) => x && !x.locked);
+    const ids = App.sel.map((id) => App.doc.items.find((x) => x.id === id)).filter((x) => x && !x.locked && x.kind !== 'transform');
     const planeZ = hit.point.z;
     moving = { ids, before: App.snapshot(), start: hit.point.clone(), planeZ, t0: new Map(ids.map((it) => [it.id, Model.tNumeric(it)])), box0: Actions.selBox(ids.map((it) => it.id)) };
     Viewer.canvas.style.cursor = 'grabbing';
@@ -682,6 +682,7 @@ const Interact = (() => {
         { icon: 'thread', label: 'Gewinde markieren …', id: 'cm-thread', help: 'cosmeticThread', hidden: !hit || hit.faceIdx == null || top.role === 'hole' || ((App.results.get(hit.id) || { data: { faces: [] } }).data.faces[hit.faceIdx] || {}).t !== 'CYLINDRE', run: () => { const r = App.results.get(hit.id); if (r && r.data.faces[hit.faceIdx]) { const a = h('div', { style: { position: 'fixed', left: cx + 'px', top: cy + 'px', width: '1px', height: '1px' } }); document.body.append(a); Features.threadPop({ id: hit.id, idx: hit.faceIdx, info: r.data.faces[hit.faceIdx] }, a); setTimeout(() => a.remove(), 0); } } },
         '-',
         { icon: 'copy', label: 'Duplizieren', kbd: 'Strg D', id: 'cm-dup', run: () => Actions.duplicate() },
+        { icon: 'moveStep', label: 'Verschieben/Drehen (Schritt)', id: 'cm-movestep', help: 'moveStep', run: () => Features.transform([top.id]) },
         { icon: 'copy', label: 'Verknüpft duplizieren', kbd: 'Strg Umschalt D', id: 'cm-duplink', hidden: it.kind === 'group', run: () => Actions.duplicateLinked() },
         { icon: it.role === 'hole' ? 'solid' : 'hole', label: it.role === 'hole' ? 'Zum Körper machen' : 'Zum Loch machen', kbd: 'H', id: 'cm-role', run: () => Actions.toggleRole() },
         { icon: 'eyeOff', label: 'Ausblenden', id: 'cm-hide', run: () => Actions.hideSelected() },

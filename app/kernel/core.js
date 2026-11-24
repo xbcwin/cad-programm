@@ -110,6 +110,30 @@ export function createKernel(R, oc) {
   function transformPoint(m, p) {
     return [m[0] * p[0] + m[4] * p[1] + m[8] * p[2] + m[12], m[1] * p[0] + m[5] * p[1] + m[9] * p[2] + m[13], m[2] * p[0] + m[6] * p[1] + m[10] * p[2] + m[14]];
   }
+  function matTrans(x, y, z) { return [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, x, y, z, 1]; }
+  function matRotXYZ(rx, ry, rz) {
+    const D = Math.PI / 180;
+    const a = num(rx, 0) * D, b = num(ry, 0) * D, c = num(rz, 0) * D;
+    const ca = Math.cos(a), sa = Math.sin(a), cb = Math.cos(b), sb = Math.sin(b), cc = Math.cos(c), sc = Math.sin(c);
+    const Rx = [1, 0, 0, 0, 0, ca, sa, 0, 0, -sa, ca, 0, 0, 0, 0, 1];
+    const Ry = [cb, 0, -sb, 0, 0, 1, 0, 0, sb, 0, cb, 0, 0, 0, 0, 1];
+    const Rz = [cc, sc, 0, 0, -sc, cc, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+    return matMul(Rx, matMul(Ry, Rz));
+  }
+  function buildTransformMatrix(p, wb) {
+    const dx = num(p.dx, 0), dy = num(p.dy, 0), dz = num(p.dz, 0);
+    const rx = num(p.rx, 0), ry = num(p.ry, 0), rz = num(p.rz, 0);
+    let M = matTrans(dx, dy, dz);
+    if (Math.abs(rx) > 1e-9 || Math.abs(ry) > 1e-9 || Math.abs(rz) > 1e-9) {
+      let px = 0, py = 0, pz = 0;
+      if (p.pivot === 'point') { px = num(p.px, 0); py = num(p.py, 0); pz = num(p.pz, 0); }
+      else if (p.pivot !== 'origin' && wb) { px = (wb[0] + wb[3]) / 2; py = (wb[1] + wb[4]) / 2; pz = (wb[2] + wb[5]) / 2; }
+      const R = matRotXYZ(rx, ry, rz);
+      const Rp = (px || py || pz) ? matMul(matTrans(px, py, pz), matMul(R, matTrans(-px, -py, -pz))) : R;
+      M = matMul(M, Rp);
+    }
+    return M;
+  }
   function bboxOf(shape) {
     const bb = shape.boundingBox; const b = bb.bounds; bb.delete();
     return [b[0][0], b[0][1], b[0][2], b[1][0], b[1][1], b[1][2]];
@@ -1177,6 +1201,7 @@ export function createKernel(R, oc) {
     return keyOf({ k: it.kind, p, f: it.finishes || null, mir: it.mir || null, c: it.children ? it.children.filter((c) => !c.hidden).map((c) => [defKey(c), c.role, c.m]) : null });
   }
   function evalItem(it, errors) {
+    if (it.kind === 'transform') return { shape: null, key: defKey(it) };
     const key = defKey(it);
     const hit = cacheGet(key);
     if (hit) {
@@ -1370,39 +1395,86 @@ export function createKernel(R, oc) {
   // Formschritte mit Modus: Ein Teil mit op = {type: 'join' | 'cut' | 'common', target} wird mit einem früheren
   // Körper verrechnet und verschwindet als eigenes Teil. Ketten (B in A, C in B) landen alle im ersten Körper.
   // Ergebnis: bodies (id → {shape, key, wb} im Koordinatensystem des Zielkörpers), consumed (id → Ziel-id)
-  function resolveOps(evald, errors) {
+  function resolveOps(evald, errors, hiddenIds) {
     const byId = new Map(evald.map((e, i) => [e.it.id, { e, i }]));
-    const consumed = new Map(), opsOf = new Map();
+    const consumed = new Map(), live = new Map(), bodies = new Map();
+    for (const e of evald) if (e.shape) live.set(e.it.id, { shape: e.shape, key: e.key, wb: e.wb, m: e.it.m, it: e.it });
     const NAMES = { join: 'Vereinigen', cut: 'Abziehen', common: 'Schnittmenge' };
     for (let i = 0; i < evald.length; i++) {
-      const e = evald[i], op = e.it.op;
-      if (!op || !NAMES[op.type] || !e.shape || e.it.role === 'hole') continue;
-      let t = byId.get(op.target);
-      while (t && consumed.has(t.e.it.id)) t = byId.get(consumed.get(t.e.it.id));
-      if (!t || t.i >= i || !t.e.shape || t.e.it.role === 'hole') { errors.push({ itemId: e.it.id, code: 'op', message: `${NAMES[op.type]}: Der Zielkörper fehlt oder kommt erst später im Verlauf – das Teil bleibt ein eigener Körper.` }); continue; }
-      consumed.set(e.it.id, t.e.it.id);
-      if (!opsOf.has(t.e.it.id)) opsOf.set(t.e.it.id, []);
-      opsOf.get(t.e.it.id).push(e);
-    }
-    const bodies = new Map();
-    for (const [tid, list] of opsOf) {
-      const base = byId.get(tid).e, inv = matInvRigid(base.it.m);
-      let shape = base.shape, key = base.key, own = false;
-      for (const o of list) {
-        const rel = matMul(inv, o.it.m), k = keyOf([key, o.it.op.type, o.key, rel.map((v) => Math.round(v * 1e6) / 1e6)]);
-        const hit = cacheGet(k);
-        if (hit) { shape = hit; key = k; own = false; continue; }
-        try {
-          const tool = applyMatrix(o.shape, rel);
-          const next = o.it.op.type === 'join' ? shape.fuse(tool) : o.it.op.type === 'cut' ? shape.cut(tool) : shape.intersect(tool);
-          safeDelete(tool);
-          cachePut(k, next); shape = next; key = k;
-        } catch (err) {
-          errors.push({ itemId: o.it.id, code: 'op', message: `${NAMES[o.it.op.type]} mit „${base.it.name || 'Körper'}“ hat nicht geklappt – berühren sich die Teile?` });
+      const e = evald[i], it = e.it;
+      if (it.kind === 'transform') {
+        const p = it.p || {};
+        let tid = p.target;
+        while (tid && consumed.has(tid)) tid = consumed.get(tid);
+        const t = tid ? byId.get(tid) : null, src = tid ? live.get(tid) : null;
+        if (!t || t.i >= i || !src || !src.shape) {
+          if (!p.copy && tid && hiddenIds && hiddenIds.has(tid)) { consumed.set(it.id, tid); continue; }
+          errors.push({ itemId: it.id, code: 'op', message: 'Verschieben/Drehen: Der Zielkörper fehlt oder kommt erst später im Verlauf.' });
+          continue;
         }
+        const M = buildTransformMatrix(p, src.wb);
+        if (p.copy) {
+          const rel = matMul(matInvRigid(it.m), matMul(M, src.m));
+          const kBase = keyOf([src.key, 'xformCopy', rel.map((v) => Math.round(v * 1e6) / 1e6)]);
+          let shape = cacheGet(kBase), key = kBase;
+          if (!shape) {
+            try { shape = applyMatrix(src.shape, rel); cachePut(kBase, shape); }
+            catch (err) { errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) }); continue; }
+          }
+          if (it.finishes && it.finishes.length) {
+            const kFin = keyOf([key, 'fin', it.finishes]);
+            const hitF = cacheGet(kFin);
+            if (hitF) { shape = hitF; key = kFin; }
+            else {
+              const e0 = errors.length;
+              const sf = applyFinishes(shape, it.finishes, errors, it.id);
+              if (sf && sf !== shape) { cachePut(kFin, sf, errors.slice(e0).map((x) => ({ ...x, itemId: x.itemId === it.id ? '$self' : x.itemId }))); shape = sf; key = kFin; }
+            }
+          }
+          const wb = bboxTransform(bboxCached(key, shape), it.m);
+          const entry = { shape, key, wb, m: it.m, it };
+          live.set(it.id, entry);
+          bodies.set(it.id, entry);
+        } else {
+          consumed.set(it.id, tid);
+          const rel = matMul(matInvRigid(src.m), matMul(M, src.m));
+          if (!isIdentity(rel)) {
+            const k = keyOf([src.key, 'xform', rel.map((v) => Math.round(v * 1e6) / 1e6)]);
+            let next = cacheGet(k);
+            if (!next) {
+              try { next = applyMatrix(src.shape, rel); cachePut(k, next); }
+              catch (err) { errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) }); continue; }
+            }
+            src.shape = next; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
+            bodies.set(tid, src);
+          }
+        }
+        continue;
       }
-      const wb = bboxTransform(bboxCached(key, shape), base.it.m);
-      bodies.set(tid, { shape, key, wb });
+      const op = it.op, o = live.get(it.id);
+      if (!op || !NAMES[op.type] || !o || !o.shape || it.role === 'hole') continue;
+      let tid = op.target;
+      while (tid && consumed.has(tid)) tid = consumed.get(tid);
+      const t = byId.get(tid), base = tid ? live.get(tid) : null;
+      if (!t || t.i >= i || !base || !base.shape || base.it.role === 'hole') { errors.push({ itemId: it.id, code: 'op', message: `${NAMES[op.type]}: Der Zielkörper fehlt oder kommt erst später im Verlauf – das Teil bleibt ein eigener Körper.` }); continue; }
+      consumed.set(it.id, tid);
+      const inv = matInvRigid(base.m), rel = matMul(inv, o.m);
+      const k = keyOf([base.key, op.type, o.key, rel.map((v) => Math.round(v * 1e6) / 1e6)]);
+      let next = cacheGet(k);
+      if (next) {
+        base.shape = next; base.key = k; base.wb = bboxTransform(bboxCached(k, next), base.m);
+        bodies.set(tid, base); continue;
+      }
+      try {
+        const tool = applyMatrix(o.shape, rel);
+        next = op.type === 'join' ? base.shape.fuse(tool) : op.type === 'cut' ? base.shape.cut(tool) : base.shape.intersect(tool);
+        safeDelete(tool);
+        cachePut(k, next);
+        base.shape = next; base.key = k; base.wb = bboxTransform(bboxCached(k, next), base.m);
+        bodies.set(tid, base);
+      } catch (err) {
+        errors.push({ itemId: it.id, code: 'op', message: `${NAMES[op.type]} mit „${base.it.name || 'Körper'}“ hat nicht geklappt – berühren sich die Teile?` });
+      }
     }
     return { bodies, consumed };
   }
@@ -1411,6 +1483,7 @@ export function createKernel(R, oc) {
     ingestBlobs(scene);
     if (scene.quality) setQuality(scene.quality);
     const errors = [];
+    const hiddenIds = new Set((scene.items || []).filter((it) => it.hidden).map((it) => it.id));
     const tops = (scene.items || []).filter((it) => !it.hidden);
     // Rechenzeit je Schritt (BE-26): nur, was wirklich neu gerechnet wurde, zählt
     const times = {}, now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
@@ -1427,7 +1500,7 @@ export function createKernel(R, oc) {
       return { it, ...r, wb };
     });
     const tOps = now();
-    const { bodies, consumed } = resolveOps(evald, errors);
+    const { bodies, consumed } = resolveOps(evald, errors, hiddenIds);
     if (bodies.size) { const d = now() - tOps; if (d > 0.5) for (const id of bodies.keys()) times[id] = (times[id] || 0) + d / bodies.size; }
     for (const e of evald) { const b = bodies.get(e.it.id); if (b) { e.shape = b.shape; e.key = b.key; e.wb = b.wb; } }
     const holes = evald.filter((e) => e.it.role === 'hole' && e.shape);
@@ -1589,6 +1662,7 @@ export function createKernel(R, oc) {
     return res;
   }
   function evaluateShapes(scene, errors) {
+    const hiddenIds = new Set((scene.items || []).filter((it) => it.hidden).map((it) => it.id));
     const tops = (scene.items || []).filter((it) => !it.hidden);
     const evald = tops.map((it) => {
       const r = evalItem(it, errors);
@@ -1596,7 +1670,7 @@ export function createKernel(R, oc) {
       if (r.shape) wb = bboxTransform(bboxCached(r.key, r.shape), it.m);
       return { it, ...r, wb };
     });
-    const { bodies, consumed } = resolveOps(evald, errors || []);
+    const { bodies, consumed } = resolveOps(evald, errors || [], hiddenIds);
     for (const e of evald) { const b = bodies.get(e.it.id); if (b) { e.shape = b.shape; e.key = b.key; e.wb = b.wb; } }
     const holes = evald.filter((e) => e.it.role === 'hole' && e.shape);
     const out = [];

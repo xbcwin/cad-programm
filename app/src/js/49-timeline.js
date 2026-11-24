@@ -5,7 +5,7 @@ const Timeline = (() => {
   let el, track, info, bStart, bPrev, bNext, bEnd, drag = null, peekT = null, peekK = null;
   function iconFor(it) {
     if (it.kind === 'part') { const d = LIBMAP[(it.p || {}).lib]; return d && d.icon ? d.icon : 'bolt'; }
-    return ({ box: 'cube', cylinder: 'circle', tube: 'circle', sphere: 'circle', hemisphere: 'circle', torus: 'circle', cone: 'polygon', pyramid: 'polygon', prism: 'hex', wedge: 'chamfer', extrude: 'extrude', revolve: 'revolve', loft: 'loft', sweep: 'sweep', import: 'folder', group: 'group' })[it.kind] || 'cube';
+    return ({ box: 'cube', cylinder: 'circle', tube: 'circle', sphere: 'circle', hemisphere: 'circle', torus: 'circle', cone: 'polygon', pyramid: 'polygon', prism: 'hex', wedge: 'chamfer', extrude: 'extrude', revolve: 'revolve', loft: 'loft', sweep: 'sweep', import: 'folder', group: 'group', transform: 'moveStep' })[it.kind] || 'cube';
   }
   // Zeitleiste des Projekts – oder des Bauteils, das gerade bearbeitet wird
   function owner(doc = App.doc) { const c = App.ctx ? doc.items.find((x) => x.id === App.ctx) : null; return c || doc; }

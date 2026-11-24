@@ -184,5 +184,10 @@
     "was": "Erstellt einen hohlen Körper in Tropfenform: runde Nase, gerades Mittelteil und ein langes Heck, das spitz ausläuft.",
     "wozu": "Ergibt eine strömungsgünstige Verkleidung mit rundem Querschnitt.",
     "achtung": "Achte auf eine ausreichende Wandstärke, wenn das Teil 3D-gedruckt wird."
+  },
+  "transform": {
+    "was": "Verschiebt oder dreht einen Körper als eigenen Schritt im Verlauf – wahlweise auch als Kopie.",
+    "wozu": "Du kannst den Schritt später jederzeit ändern oder unterdrücken, statt die feste Lage des Körpers zu überschreiben.",
+    "achtung": "Änderst du das Original weiter vorne im Verlauf, wandert der versetzte Körper oder seine Kopie automatisch mit."
   }
 }
