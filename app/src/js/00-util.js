@@ -1866,6 +1866,16 @@ const HELP = {
   "tip": "Ein Teil genau mittig zwischen zwei parallelen Flächen eines anderen ausrichten",
   "hilfe": "Wähle zuerst zwei gegenüberliegende parallele Flächen (z. B. die beiden Seitenwände einer Nut) und danach das Teil oder zwei seiner eigenen Außenflächen. Tracery stellt das Teil so ein, dass links und rechts exakt derselbe Abstand bleibt – auch wenn du die Nut oder das Teil später verschiebst oder in der Größe änderst.",
   "tipp": "Im Modus „Ganzes Teil“ reichen 3 Klicks (Nutwand 1, Nutwand 2, Teil); mit „2 Flächen“ richtest du zusätzlich eine schiefe Ausrichtung über zwei Außenflächen exakt parallel zu den Nutwänden aus."
+ },
+ "mateBall": {
+  "tip": "Kugelgelenk: zwei Punkte fallen zusammen, Drehen in alle Richtungen frei",
+  "hilfe": "Legt einen gewählten Punkt (oder die Mitte einer Kugel) am zweiten Teil genau auf einen Punkt am ersten Teil. Beide Punkte bleiben zusammen, während sich das zweite Teil frei um X, Y und Z in alle Richtungen drehen lässt.",
+  "tipp": "Auch wenn du das Teil mit der Maus ziehst oder rechts bei der Lage verschiebst, bleibt der Gelenkpunkt fest am Platz."
+ },
+ "mateSlot": {
+  "tip": "Stift im Langloch: gleitet entlang der Mittellinie bis zum Endanschlag",
+  "hilfe": "Setzt einen Stift (Zylinder, Kreisrand oder Punkt) genau auf die Mittellinie eines Langlochs. Der Stift lässt sich entlang des Langlochs schieben und drehen und bleibt am Anfang und Ende des Langlochs automatisch am Anschlag stehen.",
+  "tipp": "Klick zuerst auf die Innenfläche oder den Rand des Langlochs und dann auf den Stift. Rechts kannst du Weg, Drehwinkel und die Anschläge jederzeit anpassen."
  }
 };
 

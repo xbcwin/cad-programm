@@ -755,14 +755,20 @@ const Interact = (() => {
     let joint = null;
     if (ids.length === 1) {
       const mj = Joints.drivingOf(ids[0].id);
-      if (mj && (mj.kind === 'cyl' || mj.kind === 'planar')) {
+      if (mj && (mj.kind === 'cyl' || mj.kind === 'planar' || mj.kind === 'slot' || mj.kind === 'ball')) {
         const frame = Joints.frameOf(mj), st0 = Joints.stateOf(mj);
         if (mj.kind === 'planar') {
           const p0 = Viewer.rayPlane(e.clientX, e.clientY, frame.o, frame.n) || hit.point.clone();
           joint = { id: mj.id, kind: 'planar', frame, st0, p0 };
+        } else if (mj.kind === 'ball') {
+          const F = new THREE.Matrix4().makeBasis(frame.u, frame.v, frame.n);
+          const Rloc0 = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler((st0.rx * Math.PI) / 180, (st0.ry * Math.PI) / 180, (st0.ang * Math.PI) / 180, 'XYZ'));
+          const R0 = F.clone().multiply(Rloc0).multiply(F.clone().transpose());
+          const q0 = new THREE.Quaternion().setFromRotationMatrix(R0);
+          joint = { id: mj.id, kind: 'ball', frame, st0, sx: e.clientX, sy: e.clientY, F, q0 };
         } else {
           const s0 = Joints.projectAxisRay(frame.o, frame.d, Viewer.setRay(e.clientX, e.clientY).ray);
-          joint = { id: mj.id, kind: 'cyl', frame, st0, s0 };
+          joint = { id: mj.id, kind: mj.kind, frame, st0, s0 };
         }
       }
     }
@@ -789,6 +795,28 @@ const Interact = (() => {
         if (e.altKey) { if (Math.abs(du) > Math.abs(dv)) dv = 0; else du = 0; }
         const st = Joints.applyDrag(j.id, { u: j.st0.u + du, v: j.st0.v + dv });
         if (st) txt = `U ${Units.fmtLen(st.u, 2)}  V ${Units.fmtLen(st.v, 2)}${uSuf}`;
+      } else if (j.kind === 'ball') {
+        const dx = e.clientX - j.sx, dy = e.clientY - j.sy;
+        const camM = Viewer.camera.matrixWorld;
+        const camRight = new THREE.Vector3().setFromMatrixColumn(camM, 0).normalize();
+        const camUp = new THREE.Vector3().setFromMatrixColumn(camM, 1).normalize();
+        const qDelta = new THREE.Quaternion().setFromAxisAngle(camUp, (dx * 0.5 * Math.PI) / 180).multiply(new THREE.Quaternion().setFromAxisAngle(camRight, (dy * 0.5 * Math.PI) / 180));
+        const qNew = qDelta.multiply(j.q0);
+        const Rw = new THREE.Matrix4().makeRotationFromQuaternion(qNew);
+        const Rloc = j.F.clone().transpose().multiply(Rw).multiply(j.F);
+        const eu = new THREE.Euler().setFromRotationMatrix(Rloc, 'XYZ');
+        const toDeg = (rad) => round((rad * 180) / Math.PI, 2);
+        const st = Joints.applyDrag(j.id, { rx: toDeg(eu.x), ry: toDeg(eu.y), ang: toDeg(eu.z) });
+        if (st) txt = `X ${fmtAngle(st.rx)}°  Y ${fmtAngle(st.ry)}°  Z ${fmtAngle(st.ang)}°`;
+      } else if (j.kind === 'slot') {
+        const s = Joints.projectAxisRay(j.frame.o, j.frame.d, Viewer.setRay(e.clientX, e.clientY).ray);
+        let ds = s - j.s0;
+        if (grid) ds = Math.round(ds / grid) * grid;
+        const st = Joints.applyDrag(j.id, { pos: j.st0.pos + ds });
+        if (st) {
+          const atStop = Math.abs(st.pos - j.frame.minPos) < 1e-4 || Math.abs(st.pos - j.frame.maxPos) < 1e-4;
+          txt = `Weg ${Units.fmtLen(st.pos, 2)}${uSuf}${atStop ? ' (Anschlag)' : ''}`;
+        }
       } else {
         const s = Joints.projectAxisRay(j.frame.o, j.frame.d, Viewer.setRay(e.clientX, e.clientY).ray);
         let ds = s - j.s0;
