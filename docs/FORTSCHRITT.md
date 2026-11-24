@@ -210,6 +210,7 @@ Fertig.
 - [x] Wo fehlt ein Maß? Widerspruch erklären (Auto [A-023], SK-07, SK-08): Knopf „Freie Stellen“ (`Umschalt F`) zeigt unbestimmte Elemente und Punkte pulsierend in Orange samt Zahl der fehlenden Angaben und lässt freie Stellen per Klick im Nullraum wackeln; bei Widersprüchen listet das Panel alle minimal beteiligten Regeln und Maße zum Hervorheben und Lösen per „Entfernen“
 
 ### Stufe 3 – Features und Ansichten
+- [x] Hochziehen bis Fläche (Auto [A-029], KP-01): beim Hochziehen (Vorschau und Eigenschaften-Panel, auch bei Formschritten mit Modus) zusätzlich „Bis zur nächsten Fläche“ und „Bis zu gewählter Fläche“ (Körperfläche oder Bezugsebene im Bild anklicken); wächst bei Lage- und Größenänderungen (inkl. `transform`-Schritten) sowie schrägen Flächen automatisch mit
 - [x] Hochziehen als dünne Wand (Auto [A-007], KP-03): offene Linien/Ketten (Linien, Bögen, Splines) und geschlossene Umrisse (Rohr-Profil) mit Wandstärke und Wand-Lage (mittig, nach innen, nach außen) hochziehen – Live-Vorschau beim Fertigstellen und nachträglich rechts änderbar (`SKO.thinRegions`)
 - [x] Rippe (Auto [A-031], KP-06): offene Skizzenlinie (oder Bogen/Spline) als Formschritt `rib` mit Dicke (mittig oder einseitig), Richtung (senkrecht als Steg oder in der Ebene als Stütze) und optionaler Schräge bis zu den angrenzenden Wänden verlängern und direkt mit dem Zielkörper vereinigen (`buildRibOn` im Kern)
 - [x] Schnitt in die Skizze: mit „Kante“ (Z) auf eine Fläche statt auf eine Kante klicken → der ganze Schnitt des Körpers mit der Skizzen-Ebene kommt als Kontur (Linien, Bögen, Kreise, Splines; ein Rückgängig-Schritt; Kern `sectionOf` über `BRepAlgoAPI_Section`) (Sitzung 71)
@@ -236,6 +237,7 @@ Fertig.
 - [x] Schnitt mit Kappe und mehreren Ebenen (Auto [A-013], PF-06): bis zu drei Schnittebenen (X, Y, Z einzeln an/aus mit eigenem Regler und Umdrehen), geschnittene Flächen als echte dreieckige Kappe mit Schraffur und Bauteil-Farbe im Overlay (samt Kontur-Umriss und Schnittfläche in mm², abschaltbar über „Kappe füllen“)
 - [x] Messen, Material pro Teil, Push/Pull, „ähnliche auswählen“, Versionen (Sitzung 10)
 - [x] Messungen bleiben stehen (Auto [A-012], PF-05): Knopf „Messung behalten“ in der Messen-Leiste speichert Abstände, Winkel, Flächen und Durchmesser dauerhaft im Projekt (`doc.measures`, Liste „Messungen“ im Verlauf); bei Modelländerungen rechnet Tracery die Werte selbstständig nach, zeigt „verloren“ bei fehlenden Bezügen und erlaubt Ein-/Ausblenden, Umbenennen und Löschen mit Rückgängig
+- [x] Drehen mit Winkel und bis Fläche (Auto [A-030], KP-05): Formschritt „Drehen“ (`revolve`) unterstützt jetzt eine Richtung, umgekehrt, symmetrisch (beidseitig gleich, z. B. 90° als 2×45°), beidseitig verschieden sowie „Bis zu gewählter Fläche“ (Körperfläche oder Bezugsebene inkl. Richtungsumkehr und automatischem Nachführen); Teil-Umdrehungen zeigen einen Ziehgriff samt Winkel-Schildchen im Bild
 - [ ] Versionen in der Cloud (mit Stufe 6 – Konten)
 
 ### Stufe 4 – Drohnen-Modul

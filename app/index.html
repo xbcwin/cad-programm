@@ -2155,6 +2155,16 @@ const HELP = {
   "tip": "Offene Skizzenlinie als Versteifungs-Rippe bis an die Wände ziehen",
   "hilfe": "Verlängert eine offene Linie, einen Bogen oder eine Kurve in deiner Skizze mit einstellbarer Dicke (mittig oder einseitig) bis zu den angrenzenden Wänden des Zielkörpers und verschmilzt sie direkt damit. Optional kannst du eine Schräge und feste Tiefe angeben oder von senkrecht (Steg in einer Schale) auf in der Ebene (Stützrippe) umschalten.",
   "tipp": "Die Linie muss die Wand in der Skizze nicht exakt berühren – Tracery verlängert sie automatisch sauber bis an die nächste Wand, ohne nach außen überzustehen."
+ },
+ "extrudeToFace": {
+  "tip": "Bis zur nächsten Fläche oder bis zu einer angeklickten Fläche hochziehen",
+  "hilfe": "Unter „Bis“ wählst du beim Hochziehen statt einer festen Höhe „Bis zur nächsten Fläche“ (stößt an die erste Fläche in Ziehrichtung) oder „Bis zu gewählter Fläche“ (du klickst eine Körperfläche oder Bezugsebene im Bild an). Wandert die Zielfläche später oder ändert sich die Größe des Zielkörpers, wächst das Teil von selbst mit.",
+  "tipp": "Ideal für Stege, Bolzen und Taschen zwischen zwei Platten – du brauchst keinen Abstand auszurechnen, und beim Verschieben der Platte passt die Höhe weiter."
+ },
+ "revolveOptions": {
+  "tip": "Drehen mit Winkel, symmetrisch, beidseitig oder bis zu einer Fläche",
+  "hilfe": "Bestimmt, wie weit und in welche Richtung sich deine Skizze um die Achse dreht: in eine Richtung, umgekehrt, symmetrisch zu beiden Seiten (z. B. 90° als 2×45°), mit zwei eigenen Winkeln oder bis zu einer gewählten Körperfläche bzw. Bezugsebene. Bei Teil-Umdrehungen erscheint ein Ziehgriff für den Winkel.",
+  "tipp": "Wenn sich das Zielteil später verschiebt, wandert der Drehkörper bei „Bis zu gewählter Fläche“ automatisch mit."
  }
 };
 
@@ -2808,6 +2818,7 @@ const Model = (() => {
   const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _v = new THREE.Vector3(), _s = new THREE.Vector3(1, 1, 1);
   const D2R = Math.PI / 180;
   let curV = {};
+  let curDoc = null;
   function useVars(v) { curV = v || {}; }
   const tv = (x) => (typeof x === 'number' ? x : x == null || x === '' ? 0 : num(x, curV, 0));
   function tnum(it, k) { return tv((it.t || {})[k]); }
@@ -2938,6 +2949,7 @@ const Model = (() => {
     walk(doc.items, (it) => {
       const me = top(it.id);
       if (it.op && it.op.target) out.push({ from: me, to: top(it.op.target), what: { join: 'vereinigt mit', cut: 'abgezogen von', common: 'Schnittmenge mit' }[it.op.type] || 'verrechnet mit' });
+      if (it.p && it.p.extent === 'toFace' && it.p.toFace && it.p.toFace.id) out.push({ from: me, to: top(it.p.toFace.id), what: 'hochgezogen bis Fläche von' });
       if (it.kind === 'transform' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: it.p.copy ? 'versetzte Kopie von' : 'versetzt' });
       if (it.kind === 'rib' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Rippe an' });
       if (it.link) out.push({ from: me, to: top(it.link), what: 'verknüpfte Kopie von' });
@@ -2945,6 +2957,9 @@ const Model = (() => {
       for (const e of (sk && sk.ents) || []) if (e.link && e.link.id) out.push({ from: me, to: top(e.link.id), what: 'Skizze übernimmt Kante von' });
       const b = it.p && it.p.path3d && it.p.path3d.bind;
       for (const x of b || []) if (x && x.id) out.push({ from: me, to: top(x.id), what: 'Rohr hängt an' });
+      if (it.kind === 'revolve' && it.p && it.p.dir === 'toFace' && it.p.toFace && it.p.toFace.targetId) {
+        out.push({ from: me, to: top(it.p.toFace.targetId), what: 'dreht bis Fläche von' });
+      }
     });
     for (const d of doc.datums || []) {
       const b = d.base || {};
@@ -3043,11 +3058,31 @@ const Model = (() => {
     if (it.kind === 'extrude') {
       out.dist = num(p.dist, V, 10); out.dir = p.dir || 'normal'; out.extra = num(p.extra, V, 0);
       if (out.dir === 'two') out.dist2 = num(p.dist2, V, out.dist);
-      // „Durch alles“: so lang, dass es sicher durch alle Körper reicht (aus der Größe des Modells)
-      if (p.thru) { out.dist = sceneSpan; if (out.dir === 'two' || out.dir === 'both') { out.dir = 'two'; out.dist2 = sceneSpan; } }
+      if (p.extent === 'toNext' || p.extent === 'toFace') {
+        out.extent = p.extent;
+        if (p.extent === 'toFace' && p.toFace) {
+          if (p.toFace.datumId) {
+            const dm = typeof Datums !== 'undefined' ? Datums.find(p.toFace.datumId, curDoc || App.doc) : null;
+            out.toFace = dm && dm.plane ? { datumId: p.toFace.datumId, plane: { o: dm.plane.o, n: dm.plane.n } } : { datumId: p.toFace.datumId, missing: true };
+          } else {
+            out.toFace = { id: p.toFace.id, idx: p.toFace.idx, t: p.toFace.t, c: p.toFace.c, n: p.toFace.n, rel: p.toFace.rel, wc: p.toFace.wc, wn: p.toFace.wn };
+          }
+        }
+      } else if (p.thru) {
+        // „Durch alles“: so lang, dass es sicher durch alle Körper reicht (aus der Größe des Modells)
+        out.dist = sceneSpan; if (out.dir === 'two' || out.dir === 'both') { out.dir = 'two'; out.dist2 = sceneSpan; }
+      }
     }
     else {
+      out.dir = p.dir || 'normal';
       out.angle = num(p.angle, V, 360);
+      if (out.dir === 'two') out.angle2 = num(p.angle2, V, out.angle);
+      if (out.dir === 'toFace') {
+        if (p.toFace && Array.isArray(p.toFace.o) && Array.isArray(p.toFace.fn)) {
+          out.toFace = { o: p.toFace.o.map(Number), fn: p.toFace.fn.map(Number) };
+        }
+        out.toFaceFlip = !!p.toFaceFlip;
+      }
       if (p.axis3d && Array.isArray(p.axis3d.o) && Array.isArray(p.axis3d.d)) out.axis3d = { o: p.axis3d.o.map(Number), d: p.axis3d.d.map(Number) };
       else out.axis = p.axis || { a: [0, 0], b: [0, 1] };
     }
@@ -3352,10 +3387,10 @@ const Model = (() => {
   function kernelScene(doc, extra = [], peek = null) {
     // Lagen mit Formeln (z. B. x = Achsabstand/2) mit den Maßen DIESES Projektstands auflösen – wichtig für Versionen und Varianten
     if (doc && doc.fonts && doc.fonts.length && typeof SK !== 'undefined' && SK.ensureFonts) SK.ensureFonts(doc.fonts);
-    const { v } = vars(doc); const prev = curV; curV = v;
+    const { v } = vars(doc); const prev = curV, prevDoc = curDoc; curV = v; curDoc = doc;
     // peek = Vorschau der Zeitleiste: nur die ersten k Schritte rechnen, ohne den Marker zu verschieben
     let act = activeItems(doc); if (peek != null) { const keep = new Set(doc.items.slice(0, Math.max(0, peek))); act = act.filter((it) => keep.has(it)); }
-    try { return { items: [...act, ...extra].map((it) => kernelItem(it, v)) }; } finally { curV = prev; }
+    try { return { items: [...act, ...extra].map((it) => kernelItem(it, v)) }; } finally { curV = prev; curDoc = prevDoc; }
   }
 
   // ---------- Größen ----------
@@ -3398,8 +3433,23 @@ const Model = (() => {
       case 'cone': return `Ø ${f(p.d1)} × ${f(p.h)}${u}`;
       case 'sphere': case 'hemisphere': return `Ø ${f(p.d)}${u}`;
       case 'torus': return `Ø ${f(p.d)}${u}`;
-      case 'extrude': return p.thin ? `${f(p.dist)}${u} hoch · Wand ${f(p.wall || 2)}${u}` : `${f(p.dist)}${u} hoch`;
-      case 'revolve': return `${fmt(p.angle, 1)}°`;
+      case 'extrude': {
+        if (p.extent === 'toNext' || p.extent === 'toFace') {
+          const rd = typeof App !== 'undefined' && App.resolvedDist ? App.resolvedDist(it.id) : null;
+          const base = p.extent === 'toNext' ? 'bis nächste Fläche' : 'bis Fläche';
+          const lenTxt = rd != null ? ` (${f(rd)}${u})` : '';
+          return p.thin ? `${base}${lenTxt} · Wand ${f(p.wall || 2)}${u}` : `${base}${lenTxt}`;
+        }
+        return p.thin ? `${f(p.dist)}${u} hoch · Wand ${f(p.wall || 2)}${u}` : `${f(p.dist)}${u} hoch`;
+      }
+      case 'revolve': {
+        const dir = (it.p && it.p.dir) || 'normal';
+        if (dir === 'toFace') return it.p && it.p.toFace && it.p.toFace.name ? `bis „${it.p.toFace.name}“` : 'bis Fläche';
+        if (dir === 'both') return `${fmt(p.angle, 1)}° (2×${fmt((p.angle || 0) / 2, 1)}°)`;
+        if (dir === 'two') return `${fmt(p.angle, 1)}° / ${fmt(p.angle2 ?? p.angle, 1)}°`;
+        if (dir === 'reverse') return `−${fmt(p.angle, 1)}°`;
+        return `${fmt(p.angle, 1)}°`;
+      }
       case 'transform': {
         const parts = [];
         for (const k of ['dx', 'dy', 'dz']) if (Math.abs(p[k] || 0) > 1e-6) parts.push(`${k[1].toUpperCase()} ${p[k] > 0 ? '+' : ''}${fmt(p[k], 1)}`);
@@ -3444,7 +3494,85 @@ const Model = (() => {
     walk(doc.items, (it) => { it.t = Object.assign(T0(), it.t || {}); it.p = it.p || {}; it.finishes = it.finishes || []; if (!it.role) it.role = 'solid'; if (!it.color) it.color = nextColor(); });
     return doc;
   }
-  return { dependencies, syncLinks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, railStart, railSections, bez3, patternMatrices, instanceMatrices, loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  // Drehkörper-Bezugssystem (Achse, äußerster Radius und Bogen-Mitte in lokalen Koordinaten)
+  function revolveFrame(p, V) {
+    const sk = p && p.sketch;
+    if (!sk) return null;
+    const pl = sk.plane || { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] };
+    const norm3 = (a) => { const l = v3.len(a) || 1; return v3.mul(a, 1 / l); };
+    const o = pl.o || [0, 0, 0], x = norm3(pl.x || [1, 0, 0]), n = norm3(pl.n || [0, 0, 1]), y = v3.cross(n, x);
+    const P = (uv) => [o[0] + x[0] * uv[0] + y[0] * uv[1], o[1] + x[1] * uv[0] + y[1] * uv[1], o[2] + x[2] * uv[0] + y[2] * uv[1]];
+    let c, d;
+    if (p.axis3d && Array.isArray(p.axis3d.o) && Array.isArray(p.axis3d.d)) {
+      c = p.axis3d.o.map(Number); d = norm3(p.axis3d.d.map(Number));
+    } else {
+      const ax = p.axis || { a: [0, 0], b: [0, 1] };
+      c = P(ax.a); d = norm3(v3.sub(P(ax.b), c));
+    }
+    const ents = Solver.cached(sk, V || {}).ents;
+    const regs = SK.regions(ents);
+    let chosen = regs;
+    if (Array.isArray(p.sel) && p.sel.length) { const f = regs.filter((r) => p.sel.includes(r.key)); if (f.length) chosen = f; }
+    const pts = [];
+    for (const r of chosen) for (const q of (r.outer && r.outer.poly) || []) pts.push(P(q));
+    if (!pts.length) { const b = SK.bounds(ents); if (b) for (const q of [[b[0], b[1]], [b[2], b[1]], [b[2], b[3]], [b[0], b[3]]]) pts.push(P(q)); }
+    let rMax = 0, bestU = null, labelPt = null, hSum = 0, hCnt = 0;
+    for (const q of pts) {
+      const v = v3.sub(q, c), h = v3.dot(v, d), u = v3.sub(v, v3.mul(d, h)), rl = v3.len(u);
+      if (rl > 1e-5) { hSum += h; hCnt++; }
+      if (rl > rMax) { rMax = rl; bestU = u; labelPt = q; }
+    }
+    if (rMax < 1e-5 || !bestU) {
+      const ref = Math.abs(d[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
+      const u0 = norm3(v3.cross(ref, d));
+      return { c, d, u0, w0: v3.cross(d, u0), arcC: c.slice(), rMax: 10, labelPt: v3.add(c, v3.mul(u0, 10)), pts: [] };
+    }
+    const u0 = norm3(bestU), w0 = v3.cross(d, u0), hAvg = hCnt ? hSum / hCnt : 0;
+    return { c, d, u0, w0, arcC: v3.add(c, v3.mul(d, hAvg)), rMax, labelPt, pts };
+  }
+  function revolveHitAngle(frame, fo, fn, flip) {
+    if (!frame || !fo || !fn) return null;
+    const norm3 = (a) => { const l = v3.len(a) || 1; return v3.mul(a, 1 / l); };
+    const fnn = norm3(fn), dn = flip ? v3.mul(frame.d, -1) : frame.d;
+    const pts = frame.pts && frame.pts.length ? frame.pts : [frame.labelPt];
+    const sVals = pts.map((P) => v3.dot(v3.sub(P, fo), fnn));
+    const sMin = Math.min(...sVals), sMax = Math.max(...sVals);
+    if (sMax > 1e-3 && sMin < -1e-3) return null;
+    if (Math.max(Math.abs(sMax), Math.abs(sMin)) < 1e-4) return null;
+    const nKeep = sMax + sMin >= 0 ? fnn : v3.mul(fnn, -1);
+    const normPos = (a) => { const T = Math.PI * 2; let x = ((a % T) + T) % T; if (x < 1e-3) x = T; return x; };
+    let maxFirst = 0, any = false;
+    for (const P of pts) {
+      const v = v3.sub(P, frame.c), h = v3.dot(v, dn), u = v3.sub(v, v3.mul(dn, h));
+      if (v3.len(u) < 1e-5) continue;
+      const w = v3.cross(dn, u);
+      const A = v3.dot(u, nKeep), B = v3.dot(w, nKeep), C = v3.dot(v3.sub(v3.add(frame.c, v3.mul(dn, h)), fo), nKeep), Mab = Math.hypot(A, B);
+      if (Mab < 1e-7 || Math.abs(C) > Mab + 1e-4) return null;
+      if (Math.abs(A + C) < 1e-4 && B < -1e-6) return null;
+      const phi = Math.atan2(B, A), alpha = Math.acos(clamp(-C / Mab, -1, 1));
+      const tFirst = Math.min(normPos(phi + alpha), normPos(phi - alpha));
+      if (tFirst > maxFirst) maxFirst = tFirst;
+      any = true;
+    }
+    return any ? (maxFirst * 180) / Math.PI : null;
+  }
+  function revolveAutoFlip(frame, fo, fn, pickPtLocal) {
+    if (!frame) return false;
+    if (pickPtLocal) {
+      const vp = v3.sub(pickPtLocal, frame.c), hp = v3.dot(vp, frame.d), up = v3.sub(vp, v3.mul(frame.d, hp));
+      if (v3.len(up) > 1e-4) {
+        const phi = Math.atan2(v3.dot(up, frame.w0), v3.dot(up, frame.u0));
+        if (Math.abs(phi) > 1e-4) {
+          const wantFlip = phi < 0;
+          if (revolveHitAngle(frame, fo, fn, wantFlip) != null) return wantFlip;
+        }
+      }
+    }
+    const aPos = revolveHitAngle(frame, fo, fn, false), aNeg = revolveHitAngle(frame, fo, fn, true);
+    if (aPos != null && aNeg != null) return aNeg < aPos;
+    return aPos == null && aNeg != null;
+  }
+  return { revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, railStart, railSections, bez3, patternMatrices, instanceMatrices, loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 
 // ---- 14-ttf.js ----
@@ -6272,7 +6400,7 @@ const Kernel = (() => {
 const App = (() => {
   const S = {
     doc: Model.newDoc(), sel: [], face: null, edges: [], mode: 'model', tool: null,
-    results: new Map(), errors: [], undo: [], redo: [], extra: [], hideIds: new Set(), revision: 0, lastSavedRev: -1, fileSavedRev: -1,
+    results: new Map(), resolved: new Map(), errors: [], undo: [], redo: [], extra: [], hideIds: new Set(), revision: 0, lastSavedRev: -1, fileSavedRev: -1,
     ctx: null, iso: null,   // gerade bearbeitetes Bauteil / isoliertes Teil (nur Ansicht, nicht gespeichert)
   };
   const ev = makeEmitter();
@@ -6291,7 +6419,7 @@ const App = (() => {
     Model.useVars(Model.vars(S.doc).v);
     S.sel = []; S.face = null; S.edges = []; S.undo = []; S.redo = []; S.extra = []; S.ctx = null; S.iso = null;
     for (const id of [...S.results.keys()]) Viewer.removeNode(id);
-    S.results.clear(); S.errors = []; S.revision++;
+    S.results.clear(); S.resolved.clear(); S.errors = []; S.revision++;
     Viewer.clearGhosts(); Views.reset(); Versions.compareOff();
     ev.emit('doc'); ev.emit('selection'); ev.emit('history');
     autosave();
@@ -6469,6 +6597,7 @@ const App = (() => {
   function apply(res) {
     const seen = new Set();
     S.merged = new Map();
+    S.resolved = new Map(Object.entries(res.resolved || {}));
     for (const [id, ms] of Object.entries(res.times || {})) times.set(id, { ms, at: Date.now() });
     for (const n of res.nodes) {
       seen.add(n.id);
@@ -6621,6 +6750,8 @@ const App = (() => {
     timeOf(id) { return times.get(id) || null; },
     get times() { return times; },
     mergedInto(id) { return (S.merged && S.merged.get(id)) || null; },
+    resolvedOf(id) { return (S.resolved && S.resolved.get(id)) || null; },
+    resolvedDist(id) { const r = S.resolved && S.resolved.get(id); return r && isFinite(r.dist) ? r.dist : null; },
     get hideIds() { return S.hideIds; }, set hideIds(x) { S.hideIds = x || new Set(); applyView(); },
     get ctx() { return S.ctx; }, get iso() { return S.iso; }, setCtx, setIso, applyView,
     get tool() { return S.tool; }, set tool(t) { S.tool = t; ev.emit('tool'); },
@@ -7993,7 +8124,7 @@ const Handles = (() => {
       defs.push({ ax: 'x', dir: [1, 0, 0], p: [x1, cy, z0], param: map.x }, { ax: 'x', dir: [-1, 0, 0], p: [x0, cy, z0], param: map.x });
       defs.push({ ax: 'y', dir: [0, 1, 0], p: [cx, y1, z0], param: map.y }, { ax: 'y', dir: [0, -1, 0], p: [cx, y0, z0], param: map.y });
       defs.push({ ax: 'z', dir: [0, 0, 1], p: [cx, cy, z1], param: map.z });
-    } else if (it.kind === 'extrude' && it.p && it.p.sketch) {
+    } else if (it.kind === 'extrude' && it.p && it.p.sketch && !(it.p.extent === 'toNext' || it.p.extent === 'toFace' || it.p.thru)) {
       const pl = it.p.sketch.plane; const n = new THREE.Vector3(...pl.n).normalize();
       const dirSign = it.p.dir === 'reverse' ? -1 : 1;
       const ents = Solver.cached(it.p.sketch, Model.vars(App.doc).v).ents;
@@ -8014,6 +8145,48 @@ const Handles = (() => {
       const dist = Model.num(it.p.dist, Model.vars(App.doc).v, 10);
       const top = o.clone().addScaledVector(n, dirSign * (it.p.dir === 'both' ? dist / 2 : dist));
       defs.push({ ax: 'n', dir: n.clone().multiplyScalar(dirSign).toArray(), p: top.toArray(), param: 'dist', extrude: true });
+    } else if (it.kind === 'revolve' && it.p && it.p.sketch) {
+      const dir = it.p.dir || 'normal', V = Model.vars(App.doc).v;
+      const a1 = Model.num(it.p.angle, V, 360), a2 = dir === 'two' ? Model.num(it.p.angle2, V, a1) : 0;
+      const tot = dir === 'two' ? a1 + a2 : a1;
+      if (dir !== 'toFace' && tot < 359.99) {
+        const fr = Model.revolveFrame(it.p, V);
+        if (fr) {
+          const wC = new THREE.Vector3(...fr.arcC).applyMatrix4(W);
+          const wAx = new THREE.Vector3(...fr.d).transformDirection(W).normalize();
+          const wU = new THREE.Vector3(...fr.u0).transformDirection(W).normalize();
+          const wW = new THREE.Vector3(...fr.w0).transformDirection(W).normalize();
+          const arcR = Math.max(6, fr.rMax * 1.12);
+          const [deg0, deg1] = dir === 'reverse' ? [-a1, 0] : dir === 'both' ? [-a1 / 2, a1 / 2] : dir === 'two' ? [-a2, a1] : [0, a1];
+          const arcPts = [];
+          for (let i = 0; i <= 48; i++) {
+            const th = ((deg0 + ((deg1 - deg0) * i) / 48) * Math.PI) / 180;
+            arcPts.push(wC.clone().addScaledVector(wU, Math.cos(th) * arcR).addScaledVector(wW, Math.sin(th) * arcR));
+          }
+          const arcLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(arcPts), new THREE.LineDashedMaterial({ color: new THREE.Color('#f08c00'), dashSize: 2, gapSize: 1.5, depthTest: false, transparent: true, opacity: 0.9 }));
+          arcLine.computeLineDistances(); arcLine.renderOrder = 29;
+          group.add(arcLine); items.push(arcLine);
+          const revDefs = dir === 'reverse'
+            ? [{ angDeg: -a1, param: 'angle', sign: -1, factor: 1, val: a1 }]
+            : dir === 'both'
+              ? [{ angDeg: a1 / 2, param: 'angle', sign: 1, factor: 2, val: a1 }]
+              : dir === 'two'
+                ? [{ angDeg: a1, param: 'angle', sign: 1, factor: 1, val: a1 }, { angDeg: -a2, param: 'angle2', sign: -1, factor: 1, val: a2 }]
+                : [{ angDeg: a1, param: 'angle', sign: 1, factor: 1, val: a1 }];
+          for (const d of revDefs) {
+            const th = (d.angDeg * Math.PI) / 180;
+            const radOut = wU.clone().multiplyScalar(Math.cos(th)).addScaledVector(wW, Math.sin(th)).normalize();
+            const tan = wU.clone().multiplyScalar(-Math.sin(th)).addScaledVector(wW, Math.cos(th)).multiplyScalar(d.sign).normalize();
+            const hm = handleMesh('lift');
+            hm.material.color.set('#f08c00');
+            hm.position.copy(wC).addScaledVector(radOut, arcR);
+            hm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tan);
+            hm.userData = { kind: 'revAngle', param: d.param, sign: d.sign, factor: d.factor, center: wC.clone(), axis: wAx.clone(), u0: wU.clone(), w0: wW.clone(), rad: arcR, wdir: radOut.clone() };
+            group.add(hm); items.push(hm);
+            addAngleLabel(hm, d.val, d.factor);
+          }
+        }
+      }
     }
     for (const d of defs) {
       const m = handleMesh('size');
@@ -8099,6 +8272,38 @@ const Handles = (() => {
     overlayEl.append(el);
     labels.push({ el, handle });
   }
+  function addAngleLabel(handle, value, factor = 1) {
+    const txt = factor === 2 ? `${fmt(value, 1)}° (2×${fmt(value / 2, 1)}°)` : `${fmt(value, 1)}°`;
+    const el = h('div', { class: 'dimlabel', title: 'Klicken und genauen Winkel eintippen' }, txt);
+    el.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
+    el.addEventListener('click', (e) => { e.stopPropagation(); editAngleLabel(el, handle); });
+    overlayEl.append(el);
+    labels.push({ el, handle });
+  }
+  function editAngleLabel(el, handle) {
+    if (el.classList.contains('editing')) return;
+    const c = current(); if (!c) return;
+    const k = handle.userData.param, raw = c.it.p[k];
+    el.classList.add('editing'); el.textContent = '';
+    const inp = h('input', { type: 'text', value: typeof raw === 'number' ? fmt(raw, 2) : String(raw ?? ''), 'aria-label': 'Drehwinkel' });
+    el.append(inp); inp.focus(); inp.select();
+    let finished = false;
+    const done = (ok) => {
+      if (finished) return; finished = true;
+      if (ok) {
+        const t = inp.value.trim(), V = Model.vars(App.doc).v, n = parseNum(t);
+        const v = isNaN(n) ? Model.num(t, V, NaN) : n;
+        if (!isNaN(v) && v > 0 && v <= 360) {
+          const maxA = c.it.p.dir === 'two' ? Math.max(0.1, 360 - Model.num(c.it.p[k === 'angle' ? 'angle2' : 'angle'], V, 0)) : 360;
+          const val = isNaN(n) ? t : round(clamp(v, 0.1, maxA), 3);
+          App.change('Drehwinkel geändert', (doc) => { const f = Model.find(doc, c.it.id); if (f) f.item.p[k] = val; });
+        } else UI.toast('Bitte einen Winkel zwischen 0,1° und 360° eingeben.', { kind: 'bad' });
+      }
+      rebuild();
+    };
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); done(true); } if (e.key === 'Escape') { e.preventDefault(); done(false); } e.stopPropagation(); });
+    inp.addEventListener('blur', () => done(true), { once: true });
+  }
   function addSegLabel(handle, len, rule, id) {
     const i = handle.userData.seg;
     const lenTxt = Units.key() === 'mm' ? fmt(len, 1) : Units.fmtLenU(len, 1);
@@ -8154,7 +8359,7 @@ const Handles = (() => {
     for (const m of items) {
       if (!m.isMesh) continue;
       const ps = Viewer.pixelSizeAt(m.position);
-      const s = m.userData.kind === 'size' ? 11 * ps : m.userData.kind === 'lift' ? 13 * ps : 12 * ps;
+      const s = m.userData.kind === 'size' ? 11 * ps : (m.userData.kind === 'lift' || m.userData.kind === 'revAngle') ? 13 * ps : 12 * ps;
       m.scale.setScalar(s);
       if (m.userData.kind === 'lift') m.position.copy(m.userData.base).add(new THREE.Vector3(0, 0, 26 * ps));
       if (m.userData.kind === 'fillet') { m.scale.setScalar(13 * ps); m.position.copy(m.userData.base).addScaledVector(m.userData.wdir, -16 * ps); }
@@ -8180,7 +8385,11 @@ const Handles = (() => {
     return hits.length ? hits[0].object : null;
   }
   function hover(obj) {
-    for (const m of items) if (m.isMesh && m.userData.kind === 'size') m.material.color.set(m === obj ? Viewer.theme.accent : 0xffffff);
+    for (const m of items) {
+      if (!m.isMesh) continue;
+      if (m.userData.kind === 'size') m.material.color.set(m === obj ? Viewer.theme.accent : 0xffffff);
+      else if (m.userData.kind === 'revAngle') m.material.color.set(m === obj ? '#ffb020' : '#f08c00');
+    }
     Viewer.requestRender();
   }
   // Maß setzen und Position so anpassen, dass die Gegenseite stehen bleibt
@@ -8248,6 +8457,24 @@ const Handles = (() => {
       state.L0 = Model.localMatrix(c.it).clone();
       state.PW = Model.parentWorld(App.doc, c.it.id);
       state.W0 = Model.worldMatrix(App.doc, c.it.id);
+    } else if (ud.kind === 'revAngle') {
+      Object.assign(state, { center: ud.center.clone(), axis: ud.axis.clone(), u0: ud.u0.clone(), w0: ud.w0.clone(), rad: ud.rad, param: ud.param, sign: ud.sign, factor: ud.factor });
+      state.v0 = Model.num(c.it.p[ud.param], V, 90);
+      const rayDir = Viewer.setRay(ev.clientX, ev.clientY).ray.direction;
+      const p = Math.abs(rayDir.dot(state.axis)) > 0.05 ? Viewer.rayPlane(ev.clientX, ev.clientY, state.center, state.axis) : null;
+      if (p) {
+        const rel = p.clone().sub(state.center);
+        state.a0 = Math.atan2(rel.dot(state.w0), rel.dot(state.u0));
+        state.lastA = state.a0; state.cum = 0; state.useScreen = false;
+      } else {
+        state.useScreen = true;
+        const th0 = (state.v0 / ud.factor) * ud.sign * Math.PI / 180;
+        const tan = ud.u0.clone().multiplyScalar(-Math.sin(th0)).addScaledVector(ud.w0, Math.cos(th0)).multiplyScalar(ud.sign).normalize();
+        const s0 = Viewer.toScreen(handle.position), s1 = Viewer.toScreen(handle.position.clone().add(tan));
+        let tx = s1.x - s0.x, ty = s1.y - s0.y; const tl = Math.hypot(tx, ty);
+        if (tl > 1e-4) { tx /= tl; ty /= tl; } else { tx = 1; ty = 0; }
+        state.screenTan = [tx, ty];
+      }
     }
     return true;
   }
@@ -8300,6 +8527,37 @@ const Handles = (() => {
       Model.setFromMatrix(c.it, Ln);
       showLive(handle, deg, 'Drehung', '°');
       App.emit('doc'); liveRebuild();
+    } else if (state.kind === 'revAngle') {
+      let degDelta = 0;
+      if (!state.useScreen) {
+        const p = Viewer.rayPlane(ev.clientX, ev.clientY, state.center, state.axis);
+        if (p) {
+          const rel = p.clone().sub(state.center);
+          const a = Math.atan2(rel.dot(state.w0), rel.dot(state.u0));
+          let dA = a - state.lastA;
+          while (dA > Math.PI) dA -= Math.PI * 2;
+          while (dA < -Math.PI) dA += Math.PI * 2;
+          state.lastA = a; state.cum += dA;
+          degDelta = (state.cum * 180 / Math.PI) * state.sign * state.factor;
+        }
+      } else {
+        degDelta = ((ev.clientX - state.sx) * state.screenTan[0] + (ev.clientY - state.sy) * state.screenTan[1]) * 0.8;
+      }
+      const step = ev.shiftKey ? 1 : 5;
+      const other = c.it.p.dir === 'two' ? Model.num(c.it.p[state.param === 'angle' ? 'angle2' : 'angle'], Model.vars(App.doc).v, 0) : 0;
+      const maxA = Math.max(1, 360 - other);
+      const val = clamp(Math.round((state.v0 + degDelta) / step) * step, 1, maxA);
+      c.it.p[state.param] = round(val, 2);
+      const th = ((val / state.factor) * state.sign * Math.PI) / 180;
+      const radOut = state.u0.clone().multiplyScalar(Math.cos(th)).addScaledVector(state.w0, Math.sin(th)).normalize();
+      const tan = state.u0.clone().multiplyScalar(-Math.sin(th)).addScaledVector(state.w0, Math.cos(th)).multiplyScalar(state.sign).normalize();
+      handle.position.copy(state.center).addScaledVector(radOut, state.rad);
+      handle.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tan);
+      handle.userData.wdir = radOut;
+      placeLabels();
+      showLive(handle, val, state.factor === 2 ? 'Gesamtwinkel' : 'Winkel', '°');
+      App.emit('doc'); liveRebuild();
+      return;
     }
     // Knotenmatrix direkt nachführen (flüssig)
     const top = App.doc.items.find((x) => x.id === c.it.id);
@@ -8328,7 +8586,7 @@ const Handles = (() => {
       if (fin) { fin.r = 0.5; if (st.r !== 0.5) Actions.setFinish(st.tid, st.finId, { r: st.r }); else App.rebuild(); }
       App.select([st.tid]); rebuild(); return;
     }
-    const label = st.kind === 'size' ? 'Größe geändert' : st.kind === 'lift' ? 'Angehoben' : 'Gedreht';
+    const label = st.kind === 'size' ? 'Größe geändert' : st.kind === 'lift' ? 'Angehoben' : st.kind === 'revAngle' ? 'Drehwinkel geändert' : 'Gedreht';
     if (App.snapshot() !== st.before) { App.pushUndo(label, st.before); App.touched(); }
     rebuild();
   }
@@ -8349,6 +8607,12 @@ const Handles = (() => {
         const T1 = new THREE.Matrix4().makeTranslation(st.center.x, st.center.y, st.center.z), T2 = new THREE.Matrix4().makeTranslation(-st.center.x, -st.center.y, -st.center.z);
         Model.setFromMatrix(c.it, st.PW.clone().invert().multiply(T1.multiply(R).multiply(T2).multiply(st.W0))); fin();
       } };
+    }
+    if (st.kind === 'revAngle') {
+      const V = Model.vars(App.doc).v, cur = Model.num(c.it.p[ud.param], V, st.v0);
+      const other = c.it.p.dir === 'two' ? Model.num(c.it.p[ud.param === 'angle' ? 'angle2' : 'angle'], V, 0) : 0;
+      const maxA = Math.max(0.1, 360 - other);
+      return { fields: [{ label: ud.factor === 2 ? 'Gesamtwinkel' : 'Winkel', value: cur, unit: '°' }], apply: ([v]) => { c.it.p[ud.param] = round(clamp(v, 0.1, maxA), 3); fin(); } };
     }
     return null;
   }
@@ -8435,7 +8699,7 @@ const Interact = (() => {
     hoverTimer = requestAnimationFrame(() => {
       const hnd = Handles.hitHandle(e.clientX, e.clientY);
       Handles.hover(hnd);
-      if (hnd) { Viewer.canvas.style.cursor = hnd.userData.kind === 'rot' ? 'grab' : 'pointer'; Viewer.clearHover(); return; }
+      if (hnd) { Viewer.canvas.style.cursor = hnd.userData.kind === 'rot' || hnd.userData.kind === 'revAngle' ? 'grab' : 'pointer'; Viewer.clearHover(); return; }
       const hit = Select.adjust(Viewer.pick(e.clientX, e.clientY, Select.pickOpts()));
       if (hit && hit.edgeIdx != null) { Viewer.highlightEdge(hit.id, hit.edgeIdx); Viewer.highlightFace('hover', null, null); }
       else if (hit) { Viewer.highlightEdge(null, null); Viewer.highlightFace('hover', hit.id, hit.faceIdx); }
@@ -9577,7 +9841,10 @@ const Features = (() => {
   function stopPick() {
     if (!picking) return;
     const cv = Viewer.canvas;
-    cv.removeEventListener('pointerdown', picking.down, true); window.removeEventListener('keydown', picking.key, true);
+    cv.removeEventListener('pointerdown', picking.down, true);
+    if (picking.move) cv.removeEventListener('pointermove', picking.move);
+    window.removeEventListener('keydown', picking.key, true);
+    Viewer.highlightFace('hover', null, null);
     cv.style.cursor = ''; UI.hint(null); picking = null;
   }
   // ---------- Rohr im Raum: Punkte auf Körper oder in den Raum klicken ----------
@@ -9706,6 +9973,148 @@ const Features = (() => {
     route.inv = W.clone().invert();
     return true;
   }
+  function pickDatumPlaneAt(cx, cy) {
+    const g = Viewer.groups && Viewer.groups.datums;
+    if (!g || !g.children.length || typeof Datums === 'undefined') return null;
+    const rc = Viewer.setRay(cx, cy);
+    const hits = rc.intersectObjects(g.children, true);
+    for (const h of hits) {
+      let o = h.object;
+      while (o && !o.userData.datum && o !== g) o = o.parent;
+      if (o && o.userData.datum) {
+        const d = Datums.find(o.userData.datum);
+        if (d && d.plane) return { datum: d, point: h.point ? h.point.clone() : null };
+      }
+    }
+    return null;
+  }
+  function setRevolveToFace(itemId, target) {
+    const f = Model.find(App.doc, itemId);
+    if (!f || f.item.kind !== 'revolve' || !target) return false;
+    const r6 = (a) => a.map((v) => round(v, 6));
+    let oW, nW, pickW = null, meta = null;
+    if (target.datumId) {
+      const d = typeof Datums !== 'undefined' ? Datums.find(target.datumId) : null;
+      if (!d || !d.plane) return false;
+      oW = new THREE.Vector3(...d.plane.o);
+      nW = new THREE.Vector3(...d.plane.n).normalize();
+      pickW = oW.clone();
+      meta = { kind: 'datum', datumId: d.id, name: d.name };
+    } else if (target.id) {
+      const info = target.info || (target.idx != null && App.results.get(target.id)?.data?.faces?.[target.idx]);
+      if (!info || info.t !== 'PLANE' || !info.n) return false;
+      const W = Model.worldMatrix(App.doc, target.id);
+      oW = new THREE.Vector3(...info.c).applyMatrix4(W);
+      nW = new THREE.Vector3(...info.n).transformDirection(W).normalize();
+      pickW = Array.isArray(target.point) ? new THREE.Vector3(...target.point) : oW.clone();
+      const tgt = Model.find(App.doc, target.id);
+      meta = { kind: 'face', targetId: target.id, c: r6(info.c), n: r6(info.n), name: tgt ? Model.label(tgt.item) : 'Fläche' };
+    } else return false;
+    const inv = Model.worldMatrix(App.doc, itemId).invert();
+    const oL = oW.clone().applyMatrix4(inv).toArray();
+    const nL = nW.clone().transformDirection(inv).normalize().toArray();
+    const pickL = pickW.clone().applyMatrix4(inv).toArray();
+    const frame = Model.revolveFrame(f.item.p, Model.vars(App.doc).v);
+    const flip = Model.revolveAutoFlip(frame, oL, nL, pickL);
+    App.change('Bis zu gewählter Fläche', (doc) => {
+      const fn = Model.find(doc, itemId); if (!fn || fn.item.kind !== 'revolve') return false;
+      fn.item.p.dir = 'toFace';
+      fn.item.p.toFace = { ...meta, o: r6(oL), fn: r6(nL) };
+      fn.item.p.toFaceFlip = !!flip;
+    });
+    return true;
+  }
+  function pickRevolveFace(itemId) {
+    stopPick();
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true });
+      if (hit && hit.id !== itemId && hit.faceIdx >= 0) {
+        const fi = App.results.get(hit.id)?.data?.faces?.[hit.faceIdx];
+        if (fi && fi.t === 'PLANE' && fi.n) {
+          stopPick();
+          setRevolveToFace(itemId, { id: hit.id, idx: hit.faceIdx, info: fi, point: hit.point ? hit.point.toArray() : null });
+          UI.toast('Zielfläche gesetzt.', { icon: 'check' });
+          return;
+        }
+      }
+      const dp = pickDatumPlaneAt(e.clientX, e.clientY);
+      if (dp) {
+        stopPick();
+        setRevolveToFace(itemId, { datumId: dp.datum.id });
+        UI.toast(`Bezugsebene „${dp.datum.name}“ als Ziel gesetzt.`, { icon: 'check' });
+        return;
+      }
+      UI.toast('Bitte wähle eine ebene Fläche eines anderen Körpers oder eine Bezugsebene.', { icon: 'info' });
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true); window.addEventListener('keydown', key, true);
+    UI.hint('<b>Zielfläche wählen:</b> Klick auf eine ebene Fläche eines Körpers oder eine Bezugsebene. <b>Esc</b> bricht ab.');
+  }
+  let revRelinkRounds = 0;
+  function relinkRevolveFaces() {
+    if (!App.doc) return;
+    const vDiff = (a, b) => (!Array.isArray(a) || !Array.isArray(b) || a.length < 3 || b.length < 3) ? Infinity : Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+    const r6 = (a) => a.map((v) => round(v, 6));
+    const jobs = [];
+    Model.walk(App.doc.items, (it) => {
+      if (it.kind !== 'revolve' || !it.p || it.p.dir !== 'toFace' || !it.p.toFace) return;
+      const tf = it.p.toFace;
+      const inv = Model.worldMatrix(App.doc, it.id).invert();
+      if (tf.kind === 'datum') {
+        const d = typeof Datums !== 'undefined' ? Datums.find(tf.datumId) : null;
+        if (!d || !d.plane) { if (!tf.lost) jobs.push({ id: it.id, lost: true }); return; }
+        const oL = r6(new THREE.Vector3(...d.plane.o).applyMatrix4(inv).toArray());
+        const nL = r6(new THREE.Vector3(...d.plane.n).transformDirection(inv).normalize().toArray());
+        if (vDiff(oL, tf.o) > 1e-5 || vDiff(nL, tf.fn) > 1e-5 || tf.lost || tf.name !== d.name) {
+          jobs.push({ id: it.id, o: oL, fn: nL, name: d.name, lost: false });
+        }
+      } else if (tf.kind === 'face' && tf.targetId) {
+        const rId = App.results.has(tf.targetId) ? tf.targetId : (App.mergedInto(tf.targetId) || tf.targetId);
+        const r = App.results.get(rId), tgt = Model.find(App.doc, tf.targetId);
+        if (r && r.data && tgt) {
+          const nRef = new THREE.Vector3(...(tf.n || [0, 0, 1])), cRef = new THREE.Vector3(...(tf.c || [0, 0, 0]));
+          let best = null;
+          for (const fc of r.data.faces || []) {
+            if (fc.t !== 'PLANE' || !fc.n) continue;
+            if (new THREE.Vector3(...fc.n).dot(nRef) < 0.999) continue;
+            const dd = new THREE.Vector3(...fc.c).distanceTo(cRef);
+            if (!best || dd < best.dd) best = { fc, dd };
+          }
+          if (best) {
+            const W = Model.worldMatrix(App.doc, rId);
+            const oW = new THREE.Vector3(...best.fc.c).applyMatrix4(W);
+            const nW = new THREE.Vector3(...best.fc.n).transformDirection(W).normalize();
+            const oL = r6(oW.applyMatrix4(inv).toArray());
+            const nL = r6(nW.transformDirection(inv).normalize().toArray());
+            const nm = Model.label(tgt.item);
+            if (vDiff(oL, tf.o) > 1e-5 || vDiff(nL, tf.fn) > 1e-5 || tf.lost || tf.name !== nm) {
+              jobs.push({ id: it.id, o: oL, fn: nL, c: r6(best.fc.c), n: r6(best.fc.n), name: nm, lost: false });
+            }
+          } else if (!tf.lost) jobs.push({ id: it.id, lost: true });
+        } else if (!tgt && !tf.lost) jobs.push({ id: it.id, lost: true });
+      }
+    });
+    if (!jobs.length) { revRelinkRounds = 0; return; }
+    if (++revRelinkRounds > 3) { revRelinkRounds = 0; return; }
+    App.change('Zielfläche nachgeführt', (doc) => {
+      for (const j of jobs) {
+        const f = Model.find(doc, j.id); if (!f || !f.item.p || !f.item.p.toFace) continue;
+        const tf = f.item.p.toFace;
+        if (j.lost) tf.lost = true;
+        else {
+          delete tf.lost;
+          tf.o = j.o; tf.fn = j.fn;
+          if (j.c) tf.c = j.c; if (j.n) tf.n = j.n;
+          if (j.name) tf.name = j.name;
+        }
+      }
+    }, { amend: true });
+  }
+  App.on('results', relinkRevolveFaces);
   // Achse im Bild wählen; cb bekommt { o, d, what, axisId? } in Weltkoordinaten
   function pickAxisThen(cb, hint) {
     stopPick();
@@ -9723,6 +10132,117 @@ const Features = (() => {
     Viewer.canvas.style.cursor = 'crosshair';
     Viewer.canvas.addEventListener('pointerdown', down, true); window.addEventListener('keydown', key, true);
     UI.hint(hint || '<b>Achse wählen:</b> Klick auf eine gerade Kante, einen runden Rand, eine runde Fläche oder eine Bezugsachse. <b>Esc</b> bricht ab.');
+  }
+  function pickExtrudeFace(itemId) {
+    const f = Model.find(App.doc, itemId);
+    if (!f || f.item.kind !== 'extrude') return false;
+    const top = Model.topOf(App.doc, itemId);
+    const exclude = top && top.id === itemId ? new Set([itemId, '__preview']) : new Set(['__preview']);
+    pickFaceThen((ref) => {
+      setExtrudeToFace(itemId, ref);
+      UI.toast('Zielfläche gewählt: ' + (ref.label || 'Fläche') + '.', { icon: 'check' });
+    }, { exclude });
+    return true;
+  }
+  function makeFaceRef(hit) {
+    if (!hit || !hit.node || hit.faceIdx == null || hit.faceIdx < 0) return null;
+    const n = hit.node, data = n.data || {}, fi = (data.faces || [])[hit.faceIdx];
+    if (!fi) return null;
+    const bb = data.bbox;
+    const rel = bb && fi.c ? [0, 1, 2].map((k) => { const sp = bb[k + 3] - bb[k]; return sp > 1e-6 ? round((fi.c[k] - bb[k]) / sp, 6) : 0.5; }) : null;
+    const W = n.obj.matrixWorld;
+    const wc = fi.c ? new THREE.Vector3(...fi.c).applyMatrix4(W).toArray().map((v) => round(v, 6)) : null;
+    const wn = fi.n ? new THREE.Vector3(...fi.n).transformDirection(W).normalize().toArray().map((v) => round(v, 6)) : null;
+    const f = Model.find(App.doc, hit.id);
+    return {
+      id: hit.id,
+      idx: hit.faceIdx,
+      t: fi.t,
+      c: fi.c ? fi.c.map((v) => round(v, 6)) : null,
+      n: fi.n ? fi.n.map((v) => round(v, 6)) : null,
+      rel,
+      wc,
+      wn,
+      label: f ? Model.label(f.item) : 'Körper',
+    };
+  }
+  function pickTargetFaceAt(cx, cy, exclude) {
+    const hit = Viewer.pick(cx, cy, { solidsOnly: true, noEdges: true, exclude });
+    if (hit && hit.faceIdx >= 0) {
+      const ref = makeFaceRef(hit);
+      if (ref) return ref;
+    }
+    if (Viewer.groups && Viewer.groups.datums && Viewer.groups.datums.children.length && typeof Datums !== 'undefined') {
+      const rc = Viewer.setRay(cx, cy);
+      const dh = rc.intersectObjects(Viewer.groups.datums.children, true);
+      for (const x of dh) {
+        let o = x.object;
+        while (o && !o.userData.datum) o = o.parent;
+        if (o && o.userData.datum) {
+          const d = Datums.find(o.userData.datum);
+          if (d && d.plane) return { datumId: d.id, label: 'Bezugsebene „' + d.name + '“' };
+        }
+      }
+    }
+    return null;
+  }
+  function pickFaceThen(cb, opts = {}) {
+    stopPick();
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const ref = pickTargetFaceAt(e.clientX, e.clientY, opts.exclude);
+      if (!ref) { UI.toast('Klick auf eine Körperfläche oder Bezugsebene.', { icon: 'info' }); return; }
+      stopPick();
+      cb(ref);
+    };
+    const move = (e) => {
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true, exclude: opts.exclude });
+      Viewer.highlightFace('hover', hit && hit.faceIdx >= 0 ? hit.id : null, hit && hit.faceIdx >= 0 ? hit.faceIdx : null);
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, move, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    Viewer.canvas.addEventListener('pointermove', move);
+    window.addEventListener('keydown', key, true);
+    UI.hint(opts.hint || '<b>Zielfläche wählen:</b> Klick auf eine Fläche eines Körpers oder eine Bezugsebene. <b>Esc</b> bricht ab.');
+  }
+  function autoFlipDirForFace(plane, W, curDir, ref) {
+    if (!plane || !ref || (curDir !== 'normal' && curDir !== 'reverse')) return curDir;
+    const oW = new THREE.Vector3(...plane.o).applyMatrix4(W);
+    const nW = new THREE.Vector3(...plane.n).transformDirection(W).normalize();
+    let pW = null;
+    if (ref.datumId && typeof Datums !== 'undefined') {
+      const d = Datums.find(ref.datumId);
+      if (d && d.plane) pW = new THREE.Vector3(...d.plane.o);
+    } else if (Array.isArray(ref.wc)) {
+      pW = new THREE.Vector3(...ref.wc);
+    } else if (Array.isArray(ref.c) && ref.id && Model.find(App.doc, ref.id)) {
+      pW = new THREE.Vector3(...ref.c).applyMatrix4(Model.worldMatrix(App.doc, ref.id));
+    }
+    if (!pW) return curDir;
+    const d = pW.sub(oW).dot(nW);
+    if (d > 1e-3) return 'normal';
+    if (d < -1e-3) return 'reverse';
+    return curDir;
+  }
+  function setExtrudeToFace(itemId, ref) {
+    if (!ref) return false;
+    const f = Model.find(App.doc, itemId);
+    if (!f || f.item.kind !== 'extrude') return false;
+    App.change('Bis Fläche gewählt', (doc) => {
+      const T = Model.find(doc, itemId).item;
+      T.p.extent = 'toFace';
+      T.p.toFace = ref;
+      delete T.p.thru;
+      if (T.p.dir === 'both') T.p.dir = 'normal';
+      if (T.p.sketch && T.p.sketch.plane) {
+        T.p.dir = autoFlipDirForFace(T.p.sketch.plane, Model.worldMatrix(doc, itemId), T.p.dir || 'normal', ref);
+      }
+    });
+    App.select([itemId]);
+    return true;
   }
   function setPatternAxis(gid, axisId) {
     const ax = typeof Datums !== 'undefined' ? Datums.findAxis(axisId) : null;
@@ -10187,7 +10707,7 @@ const Features = (() => {
     sec.append(h('div', { class: 'hint-box', html: 'Die offene Linie wird mit Dicke bis an die angrenzenden Wände verlängert und direkt mit dem Zielkörper vereinigt. Mit <b>Schräge</b> wird die Rippe zum Boden breiter.' }));
   }
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { startRib, renderRib, ribTargets, transform, renderTransform, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
+  return { startRib, renderRib, ribTargets, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
 })();
 // ---- 46-datums.js ----
 // ================= Bezugsebenen & Bezugsachsen: eigene Ebenen und Achsen im Projekt =================
@@ -14093,7 +14613,7 @@ const Panels = (() => {
     let hit = false;
     const fix = (s) => { if (typeof s !== 'string') return s; const r = s.replace(re, (m, pre) => { hit = true; return pre + repl; }); return /^-?\d+(\.\d+)?$/.test(r.trim()) ? +r : r; };
     for (const q of doc.params) q.expr = fix(q.expr);
-    Model.walk(doc.items, (it) => { for (const k in it.p || {}) { if (it.kind === 'transform' && (k === 'target' || k === 'pivot')) continue; if (it.kind === 'rib' && (k === 'target' || k === 'side' || k === 'dir')) continue; it.p[k] = fix(it.p[k]); } for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) f.r = fix(f.r); if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); });
+    Model.walk(doc.items, (it) => { for (const k in it.p || {}) { if (it.kind === 'transform' && (k === 'target' || k === 'pivot')) continue; if (it.kind === 'rib' && (k === 'target' || k === 'side' || k === 'dir')) continue; if (it.kind === 'extrude' && (k === 'extent' || k === 'dir' || k === 'wallSide')) continue; it.p[k] = fix(it.p[k]); } for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) f.r = fix(f.r); if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); });
     return hit;
   }
   function renameParam(id, nv) {
@@ -14347,7 +14867,7 @@ const Panels = (() => {
         const nm = (id) => { const f = Model.find(App.doc, id); return f ? Model.label(f.item) : '–'; };
         const line = (txt, id) => { const r = h('div', { class: 'mini-row dep-row' }, h('span', { class: 'grow' }, txt)); if (id && Model.find(App.doc, id)) { r.style.cursor = 'pointer'; r.onclick = () => App.select([id]); } return r; };
         for (const x of up) ds.append(line(`${x.what} „${nm(x.to)}“`, x.to));
-        const back = { 'abgezogen von': 'wird hiervon abgezogen', 'vereinigt mit': 'ist hiermit vereinigt', 'Schnittmenge mit': 'bildet hiermit die Schnittmenge', 'verrechnet mit': 'ist hiermit verrechnet', 'versetzt': 'versetzt diesen Körper', 'versetzte Kopie von': 'ist eine versetzte Kopie hiervon', 'Rippe an': 'verstärkt diesen Körper als Rippe', 'verknüpfte Kopie von': 'ist eine verknüpfte Kopie hiervon', 'Skizze übernimmt Kante von': 'übernimmt Kanten hiervon', 'Rohr hängt an': 'hat Rohrpunkte hieran' };
+        const back = { 'abgezogen von': 'wird hiervon abgezogen', 'vereinigt mit': 'ist hiermit vereinigt', 'Schnittmenge mit': 'bildet hiermit die Schnittmenge', 'verrechnet mit': 'ist hiermit verrechnet', 'versetzt': 'versetzt diesen Körper', 'versetzte Kopie von': 'ist eine versetzte Kopie hiervon', 'Rippe an': 'verstärkt diesen Körper als Rippe', 'verknüpfte Kopie von': 'ist eine verknüpfte Kopie hiervon', 'Skizze übernimmt Kante von': 'übernimmt Kanten hiervon', 'Rohr hängt an': 'hat Rohrpunkte hieran', 'hochgezogen bis Fläche von': 'wird bis zu dieser Fläche hochgezogen', 'dreht bis Fläche von': 'dreht bis zu einer Fläche hiervon' };
         for (const x of down) ds.append(line(x.datum ? `Bezugsebene „${x.datum}“ hängt hieran` : x.axis ? `Bezugsachse „${x.axis}“ hängt hieran` : x.point ? `Bezugspunkt „${x.point}“ hängt hieran` : x.csys ? `Koordinatensystem „${x.csys}“ hängt hieran` : `„${nm(x.from)}“ ${back[x.what] || 'hängt hieran'}`, x.datum || x.axis || x.point || x.csys ? null : x.from));
         if (down.length) ds.open = true;
         w.append(ds);
@@ -14394,10 +14914,58 @@ const Panels = (() => {
       const fl = h('div', { class: 'fields' });
       if (it.kind === 'extrude') {
         const cuts = it.role === 'hole' || (it.op && it.op.type === 'cut');
-        if (!it.p.thru) fl.append(UI.numField({ id: 'p-dist', label: it.p.dir === 'two' ? 'Höhe Seite 1' : 'Höhe', value: it.p.dist, onCommit: (v) => setP('dist', v) }));
-        fl.append(UI.selectField({ id: 'p-dir', label: 'Richtung', value: it.p.dir || 'normal', options: [['normal', 'Nach außen'], ['reverse', 'Nach innen'], ['both', 'Beidseitig gleich'], ['two', 'Beidseitig verschieden']], onChange: (v) => setP('dir', v) }));
+        const ext = it.p.extent === 'toNext' || it.p.extent === 'toFace' ? it.p.extent : 'dist';
+        const extField = UI.selectField({
+          id: 'p-extent',
+          label: 'Bis',
+          value: ext,
+          options: [['dist', 'Feste Höhe'], ['toNext', 'Bis zur nächsten Fläche'], ['toFace', 'Bis zu gewählter Fläche']],
+          onChange: (v) => {
+            let pickAfter = false;
+            App.change(v === 'dist' ? 'Feste Höhe' : v === 'toNext' ? 'Bis zur nächsten Fläche' : 'Bis zu gewählter Fläche', (doc) => {
+              const T = Model.find(doc, it.id).item;
+              if (v === 'dist') {
+                const rd = App.resolvedDist(it.id);
+                if (rd != null) T.p.dist = round(rd, 4);
+                delete T.p.extent; delete T.p.toFace;
+              } else {
+                T.p.extent = v;
+                delete T.p.thru;
+                if (T.p.dir === 'both') T.p.dir = 'normal';
+                if (v === 'toNext') delete T.p.toFace;
+                else if (!T.p.toFace) pickAfter = true;
+              }
+            });
+            if (pickAfter) Features.pickExtrudeFace(it.id);
+          },
+        });
+        extField.setAttribute('data-help', 'extrudeToFace');
+        fl.append(extField);
+        if (ext === 'dist' && !it.p.thru) fl.append(UI.numField({ id: 'p-dist', label: it.p.dir === 'two' ? 'Höhe Seite 1' : 'Höhe', value: it.p.dist, onCommit: (v) => setP('dist', v) }));
+        const dirOpts = ext === 'dist'
+          ? [['normal', 'Nach außen'], ['reverse', 'Nach innen'], ['both', 'Beidseitig gleich'], ['two', 'Beidseitig verschieden']]
+          : [['normal', 'Nach außen'], ['reverse', 'Nach innen'], ['two', 'Beidseitig (Seite 2 fest)']];
+        fl.append(UI.selectField({ id: 'p-dir', label: 'Richtung', value: it.p.dir || 'normal', options: dirOpts, onChange: (v) => setP('dir', v) }));
         if (it.p.dir === 'two' && !it.p.thru) fl.append(UI.numField({ id: 'p-dist2', label: 'Höhe Seite 2', value: it.p.dist2 ?? it.p.dist, onCommit: (v) => setP('dist2', v) }));
-        if (cuts || it.p.thru) { const l = h('label', { class: 'check', 'data-help': 'thruAll' }, h('input', { type: 'checkbox', id: 'p-thru', checked: !!it.p.thru }), 'Durch alles'); l.querySelector('input').onchange = (e) => App.change(e.target.checked ? 'Durch alles' : 'Feste Tiefe', (doc) => { const T = Model.find(doc, it.id).item; if (e.target.checked) T.p.thru = true; else delete T.p.thru; }); fl.append(l); }
+        if (ext === 'dist' && (cuts || it.p.thru)) { const l = h('label', { class: 'check', 'data-help': 'thruAll' }, h('input', { type: 'checkbox', id: 'p-thru', checked: !!it.p.thru }), 'Durch alles'); l.querySelector('input').onchange = (e) => App.change(e.target.checked ? 'Durch alles' : 'Feste Tiefe', (doc) => { const T = Model.find(doc, it.id).item; if (e.target.checked) T.p.thru = true; else delete T.p.thru; }); fl.append(l); }
+        if (ext !== 'dist') {
+          const rd = App.resolvedDist(it.id);
+          const info = App.resolvedOf(it.id);
+          const tgtIt = info && info.targetId ? Model.find(App.doc, info.targetId) : null;
+          const tgtName = ext === 'toFace' && it.p.toFace && it.p.toFace.label ? it.p.toFace.label : tgtIt ? Model.label(tgtIt.item) : null;
+          const txt = ext === 'toFace' && !it.p.toFace
+            ? 'Noch keine Zielfläche gewählt – klick „Fläche im Bild wählen“.'
+            : rd != null
+              ? `Aktuelle Höhe: ${Units.fmtLenU(rd, 2)}${tgtName ? ` (bis ${tgtName})` : ''}`
+              : 'Wird bis zur Zielfläche berechnet …';
+          fl.append(h('div', { class: 'hint-box', id: 'p-ext-info' }, txt));
+          if (ext === 'toFace') {
+            const pb = h('button', { type: 'button', class: 'btn', id: 'p-pick-face' });
+            pb.innerHTML = icon('pointer') + (it.p.toFace ? 'Andere Fläche wählen' : 'Fläche im Bild wählen');
+            pb.onclick = () => Features.pickExtrudeFace(it.id);
+            fl.append(pb);
+          }
+        }
         const hasRegs = SK.regions(it.p.sketch ? Solver.cached(it.p.sketch, Model.vars(App.doc).v).ents : []).length > 0;
         const tl = h('label', { class: 'check', 'data-help': 'thinWall' }, h('input', { type: 'checkbox', id: 'p-thin', checked: !!it.p.thin, disabled: !!it.p.thin && !hasRegs }), 'Dünne Wand');
         tl.querySelector('input').onchange = (e) => App.change(e.target.checked ? 'Dünne Wand an' : 'Dünne Wand aus', (doc) => {
@@ -14411,7 +14979,57 @@ const Panels = (() => {
           fl.append(UI.selectField({ id: 'p-wall-side', label: 'Wand-Lage', value: it.p.wallSide || 'center', options: [['center', 'Mittig'], ['in', 'Nach innen'], ['out', 'Nach außen']], onChange: (v) => setP('wallSide', v) }));
         }
       } else {
-        fl.append(UI.numField({ id: 'p-angle', label: 'Winkel', value: it.p.angle, unit: '°', onCommit: (v) => setP('angle', v) }));
+        const dir = it.p.dir || 'normal';
+        const dirSel = UI.selectField({
+          id: 'p-rev-dir', label: 'Richtung', value: dir,
+          options: [['normal', 'Eine Richtung'], ['reverse', 'Umgekehrt'], ['both', 'Symmetrisch (beidseitig gleich)'], ['two', 'Beidseitig verschieden'], ['toFace', 'Bis zu gewählter Fläche']],
+          onChange: (v) => {
+            App.change('Drehrichtung geändert', (doc) => {
+              const T = Model.find(doc, it.id).item;
+              T.p.dir = v;
+              if (v === 'two' && T.p.angle2 == null) {
+                const cur = Model.num(T.p.angle, Model.vars(doc).v, 360);
+                if (cur >= 359) { T.p.angle = 90; T.p.angle2 = 90; }
+                else T.p.angle2 = T.p.angle;
+              }
+            });
+            if (v === 'toFace' && !it.p.toFace) Features.pickRevolveFace(it.id);
+          },
+        });
+        dirSel.setAttribute('data-help', 'revolveOptions');
+        fl.append(dirSel);
+        if (dir !== 'toFace') {
+          const angLbl = dir === 'both' ? 'Gesamtwinkel' : dir === 'two' ? 'Winkel Seite 1' : 'Winkel';
+          const minA = dir === 'two' ? 0 : 0.1;
+          fl.append(UI.numField({ id: 'p-angle', label: angLbl, value: it.p.angle, unit: '°', min: minA, onCommit: (v) => setP('angle', typeof v === 'number' ? clamp(v, minA, 360) : v) }));
+          if (dir === 'both') {
+            fl.append(h('div', { class: 'mini-row', id: 'p-rev-sym-info' }, h('span', { class: 'grow' }, 'Symmetrisch'), h('b', { class: 'mono' }, `je Seite ${fmt(Model.num(it.p.angle, V, 360) / 2, 1)}°`)));
+          }
+          if (dir === 'two') {
+            fl.append(UI.numField({ id: 'p-angle2', label: 'Winkel Seite 2', value: it.p.angle2 ?? it.p.angle, unit: '°', min: 0, onCommit: (v) => setP('angle2', typeof v === 'number' ? clamp(v, 0, 360) : v) }));
+          }
+        } else {
+          const tf = it.p.toFace;
+          const fr = tf && !tf.lost ? Model.revolveFrame(it.p, V) : null;
+          const hitDeg = fr ? Model.revolveHitAngle(fr, tf.o, tf.fn, !!it.p.toFaceFlip) : null;
+          const infoTxt = !tf ? 'Noch keine Fläche gewählt' : tf.lost ? `Zielfläche „${tf.name || '?'}“ fehlt` : `${tf.kind === 'datum' ? 'Bezugsebene' : 'Fläche'}: „${tf.name || 'Fläche'}“${hitDeg != null ? ` (${fmt(hitDeg, 1)}°)` : ''}`;
+          fl.append(h('div', { class: 'mini-row', id: 'p-rev-face-info', style: tf && tf.lost ? { color: 'var(--bad)' } : null }, h('span', { class: 'grow' }, infoTxt)));
+          const pb = h('button', { type: 'button', class: 'btn', id: 'p-rev-face-pick' }); pb.innerHTML = icon('cursor') + (tf ? 'Andere Fläche wählen' : 'Fläche im Bild wählen');
+          pb.onclick = () => Features.pickRevolveFace(it.id);
+          fl.append(pb);
+          const dats = typeof Datums !== 'undefined' ? Datums.list().filter((d) => d.plane) : [];
+          if (dats.length) {
+            fl.append(UI.selectField({
+              id: 'p-rev-face-datum', label: 'Bezugsebene als Ziel',
+              value: tf && tf.kind === 'datum' ? tf.datumId : '',
+              options: [['', 'Bezugsebene wählen …'], ...dats.map((d) => [d.id, d.name])],
+              onChange: (v) => { if (v) Features.setRevolveToFace(it.id, { datumId: v }); },
+            }));
+          }
+          const flp = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'p-rev-face-flip', checked: !!it.p.toFaceFlip }), 'Andere Richtung');
+          flp.querySelector('input').onchange = (e) => App.change('Drehrichtung umgekehrt', (doc) => { const T = Model.find(doc, it.id).item; T.p.toFaceFlip = e.target.checked; });
+          fl.append(flp);
+        }
         const axList = typeof Datums !== 'undefined' ? Datums.axes() : [];
         if (axList.length || it.p.axisId) {
           const opts = [['sketch', 'Achse aus der Skizze'], ...axList.filter((a) => a.axis).map((a) => ['da:' + a.id, 'Bezugsachse „' + a.name + '“'])];
@@ -19544,7 +20162,13 @@ const Sketch = (() => {
   let lastMouse = null;
   function onMove(e) {
     if (!S) return;
-    if (S.step) return stepMove(e);
+    if (S.step) {
+      if (S.step.pickingFace) {
+        const h2 = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true, exclude: new Set(['__preview']) });
+        Viewer.highlightFace('hover', h2 && h2.faceIdx >= 0 ? h2.id : null, h2 && h2.faceIdx >= 0 ? h2.faceIdx : null);
+      }
+      return stepMove(e);
+    }
     if (S.band) return;
     const uv0 = mouseUV(e); if (!uv0) return;
     lastMouse = { e, uv: uv0 };
@@ -19737,7 +20361,20 @@ const Sketch = (() => {
     if (!S) return false;
     const tag = (e.target && e.target.tagName) || '';
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return false;
-    if (S.step) { if (e.key === 'Escape') { stepBack(); return true; } if (e.key === 'Enter') { stepOK(); return true; } return false; }
+    if (S.step) {
+      if (e.key === 'Escape') {
+        if (S.step.pickingFace) {
+          S.step.pickingFace = false;
+          Viewer.canvas.style.cursor = '';
+          Viewer.highlightFace('hover', null, null);
+          renderStep();
+          return true;
+        }
+        stepBack(); return true;
+      }
+      if (e.key === 'Enter') { stepOK(); return true; }
+      return false;
+    }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); sketchUndo(); return true; }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c' && !e.shiftKey) { e.preventDefault(); copySel(); return true; }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v' && !e.shiftKey) { e.preventDefault(); pasteClip(); return true; }
@@ -21304,27 +21941,39 @@ const Sketch = (() => {
     const ctxTop = S.ctx.targetId ? Model.topOf(App.doc, S.ctx.targetId) : null;
     const ribTarget = (ctxTop && ribTargets.some((x) => x.id === ctxTop.id) ? ctxTop.id : (ribTargets[ribTargets.length - 1] || {}).id) || null;
     const useRib = !!opts.rib && !!ribTarget;
-    S.step = { dist: opts.dist, dir: opts.dir, sel: regs.map((r) => r.key), revolve: false, sweep: false, rib: useRib, ribTarget, ribThickness: 2, ribSide: 'center', ribDir: 'normal', ribFlip: false, ribDepth: 0, ribDraft: 0, openOnly, thin: openOnly ? !useRib : !!opts.thin, wall: opts.wall || 2, wallSide: opts.wallSide || 'center', axis: 'y', angle: 360, fromPushPull: !!opts.fromPushPull, color: tgt ? tgt.item.color : nextColor() };
+    S.step = { dist: opts.dist, dir: opts.dir, extent: opts.extent || 'dist', toFace: opts.toFace || null, revToFace: null, revDir: 'normal', angle2: 90, toFaceFlip: false, pickingFace: false, sel: regs.map((r) => r.key), revolve: false, sweep: false, rib: useRib, ribTarget, ribThickness: 2, ribSide: 'center', ribDir: 'normal', ribFlip: false, ribDepth: 0, ribDraft: 0, openOnly, thin: openOnly ? !useRib : !!opts.thin, wall: opts.wall || 2, wallSide: opts.wallSide || 'center', axis: 'y', angle: 360, fromPushPull: !!opts.fromPushPull, color: tgt ? tgt.item.color : nextColor() };
     stepBox = h('div', { class: 'stepbox' });
     renderStep();
     $('#overlay').append(stepBox);
     Panels.renderRight();
     updatePreview(); render();
   }
+  function updateStepExtInfo() {
+    const box = stepBox && stepBox.querySelector('#st-ext-info');
+    if (!box || !S || !S.step) return;
+    const st = S.step;
+    const rd = App.resolvedDist('__preview');
+    const err = App.errorsFor('__preview')[0];
+    box.className = err ? 'err-box' : 'hint-box';
+    if (err) { box.textContent = err.message; return; }
+    if (st.extent === 'toFace' && !st.toFace) { box.textContent = 'Klick im 3D-Bild auf die Zielfläche oder eine Bezugsebene.'; return; }
+    const tgt = st.extent === 'toFace' && st.toFace && st.toFace.label ? ` (${st.toFace.label})` : '';
+    box.textContent = rd != null ? `Berechnete Höhe: ${Units.fmtLenU(rd, 2)}${tgt}` : 'Berechnet die Höhe bis zur Zielfläche …';
+  }
   function renderStep() {
     const st = S.step; stepBox.innerHTML = '';
     const ribTargets = typeof Features !== 'undefined' && Features.ribTargets ? Features.ribTargets() : [];
-    UI.hint(st.rib ? 'Verlängert deine offene Linie mit <b>Dicke</b> bis zu den Wänden und vereinigt sie mit dem Körper.' : st.sweep ? 'Zieht ein <b>Rohr (Ø 6 mm)</b> entlang deiner offenen Kurve. Form, Größe und Wand stellst du danach rechts ein.' : st.revolve ? 'Wähl die <b>Achse</b> und den <b>Winkel</b> – 360° ergibt einen ganzen Drehkörper, zum Beispiel eine Schale oder einen Knopf.' : st.thin ? 'Zieh am <b>Pfeil</b> oder tipp Höhe, <b>Wandstärke</b> und <b>Wand-Lage</b> ein.' : 'Zieh am <b>Pfeil</b> oder tipp die Höhe ein. Nach innen wird es ein <b>Loch</b>.');
+    UI.hint(st.pickingFace ? '<b>Zielfläche wählen:</b> Klick auf die gewünschte Fläche oder Bezugsebene im Bild. <b>Esc</b> bricht ab.' : st.rib ? 'Verlängert deine offene Linie mit <b>Dicke</b> bis zu den Wänden und vereinigt sie mit dem Körper.' : st.sweep ? 'Zieht ein <b>Rohr (Ø 6 mm)</b> entlang deiner offenen Kurve. Form, Größe und Wand stellst du danach rechts ein.' : st.revolve ? 'Wähl die <b>Achse</b> und den <b>Winkel</b> – 360° ergibt einen ganzen Drehkörper, zum Beispiel eine Schale oder einen Knopf.' : st.thin ? 'Zieh am <b>Pfeil</b> oder tipp Höhe, <b>Wandstärke</b> und <b>Wand-Lage</b> ein.' : 'Zieh am <b>Pfeil</b> oder tipp die Höhe ein. Nach innen wird es ein <b>Loch</b>.');
     stepBox.append(h('h3', null, st.rib ? 'Rippe' : st.sweep ? 'Entlang Pfad' : st.revolve ? 'Drehen' : st.dir === 'reverse' ? 'Hineindrücken (Loch)' : st.thin ? 'Dünne Wand' : 'Hochziehen'));
     const seg = h('div', { class: 'role-switch' });
     if (st.openOnly) {
-      const a = h('button', { type: 'button', id: 'st-mode-thin', 'aria-pressed': !st.sweep && !st.rib ? 'true' : 'false' }); a.innerHTML = icon('wall2d') + 'Dünne Wand'; a.onclick = () => { st.sweep = false; st.rib = false; st.thin = true; renderStep(); updatePreview(); };
-      const b = h('button', { type: 'button', id: 'st-mode-sweep', 'aria-pressed': st.sweep && !st.rib ? 'true' : 'false' }); b.innerHTML = icon('sweep') + 'Entlang Pfad'; b.onclick = () => { st.sweep = true; st.rib = false; renderStep(); updatePreview(); };
-      const c = h('button', { type: 'button', id: 'st-mode-rib', 'data-help': 'rib', 'aria-pressed': st.rib ? 'true' : 'false' }); c.innerHTML = icon('rib') + 'Rippe'; c.onclick = () => { st.rib = true; st.sweep = false; st.thin = false; renderStep(); updatePreview(); };
+      const a = h('button', { type: 'button', id: 'st-mode-thin', 'aria-pressed': !st.sweep && !st.rib ? 'true' : 'false' }); a.innerHTML = icon('wall2d') + 'Dünne Wand'; a.onclick = () => { st.sweep = false; st.rib = false; st.thin = true; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
+      const b = h('button', { type: 'button', id: 'st-mode-sweep', 'aria-pressed': st.sweep && !st.rib ? 'true' : 'false' }); b.innerHTML = icon('sweep') + 'Entlang Pfad'; b.onclick = () => { st.sweep = true; st.rib = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
+      const c = h('button', { type: 'button', id: 'st-mode-rib', 'data-help': 'rib', 'aria-pressed': st.rib ? 'true' : 'false' }); c.innerHTML = icon('rib') + 'Rippe'; c.onclick = () => { st.rib = true; st.sweep = false; st.thin = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
       seg.append(a, b, c); stepBox.append(seg);
     } else if (!st.fromPushPull) {
-      const a = h('button', { type: 'button', 'aria-pressed': !st.revolve ? 'true' : 'false' }); a.innerHTML = icon('lift') + 'Hochziehen'; a.onclick = () => { st.revolve = false; renderStep(); updatePreview(); };
-      const b = h('button', { type: 'button', 'aria-pressed': st.revolve ? 'true' : 'false' }); b.innerHTML = icon('rotate') + 'Drehen'; b.onclick = () => { st.revolve = true; renderStep(); updatePreview(); };
+      const a = h('button', { type: 'button', 'aria-pressed': !st.revolve ? 'true' : 'false' }); a.innerHTML = icon('lift') + 'Hochziehen'; a.onclick = () => { st.revolve = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
+      const b = h('button', { type: 'button', 'aria-pressed': st.revolve ? 'true' : 'false' }); b.innerHTML = icon('rotate') + 'Drehen'; b.onclick = () => { st.revolve = true; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
       seg.append(a, b); stepBox.append(seg);
     }
     if (st.rib) {
@@ -21345,8 +21994,52 @@ const Sketch = (() => {
     } else if (st.sweep) {
       stepBox.append(h('p', null, 'Zieht ein Rohr Ø 6 mm entlang des offenen Pfads. Form, Größe und Wand kannst du danach rechts einstellen.'));
     } else if (!st.revolve) {
-      stepBox.append(UI.numField({ id: 'st-dist', label: 'Höhe', value: st.dist, onCommit: (v) => { st.dist = v; updatePreview(); } }));
-      stepBox.append(UI.selectField({ id: 'st-dir', label: 'Richtung', value: st.dir, options: [['normal', S.ctx.targetId ? 'Nach außen (Körper)' : 'Nach oben'], ['reverse', S.ctx.targetId ? 'Nach innen (Loch)' : 'Nach unten'], ['both', 'Beidseitig']], onChange: (v) => { st.dir = v; renderStep(); updatePreview(); } }));
+      const ext = st.extent === 'toNext' || st.extent === 'toFace' ? st.extent : 'dist';
+      const exF = UI.selectField({
+        id: 'st-extent',
+        label: 'Bis',
+        value: ext,
+        options: [['dist', 'Feste Höhe'], ['toNext', 'Bis zur nächsten Fläche'], ['toFace', 'Bis zu gewählter Fläche']],
+        onChange: (v) => {
+          st.extent = v;
+          if (v === 'dist') {
+            const rd = App.resolvedDist('__preview');
+            if (rd != null) st.dist = round(rd, 4);
+            st.pickingFace = false;
+            Viewer.canvas.style.cursor = '';
+            Viewer.highlightFace('hover', null, null);
+          } else {
+            if (st.dir === 'both') st.dir = 'normal';
+            if (v === 'toNext') { st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); }
+            else if (v === 'toFace' && !st.toFace) { st.pickingFace = true; Viewer.canvas.style.cursor = 'crosshair'; }
+          }
+          renderStep(); updatePreview();
+        },
+      });
+      exF.setAttribute('data-help', 'extrudeToFace');
+      stepBox.append(exF);
+      if (ext === 'dist') {
+        stepBox.append(UI.numField({ id: 'st-dist', label: 'Höhe', value: st.dist, onCommit: (v) => { st.dist = v; updatePreview(); } }));
+      }
+      const dirOpts = ext === 'dist'
+        ? [['normal', S.ctx.targetId ? 'Nach außen (Körper)' : 'Nach oben'], ['reverse', S.ctx.targetId ? 'Nach innen (Loch)' : 'Nach unten'], ['both', 'Beidseitig']]
+        : [['normal', S.ctx.targetId ? 'Nach außen (Körper)' : 'Nach oben'], ['reverse', S.ctx.targetId ? 'Nach innen (Loch)' : 'Nach unten']];
+      stepBox.append(UI.selectField({ id: 'st-dir', label: 'Richtung', value: st.dir === 'both' && ext !== 'dist' ? 'normal' : st.dir, options: dirOpts, onChange: (v) => { st.dir = v; renderStep(); updatePreview(); } }));
+      if (ext === 'toFace') {
+        const pb = h('button', { type: 'button', class: 'btn' + (st.pickingFace ? ' primary' : ''), id: 'st-pick-face' });
+        pb.innerHTML = icon('pointer') + (st.pickingFace ? 'Klick auf eine Fläche …' : st.toFace ? 'Andere Fläche wählen' : 'Fläche im Bild wählen');
+        pb.onclick = () => {
+          st.pickingFace = !st.pickingFace;
+          Viewer.canvas.style.cursor = st.pickingFace ? 'crosshair' : '';
+          if (!st.pickingFace) Viewer.highlightFace('hover', null, null);
+          renderStep();
+        };
+        stepBox.append(pb);
+      }
+      if (ext !== 'dist') {
+        stepBox.append(h('div', { class: 'hint-box', id: 'st-ext-info' }));
+        updateStepExtInfo();
+      }
       if (!st.openOnly && !st.fromPushPull) {
         const tl = h('label', { class: 'check', 'data-help': 'thinWall' }, h('input', { type: 'checkbox', id: 'st-thin', checked: !!st.thin }), 'Dünne Wand');
         tl.querySelector('input').onchange = (e) => { st.thin = e.target.checked; renderStep(); updatePreview(); };
@@ -21366,7 +22059,56 @@ const Sketch = (() => {
         const lines = S.ents.filter((x) => x.type === 'line');
         stepBox.append(UI.selectField({ id: 'st-line', label: 'Linie', value: st.axisLine, options: lines.map((l, i) => [l.id, `Linie ${i + 1} (${Units.fmtLenU(SK.d2(l.a, l.b), 1)})${l.con ? ' – Hilfslinie' : ''}`]), onChange: (v) => { st.axisLine = v; updatePreview(); } }));
       }
-      stepBox.append(UI.numField({ id: 'st-angle', label: 'Winkel', value: st.angle, unit: '°', min: 1, onCommit: (v) => { st.angle = clamp(v, 1, 360); updatePreview(); } }));
+      const rdir = st.revDir || 'normal';
+      const rdirSel = UI.selectField({
+        id: 'st-rev-dir', label: 'Richtung', value: rdir,
+        options: [['normal', 'Eine Richtung'], ['reverse', 'Umgekehrt'], ['both', 'Symmetrisch (beidseitig gleich)'], ['two', 'Beidseitig verschieden'], ['toFace', 'Bis zu gewählter Fläche']],
+        onChange: (v) => {
+          st.revDir = v;
+          if (v === 'two' && st.angle >= 359) { st.angle = 90; st.angle2 = 90; }
+          if (v !== 'toFace') { st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); }
+          else if (!st.revToFace) { st.pickingFace = true; Viewer.canvas.style.cursor = 'crosshair'; }
+          renderStep(); updatePreview();
+        },
+      });
+      rdirSel.setAttribute('data-help', 'revolveOptions');
+      stepBox.append(rdirSel);
+      if (rdir !== 'toFace') {
+        const angLbl = rdir === 'both' ? 'Gesamtwinkel' : rdir === 'two' ? 'Winkel Seite 1' : 'Winkel';
+        const minA = rdir === 'two' ? 0 : 0.1;
+        stepBox.append(UI.numField({ id: 'st-angle', label: angLbl, value: st.angle, unit: '°', min: minA, onCommit: (v) => { st.angle = clamp(v, minA, 360); renderStep(); updatePreview(); } }));
+        if (rdir === 'both') stepBox.append(h('div', { class: 'mini-row', id: 'st-rev-sym-info' }, h('span', { class: 'grow' }, 'Symmetrisch'), h('b', { class: 'mono' }, `je Seite ${fmt(st.angle / 2, 1)}°`)));
+        if (rdir === 'two') stepBox.append(UI.numField({ id: 'st-angle2', label: 'Winkel Seite 2', value: st.angle2, unit: '°', min: 0, onCommit: (v) => { st.angle2 = clamp(v, 0, 360); updatePreview(); } }));
+      } else {
+        stepBox.append(h('div', { class: 'mini-row', id: 'st-rev-face-info' }, h('span', { class: 'grow' }, st.revToFace ? `${st.revToFace.kind === 'datum' ? 'Bezugsebene' : 'Fläche'}: „${st.revToFace.name || 'Fläche'}“` : 'Noch keine Fläche gewählt')));
+        const pb = h('button', { type: 'button', class: 'btn' + (st.pickingFace ? ' primary' : ''), id: 'st-rev-face-pick' });
+        pb.innerHTML = icon('cursor') + (st.pickingFace ? 'Fläche im Bild anklicken …' : st.revToFace ? 'Andere Fläche wählen' : 'Fläche im Bild wählen');
+        pb.onclick = () => { st.pickingFace = !st.pickingFace; Viewer.canvas.style.cursor = st.pickingFace ? 'crosshair' : ''; if (!st.pickingFace) Viewer.highlightFace('hover', null, null); renderStep(); };
+        stepBox.append(pb);
+        const dats = typeof Datums !== 'undefined' ? Datums.list().filter((d) => d.plane) : [];
+        if (dats.length) {
+          stepBox.append(UI.selectField({
+            id: 'st-rev-face-datum', label: 'Bezugsebene als Ziel',
+            value: st.revToFace && st.revToFace.kind === 'datum' ? st.revToFace.datumId : '',
+            options: [['', 'Bezugsebene wählen …'], ...dats.map((d) => [d.id, d.name])],
+            onChange: (v) => {
+              const d = v ? Datums.find(v) : null; if (!d || !d.plane) return;
+              const inv = S.W.clone().invert(), r6 = (a) => a.map((x) => round(x, 6));
+              const oL = new THREE.Vector3(...d.plane.o).applyMatrix4(inv).toArray();
+              const nL = new THREE.Vector3(...d.plane.n).transformDirection(inv).normalize().toArray();
+              st.revToFace = { kind: 'datum', datumId: d.id, o: r6(oL), fn: r6(nL), name: d.name };
+              const tmp = stepItem(), fr = Model.revolveFrame(tmp.p, Model.vars(App.doc).v);
+              st.toFaceFlip = Model.revolveAutoFlip(fr, oL, nL, oL);
+              st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null);
+              renderStep(); updatePreview();
+            },
+          }));
+        }
+        const flp = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'st-rev-face-flip', checked: !!st.toFaceFlip }), 'Andere Richtung');
+        flp.querySelector('input').onchange = (e) => { st.toFaceFlip = e.target.checked; updatePreview(); };
+        stepBox.append(flp);
+        if (st.pickingFace) UI.hint('<b>Zielfläche wählen:</b> Klick auf eine ebene Fläche eines Körpers oder eine Bezugsebene.');
+      }
     }
     if (!st.sweep && !st.rib) {
       const hole = !st.revolve && st.dir === 'reverse' && S.ctx.targetId;
@@ -21403,12 +22145,24 @@ const Sketch = (() => {
     const it = Model.newItem(kind, {}, { name, role, color: st.color });
     const p = { sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons), ...(S.bg ? { bg: deepClone(S.bg) } : {}) }, sel };
     if (kind === 'extrude') {
-      p.dist = st.dist; p.dir = st.dir;
+      const rd = (st.extent === 'toNext' || st.extent === 'toFace') ? App.resolvedDist('__preview') : null;
+      p.dist = rd != null ? round(rd, 4) : st.dist;
+      p.dir = st.dir;
+      if (st.extent === 'toNext' || st.extent === 'toFace') {
+        p.extent = st.extent;
+        if (st.extent === 'toFace' && st.toFace) p.toFace = deepClone(st.toFace);
+      }
       if (role === 'hole') p.extra = 0.05; else if (S.ctx.targetId) p.extra = 0.02;
       if (st.thin) { p.thin = true; p.wall = st.wall; p.wallSide = st.wallSide || 'center'; }
     }
     else {
+      p.dir = st.revDir || 'normal';
       p.angle = st.angle;
+      if (p.dir === 'two') p.angle2 = st.angle2;
+      if (p.dir === 'toFace') {
+        if (st.revToFace) p.toFace = deepClone(st.revToFace);
+        p.toFaceFlip = !!st.toFaceFlip;
+      }
       if (typeof st.axis === 'string' && st.axis.startsWith('da:') && typeof Datums !== 'undefined') {
         const da = Datums.findAxis(st.axis.slice(3));
         if (da && da.axis) {
@@ -21457,7 +22211,7 @@ const Sketch = (() => {
   function placeArrow() {
     if (arrow) { arrow.remove(); arrow = null; }
     for (const l of labels.filter((x) => x.classList.contains('steplabel'))) l.remove();
-    if (!S || !S.step || S.step.revolve || S.step.sweep || S.step.rib) { Viewer.requestRender(); return; }
+    if (!S || !S.step || S.step.revolve || S.step.sweep || S.step.rib || S.step.extent === 'toNext' || S.step.extent === 'toFace') { Viewer.requestRender(); return; }
     const p = arrowPos();
     const dir = S.F.n.clone().multiplyScalar(S.step.dir === 'reverse' ? -1 : 1);
     const ps = Viewer.pixelSizeAt(p);
@@ -21489,6 +22243,53 @@ const Sketch = (() => {
   Viewer.on('camera', () => { if (S && S.step && !S.step.dragging) placeArrow(); });
   function stepDown(e) {
     if (e.button !== 0 || !S.step) return;
+    if (S.step.revolve && S.step.pickingFace) {
+      e.preventDefault(); e.stopPropagation();
+      const hits = Viewer.pickAll(e.clientX, e.clientY).filter((h) => h.id !== '__preview');
+      const hit = hits[0] || null;
+      const r = hit ? App.results.get(hit.id) : null;
+      const fi = hit && hit.faceIdx >= 0 && r && r.data && r.data.faces ? r.data.faces[hit.faceIdx] : null;
+      const inv = S.W.clone().invert(), r6 = (a) => a.map((v) => round(v, 6));
+      if (fi && fi.t === 'PLANE' && fi.n) {
+        const W = Model.worldMatrix(App.doc, hit.id);
+        const oW = new THREE.Vector3(...fi.c).applyMatrix4(W);
+        const nW = new THREE.Vector3(...fi.n).transformDirection(W).normalize();
+        const pickW = hit.point ? hit.point.clone() : oW.clone();
+        const oL = oW.applyMatrix4(inv).toArray(), nL = nW.transformDirection(inv).normalize().toArray(), pickL = pickW.applyMatrix4(inv).toArray();
+        const tgt = Model.find(App.doc, hit.id);
+        S.step.revToFace = { kind: 'face', targetId: hit.id, c: r6(fi.c), n: r6(fi.n), o: r6(oL), fn: r6(nL), name: tgt ? Model.label(tgt.item) : 'Fläche' };
+        const tmp = stepItem(), fr = Model.revolveFrame(tmp.p, Model.vars(App.doc).v);
+        S.step.toFaceFlip = Model.revolveAutoFlip(fr, oL, nL, pickL);
+        S.step.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null);
+        renderStep(); updatePreview();
+        return;
+      }
+      const dp = typeof Features !== 'undefined' && Features.pickDatumPlaneAt ? Features.pickDatumPlaneAt(e.clientX, e.clientY) : null;
+      if (dp) {
+        const oL = new THREE.Vector3(...dp.datum.plane.o).applyMatrix4(inv).toArray();
+        const nL = new THREE.Vector3(...dp.datum.plane.n).transformDirection(inv).normalize().toArray();
+        S.step.revToFace = { kind: 'datum', datumId: dp.datum.id, o: r6(oL), fn: r6(nL), name: dp.datum.name };
+        const tmp = stepItem(), fr = Model.revolveFrame(tmp.p, Model.vars(App.doc).v);
+        S.step.toFaceFlip = Model.revolveAutoFlip(fr, oL, nL, oL);
+        S.step.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null);
+        renderStep(); updatePreview();
+        return;
+      }
+      UI.toast('Bitte wähle eine ebene Fläche eines Körpers oder eine Bezugsebene.', { icon: 'info' });
+      return;
+    }
+    if (S.step.pickingFace) {
+      e.preventDefault(); e.stopPropagation();
+      const ref = Features.pickTargetFaceAt(e.clientX, e.clientY, new Set(['__preview']));
+      if (!ref) { UI.toast('Klick auf eine Körperfläche oder Bezugsebene.', { icon: 'info' }); return; }
+      S.step.toFace = ref;
+      S.step.pickingFace = false;
+      Viewer.canvas.style.cursor = '';
+      Viewer.highlightFace('hover', null, null);
+      S.step.dir = Features.autoFlipDirForFace(S.plane, S.W, S.step.dir || 'normal', ref);
+      renderStep(); updatePreview();
+      return;
+    }
     // Fläche an-/abwählen
     const uv = mouseUV(e); if (!uv) return;
     const r = SK.regionAt(SK.regions(S.ents), uv);
@@ -21523,7 +22324,9 @@ const Sketch = (() => {
   const placeArrowSoon = throttle(() => { if (S && S.step) { const d = S.step.dragging; placeArrow(); if (d) S.step.dragging = d; } }, 50);
   function stepUp() { if (S && S.step && S.step.dragging) { S.step.dragging = null; renderStep(); } }
   function stepBack() {
+    Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null);
     if (S.step.fromPushPull) { cancel(); return; }
+    Viewer.canvas.style.cursor = '';
     S.step = null; App.extra = []; App.rebuild();
     if (stepBox) { stepBox.remove(); stepBox = null; }
     { const b = SK.bounds([...S.ents, ...S.refs]); const size = b ? Math.max(40, Math.max(b[2] - b[0], b[3] - b[1]) * 0.75) : 70; const c2 = b ? [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2] : [0, 0]; Viewer.lookAtPlane(toWorld(c2[0], c2[1]).toArray(), S.F.n.toArray(), S.F.x.toArray(), size); }
@@ -21531,6 +22334,7 @@ const Sketch = (() => {
   }
   function stepOK() {
     if (S.step && S.step.rib && !S.step.ribTarget) { UI.toast('Für eine Rippe braucht es zuerst einen Zielkörper.', { kind: 'bad' }); return; }
+    if (S.step.extent === 'toFace' && !S.step.toFace && !S.step.revolve && !S.step.sweep && !S.step.rib) { UI.toast('Klick zuerst eine Zielfläche im Bild an.', { icon: 'info' }); return; }
     const it = stepItem();
     const ctx = S.ctx;
     App.extra = [];
@@ -21560,7 +22364,9 @@ const Sketch = (() => {
     const cam = S.cam, hid = S.hiddenEdit;
     clearGroup(); clearBand(); hideBar(); hideEntry(); hideDimBox();
     Viewer.highlightFace('hover', null, null);
+    Viewer.canvas.style.cursor = '';
     if (stepBox) { stepBox.remove(); stepBox = null; }
+    Viewer.canvas.style.cursor = '';
     S = null; lastMouse = null; placeArrow();
     if (hid) Viewer.updateNode(hid, { visible: true });
     Viewer.useButtons('model');
@@ -21569,7 +22375,7 @@ const Sketch = (() => {
     UI.hint(null); App.emit('mode'); Panels.renderRight(); Handles.rebuild();
   }
   function init() {
-    App.on('results', relinkAll);
+    App.on('results', () => { relinkAll(); if (S && S.step) updateStepExtInfo(); });
     const cv = Viewer.canvas;
     cv.addEventListener('pointerdown', (e) => { if (S) { onDown(e); } }, true);
     cv.addEventListener('pointermove', (e) => { if (S) onMove(e); });

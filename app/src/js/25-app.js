@@ -2,7 +2,7 @@
 const App = (() => {
   const S = {
     doc: Model.newDoc(), sel: [], face: null, edges: [], mode: 'model', tool: null,
-    results: new Map(), errors: [], undo: [], redo: [], extra: [], hideIds: new Set(), revision: 0, lastSavedRev: -1, fileSavedRev: -1,
+    results: new Map(), resolved: new Map(), errors: [], undo: [], redo: [], extra: [], hideIds: new Set(), revision: 0, lastSavedRev: -1, fileSavedRev: -1,
     ctx: null, iso: null,   // gerade bearbeitetes Bauteil / isoliertes Teil (nur Ansicht, nicht gespeichert)
   };
   const ev = makeEmitter();
@@ -21,7 +21,7 @@ const App = (() => {
     Model.useVars(Model.vars(S.doc).v);
     S.sel = []; S.face = null; S.edges = []; S.undo = []; S.redo = []; S.extra = []; S.ctx = null; S.iso = null;
     for (const id of [...S.results.keys()]) Viewer.removeNode(id);
-    S.results.clear(); S.errors = []; S.revision++;
+    S.results.clear(); S.resolved.clear(); S.errors = []; S.revision++;
     Viewer.clearGhosts(); Views.reset(); Versions.compareOff();
     ev.emit('doc'); ev.emit('selection'); ev.emit('history');
     autosave();
@@ -199,6 +199,7 @@ const App = (() => {
   function apply(res) {
     const seen = new Set();
     S.merged = new Map();
+    S.resolved = new Map(Object.entries(res.resolved || {}));
     for (const [id, ms] of Object.entries(res.times || {})) times.set(id, { ms, at: Date.now() });
     for (const n of res.nodes) {
       seen.add(n.id);
@@ -351,6 +352,8 @@ const App = (() => {
     timeOf(id) { return times.get(id) || null; },
     get times() { return times; },
     mergedInto(id) { return (S.merged && S.merged.get(id)) || null; },
+    resolvedOf(id) { return (S.resolved && S.resolved.get(id)) || null; },
+    resolvedDist(id) { const r = S.resolved && S.resolved.get(id); return r && isFinite(r.dist) ? r.dist : null; },
     get hideIds() { return S.hideIds; }, set hideIds(x) { S.hideIds = x || new Set(); applyView(); },
     get ctx() { return S.ctx; }, get iso() { return S.iso; }, setCtx, setIso, applyView,
     get tool() { return S.tool; }, set tool(t) { S.tool = t; ev.emit('tool'); },

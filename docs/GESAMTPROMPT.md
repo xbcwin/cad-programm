@@ -94,11 +94,11 @@ Leitlinien:
 | `20-kernel.js` | Brücke zum Worker |
 | `25-app.js` | Zustand, `App.change(label, fn, {merge, amend})` mit Rückgängig (300 Schritte), Neuberechnung, Ergebnisse |
 | `30-viewer.js` | three.js-Ansicht, Picking (Flächen, Kanten), `edgePositions`, Raster, Kamera (`syncCamAnim`/`scheduleCamEmit`, `camera.updateMatrixWorld`) |
-| `35-handles.js` | Ziehgriffe (Größe, Lage, Rundungsgriff), Maus-Bedienung |
+| `35-handles.js` | Ziehgriffe (Größe, Lage, Rundungsgriff, Drehwinkel-Griff `revAngle`), Maus-Bedienung |
 | `40-library.js` | Bibliotheksteile `LIB`/`LIBMAP` (Drohnen-Bausteine mit `drone: true` ausgeblendet, bleiben für alte Projekte in `LIBMAP`) |
 | `41-dronelib.js` | FPV-Daten, Kaufteile, Herstellerrahmen |
 | `45-actions.js` | Aktionen wie Gruppieren, Ausrichten, Abstand |
-| `46-features.js` | Muster (inkl. „entlang Kurve“), Spiegeln an Fläche, Teilen, Boolesch, Wandstärke, Achse im Bild wählen (`pickAxisThen`) |
+| `46-features.js` | Muster (inkl. „entlang Kurve“), Spiegeln an Fläche, Teilen, Boolesch, Wandstärke, Achse im Bild wählen (`pickAxisThen`), Drehen bis Fläche (`pickRevolveFace`) |
 | `47-mass.js` | Volumen, Gewicht, Schwerpunkt, Material |
 | `48-joints.js` | Dreh- und Schiebegelenke, Ketten, Anschlag übernehmen, Bewegung abspielen, `add` für die KI |
 | `49-*` | Bauteile im Kontext, Zeitleiste, Protokoll, Zahleneingabe beim Ziehen |
@@ -136,7 +136,7 @@ Leitlinien:
   - Werte in `t` und `p` dürfen **Formeln** mit Maßnamen sein.
 - **`kind`:**
   - Grundkörper: `box`, `cylinder`, `sphere`, `cone`, `tube`, `torus`, `wedge`, `prism`, `pyramid`, `hemisphere`
-  - Skizzenbasiert: `extrude` (p.sketch, dist, dir, sel, thin, wall, wallSide), `revolve`, `loft` (p.sketches, ruled, tip), `sweep` (p.sketch-Pfad, shape circle/rect/sketch, d, w, h, wall, prof)
+  - Skizzenbasiert: `extrude` (p.sketch, dist, dir, sel, thin, wall, wallSide), `revolve` (p.sketch, angle, dir, angle2, toFace, toFaceFlip, axis, axisId, axis3d), `loft` (p.sketches, ruled, tip), `sweep` (p.sketch-Pfad, shape circle/rect/sketch, d, w, h, wall, prof)
   - Sonstige: `import` (STEP/STL Base64), `part` (Bibliothek, `p.lib`), `group` (children; mit `p.op` = Rechen-Gruppe), `transform` (Verschieben/Drehen/Kopieren als Schritt auf `p.target` mit `dx/dy/dz`, `rx/ry/rz`, `pivot`, `copy`), `rib` (Rippe aus offener Skizzenlinie auf `p.target` mit `thickness`, `side`, `dir`, `flip`, `depth`, `draft`)
 - **Rechen-Gruppen (`p.op`):**
   - `pattern` mit `pt`:
@@ -167,7 +167,7 @@ Leitlinien:
 - Orthografisch/Perspektive (O), Ansichten 1/3/7/0, Ansichtswürfel
 - Tiefes Zoomen ohne Flimmern mit automatischem Nachschärfen; Qualität grob bis sehr fein; Design hell/dunkel
 - Aussehen (`ViewPrefs` look/mood/shadows, `Viewer.setLook`, `Viewer.lookOf`): Studio-Look mit Werkstoff-Oberflächen (`LOOKS` in `30-viewer.js`, `App` gibt `look` je Teil mit; `it.colorSet` = eigene Farbe schlägt Werkstoff-Farbe), Spiegel-Umgebung aus einem kleinen Leuchtflächen-Raum (PMREM), weiche Schatten (PCF, nur Hauptlicht), Prüfansichten Ton/Chrom (MatCap), Einfach (matt). Bild speichern: `Viewer.renderImage(w, h, {transparent})`, `Print.imageDialog`/`saveImage`
-- Formschritte mit Modus: `it.op = {type: 'join' | 'cut' | 'common', target}` an Teilen ganz oben; der Kern (`resolveOps` in `core.js`) verrechnet sie in Reihenfolge mit dem Zielkörper (Ketten → erster Körper), das Teil liefert dann einen leeren Knoten mit `merged` (`App.mergedInto(id)`). UI: Abschnitt „Körper“ (`#op-type`, `#op-target`), `Actions.setOp`. Hochziehen `dir: 'two'` mit `dist2`, `p.thru` = durch alles (`Model.sceneSpan`, App rechnet nach)
+- Formschritte mit Modus: `it.op = {type: 'join' | 'cut' | 'common', target}` an Teilen ganz oben; der Kern (`resolveOps` in `core.js`) verrechnet sie in Reihenfolge mit dem Zielkörper (Ketten → erster Körper), das Teil liefert dann einen leeren Knoten mit `merged` (`App.mergedInto(id)`). UI: Abschnitt „Körper“ (`#op-type`, `#op-target`), `Actions.setOp`. Hochziehen `dir: 'two'` mit `dist2`, `p.thru` = durch alles (`Model.sceneSpan`, App rechnet nach), Hochziehen bis Fläche (`p.extent` `'toNext'|'toFace'`, `p.toFace`, `App.resolvedDist`, `Features.pickExtrudeFace`)
 - Skizze umhängen: `Actions.replaneSketch(id, 'o:XY' | 'd:<Bezugsebene>')` setzt `p.sketch.plane` neu und die Lage `t` zurück, `link` an Elementen fällt weg; Feld `#p-replane`
 - Kanten nach Art: `Viewer.edgeKinds(id)` → je Kante 'convex' | 'concave' | 'smooth' | null (Nachbarflächen am Kantenmittelpunkt), `Select.edgesByRule(id, rule)`; Leisten-Knöpfe „Kanten wählen“ / „Nach Art“, Menü `er-convex`/`er-concave`/`er-all`
 - Kanten einer Fläche: `Viewer.faceEdges(id, faceIdx)` (Kanten, deren Anfang, Mitte und Ende auf den Dreiecken der Fläche liegen und die noch an eine zweite Fläche grenzen); Leisten-Knopf „Ihre Kanten“ → `Panels.faceEdgeList`, Menü `fe-select`/`fe-fillet`/`fe-chamfer`

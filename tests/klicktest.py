@@ -7748,6 +7748,143 @@ def t_eigene_schrift(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a029_hochziehen_bis_flaeche(p):
+    # 1. Pflicht-Szenario Teil 1: Platte (z=0..5), darüber im Abstand 15 ein Quader (z=20..30).
+    # Kreis-Skizze auf der Platte mit „Bis zur nächsten Fläche“ → Höhe 15
+    p.empty()
+    p.ev("""App.change('x', d => {
+      const a = Model.newItem('box', { w: 60, d: 60, h: 5 }, { name: 'Platte' }); d.items.push(a);
+      const b = Model.newItem('box', { w: 40, d: 40, h: 10 }, { name: 'Quader' }); b.t.z = 20; d.items.push(b);
+    })"""); warte_rechnen(p)
+    p.ev("const r=App.results.get(App.doc.items[0].id); const fi=r.data.faces.findIndex(f=>f.t==='PLANE'&&f.n[2]>0.99); return Sketch.startOnFace({id:App.doc.items[0].id, idx:fi, info:r.data.faces[fi]})")
+    p.wait(1200)
+    p.ev("Sketch.state.ents.push({id:'c1',type:'circle',c:[0,0],r:8})")
+    p.pg.keyboard.press('Enter'); p.wait(600)
+    p.pg.select_option('#st-extent', 'toNext'); p.wait(500); warte_rechnen(p)
+    prev_dist = p.ev("return App.resolvedDist('__preview')")
+    prev_txt = p.pg.locator('#st-ext-info').inner_text()
+    p.pg.locator('.stepbox .btn.primary').click(); p.wait(800); warte_rechnen(p)
+
+    info1 = p.ev("""const g=App.doc.items[0]; const ext=g.children && g.children[1];
+      return {
+        isGrp: g.kind==='group',
+        ext: ext ? ext.p.extent : null,
+        id: ext ? ext.id : null,
+        dist: ext ? App.resolvedDist(ext.id) : null,
+        bb: App.results.get(g.id) && App.results.get(g.id).data.bbox,
+        errs: App.errors.length
+      }""")
+    vol_map = lambda: p.ev("return Mass.measure().then(r=>Object.fromEntries((r.parts||[]).map(q=>[q.id, q.volume])))")
+    v1 = vol_map()
+    exp_v1 = 60 * 60 * 5 + math.pi * 64 * 15
+    ok1 = (
+        prev_dist is not None and abs(prev_dist - 15) < 0.05 and '15' in prev_txt
+        and info1['isGrp'] and info1['ext'] == 'toNext' and info1['errs'] == 0
+        and info1['dist'] is not None and abs(info1['dist'] - 15) < 0.05
+        and info1['bb'] is not None and abs(info1['bb'][5] - 20) < 0.05
+        and abs(v1.get(p.ev("return App.doc.items[0].id"), 0) - exp_v1) < 15
+    )
+
+    # 2. Pflicht-Szenario Teil 2: Quader um 5 nach oben verschieben → Höhe wächst auf 20
+    p.ev("App.change('Quader hoch', d => { d.items[1].t.z = 25; })"); warte_rechnen(p)
+    ext_id = info1['id']
+    info2 = p.ev("return { dist: App.resolvedDist(arg), bb: App.results.get(App.doc.items[0].id).data.bbox, errs: App.errors.length }", ext_id)
+    v2 = vol_map()
+    exp_v2 = 60 * 60 * 5 + math.pi * 64 * 20
+    p.ev("App.select([arg])", ext_id); p.wait(400)
+    panel_txt = p.pg.locator('#p-ext-info').inner_text() if p.pg.locator('#p-ext-info').count() else ''
+    ok2 = (
+        info2['errs'] == 0 and info2['dist'] is not None and abs(info2['dist'] - 20) < 0.05
+        and abs(info2['bb'][5] - 25) < 0.05
+        and abs(v2.get(p.ev("return App.doc.items[0].id"), 0) - exp_v2) < 15
+        and p.pg.locator('#p-extent').input_value() == 'toNext' and '20' in panel_txt
+    )
+
+    # 3. Verschieben als Schritt (transform) um +5 → Höhe wächst mit auf 25
+    p.ev("""App.change('Transform', d => {
+      const xf = Model.newItem('transform', { target: d.items[1].id, dz: 5 }); d.items.push(xf);
+    })"""); warte_rechnen(p)
+    info3 = p.ev("return { dist: App.resolvedDist(arg), bb: App.results.get(App.doc.items[0].id).data.bbox }", ext_id)
+    v3 = vol_map()
+    exp_v3 = 60 * 60 * 5 + math.pi * 64 * 25
+    ok3 = (
+        info3['dist'] is not None and abs(info3['dist'] - 25) < 0.05
+        and abs(info3['bb'][5] - 30) < 0.05
+        and abs(v3.get(p.ev("return App.doc.items[0].id"), 0) - exp_v3) < 15
+    )
+
+    # 4. „Bis zu gewählter Fläche“ per echtem Klick im 3D auf Oberseite des Quaders (z=35) + Größenänderung (h: 10→16)
+    p.ev("App.change('Transform weg', d => { d.items.splice(2, 1); })"); warte_rechnen(p)
+    p.ev("Viewer.setView('iso', false); Viewer.fit(); App.select([arg])", ext_id); p.wait(600)
+    p.pg.select_option('#p-extent', 'toFace'); p.wait(300)
+    top_pt = world_screen(p, 0, 0, 35)
+    p.pg.mouse.click(top_pt[0], top_pt[1]); p.wait(600); warte_rechnen(p)
+    info4a = p.ev("return { ext: Model.find(App.doc, arg).item.p.extent, dist: App.resolvedDist(arg), bb: App.results.get(App.doc.items[0].id).data.bbox }", ext_id)
+    p.ev("App.change('Quader höher', d => { d.items[1].p.h = 16; })"); warte_rechnen(p)
+    info4b = p.ev("return { dist: App.resolvedDist(arg), bb: App.results.get(App.doc.items[0].id).data.bbox, deps: Model.dependencies(App.doc) }", ext_id)
+    ok4 = (
+        info4a['ext'] == 'toFace' and info4a['dist'] is not None and abs(info4a['dist'] - 30) < 0.05
+        and abs(info4a['bb'][5] - 35) < 0.05
+        and info4b['dist'] is not None and abs(info4b['dist'] - 36) < 0.05
+        and abs(info4b['bb'][5] - 41) < 0.05
+        and any(x['what'] == 'hochgezogen bis Fläche von' for x in info4b['deps'])
+    )
+
+    # 5. Formschritt mit Modus (join & cut) mit „Bis zur nächsten Fläche“
+    p.ev("""App.change('Modus', d => {
+      d.items = [];
+      const pl = Model.newItem('box', { w: 60, d: 60, h: 5 }, { name: 'Platte' }); d.items.push(pl);
+      const q = Model.newItem('box', { w: 40, d: 40, h: 10 }, { name: 'Quader' }); q.t.z = 20; d.items.push(q);
+      const k = Model.newItem('extrude', {
+        sketch: { plane: { o: [0, 0, 5], x: [1, 0, 0], n: [0, 0, 1] }, ents: [{ id: 'c', type: 'circle', c: [0, 0], r: 6 }], dims: [], cons: [] },
+        dist: 5, dir: 'normal', extent: 'toNext'
+      }, { name: 'Bolzen' });
+      k.op = { type: 'join', target: pl.id };
+      d.items.push(k);
+    })"""); warte_rechnen(p)
+    v5a = vol_map()
+    pl_id, k_id = p.ev("return [App.doc.items[0].id, App.doc.items[2].id]")
+    m5a = p.ev("return [App.mergedInto(arg), App.resolvedDist(arg)]", k_id)
+    p.ev("App.change('Quader hoch', d => { d.items[1].t.z = 25; })"); warte_rechnen(p)
+    v5b = vol_map()
+    p.ev("App.change('Cut', d => { d.items[2].p.dir = 'reverse'; d.items[2].op = { type: 'cut', target: d.items[0].id }; })"); warte_rechnen(p)
+    v5c = vol_map()
+    d5c = p.ev("return App.resolvedDist(arg)", k_id)
+    ok5 = (
+        m5a[0] == pl_id and m5a[1] is not None and abs(m5a[1] - 15) < 0.05
+        and abs(v5a.get(pl_id, 0) - (60 * 60 * 5 + math.pi * 36 * 15)) < 15
+        and abs(v5b.get(pl_id, 0) - (60 * 60 * 5 + math.pi * 36 * 20)) < 15
+        and d5c is not None and abs(d5c - 5) < 0.05
+        and abs(v5c.get(pl_id, 0) - (60 * 60 * 5 - math.pi * 36 * 5)) < 15
+    )
+
+    # 6. Schräge Zielfläche + Wechsel zu fester Höhe mit Rückgängig + Hilfetext
+    p.ev("""App.change('Schräg', d => {
+      d.items = [];
+      const q = Model.newItem('box', { w: 40, d: 40, h: 10 }, { name: 'Dach' }); q.t.z = 20; q.t.rx = 15; d.items.push(q);
+      const k = Model.newItem('extrude', {
+        sketch: { plane: { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] }, ents: [{ id: 'c', type: 'circle', c: [0, 0], r: 6 }], dims: [], cons: [] },
+        dist: 5, dir: 'normal', extent: 'toNext'
+      }, { name: 'Säule' });
+      d.items.push(k);
+    })"""); warte_rechnen(p)
+    k6_id = p.ev("return App.doc.items[1].id")
+    info6 = p.ev("return { errs: App.errors.length, dist: App.resolvedDist(arg), bb: App.results.get(arg) && App.results.get(arg).data.bbox }", k6_id)
+    p.ev("App.select([arg])", k6_id); p.wait(400)
+    p.pg.select_option('#p-extent', 'dist'); p.wait(400); warte_rechnen(p)
+    has_dist_inp = p.pg.locator('#p-dist').count() == 1 and p.ev("return App.doc.items[1].p.extent == null")
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('Control+z'); p.wait(600); warte_rechnen(p)
+    undo_ok = p.ev("return App.doc.items[1].p.extent === 'toNext'")
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    help_ok = 'extrudeToFace' in hilfen and all(k in hilfen['extrudeToFace'] for k in ('tip', 'hilfe', 'tipp')) and p.pg.locator('[data-help="extrudeToFace"]').count() == 1
+    ok6 = (
+        info6['errs'] == 0 and info6['dist'] is not None and 15 < info6['dist'] < 25
+        and info6['bb'] is not None and info6['bb'][5] > 18
+        and has_dist_inp and undo_ok and help_ok
+    )
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
+
+
 def t_f11240211(p):
     # 1. Schildchen ohne Re-Entranz und mit aktueller Kamera-Matrix bei überfälliger camAnim
     p.empty()
@@ -8138,6 +8275,131 @@ def t_a031_rippe(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a030_drehen_winkel_flaeche(p):
+    p.empty()
+    p.ev("Sketch.startOnPlane('XY')"); p.wait(600)
+    p.ev("Sketch.state.ents.push({id:'r1',type:'rect',a:[10,0],b:[20,10]})"); p.wait(200)
+    p.pg.locator('.sketchbar .tool.primary').click(); p.wait(900)
+    p.pg.locator('.stepbox .role-switch button').nth(1).click(); p.wait(400)
+    p.pg.locator('.stepbox .btn.primary').click(); p.wait(1200); warte_rechnen(p)
+
+    rev_id = p.ev("return App.doc.items[0].id")
+    vol_of = lambda tid: p.ev("return Mass.measure().then(r=>{ const pt=Mass.partOf(r,arg); return pt?pt.volume:0; })", tid)
+    bbox_of = lambda tid: p.ev("return App.results.get(arg).data.bbox", tid)
+    v360 = vol_of(rev_id) or 0
+    exp360 = math.pi * (20 ** 2 - 10 ** 2) * 10
+
+    # 1. 90° ergibt ein Viertel des vollen Volumens (±1 %)
+    p.ev("App.select([arg])", rev_id); p.wait(400)
+    p.pg.fill('#p-angle', '90'); p.pg.press('#p-angle', 'Enter'); warte_rechnen(p)
+    v90 = vol_of(rev_id) or 0
+    bb90 = bbox_of(rev_id)
+    ok1 = (
+        abs(v360 - exp360) < 10
+        and abs(v90 - v360 / 4) / (v360 / 4) < 0.01
+        and p.ev("return App.errorsFor(arg).length", rev_id) == 0
+        and bb90[5] <= 0.05 and bb90[2] < -15
+    )
+
+    # 2. Symmetrisch 2×45° (Gesamtwinkel 90°) -> gleiches Volumen, symmetrisch um Z = 0
+    p.pg.select_option('#p-rev-dir', 'both'); p.wait(500); warte_rechnen(p)
+    v_sym = vol_of(rev_id) or 0
+    bb_sym = bbox_of(rev_id)
+    sym_txt = p.pg.locator('#p-rev-sym-info').text_content() or ''
+    ok2 = (
+        abs(v_sym - v90) / v90 < 0.01
+        and '45' in sym_txt
+        and abs(bb_sym[2] + bb_sym[5]) < 0.05 and bb_sym[5] > 5
+    )
+
+    # 3. Beidseitig verschieden (45°/45° und 60°/30°) & Umgekehrt (90°)
+    p.pg.select_option('#p-rev-dir', 'two'); p.wait(400); warte_rechnen(p)
+    p.pg.fill('#p-angle', '45'); p.pg.press('#p-angle', 'Enter'); warte_rechnen(p)
+    p.pg.fill('#p-angle2', '45'); p.pg.press('#p-angle2', 'Enter'); warte_rechnen(p)
+    v_two_eq = vol_of(rev_id) or 0
+    bb_two_eq = bbox_of(rev_id)
+    p.pg.fill('#p-angle', '60'); p.pg.press('#p-angle', 'Enter'); warte_rechnen(p)
+    p.pg.fill('#p-angle2', '30'); p.pg.press('#p-angle2', 'Enter'); warte_rechnen(p)
+    v_two_asym = vol_of(rev_id) or 0
+    bb_two_asym = bbox_of(rev_id)
+    p.pg.select_option('#p-rev-dir', 'reverse'); p.wait(400); warte_rechnen(p)
+    p.pg.fill('#p-angle', '90'); p.pg.press('#p-angle', 'Enter'); warte_rechnen(p)
+    v_rev = vol_of(rev_id) or 0
+    bb_rev = bbox_of(rev_id)
+    ok3 = (
+        abs(v_two_eq - v90) / v90 < 0.01 and abs(bb_two_eq[2] + bb_two_eq[5]) < 0.05
+        and abs(v_two_asym - v90) / v90 < 0.01 and abs(bb_two_asym[2]) > abs(bb_two_asym[5]) + 1
+        and abs(v_rev - v90) / v90 < 0.01 and bb_rev[2] >= -0.05 and bb_rev[5] > 15
+    )
+
+    # 4. Bis zu gewählter Fläche (radial 90° + Richtung umkehren + 60°-Bezugsebene)
+    box_id = p.ev("let id; App.change('x', d=>{ const b=Model.newItem('box',{w:10,d:20,h:25},{name:'Anschlag'}); b.t.x=-5; b.t.y=5; b.t.z=0; d.items.push(b); id=b.id; }); return id;")
+    warte_rechnen(p)
+    p.ev("""const r=App.results.get(arg.boxId);
+      const fi=r.data.faces.findIndex(f=>f.t==='PLANE'&&f.n[0]>0.9);
+      Features.setRevolveToFace(arg.revId, {id:arg.boxId, idx:fi, info:r.data.faces[fi], point:[0,5,12.5]});""", {'revId': rev_id, 'boxId': box_id})
+    warte_rechnen(p)
+    v_face = vol_of(rev_id) or 0
+    bb_face = bbox_of(rev_id)
+    p.ev("App.select([arg])", rev_id); p.wait(400)
+    p.pg.locator('#p-rev-face-flip').click(); p.wait(500); warte_rechnen(p)
+    v_flip = vol_of(rev_id) or 0
+    bb_flip = bbox_of(rev_id)
+    s60 = round(math.sin(math.pi / 3), 6)
+    c60 = round(math.cos(math.pi / 3), 6)
+    p.ev("""App.change('x', d=>{
+      d.datums=d.datums||[]; d.datums.push({id:'d60', name:'Ebene 60', base:{type:'fixed'}, plane:{o:[0,0,0], x:[0,1,0], n:[arg.s,0,arg.c]}});
+    })""", {'s': s60, 'c': c60}); p.wait(300)
+    p.pg.select_option('#p-rev-face-datum', 'd60'); p.wait(500); warte_rechnen(p)
+    v_d60 = vol_of(rev_id) or 0
+    ok4 = (
+        abs(v_face - v90) / v90 < 0.01 and bb_face[2] >= -0.05 and bb_face[5] > 15
+        and abs(v_flip - v90) / v90 < 0.01 and bb_flip[5] <= 0.05 and bb_flip[2] < -15
+        and abs(v_d60 - v360 / 6) / (v360 / 6) < 0.01
+    )
+
+    # 5. Bis zu versetzter Fläche (Trimmen an Ebene z=8) & automatisches Nachführen auf z=6
+    p.ev("App.change('x', d=>{ const b=d.items[1]; b.p.w=30; b.p.d=20; b.p.h=10; b.t.x=15; b.t.y=5; b.t.z=8; })"); warte_rechnen(p)
+    p.ev("""const r=App.results.get(arg.boxId);
+      const fi=r.data.faces.findIndex(f=>f.t==='PLANE'&&f.n[2]<-0.9);
+      Features.setRevolveToFace(arg.revId, {id:arg.boxId, idx:fi, info:r.data.faces[fi], point:[15,5,8]});""", {'revId': rev_id, 'boxId': box_id})
+    warte_rechnen(p)
+    bb_off1 = bbox_of(rev_id)
+    p.ev("App.change('x', d=>{ d.items[1].t.z=6; })"); warte_rechnen(p); p.wait(600); warte_rechnen(p)
+    bb_off2 = bbox_of(rev_id)
+    ok5 = (
+        p.ev("return App.errorsFor(arg).length", rev_id) == 0
+        and bb_off1[2] >= -0.05 and abs(bb_off1[5] - 8) < 0.05
+        and bb_off2[2] >= -0.05 and abs(bb_off2[5] - 6) < 0.05
+    )
+
+    # 6. Ziehgriff für den Winkel bei Teil-Umdrehungen + Rückgängig + Hilfetext
+    p.ev("App.change('x', d=>{ d.items.splice(1,1); d.items[0].p.dir='normal'; d.items[0].p.angle=90; })"); warte_rechnen(p)
+    p.ev("App.select([arg])", rev_id); p.wait(400)
+    has_h90 = 'revAngle' in p.ev("return Handles.debugKinds()")
+    p.pg.fill('#p-angle', '360'); p.pg.press('#p-angle', 'Enter'); warte_rechnen(p)
+    has_h360 = 'revAngle' in p.ev("return Handles.debugKinds()")
+    p.pg.fill('#p-angle', '90'); p.pg.press('#p-angle', 'Enter'); warte_rechnen(p)
+    p.ev("Viewer.setView('front', false)"); p.wait(500); p.ev("Viewer.fit()"); p.wait(600)
+    pt = p.ev("const m=Handles.debugHandle('revAngle'); const s=Viewer.toScreen(m.position); const r=Viewer.canvas.getBoundingClientRect(); return [s.x+r.left, s.y+r.top];")
+    p.pg.mouse.move(pt[0], pt[1]); p.pg.mouse.down(); p.pg.mouse.move(pt[0] - 50, pt[1] - 40, steps=8); p.pg.mouse.up()
+    p.wait(600); warte_rechnen(p)
+    drag_ang = p.ev("return App.doc.items[0].p.angle")
+    p.ev("App.undo()"); warte_rechnen(p)
+    undo_ang = p.ev("return App.doc.items[0].p.angle")
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    ro = hilfen.get('revolveOptions') or {}
+    help_ok = bool(ro.get('tip') and ro.get('hilfe') and ro.get('tipp')) and p.pg.locator('[data-help="revolveOptions"]').count() >= 1
+    ok6 = (
+        has_h90 and not has_h360
+        and drag_ang != 90 and 5 <= drag_ang <= 355
+        and p.ev("return App.errorsFor(arg).length", rev_id) == 0
+        and abs(undo_ang - 90) < 0.1
+        and help_ok
+    )
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -8264,9 +8526,11 @@ TESTS = [
     ('[A-027] Weitere Bezugsebenen: tangential an Zylinder & Kegel / senkrecht zu Kante & Kurve / durch Kante & Punkt / durch zwei Kanten / folgt Maßen & Hilfe', t_a027_weitere_bezugsebenen),
     ('[A-023] Freie Stellen & Widerspruch erklären: Linie mit Länge / Wackeln & Umschalt F / 3. Maß Liste & Hervorheben / Entfernen löst / Regel- & Live-Widerspruch', t_a023_freie_stellen_widerspruch),
     ('[A-026] Eigene Schrift laden (TTF): Laden & Körper / Speichern & Neu-Laden / Kerning & Laufweite / CFF-Meldung', t_eigene_schrift),
+    ('[A-029] Hochziehen bis Fläche: bis zur nächsten Fläche (15→20) / Transform (+5→25) / gewählte Fläche & Größenänderung / Formschritt mit Modus / schräge Fläche / Rückgängig & Hilfe', t_a029_hochziehen_bis_flaeche),
     ('[F-11240211] Volltest-Reparatur: Schildchen ohne Re-Entranz bei überfälliger Kamera-Animation / Eigenschaften-Panel sofort bei Auswahl', t_f11240211),
     ('[A-028] Bezugspunkte und Koordinatensystem: Kantenmitte 40 mm → 20 mm / Flächenmitte & x % / Schnitt Kante & Ebene / eigenes KS & Mitwandern / Export STEP, STL & 3MF ab Nullpunkt', t_a028_bezugspunkte_koordinatensystem),
     ('[A-031] Rippe (KP-06): offene Schale mit diagonaler Rippe / einseitig & Formel / Schräge / Zeitleiste, Stützrippe & Hilfe', t_a031_rippe),
+    ('[A-030] Drehen mit Winkel und bis Fläche: 90° Viertel-Volumen / symmetrisch 2×45° / beidseitig verschieden & umgekehrt / bis Fläche & Nachführen / Winkel-Ziehgriff & Hilfe', t_a030_drehen_winkel_flaeche),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

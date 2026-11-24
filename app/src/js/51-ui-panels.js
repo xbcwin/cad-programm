@@ -424,7 +424,7 @@ const Panels = (() => {
     let hit = false;
     const fix = (s) => { if (typeof s !== 'string') return s; const r = s.replace(re, (m, pre) => { hit = true; return pre + repl; }); return /^-?\d+(\.\d+)?$/.test(r.trim()) ? +r : r; };
     for (const q of doc.params) q.expr = fix(q.expr);
-    Model.walk(doc.items, (it) => { for (const k in it.p || {}) { if (it.kind === 'transform' && (k === 'target' || k === 'pivot')) continue; if (it.kind === 'rib' && (k === 'target' || k === 'side' || k === 'dir')) continue; it.p[k] = fix(it.p[k]); } for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) f.r = fix(f.r); if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); });
+    Model.walk(doc.items, (it) => { for (const k in it.p || {}) { if (it.kind === 'transform' && (k === 'target' || k === 'pivot')) continue; if (it.kind === 'rib' && (k === 'target' || k === 'side' || k === 'dir')) continue; if (it.kind === 'extrude' && (k === 'extent' || k === 'dir' || k === 'wallSide')) continue; it.p[k] = fix(it.p[k]); } for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) f.r = fix(f.r); if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); });
     return hit;
   }
   function renameParam(id, nv) {
@@ -678,7 +678,7 @@ const Panels = (() => {
         const nm = (id) => { const f = Model.find(App.doc, id); return f ? Model.label(f.item) : '–'; };
         const line = (txt, id) => { const r = h('div', { class: 'mini-row dep-row' }, h('span', { class: 'grow' }, txt)); if (id && Model.find(App.doc, id)) { r.style.cursor = 'pointer'; r.onclick = () => App.select([id]); } return r; };
         for (const x of up) ds.append(line(`${x.what} „${nm(x.to)}“`, x.to));
-        const back = { 'abgezogen von': 'wird hiervon abgezogen', 'vereinigt mit': 'ist hiermit vereinigt', 'Schnittmenge mit': 'bildet hiermit die Schnittmenge', 'verrechnet mit': 'ist hiermit verrechnet', 'versetzt': 'versetzt diesen Körper', 'versetzte Kopie von': 'ist eine versetzte Kopie hiervon', 'Rippe an': 'verstärkt diesen Körper als Rippe', 'verknüpfte Kopie von': 'ist eine verknüpfte Kopie hiervon', 'Skizze übernimmt Kante von': 'übernimmt Kanten hiervon', 'Rohr hängt an': 'hat Rohrpunkte hieran' };
+        const back = { 'abgezogen von': 'wird hiervon abgezogen', 'vereinigt mit': 'ist hiermit vereinigt', 'Schnittmenge mit': 'bildet hiermit die Schnittmenge', 'verrechnet mit': 'ist hiermit verrechnet', 'versetzt': 'versetzt diesen Körper', 'versetzte Kopie von': 'ist eine versetzte Kopie hiervon', 'Rippe an': 'verstärkt diesen Körper als Rippe', 'verknüpfte Kopie von': 'ist eine verknüpfte Kopie hiervon', 'Skizze übernimmt Kante von': 'übernimmt Kanten hiervon', 'Rohr hängt an': 'hat Rohrpunkte hieran', 'hochgezogen bis Fläche von': 'wird bis zu dieser Fläche hochgezogen', 'dreht bis Fläche von': 'dreht bis zu einer Fläche hiervon' };
         for (const x of down) ds.append(line(x.datum ? `Bezugsebene „${x.datum}“ hängt hieran` : x.axis ? `Bezugsachse „${x.axis}“ hängt hieran` : x.point ? `Bezugspunkt „${x.point}“ hängt hieran` : x.csys ? `Koordinatensystem „${x.csys}“ hängt hieran` : `„${nm(x.from)}“ ${back[x.what] || 'hängt hieran'}`, x.datum || x.axis || x.point || x.csys ? null : x.from));
         if (down.length) ds.open = true;
         w.append(ds);
@@ -725,10 +725,58 @@ const Panels = (() => {
       const fl = h('div', { class: 'fields' });
       if (it.kind === 'extrude') {
         const cuts = it.role === 'hole' || (it.op && it.op.type === 'cut');
-        if (!it.p.thru) fl.append(UI.numField({ id: 'p-dist', label: it.p.dir === 'two' ? 'Höhe Seite 1' : 'Höhe', value: it.p.dist, onCommit: (v) => setP('dist', v) }));
-        fl.append(UI.selectField({ id: 'p-dir', label: 'Richtung', value: it.p.dir || 'normal', options: [['normal', 'Nach außen'], ['reverse', 'Nach innen'], ['both', 'Beidseitig gleich'], ['two', 'Beidseitig verschieden']], onChange: (v) => setP('dir', v) }));
+        const ext = it.p.extent === 'toNext' || it.p.extent === 'toFace' ? it.p.extent : 'dist';
+        const extField = UI.selectField({
+          id: 'p-extent',
+          label: 'Bis',
+          value: ext,
+          options: [['dist', 'Feste Höhe'], ['toNext', 'Bis zur nächsten Fläche'], ['toFace', 'Bis zu gewählter Fläche']],
+          onChange: (v) => {
+            let pickAfter = false;
+            App.change(v === 'dist' ? 'Feste Höhe' : v === 'toNext' ? 'Bis zur nächsten Fläche' : 'Bis zu gewählter Fläche', (doc) => {
+              const T = Model.find(doc, it.id).item;
+              if (v === 'dist') {
+                const rd = App.resolvedDist(it.id);
+                if (rd != null) T.p.dist = round(rd, 4);
+                delete T.p.extent; delete T.p.toFace;
+              } else {
+                T.p.extent = v;
+                delete T.p.thru;
+                if (T.p.dir === 'both') T.p.dir = 'normal';
+                if (v === 'toNext') delete T.p.toFace;
+                else if (!T.p.toFace) pickAfter = true;
+              }
+            });
+            if (pickAfter) Features.pickExtrudeFace(it.id);
+          },
+        });
+        extField.setAttribute('data-help', 'extrudeToFace');
+        fl.append(extField);
+        if (ext === 'dist' && !it.p.thru) fl.append(UI.numField({ id: 'p-dist', label: it.p.dir === 'two' ? 'Höhe Seite 1' : 'Höhe', value: it.p.dist, onCommit: (v) => setP('dist', v) }));
+        const dirOpts = ext === 'dist'
+          ? [['normal', 'Nach außen'], ['reverse', 'Nach innen'], ['both', 'Beidseitig gleich'], ['two', 'Beidseitig verschieden']]
+          : [['normal', 'Nach außen'], ['reverse', 'Nach innen'], ['two', 'Beidseitig (Seite 2 fest)']];
+        fl.append(UI.selectField({ id: 'p-dir', label: 'Richtung', value: it.p.dir || 'normal', options: dirOpts, onChange: (v) => setP('dir', v) }));
         if (it.p.dir === 'two' && !it.p.thru) fl.append(UI.numField({ id: 'p-dist2', label: 'Höhe Seite 2', value: it.p.dist2 ?? it.p.dist, onCommit: (v) => setP('dist2', v) }));
-        if (cuts || it.p.thru) { const l = h('label', { class: 'check', 'data-help': 'thruAll' }, h('input', { type: 'checkbox', id: 'p-thru', checked: !!it.p.thru }), 'Durch alles'); l.querySelector('input').onchange = (e) => App.change(e.target.checked ? 'Durch alles' : 'Feste Tiefe', (doc) => { const T = Model.find(doc, it.id).item; if (e.target.checked) T.p.thru = true; else delete T.p.thru; }); fl.append(l); }
+        if (ext === 'dist' && (cuts || it.p.thru)) { const l = h('label', { class: 'check', 'data-help': 'thruAll' }, h('input', { type: 'checkbox', id: 'p-thru', checked: !!it.p.thru }), 'Durch alles'); l.querySelector('input').onchange = (e) => App.change(e.target.checked ? 'Durch alles' : 'Feste Tiefe', (doc) => { const T = Model.find(doc, it.id).item; if (e.target.checked) T.p.thru = true; else delete T.p.thru; }); fl.append(l); }
+        if (ext !== 'dist') {
+          const rd = App.resolvedDist(it.id);
+          const info = App.resolvedOf(it.id);
+          const tgtIt = info && info.targetId ? Model.find(App.doc, info.targetId) : null;
+          const tgtName = ext === 'toFace' && it.p.toFace && it.p.toFace.label ? it.p.toFace.label : tgtIt ? Model.label(tgtIt.item) : null;
+          const txt = ext === 'toFace' && !it.p.toFace
+            ? 'Noch keine Zielfläche gewählt – klick „Fläche im Bild wählen“.'
+            : rd != null
+              ? `Aktuelle Höhe: ${Units.fmtLenU(rd, 2)}${tgtName ? ` (bis ${tgtName})` : ''}`
+              : 'Wird bis zur Zielfläche berechnet …';
+          fl.append(h('div', { class: 'hint-box', id: 'p-ext-info' }, txt));
+          if (ext === 'toFace') {
+            const pb = h('button', { type: 'button', class: 'btn', id: 'p-pick-face' });
+            pb.innerHTML = icon('pointer') + (it.p.toFace ? 'Andere Fläche wählen' : 'Fläche im Bild wählen');
+            pb.onclick = () => Features.pickExtrudeFace(it.id);
+            fl.append(pb);
+          }
+        }
         const hasRegs = SK.regions(it.p.sketch ? Solver.cached(it.p.sketch, Model.vars(App.doc).v).ents : []).length > 0;
         const tl = h('label', { class: 'check', 'data-help': 'thinWall' }, h('input', { type: 'checkbox', id: 'p-thin', checked: !!it.p.thin, disabled: !!it.p.thin && !hasRegs }), 'Dünne Wand');
         tl.querySelector('input').onchange = (e) => App.change(e.target.checked ? 'Dünne Wand an' : 'Dünne Wand aus', (doc) => {
@@ -742,7 +790,57 @@ const Panels = (() => {
           fl.append(UI.selectField({ id: 'p-wall-side', label: 'Wand-Lage', value: it.p.wallSide || 'center', options: [['center', 'Mittig'], ['in', 'Nach innen'], ['out', 'Nach außen']], onChange: (v) => setP('wallSide', v) }));
         }
       } else {
-        fl.append(UI.numField({ id: 'p-angle', label: 'Winkel', value: it.p.angle, unit: '°', onCommit: (v) => setP('angle', v) }));
+        const dir = it.p.dir || 'normal';
+        const dirSel = UI.selectField({
+          id: 'p-rev-dir', label: 'Richtung', value: dir,
+          options: [['normal', 'Eine Richtung'], ['reverse', 'Umgekehrt'], ['both', 'Symmetrisch (beidseitig gleich)'], ['two', 'Beidseitig verschieden'], ['toFace', 'Bis zu gewählter Fläche']],
+          onChange: (v) => {
+            App.change('Drehrichtung geändert', (doc) => {
+              const T = Model.find(doc, it.id).item;
+              T.p.dir = v;
+              if (v === 'two' && T.p.angle2 == null) {
+                const cur = Model.num(T.p.angle, Model.vars(doc).v, 360);
+                if (cur >= 359) { T.p.angle = 90; T.p.angle2 = 90; }
+                else T.p.angle2 = T.p.angle;
+              }
+            });
+            if (v === 'toFace' && !it.p.toFace) Features.pickRevolveFace(it.id);
+          },
+        });
+        dirSel.setAttribute('data-help', 'revolveOptions');
+        fl.append(dirSel);
+        if (dir !== 'toFace') {
+          const angLbl = dir === 'both' ? 'Gesamtwinkel' : dir === 'two' ? 'Winkel Seite 1' : 'Winkel';
+          const minA = dir === 'two' ? 0 : 0.1;
+          fl.append(UI.numField({ id: 'p-angle', label: angLbl, value: it.p.angle, unit: '°', min: minA, onCommit: (v) => setP('angle', typeof v === 'number' ? clamp(v, minA, 360) : v) }));
+          if (dir === 'both') {
+            fl.append(h('div', { class: 'mini-row', id: 'p-rev-sym-info' }, h('span', { class: 'grow' }, 'Symmetrisch'), h('b', { class: 'mono' }, `je Seite ${fmt(Model.num(it.p.angle, V, 360) / 2, 1)}°`)));
+          }
+          if (dir === 'two') {
+            fl.append(UI.numField({ id: 'p-angle2', label: 'Winkel Seite 2', value: it.p.angle2 ?? it.p.angle, unit: '°', min: 0, onCommit: (v) => setP('angle2', typeof v === 'number' ? clamp(v, 0, 360) : v) }));
+          }
+        } else {
+          const tf = it.p.toFace;
+          const fr = tf && !tf.lost ? Model.revolveFrame(it.p, V) : null;
+          const hitDeg = fr ? Model.revolveHitAngle(fr, tf.o, tf.fn, !!it.p.toFaceFlip) : null;
+          const infoTxt = !tf ? 'Noch keine Fläche gewählt' : tf.lost ? `Zielfläche „${tf.name || '?'}“ fehlt` : `${tf.kind === 'datum' ? 'Bezugsebene' : 'Fläche'}: „${tf.name || 'Fläche'}“${hitDeg != null ? ` (${fmt(hitDeg, 1)}°)` : ''}`;
+          fl.append(h('div', { class: 'mini-row', id: 'p-rev-face-info', style: tf && tf.lost ? { color: 'var(--bad)' } : null }, h('span', { class: 'grow' }, infoTxt)));
+          const pb = h('button', { type: 'button', class: 'btn', id: 'p-rev-face-pick' }); pb.innerHTML = icon('cursor') + (tf ? 'Andere Fläche wählen' : 'Fläche im Bild wählen');
+          pb.onclick = () => Features.pickRevolveFace(it.id);
+          fl.append(pb);
+          const dats = typeof Datums !== 'undefined' ? Datums.list().filter((d) => d.plane) : [];
+          if (dats.length) {
+            fl.append(UI.selectField({
+              id: 'p-rev-face-datum', label: 'Bezugsebene als Ziel',
+              value: tf && tf.kind === 'datum' ? tf.datumId : '',
+              options: [['', 'Bezugsebene wählen …'], ...dats.map((d) => [d.id, d.name])],
+              onChange: (v) => { if (v) Features.setRevolveToFace(it.id, { datumId: v }); },
+            }));
+          }
+          const flp = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'p-rev-face-flip', checked: !!it.p.toFaceFlip }), 'Andere Richtung');
+          flp.querySelector('input').onchange = (e) => App.change('Drehrichtung umgekehrt', (doc) => { const T = Model.find(doc, it.id).item; T.p.toFaceFlip = e.target.checked; });
+          fl.append(flp);
+        }
         const axList = typeof Datums !== 'undefined' ? Datums.axes() : [];
         if (axList.length || it.p.axisId) {
           const opts = [['sketch', 'Achse aus der Skizze'], ...axList.filter((a) => a.axis).map((a) => ['da:' + a.id, 'Bezugsachse „' + a.name + '“'])];
