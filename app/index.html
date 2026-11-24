@@ -5704,6 +5704,10 @@ const SK = (() => {
     }
     return out;
   }
+  function needsEntsFonts(ents, extraFont = null) {
+    if (extraFont && BUILTIN_FONT_URLS[extraFont] && !FONTS[extraFont]) return true;
+    return collectTextFonts(ents).size > 0;
+  }
   async function ensureEntsFonts(ents, extraFont = null) {
     const need = collectTextFonts(ents);
     if (extraFont && BUILTIN_FONT_URLS[extraFont] && !FONTS[extraFont]) need.add(extraFont);
@@ -6204,7 +6208,7 @@ const SK = (() => {
     const r = Solver.solve({ ents: ents || [], dims: dims || [], cons: cons || [] }, V, { inPlace });
     return r.ents;
   }
-  return { textPathPts, chains, ellipsePoints, splineBez, bezPoints, textContours, textBox, FONTS, FONTNAMES, isFontLoaded, loadFont, ensureEntsFonts, ensureDocFonts, onFont: fontEv.on, syncFonts, ensureFonts, loops, regions, regionAt, segsOf, segPoints, splinePoints, lineSegsOf, endA, endB, anchorOf, distSeg, arcInfo, arcPoints, circlePoints, rectCorners, polyCorners, hit, distEnt, snapPoints, faceLoopsToEnts, project3, openEnds, bounds, translateEnt, inPoly, d2, applyDims, measure, setMeasure, DIMKEYS, DIMNAME };
+  return { textPathPts, chains, ellipsePoints, splineBez, bezPoints, textContours, textBox, FONTS, FONTNAMES, isFontLoaded, loadFont, needsEntsFonts, ensureEntsFonts, ensureDocFonts, onFont: fontEv.on, syncFonts, ensureFonts, loops, regions, regionAt, segsOf, segPoints, splinePoints, lineSegsOf, endA, endB, anchorOf, distSeg, arcInfo, arcPoints, circlePoints, rectCorners, polyCorners, hit, distEnt, snapPoints, faceLoopsToEnts, project3, openEnds, bounds, translateEnt, inPoly, d2, applyDims, measure, setMeasure, DIMKEYS, DIMNAME };
 })();
 
 // ---- 16-solver.js ----
@@ -20891,7 +20895,19 @@ const Panels = (() => {
     UI.pop(anchor, box);
   }
   // ---------- Einstellungen (rechts) ----------
-  function renderRight() {
+  let rightDeferred = false;
+  function hasFocusedRightInput() {
+    const body = $('#right-body');
+    const ae = document.activeElement;
+    if (!body || !ae || !body.contains(ae)) return false;
+    if (ae.tagName === 'TEXTAREA') return true;
+    if (ae.tagName !== 'INPUT') return false;
+    const t = (ae.type || 'text').toLowerCase();
+    return t !== 'checkbox' && t !== 'radio' && t !== 'button' && t !== 'submit' && t !== 'reset' && t !== 'range' && t !== 'color' && t !== 'file';
+  }
+  function renderRight(opts) {
+    if (opts && opts.preserveFocus && hasFocusedRightInput()) { rightDeferred = true; return; }
+    rightDeferred = false;
     const body = $('#right-body'); body.innerHTML = '';
     if (App.mode === 'drawing') { $('#right-title').textContent = 'Zeichnung'; Drawing.renderPanel(body); return; }
     if (Sketch.active) { $('#right-title').textContent = 'Skizze'; Sketch.renderPanel(body); return; }
@@ -22289,9 +22305,31 @@ const Panels = (() => {
     if (typeof Kernel !== 'undefined' && Kernel.on) Kernel.on('state', debounce(() => { if (leftTab === 'log') renderLeft(); }, 80));
     Toolbar.init();
     renderTools(); initViewCube();
+    const rightBody = $('#right-body');
+    if (rightBody) {
+      rightBody.addEventListener('focusout', () => {
+        if (!rightDeferred) return;
+        setTimeout(() => { if (rightDeferred && !hasFocusedRightInput()) renderRight(); }, 0);
+      });
+    }
+    let pendingRightForce = false;
     const rerenderLeftHint = debounce(() => { renderLeft(); UI.renderHint(); }, 16);
-    const rerender = debounce(() => { rerenderLeftHint.cancel(); renderLeft(); renderRight(); renderCtx(); UI.renderHint(); }, 16);
-    App.on('doc', rerender); App.on('selection', () => { rerender.cancel(); renderRight(); renderCtx(); rerenderLeftHint(); }); App.on('results', rerender); DroneCheck.on('checked', () => { if (!App.sel.length) rerender(); }); Weak.on('analyzed', () => { if (!App.sel.length) rerender(); }); App.on('mode', () => { renderTools(); rerender(); });
+    const rerender = debounce(() => {
+      const force = pendingRightForce;
+      pendingRightForce = false;
+      rerenderLeftHint.cancel();
+      renderLeft();
+      renderRight(force ? undefined : { preserveFocus: true });
+      renderCtx();
+      UI.renderHint();
+    }, 16);
+    const scheduleRerender = (forceRight = true) => { if (forceRight) pendingRightForce = true; rerender(); };
+    App.on('doc', () => scheduleRerender(true));
+    App.on('selection', () => { rerender.cancel(); pendingRightForce = false; renderRight(); renderCtx(); rerenderLeftHint(); });
+    App.on('results', () => scheduleRerender(false));
+    DroneCheck.on('checked', () => { if (!App.sel.length) scheduleRerender(false); });
+    Weak.on('analyzed', () => { if (!App.sel.length) scheduleRerender(false); });
+    App.on('mode', () => { renderTools(); scheduleRerender(true); });
     Viewer.on('camera', placeCtx);
     App.on('ghosts', placeCtx);
     ViewPrefs.on('change', debounce(() => { if (leftTab === 'tree') renderLeft(); }, 30));   // Erste Schritte ein-/ausblenden
@@ -24753,13 +24791,12 @@ const Sketch = (() => {
   }
   function ensureSketchFonts(extraFont = null) {
     if (!S || !SK.ensureEntsFonts) return;
-    SK.ensureEntsFonts(S.ents, extraFont).then((loaded) => {
-      if (loaded && S) { reapply(); render(); Panels.renderRight(); }
-    }).catch((e) => UI.toast((e && e.message) || 'Schrift konnte nicht geladen werden.', { kind: 'bad' }));
+    SK.ensureEntsFonts(S.ents, extraFont).catch((e) => UI.toast((e && e.message) || 'Schrift konnte nicht geladen werden.', { kind: 'bad' }));
   }
   function begin(init, skipDraw) {
     Views.collapse();
     if (S) cancel(true);
+    donePending = false;
     if (Notes.active) Notes.stop();
     Panels.closeFlyout(); UI.closePop();
     const F = frameWorld(init.plane, init.W);
@@ -28927,9 +28964,22 @@ const Sketch = (() => {
   }
 
   // ---------- Fertig / Hochziehen ----------
-  function done() {
-    if (!S) return;
+  let donePending = false;
+  function done(skipFontWait = false) {
+    if (!S || donePending) return;
     S.draft = null; hideEntry();
+    if (!skipFontWait && SK.needsEntsFonts && SK.needsEntsFonts(S.ents)) {
+      const sess = S;
+      donePending = true;
+      SK.ensureEntsFonts(S.ents).then(() => {
+        donePending = false;
+        if (S === sess) { reapply(); render(); done(true); }
+      }).catch((e) => {
+        donePending = false;
+        UI.toast((e && e.message) || 'Schrift konnte nicht geladen werden.', { kind: 'bad' });
+      });
+      return;
+    }
     const regs = SK.regions(S.ents);
     const editKind = S.ctx.mode === 'edit' ? (Model.find(App.doc, S.ctx.editId) || { item: {} }).item.kind : null;
     const pathMode = S.ctx.mode === 'patpath' || isPathEdit();
@@ -29556,6 +29606,7 @@ const Sketch = (() => {
   }
   function finishSession() {
     if (!S) return;
+    donePending = false;
     stopWiggle(true); stopFreePulse();
     loftPreviewDebounced.cancel(); lpKey = ''; lpPending = '';
     const cam = S.cam, hid = S.hiddenEdit;
@@ -29572,7 +29623,13 @@ const Sketch = (() => {
     UI.hint(null); App.emit('mode'); Panels.renderRight(); Handles.rebuild();
   }
   function init() {
-    if (SK.onFont) SK.onFont('loaded', () => { if (S) { reapply(); render(); Panels.renderRight(); } });
+    if (SK.onFont) SK.onFont('loaded', () => {
+      if (!S) return;
+      reapply(); render();
+      const note = $('#tx-font-loading');
+      if (note && S.txt && SK.isFontLoaded && SK.isFontLoaded(S.txt.font || 'inter')) note.remove();
+      Panels.renderRight({ preserveFocus: true });
+    });
     App.on('results', () => { relinkAll(); relinkSketchPlanes(); if (S && S.step) updateStepExtInfo(); });
     const cv = Viewer.canvas;
     cv.addEventListener('pointerdown', (e) => { if (S) { onDown(e); } }, true);

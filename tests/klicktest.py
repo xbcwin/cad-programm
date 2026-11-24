@@ -13373,6 +13373,105 @@ def t_a060_druck_passung_wand_ausrichten(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_f11241014(p):
+    # 1. Skizze-Fertig (Prägen) wartet auf verzögert geladene Schrift, und Schrift-Laden schützt fokussiertes Feld
+    p.empty()
+    p.ev("Actions.addPrimitive('cylinder', { p: { d: 30, h: 40 }, pos: [0, 0] })")
+    warte_rechnen(p, 20); p.wait(300)
+    p.ev("""const id = App.doc.items[0].id, r = App.results.get(id);
+      const fi = r.data.faces.findIndex(f => f.t === 'CYLINDRE');
+      App.select([id], { face: { id, faceIdx: fi } });""")
+    p.wait(300)
+    p.ev("""window.__origFetch = window.fetch;
+      window.__fontGates = {};
+      window.__releaseFont = (key) => {
+        window.__fontGates[key + '_open'] = true;
+        const fn = window.__fontGates[key];
+        if (fn) { window.__fontGates[key] = null; fn(); }
+      };
+      window.fetch = function(input, init) {
+        const url = typeof input === 'string' ? input : (input && input.url) || '';
+        if (url.includes('schrift-inter-fett.json') || url.includes('schrift-inter.json')) {
+          const key = url.includes('fett') ? 'fett' : 'inter';
+          return new Promise((resolve) => {
+            const doneWait = () => resolve(window.__origFetch.call(this, input, init));
+            if (window.__fontGates[key + '_open']) doneWait();
+            else window.__fontGates[key] = doneWait;
+          });
+        }
+        return window.__origFetch.call(this, input, init);
+      };""")
+    try:
+        p.pg.locator('.ctxbar button[aria-label="Prägen"]').click(); p.wait(700)
+        sk_init = p.ev("return [Sketch.active, SK.isFontLoaded('inter'), !!document.querySelector('#tx-font-loading')]")
+        # Fokussiertes Eingabefeld (#tx-h) bleibt beim Laden der Schrift 'fett' erhalten
+        p.pg.select_option('#tx-font', 'fett'); p.wait(200)
+        p.pg.locator('#tx-h').fill('9')
+        p.ev("window.__releaseFont('fett')"); p.wait(400)
+        focus_font = p.ev("""return [
+          SK.isFontLoaded('fett'),
+          document.activeElement && document.activeElement.id,
+          document.querySelector('#tx-h') && document.querySelector('#tx-h').value,
+          !!document.querySelector('#tx-font-loading'),
+        ]""")
+        # Zurück auf ungeladene Schrift 'inter', Text setzen und Fertig klicken, bevor 'inter' fertig ist
+        p.pg.select_option('#tx-font', 'inter'); p.wait(200)
+        p.pg.fill('#tx-s', 'HI'); p.wait(100)
+        p.pg.fill('#tx-h', '7'); p.pg.press('#tx-h', 'Enter'); p.wait(200)
+        sx, sy = to_screen(p, 0, -3.5)
+        p.pg.mouse.click(sx, sy); p.wait(300)
+        p.pg.locator('.sketchbar .tool.primary').click(); p.wait(300)
+        while_gated = p.ev("""return [
+          Sketch.active,
+          SK.isFontLoaded('inter'),
+          document.querySelectorAll('.stepbox').length,
+          document.querySelectorAll('.toast.bad').length,
+        ]""")
+        p.ev("window.__releaseFont('inter')"); p.wait(700)
+        after_release = p.ev("""return [
+          Sketch.active,
+          SK.isFontLoaded('inter'),
+          document.querySelectorAll('.stepbox').length,
+          document.querySelectorAll('#st-emb-deboss').length,
+        ]""")
+        p.pg.locator('#st-emb-deboss').click(); p.wait(200)
+        p.pg.locator('.stepbox .btn.primary').click()
+        warte_rechnen(p, 35); p.wait(300)
+        emb_done = p.ev("return [App.errors.length, App.doc.items.length, App.doc.items[1] && App.doc.items[1].kind]")
+        ok1 = (
+            sk_init == [True, False, True]
+            and focus_font == [True, 'tx-h', '9', False]
+            and while_gated == [True, False, 0, 0]
+            and after_release == [True, True, 1, 1]
+            and emb_done == [0, 2, 'emboss']
+        )
+    finally:
+        p.ev("""if (window.__releaseFont) { window.__releaseFont('inter'); window.__releaseFont('fett'); }
+          if (window.__origFetch) { window.fetch = window.__origFetch; delete window.__origFetch; }
+          if (Sketch.active) Sketch.cancel(true);""")
+
+    # 2. Fokussiertes Eingabefeld im rechten Panel überlebt asynchrones App.emit('results')
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(300)
+    p.ev("Actions.addPrimitive('box', { p: { w: 10, d: 10, h: 10 }, pos: [0, 0] })")
+    warte_rechnen(p, 20); p.wait(300)
+    p.ev("Features.scale([App.doc.items[0].id], { s: 2 })")
+    warte_rechnen(p, 20); p.wait(300)
+    p.pg.locator('#sc-uniform').uncheck(); p.wait(250)
+    p.pg.locator('#sc-sx').fill('1')
+    p.ev("App.emit('results')"); p.wait(150)
+    during_focus = p.ev("""return [
+      document.activeElement && document.activeElement.id,
+      document.querySelector('#sc-sx') && document.querySelector('#sc-sx').value,
+    ]""")
+    p.pg.press('#sc-sx', 'Enter')
+    warte_rechnen(p, 20); p.wait(250)
+    p.pg.locator('#sc-sx').evaluate("el => el.blur()")
+    p.ev("App.emit('results')"); p.wait(150)
+    after_blur = p.ev("return [App.errors.length, App.doc.items[1] && App.doc.items[1].p.sx]")
+    ok2 = during_focus == ['sc-sx', '1'] and after_blur == [0, 1]
+    return [ok1, ok2]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -13541,6 +13640,7 @@ TESTS = [
     ('[A-073] Python-Cache: .gitignore enthält __pycache__/ & *.pyc / keine .pyc in git ls-files tests', t_a073_pycache),
     ('[A-061] Stabile Bezüge, Schritt 1: Rundung an Kante über Tasche & Längenänderung 40→60 / geteilte Kante / Skizzen-Fase / Skizze auf Fläche / Lage-Ersatz', t_a061_stabile_bezuege),
     ('[A-064] Zeichnung: Detailansicht (Detail Z 4:1, wahre Maße, 4× Geometrie)', t_a064_zeichnung_detailansicht),
+    ('[F-11241014] Volltest-Reparatur: Skizze-Fertig wartet auf Schrift-Laden / rechtes Panel schützt fokussiertes Eingabefeld bei results', t_f11241014),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
