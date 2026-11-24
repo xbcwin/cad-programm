@@ -15795,6 +15795,193 @@ def t_a075_projekt_tabs(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+# ---------- [A-078] Große Modelle, Schritt 2: mehrere Rechen-Helfer (PL-04) ----------
+def t_a078_mehrere_rechenhelfer(p):
+    reqs = []
+    p.pg.on('request', lambda req: reqs.append(req.url))
+    p.empty()
+
+    # 1. Vier unabhängige Körper mit jeweils eigenem Bohrungsmuster (Rechteck- / Kreismuster)
+    p.ev("""
+      App.change('Vier Körper mit Bohrungsmustern', (doc) => {
+        const specs = [
+          { name: 'Platte A', x: 0, w: 60, d: 40, h: 6, pt: 'rect', nx: 3, ny: 2, dx: 16, dy: 16, ox: -16, oy: -8, hd: 4 },
+          { name: 'Platte B', x: 120, w: 54, d: 54, h: 8, pt: 'circ', n: 4, rad: 16, hd: 5 },
+          { name: 'Platte C', x: 240, w: 70, d: 34, h: 5, pt: 'rect', nx: 4, ny: 1, dx: 15, dy: 0, ox: -22.5, oy: 0, hd: 3.5 },
+          { name: 'Platte D', x: 360, w: 50, d: 50, h: 10, pt: 'circ', n: 6, rad: 14, hd: 3.2 },
+        ];
+        for (const s of specs) {
+          const base = Model.newItem('box', { w: s.w, d: s.d, h: s.h }, { name: s.name + ' Grund' });
+          let pat;
+          if (s.pt === 'rect') {
+            const hole = Model.newItem('cylinder', { d: s.hd, h: s.h + 4 }, { name: 'Bohrung', role: 'hole' });
+            hole.t.x = s.ox; hole.t.y = s.oy; hole.t.z = -2;
+            pat = Model.newItem('group', { op: 'pattern', pt: 'rect', nx: s.nx, ny: s.ny, dx: s.dx, dy: s.dy }, { name: 'Lochmuster' });
+            pat.children = [hole];
+          } else {
+            const hole = Model.newItem('cylinder', { d: s.hd, h: s.h + 4 }, { name: 'Bohrung', role: 'hole' });
+            hole.t.x = s.rad; hole.t.y = 0; hole.t.z = -2;
+            pat = Model.newItem('group', { op: 'pattern', pt: 'circ', n: s.n, ang: 360, cx: 0, cy: 0, cz: 0, axis: 'z' }, { name: 'Lochmuster' });
+            pat.children = [hole];
+          }
+          const grp = Model.newItem('group', {}, { name: s.name });
+          grp.t.x = s.x;
+          grp.children = [base, pat];
+          doc.items.push(grp);
+        }
+      });
+    """)
+    warte_rechnen(p, 40)
+
+    # 2. Verteilung auf mehrere Rechen-Helfer & genau ein WASM-Abruf
+    st_multi = p.ev("return Kernel.stats;")
+    expected_max = p.ev("const c = Number(navigator.hardwareConcurrency); return Math.min(4, Math.max(1, Number.isFinite(c) && c >= 1 ? Math.floor(c) : 2));")
+    multi_expected = expected_max > 1
+    used_helpers = [w for w in st_multi['lastEval']['workerIds'] if w > 0]
+    jobs_used_count = sum(1 for c in st_multi['workerJobs'] if c > 0)
+    ok1 = (
+        st_multi['wasmFetches'] == 1
+        and st_multi['maxWorkers'] == expected_max
+        and st_multi['lastEval']['chunks'] == 4
+        and st_multi['parallelEvalCalls'] >= (1 if multi_expected else 0)
+        and (st_multi['lastEval']['workersUsed'] > 1 if multi_expected else st_multi['lastEval']['workersUsed'] == 1)
+        and (st_multi['activeWorkers'] > 1 and st_multi['activeWorkers'] <= 4 if multi_expected else st_multi['activeWorkers'] == 1)
+        and (len(used_helpers) >= 1 and jobs_used_count > 1 if multi_expected else jobs_used_count == 1)
+    )
+
+    # 3. Schluessel-gebundene Aufrufe (faceLoops & remesh) funktionieren auch auf einem Neben-Helfer
+    helper_res = p.ev("""return (async () => {
+      const st = Kernel.stats;
+      const iw = st.lastEval.itemWorkers || {};
+      const targetId = Object.keys(iw).find((id) => iw[id] > 0) || App.doc.items[0].id;
+      const r = App.results.get(targetId);
+      if (!r || !r.key) return { ok: false };
+      const loops = await Kernel.call('faceLoops', { key: r.key, faceIdx: 0 });
+      const mesh = await Kernel.call('remesh', { key: r.key, tol: 0.04 });
+      return { ok: Array.isArray(loops) && loops.length > 0 && mesh && mesh.triangles && mesh.triangles.length > 0 };
+    })();""")
+
+    snap_js = """return (async () => {
+      const m = await Mass.measure();
+      const parts = {};
+      for (const p of (m && m.parts) || []) parts[p.id] = p.volume;
+      return {
+        errors: App.errors.length,
+        order: App.doc.items.map((it) => {
+          const r = App.results.get(it.id);
+          const d = r && r.data;
+          return {
+            id: it.id,
+            name: it.name,
+            key: r ? r.key : null,
+            bbox: d ? d.bbox : null,
+            tris: d && d.triangles ? d.triangles.length : 0,
+            faces: d && d.faces ? d.faces.length : 0,
+            edges: d && d.edges ? d.edges.length : 0,
+            vol: parts[it.id] || 0,
+          };
+        }),
+      };
+    })();"""
+    res_multi = p.ev(snap_js)
+    ok2 = (
+        helper_res['ok']
+        and res_multi['errors'] == 0
+        and len(res_multi['order']) == 4
+        and all(x['tris'] > 0 and x['vol'] > 1000 for x in res_multi['order'])
+    )
+
+    # 4. Einstellung (nur Profi): sichtbar in Profi, versteckt in Einfach, Abschalten nutzt nur 1 Helfer
+    p.ev("ViewPrefs.dialog();")
+    p.wait(300)
+    chk_pro = p.pg.locator('#set-multiWorker')
+    vis_pro = chk_pro.is_visible() and chk_pro.is_checked()
+    help_attr = p.pg.locator('[data-help="multiWorker"]').count() >= 1
+    p.pg.keyboard.press('Escape'); p.wait(200)
+
+    p.ev("ViewPrefs.setLevel('simple'); ViewPrefs.dialog();")
+    p.wait(300)
+    vis_simple = p.pg.locator('#set-multiWorker').is_visible()
+    p.pg.keyboard.press('Escape'); p.wait(200)
+
+    p.ev("ViewPrefs.setLevel('pro'); ViewPrefs.dialog();")
+    p.wait(300)
+    p.pg.uncheck('#set-multiWorker')
+    p.wait(200)
+    p.pg.locator('.modal .btn.primary').click()
+    p.wait(300)
+    p.ev("App.requalify();")
+    warte_rechnen(p, 40)
+
+    st_single = p.ev("return Kernel.stats;")
+    res_single = p.ev(snap_js)
+    same_geom = (
+        res_single['errors'] == 0
+        and len(res_single['order']) == len(res_multi['order'])
+        and all(
+            a['id'] == b['id']
+            and a['key'] == b['key']
+            and a['faces'] == b['faces']
+            and a['edges'] == b['edges']
+            and a['tris'] == b['tris']
+            and abs(a['vol'] - b['vol']) < 1e-4
+            and all(abs(x - y) < 1e-4 for x, y in zip(a['bbox'], b['bbox']))
+            for a, b in zip(res_multi['order'], res_single['order'])
+        )
+    )
+    ok3 = (
+        vis_pro and help_attr and not vis_simple
+        and st_single['multiWorker'] is False
+        and st_single['activeWorkers'] == 1
+        and st_single['lastEval']['workersUsed'] == 1
+        and st_single['wasmFetches'] == 1
+        and same_geom
+    )
+
+    # 5. Wieder einschalten + abhängige Körper (cut) bleiben zusammen + kein Nachladen aus dem Netz
+    p.ev("ViewPrefs.dialog();")
+    p.wait(250)
+    p.pg.check('#set-multiWorker')
+    p.wait(150)
+    p.pg.locator('.modal .btn.primary').click()
+    p.wait(250)
+    p.ev("""
+      App.change('Abhängiger Schritt', (doc) => {
+        const cutter = Model.newItem('cylinder', { d: 10, h: 20 }, { name: 'Zentralloch' });
+        cutter.t.z = -2;
+        cutter.op = { type: 'cut', target: doc.items[0].id };
+        doc.items.push(cutter);
+      });
+    """)
+    warte_rechnen(p, 40)
+    st_dep = p.ev("return Kernel.stats;")
+    dep_ok = (
+        st_dep['multiWorker'] is True
+        and st_dep['lastEval']['chunks'] == 4
+        and st_dep['wasmFetches'] == 1
+        and p.ev("return App.errors.length") == 0
+        and p.ev("return !!App.mergedInto(App.doc.items[4].id)")
+    )
+    wasm_reqs = [u for u in reqs if 'occ-kernel.wasm' in u]
+    foreign_reqs = [
+        u for u in reqs
+        if u.startswith('http')
+        and not u.startswith('http://localhost:')
+        and not u.startswith('http://127.0.0.1:')
+        and not u.startswith('https://fonts.googleapis.com/')
+        and not u.startswith('https://fonts.gstatic.com/')
+    ]
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r => r.json())")
+    h_mw = hilfen.get('multiWorker') or {}
+    ok4 = (
+        dep_ok
+        and len(wasm_reqs) == 1
+        and len(foreign_reqs) == 0
+        and bool(h_mw.get('tip') and h_mw.get('hilfe') and h_mw.get('tipp'))
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -15975,6 +16162,7 @@ TESTS = [
     ('[A-074] Übersetzbare Oberfläche, Schritt 2: Test-Modus & vollständige DOM-Abdeckung', t_a074_uebersetzbare_oberflaeche_2),
     ('[A-070] Zeichnung: Positionsnummern und Stückliste (ZE-12)', t_a070_positionsnummern_stueckliste),
     ('[A-075] Projekt-Tabs: zwei Projekte, unabhängiges Rückgängig, Schließen mit Nachfrage, Einfach & Profi, Neuladen & Hilfe', t_a075_projekt_tabs),
+    ('[A-078] Mehrere Rechen-Helfer: 4 unabhängige Körper mit Bohrungsmustern verteilt & ergebnisgleich, Einstellung (Profi), kein Nachladen', t_a078_mehrere_rechenhelfer),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

@@ -91,7 +91,7 @@ Leitlinien:
 | `15-sketchcore.js` (`SK`) | Skizzen-Geometrie: `segsOf`, `regions`, `chains` (offene Pfade), `bounds`, Splines als exakte Bézier (`splineBez`), Text-Umrisse (Inter OFL bei Bedarf über `loadFont`/`needsEntsFonts`/`ensureEntsFonts`/`ensureDocFonts` + eigene TTFs via `syncFonts`, `kern` + Laufweite), Ellipse, Fangpunkte, Maße |
 | `16-solver.js` | Skizzen-Löser (Maße und Regeln gemeinsam, Freiheitsgrade, Konflikte) |
 | `17-sketchops.js` (`SKO`) | Schnittpunkte, Trimmen, Versatz (`offsetChain`), dünne Wand (`thinRegions`), Spiegeln, Muster (`mapEnt`), Schablonen `TEMPLATES`/`tplEnts`, Skizzen-Prüfer `inspect` |
-| `20-kernel.js` | Brücke zum Worker (`Kernel.ensure`/`state`/`timings`, lädt WASM und Worker erst bei Bedarf) |
+| `20-kernel.js` | Brücke zum Worker-Pool (`Kernel.ensure`/`state`/`timings`/`setMultiWorker`/`maxWorkers`/`stats`, lädt WASM einmal bei Bedarf, verteilt unabhängige Körper auf bis zu 4 Worker) |
 | `25-app.js` | Zustand, `App.change(label, fn, {merge, amend})` mit sparsamem Patch-Rückgängig (`App.Patch`, Speicherlimit 32 MB, `App.historyStats`, `App.setHistoryLimit`), mehrere Projekt-Tabs (`openTab`/`switchTab`/`closeTab`/`restoreOpenTabs`), Neuberechnung, Ergebnisse |
 | `30-viewer.js` | three.js-Ansicht, Picking (Flächen, Kanten), `edgePositions`, Raster, `renderNow` (synchrones Einzelbild), Kamera (`syncCamAnim`/`scheduleCamEmit`, `camera.updateMatrixWorld`), adaptive Auflösung mit zeitkompensierter Dämpfung und Timer-Fallback (`scheduleAdaptRestore`) |
 | `35-handles.js` | Ziehgriffe (Größe, Lage, Rundungsgriff, Drehwinkel-Griff `revAngle`), Maus-Bedienung |

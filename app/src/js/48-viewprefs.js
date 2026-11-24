@@ -2,7 +2,7 @@
 // Persönliche Einstellung (nicht im Projekt gespeichert), gilt für alle Projekte in diesem Browser.
 const ViewPrefs = (() => {
   const KEY = 'masswerk.view';
-  const DEF = { grid: 'auto', gridOn: true, planes: true, axes: true, ortho: false, quality: 'normal', adaptive: true, theme: 'system', decimals: 2, angleDecimals: 1, notes: true, cog: false, level: 'pro', look: 'studio', mood: 'studio', shadows: true, display: 'edges' };
+  const DEF = { grid: 'auto', gridOn: true, planes: true, axes: true, ortho: false, quality: 'normal', adaptive: true, multiWorker: true, theme: 'system', decimals: 2, angleDecimals: 1, notes: true, cog: false, level: 'pro', look: 'studio', mood: 'studio', shadows: true, display: 'edges' };
   const normDec = (x, fb) => { const n = Number(x); return Number.isFinite(n) ? clamp(Math.round(n), 0, 4) : fb; };
   let v = { ...DEF };
   let firstStart = !storageGet(KEY) && !storageGet('masswerk.last') && !storageGet('masswerk.index');
@@ -28,6 +28,7 @@ const ViewPrefs = (() => {
     Viewer.setOrtho(v.ortho);
     Viewer.setAdaptive(v.adaptive !== false);
     Viewer.setLook({ look: v.look, mood: v.mood, shadows: v.shadows !== false, display: v.display || 'edges' });
+    if (typeof Kernel !== 'undefined' && Kernel.setMultiWorker) Kernel.setMultiWorker(v.multiWorker !== false);
     applyTheme();
     FMT.dec = normDec(v.decimals, DEF.decimals);
     FMT.angle = normDec(v.angleDecimals, DEF.angleDecimals);
@@ -35,7 +36,7 @@ const ViewPrefs = (() => {
     ev.emit('change', v);
   }
   function set(patch, msg) {
-    const oldQ = v.quality, oldDec = v.decimals, oldAng = v.angleDecimals, oldL = v.level;
+    const oldQ = v.quality, oldDec = v.decimals, oldAng = v.angleDecimals, oldL = v.level, oldMW = v.multiWorker;
     const next = { ...patch };
     if ('decimals' in next) next.decimals = normDec(next.decimals, DEF.decimals);
     if ('angleDecimals' in next) next.angleDecimals = normDec(next.angleDecimals, DEF.angleDecimals);
@@ -49,6 +50,9 @@ const ViewPrefs = (() => {
       if (typeof Commands !== 'undefined' && Commands.syncCmdKbds) Commands.syncCmdKbds();
     }
     if (v.quality !== oldQ) App.requalify();
+    if (v.multiWorker !== oldMW && v.multiWorker === false && typeof Kernel !== 'undefined' && Kernel.ready && typeof App !== 'undefined' && App.doc && App.doc.items && App.doc.items.length) {
+      App.rebuild();
+    }
     if (v.decimals !== oldDec || v.angleDecimals !== oldAng) {
       App.emit('doc');
       Panels.renderLeft(); Panels.renderRight(); Panels.renderCtx();
@@ -169,6 +173,12 @@ const ViewPrefs = (() => {
       sel('set-mouse', T('dlg.settings.mouseLabel'), v.mouse || 'tracery', [['tracery', T('dlg.settings.mTracery')], ['onshape', T('dlg.settings.mOnshape')], ['solidworks', T('dlg.settings.mSolidworks')], ['fusion', T('dlg.settings.mFusion')], ['blender', T('dlg.settings.mBlender')]], (x) => set({ mouse: x }), T('dlg.settings.mouseHint')),
       chk('adaptive', T('dlg.settings.adaptive'), T('dlg.settings.adaptiveHint')),
     );
+    const maxW = typeof Kernel !== 'undefined' && Kernel.maxWorkers ? Kernel.maxWorkers : 1;
+    const cores = typeof Kernel !== 'undefined' && Kernel.stats && Kernel.stats.cores ? Kernel.stats.cores : maxW;
+    const mwChk = chk('multiWorker', T('dlg.settings.multiWorker'), maxW > 1 ? T('dlg.settings.multiWorkerHint', { n: maxW, cores }) : T('dlg.settings.multiWorkerSingleHint'));
+    mwChk.classList.add('pro');
+    mwChk.dataset.help = 'multiWorker';
+    paneGen.append(mwChk);
 
     const syncTabs = (tab) => {
       tabs.hidden = simple();

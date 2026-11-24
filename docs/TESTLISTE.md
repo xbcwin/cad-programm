@@ -2056,6 +2056,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Dialoge**: Die Dialoge Einstellungen (`ViewPrefs.dialog()`), Export (`Print.exportDialog()`) und Tastenkürzel (`Commands.showKeys()`) kommen vollständig über `T()` mit höchstens 5 Ausnahmen im DOM.
 - [ ] **Von Hand**: Test-Modus (`I18n.setTestMode(true)`) im Browser über alle Arbeitsschritte (Skizzen-Assistent, Bohrungs-Assistent, Werkzeugleiste anpassen, Stückliste, Versionen) durchklicken und prüfen, ob alle Hinweise und Tooltips sauber markiert sind.
 
+## Mehrere Rechen-Helfer (Auto [A-078], PL-04)
+
+- [x] **4 unabhängige Körper mit Bohrungsmustern verteilt**: Vier unabhängige Platten mit Rechteck- bzw. Kreis-Bohrmustern werden auf mehr als einen Rechen-Helfer (bis zu 4, passend zu `navigator.hardwareConcurrency`) verteilt; `remesh` und `faceLoops` funktionieren auch auf Neben-Helfern, und `occ-kernel.wasm` wird nur genau einmal abgerufen (kein Nachladen aus dem Netz).
+- [x] **Gleiches Ergebnis wie mit einem Helfer**: Nach Abschalten in den Profi-Einstellungen (`#set-multiWorker`) berechnet nur noch 1 Helfer alle Körper mit identischen Keys, Hüllkästen, Dreieckszahlen und Volumina.
+- [x] **Einstellung (Profi), Abhängigkeiten & Hilfe**: Das Häkchen `#set-multiWorker` ist nur in „Profi“ sichtbar (in „Einfach“ ausgeblendet); abhängige Körper (`op.target`) bleiben auf demselben Helfer und der Hilfetext `multiWorker` ist vorhanden.
+- [ ] **Von Hand**: Im Browser auf einem Mehrkern-Rechner eine große Baugruppe mit mehreren unabhängigen Körpern öffnen, in den Profi-Einstellungen „Mehrere Rechen-Helfer nutzen“ aus- und einschalten und im Task-Manager / Entwicklerwerkzeug die parallele Auslastung der Worker beobachten.
+
 ## Fehler melden
 
 ```
