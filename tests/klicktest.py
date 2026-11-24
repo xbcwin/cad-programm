@@ -8673,6 +8673,48 @@ def t_koerper_liste(p):
     return [ok1, ok2, ok3, ok4, ok5, ok6]
 
 
+def t_f11240339(p):
+    # 1. Kontextleiste erscheint nach asynchroner Ghost-Auswertung (Kind-Teil in Gruppe)
+    p.empty()
+    p.ev("Actions.addPrimitive('box')"); p.wait(1500)
+    p.ev("App.change('x', d=>{ const it=d.items[0]; it.t.x=0; it.t.y=0; it.p.w=40; it.p.d=40; it.p.h=3; })"); warte_rechnen(p)
+    p.ev("Viewer.setView('top', false)"); p.wait(800)
+    s = world_screen(p, 8, 0, 3); p.pg.mouse.click(s[0], s[1]); p.wait(600)
+    p.pg.locator('.ctxbar button[aria-label="Bohrung"]').click(); p.wait(400)
+    p.pg.select_option('#hw-type', 'through'); p.pg.select_option('#hw-size', 'M3'); p.wait(100)
+    p.pg.click('#hw-go'); p.wait(2000); p.pg.keyboard.press('Escape'); p.wait(600); warte_rechnen(p)
+    p.ev("Comp.edit(App.doc.items[0].id)"); warte_rechnen(p)
+    p.ev("const hid=App.doc.items[0].children.find(c=>c.role==='hole').id; App.select([hid]);")
+    p.pg.locator('.ctxbar button[aria-label="Muster"]').click(timeout=8000); p.wait(300)
+    ok1 = p.pg.locator('.menu button, .menu [role=menuitem]').filter(has_text='Kreismuster').count() >= 1
+    p.pg.keyboard.press('Escape'); p.wait(200)
+
+    # 2. Gelenk-Abspielen läuft und endet auch bei komplett blockiertem requestAnimationFrame + überlebt Panel-Neuaufbau
+    p.ev("App.setCtx(null); App.change('x', d=>{ d.items=[]; d.joints=[]; const a=Model.newItem('box',{w:20,d:10,h:4}); a.name='Arm A'; d.items.push(a); const b=Model.newItem('box',{w:20,d:10,h:4}); b.t.x=20; b.name='Arm B'; d.items.push(b); })"); warte_rechnen(p, 20)
+    p.ev("Joints.add(App.doc.items[0].id, App.doc.items[1].id, [10,0,4], [0,1,0]); App.select([App.doc.items[1].id]);")
+    p.wait(300)
+    rev = p.ev("return App.revision")
+    mid = None
+    end = None
+    try:
+        p.ev("window.__origRAF = window.requestAnimationFrame; window.requestAnimationFrame = () => 1;")
+        p.pg.click('#jt-play'); p.wait(400)
+        mid = p.ev("const it=App.doc.items[1], n=Viewer.nodes.get(it.id), m=Model.localMatrix(it); return [!!Joints.playing, n.base.elements.some((v,i)=>Math.abs(v-m.elements[i])>1e-3), document.querySelector('#jt-play')?.innerText || '']")
+        p.ev("Panels.renderRight()")
+        for _ in range(40):
+            p.wait(200)
+            if not p.ev("return !!Joints.playing"):
+                break
+        end = p.ev("const it=App.doc.items[1], n=Viewer.nodes.get(it.id), m=Model.localMatrix(it); return [!!Joints.playing, n.base.elements.every((v,i)=>Math.abs(v-m.elements[i])<1e-6), App.revision===arg, document.querySelector('#jt-play')?.innerText || '']", rev)
+    finally:
+        p.ev("if (window.__origRAF) { window.requestAnimationFrame = window.__origRAF; delete window.__origRAF; } Joints.stopPlay();")
+    ok2 = (
+        mid is not None and mid[0] is True and mid[1] is True and 'Stopp' in mid[2]
+        and end is not None and end[0] is False and end[1] is True and end[2] is True and 'abspielen' in end[3]
+    )
+    return [ok1, ok2]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -8806,6 +8848,7 @@ TESTS = [
     ('[A-030] Drehen mit Winkel und bis Fläche: 90° Viertel-Volumen / symmetrisch 2×45° / beidseitig verschieden & umgekehrt / bis Fläche & Nachführen / Winkel-Ziehgriff & Hilfe', t_a030_drehen_winkel_flaeche),
     ('[A-034] Verlauf umsortieren, Ordner, duplizieren: zwei Löcher tauschen / Loch vor Körper rot abgelehnt / Ordner anlegen & zuklappen / Duplizieren & Hilfe', t_a034_verlauf_ordner),
     ('[A-033] Körper-Liste im Teil: 2 Körper / Umbenennen / Färben / Ausblenden / Projektdatei und Export', t_koerper_liste),
+    ('[F-11240339] Volltest-Reparatur: Kontextleiste nach Ghost-Auswertung / Gelenk-Abspielen bei rAF-Stau', t_f11240339),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
