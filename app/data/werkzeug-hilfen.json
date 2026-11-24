@@ -1363,5 +1363,10 @@
     "tip": "Meldungs-Zentrale: Fehler und Hinweise dieser Sitzung ansehen",
     "hilfe": "Die Glocke sammelt alle Rechenfehler, Warnungen und Hinweise dieser Sitzung mit genauer Uhrzeit. Du kannst nach Fehlern oder Hinweisen filtern und bei Schritt-Fehlern mit „Hinspringen“ direkt das betroffene Teil markieren.",
     "tipp": "Ein roter Punkt zeigt unbehobene oder neue Fehler; über „Leeren“ räumst du die Liste wieder auf."
+  },
+  "thirdPartyLibs": {
+    "tip": "Liste aller mitgelieferten fremden Bausteine mit Lizenz und Lizenztext anzeigen",
+    "hilfe": "Zeigt alle fremden Bibliotheken und Schriften an, die Tracery mitliefert – zum Beispiel three.js für die 3D-Ansicht, die Schrift Inter sowie OpenCascade und replicad – jeweils mit Urheber, Lizenzart und dem zugehörigen Lizenztext.",
+    "tipp": "Klick bei einem Baustein auf „Lizenztext anzeigen“, um die vollständigen Bedingungen einzublenden."
   }
 }

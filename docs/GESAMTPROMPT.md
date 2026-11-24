@@ -126,10 +126,10 @@ Leitlinien:
 | `87-geomcheck.js` | Geometrie-Prüfung (`GeomCheck`, Prüfen-Menü, kaputte Flächen, winzige Kanten, Selbstschnitte) |
 | `87-clashcheck.js` | Durchdringungs-Prüfung der ganzen Baugruppe (`ClashCheck`, paarweise Überschneidungsliste mit Volumen, Anspringen & roter Schnittkörper-Hervorhebung) |
 | `88-aihelp.js` | „Erklär diesen Schritt“, Schwachstellen-Analyse `Weak` |
-| `90-main.js` | Start; stellt `window.__M` für Tests bereit |
+| `90-main.js` | Start, Fenster „Über Tracery“ / „Fremde Bausteine“ (`fremde-bausteine.json`); stellt `window.__M` für Tests bereit |
 
 **Daten in `app/data/`** (alle von Gemini geliefert und von Claude geprüft):
-- `werkzeug-hilfen.json`, `texte-de.json`, `texte-en.json`, `schritt-erklaerungen.json`, `materialien.json` (26 Stück in 4 Kategorien mit Dichte, Aussehen und Quellen), `drucker.json` (10 3D-Drucker-Profile), `fehlermeldungen.json`, `schrauben.json` (M1.6–M24, Zylinder-, Sechskant- und Senkkopf normgerecht), `gewinde.json` (Regelgewinde M1.6–M24, Feingewinde, Zoll UNC/UNF, Rohrgewinde G1/8–G1 mit Quellen), `passstifte.json` (ISO 2338), `passfedern.json` (DIN 6885 Form A), `lager.json` (DIN 625-1 Kugellager 608/6000er/6200er & ISO 3547 Gleitlager), `iso286.json` (DIN EN ISO 286-2:2010 Passungstabelle bis 500 mm mit Quellen)
+- `werkzeug-hilfen.json`, `texte-de.json`, `texte-en.json`, `schritt-erklaerungen.json`, `fremde-bausteine.json` (mitgelieferte fremde Bausteine mit Lizenzen und Lizenztexten), `materialien.json` (26 Stück in 4 Kategorien mit Dichte, Aussehen und Quellen), `drucker.json` (10 3D-Drucker-Profile), `fehlermeldungen.json`, `schrauben.json` (M1.6–M24, Zylinder-, Sechskant- und Senkkopf normgerecht), `gewinde.json` (Regelgewinde M1.6–M24, Feingewinde, Zoll UNC/UNF, Rohrgewinde G1/8–G1 mit Quellen), `passstifte.json` (ISO 2338), `passfedern.json` (DIN 6885 Form A), `lager.json` (DIN 625-1 Kugellager 608/6000er/6200er & ISO 3547 Gleitlager), `iso286.json` (DIN EN ISO 286-2:2010 Passungstabelle bis 500 mm mit Quellen)
 - `formel-beispiele.json`, `einfuehrung-skizze.json`, `fpv-masse.json` (Stack = Quadrat, Motor = Lochkreis)
 - `bauteile.json` (Kaufteile mit Quelle, `geprueft`), `schub.json` (nur `geprueft: true` als Vorgabe), `faustregeln.json`, `rahmen.json` (13 Herstellerrahmen)
 - `schrift-inter*.json`, erzeugt mit `tools/schrift.py`

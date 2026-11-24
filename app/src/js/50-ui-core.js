@@ -50,7 +50,7 @@ const UI = (() => {
     const close = (v) => { back.remove(); document.removeEventListener('keydown', key, true); onClose && onClose(v); };
     if (actions.length) {
       const row = h('div', { class: 'actions' });
-      for (const a of actions) row.append(h('button', { type: 'button', id: a.id || null, class: 'btn ' + (a.primary ? 'primary' : a.danger ? 'danger' : ''), onclick: () => { if (a.run && a.run() === false) return; close(a.value); } }, a.label));
+      for (const a of actions) row.append(h('button', { type: 'button', id: a.id || null, 'data-help': a.help || null, class: 'btn ' + (a.primary ? 'primary' : a.danger ? 'danger' : ''), onclick: () => { if (a.run && a.run() === false) return; close(a.value); } }, a.label));
       box.append(row);
     }
     back.append(box);

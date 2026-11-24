@@ -21819,6 +21819,129 @@ def t_a107_abbrechen_meldungen(p):
     return [ok1, ok2, ok3, ok4]
 
 
+# ---------- [A-109] Lizenz „Alle Rechte vorbehalten“ & Fremde Bausteine ----------
+def t_a109_lizenz_fremde_bausteine(p):
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    lic_path = os.path.join(repo_root, 'LICENSE')
+    doc_path = os.path.join(repo_root, 'docs', 'FREMDE-BAUSTEINE.md')
+    lic_txt = open(lic_path, encoding='utf-8').read() if os.path.isfile(lic_path) else ''
+    doc_txt = open(doc_path, encoding='utf-8').read() if os.path.isfile(doc_path) else ''
+    ok1 = (
+        '© 2026 Nils Kriege' in lic_txt
+        and 'Alle Rechte vorbehalten' in lic_txt
+        and 'schriftliche Erlaubnis' in lic_txt
+        and 'three.js' in doc_txt
+        and 'MIT' in doc_txt
+        and 'Inter' in doc_txt
+        and 'SIL Open Font License' in doc_txt
+        and 'replicad' in doc_txt
+        and 'LGPL-2.1' in doc_txt
+        and 'Bitte prüfen' in doc_txt
+    )
+
+    p.empty()
+    ok2 = False
+    ok3 = False
+    try:
+        # 2. „Über Tracery“ in Profi und Einfach: Rechtehinweis + Knopf „Fremde Bausteine“
+        ok_levels = []
+        for lvl in ('pro', 'simple'):
+            p.ev(f"ViewPrefs.setLevel('{lvl}');")
+            p.wait(150)
+            p.pg.locator('#btn-menu').click(); p.wait(250)
+            p.pg.locator('.menu button', has_text='Über Tracery').click(); p.wait(250)
+            about_txt = (p.pg.locator('.modal').text_content() or '').lower()
+            btn_info = p.ev("""
+              const b = document.querySelector('#about-third-party');
+              const r = b ? b.getBoundingClientRect() : null;
+              return {
+                exists: !!b,
+                visible: !!(r && r.width > 0 && r.height > 0),
+                text: b ? (b.textContent || '').trim() : '',
+                help: b ? b.dataset.help : '',
+              };
+            """)
+            ok_levels.append(
+                '© 2026 nils kriege' in about_txt
+                and 'alle rechte vorbehalten' in about_txt
+                and 'drohne' not in about_txt
+                and 'fpv' not in about_txt
+                and btn_info['exists']
+                and btn_info['visible']
+                and btn_info['text'] == 'Fremde Bausteine'
+                and btn_info['help'] == 'thirdPartyLibs'
+            )
+            if lvl == 'pro':
+                # 3. „Fremde Bausteine“ öffnen, Inhalt & aufklappbaren Lizenztext prüfen, „Zurück“ testen
+                p.pg.locator('#about-third-party').click(); p.wait(250)
+                tp_txt = (p.pg.locator('#third-party-dialog').text_content() or '')
+                tp_low = tp_txt.lower()
+                p.pg.locator('#third-party-dialog details.tp-text summary').first.click(); p.wait(150)
+                opened = p.ev("return !!document.querySelector('#third-party-dialog details.tp-text')?.open")
+                p.pg.locator('#third-party-back').click(); p.wait(250)
+                back_ok = p.ev("return !!document.querySelector('#about-copyright') && !document.querySelector('#third-party-dialog')")
+                p.pg.keyboard.press('Escape'); p.wait(200)
+                closed_ok = p.ev("return !document.querySelector('.modal')")
+                ok3 = (
+                    'three.js' in tp_low
+                    and 'mit' in tp_low
+                    and 'permission is hereby granted' in tp_low
+                    and 'inter' in tp_low
+                    and 'sil open font license 1.1' in tp_low
+                    and 'the inter project authors' in tp_low
+                    and 'replicad' in tp_low
+                    and 'open cascade' in tp_low
+                    and 'lgpl-2.1' in tp_low
+                    and opened is True
+                    and back_ok is True
+                    and closed_ok is True
+                )
+            else:
+                p.pg.keyboard.press('Escape'); p.wait(200)
+        ok2 = len(ok_levels) == 2 and all(ok_levels)
+    finally:
+        p.ev("try { while (document.querySelector('.modal')) document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); } catch(_){}")
+        p.ev("try { ViewPrefs.setLevel('pro'); } catch(_){}")
+        p.wait(150)
+
+    # 4. DE/EN-Schlüsselgleichheit, Hilfetext thirdPartyLibs & Tooltip im UI, keine Fehler
+    res4 = p.pg.evaluate("""async () => {
+      const [de, en, hilfen] = await Promise.all([
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+        fetch('data/werkzeug-hilfen.json').then(r => r.json()),
+      ]);
+      const ka = Object.keys(de), kb = Object.keys(en);
+      const sb = new Set(kb);
+      const eq = ka.length === kb.length && ka.every(k => sb.has(k));
+      const h = hilfen && hilfen.thirdPartyLibs;
+      return {
+        eq,
+        helpOk: !!(h && h.tip && h.hilfe && h.tipp),
+        hilfe: h ? h.hilfe : '',
+      };
+    }""")
+    tip_big = ''
+    try:
+        p.pg.locator('#btn-menu').click(); p.wait(200)
+        p.pg.locator('.menu button', has_text='Über Tracery').click(); p.wait(200)
+        p.pg.locator('#about-third-party').hover()
+        p.pg.wait_for_selector('.tooltip.big', timeout=3000)
+        tip_big = p.pg.locator('.tooltip.big').text_content() or ''
+    except Exception:
+        tip_big = ''
+    finally:
+        p.pg.keyboard.press('Escape'); p.wait(150)
+    ok4 = (
+        res4['eq'] is True
+        and res4['helpOk'] is True
+        and bool(res4['hilfe'])
+        and res4['hilfe'] in tip_big
+        and not p.errs
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -22034,6 +22157,7 @@ TESTS = [
     ('[A-106] AMF, PLY und Punkte-Dateien (IO-12, IO-14)', t_a106_amf_ply_punkte),
     ('[A-105] Schräge- und Hinterschnitt-Analyse (PF-09, PF-10)', t_a105_schraege_hinterschnitt),
     ('[A-107] Rechnen abbrechen & Meldungs-Zentrale (BE-27, BE-25)', t_a107_abbrechen_meldungen),
+    ('[A-109] Lizenz „Alle Rechte vorbehalten“ & Fremde Bausteine (PL-02)', t_a109_lizenz_fremde_bausteine),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
