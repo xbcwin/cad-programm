@@ -129,7 +129,7 @@
   "menu.proj.changeFolder": "Anderen Ordner wählen …",
   "menu.proj.disconnectFolder": "Ordner-Verbindung trennen",
   "menu.proj.saveToFolder": "In Ordner speichern …",
-  "menu.proj.openImport": "Datei öffnen / STEP, IGES, BREP, STL, 3MF importieren …",
+  "menu.proj.openImport": "Datei öffnen / STEP, IGES, BREP, STL, 3MF, OBJ importieren …",
   "menu.proj.versions": "Versionen …",
   "menu.proj.newProject": "Neues Projekt",
   "menu.proj.startAndTemplates": "Startseite und Vorlagen",

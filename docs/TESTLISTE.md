@@ -1789,6 +1789,15 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Export-Dialog, ZIP, Skalierung, Hilfe & Fehler**: `#ex-iges` und `#ex-brep` mit `exportIgesBrep`-Hilfe schreiben `.igs` und `.brep` ins ZIP; `#p-scale` skaliert Einheiten (cm = 10×); defekte `.brep`/`.igs`-Dateien melden einen Fehler ohne Absturz.
 - [ ] **Von Hand**: Exportierte `.igs`- und `.brep`-Dateien in FreeCAD öffnen und die Kanten-/Flächenqualität prüfen.
 
+## Dateien ins Fenster ziehen (Auto [A-046], IO-09)
+
+- [x] **Hinweis-Rahmen & Schutz gegen internes Ziehen**: `dragenter`/`dragover` mit Dateien blendet den gestrichelten Hinweis-Rahmen `#drop-overlay` ein (`dragleave` blendet ihn aus); internes Ziehen mit `text/plain` löst ihn nicht aus.
+- [x] **STL per Drop importieren**: Drop-Ereignis mit `spitze.stl` erzeugt einen neuen `import`-Körper (`fmt='stl'`, passendes Tetraeder-Volumen) ohne Fehler und schließt den Rahmen.
+- [x] **Projektdatei per Drop öffnen**: Drop-Ereignis mit einer `.tracery.json`-Datei öffnet das Projekt (`App.doc.name` und `#btn-project` zeigen „Gezogenes Projekt“) samt Maßen und berechnetem Körper.
+- [x] **OBJ per Drop importieren**: Drop-Ereignis mit `Wuerfel.obj` importiert den Würfel mit Objektnamen und exakten Hüllmaßen (`10 × 20 × 5 mm`) ohne Fehler.
+- [x] **DXF/SVG per Drop & unbekannte Datei**: Drop einer SVG im Modellmodus legt einen Skizzenkörper an; in einer offenen Skizze zeigt der Rahmen den Skizzen-Hinweis und ein DXF-Drop fügt den Kreis direkt in die Skizze ein; eine unbekannte `.txt`-Datei meldet einen Fehler ohne Änderung am Modell.
+- [ ] **Von Hand**: Im Finder/Explorer echte Projekt-, STEP-, OBJ-, 3MF- und SVG-Dateien direkt über die Startseite, über den 3D-Bereich und über eine offene Skizze ziehen und prüfen, ob der Rahmen flüssig ein- und ausblendet.
+
 ## Fehler melden
 
 ```

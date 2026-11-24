@@ -194,14 +194,20 @@ const Start = (() => {
     hide();
     if (!silent) UI.toast('Neues Projekt. Fang mit einem Körper an – oder beschreib unten, was du bauen willst.', { icon: 'newfile', ms: 4500 });
   }
-  // STEP, IGES, BREP, STL oder 3MF als neues Teil (oder mehrere Teile) ins Projekt holen
+  function ensureModelMode() {
+    if (Sketch.active) Sketch.cancel(true);
+    if (App.mode !== 'model' && typeof Commands !== 'undefined' && Commands.setMode) Commands.setMode('model');
+  }
+  // STEP, IGES, BREP, STL, 3MF oder OBJ als neues Teil (oder mehrere Teile) ins Projekt holen
   async function importCAD(f) {
     if (/\.3mf$/i.test(f.name)) return import3MF(f);
+    if (/\.obj$/i.test(f.name)) return importOBJ(f);
     const fmt = /\.stl$/i.test(f.name) ? 'stl'
       : /\.(igs|iges)$/i.test(f.name) ? 'iges'
       : /\.brep$/i.test(f.name) ? 'brep'
       : 'step';
     if (f.size > 100e6) { UI.toast('Die Datei ist zu groß (über 100 MB).', { kind: 'bad' }); return; }
+    ensureModelMode();
     if (el) newProject(true);
     const bytes = new Uint8Array(await f.arrayBuffer());
     const blobId = await Store.putBlob(bytes);
@@ -396,6 +402,7 @@ const Start = (() => {
       console.warn(e); return;
     }
     if (!parsed.parts.length) { UI.toast('In der 3MF-Datei habe ich keine 3D-Körper gefunden.', { kind: 'bad', ms: 6000 }); return; }
+    ensureModelMode();
     if (el) newProject(true);
     const base = f.name.replace(/\.3mf$/i, '');
     const items = [];
@@ -411,6 +418,103 @@ const Start = (() => {
     App.select(items.map((x) => x.id));
     const unitNote = parsed.unitScale !== 1 ? ` (von ${parsed.unit} in Millimeter umgerechnet)` : '';
     UI.toast(`„${f.name}“ importiert: ${items.length} ${items.length === 1 ? 'Teil' : 'Teile'}${unitNote}. Mit „Auf die XY-Ebene setzen“ legst du sie auf den Boden.`, { icon: 'folder', ms: 6000 });
+    setTimeout(() => {
+      const box = new THREE.Box3();
+      for (const it of items) { const b = Actions.worldBox(it.id); if (b && !b.isEmpty()) box.union(b); }
+      if (!box.isEmpty()) Viewer.fit(items.map((x) => x.id));
+    }, 1500);
+  }
+  // ---------- OBJ lesen: ASCII-Wavefront-OBJ (mehrere Objekte/Gruppen, Dreiecke und Polygone) ----------
+  function parseOBJ(txt) {
+    const rawVerts = [];
+    const groups = [];
+    let cur = { name: '', rawTris: [] };
+    const pushCur = () => {
+      if (cur.rawTris.length >= 3) groups.push(cur);
+      cur = { name: '', rawTris: [] };
+    };
+    // Zeilenfortsetzungen (\) zusammenziehen und zeilenweise lesen
+    const lines = String(txt || '').replace(/\\\r?\n/g, ' ').split(/\r\n|\r|\n/);
+    for (const rawLine of lines) {
+      const hash = rawLine.indexOf('#');
+      const line = (hash >= 0 ? rawLine.slice(0, hash) : rawLine).trim();
+      if (!line) continue;
+      const sp = line.search(/\s/);
+      const tag = (sp < 0 ? line : line.slice(0, sp)).toLowerCase();
+      const rest = sp < 0 ? '' : line.slice(sp + 1).trim();
+      if (tag === 'v') {
+        const c = rest.split(/\s+/);
+        if (c.length >= 3) {
+          const x = parseFloat(c[0]), y = parseFloat(c[1]), z = parseFloat(c[2]);
+          if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z)) rawVerts.push(x, y, z);
+        }
+      } else if (tag === 'o') {
+        if (cur.rawTris.length) pushCur();
+        cur.name = rest;
+      } else if (tag === 'g') {
+        if (cur.rawTris.length) pushCur();
+        if (!cur.name && rest) cur.name = rest;
+      } else if (tag === 'f' && rest) {
+        const vCount = (rawVerts.length / 3) | 0;
+        const poly = [];
+        for (const tok of rest.split(/\s+/)) {
+          const idx = parseInt(tok.split('/')[0], 10);
+          if (!Number.isFinite(idx) || idx === 0) continue;
+          const vi = idx < 0 ? vCount + idx : idx - 1;
+          if (vi >= 0 && vi < vCount) poly.push(vi);
+        }
+        if (poly.length >= 3) {
+          for (let k = 1; k + 1 < poly.length; k++) {
+            const a = poly[0], b = poly[k], c = poly[k + 1];
+            if (a !== b && b !== c && a !== c) cur.rawTris.push(a, b, c);
+          }
+        }
+      }
+    }
+    if (cur.rawTris.length >= 3) groups.push(cur);
+    const parts = [];
+    for (const grp of groups) {
+      const map = new Map();
+      const verts = [];
+      const tris = new Uint32Array(grp.rawTris.length);
+      for (let i = 0; i < grp.rawTris.length; i++) {
+        const gIdx = grp.rawTris[i];
+        let lIdx = map.get(gIdx);
+        if (lIdx === undefined) {
+          lIdx = (verts.length / 3) | 0;
+          map.set(gIdx, lIdx);
+          verts.push(rawVerts[gIdx * 3], rawVerts[gIdx * 3 + 1], rawVerts[gIdx * 3 + 2]);
+        }
+        tris[i] = lIdx;
+      }
+      if (tris.length >= 3 && verts.length >= 9) {
+        parts.push({ name: grp.name, vertices: new Float32Array(verts), triangles: tris });
+      }
+    }
+    return { parts };
+  }
+  async function importOBJ(f) {
+    if (f.size > 100e6) { UI.toast('Die Datei ist zu groß (über 100 MB).', { kind: 'bad' }); return; }
+    let parsed;
+    try { parsed = parseOBJ(await f.text()); } catch (e) {
+      UI.toast('Diese OBJ-Datei kann ich nicht lesen: ' + (e && e.message ? e.message : 'unbekannter Fehler'), { kind: 'bad', ms: 7000 });
+      console.warn(e); return;
+    }
+    if (!parsed.parts.length) { UI.toast('In der OBJ-Datei habe ich keine Dreiecke gefunden.', { kind: 'bad', ms: 6000 }); return; }
+    ensureModelMode();
+    if (el) newProject(true);
+    const base = f.name.replace(/\.obj$/i, '');
+    const items = [];
+    for (let i = 0; i < parsed.parts.length; i++) {
+      const pt = parsed.parts[i];
+      const name = pt.name || (parsed.parts.length === 1 ? base : `${base} ${i + 1}`);
+      const stl = Print.buildSTL([{ vertices: pt.vertices, triangles: pt.triangles }], name);
+      const blobId = await Store.putBlob(stl);
+      items.push(Model.newItem('import', { fmt: 'stl', blobId, size: stl.byteLength, file: f.name, scale: 1 }, { name }));
+    }
+    App.change('OBJ importiert', (doc) => { doc.items.push(...items); });
+    App.select(items.map((x) => x.id));
+    UI.toast(`„${f.name}“ importiert: ${items.length} ${items.length === 1 ? 'Teil' : 'Teile'}. Mit „Auf die XY-Ebene setzen“ legst du es auf den Boden.`, { icon: 'folder', ms: 6000 });
     setTimeout(() => {
       const box = new THREE.Box3();
       for (const it of items) { const b = Actions.worldBox(it.id); if (b && !b.isEmpty()) box.union(b); }
@@ -656,6 +760,7 @@ const Start = (() => {
     const r = await readOutline(f); if (!r) return;
     const closed = SK.regions(r.ents).length;
     if (!closed) { UI.toast(`Die ${K} hat keine geschlossene Kontur – daraus kann ich keine Platte machen. Prüfe im anderen Programm, ob der Umriss irgendwo eine Lücke hat.`, { kind: 'bad', ms: 9000 }); return; }
+    ensureModelMode();
     if (el) newProject(true);
     const name = f.name.replace(/\.(dxf|svg)$/i, '');
     const it = Model.newItem('extrude', {}, { name });
@@ -666,32 +771,102 @@ const Start = (() => {
     setTimeout(() => Viewer.fit([it.id]), 1500);
   }
   async function openBlob(f) {
-    if (/\.(dxf|svg)$/i.test(f.name)) return Sketch.active ? insertOutline(f) : importDXF(f);
-    if (/\.(step|stp|igs|iges|brep|stl|3mf)$/i.test(f.name)) return importCAD(f);
+    if (/\.(dxf|svg)$/i.test(f.name)) {
+      if (Sketch.active) {
+        if (Sketch.state && Sketch.state.step) {
+          UI.toast('Klick zuerst „Zurück zur Skizze“, um die Datei in die Skizze einzufügen.', { icon: 'info', ms: 5000 });
+          return;
+        }
+        return insertOutline(f);
+      }
+      return importDXF(f);
+    }
+    if (/\.(step|stp|igs|iges|brep|stl|3mf|obj)$/i.test(f.name)) return importCAD(f);
     try {
       const txt = await f.text(); const doc = JSON.parse(txt);
+      if (!doc || typeof doc !== 'object' || Array.isArray(doc) || (!Array.isArray(doc.items) && doc.format !== 'masswerk')) {
+        throw new Error('Keine Tracery-Projektdatei');
+      }
       Model.migrate(doc);
       const vers = Array.isArray(doc.versions) ? doc.versions : null; delete doc.versions;
       if (Store.hasProject(doc.id) && doc.id !== App.doc.id) doc.id = uid('p');
       Store.extractBlobs(doc);
       if (vers) await Versions.importList(doc.id, vers);
+      ensureModelMode();
       App.setDoc(doc); hide();
       App.fileSavedRev = App.revision;
       UI.toast(`„${doc.name}“ geöffnet.`, { icon: 'folder' });
     } catch (e) { const E = ERRORS.importFailed; UI.toast(`${E.titel}. ${E.erklaerung} ${E.loesung}`, { kind: 'bad', ms: 7000 }); console.warn(e); }
   }
   function openFile() {
-    const inp = h('input', { type: 'file', accept: '.json,application/json,.step,.stp,.igs,.iges,.brep,.stl,.3mf,.dxf,.svg', style: { display: 'none' } });
+    const inp = h('input', { type: 'file', accept: '.json,application/json,.step,.stp,.igs,.iges,.brep,.stl,.3mf,.obj,.dxf,.svg', style: { display: 'none' } });
     inp.onchange = () => { const f = inp.files && inp.files[0]; inp.remove(); if (f) openBlob(f); };
     document.body.append(inp); inp.click();
   }
-  // Projektdatei einfach ins Fenster ziehen
-  addEventListener('dragover', (e) => { if (e.dataTransfer && [...e.dataTransfer.types].includes('Files')) e.preventDefault(); });
-  addEventListener('drop', (e) => {
-    const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-    if (!f || !/\.(json|step|stp|igs|iges|brep|stl|3mf|dxf|svg)$/i.test(f.name)) return;
-    e.preventDefault(); openBlob(f);
-  });
+  // Dateien einfach ins Fenster ziehen (Projektdatei, 3D-Import oder 2D-Skizze)
+  const DROP_RE = /\.(json|step|stp|igs|iges|brep|stl|3mf|obj|dxf|svg)$/i;
+  let dropEl = null, dragDepth = 0;
+  function isFileDrag(e) {
+    const dt = e && e.dataTransfer;
+    if (!dt) return false;
+    const types = dt.types ? [...dt.types] : [];
+    if (types.includes('Files')) return true;
+    if (dt.files && dt.files.length > 0) return true;
+    if (dt.items && [...dt.items].some((it) => it.kind === 'file')) return true;
+    return false;
+  }
+  function ensureDropOverlay() {
+    if (dropEl) return dropEl;
+    dropEl = h('div', { id: 'drop-overlay', class: 'drop-overlay', hidden: true, 'aria-hidden': 'true' },
+      h('div', { class: 'drop-frame' },
+        h('div', { class: 'drop-card' },
+          h('div', { class: 'drop-ico', html: icon('folder') }),
+          h('div', { class: 'drop-title' }),
+          h('div', { class: 'drop-sub' }),
+        ),
+      ),
+    );
+    document.body.append(dropEl);
+    return dropEl;
+  }
+  function showDropOverlay() {
+    const ov = ensureDropOverlay();
+    const inSketch = Sketch.active && !(Sketch.state && Sketch.state.step);
+    const ico = ov.querySelector('.drop-ico');
+    const title = ov.querySelector('.drop-title');
+    const sub = ov.querySelector('.drop-sub');
+    if (ico) ico.innerHTML = icon(inSketch ? 'sketch' : 'folder');
+    if (title) title.textContent = inSketch ? 'DXF oder SVG in diese Skizze einfügen' : 'Datei hier ablegen';
+    if (sub) sub.textContent = inSketch
+      ? 'Projekt (.json) oder 3D-Import (STEP, IGES, BREP, STL, 3MF, OBJ) öffnet bzw. importiert ebenfalls.'
+      : 'Projekt (.json) · 3D-Import (STEP, IGES, BREP, STL, 3MF, OBJ) · 2D-Skizze (DXF, SVG)';
+    ov.hidden = false;
+    ov.setAttribute('aria-hidden', 'false');
+  }
+  function hideDropOverlay() {
+    dragDepth = 0;
+    if (!dropEl) return;
+    dropEl.hidden = true;
+    dropEl.setAttribute('aria-hidden', 'true');
+  }
+  async function handleDroppedFiles(files) {
+    const supported = [], unsupported = [];
+    for (const f of files) {
+      if (f && DROP_RE.test(f.name || '')) supported.push(f);
+      else if (f && f.name) unsupported.push(f.name);
+    }
+    if (!supported.length) {
+      UI.toast('Dieses Dateiformat kann ich nicht öffnen. Ziehe eine Projektdatei (.json), STEP, IGES, BREP, STL, 3MF, OBJ, DXF oder SVG ins Fenster.', { kind: 'bad', ms: 6000 });
+      return;
+    }
+    const projects = supported.filter((f) => /\.json$/i.test(f.name));
+    const others = supported.filter((f) => !/\.json$/i.test(f.name));
+    const ordered = projects.length ? [projects[0], ...others] : others;
+    for (const f of ordered) await openBlob(f);
+    if (unsupported.length) {
+      UI.toast(`Übersprungen (nicht unterstützt): ${unsupported.join(', ')}`, { icon: 'info', ms: 5000 });
+    }
+  }
   function projectFileName() {
     return Print.safeName(App.doc.name) + '.tracery.json';
   }
@@ -875,9 +1050,38 @@ const Start = (() => {
     const btn = $('#btn-folder-status');
     if (btn) btn.onclick = (e) => openFolderMenu(e.currentTarget);
     updateFolderUI();
+    window.addEventListener('dragenter', (e) => {
+      if (!isFileDrag(e)) return;
+      dragDepth++;
+      showDropOverlay();
+    });
+    window.addEventListener('dragover', (e) => {
+      if (!isFileDrag(e)) return;
+      e.preventDefault();
+      try { e.dataTransfer.dropEffect = 'copy'; } catch (_) {}
+      if (dragDepth <= 0) dragDepth = 1;
+      showDropOverlay();
+    });
+    window.addEventListener('dragleave', (e) => {
+      if (dragDepth <= 0) return;
+      dragDepth = Math.max(0, dragDepth - 1);
+      if (dragDepth === 0 || (!e.relatedTarget && (e.clientX <= 0 || e.clientY <= 0 || e.clientX >= innerWidth || e.clientY >= innerHeight))) {
+        hideDropOverlay();
+      }
+    });
+    window.addEventListener('drop', (e) => {
+      if (!isFileDrag(e)) return;
+      e.preventDefault();
+      hideDropOverlay();
+      const files = e.dataTransfer && e.dataTransfer.files ? [...e.dataTransfer.files] : [];
+      if (files.length) handleDroppedFiles(files);
+    });
+    window.addEventListener('dragend', () => { if (dragDepth > 0 || (dropEl && !dropEl.hidden)) hideDropOverlay(); });
+    window.addEventListener('blur', () => { if (dragDepth > 0 || (dropEl && !dropEl.hidden)) hideDropOverlay(); });
+    window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && dropEl && !dropEl.hidden) hideDropOverlay(); });
   }
   return {
-    init, importCAD, import3MF, parse3MF, importDXF, parseDXF, parseSVG, show, hide, newProject, openFile, openBlob, saveFile,
+    init, importCAD, import3MF, parse3MF, importOBJ, parseOBJ, importDXF, parseDXF, parseSVG, show, hide, newProject, openFile, openBlob, saveFile,
     folderSupported, folderInfo, saveToFolder, saveToFolderNow, disconnectFolder,
     get folderDelay() { return folderDelay; }, set folderDelay(ms) { folderDelay = Math.max(0, Number(ms) || 10000); },
     openDrone, get open() { return !!el; },
