@@ -1879,6 +1879,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Große Projekte aus IndexedDB & Hilfetext**: Projekte > 400 KB samt 15-MB-STEP-Import (`blobId`) werden rein über IndexedDB (`meta.recovery` + `blobs`) wiederhergestellt; Hilfetext `crashRecovery` ist vollständig.
 - [ ] **Von Hand**: Im Browser ein Projekt bearbeiten, den Tab hart schließen oder aktualisieren und die Meldung auf Startseite und 3D-Ansicht prüfen.
 
+## Sparsames Rückgängig (Auto [A-055], PL-07)
+
+- [x] **200 Änderungen als Patches & Speichervergleich**: Bei einem großen Projekt (> 200 KB) legen 200 gemischte Änderungen (Maße, Verschieben, Skizzenelemente, Schlüssel löschen/hinzufügen, ID-Listen einfügen/löschen/umsortieren, `pushUndo`, `merge`, `amend`, `squash`) ausschließlich kompakte `ops`-Patches ab und verbrauchen deutlich unter 5 % des Speichers von 200 Vollkopien.
+- [x] **200× Rückgängig & Wiederholen exakt**: 200× `App.undo(true)` stellt Byte-für-Byte den exakten Ausgangszustand (`App.snapshot() === snap0`) wieder her; 200× `App.redo(true)` stellt den Endzustand exakt wieder her; `App.undoTo(0)` springt in einem Zug zum Anfang zurück.
+- [x] **Speicherbegrenzung statt 300-Schritte-Limit**: Über 300 kleine Änderungen (320) bleiben im Standardlimit erhalten; bei kleinem Speicherlimit (`20 KB`) werden älteste Schritte sauber abgeworfen, ohne das verbleibende Rückgängig zu beschädigen.
+- [x] **UI-Knöpfe**: `#btn-undo` und `#btn-redo` machen Änderungen am 3D-Modell sauber rückgängig und wiederholen sie.
+- [ ] **Von Hand**: In einem größeren Projekt viele Skizzen- und Formänderungen machen, mit Strg+Z / Strg+Y sowie „Bis hierher zurück“ im Protokoll vor- und zurückspringen und prüfen, dass sich alles flüssig anfühlt.
+
 ## Fehler melden
 
 ```
