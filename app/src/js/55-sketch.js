@@ -672,6 +672,58 @@ const Sketch = (() => {
     }
     return ents;
   }
+  // Eigene TrueType-Schrift (.ttf) laden, im Projekt als Base64 speichern und in der Schriftliste anbieten
+  async function loadFontFile(file, targetEntId = null) {
+    if (!file) return null;
+    if (file.size > 15e6) {
+      UI.toast('Die Schriftdatei ist zu groß (über 15 MB).', { kind: 'bad' });
+      return null;
+    }
+    let bytes, parsed;
+    try {
+      bytes = new Uint8Array(await file.arrayBuffer());
+      parsed = TTF.parse(bytes, { fallbackName: String(file.name || '').replace(/\.(ttf|otf|woff2?|ttc)$/i, '') });
+    } catch (e) {
+      UI.toast((e && e.message) || 'Die Schriftdatei konnte nicht gelesen werden.', { kind: 'bad', ms: 6500 });
+      return null;
+    }
+    const b64 = Store.bytesToBase64(bytes);
+    const existing = (App.doc.fonts || []).find((f) => f && f.data === b64);
+    let id;
+    if (existing) {
+      id = existing.id;
+      SK.syncFonts(App.doc.fonts);
+      UI.toast(`„${existing.name}“ ist schon im Projekt und wurde ausgewählt.`, { icon: 'info', ms: 3500 });
+    } else {
+      const base = parsed.name || 'Eigene Schrift';
+      const used = new Set([...Object.values(SK.FONTNAMES), ...(App.doc.fonts || []).map((f) => f && f.name)]);
+      let name = base, n = 2;
+      while (used.has(name)) name = `${base} (${n++})`;
+      id = uid('ft');
+      App.change(`Schrift geladen: ${name}`, (doc) => {
+        if (!Array.isArray(doc.fonts)) doc.fonts = [];
+        doc.fonts.push({ id, name, file: file.name || name + '.ttf', data: b64 });
+      });
+      UI.toast(`Schrift „${name}“ geladen und im Projekt gespeichert.` + (parsed.hasKern ? ' Unterschneidung aktiv.' : ''), { icon: 'check', ms: 4500 });
+    }
+    if (S) {
+      S.txt.font = id;
+      if (targetEntId) {
+        const tgt = S.ents.find((x) => x.id === targetEntId && x.type === 'text');
+        if (tgt && tgt.font !== id) { pushUndo(); tgt.font = id; reapply(); }
+      }
+      render();
+      Panels.renderRight();
+    }
+    return id;
+  }
+  function pickFont(targetEntId = null) {
+    const inp = h('input', { type: 'file', accept: '.ttf,.otf,font/ttf,font/otf,application/x-font-ttf,application/x-font-opentype', style: { display: 'none' } });
+    inp.onchange = () => { const f = inp.files && inp.files[0]; inp.remove(); if (f) loadFontFile(f, targetEntId); };
+    document.body.append(inp);
+    inp.click();
+    setTimeout(() => { if (inp.isConnected) inp.remove(); }, 60000);
+  }
   function textToCurves(id) {
     const e = S && S.ents.find((x) => x.id === id && x.type === 'text'); if (!e) return 0;
     const ents = curvesOfContours(SK.textContours(e));
@@ -3261,7 +3313,11 @@ const Sketch = (() => {
       else if (sel.type === 'text') {
         w.append(UI.textField({ id: 'se-s', label: 'Text', value: sel.s, onCommit: (v) => { if (!v.trim()) { UI.toast('Ein leerer Text geht nicht – lösch das Element stattdessen.', { icon: 'info' }); Panels.renderRight(); return; } upd((e) => { e.s = v; }); } }));
         f.append(dimField('h', 'Höhe (Großbuchstaben)', 'mm', { min: 0.1 }));
-        f.append(UI.selectField({ id: 'se-font', label: 'Schrift', value: sel.font || 'inter', options: Object.entries(SK.FONTNAMES), onChange: (v) => upd((e) => { e.font = v; }) }));
+        const fontVal = SK.FONTNAMES[sel.font] ? sel.font : 'inter';
+        f.append(UI.selectField({ id: 'se-font', label: 'Schrift', value: fontVal, options: Object.entries(SK.FONTNAMES), onChange: (v) => upd((e) => { e.font = v; }) }));
+        const lf = h('button', { type: 'button', class: 'btn', id: 'se-load-font', 'data-help': 'loadFont' }); lf.innerHTML = icon('folder') + 'Schrift laden …';
+        lf.onclick = () => pickFont(sel.id);
+        f.append(h('div', { class: 'btn-row' }, lf));
         f.append(UI.selectField({ id: 'se-align', label: 'Ausrichtung', value: sel.align || 'l', options: [['l', 'Links'], ['m', 'Mitte'], ['r', 'Rechts']], onChange: (v) => upd((e) => { e.align = v; }) }));
         if (!sel.on) f.append(UI.numField({ id: 'se-rot', label: 'Drehung', value: round(((sel.rot || 0) * 180) / Math.PI, 3), unit: '°', expr: false, onCommit: (v) => upd((e) => { e.rot = (v * Math.PI) / 180; }) }));
         f.append(UI.numField({ id: 'se-sp', label: 'Zeichenabstand', value: sel.sp || 0, unit: 'mm', expr: false, onCommit: (v) => upd((e) => { e.sp = v; }) }));
@@ -3455,12 +3511,15 @@ const Sketch = (() => {
       }
       if (S.tool === 'text') {
         const T = S.txt;
+        if (!SK.FONTNAMES[T.font]) T.font = 'inter';
         w.append(UI.textField({ id: 'tx-s', label: 'Text', value: T.s, live: true, onCommit: (v) => { T.s = v; } }));
         const f3 = h('div', { class: 'fields' });
         f3.append(UI.numField({ id: 'tx-h', label: 'Höhe (Großbuchstaben)', value: T.h, unit: 'mm', expr: false, min: 0.1, onCommit: (v) => { if (v > 0) T.h = v; } }));
         f3.append(UI.selectField({ id: 'tx-font', label: 'Schrift', value: T.font, options: Object.entries(SK.FONTNAMES), onChange: (v) => { T.font = v; } }));
         f3.append(UI.selectField({ id: 'tx-align', label: 'Ausrichtung', value: T.align, options: [['l', 'Links'], ['m', 'Mitte'], ['r', 'Rechts']], onChange: (v) => { T.align = v; } }));
-        w.append(f3);
+        const lf = h('button', { type: 'button', class: 'btn', id: 'tx-load-font', 'data-help': 'loadFont' }); lf.innerHTML = icon('folder') + 'Schrift laden …';
+        lf.onclick = () => pickFont(null);
+        w.append(f3, h('div', { class: 'btn-row' }, lf));
       }
       if (S.tool === 'slot') w.append(UI.selectField({ id: 'sl-mode', label: 'Langloch', value: S.slotArc ? 'arc' : S.slotTotal ? 'total' : 'line', options: [['line', 'Gerade, von Mitte zu Mitte'], ['total', 'Gerade, über die Gesamtlänge'], ['arc', 'Gebogen (um eine Mitte)']], onChange: (v) => { S.slotArc = v === 'arc'; S.slotTotal = v === 'total'; S.draft = null; render(); UI.hint(S.slotArc ? 'Gebogenes Langloch: Mitte klicken, dann Anfang, dann Ende (gegen den Uhrzeigersinn), zum Schluss die Breite.' : HINTS.slot); } }));
       if (S.tool === 'circle') w.append(UI.selectField({ id: 'ci-mode', label: 'Kreis', value: S.circMode || 'center', options: [['center', 'Mitte und Größe'], ['2p', 'Zwei Punkte (Durchmesser)'], ['3p', 'Drei Punkte']], onChange: (v) => { S.circMode = v; S.draft = null; render(); } }));
@@ -3954,6 +4013,6 @@ const Sketch = (() => {
     window.addEventListener('keydown', onModKey);
     window.addEventListener('keyup', onModKey);
   }
-  return { copySel, pasteClip, setRefDim, check: runCheck, repair: repairCheck, focusCheckIssue, autoDefine: proposeAutoDefine, applyAutoDefine, cancelAutoDefine, bandSelect, init, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startPath, startLoftPath, editItem, pushPullFace, renderPanel, onKey, cancel, scaleAll, insertEnts, textToCurves, setBg, setTool, get angleSnap() { return angleSnapOn; }, setAngleSnap, lengthSnapStep, get active() { return !!S; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
+  return { copySel, pasteClip, setRefDim, check: runCheck, repair: repairCheck, focusCheckIssue, autoDefine: proposeAutoDefine, applyAutoDefine, cancelAutoDefine, bandSelect, init, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startPath, startLoftPath, editItem, pushPullFace, renderPanel, onKey, cancel, scaleAll, insertEnts, textToCurves, loadFontFile, setBg, setTool, get angleSnap() { return angleSnapOn; }, setAngleSnap, lengthSnapStep, get active() { return !!S; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
 })();
 

@@ -87,7 +87,8 @@ Leitlinien:
 | `01-i18n.js` | Übersetzbare Oberfläche (`I18n`, `T(key, vars)`, eingebettete `TEXTS_DE` aus `app/data/texte-de.json`) |
 | `05-storage.js` | Browser-Datenbank (`Store`, IndexedDB `tracery-db` mit `projects`, `versions`, `blobs`, `meta`), binäre Import-Blobs, Migration aus `localStorage` |
 | `10-model.js` | Projekt-Datenmodell, `KINDS`, `newItem`, `find`/`walk`/`topOf`, Matrizen, `vars` (Maße), `kernelItem`, `sketchParams`/`loftParams`/`sweepParams`/`pathPatternParams`, `migrate` |
-| `15-sketchcore.js` (`SK`) | Skizzen-Geometrie: `segsOf`, `regions`, `chains` (offene Pfade), `bounds`, Splines als exakte Bézier (`splineBez`), Text-Umrisse (Schrift Inter, OFL), Ellipse, Fangpunkte, Maße |
+| `14-ttf.js` (`TTF`) | Kleiner TrueType-Leser im Browser (`parse`: `glyf`-Umrisse mit quadratischen Béziers und zusammengesetzten Glyphen, `cmap`, `hmtx`, `kern`, CFF/OTF-Abweisung) |
+| `15-sketchcore.js` (`SK`) | Skizzen-Geometrie: `segsOf`, `regions`, `chains` (offene Pfade), `bounds`, Splines als exakte Bézier (`splineBez`), Text-Umrisse (Inter OFL + eigene TTFs via `syncFonts`, `kern` + Laufweite), Ellipse, Fangpunkte, Maße |
 | `16-solver.js` | Skizzen-Löser (Maße und Regeln gemeinsam, Freiheitsgrade, Konflikte) |
 | `17-sketchops.js` (`SKO`) | Schnittpunkte, Trimmen, Versatz (`offsetChain`), dünne Wand (`thinRegions`), Spiegeln, Muster (`mapEnt`), Schablonen `TEMPLATES`/`tplEnts`, Skizzen-Prüfer `inspect` |
 | `20-kernel.js` | Brücke zum Worker |
@@ -130,7 +131,7 @@ Leitlinien:
 
 ## 4. Datenmodell (Projektdatei `.json`, `format: 'masswerk'`)
 
-- **`doc`:** `{ id, name, params: [{id, name, expr}], items: [...], notes, settings{printer, grid, snap, magnet, unit}, drawing, rollback (Marker der Zeitleiste), variants, variant, drone{…}, joints: [...] }`
+- **`doc`:** `{ id, name, params: [{id, name, expr}], items: [...], fonts: [{id, name, file, data}], notes, settings{printer, grid, snap, magnet, unit}, drawing, rollback (Marker der Zeitleiste), variants, variant, drone{…}, joints: [...] }`
 - **Item:** `{ id, kind, name, role: 'solid'|'hole', color, t: {x,y,z,rx,ry,rz}, p: {...}, finishes: [{id,type:'fillet'|'chamfer'|'draft'|'shell', r, edges|faces, vr+r2 (Rundung von … bis), cm 'two'+r2 | 'angle'+a, side (Fase)}], suppressed, hidden, mat, massG, ai }`
   - Werte in `t` und `p` dürfen **Formeln** mit Maßnamen sein.
 - **`kind`:**
@@ -225,7 +226,7 @@ Leitlinien:
 - **Zeichnen:**
   - Auswahl (V), Linie (L), Rechteck (R: Ecke/Mitte/gedreht über 3 Punkte), Kreis (C: Mitte/2P/3P), Ellipse (E)
   - Bogen (A: 3 Punkte oder tangential), Langloch (G: auch gebogen), Vieleck (P: Umkreis oder Schlüsselweite), Punkt (O)
-  - Schablone (J), Text (B: Schrift Inter, fett, Ausrichtung, **Bogen-Radius**, „An Kreis legen“, **entlang einer Linie, eines Bogens oder einer Spline**), Spline (S)
+  - Schablone (J), Text (B: Schrift Inter oder eigene TTF über `Sketch.loadFontFile`, fett, Ausrichtung, **Bogen-Radius**, „An Kreis legen“, **entlang einer Linie, eines Bogens oder einer Spline**, `kern`-Unterschneidung + Laufweite), Spline (S)
 - **Schablonen:** Pin-Raster, Lüftungsgitter, QFP, QFN, BGA, SOIC, DIP (Maße 2026 gegen JEDEC und Datenblätter geprüft), USB-C-Buchse 9,5 × 3,8, USB-C-Stecker 13 × 7 mit Eckradius, Befestigungslöcher
 - **Bearbeiten:**
   - Ecke runden/fasen (K, auch „Alle Ecken auf einmal“), Trimmen (T, auch Ellipsen), Verlängern (U), Teilen (Y), Versatz (F, auch Ellipsen; der Abstand einer Kette lässt sich später für alle Stücke zusammen ändern)
@@ -338,7 +339,7 @@ Leitlinien:
 
 - Verbundene Kanten finden ihre Kante über Lage, Art, Länge und Richtung. Springt eine Kante sehr weit oder verschwindet sie, bleibt die übernommene Kante stehen. Die Fangkanten aus „Skizze auf Fläche“ sind nicht verbunden.
 - Spiegeln an Fläche hängt nur an der äußersten Fläche in Achsrichtung.
-- Text hat keine Unterschneidung. Ellipse und Text lassen sich nicht trimmen. Die Drehung von Ellipse und Vieleck ist keine Regel.
+- Die eingebaute Schrift „Inter“ hat keine Unterschneidung (eigene TTFs nutzen ihre `kern`-Tabelle); `GPOS`-Kerning und CFF/OTF fehlen noch. Ellipse und Text lassen sich nicht trimmen. Die Drehung von Ellipse und Vieleck ist keine Regel.
 - Vorlagen bestehen aus einer Gruppe. Teilen ergibt zwei Hälften in einem Schritt.
 - Der Magnet auf runden Flächen rastet an Scheitel- und Mittellinien ein, nicht an Lochmitten auf der Rundung.
 - Ein Teil wird nur von einem Gelenk bewegt; „Bewegung abspielen“ nur für Teile ganz oben im Verlauf.
