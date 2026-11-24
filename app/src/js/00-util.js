@@ -1917,6 +1917,16 @@ const HELP = {
   "tip": "Teilenummer, Beschreibung, Lieferant und Stückpreis für dieses Teil eintragen",
   "hilfe": "Hier hinterlegst du feste Angaben zum Teil – wie Teilenummer, kurze Beschreibung, Lieferant und Stückpreis in Euro. Alle Werte erscheinen als eigene Spalten in der Stückliste und im CSV-Export, und die Stückliste rechnet automatisch den Gesamtpreis aller Teile aus.",
   "tipp": "Gleiche Teile mit denselben Angaben werden in der Stückliste automatisch zusammengefasst und mit ihrer Stückzahl malgenommen."
+ },
+ "dimModes": {
+  "tip": "Maß-Art wählen: automatisch, Bogenlänge, Winkel über 3 Punkte oder Koordinatenmaße",
+  "hilfe": "Mit „Automatisch“ bemaßt du Linien, Kreise, Abstände und Winkel wie gewohnt. Für Sonderfälle wählst du „Bogenlänge“ (Länge entlang des Bogens statt Radius), „Winkel über 3 Punkte“ (Endpunkt, Scheitelpunkt, Endpunkt) oder im Profi-Modus „Koordinatenmaße“ von einer gemeinsamen Nullkante.",
+  "tipp": "Bei einem Bogen kannst du auch direkt im kleinen Eingabefeld über das Symbol ⌒ zwischen Radius und Bogenlänge umschalten."
+ },
+ "ordinateDim": {
+  "tip": "Alle Abstände von einer gemeinsamen Nullkante oder einem Nullpunkt messen",
+  "hilfe": "Koordinatenmaße (Profi) sparen Maßketten: Klicke zuerst eine Linie als Nullkante (0) an und danach der Reihe nach alle Punkte oder Kanten. Jedes Maß wird ab derselben Nullkante gemessen – positive Werte auf der ersten Seite, negative auf der Gegenseite.",
+  "tipp": "Mit „Neue Nullkante wählen“ oder Esc setzt du den Bezug jederzeit neu."
  }
 };
 

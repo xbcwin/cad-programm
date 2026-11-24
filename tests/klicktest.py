@@ -19950,6 +19950,119 @@ def t_a093_eigenschaften_je_teil(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a095_koordinaten_bogen_winkel3(p):
+    sketch_xy(p)
+    def reset_sketch(ents, cons=None):
+        p.ev("const S=Sketch.state; S.ents=arg[0]; S.dims=[]; S.cons=arg[1]||[]; S.dimFirst=null; S.dimPicks=[]; S.ordBase=null; S.sels=[]; S.selCon=null; Sketch.setTool('select'); Sketch.render(); Panels.renderRight(); Viewer.canvas.focus();", [ents, cons or []])
+        p.wait(300)
+
+    # 1. Bogenlänge (SK-28): Bogen mit Bogenlänge 30 bemaßen -> gemessene Bogenlänge 30
+    reset_sketch([{'id': 'A1', 'type': 'arc', 'a': [0, 0], 'm': [10, 10], 'b': [20, 0]}])
+    p.pg.keyboard.press('d'); p.wait(250)
+    p.pg.select_option('#dm-mode', 'arcLen'); p.wait(200)
+    m_arc = to_screen(p, 10, 10)
+    p.pg.mouse.click(m_arc[0], m_arc[1]); p.wait(300)
+    p.pg.keyboard.press('ControlOrMeta+a'); p.pg.keyboard.type('30'); p.pg.keyboard.press('Enter'); p.wait(500)
+    arc_len = SS(p, "return SK.measure(E('A1'), 'arcLen')")
+    has_arc_dim = SS(p, "return S.dims.some(d => d.e==='A1' && d.k==='arcLen' && !d.ref)")
+    arc_lbl = ' '.join(p.pg.locator('.skdim').all_text_contents())
+    p.ev("Sketch.setTool('select')"); p.wait(200)
+    SS(p, "S.sel='A1'; Panels.renderRight()"); p.wait(250)
+    p.pg.fill('#se-arcLen', '25'); p.pg.press('#se-arcLen', 'Enter'); p.wait(500)
+    arc_len2 = SS(p, "return SK.measure(E('A1'), 'arcLen')")
+    p.pg.keyboard.press('ControlOrMeta+z'); p.wait(400)
+    arc_len3 = SS(p, "return SK.measure(E('A1'), 'arcLen')")
+    ok1 = (
+        has_arc_dim
+        and abs(arc_len - 30) < 1e-3
+        and '⌒' in arc_lbl
+        and '30' in arc_lbl
+        and abs(arc_len2 - 25) < 1e-3
+        and abs(arc_len3 - 30) < 1e-3
+    )
+
+    # 2. Winkel über drei Punkte (SK-28): 3 Punkte mit Winkel 60° -> Winkel 60° (und 120°)
+    reset_sketch(
+        [
+            {'id': 'P1', 'type': 'point', 'a': [20, 0]},
+            {'id': 'P2', 'type': 'point', 'a': [0, 0]},
+            {'id': 'P3', 'type': 'point', 'a': [0, 20]},
+        ],
+        [],
+    )
+    p.pg.keyboard.press('d'); p.wait(250)
+    p.pg.select_option('#dm-mode', 'ang3'); p.wait(200)
+    for pt in ((20, 0), (0, 0), (0, 20)):
+        sc = to_screen(p, *pt)
+        p.pg.mouse.click(sc[0], sc[1]); p.wait(250)
+    p.pg.keyboard.press('ControlOrMeta+a'); p.pg.keyboard.type('60'); p.pg.keyboard.press('Enter'); p.wait(500)
+    ang_js = """
+      const a=E('P1').a, v=E('P2').a, b=E('P3').a;
+      const ux=a[0]-v[0], uy=a[1]-v[1], wx=b[0]-v[0], wy=b[1]-v[1];
+      return Math.atan2(Math.abs(ux*wy-uy*wx), ux*wx+uy*wy) * 180 / Math.PI;
+    """
+    ang60 = SS(p, ang_js)
+    has_ang3 = SS(p, "return S.dims.some(d => d.k==='ang3' && !d.ref)")
+    ang_lbl = ' '.join(p.pg.locator('.skdim').all_text_contents())
+    p.pg.locator('.skdim').first.click(); p.wait(250)
+    p.pg.keyboard.press('ControlOrMeta+a'); p.pg.keyboard.type('120'); p.pg.keyboard.press('Enter'); p.wait(500)
+    ang120 = SS(p, ang_js)
+    ok2 = has_ang3 and abs(ang60 - 60) < 1e-3 and '60' in ang_lbl and '°' in ang_lbl and abs(ang120 - 120) < 1e-3
+
+    # 3. Koordinatenmaße (SK-27, Profi): alle Maße von einer gewählten Nullkante aus
+    reset_sketch(
+        [
+            {'id': 'L0', 'type': 'line', 'a': [0, -15], 'b': [0, 20]},
+            {'id': 'P1', 'type': 'point', 'a': [10, 0]},
+            {'id': 'P2', 'type': 'point', 'a': [20, 10]},
+            {'id': 'P3', 'type': 'point', 'a': [28, 5]},
+        ],
+        [{'id': 'k0', 'type': 'fix', 'refs': [{'e': 'L0'}], 'at': {'a0': 0, 'a1': -15, 'b0': 0, 'b1': 20}}],
+    )
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(200)
+    p.pg.keyboard.press('d'); p.wait(250)
+    p.pg.select_option('#dm-mode', 'ord'); p.wait(200)
+    s0 = to_screen(p, 0, 5)
+    p.pg.mouse.click(s0[0], s0[1]); p.wait(300)
+    base_ok = SS(p, "return !!(S.ordBase && S.ordBase.ref && S.ordBase.ref.e==='L0')") and p.pg.locator('#dm-ord-reset').count() == 1
+    for pt, val in (((10, 0), '15'), ((20, 10), '25'), ((28, 5), '-10')):
+        sc = to_screen(p, *pt)
+        p.pg.mouse.click(sc[0], sc[1]); p.wait(250)
+        p.pg.keyboard.press('ControlOrMeta+a'); p.pg.keyboard.type(val); p.pg.keyboard.press('Enter'); p.wait(450)
+    xs = SS(p, "return [E('P1').a[0], E('P2').a[0], E('P3').a[0]]")
+    ord_cnt = SS(p, "return S.dims.filter(d => d.k==='ord').length")
+    zero_cnt = p.pg.locator('.skdim.ord-zero').count()
+    zero_txt = p.pg.locator('.skdim.ord-zero').first.text_content() if zero_cnt else ''
+    ok3 = (
+        base_ok
+        and ord_cnt == 3
+        and zero_cnt >= 1
+        and zero_txt.strip() == '0'
+        and abs(xs[0] - 15) < 1e-3
+        and abs(xs[1] - 25) < 1e-3
+        and abs(xs[2] + 10) < 1e-3
+    )
+
+    # 4. Nur Profi & Rückgängig
+    p.ev("ViewPrefs.setLevel('simple'); Panels.renderRight()"); p.wait(250)
+    no_ord_simple = p.pg.locator('#dm-mode option[value="ord"]').count() == 0 and p.ev("return Sketch.setDimMode('ord') === false")
+    p.ev("ViewPrefs.setLevel('pro'); Panels.renderRight()"); p.wait(250)
+    has_ord_pro = p.pg.locator('#dm-mode option[value="ord"]').count() == 1
+    p.ev("Viewer.canvas.focus()"); p.wait(100)
+    p.pg.keyboard.press('ControlOrMeta+z'); p.wait(450)
+    ord_after_undo = SS(p, "return S.dims.filter(d => d.k==='ord').length")
+    ok4 = no_ord_simple and has_ord_pro and ord_after_undo == 2
+
+    # 5. Hilfetexte & keine Seitenfehler
+    meta = p.ev("""return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(d => ({
+      helpJson: !!(d.dimModes && d.dimModes.tip && d.dimModes.hilfe && d.dimModes.tipp && d.ordinateDim && d.ordinateDim.tip && d.ordinateDim.hilfe && d.ordinateDim.tipp),
+      domHelp: document.querySelectorAll('[data-help="dimModes"]').length >= 1,
+      errs: App.errors.length === 0,
+    }));""")
+    ok5 = bool(all(meta.values()) and not p.errs)
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -20152,6 +20265,7 @@ TESTS = [
     ('[F-11241729] Volltest-Reparatur: Meldungen überleben Rechenphasen / Startseiten-Karte neben Baugruppe / Tablet-Kontext auf Deutsch', t_f11241729),
     ('[A-094] Teil ersetzen und aus Datei einfügen: feste Verbindung erhalten, neues Hüllmaß, STEP & Projekt', t_a094_teil_ersetzen_aus_datei),
     ('[A-093] Eigenschaften je Teil: Teilenummer, Beschreibung, Lieferant, Preis in Stückliste & CSV', t_a093_eigenschaften_je_teil),
+    ('[A-095] Koordinatenmaße (Profi), Bogenlänge & Winkel über drei Punkte (SK-27, SK-28)', t_a095_koordinaten_bogen_winkel3),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

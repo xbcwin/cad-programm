@@ -40,6 +40,20 @@ const Solver = (() => {
     const uy = (a2 * (mx - bx) + b2 * (ax - mx) + m2 * (bx - ax)) / d;
     return [ux, uy, hyp(ax - ux, ay - uy)];
   }
+  function arcLen(ax, ay, bx, by, mx, my) {
+    const d = 2 * (ax * (by - my) + bx * (my - ay) + mx * (ay - by));
+    if (Math.abs(d) < 1e-10) return hyp(bx - ax, by - ay);
+    const a2 = ax * ax + ay * ay, b2 = bx * bx + by * by, m2 = mx * mx + my * my;
+    const ux = (a2 * (by - my) + b2 * (my - ay) + m2 * (ay - by)) / d;
+    const uy = (a2 * (mx - bx) + b2 * (ax - mx) + m2 * (bx - ax)) / d;
+    const r = hyp(ax - ux, ay - uy);
+    if (r > 1e5) return hyp(mx - ax, my - ay) + hyp(bx - mx, by - my);
+    const norm = (t) => ((t % TAU) + TAU) % TAU;
+    const a0 = Math.atan2(ay - uy, ax - ux), am = Math.atan2(my - uy, mx - ux), a1 = Math.atan2(by - uy, bx - ux);
+    const ccw = norm(am - a0) < norm(a1 - a0);
+    const sweep = ccw ? norm(a1 - a0) : norm(a0 - a1);
+    return sweep * r;
+  }
 
   // ---------- Aufbau des Gleichungssystems ----------
   function build(ents, V, opts = {}) {
@@ -154,6 +168,31 @@ const Solver = (() => {
         if (k === 'dist') { const A = point(dm.refs[0]), B = point(dm.refs[1]); if (!A || !B) continue; add([...A.deps, ...B.deps], (X) => { const a = A.get(X), b = B.get(X); return hyp(b[0] - a[0], b[1] - a[1]) - v; }, tag); }
         else if (k === 'distPL') { const P = point(dm.refs[0]), Ln = line(dm.refs[1]); if (!P || !Ln) continue; add([...P.deps, ...Ln[0].deps, ...Ln[1].deps], (X) => { const p = P.get(X); const [dx, dy, a] = L(X, Ln); return Math.abs(((p[0] - a[0]) * dy - (p[1] - a[1]) * dx) / (hyp(dx, dy) + EPS)) - v; }, tag); }
         else if (k === 'angLL') { const A = line(dm.refs[0]), B = line(dm.refs[1]); if (!A || !B) continue; add([...A[0].deps, ...A[1].deps, ...B[0].deps, ...B[1].deps], (X) => { const [ux, uy] = L(X, A), [vx, vy] = L(X, B); return (Math.atan2(Math.abs(ux * vy - uy * vx), ux * vx + uy * vy) - (v * Math.PI) / 180) * 10; }, tag); }
+        else if (k === 'ang3') {
+          const A = point(dm.refs[0]), Vp = point(dm.refs[1]), B = point(dm.refs[2]);
+          if (!A || !Vp || !B) continue;
+          add([...A.deps, ...Vp.deps, ...B.deps], (X) => {
+            const a = A.get(X), v0 = Vp.get(X), b = B.get(X);
+            const ux = a[0] - v0[0], uy = a[1] - v0[1], wx = b[0] - v0[0], wy = b[1] - v0[1];
+            return (Math.atan2(Math.abs(ux * wy - uy * wx), ux * wx + uy * wy) - (v * Math.PI) / 180) * 10;
+          }, tag);
+        } else if (k === 'ord') {
+          const P = point(dm.refs[0]);
+          const Ln = line(dm.refs[1]);
+          const sg = dm.sg === -1 ? -1 : 1;
+          if (P && Ln) {
+            add([...P.deps, ...Ln[0].deps, ...Ln[1].deps], (X) => {
+              const p = P.get(X);
+              const [dx, dy, a] = L(X, Ln);
+              return (sg * (-(p[0] - a[0]) * dy + (p[1] - a[1]) * dx) / (hyp(dx, dy) + EPS)) - v;
+            }, tag);
+          } else {
+            const O = point(dm.refs[1]);
+            if (!P || !O) continue;
+            const ax = dm.axis === 'y' ? 1 : 0;
+            add([...P.deps, ...O.deps], (X) => sg * (P.get(X)[ax] - O.get(X)[ax]) - v, tag);
+          }
+        }
         continue;
       }
       const e = byId.get(dm.e); if (!e || !idx.has(e.id)) continue;
@@ -169,6 +208,10 @@ const Solver = (() => {
       else if (k === 'h') { const s = x[J.b1] >= x[J.a1] ? 1 : -1; add([J.a1, J.b1], (X) => (X[J.b1] - X[J.a1]) * s - v, tag); }
       else if (k === 'd') add([J.r], (X) => 2 * X[J.r] - v, tag);
       else if (k === 'r') { const C = circle({ e: e.id }); if (C) add(C.deps, (X) => C.r(X) - v, tag); }
+      else if (k === 'arcLen' && e.type === 'arc') {
+        const ks = ['a0', 'a1', 'b0', 'b1', 'm0', 'm1'].map((q) => I(e.id, q));
+        add(ks, (X) => arcLen(X[ks[0]], X[ks[1]], X[ks[2]], X[ks[3]], X[ks[4]], X[ks[5]]) - v, tag);
+      }
       else if (k === 'x' || k === 'y') { const key = e.type === 'spline' ? 'p0_' + (k === 'x' ? '0' : '1') : (e.type === 'circle' || e.type === 'poly' || e.type === 'ellipse' ? 'c' : 'a') + (k === 'x' ? '0' : '1'); const i = J[key]; add([i], (X) => X[i] - v, tag); }
     }
     // ---------- Bedingungen ----------
