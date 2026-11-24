@@ -1879,6 +1879,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Große Projekte aus IndexedDB & Hilfetext**: Projekte > 400 KB samt 15-MB-STEP-Import (`blobId`) werden rein über IndexedDB (`meta.recovery` + `blobs`) wiederhergestellt; Hilfetext `crashRecovery` ist vollständig.
 - [ ] **Von Hand**: Im Browser ein Projekt bearbeiten, den Tab hart schließen oder aktualisieren und die Meldung auf Startseite und 3D-Ansicht prüfen.
 
+## Normteile: Passstifte, Passfedern, Lager (Auto [A-056], BI-04, BI-05)
+
+- [x] **Kugellager 608, 6000er & 6200er Reihe**: Lager 608 hat exakt Außen-Ø 22 mm, Innen-Ø 8 mm (`r = 4`) und Breite 7 mm (geschlossen und offen mit Kugeln); Stichproben 6000 (Ø 10 × 26 × 8) und 6204 (Ø 20 × 47 × 14) stimmen ebenfalls.
+- [x] **Passfeder 6×6×20 & passende Nut**: `stdKey` liefert exakte Hüllmaße 20 × 6 × 6 mm mit rundstirniger Form A; „Passende Nut anlegen“ erzeugt die zugehörige `stdKeyway`, die Wellennut (`t₁ = 3,5 mm`) und Nabennut (`t₂ = 2,8 mm`) maßgenau aus einem Körper schneidet.
+- [x] **Zylinderstift (ISO 2338) & Gleitlager (ISO 3547 / DIN 1850)**: `stdPin` Ø 6 × 20 mm hat exakte Hüllmaße samt 15°-Endfasen; `stdSleeve` 8 × 10 × 12 mm stimmt als zylindrische Buchse (Außen-Ø 10, Innen-Ø 8) und als Bundbuchse (Bund-Ø 15 mm).
+- [x] **Bibliothek, Suche, Hilfen & Geometrie-Prüfung**: Alle fünf Normteile erscheinen im Bauteile-Flyout unter „Normteile“, sind über die Befehlssuche auffindbar, besitzen vollständige Hilfetexte (`stdPin`, `stdKey`, `stdKeyway`, `stdBearing`, `stdSleeve`) und bestehen `GeomCheck` ohne Geometriefehler.
+- [ ] **Von Hand**: Im Browser ein Kugellager (offen und geschlossen), einen Zylinderstift sowie Passfeder samt Nut auf eine Welle setzen und im Schnitt sowie bei der Stückliste prüfen.
+
 ## Fehler melden
 
 ```

@@ -18,6 +18,9 @@ const Place = (() => {
     if (d.lib === 'blindHole') { const r = (Number(p.d) || 5) / 2, tip = blindTipHeight(Number(p.d) || 5, p.tipAngle ?? 118); return [-r, -r, -((Number(p.depth) || 10) + tip), r, r, 0.2]; }
     if (d.lib === 'fitHole') { const r = (Number(p.d) || 6) / 2; return [-r, -r, -(Number(p.depth) || 10), r, r, 0.2]; }
     if (d.lib === 'centerHole') { const m = centerHoleMetrics(p.size), r = m.d2 / 2; return [-r, -r, -m.totalDepth, r, r, 0.2]; }
+    if (d.lib === 'stdPin' || d.lib === 'stdKey' || d.lib === 'stdKeyway' || d.lib === 'stdBearing' || d.lib === 'stdSleeve') {
+      return Model.primitiveBox('part', { lib: d.lib, ...p }) || [-10, -10, 0, 10, 10, 10];
+    }
     if (d.lib === 'threadHole') return [-3.5, -3.5, -(p.length || 10), 3.5, 3.5, 0.2];
     if (d.lib === 'threadRod') return [-3, -3, 0, 3, 3, p.length || 12];
     if (d.lib === 'slotHole') return [-10, -2.3, -10, 10, 2.3, 0.2];

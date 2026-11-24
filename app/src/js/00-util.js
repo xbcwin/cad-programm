@@ -640,6 +640,11 @@ const IC = {
   star: '<path d="M12 3.2l2.6 5.3 5.9.9-4.3 4.1 1 5.9L12 16.6 6.8 19.4l1-5.9-4.3-4.1 5.9-.9z" />',
   starFill: '<path d="M12 3.2l2.6 5.3 5.9.9-4.3 4.1 1 5.9L12 16.6 6.8 19.4l1-5.9-4.3-4.1 5.9-.9z" fill="currentColor" />',
   grip: '<circle cx="9" cy="6" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="6" r="1.2" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="9" cy="18" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="18" r="1.2" fill="currentColor" stroke="none"/>',
+  pin: '<path d="M8 5.5 9.5 3.5h5L16 5.5v13l-1.5 2h-5L8 18.5z" fill="currentColor" opacity=".18"/><path d="M8 5.5 9.5 3.5h5L16 5.5v13l-1.5 2h-5L8 18.5zM8 5.5h8M8 18.5h8"/>',
+  key: '<rect x="3" y="8" width="18" height="8" rx="4" fill="currentColor" opacity=".2"/><rect x="3" y="8" width="18" height="8" rx="4"/><path d="M7 12h10" opacity=".45"/>',
+  keyway: '<circle cx="12" cy="13" r="8" opacity=".45"/><path d="M9.5 5.4V9h5V5.4"/><rect x="9.5" y="4.5" width="5" height="4.5" rx=".8" fill="currentColor" opacity=".25"/>',
+  bearing: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.2"/><circle cx="12" cy="5.4" r="1.3" fill="currentColor" stroke="none"/><circle cx="17.7" cy="8.7" r="1.3" fill="currentColor" stroke="none"/><circle cx="17.7" cy="15.3" r="1.3" fill="currentColor" stroke="none"/><circle cx="12" cy="18.6" r="1.3" fill="currentColor" stroke="none"/><circle cx="6.3" cy="15.3" r="1.3" fill="currentColor" stroke="none"/><circle cx="6.3" cy="8.7" r="1.3" fill="currentColor" stroke="none"/>',
+  sleeve: '<ellipse cx="12" cy="6" rx="6.5" ry="2.6" fill="currentColor" opacity=".2"/><path d="M5.5 6v12c0 1.4 2.9 2.6 6.5 2.6s6.5-1.2 6.5-2.6V6"/><ellipse cx="12" cy="6" rx="6.5" ry="2.6"/><ellipse cx="12" cy="6" rx="3.4" ry="1.3"/>',
 };
 function icon(name, extra = '') {
   const body = IC[name] || IC.cube;
@@ -1636,6 +1641,31 @@ const HELP = {
   "tip": "Ungesicherten Stand nach einem Absturz oder Neuladen wiederherstellen",
   "hilfe": "Tracery merkt sich laufende Änderungen automatisch in der Browser-Datenbank – auch bei großen Projekten mit importierten 3D-Modellen. Wird die Seite ohne Speichern geschlossen oder neu geladen, erscheint beim nächsten Start dieses Angebot mit Projektname und Uhrzeit.",
   "tipp": "Mit „Wiederherstellen“ holst du alle ungesicherten Änderungen sofort zurück; „Verwerfen“ kehrt zum letzten gespeicherten Stand zurück."
+ },
+ "stdPin": {
+  "tip": "Zylinderstift nach ISO 2338 zum genauen Ausrichten und Fixieren",
+  "hilfe": "Bauteile → Normteile → „Zylinderstift (ISO 2338)“: Genormter Passstift von Ø 1 bis 20 mm mit 15°-Endfasen. Durchmesser, Länge und Toleranzfeld (m6 oder h8) stellst du rechts im Panel ein.",
+  "tipp": "Für das Gegenstück nimm „Passbohrung H7“ mit demselben Nenndurchmesser – rechts steht gleich das passende H7-Abmaß."
+ },
+ "stdKey": {
+  "tip": "Rundstirnige Passfeder nach DIN 6885 Form A",
+  "hilfe": "Bauteile → Normteile → „Passfeder (DIN 6885 A)“: Überträgt Drehmoment zwischen Welle und Nabe. Rechts wählst du den Querschnitt (b × h) und die Länge l – dazu siehst du den passenden Wellendurchmesser und die zugehörigen Nuttiefen t₁ und t₂.",
+  "tipp": "Klick rechts auf „Passende Nut anlegen“, um direkt eine Passfedernut mit derselben Größe und Länge zu erzeugen."
+ },
+ "stdKeyway": {
+  "tip": "Passfedernut für Welle oder Nabe nach DIN 6885",
+  "hilfe": "Bauteile → Normteile → „Passfedernut (DIN 6885)“: Schneidet die zur Passfeder gehörende Nut aus – als rundstirnige Wellennut mit Tiefe t₁ oder als gerade Nabennut mit Tiefe t₂.",
+  "tipp": "Zieh die Nut direkt auf die Welle oder die Bohrungskante, oder richte sie über „Loch hier“ und die Lagewerte exakt aus."
+ },
+ "stdBearing": {
+  "tip": "Rillenkugellager nach DIN 625-1 (608, 6000er und 6200er Reihe)",
+  "hilfe": "Bauteile → Normteile → „Kugellager (Norm)“: Genormtes Kugellager mit exaktem Innen-Ø d, Außen-Ø D, Breite B und Kantenabstand r_min – wahlweise geschlossen (2RS/ZZ) oder offen mit sichtbaren Kugeln.",
+  "tipp": "Das 608-Lager (Ø 8 × 22 × 7 mm) ist als Standard vorgewählt – für Lagersitze passt eine „Passbohrung H7“ mit Durchmesser D."
+ },
+ "stdSleeve": {
+  "tip": "Gleitlagerbuchse nach ISO 3547 / DIN 1850",
+  "hilfe": "Bauteile → Normteile → „Gleitlager (Norm)“: Zylindrische Gleitlagerbuchse (Form C) oder Bundbuchse (Form F) aus Messing mit genormtem Innen-Ø d, Außen-Ø D und Wanddicke s₃.",
+  "tipp": "Eine Bundbuchse stützt sich mit dem Bund seitlich an der Bohrung ab – wähle die Gehäusebohrung passend zu Außen-Ø D in H7."
  }
 };
 
