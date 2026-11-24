@@ -1359,17 +1359,19 @@ export function createKernel(R, oc) {
     if (lib === 'stdScrew') return buildStdScrew(p);
     if (lib === 'stdNut') return buildStdNut(p);
     if (lib === 'stdWasher') return buildStdWasher(p);
-    const s = SCREW[p.size] || SCREW.M3;
+    const s = p.spec && typeof p.spec === 'object' ? { ...(SCREW[p.size] || SCREW.M3), ...p.spec } : (SCREW[p.size] || SCREW.M3);
     const tol = num(p.tol, 0);
     if (lib === 'screwHole') {
       const L = pos(p.length, 10);
       const hd = holeD(s, p.fit);
       let shape = R.makeCylinder((hd + tol) / 2, L + LIFT, [0, 0, -L], [0, 0, 1]);
-      if (p.head === 'countersunk') {
-        const rTop = (s.csk + tol) / 2, rBot = (hd + tol) / 2, h = rTop - rBot; // 90°-Senkung
+      if (p.head === 'countersunk' && s.csk > hd) {
+        const rTop = (s.csk + tol) / 2, rBot = (hd + tol) / 2;
+        const halfAng = (num(s.cskAngle, 90) * Math.PI) / 360;
+        const h = (rTop - rBot) / Math.tan(halfAng); // 90° (metrisch) oder 82° (Zoll UNC/UNF)
         const cone = revolveProfile([[0, -h], [rBot, -h], [rTop, 0], [rTop, LIFT], [0, LIFT]]);
         shape = shape.fuse(cone);
-      } else if (p.head === 'counterbore') {
+      } else if (p.head === 'counterbore' && s.cbD > hd && s.cbH > 0) {
         shape = shape.fuse(R.makeCylinder((s.cbD + tol) / 2, s.cbH + LIFT, [0, 0, -s.cbH], [0, 0, 1]));
       }
       return shape;

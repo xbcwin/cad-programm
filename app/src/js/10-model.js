@@ -327,7 +327,16 @@ const Model = (() => {
         mode: p.mode === 'new' || p.mode === 'cut' ? p.mode : 'join',
       };
     }
-    else o.p = resolveP(it.p, V);
+    else {
+      o.p = resolveP(it.p, V);
+      if (it.kind === 'part') {
+        if (it.p && typeof it.p.size === 'string') o.p.size = it.p.size;
+        if (o.p.lib === 'screwHole' && typeof threadEntry === 'function') {
+          const te = threadEntry(o.p.size);
+          if (te) o.p.spec = { fine: te.durchgang_fein_mm, hole: te.durchgang_mittel_mm, coarse: te.durchgang_grob_mm, tap: te.kernloch_mm, csk: te.senkung_senk_d_mm || 0, cskAngle: te.senkung_winkel_grad || 90, cbD: te.senkung_zyl_d_mm || 0, cbH: te.senkung_zyl_t_mm || 0 };
+        }
+      }
+    }
     if (it.mir) o.mir = it.mir;
     if (it.op && OPS[it.op.type] && it.op.target) o.op = { type: it.op.type, target: it.op.target };
     if (it.finishes && it.finishes.length) o.finishes = it.finishes.filter((f) => !f.off).map((f) => { const x = { id: f.id, type: f.type, r: num(f.r, V, 1), edges: f.edges, faces: f.faces }; if (f.vr) { x.vr = true; x.r2 = num(f.r2, V, x.r); } if (f.cm) { x.cm = f.cm; if (f.cm === 'two') x.r2 = num(f.r2, V, x.r); else x.a = num(f.a, V, 45); } if (f.side) x.side = 1; return x; });

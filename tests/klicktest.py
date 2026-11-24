@@ -8975,6 +8975,121 @@ def t_kaputter_bezug(p):
     return [ok1, ok2, ok3, ok4, ok5, ok6]
 
 
+# ---------- A-038: Bohrungs-Assistent mehr Gewinde (KP-18) ----------
+def t_a038_mehr_gewinde(p):
+    # 1. Feingewinde M10×1,25 -> Kernloch 8,8 mm
+    p.empty()
+    p.ev("Actions.addPrimitive('box', {p:{w:40, d:40, h:10}})"); warte_rechnen(p, 20)
+    p.ev("const id=App.doc.items[0].id; const r=App.results.get(id); const fi=r.data.faces.findIndex(f=>f.t==='PLANE'&&f.n&&f.n[2]>0.9); App.select([id], {face:{id, faceIdx:fi, info:r.data.faces[fi], point:[0,0,10], normal:[0,0,1]}})"); p.wait(400)
+    p.pg.locator('.ctxbar button[aria-label="Bohrung"]').click(); p.wait(400)
+    p.pg.select_option('#hw-type', 'tap'); p.wait(150)
+    p.pg.select_option('#hw-norm', 'metric_fine'); p.wait(150)
+    fine_opts = p.pg.evaluate("[...document.querySelectorAll('#hw-size option')].map(o=>o.value)")
+    p.pg.select_option('#hw-size', 'M10×1,25'); p.wait(200)
+    info1 = p.pg.locator('#hw-info').text_content() or ''
+    prev1 = p.pg.locator('#hw-preview').text_content() or ''
+    p.pg.click('#hw-go'); warte_rechnen(p, 25); p.pg.keyboard.press('Escape'); p.wait(400)
+    v1 = volumen(p)
+    want1 = math.pi * 4.4 * 4.4 * 10.0
+    got1 = 16000.0 - (v1 or 0)
+    cyl1 = p.ev("const r=App.results.get(App.doc.items[0].id); return r && r.data ? r.data.faces.filter(f=>f.t==='CYLINDRE').map(f=>Math.round(f.r*200)/100) : []")
+    p.ev("const ch=App.doc.items[0].children.find(c=>c.kind==='part'&&c.p.lib==='screwHole'); if(ch) App.select([ch.id]);"); p.wait(300)
+    panel1 = p.pg.locator('#p-screw-hint').text_content() or ''
+    ok1 = ('M8×1' in fine_opts and 'M10×1,25' in fine_opts
+           and '8,8' in info1 and 'DIN 336' in info1 and '8,8' in prev1
+           and p.ev("return App.errors.length") == 0
+           and abs(got1 - want1) < 0.05
+           and any(abs(d - 8.8) < 0.02 for d in cyl1)
+           and 'M10×1,25' in panel1 and '8,8' in panel1)
+
+    # 2. Zoll-Gewinde UNC / UNF (#4 bis 1/2"): 1/4"-20 UNC -> Kernloch 5,1 mm + 82°-Senkung
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(200)
+    p.ev("Actions.addPrimitive('box', {p:{w:40, d:40, h:10}})"); warte_rechnen(p, 20)
+    p.ev("const id=App.doc.items[0].id; const r=App.results.get(id); const fi=r.data.faces.findIndex(f=>f.t==='PLANE'&&f.n&&f.n[2]>0.9); App.select([id], {face:{id, faceIdx:fi, info:r.data.faces[fi], point:[0,0,10], normal:[0,0,1]}})"); p.wait(400)
+    p.pg.locator('.ctxbar button[aria-label="Bohrung"]').click(); p.wait(400)
+    p.pg.select_option('#hw-type', 'tap'); p.wait(150)
+    p.pg.select_option('#hw-norm', 'unf'); p.wait(150)
+    unf_opts = p.pg.evaluate("[...document.querySelectorAll('#hw-size option')].map(o=>o.value)")
+    p.pg.select_option('#hw-norm', 'unc'); p.wait(150)
+    unc_opts = p.pg.evaluate("[...document.querySelectorAll('#hw-size option')].map(o=>o.value)")
+    p.pg.select_option('#hw-size', '1/4"-20 UNC'); p.wait(200)
+    info2 = p.pg.locator('#hw-info').text_content() or ''
+    p.pg.click('#hw-go'); warte_rechnen(p, 25); p.pg.keyboard.press('Escape'); p.wait(400)
+    v2 = volumen(p)
+    want2 = math.pi * 2.55 * 2.55 * 10.0
+    got2 = 16000.0 - (v2 or 0)
+    cyl2 = p.ev("const r=App.results.get(App.doc.items[0].id); return r && r.data ? r.data.faces.filter(f=>f.t==='CYLINDRE').map(f=>Math.round(f.r*200)/100) : []")
+    # Durchgangsbohrung mit 82°-Senkung
+    p.ev("const id=App.doc.items[0].id; const r=App.results.get(id); const fi=r.data.faces.findIndex(f=>f.t==='PLANE'&&f.n&&f.n[2]>0.9); App.select([id], {face:{id, faceIdx:fi, info:r.data.faces[fi], point:[10,10,10], normal:[0,0,1]}})"); p.wait(300)
+    p.pg.locator('.ctxbar button[aria-label="Bohrung"]').click(); p.wait(300)
+    p.pg.select_option('#hw-type', 'through'); p.wait(150)
+    p.pg.select_option('#hw-norm', 'unc'); p.wait(150)
+    p.pg.select_option('#hw-size', '1/4"-20 UNC'); p.wait(150)
+    p.pg.select_option('#hw-head', 'countersunk'); p.wait(150)
+    csk_lbl = p.pg.locator('#hw-head option[value="countersunk"]').text_content() or ''
+    info2_csk = p.pg.locator('#hw-info').text_content() or ''
+    p.pg.click('#hw-go'); warte_rechnen(p, 25); p.pg.keyboard.press('Escape'); p.wait(400)
+    has_cone = p.ev("const r=App.results.get(App.doc.items[0].id); return !!(r && r.data && r.data.faces.some(f=>f.t==='CONE'))")
+    ok2 = ('#4-40 UNC' in unc_opts and '1/2"-13 UNC' in unc_opts
+           and '#4-48 UNF' in unf_opts and '1/2"-20 UNF' in unf_opts
+           and '5,1' in info2 and 'ASME B1.1' in info2
+           and p.ev("return App.errors.length") == 0
+           and abs(got2 - want2) < 0.05
+           and any(abs(d - 5.1) < 0.02 for d in cyl2)
+           and '82°' in csk_lbl and '82°' in info2_csk and has_cone)
+
+    # 3. Rohrgewinde G1/8 bis G1: G1/4 wählbar -> Kernloch 11,8 mm + Flachsenkung
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(200)
+    p.ev("Actions.addPrimitive('box', {p:{w:60, d:60, h:15}})"); warte_rechnen(p, 20)
+    p.ev("const id=App.doc.items[0].id; const r=App.results.get(id); const fi=r.data.faces.findIndex(f=>f.t==='PLANE'&&f.n&&f.n[2]>0.9); App.select([id], {face:{id, faceIdx:fi, info:r.data.faces[fi], point:[0,0,15], normal:[0,0,1]}})"); p.wait(400)
+    p.pg.locator('.ctxbar button[aria-label="Bohrung"]').click(); p.wait(400)
+    p.pg.select_option('#hw-type', 'tap'); p.wait(150)
+    p.pg.select_option('#hw-norm', 'pipe_g'); p.wait(150)
+    pipe_opts = p.pg.evaluate("[...document.querySelectorAll('#hw-size option')].map(o=>o.value)")
+    p.pg.select_option('#hw-size', 'G1/4'); p.wait(200)
+    info3 = p.pg.locator('#hw-info').text_content() or ''
+    p.pg.click('#hw-go'); warte_rechnen(p, 25); p.pg.keyboard.press('Escape'); p.wait(400)
+    v3 = volumen(p)
+    want3 = math.pi * 5.9 * 5.9 * 15.0
+    got3 = 54000.0 - (v3 or 0)
+    cyl3 = p.ev("const r=App.results.get(App.doc.items[0].id); return r && r.data ? r.data.faces.filter(f=>f.t==='CYLINDRE').map(f=>Math.round(f.r*200)/100) : []")
+    # Durchgang mit Flachsenkung nach DIN 3852-2 (kein Senkkopf bei G-Gewinde)
+    p.ev("const id=App.doc.items[0].id; const r=App.results.get(id); const fi=r.data.faces.findIndex(f=>f.t==='PLANE'&&f.n&&f.n[2]>0.9); App.select([id], {face:{id, faceIdx:fi, info:r.data.faces[fi], point:[18,18,15], normal:[0,0,1]}})"); p.wait(300)
+    p.pg.locator('.ctxbar button[aria-label="Bohrung"]').click(); p.wait(300)
+    p.pg.select_option('#hw-type', 'through'); p.wait(150)
+    p.pg.select_option('#hw-norm', 'pipe_g'); p.wait(150)
+    p.pg.select_option('#hw-size', 'G1/4'); p.wait(150)
+    pipe_heads = p.pg.evaluate("[...document.querySelectorAll('#hw-head option')].map(o=>o.value)")
+    p.pg.select_option('#hw-head', 'counterbore'); p.wait(150)
+    p.pg.click('#hw-go'); warte_rechnen(p, 25); p.pg.keyboard.press('Escape'); p.wait(400)
+    cyl3_cb = p.ev("const r=App.results.get(App.doc.items[0].id); return r && r.data ? r.data.faces.filter(f=>f.t==='CYLINDRE').map(f=>Math.round(f.r*200)/100) : []")
+    ok3 = (pipe_opts == ['G1/8', 'G1/4', 'G3/8', 'G1/2', 'G3/4', 'G1']
+           and '11,8' in info3 and 'ISO 228-1' in info3
+           and p.ev("return App.errors.length") == 0
+           and abs(got3 - want3) < 0.08
+           and any(abs(d - 11.8) < 0.02 for d in cyl3)
+           and 'countersunk' not in pipe_heads and 'counterbore' in pipe_heads
+           and any(abs(d - 20.0) < 0.05 for d in cyl3_cb))
+
+    # 4. Datentabelle app/data/gewinde.json mit Quellen + Hilfetext threadStandards
+    tbl = p.pg.evaluate("fetch('data/gewinde.json').then(r=>r.json())")
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    norms = {n['id']: n for n in (tbl.get('normen') or [])}
+    by_id = {g['id']: g for n in norms.values() for g in (n.get('groessen') or [])}
+    th = hilfen.get('threadStandards') or {}
+    p.ev("const id=App.doc.items[0].id; const r=App.results.get(id); const fi=r.data.faces.findIndex(f=>f.t==='PLANE'&&f.n&&f.n[2]>0.9); App.select([id], {face:{id, faceIdx:fi, info:r.data.faces[fi], point:[0,0,15], normal:[0,0,1]}})"); p.wait(250)
+    p.pg.locator('.ctxbar button[aria-label="Bohrung"]').click(); p.wait(250)
+    dh = p.pg.locator('#hw-norm').locator('..').locator('..').get_attribute('data-help')
+    ok4 = (len(tbl.get('_quellen') or []) >= 5
+           and all(k in norms and norms[k].get('quelle') for k in ('metric', 'metric_fine', 'unc', 'unf', 'pipe_g'))
+           and by_id.get('M10×1,25', {}).get('kernloch_mm') == 8.8
+           and by_id.get('1/4"-20 UNC', {}).get('kernloch_mm') == 5.1
+           and by_id.get('G1/4', {}).get('kernloch_mm') == 11.8
+           and all(f in th and th[f] for f in ('tip', 'hilfe', 'tipp'))
+           and dh == 'threadStandards')
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -9111,6 +9226,7 @@ TESTS = [
     ('[A-033] Körper-Liste im Teil: 2 Körper / Umbenennen / Färben / Ausblenden / Projektdatei und Export', t_koerper_liste),
     ('[F-11240339] Volltest-Reparatur: Kontextleiste nach Ghost-Auswertung / Gelenk-Abspielen bei rAF-Stau', t_f11240339),
     ('[A-035] Kaputter Bezug: neu wählen (Rundung, Fase, Skizze)', t_kaputter_bezug),
+    ('[A-038] Bohrungs-Assistent mehr Gewinde: Feingewinde M10×1,25 (8,8 mm) / 1/4"-20 UNC (5,1 mm) / Rohrgewinde G1/4 / Tabelle & Hilfe', t_a038_mehr_gewinde),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

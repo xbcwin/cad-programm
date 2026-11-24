@@ -248,7 +248,19 @@ const UI = (() => {
     const wrap = h('div', { class: 'field' });
     if (label) wrap.append(h('label', { for: id }, label));
     const sel = h('select', { id });
-    for (const o of options) { const [v, l] = Array.isArray(o) ? o : [o, o]; const op = h('option', { value: v }, l); if (String(v) === String(value)) op.selected = true; sel.append(op); }
+    const addOpt = (parent, o) => {
+      const [v, l] = Array.isArray(o) ? o : [o, o];
+      const op = h('option', { value: v }, l);
+      if (String(v) === String(value)) op.selected = true;
+      parent.append(op);
+    };
+    for (const o of options) {
+      if (o && typeof o === 'object' && !Array.isArray(o) && Array.isArray(o.options)) {
+        const og = h('optgroup', { label: o.group });
+        for (const sub of o.options) addOpt(og, sub);
+        sel.append(og);
+      } else addOpt(sel, o);
+    }
     sel.addEventListener('change', () => onChange(sel.value));
     wrap.append(h('div', { class: 'inp' }, sel));
     return wrap;
