@@ -1958,6 +1958,12 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Export, Rückgängig, Speichern & Hilfe**: PDF-, SVG- und DXF-Export (`SCHRAFFUR`, `SCHNITTLINIE`), Löschen samt `App.undo`/`redo`, Speichern/Laden, Befehlssuche (`schnittansicht`) und Hilfetext `drawingSection` funktionieren vollständig.
 - [ ] **Von Hand**: Im Browser ein Werkstück mit Stufenbohrung und Sackloch in der Zeichnung waagerecht und schräg schneiden, die Schnittansicht nachbemaßen und das erzeugte PDF prüfen.
 
+## Volltest-Reparatur (Auto [F-11241014])
+
+- [x] **Skizze-Fertig wartet auf verzögert geladene Schrift (`Sketch.done()` / `SK.needsEntsFonts`)**: Beim Prägen auf einem Zylindermantel mit noch blockierter Schrift (`schrift-inter.json`) bleibt der Skizzenmodus beim Klick auf „Fertig“ ohne Fehler-Toast offen und wechselt automatisch in die Präge-Vorschau (`.stepbox`), sobald die Schrift geladen ist; ein fokussiertes Feld (`#tx-h`) verliert beim Laden einer Schrift (`schrift-inter-fett.json`) weder Fokus noch Eingabe.
+- [x] **Rechtes Panel schützt fokussiertes Eingabefeld bei `results`**: Während `#sc-sx` im Skalieren-Panel fokussiert mit `'1'` gefüllt ist, zerstört ein eintreffendes `App.emit('results')` das Feld nicht; Fokus und Wert bleiben erhalten, und nach `Enter` sowie Verlassen des Feldes aktualisiert das Panel sauber.
+- [ ] **Von Hand**: Im Browser mit gedrosseltem Netzwerk („Slow 3G“) eine Prägung auf einem Zylinder sofort mit „Fertig“ abschließen sowie im Skalieren-Panel schnell hintereinander Werte in `#sc-sx`/`#sc-sy`/`#sc-sz` eintippen und prüfen, dass nichts verloren geht.
+
 ## Fehler melden
 
 ```
