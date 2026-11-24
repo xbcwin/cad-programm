@@ -449,7 +449,9 @@ const Start = (() => {
         row.append(h('div', { class: 'grow' }, h('b', null, r.name), h('span', null, T(r.n === 1 ? 'start.recentMetaOne' : 'start.recentMetaMany', { n: r.n, date: dstr }))));
         const del = h('button', { type: 'button', class: 'icon-btn', 'aria-label': T('start.deleteFromBrowserAria'), 'data-tip': T('start.deleteFromBrowserTip') }); del.innerHTML = icon('trash');
         del.onclick = async (e) => { e.stopPropagation(); if (await UI.confirm(T('start.deleteConfirmTitle'), T('start.deleteConfirmBody', { name: r.name }), T('common.delete'), true)) { await App.deleteStored(r.id); show(); } };
-        row.append(del);
+        const newTabBtn = h('button', { type: 'button', class: 'icon-btn', 'aria-label': T('tabs.openInNewTab'), 'data-tip': T('tabs.openInNewTab') }); newTabBtn.innerHTML = icon('plus');
+        newTabBtn.onclick = (e) => { e.stopPropagation(); openStoredInTab(r.id); };
+        row.append(newTabBtn, del);
         const openIt = async () => { if (r.id === App.doc.id) { hide(); return; } const d = await App.loadStored(r.id); if (d) { App.setDoc(d); hide(); } else UI.toast(T('start.projectMissing'), { kind: 'bad' }); };
         row.onclick = openIt; row.onkeydown = (e) => { if (e.key === 'Enter') openIt(); };
         list.append(row);
@@ -492,10 +494,28 @@ const Start = (() => {
     App.setDoc(t.build()); hide();
     UI.toast(T('start.droneToast', { name: t.name }), { icon: 'check', ms: 6000 });
   }
-  function newProject(silent) {
-    App.setDoc(Model.newDoc('Neues Projekt'));
+  function newProject(silent, opts = {}) {
+    App.setDoc(Model.newDoc('Neues Projekt'), opts && opts.newTab ? { newTab: true } : {});
     hide();
     if (!silent) UI.toast(T('start.newProjToast'), { icon: 'newfile', ms: 4500 });
+  }
+  function openNewTab(doc) {
+    App.openTab(doc || Model.newDoc('Neues Projekt'));
+    hide();
+    UI.toast(T('tabs.newOpened'), { icon: 'newfile', ms: 3500 });
+  }
+  async function openStoredInTab(id) {
+    const open = (App.tabs || []).find((t) => t.docId === id);
+    if (open) {
+      App.switchTab(open.tabId);
+      hide();
+      return true;
+    }
+    const d = await App.loadStored(id);
+    if (!d) { UI.toast(T('start.projectMissing'), { kind: 'bad' }); return false; }
+    App.openTab(d, { saved: true });
+    hide();
+    return true;
   }
   function customTplMeta(ct) {
     const d = ct && ct.doc ? ct.doc : {};
@@ -507,7 +527,7 @@ const Start = (() => {
     if (pb && pb.enabled) bits.push(T('tpl.metaBed', { x: Math.round(pb.x), y: Math.round(pb.y) }));
     return bits.join(' · ');
   }
-  function customTplCard(ct, { onOpen, onAfterDelete } = {}) {
+  function customTplCard(ct, { onOpen, onAfterDelete, openOpts } = {}) {
     const card = h('div', { class: 'card tpl-card custom', role: 'button', tabindex: '0', dataset: { tplId: ct.id } });
     const del = h('button', {
       type: 'button',
@@ -531,15 +551,15 @@ const Start = (() => {
       h('b', null, ct.name),
       h('span', null, ct.desc || T('tpl.customNoDesc')),
     );
-    const open = () => { if (onOpen) onOpen(); openTemplate(ct.id); };
+    const open = () => { if (onOpen) onOpen(); openTemplate(ct.id, openOpts); };
     card.onclick = open;
     card.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
     return card;
   }
-  function openTemplate(id) {
+  function openTemplate(id, opts = {}) {
     const d = Templates.buildProject(id);
     if (!d) { UI.toast(T('tpl.missing'), { kind: 'bad' }); return false; }
-    App.setDoc(d);
+    App.setDoc(d, opts && opts.newTab ? { newTab: true } : {});
     hide();
     if (id === 'print3d') {
       const pb = d.settings && d.settings.printBed;
@@ -551,7 +571,7 @@ const Start = (() => {
     }
     return true;
   }
-  function newProjectDialog() {
+  function newProjectDialog(opts = {}) {
     const wrap = h('div', { id: 'new-proj-dialog', class: 'tpl-dialog' });
     const builtSec = h('div', { class: 'tpl-sec' }, h('div', { class: 'section-h' }, T('tpl.builtinHeading')));
     const builtGrid = h('div', { class: 'tpl-grid', id: 'tpl-builtin-grid' });
@@ -560,7 +580,7 @@ const Start = (() => {
       const c = h('button', { type: 'button', class: 'card tpl-card', dataset: { tplId: t.id } });
       const th = h('div', { class: 'thumb' }); th.innerHTML = tplThumb(t);
       c.append(th, h('span', { class: 'tpl-badge' }, t.badge), h('b', null, t.name), h('span', null, t.desc));
-      c.onclick = () => { if (modalRef) modalRef.close(); openTemplate(t.id); };
+      c.onclick = () => { if (modalRef) modalRef.close(); openTemplate(t.id, opts); };
       builtGrid.append(c);
     }
     builtSec.append(builtGrid);
@@ -581,6 +601,7 @@ const Start = (() => {
       }
       for (const ct of list) {
         custGrid.append(customTplCard(ct, {
+          openOpts: opts,
           onOpen: () => { if (modalRef) modalRef.close(); },
           onAfterDelete: () => { renderCustom(); if (el) show(); },
         }));
@@ -1783,7 +1804,7 @@ const Start = (() => {
     UI.toast(`„${f.name}“ importiert: ${r.ents.length} Elemente, ${fmt(r.w)} × ${fmt(r.h)} mm` + (!svg && r.unit !== 1 ? ' (in Millimeter umgerechnet)' : '') + `. Die Platte ist ${svg ? 1 : 3} mm dick – die Dicke änderst du rechts unter „Höhe“, den Umriss mit „Skizze bearbeiten“.` + (svg ? ' Stimmt die Größe nicht? „Skizze bearbeiten“ → rechts „Breite ändern“.' : '') + (r.texts ? ' Text in der SVG fehlt – wandle ihn im Zeichenprogramm vorher in Pfade um.' : ''), { icon: 'folder', ms: 9000 });
     setTimeout(() => Viewer.fit([it.id]), 1500);
   }
-  async function openBlob(f) {
+  async function openBlob(f, opts = {}) {
     if (/\.(dxf|svg)$/i.test(f.name)) {
       if (Sketch.active) {
         if (Sketch.state && Sketch.state.step) {
@@ -1802,18 +1823,23 @@ const Start = (() => {
       }
       Model.migrate(doc);
       const vers = Array.isArray(doc.versions) ? doc.versions : null; delete doc.versions;
-      if (Store.hasProject(doc.id) && doc.id !== App.doc.id) doc.id = uid('p');
+      const openDocIds = new Set((App.tabs || []).map((t) => t.docId).filter(Boolean));
+      if (opts && opts.newTab) {
+        if (openDocIds.has(doc.id)) doc.id = uid('p');
+      } else if (Store.hasProject(doc.id) && doc.id !== App.doc.id) {
+        doc.id = uid('p');
+      }
       Store.extractBlobs(doc);
       if (vers) await Versions.importList(doc.id, vers);
       ensureModelMode();
-      App.setDoc(doc); hide();
+      App.setDoc(doc, opts && opts.newTab ? { newTab: true } : {}); hide();
       App.markClean();
       UI.toast(`„${doc.name}“ geöffnet.`, { icon: 'folder' });
     } catch (e) { const E = ERRORS.importFailed; UI.toast(`${E.titel}. ${E.erklaerung} ${E.loesung}`, { kind: 'bad', ms: 7000 }); console.warn(e); }
   }
-  function openFile() {
+  function openFile(opts = {}) {
     const inp = h('input', { type: 'file', accept: '.json,application/json,.step,.stp,.igs,.iges,.brep,.stl,.3mf,.obj,.dxf,.svg', style: { display: 'none' } });
-    inp.onchange = () => { const f = inp.files && inp.files[0]; inp.remove(); if (f) openBlob(f); };
+    inp.onchange = () => { const f = inp.files && inp.files[0]; inp.remove(); if (f) openBlob(f, opts); };
     document.body.append(inp); inp.click();
   }
   // Dateien einfach ins Fenster ziehen (Projektdatei, 3D-Import oder 2D-Skizze)
@@ -1908,7 +1934,7 @@ const Start = (() => {
   function updateFolderUI() {
     const btn = $('#btn-folder-status');
     if (!btn) return;
-    if (!folder || !folderSupported()) {
+    if (!folder || !folderSupported() || (App.doc && App.doc.id !== folder.docId)) {
       btn.hidden = true;
       btn.innerHTML = '';
       btn.className = 'folder-badge';
@@ -2254,16 +2280,124 @@ const Start = (() => {
     if (checkBarItemId && !importChecks.has(checkBarItemId)) dismissImportBanner();
   }
 
+  function renderTabs() {
+    const list = $('#proj-tabs-list');
+    if (!list) return;
+    list.innerHTML = '';
+    const allTabs = App.tabs || [];
+    for (const t of allTabs) {
+      const tab = h('div', {
+        class: 'proj-tab' + (t.active ? ' active' : '') + (t.dirty ? ' dirty' : ''),
+        role: 'tab',
+        tabindex: '0',
+        'aria-selected': String(!!t.active),
+        dataset: { tabId: t.tabId, docId: t.docId || '' },
+      });
+      const dot = h('span', { class: 'ptab-dot', 'aria-hidden': 'true' });
+      const tip = t.name + (t.dirty ? ' (ungespeicherte Änderungen)' : '');
+      const nameEl = h('span', { class: 'ptab-name', 'data-tip': tip }, t.name);
+      const closeBtn = h('button', {
+        type: 'button',
+        class: 'ptab-close',
+        'aria-label': T('tabs.closeAria', { name: t.name }),
+        'data-tip': T('tabs.closeTip'),
+      });
+      closeBtn.innerHTML = icon('close');
+      closeBtn.onclick = (e) => { e.stopPropagation(); App.closeTab(t.tabId); };
+      tab.onclick = () => { App.switchTab(t.tabId); };
+      tab.onauxclick = (e) => { if (e.button === 1) { e.preventDefault(); App.closeTab(t.tabId); } };
+      tab.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); App.switchTab(t.tabId); } };
+      nameEl.ondblclick = async (e) => {
+        e.stopPropagation();
+        if (!t.active) App.switchTab(t.tabId);
+        const n = await UI.prompt(T('tabs.rename'), T('common.name'), App.doc.name, T('common.rename'));
+        if (n && n.trim()) App.change('Projekt umbenannt', (doc) => { doc.name = n.trim(); });
+      };
+      tab.oncontextmenu = (e) => {
+        e.preventDefault();
+        const menuItems = [
+          {
+            label: T('tabs.rename'),
+            icon: 'edit',
+            run: async () => {
+              if (!t.active) App.switchTab(t.tabId);
+              const n = await UI.prompt(T('tabs.rename'), T('common.name'), App.doc.name, T('common.rename'));
+              if (n && n.trim()) App.change('Projekt umbenannt', (doc) => { doc.name = n.trim(); });
+            },
+          },
+          { label: T('tabs.closeTip'), icon: 'close', run: () => App.closeTab(t.tabId) },
+        ];
+        if ((App.tabs || []).length > 1) {
+          menuItems.push({
+            label: T('tabs.closeOthers'),
+            icon: 'close',
+            run: async () => {
+              for (const ot of (App.tabs || [])) {
+                if (ot.tabId !== t.tabId) await App.closeTab(ot.tabId);
+              }
+            },
+          });
+        }
+        UI.menu(tab, menuItems);
+      };
+      tab.append(dot, nameEl, closeBtn);
+      list.append(tab);
+    }
+    const act = list.querySelector('.proj-tab.active');
+    if (act && act.scrollIntoView) act.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+  }
+
+  function openTabAddMenu(anchor) {
+    const openIds = new Set((App.tabs || []).map((t) => t.docId).filter(Boolean));
+    const items = [
+      { id: 'tab-add-empty', label: T('tabs.newEmpty'), icon: 'newfile', run: () => openNewTab() },
+      { id: 'tab-add-tpl', label: T('tabs.newTemplate'), icon: 'cube', run: () => newProjectDialog({ newTab: true }) },
+      { id: 'tab-add-file', label: T('tabs.openFile'), icon: 'folder', run: () => openFile({ newTab: true }) },
+    ];
+    const recent = App.recentProjects().filter((r) => r.n > 0).slice(0, 8);
+    if (recent.length) {
+      items.push('-');
+      recent.forEach((r, i) => {
+        const suffix = openIds.has(r.id) ? ` (${T('tabs.alreadyOpen')})` : '';
+        items.push({
+          id: 'tab-add-recent-' + i,
+          label: r.name + suffix,
+          icon: 'box3',
+          run: () => openStoredInTab(r.id),
+        });
+      });
+    }
+    UI.menu(anchor, items);
+  }
+
   function init() {
     if (folderInited) return;
     folderInited = true;
+    const addTabBtn = $('#proj-tab-add');
+    if (addTabBtn) {
+      addTabBtn.innerHTML = icon('plus');
+      addTabBtn.onclick = (e) => openTabAddMenu(e.currentTarget);
+    }
+    App.on('tabs', renderTabs);
+    App.on('doc', renderTabs);
+    App.on('clean', renderTabs);
+    App.on('dirty', renderTabs);
+    renderTabs();
     App.on('docLoaded', ({ doc, opts }) => {
       if (!recTracking || (opts && opts.fromBoot)) return;
       clearTimeout(recTimer); recTimer = null;
+      if (opts && opts.isSwitch) {
+        if (App.dirty) scheduleRecoverySave();
+        else {
+          recBaseDoc = isEmptyDoc(doc) ? null : deepClone(doc);
+          if (!App.anyDirty) Store.clearRecovery();
+        }
+        return;
+      }
       recBaseDoc = isEmptyDoc(doc) ? null : deepClone(doc);
       if (opts && opts.fromRecovery) return;
       if (recPending) { recPending = null; hideRecoveryBanner(); }
-      Store.clearRecovery();
+      if (!App.anyDirty || (opts && opts.forceReplace)) Store.clearRecovery();
     });
     App.on('dirty', () => {
       if (!recTracking) return;
@@ -2275,14 +2409,16 @@ const Start = (() => {
       clearTimeout(recTimer); recTimer = null;
       recBaseDoc = isEmptyDoc(App.doc) ? null : deepClone(App.doc);
       if (recPending) { recPending = null; hideRecoveryBanner(); }
-      Store.clearRecovery();
+      if (!App.anyDirty) Store.clearRecovery();
       try { App.autosave.flush(); } catch (_) {}
     });
     window.addEventListener('pagehide', () => { flushRecovery(); });
     App.on('doc', () => {
       syncImportChecks();
       if (!folder) return;
-      if (App.doc.id !== folder.docId) { disconnectFolder(true); return; }
+      const hasFolderTab = (App.tabs || []).some((t) => t.docId === folder.docId);
+      if (!hasFolderTab) { disconnectFolder(true); return; }
+      if (App.doc.id !== folder.docId) { updateFolderUI(); return; }
       if (App.revision === folder.lastRev) return;
       folder.lastRev = App.revision;
       scheduleFolderSave();
@@ -2327,7 +2463,7 @@ const Start = (() => {
     window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && dropEl && !dropEl.hidden) hideDropOverlay(); });
   }
   return {
-    init, importCAD, parseSTEP, import3MF, parse3MF, importOBJ, parseOBJ, importDXF, parseDXF, parseSVG, show, hide, newProject, newProjectDialog, saveAsTemplate, openTemplate, openFile, openBlob, saveFile,
+    init, importCAD, parseSTEP, import3MF, parse3MF, importOBJ, parseOBJ, importDXF, parseDXF, parseSVG, show, hide, newProject, openNewTab, openStoredInTab, renderTabs, openTabAddMenu, newProjectDialog, saveAsTemplate, openTemplate, openFile, openBlob, saveFile,
     checkImport, healImport, importCheckOf, setImportHealOpts, dismissImportBanner,
     folderSupported, folderInfo, saveToFolder, saveToFolderNow, disconnectFolder,
     checkRecoveryOnBoot, startRecoveryTracking, restoreRecovery, dismissRecovery, flushRecovery,

@@ -14795,6 +14795,279 @@ def t_f11241146(p):
     return [ok1, ok2]
 
 
+def t_a072_zeichnung_modellaenderung(p):
+    def sheet_screen(sx, sy):
+        return p.ev("""
+          const svg = document.querySelector('#sheet .sheet-holder svg');
+          const pt = svg.createSVGPoint(); pt.x = arg[0]; pt.y = arg[1];
+          const q = pt.matrixTransform(svg.getScreenCTM());
+          return [q.x, q.y];
+        """, [sx, sy])
+
+    # 1. Platte (60 x 40 x 10) mit zwei Bohrungen (Ø8 links, Ø10 rechts)
+    p.empty()
+    p.ev("""
+      App.change('Platte mit 2 Bohrungen', d => {
+        d.items.push(Model.newItem('box', { w: 60, d: 40, h: 10 }, { name: 'Platte' }));
+        const h1 = Model.newItem('cylinder', { d: 8, h: 16 }, { name: 'Bohrung8', role: 'hole' });
+        h1.t.x = -12; h1.t.y = 0; h1.t.z = -3;
+        const h2 = Model.newItem('cylinder', { d: 10, h: 16 }, { name: 'Bohrung10', role: 'hole' });
+        h2.t.x = 12; h2.t.y = 0; h2.t.z = -3;
+        d.items.push(h1, h2);
+      });
+    """)
+    warte_rechnen(p, 30)
+
+    # 2. Zeichnung öffnen: manuelles Ø8-Maß auf Bohrung 1 (Draufsicht) + manuelles Längenmaß 60 (Vorderansicht)
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.ev("return Drawing.waitReady()")
+    p.wait(200)
+
+    p.pg.click('#dw-dm-dia'); p.wait(150)
+    dia_pt = p.ev("""
+      const v = Drawing.layout.views.top;
+      const c = v.geo.circles.find(x => x.full && Math.abs(x.r - 4) < 0.15);
+      return c ? [v.ox + (c.c[0] + c.r * Math.SQRT1_2) * v.s, v.oy - (c.c[1] + c.r * Math.SQRT1_2) * v.s] : null;
+    """)
+    sd = sheet_screen(*dia_pt)
+    p.pg.mouse.move(sd[0], sd[1]); p.wait(80)
+    p.pg.mouse.click(sd[0], sd[1]); p.wait(200)
+
+    p.pg.click('#dw-dm-lin'); p.wait(150)
+    lin_pts = p.ev("""
+      const v = Drawing.layout.views.front;
+      const toS = (q) => [v.ox + q[0] * v.s, v.oy - q[1] * v.s];
+      const b = v.geo.box;
+      return {
+        a: toS([b[0], b[1]]),
+        b: toS([b[2], b[1]]),
+        place: toS([(b[0] + b[2]) * 0.5, b[1] - 18]),
+      };
+    """)
+    for key in ('a', 'b', 'place'):
+        pt = sheet_screen(*lin_pts[key])
+        p.pg.mouse.move(pt[0], pt[1]); p.wait(70)
+        p.pg.mouse.click(pt[0], pt[1]); p.wait(160)
+    p.pg.keyboard.press('Escape'); p.wait(150)
+
+    s1 = p.ev("""
+      const dims = Drawing.activeSheet().dims;
+      const dia = dims.find(x => x.type === 'dia');
+      const lin = dims.find(x => x.type === 'lin');
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const diaTxt = dia ? svg.querySelector(`text.dimtext[data-id="${dia.id}"]`)?.textContent : '';
+      const linTxt = lin ? svg.querySelector(`text.dimtext[data-id="${lin.id}"]`)?.textContent : '';
+      return {
+        diaId: dia?.id,
+        linId: lin?.id,
+        diaTxt,
+        linTxt,
+        lostN: Drawing.lostDims().length,
+        hasLostBox: !!document.getElementById('dw-lost-sec'),
+      };
+    """)
+    ok1 = (
+        bool(s1['diaId']) and bool(s1['linId'])
+        and s1['diaTxt'] == 'Ø8' and s1['linTxt'] == '60'
+        and s1['lostN'] == 0 and not s1['hasLostBox']
+    )
+
+    # 3. Zurück ins Modell: Bohrung 1 (Ø8) löschen -> in Zeichnung rot + in Liste „Verlorene Maße“
+    p.pg.click('#tab-model'); p.wait(250)
+    p.ev("""
+      const h1 = App.doc.items.find(x => x.name === 'Bohrung8');
+      if (h1) { App.select([h1.id]); Actions.remove(); }
+    """)
+    warte_rechnen(p, 30)
+
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.ev("return Drawing.waitReady()")
+    p.wait(250)
+
+    s2 = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const topCircles = Drawing.layout.views.top.geo.circles.filter(c => c.full).length;
+      const txtEl = svg.querySelector(`text.dimtext[data-id="${arg.diaId}"]`);
+      const lineEl = svg.querySelector(`polyline.dim[data-id="${arg.diaId}"]`);
+      const txtCol = txtEl ? getComputedStyle(txtEl).fill : '';
+      const lineCol = lineEl ? getComputedStyle(lineEl).stroke : '';
+      const lostSec = document.getElementById('dw-lost-sec');
+      const lostHead = lostSec?.querySelector('.dw-lost-h')?.textContent?.toLowerCase() || '';
+      const lostRow = document.querySelector(`#dw-lost-list .dw-lost-row[data-dim-id="${arg.diaId}"]`);
+      const linEl = svg.querySelector(`text.dimtext[data-id="${arg.linId}"]`);
+      return {
+        topCircles,
+        txtLost: txtEl?.classList.contains('lost') && txtEl?.dataset.lost === '1',
+        lineLost: lineEl?.classList.contains('lost') && lineEl?.dataset.lost === '1',
+        txtCol,
+        lineCol,
+        lostHead,
+        rowTxt: lostRow?.textContent || '',
+        hasRebind: !!lostRow?.querySelector('.dw-lost-rebind'),
+        hasDel: !!lostRow?.querySelector('.dw-lost-del'),
+        lostCount: Drawing.lostDims().length,
+        linOk: linEl?.textContent === '60' && !linEl?.classList.contains('lost'),
+      };
+    """, {'diaId': s1['diaId'], 'linId': s1['linId']})
+    ok2 = (
+        s2['topCircles'] == 1
+        and s2['txtLost'] and s2['lineLost']
+        and '201, 55, 46' in s2['txtCol'] and '201, 55, 46' in s2['lineCol']
+        and 'verlorene maße' in s2['lostHead']
+        and 'Ø8' in s2['rowTxt']
+        and s2['hasRebind'] and s2['hasDel']
+        and s2['lostCount'] == 1
+        and s2['linOk']
+    )
+
+    # Rückgängig bringt Bohrung 1 zurück -> Maß wieder gültig; Redo macht es wieder rot
+    p.ev("App.undo()")
+    warte_rechnen(p, 30)
+    p.ev("return Drawing.waitReady()"); p.wait(200)
+    s2_undo = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const txtEl = svg.querySelector(`text.dimtext[data-id="${arg}"]`);
+      return {
+        lostN: Drawing.lostDims().length,
+        hasBox: !!document.getElementById('dw-lost-sec'),
+        isLost: !!txtEl?.classList.contains('lost'),
+        txt: txtEl?.textContent || '',
+      };
+    """, s1['diaId'])
+    p.ev("App.redo()")
+    warte_rechnen(p, 30)
+    p.ev("return Drawing.waitReady()"); p.wait(200)
+    s2_redo = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const txtEl = svg.querySelector(`text.dimtext[data-id="${arg}"]`);
+      return {
+        lostN: Drawing.lostDims().length,
+        hasBox: !!document.getElementById('dw-lost-sec'),
+        isLost: !!txtEl?.classList.contains('lost'),
+      };
+    """, s1['diaId'])
+    ok3 = (
+        s2_undo['lostN'] == 0 and not s2_undo['hasBox'] and not s2_undo['isLost'] and s2_undo['txt'] == 'Ø8'
+        and s2_redo['lostN'] == 1 and s2_redo['hasBox'] and s2_redo['isLost']
+    )
+
+    # 4. Länge der Platte ändern (60 -> 85 im Modell, dann 85 -> 95 direkt während Zeichnung offen ist)
+    p.pg.click('#tab-model'); p.wait(200)
+    p.ev("App.change('Breite 85', d => { d.items.find(x => x.kind === 'box').p.w = 85; })")
+    warte_rechnen(p, 30)
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.ev("return Drawing.waitReady()"); p.wait(200)
+
+    s4a = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const autoW = Drawing.activeSheet().dims.find(x => x.auto === 'width');
+      const linEl = svg.querySelector(`text.dimtext[data-id="${arg.linId}"]`);
+      const autoEl = autoW ? svg.querySelector(`text.dimtext[data-id="${autoW.id}"]`) : null;
+      return {
+        linTxt: linEl?.textContent || '',
+        linLost: !!linEl?.classList.contains('lost'),
+        autoTxt: autoEl?.textContent || '',
+        lostCount: Drawing.lostDims().length,
+      };
+    """, {'linId': s1['linId']})
+
+    p.ev("App.change('Breite 95', d => { d.items.find(x => x.kind === 'box').p.w = 95; })")
+    warte_rechnen(p, 30)
+    p.wait(300)
+    p.ev("return Drawing.waitReady()"); p.wait(200)
+
+    s4b = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const autoW = Drawing.activeSheet().dims.find(x => x.auto === 'width');
+      const linEl = svg.querySelector(`text.dimtext[data-id="${arg.linId}"]`);
+      const autoEl = autoW ? svg.querySelector(`text.dimtext[data-id="${autoW.id}"]`) : null;
+      return {
+        linTxt: linEl?.textContent || '',
+        linLost: !!linEl?.classList.contains('lost'),
+        autoTxt: autoEl?.textContent || '',
+        lostCount: Drawing.lostDims().length,
+      };
+    """, {'linId': s1['linId']})
+    ok4 = (
+        s4a['linTxt'] == '85' and not s4a['linLost'] and s4a['autoTxt'] == '85' and s4a['lostCount'] == 1
+        and s4b['linTxt'] == '95' and not s4b['linLost'] and s4b['autoTxt'] == '95' and s4b['lostCount'] == 1
+    )
+
+    # 5. Verlorenes Maß „Neu zuordnen“ auf Bohrung 2 (Ø10) -> wird gültig (Ø10), Undo zurück, „Löschen“ entfernt es
+    p.pg.click(f'#dw-lost-list .dw-lost-row[data-dim-id="{s1["diaId"]}"] .dw-lost-rebind')
+    p.wait(150)
+    h2_pt = p.ev("""
+      const v = Drawing.layout.views.top;
+      const c = v.geo.circles.find(x => x.full && Math.abs(x.r - 5) < 0.2);
+      return c ? [v.ox + (c.c[0] + c.r * Math.SQRT1_2) * v.s, v.oy - (c.c[1] + c.r * Math.SQRT1_2) * v.s] : null;
+    """)
+    sh2 = sheet_screen(*h2_pt)
+    p.pg.mouse.move(sh2[0], sh2[1]); p.wait(80)
+    p.pg.mouse.click(sh2[0], sh2[1]); p.wait(250)
+
+    s5_rebound = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const txtEl = svg.querySelector(`text.dimtext[data-id="${arg}"]`);
+      return {
+        lostN: Drawing.lostDims().length,
+        hasBox: !!document.getElementById('dw-lost-sec'),
+        isLost: !!txtEl?.classList.contains('lost'),
+        txt: txtEl?.textContent || '',
+      };
+    """, s1['diaId'])
+
+    p.ev("App.undo()"); p.wait(250)
+    s5_undo = p.ev("return { lostN: Drawing.lostDims().length, hasBox: !!document.getElementById('dw-lost-sec') }")
+
+    p.pg.click(f'#dw-lost-list .dw-lost-row[data-dim-id="{s1["diaId"]}"] .dw-lost-del')
+    p.wait(200)
+    s5_del = p.ev("""
+      return {
+        exists: Drawing.activeSheet().dims.some(x => x.id === arg),
+        lostN: Drawing.lostDims().length,
+        hasBox: !!document.getElementById('dw-lost-sec'),
+      };
+    """, s1['diaId'])
+    p.ev("App.undo()"); p.wait(200)
+    s5_restore = p.ev("return Drawing.lostDims().length")
+
+    ok5 = (
+        s5_rebound['lostN'] == 0 and not s5_rebound['hasBox'] and not s5_rebound['isLost'] and s5_rebound['txt'] == 'Ø10'
+        and s5_undo['lostN'] == 1 and s5_undo['hasBox']
+        and not s5_del['exists'] and s5_del['lostN'] == 0 and not s5_del['hasBox']
+        and s5_restore == 1
+    )
+
+    # 6. Speichern/Laden, PDF-Export, Befehlssuche & Hilfe
+    saved = p.ev("return JSON.stringify(App.doc)")
+    p.ev("App.setDoc(JSON.parse(arg), {fit:false})", saved); warte_rechnen(p, 30)
+    p.ev("return Drawing.waitReady()"); p.wait(200)
+    after_reload = p.ev("return { lostN: Drawing.lostDims().length, hasBox: !!document.getElementById('dw-lost-sec') }")
+    pdf_info = p.ev("""
+      return Drawing.buildPDFBytes().then(bytes => {
+        let s = '';
+        for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+        return { head: s.slice(0, 8), has95: s.includes('(95)'), hasRed: s.includes('0.788 0.216 0.180') };
+      });
+    """)
+    help_ok = p.ev("""
+      return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(d => ({
+        json: !!(d.drawingLostDims && d.drawingLostDims.tip && d.drawingLostDims.hilfe && d.drawingLostDims.tipp),
+        dom: document.querySelectorAll('[data-help="drawingLostDims"]').length >= 1,
+        cmd: Commands.search('verlorene maße').some(c => c.id === 'drawingLostDims'),
+      }));
+    """)
+    ok6 = (
+        after_reload['lostN'] == 1 and after_reload['hasBox']
+        and pdf_info['head'] == '%PDF-1.4' and pdf_info['has95'] and pdf_info['hasRed']
+        and all(help_ok.values())
+    )
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
+
+
 def t_a071_zeichnung_dxf_png(p):
     import struct
 
@@ -15127,6 +15400,401 @@ def t_a074_uebersetzbare_oberflaeche_2(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+# ---------- [A-070] Zeichnung: Positionsnummern und Stückliste (ZE-12) ----------
+def t_a070_positionsnummern_stueckliste(p):
+    # 1. 3 verschiedene Teile, eines zweimal (4 Körper gesamt) → Tabelle mit 3 Zeilen (Menge 2 beim doppelten) & 3 Positionsnummern im Bild
+    p.empty()
+    p.ev("""
+      App.change('A070 Teile', d => {
+        const g = Model.newItem('box', { w: 100, d: 60, h: 6 }, { name: 'Grundplatte', mat: 'Alu 6061' });
+        g.t.z = 0;
+        const b1 = Model.newItem('cylinder', { d: 14, h: 18 }, { name: 'Buchse 1', mat: 'Messing' });
+        b1.t.x = -28; b1.t.z = 6;
+        const b2 = Model.newItem('cylinder', { d: 14, h: 18 }, { name: 'Buchse 2', mat: 'Messing' });
+        b2.t.x = 28; b2.t.z = 6;
+        const dk = Model.newItem('box', { w: 80, d: 40, h: 4 }, { name: 'Deckel', mat: 'PLA' });
+        dk.t.z = 24;
+        d.items.push(g, b1, b2, dk);
+      });
+    """); warte_rechnen(p, 40)
+
+    bom_expected = p.ev("""
+      return Mass.bom().then(b => b.rows.map((r, i) => ({
+        pos: i + 1, n: r.n, name: r.name, mat: r.kind
+      })));
+    """)
+
+    p.pg.click('#tab-drawing'); p.wait(600)
+    p.ev("return Drawing.waitReady()")
+    p.pg.click('#t-balloons'); p.wait(150)
+    p.pg.click('#dw-menu-auto-balloons'); p.wait(500)
+    p.ev("return Drawing.waitReady()")
+
+    svg_info = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const headers = [...svg.querySelectorAll('text.bom-th')].map(t => t.textContent.trim());
+      const cellMap = new Map();
+      for (const t of svg.querySelectorAll('text.bom-td')) {
+        const r = Number(t.dataset.bomRow || 0);
+        if (!r) continue;
+        if (!cellMap.has(r)) cellMap.set(r, {});
+        cellMap.get(r)[t.dataset.bomCol] = t.textContent.trim();
+      }
+      const tableRows = [...cellMap.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => ({
+        pos: Number(v.pos), n: Number(v.qty), name: v.name, mat: v.mat
+      }));
+      const circles = [...svg.querySelectorAll('circle.balloon-circle')].map(c => ({
+        id: c.dataset.id,
+        pos: Number(c.dataset.pos),
+        view: c.dataset.view,
+        cx: parseFloat(c.getAttribute('cx')),
+        cy: parseFloat(c.getAttribute('cy')),
+        r: parseFloat(c.getAttribute('r'))
+      }));
+      const labels = [...svg.querySelectorAll('text.balloon-text')].map(t => Number(t.textContent.trim())).sort((a, b) => a - b);
+      const lines = svg.querySelectorAll('polyline.balloon-line').length;
+      const frame = svg.querySelector('rect.frame');
+      const fx = parseFloat(frame.getAttribute('x')), fy = parseFloat(frame.getAttribute('y'));
+      const fw = parseFloat(frame.getAttribute('width')), fh = parseFloat(frame.getAttribute('height'));
+      let noOverlap = true;
+      for (let i = 0; i < circles.length; i++) {
+        const c = circles[i];
+        if (c.cx - c.r < fx || c.cx + c.r > fx + fw || c.cy - c.r < fy || c.cy + c.r > fy + fh) noOverlap = false;
+        for (let j = i + 1; j < circles.length; j++) {
+          const d = Math.hypot(c.cx - circles[j].cx, c.cy - circles[j].cy);
+          if (d < c.r + circles[j].r + 0.5) noOverlap = false;
+        }
+      }
+      return { headers, tableRows, circles, labels, lines, noOverlap };
+    """)
+
+    buchse_row = next((r for r in svg_info['tableRows'] if r['name'] == 'Buchse'), None)
+    ok1 = bool(
+        svg_info['headers'] == ['Pos.', 'Menge', 'Name', 'Werkstoff']
+        and len(bom_expected) == 3
+        and len(svg_info['tableRows']) == 3
+        and svg_info['tableRows'] == bom_expected
+        and buchse_row and buchse_row['n'] == 2 and buchse_row['mat'] == 'Messing'
+        and len(svg_info['circles']) == 3
+        and svg_info['labels'] == [1, 2, 3]
+        and svg_info['lines'] == 3
+        and svg_info['noOverlap']
+    )
+
+    # 2. Ansicht verschieben (Ballons wandern mit), Werkstoff-Update & Gruppen-Test
+    bal_view = svg_info['circles'][0]['view'] if svg_info['circles'] else 'front'
+    before_pos = {c['id']: (c['cx'], c['cy']) for c in svg_info['circles']}
+    p.ev("Drawing.moveView(arg[0], arg[1], arg[2])", [bal_view, 18, -10]); p.wait(200)
+    after_move = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      return [...svg.querySelectorAll('circle.balloon-circle')].map(c => ({
+        id: c.dataset.id,
+        cx: parseFloat(c.getAttribute('cx')),
+        cy: parseFloat(c.getAttribute('cy'))
+      }));
+    """)
+    moved_ok = len(after_move) == 3 and all(
+        abs((c['cx'] - before_pos[c['id']][0]) - 18) < 0.1 and abs((c['cy'] - before_pos[c['id']][1]) - (-10)) < 0.1
+        for c in after_move
+    )
+    # Werkstoff-Änderung am Modell aktualisiert die Stückliste auf dem Blatt automatisch
+    p.ev("App.change('Werkstoff', d => { d.items.find(i => i.name === 'Deckel').mat = 'PETG'; })"); warte_rechnen(p)
+    p.ev("return Drawing.waitReady()")
+    deckel_mat = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const rows = {};
+      for (const t of svg.querySelectorAll('text.bom-td')) {
+        const r = t.dataset.bomRow;
+        if (!rows[r]) rows[r] = {};
+        rows[r][t.dataset.bomCol] = t.textContent.trim();
+      }
+      const hit = Object.values(rows).find(x => x.name === 'Deckel');
+      return hit ? hit.mat : null;
+    """)
+
+    # Auch Gruppen + Einzelteile testen (1 Gruppe mit Körper+Loch + 2 Einzelteile = 3 BOM-Zeilen, 3 Ballons)
+    p.ev("""
+      App.change('Gruppe + Teile', d => {
+        d.items = [];
+        const g = Model.newItem('group', {}, { name: 'Halter-Baugruppe', mat: 'Alu 7075' });
+        const body = Model.newItem('box', { w: 40, d: 30, h: 12 }, { name: 'Halter' });
+        const hole = Model.newItem('cylinder', { d: 8, h: 20 }, { name: 'Bohrung', role: 'hole' });
+        hole.t.z = -2;
+        g.children.push(body, hole);
+        const s1 = Model.newItem('cylinder', { d: 10, h: 25 }, { name: 'Bolzen 1', mat: 'Stahl' });
+        s1.t.x = 45;
+        const s2 = Model.newItem('cylinder', { d: 10, h: 25 }, { name: 'Bolzen 2', mat: 'Stahl' });
+        s2.t.x = 65;
+        const ab = Model.newItem('box', { w: 20, d: 20, h: 8 }, { name: 'Kappe', mat: 'ABS' });
+        ab.t.x = -45;
+        d.items.push(g, s1, s2, ab);
+      });
+    """); warte_rechnen(p, 40)
+    p.ev("return Drawing.autoBalloons()")
+    grp_info = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const rows = {};
+      for (const t of svg.querySelectorAll('text.bom-td')) {
+        const r = t.dataset.bomRow;
+        if (!rows[r]) rows[r] = {};
+        rows[r][t.dataset.bomCol] = t.textContent.trim();
+      }
+      const vals = Object.values(rows);
+      return {
+        rows: vals,
+        balloons: svg.querySelectorAll('circle.balloon-circle').length,
+      };
+    """)
+    grp_bolzen = next((x for x in grp_info['rows'] if x['name'] == 'Bolzen'), None)
+    grp_halter = next((x for x in grp_info['rows'] if x['name'] == 'Halter-Baugruppe'), None)
+    ok2 = bool(
+        moved_ok and deckel_mat == 'PETG'
+        and len(grp_info['rows']) == 3 and grp_info['balloons'] == 3
+        and grp_bolzen and grp_bolzen['qty'] == '2'
+        and grp_halter and grp_halter['mat'] == 'Alu 7075'
+    )
+
+    # 3. Einzeln setzen (Taste B), Spitze auf Pfeil umschalten, Entf löscht, Tabelle aus-/einblenden
+    p.pg.keyboard.press('b'); p.wait(150)
+    pt_top = p.ev("""
+      const lay = Drawing.layout;
+      const v = lay.views.top || lay.views.front;
+      const b = v.geo.box;
+      const sx = v.ox + ((b[0] + b[2]) * 0.5) * v.s;
+      const sy = v.oy - ((b[1] + b[3]) * 0.5) * v.s;
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const pt1 = svg.createSVGPoint(); pt1.x = sx; pt1.y = sy;
+      const ctm = svg.getScreenCTM();
+      const s1 = pt1.matrixTransform(ctm);
+      const pt2 = svg.createSVGPoint(); pt2.x = sx + 18; pt2.y = sy - 14;
+      const s2 = pt2.matrixTransform(ctm);
+      return { x1: s1.x, y1: s1.y, x2: s2.x, y2: s2.y };
+    """)
+    p.pg.mouse.move(pt_top['x1'], pt_top['y1']); p.wait(80)
+    p.pg.mouse.click(pt_top['x1'], pt_top['y1']); p.wait(120)
+    p.pg.mouse.move(pt_top['x2'], pt_top['y2']); p.wait(80)
+    p.pg.mouse.click(pt_top['x2'], pt_top['y2']); p.wait(200)
+    p.pg.keyboard.press('Escape'); p.wait(120)
+
+    count_after_add = p.ev("return document.querySelectorAll('#sheet svg circle.balloon-circle').length")
+    p.pg.select_option('#dw-bl-tip', 'arrow'); p.wait(150)
+    has_arrow = p.ev("return document.querySelectorAll('#sheet svg polygon.balloon-arrow').length >= 1")
+    p.pg.keyboard.press('Delete'); p.wait(150)
+    count_after_del = p.ev("return document.querySelectorAll('#sheet svg circle.balloon-circle').length")
+
+    p.pg.click('#dw-bom-show'); p.wait(150)
+    bom_hidden = p.ev("return document.querySelectorAll('#sheet svg rect.bom-frame').length === 0")
+    p.pg.click('#dw-bom-show'); p.wait(150)
+    bom_shown = p.ev("return document.querySelectorAll('#sheet svg rect.bom-frame').length === 1")
+
+    ok3 = bool(count_after_add == 4 and has_arrow and count_after_del == 3 and bom_hidden and bom_shown)
+
+    # 4. Rückgängig/Wiederholen, Speichern/Neuladen, PDF & DXF
+    p.ev("App.undo()"); p.wait(200); p.ev("return Drawing.waitReady()")
+    after_undo = p.ev("return document.querySelectorAll('#sheet svg rect.bom-frame').length")
+    p.ev("App.redo()"); p.wait(200); p.ev("return Drawing.waitReady()")
+    after_redo = p.ev("return document.querySelectorAll('#sheet svg rect.bom-frame').length")
+
+    saved = p.ev("return JSON.stringify(App.doc)")
+    p.ev("App.setDoc(JSON.parse(arg), {fit:false})", saved); warte_rechnen(p); p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    after_reload = p.ev("""
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      return {
+        frames: svg.querySelectorAll('rect.bom-frame').length,
+        circles: svg.querySelectorAll('circle.balloon-circle').length,
+      };
+    """)
+
+    pdf_res = p.ev("""
+      return Drawing.buildPDFBytes().then(bytes => {
+        const text = new TextDecoder('latin1').decode(bytes);
+        return {
+          hdr: text.startsWith('%PDF-1.4'),
+          hasCols: text.includes('Pos.') && text.includes('Menge') && text.includes('Name') && text.includes('Werkstoff'),
+          hasParts: text.includes('Halter-Baugruppe') && text.includes('Bolzen') && text.includes('Kappe'),
+        };
+      });
+    """)
+    dxf_res = p.ev("""
+      return Drawing.buildDXF().then(r => ({
+        hasCircle: r.text.includes('CIRCLE') && r.text.includes('BEMASSUNG'),
+        hasBomText: r.text.includes('Pos.') && r.text.includes('Menge') && r.text.includes('Halter-Baugruppe'),
+      }));
+    """)
+
+    ok4 = bool(
+        after_undo == 0 and after_redo == 1
+        and after_reload['frames'] == 1 and after_reload['circles'] == 3
+        and pdf_res['hdr'] and pdf_res['hasCols'] and pdf_res['hasParts']
+        and dxf_res['hasCircle'] and dxf_res['hasBomText']
+    )
+
+    # 5. Befehlssuche & Hilfetexte (drawingBalloons & drawingBom)
+    p.pg.hover('#dw-balloons-auto'); p.wait(1700)
+    tip_bal = p.ev("return document.querySelector('.tooltip')?.textContent || ''")
+    p.pg.hover('#dw-bom-show'); p.wait(1700)
+    tip_bom = p.ev("return document.querySelector('.tooltip')?.textContent || ''")
+    meta = p.ev("""
+      return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(d => ({
+        jsonBal: !!(d.drawingBalloons && d.drawingBalloons.tip && d.drawingBalloons.hilfe && d.drawingBalloons.tipp),
+        jsonBom: !!(d.drawingBom && d.drawingBom.tip && d.drawingBom.hilfe && d.drawingBom.tipp),
+        domBal: document.querySelectorAll('[data-help="drawingBalloons"]').length >= 1,
+        domBom: document.querySelectorAll('[data-help="drawingBom"]').length >= 1,
+        cmdBal: Commands.search('positionsnummer').some(c => c.id === 'drawingBalloons'),
+        cmdBom: Commands.search('stückliste').some(c => c.id === 'drawingBomTable'),
+      }));
+    """)
+    ok5 = bool(all(meta.values()) and 'Positionsnummern' in tip_bal and 'Stückliste' in tip_bom)
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
+def t_a075_projekt_tabs(p):
+    p.empty()
+
+    # 1. Zwei Projekte in Tabs öffnen, unterschiedliche Körper anlegen und dazwischen wechseln
+    p.ev("""App.change('Quader in Tab 1', d => {
+      d.name = 'Tab Eins';
+      const b = Model.newItem('box', { w: 30, d: 20, h: 10 });
+      b.name = 'Quader1';
+      d.items.push(b);
+    });""")
+    warte_rechnen(p, 20)
+    id1 = p.ev("return App.doc.items[0].id")
+    p.ev("return App.autosave.flush().then(() => Store.whenIdle());")
+
+    p.pg.click('#proj-tab-add'); p.wait(150)
+    p.pg.click('#tab-add-empty'); p.wait(400)
+    p.ev("""App.change('Zylinder in Tab 2', d => {
+      d.name = 'Tab Zwei';
+      const c = Model.newItem('cylinder', { d: 24, h: 15 });
+      c.name = 'Zylinder2';
+      d.items.push(c);
+    });""")
+    warte_rechnen(p, 20)
+    id2 = p.ev("return App.doc.items[0].id")
+    p.ev("return App.autosave.flush().then(() => Store.whenIdle());")
+
+    tabs_before = p.pg.locator('.proj-tab').count()
+    p.pg.locator('.proj-tab', has_text='Tab Eins').click(); p.wait(400); warte_rechnen(p, 20)
+    st_tab1 = p.ev("""return {
+      name: App.doc.name,
+      len: App.doc.items.length,
+      kind: App.doc.items[0] && App.doc.items[0].kind,
+      itemId: App.doc.items[0] && App.doc.items[0].id,
+      nodes: [...Viewer.nodes.keys()],
+      tree: document.querySelector('#left-body')?.textContent || '',
+    };""")
+    p.pg.locator('.proj-tab', has_text='Tab Zwei').click(); p.wait(400); warte_rechnen(p, 20)
+    st_tab2 = p.ev("""return {
+      name: App.doc.name,
+      len: App.doc.items.length,
+      kind: App.doc.items[0] && App.doc.items[0].kind,
+      itemId: App.doc.items[0] && App.doc.items[0].id,
+      nodes: [...Viewer.nodes.keys()],
+      tree: document.querySelector('#left-body')?.textContent || '',
+    };""")
+    ok1 = (
+        tabs_before == 2
+        and st_tab1['name'] == 'Tab Eins' and st_tab1['len'] == 1 and st_tab1['kind'] == 'box'
+        and st_tab1['nodes'] == [id1] and 'Quader1' in st_tab1['tree'] and 'Zylinder2' not in st_tab1['tree']
+        and st_tab2['name'] == 'Tab Zwei' and st_tab2['len'] == 1 and st_tab2['kind'] == 'cylinder'
+        and st_tab2['nodes'] == [id2] and 'Zylinder2' in st_tab2['tree'] and 'Quader1' not in st_tab2['tree']
+    )
+
+    # 2. Rückgängig in Tab 2 ändert Tab 1 nicht
+    p.ev("""App.change('Kugel in Tab 2', d => {
+      const s = Model.newItem('sphere', { d: 12 });
+      s.name = 'Kugel2';
+      d.items.push(s);
+    });""")
+    warte_rechnen(p, 20)
+    t2_two = p.ev("return App.doc.items.length")
+    p.pg.click('#btn-undo'); p.wait(300); warte_rechnen(p, 20)
+    t2_after_undo = p.ev("return { len: App.doc.items.length, name0: App.doc.items[0] && App.doc.items[0].name, undo: App.undoStack.length, redo: App.redoStack.length }")
+    p.pg.locator('.proj-tab', has_text='Tab Eins').click(); p.wait(400); warte_rechnen(p, 20)
+    t1_check = p.ev("return { len: App.doc.items.length, name0: App.doc.items[0] && App.doc.items[0].name, w: App.doc.items[0] && App.doc.items[0].p.w, undo: App.undoStack.length, redo: App.redoStack.length }")
+    p.pg.locator('.proj-tab', has_text='Tab Zwei').click(); p.wait(400); warte_rechnen(p, 20)
+    t2_back = p.ev("return { len: App.doc.items.length, redo: App.redoStack.length }")
+    ok2 = (
+        t2_two == 2
+        and t2_after_undo == {'len': 1, 'name0': 'Zylinder2', 'undo': 1, 'redo': 1}
+        and t1_check == {'len': 1, 'name0': 'Quader1', 'w': 30, 'undo': 1, 'redo': 0}
+        and t2_back == {'len': 1, 'redo': 1}
+    )
+
+    # 3. Schließen mit Nachfrage bei ungespeicherten Änderungen; sauberer Tab schließt direkt
+    p.pg.locator('.proj-tab', has_text='Tab Zwei').locator('.ptab-close').click(); p.wait(200)
+    has_prompt = p.pg.locator('#tab-close-confirm').count() == 1 and p.pg.locator('#tab-close-cancel').count() == 1
+    p.pg.click('#tab-close-cancel'); p.wait(150)
+    tabs_after_cancel = p.pg.locator('.proj-tab').count()
+    p.pg.locator('.proj-tab', has_text='Tab Zwei').locator('.ptab-close').click(); p.wait(200)
+    p.pg.click('#tab-close-confirm'); p.wait(400); warte_rechnen(p, 20)
+    tabs_after_close = p.pg.locator('.proj-tab').count()
+    active_after_close = p.ev("return App.doc.name")
+
+    p.pg.click('#proj-tab-add'); p.wait(150)
+    p.pg.click('#tab-add-empty'); p.wait(300)
+    tabs_with_empty = p.pg.locator('.proj-tab').count()
+    p.pg.locator('.proj-tab.active .ptab-close').click(); p.wait(250); warte_rechnen(p, 20)
+    ok3 = (
+        has_prompt
+        and tabs_after_cancel == 2
+        and tabs_after_close == 1
+        and active_after_close == 'Tab Eins'
+        and tabs_with_empty == 2
+        and p.pg.locator('#tab-close-confirm').count() == 0
+        and p.pg.locator('.proj-tab').count() == 1
+        and p.ev("return App.doc.name") == 'Tab Eins'
+    )
+
+    # 4. Gespeichertes Projekt über „+“ wieder öffnen und Neuladen stellt beide Tabs wieder her
+    p.pg.click('#proj-tab-add'); p.wait(150)
+    p.pg.locator('.menu button', has_text='Tab Zwei').click(); p.wait(500); warte_rechnen(p, 20)
+    p.ev("return App.autosave.flush().then(() => { App.markClean(); return Store.whenIdle(); });")
+    p.pg.locator('.proj-tab', has_text='Tab Eins').click(); p.wait(300)
+    p.ev("return App.autosave.flush().then(() => { App.markClean(); return Store.whenIdle(); });")
+    p.pg.locator('.proj-tab', has_text='Tab Zwei').click(); p.wait(300)
+    p.ev("return Store.whenIdle();")
+
+    p.pg.reload(); p.wait(3000)
+    try:
+        p.pg.locator('.loading').wait_for(state='detached', timeout=25000)
+    except Exception:
+        pass
+    warte_rechnen(p, 20)
+    reload_tabs = p.ev("return App.tabs.map(t => ({ name: t.name, active: t.active, count: t.itemCount }))")
+    reload_tab2_kind = p.ev("return App.doc.items[0] && App.doc.items[0].kind")
+    p.pg.locator('.proj-tab', has_text='Tab Eins').click(); p.wait(400); warte_rechnen(p, 20)
+    reload_tab1_kind = p.ev("return App.doc.items[0] && App.doc.items[0].kind")
+    ok4 = (
+        len(reload_tabs) == 2
+        and any(t['name'] == 'Tab Eins' for t in reload_tabs)
+        and any(t['name'] == 'Tab Zwei' and t['active'] for t in reload_tabs)
+        and reload_tab2_kind == 'cylinder'
+        and reload_tab1_kind == 'box'
+        and p.pg.locator('#recovery-bar').count() == 0
+    )
+
+    # 5. Einfach & Profi sichtbar + Hilfetext projectTabs
+    p.pg.click('#btn-level'); p.wait(400)
+    simple_vis = p.pg.locator('#proj-tabs').is_visible() and p.pg.locator('#proj-tab-add').is_visible()
+    p.pg.click('#proj-tab-add'); p.wait(150)
+    simple_menu = p.pg.locator('#tab-add-empty').is_visible()
+    p.pg.keyboard.press('Escape'); p.wait(100)
+    p.pg.mouse.click(500, 400); p.wait(100)
+    p.pg.click('#btn-level'); p.wait(300)
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r => r.json())")
+    h_tabs = hilfen.get('projectTabs') or {}
+    help_attr = p.pg.locator('#proj-tab-add').get_attribute('data-help')
+    ok5 = (
+        simple_vis and simple_menu
+        and help_attr == 'projectTabs'
+        and bool(h_tabs.get('tip') and h_tabs.get('hilfe') and h_tabs.get('tipp'))
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -15301,9 +15969,12 @@ TESTS = [
     ('[A-066] Zeichnung: Mittellinien automatisch (4 Mittelkreuze, 4 Mittellinien, einzeln ausblendbar)', t_a066_mittellinien),
     ('[A-069] Zeichnung: Maß-Stil (Pfeile, Schriftgröße 5, Nachkommastellen) & Hinweislinie (wandert mit Ansicht)', t_a069_mass_stil_hinweislinie),
     ('[A-068] Zeichnung: Toleranzen und Passungen (Ø20 H7 → +0,021/0, Ø20 g6 → −0,007/−0,020)', t_a068_toleranzen_passungen),
+    ('[A-072] Zeichnung merkt Modelländerungen: verlorene Maße rot & in Liste, Längenmaß aktualisiert, neu zuordnen', t_a072_zeichnung_modellaenderung),
     ('[F-11241146] Volltest-Reparatur: Adaptive Auflösung bei rAF-Stau / askDim behält Eingabe bei verzögertem rAF-Fokus', t_f11241146),
     ('[A-071] Zeichnung als DXF (LINE, CIRCLE, ARC, Layer & Schriftfeld) und PNG (wählbare Breite & Transparenz)', t_a071_zeichnung_dxf_png),
     ('[A-074] Übersetzbare Oberfläche, Schritt 2: Test-Modus & vollständige DOM-Abdeckung', t_a074_uebersetzbare_oberflaeche_2),
+    ('[A-070] Zeichnung: Positionsnummern und Stückliste (ZE-12)', t_a070_positionsnummern_stueckliste),
+    ('[A-075] Projekt-Tabs: zwei Projekte, unabhängiges Rückgängig, Schließen mit Nachfrage, Einfach & Profi, Neuladen & Hilfe', t_a075_projekt_tabs),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

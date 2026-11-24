@@ -41,6 +41,9 @@ const Panels = (() => {
       const noteBtn = btn('t-note', 'noteText', T('tool.dnote'), T('tool.dnoteTip'), 'N', () => Drawing.tool('note'), Drawing.activeTool === 'note' ? 'active' : '');
       noteBtn.dataset.help = 'drawingLeader';
       noteBtn.setAttribute('aria-pressed', String(Drawing.activeTool === 'note'));
+      const balBtn = btn('t-balloons', 'list', T('tool.balloons'), T('tool.balloonsTip'), '', (e) => Drawing.bomMenu(e.currentTarget), Drawing.activeTool === 'balloon' ? 'active' : '', T('tool.balloonsShort'));
+      balBtn.dataset.help = 'drawingBalloons';
+      balBtn.setAttribute('aria-pressed', String(Drawing.activeTool === 'balloon'));
       btn('t-draw', 'line', T('tool.draw2d'), T('tool.draw2dTip'), '', (e) => Drawing.drawMenu(e.currentTarget));
       el.append(h('div', { class: 'sep' }));
       const dexBtn = btn('t-dexport', 'export', T('tool.dexport'), T('tool.dexportTip'), '', (e) => Drawing.exportMenu(e.currentTarget), 'primary', T('tool.dexportShort'));

@@ -1094,6 +1094,11 @@
     "hilfe": "Wähle ein Passungs-Kurzzeichen nach DIN EN ISO 286-2:2010: Großbuchstaben (z. B. H7, K7, P7) für Bohrungen, Kleinbuchstaben (z. B. g6, h6, k6, m6, p6) für Wellen. Tracery schlägt die Abmaße passend zum Nennmaß automatisch in der Tabelle nach (z. B. Ø20 H7 → +0,021 / 0 und Ø20 g6 → −0,007 / −0,020) und zeigt die Grenzmaße direkt daneben.",
     "tipp": "Unter „Anzeige“ stellst du ein, ob Kurzzeichen samt Abmaßen, nur das Kurzzeichen, nur Abmaße oder die Grenzmaße auf dem Blatt stehen."
   },
+  "drawingLostDims": {
+    "tip": "Verlorene Maße bei Modelländerungen erkennen, neu zuordnen oder löschen",
+    "hilfe": "Änderst du das 3D-Modell, rechnen sich alle Ansichten und Maße automatisch neu aus – veränderte Längen, Durchmesser oder Radien zeigen direkt den neuen Wert. Fehlt eine Bohrung, Rundung oder Kante nach einer Änderung, wird ihr Maß auf dem Blatt rot markiert und oben rechts in der Liste „Verlorene Maße“ angezeigt.",
+    "tipp": "Klicke in der Liste „Verlorene Maße“ auf „Neu zuordnen“, um das Maß samt Toleranz an eine andere Kante oder Bohrung zu hängen, oder auf „Löschen“."
+  },
   "drawingExportDxf": {
     "tip": "Zeichnung als DXF-Datei mit Layern je Linienart speichern",
     "hilfe": "Speichert das aktive Zeichnungsblatt als DXF-Datei (AC1009/R12) in Millimetern mit echten Linien, Kreisen, Bögen, Texten und dem Schriftfeld. Sichtbare Kanten, verdeckte Kanten, Tangentialkanten, Mittellinien, Schraffuren, Schnittlinien, Bemaßungen und der Rahmen liegen auf eigenen Layern mit passenden Linienarten.",
@@ -1103,5 +1108,20 @@
     "tip": "Zeichnung als PNG-Bild in wählbarer Auflösung speichern",
     "hilfe": "Rendert das aktive Zeichnungsblatt gestochen scharf als PNG-Bild. Wähle eine feste Breite (1600, 2400 oder 3840 Pixel), eine Druckauflösung (150 oder 300 DPI) oder eine eigene Breite in Pixeln – die Höhe passt sich automatisch dem Blattformat an.",
     "tipp": "Aktiviere „Durchsichtiger Hintergrund“, wenn du die Zeichnung direkt in eine Präsentation oder Dokumentation einfügen willst."
+  },
+  "drawingBalloons": {
+    "tip": "Positionsnummern (nummerierte Kreise mit Hinweislinie) an Teile und Gruppen setzen",
+    "hilfe": "Setzt automatisch oder einzeln (Taste B) nummerierte Positionskreise mit Hinweislinie an jedes eindeutige Teil oder jede Gruppe auf dem Blatt. Die Nummern stimmen genau mit der Stückliste überein, wandern beim Verschieben einer Ansicht mit und lassen sich frei anordnen.",
+    "tipp": "Gleiche Teile mit gleichem Namen und Werkstoff erhalten dieselbe Positionsnummer – so zeigt die Stückliste direkt die richtige Menge."
+  },
+  "drawingBom": {
+    "tip": "Stückliste (Pos., Menge, Name, Werkstoff) direkt auf dem Zeichnungsblatt einblenden",
+    "hilfe": "Zeigt die Stückliste des Modells als normgerechte Tabelle mit Positionsnummer, Menge, Teilename und Werkstoff (oder Kaufteil) auf dem Zeichnungsblatt – passend zur Stückliste unter „Projekt“. Die Tabelle steht standardmäßig über dem Schriftfeld und lässt sich auf dem Blatt frei verschieben.",
+    "tipp": "Ändern sich Namen, Mengen oder Werkstoffe im Modell, aktualisieren sich Tabelle und Positionsnummern automatisch – auch in PDF, SVG und DXF."
+  },
+  "projectTabs": {
+    "tip": "Mehrere Projekte gleichzeitig in Tabs öffnen und wechseln",
+    "hilfe": "In der Tab-Leiste oben arbeitest du an mehreren Projekten parallel. Mit „+“ öffnest du ein neues leeres Projekt, eine Vorlage, eine Datei oder ein bereits gespeichertes Projekt in einem neuen Tab. Ein Klick auf einen Tab wechselt samt eigenem Verlauf und eigenem Rückgängig dorthin; „×“ schließt den Tab und fragt bei ungespeicherten Änderungen nach.",
+    "tipp": "Mit einem Doppelklick auf den Tab-Namen benennst du das Projekt um, und ein Rechtsklick schließt bei Bedarf alle anderen Tabs."
   }
 }

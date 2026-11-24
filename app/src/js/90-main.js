@@ -30,7 +30,7 @@
   $('#tab-model').onclick = () => Commands.setMode('model');
   $('#tab-drawing').onclick = () => Commands.setMode('drawing');
   $('#brand').onclick = (e) => { e.preventDefault(); Start.show(); };
-  I18n.on('change', () => { I18n.applyDom(); ViewPrefs.syncLevel(); Panels.renderTools(); Panels.renderLeft(); Panels.renderRight(); Panels.renderCtx(); Panels.refreshViewCube(); UI.renderHint(); Measure.updateStatus(); Print.updateAmpel(); Timeline.refreshLabels(); Timeline.render(); updHist(); updName(); if (Sketch.active) Sketch.refreshUI(); if (App.mode === 'drawing') Drawing.refreshUI(); if (Start.open) Start.show(); });
+  I18n.on('change', () => { I18n.applyDom(); ViewPrefs.syncLevel(); Panels.renderTools(); Panels.renderLeft(); Panels.renderRight(); Panels.renderCtx(); Panels.refreshViewCube(); UI.renderHint(); Measure.updateStatus(); Print.updateAmpel(); Timeline.refreshLabels(); Timeline.render(); updHist(); updName(); Start.renderTabs(); if (Sketch.active) Sketch.refreshUI(); if (App.mode === 'drawing') Drawing.refreshUI(); if (Start.open) Start.show(); });
   const projectItems = () => [
     { label: T('menu.proj.rename'), icon: 'edit', run: async () => { const n = await UI.prompt(T('menu.proj.rename'), T('common.name'), App.doc.name, T('common.rename')); if (n && n.trim()) App.change('Projekt umbenannt', (doc) => { doc.name = n.trim(); }); } },
     { label: T('menu.proj.saveFile'), icon: 'save', kbd: 'Strg S', run: () => Start.saveFile() },
@@ -99,13 +99,27 @@
         updName(); syncBed(); UI.renderHint();
         Start.startRecoveryTracking(baseLoaded ? rec.baseDoc : null);
       } else {
-        const lastId = Store.getLastId();
-        const last = lastId ? await App.loadStored(lastId) : null;
-        if (last) { try { App.setDoc(last, { fit: true, fromBoot: true, noAutosave: true }); } catch (_) { App.setDoc(Model.newDoc(), { fit: false, fromBoot: true, noAutosave: true }); } }
-        else App.setDoc(Model.newDoc(), { fit: false, fromBoot: true, noAutosave: true });
-        updName(); syncBed(); UI.renderHint();
-        Start.startRecoveryTracking(last || null);
-        if (!last) Start.show();
+        const savedTabs = Store.getOpenTabs ? Store.getOpenTabs() : { ids: [], activeId: null };
+        const loadedDocs = [];
+        for (const id of savedTabs.ids || []) {
+          try {
+            const d = await App.loadStored(id);
+            if (d) loadedDocs.push(d);
+          } catch (_) {}
+        }
+        if (loadedDocs.length) {
+          App.restoreOpenTabs(loadedDocs, savedTabs.activeId);
+          updName(); syncBed(); UI.renderHint();
+          Start.startRecoveryTracking(App.doc);
+        } else {
+          const lastId = Store.getLastId();
+          const last = lastId ? await App.loadStored(lastId) : null;
+          if (last) { try { App.setDoc(last, { fit: true, fromBoot: true, noAutosave: true }); } catch (_) { App.setDoc(Model.newDoc(), { fit: false, fromBoot: true, noAutosave: true }); } }
+          else App.setDoc(Model.newDoc(), { fit: false, fromBoot: true, noAutosave: true });
+          updName(); syncBed(); UI.renderHint();
+          Start.startRecoveryTracking(last || null);
+          if (!last) Start.show();
+        }
       }
     } finally {
       Print.updateAmpel();

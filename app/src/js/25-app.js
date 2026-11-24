@@ -222,32 +222,274 @@ const App = (() => {
 
   const S = {
     doc: Model.newDoc(), sel: [], face: null, edges: [], mode: 'model', tool: null,
-    results: new Map(), resolved: new Map(), baseBoxes: new Map(), ownBoxes: new Map(), errors: [], undo: [], redo: [], undoBytes: 0, redoBytes: 0, extra: [], hideIds: new Set(), revision: 0, cleanRev: 0, lastSavedRev: -1, fileSavedRev: -1,
+    results: new Map(), resolved: new Map(), baseBoxes: new Map(), ownBoxes: new Map(), errors: [], undo: [], redo: [], undoBytes: 0, redoBytes: 0, extra: [], hideIds: new Set(), revision: 1, cleanRev: 1, lastSavedRev: -1, fileSavedRev: -1,
     ctx: null, iso: null,   // gerade bearbeitetes Bauteil / isoliertes Teil (nur Ansicht, nicht gespeichert)
   };
   const ev = makeEmitter();
+  const times = new Map();
   let dirty = false, busy = false, busyTimer = null;
+  const tabs = [];
+  let activeTabId = null;
 
-  // ---------- Dokument ----------
-  function setDoc(doc, opts = {}) {
-    // noch ausstehendes Speichern des bisherigen Projekts zuerst erledigen
-    if (S.doc && !(opts && opts.fromBoot)) { try { autosave.flush(); } catch (_) {} }
-    S.doc = Model.migrate(doc);
+  function createTabRecord(doc, opts = {}) {
+    const d = Model.migrate(doc || Model.newDoc());
+    const rev = 1;
+    return {
+      tabId: opts.tabId || uid('tab'),
+      doc: d,
+      sel: [],
+      face: null,
+      edges: [],
+      undo: [],
+      redo: [],
+      undoBytes: 0,
+      redoBytes: 0,
+      revision: rev,
+      cleanRev: rev,
+      lastSavedRev: opts.saved ? rev : -1,
+      fileSavedRev: opts.saved ? rev : -1,
+      ctx: null,
+      iso: null,
+      mode: opts.mode || 'model',
+      camera: null,
+      times: new Map(),
+    };
+  }
+  {
+    const initTab = createTabRecord(S.doc);
+    tabs.push(initTab);
+    activeTabId = initTab.tabId;
+  }
+  function currentTab() {
+    return tabs.find((t) => t.tabId === activeTabId) || tabs[0] || null;
+  }
+  function tabInfo(t) {
+    const isAct = t.tabId === activeTabId;
+    const d = isAct ? S.doc : t.doc;
+    const rev = isAct ? S.revision : t.revision;
+    const clean = isAct ? S.cleanRev : t.cleanRev;
+    const undoArr = isAct ? S.undo : t.undo;
+    const redoArr = isAct ? S.redo : t.redo;
+    return {
+      tabId: t.tabId,
+      docId: d && d.id,
+      name: (d && d.name) || 'Neues Projekt',
+      dirty: rev !== clean,
+      active: isAct,
+      itemCount: Model.countItems(d),
+      undoCount: undoArr ? undoArr.length : 0,
+      redoCount: redoArr ? redoArr.length : 0,
+    };
+  }
+  function syncCurrentMeta() {
+    const cur = currentTab();
+    if (!cur) return;
+    cur.doc = S.doc;
+    cur.revision = S.revision;
+    cur.cleanRev = S.cleanRev;
+    cur.lastSavedRev = S.lastSavedRev;
+    cur.fileSavedRev = S.fileSavedRev;
+  }
+  function stashActiveTab() {
+    const cur = currentTab();
+    if (!cur) return;
+    cur.doc = S.doc;
+    cur.sel = S.sel.slice();
+    cur.face = S.face;
+    cur.edges = S.edges.slice();
+    cur.undo = S.undo;
+    cur.redo = S.redo;
+    cur.undoBytes = S.undoBytes;
+    cur.redoBytes = S.redoBytes;
+    cur.revision = S.revision;
+    cur.cleanRev = S.cleanRev;
+    cur.lastSavedRev = S.lastSavedRev;
+    cur.fileSavedRev = S.fileSavedRev;
+    cur.ctx = S.ctx;
+    cur.iso = S.iso;
+    cur.mode = S.mode;
+    cur.times = new Map(times);
+    if (typeof Viewer !== 'undefined' && Viewer.controls && Viewer.camera && Viewer.saveCamera) {
+      try { cur.camera = Viewer.saveCamera(); } catch (_) {}
+    }
+  }
+  function leaveTransientModes() {
+    if (typeof Sketch !== 'undefined' && Sketch.active) Sketch.cancel(true);
+    if (typeof Measure !== 'undefined' && Measure.active) Measure.stop();
+    if (typeof Notes !== 'undefined' && Notes.active) Notes.stop();
+    if (typeof RefFix !== 'undefined' && RefFix.active) RefFix.stop({ keepToast: true });
+    if (typeof Panels !== 'undefined' && Panels.closeFlyout) Panels.closeFlyout();
+    if (typeof UI !== 'undefined') { UI.closeMenu(); UI.closePop(); }
+  }
+  function syncOpenTabsToStore() {
+    if (typeof Store === 'undefined' || !Store.ready || !Store.setOpenTabs) return;
+    const ids = tabs.map((t) => {
+      const d = t.tabId === activeTabId ? S.doc : t.doc;
+      return d && d.id;
+    }).filter(Boolean);
+    const act = S.doc && S.doc.id ? S.doc.id : null;
+    Store.setOpenTabs(ids, act);
+  }
+  function activateTab(tab, opts = {}) {
+    activeTabId = tab.tabId;
+    S.doc = Model.migrate(tab.doc);
+    tab.doc = S.doc;
+    S.sel = (tab.sel || []).slice();
+    S.face = tab.face || null;
+    S.edges = (tab.edges || []).slice();
+    S.undo = tab.undo || [];
+    S.redo = tab.redo || [];
+    S.undoBytes = tab.undoBytes || 0;
+    S.redoBytes = tab.redoBytes || 0;
+    S.revision = tab.revision || 1;
+    S.cleanRev = tab.cleanRev || 1;
+    S.lastSavedRev = tab.lastSavedRev != null ? tab.lastSavedRev : -1;
+    S.fileSavedRev = tab.fileSavedRev != null ? tab.fileSavedRev : -1;
+    S.ctx = tab.ctx || null;
+    S.iso = tab.iso || null;
+    S.extra = [];
+    S.hideIds = new Set();
+    S.peek = null;
+    times.clear();
+    if (tab.times) for (const [k, v] of tab.times) times.set(k, v);
     if (typeof SK !== 'undefined' && SK.syncFonts) SK.syncFonts(S.doc.fonts);
     if (typeof Store !== 'undefined') {
       Store.extractBlobs(S.doc);
       if (S.doc.id) Store.loadVersions(S.doc.id).catch(() => {});
     }
     Model.useVars(Model.vars(S.doc).v);
-    S.sel = []; S.face = null; S.edges = []; S.undo = []; S.redo = []; S.undoBytes = 0; S.redoBytes = 0; S.extra = []; S.ctx = null; S.iso = null;
     for (const id of [...S.results.keys()]) Viewer.removeNode(id);
-    S.results.clear(); S.resolved.clear(); S.baseBoxes.clear(); S.ownBoxes.clear(); S.errors = []; S.revision++;
-    S.cleanRev = S.revision;
-    if (opts && opts.saved) S.fileSavedRev = S.revision;
-    Viewer.clearGhosts(); Views.reset(); Versions.compareOff();
-    ev.emit('doc'); ev.emit('docLoaded', { doc: S.doc, opts }); ev.emit('selection'); ev.emit('history');
-    if (!(opts && opts.noAutosave)) autosave();
-    rebuild().then(() => { if (opts.fit !== false) Viewer.fit(null, false); });
+    S.results.clear(); S.resolved.clear(); S.baseBoxes.clear(); S.ownBoxes.clear(); S.errors = []; S.merged = new Map();
+    Viewer.clearGhosts();
+    if (Viewer.clearProxies) Viewer.clearProxies();
+    Views.reset();
+    Versions.compareOff();
+    ev.emit('doc');
+    ev.emit('docLoaded', { doc: S.doc, opts });
+    ev.emit('selection');
+    ev.emit('history');
+    ev.emit('ctx');
+    ev.emit('tabs');
+    if (typeof Commands !== 'undefined' && Commands.setMode && (tab.mode || 'model') !== S.mode) {
+      Commands.setMode(tab.mode || 'model');
+    }
+    if (!(opts && opts.noAutosave) && !(opts && opts.isSwitch)) autosave();
+    if (!(opts && opts.fromBoot)) syncOpenTabsToStore();
+    rebuild().then(() => {
+      if (activeTabId !== tab.tabId) return;
+      if (opts && opts.isSwitch && tab.camera) Viewer.restoreCamera(tab.camera, false);
+      else if (opts.fit !== false) Viewer.fit(null, false);
+    });
+  }
+
+  // ---------- Dokument ----------
+  function setDoc(doc, opts = {}) {
+    if (opts && opts.newTab) return openTab(doc, opts);
+    if (doc && doc.id && !(opts && (opts.fromBoot || opts.fromRecovery || opts.forceReplace))) {
+      const other = tabs.find((t) => t.tabId !== activeTabId && t.doc && t.doc.id === doc.id);
+      if (other) {
+        switchTab(other.tabId, opts);
+        return other.tabId;
+      }
+    }
+    // noch ausstehendes Speichern des bisherigen Projekts zuerst erledigen
+    if (!(opts && opts.fromBoot)) {
+      leaveTransientModes();
+      if (S.doc) { try { autosave.flush(); } catch (_) {} }
+    }
+    const idx = tabs.findIndex((t) => t.tabId === activeTabId);
+    const keepMode = !!(S.doc && doc && doc.id && S.doc.id === doc.id);
+    const nextRec = createTabRecord(doc, { tabId: activeTabId, saved: !!(opts && opts.saved), mode: keepMode ? S.mode : 'model' });
+    if (idx >= 0) tabs[idx] = nextRec;
+    else tabs.push(nextRec);
+    activateTab(nextRec, { ...opts, isSwitch: false });
+    return nextRec.tabId;
+  }
+  function openTab(doc, opts = {}) {
+    const nextDoc = doc || Model.newDoc('Neues Projekt');
+    if (nextDoc && nextDoc.id) {
+      const existing = tabs.find((t) => {
+        const d = t.tabId === activeTabId ? S.doc : t.doc;
+        return d && d.id === nextDoc.id;
+      });
+      if (existing) {
+        if (existing.tabId !== activeTabId) switchTab(existing.tabId, opts);
+        return existing.tabId;
+      }
+    }
+    leaveTransientModes();
+    if (S.doc) { try { autosave.flush(); } catch (_) {} }
+    stashActiveTab();
+    const tab = createTabRecord(nextDoc, opts);
+    tabs.push(tab);
+    activateTab(tab, { ...opts, isSwitch: false });
+    return tab.tabId;
+  }
+  function switchTab(tabId, opts = {}) {
+    const target = tabs.find((t) => t.tabId === tabId);
+    if (!target) return false;
+    if (target.tabId === activeTabId) return true;
+    leaveTransientModes();
+    if (S.doc) { try { autosave.flush(); } catch (_) {} }
+    stashActiveTab();
+    activateTab(target, { ...opts, isSwitch: true });
+    return true;
+  }
+  async function closeTab(tabId = activeTabId, opts = {}) {
+    let idx = tabs.findIndex((t) => t.tabId === tabId);
+    if (idx < 0) return false;
+    const info = tabInfo(tabs[idx]);
+    if (info.dirty && !(opts && opts.force)) {
+      const ok = await new Promise((res) => {
+        UI.modal({
+          title: T('tabs.closeDirtyTitle'),
+          body: T('tabs.closeDirtyBody', { name: info.name }),
+          actions: [
+            { id: 'tab-close-cancel', label: T('common.cancel'), value: false },
+            { id: 'tab-close-confirm', label: T('tabs.closeAnyway'), danger: true, value: true },
+          ],
+          onClose: (v) => res(!!v),
+        });
+      });
+      if (!ok) return false;
+      idx = tabs.findIndex((t) => t.tabId === tabId);
+      if (idx < 0) return false;
+    }
+    if (tabs.length === 1) {
+      try { autosave.flush(); } catch (_) {}
+      setDoc(Model.newDoc('Neues Projekt'), { fit: false, noAutosave: true, forceReplace: true });
+      syncOpenTabsToStore();
+      return true;
+    }
+    const tab = tabs[idx];
+    if (tab.tabId === activeTabId) {
+      leaveTransientModes();
+      try { autosave.flush(); } catch (_) {}
+      tabs.splice(idx, 1);
+      const next = tabs[Math.min(idx, tabs.length - 1)];
+      activateTab(next, { isSwitch: true });
+      return true;
+    }
+    if (tab.revision !== tab.lastSavedRev && (Model.countItems(tab.doc) > 0 || (tab.doc.params && tab.doc.params.length) || (typeof Store !== 'undefined' && Store.hasProject(tab.doc.id)))) {
+      Store.saveProject(tab.doc, Model.countItems(tab.doc), { keepLast: true });
+    }
+    tabs.splice(idx, 1);
+    ev.emit('tabs');
+    syncOpenTabsToStore();
+    return true;
+  }
+  function restoreOpenTabs(docs, wantedActiveDocId) {
+    const list = (Array.isArray(docs) ? docs : []).filter((d) => d && typeof d === 'object');
+    if (!list.length) return false;
+    tabs.length = 0;
+    for (const d of list) {
+      const rec = createTabRecord(d, { saved: true });
+      rec.lastSavedRev = rec.revision;
+      tabs.push(rec);
+    }
+    const target = (wantedActiveDocId && tabs.find((t) => t.doc && t.doc.id === wantedActiveDocId)) || tabs[tabs.length - 1];
+    activateTab(target, { fit: true, fromBoot: true, noAutosave: true });
+    return true;
   }
   function snapshot() { return JSON.stringify(S.doc); }
   function cloneDoc(doc = S.doc) { return Patch.jsonClone(doc); }
@@ -381,8 +623,10 @@ const App = (() => {
       if (S.undo.length && !S.redo.length && oldMod !== newMod) syncTopModified(oldMod, newMod);
     }
     S.revision++;
+    syncCurrentMeta();
     ev.emit('doc');
     ev.emit('dirty', { doc: S.doc, revision: S.revision });
+    ev.emit('tabs');
     autosave();
     if (!noRebuild) rebuild();
   }
@@ -396,12 +640,15 @@ const App = (() => {
     if (S.face && !valid.has(S.face.id)) S.face = null;
     S.edges = S.edges.filter((e) => valid.has(e.id));
     S.revision++;
-    ev.emit('doc'); ev.emit('dirty', { doc: S.doc, revision: S.revision }); ev.emit('selection'); autosave(); rebuild();
+    syncCurrentMeta();
+    ev.emit('doc'); ev.emit('dirty', { doc: S.doc, revision: S.revision }); ev.emit('tabs'); ev.emit('selection'); autosave(); rebuild();
   }
   function markClean() {
     S.cleanRev = S.revision;
     S.fileSavedRev = S.revision;
+    syncCurrentMeta();
     ev.emit('clean', { doc: S.doc, revision: S.revision });
+    ev.emit('tabs');
   }
   function undo(silent) {
     const step = S.undo.pop(); if (!step) return;
@@ -489,6 +736,7 @@ const App = (() => {
     const rev = S.revision;
     return Store.saveProject(d, count).then((ok) => {
       if (ok && S.doc && S.doc.id === d.id && S.lastSavedRev < rev) S.lastSavedRev = rev;
+      if (ok) { syncCurrentMeta(); syncOpenTabsToStore(); }
       return ok;
     });
   }
@@ -501,7 +749,10 @@ const App = (() => {
   })();
   const recentProjects = () => Store.recentProjects();
   const loadStored = (id) => Store.loadProject(id);
-  const deleteStored = (id) => Store.deleteProject(id, S.doc && S.doc.id !== id ? S.doc : null);
+  const deleteStored = (id) => {
+    const keepDocs = tabs.map((t) => (t.tabId === activeTabId ? S.doc : t.doc)).filter((d) => d && d.id !== id);
+    return Store.deleteProject(id, keepDocs);
+  };
 
   // ---------- Neuberechnung ----------
   // Zeitleiste: Stand nach Schritt k nur anzeigen (null = wieder alles); ändert das Projekt nicht
@@ -528,6 +779,8 @@ const App = (() => {
     let calcEmitted = false;
     while (dirty) {
       dirty = false;
+      const buildTabId = activeTabId;
+      const buildDocId = S.doc && S.doc.id;
       if (!needsKernelFor(S.doc, S.extra, S.peek)) {
         apply({ nodes: [], errors: [], resolved: {}, times: {} });
         ev.emit('rebuilt');
@@ -540,6 +793,7 @@ const App = (() => {
       }
       if (typeof SK !== 'undefined' && SK.ensureDocFonts) {
         await SK.ensureDocFonts(S.doc, S.extra).catch((e) => console.warn(e));
+        if (activeTabId !== buildTabId || !S.doc || S.doc.id !== buildDocId) { dirty = true; continue; }
       }
       if (!Kernel.ready) {
         try { await Kernel.ensure(); }
@@ -549,10 +803,14 @@ const App = (() => {
           break;
         }
         if (!Kernel.ready) break;
+        if (activeTabId !== buildTabId || !S.doc || S.doc.id !== buildDocId) { dirty = true; continue; }
       }
       if (typeof Store !== 'undefined') {
         const ids = Store.collectBlobIds(S.doc);
-        if ([...ids].some((id) => !Store.getBlobSync(id))) await Store.hydrateDoc(S.doc);
+        if ([...ids].some((id) => !Store.getBlobSync(id))) {
+          await Store.hydrateDoc(S.doc);
+          if (activeTabId !== buildTabId || !S.doc || S.doc.id !== buildDocId) { dirty = true; continue; }
+        }
       }
       const scene = Model.kernelScene(S.doc, S.extra, S.peek);
       scene.quality = ViewPrefs.get().quality || 'normal';
@@ -561,6 +819,7 @@ const App = (() => {
       let res;
       try { res = await Kernel.call('evaluate', { scene, known }); }
       catch (e) { console.error(e); UI.toast('Beim Berechnen ist ein Fehler passiert: ' + e.message, { kind: 'bad' }); break; }
+      if (activeTabId !== buildTabId || !S.doc || S.doc.id !== buildDocId) { dirty = true; continue; }
       apply(res);
       ev.emit('rebuilt');
     }
@@ -576,7 +835,6 @@ const App = (() => {
   }
   function topItem(id) { return S.doc.items.find((x) => x.id === id) || S.extra.find((x) => x.id === id); }
   // Rechenzeit je Schritt: zuletzt gemessen, als er wirklich neu gerechnet wurde (BE-26)
-  const times = new Map();
   function apply(res) {
     const seen = new Set();
     S.merged = new Map();
@@ -761,8 +1019,11 @@ const App = (() => {
     get tool() { return S.tool; }, set tool(t) { S.tool = t; ev.emit('tool'); },
     get fileSavedRev() { return S.fileSavedRev; }, set fileSavedRev(v) { S.fileSavedRev = v; },
     get dirty() { return S.revision !== S.cleanRev; },
+    get anyDirty() { return tabs.some((t) => tabInfo(t).dirty); },
+    get tabs() { return tabs.map(tabInfo); },
+    get activeTabId() { return activeTabId; },
     markClean,
-    setDoc, snapshot, change, touched, pushUndo, restore, undo, redo, undoTo, squash, historyStats, setHistoryLimit, Patch, rebuild, requalify, replaceMesh, select, clearSelection, selectedItems, errorsFor, localBox, refreshSelectionVisuals,
+    setDoc, openTab, switchTab, closeTab, restoreOpenTabs, snapshot, change, touched, pushUndo, restore, undo, redo, undoTo, squash, historyStats, setHistoryLimit, Patch, rebuild, requalify, replaceMesh, select, clearSelection, selectedItems, errorsFor, localBox, refreshSelectionVisuals,
     recentProjects, loadStored, deleteStored, autosave, fitAfterBuild, on: ev.on, emit: ev.emit,
   };
 })();

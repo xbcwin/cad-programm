@@ -2019,12 +2019,34 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **`askDim` verliert keine Ziffern bei verzögertem `rAF(grab)` (`Sketch.askDim` / `onKey`)**: Wird die erste Ziffer über `Sketch.onKey()` an `dimBox._inp` weitergereicht und feuert danach das verzögerte `requestAnimationFrame(grab)`, bleibt `dimBox._typed` erhalten; die nächste Ziffer wird angehängt (`60` statt `0`), löst den erwarteten Konflikt (`#sk-conflict`) aus und lässt sich per „Entfernen“ sauber auflösen.
 - [ ] **Von Hand**: Im Browser bei hoher Szenenlast die Ansicht zügig drehen und loslassen (Schärfe springt nach ~0,2 s zurück) sowie beim Bemaßen (`D`) direkt nach dem Klick schnell eine zweistellige Zahl eintippen.
 
+## Zeichnung merkt Modelländerungen (Auto [A-072], ZE-14)
+
+- [x] **Gelöschte Bohrung → rotes Maß & Liste „Verlorene Maße“**: Wird nach dem Bemaßen einer Ø-8-Bohrung die Bohrung im Modell gelöscht, rechnet sich die Zeichnung automatisch neu; das Maß erhält die SVG-Klasse `.lost` (`rgb(201, 55, 46)` rot) samt `data-lost="1"` und erscheint in `#dw-lost-sec` / `#dw-lost-list` samt „Neu zuordnen“ und „Löschen“; `App.undo()` macht es wieder gültig, `App.redo()` wieder rot.
+- [x] **Längenänderung → Längenmaß zeigt neuen Wert**: Wird die Plattenbreite von `60 mm` auf `85 mm` (und bei geöffneter Zeichnung auf `95 mm`) geändert, aktualisieren sich sowohl das manuelle Längenmaß als auch das automatische Gesamtmaß auf `85` bzw. `95` ohne `.lost`-Markierung, während das Maß der gelöschten Bohrung in „Verlorene Maße“ bleibt.
+- [x] **Neu zuordnen, Löschen, Speichern/Laden, PDF & Hilfe**: „Neu zuordnen“ hängt das verlorene Maß per Klick auf eine zweite Bohrung (`Ø10`) wieder an (Rückgängig stellt den verlorenen Zustand wieder her), „Löschen“ entfernt es sauber; JSON-Roundtrip, PDF-Export, Befehlssuche (`drawingLostDims`) und Hilfetext `drawingLostDims` funktionieren vollständig.
+- [ ] **Von Hand**: Im Browser ein Werkstück mit Fase, Rundung, Bohrung und Längenmaß in der Zeichnung bemaßen, anschließend die Bohrung und Fase im Modell löschen sowie Abmessungen ändern, und die rote Markierung, die Liste „Verlorene Maße“ sowie „Neu zuordnen“ visuell prüfen.
+
 ## Zeichnung als DXF und PNG (Auto [A-071], ZE-13)
 
 - [x] **DXF-Export (`LINE`, `CIRCLE`, `ARC`, Layer & Schriftfeld)**: Export über `#t-dexport` → `#dw-exp-dxf` liefert eine gültige `.dxf`-Datei (`$INSUNITS = 4`, Layer `SICHTBAR`, `VERDECKT`, `MITTELLINIE`, `BEMASSUNG`, `RAHMEN` mit `CONTINUOUS`/`DASHED`/`CENTER`), enthält `LINE`-, `CIRCLE`-, `ARC`- und `TEXT`-Einträge auf den passenden Layern sowie alle Schriftfeld-Texte (`Benennung`, `Zeichnungsnummer`, `Gezeichnet`, `Werkstoff`, `ISO 2768-m`); bei mehreren Blättern steht zusätzlich der Mehrblatt-ZIP-Export (`#dw-exp-dxf-all`) bereit.
 - [x] **PNG-Export mit wählbarer Auflösung**: Dialog (`#dw-exp-png`) übernimmt eigene Pixelbreiten (`1800 px` → `1800 × 1273 px`), 300-DPI-Vorgabe (`3508 × 2480 px` bei A4 quer), rendert das komplette Blatt sichtbar (nicht leer) und unterstützt durchsichtigen Hintergrund (`3200 × 2263 px`, RGBA mit transparentem Rand).
 - [x] **Befehlssuche & Hilfetexte**: Befehle `drawingExportDxf` und `drawingExportPng` sowie Hilfetexte `drawingExportDxf` und `drawingExportPng` in `werkzeug-hilfen.json` und `00-util.js` sind vorhanden.
 - [ ] **Von Hand**: Im Browser eine bemaßte Zeichnung mit Schnittansicht, Mittellinien und Schriftfeld als `.dxf` in einem DXF-Betrachter (z. B. LibreCAD / QCAD) auf Layer und Linientypen sowie das exportierte `.png` auf Schärfe und Lesbarkeit prüfen.
+
+## Zeichnung: Positionsnummern und Stückliste (Auto [A-070], ZE-12)
+
+- [x] **3 verschiedene Teile, eines zweimal → Tabelle & 3 Positionsnummern**: `#t-balloons` → „Positionsnummern automatisch setzen“ erzeugt auf dem Blatt die Stückliste (`Pos.`, `Menge`, `Name`, `Werkstoff`) mit exakt 3 Datenzeilen passend zu `Mass.bom()` (Menge `2` beim doppelten Teil) und exakt 3 überschneidungsfreien Positionskreisen (`1`, `2`, `3`) im Blattrahmen.
+- [x] **Ansicht verschieben, Werkstoff-Update & Gruppen**: Beim Verschieben der Ansicht wandern die Positionsnummern exakt mit; Werkstoffänderungen am Modell aktualisieren die Tabelle automatisch; Baugruppen/Gruppen werden samt Einzelteilen korrekt gruppiert und nummeriert.
+- [x] **Einzeln setzen (`B`), Spitze wechseln, Löschen & Tabelle schalten**: Einzelne Positionsnummern lassen sich per Taste `B` setzen, zwischen Punkt und Pfeil umschalten, per `Entf` löschen und die Stückliste auf dem Blatt über `#dw-bom-show` ein-/ausblenden.
+- [x] **Rückgängig, Speichern/Neuladen, PDF, DXF & Hilfen**: Undo/Redo, JSON-Roundtrip, PDF-Export (`%PDF-1.4` mit Spalten und Teilenamen), DXF-Export (Kreise auf `BEMASSUNG`, Tabellentexte auf `RAHMEN`), Befehlssuche und Hilfetexte (`drawingBalloons`, `drawingBom`) funktionieren vollständig.
+- [ ] **Von Hand**: Im Browser eine kleine Baugruppe aus mehreren Teilen und einer Gruppe in der Zeichnung mit Positionsnummern versehen, Kreise und Stückliste auf dem Blatt zurechtschieben und die exportierte PDF- und DXF-Datei prüfen.
+
+## Mehrere Projekte in Tabs (Auto [A-075], BE-13)
+
+- [x] **Zwei Projekte in Tabs öffnen & wechseln**: Über „+“ → „Neues leeres Projekt“ bzw. gespeichertes Projekt ein zweites Projekt in einem neuen Tab öffnen; Klick auf die Tabs zeigt jeweils nur den zugehörigen Körper in 3D-Ansicht und Verlauf.
+- [x] **Eigenes Rückgängig je Tab**: Eine Änderung in Tab 2 per „Rückgängig“ zurücknehmen lässt Tab 1 samt seinem Verlauf und Rückgängig-Stapel unverändert.
+- [x] **Schließen mit Nachfrage, Einfach/Profi, Neuladen & Hilfe**: „×“ auf einem Tab mit ungespeicherten Änderungen öffnet den Bestätigungsdialog („Abbrechen“ / „Trotzdem schließen“), ein unberührter leerer Tab schließt sofort; Tab-Leiste funktioniert in „Einfach“ und „Profi“, offene Tabs werden beim Neuladen wiederhergestellt und der `+`-Knopf trägt `data-help="projectTabs"`.
+- [ ] **Von Hand**: Im Browser mehrere Projekte per „+“ (inkl. Vorlage und `.json`-Datei) öffnen, mit Doppelklick umbenennen, per Rechtsklick „Andere Tabs schließen“ prüfen und das Design in „Einfach“ und „Profi“ sowie bei schmalem Fenster ansehen.
 
 ## Übersetzbare Oberfläche, Schritt 2 (Auto [A-074], PL-01)
 

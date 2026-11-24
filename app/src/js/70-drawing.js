@@ -32,13 +32,16 @@ const Drawing = (() => {
   const scaleText = (s) => (s >= 1 ? `${fmtFixed(s, 2)}:1` : `1:${fmtFixed(1 / s, 2)}`);
   let proj = null, projRev = -1, projSceneKey = null, loadingProjPromise = null, projId = 0;
   const projSigs = new Map(), shadeCache = new Map();
+  let bomData = null, bomMeasure = null, bomCacheKey = null;
   let svg = null, wrap = null, holder = null, tabsBar = null, zoom = 1, tool = null, toolState = null, selDim = null, selView = null;
   let dimMode = 'lin';
-  let layout = null, dragDetail = null, dragNote = null, dragView = null;
+  let layout = null, dragDetail = null, dragNote = null, dragView = null, dragBalloon = null, dragBom = null;
   let lastDXF = null, lastPNG = null;
   let detailDraft = { scale: 2, label: 'Z' };
   let noteDraft = { tip: 'auto', text: '' };
+  let balloonViewPref = 'auto';
   let centersListOpen = false;
+  let lastLostKey = '';
   function normDimStyle(raw, tpl = null) {
     const t = (tpl && tpl.dimStyle) || DEFAULT_DIM_STYLE;
     const rawArrow = raw && raw.arrow;
@@ -120,6 +123,13 @@ const Drawing = (() => {
       sections: Array.isArray(opts.sections) ? opts.sections : [],
       dimStyle: normDimStyle(opts.dimStyle, tpl),
       notes: Array.isArray(opts.notes) ? opts.notes.map((n) => ({ ...n, anchor: n.anchor ? [...n.anchor] : [0, 0], elbow: n.elbow ? [...n.elbow] : [14, -10] })) : [],
+      balloons: Array.isArray(opts.balloons) ? opts.balloons.map((b) => ({ ...b, anchor: b.anchor ? [...b.anchor] : [0, 0], offset: b.offset ? [...b.offset] : [14, -12] })) : [],
+      bomTable: {
+        show: !!(opts.bomTable && opts.bomTable.show),
+        pos: Array.isArray(opts.bomTable && opts.bomTable.pos) && opts.bomTable.pos.length >= 2
+          ? [Number(opts.bomTable.pos[0]) || 0, Number(opts.bomTable.pos[1]) || 0]
+          : null,
+      },
       viewPos: opts.viewPos && typeof opts.viewPos === 'object' ? JSON.parse(JSON.stringify(opts.viewPos)) : {},
       title: {
         titel: t0.titel || '',
@@ -151,6 +161,8 @@ const Drawing = (() => {
       sections: raw && Array.isArray(raw.sections) ? raw.sections : undefined,
       dimStyle: raw && raw.dimStyle && typeof raw.dimStyle === 'object' ? raw.dimStyle : undefined,
       notes: raw && Array.isArray(raw.notes) ? raw.notes : undefined,
+      balloons: raw && Array.isArray(raw.balloons) ? raw.balloons : undefined,
+      bomTable: raw && raw.bomTable && typeof raw.bomTable === 'object' ? raw.bomTable : undefined,
       viewPos: raw && raw.viewPos && typeof raw.viewPos === 'object' ? raw.viewPos : undefined,
     });
     if (raw && raw.title && typeof raw.title === 'object') {
@@ -182,6 +194,14 @@ const Drawing = (() => {
       if (cur && !Array.isArray(cur.sections)) cur.sections = [];
       if (cur && !Array.isArray(cur.hiddenCenters)) cur.hiddenCenters = [];
       if (cur && !Array.isArray(cur.notes)) cur.notes = [];
+      if (cur && !Array.isArray(cur.balloons)) cur.balloons = [];
+      if (cur && (!cur.bomTable || typeof cur.bomTable !== 'object')) cur.bomTable = { show: false, pos: null };
+      else if (cur) cur.bomTable = {
+        show: !!cur.bomTable.show,
+        pos: Array.isArray(cur.bomTable.pos) && cur.bomTable.pos.length >= 2
+          ? [Number(cur.bomTable.pos[0]) || 0, Number(cur.bomTable.pos[1]) || 0]
+          : null,
+      };
       if (cur && (!cur.viewPos || typeof cur.viewPos !== 'object')) cur.viewPos = {};
       if (cur) cur.dimStyle = normDimStyle(cur.dimStyle);
       if (!cur || !cur.id || !SHEETS[cur.sheet] || !cur.views || !Array.isArray(cur.dims) || !Array.isArray(cur.free) || !cur.title || !cur.name) {
@@ -216,8 +236,8 @@ const Drawing = (() => {
     if (!st.sheets.some((x) => x.id === id) || st.active === id) return;
     st.active = id;
     selDim = null; selView = null;
-    dragNote = null; dragView = null;
-    toolState = (tool === 'dim' || tool === 'detail' || tool === 'section' || tool === 'note') ? { stage: 0 } : tool ? {} : null;
+    dragNote = null; dragView = null; dragBalloon = null; dragBom = null;
+    toolState = (tool === 'dim' || tool === 'detail' || tool === 'section' || tool === 'note' || tool === 'balloon') ? { stage: 0 } : tool ? {} : null;
     fitZoom(true);
     refresh();
     Panels.renderRight();
@@ -232,8 +252,8 @@ const Drawing = (() => {
       st.active = ns.id;
     });
     selDim = null; selView = null;
-    dragNote = null; dragView = null;
-    toolState = (tool === 'dim' || tool === 'detail' || tool === 'section' || tool === 'note') ? { stage: 0 } : tool ? {} : null;
+    dragNote = null; dragView = null; dragBalloon = null; dragBom = null;
+    toolState = (tool === 'dim' || tool === 'detail' || tool === 'section' || tool === 'note' || tool === 'balloon') ? { stage: 0 } : tool ? {} : null;
     fitZoom(true);
     refresh();
     Panels.renderRight();
@@ -300,6 +320,15 @@ const Drawing = (() => {
       if (view && view.startsWith('sec_') && secMap.has(view.slice(4))) view = 'sec_' + secMap.get(view.slice(4));
       return { ...n, id: uid('ln'), view, anchor: n.anchor ? [...n.anchor] : [0, 0], elbow: n.elbow ? [...n.elbow] : [14, -10] };
     });
+    clone.balloons = (clone.balloons || []).map((b) => {
+      let view = detMap.get(b.view) || idMap.get(b.view) || b.view;
+      if (view && view.startsWith('sec_') && secMap.has(view.slice(4))) view = 'sec_' + secMap.get(view.slice(4));
+      return { ...b, id: uid('bl'), view, anchor: b.anchor ? [...b.anchor] : [0, 0], offset: b.offset ? [...b.offset] : [14, -12] };
+    });
+    clone.bomTable = {
+      show: !!(src.bomTable && src.bomTable.show),
+      pos: Array.isArray(src.bomTable && src.bomTable.pos) ? [...src.bomTable.pos] : null,
+    };
     const nextVP = {};
     for (const [k, v] of Object.entries(clone.viewPos || {})) {
       if (Array.isArray(v) && v.length >= 2) nextVP[idMap.get(k) || k] = [Number(v[0]) || 0, Number(v[1]) || 0];
@@ -375,7 +404,7 @@ const Drawing = (() => {
     renderTabs();
     refresh();
   }
-  function close() { window.removeEventListener('pointerup', onUp); tool = null; toolState = null; selView = null; dragDetail = null; dragNote = null; dragView = null; const el = $('#sheet'); if (el) el.innerHTML = ''; svg = null; wrap = null; holder = null; tabsBar = null; }
+  function close() { window.removeEventListener('pointerup', onUp); tool = null; toolState = null; selView = null; dragDetail = null; dragNote = null; dragView = null; dragBalloon = null; dragBom = null; const el = $('#sheet'); if (el) el.innerHTML = ''; svg = null; wrap = null; holder = null; tabsBar = null; }
   function renderTabs() {
     if (!tabsBar) return;
     const list = sheets();
@@ -393,10 +422,15 @@ const Drawing = (() => {
       const nm = h('span', { class: 'st-name', title: s.name }, s.name);
       nm.ondblclick = (e) => { e.stopPropagation(); renameSheet(s.id); };
       const fmt = h('span', { class: 'st-fmt' }, s.sheet);
+      tab.append(nm, fmt);
+      if (proj) {
+        const nLost = lostDims(s).length;
+        if (nLost > 0) tab.append(h('span', { class: 'st-lost', title: T(nLost === 1 ? 'draw.tabs.lostOne' : 'draw.tabs.lostMany', { n: nLost }) }, String(nLost)));
+      }
       const ren = h('button', { type: 'button', class: 'st-act st-ren', 'aria-label': T('draw.tabs.renameAria'), 'data-tip': T('draw.tabs.renameAria') });
       ren.innerHTML = icon('edit');
       ren.onclick = (e) => { e.stopPropagation(); renameSheet(s.id); };
-      tab.append(nm, fmt, ren);
+      tab.append(ren);
       if (list.length > 1) {
         const del = h('button', { type: 'button', class: 'st-act st-del', 'aria-label': T('draw.tabs.deleteAria'), 'data-tip': T('draw.tabs.deleteAria') });
         del.innerHTML = icon('close');
@@ -535,6 +569,7 @@ const Drawing = (() => {
       if (s.viewOpts) delete s.viewOpts[key];
       if (s.viewPos) delete s.viewPos[key];
       s.notes = (s.notes || []).filter((n) => n.view !== key);
+      s.balloons = (s.balloons || []).filter((b) => b.view !== key);
     });
     selView = currentViewKey();
     render(); Panels.renderRight();
@@ -616,9 +651,64 @@ const Drawing = (() => {
     }
     return [...map.values()];
   }
+  function computeBomKey(sceneKey) {
+    const d = App.doc;
+    const mat = (d.settings && d.settings.material) || '';
+    const unit = (d.settings && d.settings.unit) || 'mm';
+    const meta = (d.items || []).map((it) => [it.id, it.name || '', it.mat || '', it.massG ?? '', it.role || '', it.suppressed ? 1 : 0, it.hidden ? 1 : 0]);
+    return sceneKey + '|' + mat + '|' + unit + '|' + JSON.stringify(meta);
+  }
+  async function ensureBom(sceneKey) {
+    if (!Model.activeItems(App.doc).length) {
+      bomData = null; bomMeasure = null; bomCacheKey = null;
+      return null;
+    }
+    const bk = computeBomKey(sceneKey);
+    if (bomData && bomCacheKey === bk) return bomData;
+    try {
+      const m = await Mass.measure();
+      const b = await Mass.bom(App.doc);
+      bomMeasure = m || null;
+      bomData = b || null;
+      bomCacheKey = bk;
+    } catch (_) {
+      bomMeasure = null;
+      bomData = null;
+      bomCacheKey = null;
+    }
+    return bomData;
+  }
+  function bomItems(bom = bomData) {
+    return ((bom && bom.rows) || []).map((r, i) => ({
+      pos: i + 1,
+      n: r.n,
+      name: r.name,
+      mat: r.kind,
+      kind: r.kind,
+      g: r.g,
+      buy: !!r.buy,
+      ids: Array.isArray(r.ids) ? r.ids.slice() : [],
+      key: `${r.name}|${r.kind}|${round(r.g, 2)}`,
+    }));
+  }
+  function resolveBalloonPos(bl, bom = bomData) {
+    const rows = bomItems(bom);
+    if (rows.length && bl) {
+      if (bl.itemId) {
+        const hit = rows.find((r) => r.ids.includes(bl.itemId));
+        if (hit) return hit.pos;
+      }
+      if (bl.bomKey) {
+        const hit = rows.find((r) => r.key === bl.bomKey);
+        if (hit) return hit.pos;
+      }
+    }
+    return Math.max(1, Math.round(Number(bl && bl.pos) || 1));
+  }
   async function ensureProjections() {
     if (!Model.activeItems(App.doc).length) {
       proj = null; projRev = App.revision; projSceneKey = null; projSigs.clear(); geoCache.clear(); shadeCache.clear();
+      bomData = null; bomMeasure = null; bomCacheKey = null;
       return;
     }
     if (loadingProjPromise) {
@@ -634,7 +724,11 @@ const Drawing = (() => {
     const missingViews = needFull ? specs : specs.filter((s) => !proj.views || !proj.views[s.key] || projSigs.get(s.key) !== s.sig);
     const existingSecs = (proj && proj.sections) || {};
     const missingSecs = needFull ? allSecs : allSecs.filter((s) => !existingSecs[s.key]);
-    if (!needFull && !missingViews.length && !missingSecs.length) { projRev = rev; return; }
+    if (!needFull && !missingViews.length && !missingSecs.length) {
+      await ensureBom(sceneKey);
+      projRev = rev;
+      return;
+    }
     loadingProjPromise = (async () => {
       try {
         if (needFull) {
@@ -666,6 +760,7 @@ const Drawing = (() => {
           projRev = rev;
           projId++;
         }
+        await ensureBom(sceneKey);
       } finally {
         loadingProjPromise = null;
       }
@@ -675,15 +770,29 @@ const Drawing = (() => {
   async function waitReady() {
     if (loadingProjPromise) await loadingProjPromise;
     await ensureProjections();
-    if (holder) render();
+    if (holder) {
+      render();
+      if (App.mode === 'drawing') Panels.renderRight();
+    }
   }
   async function refresh() {
     if (App.mode !== 'drawing') return;
+    const prevProjId = projId;
     try {
       await ensureProjections();
     } catch (e) { UI.toast('Die Ansichten konnten nicht berechnet werden: ' + e.message, { kind: 'bad' }); }
     render();
     Panels.renderRight();
+    const curLost = layout ? lostDims(dwg()) : [];
+    const curLostKey = curLost.map((x) => x.id).sort().join(',');
+    if (projId !== prevProjId && curLost.length) {
+      const prevSet = new Set(lastLostKey ? lastLostKey.split(',') : []);
+      const newlyLost = curLost.filter((x) => !prevSet.has(x.id));
+      if (newlyLost.length) {
+        UI.toast(`${newlyLost.length === 1 ? '1 Maß hat seine Kante verloren' : newlyLost.length + ' Maße haben ihre Kante verloren'} – siehe „Verlorene Maße“.`, { icon: 'warn', kind: 'warn', ms: 4000 });
+      }
+    }
+    lastLostKey = curLostKey;
   }
   // ---------- Kanten aufräumen ----------
   // Die Projektion liefert viele Kanten doppelt (Vorder- und Hinterkante liegen übereinander) und verdeckte
@@ -1122,6 +1231,7 @@ const Drawing = (() => {
       d.details = (d.details || []).filter((x) => x.id !== id);
       d.dims = d.dims.filter((x) => x.view !== id);
       d.notes = (d.notes || []).filter((x) => x.view !== id);
+      d.balloons = (d.balloons || []).filter((x) => x.view !== id);
       d.hiddenCenters = (d.hiddenCenters || []).filter((cid) => !cid.startsWith('ctr|' + id + '|'));
     });
     if (selDim === id) selDim = null;
@@ -1287,11 +1397,33 @@ const Drawing = (() => {
     }
     return best;
   }
-  function layoutSheet(sh, s, G, extras, secGeos, area) {
+  function bomTableRect(sh = dwg(), frame, tb, bom = bomData) {
+    if (!(sh && sh.bomTable && sh.bomTable.show)) return null;
+    const rows = bomItems(bom);
+    const w = tb.w;
+    const cPos = Math.round(w * (16 / 180) * 10) / 10;
+    const cQty = Math.round(w * (20 / 180) * 10) / 10;
+    const cMat = Math.round(w * (46 / 180) * 10) / 10;
+    const cName = w - cPos - cQty - cMat;
+    const hh = 7.0, rh = 6.2;
+    const h = hh + Math.max(1, rows.length) * rh;
+    let x = frame.x + frame.w - w;
+    let y = Math.max(frame.y, frame.y + frame.h - tb.h - h);
+    if (dragBom && dragBom.curPos) {
+      x = clamp(dragBom.curPos[0], frame.x, frame.x + frame.w - w);
+      y = clamp(dragBom.curPos[1], frame.y, frame.y + frame.h - h);
+    } else if (Array.isArray(sh.bomTable.pos) && sh.bomTable.pos.length >= 2) {
+      x = clamp(Number(sh.bomTable.pos[0]) || 0, frame.x, frame.x + frame.w - w);
+      y = clamp(Number(sh.bomTable.pos[1]) || 0, frame.y, frame.y + frame.h - h);
+    }
+    return { x, y, w, h, hh, rh, cols: [cPos, cQty, cName, cMat], rows };
+  }
+  function layoutSheet(sh, s, G, extras, secGeos, area, bomRect = null) {
     const gap = 22;
     const views = {};
     const occ = [];
     const addOcc = (px, py, vw, vh, pad = 8, padBot = 10) => occ.push([px - pad, py - pad, px + vw + pad, py + vh + padBot]);
+    if (bomRect) occ.push([bomRect.x - 4, bomRect.y - 4, bomRect.x + bomRect.w + 4, bomRect.y + bomRect.h + 4]);
     const hits = (r) => {
       if (r[0] < area.x + 2 || r[1] < area.y + 2 || r[2] > area.x + area.w - 2 || r[3] > area.y + area.h - 2) return true;
       for (const o of occ) if (r[0] < o[2] && r[2] > o[0] && r[1] < o[3] && r[3] > o[1]) return true;
@@ -1348,7 +1480,9 @@ const Drawing = (() => {
       }
       if (extras.length === 1 && G.front && G.left && G.top && !secGeos.length) {
         const rx = x0 + fw + gap, ry = y0 + fh + gap;
-        placeExtra(extras[0], rx, ry, area.x + area.w - rx - 6, area.y + area.h - ry - 10);
+        const rawH = area.y + area.h - ry - 10;
+        const maxH = bomRect ? Math.min(rawH, bomRect.y - ry - 6) : rawH;
+        placeExtra(extras[0], rx, ry, area.x + area.w - rx - 6, maxH > 24 ? maxH : rawH);
       } else if (extras.length) {
         const rx = x0 + totalW + gap;
         const aw = area.x + area.w - rx - 6;
@@ -1415,6 +1549,7 @@ const Drawing = (() => {
     const frame = { x: 20, y: m, w: W - 20 - m, h: H - 2 * m };
     const tb = { w: Math.min(180, frame.w), h: 32 };
     const area = { x: frame.x + 8, y: frame.y + 8, w: frame.w - 16, h: frame.h - tb.h - 16 };
+    const bomRect = bomTableRect(sh, frame, tb, bomData);
     const G = {
       front: sh.views.front ? viewGeom('front', sh) : null,
       top: sh.views.top ? viewGeom('top', sh) : null,
@@ -1446,20 +1581,20 @@ const Drawing = (() => {
           if (needW(sc) + 24 <= area.w * (1 - extraRoom) && needH(sc) + 24 <= area.h) { s = sc; break; }
         }
       } else s = +sh.scale || 1;
-      views = layoutSheet(sh, s, G, extras, [], area).views;
+      views = layoutSheet(sh, s, G, extras, [], area, bomRect).views;
     } else {
       if (sh.scale === 'auto') {
         s = SCALES[SCALES.length - 1];
         for (const sc of SCALES) {
           if (!main && !secGeos.length) { s = 1; break; }
           if (main && (needW(sc) + 24 > area.w * 0.78 || needH(sc) + 24 > area.h)) continue;
-          const tryLay = layoutSheet(sh, sc, G, extras, secGeos, area);
+          const tryLay = layoutSheet(sh, sc, G, extras, secGeos, area, bomRect);
           if (tryLay.fits) { s = sc; views = tryLay.views; break; }
         }
-        if (!Object.keys(views).length) views = layoutSheet(sh, s, G, extras, secGeos, area).views;
+        if (!Object.keys(views).length) views = layoutSheet(sh, s, G, extras, secGeos, area, bomRect).views;
       } else {
         s = +sh.scale || 1;
-        views = layoutSheet(sh, s, G, extras, secGeos, area).views;
+        views = layoutSheet(sh, s, G, extras, secGeos, area, bomRect).views;
       }
     }
     const vp = sh.viewPos || {};
@@ -1477,6 +1612,7 @@ const Drawing = (() => {
     // Detailansichten platzieren
     if (Array.isArray(sh.details) && sh.details.length) {
       const occupied = [[frame.x + frame.w - tb.w - 4, frame.y + frame.h - tb.h - 4, tb.w + 4, tb.h + 4]];
+      if (bomRect) occupied.push([bomRect.x - 4, bomRect.y - 4, bomRect.w + 8, bomRect.h + 8]);
       for (const [k, v] of Object.entries(views)) {
         const b = v.geo.box;
         occupied.push([v.ox + b[0] * v.s - 8, v.oy - b[3] * v.s - 8, (b[2] - b[0]) * v.s + 16, (b[3] - b[1]) * v.s + 16]);
@@ -1497,7 +1633,7 @@ const Drawing = (() => {
     }
     // frei Gezeichnetes liegt fest auf dem Papier: Millimeter ab der linken unteren Blattecke, 1:1
     if (G.free) views.free = { geo: G.free, s: 1, ox: 0, oy: H };
-    return { W, H, frame, tb, area, s, views };
+    return { W, H, frame, tb, area, s, views, bomRect };
   }
   const toSheet = (v, p) => [v.ox + p[0] * v.s, v.oy - p[1] * v.s];
   const toView = (v, P) => [(P[0] - v.ox) / v.s, (v.oy - P[1]) / v.s];
@@ -1719,12 +1855,12 @@ const Drawing = (() => {
     const wStack = Math.max(textW(tolInfo.upStr, SUB), textW(tolInfo.loStr, SUB)) * 0.95;
     return { totalW: wMain + gap + wStack };
   }
-  function emitDimTexts(texts, cx, cy, ang, dim, mainLabel, prefix, tolInfo, TXT) {
+  function emitDimTexts(texts, cx, cy, ang, dim, mainLabel, prefix, tolInfo, TXT, isLost = !!(dim && dim.lost)) {
     const rad = (ang * Math.PI) / 180;
     const exX = Math.cos(rad), exY = Math.sin(rad);
     const euX = Math.sin(rad), euY = -Math.cos(rad);
     const pt = (lx, ly) => [cx + exX * lx + euX * ly, cy + exY * lx + euY * ly];
-    const base = { rot: ang, id: dim.id, view: dim.view };
+    const base = { rot: ang, id: dim.id, view: dim.view, ...(isLost ? { lost: true } : {}) };
     if (!tolInfo) {
       texts.push({ ...base, x: cx, y: cy, t: mainLabel, size: TXT, anchor: 'middle', cls: 'dimtext' });
       return;
@@ -1769,11 +1905,374 @@ const Drawing = (() => {
     Panels.renderRight();
     return next;
   }
+  // ---------- Modelländerungen & verlorene Maße (ZE-14) ----------
+  function viewCirclesPool(v) {
+    if (!v || !v.geo) return [];
+    return [
+      ...(v.geo.circles || []),
+      ...(v.geo.hidden || []).filter((p) => p.c).map((p) => ({ c: p.c, r: p.r, full: !p.arc, arc: p.arc, hidden: true })),
+    ];
+  }
+  function viewVertexPoints(v) {
+    if (!v || !v.geo) return [];
+    const pts = [];
+    const addPt = (p) => {
+      if (!p) return;
+      if (!pts.some((q) => Math.hypot(q[0] - p[0], q[1] - p[1]) < 0.02)) pts.push([p[0], p[1]]);
+    };
+    for (const arr of [v.geo.polys, v.geo.tangents || [], v.geo.hidden || []]) {
+      for (const p of arr || []) {
+        if (!p.pts || !p.pts.length || (p.c && !p.arc)) continue;
+        addPt(p.pts[0]);
+        addPt(p.pts[p.pts.length - 1]);
+      }
+    }
+    return pts;
+  }
+  function isCircleInner(c, box) {
+    return Boolean(box && c && c.c[0] - c.r > box[0] + 0.15 && c.c[0] + c.r < box[2] - 0.15 && c.c[1] - c.r > box[1] + 0.15 && c.c[1] + c.r < box[3] - 0.15);
+  }
+  function incidentDirs(v, pt) {
+    const dirs = [];
+    for (const s of straightSegsOf(v, true)) {
+      let u = null;
+      if (Math.hypot(s.a[0] - pt[0], s.a[1] - pt[1]) <= 0.05) u = [(s.b[0] - s.a[0]) / s.L, (s.b[1] - s.a[1]) / s.L];
+      else if (Math.hypot(s.b[0] - pt[0], s.b[1] - pt[1]) <= 0.05) u = [(s.a[0] - s.b[0]) / s.L, (s.a[1] - s.b[1]) / s.L];
+      if (u && !dirs.some((d) => d[0] * u[0] + d[1] * u[1] > 0.99)) dirs.push(u);
+    }
+    return dirs;
+  }
+  function dirMatchScore(d1, d2) {
+    if (!d1 || !d1.length || !d2 || !d2.length) return 0;
+    let n = 0;
+    for (const u of d1) if (d2.some((w) => u[0] * w[0] + u[1] * w[1] > 0.985)) n++;
+    return n;
+  }
+  function angleDiff(a, b) {
+    let d = Math.abs((((a - b) % TWO_PI) + TWO_PI) % TWO_PI);
+    return Math.min(d, TWO_PI - d);
+  }
+  function makeCircleRef(v, c) {
+    const b = (v && v.geo && v.geo.box) || [0, 0, 0, 0];
+    const nearX = Math.abs((c.c[0] - c.r) - b[0]) <= 0.25 ? 'min' : Math.abs((c.c[0] + c.r) - b[2]) <= 0.25 ? 'max' : null;
+    const nearY = Math.abs((c.c[1] - c.r) - b[1]) <= 0.25 ? 'min' : Math.abs((c.c[1] + c.r) - b[3]) <= 0.25 ? 'max' : null;
+    const arcMid = c.arc ? (c.arc[0] + c.arc[1]) * 0.5 : null;
+    return {
+      kind: 'circle',
+      c: [c.c[0], c.c[1]],
+      r: c.r,
+      full: !!c.full,
+      isInner: isCircleInner(c, b),
+      arcMid,
+      nearX,
+      nearY,
+      box: [...b],
+    };
+  }
+  function makePointRef(v, pt, edge = null) {
+    const b = (v && v.geo && v.geo.box) || [0, 0, 0, 0];
+    const [x0, y0, x1, y1] = b;
+    if (!edge) {
+      const verts = viewVertexPoints(v);
+      const nearVert = verts.some((q) => Math.hypot(q[0] - pt[0], q[1] - pt[1]) <= 0.05);
+      if (!nearVert) {
+        const hitC = viewCirclesPool(v).find((c) => Math.hypot(c.c[0] - pt[0], c.c[1] - pt[1]) <= 0.05);
+        if (hitC) return { kind: 'circleCenter', circle: makeCircleRef(v, hitC), p: [pt[0], pt[1]], box: [...b] };
+      }
+    }
+    const sideOf = (val, minV, maxV) => {
+      if (Math.abs(val - minV) <= 0.08) return 'min';
+      if (Math.abs(val - maxV) <= 0.08) return 'max';
+      if (Math.abs(val - (minV + maxV) * 0.5) <= 0.08) return 'mid';
+      return null;
+    };
+    const xSide = sideOf(pt[0], x0, x1);
+    const ySide = sideOf(pt[1], y0, y1);
+    const dxMin = pt[0] - x0, dxMax = pt[0] - x1, dyMin = pt[1] - y0, dyMax = pt[1] - y1;
+    if (edge && edge.a && edge.b) {
+      const L = Math.hypot(edge.b[0] - edge.a[0], edge.b[1] - edge.a[1]) || 1;
+      const edgeDir = [(edge.b[0] - edge.a[0]) / L, (edge.b[1] - edge.a[1]) / L];
+      return { kind: 'edgePt', p: [pt[0], pt[1]], edgeDir, xSide, ySide, dxMin, dxMax, dyMin, dyMax, box: [...b] };
+    }
+    return { kind: 'vertex', p: [pt[0], pt[1]], xSide, ySide, dxMin, dxMax, dyMin, dyMax, dirs: incidentDirs(v, pt), box: [...b] };
+  }
+  function makeEdgeRef(v, seg) {
+    const b = (v && v.geo && v.geo.box) || [0, 0, 0, 0];
+    const L = Math.hypot(seg.b[0] - seg.a[0], seg.b[1] - seg.a[1]) || 1;
+    return {
+      kind: 'edge',
+      a: [...seg.a],
+      b: [...seg.b],
+      dir: [(seg.b[0] - seg.a[0]) / L, (seg.b[1] - seg.a[1]) / L],
+      aRef: makePointRef(v, seg.a),
+      bRef: makePointRef(v, seg.b),
+      box: [...b],
+    };
+  }
+  function makeChamferRef(v, seg, info) {
+    const b = (v && v.geo && v.geo.box) || [0, 0, 0, 0];
+    return {
+      kind: 'chamfer',
+      a: [...seg.a],
+      b: [...seg.b],
+      aRef: makePointRef(v, seg.a),
+      bRef: makePointRef(v, seg.b),
+      dir: [...info.dir],
+      p: [...info.p],
+      dist: info.dist,
+      ang: info.ang,
+      box: [...b],
+    };
+  }
+  function buildDimRef(dim, v) {
+    if (!dim || !v || !v.geo) return null;
+    if (dim.type === 'dia' || dim.type === 'rad') {
+      const hit = viewCirclesPool(v).find((c) => Math.hypot(c.c[0] - dim.c[0], c.c[1] - dim.c[1]) <= 0.2 && Math.abs(c.r - dim.r) <= 0.2)
+        || { c: dim.c, r: dim.r, full: !dim.partial };
+      return makeCircleRef(v, hit);
+    }
+    if (dim.type === 'lin') {
+      return { kind: 'lin', a: makePointRef(v, dim.a), b: makePointRef(v, dim.b) };
+    }
+    if (dim.type === 'chamfer') {
+      const seg = straightSegsOf(v, false).find((s) => Math.hypot((s.a[0] + s.b[0]) * 0.5 - dim.p[0], (s.a[1] + s.b[1]) * 0.5 - dim.p[1]) <= 0.5)
+        || { a: dim.p, b: dim.p };
+      return makeChamferRef(v, seg, { dir: dim.dir || [1, 1], p: dim.p, dist: dim.dist, ang: dim.ang });
+    }
+    if (dim.type === 'ang' && dim.e1 && dim.e2) {
+      return { kind: 'ang', e1: makeEdgeRef(v, { a: dim.e1[0], b: dim.e1[1] }), e2: makeEdgeRef(v, { a: dim.e2[0], b: dim.e2[1] }) };
+    }
+    if (dim.type === 'chain') {
+      return { kind: 'chain', pts: (dim.pts || []).map((p) => makePointRef(v, p)) };
+    }
+    if (dim.type === 'base' && dim.base) {
+      return { kind: 'base', base: makePointRef(v, dim.base), pts: (dim.pts || []).map((p) => makePointRef(v, p)) };
+    }
+    return null;
+  }
+  function resolveCircleRef(v, ref) {
+    if (!v || !v.geo || !ref) return null;
+    const pool = viewCirclesPool(v);
+    const b = v.geo.box, oldB = ref.box;
+    const cands = pool.filter((c) => {
+      if (ref.full && !c.full) return false;
+      if (ref.isInner === true && !isCircleInner(c, b)) return false;
+      return true;
+    });
+    const arcMidOf = (c) => (c.arc ? (c.arc[0] + c.arc[1]) * 0.5 : null);
+    const pickBest = (list, targetFn, tol = 0.35, maxAngDiff = 0.8) => {
+      let best = null, bestScore = Infinity;
+      for (const c of list) {
+        const tp = targetFn(c);
+        const d = Math.hypot(c.c[0] - tp[0], c.c[1] - tp[1]);
+        if (d > tol) continue;
+        if (!ref.full && ref.arcMid != null && c.arc) {
+          if (angleDiff(arcMidOf(c), ref.arcMid) > maxAngDiff) continue;
+        }
+        const outerBias = (ref.isInner === false && ref.full && isCircleInner(c, b)) ? 50 : 0;
+        const score = d * 20 + Math.abs(c.r - ref.r) + outerBias;
+        if (score < bestScore) { bestScore = score; best = c; }
+      }
+      return best;
+    };
+    let hit = pickBest(cands, () => ref.c, 0.35, 0.8);
+    if (!hit && !ref.full && (ref.nearX || ref.nearY)) {
+      hit = pickBest(cands, (c) => [
+        ref.nearX === 'min' ? b[0] + c.r : ref.nearX === 'max' ? b[2] - c.r : ref.c[0],
+        ref.nearY === 'min' ? b[1] + c.r : ref.nearY === 'max' ? b[3] - c.r : ref.c[1],
+      ], 0.35, 0.6);
+    }
+    if (!hit && oldB && Math.abs((b[2] - b[0]) - (oldB[2] - oldB[0])) <= 0.1 && Math.abs((b[3] - b[1]) - (oldB[3] - oldB[1])) <= 0.1) {
+      const dx = b[0] - oldB[0], dy = b[1] - oldB[1];
+      hit = pickBest(cands, () => [ref.c[0] + dx, ref.c[1] + dy], 0.35, 0.8);
+    }
+    return hit ? { c: [hit.c[0], hit.c[1]], r: hit.r, full: !!hit.full, arc: hit.arc } : null;
+  }
+  function resolvePointRef(v, ref) {
+    if (!v || !v.geo || !ref) return null;
+    if (ref.kind === 'circleCenter') {
+      const cr = resolveCircleRef(v, ref.circle);
+      return cr ? cr.c : null;
+    }
+    const b = v.geo.box, [x0, y0, x1, y1] = b, oldB = ref.box;
+    const expX = ref.xSide === 'min' ? x0 : ref.xSide === 'max' ? x1 : ref.xSide === 'mid' ? (x0 + x1) * 0.5 : ref.p[0];
+    const expY = ref.ySide === 'min' ? y0 : ref.ySide === 'max' ? y1 : ref.ySide === 'mid' ? (y0 + y1) * 0.5 : ref.p[1];
+    if (ref.kind === 'edgePt') {
+      const segs = straightSegsOf(v, true);
+      const targets = [[expX, expY]];
+      if (oldB && Math.abs((x1 - x0) - (oldB[2] - oldB[0])) <= 0.1 && Math.abs((y1 - y0) - (oldB[3] - oldB[1])) <= 0.1) {
+        targets.push([ref.p[0] + (x0 - oldB[0]), ref.p[1] + (y0 - oldB[1])]);
+      }
+      for (const tp of targets) {
+        let best = null, bd = 0.25;
+        for (const s of segs) {
+          const ux = (s.b[0] - s.a[0]) / s.L, uy = (s.b[1] - s.a[1]) / s.L;
+          if (Math.abs(ux * ref.edgeDir[0] + uy * ref.edgeDir[1]) <= 0.995) continue;
+          const tRaw = (tp[0] - s.a[0]) * ux + (tp[1] - s.a[1]) * uy;
+          if (tRaw < -0.25 || tRaw > s.L + 0.25) continue;
+          const t = clamp(tRaw, 0, s.L);
+          const px = s.a[0] + ux * t, py = s.a[1] + uy * t;
+          const d = Math.hypot(px - tp[0], py - tp[1]);
+          if (d < bd) { bd = d; best = [px, py]; }
+        }
+        if (best) return best;
+      }
+      return null;
+    }
+    const verts = viewVertexPoints(v);
+    const findNear = (target, tol = 0.2, requireDir = false) => {
+      let best = null, bestScore = Infinity;
+      for (const pt of verts) {
+        const d = Math.hypot(pt[0] - target[0], pt[1] - target[1]);
+        if (d > tol) continue;
+        const dScore = ref.dirs && ref.dirs.length ? dirMatchScore(incidentDirs(v, pt), ref.dirs) : 0;
+        if (requireDir && ref.dirs && ref.dirs.length && dScore <= 0) continue;
+        const score = d - dScore * 0.05;
+        if (score < bestScore) { bestScore = score; best = [pt[0], pt[1]]; }
+      }
+      return best;
+    };
+    let hit = findNear([expX, expY], 0.2);
+    if (!hit && oldB) {
+      const dw = (x1 - x0) - (oldB[2] - oldB[0]), dh = (y1 - y0) - (oldB[3] - oldB[1]);
+      if (Math.abs(dw) > 0.1 || Math.abs(dh) > 0.1) {
+        const cands = [];
+        if (ref.ySide) {
+          if (ref.dxMin != null) cands.push([x0 + ref.dxMin, expY]);
+          if (ref.dxMax != null) cands.push([x1 + ref.dxMax, expY]);
+        }
+        if (ref.xSide) {
+          if (ref.dyMin != null) cands.push([expX, y0 + ref.dyMin]);
+          if (ref.dyMax != null) cands.push([expX, y1 + ref.dyMax]);
+        }
+        for (const tp of cands) {
+          hit = findNear(tp, 0.15, true);
+          if (hit) break;
+        }
+      } else {
+        hit = findNear([ref.p[0] + (x0 - oldB[0]), ref.p[1] + (y0 - oldB[1])], 0.2);
+      }
+    }
+    return hit;
+  }
+  function resolveEdgeRef(v, ref) {
+    if (!v || !v.geo || !ref) return null;
+    const segs = straightSegsOf(v, true);
+    const a = resolvePointRef(v, ref.aRef), b = resolvePointRef(v, ref.bRef);
+    const matchesDir = (s) => {
+      const ux = (s.b[0] - s.a[0]) / s.L, uy = (s.b[1] - s.a[1]) / s.L;
+      return Math.abs(ux * ref.dir[0] + uy * ref.dir[1]) > 0.995;
+    };
+    const onSeg = (s, pt, tol = 0.2) => {
+      const ux = (s.b[0] - s.a[0]) / s.L, uy = (s.b[1] - s.a[1]) / s.L;
+      const nx = -uy, ny = ux;
+      if (Math.abs((pt[0] - s.a[0]) * nx + (pt[1] - s.a[1]) * ny) > tol) return false;
+      const t = (pt[0] - s.a[0]) * ux + (pt[1] - s.a[1]) * uy;
+      return t >= -tol && t <= s.L + tol;
+    };
+    if (a && b) {
+      const direct = segs.find((s) => matchesDir(s) && onSeg(s, a) && onSeg(s, b));
+      if (direct) return { a: [...direct.a], b: [...direct.b] };
+    }
+    const anchor = a || b || [(ref.a[0] + ref.b[0]) * 0.5, (ref.a[1] + ref.b[1]) * 0.5];
+    const cand = segs.find((s) => matchesDir(s) && onSeg(s, anchor, 0.25));
+    return cand ? { a: [...cand.a], b: [...cand.b] } : null;
+  }
+  function resolveChamferRef(v, ref) {
+    if (!v || !v.geo || !ref) return null;
+    const b = v.geo.box, oldB = ref.box;
+    let dx = 0, dy = 0;
+    if (oldB) {
+      const xSide = (ref.aRef && ref.aRef.xSide === 'max') || (ref.bRef && ref.bRef.xSide === 'max') ? 'max'
+        : ((ref.aRef && ref.aRef.xSide === 'min') || (ref.bRef && ref.bRef.xSide === 'min') ? 'min' : null);
+      const ySide = (ref.aRef && ref.aRef.ySide === 'max') || (ref.bRef && ref.bRef.ySide === 'max') ? 'max'
+        : ((ref.aRef && ref.aRef.ySide === 'min') || (ref.bRef && ref.bRef.ySide === 'min') ? 'min' : null);
+      if (xSide === 'min') dx = b[0] - oldB[0];
+      else if (xSide === 'max') dx = b[2] - oldB[2];
+      if (ySide === 'min') dy = b[1] - oldB[1];
+      else if (ySide === 'max') dy = b[3] - oldB[3];
+    }
+    const expP = [ref.p[0] + dx, ref.p[1] + dy];
+    let best = null, bd = Infinity;
+    for (const seg of straightSegsOf(v, false)) {
+      const info = analyzeChamfer(v, seg);
+      if (!info) continue;
+      if (info.dir[0] * ref.dir[0] + info.dir[1] * ref.dir[1] <= 0.85) continue;
+      const d = Math.hypot(info.p[0] - expP[0], info.p[1] - expP[1]);
+      const tol = Math.max(1.5, Math.max(ref.dist || 1, info.dist || 1) * 1.5);
+      if (d <= tol && d < bd) { bd = d; best = info; }
+    }
+    return best;
+  }
+  function resolveManualDim(dim, lay, sh = dwg()) {
+    if (!dim || dim.auto) return dim;
+    if (dim.view === 'free' || !dim.view) return { ...dim, lost: false };
+    if (['front', 'top', 'left', 'iso'].includes(dim.view) && sh.views && !sh.views[dim.view]) {
+      return { ...dim, lost: false, hiddenView: true };
+    }
+    const v = lay && lay.views ? lay.views[dim.view] : null;
+    if (!v || !v.geo) return { ...dim, lost: true, lostReason: 'Ansicht leer' };
+    if (!dim.ref) return { ...dim, lost: false };
+    if (dim.type === 'dia' || dim.type === 'rad') {
+      const c = resolveCircleRef(v, dim.ref);
+      if (!c) return { ...dim, lost: true, lostReason: dim.type === 'dia' ? 'Bohrung/Kreis fehlt' : 'Rundung/Bogen fehlt' };
+      return { ...dim, c: c.c, r: c.r, partial: !c.full, lost: false };
+    }
+    if (dim.type === 'lin') {
+      const a = resolvePointRef(v, dim.ref.a), b = resolvePointRef(v, dim.ref.b);
+      if (!a || !b || Math.hypot(b[0] - a[0], b[1] - a[1]) < 1e-4) return { ...dim, lost: true, lostReason: 'Kante oder Punkt fehlt' };
+      return { ...dim, a, b, lost: false };
+    }
+    if (dim.type === 'chamfer') {
+      const ch = resolveChamferRef(v, dim.ref);
+      if (!ch) return { ...dim, lost: true, lostReason: 'Fase fehlt' };
+      return { ...dim, p: ch.p, dir: ch.dir, dist: ch.dist, ang: ch.ang, lost: false };
+    }
+    if (dim.type === 'ang') {
+      const e1 = resolveEdgeRef(v, dim.ref.e1), e2 = resolveEdgeRef(v, dim.ref.e2);
+      if (!e1 || !e2) return { ...dim, lost: true, lostReason: 'Kante fehlt' };
+      const V = lineIntersect2D(e1.a, e1.b, e2.a, e2.b);
+      if (!V) return { ...dim, lost: true, lostReason: 'Kanten parallel' };
+      const mid = (dim.a0 + dim.a1) * 0.5;
+      const r = Math.max(4, dim.r || 10);
+      const sec = angularSector(V, e1, e2, [V[0] + Math.cos(mid) * r, V[1] + Math.sin(mid) * r]);
+      return { ...dim, v: V, e1: [e1.a, e1.b], e2: [e2.a, e2.b], a0: sec.a0, a1: sec.a1, lost: false };
+    }
+    if (dim.type === 'chain') {
+      const pts = (dim.ref.pts || []).map((pr) => resolvePointRef(v, pr));
+      if (pts.length < 2 || pts.some((p) => !p)) return { ...dim, lost: true, lostReason: 'Kante oder Punkt fehlt' };
+      return { ...dim, pts, lost: false };
+    }
+    if (dim.type === 'base') {
+      const base = resolvePointRef(v, dim.ref.base);
+      const pts = (dim.ref.pts || []).map((pr) => resolvePointRef(v, pr));
+      if (!base || !pts.length || pts.some((p) => !p)) return { ...dim, lost: true, lostReason: 'Bezugspunkt oder Kante fehlt' };
+      return { ...dim, base, pts, lost: false };
+    }
+    return { ...dim, lost: false };
+  }
+  function dimSummaryLabel(dim, st = sheetDimStyle()) {
+    if (!dim) return 'Maß';
+    if (dim.type === 'dia' || dim.type === 'rad') return dimLabelParts(dim, dimNominal(dim), st).mainLabel;
+    if (dim.type === 'lin') return fmtDim(dimNominal(dim), st);
+    if (dim.type === 'chamfer') {
+      const angTxt = Math.abs(dim.ang - 45) < 0.1 && st.decimals == null ? '45°' : fmtDimAngle(dim.ang, st);
+      return `${fmtDim(dim.dist, st)}×${angTxt}`;
+    }
+    if (dim.type === 'ang') return fmtDimAngle(((dim.a1 - dim.a0) * 180) / Math.PI, st);
+    if (dim.type === 'chain') return 'Kettenmaß';
+    if (dim.type === 'base') return 'Bezugsmaß';
+    return 'Maß';
+  }
+  function lostDims(sh = dwg()) {
+    const lay = (sh === dwg() && layout) ? layout : computeLayout(sh);
+    return autoDimList(sh, lay).filter((x) => x.lost);
+  }
   function autoDimList(sh = dwg(), lay = layout) {
     const all = [];
     const st = sheetDimStyle(sh);
     for (const dim of sh.dims) {
-      if (!dim.auto) { all.push(dim); continue; }
+      if (!dim.auto) { all.push(resolveManualDim(dim, lay, sh)); continue; }
       const out = [];
       const v = lay.views[dim.view]; if (!v) continue;
       const b = v.geo.box;
@@ -1825,18 +2324,19 @@ const Drawing = (() => {
     }
     return all;
   }
-  function drawSpanDim(lines, texts, P1, P2, val, dimOrId, outerTail = true, st = sheetDimStyle()) {
+  function drawSpanDim(lines, texts, P1, P2, val, dimOrId, outerTail = true, st = sheetDimStyle(), isLost = !!(dimOrId && typeof dimOrId === 'object' && dimOrId.lost)) {
     const dim = dimOrId && typeof dimOrId === 'object' ? dimOrId : null;
     const id = dim ? dim.id : dimOrId;
+    const lostObj = isLost ? { lost: true } : {};
     const TXT = st.fontSize, AR = clamp(TXT * 0.85, 2, 7), aStyle = st.arrow;
-    lines.push({ pts: [P1, P2], cls: 'dim', id });
+    lines.push({ pts: [P1, P2], cls: 'dim', id, ...lostObj });
     const L = Math.hypot(P2[0] - P1[0], P2[1] - P1[1]);
     const inside = (aStyle === 'slash' || aStyle === 'dot') ? true : L > AR * 2.6;
-    arrowHead(lines, P1, P2, AR, inside, id, null, aStyle);
-    arrowHead(lines, P2, P1, AR, inside, id, null, aStyle);
+    arrowHead(lines, P1, P2, AR, inside, id, null, aStyle, null, null, isLost);
+    arrowHead(lines, P2, P1, AR, inside, id, null, aStyle, null, null, isLost);
     if (!inside && outerTail) {
       const ux = (P2[0] - P1[0]) / (L || 1), uy = (P2[1] - P1[1]) / (L || 1);
-      lines.push({ pts: [[P1[0] - ux * AR * 2.4, P1[1] - uy * AR * 2.4], P1], cls: 'dim', id }, { pts: [P2, [P2[0] + ux * AR * 2.4, P2[1] + uy * AR * 2.4]], cls: 'dim', id });
+      lines.push({ pts: [[P1[0] - ux * AR * 2.4, P1[1] - uy * AR * 2.4], P1], cls: 'dim', id, ...lostObj }, { pts: [P2, [P2[0] + ux * AR * 2.4, P2[1] + uy * AR * 2.4]], cls: 'dim', id, ...lostObj });
     }
     const mx = (P1[0] + P2[0]) / 2, my = (P1[1] + P2[1]) / 2;
     // Maßzahl lesbar von unten oder von rechts (ISO 129): Winkel in [-90°, 90°)
@@ -1848,14 +2348,15 @@ const Drawing = (() => {
     if (dim) {
       const { mainLabel, prefix } = dimLabelParts(dim, val, st);
       const tolInfo = resolveDimTol(dim, val);
-      emitDimTexts(texts, tx, ty, ang, dim, mainLabel, prefix, tolInfo, TXT);
+      emitDimTexts(texts, tx, ty, ang, dim, mainLabel, prefix, tolInfo, TXT, isLost);
     } else {
-      texts.push({ x: tx, y: ty, t: fmtDim(val, st), size: TXT, rot: ang, anchor: 'middle', id, cls: 'dimtext' });
+      texts.push({ x: tx, y: ty, t: fmtDim(val, st), size: TXT, rot: ang, anchor: 'middle', id, cls: 'dimtext', ...lostObj });
     }
   }
   function dimSVG(dim, lines, texts, lay = layout, sh = dwg()) {
     const v = lay.views[dim.view]; if (!v) return;
     const st = sheetDimStyle(sh);
+    const isLost = !!dim.lost, lostObj = isLost ? { lost: true } : {};
     const TXT = st.fontSize, AR = clamp(TXT * 0.85, 2, 7), EXT = Math.max(2, TXT * 0.55), GAPX = 1, TGAP = Math.max(1.2, TXT * 0.34), aStyle = st.arrow;
     if (dim.type === 'lin') {
       const A = toSheet(v, dim.a), B = toSheet(v, dim.b);
@@ -1876,8 +2377,8 @@ const Drawing = (() => {
         const sg = Math.sign(off) || 1;
         E1s = [[A[0] + nx * sg * GAPX, A[1] + ny * sg * GAPX], [P1[0] + nx * sg * EXT, P1[1] + ny * sg * EXT]]; E2s = [[B[0] + nx * sg * GAPX, B[1] + ny * sg * GAPX], [P2[0] + nx * sg * EXT, P2[1] + ny * sg * EXT]];
       }
-      lines.push({ pts: E1s, cls: 'dim', id: dim.id }, { pts: E2s, cls: 'dim', id: dim.id });
-      drawSpanDim(lines, texts, P1, P2, val, dim, true, st);
+      lines.push({ pts: E1s, cls: 'dim', id: dim.id, ...lostObj }, { pts: E2s, cls: 'dim', id: dim.id, ...lostObj });
+      drawSpanDim(lines, texts, P1, P2, val, dim, true, st, isLost);
     } else if (dim.type === 'dia' || dim.type === 'rad') {
       const C = toSheet(v, dim.c); const R = dim.r * v.s; const ang = ((dim.ang ?? 45) * Math.PI) / 180;
       const ux = Math.cos(ang), uy = -Math.sin(ang);
@@ -1898,25 +2399,25 @@ const Drawing = (() => {
       if (dim.type === 'dia') {
         const Q = [C[0] - ux * R, C[1] - uy * R];
         if (dim.partial) {
-          lines.push({ pts: [C, P], cls: 'dim', id: dim.id });
-          arrowHead(lines, P, R >= AR * 1.3 ? C : out, AR, true, dim.id, null, aStyle);
+          lines.push({ pts: [C, P], cls: 'dim', id: dim.id, ...lostObj });
+          arrowHead(lines, P, R >= AR * 1.3 ? C : out, AR, true, dim.id, null, aStyle, null, null, isLost);
         } else if (2 * R >= AR * 2.6 || aStyle === 'slash' || aStyle === 'dot') {
-          lines.push({ pts: [Q, P], cls: 'dim', id: dim.id });
-          arrowHead(lines, Q, P, AR, true, dim.id, null, aStyle);
-          arrowHead(lines, P, Q, AR, true, dim.id, null, aStyle);
+          lines.push({ pts: [Q, P], cls: 'dim', id: dim.id, ...lostObj });
+          arrowHead(lines, Q, P, AR, true, dim.id, null, aStyle, null, null, isLost);
+          arrowHead(lines, P, Q, AR, true, dim.id, null, aStyle, null, null, isLost);
         } else {
           // kleine Kreise: Pfeile von außen
           const Q2 = [Q[0] - ux * AR * 2.2, Q[1] - uy * AR * 2.2];
-          lines.push({ pts: [Q2, P], cls: 'dim', id: dim.id });
-          arrowHead(lines, Q, Q2, AR, true, dim.id, null, aStyle);
-          arrowHead(lines, P, out, AR, true, dim.id, null, aStyle);
+          lines.push({ pts: [Q2, P], cls: 'dim', id: dim.id, ...lostObj });
+          arrowHead(lines, Q, Q2, AR, true, dim.id, null, aStyle, null, null, isLost);
+          arrowHead(lines, P, out, AR, true, dim.id, null, aStyle, null, null, isLost);
         }
       } else if (R >= AR * 1.3) {
-        lines.push({ pts: [C, P], cls: 'dim', id: dim.id });
-        arrowHead(lines, P, C, AR, true, dim.id, null, aStyle);
-      } else arrowHead(lines, P, out, AR, true, dim.id, null, aStyle);
-      lines.push({ pts: [P, out, tail], cls: 'dim', id: dim.id });
-      emitDimTexts(texts, (out[0] + tail[0]) / 2, out[1] - TGAP, 0, dim, mainLabel, prefix, tolInfo, TXT);
+        lines.push({ pts: [C, P], cls: 'dim', id: dim.id, ...lostObj });
+        arrowHead(lines, P, C, AR, true, dim.id, null, aStyle, null, null, isLost);
+      } else arrowHead(lines, P, out, AR, true, dim.id, null, aStyle, null, null, isLost);
+      lines.push({ pts: [P, out, tail], cls: 'dim', id: dim.id, ...lostObj });
+      emitDimTexts(texts, (out[0] + tail[0]) / 2, out[1] - TGAP, 0, dim, mainLabel, prefix, tolInfo, TXT, isLost);
     } else if (dim.type === 'chamfer') {
       const P = toSheet(v, dim.p);
       const ux = dim.dir[0], uy = -dim.dir[1];
@@ -1930,9 +2431,9 @@ const Drawing = (() => {
       const label = `${fmtDim(dim.dist, st)}×${angTxt}`;
       const tl = textW(label, TXT) * 0.92 + 2;
       const tail = [out[0] + (ux >= 0 ? tl : -tl), out[1]];
-      arrowHead(lines, P, out, AR, true, dim.id, null, aStyle);
-      lines.push({ pts: [P, out, tail], cls: 'dim', id: dim.id });
-      texts.push({ x: (out[0] + tail[0]) / 2, y: out[1] - TGAP, t: label, size: TXT, rot: 0, anchor: 'middle', id: dim.id, cls: 'dimtext' });
+      arrowHead(lines, P, out, AR, true, dim.id, null, aStyle, null, null, isLost);
+      lines.push({ pts: [P, out, tail], cls: 'dim', id: dim.id, ...lostObj });
+      texts.push({ x: (out[0] + tail[0]) / 2, y: out[1] - TGAP, t: label, size: TXT, rot: 0, anchor: 'middle', id: dim.id, cls: 'dimtext', ...lostObj });
     } else if (dim.type === 'ang') {
       const VC = toSheet(v, dim.v), R = Math.max(3, dim.r * v.s), rModel = R / v.s;
       const a0 = dim.a0, a1 = dim.a1;
@@ -1948,26 +2449,26 @@ const Drawing = (() => {
         const tMin = Math.min(tA, tB), tMax = Math.max(tA, tB);
         if (rModel > tMax + 1e-3) {
           const s0 = Math.max(0, tMax) + GAPX / v.s, s1 = rModel + EXT / v.s;
-          lines.push({ pts: [toSheet(v, [dim.v[0] + ux * s0, dim.v[1] + uy * s0]), toSheet(v, [dim.v[0] + ux * s1, dim.v[1] + uy * s1])], cls: 'dim', id: dim.id });
+          lines.push({ pts: [toSheet(v, [dim.v[0] + ux * s0, dim.v[1] + uy * s0]), toSheet(v, [dim.v[0] + ux * s1, dim.v[1] + uy * s1])], cls: 'dim', id: dim.id, ...lostObj });
         } else if (rModel < tMin - 1e-3) {
           const s0 = Math.max(0, rModel - EXT / v.s), s1 = tMin - GAPX / v.s;
-          if (s1 > s0) lines.push({ pts: [toSheet(v, [dim.v[0] + ux * s0, dim.v[1] + uy * s0]), toSheet(v, [dim.v[0] + ux * s1, dim.v[1] + uy * s1])], cls: 'dim', id: dim.id });
+          if (s1 > s0) lines.push({ pts: [toSheet(v, [dim.v[0] + ux * s0, dim.v[1] + uy * s0]), toSheet(v, [dim.v[0] + ux * s1, dim.v[1] + uy * s1])], cls: 'dim', id: dim.id, ...lostObj });
         }
       }
       const nA0 = ((a0 % TWO_PI) + TWO_PI) % TWO_PI;
       const nA1 = nA0 + span;
       const aPts = arcPts(dim.v, rModel, a0, a1).map((q) => toSheet(v, q));
-      lines.push({ pts: aPts, arc: { c: VC, r: R, a: [nA0, nA1 <= TWO_PI ? nA1 : nA1 - TWO_PI] }, cls: 'dim', id: dim.id });
+      lines.push({ pts: aPts, arc: { c: VC, r: R, a: [nA0, nA1 <= TWO_PI ? nA1 : nA1 - TWO_PI] }, cls: 'dim', id: dim.id, ...lostObj });
       const inside = (aStyle === 'slash' || aStyle === 'dot') ? true : span * R > AR * 2.6;
       const from0 = [P0[0] - Math.sin(a0) * AR, P0[1] - Math.cos(a0) * AR];
       const from1 = [P1[0] + Math.sin(a1) * AR, P1[1] + Math.cos(a1) * AR];
-      arrowHead(lines, P0, from0, AR, inside, dim.id, null, aStyle);
-      arrowHead(lines, P1, from1, AR, inside, dim.id, null, aStyle);
+      arrowHead(lines, P0, from0, AR, inside, dim.id, null, aStyle, null, null, isLost);
+      arrowHead(lines, P1, from1, AR, inside, dim.id, null, aStyle, null, null, isLost);
       if (!inside) {
         const extA = (AR * 2.4) / R;
         lines.push(
-          { pts: arcPts(dim.v, rModel, a0 - extA, a0).map((q) => toSheet(v, q)), cls: 'dim', id: dim.id },
-          { pts: arcPts(dim.v, rModel, a1, a1 + extA).map((q) => toSheet(v, q)), cls: 'dim', id: dim.id }
+          { pts: arcPts(dim.v, rModel, a0 - extA, a0).map((q) => toSheet(v, q)), cls: 'dim', id: dim.id, ...lostObj },
+          { pts: arcPts(dim.v, rModel, a1, a1 + extA).map((q) => toSheet(v, q)), cls: 'dim', id: dim.id, ...lostObj }
         );
       }
       const deg = (span * 180) / Math.PI;
@@ -1976,7 +2477,7 @@ const Drawing = (() => {
       const radOut = R + Math.max(3.2, TXT * 0.95);
       const tx = VC[0] + Math.cos(am) * radOut;
       const ty = VC[1] - Math.sin(am) * radOut + TXT * 0.34;
-      texts.push({ x: tx, y: ty, t: label, size: TXT, rot: 0, anchor: 'middle', id: dim.id, cls: 'dimtext' });
+      texts.push({ x: tx, y: ty, t: label, size: TXT, rot: 0, anchor: 'middle', id: dim.id, cls: 'dimtext', ...lostObj });
     } else if (dim.type === 'chain') {
       const pts = [...(dim.pts || [])];
       if (pts.length < 2) return;
@@ -1986,11 +2487,11 @@ const Drawing = (() => {
         const SP = pts.map((p) => toSheet(v, p));
         for (const P of SP) {
           const sgn = Math.sign(yl - P[1]) || 1;
-          lines.push({ pts: [[P[0], P[1] + sgn * GAPX], [P[0], yl + sgn * EXT]], cls: 'dim', id: dim.id });
+          lines.push({ pts: [[P[0], P[1] + sgn * GAPX], [P[0], yl + sgn * EXT]], cls: 'dim', id: dim.id, ...lostObj });
         }
         for (let i = 0; i < SP.length - 1; i++) {
           const val = Math.abs(pts[i + 1][0] - pts[i][0]);
-          drawSpanDim(lines, texts, [SP[i][0], yl], [SP[i + 1][0], yl], val, dim.id, i === 0 || i === SP.length - 2, st);
+          drawSpanDim(lines, texts, [SP[i][0], yl], [SP[i + 1][0], yl], val, dim.id, i === 0 || i === SP.length - 2, st, isLost);
         }
       } else {
         pts.sort((p, q) => p[1] - q[1]);
@@ -1998,11 +2499,11 @@ const Drawing = (() => {
         const SP = pts.map((p) => toSheet(v, p));
         for (const P of SP) {
           const sgn = Math.sign(xl - P[0]) || -1;
-          lines.push({ pts: [[P[0] + sgn * GAPX, P[1]], [xl + sgn * EXT, P[1]]], cls: 'dim', id: dim.id });
+          lines.push({ pts: [[P[0] + sgn * GAPX, P[1]], [xl + sgn * EXT, P[1]]], cls: 'dim', id: dim.id, ...lostObj });
         }
         for (let i = 0; i < SP.length - 1; i++) {
           const val = Math.abs(pts[i + 1][1] - pts[i][1]);
-          drawSpanDim(lines, texts, [xl, SP[i][1]], [xl, SP[i + 1][1]], val, dim.id, i === 0 || i === SP.length - 2, st);
+          drawSpanDim(lines, texts, [xl, SP[i][1]], [xl, SP[i + 1][1]], val, dim.id, i === 0 || i === SP.length - 2, st, isLost);
         }
       }
     } else if (dim.type === 'base') {
@@ -2016,26 +2517,26 @@ const Drawing = (() => {
         const yl0 = toSheet(v, [0, dim.linePos])[1];
         const outSign = yl0 >= B0[1] ? 1 : -1;
         const ylLast = yl0 + (pts.length - 1) * outSign * STEP_SHEET;
-        lines.push({ pts: [[B0[0], B0[1] + outSign * GAPX], [B0[0], ylLast + outSign * EXT]], cls: 'dim', id: dim.id });
+        lines.push({ pts: [[B0[0], B0[1] + outSign * GAPX], [B0[0], ylLast + outSign * EXT]], cls: 'dim', id: dim.id, ...lostObj });
         for (let i = 0; i < pts.length; i++) {
           const P = toSheet(v, pts[i]);
           const yli = yl0 + i * outSign * STEP_SHEET;
           const sgn = Math.sign(yli - P[1]) || outSign;
-          lines.push({ pts: [[P[0], P[1] + sgn * GAPX], [P[0], yli + sgn * EXT]], cls: 'dim', id: dim.id });
-          drawSpanDim(lines, texts, [B0[0], yli], [P[0], yli], Math.abs(pts[i][0] - basePt[0]), dim.id, true, st);
+          lines.push({ pts: [[P[0], P[1] + sgn * GAPX], [P[0], yli + sgn * EXT]], cls: 'dim', id: dim.id, ...lostObj });
+          drawSpanDim(lines, texts, [B0[0], yli], [P[0], yli], Math.abs(pts[i][0] - basePt[0]), dim.id, true, st, isLost);
         }
       } else {
         pts.sort((p, q) => Math.abs(p[1] - basePt[1]) - Math.abs(q[1] - basePt[1]));
         const xl0 = toSheet(v, [dim.linePos, 0])[0];
         const outSign = xl0 <= B0[0] ? -1 : 1;
         const xlLast = xl0 + (pts.length - 1) * outSign * STEP_SHEET;
-        lines.push({ pts: [[B0[0] + outSign * GAPX, B0[1]], [xlLast + outSign * EXT, B0[1]]], cls: 'dim', id: dim.id });
+        lines.push({ pts: [[B0[0] + outSign * GAPX, B0[1]], [xlLast + outSign * EXT, B0[1]]], cls: 'dim', id: dim.id, ...lostObj });
         for (let i = 0; i < pts.length; i++) {
           const P = toSheet(v, pts[i]);
           const xli = xl0 + i * outSign * STEP_SHEET;
           const sgn = Math.sign(xli - P[0]) || outSign;
-          lines.push({ pts: [[P[0] + sgn * GAPX, P[1]], [xli + sgn * EXT, P[1]]], cls: 'dim', id: dim.id });
-          drawSpanDim(lines, texts, [xli, B0[1]], [xli, P[1]], Math.abs(pts[i][1] - basePt[1]), dim.id, true, st);
+          lines.push({ pts: [[P[0] + sgn * GAPX, P[1]], [xli + sgn * EXT, P[1]]], cls: 'dim', id: dim.id, ...lostObj });
+          drawSpanDim(lines, texts, [xli, B0[1]], [xli, P[1]], Math.abs(pts[i][1] - basePt[1]), dim.id, true, st, isLost);
         }
       }
     }
@@ -2049,10 +2550,10 @@ const Drawing = (() => {
     if (st && st.decimals != null) return fmtFixed(deg, st.decimals) + '°';
     return Math.abs(deg - Math.round(deg)) < 0.05 ? `${Math.round(deg)}°` : fmtAngleU(deg);
   }
-  function arrowHead(lines, tip, from, len, inside, id, secId, style = 'filled', clsOverride = null, view = null) {
+  function arrowHead(lines, tip, from, len, inside, id, secId, style = 'filled', clsOverride = null, view = null, isLost = false) {
     const dx = from[0] - tip[0], dy = from[1] - tip[1]; const L = Math.hypot(dx, dy) || 1; let ux = dx / L, uy = dy / L;
     if (!inside && (style === 'filled' || style === 'open')) { ux = -ux; uy = -uy; }
-    const extra = { id, ...(secId ? { secId } : {}), ...(view ? { view } : {}) };
+    const extra = { id, ...(secId ? { secId } : {}), ...(view ? { view } : {}), ...(isLost ? { lost: true } : {}) };
     if (style === 'open') {
       const w = len * 0.32;
       const b = [tip[0] + ux * len, tip[1] + uy * len];
@@ -2201,6 +2702,76 @@ const Drawing = (() => {
       texts.push({ x: tx, y, t: tLines[i], size: TXT, rot: 0, anchor, id: note.id, view: note.view || undefined, cls: 'leadertext' });
     }
   }
+  function drawBalloon(bl, lines, texts, lay = layout, sh = dwg(), bom = bomData) {
+    const st = sheetDimStyle(sh);
+    let A;
+    if (bl.view) {
+      const v = lay.views[bl.view];
+      if (!v) return;
+      A = toSheet(v, bl.anchor);
+    } else {
+      A = [bl.anchor[0], bl.anchor[1]];
+    }
+    const off = (dragBalloon && dragBalloon.id === bl.id && dragBalloon.curOffset) ? dragBalloon.curOffset : (bl.offset || [14, -12]);
+    const C = [A[0] + off[0], A[1] + off[1]];
+    const pos = resolveBalloonPos(bl, bom);
+    const posStr = String(pos);
+    const FS = clamp(st.fontSize * 1.05, 2.8, 7.5);
+    const R = Math.max(clamp(FS * 1.15, 3.6, 8.0), (textW(posStr, FS) + 2.4) / 2);
+    const dx = C[0] - A[0], dy = C[1] - A[1], dist = Math.hypot(dx, dy);
+    const E = dist > R + 0.5 ? [C[0] - (dx / dist) * R, C[1] - (dy / dist) * R] : A;
+    const tipKind = bl.tip === 'arrow' ? 'arrow' : 'dot';
+    if (dist > R + 0.5) {
+      lines.push({ pts: [A, E], cls: 'balloon-line', id: bl.id, view: bl.view || undefined, balloonPos: pos, anchorPt: A });
+    }
+    if (tipKind === 'arrow') {
+      if (dist > 1) arrowHead(lines, A, C, clamp(st.fontSize * 0.82, 2.2, 6.0), true, bl.id, null, 'filled', 'balloon-arrow', bl.view || undefined);
+    } else {
+      lines.push({ circle: [A[0], A[1], Math.max(0.75, FS * 0.22)], cls: 'balloon-dot', id: bl.id, view: bl.view || undefined, balloonPos: pos, anchorPt: A });
+    }
+    lines.push({ circle: [C[0], C[1], R], cls: 'balloon-circle', id: bl.id, view: bl.view || undefined, balloonPos: pos });
+    texts.push({ x: C[0], y: C[1] + FS * 0.35, t: posStr, size: FS, rot: 0, anchor: 'middle', id: bl.id, view: bl.view || undefined, cls: 'balloon-text', balloonPos: pos });
+  }
+  function drawBomTable(sh, lay, lines, texts) {
+    const br = lay && lay.bomRect;
+    if (!br) return;
+    const [cPos, cQty, cName, cMat] = br.cols;
+    const x0 = br.x, y0 = br.y, x1 = x0 + br.w, y1 = y0 + br.h;
+    const cx1 = x0 + cPos, cx2 = cx1 + cQty, cx3 = cx2 + cName;
+    lines.push({ rect: [x0, y0, br.w, br.h], cls: 'bom-bg', id: '__bom__' });
+    lines.push({ rect: [x0, y0, br.w, br.h], cls: 'bom-frame', id: '__bom__' });
+    lines.push({ pts: [[x0, y0 + br.hh], [x1, y0 + br.hh]], cls: 'bom-head-line', id: '__bom__' });
+    lines.push(
+      { pts: [[cx1, y0], [cx1, y1]], cls: 'bom-grid', id: '__bom__' },
+      { pts: [[cx2, y0], [cx2, y1]], cls: 'bom-grid', id: '__bom__' },
+      { pts: [[cx3, y0], [cx3, y1]], cls: 'bom-grid', id: '__bom__' },
+    );
+    const hy = y0 + br.hh * 0.66;
+    texts.push(
+      { x: x0 + cPos / 2, y: hy, t: 'Pos.', size: 2.9, anchor: 'middle', cls: 'bom-th', id: '__bom__' },
+      { x: cx1 + cQty / 2, y: hy, t: 'Menge', size: 2.9, anchor: 'middle', cls: 'bom-th', id: '__bom__' },
+      { x: cx2 + 1.8, y: hy, t: 'Name', size: 2.9, anchor: 'start', cls: 'bom-th', id: '__bom__' },
+      { x: cx3 + 1.8, y: hy, t: 'Werkstoff', size: 2.9, anchor: 'start', cls: 'bom-th', id: '__bom__' },
+    );
+    if (!br.rows.length) {
+      texts.push({ x: x0 + br.w / 2, y: y0 + br.hh + br.rh * 0.66, t: 'Noch keine Teile im Modell', size: 2.6, anchor: 'middle', cls: 'bom-td', id: '__bom__' });
+      return;
+    }
+    for (let i = 0; i < br.rows.length; i++) {
+      const r = br.rows[i];
+      const ry = y0 + br.hh + i * br.rh;
+      if (i > 0) lines.push({ pts: [[x0, ry], [x1, ry]], cls: 'bom-grid', id: '__bom__' });
+      const ty = ry + br.rh * 0.67;
+      const fsN = fitSize(r.name, cName - 3.2, 2.9, 1.8);
+      const fsM = fitSize(r.mat, cMat - 3.2, 2.8, 1.8);
+      texts.push(
+        { x: x0 + cPos / 2, y: ty, t: String(r.pos), size: 2.9, anchor: 'middle', cls: 'bom-td', id: '__bom__', bomRow: r.pos, bomCol: 'pos' },
+        { x: cx1 + cQty / 2, y: ty, t: String(r.n), size: 2.9, anchor: 'middle', cls: 'bom-td', id: '__bom__', bomRow: r.pos, bomCol: 'qty' },
+        { x: cx2 + 1.8, y: ty, t: clipText(r.name, cName - 3.2, fsN), size: fsN, anchor: 'start', cls: 'bom-td', id: '__bom__', bomRow: r.pos, bomCol: 'name' },
+        { x: cx3 + 1.8, y: ty, t: clipText(r.mat, cMat - 3.2, fsM), size: fsM, anchor: 'start', cls: 'bom-td', id: '__bom__', bomRow: r.pos, bomCol: 'mat' },
+      );
+    }
+  }
   function getShadedImage(name, v) {
     if (!proj || !proj.views || !proj.views[name] || !v || !v.geo || typeof Viewer === 'undefined' || !Viewer.renderOrthoView) return null;
     const pv = proj.views[name];
@@ -2325,8 +2896,11 @@ const Drawing = (() => {
     for (const dim of autoDimList(sh, lay)) if (lay.views[dim.view] && !lay.views[dim.view].noDims) dimSVG(dim, lines, texts, lay, sh);
     // Notizen mit Hinweislinie
     for (const note of sh.notes || []) drawLeaderNote(note, lines, texts, lay, sh);
-    // Schriftfeld
+    // Positionsnummern
+    for (const bl of sh.balloons || []) drawBalloon(bl, lines, texts, lay, sh, bomData);
+    // Schriftfeld & Stückliste
     titleBlock(sh, lay, idx, total, lines, texts);
+    drawBomTable(sh, lay, lines, texts);
     return { layout: lay, lines, texts, images };
   }
   function render() {
@@ -2344,6 +2918,7 @@ const Drawing = (() => {
     if (tool === 'detail' && toolState) previewDetail(cur.lines, cur.texts);
     if (tool === 'section' && toolState) previewSection(cur.lines, cur.texts);
     if (tool === 'note' && toolState) previewNote(cur.lines, cur.texts);
+    if (tool === 'balloon' && toolState) previewBalloon(cur.lines, cur.texts);
     buildSVG(cur.lines, cur.texts, cur.images);
     const sv = document.getElementById('dw-scale-val'); if (sv) sv.textContent = scaleText(layout.s);
     renderTabs();
@@ -2401,7 +2976,7 @@ const Drawing = (() => {
   function textW(t, size) { return String(t).length * size * 0.56; }
   function fitSize(t, w, max, min) { const n = String(t).length || 1; return Math.max(min, Math.min(max, w / (n * 0.56))); }
   function clipText(t, w, size) { t = String(t); if (textW(t, size) <= w) return t; const n = Math.max(1, Math.floor(w / (size * 0.56)) - 1); return t.slice(0, n) + '…'; }
-  const SHEET_SVG_CSS = `.paper{fill:#fff;stroke:none}.frame{fill:none;stroke:#111;stroke-width:.7}.thin{fill:none;stroke:#111;stroke-width:.25}.vis{fill:none;stroke:#111;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round}.tan{fill:none;stroke:#444;stroke-width:.2;stroke-linecap:round;stroke-linejoin:round}.hid{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:2.4 1.2}.ctr{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:5 1.2 .6 1.2}.ctr[data-id]{cursor:pointer}.ctr.sel{stroke:#0c7a70;stroke-width:.45}.hatch{fill:none;stroke:#111;stroke-width:.22}.cutline{fill:none;stroke:#111;stroke-width:.35;stroke-dasharray:7 1.2 .7 1.2}.cutend{fill:none;stroke:#111;stroke-width:.7;stroke-linecap:square}.dim{fill:none;stroke:#111;stroke-width:.25}.arrow{fill:#111;stroke:none}.arrow-open{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round}.arrow-slash{fill:none;stroke:#111;stroke-width:.45;stroke-linecap:round}.arrow-dot,.leader-dot,.leader-arrow{fill:#111;stroke:none}.leader{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.view-sel{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:2 1.5;pointer-events:none}.detail{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.detail-border{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:3 1.5;cursor:grab}.detail.sel,.detail-border.sel{stroke:#0c7a70;stroke-width:.45}.sel .dim,.dim.sel,.cutline.sel,.cutend.sel,.hatch.sel,.arrow-open.sel,.arrow-slash.sel{stroke:#0c7a70}.dim.sel,.leader.sel{stroke:#0c7a70;stroke-width:.4}.arrow.sel,.arrow-dot.sel,.leader-dot.sel,.leader-arrow.sel{fill:#0c7a70}text{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif;fill:#111}text.dimtext{cursor:pointer}text.lab{fill:#555}text.note{fill:#888}text.vlabel{fill:#333;font-weight:500}text.cutlabel,text.viewlabel{font-weight:700}text.sel{fill:#0c7a70}text.detail-lbl{font-weight:600;cursor:pointer}text.leadertext{cursor:grab}.prev{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:1.5 1}.snap{fill:none;stroke:#0c7a70;stroke-width:.4}`;
+  const SHEET_SVG_CSS = `.paper{fill:#fff;stroke:none}.frame{fill:none;stroke:#111;stroke-width:.7}.thin{fill:none;stroke:#111;stroke-width:.25}.vis{fill:none;stroke:#111;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round}.tan{fill:none;stroke:#444;stroke-width:.2;stroke-linecap:round;stroke-linejoin:round}.hid{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:2.4 1.2}.ctr{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:5 1.2 .6 1.2}.ctr[data-id]{cursor:pointer}.ctr.sel{stroke:#0c7a70;stroke-width:.45}.hatch{fill:none;stroke:#111;stroke-width:.22}.cutline{fill:none;stroke:#111;stroke-width:.35;stroke-dasharray:7 1.2 .7 1.2}.cutend{fill:none;stroke:#111;stroke-width:.7;stroke-linecap:square}.dim{fill:none;stroke:#111;stroke-width:.25}.arrow{fill:#111;stroke:none}.arrow-open{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round}.arrow-slash{fill:none;stroke:#111;stroke-width:.45;stroke-linecap:round}.arrow-dot,.leader-dot,.leader-arrow,.balloon-dot,.balloon-arrow{fill:#111;stroke:none}.leader,.balloon-line{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.balloon-circle{fill:#fff;stroke:#111;stroke-width:.35;cursor:grab}.bom-bg{fill:#fff;stroke:none;cursor:grab}.bom-frame{fill:none;stroke:#111;stroke-width:.5;cursor:grab}.bom-head-line{fill:none;stroke:#111;stroke-width:.35}.bom-grid{fill:none;stroke:#111;stroke-width:.22}.bom-frame.sel,.bom-head-line.sel,.bom-grid.sel{stroke:#0c7a70}.view-sel{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:2 1.5;pointer-events:none}.detail{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.detail-border{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:3 1.5;cursor:grab}.detail.sel,.detail-border.sel{stroke:#0c7a70;stroke-width:.45}.sel .dim,.dim.sel,.cutline.sel,.cutend.sel,.hatch.sel,.arrow-open.sel,.arrow-slash.sel,.balloon-circle.sel{stroke:#0c7a70}.dim.sel,.leader.sel,.balloon-line.sel{stroke:#0c7a70;stroke-width:.4}.arrow.sel,.arrow-dot.sel,.leader-dot.sel,.leader-arrow.sel,.balloon-dot.sel,.balloon-arrow.sel{fill:#0c7a70}.dim.lost,.arrow-open.lost,.arrow-slash.lost{stroke:#c9372e;stroke-width:.38}.dim.lost{stroke-dasharray:2 1}.arrow.lost,.arrow-dot.lost{fill:#c9372e}text{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif;fill:#111}text.dimtext{cursor:pointer}text.lab{fill:#555}text.note{fill:#888}text.vlabel{fill:#333;font-weight:500}text.cutlabel,text.viewlabel,text.bom-th{font-weight:700}text.balloon-text{font-weight:600;cursor:grab}text.bom-td{cursor:grab}text.sel{fill:#0c7a70}text.dimtext.lost{fill:#c9372e;font-weight:600}.dim.lost.sel,.arrow-open.lost.sel,.arrow-slash.lost.sel{stroke:#991b1b;stroke-width:.5}.arrow.lost.sel,.arrow-dot.lost.sel{fill:#991b1b}text.dimtext.lost.sel{fill:#991b1b}text.detail-lbl{font-weight:600;cursor:pointer}text.leadertext{cursor:grab}.prev{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:1.5 1}.snap{fill:none;stroke:#0c7a70;stroke-width:.4}`;
   function buildSheetSVGElement(cur, { widthAttr, heightAttr, transparent = false, interactive = false } = {}) {
     const { W, H } = cur.layout;
     const lines = cur.lines || [], texts = cur.texts || [], images = cur.images || [];
@@ -2427,14 +3002,16 @@ const Drawing = (() => {
       else if (l.circle) { el = document.createElementNS(NS, 'circle'); el.setAttribute('cx', f(l.circle[0])); el.setAttribute('cy', f(l.circle[1])); el.setAttribute('r', f(l.circle[2])); }
       else if (l.poly) { el = document.createElementNS(NS, 'polygon'); el.setAttribute('points', l.poly.map((p) => f(p[0]) + ',' + f(p[1])).join(' ')); }
       else { el = document.createElementNS(NS, 'polyline'); el.setAttribute('points', l.pts.map((p) => f(p[0]) + ',' + f(p[1])).join(' ')); }
-      el.setAttribute('class', l.cls + (sel ? ' sel' : ''));
+      el.setAttribute('class', l.cls + (l.lost ? ' lost' : '') + (sel ? ' sel' : ''));
       if (interactive) {
         if (l.id) el.dataset.id = l.id;
+        if (l.lost) el.dataset.lost = '1';
         if (l.view) el.dataset.view = l.view;
         if (l.ctrType) el.dataset.ctr = l.ctrType;
         if (l.secId) el.dataset.sec = l.secId;
         if (l.capIdx != null) el.dataset.cap = String(l.capIdx);
         if (l.noteTip) el.dataset.tipKind = l.noteTip;
+        if (l.balloonPos != null) el.dataset.pos = String(l.balloonPos);
         if (l.anchorPt) { el.dataset.ax = f(l.anchorPt[0]); el.dataset.ay = f(l.anchorPt[1]); }
       }
       g.append(el);
@@ -2458,12 +3035,16 @@ const Drawing = (() => {
       const el = document.createElementNS(NS, 'text');
       el.setAttribute('x', f(t.x)); el.setAttribute('y', f(t.y)); el.setAttribute('font-size', f(t.size)); el.setAttribute('text-anchor', t.anchor || 'start');
       if (t.rot) el.setAttribute('transform', `rotate(${f(t.rot)} ${f(t.x)} ${f(t.y)})`);
-      el.setAttribute('class', (t.cls || '') + (interactive && t.id && t.id === selDim ? ' sel' : ''));
+      el.setAttribute('class', (t.cls || '') + (t.lost ? ' lost' : '') + (interactive && t.id && t.id === selDim ? ' sel' : ''));
       if (interactive) {
         if (t.id) el.dataset.id = t.id;
+        if (t.lost) el.dataset.lost = '1';
         if (t.view) el.dataset.view = t.view;
         if (t.secId) el.dataset.sec = t.secId;
         if (t.tolPart) el.dataset.tol = t.tolPart;
+        if (t.balloonPos != null) el.dataset.pos = String(t.balloonPos);
+        if (t.bomRow != null) el.dataset.bomRow = String(t.bomRow);
+        if (t.bomCol) el.dataset.bomCol = t.bomCol;
       }
       el.textContent = t.t;
       g.append(el);
@@ -2811,7 +3392,8 @@ const Drawing = (() => {
     const d = dwg();
     const hasMain = d.viewPos && Object.keys(d.viewPos).length > 0;
     const hasSec = (d.sections || []).some((s) => Array.isArray(s.pos));
-    if (!hasMain && !hasSec && !viewName) return false;
+    const hasBomPos = !viewName && d.bomTable && Array.isArray(d.bomTable.pos);
+    if (!hasMain && !hasSec && !hasBomPos && !viewName) return false;
     App.change('Ansichten zurückgesetzt', () => {
       const sh = dwg();
       if (viewName) {
@@ -2823,6 +3405,7 @@ const Drawing = (() => {
       } else {
         sh.viewPos = {};
         for (const s of sh.sections || []) s.pos = null;
+        if (sh.bomTable) sh.bomTable.pos = null;
       }
     });
     render(); Panels.renderRight();
@@ -3013,6 +3596,431 @@ const Drawing = (() => {
       }, lines, texts, layout, dwg());
     }
   }
+  // ---------- Positionsnummern & Stückliste auf dem Blatt (ZE-12) ----------
+  function viewBasis(viewName, sh = dwg()) {
+    if (!proj) return null;
+    if (String(viewName).startsWith('sec_')) {
+      const sec = (sh.sections || []).find((x) => 'sec_' + x.id === viewName);
+      if (!sec) return null;
+      const sv = proj.sections && proj.sections[secCacheKey(sec)];
+      if (sv && sv.dir && sv.x && sv.y) return { dir: sv.dir, x: sv.x, y: sv.y };
+      const sp = sectionPlaneSpec(sec);
+      return { dir: sp.dir, x: sp.x, y: sp.y };
+    }
+    const det = (sh.details || []).find((x) => x.id === viewName);
+    const key = det ? det.source : viewName;
+    const pv = proj.views && proj.views[key];
+    if (pv && pv.dir && pv.x && pv.y) return { dir: pv.dir, x: pv.x, y: pv.y };
+    if (STD_DIR[key]) {
+      const { dir, x } = STD_DIR[key];
+      return { dir, x, y: vNorm(vCross(dir, x)) };
+    }
+    const ev = (sh.extraViews || []).find((x) => x.id === key);
+    if (ev) return { dir: ev.dir, x: ev.x, y: vNorm(vCross(ev.dir, ev.x)) };
+    return null;
+  }
+  function projectPartInView(part, basis) {
+    if (!part || !part.bbox || !basis) return null;
+    const b = part.bbox;
+    const ex = basis.x, ey = basis.y, d = basis.dir;
+    let uMin = Infinity, uMax = -Infinity, vMin = Infinity, vMax = -Infinity;
+    let dMin = Infinity, dMax = -Infinity;
+    for (const x of [b[0], b[3]]) for (const y of [b[1], b[4]]) for (const z of [b[2], b[5]]) {
+      const u = x * ex[0] + y * ex[1] + z * ex[2];
+      const v = x * ey[0] + y * ey[1] + z * ey[2];
+      const dp = x * d[0] + y * d[1] + z * d[2];
+      if (u < uMin) uMin = u; if (u > uMax) uMax = u;
+      if (v < vMin) vMin = v; if (v > vMax) vMax = v;
+      if (dp < dMin) dMin = dp; if (dp > dMax) dMax = dp;
+    }
+    const c = Array.isArray(part.com) && part.com.length >= 3
+      ? part.com
+      : [(b[0] + b[3]) * 0.5, (b[1] + b[4]) * 0.5, (b[2] + b[5]) * 0.5];
+    const cu = clamp(c[0] * ex[0] + c[1] * ex[1] + c[2] * ex[2], uMin, uMax);
+    const cv = clamp(c[0] * ey[0] + c[1] * ey[1] + c[2] * ey[2], vMin, vMax);
+    return { box2: [uMin, vMin, uMax, vMax], center2: [cu, cv], minDepth: dMin, maxDepth: dMax };
+  }
+  function chooseBalloonView(sh, lay, rows, partsById) {
+    const avail = Object.keys(lay.views || {}).filter((k) => k !== 'free' && lay.views[k] && lay.views[k].geo && lay.views[k].geo.box);
+    if (!avail.length) return null;
+    if (balloonViewPref && balloonViewPref !== 'auto' && avail.includes(balloonViewPref)) return balloonViewPref;
+    const bonus = { front: 3, iso: 2.5, top: 2, left: 1 };
+    let bestKey = avail[0], bestScore = -Infinity;
+    for (const vk of avail) {
+      const v = lay.views[vk];
+      const basis = viewBasis(vk, sh);
+      if (!basis) continue;
+      const pts = [];
+      for (const row of rows) {
+        let chosen = null, bestD = -Infinity;
+        for (const id of row.ids) {
+          const p = partsById.get(id);
+          const pr = projectPartInView(p, basis);
+          if (!pr) continue;
+          if (pr.maxDepth > bestD) { bestD = pr.maxDepth; chosen = pr; }
+        }
+        if (chosen) pts.push(toSheet(v, chosen.center2));
+      }
+      let minDist = pts.length > 1 ? Infinity : 20;
+      let sumDist = 0, cnt = 0;
+      for (let i = 0; i < pts.length; i++) {
+        for (let j = i + 1; j < pts.length; j++) {
+          const d = Math.hypot(pts[i][0] - pts[j][0], pts[i][1] - pts[j][1]);
+          if (d < minDist) minDist = d;
+          sumDist += d; cnt++;
+        }
+      }
+      const avgDist = cnt ? sumDist / cnt : 20;
+      const sc = minDist * 3 + avgDist * 0.25 + (bonus[vk] || (v.is3d ? 2.2 : 0.5));
+      if (sc > bestScore) { bestScore = sc; bestKey = vk; }
+    }
+    return bestKey;
+  }
+  function clampBalloonCenter(cx, cy, R, frame, tb, bomRect) {
+    const xMin = frame.x + R + 3, xMax = frame.x + frame.w - R - 3;
+    const yMin = frame.y + R + 3, yMax = frame.y + frame.h - R - 3;
+    let x = clamp(cx, xMin, xMax), y = clamp(cy, yMin, yMax);
+    const keepOut = (rx0, ry0, rx1, ry1) => {
+      if (x >= rx0 && x <= rx1 && y >= ry0 && y <= ry1) {
+        const upY = ry0 - 1;
+        const leftX = rx0 - 1;
+        if (upY >= yMin && (leftX < xMin || (y - upY) <= (x - leftX))) y = upY;
+        else if (leftX >= xMin) x = leftX;
+      }
+    };
+    const tbx0 = frame.x + frame.w - tb.w - R - 3, tby0 = frame.y + frame.h - tb.h - R - 3;
+    keepOut(tbx0, tby0, frame.x + frame.w, frame.y + frame.h);
+    if (bomRect) {
+      keepOut(bomRect.x - R - 3, bomRect.y - R - 3, bomRect.x + bomRect.w + R + 3, bomRect.y + bomRect.h + R + 3);
+    }
+    return [clamp(x, xMin, xMax), clamp(y, yMin, yMax)];
+  }
+  function pickRowAnchorInView(row, vName, v, basis, partsById, allProjected, chosenAnchors) {
+    const cands = [];
+    for (const id of row.ids) {
+      const part = partsById.get(id);
+      const pr = projectPartInView(part, basis);
+      if (pr) cands.push({ id, pr });
+    }
+    if (!cands.length) {
+      const b = v.geo.box;
+      return { itemId: row.ids[0] || null, anchor: [(b[0] + b[2]) * 0.5, (b[1] + b[3]) * 0.5], tip: 'dot' };
+    }
+    let bestCand = null, bestScore = -Infinity;
+    for (const cand of cands) {
+      const [u0, v0, u1, v1] = cand.pr.box2;
+      const du = u1 - u0, dv = v1 - v0;
+      const thin = du * v.s < 3.2 || dv * v.s < 3.2;
+      const samplePts = thin
+        ? [[(u0 + u1) * 0.5, v1], [u1, (v0 + v1) * 0.5], [(u0 + u1) * 0.5, v0], [u0, (v0 + v1) * 0.5]]
+        : [cand.pr.center2, ...[0.2, 0.5, 0.8].flatMap((fu) => [0.2, 0.5, 0.8].map((fv) => [u0 + du * fu, v0 + dv * fv]))];
+      for (const pt of samplePts) {
+        const covered = allProjected.some((other) => (
+          !row.ids.includes(other.id)
+          && other.pr.maxDepth > cand.pr.maxDepth + 0.05
+          && pt[0] >= other.pr.box2[0] && pt[0] <= other.pr.box2[2]
+          && pt[1] >= other.pr.box2[1] && pt[1] <= other.pr.box2[3]
+        ));
+        let sep = Infinity;
+        const S = toSheet(v, pt);
+        for (const ca of chosenAnchors) {
+          const d = Math.hypot(S[0] - ca[0], S[1] - ca[1]);
+          if (d < sep) sep = d;
+        }
+        const cx = (u0 + u1) * 0.5, cy = (v0 + v1) * 0.5;
+        const centerDist = Math.hypot(pt[0] - cx, pt[1] - cy);
+        const sc = (covered ? -1000 : 0) + cand.pr.maxDepth * 0.05 + Math.min(sep, 40) * 2 - centerDist * 0.1;
+        if (sc > bestScore) {
+          bestScore = sc;
+          bestCand = { itemId: cand.id, anchor: [pt[0], pt[1]], tip: thin ? 'arrow' : 'dot' };
+        }
+      }
+    }
+    return bestCand;
+  }
+  async function autoBalloons(opts = {}) {
+    await ensureProjections();
+    const sh = dwg();
+    const rows = bomItems(bomData);
+    if (!rows.length) {
+      UI.toast('Noch keine Teile für Positionsnummern vorhanden.', { icon: 'info' });
+      return [];
+    }
+    const showTable = opts.showTable !== false;
+    const simSh = showTable ? { ...sh, bomTable: { ...(sh.bomTable || { pos: null }), show: true } } : sh;
+    const lay = computeLayout(simSh);
+    const partsById = new Map(((bomMeasure && bomMeasure.parts) || []).map((p) => [p.id, p]));
+    const vName = opts.view && lay.views[opts.view] ? opts.view : chooseBalloonView(simSh, lay, rows, partsById);
+    const v = vName && lay.views[vName];
+    if (!v || !v.geo || !v.geo.box) {
+      UI.toast('Keine sichtbare Ansicht für Positionsnummern gefunden.', { icon: 'info' });
+      return [];
+    }
+    const basis = viewBasis(vName, simSh);
+    const allProjected = [];
+    for (const [id, part] of partsById.entries()) {
+      const pr = projectPartInView(part, basis);
+      if (pr) allProjected.push({ id, pr });
+    }
+    const st = sheetDimStyle(sh);
+    const FS = clamp(st.fontSize * 1.05, 2.8, 7.5);
+    const R = clamp(FS * 1.15, 3.6, 8.0);
+    const b = v.geo.box;
+    const vTL = toSheet(v, [b[0], b[3]]), vBR = toSheet(v, [b[2], b[1]]);
+    const vCx = (vTL[0] + vBR[0]) * 0.5, vCy = (vTL[1] + vBR[1]) * 0.5;
+    const chosenAnchors = [];
+    const items = [];
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const pick = pickRowAnchorInView(row, vName, v, basis, partsById, allProjected, chosenAnchors);
+      const A = toSheet(v, pick.anchor);
+      chosenAnchors.push(A);
+      let dx = A[0] - vCx, dy = A[1] - vCy;
+      if (Math.hypot(dx, dy) < 1) {
+        const ang = -Math.PI / 4 + (i * Math.PI * 2) / Math.max(1, rows.length);
+        dx = Math.cos(ang); dy = Math.sin(ang);
+      }
+      const L = Math.hypot(dx, dy) || 1;
+      const ux = dx / L, uy = dy / L;
+      const margin = Math.max(10, R * 2.5);
+      const tX = ux > 1e-6 ? (vBR[0] + margin - A[0]) / ux : ux < -1e-6 ? (vTL[0] - margin - A[0]) / ux : Infinity;
+      const tY = uy > 1e-6 ? (vBR[1] + margin - A[1]) / uy : uy < -1e-6 ? (vTL[1] - margin - A[1]) / uy : Infinity;
+      const tOut = clamp(Math.min(tX, tY), 10, 46);
+      let C = clampBalloonCenter(A[0] + ux * tOut, A[1] + uy * tOut, R, lay.frame, lay.tb, lay.bomRect);
+      items.push({ row, pick, A, C });
+    }
+    const minSep = R * 2.6 + 2;
+    for (let it = 0; it < 18; it++) {
+      let moved = false;
+      for (let i = 0; i < items.length; i++) {
+        for (let j = i + 1; j < items.length; j++) {
+          const dx = items[j].C[0] - items[i].C[0], dy = items[j].C[1] - items[i].C[1];
+          const d = Math.hypot(dx, dy);
+          if (d < minSep) {
+            const push = (minSep - d) * 0.55;
+            const ux = d > 1e-4 ? dx / d : Math.cos((i + 1) * 1.1);
+            const uy = d > 1e-4 ? dy / d : Math.sin((i + 1) * 1.1);
+            items[i].C = clampBalloonCenter(items[i].C[0] - ux * push, items[i].C[1] - uy * push, R, lay.frame, lay.tb, lay.bomRect);
+            items[j].C = clampBalloonCenter(items[j].C[0] + ux * push, items[j].C[1] + uy * push, R, lay.frame, lay.tb, lay.bomRect);
+            moved = true;
+          }
+        }
+      }
+      if (!moved) break;
+    }
+    const created = items.map(({ row, pick, A, C }) => ({
+      id: uid('bl'),
+      view: vName,
+      itemId: pick.itemId,
+      bomKey: row.key,
+      pos: row.pos,
+      anchor: [pick.anchor[0], pick.anchor[1]],
+      offset: [round(C[0] - A[0], 2), round(C[1] - A[1], 2)],
+      tip: pick.tip,
+    }));
+    App.change('Positionsnummern gesetzt', () => {
+      const d = dwg();
+      d.balloons = created;
+      if (showTable) d.bomTable = { ...(d.bomTable || { pos: null }), show: true };
+    });
+    selDim = null;
+    tool = null;
+    toolState = null;
+    if (svg) svg.style.cursor = '';
+    UI.hint(null);
+    Panels.renderTools();
+    render();
+    Panels.renderRight();
+    UI.toast(`${created.length} Positionsnummer${created.length === 1 ? '' : 'n'} gesetzt.`, { icon: 'list', ms: 2400 });
+    return created;
+  }
+  function pickBalloonTarget(P) {
+    const name = leaderViewAt(P);
+    const rows = bomItems(bomData);
+    if (!name || !layout || !layout.views[name]) {
+      const r0 = rows[0] || null;
+      return {
+        view: null,
+        anchor: [P[0], P[1]],
+        sheetPt: [P[0], P[1]],
+        itemId: r0 && r0.ids[0] ? r0.ids[0] : null,
+        bomKey: r0 ? r0.key : null,
+        pos: r0 ? r0.pos : 1,
+        autoTip: 'arrow',
+      };
+    }
+    const v = layout.views[name];
+    const q = toView(v, P);
+    const basis = viewBasis(name, dwg());
+    const partsById = new Map(((bomMeasure && bomMeasure.parts) || []).map((p) => [p.id, p]));
+    let hitRow = null, hitItemId = null, bestDepth = -Infinity, bestDist = Infinity;
+    for (const row of rows) {
+      for (const id of row.ids) {
+        const pr = projectPartInView(partsById.get(id), basis);
+        if (!pr) continue;
+        const [u0, v0, u1, v1] = pr.box2;
+        const inside = q[0] >= u0 - 1e-3 && q[0] <= u1 + 1e-3 && q[1] >= v0 - 1e-3 && q[1] <= v1 + 1e-3;
+        if (inside) {
+          if (pr.maxDepth > bestDepth) { bestDepth = pr.maxDepth; hitRow = row; hitItemId = id; bestDist = 0; }
+        } else if (bestDepth === -Infinity) {
+          const dx = q[0] < u0 ? u0 - q[0] : q[0] > u1 ? q[0] - u1 : 0;
+          const dy = q[1] < v0 ? v0 - q[1] : q[1] > v1 ? q[1] - v1 : 0;
+          const d = Math.hypot(dx, dy);
+          if (d < bestDist) { bestDist = d; hitRow = row; hitItemId = id; }
+        }
+      }
+    }
+    const lt = pickLeaderTarget(P);
+    if (!hitRow && rows.length) { hitRow = rows[0]; hitItemId = rows[0].ids[0] || null; }
+    return {
+      view: lt.view || name,
+      anchor: lt.view ? lt.anchor : q,
+      sheetPt: lt.view ? lt.sheetPt : [P[0], P[1]],
+      itemId: hitItemId,
+      bomKey: hitRow ? hitRow.key : null,
+      pos: hitRow ? hitRow.pos : 1,
+      autoTip: lt.targetKind === 'edge' ? 'arrow' : 'dot',
+    };
+  }
+  function addBalloon(opts = {}) {
+    const bl = {
+      id: uid('bl'),
+      view: opts.view || null,
+      itemId: opts.itemId || null,
+      bomKey: opts.bomKey || null,
+      pos: Math.max(1, Math.round(Number(opts.pos) || 1)),
+      anchor: Array.isArray(opts.anchor) ? [Number(opts.anchor[0]) || 0, Number(opts.anchor[1]) || 0] : [0, 0],
+      offset: Array.isArray(opts.offset) ? [Number(opts.offset[0]) || 0, Number(opts.offset[1]) || 0] : [14, -12],
+      tip: opts.tip === 'arrow' ? 'arrow' : 'dot',
+    };
+    App.change('Positionsnummer hinzugefügt', () => {
+      const d = dwg();
+      if (!Array.isArray(d.balloons)) d.balloons = [];
+      d.balloons.push(bl);
+    });
+    selDim = bl.id;
+    render(); Panels.renderRight();
+    return bl;
+  }
+  function updateBalloon(id, patch = {}) {
+    let changed = false;
+    App.change('Positionsnummer geändert', () => {
+      const bl = (dwg().balloons || []).find((x) => x.id === id);
+      if (!bl) return;
+      if (patch.pos != null) {
+        const np = Math.max(1, Math.round(Number(patch.pos) || 1));
+        if (np !== bl.pos) { bl.pos = np; changed = true; }
+      }
+      if ('itemId' in patch && patch.itemId !== bl.itemId) { bl.itemId = patch.itemId; changed = true; }
+      if ('bomKey' in patch && patch.bomKey !== bl.bomKey) { bl.bomKey = patch.bomKey; changed = true; }
+      if (patch.tip === 'arrow' || patch.tip === 'dot') {
+        if (bl.tip !== patch.tip) { bl.tip = patch.tip; changed = true; }
+      }
+      if (Array.isArray(patch.offset) && patch.offset.length >= 2) {
+        bl.offset = [Number(patch.offset[0]) || 0, Number(patch.offset[1]) || 0];
+        changed = true;
+      }
+      if (Array.isArray(patch.anchor) && patch.anchor.length >= 2) {
+        bl.anchor = [Number(patch.anchor[0]) || 0, Number(patch.anchor[1]) || 0];
+        changed = true;
+      }
+    });
+    if (changed) { render(); Panels.renderRight(); }
+    return changed;
+  }
+  function removeBalloon(id) {
+    const cur = (dwg().balloons || []).find((x) => x.id === id);
+    if (!cur) return false;
+    App.change('Positionsnummer gelöscht', () => {
+      const d = dwg();
+      d.balloons = (d.balloons || []).filter((x) => x.id !== id);
+    });
+    if (selDim === id) selDim = null;
+    render(); Panels.renderRight();
+    return true;
+  }
+  function clearBalloons() {
+    if (!(dwg().balloons || []).length) return false;
+    App.change('Positionsnummern entfernt', () => {
+      dwg().balloons = [];
+    });
+    if (selDim && String(selDim).startsWith('bl')) selDim = null;
+    render(); Panels.renderRight();
+    return true;
+  }
+  async function setBomTable(show) {
+    const val = !!show;
+    const cur = dwg();
+    if ((cur.bomTable && !!cur.bomTable.show) === val) return false;
+    await ensureProjections();
+    App.change(val ? 'Stückliste eingeblendet' : 'Stückliste ausgeblendet', () => {
+      const d = dwg();
+      d.bomTable = { ...(d.bomTable || { pos: null }), show: val };
+    });
+    if (!val && selDim === '__bom__') selDim = null;
+    render(); Panels.renderRight();
+    return true;
+  }
+  function resetBomTablePos() {
+    const d = dwg();
+    if (!d.bomTable || !Array.isArray(d.bomTable.pos)) return false;
+    App.change('Stücklisten-Lage zurückgesetzt', () => {
+      const sh = dwg();
+      if (sh.bomTable) sh.bomTable.pos = null;
+    });
+    render(); Panels.renderRight();
+    return true;
+  }
+  function balloonClick(P) {
+    const st = toolState || { stage: 0 };
+    if (st.stage === 0) {
+      const target = pickBalloonTarget(P);
+      toolState = { stage: 1, target, P };
+      render();
+      return;
+    }
+    const target = st.target;
+    const v = target.view && layout && layout.views[target.view];
+    const A = v ? toSheet(v, target.anchor) : target.anchor;
+    let offset = [P[0] - A[0], P[1] - A[1]];
+    if (Math.hypot(offset[0], offset[1]) < 4) offset = [14, -12];
+    toolState = { stage: 0 };
+    addBalloon({
+      view: target.view,
+      itemId: target.itemId,
+      bomKey: target.bomKey,
+      pos: target.pos,
+      anchor: target.anchor,
+      offset,
+      tip: target.autoTip,
+    });
+  }
+  function previewBalloon(lines, texts) {
+    const st = toolState;
+    if (!st) return;
+    if (st.stage === 0 && st.target && st.target.sheetPt) {
+      const S = st.target.sheetPt;
+      const r = st.target.autoTip === 'dot' ? Math.max(0.9, 1.1 / zoom) : (1.3 / zoom) * 1.5;
+      lines.push({ circle: [S[0], S[1], r], cls: st.target.autoTip === 'dot' ? 'balloon-dot' : 'snap' });
+      return;
+    }
+    if (st.stage === 1 && st.target && st.P) {
+      const v = st.target.view && layout && layout.views[st.target.view];
+      const A = v ? toSheet(v, st.target.anchor) : st.target.anchor;
+      let offset = [st.P[0] - A[0], st.P[1] - A[1]];
+      if (Math.hypot(offset[0], offset[1]) < 4) offset = [14, -12];
+      drawBalloon({
+        id: '__blprev',
+        view: st.target.view,
+        itemId: st.target.itemId,
+        bomKey: st.target.bomKey,
+        pos: st.target.pos,
+        anchor: st.target.anchor,
+        offset,
+        tip: st.target.autoTip,
+      }, lines, texts, layout, dwg(), bomData);
+    }
+  }
   function onMove(e) {
     if (dragDetail) {
       const P = sheetPt(e);
@@ -3025,6 +4033,20 @@ const Drawing = (() => {
       const P = sheetPt(e);
       dragNote.curElbow = [dragNote.origElbow[0] + (P[0] - dragNote.startP[0]), dragNote.origElbow[1] + (P[1] - dragNote.startP[1])];
       if (Math.hypot(P[0] - dragNote.startP[0], P[1] - dragNote.startP[1]) > 0.5) dragNote.moved = true;
+      render();
+      return;
+    }
+    if (dragBalloon) {
+      const P = sheetPt(e);
+      dragBalloon.curOffset = [dragBalloon.origOffset[0] + (P[0] - dragBalloon.startP[0]), dragBalloon.origOffset[1] + (P[1] - dragBalloon.startP[1])];
+      if (Math.hypot(P[0] - dragBalloon.startP[0], P[1] - dragBalloon.startP[1]) > 0.5) dragBalloon.moved = true;
+      render();
+      return;
+    }
+    if (dragBom) {
+      const P = sheetPt(e);
+      dragBom.curPos = [dragBom.origPos[0] + (P[0] - dragBom.startP[0]), dragBom.origPos[1] + (P[1] - dragBom.startP[1])];
+      if (Math.hypot(P[0] - dragBom.startP[0], P[1] - dragBom.startP[1]) > 0.5) dragBom.moved = true;
       render();
       return;
     }
@@ -3042,6 +4064,14 @@ const Drawing = (() => {
       toolState = toolState || { stage: 0 };
       toolState.P = P;
       if (toolState.stage === 0) toolState.target = pickLeaderTarget(P);
+      render();
+      return;
+    }
+    if (tool === 'balloon') {
+      const P = sheetPt(e);
+      toolState = toolState || { stage: 0 };
+      toolState.P = P;
+      if (toolState.stage === 0) toolState.target = pickBalloonTarget(P);
       render();
       return;
     }
@@ -3127,6 +4157,7 @@ const Drawing = (() => {
     if (tool === 'detail') { detailClick(P); return; }
     if (tool === 'section') { sectionDown(P, e); return; }
     if (tool === 'note') { noteClick(P); return; }
+    if (tool === 'balloon') { balloonClick(P); return; }
     if (tool && tool.startsWith('free-')) { freeDown(e); return; }
     const t = e.target.closest && e.target.closest('[data-id]');
     selDim = t ? t.dataset.id : centerAt(P);
@@ -3136,6 +4167,11 @@ const Drawing = (() => {
       const noteObj = dwg().notes.find((x) => x.id === selDim);
       if (e.detail === 2) { editNoteText(selDim); render(); Panels.renderRight(); return; }
       dragNote = { id: selDim, startP: P, origElbow: [...(noteObj.elbow || [14, -10])], curElbow: null, moved: false };
+    } else if (selDim && (dwg().balloons || []).some((x) => x.id === selDim)) {
+      const blObj = dwg().balloons.find((x) => x.id === selDim);
+      dragBalloon = { id: selDim, startP: P, origOffset: [...(blObj.offset || [14, -12])], curOffset: null, moved: false };
+    } else if (selDim === '__bom__' && layout && layout.bomRect) {
+      dragBom = { startP: P, origPos: [layout.bomRect.x, layout.bomRect.y], curPos: null, moved: false };
     } else if (!selDim) {
       const hitV = viewAtAll(P);
       if (hitV) selView = hitV;
@@ -3162,6 +4198,29 @@ const Drawing = (() => {
       const d = dragNote;
       dragNote = null;
       if (d.moved && d.curElbow) updateNote(d.id, { elbow: d.curElbow });
+      return;
+    }
+    if (dragBalloon) {
+      const d = dragBalloon;
+      dragBalloon = null;
+      if (d.moved && d.curOffset) updateBalloon(d.id, { offset: d.curOffset });
+      return;
+    }
+    if (dragBom) {
+      const d = dragBom;
+      dragBom = null;
+      if (d.moved && d.curPos) {
+        const lay = layout || computeLayout(dwg());
+        const br = lay.bomRect;
+        const w = br ? br.w : lay.tb.w, h = br ? br.h : 20;
+        const nx = clamp(d.curPos[0], lay.frame.x, lay.frame.x + lay.frame.w - w);
+        const ny = clamp(d.curPos[1], lay.frame.y, lay.frame.y + lay.frame.h - h);
+        App.change('Stückliste verschoben', () => {
+          const sh = dwg();
+          sh.bomTable = { ...(sh.bomTable || { show: true }), show: true, pos: [round(nx, 2), round(ny, 2)] };
+        });
+        render(); Panels.renderRight();
+      }
       return;
     }
     if (dragView) {
@@ -3324,6 +4383,7 @@ const Drawing = (() => {
       d.sections = (d.sections || []).filter((x) => x.id !== id);
       d.dims = (d.dims || []).filter((x) => x.view !== 'sec_' + id);
       d.notes = (d.notes || []).filter((x) => x.view !== 'sec_' + id);
+      d.balloons = (d.balloons || []).filter((x) => x.view !== 'sec_' + id);
       d.hiddenCenters = (d.hiddenCenters || []).filter((cid) => !cid.startsWith('ctr|sec_' + id + '|'));
     });
     if (selDim === id) selDim = null;
@@ -3337,14 +4397,14 @@ const Drawing = (() => {
       const name = viewAt(P); if (!name) return;
       const c = circleAt(name, P, true);
       if (!c) { UI.toast('Klick auf einen Kreis, eine Bohrung oder eine Rundung.', { icon: 'info', ms: 2000 }); return; }
-      addDim({ view: name, type: dimMode, c: c.c, r: c.r, ang: Math.round(c.ang), ...(c.full ? {} : { partial: true }) });
+      addDim({ view: name, type: dimMode, c: c.c, r: c.r, ang: Math.round(c.ang), ...(c.full ? {} : { partial: true }), ref: makeCircleRef(layout.views[name], c) });
       return;
     }
     if (dimMode === 'chamfer') {
       const name = viewAt(P); if (!name) return;
       const ch = chamferEdgeAt(name, P);
       if (!ch) { UI.toast('Klick auf eine schräge Fasen-Kante (z. B. 45°).', { icon: 'info', ms: 2000 }); return; }
-      addDim({ view: name, type: 'chamfer', p: ch.info.p, dir: ch.info.dir, dist: ch.info.dist, ang: ch.info.ang });
+      addDim({ view: name, type: 'chamfer', p: ch.info.p, dir: ch.info.dir, dist: ch.info.dist, ang: ch.info.ang, ref: makeChamferRef(layout.views[name], ch.seg, ch.info) });
       return;
     }
     if (dimMode === 'ang') {
@@ -3352,18 +4412,18 @@ const Drawing = (() => {
         const name = viewAt(P); if (!name) return;
         const ed = edgeAt(name, P, true);
         if (!ed) { UI.toast('Klick auf die erste Kante.', { icon: 'info', ms: 1800 }); return; }
-        toolState = { stage: 1, view: name, e1: ed, P };
+        toolState = { ...st, stage: 1, view: name, e1: ed, P };
       } else if (st.stage === 1) {
         const ed = edgeAt(st.view, P, true);
         if (!ed) { UI.toast('Klick auf die zweite Kante in derselben Ansicht.', { icon: 'info', ms: 1800 }); return; }
         const V = lineIntersect2D(st.e1.a, st.e1.b, ed.a, ed.b);
         if (!V) { UI.toast('Diese beiden Kanten sind parallel – wähle zwei Kanten im Winkel zueinander.', { icon: 'info', ms: 2200 }); return; }
-        toolState = { stage: 2, view: st.view, e1: st.e1, e2: ed, v: V, P };
+        toolState = { ...st, stage: 2, view: st.view, e1: st.e1, e2: ed, v: V, P };
       } else if (st.stage === 2) {
         const v = layout.views[st.view]; if (!v) return;
         const q = toView(v, P);
         const sec = angularSector(st.v, st.e1, st.e2, q);
-        addDim({ view: st.view, type: 'ang', v: st.v, e1: sec.e1, e2: sec.e2, a0: sec.a0, a1: sec.a1, r: sec.r });
+        addDim({ view: st.view, type: 'ang', v: st.v, e1: sec.e1, e2: sec.e2, a0: sec.a0, a1: sec.a1, r: sec.r, ref: { kind: 'ang', e1: makeEdgeRef(v, st.e1), e2: makeEdgeRef(v, st.e2) } });
         return;
       }
       render();
@@ -3375,23 +4435,41 @@ const Drawing = (() => {
         const name = viewAt(P); if (!name) return;
         const sn = pickDimPoint(name, P);
         if (!sn) { UI.toast(isBase ? 'Klick auf eine Bezugskante oder einen Bezugspunkt.' : 'Klick auf einen Punkt oder eine Kante.', { icon: 'info', ms: 2000 }); return; }
-        toolState = { stage: 1, view: name, a: sn.p, preferDir: sn.preferDir || null, P };
+        toolState = { ...st, stage: 1, view: name, a: sn.p, aEdge: sn.edge || null, preferDir: sn.preferDir || null, P };
       } else if (st.stage === 1) {
         const sn = pickDimPoint(st.view, P); if (!sn) return;
         if (Math.hypot(sn.p[0] - st.a[0], sn.p[1] - st.a[1]) < 1e-4) return;
-        toolState = { ...st, stage: 2, b: sn.p, P };
+        toolState = { ...st, stage: 2, b: sn.p, bEdge: sn.edge || null, P };
       } else if (st.stage === 2) {
         const v = layout.views[st.view]; if (!v) return;
         const q = toView(v, P);
         const dir = chainDir(st.a, st.b, q, st.preferDir);
         const linePos = dir === 'h' ? q[1] : q[0];
-        const dim = isBase
-          ? { id: uid('d'), view: st.view, type: 'base', dir, linePos, base: st.a, pts: [st.b] }
-          : { id: uid('d'), view: st.view, type: 'chain', dir, linePos, pts: [st.a, st.b] };
-        App.change(isBase ? 'Bezugsmaß hinzugefügt' : 'Kettenmaß hinzugefügt', () => { dwg().dims.push(dim); });
-        selDim = dim.id;
-        toolState = { stage: 3, view: st.view, dimId: dim.id, dir, linePos, P };
-        Panels.renderRight();
+        const aRef = makePointRef(v, st.a, st.aEdge), bRef = makePointRef(v, st.b, st.bEdge);
+        const dimData = isBase
+          ? { view: st.view, type: 'base', dir, linePos, base: st.a, pts: [st.b], ref: { kind: 'base', base: aRef, pts: [bRef] } }
+          : { view: st.view, type: 'chain', dir, linePos, pts: [st.a, st.b], ref: { kind: 'chain', pts: [aRef, bRef] } };
+        if (st.rebindId) {
+          const targetId = st.rebindId;
+          App.change('Maß neu zugeordnet', () => {
+            const d = dwg();
+            const idx = (d.dims || []).findIndex((x) => x.id === targetId);
+            if (idx >= 0) {
+              const old = d.dims[idx];
+              d.dims[idx] = { ...dimData, id: old.id, ...(old.tol ? { tol: old.tol } : {}) };
+            }
+          });
+          selDim = targetId;
+          toolState = { stage: 3, view: st.view, dimId: targetId, dir, linePos, P };
+          lastLostKey = lostDims(dwg()).map((x) => x.id).sort().join(',');
+          Panels.renderRight();
+        } else {
+          const dim = { id: uid('d'), ...dimData };
+          App.change(isBase ? 'Bezugsmaß hinzugefügt' : 'Kettenmaß hinzugefügt', () => { dwg().dims.push(dim); });
+          selDim = dim.id;
+          toolState = { stage: 3, view: st.view, dimId: dim.id, dir, linePos, P };
+          Panels.renderRight();
+        }
       } else if (st.stage === 3) {
         const hitView = viewAt(P);
         if (hitView && hitView !== st.view) { toolState = { stage: 0 }; render(); Panels.renderRight(); return; }
@@ -3405,9 +4483,14 @@ const Drawing = (() => {
         const coord = st.dir === 'h' ? sn.p[0] : sn.p[1];
         const existing = [...(cur.pts || []), ...(cur.base ? [cur.base] : [])];
         if (existing.some((p) => Math.abs((st.dir === 'h' ? p[0] : p[1]) - coord) < 1e-4)) return;
+        const v = layout.views[st.view];
+        const ptRef = v ? makePointRef(v, sn.p, sn.edge || null) : null;
         App.change(isBase ? 'Bezugsmaß erweitert' : 'Kettenmaß erweitert', () => {
           const d = dwg().dims.find((x) => x.id === st.dimId);
-          if (d) d.pts.push(sn.p);
+          if (d) {
+            d.pts.push(sn.p);
+            if (ptRef && d.ref && Array.isArray(d.ref.pts)) d.ref.pts.push(ptRef);
+          }
         });
       }
       render();
@@ -3416,8 +4499,16 @@ const Drawing = (() => {
     if (st.stage === 0) {
       const name = viewAt(P); if (!name) return;
       const sn = snapIn(name, P);
-      if (!sn) { const c = circleAt(name, P); if (c) { addDim({ view: name, type: c.full ? 'dia' : 'rad', c: c.c, r: c.r, ang: Math.round(c.ang) }); return; } UI.toast('Klick auf einen Eckpunkt, eine Linie, einen Kreis oder eine Rundung.', { icon: 'info', ms: 2000 }); return; }
-      toolState = { stage: 1, view: name, a: sn.p, P };
+      if (!sn) {
+        const c = circleAt(name, P);
+        if (c) {
+          addDim({ view: name, type: c.full ? 'dia' : 'rad', c: c.c, r: c.r, ang: Math.round(c.ang), ...(c.full ? {} : { partial: true }), ref: makeCircleRef(layout.views[name], c) });
+          return;
+        }
+        UI.toast('Klick auf einen Eckpunkt, eine Linie, einen Kreis oder eine Rundung.', { icon: 'info', ms: 2000 });
+        return;
+      }
+      toolState = { ...st, stage: 1, view: name, a: sn.p, P };
     } else if (st.stage === 1) {
       const sn = snapIn(st.view, P); if (!sn) return;
       if (Math.hypot(sn.p[0] - st.a[0], sn.p[1] - st.a[1]) < 1e-6) return;
@@ -3425,7 +4516,7 @@ const Drawing = (() => {
     } else if (st.stage === 2) {
       const v = layout.views[st.view]; const q = toView(v, P);
       const dimObj = placeDim(st.a, st.b, q);
-      addDim({ view: st.view, ...dimObj });
+      addDim({ view: st.view, ...dimObj, ref: { kind: 'lin', a: makePointRef(v, st.a), b: makePointRef(v, st.b) } });
     }
     render();
   }
@@ -3507,10 +4598,114 @@ const Drawing = (() => {
     if (st.stage === 2 && st.P) { const v = layout.views[st.view]; const q = toView(v, st.P); const d = { id: '__prev', view: st.view, ...placeDim(st.a, st.b, q) }; dimSVG(d, lines, texts); }
   }
   function addDim(dim) {
-    App.change('Maß hinzugefügt', () => { dwg().dims.push({ id: uid('d'), ...dim }); });
+    if (tool === 'dim' && toolState && toolState.rebindId) {
+      rebindDim(toolState.rebindId, dim);
+      return;
+    }
+    const next = { id: uid('d'), ...dim };
+    if (!next.ref && !next.auto && layout && layout.views && layout.views[next.view]) {
+      const r = buildDimRef(next, layout.views[next.view]);
+      if (r) next.ref = r;
+    }
+    App.change('Maß hinzugefügt', () => { dwg().dims.push(next); });
     selDim = null;
     toolState = { stage: 0 };
     render();
+    Panels.renderRight();
+  }
+  function removeDim(id) {
+    if (!id) return false;
+    const d = dwg();
+    const cur = (d.dims || []).find((x) => x.id === id);
+    if (!cur) return false;
+    App.change('Verlorenes Maß gelöscht', () => {
+      const sh = dwg();
+      sh.dims = (sh.dims || []).filter((x) => x.id !== id);
+    });
+    if (selDim === id) selDim = null;
+    if (tool === 'dim' && toolState && toolState.rebindId === id) {
+      setTool(null);
+      return true;
+    }
+    render();
+    lastLostKey = layout ? lostDims(dwg()).map((x) => x.id).sort().join(',') : '';
+    Panels.renderRight();
+    return true;
+  }
+  function removeLostDims() {
+    const lost = lostDims(dwg());
+    if (!lost.length) return 0;
+    const ids = new Set(lost.filter((x) => !x.auto).map((x) => x.id));
+    if (!ids.size) return 0;
+    App.change('Verlorene Maße gelöscht', () => {
+      const sh = dwg();
+      sh.dims = (sh.dims || []).filter((x) => !ids.has(x.id));
+    });
+    if (selDim && ids.has(selDim)) selDim = null;
+    if (tool === 'dim' && toolState && toolState.rebindId && ids.has(toolState.rebindId)) {
+      tool = null; toolState = null; if (svg) svg.style.cursor = ''; UI.hint(null); Panels.renderTools();
+    }
+    render();
+    lastLostKey = '';
+    Panels.renderRight();
+    UI.toast(`${ids.size} ${ids.size === 1 ? 'verlorenes Maß' : 'verlorene Maße'} gelöscht.`, { icon: 'trash', ms: 2000 });
+    return ids.size;
+  }
+  function rebindDim(id, newDim) {
+    if (!id || !newDim) return false;
+    let updated = false;
+    App.change('Maß neu zugeordnet', () => {
+      const d = dwg();
+      const idx = (d.dims || []).findIndex((x) => x.id === id);
+      if (idx < 0) return;
+      const old = d.dims[idx];
+      const keep = { id: old.id };
+      if (old.tol) keep.tol = old.tol;
+      const next = { ...newDim, ...keep };
+      delete next.auto;
+      delete next.lost;
+      delete next.lostReason;
+      delete next.hiddenView;
+      if (!next.ref && layout && layout.views && layout.views[next.view]) {
+        const r = buildDimRef(next, layout.views[next.view]);
+        if (r) next.ref = r;
+      }
+      d.dims[idx] = next;
+      updated = true;
+    });
+    if (!updated) return false;
+    tool = null;
+    toolState = null;
+    if (svg) svg.style.cursor = '';
+    UI.hint(null);
+    selDim = id;
+    render();
+    lastLostKey = layout ? lostDims(dwg()).map((x) => x.id).sort().join(',') : '';
+    Panels.renderTools();
+    Panels.renderRight();
+    UI.toast('Maß neu zugeordnet.', { icon: 'check', ms: 2000 });
+    return true;
+  }
+  function startRebind(id) {
+    const d = dwg();
+    const dim = (d.dims || []).find((x) => x.id === id && !x.auto);
+    if (!dim) return false;
+    selDim = id;
+    dragDetail = null; dragNote = null; dragView = null;
+    dimMode = DIM_MODES.some((x) => x.key === dim.type) ? dim.type : 'lin';
+    tool = 'dim';
+    toolState = { stage: 0, rebindId: id };
+    if (svg) svg.style.cursor = 'crosshair';
+    const what = dimMode === 'dia' ? 'die neue Bohrung oder den Kreis'
+      : dimMode === 'rad' ? 'die neue Rundung oder den Bogen'
+        : dimMode === 'chamfer' ? 'die neue Fasen-Kante'
+          : dimMode === 'ang' ? 'zwei neue Kanten im Winkel'
+            : 'neue Punkte oder Kanten';
+    UI.hint(`<b>Maß neu zuordnen:</b> Klicke auf ${what} in einer Ansicht. <b>Esc</b> bricht ab.`);
+    Panels.renderTools();
+    Panels.renderRight();
+    render();
+    return true;
   }
   function flipAngleDim(id) {
     let changed = false;
@@ -3544,6 +4739,7 @@ const Drawing = (() => {
     if (e.key.toLowerCase() === 'z' && !e.ctrlKey && !e.metaKey && !e.altKey) { setTool('detail'); return true; }
     if (e.key.toLowerCase() === 's' && !e.ctrlKey && !e.metaKey && !e.altKey) { setTool('section'); return true; }
     if (e.key.toLowerCase() === 'n' && !e.ctrlKey && !e.metaKey && !e.altKey) { setTool('note'); return true; }
+    if (e.key.toLowerCase() === 'b' && !e.ctrlKey && !e.metaKey && !e.altKey) { setTool('balloon'); return true; }
     return false;
   }
   function allCenters(viewName = null) {
@@ -3626,9 +4822,11 @@ const Drawing = (() => {
   }
   function removeSel() {
     const id = selDim; if (!id) return;
+    if (id === '__bom__') { setBomTable(false); return; }
     if (String(id).startsWith('ctr|')) { hideCenter(id); return; }
     if ((dwg().sections || []).some((x) => x.id === id)) { removeSection(id); return; }
     if ((dwg().notes || []).some((x) => x.id === id)) { removeNote(id); return; }
+    if ((dwg().balloons || []).some((x) => x.id === id)) { removeBalloon(id); return; }
     App.change('Gelöscht', () => {
       const d = dwg();
       if ((d.details || []).some((x) => x.id === id)) {
@@ -3645,7 +4843,11 @@ const Drawing = (() => {
       else d.dims = d.dims.filter((x) => x.id !== id);
       d.free = d.free.filter((x) => x.id !== id);
     });
-    selDim = null; render(); Panels.renderRight();
+    selDim = null;
+    if (tool === 'dim' && toolState && toolState.rebindId === id) { setTool(null); return; }
+    render();
+    lastLostKey = layout ? lostDims(dwg()).map((x) => x.id).sort().join(',') : '';
+    Panels.renderRight();
   }
   function dimHint(mode) {
     const m = DIM_MODES.find((x) => x.key === mode);
@@ -3672,14 +4874,14 @@ const Drawing = (() => {
     })));
   }
   function setTool(t) {
-    dragDetail = null; dragNote = null; dragView = null;
+    dragDetail = null; dragNote = null; dragView = null; dragBalloon = null; dragBom = null;
     tool = t;
     if (t === 'dim') dimMode = 'lin';
     if (t === 'detail') {
       detailDraft = { scale: defaultDetailScale(), label: nextDetailLabel() };
       toolState = { stage: 0 };
     } else {
-      toolState = (t === 'dim' || t === 'section' || t === 'note') ? { stage: 0 } : t ? {} : null;
+      toolState = (t === 'dim' || t === 'section' || t === 'note' || t === 'balloon') ? { stage: 0 } : t ? {} : null;
     }
     if (svg) svg.style.cursor = t ? 'crosshair' : '';
     UI.hint(
@@ -3687,7 +4889,8 @@ const Drawing = (() => {
         : t === 'detail' ? T('draw.hint.detail')
           : t === 'section' ? T('draw.hint.section')
             : t === 'note' ? T('draw.hint.note')
-              : t && t.startsWith('free-') ? freeHint(t) : null
+              : t === 'balloon' ? T('draw.hint.balloon')
+                : t && t.startsWith('free-') ? freeHint(t) : null
     );
     Panels.renderTools(); Panels.renderRight(); render();
   }
@@ -3810,6 +5013,19 @@ const Drawing = (() => {
       { label: T('menu.draw.addFreeShaded'), icon: 'eye', run: () => addView('free', { shaded: true }) },
     ]);
   }
+  function bomMenu(anchor) {
+    const sh = dwg();
+    const hasB = !!(sh.balloons && sh.balloons.length);
+    const hasBom = !!(sh.bomTable && sh.bomTable.show);
+    UI.menu(anchor, [
+      { id: 'dw-menu-auto-balloons', label: T('menu.draw.autoBalloons'), icon: 'list', help: 'drawingBalloons', run: () => autoBalloons() },
+      { id: 'dw-menu-add-balloon', label: T('menu.draw.addBalloon'), icon: 'plus', kbd: 'B', help: 'drawingBalloons', checked: tool === 'balloon', run: () => tool_('balloon') },
+      '-',
+      { id: 'dw-menu-bom-table', label: T('menu.draw.bomTable'), icon: 'sheet', help: 'drawingBom', checked: hasBom, run: () => setBomTable(!hasBom) },
+      '-',
+      { id: 'dw-menu-clear-balloons', label: T('menu.draw.clearBalloons'), icon: 'trash', disabled: !hasB, run: () => clearBalloons() },
+    ]);
+  }
   function exportMenu(anchor) {
     const entries = [
       { id: 'dw-exp-pdf', label: T('menu.draw.exportPdf'), icon: 'file', run: () => exportPDF() },
@@ -3883,6 +5099,11 @@ const Drawing = (() => {
       'arrow-open': [0.3, null],
       'arrow-slash': [0.45, null],
       leader: [0.25, null],
+      'balloon-line': [0.25, null],
+      'balloon-circle': [0.35, null],
+      'bom-frame': [0.5, null],
+      'bom-head-line': [0.35, null],
+      'bom-grid': [0.22, null],
       detail: [0.25, null],
       'detail-border': [0.25, [3, 1.5]],
     };
@@ -3893,16 +5114,21 @@ const Drawing = (() => {
     }
     for (const l of lines) {
       if (l.cls === 'paper' || l.cls === 'prev' || l.cls === 'snap' || l.cls === 'view-sel') continue;
-      if (l.cls === 'arrow' || l.cls === 'leader-arrow') {
-        const [a, b, c] = l.poly;
-        out.push(`0.067 g ${px(a[0])} ${py(a[1])} m ${px(b[0])} ${py(b[1])} l ${px(c[0])} ${py(c[1])} l h f`);
+      if (l.cls === 'bom-bg' && l.rect) {
+        const [rx, ry, rw, rh] = l.rect;
+        out.push(`1 g ${px(rx)} ${py(ry + rh)} ${pf(rw * PT)} ${pf(rh * PT)} re f`);
         continue;
       }
-      if ((l.cls === 'arrow-dot' || l.cls === 'leader-dot') && l.circle) {
+      if (l.cls === 'arrow' || l.cls === 'leader-arrow' || l.cls === 'balloon-arrow') {
+        const [a, b, c] = l.poly;
+        out.push(`${l.lost ? '0.788 0.216 0.180' : '0.067'} g ${px(a[0])} ${py(a[1])} m ${px(b[0])} ${py(b[1])} l ${px(c[0])} ${py(c[1])} l h f`);
+        continue;
+      }
+      if ((l.cls === 'arrow-dot' || l.cls === 'leader-dot' || l.cls === 'balloon-dot') && l.circle) {
         const cx = l.circle[0] * PT, cy = (H - l.circle[1]) * PT, R = l.circle[2] * PT;
         const k = 0.5522847498 * R;
         out.push(
-          `0.067 g ${pf(cx + R)} ${pf(cy)} m`,
+          `${l.lost ? '0.788 0.216 0.180' : '0.067'} g ${pf(cx + R)} ${pf(cy)} m`,
           `${pf(cx + R)} ${pf(cy + k)} ${pf(cx + k)} ${pf(cy + R)} ${pf(cx)} ${pf(cy + R)} c`,
           `${pf(cx - k)} ${pf(cy + R)} ${pf(cx - R)} ${pf(cy + k)} ${pf(cx - R)} ${pf(cy)} c`,
           `${pf(cx - R)} ${pf(cy - k)} ${pf(cx - k)} ${pf(cy - R)} ${pf(cx)} ${pf(cy - R)} c`,
@@ -3912,8 +5138,9 @@ const Drawing = (() => {
       }
       const st = style[l.cls];
       if (!st) continue;
-      out.push(`${l.cls === 'tan' ? '0.267' : '0.067'} G ${pf(st[0] * PT)} w`);
-      if (st[1]) out.push(`[${st[1].map((v) => pf(v * PT)).join(' ')}] 0 d`);
+      out.push(`${l.lost ? '0.788 0.216 0.180' : (l.cls === 'tan' ? '0.267' : '0.067')} G ${pf(st[0] * PT)} w`);
+      if (l.lost && l.cls === 'dim') out.push(`[${pf(2 * PT)} ${pf(1 * PT)}] 0 d`);
+      else if (st[1]) out.push(`[${st[1].map((v) => pf(v * PT)).join(' ')}] 0 d`);
       else out.push('[] 0 d');
       if (l.rect) {
         const [rx, ry, rw, rh] = l.rect;
@@ -3921,12 +5148,14 @@ const Drawing = (() => {
       } else if (l.circle) {
         const cx = l.circle[0] * PT, cy = (H - l.circle[1]) * PT, R = l.circle[2] * PT;
         const k = 0.5522847498 * R;
+        const op = l.cls === 'balloon-circle' ? 'B' : 'S';
+        if (l.cls === 'balloon-circle') out.push('1 g');
         out.push(
           `${pf(cx + R)} ${pf(cy)} m`,
           `${pf(cx + R)} ${pf(cy + k)} ${pf(cx + k)} ${pf(cy + R)} ${pf(cx)} ${pf(cy + R)} c`,
           `${pf(cx - k)} ${pf(cy + R)} ${pf(cx - R)} ${pf(cy + k)} ${pf(cx - R)} ${pf(cy)} c`,
           `${pf(cx - R)} ${pf(cy - k)} ${pf(cx - k)} ${pf(cy - R)} ${pf(cx)} ${pf(cy - R)} c`,
-          `${pf(cx + k)} ${pf(cy - R)} ${pf(cx + R)} ${pf(cy - k)} ${pf(cx + R)} ${pf(cy)} c S`
+          `${pf(cx + k)} ${pf(cy - R)} ${pf(cx + R)} ${pf(cy - k)} ${pf(cx + R)} ${pf(cy)} c ${op}`
         );
       } else if (l.pts && l.pts.length > 1) {
         const seg = [`${px(l.pts[0][0])} ${py(l.pts[0][1])} m`];
@@ -3941,12 +5170,12 @@ const Drawing = (() => {
       const raw = latin1(t.t);
       const esc = pdfEsc(t.t);
       const fs = t.size * PT;
-      const fnt = (t.cls === 'title' || t.cls === 'detail-lbl' || t.cls === 'cutlabel' || t.cls === 'viewlabel') ? '/F2' : '/F1';
-      const gray = t.cls === 'lab' ? '0.333' : '0.067';
+      const fnt = (t.cls === 'title' || t.cls === 'detail-lbl' || t.cls === 'cutlabel' || t.cls === 'viewlabel' || t.cls === 'bom-th' || t.cls === 'balloon-text') ? '/F2' : '/F1';
+      const gray = t.lost ? '0.788 0.216 0.180' : (t.cls === 'lab' ? '0.333' : '0.067');
       const rad = -((t.rot || 0) * Math.PI) / 180;
       const c = Math.cos(rad), s = Math.sin(rad);
       const dx = t.anchor === 'middle' ? -pdfTextW(raw, fs) / 2 : t.anchor === 'end' ? -pdfTextW(raw, fs) : 0;
-      out.push(`${gray} g q ${pf(c)} ${pf(s)} ${pf(-s)} ${pf(c)} ${px(t.x)} ${py(t.y)} cm BT ${fnt} ${pf(fs)} Tf ${pf(dx)} 0 Td (${esc}) Tj ET Q`);
+      out.push(`${gray} ${t.lost ? 'rg' : 'g'} q ${pf(c)} ${pf(s)} ${pf(-s)} ${pf(c)} ${px(t.x)} ${py(t.y)} cm BT ${fnt} ${pf(fs)} Tf ${pf(dx)} 0 Td (${esc}) Tj ET Q`);
     }
     return out.join('\n') + '\n';
   }
@@ -4066,7 +5295,9 @@ const Drawing = (() => {
       hatch: 'SCHRAFFUR', cutline: 'SCHNITTLINIE', cutend: 'SCHNITTLINIE',
       dim: 'BEMASSUNG', arrow: 'BEMASSUNG', 'arrow-open': 'BEMASSUNG', 'arrow-slash': 'BEMASSUNG', 'arrow-dot': 'BEMASSUNG',
       leader: 'BEMASSUNG', 'leader-arrow': 'BEMASSUNG', 'leader-dot': 'BEMASSUNG', detail: 'BEMASSUNG',
+      'balloon-line': 'BEMASSUNG', 'balloon-arrow': 'BEMASSUNG', 'balloon-dot': 'BEMASSUNG', 'balloon-circle': 'BEMASSUNG',
       'detail-border': 'RAHMEN', frame: 'RAHMEN', thin: 'RAHMEN',
+      'bom-frame': 'RAHMEN', 'bom-head-line': 'RAHMEN', 'bom-grid': 'RAHMEN',
     };
     const stats = { lines: 0, circles: 0, arcs: 0, polylines: 0, solids: 0, texts: 0, byLayer: {} };
     const bumpLayer = (ly) => { stats.byLayer[ly] = (stats.byLayer[ly] || 0) + 1; };
@@ -4088,7 +5319,7 @@ const Drawing = (() => {
         stats.circles++; bumpLayer(ly);
       } else if (l.poly) {
         const q = l.poly;
-        if (q.length === 3 && (l.cls === 'arrow' || l.cls === 'leader-arrow')) {
+        if (q.length === 3 && (l.cls === 'arrow' || l.cls === 'leader-arrow' || l.cls === 'balloon-arrow')) {
           P(0, 'SOLID', 8, ly,
             10, q[0][0].toFixed(4), 20, Y(q[0][1]).toFixed(4), 30, 0,
             11, q[1][0].toFixed(4), 21, Y(q[1][1]).toFixed(4), 31, 0,
@@ -4115,7 +5346,7 @@ const Drawing = (() => {
     for (const t of cur.texts || []) {
       if (t.cls === 'note') continue;
       const cls = String(t.cls || '');
-      const tLy = (cls.startsWith('dimtext') || cls === 'leadertext' || cls === 'detail-lbl') ? 'BEMASSUNG'
+      const tLy = (cls.startsWith('dimtext') || cls === 'leadertext' || cls === 'detail-lbl' || cls === 'balloon-text') ? 'BEMASSUNG'
         : (cls === 'cutlabel' || cls === 'viewlabel') ? 'SCHNITTLINIE' : 'RAHMEN';
       const align = t.anchor === 'middle' ? [72, 1, 11, t.x.toFixed(4), 21, Y(t.y).toFixed(4), 31, 0]
         : t.anchor === 'end' ? [72, 2, 11, t.x.toFixed(4), 21, Y(t.y).toFixed(4), 31, 0] : [];
@@ -4370,6 +5601,55 @@ const Drawing = (() => {
   function renderPanel(body) {
     const all = sheets(), idx = activeIndex(), d = all[idx] || dwg();
     const w = h('div', { class: 'props' });
+    const lostList = layout ? lostDims(d) : [];
+    if (lostList.length) {
+      const dsLost = sheetDimStyle(d);
+      const lostSec = h('div', { class: 'section dw-lost-sec', id: 'dw-lost-sec', 'data-help': 'drawingLostDims' });
+      lostSec.append(h('div', { class: 'section-h dw-lost-h' }, T('draw.panel.lostHeading', { n: lostList.length })));
+      const lWrap = h('div', { class: 'dw-lost-list', id: 'dw-lost-list' });
+      for (const ld of lostList) {
+        const isRebinding = tool === 'dim' && toolState && toolState.rebindId === ld.id;
+        const row = h('div', {
+          class: 'dw-lost-row' + (selDim === ld.id ? ' active' : ''),
+          'data-dim-id': ld.id,
+        });
+        row.append(
+          h('div', { class: 'dw-lost-top' },
+            h('span', { class: 'dw-lost-val' }, dimSummaryLabel(ld, dsLost)),
+            h('span', { class: 'dw-lost-view' }, viewLabel(ld.view, d)),
+          ),
+          h('div', { class: 'dw-lost-reason' }, ld.lostReason || T('draw.panel.lostEdgeMissing')),
+        );
+        const acts = h('div', { class: 'dw-lost-acts' });
+        const bRebind = h('button', {
+          type: 'button',
+          class: 'btn dw-lost-rebind' + (isRebinding ? ' active' : ''),
+          'data-dim-id': ld.id,
+        }, T(isRebinding ? 'common.cancel' : 'draw.panel.lostRebind'));
+        bRebind.onclick = (e) => {
+          e.stopPropagation();
+          if (isRebinding) setTool(null);
+          else startRebind(ld.id);
+        };
+        const bDel = h('button', {
+          type: 'button',
+          class: 'btn danger dw-lost-del',
+          'data-dim-id': ld.id,
+        }, T('common.delete'));
+        bDel.onclick = (e) => { e.stopPropagation(); removeDim(ld.id); };
+        acts.append(bRebind, bDel);
+        row.append(acts);
+        row.onclick = () => { selDim = ld.id; render(); Panels.renderRight(); };
+        lWrap.append(row);
+      }
+      lostSec.append(lWrap);
+      if (lostList.length > 1) {
+        const bDelAll = h('button', { type: 'button', class: 'btn danger', id: 'dw-lost-del-all', style: { marginTop: '6px', width: '100%' } }, T('draw.panel.lostDelAll'));
+        bDelAll.onclick = () => removeLostDims();
+        lostSec.append(bDelAll);
+      }
+      w.append(lostSec);
+    }
     const vSec = h('div', { class: 'section', 'data-help': 'drawingViews' }, h('div', { class: 'section-h' }, T('menu.draw.viewsHeading')));
     const bIso = h('button', { type: 'button', class: 'btn', id: 'dw-add-iso', 'data-help': 'drawingViews' });
     bIso.innerHTML = icon('plus') + esc(T('draw.panel.addIso'));
@@ -4524,6 +5804,69 @@ const Drawing = (() => {
       noteSec.append(nl);
     }
     w.append(noteSec);
+    // Positionsnummern & Stückliste auf dem Blatt (ZE-12)
+    const bomSec = h('div', { class: 'section', id: 'dw-bom-sec', 'data-help': 'drawingBom' }, h('div', { class: 'section-h' }, T('draw.panel.bomSec')));
+    const bomShow = !!(d.bomTable && d.bomTable.show);
+    const bomChk = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'dw-bom-show', checked: bomShow }), T('draw.panel.bomShow'));
+    bomChk.querySelector('input').onchange = (e) => setBomTable(e.target.checked);
+    bomSec.append(bomChk);
+    const viewOptsBal = [['auto', T('draw.panel.balloonViewAuto')], ...avList.map((av) => [av.id, av.name])];
+    if (!viewOptsBal.some(([k]) => k === balloonViewPref)) balloonViewPref = 'auto';
+    bomSec.append(UI.selectField({
+      id: 'dw-balloon-view',
+      label: T('draw.panel.balloonView'),
+      value: balloonViewPref,
+      options: viewOptsBal,
+      onChange: (v) => { balloonViewPref = v; },
+    }));
+    const bAutoBal = h('button', { type: 'button', class: 'btn', id: 'dw-balloons-auto', 'data-help': 'drawingBalloons' });
+    bAutoBal.innerHTML = icon('list') + esc(T('draw.panel.balloonsAuto'));
+    bAutoBal.onclick = () => autoBalloons({ view: balloonViewPref === 'auto' ? null : balloonViewPref });
+    const bAddBal = h('button', { type: 'button', class: 'btn' + (tool === 'balloon' ? ' active' : ''), id: 'dw-balloon-add', 'data-help': 'drawingBalloons' });
+    bAddBal.innerHTML = icon('plus') + esc(T(tool === 'balloon' ? 'draw.panel.balloonActive' : 'draw.panel.balloonAdd'));
+    bAddBal.onclick = () => tool_('balloon');
+    bomSec.append(h('div', { class: 'btn-row' }, bAutoBal, bAddBal));
+    if (d.bomTable && Array.isArray(d.bomTable.pos)) {
+      const bResetBom = h('button', { type: 'button', class: 'btn', id: 'dw-bom-reset-pos', style: { marginTop: '6px' } }, T('draw.panel.bomResetPos'));
+      bResetBom.onclick = () => resetBomTablePos();
+      bomSec.append(bResetBom);
+    }
+    const bomRowsList = bomItems(bomData);
+    if (bomRowsList.length) {
+      const bList = h('div', { class: 'mini-list', id: 'dw-bom-list', style: { marginTop: '6px' } });
+      for (const r of bomRowsList) {
+        bList.append(h('div', { class: 'mini-row', 'data-bom-pos': String(r.pos) },
+          h('b', { class: 'mono' }, `${r.pos}`),
+          h('span', { class: 'mono', style: { color: 'var(--muted)' } }, `${r.n}×`),
+          h('span', { class: 'grow', style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, r.name),
+          h('span', { class: 'mono', style: { fontSize: '11px', color: 'var(--muted)' } }, r.mat)));
+      }
+      bomSec.append(bList);
+    }
+    const blList = d.balloons || [];
+    if (blList.length) {
+      const bItems = h('div', { class: 'mini-list', id: 'dw-balloons-list', style: { marginTop: '6px' } });
+      for (const bl of blList) {
+        const bPos = resolveBalloonPos(bl, bomData);
+        const matchRow = bomRowsList.find((r) => r.pos === bPos);
+        const row = h('div', {
+          class: 'mini-row balloon-row',
+          'data-balloon-id': bl.id,
+          style: { cursor: 'pointer', padding: '4px 6px', borderRadius: '6px', background: selDim === bl.id ? 'var(--accent-soft)' : '' },
+        });
+        const badge = h('b', { class: 'mono' }, `(${bPos})`);
+        const nm = h('span', { class: 'grow', style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, matchRow ? matchRow.name : T('draw.panel.posShort', { pos: bPos }));
+        const vw = h('span', { class: 'mono', style: { fontSize: '11px', color: 'var(--muted)' } }, bl.view ? viewLabel(bl.view, d) : T('draw.tb.sheet'));
+        const db = h('button', { type: 'button', class: 'btn danger balloon-del', style: { padding: '2px 6px', fontSize: '11.5px' }, 'data-tip': T('draw.panel.balloonDelTip') });
+        db.innerHTML = icon('trash');
+        db.onclick = (e) => { e.stopPropagation(); removeBalloon(bl.id); };
+        row.append(badge, nm, vw, db);
+        row.onclick = () => { selDim = bl.id; render(); Panels.renderRight(); };
+        bItems.append(row);
+      }
+      bomSec.append(bItems);
+    }
+    w.append(bomSec);
     const secs = d.sections || [];
     const secBox = h('div', { class: 'section', id: 'dw-sections-sec' }, h('div', { class: 'section-h' }, T('draw.panel.sectionsSec')));
     const bSec = h('button', { type: 'button', class: 'btn' + (tool === 'section' ? ' primary' : ''), id: 'dw-add-section', 'data-help': 'drawingSection' });
@@ -4631,9 +5974,39 @@ const Drawing = (() => {
       const isSec = secs.some((x) => x.id === selDim);
       const selD = d.dims.find((x) => x.id === selDim);
       const selNote = (d.notes || []).find((x) => x.id === selDim);
+      const selBalloon = (d.balloons || []).find((x) => x.id === selDim);
+      const isBomSel = selDim === '__bom__';
       const selCtr = String(selDim).startsWith('ctr|') ? findCenterById(selDim) : null;
-      const selDimInfo = !selDet && !isSec && !selNote && !selCtr ? findDimById(selDim, d, layout) : null;
-      const selSec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, selDet ? T('draw.view.detailNamed', { lbl: selDet.label }) : selNote ? T('draw.panel.selLeader') : selCtr ? T(selCtr.type === 'cross' ? 'draw.panel.crossName' : 'draw.panel.lineName') : selDimInfo ? T('draw.panel.selDim', { lbl: selDimInfo.label }) : T('draw.panel.selDefault')));
+      const selDimInfo = !selDet && !isSec && !selNote && !selBalloon && !isBomSel && !selCtr ? findDimById(selDim, d, layout) : null;
+      const selResolved = selDimInfo ? selDimInfo.dim : (!selDet && !isSec && !selNote && !selBalloon && !isBomSel && !selCtr && selD && layout ? autoDimList(d, layout).find((x) => x.id === selDim) : null);
+      const selSec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, selDet ? T('draw.view.detailNamed', { lbl: selDet.label }) : selNote ? T('draw.panel.selLeader') : selBalloon ? T('draw.panel.selBalloon', { pos: resolveBalloonPos(selBalloon, bomData) }) : isBomSel ? T('menu.draw.bomTable') : selCtr ? T(selCtr.type === 'cross' ? 'draw.panel.crossName' : 'draw.panel.lineName') : selDimInfo ? T('draw.panel.selDim', { lbl: selDimInfo.label }) : selResolved ? T('draw.panel.selDim', { lbl: dimSummaryLabel(selResolved, sheetDimStyle(d)) }) : T('draw.panel.selDefault')));
+      if (selBalloon) {
+        const curPos = resolveBalloonPos(selBalloon, bomData);
+        const posOpts = bomRowsList.length
+          ? bomRowsList.map((r) => [String(r.pos), `${r.pos} · ${r.name} (${r.n}×)`])
+          : [[String(curPos), T('draw.panel.posShort', { pos: curPos })]];
+        selSec.append(UI.selectField({
+          id: 'dw-bl-pos',
+          label: T('draw.panel.bomPosLabel'),
+          value: String(curPos),
+          options: posOpts,
+          onChange: (v) => {
+            const np = Math.max(1, Math.round(Number(v) || 1));
+            const r = bomRowsList.find((x) => x.pos === np);
+            updateBalloon(selBalloon.id, { pos: np, itemId: r && r.ids[0] ? r.ids[0] : null, bomKey: r ? r.key : null });
+          },
+        }));
+        selSec.append(UI.selectField({
+          id: 'dw-bl-tip',
+          label: T('draw.panel.tip'),
+          value: selBalloon.tip === 'arrow' ? 'arrow' : 'dot',
+          options: [['dot', T('draw.panel.balloonTipDot')], ['arrow', T('draw.panel.balloonTipArrow')]],
+          onChange: (v) => updateBalloon(selBalloon.id, { tip: v }),
+        }));
+      }
+      if (isBomSel) {
+        selSec.append(h('div', { class: 'mini-list' }, h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('draw.panel.bomPositions')), h('b', { class: 'mono' }, String(bomRowsList.length)))));
+      }
       if (selDet) {
         const fDet = h('div', { class: 'fields' });
         const lFld = UI.textField({ id: 'dw-det-label', label: T('draw.panel.letter'), value: selDet.label, onCommit: (v) => updateDetail(selDet.id, { label: v }) });
@@ -4789,7 +6162,16 @@ const Drawing = (() => {
         }
         selSec.append(tolBox);
       }
+      if (selResolved && selResolved.lost) {
+        selSec.append(h('div', { class: 'hint-box', id: 'dw-dim-lost-hint', html: T('draw.panel.lostRefHint', { reason: esc(selResolved.lostReason || T('draw.panel.lostDefaultReason')) }) }));
+      }
       const row = h('div', { class: 'btn-row' });
+      if (selResolved && selResolved.lost && !selResolved.auto) {
+        const isRb = tool === 'dim' && toolState && toolState.rebindId === selResolved.id;
+        const rb = h('button', { type: 'button', class: 'btn' + (isRb ? ' active' : ''), id: 'dw-dim-rebind' }, T(isRb ? 'common.cancel' : 'draw.panel.lostRebind'));
+        rb.onclick = () => { if (isRb) setTool(null); else startRebind(selResolved.id); };
+        row.append(rb);
+      }
       if (isSec) {
         const fl = h('button', { type: 'button', class: 'btn', id: 'dw-sec-flip' }, T('draw.panel.secFlipBtn'));
         fl.onclick = () => flipSection(selDim);
@@ -4804,6 +6186,16 @@ const Drawing = (() => {
         const hb = h('button', { type: 'button', class: 'btn', id: 'dw-ctr-hide' });
         hb.innerHTML = icon('eyeOff') + esc(T('common.hide'));
         hb.onclick = () => hideCenter(selCtr.id);
+        row.append(hb);
+      } else if (isBomSel) {
+        if (d.bomTable && Array.isArray(d.bomTable.pos)) {
+          const rb = h('button', { type: 'button', class: 'btn', id: 'dw-bom-sel-reset' }, T('draw.panel.bomPosReset'));
+          rb.onclick = () => resetBomTablePos();
+          row.append(rb);
+        }
+        const hb = h('button', { type: 'button', class: 'btn', id: 'dw-bom-hide' });
+        hb.innerHTML = icon('eyeOff') + esc(T('common.hide'));
+        hb.onclick = () => setBomTable(false);
         row.append(hb);
       } else {
         const del = h('button', { type: 'button', class: 'btn danger', id: 'dw-del-sel' }); del.innerHTML = icon('trash') + esc(T('draw.panel.delSelBtn')); del.onclick = () => removeSel();
@@ -4824,21 +6216,27 @@ const Drawing = (() => {
   }
   function tool_(t) { setTool(tool === t ? null : t); }
   App.on('doc', () => { if (App.mode === 'drawing') refreshSoonDoc(); });
+  App.on('docLoaded', () => { lastLostKey = ''; });
   const refreshSoonDoc = debounce(async () => { await refresh(); Panels.renderRight(); }, 150);
   return {
-    open, close, refresh, refreshUI, sheetMenu, viewMenu, exportMenu, drawMenu, autoDims, tool: tool_, setDimMode, dimMenu, flipAngleDim, onKey, renderPanel,
+    open, close, refresh, refreshUI, sheetMenu, viewMenu, bomMenu, exportMenu, drawMenu, autoDims, tool: tool_, setDimMode, dimMenu, flipAngleDim, onKey, renderPanel,
     SHEETS, sheets, activeSheet: dwg, addSheet, selectSheet, renameSheet, removeSheet, duplicateSheet,
     addView, removeView, selectView, setViewOpt, viewOpts, activeViews, updateFreeViewCamera,
     get selectedView() { return currentViewKey(); },
     details, addDetail, updateDetail, removeDetail, nextDetailLabel, DETAIL_SCALES,
     DIM_ARROWS, DIM_FONT_SIZES, dimStyle: () => sheetDimStyle(), setDimStyle,
     notes, addNote, updateNote, removeNote, moveView, resetViewPos,
+    bomTable: () => ({ ...(dwg().bomTable || { show: false, pos: null }) }), setBomTable, resetBomTablePos,
+    bomRows: () => bomItems(),
+    balloons: () => (dwg().balloons || []).map((b) => ({ ...b, pos: resolveBalloonPos(b, bomData) })),
+    autoBalloons, addBalloon, updateBalloon, removeBalloon, clearBalloons,
     select: (id) => { selDim = id; render(); Panels.renderRight(); },
     get selectedId() { return selDim; },
     addSection, flipSection, removeSection, sections: () => (dwg().sections || []).slice(), waitReady, hatchStepSheet,
     centers, allCenters, setCenters, hideCenter, showCenter, toggleCenter, showAllCenters,
     iso286, ISO286: ISO286_DATA,
     dims: () => autoDimList(dwg(), layout || computeLayout(dwg())).map((x) => ({ ...x, nominalMm: dimNominal(x) })),
+    lostDims, removeDim, removeLostDims, startRebind, rebindDim, addDim,
     getDimTol, setDimTol,
     exportPDF, buildPDFBytes, exportSVG, exportDXF, buildDXF, exportPNG, buildPNG, pngDialog, pngDimensions,
     get lastDXF() { return lastDXF; },
