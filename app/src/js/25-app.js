@@ -588,6 +588,7 @@ const App = (() => {
     if (typeof SK !== 'undefined' && SK.syncFonts) SK.syncFonts(S.doc.fonts);
     placeNewAtMarker(S.doc, topBefore);
     Model.syncLinks(S.doc);
+    if (typeof Joints !== 'undefined' && Joints.syncFixed) Joints.syncFixed(S.doc);
     Model.cleanFolders(S.doc);
     S.doc.modified = Date.now();
     const last = S.undo[S.undo.length - 1];

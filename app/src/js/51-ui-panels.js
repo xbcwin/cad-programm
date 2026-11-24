@@ -338,6 +338,7 @@ const Panels = (() => {
       const ps = Datums.pointTreeSection(); if (ps) body.append(ps);
       const cs = Datums.csysTreeSection(); if (cs) body.append(cs);
       const ms = Measure.treeSection(); if (ms) body.append(ms);
+      const js = typeof Joints !== 'undefined' && Joints.treeSection ? Joints.treeSection() : null; if (js) body.append(js);
       return;
     }
     const V = Model.vars(App.doc).v;
@@ -624,6 +625,7 @@ const Panels = (() => {
     const ps = Datums.pointTreeSection(); if (ps) body.append(ps);
     const cs = Datums.csysTreeSection(); if (cs) body.append(cs);
     const ms = Measure.treeSection(); if (ms) body.append(ms);
+    const js = typeof Joints !== 'undefined' && Joints.treeSection ? Joints.treeSection() : null; if (js) body.append(js);
   }
   function moveInTree(srcId, dstId, mode) {
     return Actions.reorder(srcId, dstId, mode);
@@ -955,6 +957,7 @@ const Panels = (() => {
     if (!items.length && Datums.selectedPoint && Datums.findPoint(Datums.selectedPoint)) { $('#right-title').textContent = T('panel.title.datumPoint'); Datums.renderPointPanel(body); return; }
     if (!items.length && Datums.selectedCsys && Datums.findCsys(Datums.selectedCsys)) { $('#right-title').textContent = T('panel.title.datumCsys'); Datums.renderCsysPanel(body); return; }
     if (!items.length && Measure.selected && Measure.find(Measure.selected)) { $('#right-title').textContent = T('panel.title.measure'); Measure.renderPanel(body); return; }
+    if (!items.length && typeof Joints !== 'undefined' && Joints.selected && Joints.list.some((x) => x.id === Joints.selected)) { $('#right-title').textContent = T('panel.title.joint'); Joints.renderPanel(body); return; }
     if (!items.length) { $('#right-title').textContent = T('panel.title.project'); renderProject(body); return; }
     if (items.length > 1) { $('#right-title').textContent = T('panel.title.selection'); renderMulti(body, items); return; }
     $('#right-title').textContent = T('panel.title.props');
@@ -1869,17 +1872,30 @@ const Panels = (() => {
     const jsec = Joints.panel(it); if (jsec) w.append(jsec);
     // Lage
     if (!isMergedStep && it.kind !== 'transform') {
+      const fixedJ = typeof Joints !== 'undefined' && Joints.fixedJointOf ? Joints.fixedJointOf(it.id) : null;
       const pos = h('div', { class: 'section' }, h('div', { class: 'section-h' }, T('panel.pos.title')));
-      const setT = (k, val) => App.change(k.startsWith('r') ? 'Gedreht' : 'Verschoben', (doc) => { Model.find(doc, it.id).item.t[k] = val; }, { merge: 't:' + it.id + ':' + k });
+      const setT = (k, val) => App.change(k.startsWith('r') ? 'Gedreht' : 'Verschoben', (doc) => { if (typeof Joints !== 'undefined' && Joints.isFixedPart(it.id)) return false; Model.find(doc, it.id).item.t[k] = val; }, { merge: 't:' + it.id + ':' + k });
       const fp = h('div', { class: 'fields three' });
-      for (const k of ['x', 'y', 'z']) fp.append(UI.numField({ id: 't-' + k, value: it.t[k], axis: k, unit: '', len: true, onCommit: (v) => setT(k, v) }));
+      for (const k of ['x', 'y', 'z']) {
+        const nf = UI.numField({ id: 't-' + k, value: it.t[k], axis: k, unit: '', len: true, onCommit: (v) => setT(k, v) });
+        if (fixedJ) nf.querySelector('input').disabled = true;
+        fp.append(nf);
+      }
       const fr = h('div', { class: 'fields three' });
-      for (const k of ['rx', 'ry', 'rz']) fr.append(UI.numField({ id: 't-' + k, value: it.t[k], axis: k[1], unit: '°', onCommit: (v) => setT(k, v) }));
+      for (const k of ['rx', 'ry', 'rz']) {
+        const nf = UI.numField({ id: 't-' + k, value: it.t[k], axis: k[1], unit: '°', onCommit: (v) => setT(k, v) });
+        if (fixedJ) nf.querySelector('input').disabled = true;
+        fr.append(nf);
+      }
       pos.append(h('div', { class: 'field' }, h('label', null, T('panel.pos.position', { u: Units.label() })), fp), h('div', { class: 'field' }, h('label', null, T('panel.pos.rotation')), fr));
+      if (fixedJ) {
+        const refA = Model.find(App.doc, fixedJ.a);
+        pos.append(h('div', { class: 'hint-box' }, T('joint.fixedLockedHint', { name: refA ? Model.label(refA.item) : 'Teil' })));
+      }
       const qa = h('div', { class: 'btn-row' });
-      const drop = h('button', { type: 'button', class: 'btn small', 'data-tip': T('panel.pos.toXYTip') }); drop.innerHTML = icon('push') + esc(T('panel.pos.toXY'));
+      const drop = h('button', { type: 'button', class: 'btn small', disabled: !!fixedJ, 'data-tip': T('panel.pos.toXYTip') }); drop.innerHTML = icon('push') + esc(T('panel.pos.toXY'));
       drop.onclick = () => Actions.dropToPlate([it.id]);
-      const rz = h('button', { type: 'button', class: 'btn small', 'data-tip': T('panel.pos.rot90Tip'), 'data-kbd': 'R' }); rz.innerHTML = icon('rotate') + esc(T('panel.pos.rot90'));
+      const rz = h('button', { type: 'button', class: 'btn small', disabled: !!fixedJ, 'data-tip': T('panel.pos.rot90Tip'), 'data-kbd': 'R' }); rz.innerHTML = icon('rotate') + esc(T('panel.pos.rot90'));
       rz.onclick = () => Actions.rotate90([it.id], 'z');
       if (!f.parent) qa.append(drop);
       qa.append(rz); pos.append(qa);
@@ -2210,6 +2226,10 @@ const Panels = (() => {
       if (items[0].item.role !== 'hole') b('mirror', T('ctx.mirrorFace'), () => Features.mirrorAtFace(face), '', T('ctx.mirrorFaceTip'), true);
       const pf = b('point', T('ctx.pointFaceCenter'), () => Datums.addPointFaceCenter(face), 'pro', T('ctx.pointFaceCenterTip'));
       pf.dataset.help = 'datumPoint';
+      if (items[0].item.role !== 'hole' && App.doc.items.filter((x) => !x.hidden && x.role !== 'hole').length >= 2) {
+        const fj = b('lock', T('ctx.fixedJoint'), () => Joints.startFixed(face), '', T('ctx.fixedJointTip'), true);
+        fj.id = 'ctx-face-fixed-joint'; fj.dataset.help = 'fixedJoint';
+      }
       sep();
     } else if (face && items.length === 1 && face.info.t !== 'PLANE') {
       const fr = face.info.r;
@@ -2238,6 +2258,10 @@ const Panels = (() => {
       }
       const pf = b('point', T('ctx.pointFaceCenter'), () => Datums.addPointFaceCenter(face), 'pro', T('ctx.pointFaceCenterTip'));
       pf.dataset.help = 'datumPoint';
+      if (items[0].item.role !== 'hole' && App.doc.items.filter((x) => !x.hidden && x.role !== 'hole').length >= 2) {
+        const fj = b('lock', T('ctx.fixedJoint'), () => Joints.startFixed(face), '', T('ctx.fixedJointTip'), true);
+        fj.id = 'ctx-face-fixed-joint'; fj.dataset.help = 'fixedJoint';
+      }
       sep();
     }
     if (items.length === 1) {
@@ -2266,7 +2290,11 @@ const Panels = (() => {
       b('group', T('ctx.group'), () => Actions.group(), 'accent', T('ctx.groupTip'));
       if (items.every((x) => x.list === items[0].list && Features.canMirrorStep(x.item, x.parent))) b('mirror', T('ctx.mirrorStep'), () => Features.mirrorStep(items.map((x) => x.item.id)), 'pro', T('ctx.mirrorStepTip')).dataset.help = 'mirrorStep';
       if (items.length === 2) b('dim', T('ctx.gap'), (e) => gapPop(e.currentTarget), '', T('ctx.gapTip'), true);
-      if (items.length === 2 && !Model.parentsOf(App.doc, items[0].item.id).some((q) => q.id === items[1].item.id) && !Model.parentsOf(App.doc, items[1].item.id).some((q) => q.id === items[0].item.id)) b('hinge', T('ctx.joint'), () => Joints.start(), '', T('ctx.jointTip'), true);
+      if (items.length === 2 && !Model.parentsOf(App.doc, items[0].item.id).some((q) => q.id === items[1].item.id) && !Model.parentsOf(App.doc, items[1].item.id).some((q) => q.id === items[0].item.id)) {
+        const fj = b('lock', T('ctx.fixedJoint'), () => Joints.startFixed(), '', T('ctx.fixedJointTip'));
+        fj.id = 'ctx-fixed-joint'; fj.dataset.help = 'fixedJoint';
+        b('hinge', T('ctx.joint'), () => Joints.start(), '', T('ctx.jointTip'), true);
+      }
       if (items.length >= 2 && items.every((x) => x.item.kind === 'extrude')) b('loft', T('ctx.loft'), () => Actions.loft(), '', T('ctx.loftTip'));
       b('boolSubtract', T('ctx.boolean'), (e) => UI.menu(e.currentTarget, [{ label: T('ctx.boolUnion'), icon: 'boolUnion', run: () => Features.boolean('union') }, { label: T('ctx.boolSub'), icon: 'boolSubtract', run: () => Features.boolean('subtract') }, { label: T('ctx.boolInt'), icon: 'boolIntersect', run: () => Features.boolean('intersect') }]), '', T('ctx.booleanTip'), true);
       b('layers', T('ctx.align'), (e) => UI.menu(e.currentTarget, [['left', T('ctx.alignLeft')], ['cx', T('ctx.alignCx')], ['right', T('ctx.alignRight')], ['front', T('ctx.alignFront')], ['cy', T('ctx.alignCy')], ['back', T('ctx.alignBack')], ['bottom', T('ctx.alignBottom')]].map(([m, l]) => ({ label: l, run: () => Actions.align(null, m) }))), '', T('ctx.alignTip'));
