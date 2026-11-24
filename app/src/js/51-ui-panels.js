@@ -1,6 +1,7 @@
 // ================= Oberfläche: Leisten, Verlauf, Einstellungen =================
 const Panels = (() => {
   const expanded = new Set();
+  const collapsedBodies = new Set();
   let leftTab = 'tree';
   let flyout = null;
 
@@ -145,10 +146,14 @@ const Panels = (() => {
   const TFKINDS = [['all', 'Alle'], ['solid', 'Körper'], ['hole', 'Löcher'], ['hidden', 'Ausgeblendet'], ['err', 'Mit Fehler'], ['note', 'Mit Notiz'], ['ai', 'Von der KI']];
   function treeMatch(it) {
     const q = treeFilter.trim().toLowerCase();
-    if (q) { const kl = it.kind === 'part' ? (LIBMAP[it.p && it.p.lib] || {}).label || '' : (KINDS[it.kind] || {}).label || ''; if (!(Model.label(it).toLowerCase().includes(q) || kl.toLowerCase().includes(q) || (it.note || '').toLowerCase().includes(q))) return false; }
+    if (q) {
+      const kl = it.kind === 'part' ? (LIBMAP[it.p && it.p.lib] || {}).label || '' : (KINDS[it.kind] || {}).label || '';
+      const bodyHit = (it.bodies || []).some((b) => b && (b.name || '').toLowerCase().includes(q));
+      if (!(Model.label(it).toLowerCase().includes(q) || kl.toLowerCase().includes(q) || (it.note || '').toLowerCase().includes(q) || bodyHit)) return false;
+    }
     if (treeKind === 'solid') return it.role !== 'hole' && it.kind !== 'group';
     if (treeKind === 'hole') return it.role === 'hole';
-    if (treeKind === 'hidden') return !!it.hidden;
+    if (treeKind === 'hidden') return !!it.hidden || (it.bodies || []).some((b) => b && b.hidden);
     if (treeKind === 'err') return App.errorsFor(it.id).length > 0;
     if (treeKind === 'note') return !!it.note;
     if (treeKind === 'ai') return !!it.ai;
@@ -162,6 +167,85 @@ const Panels = (() => {
     const sel = h('select', { id: 'tree-kind', 'aria-label': 'Nur zeigen' }); for (const [k, l] of TFKINDS) sel.append(h('option', { value: k, ...(k === treeKind ? { selected: true } : {}) }, l));
     sel.onchange = () => { treeKind = sel.value; renderLeft(); };
     return h('div', { class: 'tree-filter', 'data-help': 'treeFilter' }, inp, sel);
+  }
+  function openBodyColorPop(anchor, itemId, bodyIdx, curColor, hasOwnColor) {
+    const box = h('div', { class: 'body-color-pop' });
+    box.append(h('div', { class: 'section-h' }, 'Körperfarbe'));
+    const row = h('div', { class: 'colors' });
+    for (const c of COLORS) {
+      const b = h('button', { type: 'button', 'aria-label': c.n, 'data-tip': c.n, 'aria-pressed': c.c === curColor ? 'true' : 'false', style: { background: c.c } });
+      b.onclick = () => { UI.closePop(); Actions.setBody(itemId, bodyIdx, { color: c.c }); };
+      row.append(b);
+    }
+    const free = h('input', { type: 'color', class: 'body-color-inp', value: /^#[0-9a-f]{6}$/i.test(curColor || '') ? curColor : '#2f9e91', 'aria-label': 'Eigene Farbe' });
+    free.addEventListener('change', () => { UI.closePop(); Actions.setBody(itemId, bodyIdx, { color: free.value.toLowerCase() }); });
+    row.append(h('label', { class: 'color-free', 'data-tip': 'Jede Farbe' }, free));
+    box.append(row);
+    if (hasOwnColor) {
+      const rst = h('button', { type: 'button', class: 'btn ghost small body-color-reset' });
+      rst.innerHTML = icon('undo') + 'Farbe vom Teil';
+      rst.onclick = () => { UI.closePop(); Actions.setBody(itemId, bodyIdx, { color: null }); };
+      box.append(rst);
+    }
+    UI.pop(anchor, box);
+  }
+  async function renameBodyPrompt(itemId, bodyIdx, curName) {
+    const n = await UI.prompt('Körper umbenennen', 'Name', curName, 'Umbenennen');
+    if (n !== null) Actions.setBody(itemId, bodyIdx, { name: n.trim() || null });
+  }
+  function renderBodiesList(it) {
+    if (!App.doc.items.includes(it) || it.role === 'hole' || App.mergedInto(it.id)) return null;
+    const res = App.results.get(it.id);
+    const evalBodies = res && res.data && res.data.bodies;
+    if (!evalBodies || evalBodies.length < 2) return null;
+    const meta = Model.matchBodies(it.bodies, evalBodies);
+    const open = !collapsedBodies.has(it.id);
+    const wrap = h('div', { class: 'bodies-wrap', 'data-bodies-of': it.id, 'data-help': 'bodyList' });
+    const head = h('button', { type: 'button', class: 'bodies-head', 'aria-expanded': open ? 'true' : 'false' });
+    const chev = h('span', { class: 'tw' + (open ? ' open' : '') }); chev.innerHTML = icon('chevR');
+    head.append(chev, h('span', null, `Körper (${evalBodies.length})`));
+    head.onclick = (e) => { e.stopPropagation(); open ? collapsedBodies.add(it.id) : collapsedBodies.delete(it.id); renderLeft(); };
+    wrap.append(head);
+    if (!open) return wrap;
+    const list = h('div', { class: 'bodies-list' });
+    const anyHidden = meta.some((m) => m && m.hidden);
+    for (let bi = 0; bi < evalBodies.length; bi++) {
+      const mb = meta[bi];
+      const bName = (mb && mb.name) || `Körper ${bi + 1}`;
+      const ownCol = (mb && mb.color) || null;
+      const bCol = ownCol || it.color || '#2f9e91';
+      const hidden = !!(mb && mb.hidden);
+      const row = h('div', { class: 'body-row' + (hidden ? ' hidden-item' : ''), dataset: { item: it.id, body: String(bi) } });
+      const colBtn = h('button', { type: 'button', class: 'swatch body-color-btn', style: { background: bCol }, 'aria-label': 'Farbe ändern', 'data-tip': 'Farbe ändern' });
+      colBtn.onclick = (e) => { e.stopPropagation(); openBodyColorPop(colBtn, it.id, bi, bCol, !!ownCol); };
+      const nm = h('span', { class: 'nm', title: bName }, bName);
+      const acts = h('span', { class: 'acts' });
+      const ren = h('button', { type: 'button', class: 'body-rename', 'aria-label': 'Umbenennen', 'data-tip': 'Umbenennen' });
+      ren.innerHTML = icon('edit');
+      ren.onclick = (e) => { e.stopPropagation(); renameBodyPrompt(it.id, bi, bName); };
+      const eye = h('button', { type: 'button', class: 'body-eye', 'aria-label': hidden ? 'Einblenden' : 'Ausblenden', 'data-tip': hidden ? 'Einblenden' : 'Ausblenden' });
+      eye.innerHTML = icon(hidden ? 'eyeOff' : 'eye');
+      eye.onclick = (e) => { e.stopPropagation(); Actions.setBody(it.id, bi, { hidden: !hidden }); };
+      acts.append(ren, eye);
+      row.append(colBtn, nm, acts);
+      row.addEventListener('click', (e) => { e.stopPropagation(); App.select([it.id]); });
+      row.addEventListener('dblclick', (e) => { e.stopPropagation(); renameBodyPrompt(it.id, bi, bName); });
+      row.addEventListener('contextmenu', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        UI.menu(row, [
+          { icon: 'edit', label: 'Umbenennen', run: () => renameBodyPrompt(it.id, bi, bName) },
+          { icon: 'sliders', label: 'Farbe ändern', run: () => openBodyColorPop(colBtn, it.id, bi, bCol, !!ownCol) },
+          { icon: hidden ? 'eye' : 'eyeOff', label: hidden ? 'Einblenden' : 'Ausblenden', run: () => Actions.setBody(it.id, bi, { hidden: !hidden }) },
+          { icon: 'focusView', label: 'Nur diesen Körper zeigen', run: () => Actions.showOnlyBody(it.id, bi) },
+          ...(anyHidden ? [{ icon: 'eye', label: 'Alle Körper einblenden', run: () => Actions.showAllBodies(it.id) }] : []),
+        ]);
+      });
+      row.addEventListener('pointerenter', () => { if (!hidden) Viewer.highlightBody(it.id, bi); });
+      row.addEventListener('pointerleave', () => Viewer.highlightBody(null, null));
+      list.append(row);
+    }
+    wrap.append(list);
+    return wrap;
   }
   function renderTree(body) {
     const items = App.doc.items;
@@ -248,6 +332,8 @@ const Panels = (() => {
           moveInTree(dragId, it.id, mode); dragId = null;
         });
         li.append(row);
+        const bl = renderBodiesList(it);
+        if (bl) li.append(bl);
         if (expanded.has(it.id) || (show && it.kind === 'group')) {
           for (const fin of it.finishes || []) {
             const ferr = errs.find((x) => x.finishId === fin.id);

@@ -828,7 +828,8 @@ const Interact = (() => {
         { icon: 'trash', label: T('common.delete'), kbd: 'Entf', id: 'cm-del', run: () => Actions.remove() },
       ];
     } else {
-      const hidden = App.doc.items.filter((x) => x.hidden).length;
+      let hidden = App.doc.items.filter((x) => x.hidden).length;
+      Model.walk(App.doc.items, (x) => { if (!x.hidden && x.bodies) hidden += x.bodies.filter((b) => b && b.hidden).length; });
       items = [
         { icon: 'eye', label: hidden ? T('menu.ctx.showAllCount', { n: hidden }) : T('menu.ctx.showAll'), id: 'cm-showall', disabled: !hidden, run: () => Actions.showAll() },
         { icon: 'pointer', label: T('menu.ctx.selectAll'), kbd: 'Strg A', id: 'cm-all', run: () => App.select(App.doc.items.filter((x) => !x.hidden && !App.mergedInto(x.id)).map((x) => x.id)) },

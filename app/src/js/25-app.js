@@ -205,7 +205,7 @@ const App = (() => {
       seen.add(n.id);
       if (n.merged) S.merged.set(n.id, n.merged);
       const it = topItem(n.id); if (!it) continue;
-      const info = { matrix: Model.localMatrix(it), role: it.role, color: it.color, look: lookFor(it), opacity: it.opacity ?? null, faceColors: it.faceColors || null, threads: it.threads || null, key: n.key };
+      const info = { matrix: Model.localMatrix(it), role: it.role, color: it.color, look: lookFor(it), opacity: it.opacity ?? null, faceColors: it.faceColors || null, threads: it.threads || null, bodies: it.bodies || null, key: n.key };
       if (n.empty) { Viewer.removeNode(n.id); S.results.delete(n.id); continue; }
       if (n.same && S.results.has(n.id)) { Viewer.updateNode(n.id, info); continue; }
       Viewer.setNode(n.id, n, info);
@@ -280,7 +280,7 @@ const App = (() => {
   function replaceMesh(id, key, payload) {
     const it = topItem(id); const r = S.results.get(id);
     if (!it || !r || r.key !== key) return false;
-    Viewer.setNode(id, payload, { matrix: Model.localMatrix(it), role: it.role, color: it.color, look: lookFor(it), opacity: it.opacity ?? null, faceColors: it.faceColors || null, threads: it.threads || null, key });
+    Viewer.setNode(id, payload, { matrix: Model.localMatrix(it), role: it.role, color: it.color, look: lookFor(it), opacity: it.opacity ?? null, faceColors: it.faceColors || null, threads: it.threads || null, bodies: it.bodies || null, key });
     r.data = payload; applyView(); refreshSelectionVisuals(); ev.emit('remeshed', id);
     return true;
   }
