@@ -157,7 +157,7 @@ const Print = (() => {
     const matName = (it && it.mat) || (App.doc.settings && App.doc.settings.material) || null;
     const L = Viewer.lookOf(matName);
     const matCol = L.nat && !(it && it.colorSet) ? L.col : null;
-    const hex = matCol || (it && it.color) || o.color || '#2f9e91';
+    const hex = o.bodyColor || matCol || (it && it.color) || o.color || '#2f9e91';
     const srgb = parseHexSrgb(hex);
     const opacity = it && it.opacity != null && it.opacity < 1 ? Math.max(0.05, it.opacity) : (L.glass || 1);
     return {
@@ -554,14 +554,14 @@ const Print = (() => {
         const STL = opts.stlText ? buildSTLText : buildSTL;
         const objs = (only ? res.objects.filter((o) => only.includes(o.id)) : res.objects).map((o) => {
           const f = Model.find(App.doc, o.id);
-          return f ? { ...o, name: o.name || Model.label(f.item), color: o.color || f.item.color } : o;
+          return f ? { ...o, name: o.name || Model.label(f.item), color: o.bodyColor || o.color || f.item.color } : o;
         });
         if (!objs.length) throw new Error('Es gibt keinen Körper zum Speichern.');
         if (opts.stl) files.push({ name: name + '.stl', data: STL(objs, name) });
         if (opts.mf) files.push({ name: name + '.3mf', data: await build3MF(objs, name) });
         if (opts.obj) { const r = buildOBJ(objs, name); files.push({ name: name + '.obj', data: r.obj }, { name: name + '.mtl', data: r.mtl }); }
         if (opts.glb) files.push({ name: name + '.glb', data: buildGLB(objs, name) });
-        if (opts.each && objs.length > 1) {
+        if (opts.each && objs.length) {
           const used = new Map();
           for (const o of objs) {
             const f = Model.find(App.doc, o.id); let base = safeName(o.name || (f ? Model.label(f.item) : 'Körper')); const n = (used.get(base) || 0) + 1; used.set(base, n); if (n > 1) base += '-' + n;

@@ -237,6 +237,7 @@ Fertig.
 - [x] Messen, Material pro Teil, Push/Pull, „ähnliche auswählen“, Versionen (Sitzung 10)
 - [x] Messungen bleiben stehen (Auto [A-012], PF-05): Knopf „Messung behalten“ in der Messen-Leiste speichert Abstände, Winkel, Flächen und Durchmesser dauerhaft im Projekt (`doc.measures`, Liste „Messungen“ im Verlauf); bei Modelländerungen rechnet Tracery die Werte selbstständig nach, zeigt „verloren“ bei fehlenden Bezügen und erlaubt Ein-/Ausblenden, Umbenennen und Löschen mit Rückgängig
 - [x] Drehen mit Winkel und bis Fläche (Auto [A-030], KP-05): Formschritt „Drehen“ (`revolve`) unterstützt jetzt eine Richtung, umgekehrt, symmetrisch (beidseitig gleich, z. B. 90° als 2×45°), beidseitig verschieden sowie „Bis zu gewählter Fläche“ (Körperfläche oder Bezugsebene inkl. Richtungsumkehr und automatischem Nachführen); Teil-Umdrehungen zeigen einen Ziehgriff samt Winkel-Schildchen im Bild
+- [x] Körper-Liste im Teil (Auto [A-033], KP-09): enthält ein Teil mehrere getrennte Volumenkörper, zeigt der Verlauf darunter eine klappbare Liste „Körper (n)“; jeder Körper lässt sich umbenennen, einfärben sowie ein- und ausblenden (inkl. Rückgängig und Speichern) und wird beim Export „Jeder Körper als eigene Datei“ einzeln mit Namen und Farbe ausgegeben
 - [ ] Versionen in der Cloud (mit Stufe 6 – Konten)
 
 ### Stufe 4 – Drohnen-Modul
