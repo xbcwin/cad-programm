@@ -21,7 +21,7 @@ const Measure = (() => {
     on = true; pts = []; current = null; last = null; clearVis();
     App.clearSelection(); Handles.clear();
     $('#t-measure') && $('#t-measure').classList.add('active');
-    UI.hint('<b>Messen:</b> Klick zwei Punkte oder zwei Flächen an (Abstand, Winkel) – eine Fläche allein zeigt ihre Größe, eine runde Kante den Durchmesser. <b>Esc</b> beendet.');
+    UI.hint(T('measure.hint'));
     Viewer.canvas.style.cursor = 'crosshair';
     showBar();
   }
@@ -36,10 +36,10 @@ const Measure = (() => {
     bar = h('div', { class: 'sketchbar measurebar', id: 'measure-bar' });
     const cur = h('span', { class: 'm-cur mono', id: 'measure-cur' });
     const keepBtn = h('button', { type: 'button', class: 'tool primary', id: 'measure-keep', 'data-help': 'measureKeep', disabled: true });
-    keepBtn.innerHTML = icon('plus') + '<span>Messung behalten</span>';
+    keepBtn.innerHTML = icon('plus') + `<span>${esc(T('measure.keep'))}</span>`;
     keepBtn.onclick = () => keep();
-    const doneBtn = h('button', { type: 'button', class: 'tool', id: 'measure-done', 'data-tip': 'Messen beenden', 'data-kbd': 'Esc' });
-    doneBtn.innerHTML = icon('check') + '<span>Fertig</span>';
+    const doneBtn = h('button', { type: 'button', class: 'tool', id: 'measure-done', 'data-tip': T('measure.doneTip'), 'data-kbd': 'Esc' });
+    doneBtn.innerHTML = icon('check') + `<span>${esc(T('common.done'))}</span>`;
     doneBtn.onclick = () => stop();
     bar.append(cur, keepBtn, doneBtn);
     $('#overlay').append(bar);
@@ -49,7 +49,7 @@ const Measure = (() => {
   function updateBar() {
     if (!bar) return;
     const cur = $('#measure-cur'), kb = $('#measure-keep');
-    if (cur) cur.textContent = current ? current.eval.text : 'Klick Flächen, Kanten oder Punkte …';
+    if (cur) cur.textContent = current ? current.eval.text : T('measure.barEmpty');
     if (kb) kb.disabled = !current;
   }
   function clearVis() { for (const o of objs) { Viewer.groups.overlay.remove(o); Viewer.disposeFat(o); } objs = []; for (const e of els) e.remove(); els = []; lastLabel = null; Viewer.requestRender(); }
@@ -156,23 +156,24 @@ const Measure = (() => {
       const d = ent.edge.r * 2;
       const short = `Ø ${Units.fmtLenU(d, 2)}`;
       const text = `Ø ${Units.fmtLenU(d, 2)}   (R ${Units.fmtLen(ent.edge.r, 2)})`;
-      return { lost: false, kind, typeLabel: 'Kreiskante', value: round(d, 6), unit: 'mm', short, text, p: ent.c.clone(), lines: [], dots: [], faces: [], circle: { id: ent.id, edgeIdx: ent.edgeIdx, W: ent.W } };
+      return { lost: false, kind, typeLabel: T('measure.circleType'), value: round(d, 6), unit: 'mm', short, text, p: ent.c.clone(), lines: [], dots: [], faces: [], circle: { id: ent.id, edgeIdx: ent.edgeIdx, W: ent.W } };
     }
     if (kind === 'round') {
       const ent = ents[0];
       const wr = ent.normal ? Viewer.wallAt(ent.id, ent.hitP, ent.normal) : null;
       const d = ent.f.r * 2;
       const short = `Ø ${Units.fmtLenU(d, 2)}`;
-      const text = `${ent.f.t === 'SPHERE' ? 'Kugel' : 'Zylinder'} Ø ${Units.fmtLenU(d, 2)}   (R ${Units.fmtLen(ent.f.r, 2)})   Fläche ${Units.fmtAreaU(ent.area, 1)}${wr ? `   Wand ${Units.fmtLenU(wr, 2)}` : ''}`;
-      return { lost: false, kind, typeLabel: ent.f.t === 'SPHERE' ? 'Kugel' : 'Zylinder', value: round(d, 6), unit: 'mm', short, text, p: ent.hitP.clone(), lines: [], dots: [ent.hitP.clone()], faces: [{ id: ent.id, faceIdx: ent.faceIdx }], circle: null };
+      const lbl = ent.f.t === 'SPHERE' ? T('measure.sphere') : T('measure.cylinder');
+      const text = `${lbl} Ø ${Units.fmtLenU(d, 2)}   (R ${Units.fmtLen(ent.f.r, 2)})   ${T('measure.face')} ${Units.fmtAreaU(ent.area, 1)}${wr ? `   ${T('measure.wall')} ${Units.fmtLenU(wr, 2)}` : ''}`;
+      return { lost: false, kind, typeLabel: lbl, value: round(d, 6), unit: 'mm', short, text, p: ent.hitP.clone(), lines: [], dots: [ent.hitP.clone()], faces: [{ id: ent.id, faceIdx: ent.faceIdx }], circle: null };
     }
     if (kind === 'face') {
       const ent = ents[0];
       const wt = Viewer.wallAt(ent.id, ent.hitP, ent.n);
       const short = Units.fmtAreaU(ent.area, ent.area < 100 ? 2 : 1);
-      const text = `Fläche ${short}${wt ? `   Wand ${Units.fmtLenU(wt, 2)}` : ''}`;
+      const text = `${T('measure.face')} ${short}${wt ? `   ${T('measure.wall')} ${Units.fmtLenU(wt, 2)}` : ''}`;
       const lines = wt ? [[ent.hitP.clone(), ent.hitP.clone().addScaledVector(ent.n, -wt)]] : [];
-      return { lost: false, kind, typeLabel: 'Fläche', value: round(ent.area, 6), unit: 'mm²', short, text, p: ent.hitP.clone(), lines, dots: [], faces: [{ id: ent.id, faceIdx: ent.faceIdx }], circle: null };
+      return { lost: false, kind, typeLabel: T('measure.face'), value: round(ent.area, 6), unit: 'mm²', short, text, p: ent.hitP.clone(), lines, dots: [], faces: [{ id: ent.id, faceIdx: ent.faceIdx }], circle: null };
     }
     const [a, b] = ents;
     if (a.kind !== 'face' && b.kind !== 'face') {
@@ -180,7 +181,7 @@ const Measure = (() => {
       const d = pa.distanceTo(pb);
       const short = Units.fmtLenU(d, 2);
       const text = `${short}   ΔX ${Units.fmtLen(Math.abs(pb.x - pa.x), 2)}  ΔY ${Units.fmtLen(Math.abs(pb.y - pa.y), 2)}  ΔZ ${Units.fmtLen(Math.abs(pb.z - pa.z), 2)}`;
-      return { lost: false, kind: 'pair', typeLabel: 'Abstand (Punkt–Punkt)', value: round(d, 6), unit: 'mm', short, text, p: pa.clone().lerp(pb, 0.5), lines: [[pa.clone(), pb.clone()]], dots: [pa.clone(), pb.clone()], faces: [], circle: null };
+      return { lost: false, kind: 'pair', typeLabel: T('measure.distPP'), value: round(d, 6), unit: 'mm', short, text, p: pa.clone().lerp(pb, 0.5), lines: [[pa.clone(), pb.clone()]], dots: [pa.clone(), pb.clone()], faces: [], circle: null };
     }
     if (a.kind === 'face' && b.kind === 'face') {
       const cs = Math.abs(a.n.dot(b.n));
@@ -188,20 +189,20 @@ const Measure = (() => {
         const d = Math.abs(b.c.clone().sub(a.c).dot(a.n));
         const from = a.hitP.clone(), to = from.clone().addScaledVector(a.n, b.c.clone().sub(from).dot(a.n));
         const short = d < 1e-6 ? `0 ${Units.label()}` : Units.fmtLenU(d, 2);
-        const text = d < 1e-6 ? 'Beide Flächen liegen in einer Ebene' : `Abstand ${Units.fmtLenU(d, 2)}   (parallel)`;
-        return { lost: false, kind: 'pair', typeLabel: 'Abstand (Flächen)', value: round(d, 6), unit: 'mm', short, text, p: from.clone().lerp(to, 0.5), lines: d < 1e-6 ? [] : [[from, to]], dots: [from, to], faces: [{ id: a.id, faceIdx: a.faceIdx }, { id: b.id, faceIdx: b.faceIdx }], circle: null };
+        const text = d < 1e-6 ? T('measure.coplanar') : T('measure.distParallel', { d: Units.fmtLenU(d, 2) });
+        return { lost: false, kind: 'pair', typeLabel: T('measure.distFF'), value: round(d, 6), unit: 'mm', short, text, p: from.clone().lerp(to, 0.5), lines: d < 1e-6 ? [] : [[from, to]], dots: [from, to], faces: [{ id: a.id, faceIdx: a.faceIdx }, { id: b.id, faceIdx: b.faceIdx }], circle: null };
       }
       const ang = (Math.acos(clamp(cs, -1, 1)) * 180) / Math.PI;
       const short = fmtAngleU(ang);
-      const text = `Winkel ${short}   (zwischen den Flächen)`;
-      return { lost: false, kind: 'pair', typeLabel: 'Winkel (Flächen)', value: round(ang, 6), unit: '°', short, text, p: a.hitP.clone().lerp(b.hitP, 0.5), lines: [[a.hitP.clone(), b.hitP.clone()]], dots: [a.hitP.clone(), b.hitP.clone()], faces: [{ id: a.id, faceIdx: a.faceIdx }, { id: b.id, faceIdx: b.faceIdx }], circle: null };
+      const text = T('measure.angleBetween', { a: short });
+      return { lost: false, kind: 'pair', typeLabel: T('measure.angFF'), value: round(ang, 6), unit: '°', short, text, p: a.hitP.clone().lerp(b.hitP, 0.5), lines: [[a.hitP.clone(), b.hitP.clone()]], dots: [a.hitP.clone(), b.hitP.clone()], faces: [{ id: a.id, faceIdx: a.faceIdx }, { id: b.id, faceIdx: b.faceIdx }], circle: null };
     }
     const f = a.kind === 'face' ? a : b, q = a.kind === 'face' ? b : a, qp = q.p || q.hitP;
     const s = qp.clone().sub(f.c).dot(f.n); const foot = qp.clone().addScaledVector(f.n, -s);
     const d = Math.abs(s);
     const short = Units.fmtLenU(d, 2);
-    const text = `Abstand ${short}   (Punkt zur Fläche)`;
-    return { lost: false, kind: 'pair', typeLabel: 'Abstand (Punkt–Fläche)', value: round(d, 6), unit: 'mm', short, text, p: qp.clone().lerp(foot, 0.5), lines: [[qp.clone(), foot]], dots: [qp.clone(), foot], faces: [{ id: f.id, faceIdx: f.faceIdx }], circle: null };
+    const text = T('measure.distPtFace', { d: short });
+    return { lost: false, kind: 'pair', typeLabel: T('measure.distPF'), value: round(d, 6), unit: 'mm', short, text, p: qp.clone().lerp(foot, 0.5), lines: [[qp.clone(), foot]], dots: [qp.clone(), foot], faces: [{ id: f.id, faceIdx: f.faceIdx }], circle: null };
   }
   function result(a, b) {
     for (const e of els) e.remove(); els = [];
@@ -350,28 +351,28 @@ const Measure = (() => {
   }
   function solveMeasure(m) {
     const refs = m.refs || [];
-    if (!refs.length) return { lost: true, short: 'verloren', text: 'verloren', value: null, unit: m.unit || '', typeLabel: 'Messung', p: m.lastP ? V3(m.lastP) : null, lines: [], dots: [], faces: [], circle: null };
+    if (!refs.length) return { lost: true, short: T('measure.lost'), text: T('measure.lost'), value: null, unit: m.unit || '', typeLabel: T('measure.typeFallback'), p: m.lastP ? V3(m.lastP) : null, lines: [], dots: [], faces: [], circle: null };
     const resolved = [];
     for (const ref of refs) {
       const x = resolveRef(ref);
-      if (!x) return { lost: true, short: 'verloren', text: 'verloren', value: null, unit: m.unit || '', typeLabel: 'Messung', p: m.lastP ? V3(m.lastP) : null, lines: [], dots: [], faces: [], circle: null };
+      if (!x) return { lost: true, short: T('measure.lost'), text: T('measure.lost'), value: null, unit: m.unit || '', typeLabel: T('measure.typeFallback'), p: m.lastP ? V3(m.lastP) : null, lines: [], dots: [], faces: [], circle: null };
       resolved.push(x);
     }
     return evalEntities(m.kind, resolved);
   }
   function evalOf(m) {
     if (live.has(m.id)) return live.get(m.id);
-    if (m.lost) return { lost: true, short: 'verloren', text: 'verloren', value: null, unit: m.unit || '', typeLabel: 'Messung', p: m.lastP ? V3(m.lastP) : null, lines: [], dots: [], faces: [], circle: null };
-    return { lost: false, short: m.short || '', text: m.text || '', value: m.value, unit: m.unit || '', typeLabel: 'Messung', p: m.lastP ? V3(m.lastP) : null, lines: [], dots: [], faces: [], circle: null };
+    if (m.lost) return { lost: true, short: T('measure.lost'), text: T('measure.lost'), value: null, unit: m.unit || '', typeLabel: T('measure.typeFallback'), p: m.lastP ? V3(m.lastP) : null, lines: [], dots: [], faces: [], circle: null };
+    return { lost: false, short: m.short || '', text: m.text || '', value: m.value, unit: m.unit || '', typeLabel: T('measure.typeFallback'), p: m.lastP ? V3(m.lastP) : null, lines: [], dots: [], faces: [], circle: null };
   }
   function defaultName(cur) {
     const n = list().length + 1;
-    const t = cur.eval.typeLabel || 'Messung';
-    if (t.startsWith('Abstand')) return `Abstand ${n}`;
-    if (t.startsWith('Winkel')) return `Winkel ${n}`;
-    if (t === 'Fläche') return `Fläche ${n}`;
-    if (t === 'Kreiskante') return `Durchmesser ${n}`;
-    return `${t} ${n}`;
+    const t = cur.eval.typeLabel || T('measure.typeFallback');
+    if (cur.kind === 'face') return T('measure.defArea', { n });
+    if (cur.kind === 'circle') return T('measure.defDia', { n });
+    if (t === T('measure.angFF')) return T('measure.defAngle', { n });
+    if (cur.kind === 'pair') return T('measure.defDist', { n });
+    return T('measure.defOther', { type: t, n });
   }
   function keep() {
     if (!current) return null;
@@ -383,7 +384,7 @@ const Measure = (() => {
     live.set(m.id, current.eval);
     App.change(`Messung „${m.name}“ behalten`, (doc) => { (doc.measures = doc.measures || []).push(m); });
     pts = []; current = null; last = null; clearVis(); updateBar(); drawSaved();
-    UI.toast(`Messung „${m.name}“ behalten.`, { icon: 'check', ms: 2000 });
+    UI.toast(T('measure.keptToast', { name: m.name }), { icon: 'check', ms: 2000 });
     return m;
   }
   function relink() {
@@ -486,17 +487,17 @@ const Measure = (() => {
   }
   function treeSection() {
     const ms = list(); if (!ms.length) return null;
-    const sec = h('div', { class: 'datum-tree measure-tree', id: 'measure-tree', 'data-help': 'measureKeep' }, h('div', { class: 'section-h' }, 'Messungen'));
+    const sec = h('div', { class: 'datum-tree measure-tree', id: 'measure-tree', 'data-help': 'measureKeep' }, h('div', { class: 'section-h' }, T('measure.treeHeading')));
     for (const m of ms) {
       const ev = evalOf(m);
       const row = h('div', { class: 'tree-row measure-row' + (m.id === sel ? ' sel' : '') + (m.hidden ? ' dim' : '') + (ev.lost ? ' lost' : ''), 'data-measure': m.id });
       const ic = h('span', { class: 'swatch measure' }); ic.innerHTML = icon('measure');
-      const val = h('span', { class: 'sub mono' + (ev.lost ? ' lost' : '') }, ev.lost ? 'verloren' : ev.short);
+      const val = h('span', { class: 'sub mono' + (ev.lost ? ' lost' : '') }, ev.lost ? T('measure.lost') : ev.short);
       const acts = h('span', { class: 'm-acts' });
-      const eye = h('button', { type: 'button', class: 'm-eye', 'aria-label': m.hidden ? 'Einblenden' : 'Ausblenden', 'data-tip': m.hidden ? 'Einblenden' : 'Ausblenden' });
+      const eye = h('button', { type: 'button', class: 'm-eye', 'aria-label': m.hidden ? T('common.show') : T('common.hide'), 'data-tip': m.hidden ? T('common.show') : T('common.hide') });
       eye.innerHTML = icon(m.hidden ? 'eyeOff' : 'eye');
       eye.onclick = (e) => { e.stopPropagation(); setHidden(m.id, !m.hidden); };
-      const del = h('button', { type: 'button', class: 'm-del', 'aria-label': 'Löschen', 'data-tip': 'Löschen' });
+      const del = h('button', { type: 'button', class: 'm-del', 'aria-label': T('common.delete'), 'data-tip': T('common.delete') });
       del.innerHTML = icon('trash');
       del.onclick = (e) => { e.stopPropagation(); remove(m.id); };
       acts.append(eye, del);
@@ -510,26 +511,26 @@ const Measure = (() => {
     const m = find(sel); if (!m) return false;
     const ev = evalOf(m);
     const w = h('div', { class: 'props' });
-    const nm = h('input', { id: 'measure-name', value: m.name, 'aria-label': 'Name' });
+    const nm = h('input', { id: 'measure-name', value: m.name, 'aria-label': T('common.name') });
     nm.addEventListener('change', () => { const v = nm.value.trim(); if (v) rename(m.id, v); });
     nm.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') nm.blur(); });
     w.append(h('div', { class: 'prop-title' }, nm));
     w.append(h('div', { class: 'mini-list' },
-      h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Art'), h('b', null, ev.typeLabel || 'Messung')),
-      h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Wert'), h('b', { class: 'mono' + (ev.lost ? ' bad' : ''), id: 'measure-val' }, ev.lost ? 'verloren' : ev.text))));
-    if (ev.lost) w.append(h('div', { class: 'err-box' }, 'Ein Bezug dieser Messung fehlt oder wurde gelöscht – die Messung kann nicht mehr berechnet werden.'));
-    else w.append(h('div', { class: 'hint-box' }, 'Die Messung aktualisiert sich von selbst, sobald sich das Modell ändert.'));
+      h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('common.kind')), h('b', null, ev.typeLabel || T('measure.typeFallback'))),
+      h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, T('measure.valueLabel')), h('b', { class: 'mono' + (ev.lost ? ' bad' : ''), id: 'measure-val' }, ev.lost ? T('measure.lost') : ev.text))));
+    if (ev.lost) w.append(h('div', { class: 'err-box' }, T('measure.lostDesc')));
+    else w.append(h('div', { class: 'hint-box' }, T('measure.autoUpdateDesc')));
     const row = h('div', { class: 'btn-row' });
-    const bc = h('button', { type: 'button', class: 'btn primary', id: 'measure-copy', disabled: ev.lost }); bc.innerHTML = icon('copy') + 'Wert kopieren'; bc.onclick = () => copyValue(ev.text);
-    const bh = h('button', { type: 'button', class: 'btn', id: 'measure-hide' }); bh.innerHTML = icon(m.hidden ? 'eye' : 'eyeOff') + (m.hidden ? 'Einblenden' : 'Ausblenden'); bh.onclick = () => setHidden(m.id, !m.hidden);
-    const bd = h('button', { type: 'button', class: 'btn ghost', id: 'measure-del' }); bd.innerHTML = icon('trash') + 'Löschen'; bd.onclick = () => remove(m.id);
+    const bc = h('button', { type: 'button', class: 'btn primary', id: 'measure-copy', disabled: ev.lost }); bc.innerHTML = icon('copy') + esc(T('measure.copyBtn')); bc.onclick = () => copyValue(ev.text);
+    const bh = h('button', { type: 'button', class: 'btn', id: 'measure-hide' }); bh.innerHTML = icon(m.hidden ? 'eye' : 'eyeOff') + esc(m.hidden ? T('common.show') : T('common.hide')); bh.onclick = () => setHidden(m.id, !m.hidden);
+    const bd = h('button', { type: 'button', class: 'btn ghost', id: 'measure-del' }); bd.innerHTML = icon('trash') + esc(T('common.delete')); bd.onclick = () => remove(m.id);
     row.append(bc, bh, bd); w.append(row);
     body.append(w);
     return true;
   }
   let lastLabel = null;
   function showLabel(text, p) {
-    const el = h('div', { class: 'dimlabel mlabel', style: { fontSize: '13px', padding: '5px 8px' }, 'data-tip': 'Klicken kopiert den Wert' }, text); $('#overlay').append(el); els.push(el);
+    const el = h('div', { class: 'dimlabel mlabel', style: { fontSize: '13px', padding: '5px 8px' }, 'data-tip': T('measure.copyTip') }, text); $('#overlay').append(el); els.push(el);
     el.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); });
     el.addEventListener('click', (e) => { e.stopPropagation(); copyValue(text); });
     lastLabel = { el, p }; place();
@@ -552,10 +553,10 @@ const Measure = (() => {
       try { const ta = h('textarea', { style: { position: 'fixed', opacity: '0' } }); ta.value = t; document.body.append(ta); ta.select(); ok = document.execCommand('copy'); ta.remove(); } catch (_) { ok = false; }
     }
     copied = t;
-    UI.toast(ok ? `${what || 'Wert'} „${t}“ kopiert – mit Strg V in ein Feld einfügen.` : `Kopieren ging nicht – der Wert ist ${t}.`, { icon: ok ? 'copy' : 'info' });
+    UI.toast(ok ? T('measure.copiedToast', { what: what || T('measure.valueLabel'), val: t }) : T('measure.copyFailedToast', { val: t }), { icon: ok ? 'copy' : 'info' });
     return ok;
   }
-  function copyValue(text) { const n = firstNumber(text); if (n) return copyText(n, 'Wert'); return false; }
+  function copyValue(text) { const n = firstNumber(text); if (n) return copyText(n, T('measure.valueLabel')); return false; }
   function refreshDisplay() {
     if (list().length) relink();
     if (on && current && current.ents) {
@@ -602,23 +603,23 @@ const Measure = (() => {
       if (els.length === 1) {
         const e = els[0];
         if (e.type === 'circle' && e.r > 0) {
-          return { text: `Kreis · Ø ${Units.fmtLenU(e.r * 2, 2)}`, tip: 'Durchmesser · Klick kopiert den Wert', copyVal: Units.fmtLen(e.r * 2, 2), copyWhat: 'Durchmesser' };
+          return { text: T('status.skCircle', { v: Units.fmtLenU(e.r * 2, 2) }), tip: T('status.skCircleTip'), copyVal: Units.fmtLen(e.r * 2, 2), copyWhat: T('common.diameter') };
         }
         if (e.type === 'rect') {
           const a = Math.abs(e.b[0] - e.a[0]) * Math.abs(e.b[1] - e.a[1]);
           const d = a < 100 ? 2 : 1;
-          return { text: `Rechteck · ${Units.fmtAreaU(a, d)}`, tip: 'Flächeninhalt · Klick kopiert den Wert', copyVal: Units.fmtArea(a, d), copyWhat: 'Fläche' };
+          return { text: T('status.skRect', { v: Units.fmtAreaU(a, d) }), tip: T('status.skRectTip'), copyVal: Units.fmtArea(a, d), copyWhat: T('status.copyArea') };
         }
         if (e.type === 'point') {
-          return { text: `Punkt · X ${Units.fmtLen(e.a[0], 1)} Y ${Units.fmtLen(e.a[1], 1)} ${Units.label()}`, tip: 'Skizzenpunkt' };
+          return { text: T('status.skPoint', { x: Units.fmtLen(e.a[0], 1), y: Units.fmtLen(e.a[1], 1), u: Units.label() }), tip: T('status.skPointTip') };
         }
         const len = sketchEntLen(e);
-        if (len > 0) return { text: `1 Element · ${Units.fmtLenU(len, 2)}`, tip: 'Länge · Klick kopiert den Wert', copyVal: Units.fmtLen(len, 2), copyWhat: 'Länge' };
-        return { text: '1 Element', tip: 'Auswahl in der Skizze' };
+        if (len > 0) return { text: T('status.skOneElLen', { v: Units.fmtLenU(len, 2) }), tip: T('status.skLenTip'), copyVal: Units.fmtLen(len, 2), copyWhat: T('common.length') };
+        return { text: T('status.skOneEl'), tip: T('status.skSelTip') };
       }
       const total = els.reduce((s, e) => s + sketchEntLen(e), 0);
-      if (total > 0) return { text: `${els.length} Elemente · ${Units.fmtLenU(total, 2)}`, tip: 'Gesamtlänge · Klick kopiert den Wert', copyVal: Units.fmtLen(total, 2), copyWhat: 'Gesamtlänge' };
-      return { text: `${els.length} Elemente`, tip: 'Auswahl in der Skizze' };
+      if (total > 0) return { text: T('status.skManyElLen', { n: els.length, v: Units.fmtLenU(total, 2) }), tip: T('status.skTotalLenTip'), copyVal: Units.fmtLen(total, 2), copyWhat: T('status.copyTotalLen') };
+      return { text: T('status.skManyEl', { n: els.length }), tip: T('status.skSelTip') };
     }
     if (App.edges.length) {
       const eds = App.edges.map((x) => { const r = App.results.get(x.id); return r && r.data && r.data.edges ? r.data.edges[x.edgeIdx] : null; }).filter(Boolean);
@@ -627,14 +628,14 @@ const Measure = (() => {
       const full = one && one.t === 'CIRCLE' && one.r && Math.hypot(one.a[0] - one.b[0], one.a[1] - one.b[1], one.a[2] - one.b[2]) < 1e-6;
       if (full) {
         const d = one.r * 2;
-        return { text: `Kreiskante · Ø ${Units.fmtLenU(d, 2)}`, tip: `Radius ${Units.fmtLenU(one.r, 2)} · Umfang ${Units.fmtLenU(total, 2)} · Klick kopiert den Wert`, copyVal: Units.fmtLen(d, 2), copyWhat: 'Durchmesser' };
+        return { text: T('status.edgeCircle', { v: Units.fmtLenU(d, 2) }), tip: T('status.edgeCircleTip', { r: Units.fmtLenU(one.r, 2), total: Units.fmtLenU(total, 2) }), copyVal: Units.fmtLen(d, 2), copyWhat: T('common.diameter') };
       }
       if (App.edges.length === 1) {
-        if (total > 0) return { text: `1 Kante · ${Units.fmtLenU(total, 2)}`, tip: 'Kantenlänge · Klick kopiert den Wert', copyVal: Units.fmtLen(total, 2), copyWhat: 'Länge' };
-        return { text: '1 Kante', tip: 'Gewählte Kante' };
+        if (total > 0) return { text: T('status.edgeOneLen', { v: Units.fmtLenU(total, 2) }), tip: T('ctx.edgeLenTip'), copyVal: Units.fmtLen(total, 2), copyWhat: T('common.length') };
+        return { text: T('status.edgeOne'), tip: T('status.edgeOneTip') };
       }
-      if (total > 0) return { text: `${App.edges.length} Kanten · ${Units.fmtLenU(total, 2)}`, tip: 'Gesamtlänge der gewählten Kanten · Klick kopiert den Wert', copyVal: Units.fmtLen(total, 2), copyWhat: 'Gesamtlänge' };
-      return { text: `${App.edges.length} Kanten`, tip: 'Gewählte Kanten' };
+      if (total > 0) return { text: T('status.edgeManyLen', { n: App.edges.length, v: Units.fmtLenU(total, 2) }), tip: T('status.edgesTotalTip'), copyVal: Units.fmtLen(total, 2), copyWhat: T('status.copyTotalLen') };
+      return { text: T('status.edgeMany', { n: App.edges.length }), tip: T('status.edgeManyTip') };
     }
     if (App.face) {
       const face = typeof Actions !== 'undefined' && Actions.selectedFace ? Actions.selectedFace() : null;
@@ -645,15 +646,15 @@ const Measure = (() => {
         const dec = area < 100 ? 2 : 1;
         const areaStr = area > 0 ? Units.fmtAreaU(area, dec) : '';
         if (isRound && area > 0) {
-          return { text: `Fläche · ${areaStr} · Ø ${Units.fmtLenU(fi.r * 2, 2)}`, tip: `Flächeninhalt und Durchmesser (R ${Units.fmtLenU(fi.r, 2)}) · Klick kopiert die Fläche`, copyVal: Units.fmtArea(area, dec), copyWhat: 'Fläche' };
+          return { text: T('status.faceRoundArea', { area: areaStr, dia: Units.fmtLenU(fi.r * 2, 2) }), tip: T('status.faceRoundAreaTip', { r: Units.fmtLenU(fi.r, 2) }), copyVal: Units.fmtArea(area, dec), copyWhat: T('status.copyArea') };
         }
         if (isRound) {
-          return { text: `Runde Fläche · Ø ${Units.fmtLenU(fi.r * 2, 2)}`, tip: `Durchmesser (R ${Units.fmtLenU(fi.r, 2)}) · Klick kopiert den Wert`, copyVal: Units.fmtLen(fi.r * 2, 2), copyWhat: 'Durchmesser' };
+          return { text: T('status.faceRound', { dia: Units.fmtLenU(fi.r * 2, 2) }), tip: T('status.faceRoundTip', { r: Units.fmtLenU(fi.r, 2) }), copyVal: Units.fmtLen(fi.r * 2, 2), copyWhat: T('common.diameter') };
         }
         if (area > 0) {
-          return { text: `Fläche · ${areaStr}`, tip: 'Flächeninhalt · Klick kopiert den Wert', copyVal: Units.fmtArea(area, dec), copyWhat: 'Fläche' };
+          return { text: T('status.faceArea', { area: areaStr }), tip: T('status.faceAreaTip'), copyVal: Units.fmtArea(area, dec), copyWhat: T('status.copyArea') };
         }
-        return { text: 'Fläche', tip: 'Gewählte Fläche' };
+        return { text: T('status.face'), tip: T('status.faceTip') };
       }
     }
     if (App.sel.length) {
@@ -662,7 +663,7 @@ const Measure = (() => {
         const it = items[0].item;
         const r = App.results.get(it.id);
         const b = (r && r.data && r.data.bbox) || App.localBox(it.id);
-        const kindLbl = it.role === 'hole' ? '1 Loch' : '1 Körper';
+        const kindLbl = it.role === 'hole' ? T('status.oneHole') : T('status.oneBody');
         if (b) {
           const dx = Math.abs(b[3] - b[0]), dy = Math.abs(b[4] - b[1]), dz = Math.abs(b[5] - b[2]);
           const sz = `${Units.fmtLen(dx, 1)} × ${Units.fmtLen(dy, 1)} × ${Units.fmtLen(dz, 1)} ${Units.label()}`;
@@ -673,37 +674,37 @@ const Measure = (() => {
       if (items.length > 1) {
         const allHoles = items.every((x) => x.item.role === 'hole');
         const allSolids = items.every((x) => x.item.role !== 'hole');
-        const lbl = allHoles ? `${items.length} Löcher` : allSolids ? `${items.length} Körper` : `${items.length} Objekte`;
+        const lbl = allHoles ? T('status.manyHoles', { n: items.length }) : allSolids ? T('status.manyBodies', { n: items.length }) : T('status.manyObjects', { n: items.length });
         return { text: lbl, tip: items.map((x) => Model.label(x.item)).join(', ') };
       }
     }
     const m = sel ? find(sel) : null;
     if (m) {
       const ev = evalOf(m);
-      return { text: `Messung · ${ev.lost ? 'verloren' : ev.short}`, tip: `${m.name}: ${ev.text}`, copyVal: ev.lost ? null : firstNumber(ev.text), copyWhat: 'Messwert' };
+      return { text: T('status.measureSel', { val: ev.lost ? T('measure.lost') : ev.short }), tip: `${m.name}: ${ev.text}`, copyVal: ev.lost ? null : firstNumber(ev.text), copyWhat: T('status.copyMeasure') };
     }
     return null;
   }
   function updateCalc() {
     const kState = typeof Kernel !== 'undefined' ? (Kernel.state || (Kernel.ready ? 'ready' : 'idle')) : 'idle';
-    let state = 'ready', cls = 'st-chip st-calc ok', text = 'Bereit', tip = 'CAD-Kern ist bereit';
+    let state = 'ready', cls = 'st-chip st-calc ok', text = T('status.ready'), tip = T('status.kernelReadyTip');
     if (kState === 'error') {
-      state = 'error'; cls = 'st-chip st-calc warn'; text = 'Kern-Fehler';
-      tip = (Kernel.error && Kernel.error.message) || 'Der CAD-Kern konnte nicht geladen werden';
+      state = 'error'; cls = 'st-chip st-calc warn'; text = T('status.kernelError');
+      tip = (Kernel.error && Kernel.error.message) || T('status.kernelErrorTip');
     } else if (kState === 'loading') {
       const pct = Math.round((Kernel.progress || 0) * 100);
       state = 'loading'; cls = 'st-chip st-calc busy';
-      text = pct > 5 && pct < 99 ? `Kern lädt (${pct} %) …` : 'Kern lädt …';
-      tip = 'CAD-Kern wird geladen …';
+      text = pct > 5 && pct < 99 ? T('status.kernelLoadingPct', { pct }) : T('status.kernelLoading');
+      tip = T('status.kernelLoadingTip');
     } else if (calcBusy || uiBusy || App.busy) {
-      state = 'busy'; cls = 'st-chip st-calc busy'; text = 'Rechnet …'; tip = 'Modell wird neu berechnet …';
+      state = 'busy'; cls = 'st-chip st-calc busy'; text = T('status.calcBusy'); tip = T('status.calcBusyTip');
     } else if (App.errors && App.errors.length) {
       state = 'error'; cls = 'st-chip st-calc warn';
-      text = App.errors.length === 1 ? '1 Fehler' : `${App.errors.length} Fehler`;
-      tip = App.errors[0].message || 'Ein Schritt hat ein Problem';
+      text = App.errors.length === 1 ? T('status.errOne') : T('status.errMany', { n: App.errors.length });
+      tip = App.errors[0].message || T('status.errTip');
     } else if (kState === 'idle') {
-      state = 'idle'; cls = 'st-chip st-calc ok'; text = 'Bereit';
-      tip = 'Oberfläche bereit – CAD-Kern lädt bei Bedarf';
+      state = 'idle'; cls = 'st-chip st-calc ok'; text = T('status.ready');
+      tip = T('status.idleTip');
     }
     statusState.calcState = state; statusState.calcText = text;
     const el = $('#status-calc');
@@ -726,7 +727,7 @@ const Measure = (() => {
     const u = Units.def();
     statusState.unit = u.k;
     const unitEl = $('#status-unit');
-    if (unitEl) { unitEl.textContent = u.label; unitEl.dataset.tip = `Einheit: ${u.name} – Klick öffnet die Einstellungen`; }
+    if (unitEl) { unitEl.textContent = u.label; unitEl.dataset.tip = T('status.unitTip', { name: u.name }); }
     updateCalc();
   }
   function setCalcBusy(on) { uiBusy = !!on; updateCalc(); }
@@ -802,13 +803,13 @@ const Measure = (() => {
       let uv = S.cursor && S.cursor.p;
       if (!uv) { const w = Viewer.rayPlane(cx, cy, F.o, F.n); if (!w) return; const d = w.clone().sub(F.o); uv = [d.dot(F.x), d.dot(F.y)]; }
       coordsNow = { sketch: true, x: uv[0], y: uv[1] };
-      el.textContent = `Skizze  X ${f(uv[0])}  Y ${f(uv[1])} ${u}`; return;
+      el.textContent = T('status.coordsSketch', { x: f(uv[0]), y: f(uv[1]), u }); return;
     }
     const hit = Viewer.pick(cx, cy, { noEdges: true });
     const p = hit ? hit.point : Viewer.pickPlane(cx, cy, 0);
     if (!p) { el.textContent = ''; coordsNow = null; return; }
     coordsNow = { x: p.x, y: p.y, z: p.z, on: hit ? hit.id : null };
-    el.textContent = `X ${f(p.x)}  Y ${f(p.y)}  Z ${f(p.z)} ${u}${hit ? '' : ' · Boden'}`;
+    el.textContent = `X ${f(p.x)}  Y ${f(p.y)}  Z ${f(p.z)} ${u}${hit ? '' : T('status.coordsGround')}`;
   }
   // kleinster Abstand zweier Teile (exakt aus dem CAD-Kern); zeigt die Verbindung als Linie im Bild
   let distLine = null;

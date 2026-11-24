@@ -2,7 +2,7 @@
 (function boot() {
   let errShown = 0;
   window.addEventListener('error', (e) => { console.error(e.error || e.message); if (Date.now() - errShown > 4000 && /Tracery|app|THREE|replicad/i.test(String(e.filename || '') + String(e.message || '')) === false) { errShown = Date.now(); } });
-  window.addEventListener('unhandledrejection', (e) => { console.error(e.reason); if (Date.now() - errShown > 4000) { errShown = Date.now(); const m = (e.reason && e.reason.message) || String(e.reason || ''); if (m && !/abort|cancel/i.test(m)) UI.toast('Da ist etwas schiefgelaufen: ' + m.slice(0, 140), { kind: 'bad' }); } });
+  window.addEventListener('unhandledrejection', (e) => { console.error(e.reason); if (Date.now() - errShown > 4000) { errShown = Date.now(); const m = (e.reason && e.reason.message) || String(e.reason || ''); if (m && !/abort|cancel/i.test(m)) UI.toast(T('status.unhandledErr', { msg: m.slice(0, 140) }), { kind: 'bad' }); } });
 
   // Symbole in die festen Knöpfe setzen
   $('#btn-undo').innerHTML = icon('undo'); $('#btn-redo').innerHTML = icon('redo'); $('#btn-menu').innerHTML = icon('menu');
@@ -20,7 +20,7 @@
   $('#btn-redo').onclick = () => App.redo();
   const updHist = () => { $('#btn-undo').disabled = !App.undoStack.length; $('#btn-redo').disabled = !App.redoStack.length; const l = App.undoStack[App.undoStack.length - 1]; $('#btn-undo').dataset.tip = l ? T('topbar.undoLabel', { label: l.label }) : T('topbar.undo'); };
   App.on('history', updHist); App.on('doc', updHist); updHist();
-  const updName = () => { $('#btn-project').textContent = App.doc.name; document.title = App.doc.name && App.doc.name !== 'Neues Projekt' ? App.doc.name + ' – Tracery' : 'Tracery'; };
+  const updName = () => { const isDef = !App.doc.name || App.doc.name === 'Neues Projekt'; $('#btn-project').textContent = isDef ? T('start.newProject') : App.doc.name; document.title = !isDef ? App.doc.name + ' – Tracery' : 'Tracery'; };
   const syncBed = () => {
     const pb = App.doc && App.doc.settings && App.doc.settings.printBed;
     Viewer.setPrintBed(pb && pb.enabled ? { ...pb, warn: !Print.fitCheck(pb).fits } : pb);
@@ -30,7 +30,7 @@
   $('#tab-model').onclick = () => Commands.setMode('model');
   $('#tab-drawing').onclick = () => Commands.setMode('drawing');
   $('#brand').onclick = (e) => { e.preventDefault(); Start.show(); };
-  I18n.on('change', () => { I18n.applyDom(); ViewPrefs.syncLevel(); Panels.renderTools(); Panels.renderCtx(); updHist(); if (Start.open) Start.show(); });
+  I18n.on('change', () => { I18n.applyDom(); ViewPrefs.syncLevel(); Panels.renderTools(); Panels.renderLeft(); Panels.renderRight(); Panels.renderCtx(); Panels.refreshViewCube(); UI.renderHint(); Measure.updateStatus(); Print.updateAmpel(); Timeline.refreshLabels(); Timeline.render(); updHist(); updName(); if (Sketch.active) Sketch.refreshUI(); if (App.mode === 'drawing') Drawing.refreshUI(); if (Start.open) Start.show(); });
   const projectItems = () => [
     { label: T('menu.proj.rename'), icon: 'edit', run: async () => { const n = await UI.prompt(T('menu.proj.rename'), T('common.name'), App.doc.name, T('common.rename')); if (n && n.trim()) App.change('Projekt umbenannt', (doc) => { doc.name = n.trim(); }); } },
     { label: T('menu.proj.saveFile'), icon: 'save', kbd: 'Strg S', run: () => Start.saveFile() },
@@ -75,8 +75,8 @@
   // Letztes Projekt aus der Browser-Datenbank laden (ggf. aus localStorage übernehmen) oder Startseite zeigen
   updName(); UI.renderHint();
   Kernel.on('state', ({ state, progress }) => {
-    if (state === 'loading') UI.busy(true, progress > 0.84 ? 'CAD-Kern startet …' : 'CAD-Kern wird geladen …');
-    else if (state === 'ready') { if (App.busy) UI.busy(true, 'Rechnet …'); else UI.busy(false); }
+    if (state === 'loading') UI.busy(true, progress > 0.84 ? T('status.kernelStarting') : T('status.kernelWillLoad'));
+    else if (state === 'ready') { if (App.busy) UI.busy(true, T('status.calcBusy')); else UI.busy(false); }
     else if (state === 'error') UI.busy(false);
   });
   Kernel.on('ready', (t) => { Log.markKernelReady(t); Print.updateAmpel(); });

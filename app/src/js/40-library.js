@@ -117,68 +117,71 @@ function sleeveEntry(size) {
 }
 // 3D-Druck-Passungs-Vorgaben (DR-03): Spiel wird bei Löchern addiert, bei Bolzen abgezogen
 const PRINT_FITS = [
-  { id: 'loose', label: 'Lose', mm: 0.4, desc: 'Viel Spiel – steckt leicht ohne Nacharbeit' },
-  { id: 'slide', label: 'Gleitend', mm: 0.2, desc: 'Bewegliche Teile, Deckel und Steckverbindungen' },
-  { id: 'snug', label: 'Fest', mm: 0.1, desc: 'Strammer Sitz, von Hand zusammendrückbar' },
-  { id: 'press', label: 'Presssitz', mm: 0, desc: 'Kein Spiel – zum Einpressen' },
+  { id: 'loose', get label() { return T('printFit.loose.label'); }, mm: 0.4, get desc() { return T('printFit.loose.desc'); } },
+  { id: 'slide', get label() { return T('printFit.slide.label'); }, mm: 0.2, get desc() { return T('printFit.slide.desc'); } },
+  { id: 'snug', get label() { return T('printFit.snug.label'); }, mm: 0.1, get desc() { return T('printFit.snug.desc'); } },
+  { id: 'press', get label() { return T('printFit.press.label'); }, mm: 0, get desc() { return T('printFit.press.desc'); } },
 ];
 const PRINT_FIT_MAP = Object.fromEntries(PRINT_FITS.map((f) => [f.id, f]));
 function printFitInfo(id) { return PRINT_FIT_MAP[String(id || '')] || null; }
 function printFitMm(id) { const f = printFitInfo(id); return f ? f.mm : 0; }
-const PRINT_FIT_PROJ_OPTIONS = [
-  ['', 'Aus (exakte Nennmaße)'],
+const printFitProjOptions = () => [
+  ['', T('printFit.projOff')],
   ...PRINT_FITS.map((f) => [f.id, `${f.label} (${f.mm === 0 ? '0' : fmtFixed(f.mm, 1)} mm)`]),
 ];
-const PRINT_FIT_HOLE_OPTIONS = [
-  ['', 'Keine (exakt)'],
+const printFitHoleOptions = () => [
+  ['', T('printFit.noneExact')],
   ...PRINT_FITS.map((f) => [f.id, f.mm > 0 ? `${f.label} (+${fmtFixed(f.mm, 1)} mm)` : `${f.label} (0 mm)`]),
 ];
-const PRINT_FIT_BOLT_OPTIONS = [
-  ['', 'Keine (exakt)'],
+const printFitBoltOptions = () => [
+  ['', T('printFit.noneExact')],
   ...PRINT_FITS.map((f) => [f.id, f.mm > 0 ? `${f.label} (−${fmtFixed(f.mm, 1)} mm)` : `${f.label} (0 mm)`]),
 ];
+const PRINT_FIT_PROJ_OPTIONS = printFitProjOptions();
+const PRINT_FIT_HOLE_OPTIONS = printFitHoleOptions();
+const PRINT_FIT_BOLT_OPTIONS = printFitBoltOptions();
 const LIB = [
   { lib: 'screwHole', label: 'Schraubenloch', role: 'hole', icon: 'bolt', desc: 'Durchgangsloch mit Senkung für Schrauben', params: [
     { k: 'size', label: 'Gewinde', type: 'select', options: THREAD_GROUPED_OPTIONS, def: 'M3' },
     { k: 'head', label: 'Kopf', type: 'select', options: [['countersunk', 'Senkkopf'], ['counterbore', 'Zylinderkopf'], ['none', 'ohne Senkung']], def: 'countersunk' },
     { k: 'fit', label: 'Loch', type: 'select', options: [['medium', 'Mittel (Standard)'], ['fine', 'Eng (genau)'], ['coarse', 'Weit (mit Spiel)'], ['tap', 'Kernloch für Gewinde']], def: 'medium' },
     { k: 'length', label: 'Tiefe', type: 'num', def: 10 },
-    { k: 'printFit', label: 'Druck-Passung', type: 'select', options: PRINT_FIT_HOLE_OPTIONS, def: '' },
+    { k: 'printFit', get label() { return T('printFit.label'); }, type: 'select', options: printFitHoleOptions, def: '' },
   ] },
   { lib: 'nutTrap', label: 'Mutternfalle', role: 'hole', icon: 'hex', desc: 'Sechskant-Tasche für eine Mutter, mit Schraubenloch', params: [
     { k: 'size', label: 'Mutter', type: 'select', options: SIZES, def: 'M3' },
     { k: 'depth', label: 'Taschentiefe', type: 'num', def: null, auto: true },
     { k: 'length', label: 'Lochtiefe', type: 'num', def: 12 },
-    { k: 'printFit', label: 'Druck-Passung', type: 'select', options: PRINT_FIT_HOLE_OPTIONS, def: '' },
+    { k: 'printFit', get label() { return T('printFit.label'); }, type: 'select', options: printFitHoleOptions, def: '' },
   ] },
   { lib: 'threadHole', label: 'Gewindeloch (gedruckt)', role: 'hole', icon: 'target', desc: 'Echtes Innengewinde zum Drucken, mit etwas Spiel', params: [
     { k: 'size', label: 'Gewinde', type: 'select', options: ['M2', 'M2.5', 'M3', 'M4', 'M5', 'M6', 'M8', 'M10', 'M12', 'M16', 'M20', 'M24'], def: 'M6' },
     { k: 'length', label: 'Tiefe', type: 'num', def: 10 },
     { k: 'pitch', label: 'Steigung', type: 'num', def: null, auto: true },
     { k: 'clear', label: 'Spiel', type: 'num', def: 0.3 },
-    { k: 'printFit', label: 'Druck-Passung', type: 'select', options: PRINT_FIT_HOLE_OPTIONS, def: '' },
+    { k: 'printFit', get label() { return T('printFit.label'); }, type: 'select', options: printFitHoleOptions, def: '' },
   ] },
   { lib: 'threadRod', label: 'Gewindebolzen', role: 'solid', icon: 'target', desc: 'Außengewinde (ISO metrisch) – z. B. für gedruckte Schraubdeckel', params: [
     { k: 'size', label: 'Gewinde', type: 'select', options: ['M2', 'M2.5', 'M3', 'M4', 'M5', 'M6', 'M8', 'M10', 'M12', 'M16', 'M20', 'M24'], def: 'M6' },
     { k: 'length', label: 'Länge', type: 'num', def: 12 },
     { k: 'pitch', label: 'Steigung', type: 'num', def: null, auto: true },
-    { k: 'printFit', label: 'Druck-Passung', type: 'select', options: PRINT_FIT_BOLT_OPTIONS, def: '' },
+    { k: 'printFit', get label() { return T('printFit.label'); }, type: 'select', options: printFitBoltOptions, def: '' },
   ] },
   { lib: 'insert', label: 'Gewindeeinsatz', role: 'hole', icon: 'target', desc: 'Loch für einen Einschmelz-Gewindeeinsatz', params: [
     { k: 'size', label: 'Gewinde', type: 'select', options: ['M2', 'M2.5', 'M3', 'M4', 'M5', 'M6', 'M8'], def: 'M3' },
     { k: 'depth', label: 'Tiefe', type: 'num', def: null, auto: true },
-    { k: 'printFit', label: 'Druck-Passung', type: 'select', options: PRINT_FIT_HOLE_OPTIONS, def: '' },
+    { k: 'printFit', get label() { return T('printFit.label'); }, type: 'select', options: printFitHoleOptions, def: '' },
   ] },
   { lib: 'blindHole', label: 'Sackloch', role: 'hole', icon: 'holeWizard', desc: 'Bohrung mit fester Tiefe und 118°-Bohrspitze (Standard-Spiralbohrer)', params: [
     { k: 'd', label: 'Durchmesser', type: 'num', def: 5 },
     { k: 'depth', label: 'Tiefe (Zylinder)', type: 'num', def: 10 },
     { k: 'tipAngle', label: 'Bohrspitze', type: 'select', options: [['118', '118° (Spiralbohrer)'], ['140', '140° (Hartmetall)'], ['180', 'Flacher Boden']], def: 118 },
-    { k: 'printFit', label: 'Druck-Passung', type: 'select', options: PRINT_FIT_HOLE_OPTIONS, def: '' },
+    { k: 'printFit', get label() { return T('printFit.label'); }, type: 'select', options: printFitHoleOptions, def: '' },
   ] },
   { lib: 'fitHole', label: 'Passbohrung H7', role: 'hole', icon: 'target', desc: 'Präzisionsbohrung auf genaues Nennmaß mit Toleranz-Hinweis nach ISO 286 H7', params: [
     { k: 'd', label: 'Nenn-Ø', type: 'num', def: 6 },
     { k: 'depth', label: 'Tiefe', type: 'num', def: 10 },
-    { k: 'printFit', label: 'Druck-Passung', type: 'select', options: PRINT_FIT_HOLE_OPTIONS, def: '' },
+    { k: 'printFit', get label() { return T('printFit.label'); }, type: 'select', options: printFitHoleOptions, def: '' },
   ] },
   { lib: 'centerHole', label: 'Zentrierbohrung', role: 'hole', icon: 'holeWizard', desc: 'Zentrierbohrung nach DIN 332 Form A (60°-Kegel + Führungsbohrung)', params: [
     { k: 'size', label: 'Größe (DIN 332 A)', type: 'select', options: CENTER_SIZES, def: 'A2.5' },
@@ -198,7 +201,7 @@ const LIB = [
     { k: 'size', label: 'Durchmesser', type: 'select', options: PIN_OPTIONS, def: '6' },
     { k: 'length', label: 'Länge', type: 'num', def: 20 },
     { k: 'tol', label: 'Toleranz', type: 'select', options: [['m6', 'm6 (Form A, Standard)'], ['h8', 'h8 (Form B)']], def: 'm6' },
-    { k: 'printFit', label: 'Druck-Passung', type: 'select', options: PRINT_FIT_BOLT_OPTIONS, def: '' },
+    { k: 'printFit', get label() { return T('printFit.label'); }, type: 'select', options: printFitBoltOptions, def: '' },
   ] },
   { lib: 'stdKey', label: 'Passfeder (DIN 6885 A)', role: 'solid', icon: 'key', mat: 'Baustahl', std: true, desc: 'Rundstirnige Passfeder nach DIN 6885 Form A', params: [
     { k: 'size', label: 'Querschnitt (b × h)', type: 'select', options: KEY_OPTIONS, def: '6x6' },

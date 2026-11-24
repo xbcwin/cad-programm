@@ -611,7 +611,14 @@ const SK = (() => {
     line: ['len', 'ang', 'x', 'y'], point: ['x', 'y'], rect: ['w', 'h', 'x', 'y'], circle: ['d', 'x', 'y'], ellipse: ['w', 'h', 'x', 'y'], text: ['h', 'x', 'y'],
     poly: ['d', 'n', 'x', 'y'], slot: ['len', 'w', 'x', 'y'], arc: ['r', 'x', 'y'], spline: ['x', 'y'],
   };
-  const DIMNAME = { len: 'Länge', ang: 'Winkel', w: 'Breite', h: 'Höhe', d: 'Durchmesser', n: 'Ecken', x: 'Abstand X', y: 'Abstand Y', r: 'Radius', dist: 'Abstand', distPL: 'Abstand', angLL: 'Winkel' };
+  const DIMNAME = {
+    get len() { return T('common.length'); }, get ang() { return T('common.angle'); },
+    get w() { return T('common.width'); }, get h() { return T('common.height'); },
+    get d() { return T('common.diameter'); }, get n() { return T('param.n'); },
+    get x() { return T('sk.panel.dx'); }, get y() { return T('sk.panel.dy'); },
+    get r() { return T('common.radius'); }, get dist() { return T('common.distance'); },
+    get distPL() { return T('common.distance'); }, get angLL() { return T('common.angle'); },
+  };
   const anchorKey = (e) => (e.type === 'circle' || e.type === 'poly' || e.type === 'ellipse' ? 'c' : 'a');
   const anchorOf = (e) => (e.type === 'spline' ? e.pts[0] : e[anchorKey(e)]);
   function measure(e, k) {

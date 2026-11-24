@@ -23,10 +23,10 @@ const Timeline = (() => {
   function chipTip(it, i, V) {
     const errs = RefFix.hardErrorsFor(it.id);
     const refs = RefFix.issuesOf(it.id);
-    const st = it.suppressed ? ' · unterdrückt' : i >= markerPos() ? ' · nach dem Marker' : '';
-    const ai = it.ai ? ` · ${it.ai.edit ? 'von der KI geändert' : 'von der KI'}: „${it.ai.q}“` : '';
+    const st = it.suppressed ? T('tl.suppressed') : i >= markerPos() ? T('tl.afterMarker') : '';
+    const ai = it.ai ? ` · ${it.ai.edit ? T('tl.aiEdited') : T('tl.aiCreated')}: „${it.ai.q}“` : '';
     const msg = errs.length ? ' · ' + errs[0].message : refs.length ? ' · ' + refs[0].message : '';
-    return `${i + 1}. ${Model.label(it)}${Model.sizeText(it, V) ? ' · ' + Model.sizeText(it, V) : ''}${st}${ai}${msg}${it.note ? ' · Notiz: ' + it.note : ''}`;
+    return `${i + 1}. ${Model.label(it)}${Model.sizeText(it, V) ? ' · ' + Model.sizeText(it, V) : ''}${st}${ai}${msg}${it.note ? T('tl.notePrefix') + it.note : ''}`;
   }
   function render() {
     if (!el) return;
@@ -35,8 +35,8 @@ const Timeline = (() => {
     const selTop = own === App.doc ? new Set(App.sel.map((id) => (Model.topOf(App.doc, id) || {}).id)) : new Set(App.sel);
     el.classList.toggle('ctx', own !== App.doc);
     track.innerHTML = '';
-    if (!n) track.append(h('span', { class: 'tl-empty' }, own !== App.doc ? `„${Model.label(own)}“ ist noch leer – füge Körper hinzu` : 'Zeitleiste – jeder Schritt erscheint hier'));
-    const marker = h('div', { class: 'tl-marker', role: 'slider', 'aria-label': 'Marker der Zeitleiste', 'aria-valuemin': 0, 'aria-valuemax': n, 'aria-valuenow': mk, tabindex: 0, 'data-tip': 'Ziehen: zurückrollen', 'data-help': 'rollback' }, h('i'));
+    if (!n) track.append(h('span', { class: 'tl-empty' }, own !== App.doc ? T('tl.emptyComp', { name: Model.label(own) }) : T('tl.emptyDoc')));
+    const marker = h('div', { class: 'tl-marker', role: 'slider', 'aria-label': T('tl.markerAria'), 'aria-valuemin': 0, 'aria-valuemax': n, 'aria-valuenow': mk, tabindex: 0, 'data-tip': T('tl.markerTip'), 'data-help': 'rollback' }, h('i'));
     marker.addEventListener('pointerdown', startDrag);
     marker.addEventListener('keydown', (e) => { if (e.key === 'ArrowLeft') { e.preventDefault(); setMarker(mk - 1); } if (e.key === 'ArrowRight') { e.preventDefault(); setMarker(mk + 1); } });
     items.forEach((it, i) => {
@@ -61,7 +61,7 @@ const Timeline = (() => {
     if (mk >= n && n) track.append(marker);
     const pk = own === App.doc ? App.peeking : null;
     info.classList.toggle('peek', pk != null);
-    info.textContent = pk != null ? `Vorschau: Stand nach Schritt ${pk}` : n ? (mk >= n ? (n === 1 ? '1 Schritt' : `${n} Schritte`) : `${mk} / ${n}`) : '';
+    info.textContent = pk != null ? T('tl.peekInfo', { n: pk }) : n ? (mk >= n ? (n === 1 ? T('tl.oneStep') : T('tl.manySteps', { n })) : `${mk} / ${n}`) : '';
     if (pk != null) track.querySelectorAll('.tl-chip').forEach((c, j) => c.classList.toggle('peekoff', j >= pk));
     bStart.disabled = !n || mk === 0; bPrev.disabled = !n || mk === 0; bNext.disabled = mk >= n; bEnd.disabled = mk >= n;
     // aktiven Bereich sichtbar halten
@@ -101,13 +101,19 @@ const Timeline = (() => {
     const up = () => { m.removeEventListener('pointermove', move); m.removeEventListener('pointerup', up); m.removeEventListener('pointercancel', up); const k = drag.k; if (drag.ind) drag.ind.remove(); drag = null; m.classList.remove('drag'); setMarker(k); render(); };
     m.addEventListener('pointermove', move); m.addEventListener('pointerup', up); m.addEventListener('pointercancel', up);
   }
+  function refreshLabels() {
+    if (!el) return;
+    el.setAttribute('aria-label', T('tl.aria'));
+    const setTip = (b, k) => { if (!b) return; const t = T(k); b.setAttribute('aria-label', t); b.dataset.tip = t; };
+    setTip(bStart, 'tl.toStart'); setTip(bPrev, 'tl.stepBack'); setTip(bNext, 'tl.stepForward'); setTip(bEnd, 'tl.toEnd');
+  }
   function init() {
-    el = h('div', { class: 'timeline', id: 'timeline', role: 'toolbar', 'aria-label': 'Zeitleiste' });
+    el = h('div', { class: 'timeline', id: 'timeline', role: 'toolbar', 'aria-label': T('tl.aria') });
     const bt = (ic, tip, fn) => { const b = h('button', { type: 'button', 'aria-label': tip, 'data-tip': tip }); b.innerHTML = icon(ic); b.onclick = fn; return b; };
-    bStart = bt('chevR', 'Zum Anfang', () => setMarker(0)); bStart.querySelector('svg').style.transform = 'scaleX(-1)';
-    bPrev = bt('arrowR', 'Einen Schritt zurück', () => setMarker(markerPos() - 1)); bPrev.querySelector('svg').style.transform = 'scaleX(-1)';
-    bNext = bt('arrowR', 'Einen Schritt vor', () => setMarker(markerPos() + 1));
-    bEnd = bt('chevR', 'Ans Ende', () => setMarker(listOf(owner()).length));
+    bStart = bt('chevR', T('tl.toStart'), () => setMarker(0)); bStart.querySelector('svg').style.transform = 'scaleX(-1)';
+    bPrev = bt('arrowR', T('tl.stepBack'), () => setMarker(markerPos() - 1)); bPrev.querySelector('svg').style.transform = 'scaleX(-1)';
+    bNext = bt('arrowR', T('tl.stepForward'), () => setMarker(markerPos() + 1));
+    bEnd = bt('chevR', T('tl.toEnd'), () => setMarker(listOf(owner()).length));
     track = h('div', { class: 'tl-track' }); info = h('div', { class: 'tl-info', 'data-help': 'timeline' });
     el.append(h('div', { class: 'tl-btns' }, bStart, bPrev), track, h('div', { class: 'tl-btns' }, bNext, bEnd), info);
     $('#center').append(el); $('#center').classList.add('has-tl');
@@ -118,6 +124,6 @@ const Timeline = (() => {
     App.on('mode', () => { el.hidden = App.mode !== 'model'; $('#center').classList.toggle('has-tl', App.mode === 'model'); });
     render();
   }
-  return { init, render, setMarker, toggleSuppress, markerPos };
+  return { init, render, refreshLabels, setMarker, toggleSuppress, markerPos };
 })();
 

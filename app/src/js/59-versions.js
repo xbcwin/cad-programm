@@ -128,24 +128,24 @@ const Versions = (() => {
     const draw = () => {
       body.innerHTML = '';
       const row = h('div', { class: 'btn-row' });
-      const sv = h('button', { type: 'button', class: 'btn primary', id: 'ver-save' }); sv.innerHTML = icon('save') + 'Jetzigen Stand als Version speichern';
-      sv.onclick = async () => { const n = await UI.prompt('Version speichern', 'Name der Version', 'Version ' + (list().length + 1), 'Speichern'); if (n != null) { save(n); draw(); } };
+      const sv = h('button', { type: 'button', class: 'btn primary', id: 'ver-save' }); sv.innerHTML = icon('save') + esc(T('dlg.ver.saveBtn'));
+      sv.onclick = async () => { const n = await UI.prompt(T('dlg.ver.saveTitle'), T('dlg.ver.saveLabel'), T('dlg.ver.defName', { n: list().length + 1 }), T('common.save')); if (n != null) { save(n); draw(); } };
       row.append(sv); body.append(row);
       const arr = list().slice().reverse();
-      if (!arr.length) { body.append(h('div', { class: 'hint-box', html: 'Noch keine Versionen. Speichere einen Stand, bevor du etwas ausprobierst – dann kannst du später vergleichen oder zurück.' })); return; }
+      if (!arr.length) { body.append(h('div', { class: 'hint-box', html: T('dlg.ver.emptyHtml') })); return; }
       const ul = h('div', { class: 'mini-list' });
       for (const v of arr) {
         const r = h('div', { class: 'mini-row ver-row', 'data-vid': v.id });
         const nm = h('span', { class: 'grow' }, h('b', null, v.name), h('small', { style: { display: 'block', color: 'var(--muted)' } }, new Date(v.t).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' })));
-        const bc = h('button', { type: 'button', class: 'btn small ver-cmp' }, 'Vergleichen'); bc.onclick = () => { m.close(); compare(v.id); };
-        const br = h('button', { type: 'button', class: 'btn small ver-restore' }, 'Zurückholen'); br.onclick = async () => { if (await UI.confirm('Version zurückholen?', `Das Projekt wird auf „${v.name}“ gesetzt. Mit Rückgängig kommst du wieder hierher.`, 'Zurückholen')) { m.close(); restore(v.id); } };
-        const bd = h('button', { type: 'button', class: 'btn ghost small ver-del', 'aria-label': 'Version löschen', 'data-tip': 'Version löschen' }); bd.innerHTML = icon('trash'); bd.onclick = async () => { if (await UI.confirm('Version löschen?', `„${v.name}“ wird gelöscht.`, 'Löschen', true)) { remove(v.id); draw(); } };
+        const bc = h('button', { type: 'button', class: 'btn small ver-cmp' }, T('dlg.ver.compare')); bc.onclick = () => { m.close(); compare(v.id); };
+        const br = h('button', { type: 'button', class: 'btn small ver-restore' }, T('dlg.ver.restore')); br.onclick = async () => { if (await UI.confirm(T('dlg.ver.restoreTitle'), T('dlg.ver.restoreBody', { name: v.name }), T('dlg.ver.restore'))) { m.close(); restore(v.id); } };
+        const bd = h('button', { type: 'button', class: 'btn ghost small ver-del', 'aria-label': T('dlg.ver.delAria'), 'data-tip': T('dlg.ver.delAria') }); bd.innerHTML = icon('trash'); bd.onclick = async () => { if (await UI.confirm(T('dlg.ver.delTitle'), T('dlg.ver.delBody', { name: v.name }), T('common.delete'), true)) { remove(v.id); draw(); } };
         r.append(nm, bc, br, bd); ul.append(r);
       }
       body.append(ul);
     };
     draw();
-    const m = UI.modal({ title: 'Versionen', body, actions: [{ label: 'Schließen', primary: true }] });
+    const m = UI.modal({ title: T('dlg.ver.title'), body, actions: [{ label: T('common.close'), primary: true }] });
   }
   function init() { App.on('doc', () => { if (cmp && !App.doc) compareOff(); if (App.doc && App.doc.id) Store.loadVersions(App.doc.id).then(() => ev.emit('change')).catch(() => {}); }); }
   return { init, list, save, remove, rename, restore, compare, compareOff, diff, dialog, exportList, importList, on: ev.on, get comparing() { return cmp ? { name: cmp.v.name, diff: cmp.diff, shown: !!(cmp.nodes && cmp.nodes.length) } : null; } };

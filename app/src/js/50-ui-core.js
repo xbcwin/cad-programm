@@ -21,7 +21,7 @@ const UI = (() => {
   // ---------- Dialog ----------
   function modal({ title, body, actions = [], wide = false, onClose }) {
     const back = h('div', { class: 'modal-back' });
-    const box = h('div', { class: 'modal' + (wide ? ' wide' : ''), role: 'dialog', 'aria-modal': 'true', 'aria-label': title || 'Dialog' });
+    const box = h('div', { class: 'modal' + (wide ? ' wide' : ''), role: 'dialog', 'aria-modal': 'true', 'aria-label': title || T('common.dialog') });
     if (title) box.append(h('h2', null, title));
     if (body) box.append(typeof body === 'string' ? h('p', null, body) : body);
     const close = (v) => { back.remove(); document.removeEventListener('keydown', key, true); onClose && onClose(v); };
@@ -113,14 +113,14 @@ const UI = (() => {
     const key = helpKey(t);
     tipEl = h('div', { class: 'tooltip' }, t.dataset.tip || (key ? HELP[key].tip : ''));
     if (t.dataset.kbd) tipEl.append(h('span', { class: 'kbd' }, t.dataset.kbd));
-    if (key) tipEl.append(h('span', { class: 'more' }, 'Kurz warten für mehr …'));
+    if (key) tipEl.append(h('span', { class: 'more' }, T('hint.waitMore')));
     document.body.append(tipEl); placeTip(t);
     // länger drauf bleiben: ausführliche Hilfe
     if (key) helpTimer = setTimeout(() => {
       if (!tipEl || !document.body.contains(t)) return;
       const H = HELP[key]; const m = tipEl.querySelector('.more'); if (m) m.remove();
       tipEl.classList.add('big');
-      tipEl.append(h('span', { class: 'hl' }, H.hilfe), h('span', { class: 'tp' }, h('b', null, 'Tipp: '), H.tipp));
+      tipEl.append(h('span', { class: 'hl' }, H.hilfe), h('span', { class: 'tp' }, h('b', null, T('hint.tipPrefix')), H.tipp));
       placeTip(t);
     }, 1100);
   }
@@ -141,28 +141,28 @@ const UI = (() => {
     el.innerHTML = icon('info') + '<span>' + html + '</span>';
   }
   function defaultHint() {
-    if (App.mode === 'drawing') return 'Die Zeichnung entsteht automatisch aus deinem Modell. Mit <b>Maß</b> fügst du Bemaßungen hinzu.';
+    if (App.mode === 'drawing') return T('hint.defaultDrawing');
     const n = App.doc.items.length;
-    if (!n) return 'Zieh einen <b>Körper</b> auf die Fläche – oder schreib unten, was du bauen willst.';
-    if (App.edges.length) return '<b>Kante gewählt:</b> Am rosa Pfeil ziehen rundet die Kante (Zahl tippen geht auch) – oder Abrunden / Abschrägen. Mit Umschalt weitere Kanten dazunehmen.';
-    if (App.face && App.sel.length === 1) return '<b>Fläche gewählt:</b> Darauf skizzieren, ein Loch setzen oder den Körper ziehen.';
-    if (App.sel.length > 1) return '<b>' + App.sel.length + ' Objekte gewählt:</b> Gruppieren verbindet sie zu einem Körper.';
-    if (App.sel.length === 1) return 'Ziehen verschiebt · Pfeile ändern die Größe · <b>Zahl anklicken</b> zum Eintippen';
-    return 'Klick einen Körper an, um ihn zu bearbeiten. Links ziehen dreht die Ansicht, rechts verschiebt sie.';
+    if (!n) return T('hint.defaultEmpty');
+    if (App.edges.length) return T('hint.defaultEdges');
+    if (App.face && App.sel.length === 1) return T('hint.defaultFace');
+    if (App.sel.length > 1) return T('hint.defaultMulti', { n: App.sel.length });
+    if (App.sel.length === 1) return T('hint.defaultOne');
+    return T('hint.defaultIdle');
   }
   // ---------- Ladeanzeige ----------
   let loadingEl = null;
   function loading(show, pct, text) {
     if (!show) { if (loadingEl) { loadingEl.remove(); loadingEl = null; } return; }
     if (!loadingEl) {
-      loadingEl = h('div', { class: 'loading' }, h('div', { class: 'box' }, h('b', null, 'Tracery startet'), h('div', { class: 'bar' }, h('i')), h('span', { class: 'lt' }, 'Der CAD-Kern wird geladen …')));
+      loadingEl = h('div', { class: 'loading' }, h('div', { class: 'box' }, h('b', null, T('hint.starting')), h('div', { class: 'bar' }, h('i')), h('span', { class: 'lt' }, T('hint.kernelLoading'))));
       $('#center').append(loadingEl);
     }
     if (pct != null) loadingEl.querySelector('.bar i').style.width = Math.round(pct * 100) + '%';
     if (text) loadingEl.querySelector('.lt').textContent = text;
   }
   let busyEl = null;
-  function busy(on, text = 'Rechnet …') {
+  function busy(on, text = T('status.calcBusy')) {
     if (on) {
       if (!busyEl) { busyEl = h('div', { class: 'busy' }, h('div', { class: 'spin' }), h('span', { class: 'bt' }, text)); $('#overlay').append(busyEl); }
       else { const bt = busyEl.querySelector('.bt'); if (bt) bt.textContent = text; }
@@ -193,11 +193,11 @@ const UI = (() => {
         const uSuf = isLen && Units.key() !== 'mm' ? ' ' + Units.label() : '';
         const evTxt = isLen ? Units.fmtLen(ev) + uSuf : isAng ? fmtAngleU(ev) : fmt(ev);
         const evTip = isLen ? Units.fmtLenU(ev) : isAng ? fmtAngleU(ev) : fmt(ev);
-        box.append(h('span', { class: 'fx', title: 'Formel: ' + value + ' = ' + evTip }, '= ' + evTxt));
+        box.append(h('span', { class: 'fx', title: T('hint.formulaTip', { expr: value, val: evTip }) }, '= ' + evTxt));
       } else {
         badErr = res.error;
         box.classList.add('invalid');
-        box.append(h('span', { class: 'fx bad', title: res.error }, '! Fehler'));
+        box.append(h('span', { class: 'fx bad', title: res.error }, T('hint.formulaErrShort')));
       }
     } else if (dispUnit) box.append(h('span', { class: 'unit' }, dispUnit));
     wrap.append(box);
@@ -209,14 +209,14 @@ const UI = (() => {
       let val;
       if (isLen) {
         const p = Units.parseLen(raw, getV(), { expr });
-        if (!p.ok) { box.classList.add('invalid'); if (expr && lastBad !== raw) toast('Das kann ich nicht ausrechnen: ' + (p.error || '„' + raw + '“ – prüf die Schreibweise oder den Namen.'), { kind: 'bad' }); lastBad = raw; return; }
+        if (!p.ok) { box.classList.add('invalid'); if (expr && lastBad !== raw) toast(T('hint.calcErr', { err: p.error || T('hint.calcErrRaw', { raw }) }), { kind: 'bad' }); lastBad = raw; return; }
         val = p.value;
       } else {
         val = parseNum(raw);
         if (isNaN(val)) {
           if (!expr) { box.classList.add('invalid'); return; }
           const res = Expr.tryEval(raw, getV());
-          if (!res.ok) { box.classList.add('invalid'); if (lastBad !== raw) toast('Das kann ich nicht ausrechnen: ' + res.error, { kind: 'bad' }); lastBad = raw; return; }
+          if (!res.ok) { box.classList.add('invalid'); if (lastBad !== raw) toast(T('hint.calcErr', { err: res.error }), { kind: 'bad' }); lastBad = raw; return; }
           val = raw;
         }
       }
@@ -270,7 +270,7 @@ const UI = (() => {
       if (String(v) === String(value)) op.selected = true;
       parent.append(op);
     };
-    for (const o of options) {
+    for (const o of (typeof options === 'function' ? options() : options)) {
       if (o && typeof o === 'object' && !Array.isArray(o) && Array.isArray(o.options)) {
         const og = h('optgroup', { label: o.group });
         for (const sub of o.options) addOpt(og, sub);

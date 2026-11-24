@@ -14989,6 +14989,144 @@ def t_a071_zeichnung_dxf_png(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a074_uebersetzbare_oberflaeche_2(p):
+    # 1. Test-Modus: Markierung um alle Sammlungstexte, HTML-Schlüssel, Unbekannte unberührt, sauber aus
+    p.empty()
+    tm = p.ev("""
+      I18n.setTestMode(true);
+      const a = T('tool.body');
+      const b = T('ctx.edgesCount', { n: 2 });
+      const c = T('unbekannt.a074');
+      I18n.setTestMode(false);
+      const d = T('tool.body');
+      return { a, b, c, d };
+    """)
+    ok1 = (
+        tm['a'] == '⟦Körper⟧'
+        and tm['b'] == '⟦2 Kanten⟧'
+        and tm['c'] == 'unbekannt.a074'
+        and tm['d'] == 'Körper'
+    )
+
+    SCAN_JS = """
+      const root = document.body;
+      const techRe = /^(?:Tracery|OpenCascade|replicad|three\\.js|LGPL|MIT|CAD|CNC|DPI|PDF|PNG|SVG|DXF|STEP|IGES|BREP|STL|3MF|OBJ|GLB|MTL|CSV|ZIP|PLA|PETG|ABS|ASA|TPU|PA|PC|PMMA|H7|g6|ISO|DIN|UNC|R12|XY|XZ|YZ|X|Y|Z|mm|cm|m|in|px|ms|KB|MB|GB|g|kg|Esc|Tab|Enter|Shift|Alt|Ctrl|Del|Strg|Entf|Umschalt|F[1-9]|F1[0-2]|M\\d+(?:×[\\d.,]+)?|A[0-4]|Ø\\d*|\\d+[A-Za-z]?)$/i;
+      const bad = [];
+      const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let node;
+      while ((node = w.nextNode())) {
+        const el = node.parentElement;
+        if (!el) continue;
+        const tag = el.tagName;
+        if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT' || el.closest('svg, canvas, .sr-only')) continue;
+        // Prüfen, ob Element tatsächlich sichtbar ist
+        let cur = el, hidden = false;
+        while (cur && cur !== document.body) {
+          if (cur.hasAttribute('hidden') || cur.classList.contains('hidden')) { hidden = true; break; }
+          const cs = getComputedStyle(cur);
+          if (cs.display === 'none' || cs.visibility === 'hidden' || parseFloat(cs.opacity) === 0) { hidden = true; break; }
+          cur = cur.parentElement;
+        }
+        if (hidden) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width === 0 && r.height === 0) continue;
+        const csEl = getComputedStyle(el);
+        if (csEl.fontSize === '0px') continue;
+        // Markierte Segmente ⟦...⟧ entfernen; übrig bleiben nur unübersetzte Texte
+        const raw = (node.textContent || '').trim();
+        if (!raw) continue;
+        const stripped = raw.replace(/⟦[\\s\\S]*?⟧/g, ' ').trim();
+        if (!stripped) continue;
+        // Wörter mit mindestens 2 Buchstaben suchen, technische Kürzel/Einheiten ignorieren
+        const words = stripped.match(/[A-Za-zÄÖÜäöüß]{2,}/g) || [];
+        const rest = words.filter(wd => !techRe.test(wd));
+        if (rest.length) {
+          bad.push({ tag: el.id ? '#' + el.id : el.className || tag, raw: stripped.slice(0, 80), words: rest });
+        }
+      }
+      return bad;
+    """
+
+    try:
+        p.ev("I18n.setTestMode(true);")
+        p.wait(300)
+
+        # 2. Startseite (offen)
+        p.ev("Start.show()"); p.wait(300)
+        bad_start = p.ev(SCAN_JS)
+        p.ev("Start.hide()"); p.wait(200)
+        ok2 = len(bad_start) <= 5
+
+        # 3. 3D-Modell (Profi & Einfach) mit gewähltem Quader → Panel rechts, Statusleiste, Kontextleiste, Werkzeuge
+        p.ev("ViewPrefs.setLevel('pro'); Actions.addPrimitive('box')")
+        warte_rechnen(p, 20)
+        p.wait(300)
+        bad_pro = p.ev(SCAN_JS)
+
+        p.ev("ViewPrefs.setLevel('simple');")
+        p.wait(300)
+        bad_simple = p.ev(SCAN_JS)
+        ok3 = len(bad_pro) <= 5 and len(bad_simple) <= 5
+
+        # 4. Offene Skizze (Profi & Einfach) mit Rechteck
+        p.ev("ViewPrefs.setLevel('pro'); App.clearSelection(); Sketch.startOnPlane('XY');")
+        p.wait(800)
+        SS(p, "S.ents.push({ id: 'R1', type: 'rect', a: [0, 0], b: [30, 20] }); S.sel = ['R1']; Sketch.render(); Panels.renderRight();")
+        p.wait(300)
+        bad_sk_pro = p.ev(SCAN_JS)
+
+        p.ev("ViewPrefs.setLevel('simple');")
+        p.wait(300)
+        bad_sk_simple = p.ev(SCAN_JS)
+        p.ev("Sketch.cancel(true); ViewPrefs.setLevel('pro');")
+        p.wait(250)
+        ok4 = len(bad_sk_pro) <= 5 and len(bad_sk_simple) <= 5
+
+        # 5. Zeichnung + Dialoge (Einstellungen, Export, Tastenkürzel)
+        p.ev("Commands.setMode('drawing');")
+        warte_rechnen(p, 20)
+        p.wait(350)
+        bad_draw = p.ev(SCAN_JS)
+        p.ev("Commands.setMode('model');")
+        p.wait(250)
+
+        p.ev("ViewPrefs.dialog();")
+        p.wait(300)
+        bad_dlg_prefs = p.ev(SCAN_JS)
+        p.pg.keyboard.press('Escape'); p.wait(200)
+
+        p.ev("Print.exportDialog();")
+        p.wait(300)
+        bad_dlg_exp = p.ev(SCAN_JS)
+        p.pg.keyboard.press('Escape'); p.wait(200)
+
+        p.ev("Commands.showKeys();")
+        p.wait(300)
+        bad_dlg_keys = p.ev(SCAN_JS)
+        p.pg.keyboard.press('Escape'); p.wait(200)
+
+        ok5 = (
+            len(bad_draw) <= 5
+            and len(bad_dlg_prefs) <= 5
+            and len(bad_dlg_exp) <= 5
+            and len(bad_dlg_keys) <= 5
+        )
+        if not (ok1 and ok2 and ok3 and ok4 and ok5):
+            print('A-074 SCAN DETAILS:', {
+                'start': bad_start, 'pro': bad_pro, 'simple': bad_simple,
+                'sk_pro': bad_sk_pro, 'sk_simple': bad_sk_simple,
+                'draw': bad_draw, 'prefs': bad_dlg_prefs,
+                'export': bad_dlg_exp, 'keys': bad_dlg_keys,
+            })
+    finally:
+        p.ev("try { while (document.querySelector('.modal-backdrop, .modal')) document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); } catch(_){}")
+        p.ev("try { if (Sketch.active) Sketch.cancel(true); if (App.mode !== 'model') Commands.setMode('model'); } catch(_){}")
+        p.ev("I18n.setTestMode(false); ViewPrefs.setLevel('pro');")
+        p.wait(200)
+
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -15165,6 +15303,7 @@ TESTS = [
     ('[A-068] Zeichnung: Toleranzen und Passungen (Ø20 H7 → +0,021/0, Ø20 g6 → −0,007/−0,020)', t_a068_toleranzen_passungen),
     ('[F-11241146] Volltest-Reparatur: Adaptive Auflösung bei rAF-Stau / askDim behält Eingabe bei verzögertem rAF-Fokus', t_f11241146),
     ('[A-071] Zeichnung als DXF (LINE, CIRCLE, ARC, Layer & Schriftfeld) und PNG (wählbare Breite & Transparenz)', t_a071_zeichnung_dxf_png),
+    ('[A-074] Übersetzbare Oberfläche, Schritt 2: Test-Modus & vollständige DOM-Abdeckung', t_a074_uebersetzbare_oberflaeche_2),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
