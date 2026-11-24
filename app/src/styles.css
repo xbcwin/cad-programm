@@ -1053,3 +1053,22 @@ body.presenting .pat-dot{display:none!important}
 .recovery-bar .rb-txt span{color:var(--muted);font-size:12.5px}
 .recovery-bar .rb-acts{display:flex;gap:6px;flex:none;margin-left:auto}
 .start .recovery-bar{position:static;transform:none;max-width:none;margin:0 0 16px}
+
+/* ---------- Eigene Teile-Bibliothek (BI-08) ---------- */
+.tile.user-tile{position:relative}
+.ul-thumb-wrap{width:64px;height:48px;display:grid;place-items:center;border-radius:6px;overflow:hidden;background:var(--surface)}
+.ul-thumb{width:100%;height:100%;object-fit:contain;display:block}
+.tile.user-tile .ul-del{position:absolute;top:4px;right:4px;width:22px;height:22px;padding:0;border:0;border-radius:5px;background:transparent;color:var(--muted);display:grid;place-items:center;opacity:0;cursor:pointer;transition:opacity .12s,background .12s,color .12s}
+.tile.user-tile:hover .ul-del,.tile.user-tile:focus-within .ul-del{opacity:1}
+.tile.user-tile .ul-del:hover{background:var(--bad-soft);color:var(--bad)}
+.tile.user-tile .ul-del svg{width:13px;height:13px}
+#userlib-save-dialog{display:grid;gap:12px}
+.ul-save-head{display:grid;grid-template-columns:120px 1fr;gap:12px;align-items:center}
+.ul-save-preview{width:120px;height:90px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);display:grid;place-items:center;overflow:hidden}
+.ul-save-preview img{width:100%;height:100%;object-fit:contain}
+.ul-save-preview svg{width:36px;height:36px}
+.ul-param-sec{display:grid;gap:8px}
+.ul-param-list{display:grid;gap:6px;max-height:210px;overflow:auto;padding-right:2px}
+.ul-param-row{display:grid;grid-template-columns:auto 1fr 110px auto;gap:8px;align-items:center}
+.ul-p-unit{font-size:12px;color:var(--muted);min-width:22px}
+

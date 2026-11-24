@@ -1681,6 +1681,11 @@ const HELP = {
   "tip": "Runde Löcher beim STL/3MF-Export vergrößern (+0,1 bis +0,4 mm)",
   "hilfe": "Beim 3D-Druck schrumpfen runde Bohrungen oft leicht nach innen. Mit dem Loch-Ausgleich (+0,1 bis +0,4 mm Durchmesser) werden alle runden inneren Löcher beim Export als STL oder 3MF entsprechend größer gerechnet.",
   "tipp": "Dein CAD-Modell selbst sowie STEP, IGES und BREP bleiben dabei unverändert exakt."
+ },
+ "userLibrary": {
+  "tip": "Eigene Teile mit Vorschaubild und Maßen lokal speichern und überall einsetzen",
+  "hilfe": "Rechtsklick auf ein Teil → „In meine Bibliothek“: Das Teil wird samt Vorschaubild in diesem Browser gespeichert. Alle benutzten Maße mit Namen (oder Zahlenmaße) wählst du als Eingabefelder aus. Unter „Bauteile → Meine Teile“ lässt es sich in jedes andere Projekt einsetzen und dort je Kopie mit eigenen Maßen anpassen.",
+  "tipp": "Ideal für wiederkehrende Halterungen, Stecker-Ausschnitte oder fertige Baugruppen-Teile."
  }
 };
 

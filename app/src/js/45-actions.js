@@ -117,6 +117,30 @@ const Actions = (() => {
     UI.toast(it.massG === '' ? `${spec.name} eingefügt. Trag rechts das Gewicht aus dem Datenblatt ein.` : `${spec.name} eingefügt (${fmtFixed(Model.num(it.massG, V(), 0), 1)} g).`, { icon: 'check', ms: 3500 });
     return it;
   }
+  // Eigenes Teil aus „Meine Teile“ einsetzen (mit lokalen Maßen in item.userPart)
+  function addUserPart(item, entry, opts = {}) {
+    const hole = item.role === 'hole';
+    if (sceneEmpty() && !opts.onFace && !hole) App.fitAfterBuild();
+    const ownV = item.userPart ? Model.scopeVars(V(), item.userPart) : V();
+    const pb = Model.itemLocalBox(item, ownV) || [-15, -15, 0, 15, 15, 20];
+    const spot = opts.pos || (hole ? viewCenter() : freeSpot(Math.max(-pb[0], pb[3]), Math.max(-pb[1], pb[4])));
+    const topZ = hole && !opts.onFace && opts.z == null ? topZAt(spot[0], spot[1]) : null;
+    App.change(`${entry.name} aus Bibliothek eingefügt`, (doc) => {
+      if (opts.onFace) {
+        Object.assign(item.t, opts.onFace.t);
+        attach(doc, opts.onFace.targetId, item);
+      } else {
+        const [x, y] = spot;
+        item.t.x = x; item.t.y = y;
+        item.t.z = hole ? (opts.z ?? topZ ?? 10) : (opts.z ?? 0);
+        doc.items.push(item);
+      }
+    });
+    App.select([item.id]);
+    const pCount = item.userPart && Array.isArray(item.userPart.params) ? item.userPart.params.length : 0;
+    UI.toast(pCount ? `„${entry.name}“ eingesetzt – die Maße kannst du rechts direkt anpassen.` : `„${entry.name}“ eingesetzt.`, { icon: 'check', ms: 3500 });
+    return item;
+  }
   function remove(ids) {
     ids = ids || App.sel; if (!ids.length) return;
     const n = ids.length;
@@ -336,7 +360,7 @@ const Actions = (() => {
       const GM = Model.localMatrix(G);
       const at = ff.list.indexOf(G);
       ff.list.splice(at, 1);
-      G.children.forEach((c, i) => { Model.setFromMatrix(c, GM.clone().multiply(Model.localMatrix(c))); if (G.op && !ff.parent && c.kind !== 'rib') c.op = { ...G.op }; ff.list.splice(at + i, 0, c); kids.push(c.id); });
+      G.children.forEach((c, i) => { Model.setFromMatrix(c, GM.clone().multiply(Model.localMatrix(c))); if (G.userPart && !c.userPart) c.userPart = deepClone(G.userPart); if (G.op && !ff.parent && c.kind !== 'rib') c.op = { ...G.op }; ff.list.splice(at + i, 0, c); kids.push(c.id); });
     });
     App.select(kids);
     if ((f.item.finishes || []).length) UI.toast('Die Rundungen der Gruppe wurden entfernt, weil es die Gruppe nicht mehr gibt.', { icon: 'info' });
@@ -743,6 +767,6 @@ const Actions = (() => {
     });
     return true;
   }
-  return { setBody, showOnlyBody, showAllBodies, reorder, createFolder, toggleFolder, renameFolder, ungroupFolder, removeFromFolder, replaneSketch, duplicateLinked, unlink, hideSelected, showAll, invertSelection, setOp, gapOf, setGap, loft, addPrimitive, addPart, addBuyPart, remove, duplicate, setRole, toggleRole, group, groupAll, ungroup, rotate90, rotate, center, mirror, dropToPlate, align, addFinish, finishAll, setFinish, removeFinish, edgeSigOf, faceFrame, selectedFace, onFaceTransform, attach, worldBox, selBox, cuttersOf, viewCenter };
+  return { setBody, showOnlyBody, showAllBodies, reorder, createFolder, toggleFolder, renameFolder, ungroupFolder, removeFromFolder, replaneSketch, duplicateLinked, unlink, hideSelected, showAll, invertSelection, setOp, gapOf, setGap, loft, addPrimitive, addPart, addBuyPart, addUserPart, remove, duplicate, setRole, toggleRole, group, groupAll, ungroup, rotate90, rotate, center, mirror, dropToPlate, align, addFinish, finishAll, setFinish, removeFinish, edgeSigOf, faceFrame, selectedFace, onFaceTransform, attach, worldBox, selBox, cuttersOf, viewCenter };
 })();
 

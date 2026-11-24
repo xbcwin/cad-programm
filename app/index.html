@@ -1060,6 +1060,25 @@ body.presenting .pat-dot{display:none!important}
 .recovery-bar .rb-txt span{color:var(--muted);font-size:12.5px}
 .recovery-bar .rb-acts{display:flex;gap:6px;flex:none;margin-left:auto}
 .start .recovery-bar{position:static;transform:none;max-width:none;margin:0 0 16px}
+
+/* ---------- Eigene Teile-Bibliothek (BI-08) ---------- */
+.tile.user-tile{position:relative}
+.ul-thumb-wrap{width:64px;height:48px;display:grid;place-items:center;border-radius:6px;overflow:hidden;background:var(--surface)}
+.ul-thumb{width:100%;height:100%;object-fit:contain;display:block}
+.tile.user-tile .ul-del{position:absolute;top:4px;right:4px;width:22px;height:22px;padding:0;border:0;border-radius:5px;background:transparent;color:var(--muted);display:grid;place-items:center;opacity:0;cursor:pointer;transition:opacity .12s,background .12s,color .12s}
+.tile.user-tile:hover .ul-del,.tile.user-tile:focus-within .ul-del{opacity:1}
+.tile.user-tile .ul-del:hover{background:var(--bad-soft);color:var(--bad)}
+.tile.user-tile .ul-del svg{width:13px;height:13px}
+#userlib-save-dialog{display:grid;gap:12px}
+.ul-save-head{display:grid;grid-template-columns:120px 1fr;gap:12px;align-items:center}
+.ul-save-preview{width:120px;height:90px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);display:grid;place-items:center;overflow:hidden}
+.ul-save-preview img{width:100%;height:100%;object-fit:contain}
+.ul-save-preview svg{width:36px;height:36px}
+.ul-param-sec{display:grid;gap:8px}
+.ul-param-list{display:grid;gap:6px;max-height:210px;overflow:auto;padding-right:2px}
+.ul-param-row{display:grid;grid-template-columns:auto 1fr 110px auto;gap:8px;align-items:center}
+.ul-p-unit{font-size:12px;color:var(--muted);min-width:22px}
+
 </style>
 <div id="app">
   <header class="topbar">
@@ -2812,6 +2831,11 @@ const HELP = {
   "tip": "Runde Löcher beim STL/3MF-Export vergrößern (+0,1 bis +0,4 mm)",
   "hilfe": "Beim 3D-Druck schrumpfen runde Bohrungen oft leicht nach innen. Mit dem Loch-Ausgleich (+0,1 bis +0,4 mm Durchmesser) werden alle runden inneren Löcher beim Export als STL oder 3MF entsprechend größer gerechnet.",
   "tipp": "Dein CAD-Modell selbst sowie STEP, IGES und BREP bleiben dabei unverändert exakt."
+ },
+ "userLibrary": {
+  "tip": "Eigene Teile mit Vorschaubild und Maßen lokal speichern und überall einsetzen",
+  "hilfe": "Rechtsklick auf ein Teil → „In meine Bibliothek“: Das Teil wird samt Vorschaubild in diesem Browser gespeichert. Alle benutzten Maße mit Namen (oder Zahlenmaße) wählst du als Eingabefelder aus. Unter „Bauteile → Meine Teile“ lässt es sich in jedes andere Projekt einsetzen und dort je Kopie mit eigenen Maßen anpassen.",
+  "tipp": "Ideal für wiederkehrende Halterungen, Stecker-Ausschnitte oder fertige Baugruppen-Teile."
  }
 };
 
@@ -3598,9 +3622,15 @@ const Model = (() => {
     const chain = parentsOf(doc, id);
     const f = find(doc, id);
     const m = new THREE.Matrix4();
-    for (const p of chain) m.multiply(localMatrix(p, new THREE.Matrix4()));
-    if (f) m.multiply(localMatrix(f.item, new THREE.Matrix4()));
-    return m;
+    const prev = curV;
+    try {
+      for (const p of chain) {
+        m.multiply(localMatrix(p, new THREE.Matrix4()));
+        if (p.userPart) curV = scopeVars(curV, p.userPart);
+      }
+      if (f) m.multiply(localMatrix(f.item, new THREE.Matrix4()));
+      return m;
+    } finally { curV = prev; }
   }
   // Alle Kopie-Instanzen einer Muster-Gruppe (inkl. skipped-Flag) – genau wie der Kern sie baut
   function patternInstances(g, V) {
@@ -3655,7 +3685,9 @@ const Model = (() => {
     try {
       let mats = [new THREE.Matrix4()];
       for (const g of chain) {
-        const L = localMatrix(g, new THREE.Matrix4()), P = patternMatrices(g, V), next = [];
+        const L = localMatrix(g, new THREE.Matrix4());
+        if (g.userPart) curV = scopeVars(curV, g.userPart);
+        const P = patternMatrices(g, curV), next = [];
         for (const m of mats) for (const q of P) next.push(m.clone().multiply(L).multiply(q));
         mats = next.slice(0, 2000);
       }
@@ -3666,8 +3698,14 @@ const Model = (() => {
   function parentWorld(doc, id) {
     const chain = parentsOf(doc, id);
     const m = new THREE.Matrix4();
-    for (const p of chain) m.multiply(localMatrix(p, new THREE.Matrix4()));
-    return m;
+    const prev = curV;
+    try {
+      for (const p of chain) {
+        m.multiply(localMatrix(p, new THREE.Matrix4()));
+        if (p.userPart) curV = scopeVars(curV, p.userPart);
+      }
+      return m;
+    } finally { curV = prev; }
   }
   function setFromMatrix(it, m) {
     const pos = new THREE.Vector3(), q = new THREE.Quaternion(), sc = new THREE.Vector3();
@@ -3687,6 +3725,29 @@ const Model = (() => {
       catch (e) { errors[p.id] = e.message; v[p.name] = 0; }
     }
     return { v, errors };
+  }
+  function scopeVars(baseV, userPart) {
+    const v = { ...(baseV || {}) };
+    const baseTables = (baseV && Array.isArray(baseV.__tables)) ? baseV.__tables : [];
+    const ownTables = (userPart && Array.isArray(userPart.tables)) ? userPart.tables : [];
+    const mergedTables = ownTables.length ? [...baseTables, ...ownTables] : baseTables;
+    Object.defineProperty(v, '__tables', { value: mergedTables, enumerable: false, configurable: true });
+    for (const p of (userPart && Array.isArray(userPart.params)) ? userPart.params : []) {
+      if (!p || !p.name) continue;
+      let val = 0;
+      try { val = Expr.eval(String(p.expr), v, mergedTables); } catch (_) { val = 0; }
+      const low = String(p.name).toLowerCase();
+      for (const k of Object.keys(v)) if (k.toLowerCase() === low && k !== p.name) delete v[k];
+      v[p.name] = val;
+    }
+    return v;
+  }
+  function itemVars(doc, id) {
+    let v = vars(doc).v;
+    for (const p of parentsOf(doc, id)) if (p.userPart) v = scopeVars(v, p.userPart);
+    const f = find(doc, id);
+    if (f && f.item && f.item.userPart) v = scopeVars(v, f.item.userPart);
+    return v;
   }
   function evalInfo(val, V) {
     if (typeof val === 'number') return isFinite(val) ? { ok: true, value: val } : { ok: false, error: 'Ergebnis ist keine gültige Zahl.' };
@@ -3816,86 +3877,92 @@ const Model = (() => {
     return it.color || '#2f9e91';
   }
   function kernelItem(it, V) {
-    const o = { id: it.id, kind: it.kind, role: it.role, hidden: !!it.hidden, name: label(it), color: displayColor(it), m: matArr(localMatrix(it)) };
-    if (it.opacity != null && it.opacity < 1) o.opacity = Math.max(0.05, it.opacity);
-    if (it.comp) o.comp = true;
-    if (it.kind === 'group') {
-      let kids = it.children || [];
-      if (it.rollback != null) kids = kids.slice(0, clamp(it.rollback, 0, kids.length));
-      o.children = kids.filter((c) => !c.suppressed).map((c) => kernelItem(c, V));
-      if (it.p && it.p.op) o.p = it.p.op === 'pattern' && it.p.pt === 'path' ? pathPatternParams(it, V) : resolveP(it.p, V);
-      if (it.p && it.p.assembly) o.p = { ...(o.p || {}), assembly: true };
-    }
-    else if (it.kind === 'extrude' || it.kind === 'revolve') o.p = sketchParams(it, V);
-    else if (it.kind === 'loft') o.p = loftParams(it, V);
-    else if (it.kind === 'sweep') o.p = sweepParams(it, V);
-    else if (it.kind === 'rib') o.p = ribParams(it, V);
-    else if (it.kind === 'wrap') o.p = wrapParams(it, V);
-    else if (it.kind === 'emboss') o.p = embossParams(it, V);
-    else if (it.kind === 'import') {
-      o.p = { fmt: it.p.fmt, scale: num(it.p.scale, V, 1) };
-      if (it.p.blobId) o.p.blobId = it.p.blobId;
-      else if (it.p.data) o.p.data = it.p.data;
-      if (it.p.stepEntity != null) o.p.stepEntity = it.p.stepEntity;
-      if (Array.isArray(it.p.stepMat) && it.p.stepMat.length === 16) o.p.stepMat = it.p.stepMat;
-    } else if (it.kind === 'transform') {
-      const p = it.p || {};
-      o.p = {
-        target: p.target || null,
-        dx: num(p.dx, V, 0), dy: num(p.dy, V, 0), dz: num(p.dz, V, 0),
-        rx: num(p.rx, V, 0), ry: num(p.ry, V, 0), rz: num(p.rz, V, 0),
-        pivot: p.pivot === 'origin' || p.pivot === 'point' ? p.pivot : 'center',
-        px: num(p.px, V, 0), py: num(p.py, V, 0), pz: num(p.pz, V, 0),
-        copy: !!p.copy,
-      };
-    } else if (it.kind === 'scale') {
-      const p = it.p || {};
-      o.p = {
-        target: p.target || null,
-        uniform: p.uniform !== false,
-        s: num(p.s, V, 1),
-        sx: num(p.sx, V, 1), sy: num(p.sy, V, 1), sz: num(p.sz, V, 1),
-        pivot: p.pivot === 'origin' ? 'origin' : 'centroid',
-      };
-    } else if (it.kind === 'thicken') {
-      const p = it.p || {};
-      o.p = {
-        target: p.target || null,
-        face: p.face || null,
-        t: num(p.t, V, 2),
-        dir: p.dir === 'in' || p.dir === 'mid' ? p.dir : 'out',
-        mode: p.mode === 'new' || p.mode === 'cut' ? p.mode : 'join',
-      };
-    } else if (it.kind === 'mirrorStep') {
-      o.p = mirrorStepParams(it, V);
-    }
-    else {
-      o.p = resolveP(it.p, V);
-      if (it.kind === 'part') {
-        if (it.p && typeof it.p.size === 'string') o.p.size = it.p.size;
-        if (o.p.lib === 'screwHole' && typeof threadEntry === 'function') {
-          const te = threadEntry(o.p.size);
-          if (te) o.p.spec = { fine: te.durchgang_fein_mm, hole: te.durchgang_mittel_mm, coarse: te.durchgang_grob_mm, tap: te.kernloch_mm, csk: te.senkung_senk_d_mm || 0, cskAngle: te.senkung_winkel_grad || 90, cbD: te.senkung_zyl_d_mm || 0, cbH: te.senkung_zyl_t_mm || 0 };
-        } else if (o.p.lib === 'stdPin' && typeof pinEntry === 'function') {
-          const pe = pinEntry(o.p.size ?? o.p.d);
-          if (pe) o.p.spec = { d: pe.d_mm, c: pe.c_mm };
-        } else if ((o.p.lib === 'stdKey' || o.p.lib === 'stdKeyway') && typeof keyEntry === 'function') {
-          const ke = keyEntry(o.p.size);
-          if (ke) o.p.spec = { b: ke.b_mm, h: ke.h_mm, t1: ke.t1_mm, t2: ke.t2_mm };
-        } else if (o.p.lib === 'stdBearing' && typeof bearingEntry === 'function') {
-          const be = bearingEntry(o.p.size);
-          if (be) o.p.spec = { d: be.d_mm, D: be.D_mm, B: be.B_mm, r: be.r_min_mm, balls: be.kugeln_richtwert || 8 };
-        } else if (o.p.lib === 'stdSleeve' && typeof sleeveEntry === 'function') {
-          const se = sleeveEntry(o.p.size);
-          if (se) o.p.spec = { d: se.d_mm, D: se.D_mm, wall: se.wand_mm, fD: se.flansch_d_mm || (se.D_mm + 4 * se.wand_mm) };
+    const prev = curV; curV = V;
+    try {
+      const m = matArr(localMatrix(it));
+      const ownV = it.userPart ? scopeVars(V, it.userPart) : V;
+      curV = ownV;
+      const o = { id: it.id, kind: it.kind, role: it.role, hidden: !!it.hidden, name: label(it), color: displayColor(it), m };
+      if (it.opacity != null && it.opacity < 1) o.opacity = Math.max(0.05, it.opacity);
+      if (it.comp) o.comp = true;
+      if (it.kind === 'group') {
+        let kids = it.children || [];
+        if (it.rollback != null) kids = kids.slice(0, clamp(it.rollback, 0, kids.length));
+        o.children = kids.filter((c) => !c.suppressed).map((c) => kernelItem(c, ownV));
+        if (it.p && it.p.op) o.p = it.p.op === 'pattern' && it.p.pt === 'path' ? pathPatternParams(it, ownV) : resolveP(it.p, ownV);
+        if (it.p && it.p.assembly) o.p = { ...(o.p || {}), assembly: true };
+      }
+      else if (it.kind === 'extrude' || it.kind === 'revolve') o.p = sketchParams(it, ownV);
+      else if (it.kind === 'loft') o.p = loftParams(it, ownV);
+      else if (it.kind === 'sweep') o.p = sweepParams(it, ownV);
+      else if (it.kind === 'rib') o.p = ribParams(it, ownV);
+      else if (it.kind === 'wrap') o.p = wrapParams(it, ownV);
+      else if (it.kind === 'emboss') o.p = embossParams(it, ownV);
+      else if (it.kind === 'import') {
+        o.p = { fmt: it.p.fmt, scale: num(it.p.scale, ownV, 1) };
+        if (it.p.blobId) o.p.blobId = it.p.blobId;
+        else if (it.p.data) o.p.data = it.p.data;
+        if (it.p.stepEntity != null) o.p.stepEntity = it.p.stepEntity;
+        if (Array.isArray(it.p.stepMat) && it.p.stepMat.length === 16) o.p.stepMat = it.p.stepMat;
+      } else if (it.kind === 'transform') {
+        const p = it.p || {};
+        o.p = {
+          target: p.target || null,
+          dx: num(p.dx, ownV, 0), dy: num(p.dy, ownV, 0), dz: num(p.dz, ownV, 0),
+          rx: num(p.rx, ownV, 0), ry: num(p.ry, ownV, 0), rz: num(p.rz, ownV, 0),
+          pivot: p.pivot === 'origin' || p.pivot === 'point' ? p.pivot : 'center',
+          px: num(p.px, ownV, 0), py: num(p.py, ownV, 0), pz: num(p.pz, ownV, 0),
+          copy: !!p.copy,
+        };
+      } else if (it.kind === 'scale') {
+        const p = it.p || {};
+        o.p = {
+          target: p.target || null,
+          uniform: p.uniform !== false,
+          s: num(p.s, ownV, 1),
+          sx: num(p.sx, ownV, 1), sy: num(p.sy, ownV, 1), sz: num(p.sz, ownV, 1),
+          pivot: p.pivot === 'origin' ? 'origin' : 'centroid',
+        };
+      } else if (it.kind === 'thicken') {
+        const p = it.p || {};
+        o.p = {
+          target: p.target || null,
+          face: p.face || null,
+          t: num(p.t, ownV, 2),
+          dir: p.dir === 'in' || p.dir === 'mid' ? p.dir : 'out',
+          mode: p.mode === 'new' || p.mode === 'cut' ? p.mode : 'join',
+        };
+      } else if (it.kind === 'mirrorStep') {
+        o.p = mirrorStepParams(it, ownV);
+      }
+      else {
+        o.p = resolveP(it.p, ownV);
+        if (it.kind === 'part') {
+          if (it.p && typeof it.p.size === 'string') o.p.size = it.p.size;
+          if (o.p.lib === 'screwHole' && typeof threadEntry === 'function') {
+            const te = threadEntry(o.p.size);
+            if (te) o.p.spec = { fine: te.durchgang_fein_mm, hole: te.durchgang_mittel_mm, coarse: te.durchgang_grob_mm, tap: te.kernloch_mm, csk: te.senkung_senk_d_mm || 0, cskAngle: te.senkung_winkel_grad || 90, cbD: te.senkung_zyl_d_mm || 0, cbH: te.senkung_zyl_t_mm || 0 };
+          } else if (o.p.lib === 'stdPin' && typeof pinEntry === 'function') {
+            const pe = pinEntry(o.p.size ?? o.p.d);
+            if (pe) o.p.spec = { d: pe.d_mm, c: pe.c_mm };
+          } else if ((o.p.lib === 'stdKey' || o.p.lib === 'stdKeyway') && typeof keyEntry === 'function') {
+            const ke = keyEntry(o.p.size);
+            if (ke) o.p.spec = { b: ke.b_mm, h: ke.h_mm, t1: ke.t1_mm, t2: ke.t2_mm };
+          } else if (o.p.lib === 'stdBearing' && typeof bearingEntry === 'function') {
+            const be = bearingEntry(o.p.size);
+            if (be) o.p.spec = { d: be.d_mm, D: be.D_mm, B: be.B_mm, r: be.r_min_mm, balls: be.kugeln_richtwert || 8 };
+          } else if (o.p.lib === 'stdSleeve' && typeof sleeveEntry === 'function') {
+            const se = sleeveEntry(o.p.size);
+            if (se) o.p.spec = { d: se.d_mm, D: se.D_mm, wall: se.wand_mm, fD: se.flansch_d_mm || (se.D_mm + 4 * se.wand_mm) };
+          }
         }
       }
-    }
-    if (it.mir) o.mir = it.mir;
-    if (it.op && OPS[it.op.type] && it.op.target) o.op = { type: it.op.type, target: it.op.target };
-    if (it.finishes && it.finishes.length) o.finishes = it.finishes.filter((f) => !f.off).map((f) => { const x = { id: f.id, type: f.type, r: num(f.r, V, 1), edges: f.edges, faces: f.faces }; if (f.vr) { x.vr = true; x.r2 = num(f.r2, V, x.r); } if (f.cm) { x.cm = f.cm; if (f.cm === 'two') x.r2 = num(f.r2, V, x.r); else x.a = num(f.a, V, 45); } if (f.side) x.side = 1; return x; });
-    if (it.bodies && it.bodies.length) o.bodies = it.bodies.map((b) => ({ idx: b.idx, c: b.c, name: b.name, color: b.color, hidden: !!b.hidden }));
-    return o;
+      if (it.mir) o.mir = it.mir;
+      if (it.op && OPS[it.op.type] && it.op.target) o.op = { type: it.op.type, target: it.op.target };
+      if (it.finishes && it.finishes.length) o.finishes = it.finishes.filter((f) => !f.off).map((f) => { const x = { id: f.id, type: f.type, r: num(f.r, ownV, 1), edges: f.edges, faces: f.faces }; if (f.vr) { x.vr = true; x.r2 = num(f.r2, ownV, x.r); } if (f.cm) { x.cm = f.cm; if (f.cm === 'two') x.r2 = num(f.r2, ownV, x.r); else x.a = num(f.a, ownV, 45); } if (f.side) x.side = 1; return x; });
+      if (it.bodies && it.bodies.length) o.bodies = it.bodies.map((b) => ({ idx: b.idx, c: b.c, name: b.name, color: b.color, hidden: !!b.hidden }));
+      return o;
+    } finally { curV = prev; }
   }
   function sketchParams(it, V) {
     const p = it.p || {};
@@ -4426,6 +4493,7 @@ const Model = (() => {
   }
   function itemLocalBox(it, V = {}) {
     if (!it) return null;
+    if (it.userPart) V = scopeVars(V, it.userPart);
     const pb = primitiveBox(it.kind, resolveP(it.p, V));
     if (pb) return pb;
     if ((it.kind === 'extrude' || it.kind === 'rib' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'revolve') && it.p && it.p.sketch) {
@@ -4466,6 +4534,7 @@ const Model = (() => {
   }
   function label(it) { return it.name || (KINDS[it.kind] && KINDS[it.kind].label) || 'Objekt'; }
   function sizeText(it, V) {
+    if (it && it.userPart) V = scopeVars(V || {}, it.userPart);
     const p = resolveP(it.p || {}, V || {});
     const f = (x) => Units.fmtLen(x, 1);
     const u = Units.key() !== 'mm' ? ' ' + Units.label() : '';
@@ -4525,7 +4594,14 @@ const Model = (() => {
         const off = num(mp.off, V, 0);
         return Math.abs(off) > 1e-6 ? `${pl} (${off > 0 ? '+' : ''}${f(off)}${u})` : `${pl}-Ebene`;
       }
-      case 'group': return (typeof Features !== 'undefined' && Features.sizeText(it, V)) || `${(it.children || []).length} Teile`;
+      case 'group': {
+        const ft = typeof Features !== 'undefined' && Features.sizeText(it, V);
+        if (ft) return ft;
+        if (it.userPart && Array.isArray(it.userPart.params) && it.userPart.params.length) {
+          return it.userPart.params.slice(0, 2).map((q) => `${q.label || q.name} ${f(num(q.expr, V, 0))}${u}`).join(' · ');
+        }
+        return `${(it.children || []).length} Teile`;
+      }
       case 'part': {
         const L = String(p.lib || '');
         if (L === 'buyMotor' || L === 'buyCap') return `Ø ${f(p.d)} × ${f(p.h)}${u}`;
@@ -4864,7 +4940,7 @@ const Model = (() => {
     if (aPos != null && aNeg != null) return aNeg < aPos;
     return aPos == null && aNeg != null;
   }
-  return { matchBodies, displayColor, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, railStart, railSections, bez3, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, loftParams, loftPathAngles, pathPatternParams, pathPlaces, wrapAngleInfo, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, evalInfo, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  return { matchBodies, displayColor, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, railStart, railSections, bez3, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, loftParams, loftPathAngles, pathPatternParams, pathPlaces, wrapAngleInfo, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, scopeVars, itemVars, evalInfo, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 
 // ---- 14-ttf.js ----
@@ -8533,7 +8609,14 @@ const App = (() => {
     Viewer.clearGhosts();
     if (childIds.length && Kernel.ready) {
       const { v } = Model.vars(S.doc);
-      const items = childIds.map((id) => { const f = Model.find(S.doc, id); if (!f) return null; const ki = Model.kernelItem(f.item, v); ki.m = Model.matArr(Model.worldMatrix(S.doc, id)); ki.role = 'solid'; ki.hidden = false; return ki; }).filter(Boolean);
+      const items = childIds.map((id) => {
+        const f = Model.find(S.doc, id); if (!f) return null;
+        let pv = v;
+        for (const anc of Model.parentsOf(S.doc, id)) if (anc.userPart) pv = Model.scopeVars(pv, anc.userPart);
+        const ki = Model.kernelItem(f.item, pv);
+        ki.m = Model.matArr(Model.worldMatrix(S.doc, id)); ki.role = 'solid'; ki.hidden = false;
+        return ki;
+      }).filter(Boolean);
       try {
         const res = await Kernel.call('evaluate', { scene: { items }, known: {} });
         if (req !== ghostReq.n) return;
@@ -8545,7 +8628,7 @@ const App = (() => {
   function selectedItems() { return S.sel.map((id) => Model.find(S.doc, id)).filter(Boolean); }
   function localBox(id) {
     const f = Model.find(S.doc, id); if (!f) return null;
-    const { v } = Model.vars(S.doc);
+    const v = Model.itemVars(S.doc, id);
     const pb = Model.primitiveBox(f.item.kind, Model.resolveP(f.item.p, v));
     if (pb) return pb;
     const r = S.results.get(id); if (r && r.data.bbox) return r.data.bbox;
@@ -10084,6 +10167,57 @@ const Viewer = (() => {
     renderer.shadowMap.needsUpdate = true; needsRender = true;
     return url;
   }
+  function renderPartThumb(ids, w = 160, hgt = 120) {
+    const list = Array.isArray(ids) ? ids : [ids];
+    groups.nodes.updateMatrixWorld(true);
+    const show = list.map((id) => nodes.get(id)).filter((n) => n && n.mesh && n.mesh.geometry && n.mesh.geometry.boundingBox);
+    if (!show.length) return null;
+    const box = new THREE.Box3();
+    for (const n of show) box.union(n.mesh.geometry.boundingBox.clone().applyMatrix4(n.obj.matrixWorld));
+    if (box.isEmpty()) return null;
+    const c = box.getCenter(new THREE.Vector3());
+    const R = Math.max(1, box.getSize(new THREE.Vector3()).length() / 2);
+    const tc = new THREE.PerspectiveCamera(30, w / hgt, 0.05, 10000);
+    const dir = new THREE.Vector3(0.62, -0.9, 0.7).normalize();
+    const dist = (R / Math.sin((tc.fov * Math.PI) / 360)) * 1.18 / Math.min(1, w / hgt);
+    tc.position.copy(c).addScaledVector(dir, dist);
+    tc.up.set(0, 0, 1);
+    tc.lookAt(c);
+    tc.near = Math.max(0.05, dist - R * 3);
+    tc.far = dist + R * 3;
+    tc.updateProjectionMatrix();
+    const old = renderer.getSize(new THREE.Vector2()), oldPR = renderer.getPixelRatio();
+    const oldCol = renderer.getClearColor(new THREE.Color()), oldA = renderer.getClearAlpha(), oldClip = renderer.localClippingEnabled;
+    const nodeVis = new Map(); for (const n of nodes.values()) nodeVis.set(n, n.obj.visible);
+    const gridVis = [gridMinor ? gridMinor.visible : false, gridMajor ? gridMajor.visible : false];
+    const gv = {}; for (const k of Object.keys(groups)) if (k !== 'nodes') gv[k] = groups[k].visible;
+    try {
+      for (const n of nodes.values()) n.obj.visible = show.includes(n);
+      if (gridMinor) gridMinor.visible = false;
+      if (gridMajor) gridMajor.visible = false;
+      for (const k of Object.keys(gv)) groups[k].visible = false;
+      renderer.localClippingEnabled = false;
+      renderer.setPixelRatio(1);
+      renderer.setSize(w, hgt, false);
+      renderer.setClearColor(new THREE.Color(theme.surface || '#ffffff'), 0);
+      renderer.shadowMap.needsUpdate = true;
+      renderer.render(scene, tc);
+      return renderer.domElement.toDataURL('image/png');
+    } catch (_) {
+      return null;
+    } finally {
+      for (const [n, v] of nodeVis) n.obj.visible = v;
+      if (gridMinor) gridMinor.visible = gridVis[0];
+      if (gridMajor) gridMinor.visible = gridVis[1];
+      for (const k of Object.keys(gv)) groups[k].visible = gv[k];
+      renderer.localClippingEnabled = oldClip;
+      renderer.setClearColor(oldCol, oldA);
+      renderer.setPixelRatio(oldPR);
+      renderer.setSize(old.x, old.y, false);
+      renderer.shadowMap.needsUpdate = true;
+      needsRender = true;
+    }
+  }
   function snapshot(w = 480, hgt = 300) {
     const old = renderer.getSize(new THREE.Vector2());
     renderer.setSize(w, hgt, false); camera.aspect = w / hgt; camera.updateProjectionMatrix();
@@ -10094,7 +10228,7 @@ const Viewer = (() => {
   }
 
   return {
-    viewBack, get viewHistory() { return camHist.length; }, useButtons, setMouseStyle, get mouseStyle() { return mouseStyle; }, get leftOrbits() { return !!(controls && controls.mouseButtons.LEFT === THREE.MOUSE.ROTATE); }, setLook, lookOf, get look() { return { ...LOOK }; }, fitShadow, renderImage, lookAtFace, faceIndexOf: (id, fc) => { const n = nodes.get(id); return n ? faceIndexOf(n, fc) : -1; }, cylinderFaceInfo, threadFaceIndex: (id, th) => { const n = nodes.get(id); return n ? threadFaceIndex(n, th) : -1; }, get renderer() { return renderer; },
+    viewBack, get viewHistory() { return camHist.length; }, useButtons, setMouseStyle, get mouseStyle() { return mouseStyle; }, get leftOrbits() { return !!(controls && controls.mouseButtons.LEFT === THREE.MOUSE.ROTATE); }, setLook, lookOf, get look() { return { ...LOOK }; }, fitShadow, renderImage, renderPartThumb, lookAtFace, faceIndexOf: (id, fc) => { const n = nodes.get(id); return n ? faceIndexOf(n, fc) : -1; }, cylinderFaceInfo, threadFaceIndex: (id, th) => { const n = nodes.get(id); return n ? threadFaceIndex(n, th) : -1; }, get renderer() { return renderer; },
     init, requestRender, renderNow, setClip, setXray, setOffsets, baseBox, renderInset, silhouette, setAdaptive, setCompare, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, highlightBody, setSelectedEdges, clearHover, setRefGhost, clearRefGhost, hasRefGhost,
     edgePositions, pick, pickAll, pickGhost, pickProxy, setProxies, clearProxies, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, setPrintBed, boxVisible, sceneBox, snapshot, makeFat, disposeFat, faceOverlay, faceArea, faceEdges, edgeKinds, wallAt, thinWalls,
     get camera() { syncCamAnim(); return camera; }, get activeCamera() { syncCamAnim(); return cam(); }, get ortho() { return ortho; }, get gridStep() { return gridStep; }, get controls() { return controls; }, get scene() { return scene; }, get groups() { return groups; }, get nodes() { return nodes; }, get canvas() { return renderer.domElement; }, get theme() { return theme; }, get container() { return container; },
@@ -10938,6 +11072,7 @@ const Interact = (() => {
         { icon: 'moveStep', label: T('common.moveStep'), id: 'cm-movestep', help: 'moveStep', run: () => Features.transform([top.id]) },
         { icon: 'scaleBody', label: T('common.scaleStep'), id: 'cm-scale', help: 'scaleBody', hidden: !App.doc.items.includes(top), run: () => Features.scale([top.id]) },
         { icon: 'copy', label: T('menu.ctx.dupLinked'), kbd: 'Strg Umschalt D', id: 'cm-duplink', hidden: it.kind === 'group', run: () => Actions.duplicateLinked() },
+        ...(UserLib.canSave(top) ? [{ icon: 'save', label: 'In meine Bibliothek', id: 'cm-userlib', help: 'userLibrary', run: () => UserLib.saveDialog(top.id) }] : []),
         { icon: it.role === 'hole' ? 'solid' : 'hole', label: it.role === 'hole' ? T('menu.ctx.toSolid') : T('menu.ctx.toHole'), kbd: 'H', id: 'cm-role', run: () => Actions.toggleRole() },
         { icon: 'eyeOff', label: T('common.hide'), id: 'cm-hide', run: () => Actions.hideSelected() },
         { icon: 'focusView', label: T('common.isolate'), kbd: 'I', id: 'cm-iso', run: () => Comp.toggleIso(it.id) },
@@ -11411,6 +11546,545 @@ const DroneLib = (() => {
   function frames() { return ((FRAME_DATA && FRAME_DATA.rahmen) || []).map((f, i) => ({ id: 'fr' + i, ...f })); }
   return { motors, motor, akkus, akku, stacks, cams, CATS, buyParts, holeParts, thrust, videoShape, frames };
 })();
+// ---- 42-userlib.js ----
+// ================= Eigene Teile-Bibliothek (BI-08) =================
+const UserLib = (() => {
+  const STORAGE_KEY = 'tracery-bibliothek';
+  const ev = makeEmitter();
+  let cache = null;
+
+  const RESERVED_IDS = new Set(['wenn', 'if', 'runden', 'round', 'aufrunden', 'ceil', 'abrunden', 'floor', 'tabelle', 'pi', 'e', 'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'atan2', 'sqrt', 'abs', 'min', 'max', 'pow', 'log', 'exp', 'mm', 'cm', 'm', 'in', 'zoll']);
+  const SKIP_P_KEYS = new Set(['lib', 'op', 'pt', 'plane', 'extent', 'dir', 'wallSide', 'shape', 'profName', 'target', 'pivot', 'mode', 'side', 'face', 'toFace', 'axisId', 'axis3d', 'axis', 'wrapId', 'blobId', 'fmt', 'data', 'stepEntity', 'stepMat', 'sketch', 'sketches', 'path', 'rail', 'rail2', 'prof', 'path3d', 'features', 'datumId', 'faceRef', 'bind', 'places', 'skip', 'assembly', 'uniform', 'flip', 'ruled', 'head', 'fit', 'size', 'tipAngle', 'kind', 'seal', 'flange', 'pat', 'nut', 'form', 'conn', 'tol', 'align', 'sel']);
+
+  function readStorage() {
+    if (cache) return cache;
+    try {
+      const raw = storageGet(STORAGE_KEY);
+      const arr = raw ? JSON.parse(raw) : [];
+      cache = Array.isArray(arr) ? arr.filter((x) => x && typeof x === 'object' && x.id && x.item) : [];
+    } catch (_) {
+      cache = [];
+    }
+    return cache;
+  }
+  function writeStorage(arr) {
+    cache = arr;
+    const ok = storageSet(STORAGE_KEY, JSON.stringify(arr));
+    ev.emit('change', arr.slice());
+    return ok;
+  }
+  function list() {
+    return readStorage().map((x) => deepClone(x));
+  }
+  function get(id) {
+    const found = readStorage().find((x) => x.id === id);
+    return found ? deepClone(found) : null;
+  }
+  function canSave(it) {
+    if (!it) return false;
+    if (it.kind === 'transform' && !(it.p && it.p.copy)) return false;
+    if (it.kind === 'scale') return false;
+    if (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) return false;
+    if (it.kind === 'rib' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'mirrorStep') return false;
+    return true;
+  }
+
+  function cleanSketchLinks(sk) {
+    if (!sk || !Array.isArray(sk.ents)) return;
+    for (const e of sk.ents) if (e && e.link) delete e.link;
+  }
+  function cleanItemTree(it) {
+    if (!it || typeof it !== 'object') return;
+    delete it.ai;
+    delete it.op;
+    delete it.link;
+    delete it.linkLost;
+    delete it.suppressed;
+    delete it.hidden;
+    if (it.p) {
+      if (it.p.sketch) cleanSketchLinks(it.p.sketch);
+      if (Array.isArray(it.p.sketches)) for (const s of it.p.sketches) cleanSketchLinks(s);
+      if (it.p.path) cleanSketchLinks(it.p.path);
+      if (it.p.rail) cleanSketchLinks(it.p.rail);
+      if (it.p.rail2) cleanSketchLinks(it.p.rail2);
+      if (it.p.prof) cleanSketchLinks(it.p.prof);
+      if (it.kind === 'import' && it.p.blobId && typeof Store !== 'undefined' && Store.getBlobSync) {
+        const u8 = Store.getBlobSync(it.p.blobId);
+        if (u8) {
+          it.p.data = Store.bytesToBase64(u8);
+          delete it.p.blobId;
+        }
+      }
+    }
+    if (Array.isArray(it.children)) for (const c of it.children) cleanItemTree(c);
+  }
+  function hasFormulaT(t) {
+    if (!t) return false;
+    for (const k of ['x', 'y', 'z', 'rx', 'ry', 'rz']) {
+      if (typeof t[k] === 'string' && Model.isExpr(t[k])) return true;
+    }
+    return false;
+  }
+  function prepareItem(doc, itemId) {
+    const f = Model.find(doc, itemId);
+    if (!f || !canSave(f.item)) return null;
+    let clone = deepClone(f.item);
+    const isTop = Array.isArray(doc.items) && doc.items.includes(f.item);
+    if (isTop) {
+      const mergedOps = Model.activeItems(doc).filter((x) => x.id !== f.item.id && x.op && x.op.target === f.item.id && (x.op.type === 'cut' || x.op.type === 'join') && canSave(x));
+      if (mergedOps.length) {
+        const baseM = Model.worldMatrix(doc, f.item.id);
+        const baseInv = baseM.clone().invert();
+        const kids = [];
+        clone.t = Model.T0();
+        delete clone.op;
+        kids.push(clone);
+        for (const opIt of mergedOps) {
+          const oc = deepClone(opIt);
+          const relM = baseInv.clone().multiply(Model.worldMatrix(doc, opIt.id));
+          Model.setFromMatrix(oc, relM);
+          oc.role = opIt.op.type === 'cut' ? 'hole' : 'solid';
+          delete oc.op;
+          kids.push(oc);
+        }
+        const g = Model.newItem('group', {}, { name: Model.label(f.item), color: f.item.color, role: f.item.role || 'solid' });
+        g.t = Model.T0();
+        g.children = kids;
+        clone = g;
+      }
+    }
+    cleanItemTree(clone);
+    if (hasFormulaT(clone.t)) {
+      const g = Model.newItem('group', {}, { name: clone.name || Model.label(f.item), color: clone.color, role: clone.role || 'solid' });
+      g.t = Model.T0();
+      g.children = [clone];
+      clone = g;
+    } else {
+      clone.t = Model.T0();
+    }
+    return clone;
+  }
+
+  function extractExprTokens(str, idsOut, tblsOut) {
+    if (typeof str !== 'string' || !str.trim()) return;
+    const tblRe = /tabelle\s*\(\s*["']?([^"';)]+)["']?\s*;/gi;
+    let tm;
+    while ((tm = tblRe.exec(str))) tblsOut.add(tm[1].trim().toLowerCase());
+    const stripped = str.replace(/"[^"]*"|'[^']*'/g, ' ');
+    const idRe = /[A-Za-zÄÖÜäöüß_][A-Za-zÄÖÜäöüß_0-9]*/g;
+    let m;
+    while ((m = idRe.exec(stripped))) {
+      const tok = m[0];
+      const low = tok.toLowerCase();
+      if (!RESERVED_IDS.has(low)) idsOut.add(low);
+    }
+  }
+  function collectItemExprRefs(it, idsOut, tblsOut) {
+    if (!it || typeof it !== 'object') return;
+    const scanSk = (sk) => {
+      if (!sk || !Array.isArray(sk.dims)) return;
+      for (const d of sk.dims) if (d && typeof d.v === 'string') extractExprTokens(d.v, idsOut, tblsOut);
+    };
+    if (it.p) {
+      for (const k of Object.keys(it.p)) {
+        if (SKIP_P_KEYS.has(k)) continue;
+        if (typeof it.p[k] === 'string') extractExprTokens(it.p[k], idsOut, tblsOut);
+      }
+      if (it.p.sketch) scanSk(it.p.sketch);
+      if (Array.isArray(it.p.sketches)) for (const s of it.p.sketches) scanSk(s);
+      if (it.p.path) scanSk(it.p.path);
+      if (it.p.rail) scanSk(it.p.rail);
+      if (it.p.rail2) scanSk(it.p.rail2);
+      if (it.p.prof) scanSk(it.p.prof);
+      if (it.p.path3d) {
+        for (const pt of it.p.path3d.pts || []) for (const c of pt || []) if (typeof c === 'string') extractExprTokens(c, idsOut, tblsOut);
+        for (const r of it.p.path3d.rules || []) if (r && typeof r.len === 'string') extractExprTokens(r.len, idsOut, tblsOut);
+      }
+    }
+    if (it.t) {
+      for (const k of ['x', 'y', 'z', 'rx', 'ry', 'rz']) if (typeof it.t[k] === 'string') extractExprTokens(it.t[k], idsOut, tblsOut);
+    }
+    for (const f of it.finishes || []) {
+      if (typeof f.r === 'string') extractExprTokens(f.r, idsOut, tblsOut);
+      if (typeof f.r2 === 'string') extractExprTokens(f.r2, idsOut, tblsOut);
+      if (typeof f.a === 'string') extractExprTokens(f.a, idsOut, tblsOut);
+    }
+    if (it.userPart && Array.isArray(it.userPart.params)) {
+      for (const up of it.userPart.params) if (up && typeof up.expr === 'string') extractExprTokens(up.expr, idsOut, tblsOut);
+    }
+    if (Array.isArray(it.children)) for (const c of it.children) collectItemExprRefs(c, idsOut, tblsOut);
+  }
+  function sanitizeParamName(raw, usedLower) {
+    let s = String(raw || 'Mass').replace(/[^A-Za-zÄÖÜäöüß_0-9]/g, '_').replace(/^[^A-Za-zÄÖÜäöüß_]+/, '');
+    if (!s || RESERVED_IDS.has(s.toLowerCase())) s = 'Mass_' + (s || '1');
+    let out = s, n = 2;
+    while (usedLower.has(out.toLowerCase()) || RESERVED_IDS.has(out.toLowerCase())) out = s + n++;
+    usedLower.add(out.toLowerCase());
+    return out;
+  }
+  function detectParams(item, doc) {
+    const docParams = (doc && Array.isArray(doc.params)) ? doc.params : [];
+    const docTables = (doc && Array.isArray(doc.tables)) ? doc.tables : [];
+    const V = doc ? Model.itemVars(doc, item.id) : {};
+    const ids = new Set();
+    const tbls = new Set();
+    collectItemExprRefs(item, ids, tbls);
+
+    const ownMap = new Map();
+    const candidates = [];
+    const seenNames = new Set();
+
+    if (item.userPart && Array.isArray(item.userPart.params)) {
+      for (const up of item.userPart.params) {
+        if (!up || !up.name) continue;
+        const low = String(up.name).toLowerCase();
+        if (seenNames.has(low)) continue;
+        seenNames.add(low);
+        ownMap.set(low, up);
+        const val = Model.num(up.expr, V, 0);
+        candidates.push({ source: 'param', checked: true, name: up.name, label: up.label || up.name, expr: up.expr, val, unit: up.unit ?? 'mm' });
+      }
+    }
+
+    // Transitiv verwendete Projekt-Parameter nachziehen
+    const neededParams = new Set();
+    let added = true;
+    while (added) {
+      added = false;
+      for (const dp of docParams) {
+        const low = String(dp.name || '').toLowerCase();
+        if (!low || ownMap.has(low) || neededParams.has(low)) continue;
+        if (ids.has(low)) {
+          neededParams.add(low);
+          added = true;
+          if (typeof dp.expr === 'string') extractExprTokens(dp.expr, ids, tbls);
+        }
+      }
+    }
+    for (const dp of docParams) {
+      const low = String(dp.name || '').toLowerCase();
+      if (!neededParams.has(low) || seenNames.has(low)) continue;
+      seenNames.add(low);
+      const val = Model.num(dp.expr, V, 0);
+      candidates.push({ source: 'param', checked: true, name: dp.name, label: dp.name, expr: dp.expr, val, unit: 'mm' });
+    }
+
+    const usedTables = [];
+    const seenTbls = new Set();
+    for (const tb of docTables) {
+      if (!tb || !tb.name) continue;
+      if (tbls.has(tb.name.toLowerCase()) && !seenTbls.has(tb.name.toLowerCase())) {
+        seenTbls.add(tb.name.toLowerCase());
+        usedTables.push(deepClone(tb));
+      }
+    }
+    if (item.userPart && Array.isArray(item.userPart.tables)) {
+      for (const tb of item.userPart.tables) {
+        if (!tb || !tb.name || seenTbls.has(tb.name.toLowerCase())) continue;
+        seenTbls.add(tb.name.toLowerCase());
+        usedTables.push(deepClone(tb));
+      }
+    }
+
+    // Direkte Zahlenfelder am Wurzelteil anbieten (z. B. Breite, Tiefe, Höhe beim Quader)
+    const defaultCheckFields = candidates.length === 0;
+    const addFieldCandidate = (field, label, val, unit, source = 'field', extra = {}) => {
+      if (typeof val !== 'number' || !isFinite(val)) return;
+      const pName = sanitizeParamName(label || field, seenNames);
+      candidates.push({ source, field, label: label || field, name: pName, expr: val, val, unit: unit ?? 'mm', checked: defaultCheckFields, ...extra });
+    };
+    if (item.kind !== 'group') {
+      if (KINDS[item.kind] && Array.isArray(KINDS[item.kind].params) && KINDS[item.kind].params.length) {
+        for (const q of KINDS[item.kind].params) {
+          addFieldCandidate(q.k, q.label, item.p && item.p[q.k], q.unit ?? 'mm');
+        }
+      } else if (item.kind === 'part' && item.p && typeof LIBMAP !== 'undefined' && LIBMAP[item.p.lib]) {
+        const def = LIBMAP[item.p.lib];
+        for (const q of def.params || []) {
+          if (q.type !== 'select') addFieldCandidate(q.k, q.label, item.p[q.k], q.unit ?? 'mm');
+        }
+      } else if (item.kind === 'extrude' && item.p) {
+        if (!item.p.thru && item.p.extent !== 'toNext' && item.p.extent !== 'toFace') {
+          addFieldCandidate('dist', 'Höhe', item.p.dist, 'mm');
+        }
+        if (item.p.thin) addFieldCandidate('wall', 'Wandstärke', item.p.wall, 'mm');
+        const dims = (item.p.sketch && Array.isArray(item.p.sketch.dims)) ? item.p.sketch.dims : [];
+        dims.forEach((d, idx) => {
+          if (!d || d.ref || typeof d.v !== 'number' || !isFinite(d.v)) return;
+          const lblMap = { w: 'Breite', h: 'Höhe', len: 'Länge', d: 'Durchmesser', r: 'Radius', dist: 'Abstand', ang: 'Winkel' };
+          const unit = d.t === 'ang' || d.t === 'angLL' ? '°' : d.t === 'n' ? '' : 'mm';
+          addFieldCandidate('dim_' + idx, lblMap[d.t] || 'Skizzenmaß', d.v, unit, 'sketchDim', { dimIdx: idx });
+        });
+      } else if (item.kind === 'revolve' && item.p && item.p.dir !== 'toFace') {
+        addFieldCandidate('angle', 'Winkel', item.p.angle, '°');
+      }
+    }
+
+    return { candidates, tables: usedTables };
+  }
+
+  function escapeRe(s) {
+    return String(s).replace(/[$^.*+?()[\]{}|\\]/g, '\\$&');
+  }
+  function renameInExpr(expr, oldName, newName) {
+    if (typeof expr !== 'string' || !oldName || oldName === newName) return expr;
+    const re = new RegExp('(^|[^A-Za-zÄÖÜäöüß_0-9])' + escapeRe(oldName) + '(?![A-Za-zÄÖÜäöüß_0-9])', 'gi');
+    return expr.replace(re, (_, pre) => pre + newName);
+  }
+  function renameInItem(it, oldName, newName) {
+    if (!it || typeof it !== 'object' || !oldName || oldName === newName) return;
+    if (it.p) {
+      for (const k of Object.keys(it.p)) {
+        if (!SKIP_P_KEYS.has(k) && typeof it.p[k] === 'string') it.p[k] = renameInExpr(it.p[k], oldName, newName);
+      }
+      const fixSk = (sk) => { if (sk && Array.isArray(sk.dims)) for (const d of sk.dims) if (d && typeof d.v === 'string') d.v = renameInExpr(d.v, oldName, newName); };
+      fixSk(it.p.sketch);
+      if (Array.isArray(it.p.sketches)) for (const s of it.p.sketches) fixSk(s);
+      fixSk(it.p.path); fixSk(it.p.rail); fixSk(it.p.rail2); fixSk(it.p.prof);
+      if (it.p.path3d) {
+        for (const pt of it.p.path3d.pts || []) for (let i = 0; i < (pt || []).length; i++) if (typeof pt[i] === 'string') pt[i] = renameInExpr(pt[i], oldName, newName);
+        for (const r of it.p.path3d.rules || []) if (r && typeof r.len === 'string') r.len = renameInExpr(r.len, oldName, newName);
+      }
+    }
+    if (it.t) {
+      for (const k of ['x', 'y', 'z', 'rx', 'ry', 'rz']) if (typeof it.t[k] === 'string') it.t[k] = renameInExpr(it.t[k], oldName, newName);
+    }
+    for (const f of it.finishes || []) {
+      if (typeof f.r === 'string') f.r = renameInExpr(f.r, oldName, newName);
+      if (typeof f.r2 === 'string') f.r2 = renameInExpr(f.r2, oldName, newName);
+      if (typeof f.a === 'string') f.a = renameInExpr(f.a, oldName, newName);
+    }
+    if (Array.isArray(it.children)) for (const c of it.children) renameInItem(c, oldName, newName);
+  }
+
+  function saveItem(itemId, opts = {}) {
+    const doc = opts.doc || App.doc;
+    const f = Model.find(doc, itemId);
+    if (!f) return null;
+    const clone = prepareItem(doc, itemId);
+    if (!clone) return null;
+    const detected = detectParams(clone, doc);
+    const chosen = Array.isArray(opts.params) ? opts.params : detected.candidates.filter((c) => c.checked);
+    const finalParams = [];
+    const usedNames = new Set();
+    const renames = [];
+    const chosenOrigLower = new Set();
+
+    for (const c of chosen) {
+      const name = sanitizeParamName(c.name || c.origName || c.label || c.field || 'Mass', usedNames);
+      const exprVal = c.expr !== undefined ? c.expr : c.val;
+      if (c.source === 'field' && c.field && clone.p) {
+        clone.p[c.field] = name;
+      } else if (c.source === 'sketchDim' && c.dimIdx != null && clone.p && clone.p.sketch && clone.p.sketch.dims && clone.p.sketch.dims[c.dimIdx]) {
+        clone.p.sketch.dims[c.dimIdx].v = name;
+      } else {
+        if (c.source === 'param') chosenOrigLower.add(String(c.origName || c.name).toLowerCase());
+        if (c.origName && c.origName !== name) {
+          renameInItem(clone, c.origName, name);
+          renames.push([c.origName, name]);
+        }
+      }
+      finalParams.push({
+        name,
+        label: c.label || name,
+        expr: exprVal,
+        unit: c.unit ?? 'mm',
+      });
+    }
+    for (const [oldN, newN] of renames) {
+      for (const fp of finalParams) if (typeof fp.expr === 'string') fp.expr = renameInExpr(fp.expr, oldN, newN);
+    }
+    for (const c of detected.candidates) {
+      if (c.source !== 'param' || chosenOrigLower.has(String(c.name).toLowerCase())) continue;
+      const nv = isFinite(c.val) ? round(c.val, 4) : 0;
+      const repl = nv < 0 ? '(' + nv + ')' : String(nv);
+      renameInItem(clone, c.name, repl);
+      for (const fp of finalParams) if (typeof fp.expr === 'string') fp.expr = renameInExpr(fp.expr, c.name, repl);
+    }
+    delete clone.userPart;
+
+    let thumb = opts.thumb;
+    if (thumb === undefined && typeof Viewer !== 'undefined' && Viewer.renderPartThumb) {
+      const top = Model.topOf(doc, itemId);
+      const tid = top ? top.id : itemId;
+      thumb = Viewer.renderPartThumb([tid], 160, 120) || null;
+    }
+
+    const name = String(opts.name || Model.label(f.item) || 'Mein Teil').trim() || 'Mein Teil';
+    clone.name = name;
+    const entry = {
+      id: uid('ul'),
+      name,
+      desc: String(opts.desc || '').trim(),
+      role: clone.role || 'solid',
+      thumb: thumb || null,
+      created: Date.now(),
+      params: finalParams,
+      tables: detected.tables || [],
+      item: clone,
+    };
+    const arr = readStorage().slice();
+    arr.unshift(entry);
+    writeStorage(arr);
+    return deepClone(entry);
+  }
+
+  function thumbHTML(entry) {
+    if (entry && entry.thumb) return `<img class="ul-thumb" src="${esc(entry.thumb)}" alt="">`;
+    const col = entry && entry.role === 'hole' ? 'var(--hole)' : 'var(--accent)';
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="${col}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC.parts}</svg>`;
+  }
+
+  function saveDialog(itemId) {
+    const id = itemId || (App.sel && App.sel[0]);
+    const f = id ? Model.find(App.doc, id) : null;
+    if (!f) { UI.toast('Wähle zuerst ein Teil aus.', { icon: 'info' }); return null; }
+    if (!canSave(f.item)) { UI.toast('Diesen Schritt kannst du nicht einzeln speichern – wähle den ganzen Körper oder die Gruppe.', { icon: 'info' }); return null; }
+
+    const top = Model.topOf(App.doc, f.item.id);
+    const thumb = typeof Viewer !== 'undefined' && Viewer.renderPartThumb ? Viewer.renderPartThumb([top ? top.id : f.item.id], 160, 120) : null;
+    const detected = detectParams(f.item, App.doc);
+    const defName = Model.label(f.item) || 'Mein Teil';
+
+    const prevBox = h('div', { class: 'ul-save-preview', html: thumbHTML({ thumb, role: f.item.role }) });
+    const nameF = h('div', { class: 'field' },
+      h('label', { for: 'ul-name' }, 'Name in meiner Bibliothek'),
+      h('div', { class: 'inp' }, h('input', { id: 'ul-name', type: 'text', value: defName, autocomplete: 'off', spellcheck: 'false' })));
+    const descF = h('div', { class: 'field' },
+      h('label', { for: 'ul-desc' }, 'Beschreibung (optional)'),
+      h('div', { class: 'inp' }, h('input', { id: 'ul-desc', type: 'text', placeholder: 'z. B. Halterung mit variabler Breite', autocomplete: 'off' })));
+
+    const head = h('div', { class: 'ul-save-head' }, prevBox, h('div', { style: { display: 'grid', gap: '8px', minWidth: 0 } }, nameF, descF));
+    const paramSec = h('div', { class: 'ul-param-sec' },
+      h('div', { class: 'section-h' }, 'Änderbare Maße beim Einsetzen'),
+      h('div', { class: 'hint-box' }, detected.candidates.length
+        ? 'Angehakte Maße werden beim Einsetzen in andere Projekte eigene Eingabefelder rechts.'
+        : 'Dieses Teil hat keine änderbaren Zahlenmaße – es wird als fertige Form gespeichert.'));
+
+    const rows = [];
+    if (detected.candidates.length) {
+      const listEl = h('div', { class: 'ul-param-list', id: 'ul-params' });
+      detected.candidates.forEach((c, idx) => {
+        const chk = h('input', { type: 'checkbox', class: 'ul-p-chk', checked: !!c.checked, dataset: { param: c.name, idx: String(idx) }, 'aria-label': `Maß ${c.name} übernehmen` });
+        const nmInp = h('input', { type: 'text', class: 'ul-p-name', value: c.name, autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Maßname' });
+        const valDisp = typeof c.expr === 'number' ? fmtFixed(c.expr, 4) : String(c.expr);
+        const valInp = h('input', { type: 'text', class: 'ul-p-val', value: valDisp, autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Vorgabewert' });
+        const row = h('div', { class: 'ul-param-row', dataset: { param: c.name } },
+          chk,
+          h('div', { class: 'inp' }, nmInp),
+          h('div', { class: 'inp' }, valInp),
+          h('span', { class: 'ul-p-unit' }, c.unit || ''));
+        rows.push({ c, chk, nmInp, valInp });
+        listEl.append(row);
+      });
+      paramSec.append(listEl);
+    }
+
+    const body = h('div', { id: 'userlib-save-dialog', 'data-help': 'userLibrary' }, head, paramSec);
+    let modalRef = null;
+    const doSave = () => {
+      const nInp = $('#ul-name', body);
+      const nm = (nInp && nInp.value || '').trim();
+      if (!nm) { UI.toast('Gib dem Teil bitte einen Namen.', { kind: 'bad' }); nInp && nInp.focus(); return false; }
+      const chosen = [];
+      for (const r of rows) {
+        if (!r.chk.checked) continue;
+        const rawN = (r.nmInp.value || '').trim();
+        const rawV = (r.valInp.value || '').trim();
+        let exprVal = r.c.expr;
+        const parsed = parseNum(rawV);
+        if (rawV !== '') exprVal = !isNaN(parsed) ? parsed : rawV;
+        chosen.push({
+          ...r.c,
+          origName: r.c.source === 'param' ? r.c.name : undefined,
+          name: rawN || r.c.name,
+          label: rawN || r.c.label || r.c.name,
+          expr: exprVal,
+        });
+      }
+      const entry = saveItem(f.item.id, {
+        name: nm,
+        desc: ($('#ul-desc', body) || {}).value || '',
+        params: chosen,
+        thumb,
+      });
+      if (!entry) { UI.toast('Konnte das Teil nicht speichern.', { kind: 'bad' }); return false; }
+      UI.toast(`„${entry.name}“ in „Meine Teile“ gespeichert.`, { icon: 'check' });
+      return true;
+    };
+
+    modalRef = UI.modal({
+      title: 'In meine Bibliothek speichern',
+      body,
+      actions: [
+        { label: 'Abbrechen', value: false },
+        { label: 'Speichern', id: 'ul-save-ok', primary: true, value: true, run: () => doSave() },
+      ],
+    });
+    const nInp = $('#ul-name', body);
+    if (nInp) {
+      nInp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); if (doSave() !== false) modalRef.close(true); } });
+      setTimeout(() => { nInp.focus(); nInp.select(); }, 30);
+    }
+    return modalRef;
+  }
+
+  function buildInsertItem(entry, opts = {}) {
+    const e = typeof entry === 'string' ? get(entry) : entry;
+    if (!e || !e.item) return null;
+    const item = Model.reId(deepClone(e.item));
+    item.name = opts.name || e.name || item.name;
+    item.userPart = {
+      libId: e.id,
+      name: e.name,
+      params: (e.params || []).map((p) => ({ name: p.name, label: p.label || p.name, expr: p.expr, unit: p.unit ?? 'mm' })),
+      ...(Array.isArray(e.tables) && e.tables.length ? { tables: deepClone(e.tables) } : {}),
+    };
+    return { item, entry: e };
+  }
+  function previewItem(entry) {
+    const built = buildInsertItem(entry);
+    return built ? built.item : null;
+  }
+  function insert(entryOrId, opts = {}) {
+    const built = buildInsertItem(entryOrId, opts);
+    if (!built) { UI.toast('Dieses eigene Teil wurde nicht gefunden.', { kind: 'bad' }); return null; }
+    return Actions.addUserPart(built.item, built.entry, opts);
+  }
+  function remove(id) {
+    const arr = readStorage();
+    const next = arr.filter((x) => x.id !== id);
+    if (next.length === arr.length) return false;
+    writeStorage(next);
+    return true;
+  }
+  function rename(id, name) {
+    const nm = String(name || '').trim();
+    if (!nm) return false;
+    const arr = readStorage().map((x) => (x.id === id ? { ...x, name: nm } : x));
+    return writeStorage(arr);
+  }
+  function clear() {
+    writeStorage([]);
+  }
+
+  return {
+    STORAGE_KEY,
+    list,
+    get,
+    canSave,
+    detectParams,
+    saveItem,
+    saveDialog,
+    insert,
+    previewItem,
+    remove,
+    rename,
+    clear,
+    thumbHTML,
+    on: ev.on,
+  };
+})();
 // ---- 45-actions.js ----
 // ================= Aktionen am Modell =================
 const Actions = (() => {
@@ -11530,6 +12204,30 @@ const Actions = (() => {
     App.select([it.id]);
     UI.toast(it.massG === '' ? `${spec.name} eingefügt. Trag rechts das Gewicht aus dem Datenblatt ein.` : `${spec.name} eingefügt (${fmtFixed(Model.num(it.massG, V(), 0), 1)} g).`, { icon: 'check', ms: 3500 });
     return it;
+  }
+  // Eigenes Teil aus „Meine Teile“ einsetzen (mit lokalen Maßen in item.userPart)
+  function addUserPart(item, entry, opts = {}) {
+    const hole = item.role === 'hole';
+    if (sceneEmpty() && !opts.onFace && !hole) App.fitAfterBuild();
+    const ownV = item.userPart ? Model.scopeVars(V(), item.userPart) : V();
+    const pb = Model.itemLocalBox(item, ownV) || [-15, -15, 0, 15, 15, 20];
+    const spot = opts.pos || (hole ? viewCenter() : freeSpot(Math.max(-pb[0], pb[3]), Math.max(-pb[1], pb[4])));
+    const topZ = hole && !opts.onFace && opts.z == null ? topZAt(spot[0], spot[1]) : null;
+    App.change(`${entry.name} aus Bibliothek eingefügt`, (doc) => {
+      if (opts.onFace) {
+        Object.assign(item.t, opts.onFace.t);
+        attach(doc, opts.onFace.targetId, item);
+      } else {
+        const [x, y] = spot;
+        item.t.x = x; item.t.y = y;
+        item.t.z = hole ? (opts.z ?? topZ ?? 10) : (opts.z ?? 0);
+        doc.items.push(item);
+      }
+    });
+    App.select([item.id]);
+    const pCount = item.userPart && Array.isArray(item.userPart.params) ? item.userPart.params.length : 0;
+    UI.toast(pCount ? `„${entry.name}“ eingesetzt – die Maße kannst du rechts direkt anpassen.` : `„${entry.name}“ eingesetzt.`, { icon: 'check', ms: 3500 });
+    return item;
   }
   function remove(ids) {
     ids = ids || App.sel; if (!ids.length) return;
@@ -11750,7 +12448,7 @@ const Actions = (() => {
       const GM = Model.localMatrix(G);
       const at = ff.list.indexOf(G);
       ff.list.splice(at, 1);
-      G.children.forEach((c, i) => { Model.setFromMatrix(c, GM.clone().multiply(Model.localMatrix(c))); if (G.op && !ff.parent && c.kind !== 'rib') c.op = { ...G.op }; ff.list.splice(at + i, 0, c); kids.push(c.id); });
+      G.children.forEach((c, i) => { Model.setFromMatrix(c, GM.clone().multiply(Model.localMatrix(c))); if (G.userPart && !c.userPart) c.userPart = deepClone(G.userPart); if (G.op && !ff.parent && c.kind !== 'rib') c.op = { ...G.op }; ff.list.splice(at + i, 0, c); kids.push(c.id); });
     });
     App.select(kids);
     if ((f.item.finishes || []).length) UI.toast('Die Rundungen der Gruppe wurden entfernt, weil es die Gruppe nicht mehr gibt.', { icon: 'info' });
@@ -12157,7 +12855,7 @@ const Actions = (() => {
     });
     return true;
   }
-  return { setBody, showOnlyBody, showAllBodies, reorder, createFolder, toggleFolder, renameFolder, ungroupFolder, removeFromFolder, replaneSketch, duplicateLinked, unlink, hideSelected, showAll, invertSelection, setOp, gapOf, setGap, loft, addPrimitive, addPart, addBuyPart, remove, duplicate, setRole, toggleRole, group, groupAll, ungroup, rotate90, rotate, center, mirror, dropToPlate, align, addFinish, finishAll, setFinish, removeFinish, edgeSigOf, faceFrame, selectedFace, onFaceTransform, attach, worldBox, selBox, cuttersOf, viewCenter };
+  return { setBody, showOnlyBody, showAllBodies, reorder, createFolder, toggleFolder, renameFolder, ungroupFolder, removeFromFolder, replaneSketch, duplicateLinked, unlink, hideSelected, showAll, invertSelection, setOp, gapOf, setGap, loft, addPrimitive, addPart, addBuyPart, addUserPart, remove, duplicate, setRole, toggleRole, group, groupAll, ungroup, rotate90, rotate, center, mirror, dropToPlate, align, addFinish, finishAll, setFinish, removeFinish, edgeSigOf, faceFrame, selectedFace, onFaceTransform, attach, worldBox, selBox, cuttersOf, viewCenter };
 })();
 
 // ---- 46-features.js ----
@@ -18450,8 +19148,9 @@ const UI = (() => {
     if (typeof Measure !== 'undefined' && Measure.setCalcBusy) Measure.setCalcBusy(!!on);
   }
   // ---------- Eingabefelder ----------
-  function numField({ id, label, value, unit = 'mm', len, axis, onCommit, min, int, placeholder, expr = true, step }) {
-    const V = Model.vars(App.doc).v;
+  function numField({ id, label, value, unit = 'mm', len, axis, onCommit, min, int, placeholder, expr = true, step, vars }) {
+    const getV = () => (typeof vars === 'function' ? vars() : vars) || Model.vars(App.doc).v;
+    const V = getV();
     const isLen = len != null ? !!len : unit === 'mm';
     const isAng = !isLen && unit === '°';
     const dispUnit = isLen && unit === 'mm' ? Units.label() : unit;
@@ -18487,14 +19186,14 @@ const UI = (() => {
       if (raw === orig) { if (!badErr) box.classList.remove('invalid'); lastBad = null; return; }
       let val;
       if (isLen) {
-        const p = Units.parseLen(raw, Model.vars(App.doc).v, { expr });
+        const p = Units.parseLen(raw, getV(), { expr });
         if (!p.ok) { box.classList.add('invalid'); if (expr && lastBad !== raw) toast('Das kann ich nicht ausrechnen: ' + (p.error || '„' + raw + '“ – prüf die Schreibweise oder den Namen.'), { kind: 'bad' }); lastBad = raw; return; }
         val = p.value;
       } else {
         val = parseNum(raw);
         if (isNaN(val)) {
           if (!expr) { box.classList.add('invalid'); return; }
-          const res = Expr.tryEval(raw, Model.vars(App.doc).v);
+          const res = Expr.tryEval(raw, getV());
           if (!res.ok) { box.classList.add('invalid'); if (lastBad !== raw) toast('Das kann ich nicht ausrechnen: ' + res.error, { kind: 'bad' }); lastBad = raw; return; }
           val = raw;
         }
@@ -19246,6 +19945,46 @@ const Panels = (() => {
         for (const d of stds) stdTiles.append(makeTile(d));
         el.append(stdTiles);
       }
+      el.append(h('h3', { id: 'my-parts-head', 'data-help': 'userLibrary' }, 'Meine Teile'));
+      const myGrid = h('div', { class: 'tiles user-tiles', id: 'my-parts-grid' });
+      const renderMyParts = () => {
+        myGrid.innerHTML = '';
+        const list = UserLib.list();
+        if (!list.length) {
+          myGrid.append(h('div', { class: 'hint-box', style: { gridColumn: '1 / -1' } }, 'Noch keine eigenen Teile. Rechtsklick auf ein Teil → „In meine Bibliothek“.'));
+          return;
+        }
+        for (const entry of list) {
+          const pCount = Array.isArray(entry.params) ? entry.params.length : 0;
+          const tipTxt = entry.desc || (pCount ? `${pCount} änderbare ${pCount === 1 ? 'Maß' : 'Maße'} – klicken oder auf einen Körper ziehen` : 'Klicken oder auf einen Körper ziehen');
+          const tile = h('div', { class: 'tile user-tile' + (entry.role === 'hole' ? ' hole-part' : ''), role: 'button', tabindex: '0', dataset: { userLibId: entry.id }, 'data-tip': tipTxt, 'data-help': 'userLibrary' });
+          tile.append(h('div', { class: 'ul-thumb-wrap', html: UserLib.thumbHTML(entry) }), h('span', { class: 'lbl' }, entry.name), h('span', { class: 'role' }, pCount ? `${pCount} ${pCount === 1 ? 'Maß' : 'Maße'}` : (entry.role === 'hole' ? T('common.hole') : T('common.body'))));
+          const delBtn = h('button', { type: 'button', class: 'ul-del', 'aria-label': 'Aus meiner Bibliothek entfernen', 'data-tip': 'Aus meiner Bibliothek entfernen' });
+          delBtn.innerHTML = icon('trash');
+          delBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+          delBtn.addEventListener('click', (e) => {
+            e.preventDefault(); e.stopPropagation();
+            UserLib.remove(entry.id);
+            renderMyParts();
+            UI.toast(`„${entry.name}“ aus „Meine Teile“ entfernt.`, { icon: 'info' });
+          });
+          tile.append(delBtn);
+          Place.bindTile(tile, { userPart: entry });
+          tile.addEventListener('keydown', (e) => { if (e.key === 'Enter') { UserLib.insert(entry); closeFlyout(); } });
+          tile.addEventListener('contextmenu', (e) => {
+            e.preventDefault(); e.stopPropagation();
+            UI.menu(tile, [
+              { icon: 'plus', label: 'Einsetzen', run: () => { UserLib.insert(entry); closeFlyout(); } },
+              { icon: 'edit', label: 'Umbenennen', run: async () => { const n = await UI.prompt('Teil umbenennen', 'Name', entry.name, 'Umbenennen'); if (n && n.trim()) { UserLib.rename(entry.id, n.trim()); renderMyParts(); } } },
+              '-',
+              { icon: 'trash', label: 'Entfernen', run: () => { UserLib.remove(entry.id); renderMyParts(); } },
+            ]);
+          });
+          myGrid.append(tile);
+        }
+      };
+      renderMyParts();
+      el.append(myGrid);
       el.append(h('div', { class: 'foot' }, T('tool.fly.partsFoot')));
     }
     $('#center').append(el);
@@ -19505,6 +20244,7 @@ const Panels = (() => {
           ...(refIssues.length ? [{ icon: 'warn', label: 'Neu wählen (kaputter Bezug)', id: 'tm-reffix', help: 'refFix', run: () => RefFix.start(refIssues[0]) }] : []),
           { icon: 'help', label: T('common.explainStep'), help: 'explainStep', run: () => Explain.dialog(it.id) },
           { icon: 'copy', label: T('common.duplicate'), id: 'tm-dup', kbd: 'Strg D', help: 'treeDuplicate', run: () => Actions.duplicate([it.id]) },
+          ...(UserLib.canSave(it) ? [{ icon: 'save', label: 'In meine Bibliothek', id: 'tm-userlib', help: 'userLibrary', run: () => UserLib.saveDialog(it.id) }] : []),
           ...(Features.canMirrorStep(it, (Model.find(App.doc, it.id) || {}).parent) ? [{ icon: 'mirror', label: T('common.mirrorStep'), id: 'tm-mirrorstep', help: 'mirrorStep', run: () => Features.mirrorStep([it.id]) }] : []),
           ...(topIdx >= 0 ? [{ icon: 'moveStep', label: T('common.moveStep'), help: 'moveStep', run: () => Features.transform([it.id]) }, { icon: 'scaleBody', label: T('common.scaleStep'), help: 'scaleBody', run: () => Features.scale([it.id]) }] : []),
           ...(!((it.kind === 'transform' && !(it.p && it.p.copy)) || it.kind === 'scale' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'wrap' || it.kind === 'emboss') ? [{ icon: 'patternRect', label: T('ctx.patRect'), id: 'tm-pat-rect', help: 'patternRect', run: () => Features.pattern('rect', [it.id]) }, { icon: 'patternCirc', label: T('ctx.patCirc'), id: 'tm-pat-circ', help: 'patternCirc', run: () => Features.pattern('circ', [it.id]) }] : []),
@@ -20264,7 +21004,12 @@ const Panels = (() => {
     ]);
   }
   function renderItem(body, f) {
-    const it = f.item; const V = Model.vars(App.doc).v;
+    const it = f.item; const V = Model.itemVars(App.doc, it.id);
+    const outerV = (() => {
+      let v = Model.vars(App.doc).v;
+      for (const anc of Model.parentsOf(App.doc, it.id)) if (anc.userPart) v = Model.scopeVars(v, anc.userPart);
+      return v;
+    })();
     const w = h('div', { class: 'props' });
     const title = h('div', { class: 'prop-title' });
     const nameInp = h('input', { id: 'item-name', value: Model.label(it), 'aria-label': 'Name' });
@@ -20356,13 +21101,41 @@ const Panels = (() => {
     const isMergedStep = isMoveOnly || it.kind === 'rib' || it.kind === 'wrap' || it.kind === 'emboss';
     if (!isMergedStep) w.append(roleSwitch(it.role, (r) => Actions.setRole([it.id], r)));
     const opSec = opSection(it); if (opSec) w.append(opSec);
+    // Maße aus „Meine Teile“ (lokale Parameter je eingesetztem Teil)
+    if (it.userPart && Array.isArray(it.userPart.params) && it.userPart.params.length) {
+      const upSec = h('div', { class: 'section', id: 'userpart-sec', 'data-help': 'userLibrary' },
+        h('div', { class: 'section-h' }, 'Maße · ' + (it.userPart.name || 'Mein Teil')));
+      const upFields = h('div', { class: 'fields', id: 'userpart-fields' });
+      let runV = outerV;
+      it.userPart.params.forEach((qp, idx) => {
+        const evalScope = runV;
+        const nf = UI.numField({
+          id: 'up-' + idx,
+          label: qp.label || qp.name,
+          value: qp.expr,
+          unit: qp.unit ?? 'mm',
+          vars: evalScope,
+          onCommit: (val) => App.change('Maß geändert', (doc) => {
+            const x = Model.find(doc, it.id);
+            if (!x || !x.item.userPart || !x.item.userPart.params[idx]) return false;
+            x.item.userPart.params[idx].expr = val;
+          }, { merge: 'up:' + it.id + ':' + idx }),
+        });
+        const inp = nf.querySelector('input');
+        if (inp) inp.dataset.upName = qp.name;
+        upFields.append(nf);
+        runV = Model.scopeVars(runV, { params: [qp], tables: it.userPart.tables });
+      });
+      upSec.append(upFields);
+      w.append(upSec);
+    }
     // Maße
     const three = !!(KINDS[it.kind] && KINDS[it.kind].params.length === 3);
     const sec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, three ? `Maße (${Units.label()})` : 'Maße'));
     const setP = (k, val) => App.change('Maß geändert', (doc) => { Model.find(doc, it.id).item.p[k] = val; }, { merge: 'p:' + it.id + ':' + k });
     if (KINDS[it.kind] && KINDS[it.kind].params.length) {
       const fl = h('div', { class: 'fields' + (KINDS[it.kind].params.length === 3 ? ' three' : '') });
-      for (const q of KINDS[it.kind].params) fl.append(UI.numField({ id: 'p-' + q.k, label: q.label, value: it.p[q.k], unit: q.unit, axis: q.axis, min: q.min, int: q.int, onCommit: (val) => setP(q.k, val) }));
+      for (const q of KINDS[it.kind].params) fl.append(UI.numField({ id: 'p-' + q.k, label: q.label, value: it.p[q.k], unit: q.unit, axis: q.axis, min: q.min, int: q.int, vars: V, onCommit: (val) => setP(q.k, val) }));
       sec.append(fl); w.append(sec);
     } else if (it.kind === 'part') {
       const def = LIBMAP[it.p.lib];
@@ -20370,7 +21143,7 @@ const Panels = (() => {
         const fl = h('div', { class: 'fields' });
         for (const q of def.params) {
           if (q.type === 'select') fl.append(UI.selectField({ id: 'lp-' + q.k, label: q.label, value: it.p[q.k], options: q.options, onChange: (v) => setP(q.k, q.k === 'tipAngle' ? Number(v) : v) }));
-          else fl.append(UI.numField({ id: 'lp-' + q.k, label: q.label, value: it.p[q.k] ?? '', unit: q.unit ?? 'mm', int: q.int, placeholder: q.auto ? 'passend' : '', onCommit: (v) => setP(q.k, v) }));
+          else fl.append(UI.numField({ id: 'lp-' + q.k, label: q.label, value: it.p[q.k] ?? '', unit: q.unit ?? 'mm', int: q.int, vars: V, placeholder: q.auto ? 'passend' : '', onCommit: (v) => setP(q.k, v) }));
         }
         sec.append(fl);
         if (def.lib === 'blindHole') {
@@ -20472,12 +21245,12 @@ const Panels = (() => {
         });
         extField.setAttribute('data-help', 'extrudeToFace');
         fl.append(extField);
-        if (ext === 'dist' && !it.p.thru) fl.append(UI.numField({ id: 'p-dist', label: it.p.dir === 'two' ? 'Höhe Seite 1' : 'Höhe', value: it.p.dist, onCommit: (v) => setP('dist', v) }));
+        if (ext === 'dist' && !it.p.thru) fl.append(UI.numField({ id: 'p-dist', label: it.p.dir === 'two' ? 'Höhe Seite 1' : 'Höhe', value: it.p.dist, vars: V, onCommit: (v) => setP('dist', v) }));
         const dirOpts = ext === 'dist'
           ? [['normal', 'Nach außen'], ['reverse', 'Nach innen'], ['both', 'Beidseitig gleich'], ['two', 'Beidseitig verschieden']]
           : [['normal', 'Nach außen'], ['reverse', 'Nach innen'], ['two', 'Beidseitig (Seite 2 fest)']];
         fl.append(UI.selectField({ id: 'p-dir', label: 'Richtung', value: it.p.dir || 'normal', options: dirOpts, onChange: (v) => setP('dir', v) }));
-        if (it.p.dir === 'two' && !it.p.thru) fl.append(UI.numField({ id: 'p-dist2', label: 'Höhe Seite 2', value: it.p.dist2 ?? it.p.dist, onCommit: (v) => setP('dist2', v) }));
+        if (it.p.dir === 'two' && !it.p.thru) fl.append(UI.numField({ id: 'p-dist2', label: 'Höhe Seite 2', value: it.p.dist2 ?? it.p.dist, vars: V, onCommit: (v) => setP('dist2', v) }));
         if (ext === 'dist' && (cuts || it.p.thru)) { const l = h('label', { class: 'check', 'data-help': 'thruAll' }, h('input', { type: 'checkbox', id: 'p-thru', checked: !!it.p.thru }), 'Durch alles'); l.querySelector('input').onchange = (e) => App.change(e.target.checked ? 'Durch alles' : 'Feste Tiefe', (doc) => { const T = Model.find(doc, it.id).item; if (e.target.checked) T.p.thru = true; else delete T.p.thru; }); fl.append(l); }
         if (ext !== 'dist') {
           const rd = App.resolvedDist(it.id);
@@ -20497,7 +21270,7 @@ const Panels = (() => {
             fl.append(pb);
           }
         }
-        const hasRegs = SK.regions(it.p.sketch ? Solver.cached(it.p.sketch, Model.vars(App.doc).v).ents : []).length > 0;
+        const hasRegs = SK.regions(it.p.sketch ? Solver.cached(it.p.sketch, V).ents : []).length > 0;
         const tl = h('label', { class: 'check', 'data-help': 'thinWall' }, h('input', { type: 'checkbox', id: 'p-thin', checked: !!it.p.thin, disabled: !!it.p.thin && !hasRegs }), 'Dünne Wand');
         tl.querySelector('input').onchange = (e) => App.change(e.target.checked ? 'Dünne Wand an' : 'Dünne Wand aus', (doc) => {
           const T = Model.find(doc, it.id).item;
@@ -20506,7 +21279,7 @@ const Panels = (() => {
         });
         fl.append(tl);
         if (it.p.thin) {
-          fl.append(UI.numField({ id: 'p-wall', label: 'Wandstärke', value: it.p.wall ?? 2, min: 0.1, onCommit: (v) => setP('wall', v) }));
+          fl.append(UI.numField({ id: 'p-wall', label: 'Wandstärke', value: it.p.wall ?? 2, min: 0.1, vars: V, onCommit: (v) => setP('wall', v) }));
           fl.append(UI.selectField({ id: 'p-wall-side', label: 'Wand-Lage', value: it.p.wallSide || 'center', options: [['center', 'Mittig'], ['in', 'Nach innen'], ['out', 'Nach außen']], onChange: (v) => setP('wallSide', v) }));
         }
       } else {
@@ -20532,12 +21305,12 @@ const Panels = (() => {
         if (dir !== 'toFace') {
           const angLbl = dir === 'both' ? 'Gesamtwinkel' : dir === 'two' ? 'Winkel Seite 1' : 'Winkel';
           const minA = dir === 'two' ? 0 : 0.1;
-          fl.append(UI.numField({ id: 'p-angle', label: angLbl, value: it.p.angle, unit: '°', min: minA, onCommit: (v) => setP('angle', typeof v === 'number' ? clamp(v, minA, 360) : v) }));
+          fl.append(UI.numField({ id: 'p-angle', label: angLbl, value: it.p.angle, unit: '°', min: minA, vars: V, onCommit: (v) => setP('angle', typeof v === 'number' ? clamp(v, minA, 360) : v) }));
           if (dir === 'both') {
             fl.append(h('div', { class: 'mini-row', id: 'p-rev-sym-info' }, h('span', { class: 'grow' }, 'Symmetrisch'), h('b', { class: 'mono' }, `je Seite ${fmtAngleU(Model.num(it.p.angle, V, 360) / 2)}`)));
           }
           if (dir === 'two') {
-            fl.append(UI.numField({ id: 'p-angle2', label: 'Winkel Seite 2', value: it.p.angle2 ?? it.p.angle, unit: '°', min: 0, onCommit: (v) => setP('angle2', typeof v === 'number' ? clamp(v, 0, 360) : v) }));
+            fl.append(UI.numField({ id: 'p-angle2', label: 'Winkel Seite 2', value: it.p.angle2 ?? it.p.angle, unit: '°', min: 0, vars: V, onCommit: (v) => setP('angle2', typeof v === 'number' ? clamp(v, 0, 360) : v) }));
           }
         } else {
           const tf = it.p.toFace;
@@ -20812,7 +21585,7 @@ const Panels = (() => {
         const isRef = !!(err && RefFix.isRefError(err));
         const sh = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Wandstärke'));
         const row = h('div', { class: 'fields', style: { gridTemplateColumns: isRef ? '1fr auto auto' : '1fr auto', alignItems: 'end' } });
-        const nf = UI.numField({ id: 'fin-' + fin.id, label: `Wand · ${(fin.faces || []).length} Öffnung${(fin.faces || []).length === 1 ? '' : 'en'}`, value: fin.r, onCommit: (v) => Actions.setFinish(it.id, fin.id, { r: v }) });
+        const nf = UI.numField({ id: 'fin-' + fin.id, label: `Wand · ${(fin.faces || []).length} Öffnung${(fin.faces || []).length === 1 ? '' : 'en'}`, value: fin.r, vars: V, onCommit: (v) => Actions.setFinish(it.id, fin.id, { r: v }) });
         if (err) nf.querySelector('.inp').classList.add(isRef ? 'warn' : 'invalid');
         row.append(nf);
         if (isRef) {
@@ -20838,7 +21611,7 @@ const Panels = (() => {
         }
         const lbl = (fin.type === 'chamfer' ? 'Fase' : 'Rundung') + (typeof fin.edges === 'string' ? ' · ' + ({ all: 'alle', top: 'oben', bottom: 'unten', vertical: 'senkrecht', horizontal: 'waagerecht' }[fin.edges] || '') : ` · ${(fin.edges || []).length} Kante${(fin.edges || []).length === 1 ? '' : 'n'}`);
         const ch = fin.type === 'chamfer', vr = !ch && !!fin.vr, cm = ch ? fin.cm || '' : '';
-        const nf = UI.numField({ id: 'fin-' + fin.id, label: vr ? lbl + ' · von' : cm ? lbl + ' · Abstand' : lbl, value: fin.r, onCommit: (v) => Actions.setFinish(it.id, fin.id, { r: v }) });
+        const nf = UI.numField({ id: 'fin-' + fin.id, label: vr ? lbl + ' · von' : cm ? lbl + ' · Abstand' : lbl, value: fin.r, vars: V, onCommit: (v) => Actions.setFinish(it.id, fin.id, { r: v }) });
         if (err) nf.querySelector('.inp').classList.add(isRef ? 'warn' : 'invalid');
         row.append(nf);
         if (isRef) {
@@ -20853,11 +21626,11 @@ const Panels = (() => {
         const mo = h('div', { class: 'fields pro fin-more' });
         if (ch) {
           mo.append(UI.selectField({ id: 'fin-mode-' + fin.id, label: 'Art der Fase', value: cm, options: [['', 'Gleich'], ['two', 'Zwei Abstände'], ['angle', 'Mit Winkel']], onChange: (v) => Actions.setFinish(it.id, fin.id, v === 'two' ? { cm: 'two', r2: fin.r2 != null ? fin.r2 : round(r0 * 2, 3) } : v === 'angle' ? { cm: 'angle', a: fin.a != null ? fin.a : 30 } : { cm: null }) }));
-          if (cm === 'two') mo.append(UI.numField({ id: 'fin-r2-' + fin.id, label: 'Zweiter Abstand', value: fin.r2 != null ? fin.r2 : r0, onCommit: (v) => Actions.setFinish(it.id, fin.id, { r2: v }) }));
-          if (cm === 'angle') mo.append(UI.numField({ id: 'fin-a-' + fin.id, label: 'Winkel', value: fin.a != null ? fin.a : 45, unit: '°', onCommit: (v) => Actions.setFinish(it.id, fin.id, { a: v }) }));
+          if (cm === 'two') mo.append(UI.numField({ id: 'fin-r2-' + fin.id, label: 'Zweiter Abstand', value: fin.r2 != null ? fin.r2 : r0, vars: V, onCommit: (v) => Actions.setFinish(it.id, fin.id, { r2: v }) }));
+          if (cm === 'angle') mo.append(UI.numField({ id: 'fin-a-' + fin.id, label: 'Winkel', value: fin.a != null ? fin.a : 45, unit: '°', vars: V, onCommit: (v) => Actions.setFinish(it.id, fin.id, { a: v }) }));
         } else {
           mo.append(UI.selectField({ id: 'fin-mode-' + fin.id, label: 'Art der Rundung', value: vr ? 'var' : '', options: [['', 'Gleichmäßig'], ['var', 'Von … bis']], onChange: (v) => Actions.setFinish(it.id, fin.id, v === 'var' ? { vr: true, r2: fin.r2 != null ? fin.r2 : round(r0 / 2, 3) } : { vr: null }) }));
-          if (vr) mo.append(UI.numField({ id: 'fin-r2-' + fin.id, label: 'bis', value: fin.r2 != null ? fin.r2 : r0, onCommit: (v) => Actions.setFinish(it.id, fin.id, { r2: v }) }));
+          if (vr) mo.append(UI.numField({ id: 'fin-r2-' + fin.id, label: 'bis', value: fin.r2 != null ? fin.r2 : r0, vars: V, onCommit: (v) => Actions.setFinish(it.id, fin.id, { r2: v }) }));
         }
         ks.append(mo);
         if (vr || cm) {
@@ -21603,6 +22376,10 @@ const Place = (() => {
   let st = null; // { spec, preview, onFace, pos }
   let magnetOff = false;
   function specBox(spec) {
+    if (spec.userPart) {
+      const e = spec.userPart;
+      return Model.itemLocalBox(e.item, Model.scopeVars({}, { params: e.params, tables: e.tables })) || [-15, -15, 0, 15, 15, 20];
+    }
     if (spec.kind) return Model.primitiveBox(spec.kind, spec.p ? { ...Model.newItem(spec.kind).p, ...spec.p } : Model.newItem(spec.kind).p) || [-10, -10, 0, 10, 10, 20];
     const d = spec.part; const p = spec.params || libDefaults(d);
     if (d.lib === 'holePattern') return [-17, -17, -(p.depth || 10), 17, 17, 0.2];
@@ -21633,7 +22410,7 @@ const Place = (() => {
     const b = specBox(spec);
     const g = new THREE.BoxGeometry(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
     g.translate((b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2);
-    const hole = spec.part ? spec.part.role === 'hole' : false;
+    const hole = spec.userPart ? spec.userPart.role === 'hole' : spec.part ? spec.part.role === 'hole' : false;
     const col = new THREE.Color(hole ? Viewer.theme.hole : Viewer.theme.accent);
     const mesh = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.22, depthWrite: false }));
     const edges = new THREE.LineSegments(new THREE.EdgesGeometry(g), new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.95 }));
@@ -21657,7 +22434,8 @@ const Place = (() => {
         if (st) { finish(ev.clientX, ev.clientY); return; }
         // einfacher Klick: in die Mitte setzen
         Panels.closeFlyout();
-        if (spec.buy) Actions.addBuyPart(spec);
+        if (spec.userPart) UserLib.insert(spec.userPart);
+        else if (spec.buy) Actions.addBuyPart(spec);
         else if (spec.kind) Actions.addPrimitive(spec.kind);
         else Actions.addPart(spec.part, spec.params || libDefaults(spec.part), { name: spec.name });
         setTimeout(() => { const id = App.sel[0]; const b = id && Actions.worldBox(id); if (b && !Viewer.inView(b)) Viewer.fit(App.doc.items.map((x) => x.id)); }, 400);
@@ -21670,6 +22448,7 @@ const Place = (() => {
   // Löcher bleiben beim Kasten – sie würden sonst schon beim Ziehen in Körper schneiden.
   const DP = '__dragprev';
   function previewItem(spec) {
+    if (spec.userPart && spec.userPart.role !== 'hole') return UserLib.previewItem(spec.userPart);
     if (spec.buy) return Model.newItem(spec.kind, { ...Model.newItem(spec.kind).p, ...spec.p }, { name: spec.name, color: spec.color });
     if (spec.kind) return Model.newItem(spec.kind, spec.p || {});
     if (spec.part && spec.part.role !== 'hole') return Model.newItem('part', { lib: spec.part.lib, ...(spec.params || libDefaults(spec.part)) }, { role: spec.part.role });
@@ -21721,6 +22500,7 @@ const Place = (() => {
   function finish(x, y) {
     const s = st; cleanup();
     if (!inCanvas(x, y) || (!s.onFace && !s.pos)) return;
+    if (s.spec.userPart) { UserLib.insert(s.spec.userPart, s.onFace ? { onFace: s.onFace } : { pos: s.pos }); if (s.onFace) UI.toast('Abgelegt – es ist jetzt Teil des Körpers darunter.', { icon: 'check' }); return; }
     if (s.spec.buy) { Actions.addBuyPart(s.spec, s.onFace ? { onFace: s.onFace } : { pos: s.pos }); return; }
     if (s.spec.kind) Actions.addPrimitive(s.spec.kind, s.onFace ? { onFace: s.onFace } : { pos: s.pos });
     else Actions.addPart(s.spec.part, s.spec.params || libDefaults(s.spec.part), { ...(s.onFace ? { onFace: s.onFace } : { pos: s.pos }), name: s.spec.name });
@@ -29755,6 +30535,8 @@ const Commands = (() => {
     for (const [v, l] of [['front', 'Vorne'], ['top', 'Oben'], ['right', 'Rechts'], ['left', 'Links'], ['back', 'Hinten'], ['iso', 'Schräg']]) add('view-' + v, 'Ansicht ' + l, 'eye', 'ansicht kamera blick ' + l, () => Viewer.setView(v), { group: 'Ansicht' });
     add('new', 'Neues Projekt', 'newfile', 'neu leer vorlage vorlagen zoll 3d-druck laser gehäuse anfangen', () => Start.newProjectDialog(), { group: 'Projekt' });
     add('save-template', 'Als Vorlage speichern', 'save', 'vorlage speichern eigene vorlage template', () => Start.saveAsTemplate(), { group: 'Projekt' });
+    add('save-userlib', 'Teil in meine Bibliothek speichern', 'save', 'bibliothek meine teile speichern bauteil wiederverwenden', () => UserLib.saveDialog(), { group: 'Bauteile', needSel: true });
+    add('my-parts', 'Meine Teile (eigene Bibliothek)', 'parts', 'meine teile bibliothek eigene bauteile', () => Panels.toggleFlyout('parts', $('#t-parts')), { group: 'Bauteile' });
     add('open', 'Projekt öffnen', 'folder', 'laden datei öffnen', () => Start.openFile(), { group: 'Projekt' });
     add('loft', 'Übergang (Loft) aus gewählten Skizzenkörpern', 'loft', 'loft übergang profile nase verbinden spitze', () => Actions.loft(), { group: 'Bearbeiten', needSel: true });
     add('loft-tip', 'Zur Spitze zusammenlaufen lassen', 'loft', 'spitze kegel nase verlängern zuspitzen', () => { if (App.sel.length === 1) Actions.loft([App.sel[0]], { tip: 10 }); }, { group: 'Bearbeiten', needSel: true });
@@ -36864,11 +37646,11 @@ ${AI.modelText()}`;
   $('#btn-undo').innerHTML = icon('undo'); $('#btn-redo').innerHTML = icon('redo'); $('#btn-menu').innerHTML = icon('menu');
   $('#btn-left').innerHTML = icon('list'); $('#btn-right').innerHTML = icon('sliders');
 
-  window.__masswerk = { App, Viewer, Model, Actions, Sketch, SK, TTF, THREE, Print, Drawing, Kernel, UI, Commands, Toolbar, Panels, Handles, Start, Templates, AI, Measure, Place, Store, I18n, T, Units, RefFix, Expr, GeomCheck };
+  window.__masswerk = { App, Viewer, Model, Actions, Sketch, SK, TTF, THREE, Print, Drawing, Kernel, UI, Commands, Toolbar, Panels, Handles, Start, Templates, AI, Measure, Place, Store, I18n, T, Units, RefFix, Expr, GeomCheck, UserLib };
   UI.initTips();
   I18n.applyDom();
   Viewer.init($('#viewport'));
-  window.__V = Viewer; window.__M = { Store, Interact, Measure, Datums, RefFix, Print, ViewPrefs, App, Actions, Model, Timeline, Start, Templates, Comp, Handles, Sketch, SK, TTF, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views, Mass, Select, Versions, DroneTpl, DroneUI, DroneLib, DroneCheck, Plates, Variants, Explain, Weak, AI, Snap, Toolbar, Panels, Joints, I18n, T, Units, Expr, Tour, GeomCheck, Log, Kernel }; window.__S = Start; // für automatische Tests
+  window.__V = Viewer; window.__M = { Store, Interact, Measure, Datums, RefFix, Print, ViewPrefs, App, Actions, Model, Timeline, Start, Templates, Comp, Handles, Sketch, SK, TTF, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views, Mass, Select, Versions, DroneTpl, DroneUI, DroneLib, UserLib, DroneCheck, Plates, Variants, Explain, Weak, AI, Snap, Toolbar, Panels, Joints, I18n, T, Units, Expr, Tour, GeomCheck, Log, Kernel }; window.__S = Start; // für automatische Tests
   Panels.init(); Datums.init(); RefFix.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Notes.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init(); Refine.init(); Comp.init(); Views.init(); GeomCheck.init(); Mass.init(); Joints.init(); Versions.init(); Start.init();
 
   // Kopfzeile

@@ -1911,6 +1911,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Hilfetexte**: `printerSelect` und `holeComp` sind in `werkzeug-hilfen.json` und `HELP` vollständig gepflegt.
 - [ ] **Von Hand**: Im Browser ein Druckteil mit Bohrung und Senkung auf „Bambu Lab A1 mini“ prüfen, per „So drehen“ ausrichten und die exportierte 3MF/STL-Datei im Slicer (z. B. Bambu Studio oder PrusaSlicer) nachmessen.
 
+## Eigene Teile in die Bibliothek (Auto [A-058], BI-08)
+
+- [x] **In meine Bibliothek speichern**: Rechtsklick im 3D-Bild (`#cm-userlib`) und im Verlauf (`#tm-userlib`) öffnen `#userlib-save-dialog` mit gerendertem PNG-Vorschaubild und erkannten Maßen (z. B. `Breite` aus Parametern oder direkte Zahlenmaße).
+- [x] **In neuem Projekt einsetzen & Maße ändern**: Unter „Bauteile → Meine Teile“ (`#my-parts-grid`) erscheint das Teil mit Vorschaubild und lässt sich in ein leeres Projekt einsetzen, ohne `doc.params` zu füllen; Ändern des Eingabefelds `Breite` im Eigenschaften-Panel (`#userpart-sec`) passt den 3D-Körper direkt an.
+- [x] **Unabhängige Kopien, Neuladen, Löschen & Hilfe**: Eine zweite eingesetzte Kopie behält ihr eigenes Maß unabhängig von der ersten; gespeicherte Teile bleiben nach Neuladen erhalten, lassen sich über den Papierkorb entfernen und haben den Hilfetext `userLibrary`.
+- [ ] **Von Hand**: Ein selbst konstruiertes Teil mit mehreren Körpern und Formeln speichern, in ein anderes Projekt auf eine Körperfläche ziehen und dort die Maße variieren.
+
 ## Fehler melden
 
 ```
