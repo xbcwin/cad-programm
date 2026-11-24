@@ -2326,6 +2326,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Hilfen, Befehle & Übersetzung**: `settingsFile` und `uiScale` in `werkzeug-hilfen.json` und `HELP`, DE/EN-Schlüsselgleichheit, Befehlssuche (`settings-export`, `settings-import`, `settings-scale`) und i18n-Testmodus im Einstellungsfenster ohne Seitenfehler.
 - [ ] **Von Hand**: Im Browser auf einem großen Monitor die Oberflächen-Größe auf 125 % und 150 % stellen, Modell, Skizze und Zeichnung auf saubere Lesbarkeit ohne Überlappung prüfen und eine gesicherte `.json`-Einstellungsdatei ins Fenster ziehen.
 
+## Spline mit Kontrollpunkten und Tangenten-Griffen (Auto [A-111], SK-32, SK-33)
+
+- [x] **Kontrollpunkt-Spline (Profi, offen & geschlossen)**: 4-Punkte- und 5-Punkte-Kontrollpunkt-Spline über `#sp-mode = 'cv'` gezeichnet → startet exakt im ersten und endet im letzten Punkt, innere Punkte ziehen weich an ohne durchlaufen zu werden, `C1`-Stetigkeit am Übergang, geschlossene Variante lässt sich fehlerfrei zu einem Volumenkörper hochziehen.
+- [x] **Tangenten-Griffe an Durchgangs-Splines (Richtung, Stärke, Maß)**: Griff am Startpunkt per `#se-hAng0` auf `45°` gesetzt → `SK.splineTangentAt`, `SK.splineBez` und Kurvenanfang zeigen exakt `45°`, Durchgangspunkte bleiben erhalten; Griff per Maus auf `45°` gezogen, per Maß-Werkzeug (`D`) auf `30°` bemaßt, mit `#se-sh-reset` zurückgesetzt und mit `Strg+Z` wiederhergestellt.
+- [x] **Einfach-Modus, Hilfetexte & Übersetzung**: Im Modus „Einfach“ sind Kontrollpunkt-Spline und Tangenten-Griffe ausgeblendet; `splineControl` und `splineHandles` in `HELP` sowie alle neuen DE/EN-Texte vorhanden, ohne JavaScript-Fehler.
+- [ ] **Von Hand**: Im Browser im Profi-Modus eine geschwungene Kontrollpunkt-Spline und eine Durchgangs-Spline mit mehreren angepassten Tangenten-Griffen zeichnen, per Ziehen und Formel-Maß formen und als Körper hochziehen.
+
 ## Krümmungskamm und Regel „krümmungsglatt“ (Auto [A-112], SK-34, SK-35)
 
 - [x] **Nur im Profi-Modus sichtbar**: In „Einfach“ sind `#sk-curv-comb` und `.consbar [data-tool="c:curvature"]` ausgeblendet, nach Umschalten auf „Profi“ werden beide sichtbar.

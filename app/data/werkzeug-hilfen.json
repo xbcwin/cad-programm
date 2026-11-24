@@ -1418,5 +1418,15 @@
     "tip": "Prüft, ob das Modell zu einer gewählten Ebene genau spiegelgleich ist",
     "hilfe": "Spiegelt alle sichtbaren Körper an einer Grundebene (YZ, XZ, XY), einer Bezugsebene oder einer ebenen Fläche und vergleicht sie exakt mit dem Original. Unterschiede erscheinen farbig im Bild: Rot liegt nur auf dieser Seite, Blau fehlt auf der Gegenseite.",
     "tipp": "Liegt dein Teil nicht genau auf dem Nullpunkt, klick auf „Mitte“, um die Prüfebene automatisch in die Bauteilmitte zu schieben."
+  },
+  "splineControl": {
+    "tip": "Weiche Formkurve über Kontrollpunkte (Profi)",
+    "hilfe": "Bei „Mit Kontrollpunkten“ beginnt die Kurve exakt im ersten Punkt und endet im letzten Punkt. Alle Punkte dazwischen ziehen die Kurve wie Magnete weich an, ohne dass sie durch jeden Punkt hindurch muss.",
+    "tipp": "Ideal für glatte Übergänge ohne Dellen – am rechten Rand oder vor dem Zeichnen kannst du jederzeit zwischen „Durch Punkte“ und „Mit Kontrollpunkten“ wechseln."
+  },
+  "splineHandles": {
+    "tip": "Tangenten-Griffe an jedem Punkt einer Durchgangs-Spline einstellen (Profi)",
+    "hilfe": "Wähle eine Durchgangs-Spline aus, um an jedem Punkt einen Griff für Richtung (Winkel) und Stärke (Länge) der Tangente zu sehen. Ziehe ein Griffende direkt im Bild oder gib Winkel und Stärke rechts bzw. mit dem Maß-Werkzeug (D) exakt ein.",
+    "tipp": "Mit „Griff zurücksetzen“ übernimmt der Punkt wieder automatisch die weiche Standard-Tangente seiner Nachbarpunkte."
   }
 }
