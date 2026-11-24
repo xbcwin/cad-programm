@@ -2,9 +2,9 @@
 
 Starten (im Ordner cad-programm):
     cd app && python3 -m http.server 8765 &
-    python3 tests/klicktest.py
+    python3 tests/klicktest.py [--browser chromium|firefox|webkit] [Stichwort ...]
 
-Braucht Python mit Playwright (pip install playwright, dann playwright install chromium).
+Braucht Python mit Playwright (pip install playwright, dann playwright install chromium firefox webkit).
 Ausgabe: je Testpunkt OK, FEHLER oder VON HAND (lässt sich nicht automatisch beurteilen).
 """
 import json, math, os, sys, tempfile, zipfile
@@ -12,7 +12,45 @@ from playwright.sync_api import sync_playwright
 
 URL = os.environ.get('TRACERY_URL', 'http://localhost:8765/')
 ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist']
+VALID_BROWSERS = ('chromium', 'firefox', 'webkit')
+_PW = None
+BROWSER_NAME = 'chromium'
 results = []
+
+
+def parse_cli(argv):
+    browser = os.environ.get('TRACERY_BROWSER', 'chromium').strip().lower() or 'chromium'
+    only = []
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a == '--browser':
+            if i + 1 >= len(argv):
+                print('Fehler: --browser erwartet chromium, firefox oder webkit.', file=sys.stderr)
+                sys.exit(2)
+            browser = argv[i + 1].strip().lower()
+            i += 2
+            continue
+        if a.startswith('--browser='):
+            browser = a.split('=', 1)[1].strip().lower()
+            i += 1
+            continue
+        only.append(a)
+        i += 1
+    if browser not in VALID_BROWSERS:
+        print(f'Fehler: Unbekannter Browser "{browser}" (erlaubt: {", ".join(VALID_BROWSERS)}).', file=sys.stderr)
+        sys.exit(2)
+    return browser, only
+
+
+def launch_browser(pw, name='chromium'):
+    if name == 'chromium':
+        return pw.chromium.launch(args=ARGS)
+    if name == 'firefox':
+        return pw.firefox.launch(firefox_user_prefs={'webgl.force-enabled': True, 'webgl.disabled': False})
+    if name == 'webkit':
+        return pw.webkit.launch()
+    raise ValueError(f'Unbekannter Browser: {name}')
 
 
 def report(name, ok, note=''):
@@ -22,8 +60,8 @@ def report(name, ok, note=''):
 
 
 class Page:
-    def __init__(self, browser, clear=True):
-        self.ctx = browser.new_context(viewport={'width': 1400, 'height': 850}, accept_downloads=True)
+    def __init__(self, browser, clear=True, locale='de-DE'):
+        self.ctx = browser.new_context(viewport={'width': 1400, 'height': 850}, accept_downloads=True, locale=locale)
         self.pg = self.ctx.new_page()
         self.errs = []
         self.pg.on('pageerror', lambda e: self.errs.append(str(e)))
@@ -16214,6 +16252,91 @@ def t_a077_nur_geandertes_rechnen(p):
     return [ok1, ok2, ok3, ok4, ok5, ok6]
 
 
+# ---------- [A-079] Läuft in Firefox und Safari (PL-09) ----------
+def t_a079_firefox_webkit(p):
+    ok_cli = (
+        parse_cli(['--browser', 'firefox', '[A-079]']) == ('firefox', ['[A-079]'])
+        and parse_cli(['--browser=webkit']) == ('webkit', [])
+        and parse_cli(['abc']) == ('chromium', ['abc'])
+    )
+    expected_vol = 40 * 30 * 20 - math.pi * (5 ** 2) * 20
+
+    def run_engine(engine):
+        if _PW is None:
+            return False, False
+        br = launch_browser(_PW, engine)
+        bp = None
+        try:
+            bp = Page(br)
+            ua = bp.pg.evaluate("() => navigator.userAgent")
+            ua_ok = ('Firefox' in ua) if engine == 'firefox' else ('AppleWebKit' in ua and 'Chrome' not in ua)
+            start_ok = bp.pg.locator('.start').count() == 1 and bp.pg.get_by_text('Leeres Projekt').count() > 0
+            bp.empty()
+            bp.ev("""
+            App.change('Quader mit Bohrung', (d) => {
+              const box = Model.newItem('box', { w: 40, d: 30, h: 20 }, { name: 'Quader' });
+              const hole = Model.newItem('cylinder', { d: 10, h: 30 }, { name: 'Bohrung', role: 'hole' });
+              hole.t.z = -5;
+              d.items.push(box, hole);
+            });
+            """)
+            warte_rechnen(bp, 40)
+            app_errs1 = bp.ev("return App.errors")
+            meas1 = bp.ev("return Mass.measure()")
+            parts1 = (meas1 or {}).get('parts') or []
+            vol1 = parts1[0].get('volume', 0) if len(parts1) == 1 else 0
+            ok_vol = (
+                ua_ok and start_ok and not bp.errs and len(app_errs1) == 0
+                and len(parts1) == 1 and abs(vol1 - expected_vol) < 2.0
+            )
+
+            # Tastenkürzel, fehlende Folder-API und Datei-Dialog/Download
+            bp.pg.locator('canvas').first.focus(); bp.pg.keyboard.press('o'); bp.wait(300)
+            o1 = bp.ev("return Viewer.ortho")
+            bp.pg.keyboard.press('o'); bp.wait(300)
+            o2 = bp.ev("return Viewer.ortho")
+            bp.ev("App.change('Umbenennen', d => { d.items[0].name = 'Block-79'; })"); bp.wait(200)
+            bp.pg.locator('canvas').first.focus(); bp.pg.keyboard.press('Control+z'); bp.wait(400)
+            n_undo = bp.ev("return App.doc.items[0].name")
+            bp.pg.keyboard.press('Control+y'); bp.wait(400)
+            n_redo = bp.ev("return App.doc.items[0].name")
+            folder_sup = bp.ev("return Start.folderSupported()")
+
+            with bp.pg.expect_download(timeout=15000) as dl:
+                bp.ev("Start.saveFile()")
+            dl_name = dl.value.suggested_filename
+            dl_path = os.path.join(tempfile.gettempdir(), f'tracery-a079-{engine}.tracery.json')
+            dl.value.save_as(dl_path)
+
+            bp.ev("Start.newProject(true)"); bp.wait(1500)
+            with bp.pg.expect_file_chooser(timeout=10000) as fc:
+                bp.ev("Start.openFile()")
+            fc.value.set_files(dl_path)
+            warte_rechnen(bp, 40)
+
+            app_errs2 = bp.ev("return App.errors")
+            meas2 = bp.ev("return Mass.measure()")
+            parts2 = (meas2 or {}).get('parts') or []
+            vol2 = parts2[0].get('volume', 0) if len(parts2) == 1 else 0
+            ok_compat = (
+                o1 is True and o2 is False
+                and n_undo == 'Quader' and n_redo == 'Block-79'
+                and folder_sup is False
+                and dl_name.endswith('.tracery.json')
+                and not bp.errs and len(app_errs2) == 0
+                and len(parts2) == 1 and abs(vol2 - expected_vol) < 2.0
+            )
+            return ok_vol, ok_compat
+        finally:
+            if bp:
+                bp.close()
+            br.close()
+
+    wk_vol, wk_compat = run_engine('webkit')
+    ff_vol, ff_compat = run_engine('firefox')
+    return [ok_cli, wk_vol, wk_compat, ff_vol, ff_compat]
+
+
 def t_f11241334(p):
     p.empty()
     ids = p.ev("""return App.change('x', d => {
@@ -16451,6 +16574,162 @@ def t_a078_mehrere_rechenhelfer(p):
         and bool(h_mw.get('tip') and h_mw.get('hilfe') and h_mw.get('tipp'))
     )
     return [ok1, ok2, ok3, ok4]
+
+
+def t_a081_englische_oberflaeche(p):
+    # 1. texte-de.json & texte-en.json (Dateien + eingebettete Packs) haben exakt dieselben Schlüssel & Platzhalter
+    parity = p.pg.evaluate("""async () => {
+      const [de, en] = await Promise.all([
+        fetch('data/texte-de.json').then(r => r.json()),
+        fetch('data/texte-en.json').then(r => r.json()),
+      ]);
+      const { I18n } = window.__M;
+      const checkPair = (a, b) => {
+        const ka = Object.keys(a), kb = Object.keys(b);
+        const sa = new Set(ka), sb = new Set(kb);
+        const missing = ka.filter(k => !sb.has(k));
+        const extra = kb.filter(k => !sa.has(k));
+        const empty = kb.filter(k => typeof b[k] !== 'string' || !b[k].trim());
+        const phMismatch = [];
+        for (const k of ka) {
+          if (!sb.has(k)) continue;
+          const pa = [...String(a[k]).matchAll(/\\{(\\w+)\\}/g)].map(m => m[1]).sort().join(',');
+          const pb = [...String(b[k]).matchAll(/\\{(\\w+)\\}/g)].map(m => m[1]).sort().join(',');
+          if (pa !== pb) phMismatch.push(k);
+        }
+        return { countA: ka.length, countB: kb.length, missing, extra, empty, phMismatch };
+      };
+      return {
+        files: checkPair(de, en),
+        packs: checkPair(I18n.packs.de, I18n.packs.en),
+        sketchEn: en['tool.sketch'],
+      };
+    }""")
+    ok1 = (
+        parity['files']['countA'] > 2000
+        and parity['files']['countA'] == parity['files']['countB']
+        and not parity['files']['missing']
+        and not parity['files']['extra']
+        and not parity['files']['empty']
+        and not parity['files']['phMismatch']
+        and not parity['packs']['missing']
+        and not parity['packs']['extra']
+        and parity['sketchEn'] == 'Sketch'
+    )
+
+    # 2. Sprache in den Einstellungen auf Englisch umschalten → Knopf „Skizze“ heißt „Sketch“, bleibt beim Neuladen
+    p.empty()
+    de_sketch = p.pg.locator('#t-sketch').text_content()
+    p.ev("ViewPrefs.dialog();")
+    p.wait(250)
+    init_sel = p.pg.locator('#set-lang').input_value()
+    p.pg.select_option('#set-lang', 'en')
+    p.wait(300)
+    en_ui = p.ev("""return {
+      lang: I18n.lang,
+      docLang: document.documentElement.lang,
+      sketch: document.querySelector('#t-sketch')?.textContent,
+      model: document.querySelector('#tab-model')?.textContent,
+      drawing: document.querySelector('#tab-drawing')?.textContent,
+      dlgTitle: document.querySelector('.modal h2')?.textContent,
+    };""")
+    p.pg.keyboard.press('Escape')
+    p.wait(200)
+    p.pg.reload()
+    p.wait(2500)
+    after_reload = p.ev("return { lang: I18n.lang, sketch: document.querySelector('#t-sketch')?.textContent, pref: ViewPrefs.lang };")
+    ok2 = (
+        de_sketch == 'Skizze'
+        and init_sel == 'auto'
+        and en_ui['lang'] == 'en'
+        and en_ui['docLang'] == 'en'
+        and en_ui['sketch'] == 'Sketch'
+        and en_ui['model'] == 'Model'
+        and en_ui['drawing'] == 'Drawing'
+        and en_ui['dlgTitle'] == 'Settings'
+        and after_reload['lang'] == 'en'
+        and after_reload['sketch'] == 'Sketch'
+        and after_reload['pref'] == 'en'
+    )
+
+    # 3. Fallback auf Deutsch, wenn ein Schlüssel im Englischen fehlt
+    fb = p.ev("""
+      const savedParts = I18n.packs.en['tool.parts'];
+      const savedEdges = I18n.packs.en['ctx.edgesCount'];
+      delete I18n.packs.en['tool.parts'];
+      delete I18n.packs.en['ctx.edgesCount'];
+      const r1 = T('tool.parts');
+      const r2 = T('ctx.edgesCount', { n: 3 });
+      const r3 = T('unbekannt.a081');
+      I18n.packs.en['tool.parts'] = savedParts;
+      I18n.packs.en['ctx.edgesCount'] = savedEdges;
+      return { r1, r2, r3 };
+    """)
+    ok3 = fb['r1'] == 'Bauteile' and fb['r2'] == '3 Kanten' and fb['r3'] == 'unbekannt.a081'
+
+    # 4. Standard: Browser-Sprache (en-US → Englisch, fr-FR → Deutsch als Ersatz)
+    auto_en = auto_fr = None
+    c_en = c_fr = None
+    try:
+        br = p.ctx.browser
+        c_en = br.new_context(viewport={'width': 1400, 'height': 850}, locale='en-US')
+        pg_en = c_en.new_page()
+        pg_en.add_init_script("try{localStorage.clear();}catch(e){}")
+        pg_en.goto(URL)
+        pg_en.wait_for_timeout(2500)
+        auto_en = pg_en.evaluate("""() => ({
+          lang: window.__M.I18n.lang,
+          docLang: document.documentElement.lang,
+          sketch: document.querySelector('#t-sketch')?.textContent,
+          startEmpty: document.querySelector('.start .card.new b')?.textContent,
+        })""")
+
+        c_fr = br.new_context(viewport={'width': 1400, 'height': 850}, locale='fr-FR')
+        pg_fr = c_fr.new_page()
+        pg_fr.add_init_script("try{localStorage.clear();}catch(e){}")
+        pg_fr.goto(URL)
+        pg_fr.wait_for_timeout(2500)
+        auto_fr = pg_fr.evaluate("""() => ({
+          lang: window.__M.I18n.lang,
+          docLang: document.documentElement.lang,
+          sketch: document.querySelector('#t-sketch')?.textContent,
+          startEmpty: document.querySelector('.start .card.new b')?.textContent,
+        })""")
+    finally:
+        if c_en:
+            c_en.close()
+        if c_fr:
+            c_fr.close()
+    ok4 = (
+        auto_en is not None and auto_fr is not None
+        and auto_en['lang'] == 'en' and auto_en['docLang'] == 'en'
+        and auto_en['sketch'] == 'Sketch' and auto_en['startEmpty'] == 'Empty Project'
+        and auto_fr['lang'] == 'de' and auto_fr['docLang'] == 'de'
+        and auto_fr['sketch'] == 'Skizze' and auto_fr['startEmpty'] == 'Leeres Projekt'
+    )
+
+    # 5. Zurück auf Deutsch in den Einstellungen + Hilfetext & Befehlssuche
+    p.ev("Start.hide(); ViewPrefs.dialog();")
+    p.wait(250)
+    has_help_attr = p.pg.locator('[data-help="language"]').count() == 1
+    p.pg.select_option('#set-lang', 'de')
+    p.wait(300)
+    p.pg.locator('#set-lang').hover()
+    p.wait(550)
+    tip_text = p.pg.locator('.tooltip').text_content() if p.pg.locator('.tooltip').count() else ''
+    back_de = p.ev("return { lang: I18n.lang, sketch: document.querySelector('#t-sketch')?.textContent, cmdOk: Commands.search('language').some(c => c.id === 'settings-language') };")
+    p.pg.keyboard.press('Escape')
+    p.wait(200)
+    help_json = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(d => !!(d.language && d.language.tip && d.language.hilfe && d.language.tipp))")
+    ok5 = (
+        has_help_attr
+        and 'Deutsch und Englisch' in tip_text
+        and back_de['lang'] == 'de'
+        and back_de['sketch'] == 'Skizze'
+        and back_de['cmdOk']
+        and help_json
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
 
 
 PW_DEVICES = {}
@@ -16989,7 +17268,9 @@ TESTS = [
     ('[A-075] Projekt-Tabs: zwei Projekte, unabhängiges Rückgängig, Schließen mit Nachfrage, Einfach & Profi, Neuladen & Hilfe', t_a075_projekt_tabs),
     ('[A-078] Mehrere Rechen-Helfer: 4 unabhängige Körper mit Bohrungsmustern verteilt & ergebnisgleich, Einstellung (Profi), kein Nachladen', t_a078_mehrere_rechenhelfer),
     ('[A-077] Große Modelle: nur neu rechnen, was sich geändert hat (Fingerabdruck & Kern-Zähler)', t_a077_nur_geandertes_rechnen),
+    ('[A-079] Läuft in Firefox und Safari: Quader mit Bohrung in WebKit & Firefox, Volumen ohne App.errors', t_a079_firefox_webkit),
     ('[F-11241334] Volltest-Reparatur: Veraltete mergedInto-Bezüge beim Löschen ohne Seitenfehler in Verlauf & Eigenschaften', t_f11241334),
+    ('[A-081] Englische Oberfläche: texte-en.json Schlüsselgleichheit / Einstellungen / Sketch / Fallback / Browser-Sprache', t_a081_englische_oberflaeche),
     ('[A-080] Am Tablet bedienbar: iPad Pro 11 (44 px Knöpfe, einklappbare Panels, Antippen, 2-Finger-Drehen/Zoomen, Einfach & Profi)', t_a080_tablet),
     ('[A-082] Baugruppe & Bauteil als eigene Dokumente: Verweise speichern & Änderungen übernehmen', t_a082_baugruppe_verweise),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
@@ -17127,26 +17408,32 @@ TESTS = [
 ]
 
 if __name__ == '__main__':
-    only = sys.argv[1:]
+    BROWSER_NAME, only = parse_cli(sys.argv[1:])
+    if BROWSER_NAME != 'chromium':
+        print(f'Browser: {BROWSER_NAME}', flush=True)
     with sync_playwright() as pw:
         PW_DEVICES = pw.devices
-        b = pw.chromium.launch(args=ARGS)
-        ab = int(os.environ.get('TRACERY_AB', '0'))   # nach einem Abbruch: die ersten N Durchläufe überspringen
-        teil = os.environ.get('TRACERY_TEIL', '')     # „i/n“: nur jeden n-ten Test ab Nummer i (Volltest in Teilen, gleichzeitig)
-        ti, tn = (int(x) for x in teil.split('/')) if teil else (0, 1)
-        for nr, (name, fn) in enumerate(TESTS):
-            if nr < ab or nr % tn != ti:
-                continue
-            if only and not any(o.lower() in name.lower() or o.lower() in fn.__name__.lower() for o in only):
-                continue
+        _PW = pw
+        b = launch_browser(pw, BROWSER_NAME)
+        try:
+            ab = int(os.environ.get('TRACERY_AB', '0'))   # nach einem Abbruch: die ersten N Durchläufe überspringen
+            teil = os.environ.get('TRACERY_TEIL', '')     # „i/n“: nur jeden n-ten Test ab Nummer i (Volltest in Teilen, gleichzeitig)
+            ti, tn = (int(x) for x in teil.split('/')) if teil else (0, 1)
+            for nr, (name, fn) in enumerate(TESTS):
+                if nr < ab or nr % tn != ti:
+                    continue
+                if only and not any(o.lower() in name.lower() or o.lower() in fn.__name__.lower() for o in only):
+                    continue
 
-            def wrap(p, fn=fn):
-                r = fn(p)
-                if isinstance(r, list):
-                    return all(r), ' '.join('✓' if x else '✗' for x in r)
-                return r
-            check(name, wrap, b)
-        b.close()
+                def wrap(p, fn=fn):
+                    r = fn(p)
+                    if isinstance(r, list):
+                        return all(r), ' '.join('✓' if x else '✗' for x in r)
+                    return r
+                check(name, wrap, b)
+        finally:
+            _PW = None
+            b.close()
     bad = [r for r in results if r[1] == 'FEHLER']
     print(f'\n{len(results)} Tests: {sum(r[1] == "OK" for r in results)} OK, {len(bad)} Fehler, {sum(r[1] == "VON HAND" for r in results)} von Hand')
     sys.exit(1 if bad else 0)

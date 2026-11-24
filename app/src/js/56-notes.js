@@ -77,7 +77,7 @@ const Notes = (() => {
     if (!first) return;
     // Die Folie liegt dort, wo der Strich anfängt – so bleibt er auch neben dem Teil in passender Tiefe
     cur = { pts: [first.p.toArray().map((x) => round(x, 3))], color, w: width, plane: viewPlane(first.p), last: { x: e.clientX, y: e.clientY } };
-    Viewer.canvas.setPointerCapture(e.pointerId);
+    try { Viewer.canvas.setPointerCapture(e.pointerId); } catch (_) {}
   }
   function onMove(e) {
     if (!on || !cur) return;

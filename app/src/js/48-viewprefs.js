@@ -2,8 +2,9 @@
 // Persönliche Einstellung (nicht im Projekt gespeichert), gilt für alle Projekte in diesem Browser.
 const ViewPrefs = (() => {
   const KEY = 'masswerk.view';
-  const DEF = { grid: 'auto', gridOn: true, planes: true, axes: true, ortho: false, quality: 'normal', adaptive: true, multiWorker: true, theme: 'system', decimals: 2, angleDecimals: 1, notes: true, cog: false, level: 'pro', look: 'studio', mood: 'studio', shadows: true, display: 'edges' };
+  const DEF = { grid: 'auto', gridOn: true, planes: true, axes: true, ortho: false, quality: 'normal', adaptive: true, multiWorker: true, theme: 'system', decimals: 2, angleDecimals: 1, notes: true, cog: false, level: 'pro', look: 'studio', mood: 'studio', shadows: true, display: 'edges', lang: 'auto' };
   const normDec = (x, fb) => { const n = Number(x); return Number.isFinite(n) ? clamp(Math.round(n), 0, 4) : fb; };
+  const normLang = (x) => (x === 'de' || x === 'en' ? x : 'auto');
   let v = { ...DEF };
   let firstStart = !storageGet(KEY) && !storageGet('masswerk.last') && !storageGet('masswerk.index');
   try {
@@ -16,6 +17,7 @@ const ViewPrefs = (() => {
   } catch (_) {}
   v.decimals = normDec(v.decimals, DEF.decimals);
   v.angleDecimals = normDec(v.angleDecimals, DEF.angleDecimals);
+  v.lang = normLang(v.lang);
   const ev = makeEmitter();
   function applyTheme() {
     const r = document.documentElement;
@@ -23,6 +25,11 @@ const ViewPrefs = (() => {
   }
   const simple = () => v.level === 'simple';
   function apply() {
+    if (typeof I18n !== 'undefined' && I18n.use) {
+      const targetLang = I18n.resolve ? I18n.resolve(v.lang) : (v.lang === 'auto' ? I18n.detect() : v.lang);
+      if (I18n.lang !== targetLang) I18n.use(targetLang);
+      else if (document.documentElement) document.documentElement.lang = I18n.lang;
+    }
     document.body.classList.toggle('simple', simple());
     Viewer.setViewOptions({ grid: v.grid, gridOn: v.gridOn, planes: v.planes, axes: v.axes });
     Viewer.setOrtho(v.ortho);
@@ -40,6 +47,7 @@ const ViewPrefs = (() => {
     const next = { ...patch };
     if ('decimals' in next) next.decimals = normDec(next.decimals, DEF.decimals);
     if ('angleDecimals' in next) next.angleDecimals = normDec(next.angleDecimals, DEF.angleDecimals);
+    if ('lang' in next) next.lang = normLang(next.lang);
     if ('level' in next) firstStart = false;
     Object.assign(v, next); storageSet(KEY, JSON.stringify(v)); apply();
     syncLevel();
@@ -83,6 +91,16 @@ const ViewPrefs = (() => {
     }
   }
   function setLevel(l) { set({ level: l }, T(l === 'simple' ? 'dlg.settings.levelSimpleToast' : 'dlg.settings.levelProToast')); }
+  function setLang(l) {
+    const nextLang = normLang(l);
+    set({ lang: nextLang });
+    const eff = typeof I18n !== 'undefined' ? I18n.lang : 'de';
+    const effName = T(eff === 'en' ? 'dlg.settings.langEn' : 'dlg.settings.langDe');
+    const toastMsg = nextLang === 'auto'
+      ? T('dlg.settings.langToastAuto', { lang: effName })
+      : T(eff === 'en' ? 'dlg.settings.langToastEn' : 'dlg.settings.langToastDe');
+    UI.toast(toastMsg, { icon: 'check', ms: 1600 });
+  }
   // Zwei Stufen-Karten („Einfach“ / „Profi“) für ersten Start und Einstellungen
   function levelCards({ idPrefix, active = v.level, onPick } = {}) {
     const wrap = h('div', { class: 'level-cards', role: 'group', 'aria-label': T('level.chooseAria') });
@@ -126,6 +144,7 @@ const ViewPrefs = (() => {
 
     let curTab = !simple() && initialTab === 'keys' ? 'keys' : 'general';
     let kbdEd = null;
+    let modalHandle = null;
     const tabs = h('div', { class: 'seg set-tabs', role: 'tablist', 'aria-label': T('dlg.settings.tabsAria') });
     const tabGen = h('button', { type: 'button', role: 'tab', id: 'set-tab-general', 'aria-selected': 'true', 'aria-pressed': 'true' }, T('dlg.settings.tabGeneral'));
     const tabKeys = h('button', { type: 'button', role: 'tab', id: 'set-tab-keys', 'data-help': 'customShortcuts', 'aria-selected': 'false', 'aria-pressed': 'false' }, T('dlg.settings.tabKeys'));
@@ -139,6 +158,20 @@ const ViewPrefs = (() => {
       levelCards({ idPrefix: 'set-level', active: v.level, onPick: () => syncTabs(curTab) }),
       h('small', { style: { color: 'var(--muted)', display: 'block', marginTop: '4px' } }, T('dlg.settings.levelHint')),
     );
+    const detName = (typeof I18n !== 'undefined' && I18n.detect && I18n.detect() === 'en') ? T('dlg.settings.langEn') : T('dlg.settings.langDe');
+    const langSel = sel('set-lang', T('dlg.settings.langLabel'), v.lang || 'auto', [
+      ['auto', T('dlg.settings.langAuto', { lang: detName })],
+      ['de', T('dlg.settings.langDe')],
+      ['en', T('dlg.settings.langEn')],
+    ], (x) => {
+      const prev = v.lang;
+      setLang(x);
+      if (normLang(x) !== prev && modalHandle) {
+        modalHandle.close();
+        dialog(curTab, { focus: 'set-lang' });
+      }
+    }, T('dlg.settings.langHint'));
+    langSel.dataset.help = 'language';
     const decWord = (d) => T(d === 1 ? 'dlg.settings.decOne' : 'dlg.settings.decMany', { d, ex: `${fmtFixed(12.3456, d)} ${Units.label()}` });
     const angWord = (d) => T(d === 1 ? 'dlg.settings.decOne' : 'dlg.settings.decMany', { d, ex: `${fmtFixed(45.1234, d)}°` });
     const decOpts = () => [0, 1, 2, 3, 4].map((d) => [String(d), decWord(d)]);
@@ -166,6 +199,7 @@ const ViewPrefs = (() => {
     }, T('dlg.settings.unitHint'));
     paneGen.append(
       lvlField,
+      langSel,
       unitSel,
       sel('set-theme', T('dlg.settings.themeLabel'), v.theme, [['system', T('dlg.settings.themeSys')], ['light', T('dlg.settings.themeLight')], ['dark', T('dlg.settings.themeDark')]], (x) => set({ theme: x })),
       decBlock,
@@ -197,9 +231,9 @@ const ViewPrefs = (() => {
 
     body.append(tabs, paneGen, paneKeys);
     syncTabs(curTab);
-    UI.modal({ title: T('dlg.settings.title'), body, actions: [{ label: T('common.done'), primary: true }], onClose: () => { if (kbdEd) kbdEd.destroy(); } });
+    modalHandle = UI.modal({ title: T('dlg.settings.title'), body, actions: [{ label: T('common.done'), primary: true }], onClose: () => { if (kbdEd) kbdEd.destroy(); } });
     if (opts && opts.focus) setTimeout(() => { const el = document.getElementById(opts.focus); if (el) el.focus(); }, 45);
   }
-  return { get: () => ({ ...v }), get level() { return v.level; }, set level(l) { setLevel(l); }, get firstStart() { return firstStart && !(typeof Store !== 'undefined' && Store.hasProjects); }, set, toggle, apply, dialog, setLevel, syncLevel, levelCards, get simple() { return simple(); }, on: ev.on };
+  return { get: () => ({ ...v }), get level() { return v.level; }, set level(l) { setLevel(l); }, get lang() { return v.lang; }, setLang, get firstStart() { return firstStart && !(typeof Store !== 'undefined' && Store.hasProjects); }, set, toggle, apply, dialog, setLevel, syncLevel, levelCards, get simple() { return simple(); }, on: ev.on };
 })();
 

@@ -2076,6 +2076,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Dialoge**: Die Dialoge Einstellungen (`ViewPrefs.dialog()`), Export (`Print.exportDialog()`) und Tastenkürzel (`Commands.showKeys()`) kommen vollständig über `T()` mit höchstens 5 Ausnahmen im DOM.
 - [ ] **Von Hand**: Test-Modus (`I18n.setTestMode(true)`) im Browser über alle Arbeitsschritte (Skizzen-Assistent, Bohrungs-Assistent, Werkzeugleiste anpassen, Stückliste, Versionen) durchklicken und prüfen, ob alle Hinweise und Tooltips sauber markiert sind.
 
+## Läuft in Firefox und Safari (Auto [A-079], PL-09)
+
+- [x] **Schalter `--browser firefox|webkit` & Grundtests**: `tests/klicktest.py` startet je nach Schalter Chromium (Standard), Firefox oder WebKit; Grundtests, Vorführ-Modus (`Esc` über `fullscreenchange`/`webkitfullscreenchange`) und Zeichnungs-DXF/-PNG (`[A-071]`) laufen in Firefox und WebKit fehlerfrei.
+- [x] **Quader mit Bohrung in WebKit & Firefox**: Startseite, leeres Projekt, Quader `40 × 30 × 20 mm` mit Durchgangsbohrung `Ø 10 mm` bauen in beiden Engines ohne Seitenfehler und ohne `App.errors` mit passendem Volumen (`≈ 22429,2 mm³`).
+- [x] **Tastenkürzel, fehlende API & Datei-Dialoge**: `O` (Orthografisch), `Strg+Z`/`Strg+Y`, `Start.folderSupported() === false`, Speichern (`.tracery.json`) und Datei-Dialog (`Start.openFile()`) funktionieren in Firefox und WebKit ohne Fehler.
+- [ ] **Von Hand**: In echtem Safari auf macOS, Firefox und auf einem iPad ein Modell bauen, Datei öffnen/speichern, Bild/PDF/DXF exportieren und Vorführ-Modus per `Esc` beenden.
+
 ## Volltest-Reparatur (Auto [F-11241334])
 
 - [x] **Veraltete `mergedInto`-Bezüge beim Löschen**: Nach dem Löschen des Zielkörpers (`Block`) eines Formschritts (`Bolzen`) liefert `App.mergedInto()` sofort `null`; synchrones Neuzeichnen von Verlauf (`Panels.renderLeft()`) und Eigenschaften (`Panels.renderRight()`) noch vor Abschluss von `rebuild()` wirft keinen Seitenfehler und zeigt im rechten Panel den Hinweis für das fehlende Ziel.
@@ -2088,6 +2095,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Gleiches Ergebnis wie mit einem Helfer**: Nach Abschalten in den Profi-Einstellungen (`#set-multiWorker`) berechnet nur noch 1 Helfer alle Körper mit identischen Keys, Hüllkästen, Dreieckszahlen und Volumina.
 - [x] **Einstellung (Profi), Abhängigkeiten & Hilfe**: Das Häkchen `#set-multiWorker` ist nur in „Profi“ sichtbar (in „Einfach“ ausgeblendet); abhängige Körper (`op.target`) bleiben auf demselben Helfer und der Hilfetext `multiWorker` ist vorhanden.
 - [ ] **Von Hand**: Im Browser auf einem Mehrkern-Rechner eine große Baugruppe mit mehreren unabhängigen Körpern öffnen, in den Profi-Einstellungen „Mehrere Rechen-Helfer nutzen“ aus- und einschalten und im Task-Manager / Entwicklerwerkzeug die parallele Auslastung der Worker beobachten.
+
+## Englische Oberfläche (Auto [A-081], BE-16)
+
+- [x] **Schlüsselgleichheit `texte-en.json` ↔ `texte-de.json`**: Alle Schlüssel und `{Platzhalter}` stimmen in Dateien und eingebetteten Sprachpaketen überein; jeder Eintrag ist gefüllt und `"tool.sketch"` ist `"Sketch"`.
+- [x] **Sprach-Umschalter in den Einstellungen**: Umschalten auf `English` (`#set-lang`) ändert die Oberfläche sofort (Knopf „Skizze“ heißt „Sketch“, „Modell“/„Zeichnung“ werden „Model“/„Drawing“, `html[lang="en"]`), bleibt beim Neuladen erhalten und schaltet sauber auf `Deutsch` zurück.
+- [x] **Fallback & Browser-Sprache**: Fehlende Schlüssel in `I18n.packs.en` fallen automatisch auf den deutschen Text zurück; ohne gesetzte Einstellung startet ein englischer Browser (`en-US`) auf Englisch und ein nicht unterstützter Browser (`fr-FR`) auf Deutsch.
+- [ ] **Von Hand**: Im Browser in den Einstellungen zwischen „Wie der Browser“, „Deutsch“ und „English“ umschalten und stichprobenartig Skizze, Zeichnung, Export-Dialog und Tooltips auf verständliche englische Texte prüfen.
 
 ## Am Tablet bedienbar (Auto [A-080], PL-09)
 

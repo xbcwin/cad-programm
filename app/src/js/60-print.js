@@ -784,8 +784,9 @@ const Print = (() => {
     if (!dl) {
       // Außerhalb von Claude (lokal oder auf GitHub Pages): normaler Browser-Download
       const blob = data instanceof Blob ? data : new Blob([data]);
-      const a = h('a', { href: URL.createObjectURL(blob), download: filename }); document.body.append(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      const url = URL.createObjectURL(blob);
+      const a = h('a', { href: url, download: filename }); document.body.append(a); a.click();
+      setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 4000);
       UI.toast('Gespeichert: ' + filename, { icon: 'check' }); return true;
     }
     try { const r = await dl.save({ filename, data }); if (r && r.status === 'saved') UI.toast('Gespeichert: ' + filename, { icon: 'check' }); return true; }
@@ -969,6 +970,7 @@ const Print = (() => {
   // ---------- Drehteller-Video (AN-14): das Modell dreht sich einmal um sich selbst, als WebM ----------
   let lastVideo = null;
   function videoType() {
+    if (!Viewer.canvas || typeof Viewer.canvas.captureStream !== 'function') return null;
     for (const t of ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4']) { try { if (window.MediaRecorder && MediaRecorder.isTypeSupported(t)) return t; } catch (_) {} }
     return null;
   }

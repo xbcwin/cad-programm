@@ -1866,6 +1866,7 @@ const Start = (() => {
     const inp = h('input', { type: 'file', accept: '.json,application/json,.step,.stp,.igs,.iges,.brep,.stl,.3mf,.obj,.dxf,.svg', style: { display: 'none' } });
     inp.onchange = () => { const f = inp.files && inp.files[0]; inp.remove(); if (f) openBlob(f, opts); };
     document.body.append(inp); inp.click();
+    setTimeout(() => { if (inp.isConnected) inp.remove(); }, 60000);
   }
   // Dateien einfach ins Fenster ziehen (Projektdatei, 3D-Import oder 2D-Skizze)
   const DROP_RE = /\.(json|step|stp|igs|iges|brep|stl|3mf|obj|dxf|svg)$/i;

@@ -723,7 +723,7 @@ const Views = (() => {
     bars().append(el);
     const f = { el, body, empty, title: head.firstChild, rot: [0, 0], ids: [] };
     let drag = null;
-    body.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY, r: f.rot.slice() }; body.setPointerCapture(e.pointerId); e.stopPropagation(); });
+    body.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY, r: f.rot.slice() }; try { body.setPointerCapture(e.pointerId); } catch (_) {} e.stopPropagation(); });
     body.addEventListener('pointermove', (e) => { if (!drag) return; f.rot = [drag.r[0] - (e.clientX - drag.x) * 0.6, clamp(drag.r[1] + (e.clientY - drag.y) * 0.5, -80, 80)]; Viewer.requestRender(); });
     body.addEventListener('pointerup', () => { drag = null; });
     body.addEventListener('dblclick', () => { f.rot = [0, 0]; Viewer.requestRender(); });
@@ -883,20 +883,41 @@ const Views = (() => {
   }
 
   // ---------- Vorführ-Modus (AN-19): nur das Modell, Vollbild, auf Wunsch langsam drehend ----------
+  function fsEl() { return document.fullscreenElement || document.webkitFullscreenElement || null; }
   function present(on = !st.present) {
     if (!on) {
       if (!st.present) return;
       cancelAnimationFrame(st.present.raf); if (st.present.bar) st.present.bar.remove();
       Viewer.canvas.removeEventListener('pointerdown', st.present.pd); removeEventListener('pointerup', st.present.pu);
+      if (st.present.onFs) {
+        document.removeEventListener('fullscreenchange', st.present.onFs);
+        document.removeEventListener('webkitfullscreenchange', st.present.onFs);
+      }
       document.body.classList.remove('presenting');
-      try { if (document.fullscreenElement) document.exitFullscreen(); } catch (_) {}
+      try {
+        if (fsEl()) {
+          if (document.exitFullscreen) Promise.resolve(document.exitFullscreen()).catch(() => {});
+          else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+        }
+      } catch (_) {}
       st.present = null; sync(); setTimeout(() => Viewer.requestRender(), 50); return;
     }
     if (st.present) return;
     App.clearSelection(); Handles.clear();
-    const o = { spin: true, raf: 0, last: performance.now() };
+    const o = { spin: true, raf: 0, last: performance.now(), wasFs: false };
+    o.onFs = () => {
+      const fs = !!fsEl();
+      if (fs) o.wasFs = true;
+      else if (o.wasFs && st.present === o) present(false);
+    };
+    document.addEventListener('fullscreenchange', o.onFs);
+    document.addEventListener('webkitfullscreenchange', o.onFs);
     document.body.classList.add('presenting');
-    try { if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {}); } catch (_) {}
+    try {
+      const el = document.documentElement;
+      if (el.requestFullscreen) Promise.resolve(el.requestFullscreen()).catch(() => {});
+      else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+    } catch (_) {}
     const bar = h('div', { class: 'present-bar', id: 'present-bar' });
     const sp = h('button', { type: 'button', class: 'btn small', id: 'present-spin' }, 'Drehen anhalten');
     sp.onclick = () => { o.spin = !o.spin; sp.textContent = o.spin ? 'Drehen anhalten' : 'Langsam drehen'; o.last = performance.now(); };

@@ -772,7 +772,7 @@ const Drawing = (() => {
     await ensureProjections();
     if (holder) {
       render();
-      if (App.mode === 'drawing') Panels.renderRight();
+      if (App.mode === 'drawing') Panels.renderRight({ preserveFocus: true });
     }
   }
   async function refresh() {
@@ -782,7 +782,7 @@ const Drawing = (() => {
       await ensureProjections();
     } catch (e) { UI.toast('Die Ansichten konnten nicht berechnet werden: ' + e.message, { kind: 'bad' }); }
     render();
-    Panels.renderRight();
+    Panels.renderRight({ preserveFocus: true });
     const curLost = layout ? lostDims(dwg()) : [];
     const curLostKey = curLost.map((x) => x.id).sort().join(',');
     if (projId !== prevProjId && curLost.length) {
@@ -5707,7 +5707,7 @@ const Drawing = (() => {
     w.append(vSec);
 
     const sec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, T('draw.panel.titleBlock')));
-    const tf = (k, label, ph) => { const f = h('div', { class: 'field' }, h('label', { for: 'tb-' + k }, label), h('div', { class: 'inp' }, h('input', { id: 'tb-' + k, value: d.title[k] || '', placeholder: ph || '', style: { fontFamily: 'var(--font)' } }))); f.querySelector('input').addEventListener('change', (e) => set((x) => { x.title[k] = e.target.value; }, 'Schriftfeld geändert')); f.querySelector('input').addEventListener('keydown', (e) => e.stopPropagation()); return f; };
+    const tf = (k, label, ph) => { const f = h('div', { class: 'field' }, h('label', { for: 'tb-' + k }, label), h('div', { class: 'inp' }, h('input', { id: 'tb-' + k, value: d.title[k] || '', placeholder: ph || '', style: { fontFamily: 'var(--font)' } }))); const inp = f.querySelector('input'); inp.addEventListener('change', (e) => set((x) => { x.title[k] = e.target.value; }, 'Schriftfeld geändert')); inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } }); return f; };
     sec.append(tf('titel', T('draw.tb.title'), App.doc.name), h('div', { class: 'fields' }, tf('nummer', T('draw.tb.dwgNo')), tf('blatt', T('draw.tb.sheet'), `${idx + 1}/${all.length}`)), h('div', { class: 'fields' }, tf('name', T('draw.panel.drawnBy')), tf('datum', T('draw.tb.date'))), h('div', { class: 'fields' }, tf('werkstoff', T('draw.tb.material')), tf('firma', T('draw.tb.company'))));
     w.append(sec);
     const info = h('div', { class: 'section' }, h('div', { class: 'section-h' }, T('draw.panel.sheetHeading')));
