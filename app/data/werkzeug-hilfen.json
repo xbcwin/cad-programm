@@ -1159,6 +1159,16 @@
     "hilfe": "Mach einen Doppelklick auf ein Teil in der Baugruppe (im 3D-Bild oder links im Verlauf), um das zugehörige Bauteil in einem eigenen Tab zu öffnen. Dort siehst du alle seine eigenen Schritte und Maße. Nach dem Speichern oder beim Zurückwechseln aktualisiert sich die Baugruppe mit allen Kopien dieses Bauteils automatisch.",
     "tipp": "Oben im Bauteil-Tab erscheint ein Hinweis-Banner mit „Speichern“ und „Zurück zur Baugruppe“ – so wechselst du mit einem Klick zurück."
   },
+  "mateCyl": {
+    "tip": "Welle in Bohrung: Achsen deckungsgleich ausrichten, Drehen und Schieben erlauben",
+    "hilfe": "Richtet zwei Teile entlang ihrer runden Flächen oder Kreisränder exakt auf derselben Achse aus. Danach lässt sich das zweite Teil frei um diese Achse drehen und entlang der Achse verschieben – genau wie ein Bolzen in einer Bohrung.",
+    "tipp": "Klick zuerst auf die Bohrung am festen Teil und dann auf die Welle am beweglichen Teil. Rechts kannst du Winkel, Weg, Anschläge und „Bewegung abspielen“ nutzen."
+  },
+  "matePlanar": {
+    "tip": "Fläche auf Fläche: bündig aneinanderlegen, Schieben in der Ebene und Drehen erlauben",
+    "hilfe": "Legt zwei ebene Flächen verschiedener Teile ohne Abstand exakt aufeinander. Das zweite Teil lässt sich anschließend frei auf dieser Ebene in zwei Richtungen verschieben und um die Flächennormale drehen, ohne abzuheben.",
+    "tipp": "Auch beim Ziehen mit der Maus im 3D-Bild oder beim Ändern von X/Y/Z bleibt der Abstand zwischen den beiden Flächen exakt 0."
+  },
   "fixedJoint": {
     "tip": "Zwei Teile an gewählten Flächen oder Punkten fest verbinden",
     "hilfe": "Legt das zweite gewählte Teil bündig an das erste (Flächen gegeneinander und Mitten übereinander oder Punkt auf Punkt). Das verbundene Teil wandert bei jeder Bewegung oder Größenänderung des ersten Teils mit und lässt sich nicht mehr einzeln verschieben. Unter „Verbindungen“ links im Verlauf kannst du die Verbindung jederzeit umdrehen, drehen, einen Abstand setzen oder lösen.",

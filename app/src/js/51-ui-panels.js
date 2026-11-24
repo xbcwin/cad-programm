@@ -1985,6 +1985,7 @@ const Panels = (() => {
         const tgt = Model.find(doc, it.id)?.item;
         if (!tgt || tgt.locked || (typeof Joints !== 'undefined' && Joints.isFixedPart(it.id))) return false;
         tgt.t[k] = val;
+        if (typeof Joints !== 'undefined' && Joints.constrain) Joints.constrain(doc, it.id);
       }, { merge: 't:' + it.id + ':' + k });
       const fp = h('div', { class: 'fields three' });
       for (const k of ['x', 'y', 'z']) {
@@ -2433,6 +2434,13 @@ const Panels = (() => {
         const fj = b('lock', T('ctx.fixedJoint'), () => Joints.startFixed(), '', T('ctx.fixedJointTip'));
         fj.id = 'ctx-fixed-joint'; fj.dataset.help = 'fixedJoint';
         b('hinge', T('ctx.joint'), () => Joints.start(), '', T('ctx.jointTip'), true);
+        b('axes', T('ctx.mate'), (e) => UI.menu(e.currentTarget, [
+          { label: T('ctx.mateCyl'), icon: 'axes', help: 'mateCyl', run: () => Joints.startCylindrical() },
+          { label: T('ctx.matePlanar'), icon: 'planeXY', help: 'matePlanar', run: () => Joints.startPlanar() },
+          '-',
+          { label: T('ctx.mateRot'), icon: 'hinge', run: () => Joints.start('rot') },
+          { label: T('ctx.mateSlide'), icon: 'moveStep', run: () => Joints.start('slide') },
+        ]), '', T('ctx.mateTip'), true).dataset.help = 'mateCyl';
       }
       if (!hasRef && items.length >= 2 && items.every((x) => x.item.kind === 'extrude')) b('loft', T('ctx.loft'), () => Actions.loft(), '', T('ctx.loftTip'));
       if (!hasRef) b('boolSubtract', T('ctx.boolean'), (e) => UI.menu(e.currentTarget, [{ label: T('ctx.boolUnion'), icon: 'boolUnion', run: () => Features.boolean('union') }, { label: T('ctx.boolSub'), icon: 'boolSubtract', run: () => Features.boolean('subtract') }, { label: T('ctx.boolInt'), icon: 'boolIntersect', run: () => Features.boolean('intersect') }]), '', T('ctx.booleanTip'), true);

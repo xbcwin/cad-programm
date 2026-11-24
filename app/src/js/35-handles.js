@@ -198,23 +198,51 @@ const Handles = (() => {
     hm.userData = { kind: 'fillet', base: wp.clone(), wdir, dir: wdir.toArray() };
     group.add(hm); items.push(hm);
     const el = h('div', { class: 'dimlabel fillet-tip', title: 'Ziehen oder Zahl tippen' }, 'Rundung ziehen');
-    el.addEventListener('pointerdown', (e) => e.stopPropagation());
+    bindLabelPass(el);
+    el.addEventListener('click', (e) => {
+      if (!el.classList.contains('editing') && e.altKey && !App.ctx) {
+        e.stopPropagation();
+        Interact.selectBehind(e.clientX, e.clientY);
+      }
+    });
     overlayEl.append(el); labels.push({ el, handle: hm });
     scaleHandles(); placeLabels();
+  }
+  function bindLabelPass(el) {
+    el.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
+    el.addEventListener('contextmenu', (e) => {
+      if (el.classList.contains('editing')) return;
+      e.preventDefault(); e.stopPropagation();
+      Interact.contextMenu(e.clientX, e.clientY);
+    });
   }
   function addLabel(handle, value) {
     const txt = Units.key() === 'mm' ? Units.fmtLen(value) : Units.fmtLenU(value);
     const el = h('div', { class: 'dimlabel', title: 'Klicken und genaues Maß eintippen' }, txt);
-    el.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
-    el.addEventListener('click', (e) => { e.stopPropagation(); editLabel(el, handle); });
+    bindLabelPass(el);
+    el.addEventListener('click', (e) => {
+      if (!el.classList.contains('editing') && e.altKey && !App.ctx) {
+        e.stopPropagation();
+        Interact.selectBehind(e.clientX, e.clientY);
+        return;
+      }
+      e.stopPropagation(); editLabel(el, handle);
+    });
     overlayEl.append(el);
     labels.push({ el, handle });
   }
   function addAngleLabel(handle, value, factor = 1) {
     const txt = factor === 2 ? `${fmtAngleU(value)} (2×${fmtAngleU(value / 2)})` : fmtAngleU(value);
     const el = h('div', { class: 'dimlabel', title: 'Klicken und genauen Winkel eintippen' }, txt);
-    el.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
-    el.addEventListener('click', (e) => { e.stopPropagation(); editAngleLabel(el, handle); });
+    bindLabelPass(el);
+    el.addEventListener('click', (e) => {
+      if (!el.classList.contains('editing') && e.altKey && !App.ctx) {
+        e.stopPropagation();
+        Interact.selectBehind(e.clientX, e.clientY);
+        return;
+      }
+      e.stopPropagation(); editAngleLabel(el, handle);
+    });
     overlayEl.append(el);
     labels.push({ el, handle });
   }
@@ -250,8 +278,13 @@ const Handles = (() => {
     const i = handle.userData.seg;
     const lenTxt = Units.key() === 'mm' ? Units.fmtLen(len) : Units.fmtLenU(len);
     const el = h('div', { class: 'dimlabel seglabel' + (rule.len != null ? ' fixed' : ''), id: 'seglabel-' + i, title: 'Klicken und Länge dieses Stücks eintippen' }, (rule.ax ? ({ perp: '⊥', par: '∥' }[rule.ax] || rule.ax.toUpperCase()) + ' · ' : '') + lenTxt + (rule.len != null ? ' 🔒' : ''));
-    el.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
+    bindLabelPass(el);
     el.addEventListener('click', (e) => {
+      if (!el.classList.contains('editing') && e.altKey && !App.ctx) {
+        e.stopPropagation();
+        Interact.selectBehind(e.clientX, e.clientY);
+        return;
+      }
       e.stopPropagation(); if (el.classList.contains('editing')) return;
       el.classList.add('editing'); el.textContent = '';
       const initV = rule.len != null ? (typeof rule.len === 'number' ? Units.fmtInput(rule.len) : String(rule.len)) : Units.fmtInput(len);
@@ -320,7 +353,8 @@ const Handles = (() => {
       const p = l.handle.position.clone();
       const a = Viewer.toScreen(p), b = Viewer.toScreen(p.clone().add(l.handle.userData.wdir));
       let dx = b.x - a.x, dy = b.y - a.y; const L = Math.hypot(dx, dy);
-      if (L < 1e-6) { dx = 1; dy = 0; } else { dx /= L; dy /= L; }
+      const ps = Viewer.pixelSizeAt(p);
+      if (L < 1e-6 || (ps > 0 && L * ps < 0.35)) { dx = 1; dy = 0; } else { dx /= L; dy /= L; }
       const w = l.el.offsetWidth || 40, hh = l.el.offsetHeight || 20;
       // Abstand so wählen, dass die Beschriftung den Anfasser nie verdeckt
       const dist = 16 + Math.abs(dx) * w / 2 + Math.abs(dy) * hh / 2;
@@ -461,6 +495,7 @@ const Handles = (() => {
       const s = closestOnAxis(state.p0, state.axisDir, ev.clientX, ev.clientY);
       const dz = snap(s - state.s0);
       c.it.t = { ...state.t0, z: round(state.t0.z + dz, 4) };
+      Joints.constrain(App.doc, c.it.id);
       showLive(handle, c.it.t.z, 'Höhe über Fläche');
       App.emit('doc'); liveRebuild();
     } else if (state.kind === 'rot') {
@@ -475,6 +510,7 @@ const Handles = (() => {
       const Wn = T1.multiply(R).multiply(T2).multiply(state.W0);
       const Ln = state.PW.clone().invert().multiply(Wn);
       Model.setFromMatrix(c.it, Ln);
+      Joints.constrain(App.doc, c.it.id);
       showLive(handle, deg, 'Drehung', '°');
       App.emit('doc'); liveRebuild();
     } else if (state.kind === 'revAngle') {
@@ -511,7 +547,13 @@ const Handles = (() => {
     }
     // Knotenmatrix direkt nachführen (flüssig)
     const top = App.doc.items.find((x) => x.id === c.it.id);
-    if (top) Viewer.updateNode(top.id, { matrix: Model.localMatrix(top) });
+    if (top) {
+      Viewer.updateNode(top.id, { matrix: Model.localMatrix(top) });
+      for (const d of Joints.downstream(App.doc, top.id)) {
+        const db = App.doc.items.find((x) => x.id === d.b);
+        if (db) Viewer.updateNode(db.id, { matrix: Model.localMatrix(db) });
+      }
+    }
   }
   let liveEl = null;
   function showLive(handle, v, label, unit = '') {
@@ -710,7 +752,21 @@ const Interact = (() => {
     const ids = App.sel.map((id) => App.doc.items.find((x) => x.id === id)).filter((x) => x && !x.locked && !isStepMod(x) && !(typeof Joints !== 'undefined' && Joints.isFixedPart(x.id)));
     if (!ids.length) { down = null; Viewer.controls.enabled = true; return; }
     const planeZ = hit.point.z;
-    moving = { ids, before: App.snapshot(), start: hit.point.clone(), planeZ, t0: new Map(ids.map((it) => [it.id, Model.tNumeric(it)])), box0: Actions.selBox(ids.map((it) => it.id)) };
+    let joint = null;
+    if (ids.length === 1) {
+      const mj = Joints.drivingOf(ids[0].id);
+      if (mj && (mj.kind === 'cyl' || mj.kind === 'planar')) {
+        const frame = Joints.frameOf(mj), st0 = Joints.stateOf(mj);
+        if (mj.kind === 'planar') {
+          const p0 = Viewer.rayPlane(e.clientX, e.clientY, frame.o, frame.n) || hit.point.clone();
+          joint = { id: mj.id, kind: 'planar', frame, st0, p0 };
+        } else {
+          const s0 = Joints.projectAxisRay(frame.o, frame.d, Viewer.setRay(e.clientX, e.clientY).ray);
+          joint = { id: mj.id, kind: 'cyl', frame, st0, s0 };
+        }
+      }
+    }
+    moving = { ids, before: App.snapshot(), start: hit.point.clone(), planeZ, t0: new Map(ids.map((it) => [it.id, Model.tNumeric(it)])), box0: Actions.selBox(ids.map((it) => it.id)), joint };
     Viewer.canvas.style.cursor = 'grabbing';
     Viewer.clearHover();
   }
@@ -718,9 +774,36 @@ const Interact = (() => {
   let moveLabel = null;
   function doMove(e) {
     if (moving.child) return doMoveChild(e);
+    const grid = App.doc.settings.snap === false ? 0 : (e.shiftKey ? 0.1 : App.doc.settings.grid || 1);
+    const r = Viewer.canvas.getBoundingClientRect();
+    const uSuf = Units.key() !== 'mm' ? ' ' + Units.label() : '';
+    if (moving.joint) {
+      const j = moving.joint;
+      let txt = '';
+      if (j.kind === 'planar') {
+        const p = Viewer.rayPlane(e.clientX, e.clientY, j.frame.o, j.frame.n);
+        if (!p) return;
+        const d = p.clone().sub(j.p0);
+        let du = d.dot(j.frame.u), dv = d.dot(j.frame.v);
+        if (grid) { du = Math.round(du / grid) * grid; dv = Math.round(dv / grid) * grid; }
+        if (e.altKey) { if (Math.abs(du) > Math.abs(dv)) dv = 0; else du = 0; }
+        const st = Joints.applyDrag(j.id, { u: j.st0.u + du, v: j.st0.v + dv });
+        if (st) txt = `U ${Units.fmtLen(st.u, 2)}  V ${Units.fmtLen(st.v, 2)}${uSuf}`;
+      } else {
+        const s = Joints.projectAxisRay(j.frame.o, j.frame.d, Viewer.setRay(e.clientX, e.clientY).ray);
+        let ds = s - j.s0;
+        if (grid) ds = Math.round(ds / grid) * grid;
+        const st = Joints.applyDrag(j.id, { pos: j.st0.pos + ds });
+        if (st) txt = `Weg ${Units.fmtLen(st.pos, 2)}${uSuf}`;
+      }
+      if (!moveLabel) { moveLabel = h('div', { class: 'dimlabel live' }); $('#overlay').append(moveLabel); }
+      moveLabel.textContent = txt;
+      moveLabel.style.left = e.clientX - r.left + 'px'; moveLabel.style.top = e.clientY - r.top - 30 + 'px';
+      App.emit('doc'); Handles.rebuild(); liveRebuild();
+      return;
+    }
     const p = Viewer.rayPlane(e.clientX, e.clientY, new THREE.Vector3(0, 0, moving.planeZ), new THREE.Vector3(0, 0, 1));
     if (!p) return;
-    const grid = App.doc.settings.snap === false ? 0 : (e.shiftKey ? 0.1 : App.doc.settings.grid || 1);
     let dx = p.x - moving.start.x, dy = p.y - moving.start.y;
     if (grid) { dx = Math.round(dx / grid) * grid; dy = Math.round(dy / grid) * grid; }
     if (e.altKey) { if (Math.abs(dx) > Math.abs(dy)) dy = 0; else dx = 0; }
@@ -729,11 +812,16 @@ const Interact = (() => {
     for (const it of moving.ids) {
       const t0 = moving.t0.get(it.id);
       it.t = { ...t0, x: round(t0.x + dx, 4), y: round(t0.y + dy, 4) };
+      if (Joints.constrain(App.doc, it.id)) {
+        for (const d of Joints.downstream(App.doc, it.id)) {
+          const db = App.doc.items.find((x) => x.id === d.b);
+          if (db) Viewer.updateNode(db.id, { matrix: Model.localMatrix(db) });
+        }
+      }
       Viewer.updateNode(it.id, { matrix: Model.localMatrix(it) });
     }
     if (typeof Joints !== 'undefined' && Joints.syncFixed) Joints.syncFixed(App.doc, { live: true });
     if (!moveLabel) { moveLabel = h('div', { class: 'dimlabel live' }); $('#overlay').append(moveLabel); }
-    const r = Viewer.canvas.getBoundingClientRect();
     let gapTxt = '';
     if (moving.box0 && !moving.box0.isEmpty()) {
       const lo = [moving.box0.min.x + dx, moving.box0.min.y + dy], hi = [moving.box0.max.x + dx, moving.box0.max.y + dy];
@@ -747,7 +835,6 @@ const Interact = (() => {
       const parts = []; if (isFinite(gx)) parts.push('↔ ' + Units.fmtLen(gx, 2)); if (isFinite(gy)) parts.push('↕ ' + Units.fmtLen(gy, 2));
       if (parts.length) gapTxt = ' · Abstand ' + parts.join('  ');
     }
-    const uSuf = Units.key() !== 'mm' ? ' ' + Units.label() : '';
     moveLabel.textContent = `X ${Units.fmtLen(dx, 2)}  Y ${Units.fmtLen(dy, 2)}${uSuf}` + gapTxt;
     moveLabel.style.left = e.clientX - r.left + 'px'; moveLabel.style.top = e.clientY - r.top - (mag ? 54 : 30) + 'px';
     App.emit('doc'); Handles.rebuild(); liveRebuild();
@@ -772,6 +859,7 @@ const Interact = (() => {
     const pq = new THREE.Quaternion(); m.PW.decompose(new THREE.Vector3(), pq, new THREE.Vector3());
     const dP = dW2.applyQuaternion(pq.invert());
     m.child.t = { ...m.t0, x: round(m.t0.x + dP.x, 4), y: round(m.t0.y + dP.y, 4), z: round(m.t0.z + dP.z, 4) };
+    Joints.constrain(App.doc, m.child.id);
     App.emit('doc'); Handles.rebuild(); liveRebuildChild();
   }
   const liveRebuildChild = throttle(() => { App.rebuild(); App.refreshSelectionVisuals(); }, 120);

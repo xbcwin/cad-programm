@@ -2117,6 +2117,12 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Einstiegspunkte, Suche & Hilfe**: Rechtes Panel (`#partref-sec` / `#btn-open-part-tab`), Rechtsklick-Menü (`#cm-open-part-tab`), Befehlssuche („Bauteil im Tab öffnen“, „Neue Baugruppe anlegen“) und Hilfetext `assemblyPartTab` sind vorhanden.
 - [ ] **Von Hand**: Im Browser über „+“ → „Neue Baugruppe“ eine Baugruppe anlegen, ein gespeichertes Bauteil über „Bauteil in Baugruppe einfügen …“ zweimal platzieren, per Doppelklick im Tab ändern, über das Banner speichern/zurückspringen und die aktualisierte Darstellung prüfen.
 
+## Verbindungen zylindrisch und eben (Auto [A-086], BG-06)
+
+- [x] **Zylindrisch (Welle in Bohrung)**: Ein gekippter, versetzter Bolzen wird per `Joints.addCylindrical` auf eine Bohrung ausgerichtet; beide Zylinderachsen fallen deckungsgleich zusammen (`|d1 · d2| > 0,99999`, Achsabstand `< 0,01 mm`). Drehen (`#jt-ang`), Schieben (`#jt-pos`), seitliche Lage-Eingabe (`#t-x` wird auf die Achse zurückgeführt) und „Richtung umkehren“ (`#jt-flip`) erhalten die Achsen-Deckung; „Bewegung abspielen“ bewegt Bolzen im Bild ohne `App.revision` zu ändern.
+- [x] **Eben (Fläche auf Fläche)**: Ein versetzter Block wird auf eine um `20°` geneigte Platte per `Joints.addPlanar` bündig gelegt (Abstand `< 0,01 mm`, entgegengesetzte Normalen). Verschieben in `U`/`V` (`#jt-u`/`#jt-v`), Drehen (`#jt-ang`), Ändern von `#t-z`/`#t-x` sowie Ziehen mit der Maus im 3D-Bild halten den Flächenabstand exakt bei `0`; „Bewegung abspielen“ gleitet und dreht in der Ebene, Rückgängig, Befehlssuche und Hilfetexte (`mateCyl`, `matePlanar`) funktionieren ohne Seitenfehler.
+- [ ] **Von Hand**: Im Browser zwei Teile über Kontextleiste → „Verbindung“ → „Zylindrisch“ bzw. „Eben“ durch Anklicken zweier Flächen im 3D-Bild verbinden und mit der Maus im Bild verschieben sowie abspielen.
+
 ## Verbindung „fest“ (Auto [A-085], BG-05)
 
 - [x] **Zwei Flächen bündig verbinden**: Zwei Quader wählen → „Verbinden: fest“ → obere Fläche von A und untere Fläche von B anklicken legt B mittig und mit Abstand `0 mm` genau auf A.
@@ -2124,6 +2130,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Verlauf, Bearbeiten & Umdrehen**: Die Verbindung erscheint unter „Verbindungen“ im Verlauf, öffnet rechts das Bearbeitungs-Panel und dreht Teil B per „Umdrehen“ sauber auf die Gegenseite und zurück.
 - [x] **Punkt-an-Punkt, Löschen & Rückgängig**: Zwei gewählte Punkte fallen deckungsgleich zusammen; Löschen im Verlauf gibt Teil B wieder frei, `Strg+Z` stellt die Verbindung wieder her; Befehlssuche und Hilfetext `fixedJoint` sind vorhanden.
 - [ ] **Von Hand**: Im Browser zwei Teile über „Verbinden: fest“ (Modus Auto / Fläche / Punkt) verbinden, während der Auswahl die Ansicht mit der rechten Maustaste drehen, Drehwinkel/Abstand rechts testen und das Ergebnis mit mehreren verketteten Teilen prüfen.
+
+## Volltest-Reparatur (Auto [F-11241523])
+
+- [x] **Griff-Schilder bei Frontansicht & Alt-/Rechtsklick**: In der Frontansicht zweier hintereinander liegender Quader weicht das Tiefenschildchen seitlich aus, sodass die Körpermitte frei für `Alt + Klick` bleibt; Alt-Klick und Rechtsklick auf Griff-Schilder wechseln zum Teil dahinter bzw. öffnen das Kontextmenü ohne Zahleneingabe (`t_dahinter`, `[F-11241523]`).
+- [x] **Skizze ohne 3D-Ansichtsknöpfe**: Im Skizzen-Modus ist `.view-btns` per CSS ausgeblendet (`body.sketching .view-btns`), sodass rechts liegende Linien im Verschieben-Werkzeug (`H`) frei anklickbar sind (`t_skizze_verschieben`, `[F-11241523]`).
+- [x] **Zeitleiste sofort bei Bauteil-Wechsel**: `Timeline` reagiert auf `App.on('ctx')` und `App.on('peek')` synchron ohne 30-ms-Entprell-Verzug (`t_bauteil`, `[F-11241523]`).
+- [ ] **Von Hand**: In der Frontansicht auf einem Quader `Alt + Klick` und Rechtsklick auf ein Maßschild prüfen, in eine Skizze wechseln (Ansichtsknöpfe rechts unten bleiben ausgeblendet) und über „Neues Bauteil“ die leere Bauteil-Zeitleiste prüfen.
 
 ## Unterbaugruppen und Teil festsetzen (Auto [A-084], BG-03, BG-04)
 

@@ -483,9 +483,12 @@ Beispiel – Wunsch „Mach alles als Verbund“ (Runde 1):
       const dir = Array.isArray(ax.richtung) ? ax.richtung.map(Number) : { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] }[String(a.achse || 'z').toLowerCase()] || [0, 0, 1];
       const pt = Array.isArray(ax.punkt) ? ax.punkt.map(Number) : Array.isArray(a.punkt) ? a.punkt.map(Number) : [0, 0, 0];
       if (!fa || !fb || ![...dir, ...pt].every((v) => Number.isFinite(v))) { rep.notes.push('Für ein Gelenk braucht es ein festes und ein bewegliches Teil und eine Achse (Punkt und Richtung).'); return; }
-      const r = Joints.add(fa, fb, pt, dir, { kind: /schieb|slide/i.test(String(a.art || '')) ? 'slide' : 'rot', min: a.von, max: a.bis, ang: a.winkel ?? a.weg });
+      const artStr = String(a.art || '');
+      const jKind = /zyl|cyl/i.test(artStr) ? 'cyl' : /eben|planar/i.test(artStr) ? 'planar' : /schieb|slide/i.test(artStr) ? 'slide' : 'rot';
+      const r = Joints.add(fa, fb, pt, dir, { kind: jKind, min: a.von, max: a.bis, ang: a.winkel ?? a.weg });
       if (!r.ok) { rep.notes.push(r.msg); return; }
-      rep.changed.push(fb); rep.done.push(`gelenk: „${labelOf(fb)}“ ${/schieb|slide/i.test(String(a.art || '')) ? 'gleitet' : 'dreht sich'} gegenüber „${labelOf(fa)}“ (Gelenk ${r.id})`);
+      const verb = jKind === 'slide' ? 'gleitet' : jKind === 'cyl' ? 'dreht und gleitet' : jKind === 'planar' ? 'gleitet in der Ebene' : 'dreht sich';
+      rep.changed.push(fb); rep.done.push(`gelenk: „${labelOf(fb)}“ ${verb} gegenüber „${labelOf(fa)}“ (Gelenk ${r.id})`);
     } else if (op === 'pruefen') rep.check = true;
     else if (op === 'schwachstellen') rep.weak = true;
     else if (op === 'auswaehlen') rep.select = ids();
