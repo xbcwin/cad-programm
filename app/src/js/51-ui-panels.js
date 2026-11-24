@@ -18,30 +18,30 @@ const Panels = (() => {
       el.append(b); return b;
     };
     if (App.mode === 'model') {
-      btn('t-body', 'cube', 'Körper', 'Grundkörper hinzufügen – anklicken oder auf die Fläche ziehen', 'K', (e) => toggleFlyout('bodies', e.currentTarget));
-      btn('t-sketch', 'sketch', 'Skizze', 'Eine 2D-Skizze zeichnen und daraus einen Körper machen', 'S', () => Sketch.chooseAndStart());
-      btn('t-parts', 'parts', 'Bauteile', 'Schraubenlöcher, Mutternfallen, Scharniere, Zahnräder …', 'B', (e) => toggleFlyout('parts', e.currentTarget));
-      btn('t-measure', 'measure', 'Messen', 'Messen: Abstände, Winkel, Flächen und Durchmesser', 'M', () => Measure.toggle(), 'minor pro');
-      btn('t-notes', 'noteDraw', 'Notizen', 'Notizstift: frei malen und Text hinschreiben – ohne technische Bedeutung', 'N', () => Notes.toggle(), 'minor pro');
-      btn('t-views', 'xray', 'Ansicht', 'Ansicht: Schnitt, Röntgen, Explosion und Fokus-Vorschau – ändert nur die Anzeige', '', (e) => Views.menu(e.currentTarget), 'minor pro');
+      btn('t-body', 'cube', T('tool.body'), T('tool.bodyTip'), 'K', (e) => toggleFlyout('bodies', e.currentTarget));
+      btn('t-sketch', 'sketch', T('tool.sketch'), T('tool.sketchTip'), 'S', () => Sketch.chooseAndStart());
+      btn('t-parts', 'parts', T('tool.parts'), T('tool.partsTip'), 'B', (e) => toggleFlyout('parts', e.currentTarget));
+      btn('t-measure', 'measure', T('tool.measure'), T('tool.measureTip'), 'M', () => Measure.toggle(), 'minor pro');
+      btn('t-notes', 'noteDraw', T('tool.notes'), T('tool.notesTip'), 'N', () => Notes.toggle(), 'minor pro');
+      btn('t-views', 'xray', T('tool.views'), T('tool.viewsTip'), '', (e) => Views.menu(e.currentTarget), 'minor pro');
       // einfache Oberfläche: die Profi-Werkzeuge stecken hinter „Mehr“
-      btn('t-more', 'menu', 'Mehr', 'Weitere Werkzeuge: Messen, Notizen, Ansicht – oder alle Werkzeuge zeigen', '', (e) => UI.menu(e.currentTarget, [
-        { label: 'Messen', icon: 'measure', kbd: 'M', run: () => Measure.toggle() },
-        { label: 'Notizstift', icon: 'noteDraw', kbd: 'N', run: () => Notes.toggle() },
-        { label: 'Ansicht: Schnitt, Röntgen, Explosion …', icon: 'xray', run: () => Views.menu($('#t-more')) },
-        { label: 'Schwachstellen suchen', icon: 'target', run: () => Weak.dialog() },
-        '-', { label: 'Alle Werkzeuge zeigen (Profi)', icon: 'sliders', help: 'levelSwitch', run: () => ViewPrefs.setLevel('pro') },
+      btn('t-more', 'menu', T('tool.more'), T('tool.moreTip'), '', (e) => UI.menu(e.currentTarget, [
+        { label: T('menu.more.measure'), icon: 'measure', kbd: 'M', run: () => Measure.toggle() },
+        { label: T('menu.more.notes'), icon: 'noteDraw', kbd: 'N', run: () => Notes.toggle() },
+        { label: T('menu.more.views'), icon: 'xray', run: () => Views.menu($('#t-more')) },
+        { label: T('menu.more.weakSpots'), icon: 'target', run: () => Weak.dialog() },
+        '-', { label: T('menu.more.showAllPro'), icon: 'sliders', help: 'levelSwitch', run: () => ViewPrefs.setLevel('pro') },
       ]), 'simple-only');
       el.append(h('div', { class: 'sep' }));
       Views.sync();
-      btn('t-export', 'export', 'Exportieren', 'Als STEP, STL, 3MF, OBJ, GLB oder DXF speichern (ZIP)', 'Strg E', () => Print.exportDialog(), 'primary', 'Export');
+      btn('t-export', 'export', T('tool.export'), T('tool.exportTip'), 'Strg E', () => Print.exportDialog(), 'primary', T('tool.exportShort'));
     } else {
-      btn('t-sheet', 'sheet', 'Blatt', 'Blattgröße, Maßstab und Ansichten', '', (e) => Drawing.sheetMenu(e.currentTarget));
-      btn('t-dim', 'dim', 'Maß', 'Bemaßung hinzufügen: zwei Punkte oder einen Kreis anklicken', 'D', () => Drawing.tool('dim'));
-      btn('t-autodim', 'target', 'Automatisch bemaßen', 'Gesamtmaße und Bohrungen automatisch bemaßen', '', () => Drawing.autoDims(), '', 'Auto-Maße');
-      btn('t-draw', 'line', '2D zeichnen', 'Linien, Kreise und Text frei auf das Blatt zeichnen', '', (e) => Drawing.drawMenu(e.currentTarget));
+      btn('t-sheet', 'sheet', T('tool.sheet'), T('tool.sheetTip'), '', (e) => Drawing.sheetMenu(e.currentTarget));
+      btn('t-dim', 'dim', T('tool.dim'), T('tool.dimTip'), 'D', () => Drawing.tool('dim'));
+      btn('t-autodim', 'target', T('tool.autodim'), T('tool.autodimTip'), '', () => Drawing.autoDims(), '', T('tool.autodimShort'));
+      btn('t-draw', 'line', T('tool.draw2d'), T('tool.draw2dTip'), '', (e) => Drawing.drawMenu(e.currentTarget));
       el.append(h('div', { class: 'sep' }));
-      btn('t-dexport', 'export', 'Zeichnung speichern', 'Als PDF, SVG oder DXF speichern', '', (e) => Drawing.exportMenu(e.currentTarget), 'primary', 'Speichern');
+      btn('t-dexport', 'export', T('tool.dexport'), T('tool.dexportTip'), '', (e) => Drawing.exportMenu(e.currentTarget), 'primary', T('tool.dexportShort'));
     }
   }
   // weiche Trennstellen für lange Wörter auf schmalen Kacheln (nur Anzeige)
@@ -54,10 +54,10 @@ const Panels = (() => {
     closeFlyout();
     const el = h('div', { class: 'flyout' });
     if (kind === 'bodies') {
-      el.append(h('h3', null, 'Grundkörper'));
+      el.append(h('h3', null, T('tool.fly.bodiesTitle')));
       const tiles = h('div', { class: 'tiles' });
       for (const k of PRIMITIVE_ORDER) {
-        const t = h('div', { class: 'tile' + (SIMPLE_KINDS.includes(k) ? '' : ' pro'), role: 'button', tabindex: '0', 'data-tip': 'Klicken fügt ihn ein, Ziehen setzt ihn genau hin' });
+        const t = h('div', { class: 'tile' + (SIMPLE_KINDS.includes(k) ? '' : ' pro'), role: 'button', tabindex: '0', 'data-tip': T('tool.fly.tileTip') });
         t.innerHTML = primitiveSVG(k); t.append(h('span', { class: 'lbl' }, hyph(KINDS[k].label)));
         Place.bindTile(t, { kind: k });
         t.addEventListener('keydown', (e) => { if (e.key === 'Enter') { Actions.addPrimitive(k); closeFlyout(); } });
@@ -65,29 +65,29 @@ const Panels = (() => {
       }
       el.append(tiles);
       const row = h('div', { class: 'btn-row' });
-      const holeBtn = h('button', { type: 'button', class: 'btn small' }); holeBtn.innerHTML = icon('hole') + 'Zylinder als Loch';
+      const holeBtn = h('button', { type: 'button', class: 'btn small' }); holeBtn.innerHTML = icon('hole') + esc(T('tool.fly.cylHole'));
       holeBtn.onclick = () => { Actions.addPrimitive('cylinder', { role: 'hole', name: 'Loch', p: { d: 6, h: 30 } }); closeFlyout(); };
-      const boxHole = h('button', { type: 'button', class: 'btn small' }); boxHole.innerHTML = icon('hole') + 'Quader als Loch';
+      const boxHole = h('button', { type: 'button', class: 'btn small' }); boxHole.innerHTML = icon('hole') + esc(T('tool.fly.boxHole'));
       boxHole.onclick = () => { Actions.addPrimitive('box', { role: 'hole', name: 'Aussparung', p: { w: 10, d: 10, h: 30 } }); closeFlyout(); };
-      const routeBtn = h('button', { type: 'button', class: 'btn small pro', id: 'add-route', 'data-help': 'route3d' }); routeBtn.innerHTML = icon('sweep') + 'Rohr im Raum';
+      const routeBtn = h('button', { type: 'button', class: 'btn small pro', id: 'add-route', 'data-help': 'route3d' }); routeBtn.innerHTML = icon('sweep') + esc(T('tool.fly.route3d'));
       routeBtn.onclick = () => { closeFlyout(); Features.route3d(); };
       row.append(holeBtn, boxHole, routeBtn); el.append(row);
-      el.append(h('div', { class: 'foot' }, 'Tipp: Jeder Körper kann mit einem Klick zum Loch werden.'));
+      el.append(h('div', { class: 'foot' }, T('tool.fly.bodiesFoot')));
     } else if (kind === 'drone') {
       el.classList.add('drone');
       DroneUI.flyout(el);
     } else {
-      el.append(h('h3', null, 'Bauteile'));
+      el.append(h('h3', null, T('tool.fly.partsTitle')));
       const tiles = h('div', { class: 'tiles' });
       for (const d of LIB.filter((x) => !x.buy && !x.drone)) {
         const t = h('div', { class: 'tile' + (d.role === 'hole' ? ' hole-part' : '') + (SIMPLE_PARTS.includes(d.lib) ? '' : ' pro'), role: 'button', tabindex: '0', 'data-tip': d.desc, 'data-help': HELP[d.lib] ? d.lib : null });
-        t.innerHTML = partSVG(d); t.append(h('span', { class: 'lbl' }, hyph(d.label)), h('span', { class: 'role' }, d.role === 'hole' ? 'Loch' : 'Körper'));
+        t.innerHTML = partSVG(d); t.append(h('span', { class: 'lbl' }, hyph(d.label)), h('span', { class: 'role' }, d.role === 'hole' ? T('common.hole') : T('common.body')));
         Place.bindTile(t, { part: d });
         t.addEventListener('keydown', (e) => { if (e.key === 'Enter') { Actions.addPart(d, libDefaults(d)); closeFlyout(); } });
         tiles.append(t);
       }
       el.append(tiles);
-      el.append(h('div', { class: 'foot' }, 'Löcher auf eine Fläche ziehen – sie richten sich automatisch aus.'));
+      el.append(h('div', { class: 'foot' }, T('tool.fly.partsFoot')));
     }
     $('#center').append(el);
     const anc = btn || $('#t-parts') || $('#t-body');
@@ -223,11 +223,11 @@ const Panels = (() => {
         row.addEventListener('contextmenu', (e) => {
           e.preventDefault(); if (!selSet.has(it.id)) App.select([it.id]);
           UI.menu(row, [
-            { icon: 'help', label: 'Erklär diesen Schritt', help: 'explainStep', run: () => Explain.dialog(it.id) },
-            ...(topIdx >= 0 ? [{ icon: 'moveStep', label: 'Verschieben/Drehen (Schritt)', help: 'moveStep', run: () => Features.transform([it.id]) }] : []),
-            { icon: 'edit', label: 'Umbenennen', run: async () => { const n = await UI.prompt('Umbenennen', 'Name', Model.label(it), 'Umbenennen'); if (n && n.trim()) App.change('Umbenannt', (doc) => { Model.find(doc, it.id).item.name = n.trim(); }); } },
-            ...(ownIdx >= 0 ? [{ icon: 'suppress', label: it.suppressed ? 'Wieder aktivieren' : 'Unterdrücken', run: () => Timeline.toggleSuppress(it.id) }] : []),
-            '-', { icon: 'trash', label: 'Löschen', run: () => Actions.remove([it.id]) },
+            { icon: 'help', label: T('common.explainStep'), help: 'explainStep', run: () => Explain.dialog(it.id) },
+            ...(topIdx >= 0 ? [{ icon: 'moveStep', label: T('common.moveStep'), help: 'moveStep', run: () => Features.transform([it.id]) }] : []),
+            { icon: 'edit', label: T('common.rename'), run: async () => { const n = await UI.prompt(T('common.rename'), T('common.name'), Model.label(it), T('common.rename')); if (n && n.trim()) App.change('Umbenannt', (doc) => { Model.find(doc, it.id).item.name = n.trim(); }); } },
+            ...(ownIdx >= 0 ? [{ icon: 'suppress', label: it.suppressed ? T('common.unsuppress') : T('common.suppress'), run: () => Timeline.toggleSuppress(it.id) }] : []),
+            '-', { icon: 'trash', label: T('common.delete'), run: () => Actions.remove([it.id]) },
           ]);
         });
         row.addEventListener('dblclick', async (e) => { e.stopPropagation(); const n = await UI.prompt('Umbenennen', 'Name', Model.label(it), 'Umbenennen'); if (n && n.trim()) App.change('Umbenannt', (doc) => { Model.find(doc, it.id).item.name = n.trim(); }); });
@@ -607,20 +607,20 @@ const Panels = (() => {
   }
   function edgeRuleMenu(id, anchor) {
     UI.menu(anchor, [
-      { icon: 'pointer', label: 'Alle äußeren Kanten', id: 'er-convex', help: 'edgeRules', run: () => Select.edgesByRule(id, 'convex') },
-      { icon: 'pointer', label: 'Alle inneren Kanten', id: 'er-concave', help: 'edgeRules', run: () => Select.edgesByRule(id, 'concave') },
-      { icon: 'pointer', label: 'Alle Kanten', id: 'er-all', help: 'edgeRules', run: () => Select.edgesByRule(id, 'all') },
+      { icon: 'pointer', label: T('menu.edge.convex'), id: 'er-convex', help: 'edgeRules', run: () => Select.edgesByRule(id, 'convex') },
+      { icon: 'pointer', label: T('menu.edge.concave'), id: 'er-concave', help: 'edgeRules', run: () => Select.edgesByRule(id, 'concave') },
+      { icon: 'pointer', label: T('menu.edge.all'), id: 'er-all', help: 'edgeRules', run: () => Select.edgesByRule(id, 'all') },
     ]);
   }
   // Alle Kanten einer Fläche: wählen, abrunden oder abschrägen (KP-15)
   function faceEdgeList(face) { return Viewer.faceEdges(face.id, face.idx).map((edgeIdx) => ({ id: face.id, edgeIdx })); }
   function faceEdgeMenu(face, anchor) {
     const list = faceEdgeList(face);
-    if (!list.length) { UI.toast('An dieser Fläche habe ich keine Kanten gefunden.', { icon: 'info' }); return; }
+    if (!list.length) { UI.toast(T('menu.edge.faceNone'), { icon: 'info' }); return; }
     UI.menu(anchor, [
-      { icon: 'pointer', label: `Alle ${list.length} Kanten wählen`, id: 'fe-select', help: 'faceEdges', run: () => App.select([face.id], { edges: list }) },
-      { icon: 'fillet', label: 'Alle abrunden (1 mm)', id: 'fe-fillet', help: 'faceEdges', run: () => Actions.addFinish('fillet', 1, list) },
-      { icon: 'chamfer', label: 'Alle abschrägen (1 mm)', id: 'fe-chamfer', help: 'faceEdges', run: () => Actions.addFinish('chamfer', 1, list) },
+      { icon: 'pointer', label: T('menu.edge.faceSelect', { n: list.length }), id: 'fe-select', help: 'faceEdges', run: () => App.select([face.id], { edges: list }) },
+      { icon: 'fillet', label: T('menu.edge.faceFillet'), id: 'fe-fillet', help: 'faceEdges', run: () => Actions.addFinish('fillet', 1, list) },
+      { icon: 'chamfer', label: T('menu.edge.faceChamfer'), id: 'fe-chamfer', help: 'faceEdges', run: () => Actions.addFinish('chamfer', 1, list) },
     ]);
   }
   function renderItem(body, f) {
@@ -1071,7 +1071,7 @@ const Panels = (() => {
     if (ctx) { ctx.remove(); ctx = null; }
     if (App.mode !== 'model' || Sketch.active || Place.active || Handles.dragging) return;
     const items = App.selectedItems(); if (!items.length) return;
-    const bar = h('div', { class: 'ctxbar', role: 'toolbar', 'aria-label': 'Aktionen' });
+    const bar = h('div', { class: 'ctxbar', role: 'toolbar', 'aria-label': T('ctx.toolbarAria') });
     const PRO = ['similar', 'shell', 'patternCirc', 'split', 'boolSubtract', 'layers', 'moveStep'];
     const b = (ic, label, fn, cls = '', tip, iconOnly) => { const x = h('button', { type: 'button', class: cls + (PRO.includes(ic) ? ' pro' : ''), 'data-tip': tip || (iconOnly ? label : null), 'aria-label': label || tip, 'data-help': HELP[ic] ? ic : null }); x.innerHTML = icon(ic) + (label && !iconOnly ? `<span>${label}</span>` : ''); x.onclick = (e) => { e.stopPropagation(); fn(e); }; bar.append(x); return x; };
     const sep = () => bar.append(h('span', { class: 'vsep' }));
@@ -1079,19 +1079,19 @@ const Panels = (() => {
     const off = !App.ctx ? items.map((x) => Model.topOf(App.doc, x.item.id)).find((t) => t && !Model.isActive(App.doc, t.id)) : null;
     if (off) {
       bar.classList.add('inactive');
-      bar.append(h('span', { class: 'lbl' }, off.suppressed ? 'Unterdrückt' : 'Hinter dem Marker'));
-      if (off.suppressed) b('eye', 'Wieder einschalten', () => Timeline.toggleSuppress(off.id), 'accent', 'Diesen Schritt wieder mitrechnen');
-      else b('rollback', 'Marker dahinter', () => Timeline.setMarker(App.doc.items.indexOf(off) + 1, `Zeitleiste: bis „${Model.label(off)}“`), 'accent', 'Den Marker hinter diesen Schritt ziehen – dann wird er wieder mitgerechnet');
+      bar.append(h('span', { class: 'lbl' }, off.suppressed ? T('ctx.suppressed') : T('ctx.behindMarker')));
+      if (off.suppressed) b('eye', T('ctx.enableAgain'), () => Timeline.toggleSuppress(off.id), 'accent', T('ctx.enableAgainTip'));
+      else b('rollback', T('ctx.markerAfter'), () => Timeline.setMarker(App.doc.items.indexOf(off) + 1, `Zeitleiste: bis „${Model.label(off)}“`), 'accent', T('ctx.markerAfterTip'));
       $('#overlay').append(bar); ctx = bar;
       placeCtx();
       return;
     }
     if (items.length === 1 && items[0].item.kind === 'transform' && !(items[0].item.p && items[0].item.p.copy)) {
       const it = items[0].item;
-      bar.append(h('span', { class: 'lbl' }, 'Verschieben/Drehen'));
-      if (it.p && it.p.target && Model.find(App.doc, it.p.target)) b('pointer', 'Zielkörper', () => App.select([it.p.target]), 'accent', 'Zum Zielkörper wechseln');
-      b('suppress', 'Unterdrücken', () => Timeline.toggleSuppress(it.id), '', 'Diesen Schritt unterdrücken – der Körper springt zurück');
-      b('trash', 'Löschen', () => Actions.remove(), 'danger', 'Löschen (Entf)', true);
+      bar.append(h('span', { class: 'lbl' }, T('ctx.moveStepLabel')));
+      if (it.p && it.p.target && Model.find(App.doc, it.p.target)) b('pointer', T('ctx.targetBody'), () => App.select([it.p.target]), 'accent', T('ctx.targetBodyTip'));
+      b('suppress', T('common.suppress'), () => Timeline.toggleSuppress(it.id), '', T('ctx.suppressTip'));
+      b('trash', T('common.delete'), () => Actions.remove(), 'danger', T('ctx.deleteTip'), true);
       $('#overlay').append(bar); ctx = bar;
       placeCtx();
       return;
@@ -1099,7 +1099,7 @@ const Panels = (() => {
     const face = Actions.selectedFace();
     // Wert im Schild der Leiste: Klick kopiert ihn (Länge der Kanten, Durchmesser einer runden Fläche)
     const valLbl = (txt, val, unit, tip) => {
-      const l = h('span', { class: 'lbl copyable', id: 'sel-val', 'data-help': 'copyValue', 'data-tip': tip + ' – klicken kopiert den Wert' }, txt, h('span', { class: 'mono' }, fmt(val, 2) + ' ' + unit));
+      const l = h('span', { class: 'lbl copyable', id: 'sel-val', 'data-help': 'copyValue', 'data-tip': T('ctx.copyValTip', { tip }) }, txt, h('span', { class: 'mono' }, fmt(val, 2) + ' ' + unit));
       l.onclick = () => Measure.copyText(fmt(val, 2), txt.trim()); return l;
     };
     if (App.edges.length) {
@@ -1107,70 +1107,70 @@ const Panels = (() => {
       const one = eds.length === 1 && eds[0];
       const full = one && one.t === 'CIRCLE' && one.r && Math.hypot(one.a[0] - one.b[0], one.a[1] - one.b[1], one.a[2] - one.b[2]) < 1e-6;
       const total = eds.reduce((s, e) => s + (e.l || 0), 0);
-      if (full) bar.append(valLbl('Kante Ø', one.r * 2, 'mm', `Kreis mit Radius ${fmt(one.r, 2)} mm, Umfang ${fmt(total, 2)} mm`));
-      else if (total > 0) bar.append(valLbl(App.edges.length > 1 ? App.edges.length + ' Kanten' : 'Kante', total, 'mm', App.edges.length > 1 ? 'Gesamtlänge der gewählten Kanten' : 'Länge der Kante' + (one && one.t === 'CIRCLE' && one.r ? ` (Bogen, R ${fmt(one.r, 2)} mm)` : '')));
-      else bar.append(h('span', { class: 'lbl' }, App.edges.length > 1 ? App.edges.length + ' Kanten' : 'Kante'));
-      b('fillet', 'Abrunden', () => Actions.addFinish('fillet', 1), 'accent', 'Kante abrunden (1 mm, danach änderbar)');
-      b('chamfer', 'Abschrägen', () => Actions.addFinish('chamfer', 1), '', 'Kante abschrägen (1 mm, danach änderbar)');
-      b('similar', 'Ähnliche', () => Select.similar(), '', 'Alle gleich langen Kanten dazuwählen (A)', true);
-      b('chainEdges', 'Kette', () => Select.chain(), '', 'Alle Kanten dazuwählen, die ohne Knick weiterlaufen (z. B. ein gerundeter Umriss)', true);
-      b('similar', 'Nach Art', (e) => edgeRuleMenu(App.edges[0].id, e.currentTarget), '', 'Alle äußeren oder alle inneren Kanten dieses Teils wählen', true);
+      if (full) bar.append(valLbl(T('ctx.edgeDia'), one.r * 2, 'mm', T('ctx.edgeDiaTip', { r: fmt(one.r, 2), total: fmt(total, 2) })));
+      else if (total > 0) bar.append(valLbl(App.edges.length > 1 ? T('ctx.edgesCount', { n: App.edges.length }) : T('ctx.edgeOne'), total, 'mm', App.edges.length > 1 ? T('ctx.edgesTotalTip') : (one && one.t === 'CIRCLE' && one.r ? T('ctx.edgeArcTip', { r: fmt(one.r, 2) }) : T('ctx.edgeLenTip'))));
+      else bar.append(h('span', { class: 'lbl' }, App.edges.length > 1 ? T('ctx.edgesCount', { n: App.edges.length }) : T('ctx.edgeOne')));
+      b('fillet', T('ctx.fillet'), () => Actions.addFinish('fillet', 1), 'accent', T('ctx.filletTip'));
+      b('chamfer', T('ctx.chamfer'), () => Actions.addFinish('chamfer', 1), '', T('ctx.chamferTip'));
+      b('similar', T('ctx.similar'), () => Select.similar(), '', T('ctx.similarEdgesTip'), true);
+      b('chainEdges', T('ctx.chain'), () => Select.chain(), '', T('ctx.chainTip'), true);
+      b('similar', T('ctx.byKind'), (e) => edgeRuleMenu(App.edges[0].id, e.currentTarget), '', T('ctx.byKindTip'), true);
       if (App.edges.length === 1 && one && one.t === 'LINE') {
-        const eb = b('originPlanes', 'Ebene im Winkel', () => Datums.startEdgeAnglePick(30, App.edges[0]), 'pro', 'Bezugsebene durch diese Kante im Winkel zu einer Fläche anlegen');
+        const eb = b('originPlanes', T('ctx.planeAngle'), () => Datums.startEdgeAnglePick(30, App.edges[0]), 'pro', T('ctx.planeAngleTip'));
         eb.dataset.help = 'datumEdgeAngle';
       }
       sep();
     } else if (face && items.length === 1 && face.info.t === 'PLANE') {
-      bar.append(h('span', { class: 'lbl' }, 'Fläche'));
-      b('sketch', 'Skizze hierauf', () => Sketch.startOnFace(face), 'accent', 'Auf dieser Fläche zeichnen');
-      b('holeWizard', 'Bohrung', (e) => Place.holeHere(face, e.currentTarget), '', 'Bohrungs-Assistent: Durchgang, Kernloch, Sackloch mit Spitze, Passbohrung H7, Zentrierbohrung, Einsatz oder Mutternfalle');
-      b('lift', 'Hochziehen', () => Sketch.pushPullFace(face), '', 'Die Fläche herausziehen oder hineindrücken');
-      b('fillet', 'Ihre Kanten', (e) => faceEdgeMenu(face, e.currentTarget), '', 'Alle Kanten dieser Fläche wählen, abrunden oder abschrägen', true);
-      if (items[0].item.role !== 'hole' && App.doc.items.some((x) => x.id === face.id)) b('shell', 'Aushöhlen', () => Features.shell(face), '', 'Körper aushöhlen – diese Fläche wird die Öffnung');
-      b('section', 'Schnitt hier', () => Views.section(true, { face }), '', 'Schnitt parallel zu dieser Fläche – den Abstand stellst du in der Schnitt-Leiste ein', true);
-      if (items[0].item.role !== 'hole') b('mirror', 'An Fläche spiegeln', () => Features.mirrorAtFace(face), '', 'Gespiegelte Kopie an dieser Fläche – z. B. die zweite Hälfte eines symmetrischen Teils', true);
+      bar.append(h('span', { class: 'lbl' }, T('ctx.face')));
+      b('sketch', T('ctx.sketchHere'), () => Sketch.startOnFace(face), 'accent', T('ctx.sketchHereTip')).dataset.help = 'sketchFace';
+      b('holeWizard', T('ctx.hole'), (e) => Place.holeHere(face, e.currentTarget), '', T('ctx.holeTip'));
+      b('lift', T('ctx.extrude'), () => Sketch.pushPullFace(face), '', T('ctx.extrudeTip')).dataset.help = 'extrude';
+      b('fillet', T('ctx.faceEdges'), (e) => faceEdgeMenu(face, e.currentTarget), '', T('ctx.faceEdgesTip'), true);
+      if (items[0].item.role !== 'hole' && App.doc.items.some((x) => x.id === face.id)) b('shell', T('ctx.shell'), () => Features.shell(face), '', T('ctx.shellTip'));
+      b('section', T('ctx.sectionHere'), () => Views.section(true, { face }), '', T('ctx.sectionHereTip'), true);
+      if (items[0].item.role !== 'hole') b('mirror', T('ctx.mirrorFace'), () => Features.mirrorAtFace(face), '', T('ctx.mirrorFaceTip'), true);
       sep();
     } else if (face && items.length === 1 && face.info.t !== 'PLANE') {
       const fr = face.info.r;
-      bar.append(fr ? valLbl(face.info.t === 'SPHERE' ? 'Kugel Ø' : 'Runde Fläche Ø', fr * 2, 'mm', `Radius ${fmt(fr, 2)} mm`) : h('span', { class: 'lbl' }, 'Runde Fläche'));
-      b('holeWizard', 'Bohrung', (e) => Place.holeHere(face, e.currentTarget), 'accent', 'Bohrungs-Assistent: Loch senkrecht in die runde Fläche (Schraube, Sackloch, Passbohrung H7, Zentrierung …) – der Magnet rastet ganz oben, an den Seiten und in der Mitte ein');
+      bar.append(fr ? valLbl(face.info.t === 'SPHERE' ? T('ctx.sphereDia') : T('ctx.roundFaceDia'), fr * 2, 'mm', T('ctx.roundFaceDiaTip', { r: fmt(fr, 2) })) : h('span', { class: 'lbl' }, T('ctx.roundFace')));
+      b('holeWizard', T('ctx.hole'), (e) => Place.holeHere(face, e.currentTarget), 'accent', T('ctx.holeRoundTip'));
       if (face.info.t === 'CYLINDRE' && items[0].item.role !== 'hole') {
         const hasTh = !!Features.threadOnFace(face.id, face.idx);
-        const tb = b('thread', hasTh ? 'Gewinde ändern' : 'Gewinde markieren', (e) => Features.threadPop(face, e.currentTarget), hasTh ? 'accent' : '', 'Kosmetisches Gewinde auf dieser runden Fläche markieren (rechnet schnell)');
+        const tb = b('thread', hasTh ? T('ctx.threadEdit') : T('ctx.threadMark'), (e) => Features.threadPop(face, e.currentTarget), hasTh ? 'accent' : '', T('ctx.threadTip'));
         tb.dataset.help = 'cosmeticThread';
       }
       if (face.info.t === 'CYLINDRE') {
-        const ab = b('axes', 'Achse', () => Datums.addAxisFromFace(face), 'pro', 'Bezugsachse durch die Mitte dieser runden Fläche anlegen');
+        const ab = b('axes', T('ctx.axis'), () => Datums.addAxisFromFace(face), 'pro', T('ctx.axisTip'));
         ab.dataset.help = 'datumAxis';
       }
-      b('fillet', 'Ihre Kanten', (e) => faceEdgeMenu(face, e.currentTarget), '', 'Alle Kanten dieser Fläche wählen, abrunden oder abschrägen', true);
+      b('fillet', T('ctx.faceEdges'), (e) => faceEdgeMenu(face, e.currentTarget), '', T('ctx.faceEdgesTip'), true);
       sep();
     }
     if (items.length === 1) {
       const it = items[0].item;
       const hole = it.role === 'hole';
       const compact = !!(face || App.edges.length);
-      b(hole ? 'solid' : 'hole', hole ? 'Zum Körper' : 'Zum Loch', () => Actions.toggleRole(), '', hole ? 'Wieder zum festen Körper machen (H)' : 'Zum Loch machen – schneidet dann in andere Körper (H)', compact);
-      b('rotate', 'Drehen', (e) => UI.menu(e.currentTarget, [{ label: 'Um 90° drehen (flach)', icon: 'rotate', kbd: 'R', run: () => Actions.rotate90(null, 'z') }, { label: 'Nach vorne kippen', icon: 'rotate', run: () => Actions.rotate90(null, 'x') }, { label: 'Zur Seite kippen', icon: 'rotate', run: () => Actions.rotate90(null, 'y') }]), '', 'Um 90° drehen oder kippen', true);
-      b('mirror', 'Spiegeln', (e) => UI.menu(e.currentTarget, [{ label: 'Links ↔ rechts', icon: 'mirror', run: () => Actions.mirror(null, 'x') }, { label: 'Vorne ↔ hinten', icon: 'mirror', run: () => Actions.mirror(null, 'y') }, { label: 'Oben ↔ unten', icon: 'mirror', run: () => Actions.mirror(null, 'z') }]), '', 'Spiegeln', true);
-      b('copy', 'Duplizieren', () => Actions.duplicate(), '', 'Duplizieren (Strg D)', true);
-      if (App.doc.items.includes(it)) b('moveStep', 'Verschieben/Drehen', () => Features.transform(), '', 'Als Schritt verschieben, drehen oder kopieren (bleibt im Verlauf änderbar)', true);
-      b('patternCirc', 'Muster', (e) => UI.menu(e.currentTarget, [{ label: 'Rechteckmuster', icon: 'patternRect', run: () => Features.pattern('rect') }, { label: 'Kreismuster', icon: 'patternCirc', run: () => Features.pattern('circ') }, { label: 'Muster entlang Kurve', icon: 'patternPath', run: () => Features.patternPath() }, { label: 'Gespiegelte Kopie', icon: 'mirror', run: () => Features.pattern('mirror') }]), '', hole ? 'Loch als Muster oder gespiegelt vervielfachen' : 'Muster oder gespiegelte Kopie', true);
-      if (!hole) b('split', 'Teilen', () => Features.split(), '', 'Körper an einer Ebene teilen', true);
-      if (!hole && it.kind === 'extrude' && it.p && it.p.sketch) b('loft', 'Zur Spitze', () => Actions.loft([it.id], { tip: 10 }), '', 'Den Umriss zu einer Spitze zusammenlaufen lassen (Übergang mit Spitze)', true);
-      if (!App.edges.length) b('similar', 'Ähnliche', () => Select.similar(), '', 'Alle gleichen Teile wählen (A)', true);
-      if (!App.edges.length && !face && !hole && App.results.get(it.id) && App.doc.items.includes(it)) b('fillet', 'Kanten wählen', (e) => edgeRuleMenu(it.id, e.currentTarget), '', 'Alle äußeren, alle inneren oder alle Kanten dieses Teils wählen – dann zusammen abrunden', true);
-      if (it.kind === 'group') b('ungroup', 'Gruppe lösen', () => Actions.ungroup(), '', 'Gruppe lösen', true);
+      b(hole ? 'solid' : 'hole', hole ? T('ctx.toBody') : T('ctx.toHole'), () => Actions.toggleRole(), '', hole ? T('ctx.toBodyTip') : T('ctx.toHoleTip'), compact);
+      b('rotate', T('ctx.rotate'), (e) => UI.menu(e.currentTarget, [{ label: T('ctx.rotZ'), icon: 'rotate', kbd: 'R', run: () => Actions.rotate90(null, 'z') }, { label: T('ctx.rotX'), icon: 'rotate', run: () => Actions.rotate90(null, 'x') }, { label: T('ctx.rotY'), icon: 'rotate', run: () => Actions.rotate90(null, 'y') }]), '', T('ctx.rotateTip'), true);
+      b('mirror', T('ctx.mirror'), (e) => UI.menu(e.currentTarget, [{ label: T('ctx.mirrorX'), icon: 'mirror', run: () => Actions.mirror(null, 'x') }, { label: T('ctx.mirrorY'), icon: 'mirror', run: () => Actions.mirror(null, 'y') }, { label: T('ctx.mirrorZ'), icon: 'mirror', run: () => Actions.mirror(null, 'z') }]), '', T('ctx.mirrorTip'), true);
+      b('copy', T('common.duplicate'), () => Actions.duplicate(), '', T('ctx.dupTip'), true);
+      if (App.doc.items.includes(it)) b('moveStep', T('ctx.moveStep'), () => Features.transform(), '', T('ctx.moveStepTip'), true);
+      b('patternCirc', T('ctx.pattern'), (e) => UI.menu(e.currentTarget, [{ label: T('ctx.patRect'), icon: 'patternRect', run: () => Features.pattern('rect') }, { label: T('ctx.patCirc'), icon: 'patternCirc', run: () => Features.pattern('circ') }, { label: T('ctx.patPath'), icon: 'patternPath', run: () => Features.patternPath() }, { label: T('ctx.patMirror'), icon: 'mirror', run: () => Features.pattern('mirror') }]), '', hole ? T('ctx.patternHoleTip') : T('ctx.patternTip'), true);
+      if (!hole) b('split', T('ctx.split'), () => Features.split(), '', T('ctx.splitTip'), true);
+      if (!hole && it.kind === 'extrude' && it.p && it.p.sketch) b('loft', T('ctx.toTip'), () => Actions.loft([it.id], { tip: 10 }), '', T('ctx.toTipTip'), true);
+      if (!App.edges.length) b('similar', T('ctx.similar'), () => Select.similar(), '', T('ctx.similarPartsTip'), true);
+      if (!App.edges.length && !face && !hole && App.results.get(it.id) && App.doc.items.includes(it)) b('fillet', T('ctx.selectEdges'), (e) => edgeRuleMenu(it.id, e.currentTarget), '', T('ctx.selectEdgesTip'), true);
+      if (it.kind === 'group') b('ungroup', T('ctx.ungroup'), () => Actions.ungroup(), '', T('ctx.ungroupTip'), true);
     } else {
-      b('group', 'Gruppieren', () => Actions.group(), 'accent', 'Zu einem Körper verbinden (Strg G)');
-      if (items.length === 2) b('dim', 'Abstand', (e) => gapPop(e.currentTarget), '', 'Abstand zwischen den beiden Teilen genau setzen (der zuletzt gewählte bewegt sich)', true);
-      if (items.length === 2 && !Model.parentsOf(App.doc, items[0].item.id).some((q) => q.id === items[1].item.id) && !Model.parentsOf(App.doc, items[1].item.id).some((q) => q.id === items[0].item.id)) b('hinge', 'Gelenk', () => Joints.start(), '', 'Drehgelenk: das zuletzt gewählte Teil dreht sich um eine Achse, die du im Bild wählst', true);
-      if (items.length >= 2 && items.every((x) => x.item.kind === 'extrude')) b('loft', 'Übergang', () => Actions.loft(), '', 'Weicher Übergang durch die Umrisse – in der Reihenfolge, in der du sie gewählt hast');
-      b('boolSubtract', 'Boolesch', (e) => UI.menu(e.currentTarget, [{ label: 'Vereinigen', icon: 'boolUnion', run: () => Features.boolean('union') }, { label: 'Abziehen (der zuerst gewählte bleibt)', icon: 'boolSubtract', run: () => Features.boolean('subtract') }, { label: 'Schnittmenge', icon: 'boolIntersect', run: () => Features.boolean('intersect') }]), '', 'Körper vereinigen, abziehen oder schneiden', true);
-      b('layers', 'Ausrichten', (e) => UI.menu(e.currentTarget, [['left', 'Links bündig'], ['cx', 'Mittig (X)'], ['right', 'Rechts bündig'], ['front', 'Vorne bündig'], ['cy', 'Mittig (Y)'], ['back', 'Hinten bündig'], ['bottom', 'Unten bündig']].map(([m, l]) => ({ label: l, run: () => Actions.align(null, m) }))), '', 'Objekte aneinander ausrichten');
-      b('copy', 'Duplizieren', () => Actions.duplicate(), '', 'Duplizieren (Strg D)', true);
+      b('group', T('ctx.group'), () => Actions.group(), 'accent', T('ctx.groupTip'));
+      if (items.length === 2) b('dim', T('ctx.gap'), (e) => gapPop(e.currentTarget), '', T('ctx.gapTip'), true);
+      if (items.length === 2 && !Model.parentsOf(App.doc, items[0].item.id).some((q) => q.id === items[1].item.id) && !Model.parentsOf(App.doc, items[1].item.id).some((q) => q.id === items[0].item.id)) b('hinge', T('ctx.joint'), () => Joints.start(), '', T('ctx.jointTip'), true);
+      if (items.length >= 2 && items.every((x) => x.item.kind === 'extrude')) b('loft', T('ctx.loft'), () => Actions.loft(), '', T('ctx.loftTip'));
+      b('boolSubtract', T('ctx.boolean'), (e) => UI.menu(e.currentTarget, [{ label: T('ctx.boolUnion'), icon: 'boolUnion', run: () => Features.boolean('union') }, { label: T('ctx.boolSub'), icon: 'boolSubtract', run: () => Features.boolean('subtract') }, { label: T('ctx.boolInt'), icon: 'boolIntersect', run: () => Features.boolean('intersect') }]), '', T('ctx.booleanTip'), true);
+      b('layers', T('ctx.align'), (e) => UI.menu(e.currentTarget, [['left', T('ctx.alignLeft')], ['cx', T('ctx.alignCx')], ['right', T('ctx.alignRight')], ['front', T('ctx.alignFront')], ['cy', T('ctx.alignCy')], ['back', T('ctx.alignBack')], ['bottom', T('ctx.alignBottom')]].map(([m, l]) => ({ label: l, run: () => Actions.align(null, m) }))), '', T('ctx.alignTip'));
+      b('copy', T('common.duplicate'), () => Actions.duplicate(), '', T('ctx.dupTip'), true);
     }
-    b('trash', 'Löschen', () => Actions.remove(), 'danger', 'Löschen (Entf)', true);
+    b('trash', T('common.delete'), () => Actions.remove(), 'danger', T('ctx.deleteTip'), true);
     $('#overlay').append(bar); ctx = bar;
     placeCtx();
   }

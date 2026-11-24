@@ -36,19 +36,19 @@ const ViewPrefs = (() => {
   function syncLevel() {
     const b = document.getElementById('btn-level');
     if (b) {
-      b.textContent = simple() ? 'Einfach' : 'Profi';
+      b.textContent = simple() ? T('level.simple') : T('level.pro');
       b.setAttribute('aria-pressed', simple() ? 'true' : 'false');
       b.dataset.level = v.level;
-      b.dataset.tip = simple() ? 'Stufe: Einfach – klicken zum Wechseln auf Profi' : 'Stufe: Profi – klicken zum Wechseln auf Einfach';
+      b.dataset.tip = simple() ? T('level.tipSimple') : T('level.tipPro');
     }
   }
   function setLevel(l) { set({ level: l }, l === 'simple' ? 'Einfach: wenige, große Knöpfe, alles erklärt.' : 'Profi: alle Werkzeuge und Tastenkürzel.'); }
   // Zwei Stufen-Karten („Einfach“ / „Profi“) für ersten Start und Einstellungen
   function levelCards({ idPrefix, active = v.level, onPick } = {}) {
-    const wrap = h('div', { class: 'level-cards', role: 'group', 'aria-label': 'Stufe wählen' });
+    const wrap = h('div', { class: 'level-cards', role: 'group', 'aria-label': T('level.chooseAria') });
     const defs = [
-      ['simple', 'cube', 'Einfach', 'wenige, große Knöpfe, alles erklärt'],
-      ['pro', 'sliders', 'Profi', 'alle Werkzeuge, Tastenkürzel, Maus wie in deinem CAD'],
+      ['simple', 'cube', T('level.simple'), T('level.simpleDesc')],
+      ['pro', 'sliders', T('level.pro'), T('level.proDesc')],
     ];
     const btns = [];
     for (const [lvl, ic, title, desc] of defs) {

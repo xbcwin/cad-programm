@@ -84,6 +84,7 @@ Leitlinien:
 | Datei | Aufgabe |
 | --- | --- |
 | `00-util.js` | Hilfen, `Expr`-Rechner mit Einheiten (mm, cm, m, in, zoll, ", °), Icon-Set `IC`, eingebettete Hilfetexte `HELP` (muss immer gleich `app/data/werkzeug-hilfen.json` sein, per Python neu erzeugen) |
+| `01-i18n.js` | Übersetzbare Oberfläche (`I18n`, `T(key, vars)`, eingebettete `TEXTS_DE` aus `app/data/texte-de.json`) |
 | `05-storage.js` | Browser-Datenbank (`Store`, IndexedDB `tracery-db` mit `projects`, `versions`, `blobs`, `meta`), binäre Import-Blobs, Migration aus `localStorage` |
 | `10-model.js` | Projekt-Datenmodell, `KINDS`, `newItem`, `find`/`walk`/`topOf`, Matrizen, `vars` (Maße), `kernelItem`, `sketchParams`/`loftParams`/`sweepParams`/`pathPatternParams`, `migrate` |
 | `15-sketchcore.js` (`SK`) | Skizzen-Geometrie: `segsOf`, `regions`, `chains` (offene Pfade), `bounds`, Splines als exakte Bézier (`splineBez`), Text-Umrisse (Schrift Inter, OFL), Ellipse, Fangpunkte, Maße |
@@ -120,7 +121,7 @@ Leitlinien:
 | `90-main.js` | Start; stellt `window.__M` für Tests bereit |
 
 **Daten in `app/data/`** (alle von Gemini geliefert und von Claude geprüft):
-- `werkzeug-hilfen.json`, `schritt-erklaerungen.json`, `materialien.json` (18 Stück), `fehlermeldungen.json`, `schrauben.json` (M1.6–M8, Senkungen normgerecht)
+- `werkzeug-hilfen.json`, `texte-de.json`, `schritt-erklaerungen.json`, `materialien.json` (18 Stück), `fehlermeldungen.json`, `schrauben.json` (M1.6–M8, Senkungen normgerecht)
 - `formel-beispiele.json`, `einfuehrung-skizze.json`, `fpv-masse.json` (Stack = Quadrat, Motor = Lochkreis)
 - `bauteile.json` (Kaufteile mit Quelle, `geprueft`), `schub.json` (nur `geprueft: true` als Vorgabe), `faustregeln.json`, `rahmen.json` (13 Herstellerrahmen)
 - `schrift-inter*.json`, erzeugt mit `tools/schrift.py`

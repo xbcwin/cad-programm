@@ -1573,6 +1573,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Verwaltung & Hilfetexte**: Umbenennen, Ein-/Ausblenden, Anzeige „Bezug fehlt“ samt Rückgängig, Löschen, Befehle und Hilfetexte (`datumEdgeAngle`, `datumAxis`) geprüft.
 - [ ] **Von Hand**: Interaktives Wählen im 3D-Bild über Kontextleiste („Ebene im Winkel“ an einer Kante, „Achse“ an einem Zylinder) und beim Klick auf die Bezugsachse im Werkzeug „Achse im Bild wählen“ prüfen.
 
+## Übersetzbare Oberfläche, Schritt 1 (Auto [A-019])
+
+- [x] **Sammlung & `T()`**: `app/data/texte-de.json` enthält alle Oberflächentexte; `T(key, vars)` liefert deutsche Texte, ersetzt Platzhalter (`{n}`) und fällt bei unbekannten Schlüsseln auf den Schlüssel zurück.
+- [x] **Werkzeugleiste & Kopfzeile**: Überschreiben von `I18n.texts['tool.body']` sowie `I18n.set(...)` ändert die sichtbaren Beschriftungen an Werkzeugleiste und Arbeitsbereich-Reitern sofort.
+- [x] **Startseite, Menüs & Kontextleiste**: Geänderte Texte erscheinen direkt auf Startseite-Knöpfen/Karten, im Haupt- und Ansichtsmenü sowie in der 3D-Kontextleiste; Zurücksetzen stellt alle deutschen Originaltexte wieder her.
+- [ ] **Von Hand**: Einmal Startseite, Werkzeugleiste, alle Menüs (Projekt, Hauptmenü, Ansicht, Rechtsklick, Zeichnung) und Kontextleiste auf fehlende oder abgeschnittene Beschriftungen durchsehen.
+
 ## Fehler melden
 
 ```
