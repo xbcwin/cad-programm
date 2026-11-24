@@ -2013,6 +2013,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Freie 3D-Ansicht aus Kamera, Rückgängig, Speichern & Hilfen (ZE-05)**: `#dw-add-free` übernimmt die aktuelle 3D-Kamera als neue Zeichnungsansicht (`extraViews`), arbeitet mit Rückgängig/Wiederholen, Speichern/Laden, Befehlen und den Hilfetexten `drawingViews` / `drawingViewProps`.
 - [ ] **Von Hand**: Im Browser eine gerundete Baugruppe mit mehreren Farben und Werkstoffen als schattierte Isometrie und freie 3D-Ansicht anlegen, in der freien Ansicht den Blickwinkel per „Aktuelle 3D-Ansicht übernehmen“ aktualisieren und das exportierte PDF im PDF-Betrachter auf Schattierung, Linienstärken und Beschriftung prüfen.
 
+## Zeichnung als DXF und PNG (Auto [A-071], ZE-13)
+
+- [x] **DXF-Export (`LINE`, `CIRCLE`, `ARC`, Layer & Schriftfeld)**: Export über `#t-dexport` → `#dw-exp-dxf` liefert eine gültige `.dxf`-Datei (`$INSUNITS = 4`, Layer `SICHTBAR`, `VERDECKT`, `MITTELLINIE`, `BEMASSUNG`, `RAHMEN` mit `CONTINUOUS`/`DASHED`/`CENTER`), enthält `LINE`-, `CIRCLE`-, `ARC`- und `TEXT`-Einträge auf den passenden Layern sowie alle Schriftfeld-Texte (`Benennung`, `Zeichnungsnummer`, `Gezeichnet`, `Werkstoff`, `ISO 2768-m`); bei mehreren Blättern steht zusätzlich der Mehrblatt-ZIP-Export (`#dw-exp-dxf-all`) bereit.
+- [x] **PNG-Export mit wählbarer Auflösung**: Dialog (`#dw-exp-png`) übernimmt eigene Pixelbreiten (`1800 px` → `1800 × 1273 px`), 300-DPI-Vorgabe (`3508 × 2480 px` bei A4 quer), rendert das komplette Blatt sichtbar (nicht leer) und unterstützt durchsichtigen Hintergrund (`3200 × 2263 px`, RGBA mit transparentem Rand).
+- [x] **Befehlssuche & Hilfetexte**: Befehle `drawingExportDxf` und `drawingExportPng` sowie Hilfetexte `drawingExportDxf` und `drawingExportPng` in `werkzeug-hilfen.json` und `00-util.js` sind vorhanden.
+- [ ] **Von Hand**: Im Browser eine bemaßte Zeichnung mit Schnittansicht, Mittellinien und Schriftfeld als `.dxf` in einem DXF-Betrachter (z. B. LibreCAD / QCAD) auf Layer und Linientypen sowie das exportierte `.png` auf Schärfe und Lesbarkeit prüfen.
+
 ## Fehler melden
 
 ```
