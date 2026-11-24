@@ -2933,6 +2933,16 @@ const HELP = {
   "tip": "Notiz mit Hinweislinie an eine Kante (Pfeil) oder Fläche (Punkt) heften",
   "hilfe": "Wähle „Hinweislinie“ (Taste N), klicke auf eine Kante (Pfeilspitze) oder direkt in eine Fläche (Punkt) einer Ansicht, platziere danach die Textfahne und gib deinen Text ein. Die Hinweislinie ist an die Ansicht gebunden und wandert beim Verschieben oder Maßstabswechsel exakt mit.",
   "tipp": "Nach dem Setzen kannst du die Textfahne frei verschieben, die Spitze zwischen Pfeil und Punkt umschalten und den Text per Doppelklick oder rechts bearbeiten."
+ },
+ "drawingTolerance": {
+  "tip": "Toleranz (± symmetrisch, Abmaße oder Grenzmaße) und Passung an einem Maß festlegen",
+  "hilfe": "Klicke auf dem Zeichnungsblatt ein Längen-, Durchmesser- oder Radiusmaß an. Rechts wählst du zwischen symmetrischer Toleranz (±), ungleichen Abmaßen (oben/unten), direkten Grenzmaßen (Höchst-/Mindestmaß) oder einer genormten ISO-286-Passung (wie H7 oder g6).",
+  "tipp": "Ohne eigene Toleranz gilt die Allgemeintoleranz ISO 2768-m aus dem Schriftfeld. Alle Toleranzen werden im PDF-, SVG- und DXF-Export mit ausgegeben."
+ },
+ "drawingFit": {
+  "tip": "ISO-286-Passungen (H7, g6, h6, k6, m6 …) aus der Normtabelle wählen",
+  "hilfe": "Wähle ein Passungs-Kurzzeichen nach DIN EN ISO 286-2:2010: Großbuchstaben (z. B. H7, K7, P7) für Bohrungen, Kleinbuchstaben (z. B. g6, h6, k6, m6, p6) für Wellen. Tracery schlägt die Abmaße passend zum Nennmaß automatisch in der Tabelle nach (z. B. Ø20 H7 → +0,021 / 0 und Ø20 g6 → −0,007 / −0,020) und zeigt die Grenzmaße direkt daneben.",
+  "tipp": "Unter „Anzeige“ stellst du ein, ob Kurzzeichen samt Abmaßen, nur das Kurzzeichen, nur Abmaße oder die Grenzmaße auf dem Blatt stehen."
  }
 };
 
@@ -31175,6 +31185,7 @@ const Commands = (() => {
     add('drawingLeaderNote', 'Zeichnung: Notiz mit Hinweislinie', 'noteText', 'notiz hinweislinie pfeil punkt kante fläche kommentar zeichnung ze-11', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.tool('note'); }, { group: 'Werkzeuge', kbd: 'N' });
     add('drawingDimStyle', 'Zeichnung: Maß-Stil (Pfeile, Schriftgröße, Stellen)', 'sliders', 'maß-stil stil pfeil pfeilart schriftgröße nachkommastellen zeichnung ze-10', () => { if (App.mode !== 'drawing') setMode('drawing'); Panels.renderRight(); document.querySelector('#dw-style-size')?.focus(); }, { group: 'Werkzeuge' });
     add('drawingResetViews', 'Zeichnung: Ansichten-Lage zurücksetzen', 'fit', 'ansichten verschieben zurücksetzen lage zeichnung', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.resetViewPos(); }, { group: 'Werkzeuge' });
+    add('drawingTolerance', 'Toleranz oder ISO-Passung am Maß setzen', 'dim', 'toleranz passung iso 286 h7 g6 grenzmaß abmaß symmetrisch zeichnung ze-08 ze-09', () => { if (App.mode !== 'drawing') setMode('drawing'); const sel = document.getElementById('dw-tol-mode'); if (sel) sel.focus(); else UI.toast('Klick ein Maß auf dem Blatt an, um rechts eine Toleranz oder Passung zu wählen.', { icon: 'dim', ms: 3000 }); }, { group: 'Werkzeuge' });
     add('model', 'Zurück zum Modell', 'cube', 'modell 3d', () => setMode('model'), { group: 'Werkzeuge' });
     add('params', 'Maße mit Namen festlegen', 'sliders', 'parameter variable formel maß', () => Panels.showParams(), { group: 'Werkzeuge' });
     for (const [uk, un] of Units.OPTIONS) add('unit-' + uk, 'Einheit: ' + un, 'ruler', 'einheit einheiten mm cm m zoll inch ' + uk, () => Units.set(uk), { group: 'Projekt' });
@@ -32811,6 +32822,7 @@ const Drawing = (() => {
     { key: 'arrow', label: 'Pfeil' },
     { key: 'dot', label: 'Punkt' },
   ];
+  const ISO286_DATA = {"_hinweis":"ISO-286-Passungstabelle: Grenzabmaße in Mikrometer (µm = 0,001 mm) für Nennmaße über 0 bis 500 mm. Großbuchstaben (z. B. H7) stehen für Bohrungen (Innenmaße), Kleinbuchstaben (z. B. g6) für Wellen (Außenmaße).","_quellen":["DIN EN ISO 286-1:2010-11 – Geometrische Produktspezifikation (GPS) – ISO-Toleranzsystem für Längenmaße – Teil 1: Grundlagen für Toleranzen, Abmaße und Passungen","DIN EN ISO 286-2:2010-11 – Geometrische Produktspezifikation (GPS) – ISO-Toleranzsystem für Längenmaße – Teil 2: Tabellen der Grundtoleranzgrade und Grenzabmaße für Bohrungen und Wellen"],"norm":"DIN EN ISO 286-2:2010","stufen_mm":[3,6,10,18,30,50,80,120,180,250,315,400,500],"it_um":{"5":[4,5,6,8,9,11,13,15,18,20,23,25,27],"6":[6,8,9,11,13,16,19,22,25,29,32,36,40],"7":[10,12,15,18,21,25,30,35,40,46,52,57,63],"8":[14,18,22,27,33,39,46,54,63,72,81,89,97],"9":[25,30,36,43,52,62,74,87,100,115,130,140,155],"10":[40,48,58,70,84,100,120,140,160,185,210,230,250],"11":[60,75,90,110,130,160,190,220,250,290,320,360,400]},"klassen":{"H7":{"art":"bohrung","hinweis":"Standard-Einheitsbohrung (unteres Abmaß 0) – gängigste Passbohrung für Lager, Stifte und Wellen.","abmasse_um":[[10,0],[12,0],[15,0],[18,0],[21,0],[25,0],[30,0],[35,0],[40,0],[46,0],[52,0],[57,0],[63,0]]},"H6":{"art":"bohrung","hinweis":"Sehr genaue Einheitsbohrung für feine Spiel- und Übergangspassungen.","abmasse_um":[[6,0],[8,0],[9,0],[11,0],[13,0],[16,0],[19,0],[22,0],[25,0],[29,0],[32,0],[36,0],[40,0]]},"H8":{"art":"bohrung","hinweis":"Einheitsbohrung mit etwas weiterem Spiel für allgemeine Lagerungen.","abmasse_um":[[14,0],[18,0],[22,0],[27,0],[33,0],[39,0],[46,0],[54,0],[63,0],[72,0],[81,0],[89,0],[97,0]]},"H9":{"art":"bohrung","hinweis":"Grobe Einheitsbohrung für einfache Führungen und Passfedernuten.","abmasse_um":[[25,0],[30,0],[36,0],[43,0],[52,0],[62,0],[74,0],[87,0],[100,0],[115,0],[130,0],[140,0],[155,0]]},"H10":{"art":"bohrung","hinweis":"Weite Einheitsbohrung für grobe Toleranzen.","abmasse_um":[[40,0],[48,0],[58,0],[70,0],[84,0],[100,0],[120,0],[140,0],[160,0],[185,0],[210,0],[230,0],[250,0]]},"H11":{"art":"bohrung","hinweis":"Sehr weite Einheitsbohrung für gestanzte oder grob gedrehte Teile.","abmasse_um":[[60,0],[75,0],[90,0],[110,0],[130,0],[160,0],[190,0],[220,0],[250,0],[290,0],[320,0],[360,0],[400,0]]},"G7":{"art":"bohrung","hinweis":"Bohrung mit kleinem Spiel (leichtgängig bei engem Lauf).","abmasse_um":[[12,2],[16,4],[20,5],[24,6],[28,7],[34,9],[40,10],[47,12],[54,14],[61,15],[69,17],[75,18],[83,20]]},"F7":{"art":"bohrung","hinweis":"Bohrung mit deutlichem Laufsitz-Spiel.","abmasse_um":[[16,6],[22,10],[28,13],[34,16],[41,20],[50,25],[60,30],[71,36],[83,43],[96,50],[108,56],[119,62],[131,68]]},"F8":{"art":"bohrung","hinweis":"Bohrung mit größerem Laufsitz-Spiel.","abmasse_um":[[20,6],[28,10],[35,13],[43,16],[53,20],[64,25],[76,30],[90,36],[106,43],[122,50],[137,56],[151,62],[165,68]]},"E8":{"art":"bohrung","hinweis":"Bohrung mit großem Spiel für Lager mit Wärmedehnung.","abmasse_um":[[28,14],[38,20],[47,25],[59,32],[73,40],[89,50],[106,60],[126,72],[148,85],[172,100],[191,110],[214,125],[232,135]]},"D9":{"art":"bohrung","hinweis":"Weite Spielpassungs-Bohrung für grobe Führungen.","abmasse_um":[[45,20],[60,30],[76,40],[93,50],[117,65],[142,80],[174,100],[207,120],[245,145],[285,170],[320,190],[350,210],[385,230]]},"JS6":{"art":"bohrung","hinweis":"Symmetrische Übergangspassung für Bohrungen (mittig um das Nennmaß).","abmasse_um":[[3,-3],[4,-4],[4.5,-4.5],[5.5,-5.5],[6.5,-6.5],[8,-8],[9.5,-9.5],[11,-11],[12.5,-12.5],[14.5,-14.5],[16,-16],[18,-18],[20,-20]]},"JS7":{"art":"bohrung","hinweis":"Symmetrische Übergangspassung für Bohrungen mit IT7.","abmasse_um":[[5,-5],[6,-6],[7,-7],[9,-9],[10,-10],[12,-12],[15,-15],[17,-17],[20,-20],[23,-23],[26,-26],[28,-28],[31,-31]]},"JS9":{"art":"bohrung","hinweis":"Symmetrische Bohrungspassung für Passfedernuten (fester Sitz).","abmasse_um":[[12,-12],[15,-15],[18,-18],[21,-21],[26,-26],[31,-31],[37,-37],[43,-43],[50,-50],[57,-57],[65,-65],[70,-70],[77,-77]]},"K6":{"art":"bohrung","hinweis":"Enge Übergangsbohrung (leichtes Über- oder Untermaß möglich).","abmasse_um":[[0,-6],[2,-6],[2,-7],[2,-9],[2,-11],[3,-13],[4,-15],[4,-18],[4,-21],[5,-24],[5,-27],[7,-29],[8,-32]]},"K7":{"art":"bohrung","hinweis":"Übergangsbohrung (spielfrei bis leicht klemmend, z. B. für Kugellager-Außenringe).","abmasse_um":[[0,-10],[3,-9],[5,-10],[6,-12],[6,-15],[7,-18],[9,-21],[10,-25],[12,-28],[13,-33],[16,-36],[17,-40],[18,-45]]},"M7":{"art":"bohrung","hinweis":"Festere Übergangsbohrung für zentrierten, spielfreien Sitz.","abmasse_um":[[-2,-12],[0,-12],[0,-15],[0,-18],[0,-21],[0,-25],[0,-30],[0,-35],[0,-40],[0,-46],[0,-52],[0,-57],[0,-63]]},"N7":{"art":"bohrung","hinweis":"Stramme Übergangs- bis leichte Pressbohrung.","abmasse_um":[[-4,-14],[-4,-16],[-4,-19],[-5,-23],[-7,-28],[-8,-33],[-9,-39],[-10,-45],[-12,-52],[-14,-60],[-14,-66],[-16,-73],[-17,-80]]},"P7":{"art":"bohrung","hinweis":"Presspassungs-Bohrung für fest eingepresste Buchsen und Stifte.","abmasse_um":[[-6,-16],[-8,-20],[-9,-24],[-11,-29],[-14,-35],[-17,-42],[-21,-51],[-24,-59],[-28,-68],[-33,-79],[-36,-88],[-41,-98],[-45,-108]]},"g6":{"art":"welle","hinweis":"Präzise Spielpassungs-Welle (gleitet spielfrei in H7, kaum fühlbares Spiel).","abmasse_um":[[-2,-8],[-4,-12],[-5,-14],[-6,-17],[-7,-20],[-9,-25],[-10,-29],[-12,-34],[-14,-39],[-15,-44],[-17,-49],[-18,-54],[-20,-60]]},"h6":{"art":"welle","hinweis":"Standard-Einheitswelle (oberes Abmaß 0) – leichter Schiebesitz in H7.","abmasse_um":[[0,-6],[0,-8],[0,-9],[0,-11],[0,-13],[0,-16],[0,-19],[0,-22],[0,-25],[0,-29],[0,-32],[0,-36],[0,-40]]},"h5":{"art":"welle","hinweis":"Sehr genaue Einheitswelle für spielfreie Führungen.","abmasse_um":[[0,-4],[0,-5],[0,-6],[0,-8],[0,-9],[0,-11],[0,-13],[0,-15],[0,-18],[0,-20],[0,-23],[0,-25],[0,-27]]},"h7":{"art":"welle","hinweis":"Einheitswelle mit mittlerer Genauigkeit.","abmasse_um":[[0,-10],[0,-12],[0,-15],[0,-18],[0,-21],[0,-25],[0,-30],[0,-35],[0,-40],[0,-46],[0,-52],[0,-57],[0,-63]]},"h8":{"art":"welle","hinweis":"Einheitswelle für allgemeine Wellen und Bolzen.","abmasse_um":[[0,-14],[0,-18],[0,-22],[0,-27],[0,-33],[0,-39],[0,-46],[0,-54],[0,-63],[0,-72],[0,-81],[0,-89],[0,-97]]},"h9":{"art":"welle","hinweis":"Grobe Einheitswelle für gezogene Stäbe und Passfedern.","abmasse_um":[[0,-25],[0,-30],[0,-36],[0,-43],[0,-52],[0,-62],[0,-74],[0,-87],[0,-100],[0,-115],[0,-130],[0,-140],[0,-155]]},"h11":{"art":"welle","hinweis":"Sehr weite Einheitswelle für unbearbeitete oder grobe Bolzen.","abmasse_um":[[0,-60],[0,-75],[0,-90],[0,-110],[0,-130],[0,-160],[0,-190],[0,-220],[0,-250],[0,-290],[0,-320],[0,-360],[0,-400]]},"g5":{"art":"welle","hinweis":"Hochgenaue Spielpassungs-Welle für enge Gleitführungen.","abmasse_um":[[-2,-6],[-4,-9],[-5,-11],[-6,-14],[-7,-16],[-9,-20],[-10,-23],[-12,-27],[-14,-32],[-15,-35],[-17,-40],[-18,-43],[-20,-47]]},"f6":{"art":"welle","hinweis":"Feine Laufsitz-Welle mit spürbarem Lagerspiel.","abmasse_um":[[-6,-12],[-10,-18],[-13,-22],[-16,-27],[-20,-33],[-25,-41],[-30,-49],[-36,-58],[-43,-68],[-50,-79],[-56,-88],[-62,-98],[-68,-108]]},"f7":{"art":"welle","hinweis":"Gängige Laufsitz-Welle für rotierende Lagerungen in H7/H8.","abmasse_um":[[-6,-16],[-10,-22],[-13,-28],[-16,-34],[-20,-41],[-25,-50],[-30,-60],[-36,-71],[-43,-83],[-50,-96],[-56,-108],[-62,-119],[-68,-131]]},"f8":{"art":"welle","hinweis":"Laufsitz-Welle mit größerem Spiel.","abmasse_um":[[-6,-20],[-10,-28],[-13,-35],[-16,-43],[-20,-53],[-25,-64],[-30,-76],[-36,-90],[-43,-106],[-50,-122],[-56,-137],[-62,-151],[-68,-165]]},"e7":{"art":"welle","hinweis":"Welle mit reichlichem Spiel für größere Drehzahlen oder Wärmedehnung.","abmasse_um":[[-14,-24],[-20,-32],[-25,-40],[-32,-50],[-40,-61],[-50,-75],[-60,-90],[-72,-107],[-85,-125],[-100,-146],[-110,-162],[-125,-182],[-135,-198]]},"e8":{"art":"welle","hinweis":"Welle mit großem Laufspiel in H8/H9.","abmasse_um":[[-14,-28],[-20,-38],[-25,-47],[-32,-59],[-40,-73],[-50,-89],[-60,-106],[-72,-126],[-85,-148],[-100,-172],[-110,-191],[-125,-214],[-135,-232]]},"d8":{"art":"welle","hinweis":"Welle mit sehr großem Spiel für grobe Lagerungen.","abmasse_um":[[-20,-34],[-30,-48],[-40,-62],[-50,-77],[-65,-98],[-80,-119],[-100,-146],[-120,-174],[-145,-208],[-170,-242],[-190,-271],[-210,-299],[-230,-327]]},"d9":{"art":"welle","hinweis":"Grobe Spielpassungs-Welle für weite Führungen.","abmasse_um":[[-20,-45],[-30,-60],[-40,-76],[-50,-93],[-65,-117],[-80,-142],[-100,-174],[-120,-207],[-145,-245],[-170,-285],[-190,-320],[-210,-350],[-230,-385]]},"js5":{"art":"welle","hinweis":"Sehr genaue symmetrische Übergangswelle.","abmasse_um":[[2,-2],[2.5,-2.5],[3,-3],[4,-4],[4.5,-4.5],[5.5,-5.5],[6.5,-6.5],[7.5,-7.5],[9,-9],[10,-10],[11.5,-11.5],[12.5,-12.5],[13.5,-13.5]]},"js6":{"art":"welle","hinweis":"Symmetrische Übergangswelle (z. B. für Kugellager-Sitze).","abmasse_um":[[3,-3],[4,-4],[4.5,-4.5],[5.5,-5.5],[6.5,-6.5],[8,-8],[9.5,-9.5],[11,-11],[12.5,-12.5],[14.5,-14.5],[16,-16],[18,-18],[20,-20]]},"js7":{"art":"welle","hinweis":"Symmetrische Übergangswelle mit IT7.","abmasse_um":[[5,-5],[6,-6],[7,-7],[9,-9],[10,-10],[12,-12],[15,-15],[17,-17],[20,-20],[23,-23],[26,-26],[28,-28],[31,-31]]},"k5":{"art":"welle","hinweis":"Genaue Übergangswelle für Kugellager-Innenringe.","abmasse_um":[[4,0],[6,1],[7,1],[9,1],[11,2],[13,2],[15,2],[18,3],[21,3],[24,4],[27,4],[29,4],[32,5]]},"k6":{"art":"welle","hinweis":"Gängige Übergangswelle (leichter Festsitz in H7).","abmasse_um":[[6,0],[9,1],[10,1],[12,1],[15,2],[18,2],[21,2],[25,3],[28,3],[33,4],[36,4],[40,4],[45,5]]},"m5":{"art":"welle","hinweis":"Festere Übergangswelle für präzisen Sitz.","abmasse_um":[[6,2],[9,4],[12,6],[15,7],[17,8],[20,9],[24,11],[28,13],[33,15],[37,17],[43,20],[46,21],[50,23]]},"m6":{"art":"welle","hinweis":"Übergangs- bis Presswelle (z. B. für Zylinderstifte nach ISO 2338).","abmasse_um":[[8,2],[12,4],[15,6],[18,7],[21,8],[25,9],[30,11],[35,13],[40,15],[46,17],[52,20],[57,21],[63,23]]},"n6":{"art":"welle","hinweis":"Stramme Übergangs- bis leichte Presswelle.","abmasse_um":[[10,4],[16,8],[19,10],[23,12],[28,15],[33,17],[39,20],[45,23],[52,27],[60,31],[66,34],[73,37],[80,40]]},"p6":{"art":"welle","hinweis":"Presspassungs-Welle für dauerhaft eingepresste Verbindungen in H7.","abmasse_um":[[12,6],[20,12],[24,15],[29,18],[35,22],[42,26],[51,32],[59,37],[68,43],[79,50],[88,56],[98,62],[108,68]]}}};
   const DIM_MODES = [
     { key: 'lin', label: 'Abstand', short: 'Abstand', hint: '<b>Maß:</b> Zwei Punkte anklicken, dann die Maßlinie platzieren. Ein Klick auf einen Kreis bemaßt den Durchmesser. <b>Esc</b> beendet.' },
     { key: 'chain', label: 'Kettenmaß', short: 'Kettenmaß', hint: '<b>Kettenmaß:</b> Startpunkt, zweiten Punkt und Maßlinie anklicken, dann weitere Punkte der Kette anklicken. <b>Enter</b> schließt die Kette ab, <b>Esc</b> beendet.' },
@@ -33047,9 +33059,23 @@ const Drawing = (() => {
       return { ...s, id: nid };
     });
     clone.dims = (clone.dims || []).map((x) => {
+      const oldId = x.id, nid = uid('d');
       let view = detMap.get(x.view) || x.view;
       if (view && view.startsWith('sec_') && secMap.has(view.slice(4))) view = 'sec_' + secMap.get(view.slice(4));
-      return { ...x, id: uid('d'), view };
+      const out = { ...x, id: nid, view };
+      if (Array.isArray(x.hide)) {
+        out.hide = x.hide.map((hId) => (hId && hId.startsWith(oldId + '_') ? nid + hId.slice(oldId.length) : hId));
+      }
+      if (x.tols && typeof x.tols === 'object') {
+        const nt = {};
+        for (const [tk, tv] of Object.entries(x.tols)) {
+          const nk = tk.startsWith(oldId + '_') ? nid + tk.slice(oldId.length) : tk;
+          nt[nk] = JSON.parse(JSON.stringify(tv));
+        }
+        out.tols = nt;
+      }
+      if (x.tol && typeof x.tol === 'object') out.tol = JSON.parse(JSON.stringify(x.tol));
+      return out;
     });
     clone.hiddenCenters = (clone.hiddenCenters || []).map((cid) => {
       if (typeof cid !== 'string' || !cid.startsWith('ctr|')) return cid;
@@ -34278,6 +34304,261 @@ const Drawing = (() => {
   const toSheet = (v, p) => [v.ox + p[0] * v.s, v.oy - p[1] * v.s];
   const toView = (v, P) => [(P[0] - v.ox) / v.s, (v.oy - P[1]) / v.s];
 
+  // ---------- Toleranzen & ISO-286-Passungen (ZE-08, ZE-09) ----------
+  function decNeeded(v) {
+    const r = Math.round(Math.abs(v) * 10000) / 10000;
+    if (r < 1e-9) return 0;
+    const s = r.toFixed(4).replace(/\.?0+$/, '');
+    const dot = s.indexOf('.');
+    return dot >= 0 ? s.length - dot - 1 : 0;
+  }
+  function fmtTolVal(vDisp, dec) {
+    const r = round(vDisp, dec);
+    const clean = Object.is(r, -0) ? 0 : r;
+    return clean.toFixed(dec).replace('.', ',');
+  }
+  function fmtDevPair(upperMm, lowerMm, { minDec = 0 } = {}) {
+    const u = Units.fromMM(upperMm);
+    const l = Units.fromMM(lowerMm);
+    const isZero = (v) => Math.abs(round(v, 4)) < 1e-9;
+    const dec = Units.key() === 'mm'
+      ? Math.max(minDec, decNeeded(u), decNeeded(l))
+      : Math.max(minDec, Units.def().dec, decNeeded(u), decNeeded(l));
+    const fmtOne = (v) => {
+      if (isZero(v)) return '0';
+      return (v > 0 ? '+' : '\u2212') + fmtTolVal(Math.abs(v), dec);
+    };
+    return { upStr: fmtOne(u), loStr: fmtOne(l), dec };
+  }
+  function fmtLimitsPair(nominalMm, upperMm, lowerMm, { minDec = 0 } = {}) {
+    const loMm = Math.min(upperMm, lowerMm);
+    const hiMm = Math.max(upperMm, lowerMm);
+    const hi = Units.fromMM(nominalMm + hiMm);
+    const lo = Units.fromMM(nominalMm + loMm);
+    const dec = Units.key() === 'mm'
+      ? Math.max(minDec, decNeeded(hi), decNeeded(lo))
+      : Math.max(minDec, Units.def().dec, decNeeded(hi), decNeeded(lo));
+    return { maxStr: fmtTolVal(hi, dec), minStr: fmtTolVal(lo, dec), dec };
+  }
+  function fmtSymVal(symMm) {
+    const v = Math.abs(Units.fromMM(symMm));
+    const dec = Units.key() === 'mm' ? Math.max(1, decNeeded(v)) : Math.max(Units.def().dec, decNeeded(v));
+    return fmtFixed(v, dec);
+  }
+  function iso286(code, nominalMm) {
+    const classes = (ISO286_DATA && ISO286_DATA.klassen) || {};
+    const raw = String(code || '').trim();
+    const key = classes[raw] ? raw : Object.keys(classes).find((k) => k.toLowerCase() === raw.toLowerCase());
+    const entry = key ? classes[key] : null;
+    if (!entry) return null;
+    const nom = Number(nominalMm);
+    const steps = (ISO286_DATA && ISO286_DATA.stufen_mm) || [];
+    if (!(nom > 0) || !steps.length || nom > steps[steps.length - 1]) {
+      return {
+        code: key,
+        kind: entry.art,
+        hint: entry.hinweis || '',
+        norm: ISO286_DATA.norm || 'DIN EN ISO 286-2:2010',
+        sources: ISO286_DATA._quellen || [],
+        outOfRange: true,
+      };
+    }
+    const idx = steps.findIndex((hi) => nom <= hi);
+    const pair = entry.abmasse_um[idx];
+    const upperUm = pair[0], lowerUm = pair[1];
+    const upperMm = upperUm / 1000, lowerMm = lowerUm / 1000;
+    const rangeMin = idx === 0 ? 0 : steps[idx - 1];
+    const rangeMax = steps[idx];
+    const minDec = (!Number.isInteger(upperUm) || !Number.isInteger(lowerUm)) ? 4 : 3;
+    const dev = fmtDevPair(upperMm, lowerMm, { minDec });
+    const lim = fmtLimitsPair(nom, upperMm, lowerMm, { minDec });
+    return {
+      code: key,
+      kind: entry.art,
+      hint: entry.hinweis || '',
+      norm: ISO286_DATA.norm || 'DIN EN ISO 286-2:2010',
+      sources: ISO286_DATA._quellen || [],
+      rangeMin,
+      rangeMax,
+      upperUm,
+      lowerUm,
+      upperMm,
+      lowerMm,
+      minMm: nom + lowerMm,
+      maxMm: nom + upperMm,
+      upStr: dev.upStr,
+      loStr: dev.loStr,
+      minStr: lim.minStr,
+      maxStr: lim.maxStr,
+      outOfRange: false,
+    };
+  }
+  function dimNominal(dim) {
+    if (!dim) return 0;
+    if (dim.type === 'dia') return Number(dim.r || 0) * 2;
+    if (dim.type === 'rad') return Number(dim.r || 0);
+    if (dim.type === 'lin') {
+      if (dim.dir === 'h') return Math.abs(dim.b[0] - dim.a[0]);
+      if (dim.dir === 'v') return Math.abs(dim.b[1] - dim.a[1]);
+      return Math.hypot(dim.b[0] - dim.a[0], dim.b[1] - dim.a[1]);
+    }
+    return 0;
+  }
+  function dimLabelParts(dim, nominalMm, st = sheetDimStyle()) {
+    const countPrefix = dim.count > 1 ? dim.count + '× ' : '';
+    if (dim.type === 'dia' || dim.type === 'rad') {
+      if (dim.threadLabel) return { mainLabel: countPrefix + dim.threadLabel, prefix: '', isThread: true };
+      const prefix = dim.type === 'dia' ? 'Ø' : 'R';
+      return { mainLabel: countPrefix + prefix + fmtDim(nominalMm, st), prefix, isThread: false };
+    }
+    return { mainLabel: fmtDim(nominalMm, st), prefix: '', isThread: false };
+  }
+  function findDimById(id, sh = dwg(), lay = layout) {
+    if (!id || !sh) return null;
+    const list = lay ? autoDimList(sh, lay) : (sh.dims || []).filter((x) => !x.auto);
+    const dim = list.find((x) => x.id === id);
+    if (!dim || !['lin', 'dia', 'rad'].includes(dim.type)) return null;
+    const nominalMm = dimNominal(dim);
+    const { mainLabel } = dimLabelParts(dim, nominalMm, sheetDimStyle(sh));
+    return { dim, nominalMm, label: mainLabel };
+  }
+  function sanitizeTol(raw) {
+    if (!raw || typeof raw !== 'object' || !raw.mode || raw.mode === 'none') return null;
+    if (raw.mode === 'sym') {
+      const sym = Math.abs(Number(raw.sym) || 0);
+      return { mode: 'sym', sym: round(sym, 6) };
+    }
+    if (raw.mode === 'dev' || raw.mode === 'limits') {
+      let upper = Number(raw.upper) || 0, lower = Number(raw.lower) || 0;
+      if (lower > upper) [upper, lower] = [lower, upper];
+      return { mode: raw.mode, upper: round(upper, 6), lower: round(lower, 6) };
+    }
+    if (raw.mode === 'fit') {
+      const classes = (ISO286_DATA && ISO286_DATA.klassen) || {};
+      const rawCode = String(raw.fit || 'H7').trim();
+      const code = classes[rawCode] ? rawCode : (Object.keys(classes).find((k) => k.toLowerCase() === rawCode.toLowerCase()) || 'H7');
+      const fitShow = ['both', 'code', 'dev', 'limits'].includes(raw.fitShow) ? raw.fitShow : 'both';
+      return { mode: 'fit', fit: code, fitShow };
+    }
+    return null;
+  }
+  function getDimTol(id) {
+    const d = dwg();
+    const direct = (d.dims || []).find((x) => x.id === id);
+    if (direct) return direct.tol ? { ...direct.tol } : null;
+    const parent = (d.dims || []).find((x) => x.auto === 'circles' && id.startsWith(x.id + '_'));
+    if (parent && parent.tols && parent.tols[id]) return { ...parent.tols[id] };
+    return null;
+  }
+  function setDimTol(id, tol) {
+    if (!id) return false;
+    const clean = sanitizeTol(tol);
+    let found = false;
+    App.change(clean ? 'Toleranz geändert' : 'Toleranz entfernt', () => {
+      const d = dwg();
+      const direct = (d.dims || []).find((x) => x.id === id);
+      if (direct) {
+        if (clean) direct.tol = clean;
+        else delete direct.tol;
+        found = true;
+        return;
+      }
+      const parent = (d.dims || []).find((x) => x.auto === 'circles' && id.startsWith(x.id + '_'));
+      if (parent) {
+        if (clean) {
+          if (!parent.tols) parent.tols = {};
+          parent.tols[id] = clean;
+        } else if (parent.tols) {
+          delete parent.tols[id];
+          if (!Object.keys(parent.tols).length) delete parent.tols;
+        }
+        found = true;
+      }
+    });
+    if (found) { render(); Panels.renderRight(); }
+    return found;
+  }
+  function resolveDimTol(dim, nominalMm) {
+    const tol = dim && dim.tol;
+    if (!tol || !tol.mode || tol.mode === 'none') return null;
+    if (tol.mode === 'sym') {
+      const sym = Math.abs(Number(tol.sym) || 0);
+      return { mode: 'sym', sym, symStr: fmtSymVal(sym), upperMm: sym, lowerMm: -sym };
+    }
+    if (tol.mode === 'dev') {
+      const upperMm = Number(tol.upper) || 0, lowerMm = Number(tol.lower) || 0;
+      const dev = fmtDevPair(upperMm, lowerMm);
+      return { mode: 'dev', upperMm, lowerMm, upStr: dev.upStr, loStr: dev.loStr };
+    }
+    if (tol.mode === 'limits') {
+      const upperMm = Number(tol.upper) || 0, lowerMm = Number(tol.lower) || 0;
+      const lim = fmtLimitsPair(nominalMm, upperMm, lowerMm);
+      return { mode: 'limits', upperMm, lowerMm, maxStr: lim.maxStr, minStr: lim.minStr };
+    }
+    if (tol.mode === 'fit') {
+      const info = iso286(tol.fit, nominalMm);
+      if (!info) return null;
+      const fitShow = ['both', 'code', 'dev', 'limits'].includes(tol.fitShow) ? tol.fitShow : 'both';
+      return { mode: 'fit', fitShow, ...info };
+    }
+    return null;
+  }
+  function measureDimLabel(mainLabel, prefix, tolInfo, TXT, count = 1) {
+    if (!tolInfo) return { totalW: textW(mainLabel, TXT) * 0.92 };
+    if (tolInfo.mode === 'sym') return { totalW: textW(`${mainLabel} ±${tolInfo.symStr}`, TXT) * 0.92 };
+    if (tolInfo.mode === 'fit' && (tolInfo.fitShow === 'code' || tolInfo.outOfRange)) {
+      return { totalW: textW(`${mainLabel} ${tolInfo.code}`, TXT) * 0.92 };
+    }
+    const k = TXT / 3.5;
+    if (tolInfo.mode === 'limits' || (tolInfo.mode === 'fit' && tolInfo.fitShow === 'limits')) {
+      const LIM = round(2.8 * k, 2);
+      const countPrefix = count > 1 ? count + '× ' : '';
+      return { totalW: Math.max(textW(countPrefix + prefix + tolInfo.maxStr, LIM), textW(prefix + tolInfo.minStr, LIM)) * 0.95 };
+    }
+    const SUB = round(2.3 * k, 2), gap = round(0.8 * k, 2);
+    const leftText = (tolInfo.mode === 'fit' && tolInfo.fitShow === 'both') ? `${mainLabel} ${tolInfo.code}` : mainLabel;
+    const wMain = textW(leftText, TXT) * 0.92;
+    const wStack = Math.max(textW(tolInfo.upStr, SUB), textW(tolInfo.loStr, SUB)) * 0.95;
+    return { totalW: wMain + gap + wStack };
+  }
+  function emitDimTexts(texts, cx, cy, ang, dim, mainLabel, prefix, tolInfo, TXT) {
+    const rad = (ang * Math.PI) / 180;
+    const exX = Math.cos(rad), exY = Math.sin(rad);
+    const euX = Math.sin(rad), euY = -Math.cos(rad);
+    const pt = (lx, ly) => [cx + exX * lx + euX * ly, cy + exY * lx + euY * ly];
+    const base = { rot: ang, id: dim.id, view: dim.view };
+    if (!tolInfo) {
+      texts.push({ ...base, x: cx, y: cy, t: mainLabel, size: TXT, anchor: 'middle', cls: 'dimtext' });
+      return;
+    }
+    if (tolInfo.mode === 'sym') {
+      texts.push({ ...base, x: cx, y: cy, t: `${mainLabel} ±${tolInfo.symStr}`, size: TXT, anchor: 'middle', cls: 'dimtext', tolPart: 'sym' });
+      return;
+    }
+    if (tolInfo.mode === 'fit' && (tolInfo.fitShow === 'code' || tolInfo.outOfRange)) {
+      texts.push({ ...base, x: cx, y: cy, t: `${mainLabel} ${tolInfo.code}`, size: TXT, anchor: 'middle', cls: 'dimtext', tolPart: 'fit' });
+      return;
+    }
+    const k = TXT / 3.5;
+    if (tolInfo.mode === 'limits' || (tolInfo.mode === 'fit' && tolInfo.fitShow === 'limits')) {
+      const LIM = round(2.8 * k, 2);
+      const countPrefix = dim.count > 1 ? dim.count + '× ' : '';
+      const pTop = pt(0, 2.7 * k), pBot = pt(0, 0);
+      texts.push({ ...base, x: pTop[0], y: pTop[1], t: countPrefix + prefix + tolInfo.maxStr, size: LIM, anchor: 'middle', cls: 'dimtext dimtol', tolPart: 'max' });
+      texts.push({ ...base, x: pBot[0], y: pBot[1], t: prefix + tolInfo.minStr, size: LIM, anchor: 'middle', cls: 'dimtext dimtol', tolPart: 'min' });
+      return;
+    }
+    const SUB = round(2.3 * k, 2), gap = round(0.8 * k, 2);
+    const leftText = (tolInfo.mode === 'fit' && tolInfo.fitShow === 'both') ? `${mainLabel} ${tolInfo.code}` : mainLabel;
+    const wMain = textW(leftText, TXT) * 0.92;
+    const wStack = Math.max(textW(tolInfo.upStr, SUB), textW(tolInfo.loStr, SUB)) * 0.95;
+    const x0 = -(wMain + gap + wStack) / 2;
+    const pMain = pt(x0, 0.1 * k), pUp = pt(x0 + wMain + gap, 2.0 * k), pLo = pt(x0 + wMain + gap, -0.2 * k);
+    texts.push({ ...base, x: pMain[0], y: pMain[1], t: leftText, size: TXT, anchor: 'start', cls: 'dimtext', tolPart: 'main' });
+    texts.push({ ...base, x: pUp[0], y: pUp[1], t: tolInfo.upStr, size: SUB, anchor: 'start', cls: 'dimtext dimtol', tolPart: 'upper' });
+    texts.push({ ...base, x: pLo[0], y: pLo[1], t: tolInfo.loStr, size: SUB, anchor: 'start', cls: 'dimtext dimtol', tolPart: 'lower' });
+  }
+
   // ---------- Bemaßung ----------
   function setDimStyle(patch = {}) {
     let next = null;
@@ -34318,7 +34599,12 @@ const Drawing = (() => {
           const ang = [45, 135, 225, 315].sort((p, q) => angD(p, away) - angD(q, away)).find((a) => !taken.includes(a)) ?? 45;
           taken.push(ang);
           const mt = (v.geo.threads || []).find((th) => th.type === 'end' && Math.hypot(th.c[0] - best.c[0], th.c[1] - best.c[1]) < 0.25 && Math.abs(th.r - best.r) < 0.35);
-          out.push({ ...dim, id: dim.id + '_' + Math.round(best.r * 200), type: 'dia', c: best.c, r: best.r, ang, count: g.length, ...(mt ? { threadLabel: `${mt.size} × ${fmtDim(mt.length, st)}` } : {}) });
+          const subId = dim.id + '_' + Math.round(best.r * 200);
+          const subTol = dim.tols && dim.tols[subId] ? dim.tols[subId] : undefined;
+          const item = { ...dim, id: subId, type: 'dia', c: best.c, r: best.r, ang, count: g.length, ...(mt ? { threadLabel: `${mt.size} × ${fmtDim(mt.length, st)}` } : {}) };
+          delete item.tols;
+          if (subTol) item.tol = subTol;
+          out.push(item);
         }
         // Rundungen: gleiche Radien zusammenfassen („4× R5“). Nur deutliche Bögen – Zahnköpfe und Ähnliches bleiben weg.
         const ag = new Map();
@@ -34328,7 +34614,12 @@ const Drawing = (() => {
           let best = g[0], bd = -1;
           for (const c of g) { const mid = (c.arc[0] + c.arc[1]) / 2; const d = Math.hypot(c.c[0] + c.r * Math.cos(mid) - mx, c.c[1] + c.r * Math.sin(mid) - my); if (d > bd) { bd = d; best = c; } }
           const mid = (best.arc[0] + best.arc[1]) / 2;
-          out.push({ ...dim, id: dim.id + '_r' + Math.round(best.r * 200), type: 'rad', c: best.c, r: best.r, ang: (mid * 180) / Math.PI, count: g.length });
+          const subId = dim.id + '_r' + Math.round(best.r * 200);
+          const subTol = dim.tols && dim.tols[subId] ? dim.tols[subId] : undefined;
+          const item = { ...dim, id: subId, type: 'rad', c: best.c, r: best.r, ang: (mid * 180) / Math.PI, count: g.length };
+          delete item.tols;
+          if (subTol) item.tol = subTol;
+          out.push(item);
         }
       }
       // einzeln gelöschte automatische Maße bleiben weg
@@ -34336,7 +34627,9 @@ const Drawing = (() => {
     }
     return all;
   }
-  function drawSpanDim(lines, texts, P1, P2, val, id, outerTail = true, st = sheetDimStyle()) {
+  function drawSpanDim(lines, texts, P1, P2, val, dimOrId, outerTail = true, st = sheetDimStyle()) {
+    const dim = dimOrId && typeof dimOrId === 'object' ? dimOrId : null;
+    const id = dim ? dim.id : dimOrId;
     const TXT = st.fontSize, AR = clamp(TXT * 0.85, 2, 7), aStyle = st.arrow;
     lines.push({ pts: [P1, P2], cls: 'dim', id });
     const L = Math.hypot(P2[0] - P1[0], P2[1] - P1[1]);
@@ -34354,7 +34647,13 @@ const Drawing = (() => {
     const r = (ang * Math.PI) / 180;
     const gap = Math.max(1.2, TXT * 0.34);
     const tx = mx + Math.sin(r) * gap, ty = my - Math.cos(r) * gap;
-    texts.push({ x: tx, y: ty, t: fmtDim(val, st), size: TXT, rot: ang, anchor: 'middle', id, cls: 'dimtext' });
+    if (dim) {
+      const { mainLabel, prefix } = dimLabelParts(dim, val, st);
+      const tolInfo = resolveDimTol(dim, val);
+      emitDimTexts(texts, tx, ty, ang, dim, mainLabel, prefix, tolInfo, TXT);
+    } else {
+      texts.push({ x: tx, y: ty, t: fmtDim(val, st), size: TXT, rot: ang, anchor: 'middle', id, cls: 'dimtext' });
+    }
   }
   function dimSVG(dim, lines, texts, lay = layout, sh = dwg()) {
     const v = lay.views[dim.view]; if (!v) return;
@@ -34380,7 +34679,7 @@ const Drawing = (() => {
         E1s = [[A[0] + nx * sg * GAPX, A[1] + ny * sg * GAPX], [P1[0] + nx * sg * EXT, P1[1] + ny * sg * EXT]]; E2s = [[B[0] + nx * sg * GAPX, B[1] + ny * sg * GAPX], [P2[0] + nx * sg * EXT, P2[1] + ny * sg * EXT]];
       }
       lines.push({ pts: E1s, cls: 'dim', id: dim.id }, { pts: E2s, cls: 'dim', id: dim.id });
-      drawSpanDim(lines, texts, P1, P2, val, dim.id, true, st);
+      drawSpanDim(lines, texts, P1, P2, val, dim, true, st);
     } else if (dim.type === 'dia' || dim.type === 'rad') {
       const C = toSheet(v, dim.c); const R = dim.r * v.s; const ang = ((dim.ang ?? 45) * Math.PI) / 180;
       const ux = Math.cos(ang), uy = -Math.sin(ang);
@@ -34392,8 +34691,11 @@ const Drawing = (() => {
       const tEx = Math.min(tx, ty);
       const lead = tEx > 0 && tEx < 24 ? Math.max(5, tEx) : 7;
       const out = [P[0] + ux * lead, P[1] + uy * lead];
-      const label = (dim.count > 1 ? dim.count + '× ' : '') + (dim.threadLabel ? dim.threadLabel : (dim.type === 'dia' ? 'Ø' : 'R') + fmtDim(dim.type === 'dia' ? dim.r * 2 : dim.r, st));
-      const tl = textW(label, TXT) * 0.92 + 2;
+      const nomVal = dim.type === 'dia' ? dim.r * 2 : dim.r;
+      const { mainLabel, prefix } = dimLabelParts(dim, nomVal, st);
+      const tolInfo = resolveDimTol(dim, nomVal);
+      const { totalW } = measureDimLabel(mainLabel, prefix, tolInfo, TXT, dim.count);
+      const tl = totalW + 2.5;
       const tail = [out[0] + (ux >= 0 ? tl : -tl), out[1]];
       if (dim.type === 'dia') {
         const Q = [C[0] - ux * R, C[1] - uy * R];
@@ -34416,7 +34718,7 @@ const Drawing = (() => {
         arrowHead(lines, P, C, AR, true, dim.id, null, aStyle);
       } else arrowHead(lines, P, out, AR, true, dim.id, null, aStyle);
       lines.push({ pts: [P, out, tail], cls: 'dim', id: dim.id });
-      texts.push({ x: (out[0] + tail[0]) / 2, y: out[1] - TGAP, t: label, size: TXT, rot: 0, anchor: 'middle', id: dim.id, cls: 'dimtext' });
+      emitDimTexts(texts, (out[0] + tail[0]) / 2, out[1] - TGAP, 0, dim, mainLabel, prefix, tolInfo, TXT);
     } else if (dim.type === 'chamfer') {
       const P = toSheet(v, dim.p);
       const ux = dim.dir[0], uy = -dim.dir[1];
@@ -34896,7 +35198,7 @@ const Drawing = (() => {
   // grobe Textbreite (Schmalschrift ≈ 0,5 em, Helvetica im PDF ≈ 0,56 em)
   // Die Standardschrift im PDF kennt nur Latin-1: typografische Zeichen ersetzen
   function latin1(s) {
-    return String(s).replace(/[–—]/g, '-').replace(/…/g, '...').replace(/[„“”]/g, '"').replace(/[‚‘’]/g, "'").replace(/[^\x00-\xff]/g, '?');
+    return String(s).replace(/[–—−]/g, '-').replace(/…/g, '...').replace(/[„“”]/g, '"').replace(/[‚‘’]/g, "'").replace(/[^\x00-\xff]/g, '?');
   }
   function textW(t, size) { return String(t).length * size * 0.56; }
   function fitSize(t, w, max, min) { const n = String(t).length || 1; return Math.max(min, Math.min(max, w / (n * 0.56))); }
@@ -34908,7 +35210,7 @@ const Drawing = (() => {
     s.setAttribute('xmlns', NS);
     s.setAttribute('viewBox', `0 0 ${W} ${H}`); s.setAttribute('width', W * zoom * 3.2); s.setAttribute('height', H * zoom * 3.2);
     const style = document.createElementNS(NS, 'style');
-    style.textContent = `.paper{fill:#fff;stroke:none}.frame{fill:none;stroke:#111;stroke-width:.7}.thin{fill:none;stroke:#111;stroke-width:.25}.vis{fill:none;stroke:#111;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round}.tan{fill:none;stroke:#444;stroke-width:.2;stroke-linecap:round;stroke-linejoin:round}.hid{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:2.4 1.2}.ctr{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:5 1.2 .6 1.2}.ctr[data-id]{cursor:pointer}.ctr.sel{stroke:#0c7a70;stroke-width:.45}.hatch{fill:none;stroke:#111;stroke-width:.22}.cutline{fill:none;stroke:#111;stroke-width:.35;stroke-dasharray:7 1.2 .7 1.2}.cutend{fill:none;stroke:#111;stroke-width:.7;stroke-linecap:square}.dim{fill:none;stroke:#111;stroke-width:.25}.arrow{fill:#111;stroke:none}.arrow-open{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round}.arrow-slash{fill:none;stroke:#111;stroke-width:.45;stroke-linecap:round}.arrow-dot,.leader-dot,.leader-arrow{fill:#111;stroke:none}.leader{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.view-sel{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:2 1.5;pointer-events:none}.detail{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.detail-border{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:3 1.5;cursor:grab}.detail.sel,.detail-border.sel{stroke:#0c7a70;stroke-width:.45}.sel .dim,.dim.sel,.cutline.sel,.cutend.sel,.hatch.sel,.arrow-open.sel,.arrow-slash.sel{stroke:#0c7a70}.dim.sel,.leader.sel{stroke:#0c7a70;stroke-width:.4}.arrow.sel,.arrow-dot.sel,.leader-dot.sel,.leader-arrow.sel{fill:#0c7a70}text{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif;fill:#111}text.lab{fill:#555}text.note{fill:#888}text.vlabel{fill:#333;font-weight:500}text.cutlabel,text.viewlabel{font-weight:700}text.sel{fill:#0c7a70}text.detail-lbl{font-weight:600;cursor:pointer}text.leadertext{cursor:grab}.prev{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:1.5 1}.snap{fill:none;stroke:#0c7a70;stroke-width:.4}`;
+    style.textContent = `.paper{fill:#fff;stroke:none}.frame{fill:none;stroke:#111;stroke-width:.7}.thin{fill:none;stroke:#111;stroke-width:.25}.vis{fill:none;stroke:#111;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round}.tan{fill:none;stroke:#444;stroke-width:.2;stroke-linecap:round;stroke-linejoin:round}.hid{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:2.4 1.2}.ctr{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:5 1.2 .6 1.2}.ctr[data-id]{cursor:pointer}.ctr.sel{stroke:#0c7a70;stroke-width:.45}.hatch{fill:none;stroke:#111;stroke-width:.22}.cutline{fill:none;stroke:#111;stroke-width:.35;stroke-dasharray:7 1.2 .7 1.2}.cutend{fill:none;stroke:#111;stroke-width:.7;stroke-linecap:square}.dim{fill:none;stroke:#111;stroke-width:.25}.arrow{fill:#111;stroke:none}.arrow-open{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round}.arrow-slash{fill:none;stroke:#111;stroke-width:.45;stroke-linecap:round}.arrow-dot,.leader-dot,.leader-arrow{fill:#111;stroke:none}.leader{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.view-sel{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:2 1.5;pointer-events:none}.detail{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.detail-border{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:3 1.5;cursor:grab}.detail.sel,.detail-border.sel{stroke:#0c7a70;stroke-width:.45}.sel .dim,.dim.sel,.cutline.sel,.cutend.sel,.hatch.sel,.arrow-open.sel,.arrow-slash.sel{stroke:#0c7a70}.dim.sel,.leader.sel{stroke:#0c7a70;stroke-width:.4}.arrow.sel,.arrow-dot.sel,.leader-dot.sel,.leader-arrow.sel{fill:#0c7a70}text{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif;fill:#111}text.dimtext{cursor:pointer}text.lab{fill:#555}text.note{fill:#888}text.vlabel{fill:#333;font-weight:500}text.cutlabel,text.viewlabel{font-weight:700}text.sel{fill:#0c7a70}text.detail-lbl{font-weight:600;cursor:pointer}text.leadertext{cursor:grab}.prev{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:1.5 1}.snap{fill:none;stroke:#0c7a70;stroke-width:.4}`;
     s.append(style);
     const g = document.createElementNS(NS, 'g'); s.append(g);
     const f = (n) => (Math.round(n * 1000) / 1000).toString();
@@ -34950,6 +35252,7 @@ const Drawing = (() => {
       if (t.id) el.dataset.id = t.id;
       if (t.view) el.dataset.view = t.view;
       if (t.secId) el.dataset.sec = t.secId;
+      if (t.tolPart) el.dataset.tol = t.tolPart;
       el.textContent = t.t;
       g.append(el);
     }
@@ -36532,7 +36835,7 @@ const Drawing = (() => {
         P(0, 'SEQEND', 8, ly);
       }
     }
-    for (const t of lastTexts) { if (t.cls === 'note') continue; const tLy = (t.cls === 'dimtext' || t.cls === 'leadertext') ? 'BEMASSUNG' : (t.cls === 'cutlabel' || t.cls === 'viewlabel') ? 'SCHNITTLINIE' : 'RAHMEN'; const align = t.anchor === 'middle' ? [72, 1, 11, t.x.toFixed(4), 21, Y(t.y).toFixed(4), 31, 0] : t.anchor === 'end' ? [72, 2, 11, t.x.toFixed(4), 21, Y(t.y).toFixed(4), 31, 0] : []; P(0, 'TEXT', 8, tLy, 10, t.x.toFixed(4), 20, Y(t.y).toFixed(4), 30, 0, 40, t.size.toFixed(3), 1, String(t.t).replace(/Ø/g, '%%c').replace(/°/g, '%%d'), 50, (-(t.rot || 0)).toFixed(3), ...align); }
+    for (const t of lastTexts) { if (t.cls === 'note') continue; const tLy = (String(t.cls || '').startsWith('dimtext') || t.cls === 'leadertext') ? 'BEMASSUNG' : (t.cls === 'cutlabel' || t.cls === 'viewlabel') ? 'SCHNITTLINIE' : 'RAHMEN'; const align = t.anchor === 'middle' ? [72, 1, 11, t.x.toFixed(4), 21, Y(t.y).toFixed(4), 31, 0] : t.anchor === 'end' ? [72, 2, 11, t.x.toFixed(4), 21, Y(t.y).toFixed(4), 31, 0] : []; const dxfTxt = String(t.t).replace(/Ø/g, '%%c').replace(/±/g, '%%p').replace(/°/g, '%%d').replace(/[–—−]/g, '-'); P(0, 'TEXT', 8, tLy, 10, t.x.toFixed(4), 20, Y(t.y).toFixed(4), 30, 0, 40, t.size.toFixed(3), 1, dxfTxt, 50, (-(t.rot || 0)).toFixed(3), ...align); }
     P(0, 'ENDSEC', 0, 'EOF');
     const text = out.join('\r\n') + '\r\n';
     const bytes = new Uint8Array([...text].map((ch) => { const c = ch.charCodeAt(0); return c < 256 ? c : 63; }));
@@ -36540,6 +36843,42 @@ const Drawing = (() => {
     await Print.save(fileBase(true) + ' DXF.zip', new Blob([zip]));
   }
   // ---------- Rechte Leiste ----------
+  function tolNumField({ id, label, value, min = null, placeholder = '0', onCommit }) {
+    const wrap = h('div', { class: 'field' });
+    if (label) wrap.append(h('label', { for: id }, label));
+    const box = h('div', { class: 'inp' });
+    const fmtVal = (mm) => {
+      if (typeof mm !== 'number' || !isFinite(mm)) return '';
+      const v = Units.fromMM(mm);
+      const r = round(v, 4);
+      const clean = Object.is(r, -0) ? 0 : r;
+      return clean.toFixed(4).replace(/\.?0+$/, '').replace('.', ',');
+    };
+    const inp = h('input', { id, type: 'text', inputmode: 'decimal', value: fmtVal(value), placeholder, autocomplete: 'off', spellcheck: 'false' });
+    box.append(inp, h('span', { class: 'unit' }, Units.label()));
+    wrap.append(box);
+    let orig = inp.value;
+    const commit = () => {
+      const raw = inp.value.trim().replace(/\u2212/g, '-');
+      if (raw === orig) { box.classList.remove('invalid'); return; }
+      const p = raw ? Units.parseLen(raw, {}, { expr: false }) : { ok: true, value: 0 };
+      if (!p.ok || !isFinite(p.value)) { box.classList.add('invalid'); return; }
+      let v = p.value;
+      if (min != null && v < min) v = min;
+      box.classList.remove('invalid');
+      orig = fmtVal(v);
+      inp.value = orig;
+      onCommit(v);
+    };
+    inp.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') { commit(); inp.blur(); }
+      if (e.key === 'Escape') { inp.value = orig; inp.blur(); }
+    });
+    inp.addEventListener('blur', commit);
+    inp.addEventListener('focus', () => inp.select());
+    return wrap;
+  }
   function renderPanel(body) {
     const all = sheets(), idx = activeIndex(), d = all[idx] || dwg();
     const w = h('div', { class: 'props' });
@@ -36805,7 +37144,8 @@ const Drawing = (() => {
       const selD = d.dims.find((x) => x.id === selDim);
       const selNote = (d.notes || []).find((x) => x.id === selDim);
       const selCtr = String(selDim).startsWith('ctr|') ? findCenterById(selDim) : null;
-      const selSec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, selDet ? `Detail ${selDet.label}` : selNote ? 'Hinweislinie' : selCtr ? (selCtr.type === 'cross' ? 'Mittelkreuz' : 'Mittellinie') : 'Auswahl'));
+      const selDimInfo = !selDet && !isSec && !selNote && !selCtr ? findDimById(selDim, d, layout) : null;
+      const selSec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, selDet ? `Detail ${selDet.label}` : selNote ? 'Hinweislinie' : selCtr ? (selCtr.type === 'cross' ? 'Mittelkreuz' : 'Mittellinie') : selDimInfo ? `Maß ${selDimInfo.label}` : 'Auswahl'));
       if (selDet) {
         const fDet = h('div', { class: 'fields' });
         const lFld = UI.textField({ id: 'dw-det-label', label: 'Buchstabe', value: selDet.label, onCommit: (v) => updateDetail(selDet.id, { label: v }) });
@@ -36833,6 +37173,134 @@ const Drawing = (() => {
       if (selCtr) {
         selSec.append(h('div', { class: 'mini-list' }, h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, viewLabel(selCtr.view, d)), h('b', { class: 'mono' }, `Ø${fmtDim(selCtr.r * 2)}`))));
       }
+      if (selDimInfo) {
+        const curTol = selDimInfo.dim.tol || null;
+        const curMode = curTol && curTol.mode ? curTol.mode : 'none';
+        const tolBox = h('div', { id: 'dw-tol-sec', 'data-help': 'drawingTolerance', style: { display: 'grid', gap: '8px', marginBottom: '8px' } });
+        const prefillDev = () => {
+          if (curTol && curTol.mode === 'fit') {
+            const fi = iso286(curTol.fit, selDimInfo.nominalMm);
+            if (fi && !fi.outOfRange) return { upper: fi.upperMm, lower: fi.lowerMm };
+          }
+          if (curTol && curTol.mode === 'sym') return { upper: curTol.sym || 0, lower: -(curTol.sym || 0) };
+          if (curTol && (curTol.mode === 'dev' || curTol.mode === 'limits')) return { upper: curTol.upper || 0, lower: curTol.lower || 0 };
+          return { upper: 0.05, lower: -0.05 };
+        };
+        tolBox.append(UI.selectField({
+          id: 'dw-tol-mode',
+          label: 'Toleranz',
+          value: curMode,
+          options: [
+            ['none', 'Keine (Allgemeintoleranz)'],
+            ['sym', 'Symmetrisch (±)'],
+            ['dev', 'Abmaße (oben / unten)'],
+            ['limits', 'Grenzmaße (min / max)'],
+            ['fit', 'ISO-Passung (H7, g6 …)'],
+          ],
+          onChange: (m) => {
+            if (m === 'none') setDimTol(selDimInfo.dim.id, null);
+            else if (m === 'sym') setDimTol(selDimInfo.dim.id, { mode: 'sym', sym: curTol && curTol.sym != null ? curTol.sym : 0.1 });
+            else if (m === 'dev' || m === 'limits') setDimTol(selDimInfo.dim.id, { mode: m, ...prefillDev() });
+            else if (m === 'fit') setDimTol(selDimInfo.dim.id, { mode: 'fit', fit: (curTol && curTol.fit) || (selDimInfo.dim.type === 'dia' ? 'H7' : 'h6'), fitShow: (curTol && curTol.fitShow) || 'both' });
+          },
+        }));
+        if (curMode === 'sym') {
+          tolBox.append(tolNumField({
+            id: 'dw-tol-sym',
+            label: 'Toleranz ±',
+            value: curTol.sym ?? 0.1,
+            min: 0,
+            onCommit: (v) => setDimTol(selDimInfo.dim.id, { mode: 'sym', sym: Math.abs(v) }),
+          }));
+        } else if (curMode === 'dev') {
+          const fRow = h('div', { class: 'fields' });
+          fRow.append(
+            tolNumField({
+              id: 'dw-tol-upper',
+              label: 'Oberes Abmaß',
+              value: curTol.upper ?? 0,
+              onCommit: (v) => setDimTol(selDimInfo.dim.id, { mode: 'dev', upper: v, lower: curTol.lower ?? 0 }),
+            }),
+            tolNumField({
+              id: 'dw-tol-lower',
+              label: 'Unteres Abmaß',
+              value: curTol.lower ?? 0,
+              onCommit: (v) => setDimTol(selDimInfo.dim.id, { mode: 'dev', upper: curTol.upper ?? 0, lower: v }),
+            })
+          );
+          tolBox.append(fRow);
+        } else if (curMode === 'limits') {
+          const fRow = h('div', { class: 'fields' });
+          fRow.append(
+            tolNumField({
+              id: 'dw-tol-max',
+              label: 'Höchstmaß',
+              value: selDimInfo.nominalMm + (curTol.upper ?? 0),
+              onCommit: (v) => setDimTol(selDimInfo.dim.id, { mode: 'limits', upper: v - selDimInfo.nominalMm, lower: curTol.lower ?? 0 }),
+            }),
+            tolNumField({
+              id: 'dw-tol-min',
+              label: 'Mindestmaß',
+              value: selDimInfo.nominalMm + (curTol.lower ?? 0),
+              onCommit: (v) => setDimTol(selDimInfo.dim.id, { mode: 'limits', upper: curTol.upper ?? 0, lower: v - selDimInfo.nominalMm }),
+            })
+          );
+          tolBox.append(fRow);
+        } else if (curMode === 'fit') {
+          const classes = (ISO286_DATA && ISO286_DATA.klassen) || {};
+          const holeOpts = Object.entries(classes).filter(([, v]) => v.art === 'bohrung').map(([k]) => [k, k]);
+          const shaftOpts = Object.entries(classes).filter(([, v]) => v.art === 'welle').map(([k]) => [k, k]);
+          const fitSel = UI.selectField({
+            id: 'dw-tol-fit',
+            label: 'Passung (ISO 286)',
+            value: curTol.fit || 'H7',
+            options: [
+              { group: 'Bohrung (ISO 286)', options: holeOpts },
+              { group: 'Welle (ISO 286)', options: shaftOpts },
+            ],
+            onChange: (v) => setDimTol(selDimInfo.dim.id, { mode: 'fit', fit: v, fitShow: curTol.fitShow || 'both' }),
+          });
+          fitSel.dataset.help = 'drawingFit';
+          const showSel = UI.selectField({
+            id: 'dw-tol-fit-show',
+            label: 'Anzeige',
+            value: curTol.fitShow || 'both',
+            options: [
+              ['both', 'Kurzzeichen + Abmaße'],
+              ['code', 'Nur Kurzzeichen'],
+              ['dev', 'Nur Abmaße'],
+              ['limits', 'Grenzmaße (min / max)'],
+            ],
+            onChange: (v) => setDimTol(selDimInfo.dim.id, { mode: 'fit', fit: curTol.fit || 'H7', fitShow: v }),
+          });
+          tolBox.append(fitSel, showSel);
+        }
+        const tolInfo = resolveDimTol(selDimInfo.dim, selDimInfo.nominalMm);
+        if (tolInfo) {
+          if (tolInfo.outOfRange) {
+            tolBox.append(h('div', { class: 'hint-box', id: 'dw-tol-info', html: `<b>${esc(tolInfo.code)}</b>: Nennmaß liegt außerhalb der ISO-286-Tabelle (0–500 mm).` }));
+          } else {
+            const fitDec = tolInfo.mode === 'fit' ? ((!Number.isInteger(tolInfo.upperUm) || !Number.isInteger(tolInfo.lowerUm)) ? 4 : 3) : 0;
+            const dev = fmtDevPair(tolInfo.upperMm, tolInfo.lowerMm, { minDec: fitDec });
+            const lim = fmtLimitsPair(selDimInfo.nominalMm, tolInfo.upperMm, tolInfo.lowerMm, { minDec: fitDec });
+            const linesHtml = [];
+            if (tolInfo.mode === 'fit') {
+              const kindTxt = tolInfo.kind === 'bohrung' ? 'Bohrung' : 'Welle';
+              linesHtml.push(`<b>${esc(tolInfo.code)} (${kindTxt})</b> · Bereich &gt;${tolInfo.rangeMin} bis ${tolInfo.rangeMax} mm`);
+              const umU = tolInfo.upperUm === 0 ? '0' : (tolInfo.upperUm > 0 ? '+' : '\u2212') + String(Math.abs(tolInfo.upperUm)).replace('.', ',');
+              const umL = tolInfo.lowerUm === 0 ? '0' : (tolInfo.lowerUm > 0 ? '+' : '\u2212') + String(Math.abs(tolInfo.lowerUm)).replace('.', ',');
+              linesHtml.push(`Abmaße: <b>${esc(dev.upStr)} / ${esc(dev.loStr)} ${esc(Units.label())}</b> (${umU} / ${umL} µm)`);
+            } else {
+              linesHtml.push(`Abmaße: <b>${esc(dev.upStr)} / ${esc(dev.loStr)} ${esc(Units.label())}</b>`);
+            }
+            linesHtml.push(`Grenzmaße: <b>${esc(lim.minStr)} – ${esc(lim.maxStr)} ${esc(Units.label())}</b>`);
+            if (tolInfo.mode === 'fit' && tolInfo.hint) linesHtml.push(`<span style="color:var(--muted)">${esc(tolInfo.hint)}</span>`);
+            if (tolInfo.mode === 'fit' && tolInfo.norm) linesHtml.push(`<span style="color:var(--muted)">Quelle: ${esc(tolInfo.norm)}</span>`);
+            tolBox.append(h('div', { class: 'hint-box', id: 'dw-tol-info', html: linesHtml.join('<br>') }));
+          }
+        }
+        selSec.append(tolBox);
+      }
       const row = h('div', { class: 'btn-row' });
       if (isSec) {
         const fl = h('button', { type: 'button', class: 'btn', id: 'dw-sec-flip' }, 'Blickrichtung umkehren');
@@ -36856,7 +37324,7 @@ const Drawing = (() => {
       selSec.append(row);
       w.append(selSec);
     }
-    w.append(h('div', { class: 'hint-box', html: 'Die Ansichten stehen nach <b>Projektionsmethode 1</b>: Draufsicht unter der Vorderansicht, Seitenansicht von links rechts daneben (Ansichten lassen sich per Ziehen verschieben). Wähle eine Ansicht auf dem Blatt oder in der Liste, um Maßstab, Kanten oder Schattierung einzustellen. Mit <b>Schnittansicht (S)</b> ziehst du eine Schnittlinie A–A durch eine Ansicht, mit <b>Detailansicht (Z)</b> vergrößerst du einen Ausschnitt im eigenen Maßstab, mit <b>Hinweislinie (N)</b> setzt du Notizen an Kanten oder Flächen. Maß, Schnitt, Detail, Hinweislinie oder Mittellinie anklicken und <b>Entf</b> drücken zum Löschen bzw. Ausblenden.' }));
+    w.append(h('div', { class: 'hint-box', html: 'Die Ansichten stehen nach <b>Projektionsmethode 1</b>: Draufsicht unter der Vorderansicht, Seitenansicht von links rechts daneben (Ansichten lassen sich per Ziehen verschieben). Wähle eine Ansicht auf dem Blatt oder in der Liste, um Maßstab, Kanten oder Schattierung einzustellen. Mit <b>Schnittansicht (S)</b> ziehst du eine Schnittlinie A–A durch eine Ansicht, mit <b>Detailansicht (Z)</b> vergrößerst du einen Ausschnitt im eigenen Maßstab, mit <b>Hinweislinie (N)</b> setzt du Notizen an Kanten oder Flächen. Klick ein <b>Maß</b> an für Toleranzen (±, Abmaße, Grenzmaße) oder ISO-286-Passungen (H7, g6 …) – oder wähle Maß, Schnitt, Detail, Hinweislinie oder Mittellinie und drück <b>Entf</b> zum Löschen bzw. Ausblenden.' }));
     body.append(w);
   }
   function tool_(t) { setTool(tool === t ? null : t); }
@@ -36874,6 +37342,9 @@ const Drawing = (() => {
     get selectedId() { return selDim; },
     addSection, flipSection, removeSection, sections: () => (dwg().sections || []).slice(), waitReady, hatchStepSheet,
     centers, allCenters, setCenters, hideCenter, showCenter, toggleCenter, showAllCenters,
+    iso286, ISO286: ISO286_DATA,
+    dims: () => autoDimList(dwg(), layout || computeLayout(dwg())).map((x) => ({ ...x, nominalMm: dimNominal(x) })),
+    getDimTol, setDimTol,
     exportPDF, buildPDFBytes,
     get layout() { return layout; },
     get activeTool() { return tool; },

@@ -1998,6 +1998,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Rückgängig, Speichern/Laden, PDF & Hilfe**: Löschen/Undo/Redo, JSON-Roundtrip, PDF-Export (`%PDF-1.4` mit Notiztext), Befehlssuche und Hilfetexte (`drawingDimStyle`, `drawingLeader`) funktionieren vollständig.
 - [ ] **Von Hand**: Im Browser mehrere Blätter mit unterschiedlichen Maß-Stilen (z. B. Schrägstrich und Punkt) anlegen, eine mehrzeilige Notiz an eine Rundung setzen, die Ansicht verschieben und die exportierte PDF-/DXF-Datei prüfen.
 
+## Zeichnung: Toleranzen und Passungen (Auto [A-068], ZE-08, ZE-09)
+
+- [x] **ISO-286-Passungen (`Ø20 H7`, `Ø20 g6`)**: Nach Auswahl von `Ø20` auf dem Zeichnungsblatt berechnet Tracery aus `app/data/iso286.json` (DIN EN ISO 286-2:2010) für `H7` exakt `+0,021 / 0` (`20,000 – 20,021 mm`) und für `g6` exakt `−0,007 / −0,020` (`19,980 – 19,993 mm`); Anzeige-Modi („Kurzzeichen + Abmaße“, „Nur Kurzzeichen“, „Grenzmaße“) schalten sauber um.
+- [x] **Toleranzarten (± symmetrisch, Abmaße, Grenzmaße)**: Längenmaße (horizontal und um `−90°` gedreht senkrecht) unterstützen symmetrische Toleranz (`50 ±0,1`), obere/untere Abmaße (`+0,05 / −0,02`, `+0,10 / −0,05`) und Grenzmaße (`50,2 / 49,9`).
+- [x] **Rückgängig, Speichern/Neuladen, PDF-Export & Hilfe**: Toleranzen bleiben nach `App.undo()`/`App.redo()` und JSON-Roundtrip erhalten, erscheinen im PDF ohne `?`-Ersatzzeichen und sind über die Befehlssuche (`drawingTolerance`) sowie die Hilfetexte `drawingTolerance` und `drawingFit` dokumentiert.
+- [ ] **Von Hand**: Im Browser ein Bauteil mit Passbohrung `Ø20 H7` und Passwelle `Ø20 g6` in die Zeichnung übernehmen, Passungen setzen und die erzeugte PDF- und DXF-Datei im Betrachter prüfen.
+
 ## Zeichnung: Ansichten einstellen (Auto [A-065], ZE-04, ZE-05)
 
 - [x] **Verdeckte Kanten je Ansicht (ZE-04)**: Im Panel unter „Ansichten“ (`#dw-view-list`, `#dw-v-hidden`) lassen sich verdeckte Kanten pro Ansicht unabhängig ein- und ausschalten; aktivierte Ansichten zeigen zusätzliche gestrichelte `.hid`-Linien (`stroke-dasharray`).

@@ -1083,5 +1083,15 @@
     "tip": "Notiz mit Hinweislinie an eine Kante (Pfeil) oder Fläche (Punkt) heften",
     "hilfe": "Wähle „Hinweislinie“ (Taste N), klicke auf eine Kante (Pfeilspitze) oder direkt in eine Fläche (Punkt) einer Ansicht, platziere danach die Textfahne und gib deinen Text ein. Die Hinweislinie ist an die Ansicht gebunden und wandert beim Verschieben oder Maßstabswechsel exakt mit.",
     "tipp": "Nach dem Setzen kannst du die Textfahne frei verschieben, die Spitze zwischen Pfeil und Punkt umschalten und den Text per Doppelklick oder rechts bearbeiten."
+  },
+  "drawingTolerance": {
+    "tip": "Toleranz (± symmetrisch, Abmaße oder Grenzmaße) und Passung an einem Maß festlegen",
+    "hilfe": "Klicke auf dem Zeichnungsblatt ein Längen-, Durchmesser- oder Radiusmaß an. Rechts wählst du zwischen symmetrischer Toleranz (±), ungleichen Abmaßen (oben/unten), direkten Grenzmaßen (Höchst-/Mindestmaß) oder einer genormten ISO-286-Passung (wie H7 oder g6).",
+    "tipp": "Ohne eigene Toleranz gilt die Allgemeintoleranz ISO 2768-m aus dem Schriftfeld. Alle Toleranzen werden im PDF-, SVG- und DXF-Export mit ausgegeben."
+  },
+  "drawingFit": {
+    "tip": "ISO-286-Passungen (H7, g6, h6, k6, m6 …) aus der Normtabelle wählen",
+    "hilfe": "Wähle ein Passungs-Kurzzeichen nach DIN EN ISO 286-2:2010: Großbuchstaben (z. B. H7, K7, P7) für Bohrungen, Kleinbuchstaben (z. B. g6, h6, k6, m6, p6) für Wellen. Tracery schlägt die Abmaße passend zum Nennmaß automatisch in der Tabelle nach (z. B. Ø20 H7 → +0,021 / 0 und Ø20 g6 → −0,007 / −0,020) und zeigt die Grenzmaße direkt daneben.",
+    "tipp": "Unter „Anzeige“ stellst du ein, ob Kurzzeichen samt Abmaßen, nur das Kurzzeichen, nur Abmaße oder die Grenzmaße auf dem Blatt stehen."
   }
 }
