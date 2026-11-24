@@ -822,6 +822,13 @@ body.presenting .dimlabel.mpin,body.presenting .measurebar{display:none!importan
 .folder-badge.pending{border-color:var(--accent-line);color:var(--accent);background:var(--accent-soft)}
 .folder-badge.saving{border-color:var(--accent-line);color:var(--accent)}
 .folder-badge.error{border-color:var(--bad);color:var(--bad);background:var(--bad-soft)}
+
+/* Skizze fertig bestimmen (SK-06) */
+.sk-autodef-box{display:grid;gap:8px;padding:10px;border:1.5px dashed var(--accent);border-radius:10px;background:color-mix(in srgb,var(--accent) 6%,var(--surface))}
+.sk-autodef-head{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13.5px}
+.sk-autodef-list{display:grid;gap:3px;font-size:12.5px;color:var(--ink-2)}
+.skdim.prop{border-style:dashed;background:color-mix(in srgb,var(--accent) 12%,var(--surface));color:var(--accent);pointer-events:none}
+.skcon.prop{border-style:dashed;border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--surface));color:var(--accent);pointer-events:none}
 </style>
 <div id="app">
   <header class="topbar">
@@ -1962,6 +1969,11 @@ const HELP = {
   "tip": "Bezugsachse als Dreh- oder Musterachse anlegen",
   "hilfe": "Legt eine eigene Achse im Projekt an: durch zwei Punkte (Ecken und Kantenmitten rasten ein), durch die Mitte einer runden Fläche (Zylinder, Kegel, Ring) oder eines Kreises, oder senkrecht auf eine ebene Fläche an einem Punkt. Sie wandert mit dem Teil mit und lässt sich direkt für Kreismuster und Drehen (Revolve) wählen.",
   "tipp": "Im Verlauf unter „Bezugsachsen“ kannst du jede Achse benennen, ein- oder ausblenden und beim Kreismuster einfach aus der Liste „Drehachse“ auswählen."
+ },
+ "sketchAutoDefine": {
+  "tip": "Fehlende Regeln und Maße automatisch vorschlagen",
+  "hilfe": "Prüft deine Skizze und schlägt fehlende Regeln vor: Waagerecht oder Senkrecht bei Linien unter 2° Abweichung, Deckungsgleich bei Punkten unter 0,05 mm Abstand, dazu fehlende Maße für Längen, Durchmesser, Radien und die Lage zum Ursprung. Alle Vorschläge erscheinen zuerst gestrichelt im Bild – „Übernehmen“ legt alles in einem einzigen Rückgängig-Schritt an, „Abbrechen“ verwirft sie.",
+  "tipp": "Danach ist die Skizze voll bestimmt (alle Linien dunkel) und kann nicht mehr aus Versehen verrutschen."
  }
 };
 
@@ -5016,7 +5028,196 @@ const SKO = (() => {
     return { regions, error: null };
   }
 
-  return { TEMPLATES, TPLNAMES, tplEnts, curve, inter, intersections, partsOf, nearestOn, closest, perpFeet, tangentFeet, trimPlan, trimPieces, trimRemoved, explode, chainOf, offsetChain, offsetShape, linkPoints, hasRadius, mirrorEnt, mirrorPoint, moveEnt, rotateEnt, rotPt, pr, inspect, thinRegions };
+  // ---------- Skizze fertig bestimmen (SK-06): fehlende Regeln & Maße vorschlagen ----------
+  function autoDefine(sketch, V, opts = {}) {
+    const angleTol = opts.angleTol != null ? opts.angleTol : 2;
+    const gapTol = opts.gapTol != null ? opts.gapTol : 0.05;
+    let wEnts = JSON.parse(JSON.stringify(sketch.ents || []));
+    let wDims = JSON.parse(JSON.stringify(sketch.dims || []));
+    let wCons = JSON.parse(JSON.stringify(sketch.cons || []));
+    const r4 = (x) => { const v = Math.round(x * 1e4) / 1e4; return Math.abs(v) < 1e-6 ? 0 : v; };
+
+    if (!wEnts.length) return { ok: true, empty: true, alreadyFull: true, cons: [], dims: [], ents: wEnts, dofBefore: 0, dofAfter: 0 };
+    let cur = Solver.solve({ ents: wEnts, dims: wDims, cons: wCons }, V, { analyze: true });
+    if (!cur.ok) return { ok: false, overConstrained: true, cons: [], dims: [], ents: wEnts, dofBefore: cur.dof, dofAfter: cur.dof };
+    const dofBefore = cur.dof;
+    if (cur.dof === 0) return { ok: true, alreadyFull: true, cons: [], dims: [], ents: wEnts, dofBefore: 0, dofAfter: 0 };
+    wEnts = cur.ents;
+
+    const propCons = [], propDims = [];
+    const byId = (id) => wEnts.find((e) => e.id === id);
+    const hasDim = (eid, k) => wDims.some((d) => !d.ref && d.e === eid && d.k === k);
+    const collapsed = (ents) => ents.some((e) => {
+      if (e.type === 'circle' || e.type === 'poly' || e.type === 'slot') return !(e.r > 1e-5);
+      if (e.type === 'ellipse') return !(e.rx > 1e-5 && e.ry > 1e-5);
+      if (e.type === 'text') return !(e.h > 1e-5);
+      if (e.type === 'rect') return !(Math.abs(e.b[0] - e.a[0]) > 1e-5 && Math.abs(e.b[1] - e.a[1]) > 1e-5);
+      return false;
+    });
+    const tryAdd = (kind, item) => {
+      if (cur.dof <= 0) return false;
+      const nextCons = kind === 'con' ? [...wCons, item] : wCons;
+      const nextDims = kind === 'dim' ? [...wDims, item] : wDims;
+      const res = Solver.solve({ ents: wEnts, dims: nextDims, cons: nextCons }, V, { analyze: true });
+      if (!res.ok || res.dof >= cur.dof || collapsed(res.ents)) return false;
+      wEnts = res.ents;
+      if (kind === 'con') { wCons = nextCons; propCons.push(item); }
+      else { wDims = nextDims; propDims.push(item); }
+      cur = res;
+      return true;
+    };
+    const refXY = (ref) => {
+      if (!ref) return null;
+      if (ref.e === 'origin') return [0, 0];
+      const e = byId(ref.e); if (!e) return null;
+      const p = ref.p || 'c';
+      if (e.type === 'line' || e.type === 'slot') return p === 'a' ? e.a : p === 'b' ? e.b : null;
+      if (e.type === 'arc') {
+        if (p === 'a' || p === 'b') return e[p];
+        if (p === 'c') { const ai = SK.arcInfo(e.a, e.m, e.b); return ai ? ai.c : null; }
+        return null;
+      }
+      if (e.type === 'rect') {
+        const c = SK.rectCorners(e);
+        if (p === 'a' || p === 'k0') return c[0];
+        if (p === 'k1') return c[1];
+        if (p === 'b' || p === 'k2') return c[2];
+        if (p === 'k3') return c[3];
+        if (p === 'c') return [(e.a[0] + e.b[0]) / 2, (e.a[1] + e.b[1]) / 2];
+        return null;
+      }
+      if (e.type === 'circle' || e.type === 'ellipse' || e.type === 'poly') return p === 'c' ? e.c : null;
+      if (e.type === 'point' || e.type === 'text') return p === 'a' ? e.a : null;
+      if (e.type === 'spline' && /^p\d+$/.test(p)) return e.pts[+p.slice(1)] || null;
+      return null;
+    };
+
+    // Phase 1a: Deckungsgleich für Punkte mit < gapTol (0,05 mm) Abstand
+    const pts = [];
+    for (const e of wEnts) {
+      const addP = (p, xy) => { if (xy) pts.push({ e: e.id, type: e.type, npts: e.pts ? e.pts.length : 0, p, ref: { e: e.id, p }, xy }); };
+      if (e.type === 'line' || e.type === 'slot') { addP('a', e.a); addP('b', e.b); }
+      else if (e.type === 'arc') { addP('a', e.a); addP('b', e.b); const ai = SK.arcInfo(e.a, e.m, e.b); if (ai) addP('c', ai.c); }
+      else if (e.type === 'rect') { SK.rectCorners(e).forEach((q, i) => addP('k' + i, q)); addP('c', [(e.a[0] + e.b[0]) / 2, (e.a[1] + e.b[1]) / 2]); }
+      else if (e.type === 'circle' || e.type === 'ellipse' || e.type === 'poly') addP('c', e.c);
+      else if (e.type === 'point' || e.type === 'text') addP('a', e.a);
+      else if (e.type === 'spline') (e.pts || []).forEach((q, i) => addP('p' + i, q));
+    }
+    const cands = [];
+    for (let i = 0; i < pts.length; i++) {
+      const P = pts[i];
+      if (cur.freeEnts.has(P.e)) {
+        const d0 = d2(P.xy, [0, 0]);
+        if (d0 < gapTol) cands.push({ a: P.ref, b: { e: 'origin' }, d: d0 });
+      }
+      for (let j = i + 1; j < pts.length; j++) {
+        const Q = pts[j];
+        if (P.e === Q.e) {
+          const splineEnd = P.type === 'spline' && P.npts >= 3 && ((P.p === 'p0' && Q.p === 'p' + (P.npts - 1)) || (Q.p === 'p0' && P.p === 'p' + (P.npts - 1)));
+          if (!splineEnd) continue;
+        }
+        if (!cur.freeEnts.has(P.e) && !cur.freeEnts.has(Q.e)) continue;
+        if (Math.abs(P.xy[0] - Q.xy[0]) >= gapTol || Math.abs(P.xy[1] - Q.xy[1]) >= gapTol) continue;
+        const dist = d2(P.xy, Q.xy);
+        if (dist < gapTol) cands.push({ a: P.ref, b: Q.ref, d: dist });
+      }
+    }
+    cands.sort((a, b) => a.d - b.d);
+    for (const c of cands) {
+      if (cur.dof <= 0) break;
+      const pa = refXY(c.a), pb = refXY(c.b);
+      if (pa && pb && d2(pa, pb) < gapTol) tryAdd('con', { id: uid('k'), type: 'coincident', refs: [c.a, c.b] });
+    }
+
+    // Phase 1b: Waagerecht / Senkrecht für Linien und Langlöcher mit < angleTol (2°) Abweichung
+    const ids = wEnts.map((e) => e.id);
+    for (const id of ids) {
+      if (cur.dof <= 0) break;
+      const e = byId(id);
+      if (!e || (e.type !== 'line' && e.type !== 'slot') || !cur.freeEnts.has(id)) continue;
+      const dx = e.b[0] - e.a[0], dy = e.b[1] - e.a[1], L = Math.hypot(dx, dy);
+      if (L < 1e-6) continue;
+      const degH = (Math.atan2(Math.abs(dy), Math.abs(dx)) * 180) / Math.PI;
+      const degV = 90 - degH;
+      if (degH < angleTol) tryAdd('con', { id: uid('k'), type: 'horizontal', refs: [{ e: id }] });
+      else if (degV < angleTol) tryAdd('con', { id: uid('k'), type: 'vertical', refs: [{ e: id }] });
+    }
+
+    const tryDim = (eid, k, val) => {
+      if (hasDim(eid, k) || !isFinite(val)) return false;
+      const signed = k === 'x' || k === 'y' || k === 'ang';
+      if (!signed && val <= 1e-5) return false;
+      return tryAdd('dim', { id: uid('m'), e: eid, k, v: r4(val) });
+    };
+
+    // Phase 2: Fehlende Größenmaße (Längen, Breiten, Höhen, Durchmesser, Radien)
+    for (const id of ids) {
+      if (cur.dof <= 0) break;
+      if (!cur.freeEnts.has(id)) continue;
+      const e = byId(id); if (!e) continue;
+      if (e.type === 'rect') {
+        tryDim(id, 'w', Math.abs(e.b[0] - e.a[0]));
+        tryDim(id, 'h', Math.abs(e.b[1] - e.a[1]));
+      } else if (e.type === 'circle' || e.type === 'poly') {
+        tryDim(id, 'd', 2 * e.r);
+      } else if (e.type === 'arc') {
+        const ai = SK.arcInfo(e.a, e.m, e.b);
+        if (ai) tryDim(id, 'r', ai.r);
+      } else if (e.type === 'line') {
+        tryDim(id, 'len', d2(e.a, e.b));
+      } else if (e.type === 'slot') {
+        tryDim(id, 'len', d2(e.a, e.b));
+        tryDim(id, 'w', 2 * e.r);
+      } else if (e.type === 'ellipse') {
+        tryDim(id, 'w', 2 * e.rx);
+        tryDim(id, 'h', 2 * e.ry);
+      } else if (e.type === 'text') {
+        tryDim(id, 'h', e.h);
+      }
+    }
+
+    // Phase 3: Lage zum Ursprung (X, Y)
+    for (const id of ids) {
+      if (cur.dof <= 0) break;
+      if (!cur.freeEnts.has(id)) continue;
+      const e = byId(id); if (!e) continue;
+      const p = SK.anchorOf(e);
+      if (!p) continue;
+      tryDim(id, 'x', p[0]);
+      tryDim(id, 'y', p[1]);
+    }
+
+    // Phase 4: Winkel für schräge Linien und Langlöcher
+    for (const id of ids) {
+      if (cur.dof <= 0) break;
+      if (!cur.freeEnts.has(id)) continue;
+      const e = byId(id); if (!e) continue;
+      if (e.type === 'line' || e.type === 'slot') tryDim(id, 'ang', SK.measure(e, 'ang'));
+    }
+
+    // Phase 5: Restliche Freiheiten (z. B. Bogen-Endpunkt oder Spline-Kontrollpunkte)
+    for (const id of ids) {
+      if (cur.dof <= 0) break;
+      if (!cur.freeEnts.has(id)) continue;
+      const e = byId(id); if (!e) continue;
+      const fixP = (pName, xy) => { if (xy) tryAdd('con', { id: uid('k'), type: 'fix', refs: [{ e: id, p: pName }], at: xy.map(r4) }); };
+      if (e.type === 'arc') { fixP('b', e.b); fixP('a', e.a); }
+      else if (e.type === 'spline') (e.pts || []).forEach((q, i) => { if (cur.dof > 0) fixP('p' + i, q); });
+      else if (e.type === 'line' || e.type === 'slot') { fixP('b', e.b); fixP('a', e.a); }
+      else if (e.type === 'rect') { const c = SK.rectCorners(e); fixP('k2', c[2]); fixP('k0', c[0]); }
+      else if (e.type === 'circle' || e.type === 'poly' || e.type === 'ellipse') fixP('c', e.c);
+      else if (e.type === 'point' || e.type === 'text') fixP('a', e.a);
+      for (const k of Solver.varsOf(e) || []) {
+        if (cur.dof <= 0 || !cur.freeEnts.has(id)) break;
+        const curE = byId(id);
+        if (curE) tryAdd('con', { id: uid('k'), type: 'fix', refs: [{ e: id }], at: { [k]: r4(Solver.getK(curE, k)) } });
+      }
+    }
+
+    return { ok: cur.ok, alreadyFull: false, cons: propCons, dims: propDims, ents: wEnts, dofBefore, dofAfter: cur.dof };
+  }
+
+  return { TEMPLATES, TPLNAMES, tplEnts, curve, inter, intersections, partsOf, nearestOn, closest, perpFeet, tangentFeet, trimPlan, trimPieces, trimRemoved, explode, chainOf, offsetChain, offsetShape, linkPoints, hasRadius, mirrorEnt, mirrorPoint, moveEnt, rotateEnt, rotPt, pr, inspect, thinRegions, autoDefine };
 })();
 // ---- 20-kernel.js ----
 // ================= Verbindung zum CAD-Kern (Web Worker) =================
@@ -14446,7 +14647,7 @@ const Sketch = (() => {
     if (Notes.active) Notes.stop();
     Panels.closeFlyout(); UI.closePop();
     const F = frameWorld(init.plane, init.W);
-    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.mode === 'patpath' ? 'line' : 'rect', draft: null, sels: [], get sel() { return this.sels && this.sels.length === 1 ? this.sels[0] : null; }, set sel(v) { this.sels = v ? [v] : []; }, band: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, off: { count: 1, both: false, corners: 'sharp' }, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, hoverEnt: null, trimHover: null, check: null, checkFocus: null };
+    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.mode === 'patpath' ? 'line' : 'rect', draft: null, sels: [], get sel() { return this.sels && this.sels.length === 1 ? this.sels[0] : null; }, set sel(v) { this.sels = v ? [v] : []; }, band: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, off: { count: 1, both: false, corners: 'sharp' }, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, hoverEnt: null, trimHover: null, check: null, checkFocus: null, autoDef: null };
     S.dims = init.dims || []; S.cons = init.cons || []; S.picks = []; S.dimFirst = null; S.selCon = null;
     S.plane0 = deepClone(init.plane); S.pOff = init.pOff || 0; S.pTilt = 0;
     if (S.pOff) applyPlane(false, true);
@@ -14524,7 +14725,7 @@ const Sketch = (() => {
     clearBand();
     const carry = (id === 'xmove' || id === 'patrect' || id === 'patcirc') ? selectedIds() : [];
     S.tool = id; S.draft = null; S.picks = []; S.dimFirst = null; hideEntry(); hideDimBox();
-    S.mir = null; S.patSel = carry; S.patPick = false; S.trimHover = null; S.trimming = false; S.hoverEnt = null;
+    S.mir = null; S.patSel = carry; S.patPick = false; S.trimHover = null; S.trimming = false; S.hoverEnt = null; S.autoDef = null;
     if (id !== 'select') clearSel();
     for (const el of [bar, cbar]) if (el) $$('.tool[data-tool]', el).forEach((b) => b.classList.toggle('active', b.dataset.tool === id));
     UI.hint(HINTS[id]); Panels.renderRight(); render();
@@ -14599,11 +14800,11 @@ const Sketch = (() => {
     return { p: b, tip: null };
   }
   // ---------- Zeichnen ----------
-  function pushUndo() { S.undo.push(JSON.stringify({ ents: S.ents, dims: S.dims, cons: S.cons })); if (S.undo.length > 100) S.undo.shift(); }
+  function pushUndo() { if (S) S.autoDef = null; S.undo.push(JSON.stringify({ ents: S.ents, dims: S.dims, cons: S.cons })); if (S.undo.length > 100) S.undo.shift(); }
   function sketchUndo() {
     if (S.draft && S.draft.pts && S.draft.pts.length > 1 && S.tool === 'line') { S.draft = null; hideEntry(); updateLineHint(); render(); return; }
     const last = S.undo.pop(); if (last == null) return;
-    const st = JSON.parse(last); S.ents = st.ents; S.dims = st.dims || []; S.cons = st.cons || []; clearSel(); S.selCon = null; S.draft = null; S.picks = []; reapply(); updateLineHint(); render(); Panels.renderRight();
+    const st = JSON.parse(last); S.ents = st.ents; S.dims = st.dims || []; S.cons = st.cons || []; clearSel(); S.selCon = null; S.draft = null; S.picks = []; S.autoDef = null; reapply(); updateLineHint(); render(); Panels.renderRight();
   }
   function addEnt(e) { pushUndo(); e.id = uid('e'); if (S.construction) e.con = true; S.ents.push(e); return e; }
   // ---------- Maße und Regeln: der Löser rechnet alles gemeinsam ----------
@@ -14630,7 +14831,8 @@ const Sketch = (() => {
     } else if (S.status) S.status.conflicts = r.conflicts;
     return r;
   }
-  const ent = (id) => S.ents.find((x) => x.id === id);
+  let entList = null;
+  const ent = (id) => (entList || S.ents).find((x) => x.id === id);
   const sameRefs = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   const specMatch = (d, sp) => d.k === sp.k && (sp.e ? d.e === sp.e : !!d.refs && sameRefs(d.refs, sp.refs));
   function dimFind(sp) { return S.dims.find((d) => specMatch(d, sp)) || null; }
@@ -16565,6 +16767,8 @@ const Sketch = (() => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); sketchUndo(); return true; }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c' && !e.shiftKey) { e.preventDefault(); copySel(); return true; }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v' && !e.shiftKey) { e.preventDefault(); pasteClip(); return true; }
+    if (e.key === 'Escape' && S.autoDef) { cancelAutoDefine(); return true; }
+    if (e.key === 'Enter' && S.autoDef) { applyAutoDefine(); return true; }
     if (e.key === 'Escape' && S.band) { clearBand(); return true; }
     if (e.key === 'Escape' && S.mir) { S.mir = null; UI.hint(HINTS.mirror); render(); return true; }
     if (e.key === 'Escape' && S.patPick) { S.patPick = false; UI.hint(HINTS[S.tool]); render(); Panels.renderRight(); return true; }
@@ -16687,8 +16891,8 @@ const Sketch = (() => {
       el.addEventListener('click', (e) => { if (sp.e) setSel([sp.e]); render(); Panels.renderRight(); askDim(sp, e.clientX, e.clientY); });
     }
     // Regeln als kleine Symbole neben den Elementen
+    const slots = new Map();
     if (!S.step) {
-      const slots = new Map();
       for (const c of S.cons) {
         for (const a of consAnchors(c)) {
           const key = Math.round(a[0] / (pxSize() * 12)) + ',' + Math.round(a[1] / (pxSize() * 12));
@@ -16702,6 +16906,78 @@ const Sketch = (() => {
           $('#overlay').append(el); labels.push(el);
         }
       }
+    }
+    // Vorschläge von „Fertig bestimmen“ (gestrichelt im Bild)
+    if (S.autoDef && !S.step) {
+      const ad = S.autoDef, origById = new Map(S.ents.map((e) => [e.id, e]));
+      const movedPt = (p, q) => !p || !q || SK.d2(p, q) > 1e-4;
+      const movedEnt = (a, b) => {
+        if (!a || !b || a.type !== b.type) return true;
+        for (const k of ['a', 'b', 'm', 'c']) if (a[k] && movedPt(a[k], b[k])) return true;
+        for (const k of ['r', 'rx', 'ry']) if (a[k] != null && Math.abs(a[k] - b[k]) > 1e-4) return true;
+        if (a.pts && (!b.pts || a.pts.length !== b.pts.length || a.pts.some((q, i) => movedPt(q, b.pts[i])))) return true;
+        return false;
+      };
+      const dimGuide = (en, k, pos) => {
+        if (pos.line) return pos.line;
+        if (!en) return null;
+        if (en.type === 'rect') {
+          const x0 = Math.min(en.a[0], en.b[0]), x1 = Math.max(en.a[0], en.b[0]), y0 = Math.min(en.a[1], en.b[1]), y1 = Math.max(en.a[1], en.b[1]);
+          if (k === 'w') return [[x0, pos.p[1]], [x1, pos.p[1]]];
+          if (k === 'h') return [[pos.p[0], y0], [pos.p[0], y1]];
+        }
+        if ((en.type === 'line' || en.type === 'slot') && k === 'len') {
+          const mx = (en.a[0] + en.b[0]) / 2, my = (en.a[1] + en.b[1]) / 2;
+          const dx = pos.p[0] - mx, dy = pos.p[1] - my;
+          return [[en.a[0] + dx, en.a[1] + dy], [en.b[0] + dx, en.b[1] + dy]];
+        }
+        if ((en.type === 'circle' || en.type === 'poly') && k === 'd') {
+          return [[en.c[0] - Math.SQRT1_2 * en.r, en.c[1] - Math.SQRT1_2 * en.r], pos.p];
+        }
+        if (en.type === 'ellipse' && (k === 'w' || k === 'h')) return [en.c, pos.p];
+        if (en.a) return [en.a, pos.p];
+        return null;
+      };
+      entList = ad.ents;
+      try {
+        for (const eNew of ad.ents) {
+          if (movedEnt(eNew, origById.get(eNew.id))) {
+            for (const pts of entPts(eNew)) lineObj(pts, acc, 2, { dashed: true, opacity: 0.75, dash: 2, gap: 1.6, order: 27 });
+          }
+        }
+        for (const dm of ad.dims) {
+          const sp = dm.refs ? { k: dm.k, refs: dm.refs } : { e: dm.e, k: dm.k };
+          const pos = dimPosSpec(dm); if (!pos) continue;
+          const en = dm.e ? ent(dm.e) : null;
+          const gd = dimGuide(en, dm.k, pos);
+          if (gd) lineObj(gd, acc, 1.3, { dashed: true, opacity: 0.85, dash: 1.4, gap: 1.2, order: 27 });
+          const val = measureSpec(sp);
+          const pre = { d: 'Ø ', x: 'X ', y: 'Y ', r: 'R ' }[dm.k] || '';
+          const unit = dm.k === 'ang' || dm.k === 'angLL' ? '°' : dm.k === 'n' ? ' Ecken' : '';
+          const el = h('div', { class: 'skdim prop', 'data-tip': 'Vorschlag: ' + DIMLABEL(dm.k), dataset: { propDim: dm.id } }, pre + fmt(isFinite(val) ? val : dm.v, 2) + unit);
+          $('#overlay').append(el); labels.push(el);
+          const spx = Viewer.toScreen(toWorld(pos.p[0], pos.p[1]));
+          const lw = el.offsetWidth || 40, lh = el.offsetHeight || 18; let ly = spx.y;
+          for (let k = 0; k < 8 && placed.some((q) => Math.abs(q[0] - spx.x) < (q[2] + lw) / 2 && Math.abs(q[1] - ly) < (q[3] + lh) / 2); k++) ly += lh + 3;
+          placed.push([spx.x, ly, lw, lh]);
+          el.style.left = spx.x + 'px'; el.style.top = ly + 'px';
+        }
+        for (const c of ad.cons) {
+          if (c.type === 'coincident' && c.refs && c.refs[0]) {
+            const q = refXY(c.refs[0]);
+            if (q) { const rg = SK.circlePoints(q, pxSize() * 6, 20); rg.push(rg[0]); lineObj(rg, acc, 1.8, { dashed: true, dash: 1.2, gap: 1, order: 27 }); }
+          }
+          for (const a of consAnchors(c)) {
+            const key = Math.round(a[0] / (pxSize() * 12)) + ',' + Math.round(a[1] / (pxSize() * 12));
+            const n = slots.get(key) || 0; slots.set(key, n + 1);
+            const spx = Viewer.toScreen(toWorld(a[0], a[1]));
+            const el = h('div', { class: 'skcon prop', 'data-tip': 'Vorschlag: ' + (CNAME[c.type] || c.type), dataset: { propCon: c.id, type: c.type } });
+            el.innerHTML = icon(CICON[c.type] || 'info');
+            el.style.left = spx.x + n * 19 + 'px'; el.style.top = spx.y + 'px';
+            $('#overlay').append(el); labels.push(el);
+          }
+        }
+      } finally { entList = null; }
     }
     // Muster entlang Kurve: wo die Kopien landen (statt „offene Enden“)
     const pathM = S.ctx.mode === 'patpath' || isPathEdit();
@@ -16905,7 +17181,7 @@ const Sketch = (() => {
   function dimPos(en, k) {
     const px = pxSize();
     if (k === 'x' || k === 'y') {
-      const p = en.type === 'circle' || en.type === 'poly' || en.type === 'ellipse' ? en.c : en.a;
+      const p = SK.anchorOf(en); if (!p) return null;
       if (k === 'x') return { p: [p[0] / 2, p[1] + px * 12], line: [[0, p[1]], p] };
       return { p: [p[0] - px * 18, p[1] / 2], line: [[p[0], 0], p] };
     }
@@ -17022,6 +17298,83 @@ const Sketch = (() => {
     if (gapsFailed) msg += ` ${gapsFailed} ${gapsFailed === 1 ? 'Lücke konnte' : 'Lücken konnten'} wegen fester Regeln nicht geschlossen werden.`;
     UI.toast(msg, { icon: gapsFailed && !parts.length ? 'warn' : 'check', kind: gapsFailed && !parts.length ? 'bad' : undefined, ms: 4500 });
     return { dups: dupsFixed, gaps: gapsFixed, failed: gapsFailed, remaining: S.check.issues.length };
+  }
+
+  // ---------- Skizze fertig bestimmen (SK-06) ----------
+  function proposeAutoDefine() {
+    if (!S || S.step) return null;
+    S.draft = null; hideEntry(); hideDimBox(); clearSel(); S.selCon = null;
+    if (!S.ents.length) { UI.toast('Die Skizze ist noch leer – zeichne zuerst etwas.', { icon: 'info' }); return null; }
+    const res = SKO.autoDefine({ ents: S.ents, dims: S.dims, cons: S.cons }, vars(), { angleTol: 2, gapTol: 0.05 });
+    if (res.overConstrained) {
+      S.autoDef = null; render(); Panels.renderRight();
+      UI.toast('Die Skizze hat schon Widersprüche – löse sie zuerst, bevor du „Fertig bestimmen“ nutzt.', { kind: 'bad', ms: 5000 });
+      return res;
+    }
+    if (res.alreadyFull || (!res.cons.length && !res.dims.length)) {
+      S.autoDef = null; render(); Panels.renderRight();
+      UI.toast('Die Skizze ist schon voll bestimmt.', { icon: 'check' });
+      return res;
+    }
+    S.autoDef = res; render(); Panels.renderRight();
+    UI.hint('<b>Vorschläge (gestrichelt):</b> Klick rechts auf <b>Übernehmen</b>, um alle Regeln und Maße in einem Schritt anzulegen – oder <b>Abbrechen</b>.');
+    return res;
+  }
+  function cancelAutoDefine() {
+    if (!S || !S.autoDef) return false;
+    S.autoDef = null; UI.hint(HINTS[S.tool]); render(); Panels.renderRight();
+    return true;
+  }
+  function applyAutoDefine() {
+    if (!S || !S.autoDef) return false;
+    const prop = S.autoDef;
+    S.autoDef = null;
+    pushUndo();
+    for (const dm of prop.dims) {
+      if (dm.e) S.dims = S.dims.filter((d) => !(d.ref && d.e === dm.e && d.k === dm.k));
+    }
+    S.cons.push(...deepClone(prop.cons));
+    S.dims.push(...deepClone(prop.dims));
+    let r = reapply();
+    if (!r || !r.ok) {
+      for (const eSol of prop.ents || []) {
+        const eCur = ent(eSol.id);
+        if (!eCur) continue;
+        for (const k of Solver.varsOf(eCur) || []) {
+          const val = Solver.getK(eSol, k);
+          if (k === 'r' || k === 'rx' || k === 'ry' || (k === 'h' && eCur.type === 'text')) eCur[k] = val;
+          else if (/^p(\d+)_([01])$/.test(k)) { const [, idx, ax] = /^p(\d+)_([01])$/.exec(k); eCur.pts[+idx][+ax] = val; }
+          else eCur[k[0]][+k[1]] = val;
+        }
+      }
+      r = reapply();
+    }
+    let snapped = false;
+    for (const c of prop.cons) {
+      if (c.type !== 'coincident' || !c.refs || c.refs.length < 2) continue;
+      const [rA, rB] = c.refs;
+      const eA = rA && rA.e ? ent(rA.e) : null;
+      if (eA && rB && rB.e === 'origin' && (rA.p === 'a' || rA.p === 'b' || (eA.type === 'spline' && /^p\d+$/.test(rA.p)))) {
+        const pA = getEndPt(eA, rA.p === 'p0' ? 'a' : rA.p === 'p' + ((eA.pts || []).length - 1) ? 'b' : rA.p);
+        if (pA && SK.d2(pA, [0, 0]) < 1e-4) { setEndPt(eA, rA.p === 'p0' ? 'a' : rA.p === 'p' + ((eA.pts || []).length - 1) ? 'b' : rA.p, [0, 0]); snapped = true; }
+      } else if (eA && rB && rB.e) {
+        const eB = ent(rB.e);
+        const kA = rA.p === 'p0' ? 'a' : eA.type === 'spline' && rA.p === 'p' + ((eA.pts || []).length - 1) ? 'b' : (rA.p === 'a' || rA.p === 'b' ? rA.p : null);
+        const kB = eB && (rB.p === 'p0' ? 'a' : eB.type === 'spline' && rB.p === 'p' + ((eB.pts || []).length - 1) ? 'b' : (rB.p === 'a' || rB.p === 'b' ? rB.p : null));
+        if (eB && kA && kB) {
+          const pA = getEndPt(eA, kA), pB = getEndPt(eB, kB);
+          if (pA && pB && SK.d2(pA, pB) < 1e-4) { setEndPt(eB, kB, pA.slice()); snapped = true; }
+        }
+      }
+    }
+    if (snapped) r = reapply();
+    UI.hint(HINTS[S.tool]); render(); Panels.renderRight();
+    const parts = [];
+    if (prop.cons.length) parts.push(`${prop.cons.length} ${prop.cons.length === 1 ? 'Regel' : 'Regeln'}`);
+    if (prop.dims.length) parts.push(`${prop.dims.length} ${prop.dims.length === 1 ? 'Maß' : 'Maße'}`);
+    const tail = r && r.ok && r.dof === 0 ? ' – die Skizze ist jetzt voll bestimmt.' : '.';
+    UI.toast(`Übernommen: ${parts.join(' und ')}${tail}`, { icon: 'check', ms: 3800 });
+    return true;
   }
 
   // ---------- Rechte Leiste ----------
@@ -17218,6 +17571,37 @@ const Sketch = (() => {
         if (!st.ok) w.append(h('div', { class: 'err-box', html: '<b>' + ERRORS.sketchOverConstrained.titel + '</b><br>' + ERRORS.sketchOverConstrained.erklaerung + ' ' + ERRORS.sketchOverConstrained.loesung }));
         else if (st.dof === 0) w.append(h('div', { class: 'ok-box', html: '<b>Voll bestimmt</b> – alles liegt fest. Dunkle Linien können nicht mehr verrutschen.' }));
         else w.append(h('div', { class: 'hint-box', html: `<b>Noch ${st.dof} ${st.dof === 1 ? 'Freiheit' : 'Freiheiten'}</b> – <span style="color:${Viewer.theme.dark ? '#5aa9ff' : '#1c6fd1'};font-weight:600">blaue</span> Teile lassen sich noch verschieben. Mit Maßen und Regeln legst du sie fest.` }));
+      }
+      if (!isLoftLine() && S.ctx.mode !== 'patpath' && !isPathEdit()) {
+        if (S.autoDef) {
+          const ad = S.autoDef;
+          const box = h('div', { class: 'sk-autodef-box', id: 'sk-autodef-box' });
+          const headParts = [];
+          if (ad.cons.length) headParts.push(`${ad.cons.length} ${ad.cons.length === 1 ? 'Regel' : 'Regeln'}`);
+          if (ad.dims.length) headParts.push(`${ad.dims.length} ${ad.dims.length === 1 ? 'Maß' : 'Maße'}`);
+          box.append(h('div', { class: 'sk-autodef-head' }, h('b', null, 'Vorschlag: ' + headParts.join(', '))));
+          const list = h('div', { class: 'sk-autodef-list' });
+          const cc = new Map();
+          for (const c of ad.cons) cc.set(c.type, (cc.get(c.type) || 0) + 1);
+          const dc = new Map();
+          for (const d of ad.dims) {
+            const grp = d.k === 'x' || d.k === 'y' ? 'Lage zum Ursprung' : d.k === 'd' || d.k === 'r' ? 'Durchmesser/Radien' : d.k === 'ang' ? 'Winkel' : 'Längen/Größen';
+            dc.set(grp, (dc.get(grp) || 0) + 1);
+          }
+          for (const [t, n] of cc) list.append(h('span', null, `${n}× ${CNAME[t] || t}`));
+          for (const [g, n] of dc) list.append(h('span', null, `${n}× ${g}`));
+          if (ad.dofAfter === 0) list.append(h('span', { style: { color: 'var(--ok)', fontWeight: '600' } }, 'Danach ist die Skizze voll bestimmt.'));
+          box.append(list, h('div', { class: 'hint-box' }, 'Vorschläge erscheinen gestrichelt im Bild.'));
+          const ap = h('button', { type: 'button', class: 'btn primary', id: 'sk-autodef-apply' }); ap.innerHTML = icon('check') + 'Übernehmen'; ap.onclick = () => applyAutoDefine();
+          const ca = h('button', { type: 'button', class: 'btn', id: 'sk-autodef-cancel' }); ca.innerHTML = icon('close') + 'Abbrechen'; ca.onclick = () => cancelAutoDefine();
+          box.append(h('div', { class: 'btn-row' }, ap, ca));
+          w.append(box);
+        } else {
+          const adBtn = h('button', { type: 'button', class: 'btn', id: 'sk-autodef', 'data-help': 'sketchAutoDefine' });
+          adBtn.innerHTML = icon('lock') + 'Fertig bestimmen';
+          adBtn.onclick = () => proposeAutoDefine();
+          w.append(h('div', { class: 'btn-row' }, adBtn));
+        }
       }
       w.append(h('div', { class: 'hint-box', html: HINTS[S.tool] }));
       if (S.tool === 'corner') {
@@ -17762,7 +18146,7 @@ const Sketch = (() => {
     window.addEventListener('pointerup', (e) => { if (S) { onUp(e); stepUp(e); } });
     window.addEventListener('pointercancel', () => { if (S && S.band) clearBand(); });
   }
-  return { copySel, pasteClip, setRefDim, check: runCheck, repair: repairCheck, focusCheckIssue, bandSelect, init, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startPath, startLoftPath, editItem, pushPullFace, renderPanel, onKey, cancel, scaleAll, insertEnts, textToCurves, setBg, setTool, get active() { return !!S; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
+  return { copySel, pasteClip, setRefDim, check: runCheck, repair: repairCheck, focusCheckIssue, autoDefine: proposeAutoDefine, applyAutoDefine, cancelAutoDefine, bandSelect, init, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startPath, startLoftPath, editItem, pushPullFace, renderPanel, onKey, cancel, scaleAll, insertEnts, textToCurves, setBg, setTool, get active() { return !!S; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
 })();
 
 // ---- 56-notes.js ----
@@ -18805,6 +19189,7 @@ const Commands = (() => {
     for (const d of LIB.filter((x) => !x.buy && !x.drone)) add('lib-' + d.lib, d.label + ' hinzufügen', d.icon, 'bauteil ' + d.desc, () => Actions.addPart(d, libDefaults(d)), { group: 'Bauteile' });
     add('sketch', 'Skizze zeichnen', 'sketch', 'zeichnen 2d profil umriss extrudieren', () => Sketch.chooseAndStart(), { group: 'Werkzeuge', kbd: 'S' });
     add('sketch-check', 'Skizze prüfen (Lücken und doppelte Linien)', 'target', 'skizze prüfen pruefer lücke lücken offen doppelt reparieren fehler', () => { if (Sketch.active) Sketch.check(); else UI.toast('Öffne zuerst eine Skizze, um sie zu prüfen.', { icon: 'info' }); }, { group: 'Werkzeuge' });
+    add('sketch-autodef', 'Skizze fertig bestimmen (Regeln & Maße vorschlagen)', 'lock', 'skizze fertig bestimmen voll bestimmt regeln masse auto', () => { if (Sketch.active) Sketch.autoDefine(); else UI.toast('Öffne zuerst eine Skizze, um sie fertig zu bestimmen.', { icon: 'info' }); }, { group: 'Werkzeuge' });
     add('hole-wizard', 'Bohrungs-Assistent', 'holeWizard', 'bohrung loch schraube gewinde senkung einsatz mutter sackloch bohrspitze passbohrung h7 zentrierbohrung', () => Place.holeWizard($('#t-parts')), { group: 'Bearbeiten' });
     add('cosmetic-thread', 'Gewinde markieren (kosmetisch)', 'thread', 'gewinde kosmetisch markieren metrisch m3 m4 m5 m6 m8 echt schraube', () => { const f = Actions.selectedFace(); if (f && f.info && f.info.t === 'CYLINDRE') Features.threadPop(f, $('#center')); else UI.toast('Klick zuerst eine runde Fläche (Zylinder) an, um dort ein Gewinde zu markieren.', { icon: 'info' }); }, { group: 'Bearbeiten' });
     add('pattern-rect', 'Rechteckmuster', 'patternRect', 'muster reihe raster kopien vervielfachen', () => Features.pattern('rect'), { group: 'Bearbeiten' });
