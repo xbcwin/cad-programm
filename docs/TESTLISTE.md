@@ -1855,6 +1855,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Layout & Hilfetexte**: `#coords`, `#status-sel`, `#status-unit`, `#status-calc` und `#ampel` liegen sauber nebeneinander im Bildbereich; `statusSel`, `statusUnit` und `statusCalc` sind in `werkzeug-hilfen.json` und `HELP` vorhanden.
 - [ ] **Von Hand**: Im Browser bei engem Fenster (< 1100 px), im Skizzen-Modus (Linien, Rechtecke, Mehrfach-Auswahl) und bei langen Neuberechnungen prüfen, dass sich die Felder in der Statusleiste nicht überdecken oder abschneiden.
 
+## Wiederherstellen nach Absturz (Auto [A-051], BE-15)
+
+- [x] **Meldung nach Absturz / Neuladen ohne Speichern**: Projekt ändern und die Seite ohne Speichern neu laden zeigt `#recovery-bar` mit „Tracery wurde nicht richtig beendet – letzten Stand wiederherstellen?“, Projektname und Uhrzeit.
+- [x] **Wiederherstellen & sauberes Neuladen**: Klick auf „Wiederherstellen“ lädt alle ungesicherten Änderungen fehlerfrei ins Modell; ein erneutes Neuladen ohne weitere Änderung startet direkt ohne Meldung.
+- [x] **Verwerfen**: Klick auf „Verwerfen“ kehrt zum letzten gespeicherten Stand zurück und löscht den Wiederherstellungs-Eintrag dauerhaft.
+- [x] **Große Projekte aus IndexedDB & Hilfetext**: Projekte > 400 KB samt 15-MB-STEP-Import (`blobId`) werden rein über IndexedDB (`meta.recovery` + `blobs`) wiederhergestellt; Hilfetext `crashRecovery` ist vollständig.
+- [ ] **Von Hand**: Im Browser ein Projekt bearbeiten, den Tab hart schließen oder aktualisieren und die Meldung auf Startseite und 3D-Ansicht prüfen.
+
 ## Fehler melden
 
 ```

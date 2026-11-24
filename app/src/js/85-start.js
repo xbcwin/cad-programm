@@ -105,13 +105,168 @@ const Templates = (() => {
 
 const Start = (() => {
   let el = null;
+  let recBaseDoc = null, recPending = null, recBarEl = null, recTimer = null, recTracking = false, recBusy = false;
   function tplThumb(t) {
     return `<svg viewBox="0 0 110 56" aria-hidden="true"><style>.a1{fill:var(--accent);fill-opacity:.3;stroke:var(--ink);stroke-opacity:.5;stroke-width:1}.a2{fill:var(--accent);fill-opacity:.55;stroke:var(--ink);stroke-opacity:.5;stroke-width:1}.a3{fill:var(--accent);fill-opacity:.8;stroke:var(--ink);stroke-opacity:.5;stroke-width:1}.b1{fill:#e8833a;fill-opacity:.35;stroke:var(--ink);stroke-opacity:.5;stroke-width:1}.b2{fill:#e8833a;fill-opacity:.6;stroke:var(--ink);stroke-opacity:.5;stroke-width:1}.b3{fill:#e8833a;fill-opacity:.85;stroke:var(--ink);stroke-opacity:.5;stroke-width:1}.hole{fill:var(--surface);stroke:var(--ink);stroke-opacity:.6;stroke-width:1}.line{stroke:var(--ink);stroke-opacity:.6;stroke-width:1.4}</style>${t.svg}</svg>`;
+  }
+  function isEmptyDoc(doc) {
+    if (!doc) return true;
+    return Model.countItems(doc) === 0
+      && !(doc.params && doc.params.length)
+      && !(doc.tables && doc.tables.length)
+      && !(doc.notes && doc.notes.length);
+  }
+  function formatRecoveryTime(ts) {
+    if (!ts) return '';
+    try { return new Date(ts).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' }); }
+    catch (_) { return ''; }
+  }
+  function hideRecoveryBanner() {
+    if (recBarEl) { recBarEl.remove(); recBarEl = null; }
+  }
+  function renderRecoveryBanner() {
+    hideRecoveryBanner();
+    if (!recPending) return;
+    const name = recPending.name || 'Neues Projekt';
+    const time = formatRecoveryTime(recPending.savedAt);
+    const n = recPending.itemCount || 0;
+    const metaKey = n === 1 ? 'recovery.metaOne' : 'recovery.metaMany';
+    const bar = h('div', {
+      id: 'recovery-bar',
+      class: 'recovery-bar',
+      role: 'alert',
+      'aria-live': 'polite',
+      'data-project-name': name,
+      'data-saved-at': String(recPending.savedAt || ''),
+    });
+    const ic = h('div', { class: 'rb-ic' });
+    ic.innerHTML = icon('warn');
+    const txt = h('div', { class: 'rb-txt' },
+      h('b', null, T('recovery.title')),
+      h('span', null, T(metaKey, { name, time, n })),
+    );
+    const restoreBtn = h('button', {
+      type: 'button',
+      id: 'recovery-restore',
+      class: 'btn primary small',
+      'data-help': 'crashRecovery',
+      onclick: () => restoreRecovery(),
+    }, T('recovery.restore'));
+    const dismissBtn = h('button', {
+      type: 'button',
+      id: 'recovery-dismiss',
+      class: 'btn ghost small',
+      onclick: () => dismissRecovery(),
+    }, T('recovery.dismiss'));
+    const acts = h('div', { class: 'rb-acts' }, restoreBtn, dismissBtn);
+    bar.append(ic, txt, acts);
+    const startInner = el && el.querySelector('.start-inner');
+    if (startInner) {
+      const head = startInner.querySelector('.start-head');
+      if (head && head.nextSibling) startInner.insertBefore(bar, head.nextSibling);
+      else startInner.prepend(bar);
+    } else {
+      const host = $('#overlay') || $('#center') || document.body;
+      host.append(bar);
+    }
+    recBarEl = bar;
+  }
+  function scheduleRecoverySave() {
+    clearTimeout(recTimer);
+    recTimer = null;
+    if (!recTracking || !App.doc) return;
+    if (isEmptyDoc(App.doc) && !recBaseDoc) {
+      Store.clearRecovery();
+      return;
+    }
+    const itemCount = Model.countItems(App.doc);
+    try {
+      storageSet('tracery.recovery.flag', JSON.stringify({
+        active: true,
+        docId: App.doc.id,
+        name: App.doc.name || 'Neues Projekt',
+        savedAt: Date.now(),
+        itemCount,
+      }));
+    } catch (_) {}
+    recTimer = setTimeout(() => {
+      recTimer = null;
+      if (!recTracking || !App.doc) return;
+      Store.saveRecovery(App.doc, { baseDoc: recBaseDoc, itemCount: Model.countItems(App.doc) });
+    }, 200);
+  }
+  function flushRecovery() {
+    clearTimeout(recTimer);
+    recTimer = null;
+    if (!recTracking || recPending || !App.dirty || !App.doc) return Promise.resolve(false);
+    if (isEmptyDoc(App.doc) && !recBaseDoc) return Store.clearRecovery();
+    return Store.saveRecovery(App.doc, { baseDoc: recBaseDoc, itemCount: Model.countItems(App.doc) });
+  }
+  async function checkRecoveryOnBoot() {
+    const rec = await Store.loadRecovery();
+    if (rec && rec.doc && rec.doc.format === 'masswerk') {
+      recPending = rec;
+      return rec;
+    }
+    if (Store.getRecoveryFlag && Store.getRecoveryFlag()) await Store.clearRecovery();
+    return null;
+  }
+  function startRecoveryTracking(baseDoc) {
+    recBaseDoc = isEmptyDoc(baseDoc) ? null : deepClone(baseDoc);
+    recTracking = true;
+    if (recPending) renderRecoveryBanner();
+  }
+  async function restoreRecovery() {
+    if (!recPending || recBusy) return false;
+    recBusy = true;
+    const btn = $('#recovery-restore');
+    if (btn) btn.disabled = true;
+    const rec = recPending;
+    try {
+      await Store.hydrateDoc(rec.doc);
+      recPending = null;
+      hideRecoveryBanner();
+      hide();
+      App.setDoc(rec.doc, { fit: true, fromRecovery: true });
+      recBaseDoc = isEmptyDoc(App.doc) ? null : deepClone(App.doc);
+      await Store.clearRecovery();
+      await App.autosave.flush();
+      await App.rebuild();
+      Viewer.fit(null, false);
+      UI.toast(T('recovery.restored', { name: rec.name || App.doc.name || 'Projekt' }), { icon: 'check', ms: 4500 });
+      return true;
+    } catch (e) {
+      console.warn(e);
+      UI.toast(T('recovery.failed'), { kind: 'bad', ms: 5000 });
+      renderRecoveryBanner();
+      return false;
+    } finally {
+      recBusy = false;
+    }
+  }
+  async function dismissRecovery() {
+    if (!recPending || recBusy) return false;
+    recBusy = true;
+    const rec = recPending;
+    try {
+      recPending = null;
+      hideRecoveryBanner();
+      await Store.clearRecovery();
+      if (rec.baseDoc) {
+        await Store.saveProject(rec.baseDoc, Model.countItems(rec.baseDoc));
+      } else if (rec.docId) {
+        await Store.deleteProject(rec.docId, App.doc && App.doc.id !== rec.docId ? App.doc : null);
+      }
+      UI.toast(T('recovery.discarded'), { icon: 'info', ms: 3500 });
+      return true;
+    } finally {
+      recBusy = false;
+    }
   }
   function show() {
     hide();
     // erst speichern, damit „Weiterarbeiten“ den aktuellen Stand und Namen zeigt
-    try { App.autosave.flush(); } catch (_) {}
+    if (!recPending) { try { App.autosave.flush(); } catch (_) {} }
     el = h('div', { class: 'start', role: 'dialog', 'aria-label': T('start.aria') });
     const inner = h('div', { class: 'start-inner' });
     const head = h('div', { class: 'start-head' });
@@ -181,10 +336,11 @@ const Start = (() => {
     const close = h('button', { type: 'button', class: 'icon-btn', 'aria-label': T('common.close'), style: { position: 'fixed', top: '12px', right: '12px' } }); close.innerHTML = icon('close'); close.onclick = hide;
     if (App.doc.items.length) el.append(close);
     document.body.append(el);
+    if (recPending) renderRecoveryBanner();
     const onKey = (e) => { if (e.key === 'Escape' && el && App.doc.items.length) hide(); };
     document.addEventListener('keydown', onKey, { once: true });
   }
-  function hide() { if (el) { el.remove(); el = null; } }
+  function hide() { if (el) { el.remove(); el = null; if (recPending) renderRecoveryBanner(); } }
   function openDrone(t) {
     App.setDoc(t.build()); hide();
     UI.toast(`${t.name} geladen. Links unter „Maße“ änderst du Achsabstand, Armbreite, Stack und mehr – alles wandert mit.`, { icon: 'check', ms: 6000 });
@@ -1349,7 +1505,7 @@ const Start = (() => {
       if (vers) await Versions.importList(doc.id, vers);
       ensureModelMode();
       App.setDoc(doc); hide();
-      App.fileSavedRev = App.revision;
+      App.markClean();
       UI.toast(`„${doc.name}“ geöffnet.`, { icon: 'folder' });
     } catch (e) { const E = ERRORS.importFailed; UI.toast(`${E.titel}. ${E.erklaerung} ${E.loesung}`, { kind: 'bad', ms: 7000 }); console.warn(e); }
   }
@@ -1434,7 +1590,7 @@ const Start = (() => {
   }
   async function saveFile() {
     const ok = await Print.save(projectFileName(), await projectPayload());
-    if (ok) App.fileSavedRev = App.revision;
+    if (ok) App.markClean();
   }
 
   // ---------- Projekt in Ordner speichern & automatisch mitschreiben (BE-14) ----------
@@ -1508,6 +1664,7 @@ const Start = (() => {
       target.writing = false;
       target.status = target.queued ? 'pending' : 'saved';
       App.fileSavedRev = rev;
+      if (App.revision === rev) App.markClean();
       updateFolderUI();
       if (opts.announce) {
         UI.toast(`Gespeichert in „${target.name}/${fileName}“. Änderungen werden alle 10 s automatisch mitgeschrieben.`, { icon: 'check', ms: 5000 });
@@ -1798,6 +1955,28 @@ const Start = (() => {
   function init() {
     if (folderInited) return;
     folderInited = true;
+    App.on('docLoaded', ({ doc, opts }) => {
+      if (!recTracking || (opts && opts.fromBoot)) return;
+      clearTimeout(recTimer); recTimer = null;
+      recBaseDoc = isEmptyDoc(doc) ? null : deepClone(doc);
+      if (opts && opts.fromRecovery) return;
+      if (recPending) { recPending = null; hideRecoveryBanner(); }
+      Store.clearRecovery();
+    });
+    App.on('dirty', () => {
+      if (!recTracking) return;
+      if (recPending) { recPending = null; hideRecoveryBanner(); }
+      scheduleRecoverySave();
+    });
+    App.on('clean', () => {
+      if (!recTracking) return;
+      clearTimeout(recTimer); recTimer = null;
+      recBaseDoc = isEmptyDoc(App.doc) ? null : deepClone(App.doc);
+      if (recPending) { recPending = null; hideRecoveryBanner(); }
+      Store.clearRecovery();
+      try { App.autosave.flush(); } catch (_) {}
+    });
+    window.addEventListener('pagehide', () => { flushRecovery(); });
     App.on('doc', () => {
       syncImportChecks();
       if (!folder) return;
@@ -1849,6 +2028,8 @@ const Start = (() => {
     init, importCAD, parseSTEP, import3MF, parse3MF, importOBJ, parseOBJ, importDXF, parseDXF, parseSVG, show, hide, newProject, openFile, openBlob, saveFile,
     checkImport, healImport, importCheckOf, setImportHealOpts, dismissImportBanner,
     folderSupported, folderInfo, saveToFolder, saveToFolderNow, disconnectFolder,
+    checkRecoveryOnBoot, startRecoveryTracking, restoreRecovery, dismissRecovery, flushRecovery,
+    get pendingRecovery() { return recPending; },
     get folderDelay() { return folderDelay; }, set folderDelay(ms) { folderDelay = Math.max(0, Number(ms) || 10000); },
     openDrone, get open() { return !!el; },
   };

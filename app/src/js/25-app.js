@@ -2,7 +2,7 @@
 const App = (() => {
   const S = {
     doc: Model.newDoc(), sel: [], face: null, edges: [], mode: 'model', tool: null,
-    results: new Map(), resolved: new Map(), baseBoxes: new Map(), ownBoxes: new Map(), errors: [], undo: [], redo: [], extra: [], hideIds: new Set(), revision: 0, lastSavedRev: -1, fileSavedRev: -1,
+    results: new Map(), resolved: new Map(), baseBoxes: new Map(), ownBoxes: new Map(), errors: [], undo: [], redo: [], extra: [], hideIds: new Set(), revision: 0, cleanRev: 0, lastSavedRev: -1, fileSavedRev: -1,
     ctx: null, iso: null,   // gerade bearbeitetes Bauteil / isoliertes Teil (nur Ansicht, nicht gespeichert)
   };
   const ev = makeEmitter();
@@ -11,7 +11,7 @@ const App = (() => {
   // ---------- Dokument ----------
   function setDoc(doc, opts = {}) {
     // noch ausstehendes Speichern des bisherigen Projekts zuerst erledigen
-    if (S.doc) { try { autosave.flush(); } catch (_) {} }
+    if (S.doc && !(opts && opts.fromBoot)) { try { autosave.flush(); } catch (_) {} }
     S.doc = Model.migrate(doc);
     if (typeof SK !== 'undefined' && SK.syncFonts) SK.syncFonts(S.doc.fonts);
     if (typeof Store !== 'undefined') {
@@ -22,9 +22,11 @@ const App = (() => {
     S.sel = []; S.face = null; S.edges = []; S.undo = []; S.redo = []; S.extra = []; S.ctx = null; S.iso = null;
     for (const id of [...S.results.keys()]) Viewer.removeNode(id);
     S.results.clear(); S.resolved.clear(); S.baseBoxes.clear(); S.ownBoxes.clear(); S.errors = []; S.revision++;
+    S.cleanRev = S.revision;
+    if (opts && opts.saved) S.fileSavedRev = S.revision;
     Viewer.clearGhosts(); Views.reset(); Versions.compareOff();
-    ev.emit('doc'); ev.emit('selection'); ev.emit('history');
-    autosave();
+    ev.emit('doc'); ev.emit('docLoaded', { doc: S.doc, opts }); ev.emit('selection'); ev.emit('history');
+    if (!(opts && opts.noAutosave)) autosave();
     rebuild().then(() => { if (opts.fit !== false) Viewer.fit(null, false); });
   }
   function snapshot() { return JSON.stringify(S.doc); }
@@ -85,6 +87,7 @@ const App = (() => {
     Model.useVars(Model.vars(S.doc).v);
     S.doc.modified = Date.now(); S.revision++;
     ev.emit('doc');
+    ev.emit('dirty', { doc: S.doc, revision: S.revision });
     autosave();
     if (!noRebuild) rebuild();
   }
@@ -98,7 +101,12 @@ const App = (() => {
     if (S.face && !valid.has(S.face.id)) S.face = null;
     S.edges = S.edges.filter((e) => valid.has(e.id));
     S.revision++;
-    ev.emit('doc'); ev.emit('selection'); autosave(); rebuild();
+    ev.emit('doc'); ev.emit('dirty', { doc: S.doc, revision: S.revision }); ev.emit('selection'); autosave(); rebuild();
+  }
+  function markClean() {
+    S.cleanRev = S.revision;
+    S.fileSavedRev = S.revision;
+    ev.emit('clean', { doc: S.doc, revision: S.revision });
   }
   function undo(silent) {
     const step = S.undo.pop(); if (!step) return;
@@ -370,6 +378,8 @@ const App = (() => {
     get ctx() { return S.ctx; }, get iso() { return S.iso; }, setCtx, setIso, applyView,
     get tool() { return S.tool; }, set tool(t) { S.tool = t; ev.emit('tool'); },
     get fileSavedRev() { return S.fileSavedRev; }, set fileSavedRev(v) { S.fileSavedRev = v; },
+    get dirty() { return S.revision !== S.cleanRev; },
+    markClean,
     setDoc, snapshot, change, touched, pushUndo, restore, undo, redo, undoTo, squash, rebuild, requalify, replaceMesh, select, clearSelection, selectedItems, errorsFor, localBox, refreshSelectionVisuals,
     recentProjects, loadStored, deleteStored, autosave, fitAfterBuild, on: ev.on, emit: ev.emit,
   };

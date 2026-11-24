@@ -1,8 +1,12 @@
 // ================= Browser-Datenbank (IndexedDB) für große Projekte und binäre Importe =================
 const Store = (() => {
   const DB_NAME = 'tracery-db', DB_VER = 1;
+  const RECOVERY_KEY = 'recovery';
+  const LS_REC_FLAG = 'tracery.recovery.flag';
+  const LS_REC_QUICK = 'tracery.recovery.quick';
+  const QUICK_MAX_CHARS = 400000;
   let db = null, dbPromise = null, initPromise = null, ready = false, usingIDB = true;
-  let index = [], lastId = null;
+  let index = [], lastId = null, recoveryCache = null;
   const blobCache = new Map();     // blobId -> Uint8Array
   const pendingBlobs = new Map();  // blobId -> Promise<void>
   const versionsCache = new Map(); // projectId -> Array
@@ -387,9 +391,13 @@ const Store = (() => {
     if (!d) return;
     const keep = new Set();
     if (activeDoc) collectBlobIds(activeDoc, keep);
-    const [projs, vers] = await Promise.all([txGetAll(d, 'projects'), txGetAll(d, 'versions')]);
+    const [projs, vers, recMeta] = await Promise.all([txGetAll(d, 'projects'), txGetAll(d, 'versions'), txGet(d, 'meta', RECOVERY_KEY).catch(() => null)]);
     for (const p of projs) collectBlobIds(p, keep);
     for (const vr of vers) for (const v of (vr && vr.list) || []) if (v && v.doc) collectBlobIds(v.doc, keep);
+    if (recMeta && recMeta.v) {
+      if (recMeta.v.doc) collectBlobIds(recMeta.v.doc, keep);
+      if (recMeta.v.baseDoc) collectBlobIds(recMeta.v.baseDoc, keep);
+    }
     const keys = await txGetAllKeys(d, 'blobs');
     const stale = keys.filter((k) => !keep.has(k) && !pendingBlobs.has(k));
     if (stale.length) {
@@ -406,22 +414,122 @@ const Store = (() => {
     if (lastId === id) lastId = index[0] ? index[0].id : null;
     versionsCache.delete(id);
     fallbackProjects.delete(id);
+    if (recoveryCache && recoveryCache.docId === id) {
+      recoveryCache = null;
+      storageDel(LS_REC_FLAG);
+      storageDel(LS_REC_QUICK);
+    }
     const idxSnap = index.slice();
     const lastSnap = lastId;
 
     return enqueue(async () => {
       const d = await ensureDB();
       if (!d) { storageDel('masswerk.proj.' + id); storageDel('masswerk.versions.' + id); return true; }
+      const curRec = await txGet(d, 'meta', RECOVERY_KEY).catch(() => null);
+      const clearRec = !!(curRec && curRec.v && curRec.v.docId === id);
       const tx = d.transaction(['projects', 'versions', 'meta'], 'readwrite');
       tx.objectStore('projects').delete(id);
       tx.objectStore('versions').delete(id);
       const m = tx.objectStore('meta');
       m.put({ k: 'index', v: idxSnap });
       if (lastSnap) m.put({ k: 'last', v: lastSnap }); else m.delete('last');
+      if (clearRec) {
+        m.delete(RECOVERY_KEY);
+        recoveryCache = null;
+        storageDel(LS_REC_FLAG);
+        storageDel(LS_REC_QUICK);
+      }
       await txDone(tx);
       await gcBlobs(activeDoc);
       return true;
     }).catch((e) => { console.warn('Projekt löschen:', e); return false; });
+  }
+
+  // ---------- Absturz-Wiederherstellung ----------
+  function getRecoveryFlag() {
+    const raw = storageGet(LS_REC_FLAG);
+    if (!raw) return null;
+    try {
+      const f = JSON.parse(raw);
+      return f && f.active ? f : null;
+    } catch (_) { return null; }
+  }
+  function saveRecovery(doc, opts = {}) {
+    if (!doc || !doc.id) return Promise.resolve(false);
+    extractBlobs(doc);
+    if (opts.baseDoc) extractBlobs(opts.baseDoc);
+    const snap = deepClone(doc);
+    const baseSnap = opts.baseDoc ? deepClone(opts.baseDoc) : null;
+    const n = opts.itemCount != null ? opts.itemCount : countItems(snap);
+    const rec = {
+      docId: snap.id,
+      name: snap.name || 'Neues Projekt',
+      savedAt: opts.savedAt || Date.now(),
+      itemCount: n,
+      doc: snap,
+      baseDoc: baseSnap,
+    };
+    recoveryCache = rec;
+    try {
+      storageSet(LS_REC_FLAG, JSON.stringify({
+        active: true,
+        docId: rec.docId,
+        name: rec.name,
+        savedAt: rec.savedAt,
+        itemCount: rec.itemCount,
+      }));
+      const raw = JSON.stringify(rec);
+      if (raw.length <= QUICK_MAX_CHARS) storageSet(LS_REC_QUICK, raw);
+      else storageDel(LS_REC_QUICK);
+    } catch (_) {
+      storageDel(LS_REC_QUICK);
+    }
+    return enqueue(async () => {
+      await flushBlobs();
+      const d = await ensureDB();
+      if (d) await txPut(d, 'meta', { k: RECOVERY_KEY, v: rec });
+      return true;
+    }).catch((e) => { console.warn('Absturz-Stand sichern:', e); return false; });
+  }
+  async function loadRecovery() {
+    await init();
+    await writeQueue;
+    let idbRec = null;
+    const d = await ensureDB();
+    if (d) {
+      try {
+        const meta = await txGet(d, 'meta', RECOVERY_KEY);
+        if (meta && meta.v && meta.v.doc && meta.v.doc.format === 'masswerk') idbRec = meta.v;
+      } catch (e) { console.warn('Absturz-Stand laden:', e); }
+    }
+    let quickRec = null;
+    const flag = getRecoveryFlag();
+    if (flag) {
+      try {
+        const raw = storageGet(LS_REC_QUICK);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && parsed.doc && parsed.doc.format === 'masswerk') quickRec = parsed;
+        }
+      } catch (_) {}
+    }
+    let chosen = null;
+    if (idbRec && quickRec) chosen = (quickRec.savedAt || 0) > (idbRec.savedAt || 0) ? quickRec : idbRec;
+    else chosen = idbRec || quickRec || null;
+    recoveryCache = chosen;
+    return chosen;
+  }
+  function clearRecovery() {
+    recoveryCache = null;
+    storageDel(LS_REC_FLAG);
+    storageDel(LS_REC_QUICK);
+    return enqueue(async () => {
+      const d = await ensureDB();
+      if (!d) return true;
+      const tx = d.transaction('meta', 'readwrite');
+      tx.objectStore('meta').delete(RECOVERY_KEY);
+      return txDone(tx);
+    }).catch((e) => { console.warn('Absturz-Stand löschen:', e); return false; });
   }
 
   // ---------- Versionen ----------
@@ -471,6 +579,7 @@ const Store = (() => {
     extractBlobs, collectBlobIds, hydrateDoc, inlineBlobs,
     recentProjects, hasProject, getLastId, saveProject, loadProject, deleteProject, gcBlobs,
     loadVersions, getVersionsSync, setVersions,
+    saveRecovery, loadRecovery, clearRecovery, getRecoveryFlag,
     get ready() { return ready; },
     get hasProjects() { return index.length > 0 || !!lastId; },
     get dbName() { return DB_NAME; },

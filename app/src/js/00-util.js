@@ -1592,6 +1592,11 @@ const HELP = {
   "tip": "Rechenzustand des CAD-Kerns",
   "hilfe": "Zeigt auf einen Blick, ob der OpenCascade-Kern gerade rechnet, bereit ist oder ob ein Schritt im Verlauf einen Fehler meldet.",
   "tipp": "Bei „1 Fehler“ klickst du rechts daneben auf die Ampel oder im Verlauf auf den rot markierten Schritt für Details."
+ },
+ "crashRecovery": {
+  "tip": "Ungesicherten Stand nach einem Absturz oder Neuladen wiederherstellen",
+  "hilfe": "Tracery merkt sich laufende Änderungen automatisch in der Browser-Datenbank – auch bei großen Projekten mit importierten 3D-Modellen. Wird die Seite ohne Speichern geschlossen oder neu geladen, erscheint beim nächsten Start dieses Angebot mit Projektname und Uhrzeit.",
+  "tipp": "Mit „Wiederherstellen“ holst du alle ungesicherten Änderungen sofort zurück; „Verwerfen“ kehrt zum letzten gespeicherten Stand zurück."
  }
 };
 
