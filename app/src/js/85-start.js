@@ -1840,6 +1840,19 @@ const Start = (() => {
       }
       return importDXF(f);
     }
+    if (/\.csv$/i.test(f.name) && Sketch.active) {
+      if (Sketch.state && Sketch.state.step) {
+        UI.toast('Klick zuerst „Zurück zur Skizze“, um die CSV-Punkte in die Skizze einzufügen.', { icon: 'info', ms: 5000 });
+        return;
+      }
+      try {
+        const txt = await f.text();
+        Sketch.insertPointsCSV(txt, { name: f.name });
+      } catch (_) {
+        UI.toast('Die CSV-Datei konnte nicht gelesen werden.', { kind: 'bad' });
+      }
+      return;
+    }
     if (/\.(step|stp|igs|iges|brep|stl|3mf|obj)$/i.test(f.name)) return importCAD(f);
     try {
       const txt = await f.text(); const doc = JSON.parse(txt);

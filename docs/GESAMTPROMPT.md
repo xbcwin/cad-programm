@@ -237,6 +237,7 @@ Leitlinien:
   - Auswahl (V), Linie (L), Rechteck (R: Ecke/Mitte/gedreht über 3 Punkte), Kreis (C: Mitte/2P/3P), Ellipse (E), Teil-Ellipse (`ellarc`)
   - Bogen (A: 3 Punkte oder tangential), Langloch (G: auch gebogen), Vieleck (P: Umkreis oder Schlüsselweite), Punkt (O)
   - Schablone (J), Formen-Sammlung (`SKO.SHAPES`/`SKO.shapeEnts`/`Sketch.insertShape`: Stern, Pfeil, Herz, Zahnrad-Umriss, Schlüsselloch im Panel `#sk-shapes`), Text (B: Schrift Inter oder eigene TTF über `Sketch.loadFontFile`, fett, Ausrichtung, **Bogen-Radius**, „An Kreis legen“, **entlang einer Linie, eines Bogens oder einer Spline**, `kern`-Unterschneidung + Laufweite), Spline (S)
+  - Kurve aus Formel (`#sk-formula`, `SKO.FORMULA_CURVES`/`SKO.evalFormulaCurve`/`Sketch.insertFormulaCurve` über `Expr.evalRad`, nur Profi: `y = f(x)` oder `x(t), y(t)`, Sinus, Evolvente) und Kurve aus Tabelle (`#sk-csv`, `SKO.parsePointsCSV`/`SKO.pointsToCurveEnts`/`Sketch.insertPointsCSV`, nur Profi: CSV-Datei oder Text als Spline oder Linienzug)
 - **Schablonen:** Pin-Raster, Lüftungsgitter, QFP, QFN, BGA, SOIC, DIP (Maße 2026 gegen JEDEC und Datenblätter geprüft), USB-C-Buchse 9,5 × 3,8, USB-C-Stecker 13 × 7 mit Eckradius, Befestigungslöcher
 - **Bearbeiten:**
   - Ecke runden/fasen (K, auch „Alle Ecken auf einmal“), Trimmen (T, auch Ellipsen), Verlängern (U), Teilen (Y), Versatz (F, auch Ellipsen; der Abstand einer Kette lässt sich später für alle Stücke zusammen ändern)

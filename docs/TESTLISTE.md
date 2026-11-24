@@ -2240,6 +2240,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Elliptischer Bogen per 5 Mausklicks, Richtung umkehren & alle weiteren Formen**: Gedrehter elliptischer Bogen per 5 Klicks samt `#se-ellarc-flip` und Rückgängig; Pfeil, Herz, Zahnrad-Umriss (mit Bohrung) und Schlüsselloch mit geänderten Maßen erzeugen jeweils `1` geschlossene Region ohne offene Enden und lassen sich gemeinsam zu `4` Körpern hochziehen; Hilfetexte `ellipseArc` und `sketchShapes` vorhanden.
 - [ ] **Von Hand**: Im Browser eine gedrehte Teil-Ellipse mit 5 Klicks aufziehen, Enden schließen und alle 5 Formen aus „Formen-Sammlung“ über „Im Bild platzieren“ frei absetzen und hochziehen.
 
+## Kurve aus Formel und aus Tabelle (Auto [A-098], SK-38, SK-39)
+
+- [x] **Nur im Profi-Modus sichtbar**: In „Einfach“ sind `#sk-formula` und `#sk-csv` ausgeblendet, nach Umschalten auf „Profi“ erscheinen beide Abschnitte im Skizzen-Panel.
+- [x] **Kurve aus Formel (`y = sin(x)`, Evolvente & geschlossener Körper)**: `y = sin(x)` von `0` bis `2π` (`41` Punkte, Spline) geht exakt durch `(π/2, 1)`, `(0, 0)` und `(2π, 0)` und lässt sich mit `Strg+Z` zurücknehmen; Vorlage „Evolvente“ füllt `x(t), y(t)` aus und erzeugt die Zahnradflanke; ungültige Formeln melden den Fehler und sperren `#fc-insert`; geschlossener parametrischer Kreis (`10*cos(t)`, `10*sin(t)`) zieht sauber zum 3D-Körper hoch.
+- [x] **CSV mit 5 Punkten → Spline durch alle 5 & geschlossener Linienzug**: Hochgeladene `.csv` mit 5 Punkten erzeugt eine `spline` genau durch alle 5 Punkte; eingefügter Semikolon/Dezimalkomma-Text als geschlossener Linienzug ergibt `5` Linien, `1` Region ohne offene Enden und den exakten 3D-Körper; Hilfetexte (`formulaCurve`, `csvCurve`), DE/EN-Schlüsselgleichheit und Befehlssuche sind ohne Fehler vorhanden.
+- [ ] **Von Hand**: Im Browser eine eigene Formel eintippen (z. B. Parabel mit Projektmaß) und die gestrichelte Live-Vorschau beim Ändern von Bereich und Punktzahl sowie das Ziehen einer `.csv`-Datei direkt in die offene Skizze prüfen.
+
 ## Fehler melden
 
 ```

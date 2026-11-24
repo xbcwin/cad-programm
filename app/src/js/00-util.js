@@ -172,9 +172,17 @@ const Expr = (() => {
     const r = d >= 0 ? Number((c / f).toFixed(d)) : Math.round(c / f);
     return Object.is(r, -0) ? 0 : r;
   }
-  function parse(src, vars = {}, tables, depth = 0) {
-    const s = String(src ?? '');
+  function parse(src, vars = {}, tables, depth = 0, rad = false) {
+    let s = String(src ?? '');
     if (!s.trim()) throw new Error('Formel ist leer.');
+    if (rad) {
+      s = s
+        .replace(/−/g, '-')
+        .replace(/[×·]/g, '*')
+        .replace(/(\d)\s*π/g, '$1*pi')
+        .replace(/π/g, 'pi')
+        .replace(/(\d)\s*(pi)(?![A-Za-zÄÖÜäöüß_0-9])/gi, '$1*$2');
+    }
     const tk = tokenize(s);
     let p = 0;
     const peek = () => tk[p], next = () => tk[p++];
@@ -265,7 +273,7 @@ const Expr = (() => {
       let row = findRow(litKey, parseNum(litKey));
       if (!row && !isQuoted) {
         let kv = NaN, okKey = false;
-        try { kv = parse(rawKey, vars, rawTbls, depth + 1); okKey = true; } catch (_) {}
+        try { kv = parse(rawKey, vars, rawTbls, depth + 1, rad); okKey = true; } catch (_) {}
         if (okKey) {
           row = findRow(String(kv), kv);
           if (!row) throw new Error(`Schlüssel „${fmtFixed(kv, 4)}“ nicht in Tabelle „${tbl.name}“ gefunden.`);
@@ -280,7 +288,7 @@ const Expr = (() => {
       if (!rv) throw new Error(`Wert für „${row.key}“ in Tabelle „${tbl.name}“ fehlt.`);
       if (depth >= 16) throw new Error(`Tabelle „${tbl.name}“ verweist im Kreis auf sich selbst.`);
       try {
-        return parse(rv, vars, rawTbls, depth + 1);
+        return parse(rv, vars, rawTbls, depth + 1, rad);
       } catch (e) {
         throw new Error(`Wert für „${row.key}“ in Tabelle „${tbl.name}“ ist ungültig: ${e.message}`);
       }
@@ -296,8 +304,12 @@ const Expr = (() => {
       if (node.k === 'tcall') return lookupTable(node.rawArgs);
       if (node.k === 'var') {
         if (/^pi$/i.test(node.name)) return Math.PI;
+        if (rad && /^tau$/i.test(node.name)) return Math.PI * 2;
         const key = Object.keys(vars || {}).find((k) => k.toLowerCase() === node.name.toLowerCase());
-        if (key === undefined) throw new Error(`Unbekanntes Maß „${node.name}“ – leg es links unter „Maße“ an.`);
+        if (key === undefined) {
+          if (rad && /^e$/i.test(node.name)) return Math.E;
+          throw new Error(`Unbekanntes Maß „${node.name}“ – leg es links unter „Maße“ an.`);
+        }
         return vars[key];
       }
       if (node.k === 'call') {
@@ -318,7 +330,31 @@ const Expr = (() => {
         }
         if (low === 'sin' || low === 'cos' || low === 'tan') {
           if (args.length !== 1) throw new Error(`${node.name} braucht genau eine Zahl.`);
-          return Math[low]((args[0] * Math.PI) / 180);
+          return Math[low](rad ? args[0] : (args[0] * Math.PI) / 180);
+        }
+        if (rad) {
+          if (low === 'asin' || low === 'acos') {
+            if (args.length !== 1) throw new Error(`${node.name} braucht genau eine Zahl.`);
+            if (args[0] < -1 - 1e-12 || args[0] > 1 + 1e-12) throw new Error(`${node.name} verlangt einen Wert zwischen -1 und 1.`);
+            return Math[low](clamp(args[0], -1, 1));
+          }
+          if (low === 'atan') { if (args.length !== 1) throw new Error('atan braucht genau eine Zahl.'); return Math.atan(args[0]); }
+          if (low === 'atan2') { if (args.length !== 2) throw new Error('atan2 braucht 2 Angaben: atan2(y; x).'); return Math.atan2(args[0], args[1]); }
+          if (low === 'sinh' || low === 'cosh' || low === 'tanh') { if (args.length !== 1) throw new Error(`${node.name} braucht genau eine Zahl.`); return Math[low](args[0]); }
+          if (low === 'exp') { if (args.length !== 1) throw new Error('exp braucht genau eine Zahl.'); return Math.exp(args[0]); }
+          if (low === 'ln') {
+            if (args.length !== 1) throw new Error('ln braucht genau eine Zahl.');
+            if (args[0] <= 0) throw new Error('ln verlangt eine Zahl größer als 0.');
+            return Math.log(args[0]);
+          }
+          if (low === 'log' || low === 'log10') {
+            if (args.length !== 1) throw new Error(`${node.name} braucht genau eine Zahl.`);
+            if (args[0] <= 0) throw new Error(`${node.name} verlangt eine Zahl größer als 0.`);
+            return Math.log10(args[0]);
+          }
+          if (low === 'sign' || low === 'sgn') { if (args.length !== 1) throw new Error(`${node.name} braucht genau eine Zahl.`); return Math.sign(args[0]); }
+          if (low === 'rad') { if (args.length !== 1) throw new Error('rad braucht genau eine Zahl.'); return (args[0] * Math.PI) / 180; }
+          if (low === 'deg') { if (args.length !== 1) throw new Error('deg braucht genau eine Zahl.'); return (args[0] * 180) / Math.PI; }
         }
         throw new Error(`Unbekannte Funktion „${node.name}“.`);
       }
@@ -348,6 +384,11 @@ const Expr = (() => {
     try { return { ok: true, value: parse(src, vars, tables) }; }
     catch (e) { return { ok: false, error: e && e.message ? e.message : 'Formel nicht lesbar.' }; }
   }
+  const evalRad = (src, vars, tables) => parse(src, vars, tables, 0, true);
+  function tryEvalRad(src, vars, tables) {
+    try { return { ok: true, value: evalRad(src, vars, tables) }; }
+    catch (e) { return { ok: false, error: e && e.message ? e.message : 'Formel nicht lesbar.' }; }
+  }
   function names(src) {
     try {
       const out = [];
@@ -362,7 +403,7 @@ const Expr = (() => {
       return out;
     } catch (_) { return []; }
   }
-  return { eval: parse, tryEval, names };
+  return { eval: parse, tryEval, evalRad, tryEvalRad, names };
 })();
 
 // ---------- Einheiten je Projekt (BE-10): Anzeige und Eingabe in mm, cm, m oder Zoll; intern immer mm ----------
@@ -1954,6 +1995,16 @@ const HELP = {
   "tip": "Fertige Formen wie Stern, Pfeil, Herz, Zahnrad-Umriss oder Schlüsselloch einfügen",
   "hilfe": "Wähl eine Form aus der Sammlung, stell die Maße wie Zacken, Radien, Modul oder Breite ein und klick auf „In Mitte einfügen“ oder platziere sie frei im Bild.",
   "tipp": "Jede Form ist sofort ein geschlossener Umriss und lässt sich direkt hochziehen oder mit anderen Linien weiterbearbeiten."
+ },
+ "formulaCurve": {
+  "tip": "Kurve aus einer mathematischen Formel (y = f(x) oder x(t), y(t)) erzeugen",
+  "hilfe": "Gib eine Gleichung wie y = sin(x) oder parametrisch x(t) und y(t) samt Bereich (z. B. 0 bis 2*pi) und Punktzahl an – oder wähl eine Vorlage wie Sinus oder Evolvente. Während du tippst, siehst du die Kurve gestrichelt in der Vorschau.",
+  "tipp": "Hier rechnen sin, cos und tan im Bogenmaß (Radiant), und du kannst neben pi/π auch Projektmaße aus „Maße“ verwenden."
+ },
+ "csvCurve": {
+  "tip": "Kurve durch 2D-Punkte aus einer CSV-Datei oder Texttabelle anlegen",
+  "hilfe": "Lade eine .csv- oder Textdatei mit X/Y-Koordinaten (oder füg die Zeilen direkt ins Textfeld ein) und wähl zwischen einer weichen Spline genau durch alle Punkte oder einem geraden Linienzug.",
+  "tipp": "Spalten dürfen mit Semikolon (;), Komma (,), Tab oder Leerzeichen getrennt sein; eine Überschrift wie x;y wird automatisch übersprungen."
  }
 };
 

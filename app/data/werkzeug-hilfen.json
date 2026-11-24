@@ -1278,5 +1278,15 @@
     "tip": "Fertige Formen wie Stern, Pfeil, Herz, Zahnrad-Umriss oder Schlüsselloch einfügen",
     "hilfe": "Wähl eine Form aus der Sammlung, stell die Maße wie Zacken, Radien, Modul oder Breite ein und klick auf „In Mitte einfügen“ oder platziere sie frei im Bild.",
     "tipp": "Jede Form ist sofort ein geschlossener Umriss und lässt sich direkt hochziehen oder mit anderen Linien weiterbearbeiten."
+  },
+  "formulaCurve": {
+    "tip": "Kurve aus einer mathematischen Formel (y = f(x) oder x(t), y(t)) erzeugen",
+    "hilfe": "Gib eine Gleichung wie y = sin(x) oder parametrisch x(t) und y(t) samt Bereich (z. B. 0 bis 2*pi) und Punktzahl an – oder wähl eine Vorlage wie Sinus oder Evolvente. Während du tippst, siehst du die Kurve gestrichelt in der Vorschau.",
+    "tipp": "Hier rechnen sin, cos und tan im Bogenmaß (Radiant), und du kannst neben pi/π auch Projektmaße aus „Maße“ verwenden."
+  },
+  "csvCurve": {
+    "tip": "Kurve durch 2D-Punkte aus einer CSV-Datei oder Texttabelle anlegen",
+    "hilfe": "Lade eine .csv- oder Textdatei mit X/Y-Koordinaten (oder füg die Zeilen direkt ins Textfeld ein) und wähl zwischen einer weichen Spline genau durch alle Punkte oder einem geraden Linienzug.",
+    "tipp": "Spalten dürfen mit Semikolon (;), Komma (,), Tab oder Leerzeichen getrennt sein; eine Überschrift wie x;y wird automatisch übersprungen."
   }
 }

@@ -367,7 +367,7 @@ const Sketch = (() => {
     if (Notes.active) Notes.stop();
     Panels.closeFlyout(); UI.closePop();
     const F = frameWorld(init.plane, init.W);
-    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.embossMode ? 'text' : (init.ctx.mode === 'patpath' || init.ctx.ribMode) ? 'line' : 'rect', draft: null, sels: [], get sel() { return this.sels && this.sels.length === 1 ? this.sels[0] : null; }, set sel(v) { this.sels = v ? [v] : []; }, band: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, locked: !!init.locked, lockedDrag: null, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, off: { count: 1, both: false, corners: 'sharp' }, projOff: 0, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: init.ctx.embossMode ? 'm' : 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, ellArcCW: false, shape: { type: 'star', p: { ...SKO.SHAPES.star.p } }, shapesOpen: false, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, hoverEnt: null, trimHover: null, check: null, checkFocus: null, autoDef: null, freeMode: false, wiggle: null, lastWiggle: null, conflict: null };
+    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.embossMode ? 'text' : (init.ctx.mode === 'patpath' || init.ctx.ribMode) ? 'line' : 'rect', draft: null, sels: [], get sel() { return this.sels && this.sels.length === 1 ? this.sels[0] : null; }, set sel(v) { this.sels = v ? [v] : []; }, band: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, locked: !!init.locked, lockedDrag: null, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, off: { count: 1, both: false, corners: 'sharp' }, projOff: 0, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: init.ctx.embossMode ? 'm' : 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, ellArcCW: false, shape: { type: 'star', p: { ...SKO.SHAPES.star.p } }, shapesOpen: false, formula: { preset: 'sinus', ...SKO.FORMULA_CURVES.sinus }, formulaOpen: false, csv: { kind: 'spline', closed: false, text: '' }, csvOpen: false, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, hoverEnt: null, trimHover: null, check: null, checkFocus: null, autoDef: null, freeMode: false, wiggle: null, lastWiggle: null, conflict: null };
     S.dims = init.dims || []; S.cons = init.cons || []; S.picks = []; S.dimFirst = null; S.dimMode = 'auto'; S.dimCircMode = 'center'; S.dimPicks = []; S.ordBase = null; S.ordAxis = 'auto'; S.selCon = null;
     S.plane0 = deepClone(init.plane); S.pOff = init.pOff || 0; S.pTilt = 0;
     if (S.pOff) applyPlane(false, true);
@@ -878,6 +878,42 @@ const Sketch = (() => {
     clearSel(); reapply(); render(); Panels.renderRight();
     UI.toast(`${spec.name}: ${ents.length} Elemente eingefügt.`, { icon: 'check', ms: 2200 });
     return ents;
+  }
+  function insertFormulaCurve(spec) {
+    if (!S || S.step || guardLocked()) return [];
+    const cfg = spec ? { ...S.formula, ...spec } : S.formula;
+    const res = SKO.evalFormulaCurve(cfg, Model.vars(App.doc).v);
+    if (!res.ok) { UI.toast(res.error, { kind: 'bad' }); return []; }
+    const kind = cfg.kind || 'spline';
+    const ents = SKO.pointsToCurveEnts(res.pts, { kind, closed: !!cfg.closed, con: !!S.construction });
+    if (!ents.length) return [];
+    pushUndo(); S.ents.push(...ents); clearSel(); reapply(); render(); Panels.renderRight();
+    UI.toast(T(kind === 'polyline' ? 'sk.toast.formulaInsertedPoly' : 'sk.toast.formulaInsertedSpline', { n: res.pts.length }), { icon: 'check', ms: 2600 });
+    return ents;
+  }
+  function insertPointsCSV(text, opts = {}) {
+    if (!S || S.step || guardLocked()) return [];
+    const res = SKO.parsePointsCSV(text);
+    if (!res.ok) { UI.toast(res.error, { kind: 'bad' }); return []; }
+    const kind = opts.kind || (S.csv && S.csv.kind) || 'spline';
+    const closed = opts.closed != null ? !!opts.closed : !!(S.csv && S.csv.closed);
+    const ents = SKO.pointsToCurveEnts(res.pts, { kind, closed, con: !!S.construction });
+    if (!ents.length) return [];
+    pushUndo(); S.ents.push(...ents); clearSel(); reapply(); render(); Panels.renderRight();
+    UI.toast(T(kind === 'polyline' ? 'sk.toast.csvInsertedPoly' : 'sk.toast.csvInsertedSpline', { n: res.pts.length }), { icon: 'check', ms: 2600 });
+    return ents;
+  }
+  function openFormulaPanel() {
+    if (!S || S.step) return false;
+    if (isSimpleMode()) { UI.toast(T('sk.toast.proOnly'), { icon: 'info' }); return false; }
+    clearSel(); S.selCon = null; S.formulaOpen = true; Panels.renderRight(); render();
+    return true;
+  }
+  function openCsvPanel() {
+    if (!S || S.step) return false;
+    if (isSimpleMode()) { UI.toast(T('sk.toast.proOnly'), { icon: 'info' }); return false; }
+    clearSel(); S.selCon = null; S.csvOpen = true; Panels.renderRight(); render();
+    return true;
   }
   // Ganze Skizze um den Nullpunkt vergrößern oder verkleinern: Elemente, Längen-Maße und Abstände in Regeln wandern mit
   function scaleAll(f) {
@@ -3834,6 +3870,13 @@ const Sketch = (() => {
     // Schablonen- & Formen-Vorschau
     if (S.tool === 'tpl' && cur && !S.step) for (const en of SKO.tplEnts(S.tpl.type, S.tpl.p, cur)) for (const q of entPts(en)) lineObj(q, acc, 1.4, { dashed: true });
     if (S.tool === 'shape' && cur && !S.step) for (const en of SKO.shapeEnts(S.shape.type, S.shape.p, cur)) for (const q of entPts(en)) lineObj(q, acc, 1.4, { dashed: true });
+    if (S.formulaOpen && !S.step && !isSimpleMode()) {
+      const fres = SKO.evalFormulaCurve(S.formula, Model.vars(App.doc).v);
+      if (fres.ok && fres.pts.length >= 2) {
+        const pEnts = SKO.pointsToCurveEnts(fres.pts, { kind: S.formula.kind || 'spline', closed: !!S.formula.closed });
+        for (const en of pEnts) for (const q of entPts(en)) lineObj(q, acc, 1.8, { dashed: true, opacity: 0.85 });
+      }
+    }
     // Spline-Entwurf
     if (d && S.tool === 'spline' && d.pts && !S.step) {
       const pts = cur ? [...d.pts, cur] : d.pts;
@@ -4987,6 +5030,104 @@ const Sketch = (() => {
         sh.append(h('div', { class: 'hint-box', html: T('sk.panel.shapeHint') }));
         w.append(sh);
       }
+      if (S.ctx.mode !== 'pushpull') {
+        // Kurve aus Formel (SK-38, nur Profi)
+        const fc = h('details', { class: 'snapset pro', id: 'sk-formula', 'data-help': 'formulaCurve' }, h('summary', null, T('sk.panel.formulaTitle')));
+        fc.open = !!S.formulaOpen;
+        fc.addEventListener('toggle', () => { S.formulaOpen = fc.open; render(); });
+        const F = S.formula;
+        const fcStat = h('div', { id: 'fc-status' });
+        const fcIns = h('button', { type: 'button', class: 'btn primary', id: 'fc-insert' });
+        fcIns.innerHTML = icon('spline') + esc(T('sk.panel.fcInsert'));
+        fcIns.onclick = () => insertFormulaCurve();
+        const syncFormulaUI = (redraw = true) => {
+          const res = SKO.evalFormulaCurve(F, Model.vars(App.doc).v);
+          fcIns.disabled = !res.ok;
+          fcStat.innerHTML = '';
+          if (res.ok) {
+            fcStat.className = 'hint-box';
+            fcStat.textContent = T('sk.panel.fcReady', { n: res.pts.length, from: fmtFixed(res.t0, 3), to: fmtFixed(res.t1, 3) });
+          } else {
+            fcStat.className = 'err-box';
+            fcStat.textContent = res.error;
+          }
+          if (redraw) render();
+        };
+        fc.append(UI.selectField({
+          id: 'fc-preset', label: T('sk.panel.fcPreset'), value: F.preset || 'custom',
+          options: [['custom', T('sk.panel.fcCustom')], ...Object.entries(SKO.FORMULA_CURVES).map(([k, v]) => [k, v.name])],
+          onChange: (v) => {
+            if (v !== 'custom' && SKO.FORMULA_CURVES[v]) { Object.assign(S.formula, { preset: v, ...SKO.FORMULA_CURVES[v] }); }
+            else F.preset = 'custom';
+            S.formulaOpen = true; Panels.renderRight(); render();
+          },
+        }));
+        fc.append(UI.selectField({
+          id: 'fc-mode', label: T('sk.panel.fcMode'), value: F.mode || 'yfx',
+          options: [['yfx', T('sk.panel.fcModeYfx')], ['param', T('sk.panel.fcModeParam')]],
+          onChange: (v) => {
+            F.mode = v; F.preset = 'custom';
+            if (v === 'param' && !F.fx) F.fx = 't';
+            S.formulaOpen = true; Panels.renderRight(); render();
+          },
+        }));
+        if (F.mode === 'param') {
+          fc.append(UI.textField({ id: 'fc-fx', label: 'x(t) =', value: F.fx || '', live: true, onCommit: (v) => { F.fx = v; F.preset = 'custom'; syncFormulaUI(); } }));
+          fc.append(UI.textField({ id: 'fc-fy', label: 'y(t) =', value: F.fy || '', live: true, onCommit: (v) => { F.fy = v; F.preset = 'custom'; syncFormulaUI(); } }));
+        } else {
+          fc.append(UI.textField({ id: 'fc-fy', label: 'y = f(x)', value: F.fy || '', live: true, onCommit: (v) => { F.fy = v; F.preset = 'custom'; syncFormulaUI(); } }));
+        }
+        const ffc = h('div', { class: 'fields' });
+        ffc.append(UI.textField({ id: 'fc-from', label: T('sk.panel.fcFrom'), value: F.from ?? '0', live: true, onCommit: (v) => { F.from = v; F.preset = 'custom'; syncFormulaUI(); } }));
+        ffc.append(UI.textField({ id: 'fc-to', label: T('sk.panel.fcTo'), value: F.to ?? '2*pi', live: true, onCommit: (v) => { F.to = v; F.preset = 'custom'; syncFormulaUI(); } }));
+        ffc.append(UI.numField({ id: 'fc-n', label: T('sk.panel.fcPoints'), value: F.n || 41, unit: '', expr: false, int: true, min: 2, onCommit: (v) => { F.n = clamp(Math.round(v), 2, 200); F.preset = 'custom'; syncFormulaUI(); } }));
+        ffc.append(UI.selectField({ id: 'fc-kind', label: T('sk.panel.curveKind'), value: F.kind || 'spline', options: [['spline', T('sk.panel.curveSpline')], ['polyline', T('sk.panel.curvePolyline')]], onChange: (v) => { F.kind = v; F.preset = 'custom'; syncFormulaUI(); } }));
+        fc.append(ffc);
+        const fcCl = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'fc-closed', checked: !!F.closed }), T('sk.panel.curveClosed'));
+        fcCl.querySelector('input').onchange = (e) => { F.closed = e.target.checked; F.preset = 'custom'; syncFormulaUI(); };
+        fc.append(fcCl, fcStat, h('div', { class: 'btn-row' }, fcIns));
+        syncFormulaUI(false);
+        w.append(fc);
+
+        // Kurve aus Tabelle / CSV (SK-39, nur Profi)
+        const cv = h('details', { class: 'snapset pro', id: 'sk-csv', 'data-help': 'csvCurve' }, h('summary', null, T('sk.panel.csvTitle')));
+        cv.open = !!S.csvOpen;
+        cv.addEventListener('toggle', () => { S.csvOpen = cv.open; });
+        const C = S.csv;
+        cv.append(UI.selectField({ id: 'csv-kind', label: T('sk.panel.curveKind'), value: C.kind || 'spline', options: [['spline', T('sk.panel.curveSpline')], ['polyline', T('sk.panel.curvePolyline')]], onChange: (v) => { C.kind = v; } }));
+        const cvCl = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'csv-closed', checked: !!C.closed }), T('sk.panel.curveClosed'));
+        cvCl.querySelector('input').onchange = (e) => { C.closed = e.target.checked; };
+        cv.append(cvCl);
+        const csvFileInp = h('input', { type: 'file', id: 'csv-file', accept: '.csv,.txt,.dat,text/csv,text/plain', style: { display: 'none' } });
+        csvFileInp.onchange = async () => {
+          const f = csvFileInp.files && csvFileInp.files[0];
+          csvFileInp.value = '';
+          if (!f) return;
+          try {
+            const txt = await f.text();
+            C.text = txt;
+            const ta = $('#csv-text'); if (ta) ta.value = txt;
+            insertPointsCSV(txt, { kind: C.kind, closed: C.closed, name: f.name });
+          } catch (_) {
+            UI.toast('Die CSV-Datei konnte nicht gelesen werden.', { kind: 'bad' });
+          }
+        };
+        const csvFileBtn = h('button', { type: 'button', class: 'btn primary', id: 'csv-file-btn' });
+        csvFileBtn.innerHTML = icon('folder') + esc(T('sk.panel.csvChooseFile'));
+        csvFileBtn.onclick = () => csvFileInp.click();
+        cv.append(csvFileInp, h('div', { class: 'btn-row' }, csvFileBtn));
+        const csvTa = h('textarea', { id: 'csv-text', rows: 4, placeholder: '0;0\n10;5\n20;2\n30;12\n40;4' });
+        csvTa.value = C.text || '';
+        csvTa.addEventListener('keydown', (e) => e.stopPropagation());
+        csvTa.addEventListener('input', () => { C.text = csvTa.value; });
+        const csvInsBtn = h('button', { type: 'button', class: 'btn', id: 'csv-insert' });
+        csvInsBtn.innerHTML = icon('spline') + esc(T('sk.panel.csvInsertText'));
+        csvInsBtn.onclick = () => insertPointsCSV(C.text, { kind: C.kind, closed: C.closed });
+        cv.append(h('div', { class: 'field csv-box' }, h('label', { for: 'csv-text' }, T('sk.panel.csvPasteLabel')), csvTa));
+        cv.append(h('div', { class: 'btn-row' }, csvInsBtn));
+        cv.append(h('div', { class: 'hint-box', html: T('sk.panel.csvHint') }));
+        w.append(cv);
+      }
       const sn = h('details', { class: 'snapset' }, h('summary', null, T('sk.panel.snapTitle')));
       sn.open = !!S.snapOpen; sn.addEventListener('toggle', () => { S.snapOpen = sn.open; });
       for (const [k, lab] of snapList()) {
@@ -5837,6 +5978,6 @@ const Sketch = (() => {
     UI.hint(hintFor(S.tool));
     Panels.renderRight();
   }
-  return { isLinkLost, rebindLink, linkPointsWorld, copySel, pasteClip, setRefDim, setDimSpec, setDimMode, setDimCircMode, setLocked, toggleLocked, setRevAxis, check: runCheck, repair: repairCheck, focusCheckIssue, autoDefine: proposeAutoDefine, applyAutoDefine, cancelAutoDefine, toggleFreeSpots, setFreeMode, wiggleFree, focusConflictItem, removeConflictItem, clearConflict, bandSelect, init, refreshUI, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startEmboss, startPath, startLoftPath, editItem, pushPullFace, render, renderPanel, onKey, cancel, scaleAll, insertEnts, insertShape, textToCurves, loadFontFile, setBg, setTool, get angleSnap() { return angleSnapOn; }, setAngleSnap, lengthSnapStep, get active() { return !!S; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
+  return { isLinkLost, rebindLink, linkPointsWorld, copySel, pasteClip, setRefDim, setDimSpec, setDimMode, setDimCircMode, setLocked, toggleLocked, setRevAxis, check: runCheck, repair: repairCheck, focusCheckIssue, autoDefine: proposeAutoDefine, applyAutoDefine, cancelAutoDefine, toggleFreeSpots, setFreeMode, wiggleFree, focusConflictItem, removeConflictItem, clearConflict, bandSelect, init, refreshUI, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startEmboss, startPath, startLoftPath, editItem, pushPullFace, render, renderPanel, onKey, cancel, scaleAll, insertEnts, insertShape, insertFormulaCurve, insertPointsCSV, openFormulaPanel, openCsvPanel, textToCurves, loadFontFile, setBg, setTool, get angleSnap() { return angleSnapOn; }, setAngleSnap, lengthSnapStep, get active() { return !!S; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
 })();
 

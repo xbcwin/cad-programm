@@ -20394,6 +20394,133 @@ def t_a097_teilellipse_formen(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a098_formel_und_csv_kurve(p):
+    # 1. Nur Profi: in Einfach ausgeblendet, in Profi sichtbar
+    p.empty()
+    p.ev("ViewPrefs.set({ level: 'simple', firstStart: false }); Sketch.startOnPlane('XY')"); p.wait(1200)
+    vis_simple = not sichtbar(p, '#sk-formula') and not sichtbar(p, '#sk-csv')
+    p.ev("ViewPrefs.set({ level: 'pro', firstStart: false }); Sketch.refreshUI()"); p.wait(300)
+    vis_pro = sichtbar(p, '#sk-formula') and sichtbar(p, '#sk-csv')
+    ok1 = vis_simple and vis_pro
+
+    # 2. y = sin(x) von 0 bis 2π -> Spline durch (π/2, 1), Start/Ende & Undo
+    p.pg.click('#sk-formula summary'); p.wait(150)
+    p.pg.select_option('#fc-mode', 'yfx'); p.wait(150)
+    p.pg.fill('#fc-fy', 'sin(x)'); p.wait(100)
+    p.pg.fill('#fc-from', '0'); p.wait(100)
+    p.pg.fill('#fc-to', '2π'); p.wait(100)
+    p.pg.fill('#fc-n', '41'); p.pg.press('#fc-n', 'Enter'); p.wait(100)
+    p.pg.select_option('#fc-kind', 'spline'); p.wait(100)
+    p.pg.click('#fc-insert'); p.wait(300)
+    sin_res = p.ev("""
+      const S = Sketch.state;
+      const e = S.ents[0];
+      if (!e || e.type !== 'spline') return { ok: false };
+      const C = SKO.curve(SK.segsOf(e)[0]);
+      const target = [Math.PI / 2, 1];
+      const near = SKO.closest(C, target);
+      const dist = SK.d2(near, target);
+      const p10 = e.pts[10];
+      return {
+        ok: true,
+        n: e.pts.length,
+        closed: !!e.closed,
+        first: e.pts[0],
+        last: e.pts[e.pts.length - 1],
+        p10,
+        dist,
+      };
+    """)
+    ok2a = (sin_res['ok'] and sin_res['n'] == 41 and not sin_res['closed']
+            and sin_res['dist'] < 1e-4
+            and abs(sin_res['p10'][0] - math.pi / 2) < 1e-4 and abs(sin_res['p10'][1] - 1) < 1e-4
+            and abs(sin_res['first'][0]) < 1e-5 and abs(sin_res['first'][1]) < 1e-5
+            and abs(sin_res['last'][0] - 2 * math.pi) < 1e-4 and abs(sin_res['last'][1]) < 1e-4)
+    p.pg.keyboard.press('ControlOrMeta+z'); p.wait(250)
+    ok2 = ok2a and p.ev("return Sketch.state.ents.length") == 0
+
+    # 3. Evolvente-Vorlage + Fehlerbehandlung + geschlossene parametrische Kurve hochziehen
+    p.pg.select_option('#fc-preset', 'evolvente'); p.wait(200)
+    evo_ui = p.ev("return [document.querySelector('#fc-mode').value, !!document.querySelector('#fc-fx').value, !!document.querySelector('#fc-fy').value]")
+    p.pg.click('#fc-insert'); p.wait(300)
+    evo_res = p.ev("""
+      const e = Sketch.state.ents[0];
+      const t1 = 1.2;
+      const ex = 10 * (Math.cos(t1) + t1 * Math.sin(t1));
+      const ey = 10 * (Math.sin(t1) - t1 * Math.cos(t1));
+      return {
+        type: e && e.type,
+        n: e && e.pts && e.pts.length,
+        p0: e && e.pts[0],
+        pEnd: e && e.pts[e.pts.length - 1],
+        expEnd: [ex, ey],
+      };
+    """)
+    ok3a = (evo_ui == ['param', True, True] and evo_res['type'] == 'spline' and evo_res['n'] == 25
+            and abs(evo_res['p0'][0] - 10) < 1e-4 and abs(evo_res['p0'][1]) < 1e-4
+            and math.hypot(evo_res['pEnd'][0] - evo_res['expEnd'][0], evo_res['pEnd'][1] - evo_res['expEnd'][1]) < 1e-3)
+    # Kaputte Formel sperrt Knopf und zeigt Fehlermeldung
+    p.pg.fill('#fc-fy', 'sin('); p.wait(150)
+    bad_ui = p.ev("return [document.querySelector('#fc-insert').disabled, !!document.querySelector('#fc-status.err-box')]")
+    # Geschlossene parametrische Kurve (Kreis r = 10) -> 3D-Körper
+    p.ev("if (document.activeElement) document.activeElement.blur()"); p.wait(50)
+    p.pg.keyboard.press('ControlOrMeta+z'); p.wait(200)
+    p.pg.fill('#fc-fx', '10 * cos(t)'); p.wait(100)
+    p.pg.fill('#fc-fy', '10 * sin(t)'); p.wait(100)
+    p.pg.fill('#fc-from', '0'); p.wait(100)
+    p.pg.fill('#fc-to', '2*pi'); p.wait(100)
+    p.pg.fill('#fc-n', '25'); p.pg.press('#fc-n', 'Enter'); p.wait(100)
+    p.pg.check('#fc-closed'); p.wait(100)
+    p.pg.click('#fc-insert'); p.wait(300)
+    fertig_hoch(p)
+    v3 = volumen(p)
+    err3 = p.ev("return App.errors.length")
+    ok3 = ok3a and bad_ui == [True, True] and err3 == 0 and abs(v3 - math.pi * 100 * 3) < 20
+
+    # 4. CSV mit 5 Punkten -> Spline durch alle 5; danach CSV als geschlossener Linienzug -> Körper
+    p.ev("App.change('leer', d => { d.items = []; });"); warte_rechnen(p, 20)
+    p.ev("Sketch.startOnPlane('XY')"); p.wait(1200)
+    p.pg.click('#sk-csv summary'); p.wait(150)
+    p.pg.select_option('#csv-kind', 'spline'); p.wait(100)
+    p.pg.set_input_files('#csv-file', {
+        'name': 'punkte.csv',
+        'mimeType': 'text/csv',
+        'buffer': b'x,y\n0,0\n10,6\n20,2\n30,12\n40,4\n',
+    })
+    p.wait(450)
+    csv_sp = p.ev("""
+      const e = Sketch.state.ents[0];
+      const want = [[0, 0], [10, 6], [20, 2], [30, 12], [40, 4]];
+      if (!e || e.type !== 'spline' || e.pts.length !== 5) return { ok: false };
+      const C = SKO.curve(SK.segsOf(e)[0]);
+      const ptOk = want.every((q, i) => SK.d2(e.pts[i], q) < 1e-4);
+      const curveOk = want.every((q) => SK.d2(SKO.closest(C, q), q) < 1e-4);
+      return { ok: true, ptOk, curveOk, closed: !!e.closed };
+    """)
+    ok4a = csv_sp['ok'] and csv_sp['ptOk'] and csv_sp['curveOk'] and not csv_sp['closed']
+
+    # Undo -> Semikolon/Dezimalkomma-CSV im Textfeld als geschlossener Linienzug -> hochziehen
+    p.pg.keyboard.press('ControlOrMeta+z'); p.wait(250)
+    p.pg.select_option('#csv-kind', 'polyline'); p.wait(100)
+    p.pg.check('#csv-closed'); p.wait(100)
+    p.pg.fill('#csv-text', 'x;y\n0;0\n20;0\n20;10\n10;15,5\n0;10'); p.wait(150)
+    p.pg.click('#csv-insert'); p.wait(300)
+    poly_st = p.ev("const S=Sketch.state; return [S.ents.length, S.ents.filter(e=>e.type==='line').length, SK.regions(S.ents).length, SK.openEnds(S.ents).length]")
+    fertig_hoch(p)
+    v4 = volumen(p)
+    err4 = p.ev("return App.errors.length")
+    ok4 = ok4a and poly_st == [5, 5, 1, 0] and err4 == 0 and abs(v4 - 765) < 1.5
+
+    # 5. Hilfetexte, Übersetzungen & Befehlssuche ohne Fehler
+    p.ev("Sketch.startOnPlane('XY')"); p.wait(800)
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    i18n_ok = p.pg.evaluate("Promise.all([fetch('data/texte-de.json').then(r=>r.json()), fetch('data/texte-en.json').then(r=>r.json())]).then(([d,e])=>{ const dk=Object.keys(d).sort(), ek=Object.keys(e).sort(); return dk.length===ek.length && dk.every((k,i)=>k===ek[i]); })")
+    has_attrs = p.ev("return !!document.querySelector('[data-help=\"formulaCurve\"]') && !!document.querySelector('[data-help=\"csvCurve\"]')")
+    cmds_ok = p.ev("return Commands.search('Formel').some(c=>c.id==='sketch-formula') && Commands.search('CSV').some(c=>c.id==='sketch-csv')")
+    ok5 = all(k in hilfen for k in ['formulaCurve', 'csvCurve']) and i18n_ok and has_attrs and cmds_ok and not p.errs
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -20600,6 +20727,7 @@ TESTS = [
     ('[A-096] Maß zwischen Kreisrändern, Skizze sperren & Drehachse markieren (SK-29, SK-54, SK-55)', t_a096_kreisrand_sperren_drehachse),
     ('[F-11241932] Volltest-Reparatur: Zeichnung-Panel schützt fokussiertes Toleranzfeld bei verzögertem doc-Refresh', t_f11241932),
     ('[A-097] Teil-Ellipse (elliptischer Bogen) & Formen-Sammlung (SK-37, SK-41)', t_a097_teilellipse_formen),
+    ('[A-098] Kurve aus Formel und aus Tabelle (SK-38, SK-39)', t_a098_formel_und_csv_kurve),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

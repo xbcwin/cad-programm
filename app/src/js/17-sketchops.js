@@ -124,6 +124,7 @@ const SKO = (() => {
     for (const e of ents) SK.segsOf(e).forEach((s, i) => out.push({ ent: e, i, seg: s, curve: curve(s), ref: !!tag }));
     return out;
   }
+
   // alle Schnittpunkte zwischen verschiedenen Elementen (für Fangen)
   function intersections(ents, refs = []) {
     const parts = [...partsOf(ents), ...partsOf(refs, true)];
@@ -135,6 +136,7 @@ const SKO = (() => {
     }
     return out;
   }
+
   // nächster Punkt auf einer Kurve
   function closest(C, p) {
     if (C.type === 'line') { const t = Math.max(0, Math.min(1, C.tOf(p))); return C.at(t); }
@@ -164,6 +166,7 @@ const SKO = (() => {
     }
     return out;
   }
+
   // Berührpunkte der Tangenten von „from“ an Kreise und Bögen
   function tangentFeet(from, ents) {
     const out = [];
@@ -176,6 +179,7 @@ const SKO = (() => {
     }
     return out;
   }
+
 
   // ---------- Trimmen ----------
   // target: Linie, Bogen, Kreis oder Spline · cutters: alle anderen Teile (aus partsOf) · uv: Klickpunkt
@@ -309,6 +313,7 @@ const SKO = (() => {
     return out;
   }
 
+
   // ---------- Formen-Sammlung (SK-41): geschlossene Umrisse mit einstellbaren Maßen (Mitte c) ----------
   const SHAPES = {
     star: { name: 'Stern', p: { n: 5, ro: 20, ri: 8 } },
@@ -388,6 +393,128 @@ const SKO = (() => {
       out.push({ id: uid('e'), type: 'line', a: QR.slice(), b: PR.slice() });
     }
     return out;
+  }
+
+  // ---------- Kurve aus Formel (SK-38) und aus Tabelle / CSV (SK-39) ----------
+  const FORMULA_CURVES = {
+    sinus: { name: 'Sinus (y = sin(x))', mode: 'yfx', fx: '', fy: 'sin(x)', from: '0', to: '2*pi', n: 41, kind: 'spline', closed: false },
+    evolvente: { name: 'Evolvente (Zahnradflanke)', mode: 'param', fx: '10 * (cos(t) + t * sin(t))', fy: '10 * (sin(t) - t * cos(t))', from: '0', to: '1.2', n: 25, kind: 'spline', closed: false },
+    parabel: { name: 'Parabel (y = 0,05·x²)', mode: 'yfx', fx: '', fy: '0.05 * x^2', from: '-20', to: '20', n: 25, kind: 'spline', closed: false },
+    spirale: { name: 'Archimedische Spirale', mode: 'param', fx: '2 * t * cos(t)', fy: '2 * t * sin(t)', from: '0', to: '4*pi', n: 65, kind: 'spline', closed: false },
+  };
+  function evalFormulaCurve(spec = {}, vars = {}) {
+    const mode = spec.mode === 'param' ? 'param' : 'yfx';
+    const fyClean = String(spec.fy ?? '').trim().replace(/^\s*(?:y(?:\s*\(\s*[xt]\s*\))?|f\s*\(\s*x\s*\))\s*=\s*/i, '');
+    const fxClean = String(spec.fx ?? '').trim().replace(/^\s*x(?:\s*\(\s*t\s*\))?\s*=\s*/i, '');
+    if (!fyClean) return { ok: false, pts: [], error: mode === 'param' ? 'Bitte gib eine Formel für y(t) ein.' : 'Bitte gib eine Formel für y = f(x) ein.' };
+    if (mode === 'param' && !fxClean) return { ok: false, pts: [], error: 'Bitte gib eine Formel für x(t) ein.' };
+    const fromStr = String(spec.from ?? '').trim(), toStr = String(spec.to ?? '').trim();
+    if (!fromStr || !toStr) return { ok: false, pts: [], error: 'Bitte gib Start- und Endwert für den Bereich ein.' };
+    const r0 = Expr.tryEvalRad(fromStr, vars);
+    if (!r0.ok) return { ok: false, pts: [], error: 'Startwert: ' + r0.error };
+    const r1 = Expr.tryEvalRad(toStr, vars);
+    if (!r1.ok) return { ok: false, pts: [], error: 'Endwert: ' + r1.error };
+    const t0 = r0.value, t1 = r1.value;
+    if (Math.abs(t1 - t0) < 1e-12) return { ok: false, pts: [], error: 'Start- und Endwert dürfen nicht gleich sein.' };
+    const nRaw = Number(spec.n);
+    if (!isFinite(nRaw) || nRaw < 2 || nRaw > 200) return { ok: false, pts: [], error: 'Die Punktzahl muss zwischen 2 und 200 liegen.' };
+    const n = Math.round(nRaw);
+    const pts = [];
+    for (let i = 0; i < n; i++) {
+      const u = t0 + ((t1 - t0) * i) / (n - 1);
+      if (mode === 'param') {
+        const env = { ...vars, t: u };
+        const rx = Expr.tryEvalRad(fxClean, env);
+        if (!rx.ok) return { ok: false, pts: [], error: 'x(t): ' + rx.error };
+        const ry = Expr.tryEvalRad(fyClean, env);
+        if (!ry.ok) return { ok: false, pts: [], error: 'y(t): ' + ry.error };
+        const p = pr([rx.value, ry.value]);
+        if (!pts.length || d2(pts[pts.length - 1], p) >= 1e-7) pts.push(p);
+      } else {
+        const env = { ...vars, x: u, t: u };
+        const ry = Expr.tryEvalRad(fyClean, env);
+        if (!ry.ok) return { ok: false, pts: [], error: 'y = f(x): ' + ry.error };
+        const p = pr([u, ry.value]);
+        if (!pts.length || d2(pts[pts.length - 1], p) >= 1e-7) pts.push(p);
+      }
+    }
+    if (pts.length < 2) return { ok: false, pts: [], error: 'Die Formel ergibt weniger als 2 verschiedene Punkte.' };
+    return { ok: true, pts, t0, t1, closed: !!spec.closed };
+  }
+  function splitCsvLine(line, sep) {
+    if (sep === 'ws') return line.trim().split(/\s+/);
+    const out = []; let cur = '', qq = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (qq) {
+        if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+        else if (ch === '"') qq = false;
+        else cur += ch;
+      } else if (ch === '"') qq = true;
+      else if (ch === sep) { out.push(cur.trim()); cur = ''; }
+      else cur += ch;
+    }
+    out.push(cur.trim());
+    return out;
+  }
+  function parsePointsCSV(text) {
+    const lines = String(text ?? '').replace(/^\ufeff/, '').split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith('#') && !l.startsWith('//'));
+    if (!lines.length) return { ok: false, pts: [], error: 'Die CSV-Datei ist leer.' };
+    let sep = 'ws';
+    if (lines.some((l) => l.includes(';'))) sep = ';';
+    else if (lines.some((l) => l.includes('\t'))) sep = '\t';
+    else if (lines.some((l) => l.includes(','))) {
+      const testLine = lines[lines.length - 1];
+      const byComma = splitCsvLine(testLine, ',');
+      if (byComma.length >= 2 && byComma.slice(0, 2).every((c) => !isNaN(parseNum(c)))) sep = ',';
+      else if (/\s+/.test(testLine)) sep = 'ws';
+      else sep = ',';
+    }
+    const firstCells = splitCsvLine(lines[0], sep);
+    const hasHeader = firstCells.length < 2 || isNaN(parseNum(firstCells[0])) || isNaN(parseNum(firstCells[1]));
+    let colX = 0, colY = 1;
+    if (hasHeader && firstCells.length >= 3 && /^(id|nr|no|index|punkt|point|name|#)$/i.test(firstCells[0])) {
+      colX = 1; colY = 2;
+    }
+    const startIdx = hasHeader ? 1 : 0;
+    const pts = []; let skipped = 0;
+    for (let i = startIdx; i < lines.length; i++) {
+      const cells = splitCsvLine(lines[i], sep);
+      if (cells.length <= Math.max(colX, colY)) { skipped++; continue; }
+      const x = parseNum(cells[colX]), y = parseNum(cells[colY]);
+      if (!isFinite(x) || !isFinite(y)) { skipped++; continue; }
+      pts.push(pr([x, y]));
+    }
+    if (pts.length < 2) return { ok: false, pts: [], error: 'Mindestens 2 gültige Punkte (X und Y je Zeile) erforderlich.' };
+    if (pts.length > 1000) return { ok: false, pts: [], error: 'Zu viele Punkte in der CSV-Datei (höchstens 1000).' };
+    return { ok: true, pts, skipped, header: hasHeader };
+  }
+  function pointsToCurveEnts(pts, { kind = 'spline', closed = false, con = false } = {}) {
+    const clean = [];
+    for (const p of pts || []) {
+      if (!Array.isArray(p) || p.length < 2 || !isFinite(p[0]) || !isFinite(p[1])) continue;
+      const q = pr(p);
+      if (!clean.length || d2(clean[clean.length - 1], q) >= 1e-7) clean.push(q);
+    }
+    if (clean.length < 2) return [];
+    const base = con ? { con: true } : {};
+    if (kind === 'polyline') {
+      const ents = [];
+      for (let i = 0; i < clean.length - 1; i++) {
+        ents.push({ id: uid('e'), type: 'line', a: clean[i].slice(), b: clean[i + 1].slice(), ...base });
+      }
+      if (closed && clean.length >= 3 && d2(clean[0], clean[clean.length - 1]) > 1e-6) {
+        ents.push({ id: uid('e'), type: 'line', a: clean[clean.length - 1].slice(), b: clean[0].slice(), ...base });
+      }
+      return ents;
+    }
+    const spPts = clean.map((q) => q.slice());
+    let isClosed = !!closed;
+    if (isClosed && spPts.length >= 3 && d2(spPts[0], spPts[spPts.length - 1]) < 1e-5) spPts.pop();
+    if (isClosed && spPts.length < 3) isClosed = false;
+    return [{ id: uid('e'), type: 'spline', pts: spPts, closed: isClosed, ...base }];
   }
 
   // ---------- Ketten (zusammenhängende Linien und Bögen) ----------
@@ -1165,5 +1292,5 @@ const SKO = (() => {
     return { ok: cur.ok, alreadyFull: false, cons: propCons, dims: propDims, ents: wEnts, dofBefore, dofAfter: cur.dof };
   }
 
-  return { TEMPLATES, TPLNAMES, tplEnts, SHAPES, SHAPENAMES, shapeEnts, curve, inter, intersections, partsOf, nearestOn, closest, perpFeet, tangentFeet, trimPlan, trimPieces, trimRemoved, explode, chainOf, offsetChain, offsetShape, linkPoints, hasRadius, mirrorEnt, mirrorPoint, moveEnt, rotateEnt, rotPt, pr, inspect, thinRegions, autoDefine };
+  return { TEMPLATES, TPLNAMES, tplEnts, SHAPES, SHAPENAMES, shapeEnts, FORMULA_CURVES, evalFormulaCurve, parsePointsCSV, pointsToCurveEnts, curve, inter, intersections, partsOf, nearestOn, closest, perpFeet, tangentFeet, trimPlan, trimPieces, trimRemoved, explode, chainOf, offsetChain, offsetShape, linkPoints, hasRadius, mirrorEnt, mirrorPoint, moveEnt, rotateEnt, rotPt, pr, inspect, thinRegions, autoDefine };
 })();
