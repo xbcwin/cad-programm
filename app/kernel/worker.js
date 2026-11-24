@@ -41,6 +41,7 @@ self.onmessage = async (ev) => {
     else if (cmd === 'faceGrid') result = kernel.faceGridOf(args.key, args.faceIdx);
     else if (cmd === 'section') result = kernel.sectionOf(args.key, args.o, args.n);
     else if (cmd === 'remesh') result = kernel.remesh(args.key, args.tol);
+    else if (cmd === 'checkGeometry') result = kernel.checkGeometry(args.scene, args.opts);
     else if (cmd === 'checkImport') result = kernel.checkImport(args.p, args);
     else if (cmd === 'healImport') result = kernel.healImport(args.p, args);
     else throw new Error('Unbekannter Befehl: ' + cmd);

@@ -5733,6 +5733,282 @@ export function createKernel(R, oc) {
     }
     return { holes: out, errors };
   }
+  // Geometrie-Prüfung (PF-08): kaputte Flächen, winzige Kanten (< minEdge) und sich selbst schneidende Flächen
+  function shrinkTriPts(a, b, c, f = 0.015) {
+    const cx = (a[0] + b[0] + c[0]) / 3, cy = (a[1] + b[1] + c[1]) / 3, cz = (a[2] + b[2] + c[2]) / 3, s = 1 - f;
+    return [
+      [cx + (a[0] - cx) * s, cy + (a[1] - cy) * s, cz + (a[2] - cz) * s],
+      [cx + (b[0] - cx) * s, cy + (b[1] - cy) * s, cz + (b[2] - cz) * s],
+      [cx + (c[0] - cx) * s, cy + (c[1] - cy) * s, cz + (c[2] - cz) * s],
+    ];
+  }
+  function segTriStrictHit(p0, p1, a, b, c) {
+    const dx = p1[0] - p0[0], dy = p1[1] - p0[1], dz = p1[2] - p0[2];
+    const e1x = b[0] - a[0], e1y = b[1] - a[1], e1z = b[2] - a[2];
+    const e2x = c[0] - a[0], e2y = c[1] - a[1], e2z = c[2] - a[2];
+    const px = dy * e2z - dz * e2y, py = dz * e2x - dx * e2z, pz = dx * e2y - dy * e2x;
+    const det = e1x * px + e1y * py + e1z * pz;
+    if (Math.abs(det) < 1e-12) return null;
+    const inv = 1 / det;
+    const sx = p0[0] - a[0], sy = p0[1] - a[1], sz = p0[2] - a[2];
+    const u = (sx * px + sy * py + sz * pz) * inv;
+    if (u <= 0.015 || u >= 0.985) return null;
+    const qx = sy * e1z - sz * e1y, qy = sz * e1x - sx * e1z, qz = sx * e1y - sy * e1x;
+    const v = (dx * qx + dy * qy + dz * qz) * inv;
+    if (v <= 0.015 || u + v >= 0.985) return null;
+    const t = (e2x * qx + e2y * qy + e2z * qz) * inv;
+    if (t <= 0.015 || t >= 0.985) return null;
+    return [p0[0] + t * dx, p0[1] + t * dy, p0[2] + t * dz];
+  }
+  function triTriStrictHit(A, B) {
+    const a = shrinkTriPts(A[0], A[1], A[2]);
+    const b = shrinkTriPts(B[0], B[1], B[2]);
+    return segTriStrictHit(a[0], a[1], b[0], b[1], b[2])
+      || segTriStrictHit(a[1], a[2], b[0], b[1], b[2])
+      || segTriStrictHit(a[2], a[0], b[0], b[1], b[2])
+      || segTriStrictHit(b[0], b[1], a[0], a[1], a[2])
+      || segTriStrictHit(b[1], b[2], a[0], a[1], a[2])
+      || segTriStrictHit(b[2], b[0], a[0], a[1], a[2]);
+  }
+  function findSelfIntersections(shape, fl, cachedPayload) {
+    let V, T, fg;
+    let ownsMesh = null;
+    if (cachedPayload && cachedPayload.vertices && cachedPayload.triangles && cachedPayload.faceGroups) {
+      V = cachedPayload.vertices; T = cachedPayload.triangles; fg = cachedPayload.faceGroups;
+    } else {
+      const bb = bboxOf(shape);
+      const tol = Math.max(0.02, meshTol(bb));
+      ownsMesh = shape.mesh({ tolerance: tol, angularTolerance: 0.25 });
+      V = ownsMesh.vertices; T = ownsMesh.triangles;
+      const fIndex = new Map(fl.map((f, i) => [f.hc, i]));
+      fg = ownsMesh.faceGroups.map((g) => [g.start, g.count, fIndex.has(g.faceId) ? fIndex.get(g.faceId) : -1]);
+    }
+    try {
+      const nt = Math.floor(T.length / 3);
+      if (nt < 2) return [];
+      const triFace = new Int32Array(nt).fill(-1);
+      for (const [start, count, fi] of fg) {
+        const end = Math.min(T.length, start + count);
+        for (let k = start; k + 2 < end; k += 3) triFace[Math.floor(k / 3)] = fi;
+      }
+      const tris = new Array(nt);
+      let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+      for (let i = 0; i < nt; i++) {
+        const i0 = T[i * 3] * 3, i1 = T[i * 3 + 1] * 3, i2 = T[i * 3 + 2] * 3;
+        const p0 = [V[i0], V[i0 + 1], V[i0 + 2]];
+        const p1 = [V[i1], V[i1 + 1], V[i1 + 2]];
+        const p2 = [V[i2], V[i2 + 1], V[i2 + 2]];
+        const mn = [Math.min(p0[0], p1[0], p2[0]), Math.min(p0[1], p1[1], p2[1]), Math.min(p0[2], p1[2], p2[2])];
+        const mx = [Math.max(p0[0], p1[0], p2[0]), Math.max(p0[1], p1[1], p2[1]), Math.max(p0[2], p1[2], p2[2])];
+        if (mn[0] < minX) minX = mn[0]; if (mn[1] < minY) minY = mn[1]; if (mn[2] < minZ) minZ = mn[2];
+        if (mx[0] > maxX) maxX = mx[0]; if (mx[1] > maxY) maxY = mx[1]; if (mx[2] > maxZ) maxZ = mx[2];
+        tris[i] = { p: [p0, p1, p2], f: triFace[i], mn, mx };
+      }
+      const diag = Math.hypot(maxX - minX, maxY - minY, maxZ - minZ);
+      const cell = Math.max(diag / 32, 0.5);
+      const grid = new Map();
+      const ci = (v, o) => Math.floor((v - o) / cell);
+      for (let i = 0; i < nt; i++) {
+        const t = tris[i];
+        const x0 = ci(t.mn[0], minX), x1 = Math.min(x0 + 7, ci(t.mx[0], minX));
+        const y0 = ci(t.mn[1], minY), y1 = Math.min(y0 + 7, ci(t.mx[1], minY));
+        const z0 = ci(t.mn[2], minZ), z1 = Math.min(z0 + 7, ci(t.mx[2], minZ));
+        for (let ix = x0; ix <= x1; ix++) for (let iy = y0; iy <= y1; iy++) for (let iz = z0; iz <= z1; iz++) {
+          const kk = ix + ',' + iy + ',' + iz;
+          let list = grid.get(kk);
+          if (!list) { list = []; grid.set(kk, list); }
+          list.push(i);
+        }
+      }
+      const checkedPairs = new Set();
+      const hitsByFacePair = new Map();
+      let checks = 0;
+      const MAX_CHECKS = 200000;
+      for (const bucket of grid.values()) {
+        if (bucket.length < 2) continue;
+        for (let a = 0; a < bucket.length; a++) {
+          const i = bucket[a], A = tris[i];
+          for (let b = a + 1; b < bucket.length; b++) {
+            if (checks >= MAX_CHECKS || hitsByFacePair.size >= 30) break;
+            const j = bucket[b];
+            const lo = i < j ? i : j, hi = i < j ? j : i;
+            const pk = lo * nt + hi;
+            if (checkedPairs.has(pk)) continue;
+            checkedPairs.add(pk);
+            const B = tris[j];
+            if (A.mx[0] < B.mn[0] || B.mx[0] < A.mn[0] || A.mx[1] < B.mn[1] || B.mx[1] < A.mn[1] || A.mx[2] < B.mn[2] || B.mx[2] < A.mn[2]) continue;
+            let shared = false;
+            for (let u = 0; u < 3 && !shared; u++) {
+              const pa = A.p[u];
+              for (let v = 0; v < 3; v++) {
+                const pb = B.p[v];
+                if (Math.abs(pa[0] - pb[0]) < 1e-5 && Math.abs(pa[1] - pb[1]) < 1e-5 && Math.abs(pa[2] - pb[2]) < 1e-5) { shared = true; break; }
+              }
+            }
+            if (shared) continue;
+            checks++;
+            const pt = triTriStrictHit(A.p, B.p);
+            if (!pt) continue;
+            const f1 = A.f >= 0 ? A.f : 0, f2 = B.f >= 0 ? B.f : f1;
+            const fk = Math.min(f1, f2) + '|' + Math.max(f1, f2);
+            let entry = hitsByFacePair.get(fk);
+            if (!entry) { entry = { faceIdx: Math.min(f1, f2), faceIdx2: Math.max(f1, f2), sum: [0, 0, 0], n: 0 }; hitsByFacePair.set(fk, entry); }
+            entry.sum[0] += pt[0]; entry.sum[1] += pt[1]; entry.sum[2] += pt[2]; entry.n++;
+          }
+          if (checks >= MAX_CHECKS || hitsByFacePair.size >= 30) break;
+        }
+        if (checks >= MAX_CHECKS || hitsByFacePair.size >= 30) break;
+      }
+      return [...hitsByFacePair.values()].map((e) => ({
+        faceIdx: e.faceIdx,
+        faceIdx2: e.faceIdx2,
+        at: [e.sum[0] / e.n, e.sum[1] / e.n, e.sum[2] / e.n],
+      }));
+    } finally {
+      if (ownsMesh && ownsMesh.delete) safeDelete(ownsMesh);
+    }
+  }
+  function checkGeometry(scene, opts = {}) {
+    ingestBlobs(scene);
+    const errors = [];
+    const minEdge = typeof opts.minEdge === 'number' && opts.minEdge > 0 ? opts.minEdge : 0.01;
+    const keys = (opts && opts.keys) || {};
+    const items = (scene && Array.isArray(scene.items)) ? scene.items : [];
+    const byId = new Map(items.map((it) => [it.id, it]));
+    const targets = [];
+    const seenIds = new Set();
+    let needEval = Object.keys(keys).length === 0;
+    for (const [id, k] of Object.entries(keys)) {
+      const it = byId.get(id);
+      if (!it || it.hidden || it.suppressed || it.role === 'hole') continue;
+      const ce = cache.get(k);
+      if (ce && ce.shape) {
+        ce.gen = gen;
+        targets.push({ id, key: k, m: it.m, shape: ce.shape, ownsShape: false });
+        seenIds.add(id);
+      } else {
+        needEval = true;
+      }
+    }
+    if (needEval) {
+      const { evald, consumed } = evalSceneCore(scene, errors);
+      const holes = evald.filter((e) => e.it.role === 'hole' && e.shape);
+      for (const e of evald) {
+        const it = e.it;
+        if (!e.shape || it.hidden || it.suppressed || it.role === 'hole' || consumed.has(it.id) || seenIds.has(it.id)) continue;
+        let result = e.shape, resultKey = e.key, ownsShape = false;
+        const cutters = holes.filter((h) => h.it.id !== it.id && bboxHit(h.wb, e.wb));
+        if (cutters.length) {
+          const inv = matInvRigid(it.m);
+          const rel = cutters.map((h) => matMul(inv, h.it.m));
+          resultKey = keyOf([e.key, cutters.map((h, i) => [h.key, rel[i].map((v) => Math.round(v * 1e6) / 1e6)])]);
+          const hitc = cacheGet(resultKey);
+          if (hitc) result = hitc;
+          else {
+            try {
+              const tool = fuseAll(cutters.map((h, i) => applyMatrix(h.shape, rel[i])), true);
+              result = e.shape.cut(tool);
+              safeDelete(tool);
+              cachePut(resultKey, result);
+            } catch (_) {
+              result = e.shape; resultKey = e.key;
+            }
+          }
+        }
+        targets.push({ id: it.id, key: resultKey, m: it.m, shape: result, ownsShape });
+        seenIds.add(it.id);
+      }
+    }
+    const issues = [];
+    let truncated = false;
+    const worldCenterOf = (shape, m) => {
+      try {
+        const bb = bboxOf(shape);
+        return transformPoint(m, [(bb[0] + bb[3]) / 2, (bb[1] + bb[4]) / 2, (bb[2] + bb[5]) / 2]);
+      } catch (_) {
+        return transformPoint(m, [0, 0, 0]);
+      }
+    };
+    for (const t of targets) {
+      const { id, key, m, shape, ownsShape } = t;
+      const fl = topoList(shape, 'face'), el = topoList(shape, 'edge'), seams = seamHashes(fl);
+      const shapeCenter = worldCenterOf(shape, m);
+      let bodyBadFaces = 0;
+      const an = new oc.BRepCheck_Analyzer(shape.wrapped, true);
+      try {
+        for (let fi = 0; fi < fl.length; fi++) {
+          const f = fl[fi].shape;
+          let valid = true;
+          try { valid = !!an.IsValid(f.wrapped); } catch (_) { valid = false; }
+          let area = NaN;
+          try { area = R.measureArea(f); } catch (_) {}
+          let surfOk = true;
+          try { oc.BRep_Tool.Surface(f.wrapped); } catch (_) { surfOk = false; }
+          if (!valid || !surfOk || !Number.isFinite(area) || area < 1e-6) {
+            bodyBadFaces++;
+            let fb = null, lc = null;
+            try { fb = bboxOf(f); } catch (_) {}
+            try { const fc = f.center; lc = [fc.x, fc.y, fc.z]; } catch (_) { lc = fb ? [(fb[0] + fb[3]) / 2, (fb[1] + fb[4]) / 2, (fb[2] + fb[5]) / 2] : [0, 0, 0]; }
+            const at = transformPoint(m, lc);
+            const worldBB = fb ? bboxTransform(fb, m) : null;
+            issues.push({
+              kind: 'badFace', s: 'bad', itemId: id, faceIdx: fi,
+              reason: !valid || !surfOk ? 'invalid' : 'degenerate',
+              area: Number.isFinite(area) ? area : 0, at, bbox: worldBB,
+            });
+          }
+        }
+        let wholeValid = true;
+        try { wholeValid = !!an.IsValid(); } catch (_) { wholeValid = false; }
+        if (!wholeValid && bodyBadFaces === 0) {
+          let sb = null;
+          try { sb = bboxTransform(bboxOf(shape), m); } catch (_) {}
+          issues.push({ kind: 'badFace', s: 'bad', itemId: id, faceIdx: -1, reason: 'shell', area: 0, at: shapeCenter, bbox: sb });
+        }
+      } finally {
+        an.delete();
+      }
+      let tinyCount = 0;
+      for (let ei = 0; ei < el.length; ei++) {
+        const edge = el[ei].shape, ew = edge.wrapped;
+        if (oc.BRep_Tool.Degenerated(ew) || seams.has(el[ei].hc)) continue;
+        let eLen = NaN;
+        try { eLen = edge.length; } catch (_) {}
+        if (!Number.isFinite(eLen)) {
+          issues.push({ kind: 'badFace', s: 'bad', itemId: id, faceIdx: -1, edgeIdx: ei, reason: 'invalidEdge', area: 0, at: shapeCenter });
+          continue;
+        }
+        if (eLen < minEdge) {
+          if (tinyCount >= 50) { truncated = true; continue; }
+          tinyCount++;
+          let a, b, mid;
+          try { a = vec(edge.startPoint); } catch (_) { a = [0, 0, 0]; }
+          try { b = vec(edge.endPoint); } catch (_) { b = a.slice(); }
+          try { mid = vec(edge.pointAt(0.5)); } catch (_) { mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2]; }
+          issues.push({
+            kind: 'tinyEdge', s: 'warn', itemId: id, edgeIdx: ei, length: eLen,
+            a: transformPoint(m, a), b: transformPoint(m, b), at: transformPoint(m, mid),
+          });
+        }
+      }
+      try {
+        const cached = key ? meshCache.get(key + '|' + Q.level) : null;
+        const selfHits = findSelfIntersections(shape, fl, cached);
+        for (const h of selfHits) {
+          issues.push({
+            kind: 'selfIntersect', s: 'bad', itemId: id,
+            faceIdx: h.faceIdx, faceIdx2: h.faceIdx2, at: transformPoint(m, h.at),
+          });
+        }
+      } catch (_) {}
+      for (const f of fl) f.shape.delete();
+      for (const x of el) x.shape.delete();
+      if (ownsShape) safeDelete(shape);
+    }
+    const order = { badFace: 0, selfIntersect: 1, tinyEdge: 2 };
+    issues.sort((a, b) => (order[a.kind] - order[b.kind]) || ((a.length || 0) - (b.length || 0)));
+    return { issues, checkedCount: targets.length, minEdge, truncated, errors };
+  }
   // ---------- Import prüfen & heilen (IO-10: BRepCheck, ShapeFix, Nähen mit Toleranz) ----------
   function uniqueShapes(raw, shapeEnum) {
     const TA = oc.TopAbs_ShapeEnum;
@@ -6149,5 +6425,5 @@ export function createKernel(R, oc) {
     }
   }
 
-  return { evaluate, remesh, exportMeshes, exportSTEP, exportIGES, exportBREP, measure, minDistance, project, clashes, holeWalls, faceLoopsOf, faceGridOf, sectionOf, checkImport, healImport, _cache: cache };
+  return { evaluate, remesh, exportMeshes, exportSTEP, exportIGES, exportBREP, measure, minDistance, project, clashes, holeWalls, faceLoopsOf, faceGridOf, sectionOf, checkGeometry, checkImport, healImport, _cache: cache };
 }
