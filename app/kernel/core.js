@@ -4,8 +4,54 @@
 export function createKernel(R, oc) {
   const cache = new Map(); // key -> { shape, gen, bbox }
   const meshCache = new Map(); // resultKey -> mesh payload (plain arrays, reusable)
+  const bboxMemo = new Map();
   const importBlobs = new Map(); // blobId -> Uint8Array (binäre Import-Dateien)
   let gen = 0;
+  const stats = {
+    evals: 0,
+    totalRebuilds: 0,
+    totalHits: 0,
+    buildsByItem: new Map(),
+    hitsByItem: new Map(),
+    lastEval: { evalId: 0, rebuilt: [], cached: [], meshed: [], fingerprints: {} },
+  };
+  function getStats() {
+    return {
+      evals: stats.evals,
+      totalRebuilds: stats.totalRebuilds,
+      totalHits: stats.totalHits,
+      buildsByItem: Object.fromEntries(stats.buildsByItem),
+      hitsByItem: Object.fromEntries(stats.hitsByItem),
+      lastEval: {
+        evalId: stats.lastEval.evalId,
+        rebuilt: stats.lastEval.rebuilt.slice(),
+        cached: stats.lastEval.cached.slice(),
+        meshed: stats.lastEval.meshed.slice(),
+        fingerprints: { ...stats.lastEval.fingerprints },
+      },
+      cacheSize: cache.size,
+      meshCacheSize: meshCache.size,
+    };
+  }
+  function resetStats() {
+    stats.evals = 0;
+    stats.totalRebuilds = 0;
+    stats.totalHits = 0;
+    stats.buildsByItem.clear();
+    stats.hitsByItem.clear();
+    stats.lastEval = { evalId: 0, rebuilt: [], cached: [], meshed: [], fingerprints: {} };
+    return getStats();
+  }
+  function clearCache() {
+    for (const [, e] of cache) {
+      try { if (Array.isArray(e.shape)) e.shape.forEach(safeDelete); else e.shape.delete(); } catch (_) {}
+      freeTopoMap(e.topo);
+    }
+    cache.clear();
+    meshCache.clear();
+    bboxMemo.clear();
+    return getStats();
+  }
 
   // ---------- kleine Helfer ----------
   const EPS = 1e-9;
@@ -77,14 +123,24 @@ export function createKernel(R, oc) {
   function gc() {
     // Formen entfernen, die mehrere Durchläufe nicht gebraucht wurden
     for (const [k, e] of cache) {
-      if (gen - e.gen > 6) {
+      if (gen - e.gen > 24) {
         try { if (Array.isArray(e.shape)) e.shape.forEach(safeDelete); else e.shape.delete(); } catch (_) {}
         freeTopoMap(e.topo);
         cache.delete(k);
       }
     }
-    if (meshCache.size > 400) {
-      const drop = meshCache.size - 300; let i = 0;
+    if (cache.size > 300) {
+      const old = [...cache.entries()].filter(([, e]) => e.gen < gen).sort((a, b) => a[1].gen - b[1].gen);
+      let drop = cache.size - 240;
+      for (const [k, e] of old) {
+        if (drop-- <= 0) break;
+        try { if (Array.isArray(e.shape)) e.shape.forEach(safeDelete); else e.shape.delete(); } catch (_) {}
+        freeTopoMap(e.topo);
+        cache.delete(k);
+      }
+    }
+    if (meshCache.size > 500) {
+      const drop = meshCache.size - 380; let i = 0;
       for (const k of meshCache.keys()) { if (i++ >= drop) break; meshCache.delete(k); }
     }
   }
@@ -3273,12 +3329,29 @@ export function createKernel(R, oc) {
     }
     return null;
   }
-  function evalItem(it, errors, parentWorldM = null, ctx = null) {
+  function dynamicDepKey(it, ctx) {
+    if (!ctx) return '';
+    if (it.kind === 'extrude' && it.p && it.p.extent === 'toFace') {
+      const tf = it.p.toFace;
+      if (tf && tf.datumId) return 'datum';
+      if (tf && tf.id) {
+        let tid = tf.id;
+        while (tid && ctx.consumed && ctx.consumed.has(tid)) tid = ctx.consumed.get(tid);
+        const pool = ctx.pool || [];
+        const hit = pool.find((x) => x.id === tid || (x.ids && (x.ids.has(tf.id) || x.ids.has(tid))));
+        return hit
+          ? keyOf(['toFace', hit.id, hit.key, hit.m.map((v) => Math.round(v * 1e6) / 1e6)])
+          : keyOf(['toFaceMissing', tid]);
+      }
+    }
+    return ctx.poolKey || '';
+  }
+  function evalItem(it, errors, parentWorldM = null, ctx = null, track = null) {
     if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'thicken' || it.kind === 'rib' || it.kind === 'emboss' || it.kind === 'mirrorStep' || it.kind === 'wrap' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it), topo: null };
     const dyn = hasDynamicExtent(it);
     const W = dyn ? (parentWorldM ? matMul(parentWorldM, it.m) : it.m) : null;
     const key = dyn
-      ? keyOf([defKey(it), W.map((v) => Math.round(v * 1e6) / 1e6), ctx ? ctx.poolKey : ''])
+      ? keyOf([defKey(it), W.map((v) => Math.round(v * 1e6) / 1e6), dynamicDepKey(it, ctx)])
       : defKey(it);
     const ce = cacheEntry(key);
     if (ce && ce.shape) {
@@ -3290,6 +3363,7 @@ export function createKernel(R, oc) {
       }
       return { shape: ce.shape, key, baseBox: ce.baseBox || null, topo: ce.topo || null };
     }
+    if (track) track.rebuilt.add(it.id);
     const e0 = errors.length;
     let shape = null, topo = null, ownsTopo = false, resolvedInfo = null, baseBox = null;
     try {
@@ -3345,7 +3419,7 @@ export function createKernel(R, oc) {
               ctx.resolved[c.id] = { planeRefOk: false };
             }
           }
-          const r = evalItem(cEval, errors, W, ctx);
+          const r = evalItem(cEval, errors, W, ctx, null);
           if (!r.shape) continue;
           const tr = applyMatrixWithTopo(r.shape, c.m, r.topo, c.id);
           const entry = { shape: tr.shape, topo: tr.topo, selfId: c.id };
@@ -4848,7 +4922,7 @@ export function createKernel(R, oc) {
   // Formschritte mit Modus: Ein Teil mit op = {type: 'join' | 'cut' | 'common', target} wird mit einem früheren
   // Körper verrechnet und verschwindet als eigenes Teil. Ketten (B in A, C in B) landen alle im ersten Körper.
   // Ergebnis: bodies (id → {shape, key, wb} im Koordinatensystem des Zielkörpers), consumed (id → Ziel-id)
-  function resolveOps(evald, errors, hiddenIds, resolved = null) {
+  function resolveOps(evald, errors, hiddenIds, resolved = null, track = null) {
     const byId = new Map(evald.map((e, i) => [e.it.id, { e, i }]));
     const consumed = new Map(), live = new Map(), bodies = new Map(), featureOps = new Map(), wrapWires = new Map();
     const anyMirror = evald.some((e) => e.it.kind === 'mirrorStep');
@@ -4875,6 +4949,7 @@ export function createKernel(R, oc) {
           const ceB = cacheEntry(kBase);
           let shape = ceB ? ceB.shape : null, shapeTopo = ceB ? ceB.topo : null, key = kBase;
           if (!shape) {
+            if (track) track.rebuilt.add(it.id);
             try {
               const tr = applyMatrixWithTopo(src.shape, rel, src.topo, src.it.id);
               shape = tr.shape; shapeTopo = tr.topo;
@@ -4886,6 +4961,7 @@ export function createKernel(R, oc) {
             const ceF = cacheEntry(kFin);
             if (ceF && ceF.shape) { shape = ceF.shape; shapeTopo = ceF.topo; key = kFin; }
             else {
+              if (track) track.rebuilt.add(it.id);
               const e0 = errors.length;
               const sf = applyFinishes(shape, it.finishes, errors, it.id, shapeTopo, true);
               if (sf.shape && sf.shape !== shape) {
@@ -4898,6 +4974,7 @@ export function createKernel(R, oc) {
           const entry = { shape, topo: shapeTopo, key, wb, m: it.m, it };
           live.set(it.id, entry);
           bodies.set(it.id, entry);
+          if (track && track.stepKeys) track.stepKeys.set(it.id, key);
         } else {
           consumed.set(it.id, tid);
           const rel = matMul(matInvRigid(src.m), matMul(M, src.m));
@@ -4906,6 +4983,7 @@ export function createKernel(R, oc) {
             const ce = cacheEntry(k);
             let next = ce ? ce.shape : null, nextTopo = ce ? ce.topo : null;
             if (!next) {
+              if (track) track.rebuilt.add(it.id);
               try {
                 const tr = applyMatrixWithTopo(src.shape, rel, src.topo, src.it.id);
                 next = tr.shape; nextTopo = tr.topo;
@@ -4914,6 +4992,9 @@ export function createKernel(R, oc) {
             }
             src.shape = next; src.topo = nextTopo; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
             bodies.set(tid, src);
+            if (track && track.stepKeys) track.stepKeys.set(it.id, k);
+          } else if (track && track.stepKeys) {
+            track.stepKeys.set(it.id, keyOf([src.key, 'xform', 'id']));
           }
         }
         continue;
@@ -4944,6 +5025,7 @@ export function createKernel(R, oc) {
           const ce = cacheEntry(k);
           let next = ce ? ce.shape : null, nextTopo = ce ? ce.topo : null;
           if (!next) {
+            if (track) track.rebuilt.add(it.id);
             try {
               const idM = isIdentity(src.m);
               const wRes = idM ? { shape: src.shape, topo: src.topo } : applyMatrixWithTopo(src.shape, src.m, src.topo, src.it.id);
@@ -4977,6 +5059,9 @@ export function createKernel(R, oc) {
           }
           src.shape = next; src.topo = nextTopo; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
           bodies.set(tid, src);
+          if (track && track.stepKeys) track.stepKeys.set(it.id, k);
+        } else if (track && track.stepKeys) {
+          track.stepKeys.set(it.id, keyOf([src.key, 'scale', 1]));
         }
         continue;
       }
@@ -5009,6 +5094,7 @@ export function createKernel(R, oc) {
           const ceB = cacheEntry(kBase);
           let shape = ceB ? ceB.shape : null, shapeTopo = ceB ? ceB.topo : null, key = kBase;
           if (!shape) {
+            if (track) track.rebuilt.add(it.id);
             const fArr = []; try { for (const fx of src.shape.faces) fArr.push(fx); } catch (_) {}
             const b = bboxOf(src.shape); const tol = 0.05 + 1e-3 * Math.max(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
             const f = resolveFaceRef({ ...p.face, tol }, fArr, src.topo, src.it.id, true)[0] || matchFace(src.shape, p.face);
@@ -5031,6 +5117,7 @@ export function createKernel(R, oc) {
             const ceF = cacheEntry(kFin);
             if (ceF && ceF.shape) { shape = ceF.shape; shapeTopo = ceF.topo; key = kFin; }
             else {
+              if (track) track.rebuilt.add(it.id);
               const e0 = errors.length;
               const sf = applyFinishes(shape, it.finishes, errors, it.id, shapeTopo, true);
               if (sf.shape && sf.shape !== shape) {
@@ -5043,6 +5130,7 @@ export function createKernel(R, oc) {
           const entry = { shape, topo: shapeTopo, key, wb, m: it.m, it };
           live.set(it.id, entry);
           bodies.set(it.id, entry);
+          if (track && track.stepKeys) track.stepKeys.set(it.id, key);
         } else {
           consumed.set(it.id, tid);
           const prevShape = src.shape, prevKey = src.key;
@@ -5052,6 +5140,7 @@ export function createKernel(R, oc) {
           let next = ce ? ce.shape : null, nextTopo = ce ? ce.topo : null;
           let plate = anyMirror ? cacheGet(kPlate) : null;
           if (!next) {
+            if (track) track.rebuilt.add(it.id);
             const fArr = []; try { for (const fx of src.shape.faces) fArr.push(fx); } catch (_) {}
             const b = bboxOf(src.shape); const tol = 0.05 + 1e-3 * Math.max(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
             const f = resolveFaceRef({ ...p.face, tol }, fArr, src.topo, src.it.id, true)[0] || matchFace(src.shape, p.face);
@@ -5080,6 +5169,7 @@ export function createKernel(R, oc) {
           if (anyMirror && plate) featureOps.set(it.id, { targetId: tid, opType: mode, tools: [{ shape: plate, m: src.m, key: kPlate }] });
           src.shape = next; src.topo = nextTopo; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
           bodies.set(tid, src);
+          if (track && track.stepKeys) track.stepKeys.set(it.id, k);
         }
         continue;
       }
@@ -5100,6 +5190,7 @@ export function createKernel(R, oc) {
         const ceR = cacheEntry(k);
         let next = ceR ? ceR.shape : null, nextTopo = ceR ? ceR.topo : null;
         if (!next) {
+          if (track) track.rebuilt.add(it.id);
           try { next = buildRibOn(src.shape, rel, p); nextTopo = ensureTopoComplete(next, createTopoMap(), tid); cachePut(k, next, null, null, null, nextTopo); }
           catch (err) { errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) }); continue; }
         }
@@ -5113,6 +5204,7 @@ export function createKernel(R, oc) {
         }
         src.shape = next; src.topo = nextTopo; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
         bodies.set(tid, src);
+        if (track && track.stepKeys) track.stepKeys.set(it.id, k);
         continue;
       }
       if (it.kind === 'wrap') {
@@ -5136,6 +5228,7 @@ export function createKernel(R, oc) {
         let wires = mode === 'line' ? cacheGet(kWires) : null;
         let wrapRad = ceW && ceW.resolved ? ceW.resolved.radius : null;
         if (!next || (mode === 'line' && !wires) || (mode !== 'line' && anyMirror && !tool)) {
+          if (track) track.rebuilt.add(it.id);
           try {
             const built = buildWrapOn(src.shape, p);
             wrapRad = built.radius || null;
@@ -5161,6 +5254,7 @@ export function createKernel(R, oc) {
         }
         src.shape = next; src.topo = nextTopo; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
         bodies.set(tid, src);
+        if (track && track.stepKeys) track.stepKeys.set(it.id, k);
         continue;
       }
       if (it.kind === 'emboss') {
@@ -5180,6 +5274,7 @@ export function createKernel(R, oc) {
         const ceE = cacheEntry(k);
         let next = ceE ? ceE.shape : null, nextTopo = ceE ? ceE.topo : null;
         if (!next) {
+          if (track) track.rebuilt.add(it.id);
           try { next = buildEmbossOn(src.shape, rel, p); nextTopo = ensureTopoComplete(next, createTopoMap(), tid); cachePut(k, next, null, null, null, nextTopo); }
           catch (err) { errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) }); continue; }
         }
@@ -5194,6 +5289,7 @@ export function createKernel(R, oc) {
         }
         src.shape = next; src.topo = nextTopo; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
         bodies.set(tid, src);
+        if (track && track.stepKeys) track.stepKeys.set(it.id, k);
         continue;
       }
       if (it.kind === 'sweep' && it.p && it.p.wrapId) {
@@ -5207,6 +5303,7 @@ export function createKernel(R, oc) {
         const ceB = cacheEntry(kBase);
         let shape = ceB ? ceB.shape : null, shapeTopo = ceB ? ceB.topo : null, key = kBase;
         if (!shape) {
+          if (track) track.rebuilt.add(it.id);
           try {
             const sw = buildSweepAlongWires(ww.wires, it.p);
             if (isIdentity(rel)) shape = sw;
@@ -5223,6 +5320,7 @@ export function createKernel(R, oc) {
           const ceF = cacheEntry(kFin);
           if (ceF && ceF.shape) { shape = ceF.shape; shapeTopo = ceF.topo; key = kFin; }
           else {
+            if (track) track.rebuilt.add(it.id);
             const e0 = errors.length;
             const sf = applyFinishes(shape, it.finishes, errors, it.id, shapeTopo, true);
             if (sf.shape && sf.shape !== shape) {
@@ -5235,6 +5333,7 @@ export function createKernel(R, oc) {
         const entry = { shape, topo: shapeTopo, key, wb, m: it.m, it };
         live.set(it.id, entry);
         bodies.set(it.id, entry);
+        if (track && track.stepKeys) track.stepKeys.set(it.id, key);
       }
       if (it.kind === 'mirrorStep') {
         const p = it.p || {};
@@ -5260,6 +5359,7 @@ export function createKernel(R, oc) {
         };
         let firstTid = null, firstOp = null;
         const produced = [];
+        const mirKeys = [];
         for (const fid of fids) {
           const srcRec = byId.get(fid);
           if (!srcRec || srcRec.i >= i) {
@@ -5285,6 +5385,7 @@ export function createKernel(R, oc) {
                 const ce = cacheEntry(kOp);
                 let next = ce ? ce.shape : null, nextTopo = ce ? ce.topo : null;
                 if (!next) {
+                  if (track) track.rebuilt.add(it.id);
                   const idB = isIdentity(base.m);
                   const locMir = idB ? mw.shape : applyMatrix(mw.shape, matInvRigid(base.m));
                   const opKind = fo.opType === 'join' ? 'fuse' : fo.opType === 'cut' ? 'cut' : 'common';
@@ -5295,6 +5396,7 @@ export function createKernel(R, oc) {
                 }
                 base.shape = next; base.topo = nextTopo; base.key = kOp; base.wb = bboxTransform(bboxCached(kOp, next), base.m);
                 bodies.set(tid, base);
+                mirKeys.push(kOp);
                 produced.push({ shape: mw.shape, m: ID_MAT, key: mw.key });
               } catch (err) {
                 errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) });
@@ -5316,6 +5418,7 @@ export function createKernel(R, oc) {
                 const ce = cacheEntry(kCut);
                 let next = ce ? ce.shape : null, nextTopo = ce ? ce.topo : null;
                 if (!next) {
+                  if (track) track.rebuilt.add(it.id);
                   const idS = isIdentity(s.m);
                   const locMir = idS ? mw.shape : applyMatrix(mw.shape, matInvRigid(s.m));
                   const br = boolWithTopo('cut', s.shape, s.topo, s.it.id, locMir, null, it.id, 'MH:' + it.id);
@@ -5325,6 +5428,7 @@ export function createKernel(R, oc) {
                 }
                 s.shape = next; s.topo = nextTopo; s.key = kCut; s.wb = bboxTransform(bboxCached(kCut, next), s.m);
                 bodies.set(eid, s);
+                mirKeys.push(kCut);
                 if (!firstTid) { firstTid = eid; firstOp = 'cut'; }
               }
               if (!firstTid) {
@@ -5345,6 +5449,7 @@ export function createKernel(R, oc) {
         }
         if (firstTid) consumed.set(it.id, firstTid);
         if (produced.length && firstTid) featureOps.set(it.id, { targetId: firstTid, opType: firstOp || 'cut', tools: produced });
+        if (track && track.stepKeys) track.stepKeys.set(it.id, keyOf(['mirrorStep', p, mirKeys]));
         continue;
       }
       if (it.kind === 'group' && it.p && it.p.op === 'pattern' && (it.children || []).some((c) => c.kind === 'rib')) {
@@ -5364,6 +5469,7 @@ export function createKernel(R, oc) {
         const ce = cacheEntry(k);
         let next = ce ? ce.shape : null, nextTopo = ce ? ce.topo : null;
         if (!next) {
+          if (track) track.rebuilt.add(it.id);
           let cur = src.shape;
           try {
             for (const M of mats) {
@@ -5383,6 +5489,7 @@ export function createKernel(R, oc) {
         }
         src.shape = next; src.topo = nextTopo; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
         bodies.set(tid, src);
+        if (track && track.stepKeys) track.stepKeys.set(it.id, k);
         continue;
       }
       const op = it.op, o = live.get(it.id);
@@ -5398,8 +5505,11 @@ export function createKernel(R, oc) {
       if (ce && ce.shape) {
         featureOps.set(it.id, { targetId: tid, opType: op.type, tools: [{ shape: o.shape, m: o.m, key: o.key }] });
         base.shape = ce.shape; base.topo = ce.topo || null; base.key = k; base.wb = bboxTransform(bboxCached(k, ce.shape), base.m);
-        bodies.set(tid, base); continue;
+        bodies.set(tid, base);
+        if (track && track.stepKeys) track.stepKeys.set(it.id, k);
+        continue;
       }
+      if (track) track.rebuilt.add(it.id);
       try {
         const tr = applyMatrixWithTopo(o.shape, rel, o.topo, o.it.id);
         const opKind = op.type === 'join' ? 'fuse' : op.type === 'cut' ? 'cut' : 'common';
@@ -5410,6 +5520,7 @@ export function createKernel(R, oc) {
         featureOps.set(it.id, { targetId: tid, opType: op.type, tools: [{ shape: o.shape, m: o.m, key: o.key }] });
         base.shape = next; base.topo = nextTopo; base.key = k; base.wb = bboxTransform(bboxCached(k, next), base.m);
         bodies.set(tid, base);
+        if (track && track.stepKeys) track.stepKeys.set(it.id, k);
       } catch (err) {
         errors.push({ itemId: it.id, code: 'op', message: `${NAMES[op.type]} mit „${base.it.name || 'Körper'}“ hat nicht geklappt – berühren sich die Teile?` });
       }
@@ -5430,7 +5541,7 @@ export function createKernel(R, oc) {
     if (!it || it.kind !== 'group') return it;
     return { ...it, children: (it.children || []).filter((c) => !c.hidden && !hasDynamicExtent(c)).map(stripDynamic) };
   }
-  function evalSceneCore(scene, errors, times = null) {
+  function evalSceneCore(scene, errors, times = null, track = null) {
     const hiddenIds = new Set((scene.items || []).filter((it) => it.hidden).map((it) => it.id));
     const tops = (scene.items || []).filter((it) => !it.hidden);
     const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
@@ -5441,14 +5552,14 @@ export function createKernel(R, oc) {
         const resolved = {};
         const evald = tops.map((it) => {
           const t0 = now();
-          const r = evalItem(it, errors, null, { resolved });
+          const r = evalItem(it, errors, null, { resolved }, track);
           let wb = null;
           if (r.shape) wb = bboxTransform(bboxCached(r.key, r.shape), it.m);
           addT(it.id, t0);
           return { it, ...r, wb };
         });
         const tOps = now();
-        const { bodies, consumed } = resolveOps(evald, errors, hiddenIds, resolved);
+        const { bodies, consumed } = resolveOps(evald, errors, hiddenIds, resolved, track);
         if (bodies.size && times) { const d = now() - tOps; if (d > 0.5) for (const id of bodies.keys()) times[id] = (times[id] || 0) + d / bodies.size; }
         for (const e of evald) { const b = bodies.get(e.it.id); if (b) { e.shape = b.shape; e.topo = b.topo || null; e.key = b.key; e.wb = b.wb; } }
         return { evald, consumed, resolved, opsModified: new Set(bodies.keys()) };
@@ -5462,7 +5573,7 @@ export function createKernel(R, oc) {
     const pass1Evald = tops.map((it) => {
       if (!hasDynamicExtent(it)) {
         const t0 = now();
-        const r = evalItem(it, errors);
+        const r = evalItem(it, errors, null, null, track);
         let wb = null;
         if (r.shape) wb = bboxTransform(bboxCached(r.key, r.shape), it.m);
         addT(it.id, t0);
@@ -5479,7 +5590,7 @@ export function createKernel(R, oc) {
     });
 
     const pass1Snap = pass1Evald.map((e) => ({ ...e }));
-    const { bodies: p1Bodies, consumed: p1Consumed } = resolveOps(pass1Snap, [], hiddenIds);
+    const { bodies: p1Bodies, consumed: p1Consumed } = resolveOps(pass1Snap, [], hiddenIds, null, track ? { rebuilt: track.rebuilt, stepKeys: null } : null);
     for (const e of pass1Snap) { const b = p1Bodies.get(e.it.id); if (b) { e.shape = b.shape; e.key = b.key; e.wb = b.wb; } }
 
     const pool = [];
@@ -5503,7 +5614,7 @@ export function createKernel(R, oc) {
       for (let i = 0; i < tops.length; i++) {
         if (!pass1Evald[i].dyn) continue;
         const it = tops[i], t0 = now();
-        const r = evalItem(it, errors, null, ctx);
+        const r = evalItem(it, errors, null, ctx, track);
         let wb = null;
         if (r.shape) wb = bboxTransform(bboxCached(r.key, r.shape), it.m);
         addT(it.id, t0);
@@ -5524,7 +5635,7 @@ export function createKernel(R, oc) {
         }
       }
       const tOps = now();
-      const { bodies, consumed } = resolveOps(evald, errors, hiddenIds, ctx.resolved);
+      const { bodies, consumed } = resolveOps(evald, errors, hiddenIds, ctx.resolved, track);
       if (bodies.size && times) { const d = now() - tOps; if (d > 0.5) for (const id of bodies.keys()) times[id] = (times[id] || 0) + d / bodies.size; }
       for (const e of evald) { const b = bodies.get(e.it.id); if (b) { e.shape = b.shape; e.topo = b.topo || null; e.key = b.key; e.wb = b.wb; } }
       return { evald, consumed, resolved: ctx.resolved, opsModified: new Set(bodies.keys()) };
@@ -5572,7 +5683,7 @@ export function createKernel(R, oc) {
     const matched = matchBodiesLocal(hints, bodies);
     return bodies.map((b, bi) => (matched[bi] ? { ...b, name: matched[bi].name, color: matched[bi].color } : b));
   }
-  function evaluate(scene, known = {}) {
+  function evaluate(scene, known = {}, opts = {}) {
     gen++;
     ingestBlobs(scene);
     if (scene.quality) setQuality(scene.quality);
@@ -5580,13 +5691,24 @@ export function createKernel(R, oc) {
     // Rechenzeit je Schritt (BE-26): nur, was wirklich neu gerechnet wurde, zählt
     const times = {}, now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
     const addT = (id, t0) => { const d = now() - t0; if (d > 0.5) times[id] = (times[id] || 0) + d; };
-    const { evald, consumed, resolved } = evalSceneCore(scene, errors, times);
+    const track = { rebuilt: new Set(), stepKeys: new Map() };
+    const { evald, consumed, resolved } = evalSceneCore(scene, errors, times, track);
     const holes = evald.filter((e) => e.it.role === 'hole' && e.shape);
     const nodes = [];
+    const fingerprints = {};
+    const meshed = [];
     for (const e of evald) {
       const it = e.it;
-      if (consumed.has(it.id)) { nodes.push({ id: it.id, key: null, empty: true, merged: consumed.get(it.id), ...(e.baseBox ? { baseBox: e.baseBox } : {}), ...(e.wb ? { ownBox: e.wb } : {}) }); continue; }
-      if (!e.shape) { nodes.push({ id: it.id, key: null, empty: true }); continue; }
+      if (consumed.has(it.id)) {
+        fingerprints[it.id] = track.stepKeys.get(it.id) || e.key || defKey(it);
+        nodes.push({ id: it.id, key: null, empty: true, merged: consumed.get(it.id), ...(e.baseBox ? { baseBox: e.baseBox } : {}), ...(e.wb ? { ownBox: e.wb } : {}) });
+        continue;
+      }
+      if (!e.shape) {
+        fingerprints[it.id] = track.stepKeys.get(it.id) || e.key || defKey(it);
+        nodes.push({ id: it.id, key: null, empty: true });
+        continue;
+      }
       let resultKey = e.key, result = e.shape, resultTopo = e.topo || null;
       if (it.role !== 'hole') {
         const cutters = holes.filter((h) => h.it.id !== it.id && bboxHit(h.wb, e.wb));
@@ -5597,6 +5719,7 @@ export function createKernel(R, oc) {
           const cec = cacheEntry(resultKey);
           if (cec && cec.shape) { result = cec.shape; resultTopo = cec.topo || null; }
           else {
+            track.rebuilt.add(it.id);
             const tc = now();
             try {
               const moved = cutters.map((h, i) => {
@@ -5616,6 +5739,7 @@ export function createKernel(R, oc) {
           }
         }
       }
+      fingerprints[it.id] = resultKey;
       const mk = it.id + '|' + resultKey + '|' + Q.level;
       if (known[it.id] === resultKey) {
         const cachedPayload = meshCache.get(mk);
@@ -5630,17 +5754,33 @@ export function createKernel(R, oc) {
       let payload = meshCache.get(mk);
       if (!payload) {
         const tm = now();
-        try { payload = meshPayload(result, null, resultTopo, it.id); meshCache.set(mk, payload); addT(it.id, tm); }
+        try { payload = meshPayload(result, null, resultTopo, it.id); meshCache.set(mk, payload); addT(it.id, tm); meshed.push(it.id); }
         catch (err) { errors.push({ itemId: it.id, code: 'mesh', message: 'Die Form konnte nicht angezeigt werden.' }); nodes.push({ id: it.id, key: null, empty: true }); continue; }
       }
       const out = clonePayload(payload);
       if (out.bodies && out.bodies.length >= 2) out.bodies = applyGroupBodyHints(it, out.bodies);
       nodes.push({ id: it.id, key: resultKey, ...(e.baseBox ? { baseBox: e.baseBox } : {}), ...out });
     }
+    if (!(opts && opts.aux)) {
+      stats.evals++;
+      const rebuilt = [], cached = [];
+      for (const e of evald) {
+        const id = e.it.id;
+        if (track.rebuilt.has(id)) {
+          rebuilt.push(id);
+          stats.buildsByItem.set(id, (stats.buildsByItem.get(id) || 0) + 1);
+          stats.totalRebuilds++;
+        } else {
+          cached.push(id);
+          stats.hitsByItem.set(id, (stats.hitsByItem.get(id) || 0) + 1);
+          stats.totalHits++;
+        }
+      }
+      stats.lastEval = { evalId: stats.evals, rebuilt, cached, meshed, fingerprints };
+    }
     gc();
-    return { nodes, errors, times, resolved };
+    return opts && opts.aux ? { nodes, errors, times, resolved } : { nodes, errors, times, resolved, stats: getStats() };
   }
-  const bboxMemo = new Map();
   function bboxCached(key, shape) {
     let b = bboxMemo.get(key);
     if (!b) { b = bboxOf(shape); bboxMemo.set(key, b); if (bboxMemo.size > 2000) bboxMemo.clear(); }
@@ -8375,5 +8515,5 @@ export function createKernel(R, oc) {
     }
   }
 
-  return { evaluate, remesh, exportMeshes, exportSTEP, exportIGES, exportBREP, measure, minDistance, project, clashes, holeWalls, faceLoopsOf, faceGridOf, sectionOf, checkGeometry, checkImport, healImport, _cache: cache };
+  return { evaluate, remesh, exportMeshes, exportSTEP, exportIGES, exportBREP, measure, minDistance, project, clashes, holeWalls, faceLoopsOf, faceGridOf, sectionOf, checkGeometry, checkImport, healImport, getStats, resetStats, clearCache, _cache: cache };
 }

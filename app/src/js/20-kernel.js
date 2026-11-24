@@ -3,11 +3,52 @@ const Kernel = (() => {
   let worker = null, seq = 1, ready = false;
   let state = 'idle', progress = 0, loadError = null, startPromise = null;
   let loadStartMs = null, readyMs = null, loadDurMs = null, initMs = null;
+  let lastStats = null;
   const pending = new Map();
   const sentBlobs = new Set();
   const ev = makeEmitter();
   let readyResolve;
   const readyPromise = new Promise((res) => { readyResolve = res; });
+
+  function canonical(v) {
+    if (v === undefined || typeof v === 'function' || typeof v === 'symbol') return null;
+    if (typeof v === 'number') return Number.isFinite(v) ? (Object.is(v, -0) ? 0 : v) : null;
+    if (Array.isArray(v)) return v.map(canonical);
+    if (v && typeof v === 'object') {
+      const out = {};
+      for (const k of Object.keys(v).sort()) {
+        const val = v[k];
+        if (val === undefined || typeof val === 'function' || typeof val === 'symbol') continue;
+        out[k] = canonical(val);
+      }
+      return out;
+    }
+    return v;
+  }
+  function fingerprint(val) {
+    const str = JSON.stringify(canonical(val));
+    let h1 = 0xdeadbeef ^ str.length, h2 = 0x41c6ce57 ^ str.length;
+    for (let i = 0; i < str.length; i++) {
+      const ch = str.charCodeAt(i);
+      h1 = Math.imul(h1 ^ ch, 2654435761);
+      h2 = Math.imul(h2 ^ ch, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return (h2 >>> 0).toString(36) + (h1 >>> 0).toString(36);
+  }
+  function emptyStats() {
+    return {
+      evals: 0,
+      totalRebuilds: 0,
+      totalHits: 0,
+      buildsByItem: {},
+      hitsByItem: {},
+      lastEval: { evalId: 0, rebuilt: [], cached: [], meshed: [], fingerprints: {} },
+      cacheSize: 0,
+      meshCacheSize: 0,
+    };
+  }
 
   async function fetchWasm(onProgress) {
     const resp = await fetch('occ-kernel.wasm');
@@ -63,7 +104,16 @@ const Kernel = (() => {
     }
     return new Promise((resolve, reject) => {
       const id = seq++;
-      pending.set(id, { resolve, reject });
+      pending.set(id, {
+        resolve: (result) => {
+          if (cmd === 'evaluate' && !(args && args.opts && args.opts.aux) && result && result.stats) {
+            lastStats = result.stats;
+            ev.emit('stats', lastStats);
+          }
+          resolve(result);
+        },
+        reject,
+      });
       worker.postMessage({ id, cmd, args }, transfer);
     });
   }
@@ -82,7 +132,7 @@ const Kernel = (() => {
       }
       return startPromise;
     }
-    state = 'loading'; progress = 0.02; loadError = null; loadStartMs = performance.now();
+    state = 'loading'; progress = 0.02; loadError = null; loadStartMs = performance.now(); lastStats = null;
     onProgress && onProgress(progress);
     ev.emit('state', { state, progress });
     startPromise = (async () => {
@@ -97,6 +147,7 @@ const Kernel = (() => {
         try { w = await spawn('direct'); } catch (e1) { console.warn('Kern-Worker direkt nicht gestartet:', e1); w = await spawn('blob'); }
         worker = w;
         sentBlobs.clear();
+        lastStats = null;
         worker.onmessage = (m) => {
           const { id, ok, result, error } = m.data || {};
           if (id === 0) return; // geladen
@@ -138,8 +189,29 @@ const Kernel = (() => {
     if (!ready) await ensure();
     return postCall(cmd, args, transfer);
   }
+  async function stats() {
+    if (!ready) return emptyStats();
+    const r = await call('stats');
+    lastStats = r;
+    return r;
+  }
+  async function resetStats() {
+    lastStats = null;
+    if (!ready) return emptyStats();
+    const r = await call('resetStats');
+    lastStats = r;
+    return r;
+  }
+  async function clearCache() {
+    if (!ready) return emptyStats();
+    const r = await call('clearCache');
+    lastStats = r;
+    return r;
+  }
   return {
     start, ensure, call, on: ev.on,
+    stats, resetStats, clearCache, fingerprint,
+    get lastStats() { return lastStats; },
     get ready() { return ready; },
     get state() { return state; },
     get progress() { return progress; },

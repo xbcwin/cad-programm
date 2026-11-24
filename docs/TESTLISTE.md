@@ -2048,6 +2048,12 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Schließen mit Nachfrage, Einfach/Profi, Neuladen & Hilfe**: „×“ auf einem Tab mit ungespeicherten Änderungen öffnet den Bestätigungsdialog („Abbrechen“ / „Trotzdem schließen“), ein unberührter leerer Tab schließt sofort; Tab-Leiste funktioniert in „Einfach“ und „Profi“, offene Tabs werden beim Neuladen wiederhergestellt und der `+`-Knopf trägt `data-help="projectTabs"`.
 - [ ] **Von Hand**: Im Browser mehrere Projekte per „+“ (inkl. Vorlage und `.json`-Datei) öffnen, mit Doppelklick umbenennen, per Rechtsklick „Andere Tabs schließen“ prüfen und das Design in „Einfach“ und „Profi“ sowie bei schmalem Fenster ansehen.
 
+## Große Modelle, Schritt 1: nur neu rechnen, was sich geändert hat (Auto [A-077], PL-04)
+
+- [x] **3 unabhängige Körper → Maßänderung rechnet nur Körper 3 neu**: Nach dem Anlegen von Quader, Zylinder und Skizzenkörper zeigt `Kernel.stats()` für alle drei je `1` Neuberechnung; nach dem Ändern der Höhe an Körper 3 (direkt und per Parameter-Formel `Hoehe3`) bleiben die Zähler für Körper 1 und 2 bei `1`, nur Körper 3 wird neu gerechnet (`data-cache="hit"` bzw. `"rebuilt"` und Tooltip „aus Speicher“ / „neu gerechnet“ in der Zeitleiste).
+- [x] **Abhängiger Boolesch-Abzug, Rückgängig & Marker-Sprung**: Ein von Körper 3 abhängiger Schnitt rechnet bei Höhenänderung mit Körper 3 zusammen neu, während Körper 1 und 2 im Speicher bleiben; `App.undo()` sowie Zurück- und Vorrollen des Zeitleisten-Markers bedienen alle Schritte mit `0` Neuberechnungen aus dem Cache.
+- [ ] **Von Hand**: Im Browser bei einem größeren Modell mit mehreren Körpern und Verrundungen ein Maß am letzten Schritt ändern und im Protokoll („Rechenzeit je Schritt“) sowie an den Tooltips der Zeitleiste prüfen, dass frühere Schritte aus dem Speicher kommen.
+
 ## Fehler melden
 
 ```

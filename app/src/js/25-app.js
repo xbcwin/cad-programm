@@ -222,7 +222,7 @@ const App = (() => {
 
   const S = {
     doc: Model.newDoc(), sel: [], face: null, edges: [], mode: 'model', tool: null,
-    results: new Map(), resolved: new Map(), baseBoxes: new Map(), ownBoxes: new Map(), errors: [], undo: [], redo: [], undoBytes: 0, redoBytes: 0, extra: [], hideIds: new Set(), revision: 1, cleanRev: 1, lastSavedRev: -1, fileSavedRev: -1,
+    results: new Map(), resolved: new Map(), baseBoxes: new Map(), ownBoxes: new Map(), stepStats: new Map(), evalStats: null, errors: [], undo: [], redo: [], undoBytes: 0, redoBytes: 0, extra: [], hideIds: new Set(), revision: 1, cleanRev: 1, lastSavedRev: -1, fileSavedRev: -1,
     ctx: null, iso: null,   // gerade bearbeitetes Bauteil / isoliertes Teil (nur Ansicht, nicht gespeichert)
   };
   const ev = makeEmitter();
@@ -253,6 +253,8 @@ const App = (() => {
       mode: 'model',
       camera: null,
       times: new Map(),
+      stepStats: new Map(),
+      evalStats: null,
     };
   }
   {
@@ -309,6 +311,8 @@ const App = (() => {
     cur.iso = S.iso;
     cur.mode = S.mode;
     cur.times = new Map(times);
+    cur.stepStats = new Map(S.stepStats);
+    cur.evalStats = S.evalStats;
     if (typeof Viewer !== 'undefined' && Viewer.controls && Viewer.camera && Viewer.saveCamera) {
       try { cur.camera = Viewer.saveCamera(); } catch (_) {}
     }
@@ -352,6 +356,8 @@ const App = (() => {
     S.peek = null;
     times.clear();
     if (tab.times) for (const [k, v] of tab.times) times.set(k, v);
+    S.stepStats = new Map(tab.stepStats || []);
+    S.evalStats = tab.evalStats || null;
     if (typeof SK !== 'undefined' && SK.syncFonts) SK.syncFonts(S.doc.fonts);
     if (typeof Store !== 'undefined') {
       Store.extractBlobs(S.doc);
@@ -840,6 +846,31 @@ const App = (() => {
     S.resolved = new Map(Object.entries(res.resolved || {}));
     S.baseBoxes = new Map();
     S.ownBoxes = new Map();
+    if (res && res.stats) {
+      S.evalStats = res.stats;
+      S.stepStats = new Map();
+      const le = res.stats.lastEval || {};
+      const rebuiltSet = new Set(le.rebuilt || []);
+      const cachedSet = new Set(le.cached || []);
+      const meshedSet = new Set(le.meshed || []);
+      const fps = le.fingerprints || {};
+      const buildsBy = res.stats.buildsByItem || {};
+      const hitsBy = res.stats.hitsByItem || {};
+      const allIds = new Set([...Object.keys(fps), ...rebuiltSet, ...cachedSet]);
+      for (const id of allIds) {
+        S.stepStats.set(id, {
+          fp: fps[id] || null,
+          rebuilt: rebuiltSet.has(id),
+          cached: cachedSet.has(id),
+          meshed: meshedSet.has(id),
+          builds: buildsBy[id] || 0,
+          hits: hitsBy[id] || 0,
+          evalId: le.evalId || 0,
+        });
+      }
+    } else if (res && Array.isArray(res.nodes) && !res.nodes.length) {
+      S.stepStats.clear();
+    }
     for (const [id, ms] of Object.entries(res.times || {})) times.set(id, { ms, at: Date.now() });
     for (const n of res.nodes) {
       seen.add(n.id);
@@ -908,7 +939,7 @@ const App = (() => {
     const { v } = Model.vars(S.doc);
     const items = kids.map((c) => { const ki = Model.kernelItem(c, v); ki.m = Model.matArr(Model.worldMatrix(S.doc, c.id)); ki.role = 'solid'; ki.hidden = false; return ki; });
     try {
-      const res = await Kernel.call('evaluate', { scene: { items }, known: {} });
+      const res = await Kernel.call('evaluate', { scene: { items }, known: {}, opts: { aux: true } });
       if (req !== ctxPickReq.n) return;
       Viewer.setProxies(res.nodes.filter((n) => !n.empty).map((n) => ({ id: n.id, data: n, matrix: Model.worldMatrix(S.doc, n.id) })));
     } catch (_) { Viewer.clearProxies(); }
@@ -982,7 +1013,7 @@ const App = (() => {
         return ki;
       }).filter(Boolean);
       try {
-        const res = await Kernel.call('evaluate', { scene: { items }, known: {} });
+        const res = await Kernel.call('evaluate', { scene: { items }, known: {}, opts: { aux: true } });
         if (req !== ghostReq.n) return;
         for (const n of res.nodes) if (!n.empty) { S.ghostData = S.ghostData || new Map(); S.ghostData.set(n.id, n); Viewer.setGhost(n.id, n, Model.worldMatrix(S.doc, n.id)); }
         ev.emit('ghosts');
@@ -1013,6 +1044,9 @@ const App = (() => {
     ownBox(id) { return (S.ownBoxes && S.ownBoxes.get(id)) || null; },
     resolvedOf(id) { return (S.resolved && S.resolved.get(id)) || null; },
     resolvedDist(id) { const r = S.resolved && S.resolved.get(id); return r && isFinite(r.dist) ? r.dist : null; },
+    stepFingerprint(id) { const st = S.stepStats.get(id); return (st && st.fp) || null; },
+    stepCacheStatus(id) { return S.stepStats.get(id) || null; },
+    get evalStats() { return S.evalStats; },
     get hideIds() { return S.hideIds; }, set hideIds(x) { S.hideIds = x || new Set(); applyView(); },
     get ctx() { return S.ctx; }, get iso() { return S.iso; }, setCtx, setIso, applyView,
     get tool() { return S.tool; }, set tool(t) { S.tool = t; ev.emit('tool'); },

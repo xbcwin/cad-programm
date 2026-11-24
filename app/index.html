@@ -7998,11 +7998,52 @@ const Kernel = (() => {
   let worker = null, seq = 1, ready = false;
   let state = 'idle', progress = 0, loadError = null, startPromise = null;
   let loadStartMs = null, readyMs = null, loadDurMs = null, initMs = null;
+  let lastStats = null;
   const pending = new Map();
   const sentBlobs = new Set();
   const ev = makeEmitter();
   let readyResolve;
   const readyPromise = new Promise((res) => { readyResolve = res; });
+
+  function canonical(v) {
+    if (v === undefined || typeof v === 'function' || typeof v === 'symbol') return null;
+    if (typeof v === 'number') return Number.isFinite(v) ? (Object.is(v, -0) ? 0 : v) : null;
+    if (Array.isArray(v)) return v.map(canonical);
+    if (v && typeof v === 'object') {
+      const out = {};
+      for (const k of Object.keys(v).sort()) {
+        const val = v[k];
+        if (val === undefined || typeof val === 'function' || typeof val === 'symbol') continue;
+        out[k] = canonical(val);
+      }
+      return out;
+    }
+    return v;
+  }
+  function fingerprint(val) {
+    const str = JSON.stringify(canonical(val));
+    let h1 = 0xdeadbeef ^ str.length, h2 = 0x41c6ce57 ^ str.length;
+    for (let i = 0; i < str.length; i++) {
+      const ch = str.charCodeAt(i);
+      h1 = Math.imul(h1 ^ ch, 2654435761);
+      h2 = Math.imul(h2 ^ ch, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return (h2 >>> 0).toString(36) + (h1 >>> 0).toString(36);
+  }
+  function emptyStats() {
+    return {
+      evals: 0,
+      totalRebuilds: 0,
+      totalHits: 0,
+      buildsByItem: {},
+      hitsByItem: {},
+      lastEval: { evalId: 0, rebuilt: [], cached: [], meshed: [], fingerprints: {} },
+      cacheSize: 0,
+      meshCacheSize: 0,
+    };
+  }
 
   async function fetchWasm(onProgress) {
     const resp = await fetch('occ-kernel.wasm');
@@ -8058,7 +8099,16 @@ const Kernel = (() => {
     }
     return new Promise((resolve, reject) => {
       const id = seq++;
-      pending.set(id, { resolve, reject });
+      pending.set(id, {
+        resolve: (result) => {
+          if (cmd === 'evaluate' && !(args && args.opts && args.opts.aux) && result && result.stats) {
+            lastStats = result.stats;
+            ev.emit('stats', lastStats);
+          }
+          resolve(result);
+        },
+        reject,
+      });
       worker.postMessage({ id, cmd, args }, transfer);
     });
   }
@@ -8077,7 +8127,7 @@ const Kernel = (() => {
       }
       return startPromise;
     }
-    state = 'loading'; progress = 0.02; loadError = null; loadStartMs = performance.now();
+    state = 'loading'; progress = 0.02; loadError = null; loadStartMs = performance.now(); lastStats = null;
     onProgress && onProgress(progress);
     ev.emit('state', { state, progress });
     startPromise = (async () => {
@@ -8092,6 +8142,7 @@ const Kernel = (() => {
         try { w = await spawn('direct'); } catch (e1) { console.warn('Kern-Worker direkt nicht gestartet:', e1); w = await spawn('blob'); }
         worker = w;
         sentBlobs.clear();
+        lastStats = null;
         worker.onmessage = (m) => {
           const { id, ok, result, error } = m.data || {};
           if (id === 0) return; // geladen
@@ -8133,8 +8184,29 @@ const Kernel = (() => {
     if (!ready) await ensure();
     return postCall(cmd, args, transfer);
   }
+  async function stats() {
+    if (!ready) return emptyStats();
+    const r = await call('stats');
+    lastStats = r;
+    return r;
+  }
+  async function resetStats() {
+    lastStats = null;
+    if (!ready) return emptyStats();
+    const r = await call('resetStats');
+    lastStats = r;
+    return r;
+  }
+  async function clearCache() {
+    if (!ready) return emptyStats();
+    const r = await call('clearCache');
+    lastStats = r;
+    return r;
+  }
   return {
     start, ensure, call, on: ev.on,
+    stats, resetStats, clearCache, fingerprint,
+    get lastStats() { return lastStats; },
     get ready() { return ready; },
     get state() { return state; },
     get progress() { return progress; },
@@ -8369,7 +8441,7 @@ const App = (() => {
 
   const S = {
     doc: Model.newDoc(), sel: [], face: null, edges: [], mode: 'model', tool: null,
-    results: new Map(), resolved: new Map(), baseBoxes: new Map(), ownBoxes: new Map(), errors: [], undo: [], redo: [], undoBytes: 0, redoBytes: 0, extra: [], hideIds: new Set(), revision: 1, cleanRev: 1, lastSavedRev: -1, fileSavedRev: -1,
+    results: new Map(), resolved: new Map(), baseBoxes: new Map(), ownBoxes: new Map(), stepStats: new Map(), evalStats: null, errors: [], undo: [], redo: [], undoBytes: 0, redoBytes: 0, extra: [], hideIds: new Set(), revision: 1, cleanRev: 1, lastSavedRev: -1, fileSavedRev: -1,
     ctx: null, iso: null,   // gerade bearbeitetes Bauteil / isoliertes Teil (nur Ansicht, nicht gespeichert)
   };
   const ev = makeEmitter();
@@ -8400,6 +8472,8 @@ const App = (() => {
       mode: 'model',
       camera: null,
       times: new Map(),
+      stepStats: new Map(),
+      evalStats: null,
     };
   }
   {
@@ -8456,6 +8530,8 @@ const App = (() => {
     cur.iso = S.iso;
     cur.mode = S.mode;
     cur.times = new Map(times);
+    cur.stepStats = new Map(S.stepStats);
+    cur.evalStats = S.evalStats;
     if (typeof Viewer !== 'undefined' && Viewer.controls && Viewer.camera && Viewer.saveCamera) {
       try { cur.camera = Viewer.saveCamera(); } catch (_) {}
     }
@@ -8499,6 +8575,8 @@ const App = (() => {
     S.peek = null;
     times.clear();
     if (tab.times) for (const [k, v] of tab.times) times.set(k, v);
+    S.stepStats = new Map(tab.stepStats || []);
+    S.evalStats = tab.evalStats || null;
     if (typeof SK !== 'undefined' && SK.syncFonts) SK.syncFonts(S.doc.fonts);
     if (typeof Store !== 'undefined') {
       Store.extractBlobs(S.doc);
@@ -8987,6 +9065,31 @@ const App = (() => {
     S.resolved = new Map(Object.entries(res.resolved || {}));
     S.baseBoxes = new Map();
     S.ownBoxes = new Map();
+    if (res && res.stats) {
+      S.evalStats = res.stats;
+      S.stepStats = new Map();
+      const le = res.stats.lastEval || {};
+      const rebuiltSet = new Set(le.rebuilt || []);
+      const cachedSet = new Set(le.cached || []);
+      const meshedSet = new Set(le.meshed || []);
+      const fps = le.fingerprints || {};
+      const buildsBy = res.stats.buildsByItem || {};
+      const hitsBy = res.stats.hitsByItem || {};
+      const allIds = new Set([...Object.keys(fps), ...rebuiltSet, ...cachedSet]);
+      for (const id of allIds) {
+        S.stepStats.set(id, {
+          fp: fps[id] || null,
+          rebuilt: rebuiltSet.has(id),
+          cached: cachedSet.has(id),
+          meshed: meshedSet.has(id),
+          builds: buildsBy[id] || 0,
+          hits: hitsBy[id] || 0,
+          evalId: le.evalId || 0,
+        });
+      }
+    } else if (res && Array.isArray(res.nodes) && !res.nodes.length) {
+      S.stepStats.clear();
+    }
     for (const [id, ms] of Object.entries(res.times || {})) times.set(id, { ms, at: Date.now() });
     for (const n of res.nodes) {
       seen.add(n.id);
@@ -9055,7 +9158,7 @@ const App = (() => {
     const { v } = Model.vars(S.doc);
     const items = kids.map((c) => { const ki = Model.kernelItem(c, v); ki.m = Model.matArr(Model.worldMatrix(S.doc, c.id)); ki.role = 'solid'; ki.hidden = false; return ki; });
     try {
-      const res = await Kernel.call('evaluate', { scene: { items }, known: {} });
+      const res = await Kernel.call('evaluate', { scene: { items }, known: {}, opts: { aux: true } });
       if (req !== ctxPickReq.n) return;
       Viewer.setProxies(res.nodes.filter((n) => !n.empty).map((n) => ({ id: n.id, data: n, matrix: Model.worldMatrix(S.doc, n.id) })));
     } catch (_) { Viewer.clearProxies(); }
@@ -9129,7 +9232,7 @@ const App = (() => {
         return ki;
       }).filter(Boolean);
       try {
-        const res = await Kernel.call('evaluate', { scene: { items }, known: {} });
+        const res = await Kernel.call('evaluate', { scene: { items }, known: {}, opts: { aux: true } });
         if (req !== ghostReq.n) return;
         for (const n of res.nodes) if (!n.empty) { S.ghostData = S.ghostData || new Map(); S.ghostData.set(n.id, n); Viewer.setGhost(n.id, n, Model.worldMatrix(S.doc, n.id)); }
         ev.emit('ghosts');
@@ -9160,6 +9263,9 @@ const App = (() => {
     ownBox(id) { return (S.ownBoxes && S.ownBoxes.get(id)) || null; },
     resolvedOf(id) { return (S.resolved && S.resolved.get(id)) || null; },
     resolvedDist(id) { const r = S.resolved && S.resolved.get(id); return r && isFinite(r.dist) ? r.dist : null; },
+    stepFingerprint(id) { const st = S.stepStats.get(id); return (st && st.fp) || null; },
+    stepCacheStatus(id) { return S.stepStats.get(id) || null; },
+    get evalStats() { return S.evalStats; },
     get hideIds() { return S.hideIds; }, set hideIds(x) { S.hideIds = x || new Set(); applyView(); },
     get ctx() { return S.ctx; }, get iso() { return S.iso; }, setCtx, setIso, applyView,
     get tool() { return S.tool; }, set tool(t) { S.tool = t; ev.emit('tool'); },
@@ -19432,10 +19538,13 @@ const Timeline = (() => {
   function chipTip(it, i, V) {
     const errs = RefFix.hardErrorsFor(it.id);
     const refs = RefFix.issuesOf(it.id);
-    const st = it.suppressed ? ' · unterdrückt' : i >= markerPos() ? ' · nach dem Marker' : '';
+    const mk = markerPos();
+    const st = it.suppressed ? ' · unterdrückt' : i >= mk ? ' · nach dem Marker' : '';
+    const cs = (!it.suppressed && i < mk && owner() === App.doc && App.stepCacheStatus) ? App.stepCacheStatus(it.id) : null;
+    const cacheTxt = cs ? (cs.cached ? ' · aus Speicher' : cs.rebuilt ? ' · neu gerechnet' : '') : '';
     const ai = it.ai ? ` · ${it.ai.edit ? 'von der KI geändert' : 'von der KI'}: „${it.ai.q}“` : '';
     const msg = errs.length ? ' · ' + errs[0].message : refs.length ? ' · ' + refs[0].message : '';
-    return `${i + 1}. ${Model.label(it)}${Model.sizeText(it, V) ? ' · ' + Model.sizeText(it, V) : ''}${st}${ai}${msg}${it.note ? ' · Notiz: ' + it.note : ''}`;
+    return `${i + 1}. ${Model.label(it)}${Model.sizeText(it, V) ? ' · ' + Model.sizeText(it, V) : ''}${st}${cacheTxt}${ai}${msg}${it.note ? ' · Notiz: ' + it.note : ''}`;
   }
   function render() {
     if (!el) return;
@@ -19453,7 +19562,11 @@ const Timeline = (() => {
       const hardErrs = RefFix.hardErrorsFor(it.id);
       const hasWarn = !hardErrs.length && RefFix.hasBrokenRef(it.id);
       const cls = hardErrs.length && i < mk && !it.suppressed ? ' err' : hasWarn && i < mk && !it.suppressed ? ' warn' : '';
-      const c = h('button', { type: 'button', class: 'tl-chip' + (it.role === 'hole' ? ' hole' : '') + (selTop.has(it.id) ? ' sel' : '') + (i >= mk ? ' off' : '') + (it.suppressed ? ' sup' : '') + cls + (it.ai ? ' ai' : '') + (it.note ? ' note' : ''), 'data-tip': chipTip(it, i, V), 'aria-label': chipTip(it, i, V), 'data-help': it.ai ? 'aiSteps' : null, dataset: { idx: i } });
+      const cs = (!it.suppressed && i < mk && own === App.doc && App.stepCacheStatus) ? App.stepCacheStatus(it.id) : null;
+      const ds = { idx: i };
+      if (cs && cs.fp) ds.fp = cs.fp;
+      if (cs && (cs.cached || cs.rebuilt)) ds.cache = cs.cached ? 'hit' : 'rebuilt';
+      const c = h('button', { type: 'button', class: 'tl-chip' + (it.role === 'hole' ? ' hole' : '') + (selTop.has(it.id) ? ' sel' : '') + (i >= mk ? ' off' : '') + (it.suppressed ? ' sup' : '') + cls + (it.ai ? ' ai' : '') + (it.note ? ' note' : ''), 'data-tip': chipTip(it, i, V), 'aria-label': chipTip(it, i, V), 'data-help': it.ai ? 'aiSteps' : null, dataset: ds });
       c.innerHTML = icon(iconFor(it)); c.append(h('span', { class: 'bar', style: { background: it.role === 'hole' ? 'transparent' : it.color } }));
       if (it.ai) { const b = h('span', { class: 'ai-badge', 'aria-hidden': 'true' }); b.innerHTML = icon('spark'); c.append(b); }
       c.onclick = (e) => { clearTimeout(peekT); peekK = null; App.peek(null); App.select([it.id], { additive: e.shiftKey || e.metaKey || e.ctrlKey }); };
@@ -19471,6 +19584,9 @@ const Timeline = (() => {
     const pk = own === App.doc ? App.peeking : null;
     info.classList.toggle('peek', pk != null);
     info.textContent = pk != null ? `Vorschau: Stand nach Schritt ${pk}` : n ? (mk >= n ? (n === 1 ? '1 Schritt' : `${n} Schritte`) : `${mk} / ${n}`) : '';
+    const le = own === App.doc && App.evalStats && App.evalStats.lastEval;
+    if (le) info.dataset.tip = `Letztes Rechnen: ${le.rebuilt.length} neu gerechnet, ${le.cached.length} aus Speicher`;
+    else delete info.dataset.tip;
     if (pk != null) track.querySelectorAll('.tl-chip').forEach((c, j) => c.classList.toggle('peekoff', j >= pk));
     bStart.disabled = !n || mk === 0; bPrev.disabled = !n || mk === 0; bNext.disabled = mk >= n; bEnd.disabled = mk >= n;
     // aktiven Bereich sichtbar halten
