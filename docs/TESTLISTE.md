@@ -1972,6 +1972,15 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Rechtes Panel schützt fokussiertes Eingabefeld bei `results`**: Während `#sc-sx` im Skalieren-Panel fokussiert mit `'1'` gefüllt ist, zerstört ein eintreffendes `App.emit('results')` das Feld nicht; Fokus und Wert bleiben erhalten, und nach `Enter` sowie Verlassen des Feldes aktualisiert das Panel sauber.
 - [ ] **Von Hand**: Im Browser mit gedrosseltem Netzwerk („Slow 3G“) eine Prägung auf einem Zylinder sofort mit „Fertig“ abschließen sowie im Skalieren-Panel schnell hintereinander Werte in `#sc-sx`/`#sc-sy`/`#sc-sz` eintippen und prüfen, dass nichts verloren geht.
 
+## Zeichnung: Maß-Arten (Auto [A-067], ZE-07)
+
+- [x] **Durchmesser (Ø) & Radius (R)**: Eine Ø-8-mm-Bohrung wird per `#dw-dm-dia` als `Ø8` (mit Doppelfeilen durch die Mitte) bemaßt, eine 5-mm-Rundung per `#dw-dm-rad` als `R5`.
+- [x] **Fasenmaß (`1×45°`)**: Eine 1-mm-Fase an einer Quaderkante wird per `#dw-dm-chamfer` automatisch mit Abstand und Winkel als `1×45°` bemaßt.
+- [x] **Winkelmaß (`90°`) & Gegenwinkel**: Zwei Kanten der Vorderansicht per `#dw-dm-ang` anklicken erzeugt ein Winkelmaß `90°` mit Bogen und Pfeilen; „Gegenwinkel (180° − α)“ klappt sauber um.
+- [x] **Kettenmaß & Bezugsmaß**: `#dw-dm-chain` legt mehrere Maße (`20`, `20`, `20`) hintereinander auf eine gemeinsame Maßlinie; `#dw-dm-base` staffelt alle Maße (`20`, `40`, `60`) von einer Kante aus sauber um jeweils 8 mm.
+- [x] **Export, Speichern/Laden, Rückgängig, Menü & Hilfe**: PDF-Export (`Ø8`, `R5`, `1×45°`, `90°`), Projekt-Neuladen, `App.undo`/`redo`, `#t-dim-kind`-Menü, Befehlssuche und Hilfetext `drawingDimTypes` funktionieren vollständig.
+- [ ] **Von Hand**: Im Browser ein Werkstück mit schräger Kante (z. B. 30°), einer Fase, Bohrungen und Rundungen über das „Maß-Arten“-Menü bemaßen, Ketten- und Bezugsmaße auch senkrecht anlegen und die erzeugte DXF/PDF-Datei prüfen.
+
 ## Zeichnung: Mittellinien automatisch (Auto [A-066], ZE-06)
 
 - [x] **4 Bohrungen → 4 Mittelkreuze & 4 Mittellinien**: Platte mit 4 Durchgangsbohrungen zeigt in der Draufsicht exakt 4 strichpunktierte Mittelkreuze (`data-ctr="cross"`), in der Seiten- und Vorderansicht jeweils exakt 4 strichpunktierte Mittellinien (`data-ctr="line"`) und in der Isometrie 0 Mittellinien.

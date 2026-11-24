@@ -7,9 +7,19 @@ const Drawing = (() => {
   const DETAIL_LETTERS = 'ZYXWVUTSRQPONMLKJIHGFEDCBA'.split('');
   const VIEW_NAMES = { front: 'Vorderansicht', top: 'Draufsicht', left: 'Seitenansicht' };
   const ISO286_DATA = /*JSON:iso286.json*/null;
+  const DIM_MODES = [
+    { key: 'lin', label: 'Abstand', short: 'Abstand', hint: '<b>Maß:</b> Zwei Punkte anklicken, dann die Maßlinie platzieren. Ein Klick auf einen Kreis bemaßt den Durchmesser. <b>Esc</b> beendet.' },
+    { key: 'chain', label: 'Kettenmaß', short: 'Kettenmaß', hint: '<b>Kettenmaß:</b> Startpunkt, zweiten Punkt und Maßlinie anklicken, dann weitere Punkte der Kette anklicken. <b>Enter</b> schließt die Kette ab, <b>Esc</b> beendet.' },
+    { key: 'base', label: 'Bezugsmaß', short: 'Bezugsmaß', hint: '<b>Bezugsmaß:</b> Bezugskante oder -punkt anklicken, erstes Ziel und Maßlinie platzieren, dann weitere Ziele anklicken. <b>Enter</b> schließt ab, <b>Esc</b> beendet.' },
+    { key: 'ang', label: 'Winkel', short: 'Winkel', hint: '<b>Winkelmaß:</b> Zwei Kanten im Winkel zueinander anklicken, dann den Winkelbogen platzieren. <b>Esc</b> beendet.' },
+    { key: 'rad', label: 'Radius (R)', short: 'Radius (R)', hint: '<b>Radius:</b> Auf eine Rundung oder einen Kreisbogen klicken, um R anzuzeigen. <b>Esc</b> beendet.' },
+    { key: 'dia', label: 'Durchmesser (Ø)', short: 'Durchmesser (Ø)', hint: '<b>Durchmesser:</b> Auf eine Bohrung oder einen Kreis klicken, um Ø anzuzeigen. <b>Esc</b> beendet.' },
+    { key: 'chamfer', label: 'Fase (1×45°)', short: 'Fase (1×45°)', hint: '<b>Fase:</b> Auf eine abgeschrägte Fasen-Kante klicken, um Abstand × Winkel anzuzeigen. <b>Esc</b> beendet.' },
+  ];
   const scaleText = (s) => (s >= 1 ? `${fmtFixed(s, 2)}:1` : `1:${fmtFixed(1 / s, 2)}`);
   let proj = null, projRev = -1, loadingProjPromise = null, projId = 0;
   let svg = null, wrap = null, holder = null, tabsBar = null, zoom = 1, tool = null, toolState = null, selDim = null;
+  let dimMode = 'lin';
   let layout = null, dragDetail = null;
   let detailDraft = { scale: 2, label: 'Z' };
   let centersListOpen = false;
@@ -1282,7 +1292,7 @@ const Drawing = (() => {
     if (!id || !sh) return null;
     const list = lay ? autoDimList(sh, lay) : (sh.dims || []).filter((x) => !x.auto);
     const dim = list.find((x) => x.id === id);
-    if (!dim) return null;
+    if (!dim || !['lin', 'dia', 'rad'].includes(dim.type)) return null;
     const nominalMm = dimNominal(dim);
     const { mainLabel } = dimLabelParts(dim, nominalMm);
     return { dim, nominalMm, label: mainLabel };
@@ -1478,6 +1488,32 @@ const Drawing = (() => {
     }
     return all;
   }
+  function drawSpanDim(lines, texts, P1, P2, val, dimOrId, outerTail = true) {
+    const dim = dimOrId && typeof dimOrId === 'object' ? dimOrId : null;
+    const id = dim ? dim.id : dimOrId;
+    const TXT = 3.5, AR = 3;
+    lines.push({ pts: [P1, P2], cls: 'dim', id });
+    const L = Math.hypot(P2[0] - P1[0], P2[1] - P1[1]);
+    const inside = L > AR * 2.6;
+    arrowHead(lines, P1, P2, AR, inside, id); arrowHead(lines, P2, P1, AR, inside, id);
+    if (!inside && outerTail) {
+      const ux = (P2[0] - P1[0]) / (L || 1), uy = (P2[1] - P1[1]) / (L || 1);
+      lines.push({ pts: [[P1[0] - ux * AR * 2.4, P1[1] - uy * AR * 2.4], P1], cls: 'dim', id }, { pts: [P2, [P2[0] + ux * AR * 2.4, P2[1] + uy * AR * 2.4]], cls: 'dim', id });
+    }
+    const mx = (P1[0] + P2[0]) / 2, my = (P1[1] + P2[1]) / 2;
+    // Maßzahl lesbar von unten oder von rechts (ISO 129): Winkel in [-90°, 90°)
+    let ang = (Math.atan2(P2[1] - P1[1], P2[0] - P1[0]) * 180) / Math.PI;
+    if (ang >= 89.99) ang -= 180; if (ang < -90.01) ang += 180;
+    const r = (ang * Math.PI) / 180;
+    const tx = mx + Math.sin(r) * 1.2, ty = my - Math.cos(r) * 1.2;
+    if (dim) {
+      const { mainLabel, prefix } = dimLabelParts(dim, val);
+      const tolInfo = resolveDimTol(dim, val);
+      emitDimTexts(texts, tx, ty, ang, dim, mainLabel, prefix, tolInfo, TXT);
+    } else {
+      texts.push({ x: tx, y: ty, t: fmtDim(val), size: TXT, rot: ang, anchor: 'middle', id, cls: 'dimtext' });
+    }
+  }
   function dimSVG(dim, lines, texts, lay = layout) {
     const v = lay.views[dim.view]; if (!v) return;
     const TXT = 3.5, AR = 3, EXT = 2, GAPX = 1;
@@ -1485,7 +1521,6 @@ const Drawing = (() => {
       const A = toSheet(v, dim.a), B = toSheet(v, dim.b);
       let val, P1, P2, E1s, E2s;
       if (dim.dir === 'h') {
-        const y = Math.min(A[1], B[1]) + (dim.off < 0 ? 0 : 0);
         const off = dim.off * v.s; const yl = (dim.off < 0 ? Math.max(A[1], B[1]) - off : Math.min(A[1], B[1]) - off);
         P1 = [A[0], yl]; P2 = [B[0], yl]; val = Math.abs(dim.b[0] - dim.a[0]);
         const sgn = Math.sign(yl - A[1]) || 1;
@@ -1501,19 +1536,8 @@ const Drawing = (() => {
         const sg = Math.sign(off) || 1;
         E1s = [[A[0] + nx * sg * GAPX, A[1] + ny * sg * GAPX], [P1[0] + nx * sg * EXT, P1[1] + ny * sg * EXT]]; E2s = [[B[0] + nx * sg * GAPX, B[1] + ny * sg * GAPX], [P2[0] + nx * sg * EXT, P2[1] + ny * sg * EXT]];
       }
-      lines.push({ pts: E1s, cls: 'dim', id: dim.id }, { pts: E2s, cls: 'dim', id: dim.id }, { pts: [P1, P2], cls: 'dim', id: dim.id });
-      const L = Math.hypot(P2[0] - P1[0], P2[1] - P1[1]);
-      const inside = L > AR * 2.6;
-      arrowHead(lines, P1, P2, AR, inside, dim.id); arrowHead(lines, P2, P1, AR, inside, dim.id);
-      if (!inside) { const ux = (P2[0] - P1[0]) / (L || 1), uy = (P2[1] - P1[1]) / (L || 1); lines.push({ pts: [[P1[0] - ux * AR * 2.4, P1[1] - uy * AR * 2.4], P1], cls: 'dim', id: dim.id }, { pts: [P2, [P2[0] + ux * AR * 2.4, P2[1] + uy * AR * 2.4]], cls: 'dim', id: dim.id }); }
-      const mx = (P1[0] + P2[0]) / 2, my = (P1[1] + P2[1]) / 2;
-      // Maßzahl lesbar von unten oder von rechts (ISO 129): Winkel in [-90°, 90°)
-      let ang = (Math.atan2(P2[1] - P1[1], P2[0] - P1[0]) * 180) / Math.PI;
-      if (ang >= 89.99) ang -= 180; if (ang < -90.01) ang += 180;
-      const r = (ang * Math.PI) / 180; const tx = mx + Math.sin(r) * 1.2, ty = my - Math.cos(r) * 1.2;
-      const { mainLabel, prefix } = dimLabelParts(dim, val);
-      const tolInfo = resolveDimTol(dim, val);
-      emitDimTexts(texts, tx, ty, ang, dim, mainLabel, prefix, tolInfo, TXT);
+      lines.push({ pts: E1s, cls: 'dim', id: dim.id }, { pts: E2s, cls: 'dim', id: dim.id });
+      drawSpanDim(lines, texts, P1, P2, val, dim, true);
     } else if (dim.type === 'dia' || dim.type === 'rad') {
       const C = toSheet(v, dim.c); const R = dim.r * v.s; const ang = ((dim.ang ?? 45) * Math.PI) / 180;
       const ux = Math.cos(ang), uy = -Math.sin(ang);
@@ -1533,7 +1557,10 @@ const Drawing = (() => {
       const tail = [out[0] + (ux >= 0 ? tl : -tl), out[1]];
       if (dim.type === 'dia') {
         const Q = [C[0] - ux * R, C[1] - uy * R];
-        if (2 * R >= AR * 2.6) { lines.push({ pts: [Q, P], cls: 'dim', id: dim.id }); arrowHead(lines, Q, P, AR, true, dim.id); arrowHead(lines, P, Q, AR, true, dim.id); }
+        if (dim.partial) {
+          lines.push({ pts: [C, P], cls: 'dim', id: dim.id });
+          arrowHead(lines, P, R >= AR * 1.3 ? C : out, AR, true, dim.id);
+        } else if (2 * R >= AR * 2.6) { lines.push({ pts: [Q, P], cls: 'dim', id: dim.id }); arrowHead(lines, Q, P, AR, true, dim.id); arrowHead(lines, P, Q, AR, true, dim.id); }
         else {
           // kleine Kreise: Pfeile von außen
           const Q2 = [Q[0] - ux * AR * 2.2, Q[1] - uy * AR * 2.2];
@@ -1543,6 +1570,126 @@ const Drawing = (() => {
       else arrowHead(lines, P, out, AR, true, dim.id);
       lines.push({ pts: [P, out, tail], cls: 'dim', id: dim.id });
       emitDimTexts(texts, (out[0] + tail[0]) / 2, out[1] - 1.2, 0, dim, mainLabel, prefix, tolInfo, TXT);
+    } else if (dim.type === 'chamfer') {
+      const P = toSheet(v, dim.p);
+      const ux = dim.dir[0], uy = -dim.dir[1];
+      const bx = v.geo.box, TL = toSheet(v, [bx[0], bx[3]]), BR = toSheet(v, [bx[2], bx[1]]), M = 3.5;
+      const tx = ux > 1e-9 ? (BR[0] + M - P[0]) / ux : ux < -1e-9 ? (TL[0] - M - P[0]) / ux : Infinity;
+      const ty = uy > 1e-9 ? (BR[1] + M - P[1]) / uy : uy < -1e-9 ? (TL[1] - M - P[1]) / uy : Infinity;
+      const tEx = Math.min(tx, ty);
+      const lead = tEx > 0 && tEx < 24 ? Math.max(6, tEx) : 8;
+      const out = [P[0] + ux * lead, P[1] + uy * lead];
+      const angTxt = Math.abs(dim.ang - 45) < 0.1 ? '45°' : fmtAngleU(dim.ang);
+      const label = `${fmtDim(dim.dist)}×${angTxt}`;
+      const tl = textW(label, TXT) * 0.92 + 2;
+      const tail = [out[0] + (ux >= 0 ? tl : -tl), out[1]];
+      arrowHead(lines, P, out, AR, true, dim.id);
+      lines.push({ pts: [P, out, tail], cls: 'dim', id: dim.id });
+      texts.push({ x: (out[0] + tail[0]) / 2, y: out[1] - 1.2, t: label, size: TXT, rot: 0, anchor: 'middle', id: dim.id, cls: 'dimtext' });
+    } else if (dim.type === 'ang') {
+      const VC = toSheet(v, dim.v), R = Math.max(3, dim.r * v.s), rModel = R / v.s;
+      const a0 = dim.a0, a1 = dim.a1;
+      const span = a1 - a0;
+      if (span <= 1e-4) return;
+      const P0 = [VC[0] + R * Math.cos(a0), VC[1] - R * Math.sin(a0)];
+      const P1 = [VC[0] + R * Math.cos(a1), VC[1] - R * Math.sin(a1)];
+      for (const [ang, edge] of [[a0, dim.e1], [a1, dim.e2]]) {
+        if (!edge || edge.length < 2) continue;
+        const ux = Math.cos(ang), uy = Math.sin(ang);
+        const tA = (edge[0][0] - dim.v[0]) * ux + (edge[0][1] - dim.v[1]) * uy;
+        const tB = (edge[1][0] - dim.v[0]) * ux + (edge[1][1] - dim.v[1]) * uy;
+        const tMin = Math.min(tA, tB), tMax = Math.max(tA, tB);
+        if (rModel > tMax + 1e-3) {
+          const s0 = Math.max(0, tMax) + GAPX / v.s, s1 = rModel + EXT / v.s;
+          lines.push({ pts: [toSheet(v, [dim.v[0] + ux * s0, dim.v[1] + uy * s0]), toSheet(v, [dim.v[0] + ux * s1, dim.v[1] + uy * s1])], cls: 'dim', id: dim.id });
+        } else if (rModel < tMin - 1e-3) {
+          const s0 = Math.max(0, rModel - EXT / v.s), s1 = tMin - GAPX / v.s;
+          if (s1 > s0) lines.push({ pts: [toSheet(v, [dim.v[0] + ux * s0, dim.v[1] + uy * s0]), toSheet(v, [dim.v[0] + ux * s1, dim.v[1] + uy * s1])], cls: 'dim', id: dim.id });
+        }
+      }
+      const nA0 = ((a0 % TWO_PI) + TWO_PI) % TWO_PI;
+      const nA1 = nA0 + span;
+      const aPts = arcPts(dim.v, rModel, a0, a1).map((q) => toSheet(v, q));
+      lines.push({ pts: aPts, arc: { c: VC, r: R, a: [nA0, nA1 <= TWO_PI ? nA1 : nA1 - TWO_PI] }, cls: 'dim', id: dim.id });
+      const inside = span * R > AR * 2.6;
+      const from0 = [P0[0] - Math.sin(a0) * AR, P0[1] - Math.cos(a0) * AR];
+      const from1 = [P1[0] + Math.sin(a1) * AR, P1[1] + Math.cos(a1) * AR];
+      arrowHead(lines, P0, from0, AR, inside, dim.id);
+      arrowHead(lines, P1, from1, AR, inside, dim.id);
+      if (!inside) {
+        const extA = (AR * 2.4) / R;
+        lines.push(
+          { pts: arcPts(dim.v, rModel, a0 - extA, a0).map((q) => toSheet(v, q)), cls: 'dim', id: dim.id },
+          { pts: arcPts(dim.v, rModel, a1, a1 + extA).map((q) => toSheet(v, q)), cls: 'dim', id: dim.id }
+        );
+      }
+      const deg = (span * 180) / Math.PI;
+      const label = Math.abs(deg - Math.round(deg)) < 0.05 ? `${Math.round(deg)}°` : fmtAngleU(deg);
+      const am = (a0 + a1) * 0.5;
+      const tx = VC[0] + Math.cos(am) * (R + 3.2);
+      const ty = VC[1] - Math.sin(am) * (R + 3.2) + 1.2;
+      texts.push({ x: tx, y: ty, t: label, size: TXT, rot: 0, anchor: 'middle', id: dim.id, cls: 'dimtext' });
+    } else if (dim.type === 'chain') {
+      const pts = [...(dim.pts || [])];
+      if (pts.length < 2) return;
+      if (dim.dir === 'h') {
+        pts.sort((p, q) => p[0] - q[0]);
+        const yl = toSheet(v, [0, dim.linePos])[1];
+        const SP = pts.map((p) => toSheet(v, p));
+        for (const P of SP) {
+          const sgn = Math.sign(yl - P[1]) || 1;
+          lines.push({ pts: [[P[0], P[1] + sgn * GAPX], [P[0], yl + sgn * EXT]], cls: 'dim', id: dim.id });
+        }
+        for (let i = 0; i < SP.length - 1; i++) {
+          const val = Math.abs(pts[i + 1][0] - pts[i][0]);
+          drawSpanDim(lines, texts, [SP[i][0], yl], [SP[i + 1][0], yl], val, dim.id, i === 0 || i === SP.length - 2);
+        }
+      } else {
+        pts.sort((p, q) => p[1] - q[1]);
+        const xl = toSheet(v, [dim.linePos, 0])[0];
+        const SP = pts.map((p) => toSheet(v, p));
+        for (const P of SP) {
+          const sgn = Math.sign(xl - P[0]) || -1;
+          lines.push({ pts: [[P[0] + sgn * GAPX, P[1]], [xl + sgn * EXT, P[1]]], cls: 'dim', id: dim.id });
+        }
+        for (let i = 0; i < SP.length - 1; i++) {
+          const val = Math.abs(pts[i + 1][1] - pts[i][1]);
+          drawSpanDim(lines, texts, [xl, SP[i][1]], [xl, SP[i + 1][1]], val, dim.id, i === 0 || i === SP.length - 2);
+        }
+      }
+    } else if (dim.type === 'base') {
+      const STEP_SHEET = 8;
+      const basePt = dim.base;
+      const pts = [...(dim.pts || [])];
+      if (!basePt || !pts.length) return;
+      const B0 = toSheet(v, basePt);
+      if (dim.dir === 'h') {
+        pts.sort((p, q) => Math.abs(p[0] - basePt[0]) - Math.abs(q[0] - basePt[0]));
+        const yl0 = toSheet(v, [0, dim.linePos])[1];
+        const outSign = yl0 >= B0[1] ? 1 : -1;
+        const ylLast = yl0 + (pts.length - 1) * outSign * STEP_SHEET;
+        lines.push({ pts: [[B0[0], B0[1] + outSign * GAPX], [B0[0], ylLast + outSign * EXT]], cls: 'dim', id: dim.id });
+        for (let i = 0; i < pts.length; i++) {
+          const P = toSheet(v, pts[i]);
+          const yli = yl0 + i * outSign * STEP_SHEET;
+          const sgn = Math.sign(yli - P[1]) || outSign;
+          lines.push({ pts: [[P[0], P[1] + sgn * GAPX], [P[0], yli + sgn * EXT]], cls: 'dim', id: dim.id });
+          drawSpanDim(lines, texts, [B0[0], yli], [P[0], yli], Math.abs(pts[i][0] - basePt[0]), dim.id, true);
+        }
+      } else {
+        pts.sort((p, q) => Math.abs(p[1] - basePt[1]) - Math.abs(q[1] - basePt[1]));
+        const xl0 = toSheet(v, [dim.linePos, 0])[0];
+        const outSign = xl0 <= B0[0] ? -1 : 1;
+        const xlLast = xl0 + (pts.length - 1) * outSign * STEP_SHEET;
+        lines.push({ pts: [[B0[0] + outSign * GAPX, B0[1]], [xlLast + outSign * EXT, B0[1]]], cls: 'dim', id: dim.id });
+        for (let i = 0; i < pts.length; i++) {
+          const P = toSheet(v, pts[i]);
+          const xli = xl0 + i * outSign * STEP_SHEET;
+          const sgn = Math.sign(xli - P[0]) || outSign;
+          lines.push({ pts: [[P[0] + sgn * GAPX, P[1]], [xli + sgn * EXT, P[1]]], cls: 'dim', id: dim.id });
+          drawSpanDim(lines, texts, [xli, B0[1]], [xli, P[1]], Math.abs(pts[i][1] - basePt[1]), dim.id, true);
+        }
+      }
     }
   }
   function fmtDim(v) { return Units.fmtLen(v, 2); }
@@ -1878,15 +2025,183 @@ const Drawing = (() => {
     for (const q of v.geo.points) { const S = toSheet(v, q); const d = Math.hypot(S[0] - P[0], S[1] - P[1]); if (d < bd) { bd = d; best = { p: q, S }; } }
     return best;
   }
-  function circleAt(name, P) {
+  function circleAt(name, P, allowInside = false) {
     const v = layout.views[name]; if (!v) return null;
-    const q = toView(v, P); let best = null, bd = 2 / v.s / zoom + 0.5;
-    for (const c of v.geo.circles) {
+    const q = toView(v, P);
+    const tol = Math.max(2.5, 4 / zoom) / v.s;
+    const pool = [...v.geo.circles, ...v.geo.hidden.filter((p) => p.c).map((p) => ({ c: p.c, r: p.r, full: !p.arc, arc: p.arc }))];
+    let best = null, bd = tol;
+    for (const c of pool) {
       const d = Math.abs(Math.hypot(q[0] - c.c[0], q[1] - c.c[1]) - c.r); if (d >= bd) continue;
-      if (c.arc) { let a = angOf(c.c, q); if (a < c.arc[0] - 0.05) a += TWO_PI; if (a > c.arc[1] + 0.05) continue; }
+      if (c.arc) {
+        let a = angOf(c.c, q);
+        if (a < c.arc[0] - 0.08) a += TWO_PI;
+        if (a > c.arc[1] + 0.08) continue;
+      }
       bd = d; best = c;
     }
-    return best && { ...best, ang: (angOf(best.c, q) * 180) / Math.PI };
+    if (!best && allowInside) {
+      let bestR = Infinity;
+      for (const c of pool) {
+        if (c.arc) continue;
+        const d = Math.hypot(q[0] - c.c[0], q[1] - c.c[1]);
+        if (d <= c.r + tol && c.r < bestR) { bestR = c.r; best = c; }
+      }
+    }
+    if (!best) return null;
+    const ang = Math.hypot(q[0] - best.c[0], q[1] - best.c[1]) > 1e-3 ? (angOf(best.c, q) * 180) / Math.PI : 45;
+    return { ...best, ang };
+  }
+  function straightSegsOf(v, includeHidden = false) {
+    const out = [];
+    const add = (arr, hid) => {
+      for (const p of arr || []) {
+        if (p.c || !p.pts || p.pts.length < 2) continue;
+        for (let i = 0; i < p.pts.length - 1; i++) {
+          const a = p.pts[i], b = p.pts[i + 1];
+          const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+          if (L > 1e-4) out.push({ a, b, L, hid });
+        }
+      }
+    };
+    add(v.geo.polys, false);
+    if (includeHidden) add(v.geo.hidden, true);
+    return out;
+  }
+  function lineIntersect2D(a1, b1, a2, b2) {
+    const dx1 = b1[0] - a1[0], dy1 = b1[1] - a1[1];
+    const dx2 = b2[0] - a2[0], dy2 = b2[1] - a2[1];
+    const det = dx1 * dy2 - dy1 * dx2;
+    if (Math.abs(det) < 1e-8) return null;
+    const t = ((a2[0] - a1[0]) * dy2 - (a2[1] - a1[1]) * dx2) / det;
+    return [a1[0] + t * dx1, a1[1] + t * dy1];
+  }
+  function edgeAt(name, P, includeHidden = false) {
+    const v = layout.views[name]; if (!v) return null;
+    const tol = Math.max(2.2, 3.4 / zoom);
+    const pickFrom = (segs) => {
+      let best = null, bd = tol;
+      for (const seg of segs) {
+        const A = toSheet(v, seg.a), B = toSheet(v, seg.b);
+        const dx = B[0] - A[0], dy = B[1] - A[1], L2 = dx * dx + dy * dy;
+        if (L2 < 1e-6) continue;
+        const t = clamp(((P[0] - A[0]) * dx + (P[1] - A[1]) * dy) / L2, 0, 1);
+        const d = Math.hypot(P[0] - (A[0] + t * dx), P[1] - (A[1] + t * dy));
+        if (d < bd) {
+          bd = d;
+          best = { a: seg.a, b: seg.b, A, B, t, L: seg.L, d, hit: [seg.a[0] + t * (seg.b[0] - seg.a[0]), seg.a[1] + t * (seg.b[1] - seg.a[1])] };
+        }
+      }
+      return best;
+    };
+    const vis = pickFrom(straightSegsOf(v, false));
+    if (vis || !includeHidden) return vis;
+    return pickFrom(straightSegsOf(v, true).filter((s) => s.hid));
+  }
+  function analyzeChamfer(v, seg) {
+    const a = seg.a, b = seg.b, L = seg.L;
+    if (L < 1e-4) return null;
+    const u = [(b[0] - a[0]) / L, (b[1] - a[1]) / L];
+    const M = [(a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5];
+    const tol = Math.max(0.05, L * 0.02);
+    const vis = straightSegsOf(v, false);
+    const adj = (pt) => {
+      const dirs = [];
+      for (const s of vis) {
+        if (s.a === a && s.b === b) continue;
+        let dir = null;
+        if (Math.hypot(s.a[0] - pt[0], s.a[1] - pt[1]) <= tol) dir = [(s.b[0] - s.a[0]) / s.L, (s.b[1] - s.a[1]) / s.L];
+        else if (Math.hypot(s.b[0] - pt[0], s.b[1] - pt[1]) <= tol) dir = [(s.a[0] - s.b[0]) / s.L, (s.a[1] - s.b[1]) / s.L];
+        if (!dir) continue;
+        if (Math.abs(u[0] * dir[1] - u[1] * dir[0]) < 0.05) continue;
+        dirs.push(dir);
+      }
+      return dirs;
+    };
+    const adjA = adj(a), adjB = adj(b);
+    let best = null, bestScore = Infinity;
+    for (const nA of adjA) for (const nB of adjB) {
+      if (Math.abs(nA[0] * nB[1] - nA[1] * nB[0]) < 0.05) continue;
+      const C = lineIntersect2D(a, [a[0] + nA[0], a[1] + nA[1]], b, [b[0] + nB[0], b[1] + nB[1]]);
+      if (!C) continue;
+      if ((C[0] - a[0]) * nA[0] + (C[1] - a[1]) * nA[1] > -1e-4) continue;
+      if ((C[0] - b[0]) * nB[0] + (C[1] - b[1]) * nB[1] > -1e-4) continue;
+      const d1 = Math.hypot(C[0] - a[0], C[1] - a[1]);
+      const d2 = Math.hypot(C[0] - b[0], C[1] - b[1]);
+      const score = Math.abs(nA[0] * nB[0] + nA[1] * nB[1]) * 10 + Math.abs(d1 - d2);
+      if (score < bestScore) { bestScore = score; best = { nA, nB, C, d1, d2 }; }
+    }
+    if (best) {
+      const ang1 = (Math.acos(clamp(Math.abs(u[0] * best.nA[0] + u[1] * best.nA[1]), 0, 1)) * 180) / Math.PI;
+      const odx = best.C[0] - M[0], ody = best.C[1] - M[1];
+      const ol = Math.hypot(odx, ody) || 1;
+      const outDir = [odx / ol, ody / ol];
+      if (Math.abs(ang1 - 45) < 0.5 && Math.abs(best.d1 - best.d2) < Math.max(0.05, best.d1 * 0.02)) {
+        return { p: M, dir: outDir, dist: (best.d1 + best.d2) * 0.5, ang: 45 };
+      }
+      return { p: M, dir: outDir, dist: best.d1, ang: ang1 };
+    }
+    const dx = Math.abs(b[0] - a[0]), dy = Math.abs(b[1] - a[1]);
+    if (dx > 1e-3 && dy > 1e-3) {
+      const ang = (Math.atan2(dy, dx) * 180) / Math.PI;
+      const is45 = Math.abs(ang - 45) < 0.5;
+      const bx = v.geo.box, cx = (bx[0] + bx[2]) * 0.5, cy = (bx[1] + bx[3]) * 0.5;
+      let nx = -u[1], ny = u[0];
+      if ((M[0] - cx) * nx + (M[1] - cy) * ny < 0) { nx = -nx; ny = -ny; }
+      return { p: M, dir: [nx, ny], dist: is45 ? (dx + dy) * 0.5 : dx, ang: is45 ? 45 : ang };
+    }
+    return null;
+  }
+  function chamferEdgeAt(name, P) {
+    const v = layout.views[name]; if (!v) return null;
+    const tol = Math.max(2.6, 4.2 / zoom);
+    const cands = [];
+    for (const seg of straightSegsOf(v, false)) {
+      const A = toSheet(v, seg.a), B = toSheet(v, seg.b);
+      const dx = B[0] - A[0], dy = B[1] - A[1], L2 = dx * dx + dy * dy;
+      if (L2 < 1e-6) continue;
+      const t = clamp(((P[0] - A[0]) * dx + (P[1] - A[1]) * dy) / L2, 0, 1);
+      const d = Math.hypot(P[0] - (A[0] + t * dx), P[1] - (A[1] + t * dy));
+      if (d >= tol) continue;
+      const info = analyzeChamfer(v, seg);
+      if (info) cands.push({ seg, info, d, L: seg.L });
+    }
+    if (!cands.length) return null;
+    cands.sort((p, q) => (Math.abs(p.d - q.d) < 0.6 ? p.L - q.L : p.d - q.d));
+    return cands[0];
+  }
+  function pickDimPoint(name, P) {
+    const sn = snapIn(name, P);
+    if (sn) return sn;
+    const ed = edgeAt(name, P, false);
+    if (!ed) return null;
+    const v = layout.views[name];
+    const dx = Math.abs(ed.b[0] - ed.a[0]), dy = Math.abs(ed.b[1] - ed.a[1]);
+    const preferDir = dy > dx * 4 ? 'h' : dx > dy * 4 ? 'v' : null;
+    return { p: ed.hit, S: toSheet(v, ed.hit), edge: ed, preferDir };
+  }
+  function angularSector(V, e1, e2, q) {
+    const rayAngles = (edge) => {
+      const dA = Math.hypot(edge.a[0] - V[0], edge.a[1] - V[1]);
+      const dB = Math.hypot(edge.b[0] - V[0], edge.b[1] - V[1]);
+      const ref = dA >= dB ? edge.a : edge.b;
+      let a = Math.atan2(ref[1] - V[1], ref[0] - V[0]);
+      if (a < 0) a += TWO_PI;
+      return [a, (a + Math.PI) % TWO_PI];
+    };
+    const r1 = rayAngles(e1), r2 = rayAngles(e2);
+    const rays = [...r1, ...r2].sort((a, b) => a - b);
+    const distQ = Math.hypot(q[0] - V[0], q[1] - V[1]);
+    let aq = distQ > 1e-4 ? Math.atan2(q[1] - V[1], q[0] - V[0]) : ((r1[0] + r2[0]) * 0.5);
+    if (aq < 0) aq += TWO_PI;
+    for (let i = 0; i < 4; i++) {
+      const a0 = rays[i], a1 = i < 3 ? rays[i + 1] : rays[0] + TWO_PI;
+      const qN = i === 3 && aq < rays[0] ? aq + TWO_PI : aq;
+      if (qN >= a0 - 1e-6 && qN <= a1 + 1e-6) {
+        return { a0, a1, r: Math.max(4, distQ), e1: [e1.a, e1.b], e2: [e2.a, e2.b] };
+      }
+    }
+    return { a0: rays[0], a1: rays[1], r: Math.max(4, distQ), e1: [e1.a, e1.b], e2: [e2.a, e2.b] };
   }
   function sectionParentAt(P) {
     for (const name of ['front', 'top', 'left']) {
@@ -1953,7 +2268,20 @@ const Drawing = (() => {
       toolState.P = P;
       const name = toolState.view || viewAt(P);
       toolState.hoverView = name;
-      toolState.snap = name ? snapIn(name, P) : null;
+      if (dimMode === 'dia' || dimMode === 'rad') {
+        toolState.hoverCircle = name ? circleAt(name, P, true) : null;
+        toolState.snap = null;
+      } else if (dimMode === 'chamfer') {
+        toolState.hoverChamfer = name ? chamferEdgeAt(name, P) : null;
+        toolState.snap = null;
+      } else if (dimMode === 'ang') {
+        toolState.hoverEdge = (toolState.stage < 2 && name) ? edgeAt(name, P, true) : null;
+        toolState.snap = null;
+      } else if (dimMode === 'chain' || dimMode === 'base') {
+        toolState.snap = name ? pickDimPoint(name, P) : null;
+      } else {
+        toolState.snap = name ? snapIn(name, P) : null;
+      }
       render();
     } else if (tool === 'detail') {
       toolState = toolState || { stage: 0 };
@@ -2184,6 +2512,86 @@ const Drawing = (() => {
   }
   function dimClick(P, e) {
     const st = toolState || { stage: 0 };
+    if (dimMode === 'dia' || dimMode === 'rad') {
+      const name = viewAt(P); if (!name) return;
+      const c = circleAt(name, P, true);
+      if (!c) { UI.toast('Klick auf einen Kreis, eine Bohrung oder eine Rundung.', { icon: 'info', ms: 2000 }); return; }
+      addDim({ view: name, type: dimMode, c: c.c, r: c.r, ang: Math.round(c.ang), ...(c.full ? {} : { partial: true }) });
+      return;
+    }
+    if (dimMode === 'chamfer') {
+      const name = viewAt(P); if (!name) return;
+      const ch = chamferEdgeAt(name, P);
+      if (!ch) { UI.toast('Klick auf eine schräge Fasen-Kante (z. B. 45°).', { icon: 'info', ms: 2000 }); return; }
+      addDim({ view: name, type: 'chamfer', p: ch.info.p, dir: ch.info.dir, dist: ch.info.dist, ang: ch.info.ang });
+      return;
+    }
+    if (dimMode === 'ang') {
+      if (st.stage === 0) {
+        const name = viewAt(P); if (!name) return;
+        const ed = edgeAt(name, P, true);
+        if (!ed) { UI.toast('Klick auf die erste Kante.', { icon: 'info', ms: 1800 }); return; }
+        toolState = { stage: 1, view: name, e1: ed, P };
+      } else if (st.stage === 1) {
+        const ed = edgeAt(st.view, P, true);
+        if (!ed) { UI.toast('Klick auf die zweite Kante in derselben Ansicht.', { icon: 'info', ms: 1800 }); return; }
+        const V = lineIntersect2D(st.e1.a, st.e1.b, ed.a, ed.b);
+        if (!V) { UI.toast('Diese beiden Kanten sind parallel – wähle zwei Kanten im Winkel zueinander.', { icon: 'info', ms: 2200 }); return; }
+        toolState = { stage: 2, view: st.view, e1: st.e1, e2: ed, v: V, P };
+      } else if (st.stage === 2) {
+        const v = layout.views[st.view]; if (!v) return;
+        const q = toView(v, P);
+        const sec = angularSector(st.v, st.e1, st.e2, q);
+        addDim({ view: st.view, type: 'ang', v: st.v, e1: sec.e1, e2: sec.e2, a0: sec.a0, a1: sec.a1, r: sec.r });
+        return;
+      }
+      render();
+      return;
+    }
+    if (dimMode === 'chain' || dimMode === 'base') {
+      const isBase = dimMode === 'base';
+      if (st.stage === 0) {
+        const name = viewAt(P); if (!name) return;
+        const sn = pickDimPoint(name, P);
+        if (!sn) { UI.toast(isBase ? 'Klick auf eine Bezugskante oder einen Bezugspunkt.' : 'Klick auf einen Punkt oder eine Kante.', { icon: 'info', ms: 2000 }); return; }
+        toolState = { stage: 1, view: name, a: sn.p, preferDir: sn.preferDir || null, P };
+      } else if (st.stage === 1) {
+        const sn = pickDimPoint(st.view, P); if (!sn) return;
+        if (Math.hypot(sn.p[0] - st.a[0], sn.p[1] - st.a[1]) < 1e-4) return;
+        toolState = { ...st, stage: 2, b: sn.p, P };
+      } else if (st.stage === 2) {
+        const v = layout.views[st.view]; if (!v) return;
+        const q = toView(v, P);
+        const dir = chainDir(st.a, st.b, q, st.preferDir);
+        const linePos = dir === 'h' ? q[1] : q[0];
+        const dim = isBase
+          ? { id: uid('d'), view: st.view, type: 'base', dir, linePos, base: st.a, pts: [st.b] }
+          : { id: uid('d'), view: st.view, type: 'chain', dir, linePos, pts: [st.a, st.b] };
+        App.change(isBase ? 'Bezugsmaß hinzugefügt' : 'Kettenmaß hinzugefügt', () => { dwg().dims.push(dim); });
+        selDim = dim.id;
+        toolState = { stage: 3, view: st.view, dimId: dim.id, dir, linePos, P };
+        Panels.renderRight();
+      } else if (st.stage === 3) {
+        const hitView = viewAt(P);
+        if (hitView && hitView !== st.view) { toolState = { stage: 0 }; render(); Panels.renderRight(); return; }
+        const sn = pickDimPoint(st.view, P);
+        if (!sn) {
+          if (!hitView) { toolState = { stage: 0 }; render(); Panels.renderRight(); }
+          return;
+        }
+        const cur = dwg().dims.find((x) => x.id === st.dimId);
+        if (!cur) { toolState = { stage: 0 }; render(); return; }
+        const coord = st.dir === 'h' ? sn.p[0] : sn.p[1];
+        const existing = [...(cur.pts || []), ...(cur.base ? [cur.base] : [])];
+        if (existing.some((p) => Math.abs((st.dir === 'h' ? p[0] : p[1]) - coord) < 1e-4)) return;
+        App.change(isBase ? 'Bezugsmaß erweitert' : 'Kettenmaß erweitert', () => {
+          const d = dwg().dims.find((x) => x.id === st.dimId);
+          if (d) d.pts.push(sn.p);
+        });
+      }
+      render();
+      return;
+    }
     if (st.stage === 0) {
       const name = viewAt(P); if (!name) return;
       const sn = snapIn(name, P);
@@ -2200,6 +2608,16 @@ const Drawing = (() => {
     }
     render();
   }
+  function chainDir(a, b, q, preferDir = null) {
+    const dx = Math.abs(b[0] - a[0]), dy = Math.abs(b[1] - a[1]);
+    if (dx > 1e-4 && dy <= 1e-4) return 'h';
+    if (dy > 1e-4 && dx <= 1e-4) return 'v';
+    const mx = (a[0] + b[0]) * 0.5, my = (a[1] + b[1]) * 0.5;
+    const qx = Math.abs(q[0] - mx), qy = Math.abs(q[1] - my);
+    if (preferDir === 'h' && qy >= qx * 0.5) return 'h';
+    if (preferDir === 'v' && qx >= qy * 0.5) return 'v';
+    return qy / (dy + 1e-9) >= qx / (dx + 1e-9) ? 'h' : 'v';
+  }
   function placeDim(a, b, q) {
     const dx = Math.abs(b[0] - a[0]), dy = Math.abs(b[1] - a[1]);
     const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
@@ -2214,17 +2632,87 @@ const Drawing = (() => {
   }
   function previewDim(lines, texts) {
     const st = toolState;
-    if (st.snap) lines.push({ circle: [st.snap.S[0], st.snap.S[1], 1.2 / zoom * 1.5], cls: 'snap' });
+    if (!st) return;
+    if (st.snap) lines.push({ circle: [st.snap.S[0], st.snap.S[1], (1.2 / zoom) * 1.5], cls: 'snap' });
+    if ((dimMode === 'dia' || dimMode === 'rad') && st.hoverCircle && st.hoverView) {
+      const v = layout.views[st.hoverView];
+      if (v) {
+        const C = toSheet(v, st.hoverCircle.c);
+        lines.push({ circle: [C[0], C[1], st.hoverCircle.r * v.s], cls: 'prev' });
+        dimSVG({ id: '__prev', view: st.hoverView, type: dimMode, c: st.hoverCircle.c, r: st.hoverCircle.r, ang: Math.round(st.hoverCircle.ang), ...(st.hoverCircle.full ? {} : { partial: true }) }, lines, texts);
+      }
+      return;
+    }
+    if (dimMode === 'chamfer' && st.hoverChamfer && st.hoverView) {
+      const v = layout.views[st.hoverView];
+      if (v) {
+        lines.push({ pts: [toSheet(v, st.hoverChamfer.seg.a), toSheet(v, st.hoverChamfer.seg.b)], cls: 'prev' });
+        const ci = st.hoverChamfer.info;
+        dimSVG({ id: '__prev', view: st.hoverView, type: 'chamfer', p: ci.p, dir: ci.dir, dist: ci.dist, ang: ci.ang }, lines, texts);
+      }
+      return;
+    }
+    if (dimMode === 'ang') {
+      const v = layout.views[st.view || st.hoverView];
+      if (st.hoverEdge && v) lines.push({ pts: [st.hoverEdge.A, st.hoverEdge.B], cls: 'prev' });
+      if (st.stage >= 1 && st.e1 && v) lines.push({ pts: [toSheet(v, st.e1.a), toSheet(v, st.e1.b)], cls: 'prev' });
+      if (st.stage === 2 && st.P && v) {
+        lines.push({ pts: [toSheet(v, st.e2.a), toSheet(v, st.e2.b)], cls: 'prev' });
+        const q = toView(v, st.P);
+        const sec = angularSector(st.v, st.e1, st.e2, q);
+        dimSVG({ id: '__prev', view: st.view, type: 'ang', v: st.v, e1: sec.e1, e2: sec.e2, a0: sec.a0, a1: sec.a1, r: sec.r }, lines, texts);
+      }
+      return;
+    }
+    if (dimMode === 'chain' || dimMode === 'base') {
+      if (st.stage === 1 && st.P) { const v = layout.views[st.view]; if (v) lines.push({ pts: [toSheet(v, st.a), st.P], cls: 'prev' }); }
+      if (st.stage === 2 && st.P) {
+        const v = layout.views[st.view]; if (!v) return;
+        const q = toView(v, st.P);
+        const dir = chainDir(st.a, st.b, q, st.preferDir);
+        const linePos = dir === 'h' ? q[1] : q[0];
+        const d = dimMode === 'base'
+          ? { id: '__prev', view: st.view, type: 'base', dir, linePos, base: st.a, pts: [st.b] }
+          : { id: '__prev', view: st.view, type: 'chain', dir, linePos, pts: [st.a, st.b] };
+        dimSVG(d, lines, texts);
+      }
+      if (st.stage === 3 && st.snap && st.snap.p) {
+        const v = layout.views[st.view];
+        if (v) lines.push({ circle: [st.snap.S[0], st.snap.S[1], (1.3 / zoom) * 1.6], cls: 'prev' });
+      }
+      return;
+    }
     if (st.stage === 1 && st.P) { const v = layout.views[st.view]; const A = toSheet(v, st.a); lines.push({ pts: [A, st.P], cls: 'prev' }); }
     if (st.stage === 2 && st.P) { const v = layout.views[st.view]; const q = toView(v, st.P); const d = { id: '__prev', view: st.view, ...placeDim(st.a, st.b, q) }; dimSVG(d, lines, texts); }
   }
   function addDim(dim) {
     App.change('Maß hinzugefügt', () => { dwg().dims.push({ id: uid('d'), ...dim }); });
+    selDim = null;
     toolState = { stage: 0 };
     render();
   }
+  function flipAngleDim(id) {
+    let changed = false;
+    App.change('Gegenwinkel gewählt', () => {
+      const d = dwg().dims.find((x) => x.id === id && x.type === 'ang');
+      if (!d) return;
+      const na0 = ((d.a1 % TWO_PI) + TWO_PI) % TWO_PI;
+      const span = Math.PI - (d.a1 - d.a0);
+      if (span <= 1e-4) return;
+      d.a0 = na0;
+      d.a1 = na0 + span;
+      changed = true;
+    });
+    if (changed) { render(); Panels.renderRight(); }
+    return changed;
+  }
   function onKey(e) {
     if (e.key === 'Escape') { if (tool) { setTool(null); return true; } if (selDim) { selDim = null; render(); Panels.renderRight(); return true; } return false; }
+    if (e.key === 'Enter' && tool === 'dim' && (dimMode === 'chain' || dimMode === 'base') && toolState && toolState.stage === 3) {
+      toolState = { stage: 0 };
+      render(); Panels.renderRight();
+      return true;
+    }
     if (e.key === 'Enter' && tool === 'detail' && toolState && toolState.stage === 2) {
       addDetail({ source: toolState.source, c: toolState.c, r: toolState.r, scale: detailDraft.scale, label: detailDraft.label, pos: null });
       setTool(null);
@@ -2344,9 +2832,34 @@ const Drawing = (() => {
     });
     selDim = null; render(); Panels.renderRight();
   }
+  function dimHint(mode) {
+    const m = DIM_MODES.find((x) => x.key === mode);
+    return m ? m.hint : DIM_MODES[0].hint;
+  }
+  function setDimMode(mode) {
+    if (!mode) { setTool(null); return; }
+    dimMode = DIM_MODES.some((x) => x.key === mode) ? mode : 'lin';
+    dragDetail = null;
+    tool = 'dim';
+    toolState = { stage: 0 };
+    if (svg) svg.style.cursor = 'crosshair';
+    UI.hint(dimHint(dimMode));
+    Panels.renderTools(); Panels.renderRight(); render();
+  }
+  function dimMenu(anchor) {
+    const tMap = { lin: 'menu.draw.dimLin', chain: 'menu.draw.dimChain', base: 'menu.draw.dimBase', ang: 'menu.draw.dimAng', rad: 'menu.draw.dimRad', dia: 'menu.draw.dimDia', chamfer: 'menu.draw.dimChamfer' };
+    UI.menu(anchor, DIM_MODES.map((m) => ({
+      label: T(tMap[m.key] || m.label),
+      icon: 'dim',
+      help: 'drawingDimTypes',
+      checked: tool === 'dim' && dimMode === m.key,
+      run: () => setDimMode(m.key),
+    })));
+  }
   function setTool(t) {
     dragDetail = null;
     tool = t;
+    if (t === 'dim') dimMode = 'lin';
     if (t === 'detail') {
       detailDraft = { scale: defaultDetailScale(), label: nextDetailLabel() };
       toolState = { stage: 0 };
@@ -2355,7 +2868,7 @@ const Drawing = (() => {
     }
     if (svg) svg.style.cursor = t ? 'crosshair' : '';
     UI.hint(
-      t === 'dim' ? '<b>Maß:</b> Zwei Punkte anklicken, dann die Maßlinie platzieren. Ein Klick auf einen Kreis bemaßt den Durchmesser. <b>Esc</b> beendet.'
+      t === 'dim' ? dimHint(dimMode)
         : t === 'detail' ? '<b>Detailansicht:</b> Mitte des Kreises in einer Ansicht anklicken, Kreis aufziehen, dann die Detailansicht auf dem Blatt platzieren. <b>Esc</b> beendet.'
           : t === 'section' ? '<b>Schnittansicht:</b> Schnittlinie A–A durch eine Ansicht ziehen oder zwei Punkte anklicken (<b>Umschalt</b> = waagerecht/senkrecht, <b>Alt</b> = frei). <b>Esc</b> beendet.'
             : t && t.startsWith('free-') ? HINTS2[t] : null
@@ -2669,7 +3182,7 @@ const Drawing = (() => {
         P(0, 'SEQEND', 8, ly);
       }
     }
-    for (const t of lastTexts) { if (t.cls === 'note') continue; const tLy = String(t.cls || '').startsWith('dimtext') ? 'BEMASSUNG' : (t.cls === 'cutlabel' || t.cls === 'viewlabel') ? 'SCHNITTLINIE' : 'RAHMEN'; const dxfTxt = String(t.t).replace(/Ø/g, '%%c').replace(/±/g, '%%p').replace(/[–—−]/g, '-'); P(0, 'TEXT', 8, tLy, 10, t.x.toFixed(4), 20, Y(t.y).toFixed(4), 30, 0, 40, t.size.toFixed(3), 1, dxfTxt, 50, (-(t.rot || 0)).toFixed(3), ...(t.anchor === 'middle' ? [72, 1, 11, t.x.toFixed(4), 21, Y(t.y).toFixed(4), 31, 0] : [])); }
+    for (const t of lastTexts) { if (t.cls === 'note') continue; const tLy = String(t.cls || '').startsWith('dimtext') ? 'BEMASSUNG' : (t.cls === 'cutlabel' || t.cls === 'viewlabel') ? 'SCHNITTLINIE' : 'RAHMEN'; const dxfTxt = String(t.t).replace(/Ø/g, '%%c').replace(/±/g, '%%p').replace(/°/g, '%%d').replace(/[–—−]/g, '-'); P(0, 'TEXT', 8, tLy, 10, t.x.toFixed(4), 20, Y(t.y).toFixed(4), 30, 0, 40, t.size.toFixed(3), 1, dxfTxt, 50, (-(t.rot || 0)).toFixed(3), ...(t.anchor === 'middle' ? [72, 1, 11, t.x.toFixed(4), 21, Y(t.y).toFixed(4), 31, 0] : [])); }
     P(0, 'ENDSEC', 0, 'EOF');
     const text = out.join('\r\n') + '\r\n';
     const bytes = new Uint8Array([...text].map((ch) => { const c = ch.charCodeAt(0); return c < 256 ? c : 63; }));
@@ -2733,6 +3246,27 @@ const Drawing = (() => {
     const b = h('button', { type: 'button', class: 'btn', id: 'dw-sheet-btn', 'data-help': 'drawingFormat' }); b.innerHTML = icon('sheet') + 'Blatt & Ansichten'; b.onclick = (e) => sheetMenu(e.currentTarget);
     const bAdd = h('button', { type: 'button', class: 'btn', id: 'dw-panel-add', 'data-help': 'drawingSheets' }); bAdd.innerHTML = icon('plus') + 'Neues Blatt'; bAdd.onclick = () => addSheet();
     info.append(h('div', { class: 'btn-row' }, b, bAdd)); w.append(info);
+    const dimSec = h('div', { class: 'section', id: 'dw-dims-sec', 'data-help': 'drawingDimTypes' }, h('div', { class: 'section-h' }, 'Bemaßung'));
+    const dimGrid = h('div', { class: 'dw-dim-grid' });
+    for (const m of DIM_MODES) {
+      const act = tool === 'dim' && dimMode === m.key;
+      const db = h('button', {
+        type: 'button',
+        class: 'btn' + (act ? ' active' : ''),
+        id: 'dw-dm-' + m.key,
+        'aria-pressed': String(act),
+        'data-help': 'drawingDimTypes',
+      }, m.short);
+      db.onclick = () => { if (tool === 'dim' && dimMode === m.key) setTool(null); else setDimMode(m.key); };
+      dimGrid.append(db);
+    }
+    dimSec.append(dimGrid);
+    if (tool === 'dim' && (dimMode === 'chain' || dimMode === 'base') && toolState && toolState.stage === 3) {
+      const fin = h('button', { type: 'button', class: 'btn primary', id: 'dw-dm-finish', style: { marginTop: '6px' } }, 'Abschließen (Enter)');
+      fin.onclick = () => { toolState = { stage: 0 }; render(); Panels.renderRight(); };
+      dimSec.append(fin);
+    }
+    w.append(dimSec);
     const secs = d.sections || [];
     const secBox = h('div', { class: 'section', id: 'dw-sections-sec' }, h('div', { class: 'section-h' }, 'Schnittansichten'));
     const bSec = h('button', { type: 'button', class: 'btn' + (tool === 'section' ? ' primary' : ''), id: 'dw-add-section', 'data-help': 'drawingSection' });
@@ -2838,6 +3372,7 @@ const Drawing = (() => {
     if (selDim) {
       const selDet = detList.find((x) => x.id === selDim);
       const isSec = secs.some((x) => x.id === selDim);
+      const selD = d.dims.find((x) => x.id === selDim);
       const selCtr = String(selDim).startsWith('ctr|') ? findCenterById(selDim) : null;
       const selDimInfo = !selDet && !isSec && !selCtr ? findDimById(selDim, d, layout) : null;
       const selSec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, selDet ? `Detail ${selDet.label}` : selCtr ? (selCtr.type === 'cross' ? 'Mittelkreuz' : 'Mittellinie') : selDimInfo ? `Maß ${selDimInfo.label}` : 'Auswahl'));
@@ -2988,6 +3523,11 @@ const Drawing = (() => {
         fl.onclick = () => flipSection(selDim);
         row.append(fl);
       }
+      if (selD && selD.type === 'ang') {
+        const sup = h('button', { type: 'button', class: 'btn', id: 'dw-dim-supp' }, 'Gegenwinkel (180° − α)');
+        sup.onclick = () => flipAngleDim(selDim);
+        row.append(sup);
+      }
       if (selCtr) {
         const hb = h('button', { type: 'button', class: 'btn', id: 'dw-ctr-hide' });
         hb.innerHTML = icon('eyeOff') + 'Ausblenden';
@@ -3007,7 +3547,7 @@ const Drawing = (() => {
   App.on('doc', () => { if (App.mode === 'drawing') refreshSoonDoc(); });
   const refreshSoonDoc = debounce(async () => { await refresh(); Panels.renderRight(); }, 150);
   return {
-    open, close, refresh, sheetMenu, exportMenu, drawMenu, autoDims, tool: tool_, onKey, renderPanel,
+    open, close, refresh, sheetMenu, exportMenu, drawMenu, autoDims, tool: tool_, setDimMode, dimMenu, flipAngleDim, onKey, renderPanel,
     SHEETS, sheets, activeSheet: dwg, addSheet, selectSheet, renameSheet, removeSheet, duplicateSheet,
     details, addDetail, updateDetail, removeDetail, nextDetailLabel, DETAIL_SCALES,
     select: (id) => { selDim = id; render(); Panels.renderRight(); },
@@ -3020,6 +3560,7 @@ const Drawing = (() => {
     exportPDF, buildPDFBytes,
     get layout() { return layout; },
     get activeTool() { return tool; },
+    get dimMode() { return dimMode; },
   };
 })();
 

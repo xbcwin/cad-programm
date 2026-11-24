@@ -611,6 +611,9 @@ body.sketching .timeline{display:none}
 .sheet-tab-add{display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 10px;border-radius:8px;border:1px dashed var(--line-2);background:transparent;color:var(--ink-2);font:500 12.5px/1 var(--font);cursor:pointer;flex:none}
 .sheet-tab-add:hover{border-color:var(--accent-line);color:var(--accent);background:var(--accent-soft)}
 .sheet-tab-add svg{width:13px;height:13px}
+.dw-dim-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.dw-dim-grid .btn{justify-content:flex-start;padding:6px 8px;font-size:12.5px}
+.dw-dim-grid .btn.active{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent);font-weight:600}
 
 /* Kopfzeile: bei weniger Platz zeigen erst die Nebenwerkzeuge, dann alle außer „Exportieren“ nur ihr Symbol */
 @media (max-width: 1500px) and (min-width: 901px){ .tool.minor span{display:none} .tool.minor{padding:7px 9px} }
@@ -2889,6 +2892,11 @@ const HELP = {
   "hilfe": "Klicke „Schnittansicht“ (Taste S) und ziehe mit gedrückter Maus oder zwei Klicks eine Schnittlinie quer durch eine Ansicht. Tracery schneidet das 3D-Modell an dieser Ebene, legt eine Schnittansicht („Schnitt A–A“) an und füllt alle geschnittenen Flächen mit normgerechter 45°-Schraffur.",
   "tipp": "Löcher und Hohlräume bleiben un-schraffiert. Rechts im Panel kannst du die Blickrichtung der Pfeile umkehren oder weitere Schnitte (B–B, C–C …) hinzufügen."
  },
+ "drawingDimTypes": {
+  "tip": "Maß-Arten: Kettenmaß, Bezugsmaß, Winkel, Radius (R), Durchmesser (Ø) und Fase (1×45°)",
+  "hilfe": "Wähle rechts unter „Bemaßung“ oder über „Maß-Arten“ in der Leiste die gewünschte Maß-Art: Kettenmaß setzt mehrere Maße hintereinander auf eine Linie, Bezugsmaß staffelt alle Maße ab einer gemeinsamen Kante, Winkel misst zwischen zwei Kanten, R und Ø bemaßen Rundungen und Bohrungen, und Fase erkennt abgeschrägte Kanten wie 1×45°.",
+  "tipp": "Bei Ketten- und Bezugsmaß klickst du einfach weitere Punkte an; Enter schließt die Reihe ab. Bei Winkelmaßen kannst du nach dem Anklicken rechts auf „Gegenwinkel“ umschalten."
+ },
  "drawingCenters": {
   "tip": "Mittelkreuze und Mittellinien für Bohrungen und Zylinder automatisch ein- und ausblenden",
   "hilfe": "Bohrungen und Zylinder erhalten in jeder Ansicht automatisch strichpunktierte Mittelkreuze (Draufsicht bzw. Blick auf die Öffnung) und Mittellinien (Seiten- und Schnittansichten). Klicke ein einzelnes Mittelkreuz oder eine Mittellinie im Blatt an und drücke Entf (oder Rechtsklick → Ausblenden), um es auszublenden – oder schalte sie rechts in der Liste einzeln ein und aus.",
@@ -2919,7 +2927,7 @@ const Bus = makeEmitter();
 
 // ---- 01-i18n.js ----
 // ================= Übersetzbare Oberfläche =================
-const TEXTS_DE = {"common.ok":"OK","common.cancel":"Abbrechen","common.close":"Schließen","common.delete":"Löschen","common.rename":"Umbenennen","common.save":"Speichern","common.name":"Name","common.body":"Körper","common.hole":"Loch","common.edit":"Bearbeiten","common.suppress":"Unterdrücken","common.unsuppress":"Wieder aktivieren","common.explainStep":"Erklär diesen Schritt","common.moveStep":"Verschieben/Drehen (Schritt)","common.scaleStep":"Skalieren (Schritt)","common.thicken":"Aufdicken","common.mirrorStep":"Schritt spiegeln","common.duplicate":"Duplizieren","common.hide":"Ausblenden","common.isolate":"Isolieren","topbar.showTree":"Verlauf zeigen","topbar.tree":"Verlauf","topbar.brandAria":"Tracery – Startseite","topbar.workspace":"Arbeitsbereich","topbar.model":"Modell","topbar.drawing":"Zeichnung","topbar.undo":"Rückgängig","topbar.undoLabel":"Rückgängig: {label}","topbar.redo":"Wiederholen","topbar.project":"Projekt","topbar.menu":"Menü","topbar.showProps":"Eigenschaften zeigen","topbar.props":"Eigenschaften","topbar.params":"Maße","topbar.log":"Protokoll","topbar.cmdPlaceholder":"Werkzeug suchen oder beschreiben, was du bauen willst …","topbar.cmdAria":"Werkzeug suchen oder der KI beschreiben","topbar.cmdGo":"Ausführen","level.simple":"Einfach","level.pro":"Profi","level.tipSimple":"Stufe: Einfach – klicken zum Wechseln auf Profi","level.tipPro":"Stufe: Profi – klicken zum Wechseln auf Einfach","level.chooseAria":"Stufe wählen","level.simpleDesc":"wenige, große Knöpfe, alles erklärt","level.proDesc":"alle Werkzeuge, Tastenkürzel, Maus wie in deinem CAD","start.aria":"Startseite","start.subtitle":"CAD im Browser – kostenlos, ohne Konto","start.newProject":"Neues Projekt","start.openFile":"Datei öffnen","start.tourBasics":"Einführung (3 Minuten)","start.tourSketch":"Erste Skizze (5 Minuten)","start.welcomeTitle":"Wie möchtest du mit Tracery arbeiten?","start.welcomeSub":"Du kannst jederzeit oben rechts zwischen beiden Stufen wechseln.","start.surfaceAria":"Oberfläche","start.surfaceLabel":"Oberfläche:","start.simpleOption":"Einfach – für Einsteiger","start.proOption":"Profi – alle Werkzeuge","start.recentHeading":"Weiterarbeiten","start.recentMetaOne":"{n} Objekt · {date}","start.recentMetaMany":"{n} Objekte · {date}","start.deleteFromBrowserAria":"Aus dem Browser löschen","start.deleteFromBrowserTip":"Aus diesem Browser löschen","start.deleteConfirmTitle":"Projekt löschen?","start.deleteConfirmBody":"„{name}“ wird aus diesem Browser gelöscht. Gespeicherte Dateien bleiben erhalten.","start.projectMissing":"Das Projekt ist nicht mehr da.","start.templatesHeading":"Vorlagen","start.emptyTitle":"Leeres Projekt","start.emptyDesc":"Von null anfangen.","start.templateLoaded":"Vorlage geladen. Klick einen Teil an, um ihn zu ändern.","start.footHtml":"Projekte werden automatisch in diesem Browser gesichert. Zum sicheren Aufbewahren und Teilen: <b>Projekt als Datei speichern</b>.<br>Tracery rechnet mit OpenCascade (LGPL-2.1) über replicad (MIT) und zeigt 3D mit three.js (MIT).","start.tpl.box.name":"Box mit Deckel","start.tpl.box.desc":"Mit Maßen wie Wandstärke und Spiel – änderst du sie, passt sich alles an.","start.tpl.sign.name":"Schild mit Loch","start.tpl.sign.desc":"Flache Platte mit runden Ecken und einem Loch zum Aufhängen.","start.tpl.phone.name":"Handyhalter","start.tpl.phone.desc":"Schräge Lehne, Ablage vorne und ein Schlitz fürs Kabel.","start.tpl.bracket.name":"Winkel zum Anschrauben","start.tpl.bracket.desc":"L-Winkel mit Senkkopf-Schraublöchern und Versteifung.","start.tpl.gear.name":"Zahnradpaar","start.tpl.gear.desc":"Zwei passende Zahnräder mit Bohrung.","start.tpl.hinge.name":"Scharnier","start.tpl.hinge.desc":"Aus einem Stück, mit Spiel zwischen den Teilen.","tool.body":"Körper","tool.bodyTip":"Grundkörper hinzufügen – anklicken oder auf die Fläche ziehen","tool.sketch":"Skizze","tool.sketchTip":"Eine 2D-Skizze zeichnen und daraus einen Körper machen","tool.parts":"Bauteile","tool.partsTip":"Schraubenlöcher, Mutternfallen, Scharniere, Zahnräder …","tool.measure":"Messen","tool.measureTip":"Messen: Abstände, Winkel, Flächen und Durchmesser","tool.notes":"Notizen","tool.notesTip":"Notizstift: frei malen und Text hinschreiben – ohne technische Bedeutung","tool.views":"Ansicht","tool.viewsTip":"Ansicht: Schnitt, Röntgen, Explosion und Fokus-Vorschau – ändert nur die Anzeige","tool.check":"Prüfen","tool.checkTip":"Prüfen: Geometrie prüfen, Schwachstellen, Wandstärke und Überhänge","tool.more":"Mehr","tool.moreTip":"Weitere Werkzeuge: Messen, Notizen, Ansicht – oder alle Werkzeuge zeigen","tool.export":"Exportieren","tool.exportShort":"Export","tool.exportTip":"Als STEP, STL, 3MF, OBJ, GLB oder DXF speichern (ZIP)","tool.sheet":"Blatt","tool.sheetTip":"Blattgröße, Maßstab und Ansichten","tool.detail":"Detailansicht","tool.detailTip":"Ausschnitt einer Ansicht mit Kreis vergrößern (Detail Z)","tool.dsection":"Schnittansicht","tool.dsectionTip":"Schnittlinie A–A durch eine Ansicht ziehen – erzeugt eine Schnittansicht mit Schraffur","tool.dim":"Maß","tool.dimTip":"Bemaßung hinzufügen: zwei Punkte oder einen Kreis anklicken","tool.autodim":"Automatisch bemaßen","tool.autodimShort":"Auto-Maße","tool.autodimTip":"Gesamtmaße und Bohrungen automatisch bemaßen","tool.draw2d":"2D zeichnen","tool.draw2dTip":"Linien, Kreise und Text frei auf das Blatt zeichnen","tool.dexport":"Zeichnung speichern","tool.dexportShort":"Speichern","tool.dexportTip":"Als PDF, SVG oder DXF speichern","tool.fly.bodiesTitle":"Grundkörper","tool.fly.tileTip":"Klicken fügt ihn ein, Ziehen setzt ihn genau hin","tool.fly.cylHole":"Zylinder als Loch","tool.fly.boxHole":"Quader als Loch","tool.fly.route3d":"Rohr im Raum","tool.fly.bodiesFoot":"Tipp: Jeder Körper kann mit einem Klick zum Loch werden.","tool.fly.partsTitle":"Bauteile","tool.fly.partsFoot":"Löcher auf eine Fläche ziehen – sie richten sich automatisch aus.","menu.proj.rename":"Projekt umbenennen","menu.proj.saveFile":"Als Datei speichern","menu.proj.saveInFolderNow":"Jetzt in „{name}“ speichern","menu.proj.changeFolder":"Anderen Ordner wählen …","menu.proj.disconnectFolder":"Ordner-Verbindung trennen","menu.proj.saveToFolder":"In Ordner speichern …","menu.proj.openImport":"Datei öffnen / STEP, IGES, BREP, STL, 3MF, OBJ importieren …","menu.proj.versions":"Versionen …","menu.proj.newProject":"Neues Projekt","menu.proj.startAndTemplates":"Startseite und Vorlagen","menu.folder.saveNow":"Jetzt in Ordner speichern","menu.folder.changeFolder":"Anderen Ordner wählen …","menu.folder.disconnect":"Ordner-Verbindung trennen","menu.main.tourBasics":"Einführung starten","menu.main.tourSketch":"Einführung: Erste Skizze","menu.main.settings":"Einstellungen","menu.main.shortcuts":"Tastenkürzel","menu.main.export":"Exportieren","menu.main.saveImage":"Bild speichern (PNG)","menu.main.about":"Über Tracery","menu.main.aboutP1":"Tracery ist ein kostenloses, parametrisches CAD im Browser – ohne Konto, mit exaktem Geometrie-Kern und technischen Zeichnungen.","menu.main.aboutP2":"Der Name: „Tracery“ ist das englische Wort für Maßwerk – die filigranen, exakt konstruierten Ornamente in gotischen Kirchenfenstern. Genau so sollen deine Teile werden.","menu.main.aboutP3":"Gerechnet wird mit dem CAD-Kern OpenCascade (LGPL-2.1) über die Bibliothek replicad (MIT). Die 3D-Anzeige nutzt three.js (MIT), die PDF-Ausgabe jsPDF (MIT).","menu.main.aboutP4":"Deine Projekte bleiben in deinem Browser. Der KI-Helfer nutzt dein Claude-Konto.","menu.more.measure":"Messen","menu.more.notes":"Notizstift","menu.more.views":"Ansicht: Schnitt, Röntgen, Explosion …","menu.more.weakSpots":"Schwachstellen suchen","menu.more.showAllPro":"Alle Werkzeuge zeigen (Profi)","menu.view.section":"Schnitt","menu.view.xray":"Röntgen","menu.view.explode":"Explosion","menu.view.focus":"Fokus-Vorschau","menu.view.overhang":"Überhänge (3D-Druck)","menu.view.thin":"Wandstärke (3D-Druck)","menu.view.present":"Vorführen (Vollbild)","menu.view.turntable":"Drehteller-Video …","menu.view.lightPrefix":"Licht: {name}","menu.view.shadows":"Schatten","menu.view.viewBack":"Vorige Ansicht","menu.view.saveView":"Ansicht speichern …","menu.view.savedViewPrefix":"Ansicht: {name}","menu.view.disp.edges":"Flächen mit Kanten","menu.view.disp.shaded":"Nur Flächen","menu.view.disp.wire":"Drahtgitter (nur Kanten)","menu.view.disp.hidden":"Verdeckte Kanten zeigen","menu.view.look.studio":"Studio-Look (Werkstoff, Licht, Schatten)","menu.view.look.plain":"Einfach (matt, schnell)","menu.view.look.clay":"Prüfen: Ton","menu.view.look.chrome":"Prüfen: Chrom-Streifen","menu.view.mood.studio":"Studio","menu.view.mood.hell":"Hell","menu.view.mood.werkstatt":"Werkstatt","menu.check.geom":"Geometrie prüfen","menu.check.weak":"Schwachstellen suchen","menu.check.thin":"Wandstärke (3D-Druck)","menu.check.overhang":"Überhänge (3D-Druck)","menu.select.all":"Alles","menu.select.body":"Nur Körper","menu.select.face":"Nur Flächen","menu.select.edge":"Nur Kanten","menu.select.tip":"Wählen: {name}","menu.edge.convex":"Alle äußeren Kanten","menu.edge.concave":"Alle inneren Kanten","menu.edge.all":"Alle Kanten","menu.edge.faceSelect":"Alle {n} Kanten wählen","menu.edge.faceFillet":"Alle abrunden ({v})","menu.edge.faceChamfer":"Alle abschrägen ({v})","menu.edge.faceNone":"An dieser Fläche habe ich keine Kanten gefunden.","menu.ctx.editSketch":"Skizze bearbeiten","menu.ctx.lookAtFace":"Blick senkrecht auf die Fläche","menu.ctx.faceDxf":"Fläche als DXF speichern","menu.ctx.faceSvg":"Fläche als SVG speichern","menu.ctx.sketchOnFace":"Skizze auf dieser Fläche","menu.ctx.thread":"Gewinde …","menu.ctx.markThread":"Gewinde markieren …","menu.ctx.dupLinked":"Verknüpft duplizieren","menu.ctx.toSolid":"Zum Körper machen","menu.ctx.toHole":"Zum Loch machen","menu.ctx.selectSimilar":"Ähnliche wählen","menu.ctx.zoomFit":"Heranzoomen","menu.ctx.saveSelection":"Auswahl speichern …","menu.ctx.behind":"Dahinter wählen: „{name}“","menu.ctx.showAll":"Alles einblenden","menu.ctx.showAllCount":"Alles einblenden ({n})","menu.ctx.selectAll":"Alles wählen","menu.ctx.fitAll":"Alles zeigen","menu.ctx.selSet":"Auswahl: {name}","menu.ctx.viewBack":"Vorige Ansicht","menu.ctx.newSketch":"Neue Skizze","menu.ctx.saveImage":"Bild speichern (PNG)","menu.ctx.repeat":"Wiederholen: {label}","menu.tl.markerAfter":"Marker hinter diesen Schritt","menu.tl.markerBefore":"Marker vor diesen Schritt","menu.tree.toFolder":"In Ordner","menu.tree.fromFolder":"Aus Ordner nehmen","menu.tree.dissolveFolder":"Ordner auflösen","menu.tree.collapseFolder":"Ordner zuklappen","menu.tree.expandFolder":"Ordner aufklappen","menu.tree.selectFolder":"Alle Schritte wählen","menu.draw.line":"Linie","menu.draw.rect":"Rechteck","menu.draw.circle":"Kreis","menu.draw.text":"Text","menu.draw.clearAll":"Alles Gezeichnete löschen","menu.draw.clearTitle":"Gezeichnetes löschen?","menu.draw.clearBody":"Alle frei gezeichneten Linien und Texte werden entfernt.","menu.draw.sheet":"Blatt","menu.draw.orient":"Ausrichtung","menu.draw.landscape":"Quer","menu.draw.portrait":"Hoch","menu.draw.scale":"Maßstab","menu.draw.scaleAuto":"Automatisch","menu.draw.viewsHeading":"Ansichten","menu.draw.vFront":"Vorderansicht","menu.draw.vTop":"Draufsicht","menu.draw.vLeft":"Seitenansicht von links","menu.draw.vIso":"Isometrie (3D-Bild)","menu.draw.hiddenEdges":"Verdeckte Kanten (gestrichelt)","menu.draw.centers":"Mittellinien","menu.draw.exportPdf":"Als PDF speichern","menu.draw.exportSvg":"Als SVG speichern","menu.draw.exportDxf":"Als DXF speichern (ZIP)","menu.draw.detail":"Detailansicht","menu.draw.detailScale":"Detail-Maßstab","ctx.toolbarAria":"Aktionen","ctx.suppressed":"Unterdrückt","ctx.behindMarker":"Hinter dem Marker","ctx.enableAgain":"Wieder einschalten","ctx.enableAgainTip":"Diesen Schritt wieder mitrechnen","ctx.markerAfter":"Marker dahinter","ctx.markerAfterTip":"Den Marker hinter diesen Schritt ziehen – dann wird er wieder mitgerechnet","ctx.moveStepLabel":"Verschieben/Drehen","ctx.scaleStepLabel":"Skalieren","ctx.thickenStepLabel":"Aufdicken","ctx.mirrorStepLabel":"Schritt spiegeln","ctx.targetBody":"Zielkörper","ctx.targetBodyTip":"Zum Zielkörper wechseln","ctx.suppressTip":"Diesen Schritt unterdrücken – der Körper springt zurück","ctx.deleteTip":"Löschen (Entf)","ctx.copyValTip":"{tip} – klicken kopiert den Wert","ctx.edgeDia":"Kante Ø","ctx.edgeDiaTip":"Kreis mit Radius {r}, Umfang {total}","ctx.edgeOne":"Kante","ctx.edgesCount":"{n} Kanten","ctx.edgesTotalTip":"Gesamtlänge der gewählten Kanten","ctx.edgeLenTip":"Länge der Kante","ctx.edgeArcTip":"Länge der Kante (Bogen, R {r})","ctx.fillet":"Abrunden","ctx.filletTip":"Kante abrunden (1 mm, danach änderbar)","ctx.chamfer":"Abschrägen","ctx.chamferTip":"Kante abschrägen (1 mm, danach änderbar)","ctx.similar":"Ähnliche","ctx.similarEdgesTip":"Alle gleich langen Kanten dazuwählen (A)","ctx.chain":"Kette","ctx.chainTip":"Alle Kanten dazuwählen, die ohne Knick weiterlaufen (z. B. ein gerundeter Umriss)","ctx.byKind":"Nach Art","ctx.byKindTip":"Alle äußeren oder alle inneren Kanten dieses Teils wählen","ctx.planeAngle":"Ebene im Winkel","ctx.planeAngleTip":"Bezugsebene durch diese Kante im Winkel zu einer Fläche anlegen","ctx.planeNormal":"Ebene senkrecht","ctx.planeNormalTip":"Bezugsebene senkrecht auf diese Kante (in der Mitte, danach änderbar)","ctx.planeTwoEdges":"Ebene durch 2 Kanten","ctx.planeTwoEdgesTip":"Bezugsebene durch beide gewählten geraden Kanten anlegen","ctx.planeTangent":"Ebene tangential","ctx.planeTangentTip":"Bezugsebene tangential an diese runde Fläche anlegen","ctx.pointEdgeMid":"Punkt Kantenmitte","ctx.pointEdgeMidTip":"Bezugspunkt genau in der Mitte dieser Kante anlegen","ctx.pointFaceCenter":"Punkt Flächenmitte","ctx.pointFaceCenterTip":"Bezugspunkt in der Mitte dieser Fläche anlegen","ctx.face":"Fläche","ctx.sketchHere":"Skizze hierauf","ctx.sketchHereTip":"Auf dieser Fläche zeichnen","ctx.hole":"Bohrung","ctx.holeTip":"Bohrungs-Assistent: Durchgang, Kernloch, Sackloch mit Spitze, Passbohrung H7, Zentrierbohrung, Einsatz oder Mutternfalle","ctx.extrude":"Hochziehen","ctx.extrudeTip":"Die Fläche herausziehen oder hineindrücken","ctx.faceEdges":"Ihre Kanten","ctx.faceEdgesTip":"Alle Kanten dieser Fläche wählen, abrunden oder abschrägen","ctx.shell":"Aushöhlen","ctx.shellTip":"Körper aushöhlen – diese Fläche wird die Öffnung","ctx.sectionHere":"Schnitt hier","ctx.sectionHereTip":"Schnitt parallel zu dieser Fläche – den Abstand stellst du in der Schnitt-Leiste ein","ctx.mirrorFace":"An Fläche spiegeln","ctx.mirrorFaceTip":"Gespiegelte Kopie an dieser Fläche – z. B. die zweite Hälfte eines symmetrischen Teils","ctx.sphereDia":"Kugel Ø","ctx.roundFaceDia":"Runde Fläche Ø","ctx.roundFaceDiaTip":"Radius {r}","ctx.roundFace":"Runde Fläche","ctx.holeRoundTip":"Bohrungs-Assistent: Loch senkrecht in die runde Fläche (Schraube, Sackloch, Passbohrung H7, Zentrierung …) – der Magnet rastet ganz oben, an den Seiten und in der Mitte ein","ctx.threadEdit":"Gewinde ändern","ctx.threadMark":"Gewinde markieren","ctx.threadTip":"Kosmetisches Gewinde auf dieser runden Fläche markieren (rechnet schnell)","ctx.axis":"Achse","ctx.axisTip":"Bezugsachse durch die Mitte dieser runden Fläche anlegen","ctx.toBody":"Zum Körper","ctx.toHole":"Zum Loch","ctx.toBodyTip":"Wieder zum festen Körper machen (H)","ctx.toHoleTip":"Zum Loch machen – schneidet dann in andere Körper (H)","ctx.rotate":"Drehen","ctx.rotateTip":"Um 90° drehen oder kippen","ctx.rotZ":"Um 90° drehen (flach)","ctx.rotX":"Nach vorne kippen","ctx.rotY":"Zur Seite kippen","ctx.mirror":"Spiegeln","ctx.mirrorTip":"Spiegeln","ctx.mirrorX":"Links ↔ rechts","ctx.mirrorY":"Vorne ↔ hinten","ctx.mirrorZ":"Oben ↔ unten","ctx.dupTip":"Duplizieren (Strg D)","ctx.moveStep":"Verschieben/Drehen","ctx.moveStepTip":"Als Schritt verschieben, drehen oder kopieren (bleibt im Verlauf änderbar)","ctx.scale":"Skalieren","ctx.scaleTip":"Körper als Schritt im Verlauf vergrößern oder verkleinern (gleichmäßig oder je Achse)","ctx.thicken":"Aufdicken","ctx.thickenTip":"Fläche zu einer Platte mit fester Dicke aufdicken (nach außen, innen oder mittig)","ctx.mirrorStep":"Schritt spiegeln","ctx.mirrorStepTip":"Diesen Formschritt (z. B. eine Tasche oder Rippe) an einer Ebene oder Fläche im selben Körper spiegeln","ctx.pickMirrorPlane":"Ebene / Fläche","ctx.pickMirrorPlaneTip":"Ebene Körperfläche oder Bezugsebene als Spiegelebene wählen","ctx.pattern":"Muster","ctx.patternHoleTip":"Loch als Muster oder gespiegelt vervielfachen","ctx.patternTip":"Muster oder gespiegelte Kopie","ctx.patRect":"Rechteckmuster","ctx.patCirc":"Kreismuster","ctx.patPath":"Muster entlang Kurve","ctx.patMirror":"Gespiegelte Kopie","ctx.split":"Teilen","ctx.splitTip":"Körper an einer Ebene teilen","ctx.toTip":"Zur Spitze","ctx.toTipTip":"Den Umriss zu einer Spitze zusammenlaufen lassen (Übergang mit Spitze)","ctx.similarPartsTip":"Alle gleichen Teile wählen (A)","ctx.selectEdges":"Kanten wählen","ctx.selectEdgesTip":"Alle äußeren, alle inneren oder alle Kanten dieses Teils wählen – dann zusammen abrunden","ctx.ungroup":"Gruppe lösen","ctx.ungroupTip":"Gruppe lösen","ctx.group":"Gruppieren","ctx.groupTip":"Zu einem Körper verbinden (Strg G)","ctx.gap":"Abstand","ctx.gapTip":"Abstand zwischen den beiden Teilen genau setzen (der zuletzt gewählte bewegt sich)","ctx.joint":"Gelenk","ctx.jointTip":"Drehgelenk: das zuletzt gewählte Teil dreht sich um eine Achse, die du im Bild wählst","ctx.loft":"Übergang","ctx.loftTip":"Weicher Übergang durch die Umrisse – in der Reihenfolge, in der du sie gewählt hast","ctx.boolean":"Boolesch","ctx.booleanTip":"Körper vereinigen, abziehen oder schneiden","ctx.boolUnion":"Vereinigen","ctx.boolSub":"Abziehen (der zuerst gewählte bleibt)","ctx.boolInt":"Schnittmenge","ctx.align":"Ausrichten","ctx.alignTip":"Objekte aneinander ausrichten","ctx.alignLeft":"Links bündig","ctx.alignCx":"Mittig (X)","ctx.alignRight":"Rechts bündig","ctx.alignFront":"Vorne bündig","ctx.alignCy":"Mittig (Y)","ctx.alignBack":"Hinten bündig","ctx.alignBottom":"Unten bündig","common.emboss":"Prägen","ctx.emboss":"Prägen","ctx.embossTip":"Skizze (Text oder Logo) erhaben oder vertieft auf diese Fläche projizieren","menu.proj.saveTemplate":"Als Vorlage speichern …","start.projTpl.emptyMm.name":"Leer (mm)","start.projTpl.emptyMm.desc":"Leeres Projekt in Millimetern.","start.projTpl.emptyIn.name":"Leer (Zoll)","start.projTpl.emptyIn.desc":"Leeres Projekt in Zoll (in) für US-Maße.","start.projTpl.print3d.name":"3D-Druck","start.projTpl.print3d.desc":"Druckbett 220 × 220 × 250 mm sichtbar, 0,4-mm-Düse, PLA.","start.projTpl.laser.name":"Laser (Platte 3 mm)","start.projTpl.laser.desc":"3-mm-Sperrholzplatte mit Schnittspalt-Maß für den Laser.","start.projTpl.enclosure.name":"Gehäuse","start.projTpl.enclosure.desc":"Gehäuse 80 × 50 × 30 mm mit Deckel, Wandstärke und Spiel.","tpl.newDialogTitle":"Neues Projekt aus Vorlage","tpl.builtinHeading":"Projekt-Vorlagen","tpl.customHeading":"Eigene Vorlagen","tpl.customEmpty":"Noch keine eigenen Vorlagen. Über das Projektmenü → „Als Vorlage speichern …“ legst du hier eigene Startpunkte ab.","tpl.customNoDesc":"Eigene Vorlage (lokal gespeichert)","tpl.saveCurrent":"Aktuelles Projekt als Vorlage speichern","tpl.saveDialogTitle":"Als Vorlage speichern","tpl.saveNameLabel":"Name der Vorlage","tpl.saveDescLabel":"Kurze Beschreibung (optional)","tpl.saveDescPh":"z. B. Drucker mit 0,6-mm-Düse, Gehäuse-Grundmaß …","tpl.saveNameEmpty":"Bitte gib der Vorlage einen Namen.","tpl.saveFailed":"Die Vorlage konnte nicht lokal gespeichert werden.","tpl.saved":"Vorlage „{name}“ gespeichert.","tpl.deleteAria":"Vorlage „{name}“ löschen","tpl.deleteTip":"Vorlage löschen","tpl.deleteTitle":"Vorlage löschen?","tpl.deleteBody":"„{name}“ wird aus deinen gespeicherten Vorlagen entfernt.","tpl.deleted":"Vorlage „{name}“ gelöscht.","tpl.missing":"Die Vorlage wurde nicht gefunden.","tpl.loadedPrint3d":"Vorlage „3D-Druck“ geladen: Druckbett {x} × {y} × {z} mm, Düse {nozzle} mm.","tpl.loadedEmpty":"Neues leeres Projekt ({unit}) gestartet.","tpl.loadedNamed":"Vorlage „{name}“ geladen.","recovery.title":"Tracery wurde nicht richtig beendet – letzten Stand wiederherstellen?","recovery.metaOne":"Projekt „{name}“ · {time} · 1 Objekt","recovery.metaMany":"Projekt „{name}“ · {time} · {n} Objekte","recovery.restore":"Wiederherstellen","recovery.dismiss":"Verwerfen","recovery.restored":"Letzter Stand von „{name}“ wiederhergestellt.","recovery.discarded":"Wiederherstellungs-Stand verworfen.","recovery.failed":"Der letzte Stand konnte nicht wiederhergestellt werden."};
+const TEXTS_DE = {"common.ok":"OK","common.cancel":"Abbrechen","common.close":"Schließen","common.delete":"Löschen","common.rename":"Umbenennen","common.save":"Speichern","common.name":"Name","common.body":"Körper","common.hole":"Loch","common.edit":"Bearbeiten","common.suppress":"Unterdrücken","common.unsuppress":"Wieder aktivieren","common.explainStep":"Erklär diesen Schritt","common.moveStep":"Verschieben/Drehen (Schritt)","common.scaleStep":"Skalieren (Schritt)","common.thicken":"Aufdicken","common.mirrorStep":"Schritt spiegeln","common.duplicate":"Duplizieren","common.hide":"Ausblenden","common.isolate":"Isolieren","topbar.showTree":"Verlauf zeigen","topbar.tree":"Verlauf","topbar.brandAria":"Tracery – Startseite","topbar.workspace":"Arbeitsbereich","topbar.model":"Modell","topbar.drawing":"Zeichnung","topbar.undo":"Rückgängig","topbar.undoLabel":"Rückgängig: {label}","topbar.redo":"Wiederholen","topbar.project":"Projekt","topbar.menu":"Menü","topbar.showProps":"Eigenschaften zeigen","topbar.props":"Eigenschaften","topbar.params":"Maße","topbar.log":"Protokoll","topbar.cmdPlaceholder":"Werkzeug suchen oder beschreiben, was du bauen willst …","topbar.cmdAria":"Werkzeug suchen oder der KI beschreiben","topbar.cmdGo":"Ausführen","level.simple":"Einfach","level.pro":"Profi","level.tipSimple":"Stufe: Einfach – klicken zum Wechseln auf Profi","level.tipPro":"Stufe: Profi – klicken zum Wechseln auf Einfach","level.chooseAria":"Stufe wählen","level.simpleDesc":"wenige, große Knöpfe, alles erklärt","level.proDesc":"alle Werkzeuge, Tastenkürzel, Maus wie in deinem CAD","start.aria":"Startseite","start.subtitle":"CAD im Browser – kostenlos, ohne Konto","start.newProject":"Neues Projekt","start.openFile":"Datei öffnen","start.tourBasics":"Einführung (3 Minuten)","start.tourSketch":"Erste Skizze (5 Minuten)","start.welcomeTitle":"Wie möchtest du mit Tracery arbeiten?","start.welcomeSub":"Du kannst jederzeit oben rechts zwischen beiden Stufen wechseln.","start.surfaceAria":"Oberfläche","start.surfaceLabel":"Oberfläche:","start.simpleOption":"Einfach – für Einsteiger","start.proOption":"Profi – alle Werkzeuge","start.recentHeading":"Weiterarbeiten","start.recentMetaOne":"{n} Objekt · {date}","start.recentMetaMany":"{n} Objekte · {date}","start.deleteFromBrowserAria":"Aus dem Browser löschen","start.deleteFromBrowserTip":"Aus diesem Browser löschen","start.deleteConfirmTitle":"Projekt löschen?","start.deleteConfirmBody":"„{name}“ wird aus diesem Browser gelöscht. Gespeicherte Dateien bleiben erhalten.","start.projectMissing":"Das Projekt ist nicht mehr da.","start.templatesHeading":"Vorlagen","start.emptyTitle":"Leeres Projekt","start.emptyDesc":"Von null anfangen.","start.templateLoaded":"Vorlage geladen. Klick einen Teil an, um ihn zu ändern.","start.footHtml":"Projekte werden automatisch in diesem Browser gesichert. Zum sicheren Aufbewahren und Teilen: <b>Projekt als Datei speichern</b>.<br>Tracery rechnet mit OpenCascade (LGPL-2.1) über replicad (MIT) und zeigt 3D mit three.js (MIT).","start.tpl.box.name":"Box mit Deckel","start.tpl.box.desc":"Mit Maßen wie Wandstärke und Spiel – änderst du sie, passt sich alles an.","start.tpl.sign.name":"Schild mit Loch","start.tpl.sign.desc":"Flache Platte mit runden Ecken und einem Loch zum Aufhängen.","start.tpl.phone.name":"Handyhalter","start.tpl.phone.desc":"Schräge Lehne, Ablage vorne und ein Schlitz fürs Kabel.","start.tpl.bracket.name":"Winkel zum Anschrauben","start.tpl.bracket.desc":"L-Winkel mit Senkkopf-Schraublöchern und Versteifung.","start.tpl.gear.name":"Zahnradpaar","start.tpl.gear.desc":"Zwei passende Zahnräder mit Bohrung.","start.tpl.hinge.name":"Scharnier","start.tpl.hinge.desc":"Aus einem Stück, mit Spiel zwischen den Teilen.","tool.body":"Körper","tool.bodyTip":"Grundkörper hinzufügen – anklicken oder auf die Fläche ziehen","tool.sketch":"Skizze","tool.sketchTip":"Eine 2D-Skizze zeichnen und daraus einen Körper machen","tool.parts":"Bauteile","tool.partsTip":"Schraubenlöcher, Mutternfallen, Scharniere, Zahnräder …","tool.measure":"Messen","tool.measureTip":"Messen: Abstände, Winkel, Flächen und Durchmesser","tool.notes":"Notizen","tool.notesTip":"Notizstift: frei malen und Text hinschreiben – ohne technische Bedeutung","tool.views":"Ansicht","tool.viewsTip":"Ansicht: Schnitt, Röntgen, Explosion und Fokus-Vorschau – ändert nur die Anzeige","tool.check":"Prüfen","tool.checkTip":"Prüfen: Geometrie prüfen, Schwachstellen, Wandstärke und Überhänge","tool.more":"Mehr","tool.moreTip":"Weitere Werkzeuge: Messen, Notizen, Ansicht – oder alle Werkzeuge zeigen","tool.export":"Exportieren","tool.exportShort":"Export","tool.exportTip":"Als STEP, STL, 3MF, OBJ, GLB oder DXF speichern (ZIP)","tool.sheet":"Blatt","tool.sheetTip":"Blattgröße, Maßstab und Ansichten","tool.detail":"Detailansicht","tool.detailTip":"Ausschnitt einer Ansicht mit Kreis vergrößern (Detail Z)","tool.dsection":"Schnittansicht","tool.dsectionTip":"Schnittlinie A–A durch eine Ansicht ziehen – erzeugt eine Schnittansicht mit Schraffur","tool.dim":"Maß","tool.dimTip":"Bemaßung hinzufügen: zwei Punkte oder einen Kreis anklicken","tool.dimKinds":"Maß-Arten","tool.dimKindsTip":"Kettenmaß, Bezugsmaß, Winkel, Radius, Durchmesser oder Fase","tool.autodim":"Automatisch bemaßen","tool.autodimShort":"Auto-Maße","tool.autodimTip":"Gesamtmaße und Bohrungen automatisch bemaßen","tool.draw2d":"2D zeichnen","tool.draw2dTip":"Linien, Kreise und Text frei auf das Blatt zeichnen","tool.dexport":"Zeichnung speichern","tool.dexportShort":"Speichern","tool.dexportTip":"Als PDF, SVG oder DXF speichern","tool.fly.bodiesTitle":"Grundkörper","tool.fly.tileTip":"Klicken fügt ihn ein, Ziehen setzt ihn genau hin","tool.fly.cylHole":"Zylinder als Loch","tool.fly.boxHole":"Quader als Loch","tool.fly.route3d":"Rohr im Raum","tool.fly.bodiesFoot":"Tipp: Jeder Körper kann mit einem Klick zum Loch werden.","tool.fly.partsTitle":"Bauteile","tool.fly.partsFoot":"Löcher auf eine Fläche ziehen – sie richten sich automatisch aus.","menu.proj.rename":"Projekt umbenennen","menu.proj.saveFile":"Als Datei speichern","menu.proj.saveInFolderNow":"Jetzt in „{name}“ speichern","menu.proj.changeFolder":"Anderen Ordner wählen …","menu.proj.disconnectFolder":"Ordner-Verbindung trennen","menu.proj.saveToFolder":"In Ordner speichern …","menu.proj.openImport":"Datei öffnen / STEP, IGES, BREP, STL, 3MF, OBJ importieren …","menu.proj.versions":"Versionen …","menu.proj.newProject":"Neues Projekt","menu.proj.startAndTemplates":"Startseite und Vorlagen","menu.folder.saveNow":"Jetzt in Ordner speichern","menu.folder.changeFolder":"Anderen Ordner wählen …","menu.folder.disconnect":"Ordner-Verbindung trennen","menu.main.tourBasics":"Einführung starten","menu.main.tourSketch":"Einführung: Erste Skizze","menu.main.settings":"Einstellungen","menu.main.shortcuts":"Tastenkürzel","menu.main.export":"Exportieren","menu.main.saveImage":"Bild speichern (PNG)","menu.main.about":"Über Tracery","menu.main.aboutP1":"Tracery ist ein kostenloses, parametrisches CAD im Browser – ohne Konto, mit exaktem Geometrie-Kern und technischen Zeichnungen.","menu.main.aboutP2":"Der Name: „Tracery“ ist das englische Wort für Maßwerk – die filigranen, exakt konstruierten Ornamente in gotischen Kirchenfenstern. Genau so sollen deine Teile werden.","menu.main.aboutP3":"Gerechnet wird mit dem CAD-Kern OpenCascade (LGPL-2.1) über die Bibliothek replicad (MIT). Die 3D-Anzeige nutzt three.js (MIT), die PDF-Ausgabe jsPDF (MIT).","menu.main.aboutP4":"Deine Projekte bleiben in deinem Browser. Der KI-Helfer nutzt dein Claude-Konto.","menu.more.measure":"Messen","menu.more.notes":"Notizstift","menu.more.views":"Ansicht: Schnitt, Röntgen, Explosion …","menu.more.weakSpots":"Schwachstellen suchen","menu.more.showAllPro":"Alle Werkzeuge zeigen (Profi)","menu.view.section":"Schnitt","menu.view.xray":"Röntgen","menu.view.explode":"Explosion","menu.view.focus":"Fokus-Vorschau","menu.view.overhang":"Überhänge (3D-Druck)","menu.view.thin":"Wandstärke (3D-Druck)","menu.view.present":"Vorführen (Vollbild)","menu.view.turntable":"Drehteller-Video …","menu.view.lightPrefix":"Licht: {name}","menu.view.shadows":"Schatten","menu.view.viewBack":"Vorige Ansicht","menu.view.saveView":"Ansicht speichern …","menu.view.savedViewPrefix":"Ansicht: {name}","menu.view.disp.edges":"Flächen mit Kanten","menu.view.disp.shaded":"Nur Flächen","menu.view.disp.wire":"Drahtgitter (nur Kanten)","menu.view.disp.hidden":"Verdeckte Kanten zeigen","menu.view.look.studio":"Studio-Look (Werkstoff, Licht, Schatten)","menu.view.look.plain":"Einfach (matt, schnell)","menu.view.look.clay":"Prüfen: Ton","menu.view.look.chrome":"Prüfen: Chrom-Streifen","menu.view.mood.studio":"Studio","menu.view.mood.hell":"Hell","menu.view.mood.werkstatt":"Werkstatt","menu.check.geom":"Geometrie prüfen","menu.check.weak":"Schwachstellen suchen","menu.check.thin":"Wandstärke (3D-Druck)","menu.check.overhang":"Überhänge (3D-Druck)","menu.select.all":"Alles","menu.select.body":"Nur Körper","menu.select.face":"Nur Flächen","menu.select.edge":"Nur Kanten","menu.select.tip":"Wählen: {name}","menu.edge.convex":"Alle äußeren Kanten","menu.edge.concave":"Alle inneren Kanten","menu.edge.all":"Alle Kanten","menu.edge.faceSelect":"Alle {n} Kanten wählen","menu.edge.faceFillet":"Alle abrunden ({v})","menu.edge.faceChamfer":"Alle abschrägen ({v})","menu.edge.faceNone":"An dieser Fläche habe ich keine Kanten gefunden.","menu.ctx.editSketch":"Skizze bearbeiten","menu.ctx.lookAtFace":"Blick senkrecht auf die Fläche","menu.ctx.faceDxf":"Fläche als DXF speichern","menu.ctx.faceSvg":"Fläche als SVG speichern","menu.ctx.sketchOnFace":"Skizze auf dieser Fläche","menu.ctx.thread":"Gewinde …","menu.ctx.markThread":"Gewinde markieren …","menu.ctx.dupLinked":"Verknüpft duplizieren","menu.ctx.toSolid":"Zum Körper machen","menu.ctx.toHole":"Zum Loch machen","menu.ctx.selectSimilar":"Ähnliche wählen","menu.ctx.zoomFit":"Heranzoomen","menu.ctx.saveSelection":"Auswahl speichern …","menu.ctx.behind":"Dahinter wählen: „{name}“","menu.ctx.showAll":"Alles einblenden","menu.ctx.showAllCount":"Alles einblenden ({n})","menu.ctx.selectAll":"Alles wählen","menu.ctx.fitAll":"Alles zeigen","menu.ctx.selSet":"Auswahl: {name}","menu.ctx.viewBack":"Vorige Ansicht","menu.ctx.newSketch":"Neue Skizze","menu.ctx.saveImage":"Bild speichern (PNG)","menu.ctx.repeat":"Wiederholen: {label}","menu.tl.markerAfter":"Marker hinter diesen Schritt","menu.tl.markerBefore":"Marker vor diesen Schritt","menu.tree.toFolder":"In Ordner","menu.tree.fromFolder":"Aus Ordner nehmen","menu.tree.dissolveFolder":"Ordner auflösen","menu.tree.collapseFolder":"Ordner zuklappen","menu.tree.expandFolder":"Ordner aufklappen","menu.tree.selectFolder":"Alle Schritte wählen","menu.draw.line":"Linie","menu.draw.rect":"Rechteck","menu.draw.circle":"Kreis","menu.draw.text":"Text","menu.draw.clearAll":"Alles Gezeichnete löschen","menu.draw.clearTitle":"Gezeichnetes löschen?","menu.draw.clearBody":"Alle frei gezeichneten Linien und Texte werden entfernt.","menu.draw.sheet":"Blatt","menu.draw.orient":"Ausrichtung","menu.draw.landscape":"Quer","menu.draw.portrait":"Hoch","menu.draw.scale":"Maßstab","menu.draw.scaleAuto":"Automatisch","menu.draw.viewsHeading":"Ansichten","menu.draw.vFront":"Vorderansicht","menu.draw.vTop":"Draufsicht","menu.draw.vLeft":"Seitenansicht von links","menu.draw.vIso":"Isometrie (3D-Bild)","menu.draw.hiddenEdges":"Verdeckte Kanten (gestrichelt)","menu.draw.centers":"Mittellinien","menu.draw.exportPdf":"Als PDF speichern","menu.draw.exportSvg":"Als SVG speichern","menu.draw.exportDxf":"Als DXF speichern (ZIP)","menu.draw.detail":"Detailansicht","menu.draw.detailScale":"Detail-Maßstab","menu.draw.dimLin":"Abstand (Standard)","menu.draw.dimChain":"Kettenmaß","menu.draw.dimBase":"Bezugsmaß (von einer Kante aus)","menu.draw.dimAng":"Winkelmaß","menu.draw.dimRad":"Radius (R)","menu.draw.dimDia":"Durchmesser (Ø)","menu.draw.dimChamfer":"Fase (1×45°)","ctx.toolbarAria":"Aktionen","ctx.suppressed":"Unterdrückt","ctx.behindMarker":"Hinter dem Marker","ctx.enableAgain":"Wieder einschalten","ctx.enableAgainTip":"Diesen Schritt wieder mitrechnen","ctx.markerAfter":"Marker dahinter","ctx.markerAfterTip":"Den Marker hinter diesen Schritt ziehen – dann wird er wieder mitgerechnet","ctx.moveStepLabel":"Verschieben/Drehen","ctx.scaleStepLabel":"Skalieren","ctx.thickenStepLabel":"Aufdicken","ctx.mirrorStepLabel":"Schritt spiegeln","ctx.targetBody":"Zielkörper","ctx.targetBodyTip":"Zum Zielkörper wechseln","ctx.suppressTip":"Diesen Schritt unterdrücken – der Körper springt zurück","ctx.deleteTip":"Löschen (Entf)","ctx.copyValTip":"{tip} – klicken kopiert den Wert","ctx.edgeDia":"Kante Ø","ctx.edgeDiaTip":"Kreis mit Radius {r}, Umfang {total}","ctx.edgeOne":"Kante","ctx.edgesCount":"{n} Kanten","ctx.edgesTotalTip":"Gesamtlänge der gewählten Kanten","ctx.edgeLenTip":"Länge der Kante","ctx.edgeArcTip":"Länge der Kante (Bogen, R {r})","ctx.fillet":"Abrunden","ctx.filletTip":"Kante abrunden (1 mm, danach änderbar)","ctx.chamfer":"Abschrägen","ctx.chamferTip":"Kante abschrägen (1 mm, danach änderbar)","ctx.similar":"Ähnliche","ctx.similarEdgesTip":"Alle gleich langen Kanten dazuwählen (A)","ctx.chain":"Kette","ctx.chainTip":"Alle Kanten dazuwählen, die ohne Knick weiterlaufen (z. B. ein gerundeter Umriss)","ctx.byKind":"Nach Art","ctx.byKindTip":"Alle äußeren oder alle inneren Kanten dieses Teils wählen","ctx.planeAngle":"Ebene im Winkel","ctx.planeAngleTip":"Bezugsebene durch diese Kante im Winkel zu einer Fläche anlegen","ctx.planeNormal":"Ebene senkrecht","ctx.planeNormalTip":"Bezugsebene senkrecht auf diese Kante (in der Mitte, danach änderbar)","ctx.planeTwoEdges":"Ebene durch 2 Kanten","ctx.planeTwoEdgesTip":"Bezugsebene durch beide gewählten geraden Kanten anlegen","ctx.planeTangent":"Ebene tangential","ctx.planeTangentTip":"Bezugsebene tangential an diese runde Fläche anlegen","ctx.pointEdgeMid":"Punkt Kantenmitte","ctx.pointEdgeMidTip":"Bezugspunkt genau in der Mitte dieser Kante anlegen","ctx.pointFaceCenter":"Punkt Flächenmitte","ctx.pointFaceCenterTip":"Bezugspunkt in der Mitte dieser Fläche anlegen","ctx.face":"Fläche","ctx.sketchHere":"Skizze hierauf","ctx.sketchHereTip":"Auf dieser Fläche zeichnen","ctx.hole":"Bohrung","ctx.holeTip":"Bohrungs-Assistent: Durchgang, Kernloch, Sackloch mit Spitze, Passbohrung H7, Zentrierbohrung, Einsatz oder Mutternfalle","ctx.extrude":"Hochziehen","ctx.extrudeTip":"Die Fläche herausziehen oder hineindrücken","ctx.faceEdges":"Ihre Kanten","ctx.faceEdgesTip":"Alle Kanten dieser Fläche wählen, abrunden oder abschrägen","ctx.shell":"Aushöhlen","ctx.shellTip":"Körper aushöhlen – diese Fläche wird die Öffnung","ctx.sectionHere":"Schnitt hier","ctx.sectionHereTip":"Schnitt parallel zu dieser Fläche – den Abstand stellst du in der Schnitt-Leiste ein","ctx.mirrorFace":"An Fläche spiegeln","ctx.mirrorFaceTip":"Gespiegelte Kopie an dieser Fläche – z. B. die zweite Hälfte eines symmetrischen Teils","ctx.sphereDia":"Kugel Ø","ctx.roundFaceDia":"Runde Fläche Ø","ctx.roundFaceDiaTip":"Radius {r}","ctx.roundFace":"Runde Fläche","ctx.holeRoundTip":"Bohrungs-Assistent: Loch senkrecht in die runde Fläche (Schraube, Sackloch, Passbohrung H7, Zentrierung …) – der Magnet rastet ganz oben, an den Seiten und in der Mitte ein","ctx.threadEdit":"Gewinde ändern","ctx.threadMark":"Gewinde markieren","ctx.threadTip":"Kosmetisches Gewinde auf dieser runden Fläche markieren (rechnet schnell)","ctx.axis":"Achse","ctx.axisTip":"Bezugsachse durch die Mitte dieser runden Fläche anlegen","ctx.toBody":"Zum Körper","ctx.toHole":"Zum Loch","ctx.toBodyTip":"Wieder zum festen Körper machen (H)","ctx.toHoleTip":"Zum Loch machen – schneidet dann in andere Körper (H)","ctx.rotate":"Drehen","ctx.rotateTip":"Um 90° drehen oder kippen","ctx.rotZ":"Um 90° drehen (flach)","ctx.rotX":"Nach vorne kippen","ctx.rotY":"Zur Seite kippen","ctx.mirror":"Spiegeln","ctx.mirrorTip":"Spiegeln","ctx.mirrorX":"Links ↔ rechts","ctx.mirrorY":"Vorne ↔ hinten","ctx.mirrorZ":"Oben ↔ unten","ctx.dupTip":"Duplizieren (Strg D)","ctx.moveStep":"Verschieben/Drehen","ctx.moveStepTip":"Als Schritt verschieben, drehen oder kopieren (bleibt im Verlauf änderbar)","ctx.scale":"Skalieren","ctx.scaleTip":"Körper als Schritt im Verlauf vergrößern oder verkleinern (gleichmäßig oder je Achse)","ctx.thicken":"Aufdicken","ctx.thickenTip":"Fläche zu einer Platte mit fester Dicke aufdicken (nach außen, innen oder mittig)","ctx.mirrorStep":"Schritt spiegeln","ctx.mirrorStepTip":"Diesen Formschritt (z. B. eine Tasche oder Rippe) an einer Ebene oder Fläche im selben Körper spiegeln","ctx.pickMirrorPlane":"Ebene / Fläche","ctx.pickMirrorPlaneTip":"Ebene Körperfläche oder Bezugsebene als Spiegelebene wählen","ctx.pattern":"Muster","ctx.patternHoleTip":"Loch als Muster oder gespiegelt vervielfachen","ctx.patternTip":"Muster oder gespiegelte Kopie","ctx.patRect":"Rechteckmuster","ctx.patCirc":"Kreismuster","ctx.patPath":"Muster entlang Kurve","ctx.patMirror":"Gespiegelte Kopie","ctx.split":"Teilen","ctx.splitTip":"Körper an einer Ebene teilen","ctx.toTip":"Zur Spitze","ctx.toTipTip":"Den Umriss zu einer Spitze zusammenlaufen lassen (Übergang mit Spitze)","ctx.similarPartsTip":"Alle gleichen Teile wählen (A)","ctx.selectEdges":"Kanten wählen","ctx.selectEdgesTip":"Alle äußeren, alle inneren oder alle Kanten dieses Teils wählen – dann zusammen abrunden","ctx.ungroup":"Gruppe lösen","ctx.ungroupTip":"Gruppe lösen","ctx.group":"Gruppieren","ctx.groupTip":"Zu einem Körper verbinden (Strg G)","ctx.gap":"Abstand","ctx.gapTip":"Abstand zwischen den beiden Teilen genau setzen (der zuletzt gewählte bewegt sich)","ctx.joint":"Gelenk","ctx.jointTip":"Drehgelenk: das zuletzt gewählte Teil dreht sich um eine Achse, die du im Bild wählst","ctx.loft":"Übergang","ctx.loftTip":"Weicher Übergang durch die Umrisse – in der Reihenfolge, in der du sie gewählt hast","ctx.boolean":"Boolesch","ctx.booleanTip":"Körper vereinigen, abziehen oder schneiden","ctx.boolUnion":"Vereinigen","ctx.boolSub":"Abziehen (der zuerst gewählte bleibt)","ctx.boolInt":"Schnittmenge","ctx.align":"Ausrichten","ctx.alignTip":"Objekte aneinander ausrichten","ctx.alignLeft":"Links bündig","ctx.alignCx":"Mittig (X)","ctx.alignRight":"Rechts bündig","ctx.alignFront":"Vorne bündig","ctx.alignCy":"Mittig (Y)","ctx.alignBack":"Hinten bündig","ctx.alignBottom":"Unten bündig","common.emboss":"Prägen","ctx.emboss":"Prägen","ctx.embossTip":"Skizze (Text oder Logo) erhaben oder vertieft auf diese Fläche projizieren","menu.proj.saveTemplate":"Als Vorlage speichern …","start.projTpl.emptyMm.name":"Leer (mm)","start.projTpl.emptyMm.desc":"Leeres Projekt in Millimetern.","start.projTpl.emptyIn.name":"Leer (Zoll)","start.projTpl.emptyIn.desc":"Leeres Projekt in Zoll (in) für US-Maße.","start.projTpl.print3d.name":"3D-Druck","start.projTpl.print3d.desc":"Druckbett 220 × 220 × 250 mm sichtbar, 0,4-mm-Düse, PLA.","start.projTpl.laser.name":"Laser (Platte 3 mm)","start.projTpl.laser.desc":"3-mm-Sperrholzplatte mit Schnittspalt-Maß für den Laser.","start.projTpl.enclosure.name":"Gehäuse","start.projTpl.enclosure.desc":"Gehäuse 80 × 50 × 30 mm mit Deckel, Wandstärke und Spiel.","tpl.newDialogTitle":"Neues Projekt aus Vorlage","tpl.builtinHeading":"Projekt-Vorlagen","tpl.customHeading":"Eigene Vorlagen","tpl.customEmpty":"Noch keine eigenen Vorlagen. Über das Projektmenü → „Als Vorlage speichern …“ legst du hier eigene Startpunkte ab.","tpl.customNoDesc":"Eigene Vorlage (lokal gespeichert)","tpl.saveCurrent":"Aktuelles Projekt als Vorlage speichern","tpl.saveDialogTitle":"Als Vorlage speichern","tpl.saveNameLabel":"Name der Vorlage","tpl.saveDescLabel":"Kurze Beschreibung (optional)","tpl.saveDescPh":"z. B. Drucker mit 0,6-mm-Düse, Gehäuse-Grundmaß …","tpl.saveNameEmpty":"Bitte gib der Vorlage einen Namen.","tpl.saveFailed":"Die Vorlage konnte nicht lokal gespeichert werden.","tpl.saved":"Vorlage „{name}“ gespeichert.","tpl.deleteAria":"Vorlage „{name}“ löschen","tpl.deleteTip":"Vorlage löschen","tpl.deleteTitle":"Vorlage löschen?","tpl.deleteBody":"„{name}“ wird aus deinen gespeicherten Vorlagen entfernt.","tpl.deleted":"Vorlage „{name}“ gelöscht.","tpl.missing":"Die Vorlage wurde nicht gefunden.","tpl.loadedPrint3d":"Vorlage „3D-Druck“ geladen: Druckbett {x} × {y} × {z} mm, Düse {nozzle} mm.","tpl.loadedEmpty":"Neues leeres Projekt ({unit}) gestartet.","tpl.loadedNamed":"Vorlage „{name}“ geladen.","recovery.title":"Tracery wurde nicht richtig beendet – letzten Stand wiederherstellen?","recovery.metaOne":"Projekt „{name}“ · {time} · 1 Objekt","recovery.metaMany":"Projekt „{name}“ · {time} · {n} Objekte","recovery.restore":"Wiederherstellen","recovery.dismiss":"Verwerfen","recovery.restored":"Letzter Stand von „{name}“ wiederhergestellt.","recovery.discarded":"Wiederherstellungs-Stand verworfen.","recovery.failed":"Der letzte Stand konnte nicht wiederhergestellt werden."};
 
 const I18n = (() => {
   let lang = 'de';
@@ -20032,8 +20040,12 @@ const Panels = (() => {
       const detBtn = btn('t-detail', 'zoomIn', T('tool.detail'), T('tool.detailTip'), 'Z', () => Drawing.tool('detail'), Drawing.activeTool === 'detail' ? 'active' : '');
       detBtn.dataset.help = 'drawingDetail';
       detBtn.setAttribute('aria-pressed', String(Drawing.activeTool === 'detail'));
-      const dimBtn = btn('t-dim', 'dim', T('tool.dim'), T('tool.dimTip'), 'D', () => Drawing.tool('dim'), Drawing.activeTool === 'dim' ? 'active' : '');
-      dimBtn.setAttribute('aria-pressed', String(Drawing.activeTool === 'dim'));
+      const dimBtn = btn('t-dim', 'dim', T('tool.dim'), T('tool.dimTip'), 'D', () => Drawing.tool('dim'), Drawing.activeTool === 'dim' && Drawing.dimMode === 'lin' ? 'active' : '');
+      dimBtn.dataset.help = 'drawingDimTypes';
+      dimBtn.setAttribute('aria-pressed', String(Drawing.activeTool === 'dim' && Drawing.dimMode === 'lin'));
+      const dimKindBtn = btn('t-dim-kind', 'dim', T('tool.dimKinds'), T('tool.dimKindsTip'), '', (e) => Drawing.dimMenu(e.currentTarget), Drawing.activeTool === 'dim' && Drawing.dimMode !== 'lin' ? 'active' : '');
+      dimKindBtn.dataset.help = 'drawingDimTypes';
+      dimKindBtn.setAttribute('aria-pressed', String(Drawing.activeTool === 'dim' && Drawing.dimMode !== 'lin'));
       btn('t-autodim', 'target', T('tool.autodim'), T('tool.autodimTip'), '', () => Drawing.autoDims(), '', T('tool.autodimShort'));
       btn('t-draw', 'line', T('tool.draw2d'), T('tool.draw2dTip'), '', (e) => Drawing.drawMenu(e.currentTarget));
       el.append(h('div', { class: 'sep' }));
@@ -30996,6 +31008,12 @@ const Commands = (() => {
     add('drawingAddSheet', 'Neues Zeichnungsblatt hinzufügen', 'sheet', 'blatt seite zeichnung a4 a3 a2 a1 a0 format', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.addSheet(); }, { group: 'Werkzeuge' });
     add('drawingDetail', 'Detailansicht in Zeichnung anlegen', 'zoomIn', 'detail lupe vergrößern ausschnitt kreis zeichnung ze-03', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.tool('detail'); }, { group: 'Werkzeuge' });
     add('drawingSection', 'Schnittansicht in Zeichnung (A–A)', 'section', 'schnitt schnittansicht schraffur zeichnung a-a', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.tool('section'); }, { group: 'Werkzeuge' });
+    add('drawingDimChain', 'Zeichnung: Kettenmaß', 'dim', 'kettenmaß kette bemaßung zeichnung ze-07', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.setDimMode('chain'); }, { group: 'Werkzeuge' });
+    add('drawingDimBase', 'Zeichnung: Bezugsmaß (ab Kante)', 'dim', 'bezugsmaß bezug kante bemaßung zeichnung ze-07', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.setDimMode('base'); }, { group: 'Werkzeuge' });
+    add('drawingDimAngle', 'Zeichnung: Winkelmaß', 'dim', 'winkel winkelmaß grad bemaßung zeichnung ze-07', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.setDimMode('ang'); }, { group: 'Werkzeuge' });
+    add('drawingDimRadius', 'Zeichnung: Radius-Maß (R)', 'dim', 'radius r rundung bogen bemaßung zeichnung ze-07', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.setDimMode('rad'); }, { group: 'Werkzeuge' });
+    add('drawingDimDia', 'Zeichnung: Durchmesser-Maß (Ø)', 'dim', 'durchmesser ø bohrung kreis bemaßung zeichnung ze-07', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.setDimMode('dia'); }, { group: 'Werkzeuge' });
+    add('drawingDimChamfer', 'Zeichnung: Fasenmaß (1×45°)', 'dim', 'fase fasenmaß 45 grad schräge bemaßung zeichnung ze-07', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.setDimMode('chamfer'); }, { group: 'Werkzeuge' });
     add('drawingCenters', 'Mittellinien automatisch ein-/ausblenden', 'target', 'mittellinie mittellinien mittelkreuz mittelkreuze achse bohrung zylinder zeichnung ze-06', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.setCenters(!Drawing.activeSheet().centers); }, { group: 'Werkzeuge' });
     add('drawingCentersShowAll', 'Alle Mittellinien in Zeichnung einblenden', 'eye', 'mittellinie mittellinien mittelkreuz alle einblenden zeichnung', () => { if (App.mode !== 'drawing') setMode('drawing'); Drawing.showAllCenters(); }, { group: 'Werkzeuge' });
     add('drawingTolerance', 'Toleranz oder ISO-Passung am Maß setzen', 'dim', 'toleranz passung iso 286 h7 g6 grenzmaß abmaß symmetrisch zeichnung ze-08 ze-09', () => { if (App.mode !== 'drawing') setMode('drawing'); const sel = document.getElementById('dw-tol-mode'); if (sel) sel.focus(); else UI.toast('Klick ein Maß auf dem Blatt an, um rechts eine Toleranz oder Passung zu wählen.', { icon: 'dim', ms: 3000 }); }, { group: 'Werkzeuge' });
@@ -32623,9 +32641,19 @@ const Drawing = (() => {
   const DETAIL_LETTERS = 'ZYXWVUTSRQPONMLKJIHGFEDCBA'.split('');
   const VIEW_NAMES = { front: 'Vorderansicht', top: 'Draufsicht', left: 'Seitenansicht' };
   const ISO286_DATA = {"_hinweis":"ISO-286-Passungstabelle: Grenzabmaße in Mikrometer (µm = 0,001 mm) für Nennmaße über 0 bis 500 mm. Großbuchstaben (z. B. H7) stehen für Bohrungen (Innenmaße), Kleinbuchstaben (z. B. g6) für Wellen (Außenmaße).","_quellen":["DIN EN ISO 286-1:2010-11 – Geometrische Produktspezifikation (GPS) – ISO-Toleranzsystem für Längenmaße – Teil 1: Grundlagen für Toleranzen, Abmaße und Passungen","DIN EN ISO 286-2:2010-11 – Geometrische Produktspezifikation (GPS) – ISO-Toleranzsystem für Längenmaße – Teil 2: Tabellen der Grundtoleranzgrade und Grenzabmaße für Bohrungen und Wellen"],"norm":"DIN EN ISO 286-2:2010","stufen_mm":[3,6,10,18,30,50,80,120,180,250,315,400,500],"it_um":{"5":[4,5,6,8,9,11,13,15,18,20,23,25,27],"6":[6,8,9,11,13,16,19,22,25,29,32,36,40],"7":[10,12,15,18,21,25,30,35,40,46,52,57,63],"8":[14,18,22,27,33,39,46,54,63,72,81,89,97],"9":[25,30,36,43,52,62,74,87,100,115,130,140,155],"10":[40,48,58,70,84,100,120,140,160,185,210,230,250],"11":[60,75,90,110,130,160,190,220,250,290,320,360,400]},"klassen":{"H7":{"art":"bohrung","hinweis":"Standard-Einheitsbohrung (unteres Abmaß 0) – gängigste Passbohrung für Lager, Stifte und Wellen.","abmasse_um":[[10,0],[12,0],[15,0],[18,0],[21,0],[25,0],[30,0],[35,0],[40,0],[46,0],[52,0],[57,0],[63,0]]},"H6":{"art":"bohrung","hinweis":"Sehr genaue Einheitsbohrung für feine Spiel- und Übergangspassungen.","abmasse_um":[[6,0],[8,0],[9,0],[11,0],[13,0],[16,0],[19,0],[22,0],[25,0],[29,0],[32,0],[36,0],[40,0]]},"H8":{"art":"bohrung","hinweis":"Einheitsbohrung mit etwas weiterem Spiel für allgemeine Lagerungen.","abmasse_um":[[14,0],[18,0],[22,0],[27,0],[33,0],[39,0],[46,0],[54,0],[63,0],[72,0],[81,0],[89,0],[97,0]]},"H9":{"art":"bohrung","hinweis":"Grobe Einheitsbohrung für einfache Führungen und Passfedernuten.","abmasse_um":[[25,0],[30,0],[36,0],[43,0],[52,0],[62,0],[74,0],[87,0],[100,0],[115,0],[130,0],[140,0],[155,0]]},"H10":{"art":"bohrung","hinweis":"Weite Einheitsbohrung für grobe Toleranzen.","abmasse_um":[[40,0],[48,0],[58,0],[70,0],[84,0],[100,0],[120,0],[140,0],[160,0],[185,0],[210,0],[230,0],[250,0]]},"H11":{"art":"bohrung","hinweis":"Sehr weite Einheitsbohrung für gestanzte oder grob gedrehte Teile.","abmasse_um":[[60,0],[75,0],[90,0],[110,0],[130,0],[160,0],[190,0],[220,0],[250,0],[290,0],[320,0],[360,0],[400,0]]},"G7":{"art":"bohrung","hinweis":"Bohrung mit kleinem Spiel (leichtgängig bei engem Lauf).","abmasse_um":[[12,2],[16,4],[20,5],[24,6],[28,7],[34,9],[40,10],[47,12],[54,14],[61,15],[69,17],[75,18],[83,20]]},"F7":{"art":"bohrung","hinweis":"Bohrung mit deutlichem Laufsitz-Spiel.","abmasse_um":[[16,6],[22,10],[28,13],[34,16],[41,20],[50,25],[60,30],[71,36],[83,43],[96,50],[108,56],[119,62],[131,68]]},"F8":{"art":"bohrung","hinweis":"Bohrung mit größerem Laufsitz-Spiel.","abmasse_um":[[20,6],[28,10],[35,13],[43,16],[53,20],[64,25],[76,30],[90,36],[106,43],[122,50],[137,56],[151,62],[165,68]]},"E8":{"art":"bohrung","hinweis":"Bohrung mit großem Spiel für Lager mit Wärmedehnung.","abmasse_um":[[28,14],[38,20],[47,25],[59,32],[73,40],[89,50],[106,60],[126,72],[148,85],[172,100],[191,110],[214,125],[232,135]]},"D9":{"art":"bohrung","hinweis":"Weite Spielpassungs-Bohrung für grobe Führungen.","abmasse_um":[[45,20],[60,30],[76,40],[93,50],[117,65],[142,80],[174,100],[207,120],[245,145],[285,170],[320,190],[350,210],[385,230]]},"JS6":{"art":"bohrung","hinweis":"Symmetrische Übergangspassung für Bohrungen (mittig um das Nennmaß).","abmasse_um":[[3,-3],[4,-4],[4.5,-4.5],[5.5,-5.5],[6.5,-6.5],[8,-8],[9.5,-9.5],[11,-11],[12.5,-12.5],[14.5,-14.5],[16,-16],[18,-18],[20,-20]]},"JS7":{"art":"bohrung","hinweis":"Symmetrische Übergangspassung für Bohrungen mit IT7.","abmasse_um":[[5,-5],[6,-6],[7,-7],[9,-9],[10,-10],[12,-12],[15,-15],[17,-17],[20,-20],[23,-23],[26,-26],[28,-28],[31,-31]]},"JS9":{"art":"bohrung","hinweis":"Symmetrische Bohrungspassung für Passfedernuten (fester Sitz).","abmasse_um":[[12,-12],[15,-15],[18,-18],[21,-21],[26,-26],[31,-31],[37,-37],[43,-43],[50,-50],[57,-57],[65,-65],[70,-70],[77,-77]]},"K6":{"art":"bohrung","hinweis":"Enge Übergangsbohrung (leichtes Über- oder Untermaß möglich).","abmasse_um":[[0,-6],[2,-6],[2,-7],[2,-9],[2,-11],[3,-13],[4,-15],[4,-18],[4,-21],[5,-24],[5,-27],[7,-29],[8,-32]]},"K7":{"art":"bohrung","hinweis":"Übergangsbohrung (spielfrei bis leicht klemmend, z. B. für Kugellager-Außenringe).","abmasse_um":[[0,-10],[3,-9],[5,-10],[6,-12],[6,-15],[7,-18],[9,-21],[10,-25],[12,-28],[13,-33],[16,-36],[17,-40],[18,-45]]},"M7":{"art":"bohrung","hinweis":"Festere Übergangsbohrung für zentrierten, spielfreien Sitz.","abmasse_um":[[-2,-12],[0,-12],[0,-15],[0,-18],[0,-21],[0,-25],[0,-30],[0,-35],[0,-40],[0,-46],[0,-52],[0,-57],[0,-63]]},"N7":{"art":"bohrung","hinweis":"Stramme Übergangs- bis leichte Pressbohrung.","abmasse_um":[[-4,-14],[-4,-16],[-4,-19],[-5,-23],[-7,-28],[-8,-33],[-9,-39],[-10,-45],[-12,-52],[-14,-60],[-14,-66],[-16,-73],[-17,-80]]},"P7":{"art":"bohrung","hinweis":"Presspassungs-Bohrung für fest eingepresste Buchsen und Stifte.","abmasse_um":[[-6,-16],[-8,-20],[-9,-24],[-11,-29],[-14,-35],[-17,-42],[-21,-51],[-24,-59],[-28,-68],[-33,-79],[-36,-88],[-41,-98],[-45,-108]]},"g6":{"art":"welle","hinweis":"Präzise Spielpassungs-Welle (gleitet spielfrei in H7, kaum fühlbares Spiel).","abmasse_um":[[-2,-8],[-4,-12],[-5,-14],[-6,-17],[-7,-20],[-9,-25],[-10,-29],[-12,-34],[-14,-39],[-15,-44],[-17,-49],[-18,-54],[-20,-60]]},"h6":{"art":"welle","hinweis":"Standard-Einheitswelle (oberes Abmaß 0) – leichter Schiebesitz in H7.","abmasse_um":[[0,-6],[0,-8],[0,-9],[0,-11],[0,-13],[0,-16],[0,-19],[0,-22],[0,-25],[0,-29],[0,-32],[0,-36],[0,-40]]},"h5":{"art":"welle","hinweis":"Sehr genaue Einheitswelle für spielfreie Führungen.","abmasse_um":[[0,-4],[0,-5],[0,-6],[0,-8],[0,-9],[0,-11],[0,-13],[0,-15],[0,-18],[0,-20],[0,-23],[0,-25],[0,-27]]},"h7":{"art":"welle","hinweis":"Einheitswelle mit mittlerer Genauigkeit.","abmasse_um":[[0,-10],[0,-12],[0,-15],[0,-18],[0,-21],[0,-25],[0,-30],[0,-35],[0,-40],[0,-46],[0,-52],[0,-57],[0,-63]]},"h8":{"art":"welle","hinweis":"Einheitswelle für allgemeine Wellen und Bolzen.","abmasse_um":[[0,-14],[0,-18],[0,-22],[0,-27],[0,-33],[0,-39],[0,-46],[0,-54],[0,-63],[0,-72],[0,-81],[0,-89],[0,-97]]},"h9":{"art":"welle","hinweis":"Grobe Einheitswelle für gezogene Stäbe und Passfedern.","abmasse_um":[[0,-25],[0,-30],[0,-36],[0,-43],[0,-52],[0,-62],[0,-74],[0,-87],[0,-100],[0,-115],[0,-130],[0,-140],[0,-155]]},"h11":{"art":"welle","hinweis":"Sehr weite Einheitswelle für unbearbeitete oder grobe Bolzen.","abmasse_um":[[0,-60],[0,-75],[0,-90],[0,-110],[0,-130],[0,-160],[0,-190],[0,-220],[0,-250],[0,-290],[0,-320],[0,-360],[0,-400]]},"g5":{"art":"welle","hinweis":"Hochgenaue Spielpassungs-Welle für enge Gleitführungen.","abmasse_um":[[-2,-6],[-4,-9],[-5,-11],[-6,-14],[-7,-16],[-9,-20],[-10,-23],[-12,-27],[-14,-32],[-15,-35],[-17,-40],[-18,-43],[-20,-47]]},"f6":{"art":"welle","hinweis":"Feine Laufsitz-Welle mit spürbarem Lagerspiel.","abmasse_um":[[-6,-12],[-10,-18],[-13,-22],[-16,-27],[-20,-33],[-25,-41],[-30,-49],[-36,-58],[-43,-68],[-50,-79],[-56,-88],[-62,-98],[-68,-108]]},"f7":{"art":"welle","hinweis":"Gängige Laufsitz-Welle für rotierende Lagerungen in H7/H8.","abmasse_um":[[-6,-16],[-10,-22],[-13,-28],[-16,-34],[-20,-41],[-25,-50],[-30,-60],[-36,-71],[-43,-83],[-50,-96],[-56,-108],[-62,-119],[-68,-131]]},"f8":{"art":"welle","hinweis":"Laufsitz-Welle mit größerem Spiel.","abmasse_um":[[-6,-20],[-10,-28],[-13,-35],[-16,-43],[-20,-53],[-25,-64],[-30,-76],[-36,-90],[-43,-106],[-50,-122],[-56,-137],[-62,-151],[-68,-165]]},"e7":{"art":"welle","hinweis":"Welle mit reichlichem Spiel für größere Drehzahlen oder Wärmedehnung.","abmasse_um":[[-14,-24],[-20,-32],[-25,-40],[-32,-50],[-40,-61],[-50,-75],[-60,-90],[-72,-107],[-85,-125],[-100,-146],[-110,-162],[-125,-182],[-135,-198]]},"e8":{"art":"welle","hinweis":"Welle mit großem Laufspiel in H8/H9.","abmasse_um":[[-14,-28],[-20,-38],[-25,-47],[-32,-59],[-40,-73],[-50,-89],[-60,-106],[-72,-126],[-85,-148],[-100,-172],[-110,-191],[-125,-214],[-135,-232]]},"d8":{"art":"welle","hinweis":"Welle mit sehr großem Spiel für grobe Lagerungen.","abmasse_um":[[-20,-34],[-30,-48],[-40,-62],[-50,-77],[-65,-98],[-80,-119],[-100,-146],[-120,-174],[-145,-208],[-170,-242],[-190,-271],[-210,-299],[-230,-327]]},"d9":{"art":"welle","hinweis":"Grobe Spielpassungs-Welle für weite Führungen.","abmasse_um":[[-20,-45],[-30,-60],[-40,-76],[-50,-93],[-65,-117],[-80,-142],[-100,-174],[-120,-207],[-145,-245],[-170,-285],[-190,-320],[-210,-350],[-230,-385]]},"js5":{"art":"welle","hinweis":"Sehr genaue symmetrische Übergangswelle.","abmasse_um":[[2,-2],[2.5,-2.5],[3,-3],[4,-4],[4.5,-4.5],[5.5,-5.5],[6.5,-6.5],[7.5,-7.5],[9,-9],[10,-10],[11.5,-11.5],[12.5,-12.5],[13.5,-13.5]]},"js6":{"art":"welle","hinweis":"Symmetrische Übergangswelle (z. B. für Kugellager-Sitze).","abmasse_um":[[3,-3],[4,-4],[4.5,-4.5],[5.5,-5.5],[6.5,-6.5],[8,-8],[9.5,-9.5],[11,-11],[12.5,-12.5],[14.5,-14.5],[16,-16],[18,-18],[20,-20]]},"js7":{"art":"welle","hinweis":"Symmetrische Übergangswelle mit IT7.","abmasse_um":[[5,-5],[6,-6],[7,-7],[9,-9],[10,-10],[12,-12],[15,-15],[17,-17],[20,-20],[23,-23],[26,-26],[28,-28],[31,-31]]},"k5":{"art":"welle","hinweis":"Genaue Übergangswelle für Kugellager-Innenringe.","abmasse_um":[[4,0],[6,1],[7,1],[9,1],[11,2],[13,2],[15,2],[18,3],[21,3],[24,4],[27,4],[29,4],[32,5]]},"k6":{"art":"welle","hinweis":"Gängige Übergangswelle (leichter Festsitz in H7).","abmasse_um":[[6,0],[9,1],[10,1],[12,1],[15,2],[18,2],[21,2],[25,3],[28,3],[33,4],[36,4],[40,4],[45,5]]},"m5":{"art":"welle","hinweis":"Festere Übergangswelle für präzisen Sitz.","abmasse_um":[[6,2],[9,4],[12,6],[15,7],[17,8],[20,9],[24,11],[28,13],[33,15],[37,17],[43,20],[46,21],[50,23]]},"m6":{"art":"welle","hinweis":"Übergangs- bis Presswelle (z. B. für Zylinderstifte nach ISO 2338).","abmasse_um":[[8,2],[12,4],[15,6],[18,7],[21,8],[25,9],[30,11],[35,13],[40,15],[46,17],[52,20],[57,21],[63,23]]},"n6":{"art":"welle","hinweis":"Stramme Übergangs- bis leichte Presswelle.","abmasse_um":[[10,4],[16,8],[19,10],[23,12],[28,15],[33,17],[39,20],[45,23],[52,27],[60,31],[66,34],[73,37],[80,40]]},"p6":{"art":"welle","hinweis":"Presspassungs-Welle für dauerhaft eingepresste Verbindungen in H7.","abmasse_um":[[12,6],[20,12],[24,15],[29,18],[35,22],[42,26],[51,32],[59,37],[68,43],[79,50],[88,56],[98,62],[108,68]]}}};
+  const DIM_MODES = [
+    { key: 'lin', label: 'Abstand', short: 'Abstand', hint: '<b>Maß:</b> Zwei Punkte anklicken, dann die Maßlinie platzieren. Ein Klick auf einen Kreis bemaßt den Durchmesser. <b>Esc</b> beendet.' },
+    { key: 'chain', label: 'Kettenmaß', short: 'Kettenmaß', hint: '<b>Kettenmaß:</b> Startpunkt, zweiten Punkt und Maßlinie anklicken, dann weitere Punkte der Kette anklicken. <b>Enter</b> schließt die Kette ab, <b>Esc</b> beendet.' },
+    { key: 'base', label: 'Bezugsmaß', short: 'Bezugsmaß', hint: '<b>Bezugsmaß:</b> Bezugskante oder -punkt anklicken, erstes Ziel und Maßlinie platzieren, dann weitere Ziele anklicken. <b>Enter</b> schließt ab, <b>Esc</b> beendet.' },
+    { key: 'ang', label: 'Winkel', short: 'Winkel', hint: '<b>Winkelmaß:</b> Zwei Kanten im Winkel zueinander anklicken, dann den Winkelbogen platzieren. <b>Esc</b> beendet.' },
+    { key: 'rad', label: 'Radius (R)', short: 'Radius (R)', hint: '<b>Radius:</b> Auf eine Rundung oder einen Kreisbogen klicken, um R anzuzeigen. <b>Esc</b> beendet.' },
+    { key: 'dia', label: 'Durchmesser (Ø)', short: 'Durchmesser (Ø)', hint: '<b>Durchmesser:</b> Auf eine Bohrung oder einen Kreis klicken, um Ø anzuzeigen. <b>Esc</b> beendet.' },
+    { key: 'chamfer', label: 'Fase (1×45°)', short: 'Fase (1×45°)', hint: '<b>Fase:</b> Auf eine abgeschrägte Fasen-Kante klicken, um Abstand × Winkel anzuzeigen. <b>Esc</b> beendet.' },
+  ];
   const scaleText = (s) => (s >= 1 ? `${fmtFixed(s, 2)}:1` : `1:${fmtFixed(1 / s, 2)}`);
   let proj = null, projRev = -1, loadingProjPromise = null, projId = 0;
   let svg = null, wrap = null, holder = null, tabsBar = null, zoom = 1, tool = null, toolState = null, selDim = null;
+  let dimMode = 'lin';
   let layout = null, dragDetail = null;
   let detailDraft = { scale: 2, label: 'Z' };
   let centersListOpen = false;
@@ -33898,7 +33926,7 @@ const Drawing = (() => {
     if (!id || !sh) return null;
     const list = lay ? autoDimList(sh, lay) : (sh.dims || []).filter((x) => !x.auto);
     const dim = list.find((x) => x.id === id);
-    if (!dim) return null;
+    if (!dim || !['lin', 'dia', 'rad'].includes(dim.type)) return null;
     const nominalMm = dimNominal(dim);
     const { mainLabel } = dimLabelParts(dim, nominalMm);
     return { dim, nominalMm, label: mainLabel };
@@ -34094,6 +34122,32 @@ const Drawing = (() => {
     }
     return all;
   }
+  function drawSpanDim(lines, texts, P1, P2, val, dimOrId, outerTail = true) {
+    const dim = dimOrId && typeof dimOrId === 'object' ? dimOrId : null;
+    const id = dim ? dim.id : dimOrId;
+    const TXT = 3.5, AR = 3;
+    lines.push({ pts: [P1, P2], cls: 'dim', id });
+    const L = Math.hypot(P2[0] - P1[0], P2[1] - P1[1]);
+    const inside = L > AR * 2.6;
+    arrowHead(lines, P1, P2, AR, inside, id); arrowHead(lines, P2, P1, AR, inside, id);
+    if (!inside && outerTail) {
+      const ux = (P2[0] - P1[0]) / (L || 1), uy = (P2[1] - P1[1]) / (L || 1);
+      lines.push({ pts: [[P1[0] - ux * AR * 2.4, P1[1] - uy * AR * 2.4], P1], cls: 'dim', id }, { pts: [P2, [P2[0] + ux * AR * 2.4, P2[1] + uy * AR * 2.4]], cls: 'dim', id });
+    }
+    const mx = (P1[0] + P2[0]) / 2, my = (P1[1] + P2[1]) / 2;
+    // Maßzahl lesbar von unten oder von rechts (ISO 129): Winkel in [-90°, 90°)
+    let ang = (Math.atan2(P2[1] - P1[1], P2[0] - P1[0]) * 180) / Math.PI;
+    if (ang >= 89.99) ang -= 180; if (ang < -90.01) ang += 180;
+    const r = (ang * Math.PI) / 180;
+    const tx = mx + Math.sin(r) * 1.2, ty = my - Math.cos(r) * 1.2;
+    if (dim) {
+      const { mainLabel, prefix } = dimLabelParts(dim, val);
+      const tolInfo = resolveDimTol(dim, val);
+      emitDimTexts(texts, tx, ty, ang, dim, mainLabel, prefix, tolInfo, TXT);
+    } else {
+      texts.push({ x: tx, y: ty, t: fmtDim(val), size: TXT, rot: ang, anchor: 'middle', id, cls: 'dimtext' });
+    }
+  }
   function dimSVG(dim, lines, texts, lay = layout) {
     const v = lay.views[dim.view]; if (!v) return;
     const TXT = 3.5, AR = 3, EXT = 2, GAPX = 1;
@@ -34101,7 +34155,6 @@ const Drawing = (() => {
       const A = toSheet(v, dim.a), B = toSheet(v, dim.b);
       let val, P1, P2, E1s, E2s;
       if (dim.dir === 'h') {
-        const y = Math.min(A[1], B[1]) + (dim.off < 0 ? 0 : 0);
         const off = dim.off * v.s; const yl = (dim.off < 0 ? Math.max(A[1], B[1]) - off : Math.min(A[1], B[1]) - off);
         P1 = [A[0], yl]; P2 = [B[0], yl]; val = Math.abs(dim.b[0] - dim.a[0]);
         const sgn = Math.sign(yl - A[1]) || 1;
@@ -34117,19 +34170,8 @@ const Drawing = (() => {
         const sg = Math.sign(off) || 1;
         E1s = [[A[0] + nx * sg * GAPX, A[1] + ny * sg * GAPX], [P1[0] + nx * sg * EXT, P1[1] + ny * sg * EXT]]; E2s = [[B[0] + nx * sg * GAPX, B[1] + ny * sg * GAPX], [P2[0] + nx * sg * EXT, P2[1] + ny * sg * EXT]];
       }
-      lines.push({ pts: E1s, cls: 'dim', id: dim.id }, { pts: E2s, cls: 'dim', id: dim.id }, { pts: [P1, P2], cls: 'dim', id: dim.id });
-      const L = Math.hypot(P2[0] - P1[0], P2[1] - P1[1]);
-      const inside = L > AR * 2.6;
-      arrowHead(lines, P1, P2, AR, inside, dim.id); arrowHead(lines, P2, P1, AR, inside, dim.id);
-      if (!inside) { const ux = (P2[0] - P1[0]) / (L || 1), uy = (P2[1] - P1[1]) / (L || 1); lines.push({ pts: [[P1[0] - ux * AR * 2.4, P1[1] - uy * AR * 2.4], P1], cls: 'dim', id: dim.id }, { pts: [P2, [P2[0] + ux * AR * 2.4, P2[1] + uy * AR * 2.4]], cls: 'dim', id: dim.id }); }
-      const mx = (P1[0] + P2[0]) / 2, my = (P1[1] + P2[1]) / 2;
-      // Maßzahl lesbar von unten oder von rechts (ISO 129): Winkel in [-90°, 90°)
-      let ang = (Math.atan2(P2[1] - P1[1], P2[0] - P1[0]) * 180) / Math.PI;
-      if (ang >= 89.99) ang -= 180; if (ang < -90.01) ang += 180;
-      const r = (ang * Math.PI) / 180; const tx = mx + Math.sin(r) * 1.2, ty = my - Math.cos(r) * 1.2;
-      const { mainLabel, prefix } = dimLabelParts(dim, val);
-      const tolInfo = resolveDimTol(dim, val);
-      emitDimTexts(texts, tx, ty, ang, dim, mainLabel, prefix, tolInfo, TXT);
+      lines.push({ pts: E1s, cls: 'dim', id: dim.id }, { pts: E2s, cls: 'dim', id: dim.id });
+      drawSpanDim(lines, texts, P1, P2, val, dim, true);
     } else if (dim.type === 'dia' || dim.type === 'rad') {
       const C = toSheet(v, dim.c); const R = dim.r * v.s; const ang = ((dim.ang ?? 45) * Math.PI) / 180;
       const ux = Math.cos(ang), uy = -Math.sin(ang);
@@ -34149,7 +34191,10 @@ const Drawing = (() => {
       const tail = [out[0] + (ux >= 0 ? tl : -tl), out[1]];
       if (dim.type === 'dia') {
         const Q = [C[0] - ux * R, C[1] - uy * R];
-        if (2 * R >= AR * 2.6) { lines.push({ pts: [Q, P], cls: 'dim', id: dim.id }); arrowHead(lines, Q, P, AR, true, dim.id); arrowHead(lines, P, Q, AR, true, dim.id); }
+        if (dim.partial) {
+          lines.push({ pts: [C, P], cls: 'dim', id: dim.id });
+          arrowHead(lines, P, R >= AR * 1.3 ? C : out, AR, true, dim.id);
+        } else if (2 * R >= AR * 2.6) { lines.push({ pts: [Q, P], cls: 'dim', id: dim.id }); arrowHead(lines, Q, P, AR, true, dim.id); arrowHead(lines, P, Q, AR, true, dim.id); }
         else {
           // kleine Kreise: Pfeile von außen
           const Q2 = [Q[0] - ux * AR * 2.2, Q[1] - uy * AR * 2.2];
@@ -34159,6 +34204,126 @@ const Drawing = (() => {
       else arrowHead(lines, P, out, AR, true, dim.id);
       lines.push({ pts: [P, out, tail], cls: 'dim', id: dim.id });
       emitDimTexts(texts, (out[0] + tail[0]) / 2, out[1] - 1.2, 0, dim, mainLabel, prefix, tolInfo, TXT);
+    } else if (dim.type === 'chamfer') {
+      const P = toSheet(v, dim.p);
+      const ux = dim.dir[0], uy = -dim.dir[1];
+      const bx = v.geo.box, TL = toSheet(v, [bx[0], bx[3]]), BR = toSheet(v, [bx[2], bx[1]]), M = 3.5;
+      const tx = ux > 1e-9 ? (BR[0] + M - P[0]) / ux : ux < -1e-9 ? (TL[0] - M - P[0]) / ux : Infinity;
+      const ty = uy > 1e-9 ? (BR[1] + M - P[1]) / uy : uy < -1e-9 ? (TL[1] - M - P[1]) / uy : Infinity;
+      const tEx = Math.min(tx, ty);
+      const lead = tEx > 0 && tEx < 24 ? Math.max(6, tEx) : 8;
+      const out = [P[0] + ux * lead, P[1] + uy * lead];
+      const angTxt = Math.abs(dim.ang - 45) < 0.1 ? '45°' : fmtAngleU(dim.ang);
+      const label = `${fmtDim(dim.dist)}×${angTxt}`;
+      const tl = textW(label, TXT) * 0.92 + 2;
+      const tail = [out[0] + (ux >= 0 ? tl : -tl), out[1]];
+      arrowHead(lines, P, out, AR, true, dim.id);
+      lines.push({ pts: [P, out, tail], cls: 'dim', id: dim.id });
+      texts.push({ x: (out[0] + tail[0]) / 2, y: out[1] - 1.2, t: label, size: TXT, rot: 0, anchor: 'middle', id: dim.id, cls: 'dimtext' });
+    } else if (dim.type === 'ang') {
+      const VC = toSheet(v, dim.v), R = Math.max(3, dim.r * v.s), rModel = R / v.s;
+      const a0 = dim.a0, a1 = dim.a1;
+      const span = a1 - a0;
+      if (span <= 1e-4) return;
+      const P0 = [VC[0] + R * Math.cos(a0), VC[1] - R * Math.sin(a0)];
+      const P1 = [VC[0] + R * Math.cos(a1), VC[1] - R * Math.sin(a1)];
+      for (const [ang, edge] of [[a0, dim.e1], [a1, dim.e2]]) {
+        if (!edge || edge.length < 2) continue;
+        const ux = Math.cos(ang), uy = Math.sin(ang);
+        const tA = (edge[0][0] - dim.v[0]) * ux + (edge[0][1] - dim.v[1]) * uy;
+        const tB = (edge[1][0] - dim.v[0]) * ux + (edge[1][1] - dim.v[1]) * uy;
+        const tMin = Math.min(tA, tB), tMax = Math.max(tA, tB);
+        if (rModel > tMax + 1e-3) {
+          const s0 = Math.max(0, tMax) + GAPX / v.s, s1 = rModel + EXT / v.s;
+          lines.push({ pts: [toSheet(v, [dim.v[0] + ux * s0, dim.v[1] + uy * s0]), toSheet(v, [dim.v[0] + ux * s1, dim.v[1] + uy * s1])], cls: 'dim', id: dim.id });
+        } else if (rModel < tMin - 1e-3) {
+          const s0 = Math.max(0, rModel - EXT / v.s), s1 = tMin - GAPX / v.s;
+          if (s1 > s0) lines.push({ pts: [toSheet(v, [dim.v[0] + ux * s0, dim.v[1] + uy * s0]), toSheet(v, [dim.v[0] + ux * s1, dim.v[1] + uy * s1])], cls: 'dim', id: dim.id });
+        }
+      }
+      const nA0 = ((a0 % TWO_PI) + TWO_PI) % TWO_PI;
+      const nA1 = nA0 + span;
+      const aPts = arcPts(dim.v, rModel, a0, a1).map((q) => toSheet(v, q));
+      lines.push({ pts: aPts, arc: { c: VC, r: R, a: [nA0, nA1 <= TWO_PI ? nA1 : nA1 - TWO_PI] }, cls: 'dim', id: dim.id });
+      const inside = span * R > AR * 2.6;
+      const from0 = [P0[0] - Math.sin(a0) * AR, P0[1] - Math.cos(a0) * AR];
+      const from1 = [P1[0] + Math.sin(a1) * AR, P1[1] + Math.cos(a1) * AR];
+      arrowHead(lines, P0, from0, AR, inside, dim.id);
+      arrowHead(lines, P1, from1, AR, inside, dim.id);
+      if (!inside) {
+        const extA = (AR * 2.4) / R;
+        lines.push(
+          { pts: arcPts(dim.v, rModel, a0 - extA, a0).map((q) => toSheet(v, q)), cls: 'dim', id: dim.id },
+          { pts: arcPts(dim.v, rModel, a1, a1 + extA).map((q) => toSheet(v, q)), cls: 'dim', id: dim.id }
+        );
+      }
+      const deg = (span * 180) / Math.PI;
+      const label = Math.abs(deg - Math.round(deg)) < 0.05 ? `${Math.round(deg)}°` : fmtAngleU(deg);
+      const am = (a0 + a1) * 0.5;
+      const tx = VC[0] + Math.cos(am) * (R + 3.2);
+      const ty = VC[1] - Math.sin(am) * (R + 3.2) + 1.2;
+      texts.push({ x: tx, y: ty, t: label, size: TXT, rot: 0, anchor: 'middle', id: dim.id, cls: 'dimtext' });
+    } else if (dim.type === 'chain') {
+      const pts = [...(dim.pts || [])];
+      if (pts.length < 2) return;
+      if (dim.dir === 'h') {
+        pts.sort((p, q) => p[0] - q[0]);
+        const yl = toSheet(v, [0, dim.linePos])[1];
+        const SP = pts.map((p) => toSheet(v, p));
+        for (const P of SP) {
+          const sgn = Math.sign(yl - P[1]) || 1;
+          lines.push({ pts: [[P[0], P[1] + sgn * GAPX], [P[0], yl + sgn * EXT]], cls: 'dim', id: dim.id });
+        }
+        for (let i = 0; i < SP.length - 1; i++) {
+          const val = Math.abs(pts[i + 1][0] - pts[i][0]);
+          drawSpanDim(lines, texts, [SP[i][0], yl], [SP[i + 1][0], yl], val, dim.id, i === 0 || i === SP.length - 2);
+        }
+      } else {
+        pts.sort((p, q) => p[1] - q[1]);
+        const xl = toSheet(v, [dim.linePos, 0])[0];
+        const SP = pts.map((p) => toSheet(v, p));
+        for (const P of SP) {
+          const sgn = Math.sign(xl - P[0]) || -1;
+          lines.push({ pts: [[P[0] + sgn * GAPX, P[1]], [xl + sgn * EXT, P[1]]], cls: 'dim', id: dim.id });
+        }
+        for (let i = 0; i < SP.length - 1; i++) {
+          const val = Math.abs(pts[i + 1][1] - pts[i][1]);
+          drawSpanDim(lines, texts, [xl, SP[i][1]], [xl, SP[i + 1][1]], val, dim.id, i === 0 || i === SP.length - 2);
+        }
+      }
+    } else if (dim.type === 'base') {
+      const STEP_SHEET = 8;
+      const basePt = dim.base;
+      const pts = [...(dim.pts || [])];
+      if (!basePt || !pts.length) return;
+      const B0 = toSheet(v, basePt);
+      if (dim.dir === 'h') {
+        pts.sort((p, q) => Math.abs(p[0] - basePt[0]) - Math.abs(q[0] - basePt[0]));
+        const yl0 = toSheet(v, [0, dim.linePos])[1];
+        const outSign = yl0 >= B0[1] ? 1 : -1;
+        const ylLast = yl0 + (pts.length - 1) * outSign * STEP_SHEET;
+        lines.push({ pts: [[B0[0], B0[1] + outSign * GAPX], [B0[0], ylLast + outSign * EXT]], cls: 'dim', id: dim.id });
+        for (let i = 0; i < pts.length; i++) {
+          const P = toSheet(v, pts[i]);
+          const yli = yl0 + i * outSign * STEP_SHEET;
+          const sgn = Math.sign(yli - P[1]) || outSign;
+          lines.push({ pts: [[P[0], P[1] + sgn * GAPX], [P[0], yli + sgn * EXT]], cls: 'dim', id: dim.id });
+          drawSpanDim(lines, texts, [B0[0], yli], [P[0], yli], Math.abs(pts[i][0] - basePt[0]), dim.id, true);
+        }
+      } else {
+        pts.sort((p, q) => Math.abs(p[1] - basePt[1]) - Math.abs(q[1] - basePt[1]));
+        const xl0 = toSheet(v, [dim.linePos, 0])[0];
+        const outSign = xl0 <= B0[0] ? -1 : 1;
+        const xlLast = xl0 + (pts.length - 1) * outSign * STEP_SHEET;
+        lines.push({ pts: [[B0[0] + outSign * GAPX, B0[1]], [xlLast + outSign * EXT, B0[1]]], cls: 'dim', id: dim.id });
+        for (let i = 0; i < pts.length; i++) {
+          const P = toSheet(v, pts[i]);
+          const xli = xl0 + i * outSign * STEP_SHEET;
+          const sgn = Math.sign(xli - P[0]) || outSign;
+          lines.push({ pts: [[P[0] + sgn * GAPX, P[1]], [xli + sgn * EXT, P[1]]], cls: 'dim', id: dim.id });
+          drawSpanDim(lines, texts, [xli, B0[1]], [xli, P[1]], Math.abs(pts[i][1] - basePt[1]), dim.id, true);
+        }
+      }
     }
   }
   function fmtDim(v) { return Units.fmtLen(v, 2); }
@@ -34494,15 +34659,183 @@ const Drawing = (() => {
     for (const q of v.geo.points) { const S = toSheet(v, q); const d = Math.hypot(S[0] - P[0], S[1] - P[1]); if (d < bd) { bd = d; best = { p: q, S }; } }
     return best;
   }
-  function circleAt(name, P) {
+  function circleAt(name, P, allowInside = false) {
     const v = layout.views[name]; if (!v) return null;
-    const q = toView(v, P); let best = null, bd = 2 / v.s / zoom + 0.5;
-    for (const c of v.geo.circles) {
+    const q = toView(v, P);
+    const tol = Math.max(2.5, 4 / zoom) / v.s;
+    const pool = [...v.geo.circles, ...v.geo.hidden.filter((p) => p.c).map((p) => ({ c: p.c, r: p.r, full: !p.arc, arc: p.arc }))];
+    let best = null, bd = tol;
+    for (const c of pool) {
       const d = Math.abs(Math.hypot(q[0] - c.c[0], q[1] - c.c[1]) - c.r); if (d >= bd) continue;
-      if (c.arc) { let a = angOf(c.c, q); if (a < c.arc[0] - 0.05) a += TWO_PI; if (a > c.arc[1] + 0.05) continue; }
+      if (c.arc) {
+        let a = angOf(c.c, q);
+        if (a < c.arc[0] - 0.08) a += TWO_PI;
+        if (a > c.arc[1] + 0.08) continue;
+      }
       bd = d; best = c;
     }
-    return best && { ...best, ang: (angOf(best.c, q) * 180) / Math.PI };
+    if (!best && allowInside) {
+      let bestR = Infinity;
+      for (const c of pool) {
+        if (c.arc) continue;
+        const d = Math.hypot(q[0] - c.c[0], q[1] - c.c[1]);
+        if (d <= c.r + tol && c.r < bestR) { bestR = c.r; best = c; }
+      }
+    }
+    if (!best) return null;
+    const ang = Math.hypot(q[0] - best.c[0], q[1] - best.c[1]) > 1e-3 ? (angOf(best.c, q) * 180) / Math.PI : 45;
+    return { ...best, ang };
+  }
+  function straightSegsOf(v, includeHidden = false) {
+    const out = [];
+    const add = (arr, hid) => {
+      for (const p of arr || []) {
+        if (p.c || !p.pts || p.pts.length < 2) continue;
+        for (let i = 0; i < p.pts.length - 1; i++) {
+          const a = p.pts[i], b = p.pts[i + 1];
+          const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+          if (L > 1e-4) out.push({ a, b, L, hid });
+        }
+      }
+    };
+    add(v.geo.polys, false);
+    if (includeHidden) add(v.geo.hidden, true);
+    return out;
+  }
+  function lineIntersect2D(a1, b1, a2, b2) {
+    const dx1 = b1[0] - a1[0], dy1 = b1[1] - a1[1];
+    const dx2 = b2[0] - a2[0], dy2 = b2[1] - a2[1];
+    const det = dx1 * dy2 - dy1 * dx2;
+    if (Math.abs(det) < 1e-8) return null;
+    const t = ((a2[0] - a1[0]) * dy2 - (a2[1] - a1[1]) * dx2) / det;
+    return [a1[0] + t * dx1, a1[1] + t * dy1];
+  }
+  function edgeAt(name, P, includeHidden = false) {
+    const v = layout.views[name]; if (!v) return null;
+    const tol = Math.max(2.2, 3.4 / zoom);
+    const pickFrom = (segs) => {
+      let best = null, bd = tol;
+      for (const seg of segs) {
+        const A = toSheet(v, seg.a), B = toSheet(v, seg.b);
+        const dx = B[0] - A[0], dy = B[1] - A[1], L2 = dx * dx + dy * dy;
+        if (L2 < 1e-6) continue;
+        const t = clamp(((P[0] - A[0]) * dx + (P[1] - A[1]) * dy) / L2, 0, 1);
+        const d = Math.hypot(P[0] - (A[0] + t * dx), P[1] - (A[1] + t * dy));
+        if (d < bd) {
+          bd = d;
+          best = { a: seg.a, b: seg.b, A, B, t, L: seg.L, d, hit: [seg.a[0] + t * (seg.b[0] - seg.a[0]), seg.a[1] + t * (seg.b[1] - seg.a[1])] };
+        }
+      }
+      return best;
+    };
+    const vis = pickFrom(straightSegsOf(v, false));
+    if (vis || !includeHidden) return vis;
+    return pickFrom(straightSegsOf(v, true).filter((s) => s.hid));
+  }
+  function analyzeChamfer(v, seg) {
+    const a = seg.a, b = seg.b, L = seg.L;
+    if (L < 1e-4) return null;
+    const u = [(b[0] - a[0]) / L, (b[1] - a[1]) / L];
+    const M = [(a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5];
+    const tol = Math.max(0.05, L * 0.02);
+    const vis = straightSegsOf(v, false);
+    const adj = (pt) => {
+      const dirs = [];
+      for (const s of vis) {
+        if (s.a === a && s.b === b) continue;
+        let dir = null;
+        if (Math.hypot(s.a[0] - pt[0], s.a[1] - pt[1]) <= tol) dir = [(s.b[0] - s.a[0]) / s.L, (s.b[1] - s.a[1]) / s.L];
+        else if (Math.hypot(s.b[0] - pt[0], s.b[1] - pt[1]) <= tol) dir = [(s.a[0] - s.b[0]) / s.L, (s.a[1] - s.b[1]) / s.L];
+        if (!dir) continue;
+        if (Math.abs(u[0] * dir[1] - u[1] * dir[0]) < 0.05) continue;
+        dirs.push(dir);
+      }
+      return dirs;
+    };
+    const adjA = adj(a), adjB = adj(b);
+    let best = null, bestScore = Infinity;
+    for (const nA of adjA) for (const nB of adjB) {
+      if (Math.abs(nA[0] * nB[1] - nA[1] * nB[0]) < 0.05) continue;
+      const C = lineIntersect2D(a, [a[0] + nA[0], a[1] + nA[1]], b, [b[0] + nB[0], b[1] + nB[1]]);
+      if (!C) continue;
+      if ((C[0] - a[0]) * nA[0] + (C[1] - a[1]) * nA[1] > -1e-4) continue;
+      if ((C[0] - b[0]) * nB[0] + (C[1] - b[1]) * nB[1] > -1e-4) continue;
+      const d1 = Math.hypot(C[0] - a[0], C[1] - a[1]);
+      const d2 = Math.hypot(C[0] - b[0], C[1] - b[1]);
+      const score = Math.abs(nA[0] * nB[0] + nA[1] * nB[1]) * 10 + Math.abs(d1 - d2);
+      if (score < bestScore) { bestScore = score; best = { nA, nB, C, d1, d2 }; }
+    }
+    if (best) {
+      const ang1 = (Math.acos(clamp(Math.abs(u[0] * best.nA[0] + u[1] * best.nA[1]), 0, 1)) * 180) / Math.PI;
+      const odx = best.C[0] - M[0], ody = best.C[1] - M[1];
+      const ol = Math.hypot(odx, ody) || 1;
+      const outDir = [odx / ol, ody / ol];
+      if (Math.abs(ang1 - 45) < 0.5 && Math.abs(best.d1 - best.d2) < Math.max(0.05, best.d1 * 0.02)) {
+        return { p: M, dir: outDir, dist: (best.d1 + best.d2) * 0.5, ang: 45 };
+      }
+      return { p: M, dir: outDir, dist: best.d1, ang: ang1 };
+    }
+    const dx = Math.abs(b[0] - a[0]), dy = Math.abs(b[1] - a[1]);
+    if (dx > 1e-3 && dy > 1e-3) {
+      const ang = (Math.atan2(dy, dx) * 180) / Math.PI;
+      const is45 = Math.abs(ang - 45) < 0.5;
+      const bx = v.geo.box, cx = (bx[0] + bx[2]) * 0.5, cy = (bx[1] + bx[3]) * 0.5;
+      let nx = -u[1], ny = u[0];
+      if ((M[0] - cx) * nx + (M[1] - cy) * ny < 0) { nx = -nx; ny = -ny; }
+      return { p: M, dir: [nx, ny], dist: is45 ? (dx + dy) * 0.5 : dx, ang: is45 ? 45 : ang };
+    }
+    return null;
+  }
+  function chamferEdgeAt(name, P) {
+    const v = layout.views[name]; if (!v) return null;
+    const tol = Math.max(2.6, 4.2 / zoom);
+    const cands = [];
+    for (const seg of straightSegsOf(v, false)) {
+      const A = toSheet(v, seg.a), B = toSheet(v, seg.b);
+      const dx = B[0] - A[0], dy = B[1] - A[1], L2 = dx * dx + dy * dy;
+      if (L2 < 1e-6) continue;
+      const t = clamp(((P[0] - A[0]) * dx + (P[1] - A[1]) * dy) / L2, 0, 1);
+      const d = Math.hypot(P[0] - (A[0] + t * dx), P[1] - (A[1] + t * dy));
+      if (d >= tol) continue;
+      const info = analyzeChamfer(v, seg);
+      if (info) cands.push({ seg, info, d, L: seg.L });
+    }
+    if (!cands.length) return null;
+    cands.sort((p, q) => (Math.abs(p.d - q.d) < 0.6 ? p.L - q.L : p.d - q.d));
+    return cands[0];
+  }
+  function pickDimPoint(name, P) {
+    const sn = snapIn(name, P);
+    if (sn) return sn;
+    const ed = edgeAt(name, P, false);
+    if (!ed) return null;
+    const v = layout.views[name];
+    const dx = Math.abs(ed.b[0] - ed.a[0]), dy = Math.abs(ed.b[1] - ed.a[1]);
+    const preferDir = dy > dx * 4 ? 'h' : dx > dy * 4 ? 'v' : null;
+    return { p: ed.hit, S: toSheet(v, ed.hit), edge: ed, preferDir };
+  }
+  function angularSector(V, e1, e2, q) {
+    const rayAngles = (edge) => {
+      const dA = Math.hypot(edge.a[0] - V[0], edge.a[1] - V[1]);
+      const dB = Math.hypot(edge.b[0] - V[0], edge.b[1] - V[1]);
+      const ref = dA >= dB ? edge.a : edge.b;
+      let a = Math.atan2(ref[1] - V[1], ref[0] - V[0]);
+      if (a < 0) a += TWO_PI;
+      return [a, (a + Math.PI) % TWO_PI];
+    };
+    const r1 = rayAngles(e1), r2 = rayAngles(e2);
+    const rays = [...r1, ...r2].sort((a, b) => a - b);
+    const distQ = Math.hypot(q[0] - V[0], q[1] - V[1]);
+    let aq = distQ > 1e-4 ? Math.atan2(q[1] - V[1], q[0] - V[0]) : ((r1[0] + r2[0]) * 0.5);
+    if (aq < 0) aq += TWO_PI;
+    for (let i = 0; i < 4; i++) {
+      const a0 = rays[i], a1 = i < 3 ? rays[i + 1] : rays[0] + TWO_PI;
+      const qN = i === 3 && aq < rays[0] ? aq + TWO_PI : aq;
+      if (qN >= a0 - 1e-6 && qN <= a1 + 1e-6) {
+        return { a0, a1, r: Math.max(4, distQ), e1: [e1.a, e1.b], e2: [e2.a, e2.b] };
+      }
+    }
+    return { a0: rays[0], a1: rays[1], r: Math.max(4, distQ), e1: [e1.a, e1.b], e2: [e2.a, e2.b] };
   }
   function sectionParentAt(P) {
     for (const name of ['front', 'top', 'left']) {
@@ -34569,7 +34902,20 @@ const Drawing = (() => {
       toolState.P = P;
       const name = toolState.view || viewAt(P);
       toolState.hoverView = name;
-      toolState.snap = name ? snapIn(name, P) : null;
+      if (dimMode === 'dia' || dimMode === 'rad') {
+        toolState.hoverCircle = name ? circleAt(name, P, true) : null;
+        toolState.snap = null;
+      } else if (dimMode === 'chamfer') {
+        toolState.hoverChamfer = name ? chamferEdgeAt(name, P) : null;
+        toolState.snap = null;
+      } else if (dimMode === 'ang') {
+        toolState.hoverEdge = (toolState.stage < 2 && name) ? edgeAt(name, P, true) : null;
+        toolState.snap = null;
+      } else if (dimMode === 'chain' || dimMode === 'base') {
+        toolState.snap = name ? pickDimPoint(name, P) : null;
+      } else {
+        toolState.snap = name ? snapIn(name, P) : null;
+      }
       render();
     } else if (tool === 'detail') {
       toolState = toolState || { stage: 0 };
@@ -34800,6 +35146,86 @@ const Drawing = (() => {
   }
   function dimClick(P, e) {
     const st = toolState || { stage: 0 };
+    if (dimMode === 'dia' || dimMode === 'rad') {
+      const name = viewAt(P); if (!name) return;
+      const c = circleAt(name, P, true);
+      if (!c) { UI.toast('Klick auf einen Kreis, eine Bohrung oder eine Rundung.', { icon: 'info', ms: 2000 }); return; }
+      addDim({ view: name, type: dimMode, c: c.c, r: c.r, ang: Math.round(c.ang), ...(c.full ? {} : { partial: true }) });
+      return;
+    }
+    if (dimMode === 'chamfer') {
+      const name = viewAt(P); if (!name) return;
+      const ch = chamferEdgeAt(name, P);
+      if (!ch) { UI.toast('Klick auf eine schräge Fasen-Kante (z. B. 45°).', { icon: 'info', ms: 2000 }); return; }
+      addDim({ view: name, type: 'chamfer', p: ch.info.p, dir: ch.info.dir, dist: ch.info.dist, ang: ch.info.ang });
+      return;
+    }
+    if (dimMode === 'ang') {
+      if (st.stage === 0) {
+        const name = viewAt(P); if (!name) return;
+        const ed = edgeAt(name, P, true);
+        if (!ed) { UI.toast('Klick auf die erste Kante.', { icon: 'info', ms: 1800 }); return; }
+        toolState = { stage: 1, view: name, e1: ed, P };
+      } else if (st.stage === 1) {
+        const ed = edgeAt(st.view, P, true);
+        if (!ed) { UI.toast('Klick auf die zweite Kante in derselben Ansicht.', { icon: 'info', ms: 1800 }); return; }
+        const V = lineIntersect2D(st.e1.a, st.e1.b, ed.a, ed.b);
+        if (!V) { UI.toast('Diese beiden Kanten sind parallel – wähle zwei Kanten im Winkel zueinander.', { icon: 'info', ms: 2200 }); return; }
+        toolState = { stage: 2, view: st.view, e1: st.e1, e2: ed, v: V, P };
+      } else if (st.stage === 2) {
+        const v = layout.views[st.view]; if (!v) return;
+        const q = toView(v, P);
+        const sec = angularSector(st.v, st.e1, st.e2, q);
+        addDim({ view: st.view, type: 'ang', v: st.v, e1: sec.e1, e2: sec.e2, a0: sec.a0, a1: sec.a1, r: sec.r });
+        return;
+      }
+      render();
+      return;
+    }
+    if (dimMode === 'chain' || dimMode === 'base') {
+      const isBase = dimMode === 'base';
+      if (st.stage === 0) {
+        const name = viewAt(P); if (!name) return;
+        const sn = pickDimPoint(name, P);
+        if (!sn) { UI.toast(isBase ? 'Klick auf eine Bezugskante oder einen Bezugspunkt.' : 'Klick auf einen Punkt oder eine Kante.', { icon: 'info', ms: 2000 }); return; }
+        toolState = { stage: 1, view: name, a: sn.p, preferDir: sn.preferDir || null, P };
+      } else if (st.stage === 1) {
+        const sn = pickDimPoint(st.view, P); if (!sn) return;
+        if (Math.hypot(sn.p[0] - st.a[0], sn.p[1] - st.a[1]) < 1e-4) return;
+        toolState = { ...st, stage: 2, b: sn.p, P };
+      } else if (st.stage === 2) {
+        const v = layout.views[st.view]; if (!v) return;
+        const q = toView(v, P);
+        const dir = chainDir(st.a, st.b, q, st.preferDir);
+        const linePos = dir === 'h' ? q[1] : q[0];
+        const dim = isBase
+          ? { id: uid('d'), view: st.view, type: 'base', dir, linePos, base: st.a, pts: [st.b] }
+          : { id: uid('d'), view: st.view, type: 'chain', dir, linePos, pts: [st.a, st.b] };
+        App.change(isBase ? 'Bezugsmaß hinzugefügt' : 'Kettenmaß hinzugefügt', () => { dwg().dims.push(dim); });
+        selDim = dim.id;
+        toolState = { stage: 3, view: st.view, dimId: dim.id, dir, linePos, P };
+        Panels.renderRight();
+      } else if (st.stage === 3) {
+        const hitView = viewAt(P);
+        if (hitView && hitView !== st.view) { toolState = { stage: 0 }; render(); Panels.renderRight(); return; }
+        const sn = pickDimPoint(st.view, P);
+        if (!sn) {
+          if (!hitView) { toolState = { stage: 0 }; render(); Panels.renderRight(); }
+          return;
+        }
+        const cur = dwg().dims.find((x) => x.id === st.dimId);
+        if (!cur) { toolState = { stage: 0 }; render(); return; }
+        const coord = st.dir === 'h' ? sn.p[0] : sn.p[1];
+        const existing = [...(cur.pts || []), ...(cur.base ? [cur.base] : [])];
+        if (existing.some((p) => Math.abs((st.dir === 'h' ? p[0] : p[1]) - coord) < 1e-4)) return;
+        App.change(isBase ? 'Bezugsmaß erweitert' : 'Kettenmaß erweitert', () => {
+          const d = dwg().dims.find((x) => x.id === st.dimId);
+          if (d) d.pts.push(sn.p);
+        });
+      }
+      render();
+      return;
+    }
     if (st.stage === 0) {
       const name = viewAt(P); if (!name) return;
       const sn = snapIn(name, P);
@@ -34816,6 +35242,16 @@ const Drawing = (() => {
     }
     render();
   }
+  function chainDir(a, b, q, preferDir = null) {
+    const dx = Math.abs(b[0] - a[0]), dy = Math.abs(b[1] - a[1]);
+    if (dx > 1e-4 && dy <= 1e-4) return 'h';
+    if (dy > 1e-4 && dx <= 1e-4) return 'v';
+    const mx = (a[0] + b[0]) * 0.5, my = (a[1] + b[1]) * 0.5;
+    const qx = Math.abs(q[0] - mx), qy = Math.abs(q[1] - my);
+    if (preferDir === 'h' && qy >= qx * 0.5) return 'h';
+    if (preferDir === 'v' && qx >= qy * 0.5) return 'v';
+    return qy / (dy + 1e-9) >= qx / (dx + 1e-9) ? 'h' : 'v';
+  }
   function placeDim(a, b, q) {
     const dx = Math.abs(b[0] - a[0]), dy = Math.abs(b[1] - a[1]);
     const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
@@ -34830,17 +35266,87 @@ const Drawing = (() => {
   }
   function previewDim(lines, texts) {
     const st = toolState;
-    if (st.snap) lines.push({ circle: [st.snap.S[0], st.snap.S[1], 1.2 / zoom * 1.5], cls: 'snap' });
+    if (!st) return;
+    if (st.snap) lines.push({ circle: [st.snap.S[0], st.snap.S[1], (1.2 / zoom) * 1.5], cls: 'snap' });
+    if ((dimMode === 'dia' || dimMode === 'rad') && st.hoverCircle && st.hoverView) {
+      const v = layout.views[st.hoverView];
+      if (v) {
+        const C = toSheet(v, st.hoverCircle.c);
+        lines.push({ circle: [C[0], C[1], st.hoverCircle.r * v.s], cls: 'prev' });
+        dimSVG({ id: '__prev', view: st.hoverView, type: dimMode, c: st.hoverCircle.c, r: st.hoverCircle.r, ang: Math.round(st.hoverCircle.ang), ...(st.hoverCircle.full ? {} : { partial: true }) }, lines, texts);
+      }
+      return;
+    }
+    if (dimMode === 'chamfer' && st.hoverChamfer && st.hoverView) {
+      const v = layout.views[st.hoverView];
+      if (v) {
+        lines.push({ pts: [toSheet(v, st.hoverChamfer.seg.a), toSheet(v, st.hoverChamfer.seg.b)], cls: 'prev' });
+        const ci = st.hoverChamfer.info;
+        dimSVG({ id: '__prev', view: st.hoverView, type: 'chamfer', p: ci.p, dir: ci.dir, dist: ci.dist, ang: ci.ang }, lines, texts);
+      }
+      return;
+    }
+    if (dimMode === 'ang') {
+      const v = layout.views[st.view || st.hoverView];
+      if (st.hoverEdge && v) lines.push({ pts: [st.hoverEdge.A, st.hoverEdge.B], cls: 'prev' });
+      if (st.stage >= 1 && st.e1 && v) lines.push({ pts: [toSheet(v, st.e1.a), toSheet(v, st.e1.b)], cls: 'prev' });
+      if (st.stage === 2 && st.P && v) {
+        lines.push({ pts: [toSheet(v, st.e2.a), toSheet(v, st.e2.b)], cls: 'prev' });
+        const q = toView(v, st.P);
+        const sec = angularSector(st.v, st.e1, st.e2, q);
+        dimSVG({ id: '__prev', view: st.view, type: 'ang', v: st.v, e1: sec.e1, e2: sec.e2, a0: sec.a0, a1: sec.a1, r: sec.r }, lines, texts);
+      }
+      return;
+    }
+    if (dimMode === 'chain' || dimMode === 'base') {
+      if (st.stage === 1 && st.P) { const v = layout.views[st.view]; if (v) lines.push({ pts: [toSheet(v, st.a), st.P], cls: 'prev' }); }
+      if (st.stage === 2 && st.P) {
+        const v = layout.views[st.view]; if (!v) return;
+        const q = toView(v, st.P);
+        const dir = chainDir(st.a, st.b, q, st.preferDir);
+        const linePos = dir === 'h' ? q[1] : q[0];
+        const d = dimMode === 'base'
+          ? { id: '__prev', view: st.view, type: 'base', dir, linePos, base: st.a, pts: [st.b] }
+          : { id: '__prev', view: st.view, type: 'chain', dir, linePos, pts: [st.a, st.b] };
+        dimSVG(d, lines, texts);
+      }
+      if (st.stage === 3 && st.snap && st.snap.p) {
+        const v = layout.views[st.view];
+        if (v) lines.push({ circle: [st.snap.S[0], st.snap.S[1], (1.3 / zoom) * 1.6], cls: 'prev' });
+      }
+      return;
+    }
     if (st.stage === 1 && st.P) { const v = layout.views[st.view]; const A = toSheet(v, st.a); lines.push({ pts: [A, st.P], cls: 'prev' }); }
     if (st.stage === 2 && st.P) { const v = layout.views[st.view]; const q = toView(v, st.P); const d = { id: '__prev', view: st.view, ...placeDim(st.a, st.b, q) }; dimSVG(d, lines, texts); }
   }
   function addDim(dim) {
     App.change('Maß hinzugefügt', () => { dwg().dims.push({ id: uid('d'), ...dim }); });
+    selDim = null;
     toolState = { stage: 0 };
     render();
   }
+  function flipAngleDim(id) {
+    let changed = false;
+    App.change('Gegenwinkel gewählt', () => {
+      const d = dwg().dims.find((x) => x.id === id && x.type === 'ang');
+      if (!d) return;
+      const na0 = ((d.a1 % TWO_PI) + TWO_PI) % TWO_PI;
+      const span = Math.PI - (d.a1 - d.a0);
+      if (span <= 1e-4) return;
+      d.a0 = na0;
+      d.a1 = na0 + span;
+      changed = true;
+    });
+    if (changed) { render(); Panels.renderRight(); }
+    return changed;
+  }
   function onKey(e) {
     if (e.key === 'Escape') { if (tool) { setTool(null); return true; } if (selDim) { selDim = null; render(); Panels.renderRight(); return true; } return false; }
+    if (e.key === 'Enter' && tool === 'dim' && (dimMode === 'chain' || dimMode === 'base') && toolState && toolState.stage === 3) {
+      toolState = { stage: 0 };
+      render(); Panels.renderRight();
+      return true;
+    }
     if (e.key === 'Enter' && tool === 'detail' && toolState && toolState.stage === 2) {
       addDetail({ source: toolState.source, c: toolState.c, r: toolState.r, scale: detailDraft.scale, label: detailDraft.label, pos: null });
       setTool(null);
@@ -34960,9 +35466,34 @@ const Drawing = (() => {
     });
     selDim = null; render(); Panels.renderRight();
   }
+  function dimHint(mode) {
+    const m = DIM_MODES.find((x) => x.key === mode);
+    return m ? m.hint : DIM_MODES[0].hint;
+  }
+  function setDimMode(mode) {
+    if (!mode) { setTool(null); return; }
+    dimMode = DIM_MODES.some((x) => x.key === mode) ? mode : 'lin';
+    dragDetail = null;
+    tool = 'dim';
+    toolState = { stage: 0 };
+    if (svg) svg.style.cursor = 'crosshair';
+    UI.hint(dimHint(dimMode));
+    Panels.renderTools(); Panels.renderRight(); render();
+  }
+  function dimMenu(anchor) {
+    const tMap = { lin: 'menu.draw.dimLin', chain: 'menu.draw.dimChain', base: 'menu.draw.dimBase', ang: 'menu.draw.dimAng', rad: 'menu.draw.dimRad', dia: 'menu.draw.dimDia', chamfer: 'menu.draw.dimChamfer' };
+    UI.menu(anchor, DIM_MODES.map((m) => ({
+      label: T(tMap[m.key] || m.label),
+      icon: 'dim',
+      help: 'drawingDimTypes',
+      checked: tool === 'dim' && dimMode === m.key,
+      run: () => setDimMode(m.key),
+    })));
+  }
   function setTool(t) {
     dragDetail = null;
     tool = t;
+    if (t === 'dim') dimMode = 'lin';
     if (t === 'detail') {
       detailDraft = { scale: defaultDetailScale(), label: nextDetailLabel() };
       toolState = { stage: 0 };
@@ -34971,7 +35502,7 @@ const Drawing = (() => {
     }
     if (svg) svg.style.cursor = t ? 'crosshair' : '';
     UI.hint(
-      t === 'dim' ? '<b>Maß:</b> Zwei Punkte anklicken, dann die Maßlinie platzieren. Ein Klick auf einen Kreis bemaßt den Durchmesser. <b>Esc</b> beendet.'
+      t === 'dim' ? dimHint(dimMode)
         : t === 'detail' ? '<b>Detailansicht:</b> Mitte des Kreises in einer Ansicht anklicken, Kreis aufziehen, dann die Detailansicht auf dem Blatt platzieren. <b>Esc</b> beendet.'
           : t === 'section' ? '<b>Schnittansicht:</b> Schnittlinie A–A durch eine Ansicht ziehen oder zwei Punkte anklicken (<b>Umschalt</b> = waagerecht/senkrecht, <b>Alt</b> = frei). <b>Esc</b> beendet.'
             : t && t.startsWith('free-') ? HINTS2[t] : null
@@ -35285,7 +35816,7 @@ const Drawing = (() => {
         P(0, 'SEQEND', 8, ly);
       }
     }
-    for (const t of lastTexts) { if (t.cls === 'note') continue; const tLy = String(t.cls || '').startsWith('dimtext') ? 'BEMASSUNG' : (t.cls === 'cutlabel' || t.cls === 'viewlabel') ? 'SCHNITTLINIE' : 'RAHMEN'; const dxfTxt = String(t.t).replace(/Ø/g, '%%c').replace(/±/g, '%%p').replace(/[–—−]/g, '-'); P(0, 'TEXT', 8, tLy, 10, t.x.toFixed(4), 20, Y(t.y).toFixed(4), 30, 0, 40, t.size.toFixed(3), 1, dxfTxt, 50, (-(t.rot || 0)).toFixed(3), ...(t.anchor === 'middle' ? [72, 1, 11, t.x.toFixed(4), 21, Y(t.y).toFixed(4), 31, 0] : [])); }
+    for (const t of lastTexts) { if (t.cls === 'note') continue; const tLy = String(t.cls || '').startsWith('dimtext') ? 'BEMASSUNG' : (t.cls === 'cutlabel' || t.cls === 'viewlabel') ? 'SCHNITTLINIE' : 'RAHMEN'; const dxfTxt = String(t.t).replace(/Ø/g, '%%c').replace(/±/g, '%%p').replace(/°/g, '%%d').replace(/[–—−]/g, '-'); P(0, 'TEXT', 8, tLy, 10, t.x.toFixed(4), 20, Y(t.y).toFixed(4), 30, 0, 40, t.size.toFixed(3), 1, dxfTxt, 50, (-(t.rot || 0)).toFixed(3), ...(t.anchor === 'middle' ? [72, 1, 11, t.x.toFixed(4), 21, Y(t.y).toFixed(4), 31, 0] : [])); }
     P(0, 'ENDSEC', 0, 'EOF');
     const text = out.join('\r\n') + '\r\n';
     const bytes = new Uint8Array([...text].map((ch) => { const c = ch.charCodeAt(0); return c < 256 ? c : 63; }));
@@ -35349,6 +35880,27 @@ const Drawing = (() => {
     const b = h('button', { type: 'button', class: 'btn', id: 'dw-sheet-btn', 'data-help': 'drawingFormat' }); b.innerHTML = icon('sheet') + 'Blatt & Ansichten'; b.onclick = (e) => sheetMenu(e.currentTarget);
     const bAdd = h('button', { type: 'button', class: 'btn', id: 'dw-panel-add', 'data-help': 'drawingSheets' }); bAdd.innerHTML = icon('plus') + 'Neues Blatt'; bAdd.onclick = () => addSheet();
     info.append(h('div', { class: 'btn-row' }, b, bAdd)); w.append(info);
+    const dimSec = h('div', { class: 'section', id: 'dw-dims-sec', 'data-help': 'drawingDimTypes' }, h('div', { class: 'section-h' }, 'Bemaßung'));
+    const dimGrid = h('div', { class: 'dw-dim-grid' });
+    for (const m of DIM_MODES) {
+      const act = tool === 'dim' && dimMode === m.key;
+      const db = h('button', {
+        type: 'button',
+        class: 'btn' + (act ? ' active' : ''),
+        id: 'dw-dm-' + m.key,
+        'aria-pressed': String(act),
+        'data-help': 'drawingDimTypes',
+      }, m.short);
+      db.onclick = () => { if (tool === 'dim' && dimMode === m.key) setTool(null); else setDimMode(m.key); };
+      dimGrid.append(db);
+    }
+    dimSec.append(dimGrid);
+    if (tool === 'dim' && (dimMode === 'chain' || dimMode === 'base') && toolState && toolState.stage === 3) {
+      const fin = h('button', { type: 'button', class: 'btn primary', id: 'dw-dm-finish', style: { marginTop: '6px' } }, 'Abschließen (Enter)');
+      fin.onclick = () => { toolState = { stage: 0 }; render(); Panels.renderRight(); };
+      dimSec.append(fin);
+    }
+    w.append(dimSec);
     const secs = d.sections || [];
     const secBox = h('div', { class: 'section', id: 'dw-sections-sec' }, h('div', { class: 'section-h' }, 'Schnittansichten'));
     const bSec = h('button', { type: 'button', class: 'btn' + (tool === 'section' ? ' primary' : ''), id: 'dw-add-section', 'data-help': 'drawingSection' });
@@ -35454,6 +36006,7 @@ const Drawing = (() => {
     if (selDim) {
       const selDet = detList.find((x) => x.id === selDim);
       const isSec = secs.some((x) => x.id === selDim);
+      const selD = d.dims.find((x) => x.id === selDim);
       const selCtr = String(selDim).startsWith('ctr|') ? findCenterById(selDim) : null;
       const selDimInfo = !selDet && !isSec && !selCtr ? findDimById(selDim, d, layout) : null;
       const selSec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, selDet ? `Detail ${selDet.label}` : selCtr ? (selCtr.type === 'cross' ? 'Mittelkreuz' : 'Mittellinie') : selDimInfo ? `Maß ${selDimInfo.label}` : 'Auswahl'));
@@ -35604,6 +36157,11 @@ const Drawing = (() => {
         fl.onclick = () => flipSection(selDim);
         row.append(fl);
       }
+      if (selD && selD.type === 'ang') {
+        const sup = h('button', { type: 'button', class: 'btn', id: 'dw-dim-supp' }, 'Gegenwinkel (180° − α)');
+        sup.onclick = () => flipAngleDim(selDim);
+        row.append(sup);
+      }
       if (selCtr) {
         const hb = h('button', { type: 'button', class: 'btn', id: 'dw-ctr-hide' });
         hb.innerHTML = icon('eyeOff') + 'Ausblenden';
@@ -35623,7 +36181,7 @@ const Drawing = (() => {
   App.on('doc', () => { if (App.mode === 'drawing') refreshSoonDoc(); });
   const refreshSoonDoc = debounce(async () => { await refresh(); Panels.renderRight(); }, 150);
   return {
-    open, close, refresh, sheetMenu, exportMenu, drawMenu, autoDims, tool: tool_, onKey, renderPanel,
+    open, close, refresh, sheetMenu, exportMenu, drawMenu, autoDims, tool: tool_, setDimMode, dimMenu, flipAngleDim, onKey, renderPanel,
     SHEETS, sheets, activeSheet: dwg, addSheet, selectSheet, renameSheet, removeSheet, duplicateSheet,
     details, addDetail, updateDetail, removeDetail, nextDetailLabel, DETAIL_SCALES,
     select: (id) => { selDim = id; render(); Panels.renderRight(); },
@@ -35636,6 +36194,7 @@ const Drawing = (() => {
     exportPDF, buildPDFBytes,
     get layout() { return layout; },
     get activeTool() { return tool; },
+    get dimMode() { return dimMode; },
   };
 })();
 
