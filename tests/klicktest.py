@@ -6921,6 +6921,103 @@ def t_a019_uebersetzbare_oberflaeche(p):
     return [ok1, ok2, ok3, ok4, ok5a and ok5b]
 
 
+def t_a022_skizze_fertig_bestimmen(p):
+    # 1. Rechteck und Kreis ohne Maße und Regeln -> „Fertig bestimmen“ -> gestrichelte Vorschau -> „Abbrechen“
+    ents = [
+        {'id': 'R1', 'type': 'rect', 'a': [10, 10], 'b': [50, 35]},
+        {'id': 'C1', 'type': 'circle', 'c': [30, 22], 'r': 6},
+    ]
+    scene(p, ents)
+    dof0 = SS(p, "return S.status ? S.status.dof : -1")
+    p.pg.click('#sk-autodef'); p.wait(400)
+    prop_dims = p.pg.locator('.skdim.prop')
+    prop_border = prop_dims.first.evaluate("el => getComputedStyle(el).borderTopStyle") if prop_dims.count() else ''
+    st_prop = SS(p, "return { dims: S.dims.length, cons: S.cons.length, hasProp: !!S.autoDef, pDims: S.autoDef ? S.autoDef.dims.length : 0 }")
+    ok1a = (
+        dof0 == 7
+        and p.pg.locator('#sk-autodef-box').count() == 1
+        and p.pg.locator('#sk-autodef-apply').count() == 1
+        and p.pg.locator('#sk-autodef-cancel').count() == 1
+        and prop_dims.count() >= 5
+        and prop_border == 'dashed'
+        and st_prop['dims'] == 0 and st_prop['cons'] == 0 and st_prop['hasProp']
+    )
+    p.pg.click('#sk-autodef-cancel'); p.wait(300)
+    st_cancel = SS(p, "return { dims: S.dims.length, cons: S.cons.length, hasProp: !!S.autoDef, dof: S.status ? S.status.dof : -1 }")
+    ok1 = ok1a and p.pg.locator('#sk-autodef-box').count() == 0 and p.pg.locator('.skdim.prop').count() == 0 and st_cancel['dims'] == 0 and st_cancel['dof'] == 7
+
+    # 2. „Fertig bestimmen“ + „Übernehmen“ -> voll bestimmt
+    p.pg.click('#sk-autodef'); p.wait(400)
+    p.pg.click('#sk-autodef-apply'); p.wait(400)
+    st_apply = SS(p, "return { ok: S.status && S.status.ok, dof: S.status ? S.status.dof : -1, dims: S.dims.length, hasProp: !!S.autoDef }")
+    panel_txt = (p.pg.locator('.right .panel-body').text_content() or '').lower()
+    ok2 = (
+        st_apply['ok'] is True and st_apply['dof'] == 0 and not st_apply['hasProp']
+        and st_apply['dims'] >= 7 and p.pg.locator('.skdim.prop').count() == 0
+        and p.pg.locator('.skdim').count() == st_apply['dims']
+        and 'voll bestimmt' in panel_txt
+    )
+
+    # 3. Ein Rückgängig stellt den alten Zustand her
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('Control+z'); p.wait(400)
+    st_undo = SS(p, "return { dims: S.dims.length, cons: S.cons.length, dof: S.status ? S.status.dof : -1 }")
+    ok3 = st_undo['dims'] == 0 and st_undo['cons'] == 0 and st_undo['dof'] == 7 and p.pg.locator('.skdim').count() == 0
+
+    # 4. Regeln (< 2° waagerecht/senkrecht, < 0,05 mm deckungsgleich) + schräge Linie (> 2°) + Bogen (Radius)
+    ents2 = [
+        {'id': 'L1', 'type': 'line', 'a': [10, 10], 'b': [40, 10.5]},
+        {'id': 'L2', 'type': 'line', 'a': [40, 10.5], 'b': [40.5, 30]},
+        {'id': 'L3', 'type': 'line', 'a': [40.5, 30], 'b': [10, 29.6]},
+        {'id': 'L4', 'type': 'line', 'a': [10, 29.6], 'b': [10.02, 10.02]},
+        {'id': 'L5', 'type': 'line', 'a': [55, 10], 'b': [75, 11.8]},
+        {'id': 'A1', 'type': 'arc', 'a': [55, 25], 'm': [65, 35], 'b': [75, 25]},
+    ]
+    p.ev("Sketch.cancel(true); App.change('x', d=>{ const it=Model.newItem('extrude',{},{}); it.p={sketch:{plane:{o:[0,0,0],x:[1,0,0],n:[0,0,1]},ents:arg,dims:[],cons:[]},dist:3,dir:'normal'}; d.items.push(it); })", ents2)
+    p.wait(1500)
+    p.ev("Sketch.editItem(App.doc.items[App.doc.items.length-1].id)"); p.wait(800)
+    p.pg.click('#sk-autodef'); p.wait(500)
+    prop2 = SS(p, """const a = S.autoDef;
+      return a ? {
+        cons: a.cons.map(c => ({ t: c.type, refs: c.refs })),
+        dims: a.dims.map(d => ({ e: d.e, k: d.k })),
+        dofAfter: a.dofAfter
+      } : null""")
+    con_prop_border = p.pg.locator('.skcon.prop').first.evaluate("el => getComputedStyle(el).borderTopStyle") if p.pg.locator('.skcon.prop').count() else ''
+    has_h1 = prop2 and any(c['t'] == 'horizontal' and c['refs'][0].get('e') == 'L1' for c in prop2['cons'])
+    has_h3 = prop2 and any(c['t'] == 'horizontal' and c['refs'][0].get('e') == 'L3' for c in prop2['cons'])
+    has_v2 = prop2 and any(c['t'] == 'vertical' and c['refs'][0].get('e') == 'L2' for c in prop2['cons'])
+    has_v4 = prop2 and any(c['t'] == 'vertical' and c['refs'][0].get('e') == 'L4' for c in prop2['cons'])
+    has_co = prop2 and any(c['t'] == 'coincident' and {r.get('e') for r in c['refs']} == {'L4', 'L1'} for c in prop2['cons'])
+    no_hv5 = prop2 and not any(c['t'] in ('horizontal', 'vertical') and c['refs'][0].get('e') == 'L5' for c in prop2['cons'])
+    has_ang5 = prop2 and any(d['e'] == 'L5' and d['k'] == 'ang' for d in prop2['dims'])
+    has_r_arc = prop2 and any(d['e'] == 'A1' and d['k'] == 'r' for d in prop2['dims'])
+    p.pg.click('#sk-autodef-apply'); p.wait(500)
+    st_apply2 = SS(p, "return { ok: S.status && S.status.ok, dof: S.status ? S.status.dof : -1, regs: SK.regions(S.ents).length }")
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('Control+z'); p.wait(400)
+    st_undo2 = SS(p, "return { dims: S.dims.length, cons: S.cons.length, regs: SK.regions(S.ents).length }")
+    ok4 = (
+        bool(prop2) and prop2['dofAfter'] == 0 and con_prop_border == 'dashed'
+        and has_h1 and has_h3 and has_v2 and has_v4 and has_co and no_hv5 and has_ang5 and has_r_arc
+        and st_apply2['ok'] is True and st_apply2['dof'] == 0 and st_apply2['regs'] == 1
+        and st_undo2['dims'] == 0 and st_undo2['cons'] == 0 and st_undo2['regs'] == 0
+    )
+
+    # 5. Sichtbar in Einfach & Profi, Hilfetext und Befehlssuche
+    p.ev("ViewPrefs.setLevel('simple')"); p.wait(250)
+    vis_simple = p.pg.locator('#sk-autodef').is_visible()
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(250)
+    vis_pro = p.pg.locator('#sk-autodef').is_visible()
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    cmds = p.ev("return Commands.search('Fertig bestimmen').map(c=>c.id)")
+    ok5 = (
+        vis_simple and vis_pro
+        and 'sketchAutoDefine' in hilfen
+        and all(k in hilfen['sketchAutoDefine'] for k in ('tip', 'hilfe', 'tipp'))
+        and 'sketch-autodef' in cmds
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -7041,6 +7138,7 @@ TESTS = [
     ('[A-014] Einheiten je Projekt: Zoll 1 in = 25,4 mm & Eingabe 2 = 50,8 mm / explizite Einheiten / Kontextleiste, Messen & Stückliste / cm & m / Rückgängig & Hilfe', t_a014_einheiten_projekt),
     ('[F-11240028] Volltest-Reparatur: Kamera-Animation bei rAF-Stau / Abbruch bei Nutzer-Start / Übergang-Vorschau ohne Debounce-Stau', t_f11240028),
     ('[A-019] Übersetzbare Oberfläche (Schritt 1): Sammlung & T() / Werkzeugleiste / Startseite / Menüs / Kontextleiste', t_a019_uebersetzbare_oberflaeche),
+    ('[A-022] Skizze fertig bestimmen: Rechteck & Kreis / Regeln <2° & <0,05 mm / gestrichelte Vorschau & Abbrechen / Übernehmen & Rückgängig / Einfach & Profi', t_a022_skizze_fertig_bestimmen),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

@@ -1594,6 +1594,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Startseite, Menüs & Kontextleiste**: Geänderte Texte erscheinen direkt auf Startseite-Knöpfen/Karten, im Haupt- und Ansichtsmenü sowie in der 3D-Kontextleiste; Zurücksetzen stellt alle deutschen Originaltexte wieder her.
 - [ ] **Von Hand**: Einmal Startseite, Werkzeugleiste, alle Menüs (Projekt, Hauptmenü, Ansicht, Rechtsklick, Zeichnung) und Kontextleiste auf fehlende oder abgeschnittene Beschriftungen durchsehen.
 
+## Skizze fertig bestimmen (Auto [A-022])
+
+- [x] **Rechteck & Kreis gestrichelt vorschlagen und abbrechen**: Skizze ohne Maße und Regeln → „Fertig bestimmen“ zeigt die gestrichelte Vorschau (`.skdim.prop`, `#sk-autodef-box`), ohne den Skizzen-Zustand zu verändern; „Abbrechen“ verwirft die Vorschläge sauber.
+- [x] **Übernehmen → voll bestimmt & ein Rückgängig**: „Übernehmen“ legt alle vorgeschlagenen Maße in einem einzigen Rückgängig-Schritt an (`dof === 0`, Panel meldet „Voll bestimmt“); ein Strg/Cmd+Z stellt den alten Zustand ohne Maße/Regeln wieder her.
+- [x] **Fehlende Regeln (< 2° und < 0,05 mm) & gemischte Geometrie**: Linien unter 2° Neigung erhalten Waagerecht/Senkrecht, eine 5°-Linie Winkel + Länge, eine 0,028-mm-Lücke wird mit Deckungsgleich zur geschlossenen Fläche verbunden, ein Bogen erhält seinen Radius.
+- [x] **Einfach & Profi, Hilfe und Befehlssuche**: Knopf „Fertig bestimmen“ ist in beiden Stufen sichtbar; Hilfetext `sketchAutoDefine` und Befehl `sketch-autodef` sind vorhanden.
+- [ ] **Von Hand**: In einer größeren Freihand-Skizze mit leicht schiefen Linien, Bögen und einem Kreis „Fertig bestimmen“ klicken, die gestrichelte Vorschau auf Lesbarkeit prüfen und anschließend einzelne Maße im Bild anpassen.
+
 ## Fehler melden
 
 ```
