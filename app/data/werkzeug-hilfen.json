@@ -156,8 +156,8 @@
   },
   "sweep": {
     "tip": "Querschnitt entlang eines Pfads ziehen (Sweep)",
-    "hilfe": "Zeichne in einer Skizze einen offenen Pfad aus Linien, Bögen oder einer Spline und klick „Fertig“. Tracery zieht dann ein Rohr mit 6 mm Durchmesser daran entlang. Rechts stellst du rund oder rechteckig, die Größe und eine Wand für hohle Rohre ein.",
-    "tipp": "Gut für Kabelkanäle, Rohre, Bügel und Leisten. Ecken im Pfad werden automatisch rund übergangen."
+    "hilfe": "Zeichne in einer Skizze einen offenen Pfad aus Linien, Bögen oder einer Spline und klick „Fertig“. Wähle „Entlang Pfad“, den Querschnitt (rund, rechteckig oder eigene Form), optional eine Verdrehung in Grad sowie „Schneiden (Nut)“ für Nuten entlang einer Kurve. Alles lässt sich danach rechts weiter anpassen.",
+    "tipp": "Gut für Kabelkanäle, Rohre, verdrehte Streben sowie gebogene Nuten und Rillen in einem Körper."
   },
   "loft": {
     "tip": "Weicher Übergang durch mehrere Umrisse (Loft)",
@@ -1318,5 +1318,15 @@
     "tip": "Feder, Kegel-Feder oder flache Spirale mit Steigung, Windungen und Draht-Ø anlegen",
     "hilfe": "Legt eine räumliche Schraubenlinie (zylindrisch oder konisch mit Anfangs- und Endradius) oder eine flache Spirale an und zieht einen Kreis (Draht-Ø), ein Rechteck oder einen eigenen Skizzen-Umriss daran entlang. Im Modus „Einfach“ erhältst du sofort eine fertige Feder mit Draht-Ø.",
     "tipp": "Im Profi-Modus kannst du frei wählen, ob du die Feder über Steigung & Windungen, Höhe & Windungen oder Höhe & Steigung festlegst – in allen Feldern funktionieren Formeln."
+  },
+  "sweepTwist": {
+    "tip": "Querschnitt über die gesamte Pfadlänge um einen Winkel verdrehen",
+    "hilfe": "Dreht den Querschnitt beim Ziehen entlang des Pfads gleichmäßig vom Anfang bis zum Ende – z. B. um 90° für eine Vierteldrehung oder −90° in Gegenrichtung. Funktioniert bei geraden Linien, gebogenen Kurven und 3D-Pfaden sowie mit Formeln.",
+    "tipp": "Ideal für gedrehte Streben, Propeller-Übergänge oder geführte Drall-Kanäle. Bei engen Kurven einen kleineren Winkel oder schmaleren Querschnitt wählen."
+  },
+  "sweepCut": {
+    "tip": "Entlang Pfad direkt von einem Körper abziehen (z. B. Nut entlang einer Kurve)",
+    "hilfe": "Schneidet das entlang des Pfads gezogene Profil sofort als Nut, Rille oder Kanal aus einem bestehenden Körper heraus – wahlweise gleich beim Abschließen der Skizze oder nachträglich rechts unter „Körper“.",
+    "tipp": "Zeichne den Pfad direkt auf der Oberfläche des Körpers; mit der Querschnitts-Höhe bestimmst du, wie tief die Nut einschneidet."
   }
 }

@@ -82,6 +82,17 @@ const Explain = (() => {
       const p = it.p || {}, tf = p.target ? Model.find(doc, p.target) : null;
       lines.push({ k: 'op', t: `Prägt die Skizze ${p.mode === 'deboss' ? 'vertieft' : 'erhaben'} (${Units.fmtLenU(Model.num(p.height, V, 1), 2, doc)}) auf eine Fläche von „${tf ? Model.label(tf.item) : 'fehlendes Ziel'}“.` });
     }
+    if (it.kind === 'sweep') {
+      const p = it.p || {};
+      const shpTxt = p.shape === 'rect' ? `Rechteck ${Units.fmtLenU(Model.num(p.w, V, 6), 2, doc)} × ${Units.fmtLenU(Model.num(p.h, V, 4), 2, doc)}` : p.shape === 'sketch' ? `eigener Umriss${p.profName ? ` („${p.profName}“)` : ''}` : `Kreis Ø ${Units.fmtLenU(Model.num(p.d, V, 6), 2, doc)}`;
+      const tw = Model.num(p.twist, V, 0);
+      const twTxt = Math.abs(tw) > 1e-6 ? ` mit ${fmtAngleU(tw)} Verdrehung über die Länge` : '';
+      const wall = p.shape !== 'sketch' ? Model.num(p.wall, V, 0) : 0;
+      const wTxt = wall > 0 ? `, hohl (Wand ${Units.fmtLenU(wall, 2, doc)})` : '';
+      const tf = it.op && it.op.target ? Model.find(doc, it.op.target) : null;
+      const opTxt = it.op && it.op.type === 'cut' ? ` – wird von „${tf ? Model.label(tf.item) : 'Zielkörper'}“ als Schnitt/Nut abgezogen` : it.op && it.op.type === 'join' ? ` – wird mit „${tf ? Model.label(tf.item) : 'Zielkörper'}“ vereinigt` : it.op && it.op.type === 'common' ? ` – bildet mit „${tf ? Model.label(tf.item) : 'Zielkörper'}“ die Schnittmenge` : '';
+      lines.push({ k: 'op', t: `Zieht ${shpTxt}${wTxt} entlang des Pfads${twTxt}${opTxt}.` });
+    }
     if (it.kind === 'helix') {
       const m = Model.helixMetrics(it.p || {}, V);
       const formTxt = m.form === 'cone' ? `Kegel-Feder (Radius ${Units.fmtLenU(m.r1, 2, doc)} bis ${Units.fmtLenU(m.r2, 2, doc)})` : m.form === 'spiral' ? `Flache Spirale (Radius ${Units.fmtLenU(m.r1, 2, doc)} bis ${Units.fmtLenU(m.r2, 2, doc)})` : `Zylinder-Feder (Ø ${Units.fmtLenU(m.d, 2, doc)})`;

@@ -21028,6 +21028,157 @@ def t_a101_feder_spirale(p):
     return [ok1, ok2, ok3, ok4, ok5, ok6, ok7]
 
 
+def t_a102_pfad_verdrehung_schnitt(p):
+    def warte_idle():
+        warte_rechnen(p, 40)
+        p.wait(300)
+
+    def set_num(sel, val):
+        p.pg.locator(sel).fill(val)
+        p.pg.locator(sel).press('Enter')
+        warte_idle()
+
+    def cross_bounds(item_id, x_target, tol):
+        return p.ev("""const r = App.results.get(arg[0]);
+          if (!r || !r.data || !r.data.vertices) return null;
+          const pos = r.data.vertices;
+          let minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity, cnt = 0;
+          for (let i = 0; i < pos.length; i += 3) {
+            if (Math.abs(pos[i] - arg[1]) <= arg[2]) {
+              cnt++;
+              if (pos[i+1] < minY) minY = pos[i+1]; if (pos[i+1] > maxY) maxY = pos[i+1];
+              if (pos[i+2] < minZ) minZ = pos[i+2]; if (pos[i+2] > maxZ) maxZ = pos[i+2];
+            }
+          }
+          return cnt ? { dy: maxY - minY, dz: maxZ - minZ, cnt } : null;""", [item_id, x_target, tol])
+
+    def edge_twist_angles(item_id):
+        return p.ev("""const r = App.results.get(arg);
+          if (!r || !r.data || !r.data.edges) return [];
+          const out = [];
+          for (const e of r.data.edges) {
+            if (Math.abs(e.a[0] - e.b[0]) > 95) {
+              const p0 = e.a[0] < e.b[0] ? e.a : e.b;
+              const p1 = e.a[0] < e.b[0] ? e.b : e.a;
+              const y0 = p0[1], z0 = p0[2], y1 = p1[1], z1 = p1[2];
+              const ang = Math.atan2(y0 * z1 - z0 * y1, y0 * y1 + z0 * z1) * 180 / Math.PI;
+              out.push(ang);
+            }
+          }
+          return out;""", item_id)
+
+    # 1. Quadrat 10x10 entlang 100-mm-Linie mit 90° Verdrehung über Skizze + Stepbox
+    sketch_xy(p)
+    p.ev("Sketch.state.ents.push({id:'l1',type:'line',a:[0,0],b:[100,0]})")
+    p.pg.keyboard.press('Enter'); p.wait(500)
+    p.pg.locator('#st-mode-sweep').click(); p.wait(250)
+    p.pg.locator('#st-sweep-shape').select_option('rect'); p.wait(200)
+    p.pg.locator('#st-sweep-w').fill('10'); p.pg.locator('#st-sweep-w').press('Enter'); p.wait(200)
+    p.pg.locator('#st-sweep-h').fill('10'); p.pg.locator('#st-sweep-h').press('Enter'); p.wait(200)
+    p.pg.locator('#st-sweep-twist').fill('90'); p.pg.locator('#st-sweep-twist').press('Enter'); p.wait(300)
+    p.pg.locator('.stepbox .btn.primary').click(); warte_idle()
+
+    sw1 = p.ev("const it = App.doc.items[0]; const r = it ? App.results.get(it.id) : null; return it ? { id: it.id, kind: it.kind, twist: it.p.twist, errs: App.errors.length, bbox: r && r.data ? r.data.bbox : null } : null")
+    v1 = volumen(p)
+    angs1 = edge_twist_angles(sw1['id']) if sw1 else []
+    bb1 = sw1['bbox'] if sw1 else None
+    ok1 = (
+        bool(sw1) and sw1['kind'] == 'sweep' and sw1['errs'] == 0 and sw1['twist'] == 90
+        and v1 is not None and abs(v1 - 10000.0) / 10000.0 < 0.02
+        and bool(bb1) and abs((bb1[4] - bb1[1]) - 10.0 * math.sqrt(2)) < 0.05 and abs((bb1[5] - bb1[2]) - 10.0 * math.sqrt(2)) < 0.05
+        and len(angs1) == 4 and all(abs(a - 90.0) < 1.5 for a in angs1)
+    )
+
+    # 2. Rechteck 10x4: Startfläche 10x4, Endfläche um 90° gedreht (4x10); -90°, 0° & gekrümmter Pfad
+    set_num('#p-h', '4')
+    start2 = cross_bounds(sw1['id'], 0.0, 0.25)
+    end2 = cross_bounds(sw1['id'], 100.0, 0.25)
+    set_num('#p-twist', '-90')
+    angs_neg = edge_twist_angles(sw1['id'])
+    err_neg = p.ev("return App.errors.length")
+    set_num('#p-twist', '0')
+    end_zero = cross_bounds(sw1['id'], 100.0, 0.25)
+    err_zero = p.ev("return App.errors.length")
+    # Gekrümmter Spline-Pfad mit 90° Verdrehung
+    p.ev("App.change('x', d => { d.items = []; })"); warte_idle()
+    p.ev("""App.change('Kurve', d => {
+      const it = Model.newItem('sweep', {
+        sketch: { plane: { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] }, ents: [{ id: 's1', type: 'spline', pts: [[0, 0], [35, 22], [70, -18], [100, 0]], closed: false }], dims: [], cons: [] },
+        shape: 'rect', w: 8, h: 4, wall: 0, twist: 90
+      }, { name: 'Verdreht' });
+      d.items.push(it);
+    })"""); warte_idle()
+    v_curve = volumen(p)
+    err_curve = p.ev("return App.errors.length")
+    ok2 = (
+        bool(start2) and abs(start2['dy'] - 10.0) < 0.25 and abs(start2['dz'] - 4.0) < 0.25
+        and bool(end2) and abs(end2['dy'] - 4.0) < 0.25 and abs(end2['dz'] - 10.0) < 0.25
+        and err_neg == 0 and len(angs_neg) == 4 and all(abs(a + 90.0) < 1.5 for a in angs_neg)
+        and err_zero == 0 and bool(end_zero) and abs(end_zero['dy'] - 10.0) < 0.25 and abs(end_zero['dz'] - 4.0) < 0.25
+        and err_curve == 0 and v_curve is not None and v_curve > 2500
+    )
+
+    # 3. Entlang Pfad als Schnitt: Nut entlang Kurve verringert das Volumen eines Quaders
+    p.ev("App.change('x', d => { d.items = []; })"); warte_idle()
+    box_id = p.ev("""let id; App.change('Quader', d => {
+      const b = Model.newItem('box', { w: 60, d: 40, h: 20 }, { name: 'Platte' });
+      d.items.push(b); id = b.id;
+    }); return id""")
+    warte_idle()
+    v_before = volumen(p)
+    top_idx = p.ev("""const r = App.results.get(arg);
+      return r.data.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.99 && Math.abs(f.c[2] - 20) < 1e-3);""", box_id)
+    p.ev("const r=App.results.get(arg[0]); Sketch.startOnFace({ id: arg[0], idx: arg[1], info: r.data.faces[arg[1]] })", [box_id, top_idx]); p.wait(1200)
+    p.ev("Sketch.state.ents.push({id:'sp1',type:'spline',pts:[[-24,-4],[0,8],[24,-4]],closed:false})")
+    p.pg.keyboard.press('Enter'); p.wait(500)
+    p.pg.locator('#st-mode-sweep').click(); p.wait(250)
+    p.pg.locator('#st-sweep-op').select_option('cut'); p.wait(200)
+    p.pg.locator('#st-sweep-shape').select_option('rect'); p.wait(200)
+    p.pg.locator('#st-sweep-w').fill('6'); p.pg.locator('#st-sweep-w').press('Enter'); p.wait(200)
+    p.pg.locator('#st-sweep-h').fill('6'); p.pg.locator('#st-sweep-h').press('Enter'); p.wait(200)
+    p.pg.locator('.stepbox .btn.primary').click(); warte_idle()
+
+    cut_info = p.ev("""const sw = App.doc.items.find(x => x.kind === 'sweep');
+      return sw ? { id: sw.id, op: sw.op, merged: App.mergedInto(sw.id), errs: App.errors.length } : null;""")
+    v_after_cut = volumen(p)
+    ok3 = (
+        v_before is not None and abs(v_before - 48000.0) < 20.0
+        and bool(cut_info) and cut_info['errs'] == 0
+        and cut_info['op'] and cut_info['op']['type'] == 'cut'
+        and cut_info['merged'] == box_id
+        and v_after_cut is not None and v_after_cut < v_before - 400.0
+    )
+
+    # 4. Modus rechts im Eigenschaften-Panel umschalten (#op-type) + Verdrehung an Nut + Rückgängig
+    p.ev("App.select([arg])", cut_info['id']); p.wait(400)
+    p.pg.locator('#op-type').select_option('new'); warte_idle()
+    v_box_only = p.ev("return Mass.measureDoc(App.doc).then(r => r && r.parts.find(x => x.id === arg)?.volume)", box_id)
+    p.pg.locator('#op-type').select_option('cut'); warte_idle()
+    set_num('#p-twist', '45')
+    v_after_twist_cut = volumen(p)
+    err_twist_cut = p.ev("return App.errors.length")
+    p.ev("App.undo()"); warte_idle()
+    tw_undone = p.ev("return App.doc.items.find(x => x.id === arg).p.twist", cut_info['id'])
+    ok4 = (
+        v_box_only is not None and abs(v_box_only - 48000.0) < 20.0
+        and err_twist_cut == 0
+        and v_after_twist_cut is not None and v_after_twist_cut < v_before - 300.0
+        and tw_undone == 0
+    )
+
+    # 5. Hilfetexte, DE/EN-Schlüsselgleichheit, Befehlssuche, Erklärtext & keine Seitenfehler
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    i18n_ok = p.pg.evaluate("Promise.all([fetch('data/texte-de.json').then(r=>r.json()), fetch('data/texte-en.json').then(r=>r.json())]).then(([d,e])=>{ const dk=Object.keys(d).sort(), ek=Object.keys(e).sort(); return dk.length===ek.length && dk.every((k,i)=>k===ek[i]); })")
+    cmds_ok = p.ev("return Commands.search('nut').some(c => c.id === 'sweep-cut') && Commands.search('verdrehung').some(c => c.id === 'sweep-help')")
+    p.ev("App.redo()"); warte_idle()
+    explain_ok = p.ev("const ex = Explain.local(arg); return !!ex && ex.lines.some(l => l.k === 'op' && /Verdrehung/.test(l.t) && /Nut/.test(l.t)) && ex.lines.some(l => l.k === 'was' && /Pfad/.test(l.t))", cut_info['id'])
+    ok5 = (
+        all(k in hilfen and all(f in hilfen[k] for f in ('tip', 'hilfe', 'tipp')) for k in ('sweep', 'sweepTwist', 'sweepCut'))
+        and i18n_ok and cmds_ok and explain_ok and not p.errs
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -21238,6 +21389,7 @@ TESTS = [
     ('[A-099] Schwerpunkt als Bezugspunkt, Ebenen ziehen & einfärben, Ebenen-Schar (BZ-11, BZ-12, BZ-13)', t_a099_bezuege_schwerpunkt_schar),
     ('[A-100] Körper als Schritt löschen & Messwert als Maß (KP-51, KP-53)', t_a100_loeschen_messwert),
     ('[A-101] Feder und Spirale: Zylinder-Feder / Kegel-Feder / flache Spirale / Einfach-Modus', t_a101_feder_spirale),
+    ('[A-102] Entlang Pfad mit Verdrehung und als Schnitt (KP-28, KP-29)', t_a102_pfad_verdrehung_schnitt),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

@@ -1278,7 +1278,7 @@ const Panels = (() => {
     const idx = App.doc.items.indexOf(it);
     const isPatOp = Features.isOp(it) && it.p.op === 'pattern' && !(it.children || []).some((c) => c.kind === 'rib');
     if (idx < 0 || (it.kind === 'group' && !isPatOp) || it.kind === 'transform' || it.kind === 'scale' || it.kind === 'deleteBody' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'rib' || it.kind === 'wrap' || it.kind === 'emboss' || it.kind === 'mirrorStep') return null;
-    const targets = App.doc.items.slice(0, idx).filter((x) => x.role !== 'hole' && !x.suppressed && x.kind !== 'group' && x.kind !== 'rib' && x.kind !== 'wrap' && x.kind !== 'emboss' && x.kind !== 'mirrorStep' && x.kind !== 'deleteBody' && !(x.kind === 'transform' && !(x.p && x.p.copy)) && x.kind !== 'scale' && !(x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) && !(x.op && x.op.target === it.id));
+    const targets = App.doc.items.slice(0, idx).filter((x) => x.role !== 'hole' && !x.suppressed && !(x.kind === 'group' && x.p && x.p.assembly) && x.kind !== 'ref' && x.kind !== 'rib' && x.kind !== 'wrap' && x.kind !== 'emboss' && x.kind !== 'mirrorStep' && x.kind !== 'deleteBody' && !(x.kind === 'transform' && !(x.p && x.p.copy)) && x.kind !== 'scale' && !(x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) && !(x.op && x.op.target === it.id));
     if (!targets.length && !it.op) return null;
     const sec = h('div', { class: 'section', id: 'op-sec', 'data-help': 'bodyOp' }, h('div', { class: 'section-h' }, T('panel.op.title')));
     const type = it.op ? it.op.type : 'new';
@@ -1847,6 +1847,9 @@ const Panels = (() => {
       } else if (shp === 'circle') fl.append(UI.numField({ id: 'p-d', label: T('param.dia'), value: it.p.d, onCommit: (v) => setP('d', v) }));
       else { fl.append(UI.numField({ id: 'p-w', label: T('param.w'), value: it.p.w, onCommit: (v) => setP('w', v) }), UI.numField({ id: 'p-h', label: T('param.h'), value: it.p.h, onCommit: (v) => setP('h', v) })); }
       if (shp !== 'sketch') fl.append(UI.numField({ id: 'p-wall', label: T('panel.sweep.wallOpt'), value: it.p.wall || 0, min: 0, onCommit: (v) => setP('wall', v) }));
+      const twF = UI.numField({ id: 'p-twist', label: T('panel.sweep.twist'), value: it.p.twist ?? 0, unit: '°', vars: V, onCommit: (v) => setP('twist', v) });
+      twF.setAttribute('data-help', 'sweepTwist');
+      fl.append(twF);
       sec.append(fl);
       if (it.p.path3d) {
         // Pfad im Raum: Punkte als Zahlen, glatt oder mit Ecken, weitere Punkte im Bild anklicken

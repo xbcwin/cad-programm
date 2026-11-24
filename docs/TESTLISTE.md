@@ -2271,6 +2271,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Hilfen, Befehle, Erklärtext & DE/EN-Schlüssel**: `HELP.helix`, `werkzeug-hilfen.json`, `Explain.local`, `Commands.search('feder')` und `texte-de.json`/`texte-en.json` sind vollständig ohne JavaScript-Fehler.
 - [ ] **Von Hand**: Im Browser eine Kegel-Feder und eine flache Spirale mit eigener Skizze als Querschnitt ausprobieren sowie im Modus „Einfach“ eine fertige Feder über das Körper-Menü einfügen und per Zahleneingabe anpassen.
 
+## Entlang Pfad mit Verdrehung und als Schnitt (Auto [A-102], KP-28, KP-29)
+
+- [x] **Quadrat 10×10 entlang 100-mm-Linie mit 90° Verdrehung**: Direkt über Skizze + `.stepbox` (`#st-mode-sweep`, `#st-sweep-shape='rect'`, `10 × 10`, `#st-sweep-twist=90`) angelegt → Volumen `10000 mm³` (±2 %), Mittelquerschnitt `14,14 × 14,14 mm` und alle 4 Längskanten drehen exakt um `+90°` um den Pfad.
+- [x] **Rechteck 10×4, Gegendrehung (−90°), Zurück auf 0° & gekrümmte Kurve**: Startfläche `10 × 4`, Endfläche um `90°` gedreht `4 × 10`; `#p-twist = -90°` dreht um `−90°`, `0°` stellt `10 × 4` wieder her; gekrümmter Spline-Pfad mit `90°` Verdrehung baut fehlerfrei.
+- [x] **Nut entlang Kurve als Schnitt & Modus-Umschaltung**: Offener Spline-Pfad auf Oberseite eines `60 × 40 × 20`-Quaders mit `#st-sweep-op='cut'` (`6 × 6`) schneidet sofort eine Nut und verringert das Volumen deutlich (`< 47600 mm³`); Umschalten über `#op-type` (`new`/`cut`), Kombination mit `#p-twist = 45°` und `App.undo()` arbeiten fehlerfrei.
+- [x] **Hilfen, Befehle, Erklärtext & DE/EN-Schlüssel**: `sweep`, `sweepTwist`, `sweepCut` in `werkzeug-hilfen.json` und `HELP`, DE/EN-Schlüsselgleichheit, `Commands.search('nut')` / `Commands.search('verdrehung')` und `Explain.local` sind vollständig ohne Seitenfehler.
+- [ ] **Von Hand**: Im Browser eine gebogene Kurve als Pfad mit eigener Skizzenform und Verdrehung sowie eine verdrehte Nut auf einer Körperfläche samt Live-Vorschau ausprobieren.
+
 ## Fehler melden
 
 ```

@@ -994,16 +994,17 @@ const Model = (() => {
     R[i] = Object.keys(r).length ? r : null;
     if (R.some(Boolean)) pp.rules = R; else delete pp.rules;
   }
-  // Entlang Pfad (Sweep): längster offener Zug der Skizze, Querschnitt Kreis oder Rechteck, optional hohl
+  // Entlang Pfad (Sweep): längster offener Zug der Skizze, Querschnitt Kreis oder Rechteck, optional hohl, optional Verdrehung
   function sweepParams(it, V) {
     const p = it.p || {};
+    const twist = num(p.twist, V, 0);
     if (p.wrapId) {
       let prof = null;
       if (p.shape === 'sketch' && p.prof) {
         const regs = SK.regions(Solver.cached(p.prof, V).ents).sort((a, b) => b.area - a.area);
         if (regs.length) { const Lp = regs[0].outer; let cx = 0, cy = 0; for (const q of Lp.poly) { cx += q[0]; cy += q[1]; } cx /= Lp.poly.length; cy /= Lp.poly.length; prof = { outer: Lp.k, holes: regs[0].holes.map((h) => h.k), c: [cx, cy] }; }
       }
-      return { wrapId: p.wrapId, prof, shape: p.shape === 'rect' ? 'rect' : p.shape === 'sketch' && prof ? 'sketch' : 'circle', d: num(p.d, V, 2), w: num(p.w, V, 3), h: num(p.h, V, 2), wall: num(p.wall, V, 0) };
+      return { wrapId: p.wrapId, prof, shape: p.shape === 'rect' ? 'rect' : p.shape === 'sketch' && prof ? 'sketch' : 'circle', d: num(p.d, V, 2), w: num(p.w, V, 3), h: num(p.h, V, 2), wall: num(p.wall, V, 0), twist };
     }
     if (p.path3d && Array.isArray(p.path3d.pts)) {
       // Pfad im Raum statt Skizze
@@ -1014,7 +1015,7 @@ const Model = (() => {
         if (regs.length) { const Lp = regs[0].outer; let cx = 0, cy = 0; for (const q of Lp.poly) { cx += q[0]; cy += q[1]; } cx /= Lp.poly.length; cy /= Lp.poly.length; prof = { outer: Lp.k, holes: regs[0].holes.map((h) => h.k), c: [cx, cy] }; }
       }
       const smooth = p.path3d.smooth !== false;
-      return { path3d: { pts, smooth, segs: smooth ? bez3(pts) : [] }, prof, shape: p.shape === 'rect' ? 'rect' : p.shape === 'sketch' && prof ? 'sketch' : 'circle', d: num(p.d, V, 6), w: num(p.w, V, 6), h: num(p.h, V, 4), wall: num(p.wall, V, 0) };
+      return { path3d: { pts, smooth, segs: smooth ? bez3(pts) : [] }, prof, shape: p.shape === 'rect' ? 'rect' : p.shape === 'sketch' && prof ? 'sketch' : 'circle', d: num(p.d, V, 6), w: num(p.w, V, 6), h: num(p.h, V, 4), wall: num(p.wall, V, 0), twist };
     }
     const ch = SK.chains(p.sketch ? Solver.cached(p.sketch, V).ents : [])[0];
     let prof = null;
@@ -1022,7 +1023,7 @@ const Model = (() => {
       const regs = SK.regions(Solver.cached(p.prof, V).ents).sort((a, b) => b.area - a.area);
       if (regs.length) { const Lp = regs[0].outer; let cx = 0, cy = 0; for (const q of Lp.poly) { cx += q[0]; cy += q[1]; } cx /= Lp.poly.length; cy /= Lp.poly.length; prof = { outer: Lp.k, holes: regs[0].holes.map((h) => h.k), c: [cx, cy] }; }
     }
-    const out = { prof, plane: p.sketch ? p.sketch.plane : { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] }, segs: ch ? ch.segs : [], shape: p.shape === 'rect' ? 'rect' : p.shape === 'sketch' && prof ? 'sketch' : 'circle', d: num(p.d, V, 6), w: num(p.w, V, 6), h: num(p.h, V, 4), wall: num(p.wall, V, 0) };
+    const out = { prof, plane: p.sketch ? p.sketch.plane : { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] }, segs: ch ? ch.segs : [], shape: p.shape === 'rect' ? 'rect' : p.shape === 'sketch' && prof ? 'sketch' : 'circle', d: num(p.d, V, 6), w: num(p.w, V, 6), h: num(p.h, V, 4), wall: num(p.wall, V, 0), twist };
     if (ch) {
       const s = ch.segs[0];
       let t;
@@ -1235,6 +1236,12 @@ const Model = (() => {
       case 'cone': return `Ø ${f(p.d1)} × ${f(p.h)}${u}`;
       case 'sphere': case 'hemisphere': return `Ø ${f(p.d)}${u}`;
       case 'torus': return `Ø ${f(p.d)}${u}`;
+      case 'sweep': {
+        const shp = p.shape === 'rect' ? `${f(p.w ?? 6)} × ${f(p.h ?? 4)}${u}` : p.shape === 'sketch' ? 'eigene Form' : `Ø ${f(p.d ?? 6)}${u}`;
+        const tw = Math.abs(p.twist || 0) > 1e-6 ? ` · ↻ ${fmtAngleU(p.twist)}` : '';
+        const opTxt = it.op && it.op.type === 'cut' ? ' · Schnitt' : it.op && it.op.type === 'join' ? ' · Vereinigen' : it.op && it.op.type === 'common' ? ' · Schnittmenge' : (it.role === 'hole' ? ' · Schnitt' : '');
+        return shp + tw + opTxt;
+      }
       case 'helix': {
         const m = helixMetrics(it.p || {}, V);
         if (m.form === 'spiral') return `Spirale R ${f(m.r1)}→${f(m.r2)}${u} · ${fmt(m.turns, 1)} Wdg`;

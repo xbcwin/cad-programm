@@ -5355,7 +5355,7 @@ const Sketch = (() => {
     const useEmboss = !!opts.emboss;
     const revLine = S.ents.find((x) => x.type === 'line' && x.revAxis) || null;
     const autoRev = !!revLine && !openOnly && !opts.fromPushPull && !useRib && !useWrap && !useEmboss;
-    S.step = { dist: opts.dist, dir: opts.dir, extent: opts.extent || 'dist', toFace: opts.toFace || null, revToFace: null, revDir: 'normal', angle2: 90, toFaceFlip: false, pickingFace: false, sel: regs.map((r) => r.key), revolve: autoRev, sweep: false, rib: useRib, ribTarget, ribThickness: 2, ribSide: 'center', ribDir: 'normal', ribFlip: false, ribDepth: 0, ribDraft: 0, wrap: useWrap, wrapTarget, wrapFace, wrapMode, wrapDepth: 2, wrapAngle: 0, wrapShiftY: 0, wrapRot: 0, wrapFlip: false, emboss: useEmboss, embossTarget: S.ctx.embossMode ? S.ctx.targetId : (ctxTop ? ctxTop.id : null), embossFace: S.ctx.embossFace ? deepClone(S.ctx.embossFace) : null, embossHeight: (S.ctx.embossOpt && S.ctx.embossOpt.height) || 1, embossMode: (S.ctx.embossOpt && S.ctx.embossOpt.mode === 'deboss') ? 'deboss' : 'emboss', embossFlip: !!(S.ctx.embossOpt && S.ctx.embossOpt.flip), openOnly, thin: openOnly ? (!useRib && !useWrap) : !!opts.thin, wall: opts.wall || 2, wallSide: opts.wallSide || 'center', axis: revLine ? 'line' : 'y', axisLine: revLine ? revLine.id : null, angle: 360, fromPushPull: !!opts.fromPushPull, color: tgt ? tgt.item.color : nextColor() };
+    S.step = { dist: opts.dist, dir: opts.dir, extent: opts.extent || 'dist', toFace: opts.toFace || null, revToFace: null, revDir: 'normal', angle2: 90, toFaceFlip: false, pickingFace: false, sel: regs.map((r) => r.key), revolve: autoRev, sweep: false, sweepShape: 'circle', sweepD: 6, sweepW: 6, sweepH: 4, sweepWall: 0, sweepTwist: 0, sweepProfId: null, sweepOp: 'new', sweepTarget: ribTarget, rib: useRib, ribTarget, ribThickness: 2, ribSide: 'center', ribDir: 'normal', ribFlip: false, ribDepth: 0, ribDraft: 0, wrap: useWrap, wrapTarget, wrapFace, wrapMode, wrapDepth: 2, wrapAngle: 0, wrapShiftY: 0, wrapRot: 0, wrapFlip: false, emboss: useEmboss, embossTarget: S.ctx.embossMode ? S.ctx.targetId : (ctxTop ? ctxTop.id : null), embossFace: S.ctx.embossFace ? deepClone(S.ctx.embossFace) : null, embossHeight: (S.ctx.embossOpt && S.ctx.embossOpt.height) || 1, embossMode: (S.ctx.embossOpt && S.ctx.embossOpt.mode === 'deboss') ? 'deboss' : 'emboss', embossFlip: !!(S.ctx.embossOpt && S.ctx.embossOpt.flip), openOnly, thin: openOnly ? (!useRib && !useWrap) : !!opts.thin, wall: opts.wall || 2, wallSide: opts.wallSide || 'center', axis: revLine ? 'line' : 'y', axisLine: revLine ? revLine.id : null, angle: 360, fromPushPull: !!opts.fromPushPull, color: tgt ? tgt.item.color : nextColor() };
     stepBox = h('div', { class: 'stepbox' });
     renderStep();
     $('#overlay').append(stepBox);
@@ -5475,6 +5475,51 @@ const Sketch = (() => {
         stepBox.append(fl);
       }
     } else if (st.sweep) {
+      const sweepTargets = !App.ctx ? App.doc.items.filter((x) => x.role !== 'hole' && !x.suppressed && !(x.kind === 'group' && x.p && x.p.assembly) && x.kind !== 'ref' && x.kind !== 'rib' && x.kind !== 'wrap' && x.kind !== 'emboss' && x.kind !== 'mirrorStep' && x.kind !== 'deleteBody' && !(x.kind === 'transform' && !(x.p && x.p.copy)) && x.kind !== 'scale' && !(x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) && !(x.op && x.op.target)) : [];
+      if (sweepTargets.length) {
+        if (!st.sweepTarget || !sweepTargets.some((x) => x.id === st.sweepTarget)) st.sweepTarget = sweepTargets[sweepTargets.length - 1].id;
+        const opF = UI.selectField({
+          id: 'st-sweep-op', label: T('panel.op.what'), value: st.sweepOp || 'new',
+          options: [['new', T('panel.op.new')], ['cut', T('panel.sweep.opCut')], ['join', T('panel.op.join')], ['common', T('panel.op.common')]],
+          onChange: (v) => { st.sweepOp = v; renderStep(); updatePreview(); },
+        });
+        opF.setAttribute('data-help', 'sweepCut');
+        stepBox.append(opF);
+        if ((st.sweepOp || 'new') !== 'new') {
+          stepBox.append(UI.selectField({
+            id: 'st-sweep-target', label: T('panel.op.target'), value: st.sweepTarget,
+            options: sweepTargets.map((x) => [x.id, Model.label(x)]),
+            onChange: (v) => { st.sweepTarget = v; updatePreview(); },
+          }));
+        }
+      }
+      const profs = App.doc.items.filter((x) => x.kind === 'extrude' && x.p && x.p.sketch);
+      const shp = st.sweepShape === 'rect' ? 'rect' : st.sweepShape === 'sketch' && profs.length ? 'sketch' : 'circle';
+      st.sweepShape = shp;
+      stepBox.append(UI.selectField({
+        id: 'st-sweep-shape', label: T('panel.sweep.shape'), value: shp,
+        options: [['circle', T('panel.sweep.circle')], ['rect', T('panel.sweep.rect')], ...(profs.length ? [['sketch', T('panel.sweep.sketch')]] : [])],
+        onChange: (v) => { st.sweepShape = v; if (v === 'sketch' && (!st.sweepProfId || !profs.some((x) => x.id === st.sweepProfId))) st.sweepProfId = profs[0] ? profs[0].id : null; renderStep(); updatePreview(); },
+      }));
+      if (shp === 'sketch') {
+        if (!st.sweepProfId || !profs.some((x) => x.id === st.sweepProfId)) st.sweepProfId = profs[0].id;
+        stepBox.append(UI.selectField({
+          id: 'st-sweep-prof', label: T('panel.sweep.profFrom'), value: st.sweepProfId,
+          options: profs.map((x) => [x.id, Model.label(x)]),
+          onChange: (v) => { st.sweepProfId = v; updatePreview(); },
+        }));
+      } else if (shp === 'circle') {
+        stepBox.append(UI.numField({ id: 'st-sweep-d', label: T('param.dia'), value: st.sweepD ?? 6, min: 0.1, onCommit: (v) => { st.sweepD = v; updatePreview(); } }));
+      } else {
+        stepBox.append(UI.numField({ id: 'st-sweep-w', label: T('param.w'), value: st.sweepW ?? 6, min: 0.1, onCommit: (v) => { st.sweepW = v; updatePreview(); } }));
+        stepBox.append(UI.numField({ id: 'st-sweep-h', label: T('param.h'), value: st.sweepH ?? 4, min: 0.1, onCommit: (v) => { st.sweepH = v; updatePreview(); } }));
+      }
+      if (shp !== 'sketch') {
+        stepBox.append(UI.numField({ id: 'st-sweep-wall', label: T('panel.sweep.wallOpt'), value: st.sweepWall ?? 0, min: 0, onCommit: (v) => { st.sweepWall = v; updatePreview(); } }));
+      }
+      const twF = UI.numField({ id: 'st-sweep-twist', label: T('panel.sweep.twist'), value: st.sweepTwist ?? 0, unit: '°', onCommit: (v) => { st.sweepTwist = v; updatePreview(); } });
+      twF.setAttribute('data-help', 'sweepTwist');
+      stepBox.append(twF);
       stepBox.append(h('p', null, T('sk.step.sweepDesc')));
     } else if (!st.revolve) {
       const ext = st.extent === 'toNext' || st.extent === 'toFace' ? st.extent : 'dist';
@@ -5645,7 +5690,26 @@ const Sketch = (() => {
       }, { name: 'Rippe', color: st.color });
     }
     if (st.sweep) {
-      return Model.newItem('sweep', { sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons), ...pr, ...lk }, shape: 'circle', d: 6, w: 6, h: 4, wall: 0 }, { name: 'Entlang Pfad', color: st.color });
+      const p = {
+        sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons), ...pr, ...lk },
+        shape: st.sweepShape === 'rect' ? 'rect' : st.sweepShape === 'sketch' ? 'sketch' : 'circle',
+        d: st.sweepD ?? 6,
+        w: st.sweepW ?? 6,
+        h: st.sweepH ?? 4,
+        wall: st.sweepWall ?? 0,
+        twist: st.sweepTwist ?? 0,
+      };
+      if (p.shape === 'sketch' && st.sweepProfId) {
+        const src = Model.find(App.doc, st.sweepProfId);
+        if (src && src.item && src.item.p && src.item.p.sketch) {
+          p.prof = deepClone(src.item.p.sketch);
+          p.profName = Model.label(src.item);
+        } else p.shape = 'circle';
+      }
+      const hasOp = !App.ctx && st.sweepOp && st.sweepOp !== 'new' && st.sweepTarget && Model.find(App.doc, st.sweepTarget);
+      const it = Model.newItem('sweep', p, { name: hasOp && st.sweepOp === 'cut' ? 'Nut entlang Pfad' : 'Entlang Pfad', color: st.color });
+      if (hasOp) it.op = { type: st.sweepOp, target: st.sweepTarget };
+      return it;
     }
     const regs = SK.regions(S.ents);
     const sel = st.sel && st.sel.length && st.sel.length < regs.length ? st.sel.slice() : null;
@@ -5873,10 +5937,12 @@ const Sketch = (() => {
     const it = stepItem();
     const ctx = S.ctx;
     App.extra = [];
-    const lbl = it.kind === 'wrap' ? 'Um Zylinder gewickelt' : it.kind === 'emboss' ? 'Prägen erstellt' : it.kind === 'rib' ? 'Rippe erstellt' : it.kind === 'sweep' ? 'Entlang Pfad gezogen' : it.role === 'hole' ? 'Aussparung erstellt' : it.kind === 'revolve' ? 'Drehkörper erstellt' : (it.p && it.p.thin ? 'Dünne Wand hochgezogen' : 'Hochgezogen');
+    const lbl = it.kind === 'wrap' ? 'Um Zylinder gewickelt' : it.kind === 'emboss' ? 'Prägen erstellt' : it.kind === 'rib' ? 'Rippe erstellt' : it.kind === 'sweep' ? (it.op && it.op.type === 'cut' ? 'Nut entlang Pfad geschnitten' : 'Entlang Pfad gezogen') : it.role === 'hole' ? 'Aussparung erstellt' : it.kind === 'revolve' ? 'Drehkörper erstellt' : (it.p && it.p.thin ? 'Dünne Wand hochgezogen' : 'Hochgezogen');
+    const hideProfId = it.kind === 'sweep' && S.step.sweepShape === 'sketch' ? S.step.sweepProfId : null;
     App.change(lbl, (doc) => {
-      if (it.kind !== 'rib' && it.kind !== 'wrap' && it.kind !== 'emboss' && ctx.targetId && Model.find(doc, ctx.targetId)) Actions.attach(doc, ctx.targetId, it);
+      if (it.kind !== 'rib' && it.kind !== 'wrap' && it.kind !== 'emboss' && it.kind !== 'sweep' && ctx.targetId && Model.find(doc, ctx.targetId)) Actions.attach(doc, ctx.targetId, it);
       else { Model.setFromMatrix(it, S.W); doc.items.push(it); }
+      if (hideProfId) { const sp = doc.items.find((x) => x.id === hideProfId); if (sp) sp.hidden = true; }
     });
     finishSession();
     const top = Model.topOf(App.doc, it.id);

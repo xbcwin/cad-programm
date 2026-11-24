@@ -269,5 +269,10 @@
     "was": "Erzeugt entlang einer Schraubenlinie oder flachen Spirale einen dreidimensionalen Körper aus einem runden Draht, Rechteck oder eigenen Skizzen-Umriss.",
     "wozu": "Ideal für Druck-, Zug- und Kegelfedern, Spiralfedern, Wendelrohre, Kühlschlangen oder Schnecken.",
     "achtung": "Bei zylindrischen Federn muss die Steigung größer als die Drahtdicke sein, und der Innenradius muss immer größer als der halbe Drahtdurchmesser bleiben."
+  },
+  "sweep": {
+    "was": "Zieht einen runden, rechteckigen oder eigenen Skizzen-Querschnitt entlang eines offenen Pfads – auf Wunsch mit Verdrehung über die Länge und als Schnitt (Nut) in einem Körper.",
+    "wozu": "Ideal für Kabelkanäle, Rohre, Bügel, gedrehte Streben sowie Nuten und Rillen entlang gebogener Kurven.",
+    "achtung": "Für eine Nut wählst du unter „Körper“ den Modus „Schneiden“ (oder „Abziehen von …“) und lässt die Kurve sauber durch den Zielkörper laufen."
   }
 }

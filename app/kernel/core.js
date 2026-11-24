@@ -2003,6 +2003,183 @@ export function createKernel(R, oc) {
     return shape;
   }
 
+  // Hilfspfad (Auxiliary Spine) für Verdrehung (KP-28) entlang eines Sweep-Pfads
+  function buildTwistAuxSpine(spine, N0, twistDeg) {
+    const edges = spine.edges || [];
+    const isStraight = edges.length === 1 && edges[0].geomType === 'LINE';
+    if (isStraight) {
+      const sp0V = spine.startPoint, sp1V = spine.endPoint;
+      const sp0 = vec(sp0V), sp1 = vec(sp1V);
+      safeDelete(sp0V); safeDelete(sp1V);
+      const dVec = sub(sp1, sp0), L = len(dVec);
+      if (L <= 1e-6) throw new Error('Der Pfad ist zu kurz für eine Verdrehung.');
+      const dir = mul(dVec, 1 / L);
+      const pitch = (360 / Math.abs(twistDeg)) * L;
+      const aux = R.makeHelix(pitch, L, 1.0, sp0, dir, twistDeg < 0);
+      return { wire: aux, straight: true, samples: null };
+    }
+    const curve = spine.curve;
+    const K = Math.max(48, Math.min(360, Math.ceil(Math.abs(twistDeg) / 4) * 2 + 24));
+    const pts = [], tans = [], cum = [0];
+    try {
+      for (let i = 0; i <= K; i++) {
+        const u = i / K;
+        const pObj = curve.pointAt(u), tObj = curve.tangentAt(u);
+        const pt = vec(pObj), tn = norm(vec(tObj));
+        safeDelete(pObj); safeDelete(tObj);
+        pts.push(pt); tans.push(tn);
+        if (i > 0) cum.push(cum[i - 1] + len(sub(pt, pts[i - 1])));
+      }
+    } finally {
+      safeDelete(curve);
+    }
+    const totalL = cum[K];
+    const projOrtho = (v, t) => {
+      const d = dot(v, t);
+      const o = [v[0] - t[0] * d, v[1] - t[1] * d, v[2] - t[2] * d];
+      const l = len(o);
+      return l > 1e-6 ? mul(o, 1 / l) : null;
+    };
+    const t0 = tans[0];
+    let u0 = N0 ? projOrtho(N0, t0) : null;
+    if (!u0) u0 = projOrtho(Math.abs(t0[2]) < 0.99 ? [0, 0, 1] : [1, 0, 0], t0) || [1, 0, 0];
+    const U = [u0], W = [norm(cross(t0, u0))];
+    let kappaMax = 0;
+    for (let i = 1; i <= K; i++) {
+      const tPrev = tans[i - 1], tCur = tans[i];
+      const segLen = Math.max(1e-6, cum[i] - cum[i - 1]);
+      const kVec = cross(tPrev, tCur), sinA = len(kVec);
+      kappaMax = Math.max(kappaMax, sinA / segLen);
+      let uCur = U[i - 1];
+      if (sinA > 1e-9) {
+        const ax = mul(kVec, 1 / sinA);
+        const cosA = Math.max(-1, Math.min(1, dot(tPrev, tCur)));
+        const kxu = cross(ax, uCur), kdu = dot(ax, uCur);
+        uCur = add(add(mul(uCur, cosA), mul(kxu, sinA)), mul(ax, kdu * (1 - cosA)));
+      }
+      uCur = projOrtho(uCur, tCur) || U[i - 1];
+      U.push(uCur);
+      W.push(norm(cross(tCur, uCur)));
+    }
+    const rAux = Math.max(0.1, Math.min(1.0, 0.25 / Math.max(0.25, kappaMax)));
+    const twRad = (twistDeg * Math.PI) / 180;
+    const auxPts = [];
+    for (let i = 0; i <= K; i++) {
+      const f = totalL > 1e-9 ? cum[i] / totalL : i / K;
+      const ang = twRad * f;
+      const dirI = add(mul(U[i], Math.cos(ang)), mul(W[i], Math.sin(ang)));
+      auxPts.push(add(pts[i], mul(dirI, rAux)));
+    }
+    const auxEdge = R.makeBSplineApproximation(auxPts, { tolerance: 1e-4, degMin: 3, degMax: 6 });
+    let aux;
+    try { aux = R.assembleWire([auxEdge]); }
+    finally { safeDelete(auxEdge); }
+    return { wire: aux, straight: false, samples: { pts, tans, U, W, cum, totalL } };
+  }
+  function pipeShellWithAux(w, spine, auxWire, curviLinearEquivalence) {
+    const b = new oc.BRepOffsetAPI_MakePipeShell(spine.wrapped);
+    try {
+      b.SetTransitionMode(oc.BRepBuilderAPI_TransitionMode.BRepBuilderAPI_RoundCorner);
+      b.SetMode(auxWire.wrapped, !!curviLinearEquivalence, oc.BRepFill_TypeOfContact.BRepFill_NoContact);
+      b.Add(w.wrapped, false, true);
+      b.Build();
+      if (!b.IsDone()) throw new Error('PipeShell failed');
+      b.MakeSolid();
+      const sh = R.cast(b.Shape());
+      if (!R.isShape3D(sh)) { safeDelete(sh); throw new Error('PipeShell not 3D'); }
+      return sh;
+    } finally {
+      b.delete();
+    }
+  }
+  function sweepProfileAlongSpine(spine, profAt, P0, T, N, V, p) {
+    const twist = num(p.twist, 0);
+    if (Math.abs(twist) > 3600) throw new Error('Die Verdrehung darf höchstens ±3600° (10 Umdrehungen) betragen.');
+    const wall = num(p.wall, 0);
+    if (Math.abs(twist) < 1e-6) {
+      const sweep = (w) => R.genericSweep(w, spine, { transitionMode: 'round', forceProfileSpineOthogonality: true });
+      const wOuter = profAt(0, P0, T, V, N);
+      let shape;
+      try { shape = sweep(wOuter); }
+      finally { safeDelete(wOuter); }
+      if (wall > 0 && p.shape !== 'sketch') {
+        const inner = profAt(wall, P0, T, V, N);
+        if (!inner) { safeDelete(shape); throw new Error('Die Wand ist dicker als das halbe Rohr.'); }
+        let cutter = null;
+        try {
+          cutter = sweep(inner);
+          const res = shape.cut(cutter);
+          safeDelete(shape); shape = res;
+        } finally {
+          safeDelete(inner); safeDelete(cutter);
+        }
+      }
+      return shape;
+    }
+    const aux = buildTwistAuxSpine(spine, N, twist);
+    const doTwisted = (inset) => {
+      const w0 = profAt(inset, P0, T, V, N);
+      if (!w0) return null;
+      try {
+        try { return pipeShellWithAux(w0, spine, aux.wire, !aux.straight); }
+        catch (_) {
+          try { return pipeShellWithAux(w0, spine, aux.wire, aux.straight); }
+          catch (_2) {}
+        }
+      } finally {
+        safeDelete(w0);
+      }
+      if (aux.samples) {
+        const { pts, tans, U, W, cum, totalL } = aux.samples;
+        const M = Math.max(12, Math.min(96, Math.ceil(Math.abs(twist) / 10) + 8));
+        const twRad = (twist * Math.PI) / 180;
+        const secWires = [];
+        try {
+          let j = 0;
+          for (let m = 0; m <= M; m++) {
+            const f = m / M;
+            const sTarget = f * totalL;
+            while (j < cum.length - 2 && cum[j + 1] < sTarget) j++;
+            const ds = cum[j + 1] - cum[j];
+            const alpha = ds > 1e-9 ? Math.max(0, Math.min(1, (sTarget - cum[j]) / ds)) : 0;
+            const Pm = [0, 1, 2].map((k) => pts[j][k] + (pts[j + 1][k] - pts[j][k]) * alpha);
+            const Tm = norm([0, 1, 2].map((k) => tans[j][k] + (tans[j + 1][k] - tans[j][k]) * alpha));
+            const Um = norm([0, 1, 2].map((k) => U[j][k] + (U[j + 1][k] - U[j][k]) * alpha));
+            const Wm = norm([0, 1, 2].map((k) => W[j][k] + (W[j + 1][k] - W[j][k]) * alpha));
+            const ang = twRad * f;
+            const Nm = norm(add(mul(Um, Math.cos(ang)), mul(Wm, Math.sin(ang))));
+            const Vm = norm(cross(Tm, Nm));
+            const wm = profAt(inset, Pm, Tm, Vm, Nm);
+            if (!wm) throw new Error('Querschnitt zu klein');
+            secWires.push(wm);
+          }
+          return R.loft(secWires, { ruled: false });
+        } catch (_3) {
+          // Fallback unten wirft verständliche Fehlermeldung
+        } finally {
+          for (const w of secWires) safeDelete(w);
+        }
+      }
+      throw new Error('Die Verdrehung klappt für diesen Pfad und Querschnitt nicht – wähle einen kleineren Winkel oder ein schmaleres Profil.');
+    };
+    try {
+      let shape = doTwisted(0);
+      if (wall > 0 && p.shape !== 'sketch') {
+        const cutter = doTwisted(wall);
+        if (!cutter) { safeDelete(shape); throw new Error('Die Wand ist dicker als das halbe Rohr.'); }
+        try {
+          const res = shape.cut(cutter);
+          safeDelete(shape); shape = res;
+        } finally {
+          safeDelete(cutter);
+        }
+      }
+      return shape;
+    } finally {
+      safeDelete(aux.wire);
+    }
+  }
+
   // Querschnitt entlang eines offenen Pfads (Sweep): Rohr, Kabelkanal, Leiste
   function buildSweep(p) {
     let spine, P0, T, N;
@@ -2013,11 +2190,13 @@ export function createKernel(R, oc) {
       if (pts.length < 2) throw new Error('Der Pfad im Raum braucht mindestens zwei verschiedene Punkte.');
       const bz = Array.isArray(p.path3d.segs) ? p.path3d.segs : null;
       if (p.path3d.smooth !== false && pts.length >= 3 && bz && bz.length) {
-        spine = R.assembleWire(bz.map((g) => R.makeBezierCurve([g.a, g.c1, g.c2, g.b])));
+        const ce = bz.map((g) => R.makeBezierCurve([g.a, g.c1, g.c2, g.b]));
+        try { spine = R.assembleWire(ce); } finally { ce.forEach(safeDelete); }
         T = norm(sub(bz[0].c1, bz[0].a));
       } else {
         const ed = []; for (let i = 1; i < pts.length; i++) ed.push(R.makeLine(pts[i - 1], pts[i]));
-        spine = R.assembleWire(ed); T = norm(sub(pts[1], pts[0]));
+        try { spine = R.assembleWire(ed); } finally { ed.forEach(safeDelete); }
+        T = norm(sub(pts[1], pts[0]));
       }
       P0 = pts[0];
       const up = Math.abs(T[2]) < 0.99 ? [0, 0, 1] : [1, 0, 0], d = T[0] * up[0] + T[1] * up[1] + T[2] * up[2];
@@ -2026,33 +2205,36 @@ export function createKernel(R, oc) {
       const segs = p.segs || [];
       if (!segs.length || !p.t0) throw new Error('Die Skizze hat keinen offenen Pfad. Zeichne eine Linie, einen Bogen oder eine Spline, die nicht geschlossen ist.');
       const M = planeMap(p.plane);
-      spine = R.assembleWire(segEdges(segs, M));
+      const ed = segEdges(segs, M);
+      try { spine = R.assembleWire(ed); } finally { ed.forEach(safeDelete); }
       P0 = M.P(segs[0].a); const O = M.P([0, 0]);
       T = norm(sub(M.P(p.t0), O)); N = M.n;
     }
     const V = [T[1] * N[2] - T[2] * N[1], T[2] * N[0] - T[0] * N[2], T[0] * N[1] - T[1] * N[0]];
-    const prof = (inset) => {
+    const profAt = (inset, P, tVec, vVec, nVec) => {
       if (p.shape === 'sketch' && p.prof) {
         if (inset > 0) return null;
-        const Y = [T[1] * V[2] - T[2] * V[1], T[2] * V[0] - T[0] * V[2], T[0] * V[1] - T[1] * V[0]];
-        const o = [0, 1, 2].map((k) => P0[k] - V[k] * p.prof.c[0] - Y[k] * p.prof.c[1]);
-        return loopWire(p.prof.outer, planeMap({ o, x: V, n: T }), true);
+        const Y = [tVec[1] * vVec[2] - tVec[2] * vVec[1], tVec[2] * vVec[0] - tVec[0] * vVec[2], tVec[0] * vVec[1] - tVec[1] * vVec[0]];
+        const o = [0, 1, 2].map((k) => P[k] - vVec[k] * p.prof.c[0] - Y[k] * p.prof.c[1]);
+        return loopWire(p.prof.outer, planeMap({ o, x: vVec, n: tVec }), true);
       }
       if (p.shape === 'rect') {
         const w = pos(p.w, 6) / 2 - inset, h = pos(p.h, 4) / 2 - inset;
         if (w <= 0 || h <= 0) return null;
-        const q = (a, b) => [0, 1, 2].map((k) => P0[k] + V[k] * a + N[k] * b);
+        const q = (a, b) => [0, 1, 2].map((k) => P[k] + vVec[k] * a + nVec[k] * b);
         const c = [q(-w, -h), q(w, -h), q(w, h), q(-w, h)];
-        return R.assembleWire([R.makeLine(c[0], c[1]), R.makeLine(c[1], c[2]), R.makeLine(c[2], c[3]), R.makeLine(c[3], c[0])]);
+        const ls = [R.makeLine(c[0], c[1]), R.makeLine(c[1], c[2]), R.makeLine(c[2], c[3]), R.makeLine(c[3], c[0])];
+        try { return R.assembleWire(ls); } finally { ls.forEach(safeDelete); }
       }
       const r = pos(p.d, 6) / 2 - inset; if (r <= 0) return null;
-      return R.assembleWire([R.makeCircle(r, P0, T)]);
+      const ce = R.makeCircle(r, P, tVec);
+      try { return R.assembleWire([ce]); } finally { safeDelete(ce); }
     };
-    const sweep = (w) => R.genericSweep(w, spine, { transitionMode: 'round', forceProfileSpineOthogonality: true });
-    let shape = sweep(prof(0));
-    const wall = num(p.wall, 0);
-    if (wall > 0 && p.shape !== 'sketch') { const inner = prof(wall); if (!inner) throw new Error('Die Wand ist dicker als das halbe Rohr.'); const cutter = sweep(inner); const res = shape.cut(cutter); safeDelete(shape); safeDelete(cutter); shape = res; }
-    return shape;
+    try {
+      return sweepProfileAlongSpine(spine, profAt, P0, T, N, V, p);
+    } finally {
+      safeDelete(spine);
+    }
   }
 
   // Feder / Spirale: zylindrische Schraubenlinie, Kegel-Feder oder flache Spirale mit Profil (Draht-Ø, Rechteck oder Skizze)
@@ -4995,36 +5177,32 @@ export function createKernel(R, oc) {
       const d = dot(T, up);
       const N = norm([up[0] - T[0] * d, up[1] - T[1] * d, up[2] - T[2] * d]);
       const V = cross(T, N);
-      const prof = (inset) => {
+      const profAt = (inset, P, tVec, vVec, nVec) => {
         if (p.shape === 'sketch' && p.prof) {
           if (inset > 0) return null;
-          const Y = cross(T, V);
-          const o = [0, 1, 2].map((k) => P0[k] - V[k] * p.prof.c[0] - Y[k] * p.prof.c[1]);
-          return loopWire(p.prof.outer, planeMap({ o, x: V, n: T }), true);
+          const Y = cross(tVec, vVec);
+          const o = [0, 1, 2].map((k) => P[k] - vVec[k] * p.prof.c[0] - Y[k] * p.prof.c[1]);
+          return loopWire(p.prof.outer, planeMap({ o, x: vVec, n: tVec }), true);
         }
         if (p.shape === 'rect') {
           const w = pos(p.w, 3) / 2 - inset, h = pos(p.h, 2) / 2 - inset;
           if (w <= 0 || h <= 0) return null;
-          const q = (a, b) => [0, 1, 2].map((k) => P0[k] + V[k] * a + N[k] * b);
+          const q = (a, b) => [0, 1, 2].map((k) => P[k] + vVec[k] * a + nVec[k] * b);
           const c = [q(-w, -h), q(w, -h), q(w, h), q(-w, h)];
-          return R.assembleWire([R.makeLine(c[0], c[1]), R.makeLine(c[1], c[2]), R.makeLine(c[2], c[3]), R.makeLine(c[3], c[0])]);
+          const ls = [R.makeLine(c[0], c[1]), R.makeLine(c[1], c[2]), R.makeLine(c[2], c[3]), R.makeLine(c[3], c[0])];
+          try { return R.assembleWire(ls); } finally { ls.forEach(safeDelete); }
         }
         const r = pos(p.d, 2) / 2 - inset;
         if (r <= 0) return null;
-        return R.assembleWire([R.makeCircle(r, P0, T)]);
+        const ce = R.makeCircle(r, P, tVec);
+        try { return R.assembleWire([ce]); } finally { safeDelete(ce); }
       };
-      const doSweep = (w) => R.genericSweep(w, spine, { transitionMode: 'round', forceProfileSpineOthogonality: true });
-      let sh = doSweep(prof(0));
-      const wall = num(p.wall, 0);
-      if (wall > 0 && p.shape !== 'sketch') {
-        const inner = prof(wall);
-        if (!inner) { safeDelete(sh); throw new Error('Die Wand ist dicker als das halbe Rohr.'); }
-        const cutter = doSweep(inner);
-        const res = sh.cut(cutter);
-        safeDelete(sh); safeDelete(cutter);
-        sh = res;
+      try {
+        solids.push(sweepProfileAlongSpine(spine, profAt, P0, T, N, V, p));
+      } catch (err) {
+        solids.forEach(safeDelete);
+        throw err;
       }
-      solids.push(sh);
     }
     if (!solids.length) throw new Error('Entlang Pfad: Die gewickelte Linie ließ sich nicht ziehen.');
     return solids.length === 1 ? solids[0] : fuseAll(solids, true);
