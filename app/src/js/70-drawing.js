@@ -6,6 +6,19 @@ const Drawing = (() => {
   const DETAIL_SCALES = [1, 2, 2.5, 3, 4, 5, 10, 20];
   const DETAIL_LETTERS = 'ZYXWVUTSRQPONMLKJIHGFEDCBA'.split('');
   const VIEW_NAMES = { front: 'Vorderansicht', top: 'Draufsicht', left: 'Seitenansicht' };
+  const DIM_ARROWS = [
+    { key: 'filled', label: 'Pfeil gefüllt' },
+    { key: 'open', label: 'Pfeil offen' },
+    { key: 'slash', label: 'Schrägstrich (45°)' },
+    { key: 'dot', label: 'Punkt' },
+  ];
+  const DIM_FONT_SIZES = [2.5, 3.5, 5, 7, 10];
+  const DEFAULT_DIM_STYLE = { arrow: 'filled', fontSize: 3.5, decimals: null };
+  const NOTE_TIPS = [
+    { key: 'auto', label: 'Automatisch (Kante = Pfeil, Fläche = Punkt)' },
+    { key: 'arrow', label: 'Pfeil' },
+    { key: 'dot', label: 'Punkt' },
+  ];
   const DIM_MODES = [
     { key: 'lin', label: 'Abstand', short: 'Abstand', hint: '<b>Maß:</b> Zwei Punkte anklicken, dann die Maßlinie platzieren. Ein Klick auf einen Kreis bemaßt den Durchmesser. <b>Esc</b> beendet.' },
     { key: 'chain', label: 'Kettenmaß', short: 'Kettenmaß', hint: '<b>Kettenmaß:</b> Startpunkt, zweiten Punkt und Maßlinie anklicken, dann weitere Punkte der Kette anklicken. <b>Enter</b> schließt die Kette ab, <b>Esc</b> beendet.' },
@@ -19,9 +32,25 @@ const Drawing = (() => {
   let proj = null, projRev = -1, loadingProjPromise = null, projId = 0;
   let svg = null, wrap = null, holder = null, tabsBar = null, zoom = 1, tool = null, toolState = null, selDim = null;
   let dimMode = 'lin';
-  let layout = null, dragDetail = null;
+  let layout = null, dragDetail = null, dragNote = null, dragView = null;
   let detailDraft = { scale: 2, label: 'Z' };
+  let noteDraft = { tip: 'auto', text: '' };
   let centersListOpen = false;
+  function normDimStyle(raw, tpl = null) {
+    const t = (tpl && tpl.dimStyle) || DEFAULT_DIM_STYLE;
+    const rawArrow = raw && raw.arrow;
+    const arrow = DIM_ARROWS.some((a) => a.key === rawArrow) ? rawArrow : (DIM_ARROWS.some((a) => a.key === t.arrow) ? t.arrow : DEFAULT_DIM_STYLE.arrow);
+    const rawFs = raw && raw.fontSize != null ? Number(raw.fontSize) : Number(t.fontSize);
+    const fontSize = Number.isFinite(rawFs) ? Math.round(clamp(rawFs, 1.5, 14) * 100) / 100 : DEFAULT_DIM_STYLE.fontSize;
+    const rawDec = (raw && 'decimals' in raw) ? raw.decimals : t.decimals;
+    const decimals = (rawDec === null || rawDec === undefined || rawDec === '' || rawDec === 'auto')
+      ? null
+      : (Number.isFinite(Number(rawDec)) ? clamp(Math.round(Number(rawDec)), 0, 4) : null);
+    return { arrow, fontSize, decimals };
+  }
+  function sheetDimStyle(sh = dwg()) {
+    return normDimStyle(sh && sh.dimStyle);
+  }
   function defaultAutoDims() {
     return [
       { id: uid('d'), auto: 'width', view: 'front' },
@@ -46,6 +75,9 @@ const Drawing = (() => {
       free: opts.free || [],
       details: opts.details ? opts.details.map((x) => ({ ...x, c: x.c ? [...x.c] : [0, 0], pos: x.pos ? [...x.pos] : null })) : [],
       sections: Array.isArray(opts.sections) ? opts.sections : [],
+      dimStyle: normDimStyle(opts.dimStyle, tpl),
+      notes: Array.isArray(opts.notes) ? opts.notes.map((n) => ({ ...n, anchor: n.anchor ? [...n.anchor] : [0, 0], elbow: n.elbow ? [...n.elbow] : [14, -10] })) : [],
+      viewPos: opts.viewPos && typeof opts.viewPos === 'object' ? JSON.parse(JSON.stringify(opts.viewPos)) : {},
       title: {
         titel: t0.titel || '',
         nummer: t0.nummer || '',
@@ -72,6 +104,9 @@ const Drawing = (() => {
       free: raw && Array.isArray(raw.free) ? raw.free : undefined,
       details: raw && Array.isArray(raw.details) ? raw.details : [],
       sections: raw && Array.isArray(raw.sections) ? raw.sections : undefined,
+      dimStyle: raw && raw.dimStyle && typeof raw.dimStyle === 'object' ? raw.dimStyle : undefined,
+      notes: raw && Array.isArray(raw.notes) ? raw.notes : undefined,
+      viewPos: raw && raw.viewPos && typeof raw.viewPos === 'object' ? raw.viewPos : undefined,
     });
     if (raw && raw.title && typeof raw.title === 'object') {
       Object.assign(s.title, raw.title);
@@ -101,6 +136,9 @@ const Drawing = (() => {
       const cur = d.drawing.sheets[i];
       if (cur && !Array.isArray(cur.sections)) cur.sections = [];
       if (cur && !Array.isArray(cur.hiddenCenters)) cur.hiddenCenters = [];
+      if (cur && !Array.isArray(cur.notes)) cur.notes = [];
+      if (cur && (!cur.viewPos || typeof cur.viewPos !== 'object')) cur.viewPos = {};
+      if (cur) cur.dimStyle = normDimStyle(cur.dimStyle);
       if (!cur || !cur.id || !SHEETS[cur.sheet] || !cur.views || !Array.isArray(cur.dims) || !Array.isArray(cur.free) || !cur.title || !cur.name) {
         d.drawing.sheets[i] = normalizeSheet(cur, `Blatt ${i + 1}`);
       } else if (!Array.isArray(cur.details)) {
@@ -131,7 +169,8 @@ const Drawing = (() => {
     if (!st.sheets.some((x) => x.id === id) || st.active === id) return;
     st.active = id;
     selDim = null;
-    toolState = (tool === 'dim' || tool === 'detail' || tool === 'section') ? { stage: 0 } : tool ? {} : null;
+    dragNote = null; dragView = null;
+    toolState = (tool === 'dim' || tool === 'detail' || tool === 'section' || tool === 'note') ? { stage: 0 } : tool ? {} : null;
     fitZoom(true);
     refresh();
     Panels.renderRight();
@@ -146,7 +185,8 @@ const Drawing = (() => {
       st.active = ns.id;
     });
     selDim = null;
-    toolState = (tool === 'dim' || tool === 'detail' || tool === 'section') ? { stage: 0 } : tool ? {} : null;
+    dragNote = null; dragView = null;
+    toolState = (tool === 'dim' || tool === 'detail' || tool === 'section' || tool === 'note') ? { stage: 0 } : tool ? {} : null;
     fitZoom(true);
     refresh();
     Panels.renderRight();
@@ -184,6 +224,17 @@ const Drawing = (() => {
       return parts.join('|');
     });
     clone.free = (clone.free || []).map((x) => ({ ...x, id: uid('f') }));
+    clone.dimStyle = normDimStyle(src.dimStyle);
+    clone.notes = (clone.notes || []).map((n) => {
+      let view = detMap.get(n.view) || n.view;
+      if (view && view.startsWith('sec_') && secMap.has(view.slice(4))) view = 'sec_' + secMap.get(view.slice(4));
+      return { ...n, id: uid('ln'), view, anchor: n.anchor ? [...n.anchor] : [0, 0], elbow: n.elbow ? [...n.elbow] : [14, -10] };
+    });
+    const nextVP = {};
+    for (const [k, v] of Object.entries(clone.viewPos || {})) {
+      if (Array.isArray(v) && v.length >= 2) nextVP[k] = [Number(v[0]) || 0, Number(v[1]) || 0];
+    }
+    clone.viewPos = nextVP;
     if (clone.title) clone.title.blatt = '';
     App.change('Blatt dupliziert', () => {
       const st2 = dwgState();
@@ -254,7 +305,7 @@ const Drawing = (() => {
     renderTabs();
     refresh();
   }
-  function close() { window.removeEventListener('pointerup', onUp); tool = null; toolState = null; dragDetail = null; const el = $('#sheet'); if (el) el.innerHTML = ''; svg = null; wrap = null; holder = null; tabsBar = null; }
+  function close() { window.removeEventListener('pointerup', onUp); tool = null; toolState = null; dragDetail = null; dragNote = null; dragView = null; const el = $('#sheet'); if (el) el.innerHTML = ''; svg = null; wrap = null; holder = null; tabsBar = null; }
   function renderTabs() {
     if (!tabsBar) return;
     const list = sheets();
@@ -833,6 +884,7 @@ const Drawing = (() => {
       const d = dwg();
       d.details = (d.details || []).filter((x) => x.id !== id);
       d.dims = d.dims.filter((x) => x.view !== id);
+      d.notes = (d.notes || []).filter((x) => x.view !== id);
       d.hiddenCenters = (d.hiddenCenters || []).filter((cid) => !cid.startsWith('ctr|' + id + '|'));
     });
     if (selDim === id) selDim = null;
@@ -1042,7 +1094,9 @@ const Drawing = (() => {
     for (const { sec, geo } of secGeos) {
       const vw = geo.w * s, vh = geo.h * s;
       let px = null, py = null;
-      if (Array.isArray(sec.pos) && sec.pos.length >= 2) {
+      if (dragView && dragView.kind === 'section' && dragView.secId === sec.id && dragView.curPos) {
+        px = dragView.curPos[0]; py = dragView.curPos[1];
+      } else if (Array.isArray(sec.pos) && sec.pos.length >= 2) {
         px = sec.pos[0]; py = sec.pos[1];
       } else {
         const pv = views[sec.parent];
@@ -1136,6 +1190,16 @@ const Drawing = (() => {
         views = layoutSheet(sh, s, G, secGeos, area).views;
       }
     }
+    const vp = sh.viewPos || {};
+    for (const name of ['front', 'top', 'left', 'iso']) {
+      const v = views[name];
+      if (!v) continue;
+      const off = (dragView && dragView.kind === 'main' && dragView.name === name && dragView.curOff) ? dragView.curOff : vp[name];
+      if (Array.isArray(off) && off.length >= 2) {
+        v.ox += Number(off[0]) || 0;
+        v.oy += Number(off[1]) || 0;
+      }
+    }
     // Detailansichten platzieren
     if (Array.isArray(sh.details) && sh.details.length) {
       const occupied = [[frame.x + frame.w - tb.w - 4, frame.y + frame.h - tb.h - 4, tb.w + 4, tb.h + 4]];
@@ -1165,8 +1229,20 @@ const Drawing = (() => {
   const toView = (v, P) => [(P[0] - v.ox) / v.s, (v.oy - P[1]) / v.s];
 
   // ---------- Bemaßung ----------
+  function setDimStyle(patch = {}) {
+    let next = null;
+    App.change('Maß-Stil geändert', () => {
+      const s = dwg();
+      s.dimStyle = normDimStyle({ ...sheetDimStyle(s), ...patch });
+      next = s.dimStyle;
+    });
+    render();
+    Panels.renderRight();
+    return next;
+  }
   function autoDimList(sh = dwg(), lay = layout) {
     const all = [];
+    const st = sheetDimStyle(sh);
     for (const dim of sh.dims) {
       if (!dim.auto) { all.push(dim); continue; }
       const out = [];
@@ -1192,7 +1268,7 @@ const Drawing = (() => {
           const ang = [45, 135, 225, 315].sort((p, q) => angD(p, away) - angD(q, away)).find((a) => !taken.includes(a)) ?? 45;
           taken.push(ang);
           const mt = (v.geo.threads || []).find((th) => th.type === 'end' && Math.hypot(th.c[0] - best.c[0], th.c[1] - best.c[1]) < 0.25 && Math.abs(th.r - best.r) < 0.35);
-          out.push({ ...dim, id: dim.id + '_' + Math.round(best.r * 200), type: 'dia', c: best.c, r: best.r, ang, count: g.length, ...(mt ? { threadLabel: `${mt.size} × ${fmtDim(mt.length)}` } : {}) });
+          out.push({ ...dim, id: dim.id + '_' + Math.round(best.r * 200), type: 'dia', c: best.c, r: best.r, ang, count: g.length, ...(mt ? { threadLabel: `${mt.size} × ${fmtDim(mt.length, st)}` } : {}) });
         }
         // Rundungen: gleiche Radien zusammenfassen („4× R5“). Nur deutliche Bögen – Zahnköpfe und Ähnliches bleiben weg.
         const ag = new Map();
@@ -1210,12 +1286,13 @@ const Drawing = (() => {
     }
     return all;
   }
-  function drawSpanDim(lines, texts, P1, P2, val, id, outerTail = true) {
-    const TXT = 3.5, AR = 3;
+  function drawSpanDim(lines, texts, P1, P2, val, id, outerTail = true, st = sheetDimStyle()) {
+    const TXT = st.fontSize, AR = clamp(TXT * 0.85, 2, 7), aStyle = st.arrow;
     lines.push({ pts: [P1, P2], cls: 'dim', id });
     const L = Math.hypot(P2[0] - P1[0], P2[1] - P1[1]);
-    const inside = L > AR * 2.6;
-    arrowHead(lines, P1, P2, AR, inside, id); arrowHead(lines, P2, P1, AR, inside, id);
+    const inside = (aStyle === 'slash' || aStyle === 'dot') ? true : L > AR * 2.6;
+    arrowHead(lines, P1, P2, AR, inside, id, null, aStyle);
+    arrowHead(lines, P2, P1, AR, inside, id, null, aStyle);
     if (!inside && outerTail) {
       const ux = (P2[0] - P1[0]) / (L || 1), uy = (P2[1] - P1[1]) / (L || 1);
       lines.push({ pts: [[P1[0] - ux * AR * 2.4, P1[1] - uy * AR * 2.4], P1], cls: 'dim', id }, { pts: [P2, [P2[0] + ux * AR * 2.4, P2[1] + uy * AR * 2.4]], cls: 'dim', id });
@@ -1225,12 +1302,14 @@ const Drawing = (() => {
     let ang = (Math.atan2(P2[1] - P1[1], P2[0] - P1[0]) * 180) / Math.PI;
     if (ang >= 89.99) ang -= 180; if (ang < -90.01) ang += 180;
     const r = (ang * Math.PI) / 180;
-    const tx = mx + Math.sin(r) * 1.2, ty = my - Math.cos(r) * 1.2;
-    texts.push({ x: tx, y: ty, t: fmtDim(val), size: TXT, rot: ang, anchor: 'middle', id, cls: 'dimtext' });
+    const gap = Math.max(1.2, TXT * 0.34);
+    const tx = mx + Math.sin(r) * gap, ty = my - Math.cos(r) * gap;
+    texts.push({ x: tx, y: ty, t: fmtDim(val, st), size: TXT, rot: ang, anchor: 'middle', id, cls: 'dimtext' });
   }
-  function dimSVG(dim, lines, texts, lay = layout) {
+  function dimSVG(dim, lines, texts, lay = layout, sh = dwg()) {
     const v = lay.views[dim.view]; if (!v) return;
-    const TXT = 3.5, AR = 3, EXT = 2, GAPX = 1;
+    const st = sheetDimStyle(sh);
+    const TXT = st.fontSize, AR = clamp(TXT * 0.85, 2, 7), EXT = Math.max(2, TXT * 0.55), GAPX = 1, TGAP = Math.max(1.2, TXT * 0.34), aStyle = st.arrow;
     if (dim.type === 'lin') {
       const A = toSheet(v, dim.a), B = toSheet(v, dim.b);
       let val, P1, P2, E1s, E2s;
@@ -1251,7 +1330,7 @@ const Drawing = (() => {
         E1s = [[A[0] + nx * sg * GAPX, A[1] + ny * sg * GAPX], [P1[0] + nx * sg * EXT, P1[1] + ny * sg * EXT]]; E2s = [[B[0] + nx * sg * GAPX, B[1] + ny * sg * GAPX], [P2[0] + nx * sg * EXT, P2[1] + ny * sg * EXT]];
       }
       lines.push({ pts: E1s, cls: 'dim', id: dim.id }, { pts: E2s, cls: 'dim', id: dim.id });
-      drawSpanDim(lines, texts, P1, P2, val, dim.id, true);
+      drawSpanDim(lines, texts, P1, P2, val, dim.id, true, st);
     } else if (dim.type === 'dia' || dim.type === 'rad') {
       const C = toSheet(v, dim.c); const R = dim.r * v.s; const ang = ((dim.ang ?? 45) * Math.PI) / 180;
       const ux = Math.cos(ang), uy = -Math.sin(ang);
@@ -1263,24 +1342,31 @@ const Drawing = (() => {
       const tEx = Math.min(tx, ty);
       const lead = tEx > 0 && tEx < 24 ? Math.max(5, tEx) : 7;
       const out = [P[0] + ux * lead, P[1] + uy * lead];
-      const label = (dim.count > 1 ? dim.count + '× ' : '') + (dim.threadLabel ? dim.threadLabel : (dim.type === 'dia' ? 'Ø' : 'R') + fmtDim(dim.type === 'dia' ? dim.r * 2 : dim.r));
+      const label = (dim.count > 1 ? dim.count + '× ' : '') + (dim.threadLabel ? dim.threadLabel : (dim.type === 'dia' ? 'Ø' : 'R') + fmtDim(dim.type === 'dia' ? dim.r * 2 : dim.r, st));
       const tl = textW(label, TXT) * 0.92 + 2;
       const tail = [out[0] + (ux >= 0 ? tl : -tl), out[1]];
       if (dim.type === 'dia') {
         const Q = [C[0] - ux * R, C[1] - uy * R];
         if (dim.partial) {
           lines.push({ pts: [C, P], cls: 'dim', id: dim.id });
-          arrowHead(lines, P, R >= AR * 1.3 ? C : out, AR, true, dim.id);
-        } else if (2 * R >= AR * 2.6) { lines.push({ pts: [Q, P], cls: 'dim', id: dim.id }); arrowHead(lines, Q, P, AR, true, dim.id); arrowHead(lines, P, Q, AR, true, dim.id); }
-        else {
+          arrowHead(lines, P, R >= AR * 1.3 ? C : out, AR, true, dim.id, null, aStyle);
+        } else if (2 * R >= AR * 2.6 || aStyle === 'slash' || aStyle === 'dot') {
+          lines.push({ pts: [Q, P], cls: 'dim', id: dim.id });
+          arrowHead(lines, Q, P, AR, true, dim.id, null, aStyle);
+          arrowHead(lines, P, Q, AR, true, dim.id, null, aStyle);
+        } else {
           // kleine Kreise: Pfeile von außen
           const Q2 = [Q[0] - ux * AR * 2.2, Q[1] - uy * AR * 2.2];
-          lines.push({ pts: [Q2, P], cls: 'dim', id: dim.id }); arrowHead(lines, Q, Q2, AR, true, dim.id); arrowHead(lines, P, out, AR, true, dim.id);
+          lines.push({ pts: [Q2, P], cls: 'dim', id: dim.id });
+          arrowHead(lines, Q, Q2, AR, true, dim.id, null, aStyle);
+          arrowHead(lines, P, out, AR, true, dim.id, null, aStyle);
         }
-      } else if (R >= AR * 1.3) { lines.push({ pts: [C, P], cls: 'dim', id: dim.id }); arrowHead(lines, P, C, AR, true, dim.id); }
-      else arrowHead(lines, P, out, AR, true, dim.id);
+      } else if (R >= AR * 1.3) {
+        lines.push({ pts: [C, P], cls: 'dim', id: dim.id });
+        arrowHead(lines, P, C, AR, true, dim.id, null, aStyle);
+      } else arrowHead(lines, P, out, AR, true, dim.id, null, aStyle);
       lines.push({ pts: [P, out, tail], cls: 'dim', id: dim.id });
-      texts.push({ x: (out[0] + tail[0]) / 2, y: out[1] - 1.2, t: label, size: TXT, rot: 0, anchor: 'middle', id: dim.id, cls: 'dimtext' });
+      texts.push({ x: (out[0] + tail[0]) / 2, y: out[1] - TGAP, t: label, size: TXT, rot: 0, anchor: 'middle', id: dim.id, cls: 'dimtext' });
     } else if (dim.type === 'chamfer') {
       const P = toSheet(v, dim.p);
       const ux = dim.dir[0], uy = -dim.dir[1];
@@ -1290,13 +1376,13 @@ const Drawing = (() => {
       const tEx = Math.min(tx, ty);
       const lead = tEx > 0 && tEx < 24 ? Math.max(6, tEx) : 8;
       const out = [P[0] + ux * lead, P[1] + uy * lead];
-      const angTxt = Math.abs(dim.ang - 45) < 0.1 ? '45°' : fmtAngleU(dim.ang);
-      const label = `${fmtDim(dim.dist)}×${angTxt}`;
+      const angTxt = Math.abs(dim.ang - 45) < 0.1 && st.decimals == null ? '45°' : fmtDimAngle(dim.ang, st);
+      const label = `${fmtDim(dim.dist, st)}×${angTxt}`;
       const tl = textW(label, TXT) * 0.92 + 2;
       const tail = [out[0] + (ux >= 0 ? tl : -tl), out[1]];
-      arrowHead(lines, P, out, AR, true, dim.id);
+      arrowHead(lines, P, out, AR, true, dim.id, null, aStyle);
       lines.push({ pts: [P, out, tail], cls: 'dim', id: dim.id });
-      texts.push({ x: (out[0] + tail[0]) / 2, y: out[1] - 1.2, t: label, size: TXT, rot: 0, anchor: 'middle', id: dim.id, cls: 'dimtext' });
+      texts.push({ x: (out[0] + tail[0]) / 2, y: out[1] - TGAP, t: label, size: TXT, rot: 0, anchor: 'middle', id: dim.id, cls: 'dimtext' });
     } else if (dim.type === 'ang') {
       const VC = toSheet(v, dim.v), R = Math.max(3, dim.r * v.s), rModel = R / v.s;
       const a0 = dim.a0, a1 = dim.a1;
@@ -1322,11 +1408,11 @@ const Drawing = (() => {
       const nA1 = nA0 + span;
       const aPts = arcPts(dim.v, rModel, a0, a1).map((q) => toSheet(v, q));
       lines.push({ pts: aPts, arc: { c: VC, r: R, a: [nA0, nA1 <= TWO_PI ? nA1 : nA1 - TWO_PI] }, cls: 'dim', id: dim.id });
-      const inside = span * R > AR * 2.6;
+      const inside = (aStyle === 'slash' || aStyle === 'dot') ? true : span * R > AR * 2.6;
       const from0 = [P0[0] - Math.sin(a0) * AR, P0[1] - Math.cos(a0) * AR];
       const from1 = [P1[0] + Math.sin(a1) * AR, P1[1] + Math.cos(a1) * AR];
-      arrowHead(lines, P0, from0, AR, inside, dim.id);
-      arrowHead(lines, P1, from1, AR, inside, dim.id);
+      arrowHead(lines, P0, from0, AR, inside, dim.id, null, aStyle);
+      arrowHead(lines, P1, from1, AR, inside, dim.id, null, aStyle);
       if (!inside) {
         const extA = (AR * 2.4) / R;
         lines.push(
@@ -1335,10 +1421,11 @@ const Drawing = (() => {
         );
       }
       const deg = (span * 180) / Math.PI;
-      const label = Math.abs(deg - Math.round(deg)) < 0.05 ? `${Math.round(deg)}°` : fmtAngleU(deg);
+      const label = fmtDimAngle(deg, st);
       const am = (a0 + a1) * 0.5;
-      const tx = VC[0] + Math.cos(am) * (R + 3.2);
-      const ty = VC[1] - Math.sin(am) * (R + 3.2) + 1.2;
+      const radOut = R + Math.max(3.2, TXT * 0.95);
+      const tx = VC[0] + Math.cos(am) * radOut;
+      const ty = VC[1] - Math.sin(am) * radOut + TXT * 0.34;
       texts.push({ x: tx, y: ty, t: label, size: TXT, rot: 0, anchor: 'middle', id: dim.id, cls: 'dimtext' });
     } else if (dim.type === 'chain') {
       const pts = [...(dim.pts || [])];
@@ -1353,7 +1440,7 @@ const Drawing = (() => {
         }
         for (let i = 0; i < SP.length - 1; i++) {
           const val = Math.abs(pts[i + 1][0] - pts[i][0]);
-          drawSpanDim(lines, texts, [SP[i][0], yl], [SP[i + 1][0], yl], val, dim.id, i === 0 || i === SP.length - 2);
+          drawSpanDim(lines, texts, [SP[i][0], yl], [SP[i + 1][0], yl], val, dim.id, i === 0 || i === SP.length - 2, st);
         }
       } else {
         pts.sort((p, q) => p[1] - q[1]);
@@ -1365,11 +1452,11 @@ const Drawing = (() => {
         }
         for (let i = 0; i < SP.length - 1; i++) {
           const val = Math.abs(pts[i + 1][1] - pts[i][1]);
-          drawSpanDim(lines, texts, [xl, SP[i][1]], [xl, SP[i + 1][1]], val, dim.id, i === 0 || i === SP.length - 2);
+          drawSpanDim(lines, texts, [xl, SP[i][1]], [xl, SP[i + 1][1]], val, dim.id, i === 0 || i === SP.length - 2, st);
         }
       }
     } else if (dim.type === 'base') {
-      const STEP_SHEET = 8;
+      const STEP_SHEET = Math.max(8, TXT * 2.3);
       const basePt = dim.base;
       const pts = [...(dim.pts || [])];
       if (!basePt || !pts.length) return;
@@ -1385,7 +1472,7 @@ const Drawing = (() => {
           const yli = yl0 + i * outSign * STEP_SHEET;
           const sgn = Math.sign(yli - P[1]) || outSign;
           lines.push({ pts: [[P[0], P[1] + sgn * GAPX], [P[0], yli + sgn * EXT]], cls: 'dim', id: dim.id });
-          drawSpanDim(lines, texts, [B0[0], yli], [P[0], yli], Math.abs(pts[i][0] - basePt[0]), dim.id, true);
+          drawSpanDim(lines, texts, [B0[0], yli], [P[0], yli], Math.abs(pts[i][0] - basePt[0]), dim.id, true, st);
         }
       } else {
         pts.sort((p, q) => Math.abs(p[1] - basePt[1]) - Math.abs(q[1] - basePt[1]));
@@ -1398,18 +1485,45 @@ const Drawing = (() => {
           const xli = xl0 + i * outSign * STEP_SHEET;
           const sgn = Math.sign(xli - P[0]) || outSign;
           lines.push({ pts: [[P[0] + sgn * GAPX, P[1]], [xli + sgn * EXT, P[1]]], cls: 'dim', id: dim.id });
-          drawSpanDim(lines, texts, [xli, B0[1]], [xli, P[1]], Math.abs(pts[i][1] - basePt[1]), dim.id, true);
+          drawSpanDim(lines, texts, [xli, B0[1]], [xli, P[1]], Math.abs(pts[i][1] - basePt[1]), dim.id, true, st);
         }
       }
     }
   }
-  function fmtDim(v) { return Units.fmtLen(v, 2); }
-  function arrowHead(lines, tip, from, len, inside, id, secId) {
+  function fmtDim(v, st = sheetDimStyle()) {
+    if (typeof v !== 'number' || !isFinite(v)) return '–';
+    const dec = (st && st.decimals != null) ? st.decimals : FMT.dec;
+    return fmtFixed(Units.fromMM(v), dec);
+  }
+  function fmtDimAngle(deg, st = sheetDimStyle()) {
+    if (st && st.decimals != null) return fmtFixed(deg, st.decimals) + '°';
+    return Math.abs(deg - Math.round(deg)) < 0.05 ? `${Math.round(deg)}°` : fmtAngleU(deg);
+  }
+  function arrowHead(lines, tip, from, len, inside, id, secId, style = 'filled', clsOverride = null, view = null) {
     const dx = from[0] - tip[0], dy = from[1] - tip[1]; const L = Math.hypot(dx, dy) || 1; let ux = dx / L, uy = dy / L;
-    if (!inside) { ux = -ux; uy = -uy; }
+    if (!inside && (style === 'filled' || style === 'open')) { ux = -ux; uy = -uy; }
+    const extra = { id, ...(secId ? { secId } : {}), ...(view ? { view } : {}) };
+    if (style === 'open') {
+      const w = len * 0.32;
+      const b = [tip[0] + ux * len, tip[1] + uy * len];
+      lines.push({ pts: [[b[0] - uy * w, b[1] + ux * w], tip, [b[0] + uy * w, b[1] - ux * w]], cls: clsOverride || 'arrow-open', ...extra });
+      return;
+    }
+    if (style === 'slash') {
+      const cu = (ux > 1e-6 || (Math.abs(ux) <= 1e-6 && uy >= 0)) ? ux : -ux;
+      const cv = (ux > 1e-6 || (Math.abs(ux) <= 1e-6 && uy >= 0)) ? uy : -uy;
+      const sx = (cu + cv) * Math.SQRT1_2, sy = (-cu + cv) * Math.SQRT1_2;
+      const h = len * 0.55;
+      lines.push({ pts: [[tip[0] - sx * h, tip[1] - sy * h], [tip[0] + sx * h, tip[1] + sy * h]], cls: clsOverride || 'arrow-slash', ...extra });
+      return;
+    }
+    if (style === 'dot') {
+      lines.push({ circle: [tip[0], tip[1], Math.max(0.55, len * 0.24)], cls: clsOverride || 'arrow-dot', ...extra });
+      return;
+    }
     const w = len * 0.28;
     const b = [tip[0] + ux * len, tip[1] + uy * len];
-    lines.push({ poly: [tip, [b[0] - uy * w, b[1] + ux * w], [b[0] + uy * w, b[1] - ux * w]], cls: 'arrow', id, ...(secId ? { secId } : {}) });
+    lines.push({ poly: [tip, [b[0] - uy * w, b[1] + ux * w], [b[0] + uy * w, b[1] - ux * w]], cls: clsOverride || 'arrow', ...extra });
   }
   // ---------- Schraffur & Schnittlinie ----------
   function hatchStepSheet(s, geo) {
@@ -1496,7 +1610,7 @@ const Drawing = (() => {
     for (const [EP, outU] of [[E1, -1], [E2, 1]]) {
       const tail = [EP[0] - lookSheet[0] * shaft, EP[1] - lookSheet[1] * shaft];
       lines.push({ pts: [tail, EP], cls: 'dim', id: sec.id, secId: sec.id });
-      arrowHead(lines, EP, tail, 3.2, true, sec.id, sec.id);
+      arrowHead(lines, EP, tail, 3.2, true, sec.id, sec.id, 'filled');
       const lx = tail[0] - lookSheet[0] * 1.2 + ux * outU * 3.2;
       const ly = tail[1] - lookSheet[1] * 1.2 + uy * outU * 3.2 + 1.5;
       texts.push({ x: lx, y: ly, t: sec.label, size: 4.5, anchor: 'middle', id: sec.id, secId: sec.id, cls: 'cutlabel' });
@@ -1504,9 +1618,43 @@ const Drawing = (() => {
   }
 
   // ---------- Zeichnen ----------
+  function drawLeaderNote(note, lines, texts, lay = layout, sh = dwg()) {
+    const st = sheetDimStyle(sh);
+    let A;
+    if (note.view) {
+      const v = lay.views[note.view];
+      if (!v) return;
+      A = toSheet(v, note.anchor);
+    } else {
+      A = [note.anchor[0], note.anchor[1]];
+    }
+    const elb = (dragNote && dragNote.id === note.id && dragNote.curElbow) ? dragNote.curElbow : (note.elbow || [14, -10]);
+    const E = [A[0] + elb[0], A[1] + elb[1]];
+    const TXT = st.fontSize, TGAP = Math.max(1.2, TXT * 0.34);
+    const tLines = String(note.text || '').split(/\r?\n/).filter((x, i, a) => x.length || a.length === 1);
+    const dir = E[0] >= A[0] ? 1 : -1;
+    const maxW = Math.max(...tLines.map((s) => textW(s, TXT)), 6);
+    const tailLen = Math.max(8, maxW + 2.4);
+    const T = [E[0] + dir * tailLen, E[1]];
+    const tipKind = note.tip === 'dot' ? 'dot' : 'arrow';
+    lines.push({ pts: [A, E, T], cls: 'leader', id: note.id, view: note.view || undefined, noteTip: tipKind, anchorPt: A });
+    if (tipKind === 'dot') {
+      lines.push({ circle: [A[0], A[1], Math.max(0.75, TXT * 0.24)], cls: 'leader-dot', id: note.id, view: note.view || undefined, anchorPt: A });
+    } else {
+      arrowHead(lines, A, E, clamp(TXT * 0.85, 2.2, 6.5), true, note.id, null, 'filled', 'leader-arrow', note.view || undefined);
+    }
+    const lh = TXT * 1.25;
+    const tx = dir >= 0 ? E[0] + 1.2 : E[0] - 1.2;
+    const anchor = dir >= 0 ? 'start' : 'end';
+    for (let i = 0; i < tLines.length; i++) {
+      const y = E[1] - TGAP - (tLines.length - 1 - i) * lh;
+      texts.push({ x: tx, y, t: tLines[i], size: TXT, rot: 0, anchor, id: note.id, view: note.view || undefined, cls: 'leadertext' });
+    }
+  }
   function buildSheetContent(sh, idx, total) {
     const lay = computeLayout(sh);
     const { W, H, frame } = lay;
+    const st = sheetDimStyle(sh);
     const lines = [], texts = [];
     // Rahmen
     lines.push({ rect: [0, 0, W, H], cls: 'paper' });
@@ -1562,11 +1710,12 @@ const Drawing = (() => {
             const mx = (A[0] + B[0]) / 2, my = (A[1] + B[1]) / 2;
             const P0 = [mx + px * ro, my + py * ro];
             const P1 = [P0[0] + px * 5 + 3, P0[1] + py * 5 - 4];
-            const lbl = `${th.size} × ${fmtDim(th.length)}`;
-            const tw = textW(lbl, 3.2) + 2;
+            const lbl = `${th.size} × ${fmtDim(th.length, st)}`;
+            const thSz = Math.max(2.5, st.fontSize * 0.92);
+            const tw = textW(lbl, thSz) + 2;
             const P2 = [P1[0] + tw, P1[1]];
             lines.push({ pts: [P0, P1, P2], cls: 'dim', view: name });
-            texts.push({ x: (P1[0] + P2[0]) / 2, y: P1[1] - 1, t: lbl, size: 3.2, rot: 0, anchor: 'middle', cls: 'dimtext', view: name });
+            texts.push({ x: (P1[0] + P2[0]) / 2, y: P1[1] - 1, t: lbl, size: thSz, rot: 0, anchor: 'middle', cls: 'dimtext', view: name });
           }
         }
       }
@@ -1597,7 +1746,9 @@ const Drawing = (() => {
       if (pv) drawSectionLine(pv, sec, lines, texts);
     }
     // Bemaßungen
-    for (const dim of autoDimList(sh, lay)) if (lay.views[dim.view] && !lay.views[dim.view].noDims) dimSVG(dim, lines, texts, lay);
+    for (const dim of autoDimList(sh, lay)) if (lay.views[dim.view] && !lay.views[dim.view].noDims) dimSVG(dim, lines, texts, lay, sh);
+    // Notizen mit Hinweislinie
+    for (const note of sh.notes || []) drawLeaderNote(note, lines, texts, lay, sh);
     // Schriftfeld
     titleBlock(sh, lay, idx, total, lines, texts);
     return { layout: lay, lines, texts };
@@ -1611,6 +1762,7 @@ const Drawing = (() => {
     if (tool === 'dim' && toolState) previewDim(cur.lines, cur.texts);
     if (tool === 'detail' && toolState) previewDetail(cur.lines, cur.texts);
     if (tool === 'section' && toolState) previewSection(cur.lines, cur.texts);
+    if (tool === 'note' && toolState) previewNote(cur.lines, cur.texts);
     buildSVG(cur.lines, cur.texts);
     const sv = document.getElementById('dw-scale-val'); if (sv) sv.textContent = scaleText(layout.s);
     renderTabs();
@@ -1675,7 +1827,7 @@ const Drawing = (() => {
     s.setAttribute('xmlns', NS);
     s.setAttribute('viewBox', `0 0 ${W} ${H}`); s.setAttribute('width', W * zoom * 3.2); s.setAttribute('height', H * zoom * 3.2);
     const style = document.createElementNS(NS, 'style');
-    style.textContent = `.paper{fill:#fff;stroke:none}.frame{fill:none;stroke:#111;stroke-width:.7}.thin{fill:none;stroke:#111;stroke-width:.25}.vis{fill:none;stroke:#111;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round}.hid{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:2.4 1.2}.ctr{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:5 1.2 .6 1.2}.ctr[data-id]{cursor:pointer}.ctr.sel{stroke:#0c7a70;stroke-width:.45}.hatch{fill:none;stroke:#111;stroke-width:.22}.cutline{fill:none;stroke:#111;stroke-width:.35;stroke-dasharray:7 1.2 .7 1.2}.cutend{fill:none;stroke:#111;stroke-width:.7;stroke-linecap:square}.dim{fill:none;stroke:#111;stroke-width:.25}.arrow{fill:#111;stroke:none}.detail{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.detail-border{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:3 1.5;cursor:grab}.detail.sel,.detail-border.sel{stroke:#0c7a70;stroke-width:.45}.sel .dim,.dim.sel,.cutline.sel,.cutend.sel,.hatch.sel{stroke:#0c7a70}.dim.sel{stroke-width:.4}.arrow.sel{fill:#0c7a70}text{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif;fill:#111}text.lab{fill:#555}text.note{fill:#888}text.cutlabel,text.viewlabel{font-weight:700}text.sel{fill:#0c7a70}text.detail-lbl{font-weight:600;cursor:pointer}.prev{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:1.5 1}.snap{fill:none;stroke:#0c7a70;stroke-width:.4}`;
+    style.textContent = `.paper{fill:#fff;stroke:none}.frame{fill:none;stroke:#111;stroke-width:.7}.thin{fill:none;stroke:#111;stroke-width:.25}.vis{fill:none;stroke:#111;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round}.hid{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:2.4 1.2}.ctr{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:5 1.2 .6 1.2}.ctr[data-id]{cursor:pointer}.ctr.sel{stroke:#0c7a70;stroke-width:.45}.hatch{fill:none;stroke:#111;stroke-width:.22}.cutline{fill:none;stroke:#111;stroke-width:.35;stroke-dasharray:7 1.2 .7 1.2}.cutend{fill:none;stroke:#111;stroke-width:.7;stroke-linecap:square}.dim{fill:none;stroke:#111;stroke-width:.25}.arrow{fill:#111;stroke:none}.arrow-open{fill:none;stroke:#111;stroke-width:.3;stroke-linecap:round;stroke-linejoin:round}.arrow-slash{fill:none;stroke:#111;stroke-width:.45;stroke-linecap:round}.arrow-dot,.leader-dot,.leader-arrow{fill:#111;stroke:none}.leader{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.detail{fill:none;stroke:#111;stroke-width:.25;cursor:pointer}.detail-border{fill:none;stroke:#111;stroke-width:.25;stroke-dasharray:3 1.5;cursor:grab}.detail.sel,.detail-border.sel{stroke:#0c7a70;stroke-width:.45}.sel .dim,.dim.sel,.cutline.sel,.cutend.sel,.hatch.sel,.arrow-open.sel,.arrow-slash.sel{stroke:#0c7a70}.dim.sel,.leader.sel{stroke:#0c7a70;stroke-width:.4}.arrow.sel,.arrow-dot.sel,.leader-dot.sel,.leader-arrow.sel{fill:#0c7a70}text{font-family:"Barlow Semi Condensed","Barlow",Arial,sans-serif;fill:#111}text.lab{fill:#555}text.note{fill:#888}text.cutlabel,text.viewlabel{font-weight:700}text.sel{fill:#0c7a70}text.detail-lbl{font-weight:600;cursor:pointer}text.leadertext{cursor:grab}.prev{fill:none;stroke:#0c7a70;stroke-width:.35;stroke-dasharray:1.5 1}.snap{fill:none;stroke:#0c7a70;stroke-width:.4}`;
     s.append(style);
     const g = document.createElementNS(NS, 'g'); s.append(g);
     const f = (n) => (Math.round(n * 1000) / 1000).toString();
@@ -1692,6 +1844,8 @@ const Drawing = (() => {
       if (l.ctrType) el.dataset.ctr = l.ctrType;
       if (l.secId) el.dataset.sec = l.secId;
       if (l.capIdx != null) el.dataset.cap = String(l.capIdx);
+      if (l.noteTip) el.dataset.tipKind = l.noteTip;
+      if (l.anchorPt) { el.dataset.ax = f(l.anchorPt[0]); el.dataset.ay = f(l.anchorPt[1]); }
       g.append(el);
     }
     for (const t of texts) {
@@ -1964,11 +2118,299 @@ const Drawing = (() => {
     }
     return best ? [best[0], best[1]] : q;
   }
+  function movableViewAt(P) {
+    if (!layout || !layout.views) return null;
+    const names = [...Object.keys(layout.views).filter((k) => k.startsWith('sec_')), 'front', 'top', 'left', 'iso'];
+    for (const name of names) {
+      const v = layout.views[name];
+      if (!v || !v.geo || !v.geo.box) continue;
+      const b = v.geo.box;
+      const A = toSheet(v, [b[0], b[3]]), B = toSheet(v, [b[2], b[1]]);
+      if (P[0] >= A[0] - 4 && P[0] <= B[0] + 4 && P[1] >= A[1] - 4 && P[1] <= B[1] + 4) return name;
+    }
+    return null;
+  }
+  function moveView(viewName, dx, dy) {
+    const numDx = Number(dx) || 0, numDy = Number(dy) || 0;
+    if (!numDx && !numDy) return false;
+    const lay = layout || computeLayout(dwg());
+    if (['front', 'top', 'left', 'iso'].includes(viewName)) {
+      if (!lay.views[viewName]) return false;
+      App.change('Ansicht verschoben', () => {
+        const d = dwg();
+        if (!d.viewPos || typeof d.viewPos !== 'object') d.viewPos = {};
+        const cur = Array.isArray(d.viewPos[viewName]) ? d.viewPos[viewName] : [0, 0];
+        d.viewPos[viewName] = [Number(cur[0] || 0) + numDx, Number(cur[1] || 0) + numDy];
+      });
+      render(); Panels.renderRight();
+      return true;
+    }
+    if (String(viewName).startsWith('sec_')) {
+      const secId = String(viewName).slice(4);
+      const sec = (dwg().sections || []).find((x) => x.id === secId);
+      const v = lay.views[viewName];
+      if (!sec || !v) return false;
+      const b = v.geo.box;
+      const curPx = v.ox + b[0] * v.s, curPy = v.oy - b[3] * v.s;
+      App.change('Ansicht verschoben', () => {
+        const s = (dwg().sections || []).find((x) => x.id === secId);
+        if (s) s.pos = [curPx + numDx, curPy + numDy];
+      });
+      render(); Panels.renderRight();
+      return true;
+    }
+    const det = (dwg().details || []).find((x) => x.id === viewName);
+    const dv = lay.views[viewName];
+    if (det && dv && dv.sheetCenter) {
+      return updateDetail(det.id, { pos: [dv.sheetCenter[0] + numDx, dv.sheetCenter[1] + numDy] });
+    }
+    return false;
+  }
+  function setViewOffset(viewName, off) {
+    if (!['front', 'top', 'left', 'iso'].includes(viewName) || !Array.isArray(off) || off.length < 2) return false;
+    App.change('Ansicht verschoben', () => {
+      const d = dwg();
+      if (!d.viewPos || typeof d.viewPos !== 'object') d.viewPos = {};
+      d.viewPos[viewName] = [Number(off[0]) || 0, Number(off[1]) || 0];
+    });
+    render(); Panels.renderRight();
+    return true;
+  }
+  function resetViewPos(viewName = null) {
+    const d = dwg();
+    const hasMain = d.viewPos && Object.keys(d.viewPos).length > 0;
+    const hasSec = (d.sections || []).some((s) => Array.isArray(s.pos));
+    if (!hasMain && !hasSec && !viewName) return false;
+    App.change('Ansichten zurückgesetzt', () => {
+      const sh = dwg();
+      if (viewName) {
+        if (sh.viewPos) delete sh.viewPos[viewName];
+        if (String(viewName).startsWith('sec_')) {
+          const s = (sh.sections || []).find((x) => x.id === String(viewName).slice(4));
+          if (s) s.pos = null;
+        }
+      } else {
+        sh.viewPos = {};
+        for (const s of sh.sections || []) s.pos = null;
+      }
+    });
+    render(); Panels.renderRight();
+    return true;
+  }
+  // ---------- Hinweislinien / Notizen (ZE-11) ----------
+  function leaderViewAt(P) {
+    if (!layout || !layout.views) return null;
+    for (const [name, v] of Object.entries(layout.views)) {
+      if (v.detail && Math.hypot(P[0] - v.sheetCenter[0], P[1] - v.sheetCenter[1]) <= v.sheetR + 6) return name;
+    }
+    let best = null;
+    for (const [name, v] of Object.entries(layout.views)) {
+      if (name === 'free' || v.detail || !v.geo || !v.geo.box) continue;
+      const b = v.geo.box;
+      const A = toSheet(v, [b[0], b[3]]), B = toSheet(v, [b[2], b[1]]);
+      if (P[0] >= A[0] - 6 && P[0] <= B[0] + 6 && P[1] >= A[1] - 6 && P[1] <= B[1] + 6) best = name;
+    }
+    return best;
+  }
+  function pickLeaderTarget(P) {
+    const name = leaderViewAt(P);
+    if (!name || !layout || !layout.views[name]) {
+      return { view: null, anchor: [P[0], P[1]], sheetPt: [P[0], P[1]], targetKind: 'free', autoTip: 'arrow' };
+    }
+    const v = layout.views[name];
+    const tol = Math.max(2.5, 3.8 / zoom);
+    let bestPt = null, bd = tol;
+    for (const seg of straightSegsOf(v, false)) {
+      const A = toSheet(v, seg.a), B = toSheet(v, seg.b);
+      const dx = B[0] - A[0], dy = B[1] - A[1], L2 = dx * dx + dy * dy;
+      if (L2 < 1e-6) continue;
+      const t = clamp(((P[0] - A[0]) * dx + (P[1] - A[1]) * dy) / L2, 0, 1);
+      const d = Math.hypot(P[0] - (A[0] + t * dx), P[1] - (A[1] + t * dy));
+      if (d < bd) { bd = d; bestPt = [seg.a[0] + t * (seg.b[0] - seg.a[0]), seg.a[1] + t * (seg.b[1] - seg.a[1])]; }
+    }
+    const q = toView(v, P);
+    for (const c of v.geo.circles || []) {
+      const dist = Math.hypot(q[0] - c.c[0], q[1] - c.c[1]);
+      const d = Math.abs(dist - c.r) * v.s;
+      if (d >= bd) continue;
+      let ang = dist > 1e-6 ? angOf(c.c, q) : 0;
+      if (c.arc) {
+        let a = ang;
+        if (a < c.arc[0] - 0.08) a += TWO_PI;
+        if (a > c.arc[1] + 0.08) continue;
+      }
+      bd = d;
+      bestPt = [c.c[0] + Math.cos(ang) * c.r, c.c[1] + Math.sin(ang) * c.r];
+    }
+    for (const p of v.geo.polys || []) {
+      if (p.c || !p.pts || p.pts.length <= 2) continue;
+      for (let i = 0; i < p.pts.length - 1; i++) {
+        const a = p.pts[i], b = p.pts[i + 1];
+        const A = toSheet(v, a), B = toSheet(v, b);
+        const dx = B[0] - A[0], dy = B[1] - A[1], L2 = dx * dx + dy * dy;
+        if (L2 < 1e-6) continue;
+        const t = clamp(((P[0] - A[0]) * dx + (P[1] - A[1]) * dy) / L2, 0, 1);
+        const d = Math.hypot(P[0] - (A[0] + t * dx), P[1] - (A[1] + t * dy));
+        if (d < bd) { bd = d; bestPt = [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])]; }
+      }
+    }
+    if (bestPt) {
+      return { view: name, anchor: bestPt, sheetPt: toSheet(v, bestPt), targetKind: 'edge', autoTip: 'arrow' };
+    }
+    const bx = v.geo.box;
+    const inBox = q[0] >= bx[0] - 1e-4 && q[0] <= bx[2] + 1e-4 && q[1] >= bx[1] - 1e-4 && q[1] <= bx[3] + 1e-4;
+    const inDet = !v.detail || Math.hypot(q[0] - v.detail.c[0], q[1] - v.detail.c[1]) <= v.detail.r + 1e-4;
+    if (inBox && inDet) {
+      return { view: name, anchor: [q[0], q[1]], sheetPt: [P[0], P[1]], targetKind: 'face', autoTip: 'dot' };
+    }
+    return { view: null, anchor: [P[0], P[1]], sheetPt: [P[0], P[1]], targetKind: 'free', autoTip: 'arrow' };
+  }
+  function notes(sh = dwg()) { return (sh.notes || []).slice(); }
+  function addNote(opts = {}) {
+    const text = String(opts.text ?? '').trim();
+    if (!text) return null;
+    const tip = opts.tip === 'dot' ? 'dot' : 'arrow';
+    const note = {
+      id: uid('ln'),
+      view: opts.view || null,
+      anchor: Array.isArray(opts.anchor) ? [Number(opts.anchor[0]) || 0, Number(opts.anchor[1]) || 0] : [0, 0],
+      elbow: Array.isArray(opts.elbow) ? [Number(opts.elbow[0]) || 0, Number(opts.elbow[1]) || 0] : [14, -10],
+      tip,
+      text,
+      targetKind: opts.targetKind || (opts.view ? (tip === 'dot' ? 'face' : 'edge') : 'free'),
+    };
+    App.change('Hinweislinie hinzugefügt', () => {
+      const d = dwg();
+      if (!Array.isArray(d.notes)) d.notes = [];
+      d.notes.push(note);
+    });
+    selDim = note.id;
+    render(); Panels.renderRight();
+    return note;
+  }
+  function updateNote(id, patch = {}) {
+    let changed = false;
+    App.change('Hinweislinie geändert', () => {
+      const n = (dwg().notes || []).find((x) => x.id === id);
+      if (!n) return;
+      if (patch.text != null) {
+        const clean = String(patch.text).trim();
+        if (clean && clean !== n.text) { n.text = clean; changed = true; }
+      }
+      if (patch.tip === 'arrow' || patch.tip === 'dot') {
+        if (n.tip !== patch.tip) { n.tip = patch.tip; changed = true; }
+      }
+      if (Array.isArray(patch.elbow) && patch.elbow.length >= 2) {
+        n.elbow = [Number(patch.elbow[0]) || 0, Number(patch.elbow[1]) || 0];
+        changed = true;
+      }
+      if (Array.isArray(patch.anchor) && patch.anchor.length >= 2) {
+        n.anchor = [Number(patch.anchor[0]) || 0, Number(patch.anchor[1]) || 0];
+        changed = true;
+      }
+    });
+    if (changed) { render(); Panels.renderRight(); }
+    return changed;
+  }
+  function removeNote(id) {
+    const cur = (dwg().notes || []).find((x) => x.id === id);
+    if (!cur) return false;
+    App.change('Hinweislinie gelöscht', () => {
+      const d = dwg();
+      d.notes = (d.notes || []).filter((x) => x.id !== id);
+    });
+    if (selDim === id) selDim = null;
+    render(); Panels.renderRight();
+    return true;
+  }
+  async function editNoteText(id) {
+    const n = (dwg().notes || []).find((x) => x.id === id);
+    if (!n) return;
+    const t = await UI.prompt('Notiz ändern', 'Text', n.text, 'Ändern');
+    if (t != null && t.trim()) updateNote(id, { text: t });
+  }
+  async function noteClick(P) {
+    const st = toolState || { stage: 0 };
+    if (st.stage === 0) {
+      const target = pickLeaderTarget(P);
+      const tip = noteDraft.tip === 'auto' ? target.autoTip : noteDraft.tip;
+      toolState = { stage: 1, target, tip, P };
+      render();
+      return;
+    }
+    const target = st.target;
+    const v = target.view && layout && layout.views[target.view];
+    const A = v ? toSheet(v, target.anchor) : target.anchor;
+    let elbow = [P[0] - A[0], P[1] - A[1]];
+    if (Math.hypot(elbow[0], elbow[1]) < 3) elbow = [14, -10];
+    const tip = noteDraft.tip === 'auto' ? target.autoTip : noteDraft.tip;
+    let txt = String(noteDraft.text || '').trim();
+    toolState = { stage: 0 };
+    if (!txt) {
+      render();
+      const entered = await UI.prompt('Notiz mit Hinweislinie', 'Text', '', 'Einfügen');
+      txt = entered ? entered.trim() : '';
+    }
+    if (txt) {
+      addNote({ view: target.view, anchor: target.anchor, elbow, tip, text: txt, targetKind: target.targetKind });
+    } else {
+      render();
+    }
+  }
+  function previewNote(lines, texts) {
+    const st = toolState;
+    if (!st) return;
+    if (st.stage === 0 && st.target && st.target.sheetPt) {
+      const S = st.target.sheetPt;
+      const r = st.target.targetKind === 'face' ? Math.max(0.9, 1.1 / zoom) : (1.3 / zoom) * 1.5;
+      lines.push({ circle: [S[0], S[1], r], cls: st.target.targetKind === 'face' ? 'leader-dot' : 'snap' });
+      return;
+    }
+    if (st.stage === 1 && st.target && st.P) {
+      const v = st.target.view && layout && layout.views[st.target.view];
+      const A = v ? toSheet(v, st.target.anchor) : st.target.anchor;
+      let elbow = [st.P[0] - A[0], st.P[1] - A[1]];
+      if (Math.hypot(elbow[0], elbow[1]) < 3) elbow = [14, -10];
+      const tip = noteDraft.tip === 'auto' ? st.target.autoTip : noteDraft.tip;
+      drawLeaderNote({
+        id: '__noteprev',
+        view: st.target.view,
+        anchor: st.target.anchor,
+        elbow,
+        tip,
+        text: String(noteDraft.text || '').trim() || 'Notiz',
+      }, lines, texts, layout, dwg());
+    }
+  }
   function onMove(e) {
     if (dragDetail) {
       const P = sheetPt(e);
       dragDetail.curPos = [dragDetail.origPos[0] + (P[0] - dragDetail.startP[0]), dragDetail.origPos[1] + (P[1] - dragDetail.startP[1])];
       if (Math.hypot(P[0] - dragDetail.startP[0], P[1] - dragDetail.startP[1]) > 0.5) dragDetail.moved = true;
+      render();
+      return;
+    }
+    if (dragNote) {
+      const P = sheetPt(e);
+      dragNote.curElbow = [dragNote.origElbow[0] + (P[0] - dragNote.startP[0]), dragNote.origElbow[1] + (P[1] - dragNote.startP[1])];
+      if (Math.hypot(P[0] - dragNote.startP[0], P[1] - dragNote.startP[1]) > 0.5) dragNote.moved = true;
+      render();
+      return;
+    }
+    if (dragView) {
+      const P = sheetPt(e);
+      const dx = P[0] - dragView.startP[0], dy = P[1] - dragView.startP[1];
+      if (Math.hypot(dx, dy) > 1.2) dragView.moved = true;
+      if (dragView.kind === 'main') dragView.curOff = [dragView.origOff[0] + dx, dragView.origOff[1] + dy];
+      else if (dragView.kind === 'section') dragView.curPos = [dragView.origPos[0] + dx, dragView.origPos[1] + dy];
+      if (dragView.moved) render();
+      return;
+    }
+    if (tool === 'note') {
+      const P = sheetPt(e);
+      toolState = toolState || { stage: 0 };
+      toolState.P = P;
+      if (toolState.stage === 0) toolState.target = pickLeaderTarget(P);
       render();
       return;
     }
@@ -2053,11 +2495,25 @@ const Drawing = (() => {
     if (tool === 'dim') { dimClick(P, e); return; }
     if (tool === 'detail') { detailClick(P); return; }
     if (tool === 'section') { sectionDown(P, e); return; }
+    if (tool === 'note') { noteClick(P); return; }
     if (tool && tool.startsWith('free-')) { freeDown(e); return; }
     const t = e.target.closest && e.target.closest('[data-id]');
     selDim = t ? t.dataset.id : centerAt(P);
     if (selDim && layout && layout.views[selDim] && layout.views[selDim].detail) {
       dragDetail = { id: selDim, startP: P, origPos: [...layout.views[selDim].sheetCenter], curPos: null, moved: false };
+    } else if (selDim && (dwg().notes || []).some((x) => x.id === selDim)) {
+      const noteObj = dwg().notes.find((x) => x.id === selDim);
+      if (e.detail === 2) { editNoteText(selDim); render(); Panels.renderRight(); return; }
+      dragNote = { id: selDim, startP: P, origElbow: [...(noteObj.elbow || [14, -10])], curElbow: null, moved: false };
+    } else if (!selDim) {
+      const mv = movableViewAt(P);
+      if (mv && String(mv).startsWith('sec_')) {
+        const v = layout.views[mv], b = v.geo.box, secId = mv.slice(4);
+        dragView = { kind: 'section', secId, startP: P, origPos: [v.ox + b[0] * v.s, v.oy - b[3] * v.s], curPos: null, moved: false };
+      } else if (mv && ['front', 'top', 'left', 'iso'].includes(mv)) {
+        const curOff = (dwg().viewPos && Array.isArray(dwg().viewPos[mv])) ? dwg().viewPos[mv] : [0, 0];
+        dragView = { kind: 'main', name: mv, startP: P, origOff: [Number(curOff[0]) || 0, Number(curOff[1]) || 0], curOff: null, moved: false };
+      }
     }
     if (t && e.detail === 2) editFreeText(selDim);
     render(); Panels.renderRight();
@@ -2067,6 +2523,27 @@ const Drawing = (() => {
       const d = dragDetail;
       dragDetail = null;
       if (d.moved && d.curPos) updateDetail(d.id, { pos: d.curPos });
+      return;
+    }
+    if (dragNote) {
+      const d = dragNote;
+      dragNote = null;
+      if (d.moved && d.curElbow) updateNote(d.id, { elbow: d.curElbow });
+      return;
+    }
+    if (dragView) {
+      const d = dragView;
+      dragView = null;
+      if (d.moved) {
+        if (d.kind === 'main' && d.curOff) setViewOffset(d.name, d.curOff);
+        else if (d.kind === 'section' && d.curPos) {
+          App.change('Ansicht verschoben', () => {
+            const s = (dwg().sections || []).find((x) => x.id === d.secId);
+            if (s) s.pos = [d.curPos[0], d.curPos[1]];
+          });
+          render(); Panels.renderRight();
+        }
+      }
       return;
     }
     if (!e || e.button !== 0 || tool !== 'section' || !toolState || toolState.stage !== 1 || !svg) return;
@@ -2213,6 +2690,7 @@ const Drawing = (() => {
       const d = dwg();
       d.sections = (d.sections || []).filter((x) => x.id !== id);
       d.dims = (d.dims || []).filter((x) => x.view !== 'sec_' + id);
+      d.notes = (d.notes || []).filter((x) => x.view !== 'sec_' + id);
       d.hiddenCenters = (d.hiddenCenters || []).filter((cid) => !cid.startsWith('ctr|sec_' + id + '|'));
     });
     if (selDim === id) selDim = null;
@@ -2432,6 +2910,7 @@ const Drawing = (() => {
     if (e.key.toLowerCase() === 'd' && !e.ctrlKey && !e.metaKey && !e.altKey) { setTool('dim'); return true; }
     if (e.key.toLowerCase() === 'z' && !e.ctrlKey && !e.metaKey && !e.altKey) { setTool('detail'); return true; }
     if (e.key.toLowerCase() === 's' && !e.ctrlKey && !e.metaKey && !e.altKey) { setTool('section'); return true; }
+    if (e.key.toLowerCase() === 'n' && !e.ctrlKey && !e.metaKey && !e.altKey) { setTool('note'); return true; }
     return false;
   }
   function viewLabel(vName, sh = dwg()) {
@@ -2525,11 +3004,13 @@ const Drawing = (() => {
     const id = selDim; if (!id) return;
     if (String(id).startsWith('ctr|')) { hideCenter(id); return; }
     if ((dwg().sections || []).some((x) => x.id === id)) { removeSection(id); return; }
+    if ((dwg().notes || []).some((x) => x.id === id)) { removeNote(id); return; }
     App.change('Gelöscht', () => {
       const d = dwg();
       if ((d.details || []).some((x) => x.id === id)) {
         d.details = (d.details || []).filter((x) => x.id !== id);
         d.dims = d.dims.filter((x) => x.view !== id);
+        d.notes = (d.notes || []).filter((x) => x.view !== id);
         d.hiddenCenters = (d.hiddenCenters || []).filter((cid) => !cid.startsWith('ctr|' + id + '|'));
         return;
       }
@@ -2567,21 +3048,22 @@ const Drawing = (() => {
     })));
   }
   function setTool(t) {
-    dragDetail = null;
+    dragDetail = null; dragNote = null; dragView = null;
     tool = t;
     if (t === 'dim') dimMode = 'lin';
     if (t === 'detail') {
       detailDraft = { scale: defaultDetailScale(), label: nextDetailLabel() };
       toolState = { stage: 0 };
     } else {
-      toolState = (t === 'dim' || t === 'section') ? { stage: 0 } : t ? {} : null;
+      toolState = (t === 'dim' || t === 'section' || t === 'note') ? { stage: 0 } : t ? {} : null;
     }
     if (svg) svg.style.cursor = t ? 'crosshair' : '';
     UI.hint(
       t === 'dim' ? dimHint(dimMode)
         : t === 'detail' ? '<b>Detailansicht:</b> Mitte des Kreises in einer Ansicht anklicken, Kreis aufziehen, dann die Detailansicht auf dem Blatt platzieren. <b>Esc</b> beendet.'
           : t === 'section' ? '<b>Schnittansicht:</b> Schnittlinie A–A durch eine Ansicht ziehen oder zwei Punkte anklicken (<b>Umschalt</b> = waagerecht/senkrecht, <b>Alt</b> = frei). <b>Esc</b> beendet.'
-            : t && t.startsWith('free-') ? HINTS2[t] : null
+            : t === 'note' ? '<b>Hinweislinie:</b> Kante (Pfeil) oder Fläche (Punkt) anklicken, dann die Textstelle wählen. <b>Esc</b> beendet.'
+              : t && t.startsWith('free-') ? HINTS2[t] : null
     );
     Panels.renderTools(); Panels.renderRight(); render();
   }
@@ -2741,6 +3223,9 @@ const Drawing = (() => {
       cutline: [0.35, [7, 1.2, 0.7, 1.2]],
       cutend: [0.7, null],
       dim: [0.25, null],
+      'arrow-open': [0.3, null],
+      'arrow-slash': [0.45, null],
+      leader: [0.25, null],
       detail: [0.25, null],
       'detail-border': [0.25, [3, 1.5]],
     };
@@ -2748,9 +3233,21 @@ const Drawing = (() => {
     const py = (y) => pf((H - y) * PT);
     for (const l of lines) {
       if (l.cls === 'paper' || l.cls === 'prev' || l.cls === 'snap') continue;
-      if (l.cls === 'arrow') {
+      if (l.cls === 'arrow' || l.cls === 'leader-arrow') {
         const [a, b, c] = l.poly;
         out.push(`0.067 g ${px(a[0])} ${py(a[1])} m ${px(b[0])} ${py(b[1])} l ${px(c[0])} ${py(c[1])} l h f`);
+        continue;
+      }
+      if ((l.cls === 'arrow-dot' || l.cls === 'leader-dot') && l.circle) {
+        const cx = l.circle[0] * PT, cy = (H - l.circle[1]) * PT, R = l.circle[2] * PT;
+        const k = 0.5522847498 * R;
+        out.push(
+          `0.067 g ${pf(cx + R)} ${pf(cy)} m`,
+          `${pf(cx + R)} ${pf(cy + k)} ${pf(cx + k)} ${pf(cy + R)} ${pf(cx)} ${pf(cy + R)} c`,
+          `${pf(cx - k)} ${pf(cy + R)} ${pf(cx - R)} ${pf(cy + k)} ${pf(cx - R)} ${pf(cy)} c`,
+          `${pf(cx - R)} ${pf(cy - k)} ${pf(cx - k)} ${pf(cy - R)} ${pf(cx)} ${pf(cy - R)} c`,
+          `${pf(cx + k)} ${pf(cy - R)} ${pf(cx + R)} ${pf(cy - k)} ${pf(cx + R)} ${pf(cy)} c f`
+        );
         continue;
       }
       const st = style[l.cls];
@@ -2788,7 +3285,7 @@ const Drawing = (() => {
       const gray = t.cls === 'lab' ? '0.333' : '0.067';
       const rad = -((t.rot || 0) * Math.PI) / 180;
       const c = Math.cos(rad), s = Math.sin(rad);
-      const dx = t.anchor === 'middle' ? -pdfTextW(raw, fs) / 2 : 0;
+      const dx = t.anchor === 'middle' ? -pdfTextW(raw, fs) / 2 : t.anchor === 'end' ? -pdfTextW(raw, fs) : 0;
       out.push(`${gray} g q ${pf(c)} ${pf(s)} ${pf(-s)} ${pf(c)} ${px(t.x)} ${py(t.y)} cm BT ${fnt} ${pf(fs)} Tf ${pf(dx)} 0 Td (${esc}) Tj ET Q`);
     }
     return out.join('\n') + '\n';
@@ -2872,7 +3369,7 @@ const Drawing = (() => {
     P(0, 'ENDTAB', 0, 'TABLE', 2, 'LAYER', 70, 7);
     for (const [n, lt, col] of [['SICHTBAR', 'CONTINUOUS', 7], ['VERDECKT', 'DASHED', 8], ['MITTELLINIE', 'CENTER', 1], ['SCHRAFFUR', 'CONTINUOUS', 8], ['SCHNITTLINIE', 'CENTER', 1], ['BEMASSUNG', 'CONTINUOUS', 3], ['RAHMEN', 'CONTINUOUS', 7]]) P(0, 'LAYER', 2, n, 70, 0, 62, col, 6, lt);
     P(0, 'ENDTAB', 0, 'ENDSEC', 0, 'SECTION', 2, 'ENTITIES');
-    const layer = { vis: 'SICHTBAR', hid: 'VERDECKT', ctr: 'MITTELLINIE', hatch: 'SCHRAFFUR', cutline: 'SCHNITTLINIE', cutend: 'SCHNITTLINIE', dim: 'BEMASSUNG', arrow: 'BEMASSUNG', detail: 'BEMASSUNG', 'detail-border': 'RAHMEN', frame: 'RAHMEN', thin: 'RAHMEN' };
+    const layer = { vis: 'SICHTBAR', hid: 'VERDECKT', ctr: 'MITTELLINIE', hatch: 'SCHRAFFUR', cutline: 'SCHNITTLINIE', cutend: 'SCHNITTLINIE', dim: 'BEMASSUNG', arrow: 'BEMASSUNG', 'arrow-open': 'BEMASSUNG', 'arrow-slash': 'BEMASSUNG', 'arrow-dot': 'BEMASSUNG', leader: 'BEMASSUNG', 'leader-arrow': 'BEMASSUNG', 'leader-dot': 'BEMASSUNG', detail: 'BEMASSUNG', 'detail-border': 'RAHMEN', frame: 'RAHMEN', thin: 'RAHMEN' };
     const Y = (y) => H - y;
     const line = (a, b, ly) => P(0, 'LINE', 8, ly, 10, a[0].toFixed(4), 20, Y(a[1]).toFixed(4), 30, 0, 11, b[0].toFixed(4), 21, Y(b[1]).toFixed(4), 31, 0);
     for (const l of lastLines) {
@@ -2892,7 +3389,7 @@ const Drawing = (() => {
         P(0, 'SEQEND', 8, ly);
       }
     }
-    for (const t of lastTexts) { if (t.cls === 'note') continue; const tLy = t.cls === 'dimtext' ? 'BEMASSUNG' : (t.cls === 'cutlabel' || t.cls === 'viewlabel') ? 'SCHNITTLINIE' : 'RAHMEN'; P(0, 'TEXT', 8, tLy, 10, t.x.toFixed(4), 20, Y(t.y).toFixed(4), 30, 0, 40, t.size.toFixed(3), 1, String(t.t).replace(/Ø/g, '%%c').replace(/°/g, '%%d'), 50, (-(t.rot || 0)).toFixed(3), ...(t.anchor === 'middle' ? [72, 1, 11, t.x.toFixed(4), 21, Y(t.y).toFixed(4), 31, 0] : [])); }
+    for (const t of lastTexts) { if (t.cls === 'note') continue; const tLy = (t.cls === 'dimtext' || t.cls === 'leadertext') ? 'BEMASSUNG' : (t.cls === 'cutlabel' || t.cls === 'viewlabel') ? 'SCHNITTLINIE' : 'RAHMEN'; const align = t.anchor === 'middle' ? [72, 1, 11, t.x.toFixed(4), 21, Y(t.y).toFixed(4), 31, 0] : t.anchor === 'end' ? [72, 2, 11, t.x.toFixed(4), 21, Y(t.y).toFixed(4), 31, 0] : []; P(0, 'TEXT', 8, tLy, 10, t.x.toFixed(4), 20, Y(t.y).toFixed(4), 30, 0, 40, t.size.toFixed(3), 1, String(t.t).replace(/Ø/g, '%%c').replace(/°/g, '%%d'), 50, (-(t.rot || 0)).toFixed(3), ...align); }
     P(0, 'ENDSEC', 0, 'EOF');
     const text = out.join('\r\n') + '\r\n';
     const bytes = new Uint8Array([...text].map((ch) => { const c = ch.charCodeAt(0); return c < 256 ? c : 63; }));
@@ -2919,7 +3416,13 @@ const Drawing = (() => {
     info.append(flds);
     const b = h('button', { type: 'button', class: 'btn', id: 'dw-sheet-btn', 'data-help': 'drawingFormat' }); b.innerHTML = icon('sheet') + 'Blatt & Ansichten'; b.onclick = (e) => sheetMenu(e.currentTarget);
     const bAdd = h('button', { type: 'button', class: 'btn', id: 'dw-panel-add', 'data-help': 'drawingSheets' }); bAdd.innerHTML = icon('plus') + 'Neues Blatt'; bAdd.onclick = () => addSheet();
-    info.append(h('div', { class: 'btn-row' }, b, bAdd)); w.append(info);
+    info.append(h('div', { class: 'btn-row' }, b, bAdd));
+    if (d.viewPos && Object.keys(d.viewPos).length) {
+      const bResetV = h('button', { type: 'button', class: 'btn', id: 'dw-reset-views', style: { marginTop: '6px' } }, 'Ansichten-Lage zurücksetzen');
+      bResetV.onclick = () => resetViewPos();
+      info.append(bResetV);
+    }
+    w.append(info);
     const dimSec = h('div', { class: 'section', id: 'dw-dims-sec', 'data-help': 'drawingDimTypes' }, h('div', { class: 'section-h' }, 'Bemaßung'));
     const dimGrid = h('div', { class: 'dw-dim-grid' });
     for (const m of DIM_MODES) {
@@ -2941,6 +3444,60 @@ const Drawing = (() => {
       dimSec.append(fin);
     }
     w.append(dimSec);
+    // Maß-Stil je Blatt (ZE-10)
+    const ds = sheetDimStyle(d);
+    const styleSec = h('div', { class: 'section', id: 'dw-dimstyle-sec', 'data-help': 'drawingDimStyle' }, h('div', { class: 'section-h' }, 'Maß-Stil'));
+    const fsList = DIM_FONT_SIZES.includes(ds.fontSize) ? DIM_FONT_SIZES : [...DIM_FONT_SIZES, ds.fontSize].sort((a, b) => a - b);
+    const decVal = ds.decimals == null ? 'auto' : String(ds.decimals);
+    const decOpts = [
+      ['auto', 'Wie Einstellung'],
+      ['0', '0 Stellen (12)'],
+      ['1', '1 Stelle (12,3)'],
+      ['2', '2 Stellen (12,35)'],
+      ['3', '3 Stellen (12,346)'],
+      ['4', '4 Stellen (12,3456)'],
+    ];
+    styleSec.append(
+      UI.selectField({ id: 'dw-style-arrow', label: 'Pfeilart', value: ds.arrow, options: DIM_ARROWS.map((a) => [a.key, a.label]), onChange: (v) => setDimStyle({ arrow: v }) }),
+      h('div', { class: 'fields' },
+        UI.selectField({ id: 'dw-style-size', label: 'Schriftgröße', value: String(ds.fontSize), options: fsList.map((s) => [String(s), fmtFixed(s, 1) + ' mm']), onChange: (v) => setDimStyle({ fontSize: +v || 3.5 }) }),
+        UI.selectField({ id: 'dw-style-dec', label: 'Nachkommastellen', value: decVal, options: decOpts, onChange: (v) => setDimStyle({ decimals: v === 'auto' ? null : +v }) }),
+      ),
+    );
+    w.append(styleSec);
+    // Hinweislinien / Notizen (ZE-11)
+    const noteSec = h('div', { class: 'section', id: 'dw-notes-sec', 'data-help': 'drawingLeader' }, h('div', { class: 'section-h' }, 'Hinweislinien'));
+    const bNote = h('button', { type: 'button', class: 'btn' + (tool === 'note' ? ' active' : ''), id: 'dw-add-note', 'data-help': 'drawingLeader' });
+    bNote.innerHTML = icon('noteText') + (tool === 'note' ? 'Hinweislinie aktiv' : 'Hinweislinie setzen');
+    bNote.onclick = () => tool_('note');
+    noteSec.append(bNote);
+    if (tool === 'note') {
+      const tipFld = UI.selectField({ id: 'dw-note-new-tip', label: 'Spitze', value: noteDraft.tip, options: NOTE_TIPS.map((x) => [x.key, x.label]), onChange: (v) => { noteDraft.tip = v; render(); } });
+      const txtFld = UI.textField({ id: 'dw-note-new-text', label: 'Text', value: noteDraft.text, live: true, placeholder: 'Leer = beim Absetzen fragen', onCommit: (v) => { noteDraft.text = v; render(); } });
+      noteSec.append(tipFld, txtFld);
+    }
+    const noteList = d.notes || [];
+    if (noteList.length) {
+      const nl = h('div', { class: 'mini-list', style: { marginTop: '6px' } });
+      for (const n of noteList) {
+        const row = h('div', {
+          class: 'mini-row note-row',
+          'data-note-id': n.id,
+          style: { cursor: 'pointer', padding: '4px 6px', borderRadius: '6px', background: selDim === n.id ? 'var(--accent-soft)' : '' },
+        });
+        const badge = h('b', { class: 'mono' }, n.tip === 'dot' ? '●' : '→');
+        const txt = h('span', { class: 'grow', style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, n.text.replace(/\s+/g, ' '));
+        const vw = h('span', { class: 'mono', style: { fontSize: '11px', color: 'var(--muted)' } }, n.view ? viewLabel(n.view, d) : 'Blatt');
+        const db = h('button', { type: 'button', class: 'btn danger note-del', style: { padding: '2px 6px', fontSize: '11.5px' }, 'data-tip': 'Hinweislinie löschen' });
+        db.innerHTML = icon('trash');
+        db.onclick = (e) => { e.stopPropagation(); removeNote(n.id); };
+        row.append(badge, txt, vw, db);
+        row.onclick = () => { selDim = n.id; render(); Panels.renderRight(); };
+        nl.append(row);
+      }
+      noteSec.append(nl);
+    }
+    w.append(noteSec);
     const secs = d.sections || [];
     const secBox = h('div', { class: 'section', id: 'dw-sections-sec' }, h('div', { class: 'section-h' }, 'Schnittansichten'));
     const bSec = h('button', { type: 'button', class: 'btn' + (tool === 'section' ? ' primary' : ''), id: 'dw-add-section', 'data-help': 'drawingSection' });
@@ -3047,8 +3604,9 @@ const Drawing = (() => {
       const selDet = detList.find((x) => x.id === selDim);
       const isSec = secs.some((x) => x.id === selDim);
       const selD = d.dims.find((x) => x.id === selDim);
+      const selNote = (d.notes || []).find((x) => x.id === selDim);
       const selCtr = String(selDim).startsWith('ctr|') ? findCenterById(selDim) : null;
-      const selSec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, selDet ? `Detail ${selDet.label}` : selCtr ? (selCtr.type === 'cross' ? 'Mittelkreuz' : 'Mittellinie') : 'Auswahl'));
+      const selSec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, selDet ? `Detail ${selDet.label}` : selNote ? 'Hinweislinie' : selCtr ? (selCtr.type === 'cross' ? 'Mittelkreuz' : 'Mittellinie') : 'Auswahl'));
       if (selDet) {
         const fDet = h('div', { class: 'fields' });
         const lFld = UI.textField({ id: 'dw-det-label', label: 'Buchstabe', value: selDet.label, onCommit: (v) => updateDetail(selDet.id, { label: v }) });
@@ -3058,6 +3616,20 @@ const Drawing = (() => {
         const rFld = UI.numField({ id: 'dw-det-r', label: 'Kreis-Radius', unit: 'len', value: selDet.r, min: 0.5, step: 1, onCommit: (v) => { if (v > 0.2) updateDetail(selDet.id, { r: v }); } });
         fDet.append(lFld, sFld);
         selSec.append(fDet, rFld);
+      }
+      if (selNote) {
+        const kindTxt = selNote.targetKind === 'edge' ? 'Kante' : selNote.targetKind === 'face' ? 'Fläche' : 'Frei';
+        selSec.append(h('div', { class: 'mini-list' }, h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, selNote.view ? viewLabel(selNote.view, d) : 'Frei auf dem Blatt'), h('b', null, kindTxt))));
+        selSec.append(UI.selectField({ id: 'dw-note-tip', label: 'Spitze', value: selNote.tip, options: [['arrow', 'Pfeil'], ['dot', 'Punkt']], onChange: (v) => updateNote(selNote.id, { tip: v }) }));
+        const ta = h('textarea', {
+          id: 'dw-note-text',
+          rows: '2',
+          style: { width: '100%', boxSizing: 'border-box', resize: 'vertical', padding: '6px 8px', border: '1px solid var(--line-strong)', borderRadius: '6px', background: 'var(--surface)', color: 'var(--ink)', fontFamily: 'var(--font)', fontSize: '12.5px' },
+        });
+        ta.value = selNote.text || '';
+        ta.addEventListener('keydown', (e) => e.stopPropagation());
+        ta.addEventListener('change', () => updateNote(selNote.id, { text: ta.value }));
+        selSec.append(h('div', { class: 'field' }, h('label', { for: 'dw-note-text' }, 'Notiz-Text'), ta));
       }
       if (selCtr) {
         selSec.append(h('div', { class: 'mini-list' }, h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, viewLabel(selCtr.view, d)), h('b', { class: 'mono' }, `Ø${fmtDim(selCtr.r * 2)}`))));
@@ -3085,7 +3657,7 @@ const Drawing = (() => {
       selSec.append(row);
       w.append(selSec);
     }
-    w.append(h('div', { class: 'hint-box', html: 'Die Ansichten stehen nach <b>Projektionsmethode 1</b>: Draufsicht unter der Vorderansicht, Seitenansicht von links rechts daneben. Mit <b>Schnittansicht (S)</b> ziehst du eine Schnittlinie A–A durch eine Ansicht, mit <b>Detailansicht (Z)</b> vergrößerst du einen Ausschnitt im eigenen Maßstab. Maß, Schnitt, Detail oder Mittellinie anklicken und <b>Entf</b> drücken zum Löschen bzw. Ausblenden.' }));
+    w.append(h('div', { class: 'hint-box', html: 'Die Ansichten stehen nach <b>Projektionsmethode 1</b>: Draufsicht unter der Vorderansicht, Seitenansicht von links rechts daneben (Ansichten lassen sich per Ziehen verschieben). Mit <b>Schnittansicht (S)</b> ziehst du eine Schnittlinie A–A durch eine Ansicht, mit <b>Detailansicht (Z)</b> vergrößerst du einen Ausschnitt im eigenen Maßstab, mit <b>Hinweislinie (N)</b> setzt du Notizen an Kanten oder Flächen. Maß, Schnitt, Detail, Hinweislinie oder Mittellinie anklicken und <b>Entf</b> drücken zum Löschen bzw. Ausblenden.' }));
     body.append(w);
   }
   function tool_(t) { setTool(tool === t ? null : t); }
@@ -3095,6 +3667,8 @@ const Drawing = (() => {
     open, close, refresh, sheetMenu, exportMenu, drawMenu, autoDims, tool: tool_, setDimMode, dimMenu, flipAngleDim, onKey, renderPanel,
     SHEETS, sheets, activeSheet: dwg, addSheet, selectSheet, renameSheet, removeSheet, duplicateSheet,
     details, addDetail, updateDetail, removeDetail, nextDetailLabel, DETAIL_SCALES,
+    DIM_ARROWS, DIM_FONT_SIZES, dimStyle: () => sheetDimStyle(), setDimStyle,
+    notes, addNote, updateNote, removeNote, moveView, resetViewPos,
     select: (id) => { selDim = id; render(); Panels.renderRight(); },
     get selectedId() { return selDim; },
     addSection, flipSection, removeSection, sections: () => (dwg().sections || []).slice(), waitReady, hatchStepSheet,

@@ -14007,6 +14007,249 @@ def t_a066_mittellinien(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a069_mass_stil_hinweislinie(p):
+    # 1. Quader mit Bohrung in Zeichnung öffnen -> Schriftgröße 5 & Stil je Blatt
+    p.empty()
+    p.ev("""
+      App.change('Quader mit Bohrung', d => {
+        d.items.push(Model.newItem('box', { w: 42.345, d: 30, h: 18.678 }, { name: 'Block' }));
+        const h = Model.newItem('cylinder', { d: 8, h: 22 }, { name: 'Bohrung', role: 'hole' });
+        h.t.z = -1;
+        d.items.push(h);
+      });
+    """)
+    warte_rechnen(p)
+
+    p.pg.click('#tab-drawing')
+    p.pg.wait_for_selector('#sheet .sheet-holder svg', timeout=15000)
+    p.wait(300)
+    p.ev("return Drawing.waitReady()")
+
+    def svg_pt(sx, sy):
+        return p.ev("""
+          const svg = document.querySelector('#sheet .sheet-holder svg');
+          const pt = svg.createSVGPoint(); pt.x = arg[0]; pt.y = arg[1];
+          const q = pt.matrixTransform(svg.getScreenCTM());
+          return [q.x, q.y];
+        """, [sx, sy])
+
+    before_fs = p.ev("""
+      const ts = [...document.querySelectorAll('#sheet .sheet-holder svg text.dimtext')];
+      return { n: ts.length, sizes: ts.map(e => Number(e.getAttribute('font-size'))) };
+    """)
+    p.pg.select_option('#dw-style-size', '5')
+    p.wait(150)
+    after_fs = p.ev("""
+      const ts = [...document.querySelectorAll('#sheet .sheet-holder svg text.dimtext')];
+      return { n: ts.length, sizes: ts.map(e => Number(e.getAttribute('font-size'))), texts: ts.map(e => e.textContent) };
+    """)
+
+    # Zweites Blatt mit eigener Schriftgröße 2.5 -> Blatt 1 bleibt bei 5
+    p.pg.click('#dw-panel-add')
+    p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    p.pg.select_option('#dw-style-size', '2.5')
+    p.wait(150)
+    fs_sheet2 = p.ev("return [...document.querySelectorAll('#sheet .sheet-holder svg text.dimtext')].map(e => Number(e.getAttribute('font-size')))")
+    p.pg.locator('#sheet-tabs .sheet-tab').first.click()
+    p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    fs_sheet1_back = p.ev("return [...document.querySelectorAll('#sheet .sheet-holder svg text.dimtext')].map(e => Number(e.getAttribute('font-size')))")
+
+    ok1 = (
+        before_fs['n'] >= 4 and all(abs(s - 3.5) < 1e-3 for s in before_fs['sizes'])
+        and after_fs['n'] >= 4 and all(abs(s - 5.0) < 1e-3 for s in after_fs['sizes'])
+        and all(abs(s - 2.5) < 1e-3 for s in fs_sheet2)
+        and all(abs(s - 5.0) < 1e-3 for s in fs_sheet1_back)
+    )
+
+    # 2. Pfeilarten (open, slash, dot, filled) & Nachkommastellen (0, 1, 3)
+    p.pg.select_option('#dw-style-arrow', 'open'); p.wait(120)
+    c_open = p.ev("return document.querySelectorAll('#sheet .sheet-holder svg polyline.arrow-open').length")
+    p.pg.select_option('#dw-style-arrow', 'slash'); p.wait(120)
+    c_slash = p.ev("return document.querySelectorAll('#sheet .sheet-holder svg polyline.arrow-slash').length")
+    p.pg.select_option('#dw-style-arrow', 'dot'); p.wait(120)
+    c_dot = p.ev("return document.querySelectorAll('#sheet .sheet-holder svg circle.arrow-dot').length")
+    p.pg.select_option('#dw-style-arrow', 'filled'); p.wait(120)
+    c_fill = p.ev("return document.querySelectorAll('#sheet .sheet-holder svg polygon.arrow').length")
+
+    p.pg.select_option('#dw-style-dec', '0'); p.wait(120)
+    t_dec0 = p.ev("return [...document.querySelectorAll('#sheet .sheet-holder svg text.dimtext')].map(e => e.textContent)")
+    p.pg.select_option('#dw-style-dec', '1'); p.wait(120)
+    t_dec1 = p.ev("return [...document.querySelectorAll('#sheet .sheet-holder svg text.dimtext')].map(e => e.textContent)")
+    p.pg.select_option('#dw-style-dec', '3'); p.wait(120)
+    t_dec3 = p.ev("return [...document.querySelectorAll('#sheet .sheet-holder svg text.dimtext')].map(e => e.textContent)")
+
+    ok2 = (
+        c_open >= 6 and c_slash >= 6 and c_dot >= 6 and c_fill >= 6
+        and '42' in t_dec0 and '19' in t_dec0
+        and '42,3' in t_dec1 and '18,7' in t_dec1
+        and '42,345' in t_dec3 and '18,678' in t_dec3
+    )
+
+    # 3. Notiz mit Hinweislinie an oberer Kante der Vorderansicht (Pfeil) & auf Fläche (Punkt)
+    front_geo = p.ev("""
+      const v = Drawing.layout.views.front, b = v.geo.box;
+      const ox = v.ox, oy = v.oy, s = v.s;
+      const topMid = [ox + ((b[0] + b[2]) * 0.5) * s, oy - b[3] * s];
+      const faceMid = [ox + ((b[0] + b[2]) * 0.28) * s, oy - ((b[1] + b[3]) * 0.52) * s];
+      return { topMid, faceMid };
+    """)
+    p.pg.click('#t-note')
+    p.wait(120)
+    p.pg.fill('#dw-note-new-text', 'Kante entgraten')
+    p.wait(80)
+    c1 = svg_pt(front_geo['topMid'][0], front_geo['topMid'][1])
+    p.pg.mouse.move(c1[0], c1[1]); p.wait(60)
+    p.pg.mouse.click(c1[0], c1[1]); p.wait(100)
+    c2 = svg_pt(front_geo['topMid'][0] + 18, front_geo['topMid'][1] - 12)
+    p.pg.mouse.move(c2[0], c2[1]); p.wait(60)
+    p.pg.mouse.click(c2[0], c2[1]); p.wait(160)
+
+    p.pg.fill('#dw-note-new-text', 'Fläche eloxieren')
+    p.wait(80)
+    f1 = svg_pt(front_geo['faceMid'][0], front_geo['faceMid'][1])
+    p.pg.mouse.move(f1[0], f1[1]); p.wait(60)
+    p.pg.mouse.click(f1[0], f1[1]); p.wait(100)
+    f2 = svg_pt(front_geo['faceMid'][0] - 20, front_geo['faceMid'][1] - 10)
+    p.pg.mouse.move(f2[0], f2[1]); p.wait(60)
+    p.pg.mouse.click(f2[0], f2[1]); p.wait(160)
+    p.pg.keyboard.press('Escape'); p.wait(100)
+
+    notes_after_add = p.ev("""
+      const ns = Drawing.notes();
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const arrows = [...svg.querySelectorAll('polygon.leader-arrow')].map(el => el.getAttribute('points').split(' ')[0].split(',').map(Number));
+      const dots = [...svg.querySelectorAll('circle.leader-dot')].map(el => [Number(el.getAttribute('cx')), Number(el.getAttribute('cy'))]);
+      const texts = [...svg.querySelectorAll('text.leadertext')].map(el => el.textContent);
+      return { ns, arrows, dots, texts };
+    """)
+    edge_note = next((n for n in notes_after_add['ns'] if n['text'] == 'Kante entgraten'), None)
+    face_note = next((n for n in notes_after_add['ns'] if n['text'] == 'Fläche eloxieren'), None)
+    tip0 = notes_after_add['arrows'][0] if notes_after_add['arrows'] else [0, 0]
+    d_edge0 = ((tip0[0] - front_geo['topMid'][0]) ** 2 + (tip0[1] - front_geo['topMid'][1]) ** 2) ** 0.5
+
+    # Erste Notiz auswählen, Text und Spitze im Panel ändern, dann Spitze zurück auf arrow
+    p.ev("Drawing.select(arg)", edge_note['id']); p.wait(100)
+    p.pg.fill('#dw-note-text', 'Fase 0,5')
+    p.pg.locator('#dw-note-text').dispatch_event('change')
+    p.wait(120)
+    p.pg.select_option('#dw-note-tip', 'dot'); p.wait(120)
+    after_edit_dot = p.ev("return document.querySelectorAll('#sheet .sheet-holder svg circle.leader-dot').length")
+    p.pg.select_option('#dw-note-tip', 'arrow'); p.wait(120)
+
+    ok3 = (
+        edge_note is not None and edge_note['tip'] == 'arrow' and edge_note['targetKind'] == 'edge'
+        and face_note is not None and face_note['tip'] == 'dot' and face_note['targetKind'] == 'face'
+        and d_edge0 < 0.25
+        and len(notes_after_add['dots']) >= 1
+        and 'Kante entgraten' in notes_after_add['texts'] and 'Fläche eloxieren' in notes_after_add['texts']
+        and after_edit_dot >= 2
+        and 'Fase 0,5' in p.ev("return [...document.querySelectorAll('#sheet .sheet-holder svg text.leadertext')].map(e => e.textContent)")
+    )
+
+    # 4. Ansicht verschieben (Mausziehen + moveView + Formatwechsel A3) -> Pfeil zeigt weiter auf die Kante
+    p.ev("Drawing.select(null)"); p.wait(80)
+    drag_from = svg_pt(front_geo['faceMid'][0] + 6, front_geo['faceMid'][1] + 2)
+    drag_to = svg_pt(front_geo['faceMid'][0] + 18, front_geo['faceMid'][1] + 8)
+    p.pg.mouse.move(drag_from[0], drag_from[1])
+    p.pg.mouse.down()
+    p.pg.mouse.move(drag_to[0], drag_to[1], steps=6)
+    p.pg.mouse.up()
+    p.wait(160)
+    p.ev("Drawing.moveView('front', 20, -10)"); p.wait(150)
+
+    after_move = p.ev("""
+      const v = Drawing.layout.views.front, b = v.geo.box;
+      const topMidNew = [v.ox + ((b[0] + b[2]) * 0.5) * v.s, v.oy - b[3] * v.s];
+      const facePtNew = [v.ox + ((b[0] + b[2]) * 0.28) * v.s, v.oy - ((b[1] + b[3]) * 0.52) * v.s];
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const arrowEl = svg.querySelector(`polygon.leader-arrow[data-id="${arg[0]}"]`);
+      const dotEl = svg.querySelector(`circle.leader-dot[data-id="${arg[1]}"]`);
+      const arrowTip = arrowEl ? arrowEl.getAttribute('points').split(' ')[0].split(',').map(Number) : null;
+      const dotPt = dotEl ? [Number(dotEl.getAttribute('cx')), Number(dotEl.getAttribute('cy'))] : null;
+      const topEdgeY = topMidNew[1];
+      return { topMidNew, facePtNew, arrowTip, dotPt, topEdgeY };
+    """, [edge_note['id'], face_note['id']])
+
+    d_moved_edge = ((after_move['arrowTip'][0] - after_move['topMidNew'][0]) ** 2 + (after_move['arrowTip'][1] - after_move['topMidNew'][1]) ** 2) ** 0.5
+    d_moved_dot = ((after_move['dotPt'][0] - after_move['facePtNew'][0]) ** 2 + (after_move['dotPt'][1] - after_move['facePtNew'][1]) ** 2) ** 0.5
+    view_shift = ((after_move['topMidNew'][0] - front_geo['topMid'][0]) ** 2 + (after_move['topMidNew'][1] - front_geo['topMid'][1]) ** 2) ** 0.5
+
+    # Blattformat auf A3 ändern -> Ansicht wandert im Layout, Pfeil wandert weiter exakt auf der Kante mit
+    p.pg.select_option('#dw-panel-sheet', 'A3'); p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    after_a3 = p.ev("""
+      const v = Drawing.layout.views.front, b = v.geo.box;
+      const topY = v.oy - b[3] * v.s;
+      const minX = v.ox + b[0] * v.s, maxX = v.ox + b[2] * v.s;
+      const svg = document.querySelector('#sheet .sheet-holder svg');
+      const arrowEl = svg.querySelector(`polygon.leader-arrow[data-id="${arg}"]`);
+      const arrowTip = arrowEl ? arrowEl.getAttribute('points').split(' ')[0].split(',').map(Number) : null;
+      return { topY, minX, maxX, arrowTip };
+    """, edge_note['id'])
+    d_a3_y = abs(after_a3['arrowTip'][1] - after_a3['topY'])
+
+    ok4 = (
+        view_shift > 15.0
+        and after_move['arrowTip'] is not None and d_moved_edge < 0.1
+        and after_move['dotPt'] is not None and d_moved_dot < 0.1
+        and after_a3['arrowTip'] is not None and d_a3_y < 0.05
+        and after_a3['minX'] <= after_a3['arrowTip'][0] <= after_a3['maxX']
+    )
+
+    # 5. Löschen/Undo/Redo, Speichern/Laden, PDF-Export, Befehle & Hilfetexte
+    p.ev("Drawing.select(arg)", face_note['id']); p.wait(80)
+    p.pg.click('#dw-del-sel'); p.wait(150)
+    n_after_del = p.ev("return Drawing.notes().length")
+    p.ev("App.undo()"); p.wait(150)
+    n_after_undo = p.ev("return Drawing.notes().length")
+    p.ev("App.redo()"); p.wait(150)
+    n_after_redo = p.ev("return Drawing.notes().length")
+    p.ev("App.undo()"); p.wait(150)
+
+    saved = p.ev("return JSON.stringify(App.doc)")
+    p.ev("App.setDoc(JSON.parse(arg), {fit:false})", saved); warte_rechnen(p); p.wait(250)
+    p.ev("return Drawing.waitReady()")
+    p.ev("Panels.renderRight()"); p.wait(100)
+
+    reload_st = p.ev("""
+      return {
+        dimStyle: Drawing.dimStyle(),
+        notesN: Drawing.notes().length,
+        hasViewPos: Object.keys(Drawing.activeSheet().viewPos || {}).length >= 1,
+        texts: [...document.querySelectorAll('#sheet .sheet-holder svg text.leadertext')].map(e => e.textContent),
+      };
+    """)
+    pdf_ok = p.ev("""
+      return Drawing.buildPDFBytes().then(bytes => {
+        const text = new TextDecoder('latin1').decode(bytes);
+        return text.startsWith('%PDF-1.4') && text.includes('Fase 0,5');
+      });
+    """)
+    help_ok = p.ev("""
+      return fetch('data/werkzeug-hilfen.json').then(r => r.json()).then(d => ({
+        styleHelp: !!(d.drawingDimStyle && d.drawingDimStyle.tip && d.drawingDimStyle.hilfe && d.drawingDimStyle.tipp),
+        noteHelp: !!(d.drawingLeader && d.drawingLeader.tip && d.drawingLeader.hilfe && d.drawingLeader.tipp),
+        domStyle: document.querySelectorAll('[data-help="drawingDimStyle"]').length >= 1,
+        domNote: document.querySelectorAll('[data-help="drawingLeader"]').length >= 1,
+        cmdNote: Commands.search('hinweislinie').some(c => c.id === 'drawingLeaderNote'),
+        cmdStyle: Commands.search('maß-stil').some(c => c.id === 'drawingDimStyle'),
+      }));
+    """)
+
+    ok5 = (
+        n_after_del == 1 and n_after_undo == 2 and n_after_redo == 1
+        and reload_st['dimStyle']['fontSize'] == 5 and reload_st['dimStyle']['decimals'] == 3
+        and reload_st['notesN'] == 2 and reload_st['hasViewPos']
+        and 'Fase 0,5' in reload_st['texts']
+        and bool(pdf_ok)
+        and help_ok['styleHelp'] and help_ok['noteHelp'] and help_ok['domStyle'] and help_ok['domNote']
+        and help_ok['cmdNote'] and help_ok['cmdStyle']
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -14178,6 +14421,7 @@ TESTS = [
     ('[F-11241014] Volltest-Reparatur: Skizze-Fertig wartet auf Schrift-Laden / rechtes Panel schützt fokussiertes Eingabefeld bei results', t_f11241014),
     ('[A-067] Zeichnung: Maß-Arten (Ø Bohrung, R Rundung, Fase 1×45°, Winkel 90°, Ketten- & Bezugsmaß)', t_a067_zeichnung_mass_arten),
     ('[A-066] Zeichnung: Mittellinien automatisch (4 Mittelkreuze, 4 Mittellinien, einzeln ausblendbar)', t_a066_mittellinien),
+    ('[A-069] Zeichnung: Maß-Stil (Pfeile, Schriftgröße 5, Nachkommastellen) & Hinweislinie (wandert mit Ansicht)', t_a069_mass_stil_hinweislinie),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

@@ -1063,5 +1063,15 @@
     "tip": "Mittelkreuze und Mittellinien für Bohrungen und Zylinder automatisch ein- und ausblenden",
     "hilfe": "Bohrungen und Zylinder erhalten in jeder Ansicht automatisch strichpunktierte Mittelkreuze (Draufsicht bzw. Blick auf die Öffnung) und Mittellinien (Seiten- und Schnittansichten). Klicke ein einzelnes Mittelkreuz oder eine Mittellinie im Blatt an und drücke Entf (oder Rechtsklick → Ausblenden), um es auszublenden – oder schalte sie rechts in der Liste einzeln ein und aus.",
     "tipp": "Mit „Alle einblenden“ holst du einzeln ausgeblendete Mittellinien jederzeit mit einem Klick zurück; alle Änderungen lassen sich rückgängig machen."
+  },
+  "drawingDimStyle": {
+    "tip": "Maß-Stil je Blatt festlegen: Pfeilart, Schriftgröße und Nachkommastellen",
+    "hilfe": "Stelle für jedes Zeichnungsblatt getrennt ein, wie Maße gezeichnet werden: Pfeilart (gefüllt, offen, 45°-Schrägstrich oder Punkt), Schriftgröße in Millimetern (2,5 bis 10 mm) und die Anzahl der Nachkommastellen (0 bis 4 oder wie in den Einstellungen).",
+    "tipp": "Alle Änderungen am Maß-Stil gelten sofort für alle Maße und Hinweislinien auf dem aktiven Blatt – auch in SVG, PDF und DXF."
+  },
+  "drawingLeader": {
+    "tip": "Notiz mit Hinweislinie an eine Kante (Pfeil) oder Fläche (Punkt) heften",
+    "hilfe": "Wähle „Hinweislinie“ (Taste N), klicke auf eine Kante (Pfeilspitze) oder direkt in eine Fläche (Punkt) einer Ansicht, platziere danach die Textfahne und gib deinen Text ein. Die Hinweislinie ist an die Ansicht gebunden und wandert beim Verschieben oder Maßstabswechsel exakt mit.",
+    "tipp": "Nach dem Setzen kannst du die Textfahne frei verschieben, die Spitze zwischen Pfeil und Punkt umschalten und den Text per Doppelklick oder rechts bearbeiten."
   }
 }

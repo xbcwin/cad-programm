@@ -117,6 +117,8 @@
   "tool.autodim": "Automatisch bemaßen",
   "tool.autodimShort": "Auto-Maße",
   "tool.autodimTip": "Gesamtmaße und Bohrungen automatisch bemaßen",
+  "tool.dnote": "Hinweislinie",
+  "tool.dnoteTip": "Notiz mit Hinweislinie (Pfeil oder Punkt an einer Kante oder Fläche)",
   "tool.draw2d": "2D zeichnen",
   "tool.draw2dTip": "Linien, Kreise und Text frei auf das Blatt zeichnen",
   "tool.dexport": "Zeichnung speichern",

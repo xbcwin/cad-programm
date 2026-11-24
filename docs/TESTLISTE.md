@@ -1989,6 +1989,15 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Speichern/Neuladen, Schnittansicht, PDF-Export & Hilfe**: Ausgeblendete Mittellinien (`hiddenCenters`) bleiben nach Speichern und Neuladen erhalten; Schnittansicht durch eine Bohrung zeigt eine Mittellinie; PDF enthält das Strichpunkt-Muster `[14.173 3.402 1.701 3.402] 0 d`; Befehlssuche und Hilfetext `drawingCenters` sind vorhanden.
 - [ ] **Von Hand**: Im Browser eine Platte mit Bohrungen und einem quer liegenden Bolzen in der Zeichnung öffnen, einzelne Mittelkreuze per Rechtsklick ausblenden und die erzeugte PDF- und DXF-Datei prüfen.
 
+## Zeichnung: Maß-Stil und Hinweislinie (Auto [A-069], ZE-10, ZE-11)
+
+- [x] **Schriftgröße 5 & Maß-Stil je Blatt**: Umstellen von `#dw-style-size` auf `5` vergrößert alle Maßtexte (`text.dimtext`) im SVG von `3.5` auf `5`; ein zweites Blatt behält seinen eigenen Stil (`2.5`), während Blatt 1 bei `5` bleibt.
+- [x] **Pfeilarten & Nachkommastellen**: Alle 4 Pfeilarten (`filled`, `open`, `slash`, `dot`) über `#dw-style-arrow` erzeugen die passenden SVG-Elemente (`polygon.arrow`, `polyline.arrow-open`, `polyline.arrow-slash`, `circle.arrow-dot`); `#dw-style-dec` schaltet zwischen `0`, `1` und `3` Nachkommastellen um (`42`, `42,3`, `42,345`).
+- [x] **Notiz mit Hinweislinie an Kante & Fläche**: `#t-note` heftet eine Notiz an eine Kante automatisch mit Pfeilspitze (`polygon.leader-arrow`, `tip === 'arrow'`) und auf eine Fläche automatisch mit Punkt (`circle.leader-dot`, `tip === 'dot'`); Text und Spitze lassen sich über `#dw-note-text` und `#dw-note-tip` ändern.
+- [x] **Ansicht verschieben → Pfeil zeigt weiter auf die Kante**: Nach Verschieben der Vorderansicht (Mausziehen, `Drawing.moveView('front', 20, -10)` und Blattwechsel auf A3) wandern beide Hinweislinien exakt mit; die Pfeilspitze liegt weiterhin `< 0,05 mm` auf der oberen Kante der Vorderansicht.
+- [x] **Rückgängig, Speichern/Laden, PDF & Hilfe**: Löschen/Undo/Redo, JSON-Roundtrip, PDF-Export (`%PDF-1.4` mit Notiztext), Befehlssuche und Hilfetexte (`drawingDimStyle`, `drawingLeader`) funktionieren vollständig.
+- [ ] **Von Hand**: Im Browser mehrere Blätter mit unterschiedlichen Maß-Stilen (z. B. Schrägstrich und Punkt) anlegen, eine mehrzeilige Notiz an eine Rundung setzen, die Ansicht verschieben und die exportierte PDF-/DXF-Datei prüfen.
+
 ## Fehler melden
 
 ```

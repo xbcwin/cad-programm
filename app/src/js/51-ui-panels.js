@@ -36,6 +36,9 @@ const Panels = (() => {
       dimKindBtn.dataset.help = 'drawingDimTypes';
       dimKindBtn.setAttribute('aria-pressed', String(Drawing.activeTool === 'dim' && Drawing.dimMode !== 'lin'));
       btn('t-autodim', 'target', T('tool.autodim'), T('tool.autodimTip'), '', () => Drawing.autoDims(), '', T('tool.autodimShort'));
+      const noteBtn = btn('t-note', 'noteText', T('tool.dnote'), T('tool.dnoteTip'), 'N', () => Drawing.tool('note'), Drawing.activeTool === 'note' ? 'active' : '');
+      noteBtn.dataset.help = 'drawingLeader';
+      noteBtn.setAttribute('aria-pressed', String(Drawing.activeTool === 'note'));
       btn('t-draw', 'line', T('tool.draw2d'), T('tool.draw2dTip'), '', (e) => Drawing.drawMenu(e.currentTarget));
       el.append(h('div', { class: 'sep' }));
       btn('t-dexport', 'export', T('tool.dexport'), T('tool.dexportTip'), '', (e) => Drawing.exportMenu(e.currentTarget), 'primary', T('tool.dexportShort'));
