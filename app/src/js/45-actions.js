@@ -471,6 +471,7 @@ const Actions = (() => {
     const g = r.data.edges[edgeIdx]; if (!g) return null;
     const r5 = (arr) => arr.map((v) => round(v, 5));
     const sig = { m: r5(g.m), l: round(g.l, 5), t: g.t };
+    if (g.tid) sig.tid = g.tid;
     if (Array.isArray(g.a)) sig.a = r5(g.a);
     if (Array.isArray(g.b)) sig.b = r5(g.b);
     if (g.t === 'CIRCLE' && g.c && g.n && g.r != null) { sig.c = r5(g.c); sig.n = r5(g.n); sig.r = round(g.r, 5); }

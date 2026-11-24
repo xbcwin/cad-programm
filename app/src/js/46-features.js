@@ -622,13 +622,13 @@ const Features = (() => {
     if (!it || it.role === 'hole') { UI.toast('Klick auf eine Fläche eines Körpers.', { icon: 'info' }); return; }
     const bb = App.results.get(face.id)?.data?.bbox;
     const size = bb ? round(clamp(Math.max(bb[3] - bb[0], bb[4] - bb[1], bb[5] - bb[2]) * 0.6, 8, 60), 2) : 20;
-    const sig = { c: face.info.c.map((v) => round(v, 4)), n: face.info.n ? face.info.n.map((v) => round(v, 5)) : null, size };
+    const sig = { c: face.info.c.map((v) => round(v, 4)), n: face.info.n ? face.info.n.map((v) => round(v, 5)) : null, size, ...(face.info.tid ? { tid: face.info.tid } : {}) };
     const ex = (it.finishes || []).find((f) => f.type === 'shell');
     App.change(ex ? 'Öffnung geändert' : 'Ausgehöhlt', (doc) => {
       const T = Model.find(doc, it.id).item; T.finishes = T.finishes || [];
       const s = T.finishes.find((f) => f.type === 'shell');
       if (!s) { T.finishes.push({ id: uid('f'), type: 'shell', r: 2, faces: [sig] }); return; }
-      const i = s.faces.findIndex((f) => Math.hypot(f.c[0] - sig.c[0], f.c[1] - sig.c[1], f.c[2] - sig.c[2]) < 1e-3);
+      const i = s.faces.findIndex((f) => (f.tid && sig.tid && f.tid === sig.tid) || (f.c && Math.hypot(f.c[0] - sig.c[0], f.c[1] - sig.c[1], f.c[2] - sig.c[2]) < 1e-3));
       if (i >= 0) { if (s.faces.length > 1) s.faces.splice(i, 1); } else s.faces.push(sig);
     });
     App.select([it.id]);

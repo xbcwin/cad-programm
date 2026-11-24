@@ -245,6 +245,7 @@ const Sketch = (() => {
       c: face.info.c.map((v) => round(v, 5)),
       n: (face.info.n || [0, 0, 1]).map((v) => round(v, 5)),
       size: faceSizeApprox(face, loops),
+      ...(face.info.tid ? { tid: face.info.tid } : {}),
     };
     begin({ plane, W, ents: [], refs, planeRef, ctx: { mode: 'new', targetId: face.id, ribMode: !!opts.ribMode } });
   }
@@ -2487,6 +2488,103 @@ const Sketch = (() => {
         e.link = j.g.link;
         const ks = Solver.varsOf(e);
         for (const c of sk.cons || []) if (c.type === 'fix' && c.refs[0].e === e.id && ks) c.at = Object.fromEntries(ks.map((k) => [k, Solver.getK(e, k)]));
+      }
+    }, { amend: true });
+  }
+  let relinkPlaneRounds = 0;
+  function samePlane(a, b) {
+    if (!a || !b) return false;
+    const vd = (u, v) => Math.max(Math.abs(u[0] - v[0]), Math.abs(u[1] - v[1]), Math.abs(u[2] - v[2]));
+    return vd(a.o, b.o) < 1e-4 && vd(a.x, b.x) < 1e-4 && vd(a.n, b.n) < 1e-4;
+  }
+  function updateSketchPlaneFromFace(oldPlane, fcL, fnL) {
+    const n0 = new THREE.Vector3(...(oldPlane.n || [0, 0, 1])).normalize();
+    const n1 = new THREE.Vector3(...fnL).normalize();
+    const x0 = new THREE.Vector3(...(oldPlane.x || [1, 0, 0])).normalize();
+    const o0 = new THREE.Vector3(...(oldPlane.o || [0, 0, 0]));
+    const fc = new THREE.Vector3(...fcL);
+    const dp = n0.dot(n1);
+    let oNew, xNew;
+    if (dp > 0.9999) {
+      const d = fc.clone().sub(o0).dot(n1);
+      oNew = o0.clone().addScaledVector(n1, d);
+      xNew = x0;
+    } else if (dp < -0.9999) {
+      oNew = fc;
+      xNew = x0;
+    } else {
+      const q = new THREE.Quaternion().setFromUnitVectors(n0, n1);
+      xNew = x0.clone().applyQuaternion(q);
+      xNew.addScaledVector(n1, -xNew.dot(n1)).normalize();
+      oNew = fc;
+    }
+    const r6 = (arr) => arr.map((v) => round(v, 6));
+    return { o: r6(oNew.toArray()), x: r6(xNew.toArray()), n: r6(n1.toArray()) };
+  }
+  function relinkSketchPlanes() {
+    if (S || !App.doc) return;
+    const jobs = [];
+    Model.walk(App.doc.items, (it) => {
+      const sk = it.p && it.p.sketch;
+      const pr = sk && sk.planeRef;
+      if (!sk || !sk.plane || !pr || pr.kind !== 'face') return;
+      if (!Model.isActive(App.doc, it.id)) return;
+      const resInfo = App.resolvedOf(it.id);
+      if (resInfo && resInfo.planeRefOk === true && resInfo.plane) {
+        if (!samePlane(sk.plane, resInfo.plane)) {
+          jobs.push({
+            id: it.id,
+            plane: resInfo.plane,
+            c: resInfo.faceC ? resInfo.faceC.map((v) => round(v, 5)) : pr.c,
+            n: resInfo.faceN ? resInfo.faceN.map((v) => round(v, 5)) : pr.n,
+          });
+        }
+        return;
+      }
+      const host = pr.id ? App.results.get(pr.id) : null;
+      if (!host || !host.data || !Array.isArray(host.data.faces)) return;
+      const faces = host.data.faces;
+      let fc = null;
+      if (pr.tid) {
+        const wantBase = pr.tid.split('|')[0];
+        fc = faces.find((f) => f && f.t === 'PLANE' && f.tid === pr.tid)
+          || faces.find((f) => f && f.t === 'PLANE' && f.tid && f.tid.split('|')[0] === wantBase);
+      }
+      if (!fc && Array.isArray(pr.c) && Array.isArray(pr.n)) {
+        let bestD = Infinity;
+        for (const f of faces) {
+          if (!f || f.t !== 'PLANE' || !f.n || !f.c) continue;
+          if (f.n[0] * pr.n[0] + f.n[1] * pr.n[1] + f.n[2] * pr.n[2] < 0.995) continue;
+          const d = Math.hypot(f.c[0] - pr.c[0], f.c[1] - pr.c[1], f.c[2] - pr.c[2]);
+          if (d < bestD) { bestD = d; fc = f; }
+        }
+      }
+      if (!fc || !fc.c || !fc.n) return;
+      const HW = Model.worldMatrix(App.doc, pr.id);
+      const PWInv = Model.parentWorld(App.doc, it.id).multiply(Model.localMatrix(it)).invert();
+      const fcL = new THREE.Vector3(...fc.c).applyMatrix4(HW).applyMatrix4(PWInv).toArray();
+      const fnL = new THREE.Vector3(...fc.n).transformDirection(HW).transformDirection(PWInv).normalize().toArray();
+      const newPlane = updateSketchPlaneFromFace(sk.plane, fcL, fnL);
+      if (!samePlane(sk.plane, newPlane)) {
+        jobs.push({
+          id: it.id,
+          plane: newPlane,
+          c: fc.c.map((v) => round(v, 5)),
+          n: fc.n.map((v) => round(v, 5)),
+        });
+      }
+    });
+    if (!jobs.length) { relinkPlaneRounds = 0; return; }
+    if (++relinkPlaneRounds > 3) { relinkPlaneRounds = 0; return; }
+    App.change('Skizzen-Fläche nachgeführt', (doc) => {
+      for (const j of jobs) {
+        const f = Model.find(doc, j.id);
+        if (!f || !f.item.p || !f.item.p.sketch) continue;
+        f.item.p.sketch.plane = j.plane;
+        if (f.item.p.sketch.planeRef) {
+          if (j.c) f.item.p.sketch.planeRef.c = j.c;
+          if (j.n) f.item.p.sketch.planeRef.n = j.n;
+        }
       }
     }, { amend: true });
   }
@@ -5114,7 +5212,7 @@ const Sketch = (() => {
   }
   function init() {
     if (SK.onFont) SK.onFont('loaded', () => { if (S) { reapply(); render(); Panels.renderRight(); } });
-    App.on('results', () => { relinkAll(); if (S && S.step) updateStepExtInfo(); });
+    App.on('results', () => { relinkAll(); relinkSketchPlanes(); if (S && S.step) updateStepExtInfo(); });
     const cv = Viewer.canvas;
     cv.addEventListener('pointerdown', (e) => { if (S) { onDown(e); } }, true);
     cv.addEventListener('pointermove', (e) => { if (S) onMove(e); });

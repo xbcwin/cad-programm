@@ -474,6 +474,15 @@ const Model = (() => {
       if (Array.isArray(p.sel) && p.sel.length) { const f = regs.filter((r) => p.sel.includes(r.key)); if (f.length) chosen = f; }
       out = { plane, regions: chosen.map((r) => ({ outer: r.outer.k, holes: r.holes.map((h) => h.k) })) };
     }
+    if (p.sketch && p.sketch.planeRef && p.sketch.planeRef.kind === 'face') {
+      out.planeRef = {
+        kind: 'face',
+        id: p.sketch.planeRef.id,
+        tid: p.sketch.planeRef.tid || null,
+        c: p.sketch.planeRef.c || null,
+        n: p.sketch.planeRef.n || null,
+      };
+    }
     if (it.kind === 'extrude') {
       out.dist = num(p.dist, V, 10); out.dir = p.dir || 'normal'; out.extra = num(p.extra, V, 0);
       if (out.dir === 'two') out.dist2 = num(p.dist2, V, out.dist);

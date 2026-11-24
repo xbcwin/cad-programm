@@ -669,6 +669,10 @@ const App = (() => {
   function replaceMesh(id, key, payload) {
     const it = topItem(id); const r = S.results.get(id);
     if (!it || !r || r.key !== key) return false;
+    if (payload) {
+      for (const f of payload.faces || []) if (f && f.tid && f.tid.startsWith('$self/')) f.tid = id + '/' + f.tid.slice(6);
+      for (const e of payload.edges || []) if (e && e.tid && e.tid.startsWith('$self/')) e.tid = id + '/' + e.tid.slice(6);
+    }
     Viewer.setNode(id, payload, { matrix: Model.localMatrix(it), role: it.role, color: it.color, look: lookFor(it), opacity: it.opacity ?? null, faceColors: it.faceColors || null, threads: it.threads || null, bodies: it.bodies || null, key });
     r.data = payload; applyView(); refreshSelectionVisuals(); ev.emit('remeshed', id);
     return true;

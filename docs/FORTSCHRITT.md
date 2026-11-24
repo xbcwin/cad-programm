@@ -374,6 +374,7 @@ Fertig.
 - [x] Übersetzbare Oberfläche, Schritt 1 (Auto [A-019], PL-01): feste Texte für Startseite, Werkzeugleiste, Menüs und Kontextleiste in `app/data/texte-de.json` gezogen und über `T('schlüssel')` / `I18n` (`app/src/js/01-i18n.js`) angebunden
 - [x] Schneller Start (Auto [A-054], PL-03): CAD-Kern (`occ-kernel.wasm` + Worker) und eingebaute Schriften (`schrift-inter.json`, `schrift-inter-fett.json`) laden erst bei Bedarf (3D-Neubau/Export bzw. Text-Werkzeug); die Oberfläche ist samt 2D-Skizze sofort bedienbar und misst Startzeiten für Oberfläche, Kern und Schriften im Protokoll (`#startup-times`)
 - [x] Eigene Schrift laden und Unterschneidung (Auto [A-026], SK-47, SK-48): TrueType-Schriften (`.ttf`) im Browser ohne Zusatzbibliothek lesen (`app/src/js/14-ttf.js`, `glyf`-Umrisse, quadratische Kurven, zusammengesetzte Glyphen, `kern`-Unterschneidung), als Base64 in `doc.fonts` speichern, in `#tx-font`/`#se-font` wählen, Laufweite (`sp`) bleibt einstellbar; CFF/OTF meldet „noch nicht unterstützt“
+- [x] Stabile Bezüge, Schritt 1 (Auto [A-061], PL-05): Rundung, Fase, Wandstärke und Skizzen auf Flächen merken sich Kanten und Flächen zusätzlich über ihre Kern-Herkunft (`tid` aus Schritt, Skizzen-Linie `sid` und OpenCascade-Verlauf über `Generated`/`Modified`); bei Maßänderungen und neuen Kanten bleiben Bezüge stabil, die Lage dient nur noch als Ersatz
 
 ### Stufe 6 – Konten und Zusammenarbeit (Idee, nach dem Drohnen-Modul)
 - [ ] A: Konto mit Name und Passwort, Projekte in der Cloud

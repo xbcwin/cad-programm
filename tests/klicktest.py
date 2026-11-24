@@ -8981,13 +8981,13 @@ def t_a032_aufdicken_skalieren(p):
 
 
 def t_kaputter_bezug(p):
-    # 1. Quader 20x20x10 anlegen und Kante bei [10, 0, 10] abrunden
+    # 1. Zylinder Ø 20 × 10 anlegen und obere Kreiskante abrunden
     p.empty()
-    p.ev("Actions.addPrimitive('box', {p:{w:20, d:20, h:10}})")
+    p.ev("Actions.addPrimitive('cylinder', {p:{d:20, h:10}})")
     warte_rechnen(p, 30)
     p.ev("Viewer.fit()")
     p.wait(500)
-    ei = p.ev("const it=App.doc.items[0]; const r=App.results.get(it.id); return r.data.edges.findIndex(e=>e&&e.m&&Math.hypot(e.m[0]-10,e.m[1],e.m[2]-10)<0.2)")
+    ei = p.ev("const it=App.doc.items[0]; const r=App.results.get(it.id); return r.data.edges.findIndex(e=>e&&e.t==='CIRCLE'&&e.m&&Math.abs(e.m[2]-10)<0.2)")
     p.ev("Actions.addFinish('fillet', 2, [{id:App.doc.items[0].id, edgeIdx:arg}])", ei)
     warte_rechnen(p, 30)
     p.wait(250)
@@ -8998,8 +8998,8 @@ def t_kaputter_bezug(p):
         and p.pg.locator('.tl-chip.warn').count() == 0
     )
 
-    # 2. Maß w auf 40 ändern → alte Kante verschwindet → gelbes Warnzeichen & Neu-wählen-Knopf
-    p.ev("App.change('Breite ändern', d=>{ d.items[0].p.w = 40; })")
+    # 2. Form auf Quader 40×20×10 umstellen → alte Zylinderkante fehlt → gelbes Warnzeichen & Neu-wählen-Knopf
+    p.ev("App.change('Form ändern', d=>{ d.items[0].kind = 'box'; d.items[0].p = {w:40, d:20, h:10}; })")
     warte_rechnen(p, 30)
     p.wait(300)
     ok2 = (
@@ -9033,15 +9033,15 @@ def t_kaputter_bezug(p):
         and vol_fillet < 8000
     )
 
-    # 5. Fase verliert Kante beim Ändern der Höhe → Klick aufs gelbe Zeichen im Verlauf → neu wählen
+    # 5. Fase verliert Kante beim Wechsel von Zylinder auf Quader → Klick aufs gelbe Zeichen im Verlauf → neu wählen
     p.ev("Start.newProject(true)")
     p.wait(700)
-    p.ev("Actions.addPrimitive('box', {p:{w:20, d:20, h:10}})")
+    p.ev("Actions.addPrimitive('cylinder', {p:{d:20, h:10}})")
     warte_rechnen(p, 30)
-    ei2 = p.ev("const it=App.doc.items[0]; const r=App.results.get(it.id); return r.data.edges.findIndex(e=>e&&e.m&&Math.hypot(e.m[0],e.m[1]+10,e.m[2]-10)<0.2)")
+    ei2 = p.ev("const it=App.doc.items[0]; const r=App.results.get(it.id); return r.data.edges.findIndex(e=>e&&e.t==='CIRCLE'&&e.m&&Math.abs(e.m[2]-10)<0.2)")
     p.ev("Actions.addFinish('chamfer', 1.5, [{id:App.doc.items[0].id, edgeIdx:arg}])", ei2)
     warte_rechnen(p, 30)
-    p.ev("App.change('Höhe ändern', d=>{ d.items[0].p.h = 20; })")
+    p.ev("App.change('Form ändern', d=>{ d.items[0].kind = 'box'; d.items[0].p = {w:20, d:20, h:20}; })")
     warte_rechnen(p, 30)
     p.wait(300)
     ok5_warn = (
@@ -12246,6 +12246,163 @@ def t_a058_eigene_bibliothek(p):
     return [ok1, ok2, ok3, ok4]
 
 
+# ---------- A-061: Stabile Bezüge, Schritt 1 (PL-05) ----------
+def t_a061_stabile_bezuege(p):
+    # 1. Kern-Test: Quader 40×40×15 mit Rundung an der vorderen oberen Kante (y = -20, z = 15),
+    # danach eine Tasche (erzeugt neue Kanten) und Quaderlänge von 40 auf 60 (w=60, d=60) → Rundung bleibt an derselben Kante
+    p.empty()
+    p.ev("Actions.addPrimitive('box', {p:{w:40, d:40, h:15}})")
+    warte_rechnen(p, 30)
+    ei = p.ev("const it=App.doc.items[0]; const r=App.results.get(it.id); return r.data.edges.findIndex(e=>e&&e.m&&Math.hypot(e.m[0],e.m[1]+20,e.m[2]-15)<0.2)")
+    p.ev("Actions.addFinish('fillet', 2, [{id:App.doc.items[0].id, edgeIdx:arg}])", ei)
+    warte_rechnen(p, 30)
+    tid_ok = p.ev("const f=App.doc.items[0].finishes[0]; return !!(f&&f.edges[0]&&typeof f.edges[0].tid==='string'&&f.edges[0].tid.includes('E:ny&top'))")
+    edges_before = p.ev("return App.results.get(App.doc.items[0].id).data.edges.length")
+    p.ev("""
+      const boxId = App.doc.items[0].id;
+      const pkt = Model.newItem('box', {w:12, d:12, h:8}, {name:'Tasche', role:'solid'});
+      pkt.t.z = 10;
+      pkt.op = {type:'cut', target:boxId};
+      App.change('Tasche schneiden', d => { d.items.push(pkt); });
+    """)
+    warte_rechnen(p, 30)
+    edges_after = p.ev("return App.results.get(App.doc.items[0].id).data.edges.length")
+    p.ev("App.change('Länge auf 60', d => { d.items[0].p.w = 60; d.items[0].p.d = 60; })")
+    warte_rechnen(p, 30)
+    p.wait(250)
+    res1 = p.ev("""
+      const it = App.doc.items[0];
+      const r = App.results.get(it.id);
+      const fil = (r?.data?.faces || []).find(f => f && f.t === 'CYLINDRE' && f.c && f.c[1] < -25 && f.c[2] > 12);
+      return {
+        errs: App.errors.length,
+        filOk: !!(fil && Math.abs(fil.r - 2) < 0.05 && fil.c[1] < -28.5 && fil.c[2] > 13.5 && fil.c[2] < 15),
+        bbox: r?.data?.bbox,
+      };
+    """)
+    ok1 = (
+        ei >= 0 and tid_ok and edges_after > edges_before
+        and res1['errs'] == 0 and res1['filOk']
+        and p.pg.locator('.node .warn-ref').count() == 0
+        and abs(res1['bbox'][3] - res1['bbox'][0] - 60) < 0.1
+    )
+
+    # 2. Tasche schneidet direkt die vordere obere Kante in zwei Hälften VOR der Rundung (Modified-Verlauf),
+    # danach wächst der Quader von 40 auf 60 → beide Rundungsstücke bleiben an der vorderen oberen Kante
+    p.ev("Start.newProject(true)")
+    p.wait(600)
+    p.ev("""
+      const box = Model.newItem('box', {w:40, d:40, h:15}, {name:'Grundkörper'});
+      const hole = Model.newItem('box', {w:10, d:14, h:10}, {name:'Tasche', role:'hole'});
+      hole.t.y = -18; hole.t.z = 10;
+      App.change('Quader mit Randtasche', d => { d.items.push(box, hole); });
+    """)
+    warte_rechnen(p, 30)
+    p.ev("""
+      const box = App.doc.items[0];
+      const r = App.results.get(box.id);
+      const ei = r.data.edges.findIndex(e => e && e.m && e.m[0] < -5 && Math.abs(e.m[1]+20) < 0.2 && Math.abs(e.m[2]-15) < 0.2);
+      if (ei >= 0) Actions.addFinish('fillet', 2, [{id:box.id, edgeIdx:ei}]);
+    """)
+    warte_rechnen(p, 30)
+    p.ev("App.change('Quader auf 60', d => { const b = Model.find(d, d.items[0].children ? d.items[0].children[0].id : d.items[0].id); if (b) { b.item.p.w = 60; b.item.p.d = 60; } })")
+    warte_rechnen(p, 30)
+    res2 = p.ev("""
+      const top = App.doc.items[0];
+      const r = App.results.get(top.id);
+      const fil = (r?.data?.faces || []).find(f => f && f.t === 'CYLINDRE' && f.c && f.c[1] < -28 && f.c[2] > 13.5);
+      return { errs: App.errors.length, ok: !!(fil && Math.abs(fil.r - 2) < 0.05) };
+    """)
+    ok2 = res2['errs'] == 0 and res2['ok']
+
+    # 3. Skizzenkörper + Fase über Herkunft aus Skizzenlinie (F:sk:<entId>): Rechteck 40→60 verbreitern
+    p.ev("Start.newProject(true)")
+    p.wait(600)
+    p.ev("""
+      const sk = {
+        plane: {o:[0,0,0], x:[1,0,0], n:[0,0,1]},
+        ents: [{id:'sk_r1', type:'rect', a:[0,0], b:[40,20]}],
+        dims: [], cons: []
+      };
+      const ex = Model.newItem('extrude', {sketch:sk, dist:15, dir:'normal'}, {name:'Platte'});
+      App.change('Skizzenkörper', d => { d.items.push(ex); });
+    """)
+    warte_rechnen(p, 30)
+    sk_tid_ok = p.ev("const r=App.results.get(App.doc.items[0].id); return r.data.faces.some(f=>f&&f.tid&&f.tid.includes('F:sk:'))")
+    p.ev("""
+      const it = App.doc.items[0];
+      const r = App.results.get(it.id);
+      const ei = r.data.edges.findIndex(e => e && e.m && Math.hypot(e.m[0]-20, e.m[1], e.m[2]-15) < 0.2);
+      if (ei >= 0) Actions.addFinish('chamfer', 2, [{id:it.id, edgeIdx:ei}]);
+    """)
+    warte_rechnen(p, 30)
+    p.ev("App.change('Skizze breiter', d => { d.items[0].p.sketch.ents[0].b = [60, 20]; })")
+    warte_rechnen(p, 30)
+    res3 = p.ev("""
+      const r = App.results.get(App.doc.items[0].id);
+      const ch = (r?.data?.faces || []).find(f => f && f.t === 'PLANE' && f.n && f.n[1] < -0.5 && f.n[2] > 0.5);
+      return { errs: App.errors.length, ok: !!(ch && Math.abs(ch.c[0] - 30) < 0.2 && ch.c[1] < 2 && ch.c[2] > 13) };
+    """)
+    ok3 = sk_tid_ok and res3['errs'] == 0 and res3['ok']
+
+    # 4. Skizze auf oberer Fläche (planeRef mit tid) → Quaderhöhe 15 auf 25 → Aufbau wandert mit auf Z = 33
+    p.ev("Start.newProject(true)")
+    p.wait(600)
+    p.ev("Actions.addPrimitive('box', {p:{w:40, d:20, h:15}})")
+    warte_rechnen(p, 30)
+    top_fidx = p.ev("const r=App.results.get(App.doc.items[0].id); return r.data.faces.findIndex(f=>f&&f.t==='PLANE'&&f.n&&f.n[2]>0.99)")
+    p.ev("""
+      const id = App.doc.items[0].id;
+      const r = App.results.get(id);
+      return Sketch.startOnFace({id, idx:arg, info:r.data.faces[arg]});
+    """, top_fidx)
+    p.wait(500)
+    pr_tid_ok = p.ev("return !!(Sketch.state && Sketch.state.planeRef && Sketch.state.planeRef.tid && Sketch.state.planeRef.tid.includes('F:top'))")
+    p.ev("Sketch.insertEnts([{id:'r_top', type:'rect', a:[-5,-5], b:[5,5]}])")
+    p.wait(250)
+    p.pg.keyboard.press('Enter')
+    p.wait(1000)
+    p.pg.locator('#st-dist').fill('8')
+    p.pg.locator('#st-dist').press('Enter')
+    p.wait(250)
+    p.pg.locator('.stepbox .btn.primary').click()
+    warte_rechnen(p, 30)
+    p.wait(300)
+    p.ev("App.change('Quader höher', d => { d.items[0].children[0].p.h = 25; })")
+    warte_rechnen(p, 30)
+    p.wait(300)
+    res4 = p.ev("""
+      const g = App.doc.items[0];
+      const r = App.results.get(g.id);
+      const maxZ = r?.data?.bbox ? r.data.bbox[5] : 0;
+      const sk = g.children[1]?.p?.sketch;
+      return { errs: App.errors.length, maxZ, skZ: sk?.plane?.o?.[2] };
+    """)
+    ok4 = (
+        top_fidx >= 0 and pr_tid_ok
+        and res4['errs'] == 0
+        and abs(res4['maxZ'] - 33) < 0.1
+        and abs((res4['skZ'] or 0) - 25) < 0.1
+        and p.pg.locator('.node .warn-ref').count() == 0
+    )
+
+    # 5. Lage-Ersatz für alte Bezüge ohne tid funktioniert weiter
+    p.ev("Start.newProject(true)")
+    p.wait(600)
+    p.ev("""
+      const box = Model.newItem('box', {w:20, d:20, h:10}, {name:'Alt'});
+      box.finishes = [{id:'f_old', type:'fillet', r:2, edges:[{m:[0, -10, 10], l:20, t:'LINE'}]}];
+      App.change('Alter Lage-Bezug', d => { d.items.push(box); });
+    """)
+    warte_rechnen(p, 30)
+    ok5 = p.ev("""
+      const r = App.results.get(App.doc.items[0].id);
+      const fil = (r?.data?.faces || []).find(f => f && f.t === 'CYLINDRE' && Math.abs(f.r - 2) < 0.05);
+      return App.errors.length === 0 && !!fil;
+    """)
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -12407,6 +12564,7 @@ TESTS = [
     ('[A-056] Normteile: Passstifte, Passfedern mit Nut, Kugel- und Gleitlager', t_a056_normteile_stifte_lager),
     ('[A-059] 3D-Druck: Drucker-Liste, Bauraum-Warnung mit Drehvorschlag & Loch-Ausgleich im STL/3MF', t_a059_drucker_loch_ausgleich),
     ('[A-058] Eigene Teile in die Bibliothek: mit Maß „Breite“ speichern / Vorschaubild / in neuem Projekt einsetzen / Breite ändern passt Körper an / zweite Kopie & Neuladen & Löschen & Hilfe', t_a058_eigene_bibliothek),
+    ('[A-061] Stabile Bezüge, Schritt 1: Rundung an Kante über Tasche & Längenänderung 40→60 / geteilte Kante / Skizzen-Fase / Skizze auf Fläche / Lage-Ersatz', t_a061_stabile_bezuege),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
