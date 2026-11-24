@@ -464,8 +464,9 @@ const Sketch = (() => {
     const uniq = [...new Set((ids || []).filter((id) => ent(id)))];
     S.sels = uniq;
     if (uniq.length) S.selCon = null;
+    if (typeof App !== 'undefined' && App.emit) App.emit('sketchSel');
   }
-  function clearSel() { if (!S) return; S.sels = []; }
+  function clearSel() { if (!S) return; S.sels = []; if (typeof App !== 'undefined' && App.emit) App.emit('sketchSel'); }
   function clearBand() { if (S && S.band) { if (S.band.el) S.band.el.remove(); S.band = null; } }
   function setTool(id) {
     if (!S) return;
@@ -2782,7 +2783,7 @@ const Sketch = (() => {
       S.cursor = null; render(); return;
     }
     if (S.tool === 'dim' || S.tool.startsWith('c:')) { S.hoverPick = pickAt(uv0, { refs: S.tool === 'c:project', points: S.tool !== 'c:project' }); S.cursor = null; render(); return; }
-    if (S.tool === 'select') { S.cursor = null; return; }
+    if (S.tool === 'select') { S.cursor = null; if (isLoftLine()) loftPreview(); return; }
     if (S.tool === 'line' && S.lineMode !== 'tan2' && S.draft && !S.draft.arc) {
       S.cursor = linePoint(uv0, e);
     } else {

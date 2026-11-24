@@ -33,7 +33,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -582,6 +582,8 @@ def t_fies_reload(p):
     p.ev("Timeline.setMarker(0)"); p.wait(2500)
     p.ev("App.autosave.flush && App.autosave.flush()"); p.wait(500)
     p.pg.reload(); p.wait(5000)
+    if p.pg.locator('#recovery-restore').count():
+        p.pg.locator('#recovery-restore').click(); p.wait(4000)
     if p.pg.locator('.start').count():   # falls die Startseite kommt: letztes Projekt öffnen
         p.pg.locator('.recent-row').first.click(); p.wait(5000)
     return p.ev("return App.doc.rollback") == 0 and p.ev("return App.doc.items.length") == 3
@@ -6396,6 +6398,8 @@ def t_a016_speicher_gross(p):
         p.pg.locator('.loading').wait_for(state='detached', timeout=25000)
     except Exception:
         pass
+    if p.pg.locator('#recovery-restore').count():
+        p.pg.locator('#recovery-restore').click(); p.wait(1000)
     warte_rechnen(p, 45)
     st2 = p.ev("""return Mass.measure().then(m => {
       const it = App.doc.items[0];
@@ -6422,6 +6426,8 @@ def t_a016_speicher_gross(p):
         p.pg.locator('.loading').wait_for(state='detached', timeout=25000)
     except Exception:
         pass
+    if p.pg.locator('#recovery-restore').count():
+        p.pg.locator('#recovery-restore').click(); p.wait(1000)
     warte_rechnen(p, 45)
     v_before = p.ev("""return {
       names: Versions.list().map(v => v.name),
@@ -10441,6 +10447,69 @@ endsolid spitze
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_geometrie_pruefung(p):
+    # 1. Gesunder Quader über Prüfen-Menü -> „Keine Probleme“
+    p.empty()
+    p.ev("Actions.addPrimitive('box', { p: { w: 30, d: 20, h: 15 } })")
+    warte_rechnen(p, 20)
+    p.pg.locator('#t-check').click(); p.wait(250)
+    p.pg.locator('#check-geom').click()
+    p.pg.locator('#geom-check-ok').wait_for(state='visible', timeout=10000)
+    bar_txt1 = p.pg.locator('#geom-check-bar').text_content().lower()
+    st1 = p.ev("return GeomCheck.last ? { n: GeomCheck.last.issues.length, c: GeomCheck.last.checkedCount } : null")
+    ok1 = ('keine probleme' in bar_txt1) and bool(st1 and st1['n'] == 0 and st1['c'] == 1)
+
+    # 2. Gesunde Kugel & Zylinder (keine Fehlalarme durch Pole oder Nahtkanten)
+    p.ev("""App.change('Kugel und Zylinder', d => {
+      const s = Model.newItem('sphere', { d: 20 }, { name: 'Kugel' });
+      const c = Model.newItem('cylinder', { d: 16, h: 24 }, { name: 'Zylinder' });
+      c.t.x = 30;
+      d.items = [s, c];
+    })""")
+    warte_rechnen(p, 20)
+    p.pg.locator('#gc-rerun').click()
+    p.pg.locator('#geom-check-ok').wait_for(state='visible', timeout=10000)
+    st2 = p.ev("return GeomCheck.last ? { n: GeomCheck.last.issues.length, c: GeomCheck.last.checkedCount } : null")
+    ok2 = bool(st2 and st2['n'] == 0 and st2['c'] == 2)
+
+    # 3. Körper mit winziger Kante (< 0,01 mm durch zwei fast gleiche Maße)
+    p.pg.locator('#gc-close').click(); p.wait(200)
+    p.ev("""App.setDoc(Model.newDoc())""")
+    p.ev("""App.change('Winzige Kante', d => {
+      const a = Model.newItem('box', { w: 20, d: 20, h: 10 }, { name: 'Grundkörper' });
+      const b = Model.newItem('box', { w: 20.005, d: 10, h: 10 }, { name: 'Aufsatz' });
+      b.t.z = 5;
+      b.op = { type: 'join', target: a.id };
+      d.items.push(a, b);
+    })""")
+    warte_rechnen(p, 25)
+    p.pg.locator('#t-check').click(); p.wait(250)
+    p.pg.locator('#check-geom').click()
+    p.pg.locator('#geom-check-list button').first.wait_for(state='visible', timeout=10000)
+    first_txt = p.pg.locator('#geom-check-list button').first.text_content().lower()
+    st3 = p.ev("return GeomCheck.last ? GeomCheck.last.issues.map(x => ({ kind: x.kind, len: x.length })) : []")
+    tiny = [x for x in st3 if x['kind'] == 'tinyEdge']
+    ok3 = len(tiny) >= 1 and all(x['len'] < 0.01 for x in tiny) and ('kante' in first_txt) and ('mm' in first_txt)
+
+    # 4. Anklickbare Liste & 3D-Hervorhebung + Schließen
+    p.pg.locator('#geom-check-list button').first.click(); p.wait(400)
+    cls = p.pg.locator('#geom-check-list button').first.get_attribute('class') or ''
+    hi_on = p.ev("return { focused: GeomCheck.focused, has: GeomCheck.hasHighlight, active: GeomCheck.active }")
+    p.pg.locator('#gc-close').click(); p.wait(250)
+    hi_off = p.ev("return { active: GeomCheck.active, has: GeomCheck.hasHighlight, bar: !!document.querySelector('#geom-check-bar') }")
+    ok4 = ('active' in cls and hi_on['focused'] == 0 and hi_on['has'] and hi_on['active']
+           and not hi_off['active'] and not hi_off['has'] and not hi_off['bar'])
+
+    # 5. Befehlssuche & Hilfetext
+    cmd_ok = p.ev("return Commands.search('Geometrie prüfen').some(c => c.id === 'geom-check')")
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    h_gc = hilfen.get('geomCheck') or {}
+    help_ok = bool(h_gc.get('tip') and h_gc.get('hilfe') and h_gc.get('tipp'))
+    ok5 = bool(cmd_ok and help_ok)
+
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 def t_a047_import_heilen(p):
     p.empty()
 
@@ -10623,7 +10692,7 @@ def t_a047_import_heilen(p):
 def t_a049_werkzeugleiste(p):
     p.empty()
     tool_ids = lambda: p.pg.evaluate("Array.from(document.querySelectorAll('#tools .tool[data-tool-id]')).map(b=>b.dataset.toolId)")
-    init_ok = tool_ids() == ['body', 'sketch', 'parts', 'measure', 'notes', 'views', 'export']
+    init_ok = tool_ids() == ['body', 'sketch', 'parts', 'measure', 'notes', 'views', 'check', 'export']
 
     # 1. Rechtsklick auf die Werkzeugleiste → Anpassen …
     p.pg.locator('#t-notes').click(button='right'); p.wait(200)
@@ -10688,13 +10757,358 @@ def t_a049_werkzeugleiste(p):
       return !!(h && h.tip && h.hilfe && h.tipp);
     })""")
     ok_reset = (
-        ids_reset == ['body', 'sketch', 'parts', 'measure', 'notes', 'views', 'export']
+        ids_reset == ['body', 'sketch', 'parts', 'measure', 'notes', 'views', 'check', 'export']
         and p.pg.locator('#tools .tool.fav').count() == 0
         and p.ev("return localStorage.getItem('tracery-werkzeugleiste')") is None
         and bool(help_ok)
     )
 
     return [init_ok and ok_ctx and ok_dlg, ok_remove, ok_add_sort, ok_fav, ok_reload, ok_reset]
+
+
+def t_f11240651(p):
+    # 1: Übergang-Führungskurve löst Vorschau auch im Auswahl-Werkzeug ('select') aus
+    p.empty()
+    skizzenkoerper(p, [{'id': 'r', 'type': 'rect', 'a': [-15, -10], 'b': [15, 10]}], 0, 'Unten')
+    skizzenkoerper(p, [{'id': 'c', 'type': 'circle', 'c': [0, 0], 'r': 8}], 40, 'Oben')
+    warte_rechnen(p, 20)
+    p.ev("App.select([App.doc.items[0].id]); App.select([App.doc.items[1].id], {additive:true})"); p.wait(600)
+    p.pg.locator('.ctxbar button[aria-label="Übergang"]').click(); warte_rechnen(p, 30)
+    p.pg.locator('#loft-rail-edit').click(); p.wait(1000)
+    st = SS(p, "return [S.ctx.mode, S.tool]")
+    SS(p, "const q=S.ents[0].pts; q[1]=[Math.sign(q[0][0])*25, 20]")
+    p.pg.mouse.move(700, 400); p.pg.mouse.move(705, 405); p.wait(600); warte_rechnen(p, 30)
+    pv = p.ev("const r=App.extra.length&&App.results.get('__preview'); return r&&r.data?r.data.bbox:null")
+    ok1 = st == ['loftrail', 'select'] and pv is not None and (pv[3] - pv[0]) > 45
+    p.ev("Sketch.cancel(true)"); p.wait(300)
+
+    # 2: Explosion mit Gruppen bei blockiertem requestAnimationFrame (Timer-Fallback)
+    p.ev("Start.newProject(true)"); p.wait(600)
+    p.ev("""App.change('x', d=>{
+      const g=Model.newItem('group',{}); g.name='Baugruppe';
+      for (let i=0;i<3;i++){ const b=Model.newItem('box',{w:20,d:20,h:6}); b.t.x=i*20; b.name='Teil '+(i+1); g.children.push(b); }
+      d.items.push(g);
+      const e=Model.newItem('box',{w:10,d:10,h:10},{name:'Extra'}); e.t.x=-40; d.items.push(e);
+    })"""); warte_rechnen(p, 30)
+    pause_raf = "window.__origRAF=window.requestAnimationFrame; window.__rafQueue=[]; window.requestAnimationFrame=(cb)=>{window.__rafQueue.push(cb); return window.__rafQueue.length;};"
+    resume_raf = "if(window.__origRAF){ window.requestAnimationFrame=window.__origRAF; const q=window.__rafQueue.splice(0); for(const cb of q) window.requestAnimationFrame(cb); }"
+    p.ev(pause_raf)
+    try:
+        p.ev("Views.explode(true)"); p.wait(700)
+        ex_open = p.ev("return [Views.explodeAmount, !!(document.querySelector('#ex-groups') && !document.querySelector('#ex-groups').closest('.vb-row').hidden)]")
+        p.ev("document.querySelector('#ex-groups').click()"); p.wait(400); warte_rechnen(p, 30)
+        ex_split = p.ev("return [Views.explodeGroups, App.extra.length]")
+        p.ev("Views.explode(false)"); p.wait(700); warte_rechnen(p, 30)
+        ex_closed = p.ev("return [Views.explodeAmount, Views.explodeGroups, App.extra.length, document.querySelector('#ex-groups')===null]")
+    finally:
+        p.ev(resume_raf)
+    ok2 = ex_open[0] > 0.55 and ex_open[1] and ex_split == [True, 3] and ex_closed == [0, False, 0, True]
+
+    # 3: Regler bricht laufenden Explosion-Timer bei rAF-Stau sauber ab
+    p.ev(pause_raf)
+    try:
+        p.ev("Views.explode(true)"); p.wait(100)
+        p.ev("const r=document.querySelector('#ex-range'); r.value='25'; r.dispatchEvent(new Event('input', {bubbles:true}));")
+        p.wait(600)
+        ex_slider = p.ev("return Views.explodeAmount")
+    finally:
+        p.ev(resume_raf)
+        p.ev("Views.reset()")
+    ok3 = abs(ex_slider - 0.25) < 0.03
+    return [ok1, ok2, ok3]
+
+
+# ---------- [A-052] Statusleiste vollständig (BE-17) ----------
+def t_a052_statusleiste(p):
+    p.empty()
+    # 1. Zwei Kanten gewählt: 40 + 30 mm = 70 mm, sowie 17,7 + 20 mm = 37,7 mm; Klick kopiert Wert
+    p.ev("App.change('x', d=>{ d.items.push(Model.newItem('box',{w:40,d:30,h:10},{name:'Platte'})); })"); warte_rechnen(p)
+    p.ev("""
+      const id = App.doc.items[0].id, r = App.results.get(id).data;
+      const i1 = r.edges.findIndex(e => e.t === 'LINE' && Math.abs(e.l - 40) < 1e-4 && Math.abs(e.a[2] - 10) < 1e-4);
+      const i2 = r.edges.findIndex(e => e.t === 'LINE' && Math.abs(e.l - 30) < 1e-4 && Math.abs(e.a[2] - 10) < 1e-4);
+      App.select([id], { edges: [{ id, edgeIdx: i1 }, { id, edgeIdx: i2 }] });
+    """); p.wait(300)
+    sel_txt1 = (p.pg.locator('#status-sel').text_content() or '').strip()
+    p.pg.locator('#status-sel').click(); p.wait(250)
+    copied1 = p.ev("return Measure.copied")
+
+    p.ev("App.change('x', d=>{ d.items.push(Model.newItem('box',{w:17.7,d:20,h:10},{name:'Streifen'})); })"); warte_rechnen(p)
+    p.ev("""
+      const id = App.doc.items[1].id, r = App.results.get(id).data;
+      const i1 = r.edges.findIndex(e => e.t === 'LINE' && Math.abs(e.l - 17.7) < 1e-4 && Math.abs(e.a[2] - 10) < 1e-4);
+      const i2 = r.edges.findIndex(e => e.t === 'LINE' && Math.abs(e.l - 20) < 1e-4 && Math.abs(e.a[2] - 10) < 1e-4);
+      App.select([id], { edges: [{ id, edgeIdx: i1 }, { id, edgeIdx: i2 }] });
+    """); p.wait(300)
+    sel_txt2 = (p.pg.locator('#status-sel').text_content() or '').strip()
+    ok1 = (
+        p.pg.locator('#status-sel').is_visible()
+        and '2 Kanten' in sel_txt1 and '70 mm' in sel_txt1 and copied1 == '70'
+        and '2 Kanten' in sel_txt2 and '37,7 mm' in sel_txt2
+    )
+
+    # 2. Fläche (1200 mm²), runde Fläche (Fläche + Ø), einzelner Körper & leere Auswahl blendet aus
+    p.ev("""
+      const id = App.doc.items[0].id, r = App.results.get(id).data;
+      const fi = r.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.9);
+      App.select([id], { face: { id, faceIdx: fi } });
+    """); p.wait(300)
+    face_txt = (p.pg.locator('#status-sel').text_content() or '').strip()
+
+    p.ev("App.change('x', d=>{ const c=Model.newItem('cylinder',{d:10,h:20},{name:'Bolzen'}); c.t.x=50; d.items.push(c); })"); warte_rechnen(p)
+    p.ev("""
+      const id = App.doc.items[2].id, r = App.results.get(id).data;
+      const fi = r.faces.findIndex(f => f.t === 'CYLINDRE');
+      App.select([id], { face: { id, faceIdx: fi } });
+    """); p.wait(300)
+    cyl_txt = (p.pg.locator('#status-sel').text_content() or '').strip()
+
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(250)
+    body_txt = (p.pg.locator('#status-sel').text_content() or '').strip()
+
+    p.ev("App.clearSelection()"); p.wait(250)
+    hidden_empty = not p.pg.locator('#status-sel').is_visible()
+    ok2 = (
+        'Fläche' in face_txt and '1200 mm²' in face_txt
+        and 'Fläche' in cyl_txt and 'mm²' in cyl_txt and 'Ø 10 mm' in cyl_txt
+        and '1 Körper' in body_txt and '40 × 30 × 10 mm' in body_txt
+        and hidden_empty
+    )
+
+    # 3. Einheit & Klick öffnet Einstellungen mit Fokus auf #set-proj-unit
+    unit_init = (p.pg.locator('#status-unit').text_content() or '').strip()
+    p.ev("""
+      const id = App.doc.items[0].id, r = App.results.get(id).data;
+      const fi = r.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.9);
+      App.select([id], { face: { id, faceIdx: fi } });
+    """); p.wait(250)
+    p.pg.locator('#status-unit').click(); p.wait(300)
+    modal_open = p.pg.locator('#set-proj-unit').count() == 1 and p.ev("return document.activeElement && document.activeElement.id === 'set-proj-unit'")
+    p.pg.select_option('#set-proj-unit', 'cm'); p.wait(300)
+    unit_cm = (p.pg.locator('#status-unit').text_content() or '').strip()
+    face_cm = (p.pg.locator('#status-sel').text_content() or '').strip()
+    p.pg.select_option('#set-proj-unit', 'mm'); p.wait(250)
+    p.pg.keyboard.press('Escape'); p.wait(250)
+    unit_mm = (p.pg.locator('#status-unit').text_content() or '').strip()
+    ok3 = unit_init == 'mm' and modal_open and unit_cm == 'cm' and '12 cm²' in face_cm and unit_mm == 'mm'
+
+    # 4. Rechenzustand: Bereit → Rechnet → Bereit → Fehler → Undo → Bereit
+    st_ready = p.ev("const el=document.querySelector('#status-calc'); return [el.dataset.state, el.textContent.trim()];")
+    p.ev("App.emit('calc', true)"); p.wait(100)
+    st_busy = p.ev("const el=document.querySelector('#status-calc'); return [el.dataset.state, el.textContent.trim()];")
+    p.ev("App.emit('calc', false)"); p.wait(100)
+    st_back = p.ev("const el=document.querySelector('#status-calc'); return [el.dataset.state, el.textContent.trim()];")
+    p.ev("App.change('x', d=>{ d.items[0].finishes.push({id:'f_bad',type:'fillet',r:999,edges:[0]}); })"); warte_rechnen(p)
+    st_err = p.ev("const el=document.querySelector('#status-calc'); return [el.dataset.state, el.textContent.trim()];")
+    p.ev("App.undo()"); warte_rechnen(p)
+    st_fixed = p.ev("const el=document.querySelector('#status-calc'); return [el.dataset.state, el.textContent.trim()];")
+    ok4 = (
+        st_ready == ['ready', 'Bereit']
+        and st_busy[0] == 'busy' and 'Rechnet' in st_busy[1]
+        and st_back == ['ready', 'Bereit']
+        and st_err[0] == 'error' and 'Fehler' in st_err[1]
+        and st_fixed == ['ready', 'Bereit']
+    )
+
+    # 5. Zusammenspiel mit #coords und #ampel sowie Hilfetexte
+    p.ev("App.select([App.doc.items[0].id]); Viewer.setView('iso', false)"); p.wait(500)
+    sx, sy = world_screen(p, 5, -5, 10)
+    p.pg.mouse.move(sx - 15, sy); p.pg.mouse.move(sx, sy, steps=4); p.wait(300)
+    box_ok = p.ev("""
+      const ids = ['#coords', '#status-sel', '#status-unit', '#status-calc', '#ampel'];
+      return ids.every(s => {
+        const el = document.querySelector(s);
+        if (!el) return false;
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0 && r.right <= innerWidth + 1 && r.bottom <= innerHeight + 1;
+      });
+    """)
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    attr_ok = p.ev("return ['#status-sel:statusSel','#status-unit:statusUnit','#status-calc:statusCalc'].every(s=>{ const [sel,k]=s.split(':'); const el=document.querySelector(sel); return el && el.dataset.help===k; })")
+    ok5 = (
+        box_ok
+        and attr_ok
+        and all(k in hilfen and all(f in hilfen[k] for f in ('tip', 'hilfe', 'tipp')) for k in ('statusSel', 'statusUnit', 'statusCalc'))
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
+def t_a051_absturz_wiederherstellen(p):
+    import re
+    p.empty()
+
+    # 1. Sauber gespeicherten Ausgangsstand anlegen, danach ohne Speichern ändern und neu laden
+    p.ev("""App.change('Ausgangsstand', d => {
+      d.name = 'Halterung A51';
+      const b = Model.newItem('box', { w: 20, d: 20, h: 10 });
+      b.name = 'Basis';
+      d.items.push(b);
+    });""")
+    warte_rechnen(p, 20)
+    p.ev("return App.autosave.flush().then(() => { App.markClean(); return Store.whenIdle(); });")
+
+    # Jetzt ohne Speichern ändern (Breite 20 -> 55 und Zylinder dazu) -> Absturz simulieren
+    p.ev("""App.change('Ungesicherte Änderung', d => {
+      d.items[0].p.w = 55;
+      const c = Model.newItem('cylinder', { d: 8, h: 15 });
+      c.name = 'Zapfen';
+      d.items.push(c);
+    });""")
+    warte_rechnen(p, 20)
+    p.ev("return new Promise(r => setTimeout(r, 350)).then(() => Store.whenIdle());")
+
+    p.pg.reload()
+    p.wait(3000)
+    try:
+        p.pg.locator('.loading').wait_for(state='detached', timeout=25000)
+    except Exception:
+        pass
+    warte_rechnen(p, 20)
+
+    bar1 = p.pg.locator('#recovery-bar')
+    has_bar1 = bar1.count() == 1
+    txt1 = bar1.text_content() if has_bar1 else ''
+    before1 = p.ev("return { name: App.doc.name, len: App.doc.items.length, w: App.doc.items[0] && App.doc.items[0].p.w };")
+    help_attr = p.pg.locator('#recovery-restore').get_attribute('data-help') if has_bar1 else None
+    p.pg.locator('#recovery-restore').click()
+    p.wait(1200)
+    warte_rechnen(p, 20)
+    p.ev("return Store.whenIdle();")
+    after1 = p.ev("return { bar: document.querySelectorAll('#recovery-bar').length, name: App.doc.name, len: App.doc.items.length, w: App.doc.items[0] && App.doc.items[0].p.w, errs: App.errors.length };")
+    ok1 = (
+        has_bar1
+        and 'Tracery wurde nicht richtig beendet – letzten Stand wiederherstellen?' in txt1
+        and 'Halterung A51' in txt1
+        and bool(re.search(r'\b\d{1,2}:\d{2}\b', txt1))
+        and before1 == {'name': 'Halterung A51', 'len': 1, 'w': 20}
+        and after1 == {'bar': 0, 'name': 'Halterung A51', 'len': 2, 'w': 55, 'errs': 0}
+    )
+
+    # 2. Sauberes Neuladen danach ohne weitere Änderung -> keine Meldung
+    p.pg.reload()
+    p.wait(3000)
+    try:
+        p.pg.locator('.loading').wait_for(state='detached', timeout=25000)
+    except Exception:
+        pass
+    warte_rechnen(p, 20)
+    clean_st = p.ev("return { bar: document.querySelectorAll('#recovery-bar').length, name: App.doc.name, len: App.doc.items.length, w: App.doc.items[0] && App.doc.items[0].p.w };")
+    ok2 = clean_st == {'bar': 0, 'name': 'Halterung A51', 'len': 2, 'w': 55}
+
+    # 3. Nochmals ändern, neu laden und „Verwerfen“ klicken -> alter Stand bleibt
+    p.ev("""App.change('Kugel dazu', d => {
+      const s = Model.newItem('sphere', { d: 10 });
+      s.name = 'Kugel';
+      d.items.push(s);
+    });""")
+    warte_rechnen(p, 20)
+    p.ev("return new Promise(r => setTimeout(r, 350)).then(() => Store.whenIdle());")
+
+    p.pg.reload()
+    p.wait(3000)
+    try:
+        p.pg.locator('.loading').wait_for(state='detached', timeout=25000)
+    except Exception:
+        pass
+    warte_rechnen(p, 20)
+    has_bar3 = p.pg.locator('#recovery-bar').count() == 1
+    p.pg.locator('#recovery-dismiss').click()
+    p.wait(800)
+    p.ev("return Store.whenIdle();")
+    after_dis = p.ev("return { bar: document.querySelectorAll('#recovery-bar').length, len: App.doc.items.length };")
+    p.pg.reload()
+    p.wait(3000)
+    try:
+        p.pg.locator('.loading').wait_for(state='detached', timeout=25000)
+    except Exception:
+        pass
+    warte_rechnen(p, 20)
+    after_dis_reload = p.ev("return { bar: document.querySelectorAll('#recovery-bar').length, len: App.doc.items.length };")
+    ok3 = has_bar3 and after_dis == {'bar': 0, 'len': 2} and after_dis_reload == {'bar': 0, 'len': 2}
+
+    # 4. Großes Projekt (> 400 KB Dokument + 15+ MB STEP-Import) rein aus IndexedDB wiederherstellen
+    big_prep = p.pg.evaluate("""async () => {
+      const { Kernel, Model, App, Start, Store } = window.__masswerk;
+      Start.newProject(true);
+      App.change('Basisquader', d => {
+        d.name = 'Grosses Projekt A51';
+        d.items.push(Model.newItem('box', { w: 20, d: 20, h: 20 }));
+      });
+      await App.rebuild();
+      const r = await Kernel.call('exportSTEP', { scene: Model.kernelScene(App.doc) });
+      const head = new TextDecoder('utf-8').decode(new Uint8Array(r.data));
+      const line = '/* ' + '0123456789abcdef'.repeat(4) + ' */\\n';
+      const need = 15600000 - head.length;
+      const pad = line.repeat(Math.ceil(need / line.length));
+      const bigStep = head.replace('DATA;', 'DATA;\\n' + pad);
+      App.change('Clean', d => { d.items = []; d.name = 'Grosses Projekt A51'; });
+      await App.autosave.flush();
+      App.markClean();
+      await Store.whenIdle();
+      await Start.importCAD(new File([bigStep], 'GrossesTeilA51.step'));
+      App.change('Grosse Notiz', d => {
+        d.name = 'Grosses Projekt A51';
+        d.notes = [{ id: 'n_big', text: 'x'.repeat(430000) }];
+      });
+      await new Promise(res => setTimeout(res, 350));
+      await Store.whenIdle();
+      return {
+        quick: localStorage.getItem('tracery.recovery.quick'),
+        flag: Store.getRecoveryFlag(),
+        stepLen: bigStep.length,
+      };
+    }""")
+    warte_rechnen(p, 45)
+    p.pg.reload()
+    p.wait(3500)
+    try:
+        p.pg.locator('.loading').wait_for(state='detached', timeout=25000)
+    except Exception:
+        pass
+    warte_rechnen(p, 45)
+
+    bar4 = p.pg.locator('#recovery-bar')
+    has_bar4 = bar4.count() == 1
+    txt4 = bar4.text_content() if has_bar4 else ''
+    p.pg.locator('#recovery-restore').click()
+    p.wait(1500)
+    warte_rechnen(p, 45)
+    st4 = p.ev("""return Mass.measure().then(m => {
+      const it = App.doc.items[0];
+      return {
+        bar: document.querySelectorAll('#recovery-bar').length,
+        name: App.doc.name,
+        len: App.doc.items.length,
+        hasBlobId: !!(it && it.p && it.p.blobId),
+        errs: App.errors.length,
+        vol: m && m.volume,
+        noteLen: App.doc.notes && App.doc.notes[0] && App.doc.notes[0].text ? App.doc.notes[0].text.length : 0,
+      };
+    });""")
+    ok4 = (
+        big_prep['stepLen'] > 15_500_000
+        and big_prep['quick'] is None
+        and bool(big_prep['flag'] and big_prep['flag'].get('name') == 'Grosses Projekt A51')
+        and has_bar4
+        and 'Grosses Projekt A51' in txt4
+        and bool(re.search(r'\b\d{1,2}:\d{2}\b', txt4))
+        and st4['bar'] == 0
+        and st4['name'] == 'Grosses Projekt A51'
+        and st4['len'] == 1
+        and st4['hasBlobId']
+        and st4['errs'] == 0
+        and abs((st4['vol'] or 0) - 8000) < 10
+        and st4['noteLen'] == 430000
+    )
+
+    # 5. Hilfetext crashRecovery vollständig und am Knopf verknüpft
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    h_rec = hilfen.get('crashRecovery') or {}
+    ok5 = (
+        help_attr == 'crashRecovery'
+        and bool(h_rec.get('tip') and h_rec.get('hilfe') and h_rec.get('tipp'))
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
 
 
 def t_a050_genauigkeit(p):
@@ -11040,9 +11454,13 @@ TESTS = [
     ('[A-043] Wickeln um Zylinder (KP-34): Rechteck 31,4 mm auf Ø20 → 180° ± 2° / vertieft, Winkel & Ø40 / Linie & Entlang Pfad / Verlauf & Hilfe', t_a043_wickeln_zylinder),
     ('[A-044] IGES und BREP: Export und Import (Quader, Loch, Dialog)', t_a044_iges_brep),
     ('[A-046] Dateien ins Fenster ziehen: Hinweis-Rahmen / STL / Projektdatei / OBJ / DXF & SVG / unbekannte Datei', t_a046_dateien_ziehen),
+    ('[A-048] Geometrie-Prüfung: gesunder Quader / Kugel & Zylinder / winzige Kante / Hervorheben / Suche & Hilfe', t_geometrie_pruefung),
     ('[A-047] Import prüfen und heilen: offenes STEP / Hinweis / Heilen mit Ergebnis / Lücken & gültiges STEP', t_a047_import_heilen),
     ('[A-049] Werkzeugleiste anpassen & Favoriten: Rechtsklick / Entfernen / Hinzufügen & Sortieren per Ziehen / Favorit ganz links / Neu laden / Zurücksetzen & Hilfe', t_a049_werkzeugleiste),
     ('[A-050] Genauigkeit & Nachkommastellen: Anzeige 0–4 (12,3456 → 12,346 / 12) / Winkel getrennt / Schilder, Maße & Panels gleich / gespeichertes Maß & Kern exakt / Neuladen & Hilfe', t_a050_genauigkeit),
+    ('[F-11240651] Volltest-Reparatur: Übergang-Vorschau im Auswahl-Werkzeug / Explosion-Animation & Regler-Abbruch bei rAF-Stau', t_f11240651),
+    ('[A-052] Statusleiste vollständig: 2 Kanten Summe / Fläche Flächeninhalt / Einheit-Klick öffnet Einstellung / Rechenzustand & Hilfe', t_a052_statusleiste),
+    ('[A-051] Wiederherstellen nach Absturz: Meldung mit Zeit & Projektname / Wiederherstellen / Verwerfen / großes Projekt aus IndexedDB / sauber gespeichert ohne Meldung', t_a051_absturz_wiederherstellen),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

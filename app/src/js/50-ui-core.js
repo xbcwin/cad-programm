@@ -165,6 +165,7 @@ const UI = (() => {
   function busy(on) {
     if (on && !busyEl) { busyEl = h('div', { class: 'busy' }, h('div', { class: 'spin' }), 'Rechnet …'); $('#overlay').append(busyEl); }
     else if (!on && busyEl) { busyEl.remove(); busyEl = null; }
+    if (typeof Measure !== 'undefined' && Measure.setCalcBusy) Measure.setCalcBusy(!!on);
   }
   // ---------- Eingabefelder ----------
   function numField({ id, label, value, unit = 'mm', len, axis, onCommit, min, int, placeholder, expr = true, step }) {

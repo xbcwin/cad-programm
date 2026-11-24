@@ -8,12 +8,12 @@
   $('#btn-undo').innerHTML = icon('undo'); $('#btn-redo').innerHTML = icon('redo'); $('#btn-menu').innerHTML = icon('menu');
   $('#btn-left').innerHTML = icon('list'); $('#btn-right').innerHTML = icon('sliders');
 
-  window.__masswerk = { App, Viewer, Model, Actions, Sketch, SK, TTF, THREE, Print, Drawing, Kernel, UI, Commands, Toolbar, Panels, Handles, Start, AI, Measure, Place, Store, I18n, T, Units, RefFix, Expr };
+  window.__masswerk = { App, Viewer, Model, Actions, Sketch, SK, TTF, THREE, Print, Drawing, Kernel, UI, Commands, Toolbar, Panels, Handles, Start, AI, Measure, Place, Store, I18n, T, Units, RefFix, Expr, GeomCheck };
   UI.initTips();
   I18n.applyDom();
   Viewer.init($('#viewport'));
-  window.__V = Viewer; window.__M = { Store, Interact, Measure, Datums, RefFix, Print, ViewPrefs, App, Actions, Model, Timeline, Start, Comp, Handles, Sketch, SK, TTF, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views, Mass, Select, Versions, DroneTpl, DroneUI, DroneLib, DroneCheck, Plates, Variants, Explain, Weak, AI, Snap, Toolbar, Panels, Joints, I18n, T, Units, Expr, Tour }; window.__S = Start; // für automatische Tests
-  Panels.init(); Datums.init(); RefFix.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Notes.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init(); Refine.init(); Comp.init(); Views.init(); Mass.init(); Joints.init(); Versions.init(); Start.init();
+  window.__V = Viewer; window.__M = { Store, Interact, Measure, Datums, RefFix, Print, ViewPrefs, App, Actions, Model, Timeline, Start, Comp, Handles, Sketch, SK, TTF, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views, Mass, Select, Versions, DroneTpl, DroneUI, DroneLib, DroneCheck, Plates, Variants, Explain, Weak, AI, Snap, Toolbar, Panels, Joints, I18n, T, Units, Expr, Tour, GeomCheck }; window.__S = Start; // für automatische Tests
+  Panels.init(); Datums.init(); RefFix.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Notes.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init(); Refine.init(); Comp.init(); Views.init(); GeomCheck.init(); Mass.init(); Joints.init(); Versions.init(); Start.init();
 
   // Kopfzeile
   $('#btn-undo').onclick = () => App.undo();
@@ -62,19 +62,38 @@
   $('#center').addEventListener('pointerdown', () => { if (innerWidth <= 900) ws.classList.remove('show-left', 'show-right'); });
   App.on('busy', (on) => UI.busy(on));
   App.on('selection', () => { if (innerWidth <= 900 && App.sel.length) { /* rechte Leiste nicht aufzwingen */ } });
-  window.addEventListener('beforeunload', () => App.autosave.flush && App.autosave.flush());
+  window.addEventListener('beforeunload', () => {
+    if (Start.flushRecovery) Start.flushRecovery();
+    if (App.autosave && App.autosave.flush && !Start.pendingRecovery) App.autosave.flush();
+  });
 
   // Letztes Projekt aus der Browser-Datenbank laden (ggf. aus localStorage übernehmen) oder Startseite zeigen
   updName(); UI.renderHint();
   UI.loading(true, 0.02);
   const storageReady = (async () => {
     await Store.init();
-    const lastId = Store.getLastId();
-    const last = lastId ? await App.loadStored(lastId) : null;
-    if (last) { try { App.setDoc(last, { fit: true }); } catch (_) { App.setDoc(Model.newDoc()); } }
-    else App.setDoc(Model.newDoc());
-    updName(); UI.renderHint();
-    if (!last) Start.show();
+    const rec = Start.checkRecoveryOnBoot ? await Start.checkRecoveryOnBoot() : null;
+    if (rec) {
+      let baseLoaded = false;
+      if (rec.baseDoc) {
+        try {
+          await Store.hydrateDoc(rec.baseDoc);
+          App.setDoc(rec.baseDoc, { fit: true, fromBoot: true, noAutosave: true });
+          baseLoaded = true;
+        } catch (_) { baseLoaded = false; }
+      }
+      if (!baseLoaded) App.setDoc(Model.newDoc(), { fit: false, fromBoot: true, noAutosave: true });
+      updName(); UI.renderHint();
+      Start.startRecoveryTracking(baseLoaded ? rec.baseDoc : null);
+    } else {
+      const lastId = Store.getLastId();
+      const last = lastId ? await App.loadStored(lastId) : null;
+      if (last) { try { App.setDoc(last, { fit: true, fromBoot: true, noAutosave: true }); } catch (_) { App.setDoc(Model.newDoc(), { fit: false, fromBoot: true, noAutosave: true }); } }
+      else App.setDoc(Model.newDoc(), { fit: false, fromBoot: true, noAutosave: true });
+      updName(); UI.renderHint();
+      Start.startRecoveryTracking(last || null);
+      if (!last) Start.show();
+    }
   })();
 
   Kernel.start((p) => UI.loading(true, p, p > 0.84 ? 'CAD-Kern startet …' : 'Der CAD-Kern wird geladen …'))

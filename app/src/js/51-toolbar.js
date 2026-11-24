@@ -1,7 +1,7 @@
 // ================= Werkzeugleiste anpassen & Favoriten (BE-04) =================
 const Toolbar = (() => {
   const KEY = 'tracery-werkzeugleiste';
-  const DEFAULT_ITEMS = ['body', 'sketch', 'parts', 'measure', 'notes', 'views', 'export'];
+  const DEFAULT_ITEMS = ['body', 'sketch', 'parts', 'measure', 'notes', 'views', 'check', 'export'];
 
   let items = [...DEFAULT_ITEMS];
   let favs = [];
@@ -17,6 +17,7 @@ const Toolbar = (() => {
       { id: 'measure', group: 'Grundwerkzeuge', domId: 't-measure', icon: 'measure', label: T('tool.measure'), tip: T('tool.measureTip'), kbd: 'M', cls: 'minor pro', help: 'measure', run: () => Measure.toggle() },
       { id: 'notes', group: 'Grundwerkzeuge', domId: 't-notes', icon: 'noteDraw', label: T('tool.notes'), tip: T('tool.notesTip'), kbd: 'N', cls: 'minor pro', run: () => Notes.toggle() },
       { id: 'views', group: 'Grundwerkzeuge', domId: 't-views', icon: 'xray', label: T('tool.views'), tip: T('tool.viewsTip'), cls: 'minor pro', run: (e) => Views.menu(e.currentTarget) },
+      { id: 'check', group: 'Grundwerkzeuge', domId: 't-check', icon: 'target', label: T('tool.check'), tip: T('tool.checkTip'), cls: 'minor pro', run: (e) => GeomCheck.menu(e.currentTarget) },
       { id: 'export', group: 'Grundwerkzeuge', domId: 't-export', icon: 'export', label: T('tool.export'), short: T('tool.exportShort'), tip: T('tool.exportTip'), kbd: 'Strg E', cls: 'primary', run: () => Print.exportDialog() },
       // Bearbeiten & Formen
       { id: 'holeWizard', group: 'Bearbeiten & Formen', domId: 't-holeWizard', icon: 'holeWizard', label: 'Bohrung', tip: 'Bohrungs-Assistent öffnen', cls: 'minor', help: 'holeWizard', run: (e) => Place.holeWizard(e.currentTarget) },
@@ -240,6 +241,7 @@ const Toolbar = (() => {
     b.addEventListener('click', def.run);
     if (def.id === 'measure' && typeof Measure !== 'undefined' && Measure.active) b.classList.add('active');
     if (def.id === 'notes' && typeof Notes !== 'undefined' && Notes.active) b.classList.add('active');
+    if (def.id === 'check' && typeof GeomCheck !== 'undefined' && GeomCheck.active) b.classList.add('active');
     return b;
   }
 
@@ -257,6 +259,7 @@ const Toolbar = (() => {
       { label: T('menu.more.notes'), icon: 'noteDraw', kbd: 'N', run: () => Notes.toggle() },
       { label: T('menu.more.views'), icon: 'xray', run: () => Views.menu($('#t-more')) },
       { label: T('menu.more.weakSpots'), icon: 'target', run: () => Weak.dialog() },
+      { label: T('menu.check.geom'), icon: 'target', id: 'more-geom-check', help: 'geomCheck', run: () => GeomCheck.open() },
       '-', { label: T('menu.more.showAllPro'), icon: 'sliders', help: 'levelSwitch', run: () => ViewPrefs.setLevel('pro') },
     ]));
     return b;

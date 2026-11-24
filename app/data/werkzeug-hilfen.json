@@ -933,5 +933,30 @@
     "tip": "Nachkommastellen für Anzeige (0–4) und Winkel (0–4) getrennt wählen",
     "hilfe": "In den Einstellungen stellst du getrennt ein, wie viele Stellen nach dem Komma bei Längen, Maßen, Schildern, Messungen und Panels (0 bis 4) sowie bei Winkeln (0 bis 4) angezeigt werden. Alle eingegebenen Maße, Formeln und der CAD-Kern rechnen im Hintergrund immer mit voller Genauigkeit weiter.",
     "tipp": "Auch wenn 0 Stellen eingestellt sind, kannst du jederzeit exakte Werte wie 12,3456 eintippen – sie bleiben genau so gespeichert und sichtbar, sobald du mehr Stellen wählst."
+  },
+  "geomCheck": {
+    "tip": "Modell auf kaputte Flächen, winzige Kanten und Selbstschnitte prüfen",
+    "hilfe": "Prüfen → „Geometrie prüfen“ untersucht alle sichtbaren Körper mit dem OpenCascade-Kern auf beschädigte oder zusammengefallene Flächen, winzige Kanten unter 0,01 mm (oft durch zwei fast gleiche Maße) sowie sich selbst schneidende Flächen. Ein Klick auf einen Eintrag in der Liste hebt die betroffene Stelle rot im Modell hervor und fährt die Kamera heran.",
+    "tipp": "Wenn eine Rundung oder ein Export unerwartet scheitert, deckt die Geometrie-Prüfung winzige Kanten oder kaputte Flächen meist sofort auf."
+  },
+  "statusSel": {
+    "tip": "Auswahl-Info in der Statusleiste",
+    "hilfe": "Zeigt unten rechts sofort, was du gerade gewählt hast – zum Beispiel die Länge einer Kante, die Summe mehrerer Kanten, den Flächeninhalt einer Fläche, den Durchmesser einer Rundung oder die Größe eines Körpers.",
+    "tipp": "Ein Klick auf das Auswahl-Schild kopiert den Zahlenwert in die Zwischenablage."
+  },
+  "statusUnit": {
+    "tip": "Aktuelle Projekt-Einheit – Klick öffnet die Einstellung",
+    "hilfe": "Zeigt die gerade eingestellte Einheit dieses Projekts (mm, cm, m oder Zoll). Alle Längen, Flächen und Maßeingaben ohne eigene Einheit richten sich danach.",
+    "tipp": "Klick direkt auf die Einheit, um sie in den Einstellungen umzustellen."
+  },
+  "statusCalc": {
+    "tip": "Rechenzustand des CAD-Kerns",
+    "hilfe": "Zeigt auf einen Blick, ob der OpenCascade-Kern gerade rechnet, bereit ist oder ob ein Schritt im Verlauf einen Fehler meldet.",
+    "tipp": "Bei „1 Fehler“ klickst du rechts daneben auf die Ampel oder im Verlauf auf den rot markierten Schritt für Details."
+  },
+  "crashRecovery": {
+    "tip": "Ungesicherten Stand nach einem Absturz oder Neuladen wiederherstellen",
+    "hilfe": "Tracery merkt sich laufende Änderungen automatisch in der Browser-Datenbank – auch bei großen Projekten mit importierten 3D-Modellen. Wird die Seite ohne Speichern geschlossen oder neu geladen, erscheint beim nächsten Start dieses Angebot mit Projektname und Uhrzeit.",
+    "tipp": "Mit „Wiederherstellen“ holst du alle ungesicherten Änderungen sofort zurück; „Verwerfen“ kehrt zum letzten gespeicherten Stand zurück."
   }
 }

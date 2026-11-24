@@ -76,7 +76,7 @@ Leitlinien:
   - `buildExtrude`/`buildRevolve`/`buildLoft`/`buildSweep`/`buildImport`
   - `patternShape` (Rechteck, Kreis mit Achse z/x/y/pick, Pfad, Spiegeln auch an Fläche mit `bind`)
   - `splitBody`, `applyFinishes` (Rundung, Fase, Entformungsschräge `draft`, Wandstärke `shell`)
-  - `evaluate`, `measure`, `project` (Zeichnung, DXF), `clashes` (Durchdringungen und Prüfkörper), `faceLoops`, `checkImport`/`healImport` (BRepCheck, ShapeFix, Nähen mit Toleranz)
+  - `evaluate`, `measure`, `project` (Zeichnung, DXF), `clashes` (Durchdringungen und Prüfkörper), `faceLoops`, `checkGeometry` (Geometrie-Prüfung PF-08), `checkImport`/`healImport` (BRepCheck, ShapeFix, Nähen mit Toleranz)
 - Gewinde über Helix-Sweep mit `PITCH`-Tabelle.
 
 **JS-Module (Datei → Aufgabe):**
@@ -85,7 +85,7 @@ Leitlinien:
 | --- | --- |
 | `00-util.js` | Hilfen, `Expr`-Rechner (`wenn`, `runden`/`aufrunden`/`abrunden`, `tabelle`, `< > <= >= == !=`, Klartext-Fehler) mit Einheiten (mm, cm, m, in, zoll, ", °), Projekt-Einheiten `Units` (`mm`, `cm`, `m`, `in`), Anzeige-Rundung `FMT`/`fmt`/`fmtFixed`/`fmtAngle`/`fmtAngleU`, Icon-Set `IC`, eingebettete Hilfetexte `HELP` (muss immer gleich `app/data/werkzeug-hilfen.json` sein, per Python neu erzeugen) |
 | `01-i18n.js` | Übersetzbare Oberfläche (`I18n`, `T(key, vars)`, eingebettete `TEXTS_DE` aus `app/data/texte-de.json`) |
-| `05-storage.js` | Browser-Datenbank (`Store`, IndexedDB `tracery-db` mit `projects`, `versions`, `blobs`, `meta`), binäre Import-Blobs, Migration aus `localStorage` |
+| `05-storage.js` | Browser-Datenbank (`Store`, IndexedDB `tracery-db` mit `projects`, `versions`, `blobs`, `meta`), binäre Import-Blobs, Absturz-Sicherung (`saveRecovery`/`loadRecovery`/`clearRecovery`), Migration aus `localStorage` |
 | `10-model.js` | Projekt-Datenmodell, `KINDS`, `newItem`, `find`/`walk`/`topOf`, Matrizen, `vars` (Maße), `kernelItem`, `sketchParams`/`loftParams`/`sweepParams`/`pathPatternParams`, `migrate` |
 | `14-ttf.js` (`TTF`) | Kleiner TrueType-Leser im Browser (`parse`: `glyf`-Umrisse mit quadratischen Béziers und zusammengesetzten Glyphen, `cmap`, `hmtx`, `kern`, CFF/OTF-Abweisung) |
 | `15-sketchcore.js` (`SK`) | Skizzen-Geometrie: `segsOf`, `regions`, `chains` (offene Pfade), `bounds`, Splines als exakte Bézier (`splineBez`), Text-Umrisse (Inter OFL + eigene TTFs via `syncFonts`, `kern` + Laufweite), Ellipse, Fangpunkte, Maße |
@@ -107,7 +107,7 @@ Leitlinien:
 | `51-toolbar.js` (`Toolbar`) | Anpassbare 3D-Werkzeugleiste (`tracery-werkzeugleiste`): Rechtsklick-Menü, Anpassen-Dialog per Ziehen, Favoriten ganz links, Zurücksetzen |
 | `52-snap.js` | magnetisches Einrasten |
 | `52-place.js` | Platzieren, Bohrungs-Assistent |
-| `53-views.js` | Schnitt, Röntgen, Explosion, Fokus-Vorschau, Überhänge |
+| `53-views.js` | Schnitt, Röntgen, Explosion (`animateTo` mit Timer-Fallback bei rAF-Stau), Fokus-Vorschau, Überhänge |
 | `54-select.js` | Auswahlfilter, Ähnliche, Kantenkette |
 | `55-sketch.js` | Skizzen-Modus: alle Werkzeuge, Panel, Fertig/Hochziehen, verbundene Kanten, Re-Entranz-Schutz in `render()` |
 | `56-notes.js` | Notizstift |
@@ -118,8 +118,9 @@ Leitlinien:
 | `70-drawing.js` | technische Zeichnung, PDF |
 | `80-ai.js` | KI-Kollege (`AI.RULES`, `AI.ACTIONS`, `AI.SUGGESTIONS`, `AI.open` – allgemeines CAD ohne Drohnen-Bezug; `drohne`-Aktion technisch erhalten) |
 | `84-drone.js` | Rahmen-Generator, Frame-Assistent, Bausätze |
-| `85-start.js` | Startseite, Öffnen, Drag-and-Drop-Rahmen (`#drop-overlay`), Import (STEP mit `parseSTEP` für Namen/Farben/Baugruppen, IGES, BREP, STL, 3MF, OBJ, DXF, SVG), Import-Prüfung & Heilen (`checkImport`, `healImport`, `#import-check-bar`) |
+| `85-start.js` | Startseite, Öffnen, Drag-and-Drop-Rahmen (`#drop-overlay`), Absturz-Wiederherstellung (`#recovery-bar`, `restoreRecovery`, `dismissRecovery`), Import (STEP mit `parseSTEP` für Namen/Farben/Baugruppen, IGES, BREP, STL, 3MF, OBJ, DXF, SVG), Import-Prüfung & Heilen (`checkImport`, `healImport`, `#import-check-bar`) |
 | `86-dronecheck.js` | Drohnen-Check |
+| `87-geomcheck.js` | Geometrie-Prüfung (`GeomCheck`, Prüfen-Menü, kaputte Flächen, winzige Kanten, Selbstschnitte) |
 | `88-aihelp.js` | „Erklär diesen Schritt“, Schwachstellen-Analyse `Weak` |
 | `90-main.js` | Start; stellt `window.__M` für Tests bereit |
 
@@ -158,7 +159,7 @@ Leitlinien:
   - Nur für Teile ganz oben im Verlauf. Gelenke sind kein Schritt der Zeitleiste.
   - Ketten: Ein Teil darf an mehreren Gelenken hängen, wird aber nur von einem bewegt; Kreise werden abgelehnt.
 - **Übergang mit Mittellinie:** `loft.p.path` = Skizze mit offenem Zug (Kern: Pipe-Shell mit mehreren Schnitten).
-- **Übergang mit Führungskurven:** `loft.p.rail`, `loft.p.rail2` = Skizzen in Ebenen durch die Achse (die zweite quer zur ersten); `Model.railSections` mischt und streckt Zwischenschnitte, der Kern baut sie als `sections3`; `loftPreview` in `55-sketch.js` verzögert nur bei geänderter Kurve neu, damit Kamera-/Maus-`render()`-Aufrufe die Vorschau nicht aushungern.
+- **Übergang mit Führungskurven:** `loft.p.rail`, `loft.p.rail2` = Skizzen in Ebenen durch die Achse (die zweite quer zur ersten); `Model.railSections` mischt und streckt Zwischenschnitte, der Kern baut sie als `sections3`; `loftPreview` in `55-sketch.js` wird von `onMove` auch im Auswahl-Werkzeug (`select`) angestoßen und verzögert nur bei geänderter Kurve neu, damit Kamera-/Maus-`render()`-Aufrufe die Vorschau nicht aushungern.
 - **Rohr im Raum:** `sweep.p.path3d = {pts: [[x,y,z],…], smooth, rules: [{ax:'x'|'y'|'z'|'perp'|'par', len}|null, …], bind: [{id, lp}|null, …] (Punkt hängt an Körper id, lp = Lage im Körper)}` statt `p.sketch`; `Model.path3dPoints` rechnet die Lage mit Regeln.
 - **Drohnen:** vorne ist **−Y**. Die Maße `Achsabstand`, `Armwinkel`, `Armwinkel_hinten`, `Armbreite`, `Armdicke`, `Plattenbreite`/`-länge`/`-dicke`, `Bolzenhöhe`, Stack, Motorlochkreis, Kamerabreite, `Propeller` und `Motorneigung` steuern den Rahmen.
 
@@ -183,7 +184,7 @@ Leitlinien:
 - 2D-Dateien: `Print.entsToDXF(ents)` / `Print.entsToSVG(ents)` (Skizzen-Elemente ohne Hilfslinien; Linie, Kreis, Bogen echt, alles andere als Linienzug; SVG in mm, y nach oben), `Print.save2D`, `Print.faceTo2D(face, kind)` über Kern `faceLoops` und `Actions.faceFrame`; Knöpfe `#sk-dxf`/`#sk-svg`, Rechtsklick `cm-facedxf`/`cm-facesvg`
 - Export-Einstellungen: `opts.q` (Kern `exportMeshes(scene, fine, q)`, Toleranz × q), `opts.stlText` → `Print.buildSTLText`; Felder `#ex-q`, `#ex-stlfmt`; `Print.lastTris`
 - Export: `Print.exportSelection()` (gewählte Teile oberster Ebene, verrechnete zählen zum Ziel) → Option `onlySel` filtert die Netze nach `id` und gibt `only` an den Kern (`exportSTEP(scene, only)`); Option `each` legt „Einzeln/<Name>.stl/.3mf/.obj/.mtl/.glb“ an; `Print.buildOBJ`, `Print.buildGLB`; `Print.lastExport` = Dateinamen des letzten ZIP
-- Lage unter der Maus: `#coords` in der Statusleiste (`Measure.showCoords`, höchstens alle 50 ms inkl. letztem Mauspunkt am Bewegungsende; `Measure.coords`)
+- Lage unter der Maus & Statusleiste: `#coords`, `#status-sel` (Auswahl-Info: Kanten/Summe, Fläche, Ø, Körper, Skizzen-Auswahl mit Klick-Kopieren), `#status-unit` (Projekt-Einheit, Klick öffnet Einstellungen) und `#status-calc` (Rechenzustand `loading`/`busy`/`error`/`ready`) in `.ampel-wrap` (`Measure.showCoords`/`updateStatus`/`setCalcBusy`/`statusInfo`, `Measure.coords`)
 - Maus-Steuerung: `ViewPrefs` `mouse` ('tracery' | 'onshape' | 'solidworks' | 'fusion' | 'blender') → `Viewer.setMouseStyle`; Skizze, Setzen und Notizen rufen `Viewer.useButtons('sketch' | 'place' | 'model')` statt `mouseButtons` selbst zu setzen; `Viewer.leftOrbits` = false → links im Leeren zieht einen Rahmen
 - Drehteller-Video: `Print.turntable({seconds, fps, save})` (MediaRecorder auf `canvas.captureStream`, Kamera dreht um die senkrechte Achse durch den Blickpunkt mit Timer-Fallback, synchronem `Viewer.renderNow()` und `track.requestFrame()`, danach zurück), Dialog `Print.turntableDialog` (`#tt-sec`), `Print.lastVideo`
 - Vorführen: `Views.present(on)` (Taste P, Klasse `body.presenting`, Vollbild, Drehteller über `requestAnimationFrame`, Leiste `#present-bar`), `Views.presenting`
@@ -212,6 +213,7 @@ Leitlinien:
 - Einfache Oberfläche für Einsteiger („Einfach/Profi“): Zwei-Karten-Wahl beim ersten Start (`ViewPrefs.firstStart`, `levelCards`) und in den Einstellungen, `ViewPrefs.level` (`'simple'|'pro'`), Schild `#btn-level`; Einführung „Deine erste Skizze“ (`Tour`, ereignisgesteuert über `history`/`doc`/`mode`/`sketch`/`pop`)
 - Genauigkeit und Nachkommastellen (BE-11): `ViewPrefs.decimals` (0–4) und `ViewPrefs.angleDecimals` (0–4) steuern `FMT.dec`/`FMT.angle` einheitlich für Schilder, Maße, Messungen und Panels ohne Änderung der Rechengenauigkeit
 - Projekt in einen Ordner speichern (BE-14): `Start.saveToFolder`/`saveToFolderNow`/`disconnectFolder`/`folderSupported`/`folderInfo` (File System Access API, gebündelt alle 10 s, Anzeige `#btn-folder-status`)
+- Wiederherstellen nach Absturz (BE-15): `Store.saveRecovery`/`loadRecovery`/`clearRecovery` (IndexedDB `meta.recovery` + kompakte Schnellkopie in `localStorage`), `App.dirty`/`markClean`, Banner `#recovery-bar` mit Projektname, Zeit, „Wiederherstellen“ und „Verwerfen“
 - Eigene Tastenkürzel (nur „Profi“): `Commands.shortcuts`/`setShortcut`/`resetShortcuts`/`renderShortcutsEditor`, gespeichert in `localStorage` (`tracery-kuerzel`), Duplikat-Prüfung, Einstellungs-Tab `#set-tab-keys`
 - Werkzeugleiste anpassen (BE-04): `Toolbar` in `51-toolbar.js`, Rechtsklick → „Anpassen …“, Werkzeuge per Ziehen hinzufügen/entfernen/sortieren, Favoriten mit Stern ganz links, gespeichert in `localStorage` (`tracery-werkzeugleiste`), „Zurücksetzen“
 - Notizstift; Messen (Abstand, Winkel, Fläche); Material je Teil, Gewicht, Schwerpunkt

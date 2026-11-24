@@ -1815,6 +1815,15 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **DXF/SVG per Drop & unbekannte Datei**: Drop einer SVG im Modellmodus legt einen Skizzenkörper an; in einer offenen Skizze zeigt der Rahmen den Skizzen-Hinweis und ein DXF-Drop fügt den Kreis direkt in die Skizze ein; eine unbekannte `.txt`-Datei meldet einen Fehler ohne Änderung am Modell.
 - [ ] **Von Hand**: Im Finder/Explorer echte Projekt-, STEP-, OBJ-, 3MF- und SVG-Dateien direkt über die Startseite, über den 3D-Bereich und über eine offene Skizze ziehen und prüfen, ob der Rahmen flüssig ein- und ausblendet.
 
+## Geometrie-Prüfung (Auto [A-048], PF-08)
+
+- [x] **Gesunder Quader über Prüfen-Menü**: Klick auf „Prüfen“ (`#t-check`) → „Geometrie prüfen“ (`#check-geom`) prüft den Quader im Kern (`checkGeometry`) und zeigt „Keine Probleme“ (`#geom-check-ok`) ohne Fundstellen.
+- [x] **Kugel & Zylinder ohne Fehlalarme**: Entartete Polkanten und Nahtkanten werden übersprungen; gesunde Kugel und Zylinder melden gemeinsam `0` Probleme.
+- [x] **Winzige Kante erkannt**: Vereinigen zweier Quader mit zwei fast gleichen Maßen (`20` mm und `20,005` mm) liefert in der Liste Einträge mit `kind === 'tinyEdge'` (`length < 0,01 mm`), die Kante samt Länge in mm nennen.
+- [x] **Anklickbare Liste & 3D-Hervorhebung**: Klick auf einen Eintrag in `#geom-check-list` setzt `.active`, erzeugt die rote Hervorhebung im 3D-Bild (`GeomCheck.hasHighlight === true`) und schließt sauber über `#gc-close`.
+- [x] **Befehlssuche & Hilfetext**: `Commands.search('Geometrie prüfen')` findet `geom-check`, `HELP.geomCheck` besitzt `tip`, `hilfe` und `tipp`.
+- [ ] **Von Hand**: Im Browser ein importiertes/komplexes Teil über „Prüfen → Geometrie prüfen“ prüfen, verschiedene Einträge anklicken und kontrollieren, ob Kamerafokus und roter Ring/Kante gut sichtbar sind.
+
 ## Import prüfen und heilen (Auto [A-047], IO-10)
 
 - [x] **Offenes STEP erkennen & Hinweis zeigen**: Absichtlich offenes STEP (eine Fläche fehlt, `OPEN_SHELL` mit 4 offenen Kanten) wird nach dem Import automatisch per `BRepCheck_Analyzer`/`BRepBuilderAPI_Sewing` geprüft (`hasIssues=true`, `openEdges=4`, `solids=0`) und blendet die Hinweis-Leiste `#import-check-bar` samt „Heilen“-Knopf sowie den Bereich `#import-check-panel` ein.
@@ -1838,6 +1847,29 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Skizze, Maße & Messungen**: Maße-Panel, `.skdim`, Eigenschaftsfelder, `#dim-table` und dauerhafte Messungen (`.mpin`, `#measure-tree`) übernehmen Änderungen sofort ohne Verlust der Genauigkeit.
 - [x] **Eingabe, Persistenz & Hilfe**: Exakte Eingaben bei 0 Stellen bleiben exakt gespeichert; Einstellungen bleiben nach Neuladen erhalten; Befehl `settings-precision` und Hilfetext `precision` sind vorhanden.
 - [ ] **Von Hand**: In den Einstellungen zwischen 0 und 4 Stellen für Anzeige und Winkel wechseln und prüfen, ob beim Messen und Zeichnen in Zoll und Millimeter alle Schilder ruhig und übersichtlich wirken.
+
+## Volltest-Reparatur (Auto [F-11240651])
+
+- [x] **Übergang-Vorschau im Auswahl-Werkzeug**: `Sketch.onMove` löst `loftPreview()` auch bei `S.tool === 'select'` aus (`loftpath`, `loftrail`, `loftrail2`), ohne das `render()`-Aussetzen für normale Auswahl-Mausbewegungen aufzugeben; die Vorschau biegt und wölbt sich sofort.
+- [x] **Explosion in Gruppen bei rAF-Stau**: `Views.animateTo()` nutzt neben `requestAnimationFrame` einen `setTimeout`-Fallback (`st.exTimer`), sodass Auseinanderrücken, `#ex-groups` und Zusammensetzen samt `setGroups(false)` auch bei blockiertem `requestAnimationFrame` innerhalb der Animationszeit abschließen.
+- [x] **Sauberer Abbruch über Regler & `Views.reset()`**: `stopExAnim()` bricht sowohl `st.exAnim` als auch `st.exTimer` ab, sodass manuelles Ziehen an `#ex-range` den Zustand exakt beibehält.
+- [ ] **Von Hand**: Im Browser bei einem Übergang eine Führungs- oder Mittellinie ziehen und prüfen, dass die Vorschau mitgeht, sowie bei einer Baugruppe „Explosion“ mit „Gruppen auch zerlegen“ öffnen, am Regler schieben und wieder zusammensetzen.
+
+## Statusleiste vollständig (Auto [A-052], BE-17)
+
+- [x] **Auswahl-Info (`#status-sel`)**: Zwei gewählte Kanten zeigen „2 Kanten“ samt aufsummierter Länge (inkl. „37,7 mm“ bei `17,7 + 20 mm`), Klick kopiert den Wert; eine ebene Fläche zeigt „Fläche“ samt Flächeninhalt (`1200 mm²`), eine runde Fläche Fläche + Durchmesser, ein Körper seine Hüllmaße; bei leerer Auswahl wird das Schild ausgeblendet.
+- [x] **Einheit & Einstellungen (`#status-unit`)**: Zeigt die aktuelle Projekt-Einheit (`mm`/`cm`/…); Klick öffnet das Einstellungsfenster mit Fokus auf `#set-proj-unit`; Umstellen auf `cm` aktualisiert Einheit und Auswahl-Anzeige (`12 cm²`) sofort.
+- [x] **Rechenzustand (`#status-calc`)**: Wechselt zwischen „Bereit“ (`ready`), „Rechnet …“ (`busy`) und Fehleranzahl („1 Fehler“, `error`) samt Rückkehr nach `App.undo()`.
+- [x] **Layout & Hilfetexte**: `#coords`, `#status-sel`, `#status-unit`, `#status-calc` und `#ampel` liegen sauber nebeneinander im Bildbereich; `statusSel`, `statusUnit` und `statusCalc` sind in `werkzeug-hilfen.json` und `HELP` vorhanden.
+- [ ] **Von Hand**: Im Browser bei engem Fenster (< 1100 px), im Skizzen-Modus (Linien, Rechtecke, Mehrfach-Auswahl) und bei langen Neuberechnungen prüfen, dass sich die Felder in der Statusleiste nicht überdecken oder abschneiden.
+
+## Wiederherstellen nach Absturz (Auto [A-051], BE-15)
+
+- [x] **Meldung nach Absturz / Neuladen ohne Speichern**: Projekt ändern und die Seite ohne Speichern neu laden zeigt `#recovery-bar` mit „Tracery wurde nicht richtig beendet – letzten Stand wiederherstellen?“, Projektname und Uhrzeit.
+- [x] **Wiederherstellen & sauberes Neuladen**: Klick auf „Wiederherstellen“ lädt alle ungesicherten Änderungen fehlerfrei ins Modell; ein erneutes Neuladen ohne weitere Änderung startet direkt ohne Meldung.
+- [x] **Verwerfen**: Klick auf „Verwerfen“ kehrt zum letzten gespeicherten Stand zurück und löscht den Wiederherstellungs-Eintrag dauerhaft.
+- [x] **Große Projekte aus IndexedDB & Hilfetext**: Projekte > 400 KB samt 15-MB-STEP-Import (`blobId`) werden rein über IndexedDB (`meta.recovery` + `blobs`) wiederhergestellt; Hilfetext `crashRecovery` ist vollständig.
+- [ ] **Von Hand**: Im Browser ein Projekt bearbeiten, den Tab hart schließen oder aktualisieren und die Meldung auf Startseite und 3D-Ansicht prüfen.
 
 ## Fehler melden
 

@@ -97,6 +97,8 @@
   "tool.notesTip": "Notizstift: frei malen und Text hinschreiben – ohne technische Bedeutung",
   "tool.views": "Ansicht",
   "tool.viewsTip": "Ansicht: Schnitt, Röntgen, Explosion und Fokus-Vorschau – ändert nur die Anzeige",
+  "tool.check": "Prüfen",
+  "tool.checkTip": "Prüfen: Geometrie prüfen, Schwachstellen, Wandstärke und Überhänge",
   "tool.more": "Mehr",
   "tool.moreTip": "Weitere Werkzeuge: Messen, Notizen, Ansicht – oder alle Werkzeuge zeigen",
   "tool.export": "Exportieren",
@@ -180,6 +182,11 @@
   "menu.view.mood.studio": "Studio",
   "menu.view.mood.hell": "Hell",
   "menu.view.mood.werkstatt": "Werkstatt",
+
+  "menu.check.geom": "Geometrie prüfen",
+  "menu.check.weak": "Schwachstellen suchen",
+  "menu.check.thin": "Wandstärke (3D-Druck)",
+  "menu.check.overhang": "Überhänge (3D-Druck)",
 
   "menu.select.all": "Alles",
   "menu.select.body": "Nur Körper",
@@ -388,5 +395,14 @@
   "ctx.alignBottom": "Unten bündig",
   "common.emboss": "Prägen",
   "ctx.emboss": "Prägen",
-  "ctx.embossTip": "Skizze (Text oder Logo) erhaben oder vertieft auf diese Fläche projizieren"
+  "ctx.embossTip": "Skizze (Text oder Logo) erhaben oder vertieft auf diese Fläche projizieren",
+
+  "recovery.title": "Tracery wurde nicht richtig beendet – letzten Stand wiederherstellen?",
+  "recovery.metaOne": "Projekt „{name}“ · {time} · 1 Objekt",
+  "recovery.metaMany": "Projekt „{name}“ · {time} · {n} Objekte",
+  "recovery.restore": "Wiederherstellen",
+  "recovery.dismiss": "Verwerfen",
+  "recovery.restored": "Letzter Stand von „{name}“ wiederhergestellt.",
+  "recovery.discarded": "Wiederherstellungs-Stand verworfen.",
+  "recovery.failed": "Der letzte Stand konnte nicht wiederhergestellt werden."
 }

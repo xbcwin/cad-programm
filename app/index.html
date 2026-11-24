@@ -227,7 +227,7 @@ body.sketching .viewcube{display:none}
 .check input{accent-color:var(--accent);width:16px;height:16px}
 
 /* ---------- Fußzeile ---------- */
-.bottombar{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,560px) minmax(0,1fr);align-items:center;gap:12px;padding:8px 12px calc(8px + env(safe-area-inset-bottom,0px));background:var(--surface);border-top:1px solid var(--line);position:relative;z-index:25}
+.bottombar{display:grid;grid-template-columns:minmax(140px,1fr) minmax(240px,440px) minmax(0,auto);align-items:center;gap:10px;padding:8px 12px calc(8px + env(safe-area-inset-bottom,0px));background:var(--surface);border-top:1px solid var(--line);position:relative;z-index:25}
 .hintline{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px;line-height:1.3;min-width:0}
 .hintline svg{width:17px;height:17px;flex:none;color:var(--accent)}
 .hintline span{overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
@@ -608,6 +608,7 @@ body.sketching .timeline{display:none}
   .tool .l-short{display:inline}
   .brand b{display:none}
   .tool{padding:7px 8px}
+  .bottombar{grid-template-columns:minmax(100px,1fr) minmax(200px,340px) minmax(0,auto)}
 }
 @media (max-width: 900px){
   .workspace,.workspace.drawing-mode{grid-template-columns:minmax(0,1fr)}
@@ -799,9 +800,23 @@ body:not(.simple) .simple-only{display:none!important}
 .note-sec textarea{width:100%;box-sizing:border-box;resize:vertical;min-height:54px;font:13px/1.4 var(--font);color:var(--ink);background:var(--surface);border:1px solid var(--line-strong);border-radius:6px;padding:6px 8px}
 .tl-chip.note{box-shadow:inset 0 -3px 0 var(--accent)}
 
-/* Lage unter der Maus (Statusleiste) */
-.ampel-wrap{display:flex;align-items:center;justify-content:flex-end;gap:10px;min-width:0}
-.coords{font:500 11.5px/1 var(--font-mono);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+/* Statusleiste unten rechts (BE-17) */
+.ampel-wrap{display:flex;align-items:center;justify-content:flex-end;gap:6px;min-width:0}
+.coords{font:500 11.5px/1 var(--font-mono);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1 auto}
+.coords:empty{display:none}
+.st-chip{display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 8px;border:1px solid var(--line);border-radius:14px;background:var(--surface-2);color:var(--ink-2);font:500 11.5px/1 var(--font-mono);white-space:nowrap;flex:none;min-width:0}
+.st-chip[hidden]{display:none}
+.st-sel{background:var(--accent-soft);border-color:var(--accent-line);color:var(--ink);cursor:pointer;max-width:220px;overflow:hidden;text-overflow:ellipsis;display:inline-block;line-height:24px}
+.st-sel:hover{border-color:var(--accent)}
+.st-unit{font-weight:600;cursor:pointer}
+.st-unit:hover{border-color:var(--accent-line);color:var(--accent);background:var(--surface)}
+.st-calc{color:var(--muted)}
+.st-calc .st-dot{width:7px;height:7px;border-radius:50%;background:var(--faint);flex:none}
+.st-calc.ok .st-dot{background:var(--ok)}
+.st-calc.busy{color:var(--accent);border-color:var(--accent-line);background:var(--accent-soft)}
+.st-calc.busy .st-dot{width:9px;height:9px;border:1.5px solid var(--accent);border-top-color:transparent;background:transparent;animation:spin .7s linear infinite}
+.st-calc.warn{color:var(--warn);border-color:var(--warn);background:var(--warn-soft)}
+.st-calc.warn .st-dot{background:var(--warn)}
 @media (max-width:900px){.coords{display:none}}
 
 /* Suchen im Verlauf */
@@ -975,6 +990,12 @@ body.presenting .pat-dot{display:none!important}
 .drop-title{font:600 18px/1.25 var(--font-cond);letter-spacing:.01em;color:var(--ink)}
 .drop-sub{font-size:13.5px;line-height:1.45;color:var(--muted)}
 
+/* Geometrie-Prüfung (PF-08) */
+.geom-check-bar{width:340px;max-width:calc(100vw - 24px)}
+.gc-list{max-height:46vh;overflow-y:auto;padding-right:2px}
+.gc-summary{font-size:12.5px;color:var(--muted)}
+.gc-stale{font-size:12px;color:var(--warn);background:var(--warn-soft);padding:6px 8px;border-radius:7px}
+
 /* Werkzeugleiste anpassen & Favoriten (BE-04) */
 .tool .tb-fav-star{display:inline-grid;place-items:center;color:var(--warn);margin-left:1px;flex:none}
 .tool .tb-fav-star svg{width:11px;height:11px}
@@ -1015,6 +1036,16 @@ body.presenting .pat-dot{display:none!important}
 .tb-fav-div{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600;color:var(--muted);padding:4px 2px 2px}
 .tb-fav-div::after{content:"";flex:1;height:1px;background:var(--line)}
 .tb-empty{padding:24px 12px;text-align:center;font-size:13px;color:var(--muted);line-height:1.45}
+
+/* ---------- Absturz-Wiederherstellung (BE-15) ---------- */
+.recovery-bar{position:absolute;top:14px;left:50%;transform:translateX(-50%);z-index:28;display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:var(--radius);background:var(--surface);border:1.5px solid var(--warn);box-shadow:var(--shadow-2);max-width:min(92%,700px);flex-wrap:wrap}
+.recovery-bar .rb-ic{color:var(--warn);display:grid;place-items:center;flex:none}
+.recovery-bar .rb-ic svg{width:20px;height:20px}
+.recovery-bar .rb-txt{display:grid;gap:2px;font-size:13px;min-width:0;flex:1 1 220px}
+.recovery-bar .rb-txt b{font-size:13.5px;color:var(--ink)}
+.recovery-bar .rb-txt span{color:var(--muted);font-size:12.5px}
+.recovery-bar .rb-acts{display:flex;gap:6px;flex:none;margin-left:auto}
+.start .recovery-bar{position:static;transform:none;max-width:none;margin:0 0 16px}
 </style>
 <div id="app">
   <header class="topbar">
@@ -1072,7 +1103,7 @@ body.presenting .pat-dot{display:none!important}
         <button class="go" id="cmd-go" type="button" aria-label="Ausführen" data-i18n-aria="topbar.cmdGo" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       </div>
     </div>
-    <div class="ampel-wrap"><span class="coords" id="coords" data-help="coords" aria-live="off"></span><button class="ampel" id="ampel" type="button"><i class="dot"></i><span class="t">Wird geladen …</span></button></div>
+    <div class="ampel-wrap"><span class="coords" id="coords" data-help="coords" aria-live="off"></span><button class="st-chip st-sel" id="status-sel" type="button" data-help="statusSel" hidden></button><button class="st-chip st-unit" id="status-unit" type="button" data-help="statusUnit" aria-label="Einheit ändern">mm</button><span class="st-chip st-calc busy" id="status-calc" data-help="statusCalc" data-state="loading" aria-live="polite"><i class="st-dot"></i><span class="t">Lädt …</span></span><button class="ampel" id="ampel" type="button"><i class="dot"></i><span class="t">Wird geladen …</span></button></div>
   </footer>
 </div>
 <div class="toasts" id="toasts" aria-live="polite"></div>
@@ -2682,6 +2713,31 @@ const HELP = {
   "tip": "Nachkommastellen für Anzeige (0–4) und Winkel (0–4) getrennt wählen",
   "hilfe": "In den Einstellungen stellst du getrennt ein, wie viele Stellen nach dem Komma bei Längen, Maßen, Schildern, Messungen und Panels (0 bis 4) sowie bei Winkeln (0 bis 4) angezeigt werden. Alle eingegebenen Maße, Formeln und der CAD-Kern rechnen im Hintergrund immer mit voller Genauigkeit weiter.",
   "tipp": "Auch wenn 0 Stellen eingestellt sind, kannst du jederzeit exakte Werte wie 12,3456 eintippen – sie bleiben genau so gespeichert und sichtbar, sobald du mehr Stellen wählst."
+ },
+ "geomCheck": {
+  "tip": "Modell auf kaputte Flächen, winzige Kanten und Selbstschnitte prüfen",
+  "hilfe": "Prüfen → „Geometrie prüfen“ untersucht alle sichtbaren Körper mit dem OpenCascade-Kern auf beschädigte oder zusammengefallene Flächen, winzige Kanten unter 0,01 mm (oft durch zwei fast gleiche Maße) sowie sich selbst schneidende Flächen. Ein Klick auf einen Eintrag in der Liste hebt die betroffene Stelle rot im Modell hervor und fährt die Kamera heran.",
+  "tipp": "Wenn eine Rundung oder ein Export unerwartet scheitert, deckt die Geometrie-Prüfung winzige Kanten oder kaputte Flächen meist sofort auf."
+ },
+ "statusSel": {
+  "tip": "Auswahl-Info in der Statusleiste",
+  "hilfe": "Zeigt unten rechts sofort, was du gerade gewählt hast – zum Beispiel die Länge einer Kante, die Summe mehrerer Kanten, den Flächeninhalt einer Fläche, den Durchmesser einer Rundung oder die Größe eines Körpers.",
+  "tipp": "Ein Klick auf das Auswahl-Schild kopiert den Zahlenwert in die Zwischenablage."
+ },
+ "statusUnit": {
+  "tip": "Aktuelle Projekt-Einheit – Klick öffnet die Einstellung",
+  "hilfe": "Zeigt die gerade eingestellte Einheit dieses Projekts (mm, cm, m oder Zoll). Alle Längen, Flächen und Maßeingaben ohne eigene Einheit richten sich danach.",
+  "tipp": "Klick direkt auf die Einheit, um sie in den Einstellungen umzustellen."
+ },
+ "statusCalc": {
+  "tip": "Rechenzustand des CAD-Kerns",
+  "hilfe": "Zeigt auf einen Blick, ob der OpenCascade-Kern gerade rechnet, bereit ist oder ob ein Schritt im Verlauf einen Fehler meldet.",
+  "tipp": "Bei „1 Fehler“ klickst du rechts daneben auf die Ampel oder im Verlauf auf den rot markierten Schritt für Details."
+ },
+ "crashRecovery": {
+  "tip": "Ungesicherten Stand nach einem Absturz oder Neuladen wiederherstellen",
+  "hilfe": "Tracery merkt sich laufende Änderungen automatisch in der Browser-Datenbank – auch bei großen Projekten mit importierten 3D-Modellen. Wird die Seite ohne Speichern geschlossen oder neu geladen, erscheint beim nächsten Start dieses Angebot mit Projektname und Uhrzeit.",
+  "tipp": "Mit „Wiederherstellen“ holst du alle ungesicherten Änderungen sofort zurück; „Verwerfen“ kehrt zum letzten gespeicherten Stand zurück."
  }
 };
 
@@ -2698,7 +2754,7 @@ const Bus = makeEmitter();
 
 // ---- 01-i18n.js ----
 // ================= Übersetzbare Oberfläche =================
-const TEXTS_DE = {"common.ok":"OK","common.cancel":"Abbrechen","common.close":"Schließen","common.delete":"Löschen","common.rename":"Umbenennen","common.save":"Speichern","common.name":"Name","common.body":"Körper","common.hole":"Loch","common.edit":"Bearbeiten","common.suppress":"Unterdrücken","common.unsuppress":"Wieder aktivieren","common.explainStep":"Erklär diesen Schritt","common.moveStep":"Verschieben/Drehen (Schritt)","common.scaleStep":"Skalieren (Schritt)","common.thicken":"Aufdicken","common.mirrorStep":"Schritt spiegeln","common.duplicate":"Duplizieren","common.hide":"Ausblenden","common.isolate":"Isolieren","topbar.showTree":"Verlauf zeigen","topbar.tree":"Verlauf","topbar.brandAria":"Tracery – Startseite","topbar.workspace":"Arbeitsbereich","topbar.model":"Modell","topbar.drawing":"Zeichnung","topbar.undo":"Rückgängig","topbar.undoLabel":"Rückgängig: {label}","topbar.redo":"Wiederholen","topbar.project":"Projekt","topbar.menu":"Menü","topbar.showProps":"Eigenschaften zeigen","topbar.props":"Eigenschaften","topbar.params":"Maße","topbar.log":"Protokoll","topbar.cmdPlaceholder":"Werkzeug suchen oder beschreiben, was du bauen willst …","topbar.cmdAria":"Werkzeug suchen oder der KI beschreiben","topbar.cmdGo":"Ausführen","level.simple":"Einfach","level.pro":"Profi","level.tipSimple":"Stufe: Einfach – klicken zum Wechseln auf Profi","level.tipPro":"Stufe: Profi – klicken zum Wechseln auf Einfach","level.chooseAria":"Stufe wählen","level.simpleDesc":"wenige, große Knöpfe, alles erklärt","level.proDesc":"alle Werkzeuge, Tastenkürzel, Maus wie in deinem CAD","start.aria":"Startseite","start.subtitle":"CAD im Browser – kostenlos, ohne Konto","start.newProject":"Neues Projekt","start.openFile":"Datei öffnen","start.tourBasics":"Einführung (3 Minuten)","start.tourSketch":"Erste Skizze (5 Minuten)","start.welcomeTitle":"Wie möchtest du mit Tracery arbeiten?","start.welcomeSub":"Du kannst jederzeit oben rechts zwischen beiden Stufen wechseln.","start.surfaceAria":"Oberfläche","start.surfaceLabel":"Oberfläche:","start.simpleOption":"Einfach – für Einsteiger","start.proOption":"Profi – alle Werkzeuge","start.recentHeading":"Weiterarbeiten","start.recentMetaOne":"{n} Objekt · {date}","start.recentMetaMany":"{n} Objekte · {date}","start.deleteFromBrowserAria":"Aus dem Browser löschen","start.deleteFromBrowserTip":"Aus diesem Browser löschen","start.deleteConfirmTitle":"Projekt löschen?","start.deleteConfirmBody":"„{name}“ wird aus diesem Browser gelöscht. Gespeicherte Dateien bleiben erhalten.","start.projectMissing":"Das Projekt ist nicht mehr da.","start.templatesHeading":"Vorlagen","start.emptyTitle":"Leeres Projekt","start.emptyDesc":"Von null anfangen.","start.templateLoaded":"Vorlage geladen. Klick einen Teil an, um ihn zu ändern.","start.footHtml":"Projekte werden automatisch in diesem Browser gesichert. Zum sicheren Aufbewahren und Teilen: <b>Projekt als Datei speichern</b>.<br>Tracery rechnet mit OpenCascade (LGPL-2.1) über replicad (MIT) und zeigt 3D mit three.js (MIT).","start.tpl.box.name":"Box mit Deckel","start.tpl.box.desc":"Mit Maßen wie Wandstärke und Spiel – änderst du sie, passt sich alles an.","start.tpl.sign.name":"Schild mit Loch","start.tpl.sign.desc":"Flache Platte mit runden Ecken und einem Loch zum Aufhängen.","start.tpl.phone.name":"Handyhalter","start.tpl.phone.desc":"Schräge Lehne, Ablage vorne und ein Schlitz fürs Kabel.","start.tpl.bracket.name":"Winkel zum Anschrauben","start.tpl.bracket.desc":"L-Winkel mit Senkkopf-Schraublöchern und Versteifung.","start.tpl.gear.name":"Zahnradpaar","start.tpl.gear.desc":"Zwei passende Zahnräder mit Bohrung.","start.tpl.hinge.name":"Scharnier","start.tpl.hinge.desc":"Aus einem Stück, mit Spiel zwischen den Teilen.","tool.body":"Körper","tool.bodyTip":"Grundkörper hinzufügen – anklicken oder auf die Fläche ziehen","tool.sketch":"Skizze","tool.sketchTip":"Eine 2D-Skizze zeichnen und daraus einen Körper machen","tool.parts":"Bauteile","tool.partsTip":"Schraubenlöcher, Mutternfallen, Scharniere, Zahnräder …","tool.measure":"Messen","tool.measureTip":"Messen: Abstände, Winkel, Flächen und Durchmesser","tool.notes":"Notizen","tool.notesTip":"Notizstift: frei malen und Text hinschreiben – ohne technische Bedeutung","tool.views":"Ansicht","tool.viewsTip":"Ansicht: Schnitt, Röntgen, Explosion und Fokus-Vorschau – ändert nur die Anzeige","tool.more":"Mehr","tool.moreTip":"Weitere Werkzeuge: Messen, Notizen, Ansicht – oder alle Werkzeuge zeigen","tool.export":"Exportieren","tool.exportShort":"Export","tool.exportTip":"Als STEP, STL, 3MF, OBJ, GLB oder DXF speichern (ZIP)","tool.sheet":"Blatt","tool.sheetTip":"Blattgröße, Maßstab und Ansichten","tool.dim":"Maß","tool.dimTip":"Bemaßung hinzufügen: zwei Punkte oder einen Kreis anklicken","tool.autodim":"Automatisch bemaßen","tool.autodimShort":"Auto-Maße","tool.autodimTip":"Gesamtmaße und Bohrungen automatisch bemaßen","tool.draw2d":"2D zeichnen","tool.draw2dTip":"Linien, Kreise und Text frei auf das Blatt zeichnen","tool.dexport":"Zeichnung speichern","tool.dexportShort":"Speichern","tool.dexportTip":"Als PDF, SVG oder DXF speichern","tool.fly.bodiesTitle":"Grundkörper","tool.fly.tileTip":"Klicken fügt ihn ein, Ziehen setzt ihn genau hin","tool.fly.cylHole":"Zylinder als Loch","tool.fly.boxHole":"Quader als Loch","tool.fly.route3d":"Rohr im Raum","tool.fly.bodiesFoot":"Tipp: Jeder Körper kann mit einem Klick zum Loch werden.","tool.fly.partsTitle":"Bauteile","tool.fly.partsFoot":"Löcher auf eine Fläche ziehen – sie richten sich automatisch aus.","menu.proj.rename":"Projekt umbenennen","menu.proj.saveFile":"Als Datei speichern","menu.proj.saveInFolderNow":"Jetzt in „{name}“ speichern","menu.proj.changeFolder":"Anderen Ordner wählen …","menu.proj.disconnectFolder":"Ordner-Verbindung trennen","menu.proj.saveToFolder":"In Ordner speichern …","menu.proj.openImport":"Datei öffnen / STEP, IGES, BREP, STL, 3MF, OBJ importieren …","menu.proj.versions":"Versionen …","menu.proj.newProject":"Neues Projekt","menu.proj.startAndTemplates":"Startseite und Vorlagen","menu.folder.saveNow":"Jetzt in Ordner speichern","menu.folder.changeFolder":"Anderen Ordner wählen …","menu.folder.disconnect":"Ordner-Verbindung trennen","menu.main.tourBasics":"Einführung starten","menu.main.tourSketch":"Einführung: Erste Skizze","menu.main.settings":"Einstellungen","menu.main.shortcuts":"Tastenkürzel","menu.main.export":"Exportieren","menu.main.saveImage":"Bild speichern (PNG)","menu.main.about":"Über Tracery","menu.main.aboutP1":"Tracery ist ein kostenloses, parametrisches CAD im Browser – ohne Konto, mit exaktem Geometrie-Kern und technischen Zeichnungen.","menu.main.aboutP2":"Der Name: „Tracery“ ist das englische Wort für Maßwerk – die filigranen, exakt konstruierten Ornamente in gotischen Kirchenfenstern. Genau so sollen deine Teile werden.","menu.main.aboutP3":"Gerechnet wird mit dem CAD-Kern OpenCascade (LGPL-2.1) über die Bibliothek replicad (MIT). Die 3D-Anzeige nutzt three.js (MIT), die PDF-Ausgabe jsPDF (MIT).","menu.main.aboutP4":"Deine Projekte bleiben in deinem Browser. Der KI-Helfer nutzt dein Claude-Konto.","menu.more.measure":"Messen","menu.more.notes":"Notizstift","menu.more.views":"Ansicht: Schnitt, Röntgen, Explosion …","menu.more.weakSpots":"Schwachstellen suchen","menu.more.showAllPro":"Alle Werkzeuge zeigen (Profi)","menu.view.section":"Schnitt","menu.view.xray":"Röntgen","menu.view.explode":"Explosion","menu.view.focus":"Fokus-Vorschau","menu.view.overhang":"Überhänge (3D-Druck)","menu.view.thin":"Wandstärke (3D-Druck)","menu.view.present":"Vorführen (Vollbild)","menu.view.turntable":"Drehteller-Video …","menu.view.lightPrefix":"Licht: {name}","menu.view.shadows":"Schatten","menu.view.viewBack":"Vorige Ansicht","menu.view.saveView":"Ansicht speichern …","menu.view.savedViewPrefix":"Ansicht: {name}","menu.view.disp.edges":"Flächen mit Kanten","menu.view.disp.shaded":"Nur Flächen","menu.view.disp.wire":"Drahtgitter (nur Kanten)","menu.view.disp.hidden":"Verdeckte Kanten zeigen","menu.view.look.studio":"Studio-Look (Werkstoff, Licht, Schatten)","menu.view.look.plain":"Einfach (matt, schnell)","menu.view.look.clay":"Prüfen: Ton","menu.view.look.chrome":"Prüfen: Chrom-Streifen","menu.view.mood.studio":"Studio","menu.view.mood.hell":"Hell","menu.view.mood.werkstatt":"Werkstatt","menu.select.all":"Alles","menu.select.body":"Nur Körper","menu.select.face":"Nur Flächen","menu.select.edge":"Nur Kanten","menu.select.tip":"Wählen: {name}","menu.edge.convex":"Alle äußeren Kanten","menu.edge.concave":"Alle inneren Kanten","menu.edge.all":"Alle Kanten","menu.edge.faceSelect":"Alle {n} Kanten wählen","menu.edge.faceFillet":"Alle abrunden ({v})","menu.edge.faceChamfer":"Alle abschrägen ({v})","menu.edge.faceNone":"An dieser Fläche habe ich keine Kanten gefunden.","menu.ctx.editSketch":"Skizze bearbeiten","menu.ctx.lookAtFace":"Blick senkrecht auf die Fläche","menu.ctx.faceDxf":"Fläche als DXF speichern","menu.ctx.faceSvg":"Fläche als SVG speichern","menu.ctx.sketchOnFace":"Skizze auf dieser Fläche","menu.ctx.thread":"Gewinde …","menu.ctx.markThread":"Gewinde markieren …","menu.ctx.dupLinked":"Verknüpft duplizieren","menu.ctx.toSolid":"Zum Körper machen","menu.ctx.toHole":"Zum Loch machen","menu.ctx.selectSimilar":"Ähnliche wählen","menu.ctx.zoomFit":"Heranzoomen","menu.ctx.saveSelection":"Auswahl speichern …","menu.ctx.behind":"Dahinter wählen: „{name}“","menu.ctx.showAll":"Alles einblenden","menu.ctx.showAllCount":"Alles einblenden ({n})","menu.ctx.selectAll":"Alles wählen","menu.ctx.fitAll":"Alles zeigen","menu.ctx.selSet":"Auswahl: {name}","menu.ctx.viewBack":"Vorige Ansicht","menu.ctx.newSketch":"Neue Skizze","menu.ctx.saveImage":"Bild speichern (PNG)","menu.ctx.repeat":"Wiederholen: {label}","menu.tl.markerAfter":"Marker hinter diesen Schritt","menu.tl.markerBefore":"Marker vor diesen Schritt","menu.tree.toFolder":"In Ordner","menu.tree.fromFolder":"Aus Ordner nehmen","menu.tree.dissolveFolder":"Ordner auflösen","menu.tree.collapseFolder":"Ordner zuklappen","menu.tree.expandFolder":"Ordner aufklappen","menu.tree.selectFolder":"Alle Schritte wählen","menu.draw.line":"Linie","menu.draw.rect":"Rechteck","menu.draw.circle":"Kreis","menu.draw.text":"Text","menu.draw.clearAll":"Alles Gezeichnete löschen","menu.draw.clearTitle":"Gezeichnetes löschen?","menu.draw.clearBody":"Alle frei gezeichneten Linien und Texte werden entfernt.","menu.draw.sheet":"Blatt","menu.draw.orient":"Ausrichtung","menu.draw.landscape":"Quer","menu.draw.portrait":"Hoch","menu.draw.scale":"Maßstab","menu.draw.scaleAuto":"Automatisch","menu.draw.viewsHeading":"Ansichten","menu.draw.vFront":"Vorderansicht","menu.draw.vTop":"Draufsicht","menu.draw.vLeft":"Seitenansicht von links","menu.draw.vIso":"Isometrie (3D-Bild)","menu.draw.hiddenEdges":"Verdeckte Kanten (gestrichelt)","menu.draw.centers":"Mittellinien","menu.draw.exportPdf":"Als PDF speichern","menu.draw.exportSvg":"Als SVG speichern","menu.draw.exportDxf":"Als DXF speichern (ZIP)","ctx.toolbarAria":"Aktionen","ctx.suppressed":"Unterdrückt","ctx.behindMarker":"Hinter dem Marker","ctx.enableAgain":"Wieder einschalten","ctx.enableAgainTip":"Diesen Schritt wieder mitrechnen","ctx.markerAfter":"Marker dahinter","ctx.markerAfterTip":"Den Marker hinter diesen Schritt ziehen – dann wird er wieder mitgerechnet","ctx.moveStepLabel":"Verschieben/Drehen","ctx.scaleStepLabel":"Skalieren","ctx.thickenStepLabel":"Aufdicken","ctx.mirrorStepLabel":"Schritt spiegeln","ctx.targetBody":"Zielkörper","ctx.targetBodyTip":"Zum Zielkörper wechseln","ctx.suppressTip":"Diesen Schritt unterdrücken – der Körper springt zurück","ctx.deleteTip":"Löschen (Entf)","ctx.copyValTip":"{tip} – klicken kopiert den Wert","ctx.edgeDia":"Kante Ø","ctx.edgeDiaTip":"Kreis mit Radius {r}, Umfang {total}","ctx.edgeOne":"Kante","ctx.edgesCount":"{n} Kanten","ctx.edgesTotalTip":"Gesamtlänge der gewählten Kanten","ctx.edgeLenTip":"Länge der Kante","ctx.edgeArcTip":"Länge der Kante (Bogen, R {r})","ctx.fillet":"Abrunden","ctx.filletTip":"Kante abrunden (1 mm, danach änderbar)","ctx.chamfer":"Abschrägen","ctx.chamferTip":"Kante abschrägen (1 mm, danach änderbar)","ctx.similar":"Ähnliche","ctx.similarEdgesTip":"Alle gleich langen Kanten dazuwählen (A)","ctx.chain":"Kette","ctx.chainTip":"Alle Kanten dazuwählen, die ohne Knick weiterlaufen (z. B. ein gerundeter Umriss)","ctx.byKind":"Nach Art","ctx.byKindTip":"Alle äußeren oder alle inneren Kanten dieses Teils wählen","ctx.planeAngle":"Ebene im Winkel","ctx.planeAngleTip":"Bezugsebene durch diese Kante im Winkel zu einer Fläche anlegen","ctx.planeNormal":"Ebene senkrecht","ctx.planeNormalTip":"Bezugsebene senkrecht auf diese Kante (in der Mitte, danach änderbar)","ctx.planeTwoEdges":"Ebene durch 2 Kanten","ctx.planeTwoEdgesTip":"Bezugsebene durch beide gewählten geraden Kanten anlegen","ctx.planeTangent":"Ebene tangential","ctx.planeTangentTip":"Bezugsebene tangential an diese runde Fläche anlegen","ctx.pointEdgeMid":"Punkt Kantenmitte","ctx.pointEdgeMidTip":"Bezugspunkt genau in der Mitte dieser Kante anlegen","ctx.pointFaceCenter":"Punkt Flächenmitte","ctx.pointFaceCenterTip":"Bezugspunkt in der Mitte dieser Fläche anlegen","ctx.face":"Fläche","ctx.sketchHere":"Skizze hierauf","ctx.sketchHereTip":"Auf dieser Fläche zeichnen","ctx.hole":"Bohrung","ctx.holeTip":"Bohrungs-Assistent: Durchgang, Kernloch, Sackloch mit Spitze, Passbohrung H7, Zentrierbohrung, Einsatz oder Mutternfalle","ctx.extrude":"Hochziehen","ctx.extrudeTip":"Die Fläche herausziehen oder hineindrücken","ctx.faceEdges":"Ihre Kanten","ctx.faceEdgesTip":"Alle Kanten dieser Fläche wählen, abrunden oder abschrägen","ctx.shell":"Aushöhlen","ctx.shellTip":"Körper aushöhlen – diese Fläche wird die Öffnung","ctx.sectionHere":"Schnitt hier","ctx.sectionHereTip":"Schnitt parallel zu dieser Fläche – den Abstand stellst du in der Schnitt-Leiste ein","ctx.mirrorFace":"An Fläche spiegeln","ctx.mirrorFaceTip":"Gespiegelte Kopie an dieser Fläche – z. B. die zweite Hälfte eines symmetrischen Teils","ctx.sphereDia":"Kugel Ø","ctx.roundFaceDia":"Runde Fläche Ø","ctx.roundFaceDiaTip":"Radius {r}","ctx.roundFace":"Runde Fläche","ctx.holeRoundTip":"Bohrungs-Assistent: Loch senkrecht in die runde Fläche (Schraube, Sackloch, Passbohrung H7, Zentrierung …) – der Magnet rastet ganz oben, an den Seiten und in der Mitte ein","ctx.threadEdit":"Gewinde ändern","ctx.threadMark":"Gewinde markieren","ctx.threadTip":"Kosmetisches Gewinde auf dieser runden Fläche markieren (rechnet schnell)","ctx.axis":"Achse","ctx.axisTip":"Bezugsachse durch die Mitte dieser runden Fläche anlegen","ctx.toBody":"Zum Körper","ctx.toHole":"Zum Loch","ctx.toBodyTip":"Wieder zum festen Körper machen (H)","ctx.toHoleTip":"Zum Loch machen – schneidet dann in andere Körper (H)","ctx.rotate":"Drehen","ctx.rotateTip":"Um 90° drehen oder kippen","ctx.rotZ":"Um 90° drehen (flach)","ctx.rotX":"Nach vorne kippen","ctx.rotY":"Zur Seite kippen","ctx.mirror":"Spiegeln","ctx.mirrorTip":"Spiegeln","ctx.mirrorX":"Links ↔ rechts","ctx.mirrorY":"Vorne ↔ hinten","ctx.mirrorZ":"Oben ↔ unten","ctx.dupTip":"Duplizieren (Strg D)","ctx.moveStep":"Verschieben/Drehen","ctx.moveStepTip":"Als Schritt verschieben, drehen oder kopieren (bleibt im Verlauf änderbar)","ctx.scale":"Skalieren","ctx.scaleTip":"Körper als Schritt im Verlauf vergrößern oder verkleinern (gleichmäßig oder je Achse)","ctx.thicken":"Aufdicken","ctx.thickenTip":"Fläche zu einer Platte mit fester Dicke aufdicken (nach außen, innen oder mittig)","ctx.mirrorStep":"Schritt spiegeln","ctx.mirrorStepTip":"Diesen Formschritt (z. B. eine Tasche oder Rippe) an einer Ebene oder Fläche im selben Körper spiegeln","ctx.pickMirrorPlane":"Ebene / Fläche","ctx.pickMirrorPlaneTip":"Ebene Körperfläche oder Bezugsebene als Spiegelebene wählen","ctx.pattern":"Muster","ctx.patternHoleTip":"Loch als Muster oder gespiegelt vervielfachen","ctx.patternTip":"Muster oder gespiegelte Kopie","ctx.patRect":"Rechteckmuster","ctx.patCirc":"Kreismuster","ctx.patPath":"Muster entlang Kurve","ctx.patMirror":"Gespiegelte Kopie","ctx.split":"Teilen","ctx.splitTip":"Körper an einer Ebene teilen","ctx.toTip":"Zur Spitze","ctx.toTipTip":"Den Umriss zu einer Spitze zusammenlaufen lassen (Übergang mit Spitze)","ctx.similarPartsTip":"Alle gleichen Teile wählen (A)","ctx.selectEdges":"Kanten wählen","ctx.selectEdgesTip":"Alle äußeren, alle inneren oder alle Kanten dieses Teils wählen – dann zusammen abrunden","ctx.ungroup":"Gruppe lösen","ctx.ungroupTip":"Gruppe lösen","ctx.group":"Gruppieren","ctx.groupTip":"Zu einem Körper verbinden (Strg G)","ctx.gap":"Abstand","ctx.gapTip":"Abstand zwischen den beiden Teilen genau setzen (der zuletzt gewählte bewegt sich)","ctx.joint":"Gelenk","ctx.jointTip":"Drehgelenk: das zuletzt gewählte Teil dreht sich um eine Achse, die du im Bild wählst","ctx.loft":"Übergang","ctx.loftTip":"Weicher Übergang durch die Umrisse – in der Reihenfolge, in der du sie gewählt hast","ctx.boolean":"Boolesch","ctx.booleanTip":"Körper vereinigen, abziehen oder schneiden","ctx.boolUnion":"Vereinigen","ctx.boolSub":"Abziehen (der zuerst gewählte bleibt)","ctx.boolInt":"Schnittmenge","ctx.align":"Ausrichten","ctx.alignTip":"Objekte aneinander ausrichten","ctx.alignLeft":"Links bündig","ctx.alignCx":"Mittig (X)","ctx.alignRight":"Rechts bündig","ctx.alignFront":"Vorne bündig","ctx.alignCy":"Mittig (Y)","ctx.alignBack":"Hinten bündig","ctx.alignBottom":"Unten bündig","common.emboss":"Prägen","ctx.emboss":"Prägen","ctx.embossTip":"Skizze (Text oder Logo) erhaben oder vertieft auf diese Fläche projizieren"};
+const TEXTS_DE = {"common.ok":"OK","common.cancel":"Abbrechen","common.close":"Schließen","common.delete":"Löschen","common.rename":"Umbenennen","common.save":"Speichern","common.name":"Name","common.body":"Körper","common.hole":"Loch","common.edit":"Bearbeiten","common.suppress":"Unterdrücken","common.unsuppress":"Wieder aktivieren","common.explainStep":"Erklär diesen Schritt","common.moveStep":"Verschieben/Drehen (Schritt)","common.scaleStep":"Skalieren (Schritt)","common.thicken":"Aufdicken","common.mirrorStep":"Schritt spiegeln","common.duplicate":"Duplizieren","common.hide":"Ausblenden","common.isolate":"Isolieren","topbar.showTree":"Verlauf zeigen","topbar.tree":"Verlauf","topbar.brandAria":"Tracery – Startseite","topbar.workspace":"Arbeitsbereich","topbar.model":"Modell","topbar.drawing":"Zeichnung","topbar.undo":"Rückgängig","topbar.undoLabel":"Rückgängig: {label}","topbar.redo":"Wiederholen","topbar.project":"Projekt","topbar.menu":"Menü","topbar.showProps":"Eigenschaften zeigen","topbar.props":"Eigenschaften","topbar.params":"Maße","topbar.log":"Protokoll","topbar.cmdPlaceholder":"Werkzeug suchen oder beschreiben, was du bauen willst …","topbar.cmdAria":"Werkzeug suchen oder der KI beschreiben","topbar.cmdGo":"Ausführen","level.simple":"Einfach","level.pro":"Profi","level.tipSimple":"Stufe: Einfach – klicken zum Wechseln auf Profi","level.tipPro":"Stufe: Profi – klicken zum Wechseln auf Einfach","level.chooseAria":"Stufe wählen","level.simpleDesc":"wenige, große Knöpfe, alles erklärt","level.proDesc":"alle Werkzeuge, Tastenkürzel, Maus wie in deinem CAD","start.aria":"Startseite","start.subtitle":"CAD im Browser – kostenlos, ohne Konto","start.newProject":"Neues Projekt","start.openFile":"Datei öffnen","start.tourBasics":"Einführung (3 Minuten)","start.tourSketch":"Erste Skizze (5 Minuten)","start.welcomeTitle":"Wie möchtest du mit Tracery arbeiten?","start.welcomeSub":"Du kannst jederzeit oben rechts zwischen beiden Stufen wechseln.","start.surfaceAria":"Oberfläche","start.surfaceLabel":"Oberfläche:","start.simpleOption":"Einfach – für Einsteiger","start.proOption":"Profi – alle Werkzeuge","start.recentHeading":"Weiterarbeiten","start.recentMetaOne":"{n} Objekt · {date}","start.recentMetaMany":"{n} Objekte · {date}","start.deleteFromBrowserAria":"Aus dem Browser löschen","start.deleteFromBrowserTip":"Aus diesem Browser löschen","start.deleteConfirmTitle":"Projekt löschen?","start.deleteConfirmBody":"„{name}“ wird aus diesem Browser gelöscht. Gespeicherte Dateien bleiben erhalten.","start.projectMissing":"Das Projekt ist nicht mehr da.","start.templatesHeading":"Vorlagen","start.emptyTitle":"Leeres Projekt","start.emptyDesc":"Von null anfangen.","start.templateLoaded":"Vorlage geladen. Klick einen Teil an, um ihn zu ändern.","start.footHtml":"Projekte werden automatisch in diesem Browser gesichert. Zum sicheren Aufbewahren und Teilen: <b>Projekt als Datei speichern</b>.<br>Tracery rechnet mit OpenCascade (LGPL-2.1) über replicad (MIT) und zeigt 3D mit three.js (MIT).","start.tpl.box.name":"Box mit Deckel","start.tpl.box.desc":"Mit Maßen wie Wandstärke und Spiel – änderst du sie, passt sich alles an.","start.tpl.sign.name":"Schild mit Loch","start.tpl.sign.desc":"Flache Platte mit runden Ecken und einem Loch zum Aufhängen.","start.tpl.phone.name":"Handyhalter","start.tpl.phone.desc":"Schräge Lehne, Ablage vorne und ein Schlitz fürs Kabel.","start.tpl.bracket.name":"Winkel zum Anschrauben","start.tpl.bracket.desc":"L-Winkel mit Senkkopf-Schraublöchern und Versteifung.","start.tpl.gear.name":"Zahnradpaar","start.tpl.gear.desc":"Zwei passende Zahnräder mit Bohrung.","start.tpl.hinge.name":"Scharnier","start.tpl.hinge.desc":"Aus einem Stück, mit Spiel zwischen den Teilen.","tool.body":"Körper","tool.bodyTip":"Grundkörper hinzufügen – anklicken oder auf die Fläche ziehen","tool.sketch":"Skizze","tool.sketchTip":"Eine 2D-Skizze zeichnen und daraus einen Körper machen","tool.parts":"Bauteile","tool.partsTip":"Schraubenlöcher, Mutternfallen, Scharniere, Zahnräder …","tool.measure":"Messen","tool.measureTip":"Messen: Abstände, Winkel, Flächen und Durchmesser","tool.notes":"Notizen","tool.notesTip":"Notizstift: frei malen und Text hinschreiben – ohne technische Bedeutung","tool.views":"Ansicht","tool.viewsTip":"Ansicht: Schnitt, Röntgen, Explosion und Fokus-Vorschau – ändert nur die Anzeige","tool.check":"Prüfen","tool.checkTip":"Prüfen: Geometrie prüfen, Schwachstellen, Wandstärke und Überhänge","tool.more":"Mehr","tool.moreTip":"Weitere Werkzeuge: Messen, Notizen, Ansicht – oder alle Werkzeuge zeigen","tool.export":"Exportieren","tool.exportShort":"Export","tool.exportTip":"Als STEP, STL, 3MF, OBJ, GLB oder DXF speichern (ZIP)","tool.sheet":"Blatt","tool.sheetTip":"Blattgröße, Maßstab und Ansichten","tool.dim":"Maß","tool.dimTip":"Bemaßung hinzufügen: zwei Punkte oder einen Kreis anklicken","tool.autodim":"Automatisch bemaßen","tool.autodimShort":"Auto-Maße","tool.autodimTip":"Gesamtmaße und Bohrungen automatisch bemaßen","tool.draw2d":"2D zeichnen","tool.draw2dTip":"Linien, Kreise und Text frei auf das Blatt zeichnen","tool.dexport":"Zeichnung speichern","tool.dexportShort":"Speichern","tool.dexportTip":"Als PDF, SVG oder DXF speichern","tool.fly.bodiesTitle":"Grundkörper","tool.fly.tileTip":"Klicken fügt ihn ein, Ziehen setzt ihn genau hin","tool.fly.cylHole":"Zylinder als Loch","tool.fly.boxHole":"Quader als Loch","tool.fly.route3d":"Rohr im Raum","tool.fly.bodiesFoot":"Tipp: Jeder Körper kann mit einem Klick zum Loch werden.","tool.fly.partsTitle":"Bauteile","tool.fly.partsFoot":"Löcher auf eine Fläche ziehen – sie richten sich automatisch aus.","menu.proj.rename":"Projekt umbenennen","menu.proj.saveFile":"Als Datei speichern","menu.proj.saveInFolderNow":"Jetzt in „{name}“ speichern","menu.proj.changeFolder":"Anderen Ordner wählen …","menu.proj.disconnectFolder":"Ordner-Verbindung trennen","menu.proj.saveToFolder":"In Ordner speichern …","menu.proj.openImport":"Datei öffnen / STEP, IGES, BREP, STL, 3MF, OBJ importieren …","menu.proj.versions":"Versionen …","menu.proj.newProject":"Neues Projekt","menu.proj.startAndTemplates":"Startseite und Vorlagen","menu.folder.saveNow":"Jetzt in Ordner speichern","menu.folder.changeFolder":"Anderen Ordner wählen …","menu.folder.disconnect":"Ordner-Verbindung trennen","menu.main.tourBasics":"Einführung starten","menu.main.tourSketch":"Einführung: Erste Skizze","menu.main.settings":"Einstellungen","menu.main.shortcuts":"Tastenkürzel","menu.main.export":"Exportieren","menu.main.saveImage":"Bild speichern (PNG)","menu.main.about":"Über Tracery","menu.main.aboutP1":"Tracery ist ein kostenloses, parametrisches CAD im Browser – ohne Konto, mit exaktem Geometrie-Kern und technischen Zeichnungen.","menu.main.aboutP2":"Der Name: „Tracery“ ist das englische Wort für Maßwerk – die filigranen, exakt konstruierten Ornamente in gotischen Kirchenfenstern. Genau so sollen deine Teile werden.","menu.main.aboutP3":"Gerechnet wird mit dem CAD-Kern OpenCascade (LGPL-2.1) über die Bibliothek replicad (MIT). Die 3D-Anzeige nutzt three.js (MIT), die PDF-Ausgabe jsPDF (MIT).","menu.main.aboutP4":"Deine Projekte bleiben in deinem Browser. Der KI-Helfer nutzt dein Claude-Konto.","menu.more.measure":"Messen","menu.more.notes":"Notizstift","menu.more.views":"Ansicht: Schnitt, Röntgen, Explosion …","menu.more.weakSpots":"Schwachstellen suchen","menu.more.showAllPro":"Alle Werkzeuge zeigen (Profi)","menu.view.section":"Schnitt","menu.view.xray":"Röntgen","menu.view.explode":"Explosion","menu.view.focus":"Fokus-Vorschau","menu.view.overhang":"Überhänge (3D-Druck)","menu.view.thin":"Wandstärke (3D-Druck)","menu.view.present":"Vorführen (Vollbild)","menu.view.turntable":"Drehteller-Video …","menu.view.lightPrefix":"Licht: {name}","menu.view.shadows":"Schatten","menu.view.viewBack":"Vorige Ansicht","menu.view.saveView":"Ansicht speichern …","menu.view.savedViewPrefix":"Ansicht: {name}","menu.view.disp.edges":"Flächen mit Kanten","menu.view.disp.shaded":"Nur Flächen","menu.view.disp.wire":"Drahtgitter (nur Kanten)","menu.view.disp.hidden":"Verdeckte Kanten zeigen","menu.view.look.studio":"Studio-Look (Werkstoff, Licht, Schatten)","menu.view.look.plain":"Einfach (matt, schnell)","menu.view.look.clay":"Prüfen: Ton","menu.view.look.chrome":"Prüfen: Chrom-Streifen","menu.view.mood.studio":"Studio","menu.view.mood.hell":"Hell","menu.view.mood.werkstatt":"Werkstatt","menu.check.geom":"Geometrie prüfen","menu.check.weak":"Schwachstellen suchen","menu.check.thin":"Wandstärke (3D-Druck)","menu.check.overhang":"Überhänge (3D-Druck)","menu.select.all":"Alles","menu.select.body":"Nur Körper","menu.select.face":"Nur Flächen","menu.select.edge":"Nur Kanten","menu.select.tip":"Wählen: {name}","menu.edge.convex":"Alle äußeren Kanten","menu.edge.concave":"Alle inneren Kanten","menu.edge.all":"Alle Kanten","menu.edge.faceSelect":"Alle {n} Kanten wählen","menu.edge.faceFillet":"Alle abrunden ({v})","menu.edge.faceChamfer":"Alle abschrägen ({v})","menu.edge.faceNone":"An dieser Fläche habe ich keine Kanten gefunden.","menu.ctx.editSketch":"Skizze bearbeiten","menu.ctx.lookAtFace":"Blick senkrecht auf die Fläche","menu.ctx.faceDxf":"Fläche als DXF speichern","menu.ctx.faceSvg":"Fläche als SVG speichern","menu.ctx.sketchOnFace":"Skizze auf dieser Fläche","menu.ctx.thread":"Gewinde …","menu.ctx.markThread":"Gewinde markieren …","menu.ctx.dupLinked":"Verknüpft duplizieren","menu.ctx.toSolid":"Zum Körper machen","menu.ctx.toHole":"Zum Loch machen","menu.ctx.selectSimilar":"Ähnliche wählen","menu.ctx.zoomFit":"Heranzoomen","menu.ctx.saveSelection":"Auswahl speichern …","menu.ctx.behind":"Dahinter wählen: „{name}“","menu.ctx.showAll":"Alles einblenden","menu.ctx.showAllCount":"Alles einblenden ({n})","menu.ctx.selectAll":"Alles wählen","menu.ctx.fitAll":"Alles zeigen","menu.ctx.selSet":"Auswahl: {name}","menu.ctx.viewBack":"Vorige Ansicht","menu.ctx.newSketch":"Neue Skizze","menu.ctx.saveImage":"Bild speichern (PNG)","menu.ctx.repeat":"Wiederholen: {label}","menu.tl.markerAfter":"Marker hinter diesen Schritt","menu.tl.markerBefore":"Marker vor diesen Schritt","menu.tree.toFolder":"In Ordner","menu.tree.fromFolder":"Aus Ordner nehmen","menu.tree.dissolveFolder":"Ordner auflösen","menu.tree.collapseFolder":"Ordner zuklappen","menu.tree.expandFolder":"Ordner aufklappen","menu.tree.selectFolder":"Alle Schritte wählen","menu.draw.line":"Linie","menu.draw.rect":"Rechteck","menu.draw.circle":"Kreis","menu.draw.text":"Text","menu.draw.clearAll":"Alles Gezeichnete löschen","menu.draw.clearTitle":"Gezeichnetes löschen?","menu.draw.clearBody":"Alle frei gezeichneten Linien und Texte werden entfernt.","menu.draw.sheet":"Blatt","menu.draw.orient":"Ausrichtung","menu.draw.landscape":"Quer","menu.draw.portrait":"Hoch","menu.draw.scale":"Maßstab","menu.draw.scaleAuto":"Automatisch","menu.draw.viewsHeading":"Ansichten","menu.draw.vFront":"Vorderansicht","menu.draw.vTop":"Draufsicht","menu.draw.vLeft":"Seitenansicht von links","menu.draw.vIso":"Isometrie (3D-Bild)","menu.draw.hiddenEdges":"Verdeckte Kanten (gestrichelt)","menu.draw.centers":"Mittellinien","menu.draw.exportPdf":"Als PDF speichern","menu.draw.exportSvg":"Als SVG speichern","menu.draw.exportDxf":"Als DXF speichern (ZIP)","ctx.toolbarAria":"Aktionen","ctx.suppressed":"Unterdrückt","ctx.behindMarker":"Hinter dem Marker","ctx.enableAgain":"Wieder einschalten","ctx.enableAgainTip":"Diesen Schritt wieder mitrechnen","ctx.markerAfter":"Marker dahinter","ctx.markerAfterTip":"Den Marker hinter diesen Schritt ziehen – dann wird er wieder mitgerechnet","ctx.moveStepLabel":"Verschieben/Drehen","ctx.scaleStepLabel":"Skalieren","ctx.thickenStepLabel":"Aufdicken","ctx.mirrorStepLabel":"Schritt spiegeln","ctx.targetBody":"Zielkörper","ctx.targetBodyTip":"Zum Zielkörper wechseln","ctx.suppressTip":"Diesen Schritt unterdrücken – der Körper springt zurück","ctx.deleteTip":"Löschen (Entf)","ctx.copyValTip":"{tip} – klicken kopiert den Wert","ctx.edgeDia":"Kante Ø","ctx.edgeDiaTip":"Kreis mit Radius {r}, Umfang {total}","ctx.edgeOne":"Kante","ctx.edgesCount":"{n} Kanten","ctx.edgesTotalTip":"Gesamtlänge der gewählten Kanten","ctx.edgeLenTip":"Länge der Kante","ctx.edgeArcTip":"Länge der Kante (Bogen, R {r})","ctx.fillet":"Abrunden","ctx.filletTip":"Kante abrunden (1 mm, danach änderbar)","ctx.chamfer":"Abschrägen","ctx.chamferTip":"Kante abschrägen (1 mm, danach änderbar)","ctx.similar":"Ähnliche","ctx.similarEdgesTip":"Alle gleich langen Kanten dazuwählen (A)","ctx.chain":"Kette","ctx.chainTip":"Alle Kanten dazuwählen, die ohne Knick weiterlaufen (z. B. ein gerundeter Umriss)","ctx.byKind":"Nach Art","ctx.byKindTip":"Alle äußeren oder alle inneren Kanten dieses Teils wählen","ctx.planeAngle":"Ebene im Winkel","ctx.planeAngleTip":"Bezugsebene durch diese Kante im Winkel zu einer Fläche anlegen","ctx.planeNormal":"Ebene senkrecht","ctx.planeNormalTip":"Bezugsebene senkrecht auf diese Kante (in der Mitte, danach änderbar)","ctx.planeTwoEdges":"Ebene durch 2 Kanten","ctx.planeTwoEdgesTip":"Bezugsebene durch beide gewählten geraden Kanten anlegen","ctx.planeTangent":"Ebene tangential","ctx.planeTangentTip":"Bezugsebene tangential an diese runde Fläche anlegen","ctx.pointEdgeMid":"Punkt Kantenmitte","ctx.pointEdgeMidTip":"Bezugspunkt genau in der Mitte dieser Kante anlegen","ctx.pointFaceCenter":"Punkt Flächenmitte","ctx.pointFaceCenterTip":"Bezugspunkt in der Mitte dieser Fläche anlegen","ctx.face":"Fläche","ctx.sketchHere":"Skizze hierauf","ctx.sketchHereTip":"Auf dieser Fläche zeichnen","ctx.hole":"Bohrung","ctx.holeTip":"Bohrungs-Assistent: Durchgang, Kernloch, Sackloch mit Spitze, Passbohrung H7, Zentrierbohrung, Einsatz oder Mutternfalle","ctx.extrude":"Hochziehen","ctx.extrudeTip":"Die Fläche herausziehen oder hineindrücken","ctx.faceEdges":"Ihre Kanten","ctx.faceEdgesTip":"Alle Kanten dieser Fläche wählen, abrunden oder abschrägen","ctx.shell":"Aushöhlen","ctx.shellTip":"Körper aushöhlen – diese Fläche wird die Öffnung","ctx.sectionHere":"Schnitt hier","ctx.sectionHereTip":"Schnitt parallel zu dieser Fläche – den Abstand stellst du in der Schnitt-Leiste ein","ctx.mirrorFace":"An Fläche spiegeln","ctx.mirrorFaceTip":"Gespiegelte Kopie an dieser Fläche – z. B. die zweite Hälfte eines symmetrischen Teils","ctx.sphereDia":"Kugel Ø","ctx.roundFaceDia":"Runde Fläche Ø","ctx.roundFaceDiaTip":"Radius {r}","ctx.roundFace":"Runde Fläche","ctx.holeRoundTip":"Bohrungs-Assistent: Loch senkrecht in die runde Fläche (Schraube, Sackloch, Passbohrung H7, Zentrierung …) – der Magnet rastet ganz oben, an den Seiten und in der Mitte ein","ctx.threadEdit":"Gewinde ändern","ctx.threadMark":"Gewinde markieren","ctx.threadTip":"Kosmetisches Gewinde auf dieser runden Fläche markieren (rechnet schnell)","ctx.axis":"Achse","ctx.axisTip":"Bezugsachse durch die Mitte dieser runden Fläche anlegen","ctx.toBody":"Zum Körper","ctx.toHole":"Zum Loch","ctx.toBodyTip":"Wieder zum festen Körper machen (H)","ctx.toHoleTip":"Zum Loch machen – schneidet dann in andere Körper (H)","ctx.rotate":"Drehen","ctx.rotateTip":"Um 90° drehen oder kippen","ctx.rotZ":"Um 90° drehen (flach)","ctx.rotX":"Nach vorne kippen","ctx.rotY":"Zur Seite kippen","ctx.mirror":"Spiegeln","ctx.mirrorTip":"Spiegeln","ctx.mirrorX":"Links ↔ rechts","ctx.mirrorY":"Vorne ↔ hinten","ctx.mirrorZ":"Oben ↔ unten","ctx.dupTip":"Duplizieren (Strg D)","ctx.moveStep":"Verschieben/Drehen","ctx.moveStepTip":"Als Schritt verschieben, drehen oder kopieren (bleibt im Verlauf änderbar)","ctx.scale":"Skalieren","ctx.scaleTip":"Körper als Schritt im Verlauf vergrößern oder verkleinern (gleichmäßig oder je Achse)","ctx.thicken":"Aufdicken","ctx.thickenTip":"Fläche zu einer Platte mit fester Dicke aufdicken (nach außen, innen oder mittig)","ctx.mirrorStep":"Schritt spiegeln","ctx.mirrorStepTip":"Diesen Formschritt (z. B. eine Tasche oder Rippe) an einer Ebene oder Fläche im selben Körper spiegeln","ctx.pickMirrorPlane":"Ebene / Fläche","ctx.pickMirrorPlaneTip":"Ebene Körperfläche oder Bezugsebene als Spiegelebene wählen","ctx.pattern":"Muster","ctx.patternHoleTip":"Loch als Muster oder gespiegelt vervielfachen","ctx.patternTip":"Muster oder gespiegelte Kopie","ctx.patRect":"Rechteckmuster","ctx.patCirc":"Kreismuster","ctx.patPath":"Muster entlang Kurve","ctx.patMirror":"Gespiegelte Kopie","ctx.split":"Teilen","ctx.splitTip":"Körper an einer Ebene teilen","ctx.toTip":"Zur Spitze","ctx.toTipTip":"Den Umriss zu einer Spitze zusammenlaufen lassen (Übergang mit Spitze)","ctx.similarPartsTip":"Alle gleichen Teile wählen (A)","ctx.selectEdges":"Kanten wählen","ctx.selectEdgesTip":"Alle äußeren, alle inneren oder alle Kanten dieses Teils wählen – dann zusammen abrunden","ctx.ungroup":"Gruppe lösen","ctx.ungroupTip":"Gruppe lösen","ctx.group":"Gruppieren","ctx.groupTip":"Zu einem Körper verbinden (Strg G)","ctx.gap":"Abstand","ctx.gapTip":"Abstand zwischen den beiden Teilen genau setzen (der zuletzt gewählte bewegt sich)","ctx.joint":"Gelenk","ctx.jointTip":"Drehgelenk: das zuletzt gewählte Teil dreht sich um eine Achse, die du im Bild wählst","ctx.loft":"Übergang","ctx.loftTip":"Weicher Übergang durch die Umrisse – in der Reihenfolge, in der du sie gewählt hast","ctx.boolean":"Boolesch","ctx.booleanTip":"Körper vereinigen, abziehen oder schneiden","ctx.boolUnion":"Vereinigen","ctx.boolSub":"Abziehen (der zuerst gewählte bleibt)","ctx.boolInt":"Schnittmenge","ctx.align":"Ausrichten","ctx.alignTip":"Objekte aneinander ausrichten","ctx.alignLeft":"Links bündig","ctx.alignCx":"Mittig (X)","ctx.alignRight":"Rechts bündig","ctx.alignFront":"Vorne bündig","ctx.alignCy":"Mittig (Y)","ctx.alignBack":"Hinten bündig","ctx.alignBottom":"Unten bündig","common.emboss":"Prägen","ctx.emboss":"Prägen","ctx.embossTip":"Skizze (Text oder Logo) erhaben oder vertieft auf diese Fläche projizieren","recovery.title":"Tracery wurde nicht richtig beendet – letzten Stand wiederherstellen?","recovery.metaOne":"Projekt „{name}“ · {time} · 1 Objekt","recovery.metaMany":"Projekt „{name}“ · {time} · {n} Objekte","recovery.restore":"Wiederherstellen","recovery.dismiss":"Verwerfen","recovery.restored":"Letzter Stand von „{name}“ wiederhergestellt.","recovery.discarded":"Wiederherstellungs-Stand verworfen.","recovery.failed":"Der letzte Stand konnte nicht wiederhergestellt werden."};
 
 const I18n = (() => {
   let lang = 'de';
@@ -2765,8 +2821,12 @@ Object.defineProperty(T, 'texts', { get: () => I18n.texts });
 // ================= Browser-Datenbank (IndexedDB) für große Projekte und binäre Importe =================
 const Store = (() => {
   const DB_NAME = 'tracery-db', DB_VER = 1;
+  const RECOVERY_KEY = 'recovery';
+  const LS_REC_FLAG = 'tracery.recovery.flag';
+  const LS_REC_QUICK = 'tracery.recovery.quick';
+  const QUICK_MAX_CHARS = 400000;
   let db = null, dbPromise = null, initPromise = null, ready = false, usingIDB = true;
-  let index = [], lastId = null;
+  let index = [], lastId = null, recoveryCache = null;
   const blobCache = new Map();     // blobId -> Uint8Array
   const pendingBlobs = new Map();  // blobId -> Promise<void>
   const versionsCache = new Map(); // projectId -> Array
@@ -3151,9 +3211,13 @@ const Store = (() => {
     if (!d) return;
     const keep = new Set();
     if (activeDoc) collectBlobIds(activeDoc, keep);
-    const [projs, vers] = await Promise.all([txGetAll(d, 'projects'), txGetAll(d, 'versions')]);
+    const [projs, vers, recMeta] = await Promise.all([txGetAll(d, 'projects'), txGetAll(d, 'versions'), txGet(d, 'meta', RECOVERY_KEY).catch(() => null)]);
     for (const p of projs) collectBlobIds(p, keep);
     for (const vr of vers) for (const v of (vr && vr.list) || []) if (v && v.doc) collectBlobIds(v.doc, keep);
+    if (recMeta && recMeta.v) {
+      if (recMeta.v.doc) collectBlobIds(recMeta.v.doc, keep);
+      if (recMeta.v.baseDoc) collectBlobIds(recMeta.v.baseDoc, keep);
+    }
     const keys = await txGetAllKeys(d, 'blobs');
     const stale = keys.filter((k) => !keep.has(k) && !pendingBlobs.has(k));
     if (stale.length) {
@@ -3170,22 +3234,122 @@ const Store = (() => {
     if (lastId === id) lastId = index[0] ? index[0].id : null;
     versionsCache.delete(id);
     fallbackProjects.delete(id);
+    if (recoveryCache && recoveryCache.docId === id) {
+      recoveryCache = null;
+      storageDel(LS_REC_FLAG);
+      storageDel(LS_REC_QUICK);
+    }
     const idxSnap = index.slice();
     const lastSnap = lastId;
 
     return enqueue(async () => {
       const d = await ensureDB();
       if (!d) { storageDel('masswerk.proj.' + id); storageDel('masswerk.versions.' + id); return true; }
+      const curRec = await txGet(d, 'meta', RECOVERY_KEY).catch(() => null);
+      const clearRec = !!(curRec && curRec.v && curRec.v.docId === id);
       const tx = d.transaction(['projects', 'versions', 'meta'], 'readwrite');
       tx.objectStore('projects').delete(id);
       tx.objectStore('versions').delete(id);
       const m = tx.objectStore('meta');
       m.put({ k: 'index', v: idxSnap });
       if (lastSnap) m.put({ k: 'last', v: lastSnap }); else m.delete('last');
+      if (clearRec) {
+        m.delete(RECOVERY_KEY);
+        recoveryCache = null;
+        storageDel(LS_REC_FLAG);
+        storageDel(LS_REC_QUICK);
+      }
       await txDone(tx);
       await gcBlobs(activeDoc);
       return true;
     }).catch((e) => { console.warn('Projekt löschen:', e); return false; });
+  }
+
+  // ---------- Absturz-Wiederherstellung ----------
+  function getRecoveryFlag() {
+    const raw = storageGet(LS_REC_FLAG);
+    if (!raw) return null;
+    try {
+      const f = JSON.parse(raw);
+      return f && f.active ? f : null;
+    } catch (_) { return null; }
+  }
+  function saveRecovery(doc, opts = {}) {
+    if (!doc || !doc.id) return Promise.resolve(false);
+    extractBlobs(doc);
+    if (opts.baseDoc) extractBlobs(opts.baseDoc);
+    const snap = deepClone(doc);
+    const baseSnap = opts.baseDoc ? deepClone(opts.baseDoc) : null;
+    const n = opts.itemCount != null ? opts.itemCount : countItems(snap);
+    const rec = {
+      docId: snap.id,
+      name: snap.name || 'Neues Projekt',
+      savedAt: opts.savedAt || Date.now(),
+      itemCount: n,
+      doc: snap,
+      baseDoc: baseSnap,
+    };
+    recoveryCache = rec;
+    try {
+      storageSet(LS_REC_FLAG, JSON.stringify({
+        active: true,
+        docId: rec.docId,
+        name: rec.name,
+        savedAt: rec.savedAt,
+        itemCount: rec.itemCount,
+      }));
+      const raw = JSON.stringify(rec);
+      if (raw.length <= QUICK_MAX_CHARS) storageSet(LS_REC_QUICK, raw);
+      else storageDel(LS_REC_QUICK);
+    } catch (_) {
+      storageDel(LS_REC_QUICK);
+    }
+    return enqueue(async () => {
+      await flushBlobs();
+      const d = await ensureDB();
+      if (d) await txPut(d, 'meta', { k: RECOVERY_KEY, v: rec });
+      return true;
+    }).catch((e) => { console.warn('Absturz-Stand sichern:', e); return false; });
+  }
+  async function loadRecovery() {
+    await init();
+    await writeQueue;
+    let idbRec = null;
+    const d = await ensureDB();
+    if (d) {
+      try {
+        const meta = await txGet(d, 'meta', RECOVERY_KEY);
+        if (meta && meta.v && meta.v.doc && meta.v.doc.format === 'masswerk') idbRec = meta.v;
+      } catch (e) { console.warn('Absturz-Stand laden:', e); }
+    }
+    let quickRec = null;
+    const flag = getRecoveryFlag();
+    if (flag) {
+      try {
+        const raw = storageGet(LS_REC_QUICK);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && parsed.doc && parsed.doc.format === 'masswerk') quickRec = parsed;
+        }
+      } catch (_) {}
+    }
+    let chosen = null;
+    if (idbRec && quickRec) chosen = (quickRec.savedAt || 0) > (idbRec.savedAt || 0) ? quickRec : idbRec;
+    else chosen = idbRec || quickRec || null;
+    recoveryCache = chosen;
+    return chosen;
+  }
+  function clearRecovery() {
+    recoveryCache = null;
+    storageDel(LS_REC_FLAG);
+    storageDel(LS_REC_QUICK);
+    return enqueue(async () => {
+      const d = await ensureDB();
+      if (!d) return true;
+      const tx = d.transaction('meta', 'readwrite');
+      tx.objectStore('meta').delete(RECOVERY_KEY);
+      return txDone(tx);
+    }).catch((e) => { console.warn('Absturz-Stand löschen:', e); return false; });
   }
 
   // ---------- Versionen ----------
@@ -3235,6 +3399,7 @@ const Store = (() => {
     extractBlobs, collectBlobIds, hydrateDoc, inlineBlobs,
     recentProjects, hasProject, getLastId, saveProject, loadProject, deleteProject, gcBlobs,
     loadVersions, getVersionsSync, setVersions,
+    saveRecovery, loadRecovery, clearRecovery, getRecoveryFlag,
     get ready() { return ready; },
     get hasProjects() { return index.length > 0 || !!lastId; },
     get dbName() { return DB_NAME; },
@@ -7430,7 +7595,7 @@ const Kernel = (() => {
 const App = (() => {
   const S = {
     doc: Model.newDoc(), sel: [], face: null, edges: [], mode: 'model', tool: null,
-    results: new Map(), resolved: new Map(), baseBoxes: new Map(), ownBoxes: new Map(), errors: [], undo: [], redo: [], extra: [], hideIds: new Set(), revision: 0, lastSavedRev: -1, fileSavedRev: -1,
+    results: new Map(), resolved: new Map(), baseBoxes: new Map(), ownBoxes: new Map(), errors: [], undo: [], redo: [], extra: [], hideIds: new Set(), revision: 0, cleanRev: 0, lastSavedRev: -1, fileSavedRev: -1,
     ctx: null, iso: null,   // gerade bearbeitetes Bauteil / isoliertes Teil (nur Ansicht, nicht gespeichert)
   };
   const ev = makeEmitter();
@@ -7439,7 +7604,7 @@ const App = (() => {
   // ---------- Dokument ----------
   function setDoc(doc, opts = {}) {
     // noch ausstehendes Speichern des bisherigen Projekts zuerst erledigen
-    if (S.doc) { try { autosave.flush(); } catch (_) {} }
+    if (S.doc && !(opts && opts.fromBoot)) { try { autosave.flush(); } catch (_) {} }
     S.doc = Model.migrate(doc);
     if (typeof SK !== 'undefined' && SK.syncFonts) SK.syncFonts(S.doc.fonts);
     if (typeof Store !== 'undefined') {
@@ -7450,9 +7615,11 @@ const App = (() => {
     S.sel = []; S.face = null; S.edges = []; S.undo = []; S.redo = []; S.extra = []; S.ctx = null; S.iso = null;
     for (const id of [...S.results.keys()]) Viewer.removeNode(id);
     S.results.clear(); S.resolved.clear(); S.baseBoxes.clear(); S.ownBoxes.clear(); S.errors = []; S.revision++;
+    S.cleanRev = S.revision;
+    if (opts && opts.saved) S.fileSavedRev = S.revision;
     Viewer.clearGhosts(); Views.reset(); Versions.compareOff();
-    ev.emit('doc'); ev.emit('selection'); ev.emit('history');
-    autosave();
+    ev.emit('doc'); ev.emit('docLoaded', { doc: S.doc, opts }); ev.emit('selection'); ev.emit('history');
+    if (!(opts && opts.noAutosave)) autosave();
     rebuild().then(() => { if (opts.fit !== false) Viewer.fit(null, false); });
   }
   function snapshot() { return JSON.stringify(S.doc); }
@@ -7513,6 +7680,7 @@ const App = (() => {
     Model.useVars(Model.vars(S.doc).v);
     S.doc.modified = Date.now(); S.revision++;
     ev.emit('doc');
+    ev.emit('dirty', { doc: S.doc, revision: S.revision });
     autosave();
     if (!noRebuild) rebuild();
   }
@@ -7526,7 +7694,12 @@ const App = (() => {
     if (S.face && !valid.has(S.face.id)) S.face = null;
     S.edges = S.edges.filter((e) => valid.has(e.id));
     S.revision++;
-    ev.emit('doc'); ev.emit('selection'); autosave(); rebuild();
+    ev.emit('doc'); ev.emit('dirty', { doc: S.doc, revision: S.revision }); ev.emit('selection'); autosave(); rebuild();
+  }
+  function markClean() {
+    S.cleanRev = S.revision;
+    S.fileSavedRev = S.revision;
+    ev.emit('clean', { doc: S.doc, revision: S.revision });
   }
   function undo(silent) {
     const step = S.undo.pop(); if (!step) return;
@@ -7596,6 +7769,7 @@ const App = (() => {
   async function runRebuild() {
     if (!Kernel.ready) { await Kernel.whenReady().catch(() => {}); if (!Kernel.ready) return; }
     busy = true;
+    ev.emit('calc', true);
     clearTimeout(busyTimer); busyTimer = setTimeout(() => ev.emit('busy', true), 300);
     while (dirty) {
       dirty = false;
@@ -7613,7 +7787,7 @@ const App = (() => {
       apply(res);
       ev.emit('rebuilt');
     }
-    busy = false; clearTimeout(busyTimer); ev.emit('busy', false);
+    busy = false; clearTimeout(busyTimer); ev.emit('busy', false); ev.emit('calc', false);
     ev.emit('rebuilt');
   }
   // Aussehen am Werkstoff: eigener Werkstoff des Teils, sonst der ausdrücklich gewählte Projekt-Werkstoff
@@ -7797,6 +7971,8 @@ const App = (() => {
     get ctx() { return S.ctx; }, get iso() { return S.iso; }, setCtx, setIso, applyView,
     get tool() { return S.tool; }, set tool(t) { S.tool = t; ev.emit('tool'); },
     get fileSavedRev() { return S.fileSavedRev; }, set fileSavedRev(v) { S.fileSavedRev = v; },
+    get dirty() { return S.revision !== S.cleanRev; },
+    markClean,
     setDoc, snapshot, change, touched, pushUndo, restore, undo, redo, undoTo, squash, rebuild, requalify, replaceMesh, select, clearSelection, selectedItems, errorsFor, localBox, refreshSelectionVisuals,
     recentProjects, loadStored, deleteStored, autosave, fitAfterBuild, on: ev.on, emit: ev.emit,
   };
@@ -17003,7 +17179,7 @@ const ViewPrefs = (() => {
     return wrap;
   }
   // Einstellungen-Fenster (Menü ⋯ → Einstellungen)
-  function dialog(initialTab = 'general') {
+  function dialog(initialTab = 'general', opts = {}) {
     const body = h('div', { style: { display: 'grid', gap: '14px', minWidth: 'min(480px, 84vw)' } });
     const sel = (id, label, val, opts, fn, hint) => { const f = UI.selectField({ id, label, value: String(val), options: opts, onChange: fn }); if (hint) f.append(h('small', { style: { color: 'var(--muted)', display: 'block', marginTop: '4px' } }, hint)); return f; };
     const chk = (k, label, hint) => { const l = h('label', { class: 'check', style: { alignItems: 'flex-start' } }, h('input', { type: 'checkbox', id: 'set-' + k, checked: !!v[k] }), h('span', null, label, hint ? h('small', { style: { display: 'block', color: 'var(--muted)' } }, hint) : null)); l.querySelector('input').onchange = (e) => set({ [k]: e.target.checked }); return l; };
@@ -17074,6 +17250,7 @@ const ViewPrefs = (() => {
     body.append(tabs, paneGen, paneKeys);
     syncTabs(curTab);
     UI.modal({ title: 'Einstellungen', body, actions: [{ label: 'Fertig', primary: true }], onClose: () => { if (kbdEd) kbdEd.destroy(); } });
+    if (opts && opts.focus) setTimeout(() => { const el = document.getElementById(opts.focus); if (el) el.focus(); }, 45);
   }
   return { get: () => ({ ...v }), get level() { return v.level; }, set level(l) { setLevel(l); }, get firstStart() { return firstStart && !(typeof Store !== 'undefined' && Store.hasProjects); }, set, toggle, apply, dialog, setLevel, syncLevel, levelCards, get simple() { return simple(); }, on: ev.on };
 })();
@@ -17516,6 +17693,7 @@ const UI = (() => {
   function busy(on) {
     if (on && !busyEl) { busyEl = h('div', { class: 'busy' }, h('div', { class: 'spin' }), 'Rechnet …'); $('#overlay').append(busyEl); }
     else if (!on && busyEl) { busyEl.remove(); busyEl = null; }
+    if (typeof Measure !== 'undefined' && Measure.setCalcBusy) Measure.setCalcBusy(!!on);
   }
   // ---------- Eingabefelder ----------
   function numField({ id, label, value, unit = 'mm', len, axis, onCommit, min, int, placeholder, expr = true, step }) {
@@ -17635,7 +17813,7 @@ const UI = (() => {
 // ================= Werkzeugleiste anpassen & Favoriten (BE-04) =================
 const Toolbar = (() => {
   const KEY = 'tracery-werkzeugleiste';
-  const DEFAULT_ITEMS = ['body', 'sketch', 'parts', 'measure', 'notes', 'views', 'export'];
+  const DEFAULT_ITEMS = ['body', 'sketch', 'parts', 'measure', 'notes', 'views', 'check', 'export'];
 
   let items = [...DEFAULT_ITEMS];
   let favs = [];
@@ -17651,6 +17829,7 @@ const Toolbar = (() => {
       { id: 'measure', group: 'Grundwerkzeuge', domId: 't-measure', icon: 'measure', label: T('tool.measure'), tip: T('tool.measureTip'), kbd: 'M', cls: 'minor pro', help: 'measure', run: () => Measure.toggle() },
       { id: 'notes', group: 'Grundwerkzeuge', domId: 't-notes', icon: 'noteDraw', label: T('tool.notes'), tip: T('tool.notesTip'), kbd: 'N', cls: 'minor pro', run: () => Notes.toggle() },
       { id: 'views', group: 'Grundwerkzeuge', domId: 't-views', icon: 'xray', label: T('tool.views'), tip: T('tool.viewsTip'), cls: 'minor pro', run: (e) => Views.menu(e.currentTarget) },
+      { id: 'check', group: 'Grundwerkzeuge', domId: 't-check', icon: 'target', label: T('tool.check'), tip: T('tool.checkTip'), cls: 'minor pro', run: (e) => GeomCheck.menu(e.currentTarget) },
       { id: 'export', group: 'Grundwerkzeuge', domId: 't-export', icon: 'export', label: T('tool.export'), short: T('tool.exportShort'), tip: T('tool.exportTip'), kbd: 'Strg E', cls: 'primary', run: () => Print.exportDialog() },
       // Bearbeiten & Formen
       { id: 'holeWizard', group: 'Bearbeiten & Formen', domId: 't-holeWizard', icon: 'holeWizard', label: 'Bohrung', tip: 'Bohrungs-Assistent öffnen', cls: 'minor', help: 'holeWizard', run: (e) => Place.holeWizard(e.currentTarget) },
@@ -17874,6 +18053,7 @@ const Toolbar = (() => {
     b.addEventListener('click', def.run);
     if (def.id === 'measure' && typeof Measure !== 'undefined' && Measure.active) b.classList.add('active');
     if (def.id === 'notes' && typeof Notes !== 'undefined' && Notes.active) b.classList.add('active');
+    if (def.id === 'check' && typeof GeomCheck !== 'undefined' && GeomCheck.active) b.classList.add('active');
     return b;
   }
 
@@ -17891,6 +18071,7 @@ const Toolbar = (() => {
       { label: T('menu.more.notes'), icon: 'noteDraw', kbd: 'N', run: () => Notes.toggle() },
       { label: T('menu.more.views'), icon: 'xray', run: () => Views.menu($('#t-more')) },
       { label: T('menu.more.weakSpots'), icon: 'target', run: () => Weak.dialog() },
+      { label: T('menu.check.geom'), icon: 'target', id: 'more-geom-check', help: 'geomCheck', run: () => GeomCheck.open() },
       '-', { label: T('menu.more.showAllPro'), icon: 'sliders', help: 'levelSwitch', run: () => ViewPrefs.setLevel('pro') },
     ]));
     return b;
@@ -20990,7 +21171,7 @@ const Place = (() => {
 // Alles hier ändert nur, wie das Modell gezeigt wird – nie das Modell selbst. Nichts davon landet
 // in der Zeitleiste oder in der Projektdatei.
 const Views = (() => {
-  const st = { cut: null, xray: false, ex: 0, exGoal: 0, exAnim: null, focus: null, ov: null, exGroups: false };
+  const st = { cut: null, xray: false, ex: 0, exGoal: 0, exAnim: null, exTimer: null, exWaitOff: null, focus: null, ov: null, exGroups: false };
   let wrap = null;   // Leisten links oben
   function bars() {
     if (!wrap || !wrap.isConnected) { wrap = h('div', { class: 'viewbars' }); $('#overlay').append(wrap); }
@@ -21633,13 +21814,20 @@ const Views = (() => {
     }
     return map;
   }
+  function stopExAnim() {
+    if (st.exAnim) { cancelAnimationFrame(st.exAnim); st.exAnim = null; }
+    if (st.exTimer) { clearTimeout(st.exTimer); st.exTimer = null; }
+  }
   function explodeCount() { return [...Viewer.nodes.keys()].filter(shown).length; }
   function explode(on = st.exGoal === 0, amount = 0.6) {
+    if (st.exWaitOff) { st.exWaitOff(); st.exWaitOff = null; }
     if (on && explodeCount() < 2) {
       // Nur ein Teil ganz oben, aber eine Gruppe mit mehreren Teilen: dann die Gruppen gleich mit zerlegen
       if (!groupsSplittable()) { UI.toast('Zum Auseinanderziehen braucht es mindestens zwei Teile.', { icon: 'info', ms: 4200 }); return; }
+      st.exGoal = amount;
       setGroups(true);
-      const off = App.on('results', () => { off(); animateTo(amount); });
+      const off = App.on('results', () => { off(); if (st.exWaitOff === off) st.exWaitOff = null; if (st.exGoal > 0) animateTo(amount); });
+      st.exWaitOff = off;
       exBar(); App.select(App.sel); return;
     }
     animateTo(on ? amount : 0);
@@ -21647,18 +21835,27 @@ const Views = (() => {
   }
   function animateTo(goal, ms = 450) {
     st.exGoal = goal; const from = st.ex, t0 = performance.now();
-    cancelAnimationFrame(st.exAnim);
+    stopExAnim();
     const step = () => {
-      const t = Math.min(1, (performance.now() - t0) / ms); const e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-      setEx(from + (goal - from) * e);
-      if (t < 1) st.exAnim = requestAnimationFrame(step);
-      else { st.exAnim = null; if (goal === 0) { Viewer.setOffsets(null); if (st.exBar) { st.exBar.remove(); st.exBar = null; } if (st.exGroups) setGroups(false); Handles.rebuild(); Panels.renderCtx(); } if (st.cut) drawCutCaps(); sync(); }
+      stopExAnim();
+      const elapsed = performance.now() - t0;
+      const t = ms > 0 ? Math.min(1, elapsed / ms) : 1;
+      const e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+      setEx(from + (goal - from) * e, true);
+      if (t < 1) {
+        st.exAnim = requestAnimationFrame(step);
+        st.exTimer = setTimeout(step, Math.max(16, Math.min(50, ms - elapsed + 16)));
+      } else {
+        if (goal === 0) { Viewer.setOffsets(null); if (st.exBar) { st.exBar.remove(); st.exBar = null; } if (st.exGroups) setGroups(false); Handles.rebuild(); Panels.renderCtx(); }
+        if (st.cut) drawCutCaps();
+        sync();
+      }
     };
     step();
   }
-  function setEx(f) {
+  function setEx(f, animating = false) {
     st.ex = f; Viewer.setOffsets(f > 1e-4 ? offsets(f) : null);
-    if (st.cut && !st.exAnim) drawCutCaps();
+    if (st.cut && !animating && !st.exAnim && !st.exTimer) drawCutCaps();
     if (st.exBar) { const r = st.exBar.querySelector('#ex-range'); if (r && document.activeElement !== r) r.value = Math.round(f * 100); }
   }
   function exBar() {
@@ -21668,7 +21865,7 @@ const Views = (() => {
     const close = h('button', { type: 'button', class: 'vb-x', 'aria-label': 'Wieder zusammensetzen', 'data-tip': 'Wieder zusammensetzen' }); close.innerHTML = icon('close'); close.onclick = () => explode(false);
     head.append(close);
     const range = h('input', { type: 'range', id: 'ex-range', min: 0, max: 100, step: 1, value: Math.round(st.exGoal * 100), 'aria-label': 'Wie weit auseinander' });
-    range.oninput = () => { cancelAnimationFrame(st.exAnim); st.exAnim = null; st.exGoal = +range.value / 100; setEx(st.exGoal); sync(); };
+    range.oninput = () => { stopExAnim(); st.exGoal = +range.value / 100; setEx(st.exGoal); sync(); };
     const back = h('button', { type: 'button', class: 'btn small', id: 'ex-back' }); back.innerHTML = icon('group') + 'Zusammensetzen';
     back.onclick = () => explode(false);
     const gcb = h('input', { type: 'checkbox', id: 'ex-groups' }); gcb.checked = st.exGroups;
@@ -22019,7 +22216,7 @@ const Views = (() => {
       }
     });
   }
-  function reset() { section(false); if (st.xray) xray(false); if (st.exGoal > 0 || st.ex > 0) { cancelAnimationFrame(st.exAnim); st.exAnim = null; st.ex = st.exGoal = 0; Viewer.setOffsets(null); if (st.exBar) { st.exBar.remove(); st.exBar = null; } } focus(false); overhang(false); thin(false); wind(false); present(false); if (st.exGroups) setGroups(false); }
+  function reset() { section(false); if (st.xray) xray(false); if (st.exWaitOff) { st.exWaitOff(); st.exWaitOff = null; } stopExAnim(); if (st.exGoal > 0 || st.ex > 0) { st.ex = st.exGoal = 0; Viewer.setOffsets(null); if (st.exBar) { st.exBar.remove(); st.exBar = null; } } focus(false); overhang(false); thin(false); wind(false); present(false); if (st.exGroups) setGroups(false); }
   return { saveView, goView, removeView,     init, section, xray, explode, collapse, focus, overhang, menu, onKey, reset, sync, bars,
     present, get presenting() { return !!st.present; }, thin, get thinInfo() { return st.thin ? { area: st.thin.area, minT: st.thin.minT } : null; },
     get overhangArea() { return st.ov ? st.ov.area : null; },
@@ -22634,8 +22831,9 @@ const Sketch = (() => {
     const uniq = [...new Set((ids || []).filter((id) => ent(id)))];
     S.sels = uniq;
     if (uniq.length) S.selCon = null;
+    if (typeof App !== 'undefined' && App.emit) App.emit('sketchSel');
   }
-  function clearSel() { if (!S) return; S.sels = []; }
+  function clearSel() { if (!S) return; S.sels = []; if (typeof App !== 'undefined' && App.emit) App.emit('sketchSel'); }
   function clearBand() { if (S && S.band) { if (S.band.el) S.band.el.remove(); S.band = null; } }
   function setTool(id) {
     if (!S) return;
@@ -24952,7 +25150,7 @@ const Sketch = (() => {
       S.cursor = null; render(); return;
     }
     if (S.tool === 'dim' || S.tool.startsWith('c:')) { S.hoverPick = pickAt(uv0, { refs: S.tool === 'c:project', points: S.tool !== 'c:project' }); S.cursor = null; render(); return; }
-    if (S.tool === 'select') { S.cursor = null; return; }
+    if (S.tool === 'select') { S.cursor = null; if (isLoftLine()) loftPreview(); return; }
     if (S.tool === 'line' && S.lineMode !== 'tan2' && S.draft && !S.draft.arc) {
       S.cursor = linePoint(uv0, e);
     } else {
@@ -27966,6 +28164,7 @@ const Measure = (() => {
       if (typeof Datums !== 'undefined' && Datums.selectedCsys) Datums.selectCsys(null);
     }
     drawSaved(); Panels.renderLeft(); Panels.renderRight();
+    updateStatus();
   }
   function clearPins() {
     const g = Viewer.groups.measures;
@@ -28103,14 +28302,170 @@ const Measure = (() => {
       if (lastLabel && lastLabel.el) lastLabel.el.textContent = ev.text;
       updateBar();
     }
+    updateStatus();
   }
+  let calcBusy = false, uiBusy = false, selCopyVal = null, selCopyWhat = null;
+  const statusState = { selText: '', unit: 'mm', calcState: 'loading', calcText: 'Lädt …' };
+  function sketchEntLen(e) {
+    if (!e) return 0;
+    if (e.type === 'line') return Math.hypot(e.b[0] - e.a[0], e.b[1] - e.a[1]);
+    if (e.type === 'circle') return 2 * Math.PI * (e.r || 0);
+    if (e.type === 'arc') {
+      const info = typeof SK !== 'undefined' && SK.arcInfo ? SK.arcInfo(e.a, e.m, e.b) : null;
+      return info ? Math.abs(info.sweep) * info.r : Math.hypot(e.b[0] - e.a[0], e.b[1] - e.a[1]);
+    }
+    if (e.type === 'rect') return 2 * (Math.abs(e.b[0] - e.a[0]) + Math.abs(e.b[1] - e.a[1]));
+    if (typeof SK !== 'undefined' && SK.segsOf) {
+      let len = 0;
+      for (const s of SK.segsOf([e])) {
+        if (s.t === 'line') len += Math.hypot(s.b[0] - s.a[0], s.b[1] - s.a[1]);
+        else if (s.t === 'arc') {
+          const info = SK.arcInfo(s.a, s.m, s.b);
+          len += info ? Math.abs(info.sweep) * info.r : Math.hypot(s.b[0] - s.a[0], s.b[1] - s.a[1]);
+        } else if (s.t === 'bez' && SK.bezPoints) {
+          const pts = SK.bezPoints(s);
+          for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+        }
+      }
+      return len;
+    }
+    return 0;
+  }
+  function computeSelectionStatus() {
+    if (typeof Sketch !== 'undefined' && Sketch.active && Sketch.state) {
+      const S = Sketch.state;
+      const els = [...new Set(S.sels || [])].map((id) => S.ents.find((e) => e.id === id)).filter(Boolean);
+      if (!els.length) return null;
+      if (els.length === 1) {
+        const e = els[0];
+        if (e.type === 'circle' && e.r > 0) {
+          return { text: `Kreis · Ø ${Units.fmtLenU(e.r * 2, 2)}`, tip: 'Durchmesser · Klick kopiert den Wert', copyVal: Units.fmtLen(e.r * 2, 2), copyWhat: 'Durchmesser' };
+        }
+        if (e.type === 'rect') {
+          const a = Math.abs(e.b[0] - e.a[0]) * Math.abs(e.b[1] - e.a[1]);
+          const d = a < 100 ? 2 : 1;
+          return { text: `Rechteck · ${Units.fmtAreaU(a, d)}`, tip: 'Flächeninhalt · Klick kopiert den Wert', copyVal: Units.fmtArea(a, d), copyWhat: 'Fläche' };
+        }
+        if (e.type === 'point') {
+          return { text: `Punkt · X ${Units.fmtLen(e.a[0], 1)} Y ${Units.fmtLen(e.a[1], 1)} ${Units.label()}`, tip: 'Skizzenpunkt' };
+        }
+        const len = sketchEntLen(e);
+        if (len > 0) return { text: `1 Element · ${Units.fmtLenU(len, 2)}`, tip: 'Länge · Klick kopiert den Wert', copyVal: Units.fmtLen(len, 2), copyWhat: 'Länge' };
+        return { text: '1 Element', tip: 'Auswahl in der Skizze' };
+      }
+      const total = els.reduce((s, e) => s + sketchEntLen(e), 0);
+      if (total > 0) return { text: `${els.length} Elemente · ${Units.fmtLenU(total, 2)}`, tip: 'Gesamtlänge · Klick kopiert den Wert', copyVal: Units.fmtLen(total, 2), copyWhat: 'Gesamtlänge' };
+      return { text: `${els.length} Elemente`, tip: 'Auswahl in der Skizze' };
+    }
+    if (App.edges.length) {
+      const eds = App.edges.map((x) => { const r = App.results.get(x.id); return r && r.data && r.data.edges ? r.data.edges[x.edgeIdx] : null; }).filter(Boolean);
+      const total = eds.reduce((s, e) => s + (e.l || 0), 0);
+      const one = App.edges.length === 1 && eds.length === 1 ? eds[0] : null;
+      const full = one && one.t === 'CIRCLE' && one.r && Math.hypot(one.a[0] - one.b[0], one.a[1] - one.b[1], one.a[2] - one.b[2]) < 1e-6;
+      if (full) {
+        const d = one.r * 2;
+        return { text: `Kreiskante · Ø ${Units.fmtLenU(d, 2)}`, tip: `Radius ${Units.fmtLenU(one.r, 2)} · Umfang ${Units.fmtLenU(total, 2)} · Klick kopiert den Wert`, copyVal: Units.fmtLen(d, 2), copyWhat: 'Durchmesser' };
+      }
+      if (App.edges.length === 1) {
+        if (total > 0) return { text: `1 Kante · ${Units.fmtLenU(total, 2)}`, tip: 'Kantenlänge · Klick kopiert den Wert', copyVal: Units.fmtLen(total, 2), copyWhat: 'Länge' };
+        return { text: '1 Kante', tip: 'Gewählte Kante' };
+      }
+      if (total > 0) return { text: `${App.edges.length} Kanten · ${Units.fmtLenU(total, 2)}`, tip: 'Gesamtlänge der gewählten Kanten · Klick kopiert den Wert', copyVal: Units.fmtLen(total, 2), copyWhat: 'Gesamtlänge' };
+      return { text: `${App.edges.length} Kanten`, tip: 'Gewählte Kanten' };
+    }
+    if (App.face) {
+      const face = typeof Actions !== 'undefined' && Actions.selectedFace ? Actions.selectedFace() : null;
+      if (face) {
+        const area = Viewer.faceArea(face.id, face.idx);
+        const fi = face.info;
+        const isRound = fi && (fi.t === 'CYLINDRE' || fi.t === 'SPHERE') && fi.r;
+        const dec = area < 100 ? 2 : 1;
+        const areaStr = area > 0 ? Units.fmtAreaU(area, dec) : '';
+        if (isRound && area > 0) {
+          return { text: `Fläche · ${areaStr} · Ø ${Units.fmtLenU(fi.r * 2, 2)}`, tip: `Flächeninhalt und Durchmesser (R ${Units.fmtLenU(fi.r, 2)}) · Klick kopiert die Fläche`, copyVal: Units.fmtArea(area, dec), copyWhat: 'Fläche' };
+        }
+        if (isRound) {
+          return { text: `Runde Fläche · Ø ${Units.fmtLenU(fi.r * 2, 2)}`, tip: `Durchmesser (R ${Units.fmtLenU(fi.r, 2)}) · Klick kopiert den Wert`, copyVal: Units.fmtLen(fi.r * 2, 2), copyWhat: 'Durchmesser' };
+        }
+        if (area > 0) {
+          return { text: `Fläche · ${areaStr}`, tip: 'Flächeninhalt · Klick kopiert den Wert', copyVal: Units.fmtArea(area, dec), copyWhat: 'Fläche' };
+        }
+        return { text: 'Fläche', tip: 'Gewählte Fläche' };
+      }
+    }
+    if (App.sel.length) {
+      const items = App.selectedItems();
+      if (items.length === 1) {
+        const it = items[0].item;
+        const r = App.results.get(it.id);
+        const b = (r && r.data && r.data.bbox) || App.localBox(it.id);
+        const kindLbl = it.role === 'hole' ? '1 Loch' : '1 Körper';
+        if (b) {
+          const dx = Math.abs(b[3] - b[0]), dy = Math.abs(b[4] - b[1]), dz = Math.abs(b[5] - b[2]);
+          const sz = `${Units.fmtLen(dx, 1)} × ${Units.fmtLen(dy, 1)} × ${Units.fmtLen(dz, 1)} ${Units.label()}`;
+          return { text: `${kindLbl} · ${sz}`, tip: `${Model.label(it)} (${sz})` };
+        }
+        return { text: kindLbl, tip: Model.label(it) };
+      }
+      if (items.length > 1) {
+        const allHoles = items.every((x) => x.item.role === 'hole');
+        const allSolids = items.every((x) => x.item.role !== 'hole');
+        const lbl = allHoles ? `${items.length} Löcher` : allSolids ? `${items.length} Körper` : `${items.length} Objekte`;
+        return { text: lbl, tip: items.map((x) => Model.label(x.item)).join(', ') };
+      }
+    }
+    const m = sel ? find(sel) : null;
+    if (m) {
+      const ev = evalOf(m);
+      return { text: `Messung · ${ev.lost ? 'verloren' : ev.short}`, tip: `${m.name}: ${ev.text}`, copyVal: ev.lost ? null : firstNumber(ev.text), copyWhat: 'Messwert' };
+    }
+    return null;
+  }
+  function updateCalc() {
+    let state = 'ready', cls = 'st-chip st-calc ok', text = 'Bereit', tip = 'CAD-Kern ist bereit';
+    if (typeof Kernel === 'undefined' || !Kernel.ready) {
+      state = 'loading'; cls = 'st-chip st-calc busy'; text = 'Lädt …'; tip = 'CAD-Kern wird geladen …';
+    } else if (calcBusy || uiBusy || App.busy) {
+      state = 'busy'; cls = 'st-chip st-calc busy'; text = 'Rechnet …'; tip = 'Modell wird neu berechnet …';
+    } else if (App.errors && App.errors.length) {
+      state = 'error'; cls = 'st-chip st-calc warn';
+      text = App.errors.length === 1 ? '1 Fehler' : `${App.errors.length} Fehler`;
+      tip = App.errors[0].message || 'Ein Schritt hat ein Problem';
+    }
+    statusState.calcState = state; statusState.calcText = text;
+    const el = $('#status-calc');
+    if (el) {
+      el.className = cls; el.dataset.state = state; el.dataset.tip = tip;
+      const t = el.querySelector('.t'); if (t) t.textContent = text;
+    }
+  }
+  function updateStatus() {
+    const selEl = $('#status-sel');
+    const info = computeSelectionStatus();
+    if (info) {
+      selCopyVal = info.copyVal || null; selCopyWhat = info.copyWhat || null;
+      statusState.selText = info.text;
+      if (selEl) { selEl.hidden = false; selEl.textContent = info.text; selEl.dataset.tip = info.tip; }
+    } else {
+      selCopyVal = null; selCopyWhat = null; statusState.selText = '';
+      if (selEl) { selEl.hidden = true; selEl.textContent = ''; }
+    }
+    const u = Units.def();
+    statusState.unit = u.k;
+    const unitEl = $('#status-unit');
+    if (unitEl) { unitEl.textContent = u.label; unitEl.dataset.tip = `Einheit: ${u.name} – Klick öffnet die Einstellungen`; }
+    updateCalc();
+  }
+  function setCalcBusy(on) { uiBusy = !!on; updateCalc(); }
   function init() {
     App.on('selection', () => {
       if (App.sel.length !== 2) clearDist();
       if (sel && App.sel.length) { sel = null; drawSaved(); }
+      updateStatus();
     });
-    App.on('results', relink);
+    App.on('results', () => { relink(); updateStatus(); });
     App.on('remeshed', relink);
+    App.on('rebuilt', updateCalc);
     let lastUnit = Units.key();
     let lastFmt = `${FMT.dec}:${FMT.angle}`;
     if (typeof ViewPrefs !== 'undefined' && ViewPrefs.on) {
@@ -28125,8 +28480,19 @@ const Measure = (() => {
       for (const k of [...live.keys()]) if (!ids.has(k)) live.delete(k);
       if (Units.key() !== lastUnit) { lastUnit = Units.key(); if (list().length) relink(); }
       drawSaved();
+      updateStatus();
     });
-    App.on('mode', () => { if (App.mode !== 'model' && on) stop(); drawSaved(); });
+    App.on('mode', () => { if (App.mode !== 'model' && on) stop(); drawSaved(); updateStatus(); });
+    App.on('sketch', updateStatus);
+    App.on('sketchSel', updateStatus);
+    App.on('calc', (b) => { calcBusy = !!b; updateCalc(); });
+    App.on('busy', (b) => { uiBusy = !!b; updateCalc(); });
+    if (typeof Kernel !== 'undefined' && Kernel.whenReady) Kernel.whenReady().then(updateStatus).catch(() => {});
+    const selBtn = $('#status-sel');
+    if (selBtn) selBtn.addEventListener('click', () => { if (selCopyVal) copyText(selCopyVal, selCopyWhat || 'Wert'); });
+    const unitBtn = $('#status-unit');
+    if (unitBtn) unitBtn.addEventListener('click', () => ViewPrefs.dialog('general', { focus: 'set-proj-unit' }));
+    updateStatus();
     let d0 = null;
     Viewer.canvas.addEventListener('pointerdown', (e) => { if (on) d0 = { x: e.clientX, y: e.clientY }; }, true);
     Viewer.canvas.addEventListener('pointerup', (e) => { if (on && d0 && Math.hypot(e.clientX - d0.x, e.clientY - d0.y) < 5) onDown(e); d0 = null; });
@@ -28186,7 +28552,7 @@ const Measure = (() => {
     return r;
   }
   return {
-    showCoords, get coords() { return coordsNow; }, copyText, copyValue, get copied() { return copied; }, minDistance, clearDist, init, toggle, start, stop, refreshDisplay,
+    showCoords, get coords() { return coordsNow; }, updateStatus, setCalcBusy, get statusInfo() { return { ...statusState }; }, copyText, copyValue, get copied() { return copied; }, minDistance, clearDist, init, toggle, start, stop, refreshDisplay,
     get active() { return on; }, get result() { return last ? last.text : (els[0] ? els[0].textContent : null); },
     list, find, keep, relink, setHidden, rename, remove, select, drawSaved, treeSection, renderPanel, get selected() { return sel; },
   };
@@ -28422,6 +28788,7 @@ const Commands = (() => {
     add('variants', 'Varianten vergleichen', 'list', 'variante varianten vergleichen maße sätze schritte unterdrücken', () => Variants.compareDialog(), { group: 'Projekt' });
     add('explain', 'Erklär diesen Schritt', 'help', 'erklär erklären was ist das schritt warum', () => Explain.dialog(), { group: 'Projekt' });
     add('weak', 'Schwachstellen suchen', 'target', 'schwachstellen schwach prüfen bruch dünn rand loch festigkeit stabil', () => Weak.dialog(), { group: 'Projekt' });
+    add('geom-check', 'Geometrie prüfen (kaputte Flächen, winzige Kanten)', 'target', 'geometrie prüfen check kaputt fläche kante winzig selbstschnitt brep fehler', () => GeomCheck.open(), { group: 'Projekt' });
     add('versions', 'Versionen: speichern, vergleichen, zurückholen', 'rollback', 'version versionen stand vergleichen zurück sichern', () => Versions.dialog(), { group: 'Projekt' });
     add('version-save', 'Jetzigen Stand als Version speichern', 'save', 'version speichern sichern stand', async () => { const n = await UI.prompt('Version speichern', 'Name der Version', 'Version ' + (Versions.list().length + 1), 'Speichern'); if (n != null) Versions.save(n); }, { group: 'Projekt' });
     add('chain', 'Kantenkette wählen', 'chainEdges', 'kette kanten umriss tangential rand alle zusammen', () => Select.chain(), { group: 'Bearbeiten', needSel: true });
@@ -31888,13 +32255,168 @@ const Templates = (() => {
 
 const Start = (() => {
   let el = null;
+  let recBaseDoc = null, recPending = null, recBarEl = null, recTimer = null, recTracking = false, recBusy = false;
   function tplThumb(t) {
     return `<svg viewBox="0 0 110 56" aria-hidden="true"><style>.a1{fill:var(--accent);fill-opacity:.3;stroke:var(--ink);stroke-opacity:.5;stroke-width:1}.a2{fill:var(--accent);fill-opacity:.55;stroke:var(--ink);stroke-opacity:.5;stroke-width:1}.a3{fill:var(--accent);fill-opacity:.8;stroke:var(--ink);stroke-opacity:.5;stroke-width:1}.b1{fill:#e8833a;fill-opacity:.35;stroke:var(--ink);stroke-opacity:.5;stroke-width:1}.b2{fill:#e8833a;fill-opacity:.6;stroke:var(--ink);stroke-opacity:.5;stroke-width:1}.b3{fill:#e8833a;fill-opacity:.85;stroke:var(--ink);stroke-opacity:.5;stroke-width:1}.hole{fill:var(--surface);stroke:var(--ink);stroke-opacity:.6;stroke-width:1}.line{stroke:var(--ink);stroke-opacity:.6;stroke-width:1.4}</style>${t.svg}</svg>`;
+  }
+  function isEmptyDoc(doc) {
+    if (!doc) return true;
+    return Model.countItems(doc) === 0
+      && !(doc.params && doc.params.length)
+      && !(doc.tables && doc.tables.length)
+      && !(doc.notes && doc.notes.length);
+  }
+  function formatRecoveryTime(ts) {
+    if (!ts) return '';
+    try { return new Date(ts).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' }); }
+    catch (_) { return ''; }
+  }
+  function hideRecoveryBanner() {
+    if (recBarEl) { recBarEl.remove(); recBarEl = null; }
+  }
+  function renderRecoveryBanner() {
+    hideRecoveryBanner();
+    if (!recPending) return;
+    const name = recPending.name || 'Neues Projekt';
+    const time = formatRecoveryTime(recPending.savedAt);
+    const n = recPending.itemCount || 0;
+    const metaKey = n === 1 ? 'recovery.metaOne' : 'recovery.metaMany';
+    const bar = h('div', {
+      id: 'recovery-bar',
+      class: 'recovery-bar',
+      role: 'alert',
+      'aria-live': 'polite',
+      'data-project-name': name,
+      'data-saved-at': String(recPending.savedAt || ''),
+    });
+    const ic = h('div', { class: 'rb-ic' });
+    ic.innerHTML = icon('warn');
+    const txt = h('div', { class: 'rb-txt' },
+      h('b', null, T('recovery.title')),
+      h('span', null, T(metaKey, { name, time, n })),
+    );
+    const restoreBtn = h('button', {
+      type: 'button',
+      id: 'recovery-restore',
+      class: 'btn primary small',
+      'data-help': 'crashRecovery',
+      onclick: () => restoreRecovery(),
+    }, T('recovery.restore'));
+    const dismissBtn = h('button', {
+      type: 'button',
+      id: 'recovery-dismiss',
+      class: 'btn ghost small',
+      onclick: () => dismissRecovery(),
+    }, T('recovery.dismiss'));
+    const acts = h('div', { class: 'rb-acts' }, restoreBtn, dismissBtn);
+    bar.append(ic, txt, acts);
+    const startInner = el && el.querySelector('.start-inner');
+    if (startInner) {
+      const head = startInner.querySelector('.start-head');
+      if (head && head.nextSibling) startInner.insertBefore(bar, head.nextSibling);
+      else startInner.prepend(bar);
+    } else {
+      const host = $('#overlay') || $('#center') || document.body;
+      host.append(bar);
+    }
+    recBarEl = bar;
+  }
+  function scheduleRecoverySave() {
+    clearTimeout(recTimer);
+    recTimer = null;
+    if (!recTracking || !App.doc) return;
+    if (isEmptyDoc(App.doc) && !recBaseDoc) {
+      Store.clearRecovery();
+      return;
+    }
+    const itemCount = Model.countItems(App.doc);
+    try {
+      storageSet('tracery.recovery.flag', JSON.stringify({
+        active: true,
+        docId: App.doc.id,
+        name: App.doc.name || 'Neues Projekt',
+        savedAt: Date.now(),
+        itemCount,
+      }));
+    } catch (_) {}
+    recTimer = setTimeout(() => {
+      recTimer = null;
+      if (!recTracking || !App.doc) return;
+      Store.saveRecovery(App.doc, { baseDoc: recBaseDoc, itemCount: Model.countItems(App.doc) });
+    }, 200);
+  }
+  function flushRecovery() {
+    clearTimeout(recTimer);
+    recTimer = null;
+    if (!recTracking || recPending || !App.dirty || !App.doc) return Promise.resolve(false);
+    if (isEmptyDoc(App.doc) && !recBaseDoc) return Store.clearRecovery();
+    return Store.saveRecovery(App.doc, { baseDoc: recBaseDoc, itemCount: Model.countItems(App.doc) });
+  }
+  async function checkRecoveryOnBoot() {
+    const rec = await Store.loadRecovery();
+    if (rec && rec.doc && rec.doc.format === 'masswerk') {
+      recPending = rec;
+      return rec;
+    }
+    if (Store.getRecoveryFlag && Store.getRecoveryFlag()) await Store.clearRecovery();
+    return null;
+  }
+  function startRecoveryTracking(baseDoc) {
+    recBaseDoc = isEmptyDoc(baseDoc) ? null : deepClone(baseDoc);
+    recTracking = true;
+    if (recPending) renderRecoveryBanner();
+  }
+  async function restoreRecovery() {
+    if (!recPending || recBusy) return false;
+    recBusy = true;
+    const btn = $('#recovery-restore');
+    if (btn) btn.disabled = true;
+    const rec = recPending;
+    try {
+      await Store.hydrateDoc(rec.doc);
+      recPending = null;
+      hideRecoveryBanner();
+      hide();
+      App.setDoc(rec.doc, { fit: true, fromRecovery: true });
+      recBaseDoc = isEmptyDoc(App.doc) ? null : deepClone(App.doc);
+      await Store.clearRecovery();
+      await App.autosave.flush();
+      await App.rebuild();
+      Viewer.fit(null, false);
+      UI.toast(T('recovery.restored', { name: rec.name || App.doc.name || 'Projekt' }), { icon: 'check', ms: 4500 });
+      return true;
+    } catch (e) {
+      console.warn(e);
+      UI.toast(T('recovery.failed'), { kind: 'bad', ms: 5000 });
+      renderRecoveryBanner();
+      return false;
+    } finally {
+      recBusy = false;
+    }
+  }
+  async function dismissRecovery() {
+    if (!recPending || recBusy) return false;
+    recBusy = true;
+    const rec = recPending;
+    try {
+      recPending = null;
+      hideRecoveryBanner();
+      await Store.clearRecovery();
+      if (rec.baseDoc) {
+        await Store.saveProject(rec.baseDoc, Model.countItems(rec.baseDoc));
+      } else if (rec.docId) {
+        await Store.deleteProject(rec.docId, App.doc && App.doc.id !== rec.docId ? App.doc : null);
+      }
+      UI.toast(T('recovery.discarded'), { icon: 'info', ms: 3500 });
+      return true;
+    } finally {
+      recBusy = false;
+    }
   }
   function show() {
     hide();
     // erst speichern, damit „Weiterarbeiten“ den aktuellen Stand und Namen zeigt
-    try { App.autosave.flush(); } catch (_) {}
+    if (!recPending) { try { App.autosave.flush(); } catch (_) {} }
     el = h('div', { class: 'start', role: 'dialog', 'aria-label': T('start.aria') });
     const inner = h('div', { class: 'start-inner' });
     const head = h('div', { class: 'start-head' });
@@ -31964,10 +32486,11 @@ const Start = (() => {
     const close = h('button', { type: 'button', class: 'icon-btn', 'aria-label': T('common.close'), style: { position: 'fixed', top: '12px', right: '12px' } }); close.innerHTML = icon('close'); close.onclick = hide;
     if (App.doc.items.length) el.append(close);
     document.body.append(el);
+    if (recPending) renderRecoveryBanner();
     const onKey = (e) => { if (e.key === 'Escape' && el && App.doc.items.length) hide(); };
     document.addEventListener('keydown', onKey, { once: true });
   }
-  function hide() { if (el) { el.remove(); el = null; } }
+  function hide() { if (el) { el.remove(); el = null; if (recPending) renderRecoveryBanner(); } }
   function openDrone(t) {
     App.setDoc(t.build()); hide();
     UI.toast(`${t.name} geladen. Links unter „Maße“ änderst du Achsabstand, Armbreite, Stack und mehr – alles wandert mit.`, { icon: 'check', ms: 6000 });
@@ -33132,7 +33655,7 @@ const Start = (() => {
       if (vers) await Versions.importList(doc.id, vers);
       ensureModelMode();
       App.setDoc(doc); hide();
-      App.fileSavedRev = App.revision;
+      App.markClean();
       UI.toast(`„${doc.name}“ geöffnet.`, { icon: 'folder' });
     } catch (e) { const E = ERRORS.importFailed; UI.toast(`${E.titel}. ${E.erklaerung} ${E.loesung}`, { kind: 'bad', ms: 7000 }); console.warn(e); }
   }
@@ -33217,7 +33740,7 @@ const Start = (() => {
   }
   async function saveFile() {
     const ok = await Print.save(projectFileName(), await projectPayload());
-    if (ok) App.fileSavedRev = App.revision;
+    if (ok) App.markClean();
   }
 
   // ---------- Projekt in Ordner speichern & automatisch mitschreiben (BE-14) ----------
@@ -33291,6 +33814,7 @@ const Start = (() => {
       target.writing = false;
       target.status = target.queued ? 'pending' : 'saved';
       App.fileSavedRev = rev;
+      if (App.revision === rev) App.markClean();
       updateFolderUI();
       if (opts.announce) {
         UI.toast(`Gespeichert in „${target.name}/${fileName}“. Änderungen werden alle 10 s automatisch mitgeschrieben.`, { icon: 'check', ms: 5000 });
@@ -33581,6 +34105,28 @@ const Start = (() => {
   function init() {
     if (folderInited) return;
     folderInited = true;
+    App.on('docLoaded', ({ doc, opts }) => {
+      if (!recTracking || (opts && opts.fromBoot)) return;
+      clearTimeout(recTimer); recTimer = null;
+      recBaseDoc = isEmptyDoc(doc) ? null : deepClone(doc);
+      if (opts && opts.fromRecovery) return;
+      if (recPending) { recPending = null; hideRecoveryBanner(); }
+      Store.clearRecovery();
+    });
+    App.on('dirty', () => {
+      if (!recTracking) return;
+      if (recPending) { recPending = null; hideRecoveryBanner(); }
+      scheduleRecoverySave();
+    });
+    App.on('clean', () => {
+      if (!recTracking) return;
+      clearTimeout(recTimer); recTimer = null;
+      recBaseDoc = isEmptyDoc(App.doc) ? null : deepClone(App.doc);
+      if (recPending) { recPending = null; hideRecoveryBanner(); }
+      Store.clearRecovery();
+      try { App.autosave.flush(); } catch (_) {}
+    });
+    window.addEventListener('pagehide', () => { flushRecovery(); });
     App.on('doc', () => {
       syncImportChecks();
       if (!folder) return;
@@ -33632,6 +34178,8 @@ const Start = (() => {
     init, importCAD, parseSTEP, import3MF, parse3MF, importOBJ, parseOBJ, importDXF, parseDXF, parseSVG, show, hide, newProject, openFile, openBlob, saveFile,
     checkImport, healImport, importCheckOf, setImportHealOpts, dismissImportBanner,
     folderSupported, folderInfo, saveToFolder, saveToFolderNow, disconnectFolder,
+    checkRecoveryOnBoot, startRecoveryTracking, restoreRecovery, dismissRecovery, flushRecovery,
+    get pendingRecovery() { return recPending; },
     get folderDelay() { return folderDelay; }, set folderDelay(ms) { folderDelay = Math.max(0, Number(ms) || 10000); },
     openDrone, get open() { return !!el; },
   };
@@ -34160,6 +34708,306 @@ const Variants = (() => {
   }
   return { list, active, changed, save, update, apply, remove, setStepSuppressed, toggleStep, suppressedOf, compareData, compareDialog, section };
 })();
+// ---- 87-geomcheck.js ----
+// ================= Geometrie-Prüfung (PF-08): kaputte Flächen, winzige Kanten, Selbstschnitte =================
+const GeomCheck = (() => {
+  let bar = null, last = null, focused = null, highlightGroup = null, busy = false, runSeq = 0;
+
+  function sync() {
+    const b = $('#t-check');
+    if (b) b.classList.toggle('active', !!bar);
+  }
+
+  function menu(anchor) {
+    UI.menu(anchor, [
+      { label: T('menu.check.geom'), icon: 'target', id: 'check-geom', help: 'geomCheck', run: () => open() },
+      { label: T('menu.check.weak'), icon: 'warn', id: 'check-weak', help: 'weakSpots', run: () => Weak.dialog() },
+      '-',
+      { label: T('menu.check.thin'), icon: 'ruler', id: 'check-thin', help: 'thinWalls', run: () => Views.thin() },
+      { label: T('menu.check.overhang'), icon: 'overhang', id: 'check-overhang', help: 'overhang', run: () => Views.overhang() },
+    ]);
+  }
+
+  function clearHighlight() {
+    if (!highlightGroup) return;
+    Viewer.groups.overlay.remove(highlightGroup);
+    highlightGroup.traverse((o) => {
+      if (o.isLineSegments2 || (o.material && o.material.isLineMaterial)) Viewer.disposeFat(o);
+      else {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) o.material.dispose();
+      }
+    });
+    highlightGroup = null;
+    Viewer.requestRender();
+  }
+
+  function addMarker(grp, at, radius) {
+    if (!Array.isArray(at) || at.length < 3) return;
+    const R0 = clamp(radius || 2.5, 1.4, 8);
+    const R1 = R0 + Math.max(0.9, R0 * 0.25);
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(R0, R1, 40),
+      new THREE.MeshBasicMaterial({ color: 0xe5484d, transparent: true, opacity: 0.96, depthTest: false, side: THREE.DoubleSide })
+    );
+    ring.position.set(at[0], at[1], at[2]);
+    ring.quaternion.copy(Viewer.activeCamera.quaternion);
+    ring.renderOrder = 47;
+    grp.add(ring);
+
+    const dot = new THREE.Mesh(
+      new THREE.SphereGeometry(Math.max(0.28, R0 * 0.16), 14, 10),
+      new THREE.MeshBasicMaterial({ color: 0xe5484d, depthTest: false })
+    );
+    dot.position.set(at[0], at[1], at[2]);
+    dot.renderOrder = 48;
+    grp.add(dot);
+  }
+
+  function formatLen(mm) {
+    if (!(mm >= 0)) return '0 mm';
+    if (Units.key() !== 'mm') return Units.fmtLenU(mm, 4);
+    if (mm < 0.001) return '< 0,001 mm';
+    return fmt(mm, 4) + ' mm';
+  }
+
+  function formatIssue(iss) {
+    const nm = iss.itemName || 'Körper';
+    if (iss.kind === 'tinyEdge') {
+      const lenTxt = formatLen(iss.length);
+      return {
+        title: `Winzige Kante (${lenTxt}) – ${nm}`,
+        text: `Kante #${(iss.edgeIdx ?? 0) + 1} ist kürzer als ${Units.key() !== 'mm' ? Units.fmtLenU(0.01, 4) : '0,01 mm'} (oft durch zwei fast gleiche Maße). Das kann Rundungen oder den Export stören.`,
+      };
+    }
+    if (iss.kind === 'selfIntersect') {
+      const detail = iss.faceIdx2 != null && iss.faceIdx2 !== iss.faceIdx
+        ? `Fläche #${iss.faceIdx + 1} durchdringt Fläche #${iss.faceIdx2 + 1}.`
+        : `Fläche #${(iss.faceIdx ?? 0) + 1} schneidet sich selbst.`;
+      return { title: `Sich selbst schneidende Fläche – ${nm}`, text: detail };
+    }
+    let text;
+    if (iss.reason === 'degenerate') text = `Fläche #${(iss.faceIdx ?? 0) + 1} ist winzig oder zusammengefallen (Fläche nahe 0).`;
+    else if (iss.reason === 'shell') text = 'Die Außenhülle dieses Körpers ist nicht sauber geschlossen oder ungültig.';
+    else if (iss.reason === 'invalidEdge') text = 'Eine Kante hat keine gültige Geometrie.';
+    else text = `Fläche #${(iss.faceIdx ?? 0) + 1} hat einen Geometriefehler (OpenCascade-Prüfung fehlgeschlagen).`;
+    return {
+      title: iss.faceIdx >= 0 ? `Kaputte Fläche – ${nm}` : `Kaputte Geometrie – ${nm}`,
+      text,
+    };
+  }
+
+  function focus(idx) {
+    if (!last || !Array.isArray(last.issues) || !last.issues[idx]) return;
+    const iss = last.issues[idx];
+    clearHighlight();
+    focused = idx;
+    if (bar) {
+      for (const btn of bar.querySelectorAll('#geom-check-list [data-gc-idx]')) {
+        btn.classList.toggle('active', Number(btn.dataset.gcIdx) === idx);
+      }
+    }
+    const grp = new THREE.Group();
+    const box = Viewer.baseBox(iss.itemId);
+    const bodyDiag = box ? box.getSize(new THREE.Vector3()).length() : 24;
+
+    if (iss.kind === 'tinyEdge') {
+      const node = Viewer.nodes.get(iss.itemId);
+      const pos = node ? Viewer.edgePositions(node, iss.edgeIdx) : null;
+      if (pos && pos.length >= 6) {
+        const line = Viewer.makeFat(pos, 0xe5484d, 6, { depthTest: false, order: 46 });
+        line.matrixAutoUpdate = false;
+        line.matrix.copy(node.obj.matrix);
+        grp.add(line);
+      } else if (iss.a && iss.b && Math.hypot(iss.a[0] - iss.b[0], iss.a[1] - iss.b[1], iss.a[2] - iss.b[2]) > 1e-7) {
+        grp.add(Viewer.makeFat([...iss.a, ...iss.b], 0xe5484d, 6, { depthTest: false, order: 46 }));
+      }
+      addMarker(grp, iss.at, clamp(bodyDiag * 0.055, 1.4, 7));
+    } else if (iss.kind === 'badFace') {
+      if (iss.faceIdx >= 0) {
+        const ov = Viewer.faceOverlay(iss.itemId, iss.faceIdx, 0xe5484d, 0.55);
+        if (ov) { ov.renderOrder = 44; grp.add(ov); }
+      }
+      addMarker(grp, iss.at, clamp(bodyDiag * 0.06, 1.8, 8));
+    } else if (iss.kind === 'selfIntersect') {
+      const seenF = new Set();
+      for (const fi of [iss.faceIdx, iss.faceIdx2]) {
+        if (fi == null || fi < 0 || seenF.has(fi)) continue;
+        seenF.add(fi);
+        const ov = Viewer.faceOverlay(iss.itemId, fi, 0xe5484d, 0.48);
+        if (ov) { ov.renderOrder = 44; grp.add(ov); }
+      }
+      addMarker(grp, iss.at, clamp(bodyDiag * 0.06, 1.8, 8));
+    }
+
+    Viewer.groups.overlay.add(grp);
+    highlightGroup = grp;
+    Viewer.requestRender();
+
+    if (Array.isArray(iss.at) && iss.at.length >= 3) {
+      const cen = new THREE.Vector3(iss.at[0], iss.at[1], iss.at[2]);
+      const cam = Viewer.activeCamera, ctr = Viewer.controls;
+      const dir = cam.position.clone().sub(ctr.target);
+      if (dir.lengthSq() < 1e-8) dir.set(1, -1, 1);
+      dir.normalize();
+      const span = iss.kind === 'tinyEdge' ? Math.max(8, bodyDiag * 0.35) : Math.max(12, bodyDiag * 0.55);
+      const fov = cam.fov || 45;
+      const dist = (span / Math.sin((fov * Math.PI) / 360)) * 1.05;
+      Viewer.moveCamera(cen.clone().add(dir.multiplyScalar(dist)), cen);
+    }
+  }
+
+  async function run(opts = {}) {
+    if (!App.doc.items.length) {
+      last = { rev: App.revision, issues: [], checkedCount: 0, minEdge: opts.minEdge || 0.01, truncated: false, errors: [] };
+      return last;
+    }
+    const keys = {};
+    for (const [id, r] of App.results) if (r && r.key) keys[id] = r.key;
+    const rev = App.revision;
+    const res = await Kernel.call('checkGeometry', {
+      scene: Model.kernelScene(App.doc),
+      opts: { minEdge: opts.minEdge || 0.01, keys },
+    });
+    const issues = (res && res.issues ? res.issues : []).map((iss) => {
+      const f = Model.find(App.doc, iss.itemId);
+      return { ...iss, itemName: f ? Model.label(f.item) : 'Körper' };
+    });
+    last = {
+      rev,
+      issues,
+      checkedCount: res ? res.checkedCount || 0 : 0,
+      minEdge: res ? res.minEdge || 0.01 : 0.01,
+      truncated: !!(res && res.truncated),
+      errors: (res && res.errors) || [],
+    };
+    return last;
+  }
+
+  function showStaleHint() {
+    if (!bar) return;
+    const body = bar.querySelector('#gc-body');
+    if (!body || body.querySelector('.gc-stale')) return;
+    body.prepend(h('div', { class: 'gc-stale' }, 'Das Modell wurde geändert – klick „Noch mal prüfen“ für den aktuellen Stand.'));
+  }
+
+  function renderBar() {
+    if (!bar) return;
+    const body = bar.querySelector('#gc-body');
+    if (!body) return;
+    body.innerHTML = '';
+    if (busy) {
+      body.append(h('div', { class: 'hint-box' }, 'Prüfe Geometrie …'));
+      return;
+    }
+    if (!last) return;
+    if (!last.checkedCount) {
+      body.append(h('div', { class: 'hint-box', id: 'geom-check-empty' }, 'Es gibt keine sichtbaren Körper zu prüfen.'));
+      return;
+    }
+    if (!last.issues.length) {
+      body.append(h('div', { class: 'chk-row ok', id: 'geom-check-ok' },
+        h('span', { class: 'chk-dot', 'aria-hidden': 'true' }, '✓'),
+        h('div', { class: 'grow' },
+          h('b', null, 'Keine Probleme'),
+          h('span', null, `${last.checkedCount} ${last.checkedCount === 1 ? 'Körper geprüft' : 'Körper geprüft'} – keine kaputten Flächen, winzigen Kanten oder Selbstschnitte.`))));
+      return;
+    }
+    const nBad = last.issues.filter((x) => x.kind === 'badFace').length;
+    const nTiny = last.issues.filter((x) => x.kind === 'tinyEdge').length;
+    const nSelf = last.issues.filter((x) => x.kind === 'selfIntersect').length;
+    const parts = [];
+    if (nBad) parts.push(`${nBad} kaputte ${nBad === 1 ? 'Fläche' : 'Flächen'}`);
+    if (nTiny) parts.push(`${nTiny} winzige ${nTiny === 1 ? 'Kante' : 'Kanten'}`);
+    if (nSelf) parts.push(`${nSelf} ${nSelf === 1 ? 'Selbstschnitt' : 'Selbstschnitte'}`);
+    body.append(h('div', { class: 'gc-summary' }, `${last.issues.length} ${last.issues.length === 1 ? 'Problem' : 'Probleme'} gefunden (${parts.join(', ')}):`));
+
+    const list = h('div', { class: 'chk-list gc-list', id: 'geom-check-list' });
+    last.issues.forEach((iss, idx) => {
+      const info = formatIssue(iss);
+      const cls = 'chk-row sk-chk-item ' + (iss.s === 'warn' ? 'warn' : 'bad') + (focused === idx ? ' active' : '');
+      const row = h('button', {
+        type: 'button',
+        class: cls,
+        'data-gc-idx': String(idx),
+        'data-gc-kind': iss.kind,
+      },
+        h('span', { class: 'chk-dot', 'aria-hidden': 'true' }, iss.s === 'warn' ? '!' : '✕'),
+        h('div', { class: 'grow' }, h('b', null, info.title), h('span', null, info.text)));
+      row.onclick = () => focus(idx);
+      list.append(row);
+    });
+    body.append(list);
+    if (last.truncated) body.append(h('div', { class: 'vb-hint' }, 'Weitere winzige Kanten ausgeblendet.'));
+    body.append(h('div', { class: 'vb-hint' }, 'Klick auf einen Eintrag, um die Stelle im Modell hervorzuheben.'));
+  }
+
+  async function open(opts = {}) {
+    if (!App.doc.items.length) {
+      UI.toast('Es gibt noch nichts zu prüfen. Bau zuerst etwas.', { icon: 'info' });
+      return null;
+    }
+    const seq = ++runSeq;
+    clearHighlight();
+    focused = null;
+    if (!bar || !bar.isConnected) {
+      bar = h('div', { class: 'viewbar geom-check-bar', id: 'geom-check-bar' });
+      const head = h('div', { class: 'vb-head' }, h('span', { class: 'title' }, 'Geometrie prüfen'));
+      const acts = h('div', { style: { display: 'flex', gap: '4px', alignItems: 'center' } });
+      const rerun = h('button', { type: 'button', class: 'btn small ghost', id: 'gc-rerun', 'data-tip': 'Erneut prüfen' }, 'Noch mal');
+      rerun.onclick = () => open(opts);
+      const closeBtn = h('button', { type: 'button', class: 'vb-x', id: 'gc-close', 'aria-label': 'Geometrie-Prüfung schließen', 'data-tip': 'Schließen' });
+      closeBtn.innerHTML = icon('close');
+      closeBtn.onclick = () => close();
+      acts.append(rerun, closeBtn);
+      head.append(acts);
+      bar.append(head, h('div', { id: 'gc-body', style: { display: 'grid', gap: '6px' } }));
+      Views.bars().append(bar);
+    }
+    busy = true;
+    sync();
+    renderBar();
+    try {
+      const res = await run(opts);
+      if (seq !== runSeq || !bar || !bar.isConnected) return res;
+      busy = false;
+      renderBar();
+      return res;
+    } catch (err) {
+      if (seq !== runSeq || !bar || !bar.isConnected) return null;
+      busy = false;
+      const body = bar.querySelector('#gc-body');
+      if (body) { body.innerHTML = ''; body.append(h('div', { class: 'chk-row bad' }, h('span', { class: 'chk-dot' }, '✕'), h('div', { class: 'grow' }, h('b', null, 'Prüfung fehlgeschlagen'), h('span', null, String((err && err.message) || err))))); }
+      return null;
+    }
+  }
+
+  function close() {
+    runSeq++;
+    busy = false;
+    clearHighlight();
+    focused = null;
+    if (bar) { bar.remove(); bar = null; }
+    sync();
+  }
+
+  function init() {
+    App.on('mode', () => { if (App.mode !== 'model') close(); });
+    App.on('doc', () => {
+      clearHighlight();
+      focused = null;
+      if (bar && last && last.rev !== App.revision && !busy) showStaleHint();
+    });
+  }
+
+  return {
+    init, menu, open, run, close, focus, clearHighlight,
+    get active() { return !!bar; },
+    get last() { return last; },
+    get focused() { return focused; },
+    get hasHighlight() { return !!(highlightGroup && highlightGroup.children.length); },
+  };
+})();
 // ---- 88-aihelp.js ----
 // ================= „Erklär diesen Schritt“ und Schwachstellen-Analyse =================
 // Beides funktioniert ohne KI: Tracery erklärt jeden Schritt aus seinen Daten (Art, Größe, Maße, Löcher …)
@@ -34587,12 +35435,12 @@ ${AI.modelText()}`;
   $('#btn-undo').innerHTML = icon('undo'); $('#btn-redo').innerHTML = icon('redo'); $('#btn-menu').innerHTML = icon('menu');
   $('#btn-left').innerHTML = icon('list'); $('#btn-right').innerHTML = icon('sliders');
 
-  window.__masswerk = { App, Viewer, Model, Actions, Sketch, SK, TTF, THREE, Print, Drawing, Kernel, UI, Commands, Toolbar, Panels, Handles, Start, AI, Measure, Place, Store, I18n, T, Units, RefFix, Expr };
+  window.__masswerk = { App, Viewer, Model, Actions, Sketch, SK, TTF, THREE, Print, Drawing, Kernel, UI, Commands, Toolbar, Panels, Handles, Start, AI, Measure, Place, Store, I18n, T, Units, RefFix, Expr, GeomCheck };
   UI.initTips();
   I18n.applyDom();
   Viewer.init($('#viewport'));
-  window.__V = Viewer; window.__M = { Store, Interact, Measure, Datums, RefFix, Print, ViewPrefs, App, Actions, Model, Timeline, Start, Comp, Handles, Sketch, SK, TTF, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views, Mass, Select, Versions, DroneTpl, DroneUI, DroneLib, DroneCheck, Plates, Variants, Explain, Weak, AI, Snap, Toolbar, Panels, Joints, I18n, T, Units, Expr, Tour }; window.__S = Start; // für automatische Tests
-  Panels.init(); Datums.init(); RefFix.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Notes.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init(); Refine.init(); Comp.init(); Views.init(); Mass.init(); Joints.init(); Versions.init(); Start.init();
+  window.__V = Viewer; window.__M = { Store, Interact, Measure, Datums, RefFix, Print, ViewPrefs, App, Actions, Model, Timeline, Start, Comp, Handles, Sketch, SK, TTF, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views, Mass, Select, Versions, DroneTpl, DroneUI, DroneLib, DroneCheck, Plates, Variants, Explain, Weak, AI, Snap, Toolbar, Panels, Joints, I18n, T, Units, Expr, Tour, GeomCheck }; window.__S = Start; // für automatische Tests
+  Panels.init(); Datums.init(); RefFix.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Notes.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init(); Refine.init(); Comp.init(); Views.init(); GeomCheck.init(); Mass.init(); Joints.init(); Versions.init(); Start.init();
 
   // Kopfzeile
   $('#btn-undo').onclick = () => App.undo();
@@ -34641,19 +35489,38 @@ ${AI.modelText()}`;
   $('#center').addEventListener('pointerdown', () => { if (innerWidth <= 900) ws.classList.remove('show-left', 'show-right'); });
   App.on('busy', (on) => UI.busy(on));
   App.on('selection', () => { if (innerWidth <= 900 && App.sel.length) { /* rechte Leiste nicht aufzwingen */ } });
-  window.addEventListener('beforeunload', () => App.autosave.flush && App.autosave.flush());
+  window.addEventListener('beforeunload', () => {
+    if (Start.flushRecovery) Start.flushRecovery();
+    if (App.autosave && App.autosave.flush && !Start.pendingRecovery) App.autosave.flush();
+  });
 
   // Letztes Projekt aus der Browser-Datenbank laden (ggf. aus localStorage übernehmen) oder Startseite zeigen
   updName(); UI.renderHint();
   UI.loading(true, 0.02);
   const storageReady = (async () => {
     await Store.init();
-    const lastId = Store.getLastId();
-    const last = lastId ? await App.loadStored(lastId) : null;
-    if (last) { try { App.setDoc(last, { fit: true }); } catch (_) { App.setDoc(Model.newDoc()); } }
-    else App.setDoc(Model.newDoc());
-    updName(); UI.renderHint();
-    if (!last) Start.show();
+    const rec = Start.checkRecoveryOnBoot ? await Start.checkRecoveryOnBoot() : null;
+    if (rec) {
+      let baseLoaded = false;
+      if (rec.baseDoc) {
+        try {
+          await Store.hydrateDoc(rec.baseDoc);
+          App.setDoc(rec.baseDoc, { fit: true, fromBoot: true, noAutosave: true });
+          baseLoaded = true;
+        } catch (_) { baseLoaded = false; }
+      }
+      if (!baseLoaded) App.setDoc(Model.newDoc(), { fit: false, fromBoot: true, noAutosave: true });
+      updName(); UI.renderHint();
+      Start.startRecoveryTracking(baseLoaded ? rec.baseDoc : null);
+    } else {
+      const lastId = Store.getLastId();
+      const last = lastId ? await App.loadStored(lastId) : null;
+      if (last) { try { App.setDoc(last, { fit: true, fromBoot: true, noAutosave: true }); } catch (_) { App.setDoc(Model.newDoc(), { fit: false, fromBoot: true, noAutosave: true }); } }
+      else App.setDoc(Model.newDoc(), { fit: false, fromBoot: true, noAutosave: true });
+      updName(); UI.renderHint();
+      Start.startRecoveryTracking(last || null);
+      if (!last) Start.show();
+    }
   })();
 
   Kernel.start((p) => UI.loading(true, p, p > 0.84 ? 'CAD-Kern startet …' : 'Der CAD-Kern wird geladen …'))

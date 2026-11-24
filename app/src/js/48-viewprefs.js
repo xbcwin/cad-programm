@@ -109,7 +109,7 @@ const ViewPrefs = (() => {
     return wrap;
   }
   // Einstellungen-Fenster (Menü ⋯ → Einstellungen)
-  function dialog(initialTab = 'general') {
+  function dialog(initialTab = 'general', opts = {}) {
     const body = h('div', { style: { display: 'grid', gap: '14px', minWidth: 'min(480px, 84vw)' } });
     const sel = (id, label, val, opts, fn, hint) => { const f = UI.selectField({ id, label, value: String(val), options: opts, onChange: fn }); if (hint) f.append(h('small', { style: { color: 'var(--muted)', display: 'block', marginTop: '4px' } }, hint)); return f; };
     const chk = (k, label, hint) => { const l = h('label', { class: 'check', style: { alignItems: 'flex-start' } }, h('input', { type: 'checkbox', id: 'set-' + k, checked: !!v[k] }), h('span', null, label, hint ? h('small', { style: { display: 'block', color: 'var(--muted)' } }, hint) : null)); l.querySelector('input').onchange = (e) => set({ [k]: e.target.checked }); return l; };
@@ -180,6 +180,7 @@ const ViewPrefs = (() => {
     body.append(tabs, paneGen, paneKeys);
     syncTabs(curTab);
     UI.modal({ title: 'Einstellungen', body, actions: [{ label: 'Fertig', primary: true }], onClose: () => { if (kbdEd) kbdEd.destroy(); } });
+    if (opts && opts.focus) setTimeout(() => { const el = document.getElementById(opts.focus); if (el) el.focus(); }, 45);
   }
   return { get: () => ({ ...v }), get level() { return v.level; }, set level(l) { setLevel(l); }, get firstStart() { return firstStart && !(typeof Store !== 'undefined' && Store.hasProjects); }, set, toggle, apply, dialog, setLevel, syncLevel, levelCards, get simple() { return simple(); }, on: ev.on };
 })();

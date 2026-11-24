@@ -427,6 +427,7 @@ const Measure = (() => {
       if (typeof Datums !== 'undefined' && Datums.selectedCsys) Datums.selectCsys(null);
     }
     drawSaved(); Panels.renderLeft(); Panels.renderRight();
+    updateStatus();
   }
   function clearPins() {
     const g = Viewer.groups.measures;
@@ -564,14 +565,170 @@ const Measure = (() => {
       if (lastLabel && lastLabel.el) lastLabel.el.textContent = ev.text;
       updateBar();
     }
+    updateStatus();
   }
+  let calcBusy = false, uiBusy = false, selCopyVal = null, selCopyWhat = null;
+  const statusState = { selText: '', unit: 'mm', calcState: 'loading', calcText: 'Lädt …' };
+  function sketchEntLen(e) {
+    if (!e) return 0;
+    if (e.type === 'line') return Math.hypot(e.b[0] - e.a[0], e.b[1] - e.a[1]);
+    if (e.type === 'circle') return 2 * Math.PI * (e.r || 0);
+    if (e.type === 'arc') {
+      const info = typeof SK !== 'undefined' && SK.arcInfo ? SK.arcInfo(e.a, e.m, e.b) : null;
+      return info ? Math.abs(info.sweep) * info.r : Math.hypot(e.b[0] - e.a[0], e.b[1] - e.a[1]);
+    }
+    if (e.type === 'rect') return 2 * (Math.abs(e.b[0] - e.a[0]) + Math.abs(e.b[1] - e.a[1]));
+    if (typeof SK !== 'undefined' && SK.segsOf) {
+      let len = 0;
+      for (const s of SK.segsOf([e])) {
+        if (s.t === 'line') len += Math.hypot(s.b[0] - s.a[0], s.b[1] - s.a[1]);
+        else if (s.t === 'arc') {
+          const info = SK.arcInfo(s.a, s.m, s.b);
+          len += info ? Math.abs(info.sweep) * info.r : Math.hypot(s.b[0] - s.a[0], s.b[1] - s.a[1]);
+        } else if (s.t === 'bez' && SK.bezPoints) {
+          const pts = SK.bezPoints(s);
+          for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+        }
+      }
+      return len;
+    }
+    return 0;
+  }
+  function computeSelectionStatus() {
+    if (typeof Sketch !== 'undefined' && Sketch.active && Sketch.state) {
+      const S = Sketch.state;
+      const els = [...new Set(S.sels || [])].map((id) => S.ents.find((e) => e.id === id)).filter(Boolean);
+      if (!els.length) return null;
+      if (els.length === 1) {
+        const e = els[0];
+        if (e.type === 'circle' && e.r > 0) {
+          return { text: `Kreis · Ø ${Units.fmtLenU(e.r * 2, 2)}`, tip: 'Durchmesser · Klick kopiert den Wert', copyVal: Units.fmtLen(e.r * 2, 2), copyWhat: 'Durchmesser' };
+        }
+        if (e.type === 'rect') {
+          const a = Math.abs(e.b[0] - e.a[0]) * Math.abs(e.b[1] - e.a[1]);
+          const d = a < 100 ? 2 : 1;
+          return { text: `Rechteck · ${Units.fmtAreaU(a, d)}`, tip: 'Flächeninhalt · Klick kopiert den Wert', copyVal: Units.fmtArea(a, d), copyWhat: 'Fläche' };
+        }
+        if (e.type === 'point') {
+          return { text: `Punkt · X ${Units.fmtLen(e.a[0], 1)} Y ${Units.fmtLen(e.a[1], 1)} ${Units.label()}`, tip: 'Skizzenpunkt' };
+        }
+        const len = sketchEntLen(e);
+        if (len > 0) return { text: `1 Element · ${Units.fmtLenU(len, 2)}`, tip: 'Länge · Klick kopiert den Wert', copyVal: Units.fmtLen(len, 2), copyWhat: 'Länge' };
+        return { text: '1 Element', tip: 'Auswahl in der Skizze' };
+      }
+      const total = els.reduce((s, e) => s + sketchEntLen(e), 0);
+      if (total > 0) return { text: `${els.length} Elemente · ${Units.fmtLenU(total, 2)}`, tip: 'Gesamtlänge · Klick kopiert den Wert', copyVal: Units.fmtLen(total, 2), copyWhat: 'Gesamtlänge' };
+      return { text: `${els.length} Elemente`, tip: 'Auswahl in der Skizze' };
+    }
+    if (App.edges.length) {
+      const eds = App.edges.map((x) => { const r = App.results.get(x.id); return r && r.data && r.data.edges ? r.data.edges[x.edgeIdx] : null; }).filter(Boolean);
+      const total = eds.reduce((s, e) => s + (e.l || 0), 0);
+      const one = App.edges.length === 1 && eds.length === 1 ? eds[0] : null;
+      const full = one && one.t === 'CIRCLE' && one.r && Math.hypot(one.a[0] - one.b[0], one.a[1] - one.b[1], one.a[2] - one.b[2]) < 1e-6;
+      if (full) {
+        const d = one.r * 2;
+        return { text: `Kreiskante · Ø ${Units.fmtLenU(d, 2)}`, tip: `Radius ${Units.fmtLenU(one.r, 2)} · Umfang ${Units.fmtLenU(total, 2)} · Klick kopiert den Wert`, copyVal: Units.fmtLen(d, 2), copyWhat: 'Durchmesser' };
+      }
+      if (App.edges.length === 1) {
+        if (total > 0) return { text: `1 Kante · ${Units.fmtLenU(total, 2)}`, tip: 'Kantenlänge · Klick kopiert den Wert', copyVal: Units.fmtLen(total, 2), copyWhat: 'Länge' };
+        return { text: '1 Kante', tip: 'Gewählte Kante' };
+      }
+      if (total > 0) return { text: `${App.edges.length} Kanten · ${Units.fmtLenU(total, 2)}`, tip: 'Gesamtlänge der gewählten Kanten · Klick kopiert den Wert', copyVal: Units.fmtLen(total, 2), copyWhat: 'Gesamtlänge' };
+      return { text: `${App.edges.length} Kanten`, tip: 'Gewählte Kanten' };
+    }
+    if (App.face) {
+      const face = typeof Actions !== 'undefined' && Actions.selectedFace ? Actions.selectedFace() : null;
+      if (face) {
+        const area = Viewer.faceArea(face.id, face.idx);
+        const fi = face.info;
+        const isRound = fi && (fi.t === 'CYLINDRE' || fi.t === 'SPHERE') && fi.r;
+        const dec = area < 100 ? 2 : 1;
+        const areaStr = area > 0 ? Units.fmtAreaU(area, dec) : '';
+        if (isRound && area > 0) {
+          return { text: `Fläche · ${areaStr} · Ø ${Units.fmtLenU(fi.r * 2, 2)}`, tip: `Flächeninhalt und Durchmesser (R ${Units.fmtLenU(fi.r, 2)}) · Klick kopiert die Fläche`, copyVal: Units.fmtArea(area, dec), copyWhat: 'Fläche' };
+        }
+        if (isRound) {
+          return { text: `Runde Fläche · Ø ${Units.fmtLenU(fi.r * 2, 2)}`, tip: `Durchmesser (R ${Units.fmtLenU(fi.r, 2)}) · Klick kopiert den Wert`, copyVal: Units.fmtLen(fi.r * 2, 2), copyWhat: 'Durchmesser' };
+        }
+        if (area > 0) {
+          return { text: `Fläche · ${areaStr}`, tip: 'Flächeninhalt · Klick kopiert den Wert', copyVal: Units.fmtArea(area, dec), copyWhat: 'Fläche' };
+        }
+        return { text: 'Fläche', tip: 'Gewählte Fläche' };
+      }
+    }
+    if (App.sel.length) {
+      const items = App.selectedItems();
+      if (items.length === 1) {
+        const it = items[0].item;
+        const r = App.results.get(it.id);
+        const b = (r && r.data && r.data.bbox) || App.localBox(it.id);
+        const kindLbl = it.role === 'hole' ? '1 Loch' : '1 Körper';
+        if (b) {
+          const dx = Math.abs(b[3] - b[0]), dy = Math.abs(b[4] - b[1]), dz = Math.abs(b[5] - b[2]);
+          const sz = `${Units.fmtLen(dx, 1)} × ${Units.fmtLen(dy, 1)} × ${Units.fmtLen(dz, 1)} ${Units.label()}`;
+          return { text: `${kindLbl} · ${sz}`, tip: `${Model.label(it)} (${sz})` };
+        }
+        return { text: kindLbl, tip: Model.label(it) };
+      }
+      if (items.length > 1) {
+        const allHoles = items.every((x) => x.item.role === 'hole');
+        const allSolids = items.every((x) => x.item.role !== 'hole');
+        const lbl = allHoles ? `${items.length} Löcher` : allSolids ? `${items.length} Körper` : `${items.length} Objekte`;
+        return { text: lbl, tip: items.map((x) => Model.label(x.item)).join(', ') };
+      }
+    }
+    const m = sel ? find(sel) : null;
+    if (m) {
+      const ev = evalOf(m);
+      return { text: `Messung · ${ev.lost ? 'verloren' : ev.short}`, tip: `${m.name}: ${ev.text}`, copyVal: ev.lost ? null : firstNumber(ev.text), copyWhat: 'Messwert' };
+    }
+    return null;
+  }
+  function updateCalc() {
+    let state = 'ready', cls = 'st-chip st-calc ok', text = 'Bereit', tip = 'CAD-Kern ist bereit';
+    if (typeof Kernel === 'undefined' || !Kernel.ready) {
+      state = 'loading'; cls = 'st-chip st-calc busy'; text = 'Lädt …'; tip = 'CAD-Kern wird geladen …';
+    } else if (calcBusy || uiBusy || App.busy) {
+      state = 'busy'; cls = 'st-chip st-calc busy'; text = 'Rechnet …'; tip = 'Modell wird neu berechnet …';
+    } else if (App.errors && App.errors.length) {
+      state = 'error'; cls = 'st-chip st-calc warn';
+      text = App.errors.length === 1 ? '1 Fehler' : `${App.errors.length} Fehler`;
+      tip = App.errors[0].message || 'Ein Schritt hat ein Problem';
+    }
+    statusState.calcState = state; statusState.calcText = text;
+    const el = $('#status-calc');
+    if (el) {
+      el.className = cls; el.dataset.state = state; el.dataset.tip = tip;
+      const t = el.querySelector('.t'); if (t) t.textContent = text;
+    }
+  }
+  function updateStatus() {
+    const selEl = $('#status-sel');
+    const info = computeSelectionStatus();
+    if (info) {
+      selCopyVal = info.copyVal || null; selCopyWhat = info.copyWhat || null;
+      statusState.selText = info.text;
+      if (selEl) { selEl.hidden = false; selEl.textContent = info.text; selEl.dataset.tip = info.tip; }
+    } else {
+      selCopyVal = null; selCopyWhat = null; statusState.selText = '';
+      if (selEl) { selEl.hidden = true; selEl.textContent = ''; }
+    }
+    const u = Units.def();
+    statusState.unit = u.k;
+    const unitEl = $('#status-unit');
+    if (unitEl) { unitEl.textContent = u.label; unitEl.dataset.tip = `Einheit: ${u.name} – Klick öffnet die Einstellungen`; }
+    updateCalc();
+  }
+  function setCalcBusy(on) { uiBusy = !!on; updateCalc(); }
   function init() {
     App.on('selection', () => {
       if (App.sel.length !== 2) clearDist();
       if (sel && App.sel.length) { sel = null; drawSaved(); }
+      updateStatus();
     });
-    App.on('results', relink);
+    App.on('results', () => { relink(); updateStatus(); });
     App.on('remeshed', relink);
+    App.on('rebuilt', updateCalc);
     let lastUnit = Units.key();
     let lastFmt = `${FMT.dec}:${FMT.angle}`;
     if (typeof ViewPrefs !== 'undefined' && ViewPrefs.on) {
@@ -586,8 +743,19 @@ const Measure = (() => {
       for (const k of [...live.keys()]) if (!ids.has(k)) live.delete(k);
       if (Units.key() !== lastUnit) { lastUnit = Units.key(); if (list().length) relink(); }
       drawSaved();
+      updateStatus();
     });
-    App.on('mode', () => { if (App.mode !== 'model' && on) stop(); drawSaved(); });
+    App.on('mode', () => { if (App.mode !== 'model' && on) stop(); drawSaved(); updateStatus(); });
+    App.on('sketch', updateStatus);
+    App.on('sketchSel', updateStatus);
+    App.on('calc', (b) => { calcBusy = !!b; updateCalc(); });
+    App.on('busy', (b) => { uiBusy = !!b; updateCalc(); });
+    if (typeof Kernel !== 'undefined' && Kernel.whenReady) Kernel.whenReady().then(updateStatus).catch(() => {});
+    const selBtn = $('#status-sel');
+    if (selBtn) selBtn.addEventListener('click', () => { if (selCopyVal) copyText(selCopyVal, selCopyWhat || 'Wert'); });
+    const unitBtn = $('#status-unit');
+    if (unitBtn) unitBtn.addEventListener('click', () => ViewPrefs.dialog('general', { focus: 'set-proj-unit' }));
+    updateStatus();
     let d0 = null;
     Viewer.canvas.addEventListener('pointerdown', (e) => { if (on) d0 = { x: e.clientX, y: e.clientY }; }, true);
     Viewer.canvas.addEventListener('pointerup', (e) => { if (on && d0 && Math.hypot(e.clientX - d0.x, e.clientY - d0.y) < 5) onDown(e); d0 = null; });
@@ -647,7 +815,7 @@ const Measure = (() => {
     return r;
   }
   return {
-    showCoords, get coords() { return coordsNow; }, copyText, copyValue, get copied() { return copied; }, minDistance, clearDist, init, toggle, start, stop, refreshDisplay,
+    showCoords, get coords() { return coordsNow; }, updateStatus, setCalcBusy, get statusInfo() { return { ...statusState }; }, copyText, copyValue, get copied() { return copied; }, minDistance, clearDist, init, toggle, start, stop, refreshDisplay,
     get active() { return on; }, get result() { return last ? last.text : (els[0] ? els[0].textContent : null); },
     list, find, keep, relink, setHidden, rename, remove, select, drawSaved, treeSection, renderPanel, get selected() { return sel; },
   };
