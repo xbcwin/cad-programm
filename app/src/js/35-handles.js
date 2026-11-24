@@ -158,7 +158,8 @@ const Handles = (() => {
     scaleHandles(); placeLabels();
   }
   function addLabel(handle, value) {
-    const el = h('div', { class: 'dimlabel', title: 'Klicken und genaues Maß eintippen' }, fmt(value, 2));
+    const txt = Units.key() === 'mm' ? fmt(value, 2) : Units.fmtLenU(value, 2);
+    const el = h('div', { class: 'dimlabel', title: 'Klicken und genaues Maß eintippen' }, txt);
     el.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
     el.addEventListener('click', (e) => { e.stopPropagation(); editLabel(el, handle); });
     overlayEl.append(el);
@@ -166,19 +167,21 @@ const Handles = (() => {
   }
   function addSegLabel(handle, len, rule, id) {
     const i = handle.userData.seg;
-    const el = h('div', { class: 'dimlabel seglabel' + (rule.len != null ? ' fixed' : ''), id: 'seglabel-' + i, title: 'Klicken und Länge dieses Stücks eintippen' }, (rule.ax ? ({ perp: '⊥', par: '∥' }[rule.ax] || rule.ax.toUpperCase()) + ' · ' : '') + fmt(len, 1) + (rule.len != null ? ' 🔒' : ''));
+    const lenTxt = Units.key() === 'mm' ? fmt(len, 1) : Units.fmtLenU(len, 1);
+    const el = h('div', { class: 'dimlabel seglabel' + (rule.len != null ? ' fixed' : ''), id: 'seglabel-' + i, title: 'Klicken und Länge dieses Stücks eintippen' }, (rule.ax ? ({ perp: '⊥', par: '∥' }[rule.ax] || rule.ax.toUpperCase()) + ' · ' : '') + lenTxt + (rule.len != null ? ' 🔒' : ''));
     el.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
     el.addEventListener('click', (e) => {
       e.stopPropagation(); if (el.classList.contains('editing')) return;
       el.classList.add('editing'); el.textContent = '';
-      const inp = h('input', { type: 'text', value: rule.len != null ? String(rule.len) : fmt(len, 2), 'aria-label': `Länge von Stück ${i + 1}` });
+      const initV = rule.len != null ? (typeof rule.len === 'number' ? Units.fmtInput(rule.len) : String(rule.len)) : Units.fmtInput(len);
+      const inp = h('input', { type: 'text', value: initV, 'aria-label': `Länge von Stück ${i + 1}` });
       el.append(inp); inp.focus(); inp.select();
       let finished = false;
       const done = (ok) => {
         if (finished) return; finished = true;
         if (ok) {
-          const val = inp.value.trim(), n = parseNum(val), V = Model.vars(App.doc).v, test = isNaN(n) ? Model.num(val, V, NaN) : n;
-          if (!isNaN(test) && test >= 0) App.change('Länge im Pfad', (doc) => { const f = Model.find(doc, id); if (!f || !f.item.p.path3d) return false; Model.path3dSetRule(f.item.p.path3d, i, { len: isNaN(n) ? val : n || null }, V); });
+          const val = inp.value.trim(), V = Model.vars(App.doc).v, p = Units.parseLen(val, V, { expr: true });
+          if (p.ok && p.num >= 0) App.change('Länge im Pfad', (doc) => { const f = Model.find(doc, id); if (!f || !f.item.p.path3d) return false; Model.path3dSetRule(f.item.p.path3d, i, { len: p.num === 0 ? null : p.value }, V); });
           else UI.toast('Bitte eine Zahl eingeben (0 macht die Länge wieder frei).', { kind: 'bad' });
         }
         rebuild();
@@ -195,18 +198,17 @@ const Handles = (() => {
     const k = handle.userData.param;
     const raw = c.it.p[k];
     el.classList.add('editing'); el.textContent = '';
-    const inp = h('input', { type: 'text', value: typeof raw === 'number' ? fmt(raw, 3) : String(raw), 'aria-label': LABELS[k] || k });
+    const inp = h('input', { type: 'text', value: typeof raw === 'number' ? Units.fmtInput(raw) : String(raw), 'aria-label': LABELS[k] || k });
     el.append(inp); inp.focus(); inp.select();
     let finished = false;
     const done = (ok) => {
       if (finished) return; finished = true;
       if (ok) {
         const val = inp.value.trim();
-        const n = parseNum(val);
         const V = Model.vars(App.doc).v;
-        const test = isNaN(n) ? Model.num(val, V, NaN) : n;
-        if (!isNaN(test) && test > 0) {
-          App.change('Maß geändert', () => { setDim(c, handle, isNaN(n) ? val : n, true); });
+        const p = Units.parseLen(val, V, { expr: true });
+        if (p.ok && p.num > 0) {
+          App.change('Maß geändert', () => { setDim(c, handle, p.value, true); });
         } else UI.toast('Bitte eine Zahl größer als 0 eingeben.', { kind: 'bad' });
       }
       rebuild();
@@ -372,7 +374,14 @@ const Handles = (() => {
   let liveEl = null;
   function showLive(handle, v, label, unit = '') {
     if (!liveEl) { liveEl = h('div', { class: 'dimlabel live' }); overlayEl.append(liveEl); }
-    liveEl.textContent = (label ? label + ' ' : '') + fmt(v, 2) + (unit || '');
+    const valTxt = unit === '°'
+      ? fmt(v, 2) + '°'
+      : unit === ' mm' || unit === 'mm'
+        ? Units.fmtLenU(v, 2)
+        : unit === ''
+          ? (Units.key() === 'mm' ? fmt(v, 2) : Units.fmtLenU(v, 2))
+          : fmt(v, 2) + unit;
+    liveEl.textContent = (label ? label + ' ' : '') + valTxt;
     const s = Viewer.toScreen(handle.position);
     liveEl.style.left = s.x + 'px'; liveEl.style.top = s.y - 28 + 'px';
   }
@@ -541,10 +550,11 @@ const Interact = (() => {
         if (b.max.y > lo[1] && b.min.y < hi[1]) { const g = b.min.x >= hi[0] ? b.min.x - hi[0] : lo[0] >= b.max.x ? lo[0] - b.max.x : Infinity; gx = Math.min(gx, g); }
         if (b.max.x > lo[0] && b.min.x < hi[0]) { const g = b.min.y >= hi[1] ? b.min.y - hi[1] : lo[1] >= b.max.y ? lo[1] - b.max.y : Infinity; gy = Math.min(gy, g); }
       }
-      const parts = []; if (isFinite(gx)) parts.push('↔ ' + fmt(gx, 2)); if (isFinite(gy)) parts.push('↕ ' + fmt(gy, 2));
+      const parts = []; if (isFinite(gx)) parts.push('↔ ' + Units.fmtLen(gx, 2)); if (isFinite(gy)) parts.push('↕ ' + Units.fmtLen(gy, 2));
       if (parts.length) gapTxt = ' · Abstand ' + parts.join('  ');
     }
-    moveLabel.textContent = `X ${fmt(dx, 2)}  Y ${fmt(dy, 2)}` + gapTxt;
+    const uSuf = Units.key() !== 'mm' ? ' ' + Units.label() : '';
+    moveLabel.textContent = `X ${Units.fmtLen(dx, 2)}  Y ${Units.fmtLen(dy, 2)}${uSuf}` + gapTxt;
     moveLabel.style.left = e.clientX - r.left + 'px'; moveLabel.style.top = e.clientY - r.top - (mag ? 54 : 30) + 'px';
     App.emit('doc'); Handles.rebuild(); liveRebuild();
   }

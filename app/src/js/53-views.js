@@ -373,7 +373,7 @@ const Views = (() => {
     const n = activeCutEntries().length;
     if (!c.cap) { el.textContent = 'Kappe ausgeblendet'; return; }
     if (n > 1) { el.textContent = `${n} Ebenen aktiv · schraffiert = Schnittfläche`; return; }
-    el.textContent = c.capArea > 0.05 ? `Schnittfläche ${fmt(c.capArea, c.capArea < 100 ? 1 : 0)} mm²` : 'Schraffiert = Schnittfläche';
+    el.textContent = c.capArea > 0.05 ? `Schnittfläche ${Units.fmtAreaU(c.capArea, c.capArea < 100 ? 1 : 0)}` : 'Schraffiert = Schnittfläche';
   }
   function applyCut() {
     const c = st.cut;
@@ -554,24 +554,24 @@ const Views = (() => {
       const lo = key === 'FACE' ? -span : Math.floor(b.min.getComponent(ax) - 1);
       const hi = key === 'FACE' ? span : Math.ceil(b.max.getComponent(ax) + 1);
       const range = h('input', { type: 'range', ...(isF ? { id: 'cut-range' } : {}), 'data-cut-range': key, min: lo, max: hi, step: 0.1, value: entry.off, 'aria-label': `Lage ${key === 'FACE' ? 'Fläche' : PLANE_META[key].axis}` });
-      const num = h('input', { type: 'text', ...(isF ? { id: 'cut-off' } : {}), 'data-cut-off': key, class: 'vb-num', inputmode: 'decimal', value: fmt(entry.off, 2), 'aria-label': 'Lage in mm' });
+      const num = h('input', { type: 'text', ...(isF ? { id: 'cut-off' } : {}), 'data-cut-off': key, class: 'vb-num', inputmode: 'decimal', value: Units.fmtInput(entry.off), 'aria-label': `Lage in ${Units.label()}` });
       const set = (v) => {
         if (!isFinite(v)) return;
         entry.off = v;
         focusPlane(key);
         applyCut();
         range.value = v;
-        if (document.activeElement !== num) num.value = fmt(v, 2);
+        if (document.activeElement !== num) num.value = Units.fmtInput(v);
       };
       range.oninput = () => set(+range.value);
       num.onfocus = () => focusPlane(key);
-      num.onkeydown = (e) => { if (e.key === 'Enter') { const v = parseNum(num.value); if (v != null) set(v); num.blur(); } e.stopPropagation(); };
-      num.onchange = () => { const v = parseNum(num.value); if (v != null) set(v); };
+      num.onkeydown = (e) => { if (e.key === 'Enter') { const p = Units.parseLen(num.value, Model.vars(App.doc).v, { expr: false }); if (p.ok) set(p.num); num.blur(); } e.stopPropagation(); };
+      num.onchange = () => { const p = Units.parseLen(num.value, Model.vars(App.doc).v, { expr: false }); if (p.ok) set(p.num); };
       const flip = h('button', { type: 'button', class: 'btn small cut-flip-btn', ...(isF ? { id: 'cut-flip' } : {}), 'data-cut-flip': key, 'aria-pressed': entry.flip ? 'true' : 'false', 'data-tip': 'Die andere Hälfte zeigen' });
       flip.innerHTML = entries.length > 1 ? icon('mirror') : icon('mirror') + 'Umdrehen';
       flip.onclick = () => { entry.flip = !entry.flip; flip.setAttribute('aria-pressed', entry.flip ? 'true' : 'false'); focusPlane(key); applyCut(); };
       const lbl = h('span', { class: 'vb-l cut-badge', style: key === 'FACE' ? {} : { color: PLANE_META[key].color } }, key === 'FACE' ? '↕' : PLANE_META[key].axis);
-      const row = h('div', { class: 'vb-row cut-row' + (isF ? ' is-active' : ''), 'data-row-plane': key, 'data-axis': key === 'FACE' ? 'FACE' : PLANE_META[key].axis }, lbl, range, num, h('span', { class: 'vb-u' }, 'mm'), flip);
+      const row = h('div', { class: 'vb-row cut-row' + (isF ? ' is-active' : ''), 'data-row-plane': key, 'data-axis': key === 'FACE' ? 'FACE' : PLANE_META[key].axis }, lbl, range, num, h('span', { class: 'vb-u' }, Units.label()), flip);
       bar.append(row);
     }
     const capCb = h('input', { type: 'checkbox', id: 'cut-cap' }); capCb.checked = !!c.cap;
@@ -769,7 +769,7 @@ const Views = (() => {
       o.mesh = new THREE.Mesh(g, m); o.mesh.renderOrder = 18; Viewer.groups.overlay.add(o.mesh);
     }
     const t = o.bar && o.bar.querySelector('#ov-area');
-    if (t) t.textContent = d.area > 0.05 ? `${fmt(d.area, d.area < 100 ? 1 : 0)} mm² brauchen Stützen` : 'Keine Überhänge – druckt ohne Stützen';
+    if (t) t.textContent = d.area > 0.05 ? `${Units.fmtAreaU(d.area, d.area < 100 ? 1 : 0)} brauchen Stützen` : 'Keine Überhänge – druckt ohne Stützen';
     Viewer.requestRender();
   }
   function overhang(on = !st.ov) {
@@ -800,7 +800,7 @@ const Views = (() => {
       o.mesh = new THREE.Mesh(g, m); o.mesh.renderOrder = 18; Viewer.groups.overlay.add(o.mesh);
     }
     const t = o.bar && o.bar.querySelector('#thin-area');
-    if (t) t.textContent = d.area > 0.05 ? `${fmt(d.area, d.area < 100 ? 1 : 0)} mm² dünner als ${fmt(o.limit, 1)} mm – dünnste Stelle ${fmt(d.minT, 2)} mm` : `Überall mindestens ${fmt(o.limit, 1)} mm`;
+    if (t) t.textContent = d.area > 0.05 ? `${Units.fmtAreaU(d.area, d.area < 100 ? 1 : 0)} dünner als ${Units.fmtLenU(o.limit, 1)} – dünnste Stelle ${Units.fmtLenU(d.minT, 2)}` : `Überall mindestens ${Units.fmtLenU(o.limit, 1)}`;
     Viewer.requestRender();
   }
   function thin(on = !st.thin) {
@@ -812,7 +812,7 @@ const Views = (() => {
     const close = h('button', { type: 'button', class: 'vb-x', 'aria-label': 'Wandstärke ausblenden', 'data-tip': 'Ausblenden' }); close.innerHTML = icon('close'); close.onclick = () => thin(false);
     head.append(close);
     const sel = h('select', { id: 'thin-limit', class: 'vb-sel', 'aria-label': 'Mindest-Wandstärke' });
-    for (const a of [0.4, 0.8, 1.2, 1.6, 2, 3, 5]) sel.append(h('option', { value: a, ...(a === 1.2 ? { selected: true } : {}) }, fmt(a, 1) + ' mm'));
+    for (const a of [0.4, 0.8, 1.2, 1.6, 2, 3, 5]) sel.append(h('option', { value: a, ...(a === 1.2 ? { selected: true } : {}) }, Units.fmtLenU(a, 1)));
     sel.onchange = () => { o.limit = +sel.value; drawThin(); };
     bar.append(head, h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, 'Rot unter'), sel, h('span', { class: 'vb-hint' }, '0,4 mm Düse: mindestens 0,8–1,2 mm')), h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint', id: 'thin-area' }, '')));
     bars().append(bar); o.bar = bar;

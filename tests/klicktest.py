@@ -33,7 +33,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Panels,Joints}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Panels,Joints,Units}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -6646,6 +6646,93 @@ def t_a017_ebene_winkel_achsen(p):
     return [ok1, ok2, ok3, ok4, ok5, ok6]
 
 
+# ---------- [A-014] Einheiten je Projekt (BE-10) ----------
+def t_a014_einheiten_projekt(p):
+    p.empty()
+    # 1. Projekt auf Zoll umstellen, Quader 25,4 × 25,4 × 25,4 mm → zeigt 1 in
+    p.pg.select_option('#proj-unit', 'in'); p.wait(300)
+    p.ev("Actions.addPrimitive('box', { p: { w: 25.4, d: 25.4, h: 25.4 } })"); warte_rechnen(p)
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(500)
+    pw_val = p.pg.locator('#p-w').input_value()
+    sec_h = [el.text_content().strip().lower() for el in p.pg.locator('#right-body .section-h').all()]
+    lbls = [el.text_content().strip() for el in p.pg.locator('.dimlabel').all()]
+    ampel = p.pg.locator('#ampel .t').text_content()
+    ok1 = (
+        p.ev("return App.doc.settings.unit") == 'in'
+        and pw_val == '1'
+        and any('maße (in)' in s for s in sec_h)
+        and any('1 in' in l for l in lbls)
+        and '1 × 1 × 1 in' in ampel
+    )
+
+    # 2. Eingabe „2“ ohne Einheit → 50,8 mm intern, Schildchen zeigt „2 in“
+    p.pg.fill('#p-w', '2'); p.pg.press('#p-w', 'Enter'); warte_rechnen(p)
+    w_mm = p.ev("return App.doc.items[0].p.w")
+    lbls2 = [el.text_content().strip() for el in p.pg.locator('.dimlabel').all()]
+    ok2 = abs(w_mm - 50.8) < 1e-6 and any('2 in' in l for l in lbls2)
+
+    # 3. Explizite Einheiten im Zoll-Projekt (25,4 mm, 2 cm, 1 in)
+    p.pg.fill('#p-w', '25,4 mm'); p.pg.press('#p-w', 'Enter'); warte_rechnen(p)
+    w_mm1 = p.ev("return App.doc.items[0].p.w")
+    pw_after = p.pg.locator('#p-w').input_value()
+    p.pg.fill('#p-w', '2 cm'); p.pg.press('#p-w', 'Enter'); warte_rechnen(p)
+    w_cm = p.ev("return App.doc.items[0].p.w")
+    p.pg.fill('#p-w', '1 in'); p.pg.press('#p-w', 'Enter'); warte_rechnen(p)
+    w_in = p.ev("return App.doc.items[0].p.w")
+    ok3 = abs(w_mm1 - 25.4) < 1e-6 and pw_after == '1' and abs(w_cm - 20) < 1e-6 and abs(w_in - 25.4) < 1e-6
+
+    # 4. Kontextleiste (#sel-val), Messen (Fläche + Wand in in²/in) & Stückliste
+    p.ev("const id=App.doc.items[0].id, r=App.results.get(id); const i=r.data.edges.findIndex(e=>e.t==='LINE' && Math.abs(e.l-25.4)<1e-4); App.select([id],{edges:[{id,edgeIdx:i}]})"); p.wait(500)
+    sel_txt = p.pg.locator('#sel-val').text_content() if p.pg.locator('#sel-val').count() else ''
+    p.pg.keyboard.press('m'); p.wait(300)
+    top_sc = p.ev("""
+      const id = App.doc.items[0].id, r = App.results.get(id).data;
+      const fi = r.faces.findIndex(f => f.t === 'PLANE' && f.n && f.n[2] > 0.9);
+      const fc = r.faces[fi].c;
+      const v = Viewer.camera.position.clone().set(fc[0], fc[1], fc[2]).applyMatrix4(Model.worldMatrix(App.doc, id));
+      const s = Viewer.toScreen(v);
+      const rc = Viewer.canvas.getBoundingClientRect();
+      return [s.x + rc.left, s.y + rc.top];
+    """)
+    p.pg.mouse.click(top_sc[0], top_sc[1]); p.wait(600)
+    m_res = p.ev("return Measure.result") or ''
+    p.pg.keyboard.press('Escape'); p.wait(300)
+    p.ev("App.select([])"); p.wait(400)
+    p.pg.locator('#proj-bom').click(); p.pg.wait_for_selector('#bom table', timeout=20000); p.wait(300)
+    bom_txt = p.pg.locator('#bom').inner_text()
+    p.pg.keyboard.press('Escape'); p.wait(200)
+    ok4 = ('1 in' in sel_txt) and ('1 in²' in m_res) and ('Wand 1 in' in m_res) and ('1 × 1 × 1 in' in bom_txt)
+
+    # 5. Umschalten auf cm und m
+    p.pg.select_option('#proj-unit', 'cm'); p.wait(300)
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(400)
+    pw_cm = p.pg.locator('#p-w').input_value()
+    p.pg.fill('#p-w', '3'); p.pg.press('#p-w', 'Enter'); warte_rechnen(p)
+    w_from_cm = p.ev("return App.doc.items[0].p.w")
+    p.ev("App.select([])"); p.wait(300)
+    p.pg.select_option('#proj-unit', 'm'); p.wait(300)
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(400)
+    pw_m = p.pg.locator('#p-w').input_value()
+    p.pg.fill('#p-w', '0,05'); p.pg.press('#p-w', 'Enter'); warte_rechnen(p)
+    w_from_m = p.ev("return App.doc.items[0].p.w")
+    ok5 = pw_cm == '2,54' and abs(w_from_cm - 30) < 1e-6 and pw_m == '0,03' and abs(w_from_m - 50) < 1e-6
+
+    # 6. Rückgängig, Migrate, Befehle & Hilfetext
+    p.ev("App.undo(); App.undo()"); p.wait(400)   # zurück über m-Eingabe und Umschaltung auf m → cm
+    unit_after_undo = p.ev("return App.doc.settings.unit")
+    mig_unit = p.ev("const d=Model.migrate({format:'masswerk',version:1,id:'p_t',name:'T',params:[],items:[],settings:{unit:'in'}}); return d.settings.unit")
+    cmd_ids = p.ev("return Commands.search('Einheit').map(c=>c.id)")
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    ok6 = (
+        unit_after_undo == 'cm'
+        and mig_unit == 'in'
+        and 'unit-in' in cmd_ids
+        and 'projectUnit' in hilfen
+        and all(k in hilfen['projectUnit'] for k in ('tip', 'hilfe', 'tipp'))
+    )
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -6762,6 +6849,7 @@ TESTS = [
     ('[A-016] Speicher für große Projekte: 15 MB Import sichern & neu laden / Versionen in IndexedDB / Migration aus localStorage / Löschen räumt Blobs auf', t_a016_speicher_gross),
     ('[A-015] Projekt in Ordner speichern: ohne API ausgeblendet / Ordner wählen & Anzeige / 10 s gebündelt / Trennen & Projektwechsel / Hilfe', t_a015_ordner_speichern),
     ('[A-017] Ebene im Winkel und Bezugsachsen: 30° an Quaderkante / Achse durch Zylinder → Kreismuster / Drehen um Bezugsachse / 2 Punkte & senkrecht auf Fläche', t_a017_ebene_winkel_achsen),
+    ('[A-014] Einheiten je Projekt: Zoll 1 in = 25,4 mm & Eingabe 2 = 50,8 mm / explizite Einheiten / Kontextleiste, Messen & Stückliste / cm & m / Rückgängig & Hilfe', t_a014_einheiten_projekt),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

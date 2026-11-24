@@ -50,7 +50,7 @@ const Model = (() => {
     return {
       format: 'masswerk', version: 1, id: uid('p'), name, created: Date.now(), modified: Date.now(),
       params: [], items: [], notes: [],
-      settings: { printer: 'std', custom: { x: 220, y: 220, z: 250 }, grid: 1, snap: true },
+      settings: { printer: 'std', custom: { x: 220, y: 220, z: 250 }, grid: 1, snap: true, unit: 'mm' },
       drawing: null,
     };
   }
@@ -616,23 +616,24 @@ const Model = (() => {
   function label(it) { return it.name || (KINDS[it.kind] && KINDS[it.kind].label) || 'Objekt'; }
   function sizeText(it, V) {
     const p = resolveP(it.p || {}, V || {});
-    const f = (x) => fmt(x, 1);
+    const f = (x) => Units.fmtLen(x, 1);
+    const u = Units.key() !== 'mm' ? ' ' + Units.label() : '';
     switch (it.kind) {
-      case 'box': case 'pyramid': case 'wedge': return `${f(p.w)} × ${f(p.d)} × ${f(p.h)}`;
-      case 'cylinder': case 'tube': case 'prism': return `Ø ${f(p.d)} × ${f(p.h)}`;
-      case 'cone': return `Ø ${f(p.d1)} × ${f(p.h)}`;
-      case 'sphere': case 'hemisphere': return `Ø ${f(p.d)}`;
-      case 'torus': return `Ø ${f(p.d)}`;
-      case 'extrude': return p.thin ? `${f(p.dist)} hoch · Wand ${f(p.wall || 2)}` : `${f(p.dist)} hoch`;
-      case 'revolve': return `${f(p.angle)}°`;
+      case 'box': case 'pyramid': case 'wedge': return `${f(p.w)} × ${f(p.d)} × ${f(p.h)}${u}`;
+      case 'cylinder': case 'tube': case 'prism': return `Ø ${f(p.d)} × ${f(p.h)}${u}`;
+      case 'cone': return `Ø ${f(p.d1)} × ${f(p.h)}${u}`;
+      case 'sphere': case 'hemisphere': return `Ø ${f(p.d)}${u}`;
+      case 'torus': return `Ø ${f(p.d)}${u}`;
+      case 'extrude': return p.thin ? `${f(p.dist)}${u} hoch · Wand ${f(p.wall || 2)}${u}` : `${f(p.dist)}${u} hoch`;
+      case 'revolve': return `${fmt(p.angle, 1)}°`;
       case 'group': return (typeof Features !== 'undefined' && Features.sizeText(it, V)) || `${(it.children || []).length} Teile`;
       case 'part': {
         const L = String(p.lib || '');
-        if (L === 'buyMotor' || L === 'buyCap') return `Ø ${f(p.d)} × ${f(p.h)}`;
-        if (L === 'buyProp') return `${f(p.zoll)}"`;
-        if (L === 'buyAntenna') return `${f(p.L)} lang`;
-        if (L === 'buyStack') return `${f(p.a)} × ${f(p.a)}`;
-        if (L.startsWith('buy')) return `${f(p.w)} × ${f(p.d)} × ${f(p.h)}`;
+        if (L === 'buyMotor' || L === 'buyCap') return `Ø ${f(p.d)} × ${f(p.h)}${u}`;
+        if (L === 'buyProp') return `${fmt(p.zoll, 1)}"`;
+        if (L === 'buyAntenna') return `${f(p.L)}${u} lang`;
+        if (L === 'buyStack') return `${f(p.a)} × ${f(p.a)}${u}`;
+        if (L.startsWith('buy')) return `${f(p.w)} × ${f(p.d)} × ${f(p.h)}${u}`;
         return p.size || '';
       }
     }
@@ -648,7 +649,8 @@ const Model = (() => {
   function migrate(doc) {
     if (!doc || doc.format !== 'masswerk') throw new Error('Das ist keine Tracery-Projektdatei.');
     doc.params = doc.params || []; doc.items = doc.items || [];
-    doc.settings = Object.assign({ printer: 'std', custom: { x: 220, y: 220, z: 250 }, grid: 1, snap: true }, doc.settings || {});
+    doc.settings = Object.assign({ printer: 'std', custom: { x: 220, y: 220, z: 250 }, grid: 1, snap: true, unit: 'mm' }, doc.settings || {});
+    if (!Units.DEFS[doc.settings.unit]) doc.settings.unit = 'mm';
     if (doc.rollback != null && !(doc.rollback >= 0 && doc.rollback < doc.items.length)) doc.rollback = null;
     if (!Array.isArray(doc.notes)) doc.notes = [];
     if (doc.variants != null && !Array.isArray(doc.variants)) doc.variants = [];

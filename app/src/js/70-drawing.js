@@ -456,7 +456,7 @@ const Drawing = (() => {
       texts.push({ x: (out[0] + tail[0]) / 2, y: out[1] - 1.2, t: label, size: TXT, rot: 0, anchor: 'middle', id: dim.id, cls: 'dimtext' });
     }
   }
-  function fmtDim(v) { return fmt(Math.round(v * 100) / 100, 2); }
+  function fmtDim(v) { return Units.fmtLen(v, 2); }
   function arrowHead(lines, tip, from, len, inside, id) {
     const dx = from[0] - tip[0], dy = from[1] - tip[1]; const L = Math.hypot(dx, dy) || 1; let ux = dx / L, uy = dy / L;
     if (!inside) { ux = -ux; uy = -uy; }
@@ -560,7 +560,7 @@ const Drawing = (() => {
       texts.push({ x: cC + 1.5, y: rows[0] + 10.5, t: clipText(l1, tw, ts), size: ts, anchor: 'start', cls: 'title' });
       texts.push({ x: cC + 1.5, y: rows[0] + 10.5 + ts * 1.25, t: clipText(l2, tw, ts), size: ts, anchor: 'start', cls: 'title' });
     } else texts.push({ x: cC + 1.5, y: rows[0] + 13.5, t: title, size: ts, anchor: 'start', cls: 'title' });
-    texts.push({ x: cC + 1.5, y: rows[3] + 5.4, t: 'Erstellt mit Tracery', size: 2, anchor: 'start', cls: 'lab' });
+    texts.push({ x: cC + 1.5, y: rows[3] + 5.4, t: `Erstellt mit Tracery · Maße in ${Units.label()}`, size: 2, anchor: 'start', cls: 'lab' });
     // Projektionssymbol Methode 1 (ISO 5456-2): Kegelstumpf links mit schmalem Ende links, Ansicht von links rechts daneben
     lab(cD, rows[0], 'Projektion');
     const sx = cD + 4.5, cy = y0 + 11.5;

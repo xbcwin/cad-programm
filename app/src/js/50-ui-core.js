@@ -166,40 +166,51 @@ const UI = (() => {
     else if (!on && busyEl) { busyEl.remove(); busyEl = null; }
   }
   // ---------- Eingabefelder ----------
-  function numField({ id, label, value, unit = 'mm', axis, onCommit, min, int, placeholder, expr = true, step }) {
+  function numField({ id, label, value, unit = 'mm', len, axis, onCommit, min, int, placeholder, expr = true, step }) {
     const V = Model.vars(App.doc).v;
+    const isLen = len != null ? !!len : unit === 'mm';
+    const dispUnit = isLen && unit === 'mm' ? Units.label() : unit;
     const isE = typeof value === 'string' && Model.isExpr(value);
     const wrap = h('div', { class: 'field' });
     if (label) wrap.append(h('label', { for: id }, label));
     const box = h('div', { class: 'inp' + (isE ? ' expr' : '') });
     if (axis) box.append(h('span', { class: 'axis ' + axis }, axis.toUpperCase()));
-    const inp = h('input', { id, type: 'text', inputmode: 'decimal', value: typeof value === 'number' ? fmt(value, 3) : (value ?? ''), placeholder: placeholder || '', autocomplete: 'off', spellcheck: 'false' });
+    const dispVal = typeof value === 'number' ? (isLen ? Units.fmtInput(value) : fmt(value, 3)) : (value ?? '');
+    const inp = h('input', { id, type: 'text', inputmode: 'decimal', value: dispVal, placeholder: placeholder || '', autocomplete: 'off', spellcheck: 'false' });
     box.append(inp);
-    if (isE) box.append(h('span', { class: 'fx', title: 'Formel: ' + value + ' = ' + fmt(Model.num(value, V, NaN), 3) }, '= ' + fmt(Model.num(value, V, NaN), 2)));
-    else if (unit) box.append(h('span', { class: 'unit' }, unit));
+    if (isE) {
+      const ev = Model.num(value, V, NaN);
+      const uSuf = isLen && Units.key() !== 'mm' ? ' ' + Units.label() : '';
+      const evTxt = isLen ? Units.fmtLen(ev, 2) + uSuf : fmt(ev, 2);
+      const evTip = isLen ? Units.fmtLenU(ev, 3) : fmt(ev, 3);
+      box.append(h('span', { class: 'fx', title: 'Formel: ' + value + ' = ' + evTip }, '= ' + evTxt));
+    } else if (dispUnit) box.append(h('span', { class: 'unit' }, dispUnit));
     wrap.append(box);
     let orig = inp.value, lastBad = null;
     const commit = () => {
       const raw = inp.value.trim();
       if (raw === orig) { box.classList.remove('invalid'); lastBad = null; return; }
-      let val = parseNum(raw);
-      // Zahl mit Einheit (2 cm, 1 in, 1/4") wird gleich in mm umgerechnet statt als Formel gespeichert
-      if (isNaN(val)) {
-        const um = /^([-+()\d.,\s*/]+?)\s*(mm|cm|m|in|zoll|"|°)$/i.exec(raw);
-        if (um) { try { val = round(Expr.eval(um[1], {}) * { mm: 1, cm: 10, m: 1000, in: 25.4, zoll: 25.4, '"': 25.4, '°': 1 }[um[2].toLowerCase()], 6); } catch (_) { val = NaN; } }
-        else if (/^[-+()\d.,\s*/]+((mm|cm|m|in|zoll|"|°)[-+()\d.,\s*/]*)+$/i.test(raw)) { try { val = round(Expr.eval(raw, {}), 6); } catch (_) { val = NaN; } }
-      }
-      if (isNaN(val)) {
-        if (!expr) { box.classList.add('invalid'); return; }
-        const vv = Model.num(raw, Model.vars(App.doc).v, NaN);
-        if (isNaN(vv)) { box.classList.add('invalid'); if (lastBad !== raw) toast('Das kann ich nicht ausrechnen: „' + raw + '“ – prüf die Schreibweise oder den Namen.', { kind: 'bad' }); lastBad = raw; return; }
-        val = raw;
+      let val;
+      if (isLen) {
+        const p = Units.parseLen(raw, Model.vars(App.doc).v, { expr });
+        if (!p.ok) { box.classList.add('invalid'); if (expr && lastBad !== raw) toast('Das kann ich nicht ausrechnen: „' + raw + '“ – prüf die Schreibweise oder den Namen.', { kind: 'bad' }); lastBad = raw; return; }
+        val = p.value;
       } else {
+        val = parseNum(raw);
+        if (isNaN(val)) {
+          if (!expr) { box.classList.add('invalid'); return; }
+          const vv = Model.num(raw, Model.vars(App.doc).v, NaN);
+          if (isNaN(vv)) { box.classList.add('invalid'); if (lastBad !== raw) toast('Das kann ich nicht ausrechnen: „' + raw + '“ – prüf die Schreibweise oder den Namen.', { kind: 'bad' }); lastBad = raw; return; }
+          val = raw;
+        }
+      }
+      if (typeof val === 'number') {
         if (min != null && val < min) val = min;
         if (int) val = Math.round(val);
       }
       box.classList.remove('invalid');
-      orig = typeof val === 'number' ? fmt(val, 3) : val;
+      orig = typeof val === 'number' ? (isLen ? Units.fmtInput(val) : fmt(val, 3)) : val;
+      inp.value = orig;
       onCommit(val);
     };
     inp.addEventListener('keydown', (e) => {
@@ -209,9 +220,11 @@ const UI = (() => {
       if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
         const n = parseNum(inp.value); if (isNaN(n)) return;
         e.preventDefault();
-        const s = (step || (e.shiftKey ? 10 : 1)) * (e.key === 'ArrowUp' ? 1 : -1);
-        let nv = round(n + s, 4); if (min != null) nv = Math.max(min, nv);
-        inp.value = fmt(nv, 3); commit();
+        const u = isLen ? Units.def() : null;
+        const s = (step || (u ? (e.shiftKey ? u.shiftStep : u.step) : (e.shiftKey ? 10 : 1))) * (e.key === 'ArrowUp' ? 1 : -1);
+        let nv = round(n + s, isLen ? u.inputDec : 4);
+        if (min != null) nv = Math.max(isLen ? Units.fromMM(min) : min, nv);
+        inp.value = fmt(nv, isLen ? u.inputDec : 3); commit();
       }
     });
     inp.addEventListener('blur', commit);

@@ -218,6 +218,7 @@ const Commands = (() => {
     add('drawing', 'Technische Zeichnung öffnen', 'sheet', 'zeichnung ansichten bemaßung pdf dreitafel', () => setMode('drawing'), { group: 'Werkzeuge' });
     add('model', 'Zurück zum Modell', 'cube', 'modell 3d', () => setMode('model'), { group: 'Werkzeuge' });
     add('params', 'Maße mit Namen festlegen', 'sliders', 'parameter variable formel maß', () => Panels.showParams(), { group: 'Werkzeuge' });
+    for (const [uk, un] of Units.OPTIONS) add('unit-' + uk, 'Einheit: ' + un, 'ruler', 'einheit einheiten mm cm m zoll inch ' + uk, () => Units.set(uk), { group: 'Projekt' });
     add('undo', 'Rückgängig', 'undo', 'zurück', () => App.undo(), { group: 'Bearbeiten', kbd: 'Strg Z' });
     add('redo', 'Wiederholen', 'redo', 'vor', () => App.redo(), { group: 'Bearbeiten', kbd: 'Strg Y' });
     add('delete', 'Auswahl löschen', 'trash', 'entfernen weg', () => Actions.remove(), { group: 'Bearbeiten', kbd: 'Entf', needSel: true });

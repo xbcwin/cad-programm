@@ -1566,6 +1566,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Verwaltung & Hilfetexte**: Umbenennen, Ein-/Ausblenden, Anzeige „Bezug fehlt“ samt Rückgängig, Löschen, Befehle und Hilfetexte (`datumEdgeAngle`, `datumAxis`) geprüft.
 - [ ] **Von Hand**: Interaktives Wählen im 3D-Bild über Kontextleiste („Ebene im Winkel“ an einer Kante, „Achse“ an einem Zylinder) und beim Klick auf die Bezugsachse im Werkzeug „Achse im Bild wählen“ prüfen.
 
+## Einheiten je Projekt (Auto [A-014])
+
+- [x] **Zoll-Projekt**: `#proj-unit` auf `in` (Zoll) umstellen; ein Quader `25,4 × 25,4 × 25,4 mm` zeigt `1` im Eingabefeld, `Maße (in)`, `1 in` am 3D-Schildchen und `1 × 1 × 1 in` in der Ampel; Eingabe `2` ohne Einheit ergibt exakt `50,8 mm` intern.
+- [x] **Explizite Einheiten & Umschalten**: `25,4 mm`, `2 cm` und `1 in` rechnen weiter exakt um; Umschalten auf `cm` (`2,54`, Eingabe `3` → `30 mm`) und `m` (`0,03`, Eingabe `0,05` → `50 mm`) sowie Rückgängig und Befehle funktionieren.
+- [x] **Kontextleiste, Messen, Stückliste & Hilfe**: Kantenlänge `#sel-val` (`1 in`), Messen (`1 in²`, `Wand 1 in`), Stückliste (`1 × 1 × 1 in`) und Hilfetext `projectUnit` geprüft.
+- [ ] **Von Hand**: In der Skizze (Maße eintippen, `.skdim`-Schildchen, Skizzen-Tabelle) und in der technischen Zeichnung prüfen, ob alle Angaben in Zoll/cm/m sauber umgerechnet sind und mit `STEP`/`STL` zusammenpassen.
+
 ## Fehler melden
 
 ```

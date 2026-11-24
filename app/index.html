@@ -1012,6 +1012,101 @@ const Expr = (() => {
   return { eval: parse, names(src) { try { return tokenize(src).filter((t) => t.t === 'id').map((t) => t.v); } catch (_) { return []; } } };
 })();
 
+// ---------- Einheiten je Projekt (BE-10): Anzeige und Eingabe in mm, cm, m oder Zoll; intern immer mm ----------
+const Units = (() => {
+  const DEFS = {
+    mm: { k: 'mm', label: 'mm', name: 'Millimeter (mm)', fac: 1, dec: 2, inputDec: 3, step: 1, shiftStep: 10, areaLabel: 'mm²', areaFac: 1, volLabel: 'cm³', volFac: 1000 },
+    cm: { k: 'cm', label: 'cm', name: 'Zentimeter (cm)', fac: 10, dec: 2, inputDec: 4, step: 0.1, shiftStep: 1, areaLabel: 'cm²', areaFac: 100, volLabel: 'cm³', volFac: 1000 },
+    m:  { k: 'm',  label: 'm',  name: 'Meter (m)',       fac: 1000, dec: 3, inputDec: 5, step: 0.01, shiftStep: 0.1, areaLabel: 'm²', areaFac: 1e6, volLabel: 'm³', volFac: 1e9 },
+    in: { k: 'in', label: 'in', name: 'Zoll (in)',       fac: 25.4, dec: 3, inputDec: 4, step: 0.1, shiftStep: 1, areaLabel: 'in²', areaFac: 645.16, volLabel: 'in³', volFac: 16387.064 },
+  };
+  const ORDER = ['mm', 'cm', 'm', 'in'];
+  const OPTIONS = ORDER.map((k) => [k, DEFS[k].name]);
+  const curDoc = (doc) => doc || (typeof App !== 'undefined' ? App.doc : null);
+  function key(doc) {
+    const d = curDoc(doc);
+    const u = d && d.settings && d.settings.unit;
+    return DEFS[u] ? u : 'mm';
+  }
+  const def = (doc) => DEFS[key(doc)];
+  const label = (doc) => def(doc).label;
+  const areaLabel = (doc) => def(doc).areaLabel;
+  const volLabel = (doc) => def(doc).volLabel;
+  const factor = (doc) => def(doc).fac;
+  const fromMM = (mm, doc) => mm / def(doc).fac;
+  const toMM = (v, doc) => v * def(doc).fac;
+  const areaFromMM2 = (mm2, doc) => mm2 / def(doc).areaFac;
+  const volFromMM3 = (mm3, doc) => mm3 / def(doc).volFac;
+  const decFor = (d, doc) => (def(doc).k === 'mm' ? d : Math.max(d, def(doc).dec));
+  function fmtLen(mm, d = 2, doc) {
+    if (typeof mm !== 'number' || !isFinite(mm)) return '–';
+    return fmt(fromMM(mm, doc), decFor(d, doc));
+  }
+  function fmtLenU(mm, d = 2, doc) {
+    if (typeof mm !== 'number' || !isFinite(mm)) return '–';
+    return `${fmtLen(mm, d, doc)} ${label(doc)}`;
+  }
+  function fmtArea(mm2, d = 2, doc) {
+    if (typeof mm2 !== 'number' || !isFinite(mm2)) return '–';
+    const u = def(doc);
+    return fmt(mm2 / u.areaFac, u.k === 'mm' ? d : Math.max(d, u.k === 'm' ? 4 : 2));
+  }
+  function fmtAreaU(mm2, d = 2, doc) {
+    if (typeof mm2 !== 'number' || !isFinite(mm2)) return '–';
+    return `${fmtArea(mm2, d, doc)} ${def(doc).areaLabel}`;
+  }
+  function fmtVolU(mm3, d = 3, doc) {
+    if (typeof mm3 !== 'number' || !isFinite(mm3)) return '–';
+    const u = def(doc);
+    return `${fmt(mm3 / u.volFac, u.k === 'm' ? Math.max(d, 5) : d)} ${u.volLabel}`;
+  }
+  function fmtInput(mm, doc) {
+    if (typeof mm !== 'number' || !isFinite(mm)) return '';
+    return fmt(fromMM(mm, doc), def(doc).inputDec);
+  }
+  const UFAC = { mm: 1, cm: 10, m: 1000, in: 25.4, zoll: 25.4, '"': 25.4, '°': 1 };
+  function parseLen(raw, V, { expr = true, doc } = {}) {
+    const s = String(raw ?? '').trim();
+    if (!s) return { ok: false };
+    const n = parseNum(s);
+    if (!isNaN(n)) {
+      const mm = round(toMM(n, doc), 6);
+      return { ok: true, value: mm, num: mm };
+    }
+    const um = /^([-+()\d.,\s*/]+?)\s*(mm|cm|m|in|zoll|"|°)$/i.exec(s);
+    if (um) {
+      try {
+        const mm = round(Expr.eval(um[1], {}) * UFAC[um[2].toLowerCase()], 6);
+        if (isFinite(mm)) return { ok: true, value: mm, num: mm };
+      } catch (_) {}
+    } else if (/^[-+()\d.,\s*/]+((mm|cm|m|in|zoll|"|°)[-+()\d.,\s*/]*)+$/i.test(s)) {
+      try {
+        const mm = round(Expr.eval(s, {}), 6);
+        if (isFinite(mm)) return { ok: true, value: mm, num: mm };
+      } catch (_) {}
+    }
+    if (!/[A-Za-zÄÖÜäöüß_]/.test(s) && (!expr || key(doc) !== 'mm')) {
+      try {
+        const v = Expr.eval(s, {});
+        if (isFinite(v)) {
+          const mm = round(toMM(v, doc), 6);
+          return { ok: true, value: mm, num: mm };
+        }
+      } catch (_) {}
+    }
+    if (!expr) return { ok: false };
+    const ev = typeof Model !== 'undefined' ? Model.num(s, V || {}, NaN) : (() => { try { return Expr.eval(s, V || {}); } catch (_) { return NaN; } })();
+    if (!isFinite(ev)) return { ok: false };
+    return { ok: true, value: s, num: ev };
+  }
+  function set(u) {
+    if (!DEFS[u] || typeof App === 'undefined' || !App.doc || key() === u) return false;
+    App.change('Einheit: ' + DEFS[u].name, (doc) => { doc.settings = doc.settings || {}; doc.settings.unit = u; });
+    return true;
+  }
+  return { DEFS, ORDER, OPTIONS, key, def, label, areaLabel, volLabel, factor, fromMM, toMM, areaFromMM2, volFromMM3, fmtLen, fmtLenU, fmtArea, fmtAreaU, fmtVolU, fmtInput, parseLen, set };
+})();
+
 // ---------- Symbole ----------
 const IC = {
   cube: '<path d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5z M4 7.5 12 12l8-4.5 M12 12v9" />',
@@ -1956,6 +2051,11 @@ const HELP = {
   "tip": "Bezugsachse als Dreh- oder Musterachse anlegen",
   "hilfe": "Legt eine eigene Achse im Projekt an: durch zwei Punkte (Ecken und Kantenmitten rasten ein), durch die Mitte einer runden Fläche (Zylinder, Kegel, Ring) oder eines Kreises, oder senkrecht auf eine ebene Fläche an einem Punkt. Sie wandert mit dem Teil mit und lässt sich direkt für Kreismuster und Drehen (Revolve) wählen.",
   "tipp": "Im Verlauf unter „Bezugsachsen“ kannst du jede Achse benennen, ein- oder ausblenden und beim Kreismuster einfach aus der Liste „Drehachse“ auswählen."
+ },
+ "projectUnit": {
+  "tip": "Einheit für dieses Projekt wählen (mm, cm, m oder Zoll)",
+  "hilfe": "Legt die Anzeige- und Standard-Einheit für dieses Projekt fest. Alle Maße, Schilder, Koordinaten, Messungen und die Stückliste zeigen in dieser Einheit; Eingaben ohne Einheit gelten darin. Eingaben mit Einheit (z. B. 25,4 mm oder 1 in) funktionieren immer.",
+  "tipp": "Du kannst die Einheit jederzeit umschalten – die echte Geometrie bleibt immer exakt erhalten."
  }
 };
 
@@ -2503,7 +2603,7 @@ const Model = (() => {
     return {
       format: 'masswerk', version: 1, id: uid('p'), name, created: Date.now(), modified: Date.now(),
       params: [], items: [], notes: [],
-      settings: { printer: 'std', custom: { x: 220, y: 220, z: 250 }, grid: 1, snap: true },
+      settings: { printer: 'std', custom: { x: 220, y: 220, z: 250 }, grid: 1, snap: true, unit: 'mm' },
       drawing: null,
     };
   }
@@ -3069,23 +3169,24 @@ const Model = (() => {
   function label(it) { return it.name || (KINDS[it.kind] && KINDS[it.kind].label) || 'Objekt'; }
   function sizeText(it, V) {
     const p = resolveP(it.p || {}, V || {});
-    const f = (x) => fmt(x, 1);
+    const f = (x) => Units.fmtLen(x, 1);
+    const u = Units.key() !== 'mm' ? ' ' + Units.label() : '';
     switch (it.kind) {
-      case 'box': case 'pyramid': case 'wedge': return `${f(p.w)} × ${f(p.d)} × ${f(p.h)}`;
-      case 'cylinder': case 'tube': case 'prism': return `Ø ${f(p.d)} × ${f(p.h)}`;
-      case 'cone': return `Ø ${f(p.d1)} × ${f(p.h)}`;
-      case 'sphere': case 'hemisphere': return `Ø ${f(p.d)}`;
-      case 'torus': return `Ø ${f(p.d)}`;
-      case 'extrude': return p.thin ? `${f(p.dist)} hoch · Wand ${f(p.wall || 2)}` : `${f(p.dist)} hoch`;
-      case 'revolve': return `${f(p.angle)}°`;
+      case 'box': case 'pyramid': case 'wedge': return `${f(p.w)} × ${f(p.d)} × ${f(p.h)}${u}`;
+      case 'cylinder': case 'tube': case 'prism': return `Ø ${f(p.d)} × ${f(p.h)}${u}`;
+      case 'cone': return `Ø ${f(p.d1)} × ${f(p.h)}${u}`;
+      case 'sphere': case 'hemisphere': return `Ø ${f(p.d)}${u}`;
+      case 'torus': return `Ø ${f(p.d)}${u}`;
+      case 'extrude': return p.thin ? `${f(p.dist)}${u} hoch · Wand ${f(p.wall || 2)}${u}` : `${f(p.dist)}${u} hoch`;
+      case 'revolve': return `${fmt(p.angle, 1)}°`;
       case 'group': return (typeof Features !== 'undefined' && Features.sizeText(it, V)) || `${(it.children || []).length} Teile`;
       case 'part': {
         const L = String(p.lib || '');
-        if (L === 'buyMotor' || L === 'buyCap') return `Ø ${f(p.d)} × ${f(p.h)}`;
-        if (L === 'buyProp') return `${f(p.zoll)}"`;
-        if (L === 'buyAntenna') return `${f(p.L)} lang`;
-        if (L === 'buyStack') return `${f(p.a)} × ${f(p.a)}`;
-        if (L.startsWith('buy')) return `${f(p.w)} × ${f(p.d)} × ${f(p.h)}`;
+        if (L === 'buyMotor' || L === 'buyCap') return `Ø ${f(p.d)} × ${f(p.h)}${u}`;
+        if (L === 'buyProp') return `${fmt(p.zoll, 1)}"`;
+        if (L === 'buyAntenna') return `${f(p.L)}${u} lang`;
+        if (L === 'buyStack') return `${f(p.a)} × ${f(p.a)}${u}`;
+        if (L.startsWith('buy')) return `${f(p.w)} × ${f(p.d)} × ${f(p.h)}${u}`;
         return p.size || '';
       }
     }
@@ -3101,7 +3202,8 @@ const Model = (() => {
   function migrate(doc) {
     if (!doc || doc.format !== 'masswerk') throw new Error('Das ist keine Tracery-Projektdatei.');
     doc.params = doc.params || []; doc.items = doc.items || [];
-    doc.settings = Object.assign({ printer: 'std', custom: { x: 220, y: 220, z: 250 }, grid: 1, snap: true }, doc.settings || {});
+    doc.settings = Object.assign({ printer: 'std', custom: { x: 220, y: 220, z: 250 }, grid: 1, snap: true, unit: 'mm' }, doc.settings || {});
+    if (!Units.DEFS[doc.settings.unit]) doc.settings.unit = 'mm';
     if (doc.rollback != null && !(doc.rollback >= 0 && doc.rollback < doc.items.length)) doc.rollback = null;
     if (!Array.isArray(doc.notes)) doc.notes = [];
     if (doc.variants != null && !Array.isArray(doc.variants)) doc.variants = [];
@@ -6794,7 +6896,8 @@ const Handles = (() => {
     scaleHandles(); placeLabels();
   }
   function addLabel(handle, value) {
-    const el = h('div', { class: 'dimlabel', title: 'Klicken und genaues Maß eintippen' }, fmt(value, 2));
+    const txt = Units.key() === 'mm' ? fmt(value, 2) : Units.fmtLenU(value, 2);
+    const el = h('div', { class: 'dimlabel', title: 'Klicken und genaues Maß eintippen' }, txt);
     el.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
     el.addEventListener('click', (e) => { e.stopPropagation(); editLabel(el, handle); });
     overlayEl.append(el);
@@ -6802,19 +6905,21 @@ const Handles = (() => {
   }
   function addSegLabel(handle, len, rule, id) {
     const i = handle.userData.seg;
-    const el = h('div', { class: 'dimlabel seglabel' + (rule.len != null ? ' fixed' : ''), id: 'seglabel-' + i, title: 'Klicken und Länge dieses Stücks eintippen' }, (rule.ax ? ({ perp: '⊥', par: '∥' }[rule.ax] || rule.ax.toUpperCase()) + ' · ' : '') + fmt(len, 1) + (rule.len != null ? ' 🔒' : ''));
+    const lenTxt = Units.key() === 'mm' ? fmt(len, 1) : Units.fmtLenU(len, 1);
+    const el = h('div', { class: 'dimlabel seglabel' + (rule.len != null ? ' fixed' : ''), id: 'seglabel-' + i, title: 'Klicken und Länge dieses Stücks eintippen' }, (rule.ax ? ({ perp: '⊥', par: '∥' }[rule.ax] || rule.ax.toUpperCase()) + ' · ' : '') + lenTxt + (rule.len != null ? ' 🔒' : ''));
     el.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
     el.addEventListener('click', (e) => {
       e.stopPropagation(); if (el.classList.contains('editing')) return;
       el.classList.add('editing'); el.textContent = '';
-      const inp = h('input', { type: 'text', value: rule.len != null ? String(rule.len) : fmt(len, 2), 'aria-label': `Länge von Stück ${i + 1}` });
+      const initV = rule.len != null ? (typeof rule.len === 'number' ? Units.fmtInput(rule.len) : String(rule.len)) : Units.fmtInput(len);
+      const inp = h('input', { type: 'text', value: initV, 'aria-label': `Länge von Stück ${i + 1}` });
       el.append(inp); inp.focus(); inp.select();
       let finished = false;
       const done = (ok) => {
         if (finished) return; finished = true;
         if (ok) {
-          const val = inp.value.trim(), n = parseNum(val), V = Model.vars(App.doc).v, test = isNaN(n) ? Model.num(val, V, NaN) : n;
-          if (!isNaN(test) && test >= 0) App.change('Länge im Pfad', (doc) => { const f = Model.find(doc, id); if (!f || !f.item.p.path3d) return false; Model.path3dSetRule(f.item.p.path3d, i, { len: isNaN(n) ? val : n || null }, V); });
+          const val = inp.value.trim(), V = Model.vars(App.doc).v, p = Units.parseLen(val, V, { expr: true });
+          if (p.ok && p.num >= 0) App.change('Länge im Pfad', (doc) => { const f = Model.find(doc, id); if (!f || !f.item.p.path3d) return false; Model.path3dSetRule(f.item.p.path3d, i, { len: p.num === 0 ? null : p.value }, V); });
           else UI.toast('Bitte eine Zahl eingeben (0 macht die Länge wieder frei).', { kind: 'bad' });
         }
         rebuild();
@@ -6831,18 +6936,17 @@ const Handles = (() => {
     const k = handle.userData.param;
     const raw = c.it.p[k];
     el.classList.add('editing'); el.textContent = '';
-    const inp = h('input', { type: 'text', value: typeof raw === 'number' ? fmt(raw, 3) : String(raw), 'aria-label': LABELS[k] || k });
+    const inp = h('input', { type: 'text', value: typeof raw === 'number' ? Units.fmtInput(raw) : String(raw), 'aria-label': LABELS[k] || k });
     el.append(inp); inp.focus(); inp.select();
     let finished = false;
     const done = (ok) => {
       if (finished) return; finished = true;
       if (ok) {
         const val = inp.value.trim();
-        const n = parseNum(val);
         const V = Model.vars(App.doc).v;
-        const test = isNaN(n) ? Model.num(val, V, NaN) : n;
-        if (!isNaN(test) && test > 0) {
-          App.change('Maß geändert', () => { setDim(c, handle, isNaN(n) ? val : n, true); });
+        const p = Units.parseLen(val, V, { expr: true });
+        if (p.ok && p.num > 0) {
+          App.change('Maß geändert', () => { setDim(c, handle, p.value, true); });
         } else UI.toast('Bitte eine Zahl größer als 0 eingeben.', { kind: 'bad' });
       }
       rebuild();
@@ -7008,7 +7112,14 @@ const Handles = (() => {
   let liveEl = null;
   function showLive(handle, v, label, unit = '') {
     if (!liveEl) { liveEl = h('div', { class: 'dimlabel live' }); overlayEl.append(liveEl); }
-    liveEl.textContent = (label ? label + ' ' : '') + fmt(v, 2) + (unit || '');
+    const valTxt = unit === '°'
+      ? fmt(v, 2) + '°'
+      : unit === ' mm' || unit === 'mm'
+        ? Units.fmtLenU(v, 2)
+        : unit === ''
+          ? (Units.key() === 'mm' ? fmt(v, 2) : Units.fmtLenU(v, 2))
+          : fmt(v, 2) + unit;
+    liveEl.textContent = (label ? label + ' ' : '') + valTxt;
     const s = Viewer.toScreen(handle.position);
     liveEl.style.left = s.x + 'px'; liveEl.style.top = s.y - 28 + 'px';
   }
@@ -7177,10 +7288,11 @@ const Interact = (() => {
         if (b.max.y > lo[1] && b.min.y < hi[1]) { const g = b.min.x >= hi[0] ? b.min.x - hi[0] : lo[0] >= b.max.x ? lo[0] - b.max.x : Infinity; gx = Math.min(gx, g); }
         if (b.max.x > lo[0] && b.min.x < hi[0]) { const g = b.min.y >= hi[1] ? b.min.y - hi[1] : lo[1] >= b.max.y ? lo[1] - b.max.y : Infinity; gy = Math.min(gy, g); }
       }
-      const parts = []; if (isFinite(gx)) parts.push('↔ ' + fmt(gx, 2)); if (isFinite(gy)) parts.push('↕ ' + fmt(gy, 2));
+      const parts = []; if (isFinite(gx)) parts.push('↔ ' + Units.fmtLen(gx, 2)); if (isFinite(gy)) parts.push('↕ ' + Units.fmtLen(gy, 2));
       if (parts.length) gapTxt = ' · Abstand ' + parts.join('  ');
     }
-    moveLabel.textContent = `X ${fmt(dx, 2)}  Y ${fmt(dy, 2)}` + gapTxt;
+    const uSuf = Units.key() !== 'mm' ? ' ' + Units.label() : '';
+    moveLabel.textContent = `X ${Units.fmtLen(dx, 2)}  Y ${Units.fmtLen(dy, 2)}${uSuf}` + gapTxt;
     moveLabel.style.left = e.clientX - r.left + 'px'; moveLabel.style.top = e.clientY - r.top - (mag ? 54 : 30) + 'px';
     App.emit('doc'); Handles.rebuild(); liveRebuild();
   }
@@ -8735,7 +8847,7 @@ const Features = (() => {
     let len = existing ? existing.length : round(g.faceLen, 2);
     let from = existing ? (existing.from || 'top') : 'top';
     const box = h('div', { style: { display: 'grid', gap: '10px', minWidth: '230px' }, 'data-help': 'cosmeticThread' });
-    box.append(h('div', { class: 'section-h' }, (g.kind === 'int' ? 'Innengewinde' : 'Außengewinde') + ` · Ø ${fmt(2 * g.r, 2)} mm`));
+    box.append(h('div', { class: 'section-h' }, (g.kind === 'int' ? 'Innengewinde' : 'Außengewinde') + ` · Ø ${Units.fmtLenU(2 * g.r, 2)}`));
     const fields = h('div', { class: 'fields' });
     fields.append(UI.selectField({ id: 'ct-size', label: 'M-Größe', value: size, options: THREAD_SPECS.map((s) => [s.size, `${s.size} (Steigung ${fmt(s.pitch, 2)})`]), onChange: (v) => { size = v; } }));
     fields.append(UI.numField({ id: 'ct-len', label: 'Länge', value: len, min: 0.5, unit: 'mm', expr: false, onCommit: (v) => { len = v; } }));
@@ -8925,12 +9037,12 @@ const Datums = (() => {
     select(d.id);
     return d;
   }
-  function addOrigin(plane = 'XY', dist = 10, tilt = 0) { return add({ type: 'origin', plane, dist, tilt }, `${NAMES[plane] || plane} ${typeof dist === 'number' ? fmt(dist, 2) + ' mm' : dist}${tilt ? ' · ' + tilt + '°' : ''}`); }
+  function addOrigin(plane = 'XY', dist = 10, tilt = 0) { return add({ type: 'origin', plane, dist, tilt }, `${NAMES[plane] || plane} ${typeof dist === 'number' ? Units.fmtLenU(dist, 2) : dist}${tilt ? ' · ' + tilt + '°' : ''}`); }
   function addFromFace(face, dist = 10) {
     const f = resolveFace(face);
     if (!f || f.info.t !== 'PLANE') { UI.toast('Wähl zuerst eine ebene Fläche eines Körpers.', { icon: 'info' }); return null; }
     const top = Model.find(App.doc, f.id);
-    return add({ type: 'face', id: f.id, n: f.info.n, c: f.info.c, dist }, `Fläche von „${Model.label(top.item)}“ + ${fmt(dist, 2)} mm`);
+    return add({ type: 'face', id: f.id, n: f.info.n, c: f.info.c, dist }, `Fläche von „${Model.label(top.item)}“ + ${Units.fmtLenU(dist, 2)}`);
   }
   function addEdgeAngle(edge, face, angle = 30, name) {
     const eRef = resolveEdge(edge);
@@ -9468,7 +9580,7 @@ const Datums = (() => {
     nm.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') nm.blur(); });
     w.append(h('div', { class: 'prop-title' }, nm));
     if (ax.axis && Array.isArray(ax.axis.o) && Array.isArray(ax.axis.d)) {
-      const oTxt = ax.axis.o.map((v) => fmt(v, 1)).join(' · ');
+      const oTxt = ax.axis.o.map((v) => Units.fmtLen(v, 1)).join(' · ') + (Units.key() !== 'mm' ? ' ' + Units.label() : '');
       const dTxt = ax.axis.d.map((v) => fmt(v, 2)).join(' · ');
       w.append(h('div', { class: 'mini-list' },
         h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Punkt'), h('b', { class: 'mono' }, oTxt)),
@@ -9668,7 +9780,7 @@ const Mass = (() => {
       const name = String(it.name || 'Teil').replace(/\s*\(\d+\s*[×x]\)\s*$/, '').replace(/\s*\(Kopie[^)]*\)\s*$/i, '').replace(/\s+\d+$/, '').trim() || 'Teil';
       const kind = p.fixed ? 'Kaufteil' : (p.mat || '–');
       const key = name + '|' + kind + '|' + round(p.mass / k, 2);
-      const row = map.get(key) || { name, kind, n: 0, g: p.mass / k, cm3: p.fixed ? null : p.volume / 1000 / k, missing: !!p.missing, buy: !!p.fixed, ids: [] };
+      const row = map.get(key) || { name, kind, n: 0, g: p.mass / k, cm3: p.fixed ? null : p.volume / 1000 / k, dims: p.bbox ? [p.bbox[3] - p.bbox[0], p.bbox[4] - p.bbox[1], p.bbox[5] - p.bbox[2]] : null, missing: !!p.missing, buy: !!p.fixed, ids: [] };
       row.n += k; row.ids.push(it.id); map.set(key, row);
     }
     const rows = [...map.values()].sort((a, b) => (a.buy === b.buy ? b.g * b.n - a.g * a.n : a.buy ? 1 : -1));
@@ -9688,7 +9800,7 @@ const Mass = (() => {
       for (const th of it.threads) {
         const L = round(Model.num(th.length, V, 10), 1);
         const kind = th.kind === 'int' ? 'int' : 'ext';
-        const label = `${kind === 'int' ? 'Innengewinde' : 'Außengewinde'} ${th.size} × ${fmt(L, 1)} mm`;
+        const label = `${kind === 'int' ? 'Innengewinde' : 'Außengewinde'} ${th.size} × ${Units.fmtLenU(L, 1, doc)}`;
         const key = label + '|' + part;
         const row = map.get(key) || { name: label, size: th.size, length: L, kind, part, n: 0, ids: [] };
         row.n += n;
@@ -9726,11 +9838,15 @@ const Mass = (() => {
   }
   function bomCSV(B, name) {
     const q = (v) => '"' + String(v).replace(/"/g, '""') + '"', z = (v, d = 1) => String(round(v, d)).replace('.', ',');
-    const L = [['Teil', 'Anzahl', 'Art', 'Gewicht je Stück (g)', 'Gewicht gesamt (g)', 'Volumen je Stück (cm³)'].map(q).join(';')];
-    for (const x of B.rows) L.push([q(x.name), x.n, q(x.kind), x.missing ? '' : z(x.g), x.missing ? '' : z(x.g * x.n), x.cm3 == null ? '' : z(x.cm3, 2)].join(';'));
-    L.push([q('Summe ' + name), B.count, '', '', z(B.mass), ''].join(';'));
-    for (const x of B.screws || []) L.push([q(x.name), x.n, q('Kleinteil'), '', '', ''].join(';'));
-    for (const x of B.threads || []) L.push([q(x.name), x.n, q('Gewinde (' + x.part + ')'), '', '', ''].join(';'));
+    const L = [['Teil', 'Anzahl', 'Art', 'Gewicht je Stück (g)', 'Gewicht gesamt (g)', `Volumen je Stück (${Units.volLabel()})`, `Größe (${Units.label()})`].map(q).join(';')];
+    for (const x of B.rows) {
+      const sz = x.dims ? x.dims.map((v) => Units.fmtLen(v, 1)).join(' × ') : '';
+      const vol = x.cm3 == null ? '' : z(Units.volFromMM3(x.cm3 * 1000), Units.key() === 'm' ? 5 : 2);
+      L.push([q(x.name), x.n, q(x.kind), x.missing ? '' : z(x.g), x.missing ? '' : z(x.g * x.n), vol, q(sz)].join(';'));
+    }
+    L.push([q('Summe ' + name), B.count, '', '', z(B.mass), '', ''].join(';'));
+    for (const x of B.screws || []) L.push([q(x.name), x.n, q('Kleinteil'), '', '', '', ''].join(';'));
+    for (const x of B.threads || []) L.push([q(x.name), x.n, q('Gewinde (' + x.part + ')'), '', '', '', ''].join(';'));
     return '\ufeff' + L.join('\r\n') + '\r\n';
   }
   async function bomDialog() {
@@ -9741,13 +9857,14 @@ const Mass = (() => {
       { label: 'Schließen', primary: true }] });
     B = await bom(); body.innerHTML = '';
     if (!B || !B.rows.length) { body.append(h('div', { class: 'hint-box' }, 'Noch keine Teile im Projekt.')); return; }
-    const tb = h('table', { class: 'vtable' }, h('tr', null, ...['Teil', 'Anzahl', 'Art', 'je Stück', 'gesamt'].map((t) => h('th', null, t))));
+    const tb = h('table', { class: 'vtable' }, h('tr', null, ...['Teil', 'Anzahl', 'Art', 'Größe', 'je Stück', 'gesamt'].map((t) => h('th', null, t))));
     for (const x of B.rows) {
-      const tr = h('tr', { class: 'bom-row', style: { cursor: 'pointer' } }, h('td', null, x.name), h('td', { class: 'mono' }, String(x.n)), h('td', null, x.kind), h('td', { class: 'mono' }, x.missing ? 'fehlt' : gText(x.g)), h('td', { class: 'mono' }, x.missing ? '–' : gText(x.g * x.n)));
+      const sz = x.dims ? `${Units.fmtLen(x.dims[0], 1)} × ${Units.fmtLen(x.dims[1], 1)} × ${Units.fmtLen(x.dims[2], 1)} ${Units.label()}` : '–';
+      const tr = h('tr', { class: 'bom-row', style: { cursor: 'pointer' } }, h('td', null, x.name), h('td', { class: 'mono' }, String(x.n)), h('td', null, x.kind), h('td', { class: 'mono' }, sz), h('td', { class: 'mono' }, x.missing ? 'fehlt' : gText(x.g)), h('td', { class: 'mono' }, x.missing ? '–' : gText(x.g * x.n)));
       tr.onclick = () => App.select(x.ids);
       tb.append(tr);
     }
-    tb.append(h('tr', { class: 'bom-sum' }, h('td', null, h('b', null, 'Summe')), h('td', { class: 'mono' }, h('b', null, String(B.count))), h('td', null, ''), h('td', null, ''), h('td', { class: 'mono' }, h('b', null, gText(B.mass)))));
+    tb.append(h('tr', { class: 'bom-sum' }, h('td', null, h('b', null, 'Summe')), h('td', { class: 'mono' }, h('b', null, String(B.count))), h('td', null, ''), h('td', null, ''), h('td', null, ''), h('td', { class: 'mono' }, h('b', null, gText(B.mass)))));
     body.append(tb);
     if (B.screws.length) {
       const ts = h('table', { class: 'vtable', id: 'bom-screws', style: { marginTop: '14px' } }, h('tr', null, h('th', null, 'Schrauben und Kleinteile'), h('th', null, 'Anzahl')));
@@ -9763,7 +9880,8 @@ const Mass = (() => {
       }
       body.append(tt);
     }
-    if (B.filament.length) body.append(h('div', { class: 'ok-box', id: 'bom-filament', html: '<b>Filament für die Druckteile:</b> ' + B.filament.map((x) => `${x.mat} ${gText(x.g)} ≈ ${fmt(x.m, 1)} m`).join(' · ') + ' (Draht 1,75 mm, massiv gerechnet – mit weniger Füllung brauchst du weniger; Stützen und Rand kommen dazu).' }));
+    const filLen = (m) => Units.key() === 'in' ? `${fmt((m * 1000) / 25.4, 1)} in` : Units.key() === 'cm' ? `${fmt(m * 100, 1)} cm` : `${fmt(m, 1)} m`;
+    if (B.filament.length) body.append(h('div', { class: 'ok-box', id: 'bom-filament', html: '<b>Filament für die Druckteile:</b> ' + B.filament.map((x) => `${x.mat} ${gText(x.g)} ≈ ${filLen(x.m)}`).join(' · ') + ' (Draht 1,75 mm, massiv gerechnet – mit weniger Füllung brauchst du weniger; Stützen und Rand kommen dazu).' }));
     body.append(h('div', { class: 'hint-box', html: 'Gleiche Teile (gleicher Name ohne Nummer, gleiches Gewicht) stehen in einer Zeile. Klick auf eine Zeile wählt die Teile im Bild aus. <b>Kaufteile</b> zählen mit dem Gewicht aus dem Datenblatt, alles andere mit Volumen × Material.' + (B.rows.some((x) => x.missing) ? ' Bei Teilen mit „fehlt“ ist noch kein Gewicht eingetragen.' : '') }));
   }
   return { stability, hull2,  init, measure, measureDoc, bom, bomCSV, bomDialog, screws, threads, materialFor, projectMaterial, partOf, gText, fixedOf, on: ev.on, get markerShown() { return !!marker; }, get markerPos() { return marker ? marker.position.toArray() : null; } };
@@ -9957,16 +10075,17 @@ const Joints = (() => {
   }
   function describe(j, res) {
     const hit = res.filter((r) => r.v > 0.05);
-    const u = unit(j);
-    if (!hit.length) return { ok: true, text: `Frei im ganzen Bereich von ${fmt(j.min, 1)} ${u} bis ${fmt(j.max, 1)} ${u} – nichts stößt an.` };
+    const u = slide(j) ? Units.label() : '°';
+    const fv = (x) => (slide(j) ? Units.fmtLen(x, 1) : fmt(x, 1));
+    if (!hit.length) return { ok: true, text: `Frei im ganzen Bereich von ${fv(j.min)} ${u} bis ${fv(j.max)} ${u} – nichts stößt an.` };
     const free = res.filter((r) => r.v <= 0.05).map((r) => r.a);
     const lo = res.filter((r) => r.a <= j.ang && r.v > 0.05).map((r) => r.a), hi = res.filter((r) => r.a >= j.ang && r.v > 0.05).map((r) => r.a);
     const from = lo.length ? Math.max(...lo) : null, to = hi.length ? Math.min(...hi) : null;
     const parts = [];
-    if (to != null) parts.push(`stößt in Plus-Richtung bei ${fmt(to, 1)} ${u} an`);
-    if (from != null) parts.push(`in Minus-Richtung bei ${fmt(from, 1)} ${u}`);
+    if (to != null) parts.push(`stößt in Plus-Richtung bei ${fv(to)} ${u} an`);
+    if (from != null) parts.push(`in Minus-Richtung bei ${fv(from)} ${u}`);
     const atNow = res.find((r) => Math.abs(r.a - j.ang) < 1e-6);
-    return { ok: false, text: (atNow && atNow.v > 0.05 ? 'Schon in dieser Stellung stecken die Teile ineinander. ' : '') + `Das Teil ${parts.join(', ')}.` + (free.length ? ` Frei: ${fmt(Math.min(...free), 1)} … ${fmt(Math.max(...free), 1)} ${u} (nicht unbedingt am Stück).` : '') };
+    return { ok: false, text: (atNow && atNow.v > 0.05 ? 'Schon in dieser Stellung stecken die Teile ineinander. ' : '') + `Das Teil ${parts.join(', ')}.` + (free.length ? ` Frei: ${fv(Math.min(...free))} … ${fv(Math.max(...free))} ${u} (nicht unbedingt am Stück).` : '') };
   }
   // Freier Bereich um die jetzige Stellung aus dem Ergebnis von „Bewegung prüfen“ – wird zum Anschlag (Von/Bis)
   function freeRange(j, res) {
@@ -10050,7 +10169,9 @@ const Joints = (() => {
         const fr = d.ok ? null : freeRange(j, r);
         const old = box.querySelector('.jt-stop'); if (old) old.remove();
         if (fr && fr[1] - fr[0] > 1e-9 && (fr[0] > j.min + 1e-9 || fr[1] < j.max - 1e-9)) {
-          const sb = h('button', { type: 'button', class: 'btn small jt-stop', id: 'jt-stop' + sfx }); sb.innerHTML = icon('check') + `Als Anschlag übernehmen: ${fmt(fr[0], 1)} … ${fmt(fr[1], 1)} ${unit(j)}`;
+          const fVal = (x) => (slide(j) ? Units.fmtLen(x, 1) : fmt(x, 1));
+          const uLbl = slide(j) ? Units.label() : unit(j);
+          const sb = h('button', { type: 'button', class: 'btn small jt-stop', id: 'jt-stop' + sfx }); sb.innerHTML = icon('check') + `Als Anschlag übernehmen: ${fVal(fr[0])} … ${fVal(fr[1])} ${uLbl}`;
           sb.onclick = () => setStops(j.id, fr[0], fr[1]);
           res.after(sb);
         }
@@ -10179,8 +10300,9 @@ const ViewPrefs = (() => {
     );
     paneGen.append(
       lvlField,
+      sel('set-proj-unit', 'Einheit in diesem Projekt', Units.key(), Units.OPTIONS, (x) => Units.set(x), 'Gilt für alle Anzeigen, Maße und Eingaben ohne eigene Einheit in diesem Projekt.'),
       sel('set-theme', 'Design', v.theme, [['system', 'Wie das System'], ['light', 'Hell'], ['dark', 'Dunkel']], (x) => set({ theme: x })),
-      sel('set-dec', 'Nachkommastellen in Anzeigen', v.decimals, [['0', 'Automatisch (2 Stellen)'], ['3', '3 Stellen (0,001 mm)'], ['4', '4 Stellen (0,0001 mm)']], (x) => set({ decimals: +x }), 'Eingaben werden immer exakt gespeichert, das betrifft nur die Anzeige.'),
+      sel('set-dec', 'Nachkommastellen in Anzeigen', v.decimals, [['0', 'Automatisch (2 Stellen)'], ['3', `3 Stellen (0,001 ${Units.label()})`], ['4', `4 Stellen (0,0001 ${Units.label()})`]], (x) => set({ decimals: +x }), 'Eingaben werden immer exakt gespeichert, das betrifft nur die Anzeige.'),
       sel('set-quality', 'Darstellungsqualität', v.quality, [['coarse', 'Grob – am schnellsten'], ['normal', 'Normal'], ['fine', 'Fein'], ['ultra', 'Sehr fein – braucht mehr Leistung']], (x) => set({ quality: x }), 'Wie glatt Rundungen auf dem Bildschirm aussehen. Die Geometrie selbst ist immer exakt.'),
       sel('set-mouse', 'Maus-Steuerung', v.mouse || 'tracery', [['tracery', 'Tracery – links drehen, rechts verschieben, Rad zoomt'], ['onshape', 'Wie Onshape – rechts drehen, Mitte verschieben'], ['solidworks', 'Wie SolidWorks – Mitte drehen, rechts verschieben'], ['fusion', 'Wie Fusion – Mitte verschieben, Umschalt + Mitte drehen'], ['blender', 'Wie Blender – Mitte drehen, Umschalt + Mitte verschieben']], (x) => set({ mouse: x }), 'Bei allen außer Tracery zieht die linke Maustaste im Leeren einen Auswahl-Rahmen auf. Das Mausrad zoomt immer.'),
       chk('adaptive', 'Darstellung automatisch anpassen', 'Teile, die du von nah ansiehst, werden feiner dargestellt. Beim Drehen eines großen Modells wird kurz gröber gezeichnet, damit es flüssig bleibt.'),
@@ -10406,8 +10528,11 @@ const DragInput = (() => {
     close(); spec = sp;
     el = h('div', { class: 'drag-input', role: 'dialog', 'aria-label': 'Wert eingeben' });
     const inputs = sp.fields.map((f, i) => {
-      const inp = h('input', { type: 'text', value: i === 0 && firstChar != null ? firstChar : fmt(f.value, 3), 'aria-label': f.label, inputmode: 'decimal' });
-      el.append(h('span', null, f.label), inp); if (f.unit) el.append(h('small', null, f.unit));
+      const isLen = f.unit === 'mm';
+      const inp = h('input', { type: 'text', value: i === 0 && firstChar != null ? firstChar : (isLen ? Units.fmtInput(f.value) : fmt(f.value, 3)), 'aria-label': f.label, inputmode: 'decimal' });
+      el.append(h('span', null, f.label), inp);
+      const u = isLen ? Units.label() : f.unit;
+      if (u) el.append(h('small', null, u));
       return inp;
     });
     el.append(h('small', null, '↵ übernehmen · Tab wechseln · Esc'));
@@ -10421,7 +10546,11 @@ const DragInput = (() => {
       else if (e.key === 'Enter') {
         e.preventDefault();
         const V = Model.vars(App.doc).v;
-        const vals = inputs.map((inp, i) => { const t = inp.value.trim(); const n = parseNum(t); return isNaN(n) ? Model.num(t, V, sp.fields[i].value) : n; });
+        const vals = inputs.map((inp, i) => {
+          const t = inp.value.trim();
+          if (sp.fields[i].unit === 'mm') { const p = Units.parseLen(t, V, { expr: true }); return p.ok ? p.num : sp.fields[i].value; }
+          const n = parseNum(t); return isNaN(n) ? Model.num(t, V, sp.fields[i].value) : n;
+        });
         const s2 = spec; close(); s2.apply(vals);
       }
     });
@@ -10633,40 +10762,51 @@ const UI = (() => {
     else if (!on && busyEl) { busyEl.remove(); busyEl = null; }
   }
   // ---------- Eingabefelder ----------
-  function numField({ id, label, value, unit = 'mm', axis, onCommit, min, int, placeholder, expr = true, step }) {
+  function numField({ id, label, value, unit = 'mm', len, axis, onCommit, min, int, placeholder, expr = true, step }) {
     const V = Model.vars(App.doc).v;
+    const isLen = len != null ? !!len : unit === 'mm';
+    const dispUnit = isLen && unit === 'mm' ? Units.label() : unit;
     const isE = typeof value === 'string' && Model.isExpr(value);
     const wrap = h('div', { class: 'field' });
     if (label) wrap.append(h('label', { for: id }, label));
     const box = h('div', { class: 'inp' + (isE ? ' expr' : '') });
     if (axis) box.append(h('span', { class: 'axis ' + axis }, axis.toUpperCase()));
-    const inp = h('input', { id, type: 'text', inputmode: 'decimal', value: typeof value === 'number' ? fmt(value, 3) : (value ?? ''), placeholder: placeholder || '', autocomplete: 'off', spellcheck: 'false' });
+    const dispVal = typeof value === 'number' ? (isLen ? Units.fmtInput(value) : fmt(value, 3)) : (value ?? '');
+    const inp = h('input', { id, type: 'text', inputmode: 'decimal', value: dispVal, placeholder: placeholder || '', autocomplete: 'off', spellcheck: 'false' });
     box.append(inp);
-    if (isE) box.append(h('span', { class: 'fx', title: 'Formel: ' + value + ' = ' + fmt(Model.num(value, V, NaN), 3) }, '= ' + fmt(Model.num(value, V, NaN), 2)));
-    else if (unit) box.append(h('span', { class: 'unit' }, unit));
+    if (isE) {
+      const ev = Model.num(value, V, NaN);
+      const uSuf = isLen && Units.key() !== 'mm' ? ' ' + Units.label() : '';
+      const evTxt = isLen ? Units.fmtLen(ev, 2) + uSuf : fmt(ev, 2);
+      const evTip = isLen ? Units.fmtLenU(ev, 3) : fmt(ev, 3);
+      box.append(h('span', { class: 'fx', title: 'Formel: ' + value + ' = ' + evTip }, '= ' + evTxt));
+    } else if (dispUnit) box.append(h('span', { class: 'unit' }, dispUnit));
     wrap.append(box);
     let orig = inp.value, lastBad = null;
     const commit = () => {
       const raw = inp.value.trim();
       if (raw === orig) { box.classList.remove('invalid'); lastBad = null; return; }
-      let val = parseNum(raw);
-      // Zahl mit Einheit (2 cm, 1 in, 1/4") wird gleich in mm umgerechnet statt als Formel gespeichert
-      if (isNaN(val)) {
-        const um = /^([-+()\d.,\s*/]+?)\s*(mm|cm|m|in|zoll|"|°)$/i.exec(raw);
-        if (um) { try { val = round(Expr.eval(um[1], {}) * { mm: 1, cm: 10, m: 1000, in: 25.4, zoll: 25.4, '"': 25.4, '°': 1 }[um[2].toLowerCase()], 6); } catch (_) { val = NaN; } }
-        else if (/^[-+()\d.,\s*/]+((mm|cm|m|in|zoll|"|°)[-+()\d.,\s*/]*)+$/i.test(raw)) { try { val = round(Expr.eval(raw, {}), 6); } catch (_) { val = NaN; } }
-      }
-      if (isNaN(val)) {
-        if (!expr) { box.classList.add('invalid'); return; }
-        const vv = Model.num(raw, Model.vars(App.doc).v, NaN);
-        if (isNaN(vv)) { box.classList.add('invalid'); if (lastBad !== raw) toast('Das kann ich nicht ausrechnen: „' + raw + '“ – prüf die Schreibweise oder den Namen.', { kind: 'bad' }); lastBad = raw; return; }
-        val = raw;
+      let val;
+      if (isLen) {
+        const p = Units.parseLen(raw, Model.vars(App.doc).v, { expr });
+        if (!p.ok) { box.classList.add('invalid'); if (expr && lastBad !== raw) toast('Das kann ich nicht ausrechnen: „' + raw + '“ – prüf die Schreibweise oder den Namen.', { kind: 'bad' }); lastBad = raw; return; }
+        val = p.value;
       } else {
+        val = parseNum(raw);
+        if (isNaN(val)) {
+          if (!expr) { box.classList.add('invalid'); return; }
+          const vv = Model.num(raw, Model.vars(App.doc).v, NaN);
+          if (isNaN(vv)) { box.classList.add('invalid'); if (lastBad !== raw) toast('Das kann ich nicht ausrechnen: „' + raw + '“ – prüf die Schreibweise oder den Namen.', { kind: 'bad' }); lastBad = raw; return; }
+          val = raw;
+        }
+      }
+      if (typeof val === 'number') {
         if (min != null && val < min) val = min;
         if (int) val = Math.round(val);
       }
       box.classList.remove('invalid');
-      orig = typeof val === 'number' ? fmt(val, 3) : val;
+      orig = typeof val === 'number' ? (isLen ? Units.fmtInput(val) : fmt(val, 3)) : val;
+      inp.value = orig;
       onCommit(val);
     };
     inp.addEventListener('keydown', (e) => {
@@ -10676,9 +10816,11 @@ const UI = (() => {
       if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
         const n = parseNum(inp.value); if (isNaN(n)) return;
         e.preventDefault();
-        const s = (step || (e.shiftKey ? 10 : 1)) * (e.key === 'ArrowUp' ? 1 : -1);
-        let nv = round(n + s, 4); if (min != null) nv = Math.max(min, nv);
-        inp.value = fmt(nv, 3); commit();
+        const u = isLen ? Units.def() : null;
+        const s = (step || (u ? (e.shiftKey ? u.shiftStep : u.step) : (e.shiftKey ? 10 : 1))) * (e.key === 'ArrowUp' ? 1 : -1);
+        let nv = round(n + s, isLen ? u.inputDec : 4);
+        if (min != null) nv = Math.max(isLen ? Units.fromMM(min) : min, nv);
+        inp.value = fmt(nv, isLen ? u.inputDec : 3); commit();
       }
     });
     inp.addEventListener('blur', commit);
@@ -10963,9 +11105,9 @@ const Panels = (() => {
             const ferr = errs.find((x) => x.finishId === fin.id);
             const fr = h('div', { class: 'finish-row' + (ferr ? ' bad' : ''), title: ferr ? ferr.message : '' });
             fr.innerHTML = icon(fin.type === 'chamfer' ? 'chamfer' : fin.type === 'shell' ? 'shell' : 'fillet');
-            if (fin.type === 'shell') fr.append(h('span', null, 'Wandstärke ' + fmt(Model.num(fin.r, V, 2), 2) + ' mm'));
+            if (fin.type === 'shell') fr.append(h('span', null, 'Wandstärke ' + Units.fmtLenU(Model.num(fin.r, V, 2), 2)));
             else if (fin.type === 'draft') fr.append(h('span', null, 'Entformungsschräge ' + fmt(Model.num(fin.r, V, 3), 1) + '°'));
-            else fr.append(h('span', null, (fin.type === 'chamfer' ? 'Fase ' : 'Rundung ') + fmt(Model.num(fin.r, V, 1), 2) + ' mm' + (typeof fin.edges === 'string' ? ' · ' + ({ all: 'alle Kanten', top: 'oben', bottom: 'unten', vertical: 'senkrecht', horizontal: 'waagerecht' }[fin.edges] || '') : ' · ' + (fin.edges || []).length + ' Kante' + ((fin.edges || []).length === 1 ? '' : 'n'))));
+            else fr.append(h('span', null, (fin.type === 'chamfer' ? 'Fase ' : 'Rundung ') + Units.fmtLenU(Model.num(fin.r, V, 1), 2) + (typeof fin.edges === 'string' ? ' · ' + ({ all: 'alle Kanten', top: 'oben', bottom: 'unten', vertical: 'senkrecht', horizontal: 'waagerecht' }[fin.edges] || '') : ' · ' + (fin.edges || []).length + ' Kante' + ((fin.edges || []).length === 1 ? '' : 'n'))));
             fr.onclick = () => App.select([it.id]);
             li.append(fr);
           }
@@ -11161,7 +11303,7 @@ const Panels = (() => {
     const draw = () => {
       body.innerHTML = '';
       body.append(UI.selectField({ id: 'gap-ax', label: 'Richtung', value: ax, options: [['x', 'Links / rechts (X)'], ['y', 'Vorne / hinten (Y)'], ['z', 'Oben / unten (Z)']], onChange: (v) => { ax = v; draw(); } }));
-      body.append(UI.numField({ id: 'gap-v', label: 'Lücke (jetzt ' + fmt(g0(), 2) + ' mm)', value: g0(), onCommit: (v) => { const n = Model.num(v, Model.vars(App.doc).v, NaN); if (!isNaN(n)) { Actions.setGap(null, ax, n); UI.closePop(); } } }));
+      body.append(UI.numField({ id: 'gap-v', label: 'Lücke (jetzt ' + Units.fmtLenU(g0(), 2) + ')', value: g0(), onCommit: (v) => { const n = Model.num(v, Model.vars(App.doc).v, NaN); if (!isNaN(n)) { Actions.setGap(null, ax, n); UI.closePop(); } } }));
     };
     draw(); box.append(body, h('div', { class: 'hint-box', html: 'Der zuletzt gewählte Teil bewegt sich. 0 = bündig aneinander, negativ = ineinander.' }));
     UI.pop(anchor, box);
@@ -11185,6 +11327,9 @@ const Panels = (() => {
     const nameF = h('div', { class: 'field' }, h('label', { for: 'proj-name' }, 'Projektname'), h('div', { class: 'inp' }, h('input', { id: 'proj-name', value: App.doc.name, style: { fontFamily: 'var(--font)' } })));
     nameF.querySelector('input').addEventListener('change', (e) => { const v = e.target.value.trim() || 'Neues Projekt'; App.change('Projekt umbenannt', (doc) => { doc.name = v; }); });
     w.append(nameF);
+    const unitF = UI.selectField({ id: 'proj-unit', label: 'Einheit', value: Units.key(), options: Units.OPTIONS, onChange: (v) => Units.set(v) });
+    unitF.dataset.help = 'projectUnit';
+    w.append(unitF);
     if (App.doc.items.length) {
       const ps = h('div', { class: 'section', id: 'proj-weak-sec' }, h('div', { class: 'section-h' }, 'Schwachstellen'));
       const wl = Weak.summary();
@@ -11196,14 +11341,14 @@ const Panels = (() => {
     }
     const pv = ViewPrefs.get();
     const va = h('div', { class: 'section pro' }, h('div', { class: 'section-h' }, 'Ansicht'));
-    va.append(UI.selectField({ id: 'view-grid', label: 'Rasterweite', value: String(pv.grid), options: [['auto', 'Automatisch (folgt dem Zoom)'], ['0.01', '0,01 mm'], ['0.1', '0,1 mm'], ['1', '1 mm'], ['10', '10 mm'], ['100', '100 mm']], onChange: (val) => ViewPrefs.set({ grid: val === 'auto' ? 'auto' : parseFloat(val) }) }));
+    va.append(UI.selectField({ id: 'view-grid', label: 'Rasterweite', value: String(pv.grid), options: [['auto', 'Automatisch (folgt dem Zoom)'], ['0.01', Units.fmtLenU(0.01, 2)], ['0.1', Units.fmtLenU(0.1, 2)], ['1', Units.fmtLenU(1, 2)], ['10', Units.fmtLenU(10, 2)], ['100', Units.fmtLenU(100, 2)]], onChange: (val) => ViewPrefs.set({ grid: val === 'auto' ? 'auto' : parseFloat(val) }) }));
     const chk = (k, label) => { const l = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'view-' + k, checked: !!pv[k] }), label); l.querySelector('input').onchange = (e) => ViewPrefs.set({ [k]: e.target.checked }); return l; };
     va.append(UI.selectField({ id: 'view-quality', label: 'Darstellungsqualität', value: pv.quality, options: [['coarse', 'Grob'], ['normal', 'Normal'], ['fine', 'Fein'], ['ultra', 'Sehr fein']], onChange: (val) => ViewPrefs.set({ quality: val }) }));
     va.append(h('div', { style: { display: 'grid', gap: '6px', marginTop: '8px' } }, chk('adaptive', 'Darstellung anpassen (Zoom, Drehen)'), chk('gridOn', 'Raster zeigen'), chk('planes', 'Ursprungsebenen zeigen'), chk('axes', 'Achsen zeigen'), chk('notes', 'Notizen zeigen'), chk('ortho', 'Orthografisch (ohne Perspektive)')));
     w.append(va);
     const gr = h('div', { class: 'section pro' }, h('div', { class: 'section-h' }, 'Fangen beim Verschieben'));
     const f2 = h('div', { class: 'fields' });
-    f2.append(UI.selectField({ id: 'grid', label: 'Schrittweite', value: App.doc.settings.grid, options: [[0.01, '0,01 mm'], [0.05, '0,05 mm'], [0.1, '0,1 mm'], [0.5, '0,5 mm'], [1, '1 mm'], [2, '2 mm'], [5, '5 mm'], [10, '10 mm']], onChange: (v) => App.change('Raster geändert', (doc) => { doc.settings.grid = parseFloat(v); }) }));
+    f2.append(UI.selectField({ id: 'grid', label: 'Schrittweite', value: App.doc.settings.grid, options: [0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10].map((v) => [v, Units.fmtLenU(v, 2)]), onChange: (v) => App.change('Raster geändert', (doc) => { doc.settings.grid = parseFloat(v); }) }));
     const snap = h('label', { class: 'check', style: { alignSelf: 'end', paddingBottom: '8px' } }, h('input', { type: 'checkbox', id: 'snap', checked: App.doc.settings.snap !== false }), 'Einrasten');
     snap.querySelector('input').onchange = (e) => App.change('Einrasten geändert', (doc) => { doc.settings.snap = e.target.checked; });
     const mag = h('label', { class: 'check', style: { paddingBottom: '4px' } }, h('input', { type: 'checkbox', id: 'magnet', checked: App.doc.settings.magnet !== false }), 'Magnetisch einrasten (Mitte, Mittellinien, Lochmitten, ganz oben auf Rundungen, bündig zu anderen Teilen) – Strg hält es kurz an');
@@ -11213,7 +11358,7 @@ const Panels = (() => {
     const info = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Überblick'));
     info.append(h('div', { class: 'mini-list' },
       h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Objekte'), h('b', { class: 'mono' }, String(Model.countItems(App.doc)))),
-      h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Größe gesamt'), h('b', { class: 'mono' }, st ? `${fmt(st.x, 1)} × ${fmt(st.y, 1)} × ${fmt(st.z, 1)} mm` : '–'))));
+      h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Größe gesamt'), h('b', { class: 'mono' }, st ? `${Units.fmtLen(st.x, 1)} × ${Units.fmtLen(st.y, 1)} × ${Units.fmtLen(st.z, 1)} ${Units.label()}` : '–'))));
     w.append(info);
     // Material und Gewicht des ganzen Projekts (exaktes Volumen aus dem CAD-Kern)
     const curMat = App.doc.settings.material || 'CFK';
@@ -11235,9 +11380,8 @@ const Panels = (() => {
     ms.append(h('div', { class: 'btn-row', style: { marginTop: '8px' } }, bomB));
     Mass.measure().then((r) => {
       if (!r) { vRow.textContent = gRow.textContent = cRow.textContent = '–'; return; }
-      const cm3 = r.volume / 1000;
-      vRow.textContent = `${fmt(cm3, 3)} cm³`; gRow.textContent = Mass.gText(r.mass);
-      cRow.textContent = r.com ? r.com.map((v) => fmt(v, 1)).join(' · ') : '–';
+      vRow.textContent = Units.fmtVolU(r.volume, 3); gRow.textContent = Mass.gText(r.mass);
+      cRow.textContent = r.com ? r.com.map((v) => Units.fmtLen(v, 1)).join(' · ') + (Units.key() !== 'mm' ? ' ' + Units.label() : '') : '–';
       const n = (r.parts || []).filter((p) => p.own && !p.fixed).length, nf = (r.parts || []).filter((p) => p.fixed).length;
       const bits = [];
       if (n) bits.push(`${n} ${n === 1 ? 'Teil hat' : 'Teile haben'} ein eigenes Material`);
@@ -11264,7 +11408,7 @@ const Panels = (() => {
     if (tops && tops[0] !== tops[1]) {
       const ds = h('div', { class: 'section', id: 'min-dist', 'data-help': 'minDistance' }, h('div', { class: 'section-h' }, 'Kleinster Abstand'));
       const val = h('b', { class: 'mono', id: 'min-dist-val' }, '…'); ds.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, `${Model.label(found[0].item)} ↔ ${Model.label(found[1].item)}`), val));
-      Measure.minDistance(tops).then((r) => { val.textContent = !r ? '–' : r.d < 1e-6 ? 'berühren sich' : fmt(r.d, 3) + ' mm'; });
+      Measure.minDistance(tops).then((r) => { val.textContent = !r ? '–' : r.d < 1e-6 ? 'berühren sich' : Units.fmtLenU(r.d, 3); });
       w.append(ds);
     }
     const al = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Ausrichten'));
@@ -11331,8 +11475,8 @@ const Panels = (() => {
     if (!list.length) { UI.toast('An dieser Fläche habe ich keine Kanten gefunden.', { icon: 'info' }); return; }
     UI.menu(anchor, [
       { icon: 'pointer', label: `Alle ${list.length} Kanten wählen`, id: 'fe-select', help: 'faceEdges', run: () => App.select([face.id], { edges: list }) },
-      { icon: 'fillet', label: 'Alle abrunden (1 mm)', id: 'fe-fillet', help: 'faceEdges', run: () => Actions.addFinish('fillet', 1, list) },
-      { icon: 'chamfer', label: 'Alle abschrägen (1 mm)', id: 'fe-chamfer', help: 'faceEdges', run: () => Actions.addFinish('chamfer', 1, list) },
+      { icon: 'fillet', label: `Alle abrunden (${Units.fmtLenU(1, 2)})`, id: 'fe-fillet', help: 'faceEdges', run: () => Actions.addFinish('fillet', 1, list) },
+      { icon: 'chamfer', label: `Alle abschrägen (${Units.fmtLenU(1, 2)})`, id: 'fe-chamfer', help: 'faceEdges', run: () => Actions.addFinish('chamfer', 1, list) },
     ]);
   }
   function renderItem(body, f) {
@@ -11361,7 +11505,7 @@ const Panels = (() => {
     }
     for (const e of App.errorsFor(it.id)) {
       const box = h('div', { class: 'err-box' }, h('span', null, e.message));
-      if (e.code === 'toobig' && e.max > 0) { const b = h('button', { type: 'button', class: 'btn small' }, `Auf ${fmt(e.max, 1)} mm setzen`); b.onclick = () => Actions.setFinish(it.id, e.finishId, { r: e.max }); box.append(h('div', null, b)); }
+      if (e.code === 'toobig' && e.max > 0) { const b = h('button', { type: 'button', class: 'btn small' }, `Auf ${Units.fmtLenU(e.max, 1)} setzen`); b.onclick = () => Actions.setFinish(it.id, e.finishId, { r: e.max }); box.append(h('div', null, b)); }
       if (e.code === 'edges') { const b = h('button', { type: 'button', class: 'btn small' }, 'Rundung entfernen'); b.onclick = () => Actions.removeFinish(it.id, e.finishId); box.append(h('div', null, b)); }
       w.append(box);
     }
@@ -11394,7 +11538,7 @@ const Panels = (() => {
     const opSec = opSection(it); if (opSec) w.append(opSec);
     // Maße
     const three = !!(KINDS[it.kind] && KINDS[it.kind].params.length === 3);
-    const sec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, three ? 'Maße (mm)' : 'Maße'));
+    const sec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, three ? `Maße (${Units.label()})` : 'Maße'));
     const setP = (k, val) => App.change('Maß geändert', (doc) => { Model.find(doc, it.id).item.p[k] = val; }, { merge: 'p:' + it.id + ':' + k });
     if (KINDS[it.kind] && KINDS[it.kind].params.length) {
       const fl = h('div', { class: 'fields' + (KINDS[it.kind].params.length === 3 ? ' three' : '') });
@@ -11411,15 +11555,15 @@ const Panels = (() => {
         sec.append(fl);
         if (def.lib === 'blindHole') {
           const d = Model.num(it.p.d, V, 5), dep = Model.num(it.p.depth, V, 10), ang = Number(it.p.tipAngle ?? 118), tipH = blindTipHeight(d, ang);
-          const tipTxt = ang >= 179.5 ? `Flacher Boden, Tiefe ${fmt(dep, 2)} mm.` : `Bohrspitze (${ang}°): +${fmt(tipH, 2)} mm → Gesamttiefe <b>${fmt(dep + tipH, 2)} mm</b>.`;
+          const tipTxt = ang >= 179.5 ? `Flacher Boden, Tiefe ${Units.fmtLenU(dep, 2)}.` : `Bohrspitze (${ang}°): +${Units.fmtLenU(tipH, 2)} → Gesamttiefe <b>${Units.fmtLenU(dep + tipH, 2)}</b>.`;
           sec.append(h('div', { class: 'hint-box', html: `${tipTxt} Setz es mit <b>Bohrung</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.` }));
         } else if (def.lib === 'fitHole') {
           const d = Model.num(it.p.d, V, 6), info = h7Info(d);
-          const tolTxt = info.um != null ? `<b>Passung Ø ${fmt(d, 2)} H7 (ISO 286):</b> ${info.esText} / 0 mm (${info.rangeText}). Im 3D-Modell wird genau das Nennmaß gebohrt – beim Fertigen auf Maß reiben.` : `<b>Passung Ø ${fmt(d, 2)} H7:</b> Im 3D-Modell wird genau das Nennmaß gebohrt.`;
+          const tolTxt = info.um != null ? `<b>Passung Ø ${Units.fmtLenU(d, 2)} H7 (ISO 286):</b> ${info.esText} / 0 mm (${info.rangeText}). Im 3D-Modell wird genau das Nennmaß gebohrt – beim Fertigen auf Maß reiben.` : `<b>Passung Ø ${Units.fmtLenU(d, 2)} H7:</b> Im 3D-Modell wird genau das Nennmaß gebohrt.`;
           sec.append(h('div', { id: 'p-fit-hint', class: 'hint-box', html: tolTxt }));
         } else if (def.lib === 'centerHole') {
           const m = centerHoleMetrics(it.p.size);
-          sec.append(h('div', { class: 'hint-box', html: `<b>DIN 332 Form A (${it.p.size || 'A2.5'}):</b> Führungs-Ø ${fmt(m.d1, 2)} mm · 60°-Kegel Ø ${fmt(m.d2, 2)} mm · Gesamttiefe ${fmt(m.totalDepth, 2)} mm.` }));
+          sec.append(h('div', { class: 'hint-box', html: `<b>DIN 332 Form A (${it.p.size || 'A2.5'}):</b> Führungs-Ø ${Units.fmtLenU(m.d1, 2)} · 60°-Kegel Ø ${Units.fmtLenU(m.d2, 2)} · Gesamttiefe ${Units.fmtLenU(m.totalDepth, 2)}.` }));
         } else if (def.lib === 'screwHole' || def.lib === 'insert' || def.lib === 'nutTrap') sec.append(h('div', { class: 'hint-box', html: 'Das Loch zeigt mit der flachen Seite nach oben. Setz es mit <b>Loch hier</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.' }));
         w.append(sec);
       }
@@ -11515,7 +11659,7 @@ const Panels = (() => {
             const L = Math.hypot(RP[i + 1][0] - RP[i][0], RP[i + 1][1] - RP[i][1], RP[i + 1][2] - RP[i][2]), r = RU[i] || {};
             const sr = h('div', { class: 'fields p3-seg' });
             sr.append(UI.selectField({ id: `p3-ax-${i}`, label: `Stück P${i + 1} → P${i + 2}`, value: r.ax || '', options: [['', 'Richtung frei'], ['x', 'entlang X'], ['y', 'entlang Y'], ['z', 'entlang Z (senkrecht)'], ...(i > 0 ? [['perp', 'rechtwinklig zum vorigen'], ['par', 'parallel zum vorigen']] : [])], onChange: (v) => setRule(i, { ax: v || null }) }));
-            sr.append(UI.numField({ id: `p3-len-${i}`, label: r.len != null ? 'Länge (fest)' : `Länge (jetzt ${fmt(L, 1)})`, value: r.len != null ? r.len : 0, min: 0, onCommit: (v) => setRule(i, { len: v || null }) }));
+            sr.append(UI.numField({ id: `p3-len-${i}`, label: r.len != null ? 'Länge (fest)' : `Länge (jetzt ${Units.fmtLen(L, 1)})`, value: r.len != null ? r.len : 0, min: 0, onCommit: (v) => setRule(i, { len: v || null }) }));
             list.append(sr);
           }
         });
@@ -11596,10 +11740,10 @@ const Panels = (() => {
     const pos = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Lage'));
     const setT = (k, val) => App.change(k.startsWith('r') ? 'Gedreht' : 'Verschoben', (doc) => { Model.find(doc, it.id).item.t[k] = val; }, { merge: 't:' + it.id + ':' + k });
     const fp = h('div', { class: 'fields three' });
-    for (const k of ['x', 'y', 'z']) fp.append(UI.numField({ id: 't-' + k, value: it.t[k], axis: k, unit: '', onCommit: (v) => setT(k, v) }));
+    for (const k of ['x', 'y', 'z']) fp.append(UI.numField({ id: 't-' + k, value: it.t[k], axis: k, unit: '', len: true, onCommit: (v) => setT(k, v) }));
     const fr = h('div', { class: 'fields three' });
     for (const k of ['rx', 'ry', 'rz']) fr.append(UI.numField({ id: 't-' + k, value: it.t[k], axis: k[1], unit: '°', onCommit: (v) => setT(k, v) }));
-    pos.append(h('div', { class: 'field' }, h('label', null, 'Position (mm)'), fp), h('div', { class: 'field' }, h('label', null, 'Drehung (°)'), fr));
+    pos.append(h('div', { class: 'field' }, h('label', null, `Position (${Units.label()})`), fp), h('div', { class: 'field' }, h('label', null, 'Drehung (°)'), fr));
     const qa = h('div', { class: 'btn-row' });
     const drop = h('button', { type: 'button', class: 'btn small', 'data-tip': 'Unterkante auf Höhe 0 setzen' }); drop.innerHTML = icon('push') + 'Auf XY-Ebene';
     drop.onclick = () => Actions.dropToPlate([it.id]);
@@ -11700,7 +11844,7 @@ const Panels = (() => {
       for (const th of it.threads || []) {
         const sp = THREAD_MAP[th.size] || { pitch: 1 };
         const box = h('div', { class: 'thread-item', style: { display: 'grid', gap: '6px', padding: '6px 0', borderTop: '1px solid var(--line)' } });
-        box.append(h('div', { class: 'mini-row' }, h('b', null, `${th.size} × ${fmt(th.length, 1)} mm`), h('span', { class: 'grow muted', style: { marginLeft: '6px', fontSize: '11px' } }, `${th.kind === 'int' ? 'Innengewinde' : 'Außengewinde'} · P ${fmt(sp.pitch, 2)}`)));
+        box.append(h('div', { class: 'mini-row' }, h('b', null, `${th.size} × ${Units.fmtLenU(th.length, 1)}`), h('span', { class: 'grow muted', style: { marginLeft: '6px', fontSize: '11px' } }, `${th.kind === 'int' ? 'Innengewinde' : 'Außengewinde'} · P ${fmt(sp.pitch, 2)}`)));
         const fs = h('div', { class: 'fields' });
         fs.append(UI.selectField({ id: 'th-size-' + th.id, label: 'M-Größe', value: th.size, options: THREAD_SPECS.map((s) => [s.size, s.size]), onChange: (v) => Features.updateThread(it.id, th.id, { size: v }) }));
         fs.append(UI.numField({ id: 'th-len-' + th.id, label: 'Länge', value: th.length, min: 0.5, unit: 'mm', expr: false, onCommit: (v) => Features.updateThread(it.id, th.id, { length: v }) }));
@@ -11737,9 +11881,9 @@ const Panels = (() => {
       const vR = h('b', { class: 'mono' }, '…'), gR = h('b', { class: 'mono' }, '…'), aR = h('b', { class: 'mono' }, '…'), bR = h('b', { class: 'mono' }, '…');
       ms.append(h('div', { class: 'mini-list', style: { marginTop: '8px' } }, h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Volumen'), vR), h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Oberfläche'), aR), h('div', { class: 'mini-row', 'data-help': 'bboxSize' }, h('span', { class: 'grow' }, 'Hüllmaße (L × B × H)'), bR), h('div', { class: 'mini-row', 'data-help': 'massProps' }, h('span', { class: 'grow' }, 'Gewicht'), gR)));
       Mass.measure().then((r) => {
-        const p = Mass.partOf(r, it.id); vR.textContent = p ? `${fmt(p.volume / 1000, 3)} cm³` : '–'; gR.textContent = p ? Mass.gText(p.mass) + (p.fixed ? ' (fest)' : '') : '–'; vR.id = 'p-vol'; gR.id = 'p-mass';
-        aR.textContent = p && p.area ? `${fmt(p.area / 100, 2)} cm²` : '–'; aR.id = 'p-area';
-        const b = p && p.bbox; bR.textContent = b ? `${fmt(b[3] - b[0], 2)} × ${fmt(b[4] - b[1], 2)} × ${fmt(b[5] - b[2], 2)} mm` : '–'; bR.id = 'p-bbox';
+        const p = Mass.partOf(r, it.id); vR.textContent = p ? Units.fmtVolU(p.volume, 3) : '–'; gR.textContent = p ? Mass.gText(p.mass) + (p.fixed ? ' (fest)' : '') : '–'; vR.id = 'p-vol'; gR.id = 'p-mass';
+        aR.textContent = p && p.area ? (Units.key() === 'mm' ? `${fmt(p.area / 100, 2)} cm²` : Units.fmtAreaU(p.area, 2)) : '–'; aR.id = 'p-area';
+        const b = p && p.bbox; bR.textContent = b ? `${Units.fmtLen(b[3] - b[0], 2)} × ${Units.fmtLen(b[4] - b[1], 2)} × ${Units.fmtLen(b[5] - b[2], 2)} ${Units.label()}` : '–'; bR.id = 'p-bbox';
         // Trägheit um den Schwerpunkt (PF-13) und Standfestigkeit (PF-14)
         if (p && p.I && !p.fixed) {
           const gc = (x) => fmt(x / 100, x / 100 < 10 ? 2 : 1);
@@ -11793,16 +11937,19 @@ const Panels = (() => {
     const face = Actions.selectedFace();
     // Wert im Schild der Leiste: Klick kopiert ihn (Länge der Kanten, Durchmesser einer runden Fläche)
     const valLbl = (txt, val, unit, tip) => {
-      const l = h('span', { class: 'lbl copyable', id: 'sel-val', 'data-help': 'copyValue', 'data-tip': tip + ' – klicken kopiert den Wert' }, txt, h('span', { class: 'mono' }, fmt(val, 2) + ' ' + unit));
-      l.onclick = () => Measure.copyText(fmt(val, 2), txt.trim()); return l;
+      const isL = unit === 'mm';
+      const numStr = isL ? Units.fmtLen(val, 2) : fmt(val, 2);
+      const uStr = isL ? Units.label() : unit;
+      const l = h('span', { class: 'lbl copyable', id: 'sel-val', 'data-help': 'copyValue', 'data-tip': tip + ' – klicken kopiert den Wert' }, txt, h('span', { class: 'mono' }, numStr + ' ' + uStr));
+      l.onclick = () => Measure.copyText(numStr, txt.trim()); return l;
     };
     if (App.edges.length) {
       const eds = App.edges.map((x) => { const r = App.results.get(x.id); return r && r.data.edges[x.edgeIdx]; }).filter(Boolean);
       const one = eds.length === 1 && eds[0];
       const full = one && one.t === 'CIRCLE' && one.r && Math.hypot(one.a[0] - one.b[0], one.a[1] - one.b[1], one.a[2] - one.b[2]) < 1e-6;
       const total = eds.reduce((s, e) => s + (e.l || 0), 0);
-      if (full) bar.append(valLbl('Kante Ø', one.r * 2, 'mm', `Kreis mit Radius ${fmt(one.r, 2)} mm, Umfang ${fmt(total, 2)} mm`));
-      else if (total > 0) bar.append(valLbl(App.edges.length > 1 ? App.edges.length + ' Kanten' : 'Kante', total, 'mm', App.edges.length > 1 ? 'Gesamtlänge der gewählten Kanten' : 'Länge der Kante' + (one && one.t === 'CIRCLE' && one.r ? ` (Bogen, R ${fmt(one.r, 2)} mm)` : '')));
+      if (full) bar.append(valLbl('Kante Ø', one.r * 2, 'mm', `Kreis mit Radius ${Units.fmtLenU(one.r, 2)}, Umfang ${Units.fmtLenU(total, 2)}`));
+      else if (total > 0) bar.append(valLbl(App.edges.length > 1 ? App.edges.length + ' Kanten' : 'Kante', total, 'mm', App.edges.length > 1 ? 'Gesamtlänge der gewählten Kanten' : 'Länge der Kante' + (one && one.t === 'CIRCLE' && one.r ? ` (Bogen, R ${Units.fmtLenU(one.r, 2)})` : '')));
       else bar.append(h('span', { class: 'lbl' }, App.edges.length > 1 ? App.edges.length + ' Kanten' : 'Kante'));
       b('fillet', 'Abrunden', () => Actions.addFinish('fillet', 1), 'accent', 'Kante abrunden (1 mm, danach änderbar)');
       b('chamfer', 'Abschrägen', () => Actions.addFinish('chamfer', 1), '', 'Kante abschrägen (1 mm, danach änderbar)');
@@ -11826,7 +11973,7 @@ const Panels = (() => {
       sep();
     } else if (face && items.length === 1 && face.info.t !== 'PLANE') {
       const fr = face.info.r;
-      bar.append(fr ? valLbl(face.info.t === 'SPHERE' ? 'Kugel Ø' : 'Runde Fläche Ø', fr * 2, 'mm', `Radius ${fmt(fr, 2)} mm`) : h('span', { class: 'lbl' }, 'Runde Fläche'));
+      bar.append(fr ? valLbl(face.info.t === 'SPHERE' ? 'Kugel Ø' : 'Runde Fläche Ø', fr * 2, 'mm', `Radius ${Units.fmtLenU(fr, 2)}`) : h('span', { class: 'lbl' }, 'Runde Fläche'));
       b('holeWizard', 'Bohrung', (e) => Place.holeHere(face, e.currentTarget), 'accent', 'Bohrungs-Assistent: Loch senkrecht in die runde Fläche (Schraube, Sackloch, Passbohrung H7, Zentrierung …) – der Magnet rastet ganz oben, an den Seiten und in der Mitte ein');
       if (face.info.t === 'CYLINDRE' && items[0].item.role !== 'hole') {
         const hasTh = !!Features.threadOnFace(face.id, face.idx);
@@ -12474,17 +12621,17 @@ const Place = (() => {
     if (o.type === 'blind') {
       const d = hwNum(o.d, 5), depth = hwNum(o.depth, 10), ang = Number(o.tipAngle ?? 118);
       const tipH = blindTipHeight(d, ang);
-      if (ang >= 179.5) return `<b>Flacher Boden:</b> Tiefe ${fmt(depth, 2)} mm (wie gefräst).`;
-      return `<b>Bohrspitze (${ang}°):</b> +${fmt(tipH, 2)} mm → Gesamttiefe <b>${fmt(depth + tipH, 2)} mm</b>.`;
+      if (ang >= 179.5) return `<b>Flacher Boden:</b> Tiefe ${Units.fmtLenU(depth, 2)} (wie gefräst).`;
+      return `<b>Bohrspitze (${ang}°):</b> +${Units.fmtLenU(tipH, 2)} → Gesamttiefe <b>${Units.fmtLenU(depth + tipH, 2)}</b>.`;
     }
     if (o.type === 'fit') {
       const d = hwNum(o.fitD, 6), info = h7Info(d);
-      if (info.um != null) return `<b>Passung Ø ${fmt(d, 2)} H7 (ISO 286):</b> ${info.esText} / 0 mm (${info.rangeText}). Im Modell wird genau das Nennmaß gebohrt – beim Fertigen auf Maß reiben.`;
-      return `<b>Passung Ø ${fmt(d, 2)} H7:</b> Im Modell wird genau das Nennmaß gebohrt (ISO 286 H7 gilt bis Ø 500 mm).`;
+      if (info.um != null) return `<b>Passung Ø ${Units.fmtLenU(d, 2)} H7 (ISO 286):</b> ${info.esText} / 0 mm (${info.rangeText}). Im Modell wird genau das Nennmaß gebohrt – beim Fertigen auf Maß reiben.`;
+      return `<b>Passung Ø ${Units.fmtLenU(d, 2)} H7:</b> Im Modell wird genau das Nennmaß gebohrt (ISO 286 H7 gilt bis Ø 500 mm).`;
     }
     if (o.type === 'center') {
       const m = centerHoleMetrics(o.centerSize);
-      return `<b>DIN 332 Form A (${o.centerSize}):</b> Führungs-Ø ${fmt(m.d1, 2)} mm · 60°-Kegel Ø ${fmt(m.d2, 2)} mm · Gesamttiefe ${fmt(m.totalDepth, 2)} mm.`;
+      return `<b>DIN 332 Form A (${o.centerSize}):</b> Führungs-Ø ${Units.fmtLenU(m.d1, 2)} · 60°-Kegel Ø ${Units.fmtLenU(m.d2, 2)} · Gesamttiefe ${Units.fmtLenU(m.totalDepth, 2)}.`;
     }
     return '';
   }
@@ -13061,7 +13208,7 @@ const Views = (() => {
     const n = activeCutEntries().length;
     if (!c.cap) { el.textContent = 'Kappe ausgeblendet'; return; }
     if (n > 1) { el.textContent = `${n} Ebenen aktiv · schraffiert = Schnittfläche`; return; }
-    el.textContent = c.capArea > 0.05 ? `Schnittfläche ${fmt(c.capArea, c.capArea < 100 ? 1 : 0)} mm²` : 'Schraffiert = Schnittfläche';
+    el.textContent = c.capArea > 0.05 ? `Schnittfläche ${Units.fmtAreaU(c.capArea, c.capArea < 100 ? 1 : 0)}` : 'Schraffiert = Schnittfläche';
   }
   function applyCut() {
     const c = st.cut;
@@ -13242,24 +13389,24 @@ const Views = (() => {
       const lo = key === 'FACE' ? -span : Math.floor(b.min.getComponent(ax) - 1);
       const hi = key === 'FACE' ? span : Math.ceil(b.max.getComponent(ax) + 1);
       const range = h('input', { type: 'range', ...(isF ? { id: 'cut-range' } : {}), 'data-cut-range': key, min: lo, max: hi, step: 0.1, value: entry.off, 'aria-label': `Lage ${key === 'FACE' ? 'Fläche' : PLANE_META[key].axis}` });
-      const num = h('input', { type: 'text', ...(isF ? { id: 'cut-off' } : {}), 'data-cut-off': key, class: 'vb-num', inputmode: 'decimal', value: fmt(entry.off, 2), 'aria-label': 'Lage in mm' });
+      const num = h('input', { type: 'text', ...(isF ? { id: 'cut-off' } : {}), 'data-cut-off': key, class: 'vb-num', inputmode: 'decimal', value: Units.fmtInput(entry.off), 'aria-label': `Lage in ${Units.label()}` });
       const set = (v) => {
         if (!isFinite(v)) return;
         entry.off = v;
         focusPlane(key);
         applyCut();
         range.value = v;
-        if (document.activeElement !== num) num.value = fmt(v, 2);
+        if (document.activeElement !== num) num.value = Units.fmtInput(v);
       };
       range.oninput = () => set(+range.value);
       num.onfocus = () => focusPlane(key);
-      num.onkeydown = (e) => { if (e.key === 'Enter') { const v = parseNum(num.value); if (v != null) set(v); num.blur(); } e.stopPropagation(); };
-      num.onchange = () => { const v = parseNum(num.value); if (v != null) set(v); };
+      num.onkeydown = (e) => { if (e.key === 'Enter') { const p = Units.parseLen(num.value, Model.vars(App.doc).v, { expr: false }); if (p.ok) set(p.num); num.blur(); } e.stopPropagation(); };
+      num.onchange = () => { const p = Units.parseLen(num.value, Model.vars(App.doc).v, { expr: false }); if (p.ok) set(p.num); };
       const flip = h('button', { type: 'button', class: 'btn small cut-flip-btn', ...(isF ? { id: 'cut-flip' } : {}), 'data-cut-flip': key, 'aria-pressed': entry.flip ? 'true' : 'false', 'data-tip': 'Die andere Hälfte zeigen' });
       flip.innerHTML = entries.length > 1 ? icon('mirror') : icon('mirror') + 'Umdrehen';
       flip.onclick = () => { entry.flip = !entry.flip; flip.setAttribute('aria-pressed', entry.flip ? 'true' : 'false'); focusPlane(key); applyCut(); };
       const lbl = h('span', { class: 'vb-l cut-badge', style: key === 'FACE' ? {} : { color: PLANE_META[key].color } }, key === 'FACE' ? '↕' : PLANE_META[key].axis);
-      const row = h('div', { class: 'vb-row cut-row' + (isF ? ' is-active' : ''), 'data-row-plane': key, 'data-axis': key === 'FACE' ? 'FACE' : PLANE_META[key].axis }, lbl, range, num, h('span', { class: 'vb-u' }, 'mm'), flip);
+      const row = h('div', { class: 'vb-row cut-row' + (isF ? ' is-active' : ''), 'data-row-plane': key, 'data-axis': key === 'FACE' ? 'FACE' : PLANE_META[key].axis }, lbl, range, num, h('span', { class: 'vb-u' }, Units.label()), flip);
       bar.append(row);
     }
     const capCb = h('input', { type: 'checkbox', id: 'cut-cap' }); capCb.checked = !!c.cap;
@@ -13457,7 +13604,7 @@ const Views = (() => {
       o.mesh = new THREE.Mesh(g, m); o.mesh.renderOrder = 18; Viewer.groups.overlay.add(o.mesh);
     }
     const t = o.bar && o.bar.querySelector('#ov-area');
-    if (t) t.textContent = d.area > 0.05 ? `${fmt(d.area, d.area < 100 ? 1 : 0)} mm² brauchen Stützen` : 'Keine Überhänge – druckt ohne Stützen';
+    if (t) t.textContent = d.area > 0.05 ? `${Units.fmtAreaU(d.area, d.area < 100 ? 1 : 0)} brauchen Stützen` : 'Keine Überhänge – druckt ohne Stützen';
     Viewer.requestRender();
   }
   function overhang(on = !st.ov) {
@@ -13488,7 +13635,7 @@ const Views = (() => {
       o.mesh = new THREE.Mesh(g, m); o.mesh.renderOrder = 18; Viewer.groups.overlay.add(o.mesh);
     }
     const t = o.bar && o.bar.querySelector('#thin-area');
-    if (t) t.textContent = d.area > 0.05 ? `${fmt(d.area, d.area < 100 ? 1 : 0)} mm² dünner als ${fmt(o.limit, 1)} mm – dünnste Stelle ${fmt(d.minT, 2)} mm` : `Überall mindestens ${fmt(o.limit, 1)} mm`;
+    if (t) t.textContent = d.area > 0.05 ? `${Units.fmtAreaU(d.area, d.area < 100 ? 1 : 0)} dünner als ${Units.fmtLenU(o.limit, 1)} – dünnste Stelle ${Units.fmtLenU(d.minT, 2)}` : `Überall mindestens ${Units.fmtLenU(o.limit, 1)}`;
     Viewer.requestRender();
   }
   function thin(on = !st.thin) {
@@ -13500,7 +13647,7 @@ const Views = (() => {
     const close = h('button', { type: 'button', class: 'vb-x', 'aria-label': 'Wandstärke ausblenden', 'data-tip': 'Ausblenden' }); close.innerHTML = icon('close'); close.onclick = () => thin(false);
     head.append(close);
     const sel = h('select', { id: 'thin-limit', class: 'vb-sel', 'aria-label': 'Mindest-Wandstärke' });
-    for (const a of [0.4, 0.8, 1.2, 1.6, 2, 3, 5]) sel.append(h('option', { value: a, ...(a === 1.2 ? { selected: true } : {}) }, fmt(a, 1) + ' mm'));
+    for (const a of [0.4, 0.8, 1.2, 1.6, 2, 3, 5]) sel.append(h('option', { value: a, ...(a === 1.2 ? { selected: true } : {}) }, Units.fmtLenU(a, 1)));
     sel.onchange = () => { o.limit = +sel.value; drawThin(); };
     bar.append(head, h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, 'Rot unter'), sel, h('span', { class: 'vb-hint' }, '0,4 mm Düse: mindestens 0,8–1,2 mm')), h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint', id: 'thin-area' }, '')));
     bars().append(bar); o.bar = bar;
@@ -14750,10 +14897,13 @@ const Sketch = (() => {
   function askDim(sp, clientX, clientY) {
     hideDimBox(); hideEntry();
     const cur = dimFind(sp);
-    const val = cur && !cur.ref ? (typeof cur.v === 'number' ? fmt(cur.v, 4) : cur.v) : fmt(round(measureSpec(sp), 4), 4);
+    const isLen = sp.k !== 'ang' && sp.k !== 'angLL' && sp.k !== 'n';
+    const rawNum = cur && !cur.ref ? cur.v : round(measureSpec(sp), 4);
+    const val = typeof rawNum === 'number' ? (isLen ? Units.fmtInput(rawNum) : fmt(rawNum, 4)) : rawNum;
     dimBox = h('div', { class: 'numentry dimask' });
     const inp = h('input', { type: 'text', value: val, 'aria-label': DIMLABEL(sp.k), spellcheck: 'false', autocomplete: 'off', style: { width: '120px' } });
-    dimBox.append(h('label', null, DIMLABEL(sp.k), inp));
+    const lbl = DIMLABEL(sp.k) + (isLen && Units.key() !== 'mm' ? ' (' + Units.label() + ')' : '');
+    dimBox.append(h('label', null, lbl, inp));
     if (sp.k !== 'n' && !(cur && cur.ref)) {
       // Knopf „( )“: nur ablesen statt festlegen
       const rb = h('button', { type: 'button', class: 'dimlock', id: 'dim-ref', 'data-tip': 'Nur ablesen – das Maß zeigt den Wert, legt aber nichts fest', 'aria-label': 'Nur ablesen' }, '( )');
@@ -14777,10 +14927,17 @@ const Sketch = (() => {
       if (/^[A-Za-zÄÖÜäöüß_][A-Za-zÄÖÜäöüß_0-9]*$/.test(raw) && !/^pi$/i.test(raw) && isNaN(Model.num(raw, vars(), NaN))) {
         const now = round(measureSpec(sp), 4);
         App.change(`Maß „${raw}“ angelegt`, (doc) => { doc.params.push({ id: uid('m'), name: raw, expr: now }); });
-        UI.toast(`Neuer Name „${raw}“ = ${fmt(now, 2)} – zu finden links unter „Maße“.`, { icon: 'check' });
+        UI.toast(`Neuer Name „${raw}“ = ${isLen ? Units.fmtLenU(now, 2) : fmt(now, 2)} – zu finden links unter „Maße“.`, { icon: 'check' });
       }
-      const n = parseNum(raw); const v = isNaN(n) ? raw : n;
-      if (isNaN(Model.num(v, vars(), NaN))) { inp.parentElement.parentElement.classList.add('invalid'); UI.toast('Das kann ich nicht ausrechnen: „' + raw + '“. Prüf die Schreibweise – Beispiele findest du unter „Maße“.', { kind: 'bad' }); return; }
+      let v;
+      if (isLen) {
+        const p = Units.parseLen(raw, vars(), { expr: true });
+        if (!p.ok) { inp.parentElement.parentElement.classList.add('invalid'); UI.toast('Das kann ich nicht ausrechnen: „' + raw + '“. Prüf die Schreibweise – Beispiele findest du unter „Maße“.', { kind: 'bad' }); return; }
+        v = p.value;
+      } else {
+        const n = parseNum(raw); v = isNaN(n) ? raw : n;
+        if (isNaN(Model.num(v, vars(), NaN))) { inp.parentElement.parentElement.classList.add('invalid'); UI.toast('Das kann ich nicht ausrechnen: „' + raw + '“. Prüf die Schreibweise – Beispiele findest du unter „Maße“.', { kind: 'bad' }); return; }
+      }
       hideDimBox(); if (sp.e) setSel([sp.e]); setDimSpec(sp, v); Viewer.canvas.focus();
     };
     inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); commit(); } if (e.key === 'Escape') { hideDimBox(); Viewer.canvas.focus(); } });
@@ -15702,12 +15859,13 @@ const Sketch = (() => {
     const a = S.bgCal[0], b = uv; S.bgCal = null;
     const L = SK.d2(a, b); if (L < 1e-6) { setTool('bg'); return; }
     render();
-    const ans = await UI.prompt('Maßstab festlegen', `Wie weit liegen die beiden Punkte in Wirklichkeit auseinander (mm)? Im Bild sind es jetzt ${fmt(L, 2)} mm.`, fmt(L, 2));
-    const v = ans == null ? NaN : parseNum(String(ans));
+    const ans = await UI.prompt('Maßstab festlegen', `Wie weit liegen die beiden Punkte in Wirklichkeit auseinander (${Units.label()})? Im Bild sind es jetzt ${Units.fmtLenU(L, 2)}.`, Units.fmtInput(L));
+    const p = ans == null ? { ok: false } : Units.parseLen(String(ans), vars(), { expr: false });
+    const v = p.ok ? p.num : NaN;
     if (S && S.bg && v > 0) {
       const f = v / L;
       S.bg.a = [round(a[0] + (S.bg.a[0] - a[0]) * f, 4), round(a[1] + (S.bg.a[1] - a[1]) * f, 4)]; S.bg.w = round(S.bg.w * f, 4);
-      UI.toast(`Maßstab gesetzt: Das Bild ist jetzt ${fmt(S.bg.w, 1)} mm breit.`, { icon: 'check' });
+      UI.toast(`Maßstab gesetzt: Das Bild ist jetzt ${Units.fmtLenU(S.bg.w, 1)} breit.`, { icon: 'check' });
     }
     if (S) setTool('bg');
   }
@@ -15721,7 +15879,7 @@ const Sketch = (() => {
     g.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1], 2));
     const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ map: bgTex, transparent: true, opacity: B.op ?? 0.5, depthTest: false, depthWrite: false, side: THREE.DoubleSide }));
     m.renderOrder = 15; grp.add(m);
-    if (S.tool === 'bgcal' && S.bgCal) { const cur = S.cursor ? S.cursor.p : S.bgCal[0]; lineObj([S.bgCal[0], cur], Viewer.theme.accent, 2, { dashed: true }); label(`${fmt(SK.d2(S.bgCal[0], cur), 2)} mm`, cur); }
+    if (S.tool === 'bgcal' && S.bgCal) { const cur = S.cursor ? S.cursor.p : S.bgCal[0]; lineObj([S.bgCal[0], cur], Viewer.theme.accent, 2, { dashed: true }); label(Units.fmtLenU(SK.d2(S.bgCal[0], cur), 2), cur); }
   }
   // Gedrehtes Rechteck aus drei Punkten: erste Kante a–b, dann die Höhe
   function rect3Corners(a, b, p) {
@@ -16246,7 +16404,8 @@ const Sketch = (() => {
     const inputs = [];
     for (const [k, label] of fields) {
       const inp = h('input', { type: 'text', inputmode: 'decimal', 'aria-label': label, dataset: { k } });
-      entry.append(h('label', null, label, inp)); inputs.push(inp);
+      const lbl = k !== 'ang' && Units.key() !== 'mm' ? `${label} (${Units.label()})` : label;
+      entry.append(h('label', null, lbl, inp)); inputs.push(inp);
     }
     $('#overlay').append(entry);
     placeEntry();
@@ -16265,9 +16424,17 @@ const Sketch = (() => {
   }
   function hideEntry() { if (entry) { entry.remove(); entry = null; } }
   function applyEntry(inputs) {
-    const val = (k) => { const i = inputs.find((x) => x.dataset.k === k); if (!i || !i.value.trim()) return NaN; const n = parseNum(i.value); return isNaN(n) ? Model.num(i.value, Model.vars(App.doc).v, NaN) : n; };
+    const val = (k) => {
+      const i = inputs.find((x) => x.dataset.k === k); if (!i || !i.value.trim()) return NaN;
+      if (k !== 'ang') { const p = Units.parseLen(i.value, Model.vars(App.doc).v, { expr: true }); return p.ok ? p.num : NaN; }
+      const n = parseNum(i.value); return isNaN(n) ? Model.num(i.value, Model.vars(App.doc).v, NaN) : n;
+    };
     // Eingetippte Werte werden zu festen Maßen (Formeln bleiben Formeln)
-    const raw = (k) => { const i = inputs.find((x) => x.dataset.k === k); if (!i || !i.value.trim()) return null; const n = parseNum(i.value); return isNaN(n) ? i.value.trim() : n; };
+    const raw = (k) => {
+      const i = inputs.find((x) => x.dataset.k === k); if (!i || !i.value.trim()) return null;
+      if (k !== 'ang') { const p = Units.parseLen(i.value, Model.vars(App.doc).v, { expr: true }); return p.ok ? p.value : i.value.trim(); }
+      const n = parseNum(i.value); return isNaN(n) ? i.value.trim() : n;
+    };
     const fix = (en, k, rk) => { const r = raw(rk); if (r == null || !en) return; putDim(en.id, k, typeof r === 'number' ? round(r, 4) : r); };
     const t = S.tool, d = S.draft, cur = S.cursor ? S.cursor.p : null;
     if (t === 'line' || (t === 'slot' && !d.b)) {
@@ -16446,9 +16613,11 @@ const Sketch = (() => {
       const isF = typeof dm.v === 'string' && Model.isExpr(dm.v);
       const bad = !dm.ref && (isNaN(Model.num(dm.v, vars(), NaN)) || conflicts.has(dm.id));
       const pre = { d: 'Ø ', x: 'X ', y: 'Y ', r: 'R ' }[dm.k] || '';
-      const unit = dm.k === 'ang' || dm.k === 'angLL' ? '°' : dm.k === 'n' ? ' Ecken' : '';
+      const isLen = dm.k !== 'ang' && dm.k !== 'angLL' && dm.k !== 'n';
+      const unit = dm.k === 'ang' || dm.k === 'angLL' ? '°' : dm.k === 'n' ? ' Ecken' : (Units.key() !== 'mm' ? ' ' + Units.label() : '');
+      const valTxt = isLen ? Units.fmtLen(val, 2) : fmt(val, 2);
       const el = h('div', { class: 'skdim' + (bad ? ' bad' : '') + (dm.ref ? ' ref' : ''), 'data-tip': bad ? 'Dieses Maß geht nicht auf – klicken zum Ändern' : dm.ref ? DIMLABEL(dm.k) + ' zum Ablesen – legt nichts fest, klicken zum Festlegen' : DIMLABEL(dm.k) + ' – klicken zum Ändern', dataset: { dim: dm.id } });
-      el.innerHTML = dm.ref ? esc('(' + pre + fmt(val, 2) + unit + ')') : (isF ? `<span class="fx">${esc(dm.v)}&nbsp;=</span>` : '') + esc(pre + fmt(val, 2) + unit);
+      el.innerHTML = dm.ref ? esc('(' + pre + valTxt + unit + ')') : (isF ? `<span class="fx">${esc(dm.v)}&nbsp;=</span>` : '') + esc(pre + valTxt + unit);
       $('#overlay').append(el); labels.push(el);
       const spx = Viewer.toScreen(toWorld(pos.p[0], pos.p[1]));
       const lw = el.offsetWidth || 40, lh = el.offsetHeight || 18; let ly = spx.y;
@@ -16510,7 +16679,7 @@ const Sketch = (() => {
         }
         if (focused) {
           const tag = it.kind === 'gap'
-            ? `Lücke ${fmt(it.dist, 3)} mm`
+            ? `Lücke ${Units.fmtLenU(it.dist, 3)}`
             : it.kind === 'dup'
               ? (it.partial ? 'Überlappende Linie' : ({ line: 'Doppelte Linie', arc: 'Doppelter Bogen', circle: 'Doppelter Kreis', rect: 'Doppeltes Rechteck' }[it.sub] || 'Doppeltes Element'))
               : 'Offenes Ende';
@@ -16525,29 +16694,29 @@ const Sketch = (() => {
       const t = S.tool;
       if (t === 'line' && d.arc) {
         const st = draftTan(), g = st ? tanArc(st, cur) : null;
-        if (g) { lineObj(SK.arcPoints(st.p, g.m, cur), acc, 2.2); lineObj([g.c, st.p], acc, 1, { dashed: true, opacity: 0.55 }); label(`Bogen · R ${fmt(g.r, 2)} mm`, cur); }
+        if (g) { lineObj(SK.arcPoints(st.p, g.m, cur), acc, 2.2); lineObj([g.c, st.p], acc, 1, { dashed: true, opacity: 0.55 }); label(`Bogen · R ${Units.fmtLenU(g.r, 2)}`, cur); }
         else if (st) { lineObj([st.p, cur], acc, 1.4, { dashed: true }); label('Tangentialer Bogen', cur); }
-      } else if (t === 'line') { const a = d.pts[d.pts.length - 1]; lineObj([a, cur], acc, 2.2); const L = SK.d2(a, cur); const ang = (Math.atan2(cur[1] - a[1], cur[0] - a[0]) * 180) / Math.PI; label(`${fmt(L, 2)} mm · ${fmt(ang, 1)}°`, [(a[0] + cur[0]) / 2, (a[1] + cur[1]) / 2]); }
-      if (t === 'rect' && d.r3) { if (d.r3.length === 1) lineObj([d.r3[0], cur], acc, 2.2); else { const c = rect3Corners(d.r3[0], d.r3[1], cur); if (c) { lineObj([...c, c[0]], acc, 2.2); label(`${fmt(SK.d2(c[0], c[1]), 2)} × ${fmt(SK.d2(c[1], c[2]), 2)}`, cur); } } }
-      else if (t === 'rect') { const q = rectDraft(d, cur), e = { type: 'rect', a: q.a, b: q.b }; for (const p of entPts(e)) lineObj(p, acc, 2.2); if (d.mid) lineObj([d.a, cur], acc, 1, { dashed: true }); label(`${fmt(Math.abs(q.b[0] - q.a[0]), 2)} × ${fmt(Math.abs(q.b[1] - q.a[1]), 2)}`, [(d.a[0] + cur[0]) / 2, (d.a[1] + cur[1]) / 2]); }
+      } else if (t === 'line') { const a = d.pts[d.pts.length - 1]; lineObj([a, cur], acc, 2.2); const L = SK.d2(a, cur); const ang = (Math.atan2(cur[1] - a[1], cur[0] - a[0]) * 180) / Math.PI; label(`${Units.fmtLenU(L, 2)} · ${fmt(ang, 1)}°`, [(a[0] + cur[0]) / 2, (a[1] + cur[1]) / 2]); }
+      if (t === 'rect' && d.r3) { if (d.r3.length === 1) lineObj([d.r3[0], cur], acc, 2.2); else { const c = rect3Corners(d.r3[0], d.r3[1], cur); if (c) { lineObj([...c, c[0]], acc, 2.2); label(`${Units.fmtLen(SK.d2(c[0], c[1]), 2)} × ${Units.fmtLen(SK.d2(c[1], c[2]), 2)}`, cur); } } }
+      else if (t === 'rect') { const q = rectDraft(d, cur), e = { type: 'rect', a: q.a, b: q.b }; for (const p of entPts(e)) lineObj(p, acc, 2.2); if (d.mid) lineObj([d.a, cur], acc, 1, { dashed: true }); label(`${Units.fmtLen(Math.abs(q.b[0] - q.a[0]), 2)} × ${Units.fmtLen(Math.abs(q.b[1] - q.a[1]), 2)}`, [(d.a[0] + cur[0]) / 2, (d.a[1] + cur[1]) / 2]); }
       if (t === 'ellipse') {
-        if (!d.ax) { const r = SK.d2(d.c, cur); lineObj([[2 * d.c[0] - cur[0], 2 * d.c[1] - cur[1]], cur], acc, 1.4, { dashed: true }); label(`${fmt(2 * r, 2)} mm`, cur); }
-        else { const q = ellDraft(d, cur); lineObj([[2 * d.c[0] - d.ax[0], 2 * d.c[1] - d.ax[1]], d.ax], acc, 1, { dashed: true }); if (q.ry > 1e-6) { const pts = SK.ellipsePoints(d.c, q.rx, q.ry, q.rot); pts.push(pts[0]); lineObj(pts, acc, 2.2); } label(`${fmt(2 * q.rx, 2)} × ${fmt(2 * q.ry, 2)}`, cur); }
+        if (!d.ax) { const r = SK.d2(d.c, cur); lineObj([[2 * d.c[0] - cur[0], 2 * d.c[1] - cur[1]], cur], acc, 1.4, { dashed: true }); label(Units.fmtLenU(2 * r, 2), cur); }
+        else { const q = ellDraft(d, cur); lineObj([[2 * d.c[0] - d.ax[0], 2 * d.c[1] - d.ax[1]], d.ax], acc, 1, { dashed: true }); if (q.ry > 1e-6) { const pts = SK.ellipsePoints(d.c, q.rx, q.ry, q.rot); pts.push(pts[0]); lineObj(pts, acc, 2.2); } label(`${Units.fmtLen(2 * q.rx, 2)} × ${Units.fmtLen(2 * q.ry, 2)}`, cur); }
       }
-      if (t === 'circle' && d.pts) { for (const q of d.pts) label('•', q, 'snaptip'); const ci = circOfDraft([...d.pts, cur]); if (ci && d.pts.length + 1 >= 2) { lineObj(SK.segPoints({ t: 'circle', c: ci.c, r: ci.r }), acc, d.pts.length + 1 >= (S.circMode === '3p' ? 3 : 2) ? 2.2 : 1.2, { dashed: d.pts.length + 1 < (S.circMode === '3p' ? 3 : 2) }); label(`Ø ${fmt(2 * ci.r, 2)}`, cur); } }
-      else if (t === 'arc' && d.tan) { const g = tanArc(d.tan, cur); if (g) { lineObj(SK.arcPoints(d.tan.p, g.m, cur), acc, 2.2); label(`R ${fmt(g.r, 2)}`, cur); } }
-      else if (t === 'circle') { const r = SK.d2(d.c, cur); lineObj(SK.segPoints({ t: 'circle', c: d.c, r }), acc, 2.2); lineObj([d.c, cur], acc, 1, { dashed: true }); label(`Ø ${fmt(2 * r, 2)}`, cur); }
-      if (t === 'poly') { const r = SK.d2(d.c, cur); const e = { type: 'poly', c: d.c, r, n: S.polySides, rot: Math.atan2(cur[1] - d.c[1], cur[0] - d.c[0]) - Math.PI / 2 }; for (const p of entPts(e)) lineObj(p, acc, 2.2); label(`Ø ${fmt(2 * r, 2)}`, cur); }
+      if (t === 'circle' && d.pts) { for (const q of d.pts) label('•', q, 'snaptip'); const ci = circOfDraft([...d.pts, cur]); if (ci && d.pts.length + 1 >= 2) { lineObj(SK.segPoints({ t: 'circle', c: ci.c, r: ci.r }), acc, d.pts.length + 1 >= (S.circMode === '3p' ? 3 : 2) ? 2.2 : 1.2, { dashed: d.pts.length + 1 < (S.circMode === '3p' ? 3 : 2) }); label(`Ø ${Units.fmtLen(2 * ci.r, 2)}`, cur); } }
+      else if (t === 'arc' && d.tan) { const g = tanArc(d.tan, cur); if (g) { lineObj(SK.arcPoints(d.tan.p, g.m, cur), acc, 2.2); label(`R ${Units.fmtLen(g.r, 2)}`, cur); } }
+      else if (t === 'circle') { const r = SK.d2(d.c, cur); lineObj(SK.segPoints({ t: 'circle', c: d.c, r }), acc, 2.2); lineObj([d.c, cur], acc, 1, { dashed: true }); label(`Ø ${Units.fmtLen(2 * r, 2)}`, cur); }
+      if (t === 'poly') { const r = SK.d2(d.c, cur); const e = { type: 'poly', c: d.c, r, n: S.polySides, rot: Math.atan2(cur[1] - d.c[1], cur[0] - d.c[0]) - Math.PI / 2 }; for (const p of entPts(e)) lineObj(p, acc, 2.2); label(`Ø ${Units.fmtLen(2 * r, 2)}`, cur); }
       if (t === 'arc' && d.ctr) {
-        if (!d.s) { lineObj([d.ctr, cur], acc, 1.4, { dashed: true }); label(`R ${fmt(SK.d2(d.ctr, cur), 2)}`, cur); }
+        if (!d.s) { lineObj([d.ctr, cur], acc, 1.4, { dashed: true }); label(`R ${Units.fmtLen(SK.d2(d.ctr, cur), 2)}`, cur); }
         else { const g = centerArc(d, cur); lineObj([d.ctr, d.s], acc, 1, { dashed: true }); if (g) { lineObj(SK.arcPoints(g.a, g.m, g.b), acc, 2.2); lineObj([d.ctr, g.b], acc, 1, { dashed: true }); label(`${fmt((g.sw * 180) / Math.PI, 1)}°`, cur); } }
       }
-      if (t === 'arc' && !d.tan && !d.ctr) { if (!d.b) lineObj([d.a, cur], acc, 1.4, { dashed: true }); else if (SK.arcInfo(d.a, cur, d.b)) { lineObj(SK.arcPoints(d.a, cur, d.b), acc, 2.2); const ai = SK.arcInfo(d.a, cur, d.b); label(`R ${fmt(ai.r, 2)}`, cur); } }
+      if (t === 'arc' && !d.tan && !d.ctr) { if (!d.b) lineObj([d.a, cur], acc, 1.4, { dashed: true }); else if (SK.arcInfo(d.a, cur, d.b)) { lineObj(SK.arcPoints(d.a, cur, d.b), acc, 2.2); const ai = SK.arcInfo(d.a, cur, d.b); label(`R ${Units.fmtLen(ai.r, 2)}`, cur); } }
       if (t === 'slot' && d.arcslot) {
-        if (!d.s) { lineObj([d.c, cur], acc, 1.2, { dashed: true }); label(`R ${fmt(SK.d2(d.c, cur), 2)}`, cur); }
+        if (!d.s) { lineObj([d.c, cur], acc, 1.2, { dashed: true }); label(`R ${Units.fmtLen(SK.d2(d.c, cur), 2)}`, cur); }
         else if (!d.e) { const g = arcSlotGeom({ ...d, e: cur }, null); if (g) lineObj(SK.arcPoints(g.s, g.m, g.e), acc, 1.4, { dashed: true }); }
-        else { const g = arcSlotGeom(d, cur); if (g) { for (const a of g.arcs) lineObj(SK.arcPoints(a.a, a.m, a.b), acc, 2.2); label(`Breite ${fmt(2 * g.w, 2)}`, cur); } }
-      } else if (t === 'slot') { if (!d.b) { lineObj([d.a, cur], acc, 1.4, { dashed: true }); label(`${S.slotTotal ? 'gesamt ' : ''}${fmt(SK.d2(d.a, cur), 2)} mm`, cur); } else { const r = slotR(d.a, d.b, cur); const q = S.slotTotal ? slotInset(d.a, d.b, r) : { a: d.a, b: d.b }; if (S.slotTotal) lineObj([d.a, d.b], acc, 1, { dashed: true }); if (r > 1e-6 && q) { const e = { type: 'slot', a: q.a, b: q.b, r }; for (const p of entPts(e)) lineObj(p, acc, 2.2); label(`Breite ${fmt(2 * r, 2)}`, cur); } } }
+        else { const g = arcSlotGeom(d, cur); if (g) { for (const a of g.arcs) lineObj(SK.arcPoints(a.a, a.m, a.b), acc, 2.2); label(`Breite ${Units.fmtLen(2 * g.w, 2)}`, cur); } }
+      } else if (t === 'slot') { if (!d.b) { lineObj([d.a, cur], acc, 1.4, { dashed: true }); label(`${S.slotTotal ? 'gesamt ' : ''}${Units.fmtLenU(SK.d2(d.a, cur), 2)}`, cur); } else { const r = slotR(d.a, d.b, cur); const q = S.slotTotal ? slotInset(d.a, d.b, r) : { a: d.a, b: d.b }; if (S.slotTotal) lineObj([d.a, d.b], acc, 1, { dashed: true }); if (r > 1e-6 && q) { const e = { type: 'slot', a: q.a, b: q.b, r }; for (const p of entPts(e)) lineObj(p, acc, 2.2); label(`Breite ${Units.fmtLen(2 * r, 2)}`, cur); } } }
     }
     // Verlängern-Vorschau
     if (S.tool === 'extend' && S.extHover) lineObj([S.extHover.line[S.extHover.k], S.extHover.p], th.accent, 2.4, { dashed: true });
@@ -16924,7 +17093,7 @@ const Sketch = (() => {
           });
           f.append(h('div', { class: 'btn-row' }, ob));
         }
-        const tb = SK.textBox(sel); if (tb) w.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Größe'), h('b', { class: 'mono' }, fmt(tb.w, 2) + ' × ' + fmt(tb.h, 2) + ' mm')));
+        const tb = SK.textBox(sel); if (tb) w.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Größe'), h('b', { class: 'mono' }, `${Units.fmtLen(tb.w, 2)} × ${Units.fmtLen(tb.h, 2)} ${Units.label()}`)));
         const cb = h('button', { type: 'button', class: 'btn', id: 'se-text-curves', 'data-help': 'textCurves' }); cb.innerHTML = icon('spline') + 'In Kurven umwandeln';
         cb.onclick = () => textToCurves(sel.id);
         w.append(h('div', { class: 'btn-row' }, cb));
@@ -17111,13 +17280,13 @@ const Sketch = (() => {
       const bb = S.tool === 'select' && S.ctx.mode !== 'pushpull' ? SK.bounds(S.ents.filter((e) => !e.con)) : null;
       if (bb && bb[2] - bb[0] > 1e-6 && bb[3] - bb[1] > 1e-6) {
         const W = bb[2] - bb[0], H = bb[3] - bb[1], fz = h('div', { class: 'fields' });
-        w.append(h('div', { class: 'mini-row', id: 'sk-size' }, h('span', { class: 'grow' }, 'Größe der Skizze'), h('b', { class: 'mono' }, fmt(W, 2) + ' × ' + fmt(H, 2) + ' mm')));
+        w.append(h('div', { class: 'mini-row', id: 'sk-size' }, h('span', { class: 'grow' }, 'Größe der Skizze'), h('b', { class: 'mono' }, `${Units.fmtLen(W, 2)} × ${Units.fmtLen(H, 2)} ${Units.label()}`)));
         // Fläche und Umfang aller geschlossenen Flächen (Löcher abgezogen, Lochränder zählen zum Umfang)
         const regs = SK.regions(S.ents);
         if (regs.length) {
           const per = (poly) => poly.reduce((s, q, i) => s + Math.hypot(q[0] - poly[(i + 1) % poly.length][0], q[1] - poly[(i + 1) % poly.length][1]), 0);
           const A = regs.reduce((s, r) => s + r.area, 0), U = regs.reduce((s, r) => s + per(r.outer.poly) + r.holes.reduce((t, hh) => t + per(hh.poly), 0), 0);
-          w.append(h('div', { class: 'mini-row', id: 'sk-area', 'data-help': 'sketchMeasure' }, h('span', { class: 'grow' }, regs.length === 1 ? 'Fläche · Umfang' : `${regs.length} Flächen · Umfang`), h('b', { class: 'mono' }, fmt(A, 2) + ' mm² · ' + fmt(U, 2) + ' mm')));
+          w.append(h('div', { class: 'mini-row', id: 'sk-area', 'data-help': 'sketchMeasure' }, h('span', { class: 'grow' }, regs.length === 1 ? 'Fläche · Umfang' : `${regs.length} Flächen · Umfang`), h('b', { class: 'mono' }, `${Units.fmtAreaU(A, 2)} · ${Units.fmtLenU(U, 2)}`)));
         }
         const go = (fac) => { if (!(fac > 0) || fac > 1000 || fac < 0.001) { UI.toast('Diese Größe geht nicht.', { kind: 'bad' }); Panels.renderRight(); return; } if (scaleAll(fac)) UI.toast(`Skizze auf ${fmt(fac * 100, 1)} % gebracht – Längen-Maße sind mitgewachsen.`, { icon: 'check' }); };
         fz.append(UI.numField({ id: 'sk-scale-w', label: 'Breite ändern (alles wächst mit)', value: round(W, 3), unit: 'mm', expr: false, min: 0.01, onCommit: (v) => go(v / W) }));
@@ -17174,15 +17343,15 @@ const Sketch = (() => {
             S.check.issues.forEach((it, idx) => {
               const cls = 'chk-row sk-chk-item ' + (it.kind === 'dup' ? 'warn' : 'bad') + (S.checkFocus === idx ? ' active' : '');
               const title = it.kind === 'gap'
-                ? `Winzige Lücke (${fmt(it.dist, 3)} mm)`
+                ? `Winzige Lücke (${Units.fmtLenU(it.dist, 3)})`
                 : it.kind === 'dup'
                   ? (it.partial ? 'Überlappende Linie' : ({ line: 'Doppelte Linie', arc: 'Doppelter Bogen', circle: 'Doppelter Kreis', rect: 'Doppeltes Rechteck' }[it.sub] || 'Doppeltes Element'))
                   : 'Offenes Ende';
               const sub = it.kind === 'gap'
-                ? `Bei ${fmt(it.p[0], 1)} / ${fmt(it.p[1], 1)} mm – wird mit Deckungsgleich geschlossen`
+                ? `Bei ${Units.fmtLen(it.p[0], 1)} / ${Units.fmtLenU(it.p[1], 1)} – wird mit Deckungsgleich geschlossen`
                 : it.kind === 'dup'
-                  ? (it.partial ? `Überlappt um ${fmt(it.len, 1)} mm – wird zusammengeführt` : `Liegt direkt auf einem anderen Element${it.len ? ` (${fmt(it.len, 1)} mm)` : ''}`)
-                  : `Bei ${fmt(it.p[0], 1)} / ${fmt(it.p[1], 1)} mm – mit anderer Linie verbinden`;
+                  ? (it.partial ? `Überlappt um ${Units.fmtLenU(it.len, 1)} – wird zusammengeführt` : `Liegt direkt auf einem anderen Element${it.len ? ` (${Units.fmtLenU(it.len, 1)})` : ''}`)
+                  : `Bei ${Units.fmtLen(it.p[0], 1)} / ${Units.fmtLenU(it.p[1], 1)} – mit anderer Linie verbinden`;
               const row = h('button', { type: 'button', class: cls, dataset: { idx: String(idx), kind: it.kind } },
                 h('span', { class: 'chk-dot' }, '!'),
                 h('span', { class: 'grow' }, h('b', null, title), h('small', null, sub))
@@ -17337,7 +17506,7 @@ const Sketch = (() => {
       stepBox.append(UI.selectField({ id: 'st-axis', label: 'Achse', value: st.axis, options: opts, onChange: (v) => { st.axis = v; if (v === 'line') { const l = S.ents.find((x) => x.type === 'line' && x.con) || S.ents.find((x) => x.type === 'line'); st.axisLine = l ? l.id : null; } updatePreview(); renderStep(); } }));
       if (st.axis === 'line') {
         const lines = S.ents.filter((x) => x.type === 'line');
-        stepBox.append(UI.selectField({ id: 'st-line', label: 'Linie', value: st.axisLine, options: lines.map((l, i) => [l.id, `Linie ${i + 1} (${fmt(SK.d2(l.a, l.b), 1)} mm)${l.con ? ' – Hilfslinie' : ''}`]), onChange: (v) => { st.axisLine = v; updatePreview(); } }));
+        stepBox.append(UI.selectField({ id: 'st-line', label: 'Linie', value: st.axisLine, options: lines.map((l, i) => [l.id, `Linie ${i + 1} (${Units.fmtLenU(SK.d2(l.a, l.b), 1)})${l.con ? ' – Hilfslinie' : ''}`]), onChange: (v) => { st.axisLine = v; updatePreview(); } }));
       }
       stepBox.append(UI.numField({ id: 'st-angle', label: 'Winkel', value: st.angle, unit: '°', min: 1, onCommit: (v) => { st.angle = clamp(v, 1, 360); updatePreview(); } }));
     }
@@ -17443,7 +17612,7 @@ const Sketch = (() => {
     $('#overlay').append(arrow);
     // Höhe neben der Pfeilspitze
     const tipX = a.x + dx * 46, tipY = a.y + dy * 46;
-    const el = h('div', { class: 'dimlabel live steplabel' }, fmt(Model.num(S.step.dist, Model.vars(App.doc).v, 10), 2) + ' mm');
+    const el = h('div', { class: 'dimlabel live steplabel' }, Units.fmtLenU(Model.num(S.step.dist, Model.vars(App.doc).v, 10), 2));
     el.style.left = tipX + (dx >= 0 ? 34 : -34) + 'px'; el.style.top = tipY + 'px'; $('#overlay').append(el); labels.push(el);
   }
   Viewer.on('camera', () => { if (S && S.step && !S.step.dragging) placeArrow(); });
@@ -17476,7 +17645,7 @@ const Sketch = (() => {
     const newDir = st.dir === 'both' ? 'both' : v < 0 ? 'reverse' : 'normal';
     const changedDir = newDir !== st.dir;
     st.dir = newDir; st.dist = round(Math.abs(v), 4);
-    if (changedDir) renderStep(); else { const inp = $('#st-dist'); if (inp) inp.value = fmt(st.dist, 3); }
+    if (changedDir) renderStep(); else { const inp = $('#st-dist'); if (inp) inp.value = Units.fmtInput(st.dist); }
     updatePreview();
     placeArrowSoon();
   }
@@ -17936,23 +18105,23 @@ const Measure = (() => {
     if (kind === 'circle') {
       const ent = ents[0];
       const d = ent.edge.r * 2;
-      const short = `Ø ${fmt(d, 2)} mm`;
-      const text = `Ø ${fmt(d, 2)} mm   (R ${fmt(ent.edge.r, 2)})`;
+      const short = `Ø ${Units.fmtLenU(d, 2)}`;
+      const text = `Ø ${Units.fmtLenU(d, 2)}   (R ${Units.fmtLen(ent.edge.r, 2)})`;
       return { lost: false, kind, typeLabel: 'Kreiskante', value: round(d, 6), unit: 'mm', short, text, p: ent.c.clone(), lines: [], dots: [], faces: [], circle: { id: ent.id, edgeIdx: ent.edgeIdx, W: ent.W } };
     }
     if (kind === 'round') {
       const ent = ents[0];
       const wr = ent.normal ? Viewer.wallAt(ent.id, ent.hitP, ent.normal) : null;
       const d = ent.f.r * 2;
-      const short = `Ø ${fmt(d, 2)} mm`;
-      const text = `${ent.f.t === 'SPHERE' ? 'Kugel' : 'Zylinder'} Ø ${fmt(d, 2)} mm   (R ${fmt(ent.f.r, 2)})   Fläche ${fmt(ent.area, 1)} mm²${wr ? `   Wand ${fmt(wr, 2)} mm` : ''}`;
+      const short = `Ø ${Units.fmtLenU(d, 2)}`;
+      const text = `${ent.f.t === 'SPHERE' ? 'Kugel' : 'Zylinder'} Ø ${Units.fmtLenU(d, 2)}   (R ${Units.fmtLen(ent.f.r, 2)})   Fläche ${Units.fmtAreaU(ent.area, 1)}${wr ? `   Wand ${Units.fmtLenU(wr, 2)}` : ''}`;
       return { lost: false, kind, typeLabel: ent.f.t === 'SPHERE' ? 'Kugel' : 'Zylinder', value: round(d, 6), unit: 'mm', short, text, p: ent.hitP.clone(), lines: [], dots: [ent.hitP.clone()], faces: [{ id: ent.id, faceIdx: ent.faceIdx }], circle: null };
     }
     if (kind === 'face') {
       const ent = ents[0];
       const wt = Viewer.wallAt(ent.id, ent.hitP, ent.n);
-      const short = `${fmt(ent.area, ent.area < 100 ? 2 : 1)} mm²`;
-      const text = `Fläche ${short}${wt ? `   Wand ${fmt(wt, 2)} mm` : ''}`;
+      const short = Units.fmtAreaU(ent.area, ent.area < 100 ? 2 : 1);
+      const text = `Fläche ${short}${wt ? `   Wand ${Units.fmtLenU(wt, 2)}` : ''}`;
       const lines = wt ? [[ent.hitP.clone(), ent.hitP.clone().addScaledVector(ent.n, -wt)]] : [];
       return { lost: false, kind, typeLabel: 'Fläche', value: round(ent.area, 6), unit: 'mm²', short, text, p: ent.hitP.clone(), lines, dots: [], faces: [{ id: ent.id, faceIdx: ent.faceIdx }], circle: null };
     }
@@ -17960,8 +18129,8 @@ const Measure = (() => {
     if (a.kind !== 'face' && b.kind !== 'face') {
       const pa = a.p || a.hitP, pb = b.p || b.hitP;
       const d = pa.distanceTo(pb);
-      const short = `${fmt(d, 2)} mm`;
-      const text = `${short}   ΔX ${fmt(Math.abs(pb.x - pa.x), 2)}  ΔY ${fmt(Math.abs(pb.y - pa.y), 2)}  ΔZ ${fmt(Math.abs(pb.z - pa.z), 2)}`;
+      const short = Units.fmtLenU(d, 2);
+      const text = `${short}   ΔX ${Units.fmtLen(Math.abs(pb.x - pa.x), 2)}  ΔY ${Units.fmtLen(Math.abs(pb.y - pa.y), 2)}  ΔZ ${Units.fmtLen(Math.abs(pb.z - pa.z), 2)}`;
       return { lost: false, kind: 'pair', typeLabel: 'Abstand (Punkt–Punkt)', value: round(d, 6), unit: 'mm', short, text, p: pa.clone().lerp(pb, 0.5), lines: [[pa.clone(), pb.clone()]], dots: [pa.clone(), pb.clone()], faces: [], circle: null };
     }
     if (a.kind === 'face' && b.kind === 'face') {
@@ -17969,8 +18138,8 @@ const Measure = (() => {
       if (cs > 0.99995) {
         const d = Math.abs(b.c.clone().sub(a.c).dot(a.n));
         const from = a.hitP.clone(), to = from.clone().addScaledVector(a.n, b.c.clone().sub(from).dot(a.n));
-        const short = d < 1e-6 ? '0 mm' : `${fmt(d, 2)} mm`;
-        const text = d < 1e-6 ? 'Beide Flächen liegen in einer Ebene' : `Abstand ${fmt(d, 2)} mm   (parallel)`;
+        const short = d < 1e-6 ? `0 ${Units.label()}` : Units.fmtLenU(d, 2);
+        const text = d < 1e-6 ? 'Beide Flächen liegen in einer Ebene' : `Abstand ${Units.fmtLenU(d, 2)}   (parallel)`;
         return { lost: false, kind: 'pair', typeLabel: 'Abstand (Flächen)', value: round(d, 6), unit: 'mm', short, text, p: from.clone().lerp(to, 0.5), lines: d < 1e-6 ? [] : [[from, to]], dots: [from, to], faces: [{ id: a.id, faceIdx: a.faceIdx }, { id: b.id, faceIdx: b.faceIdx }], circle: null };
       }
       const ang = (Math.acos(clamp(cs, -1, 1)) * 180) / Math.PI;
@@ -17981,7 +18150,7 @@ const Measure = (() => {
     const f = a.kind === 'face' ? a : b, q = a.kind === 'face' ? b : a, qp = q.p || q.hitP;
     const s = qp.clone().sub(f.c).dot(f.n); const foot = qp.clone().addScaledVector(f.n, -s);
     const d = Math.abs(s);
-    const short = `${fmt(d, 2)} mm`;
+    const short = Units.fmtLenU(d, 2);
     const text = `Abstand ${short}   (Punkt zur Fläche)`;
     return { lost: false, kind: 'pair', typeLabel: 'Abstand (Punkt–Fläche)', value: round(d, 6), unit: 'mm', short, text, p: qp.clone().lerp(foot, 0.5), lines: [[qp.clone(), foot]], dots: [qp.clone(), foot], faces: [{ id: f.id, faceIdx: f.faceIdx }], circle: null };
   }
@@ -18342,10 +18511,12 @@ const Measure = (() => {
     });
     App.on('results', relink);
     App.on('remeshed', relink);
+    let lastUnit = Units.key();
     App.on('doc', () => {
       if (sel && !find(sel)) sel = null;
       const ids = new Set(list().map((m) => m.id));
       for (const k of [...live.keys()]) if (!ids.has(k)) live.delete(k);
+      if (Units.key() !== lastUnit) { lastUnit = Units.key(); if (list().length) relink(); }
       drawSaved();
     });
     App.on('mode', () => { if (App.mode !== 'model' && on) stop(); drawSaved(); });
@@ -18377,19 +18548,20 @@ const Measure = (() => {
   let coordsNow = null;
   function showCoords(cx, cy) {
     const el = $('#coords'); if (!el) return;
-    const f = (v) => fmt(Math.abs(v) < 5e-5 ? 0 : v, 1);
+    const f = (v) => Units.fmtLen(Math.abs(v) < 5e-5 ? 0 : v, 1);
+    const u = Units.label();
     if (Sketch.active && Sketch.state && Sketch.state.F) {
       const S = Sketch.state, F = S.F;
       let uv = S.cursor && S.cursor.p;
       if (!uv) { const w = Viewer.rayPlane(cx, cy, F.o, F.n); if (!w) return; const d = w.clone().sub(F.o); uv = [d.dot(F.x), d.dot(F.y)]; }
       coordsNow = { sketch: true, x: uv[0], y: uv[1] };
-      el.textContent = `Skizze  X ${f(uv[0])}  Y ${f(uv[1])} mm`; return;
+      el.textContent = `Skizze  X ${f(uv[0])}  Y ${f(uv[1])} ${u}`; return;
     }
     const hit = Viewer.pick(cx, cy, { noEdges: true });
     const p = hit ? hit.point : Viewer.pickPlane(cx, cy, 0);
     if (!p) { el.textContent = ''; coordsNow = null; return; }
     coordsNow = { x: p.x, y: p.y, z: p.z, on: hit ? hit.id : null };
-    el.textContent = `X ${f(p.x)}  Y ${f(p.y)}  Z ${f(p.z)} mm${hit ? '' : ' · Boden'}`;
+    el.textContent = `X ${f(p.x)}  Y ${f(p.y)}  Z ${f(p.z)} ${u}${hit ? '' : ' · Boden'}`;
   }
   // kleinster Abstand zweier Teile (exakt aus dem CAD-Kern); zeigt die Verbindung als Linie im Bild
   let distLine = null;
@@ -18634,6 +18806,7 @@ const Commands = (() => {
     add('drawing', 'Technische Zeichnung öffnen', 'sheet', 'zeichnung ansichten bemaßung pdf dreitafel', () => setMode('drawing'), { group: 'Werkzeuge' });
     add('model', 'Zurück zum Modell', 'cube', 'modell 3d', () => setMode('model'), { group: 'Werkzeuge' });
     add('params', 'Maße mit Namen festlegen', 'sliders', 'parameter variable formel maß', () => Panels.showParams(), { group: 'Werkzeuge' });
+    for (const [uk, un] of Units.OPTIONS) add('unit-' + uk, 'Einheit: ' + un, 'ruler', 'einheit einheiten mm cm m zoll inch ' + uk, () => Units.set(uk), { group: 'Projekt' });
     add('undo', 'Rückgängig', 'undo', 'zurück', () => App.undo(), { group: 'Bearbeiten', kbd: 'Strg Z' });
     add('redo', 'Wiederholen', 'redo', 'vor', () => App.redo(), { group: 'Bearbeiten', kbd: 'Strg Y' });
     add('delete', 'Auswahl löschen', 'trash', 'entfernen weg', () => Actions.remove(), { group: 'Bearbeiten', kbd: 'Entf', needSel: true });
@@ -19088,7 +19261,7 @@ const Print = (() => {
     const errs = App.errors.length;
     if (errs) out.push({ s: 'warn', t: errs === 1 ? 'Ein Schritt hat ein Problem' : errs + ' Schritte haben Probleme', d: App.errors[0].message });
     const bodies = App.doc.items.filter((x) => x.role !== 'hole' && !x.hidden).length;
-    if (!out.length) out.push({ s: 'ok', t: `${fmt(st.x, 2)} × ${fmt(st.y, 2)} × ${fmt(st.z, 2)} mm`, d: `${bodies} ${bodies === 1 ? 'Körper' : 'Körper'}, Ursprung bei (0 | 0 | 0). Abmessungen der Hüllbox.` });
+    if (!out.length) out.push({ s: 'ok', t: `${Units.fmtLen(st.x, 2)} × ${Units.fmtLen(st.y, 2)} × ${Units.fmtLen(st.z, 2)} ${Units.label()}`, d: `${bodies} ${bodies === 1 ? 'Körper' : 'Körper'}, Ursprung bei (0 | 0 | 0). Abmessungen der Hüllbox.` });
     return out;
   }
   function updateAmpel() {
@@ -20180,7 +20353,7 @@ const Drawing = (() => {
       texts.push({ x: (out[0] + tail[0]) / 2, y: out[1] - 1.2, t: label, size: TXT, rot: 0, anchor: 'middle', id: dim.id, cls: 'dimtext' });
     }
   }
-  function fmtDim(v) { return fmt(Math.round(v * 100) / 100, 2); }
+  function fmtDim(v) { return Units.fmtLen(v, 2); }
   function arrowHead(lines, tip, from, len, inside, id) {
     const dx = from[0] - tip[0], dy = from[1] - tip[1]; const L = Math.hypot(dx, dy) || 1; let ux = dx / L, uy = dy / L;
     if (!inside) { ux = -ux; uy = -uy; }
@@ -20284,7 +20457,7 @@ const Drawing = (() => {
       texts.push({ x: cC + 1.5, y: rows[0] + 10.5, t: clipText(l1, tw, ts), size: ts, anchor: 'start', cls: 'title' });
       texts.push({ x: cC + 1.5, y: rows[0] + 10.5 + ts * 1.25, t: clipText(l2, tw, ts), size: ts, anchor: 'start', cls: 'title' });
     } else texts.push({ x: cC + 1.5, y: rows[0] + 13.5, t: title, size: ts, anchor: 'start', cls: 'title' });
-    texts.push({ x: cC + 1.5, y: rows[3] + 5.4, t: 'Erstellt mit Tracery', size: 2, anchor: 'start', cls: 'lab' });
+    texts.push({ x: cC + 1.5, y: rows[3] + 5.4, t: `Erstellt mit Tracery · Maße in ${Units.label()}`, size: 2, anchor: 'start', cls: 'lab' });
     // Projektionssymbol Methode 1 (ISO 5456-2): Kegelstumpf links mit schmalem Ende links, Ansicht von links rechts daneben
     lab(cD, rows[0], 'Projektion');
     const sx = cD + 4.5, cy = y0 + 11.5;
@@ -23266,7 +23439,7 @@ const Explain = (() => {
     const where = top >= 0 ? `Schritt ${top + 1} von ${doc.items.length}` : `Teil von „${Model.label(f.parent)}“`;
     lines.push({ k: 'was', t: txt.was });
     const bb = top >= 0 && doc === App.doc ? Viewer.baseBox(id) : null;
-    const size = bb && !bb.isEmpty() ? `${fmt(bb.max.x - bb.min.x, 1)} × ${fmt(bb.max.y - bb.min.y, 1)} × ${fmt(bb.max.z - bb.min.z, 1)} mm` : it.kind !== 'group' ? Model.sizeText(it, V) : '';
+    const size = bb && !bb.isEmpty() ? `${Units.fmtLen(bb.max.x - bb.min.x, 1, doc)} × ${Units.fmtLen(bb.max.y - bb.min.y, 1, doc)} × ${Units.fmtLen(bb.max.z - bb.min.z, 1, doc)} ${Units.label(doc)}` : it.kind !== 'group' ? Model.sizeText(it, V) : '';
     if (size) lines.push({ k: 'groesse', t: `Größe: ${size}.` });
     if (it.kind === 'group') {
       const c = counts(it, V);
@@ -23275,7 +23448,7 @@ const Explain = (() => {
       else if (c.solids) lines.push({ k: 'kinder', t: `Besteht aus ${c.solids} ${c.solids === 1 ? 'Körper' : 'Körpern'}.` });
     }
     if (it.role === 'hole' && top >= 0) lines.push({ k: 'loch', t: 'Als Loch auf oberster Ebene schneidet es jeden Körper, den es berührt.' });
-    for (const fin of it.finishes || []) lines.push({ k: 'fin', t: fin.type === 'shell' ? `Ausgehöhlt mit ${fmt(Model.num(fin.r, V, 2), 2)} mm Wand.` : `${fin.type === 'chamfer' ? 'Fase' : 'Rundung'} ${fmt(Model.num(fin.r, V, 1), 2)} mm an den Kanten.` });
+    for (const fin of it.finishes || []) lines.push({ k: 'fin', t: fin.type === 'shell' ? `Ausgehöhlt mit ${Units.fmtLenU(Model.num(fin.r, V, 2), 2, doc)} Wand.` : `${fin.type === 'chamfer' ? 'Fase' : 'Rundung'} ${Units.fmtLenU(Model.num(fin.r, V, 1), 2, doc)} an den Kanten.` });
     const used = paramsUsed(it, doc);
     if (used.length) lines.push({ k: 'masse', t: `Hängt an ${used.length === 1 ? 'dem Maß' : 'den Maßen'} ${used.slice(0, 6).join(', ')}${used.length > 6 ? ` und ${used.length - 6} weiteren` : ''}. Änderst du ${used.length === 1 ? 'es' : 'eines'} unter „Maße“, rechnet Tracery diesen Schritt neu.` });
     if (top >= 0 && Mass.fixedOf(it)) lines.push({ k: 'gewicht', t: it.massG === '' ? 'Kaufteil: Das Gewicht fehlt noch – trag es rechts ein.' : `Kaufteil mit festem Gewicht ${fmt(Model.num(it.massG, V, 0), 1)} g.` });
@@ -23610,10 +23783,10 @@ ${AI.modelText()}`;
   $('#btn-undo').innerHTML = icon('undo'); $('#btn-redo').innerHTML = icon('redo'); $('#btn-menu').innerHTML = icon('menu');
   $('#btn-left').innerHTML = icon('list'); $('#btn-right').innerHTML = icon('sliders');
 
-  window.__masswerk = { App, Viewer, Model, Actions, Sketch, SK, THREE, Print, Drawing, Kernel, UI, Commands, Panels, Handles, Start, AI, Measure, Place, Store };
+  window.__masswerk = { App, Viewer, Model, Actions, Sketch, SK, THREE, Print, Drawing, Kernel, UI, Commands, Panels, Handles, Start, AI, Measure, Place, Store, Units };
   UI.initTips();
   Viewer.init($('#viewport'));
-  window.__V = Viewer; window.__M = { Store, Interact, Measure, Datums, Print, ViewPrefs, App, Actions, Model, Timeline, Start, Comp, Handles, Sketch, SK, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views, Mass, Select, Versions, DroneTpl, DroneUI, DroneLib, DroneCheck, Plates, Variants, Explain, Weak, AI, Snap, Panels, Joints }; window.__S = Start; // für automatische Tests
+  window.__V = Viewer; window.__M = { Store, Interact, Measure, Datums, Print, ViewPrefs, App, Actions, Model, Timeline, Start, Comp, Handles, Sketch, SK, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views, Mass, Select, Versions, DroneTpl, DroneUI, DroneLib, DroneCheck, Plates, Variants, Explain, Weak, AI, Snap, Panels, Joints, Units }; window.__S = Start; // für automatische Tests
   Panels.init(); Datums.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Notes.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init(); Refine.init(); Comp.init(); Views.init(); Mass.init(); Joints.init(); Versions.init(); Start.init();
 
   // Kopfzeile

@@ -40,7 +40,7 @@ const Explain = (() => {
     const where = top >= 0 ? `Schritt ${top + 1} von ${doc.items.length}` : `Teil von „${Model.label(f.parent)}“`;
     lines.push({ k: 'was', t: txt.was });
     const bb = top >= 0 && doc === App.doc ? Viewer.baseBox(id) : null;
-    const size = bb && !bb.isEmpty() ? `${fmt(bb.max.x - bb.min.x, 1)} × ${fmt(bb.max.y - bb.min.y, 1)} × ${fmt(bb.max.z - bb.min.z, 1)} mm` : it.kind !== 'group' ? Model.sizeText(it, V) : '';
+    const size = bb && !bb.isEmpty() ? `${Units.fmtLen(bb.max.x - bb.min.x, 1, doc)} × ${Units.fmtLen(bb.max.y - bb.min.y, 1, doc)} × ${Units.fmtLen(bb.max.z - bb.min.z, 1, doc)} ${Units.label(doc)}` : it.kind !== 'group' ? Model.sizeText(it, V) : '';
     if (size) lines.push({ k: 'groesse', t: `Größe: ${size}.` });
     if (it.kind === 'group') {
       const c = counts(it, V);
@@ -49,7 +49,7 @@ const Explain = (() => {
       else if (c.solids) lines.push({ k: 'kinder', t: `Besteht aus ${c.solids} ${c.solids === 1 ? 'Körper' : 'Körpern'}.` });
     }
     if (it.role === 'hole' && top >= 0) lines.push({ k: 'loch', t: 'Als Loch auf oberster Ebene schneidet es jeden Körper, den es berührt.' });
-    for (const fin of it.finishes || []) lines.push({ k: 'fin', t: fin.type === 'shell' ? `Ausgehöhlt mit ${fmt(Model.num(fin.r, V, 2), 2)} mm Wand.` : `${fin.type === 'chamfer' ? 'Fase' : 'Rundung'} ${fmt(Model.num(fin.r, V, 1), 2)} mm an den Kanten.` });
+    for (const fin of it.finishes || []) lines.push({ k: 'fin', t: fin.type === 'shell' ? `Ausgehöhlt mit ${Units.fmtLenU(Model.num(fin.r, V, 2), 2, doc)} Wand.` : `${fin.type === 'chamfer' ? 'Fase' : 'Rundung'} ${Units.fmtLenU(Model.num(fin.r, V, 1), 2, doc)} an den Kanten.` });
     const used = paramsUsed(it, doc);
     if (used.length) lines.push({ k: 'masse', t: `Hängt an ${used.length === 1 ? 'dem Maß' : 'den Maßen'} ${used.slice(0, 6).join(', ')}${used.length > 6 ? ` und ${used.length - 6} weiteren` : ''}. Änderst du ${used.length === 1 ? 'es' : 'eines'} unter „Maße“, rechnet Tracery diesen Schritt neu.` });
     if (top >= 0 && Mass.fixedOf(it)) lines.push({ k: 'gewicht', t: it.massG === '' ? 'Kaufteil: Das Gewicht fehlt noch – trag es rechts ein.' : `Kaufteil mit festem Gewicht ${fmt(Model.num(it.massG, V, 0), 1)} g.` });

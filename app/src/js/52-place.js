@@ -198,17 +198,17 @@ const Place = (() => {
     if (o.type === 'blind') {
       const d = hwNum(o.d, 5), depth = hwNum(o.depth, 10), ang = Number(o.tipAngle ?? 118);
       const tipH = blindTipHeight(d, ang);
-      if (ang >= 179.5) return `<b>Flacher Boden:</b> Tiefe ${fmt(depth, 2)} mm (wie gefräst).`;
-      return `<b>Bohrspitze (${ang}°):</b> +${fmt(tipH, 2)} mm → Gesamttiefe <b>${fmt(depth + tipH, 2)} mm</b>.`;
+      if (ang >= 179.5) return `<b>Flacher Boden:</b> Tiefe ${Units.fmtLenU(depth, 2)} (wie gefräst).`;
+      return `<b>Bohrspitze (${ang}°):</b> +${Units.fmtLenU(tipH, 2)} → Gesamttiefe <b>${Units.fmtLenU(depth + tipH, 2)}</b>.`;
     }
     if (o.type === 'fit') {
       const d = hwNum(o.fitD, 6), info = h7Info(d);
-      if (info.um != null) return `<b>Passung Ø ${fmt(d, 2)} H7 (ISO 286):</b> ${info.esText} / 0 mm (${info.rangeText}). Im Modell wird genau das Nennmaß gebohrt – beim Fertigen auf Maß reiben.`;
-      return `<b>Passung Ø ${fmt(d, 2)} H7:</b> Im Modell wird genau das Nennmaß gebohrt (ISO 286 H7 gilt bis Ø 500 mm).`;
+      if (info.um != null) return `<b>Passung Ø ${Units.fmtLenU(d, 2)} H7 (ISO 286):</b> ${info.esText} / 0 mm (${info.rangeText}). Im Modell wird genau das Nennmaß gebohrt – beim Fertigen auf Maß reiben.`;
+      return `<b>Passung Ø ${Units.fmtLenU(d, 2)} H7:</b> Im Modell wird genau das Nennmaß gebohrt (ISO 286 H7 gilt bis Ø 500 mm).`;
     }
     if (o.type === 'center') {
       const m = centerHoleMetrics(o.centerSize);
-      return `<b>DIN 332 Form A (${o.centerSize}):</b> Führungs-Ø ${fmt(m.d1, 2)} mm · 60°-Kegel Ø ${fmt(m.d2, 2)} mm · Gesamttiefe ${fmt(m.totalDepth, 2)} mm.`;
+      return `<b>DIN 332 Form A (${o.centerSize}):</b> Führungs-Ø ${Units.fmtLenU(m.d1, 2)} · 60°-Kegel Ø ${Units.fmtLenU(m.d2, 2)} · Gesamttiefe ${Units.fmtLenU(m.totalDepth, 2)}.`;
     }
     return '';
   }

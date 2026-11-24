@@ -108,7 +108,7 @@ const Mass = (() => {
       const name = String(it.name || 'Teil').replace(/\s*\(\d+\s*[×x]\)\s*$/, '').replace(/\s*\(Kopie[^)]*\)\s*$/i, '').replace(/\s+\d+$/, '').trim() || 'Teil';
       const kind = p.fixed ? 'Kaufteil' : (p.mat || '–');
       const key = name + '|' + kind + '|' + round(p.mass / k, 2);
-      const row = map.get(key) || { name, kind, n: 0, g: p.mass / k, cm3: p.fixed ? null : p.volume / 1000 / k, missing: !!p.missing, buy: !!p.fixed, ids: [] };
+      const row = map.get(key) || { name, kind, n: 0, g: p.mass / k, cm3: p.fixed ? null : p.volume / 1000 / k, dims: p.bbox ? [p.bbox[3] - p.bbox[0], p.bbox[4] - p.bbox[1], p.bbox[5] - p.bbox[2]] : null, missing: !!p.missing, buy: !!p.fixed, ids: [] };
       row.n += k; row.ids.push(it.id); map.set(key, row);
     }
     const rows = [...map.values()].sort((a, b) => (a.buy === b.buy ? b.g * b.n - a.g * a.n : a.buy ? 1 : -1));
@@ -128,7 +128,7 @@ const Mass = (() => {
       for (const th of it.threads) {
         const L = round(Model.num(th.length, V, 10), 1);
         const kind = th.kind === 'int' ? 'int' : 'ext';
-        const label = `${kind === 'int' ? 'Innengewinde' : 'Außengewinde'} ${th.size} × ${fmt(L, 1)} mm`;
+        const label = `${kind === 'int' ? 'Innengewinde' : 'Außengewinde'} ${th.size} × ${Units.fmtLenU(L, 1, doc)}`;
         const key = label + '|' + part;
         const row = map.get(key) || { name: label, size: th.size, length: L, kind, part, n: 0, ids: [] };
         row.n += n;
@@ -166,11 +166,15 @@ const Mass = (() => {
   }
   function bomCSV(B, name) {
     const q = (v) => '"' + String(v).replace(/"/g, '""') + '"', z = (v, d = 1) => String(round(v, d)).replace('.', ',');
-    const L = [['Teil', 'Anzahl', 'Art', 'Gewicht je Stück (g)', 'Gewicht gesamt (g)', 'Volumen je Stück (cm³)'].map(q).join(';')];
-    for (const x of B.rows) L.push([q(x.name), x.n, q(x.kind), x.missing ? '' : z(x.g), x.missing ? '' : z(x.g * x.n), x.cm3 == null ? '' : z(x.cm3, 2)].join(';'));
-    L.push([q('Summe ' + name), B.count, '', '', z(B.mass), ''].join(';'));
-    for (const x of B.screws || []) L.push([q(x.name), x.n, q('Kleinteil'), '', '', ''].join(';'));
-    for (const x of B.threads || []) L.push([q(x.name), x.n, q('Gewinde (' + x.part + ')'), '', '', ''].join(';'));
+    const L = [['Teil', 'Anzahl', 'Art', 'Gewicht je Stück (g)', 'Gewicht gesamt (g)', `Volumen je Stück (${Units.volLabel()})`, `Größe (${Units.label()})`].map(q).join(';')];
+    for (const x of B.rows) {
+      const sz = x.dims ? x.dims.map((v) => Units.fmtLen(v, 1)).join(' × ') : '';
+      const vol = x.cm3 == null ? '' : z(Units.volFromMM3(x.cm3 * 1000), Units.key() === 'm' ? 5 : 2);
+      L.push([q(x.name), x.n, q(x.kind), x.missing ? '' : z(x.g), x.missing ? '' : z(x.g * x.n), vol, q(sz)].join(';'));
+    }
+    L.push([q('Summe ' + name), B.count, '', '', z(B.mass), '', ''].join(';'));
+    for (const x of B.screws || []) L.push([q(x.name), x.n, q('Kleinteil'), '', '', '', ''].join(';'));
+    for (const x of B.threads || []) L.push([q(x.name), x.n, q('Gewinde (' + x.part + ')'), '', '', '', ''].join(';'));
     return '\ufeff' + L.join('\r\n') + '\r\n';
   }
   async function bomDialog() {
@@ -181,13 +185,14 @@ const Mass = (() => {
       { label: 'Schließen', primary: true }] });
     B = await bom(); body.innerHTML = '';
     if (!B || !B.rows.length) { body.append(h('div', { class: 'hint-box' }, 'Noch keine Teile im Projekt.')); return; }
-    const tb = h('table', { class: 'vtable' }, h('tr', null, ...['Teil', 'Anzahl', 'Art', 'je Stück', 'gesamt'].map((t) => h('th', null, t))));
+    const tb = h('table', { class: 'vtable' }, h('tr', null, ...['Teil', 'Anzahl', 'Art', 'Größe', 'je Stück', 'gesamt'].map((t) => h('th', null, t))));
     for (const x of B.rows) {
-      const tr = h('tr', { class: 'bom-row', style: { cursor: 'pointer' } }, h('td', null, x.name), h('td', { class: 'mono' }, String(x.n)), h('td', null, x.kind), h('td', { class: 'mono' }, x.missing ? 'fehlt' : gText(x.g)), h('td', { class: 'mono' }, x.missing ? '–' : gText(x.g * x.n)));
+      const sz = x.dims ? `${Units.fmtLen(x.dims[0], 1)} × ${Units.fmtLen(x.dims[1], 1)} × ${Units.fmtLen(x.dims[2], 1)} ${Units.label()}` : '–';
+      const tr = h('tr', { class: 'bom-row', style: { cursor: 'pointer' } }, h('td', null, x.name), h('td', { class: 'mono' }, String(x.n)), h('td', null, x.kind), h('td', { class: 'mono' }, sz), h('td', { class: 'mono' }, x.missing ? 'fehlt' : gText(x.g)), h('td', { class: 'mono' }, x.missing ? '–' : gText(x.g * x.n)));
       tr.onclick = () => App.select(x.ids);
       tb.append(tr);
     }
-    tb.append(h('tr', { class: 'bom-sum' }, h('td', null, h('b', null, 'Summe')), h('td', { class: 'mono' }, h('b', null, String(B.count))), h('td', null, ''), h('td', null, ''), h('td', { class: 'mono' }, h('b', null, gText(B.mass)))));
+    tb.append(h('tr', { class: 'bom-sum' }, h('td', null, h('b', null, 'Summe')), h('td', { class: 'mono' }, h('b', null, String(B.count))), h('td', null, ''), h('td', null, ''), h('td', null, ''), h('td', { class: 'mono' }, h('b', null, gText(B.mass)))));
     body.append(tb);
     if (B.screws.length) {
       const ts = h('table', { class: 'vtable', id: 'bom-screws', style: { marginTop: '14px' } }, h('tr', null, h('th', null, 'Schrauben und Kleinteile'), h('th', null, 'Anzahl')));
@@ -203,7 +208,8 @@ const Mass = (() => {
       }
       body.append(tt);
     }
-    if (B.filament.length) body.append(h('div', { class: 'ok-box', id: 'bom-filament', html: '<b>Filament für die Druckteile:</b> ' + B.filament.map((x) => `${x.mat} ${gText(x.g)} ≈ ${fmt(x.m, 1)} m`).join(' · ') + ' (Draht 1,75 mm, massiv gerechnet – mit weniger Füllung brauchst du weniger; Stützen und Rand kommen dazu).' }));
+    const filLen = (m) => Units.key() === 'in' ? `${fmt((m * 1000) / 25.4, 1)} in` : Units.key() === 'cm' ? `${fmt(m * 100, 1)} cm` : `${fmt(m, 1)} m`;
+    if (B.filament.length) body.append(h('div', { class: 'ok-box', id: 'bom-filament', html: '<b>Filament für die Druckteile:</b> ' + B.filament.map((x) => `${x.mat} ${gText(x.g)} ≈ ${filLen(x.m)}`).join(' · ') + ' (Draht 1,75 mm, massiv gerechnet – mit weniger Füllung brauchst du weniger; Stützen und Rand kommen dazu).' }));
     body.append(h('div', { class: 'hint-box', html: 'Gleiche Teile (gleicher Name ohne Nummer, gleiches Gewicht) stehen in einer Zeile. Klick auf eine Zeile wählt die Teile im Bild aus. <b>Kaufteile</b> zählen mit dem Gewicht aus dem Datenblatt, alles andere mit Volumen × Material.' + (B.rows.some((x) => x.missing) ? ' Bei Teilen mit „fehlt“ ist noch kein Gewicht eingetragen.' : '') }));
   }
   return { stability, hull2,  init, measure, measureDoc, bom, bomCSV, bomDialog, screws, threads, materialFor, projectMaterial, partOf, gText, fixedOf, on: ev.on, get markerShown() { return !!marker; }, get markerPos() { return marker ? marker.position.toArray() : null; } };

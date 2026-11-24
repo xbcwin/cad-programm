@@ -887,10 +887,13 @@ const Sketch = (() => {
   function askDim(sp, clientX, clientY) {
     hideDimBox(); hideEntry();
     const cur = dimFind(sp);
-    const val = cur && !cur.ref ? (typeof cur.v === 'number' ? fmt(cur.v, 4) : cur.v) : fmt(round(measureSpec(sp), 4), 4);
+    const isLen = sp.k !== 'ang' && sp.k !== 'angLL' && sp.k !== 'n';
+    const rawNum = cur && !cur.ref ? cur.v : round(measureSpec(sp), 4);
+    const val = typeof rawNum === 'number' ? (isLen ? Units.fmtInput(rawNum) : fmt(rawNum, 4)) : rawNum;
     dimBox = h('div', { class: 'numentry dimask' });
     const inp = h('input', { type: 'text', value: val, 'aria-label': DIMLABEL(sp.k), spellcheck: 'false', autocomplete: 'off', style: { width: '120px' } });
-    dimBox.append(h('label', null, DIMLABEL(sp.k), inp));
+    const lbl = DIMLABEL(sp.k) + (isLen && Units.key() !== 'mm' ? ' (' + Units.label() + ')' : '');
+    dimBox.append(h('label', null, lbl, inp));
     if (sp.k !== 'n' && !(cur && cur.ref)) {
       // Knopf „( )“: nur ablesen statt festlegen
       const rb = h('button', { type: 'button', class: 'dimlock', id: 'dim-ref', 'data-tip': 'Nur ablesen – das Maß zeigt den Wert, legt aber nichts fest', 'aria-label': 'Nur ablesen' }, '( )');
@@ -914,10 +917,17 @@ const Sketch = (() => {
       if (/^[A-Za-zÄÖÜäöüß_][A-Za-zÄÖÜäöüß_0-9]*$/.test(raw) && !/^pi$/i.test(raw) && isNaN(Model.num(raw, vars(), NaN))) {
         const now = round(measureSpec(sp), 4);
         App.change(`Maß „${raw}“ angelegt`, (doc) => { doc.params.push({ id: uid('m'), name: raw, expr: now }); });
-        UI.toast(`Neuer Name „${raw}“ = ${fmt(now, 2)} – zu finden links unter „Maße“.`, { icon: 'check' });
+        UI.toast(`Neuer Name „${raw}“ = ${isLen ? Units.fmtLenU(now, 2) : fmt(now, 2)} – zu finden links unter „Maße“.`, { icon: 'check' });
       }
-      const n = parseNum(raw); const v = isNaN(n) ? raw : n;
-      if (isNaN(Model.num(v, vars(), NaN))) { inp.parentElement.parentElement.classList.add('invalid'); UI.toast('Das kann ich nicht ausrechnen: „' + raw + '“. Prüf die Schreibweise – Beispiele findest du unter „Maße“.', { kind: 'bad' }); return; }
+      let v;
+      if (isLen) {
+        const p = Units.parseLen(raw, vars(), { expr: true });
+        if (!p.ok) { inp.parentElement.parentElement.classList.add('invalid'); UI.toast('Das kann ich nicht ausrechnen: „' + raw + '“. Prüf die Schreibweise – Beispiele findest du unter „Maße“.', { kind: 'bad' }); return; }
+        v = p.value;
+      } else {
+        const n = parseNum(raw); v = isNaN(n) ? raw : n;
+        if (isNaN(Model.num(v, vars(), NaN))) { inp.parentElement.parentElement.classList.add('invalid'); UI.toast('Das kann ich nicht ausrechnen: „' + raw + '“. Prüf die Schreibweise – Beispiele findest du unter „Maße“.', { kind: 'bad' }); return; }
+      }
       hideDimBox(); if (sp.e) setSel([sp.e]); setDimSpec(sp, v); Viewer.canvas.focus();
     };
     inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); commit(); } if (e.key === 'Escape') { hideDimBox(); Viewer.canvas.focus(); } });
@@ -1839,12 +1849,13 @@ const Sketch = (() => {
     const a = S.bgCal[0], b = uv; S.bgCal = null;
     const L = SK.d2(a, b); if (L < 1e-6) { setTool('bg'); return; }
     render();
-    const ans = await UI.prompt('Maßstab festlegen', `Wie weit liegen die beiden Punkte in Wirklichkeit auseinander (mm)? Im Bild sind es jetzt ${fmt(L, 2)} mm.`, fmt(L, 2));
-    const v = ans == null ? NaN : parseNum(String(ans));
+    const ans = await UI.prompt('Maßstab festlegen', `Wie weit liegen die beiden Punkte in Wirklichkeit auseinander (${Units.label()})? Im Bild sind es jetzt ${Units.fmtLenU(L, 2)}.`, Units.fmtInput(L));
+    const p = ans == null ? { ok: false } : Units.parseLen(String(ans), vars(), { expr: false });
+    const v = p.ok ? p.num : NaN;
     if (S && S.bg && v > 0) {
       const f = v / L;
       S.bg.a = [round(a[0] + (S.bg.a[0] - a[0]) * f, 4), round(a[1] + (S.bg.a[1] - a[1]) * f, 4)]; S.bg.w = round(S.bg.w * f, 4);
-      UI.toast(`Maßstab gesetzt: Das Bild ist jetzt ${fmt(S.bg.w, 1)} mm breit.`, { icon: 'check' });
+      UI.toast(`Maßstab gesetzt: Das Bild ist jetzt ${Units.fmtLenU(S.bg.w, 1)} breit.`, { icon: 'check' });
     }
     if (S) setTool('bg');
   }
@@ -1858,7 +1869,7 @@ const Sketch = (() => {
     g.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1], 2));
     const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ map: bgTex, transparent: true, opacity: B.op ?? 0.5, depthTest: false, depthWrite: false, side: THREE.DoubleSide }));
     m.renderOrder = 15; grp.add(m);
-    if (S.tool === 'bgcal' && S.bgCal) { const cur = S.cursor ? S.cursor.p : S.bgCal[0]; lineObj([S.bgCal[0], cur], Viewer.theme.accent, 2, { dashed: true }); label(`${fmt(SK.d2(S.bgCal[0], cur), 2)} mm`, cur); }
+    if (S.tool === 'bgcal' && S.bgCal) { const cur = S.cursor ? S.cursor.p : S.bgCal[0]; lineObj([S.bgCal[0], cur], Viewer.theme.accent, 2, { dashed: true }); label(Units.fmtLenU(SK.d2(S.bgCal[0], cur), 2), cur); }
   }
   // Gedrehtes Rechteck aus drei Punkten: erste Kante a–b, dann die Höhe
   function rect3Corners(a, b, p) {
@@ -2383,7 +2394,8 @@ const Sketch = (() => {
     const inputs = [];
     for (const [k, label] of fields) {
       const inp = h('input', { type: 'text', inputmode: 'decimal', 'aria-label': label, dataset: { k } });
-      entry.append(h('label', null, label, inp)); inputs.push(inp);
+      const lbl = k !== 'ang' && Units.key() !== 'mm' ? `${label} (${Units.label()})` : label;
+      entry.append(h('label', null, lbl, inp)); inputs.push(inp);
     }
     $('#overlay').append(entry);
     placeEntry();
@@ -2402,9 +2414,17 @@ const Sketch = (() => {
   }
   function hideEntry() { if (entry) { entry.remove(); entry = null; } }
   function applyEntry(inputs) {
-    const val = (k) => { const i = inputs.find((x) => x.dataset.k === k); if (!i || !i.value.trim()) return NaN; const n = parseNum(i.value); return isNaN(n) ? Model.num(i.value, Model.vars(App.doc).v, NaN) : n; };
+    const val = (k) => {
+      const i = inputs.find((x) => x.dataset.k === k); if (!i || !i.value.trim()) return NaN;
+      if (k !== 'ang') { const p = Units.parseLen(i.value, Model.vars(App.doc).v, { expr: true }); return p.ok ? p.num : NaN; }
+      const n = parseNum(i.value); return isNaN(n) ? Model.num(i.value, Model.vars(App.doc).v, NaN) : n;
+    };
     // Eingetippte Werte werden zu festen Maßen (Formeln bleiben Formeln)
-    const raw = (k) => { const i = inputs.find((x) => x.dataset.k === k); if (!i || !i.value.trim()) return null; const n = parseNum(i.value); return isNaN(n) ? i.value.trim() : n; };
+    const raw = (k) => {
+      const i = inputs.find((x) => x.dataset.k === k); if (!i || !i.value.trim()) return null;
+      if (k !== 'ang') { const p = Units.parseLen(i.value, Model.vars(App.doc).v, { expr: true }); return p.ok ? p.value : i.value.trim(); }
+      const n = parseNum(i.value); return isNaN(n) ? i.value.trim() : n;
+    };
     const fix = (en, k, rk) => { const r = raw(rk); if (r == null || !en) return; putDim(en.id, k, typeof r === 'number' ? round(r, 4) : r); };
     const t = S.tool, d = S.draft, cur = S.cursor ? S.cursor.p : null;
     if (t === 'line' || (t === 'slot' && !d.b)) {
@@ -2583,9 +2603,11 @@ const Sketch = (() => {
       const isF = typeof dm.v === 'string' && Model.isExpr(dm.v);
       const bad = !dm.ref && (isNaN(Model.num(dm.v, vars(), NaN)) || conflicts.has(dm.id));
       const pre = { d: 'Ø ', x: 'X ', y: 'Y ', r: 'R ' }[dm.k] || '';
-      const unit = dm.k === 'ang' || dm.k === 'angLL' ? '°' : dm.k === 'n' ? ' Ecken' : '';
+      const isLen = dm.k !== 'ang' && dm.k !== 'angLL' && dm.k !== 'n';
+      const unit = dm.k === 'ang' || dm.k === 'angLL' ? '°' : dm.k === 'n' ? ' Ecken' : (Units.key() !== 'mm' ? ' ' + Units.label() : '');
+      const valTxt = isLen ? Units.fmtLen(val, 2) : fmt(val, 2);
       const el = h('div', { class: 'skdim' + (bad ? ' bad' : '') + (dm.ref ? ' ref' : ''), 'data-tip': bad ? 'Dieses Maß geht nicht auf – klicken zum Ändern' : dm.ref ? DIMLABEL(dm.k) + ' zum Ablesen – legt nichts fest, klicken zum Festlegen' : DIMLABEL(dm.k) + ' – klicken zum Ändern', dataset: { dim: dm.id } });
-      el.innerHTML = dm.ref ? esc('(' + pre + fmt(val, 2) + unit + ')') : (isF ? `<span class="fx">${esc(dm.v)}&nbsp;=</span>` : '') + esc(pre + fmt(val, 2) + unit);
+      el.innerHTML = dm.ref ? esc('(' + pre + valTxt + unit + ')') : (isF ? `<span class="fx">${esc(dm.v)}&nbsp;=</span>` : '') + esc(pre + valTxt + unit);
       $('#overlay').append(el); labels.push(el);
       const spx = Viewer.toScreen(toWorld(pos.p[0], pos.p[1]));
       const lw = el.offsetWidth || 40, lh = el.offsetHeight || 18; let ly = spx.y;
@@ -2647,7 +2669,7 @@ const Sketch = (() => {
         }
         if (focused) {
           const tag = it.kind === 'gap'
-            ? `Lücke ${fmt(it.dist, 3)} mm`
+            ? `Lücke ${Units.fmtLenU(it.dist, 3)}`
             : it.kind === 'dup'
               ? (it.partial ? 'Überlappende Linie' : ({ line: 'Doppelte Linie', arc: 'Doppelter Bogen', circle: 'Doppelter Kreis', rect: 'Doppeltes Rechteck' }[it.sub] || 'Doppeltes Element'))
               : 'Offenes Ende';
@@ -2662,29 +2684,29 @@ const Sketch = (() => {
       const t = S.tool;
       if (t === 'line' && d.arc) {
         const st = draftTan(), g = st ? tanArc(st, cur) : null;
-        if (g) { lineObj(SK.arcPoints(st.p, g.m, cur), acc, 2.2); lineObj([g.c, st.p], acc, 1, { dashed: true, opacity: 0.55 }); label(`Bogen · R ${fmt(g.r, 2)} mm`, cur); }
+        if (g) { lineObj(SK.arcPoints(st.p, g.m, cur), acc, 2.2); lineObj([g.c, st.p], acc, 1, { dashed: true, opacity: 0.55 }); label(`Bogen · R ${Units.fmtLenU(g.r, 2)}`, cur); }
         else if (st) { lineObj([st.p, cur], acc, 1.4, { dashed: true }); label('Tangentialer Bogen', cur); }
-      } else if (t === 'line') { const a = d.pts[d.pts.length - 1]; lineObj([a, cur], acc, 2.2); const L = SK.d2(a, cur); const ang = (Math.atan2(cur[1] - a[1], cur[0] - a[0]) * 180) / Math.PI; label(`${fmt(L, 2)} mm · ${fmt(ang, 1)}°`, [(a[0] + cur[0]) / 2, (a[1] + cur[1]) / 2]); }
-      if (t === 'rect' && d.r3) { if (d.r3.length === 1) lineObj([d.r3[0], cur], acc, 2.2); else { const c = rect3Corners(d.r3[0], d.r3[1], cur); if (c) { lineObj([...c, c[0]], acc, 2.2); label(`${fmt(SK.d2(c[0], c[1]), 2)} × ${fmt(SK.d2(c[1], c[2]), 2)}`, cur); } } }
-      else if (t === 'rect') { const q = rectDraft(d, cur), e = { type: 'rect', a: q.a, b: q.b }; for (const p of entPts(e)) lineObj(p, acc, 2.2); if (d.mid) lineObj([d.a, cur], acc, 1, { dashed: true }); label(`${fmt(Math.abs(q.b[0] - q.a[0]), 2)} × ${fmt(Math.abs(q.b[1] - q.a[1]), 2)}`, [(d.a[0] + cur[0]) / 2, (d.a[1] + cur[1]) / 2]); }
+      } else if (t === 'line') { const a = d.pts[d.pts.length - 1]; lineObj([a, cur], acc, 2.2); const L = SK.d2(a, cur); const ang = (Math.atan2(cur[1] - a[1], cur[0] - a[0]) * 180) / Math.PI; label(`${Units.fmtLenU(L, 2)} · ${fmt(ang, 1)}°`, [(a[0] + cur[0]) / 2, (a[1] + cur[1]) / 2]); }
+      if (t === 'rect' && d.r3) { if (d.r3.length === 1) lineObj([d.r3[0], cur], acc, 2.2); else { const c = rect3Corners(d.r3[0], d.r3[1], cur); if (c) { lineObj([...c, c[0]], acc, 2.2); label(`${Units.fmtLen(SK.d2(c[0], c[1]), 2)} × ${Units.fmtLen(SK.d2(c[1], c[2]), 2)}`, cur); } } }
+      else if (t === 'rect') { const q = rectDraft(d, cur), e = { type: 'rect', a: q.a, b: q.b }; for (const p of entPts(e)) lineObj(p, acc, 2.2); if (d.mid) lineObj([d.a, cur], acc, 1, { dashed: true }); label(`${Units.fmtLen(Math.abs(q.b[0] - q.a[0]), 2)} × ${Units.fmtLen(Math.abs(q.b[1] - q.a[1]), 2)}`, [(d.a[0] + cur[0]) / 2, (d.a[1] + cur[1]) / 2]); }
       if (t === 'ellipse') {
-        if (!d.ax) { const r = SK.d2(d.c, cur); lineObj([[2 * d.c[0] - cur[0], 2 * d.c[1] - cur[1]], cur], acc, 1.4, { dashed: true }); label(`${fmt(2 * r, 2)} mm`, cur); }
-        else { const q = ellDraft(d, cur); lineObj([[2 * d.c[0] - d.ax[0], 2 * d.c[1] - d.ax[1]], d.ax], acc, 1, { dashed: true }); if (q.ry > 1e-6) { const pts = SK.ellipsePoints(d.c, q.rx, q.ry, q.rot); pts.push(pts[0]); lineObj(pts, acc, 2.2); } label(`${fmt(2 * q.rx, 2)} × ${fmt(2 * q.ry, 2)}`, cur); }
+        if (!d.ax) { const r = SK.d2(d.c, cur); lineObj([[2 * d.c[0] - cur[0], 2 * d.c[1] - cur[1]], cur], acc, 1.4, { dashed: true }); label(Units.fmtLenU(2 * r, 2), cur); }
+        else { const q = ellDraft(d, cur); lineObj([[2 * d.c[0] - d.ax[0], 2 * d.c[1] - d.ax[1]], d.ax], acc, 1, { dashed: true }); if (q.ry > 1e-6) { const pts = SK.ellipsePoints(d.c, q.rx, q.ry, q.rot); pts.push(pts[0]); lineObj(pts, acc, 2.2); } label(`${Units.fmtLen(2 * q.rx, 2)} × ${Units.fmtLen(2 * q.ry, 2)}`, cur); }
       }
-      if (t === 'circle' && d.pts) { for (const q of d.pts) label('•', q, 'snaptip'); const ci = circOfDraft([...d.pts, cur]); if (ci && d.pts.length + 1 >= 2) { lineObj(SK.segPoints({ t: 'circle', c: ci.c, r: ci.r }), acc, d.pts.length + 1 >= (S.circMode === '3p' ? 3 : 2) ? 2.2 : 1.2, { dashed: d.pts.length + 1 < (S.circMode === '3p' ? 3 : 2) }); label(`Ø ${fmt(2 * ci.r, 2)}`, cur); } }
-      else if (t === 'arc' && d.tan) { const g = tanArc(d.tan, cur); if (g) { lineObj(SK.arcPoints(d.tan.p, g.m, cur), acc, 2.2); label(`R ${fmt(g.r, 2)}`, cur); } }
-      else if (t === 'circle') { const r = SK.d2(d.c, cur); lineObj(SK.segPoints({ t: 'circle', c: d.c, r }), acc, 2.2); lineObj([d.c, cur], acc, 1, { dashed: true }); label(`Ø ${fmt(2 * r, 2)}`, cur); }
-      if (t === 'poly') { const r = SK.d2(d.c, cur); const e = { type: 'poly', c: d.c, r, n: S.polySides, rot: Math.atan2(cur[1] - d.c[1], cur[0] - d.c[0]) - Math.PI / 2 }; for (const p of entPts(e)) lineObj(p, acc, 2.2); label(`Ø ${fmt(2 * r, 2)}`, cur); }
+      if (t === 'circle' && d.pts) { for (const q of d.pts) label('•', q, 'snaptip'); const ci = circOfDraft([...d.pts, cur]); if (ci && d.pts.length + 1 >= 2) { lineObj(SK.segPoints({ t: 'circle', c: ci.c, r: ci.r }), acc, d.pts.length + 1 >= (S.circMode === '3p' ? 3 : 2) ? 2.2 : 1.2, { dashed: d.pts.length + 1 < (S.circMode === '3p' ? 3 : 2) }); label(`Ø ${Units.fmtLen(2 * ci.r, 2)}`, cur); } }
+      else if (t === 'arc' && d.tan) { const g = tanArc(d.tan, cur); if (g) { lineObj(SK.arcPoints(d.tan.p, g.m, cur), acc, 2.2); label(`R ${Units.fmtLen(g.r, 2)}`, cur); } }
+      else if (t === 'circle') { const r = SK.d2(d.c, cur); lineObj(SK.segPoints({ t: 'circle', c: d.c, r }), acc, 2.2); lineObj([d.c, cur], acc, 1, { dashed: true }); label(`Ø ${Units.fmtLen(2 * r, 2)}`, cur); }
+      if (t === 'poly') { const r = SK.d2(d.c, cur); const e = { type: 'poly', c: d.c, r, n: S.polySides, rot: Math.atan2(cur[1] - d.c[1], cur[0] - d.c[0]) - Math.PI / 2 }; for (const p of entPts(e)) lineObj(p, acc, 2.2); label(`Ø ${Units.fmtLen(2 * r, 2)}`, cur); }
       if (t === 'arc' && d.ctr) {
-        if (!d.s) { lineObj([d.ctr, cur], acc, 1.4, { dashed: true }); label(`R ${fmt(SK.d2(d.ctr, cur), 2)}`, cur); }
+        if (!d.s) { lineObj([d.ctr, cur], acc, 1.4, { dashed: true }); label(`R ${Units.fmtLen(SK.d2(d.ctr, cur), 2)}`, cur); }
         else { const g = centerArc(d, cur); lineObj([d.ctr, d.s], acc, 1, { dashed: true }); if (g) { lineObj(SK.arcPoints(g.a, g.m, g.b), acc, 2.2); lineObj([d.ctr, g.b], acc, 1, { dashed: true }); label(`${fmt((g.sw * 180) / Math.PI, 1)}°`, cur); } }
       }
-      if (t === 'arc' && !d.tan && !d.ctr) { if (!d.b) lineObj([d.a, cur], acc, 1.4, { dashed: true }); else if (SK.arcInfo(d.a, cur, d.b)) { lineObj(SK.arcPoints(d.a, cur, d.b), acc, 2.2); const ai = SK.arcInfo(d.a, cur, d.b); label(`R ${fmt(ai.r, 2)}`, cur); } }
+      if (t === 'arc' && !d.tan && !d.ctr) { if (!d.b) lineObj([d.a, cur], acc, 1.4, { dashed: true }); else if (SK.arcInfo(d.a, cur, d.b)) { lineObj(SK.arcPoints(d.a, cur, d.b), acc, 2.2); const ai = SK.arcInfo(d.a, cur, d.b); label(`R ${Units.fmtLen(ai.r, 2)}`, cur); } }
       if (t === 'slot' && d.arcslot) {
-        if (!d.s) { lineObj([d.c, cur], acc, 1.2, { dashed: true }); label(`R ${fmt(SK.d2(d.c, cur), 2)}`, cur); }
+        if (!d.s) { lineObj([d.c, cur], acc, 1.2, { dashed: true }); label(`R ${Units.fmtLen(SK.d2(d.c, cur), 2)}`, cur); }
         else if (!d.e) { const g = arcSlotGeom({ ...d, e: cur }, null); if (g) lineObj(SK.arcPoints(g.s, g.m, g.e), acc, 1.4, { dashed: true }); }
-        else { const g = arcSlotGeom(d, cur); if (g) { for (const a of g.arcs) lineObj(SK.arcPoints(a.a, a.m, a.b), acc, 2.2); label(`Breite ${fmt(2 * g.w, 2)}`, cur); } }
-      } else if (t === 'slot') { if (!d.b) { lineObj([d.a, cur], acc, 1.4, { dashed: true }); label(`${S.slotTotal ? 'gesamt ' : ''}${fmt(SK.d2(d.a, cur), 2)} mm`, cur); } else { const r = slotR(d.a, d.b, cur); const q = S.slotTotal ? slotInset(d.a, d.b, r) : { a: d.a, b: d.b }; if (S.slotTotal) lineObj([d.a, d.b], acc, 1, { dashed: true }); if (r > 1e-6 && q) { const e = { type: 'slot', a: q.a, b: q.b, r }; for (const p of entPts(e)) lineObj(p, acc, 2.2); label(`Breite ${fmt(2 * r, 2)}`, cur); } } }
+        else { const g = arcSlotGeom(d, cur); if (g) { for (const a of g.arcs) lineObj(SK.arcPoints(a.a, a.m, a.b), acc, 2.2); label(`Breite ${Units.fmtLen(2 * g.w, 2)}`, cur); } }
+      } else if (t === 'slot') { if (!d.b) { lineObj([d.a, cur], acc, 1.4, { dashed: true }); label(`${S.slotTotal ? 'gesamt ' : ''}${Units.fmtLenU(SK.d2(d.a, cur), 2)}`, cur); } else { const r = slotR(d.a, d.b, cur); const q = S.slotTotal ? slotInset(d.a, d.b, r) : { a: d.a, b: d.b }; if (S.slotTotal) lineObj([d.a, d.b], acc, 1, { dashed: true }); if (r > 1e-6 && q) { const e = { type: 'slot', a: q.a, b: q.b, r }; for (const p of entPts(e)) lineObj(p, acc, 2.2); label(`Breite ${Units.fmtLen(2 * r, 2)}`, cur); } } }
     }
     // Verlängern-Vorschau
     if (S.tool === 'extend' && S.extHover) lineObj([S.extHover.line[S.extHover.k], S.extHover.p], th.accent, 2.4, { dashed: true });
@@ -3061,7 +3083,7 @@ const Sketch = (() => {
           });
           f.append(h('div', { class: 'btn-row' }, ob));
         }
-        const tb = SK.textBox(sel); if (tb) w.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Größe'), h('b', { class: 'mono' }, fmt(tb.w, 2) + ' × ' + fmt(tb.h, 2) + ' mm')));
+        const tb = SK.textBox(sel); if (tb) w.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Größe'), h('b', { class: 'mono' }, `${Units.fmtLen(tb.w, 2)} × ${Units.fmtLen(tb.h, 2)} ${Units.label()}`)));
         const cb = h('button', { type: 'button', class: 'btn', id: 'se-text-curves', 'data-help': 'textCurves' }); cb.innerHTML = icon('spline') + 'In Kurven umwandeln';
         cb.onclick = () => textToCurves(sel.id);
         w.append(h('div', { class: 'btn-row' }, cb));
@@ -3248,13 +3270,13 @@ const Sketch = (() => {
       const bb = S.tool === 'select' && S.ctx.mode !== 'pushpull' ? SK.bounds(S.ents.filter((e) => !e.con)) : null;
       if (bb && bb[2] - bb[0] > 1e-6 && bb[3] - bb[1] > 1e-6) {
         const W = bb[2] - bb[0], H = bb[3] - bb[1], fz = h('div', { class: 'fields' });
-        w.append(h('div', { class: 'mini-row', id: 'sk-size' }, h('span', { class: 'grow' }, 'Größe der Skizze'), h('b', { class: 'mono' }, fmt(W, 2) + ' × ' + fmt(H, 2) + ' mm')));
+        w.append(h('div', { class: 'mini-row', id: 'sk-size' }, h('span', { class: 'grow' }, 'Größe der Skizze'), h('b', { class: 'mono' }, `${Units.fmtLen(W, 2)} × ${Units.fmtLen(H, 2)} ${Units.label()}`)));
         // Fläche und Umfang aller geschlossenen Flächen (Löcher abgezogen, Lochränder zählen zum Umfang)
         const regs = SK.regions(S.ents);
         if (regs.length) {
           const per = (poly) => poly.reduce((s, q, i) => s + Math.hypot(q[0] - poly[(i + 1) % poly.length][0], q[1] - poly[(i + 1) % poly.length][1]), 0);
           const A = regs.reduce((s, r) => s + r.area, 0), U = regs.reduce((s, r) => s + per(r.outer.poly) + r.holes.reduce((t, hh) => t + per(hh.poly), 0), 0);
-          w.append(h('div', { class: 'mini-row', id: 'sk-area', 'data-help': 'sketchMeasure' }, h('span', { class: 'grow' }, regs.length === 1 ? 'Fläche · Umfang' : `${regs.length} Flächen · Umfang`), h('b', { class: 'mono' }, fmt(A, 2) + ' mm² · ' + fmt(U, 2) + ' mm')));
+          w.append(h('div', { class: 'mini-row', id: 'sk-area', 'data-help': 'sketchMeasure' }, h('span', { class: 'grow' }, regs.length === 1 ? 'Fläche · Umfang' : `${regs.length} Flächen · Umfang`), h('b', { class: 'mono' }, `${Units.fmtAreaU(A, 2)} · ${Units.fmtLenU(U, 2)}`)));
         }
         const go = (fac) => { if (!(fac > 0) || fac > 1000 || fac < 0.001) { UI.toast('Diese Größe geht nicht.', { kind: 'bad' }); Panels.renderRight(); return; } if (scaleAll(fac)) UI.toast(`Skizze auf ${fmt(fac * 100, 1)} % gebracht – Längen-Maße sind mitgewachsen.`, { icon: 'check' }); };
         fz.append(UI.numField({ id: 'sk-scale-w', label: 'Breite ändern (alles wächst mit)', value: round(W, 3), unit: 'mm', expr: false, min: 0.01, onCommit: (v) => go(v / W) }));
@@ -3311,15 +3333,15 @@ const Sketch = (() => {
             S.check.issues.forEach((it, idx) => {
               const cls = 'chk-row sk-chk-item ' + (it.kind === 'dup' ? 'warn' : 'bad') + (S.checkFocus === idx ? ' active' : '');
               const title = it.kind === 'gap'
-                ? `Winzige Lücke (${fmt(it.dist, 3)} mm)`
+                ? `Winzige Lücke (${Units.fmtLenU(it.dist, 3)})`
                 : it.kind === 'dup'
                   ? (it.partial ? 'Überlappende Linie' : ({ line: 'Doppelte Linie', arc: 'Doppelter Bogen', circle: 'Doppelter Kreis', rect: 'Doppeltes Rechteck' }[it.sub] || 'Doppeltes Element'))
                   : 'Offenes Ende';
               const sub = it.kind === 'gap'
-                ? `Bei ${fmt(it.p[0], 1)} / ${fmt(it.p[1], 1)} mm – wird mit Deckungsgleich geschlossen`
+                ? `Bei ${Units.fmtLen(it.p[0], 1)} / ${Units.fmtLenU(it.p[1], 1)} – wird mit Deckungsgleich geschlossen`
                 : it.kind === 'dup'
-                  ? (it.partial ? `Überlappt um ${fmt(it.len, 1)} mm – wird zusammengeführt` : `Liegt direkt auf einem anderen Element${it.len ? ` (${fmt(it.len, 1)} mm)` : ''}`)
-                  : `Bei ${fmt(it.p[0], 1)} / ${fmt(it.p[1], 1)} mm – mit anderer Linie verbinden`;
+                  ? (it.partial ? `Überlappt um ${Units.fmtLenU(it.len, 1)} – wird zusammengeführt` : `Liegt direkt auf einem anderen Element${it.len ? ` (${Units.fmtLenU(it.len, 1)})` : ''}`)
+                  : `Bei ${Units.fmtLen(it.p[0], 1)} / ${Units.fmtLenU(it.p[1], 1)} – mit anderer Linie verbinden`;
               const row = h('button', { type: 'button', class: cls, dataset: { idx: String(idx), kind: it.kind } },
                 h('span', { class: 'chk-dot' }, '!'),
                 h('span', { class: 'grow' }, h('b', null, title), h('small', null, sub))
@@ -3474,7 +3496,7 @@ const Sketch = (() => {
       stepBox.append(UI.selectField({ id: 'st-axis', label: 'Achse', value: st.axis, options: opts, onChange: (v) => { st.axis = v; if (v === 'line') { const l = S.ents.find((x) => x.type === 'line' && x.con) || S.ents.find((x) => x.type === 'line'); st.axisLine = l ? l.id : null; } updatePreview(); renderStep(); } }));
       if (st.axis === 'line') {
         const lines = S.ents.filter((x) => x.type === 'line');
-        stepBox.append(UI.selectField({ id: 'st-line', label: 'Linie', value: st.axisLine, options: lines.map((l, i) => [l.id, `Linie ${i + 1} (${fmt(SK.d2(l.a, l.b), 1)} mm)${l.con ? ' – Hilfslinie' : ''}`]), onChange: (v) => { st.axisLine = v; updatePreview(); } }));
+        stepBox.append(UI.selectField({ id: 'st-line', label: 'Linie', value: st.axisLine, options: lines.map((l, i) => [l.id, `Linie ${i + 1} (${Units.fmtLenU(SK.d2(l.a, l.b), 1)})${l.con ? ' – Hilfslinie' : ''}`]), onChange: (v) => { st.axisLine = v; updatePreview(); } }));
       }
       stepBox.append(UI.numField({ id: 'st-angle', label: 'Winkel', value: st.angle, unit: '°', min: 1, onCommit: (v) => { st.angle = clamp(v, 1, 360); updatePreview(); } }));
     }
@@ -3580,7 +3602,7 @@ const Sketch = (() => {
     $('#overlay').append(arrow);
     // Höhe neben der Pfeilspitze
     const tipX = a.x + dx * 46, tipY = a.y + dy * 46;
-    const el = h('div', { class: 'dimlabel live steplabel' }, fmt(Model.num(S.step.dist, Model.vars(App.doc).v, 10), 2) + ' mm');
+    const el = h('div', { class: 'dimlabel live steplabel' }, Units.fmtLenU(Model.num(S.step.dist, Model.vars(App.doc).v, 10), 2));
     el.style.left = tipX + (dx >= 0 ? 34 : -34) + 'px'; el.style.top = tipY + 'px'; $('#overlay').append(el); labels.push(el);
   }
   Viewer.on('camera', () => { if (S && S.step && !S.step.dragging) placeArrow(); });
@@ -3613,7 +3635,7 @@ const Sketch = (() => {
     const newDir = st.dir === 'both' ? 'both' : v < 0 ? 'reverse' : 'normal';
     const changedDir = newDir !== st.dir;
     st.dir = newDir; st.dist = round(Math.abs(v), 4);
-    if (changedDir) renderStep(); else { const inp = $('#st-dist'); if (inp) inp.value = fmt(st.dist, 3); }
+    if (changedDir) renderStep(); else { const inp = $('#st-dist'); if (inp) inp.value = Units.fmtInput(st.dist); }
     updatePreview();
     placeArrowSoon();
   }

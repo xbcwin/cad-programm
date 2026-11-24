@@ -186,16 +186,17 @@ const Joints = (() => {
   }
   function describe(j, res) {
     const hit = res.filter((r) => r.v > 0.05);
-    const u = unit(j);
-    if (!hit.length) return { ok: true, text: `Frei im ganzen Bereich von ${fmt(j.min, 1)} ${u} bis ${fmt(j.max, 1)} ${u} – nichts stößt an.` };
+    const u = slide(j) ? Units.label() : '°';
+    const fv = (x) => (slide(j) ? Units.fmtLen(x, 1) : fmt(x, 1));
+    if (!hit.length) return { ok: true, text: `Frei im ganzen Bereich von ${fv(j.min)} ${u} bis ${fv(j.max)} ${u} – nichts stößt an.` };
     const free = res.filter((r) => r.v <= 0.05).map((r) => r.a);
     const lo = res.filter((r) => r.a <= j.ang && r.v > 0.05).map((r) => r.a), hi = res.filter((r) => r.a >= j.ang && r.v > 0.05).map((r) => r.a);
     const from = lo.length ? Math.max(...lo) : null, to = hi.length ? Math.min(...hi) : null;
     const parts = [];
-    if (to != null) parts.push(`stößt in Plus-Richtung bei ${fmt(to, 1)} ${u} an`);
-    if (from != null) parts.push(`in Minus-Richtung bei ${fmt(from, 1)} ${u}`);
+    if (to != null) parts.push(`stößt in Plus-Richtung bei ${fv(to)} ${u} an`);
+    if (from != null) parts.push(`in Minus-Richtung bei ${fv(from)} ${u}`);
     const atNow = res.find((r) => Math.abs(r.a - j.ang) < 1e-6);
-    return { ok: false, text: (atNow && atNow.v > 0.05 ? 'Schon in dieser Stellung stecken die Teile ineinander. ' : '') + `Das Teil ${parts.join(', ')}.` + (free.length ? ` Frei: ${fmt(Math.min(...free), 1)} … ${fmt(Math.max(...free), 1)} ${u} (nicht unbedingt am Stück).` : '') };
+    return { ok: false, text: (atNow && atNow.v > 0.05 ? 'Schon in dieser Stellung stecken die Teile ineinander. ' : '') + `Das Teil ${parts.join(', ')}.` + (free.length ? ` Frei: ${fv(Math.min(...free))} … ${fv(Math.max(...free))} ${u} (nicht unbedingt am Stück).` : '') };
   }
   // Freier Bereich um die jetzige Stellung aus dem Ergebnis von „Bewegung prüfen“ – wird zum Anschlag (Von/Bis)
   function freeRange(j, res) {
@@ -279,7 +280,9 @@ const Joints = (() => {
         const fr = d.ok ? null : freeRange(j, r);
         const old = box.querySelector('.jt-stop'); if (old) old.remove();
         if (fr && fr[1] - fr[0] > 1e-9 && (fr[0] > j.min + 1e-9 || fr[1] < j.max - 1e-9)) {
-          const sb = h('button', { type: 'button', class: 'btn small jt-stop', id: 'jt-stop' + sfx }); sb.innerHTML = icon('check') + `Als Anschlag übernehmen: ${fmt(fr[0], 1)} … ${fmt(fr[1], 1)} ${unit(j)}`;
+          const fVal = (x) => (slide(j) ? Units.fmtLen(x, 1) : fmt(x, 1));
+          const uLbl = slide(j) ? Units.label() : unit(j);
+          const sb = h('button', { type: 'button', class: 'btn small jt-stop', id: 'jt-stop' + sfx }); sb.innerHTML = icon('check') + `Als Anschlag übernehmen: ${fVal(fr[0])} … ${fVal(fr[1])} ${uLbl}`;
           sb.onclick = () => setStops(j.id, fr[0], fr[1]);
           res.after(sb);
         }

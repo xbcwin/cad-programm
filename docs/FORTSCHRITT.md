@@ -329,6 +329,7 @@ Fertig.
 - [x] Einfache Oberfläche mit größeren Knöpfen: Oberleiste, Kontextleiste, Verlauf, Knöpfe und Kacheln größer, Knöpfe oben mindestens 44 px hoch (Sitzung 50)
 - [x] Profi-Stufe wählen und eigene Tastenkürzel: Zwei-Karten-Wahl („Einfach“ / „Profi“) beim ersten Start und in den Einstellungen, Schild oben in der Leiste, anpassbare Tastenkürzel in „Profi“ unter `tracery-kuerzel` mit Konfliktmeldung und Zurücksetzen (Auto [A-021], BE-01)
 - [x] Speicher für große Projekte (Auto [A-016], PL-06): Autosave und Versionen liegen jetzt in der Browser-Datenbank (`tracery-db`, IndexedDB) statt im engen `localStorage`; importierte STEP-, STL- und 3MF-Dateien bis 100 MB werden binär als `Uint8Array` im Blob-Store abgelegt, bestehende Projekte und Versionen aus `localStorage` beim ersten Start automatisch übernommen und verwaiste Blobs beim Löschen aufgeräumt
+- [x] Einheiten je Projekt (Auto [A-014], BE-10): Projekteinstellung `mm`, `cm`, `m` oder Zoll (`in`) unter `doc.settings.unit` (`Units` in `00-util.js`); alle Eingabefelder, Schildchen, Messen, Koordinaten, Kontextleiste, Ampel, Stückliste, Ansichten und Zeichnung zeigen in der Projekteinheit, Eingaben ohne Einheit gelten darin, explizite Einheiten (`1 in`, `25,4 mm`, `2 cm`) gehen weiter; intern bleibt alles exakt in mm
 
 ### Stufe 6 – Konten und Zusammenarbeit (Idee, nach dem Drohnen-Modul)
 - [ ] A: Konto mit Name und Passwort, Projekte in der Cloud

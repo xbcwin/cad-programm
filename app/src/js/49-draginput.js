@@ -6,8 +6,11 @@ const DragInput = (() => {
     close(); spec = sp;
     el = h('div', { class: 'drag-input', role: 'dialog', 'aria-label': 'Wert eingeben' });
     const inputs = sp.fields.map((f, i) => {
-      const inp = h('input', { type: 'text', value: i === 0 && firstChar != null ? firstChar : fmt(f.value, 3), 'aria-label': f.label, inputmode: 'decimal' });
-      el.append(h('span', null, f.label), inp); if (f.unit) el.append(h('small', null, f.unit));
+      const isLen = f.unit === 'mm';
+      const inp = h('input', { type: 'text', value: i === 0 && firstChar != null ? firstChar : (isLen ? Units.fmtInput(f.value) : fmt(f.value, 3)), 'aria-label': f.label, inputmode: 'decimal' });
+      el.append(h('span', null, f.label), inp);
+      const u = isLen ? Units.label() : f.unit;
+      if (u) el.append(h('small', null, u));
       return inp;
     });
     el.append(h('small', null, '↵ übernehmen · Tab wechseln · Esc'));
@@ -21,7 +24,11 @@ const DragInput = (() => {
       else if (e.key === 'Enter') {
         e.preventDefault();
         const V = Model.vars(App.doc).v;
-        const vals = inputs.map((inp, i) => { const t = inp.value.trim(); const n = parseNum(t); return isNaN(n) ? Model.num(t, V, sp.fields[i].value) : n; });
+        const vals = inputs.map((inp, i) => {
+          const t = inp.value.trim();
+          if (sp.fields[i].unit === 'mm') { const p = Units.parseLen(t, V, { expr: true }); return p.ok ? p.num : sp.fields[i].value; }
+          const n = parseNum(t); return isNaN(n) ? Model.num(t, V, sp.fields[i].value) : n;
+        });
         const s2 = spec; close(); s2.apply(vals);
       }
     });

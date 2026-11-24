@@ -18,7 +18,7 @@ const Print = (() => {
     const errs = App.errors.length;
     if (errs) out.push({ s: 'warn', t: errs === 1 ? 'Ein Schritt hat ein Problem' : errs + ' Schritte haben Probleme', d: App.errors[0].message });
     const bodies = App.doc.items.filter((x) => x.role !== 'hole' && !x.hidden).length;
-    if (!out.length) out.push({ s: 'ok', t: `${fmt(st.x, 2)} × ${fmt(st.y, 2)} × ${fmt(st.z, 2)} mm`, d: `${bodies} ${bodies === 1 ? 'Körper' : 'Körper'}, Ursprung bei (0 | 0 | 0). Abmessungen der Hüllbox.` });
+    if (!out.length) out.push({ s: 'ok', t: `${Units.fmtLen(st.x, 2)} × ${Units.fmtLen(st.y, 2)} × ${Units.fmtLen(st.z, 2)} ${Units.label()}`, d: `${bodies} ${bodies === 1 ? 'Körper' : 'Körper'}, Ursprung bei (0 | 0 | 0). Abmessungen der Hüllbox.` });
     return out;
   }
   function updateAmpel() {

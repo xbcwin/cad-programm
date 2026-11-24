@@ -154,23 +154,23 @@ const Measure = (() => {
     if (kind === 'circle') {
       const ent = ents[0];
       const d = ent.edge.r * 2;
-      const short = `Ø ${fmt(d, 2)} mm`;
-      const text = `Ø ${fmt(d, 2)} mm   (R ${fmt(ent.edge.r, 2)})`;
+      const short = `Ø ${Units.fmtLenU(d, 2)}`;
+      const text = `Ø ${Units.fmtLenU(d, 2)}   (R ${Units.fmtLen(ent.edge.r, 2)})`;
       return { lost: false, kind, typeLabel: 'Kreiskante', value: round(d, 6), unit: 'mm', short, text, p: ent.c.clone(), lines: [], dots: [], faces: [], circle: { id: ent.id, edgeIdx: ent.edgeIdx, W: ent.W } };
     }
     if (kind === 'round') {
       const ent = ents[0];
       const wr = ent.normal ? Viewer.wallAt(ent.id, ent.hitP, ent.normal) : null;
       const d = ent.f.r * 2;
-      const short = `Ø ${fmt(d, 2)} mm`;
-      const text = `${ent.f.t === 'SPHERE' ? 'Kugel' : 'Zylinder'} Ø ${fmt(d, 2)} mm   (R ${fmt(ent.f.r, 2)})   Fläche ${fmt(ent.area, 1)} mm²${wr ? `   Wand ${fmt(wr, 2)} mm` : ''}`;
+      const short = `Ø ${Units.fmtLenU(d, 2)}`;
+      const text = `${ent.f.t === 'SPHERE' ? 'Kugel' : 'Zylinder'} Ø ${Units.fmtLenU(d, 2)}   (R ${Units.fmtLen(ent.f.r, 2)})   Fläche ${Units.fmtAreaU(ent.area, 1)}${wr ? `   Wand ${Units.fmtLenU(wr, 2)}` : ''}`;
       return { lost: false, kind, typeLabel: ent.f.t === 'SPHERE' ? 'Kugel' : 'Zylinder', value: round(d, 6), unit: 'mm', short, text, p: ent.hitP.clone(), lines: [], dots: [ent.hitP.clone()], faces: [{ id: ent.id, faceIdx: ent.faceIdx }], circle: null };
     }
     if (kind === 'face') {
       const ent = ents[0];
       const wt = Viewer.wallAt(ent.id, ent.hitP, ent.n);
-      const short = `${fmt(ent.area, ent.area < 100 ? 2 : 1)} mm²`;
-      const text = `Fläche ${short}${wt ? `   Wand ${fmt(wt, 2)} mm` : ''}`;
+      const short = Units.fmtAreaU(ent.area, ent.area < 100 ? 2 : 1);
+      const text = `Fläche ${short}${wt ? `   Wand ${Units.fmtLenU(wt, 2)}` : ''}`;
       const lines = wt ? [[ent.hitP.clone(), ent.hitP.clone().addScaledVector(ent.n, -wt)]] : [];
       return { lost: false, kind, typeLabel: 'Fläche', value: round(ent.area, 6), unit: 'mm²', short, text, p: ent.hitP.clone(), lines, dots: [], faces: [{ id: ent.id, faceIdx: ent.faceIdx }], circle: null };
     }
@@ -178,8 +178,8 @@ const Measure = (() => {
     if (a.kind !== 'face' && b.kind !== 'face') {
       const pa = a.p || a.hitP, pb = b.p || b.hitP;
       const d = pa.distanceTo(pb);
-      const short = `${fmt(d, 2)} mm`;
-      const text = `${short}   ΔX ${fmt(Math.abs(pb.x - pa.x), 2)}  ΔY ${fmt(Math.abs(pb.y - pa.y), 2)}  ΔZ ${fmt(Math.abs(pb.z - pa.z), 2)}`;
+      const short = Units.fmtLenU(d, 2);
+      const text = `${short}   ΔX ${Units.fmtLen(Math.abs(pb.x - pa.x), 2)}  ΔY ${Units.fmtLen(Math.abs(pb.y - pa.y), 2)}  ΔZ ${Units.fmtLen(Math.abs(pb.z - pa.z), 2)}`;
       return { lost: false, kind: 'pair', typeLabel: 'Abstand (Punkt–Punkt)', value: round(d, 6), unit: 'mm', short, text, p: pa.clone().lerp(pb, 0.5), lines: [[pa.clone(), pb.clone()]], dots: [pa.clone(), pb.clone()], faces: [], circle: null };
     }
     if (a.kind === 'face' && b.kind === 'face') {
@@ -187,8 +187,8 @@ const Measure = (() => {
       if (cs > 0.99995) {
         const d = Math.abs(b.c.clone().sub(a.c).dot(a.n));
         const from = a.hitP.clone(), to = from.clone().addScaledVector(a.n, b.c.clone().sub(from).dot(a.n));
-        const short = d < 1e-6 ? '0 mm' : `${fmt(d, 2)} mm`;
-        const text = d < 1e-6 ? 'Beide Flächen liegen in einer Ebene' : `Abstand ${fmt(d, 2)} mm   (parallel)`;
+        const short = d < 1e-6 ? `0 ${Units.label()}` : Units.fmtLenU(d, 2);
+        const text = d < 1e-6 ? 'Beide Flächen liegen in einer Ebene' : `Abstand ${Units.fmtLenU(d, 2)}   (parallel)`;
         return { lost: false, kind: 'pair', typeLabel: 'Abstand (Flächen)', value: round(d, 6), unit: 'mm', short, text, p: from.clone().lerp(to, 0.5), lines: d < 1e-6 ? [] : [[from, to]], dots: [from, to], faces: [{ id: a.id, faceIdx: a.faceIdx }, { id: b.id, faceIdx: b.faceIdx }], circle: null };
       }
       const ang = (Math.acos(clamp(cs, -1, 1)) * 180) / Math.PI;
@@ -199,7 +199,7 @@ const Measure = (() => {
     const f = a.kind === 'face' ? a : b, q = a.kind === 'face' ? b : a, qp = q.p || q.hitP;
     const s = qp.clone().sub(f.c).dot(f.n); const foot = qp.clone().addScaledVector(f.n, -s);
     const d = Math.abs(s);
-    const short = `${fmt(d, 2)} mm`;
+    const short = Units.fmtLenU(d, 2);
     const text = `Abstand ${short}   (Punkt zur Fläche)`;
     return { lost: false, kind: 'pair', typeLabel: 'Abstand (Punkt–Fläche)', value: round(d, 6), unit: 'mm', short, text, p: qp.clone().lerp(foot, 0.5), lines: [[qp.clone(), foot]], dots: [qp.clone(), foot], faces: [{ id: f.id, faceIdx: f.faceIdx }], circle: null };
   }
@@ -560,10 +560,12 @@ const Measure = (() => {
     });
     App.on('results', relink);
     App.on('remeshed', relink);
+    let lastUnit = Units.key();
     App.on('doc', () => {
       if (sel && !find(sel)) sel = null;
       const ids = new Set(list().map((m) => m.id));
       for (const k of [...live.keys()]) if (!ids.has(k)) live.delete(k);
+      if (Units.key() !== lastUnit) { lastUnit = Units.key(); if (list().length) relink(); }
       drawSaved();
     });
     App.on('mode', () => { if (App.mode !== 'model' && on) stop(); drawSaved(); });
@@ -595,19 +597,20 @@ const Measure = (() => {
   let coordsNow = null;
   function showCoords(cx, cy) {
     const el = $('#coords'); if (!el) return;
-    const f = (v) => fmt(Math.abs(v) < 5e-5 ? 0 : v, 1);
+    const f = (v) => Units.fmtLen(Math.abs(v) < 5e-5 ? 0 : v, 1);
+    const u = Units.label();
     if (Sketch.active && Sketch.state && Sketch.state.F) {
       const S = Sketch.state, F = S.F;
       let uv = S.cursor && S.cursor.p;
       if (!uv) { const w = Viewer.rayPlane(cx, cy, F.o, F.n); if (!w) return; const d = w.clone().sub(F.o); uv = [d.dot(F.x), d.dot(F.y)]; }
       coordsNow = { sketch: true, x: uv[0], y: uv[1] };
-      el.textContent = `Skizze  X ${f(uv[0])}  Y ${f(uv[1])} mm`; return;
+      el.textContent = `Skizze  X ${f(uv[0])}  Y ${f(uv[1])} ${u}`; return;
     }
     const hit = Viewer.pick(cx, cy, { noEdges: true });
     const p = hit ? hit.point : Viewer.pickPlane(cx, cy, 0);
     if (!p) { el.textContent = ''; coordsNow = null; return; }
     coordsNow = { x: p.x, y: p.y, z: p.z, on: hit ? hit.id : null };
-    el.textContent = `X ${f(p.x)}  Y ${f(p.y)}  Z ${f(p.z)} mm${hit ? '' : ' · Boden'}`;
+    el.textContent = `X ${f(p.x)}  Y ${f(p.y)}  Z ${f(p.z)} ${u}${hit ? '' : ' · Boden'}`;
   }
   // kleinster Abstand zweier Teile (exakt aus dem CAD-Kern); zeigt die Verbindung als Linie im Bild
   let distLine = null;

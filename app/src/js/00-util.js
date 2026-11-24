@@ -119,6 +119,101 @@ const Expr = (() => {
   return { eval: parse, names(src) { try { return tokenize(src).filter((t) => t.t === 'id').map((t) => t.v); } catch (_) { return []; } } };
 })();
 
+// ---------- Einheiten je Projekt (BE-10): Anzeige und Eingabe in mm, cm, m oder Zoll; intern immer mm ----------
+const Units = (() => {
+  const DEFS = {
+    mm: { k: 'mm', label: 'mm', name: 'Millimeter (mm)', fac: 1, dec: 2, inputDec: 3, step: 1, shiftStep: 10, areaLabel: 'mm²', areaFac: 1, volLabel: 'cm³', volFac: 1000 },
+    cm: { k: 'cm', label: 'cm', name: 'Zentimeter (cm)', fac: 10, dec: 2, inputDec: 4, step: 0.1, shiftStep: 1, areaLabel: 'cm²', areaFac: 100, volLabel: 'cm³', volFac: 1000 },
+    m:  { k: 'm',  label: 'm',  name: 'Meter (m)',       fac: 1000, dec: 3, inputDec: 5, step: 0.01, shiftStep: 0.1, areaLabel: 'm²', areaFac: 1e6, volLabel: 'm³', volFac: 1e9 },
+    in: { k: 'in', label: 'in', name: 'Zoll (in)',       fac: 25.4, dec: 3, inputDec: 4, step: 0.1, shiftStep: 1, areaLabel: 'in²', areaFac: 645.16, volLabel: 'in³', volFac: 16387.064 },
+  };
+  const ORDER = ['mm', 'cm', 'm', 'in'];
+  const OPTIONS = ORDER.map((k) => [k, DEFS[k].name]);
+  const curDoc = (doc) => doc || (typeof App !== 'undefined' ? App.doc : null);
+  function key(doc) {
+    const d = curDoc(doc);
+    const u = d && d.settings && d.settings.unit;
+    return DEFS[u] ? u : 'mm';
+  }
+  const def = (doc) => DEFS[key(doc)];
+  const label = (doc) => def(doc).label;
+  const areaLabel = (doc) => def(doc).areaLabel;
+  const volLabel = (doc) => def(doc).volLabel;
+  const factor = (doc) => def(doc).fac;
+  const fromMM = (mm, doc) => mm / def(doc).fac;
+  const toMM = (v, doc) => v * def(doc).fac;
+  const areaFromMM2 = (mm2, doc) => mm2 / def(doc).areaFac;
+  const volFromMM3 = (mm3, doc) => mm3 / def(doc).volFac;
+  const decFor = (d, doc) => (def(doc).k === 'mm' ? d : Math.max(d, def(doc).dec));
+  function fmtLen(mm, d = 2, doc) {
+    if (typeof mm !== 'number' || !isFinite(mm)) return '–';
+    return fmt(fromMM(mm, doc), decFor(d, doc));
+  }
+  function fmtLenU(mm, d = 2, doc) {
+    if (typeof mm !== 'number' || !isFinite(mm)) return '–';
+    return `${fmtLen(mm, d, doc)} ${label(doc)}`;
+  }
+  function fmtArea(mm2, d = 2, doc) {
+    if (typeof mm2 !== 'number' || !isFinite(mm2)) return '–';
+    const u = def(doc);
+    return fmt(mm2 / u.areaFac, u.k === 'mm' ? d : Math.max(d, u.k === 'm' ? 4 : 2));
+  }
+  function fmtAreaU(mm2, d = 2, doc) {
+    if (typeof mm2 !== 'number' || !isFinite(mm2)) return '–';
+    return `${fmtArea(mm2, d, doc)} ${def(doc).areaLabel}`;
+  }
+  function fmtVolU(mm3, d = 3, doc) {
+    if (typeof mm3 !== 'number' || !isFinite(mm3)) return '–';
+    const u = def(doc);
+    return `${fmt(mm3 / u.volFac, u.k === 'm' ? Math.max(d, 5) : d)} ${u.volLabel}`;
+  }
+  function fmtInput(mm, doc) {
+    if (typeof mm !== 'number' || !isFinite(mm)) return '';
+    return fmt(fromMM(mm, doc), def(doc).inputDec);
+  }
+  const UFAC = { mm: 1, cm: 10, m: 1000, in: 25.4, zoll: 25.4, '"': 25.4, '°': 1 };
+  function parseLen(raw, V, { expr = true, doc } = {}) {
+    const s = String(raw ?? '').trim();
+    if (!s) return { ok: false };
+    const n = parseNum(s);
+    if (!isNaN(n)) {
+      const mm = round(toMM(n, doc), 6);
+      return { ok: true, value: mm, num: mm };
+    }
+    const um = /^([-+()\d.,\s*/]+?)\s*(mm|cm|m|in|zoll|"|°)$/i.exec(s);
+    if (um) {
+      try {
+        const mm = round(Expr.eval(um[1], {}) * UFAC[um[2].toLowerCase()], 6);
+        if (isFinite(mm)) return { ok: true, value: mm, num: mm };
+      } catch (_) {}
+    } else if (/^[-+()\d.,\s*/]+((mm|cm|m|in|zoll|"|°)[-+()\d.,\s*/]*)+$/i.test(s)) {
+      try {
+        const mm = round(Expr.eval(s, {}), 6);
+        if (isFinite(mm)) return { ok: true, value: mm, num: mm };
+      } catch (_) {}
+    }
+    if (!/[A-Za-zÄÖÜäöüß_]/.test(s) && (!expr || key(doc) !== 'mm')) {
+      try {
+        const v = Expr.eval(s, {});
+        if (isFinite(v)) {
+          const mm = round(toMM(v, doc), 6);
+          return { ok: true, value: mm, num: mm };
+        }
+      } catch (_) {}
+    }
+    if (!expr) return { ok: false };
+    const ev = typeof Model !== 'undefined' ? Model.num(s, V || {}, NaN) : (() => { try { return Expr.eval(s, V || {}); } catch (_) { return NaN; } })();
+    if (!isFinite(ev)) return { ok: false };
+    return { ok: true, value: s, num: ev };
+  }
+  function set(u) {
+    if (!DEFS[u] || typeof App === 'undefined' || !App.doc || key() === u) return false;
+    App.change('Einheit: ' + DEFS[u].name, (doc) => { doc.settings = doc.settings || {}; doc.settings.unit = u; });
+    return true;
+  }
+  return { DEFS, ORDER, OPTIONS, key, def, label, areaLabel, volLabel, factor, fromMM, toMM, areaFromMM2, volFromMM3, fmtLen, fmtLenU, fmtArea, fmtAreaU, fmtVolU, fmtInput, parseLen, set };
+})();
+
 // ---------- Symbole ----------
 const IC = {
   cube: '<path d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5z M4 7.5 12 12l8-4.5 M12 12v9" />',
@@ -1063,6 +1158,11 @@ const HELP = {
   "tip": "Bezugsachse als Dreh- oder Musterachse anlegen",
   "hilfe": "Legt eine eigene Achse im Projekt an: durch zwei Punkte (Ecken und Kantenmitten rasten ein), durch die Mitte einer runden Fläche (Zylinder, Kegel, Ring) oder eines Kreises, oder senkrecht auf eine ebene Fläche an einem Punkt. Sie wandert mit dem Teil mit und lässt sich direkt für Kreismuster und Drehen (Revolve) wählen.",
   "tipp": "Im Verlauf unter „Bezugsachsen“ kannst du jede Achse benennen, ein- oder ausblenden und beim Kreismuster einfach aus der Liste „Drehachse“ auswählen."
+ },
+ "projectUnit": {
+  "tip": "Einheit für dieses Projekt wählen (mm, cm, m oder Zoll)",
+  "hilfe": "Legt die Anzeige- und Standard-Einheit für dieses Projekt fest. Alle Maße, Schilder, Koordinaten, Messungen und die Stückliste zeigen in dieser Einheit; Eingaben ohne Einheit gelten darin. Eingaben mit Einheit (z. B. 25,4 mm oder 1 in) funktionieren immer.",
+  "tipp": "Du kannst die Einheit jederzeit umschalten – die echte Geometrie bleibt immer exakt erhalten."
  }
 };
 

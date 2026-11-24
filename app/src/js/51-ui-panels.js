@@ -250,9 +250,9 @@ const Panels = (() => {
             const ferr = errs.find((x) => x.finishId === fin.id);
             const fr = h('div', { class: 'finish-row' + (ferr ? ' bad' : ''), title: ferr ? ferr.message : '' });
             fr.innerHTML = icon(fin.type === 'chamfer' ? 'chamfer' : fin.type === 'shell' ? 'shell' : 'fillet');
-            if (fin.type === 'shell') fr.append(h('span', null, 'Wandstärke ' + fmt(Model.num(fin.r, V, 2), 2) + ' mm'));
+            if (fin.type === 'shell') fr.append(h('span', null, 'Wandstärke ' + Units.fmtLenU(Model.num(fin.r, V, 2), 2)));
             else if (fin.type === 'draft') fr.append(h('span', null, 'Entformungsschräge ' + fmt(Model.num(fin.r, V, 3), 1) + '°'));
-            else fr.append(h('span', null, (fin.type === 'chamfer' ? 'Fase ' : 'Rundung ') + fmt(Model.num(fin.r, V, 1), 2) + ' mm' + (typeof fin.edges === 'string' ? ' · ' + ({ all: 'alle Kanten', top: 'oben', bottom: 'unten', vertical: 'senkrecht', horizontal: 'waagerecht' }[fin.edges] || '') : ' · ' + (fin.edges || []).length + ' Kante' + ((fin.edges || []).length === 1 ? '' : 'n'))));
+            else fr.append(h('span', null, (fin.type === 'chamfer' ? 'Fase ' : 'Rundung ') + Units.fmtLenU(Model.num(fin.r, V, 1), 2) + (typeof fin.edges === 'string' ? ' · ' + ({ all: 'alle Kanten', top: 'oben', bottom: 'unten', vertical: 'senkrecht', horizontal: 'waagerecht' }[fin.edges] || '') : ' · ' + (fin.edges || []).length + ' Kante' + ((fin.edges || []).length === 1 ? '' : 'n'))));
             fr.onclick = () => App.select([it.id]);
             li.append(fr);
           }
@@ -448,7 +448,7 @@ const Panels = (() => {
     const draw = () => {
       body.innerHTML = '';
       body.append(UI.selectField({ id: 'gap-ax', label: 'Richtung', value: ax, options: [['x', 'Links / rechts (X)'], ['y', 'Vorne / hinten (Y)'], ['z', 'Oben / unten (Z)']], onChange: (v) => { ax = v; draw(); } }));
-      body.append(UI.numField({ id: 'gap-v', label: 'Lücke (jetzt ' + fmt(g0(), 2) + ' mm)', value: g0(), onCommit: (v) => { const n = Model.num(v, Model.vars(App.doc).v, NaN); if (!isNaN(n)) { Actions.setGap(null, ax, n); UI.closePop(); } } }));
+      body.append(UI.numField({ id: 'gap-v', label: 'Lücke (jetzt ' + Units.fmtLenU(g0(), 2) + ')', value: g0(), onCommit: (v) => { const n = Model.num(v, Model.vars(App.doc).v, NaN); if (!isNaN(n)) { Actions.setGap(null, ax, n); UI.closePop(); } } }));
     };
     draw(); box.append(body, h('div', { class: 'hint-box', html: 'Der zuletzt gewählte Teil bewegt sich. 0 = bündig aneinander, negativ = ineinander.' }));
     UI.pop(anchor, box);
@@ -472,6 +472,9 @@ const Panels = (() => {
     const nameF = h('div', { class: 'field' }, h('label', { for: 'proj-name' }, 'Projektname'), h('div', { class: 'inp' }, h('input', { id: 'proj-name', value: App.doc.name, style: { fontFamily: 'var(--font)' } })));
     nameF.querySelector('input').addEventListener('change', (e) => { const v = e.target.value.trim() || 'Neues Projekt'; App.change('Projekt umbenannt', (doc) => { doc.name = v; }); });
     w.append(nameF);
+    const unitF = UI.selectField({ id: 'proj-unit', label: 'Einheit', value: Units.key(), options: Units.OPTIONS, onChange: (v) => Units.set(v) });
+    unitF.dataset.help = 'projectUnit';
+    w.append(unitF);
     if (App.doc.items.length) {
       const ps = h('div', { class: 'section', id: 'proj-weak-sec' }, h('div', { class: 'section-h' }, 'Schwachstellen'));
       const wl = Weak.summary();
@@ -483,14 +486,14 @@ const Panels = (() => {
     }
     const pv = ViewPrefs.get();
     const va = h('div', { class: 'section pro' }, h('div', { class: 'section-h' }, 'Ansicht'));
-    va.append(UI.selectField({ id: 'view-grid', label: 'Rasterweite', value: String(pv.grid), options: [['auto', 'Automatisch (folgt dem Zoom)'], ['0.01', '0,01 mm'], ['0.1', '0,1 mm'], ['1', '1 mm'], ['10', '10 mm'], ['100', '100 mm']], onChange: (val) => ViewPrefs.set({ grid: val === 'auto' ? 'auto' : parseFloat(val) }) }));
+    va.append(UI.selectField({ id: 'view-grid', label: 'Rasterweite', value: String(pv.grid), options: [['auto', 'Automatisch (folgt dem Zoom)'], ['0.01', Units.fmtLenU(0.01, 2)], ['0.1', Units.fmtLenU(0.1, 2)], ['1', Units.fmtLenU(1, 2)], ['10', Units.fmtLenU(10, 2)], ['100', Units.fmtLenU(100, 2)]], onChange: (val) => ViewPrefs.set({ grid: val === 'auto' ? 'auto' : parseFloat(val) }) }));
     const chk = (k, label) => { const l = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'view-' + k, checked: !!pv[k] }), label); l.querySelector('input').onchange = (e) => ViewPrefs.set({ [k]: e.target.checked }); return l; };
     va.append(UI.selectField({ id: 'view-quality', label: 'Darstellungsqualität', value: pv.quality, options: [['coarse', 'Grob'], ['normal', 'Normal'], ['fine', 'Fein'], ['ultra', 'Sehr fein']], onChange: (val) => ViewPrefs.set({ quality: val }) }));
     va.append(h('div', { style: { display: 'grid', gap: '6px', marginTop: '8px' } }, chk('adaptive', 'Darstellung anpassen (Zoom, Drehen)'), chk('gridOn', 'Raster zeigen'), chk('planes', 'Ursprungsebenen zeigen'), chk('axes', 'Achsen zeigen'), chk('notes', 'Notizen zeigen'), chk('ortho', 'Orthografisch (ohne Perspektive)')));
     w.append(va);
     const gr = h('div', { class: 'section pro' }, h('div', { class: 'section-h' }, 'Fangen beim Verschieben'));
     const f2 = h('div', { class: 'fields' });
-    f2.append(UI.selectField({ id: 'grid', label: 'Schrittweite', value: App.doc.settings.grid, options: [[0.01, '0,01 mm'], [0.05, '0,05 mm'], [0.1, '0,1 mm'], [0.5, '0,5 mm'], [1, '1 mm'], [2, '2 mm'], [5, '5 mm'], [10, '10 mm']], onChange: (v) => App.change('Raster geändert', (doc) => { doc.settings.grid = parseFloat(v); }) }));
+    f2.append(UI.selectField({ id: 'grid', label: 'Schrittweite', value: App.doc.settings.grid, options: [0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10].map((v) => [v, Units.fmtLenU(v, 2)]), onChange: (v) => App.change('Raster geändert', (doc) => { doc.settings.grid = parseFloat(v); }) }));
     const snap = h('label', { class: 'check', style: { alignSelf: 'end', paddingBottom: '8px' } }, h('input', { type: 'checkbox', id: 'snap', checked: App.doc.settings.snap !== false }), 'Einrasten');
     snap.querySelector('input').onchange = (e) => App.change('Einrasten geändert', (doc) => { doc.settings.snap = e.target.checked; });
     const mag = h('label', { class: 'check', style: { paddingBottom: '4px' } }, h('input', { type: 'checkbox', id: 'magnet', checked: App.doc.settings.magnet !== false }), 'Magnetisch einrasten (Mitte, Mittellinien, Lochmitten, ganz oben auf Rundungen, bündig zu anderen Teilen) – Strg hält es kurz an');
@@ -500,7 +503,7 @@ const Panels = (() => {
     const info = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Überblick'));
     info.append(h('div', { class: 'mini-list' },
       h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Objekte'), h('b', { class: 'mono' }, String(Model.countItems(App.doc)))),
-      h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Größe gesamt'), h('b', { class: 'mono' }, st ? `${fmt(st.x, 1)} × ${fmt(st.y, 1)} × ${fmt(st.z, 1)} mm` : '–'))));
+      h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Größe gesamt'), h('b', { class: 'mono' }, st ? `${Units.fmtLen(st.x, 1)} × ${Units.fmtLen(st.y, 1)} × ${Units.fmtLen(st.z, 1)} ${Units.label()}` : '–'))));
     w.append(info);
     // Material und Gewicht des ganzen Projekts (exaktes Volumen aus dem CAD-Kern)
     const curMat = App.doc.settings.material || 'CFK';
@@ -522,9 +525,8 @@ const Panels = (() => {
     ms.append(h('div', { class: 'btn-row', style: { marginTop: '8px' } }, bomB));
     Mass.measure().then((r) => {
       if (!r) { vRow.textContent = gRow.textContent = cRow.textContent = '–'; return; }
-      const cm3 = r.volume / 1000;
-      vRow.textContent = `${fmt(cm3, 3)} cm³`; gRow.textContent = Mass.gText(r.mass);
-      cRow.textContent = r.com ? r.com.map((v) => fmt(v, 1)).join(' · ') : '–';
+      vRow.textContent = Units.fmtVolU(r.volume, 3); gRow.textContent = Mass.gText(r.mass);
+      cRow.textContent = r.com ? r.com.map((v) => Units.fmtLen(v, 1)).join(' · ') + (Units.key() !== 'mm' ? ' ' + Units.label() : '') : '–';
       const n = (r.parts || []).filter((p) => p.own && !p.fixed).length, nf = (r.parts || []).filter((p) => p.fixed).length;
       const bits = [];
       if (n) bits.push(`${n} ${n === 1 ? 'Teil hat' : 'Teile haben'} ein eigenes Material`);
@@ -551,7 +553,7 @@ const Panels = (() => {
     if (tops && tops[0] !== tops[1]) {
       const ds = h('div', { class: 'section', id: 'min-dist', 'data-help': 'minDistance' }, h('div', { class: 'section-h' }, 'Kleinster Abstand'));
       const val = h('b', { class: 'mono', id: 'min-dist-val' }, '…'); ds.append(h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, `${Model.label(found[0].item)} ↔ ${Model.label(found[1].item)}`), val));
-      Measure.minDistance(tops).then((r) => { val.textContent = !r ? '–' : r.d < 1e-6 ? 'berühren sich' : fmt(r.d, 3) + ' mm'; });
+      Measure.minDistance(tops).then((r) => { val.textContent = !r ? '–' : r.d < 1e-6 ? 'berühren sich' : Units.fmtLenU(r.d, 3); });
       w.append(ds);
     }
     const al = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Ausrichten'));
@@ -618,8 +620,8 @@ const Panels = (() => {
     if (!list.length) { UI.toast('An dieser Fläche habe ich keine Kanten gefunden.', { icon: 'info' }); return; }
     UI.menu(anchor, [
       { icon: 'pointer', label: `Alle ${list.length} Kanten wählen`, id: 'fe-select', help: 'faceEdges', run: () => App.select([face.id], { edges: list }) },
-      { icon: 'fillet', label: 'Alle abrunden (1 mm)', id: 'fe-fillet', help: 'faceEdges', run: () => Actions.addFinish('fillet', 1, list) },
-      { icon: 'chamfer', label: 'Alle abschrägen (1 mm)', id: 'fe-chamfer', help: 'faceEdges', run: () => Actions.addFinish('chamfer', 1, list) },
+      { icon: 'fillet', label: `Alle abrunden (${Units.fmtLenU(1, 2)})`, id: 'fe-fillet', help: 'faceEdges', run: () => Actions.addFinish('fillet', 1, list) },
+      { icon: 'chamfer', label: `Alle abschrägen (${Units.fmtLenU(1, 2)})`, id: 'fe-chamfer', help: 'faceEdges', run: () => Actions.addFinish('chamfer', 1, list) },
     ]);
   }
   function renderItem(body, f) {
@@ -648,7 +650,7 @@ const Panels = (() => {
     }
     for (const e of App.errorsFor(it.id)) {
       const box = h('div', { class: 'err-box' }, h('span', null, e.message));
-      if (e.code === 'toobig' && e.max > 0) { const b = h('button', { type: 'button', class: 'btn small' }, `Auf ${fmt(e.max, 1)} mm setzen`); b.onclick = () => Actions.setFinish(it.id, e.finishId, { r: e.max }); box.append(h('div', null, b)); }
+      if (e.code === 'toobig' && e.max > 0) { const b = h('button', { type: 'button', class: 'btn small' }, `Auf ${Units.fmtLenU(e.max, 1)} setzen`); b.onclick = () => Actions.setFinish(it.id, e.finishId, { r: e.max }); box.append(h('div', null, b)); }
       if (e.code === 'edges') { const b = h('button', { type: 'button', class: 'btn small' }, 'Rundung entfernen'); b.onclick = () => Actions.removeFinish(it.id, e.finishId); box.append(h('div', null, b)); }
       w.append(box);
     }
@@ -681,7 +683,7 @@ const Panels = (() => {
     const opSec = opSection(it); if (opSec) w.append(opSec);
     // Maße
     const three = !!(KINDS[it.kind] && KINDS[it.kind].params.length === 3);
-    const sec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, three ? 'Maße (mm)' : 'Maße'));
+    const sec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, three ? `Maße (${Units.label()})` : 'Maße'));
     const setP = (k, val) => App.change('Maß geändert', (doc) => { Model.find(doc, it.id).item.p[k] = val; }, { merge: 'p:' + it.id + ':' + k });
     if (KINDS[it.kind] && KINDS[it.kind].params.length) {
       const fl = h('div', { class: 'fields' + (KINDS[it.kind].params.length === 3 ? ' three' : '') });
@@ -698,15 +700,15 @@ const Panels = (() => {
         sec.append(fl);
         if (def.lib === 'blindHole') {
           const d = Model.num(it.p.d, V, 5), dep = Model.num(it.p.depth, V, 10), ang = Number(it.p.tipAngle ?? 118), tipH = blindTipHeight(d, ang);
-          const tipTxt = ang >= 179.5 ? `Flacher Boden, Tiefe ${fmt(dep, 2)} mm.` : `Bohrspitze (${ang}°): +${fmt(tipH, 2)} mm → Gesamttiefe <b>${fmt(dep + tipH, 2)} mm</b>.`;
+          const tipTxt = ang >= 179.5 ? `Flacher Boden, Tiefe ${Units.fmtLenU(dep, 2)}.` : `Bohrspitze (${ang}°): +${Units.fmtLenU(tipH, 2)} → Gesamttiefe <b>${Units.fmtLenU(dep + tipH, 2)}</b>.`;
           sec.append(h('div', { class: 'hint-box', html: `${tipTxt} Setz es mit <b>Bohrung</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.` }));
         } else if (def.lib === 'fitHole') {
           const d = Model.num(it.p.d, V, 6), info = h7Info(d);
-          const tolTxt = info.um != null ? `<b>Passung Ø ${fmt(d, 2)} H7 (ISO 286):</b> ${info.esText} / 0 mm (${info.rangeText}). Im 3D-Modell wird genau das Nennmaß gebohrt – beim Fertigen auf Maß reiben.` : `<b>Passung Ø ${fmt(d, 2)} H7:</b> Im 3D-Modell wird genau das Nennmaß gebohrt.`;
+          const tolTxt = info.um != null ? `<b>Passung Ø ${Units.fmtLenU(d, 2)} H7 (ISO 286):</b> ${info.esText} / 0 mm (${info.rangeText}). Im 3D-Modell wird genau das Nennmaß gebohrt – beim Fertigen auf Maß reiben.` : `<b>Passung Ø ${Units.fmtLenU(d, 2)} H7:</b> Im 3D-Modell wird genau das Nennmaß gebohrt.`;
           sec.append(h('div', { id: 'p-fit-hint', class: 'hint-box', html: tolTxt }));
         } else if (def.lib === 'centerHole') {
           const m = centerHoleMetrics(it.p.size);
-          sec.append(h('div', { class: 'hint-box', html: `<b>DIN 332 Form A (${it.p.size || 'A2.5'}):</b> Führungs-Ø ${fmt(m.d1, 2)} mm · 60°-Kegel Ø ${fmt(m.d2, 2)} mm · Gesamttiefe ${fmt(m.totalDepth, 2)} mm.` }));
+          sec.append(h('div', { class: 'hint-box', html: `<b>DIN 332 Form A (${it.p.size || 'A2.5'}):</b> Führungs-Ø ${Units.fmtLenU(m.d1, 2)} · 60°-Kegel Ø ${Units.fmtLenU(m.d2, 2)} · Gesamttiefe ${Units.fmtLenU(m.totalDepth, 2)}.` }));
         } else if (def.lib === 'screwHole' || def.lib === 'insert' || def.lib === 'nutTrap') sec.append(h('div', { class: 'hint-box', html: 'Das Loch zeigt mit der flachen Seite nach oben. Setz es mit <b>Loch hier</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.' }));
         w.append(sec);
       }
@@ -802,7 +804,7 @@ const Panels = (() => {
             const L = Math.hypot(RP[i + 1][0] - RP[i][0], RP[i + 1][1] - RP[i][1], RP[i + 1][2] - RP[i][2]), r = RU[i] || {};
             const sr = h('div', { class: 'fields p3-seg' });
             sr.append(UI.selectField({ id: `p3-ax-${i}`, label: `Stück P${i + 1} → P${i + 2}`, value: r.ax || '', options: [['', 'Richtung frei'], ['x', 'entlang X'], ['y', 'entlang Y'], ['z', 'entlang Z (senkrecht)'], ...(i > 0 ? [['perp', 'rechtwinklig zum vorigen'], ['par', 'parallel zum vorigen']] : [])], onChange: (v) => setRule(i, { ax: v || null }) }));
-            sr.append(UI.numField({ id: `p3-len-${i}`, label: r.len != null ? 'Länge (fest)' : `Länge (jetzt ${fmt(L, 1)})`, value: r.len != null ? r.len : 0, min: 0, onCommit: (v) => setRule(i, { len: v || null }) }));
+            sr.append(UI.numField({ id: `p3-len-${i}`, label: r.len != null ? 'Länge (fest)' : `Länge (jetzt ${Units.fmtLen(L, 1)})`, value: r.len != null ? r.len : 0, min: 0, onCommit: (v) => setRule(i, { len: v || null }) }));
             list.append(sr);
           }
         });
@@ -883,10 +885,10 @@ const Panels = (() => {
     const pos = h('div', { class: 'section' }, h('div', { class: 'section-h' }, 'Lage'));
     const setT = (k, val) => App.change(k.startsWith('r') ? 'Gedreht' : 'Verschoben', (doc) => { Model.find(doc, it.id).item.t[k] = val; }, { merge: 't:' + it.id + ':' + k });
     const fp = h('div', { class: 'fields three' });
-    for (const k of ['x', 'y', 'z']) fp.append(UI.numField({ id: 't-' + k, value: it.t[k], axis: k, unit: '', onCommit: (v) => setT(k, v) }));
+    for (const k of ['x', 'y', 'z']) fp.append(UI.numField({ id: 't-' + k, value: it.t[k], axis: k, unit: '', len: true, onCommit: (v) => setT(k, v) }));
     const fr = h('div', { class: 'fields three' });
     for (const k of ['rx', 'ry', 'rz']) fr.append(UI.numField({ id: 't-' + k, value: it.t[k], axis: k[1], unit: '°', onCommit: (v) => setT(k, v) }));
-    pos.append(h('div', { class: 'field' }, h('label', null, 'Position (mm)'), fp), h('div', { class: 'field' }, h('label', null, 'Drehung (°)'), fr));
+    pos.append(h('div', { class: 'field' }, h('label', null, `Position (${Units.label()})`), fp), h('div', { class: 'field' }, h('label', null, 'Drehung (°)'), fr));
     const qa = h('div', { class: 'btn-row' });
     const drop = h('button', { type: 'button', class: 'btn small', 'data-tip': 'Unterkante auf Höhe 0 setzen' }); drop.innerHTML = icon('push') + 'Auf XY-Ebene';
     drop.onclick = () => Actions.dropToPlate([it.id]);
@@ -987,7 +989,7 @@ const Panels = (() => {
       for (const th of it.threads || []) {
         const sp = THREAD_MAP[th.size] || { pitch: 1 };
         const box = h('div', { class: 'thread-item', style: { display: 'grid', gap: '6px', padding: '6px 0', borderTop: '1px solid var(--line)' } });
-        box.append(h('div', { class: 'mini-row' }, h('b', null, `${th.size} × ${fmt(th.length, 1)} mm`), h('span', { class: 'grow muted', style: { marginLeft: '6px', fontSize: '11px' } }, `${th.kind === 'int' ? 'Innengewinde' : 'Außengewinde'} · P ${fmt(sp.pitch, 2)}`)));
+        box.append(h('div', { class: 'mini-row' }, h('b', null, `${th.size} × ${Units.fmtLenU(th.length, 1)}`), h('span', { class: 'grow muted', style: { marginLeft: '6px', fontSize: '11px' } }, `${th.kind === 'int' ? 'Innengewinde' : 'Außengewinde'} · P ${fmt(sp.pitch, 2)}`)));
         const fs = h('div', { class: 'fields' });
         fs.append(UI.selectField({ id: 'th-size-' + th.id, label: 'M-Größe', value: th.size, options: THREAD_SPECS.map((s) => [s.size, s.size]), onChange: (v) => Features.updateThread(it.id, th.id, { size: v }) }));
         fs.append(UI.numField({ id: 'th-len-' + th.id, label: 'Länge', value: th.length, min: 0.5, unit: 'mm', expr: false, onCommit: (v) => Features.updateThread(it.id, th.id, { length: v }) }));
@@ -1024,9 +1026,9 @@ const Panels = (() => {
       const vR = h('b', { class: 'mono' }, '…'), gR = h('b', { class: 'mono' }, '…'), aR = h('b', { class: 'mono' }, '…'), bR = h('b', { class: 'mono' }, '…');
       ms.append(h('div', { class: 'mini-list', style: { marginTop: '8px' } }, h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Volumen'), vR), h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Oberfläche'), aR), h('div', { class: 'mini-row', 'data-help': 'bboxSize' }, h('span', { class: 'grow' }, 'Hüllmaße (L × B × H)'), bR), h('div', { class: 'mini-row', 'data-help': 'massProps' }, h('span', { class: 'grow' }, 'Gewicht'), gR)));
       Mass.measure().then((r) => {
-        const p = Mass.partOf(r, it.id); vR.textContent = p ? `${fmt(p.volume / 1000, 3)} cm³` : '–'; gR.textContent = p ? Mass.gText(p.mass) + (p.fixed ? ' (fest)' : '') : '–'; vR.id = 'p-vol'; gR.id = 'p-mass';
-        aR.textContent = p && p.area ? `${fmt(p.area / 100, 2)} cm²` : '–'; aR.id = 'p-area';
-        const b = p && p.bbox; bR.textContent = b ? `${fmt(b[3] - b[0], 2)} × ${fmt(b[4] - b[1], 2)} × ${fmt(b[5] - b[2], 2)} mm` : '–'; bR.id = 'p-bbox';
+        const p = Mass.partOf(r, it.id); vR.textContent = p ? Units.fmtVolU(p.volume, 3) : '–'; gR.textContent = p ? Mass.gText(p.mass) + (p.fixed ? ' (fest)' : '') : '–'; vR.id = 'p-vol'; gR.id = 'p-mass';
+        aR.textContent = p && p.area ? (Units.key() === 'mm' ? `${fmt(p.area / 100, 2)} cm²` : Units.fmtAreaU(p.area, 2)) : '–'; aR.id = 'p-area';
+        const b = p && p.bbox; bR.textContent = b ? `${Units.fmtLen(b[3] - b[0], 2)} × ${Units.fmtLen(b[4] - b[1], 2)} × ${Units.fmtLen(b[5] - b[2], 2)} ${Units.label()}` : '–'; bR.id = 'p-bbox';
         // Trägheit um den Schwerpunkt (PF-13) und Standfestigkeit (PF-14)
         if (p && p.I && !p.fixed) {
           const gc = (x) => fmt(x / 100, x / 100 < 10 ? 2 : 1);
@@ -1080,16 +1082,19 @@ const Panels = (() => {
     const face = Actions.selectedFace();
     // Wert im Schild der Leiste: Klick kopiert ihn (Länge der Kanten, Durchmesser einer runden Fläche)
     const valLbl = (txt, val, unit, tip) => {
-      const l = h('span', { class: 'lbl copyable', id: 'sel-val', 'data-help': 'copyValue', 'data-tip': tip + ' – klicken kopiert den Wert' }, txt, h('span', { class: 'mono' }, fmt(val, 2) + ' ' + unit));
-      l.onclick = () => Measure.copyText(fmt(val, 2), txt.trim()); return l;
+      const isL = unit === 'mm';
+      const numStr = isL ? Units.fmtLen(val, 2) : fmt(val, 2);
+      const uStr = isL ? Units.label() : unit;
+      const l = h('span', { class: 'lbl copyable', id: 'sel-val', 'data-help': 'copyValue', 'data-tip': tip + ' – klicken kopiert den Wert' }, txt, h('span', { class: 'mono' }, numStr + ' ' + uStr));
+      l.onclick = () => Measure.copyText(numStr, txt.trim()); return l;
     };
     if (App.edges.length) {
       const eds = App.edges.map((x) => { const r = App.results.get(x.id); return r && r.data.edges[x.edgeIdx]; }).filter(Boolean);
       const one = eds.length === 1 && eds[0];
       const full = one && one.t === 'CIRCLE' && one.r && Math.hypot(one.a[0] - one.b[0], one.a[1] - one.b[1], one.a[2] - one.b[2]) < 1e-6;
       const total = eds.reduce((s, e) => s + (e.l || 0), 0);
-      if (full) bar.append(valLbl('Kante Ø', one.r * 2, 'mm', `Kreis mit Radius ${fmt(one.r, 2)} mm, Umfang ${fmt(total, 2)} mm`));
-      else if (total > 0) bar.append(valLbl(App.edges.length > 1 ? App.edges.length + ' Kanten' : 'Kante', total, 'mm', App.edges.length > 1 ? 'Gesamtlänge der gewählten Kanten' : 'Länge der Kante' + (one && one.t === 'CIRCLE' && one.r ? ` (Bogen, R ${fmt(one.r, 2)} mm)` : '')));
+      if (full) bar.append(valLbl('Kante Ø', one.r * 2, 'mm', `Kreis mit Radius ${Units.fmtLenU(one.r, 2)}, Umfang ${Units.fmtLenU(total, 2)}`));
+      else if (total > 0) bar.append(valLbl(App.edges.length > 1 ? App.edges.length + ' Kanten' : 'Kante', total, 'mm', App.edges.length > 1 ? 'Gesamtlänge der gewählten Kanten' : 'Länge der Kante' + (one && one.t === 'CIRCLE' && one.r ? ` (Bogen, R ${Units.fmtLenU(one.r, 2)})` : '')));
       else bar.append(h('span', { class: 'lbl' }, App.edges.length > 1 ? App.edges.length + ' Kanten' : 'Kante'));
       b('fillet', 'Abrunden', () => Actions.addFinish('fillet', 1), 'accent', 'Kante abrunden (1 mm, danach änderbar)');
       b('chamfer', 'Abschrägen', () => Actions.addFinish('chamfer', 1), '', 'Kante abschrägen (1 mm, danach änderbar)');
@@ -1113,7 +1118,7 @@ const Panels = (() => {
       sep();
     } else if (face && items.length === 1 && face.info.t !== 'PLANE') {
       const fr = face.info.r;
-      bar.append(fr ? valLbl(face.info.t === 'SPHERE' ? 'Kugel Ø' : 'Runde Fläche Ø', fr * 2, 'mm', `Radius ${fmt(fr, 2)} mm`) : h('span', { class: 'lbl' }, 'Runde Fläche'));
+      bar.append(fr ? valLbl(face.info.t === 'SPHERE' ? 'Kugel Ø' : 'Runde Fläche Ø', fr * 2, 'mm', `Radius ${Units.fmtLenU(fr, 2)}`) : h('span', { class: 'lbl' }, 'Runde Fläche'));
       b('holeWizard', 'Bohrung', (e) => Place.holeHere(face, e.currentTarget), 'accent', 'Bohrungs-Assistent: Loch senkrecht in die runde Fläche (Schraube, Sackloch, Passbohrung H7, Zentrierung …) – der Magnet rastet ganz oben, an den Seiten und in der Mitte ein');
       if (face.info.t === 'CYLINDRE' && items[0].item.role !== 'hole') {
         const hasTh = !!Features.threadOnFace(face.id, face.idx);

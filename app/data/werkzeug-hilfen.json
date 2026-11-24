@@ -758,5 +758,10 @@
     "tip": "Bezugsachse als Dreh- oder Musterachse anlegen",
     "hilfe": "Legt eine eigene Achse im Projekt an: durch zwei Punkte (Ecken und Kantenmitten rasten ein), durch die Mitte einer runden Fläche (Zylinder, Kegel, Ring) oder eines Kreises, oder senkrecht auf eine ebene Fläche an einem Punkt. Sie wandert mit dem Teil mit und lässt sich direkt für Kreismuster und Drehen (Revolve) wählen.",
     "tipp": "Im Verlauf unter „Bezugsachsen“ kannst du jede Achse benennen, ein- oder ausblenden und beim Kreismuster einfach aus der Liste „Drehachse“ auswählen."
+  },
+  "projectUnit": {
+    "tip": "Einheit für dieses Projekt wählen (mm, cm, m oder Zoll)",
+    "hilfe": "Legt die Anzeige- und Standard-Einheit für dieses Projekt fest. Alle Maße, Schilder, Koordinaten, Messungen und die Stückliste zeigen in dieser Einheit; Eingaben ohne Einheit gelten darin. Eingaben mit Einheit (z. B. 25,4 mm oder 1 in) funktionieren immer.",
+    "tipp": "Du kannst die Einheit jederzeit umschalten – die echte Geometrie bleibt immer exakt erhalten."
   }
 }

@@ -155,12 +155,12 @@ const Datums = (() => {
     select(d.id);
     return d;
   }
-  function addOrigin(plane = 'XY', dist = 10, tilt = 0) { return add({ type: 'origin', plane, dist, tilt }, `${NAMES[plane] || plane} ${typeof dist === 'number' ? fmt(dist, 2) + ' mm' : dist}${tilt ? ' · ' + tilt + '°' : ''}`); }
+  function addOrigin(plane = 'XY', dist = 10, tilt = 0) { return add({ type: 'origin', plane, dist, tilt }, `${NAMES[plane] || plane} ${typeof dist === 'number' ? Units.fmtLenU(dist, 2) : dist}${tilt ? ' · ' + tilt + '°' : ''}`); }
   function addFromFace(face, dist = 10) {
     const f = resolveFace(face);
     if (!f || f.info.t !== 'PLANE') { UI.toast('Wähl zuerst eine ebene Fläche eines Körpers.', { icon: 'info' }); return null; }
     const top = Model.find(App.doc, f.id);
-    return add({ type: 'face', id: f.id, n: f.info.n, c: f.info.c, dist }, `Fläche von „${Model.label(top.item)}“ + ${fmt(dist, 2)} mm`);
+    return add({ type: 'face', id: f.id, n: f.info.n, c: f.info.c, dist }, `Fläche von „${Model.label(top.item)}“ + ${Units.fmtLenU(dist, 2)}`);
   }
   function addEdgeAngle(edge, face, angle = 30, name) {
     const eRef = resolveEdge(edge);
@@ -698,7 +698,7 @@ const Datums = (() => {
     nm.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') nm.blur(); });
     w.append(h('div', { class: 'prop-title' }, nm));
     if (ax.axis && Array.isArray(ax.axis.o) && Array.isArray(ax.axis.d)) {
-      const oTxt = ax.axis.o.map((v) => fmt(v, 1)).join(' · ');
+      const oTxt = ax.axis.o.map((v) => Units.fmtLen(v, 1)).join(' · ') + (Units.key() !== 'mm' ? ' ' + Units.label() : '');
       const dTxt = ax.axis.d.map((v) => fmt(v, 2)).join(' · ');
       w.append(h('div', { class: 'mini-list' },
         h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Punkt'), h('b', { class: 'mono' }, oTxt)),
