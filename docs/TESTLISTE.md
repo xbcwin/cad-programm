@@ -1712,6 +1712,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Hilfetexte & Befehle**: `scaleBody` und `thickenFace` in `werkzeug-hilfen.json` sowie Befehle `scale-body` und `thicken-face` vorhanden.
 - [ ] **Von Hand**: Im Browser einen Körper mit Rundungen ungleichmäßig skalieren sowie an einer gekrümmten Freiformfläche „Aufdicken“ mit „Andere Fläche wählen“ und „Eigene Platte“ prüfen.
 
+## Kaputter Bezug: neu wählen (Auto [A-035], KP-12)
+
+- [x] **Verlorene Kante bei Rundung & Fase**: Ändert sich ein Maß so, dass die Kante einer Rundung oder Fase verschwindet, zeigen Verlauf (`.node .warn-ref`), Zeitleiste (`.tl-chip.warn`) und Eigenschaften-Panel (`.warn-box`) ein gelbes Warnzeichen samt „Neu wählen“.
+- [x] **Gestrichelte Alt-Lage & Kante neu wählen**: Der Assistent (`RefFix`) blendet die alte Lage gelb gestrichelt im 3D-Bild ein (`Viewer.hasRefGhost()`), übernimmt per Klick eine neue Kante am Körper und rechnet danach fehlerfrei weiter.
+- [x] **Verlorene Skizzen-Bezugsebene & Hilfetext**: Wird die Bezugsebene einer Skizze gelöscht, erscheint das gelbe Warnzeichen; „Neu wählen“ setzt die Skizze wieder auf eine Ebene/Fläche, alles rechnet fehlerfrei weiter und der Hilfetext `refFix` ist vorhanden.
+- [ ] **Von Hand**: Im Browser beim geöffneten „Neu wählen“-Assistenten prüfen, dass sich die Ansicht per linker Maustaste weiterhin drehen lässt und die gestrichelte Alt-Lage beim Überfahren von Ersatzkanten bzw. -flächen gut sichtbar bleibt.
+
 ## Fehler melden
 
 ```

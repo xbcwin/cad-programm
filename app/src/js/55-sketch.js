@@ -195,7 +195,10 @@ const Sketch = (() => {
     return { o: r6v(a), x: r6v(u.normalize()), n: r6v(n) };
   }
   // Skizze auf einer beliebigen Ebene (z. B. einer Bezugsebene)
-  function startOnPlaneObj(plane, opts = {}) { begin({ plane: deepClone(plane), W: new THREE.Matrix4(), ents: [], refs: [], ctx: { mode: 'new', targetId: null, ribMode: !!opts.ribMode } }); }
+  function startOnPlaneObj(plane, opts = {}) {
+    const planeRef = opts.datumId ? { kind: 'datum', datumId: opts.datumId, name: opts.datumName || '' } : null;
+    begin({ plane: deepClone(plane), W: new THREE.Matrix4(), ents: [], refs: [], planeRef, ctx: { mode: 'new', targetId: null, ribMode: !!opts.ribMode } });
+  }
   function startOnPlane(name, off = 0, opts = {}) {
     const pl = PLANES[name];
     begin({ plane: deepClone(pl), W: new THREE.Matrix4(), ents: [], refs: [], ctx: { mode: 'new', targetId: null, ribMode: !!opts.ribMode }, pOff: off || 0 });
@@ -217,18 +220,39 @@ const Sketch = (() => {
     try { return await Kernel.call('faceLoops', { key: r.key, faceIdx: face.idx }); }
     catch (e) { UI.toast(e.message, { kind: 'bad' }); return null; }
   }
+  function faceSizeApprox(face, loops) {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const lp of loops || []) for (const s of lp || []) for (const pt of [s.a, s.b, s.m, s.c].filter(Boolean)) {
+      minX = Math.min(minX, pt[0]); maxX = Math.max(maxX, pt[0]); minY = Math.min(minY, pt[1]); maxY = Math.max(maxY, pt[1]);
+    }
+    if (isFinite(minX)) {
+      const span = Math.max(maxX - minX, maxY - minY);
+      if (span > 1e-3) return round(clamp(span * 0.8, 10, 80), 2);
+    }
+    const bb = App.results.get(face.id)?.data?.bbox;
+    if (bb) return round(clamp(Math.max(bb[3] - bb[0], bb[4] - bb[1], bb[5] - bb[2]) * 0.6, 10, 80), 2);
+    return 24;
+  }
   async function startOnFace(face, opts = {}) {
     const loops = await loopsOf(face); if (loops == null) return;
     const fr = Actions.faceFrame(face.info);
     const plane = { o: fr.o, x: fr.x, n: fr.n };
     const W = Model.worldMatrix(App.doc, face.id);
     const refs = SK.faceLoopsToEnts({ o: fr.o, x: fr.x, y: fr.y }, loops);
-    begin({ plane, W, ents: [], refs, ctx: { mode: 'new', targetId: face.id, ribMode: !!opts.ribMode } });
+    const planeRef = {
+      kind: 'face',
+      id: face.id,
+      c: face.info.c.map((v) => round(v, 5)),
+      n: (face.info.n || [0, 0, 1]).map((v) => round(v, 5)),
+      size: faceSizeApprox(face, loops),
+    };
+    begin({ plane, W, ents: [], refs, planeRef, ctx: { mode: 'new', targetId: face.id, ribMode: !!opts.ribMode } });
   }
   function editItem(id) {
     const f = Model.find(App.doc, id); if (!f || !f.item.p.sketch) return;
     const W = Model.worldMatrix(App.doc, id);
-    begin({ plane: deepClone(f.item.p.sketch.plane), W, ents: deepClone(f.item.p.sketch.ents), dims: deepClone(f.item.p.sketch.dims || []), cons: deepClone(f.item.p.sketch.cons || []), bg: f.item.p.sketch.bg, refs: [], ctx: { mode: 'edit', editId: id } });
+    const planeRef = f.item.p.sketch.planeRef ? deepClone(f.item.p.sketch.planeRef) : null;
+    begin({ plane: deepClone(f.item.p.sketch.plane), W, ents: deepClone(f.item.p.sketch.ents), dims: deepClone(f.item.p.sketch.dims || []), cons: deepClone(f.item.p.sketch.cons || []), bg: f.item.p.sketch.bg, planeRef, refs: [], ctx: { mode: 'edit', editId: id } });
     if (f.item.kind === 'group' || f.item.kind === 'rib') return;   // Muster entlang Kurve & Rippe: Zielkörper bleibt sichtbar
     // Körper während des Bearbeitens ausblenden
     S.hiddenEdit = id;
@@ -2345,6 +2369,57 @@ const Sketch = (() => {
     if (n.r != null && Math.abs(e.r - n.r) > 1e-4) return false;
     if (n.pts && !close(e.pts, n.pts)) return false;
     return true;
+  }
+  // Prüft rein lesend, ob eine verbundene Körperkante ihr Ziel verloren hat (KP-12)
+  function isLinkLost(it, e) {
+    if (!e || !e.link || !e.link.id || !App.doc) return false;
+    const rf = Model.find(App.doc, e.link.id);
+    if (!rf || rf.item.suppressed) return true;
+    if (!App.results.has(e.link.id)) return false;
+    const sk = it && it.p && it.p.sketch; if (!sk || !sk.plane) return false;
+    const F = frameWorld(sk.plane, Model.worldMatrix(App.doc, it.id));
+    return !relinkGeom(e, F);
+  }
+  function linkPointsWorld(it, e) {
+    const sk = it && it.p && it.p.sketch; if (!sk || !sk.plane || !e) return [];
+    const F = frameWorld(sk.plane, Model.worldMatrix(App.doc, it.id));
+    return SK.segPoints(e).map((q) => F.o.clone().addScaledVector(F.x, q[0]).addScaledVector(F.y, q[1]).toArray());
+  }
+  function rebindLink(itemId, entId, targetId, edgeIdx) {
+    const f = Model.find(App.doc, itemId);
+    if (!f || !f.item.p || !f.item.p.sketch) return { ok: false, why: 'Skizze nicht gefunden.' };
+    const r = App.results.get(targetId);
+    if (!r || !r.data || !r.data.edges || !r.data.edges[edgeIdx]) return { ok: false, why: 'Kante nicht gefunden.' };
+    const g = r.data.edges[edgeIdx];
+    const W = Model.worldMatrix(App.doc, targetId);
+    const pts3 = edgeWorldPts(r.data, edgeIdx, W);
+    if (pts3.length < 2) return { ok: false, why: 'Kante hat keine Geometrie.' };
+    const sk = f.item.p.sketch;
+    const F = frameWorld(sk.plane, Model.worldMatrix(App.doc, itemId));
+    const pts = []; for (const v of pts3) { const uv = uvIn(F, v); if (!pts.length || SK.d2(pts[pts.length - 1], uv) > 1e-4) pts.push(uv); }
+    const en = edgeGeom2D(pts, g.t);
+    if (!en) return { ok: false, why: 'Kante konnte nicht in die Skizzenebene übernommen werden.' };
+    const link = edgeLink(targetId, g, pts3);
+    App.change('Verbundene Kante neu gewählt', (doc) => {
+      const fn = Model.find(doc, itemId); if (!fn || !fn.item.p || !fn.item.p.sketch) return false;
+      const sk2 = fn.item.p.sketch;
+      const orig = (sk2.ents || []).find((x) => x.id === entId); if (!orig) return false;
+      const sameType = orig.type === en.type;
+      if (!sameType) {
+        for (const k of ['a', 'b', 'm', 'c', 'r', 'pts', 'closed']) delete orig[k];
+        orig.type = en.type;
+        sk2.cons = (sk2.cons || []).filter((c) => c.type === 'fix' || !c.refs || !c.refs.some((x) => x && x.e === orig.id));
+        sk2.dims = (sk2.dims || []).filter((d) => !d.refs || !d.refs.some((x) => x && x.e === orig.id));
+      }
+      for (const k of ['a', 'b', 'm', 'c', 'r', 'pts', 'closed']) {
+        if (en[k] != null) orig[k] = deepClone(en[k]);
+        else delete orig[k];
+      }
+      orig.link = link;
+      const ks = Solver.varsOf(orig);
+      for (const c of sk2.cons || []) if (c.type === 'fix' && c.refs && c.refs[0] && c.refs[0].e === orig.id && ks) c.at = Object.fromEntries(ks.map((k) => [k, Solver.getK(orig, k)]));
+    });
+    return { ok: true };
   }
   function relinkAll() {
     if (S || !App.doc) return;
@@ -4612,9 +4687,10 @@ const Sketch = (() => {
   }
   function stepItem() {
     const st = S.step;
+    const pr = S.planeRef ? { planeRef: deepClone(S.planeRef) } : {};
     if (st.rib) {
       return Model.newItem('rib', {
-        sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons) },
+        sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons), ...pr },
         target: st.ribTarget,
         thickness: st.ribThickness,
         side: st.ribSide || 'center',
@@ -4625,7 +4701,7 @@ const Sketch = (() => {
       }, { name: 'Rippe', color: st.color });
     }
     if (st.sweep) {
-      return Model.newItem('sweep', { sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons) }, shape: 'circle', d: 6, w: 6, h: 4, wall: 0 }, { name: 'Entlang Pfad', color: st.color });
+      return Model.newItem('sweep', { sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons), ...pr }, shape: 'circle', d: 6, w: 6, h: 4, wall: 0 }, { name: 'Entlang Pfad', color: st.color });
     }
     const regs = SK.regions(S.ents);
     const sel = st.sel && st.sel.length && st.sel.length < regs.length ? st.sel.slice() : null;
@@ -4634,7 +4710,7 @@ const Sketch = (() => {
     const target = S.ctx.targetId ? Model.find(App.doc, S.ctx.targetId) : null;
     const name = st.revolve ? 'Drehkörper' : role === 'hole' ? 'Aussparung' : S.ctx.targetId ? 'Erhöhung' : (st.thin && st.openOnly ? 'Dünne Wand' : 'Skizzenkörper');
     const it = Model.newItem(kind, {}, { name, role, color: st.color });
-    const p = { sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons), ...(S.bg ? { bg: deepClone(S.bg) } : {}) }, sel };
+    const p = { sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons), ...pr, ...(S.bg ? { bg: deepClone(S.bg) } : {}) }, sel };
     if (kind === 'extrude') {
       const rd = (st.extent === 'toNext' || st.extent === 'toFace') ? App.resolvedDist('__preview') : null;
       p.dist = rd != null ? round(rd, 4) : st.dist;
@@ -4883,6 +4959,6 @@ const Sketch = (() => {
     window.addEventListener('keydown', onModKey);
     window.addEventListener('keyup', onModKey);
   }
-  return { copySel, pasteClip, setRefDim, setDimSpec, check: runCheck, repair: repairCheck, focusCheckIssue, autoDefine: proposeAutoDefine, applyAutoDefine, cancelAutoDefine, toggleFreeSpots, setFreeMode, wiggleFree, focusConflictItem, removeConflictItem, clearConflict, bandSelect, init, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startPath, startLoftPath, editItem, pushPullFace, renderPanel, onKey, cancel, scaleAll, insertEnts, textToCurves, loadFontFile, setBg, setTool, get angleSnap() { return angleSnapOn; }, setAngleSnap, lengthSnapStep, get active() { return !!S; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
+  return { isLinkLost, rebindLink, linkPointsWorld, copySel, pasteClip, setRefDim, setDimSpec, check: runCheck, repair: repairCheck, focusCheckIssue, autoDefine: proposeAutoDefine, applyAutoDefine, cancelAutoDefine, toggleFreeSpots, setFreeMode, wiggleFree, focusConflictItem, removeConflictItem, clearConflict, bandSelect, init, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startPath, startLoftPath, editItem, pushPullFace, renderPanel, onKey, cancel, scaleAll, insertEnts, textToCurves, loadFontFile, setBg, setTool, get angleSnap() { return angleSnapOn; }, setAngleSnap, lengthSnapStep, get active() { return !!S; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
 })();
 

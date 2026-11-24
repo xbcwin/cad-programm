@@ -33,7 +33,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Panels,Joints,I18n,T,Units}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Panels,Joints,I18n,T,Units}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -8846,6 +8846,135 @@ def t_a032_aufdicken_skalieren(p):
     return [ok1, ok2, ok3, ok4, ok5, ok6]
 
 
+def t_kaputter_bezug(p):
+    # 1. Quader 20x20x10 anlegen und Kante bei [10, 0, 10] abrunden
+    p.empty()
+    p.ev("Actions.addPrimitive('box', {p:{w:20, d:20, h:10}})")
+    warte_rechnen(p, 30)
+    p.ev("Viewer.fit()")
+    p.wait(500)
+    ei = p.ev("const it=App.doc.items[0]; const r=App.results.get(it.id); return r.data.edges.findIndex(e=>e&&e.m&&Math.hypot(e.m[0]-10,e.m[1],e.m[2]-10)<0.2)")
+    p.ev("Actions.addFinish('fillet', 2, [{id:App.doc.items[0].id, edgeIdx:arg}])", ei)
+    warte_rechnen(p, 30)
+    p.wait(250)
+    ok1 = (
+        ei >= 0
+        and p.ev("return App.errors.length === 0")
+        and p.pg.locator('.node .warn-ref').count() == 0
+        and p.pg.locator('.tl-chip.warn').count() == 0
+    )
+
+    # 2. Maß w auf 40 ändern → alte Kante verschwindet → gelbes Warnzeichen & Neu-wählen-Knopf
+    p.ev("App.change('Breite ändern', d=>{ d.items[0].p.w = 40; })")
+    warte_rechnen(p, 30)
+    p.wait(300)
+    ok2 = (
+        p.ev("return App.errors.some(e=>e.code==='edges')")
+        and p.pg.locator('.node .warn-ref').count() == 1
+        and p.pg.locator('.tl-chip.warn').count() == 1
+        and p.pg.locator('.warn-box button[data-reffix]').count() >= 1
+    )
+
+    # 3. „Neu wählen“ öffnet Assistent und zeigt alte Lage gestrichelt
+    p.pg.locator('.warn-box button[data-reffix]').first.click()
+    p.wait(350)
+    ok3 = (
+        p.pg.locator('#reffix-bar').count() == 1
+        and p.ev("return RefFix.active === true && Viewer.hasRefGhost() === true")
+    )
+
+    # 4. Neue Kante bei [20, 0, 10] anklicken → Fehler weg, Körper rundet sauber
+    p.ev("Viewer.fit()")
+    p.wait(500)
+    sx, sy = world_screen(p, 20, 0, 10)
+    p.pg.mouse.click(sx, sy)
+    warte_rechnen(p, 30)
+    p.wait(300)
+    vol_fillet = volumen(p) or 9999
+    ok4 = (
+        p.pg.locator('#reffix-bar').count() == 0
+        and p.ev("return !RefFix.active && !Viewer.hasRefGhost() && App.errors.length === 0")
+        and p.pg.locator('.node .warn-ref').count() == 0
+        and p.pg.locator('.tl-chip.warn').count() == 0
+        and vol_fillet < 8000
+    )
+
+    # 5. Fase verliert Kante beim Ändern der Höhe → Klick aufs gelbe Zeichen im Verlauf → neu wählen
+    p.ev("Start.newProject(true)")
+    p.wait(700)
+    p.ev("Actions.addPrimitive('box', {p:{w:20, d:20, h:10}})")
+    warte_rechnen(p, 30)
+    ei2 = p.ev("const it=App.doc.items[0]; const r=App.results.get(it.id); return r.data.edges.findIndex(e=>e&&e.m&&Math.hypot(e.m[0],e.m[1]+10,e.m[2]-10)<0.2)")
+    p.ev("Actions.addFinish('chamfer', 1.5, [{id:App.doc.items[0].id, edgeIdx:arg}])", ei2)
+    warte_rechnen(p, 30)
+    p.ev("App.change('Höhe ändern', d=>{ d.items[0].p.h = 20; })")
+    warte_rechnen(p, 30)
+    p.wait(300)
+    ok5_warn = (
+        ei2 >= 0
+        and p.pg.locator('.node .warn-ref').count() == 1
+        and p.ev("return App.errors.some(e=>e.code==='edges')")
+    )
+    p.pg.locator('.node .warn-ref').first.click()
+    p.wait(350)
+    ok5_ghost = p.pg.locator('#reffix-bar').count() == 1 and p.ev("return Viewer.hasRefGhost() === true")
+    p.ev("Viewer.fit()")
+    p.wait(500)
+    sx2, sy2 = world_screen(p, 0, -10, 20)
+    p.pg.mouse.click(sx2, sy2)
+    warte_rechnen(p, 30)
+    p.wait(300)
+    ok5 = (
+        ok5_warn
+        and ok5_ghost
+        and p.ev("return !RefFix.active && App.errors.length === 0")
+        and p.pg.locator('.node .warn-ref').count() == 0
+    )
+
+    # 6. Skizze auf Bezugsebene → Bezugsebene löschen → gelbes Zeichen → neu wählen auf XY + Hilfetext
+    p.ev("Start.newProject(true)")
+    p.wait(700)
+    p.ev("Actions.addPrimitive('box', {p:{w:20, d:20, h:10}})")
+    warte_rechnen(p, 30)
+    did = p.ev("const d=Datums.addOrigin('XY', 10); return d.id")
+    p.wait(300)
+    p.ev("Datums.sketchOn(arg)", did)
+    p.wait(400)
+    p.ev("Sketch.insertEnts([{id:'r_rf', type:'rect', a:[-5,-5], b:[5,5]}])")
+    p.wait(300)
+    p.pg.keyboard.press('Enter')
+    p.wait(1200)
+    p.pg.locator('.stepbox .btn.primary').click()
+    warte_rechnen(p, 30)
+    p.wait(300)
+    p.ev("Datums.remove(arg)", did)
+    p.wait(400)
+    ok6_warn = (
+        p.pg.locator('.node .warn-ref').count() == 1
+        and p.pg.locator('.tl-chip.warn').count() == 1
+        and p.pg.locator('.warn-box button[data-reffix]').count() >= 1
+    )
+    p.pg.locator('.warn-box button[data-reffix]').first.click()
+    p.wait(350)
+    ok6_ghost = p.pg.locator('#reffix-bar').count() == 1 and p.ev("return Viewer.hasRefGhost() === true")
+    p.pg.locator('#reffix-bar button[data-reffix-plane="XY"]').click()
+    warte_rechnen(p, 30)
+    p.wait(300)
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    rf_help = hilfen.get('refFix') or {}
+    help_ok = bool(rf_help.get('tip') and rf_help.get('hilfe') and rf_help.get('tipp'))
+    ok6 = (
+        ok6_warn
+        and ok6_ghost
+        and p.pg.locator('#reffix-bar').count() == 0
+        and p.pg.locator('.node .warn-ref').count() == 0
+        and p.ev("return App.errors.length === 0")
+        and (volumen(p) or 0) > 4000
+        and help_ok
+    )
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -8981,6 +9110,7 @@ TESTS = [
     ('[A-034] Verlauf umsortieren, Ordner, duplizieren: zwei Löcher tauschen / Loch vor Körper rot abgelehnt / Ordner anlegen & zuklappen / Duplizieren & Hilfe', t_a034_verlauf_ordner),
     ('[A-033] Körper-Liste im Teil: 2 Körper / Umbenennen / Färben / Ausblenden / Projektdatei und Export', t_koerper_liste),
     ('[F-11240339] Volltest-Reparatur: Kontextleiste nach Ghost-Auswertung / Gelenk-Abspielen bei rAF-Stau', t_f11240339),
+    ('[A-035] Kaputter Bezug: neu wählen (Rundung, Fase, Skizze)', t_kaputter_bezug),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

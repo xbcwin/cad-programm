@@ -803,11 +803,12 @@ export function createKernel(R, oc) {
     };
 
     const pool = (ctx && ctx.pool) || [];
+    const refErr = (m) => { const e = new Error(m); e.code = 'ref'; return e; };
     if (p.extent === 'toFace') {
       const ref = p.toFace;
-      if (!ref) throw new Error('Bis zu gewählter Fläche: Keine Zielfläche gewählt – klick eine Fläche im Bild an.');
+      if (!ref) throw refErr('Bis zu gewählter Fläche: Keine Zielfläche gewählt – klick eine Fläche im Bild an.');
       if (ref.datumId) {
-        if (ref.missing || !ref.plane || !ref.plane.o || !ref.plane.n) throw new Error('Bis zu gewählter Fläche: Die gewählte Bezugsebene fehlt.');
+        if (ref.missing || !ref.plane || !ref.plane.o || !ref.plane.n) throw refErr('Bis zu gewählter Fläche: Die gewählte Bezugsebene fehlt.');
         const r = extrudeToPlane(ref.plane.o, norm(ref.plane.n), 'Bis zu gewählter Fläche');
         return { shape: r.shape, resolved: { dist: Math.round(r.dist * 1e6) / 1e6, targetId: ref.datumId } };
       }
@@ -815,11 +816,11 @@ export function createKernel(R, oc) {
       const wasConsumed = !!(ctx && ctx.consumed && ctx.consumed.has(tid));
       while (tid && ctx && ctx.consumed && ctx.consumed.has(tid)) tid = ctx.consumed.get(tid);
       const T = pool.find((e) => e.ids.has(tid));
-      if (!T) throw new Error('Bis zu gewählter Fläche: Der Zielkörper fehlt oder ist ausgeblendet.');
+      if (!T) throw refErr('Bis zu gewählter Fläche: Der Zielkörper fehlt oder ist ausgeblendet.');
       if (T.id === it.id) throw new Error('Bis zu gewählter Fläche: Das Teil kann nicht bis zu sich selbst hochgezogen werden.');
       const useWorld = wasConsumed && T.id !== ref.id;
       const matched = matchFaceOnShape(useWorld ? T.worldShape : T.localShape, ref, useWorld);
-      if (!matched) throw new Error('Bis zu gewählter Fläche: Die gewählte Fläche wurde nicht mehr gefunden.');
+      if (!matched) throw refErr('Bis zu gewählter Fläche: Die gewählte Fläche wurde nicht mehr gefunden.');
       const fi = matched.info;
       if (fi.t === 'PLANE' && fi.n && fi.c) {
         const pF = useWorld ? fi.c : transformPoint(T.m, fi.c);
@@ -1868,9 +1869,17 @@ export function createKernel(R, oc) {
     const t = num(fin.r, 2);
     const b = bboxOf(shape); const tol = 0.05 + 1e-3 * Math.max(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
     const sigs = (fin.faces || []).filter((f) => f && f.c);
-    const pick = (f) => { const c = vec(f.center); return sigs.some((s) => Math.hypot(c[0] - s.c[0], c[1] - s.c[1], c[2] - s.c[2]) < tol); };
-    let count = 0; try { for (const f of shape.faces) if (pick(f)) count++; } catch (_) {}
-    if (!count) { errors.push({ itemId, finishId: fin.id, code: 'edges', message: 'Die offene Fläche für die Wandstärke gibt es nicht mehr.' }); return shape; }
+    const matchFace = (f, s) => { const c = vec(f.center); return Math.hypot(c[0] - s.c[0], c[1] - s.c[1], c[2] - s.c[2]) < tol; };
+    const pick = (f) => sigs.some((s) => matchFace(f, s));
+    let count = 0;
+    const faceArr = [];
+    try { for (const f of shape.faces) { faceArr.push(f); if (pick(f)) count++; } } catch (_) {}
+    const missing = [];
+    sigs.forEach((s, i) => { if (!faceArr.some((f) => matchFace(f, s))) missing.push(i); });
+    if (!count) { errors.push({ itemId, finishId: fin.id, code: 'edges', refType: 'face', missing: sigs.map((_, i) => i), message: 'Die offene Fläche für die Wandstärke gibt es nicht mehr.' }); return shape; }
+    if (missing.length) {
+      errors.push({ itemId, finishId: fin.id, code: 'edges', refType: 'face', partial: true, missing, message: `${missing.length} von ${sigs.length} offenen Flächen für die Wandstärke gibt es nicht mehr.` });
+    }
     const minDim = Math.min(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
     if (!(t > 0) || 2 * t >= minDim - 1e-6) { errors.push({ itemId, finishId: fin.id, code: 'shell', message: `Die Wandstärke ist zu dick für dieses Teil – möglich sind weniger als ${String(Math.floor(minDim * 5) / 10).replace('.', ',')} mm.` }); return shape; }
     try {
@@ -1889,9 +1898,30 @@ export function createKernel(R, oc) {
       if (!(r > 0)) continue;
       let matcher;
       try { matcher = makeEdgeMatcher(fin.edges, shape); } catch (e) { continue; }
+      const shapeEdges = [];
       let count = 0;
-      try { for (const e of shape.edges) if (matcher(e)) count++; } catch (_) {}
-      if (!count) { errors.push({ itemId, finishId: fin.id, code: 'edges', message: 'Die gewählten Kanten gibt es nicht mehr.' }); continue; }
+      try { for (const e of shape.edges) { shapeEdges.push(e); if (matcher(e)) count++; } } catch (_) {}
+      const missing = [];
+      if (Array.isArray(fin.edges)) {
+        const mids = shapeEdges.map((e) => { try { return vec(e.pointAt(0.5)); } catch (_) { return null; } });
+        fin.edges.forEach((s, i) => {
+          if (!s || !s.m) { missing.push(i); return; }
+          const tol = 0.02 + 0.002 * num(s.l, 1);
+          const ok = mids.some((m) => m && Math.hypot(m[0] - s.m[0], m[1] - s.m[1], m[2] - s.m[2]) < tol);
+          if (!ok) missing.push(i);
+        });
+      }
+      const kindTxt = fin.type === 'chamfer' ? 'Fase' : 'Rundung';
+      if (!count) {
+        const msg = Array.isArray(fin.edges) && fin.edges.length === 1
+          ? `Die gewählte Kante der ${kindTxt} gibt es nicht mehr.`
+          : `Die gewählten Kanten der ${kindTxt} gibt es nicht mehr.`;
+        errors.push({ itemId, finishId: fin.id, code: 'edges', refType: 'edge', missing: Array.isArray(fin.edges) ? fin.edges.map((_, i) => i) : null, message: msg });
+        continue;
+      }
+      if (missing.length) {
+        errors.push({ itemId, finishId: fin.id, code: 'edges', refType: 'edge', partial: true, missing, message: `${missing.length} von ${fin.edges.length} gewählten Kanten der ${kindTxt} gibt es nicht mehr.` });
+      }
       try {
         shape = tryFinish(shape, fin.type, r, matcher, fin);
       } catch (err) {
@@ -2081,7 +2111,7 @@ export function createKernel(R, oc) {
         if (it.mir[2] < 0) shape = shape.mirror('XY', [0, 0, 0]);
       }
     } catch (err) {
-      errors.push({ itemId: it.id, code: err && err.code === 'split' ? 'split' : 'build', message: friendlyError(err) });
+      errors.push({ itemId: it.id, code: err && (err.code === 'split' || err.code === 'ref') ? err.code : 'build', message: friendlyError(err) });
       shape = null;
     }
     if (shape) cachePut(key, shape, errors.slice(e0).map((x) => ({ ...x, itemId: x.itemId === it.id ? '$self' : x.itemId })), resolvedInfo);
