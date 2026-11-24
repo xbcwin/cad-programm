@@ -2334,6 +2334,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Hilfetexte, Befehle & DE/EN-Schlüssel**: `curvatureComb` und `cCurvature` in `werkzeug-hilfen.json` und `HELP`, DE/EN-Schlüsselgleichheit und Befehlssuche (`sketch-curvature`, `sketch-g2`) ohne Seitenfehler.
 - [ ] **Von Hand**: Im Browser eine geschwungene Spline an einen Bogen und eine Gerade zeichnen, „Krümmung zeigen“ einschalten, „Krümmungsglatt (G2)“ setzen und beim Ziehen der mittleren Spline-Punkte beobachten, wie die Krümmungskämme am Übergang gleich hoch bleiben.
 
+## Kleinster Innenradius und Symmetrie prüfen (Auto [A-104], PF-11, PF-16)
+
+- [x] **Kleinster Innenradius (Tasche R 2, Fräser R 3 → 1,5)**: Prüfen-Menü → „Kleinster Innenradius“ erkennt alle 4 Taschen-Ecken (`R 2`) als zu klein für Fräser `R 3` (rot markiert, `tooSmallCount == 4`, `minRadius == 2`), schaltet bei Fräser `R 1,5` auf grün um und zählt äußere Rundungen (`R 2` an der Außenecke) nicht mit; Klick in der Liste hebt die Fläche im Modell hervor.
+- [x] **Symmetrie prüfen (Quader & seitliche Bohrung)**: Symmetrischer Quader `30 × 20 × 15` ergibt an der YZ-Ebene „Symmetrisch“ (`100 %`, keine Abweichung). Eine seitliche Bohrung (`Ø 8` bei `X = 8, Y = 0`) meldet „Nicht symmetrisch“ mit roter/blauer Abweichungs-Überlagerung an YZ, bleibt an XZ weiterhin symmetrisch.
+- [x] **Hilfen, Befehle & Übersetzung**: `innerRadius` und `symmetryCheck` in `werkzeug-hilfen.json` und `HELP`, DE/EN-Schlüsselgleichheit sowie Befehlssuche (`innenradius`, `symmetrie`) ohne Seitenfehler.
+- [ ] **Von Hand**: Im Browser bei einem Bauteil mit Freiform-Rundungen, Bohrungen und Versatz-Symmetrieebene („Fläche“ und „Mitte“) die rote/blaue Hervorhebung und das Anspringen der Liste im 3D-Fenster prüfen.
+
 ## Strecken und Live-Spiegeln (Auto [A-110], SK-30, SK-46)
 - [x] **Profi-Modus**: Werkzeug „Strecken“ (`[data-tool="stretch"]`), Schalter `#sk-live-mir-btn` und Panel-Bereich `#sk-live-mir-box` sind im Modus „Einfach“ ausgeblendet und im Modus „Profi“ sichtbar.
 - [x] **Strecken am Rechteck und geregeltem Linienzug**: Auswahlrahmen per Maus aufziehen, Richtung X + Weg 5 mm anwenden → nur die rechte Kante wandert um 5 mm (Breite 25, linke Kante unverändert), vorhandene Regeln (`horizontal`, `vertical`, `coincident`, `fix`) bleiben gültig, `Strg+Z` macht rückgängig.

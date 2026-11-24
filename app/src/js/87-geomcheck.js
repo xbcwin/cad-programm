@@ -4,7 +4,7 @@ const GeomCheck = (() => {
 
   function sync() {
     const b = $('#t-check');
-    if (b) b.classList.toggle('active', !!bar || (typeof ClashCheck !== 'undefined' && ClashCheck.active) || (typeof Measure !== 'undefined' && Measure.draftActive));
+    if (b) b.classList.toggle('active', !!bar || (typeof ClashCheck !== 'undefined' && ClashCheck.active) || (typeof Measure !== 'undefined' && Measure.draftActive) || (typeof InnerRadius !== 'undefined' && InnerRadius.active) || (typeof SymmetryCheck !== 'undefined' && SymmetryCheck.active));
   }
 
   function menu(anchor) {
@@ -16,6 +16,8 @@ const GeomCheck = (() => {
       { label: T('menu.check.thin'), icon: 'ruler', id: 'check-thin', help: 'thinWalls', run: () => Views.thin() },
       { label: T('menu.check.overhang'), icon: 'overhang', id: 'check-overhang', help: 'overhang', run: () => Views.overhang() },
       { label: (typeof Measure !== 'undefined' && Measure.draftActive ? '✓ ' : '') + T('menu.check.draft'), icon: 'chamfer', id: 'check-draft', help: 'draftAnalysis', run: () => Measure.draft() },
+      { label: (typeof InnerRadius !== 'undefined' && InnerRadius.active ? '✓ ' : '') + T('menu.check.innerRadius'), icon: 'fillet', id: 'check-inner-radius', help: 'innerRadius', run: () => InnerRadius.toggle() },
+      { label: (typeof SymmetryCheck !== 'undefined' && SymmetryCheck.active ? '✓ ' : '') + T('menu.check.symmetry'), icon: 'mirror', id: 'check-symmetry', help: 'symmetryCheck', run: () => SymmetryCheck.open() },
     ]);
   }
 

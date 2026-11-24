@@ -2120,6 +2120,16 @@ const HELP = {
   "tip": "Live-Spiegeln: Alles neu Gezeichnete entsteht sofort auch gespiegelt",
   "hilfe": "Schalte im Profi-Modus „Live-Spiegeln“ ein und wähle eine vorhandene Linie (oder die X-/Y-Achse). Jede Linie, jeder Kreis, Bogen, Spline oder Umriss, den du danach zeichnest, entsteht sofort auch gespiegelt mit der Regel „Symmetrisch“ – so bleiben beide Seiten dauerhaft verknüpft.",
   "tipp": "Klick oben oder rechts erneut auf „Live-Spiegeln“, um das automatische Spiegeln wieder auszuschalten."
+ },
+ "innerRadius": {
+  "tip": "Innenrundungen prüfen: Sind alle Ecken groß genug für den Fräser?",
+  "hilfe": "Misst alle nach innen gewölbten Rundungen und Bohrungen am Modell und vergleicht sie mit deinem eingestellten Fräser-Radius. Alles, was kleiner als der Fräser ist, leuchtet rot auf und erscheint in der Liste – so siehst du sofort, wo der Fräser nicht hineinkommt.",
+  "tipp": "Mit „Bohrungen mitprüfen“ kannst du festlegen, ob kreisrunde Löcher (die meist gebohrt werden) mitgezählt werden oder nur gefräste Taschen-Ecken."
+ },
+ "symmetryCheck": {
+  "tip": "Prüft, ob das Modell zu einer gewählten Ebene genau spiegelgleich ist",
+  "hilfe": "Spiegelt alle sichtbaren Körper an einer Grundebene (YZ, XZ, XY), einer Bezugsebene oder einer ebenen Fläche und vergleicht sie exakt mit dem Original. Unterschiede erscheinen farbig im Bild: Rot liegt nur auf dieser Seite, Blau fehlt auf der Gegenseite.",
+  "tipp": "Liegt dein Teil nicht genau auf dem Nullpunkt, klick auf „Mitte“, um die Prüfebene automatisch in die Bauteilmitte zu schieben."
  }
 };
 

@@ -1222,6 +1222,253 @@ const Viewer = (() => {
       dir: [d.x, d.y, d.z], minAngle, twoSided,
     };
   }
+  // ---------- Kleinster Innenradius (PF-11): findet alle konkaven Innenrundungen und Bohrungen ----------
+  function innerRadiusAnalysis(opts = {}) {
+    const cutterRadius = Math.max(0.01, Number(opts.cutterRadius ?? 3));
+    const includeHoles = opts.includeHoles !== false;
+    const only = Array.isArray(opts.only) ? opts.only : null;
+    const solids = [...nodes.values()].filter((n) => n.obj.visible && !n.allBodiesHidden && n.role !== 'hole' && n.mesh && n.data && n.data.triangles && (!only || only.includes(n.id)));
+    if (!solids.length) {
+      return {
+        cutterRadius, includeHoles, minRadius: null,
+        tooSmallCount: 0, okCount: 0, totalCount: 0, tooSmallArea: 0, okArea: 0,
+        faces: [], tooSmallPos: [], tooSmallNorms: [], okPos: [], okNorms: [], box: null,
+      };
+    }
+
+    const worldBox = new THREE.Box3();
+    for (const n of solids) {
+      n.obj.updateMatrixWorld(true);
+      const b = baseBox(n.id);
+      if (b) worldBox.union(b);
+    }
+    const diag = worldBox.isEmpty() ? 24 : Math.max(1, worldBox.getSize(new THREE.Vector3()).length());
+    const off = Math.max(0.015, diag * 0.00025);
+
+    const aV = new THREE.Vector3(), bV = new THREE.Vector3(), cV = new THREE.Vector3();
+    const ab = new THREE.Vector3(), ac = new THREE.Vector3(), lN = new THREE.Vector3();
+    const wA = new THREE.Vector3(), wB = new THREE.Vector3(), wC = new THREE.Vector3(), wN = new THREE.Vector3();
+
+    const detected = [];
+    const tooSmallPos = [], tooSmallNorms = [];
+    const okPos = [], okNorms = [];
+    let tooSmallArea = 0, okArea = 0;
+
+    const estimateFreeformRadius = (P, T, start, count) => {
+      const tris = [];
+      const edgeMap = new Map();
+      const qk = (x, y, z) => Math.round(x * 1e4) + ',' + Math.round(y * 1e4) + ',' + Math.round(z * 1e4);
+      const eKey = (k1, k2) => (k1 < k2 ? k1 + '|' + k2 : k2 + '|' + k1);
+      for (let i = start; i + 2 < start + count; i += 3) {
+        const i0 = T[i], i1 = T[i + 1], i2 = T[i + 2];
+        aV.fromArray(P, i0 * 3); bV.fromArray(P, i1 * 3); cV.fromArray(P, i2 * 3);
+        lN.crossVectors(ab.subVectors(bV, aV), ac.subVectors(cV, aV));
+        const L = lN.length();
+        if (L < 1e-12) continue;
+        lN.divideScalar(L);
+        const ti = tris.length;
+        const cen = [(aV.x + bV.x + cV.x) / 3, (aV.y + bV.y + cV.y) / 3, (aV.z + bV.z + cV.z) / 3];
+        tris.push({ n: [lN.x, lN.y, lN.z], c: cen });
+        const keys = [qk(aV.x, aV.y, aV.z), qk(bV.x, bV.y, bV.z), qk(cV.x, cV.y, cV.z)];
+        const pts = [[aV.x, aV.y, aV.z], [bV.x, bV.y, bV.z], [cV.x, cV.y, cV.z]];
+        for (let e = 0; e < 3; e++) {
+          const kA = keys[e], kB = keys[(e + 1) % 3];
+          if (kA === kB) continue;
+          const ek = eKey(kA, kB);
+          let arr = edgeMap.get(ek);
+          if (!arr) { arr = { pA: pts[e], pB: pts[(e + 1) % 3], tris: [] }; edgeMap.set(ek, arr); }
+          arr.tris.push(ti);
+        }
+      }
+      if (tris.length < 2) return null;
+      let lenConcave = 0, lenConvex = 0;
+      const radii = [];
+      for (const ed of edgeMap.values()) {
+        if (ed.tris.length !== 2) continue;
+        const tA = tris[ed.tris[0]], tB = tris[ed.tris[1]];
+        const cs = clamp(tA.n[0] * tB.n[0] + tA.n[1] * tB.n[1] + tA.n[2] * tB.n[2], -1, 1);
+        const theta = Math.acos(cs);
+        if (theta < 0.015 || theta > 1.4) continue;
+        const el = Math.hypot(ed.pB[0] - ed.pA[0], ed.pB[1] - ed.pA[1], ed.pB[2] - ed.pA[2]);
+        if (el < 1e-5) continue;
+        const dx = tB.c[0] - tA.c[0], dy = tB.c[1] - tA.c[1], dz = tB.c[2] - tA.c[2];
+        const s = tA.n[0] * dx + tA.n[1] * dy + tA.n[2] * dz;
+        if (s > 1e-7) {
+          lenConcave += el;
+          const dc = Math.hypot(dx, dy, dz);
+          const rEst = dc / (2 * Math.sin(theta / 2));
+          if (isFinite(rEst) && rEst > 1e-3 && rEst < 1e4) radii.push(rEst);
+        } else if (s < -1e-7) {
+          lenConvex += el;
+        }
+      }
+      const tot = lenConcave + lenConvex;
+      if (radii.length < 2 || tot <= 1e-6 || lenConcave / tot <= 0.65) return null;
+      radii.sort((x, y) => x - y);
+      return radii[Math.floor(radii.length * 0.15)];
+    };
+
+    for (const n of solids) {
+      const P = n.mesh.geometry.getAttribute('position').array;
+      const T = n.mesh.geometry.index ? n.mesh.geometry.index.array : n.data.triangles;
+      const groups = n.visFaceGroups || n.data.faceGroups || [];
+      const facesMeta = n.data.faces || [];
+      const M = n.mesh.matrixWorld;
+      const normalMat = new THREE.Matrix3().getNormalMatrix(M);
+      const flipN = M.determinant() < 0 ? -1 : 1;
+
+      for (const [start, count, fi] of groups) {
+        const f = facesMeta[fi];
+        if (!f || f.t === 'PLANE' || count < 3) continue;
+
+        let area = 0, concavWeight = 0;
+        let cxSum = 0, cySum = 0, czSum = 0;
+        const triIdxList = [];
+
+        let axO = 0, axOy = 0, axOz = 0, axDx = 0, axDy = 0, axDz = 1;
+        let uAx = null, vAx = null, thetas = null;
+        if (f.axis && f.axis.length >= 6) {
+          axO = f.axis[0]; axOy = f.axis[1]; axOz = f.axis[2];
+          const dl = Math.hypot(f.axis[3], f.axis[4], f.axis[5]) || 1;
+          axDx = f.axis[3] / dl; axDy = f.axis[4] / dl; axDz = f.axis[5] / dl;
+          if (f.t === 'CYLINDRE') {
+            const dVec = new THREE.Vector3(axDx, axDy, axDz);
+            const ref = Math.abs(axDz) < 0.9 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(1, 0, 0);
+            uAx = new THREE.Vector3().crossVectors(ref, dVec).normalize();
+            vAx = new THREE.Vector3().crossVectors(dVec, uAx).normalize();
+            thetas = [];
+          }
+        }
+
+        let coneMinR = Infinity;
+        for (let i = start; i + 2 < start + count; i += 3) {
+          const i0 = T[i], i1 = T[i + 1], i2 = T[i + 2];
+          aV.fromArray(P, i0 * 3); bV.fromArray(P, i1 * 3); cV.fromArray(P, i2 * 3);
+          lN.crossVectors(ab.subVectors(bV, aV), ac.subVectors(cV, aV));
+          const L = lN.length();
+          if (L < 1e-12) continue;
+          lN.divideScalar(L);
+          const ta = L * 0.5;
+          const cx = (aV.x + bV.x + cV.x) / 3, cy = (aV.y + bV.y + cV.y) / 3, cz = (aV.z + bV.z + cV.z) / 3;
+          area += ta;
+          cxSum += cx * ta; cySum += cy * ta; czSum += cz * ta;
+          triIdxList.push(i0, i1, i2);
+
+          if (f.t === 'CYLINDRE' && f.r > 0 && f.axis) {
+            const vx = cx - axO, vy = cy - axOy, vz = cz - axOz;
+            const proj = vx * axDx + vy * axDy + vz * axDz;
+            const rx = vx - proj * axDx, ry = vy - proj * axDy, rz = vz - proj * axDz;
+            const rl = Math.hypot(rx, ry, rz);
+            if (rl > 1e-9) concavWeight += (-(lN.x * rx + lN.y * ry + lN.z * rz) / rl) * ta;
+            if (thetas) {
+              for (const pt of [aV, bV, cV]) {
+                const px = pt.x - axO, py = pt.y - axOy, pz = pt.z - axOz;
+                thetas.push(Math.atan2(px * vAx.x + py * vAx.y + pz * vAx.z, px * uAx.x + py * uAx.y + pz * uAx.z));
+              }
+            }
+          } else if (f.t === 'SPHERE' && f.r > 0 && f.sc) {
+            const rx = cx - f.sc[0], ry = cy - f.sc[1], rz = cz - f.sc[2];
+            const rl = Math.hypot(rx, ry, rz);
+            if (rl > 1e-9) concavWeight += (-(lN.x * rx + lN.y * ry + lN.z * rz) / rl) * ta;
+          } else if (f.t === 'TORUS' && f.r > 0 && f.majorR > 0 && f.axis) {
+            const vx = cx - axO, vy = cy - axOy, vz = cz - axOz;
+            const proj = vx * axDx + vy * axDy + vz * axDz;
+            const px = vx - proj * axDx, py = vy - proj * axDy, pz = vz - proj * axDz;
+            const pl = Math.hypot(px, py, pz);
+            if (pl > 1e-9) {
+              const mx = axO + (px / pl) * f.majorR, my = axOy + (py / pl) * f.majorR, mz = axOz + (pz / pl) * f.majorR;
+              const rx = cx - mx, ry = cy - my, rz = cz - mz;
+              const rl = Math.hypot(rx, ry, rz);
+              if (rl > 1e-9) concavWeight += (-(lN.x * rx + lN.y * ry + lN.z * rz) / rl) * ta;
+            }
+          } else if (f.t === 'CONE' && f.axis) {
+            const vx = cx - axO, vy = cy - axOy, vz = cz - axOz;
+            const proj = vx * axDx + vy * axDy + vz * axDz;
+            const rx = vx - proj * axDx, ry = vy - proj * axDy, rz = vz - proj * axDz;
+            const rl = Math.hypot(rx, ry, rz);
+            if (rl > 1e-9) {
+              concavWeight += (-(lN.x * rx + lN.y * ry + lN.z * rz) / rl) * ta;
+              coneMinR = Math.min(coneMinR, rl);
+            }
+          }
+        }
+
+        if (!(area > 1e-6) || !triIdxList.length) continue;
+
+        let r = null, kind = 'fillet', isFullCircle = false;
+        if (f.t === 'CYLINDRE' && f.r > 0 && f.axis) {
+          if (concavWeight / area <= 0.25) continue;
+          r = f.r;
+          if (thetas && thetas.length >= 3) {
+            thetas.sort((x, y) => x - y);
+            let maxGap = thetas[0] + 2 * Math.PI - thetas[thetas.length - 1];
+            for (let k = 0; k + 1 < thetas.length; k++) maxGap = Math.max(maxGap, thetas[k + 1] - thetas[k]);
+            const span = 2 * Math.PI - maxGap;
+            isFullCircle = span >= (320 * Math.PI) / 180;
+          }
+          kind = isFullCircle ? 'hole' : 'fillet';
+          if (!includeHoles && isFullCircle) continue;
+        } else if (f.t === 'SPHERE' && f.r > 0 && f.sc) {
+          if (concavWeight / area <= 0.25) continue;
+          r = f.r;
+          kind = 'corner';
+        } else if (f.t === 'TORUS' && f.r > 0 && f.majorR > 0 && f.axis) {
+          if (concavWeight / area <= 0.25) continue;
+          r = f.r;
+          kind = 'fillet';
+        } else if (f.t === 'CONE' && f.axis) {
+          if (concavWeight / area <= 0.25 || !isFinite(coneMinR)) continue;
+          const cosA = f.semiAngle != null ? Math.max(0.1, Math.abs(Math.cos(f.semiAngle))) : 1;
+          r = coneMinR / cosA;
+          kind = 'cone';
+        } else {
+          r = estimateFreeformRadius(P, T, start, count);
+          if (!(r > 0)) continue;
+          kind = 'freeform';
+        }
+
+        const status = r < cutterRadius - 1e-4 ? 'tooSmall' : 'ok';
+        const dstPos = status === 'tooSmall' ? tooSmallPos : okPos;
+        const dstNorm = status === 'tooSmall' ? tooSmallNorms : okNorms;
+        if (status === 'tooSmall') tooSmallArea += area;
+        else okArea += area;
+
+        for (let k = 0; k + 2 < triIdxList.length; k += 3) {
+          wA.fromArray(P, triIdxList[k] * 3).applyMatrix4(M);
+          wB.fromArray(P, triIdxList[k + 1] * 3).applyMatrix4(M);
+          wC.fromArray(P, triIdxList[k + 2] * 3).applyMatrix4(M);
+          wN.crossVectors(ab.subVectors(wB, wA), ac.subVectors(wC, wA));
+          const wl = wN.length();
+          if (wl < 1e-12) continue;
+          wN.divideScalar(wl * flipN);
+          const ox = wN.x * off, oy = wN.y * off, oz = wN.z * off;
+          dstPos.push(wA.x + ox, wA.y + oy, wA.z + oz, wB.x + ox, wB.y + oy, wB.z + oz, wC.x + ox, wC.y + oy, wC.z + oz);
+          dstNorm.push(wN.x, wN.y, wN.z, wN.x, wN.y, wN.z, wN.x, wN.y, wN.z);
+        }
+
+        const cLocal = f.c && f.c.length >= 3
+          ? new THREE.Vector3(f.c[0], f.c[1], f.c[2])
+          : new THREE.Vector3(cxSum / area, cySum / area, czSum / area);
+        const center = cLocal.applyMatrix4(M).toArray();
+        detected.push({
+          id: n.id, faceIdx: fi, type: f.t, kind, r: round(r, 4), isFullCircle, status, area: round(area, 3), center,
+        });
+      }
+    }
+
+    detected.sort((a, b) => a.r - b.r);
+    const minRadius = detected.length ? detected[0].r : null;
+    const tooSmallCount = detected.filter((x) => x.status === 'tooSmall').length;
+    const okCount = detected.length - tooSmallCount;
+
+    return {
+      cutterRadius, includeHoles, minRadius,
+      tooSmallCount, okCount, totalCount: detected.length,
+      tooSmallArea, okArea, faces: detected,
+      tooSmallPos, tooSmallNorms, okPos, okNorms,
+      box: worldBox.isEmpty() ? null : worldBox,
+    };
+  }
   // Art jeder Kante: außen (konvex), innen (konkav) oder glatt (tangential) – über die beiden Nachbarflächen am Kantenmittelpunkt (KP-16)
   function edgeKinds(id) {
     const n = nodes.get(id); if (!n || !n.data || !n.data.triangles || !n.data.edges) return [];
@@ -1934,7 +2181,7 @@ const Viewer = (() => {
   return {
     viewBack, get viewHistory() { return camHist.length; }, useButtons, setMouseStyle, get mouseStyle() { return mouseStyle; }, get leftOrbits() { return !!(controls && controls.mouseButtons.LEFT === THREE.MOUSE.ROTATE); }, setLook, lookOf, get look() { return { ...LOOK }; }, fitShadow, renderImage, renderPartThumb, cameraBasis, renderOrthoView, lookAtFace, faceIndexOf: (id, fc) => { const n = nodes.get(id); return n ? faceIndexOf(n, fc) : -1; }, cylinderFaceInfo, threadFaceIndex: (id, th) => { const n = nodes.get(id); return n ? threadFaceIndex(n, th) : -1; }, get renderer() { return renderer; },
     init, requestRender, renderNow, setClip, setXray, setOffsets, baseBox, renderInset, silhouette, setAdaptive, setCompare, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, highlightBody, setSelectedEdges, clearHover, setRefGhost, clearRefGhost, hasRefGhost,
-    edgePositions, pick, pickAll, pickGhost, pickProxy, setProxies, clearProxies, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, setPrintBed, boxVisible, sceneBox, snapshot, makeFat, disposeFat, faceOverlay, faceArea, faceEdges, edgeKinds, wallAt, thinWalls, draftAnalysis,
+    edgePositions, pick, pickAll, pickGhost, pickProxy, setProxies, clearProxies, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, setPrintBed, boxVisible, sceneBox, snapshot, makeFat, disposeFat, faceOverlay, faceArea, faceEdges, edgeKinds, wallAt, thinWalls, draftAnalysis, innerRadiusAnalysis,
     get camera() { syncCamAnim(); return camera; }, get activeCamera() { syncCamAnim(); return cam(); }, get ortho() { return ortho; }, get gridStep() { return gridStep; }, get controls() { return controls; }, get scene() { return scene; }, get groups() { return groups; }, get nodes() { return nodes; }, get canvas() { return renderer.domElement; }, get theme() { return theme; }, get container() { return container; },
     get clip() { return vis.clip; }, get clips() { return vis.clips.slice(); }, get xray() { return vis.xray; }, get lowRes() { return lowRes; },  get pixelRatio() { return renderer.getPixelRatio(); },
     on: listeners.on,
