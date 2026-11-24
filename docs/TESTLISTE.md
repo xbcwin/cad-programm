@@ -1934,6 +1934,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Rückwärtskompatibilität & Hilfen**: Alte Ein-Blatt-Projekte werden beim Öffnen nahtlos übernommen; `drawingSheets` und `drawingFormat` sind in `werkzeug-hilfen.json` und `HELP` gepflegt.
 - [ ] **Von Hand**: Im Browser eine Zeichnung mit drei Blättern (z. B. A4 hoch, A3 quer, A1 quer) anlegen, unterschiedlich bemaßen, als PDF exportieren und die Seitengrößen im PDF-Betrachter prüfen.
 
+## Stabile Bezüge, Schritt 1 (Auto [A-061], PL-05)
+
+- [x] **Rundung bleibt nach Tasche und Längenänderung 40 → 60**: Vordere obere Kante eines Quaders abrunden (`tid` mit `E:ny&top`), danach Tasche schneiden (neue Kanten) und Quader von 40 auf 60 vergrößern → Rundung sitzt weiter fehlerfrei mit Radius 2 mm an der verschobenen vorderen oberen Kante.
+- [x] **Geteilte Kante über OpenCascade-Verlauf (`Modified`)**: Kante vor dem Abrunden durch eine Tasche teilen und Quader auf 60 ändern → beide Kantenstücke bleiben sauber gerundet.
+- [x] **Skizzenkörper-Fase über Skizzen-Linien-Herkunft (`F:sk:`)**: Rechteck-Umriss von 40 auf 60 verbreitern → Fase an der vorderen oberen Kante wandert mit.
+- [x] **Skizze auf Fläche (`planeRef` mit `tid`) & Lage-Ersatz**: Skizze auf oberer Quaderfläche (`F:top`) samt Aufbau wandert bei Höhenänderung 15 → 25 mit auf Z = 33; alte Bezüge ohne `tid` greifen weiter über die Lage.
+- [ ] **Von Hand**: Im Browser einen Quader mit Tasche und Rundungen sowie einer Skizze auf der Deckfläche versehen, frühe Maße per Ziehgriff und Feld stark ändern und prüfen, dass Rundungen und Skizzenfläche ohne Warnung mitwandern.
+
 ## Fehler melden
 
 ```

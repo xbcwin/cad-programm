@@ -4008,6 +4008,15 @@ const Model = (() => {
       if (Array.isArray(p.sel) && p.sel.length) { const f = regs.filter((r) => p.sel.includes(r.key)); if (f.length) chosen = f; }
       out = { plane, regions: chosen.map((r) => ({ outer: r.outer.k, holes: r.holes.map((h) => h.k) })) };
     }
+    if (p.sketch && p.sketch.planeRef && p.sketch.planeRef.kind === 'face') {
+      out.planeRef = {
+        kind: 'face',
+        id: p.sketch.planeRef.id,
+        tid: p.sketch.planeRef.tid || null,
+        c: p.sketch.planeRef.c || null,
+        n: p.sketch.planeRef.n || null,
+      };
+    }
     if (it.kind === 'extrude') {
       out.dist = num(p.dist, V, 10); out.dir = p.dir || 'normal'; out.extra = num(p.extra, V, 0);
       if (out.dir === 'two') out.dist2 = num(p.dist2, V, out.dist);
@@ -5615,7 +5624,11 @@ const SK = (() => {
     for (let i = 0; i <= n; i++) { const t = i / n, u = 1 - t, A = u * u * u, B = 3 * u * u * t, C = 3 * u * t * t, D = t * t * t; o.push([A * s.a[0] + B * s.c1[0] + C * s.c2[0] + D * s.b[0], A * s.a[1] + B * s.c1[1] + C * s.c2[1] + D * s.b[1]]); }
     return o;
   }
-  const revSeg = (s) => (s.t === 'bez' ? { t: 'bez', a: s.b, c1: s.c2, c2: s.c1, b: s.a } : s.t === 'arc' ? { t: 'arc', a: s.b, m: s.m, b: s.a } : { t: 'line', a: s.b, b: s.a });
+  const revSeg = (s) => {
+    const o = s.t === 'bez' ? { t: 'bez', a: s.b, c1: s.c2, c2: s.c1, b: s.a } : s.t === 'arc' ? { t: 'arc', a: s.b, m: s.m, b: s.a } : { t: 'line', a: s.b, b: s.a };
+    if (s.sid) o.sid = s.sid;
+    return o;
+  };
   // ---------- Text: Umrisse aus eingebauten und geladenen Schriften ----------
   const BUILTIN_FONT_URLS = { inter: 'data/schrift-inter.json', fett: 'data/schrift-inter-fett.json' };
   const BUILTIN_FONTNAMES = { inter: 'Inter', fett: 'Inter Fett' };
@@ -5854,23 +5867,23 @@ const SK = (() => {
     const ux = (b[0] - a[0]) / L, uy = (b[1] - a[1]) / L, nx = -uy * r, ny = ux * r;
     const a1 = [a[0] + nx, a[1] + ny], a2 = [a[0] - nx, a[1] - ny], b1 = [b[0] + nx, b[1] + ny], b2 = [b[0] - nx, b[1] - ny];
     return [
-      { t: 'line', a: a2, b: b2 },
-      { t: 'arc', a: b2, m: [b[0] + ux * r, b[1] + uy * r], b: b1 },
-      { t: 'line', a: b1, b: a1 },
-      { t: 'arc', a: a1, m: [a[0] - ux * r, a[1] - uy * r], b: a2 },
+      { t: 'line', a: a2, b: b2, sid: e.id + ':0' },
+      { t: 'arc', a: b2, m: [b[0] + ux * r, b[1] + uy * r], b: b1, sid: e.id + ':1' },
+      { t: 'line', a: b1, b: a1, sid: e.id + ':2' },
+      { t: 'arc', a: a1, m: [a[0] - ux * r, a[1] - uy * r], b: a2, sid: e.id + ':3' },
     ];
   }
   // Einzelteile eines Elements (für Anzeige und Schleifen)
   function segsOf(e) {
     switch (e.type) {
-      case 'line': return [{ t: 'line', a: e.a, b: e.b }];
-      case 'arc': return [{ t: 'arc', a: e.a, m: e.m, b: e.b }];
-      case 'rect': { const c = rectCorners(e); return [0, 1, 2, 3].map((i) => ({ t: 'line', a: c[i], b: c[(i + 1) % 4] })); }
-      case 'poly': { const c = polyCorners(e); return c.map((p, i) => ({ t: 'line', a: p, b: c[(i + 1) % c.length] })); }
-      case 'slot': { if (d2(e.a, e.b) < 1e-9) return [{ t: 'circle', c: e.a, r: e.r }]; return slotSegs(e); }
-      case 'circle': return [{ t: 'circle', c: e.c, r: e.r }];
-      case 'ellipse': return [{ t: 'ellipse', c: e.c, rx: e.rx, ry: e.ry, rot: e.rot || 0 }];
-      case 'spline': return e.pts && e.pts.length >= 2 ? [{ t: 'spline', pts: e.pts, closed: !!e.closed }] : [];
+      case 'line': return [{ t: 'line', a: e.a, b: e.b, sid: e.id }];
+      case 'arc': return [{ t: 'arc', a: e.a, m: e.m, b: e.b, sid: e.id }];
+      case 'rect': { const c = rectCorners(e); return [0, 1, 2, 3].map((i) => ({ t: 'line', a: c[i], b: c[(i + 1) % 4], sid: e.id + ':' + i })); }
+      case 'poly': { const c = polyCorners(e); return c.map((p, i) => ({ t: 'line', a: p, b: c[(i + 1) % c.length], sid: e.id + ':' + i })); }
+      case 'slot': { if (d2(e.a, e.b) < 1e-9) return [{ t: 'circle', c: e.a, r: e.r, sid: e.id }]; return slotSegs(e); }
+      case 'circle': return [{ t: 'circle', c: e.c, r: e.r, sid: e.id }];
+      case 'ellipse': return [{ t: 'ellipse', c: e.c, rx: e.rx, ry: e.ry, rot: e.rot || 0, sid: e.id }];
+      case 'spline': return e.pts && e.pts.length >= 2 ? [{ t: 'spline', pts: e.pts, closed: !!e.closed, sid: e.id }] : [];
       case 'text': return textContours(e).flat();
     }
     return [];
@@ -5897,17 +5910,17 @@ const SK = (() => {
     const pts = [];
     for (const s of segs) { const sp = segPoints(s); for (let i = 0; i < sp.length - 1; i++) pts.push(sp[i]); }
     const area = polyArea(pts);
-    return { key, ents, k: { segs: segs.map((s) => (s.t === 'arc' ? { t: 'arc', a: s.a, m: s.m, b: s.b } : s.t === 'bez' ? { t: 'bez', a: s.a, c1: s.c1, c2: s.c2, b: s.b } : { t: 'line', a: s.a, b: s.b })) }, poly: pts, area: Math.abs(area) };
+    return { key, ents, k: { segs: segs.map((s) => { const o = s.t === 'arc' ? { t: 'arc', a: s.a, m: s.m, b: s.b } : s.t === 'bez' ? { t: 'bez', a: s.a, c1: s.c1, c2: s.c2, b: s.b } : { t: 'line', a: s.a, b: s.b }; if (s.sid) o.sid = s.sid; return o; }) }, poly: pts, area: Math.abs(area) };
   }
   function loops(ents) {
     const out = [];
     const open = [];
     for (const e of ents || []) {
       if (e.con) continue;
-      if (e.type === 'text') { textContours(e).forEach((c, i) => { const L = loopFromSegs(c, e.id + ':' + i, [e.id]); if (L.poly.length >= 3 && L.area > 1e-6) out.push(L); }); continue; }
-      if (e.type === 'circle') { out.push({ key: e.id, ents: [e.id], k: { circle: { c: e.c, r: e.r } }, poly: circlePoints(e.c, e.r), area: Math.PI * e.r * e.r }); continue; }
-      if (e.type === 'ellipse') { if (e.rx > 1e-6 && e.ry > 1e-6) out.push({ key: e.id, ents: [e.id], k: { ellipse: { c: e.c, rx: e.rx, ry: e.ry, rot: e.rot || 0 } }, poly: ellipsePoints(e.c, e.rx, e.ry, e.rot || 0), area: Math.PI * e.rx * e.ry }); continue; }
-      if (e.type === 'slot' && d2(e.a, e.b) < 1e-9) { out.push({ key: e.id, ents: [e.id], k: { circle: { c: e.a, r: e.r } }, poly: circlePoints(e.a, e.r), area: Math.PI * e.r * e.r }); continue; }
+      if (e.type === 'text') { textContours(e).forEach((c, i) => { const L = loopFromSegs(c.map((s, si) => ({ ...s, sid: e.id + ':' + i + ':' + si })), e.id + ':' + i, [e.id]); if (L.poly.length >= 3 && L.area > 1e-6) out.push(L); }); continue; }
+      if (e.type === 'circle') { out.push({ key: e.id, ents: [e.id], k: { circle: { c: e.c, r: e.r, sid: e.id } }, poly: circlePoints(e.c, e.r), area: Math.PI * e.r * e.r }); continue; }
+      if (e.type === 'ellipse') { if (e.rx > 1e-6 && e.ry > 1e-6) out.push({ key: e.id, ents: [e.id], k: { ellipse: { c: e.c, rx: e.rx, ry: e.ry, rot: e.rot || 0, sid: e.id } }, poly: ellipsePoints(e.c, e.rx, e.ry, e.rot || 0), area: Math.PI * e.rx * e.ry }); continue; }
+      if (e.type === 'slot' && d2(e.a, e.b) < 1e-9) { out.push({ key: e.id, ents: [e.id], k: { circle: { c: e.a, r: e.r, sid: e.id } }, poly: circlePoints(e.a, e.r), area: Math.PI * e.r * e.r }); continue; }
       if (e.type === 'rect' || e.type === 'poly' || e.type === 'slot') {
         const segs = segsOf(e);
         if (e.type === 'rect' && (Math.abs(e.a[0] - e.b[0]) < 1e-6 || Math.abs(e.a[1] - e.b[1]) < 1e-6)) continue;
@@ -5915,7 +5928,7 @@ const SK = (() => {
       }
       if (e.type === 'spline') {
         if (!e.pts || e.pts.length < 2) continue;
-        if (e.closed) { if (e.pts.length >= 3) out.push(loopFromSegs(splineBez(e.pts, true), e.id, [e.id])); continue; }
+        if (e.closed) { if (e.pts.length >= 3) out.push(loopFromSegs(splineBez(e.pts, true).map((s, si) => ({ ...s, sid: e.id + ':' + si })), e.id, [e.id])); continue; }
         if (d2(endA(e), endB(e)) > 1e-9) open.push(e);
         continue;
       }
@@ -5943,8 +5956,8 @@ const SK = (() => {
         visited.add(cur.id);
         const forward = qkey(endA(cur)) === qkey(from);
         const a = forward ? endA(cur) : endB(cur), b = forward ? endB(cur) : endA(cur);
-        if (cur.type === 'spline') { const bz = splineBez(cur.pts, false); segs.push(...(forward ? bz : bz.slice().reverse().map(revSeg))); }
-        else segs.push(cur.type === 'arc' ? { t: 'arc', a, m: cur.m, b } : { t: 'line', a, b });
+        if (cur.type === 'spline') { const bz = splineBez(cur.pts, false).map((s, si) => ({ ...s, sid: cur.id + ':' + si })); segs.push(...(forward ? bz : bz.slice().reverse().map(revSeg))); }
+        else segs.push(cur.type === 'arc' ? { t: 'arc', a, m: cur.m, b, sid: cur.id } : { t: 'line', a, b, sid: cur.id });
         from = b;
         const nxt = (adj.get(qkey(b)) || []).find((n) => n.e.id !== cur.id && !visited.has(n.e.id));
         cur = nxt ? nxt.e : null;
@@ -8609,6 +8622,10 @@ const App = (() => {
   function replaceMesh(id, key, payload) {
     const it = topItem(id); const r = S.results.get(id);
     if (!it || !r || r.key !== key) return false;
+    if (payload) {
+      for (const f of payload.faces || []) if (f && f.tid && f.tid.startsWith('$self/')) f.tid = id + '/' + f.tid.slice(6);
+      for (const e of payload.edges || []) if (e && e.tid && e.tid.startsWith('$self/')) e.tid = id + '/' + e.tid.slice(6);
+    }
     Viewer.setNode(id, payload, { matrix: Model.localMatrix(it), role: it.role, color: it.color, look: lookFor(it), opacity: it.opacity ?? null, faceColors: it.faceColors || null, threads: it.threads || null, bodies: it.bodies || null, key });
     r.data = payload; applyView(); refreshSelectionVisuals(); ev.emit('remeshed', id);
     return true;
@@ -12593,6 +12610,7 @@ const Actions = (() => {
     const g = r.data.edges[edgeIdx]; if (!g) return null;
     const r5 = (arr) => arr.map((v) => round(v, 5));
     const sig = { m: r5(g.m), l: round(g.l, 5), t: g.t };
+    if (g.tid) sig.tid = g.tid;
     if (Array.isArray(g.a)) sig.a = r5(g.a);
     if (Array.isArray(g.b)) sig.b = r5(g.b);
     if (g.t === 'CIRCLE' && g.c && g.n && g.r != null) { sig.c = r5(g.c); sig.n = r5(g.n); sig.r = round(g.r, 5); }
@@ -13517,13 +13535,13 @@ const Features = (() => {
     if (!it || it.role === 'hole') { UI.toast('Klick auf eine Fläche eines Körpers.', { icon: 'info' }); return; }
     const bb = App.results.get(face.id)?.data?.bbox;
     const size = bb ? round(clamp(Math.max(bb[3] - bb[0], bb[4] - bb[1], bb[5] - bb[2]) * 0.6, 8, 60), 2) : 20;
-    const sig = { c: face.info.c.map((v) => round(v, 4)), n: face.info.n ? face.info.n.map((v) => round(v, 5)) : null, size };
+    const sig = { c: face.info.c.map((v) => round(v, 4)), n: face.info.n ? face.info.n.map((v) => round(v, 5)) : null, size, ...(face.info.tid ? { tid: face.info.tid } : {}) };
     const ex = (it.finishes || []).find((f) => f.type === 'shell');
     App.change(ex ? 'Öffnung geändert' : 'Ausgehöhlt', (doc) => {
       const T = Model.find(doc, it.id).item; T.finishes = T.finishes || [];
       const s = T.finishes.find((f) => f.type === 'shell');
       if (!s) { T.finishes.push({ id: uid('f'), type: 'shell', r: 2, faces: [sig] }); return; }
-      const i = s.faces.findIndex((f) => Math.hypot(f.c[0] - sig.c[0], f.c[1] - sig.c[1], f.c[2] - sig.c[2]) < 1e-3);
+      const i = s.faces.findIndex((f) => (f.tid && sig.tid && f.tid === sig.tid) || (f.c && Math.hypot(f.c[0] - sig.c[0], f.c[1] - sig.c[1], f.c[2] - sig.c[2]) < 1e-3));
       if (i >= 0) { if (s.faces.length > 1) s.faces.splice(i, 1); } else s.faces.push(sig);
     });
     App.select([it.id]);
@@ -17315,7 +17333,7 @@ const RefFix = (() => {
   const isRefError = (e) => !!(e && (e.code === 'edges' || e.code === 'ref'));
   const hardErrorsFor = (itemId) => App.errorsFor(itemId).filter((e) => !isRefError(e));
 
-  function planeRefLost(pr) {
+  function planeRefLost(pr, itemId) {
     if (!pr) return false;
     if (pr.kind === 'datum') {
       if (typeof Datums === 'undefined') return false;
@@ -17323,10 +17341,18 @@ const RefFix = (() => {
       return !d || Datums.lost.includes(d.id);
     }
     if (pr.kind === 'face') {
+      const resInfo = itemId ? App.resolvedOf(itemId) : null;
+      if (resInfo && resInfo.planeRefOk === true) return false;
+      if (resInfo && resInfo.planeRefOk === false) return true;
       const rf = Model.find(App.doc, pr.id);
       if (!rf || rf.item.suppressed) return true;
       const res = App.results.get(pr.id);
       if (res && res.data && Array.isArray(res.data.faces)) {
+        if (pr.tid) {
+          const wantBase = pr.tid.split('|')[0];
+          const tidOk = res.data.faces.some((fc) => fc && fc.t === 'PLANE' && fc.tid && (fc.tid === pr.tid || fc.tid.split('|')[0] === wantBase));
+          if (tidOk) return false;
+        }
         const pn = pr.n || [0, 0, 1], pc = pr.c || [0, 0, 0];
         const ok = res.data.faces.some((fc) => {
           if (!fc || fc.t !== 'PLANE' || !fc.n || !fc.c) return false;
@@ -17389,7 +17415,7 @@ const RefFix = (() => {
       }
     }
 
-    if (it.p && it.p.sketch && it.p.sketch.planeRef && planeRefLost(it.p.sketch.planeRef)) {
+    if (it.p && it.p.sketch && it.p.sketch.planeRef && planeRefLost(it.p.sketch.planeRef, it.id)) {
       out.push({
         key: `${it.id}:skplane`,
         kind: 'sketch-plane',
@@ -17628,7 +17654,7 @@ const RefFix = (() => {
         : [];
       const merged = [...kept];
       for (const s of sigs) {
-        const dup = merged.some((k) => k && k.m && Math.hypot(k.m[0] - s.m[0], k.m[1] - s.m[1], k.m[2] - s.m[2]) < 1e-3);
+        const dup = merged.some((k) => k && ((k.tid && s.tid && k.tid === s.tid) || (k.m && Math.hypot(k.m[0] - s.m[0], k.m[1] - s.m[1], k.m[2] - s.m[2]) < 1e-3)));
         if (!dup) merged.push(s);
       }
       fin.edges = merged;
@@ -17642,7 +17668,7 @@ const RefFix = (() => {
     if (!fi || !fi.c) return false;
     const bb = r.data.bbox;
     const size = bb ? round(clamp(Math.max(bb[3] - bb[0], bb[4] - bb[1], bb[5] - bb[2]) * 0.6, 8, 60), 2) : 20;
-    const sig = { c: fi.c.map((v) => round(v, 4)), n: fi.n ? fi.n.map((v) => round(v, 5)) : null, size };
+    const sig = { c: fi.c.map((v) => round(v, 4)), n: fi.n ? fi.n.map((v) => round(v, 5)) : null, size, ...(fi.tid ? { tid: fi.tid } : {}) };
     App.change('Fläche neu gewählt', (doc) => {
       const f = Model.find(doc, issue.itemId);
       if (!f) return false;
@@ -17652,7 +17678,7 @@ const RefFix = (() => {
       const kept = Array.isArray(fin.faces) && miss && miss.size < fin.faces.length
         ? fin.faces.filter((_, i) => !miss.has(i))
         : [];
-      const dup = kept.some((k) => k && k.c && Math.hypot(k.c[0] - sig.c[0], k.c[1] - sig.c[1], k.c[2] - sig.c[2]) < 1e-3);
+      const dup = kept.some((k) => k && ((k.tid && sig.tid && k.tid === sig.tid) || (k.c && Math.hypot(k.c[0] - sig.c[0], k.c[1] - sig.c[1], k.c[2] - sig.c[2]) < 1e-3)));
       if (!dup) kept.push(sig);
       fin.faces = kept;
     });
@@ -17882,7 +17908,7 @@ const RefFix = (() => {
             const nW = new THREE.Vector3(...fr.n).transformDirection(W).normalize().toArray();
             const bb = App.results.get(hit.id)?.data?.bbox;
             const size = bb ? round(clamp(Math.max(bb[3] - bb[0], bb[4] - bb[1], bb[5] - bb[2]) * 0.6, 10, 80), 2) : 24;
-            const planeRef = { kind: 'face', id: hit.id, c: fi.c.map((v) => round(v, 5)), n: fi.n.map((v) => round(v, 5)), size };
+            const planeRef = { kind: 'face', id: hit.id, c: fi.c.map((v) => round(v, 5)), n: fi.n.map((v) => round(v, 5)), size, ...(fi.tid ? { tid: fi.tid } : {}) };
             applySketchPlane(issue, { oW, xW, nW, planeRef });
             stop({ keepToast: true });
             UI.toast('Skizzen-Fläche neu gewählt – Modell wird neu berechnet.', { icon: 'check' });
@@ -24383,6 +24409,7 @@ const Sketch = (() => {
       c: face.info.c.map((v) => round(v, 5)),
       n: (face.info.n || [0, 0, 1]).map((v) => round(v, 5)),
       size: faceSizeApprox(face, loops),
+      ...(face.info.tid ? { tid: face.info.tid } : {}),
     };
     begin({ plane, W, ents: [], refs, planeRef, ctx: { mode: 'new', targetId: face.id, ribMode: !!opts.ribMode } });
   }
@@ -26625,6 +26652,103 @@ const Sketch = (() => {
         e.link = j.g.link;
         const ks = Solver.varsOf(e);
         for (const c of sk.cons || []) if (c.type === 'fix' && c.refs[0].e === e.id && ks) c.at = Object.fromEntries(ks.map((k) => [k, Solver.getK(e, k)]));
+      }
+    }, { amend: true });
+  }
+  let relinkPlaneRounds = 0;
+  function samePlane(a, b) {
+    if (!a || !b) return false;
+    const vd = (u, v) => Math.max(Math.abs(u[0] - v[0]), Math.abs(u[1] - v[1]), Math.abs(u[2] - v[2]));
+    return vd(a.o, b.o) < 1e-4 && vd(a.x, b.x) < 1e-4 && vd(a.n, b.n) < 1e-4;
+  }
+  function updateSketchPlaneFromFace(oldPlane, fcL, fnL) {
+    const n0 = new THREE.Vector3(...(oldPlane.n || [0, 0, 1])).normalize();
+    const n1 = new THREE.Vector3(...fnL).normalize();
+    const x0 = new THREE.Vector3(...(oldPlane.x || [1, 0, 0])).normalize();
+    const o0 = new THREE.Vector3(...(oldPlane.o || [0, 0, 0]));
+    const fc = new THREE.Vector3(...fcL);
+    const dp = n0.dot(n1);
+    let oNew, xNew;
+    if (dp > 0.9999) {
+      const d = fc.clone().sub(o0).dot(n1);
+      oNew = o0.clone().addScaledVector(n1, d);
+      xNew = x0;
+    } else if (dp < -0.9999) {
+      oNew = fc;
+      xNew = x0;
+    } else {
+      const q = new THREE.Quaternion().setFromUnitVectors(n0, n1);
+      xNew = x0.clone().applyQuaternion(q);
+      xNew.addScaledVector(n1, -xNew.dot(n1)).normalize();
+      oNew = fc;
+    }
+    const r6 = (arr) => arr.map((v) => round(v, 6));
+    return { o: r6(oNew.toArray()), x: r6(xNew.toArray()), n: r6(n1.toArray()) };
+  }
+  function relinkSketchPlanes() {
+    if (S || !App.doc) return;
+    const jobs = [];
+    Model.walk(App.doc.items, (it) => {
+      const sk = it.p && it.p.sketch;
+      const pr = sk && sk.planeRef;
+      if (!sk || !sk.plane || !pr || pr.kind !== 'face') return;
+      if (!Model.isActive(App.doc, it.id)) return;
+      const resInfo = App.resolvedOf(it.id);
+      if (resInfo && resInfo.planeRefOk === true && resInfo.plane) {
+        if (!samePlane(sk.plane, resInfo.plane)) {
+          jobs.push({
+            id: it.id,
+            plane: resInfo.plane,
+            c: resInfo.faceC ? resInfo.faceC.map((v) => round(v, 5)) : pr.c,
+            n: resInfo.faceN ? resInfo.faceN.map((v) => round(v, 5)) : pr.n,
+          });
+        }
+        return;
+      }
+      const host = pr.id ? App.results.get(pr.id) : null;
+      if (!host || !host.data || !Array.isArray(host.data.faces)) return;
+      const faces = host.data.faces;
+      let fc = null;
+      if (pr.tid) {
+        const wantBase = pr.tid.split('|')[0];
+        fc = faces.find((f) => f && f.t === 'PLANE' && f.tid === pr.tid)
+          || faces.find((f) => f && f.t === 'PLANE' && f.tid && f.tid.split('|')[0] === wantBase);
+      }
+      if (!fc && Array.isArray(pr.c) && Array.isArray(pr.n)) {
+        let bestD = Infinity;
+        for (const f of faces) {
+          if (!f || f.t !== 'PLANE' || !f.n || !f.c) continue;
+          if (f.n[0] * pr.n[0] + f.n[1] * pr.n[1] + f.n[2] * pr.n[2] < 0.995) continue;
+          const d = Math.hypot(f.c[0] - pr.c[0], f.c[1] - pr.c[1], f.c[2] - pr.c[2]);
+          if (d < bestD) { bestD = d; fc = f; }
+        }
+      }
+      if (!fc || !fc.c || !fc.n) return;
+      const HW = Model.worldMatrix(App.doc, pr.id);
+      const PWInv = Model.parentWorld(App.doc, it.id).multiply(Model.localMatrix(it)).invert();
+      const fcL = new THREE.Vector3(...fc.c).applyMatrix4(HW).applyMatrix4(PWInv).toArray();
+      const fnL = new THREE.Vector3(...fc.n).transformDirection(HW).transformDirection(PWInv).normalize().toArray();
+      const newPlane = updateSketchPlaneFromFace(sk.plane, fcL, fnL);
+      if (!samePlane(sk.plane, newPlane)) {
+        jobs.push({
+          id: it.id,
+          plane: newPlane,
+          c: fc.c.map((v) => round(v, 5)),
+          n: fc.n.map((v) => round(v, 5)),
+        });
+      }
+    });
+    if (!jobs.length) { relinkPlaneRounds = 0; return; }
+    if (++relinkPlaneRounds > 3) { relinkPlaneRounds = 0; return; }
+    App.change('Skizzen-Fläche nachgeführt', (doc) => {
+      for (const j of jobs) {
+        const f = Model.find(doc, j.id);
+        if (!f || !f.item.p || !f.item.p.sketch) continue;
+        f.item.p.sketch.plane = j.plane;
+        if (f.item.p.sketch.planeRef) {
+          if (j.c) f.item.p.sketch.planeRef.c = j.c;
+          if (j.n) f.item.p.sketch.planeRef.n = j.n;
+        }
       }
     }, { amend: true });
   }
@@ -29252,7 +29376,7 @@ const Sketch = (() => {
   }
   function init() {
     if (SK.onFont) SK.onFont('loaded', () => { if (S) { reapply(); render(); Panels.renderRight(); } });
-    App.on('results', () => { relinkAll(); if (S && S.step) updateStepExtInfo(); });
+    App.on('results', () => { relinkAll(); relinkSketchPlanes(); if (S && S.step) updateStepExtInfo(); });
     const cv = Viewer.canvas;
     cv.addEventListener('pointerdown', (e) => { if (S) { onDown(e); } }, true);
     cv.addEventListener('pointermove', (e) => { if (S) onMove(e); });

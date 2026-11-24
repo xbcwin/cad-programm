@@ -95,7 +95,11 @@ const SK = (() => {
     for (let i = 0; i <= n; i++) { const t = i / n, u = 1 - t, A = u * u * u, B = 3 * u * u * t, C = 3 * u * t * t, D = t * t * t; o.push([A * s.a[0] + B * s.c1[0] + C * s.c2[0] + D * s.b[0], A * s.a[1] + B * s.c1[1] + C * s.c2[1] + D * s.b[1]]); }
     return o;
   }
-  const revSeg = (s) => (s.t === 'bez' ? { t: 'bez', a: s.b, c1: s.c2, c2: s.c1, b: s.a } : s.t === 'arc' ? { t: 'arc', a: s.b, m: s.m, b: s.a } : { t: 'line', a: s.b, b: s.a });
+  const revSeg = (s) => {
+    const o = s.t === 'bez' ? { t: 'bez', a: s.b, c1: s.c2, c2: s.c1, b: s.a } : s.t === 'arc' ? { t: 'arc', a: s.b, m: s.m, b: s.a } : { t: 'line', a: s.b, b: s.a };
+    if (s.sid) o.sid = s.sid;
+    return o;
+  };
   // ---------- Text: Umrisse aus eingebauten und geladenen Schriften ----------
   const BUILTIN_FONT_URLS = { inter: 'data/schrift-inter.json', fett: 'data/schrift-inter-fett.json' };
   const BUILTIN_FONTNAMES = { inter: 'Inter', fett: 'Inter Fett' };
@@ -334,23 +338,23 @@ const SK = (() => {
     const ux = (b[0] - a[0]) / L, uy = (b[1] - a[1]) / L, nx = -uy * r, ny = ux * r;
     const a1 = [a[0] + nx, a[1] + ny], a2 = [a[0] - nx, a[1] - ny], b1 = [b[0] + nx, b[1] + ny], b2 = [b[0] - nx, b[1] - ny];
     return [
-      { t: 'line', a: a2, b: b2 },
-      { t: 'arc', a: b2, m: [b[0] + ux * r, b[1] + uy * r], b: b1 },
-      { t: 'line', a: b1, b: a1 },
-      { t: 'arc', a: a1, m: [a[0] - ux * r, a[1] - uy * r], b: a2 },
+      { t: 'line', a: a2, b: b2, sid: e.id + ':0' },
+      { t: 'arc', a: b2, m: [b[0] + ux * r, b[1] + uy * r], b: b1, sid: e.id + ':1' },
+      { t: 'line', a: b1, b: a1, sid: e.id + ':2' },
+      { t: 'arc', a: a1, m: [a[0] - ux * r, a[1] - uy * r], b: a2, sid: e.id + ':3' },
     ];
   }
   // Einzelteile eines Elements (für Anzeige und Schleifen)
   function segsOf(e) {
     switch (e.type) {
-      case 'line': return [{ t: 'line', a: e.a, b: e.b }];
-      case 'arc': return [{ t: 'arc', a: e.a, m: e.m, b: e.b }];
-      case 'rect': { const c = rectCorners(e); return [0, 1, 2, 3].map((i) => ({ t: 'line', a: c[i], b: c[(i + 1) % 4] })); }
-      case 'poly': { const c = polyCorners(e); return c.map((p, i) => ({ t: 'line', a: p, b: c[(i + 1) % c.length] })); }
-      case 'slot': { if (d2(e.a, e.b) < 1e-9) return [{ t: 'circle', c: e.a, r: e.r }]; return slotSegs(e); }
-      case 'circle': return [{ t: 'circle', c: e.c, r: e.r }];
-      case 'ellipse': return [{ t: 'ellipse', c: e.c, rx: e.rx, ry: e.ry, rot: e.rot || 0 }];
-      case 'spline': return e.pts && e.pts.length >= 2 ? [{ t: 'spline', pts: e.pts, closed: !!e.closed }] : [];
+      case 'line': return [{ t: 'line', a: e.a, b: e.b, sid: e.id }];
+      case 'arc': return [{ t: 'arc', a: e.a, m: e.m, b: e.b, sid: e.id }];
+      case 'rect': { const c = rectCorners(e); return [0, 1, 2, 3].map((i) => ({ t: 'line', a: c[i], b: c[(i + 1) % 4], sid: e.id + ':' + i })); }
+      case 'poly': { const c = polyCorners(e); return c.map((p, i) => ({ t: 'line', a: p, b: c[(i + 1) % c.length], sid: e.id + ':' + i })); }
+      case 'slot': { if (d2(e.a, e.b) < 1e-9) return [{ t: 'circle', c: e.a, r: e.r, sid: e.id }]; return slotSegs(e); }
+      case 'circle': return [{ t: 'circle', c: e.c, r: e.r, sid: e.id }];
+      case 'ellipse': return [{ t: 'ellipse', c: e.c, rx: e.rx, ry: e.ry, rot: e.rot || 0, sid: e.id }];
+      case 'spline': return e.pts && e.pts.length >= 2 ? [{ t: 'spline', pts: e.pts, closed: !!e.closed, sid: e.id }] : [];
       case 'text': return textContours(e).flat();
     }
     return [];
@@ -377,17 +381,17 @@ const SK = (() => {
     const pts = [];
     for (const s of segs) { const sp = segPoints(s); for (let i = 0; i < sp.length - 1; i++) pts.push(sp[i]); }
     const area = polyArea(pts);
-    return { key, ents, k: { segs: segs.map((s) => (s.t === 'arc' ? { t: 'arc', a: s.a, m: s.m, b: s.b } : s.t === 'bez' ? { t: 'bez', a: s.a, c1: s.c1, c2: s.c2, b: s.b } : { t: 'line', a: s.a, b: s.b })) }, poly: pts, area: Math.abs(area) };
+    return { key, ents, k: { segs: segs.map((s) => { const o = s.t === 'arc' ? { t: 'arc', a: s.a, m: s.m, b: s.b } : s.t === 'bez' ? { t: 'bez', a: s.a, c1: s.c1, c2: s.c2, b: s.b } : { t: 'line', a: s.a, b: s.b }; if (s.sid) o.sid = s.sid; return o; }) }, poly: pts, area: Math.abs(area) };
   }
   function loops(ents) {
     const out = [];
     const open = [];
     for (const e of ents || []) {
       if (e.con) continue;
-      if (e.type === 'text') { textContours(e).forEach((c, i) => { const L = loopFromSegs(c, e.id + ':' + i, [e.id]); if (L.poly.length >= 3 && L.area > 1e-6) out.push(L); }); continue; }
-      if (e.type === 'circle') { out.push({ key: e.id, ents: [e.id], k: { circle: { c: e.c, r: e.r } }, poly: circlePoints(e.c, e.r), area: Math.PI * e.r * e.r }); continue; }
-      if (e.type === 'ellipse') { if (e.rx > 1e-6 && e.ry > 1e-6) out.push({ key: e.id, ents: [e.id], k: { ellipse: { c: e.c, rx: e.rx, ry: e.ry, rot: e.rot || 0 } }, poly: ellipsePoints(e.c, e.rx, e.ry, e.rot || 0), area: Math.PI * e.rx * e.ry }); continue; }
-      if (e.type === 'slot' && d2(e.a, e.b) < 1e-9) { out.push({ key: e.id, ents: [e.id], k: { circle: { c: e.a, r: e.r } }, poly: circlePoints(e.a, e.r), area: Math.PI * e.r * e.r }); continue; }
+      if (e.type === 'text') { textContours(e).forEach((c, i) => { const L = loopFromSegs(c.map((s, si) => ({ ...s, sid: e.id + ':' + i + ':' + si })), e.id + ':' + i, [e.id]); if (L.poly.length >= 3 && L.area > 1e-6) out.push(L); }); continue; }
+      if (e.type === 'circle') { out.push({ key: e.id, ents: [e.id], k: { circle: { c: e.c, r: e.r, sid: e.id } }, poly: circlePoints(e.c, e.r), area: Math.PI * e.r * e.r }); continue; }
+      if (e.type === 'ellipse') { if (e.rx > 1e-6 && e.ry > 1e-6) out.push({ key: e.id, ents: [e.id], k: { ellipse: { c: e.c, rx: e.rx, ry: e.ry, rot: e.rot || 0, sid: e.id } }, poly: ellipsePoints(e.c, e.rx, e.ry, e.rot || 0), area: Math.PI * e.rx * e.ry }); continue; }
+      if (e.type === 'slot' && d2(e.a, e.b) < 1e-9) { out.push({ key: e.id, ents: [e.id], k: { circle: { c: e.a, r: e.r, sid: e.id } }, poly: circlePoints(e.a, e.r), area: Math.PI * e.r * e.r }); continue; }
       if (e.type === 'rect' || e.type === 'poly' || e.type === 'slot') {
         const segs = segsOf(e);
         if (e.type === 'rect' && (Math.abs(e.a[0] - e.b[0]) < 1e-6 || Math.abs(e.a[1] - e.b[1]) < 1e-6)) continue;
@@ -395,7 +399,7 @@ const SK = (() => {
       }
       if (e.type === 'spline') {
         if (!e.pts || e.pts.length < 2) continue;
-        if (e.closed) { if (e.pts.length >= 3) out.push(loopFromSegs(splineBez(e.pts, true), e.id, [e.id])); continue; }
+        if (e.closed) { if (e.pts.length >= 3) out.push(loopFromSegs(splineBez(e.pts, true).map((s, si) => ({ ...s, sid: e.id + ':' + si })), e.id, [e.id])); continue; }
         if (d2(endA(e), endB(e)) > 1e-9) open.push(e);
         continue;
       }
@@ -423,8 +427,8 @@ const SK = (() => {
         visited.add(cur.id);
         const forward = qkey(endA(cur)) === qkey(from);
         const a = forward ? endA(cur) : endB(cur), b = forward ? endB(cur) : endA(cur);
-        if (cur.type === 'spline') { const bz = splineBez(cur.pts, false); segs.push(...(forward ? bz : bz.slice().reverse().map(revSeg))); }
-        else segs.push(cur.type === 'arc' ? { t: 'arc', a, m: cur.m, b } : { t: 'line', a, b });
+        if (cur.type === 'spline') { const bz = splineBez(cur.pts, false).map((s, si) => ({ ...s, sid: cur.id + ':' + si })); segs.push(...(forward ? bz : bz.slice().reverse().map(revSeg))); }
+        else segs.push(cur.type === 'arc' ? { t: 'arc', a, m: cur.m, b, sid: cur.id } : { t: 'line', a, b, sid: cur.id });
         from = b;
         const nxt = (adj.get(qkey(b)) || []).find((n) => n.e.id !== cur.id && !visited.has(n.e.id));
         cur = nxt ? nxt.e : null;

@@ -75,7 +75,7 @@ Leitlinien:
   - Grundkörper und `buildPart` (Bibliotheksteile)
   - `buildExtrude`/`buildRevolve`/`buildLoft`/`buildSweep`/`buildImport`
   - `patternShape` (Rechteck, Kreis mit Achse z/x/y/pick, Pfad, Spiegeln auch an Fläche mit `bind`)
-  - `splitBody`, `applyFinishes` (Rundung, Fase, Entformungsschräge `draft`, Wandstärke `shell`)
+  - `splitBody`, `applyFinishes` (Rundung, Fase, Entformungsschräge `draft`, Wandstärke `shell`), Topologie-Verlauf (`tid`, `sid`, OpenCascade `Generated`/`Modified`, Lage als Ersatz)
   - `evaluate`, `measure`, `project` (Zeichnung, DXF), `clashes` (Durchdringungen und Prüfkörper), `faceLoops`, `checkGeometry` (Geometrie-Prüfung PF-08), `checkImport`/`healImport` (BRepCheck, ShapeFix, Nähen mit Toleranz)
 - Gewinde über Helix-Sweep mit `PITCH`-Tabelle.
 

@@ -6,7 +6,7 @@ const RefFix = (() => {
   const isRefError = (e) => !!(e && (e.code === 'edges' || e.code === 'ref'));
   const hardErrorsFor = (itemId) => App.errorsFor(itemId).filter((e) => !isRefError(e));
 
-  function planeRefLost(pr) {
+  function planeRefLost(pr, itemId) {
     if (!pr) return false;
     if (pr.kind === 'datum') {
       if (typeof Datums === 'undefined') return false;
@@ -14,10 +14,18 @@ const RefFix = (() => {
       return !d || Datums.lost.includes(d.id);
     }
     if (pr.kind === 'face') {
+      const resInfo = itemId ? App.resolvedOf(itemId) : null;
+      if (resInfo && resInfo.planeRefOk === true) return false;
+      if (resInfo && resInfo.planeRefOk === false) return true;
       const rf = Model.find(App.doc, pr.id);
       if (!rf || rf.item.suppressed) return true;
       const res = App.results.get(pr.id);
       if (res && res.data && Array.isArray(res.data.faces)) {
+        if (pr.tid) {
+          const wantBase = pr.tid.split('|')[0];
+          const tidOk = res.data.faces.some((fc) => fc && fc.t === 'PLANE' && fc.tid && (fc.tid === pr.tid || fc.tid.split('|')[0] === wantBase));
+          if (tidOk) return false;
+        }
         const pn = pr.n || [0, 0, 1], pc = pr.c || [0, 0, 0];
         const ok = res.data.faces.some((fc) => {
           if (!fc || fc.t !== 'PLANE' || !fc.n || !fc.c) return false;
@@ -80,7 +88,7 @@ const RefFix = (() => {
       }
     }
 
-    if (it.p && it.p.sketch && it.p.sketch.planeRef && planeRefLost(it.p.sketch.planeRef)) {
+    if (it.p && it.p.sketch && it.p.sketch.planeRef && planeRefLost(it.p.sketch.planeRef, it.id)) {
       out.push({
         key: `${it.id}:skplane`,
         kind: 'sketch-plane',
@@ -319,7 +327,7 @@ const RefFix = (() => {
         : [];
       const merged = [...kept];
       for (const s of sigs) {
-        const dup = merged.some((k) => k && k.m && Math.hypot(k.m[0] - s.m[0], k.m[1] - s.m[1], k.m[2] - s.m[2]) < 1e-3);
+        const dup = merged.some((k) => k && ((k.tid && s.tid && k.tid === s.tid) || (k.m && Math.hypot(k.m[0] - s.m[0], k.m[1] - s.m[1], k.m[2] - s.m[2]) < 1e-3)));
         if (!dup) merged.push(s);
       }
       fin.edges = merged;
@@ -333,7 +341,7 @@ const RefFix = (() => {
     if (!fi || !fi.c) return false;
     const bb = r.data.bbox;
     const size = bb ? round(clamp(Math.max(bb[3] - bb[0], bb[4] - bb[1], bb[5] - bb[2]) * 0.6, 8, 60), 2) : 20;
-    const sig = { c: fi.c.map((v) => round(v, 4)), n: fi.n ? fi.n.map((v) => round(v, 5)) : null, size };
+    const sig = { c: fi.c.map((v) => round(v, 4)), n: fi.n ? fi.n.map((v) => round(v, 5)) : null, size, ...(fi.tid ? { tid: fi.tid } : {}) };
     App.change('Fläche neu gewählt', (doc) => {
       const f = Model.find(doc, issue.itemId);
       if (!f) return false;
@@ -343,7 +351,7 @@ const RefFix = (() => {
       const kept = Array.isArray(fin.faces) && miss && miss.size < fin.faces.length
         ? fin.faces.filter((_, i) => !miss.has(i))
         : [];
-      const dup = kept.some((k) => k && k.c && Math.hypot(k.c[0] - sig.c[0], k.c[1] - sig.c[1], k.c[2] - sig.c[2]) < 1e-3);
+      const dup = kept.some((k) => k && ((k.tid && sig.tid && k.tid === sig.tid) || (k.c && Math.hypot(k.c[0] - sig.c[0], k.c[1] - sig.c[1], k.c[2] - sig.c[2]) < 1e-3)));
       if (!dup) kept.push(sig);
       fin.faces = kept;
     });
@@ -573,7 +581,7 @@ const RefFix = (() => {
             const nW = new THREE.Vector3(...fr.n).transformDirection(W).normalize().toArray();
             const bb = App.results.get(hit.id)?.data?.bbox;
             const size = bb ? round(clamp(Math.max(bb[3] - bb[0], bb[4] - bb[1], bb[5] - bb[2]) * 0.6, 10, 80), 2) : 24;
-            const planeRef = { kind: 'face', id: hit.id, c: fi.c.map((v) => round(v, 5)), n: fi.n.map((v) => round(v, 5)), size };
+            const planeRef = { kind: 'face', id: hit.id, c: fi.c.map((v) => round(v, 5)), n: fi.n.map((v) => round(v, 5)), size, ...(fi.tid ? { tid: fi.tid } : {}) };
             applySketchPlane(issue, { oW, xW, nW, planeRef });
             stop({ keepToast: true });
             UI.toast('Skizzen-Fläche neu gewählt – Modell wird neu berechnet.', { icon: 'check' });

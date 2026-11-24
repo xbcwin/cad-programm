@@ -62,12 +62,26 @@ export function createKernel(R, oc) {
     if (e) { e.gen = gen; return e.shape; }
     return null;
   }
-  function cachePut(key, shape, errs, resolved, baseBox = null) { cache.set(key, { shape, gen, errs: errs && errs.length ? errs : null, resolved: resolved || null, baseBox: baseBox || null }); return shape; }
+  function cacheEntry(key) {
+    const e = cache.get(key);
+    if (e) { e.gen = gen; return e; }
+    return null;
+  }
+  function cachePut(key, shape, errs, resolved, baseBox = null, topo = null) {
+    const old = cache.get(key);
+    if (old && old.topo && old.topo !== topo) freeTopoMap(old.topo);
+    cache.set(key, { shape, gen, errs: errs && errs.length ? errs : null, resolved: resolved || null, baseBox: baseBox || null, topo: topo || null });
+    return shape;
+  }
 
   function gc() {
     // Formen entfernen, die mehrere Durchläufe nicht gebraucht wurden
     for (const [k, e] of cache) {
-      if (gen - e.gen > 6) { try { if (Array.isArray(e.shape)) e.shape.forEach(safeDelete); else e.shape.delete(); } catch (_) {} cache.delete(k); }
+      if (gen - e.gen > 6) {
+        try { if (Array.isArray(e.shape)) e.shape.forEach(safeDelete); else e.shape.delete(); } catch (_) {}
+        freeTopoMap(e.topo);
+        cache.delete(k);
+      }
     }
     if (meshCache.size > 400) {
       const drop = meshCache.size - 300; let i = 0;
@@ -90,6 +104,33 @@ export function createKernel(R, oc) {
     const res = R.cast(tr.ModifiedShape(shape.wrapped));
     tr.delete(); trsf.delete();
     return res;
+  }
+  function applyMatrixWithTopo(shape, m, topo, selfId = null) {
+    if (isIdentity(m)) {
+      const res = shape.clone();
+      const outTopo = topo ? cloneTopoForShape(res, topo, selfId) : null;
+      return { shape: res, topo: outTopo };
+    }
+    const trsf = new oc.gp_Trsf();
+    trsf.SetValues(m[0], m[4], m[8], m[12], m[1], m[5], m[9], m[13], m[2], m[6], m[10], m[14]);
+    const tr = new oc.BRepBuilderAPI_Transform(shape.wrapped, trsf, true, false);
+    const res = R.cast(tr.ModifiedShape(shape.wrapped));
+    const outTopo = topo ? transformTopo(topo, tr, res, selfId) : null;
+    tr.delete(); trsf.delete();
+    return { shape: res, topo: outTopo };
+  }
+  function mirrorAxisWithTopo(shape, topo, planeName, selfId = null) {
+    const dir = planeName === 'YZ' ? [1, 0, 0] : planeName === 'XZ' ? [0, 1, 0] : [0, 0, 1];
+    const p0 = new oc.gp_Pnt(0, 0, 0);
+    const d0 = new oc.gp_Dir(dir[0], dir[1], dir[2]);
+    const ax2 = new oc.gp_Ax2(p0, d0);
+    const trsf = new oc.gp_Trsf();
+    trsf.SetMirror(ax2);
+    const tr = new oc.BRepBuilderAPI_Transform(shape.wrapped, trsf, true, false);
+    const res = R.cast(tr.ModifiedShape(shape.wrapped));
+    const outTopo = topo ? transformTopo(topo, tr, res, selfId) : null;
+    tr.delete(); trsf.delete(); ax2.delete(); d0.delete(); p0.delete();
+    return { shape: res, topo: outTopo };
   }
   function matMul(a, b) { // a*b, column-major
     const r = new Array(16);
@@ -603,6 +644,40 @@ export function createKernel(R, oc) {
     if (ownInputs) for (let i = 1; i < shapes.length; i++) safeDelete(shapes[i]);
     return res;
   }
+  function boolWithTopo(op, aShape, aTopo, aSelf, bShape, bTopo, bSelf, opTag) {
+    let builder = null;
+    try {
+      const aW = aShape.wrapped, bW = bShape.wrapped;
+      if (op === 'cut') builder = new oc.BRepAlgoAPI_Cut(aW, bW);
+      else if (op === 'common') builder = new oc.BRepAlgoAPI_Common(aW, bW);
+      else builder = new oc.BRepAlgoAPI_Fuse(aW, bW);
+      builder.SetToFillHistory(true);
+      builder.Build();
+      builder.SimplifyResult(true, true, 1e-3);
+      const res = R.cast(builder.Shape());
+      if (!res || !R.isShape3D(res)) { safeDelete(res); throw new Error('Boolesche Verrechnung fehlgeschlagen.'); }
+      const outTopo = propagateHistory(builder, [{ topo: aTopo, selfId: aSelf }, { topo: bTopo, selfId: bSelf }], res, opTag);
+      return { shape: res, topo: outTopo };
+    } finally {
+      if (builder && builder.delete) try { builder.delete(); } catch (_) {}
+    }
+  }
+  function fuseAllWithTopo(entries, ownInputs = false, opTag = 'U') {
+    if (!entries.length) return null;
+    if (entries.length === 1) {
+      const e = entries[0];
+      const topo = e.topo ? cloneTopoForShape(e.shape, e.topo, e.selfId || null) : ensureTopoComplete(e.shape, createTopoMap(), e.selfId || '$self');
+      return { shape: e.shape, topo };
+    }
+    let cur = { shape: entries[0].shape, topo: entries[0].topo, selfId: entries[0].selfId || null };
+    for (let i = 1; i < entries.length; i++) {
+      const nxt = boolWithTopo('fuse', cur.shape, cur.topo, cur.selfId, entries[i].shape, entries[i].topo, entries[i].selfId || null, opTag + i);
+      if (i > 1 || ownInputs) { safeDelete(cur.shape); freeTopoMap(cur.topo); }
+      if (ownInputs) { safeDelete(entries[i].shape); freeTopoMap(entries[i].topo); }
+      cur = { shape: nxt.shape, topo: nxt.topo, selfId: null };
+    }
+    return { shape: cur.shape, topo: cur.topo };
+  }
   function safeDelete(s) { try { if (s && s.delete) s.delete(); } catch (_) {} }
   function polygonFace(pts3) { return R.makePolygon(pts3); }
 
@@ -610,6 +685,154 @@ export function createKernel(R, oc) {
   function revolveProfile(pts2) { // Profil in XZ-Ebene (x=Radius, z=Höhe) um Z drehen
     const face = polygonFace(pts2.map(([x, z]) => [x, 0, z]));
     return R.revolution(face, [0, 0, 0], [0, 0, 1], 360);
+  }
+  function makePrismWithTopo(pts3, vec3, prefix = '$self') {
+    const wb = new oc.BRepBuilderAPI_MakeWire();
+    const edgeSids = [];
+    for (let i = 0; i < pts3.length; i++) {
+      const p1 = pts3[i], p2 = pts3[(i + 1) % pts3.length];
+      const e = R.makeLine(p1, p2);
+      wb.Add(e.wrapped);
+      edgeSids.push({ edge: wb.Edge(), sid: String(i) });
+      e.delete();
+    }
+    wb.Build();
+    const wire = wb.Wire(); wb.delete();
+    const fb = new oc.BRepBuilderAPI_MakeFace(wire, false);
+    const faceRaw = fb.Face(); fb.delete();
+    const gv = new oc.gp_Vec(vec3[0], vec3[1], vec3[2]);
+    const pr = new oc.BRepPrimAPI_MakePrism(faceRaw, gv, false, true);
+    pr.Build();
+    const res = R.cast(pr.Shape());
+    const tm = createTopoMap();
+    try {
+      const outFaces = exploreUnique(res, oc.TopAbs_ShapeEnum.TopAbs_FACE);
+      const outEdges = exploreUnique(res, oc.TopAbs_ShapeEnum.TopAbs_EDGE);
+      const matchOut = (list, raw) => { const h = topoHc(raw); const b = list.find((x) => x.hc === h && x.s.IsSame(raw)); return b ? b.s : null; };
+      try {
+        const ff = pr.FirstShape();
+        const mf = !ff.IsNull() ? matchOut(outFaces, ff) : null;
+        if (mf) tmAdd(tm.faces, mf, `${prefix}/F:start`);
+        safeDelete(ff);
+      } catch (_) {}
+      try {
+        const lf = pr.LastShape();
+        const mf = !lf.IsNull() ? matchOut(outFaces, lf) : null;
+        if (mf) tmAdd(tm.faces, mf, `${prefix}/F:end`);
+        safeDelete(lf);
+      } catch (_) {}
+      for (const { edge, sid } of edgeSids) {
+        const gen = readShapeList(pr.Generated(edge));
+        let k = 0;
+        for (const g of gen) {
+          if (g.ShapeType() === oc.TopAbs_ShapeEnum.TopAbs_FACE) {
+            const mf = matchOut(outFaces, g);
+            if (mf) tmAdd(tm.faces, mf, gen.length === 1 ? `${prefix}/F:side:${sid}` : `${prefix}/F:side:${sid}#${k++}`);
+          }
+          safeDelete(g);
+        }
+        try {
+          const fe = pr.FirstShape(edge);
+          const me = !fe.IsNull() ? matchOut(outEdges, fe) : null;
+          if (me) tmAdd(tm.edges, me, `${prefix}/E:side:${sid}:start`);
+          safeDelete(fe);
+        } catch (_) {}
+        try {
+          const le = pr.LastShape(edge);
+          const me = !le.IsNull() ? matchOut(outEdges, le) : null;
+          if (me) tmAdd(tm.edges, me, `${prefix}/E:side:${sid}:end`);
+          safeDelete(le);
+        } catch (_) {}
+      }
+      for (const f of outFaces) if (!tmGet(tm.faces, f.s)) f.s.delete();
+      for (const e of outEdges) if (!tmGet(tm.edges, e.s)) e.s.delete();
+      ensureTopoComplete(res, tm, prefix);
+    } finally {
+      pr.delete(); gv.delete(); safeDelete(faceRaw); safeDelete(wire);
+    }
+    return { shape: res, topo: tm };
+  }
+  function buildPrimitiveWithTopo(kind, p) {
+    if (kind === 'box') {
+      const w = pos(p.w, 20), d = pos(p.d, 20), h = pos(p.h, 20);
+      const p1 = new oc.gp_Pnt(-w / 2, -d / 2, 0), p2 = new oc.gp_Pnt(w / 2, d / 2, h);
+      const mk = new oc.BRepPrimAPI_MakeBox(p1, p2);
+      const shape = R.cast(mk.Solid());
+      const tm = createTopoMap();
+      const outFaces = exploreUnique(shape, oc.TopAbs_ShapeEnum.TopAbs_FACE);
+      const tagBoxFace = (raw, tag) => {
+        const hc = topoHc(raw);
+        const found = outFaces.find((x) => x.hc === hc && x.s.IsSame(raw));
+        if (found) tmAdd(tm.faces, found.s, tag);
+        safeDelete(raw);
+      };
+      tagBoxFace(mk.TopFace(), '$self/F:top');
+      tagBoxFace(mk.BottomFace(), '$self/F:bottom');
+      tagBoxFace(mk.FrontFace(), '$self/F:px');
+      tagBoxFace(mk.BackFace(), '$self/F:nx');
+      tagBoxFace(mk.LeftFace(), '$self/F:ny');
+      tagBoxFace(mk.RightFace(), '$self/F:py');
+      for (const f of outFaces) if (!tmGet(tm.faces, f.s)) f.s.delete();
+      mk.delete(); p1.delete(); p2.delete();
+      ensureTopoComplete(shape, tm, '$self');
+      return { shape, topo: tm };
+    }
+    if (kind === 'cylinder') {
+      const r = pos(p.d, 20) / 2, h = pos(p.h, 20);
+      const ax2 = R.makeAx2([0, 0, 0], [0, 0, 1]);
+      const mk = new oc.BRepPrimAPI_MakeCylinder(ax2, r, h);
+      const shape = R.cast(mk.Shape());
+      const tm = createTopoMap();
+      const cylFace = mk.Face();
+      const outFaces = exploreUnique(shape, oc.TopAbs_ShapeEnum.TopAbs_FACE);
+      for (const f of outFaces) {
+        if (f.s.IsSame(cylFace)) tmAdd(tm.faces, f.s, '$self/F:side');
+        else {
+          const rf = new R.Face(oc.TopoDS.Face(f.s));
+          let nz = 0; try { nz = rf.normalAt().z; } catch (_) {}
+          tmAdd(tm.faces, f.s, nz > 0 ? '$self/F:top' : '$self/F:bottom');
+        }
+      }
+      safeDelete(cylFace); mk.delete(); ax2.delete();
+      ensureTopoComplete(shape, tm, '$self');
+      return { shape, topo: tm };
+    }
+    if (kind === 'tube') {
+      const D = pos(p.d, 20), h = pos(p.h, 20), wall = pos(p.wall, 2);
+      const outer = buildPrimitiveWithTopo('cylinder', { d: D, h });
+      const di = D - 2 * wall;
+      if (di <= 0.05) return outer;
+      const ax2 = R.makeAx2([0, 0, -1], [0, 0, 1]);
+      const mkIn = new oc.BRepPrimAPI_MakeCylinder(ax2, di / 2, h + 2);
+      const innerShape = R.cast(mkIn.Shape());
+      const innerFace = mkIn.Face();
+      const inTm = createTopoMap();
+      const inFaces = exploreUnique(innerShape, oc.TopAbs_ShapeEnum.TopAbs_FACE);
+      for (const f of inFaces) {
+        if (f.s.IsSame(innerFace)) tmAdd(inTm.faces, f.s, '$self/F:inner');
+        else f.s.delete();
+      }
+      safeDelete(innerFace); mkIn.delete(); ax2.delete();
+      ensureTopoComplete(innerShape, inTm, '$self:in');
+      const res = boolWithTopo('cut', outer.shape, outer.topo, null, innerShape, inTm, null, 'Tube');
+      safeDelete(outer.shape); freeTopoMap(outer.topo);
+      safeDelete(innerShape); freeTopoMap(inTm);
+      return res;
+    }
+    if (kind === 'prism') {
+      const n = Math.max(3, Math.min(64, Math.round(num(p.n, 6)))), r = pos(p.d, 20) / 2, h = pos(p.h, 20);
+      const pts = [];
+      for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2 + Math.PI / 2; pts.push([Math.cos(a) * r, Math.sin(a) * r, 0]); }
+      return makePrismWithTopo(pts, [0, 0, h], '$self');
+    }
+    if (kind === 'wedge') {
+      const w = pos(p.w, 20), d = pos(p.d, 20), h = pos(p.h, 20);
+      const tri = [[-w / 2, -d / 2, 0], [w / 2, -d / 2, 0], [-w / 2, -d / 2, h]];
+      return makePrismWithTopo(tri, [0, d, 0], '$self');
+    }
+    const shape = buildPrimitive(kind, p);
+    const topo = ensureTopoComplete(shape, createTopoMap(), '$self');
+    return { shape, topo };
   }
   function buildPrimitive(kind, p) {
     switch (kind) {
@@ -716,6 +939,43 @@ export function createKernel(R, oc) {
     }
     return R.assembleWire(edges);
   }
+  function loopWireTracked(loop, M, ccw = true) {
+    const wb = new oc.BRepBuilderAPI_MakeWire();
+    const edgeSids = [];
+    const addEdge = (edgeObj, sid) => {
+      wb.Add(edgeObj.wrapped);
+      edgeSids.push({ edge: wb.Edge(), sid });
+      edgeObj.delete();
+    };
+    try {
+      if (loop.circle) {
+        addEdge(R.makeCircle(loop.circle.r, M.P(loop.circle.c), ccw ? M.n : M.n.map((v) => -v)), loop.circle.sid || 'c');
+      } else if (loop.ellipse) {
+        const E = loop.ellipse; let a = E.rx, b = E.ry, rot = E.rot || 0;
+        if (b > a) { const t = a; a = b; b = t; rot += Math.PI / 2; }
+        const d2 = [Math.cos(rot), Math.sin(rot)], xd = [0, 1, 2].map((i) => M.x[i] * d2[0] + M.y[i] * d2[1]);
+        const eObj = Math.abs(a - b) < 1e-6
+          ? R.makeCircle(a, M.P(E.c), ccw ? M.n : M.n.map((v) => -v))
+          : R.makeEllipse(a, b, M.P(E.c), ccw ? M.n : M.n.map((v) => -v), xd);
+        addEdge(eObj, E.sid || 'el');
+      } else {
+        let segs = loop.segs;
+        if ((loopArea(loop) > 0) !== ccw) {
+          segs = segs.slice().reverse().map((s) => (s.t === 'bez' ? { ...s, a: s.b, b: s.a, c1: s.c2, c2: s.c1 } : { ...s, a: s.b, b: s.a }));
+        }
+        for (let i = 0; i < segs.length; i++) {
+          const s = segs[i];
+          const sid = s.sid || ('s' + i);
+          if (s.t === 'arc') addEdge(R.makeThreePointArc(M.P(s.a), M.P(s.m), M.P(s.b)), sid);
+          else if (s.t === 'bez') addEdge(R.makeBezierCurve([M.P(s.a), M.P(s.c1), M.P(s.c2), M.P(s.b)]), sid);
+          else if (Math.hypot(s.b[0] - s.a[0], s.b[1] - s.a[1]) >= 1e-6) addEdge(R.makeLine(M.P(s.a), M.P(s.b)), sid);
+        }
+      }
+      wb.Build();
+      const wire = wb.Wire();
+      return { wire, edgeSids };
+    } finally { wb.delete(); }
+  }
   function regionFace(region, M) {
     // Außenkontur gegen, Löcher im Uhrzeigersinn – sonst würde ein Loch als Material zählen
     const outer = loopWire(region.outer, M, true);
@@ -740,6 +1000,205 @@ export function createKernel(R, oc) {
     }
     if (!solids.length) throw new Error(p.thin ? 'Die Skizze hat keine Linie und keinen Umriss für eine dünne Wand.' : 'Die Skizze hat keine geschlossene Fläche.');
     return fuseAll(solids);
+  }
+  function buildRevolveWithTopo(p) {
+    const M = planeMap(p.plane);
+    const ax = p.axis || { a: [0, 0], b: [0, 1] };
+    const c = p.axis3d && Array.isArray(p.axis3d.o) ? p.axis3d.o.map(Number) : M.P(ax.a);
+    const d = p.axis3d && Array.isArray(p.axis3d.d) ? norm(p.axis3d.d.map(Number)) : norm(sub(M.P(ax.b), c));
+    const regs = p.regions || [];
+    if (!regs.length) throw new Error('Die Skizze hat keine geschlossene Fläche.');
+    const dir = p.dir || 'normal';
+    if (dir === 'toFace') {
+      const sh = buildRevolve(p);
+      return { shape: sh, topo: ensureTopoComplete(sh, createTopoMap(), '$self') };
+    }
+    const entries = [];
+    for (let rgIdx = 0; rgIdx < regs.length; rgIdx++) {
+      const rg = regs[rgIdx];
+      const outer = loopWireTracked(rg.outer, M, true);
+      const holes = (rg.holes || []).map((h) => loopWireTracked(h, M, false));
+      const allEdgeSids = [...outer.edgeSids, ...holes.flatMap((h) => h.edgeSids)];
+      const fb = new oc.BRepBuilderAPI_MakeFace(outer.wire, false);
+      for (const h of holes) fb.Add(h.wire);
+      if (!fb.IsDone()) {
+        fb.delete(); safeDelete(outer.wire); holes.forEach((h) => safeDelete(h.wire));
+        throw new Error('Aus dieser Skizze lässt sich keine Fläche bilden.');
+      }
+      let faceRaw = fb.Face(); fb.delete();
+      safeDelete(outer.wire); holes.forEach((h) => safeDelete(h.wire));
+      let revDir = d, revAngle = 360, preRot = 0;
+      if (dir === 'reverse') { revDir = mul(d, -1); revAngle = Math.max(0.1, Math.min(360, num(p.angle, 360))); }
+      else if (dir === 'both') { revAngle = Math.max(0.1, Math.min(360, num(p.angle, 360))); if (revAngle < 360 - 1e-6) preRot = -revAngle / 2; }
+      else if (dir === 'two') {
+        const a1 = Math.max(0, Math.min(360, num(p.angle, 90))), a2 = Math.max(0, Math.min(360, num(p.angle2, a1)));
+        const tot = Math.min(360, a1 + a2);
+        if (tot < 0.1) { safeDelete(faceRaw); allEdgeSids.forEach((x) => safeDelete(x.edge)); throw new Error('Der Drehwinkel muss größer als 0° sein.'); }
+        revAngle = tot;
+        if (tot < 360 - 1e-6 && a2 > 1e-6) preRot = -a2;
+      } else { revAngle = Math.max(0.1, Math.min(360, num(p.angle, 360))); }
+      let curEdges = allEdgeSids;
+      if (Math.abs(preRot) > 1e-9) {
+        const ax1p = R.makeAx1(c, revDir);
+        const trsf = new oc.gp_Trsf();
+        trsf.SetRotation(ax1p, (preRot * Math.PI) / 180);
+        const tr = new oc.BRepBuilderAPI_Transform(faceRaw, trsf, true, false);
+        const nf = oc.TopoDS.Face(tr.ModifiedShape(faceRaw));
+        curEdges = allEdgeSids.map(({ edge, sid }) => {
+          const ne = oc.TopoDS.Edge(tr.ModifiedShape(edge));
+          safeDelete(edge);
+          return { edge: ne, sid };
+        });
+        safeDelete(faceRaw); faceRaw = nf;
+        tr.delete(); trsf.delete(); ax1p.delete();
+      }
+      const ax1 = R.makeAx1(c, revDir);
+      const rev = new oc.BRepPrimAPI_MakeRevol(faceRaw, ax1, (revAngle * Math.PI) / 180, false);
+      rev.Build();
+      const solid = R.cast(rev.Shape());
+      const tm = createTopoMap();
+      try {
+        const rPref = regs.length > 1 ? `$self/F:r${rgIdx}:` : '$self/F:';
+        const ePref = regs.length > 1 ? `$self/E:r${rgIdx}:` : '$self/E:';
+        const outFaces = exploreUnique(solid, oc.TopAbs_ShapeEnum.TopAbs_FACE);
+        const outEdges = exploreUnique(solid, oc.TopAbs_ShapeEnum.TopAbs_EDGE);
+        const matchOut = (list, raw) => { const h = topoHc(raw); const b = list.find((x) => x.hc === h && x.s.IsSame(raw)); return b ? b.s : null; };
+        if (revAngle < 360 - 1e-6) {
+          try { const ff = rev.FirstShape(); const mf = !ff.IsNull() ? matchOut(outFaces, ff) : null; if (mf) tmAdd(tm.faces, mf, `${rPref}start`); safeDelete(ff); } catch (_) {}
+          try { const lf = rev.LastShape(); const mf = !lf.IsNull() ? matchOut(outFaces, lf) : null; if (mf) tmAdd(tm.faces, mf, `${rPref}end`); safeDelete(lf); } catch (_) {}
+        }
+        const usedSide = new Map();
+        for (const { edge, sid } of curEdges) {
+          const gen = readShapeList(rev.Generated(edge));
+          const cnt = usedSide.get(sid) || 0;
+          usedSide.set(sid, cnt + 1);
+          const baseSid = cnt === 0 ? sid : `${sid}#${cnt}`;
+          let k = 0;
+          for (const g of gen) {
+            if (g.ShapeType() === oc.TopAbs_ShapeEnum.TopAbs_FACE) {
+              const mf = matchOut(outFaces, g);
+              if (mf && !tmGet(tm.faces, mf)) tmAdd(tm.faces, mf, gen.length === 1 ? `${rPref}sk:${baseSid}` : `${rPref}sk:${baseSid}:${k++}`);
+            }
+            safeDelete(g);
+          }
+          if (revAngle < 360 - 1e-6) {
+            try { const fe = rev.FirstShape(edge); const me = !fe.IsNull() ? matchOut(outEdges, fe) : null; if (me && !tmGet(tm.edges, me)) tmAdd(tm.edges, me, `${ePref}sk:${baseSid}:start`); safeDelete(fe); } catch (_) {}
+            try { const le = rev.LastShape(edge); const me = !le.IsNull() ? matchOut(outEdges, le) : null; if (me && !tmGet(tm.edges, me)) tmAdd(tm.edges, me, `${ePref}sk:${baseSid}:end`); safeDelete(le); } catch (_) {}
+          }
+          safeDelete(edge);
+        }
+        for (const f of outFaces) if (!tmGet(tm.faces, f.s)) f.s.delete();
+        for (const e of outEdges) if (!tmGet(tm.edges, e.s)) e.s.delete();
+        ensureTopoComplete(solid, tm, '$self');
+      } finally {
+        rev.delete(); ax1.delete(); safeDelete(faceRaw);
+      }
+      entries.push({ shape: solid, topo: tm, selfId: null });
+    }
+    return fuseAllWithTopo(entries, true, 'Rv');
+  }
+  function buildExtrudeWithTopo(p) {
+    if (p.thinError) throw new Error(p.thinError);
+    const M = planeMap(p.plane);
+    const dist = pos(p.dist, 10);
+    const extra = num(p.extra, 0);
+    const dir = p.dir || 'normal';
+    const regs = p.regions || [];
+    if (!regs.length) throw new Error(p.thin ? 'Die Skizze hat keine Linie und keinen Umriss für eine dünne Wand.' : 'Die Skizze hat keine geschlossene Fläche.');
+    const entries = [];
+    for (let rgIdx = 0; rgIdx < regs.length; rgIdx++) {
+      const rg = regs[rgIdx];
+      const outer = loopWireTracked(rg.outer, M, true);
+      const holes = (rg.holes || []).map((h) => loopWireTracked(h, M, false));
+      const allEdgeSids = [...outer.edgeSids, ...holes.flatMap((h) => h.edgeSids)];
+      const fb = new oc.BRepBuilderAPI_MakeFace(outer.wire, false);
+      for (const h of holes) fb.Add(h.wire);
+      if (!fb.IsDone()) {
+        fb.delete(); safeDelete(outer.wire); holes.forEach((h) => safeDelete(h.wire));
+        throw new Error('Aus dieser Skizze lässt sich keine Fläche bilden.');
+      }
+      let faceRaw = fb.Face(); fb.delete();
+      safeDelete(outer.wire); holes.forEach((h) => safeDelete(h.wire));
+      let shift = [0, 0, 0], v;
+      if (dir === 'both') { shift = mul(M.n, -dist / 2); v = mul(M.n, dist); }
+      else if (dir === 'two') { const d2 = pos(p.dist2, dist); shift = mul(M.n, -d2); v = mul(M.n, dist + d2); }
+      else if (dir === 'reverse') { if (extra) shift = mul(M.n, extra); v = mul(M.n, -(dist + extra)); }
+      else { if (extra) shift = mul(M.n, -extra); v = mul(M.n, dist + extra); }
+      let shiftedEdges = allEdgeSids;
+      if (Math.hypot(shift[0], shift[1], shift[2]) > 1e-12) {
+        const trsf = new oc.gp_Trsf();
+        const sv = new oc.gp_Vec(shift[0], shift[1], shift[2]);
+        trsf.SetTranslation(sv);
+        const tr = new oc.BRepBuilderAPI_Transform(faceRaw, trsf, true, false);
+        const newFace = oc.TopoDS.Face(tr.ModifiedShape(faceRaw));
+        shiftedEdges = allEdgeSids.map(({ edge, sid }) => {
+          const ne = oc.TopoDS.Edge(tr.ModifiedShape(edge));
+          safeDelete(edge);
+          return { edge: ne, sid };
+        });
+        safeDelete(faceRaw); faceRaw = newFace;
+        tr.delete(); trsf.delete(); sv.delete();
+      }
+      const gv = new oc.gp_Vec(v[0], v[1], v[2]);
+      const pr = new oc.BRepPrimAPI_MakePrism(faceRaw, gv, false, true);
+      pr.Build();
+      const solid = R.cast(pr.Shape());
+      const tm = createTopoMap();
+      try {
+        const rPref = regs.length > 1 ? `$self/F:r${rgIdx}:` : '$self/F:';
+        const ePref = regs.length > 1 ? `$self/E:r${rgIdx}:` : '$self/E:';
+        const outFaces = exploreUnique(solid, oc.TopAbs_ShapeEnum.TopAbs_FACE);
+        const outEdges = exploreUnique(solid, oc.TopAbs_ShapeEnum.TopAbs_EDGE);
+        const matchOut = (list, raw) => { const h = topoHc(raw); const b = list.find((x) => x.hc === h && x.s.IsSame(raw)); return b ? b.s : null; };
+        try {
+          const ff = pr.FirstShape();
+          const mf = !ff.IsNull() ? matchOut(outFaces, ff) : null;
+          if (mf) tmAdd(tm.faces, mf, `${rPref}start`);
+          safeDelete(ff);
+        } catch (_) {}
+        try {
+          const lf = pr.LastShape();
+          const mf = !lf.IsNull() ? matchOut(outFaces, lf) : null;
+          if (mf) tmAdd(tm.faces, mf, `${rPref}end`);
+          safeDelete(lf);
+        } catch (_) {}
+        const usedSide = new Map();
+        for (const { edge, sid } of shiftedEdges) {
+          const gen = readShapeList(pr.Generated(edge));
+          const cnt = usedSide.get(sid) || 0;
+          usedSide.set(sid, cnt + 1);
+          const baseSid = cnt === 0 ? sid : `${sid}#${cnt}`;
+          let k = 0;
+          for (const g of gen) {
+            if (g.ShapeType() === oc.TopAbs_ShapeEnum.TopAbs_FACE) {
+              const mf = matchOut(outFaces, g);
+              if (mf && !tmGet(tm.faces, mf)) tmAdd(tm.faces, mf, gen.length === 1 ? `${rPref}sk:${baseSid}` : `${rPref}sk:${baseSid}:${k++}`);
+            }
+            safeDelete(g);
+          }
+          try {
+            const fe = pr.FirstShape(edge);
+            const me = !fe.IsNull() ? matchOut(outEdges, fe) : null;
+            if (me && !tmGet(tm.edges, me)) tmAdd(tm.edges, me, `${ePref}sk:${baseSid}:start`);
+            safeDelete(fe);
+          } catch (_) {}
+          try {
+            const le = pr.LastShape(edge);
+            const me = !le.IsNull() ? matchOut(outEdges, le) : null;
+            if (me && !tmGet(tm.edges, me)) tmAdd(tm.edges, me, `${ePref}sk:${baseSid}:end`);
+            safeDelete(le);
+          } catch (_) {}
+          safeDelete(edge);
+        }
+        for (const f of outFaces) if (!tmGet(tm.faces, f.s)) f.s.delete();
+        for (const e of outEdges) if (!tmGet(tm.edges, e.s)) e.s.delete();
+        ensureTopoComplete(solid, tm, '$self');
+      } finally {
+        pr.delete(); gv.delete(); safeDelete(faceRaw);
+      }
+      entries.push({ shape: solid, topo: tm, selfId: null });
+    }
+    return fuseAllWithTopo(entries, true, 'Ex');
   }
   function isDynamicExtent(p) { return !!(p && (p.extent === 'toNext' || p.extent === 'toFace')); }
   function hasDynamicExtent(it) {
@@ -1177,6 +1636,102 @@ export function createKernel(R, oc) {
     }
     return fuseAll(solids);
   }
+  function buildRevolveWithTopo(p) {
+    const M = planeMap(p.plane);
+    const ax = p.axis || { a: [0, 0], b: [0, 1] };
+    const c = p.axis3d && Array.isArray(p.axis3d.o) ? p.axis3d.o.map(Number) : M.P(ax.a);
+    const d = p.axis3d && Array.isArray(p.axis3d.d) ? norm(p.axis3d.d.map(Number)) : norm(sub(M.P(ax.b), c));
+    const regs = p.regions || [];
+    if (!regs.length) throw new Error('Die Skizze hat keine geschlossene Fläche.');
+    const dir = p.dir || 'normal';
+    if (dir === 'toFace') {
+      const sh = buildRevolve(p);
+      return { shape: sh, topo: ensureTopoComplete(sh, createTopoMap(), '$self') };
+    }
+    const entries = [];
+    for (let rgIdx = 0; rgIdx < regs.length; rgIdx++) {
+      const rg = regs[rgIdx];
+      const outer = loopWireTracked(rg.outer, M, true);
+      const holes = (rg.holes || []).map((h) => loopWireTracked(h, M, false));
+      const allEdgeSids = [...outer.edgeSids, ...holes.flatMap((h) => h.edgeSids)];
+      const fb = new oc.BRepBuilderAPI_MakeFace(outer.wire, false);
+      for (const h of holes) fb.Add(h.wire);
+      if (!fb.IsDone()) {
+        fb.delete(); safeDelete(outer.wire); holes.forEach((h) => safeDelete(h.wire));
+        throw new Error('Aus dieser Skizze lässt sich keine Fläche bilden.');
+      }
+      let faceRaw = fb.Face(); fb.delete();
+      safeDelete(outer.wire); holes.forEach((h) => safeDelete(h.wire));
+      let revDir = d, revAngle = 360, preRot = 0;
+      if (dir === 'reverse') { revDir = mul(d, -1); revAngle = Math.max(0.1, Math.min(360, num(p.angle, 360))); }
+      else if (dir === 'both') { revAngle = Math.max(0.1, Math.min(360, num(p.angle, 360))); if (revAngle < 360 - 1e-6) preRot = -revAngle / 2; }
+      else if (dir === 'two') {
+        const a1 = Math.max(0, Math.min(360, num(p.angle, 90))), a2 = Math.max(0, Math.min(360, num(p.angle2, a1)));
+        const tot = Math.min(360, a1 + a2);
+        if (tot < 0.1) { safeDelete(faceRaw); allEdgeSids.forEach((x) => safeDelete(x.edge)); throw new Error('Der Drehwinkel muss größer als 0° sein.'); }
+        revAngle = tot;
+        if (tot < 360 - 1e-6 && a2 > 1e-6) preRot = -a2;
+      } else { revAngle = Math.max(0.1, Math.min(360, num(p.angle, 360))); }
+      let curEdges = allEdgeSids;
+      if (Math.abs(preRot) > 1e-9) {
+        const ax1p = R.makeAx1(c, revDir);
+        const trsf = new oc.gp_Trsf();
+        trsf.SetRotation(ax1p, (preRot * Math.PI) / 180);
+        const tr = new oc.BRepBuilderAPI_Transform(faceRaw, trsf, true, false);
+        const nf = oc.TopoDS.Face(tr.ModifiedShape(faceRaw));
+        curEdges = allEdgeSids.map(({ edge, sid }) => {
+          const ne = oc.TopoDS.Edge(tr.ModifiedShape(edge));
+          safeDelete(edge);
+          return { edge: ne, sid };
+        });
+        safeDelete(faceRaw); faceRaw = nf;
+        tr.delete(); trsf.delete(); ax1p.delete();
+      }
+      const ax1 = R.makeAx1(c, revDir);
+      const rev = new oc.BRepPrimAPI_MakeRevol(faceRaw, ax1, (revAngle * Math.PI) / 180, false);
+      rev.Build();
+      const solid = R.cast(rev.Shape());
+      const tm = createTopoMap();
+      try {
+        const rPref = regs.length > 1 ? `$self/F:r${rgIdx}:` : '$self/F:';
+        const ePref = regs.length > 1 ? `$self/E:r${rgIdx}:` : '$self/E:';
+        const outFaces = exploreUnique(solid, oc.TopAbs_ShapeEnum.TopAbs_FACE);
+        const outEdges = exploreUnique(solid, oc.TopAbs_ShapeEnum.TopAbs_EDGE);
+        const matchOut = (list, raw) => { const h = topoHc(raw); const b = list.find((x) => x.hc === h && x.s.IsSame(raw)); return b ? b.s : null; };
+        if (revAngle < 360 - 1e-6) {
+          try { const ff = rev.FirstShape(); const mf = !ff.IsNull() ? matchOut(outFaces, ff) : null; if (mf) tmAdd(tm.faces, mf, `${rPref}start`); safeDelete(ff); } catch (_) {}
+          try { const lf = rev.LastShape(); const mf = !lf.IsNull() ? matchOut(outFaces, lf) : null; if (mf) tmAdd(tm.faces, mf, `${rPref}end`); safeDelete(lf); } catch (_) {}
+        }
+        const usedSide = new Map();
+        for (const { edge, sid } of curEdges) {
+          const gen = readShapeList(rev.Generated(edge));
+          const cnt = usedSide.get(sid) || 0;
+          usedSide.set(sid, cnt + 1);
+          const baseSid = cnt === 0 ? sid : `${sid}#${cnt}`;
+          let k = 0;
+          for (const g of gen) {
+            if (g.ShapeType() === oc.TopAbs_ShapeEnum.TopAbs_FACE) {
+              const mf = matchOut(outFaces, g);
+              if (mf && !tmGet(tm.faces, mf)) tmAdd(tm.faces, mf, gen.length === 1 ? `${rPref}sk:${baseSid}` : `${rPref}sk:${baseSid}:${k++}`);
+            }
+            safeDelete(g);
+          }
+          if (revAngle < 360 - 1e-6) {
+            try { const fe = rev.FirstShape(edge); const me = !fe.IsNull() ? matchOut(outEdges, fe) : null; if (me && !tmGet(tm.edges, me)) tmAdd(tm.edges, me, `${ePref}sk:${baseSid}:start`); safeDelete(fe); } catch (_) {}
+            try { const le = rev.LastShape(edge); const me = !le.IsNull() ? matchOut(outEdges, le) : null; if (me && !tmGet(tm.edges, me)) tmAdd(tm.edges, me, `${ePref}sk:${baseSid}:end`); safeDelete(le); } catch (_) {}
+          }
+          safeDelete(edge);
+        }
+        for (const f of outFaces) if (!tmGet(tm.faces, f.s)) f.s.delete();
+        for (const e of outEdges) if (!tmGet(tm.edges, e.s)) e.s.delete();
+        ensureTopoComplete(solid, tm, '$self');
+      } finally {
+        rev.delete(); ax1.delete(); safeDelete(faceRaw);
+      }
+      entries.push({ shape: solid, topo: tm, selfId: null });
+    }
+    return fuseAllWithTopo(entries, true, 'Rv');
+  }
   function buildRevolve(p) {
     const M = planeMap(p.plane);
     const ax = p.axis || { a: [0, 0], b: [0, 1] };
@@ -1234,6 +1789,102 @@ export function createKernel(R, oc) {
       }
     }
     return fuseAll(solids);
+  }
+  function buildRevolveWithTopo(p) {
+    const M = planeMap(p.plane);
+    const ax = p.axis || { a: [0, 0], b: [0, 1] };
+    const c = p.axis3d && Array.isArray(p.axis3d.o) ? p.axis3d.o.map(Number) : M.P(ax.a);
+    const d = p.axis3d && Array.isArray(p.axis3d.d) ? norm(p.axis3d.d.map(Number)) : norm(sub(M.P(ax.b), c));
+    const regs = p.regions || [];
+    if (!regs.length) throw new Error('Die Skizze hat keine geschlossene Fläche.');
+    const dir = p.dir || 'normal';
+    if (dir === 'toFace') {
+      const sh = buildRevolve(p);
+      return { shape: sh, topo: ensureTopoComplete(sh, createTopoMap(), '$self') };
+    }
+    const entries = [];
+    for (let rgIdx = 0; rgIdx < regs.length; rgIdx++) {
+      const rg = regs[rgIdx];
+      const outer = loopWireTracked(rg.outer, M, true);
+      const holes = (rg.holes || []).map((h) => loopWireTracked(h, M, false));
+      const allEdgeSids = [...outer.edgeSids, ...holes.flatMap((h) => h.edgeSids)];
+      const fb = new oc.BRepBuilderAPI_MakeFace(outer.wire, false);
+      for (const h of holes) fb.Add(h.wire);
+      if (!fb.IsDone()) {
+        fb.delete(); safeDelete(outer.wire); holes.forEach((h) => safeDelete(h.wire));
+        throw new Error('Aus dieser Skizze lässt sich keine Fläche bilden.');
+      }
+      let faceRaw = fb.Face(); fb.delete();
+      safeDelete(outer.wire); holes.forEach((h) => safeDelete(h.wire));
+      let revDir = d, revAngle = 360, preRot = 0;
+      if (dir === 'reverse') { revDir = mul(d, -1); revAngle = Math.max(0.1, Math.min(360, num(p.angle, 360))); }
+      else if (dir === 'both') { revAngle = Math.max(0.1, Math.min(360, num(p.angle, 360))); if (revAngle < 360 - 1e-6) preRot = -revAngle / 2; }
+      else if (dir === 'two') {
+        const a1 = Math.max(0, Math.min(360, num(p.angle, 90))), a2 = Math.max(0, Math.min(360, num(p.angle2, a1)));
+        const tot = Math.min(360, a1 + a2);
+        if (tot < 0.1) { safeDelete(faceRaw); allEdgeSids.forEach((x) => safeDelete(x.edge)); throw new Error('Der Drehwinkel muss größer als 0° sein.'); }
+        revAngle = tot;
+        if (tot < 360 - 1e-6 && a2 > 1e-6) preRot = -a2;
+      } else { revAngle = Math.max(0.1, Math.min(360, num(p.angle, 360))); }
+      let curEdges = allEdgeSids;
+      if (Math.abs(preRot) > 1e-9) {
+        const ax1p = R.makeAx1(c, revDir);
+        const trsf = new oc.gp_Trsf();
+        trsf.SetRotation(ax1p, (preRot * Math.PI) / 180);
+        const tr = new oc.BRepBuilderAPI_Transform(faceRaw, trsf, true, false);
+        const nf = oc.TopoDS.Face(tr.ModifiedShape(faceRaw));
+        curEdges = allEdgeSids.map(({ edge, sid }) => {
+          const ne = oc.TopoDS.Edge(tr.ModifiedShape(edge));
+          safeDelete(edge);
+          return { edge: ne, sid };
+        });
+        safeDelete(faceRaw); faceRaw = nf;
+        tr.delete(); trsf.delete(); ax1p.delete();
+      }
+      const ax1 = R.makeAx1(c, revDir);
+      const rev = new oc.BRepPrimAPI_MakeRevol(faceRaw, ax1, (revAngle * Math.PI) / 180, false);
+      rev.Build();
+      const solid = R.cast(rev.Shape());
+      const tm = createTopoMap();
+      try {
+        const rPref = regs.length > 1 ? `$self/F:r${rgIdx}:` : '$self/F:';
+        const ePref = regs.length > 1 ? `$self/E:r${rgIdx}:` : '$self/E:';
+        const outFaces = exploreUnique(solid, oc.TopAbs_ShapeEnum.TopAbs_FACE);
+        const outEdges = exploreUnique(solid, oc.TopAbs_ShapeEnum.TopAbs_EDGE);
+        const matchOut = (list, raw) => { const h = topoHc(raw); const b = list.find((x) => x.hc === h && x.s.IsSame(raw)); return b ? b.s : null; };
+        if (revAngle < 360 - 1e-6) {
+          try { const ff = rev.FirstShape(); const mf = !ff.IsNull() ? matchOut(outFaces, ff) : null; if (mf) tmAdd(tm.faces, mf, `${rPref}start`); safeDelete(ff); } catch (_) {}
+          try { const lf = rev.LastShape(); const mf = !lf.IsNull() ? matchOut(outFaces, lf) : null; if (mf) tmAdd(tm.faces, mf, `${rPref}end`); safeDelete(lf); } catch (_) {}
+        }
+        const usedSide = new Map();
+        for (const { edge, sid } of curEdges) {
+          const gen = readShapeList(rev.Generated(edge));
+          const cnt = usedSide.get(sid) || 0;
+          usedSide.set(sid, cnt + 1);
+          const baseSid = cnt === 0 ? sid : `${sid}#${cnt}`;
+          let k = 0;
+          for (const g of gen) {
+            if (g.ShapeType() === oc.TopAbs_ShapeEnum.TopAbs_FACE) {
+              const mf = matchOut(outFaces, g);
+              if (mf && !tmGet(tm.faces, mf)) tmAdd(tm.faces, mf, gen.length === 1 ? `${rPref}sk:${baseSid}` : `${rPref}sk:${baseSid}:${k++}`);
+            }
+            safeDelete(g);
+          }
+          if (revAngle < 360 - 1e-6) {
+            try { const fe = rev.FirstShape(edge); const me = !fe.IsNull() ? matchOut(outEdges, fe) : null; if (me && !tmGet(tm.edges, me)) tmAdd(tm.edges, me, `${ePref}sk:${baseSid}:start`); safeDelete(fe); } catch (_) {}
+            try { const le = rev.LastShape(edge); const me = !le.IsNull() ? matchOut(outEdges, le) : null; if (me && !tmGet(tm.edges, me)) tmAdd(tm.edges, me, `${ePref}sk:${baseSid}:end`); safeDelete(le); } catch (_) {}
+          }
+          safeDelete(edge);
+        }
+        for (const f of outFaces) if (!tmGet(tm.faces, f.s)) f.s.delete();
+        for (const e of outEdges) if (!tmGet(tm.edges, e.s)) e.s.delete();
+        ensureTopoComplete(solid, tm, '$self');
+      } finally {
+        rev.delete(); ax1.delete(); safeDelete(faceRaw);
+      }
+      entries.push({ shape: solid, topo: tm, selfId: null });
+    }
+    return fuseAllWithTopo(entries, true, 'Rv');
   }
 
   // Offener Zug aus Skizzen-Stücken als Kanten im Raum (Pfad für Sweep und Mittellinie)
@@ -2166,54 +2817,219 @@ export function createKernel(R, oc) {
       return R.cast(builder.Shape());
     } finally { builder.delete(); }
   }
-  function applyShell(shape, fin, errors, itemId) {
+  function resolveEdgeRef(s, shapeEdges, topo, itemId, isLeaf) {
+    if (!s) return [];
+    if (s.tid && topo) {
+      const want = resolveTid(s.tid, itemId);
+      const wantBase = baseTid(want);
+      const wantLocal = localTid(want);
+      const exact = [], splitOrMerged = [], byLocal = [];
+      for (const e of shapeEdges) {
+        const rawTid = tmGet(topo.edges, e.wrapped);
+        if (!rawTid) continue;
+        const eTid = resolveTid(rawTid, itemId);
+        if (eTid === want) { exact.push(e); continue; }
+        const eBase = baseTid(eTid);
+        if (eBase === want || eBase === wantBase || (want.includes('|') && eTid === wantBase)) {
+          splitOrMerged.push(e); continue;
+        }
+        if (isLeaf && localTid(eTid) === wantLocal) byLocal.push(e);
+      }
+      if (exact.length) return exact;
+      if (splitOrMerged.length) return splitOrMerged;
+      if (byLocal.length) return byLocal;
+    }
+    if (Array.isArray(s.m)) {
+      const tol = 0.02 + 0.002 * num(s.l, 1);
+      const out = [];
+      for (const e of shapeEdges) {
+        try {
+          const m = vec(e.pointAt(0.5));
+          if (Math.hypot(m[0] - s.m[0], m[1] - s.m[1], m[2] - s.m[2]) < tol) out.push(e);
+        } catch (_) {}
+      }
+      return out;
+    }
+    return [];
+  }
+  function resolveFaceRef(s, shapeFaces, topo, itemId, isLeaf) {
+    if (!s) return [];
+    if (s.tid && topo) {
+      const want = resolveTid(s.tid, itemId);
+      const wantBase = baseTid(want);
+      const wantLocal = localTid(want);
+      const exact = [], splitOrMerged = [], byLocal = [];
+      for (const f of shapeFaces) {
+        const rawTid = tmGet(topo.faces, f.wrapped);
+        if (!rawTid) continue;
+        const fTid = resolveTid(rawTid, itemId);
+        if (fTid === want) { exact.push(f); continue; }
+        const fBase = baseTid(fTid);
+        if (fBase === want || fBase === wantBase || (want.includes('|') && fTid === wantBase)) {
+          splitOrMerged.push(f); continue;
+        }
+        if (isLeaf && localTid(fTid) === wantLocal) byLocal.push(f);
+      }
+      if (exact.length) return exact;
+      if (splitOrMerged.length) return splitOrMerged;
+      if (byLocal.length) return byLocal;
+    }
+    if (Array.isArray(s.c)) {
+      const tol = Math.max(0.05, num(s.tol, 0.08));
+      const out = [];
+      for (const f of shapeFaces) {
+        try {
+          const c = vec(f.center);
+          if (Math.hypot(c[0] - s.c[0], c[1] - s.c[1], c[2] - s.c[2]) < tol) out.push(f);
+        } catch (_) {}
+      }
+      if (out.length) return out;
+    }
+    return [];
+  }
+  function runFilletChamferWithTopo(shape, topo, type, r, matchedEdges, fin, itemId, skipTopo = false) {
+    if (!matchedEdges.length) throw new Error('Keine Kante gewählt.');
+    if (type === 'chamfer') {
+      const builder = new oc.BRepFilletAPI_MakeChamfer(shape.wrapped);
+      try {
+        if (fin.cm === 'two' || fin.cm === 'angle') {
+          const faces = shape.faces, fe = faces.map((f) => f.edges);
+          const key = (f) => { const c = vec(f.center); return [Math.round(c[2] * 1e3), Math.round(c[1] * 1e3), Math.round(c[0] * 1e3)]; };
+          const cmp = (a, b) => { const x = key(a), y = key(b); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
+          const d2 = fin.cm === 'two' ? num(fin.r2, r) * (r / Math.max(1e-9, num(fin.r, r))) : 0;
+          const ang = (num(fin.a, 45) * Math.PI) / 180;
+          let n = 0;
+          for (const e of matchedEdges) {
+            const adj = faces.filter((f, i) => fe[i].some((x) => x.isSame(e))).sort(cmp);
+            if (!adj.length) continue;
+            const f = adj[Math.min(fin.side ? 1 : 0, adj.length - 1)];
+            if (fin.cm === 'angle') builder.AddDA(r, ang, e.wrapped, f.wrapped);
+            else builder.Add(r, d2 > 0 ? d2 : r, e.wrapped, f.wrapped);
+            n++;
+          }
+          for (const f of faces) safeDelete(f);
+          for (const el of fe) for (const e of el) safeDelete(e);
+          if (!n) throw new Error('Keine Kante für die Fase.');
+        } else {
+          for (const e of matchedEdges) builder.Add(r, e.wrapped);
+        }
+        builder.Build();
+        const res = R.cast(builder.Shape());
+        if (!res || !R.isShape3D(res)) { safeDelete(res); throw new Error('Fase fehlgeschlagen.'); }
+        const outTopo = skipTopo ? null : propagateHistory(builder, [{ topo, selfId: itemId }], res, 'Ch:' + (fin.id || 'f'));
+        return { shape: res, topo: outTopo };
+      } finally { builder.delete(); }
+    }
+    const builder = new oc.BRepFilletAPI_MakeFillet(shape.wrapped, oc.ChFi3d_FilletShape.ChFi3d_Rational);
+    try {
+      const r2 = fin.vr ? num(fin.r2, r) * (r / Math.max(1e-9, num(fin.r, r))) : r;
+      const isVar = !!(fin.vr && r2 > 0 && Math.abs(r2 - r) > 1e-9);
+      for (const e of matchedEdges) {
+        if (isVar) builder.Add(r, r2, e.wrapped);
+        else builder.Add(r, e.wrapped);
+      }
+      builder.Build();
+      const res = R.cast(builder.Shape());
+      if (!res || !R.isShape3D(res)) { safeDelete(res); throw new Error('Rundung fehlgeschlagen.'); }
+      const outTopo = skipTopo ? null : propagateHistory(builder, [{ topo, selfId: itemId }], res, 'Fi:' + (fin.id || 'f'));
+      return { shape: res, topo: outTopo };
+    } finally { builder.delete(); }
+  }
+  function applyShell(shape, fin, errors, itemId, topo = null, isLeaf = false) {
     const t = num(fin.r, 2);
     const b = bboxOf(shape); const tol = 0.05 + 1e-3 * Math.max(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
-    const sigs = (fin.faces || []).filter((f) => f && f.c);
-    const matchFace = (f, s) => { const c = vec(f.center); return Math.hypot(c[0] - s.c[0], c[1] - s.c[1], c[2] - s.c[2]) < tol; };
-    const pick = (f) => sigs.some((s) => matchFace(f, s));
-    let count = 0;
+    const sigs = (fin.faces || []).filter((f) => f && (f.c || f.tid));
     const faceArr = [];
-    try { for (const f of shape.faces) { faceArr.push(f); if (pick(f)) count++; } } catch (_) {}
+    try { for (const f of shape.faces) faceArr.push(f); } catch (_) {}
+    const picked = [];
     const missing = [];
-    sigs.forEach((s, i) => { if (!faceArr.some((f) => matchFace(f, s))) missing.push(i); });
-    if (!count) { errors.push({ itemId, finishId: fin.id, code: 'edges', refType: 'face', missing: sigs.map((_, i) => i), message: 'Die offene Fläche für die Wandstärke gibt es nicht mehr.' }); return shape; }
+    sigs.forEach((s, i) => {
+      const matched = resolveFaceRef({ ...s, tol }, faceArr, topo, itemId, isLeaf);
+      if (!matched.length) missing.push(i);
+      else for (const mf of matched) if (!picked.some((x) => x.isSame(mf))) picked.push(mf);
+    });
+    if (!picked.length) {
+      for (const f of faceArr) safeDelete(f);
+      errors.push({ itemId, finishId: fin.id, code: 'edges', refType: 'face', missing: sigs.map((_, i) => i), message: 'Die offene Fläche für die Wandstärke gibt es nicht mehr.' });
+      return { shape, topo };
+    }
     if (missing.length) {
       errors.push({ itemId, finishId: fin.id, code: 'edges', refType: 'face', partial: true, missing, message: `${missing.length} von ${sigs.length} offenen Flächen für die Wandstärke gibt es nicht mehr.` });
     }
     const minDim = Math.min(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
-    if (!(t > 0) || 2 * t >= minDim - 1e-6) { errors.push({ itemId, finishId: fin.id, code: 'shell', message: `Die Wandstärke ist zu dick für dieses Teil – möglich sind weniger als ${String(Math.floor(minDim * 5) / 10).replace('.', ',')} mm.` }); return shape; }
-    try {
-      const res = shape.shell(t, (ff) => ff.when(({ element }) => pick(element)), 1e-3);
-      const rb = bboxOf(res);   // Unsinnige Ergebnisse (größer als vorher) als Fehler melden
-      if (rb[3] - rb[0] > b[3] - b[0] + 1e-3 || rb[4] - rb[1] > b[4] - b[1] + 1e-3 || rb[5] - rb[2] > b[5] - b[2] + 1e-3) { safeDelete(res); throw new Error('größer'); }
-      return res;
+    if (!(t > 0) || 2 * t >= minDim - 1e-6) {
+      for (const f of faceArr) safeDelete(f);
+      errors.push({ itemId, finishId: fin.id, code: 'shell', message: `Die Wandstärke ist zu dick für dieses Teil – möglich sind weniger als ${String(Math.floor(minDim * 5) / 10).replace('.', ',')} mm.` });
+      return { shape, topo };
     }
-    catch (_) { errors.push({ itemId, finishId: fin.id, code: 'shell', message: 'Die Wandstärke ist zu dick für dieses Teil – nimm einen kleineren Wert.' }); return shape; }
+    try {
+      const facesToRemove = new oc.NCollection_List_TopoDS_Shape();
+      for (const f of picked) facesToRemove.Append(f.wrapped);
+      const builder = new oc.BRepOffsetAPI_MakeThickSolid();
+      let res = null;
+      try {
+        builder.MakeThickSolidByJoin(shape.wrapped, facesToRemove, -t, 1e-3, oc.BRepOffset_Mode.BRepOffset_Skin, false, false, oc.GeomAbs_JoinType.GeomAbs_Arc, false);
+        res = R.cast(builder.Shape());
+        if (!R.isShape3D(res)) { safeDelete(res); throw new Error('shell'); }
+        const rb = bboxOf(res);   // Unsinnige Ergebnisse (größer als vorher) als Fehler melden
+        if (rb[3] - rb[0] > b[3] - b[0] + 1e-3 || rb[4] - rb[1] > b[4] - b[1] + 1e-3 || rb[5] - rb[2] > b[5] - b[2] + 1e-3) { safeDelete(res); throw new Error('größer'); }
+        const outTopo = propagateHistory(builder, [{ topo, selfId: itemId }], res, 'Sh:' + (fin.id || 's'));
+        return { shape: res, topo: outTopo };
+      } finally {
+        builder.delete();
+        facesToRemove.delete();
+      }
+    } catch (_) {
+      errors.push({ itemId, finishId: fin.id, code: 'shell', message: 'Die Wandstärke ist zu dick für dieses Teil – nimm einen kleineren Wert.' });
+      return { shape, topo };
+    } finally {
+      for (const f of faceArr) safeDelete(f);
+    }
   }
-  function applyFinishes(shape, finishes, errors, itemId) {
+  function applyFinishes(shape, finishes, errors, itemId, topo = null, isLeaf = false) {
+    let curShape = shape;
+    let curTopo = topo;
+    let ownsTopo = false;
     for (const fin of finishes || []) {
-      if (fin.type === 'shell') { shape = applyShell(shape, fin, errors, itemId); continue; }
-      if (fin.type === 'draft') { shape = applyDraft(shape, fin, errors, itemId); continue; }
+      if (fin.type === 'shell') {
+        const res = applyShell(curShape, fin, errors, itemId, curTopo, isLeaf);
+        if (res.shape !== curShape) {
+          if (curShape !== shape) safeDelete(curShape);
+          if (ownsTopo) freeTopoMap(curTopo);
+          curShape = res.shape; curTopo = res.topo; ownsTopo = true;
+        }
+        continue;
+      }
+      if (fin.type === 'draft') {
+        const res = applyDraft(curShape, fin, errors, itemId, curTopo);
+        if (res.shape !== curShape) {
+          if (curShape !== shape) safeDelete(curShape);
+          if (ownsTopo) freeTopoMap(curTopo);
+          curShape = res.shape; curTopo = res.topo; ownsTopo = true;
+        }
+        continue;
+      }
       const r = num(fin.r, 1);
       if (!(r > 0)) continue;
-      let matcher;
-      try { matcher = makeEdgeMatcher(fin.edges, shape); } catch (e) { continue; }
       const shapeEdges = [];
-      let count = 0;
-      try { for (const e of shape.edges) { shapeEdges.push(e); if (matcher(e)) count++; } } catch (_) {}
+      try { for (const e of curShape.edges) shapeEdges.push(e); } catch (_) {}
+      const matchedEdges = [];
+      const addMatched = (e) => { if (!matchedEdges.some((x) => x.isSame(e))) matchedEdges.push(e); };
       const missing = [];
       if (Array.isArray(fin.edges)) {
-        const mids = shapeEdges.map((e) => { try { return vec(e.pointAt(0.5)); } catch (_) { return null; } });
         fin.edges.forEach((s, i) => {
-          if (!s || !s.m) { missing.push(i); return; }
-          const tol = 0.02 + 0.002 * num(s.l, 1);
-          const ok = mids.some((m) => m && Math.hypot(m[0] - s.m[0], m[1] - s.m[1], m[2] - s.m[2]) < tol);
-          if (!ok) missing.push(i);
+          const hits = resolveEdgeRef(s, shapeEdges, curTopo, itemId, isLeaf);
+          if (!hits.length) missing.push(i);
+          else for (const he of hits) addMatched(he);
         });
+      } else {
+        let matcher;
+        try { matcher = makeEdgeMatcher(fin.edges, curShape); } catch (e) { for (const e of shapeEdges) safeDelete(e); continue; }
+        for (const e of shapeEdges) { try { if (matcher(e)) addMatched(e); } catch (_) {} }
       }
       const kindTxt = fin.type === 'chamfer' ? 'Fase' : 'Rundung';
-      if (!count) {
+      if (!matchedEdges.length) {
+        for (const e of shapeEdges) safeDelete(e);
         const msg = Array.isArray(fin.edges) && fin.edges.length === 1
           ? `Die gewählte Kante der ${kindTxt} gibt es nicht mehr.`
           : `Die gewählten Kanten der ${kindTxt} gibt es nicht mehr.`;
@@ -2224,25 +3040,29 @@ export function createKernel(R, oc) {
         errors.push({ itemId, finishId: fin.id, code: 'edges', refType: 'edge', partial: true, missing, message: `${missing.length} von ${fin.edges.length} gewählten Kanten der ${kindTxt} gibt es nicht mehr.` });
       }
       try {
-        shape = tryFinish(shape, fin.type, r, matcher, fin);
+        const res = runFilletChamferWithTopo(curShape, curTopo, fin.type, r, matchedEdges, fin, itemId, false);
+        if (curShape !== shape) safeDelete(curShape);
+        if (ownsTopo) freeTopoMap(curTopo);
+        curShape = res.shape; curTopo = res.topo; ownsTopo = true;
       } catch (err) {
         // größten möglichen Wert suchen
         let lo = 0, hi = r;
         for (let i = 0; i < 6; i++) {
           const mid = (lo + hi) / 2;
-          try { const t = tryFinish(shape, fin.type, mid, matcher, fin); t.delete(); lo = mid; } catch (_) { hi = mid; }
+          try { const t = runFilletChamferWithTopo(curShape, curTopo, fin.type, mid, matchedEdges, fin, itemId, true); safeDelete(t.shape); lo = mid; } catch (_) { hi = mid; }
         }
         const max = Math.floor(lo * 10) / 10;
         errors.push({ itemId, finishId: fin.id, code: 'toobig', max, message: max > 0 ? `${fin.type === 'chamfer' ? 'Die Fase' : 'Die Rundung'} ist zu groß. Möglich sind höchstens ${String(max).replace('.', ',')} mm.` : `${fin.type === 'chamfer' ? 'Diese Fase' : 'Diese Rundung'} lässt sich an diesen Kanten nicht bauen.` });
       }
+      for (const e of shapeEdges) safeDelete(e);
     }
-    return shape;
+    return { shape: curShape, topo: curTopo, ownsTopo };
   }
 
   // Entformungsschräge: alle senkrechten Seitenflächen um den Winkel neigen, unten (kleinstes Z) bleibt die Kontur
-  function applyDraft(shape, fin, errors, itemId) {
+  function applyDraft(shape, fin, errors, itemId, topo = null) {
     const ang = num(fin.r, 3);
-    if (!(Math.abs(ang) > 1e-6) || Math.abs(ang) >= 45) { errors.push({ itemId, finishId: fin.id, code: 'draft', message: 'Die Schräge muss zwischen 0 und 45° liegen.' }); return shape; }
+    if (!(Math.abs(ang) > 1e-6) || Math.abs(ang) >= 45) { errors.push({ itemId, finishId: fin.id, code: 'draft', message: 'Die Schräge muss zwischen 0 und 45° liegen.' }); return { shape, topo }; }
     const b = bboxOf(shape), z0 = b[2];
     const dir = R.asDir([0, 0, 1]), pln = new oc.gp_Pln(R.asPnt([0, 0, z0]), dir);
     const builder = new oc.BRepOffsetAPI_DraftAngle(shape.wrapped);
@@ -2252,14 +3072,15 @@ export function createKernel(R, oc) {
         let nz = 1; try { const v = f.normalAt(); nz = v.z; } catch (_) {}
         if (Math.abs(nz) < 0.02) { builder.Add(f.wrapped, dir, (ang * Math.PI) / 180, pln, true); n++; }
       }
-      if (!n) { errors.push({ itemId, finishId: fin.id, code: 'draft', message: 'Dieser Körper hat keine senkrechten Seitenflächen für eine Schräge.' }); return shape; }
+      if (!n) { errors.push({ itemId, finishId: fin.id, code: 'draft', message: 'Dieser Körper hat keine senkrechten Seitenflächen für eine Schräge.' }); return { shape, topo }; }
       builder.Build();
       if (!builder.IsDone || (typeof builder.IsDone === 'function' && !builder.IsDone())) throw new Error('draft');
       const out = R.cast(builder.Shape());
-      return out;
+      const outTopo = propagateHistory(builder, [{ topo, selfId: itemId }], out, 'Dr:' + (fin.id || 'd'));
+      return { shape: out, topo: outTopo };
     } catch (e) {
       errors.push({ itemId, finishId: fin.id, code: 'draft', message: 'Die Schräge lässt sich an diesem Körper nicht bauen – versuch einen kleineren Winkel oder zuerst ohne Rundungen.' });
-      return shape;
+      return { shape, topo };
     } finally { try { builder.delete(); pln.delete(); dir.delete(); } catch (_) {} }
   }
 
@@ -2361,33 +3182,113 @@ export function createKernel(R, oc) {
       if (it.p.stepEntity != null) p.stepEntity = it.p.stepEntity;
       if (Array.isArray(it.p.stepMat) && it.p.stepMat.length === 16) p.stepMat = it.p.stepMat.map((v) => Math.round(v * 1e6) / 1e6);
     }
-    return keyOf({ k: it.kind, p, f: it.finishes || null, mir: it.mir || null, c: it.children ? it.children.filter((c) => !c.hidden).map((c) => [defKey(c), c.role, c.m]) : null });
+    return keyOf({ k: it.kind, p, f: it.finishes || null, mir: it.mir || null, c: it.children ? it.children.filter((c) => !c.hidden).map((c) => [c.id, defKey(c), c.role, c.m]) : null });
+  }
+  function updatePlaneFromFace(oldPlane, fcL, fnL) {
+    const n0 = norm(oldPlane.n || [0, 0, 1]);
+    const n1 = norm(fnL);
+    const x0 = norm(oldPlane.x || [1, 0, 0]);
+    const o0 = oldPlane.o || [0, 0, 0];
+    const dp = dot(n0, n1);
+    let oNew, xNew;
+    if (dp > 0.9999) {
+      const d = dot(sub(fcL, o0), n1);
+      oNew = add(o0, mul(n1, d));
+      xNew = x0;
+    } else if (dp < -0.9999) {
+      oNew = fcL.slice();
+      xNew = x0;
+    } else {
+      const ax = norm(cross(n0, n1));
+      const cosA = Math.max(-1, Math.min(1, dp));
+      const sinA = Math.sqrt(Math.max(0, 1 - cosA * cosA));
+      const rot = add(add(mul(x0, cosA), mul(cross(ax, x0), sinA)), mul(ax, dot(ax, x0) * (1 - cosA)));
+      const xProj = sub(rot, mul(n1, dot(rot, n1)));
+      xNew = len(xProj) > 1e-6 ? norm(xProj) : norm(cross(Math.abs(n1[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0], n1));
+      oNew = fcL.slice();
+    }
+    const r6 = (v) => Math.round(v * 1e6) / 1e6;
+    return { o: oNew.map(r6), x: xNew.map(r6), n: n1.map(r6) };
+  }
+  function resolveChildPlaneRef(pr, kidMap) {
+    if (!pr || pr.kind !== 'face') return null;
+    const candidates = [];
+    if (pr.id && kidMap.has(pr.id)) candidates.push(kidMap.get(pr.id));
+    if (pr.tid) {
+      const sl = pr.tid.indexOf('/');
+      const owner = sl > 0 ? pr.tid.slice(0, sl) : null;
+      if (owner && owner !== '$self' && kidMap.has(owner) && !candidates.includes(kidMap.get(owner))) {
+        candidates.push(kidMap.get(owner));
+      }
+    }
+    for (const v of kidMap.values()) if (!candidates.includes(v)) candidates.push(v);
+    for (const cand of candidates) {
+      const faces = [];
+      try { for (const f of cand.shape.faces) faces.push(f); } catch (_) {}
+      try {
+        if (pr.tid) {
+          const want = resolveTid(pr.tid, cand.id);
+          const wantBase = baseTid(want);
+          let matched = faces.find((f) => {
+            const rt = tmGet(cand.topo?.faces, f.wrapped);
+            return rt && resolveTid(rt, cand.id) === want;
+          });
+          if (!matched) {
+            matched = faces.find((f) => {
+              const rt = tmGet(cand.topo?.faces, f.wrapped);
+              if (!rt) return false;
+              const ft = resolveTid(rt, cand.id);
+              return baseTid(ft) === want || baseTid(ft) === wantBase;
+            });
+          }
+          if (matched && matched.geomType === 'PLANE') {
+            return { c: vec(matched.center), n: vec(matched.normalAt()) };
+          }
+        }
+      } finally {
+        for (const f of faces) safeDelete(f);
+      }
+    }
+    // Lage als Ersatz
+    if (Array.isArray(pr.c) && Array.isArray(pr.n)) {
+      for (const cand of candidates) {
+        if (pr.id && cand.id !== pr.id && kidMap.has(pr.id)) continue;
+        const m = matchFace(cand.shape, { c: pr.c, n: pr.n, t: 'PLANE' });
+        if (m && m.geomType === 'PLANE') {
+          const res = { c: vec(m.center), n: vec(m.normalAt()) };
+          safeDelete(m);
+          return res;
+        }
+        safeDelete(m);
+      }
+    }
+    return null;
   }
   function evalItem(it, errors, parentWorldM = null, ctx = null) {
-    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'thicken' || it.kind === 'rib' || it.kind === 'emboss' || it.kind === 'mirrorStep' || it.kind === 'wrap' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it) };
+    if (it.kind === 'transform' || it.kind === 'scale' || it.kind === 'thicken' || it.kind === 'rib' || it.kind === 'emboss' || it.kind === 'mirrorStep' || it.kind === 'wrap' || (it.kind === 'sweep' && it.p && it.p.wrapId)) return { shape: null, key: defKey(it), topo: null };
     const dyn = hasDynamicExtent(it);
     const W = dyn ? (parentWorldM ? matMul(parentWorldM, it.m) : it.m) : null;
     const key = dyn
       ? keyOf([defKey(it), W.map((v) => Math.round(v * 1e6) / 1e6), ctx ? ctx.poolKey : ''])
       : defKey(it);
-    const hit = cacheGet(key);
-    if (hit) {
+    const ce = cacheEntry(key);
+    if (ce && ce.shape) {
       // Meldungen beim Bauen (z. B. „Rundung zu groß“) gelten weiter, auch wenn die Form aus dem Speicher kommt
-      const ce = cache.get(key);
       if (ce.errs) for (const x of ce.errs) errors.push({ ...x, itemId: x.itemId === '$self' ? it.id : x.itemId });
       if (ce.resolved && ctx && ctx.resolved) {
         if (it.kind === 'group') Object.assign(ctx.resolved, ce.resolved);
         else ctx.resolved[it.id] = ce.resolved;
       }
-      return { shape: hit, key, baseBox: ce.baseBox || null };
+      return { shape: ce.shape, key, baseBox: ce.baseBox || null, topo: ce.topo || null };
     }
     const e0 = errors.length;
-    let shape, resolvedInfo = null, baseBox = null;
+    let shape = null, topo = null, ownsTopo = false, resolvedInfo = null, baseBox = null;
     try {
       if (it.kind === 'group') {
         const kids = (it.children || []).filter((c) => !c.hidden);
         const solids = [], holes = [];
         const kidById = new Map();
+        const kidGeoMap = new Map();
         const beforeRes = ctx && ctx.resolved ? new Set(Object.keys(ctx.resolved)) : null;
         for (const c of kids) {
           if (c.kind === 'mirrorStep') {
@@ -2413,18 +3314,35 @@ export function createKernel(R, oc) {
               if (!firstRole) firstRole = src.role;
               for (const st of src.tools) {
                 const ms = st.shape.clone().mirror(mn, mo);
-                (src.role === 'hole' ? holes : solids).push(ms);
-                mirTools.push({ shape: ms });
+                const mTopo = ensureTopoComplete(ms, createTopoMap(), c.id);
+                (src.role === 'hole' ? holes : solids).push({ shape: ms, topo: mTopo, selfId: c.id });
+                mirTools.push({ shape: ms, topo: mTopo });
               }
             }
             if (mirTools.length) kidById.set(c.id, { role: firstRole || c.role, tools: mirTools });
             continue;
           }
-          const r = evalItem(c, errors, W, ctx);
+          let cEval = c;
+          if (c.p && c.p.planeRef && c.p.planeRef.kind === 'face' && c.p.plane && kidGeoMap.size) {
+            const hitFace = resolveChildPlaneRef(c.p.planeRef, kidGeoMap);
+            if (hitFace) {
+              const cInv = matInvRigid(c.m);
+              const fcL = transformPoint(cInv, hitFace.c);
+              const fnL = transformDir(cInv, hitFace.n);
+              const newPlane = updatePlaneFromFace(c.p.plane, fcL, fnL);
+              cEval = { ...c, p: { ...c.p, plane: newPlane } };
+              if (ctx && ctx.resolved) ctx.resolved[c.id] = { planeRefOk: true, plane: newPlane, faceC: fcL, faceN: fnL };
+            } else if (ctx && ctx.resolved) {
+              ctx.resolved[c.id] = { planeRefOk: false };
+            }
+          }
+          const r = evalItem(cEval, errors, W, ctx);
           if (!r.shape) continue;
-          const s = applyMatrix(r.shape, c.m);
-          (c.role === 'hole' ? holes : solids).push(s);
-          kidById.set(c.id, { role: c.role, tools: [{ shape: s }] });
+          const tr = applyMatrixWithTopo(r.shape, c.m, r.topo, c.id);
+          const entry = { shape: tr.shape, topo: tr.topo, selfId: c.id };
+          (c.role === 'hole' ? holes : solids).push(entry);
+          kidById.set(c.id, { role: c.role, tools: [{ shape: tr.shape, topo: tr.topo }] });
+          kidGeoMap.set(c.id, { id: c.id, shape: tr.shape, topo: tr.topo });
         }
         if (beforeRes && ctx && ctx.resolved) {
           const subRes = {};
@@ -2435,40 +3353,94 @@ export function createKernel(R, oc) {
         if (solids.length) {
           if (op === 'intersect' && solids.length > 1) {
             // Schnittmenge: nur, was in allen Körpern liegt
-            shape = solids[0];
-            for (let i = 1; i < solids.length; i++) { const nx = shape.intersect(solids[i]); safeDelete(shape); safeDelete(solids[i]); shape = nx; }
+            let cur = { shape: solids[0].shape, topo: solids[0].topo, selfId: solids[0].selfId };
+            for (let i = 1; i < solids.length; i++) {
+              const nx = boolWithTopo('common', cur.shape, cur.topo, cur.selfId, solids[i].shape, solids[i].topo, solids[i].selfId, 'In' + i);
+              safeDelete(cur.shape); freeTopoMap(cur.topo);
+              safeDelete(solids[i].shape); freeTopoMap(solids[i].topo);
+              cur = { shape: nx.shape, topo: nx.topo, selfId: null };
+            }
+            shape = cur.shape; topo = cur.topo; ownsTopo = true;
           } else if (it.p && it.p.assembly) {
-            shape = solids.length === 1 ? solids[0] : R.makeCompound(solids);
-          } else shape = fuseAll(solids, true);
-          if (holes.length) { const tool = fuseAll(holes, true); const cut = shape.cut(tool); safeDelete(tool); safeDelete(shape); shape = cut; }
-        } else if (holes.length) shape = fuseAll(holes, true);
-        else shape = null;
-        if (shape && op === 'pattern') { baseBox = bboxOf(shape); shape = patternShape(shape, it.p); }
-        if (shape && op === 'split') shape = splitBody(shape, it.p);
+            if (solids.length === 1) {
+              shape = solids[0].shape; topo = solids[0].topo; ownsTopo = true;
+            } else {
+              shape = R.makeCompound(solids.map((x) => x.shape));
+              for (const x of solids) freeTopoMap(x.topo);
+              topo = ensureTopoComplete(shape, createTopoMap(), it.id); ownsTopo = true;
+            }
+          } else {
+            const fused = fuseAllWithTopo(solids, true, 'Gr');
+            shape = fused.shape; topo = fused.topo; ownsTopo = true;
+          }
+          if (holes.length) {
+            const tool = fuseAllWithTopo(holes, true, 'GH');
+            const cut = boolWithTopo('cut', shape, topo, null, tool.shape, tool.topo, null, 'GC');
+            safeDelete(tool.shape); freeTopoMap(tool.topo);
+            safeDelete(shape); if (ownsTopo) freeTopoMap(topo);
+            shape = cut.shape; topo = cut.topo; ownsTopo = true;
+          }
+        } else if (holes.length) {
+          const fusedH = fuseAllWithTopo(holes, true, 'GH');
+          shape = fusedH.shape; topo = fusedH.topo; ownsTopo = true;
+        } else {
+          shape = null;
+        }
+        if (shape && op === 'pattern') { baseBox = bboxOf(shape); shape = patternShape(shape, it.p); if (ownsTopo) freeTopoMap(topo); topo = ensureTopoComplete(shape, createTopoMap(), '$self'); ownsTopo = true; }
+        if (shape && op === 'split') { shape = splitBody(shape, it.p); if (ownsTopo) freeTopoMap(topo); topo = ensureTopoComplete(shape, createTopoMap(), '$self'); ownsTopo = true; }
       } else if (it.kind === 'extrude' && isDynamicExtent(it.p)) {
         const res = buildExtrudeToTarget(it, W || it.m, ctx);
         shape = res.shape;
+        topo = ensureTopoComplete(shape, createTopoMap(), '$self'); ownsTopo = true;
         resolvedInfo = res.resolved;
         if (ctx && ctx.resolved && resolvedInfo) ctx.resolved[it.id] = resolvedInfo;
-      } else if (it.kind === 'extrude') shape = buildExtrude(it.p);
-      else if (it.kind === 'revolve') shape = buildRevolve(it.p);
-      else if (it.kind === 'loft') shape = buildLoft(it.p);
-      else if (it.kind === 'sweep') shape = buildSweep(it.p);
-      else if (it.kind === 'import') shape = buildImport(it.p);
-      else if (it.kind === 'part') shape = buildPart(it.p);
-      else shape = buildPrimitive(it.kind, it.p || {});
-      if (shape && it.finishes && it.finishes.length) shape = applyFinishes(shape, it.finishes, errors, it.id);
+      } else if (it.kind === 'extrude') {
+        const res = buildExtrudeWithTopo(it.p);
+        shape = res.shape; topo = res.topo; ownsTopo = true;
+      } else if (it.kind === 'revolve') {
+        const res = buildRevolveWithTopo(it.p);
+        shape = res.shape; topo = res.topo; ownsTopo = true;
+      } else if (it.kind === 'loft') {
+        shape = buildLoft(it.p); topo = ensureTopoComplete(shape, createTopoMap(), '$self'); ownsTopo = true;
+      } else if (it.kind === 'sweep') {
+        shape = buildSweep(it.p); topo = ensureTopoComplete(shape, createTopoMap(), '$self'); ownsTopo = true;
+      } else if (it.kind === 'import') {
+        shape = buildImport(it.p); topo = ensureTopoComplete(shape, createTopoMap(), '$self'); ownsTopo = true;
+      } else if (it.kind === 'part') {
+        shape = buildPart(it.p); topo = ensureTopoComplete(shape, createTopoMap(), '$self'); ownsTopo = true;
+      } else {
+        const res = buildPrimitiveWithTopo(it.kind, it.p || {});
+        shape = res.shape; topo = res.topo; ownsTopo = true;
+      }
+      if (shape && it.finishes && it.finishes.length) {
+        const fr = applyFinishes(shape, it.finishes, errors, it.id, topo, it.kind !== 'group');
+        if (fr.shape !== shape) {
+          safeDelete(shape);
+          if (ownsTopo) freeTopoMap(topo);
+          shape = fr.shape; topo = fr.topo; ownsTopo = true;
+        }
+      }
       if (shape && it.mir) {
-        if (it.mir[0] < 0) shape = shape.mirror('YZ', [0, 0, 0]);
-        if (it.mir[1] < 0) shape = shape.mirror('XZ', [0, 0, 0]);
-        if (it.mir[2] < 0) shape = shape.mirror('XY', [0, 0, 0]);
+        for (const [axIdx, pl] of [[0, 'YZ'], [1, 'XZ'], [2, 'XY']]) {
+          if (it.mir[axIdx] < 0) {
+            const mr = mirrorAxisWithTopo(shape, topo, pl, it.kind === 'group' ? null : it.id);
+            safeDelete(shape);
+            if (ownsTopo) freeTopoMap(topo);
+            shape = mr.shape; topo = mr.topo; ownsTopo = true;
+          }
+        }
       }
     } catch (err) {
+      if (ownsTopo) freeTopoMap(topo);
+      topo = null;
       errors.push({ itemId: it.id, code: err && (err.code === 'split' || err.code === 'ref') ? err.code : 'build', message: friendlyError(err) });
       shape = null;
     }
-    if (shape) cachePut(key, shape, errors.slice(e0).map((x) => ({ ...x, itemId: x.itemId === it.id ? '$self' : x.itemId })), resolvedInfo, baseBox);
-    return { shape, key, baseBox };
+    if (shape) {
+      if (!topo) topo = ensureTopoComplete(shape, createTopoMap(), '$self');
+      cachePut(key, shape, errors.slice(e0).map((x) => ({ ...x, itemId: x.itemId === it.id ? '$self' : x.itemId })), resolvedInfo, baseBox, topo);
+    }
+    return { shape, key, baseBox, topo };
   }
   function friendlyError(err) {
     const msg = String((err && err.message) || err || '');
@@ -2478,8 +3450,314 @@ export function createKernel(R, oc) {
     return msg.slice(0, 160);
   }
 
-  // ---------- schnelle Topologie-Listen (Streuwert statt Paarvergleich) ----------
+  // ---------- Topologie-Verlauf (stabile Bezüge, PL-05) ----------
   const HMAX = 2147483647;
+  const topoHc = (raw) => oc.ReplicadShapeHasher.HashCode(raw, HMAX);
+  function createTopoMap() { return { faces: new Map(), edges: new Map() }; }
+  function freeTopoMap(tm) {
+    if (!tm) return;
+    for (const b of tm.faces.values()) for (const x of b) safeDelete(x.s);
+    for (const b of tm.edges.values()) for (const x of b) safeDelete(x.s);
+    tm.faces.clear();
+    tm.edges.clear();
+  }
+  function tmAdd(bucketMap, raw, id, overwrite = false) {
+    if (!raw || !id) return;
+    const hc = topoHc(raw);
+    let b = bucketMap.get(hc);
+    if (!b) { b = []; bucketMap.set(hc, b); }
+    const ex = b.find((x) => x.s.IsSame(raw));
+    if (ex) { if (overwrite) ex.id = id; return; }
+    b.push({ s: raw, id });
+  }
+  function tmGet(bucketMap, raw) {
+    if (!bucketMap || !raw) return null;
+    const b = bucketMap.get(topoHc(raw));
+    if (!b) return null;
+    const hit = b.find((x) => x.s.IsSame(raw));
+    return hit ? hit.id : null;
+  }
+  function resolveTid(id, selfId) {
+    if (!id) return null;
+    if (selfId && id.startsWith('$self/')) return `${selfId}/${id.slice(6)}`;
+    return id;
+  }
+  const baseTid = (t) => String(t || '').split('|')[0];
+  const localTid = (t) => { const s = String(t || ''), i = s.indexOf('/'); return i >= 0 ? s.slice(i + 1) : s; };
+  function readShapeList(lst) {
+    const out = [];
+    if (!lst || lst.IsEmpty()) return out;
+    const copy = new oc.NCollection_List_TopoDS_Shape();
+    try {
+      copy.Assign(lst);
+      while (!copy.IsEmpty()) { out.push(copy.First()); copy.RemoveFirst(); }
+    } finally { copy.delete(); }
+    return out;
+  }
+  function exploreUnique(shape, shapeEnum) {
+    const TA = oc.TopAbs_ShapeEnum;
+    const ex = new oc.TopExp_Explorer(shape.wrapped, shapeEnum, TA.TopAbs_SHAPE);
+    const buckets = new Map(), out = [];
+    try {
+      while (ex.More()) {
+        const s = ex.Current();
+        const hc = topoHc(s);
+        let b = buckets.get(hc);
+        if (!b) { b = []; buckets.set(hc, b); }
+        if (!b.some((x) => x.IsSame(s))) { b.push(s); out.push({ hc, s }); }
+        else safeDelete(s);
+        ex.Next();
+      }
+    } finally { ex.delete(); }
+    return out;
+  }
+  function cloneTopoForShape(shape, srcTopo, selfId = null) {
+    const out = createTopoMap();
+    if (!shape || !shape.wrapped) return out;
+    const fl = exploreUnique(shape, oc.TopAbs_ShapeEnum.TopAbs_FACE);
+    for (const f of fl) {
+      const id = srcTopo ? resolveTid(tmGet(srcTopo.faces, f.s), selfId) : null;
+      if (id) tmAdd(out.faces, f.s, id);
+      else f.s.delete();
+    }
+    const el = exploreUnique(shape, oc.TopAbs_ShapeEnum.TopAbs_EDGE);
+    for (const e of el) {
+      const id = srcTopo ? resolveTid(tmGet(srcTopo.edges, e.s), selfId) : null;
+      if (id) tmAdd(out.edges, e.s, id);
+      else e.s.delete();
+    }
+    return out;
+  }
+  function faceSortKey(raw) {
+    const rf = new R.Face(oc.TopoDS.Face(raw));
+    let k = [0, 0, 0];
+    try { const c = rf.center; k = [Math.round(c.z * 1e3), Math.round(c.y * 1e3), Math.round(c.x * 1e3)]; } catch (_) {}
+    rf.delete();
+    return k;
+  }
+  function edgeSortKey(raw) {
+    const re = new R.Edge(oc.TopoDS.Edge(raw));
+    let k = [0, 0, 0];
+    try { const c = re.pointAt(0.5); k = [Math.round(c.z * 1e3), Math.round(c.y * 1e3), Math.round(c.x * 1e3)]; } catch (_) {}
+    re.delete();
+    return k;
+  }
+  function cmpSortKey(a, b) {
+    for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] - b[i];
+    return 0;
+  }
+  function deriveEdgeIdsFromFaces(shape, tm, prefix = '$self') {
+    const TA = oc.TopAbs_ShapeEnum;
+    const adj = new Map(); // hc -> [{ s, fIds: Set }]
+    const fl = exploreUnique(shape, TA.TopAbs_FACE);
+    for (const f of fl) {
+      const fid = tmGet(tm.faces, f.s);
+      const ex = new oc.TopExp_Explorer(f.s, TA.TopAbs_EDGE, TA.TopAbs_SHAPE);
+      try {
+        while (ex.More()) {
+          const ew = ex.Current();
+          const hc = topoHc(ew);
+          let b = adj.get(hc);
+          if (!b) { b = []; adj.set(hc, b); }
+          let entry = b.find((x) => x.s.IsSame(ew));
+          if (!entry) { entry = { s: ew, fIds: new Set() }; b.push(entry); }
+          else safeDelete(ew);
+          if (fid) entry.fIds.add(fid);
+          ex.Next();
+        }
+      } finally { ex.delete(); }
+      f.s.delete();
+    }
+    const el = exploreUnique(shape, TA.TopAbs_EDGE);
+    const groups = new Map();
+    for (const e of el) {
+      if (tmGet(tm.edges, e.s)) { e.s.delete(); continue; }
+      const b = adj.get(e.hc);
+      const entry = b ? b.find((x) => x.s.IsSame(e.s)) : null;
+      const fIds = entry ? [...entry.fIds].sort() : [];
+      let baseKey;
+      if (fIds.length) {
+        const owners = fIds.map((id) => { const idx = id.indexOf('/F:'); return idx >= 0 ? id.slice(0, idx) : null; });
+        const sameOwner = owners[0] && owners.every((o) => o === owners[0]);
+        if (sameOwner) {
+          const parts = fIds.map((id) => id.slice(owners[0].length + 3));
+          baseKey = `${owners[0]}/E:${parts.join('&')}`;
+        } else {
+          baseKey = `${prefix}/E(${fIds.join('&')})`;
+        }
+      } else {
+        baseKey = `${prefix}/E:anon`;
+      }
+      if (!groups.has(baseKey)) groups.set(baseKey, []);
+      groups.get(baseKey).push({ s: e.s, key: edgeSortKey(e.s) });
+    }
+    for (const b of adj.values()) for (const x of b) safeDelete(x.s);
+    for (const [baseKey, list] of groups) {
+      if (list.length > 1) list.sort((a, b) => cmpSortKey(a.key, b.key));
+      for (let i = 0; i < list.length; i++) {
+        tmAdd(tm.edges, list[i].s, list.length === 1 ? baseKey : `${baseKey}#${i}`);
+      }
+    }
+  }
+  function ensureTopoComplete(shape, tm, prefix = '$self') {
+    if (!tm) tm = createTopoMap();
+    if (!shape || !shape.wrapped) return tm;
+    const fl = exploreUnique(shape, oc.TopAbs_ShapeEnum.TopAbs_FACE);
+    const byType = new Map();
+    for (const f of fl) {
+      if (tmGet(tm.faces, f.s)) { f.s.delete(); continue; }
+      const rf = new R.Face(oc.TopoDS.Face(f.s));
+      let gt = 'FACE';
+      try { gt = rf.geomType || 'FACE'; } catch (_) {}
+      rf.delete();
+      if (!byType.has(gt)) byType.set(gt, []);
+      byType.get(gt).push({ s: f.s, key: faceSortKey(f.s) });
+    }
+    for (const [gt, list] of byType) {
+      list.sort((a, b) => cmpSortKey(a.key, b.key));
+      for (let i = 0; i < list.length; i++) tmAdd(tm.faces, list[i].s, `${prefix}/F:${gt}#${i}`);
+    }
+    deriveEdgeIdsFromFaces(shape, tm, prefix);
+    return tm;
+  }
+  function transformTopo(inTopo, trBuilder, outShape, selfId = null) {
+    const outTopo = createTopoMap();
+    if (!outShape || !outShape.wrapped) return outTopo;
+    const outFaces = exploreUnique(outShape, oc.TopAbs_ShapeEnum.TopAbs_FACE);
+    const outEdges = exploreUnique(outShape, oc.TopAbs_ShapeEnum.TopAbs_EDGE);
+    const findOut = (list, raw) => { const h = topoHc(raw); const b = list.find((x) => x.hc === h && x.s.IsSame(raw)); return b ? b.s : null; };
+    if (inTopo) {
+      for (const bucket of inTopo.faces.values()) {
+        for (const { s, id } of bucket) {
+          let m = null;
+          try { m = trBuilder.ModifiedShape(s); } catch (_) {}
+          if (m && !m.IsNull()) {
+            const mf = findOut(outFaces, m);
+            const rid = resolveTid(id, selfId);
+            if (mf && rid) tmAdd(outTopo.faces, mf, rid);
+          }
+          safeDelete(m);
+        }
+      }
+      for (const bucket of inTopo.edges.values()) {
+        for (const { s, id } of bucket) {
+          let m = null;
+          try { m = trBuilder.ModifiedShape(s); } catch (_) {}
+          if (m && !m.IsNull()) {
+            const me = findOut(outEdges, m);
+            const rid = resolveTid(id, selfId);
+            if (me && rid) tmAdd(outTopo.edges, me, rid);
+          }
+          safeDelete(m);
+        }
+      }
+    }
+    for (const f of outFaces) if (!tmGet(outTopo.faces, f.s)) f.s.delete();
+    for (const e of outEdges) if (!tmGet(outTopo.edges, e.s)) e.s.delete();
+    ensureTopoComplete(outShape, outTopo, selfId || '$self');
+    return outTopo;
+  }
+  function propagateHistory(builder, inputs, outShape, opTag) {
+    const outTopo = createTopoMap();
+    if (!outShape || !outShape.wrapped) return outTopo;
+    const TA = oc.TopAbs_ShapeEnum;
+    const outFaces = exploreUnique(outShape, TA.TopAbs_FACE);
+    const outEdges = exploreUnique(outShape, TA.TopAbs_EDGE);
+    const findOut = (list, raw) => { const h = topoHc(raw); const b = list.find((x) => x.hc === h && x.s.IsSame(raw)); return b ? b.s : null; };
+    for (const inp of inputs || []) {
+      const inTopo = inp && inp.topo;
+      if (!inTopo) continue;
+      const selfId = inp.selfId || null;
+      for (const bucket of inTopo.faces.values()) {
+        for (const { s: inF, id: rawId } of bucket) {
+          const id = resolveTid(rawId, selfId);
+          if (!id) continue;
+          const mods = readShapeList(builder.Modified(inF));
+          const matched = [];
+          for (const m of mods) {
+            const mf = findOut(outFaces, m);
+            if (mf && !matched.includes(mf)) matched.push(mf);
+            safeDelete(m);
+          }
+          if (matched.length === 1) {
+            tmAdd(outTopo.faces, matched[0], id);
+          } else if (matched.length > 1) {
+            matched.sort((a, b) => cmpSortKey(faceSortKey(a), faceSortKey(b)));
+            matched.forEach((mf, k) => tmAdd(outTopo.faces, mf, `${id}|${opTag}#${k}`));
+          } else {
+            let del = false;
+            try { del = !!builder.IsDeleted(inF); } catch (_) {}
+            if (!del) {
+              const mf = findOut(outFaces, inF);
+              if (mf) tmAdd(outTopo.faces, mf, id);
+            }
+          }
+        }
+      }
+      for (const bucket of inTopo.edges.values()) {
+        for (const { s: inE, id: rawEId } of bucket) {
+          const eId = resolveTid(rawEId, selfId);
+          if (!eId) continue;
+          const gens = readShapeList(builder.Generated(inE));
+          const genFaces = [];
+          const genEdges = [];
+          for (const g of gens) {
+            const gt = g.ShapeType();
+            if (gt === TA.TopAbs_FACE) {
+              const mf = findOut(outFaces, g);
+              if (mf && !tmGet(outTopo.faces, mf) && !genFaces.includes(mf)) genFaces.push(mf);
+            } else if (gt === TA.TopAbs_EDGE) {
+              const me = findOut(outEdges, g);
+              if (me && !tmGet(outTopo.edges, me) && !genEdges.includes(me)) genEdges.push(me);
+            }
+            safeDelete(g);
+          }
+          if (genFaces.length === 1) tmAdd(outTopo.faces, genFaces[0], `F:${opTag}(${eId})`);
+          else if (genFaces.length > 1) {
+            genFaces.sort((a, b) => cmpSortKey(faceSortKey(a), faceSortKey(b)));
+            genFaces.forEach((mf, k) => tmAdd(outTopo.faces, mf, `F:${opTag}(${eId})#${k}`));
+          }
+          if (genEdges.length === 1) tmAdd(outTopo.edges, genEdges[0], `E:${opTag}(${eId})`);
+          else if (genEdges.length > 1) {
+            genEdges.sort((a, b) => cmpSortKey(edgeSortKey(a), edgeSortKey(b)));
+            genEdges.forEach((me, k) => tmAdd(outTopo.edges, me, `E:${opTag}(${eId})#${k}`));
+          }
+        }
+      }
+      for (const bucket of inTopo.edges.values()) {
+        for (const { s: inE, id: rawEId } of bucket) {
+          const eId = resolveTid(rawEId, selfId);
+          if (!eId) continue;
+          const mods = readShapeList(builder.Modified(inE));
+          const matched = [];
+          for (const m of mods) {
+            const me = findOut(outEdges, m);
+            if (me && !matched.includes(me)) matched.push(me);
+            safeDelete(m);
+          }
+          if (matched.length === 1) {
+            tmAdd(outTopo.edges, matched[0], eId);
+          } else if (matched.length > 1) {
+            matched.sort((a, b) => cmpSortKey(edgeSortKey(a), edgeSortKey(b)));
+            matched.forEach((me, k) => tmAdd(outTopo.edges, me, `${eId}|${opTag}#${k}`));
+          } else {
+            let del = false;
+            try { del = !!builder.IsDeleted(inE); } catch (_) {}
+            if (!del) {
+              const me = findOut(outEdges, inE);
+              if (me) tmAdd(outTopo.edges, me, eId);
+            }
+          }
+        }
+      }
+    }
+    for (const f of outFaces) if (!tmGet(outTopo.faces, f.s)) f.s.delete();
+    for (const e of outEdges) if (!tmGet(outTopo.edges, e.s)) e.s.delete();
+    ensureTopoComplete(outShape, outTopo, opTag);
+    return outTopo;
+  }
+
+  // ---------- schnelle Topologie-Listen (Streuwert statt Paarvergleich) ----------
   function topoList(shape, kind) {
     const TA = oc.TopAbs_ShapeEnum;
     const ex = new oc.TopExp_Explorer(shape.wrapped, kind === 'face' ? TA.TopAbs_FACE : TA.TopAbs_EDGE, TA.TopAbs_SHAPE);
@@ -2688,7 +3966,7 @@ export function createKernel(R, oc) {
     }
     return out;
   }
-  function meshPayload(shape, tolOverride) {
+  function meshPayload(shape, tolOverride, topo = null, selfId = null) {
     const b = bboxOf(shape);
     const base = meshTol(b);
     const tol = tolOverride || base;
@@ -2708,8 +3986,22 @@ export function createKernel(R, oc) {
       for (let i = g.start; i < g.start + g.count; i++) lines.push(e.lines[i * 3], e.lines[i * 3 + 1], e.lines[i * 3 + 2]);
       edgeGroups.push([start, g.count, eIndex.has(g.edgeId) ? eIndex.get(g.edgeId) : -1]);
     }
-    const fi = fl.map((f) => faceInfo(f.shape));
-    const ei = el.map((f) => edgeGeom(f.shape));
+    const fi = fl.map((f) => {
+      const info = faceInfo(f.shape);
+      if (topo) {
+        const tid = resolveTid(tmGet(topo.faces, f.shape.wrapped), selfId);
+        if (tid) info.tid = tid;
+      }
+      return info;
+    });
+    const ei = el.map((f) => {
+      const g = edgeGeom(f.shape);
+      if (topo) {
+        const tid = resolveTid(tmGet(topo.edges, f.shape.wrapped), selfId);
+        if (tid) g.tid = tid;
+      }
+      return g;
+    });
     const sl = sortedSolids(shape);
     let bodies = null, faceBody = null, edgeBody = null;
     if (sl.length > 1) {
@@ -3553,7 +4845,7 @@ export function createKernel(R, oc) {
     const anyMirror = evald.some((e) => e.it.kind === 'mirrorStep');
     const r6 = (v) => Math.round(v * 1e6) / 1e6;
     const ID_MAT = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
-    for (const e of evald) if (e.shape) live.set(e.it.id, { shape: e.shape, key: e.key, wb: e.wb, m: e.it.m, it: e.it });
+    for (const e of evald) if (e.shape) live.set(e.it.id, { shape: e.shape, topo: e.topo || null, key: e.key, wb: e.wb, m: e.it.m, it: e.it });
     const NAMES = { join: 'Vereinigen', cut: 'Abziehen', common: 'Schnittmenge' };
     for (let i = 0; i < evald.length; i++) {
       const e = evald[i], it = e.it;
@@ -3571,23 +4863,30 @@ export function createKernel(R, oc) {
         if (p.copy) {
           const rel = matMul(matInvRigid(it.m), matMul(M, src.m));
           const kBase = keyOf([src.key, 'xformCopy', rel.map((v) => Math.round(v * 1e6) / 1e6)]);
-          let shape = cacheGet(kBase), key = kBase;
+          const ceB = cacheEntry(kBase);
+          let shape = ceB ? ceB.shape : null, shapeTopo = ceB ? ceB.topo : null, key = kBase;
           if (!shape) {
-            try { shape = applyMatrix(src.shape, rel); cachePut(kBase, shape); }
-            catch (err) { errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) }); continue; }
+            try {
+              const tr = applyMatrixWithTopo(src.shape, rel, src.topo, src.it.id);
+              shape = tr.shape; shapeTopo = tr.topo;
+              cachePut(kBase, shape, null, null, null, shapeTopo);
+            } catch (err) { errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) }); continue; }
           }
           if (it.finishes && it.finishes.length) {
             const kFin = keyOf([key, 'fin', it.finishes]);
-            const hitF = cacheGet(kFin);
-            if (hitF) { shape = hitF; key = kFin; }
+            const ceF = cacheEntry(kFin);
+            if (ceF && ceF.shape) { shape = ceF.shape; shapeTopo = ceF.topo; key = kFin; }
             else {
               const e0 = errors.length;
-              const sf = applyFinishes(shape, it.finishes, errors, it.id);
-              if (sf && sf !== shape) { cachePut(kFin, sf, errors.slice(e0).map((x) => ({ ...x, itemId: x.itemId === it.id ? '$self' : x.itemId }))); shape = sf; key = kFin; }
+              const sf = applyFinishes(shape, it.finishes, errors, it.id, shapeTopo, true);
+              if (sf.shape && sf.shape !== shape) {
+                cachePut(kFin, sf.shape, errors.slice(e0).map((x) => ({ ...x, itemId: x.itemId === it.id ? '$self' : x.itemId })), null, null, sf.topo);
+                shape = sf.shape; shapeTopo = sf.topo; key = kFin;
+              }
             }
           }
           const wb = bboxTransform(bboxCached(key, shape), it.m);
-          const entry = { shape, key, wb, m: it.m, it };
+          const entry = { shape, topo: shapeTopo, key, wb, m: it.m, it };
           live.set(it.id, entry);
           bodies.set(it.id, entry);
         } else {
@@ -3595,12 +4894,16 @@ export function createKernel(R, oc) {
           const rel = matMul(matInvRigid(src.m), matMul(M, src.m));
           if (!isIdentity(rel)) {
             const k = keyOf([src.key, 'xform', rel.map((v) => Math.round(v * 1e6) / 1e6)]);
-            let next = cacheGet(k);
+            const ce = cacheEntry(k);
+            let next = ce ? ce.shape : null, nextTopo = ce ? ce.topo : null;
             if (!next) {
-              try { next = applyMatrix(src.shape, rel); cachePut(k, next); }
-              catch (err) { errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) }); continue; }
+              try {
+                const tr = applyMatrixWithTopo(src.shape, rel, src.topo, src.it.id);
+                next = tr.shape; nextTopo = tr.topo;
+                cachePut(k, next, null, null, null, nextTopo);
+              } catch (err) { errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) }); continue; }
             }
-            src.shape = next; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
+            src.shape = next; src.topo = nextTopo; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
             bodies.set(tid, src);
           }
         }
@@ -3629,27 +4932,41 @@ export function createKernel(R, oc) {
         if (Math.abs(sx - 1) > 1e-9 || Math.abs(sy - 1) > 1e-9 || Math.abs(sz - 1) > 1e-9) {
           const pv = p.pivot === 'origin' ? 'origin' : 'centroid';
           const k = keyOf([src.key, 'scale', Math.round(sx * 1e6) / 1e6, Math.round(sy * 1e6) / 1e6, Math.round(sz * 1e6) / 1e6, pv, src.m.map((v) => Math.round(v * 1e6) / 1e6)]);
-          let next = cacheGet(k);
+          const ce = cacheEntry(k);
+          let next = ce ? ce.shape : null, nextTopo = ce ? ce.topo : null;
           if (!next) {
             try {
               const idM = isIdentity(src.m);
-              const wShape = idM ? src.shape : applyMatrix(src.shape, src.m);
-              const center = pv === 'origin' ? [0, 0, 0] : shapeCenterOfMass(wShape, src.wb);
-              const wScaled = applyScale(wShape, center, sx, sy, sz);
-              if (!idM) safeDelete(wShape);
-              if (idM) {
-                next = wScaled;
+              const wRes = idM ? { shape: src.shape, topo: src.topo } : applyMatrixWithTopo(src.shape, src.m, src.topo, src.it.id);
+              const center = pv === 'origin' ? [0, 0, 0] : shapeCenterOfMass(wRes.shape, src.wb);
+              let wScaled, wScaledTopo;
+              if (Math.abs(sx - sy) < 1e-9 && Math.abs(sx - sz) < 1e-9) {
+                const trsf = new oc.gp_Trsf();
+                const cp = new oc.gp_Pnt(center[0], center[1], center[2]);
+                trsf.SetScale(cp, sx);
+                const tr = new oc.BRepBuilderAPI_Transform(wRes.shape.wrapped, trsf, true, false);
+                wScaled = R.cast(tr.ModifiedShape(wRes.shape.wrapped));
+                wScaledTopo = wRes.topo ? transformTopo(wRes.topo, tr, wScaled, src.it.id) : ensureTopoComplete(wScaled, createTopoMap(), src.it.id);
+                tr.delete(); trsf.delete(); cp.delete();
               } else {
-                next = applyMatrix(wScaled, matInvRigid(src.m));
-                safeDelete(wScaled);
+                wScaled = applyScale(wRes.shape, center, sx, sy, sz);
+                wScaledTopo = ensureTopoComplete(wScaled, createTopoMap(), src.it.id);
               }
-              cachePut(k, next);
+              if (!idM) { safeDelete(wRes.shape); freeTopoMap(wRes.topo); }
+              if (idM) {
+                next = wScaled; nextTopo = wScaledTopo;
+              } else {
+                const back = applyMatrixWithTopo(wScaled, matInvRigid(src.m), wScaledTopo, src.it.id);
+                next = back.shape; nextTopo = back.topo;
+                safeDelete(wScaled); freeTopoMap(wScaledTopo);
+              }
+              cachePut(k, next, null, null, null, nextTopo);
             } catch (err) {
               errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) });
               continue;
             }
           }
-          src.shape = next; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
+          src.shape = next; src.topo = nextTopo; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
           bodies.set(tid, src);
         }
         continue;
@@ -3680,32 +4997,41 @@ export function createKernel(R, oc) {
         if (mode === 'new') {
           const rel = matMul(matInvRigid(it.m), src.m);
           const kBase = keyOf([src.key, 'thickenNew', p.face, Math.round(dist * 1e6) / 1e6, dir, rel.map((v) => Math.round(v * 1e6) / 1e6)]);
-          let shape = cacheGet(kBase), key = kBase;
+          const ceB = cacheEntry(kBase);
+          let shape = ceB ? ceB.shape : null, shapeTopo = ceB ? ceB.topo : null, key = kBase;
           if (!shape) {
-            const f = matchFace(src.shape, p.face);
-            if (!f) { errors.push({ itemId: it.id, code: 'edges', message: 'Aufdicken: Die gewählte Fläche gibt es nicht mehr.' }); continue; }
+            const fArr = []; try { for (const fx of src.shape.faces) fArr.push(fx); } catch (_) {}
+            const b = bboxOf(src.shape); const tol = 0.05 + 1e-3 * Math.max(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
+            const f = resolveFaceRef({ ...p.face, tol }, fArr, src.topo, src.it.id, true)[0] || matchFace(src.shape, p.face);
+            if (!f) { for (const fx of fArr) safeDelete(fx); errors.push({ itemId: it.id, code: 'edges', message: 'Aufdicken: Die gewählte Fläche gibt es nicht mehr.' }); continue; }
             try {
               const plate = thickenFaceShape(f, dist, dir, 'new');
               if (isIdentity(rel)) shape = plate;
               else { shape = applyMatrix(plate, rel); safeDelete(plate); }
-              cachePut(kBase, shape);
+              shapeTopo = ensureTopoComplete(shape, createTopoMap(), it.id);
+              cachePut(kBase, shape, null, null, null, shapeTopo);
             } catch (err) {
               errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) });
+              for (const fx of fArr) safeDelete(fx);
               continue;
             }
+            for (const fx of fArr) safeDelete(fx);
           }
           if (it.finishes && it.finishes.length) {
             const kFin = keyOf([key, 'fin', it.finishes]);
-            const hitF = cacheGet(kFin);
-            if (hitF) { shape = hitF; key = kFin; }
+            const ceF = cacheEntry(kFin);
+            if (ceF && ceF.shape) { shape = ceF.shape; shapeTopo = ceF.topo; key = kFin; }
             else {
               const e0 = errors.length;
-              const sf = applyFinishes(shape, it.finishes, errors, it.id);
-              if (sf && sf !== shape) { cachePut(kFin, sf, errors.slice(e0).map((x) => ({ ...x, itemId: x.itemId === it.id ? '$self' : x.itemId }))); shape = sf; key = kFin; }
+              const sf = applyFinishes(shape, it.finishes, errors, it.id, shapeTopo, true);
+              if (sf.shape && sf.shape !== shape) {
+                cachePut(kFin, sf.shape, errors.slice(e0).map((x) => ({ ...x, itemId: x.itemId === it.id ? '$self' : x.itemId })), null, null, sf.topo);
+                shape = sf.shape; shapeTopo = sf.topo; key = kFin;
+              }
             }
           }
           const wb = bboxTransform(bboxCached(key, shape), it.m);
-          const entry = { shape, key, wb, m: it.m, it };
+          const entry = { shape, topo: shapeTopo, key, wb, m: it.m, it };
           live.set(it.id, entry);
           bodies.set(it.id, entry);
         } else {
@@ -3713,21 +5039,29 @@ export function createKernel(R, oc) {
           const prevShape = src.shape, prevKey = src.key;
           const k = keyOf([src.key, 'thicken', mode, p.face, Math.round(dist * 1e6) / 1e6, dir]);
           const kPlate = keyOf([prevKey, 'thickenPlate', p.face, r6(dist), dir, mode]);
-          let next = cacheGet(k);
+          const ce = cacheEntry(k);
+          let next = ce ? ce.shape : null, nextTopo = ce ? ce.topo : null;
           let plate = anyMirror ? cacheGet(kPlate) : null;
           if (!next) {
-            const f = matchFace(src.shape, p.face);
-            if (!f) { errors.push({ itemId: it.id, code: 'edges', message: 'Aufdicken: Die gewählte Fläche gibt es nicht mehr.' }); continue; }
+            const fArr = []; try { for (const fx of src.shape.faces) fArr.push(fx); } catch (_) {}
+            const b = bboxOf(src.shape); const tol = 0.05 + 1e-3 * Math.max(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
+            const f = resolveFaceRef({ ...p.face, tol }, fArr, src.topo, src.it.id, true)[0] || matchFace(src.shape, p.face);
+            if (!f) { for (const fx of fArr) safeDelete(fx); errors.push({ itemId: it.id, code: 'edges', message: 'Aufdicken: Die gewählte Fläche gibt es nicht mehr.' }); continue; }
             try {
               plate = thickenFaceShape(f, dist, dir, mode);
-              next = mode === 'cut' ? src.shape.cut(plate) : src.shape.fuse(plate);
+              const plateTopo = ensureTopoComplete(plate, createTopoMap(), it.id);
+              const br = boolWithTopo(mode === 'cut' ? 'cut' : 'fuse', src.shape, src.topo, src.it.id, plate, plateTopo, it.id, 'Th:' + it.id);
+              next = br.shape; nextTopo = br.topo;
+              freeTopoMap(plateTopo);
               if (anyMirror) cachePut(kPlate, plate);
               else safeDelete(plate);
-              cachePut(k, next);
+              cachePut(k, next, null, null, null, nextTopo);
             } catch (err) {
               errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) });
+              for (const fx of fArr) safeDelete(fx);
               continue;
             }
+            for (const fx of fArr) safeDelete(fx);
           } else if (anyMirror && !plate) {
             const f = matchFace(prevShape, p.face);
             if (f) {
@@ -3735,7 +5069,7 @@ export function createKernel(R, oc) {
             }
           }
           if (anyMirror && plate) featureOps.set(it.id, { targetId: tid, opType: mode, tools: [{ shape: plate, m: src.m, key: kPlate }] });
-          src.shape = next; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
+          src.shape = next; src.topo = nextTopo; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
           bodies.set(tid, src);
         }
         continue;
@@ -3754,9 +5088,10 @@ export function createKernel(R, oc) {
         const prevShape = src.shape, prevKey = src.key;
         const rel = matMul(matInvRigid(src.m), it.m);
         const k = keyOf([src.key, 'rib', p, rel.map((v) => Math.round(v * 1e6) / 1e6)]);
-        let next = cacheGet(k);
+        const ceR = cacheEntry(k);
+        let next = ceR ? ceR.shape : null, nextTopo = ceR ? ceR.topo : null;
         if (!next) {
-          try { next = buildRibOn(src.shape, rel, p); cachePut(k, next); }
+          try { next = buildRibOn(src.shape, rel, p); nextTopo = ensureTopoComplete(next, createTopoMap(), tid); cachePut(k, next, null, null, null, nextTopo); }
           catch (err) { errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) }); continue; }
         }
         if (anyMirror) {
@@ -3767,7 +5102,7 @@ export function createKernel(R, oc) {
           }
           if (delta) featureOps.set(it.id, { targetId: tid, opType: 'join', tools: [{ shape: delta, m: src.m, key: kDelta }] });
         }
-        src.shape = next; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
+        src.shape = next; src.topo = nextTopo; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
         bodies.set(tid, src);
         continue;
       }
@@ -3786,15 +5121,16 @@ export function createKernel(R, oc) {
         const k = keyOf([src.key, 'wrap', p]);
         const kTool = keyOf([src.key, 'wrapTool', p]);
         const kWires = keyOf([src.key, 'wrapWires', p]);
-        let next = cacheGet(k);
+        const ceW = cacheEntry(k);
+        let next = ceW ? ceW.shape : null, nextTopo = ceW ? ceW.topo : null;
         let tool = mode !== 'line' && anyMirror ? cacheGet(kTool) : null;
         let wires = mode === 'line' ? cacheGet(kWires) : null;
-        let wrapRad = next && cache.get(k)?.resolved ? cache.get(k).resolved.radius : null;
+        let wrapRad = ceW && ceW.resolved ? ceW.resolved.radius : null;
         if (!next || (mode === 'line' && !wires) || (mode !== 'line' && anyMirror && !tool)) {
           try {
             const built = buildWrapOn(src.shape, p);
             wrapRad = built.radius || null;
-            if (!next) { next = built.shape; cachePut(k, next, null, wrapRad ? { radius: wrapRad } : null); }
+            if (!next) { next = built.shape; nextTopo = ensureTopoComplete(next, createTopoMap(), tid); cachePut(k, next, null, wrapRad ? { radius: wrapRad } : null, null, nextTopo); }
             else safeDelete(built.shape);
             if (mode === 'line') {
               if (!wires && built.wires) { wires = built.wires; cachePut(kWires, wires); }
@@ -3814,7 +5150,7 @@ export function createKernel(R, oc) {
         if (mode !== 'line' && anyMirror && tool) {
           featureOps.set(it.id, { targetId: tid, opType: mode === 'deboss' ? 'cut' : 'join', tools: [{ shape: tool, m: src.m, key: kTool }] });
         }
-        src.shape = next; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
+        src.shape = next; src.topo = nextTopo; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
         bodies.set(tid, src);
         continue;
       }
@@ -3832,9 +5168,10 @@ export function createKernel(R, oc) {
         const prevShape = src.shape, prevKey = src.key;
         const rel = matMul(matInvRigid(src.m), it.m);
         const k = keyOf([src.key, 'emboss', p, rel.map((v) => Math.round(v * 1e6) / 1e6)]);
-        let next = cacheGet(k);
+        const ceE = cacheEntry(k);
+        let next = ceE ? ceE.shape : null, nextTopo = ceE ? ceE.topo : null;
         if (!next) {
-          try { next = buildEmbossOn(src.shape, rel, p); cachePut(k, next); }
+          try { next = buildEmbossOn(src.shape, rel, p); nextTopo = ensureTopoComplete(next, createTopoMap(), tid); cachePut(k, next, null, null, null, nextTopo); }
           catch (err) { errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) }); continue; }
         }
         if (anyMirror) {
@@ -3846,7 +5183,7 @@ export function createKernel(R, oc) {
           }
           if (delta) featureOps.set(it.id, { targetId: tid, opType: isDeb ? 'cut' : 'join', tools: [{ shape: delta, m: src.m, key: kDelta }] });
         }
-        src.shape = next; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
+        src.shape = next; src.topo = nextTopo; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
         bodies.set(tid, src);
         continue;
       }
@@ -3858,13 +5195,15 @@ export function createKernel(R, oc) {
         }
         const rel = matMul(matInvRigid(it.m), ww.m);
         const kBase = keyOf([ww.key, 'wrapSweep', it.p, rel.map(r6)]);
-        let shape = cacheGet(kBase), key = kBase;
+        const ceB = cacheEntry(kBase);
+        let shape = ceB ? ceB.shape : null, shapeTopo = ceB ? ceB.topo : null, key = kBase;
         if (!shape) {
           try {
             const sw = buildSweepAlongWires(ww.wires, it.p);
             if (isIdentity(rel)) shape = sw;
             else { shape = applyMatrix(sw, rel); safeDelete(sw); }
-            cachePut(kBase, shape);
+            shapeTopo = ensureTopoComplete(shape, createTopoMap(), it.id);
+            cachePut(kBase, shape, null, null, null, shapeTopo);
           } catch (err) {
             errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) });
             continue;
@@ -3872,16 +5211,19 @@ export function createKernel(R, oc) {
         }
         if (it.finishes && it.finishes.length) {
           const kFin = keyOf([key, 'fin', it.finishes]);
-          const hitF = cacheGet(kFin);
-          if (hitF) { shape = hitF; key = kFin; }
+          const ceF = cacheEntry(kFin);
+          if (ceF && ceF.shape) { shape = ceF.shape; shapeTopo = ceF.topo; key = kFin; }
           else {
             const e0 = errors.length;
-            const sf = applyFinishes(shape, it.finishes, errors, it.id);
-            if (sf && sf !== shape) { cachePut(kFin, sf, errors.slice(e0).map((x) => ({ ...x, itemId: x.itemId === it.id ? '$self' : x.itemId }))); shape = sf; key = kFin; }
+            const sf = applyFinishes(shape, it.finishes, errors, it.id, shapeTopo, true);
+            if (sf.shape && sf.shape !== shape) {
+              cachePut(kFin, sf.shape, errors.slice(e0).map((x) => ({ ...x, itemId: x.itemId === it.id ? '$self' : x.itemId })), null, null, sf.topo);
+              shape = sf.shape; shapeTopo = sf.topo; key = kFin;
+            }
           }
         }
         const wb = bboxTransform(bboxCached(key, shape), it.m);
-        const entry = { shape, key, wb, m: it.m, it };
+        const entry = { shape, topo: shapeTopo, key, wb, m: it.m, it };
         live.set(it.id, entry);
         bodies.set(it.id, entry);
       }
@@ -3931,15 +5273,18 @@ export function createKernel(R, oc) {
               try {
                 const mw = mirrorWorld(te.shape, te.m, te.key);
                 const kOp = keyOf([base.key, 'mirFeat', fo.opType, mw.key, base.m.map(r6)]);
-                let next = cacheGet(kOp);
+                const ce = cacheEntry(kOp);
+                let next = ce ? ce.shape : null, nextTopo = ce ? ce.topo : null;
                 if (!next) {
                   const idB = isIdentity(base.m);
                   const locMir = idB ? mw.shape : applyMatrix(mw.shape, matInvRigid(base.m));
-                  next = fo.opType === 'join' ? base.shape.fuse(locMir) : fo.opType === 'cut' ? base.shape.cut(locMir) : base.shape.intersect(locMir);
+                  const opKind = fo.opType === 'join' ? 'fuse' : fo.opType === 'cut' ? 'cut' : 'common';
+                  const br = boolWithTopo(opKind, base.shape, base.topo, base.it.id, locMir, null, it.id, 'MS:' + it.id);
+                  next = br.shape; nextTopo = br.topo;
                   if (!idB) safeDelete(locMir);
-                  cachePut(kOp, next);
+                  cachePut(kOp, next, null, null, null, nextTopo);
                 }
-                base.shape = next; base.key = kOp; base.wb = bboxTransform(bboxCached(kOp, next), base.m);
+                base.shape = next; base.topo = nextTopo; base.key = kOp; base.wb = bboxTransform(bboxCached(kOp, next), base.m);
                 bodies.set(tid, base);
                 produced.push({ shape: mw.shape, m: ID_MAT, key: mw.key });
               } catch (err) {
@@ -3959,15 +5304,17 @@ export function createKernel(R, oc) {
                 const s = live.get(eid);
                 if (!s || !s.shape || s.it.role === 'hole' || !bboxHit(mwBox, s.wb)) continue;
                 const kCut = keyOf([s.key, 'mirHoleCut', mw.key, s.m.map(r6)]);
-                let next = cacheGet(kCut);
+                const ce = cacheEntry(kCut);
+                let next = ce ? ce.shape : null, nextTopo = ce ? ce.topo : null;
                 if (!next) {
                   const idS = isIdentity(s.m);
                   const locMir = idS ? mw.shape : applyMatrix(mw.shape, matInvRigid(s.m));
-                  next = s.shape.cut(locMir);
+                  const br = boolWithTopo('cut', s.shape, s.topo, s.it.id, locMir, null, it.id, 'MH:' + it.id);
+                  next = br.shape; nextTopo = br.topo;
                   if (!idS) safeDelete(locMir);
-                  cachePut(kCut, next);
+                  cachePut(kCut, next, null, null, null, nextTopo);
                 }
-                s.shape = next; s.key = kCut; s.wb = bboxTransform(bboxCached(kCut, next), s.m);
+                s.shape = next; s.topo = nextTopo; s.key = kCut; s.wb = bboxTransform(bboxCached(kCut, next), s.m);
                 bodies.set(eid, s);
                 if (!firstTid) { firstTid = eid; firstOp = 'cut'; }
               }
@@ -4005,7 +5352,8 @@ export function createKernel(R, oc) {
         consumed.set(it.id, tid);
         const mats = patternStepMatrices(it.p);
         const k = keyOf([src.key, 'ribPat', it.p, rp, it.m.map((v) => Math.round(v * 1e6) / 1e6), rib.m.map((v) => Math.round(v * 1e6) / 1e6)]);
-        let next = cacheGet(k);
+        const ce = cacheEntry(k);
+        let next = ce ? ce.shape : null, nextTopo = ce ? ce.topo : null;
         if (!next) {
           let cur = src.shape;
           try {
@@ -4016,14 +5364,15 @@ export function createKernel(R, oc) {
               cur = nxt;
             }
             next = cur === src.shape ? src.shape.clone() : cur;
-            cachePut(k, next);
+            nextTopo = ensureTopoComplete(next, createTopoMap(), tid);
+            cachePut(k, next, null, null, null, nextTopo);
           } catch (err) {
             if (cur && cur !== src.shape) safeDelete(cur);
             errors.push({ itemId: it.id, code: 'build', message: friendlyError(err) });
             continue;
           }
         }
-        src.shape = next; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
+        src.shape = next; src.topo = nextTopo; src.key = k; src.wb = bboxTransform(bboxCached(k, next), src.m);
         bodies.set(tid, src);
         continue;
       }
@@ -4036,19 +5385,21 @@ export function createKernel(R, oc) {
       consumed.set(it.id, tid);
       const inv = matInvRigid(base.m), rel = matMul(inv, o.m);
       const k = keyOf([base.key, op.type, o.key, rel.map((v) => Math.round(v * 1e6) / 1e6)]);
-      let next = cacheGet(k);
-      if (next) {
+      const ce = cacheEntry(k);
+      if (ce && ce.shape) {
         featureOps.set(it.id, { targetId: tid, opType: op.type, tools: [{ shape: o.shape, m: o.m, key: o.key }] });
-        base.shape = next; base.key = k; base.wb = bboxTransform(bboxCached(k, next), base.m);
+        base.shape = ce.shape; base.topo = ce.topo || null; base.key = k; base.wb = bboxTransform(bboxCached(k, ce.shape), base.m);
         bodies.set(tid, base); continue;
       }
       try {
-        const tool = applyMatrix(o.shape, rel);
-        next = op.type === 'join' ? base.shape.fuse(tool) : op.type === 'cut' ? base.shape.cut(tool) : base.shape.intersect(tool);
-        safeDelete(tool);
-        cachePut(k, next);
+        const tr = applyMatrixWithTopo(o.shape, rel, o.topo, o.it.id);
+        const opKind = op.type === 'join' ? 'fuse' : op.type === 'cut' ? 'cut' : 'common';
+        const br = boolWithTopo(opKind, base.shape, base.topo, base.it.id, tr.shape, tr.topo, o.it.id, 'Op:' + it.id);
+        safeDelete(tr.shape); freeTopoMap(tr.topo);
+        const next = br.shape, nextTopo = br.topo;
+        cachePut(k, next, null, null, null, nextTopo);
         featureOps.set(it.id, { targetId: tid, opType: op.type, tools: [{ shape: o.shape, m: o.m, key: o.key }] });
-        base.shape = next; base.key = k; base.wb = bboxTransform(bboxCached(k, next), base.m);
+        base.shape = next; base.topo = nextTopo; base.key = k; base.wb = bboxTransform(bboxCached(k, next), base.m);
         bodies.set(tid, base);
       } catch (err) {
         errors.push({ itemId: it.id, code: 'op', message: `${NAMES[op.type]} mit „${base.it.name || 'Körper'}“ hat nicht geklappt – berühren sich die Teile?` });
@@ -4078,19 +5429,19 @@ export function createKernel(R, oc) {
     const anyDyn = tops.some(hasDynamicExtent);
     if (!anyDyn) {
       try {
+        const resolved = {};
         const evald = tops.map((it) => {
           const t0 = now();
-          const r = evalItem(it, errors);
+          const r = evalItem(it, errors, null, { resolved });
           let wb = null;
           if (r.shape) wb = bboxTransform(bboxCached(r.key, r.shape), it.m);
           addT(it.id, t0);
           return { it, ...r, wb };
         });
         const tOps = now();
-        const resolved = {};
         const { bodies, consumed } = resolveOps(evald, errors, hiddenIds, resolved);
         if (bodies.size && times) { const d = now() - tOps; if (d > 0.5) for (const id of bodies.keys()) times[id] = (times[id] || 0) + d / bodies.size; }
-        for (const e of evald) { const b = bodies.get(e.it.id); if (b) { e.shape = b.shape; e.key = b.key; e.wb = b.wb; } }
+        for (const e of evald) { const b = bodies.get(e.it.id); if (b) { e.shape = b.shape; e.topo = b.topo || null; e.key = b.key; e.wb = b.wb; } }
         return { evald, consumed, resolved, opsModified: new Set(bodies.keys()) };
       } finally {
         clearStepReaderCache();
@@ -4166,7 +5517,7 @@ export function createKernel(R, oc) {
       const tOps = now();
       const { bodies, consumed } = resolveOps(evald, errors, hiddenIds, ctx.resolved);
       if (bodies.size && times) { const d = now() - tOps; if (d > 0.5) for (const id of bodies.keys()) times[id] = (times[id] || 0) + d / bodies.size; }
-      for (const e of evald) { const b = bodies.get(e.it.id); if (b) { e.shape = b.shape; e.key = b.key; e.wb = b.wb; } }
+      for (const e of evald) { const b = bodies.get(e.it.id); if (b) { e.shape = b.shape; e.topo = b.topo || null; e.key = b.key; e.wb = b.wb; } }
       return { evald, consumed, resolved: ctx.resolved, opsModified: new Set(bodies.keys()) };
     } finally {
       for (const x of pool) safeDelete(x.worldShape);
@@ -4227,31 +5578,36 @@ export function createKernel(R, oc) {
       const it = e.it;
       if (consumed.has(it.id)) { nodes.push({ id: it.id, key: null, empty: true, merged: consumed.get(it.id), ...(e.baseBox ? { baseBox: e.baseBox } : {}), ...(e.wb ? { ownBox: e.wb } : {}) }); continue; }
       if (!e.shape) { nodes.push({ id: it.id, key: null, empty: true }); continue; }
-      let resultKey = e.key, result = e.shape;
+      let resultKey = e.key, result = e.shape, resultTopo = e.topo || null;
       if (it.role !== 'hole') {
         const cutters = holes.filter((h) => h.it.id !== it.id && bboxHit(h.wb, e.wb));
         if (cutters.length) {
           const inv = matInvRigid(it.m);
           const rel = cutters.map((h) => matMul(inv, h.it.m));
           resultKey = keyOf([e.key, cutters.map((h, i) => [h.key, rel[i].map((v) => Math.round(v * 1e6) / 1e6)])]);
-          const hitc = cacheGet(resultKey);
-          if (hitc) result = hitc;
+          const cec = cacheEntry(resultKey);
+          if (cec && cec.shape) { result = cec.shape; resultTopo = cec.topo || null; }
           else {
             const tc = now();
             try {
-              const tool = fuseAll(cutters.map((h, i) => applyMatrix(h.shape, rel[i])), true);
-              result = e.shape.cut(tool);
-              safeDelete(tool);
-              cachePut(resultKey, result);
+              const moved = cutters.map((h, i) => {
+                const tr = applyMatrixWithTopo(h.shape, rel[i], h.topo || null, h.it.id);
+                return { shape: tr.shape, topo: tr.topo, selfId: h.it.id };
+              });
+              const tool = fuseAllWithTopo(moved, true, 'HC');
+              const br = boolWithTopo('cut', e.shape, e.topo || null, it.id, tool.shape, tool.topo, null, 'HCut');
+              safeDelete(tool.shape); freeTopoMap(tool.topo);
+              result = br.shape; resultTopo = br.topo;
+              cachePut(resultKey, result, null, null, null, resultTopo);
               addT(it.id, tc);
             } catch (err) {
               errors.push({ itemId: it.id, code: 'cut', message: 'Ein Loch konnte nicht abgezogen werden.' });
-              result = e.shape; resultKey = e.key;
+              result = e.shape; resultTopo = e.topo || null; resultKey = e.key;
             }
           }
         }
       }
-      const mk = resultKey + '|' + Q.level;
+      const mk = it.id + '|' + resultKey + '|' + Q.level;
       if (known[it.id] === resultKey) {
         const cachedPayload = meshCache.get(mk);
         const sameNode = { id: it.id, key: resultKey, same: true, ...(e.baseBox ? { baseBox: e.baseBox } : {}) };
@@ -4265,7 +5621,7 @@ export function createKernel(R, oc) {
       let payload = meshCache.get(mk);
       if (!payload) {
         const tm = now();
-        try { payload = meshPayload(result); meshCache.set(mk, payload); addT(it.id, tm); }
+        try { payload = meshPayload(result, null, resultTopo, it.id); meshCache.set(mk, payload); addT(it.id, tm); }
         catch (err) { errors.push({ itemId: it.id, code: 'mesh', message: 'Die Form konnte nicht angezeigt werden.' }); nodes.push({ id: it.id, key: null, empty: true }); continue; }
       }
       const out = clonePayload(payload);
@@ -4292,12 +5648,11 @@ export function createKernel(R, oc) {
 
   // Feinere Anzeige für ein schon berechnetes Teil (beim Hineinzoomen)
   function remesh(key, tol) {
-    const e = cache.get(key); if (!e) throw new Error('Die Form ist nicht mehr im Speicher.');
-    e.gen = gen;
+    const e = cacheEntry(key); if (!e) throw new Error('Die Form ist nicht mehr im Speicher.');
     const t = Math.max(0.0002, tol);
     const mk = key + '|t' + t.toPrecision(2);
     let payload = meshCache.get(mk);
-    if (!payload) { payload = meshPayload(e.shape, t); meshCache.set(mk, payload); }
+    if (!payload) { payload = meshPayload(e.shape, t, e.topo || null, null); meshCache.set(mk, payload); }
     return clonePayload(payload);
   }
   // Umriss einer ebenen Fläche (für „Skizze hierauf“ und „Hochziehen“)
