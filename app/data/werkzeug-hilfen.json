@@ -783,5 +783,10 @@
     "tip": "Freie Punkte und fehlende Angaben anzeigen",
     "hilfe": "Markiert alle noch beweglichen Punkte und Elemente pulsierend in Orange und zeigt die Zahl der fehlenden Angaben. Klickst du auf eine freie Stelle, wackelt sie kurz in der Richtung, in der sie noch Spiel hat.",
     "tipp": "Mit Umschalt + F schaltest du die Anzeige direkt in der Skizze ein oder aus – so siehst du sofort, wo noch ein Maß oder eine Regel fehlt."
+  },
+  "loadFont": {
+    "tip": "Eigene TrueType-Schrift (.ttf) aus einer Datei laden",
+    "hilfe": "Lädt eine TrueType-Schriftdatei (.ttf) von deinem Gerät, liest die Buchstaben-Umrisse und eventuelle Unterschneidungs-Paare (Kerning) direkt im Browser und speichert die Schrift im Projekt. Danach steht sie in der Schriftliste und bleibt beim Speichern und Öffnen erhalten.",
+    "tipp": "Wenn die Schrift eigene Zeichenabstände (kern-Tabelle) mitbringt, werden sie automatisch genutzt – zusätzlich kannst du rechts jederzeit den Zeichenabstand anpassen."
   }
 }
