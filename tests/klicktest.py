@@ -71,7 +71,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Assembly,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,ClashCheck,Log,Notices,Kernel,Drawing,UI}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,PointClouds,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Assembly,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,ClashCheck,Log,Notices,Kernel,Drawing,UI}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -21179,6 +21179,201 @@ def t_a102_pfad_verdrehung_schnitt(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a106_amf_ply_punkte(p):
+    import base64, io, tempfile, zipfile
+
+    def same_bb(a, b, tol=0.05):
+        return a and b and len(a) == 6 and len(b) == 6 and all(abs(a[i] - b[i]) <= tol for i in range(6))
+
+    # 1. Würfel 25×25×25 als PLY (binär & ASCII) und AMF speichern und wieder öffnen -> gleiche Dreieckszahl & Hüllmaße
+    p.empty()
+    p.ev("""App.change('Wuerfel', d => {
+      const b = Model.newItem('box', { w: 25, d: 25, h: 25 }, { name: 'Würfel', color: '#3f7fd6' });
+      b.colorSet = true;
+      d.items.push(b);
+    })""")
+    warte_rechnen(p, 30)
+    orig = p.ev("""const it = App.doc.items[0]; const r = App.results.get(it.id);
+      return {
+        tris: r && r.data && r.data.triangles ? (r.data.triangles.length / 3) : 0,
+        bbox: r && r.data ? r.data.bbox : null,
+      };""")
+
+    p.pg.get_by_role('button', name='Exportieren').first.click(); p.wait(400)
+    dh_amf = p.pg.locator('#ex-amf').locator('xpath=ancestor::label').get_attribute('data-help')
+    dh_ply = p.pg.locator('#ex-ply').locator('xpath=ancestor::label').get_attribute('data-help')
+    p.pg.uncheck('#ex-step'); p.pg.check('#ex-amf'); p.pg.check('#ex-ply'); p.pg.check('#ex-each'); p.wait(100)
+    with p.pg.expect_download(timeout=90000) as dl:
+        p.pg.get_by_role('button', name='Als ZIP speichern').click()
+    zpath = os.path.join(tempfile.gettempdir(), 'tracery-a106.zip')
+    dl.value.save_as(zpath)
+    zf = zipfile.ZipFile(zpath)
+    names = zf.namelist()
+    ply_names = [n for n in names if '/' not in n and n.endswith('.ply')]
+    amf_names = [n for n in names if '/' not in n and n.endswith('.amf')]
+    einzeln_ok = 'Einzeln/Würfel.ply' in names and 'Einzeln/Würfel.amf' in names
+    ply_bytes = zf.read(ply_names[0]) if ply_names else b''
+    amf_bytes = zf.read(amf_names[0]) if amf_names else b''
+
+    # PLY wieder öffnen -> gleiche Dreieckszahl, Hüllmaße & Farbe
+    p.ev("App.change('leer', d => { d.items = []; })"); p.wait(300)
+    p.pg.evaluate("""(b64) => {
+      const bin = atob(b64), u = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+      return window.__masswerk.Start.openBlob(new File([u], 'Wuerfel.ply'));
+    }""", base64.b64encode(ply_bytes).decode('ascii'))
+    warte_rechnen(p, 30)
+    ply_imp = p.ev("""const it = App.doc.items[0]; const r = it && App.results.get(it.id);
+      return {
+        errs: App.errors.length,
+        n: App.doc.items.length,
+        kind: it && it.kind,
+        color: it && it.color,
+        tris: r && r.data && r.data.triangles ? (r.data.triangles.length / 3) : 0,
+        bbox: r && r.data ? r.data.bbox : null,
+      };""")
+    ascii_chk = p.ev("""const r = App.results.get(App.doc.items[0].id);
+      const asciiBytes = Print.buildPLY([{ vertices: r.data.vertices, triangles: r.data.triangles, name: 'W', color: '#3f7fd6' }], 'W', { ascii: true });
+      const parsed = Start.parsePLY(asciiBytes);
+      return { tris: parsed.triangles.length / 3, verts: parsed.vertexCount, color: parsed.color };""")
+    ok1 = (
+        dh_amf == 'exportAmfPly' and dh_ply == 'exportAmfPly'
+        and len(ply_names) == 1 and len(amf_names) == 1 and einzeln_ok
+        and orig['tris'] == 12
+        and ply_imp['errs'] == 0 and ply_imp['n'] == 1 and ply_imp['kind'] == 'import'
+        and ply_imp['tris'] == orig['tris']
+        and same_bb(ply_imp['bbox'], orig['bbox'], 0.05)
+        and ply_imp['color'] == '#3f7fd6'
+        and ascii_chk['tris'] == orig['tris'] and ascii_chk['verts'] == 8 and ascii_chk['color'] == '#3f7fd6'
+    )
+
+    # 2. AMF wieder öffnen + gezipptes AMF in Zoll -> Hüllmaß 25,4 mm
+    p.ev("App.change('leer', d => { d.items = []; })"); p.wait(300)
+    p.pg.evaluate("""(b64) => {
+      const bin = atob(b64), u = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+      return window.__masswerk.Start.openBlob(new File([u], 'Wuerfel.amf'));
+    }""", base64.b64encode(amf_bytes).decode('ascii'))
+    warte_rechnen(p, 30)
+    amf_imp = p.ev("""const it = App.doc.items[0]; const r = it && App.results.get(it.id);
+      return {
+        errs: App.errors.length,
+        n: App.doc.items.length,
+        name: it && it.name,
+        color: it && it.color,
+        tris: r && r.data && r.data.triangles ? (r.data.triangles.length / 3) : 0,
+        bbox: r && r.data ? r.data.bbox : null,
+      };""")
+
+    cube_v = [(0,0,0),(1,0,0),(1,1,0),(0,1,0),(0,0,1),(1,0,1),(1,1,1),(0,1,1)]
+    cube_t = [(0,2,1),(0,3,2),(4,5,6),(4,6,7),(0,1,5),(0,5,4),(1,2,6),(1,6,5),(2,3,7),(2,7,6),(3,0,4),(3,4,7)]
+    amf_v_xml = ''.join(f'<vertex><coordinates><x>{x}</x><y>{y}</y><z>{z}</z></coordinates></vertex>' for x, y, z in cube_v)
+    amf_t_xml = ''.join(f'<triangle><v1>{a}</v1><v2>{b}</v2><v3>{c}</v3></triangle>' for a, b, c in cube_t)
+    inch_amf = f'''<?xml version="1.0" encoding="UTF-8"?>
+<amf unit="inch" version="1.1">
+  <object id="0">
+    <metadata type="name">ZollAMF</metadata>
+    <color><r>0.91</r><g>0.51</g><b>0.23</b></color>
+    <mesh><vertices>{amf_v_xml}</vertices><volume>{amf_t_xml}</volume></mesh>
+  </object>
+</amf>'''
+    zbuf = io.BytesIO()
+    with zipfile.ZipFile(zbuf, 'w', zipfile.ZIP_DEFLATED) as az:
+        az.writestr('zoll.amf', inch_amf)
+    p.ev("App.change('leer', d => { d.items = []; })"); p.wait(250)
+    p.pg.evaluate("""(b64) => {
+      const bin = atob(b64), u = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+      return window.__masswerk.Start.openBlob(new File([u], 'zoll.amf'));
+    }""", base64.b64encode(zbuf.getvalue()).decode('ascii'))
+    warte_rechnen(p, 30)
+    inch_res = p.ev("""const it = App.doc.items[0]; const r = it && App.results.get(it.id);
+      return { errs: App.errors.length, name: it && it.name, bbox: r && r.data ? r.data.bbox : null };""")
+    ok2 = (
+        amf_imp['errs'] == 0 and amf_imp['n'] == 1
+        and amf_imp['name'] == 'Würfel' and amf_imp['color'] == '#3f7fd6'
+        and amf_imp['tris'] == orig['tris'] and same_bb(amf_imp['bbox'], orig['bbox'], 0.05)
+        and inch_res['errs'] == 0 and inch_res['name'] == 'ZollAMF'
+        and same_bb(inch_res['bbox'], [0, 0, 0, 25.4, 25.4, 25.4], 0.15)
+    )
+
+    # 3. CSV mit 10 Punkten -> 10 Punkte (als 3D-Punktwolke UND als Skizzenpunkte) + XYZ-Datei
+    csv10 = "x;y;z\n" + "\n".join(f"{i * 5};{round(math.sin(i * 0.5) * 10, 2).as_integer_ratio()[0] if False else str(round(math.sin(i * 0.5) * 10, 2)).replace('.', ',')};{i * 2}" for i in range(10))
+    p.ev("App.change('leer', d => { d.items = []; d.pointClouds = []; })"); p.wait(300)
+    p.pg.evaluate("(txt) => window.__masswerk.Start.openBlob(new File([txt], 'messung.csv', { type: 'text/csv' }))", csv10)
+    p.pg.locator('#points-import-dialog').wait_for(state='visible', timeout=5000)
+    dlg_txt = p.pg.locator('#points-import-dialog').text_content() or ''
+    p.pg.select_option('#pts-imp-mode', 'pointCloud'); p.wait(100)
+    p.pg.click('#pts-imp-ok'); p.wait(350)
+    pc_info = p.ev("""const pcs = PointClouds.list();
+      const pc = pcs[0];
+      return {
+        n: pcs.length,
+        pts: pc ? pc.points.length : 0,
+        meshCnt: Viewer.groups.pointClouds.children.length,
+        treeCnt: document.querySelectorAll('#pointcloud-tree .pointcloud-row').length,
+        bbox: pc ? PointClouds.bboxOf(pc).size : null,
+      };""")
+    p.ev("App.undo()"); p.wait(200)
+    pc_after_undo = p.ev("return PointClouds.list().length")
+    p.ev("App.redo()"); p.wait(200)
+    pc_after_redo = p.ev("return PointClouds.list().length")
+
+    # Dieselbe 10-Punkte-CSV über Dialog als Skizzenpunkte importieren
+    p.pg.evaluate("(txt) => window.__masswerk.Start.openBlob(new File([txt], 'skizze10.csv', { type: 'text/csv' }))", csv10)
+    p.pg.locator('#points-import-dialog').wait_for(state='visible', timeout=5000)
+    p.pg.select_option('#pts-imp-mode', 'sketchPoints'); p.wait(100)
+    p.pg.click('#pts-imp-ok'); p.wait(500)
+    sk_pts = p.ev("""const S = Sketch.state;
+      return {
+        active: Sketch.active,
+        total: S ? S.ents.length : 0,
+        points: S ? S.ents.filter(e => e.type === 'point').length : 0,
+      };""")
+
+    # Im Skizzen-Modus über #sk-csv mit #csv-kind = 'points' weitere 10 Punkte einfügen
+    p.ev("Sketch.cancel(true); Sketch.startOnPlane('XY')"); p.wait(700)
+    p.pg.click('#sk-csv summary'); p.wait(150)
+    p.pg.select_option('#csv-kind', 'points'); p.wait(100)
+    p.pg.set_input_files('#csv-file', {
+        'name': 'punkte10.csv',
+        'mimeType': 'text/csv',
+        'buffer': ("\n".join(f"{i * 3},{i * 2}" for i in range(10))).encode('utf-8'),
+    })
+    p.wait(450)
+    sk_csv_pts = SS(p, "return [S.ents.length, S.ents.filter(e => e.type === 'point').length]")
+    p.ev("Sketch.cancel(true)"); p.wait(250)
+
+    # XYZ-Datei (10 Punkte, mit Punktzahl-Kopfzeile) als Punktwolke
+    xyz10 = "10\n# Scan\n" + "\n".join(f"{i * 4} {i * 3} {i}" for i in range(10))
+    p.pg.evaluate("(txt) => window.__masswerk.Start.openBlob(new File([txt], 'scan.xyz'), { target: 'pointCloud' })", xyz10)
+    p.wait(300)
+    xyz_info = p.ev("""const pcs = PointClouds.list();
+      const last = pcs[pcs.length - 1];
+      return { n: pcs.length, pts: last ? last.points.length : 0, bbox: last ? PointClouds.bboxOf(last).size : null };""")
+
+    ok3 = (
+        '10' in dlg_txt
+        and pc_info['n'] == 1 and pc_info['pts'] == 10 and pc_info['meshCnt'] == 1 and pc_info['treeCnt'] == 1
+        and pc_info['bbox'] and abs(pc_info['bbox'][0] - 45) < 0.1 and abs(pc_info['bbox'][2] - 18) < 0.1
+        and pc_after_undo == 0 and pc_after_redo == 1
+        and sk_pts['active'] and sk_pts['total'] == 10 and sk_pts['points'] == 10
+        and sk_csv_pts == [10, 10]
+        and xyz_info['n'] == 2 and xyz_info['pts'] == 10
+        and xyz_info['bbox'] and abs(xyz_info['bbox'][0] - 36) < 0.1 and abs(xyz_info['bbox'][2] - 9) < 0.1
+    )
+
+    # 4. Hilfetexte, DE/EN-Schlüsselgleichheit, Befehlssuche & keine Seitenfehler
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    i18n_ok = p.pg.evaluate("Promise.all([fetch('data/texte-de.json').then(r=>r.json()), fetch('data/texte-en.json').then(r=>r.json())]).then(([d,e])=>{ const dk=Object.keys(d).sort(), ek=Object.keys(e).sort(); return dk.length===ek.length && dk.every((k,i)=>k===ek[i]); })")
+    cmds_ok = p.ev("return Commands.search('ply').some(c => c.id === 'export') && Commands.search('amf').some(c => c.id === 'import') && Commands.search('xyz').some(c => c.id === 'import-points')")
+    ok4 = (
+        all(k in hilfen and all(f in hilfen[k] for f in ('tip', 'hilfe', 'tipp')) for k in ('exportAmfPly', 'pointCloudImport', 'importCad'))
+        and i18n_ok and cmds_ok and not p.errs
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 def t_a105_schraege_hinterschnitt(p):
     p.empty()
     # 1. Quader 20x20x10 mit 3° Entformungsschräge, Grenze 1° → alle 4 Seitenflächen grün
@@ -21679,6 +21874,7 @@ TESTS = [
     ('[A-100] Körper als Schritt löschen & Messwert als Maß (KP-51, KP-53)', t_a100_loeschen_messwert),
     ('[A-101] Feder und Spirale: Zylinder-Feder / Kegel-Feder / flache Spirale / Einfach-Modus', t_a101_feder_spirale),
     ('[A-102] Entlang Pfad mit Verdrehung und als Schnitt (KP-28, KP-29)', t_a102_pfad_verdrehung_schnitt),
+    ('[A-106] AMF, PLY und Punkte-Dateien (IO-12, IO-14)', t_a106_amf_ply_punkte),
     ('[A-105] Schräge- und Hinterschnitt-Analyse (PF-09, PF-10)', t_a105_schraege_hinterschnitt),
     ('[A-107] Rechnen abbrechen & Meldungs-Zentrale (BE-27, BE-25)', t_a107_abbrechen_meldungen),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),

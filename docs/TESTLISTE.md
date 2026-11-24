@@ -2295,6 +2295,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Einfach-Modus, Hilfen, DE/EN & Befehle**: Glocke bleibt in „Einfach“ sichtbar; `calcCancel` und `noticeCenter` sind in `werkzeug-hilfen.json`/`HELP` vollständig; DE/EN-Schlüssel sind gleich und `Commands.search` findet `notices` und `cancel-calc`.
 - [ ] **Von Hand**: Im Browser eine sehr rechenintensive Rundung oder große Muster-Kopie auslösen, nach 2 s „Abbrechen“ klicken und in der Glocke bei einem fehlerhaften Schritt auf „Hinspringen“ klicken.
 
+## AMF, PLY und Punkte-Dateien (Auto [A-106], IO-12, IO-14)
+
+- [x] **PLY-Export und -Import (binär & ASCII)**: Würfel `25 × 25 × 25` als PLY exportiert (`#ex-ply`, `#ex-each`) und per `Start.openBlob` wieder geöffnet → `0` Fehler, exakt gleiche Dreieckszahl (`12`), gleiche Hüllmaße und gleiche Farbe (`#3f7fd6`); ASCII-PLY-Roundtrip über `Print.buildPLY(..., { ascii: true })` und `Start.parsePLY` konsistent.
+- [x] **AMF-Export und -Import (XML & ZIP-AMF mit Zoll)**: Export (`#ex-amf`) und Re-Import liefert exakt `12` Dreiecke, gleiche Hüllmaße, Namen und Farbe; komprimierte AMF-Datei mit `unit="inch"` rechnet sauber auf `25,4 × 25,4 × 25,4 mm` um.
+- [x] **CSV und XYZ als Punktwolke oder Skizzenpunkte**: 10-Punkte-CSV über `#points-import-dialog` als 3D-Punktwolke (`PointClouds` mit Verlauf, 3D-Anzeige und Rückgängig/Wiederholen) sowie als `10` Skizzenpunkte auf `XY` geladen; `#sk-csv` (`#csv-kind = 'points'`) fügt `10` Skizzenpunkte ein; 10-Punkte-`.xyz`-Datei importiert fehlerfrei als Punktwolke.
+- [x] **Hilfen, Befehle & DE/EN-Schlüssel**: `exportAmfPly`, `pointCloudImport` und `importCad` in `werkzeug-hilfen.json`, DE/EN-Schlüsselgleichheit und Befehlssuche (`ply`, `amf`, `xyz`) vollständig ohne JavaScript-Fehler.
+- [ ] **Von Hand**: Im Browser eine farbige PLY-Punktwolke oder ein Mesh aus MeshLab/Blender sowie eine eigene CSV-/XYZ-Messdatei per Ziehen ins Fenster öffnen, Punktgröße und Farbe rechts anpassen und „Als Skizzenpunkte übernehmen“ prüfen.
+
 ## Fehler melden
 
 ```

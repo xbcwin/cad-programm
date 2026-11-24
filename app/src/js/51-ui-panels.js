@@ -352,6 +352,7 @@ const Panels = (() => {
       const as = Datums.axisTreeSection(); if (as) body.append(as);
       const ps = Datums.pointTreeSection(); if (ps) body.append(ps);
       const cs = Datums.csysTreeSection(); if (cs) body.append(cs);
+      const pcs = typeof PointClouds !== 'undefined' && PointClouds.treeSection ? PointClouds.treeSection() : null; if (pcs) body.append(pcs);
       const ms = Measure.treeSection(); if (ms) body.append(ms);
       const js = typeof Joints !== 'undefined' && Joints.treeSection ? Joints.treeSection() : null; if (js) body.append(js);
       return;
@@ -692,6 +693,7 @@ const Panels = (() => {
     const as = Datums.axisTreeSection(); if (as) body.append(as);
     const ps = Datums.pointTreeSection(); if (ps) body.append(ps);
     const cs = Datums.csysTreeSection(); if (cs) body.append(cs);
+    const pcs = typeof PointClouds !== 'undefined' && PointClouds.treeSection ? PointClouds.treeSection() : null; if (pcs) body.append(pcs);
     const ms = Measure.treeSection(); if (ms) body.append(ms);
     const js = typeof Joints !== 'undefined' && Joints.treeSection ? Joints.treeSection() : null; if (js) body.append(js);
   }
@@ -1036,6 +1038,7 @@ const Panels = (() => {
     if (!items.length && Datums.selectedAxis && Datums.findAxis(Datums.selectedAxis)) { $('#right-title').textContent = T('panel.title.datumAxis'); Datums.renderAxisPanel(body); return; }
     if (!items.length && Datums.selectedPoint && Datums.findPoint(Datums.selectedPoint)) { $('#right-title').textContent = T('panel.title.datumPoint'); Datums.renderPointPanel(body); return; }
     if (!items.length && Datums.selectedCsys && Datums.findCsys(Datums.selectedCsys)) { $('#right-title').textContent = T('panel.title.datumCsys'); Datums.renderCsysPanel(body); return; }
+    if (!items.length && typeof PointClouds !== 'undefined' && PointClouds.selected && PointClouds.find(PointClouds.selected)) { $('#right-title').textContent = T('panel.title.pointCloud'); PointClouds.renderPanel(body); return; }
     if (!items.length && Measure.selected && Measure.find(Measure.selected)) { $('#right-title').textContent = T('panel.title.measure'); Measure.renderPanel(body); return; }
     if (!items.length && typeof Joints !== 'undefined' && Joints.selected && Joints.list.some((x) => x.id === Joints.selected)) { $('#right-title').textContent = T('panel.title.joint'); Joints.renderPanel(body); return; }
     if (!items.length) { $('#right-title').textContent = T('panel.title.project'); renderProject(body); return; }
