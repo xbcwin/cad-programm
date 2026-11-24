@@ -738,6 +738,7 @@ const Interact = (() => {
   }
   const isStepMod = (x) => x.kind === 'transform' || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'emboss' || x.kind === 'mirrorStep';
   function startMove(e) {
+    if (typeof Joints !== 'undefined' && Joints.closeDockPrompt) Joints.closeDockPrompt();
     const hit = down.hit; const top = App.doc.items.find((x) => x.id === hit.id);
     if (!top || isStepMod(top)) { down = null; Viewer.controls.enabled = true; return; }
     if (top.locked) {
@@ -772,7 +773,8 @@ const Interact = (() => {
         }
       }
     }
-    moving = { ids, before: App.snapshot(), start: hit.point.clone(), planeZ, t0: new Map(ids.map((it) => [it.id, Model.tNumeric(it)])), box0: Actions.selBox(ids.map((it) => it.id)), joint };
+    const dockActive = !joint && ids.length === 1 && ids[0].role !== 'hole' && !App.ctx && Snap.beginDockDrag ? Snap.beginDockDrag(ids[0].id) : false;
+    moving = { ids, before: App.snapshot(), start: hit.point.clone(), planeZ, t0: new Map(ids.map((it) => [it.id, Model.tNumeric(it)])), box0: Actions.selBox(ids.map((it) => it.id)), joint, dockActive, dock: null };
     Viewer.canvas.style.cursor = 'grabbing';
     Viewer.clearHover();
   }
@@ -835,7 +837,27 @@ const Interact = (() => {
     let dx = p.x - moving.start.x, dy = p.y - moving.start.y;
     if (grid) { dx = Math.round(dx / grid) * grid; dy = Math.round(dy / grid) * grid; }
     if (e.altKey) { if (Math.abs(dx) > Math.abs(dy)) dy = 0; else dx = 0; }
-    const mag = e.ctrlKey || e.metaKey || e.altKey || !moving.box0 || moving.box0.isEmpty() ? (Snap.clear(), null) : Snap.bodies(moving.box0, [dx, dy], moving.ids.map((it) => it.id), moving.box0.min.z);
+    const magOff = e.ctrlKey || e.metaKey || e.altKey;
+    let dock = null;
+    if (moving.dockActive) {
+      if (!magOff && Snap.updateDockDrag) dock = Snap.updateDockDrag(moving.ids[0], moving.t0.get(moving.ids[0].id), [dx, dy], e.clientX, e.clientY);
+      else if (Snap.setDockVisible) Snap.setDockVisible(false);
+    }
+    moving.dock = dock;
+    if (dock) {
+      const it = moving.ids[0];
+      const Pb = Model.parentWorld(App.doc, it.id);
+      const Lb = Pb.clone().invert().multiply(dock.worldMatrix);
+      Model.setFromMatrix(it, Lb);
+      Viewer.updateNode(it.id, { matrix: Model.localMatrix(it) });
+      if (typeof Joints !== 'undefined' && Joints.syncFixed) Joints.syncFixed(App.doc, { live: true });
+      if (!moveLabel) { moveLabel = h('div', { class: 'dimlabel live' }); $('#overlay').append(moveLabel); }
+      moveLabel.textContent = dock.label;
+      moveLabel.style.left = e.clientX - r.left + 'px'; moveLabel.style.top = e.clientY - r.top - 54 + 'px';
+      App.emit('doc'); Handles.rebuild(); liveRebuild();
+      return;
+    }
+    const mag = magOff || !moving.box0 || moving.box0.isEmpty() ? (Snap.clear(), null) : Snap.bodies(moving.box0, [dx, dy], moving.ids.map((it) => it.id), moving.box0.min.z);
     if (mag) { dx = round(mag.d[0], 4); dy = round(mag.d[1], 4); }
     for (const it of moving.ids) {
       const t0 = moving.t0.get(it.id);
@@ -913,11 +935,26 @@ const Interact = (() => {
     }
     if (moving) {
       const m = moving; moving = null;
+      const dock = m.dock || null;
       if (moveLabel) { moveLabel.remove(); moveLabel = null; }
+      if (Snap.endDockDrag) Snap.endDockDrag();
       Snap.clear();
       Viewer.canvas.style.cursor = '';
-      if (App.snapshot() !== m.before) { App.pushUndo(m.ids && m.ids.length > 1 ? 'Objekte verschoben' : 'Verschoben', m.before); App.touched(); }
-      if (m.child) App.refreshSelectionVisuals();
+      if (dock && typeof Joints !== 'undefined' && Joints.onDockDrop) {
+        const sp = Viewer.toScreen(dock.target.p);
+        const rc = Viewer.canvas.getBoundingClientRect();
+        const pt = { x: rc.left + sp.x, y: rc.top + sp.y };
+        const isSimple = typeof ViewPrefs !== 'undefined' && ViewPrefs.simple;
+        if (isSimple && Joints.canConnect && Joints.canConnect(dock.target.id, dock.source.id).ok) {
+          Joints.onDockDrop(dock, pt, { before: m.before });
+        } else {
+          if (App.snapshot() !== m.before) { App.pushUndo('Eingerastet', m.before); App.touched(); }
+          Joints.onDockDrop(dock, pt);
+        }
+      } else {
+        if (App.snapshot() !== m.before) { App.pushUndo(m.ids && m.ids.length > 1 ? 'Objekte verschoben' : 'Verschoben', m.before); App.touched(); }
+        if (m.child) App.refreshSelectionVisuals();
+      }
       down = null; Viewer.controls.enabled = true; return;
     }
     if (down && !down.handle) {
@@ -939,6 +976,7 @@ const Interact = (() => {
     if (moving) {
       moving = null;
       if (moveLabel) { moveLabel.remove(); moveLabel = null; }
+      if (Snap.endDockDrag) Snap.endDockDrag();
       Snap.clear();
       Viewer.canvas.style.cursor = '';
     }
@@ -1103,11 +1141,14 @@ const Interact = (() => {
     e.preventDefault(); e.stopImmediatePropagation();
     // Ziehen anhalten, Wert per Tastatur übernehmen
     const handleWas = down && down.handle;
+    if (!handleWas && Snap.endDockDrag) Snap.endDockDrag();
     down = { kbd: true }; if (!handleWas) moving = null;
     DragInput.open({ fields: sp.fields, apply: (v) => { sp.apply(v); down = null; Viewer.controls.enabled = true; } }, e.key === ',' ? '0,' : e.key, lastPtr);
   }
   function finishMove(m) {
     if (moveLabel) { moveLabel.remove(); moveLabel = null; }
+    if (Snap.endDockDrag) Snap.endDockDrag();
+    Snap.clear();
     Viewer.canvas.style.cursor = '';
     if (App.snapshot() !== m.before) { App.pushUndo(m.ids && m.ids.length > 1 ? 'Objekte verschoben' : 'Verschoben', m.before); App.touched(); }
     else App.emit('doc');

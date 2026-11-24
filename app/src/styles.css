@@ -293,6 +293,17 @@ body.sketching .viewcube,body.sketching .view-btns{display:none}
 .dimlabel input{width:64px;border:0;outline:none;background:transparent;font:inherit;color:inherit;padding:0}
 .dimlabel.editing{background:var(--surface);border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 .snaptip{pointer-events:none!important;position:absolute;transform:translate(10px,-26px);background:var(--ink);color:var(--surface);border-radius:4px;padding:3px 6px;font:600 11.5px/1 var(--font-cond);letter-spacing:.04em;pointer-events:none;white-space:nowrap}
+.dock-pop{position:fixed;z-index:26;min-width:220px;max-width:280px;background:var(--surface);border:1px solid var(--line-strong);border-radius:11px;box-shadow:var(--shadow-2);padding:8px;display:grid;gap:6px}
+.dock-pop-head{font:700 13px/1.2 var(--font);color:var(--ink);padding:2px 4px 0}
+.dock-pop-sub{font:500 11.5px/1.3 var(--font);color:var(--muted);padding:0 4px 2px}
+.dock-pop-list{display:grid;gap:4px}
+.dock-opt{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:7px 9px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;font:600 12.5px/1.2 var(--font)}
+.dock-opt:hover{border-color:var(--accent-line);background:var(--surface-2)}
+.dock-opt.primary{border-color:var(--accent);background:var(--accent-soft);color:var(--ink)}
+.dock-opt svg{width:15px;height:15px;flex:none;color:var(--accent)}
+.dock-opt span{display:grid;gap:1px}
+.dock-opt small{font:400 11px/1.2 var(--font);color:var(--muted)}
+body.tablet .dock-opt{min-height:44px}
 .numentry{position:absolute;transform:translate(14px,14px);display:flex;gap:4px;background:var(--surface);border:1px solid var(--accent);border-radius:7px;box-shadow:var(--shadow-2);padding:4px}
 .numentry label{display:flex;align-items:center;gap:4px;font:600 11.5px/1 var(--font-cond);color:var(--muted);letter-spacing:.04em;padding-left:4px}
 .numentry input{width:62px;border:1px solid var(--line);border-radius:5px;padding:3px 5px;font:500 13px/1 var(--font-mono);outline:none;background:var(--surface)}

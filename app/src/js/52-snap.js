@@ -51,9 +51,9 @@ const Snap = (() => {
   // Punkt (Welt) auf einer Fläche einrasten. Ergebnis: { point: Vector3 (Welt), label } oder null
   // opt.normal: Normale am Treffpunkt (Welt), opt.flatOnly: nur ebene Flächen
   function onFace(id, faceIdx, pointWorld, opt = {}) {
-    if (!on()) { clear(); return null; }
-    const D = faceData(id, faceIdx); if (!D) { clear(); return null; }
-    if (D.curved) return opt.flatOnly ? (clear(), null) : onCurved(id, D, pointWorld, opt.normal);
+    if (!on()) { clearSnap(); return null; }
+    const D = faceData(id, faceIdx); if (!D) { clearSnap(); return null; }
+    if (D.curved) return opt.flatOnly ? (clearSnap(), null) : onCurved(id, D, pointWorld, opt.normal);
     const W = Model.worldMatrix(App.doc, id), WI = W.clone().invert();
     const F = D.F, o = new THREE.Vector3(...F.o), X = new THREE.Vector3(...F.x), Y = new THREE.Vector3(...F.y);
     const lp = pointWorld.clone().applyMatrix4(WI).sub(o);
@@ -78,7 +78,7 @@ const Snap = (() => {
       if (by) { v = by.v; guides.push([toW(x0, v), toW(x1, v)]); }
       if (bx || by) label = bx && by && bx.name === by.name ? bx.name : [bx && bx.name, by && by.name].filter(Boolean).join(' · ');
     }
-    if (!label) { clear(); return null; }
+    if (!label) { clearSnap(); return null; }
     const point = toW(u, v);
     show(guides, label, point);
     return { point, label, uv: [u, v] };
@@ -190,13 +190,13 @@ const Snap = (() => {
       const q = L.fix ? evalP(g, s, v) : evalP(g, v, t), d = q.distanceTo(lp);
       if (d < tol && (!pick[L.fix] || d < pick[L.fix].d)) pick[L.fix] = { L, d };
     }
-    if (!pick[0] && !pick[1]) { clear(); return null; }
+    if (!pick[0] && !pick[1]) { clearSnap(); return null; }
     let ss = s, tt = t;
     for (let it = 0; it < 4; it++) {
       if (pick[0]) { const v = lineAt(pick[0].L, tt); if (v !== null) ss = v; }
       if (pick[1]) { const v = lineAt(pick[1].L, ss); if (v !== null) tt = v; }
     }
-    if (!inside(g, ss, tt)) { clear(); return null; }
+    if (!inside(g, ss, tt)) { clearSnap(); return null; }
     const p = evalP(g, ss, tt), n = evalN(g, ss, tt);
     const ci = D.info;
     if (ci.t === 'CYLINDRE' && ci.axis && ci.r) {     // Zylinder: genau auf den Radius
@@ -239,7 +239,7 @@ const Snap = (() => {
   // ---------- Körper zueinander (Grundebene, Z bleibt) ----------
   // box0: Weltbox des bewegten Körpers am Anfang, d: [dx, dy] gewünschte Verschiebung, ids: bewegte Körper
   function bodies(box0, d, ids, z) {
-    if (!on()) { clear(); return null; }
+    if (!on()) { clearSnap(); return null; }
     const others = App.doc.items.filter((it) => !ids.includes(it.id) && !it.hidden).map((it) => Actions.worldBox(it.id)).filter((b) => b && !b.isEmpty());
     const lo = [box0.min.x + d[0], box0.min.y + d[1]], hi = [box0.max.x + d[0], box0.max.y + d[1]];
     const mid = [(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2];
@@ -279,11 +279,527 @@ const Snap = (() => {
         guides.push(k === 0 ? [new THREE.Vector3(best.v, s0, z), new THREE.Vector3(best.v, s1, z)] : [new THREE.Vector3(s0, best.v, z), new THREE.Vector3(s1, best.v, z)]);
       }
     }
-    if (!names.length) { clear(); return null; }
+    if (!names.length) { clearSnap(); return null; }
     // Hilfslinien bei der neuen Lage zeichnen
     const label = [...new Set(names)].join(' · ');
     show(guides, label, new THREE.Vector3((lo[0] + hi[0]) / 2 + res[0] - d[0], hi[1] + res[1] - d[1], z));
     return { d: res, label };
+  }
+
+  // ---------- Andock-Punkte an Teilen & Einrasten beim Ziehen (BG-08) ----------
+  const DOCK_TOL = 24; // Fangbereich in Bildpunkten
+  const DOCK_NORM_LIBS = {
+    stdScrew: 'Schraubenachse',
+    stdPin: 'Stiftachse',
+    stdNut: 'Muttermitte',
+    stdWasher: 'Scheibenmitte',
+    stdBearing: 'Lagermitte',
+    stdSleeve: 'Buchsenachse',
+  };
+  let dockDrag = null;
+
+  function dockRotBetween(from, to) {
+    const a = from.clone().normalize(), b = to.clone().normalize();
+    const dot = a.dot(b);
+    if (dot > 1 - 1e-10) return new THREE.Quaternion();
+    if (dot < -1 + 1e-10) {
+      const ref = Math.abs(a.x) < 0.8 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+      return new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3().crossVectors(a, ref).normalize(), Math.PI);
+    }
+    return new THREE.Quaternion().setFromUnitVectors(a, b);
+  }
+  function dockCanonicalX(n) {
+    const nv = new THREE.Vector3(...n).normalize();
+    let ref = Math.abs(nv.z) < 0.9 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(1, 0, 0);
+    let x = ref.clone().addScaledVector(nv, -ref.dot(nv));
+    if (x.lengthSq() < 1e-9) {
+      ref = new THREE.Vector3(0, 1, 0);
+      x = ref.clone().addScaledVector(nv, -ref.dot(nv));
+    }
+    return x.normalize();
+  }
+  function dockBasisUV(n) {
+    const u = dockCanonicalX(n.toArray());
+    const v = new THREE.Vector3().crossVectors(n, u).normalize();
+    return [u, v];
+  }
+  function normPartOf(it, doc) {
+    if (!it) return null;
+    if (it.kind === 'part' && it.p && DOCK_NORM_LIBS[it.p.lib]) return { item: it, lib: it.p.lib, M: new THREE.Matrix4() };
+    if (it.kind === 'ref' && it.p && it.p.docId && Model.resolveDoc) {
+      const refDoc = Model.resolveDoc(it.p.docId);
+      const act = refDoc ? Model.activeItems(refDoc).filter((x) => x && !x.hidden && x.role !== 'hole') : [];
+      if (act.length === 1 && act[0].kind === 'part' && act[0].p && DOCK_NORM_LIBS[act[0].p.lib]) {
+        return { item: act[0], lib: act[0].p.lib, M: Model.localMatrix(act[0]) };
+      }
+    }
+    return null;
+  }
+
+  function dockPoints(id, doc = App.doc) {
+    const f = Model.find(doc, id);
+    const it = f && f.item;
+    if (!it || it.hidden || it.role === 'hole' || (typeof App !== 'undefined' && App.mergedInto && App.mergedInto(it.id))) return [];
+    const r = App.results.get(id);
+    const data = r && r.data;
+    if (!data) return [];
+
+    const W = Model.worldMatrix(doc, id);
+    const faces = data.faces || [];
+    const edges = data.edges || [];
+    const bb = data.bbox;
+    const bc = Array.isArray(bb) && bb.length >= 6
+      ? new THREE.Vector3((bb[0] + bb[3]) / 2, (bb[1] + bb[4]) / 2, (bb[2] + bb[5]) / 2)
+      : new THREE.Vector3();
+
+    const planes = [];
+    for (let i = 0; i < faces.length; i++) {
+      const fi = faces[i];
+      if (!fi || fi.t !== 'PLANE' || !Array.isArray(fi.c) || !Array.isArray(fi.n)) continue;
+      const nv = new THREE.Vector3(...fi.n);
+      if (nv.lengthSq() < 1e-12) continue;
+      planes.push({ idx: i, c: new THREE.Vector3(...fi.c), n: nv.normalize() });
+    }
+    const cyls = [];
+    for (let i = 0; i < faces.length; i++) {
+      const fi = faces[i];
+      if (!fi || fi.t !== 'CYLINDRE' || !Array.isArray(fi.axis)) continue;
+      const d = new THREE.Vector3(fi.axis[3], fi.axis[4], fi.axis[5]);
+      if (d.lengthSq() < 1e-12) continue;
+      d.normalize();
+      const l = new THREE.Vector3(fi.axis[0], fi.axis[1], fi.axis[2]);
+      if (Array.isArray(fi.c)) {
+        const fc = new THREE.Vector3(...fi.c);
+        l.addScaledVector(d, fc.sub(l).dot(d));
+      }
+      cyls.push({ idx: i, l, d, r: Number(fi.r) || 0 });
+    }
+
+    const out = [];
+    const addPt = (pt) => {
+      const lp = new THREE.Vector3(...pt.localP);
+      const ln = new THREE.Vector3(...pt.localN).normalize();
+      const ld = pt.localDir ? new THREE.Vector3(...pt.localDir).normalize() : null;
+      out.push({
+        id,
+        kind: pt.kind,
+        sub: pt.sub || null,
+        name: pt.name,
+        primary: !!pt.primary,
+        pri: pt.pri,
+        localP: [round(lp.x, 6), round(lp.y, 6), round(lp.z, 6)],
+        localN: [round(ln.x, 9), round(ln.y, 9), round(ln.z, 9)],
+        localDir: ld ? [round(ld.x, 9), round(ld.y, 9), round(ld.z, 9)] : null,
+        p: lp.clone().applyMatrix4(W),
+        n: ln.clone().transformDirection(W).normalize(),
+        dir: ld ? ld.clone().transformDirection(W).normalize() : null,
+        r: pt.r || 0,
+        faceIdx: pt.faceIdx != null ? pt.faceIdx : null,
+        planeFaceIdx: pt.planeFaceIdx != null ? pt.planeFaceIdx : null,
+        cylFaceIdx: pt.cylFaceIdx != null ? pt.cylFaceIdx : null,
+        edgeIdx: pt.edgeIdx != null ? pt.edgeIdx : null,
+      });
+    };
+
+    const matchPlane = (pt, nHint) => {
+      let best = null, bd = 0.08;
+      for (const pl of planes) {
+        if (nHint && Math.abs(pl.n.dot(nHint)) < 0.99) continue;
+        const d = Math.abs(pt.clone().sub(pl.c).dot(pl.n));
+        if (d < bd) { bd = d; best = pl; }
+      }
+      return best;
+    };
+    const matchCyl = (pt, nHint) => {
+      let best = null, bd = 0.15;
+      for (const cy of cyls) {
+        if (Math.abs(cy.d.dot(nHint)) < 0.99) continue;
+        const v = pt.clone().sub(cy.l);
+        const perp = v.addScaledVector(cy.d, -v.dot(cy.d)).length();
+        if (perp < bd) { bd = perp; best = cy; }
+      }
+      return best;
+    };
+
+    // 1. Primärer Andock-Punkt bei Normteilen (z. B. Schraube: Kopfauflage auf Schaftachse)
+    const np = normPartOf(it, doc);
+    if (np) {
+      const lp = new THREE.Vector3(0, 0, 0).applyMatrix4(np.M);
+      const ln = new THREE.Vector3(0, 0, -1).transformDirection(np.M).normalize();
+      const pl = matchPlane(lp, ln);
+      const cy = matchCyl(lp, ln);
+      addPt({
+        kind: 'hole',
+        sub: np.lib === 'stdScrew' ? 'shaft' : 'norm',
+        name: DOCK_NORM_LIBS[np.lib],
+        primary: true,
+        pri: 0,
+        localP: lp.toArray(),
+        localN: ln.toArray(),
+        r: cy ? cy.r : 0,
+        faceIdx: pl ? pl.idx : (cy ? cy.idx : null),
+        planeFaceIdx: pl ? pl.idx : null,
+        cylFaceIdx: cy ? cy.idx : null,
+      });
+    }
+
+    // 2. Lochmitten (Kreiskanten & Zylinderachsen)
+    const holes = [];
+    for (let i = 0; i < edges.length; i++) {
+      const g = edges[i];
+      if (!g || g.t !== 'CIRCLE' || !Array.isArray(g.c) || !Array.isArray(g.n) || !(g.r > 0.2)) continue;
+      if (Number.isFinite(g.l) && g.l < Math.PI * g.r * 0.95) continue; // kleine Ecken-Bögen überspringen
+      const cc = new THREE.Vector3(...g.c);
+      let cn = new THREE.Vector3(...g.n);
+      if (cn.lengthSq() < 1e-12) continue;
+      cn.normalize();
+      const pl = matchPlane(cc, cn);
+      if (pl) cn = pl.n.clone();
+      else if (cc.clone().sub(bc).dot(cn) < 0) cn.negate();
+      const cy = matchCyl(cc, cn);
+      const dup = holes.find((h0) => h0.lp.distanceTo(cc) < 0.15 && Math.abs(h0.ln.dot(cn)) > 0.99);
+      if (dup) {
+        if (pl && dup.planeFaceIdx == null) { dup.planeFaceIdx = pl.idx; dup.ln.copy(pl.n); }
+        if (cy && dup.cylFaceIdx == null) dup.cylFaceIdx = cy.idx;
+        continue;
+      }
+      holes.push({
+        lp: cc, ln: cn, r: g.r,
+        faceIdx: pl ? pl.idx : (cy ? cy.idx : null),
+        planeFaceIdx: pl ? pl.idx : null,
+        cylFaceIdx: cy ? cy.idx : null,
+        edgeIdx: i,
+      });
+    }
+    for (const cy of cyls) {
+      const hasSame = out.some((x) => x.cylFaceIdx === cy.idx) || holes.some((h0) => h0.cylFaceIdx === cy.idx);
+      if (hasSame) continue;
+      const cn = cy.l.clone().sub(bc).dot(cy.d) >= 0 ? cy.d.clone() : cy.d.clone().negate();
+      holes.push({ lp: cy.l.clone(), ln: cn, r: cy.r, faceIdx: cy.idx, planeFaceIdx: null, cylFaceIdx: cy.idx, edgeIdx: null });
+    }
+    let holeCount = out.length;
+    for (const h0 of holes) {
+      if (holeCount >= 40) break;
+      if (out.some((x) => new THREE.Vector3(...x.localP).distanceTo(h0.lp) < 0.15 && Math.abs(new THREE.Vector3(...x.localN).dot(h0.ln)) > 0.99)) {
+        const ex = out.find((x) => new THREE.Vector3(...x.localP).distanceTo(h0.lp) < 0.15 && Math.abs(new THREE.Vector3(...x.localN).dot(h0.ln)) > 0.99);
+        if (ex && ex.planeFaceIdx == null && h0.planeFaceIdx != null) ex.planeFaceIdx = h0.planeFaceIdx;
+        if (ex && ex.cylFaceIdx == null && h0.cylFaceIdx != null) ex.cylFaceIdx = h0.cylFaceIdx;
+        continue;
+      }
+      addPt({
+        kind: 'hole',
+        name: 'Lochmitte',
+        pri: 0,
+        localP: h0.lp.toArray(),
+        localN: h0.ln.toArray(),
+        r: h0.r,
+        faceIdx: h0.faceIdx,
+        planeFaceIdx: h0.planeFaceIdx,
+        cylFaceIdx: h0.cylFaceIdx,
+        edgeIdx: h0.edgeIdx,
+      });
+      holeCount++;
+    }
+
+    // 3. Flächenmitten (ebene Flächen)
+    let faceCount = 0;
+    for (const pl of planes) {
+      if (faceCount >= 24) break;
+      if (out.some((x) => x.kind === 'hole' && new THREE.Vector3(...x.localP).distanceTo(pl.c) < 0.15 && Math.abs(new THREE.Vector3(...x.localN).dot(pl.n)) > 0.99)) continue;
+      addPt({
+        kind: 'face',
+        name: 'Flächenmitte',
+        pri: 1,
+        localP: pl.c.toArray(),
+        localN: pl.n.toArray(),
+        faceIdx: pl.idx,
+        planeFaceIdx: pl.idx,
+      });
+      faceCount++;
+    }
+
+    // 4. Kantenmitten (gerade Kanten > 2 mm, längste zuerst)
+    const lineCands = [];
+    for (let i = 0; i < edges.length; i++) {
+      const g = edges[i];
+      if (!g || g.t !== 'LINE' || !Array.isArray(g.a) || !Array.isArray(g.b) || !Array.isArray(g.m)) continue;
+      const a = new THREE.Vector3(...g.a), b = new THREE.Vector3(...g.b), m = new THREE.Vector3(...g.m);
+      const dv = b.clone().sub(a), len = dv.length();
+      if (len <= 2) continue;
+      if (out.some((x) => new THREE.Vector3(...x.localP).distanceTo(m) < 0.15)) continue;
+      const dir = dv.divideScalar(len);
+      // Normale aus anliegenden ebenen Flächen bestimmen
+      const adjN = new THREE.Vector3();
+      for (const pl of planes) {
+        if (Math.abs(pl.n.dot(dir)) > 0.05) continue;
+        if (Math.abs(m.clone().sub(pl.c).dot(pl.n)) < 0.08) adjN.add(pl.n);
+      }
+      adjN.addScaledVector(dir, -adjN.dot(dir));
+      if (adjN.lengthSq() < 1e-6) {
+        adjN.copy(m).sub(bc);
+        adjN.addScaledVector(dir, -adjN.dot(dir));
+        if (adjN.lengthSq() < 1e-6) adjN.copy(dockCanonicalX(dir.toArray()));
+      }
+      adjN.normalize();
+      lineCands.push({ len, m, adjN, dir, edgeIdx: i });
+    }
+    lineCands.sort((p, q) => q.len - p.len);
+    let edgeCount = 0;
+    for (const lc of lineCands) {
+      if (edgeCount >= 24) break;
+      if (out.some((x) => new THREE.Vector3(...x.localP).distanceTo(lc.m) < 0.15)) continue;
+      addPt({
+        kind: 'edge',
+        name: 'Kantenmitte',
+        pri: 2,
+        localP: lc.m.toArray(),
+        localN: lc.adjN.toArray(),
+        localDir: lc.dir.toArray(),
+        edgeIdx: lc.edgeIdx,
+      });
+      edgeCount++;
+    }
+    return out;
+  }
+
+  function clearDockActive() {
+    if (!dockDrag) return;
+    for (const o of dockDrag.activeObjs) { Viewer.groups.overlay.remove(o); Viewer.disposeFat(o); }
+    dockDrag.activeObjs = [];
+  }
+  function clearDockMarkers() {
+    if (!dockDrag) return;
+    clearDockActive();
+    for (const o of dockDrag.markerObjs) { Viewer.groups.overlay.remove(o); Viewer.disposeFat(o); }
+    dockDrag.markerObjs = [];
+  }
+  function pushCirclePos(pos, c, n, rad, segs = 16) {
+    const [u, v] = dockBasisUV(n);
+    for (let i = 0; i < segs; i++) {
+      const a1 = (i / segs) * Math.PI * 2, a2 = ((i + 1) / segs) * Math.PI * 2;
+      const p1 = c.clone().addScaledVector(u, Math.cos(a1) * rad).addScaledVector(v, Math.sin(a1) * rad);
+      const p2 = c.clone().addScaledVector(u, Math.cos(a2) * rad).addScaledVector(v, Math.sin(a2) * rad);
+      pos.push(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z);
+    }
+  }
+  function pushCrossPos(pos, c, n, size) {
+    const [u, v] = dockBasisUV(n);
+    const a1 = c.clone().addScaledVector(u, -size), b1 = c.clone().addScaledVector(u, size);
+    const a2 = c.clone().addScaledVector(v, -size), b2 = c.clone().addScaledVector(v, size);
+    pos.push(a1.x, a1.y, a1.z, b1.x, b1.y, b1.z, a2.x, a2.y, a2.z, b2.x, b2.y, b2.z);
+  }
+  function renderDockMarkers() {
+    clearDockMarkers();
+    if (!dockDrag || !dockDrag.targetPts.length) return;
+    const holeRingPos = [], holeDotPos = [], facePos = [], edgePos = [];
+    for (const t of dockDrag.targetPts) {
+      const ps = Math.max(0.15, Viewer.pixelSizeAt(t.p));
+      if (t.kind === 'hole') {
+        const rad = t.r > 0.3 ? Math.min(Math.max(t.r, 4.5 * ps), 18 * ps) : 6 * ps;
+        pushCirclePos(holeRingPos, t.p, t.n, rad, 18);
+        holeDotPos.push(t.p.x, t.p.y, t.p.z, t.p.x, t.p.y, t.p.z + 0.001);
+      } else if (t.kind === 'face') {
+        const s = 5.5 * ps;
+        const [u, v] = dockBasisUV(t.n);
+        const p0 = t.p.clone().addScaledVector(u, s), p1 = t.p.clone().addScaledVector(v, s);
+        const p2 = t.p.clone().addScaledVector(u, -s), p3 = t.p.clone().addScaledVector(v, -s);
+        facePos.push(p0.x, p0.y, p0.z, p1.x, p1.y, p1.z, p1.x, p1.y, p1.z, p2.x, p2.y, p2.z, p2.x, p2.y, p2.z, p3.x, p3.y, p3.z, p3.x, p3.y, p3.z, p0.x, p0.y, p0.z);
+      } else {
+        pushCrossPos(edgePos, t.p, t.n, 4 * ps);
+      }
+    }
+    const addLayer = (arr, col, width, order, opacity = 0.88) => {
+      if (!arr.length) return;
+      const obj = Viewer.makeFat(arr, col, width, { depthTest: false, order, opacity });
+      obj.visible = dockDrag.visible;
+      Viewer.groups.overlay.add(obj);
+      dockDrag.markerObjs.push(obj);
+    };
+    addLayer(holeRingPos, '#0c7a70', 2, 38, 0.9);
+    addLayer(holeDotPos, '#0c7a70', 6, 39, 0.95);
+    addLayer(facePos, '#1971c2', 1.8, 38, 0.85);
+    addLayer(edgePos, '#f08c00', 1.8, 38, 0.82);
+    Viewer.requestRender();
+  }
+  function renderDockActive(t) {
+    clearDockActive();
+    if (!dockDrag || !t) return;
+    const ps = Math.max(0.15, Viewer.pixelSizeAt(t.p));
+    const ringPos = [];
+    const rad = t.kind === 'hole' && t.r > 0.3 ? Math.min(Math.max(t.r * 1.15, 7 * ps), 22 * ps) : 8 * ps;
+    pushCirclePos(ringPos, t.p, t.n, rad, 24);
+    const dot = Viewer.makeFat([t.p.x, t.p.y, t.p.z, t.p.x, t.p.y, t.p.z + 0.001], '#e0457b', 10, { depthTest: false, order: 42 });
+    const ring = Viewer.makeFat(ringPos, '#e0457b', 3, { depthTest: false, order: 41 });
+    const axLen = Math.max(8, 22 * ps);
+    const a0 = t.p.clone().addScaledVector(t.n, -axLen * 0.5), a1 = t.p.clone().addScaledVector(t.n, axLen);
+    const axis = Viewer.makeFat([a0.x, a0.y, a0.z, a1.x, a1.y, a1.z], '#e0457b', 2, { depthTest: false, dashed: true, dashSize: 1.6, gapSize: 1.2, order: 41 });
+    Viewer.groups.overlay.add(ring, dot, axis);
+    dockDrag.activeObjs.push(ring, dot, axis);
+    Viewer.requestRender();
+  }
+
+  function beginDockDrag(draggedId) {
+    endDockDrag();
+    if (!on() || !draggedId || !App.doc) return false;
+    const sourcePts = dockPoints(draggedId, App.doc);
+    if (!sourcePts.length) return false;
+    const excl = new Set([draggedId]);
+    if (typeof Joints !== 'undefined' && Joints.downstream) {
+      for (const d of Joints.downstream(App.doc, draggedId)) excl.add(d.b);
+    }
+    const targetPts = [];
+    for (const it of App.doc.items || []) {
+      if (excl.has(it.id) || it.hidden || it.role === 'hole' || (App.mergedInto && App.mergedInto(it.id))) continue;
+      for (const pt of dockPoints(it.id, App.doc)) targetPts.push(pt);
+    }
+    if (!targetPts.length) return false;
+    dockDrag = {
+      draggedId,
+      W0: Model.worldMatrix(App.doc, draggedId),
+      sourcePts,
+      targetPts,
+      active: null,
+      markerObjs: [],
+      activeObjs: [],
+      visible: true,
+    };
+    renderDockMarkers();
+    return true;
+  }
+
+  function pickSourceFor(target, Wtent, sourcePts) {
+    const scoreCand = (s) => {
+      const sp = new THREE.Vector3(...s.localP).applyMatrix4(Wtent);
+      const sn = new THREE.Vector3(...s.localN).transformDirection(Wtent).normalize();
+      const dist = sp.distanceTo(target.p);
+      const oppose = sn.dot(target.n); // -1 = zeigt genau in die Gegenrichtung (ideal zum Aufsetzen)
+      if (target.kind === 'hole') {
+        if (s.kind === 'hole') {
+          const primBonus = s.primary ? -1000 : 0;
+          const dirPen = oppose < -0.5 ? 0 : 120;
+          const rDiff = target.r > 0 && s.r > 0 ? Math.abs(s.r - target.r) * 2 : 0;
+          return primBonus + dirPen + rDiff + dist * 0.05;
+        }
+        if (s.kind === 'face') return 400 + (oppose + 1) * 80 + dist * 0.05;
+        return 700 + dist * 0.05;
+      }
+      if (target.kind === 'face') {
+        if (s.primary) return -400 + (oppose + 1) * 50 + dist * 0.05;
+        if (s.kind === 'face') return (oppose + 1) * 120 + dist * 0.05;
+        if (s.kind === 'hole') return 250 + (oppose + 1) * 100 + dist * 0.05;
+        return 600 + dist * 0.05;
+      }
+      if (s.kind === 'edge') {
+        const sDir = s.localDir ? new THREE.Vector3(...s.localDir).transformDirection(Wtent).normalize() : null;
+        const par = sDir && target.dir ? 1 - Math.abs(sDir.dot(target.dir)) : 1;
+        return par * 80 + dist * 0.05;
+      }
+      if (s.primary) return 150 + dist * 0.05;
+      if (s.kind === 'face') return 220 + (oppose + 1) * 40 + dist * 0.05;
+      return 350 + dist * 0.05;
+    };
+    let best = null, bestSc = Infinity;
+    for (const s of sourcePts) {
+      const sc = scoreCand(s);
+      if (sc < bestSc) { bestSc = sc; best = s; }
+    }
+    return best;
+  }
+
+  function setDockVisible(vis) {
+    if (!dockDrag) return;
+    const v = !!vis;
+    if (dockDrag.visible !== v) {
+      dockDrag.visible = v;
+      for (const o of dockDrag.markerObjs) o.visible = v;
+    }
+    if (!v) {
+      dockDrag.active = null;
+      clearDockActive();
+      clearSnap();
+    }
+    Viewer.requestRender();
+  }
+
+  function updateDockDrag(item, t0, dXY, clientX, clientY) {
+    if (!dockDrag || !on() || !item) return null;
+    if (!dockDrag.visible) setDockVisible(true);
+    const PW = Model.parentWorld(App.doc, item.id);
+    const Ltent = Model.localMatrix({ t: { ...t0, x: t0.x + dXY[0], y: t0.y + dXY[1] } });
+    const Wtent = PW.clone().multiply(Ltent);
+    const rect = Viewer.canvas.getBoundingClientRect();
+    const mx = clientX - rect.left, my = clientY - rect.top;
+    const cam = Viewer.activeCamera || Viewer.camera;
+    const orthoDir = Viewer.ortho ? new THREE.Vector3(0, 0, 1).applyQuaternion(cam.quaternion).normalize() : null;
+
+    let best = null;
+    for (const t of dockDrag.targetPts) {
+      const st = Viewer.toScreen(t.p);
+      if (st.behind) continue;
+      const s = pickSourceFor(t, Wtent, dockDrag.sourcePts);
+      if (!s) continue;
+      const sp = new THREE.Vector3(...s.localP).applyMatrix4(Wtent);
+      const ss = Viewer.toScreen(sp);
+      const dCursor = Math.hypot(st.x - mx, st.y - my);
+      const dSrc = ss.behind ? Infinity : Math.hypot(st.x - ss.x, st.y - ss.y);
+      const dPx = Math.min(dCursor, dSrc);
+      if (dPx >= DOCK_TOL) continue;
+      const viewDir = orthoDir || cam.position.clone().sub(t.p).normalize();
+      const facing = t.n.dot(viewDir);
+      const backPenalty = facing < -0.1 ? 18 : 0;
+      const kindBonus = t.kind === 'hole' && s.kind === 'hole' ? -4 : t.kind === 'face' && s.kind === 'face' ? -2 : 0;
+      const score = dPx + t.pri * 5 + backPenalty + kindBonus;
+      if (score < DOCK_TOL + 8 && (!best || score < best.score)) {
+        best = { t, s, score };
+      }
+    }
+
+    if (!best) {
+      dockDrag.active = null;
+      clearDockActive();
+      clearSnap();
+      return null;
+    }
+
+    const { t, s } = best;
+    const W0 = dockDrag.W0;
+    const R0 = new THREE.Matrix4().extractRotation(W0);
+    const sN0 = new THREE.Vector3(...s.localN).transformDirection(W0).normalize();
+    const zTarget = t.n.clone().negate();
+    const Q = dockRotBetween(sN0, zTarget);
+    const R = new THREE.Matrix4().makeRotationFromQuaternion(Q).multiply(R0);
+    const sP = new THREE.Vector3(...s.localP).applyMatrix4(R);
+    const pos = t.p.clone().sub(sP);
+    const worldMatrix = R.clone().setPosition(pos);
+
+    const Wa = Model.worldMatrix(App.doc, t.id);
+    const xBl = dockCanonicalX(s.localN);
+    const xAw = xBl.clone().transformDirection(R).normalize();
+    const xAl = xAw.clone().transformDirection(Wa.clone().invert());
+    xAl.addScaledVector(new THREE.Vector3(...t.localN).normalize(), -xAl.dot(new THREE.Vector3(...t.localN).normalize()));
+    if (xAl.lengthSq() < 1e-9) xAl.copy(dockCanonicalX(t.localN));
+    xAl.normalize();
+
+    const label = 'Andocken: ' + t.name;
+    renderDockActive(t);
+    show([], label, t.p);
+    dockDrag.active = {
+      target: t,
+      source: s,
+      worldMatrix,
+      xAl: xAl.toArray().map((v) => round(v, 9)),
+      xBl: xBl.toArray().map((v) => round(v, 9)),
+      label,
+    };
+    return dockDrag.active;
+  }
+
+  function endDockDrag() {
+    if (!dockDrag) return;
+    clearDockMarkers();
+    clearSnap();
+    dockDrag = null;
+    Viewer.requestRender();
   }
 
   // ---------- Anzeige ----------
@@ -301,8 +817,16 @@ const Snap = (() => {
     Viewer.requestRender();
   }
   function clearGuides() { if (guideObj) { Viewer.groups.overlay.remove(guideObj); Viewer.disposeFat(guideObj); guideObj = null; } }
-  function clear() { clearGuides(); if (tip) { tip.remove(); tip = null; } Viewer.requestRender(); }
+  function clearSnap() { clearGuides(); if (tip) { tip.remove(); tip = null; } Viewer.requestRender(); }
+  function clear() { clearSnap(); clearDockMarkers(); }
   // Flächendaten vorab holen (z. B. beim Überfahren)
   function prime(id, faceIdx) { faceData(id, faceIdx); }
-  return { onFace, bodies, clear, prime, get label() { return tip ? tip.textContent : null; } };
+  return {
+    onFace, bodies, clear, prime,
+    dockPoints, beginDockDrag, updateDockDrag, setDockVisible, endDockDrag,
+    get label() { return tip ? tip.textContent : null; },
+    get dockCount() { return dockDrag ? dockDrag.targetPts.length : 0; },
+    get dockTargets() { return dockDrag ? dockDrag.targetPts.map((t) => ({ id: t.id, kind: t.kind, name: t.name, p: t.p.toArray(), n: t.n.toArray() })) : []; },
+    get activeDock() { return dockDrag ? dockDrag.active : null; },
+  };
 })();

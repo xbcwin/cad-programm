@@ -2152,6 +2152,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Lösen, Rückgängig, Suche & Hilfe**: „Festsetzen lösen“ gibt das Teil wieder frei, `Strg+Z` stellt den Zustand wieder her, und Befehlssuche sowie Hilfetexte (`subAssembly`, `groundPart`) sind vorhanden.
 - [ ] **Von Hand**: Im Browser eine Unterbaugruppe mit mehreren Teilen einsetzen, im 3D-Bild mit der Maus verschieben, ein Grundteil per Rechtsklick festsetzen und danach mit einem weiteren Teil per „Verbinden: fest“ verknüpfen.
 
+## Andock-Punkte und Einrasten beim Ziehen (Auto [A-090], BG-08)
+
+- [x] **Andock-Punkte sichtbar & Schraube in Bohrung (Einfach)**: Beim Ziehen einer geneigten M3-Schraube zeigen sich Loch-, Flächen- und Kantenmitten an der gelochten Platte; über der Bohrung rastet die Schraubenachse deckungsgleich in der Bohrungsachse ein (`z = 6 mm`), legt im Modus „Einfach“ automatisch eine feste Verbindung an und wandert beim Verschieben der Platte mit.
+- [x] **Verbindungs-Auswahl im Profi-Modus**: Beim Loslassen einer Schraube auf der zweiten Bohrung erscheint `#dock-joint-pop` mit „Fest“, „Zylindrisch“, „Drehen“ und „Nur einrasten“; Wahl von „Zylindrisch“ legt die zylindrische Verbindung deckungsgleich auf der Bohrungsachse an.
+- [x] **Flächenmitte, „Nur einrasten“ & Strg**: Ein Quader rastet auf der Flächenmitte der Platte ein, bietet „Eben“ und „Nur einrasten“ an, legt bei „Nur einrasten“ keine Verbindung an und ignoriert bei gedrücktem `Strg` die Andock-Punkte; Hilfetext `dockSnap` ist vorhanden und es treten keine Seitenfehler auf.
+- [ ] **Von Hand**: Im Browser eine Baugruppe mit gelochter Platte und Normschraube öffnen, die Schraube per Maus über verschiedene Löcher und Kanten ziehen, die farbigen Andock-Punkte und das Einrasten prüfen und im Modus „Profi“ verschiedene Verbindungsarten ausprobieren.
+
 ## Fehler melden
 
 ```

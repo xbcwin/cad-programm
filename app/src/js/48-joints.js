@@ -661,6 +661,7 @@ const Joints = (() => {
         tid: (fi && fi.tid) || spec.tid || null,
         idx,
         frac: fracOf(cArr, bbox),
+        ...(spec.dock ? { dock: true } : {}),
       };
     }
     const pt = spec.c || spec.p || spec.point;
@@ -714,13 +715,13 @@ const Joints = (() => {
     let needSync = false;
     for (const j of fjs) {
       if (j.mode === 'face') {
-        const mA = matchFaceRef(j.a, j.refA);
+        const mA = !j.refA.dock ? matchFaceRef(j.a, j.refA) : null;
         if (mA) {
           const dc = Math.hypot(mA.c[0] - j.refA.c[0], mA.c[1] - j.refA.c[1], mA.c[2] - j.refA.c[2]);
           const dn = Math.hypot(mA.n[0] - j.refA.n[0], mA.n[1] - j.refA.n[1], mA.n[2] - j.refA.n[2]);
           if (dc > 1e-4 || dn > 1e-4 || (mA.tid && mA.tid !== j.refA.tid)) refUpdates.push({ jid: j.id, side: 'refA', m: mA });
         }
-        const mB = matchFaceRef(j.b, j.refB);
+        const mB = !j.refB.dock ? matchFaceRef(j.b, j.refB) : null;
         if (mB) {
           const dc = Math.hypot(mB.c[0] - j.refB.c[0], mB.c[1] - j.refB.c[1], mB.c[2] - j.refB.c[2]);
           const dn = Math.hypot(mB.n[0] - j.refB.n[0], mB.n[1] - j.refB.n[1], mB.n[2] - j.refB.n[2]);
@@ -773,7 +774,8 @@ const Joints = (() => {
       relQ = r9(qa.clone().invert().multiply(qb).toArray());
     }
     let jid = null;
-    App.change('Verbindung angelegt', (doc) => {
+    const changeOpts = opts.before ? { before: opts.before } : undefined;
+    App.change(opts.label || 'Verbindung angelegt', (doc) => {
       const b = top(B.id, doc); if (!b) return false;
       doc.joints = doc.joints || [];
       jid = uid('j');
@@ -799,7 +801,7 @@ const Joints = (() => {
         max: 0,
       });
       syncFixed(doc);
-    });
+    }, changeOpts);
     if (jid) drawSelectedJoint();
     return jid ? { ok: true, id: jid } : { ok: false, msg: 'Die Verbindung ließ sich nicht anlegen.' };
   }
@@ -1111,6 +1113,173 @@ const Joints = (() => {
       if (Object.keys(patch).length) setState(jid, patch);
     }
     return jid ? { ok: true, id: jid } : { ok: false, msg: 'Die Stift-im-Langloch-Verbindung ließ sich nicht anlegen.' };
+  }
+
+  function canConnect(aId, bId, doc = App.doc) {
+    const A = top(aId, doc), B = top(bId, doc);
+    if (!A || !B || A.id === B.id) return { ok: false, msg: 'Bitte zwei verschiedene Teile wählen.' };
+    const why = refuse(doc, A, B); if (why) return { ok: false, msg: why };
+    if (B.locked) return { ok: false, msg: T('asm.groundedJointErr', { name: Model.label(B) }) };
+    if (connected(doc, A.id, B.id)) return { ok: false, msg: `„${Model.label(A)}“ und „${Model.label(B)}“ sind schon miteinander verbunden – ein weiteres ergäbe einen Kreis.` };
+    if (list(doc).some((j) => j.b === B.id)) return { ok: false, msg: `„${Model.label(B)}“ wird schon von einer Verbindung bewegt.` };
+    return { ok: true, A, B };
+  }
+
+  function dockOptions(dock) {
+    if (!dock || !dock.target || !dock.source) return [];
+    const t = dock.target, s = dock.source;
+    const opts = [
+      { kind: 'fixed', label: 'Fest', icon: 'lock', desc: 'Starr an diesem Punkt', primary: true },
+    ];
+    if (t.kind === 'hole' && s.kind === 'hole') {
+      opts.push(
+        { kind: 'cyl', label: 'Zylindrisch', icon: 'hinge', desc: 'Drehen und schieben' },
+        { kind: 'rot', label: 'Drehen', icon: 'rotate', desc: 'Dreht um die Achse' }
+      );
+    } else if (t.kind === 'face' && s.kind === 'face') {
+      opts.push({ kind: 'planar', label: 'Eben', icon: 'plane', desc: 'Gleitet auf der Fläche' });
+    } else {
+      opts.push({ kind: 'ball', label: 'Kugel', icon: 'sphere', desc: 'Dreht frei um den Punkt' });
+    }
+    opts.push({ kind: 'none', label: 'Nur einrasten', icon: 'close', desc: 'Ohne Verbindung' });
+    return opts;
+  }
+
+  function applyDockJoint(dock, kind, opts = {}) {
+    if (!dock || !dock.target || !dock.source) return { ok: false, msg: 'Kein Andock-Punkt gewählt.' };
+    if (kind === 'none') return { ok: true, id: null, kind: 'none' };
+    const { target, source } = dock;
+    const chk = canConnect(target.id, source.id);
+    if (!chk.ok) return { ok: false, msg: chk.msg };
+    const Wb = Model.worldMatrix(App.doc, source.id);
+    const sP = new THREE.Vector3(...source.localP).applyMatrix4(Wb);
+    const sN = new THREE.Vector3(...source.localN).transformDirection(Wb).normalize();
+    if (kind === 'fixed') {
+      const aSpec = {
+        id: target.id,
+        kind: 'face',
+        c: target.localP,
+        n: target.localN,
+        x: dock.xAl,
+        ...(target.kind === 'face' && target.faceIdx != null ? { faceIdx: target.faceIdx } : { dock: true }),
+      };
+      const bSpec = {
+        id: source.id,
+        kind: 'face',
+        c: source.localP,
+        n: source.localN,
+        x: dock.xBl,
+        ...(source.kind === 'face' && !source.primary && source.faceIdx != null ? { faceIdx: source.faceIdx } : { dock: true }),
+      };
+      return addFixed(aSpec, bSpec, opts);
+    }
+    if (kind === 'cyl') {
+      return addCylindrical(
+        { id: target.id, o: target.p.toArray(), d: target.n.toArray(), what: target.name },
+        { id: source.id, o: sP.toArray(), d: sN.toArray(), what: source.name },
+        opts
+      );
+    }
+    if (kind === 'rot') {
+      return add(target.id, source.id, target.p.toArray(), target.n.toArray(), { kind: 'rot', min: -180, max: 180, ...opts });
+    }
+    if (kind === 'planar') {
+      return addPlanar(
+        { id: target.id, p: target.p.toArray(), n: target.n.toArray(), what: target.name },
+        { id: source.id, p: sP.toArray(), n: sN.toArray(), what: source.name },
+        opts
+      );
+    }
+    if (kind === 'ball') {
+      return addBall(
+        { id: target.id, p: target.p.toArray(), what: target.name },
+        { id: source.id, p: sP.toArray(), what: source.name },
+        opts
+      );
+    }
+    return { ok: false, msg: 'Unbekannte Verbindungsart.' };
+  }
+
+  let dockPop = null;
+  function closeDockPrompt() {
+    if (!dockPop) return;
+    document.removeEventListener('pointerdown', dockPop.outside, true);
+    window.removeEventListener('keydown', dockPop.key, true);
+    dockPop.el.remove();
+    dockPop = null;
+  }
+  function onDockDrop(dock, screenPt, opts = {}) {
+    closeDockPrompt();
+    if (!dock || !dock.target || !dock.source) return { snapped: false, connected: false };
+    const chk = canConnect(dock.target.id, dock.source.id);
+    if (!chk.ok) {
+      UI.toast(`Eingerastet (${dock.target.name}) – Verbindung nicht möglich: ${chk.msg}`, { icon: 'info', ms: 3400 });
+      return { snapped: true, connected: false };
+    }
+    const { A, B } = chk;
+    if (typeof ViewPrefs !== 'undefined' && ViewPrefs.simple) {
+      const res = applyDockJoint(dock, 'fixed', { before: opts.before, label: 'Eingerastet & verbunden' });
+      if (res && res.ok) {
+        UI.toast(`Eingerastet & fest verbunden: „${Model.label(B)}“ an „${Model.label(A)}“ (${dock.target.name}).`, { icon: 'check', ms: 3400 });
+        return { snapped: true, connected: true, kind: 'fixed', id: res.id };
+      }
+      if (res && res.msg) UI.toast(res.msg, { icon: 'info' });
+      return { snapped: true, connected: false };
+    }
+
+    const choices = dockOptions(dock);
+    const el = h('div', { class: 'dock-pop', id: 'dock-joint-pop', role: 'dialog', 'aria-label': 'Verbindung wählen', 'data-help': 'dockSnap' });
+    el.append(
+      h('div', { class: 'dock-pop-head' }, 'Verbindung anlegen?'),
+      h('div', { class: 'dock-pop-sub' }, `${dock.target.name}: ${Model.label(B)} → ${Model.label(A)}`)
+    );
+    const listEl = h('div', { class: 'dock-pop-list' });
+    const pick = (opt) => {
+      closeDockPrompt();
+      if (opt.kind === 'none') {
+        UI.toast(`Nur eingerastet (${dock.target.name}, ohne Verbindung).`, { icon: 'check', ms: 2400 });
+        return;
+      }
+      const res = applyDockJoint(dock, opt.kind);
+      if (res && res.ok) {
+        UI.toast(`${opt.label} verbunden: „${Model.label(B)}“ an „${Model.label(A)}“.`, { icon: 'check', ms: 3200 });
+      } else if (res && res.msg) {
+        UI.toast(res.msg, { kind: 'bad' });
+      }
+    };
+    for (const opt of choices) {
+      const btn = h('button', {
+        type: 'button',
+        id: 'dock-opt-' + opt.kind,
+        class: 'dock-opt' + (opt.primary ? ' primary' : ''),
+        dataset: { kind: opt.kind },
+      });
+      btn.innerHTML = icon(opt.icon);
+      btn.append(h('span', null, h('b', null, opt.label), h('small', null, opt.desc)));
+      btn.onclick = () => pick(opt);
+      listEl.append(btn);
+    }
+    el.append(listEl);
+    document.body.append(el);
+    const r = el.getBoundingClientRect();
+    const sx = screenPt && Number.isFinite(screenPt.x) ? screenPt.x : innerWidth / 2;
+    const sy = screenPt && Number.isFinite(screenPt.y) ? screenPt.y : innerHeight / 2;
+    el.style.left = clamp(sx + 16, 8, innerWidth - r.width - 8) + 'px';
+    el.style.top = clamp(sy - 16, 8, innerHeight - r.height - 8) + 'px';
+
+    const outside = (ev) => { if (dockPop && !dockPop.el.contains(ev.target)) closeDockPrompt(); };
+    const key = (ev) => {
+      if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); closeDockPrompt(); }
+      else if (ev.key === 'Enter') {
+        ev.preventDefault(); ev.stopPropagation();
+        const def = choices.find((x) => x.kind === 'fixed') || choices[0];
+        if (def) pick(def);
+      }
+    };
+    dockPop = { el, outside, key };
+    setTimeout(() => document.addEventListener('pointerdown', outside, true), 0);
+    window.addEventListener('keydown', key, true);
+    return { snapped: true, connected: false, prompt: true };
   }
 
   // ---------- Interaktives Wählen im Bild ----------
@@ -2494,8 +2663,8 @@ const Joints = (() => {
       relinkFixed();
       drawSelectedJoint();
     });
-    App.on('docLoaded', stopPick);
-    App.on('mode', stopPick);
+    App.on('docLoaded', () => { stopPick(); closeDockPrompt(); });
+    App.on('mode', () => { stopPick(); closeDockPrompt(); });
   }
 
   return {
@@ -2516,6 +2685,11 @@ const Joints = (() => {
     addPlanar,
     addBall,
     addSlot,
+    canConnect,
+    dockOptions,
+    applyDockJoint,
+    onDockDrop,
+    closeDockPrompt,
     setAngle,
     setState,
     setKind,
@@ -2550,6 +2724,7 @@ const Joints = (() => {
     isFixedPart,
     fixedJointOf,
     get picking() { return !!pickState; },
+    get dockPromptOpen() { return !!dockPop; },
     get selected() { return selJoint; },
     get list() { return list(); },
     get playing() { return anim ? { jid: anim.jid, a: anim.a, st: anim.st } : null; },
