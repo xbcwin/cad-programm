@@ -2,9 +2,9 @@
 
 Starten (im Ordner cad-programm):
     cd app && python3 -m http.server 8765 &
-    python3 tests/klicktest.py
+    python3 tests/klicktest.py [--browser chromium|firefox|webkit] [Stichwort ...]
 
-Braucht Python mit Playwright (pip install playwright, dann playwright install chromium).
+Braucht Python mit Playwright (pip install playwright, dann playwright install chromium firefox webkit).
 Ausgabe: je Testpunkt OK, FEHLER oder VON HAND (lässt sich nicht automatisch beurteilen).
 """
 import json, math, os, sys, tempfile, zipfile
@@ -12,7 +12,45 @@ from playwright.sync_api import sync_playwright
 
 URL = os.environ.get('TRACERY_URL', 'http://localhost:8765/')
 ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist']
+VALID_BROWSERS = ('chromium', 'firefox', 'webkit')
+_PW = None
+BROWSER_NAME = 'chromium'
 results = []
+
+
+def parse_cli(argv):
+    browser = os.environ.get('TRACERY_BROWSER', 'chromium').strip().lower() or 'chromium'
+    only = []
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a == '--browser':
+            if i + 1 >= len(argv):
+                print('Fehler: --browser erwartet chromium, firefox oder webkit.', file=sys.stderr)
+                sys.exit(2)
+            browser = argv[i + 1].strip().lower()
+            i += 2
+            continue
+        if a.startswith('--browser='):
+            browser = a.split('=', 1)[1].strip().lower()
+            i += 1
+            continue
+        only.append(a)
+        i += 1
+    if browser not in VALID_BROWSERS:
+        print(f'Fehler: Unbekannter Browser "{browser}" (erlaubt: {", ".join(VALID_BROWSERS)}).', file=sys.stderr)
+        sys.exit(2)
+    return browser, only
+
+
+def launch_browser(pw, name='chromium'):
+    if name == 'chromium':
+        return pw.chromium.launch(args=ARGS)
+    if name == 'firefox':
+        return pw.firefox.launch(firefox_user_prefs={'webgl.force-enabled': True, 'webgl.disabled': False})
+    if name == 'webkit':
+        return pw.webkit.launch()
+    raise ValueError(f'Unbekannter Browser: {name}')
 
 
 def report(name, ok, note=''):
@@ -16214,6 +16252,91 @@ def t_a077_nur_geandertes_rechnen(p):
     return [ok1, ok2, ok3, ok4, ok5, ok6]
 
 
+# ---------- [A-079] Läuft in Firefox und Safari (PL-09) ----------
+def t_a079_firefox_webkit(p):
+    ok_cli = (
+        parse_cli(['--browser', 'firefox', '[A-079]']) == ('firefox', ['[A-079]'])
+        and parse_cli(['--browser=webkit']) == ('webkit', [])
+        and parse_cli(['abc']) == ('chromium', ['abc'])
+    )
+    expected_vol = 40 * 30 * 20 - math.pi * (5 ** 2) * 20
+
+    def run_engine(engine):
+        if _PW is None:
+            return False, False
+        br = launch_browser(_PW, engine)
+        bp = None
+        try:
+            bp = Page(br)
+            ua = bp.pg.evaluate("() => navigator.userAgent")
+            ua_ok = ('Firefox' in ua) if engine == 'firefox' else ('AppleWebKit' in ua and 'Chrome' not in ua)
+            start_ok = bp.pg.locator('.start').count() == 1 and bp.pg.get_by_text('Leeres Projekt').count() > 0
+            bp.empty()
+            bp.ev("""
+            App.change('Quader mit Bohrung', (d) => {
+              const box = Model.newItem('box', { w: 40, d: 30, h: 20 }, { name: 'Quader' });
+              const hole = Model.newItem('cylinder', { d: 10, h: 30 }, { name: 'Bohrung', role: 'hole' });
+              hole.t.z = -5;
+              d.items.push(box, hole);
+            });
+            """)
+            warte_rechnen(bp, 40)
+            app_errs1 = bp.ev("return App.errors")
+            meas1 = bp.ev("return Mass.measure()")
+            parts1 = (meas1 or {}).get('parts') or []
+            vol1 = parts1[0].get('volume', 0) if len(parts1) == 1 else 0
+            ok_vol = (
+                ua_ok and start_ok and not bp.errs and len(app_errs1) == 0
+                and len(parts1) == 1 and abs(vol1 - expected_vol) < 2.0
+            )
+
+            # Tastenkürzel, fehlende Folder-API und Datei-Dialog/Download
+            bp.pg.locator('canvas').first.focus(); bp.pg.keyboard.press('o'); bp.wait(300)
+            o1 = bp.ev("return Viewer.ortho")
+            bp.pg.keyboard.press('o'); bp.wait(300)
+            o2 = bp.ev("return Viewer.ortho")
+            bp.ev("App.change('Umbenennen', d => { d.items[0].name = 'Block-79'; })"); bp.wait(200)
+            bp.pg.locator('canvas').first.focus(); bp.pg.keyboard.press('Control+z'); bp.wait(400)
+            n_undo = bp.ev("return App.doc.items[0].name")
+            bp.pg.keyboard.press('Control+y'); bp.wait(400)
+            n_redo = bp.ev("return App.doc.items[0].name")
+            folder_sup = bp.ev("return Start.folderSupported()")
+
+            with bp.pg.expect_download(timeout=15000) as dl:
+                bp.ev("Start.saveFile()")
+            dl_name = dl.value.suggested_filename
+            dl_path = os.path.join(tempfile.gettempdir(), f'tracery-a079-{engine}.tracery.json')
+            dl.value.save_as(dl_path)
+
+            bp.ev("Start.newProject(true)"); bp.wait(1500)
+            with bp.pg.expect_file_chooser(timeout=10000) as fc:
+                bp.ev("Start.openFile()")
+            fc.value.set_files(dl_path)
+            warte_rechnen(bp, 40)
+
+            app_errs2 = bp.ev("return App.errors")
+            meas2 = bp.ev("return Mass.measure()")
+            parts2 = (meas2 or {}).get('parts') or []
+            vol2 = parts2[0].get('volume', 0) if len(parts2) == 1 else 0
+            ok_compat = (
+                o1 is True and o2 is False
+                and n_undo == 'Quader' and n_redo == 'Block-79'
+                and folder_sup is False
+                and dl_name.endswith('.tracery.json')
+                and not bp.errs and len(app_errs2) == 0
+                and len(parts2) == 1 and abs(vol2 - expected_vol) < 2.0
+            )
+            return ok_vol, ok_compat
+        finally:
+            if bp:
+                bp.close()
+            br.close()
+
+    wk_vol, wk_compat = run_engine('webkit')
+    ff_vol, ff_compat = run_engine('firefox')
+    return [ok_cli, wk_vol, wk_compat, ff_vol, ff_compat]
+
+
 def t_f11241334(p):
     p.empty()
     ids = p.ev("""return App.change('x', d => {
@@ -16972,6 +17095,7 @@ TESTS = [
     ('[A-075] Projekt-Tabs: zwei Projekte, unabhängiges Rückgängig, Schließen mit Nachfrage, Einfach & Profi, Neuladen & Hilfe', t_a075_projekt_tabs),
     ('[A-078] Mehrere Rechen-Helfer: 4 unabhängige Körper mit Bohrungsmustern verteilt & ergebnisgleich, Einstellung (Profi), kein Nachladen', t_a078_mehrere_rechenhelfer),
     ('[A-077] Große Modelle: nur neu rechnen, was sich geändert hat (Fingerabdruck & Kern-Zähler)', t_a077_nur_geandertes_rechnen),
+    ('[A-079] Läuft in Firefox und Safari: Quader mit Bohrung in WebKit & Firefox, Volumen ohne App.errors', t_a079_firefox_webkit),
     ('[F-11241334] Volltest-Reparatur: Veraltete mergedInto-Bezüge beim Löschen ohne Seitenfehler in Verlauf & Eigenschaften', t_f11241334),
     ('[A-081] Englische Oberfläche: texte-en.json Schlüsselgleichheit / Einstellungen / Sketch / Fallback / Browser-Sprache', t_a081_englische_oberflaeche),
     ('[A-080] Am Tablet bedienbar: iPad Pro 11 (44 px Knöpfe, einklappbare Panels, Antippen, 2-Finger-Drehen/Zoomen, Einfach & Profi)', t_a080_tablet),
@@ -17110,26 +17234,32 @@ TESTS = [
 ]
 
 if __name__ == '__main__':
-    only = sys.argv[1:]
+    BROWSER_NAME, only = parse_cli(sys.argv[1:])
+    if BROWSER_NAME != 'chromium':
+        print(f'Browser: {BROWSER_NAME}', flush=True)
     with sync_playwright() as pw:
         PW_DEVICES = pw.devices
-        b = pw.chromium.launch(args=ARGS)
-        ab = int(os.environ.get('TRACERY_AB', '0'))   # nach einem Abbruch: die ersten N Durchläufe überspringen
-        teil = os.environ.get('TRACERY_TEIL', '')     # „i/n“: nur jeden n-ten Test ab Nummer i (Volltest in Teilen, gleichzeitig)
-        ti, tn = (int(x) for x in teil.split('/')) if teil else (0, 1)
-        for nr, (name, fn) in enumerate(TESTS):
-            if nr < ab or nr % tn != ti:
-                continue
-            if only and not any(o.lower() in name.lower() or o.lower() in fn.__name__.lower() for o in only):
-                continue
+        _PW = pw
+        b = launch_browser(pw, BROWSER_NAME)
+        try:
+            ab = int(os.environ.get('TRACERY_AB', '0'))   # nach einem Abbruch: die ersten N Durchläufe überspringen
+            teil = os.environ.get('TRACERY_TEIL', '')     # „i/n“: nur jeden n-ten Test ab Nummer i (Volltest in Teilen, gleichzeitig)
+            ti, tn = (int(x) for x in teil.split('/')) if teil else (0, 1)
+            for nr, (name, fn) in enumerate(TESTS):
+                if nr < ab or nr % tn != ti:
+                    continue
+                if only and not any(o.lower() in name.lower() or o.lower() in fn.__name__.lower() for o in only):
+                    continue
 
-            def wrap(p, fn=fn):
-                r = fn(p)
-                if isinstance(r, list):
-                    return all(r), ' '.join('✓' if x else '✗' for x in r)
-                return r
-            check(name, wrap, b)
-        b.close()
+                def wrap(p, fn=fn):
+                    r = fn(p)
+                    if isinstance(r, list):
+                        return all(r), ' '.join('✓' if x else '✗' for x in r)
+                    return r
+                check(name, wrap, b)
+        finally:
+            _PW = None
+            b.close()
     bad = [r for r in results if r[1] == 'FEHLER']
     print(f'\n{len(results)} Tests: {sum(r[1] == "OK" for r in results)} OK, {len(bad)} Fehler, {sum(r[1] == "VON HAND" for r in results)} von Hand')
     sys.exit(1 if bad else 0)
