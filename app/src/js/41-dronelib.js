@@ -37,26 +37,26 @@ const DroneLib = (() => {
     const out = [];
     const part = (lib, p, name, g, extra = {}) => ({ buy: true, kind: 'part', p: { lib, ...p }, name, massG: g == null ? '' : g, color: COL[cat], ...extra });
     const box = (lib, name, l, b, hgt, g, extra = {}) => part(lib, { w: b, d: l, h: hgt }, name, g, extra);
-    if (cat === 'motor') for (const m of motors()) out.push(part('buyMotor', { d: m.d, h: m.h, lk: m.circle, size: motorScrew(m) }, 'Motor ' + m.stator, m.g, { color: COL.motor, info: m.sheet ? `${m.src}: ${fmt(m.g, 1)} g` + (m.est ? ' (Höhe geschätzt)' : '') : 'Höhe geschätzt, Gewicht bitte eintragen' }));
-    if (cat === 'akku') for (const a of akkus()) out.push(box('buyBattery', a.name, a.l, a.w, a.h, a.g, { info: a.produkt ? `${a.produkt}: ${fmt(a.g, 0)} g` : `ca. ${a.g} g` }));
+    if (cat === 'motor') for (const m of motors()) out.push(part('buyMotor', { d: m.d, h: m.h, lk: m.circle, size: motorScrew(m) }, 'Motor ' + m.stator, m.g, { color: COL.motor, info: m.sheet ? `${m.src}: ${fmtFixed(m.g, 1)} g` + (m.est ? ' (Höhe geschätzt)' : '') : 'Höhe geschätzt, Gewicht bitte eintragen' }));
+    if (cat === 'akku') for (const a of akkus()) out.push(box('buyBattery', a.name, a.l, a.w, a.h, a.g, { info: a.produkt ? `${a.produkt}: ${fmtFixed(a.g, 0)} g` : `ca. ${a.g} g` }));
     if (cat === 'video') {
       for (const v of BUY_DATA.videosender || []) {
-        const info = { info: v.gewicht_g != null ? `${fmt(v.gewicht_g, 1)} g` + (v.unsicher ? ' (abgeleitet)' : '') : 'Gewicht bitte eintragen' };
+        const info = { info: v.gewicht_g != null ? `${fmtFixed(v.gewicht_g, 1)} g` + (v.unsicher ? ' (abgeleitet)' : '') : 'Gewicht bitte eintragen' };
         const t = videoShape(v);
         out.push(t.lib === 'buyVtx' ? part('buyVtx', { w: v.b_mm, d: v.l_mm, h: v.h_mm, a: t.a }, v.name, v.gewicht_g, info) : box(t.lib, v.name, v.l_mm, v.b_mm, v.h_mm, v.gewicht_g, info));
       }
-      for (const c of cams()) out.push(part('buyCamera', { w: c.w, d: 20, h: c.w }, `Kamera ${c.name} (analog)`, '', { info: `${fmt(c.w, 1)} mm breit, Gewicht eintragen` }));
+      for (const c of cams()) out.push(part('buyCamera', { w: c.w, d: 20, h: c.w }, `Kamera ${c.name} (analog)`, '', { info: `${fmtFixed(c.w, 1)} mm breit, Gewicht eintragen` }));
     }
     if (cat === 'funk') {
-      for (const v of BUY_DATA.empfaenger || []) out.push(box('buyPcb', v.name, v.l_mm, v.b_mm, v.h_mm, v.gewicht_g, { info: `${fmt(v.gewicht_g, 1)} g` }));
-      for (const v of BUY_DATA.gps || []) out.push(box('buyGps', v.name, v.l_mm, v.b_mm, v.h_mm, v.gewicht_g, { info: `${fmt(v.gewicht_g, 1)} g` }));
+      for (const v of BUY_DATA.empfaenger || []) out.push(box('buyPcb', v.name, v.l_mm, v.b_mm, v.h_mm, v.gewicht_g, { info: `${fmtFixed(v.gewicht_g, 1)} g` }));
+      for (const v of BUY_DATA.gps || []) out.push(box('buyGps', v.name, v.l_mm, v.b_mm, v.h_mm, v.gewicht_g, { info: `${fmtFixed(v.gewicht_g, 1)} g` }));
       // Antennen mit eigenen Maßen (Herstellerdaten folgen): Pilz für 5,8 GHz, Stab für Empfänger/Long Range
       out.push(part('buyAntenna', { L: 45, d: 3, form: 'pilz', kd: 14, kl: 12, conn: 'sma' }, 'Antenne Pilz (eigene Maße)', '', { info: 'Maße und Gewicht deiner Antenne eintragen' }));
       out.push(part('buyAntenna', { L: 80, d: 4, form: 'stab', kd: 4, kl: 1, conn: 'ufl' }, 'Antenne Stab (eigene Maße)', '', { info: 'Maße und Gewicht deiner Antenne eintragen' }));
     }
-    if (cat === 'action') for (const v of BUY_DATA.actioncam || []) out.push(box('buyActioncam', v.name, v.b_mm, v.l_mm, v.h_mm, v.gewicht_g, { info: `${fmt(v.gewicht_g, 1)} g` }));
+    if (cat === 'action') for (const v of BUY_DATA.actioncam || []) out.push(box('buyActioncam', v.name, v.b_mm, v.l_mm, v.h_mm, v.gewicht_g, { info: `${fmtFixed(v.gewicht_g, 1)} g` }));
     if (cat === 'klein') {
-      for (const v of BUY_DATA.stecker || []) out.push(box('buyPlug', v.name, v.l_mm, v.b_mm, v.h_mm, v.gewicht_g, { info: `ca. ${fmt(v.gewicht_g, 1)} g` }));
+      for (const v of BUY_DATA.stecker || []) out.push(box('buyPlug', v.name, v.l_mm, v.b_mm, v.h_mm, v.gewicht_g, { info: `ca. ${fmtFixed(v.gewicht_g, 1)} g` }));
       for (const v of BUY_DATA.kondensator || []) out.push(part('buyCap', { d: v.b_mm, h: v.l_mm }, 'Kondensator ' + v.name.replace(/^Panasonic /, ''), '', { info: 'Maße vom Hersteller, Gewicht eintragen' }));
     }
     return out;

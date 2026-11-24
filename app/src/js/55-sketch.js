@@ -1060,9 +1060,11 @@ const Sketch = (() => {
   function askDim(sp, clientX, clientY) {
     hideDimBox(); hideEntry();
     const cur = dimFind(sp);
-    const isLen = sp.k !== 'ang' && sp.k !== 'angLL' && sp.k !== 'n';
-    const rawNum = cur && !cur.ref ? cur.v : round(measureSpec(sp), 4);
-    const val = typeof rawNum === 'number' ? (isLen ? Units.fmtInput(rawNum) : fmt(rawNum, 4)) : rawNum;
+    const isAng = sp.k === 'ang' || sp.k === 'angLL';
+    const isLen = !isAng && sp.k !== 'n';
+    const rawNum = cur && !cur.ref ? cur.v : round(measureSpec(sp), 6);
+    const val = typeof rawNum === 'number' ? (isLen ? Units.fmtInput(rawNum) : sp.k === 'n' ? String(Math.round(rawNum)) : fmtFixed(rawNum, Math.max(4, FMT.angle))) : rawNum;
+    const orig = String(val);
     dimBox = h('div', { class: 'numentry dimask' });
     const inp = h('input', { type: 'text', value: val, 'aria-label': DIMLABEL(sp.k), spellcheck: 'false', autocomplete: 'off', style: { width: '120px' } });
     const lbl = DIMLABEL(sp.k) + (isLen && Units.key() !== 'mm' ? ' (' + Units.label() + ')' : '');
@@ -1070,7 +1072,7 @@ const Sketch = (() => {
     if (sp.k !== 'n' && !(cur && cur.ref)) {
       // Knopf „( )“: nur ablesen statt festlegen
       const rb = h('button', { type: 'button', class: 'dimlock', id: 'dim-ref', 'data-tip': 'Nur ablesen – das Maß zeigt den Wert, legt aber nichts fest', 'aria-label': 'Nur ablesen' }, '( )');
-      rb.onclick = () => { hideDimBox(); if (cur) { pushUndo(); cur.ref = true; cur.v = round(measureSpec(sp), 4); reapply(); render(); Panels.renderRight(); } else setRefDim(sp); };
+      rb.onclick = () => { hideDimBox(); if (cur) { pushUndo(); cur.ref = true; cur.v = round(measureSpec(sp), 6); reapply(); render(); Panels.renderRight(); } else setRefDim(sp); };
       dimBox.append(rb);
     }
     if (cur) {
@@ -1086,11 +1088,12 @@ const Sketch = (() => {
     grab(); setTimeout(grab, 0); setTimeout(grab, 60);
     const commit = () => {
       const raw = inp.value.trim(); if (!raw) { hideDimBox(); return; }
+      if (raw === orig && cur && !cur.ref) { hideDimBox(); Viewer.canvas.focus(); return; }
       // ein neuer Name wie „breite“ wird unter „Maße“ mit dem jetzigen Wert angelegt
       if (/^[A-Za-zÄÖÜäöüß_][A-Za-zÄÖÜäöüß_0-9]*$/.test(raw) && !/^pi$/i.test(raw) && isNaN(Model.num(raw, vars(), NaN))) {
-        const now = round(measureSpec(sp), 4);
+        const now = round(measureSpec(sp), 6);
         App.change(`Maß „${raw}“ angelegt`, (doc) => { doc.params.push({ id: uid('m'), name: raw, expr: now }); });
-        UI.toast(`Neuer Name „${raw}“ = ${isLen ? Units.fmtLenU(now, 2) : fmt(now, 2)} – zu finden links unter „Maße“.`, { icon: 'check' });
+        UI.toast(`Neuer Name „${raw}“ = ${isLen ? Units.fmtLenU(now) : isAng ? fmtAngleU(now) : fmt(now)} – zu finden links unter „Maße“.`, { icon: 'check' });
       }
       let v;
       if (isLen) {
@@ -3113,9 +3116,10 @@ const Sketch = (() => {
         const isF = typeof dm.v === 'string' && Model.isExpr(dm.v);
         const bad = !dm.ref && (isNaN(Model.num(dm.v, vars(), NaN)) || conflicts.has(dm.id));
         const pre = { d: 'Ø ', x: 'X ', y: 'Y ', r: 'R ' }[dm.k] || '';
-        const isLen = dm.k !== 'ang' && dm.k !== 'angLL' && dm.k !== 'n';
-        const unit = dm.k === 'ang' || dm.k === 'angLL' ? '°' : dm.k === 'n' ? ' Ecken' : (Units.key() !== 'mm' ? ' ' + Units.label() : '');
-        const valTxt = isLen ? Units.fmtLen(val, 2) : fmt(val, 2);
+        const isAng = dm.k === 'ang' || dm.k === 'angLL';
+        const isLen = !isAng && dm.k !== 'n';
+        const unit = isAng ? '°' : dm.k === 'n' ? ' Ecken' : (Units.key() !== 'mm' ? ' ' + Units.label() : '');
+        const valTxt = isLen ? Units.fmtLen(val) : isAng ? fmtAngle(val) : String(Math.round(val));
         const el = h('div', { class: 'skdim' + (bad ? ' bad' : '') + (dm.ref ? ' ref' : '') + (confFocusId === dm.id ? ' conf-focus' : ''), 'data-tip': bad ? 'Dieses Maß geht nicht auf – klicken zum Ändern' : dm.ref ? DIMLABEL(dm.k) + ' zum Ablesen – legt nichts fest, klicken zum Festlegen' : DIMLABEL(dm.k) + ' – klicken zum Ändern', dataset: { dim: dm.id } });
         el.innerHTML = dm.ref ? esc('(' + pre + valTxt + unit + ')') : (isF ? `<span class="fx">${esc(dm.v)}&nbsp;=</span>` : '') + esc(pre + valTxt + unit);
         $('#overlay').append(el); labels.push(el);
@@ -3136,9 +3140,10 @@ const Sketch = (() => {
           if (pos.line) lineObj(pos.line, '#e03131', 1.5, { dashed: true, opacity: 0.9, dash: 1.2, gap: 1.2 });
           const val = Model.num(pd.v, vars(), NaN);
           const pre = { d: 'Ø ', x: 'X ', y: 'Y ', r: 'R ' }[pd.k] || '';
-          const isLen = pd.k !== 'ang' && pd.k !== 'angLL' && pd.k !== 'n';
-          const unit = pd.k === 'ang' || pd.k === 'angLL' ? '°' : pd.k === 'n' ? ' Ecken' : (Units.key() !== 'mm' ? ' ' + Units.label() : '');
-          const valTxt = isFinite(val) ? (isLen ? Units.fmtLen(val, 2) : fmt(val, 2)) : String(pd.v);
+          const isAng = pd.k === 'ang' || pd.k === 'angLL';
+          const isLen = !isAng && pd.k !== 'n';
+          const unit = isAng ? '°' : pd.k === 'n' ? ' Ecken' : (Units.key() !== 'mm' ? ' ' + Units.label() : '');
+          const valTxt = isFinite(val) ? (isLen ? Units.fmtLen(val) : isAng ? fmtAngle(val) : String(Math.round(val))) : String(pd.v);
           const el = h('div', { class: 'skdim bad conf-pending' + (confFocusId === '_neu' ? ' conf-focus' : ''), 'data-tip': 'Neues widersprüchliches Maß – klicken zum Hervorheben', dataset: { dim: '_neu' } }, pre + valTxt + unit);
           $('#overlay').append(el); labels.push(el);
           const spx = Viewer.toScreen(toWorld(pos.p[0], pos.p[1]));
@@ -3219,8 +3224,12 @@ const Sketch = (() => {
             if (gd) lineObj(gd, acc, 1.3, { dashed: true, opacity: 0.85, dash: 1.4, gap: 1.2, order: 27 });
             const val = measureSpec(sp);
             const pre = { d: 'Ø ', x: 'X ', y: 'Y ', r: 'R ' }[dm.k] || '';
-            const unit = dm.k === 'ang' || dm.k === 'angLL' ? '°' : dm.k === 'n' ? ' Ecken' : '';
-            const el = h('div', { class: 'skdim prop', 'data-tip': 'Vorschlag: ' + DIMLABEL(dm.k), dataset: { propDim: dm.id } }, pre + fmt(isFinite(val) ? val : dm.v, 2) + unit);
+            const isAng = dm.k === 'ang' || dm.k === 'angLL';
+            const isLen = !isAng && dm.k !== 'n';
+            const unit = isAng ? '°' : dm.k === 'n' ? ' Ecken' : (Units.key() !== 'mm' ? ' ' + Units.label() : '');
+            const dv = isFinite(val) ? val : dm.v;
+            const valTxt = isFinite(dv) ? (isLen ? Units.fmtLen(dv) : isAng ? fmtAngle(dv) : String(Math.round(dv))) : String(dv);
+            const el = h('div', { class: 'skdim prop', 'data-tip': 'Vorschlag: ' + DIMLABEL(dm.k), dataset: { propDim: dm.id } }, pre + valTxt + unit);
             $('#overlay').append(el); labels.push(el);
             const spx = Viewer.toScreen(toWorld(pos.p[0], pos.p[1]));
             const br = el.getBoundingClientRect();
@@ -3309,7 +3318,7 @@ const Sketch = (() => {
           }
           if (focused) {
             const tag = it.kind === 'gap'
-              ? `Lücke ${Units.fmtLenU(it.dist, 3)}`
+              ? `Lücke ${Units.fmtLenFixedU(it.dist, 3)}`
               : it.kind === 'dup'
                 ? (it.partial ? 'Überlappende Linie' : ({ line: 'Doppelte Linie', arc: 'Doppelter Bogen', circle: 'Doppelter Kreis', rect: 'Doppeltes Rechteck' }[it.sub] || 'Doppeltes Element'))
                 : 'Offenes Ende';
@@ -3329,7 +3338,7 @@ const Sketch = (() => {
         const st = draftTan(), g = st ? tanArc(st, cur) : null;
         if (g) { lineObj(SK.arcPoints(st.p, g.m, cur), acc, 2.2); lineObj([g.c, st.p], acc, 1, { dashed: true, opacity: 0.55 }); label(`Bogen · R ${Units.fmtLenU(g.r, 2)}`, cur); }
         else if (st) { lineObj([st.p, cur], acc, 1.4, { dashed: true }); label('Tangentialer Bogen', cur); }
-      } else if (t === 'line') { const a = d.pts[d.pts.length - 1]; lineObj([a, cur], acc, 2.2); const L = SK.d2(a, cur); const ang = (Math.atan2(cur[1] - a[1], cur[0] - a[0]) * 180) / Math.PI; label(`${Units.fmtLenU(L, 2)} · ${fmt(ang, 1)}°`, [(a[0] + cur[0]) / 2, (a[1] + cur[1]) / 2]); }
+      } else if (t === 'line') { const a = d.pts[d.pts.length - 1]; lineObj([a, cur], acc, 2.2); const L = SK.d2(a, cur); const ang = (Math.atan2(cur[1] - a[1], cur[0] - a[0]) * 180) / Math.PI; label(`${Units.fmtLenU(L)} · ${fmtAngleU(ang)}`, [(a[0] + cur[0]) / 2, (a[1] + cur[1]) / 2]); }
       if (t === 'rect' && d.r3) { if (d.r3.length === 1) lineObj([d.r3[0], cur], acc, 2.2); else { const c = rect3Corners(d.r3[0], d.r3[1], cur); if (c) { lineObj([...c, c[0]], acc, 2.2); label(`${Units.fmtLen(SK.d2(c[0], c[1]), 2)} × ${Units.fmtLen(SK.d2(c[1], c[2]), 2)}`, cur); } } }
       else if (t === 'rect') { const q = rectDraft(d, cur), e = { type: 'rect', a: q.a, b: q.b }; for (const p of entPts(e)) lineObj(p, acc, 2.2); if (d.mid) lineObj([d.a, cur], acc, 1, { dashed: true }); label(`${Units.fmtLen(Math.abs(q.b[0] - q.a[0]), 2)} × ${Units.fmtLen(Math.abs(q.b[1] - q.a[1]), 2)}`, [(d.a[0] + cur[0]) / 2, (d.a[1] + cur[1]) / 2]); }
       if (t === 'ellipse') {
@@ -3342,7 +3351,7 @@ const Sketch = (() => {
       if (t === 'poly') { const r = SK.d2(d.c, cur); const e = { type: 'poly', c: d.c, r, n: S.polySides, rot: Math.atan2(cur[1] - d.c[1], cur[0] - d.c[0]) - Math.PI / 2 }; for (const p of entPts(e)) lineObj(p, acc, 2.2); label(`Ø ${Units.fmtLen(2 * r, 2)}`, cur); }
       if (t === 'arc' && d.ctr) {
         if (!d.s) { lineObj([d.ctr, cur], acc, 1.4, { dashed: true }); label(`R ${Units.fmtLen(SK.d2(d.ctr, cur), 2)}`, cur); }
-        else { const g = centerArc(d, cur); lineObj([d.ctr, d.s], acc, 1, { dashed: true }); if (g) { lineObj(SK.arcPoints(g.a, g.m, g.b), acc, 2.2); lineObj([d.ctr, g.b], acc, 1, { dashed: true }); label(`${fmt((g.sw * 180) / Math.PI, 1)}°`, cur); } }
+        else { const g = centerArc(d, cur); lineObj([d.ctr, d.s], acc, 1, { dashed: true }); if (g) { lineObj(SK.arcPoints(g.a, g.m, g.b), acc, 2.2); lineObj([d.ctr, g.b], acc, 1, { dashed: true }); label(fmtAngleU((g.sw * 180) / Math.PI), cur); } }
       }
       if (t === 'arc' && !d.tan && !d.ctr) { if (!d.b) lineObj([d.a, cur], acc, 1.4, { dashed: true }); else if (SK.arcInfo(d.a, cur, d.b)) { lineObj(SK.arcPoints(d.a, cur, d.b), acc, 2.2); const ai = SK.arcInfo(d.a, cur, d.b); label(`R ${Units.fmtLen(ai.r, 2)}`, cur); } }
       if (t === 'slot' && d.arcslot) {
@@ -3381,7 +3390,7 @@ const Sketch = (() => {
           if (plan.ok) {
             for (const cp of plan.copies) for (const it of cp.items) for (const p of entPts(it.ent)) lineObj(p, acc, 2.2, { dashed: true, order: 27 });
             const O = S.off || {};
-            const tags = [fmt(Math.abs(sd), 2) + ' mm'];
+            const tags = [Units.fmtLenU(Math.abs(sd))];
             if ((O.count || 1) > 1) tags.push(Math.round(O.count) + '×');
             if (O.both) tags.push('beidseitig');
             if (O.corners === 'round') tags.push('rund');
@@ -3815,7 +3824,7 @@ const Sketch = (() => {
   function describeDim(d, entsList) {
     const isAng = d.k === 'ang' || d.k === 'angLL';
     const num = Model.num(d.v, vars(), NaN);
-    const valTxt = isFinite(num) ? (isAng ? fmt(num, 2) + '°' : d.k === 'n' ? String(Math.round(num)) : Units.fmtLenU(num, 2)) : String(d.v);
+    const valTxt = isFinite(num) ? (isAng ? fmtAngleU(num) : d.k === 'n' ? String(Math.round(num)) : Units.fmtLenU(num)) : String(d.v);
     const exprPre = typeof d.v === 'string' && Model.isExpr(d.v) ? `${d.v} = ` : '';
     const label = `${DIMLABEL(d.k)} = ${exprPre}${valTxt}`;
     const names = [];
@@ -4032,7 +4041,7 @@ const Sketch = (() => {
       // Jedes eingetippte Maß wird fest (auch als Formel). Das Schloss löst es wieder.
       const dimField = (k, label, unit = 'mm', opts = {}) => {
         const dm = dimOf(sel.id, k);
-        const fld = UI.numField({ id: 'se-' + k, label, value: dm && !dm.ref ? dm.v : round(SK.measure(sel, k), 4), unit, min: opts.min, int: opts.int, onCommit: (v) => setDim(sel.id, k, v) });
+        const fld = UI.numField({ id: 'se-' + k, label, value: dm && !dm.ref ? dm.v : round(SK.measure(sel, k), 6), unit, min: opts.min, int: opts.int, onCommit: (v) => setDim(sel.id, k, v) });
         const box = fld.querySelector('.inp');
         if (dm && dm.ref) {
           const lk = h('button', { type: 'button', class: 'dimlock refmark', 'data-tip': 'Maß zum Ablesen – legt nichts fest. Klicken entfernt es.', 'aria-label': label + ': Maß zum Ablesen entfernen' }, '( )');
@@ -4061,7 +4070,7 @@ const Sketch = (() => {
         lf.onclick = () => pickFont(sel.id);
         f.append(h('div', { class: 'btn-row' }, lf));
         f.append(UI.selectField({ id: 'se-align', label: 'Ausrichtung', value: sel.align || 'l', options: [['l', 'Links'], ['m', 'Mitte'], ['r', 'Rechts']], onChange: (v) => upd((e) => { e.align = v; }) }));
-        if (!sel.on) f.append(UI.numField({ id: 'se-rot', label: 'Drehung', value: round(((sel.rot || 0) * 180) / Math.PI, 3), unit: '°', expr: false, onCommit: (v) => upd((e) => { e.rot = (v * Math.PI) / 180; }) }));
+        if (!sel.on) f.append(UI.numField({ id: 'se-rot', label: 'Drehung', value: round(((sel.rot || 0) * 180) / Math.PI, 6), unit: '°', expr: false, onCommit: (v) => upd((e) => { e.rot = (v * Math.PI) / 180; }) }));
         f.append(UI.numField({ id: 'se-sp', label: 'Zeichenabstand', value: sel.sp || 0, unit: 'mm', expr: false, onCommit: (v) => upd((e) => { e.sp = v; }) }));
         // entlang einer offenen Kurve der Skizze (Linie, Bogen, Spline)
         const curves = S.ents.filter((x) => x.type === 'line' || x.type === 'arc' || (x.type === 'spline' && !x.closed));
@@ -4103,12 +4112,12 @@ const Sketch = (() => {
       }
       else if (sel.type === 'ellipse') {
         f.append(dimField('w', 'Breite (Achse 1)', 'mm', { min: 0.01 }), dimField('h', 'Höhe (Achse 2)', 'mm', { min: 0.01 }));
-        f.append(UI.numField({ id: 'se-rot', label: 'Drehung', value: round(((sel.rot || 0) * 180) / Math.PI, 3), unit: '°', expr: false, onCommit: (v) => upd((e) => { e.rot = (v * Math.PI) / 180; }) }));
+        f.append(UI.numField({ id: 'se-rot', label: 'Drehung', value: round(((sel.rot || 0) * 180) / Math.PI, 6), unit: '°', expr: false, onCommit: (v) => upd((e) => { e.rot = (v * Math.PI) / 180; }) }));
       }
       else if (sel.type === 'poly') {
         f.append(dimField('d', 'Durchmesser', 'mm', { min: 0.01 }), dimField('n', 'Ecken', '', { min: 3, int: true }));
         // Drehung: 0° = eine Ecke zeigt nach oben
-        f.append(UI.numField({ id: 'se-rot', label: 'Drehung', value: round(((sel.rot || 0) * 180) / Math.PI, 3), unit: '°', expr: false, onCommit: (v) => upd((e) => { e.rot = (v * Math.PI) / 180; }) }));
+        f.append(UI.numField({ id: 'se-rot', label: 'Drehung', value: round(((sel.rot || 0) * 180) / Math.PI, 6), unit: '°', expr: false, onCommit: (v) => upd((e) => { e.rot = (v * Math.PI) / 180; }) }));
       }
       else if (sel.type === 'slot') { f.append(dimField('len', 'Länge (Mitte–Mitte)', 'mm', { min: 0.01 }), dimField('w', 'Breite', 'mm', { min: 0.01 })); }
       else if (sel.type === 'arc') {
@@ -4339,8 +4348,8 @@ const Sketch = (() => {
           const A = regs.reduce((s, r) => s + r.area, 0), U = regs.reduce((s, r) => s + per(r.outer.poly) + r.holes.reduce((t, hh) => t + per(hh.poly), 0), 0);
           w.append(h('div', { class: 'mini-row', id: 'sk-area', 'data-help': 'sketchMeasure' }, h('span', { class: 'grow' }, regs.length === 1 ? 'Fläche · Umfang' : `${regs.length} Flächen · Umfang`), h('b', { class: 'mono' }, `${Units.fmtAreaU(A, 2)} · ${Units.fmtLenU(U, 2)}`)));
         }
-        const go = (fac) => { if (!(fac > 0) || fac > 1000 || fac < 0.001) { UI.toast('Diese Größe geht nicht.', { kind: 'bad' }); Panels.renderRight(); return; } if (scaleAll(fac)) UI.toast(`Skizze auf ${fmt(fac * 100, 1)} % gebracht – Längen-Maße sind mitgewachsen.`, { icon: 'check' }); };
-        fz.append(UI.numField({ id: 'sk-scale-w', label: 'Breite ändern (alles wächst mit)', value: round(W, 3), unit: 'mm', expr: false, min: 0.01, onCommit: (v) => go(v / W) }));
+        const go = (fac) => { if (!(fac > 0) || fac > 1000 || fac < 0.001) { UI.toast('Diese Größe geht nicht.', { kind: 'bad' }); Panels.renderRight(); return; } if (scaleAll(fac)) UI.toast(`Skizze auf ${fmtFixed(fac * 100, 1)} % gebracht – Längen-Maße sind mitgewachsen.`, { icon: 'check' }); };
+        fz.append(UI.numField({ id: 'sk-scale-w', label: 'Breite ändern (alles wächst mit)', value: round(W, 6), unit: 'mm', expr: false, min: 0.01, onCommit: (v) => go(v / W) }));
         fz.append(UI.numField({ id: 'sk-scale-f', label: 'oder Faktor', value: 100, unit: '%', expr: false, min: 0.1, onCommit: (v) => go(v / 100) }));
         w.append(fz);
       }
@@ -4394,7 +4403,7 @@ const Sketch = (() => {
             S.check.issues.forEach((it, idx) => {
               const cls = 'chk-row sk-chk-item ' + (it.kind === 'dup' ? 'warn' : 'bad') + (S.checkFocus === idx ? ' active' : '');
               const title = it.kind === 'gap'
-                ? `Winzige Lücke (${Units.fmtLenU(it.dist, 3)})`
+                ? `Winzige Lücke (${Units.fmtLenFixedU(it.dist, 3)})`
                 : it.kind === 'dup'
                   ? (it.partial ? 'Überlappende Linie' : ({ line: 'Doppelte Linie', arc: 'Doppelter Bogen', circle: 'Doppelter Kreis', rect: 'Doppeltes Rechteck' }[it.sub] || 'Doppeltes Element'))
                   : 'Offenes Ende';
@@ -4427,7 +4436,7 @@ const Sketch = (() => {
             const e = d.e ? ent(d.e) : null;
             const nr = e ? S.ents.filter((x) => x.type === e.type).indexOf(e) + 1 : 0;
             const what = (DIMLABEL(d.k) + (e ? ` · ${TN[e.type] || e.type} ${nr}` : '')) + (d.ref ? ' (ablesen)' : '');
-            const f = UI.numField({ id: 'dt-' + i, label: what, value: d.ref ? round(measureSpec(sp), 4) : d.v, unit: unitOf(d.k), onCommit: (v) => { setDimSpec(sp, v); } });
+            const f = UI.numField({ id: 'dt-' + i, label: what, value: d.ref ? round(measureSpec(sp), 6) : d.v, unit: unitOf(d.k), onCommit: (v) => { setDimSpec(sp, v); } });
             f.addEventListener('mouseenter', () => { if (e && S.hoverDim !== e.id) { S.hoverDim = e.id; S.hoverEnt = e.id; render(); } });
             tbl.append(f);
           });
@@ -4623,7 +4632,7 @@ const Sketch = (() => {
         if (aInfo) {
           stepBox.append(h('div', { class: 'mini-row', id: 'st-wrap-info' },
             h('span', { class: 'grow' }, `Umfangswinkel (Ø ${Units.fmtLenU(aInfo.radius * 2, 1)})`),
-            h('b', { class: 'mono' }, `${fmt(aInfo.deg, 1)}°`)));
+            h('b', { class: 'mono' }, fmtAngleU(aInfo.deg))));
         }
       }
     } else if (st.emboss) {
@@ -4745,7 +4754,7 @@ const Sketch = (() => {
         const angLbl = rdir === 'both' ? 'Gesamtwinkel' : rdir === 'two' ? 'Winkel Seite 1' : 'Winkel';
         const minA = rdir === 'two' ? 0 : 0.1;
         stepBox.append(UI.numField({ id: 'st-angle', label: angLbl, value: st.angle, unit: '°', min: minA, onCommit: (v) => { st.angle = clamp(v, minA, 360); renderStep(); updatePreview(); } }));
-        if (rdir === 'both') stepBox.append(h('div', { class: 'mini-row', id: 'st-rev-sym-info' }, h('span', { class: 'grow' }, 'Symmetrisch'), h('b', { class: 'mono' }, `je Seite ${fmt(st.angle / 2, 1)}°`)));
+        if (rdir === 'both') stepBox.append(h('div', { class: 'mini-row', id: 'st-rev-sym-info' }, h('span', { class: 'grow' }, 'Symmetrisch'), h('b', { class: 'mono' }, `je Seite ${fmtAngleU(st.angle / 2)}`)));
         if (rdir === 'two') stepBox.append(UI.numField({ id: 'st-angle2', label: 'Winkel Seite 2', value: st.angle2, unit: '°', min: 0, onCommit: (v) => { st.angle2 = clamp(v, 0, 360); updatePreview(); } }));
       } else {
         stepBox.append(h('div', { class: 'mini-row', id: 'st-rev-face-info' }, h('span', { class: 'grow' }, st.revToFace ? `${st.revToFace.kind === 'datum' ? 'Bezugsebene' : 'Fläche'}: „${st.revToFace.name || 'Fläche'}“` : 'Noch keine Fläche gewählt')));
@@ -5034,7 +5043,7 @@ const Sketch = (() => {
     const newDir = st.dir === 'both' ? 'both' : v < 0 ? 'reverse' : 'normal';
     const changedDir = newDir !== st.dir;
     st.dir = newDir; st.dist = round(Math.abs(v), 4);
-    if (changedDir) renderStep(); else { const inp = $('#st-dist'); if (inp) inp.value = Units.fmtInput(st.dist); }
+    if (changedDir) renderStep(); else { const inp = $('#st-dist'); if (inp) inp.value = Units.fmtLen(st.dist); }
     updatePreview();
     placeArrowSoon();
   }
@@ -5111,6 +5120,6 @@ const Sketch = (() => {
     window.addEventListener('keydown', onModKey);
     window.addEventListener('keyup', onModKey);
   }
-  return { isLinkLost, rebindLink, linkPointsWorld, copySel, pasteClip, setRefDim, setDimSpec, check: runCheck, repair: repairCheck, focusCheckIssue, autoDefine: proposeAutoDefine, applyAutoDefine, cancelAutoDefine, toggleFreeSpots, setFreeMode, wiggleFree, focusConflictItem, removeConflictItem, clearConflict, bandSelect, init, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startEmboss, startPath, startLoftPath, editItem, pushPullFace, renderPanel, onKey, cancel, scaleAll, insertEnts, textToCurves, loadFontFile, setBg, setTool, get angleSnap() { return angleSnapOn; }, setAngleSnap, lengthSnapStep, get active() { return !!S; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
+  return { isLinkLost, rebindLink, linkPointsWorld, copySel, pasteClip, setRefDim, setDimSpec, check: runCheck, repair: repairCheck, focusCheckIssue, autoDefine: proposeAutoDefine, applyAutoDefine, cancelAutoDefine, toggleFreeSpots, setFreeMode, wiggleFree, focusConflictItem, removeConflictItem, clearConflict, bandSelect, init, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startEmboss, startPath, startLoftPath, editItem, pushPullFace, render, renderPanel, onKey, cancel, scaleAll, insertEnts, textToCurves, loadFontFile, setBg, setTool, get angleSnap() { return angleSnapOn; }, setAngleSnap, lengthSnapStep, get active() { return !!S; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
 })();
 

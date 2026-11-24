@@ -158,8 +158,8 @@ const Place = (() => {
       const dPx = Math.max(18, Math.min(44, depth * scale));
       const tPx = ang >= 179.5 ? 0 : Math.max(5, Math.min(18, tipH * scale));
       const y1 = y0 + dPx, y2 = y1 + tPx;
-      const lbl = `<text x="${cx + rPx + 6}" y="${y0 + dPx / 2 + 3}" font-size="10" fill="var(--muted)">t ${fmt(depth, 1)}</text>`
-        + `<text x="28" y="${y0 + 13}" font-size="10" fill="var(--ink)">Ø ${fmt(d, 2)}</text>`
+      const lbl = `<text x="${cx + rPx + 6}" y="${y0 + dPx / 2 + 3}" font-size="10" fill="var(--muted)">t ${fmtFixed(depth, 1)}</text>`
+        + `<text x="28" y="${y0 + 13}" font-size="10" fill="var(--ink)">Ø ${fmtFixed(d, 2)}</text>`
         + (tPx > 0 ? `<text x="${cx + rPx + 6}" y="${y2}" font-size="10" fill="var(--hole)">${ang}°</text>` : '');
       return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - rPx} ${y0} V${y1} L${cx} ${y2} L${cx + rPx} ${y1} V${y0} Z`)}${lbl}</svg>`;
     }
@@ -168,7 +168,7 @@ const Place = (() => {
       const rPx = Math.max(12, Math.min(30, d * 2.4));
       const tolLbl = info.um != null ? `${info.esText} / 0` : 'H7';
       return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - rPx} ${y0} V${yB} H${cx + rPx} V${y0} Z`)}`
-        + `<text x="28" y="${y0 + 14}" font-size="10.5" font-weight="600" fill="var(--ink)">Ø ${fmt(d, 2)} H7</text>`
+        + `<text x="28" y="${y0 + 14}" font-size="10.5" font-weight="600" fill="var(--ink)">Ø ${fmtFixed(d, 2)} H7</text>`
         + `<text x="${cx + rPx + 7}" y="${y0 + 30}" font-size="10" fill="var(--hole)">${tolLbl}</text></svg>`;
     }
     if (o.type === 'center') {
@@ -177,8 +177,8 @@ const Place = (() => {
       const r1 = Math.max(7, m.d1 / 2 * sc), r2 = Math.max(r1 + 8, Math.min(38, m.d2 / 2 * sc));
       const y1 = y0 + Math.max(12, m.hCone * sc), y2 = y1 + Math.max(14, m.t1 * sc), y3 = y2 + Math.max(5, m.tipH * sc);
       return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - r2} ${y0} L${cx - r1} ${y1} V${y2} L${cx} ${y3} L${cx + r1} ${y2} V${y1} L${cx + r2} ${y0} Z`)}`
-        + `<text x="28" y="${y0 + 13}" font-size="10" fill="var(--ink)">Ø ${fmt(m.d2, 2)}</text>`
-        + `<text x="28" y="${y2}" font-size="10" fill="var(--muted)">Ø ${fmt(m.d1, 2)}</text>`
+        + `<text x="28" y="${y0 + 13}" font-size="10" fill="var(--ink)">Ø ${fmtFixed(m.d2, 2)}</text>`
+        + `<text x="28" y="${y2}" font-size="10" fill="var(--muted)">Ø ${fmtFixed(m.d1, 2)}</text>`
         + `<text x="${cx + r2 + 6}" y="${y1}" font-size="10" fill="var(--hole)">60°</text></svg>`;
     }
     const te = (o.type === 'through' || o.type === 'tap') ? threadEntry(o.size) : null;
@@ -187,14 +187,14 @@ const Place = (() => {
       const dCsk = te && te.senkung_senk_d_mm;
       return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - 28} ${y0} L${cx - 14} ${y0 + 16} V${yB} H${cx + 14} V${y0 + 16} L${cx + 28} ${y0} Z`)}`
         + `<text x="28" y="${y0 + 14}" font-size="10" fill="var(--ink)">${esc(o.size)} Senk. (${ang}°)</text>`
-        + (dCsk ? `<text x="${cx + 32}" y="${y0 + 14}" font-size="10" fill="var(--hole)">Ø ${fmt(dCsk, 1)}</text>` : '') + `</svg>`;
+        + (dCsk ? `<text x="${cx + 32}" y="${y0 + 14}" font-size="10" fill="var(--hole)">Ø ${fmtFixed(dCsk, 1)}</text>` : '') + `</svg>`;
     }
     if (o.type === 'through' && o.head === 'counterbore') {
       const dCb = te && te.senkung_zyl_d_mm, tCb = te && te.senkung_zyl_t_mm;
       const headName = te && te.normId === 'pipe_g' ? 'Flach.' : 'Zyl.';
       return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - 26} ${y0} V${y0 + 22} H${cx - 14} V${yB} H${cx + 14} V${y0 + 22} H${cx + 26} V${y0} Z`)}`
         + `<text x="28" y="${y0 + 14}" font-size="10" fill="var(--ink)">${esc(o.size)} ${headName}</text>`
-        + (dCb ? `<text x="${cx + 30}" y="${y0 + 14}" font-size="10" fill="var(--hole)">Ø ${fmt(dCb, 1)}×${fmt(tCb, 1)}</text>` : '') + `</svg>`;
+        + (dCb ? `<text x="${cx + 30}" y="${y0 + 14}" font-size="10" fill="var(--hole)">Ø ${fmtFixed(dCb, 1)}×${fmtFixed(tCb, 1)}</text>` : '') + `</svg>`;
     }
     if (o.type === 'nut') {
       return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - 26} ${y0} V${y0 + 20} H${cx - 13} V${yB} H${cx + 13} V${y0 + 20} H${cx + 26} V${y0} Z`)}`
@@ -203,7 +203,7 @@ const Place = (() => {
     const r = o.type === 'insert' ? 18 : 13;
     const endY = o.thru ? yB : yB - 12;
     const dia = te ? threadHoleDia(te, o.type === 'tap' ? 'tap' : o.fit) : null;
-    const lbl = o.type === 'tap' ? `${o.size} Kernloch${dia ? ' Ø ' + fmt(dia, 2) : ''}` : o.type === 'insert' ? `${o.size} Einsatz` : `${o.size} Durchg.${dia ? ' Ø ' + fmt(dia, 2) : ''}`;
+    const lbl = o.type === 'tap' ? `${o.size} Kernloch${dia ? ' Ø ' + fmtFixed(dia, 2) : ''}` : o.type === 'insert' ? `${o.size} Einsatz` : `${o.size} Durchg.${dia ? ' Ø ' + fmtFixed(dia, 2) : ''}`;
     return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - r} ${y0} V${endY} H${cx + r} V${y0} Z`)}`
       + `<text x="28" y="${y0 + 14}" font-size="10" fill="var(--ink)">${esc(lbl)}</text></svg>`;
   }
@@ -226,7 +226,7 @@ const Place = (() => {
     if (o.type === 'tap') {
       const te = threadEntry(o.size);
       if (!te) return '';
-      const pitchTxt = te.tpi ? `${te.tpi} Gg/1″ (${fmt(te.steigung_mm, 2)} mm)` : `Steigung ${fmt(te.steigung_mm, 2)} mm`;
+      const pitchTxt = te.tpi ? `${te.tpi} Gg/1″ (${fmtFixed(te.steigung_mm, 2)} mm)` : `Steigung ${fmtFixed(te.steigung_mm, 2)} mm`;
       const drillTxt = te.bohrer ? ` · Bohrer ${esc(te.bohrer)}` : '';
       return `<b>Kernloch ${esc(te.id)}:</b> Ø <b>${Units.fmtLenU(te.kernloch_mm, 2)}</b> (${pitchTxt}${drillTxt}).<br><span style="color:var(--muted)">Norm: ${esc(te.quelle)}</span>`;
     }

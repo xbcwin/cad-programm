@@ -114,7 +114,7 @@ const Measure = (() => {
       }
       last = { text: ev.text };
       const bbox = hit.node.data.bbox;
-      current = { kind: 'circle', refs: [{ kind: 'circle', id: hit.id, c: r6(ent.edge.c), n: ent.edge.n ? r6(ent.edge.n) : null, r: round(ent.edge.r, 6), frac: fracOf(ent.edge.c, bbox) }], eval: ev };
+      current = { kind: 'circle', refs: [{ kind: 'circle', id: hit.id, c: r6(ent.edge.c), n: ent.edge.n ? r6(ent.edge.n) : null, r: round(ent.edge.r, 6), frac: fracOf(ent.edge.c, bbox) }], ents: [circleEnt], eval: ev };
       updateBar();
       return true;
     }
@@ -125,7 +125,7 @@ const Measure = (() => {
       const ev = evalEntities('round', [ent]);
       showLabel(ev.text, ev.p);
       last = { text: ev.text };
-      current = { kind: 'round', refs: [ent.ref], eval: ev };
+      current = { kind: 'round', refs: [ent.ref], ents: [ent], eval: ev };
       updateBar();
       Viewer.requestRender();
       return true;
@@ -140,7 +140,7 @@ const Measure = (() => {
       const ev = evalEntities('face', [ent]);
       for (const [a, b] of ev.lines) dash(a, b);
       showLabel(ev.text, ev.p); last = { text: ev.text };
-      current = { kind: 'face', refs: [ent.ref], eval: ev };
+      current = { kind: 'face', refs: [ent.ref], ents: [ent], eval: ev };
       updateBar();
     } else if (pts.length === 1) {
       updateBar();
@@ -192,7 +192,7 @@ const Measure = (() => {
         return { lost: false, kind: 'pair', typeLabel: 'Abstand (Flächen)', value: round(d, 6), unit: 'mm', short, text, p: from.clone().lerp(to, 0.5), lines: d < 1e-6 ? [] : [[from, to]], dots: [from, to], faces: [{ id: a.id, faceIdx: a.faceIdx }, { id: b.id, faceIdx: b.faceIdx }], circle: null };
       }
       const ang = (Math.acos(clamp(cs, -1, 1)) * 180) / Math.PI;
-      const short = `${fmt(ang, 2)}°`;
+      const short = fmtAngleU(ang);
       const text = `Winkel ${short}   (zwischen den Flächen)`;
       return { lost: false, kind: 'pair', typeLabel: 'Winkel (Flächen)', value: round(ang, 6), unit: '°', short, text, p: a.hitP.clone().lerp(b.hitP, 0.5), lines: [[a.hitP.clone(), b.hitP.clone()]], dots: [a.hitP.clone(), b.hitP.clone()], faces: [{ id: a.id, faceIdx: a.faceIdx }, { id: b.id, faceIdx: b.faceIdx }], circle: null };
     }
@@ -209,7 +209,7 @@ const Measure = (() => {
     for (const [p1, p2] of ev.lines) dash(p1, p2);
     showLabel(ev.text, ev.p);
     last = { text: ev.text };
-    current = { kind: 'pair', refs: [a.ref, b.ref], eval: ev };
+    current = { kind: 'pair', refs: [a.ref, b.ref], ents: [a, b], eval: ev };
     updateBar();
   }
   function pickBest(cands, refC, refFrac, bbox) {
@@ -555,6 +555,16 @@ const Measure = (() => {
     return ok;
   }
   function copyValue(text) { const n = firstNumber(text); if (n) return copyText(n, 'Wert'); return false; }
+  function refreshDisplay() {
+    if (list().length) relink();
+    if (on && current && current.ents) {
+      const ev = evalEntities(current.kind, current.ents);
+      current.eval = ev;
+      last = { text: ev.text };
+      if (lastLabel && lastLabel.el) lastLabel.el.textContent = ev.text;
+      updateBar();
+    }
+  }
   function init() {
     App.on('selection', () => {
       if (App.sel.length !== 2) clearDist();
@@ -563,6 +573,13 @@ const Measure = (() => {
     App.on('results', relink);
     App.on('remeshed', relink);
     let lastUnit = Units.key();
+    let lastFmt = `${FMT.dec}:${FMT.angle}`;
+    if (typeof ViewPrefs !== 'undefined' && ViewPrefs.on) {
+      ViewPrefs.on('change', () => {
+        const curFmt = `${FMT.dec}:${FMT.angle}`;
+        if (curFmt !== lastFmt) { lastFmt = curFmt; refreshDisplay(); }
+      });
+    }
     App.on('doc', () => {
       if (sel && !find(sel)) sel = null;
       const ids = new Set(list().map((m) => m.id));
@@ -630,7 +647,7 @@ const Measure = (() => {
     return r;
   }
   return {
-    showCoords, get coords() { return coordsNow; }, copyText, copyValue, get copied() { return copied; }, minDistance, clearDist, init, toggle, start, stop,
+    showCoords, get coords() { return coordsNow; }, copyText, copyValue, get copied() { return copied; }, minDistance, clearDist, init, toggle, start, stop, refreshDisplay,
     get active() { return on; }, get result() { return last ? last.text : (els[0] ? els[0].textContent : null); },
     list, find, keep, relink, setHidden, rename, remove, select, drawSaved, treeSection, renderPanel, get selected() { return sel; },
   };

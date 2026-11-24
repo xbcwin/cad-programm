@@ -635,7 +635,7 @@ const Datums = (() => {
     select(d.id);
     return d;
   }
-  function addOrigin(plane = 'XY', dist = 10, tilt = 0) { return add({ type: 'origin', plane, dist, tilt }, `${NAMES[plane] || plane} ${typeof dist === 'number' ? Units.fmtLenU(dist, 2) : dist}${tilt ? ' · ' + tilt + '°' : ''}`); }
+  function addOrigin(plane = 'XY', dist = 10, tilt = 0) { return add({ type: 'origin', plane, dist, tilt }, `${NAMES[plane] || plane} ${typeof dist === 'number' ? Units.fmtLenU(dist, 2) : dist}${tilt ? ' · ' + (typeof tilt === 'number' ? fmtAngleU(tilt) : tilt + '°') : ''}`); }
   function addFromFace(face, dist = 10) {
     const f = resolveFace(face);
     if (!f || f.info.t !== 'PLANE') { UI.toast('Wähl zuerst eine ebene Fläche eines Körpers.', { icon: 'info' }); return null; }
@@ -668,7 +668,7 @@ const Datums = (() => {
       edgeId: eRef.id, ea: r6(eRef.info.a), eb: r6(eRef.info.b), em: r6(eRef.info.m), ed: r6(edLocal.toArray()),
       faceId: fRef.id, fn: r6(fRef.info.n), fc: r6(fRef.info.c), angle,
     };
-    const angTxt = typeof angle === 'number' ? fmt(angle, 1) + '°' : angle;
+    const angTxt = typeof angle === 'number' ? fmtAngleU(angle) : angle;
     return add(base, name || `Ebene ${angTxt} an „${top ? Model.label(top.item) : 'Kante'}“`);
   }
   function addFixed(plane, name) { return add({ type: 'fixed' }, name, plane); }
@@ -718,7 +718,7 @@ const Datums = (() => {
       percent = pos;
     }
     const top = Model.find(App.doc, eRef.id);
-    const posTxt = posMode === 'start' ? 'Anfang' : posMode === 'end' ? 'Ende' : posMode === 'mid' ? 'Mitte' : (typeof percent === 'number' ? fmt(percent, 0) + ' %' : String(percent));
+    const posTxt = posMode === 'start' ? 'Anfang' : posMode === 'end' ? 'Ende' : posMode === 'mid' ? 'Mitte' : (typeof percent === 'number' ? fmtFixed(percent, 0) + ' %' : String(percent));
     const base = { type: 'normalToCurve', edgeId: eRef.id, edge: makeEdgeRef(eRef), posMode, percent };
     if (flip) base.flip = true;
     return add(base, name || `Senkrecht zu „${top ? Model.label(top.item) : 'Kante'}“ (${posTxt})`);
@@ -1160,7 +1160,7 @@ const Datums = (() => {
     if (percent && typeof percent === 'object') { pct = percent.percent ?? 50; flip = !!percent.flip; }
     else if (percent != null) pct = percent;
     const top = Model.find(App.doc, eRef.id);
-    const pTxt = typeof pct === 'number' ? fmt(pct, 0) + ' %' : String(pct);
+    const pTxt = typeof pct === 'number' ? fmtFixed(pct, 0) + ' %' : String(pct);
     const base = { type: 'curvePercent', edgeId: eRef.id, edge: makeEdgeRef(eRef), percent: pct };
     if (flip) base.flip = true;
     return addPoint(base, name || `Punkt ${pTxt} (${top ? Model.label(top.item) : 'Kurve'})`);
@@ -1573,8 +1573,8 @@ const Datums = (() => {
     if (edgeRef && edgeRef.info.t !== 'LINE') { UI.toast('Wähl eine gerade Kante.', { icon: 'info' }); return; }
     if (edgeRef) Viewer.highlightEdge(edgeRef.id, edgeRef.idx);
     const hint = () => UI.hint(edgeRef
-      ? `<b>Ebene im Winkel (${fmt(Number(angle) || 30, 1)}°):</b> Klick eine ebene Fläche als Bezug für den Winkel. <b>Esc</b> bricht ab.`
-      : `<b>Ebene im Winkel (${fmt(Number(angle) || 30, 1)}°):</b> Klick zuerst eine gerade Kante. <b>Esc</b> bricht ab.`);
+      ? `<b>Ebene im Winkel (${fmtAngleU(Number(angle) || 30)}):</b> Klick eine ebene Fläche als Bezug für den Winkel. <b>Esc</b> bricht ab.`
+      : `<b>Ebene im Winkel (${fmtAngleU(Number(angle) || 30)}):</b> Klick zuerst eine gerade Kante. <b>Esc</b> bricht ab.`);
     const down = (e) => {
       if (e.button !== 0) return;
       e.preventDefault(); e.stopPropagation();
@@ -1785,7 +1785,7 @@ const Datums = (() => {
     const hint = () => UI.hint({
       edgeMid: '<b>Bezugspunkt Kantenmitte:</b> Klick eine Kante eines Körpers. <b>Esc</b> bricht ab.',
       faceCenter: '<b>Bezugspunkt Flächenmitte:</b> Klick eine Fläche eines Körpers. <b>Esc</b> bricht ab.',
-      curvePercent: `<b>Bezugspunkt auf Kurve (${fmt(Number(opts.percent) || 50, 0)} %):</b> Klick eine Kante oder Kurve eines Körpers. <b>Esc</b> bricht ab.`,
+      curvePercent: `<b>Bezugspunkt auf Kurve (${fmtFixed(Number(opts.percent) || 50, 0)} %):</b> Klick eine Kante oder Kurve eines Körpers. <b>Esc</b> bricht ab.`,
       edgePlaneIntersect: edgeRef
         ? '<b>Schnittpunkt Kante / Ebene:</b> Klick eine ebene Fläche als Schnitt-Ebene. <b>Esc</b> bricht ab.'
         : '<b>Schnittpunkt Kante / Ebene:</b> Klick zuerst eine Kante oder Kurve. <b>Esc</b> bricht ab.',

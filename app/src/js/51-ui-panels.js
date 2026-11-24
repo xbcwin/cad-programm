@@ -398,7 +398,7 @@ const Panels = (() => {
           const fr = h('div', { class: 'finish-row' + (isRef ? ' warn' : ferr ? ' bad' : ''), title: ferr ? ferr.message : '' });
           fr.innerHTML = icon(fin.type === 'chamfer' ? 'chamfer' : fin.type === 'shell' ? 'shell' : 'fillet');
           if (fin.type === 'shell') fr.append(h('span', null, 'Wandstärke ' + Units.fmtLenU(Model.num(fin.r, V, 2), 2)));
-          else if (fin.type === 'draft') fr.append(h('span', null, 'Entformungsschräge ' + fmt(Model.num(fin.r, V, 3), 1) + '°'));
+          else if (fin.type === 'draft') fr.append(h('span', null, 'Entformungsschräge ' + fmtAngleU(Model.num(fin.r, V, 3))));
           else fr.append(h('span', null, (fin.type === 'chamfer' ? 'Fase ' : 'Rundung ') + Units.fmtLenU(Model.num(fin.r, V, 1), 2) + (typeof fin.edges === 'string' ? ' · ' + ({ all: 'alle Kanten', top: 'oben', bottom: 'unten', vertical: 'senkrecht', horizontal: 'waagerecht' }[fin.edges] || '') : ' · ' + (fin.edges || []).length + ' Kante' + ((fin.edges || []).length === 1 ? '' : 'n'))));
           if (isRef) {
             const iss = refIssues.find((x) => x.finishId === fin.id);
@@ -537,7 +537,7 @@ const Panels = (() => {
     const slow = App.doc.items.map((it) => ({ it, t: App.timeOf(it.id) })).filter((x) => x.t && x.t.ms >= 1).sort((a, b) => b.t.ms - a.t.ms).slice(0, 5);
     if (slow.length) {
       const sec = h('details', { class: 'section slow-sec', id: 'slow-steps', 'data-help': 'slowSteps' }, h('summary', { class: 'section-h' }, 'Rechenzeit je Schritt'));
-      const fmtMs = (ms) => (ms >= 1000 ? `${fmt(ms / 1000, 1)} s` : `${Math.round(ms)} ms`);
+      const fmtMs = (ms) => (ms >= 1000 ? `${fmtFixed(ms / 1000, 1)} s` : `${Math.round(ms)} ms`);
       for (const x of slow) { const r = h('div', { class: 'mini-row dep-row' }, h('span', { class: 'grow' }, Model.label(x.it)), h('b', { class: 'mono' }, fmtMs(x.t.ms))); r.style.cursor = 'pointer'; r.onclick = () => App.select([x.it.id]); sec.append(r); }
       sec.append(h('div', { class: 'hint-box', html: 'Gemessen beim letzten echten Neurechnen. Was gerade nicht geändert wurde, kommt aus dem Speicher und kostet fast nichts. Langsam sind meist Rundungen an vielen Kanten, Gewinde und Muster mit vielen Kopien.' }));
       if (slow[0].t.ms > 1500) sec.open = true;
@@ -639,7 +639,7 @@ const Panels = (() => {
             row.key = nk;
           });
         });
-        const valStr = typeof r.val === 'number' ? fmt(r.val, 6) : (r.val ?? '');
+        const valStr = typeof r.val === 'number' ? fmtFixed(r.val, 6) : (r.val ?? '');
         const vIn = h('input', { id: 'ptv-' + r.id, class: 'ptbl-val mono', value: valStr, placeholder: 'Wert', 'aria-label': 'Wert', spellcheck: 'false' });
         vIn.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') vIn.blur(); if (e.key === 'Escape') { vIn.value = valStr; vIn.classList.remove('invalid'); vIn.blur(); } });
         vIn.addEventListener('change', () => {
@@ -705,7 +705,7 @@ const Panels = (() => {
     const q = (s) => (/[;"\n]/.test(String(s)) ? '"' + String(s).replace(/"/g, '""') + '"' : String(s));
     const { v } = Model.vars(App.doc);
     const rows = [['Name', 'Wert', 'Ergebnis']];
-    for (const p of App.doc.params || []) rows.push([p.name, typeof p.expr === 'number' ? fmt(p.expr, 6) : p.expr, fmt(v[p.name], 6)]);
+    for (const p of App.doc.params || []) rows.push([p.name, typeof p.expr === 'number' ? fmtFixed(p.expr, 6) : p.expr, fmtFixed(v[p.name], 6)]);
     return rows.map((r) => r.map(q).join(';')).join('\r\n') + '\r\n';
   }
   // CSV lesen: Name;Wert (auch mit Komma oder Tab getrennt); bekannte Namen werden geändert, neue angelegt
@@ -738,7 +738,7 @@ const Panels = (() => {
     const list = h('div', { class: 'formula-list' });
     for (const x of FORMULA_EXAMPLES) {
       let val = '';
-      try { val = fmt(Expr.eval(x.f, FORMULA_DEMO), 2); } catch (_) {}
+      try { val = fmtFixed(Expr.eval(x.f, FORMULA_DEMO), 2); } catch (_) {}
       const cp = h('button', { type: 'button', class: 'btn ghost small', 'data-tip': 'Formel kopieren' }); cp.innerHTML = icon('copy');
       cp.onclick = async () => { try { await navigator.clipboard.writeText(x.f); UI.toast('Kopiert: ' + x.f, { icon: 'check', ms: 1500 }); } catch (_) { UI.toast('Kopieren ging nicht – markier die Formel einfach.', { icon: 'info' }); } };
       list.append(h('div', { class: 'formula-row' }, h('div', { class: 'formula-top' }, h('code', null, x.f), h('b', { class: 'mono' }, '= ' + val), cp), h('p', null, x.e)));
@@ -842,14 +842,14 @@ const Panels = (() => {
     }
     const pv = ViewPrefs.get();
     const va = h('div', { class: 'section pro' }, h('div', { class: 'section-h' }, 'Ansicht'));
-    va.append(UI.selectField({ id: 'view-grid', label: 'Rasterweite', value: String(pv.grid), options: [['auto', 'Automatisch (folgt dem Zoom)'], ['0.01', Units.fmtLenU(0.01, 2)], ['0.1', Units.fmtLenU(0.1, 2)], ['1', Units.fmtLenU(1, 2)], ['10', Units.fmtLenU(10, 2)], ['100', Units.fmtLenU(100, 2)]], onChange: (val) => ViewPrefs.set({ grid: val === 'auto' ? 'auto' : parseFloat(val) }) }));
+    va.append(UI.selectField({ id: 'view-grid', label: 'Rasterweite', value: String(pv.grid), options: [['auto', 'Automatisch (folgt dem Zoom)'], ['0.01', Units.fmtLenFixedU(0.01, 2)], ['0.1', Units.fmtLenFixedU(0.1, 2)], ['1', Units.fmtLenFixedU(1, 2)], ['10', Units.fmtLenFixedU(10, 2)], ['100', Units.fmtLenFixedU(100, 2)]], onChange: (val) => ViewPrefs.set({ grid: val === 'auto' ? 'auto' : parseFloat(val) }) }));
     const chk = (k, label) => { const l = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'view-' + k, checked: !!pv[k] }), label); l.querySelector('input').onchange = (e) => ViewPrefs.set({ [k]: e.target.checked }); return l; };
     va.append(UI.selectField({ id: 'view-quality', label: 'Darstellungsqualität', value: pv.quality, options: [['coarse', 'Grob'], ['normal', 'Normal'], ['fine', 'Fein'], ['ultra', 'Sehr fein']], onChange: (val) => ViewPrefs.set({ quality: val }) }));
     va.append(h('div', { style: { display: 'grid', gap: '6px', marginTop: '8px' } }, chk('adaptive', 'Darstellung anpassen (Zoom, Drehen)'), chk('gridOn', 'Raster zeigen'), chk('planes', 'Ursprungsebenen zeigen'), chk('axes', 'Achsen zeigen'), chk('notes', 'Notizen zeigen'), chk('ortho', 'Orthografisch (ohne Perspektive)')));
     w.append(va);
     const gr = h('div', { class: 'section pro' }, h('div', { class: 'section-h' }, 'Fangen beim Verschieben'));
     const f2 = h('div', { class: 'fields' });
-    f2.append(UI.selectField({ id: 'grid', label: 'Schrittweite', value: App.doc.settings.grid, options: [0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10].map((v) => [v, Units.fmtLenU(v, 2)]), onChange: (v) => App.change('Raster geändert', (doc) => { doc.settings.grid = parseFloat(v); }) }));
+    f2.append(UI.selectField({ id: 'grid', label: 'Schrittweite', value: App.doc.settings.grid, options: [0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10].map((v) => [v, Units.fmtLenFixedU(v, 2)]), onChange: (v) => App.change('Raster geändert', (doc) => { doc.settings.grid = parseFloat(v); }) }));
     const snap = h('label', { class: 'check', style: { alignSelf: 'end', paddingBottom: '8px' } }, h('input', { type: 'checkbox', id: 'snap', checked: App.doc.settings.snap !== false }), 'Einrasten');
     snap.querySelector('input').onchange = (e) => App.change('Einrasten geändert', (doc) => { doc.settings.snap = e.target.checked; });
     const mag = h('label', { class: 'check', style: { paddingBottom: '4px' } }, h('input', { type: 'checkbox', id: 'magnet', checked: App.doc.settings.magnet !== false }), 'Magnetisch einrasten (Mitte, Mittellinien, Lochmitten, ganz oben auf Rundungen, bündig zu anderen Teilen) – Strg hält es kurz an');
@@ -1101,7 +1101,7 @@ const Panels = (() => {
         sec.append(fl);
         if (def.lib === 'blindHole') {
           const d = Model.num(it.p.d, V, 5), dep = Model.num(it.p.depth, V, 10), ang = Number(it.p.tipAngle ?? 118), tipH = blindTipHeight(d, ang);
-          const tipTxt = ang >= 179.5 ? `Flacher Boden, Tiefe ${Units.fmtLenU(dep, 2)}.` : `Bohrspitze (${ang}°): +${Units.fmtLenU(tipH, 2)} → Gesamttiefe <b>${Units.fmtLenU(dep + tipH, 2)}</b>.`;
+          const tipTxt = ang >= 179.5 ? `Flacher Boden, Tiefe ${Units.fmtLenU(dep, 2)}.` : `Bohrspitze (${fmtAngleU(ang)}): +${Units.fmtLenU(tipH, 2)} → Gesamttiefe <b>${Units.fmtLenU(dep + tipH, 2)}</b>.`;
           sec.append(h('div', { class: 'hint-box', html: `${tipTxt} Setz es mit <b>Bohrung</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.` }));
         } else if (def.lib === 'fitHole') {
           const d = Model.num(it.p.d, V, 6), info = h7Info(d);
@@ -1220,7 +1220,7 @@ const Panels = (() => {
           const minA = dir === 'two' ? 0 : 0.1;
           fl.append(UI.numField({ id: 'p-angle', label: angLbl, value: it.p.angle, unit: '°', min: minA, onCommit: (v) => setP('angle', typeof v === 'number' ? clamp(v, minA, 360) : v) }));
           if (dir === 'both') {
-            fl.append(h('div', { class: 'mini-row', id: 'p-rev-sym-info' }, h('span', { class: 'grow' }, 'Symmetrisch'), h('b', { class: 'mono' }, `je Seite ${fmt(Model.num(it.p.angle, V, 360) / 2, 1)}°`)));
+            fl.append(h('div', { class: 'mini-row', id: 'p-rev-sym-info' }, h('span', { class: 'grow' }, 'Symmetrisch'), h('b', { class: 'mono' }, `je Seite ${fmtAngleU(Model.num(it.p.angle, V, 360) / 2)}`)));
           }
           if (dir === 'two') {
             fl.append(UI.numField({ id: 'p-angle2', label: 'Winkel Seite 2', value: it.p.angle2 ?? it.p.angle, unit: '°', min: 0, onCommit: (v) => setP('angle2', typeof v === 'number' ? clamp(v, 0, 360) : v) }));
@@ -1229,7 +1229,7 @@ const Panels = (() => {
           const tf = it.p.toFace;
           const fr = tf && !tf.lost ? Model.revolveFrame(it.p, V) : null;
           const hitDeg = fr ? Model.revolveHitAngle(fr, tf.o, tf.fn, !!it.p.toFaceFlip) : null;
-          const infoTxt = !tf ? 'Noch keine Fläche gewählt' : tf.lost ? `Zielfläche „${tf.name || '?'}“ fehlt` : `${tf.kind === 'datum' ? 'Bezugsebene' : 'Fläche'}: „${tf.name || 'Fläche'}“${hitDeg != null ? ` (${fmt(hitDeg, 1)}°)` : ''}`;
+          const infoTxt = !tf ? 'Noch keine Fläche gewählt' : tf.lost ? `Zielfläche „${tf.name || '?'}“ fehlt` : `${tf.kind === 'datum' ? 'Bezugsebene' : 'Fläche'}: „${tf.name || 'Fläche'}“${hitDeg != null ? ` (${fmtAngleU(hitDeg)})` : ''}`;
           fl.append(h('div', { class: 'mini-row', id: 'p-rev-face-info', style: tf && tf.lost ? { color: 'var(--bad)' } : null }, h('span', { class: 'grow' }, infoTxt)));
           const pb = h('button', { type: 'button', class: 'btn', id: 'p-rev-face-pick' }); pb.innerHTML = icon('cursor') + (tf ? 'Andere Fläche wählen' : 'Fläche im Bild wählen');
           pb.onclick = () => Features.pickRevolveFace(it.id);
@@ -1309,7 +1309,7 @@ const Panels = (() => {
       if (healed && healed.before && healed.after) {
         const b = healed.before, a = healed.after;
         const diff = h('div', { id: 'import-heal-diff', class: 'hint-box import-diff' });
-        diff.append(h('b', null, `Heil-Ergebnis (Toleranz ${fmt(healed.tol ?? 0.1, 3)} mm)`));
+        diff.append(h('b', null, `Heil-Ergebnis (Toleranz ${fmtFixed(healed.tol ?? 0.1, 3)} mm)`));
         const rows = h('div', { class: 'import-metrics' },
           h('span', null, 'Offene Kanten'), h('b', null, `${b.openEdges} → ${a.openEdges}`),
           h('span', null, 'Lücken'), h('b', null, `${b.gaps} → ${a.gaps}`),
@@ -1596,7 +1596,7 @@ const Panels = (() => {
           const sp = THREAD_MAP[th.size] || { pitch: 1 };
           const pitch = (th.pitch > 0 ? th.pitch : null) || sp.pitch;
           const box = h('div', { class: 'thread-item', style: { display: 'grid', gap: '6px', padding: '6px 0', borderTop: '1px solid var(--line)' } });
-          box.append(h('div', { class: 'mini-row' }, h('b', null, `${th.size} × ${Units.fmtLenU(th.length, 1)}`), h('span', { class: 'grow muted', style: { marginLeft: '6px', fontSize: '11px' } }, `${th.kind === 'int' ? 'Innengewinde' : 'Außengewinde'} · P ${fmt(pitch, 2)}`)));
+          box.append(h('div', { class: 'mini-row' }, h('b', null, `${th.size} × ${Units.fmtLenU(th.length, 1)}`), h('span', { class: 'grow muted', style: { marginLeft: '6px', fontSize: '11px' } }, `${th.kind === 'int' ? 'Innengewinde' : 'Außengewinde'} · P ${fmtFixed(pitch, 2)}`)));
           const fs = h('div', { class: 'fields' });
           fs.append(UI.selectField({ id: 'th-size-' + th.id, label: 'M-Größe', value: th.size, options: THREAD_SPECS.map((s) => [s.size, s.size]), onChange: (v) => Features.updateThread(it.id, th.id, { size: v }) }));
           fs.append(UI.numField({ id: 'th-pitch-' + th.id, label: 'Steigung', value: pitch, min: 0.25, step: 0.05, unit: 'mm', expr: false, onCommit: (v) => Features.updateThread(it.id, th.id, { pitch: v }) }));
@@ -1640,11 +1640,11 @@ const Panels = (() => {
         const b = p && p.bbox; bR.textContent = b ? `${Units.fmtLen(b[3] - b[0], 2)} × ${Units.fmtLen(b[4] - b[1], 2)} × ${Units.fmtLen(b[5] - b[2], 2)} ${Units.label()}` : '–'; bR.id = 'p-bbox';
         // Trägheit um den Schwerpunkt (PF-13) und Standfestigkeit (PF-14)
         if (p && p.I && !p.fixed) {
-          const gc = (x) => fmt(x / 100, x / 100 < 10 ? 2 : 1);
+          const gc = (x) => fmtFixed(x / 100, x / 100 < 10 ? 2 : 1);
           ms.querySelector('.mini-list').append(h('div', { class: 'mini-row', 'data-help': 'inertia', 'data-tip': 'Trägheitsmomente um den Schwerpunkt, um die X-, Y- und Z-Richtung' }, h('span', { class: 'grow' }, 'Trägheit X · Y · Z'), h('b', { class: 'mono', id: 'p-inertia' }, `${gc(p.I[0])} · ${gc(p.I[1])} · ${gc(p.I[2])} g·cm²`)));
         }
         const st = p && p.com ? Mass.stability(it.id, p.com) : null;
-        if (st) ms.querySelector('.mini-list').append(h('div', { class: 'mini-row', 'data-help': 'stability' }, h('span', { class: 'grow' }, 'Standfest'), h('b', { class: 'mono', id: 'p-stand', style: { color: st.ok ? '' : 'var(--bad)' } }, st.ok ? `ja – kippt ab ${fmt(st.angle, 0)}°` : 'nein – kippt um')));
+        if (st) ms.querySelector('.mini-list').append(h('div', { class: 'mini-row', 'data-help': 'stability' }, h('span', { class: 'grow' }, 'Standfest'), h('b', { class: 'mono', id: 'p-stand', style: { color: st.ok ? '' : 'var(--bad)' } }, st.ok ? `ja – kippt ab ${fmtFixed(st.angle, 0)}°` : 'nein – kippt um')));
       });
       w.append(ms);
     }

@@ -37,7 +37,7 @@ const Mass = (() => {
   // festes Gewicht – auch wenn es noch fehlt (leer): dann zählt es mit 0 g und wird angemahnt
   function fixedOf(it) { return !!(it && it.massG != null); }
   function partOf(r, id) { return r && (r.parts || []).find((p) => p.id === id) || null; }
-  const gText = (g) => `${fmt(g, g < 10 ? 2 : 1)} g`;
+  const gText = (g) => `${fmtFixed(g, g < 10 ? 2 : 1)} g`;
 
   // ---------- Standfestigkeit (PF-14): Steht das Teil, so wie es liegt, oder kippt es? ----------
   // Aufstandsfläche = Hülle der untersten Punkte; der Schwerpunkt muss darüber liegen. Kippwinkel = atan(Abstand zur Kante / Höhe).
@@ -129,7 +129,7 @@ const Mass = (() => {
         const L = round(Model.num(th.length, V, 10), 1);
         const kind = th.kind === 'int' ? 'int' : 'ext';
         const spec = THREAD_MAP[th.size];
-        const sizeLabel = th.pitch > 0 && (!spec || Math.abs(th.pitch - spec.pitch) > 1e-4) ? `${th.size}×${fmt(th.pitch, 2)}` : th.size;
+        const sizeLabel = th.pitch > 0 && (!spec || Math.abs(th.pitch - spec.pitch) > 1e-4) ? `${th.size}×${fmtFixed(th.pitch, 2)}` : th.size;
         const label = `${kind === 'int' ? 'Innengewinde' : 'Außengewinde'} ${sizeLabel} × ${Units.fmtLenU(L, 1, doc)}`;
         const key = label + '|' + part;
         const row = map.get(key) || { name: label, size: th.size, length: L, kind, part, n: 0, ids: [] };
@@ -210,7 +210,7 @@ const Mass = (() => {
       }
       body.append(tt);
     }
-    const filLen = (m) => Units.key() === 'in' ? `${fmt((m * 1000) / 25.4, 1)} in` : Units.key() === 'cm' ? `${fmt(m * 100, 1)} cm` : `${fmt(m, 1)} m`;
+    const filLen = (m) => Units.key() === 'in' ? `${fmtFixed((m * 1000) / 25.4, 1)} in` : Units.key() === 'cm' ? `${fmtFixed(m * 100, 1)} cm` : `${fmtFixed(m, 1)} m`;
     if (B.filament.length) body.append(h('div', { class: 'ok-box', id: 'bom-filament', html: '<b>Filament für die Druckteile:</b> ' + B.filament.map((x) => `${x.mat} ${gText(x.g)} ≈ ${filLen(x.m)}`).join(' · ') + ' (Draht 1,75 mm, massiv gerechnet – mit weniger Füllung brauchst du weniger; Stützen und Rand kommen dazu).' }));
     body.append(h('div', { class: 'hint-box', html: 'Gleiche Teile (gleicher Name ohne Nummer, gleiches Gewicht) stehen in einer Zeile. Klick auf eine Zeile wählt die Teile im Bild aus. <b>Kaufteile</b> zählen mit dem Gewicht aus dem Datenblatt, alles andere mit Volumen × Material.' + (B.rows.some((x) => x.missing) ? ' Bei Teilen mit „fehlt“ ist noch kein Gewicht eingetragen.' : '') }));
   }

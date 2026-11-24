@@ -114,7 +114,7 @@ const Actions = (() => {
       doc.items.push(it);
     });
     App.select([it.id]);
-    UI.toast(it.massG === '' ? `${spec.name} eingefügt. Trag rechts das Gewicht aus dem Datenblatt ein.` : `${spec.name} eingefügt (${fmt(Model.num(it.massG, V(), 0), 1)} g).`, { icon: 'check', ms: 3500 });
+    UI.toast(it.massG === '' ? `${spec.name} eingefügt. Trag rechts das Gewicht aus dem Datenblatt ein.` : `${spec.name} eingefügt (${fmtFixed(Model.num(it.massG, V(), 0), 1)} g).`, { icon: 'check', ms: 3500 });
     return it;
   }
   function remove(ids) {
@@ -347,7 +347,7 @@ const Actions = (() => {
     ids = ids || App.sel; if (!ids.length) return;
     const box = selBox(ids); const c = box.isEmpty() ? new THREE.Vector3() : box.getCenter(new THREE.Vector3());
     const a = (deg * Math.PI) / 180;
-    App.change(deg === 90 ? 'Um 90° gedreht' : `Um ${fmt(deg, 1)}° gedreht`, (doc) => {
+    App.change(deg === 90 ? 'Um 90° gedreht' : `Um ${fmtAngleU(deg)} gedreht`, (doc) => {
       const R = new THREE.Matrix4();
       if (axis === 'x') R.makeRotationX(a); else if (axis === 'y') R.makeRotationY(a); else R.makeRotationZ(a);
       const T1 = new THREE.Matrix4().makeTranslation(c.x, c.y, c.z), T2 = new THREE.Matrix4().makeTranslation(-c.x, -c.y, -c.z);

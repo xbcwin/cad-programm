@@ -170,13 +170,15 @@ const UI = (() => {
   function numField({ id, label, value, unit = 'mm', len, axis, onCommit, min, int, placeholder, expr = true, step }) {
     const V = Model.vars(App.doc).v;
     const isLen = len != null ? !!len : unit === 'mm';
+    const isAng = !isLen && unit === '°';
     const dispUnit = isLen && unit === 'mm' ? Units.label() : unit;
+    const fmtDisp = (val) => (int ? String(Math.round(val)) : isLen ? Units.fmtLen(val) : isAng ? fmtAngle(val) : fmt(val));
     const isE = typeof value === 'string' && Model.isExpr(value);
     const wrap = h('div', { class: 'field' });
     if (label) wrap.append(h('label', { for: id }, label));
     const box = h('div', { class: 'inp' + (isE ? ' expr' : '') });
     if (axis) box.append(h('span', { class: 'axis ' + axis }, axis.toUpperCase()));
-    const dispVal = typeof value === 'number' ? (isLen ? Units.fmtInput(value) : fmt(value, 3)) : (value ?? '');
+    const dispVal = typeof value === 'number' ? fmtDisp(value) : (value ?? '');
     const inp = h('input', { id, type: 'text', inputmode: 'decimal', value: dispVal, placeholder: placeholder || '', autocomplete: 'off', spellcheck: 'false' });
     box.append(inp);
     let badErr = null;
@@ -185,8 +187,8 @@ const UI = (() => {
       if (res.ok) {
         const ev = res.value;
         const uSuf = isLen && Units.key() !== 'mm' ? ' ' + Units.label() : '';
-        const evTxt = isLen ? Units.fmtLen(ev, 2) + uSuf : fmt(ev, 2);
-        const evTip = isLen ? Units.fmtLenU(ev, 3) : fmt(ev, 3);
+        const evTxt = isLen ? Units.fmtLen(ev) + uSuf : isAng ? fmtAngleU(ev) : fmt(ev);
+        const evTip = isLen ? Units.fmtLenU(ev) : isAng ? fmtAngleU(ev) : fmt(ev);
         box.append(h('span', { class: 'fx', title: 'Formel: ' + value + ' = ' + evTip }, '= ' + evTxt));
       } else {
         badErr = res.error;
@@ -219,7 +221,7 @@ const UI = (() => {
         if (int) val = Math.round(val);
       }
       box.classList.remove('invalid');
-      orig = typeof val === 'number' ? (isLen ? Units.fmtInput(val) : fmt(val, 3)) : val;
+      orig = typeof val === 'number' ? fmtDisp(val) : val;
       inp.value = orig;
       onCommit(val);
     };
@@ -234,7 +236,7 @@ const UI = (() => {
         const s = (step || (u ? (e.shiftKey ? u.shiftStep : u.step) : (e.shiftKey ? 10 : 1))) * (e.key === 'ArrowUp' ? 1 : -1);
         let nv = round(n + s, isLen ? u.inputDec : 4);
         if (min != null) nv = Math.max(isLen ? Units.fromMM(min) : min, nv);
-        inp.value = fmt(nv, isLen ? u.inputDec : 3); commit();
+        inp.value = fmtFixed(nv, isLen ? u.inputDec : 4); commit();
       }
     });
     inp.addEventListener('blur', commit);

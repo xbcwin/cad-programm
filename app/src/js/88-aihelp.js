@@ -64,13 +64,13 @@ const Explain = (() => {
       const p = it.p || {}, tf = p.target ? Model.find(doc, p.target) : null;
       const sideTxt = p.side === 'side1' || p.side === 'side2' ? 'einseitig' : 'mittig';
       const dirTxt = p.dir === 'parallel' ? 'in der Skizzenebene' : 'senkrecht zur Skizze';
-      lines.push({ k: 'op', t: `Verstärkt „${tf ? Model.label(tf.item) : 'fehlendes Ziel'}“ als Rippe (${Units.fmtLenU(Model.num(p.thickness, V, 2), 2, doc)} dick, ${sideTxt}, ${dirTxt}${Math.abs(Model.num(p.draft, V, 0)) > 1e-6 ? `, ${fmt(Model.num(p.draft, V, 0), 1)}° Schräge` : ''}).` });
+      lines.push({ k: 'op', t: `Verstärkt „${tf ? Model.label(tf.item) : 'fehlendes Ziel'}“ als Rippe (${Units.fmtLenU(Model.num(p.thickness, V, 2), 2, doc)} dick, ${sideTxt}, ${dirTxt}${Math.abs(Model.num(p.draft, V, 0)) > 1e-6 ? `, ${fmtAngleU(Model.num(p.draft, V, 0))} Schräge` : ''}).` });
     }
     if (it.kind === 'wrap') {
       const p = it.p || {}, tf = p.target ? Model.find(doc, p.target) : null;
       const info = Model.wrapAngleInfo ? Model.wrapAngleInfo(it, V, doc) : null;
       const modeTxt = p.mode === 'deboss' ? `vertieft um ${Units.fmtLenU(Model.num(p.depth, V, 2), 2, doc)}` : p.mode === 'line' ? 'als Linie auf der Oberfläche' : `erhaben um ${Units.fmtLenU(Model.num(p.depth, V, 2), 2, doc)}`;
-      lines.push({ k: 'op', t: `Wickelt eine Skizze ${modeTxt} um „${tf ? Model.label(tf.item) : 'fehlendes Ziel'}“${info ? ` (${fmt(info.deg, 1)}° des Umfangs)` : ''}.` });
+      lines.push({ k: 'op', t: `Wickelt eine Skizze ${modeTxt} um „${tf ? Model.label(tf.item) : 'fehlendes Ziel'}“${info ? ` (${fmtAngleU(info.deg)} des Umfangs)` : ''}.` });
     }
     if (it.kind === 'emboss') {
       const p = it.p || {}, tf = p.target ? Model.find(doc, p.target) : null;
@@ -92,7 +92,7 @@ const Explain = (() => {
     for (const fin of it.finishes || []) lines.push({ k: 'fin', t: fin.type === 'shell' ? `Ausgehöhlt mit ${Units.fmtLenU(Model.num(fin.r, V, 2), 2, doc)} Wand.` : `${fin.type === 'chamfer' ? 'Fase' : 'Rundung'} ${Units.fmtLenU(Model.num(fin.r, V, 1), 2, doc)} an den Kanten.` });
     const used = paramsUsed(it, doc);
     if (used.length) lines.push({ k: 'masse', t: `Hängt an ${used.length === 1 ? 'dem Maß' : 'den Maßen'} ${used.slice(0, 6).join(', ')}${used.length > 6 ? ` und ${used.length - 6} weiteren` : ''}. Änderst du ${used.length === 1 ? 'es' : 'eines'} unter „Maße“, rechnet Tracery diesen Schritt neu.` });
-    if (top >= 0 && Mass.fixedOf(it)) lines.push({ k: 'gewicht', t: it.massG === '' ? 'Kaufteil: Das Gewicht fehlt noch – trag es rechts ein.' : `Kaufteil mit festem Gewicht ${fmt(Model.num(it.massG, V, 0), 1)} g.` });
+    if (top >= 0 && Mass.fixedOf(it)) lines.push({ k: 'gewicht', t: it.massG === '' ? 'Kaufteil: Das Gewicht fehlt noch – trag es rechts ein.' : `Kaufteil mit festem Gewicht ${fmtFixed(Model.num(it.massG, V, 0), 1)} g.` });
     else if (top >= 0 && it.role !== 'hole' && it.kind !== 'rib' && it.kind !== 'wrap' && it.kind !== 'emboss' && it.kind !== 'mirrorStep' && !(it.kind === 'transform' && !(it.p && it.p.copy)) && it.kind !== 'scale' && !(it.kind === 'thicken' && !(it.p && it.p.mode === 'new'))) lines.push({ k: 'material', t: `Material: ${Mass.materialFor(it, doc).k}.` });
     if (it.suppressed) lines.push({ k: 'status', t: 'Dieser Schritt ist unterdrückt und zählt gerade nicht mit.' });
     else if (top >= 0 && doc === App.doc && top >= Timeline.markerPos()) lines.push({ k: 'status', t: 'Dieser Schritt liegt hinter dem Marker der Zeitleiste und wird gerade nicht gerechnet.' });
@@ -195,7 +195,7 @@ const Weak = (() => {
     const cls = CLASS[Mass.materialFor(it).k] || 'print', printed = cls === 'print' || cls === 'tpu';
     const groups = new Map();
     const add = (kind, s, hole, val, ratio, dn) => {
-      const key = `${kind}|${s}|${fmt(hole.r * 2, 1)}|${fmt(val, 1)}`;
+      const key = `${kind}|${s}|${fmtFixed(hole.r * 2, 1)}|${fmtFixed(val, 1)}`;
       if (!groups.has(key)) groups.set(key, { kind, s, d: hole.r * 2, val, ratio, dn, at: [] });
       const g = groups.get(key); if (!g.at.some((q) => Math.hypot(q[0] - hole.c[0], q[1] - hole.c[1]) < 0.05)) g.at.push([hole.c[0], hole.c[1], z]);
     };
@@ -222,11 +222,11 @@ const Weak = (() => {
     return [...groups.values()].map((g) => ({
       id: g.kind === 'pitch' ? 'hole-pitch' : 'hole-edge', s: g.s, title: g.kind === 'pitch' ? `Löcher nah beieinander – ${plate.name}` : `Löcher nah am Rand – ${plate.name}`,
       text: (g.kind === 'pitch'
-        ? `${g.at.length} ${g.at.length === 1 ? 'Loch' : 'Löcher'} (Ø ${fmt(g.d, 1)} mm) mit nur ${fmt(g.val, 1)} mm Steg zum nächsten Loch. Tracery meldet unter ${fmt(RULES.pitch.warn * g.dn, 1)} mm (halber Durchmesser); für belastete Carbon-Verschraubungen empfehlen Hersteller sogar ${fmt(RULES.pitch.rec, 0)} × Durchmesser von Mitte zu Mitte.`
-        : `${g.at.length} ${g.at.length === 1 ? 'Loch' : 'Löcher'} (Ø ${fmt(g.d, 1)} mm) ${g.at.length === 1 ? 'hat' : 'haben'} nur ${fmt(g.val, 1)} mm Material bis zum Rand – da reißt das Material bei Belastung zuerst aus. ` +
+        ? `${g.at.length} ${g.at.length === 1 ? 'Loch' : 'Löcher'} (Ø ${fmtFixed(g.d, 1)} mm) mit nur ${fmtFixed(g.val, 1)} mm Steg zum nächsten Loch. Tracery meldet unter ${fmtFixed(RULES.pitch.warn * g.dn, 1)} mm (halber Durchmesser); für belastete Carbon-Verschraubungen empfehlen Hersteller sogar ${fmtFixed(RULES.pitch.rec, 0)} × Durchmesser von Mitte zu Mitte.`
+        : `${g.at.length} ${g.at.length === 1 ? 'Loch' : 'Löcher'} (Ø ${fmtFixed(g.d, 1)} mm) ${g.at.length === 1 ? 'hat' : 'haben'} nur ${fmtFixed(g.val, 1)} mm Material bis zum Rand – da reißt das Material bei Belastung zuerst aus. ` +
           (g.kind === 'pedge'
-            ? `Bei Druckteilen gehören um ein Schraubenloch mindestens ${fmt(g.d < 2.8 ? RULES.printHole.small : RULES.printHole.big, 1)} mm Material.`
-            : `Tracery meldet, wenn die Lochmitte näher als ${fmt(RULES.edge.warn, 1)} × Durchmesser am Rand liegt (hier ${fmt(RULES.edge.warn * g.d, 1)} mm); für belastete Carbon-Verschraubungen empfehlen Hersteller ${fmt(RULES.edge.rec, 1)} ×.`)),
+            ? `Bei Druckteilen gehören um ein Schraubenloch mindestens ${fmtFixed(g.d < 2.8 ? RULES.printHole.small : RULES.printHole.big, 1)} mm Material.`
+            : `Tracery meldet, wenn die Lochmitte näher als ${fmtFixed(RULES.edge.warn, 1)} × Durchmesser am Rand liegt (hier ${fmtFixed(RULES.edge.warn * g.d, 1)} mm); für belastete Carbon-Verschraubungen empfehlen Hersteller ${fmtFixed(RULES.edge.rec, 1)} ×.`)),
       ids: [plate.id], at: g.at, r: g.d / 2,
     }));
   }
@@ -240,7 +240,7 @@ const Weak = (() => {
     const groups = new Map();
     for (const hl of (res && res.holes) || []) {
       const s = hl.wall < hl.need / 2 ? 'bad' : 'warn';
-      const key = `${hl.id}|${s}|${fmt(hl.d, 1)}|${fmt(hl.wall, 1)}`;
+      const key = `${hl.id}|${s}|${fmtFixed(hl.d, 1)}|${fmtFixed(hl.wall, 1)}`;
       if (!groups.has(key)) groups.set(key, { id: hl.id, s, d: hl.d, wall: hl.wall, need: hl.need, at: [] });
       groups.get(key).at.push(hl.c);
     }
@@ -248,7 +248,7 @@ const Weak = (() => {
       const it = App.doc.items.find((x) => x.id === g.id), name = it ? Model.label(it) : 'Teil';
       return {
         id: 'hole-wall', s: g.s, title: `Dünne Wand um ein Loch – ${name}`,
-        text: `${g.at.length} ${g.at.length === 1 ? 'Loch' : 'Löcher'} (Ø ${fmt(g.d, 1)} mm) ${g.at.length === 1 ? 'hat' : 'haben'} an einer Stelle nur etwa ${fmt(g.wall, 1)} mm Material drumherum. Bei Druckteilen gehören um ein Schraubenloch mindestens ${fmt(g.need, 1)} mm – sonst reißt die Schraube beim Anziehen oder bei Belastung aus. Loch weiter nach innen setzen oder dort mehr Material anbauen.`,
+        text: `${g.at.length} ${g.at.length === 1 ? 'Loch' : 'Löcher'} (Ø ${fmtFixed(g.d, 1)} mm) ${g.at.length === 1 ? 'hat' : 'haben'} an einer Stelle nur etwa ${fmtFixed(g.wall, 1)} mm Material drumherum. Bei Druckteilen gehören um ein Schraubenloch mindestens ${fmtFixed(g.need, 1)} mm – sonst reißt die Schraube beim Anziehen oder bei Belastung aus. Loch weiter nach innen setzen oder dort mehr Material anbauen.`,
         ids: [g.id], at: g.at, r: g.d / 2 + 1,
       };
     });
@@ -280,7 +280,7 @@ const Weak = (() => {
       const th = thinnest(it, V); if (!th) continue;
       const s = th.t < bad ? 'bad' : th.t < warn ? 'warn' : null; if (!s) continue;
       const b = Viewer.baseBox(it.id); const c = b ? b.getCenter(new THREE.Vector3()) : null;
-      out.push({ id: 'wall', s, title: `Dünne Stelle – ${Model.label(it)}`, text: `„${th.name}“ ist nur ${fmt(th.t, 2)} mm ${th.what === 'Durchmesser' ? 'dick' : th.what === 'Wand' ? 'Wand' : 'dick'} (${m.k}). Faustregel für ${({ print: 'tragende Druckteile', tpu: 'TPU', fiber: 'Carbon und GFK', metal: 'Metall', wood: 'Holz' })[cls]}: mindestens ${fmt(warn, 1)} mm.`, ids: [it.id], at: c ? [[c.x, c.y, b.max.z]] : [], r: 6 });
+      out.push({ id: 'wall', s, title: `Dünne Stelle – ${Model.label(it)}`, text: `„${th.name}“ ist nur ${fmtFixed(th.t, 2)} mm ${th.what === 'Durchmesser' ? 'dick' : th.what === 'Wand' ? 'Wand' : 'dick'} (${m.k}). Faustregel für ${({ print: 'tragende Druckteile', tpu: 'TPU', fiber: 'Carbon und GFK', metal: 'Metall', wood: 'Holz' })[cls]}: mindestens ${fmtFixed(warn, 1)} mm.`, ids: [it.id], at: c ? [[c.x, c.y, b.max.z]] : [], r: 6 });
     }
     return out;
   }
@@ -291,8 +291,8 @@ const Weak = (() => {
     if (t >= rec) return [];
     const s = t < min - 1 ? 'bad' : t < min ? 'warn' : 'info';
     return [{ id: 'arm', s, title: s === 'info' ? 'Arme für Freestyle eher dünn' : 'Dünne Arme', text: s === 'info'
-      ? `Die Arme sind ${fmt(t, 1)} mm dick – für einen ${z}"-Racer in Ordnung, für Freestyle sind ${fmt(rec, 1)} mm üblich.`
-      : `Die Arme sind ${fmt(t, 1)} mm dick. Für ${z}"-Rahmen nehmen Racer mindestens ${fmt(min, 1)} mm, Freestyle-Rahmen ${fmt(rec, 1)} mm – dünnere Arme brechen beim Crash zuerst.`, ids: App.doc.items.filter((i) => i.name === 'Unterteil').map((i) => i.id), fix: { label: `Armdicke auf ${fmt(rec, 1)} mm`, run: () => App.change('Armdicke erhöht', (doc) => { doc.params.find((p) => p.name === 'Armdicke').expr = rec; }) } }];
+      ? `Die Arme sind ${fmtFixed(t, 1)} mm dick – für einen ${z}"-Racer in Ordnung, für Freestyle sind ${fmtFixed(rec, 1)} mm üblich.`
+      : `Die Arme sind ${fmtFixed(t, 1)} mm dick. Für ${z}"-Rahmen nehmen Racer mindestens ${fmtFixed(min, 1)} mm, Freestyle-Rahmen ${fmtFixed(rec, 1)} mm – dünnere Arme brechen beim Crash zuerst.`, ids: App.doc.items.filter((i) => i.name === 'Unterteil').map((i) => i.id), fix: { label: `Armdicke auf ${fmtFixed(rec, 1)} mm`, run: () => App.change('Armdicke erhöht', (doc) => { doc.params.find((p) => p.name === 'Armdicke').expr = rec; }) } }];
   }
   // Überhänge bei Druckteilen: was steiler als 45° nach unten zeigt und nicht auf dem Druckbett liegt
   function overhangs() {
@@ -301,7 +301,7 @@ const Weak = (() => {
       if (it.hidden || it.role === 'hole' || Mass.fixedOf(it) || !Viewer.nodes.has(it.id)) continue;
       const cls = CLASS[Mass.materialFor(it).k] || 'print'; if (cls !== 'print' && cls !== 'tpu') continue;
       const o = Views.overhangOf(it.id, 45); if (!o || o.area < 100 || !o.c) continue;   // kleine Stellen (z. B. waagerechte Schraubenlöcher) überbrückt der Drucker
-      out.push({ id: 'overhang', s: 'info', title: `Überhang beim Drucken – ${Model.label(it)}`, text: `${fmt(o.area, 0)} mm² zeigen steiler als 45° nach unten und hängen beim Drucken in der Luft – der Slicer braucht dort Stützen. Anders hinlegen, eine Fase statt einer waagerechten Kante oder in zwei Teile teilen hilft. Ansichten → „Überhänge (3D-Druck)“ zeigt die Stellen rot.`, ids: [it.id], at: [o.c], r: 6 });
+      out.push({ id: 'overhang', s: 'info', title: `Überhang beim Drucken – ${Model.label(it)}`, text: `${fmtFixed(o.area, 0)} mm² zeigen steiler als 45° nach unten und hängen beim Drucken in der Luft – der Slicer braucht dort Stützen. Anders hinlegen, eine Fase statt einer waagerechten Kante oder in zwei Teile teilen hilft. Ansichten → „Überhänge (3D-Druck)“ zeigt die Stellen rot.`, ids: [it.id], at: [o.c], r: 6 });
     }
     return out;
   }

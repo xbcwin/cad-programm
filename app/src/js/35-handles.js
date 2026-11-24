@@ -201,7 +201,7 @@ const Handles = (() => {
     scaleHandles(); placeLabels();
   }
   function addLabel(handle, value) {
-    const txt = Units.key() === 'mm' ? fmt(value, 2) : Units.fmtLenU(value, 2);
+    const txt = Units.key() === 'mm' ? Units.fmtLen(value) : Units.fmtLenU(value);
     const el = h('div', { class: 'dimlabel', title: 'Klicken und genaues Maß eintippen' }, txt);
     el.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
     el.addEventListener('click', (e) => { e.stopPropagation(); editLabel(el, handle); });
@@ -209,7 +209,7 @@ const Handles = (() => {
     labels.push({ el, handle });
   }
   function addAngleLabel(handle, value, factor = 1) {
-    const txt = factor === 2 ? `${fmt(value, 1)}° (2×${fmt(value / 2, 1)}°)` : `${fmt(value, 1)}°`;
+    const txt = factor === 2 ? `${fmtAngleU(value)} (2×${fmtAngleU(value / 2)})` : fmtAngleU(value);
     const el = h('div', { class: 'dimlabel', title: 'Klicken und genauen Winkel eintippen' }, txt);
     el.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
     el.addEventListener('click', (e) => { e.stopPropagation(); editAngleLabel(el, handle); });
@@ -221,19 +221,23 @@ const Handles = (() => {
     const c = current(); if (!c) return;
     const k = handle.userData.param, raw = c.it.p[k];
     el.classList.add('editing'); el.textContent = '';
-    const inp = h('input', { type: 'text', value: typeof raw === 'number' ? fmt(raw, 2) : String(raw ?? ''), 'aria-label': 'Drehwinkel' });
+    const orig = typeof raw === 'number' ? fmtFixed(raw, Math.max(4, FMT.angle)) : String(raw ?? '');
+    const inp = h('input', { type: 'text', value: orig, 'aria-label': 'Drehwinkel' });
     el.append(inp); inp.focus(); inp.select();
     let finished = false;
     const done = (ok) => {
       if (finished) return; finished = true;
       if (ok) {
-        const t = inp.value.trim(), V = Model.vars(App.doc).v, n = parseNum(t);
-        const v = isNaN(n) ? Model.num(t, V, NaN) : n;
-        if (!isNaN(v) && v > 0 && v <= 360) {
-          const maxA = c.it.p.dir === 'two' ? Math.max(0.1, 360 - Model.num(c.it.p[k === 'angle' ? 'angle2' : 'angle'], V, 0)) : 360;
-          const val = isNaN(n) ? t : round(clamp(v, 0.1, maxA), 3);
-          App.change('Drehwinkel geändert', (doc) => { const f = Model.find(doc, c.it.id); if (f) f.item.p[k] = val; });
-        } else UI.toast('Bitte einen Winkel zwischen 0,1° und 360° eingeben.', { kind: 'bad' });
+        const t = inp.value.trim();
+        if (t !== orig) {
+          const V = Model.vars(App.doc).v, n = parseNum(t);
+          const v = isNaN(n) ? Model.num(t, V, NaN) : n;
+          if (!isNaN(v) && v > 0 && v <= 360) {
+            const maxA = c.it.p.dir === 'two' ? Math.max(0.1, 360 - Model.num(c.it.p[k === 'angle' ? 'angle2' : 'angle'], V, 0)) : 360;
+            const val = isNaN(n) ? t : round(clamp(v, 0.1, maxA), 4);
+            App.change('Drehwinkel geändert', (doc) => { const f = Model.find(doc, c.it.id); if (f) f.item.p[k] = val; });
+          } else UI.toast('Bitte einen Winkel zwischen 0,1° und 360° eingeben.', { kind: 'bad' });
+        }
       }
       rebuild();
     };
@@ -242,7 +246,7 @@ const Handles = (() => {
   }
   function addSegLabel(handle, len, rule, id) {
     const i = handle.userData.seg;
-    const lenTxt = Units.key() === 'mm' ? fmt(len, 1) : Units.fmtLenU(len, 1);
+    const lenTxt = Units.key() === 'mm' ? Units.fmtLen(len) : Units.fmtLenU(len);
     const el = h('div', { class: 'dimlabel seglabel' + (rule.len != null ? ' fixed' : ''), id: 'seglabel-' + i, title: 'Klicken und Länge dieses Stücks eintippen' }, (rule.ax ? ({ perp: '⊥', par: '∥' }[rule.ax] || rule.ax.toUpperCase()) + ' · ' : '') + lenTxt + (rule.len != null ? ' 🔒' : ''));
     el.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
     el.addEventListener('click', (e) => {
@@ -255,9 +259,12 @@ const Handles = (() => {
       const done = (ok) => {
         if (finished) return; finished = true;
         if (ok) {
-          const val = inp.value.trim(), V = Model.vars(App.doc).v, p = Units.parseLen(val, V, { expr: true });
-          if (p.ok && p.num >= 0) App.change('Länge im Pfad', (doc) => { const f = Model.find(doc, id); if (!f || !f.item.p.path3d) return false; Model.path3dSetRule(f.item.p.path3d, i, { len: p.num === 0 ? null : p.value }, V); });
-          else UI.toast('Bitte eine Zahl eingeben (0 macht die Länge wieder frei).', { kind: 'bad' });
+          const val = inp.value.trim();
+          if (val !== initV) {
+            const V = Model.vars(App.doc).v, p = Units.parseLen(val, V, { expr: true });
+            if (p.ok && p.num >= 0) App.change('Länge im Pfad', (doc) => { const f = Model.find(doc, id); if (!f || !f.item.p.path3d) return false; Model.path3dSetRule(f.item.p.path3d, i, { len: p.num === 0 ? null : p.value }, V); });
+            else UI.toast('Bitte eine Zahl eingeben (0 macht die Länge wieder frei).', { kind: 'bad' });
+          }
         }
         rebuild();
       };
@@ -273,18 +280,21 @@ const Handles = (() => {
     const k = handle.userData.param;
     const raw = c.it.p[k];
     el.classList.add('editing'); el.textContent = '';
-    const inp = h('input', { type: 'text', value: typeof raw === 'number' ? Units.fmtInput(raw) : String(raw), 'aria-label': LABELS[k] || k });
+    const orig = typeof raw === 'number' ? Units.fmtInput(raw) : String(raw);
+    const inp = h('input', { type: 'text', value: orig, 'aria-label': LABELS[k] || k });
     el.append(inp); inp.focus(); inp.select();
     let finished = false;
     const done = (ok) => {
       if (finished) return; finished = true;
       if (ok) {
         const val = inp.value.trim();
-        const V = Model.vars(App.doc).v;
-        const p = Units.parseLen(val, V, { expr: true });
-        if (p.ok && p.num > 0) {
-          App.change('Maß geändert', () => { setDim(c, handle, p.value, true); });
-        } else UI.toast('Bitte eine Zahl größer als 0 eingeben.', { kind: 'bad' });
+        if (val !== orig) {
+          const V = Model.vars(App.doc).v;
+          const p = Units.parseLen(val, V, { expr: true });
+          if (p.ok && p.num > 0) {
+            App.change('Maß geändert', () => { setDim(c, handle, p.value, true); });
+          } else UI.toast('Bitte eine Zahl größer als 0 eingeben.', { kind: 'bad' });
+        }
       }
       rebuild();
     };
@@ -503,12 +513,12 @@ const Handles = (() => {
   function showLive(handle, v, label, unit = '') {
     if (!liveEl) { liveEl = h('div', { class: 'dimlabel live' }); overlayEl.append(liveEl); }
     const valTxt = unit === '°'
-      ? fmt(v, 2) + '°'
+      ? fmtAngleU(v)
       : unit === ' mm' || unit === 'mm'
-        ? Units.fmtLenU(v, 2)
+        ? Units.fmtLenU(v)
         : unit === ''
-          ? (Units.key() === 'mm' ? fmt(v, 2) : Units.fmtLenU(v, 2))
-          : fmt(v, 2) + unit;
+          ? (Units.key() === 'mm' ? Units.fmtLen(v) : Units.fmtLenU(v))
+          : fmt(v) + unit;
     liveEl.textContent = (label ? label + ' ' : '') + valTxt;
     const s = Viewer.toScreen(handle.position);
     liveEl.style.left = s.x + 'px'; liveEl.style.top = s.y - 28 + 'px';

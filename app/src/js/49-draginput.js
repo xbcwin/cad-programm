@@ -7,7 +7,7 @@ const DragInput = (() => {
     el = h('div', { class: 'drag-input', role: 'dialog', 'aria-label': 'Wert eingeben' });
     const inputs = sp.fields.map((f, i) => {
       const isLen = f.unit === 'mm';
-      const inp = h('input', { type: 'text', value: i === 0 && firstChar != null ? firstChar : (isLen ? Units.fmtInput(f.value) : fmt(f.value, 3)), 'aria-label': f.label, inputmode: 'decimal' });
+      const inp = h('input', { type: 'text', value: i === 0 && firstChar != null ? firstChar : (isLen ? Units.fmtInput(f.value) : f.unit === '°' ? fmtFixed(f.value, Math.max(4, FMT.angle)) : fmtFixed(f.value, Math.max(4, FMT.dec))), 'aria-label': f.label, inputmode: 'decimal' });
       el.append(h('span', null, f.label), inp);
       const u = isLen ? Units.label() : f.unit;
       if (u) el.append(h('small', null, u));

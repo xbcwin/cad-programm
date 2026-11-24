@@ -986,26 +986,26 @@ const Model = (() => {
       case 'revolve': {
         const dir = (it.p && it.p.dir) || 'normal';
         if (dir === 'toFace') return it.p && it.p.toFace && it.p.toFace.name ? `bis „${it.p.toFace.name}“` : 'bis Fläche';
-        if (dir === 'both') return `${fmt(p.angle, 1)}° (2×${fmt((p.angle || 0) / 2, 1)}°)`;
-        if (dir === 'two') return `${fmt(p.angle, 1)}° / ${fmt(p.angle2 ?? p.angle, 1)}°`;
-        if (dir === 'reverse') return `−${fmt(p.angle, 1)}°`;
-        return `${fmt(p.angle, 1)}°`;
+        if (dir === 'both') return `${fmtAngleU(p.angle)} (2×${fmtAngleU((p.angle || 0) / 2)})`;
+        if (dir === 'two') return `${fmtAngleU(p.angle)} / ${fmtAngleU(p.angle2 ?? p.angle)}`;
+        if (dir === 'reverse') return `−${fmtAngleU(p.angle)}`;
+        return fmtAngleU(p.angle);
       }
       case 'transform': {
         const parts = [];
-        for (const k of ['dx', 'dy', 'dz']) if (Math.abs(p[k] || 0) > 1e-6) parts.push(`${k[1].toUpperCase()} ${p[k] > 0 ? '+' : ''}${fmt(p[k], 1)}`);
-        for (const k of ['rx', 'ry', 'rz']) if (Math.abs(p[k] || 0) > 1e-6) parts.push(`↻${k[1].toUpperCase()} ${fmt(p[k], 1)}°`);
-        const s = parts.length ? parts.join(' ') : '0 mm';
+        for (const k of ['dx', 'dy', 'dz']) if (Math.abs(p[k] || 0) > 1e-6) parts.push(`${k[1].toUpperCase()} ${p[k] > 0 ? '+' : ''}${Units.fmtLen(p[k])}`);
+        for (const k of ['rx', 'ry', 'rz']) if (Math.abs(p[k] || 0) > 1e-6) parts.push(`↻${k[1].toUpperCase()} ${fmtAngleU(p[k])}`);
+        const s = parts.length ? parts.join(' ') : `0 ${Units.label()}`;
         return p.copy ? 'Kopie · ' + s : s;
       }
       case 'rib': {
         const t = f(p.thickness ?? 2);
-        const dr = Math.abs(p.draft || 0) > 1e-6 ? ' · ' + fmt(p.draft, 1) + '°' : '';
+        const dr = Math.abs(p.draft || 0) > 1e-6 ? ' · ' + fmtAngleU(p.draft) : '';
         return `${t}${u} dick${dr}`;
       }
       case 'wrap': {
         const info = wrapAngleInfo(it, V);
-        const angTxt = info ? ` · ${fmt(info.deg, 1)}°` : '';
+        const angTxt = info ? ` · ${fmtAngleU(info.deg)}` : '';
         if (p.mode === 'line') return `Linie${angTxt}`;
         const d = f(p.depth ?? 2);
         return `${p.mode === 'deboss' ? '−' : '+'}${d}${u}${angTxt}`;
@@ -1028,7 +1028,7 @@ const Model = (() => {
       case 'part': {
         const L = String(p.lib || '');
         if (L === 'buyMotor' || L === 'buyCap') return `Ø ${f(p.d)} × ${f(p.h)}${u}`;
-        if (L === 'buyProp') return `${fmt(p.zoll, 1)}"`;
+        if (L === 'buyProp') return `${fmtFixed(p.zoll, 1)}"`;
         if (L === 'buyAntenna') return `${f(p.L)}${u} lang`;
         if (L === 'buyStack') return `${f(p.a)} × ${f(p.a)}${u}`;
         if (L.startsWith('buy')) return `${f(p.w)} × ${f(p.d)} × ${f(p.h)}${u}`;

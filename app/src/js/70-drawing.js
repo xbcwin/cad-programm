@@ -2,7 +2,7 @@
 const Drawing = (() => {
   const SHEETS = { A4: [297, 210], A3: [420, 297] };
   const SCALES = [10, 5, 2, 1, 0.5, 0.2, 0.1, 0.05, 0.02];
-  const scaleText = (s) => (s >= 1 ? `${fmt(s, 2)}:1` : `1:${fmt(1 / s, 2)}`);
+  const scaleText = (s) => (s >= 1 ? `${fmtFixed(s, 2)}:1` : `1:${fmtFixed(1 / s, 2)}`);
   let proj = null, projRev = -1, loadingProj = false, projId = 0;
   let svg = null, wrap = null, holder = null, zoom = 1, tool = null, toolState = null, selDim = null;
   let layout = null;

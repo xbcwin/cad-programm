@@ -1622,7 +1622,7 @@ const Start = (() => {
     if (before.invalidCount !== after.invalidCount || !before.brepValid || !after.brepValid) diffs.push(`BRepCheck-Fehler ${before.invalidCount} → ${after.invalidCount}`);
     const bodyTxt = before.solids === 0 && after.solids > 0 ? ' · geschlossener Körper' : '';
     const capTxt = cappedFaces > 0 ? ` (+${cappedFaces} ${cappedFaces === 1 ? 'Fläche' : 'Flächen'})` : '';
-    const tolTxt = fmt(tol, 3);
+    const tolTxt = fmtFixed(tol, 3);
     if (!after.hasIssues) return `Geheilt (Toleranz ${tolTxt} mm): ${diffs.join(' · ')}${bodyTxt}${capTxt}.`;
     return `Heilen abgeschlossen (Toleranz ${tolTxt} mm): ${diffs.join(' · ')}${capTxt} – noch offen: ${issueSummaryText(after)}. Versuch eine größere Toleranz.`;
   }

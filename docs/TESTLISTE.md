@@ -1831,6 +1831,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Zurücksetzen & Hilfe**: „Zurücksetzen“ stellt die Ausgangs-Leiste samt Reihenfolge ohne Favoriten und ohne gespeicherte Anpassung wieder her; Hilfetext `toolbarCustomize` liegt in `werkzeug-hilfen.json`.
 - [ ] **Von Hand**: Werkzeugleiste in beiden Stufen („Einfach“ und „Profi“), bei schmalem Fenster sowie mit Suchfilter im Anpassen-Dialog testen und alle hinzugefügten Werkzeuge einmal anklicken.
 
+## Genauigkeit und Nachkommastellen (Auto [A-050], BE-11)
+
+- [x] **Anzeige 0–4 überall gleich**: Nachkommastellen 3 zeigt `12,3456` als `12,346`, 0 als `12` – in `#p-w`, `.dimlabel`, Ampel, Verlauf, Hüllmaßen und Kontextleiste; gespeichertes Maß und CAD-Volumen bleiben exakt.
+- [x] **Winkel getrennt einstellbar**: `#set-angle-dec` (0–4) steuert Drehung, Winkel-Maße und Drehkörper getrennt von Längen (`#set-dec`), gespeicherte Winkel bleiben exakt.
+- [x] **Skizze, Maße & Messungen**: Maße-Panel, `.skdim`, Eigenschaftsfelder, `#dim-table` und dauerhafte Messungen (`.mpin`, `#measure-tree`) übernehmen Änderungen sofort ohne Verlust der Genauigkeit.
+- [x] **Eingabe, Persistenz & Hilfe**: Exakte Eingaben bei 0 Stellen bleiben exakt gespeichert; Einstellungen bleiben nach Neuladen erhalten; Befehl `settings-precision` und Hilfetext `precision` sind vorhanden.
+- [ ] **Von Hand**: In den Einstellungen zwischen 0 und 4 Stellen für Anzeige und Winkel wechseln und prüfen, ob beim Messen und Zeichnen in Zoll und Millimeter alle Schilder ruhig und übersichtlich wirken.
+
 ## Fehler melden
 
 ```

@@ -29,12 +29,23 @@ const uid = (p = 'i') => p + '_' + Math.random().toString(36).slice(2, 9);
 function debounce(fn, ms) { let t; const f = (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; f.flush = (...a) => { clearTimeout(t); fn(...a); }; f.cancel = () => clearTimeout(t); return f; }
 function throttle(fn, ms) { let last = 0, t = null; return (...a) => { const now = performance.now(); const run = () => { last = performance.now(); t = null; fn(...a); }; if (now - last >= ms) run(); else if (!t) t = setTimeout(run, ms - (now - last)); }; }
 function round(v, d = 3) { const f = Math.pow(10, d); return Math.round(v * f) / f; }
-const FMT = { min: 0 };   // Einstellung „Nachkommastellen“: Mindestgenauigkeit aller Anzeigen
-function fmt(v, d = 2) {
+const FMT = { dec: 2, angle: 1 };   // Einstellung „Nachkommastellen“: Anzeige (0–4) und Winkel (0–4)
+function fmtFixed(v, d = 2) {
   if (typeof v !== 'number' || !isFinite(v)) return '–';
-  let r = round(v, Math.max(d, FMT.min));
+  const dc = clamp(Math.round(d), 0, 12);
+  let r = round(v, dc);
   if (Object.is(r, -0)) r = 0;
-  return String(r).replace('.', ',');
+  const s = dc > 0 ? r.toFixed(dc) : String(Math.round(r));
+  return (s.includes('.') ? s.replace(/\.?0+$/, '') : s).replace('.', ',');
+}
+function fmt(v, d) {
+  return fmtFixed(v, FMT.dec);
+}
+function fmtAngle(v) {
+  return fmtFixed(v, FMT.angle);
+}
+function fmtAngleU(v) {
+  return typeof v !== 'number' || !isFinite(v) ? '–' : fmtAngle(v) + '°';
 }
 function parseNum(s) {
   if (typeof s === 'number') return s;
@@ -257,7 +268,7 @@ const Expr = (() => {
         try { kv = parse(rawKey, vars, rawTbls, depth + 1); okKey = true; } catch (_) {}
         if (okKey) {
           row = findRow(String(kv), kv);
-          if (!row) throw new Error(`Schlüssel „${fmt(kv, 4)}“ nicht in Tabelle „${tbl.name}“ gefunden.`);
+          if (!row) throw new Error(`Schlüssel „${fmtFixed(kv, 4)}“ nicht in Tabelle „${tbl.name}“ gefunden.`);
         }
       }
       if (!row) throw new Error(`Schlüssel „${litKey}“ nicht in Tabelle „${tbl.name}“ gefunden.`);
@@ -380,31 +391,39 @@ const Units = (() => {
   const areaFromMM2 = (mm2, doc) => mm2 / def(doc).areaFac;
   const volFromMM3 = (mm3, doc) => mm3 / def(doc).volFac;
   const decFor = (d, doc) => (def(doc).k === 'mm' ? d : Math.max(d, def(doc).dec));
-  function fmtLen(mm, d = 2, doc) {
+  function fmtLen(mm, d, doc) {
     if (typeof mm !== 'number' || !isFinite(mm)) return '–';
-    return fmt(fromMM(mm, doc), decFor(d, doc));
+    return fmtFixed(fromMM(mm, doc), FMT.dec);
   }
-  function fmtLenU(mm, d = 2, doc) {
+  function fmtLenU(mm, d, doc) {
     if (typeof mm !== 'number' || !isFinite(mm)) return '–';
     return `${fmtLen(mm, d, doc)} ${label(doc)}`;
   }
-  function fmtArea(mm2, d = 2, doc) {
+  function fmtLenFixed(mm, d = 2, doc) {
+    if (typeof mm !== 'number' || !isFinite(mm)) return '–';
+    return fmtFixed(fromMM(mm, doc), decFor(d, doc));
+  }
+  function fmtLenFixedU(mm, d = 2, doc) {
+    if (typeof mm !== 'number' || !isFinite(mm)) return '–';
+    return `${fmtLenFixed(mm, d, doc)} ${label(doc)}`;
+  }
+  function fmtArea(mm2, d, doc) {
     if (typeof mm2 !== 'number' || !isFinite(mm2)) return '–';
     const u = def(doc);
-    return fmt(mm2 / u.areaFac, u.k === 'mm' ? d : Math.max(d, u.k === 'm' ? 4 : 2));
+    return fmtFixed(mm2 / u.areaFac, u.k === 'm' ? Math.max(FMT.dec, 4) : FMT.dec);
   }
-  function fmtAreaU(mm2, d = 2, doc) {
+  function fmtAreaU(mm2, d, doc) {
     if (typeof mm2 !== 'number' || !isFinite(mm2)) return '–';
     return `${fmtArea(mm2, d, doc)} ${def(doc).areaLabel}`;
   }
-  function fmtVolU(mm3, d = 3, doc) {
+  function fmtVolU(mm3, d, doc) {
     if (typeof mm3 !== 'number' || !isFinite(mm3)) return '–';
     const u = def(doc);
-    return `${fmt(mm3 / u.volFac, u.k === 'm' ? Math.max(d, 5) : d)} ${u.volLabel}`;
+    return `${fmtFixed(mm3 / u.volFac, u.k === 'm' ? Math.max(FMT.dec, 5) : FMT.dec)} ${u.volLabel}`;
   }
   function fmtInput(mm, doc) {
     if (typeof mm !== 'number' || !isFinite(mm)) return '';
-    return fmt(fromMM(mm, doc), def(doc).inputDec);
+    return fmtFixed(fromMM(mm, doc), Math.max(def(doc).inputDec, FMT.dec, 4));
   }
   const UFAC = { mm: 1, cm: 10, m: 1000, in: 25.4, zoll: 25.4, '"': 25.4, '°': 1 };
   function parseLen(raw, V, { expr = true, doc } = {}) {
@@ -446,7 +465,7 @@ const Units = (() => {
     App.change('Einheit: ' + DEFS[u].name, (doc) => { doc.settings = doc.settings || {}; doc.settings.unit = u; });
     return true;
   }
-  return { DEFS, ORDER, OPTIONS, key, def, label, areaLabel, volLabel, factor, fromMM, toMM, areaFromMM2, volFromMM3, fmtLen, fmtLenU, fmtArea, fmtAreaU, fmtVolU, fmtInput, parseLen, set };
+  return { DEFS, ORDER, OPTIONS, key, def, label, areaLabel, volLabel, factor, fromMM, toMM, areaFromMM2, volFromMM3, fmtLen, fmtLenU, fmtLenFixed, fmtLenFixedU, fmtArea, fmtAreaU, fmtVolU, fmtInput, parseLen, set };
 })();
 
 // ---------- Symbole ----------
@@ -1572,6 +1591,11 @@ const HELP = {
   "tip": "Werkzeugleiste anpassen, sortieren und Favoriten ganz links anheften",
   "hilfe": "Mach einen Rechtsklick auf die Werkzeugleiste oben und wähle „Anpassen …“. Links siehst du deine aktiven Werkzeuge, rechts alle weiteren Werkzeuge wie Abrunden, Bohren oder Schnitt. Zieh Werkzeuge per Maus zwischen den Listen hin und her oder sortiere sie neu. Ein Klick auf den Stern markiert ein Werkzeug als Favorit – Favoriten stehen in der Leiste immer ganz links. Alle Änderungen werden in deinem Browser gespeichert; „Zurücksetzen“ stellt den Anfangszustand wieder her.",
   "tipp": "Mit einem Rechtsklick direkt auf ein Werkzeug in der Leiste kannst du es auch ohne Umweg als Favorit markieren oder entfernen."
+ },
+ "precision": {
+  "tip": "Nachkommastellen für Anzeige (0–4) und Winkel (0–4) getrennt wählen",
+  "hilfe": "In den Einstellungen stellst du getrennt ein, wie viele Stellen nach dem Komma bei Längen, Maßen, Schildern, Messungen und Panels (0 bis 4) sowie bei Winkeln (0 bis 4) angezeigt werden. Alle eingegebenen Maße, Formeln und der CAD-Kern rechnen im Hintergrund immer mit voller Genauigkeit weiter.",
+  "tipp": "Auch wenn 0 Stellen eingestellt sind, kannst du jederzeit exakte Werte wie 12,3456 eintippen – sie bleiben genau so gespeichert und sichtbar, sobald du mehr Stellen wählst."
  }
 };
 

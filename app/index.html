@@ -1115,12 +1115,23 @@ const uid = (p = 'i') => p + '_' + Math.random().toString(36).slice(2, 9);
 function debounce(fn, ms) { let t; const f = (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; f.flush = (...a) => { clearTimeout(t); fn(...a); }; f.cancel = () => clearTimeout(t); return f; }
 function throttle(fn, ms) { let last = 0, t = null; return (...a) => { const now = performance.now(); const run = () => { last = performance.now(); t = null; fn(...a); }; if (now - last >= ms) run(); else if (!t) t = setTimeout(run, ms - (now - last)); }; }
 function round(v, d = 3) { const f = Math.pow(10, d); return Math.round(v * f) / f; }
-const FMT = { min: 0 };   // Einstellung „Nachkommastellen“: Mindestgenauigkeit aller Anzeigen
-function fmt(v, d = 2) {
+const FMT = { dec: 2, angle: 1 };   // Einstellung „Nachkommastellen“: Anzeige (0–4) und Winkel (0–4)
+function fmtFixed(v, d = 2) {
   if (typeof v !== 'number' || !isFinite(v)) return '–';
-  let r = round(v, Math.max(d, FMT.min));
+  const dc = clamp(Math.round(d), 0, 12);
+  let r = round(v, dc);
   if (Object.is(r, -0)) r = 0;
-  return String(r).replace('.', ',');
+  const s = dc > 0 ? r.toFixed(dc) : String(Math.round(r));
+  return (s.includes('.') ? s.replace(/\.?0+$/, '') : s).replace('.', ',');
+}
+function fmt(v, d) {
+  return fmtFixed(v, FMT.dec);
+}
+function fmtAngle(v) {
+  return fmtFixed(v, FMT.angle);
+}
+function fmtAngleU(v) {
+  return typeof v !== 'number' || !isFinite(v) ? '–' : fmtAngle(v) + '°';
 }
 function parseNum(s) {
   if (typeof s === 'number') return s;
@@ -1343,7 +1354,7 @@ const Expr = (() => {
         try { kv = parse(rawKey, vars, rawTbls, depth + 1); okKey = true; } catch (_) {}
         if (okKey) {
           row = findRow(String(kv), kv);
-          if (!row) throw new Error(`Schlüssel „${fmt(kv, 4)}“ nicht in Tabelle „${tbl.name}“ gefunden.`);
+          if (!row) throw new Error(`Schlüssel „${fmtFixed(kv, 4)}“ nicht in Tabelle „${tbl.name}“ gefunden.`);
         }
       }
       if (!row) throw new Error(`Schlüssel „${litKey}“ nicht in Tabelle „${tbl.name}“ gefunden.`);
@@ -1466,31 +1477,39 @@ const Units = (() => {
   const areaFromMM2 = (mm2, doc) => mm2 / def(doc).areaFac;
   const volFromMM3 = (mm3, doc) => mm3 / def(doc).volFac;
   const decFor = (d, doc) => (def(doc).k === 'mm' ? d : Math.max(d, def(doc).dec));
-  function fmtLen(mm, d = 2, doc) {
+  function fmtLen(mm, d, doc) {
     if (typeof mm !== 'number' || !isFinite(mm)) return '–';
-    return fmt(fromMM(mm, doc), decFor(d, doc));
+    return fmtFixed(fromMM(mm, doc), FMT.dec);
   }
-  function fmtLenU(mm, d = 2, doc) {
+  function fmtLenU(mm, d, doc) {
     if (typeof mm !== 'number' || !isFinite(mm)) return '–';
     return `${fmtLen(mm, d, doc)} ${label(doc)}`;
   }
-  function fmtArea(mm2, d = 2, doc) {
+  function fmtLenFixed(mm, d = 2, doc) {
+    if (typeof mm !== 'number' || !isFinite(mm)) return '–';
+    return fmtFixed(fromMM(mm, doc), decFor(d, doc));
+  }
+  function fmtLenFixedU(mm, d = 2, doc) {
+    if (typeof mm !== 'number' || !isFinite(mm)) return '–';
+    return `${fmtLenFixed(mm, d, doc)} ${label(doc)}`;
+  }
+  function fmtArea(mm2, d, doc) {
     if (typeof mm2 !== 'number' || !isFinite(mm2)) return '–';
     const u = def(doc);
-    return fmt(mm2 / u.areaFac, u.k === 'mm' ? d : Math.max(d, u.k === 'm' ? 4 : 2));
+    return fmtFixed(mm2 / u.areaFac, u.k === 'm' ? Math.max(FMT.dec, 4) : FMT.dec);
   }
-  function fmtAreaU(mm2, d = 2, doc) {
+  function fmtAreaU(mm2, d, doc) {
     if (typeof mm2 !== 'number' || !isFinite(mm2)) return '–';
     return `${fmtArea(mm2, d, doc)} ${def(doc).areaLabel}`;
   }
-  function fmtVolU(mm3, d = 3, doc) {
+  function fmtVolU(mm3, d, doc) {
     if (typeof mm3 !== 'number' || !isFinite(mm3)) return '–';
     const u = def(doc);
-    return `${fmt(mm3 / u.volFac, u.k === 'm' ? Math.max(d, 5) : d)} ${u.volLabel}`;
+    return `${fmtFixed(mm3 / u.volFac, u.k === 'm' ? Math.max(FMT.dec, 5) : FMT.dec)} ${u.volLabel}`;
   }
   function fmtInput(mm, doc) {
     if (typeof mm !== 'number' || !isFinite(mm)) return '';
-    return fmt(fromMM(mm, doc), def(doc).inputDec);
+    return fmtFixed(fromMM(mm, doc), Math.max(def(doc).inputDec, FMT.dec, 4));
   }
   const UFAC = { mm: 1, cm: 10, m: 1000, in: 25.4, zoll: 25.4, '"': 25.4, '°': 1 };
   function parseLen(raw, V, { expr = true, doc } = {}) {
@@ -1532,7 +1551,7 @@ const Units = (() => {
     App.change('Einheit: ' + DEFS[u].name, (doc) => { doc.settings = doc.settings || {}; doc.settings.unit = u; });
     return true;
   }
-  return { DEFS, ORDER, OPTIONS, key, def, label, areaLabel, volLabel, factor, fromMM, toMM, areaFromMM2, volFromMM3, fmtLen, fmtLenU, fmtArea, fmtAreaU, fmtVolU, fmtInput, parseLen, set };
+  return { DEFS, ORDER, OPTIONS, key, def, label, areaLabel, volLabel, factor, fromMM, toMM, areaFromMM2, volFromMM3, fmtLen, fmtLenU, fmtLenFixed, fmtLenFixedU, fmtArea, fmtAreaU, fmtVolU, fmtInput, parseLen, set };
 })();
 
 // ---------- Symbole ----------
@@ -2658,6 +2677,11 @@ const HELP = {
   "tip": "Werkzeugleiste anpassen, sortieren und Favoriten ganz links anheften",
   "hilfe": "Mach einen Rechtsklick auf die Werkzeugleiste oben und wähle „Anpassen …“. Links siehst du deine aktiven Werkzeuge, rechts alle weiteren Werkzeuge wie Abrunden, Bohren oder Schnitt. Zieh Werkzeuge per Maus zwischen den Listen hin und her oder sortiere sie neu. Ein Klick auf den Stern markiert ein Werkzeug als Favorit – Favoriten stehen in der Leiste immer ganz links. Alle Änderungen werden in deinem Browser gespeichert; „Zurücksetzen“ stellt den Anfangszustand wieder her.",
   "tipp": "Mit einem Rechtsklick direkt auf ein Werkzeug in der Leiste kannst du es auch ohne Umweg als Favorit markieren oder entfernen."
+ },
+ "precision": {
+  "tip": "Nachkommastellen für Anzeige (0–4) und Winkel (0–4) getrennt wählen",
+  "hilfe": "In den Einstellungen stellst du getrennt ein, wie viele Stellen nach dem Komma bei Längen, Maßen, Schildern, Messungen und Panels (0 bis 4) sowie bei Winkeln (0 bis 4) angezeigt werden. Alle eingegebenen Maße, Formeln und der CAD-Kern rechnen im Hintergrund immer mit voller Genauigkeit weiter.",
+  "tipp": "Auch wenn 0 Stellen eingestellt sind, kannst du jederzeit exakte Werte wie 12,3456 eintippen – sie bleiben genau so gespeichert und sichtbar, sobald du mehr Stellen wählst."
  }
 };
 
@@ -4206,26 +4230,26 @@ const Model = (() => {
       case 'revolve': {
         const dir = (it.p && it.p.dir) || 'normal';
         if (dir === 'toFace') return it.p && it.p.toFace && it.p.toFace.name ? `bis „${it.p.toFace.name}“` : 'bis Fläche';
-        if (dir === 'both') return `${fmt(p.angle, 1)}° (2×${fmt((p.angle || 0) / 2, 1)}°)`;
-        if (dir === 'two') return `${fmt(p.angle, 1)}° / ${fmt(p.angle2 ?? p.angle, 1)}°`;
-        if (dir === 'reverse') return `−${fmt(p.angle, 1)}°`;
-        return `${fmt(p.angle, 1)}°`;
+        if (dir === 'both') return `${fmtAngleU(p.angle)} (2×${fmtAngleU((p.angle || 0) / 2)})`;
+        if (dir === 'two') return `${fmtAngleU(p.angle)} / ${fmtAngleU(p.angle2 ?? p.angle)}`;
+        if (dir === 'reverse') return `−${fmtAngleU(p.angle)}`;
+        return fmtAngleU(p.angle);
       }
       case 'transform': {
         const parts = [];
-        for (const k of ['dx', 'dy', 'dz']) if (Math.abs(p[k] || 0) > 1e-6) parts.push(`${k[1].toUpperCase()} ${p[k] > 0 ? '+' : ''}${fmt(p[k], 1)}`);
-        for (const k of ['rx', 'ry', 'rz']) if (Math.abs(p[k] || 0) > 1e-6) parts.push(`↻${k[1].toUpperCase()} ${fmt(p[k], 1)}°`);
-        const s = parts.length ? parts.join(' ') : '0 mm';
+        for (const k of ['dx', 'dy', 'dz']) if (Math.abs(p[k] || 0) > 1e-6) parts.push(`${k[1].toUpperCase()} ${p[k] > 0 ? '+' : ''}${Units.fmtLen(p[k])}`);
+        for (const k of ['rx', 'ry', 'rz']) if (Math.abs(p[k] || 0) > 1e-6) parts.push(`↻${k[1].toUpperCase()} ${fmtAngleU(p[k])}`);
+        const s = parts.length ? parts.join(' ') : `0 ${Units.label()}`;
         return p.copy ? 'Kopie · ' + s : s;
       }
       case 'rib': {
         const t = f(p.thickness ?? 2);
-        const dr = Math.abs(p.draft || 0) > 1e-6 ? ' · ' + fmt(p.draft, 1) + '°' : '';
+        const dr = Math.abs(p.draft || 0) > 1e-6 ? ' · ' + fmtAngleU(p.draft) : '';
         return `${t}${u} dick${dr}`;
       }
       case 'wrap': {
         const info = wrapAngleInfo(it, V);
-        const angTxt = info ? ` · ${fmt(info.deg, 1)}°` : '';
+        const angTxt = info ? ` · ${fmtAngleU(info.deg)}` : '';
         if (p.mode === 'line') return `Linie${angTxt}`;
         const d = f(p.depth ?? 2);
         return `${p.mode === 'deboss' ? '−' : '+'}${d}${u}${angTxt}`;
@@ -4248,7 +4272,7 @@ const Model = (() => {
       case 'part': {
         const L = String(p.lib || '');
         if (L === 'buyMotor' || L === 'buyCap') return `Ø ${f(p.d)} × ${f(p.h)}${u}`;
-        if (L === 'buyProp') return `${fmt(p.zoll, 1)}"`;
+        if (L === 'buyProp') return `${fmtFixed(p.zoll, 1)}"`;
         if (L === 'buyAntenna') return `${f(p.L)}${u} lang`;
         if (L === 'buyStack') return `${f(p.a)} × ${f(p.a)}${u}`;
         if (L.startsWith('buy')) return `${f(p.w)} × ${f(p.d)} × ${f(p.h)}${u}`;
@@ -9457,7 +9481,7 @@ const Handles = (() => {
     scaleHandles(); placeLabels();
   }
   function addLabel(handle, value) {
-    const txt = Units.key() === 'mm' ? fmt(value, 2) : Units.fmtLenU(value, 2);
+    const txt = Units.key() === 'mm' ? Units.fmtLen(value) : Units.fmtLenU(value);
     const el = h('div', { class: 'dimlabel', title: 'Klicken und genaues Maß eintippen' }, txt);
     el.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
     el.addEventListener('click', (e) => { e.stopPropagation(); editLabel(el, handle); });
@@ -9465,7 +9489,7 @@ const Handles = (() => {
     labels.push({ el, handle });
   }
   function addAngleLabel(handle, value, factor = 1) {
-    const txt = factor === 2 ? `${fmt(value, 1)}° (2×${fmt(value / 2, 1)}°)` : `${fmt(value, 1)}°`;
+    const txt = factor === 2 ? `${fmtAngleU(value)} (2×${fmtAngleU(value / 2)})` : fmtAngleU(value);
     const el = h('div', { class: 'dimlabel', title: 'Klicken und genauen Winkel eintippen' }, txt);
     el.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
     el.addEventListener('click', (e) => { e.stopPropagation(); editAngleLabel(el, handle); });
@@ -9477,19 +9501,23 @@ const Handles = (() => {
     const c = current(); if (!c) return;
     const k = handle.userData.param, raw = c.it.p[k];
     el.classList.add('editing'); el.textContent = '';
-    const inp = h('input', { type: 'text', value: typeof raw === 'number' ? fmt(raw, 2) : String(raw ?? ''), 'aria-label': 'Drehwinkel' });
+    const orig = typeof raw === 'number' ? fmtFixed(raw, Math.max(4, FMT.angle)) : String(raw ?? '');
+    const inp = h('input', { type: 'text', value: orig, 'aria-label': 'Drehwinkel' });
     el.append(inp); inp.focus(); inp.select();
     let finished = false;
     const done = (ok) => {
       if (finished) return; finished = true;
       if (ok) {
-        const t = inp.value.trim(), V = Model.vars(App.doc).v, n = parseNum(t);
-        const v = isNaN(n) ? Model.num(t, V, NaN) : n;
-        if (!isNaN(v) && v > 0 && v <= 360) {
-          const maxA = c.it.p.dir === 'two' ? Math.max(0.1, 360 - Model.num(c.it.p[k === 'angle' ? 'angle2' : 'angle'], V, 0)) : 360;
-          const val = isNaN(n) ? t : round(clamp(v, 0.1, maxA), 3);
-          App.change('Drehwinkel geändert', (doc) => { const f = Model.find(doc, c.it.id); if (f) f.item.p[k] = val; });
-        } else UI.toast('Bitte einen Winkel zwischen 0,1° und 360° eingeben.', { kind: 'bad' });
+        const t = inp.value.trim();
+        if (t !== orig) {
+          const V = Model.vars(App.doc).v, n = parseNum(t);
+          const v = isNaN(n) ? Model.num(t, V, NaN) : n;
+          if (!isNaN(v) && v > 0 && v <= 360) {
+            const maxA = c.it.p.dir === 'two' ? Math.max(0.1, 360 - Model.num(c.it.p[k === 'angle' ? 'angle2' : 'angle'], V, 0)) : 360;
+            const val = isNaN(n) ? t : round(clamp(v, 0.1, maxA), 4);
+            App.change('Drehwinkel geändert', (doc) => { const f = Model.find(doc, c.it.id); if (f) f.item.p[k] = val; });
+          } else UI.toast('Bitte einen Winkel zwischen 0,1° und 360° eingeben.', { kind: 'bad' });
+        }
       }
       rebuild();
     };
@@ -9498,7 +9526,7 @@ const Handles = (() => {
   }
   function addSegLabel(handle, len, rule, id) {
     const i = handle.userData.seg;
-    const lenTxt = Units.key() === 'mm' ? fmt(len, 1) : Units.fmtLenU(len, 1);
+    const lenTxt = Units.key() === 'mm' ? Units.fmtLen(len) : Units.fmtLenU(len);
     const el = h('div', { class: 'dimlabel seglabel' + (rule.len != null ? ' fixed' : ''), id: 'seglabel-' + i, title: 'Klicken und Länge dieses Stücks eintippen' }, (rule.ax ? ({ perp: '⊥', par: '∥' }[rule.ax] || rule.ax.toUpperCase()) + ' · ' : '') + lenTxt + (rule.len != null ? ' 🔒' : ''));
     el.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
     el.addEventListener('click', (e) => {
@@ -9511,9 +9539,12 @@ const Handles = (() => {
       const done = (ok) => {
         if (finished) return; finished = true;
         if (ok) {
-          const val = inp.value.trim(), V = Model.vars(App.doc).v, p = Units.parseLen(val, V, { expr: true });
-          if (p.ok && p.num >= 0) App.change('Länge im Pfad', (doc) => { const f = Model.find(doc, id); if (!f || !f.item.p.path3d) return false; Model.path3dSetRule(f.item.p.path3d, i, { len: p.num === 0 ? null : p.value }, V); });
-          else UI.toast('Bitte eine Zahl eingeben (0 macht die Länge wieder frei).', { kind: 'bad' });
+          const val = inp.value.trim();
+          if (val !== initV) {
+            const V = Model.vars(App.doc).v, p = Units.parseLen(val, V, { expr: true });
+            if (p.ok && p.num >= 0) App.change('Länge im Pfad', (doc) => { const f = Model.find(doc, id); if (!f || !f.item.p.path3d) return false; Model.path3dSetRule(f.item.p.path3d, i, { len: p.num === 0 ? null : p.value }, V); });
+            else UI.toast('Bitte eine Zahl eingeben (0 macht die Länge wieder frei).', { kind: 'bad' });
+          }
         }
         rebuild();
       };
@@ -9529,18 +9560,21 @@ const Handles = (() => {
     const k = handle.userData.param;
     const raw = c.it.p[k];
     el.classList.add('editing'); el.textContent = '';
-    const inp = h('input', { type: 'text', value: typeof raw === 'number' ? Units.fmtInput(raw) : String(raw), 'aria-label': LABELS[k] || k });
+    const orig = typeof raw === 'number' ? Units.fmtInput(raw) : String(raw);
+    const inp = h('input', { type: 'text', value: orig, 'aria-label': LABELS[k] || k });
     el.append(inp); inp.focus(); inp.select();
     let finished = false;
     const done = (ok) => {
       if (finished) return; finished = true;
       if (ok) {
         const val = inp.value.trim();
-        const V = Model.vars(App.doc).v;
-        const p = Units.parseLen(val, V, { expr: true });
-        if (p.ok && p.num > 0) {
-          App.change('Maß geändert', () => { setDim(c, handle, p.value, true); });
-        } else UI.toast('Bitte eine Zahl größer als 0 eingeben.', { kind: 'bad' });
+        if (val !== orig) {
+          const V = Model.vars(App.doc).v;
+          const p = Units.parseLen(val, V, { expr: true });
+          if (p.ok && p.num > 0) {
+            App.change('Maß geändert', () => { setDim(c, handle, p.value, true); });
+          } else UI.toast('Bitte eine Zahl größer als 0 eingeben.', { kind: 'bad' });
+        }
       }
       rebuild();
     };
@@ -9759,12 +9793,12 @@ const Handles = (() => {
   function showLive(handle, v, label, unit = '') {
     if (!liveEl) { liveEl = h('div', { class: 'dimlabel live' }); overlayEl.append(liveEl); }
     const valTxt = unit === '°'
-      ? fmt(v, 2) + '°'
+      ? fmtAngleU(v)
       : unit === ' mm' || unit === 'mm'
-        ? Units.fmtLenU(v, 2)
+        ? Units.fmtLenU(v)
         : unit === ''
-          ? (Units.key() === 'mm' ? fmt(v, 2) : Units.fmtLenU(v, 2))
-          : fmt(v, 2) + unit;
+          ? (Units.key() === 'mm' ? Units.fmtLen(v) : Units.fmtLenU(v))
+          : fmt(v) + unit;
     liveEl.textContent = (label ? label + ' ' : '') + valTxt;
     const s = Viewer.toScreen(handle.position);
     liveEl.style.left = s.x + 'px'; liveEl.style.top = s.y - 28 + 'px';
@@ -10428,26 +10462,26 @@ const DroneLib = (() => {
     const out = [];
     const part = (lib, p, name, g, extra = {}) => ({ buy: true, kind: 'part', p: { lib, ...p }, name, massG: g == null ? '' : g, color: COL[cat], ...extra });
     const box = (lib, name, l, b, hgt, g, extra = {}) => part(lib, { w: b, d: l, h: hgt }, name, g, extra);
-    if (cat === 'motor') for (const m of motors()) out.push(part('buyMotor', { d: m.d, h: m.h, lk: m.circle, size: motorScrew(m) }, 'Motor ' + m.stator, m.g, { color: COL.motor, info: m.sheet ? `${m.src}: ${fmt(m.g, 1)} g` + (m.est ? ' (Höhe geschätzt)' : '') : 'Höhe geschätzt, Gewicht bitte eintragen' }));
-    if (cat === 'akku') for (const a of akkus()) out.push(box('buyBattery', a.name, a.l, a.w, a.h, a.g, { info: a.produkt ? `${a.produkt}: ${fmt(a.g, 0)} g` : `ca. ${a.g} g` }));
+    if (cat === 'motor') for (const m of motors()) out.push(part('buyMotor', { d: m.d, h: m.h, lk: m.circle, size: motorScrew(m) }, 'Motor ' + m.stator, m.g, { color: COL.motor, info: m.sheet ? `${m.src}: ${fmtFixed(m.g, 1)} g` + (m.est ? ' (Höhe geschätzt)' : '') : 'Höhe geschätzt, Gewicht bitte eintragen' }));
+    if (cat === 'akku') for (const a of akkus()) out.push(box('buyBattery', a.name, a.l, a.w, a.h, a.g, { info: a.produkt ? `${a.produkt}: ${fmtFixed(a.g, 0)} g` : `ca. ${a.g} g` }));
     if (cat === 'video') {
       for (const v of BUY_DATA.videosender || []) {
-        const info = { info: v.gewicht_g != null ? `${fmt(v.gewicht_g, 1)} g` + (v.unsicher ? ' (abgeleitet)' : '') : 'Gewicht bitte eintragen' };
+        const info = { info: v.gewicht_g != null ? `${fmtFixed(v.gewicht_g, 1)} g` + (v.unsicher ? ' (abgeleitet)' : '') : 'Gewicht bitte eintragen' };
         const t = videoShape(v);
         out.push(t.lib === 'buyVtx' ? part('buyVtx', { w: v.b_mm, d: v.l_mm, h: v.h_mm, a: t.a }, v.name, v.gewicht_g, info) : box(t.lib, v.name, v.l_mm, v.b_mm, v.h_mm, v.gewicht_g, info));
       }
-      for (const c of cams()) out.push(part('buyCamera', { w: c.w, d: 20, h: c.w }, `Kamera ${c.name} (analog)`, '', { info: `${fmt(c.w, 1)} mm breit, Gewicht eintragen` }));
+      for (const c of cams()) out.push(part('buyCamera', { w: c.w, d: 20, h: c.w }, `Kamera ${c.name} (analog)`, '', { info: `${fmtFixed(c.w, 1)} mm breit, Gewicht eintragen` }));
     }
     if (cat === 'funk') {
-      for (const v of BUY_DATA.empfaenger || []) out.push(box('buyPcb', v.name, v.l_mm, v.b_mm, v.h_mm, v.gewicht_g, { info: `${fmt(v.gewicht_g, 1)} g` }));
-      for (const v of BUY_DATA.gps || []) out.push(box('buyGps', v.name, v.l_mm, v.b_mm, v.h_mm, v.gewicht_g, { info: `${fmt(v.gewicht_g, 1)} g` }));
+      for (const v of BUY_DATA.empfaenger || []) out.push(box('buyPcb', v.name, v.l_mm, v.b_mm, v.h_mm, v.gewicht_g, { info: `${fmtFixed(v.gewicht_g, 1)} g` }));
+      for (const v of BUY_DATA.gps || []) out.push(box('buyGps', v.name, v.l_mm, v.b_mm, v.h_mm, v.gewicht_g, { info: `${fmtFixed(v.gewicht_g, 1)} g` }));
       // Antennen mit eigenen Maßen (Herstellerdaten folgen): Pilz für 5,8 GHz, Stab für Empfänger/Long Range
       out.push(part('buyAntenna', { L: 45, d: 3, form: 'pilz', kd: 14, kl: 12, conn: 'sma' }, 'Antenne Pilz (eigene Maße)', '', { info: 'Maße und Gewicht deiner Antenne eintragen' }));
       out.push(part('buyAntenna', { L: 80, d: 4, form: 'stab', kd: 4, kl: 1, conn: 'ufl' }, 'Antenne Stab (eigene Maße)', '', { info: 'Maße und Gewicht deiner Antenne eintragen' }));
     }
-    if (cat === 'action') for (const v of BUY_DATA.actioncam || []) out.push(box('buyActioncam', v.name, v.b_mm, v.l_mm, v.h_mm, v.gewicht_g, { info: `${fmt(v.gewicht_g, 1)} g` }));
+    if (cat === 'action') for (const v of BUY_DATA.actioncam || []) out.push(box('buyActioncam', v.name, v.b_mm, v.l_mm, v.h_mm, v.gewicht_g, { info: `${fmtFixed(v.gewicht_g, 1)} g` }));
     if (cat === 'klein') {
-      for (const v of BUY_DATA.stecker || []) out.push(box('buyPlug', v.name, v.l_mm, v.b_mm, v.h_mm, v.gewicht_g, { info: `ca. ${fmt(v.gewicht_g, 1)} g` }));
+      for (const v of BUY_DATA.stecker || []) out.push(box('buyPlug', v.name, v.l_mm, v.b_mm, v.h_mm, v.gewicht_g, { info: `ca. ${fmtFixed(v.gewicht_g, 1)} g` }));
       for (const v of BUY_DATA.kondensator || []) out.push(part('buyCap', { d: v.b_mm, h: v.l_mm }, 'Kondensator ' + v.name.replace(/^Panasonic /, ''), '', { info: 'Maße vom Hersteller, Gewicht eintragen' }));
     }
     return out;
@@ -10602,7 +10636,7 @@ const Actions = (() => {
       doc.items.push(it);
     });
     App.select([it.id]);
-    UI.toast(it.massG === '' ? `${spec.name} eingefügt. Trag rechts das Gewicht aus dem Datenblatt ein.` : `${spec.name} eingefügt (${fmt(Model.num(it.massG, V(), 0), 1)} g).`, { icon: 'check', ms: 3500 });
+    UI.toast(it.massG === '' ? `${spec.name} eingefügt. Trag rechts das Gewicht aus dem Datenblatt ein.` : `${spec.name} eingefügt (${fmtFixed(Model.num(it.massG, V(), 0), 1)} g).`, { icon: 'check', ms: 3500 });
     return it;
   }
   function remove(ids) {
@@ -10835,7 +10869,7 @@ const Actions = (() => {
     ids = ids || App.sel; if (!ids.length) return;
     const box = selBox(ids); const c = box.isEmpty() ? new THREE.Vector3() : box.getCenter(new THREE.Vector3());
     const a = (deg * Math.PI) / 180;
-    App.change(deg === 90 ? 'Um 90° gedreht' : `Um ${fmt(deg, 1)}° gedreht`, (doc) => {
+    App.change(deg === 90 ? 'Um 90° gedreht' : `Um ${fmtAngleU(deg)} gedreht`, (doc) => {
       const R = new THREE.Matrix4();
       if (axis === 'x') R.makeRotationX(a); else if (axis === 'y') R.makeRotationY(a); else R.makeRotationZ(a);
       const T1 = new THREE.Matrix4().makeTranslation(c.x, c.y, c.z), T2 = new THREE.Matrix4().makeTranslation(-c.x, -c.y, -c.z);
@@ -12058,8 +12092,8 @@ const Features = (() => {
       return hasSkip ? `${active}/${total} (${base})` : base;
     }
     if (p.op === 'pattern' && p.pt === 'circ') {
-      const base = `${Math.max(1, Math.round(p.n || 1))}× ${fmt(p.ang ?? 360, 0)}°`;
-      return hasSkip ? `${active}/${total}× ${fmt(p.ang ?? 360, 0)}°` : base;
+      const base = `${Math.max(1, Math.round(p.n || 1))}× ${fmtAngleU(p.ang ?? 360)}`;
+      return hasSkip ? `${active}/${total}× ${fmtAngleU(p.ang ?? 360)}` : base;
     }
     if (p.op === 'pattern' && p.pt === 'path') {
       return total ? (hasSkip ? `${active}/${total}× entlang Kurve` : `${total}× entlang Kurve`) : 'Kurve fehlt';
@@ -12292,7 +12326,7 @@ const Features = (() => {
     const fields = h('div', { class: 'fields' });
     const modeRow = UI.selectField({ id: 'ct-mode', label: 'Ausführung', value: mode, options: [['real', 'Echt (3D-Gewinde)'], ['cosmetic', 'Kosmetisch (nur Markierung)']], onChange: (v) => { mode = v; syncMode(); } });
     fields.append(modeRow);
-    fields.append(UI.selectField({ id: 'ct-size', label: 'M-Größe', value: size, options: THREAD_SPECS.map((s) => [s.size, `${s.size} (P ${fmt(s.pitch, 2)})`]), onChange: (v) => {
+    fields.append(UI.selectField({ id: 'ct-size', label: 'M-Größe', value: size, options: THREAD_SPECS.map((s) => [s.size, `${s.size} (P ${fmtFixed(s.pitch, 2)})`]), onChange: (v) => {
       size = v;
       const sp = THREAD_MAP[v];
       if (sp) {
@@ -13327,7 +13361,7 @@ const Features = (() => {
     if (aInfo) {
       sec.append(h('div', { class: 'mini-row', id: 'wrap-angle-info' },
         h('span', { class: 'grow' }, `Umfangswinkel (Ø ${Units.fmtLenU(aInfo.radius * 2, 1)})`),
-        h('b', { class: 'mono' }, `${fmt(aInfo.deg, 1)}° (${fmt(aInfo.pct, 1)} %)`)));
+        h('b', { class: 'mono' }, `${fmtAngleU(aInfo.deg)} (${fmtFixed(aInfo.pct, 1)} %)`)));
     }
 
     const row = h('div', { class: 'btn-row', style: { marginTop: '8px' } });
@@ -13992,7 +14026,7 @@ const Datums = (() => {
     select(d.id);
     return d;
   }
-  function addOrigin(plane = 'XY', dist = 10, tilt = 0) { return add({ type: 'origin', plane, dist, tilt }, `${NAMES[plane] || plane} ${typeof dist === 'number' ? Units.fmtLenU(dist, 2) : dist}${tilt ? ' · ' + tilt + '°' : ''}`); }
+  function addOrigin(plane = 'XY', dist = 10, tilt = 0) { return add({ type: 'origin', plane, dist, tilt }, `${NAMES[plane] || plane} ${typeof dist === 'number' ? Units.fmtLenU(dist, 2) : dist}${tilt ? ' · ' + (typeof tilt === 'number' ? fmtAngleU(tilt) : tilt + '°') : ''}`); }
   function addFromFace(face, dist = 10) {
     const f = resolveFace(face);
     if (!f || f.info.t !== 'PLANE') { UI.toast('Wähl zuerst eine ebene Fläche eines Körpers.', { icon: 'info' }); return null; }
@@ -14025,7 +14059,7 @@ const Datums = (() => {
       edgeId: eRef.id, ea: r6(eRef.info.a), eb: r6(eRef.info.b), em: r6(eRef.info.m), ed: r6(edLocal.toArray()),
       faceId: fRef.id, fn: r6(fRef.info.n), fc: r6(fRef.info.c), angle,
     };
-    const angTxt = typeof angle === 'number' ? fmt(angle, 1) + '°' : angle;
+    const angTxt = typeof angle === 'number' ? fmtAngleU(angle) : angle;
     return add(base, name || `Ebene ${angTxt} an „${top ? Model.label(top.item) : 'Kante'}“`);
   }
   function addFixed(plane, name) { return add({ type: 'fixed' }, name, plane); }
@@ -14075,7 +14109,7 @@ const Datums = (() => {
       percent = pos;
     }
     const top = Model.find(App.doc, eRef.id);
-    const posTxt = posMode === 'start' ? 'Anfang' : posMode === 'end' ? 'Ende' : posMode === 'mid' ? 'Mitte' : (typeof percent === 'number' ? fmt(percent, 0) + ' %' : String(percent));
+    const posTxt = posMode === 'start' ? 'Anfang' : posMode === 'end' ? 'Ende' : posMode === 'mid' ? 'Mitte' : (typeof percent === 'number' ? fmtFixed(percent, 0) + ' %' : String(percent));
     const base = { type: 'normalToCurve', edgeId: eRef.id, edge: makeEdgeRef(eRef), posMode, percent };
     if (flip) base.flip = true;
     return add(base, name || `Senkrecht zu „${top ? Model.label(top.item) : 'Kante'}“ (${posTxt})`);
@@ -14517,7 +14551,7 @@ const Datums = (() => {
     if (percent && typeof percent === 'object') { pct = percent.percent ?? 50; flip = !!percent.flip; }
     else if (percent != null) pct = percent;
     const top = Model.find(App.doc, eRef.id);
-    const pTxt = typeof pct === 'number' ? fmt(pct, 0) + ' %' : String(pct);
+    const pTxt = typeof pct === 'number' ? fmtFixed(pct, 0) + ' %' : String(pct);
     const base = { type: 'curvePercent', edgeId: eRef.id, edge: makeEdgeRef(eRef), percent: pct };
     if (flip) base.flip = true;
     return addPoint(base, name || `Punkt ${pTxt} (${top ? Model.label(top.item) : 'Kurve'})`);
@@ -14930,8 +14964,8 @@ const Datums = (() => {
     if (edgeRef && edgeRef.info.t !== 'LINE') { UI.toast('Wähl eine gerade Kante.', { icon: 'info' }); return; }
     if (edgeRef) Viewer.highlightEdge(edgeRef.id, edgeRef.idx);
     const hint = () => UI.hint(edgeRef
-      ? `<b>Ebene im Winkel (${fmt(Number(angle) || 30, 1)}°):</b> Klick eine ebene Fläche als Bezug für den Winkel. <b>Esc</b> bricht ab.`
-      : `<b>Ebene im Winkel (${fmt(Number(angle) || 30, 1)}°):</b> Klick zuerst eine gerade Kante. <b>Esc</b> bricht ab.`);
+      ? `<b>Ebene im Winkel (${fmtAngleU(Number(angle) || 30)}):</b> Klick eine ebene Fläche als Bezug für den Winkel. <b>Esc</b> bricht ab.`
+      : `<b>Ebene im Winkel (${fmtAngleU(Number(angle) || 30)}):</b> Klick zuerst eine gerade Kante. <b>Esc</b> bricht ab.`);
     const down = (e) => {
       if (e.button !== 0) return;
       e.preventDefault(); e.stopPropagation();
@@ -15142,7 +15176,7 @@ const Datums = (() => {
     const hint = () => UI.hint({
       edgeMid: '<b>Bezugspunkt Kantenmitte:</b> Klick eine Kante eines Körpers. <b>Esc</b> bricht ab.',
       faceCenter: '<b>Bezugspunkt Flächenmitte:</b> Klick eine Fläche eines Körpers. <b>Esc</b> bricht ab.',
-      curvePercent: `<b>Bezugspunkt auf Kurve (${fmt(Number(opts.percent) || 50, 0)} %):</b> Klick eine Kante oder Kurve eines Körpers. <b>Esc</b> bricht ab.`,
+      curvePercent: `<b>Bezugspunkt auf Kurve (${fmtFixed(Number(opts.percent) || 50, 0)} %):</b> Klick eine Kante oder Kurve eines Körpers. <b>Esc</b> bricht ab.`,
       edgePlaneIntersect: edgeRef
         ? '<b>Schnittpunkt Kante / Ebene:</b> Klick eine ebene Fläche als Schnitt-Ebene. <b>Esc</b> bricht ab.'
         : '<b>Schnittpunkt Kante / Ebene:</b> Klick zuerst eine Kante oder Kurve. <b>Esc</b> bricht ab.',
@@ -16359,7 +16393,7 @@ const Mass = (() => {
   // festes Gewicht – auch wenn es noch fehlt (leer): dann zählt es mit 0 g und wird angemahnt
   function fixedOf(it) { return !!(it && it.massG != null); }
   function partOf(r, id) { return r && (r.parts || []).find((p) => p.id === id) || null; }
-  const gText = (g) => `${fmt(g, g < 10 ? 2 : 1)} g`;
+  const gText = (g) => `${fmtFixed(g, g < 10 ? 2 : 1)} g`;
 
   // ---------- Standfestigkeit (PF-14): Steht das Teil, so wie es liegt, oder kippt es? ----------
   // Aufstandsfläche = Hülle der untersten Punkte; der Schwerpunkt muss darüber liegen. Kippwinkel = atan(Abstand zur Kante / Höhe).
@@ -16451,7 +16485,7 @@ const Mass = (() => {
         const L = round(Model.num(th.length, V, 10), 1);
         const kind = th.kind === 'int' ? 'int' : 'ext';
         const spec = THREAD_MAP[th.size];
-        const sizeLabel = th.pitch > 0 && (!spec || Math.abs(th.pitch - spec.pitch) > 1e-4) ? `${th.size}×${fmt(th.pitch, 2)}` : th.size;
+        const sizeLabel = th.pitch > 0 && (!spec || Math.abs(th.pitch - spec.pitch) > 1e-4) ? `${th.size}×${fmtFixed(th.pitch, 2)}` : th.size;
         const label = `${kind === 'int' ? 'Innengewinde' : 'Außengewinde'} ${sizeLabel} × ${Units.fmtLenU(L, 1, doc)}`;
         const key = label + '|' + part;
         const row = map.get(key) || { name: label, size: th.size, length: L, kind, part, n: 0, ids: [] };
@@ -16532,7 +16566,7 @@ const Mass = (() => {
       }
       body.append(tt);
     }
-    const filLen = (m) => Units.key() === 'in' ? `${fmt((m * 1000) / 25.4, 1)} in` : Units.key() === 'cm' ? `${fmt(m * 100, 1)} cm` : `${fmt(m, 1)} m`;
+    const filLen = (m) => Units.key() === 'in' ? `${fmtFixed((m * 1000) / 25.4, 1)} in` : Units.key() === 'cm' ? `${fmtFixed(m * 100, 1)} cm` : `${fmtFixed(m, 1)} m`;
     if (B.filament.length) body.append(h('div', { class: 'ok-box', id: 'bom-filament', html: '<b>Filament für die Druckteile:</b> ' + B.filament.map((x) => `${x.mat} ${gText(x.g)} ≈ ${filLen(x.m)}`).join(' · ') + ' (Draht 1,75 mm, massiv gerechnet – mit weniger Füllung brauchst du weniger; Stützen und Rand kommen dazu).' }));
     body.append(h('div', { class: 'hint-box', html: 'Gleiche Teile (gleicher Name ohne Nummer, gleiches Gewicht) stehen in einer Zeile. Klick auf eine Zeile wählt die Teile im Bild aus. <b>Kaufteile</b> zählen mit dem Gewicht aus dem Datenblatt, alles andere mit Volumen × Material.' + (B.rows.some((x) => x.missing) ? ' Bei Teilen mit „fehlt“ ist noch kein Gewicht eingetragen.' : '') }));
   }
@@ -16728,7 +16762,7 @@ const Joints = (() => {
   function describe(j, res) {
     const hit = res.filter((r) => r.v > 0.05);
     const u = slide(j) ? Units.label() : '°';
-    const fv = (x) => (slide(j) ? Units.fmtLen(x, 1) : fmt(x, 1));
+    const fv = (x) => (slide(j) ? Units.fmtLen(x, 1) : fmtAngle(x));
     if (!hit.length) return { ok: true, text: `Frei im ganzen Bereich von ${fv(j.min)} ${u} bis ${fv(j.max)} ${u} – nichts stößt an.` };
     const free = res.filter((r) => r.v <= 0.05).map((r) => r.a);
     const lo = res.filter((r) => r.a <= j.ang && r.v > 0.05).map((r) => r.a), hi = res.filter((r) => r.a >= j.ang && r.v > 0.05).map((r) => r.a);
@@ -16829,7 +16863,7 @@ const Joints = (() => {
         const fr = d.ok ? null : freeRange(j, r);
         const old = box.querySelector('.jt-stop'); if (old) old.remove();
         if (fr && fr[1] - fr[0] > 1e-9 && (fr[0] > j.min + 1e-9 || fr[1] < j.max - 1e-9)) {
-          const fVal = (x) => (slide(j) ? Units.fmtLen(x, 1) : fmt(x, 1));
+          const fVal = (x) => (slide(j) ? Units.fmtLen(x, 1) : fmtAngle(x));
           const uLbl = slide(j) ? Units.label() : unit(j);
           const sb = h('button', { type: 'button', class: 'btn small jt-stop', id: 'jt-stop' + sfx }); sb.innerHTML = icon('check') + `Als Anschlag übernehmen: ${fVal(fr[0])} … ${fVal(fr[1])} ${uLbl}`;
           sb.onclick = () => setStops(j.id, fr[0], fr[1]);
@@ -16862,21 +16896,45 @@ const Joints = (() => {
 // Persönliche Einstellung (nicht im Projekt gespeichert), gilt für alle Projekte in diesem Browser.
 const ViewPrefs = (() => {
   const KEY = 'masswerk.view';
-  const DEF = { grid: 'auto', gridOn: true, planes: true, axes: true, ortho: false, quality: 'normal', adaptive: true, theme: 'system', decimals: 0, notes: true, cog: false, level: 'pro', look: 'studio', mood: 'studio', shadows: true, display: 'edges' };
+  const DEF = { grid: 'auto', gridOn: true, planes: true, axes: true, ortho: false, quality: 'normal', adaptive: true, theme: 'system', decimals: 2, angleDecimals: 1, notes: true, cog: false, level: 'pro', look: 'studio', mood: 'studio', shadows: true, display: 'edges' };
+  const normDec = (x, fb) => { const n = Number(x); return Number.isFinite(n) ? clamp(Math.round(n), 0, 4) : fb; };
   let v = { ...DEF };
   let firstStart = !storageGet(KEY) && !storageGet('masswerk.last') && !storageGet('masswerk.index');
-  try { const raw = storageGet(KEY); if (raw) v = { ...DEF, ...JSON.parse(raw) }; } catch (_) {}
+  try {
+    const raw = storageGet(KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.decimals === 0 && !('angleDecimals' in parsed)) parsed.decimals = 2;
+      v = { ...DEF, ...parsed };
+    }
+  } catch (_) {}
+  v.decimals = normDec(v.decimals, DEF.decimals);
+  v.angleDecimals = normDec(v.angleDecimals, DEF.angleDecimals);
   const ev = makeEmitter();
   function applyTheme() {
     const r = document.documentElement;
     if (v.theme === 'light' || v.theme === 'dark') r.setAttribute('data-theme', v.theme); else r.removeAttribute('data-theme');
   }
   const simple = () => v.level === 'simple';
-  function apply() { document.body.classList.toggle('simple', simple()); Viewer.setViewOptions({ grid: v.grid, gridOn: v.gridOn, planes: v.planes, axes: v.axes }); Viewer.setOrtho(v.ortho); Viewer.setAdaptive(v.adaptive !== false); Viewer.setLook({ look: v.look, mood: v.mood, shadows: v.shadows !== false, display: v.display || 'edges' }); applyTheme(); FMT.min = +v.decimals || 0; Viewer.setMouseStyle(v.mouse || 'tracery'); ev.emit('change', v); }
+  function apply() {
+    document.body.classList.toggle('simple', simple());
+    Viewer.setViewOptions({ grid: v.grid, gridOn: v.gridOn, planes: v.planes, axes: v.axes });
+    Viewer.setOrtho(v.ortho);
+    Viewer.setAdaptive(v.adaptive !== false);
+    Viewer.setLook({ look: v.look, mood: v.mood, shadows: v.shadows !== false, display: v.display || 'edges' });
+    applyTheme();
+    FMT.dec = normDec(v.decimals, DEF.decimals);
+    FMT.angle = normDec(v.angleDecimals, DEF.angleDecimals);
+    Viewer.setMouseStyle(v.mouse || 'tracery');
+    ev.emit('change', v);
+  }
   function set(patch, msg) {
-    const oldQ = v.quality, oldDec = v.decimals, oldL = v.level;
-    if ('level' in patch) firstStart = false;
-    Object.assign(v, patch); storageSet(KEY, JSON.stringify(v)); apply();
+    const oldQ = v.quality, oldDec = v.decimals, oldAng = v.angleDecimals, oldL = v.level;
+    const next = { ...patch };
+    if ('decimals' in next) next.decimals = normDec(next.decimals, DEF.decimals);
+    if ('angleDecimals' in next) next.angleDecimals = normDec(next.angleDecimals, DEF.angleDecimals);
+    if ('level' in next) firstStart = false;
+    Object.assign(v, next); storageSet(KEY, JSON.stringify(v)); apply();
     syncLevel();
     if (v.level !== oldL) {
       // Oberfläche gewechselt: Werkzeuge, Leisten und Kontextleiste neu aufbauen
@@ -16885,7 +16943,13 @@ const ViewPrefs = (() => {
       if (typeof Commands !== 'undefined' && Commands.syncCmdKbds) Commands.syncCmdKbds();
     }
     if (v.quality !== oldQ) App.requalify();
-    if (v.decimals !== oldDec) { App.emit('doc'); Panels.renderRight(); }
+    if (v.decimals !== oldDec || v.angleDecimals !== oldAng) {
+      App.emit('doc');
+      Panels.renderLeft(); Panels.renderRight(); Panels.renderCtx();
+      if (typeof Print !== 'undefined' && Print.updateAmpel) Print.updateAmpel();
+      if (typeof Sketch !== 'undefined' && Sketch.active && Sketch.render) Sketch.render();
+      if (typeof Measure !== 'undefined' && Measure.refreshDisplay) Measure.refreshDisplay();
+    }
     if (msg) UI.toast(msg, { icon: 'check', ms: 1600 });
   }
   function toggle(k) {
@@ -16959,11 +17023,34 @@ const ViewPrefs = (() => {
       levelCards({ idPrefix: 'set-level', active: v.level, onPick: () => syncTabs(curTab) }),
       h('small', { style: { color: 'var(--muted)', display: 'block', marginTop: '4px' } }, 'Einfach blendet Messen, Notizen, Ansicht, Zeichnung und Profi-Werkzeuge aus. Über „Mehr“ kommst du trotzdem hin.'),
     );
+    const decOpts = () => [0, 1, 2, 3, 4].map((d) => [String(d), `${d} ${d === 1 ? 'Stelle' : 'Stellen'} (${fmtFixed(12.3456, d)} ${Units.label()})`]);
+    const angOpts = [0, 1, 2, 3, 4].map((d) => [String(d), `${d} ${d === 1 ? 'Stelle' : 'Stellen'} (${fmtFixed(45.1234, d)}°)`]);
+    const decFields = h('div', { class: 'fields', 'data-help': 'precision' },
+      sel('set-dec', 'Nachkommastellen (Anzeige)', v.decimals, decOpts(), (x) => set({ decimals: +x })),
+      sel('set-angle-dec', 'Nachkommastellen (Winkel)', v.angleDecimals, angOpts, (x) => set({ angleDecimals: +x })),
+    );
+    const decBlock = h('div', { 'data-help': 'precision' },
+      decFields,
+      h('small', { style: { color: 'var(--muted)', display: 'block', marginTop: '4px' } }, 'Gilt für Schilder, Maße, Messungen und Panels. Gespeicherte Werte und die Rechengenauigkeit bleiben immer exakt.'),
+    );
+    const unitSel = sel('set-proj-unit', 'Einheit in diesem Projekt', Units.key(), Units.OPTIONS, (x) => {
+      Units.set(x);
+      const sd = decFields.querySelector('#set-dec');
+      if (sd) {
+        const cur = sd.value;
+        sd.innerHTML = '';
+        for (const [ov, ol] of decOpts()) {
+          const op = h('option', { value: ov }, ol);
+          if (String(ov) === String(cur)) op.selected = true;
+          sd.append(op);
+        }
+      }
+    }, 'Gilt für alle Anzeigen, Maße und Eingaben ohne eigene Einheit in diesem Projekt.');
     paneGen.append(
       lvlField,
-      sel('set-proj-unit', 'Einheit in diesem Projekt', Units.key(), Units.OPTIONS, (x) => Units.set(x), 'Gilt für alle Anzeigen, Maße und Eingaben ohne eigene Einheit in diesem Projekt.'),
+      unitSel,
       sel('set-theme', 'Design', v.theme, [['system', 'Wie das System'], ['light', 'Hell'], ['dark', 'Dunkel']], (x) => set({ theme: x })),
-      sel('set-dec', 'Nachkommastellen in Anzeigen', v.decimals, [['0', 'Automatisch (2 Stellen)'], ['3', `3 Stellen (0,001 ${Units.label()})`], ['4', `4 Stellen (0,0001 ${Units.label()})`]], (x) => set({ decimals: +x }), 'Eingaben werden immer exakt gespeichert, das betrifft nur die Anzeige.'),
+      decBlock,
       sel('set-quality', 'Darstellungsqualität', v.quality, [['coarse', 'Grob – am schnellsten'], ['normal', 'Normal'], ['fine', 'Fein'], ['ultra', 'Sehr fein – braucht mehr Leistung']], (x) => set({ quality: x }), 'Wie glatt Rundungen auf dem Bildschirm aussehen. Die Geometrie selbst ist immer exakt.'),
       sel('set-mouse', 'Maus-Steuerung', v.mouse || 'tracery', [['tracery', 'Tracery – links drehen, rechts verschieben, Rad zoomt'], ['onshape', 'Wie Onshape – rechts drehen, Mitte verschieben'], ['solidworks', 'Wie SolidWorks – Mitte drehen, rechts verschieben'], ['fusion', 'Wie Fusion – Mitte verschieben, Umschalt + Mitte drehen'], ['blender', 'Wie Blender – Mitte drehen, Umschalt + Mitte verschieben']], (x) => set({ mouse: x }), 'Bei allen außer Tracery zieht die linke Maustaste im Leeren einen Auswahl-Rahmen auf. Das Mausrad zoomt immer.'),
       chk('adaptive', 'Darstellung automatisch anpassen', 'Teile, die du von nah ansiehst, werden feiner dargestellt. Beim Drehen eines großen Modells wird kurz gröber gezeichnet, damit es flüssig bleibt.'),
@@ -17197,7 +17284,7 @@ const DragInput = (() => {
     el = h('div', { class: 'drag-input', role: 'dialog', 'aria-label': 'Wert eingeben' });
     const inputs = sp.fields.map((f, i) => {
       const isLen = f.unit === 'mm';
-      const inp = h('input', { type: 'text', value: i === 0 && firstChar != null ? firstChar : (isLen ? Units.fmtInput(f.value) : fmt(f.value, 3)), 'aria-label': f.label, inputmode: 'decimal' });
+      const inp = h('input', { type: 'text', value: i === 0 && firstChar != null ? firstChar : (isLen ? Units.fmtInput(f.value) : f.unit === '°' ? fmtFixed(f.value, Math.max(4, FMT.angle)) : fmtFixed(f.value, Math.max(4, FMT.dec))), 'aria-label': f.label, inputmode: 'decimal' });
       el.append(h('span', null, f.label), inp);
       const u = isLen ? Units.label() : f.unit;
       if (u) el.append(h('small', null, u));
@@ -17434,13 +17521,15 @@ const UI = (() => {
   function numField({ id, label, value, unit = 'mm', len, axis, onCommit, min, int, placeholder, expr = true, step }) {
     const V = Model.vars(App.doc).v;
     const isLen = len != null ? !!len : unit === 'mm';
+    const isAng = !isLen && unit === '°';
     const dispUnit = isLen && unit === 'mm' ? Units.label() : unit;
+    const fmtDisp = (val) => (int ? String(Math.round(val)) : isLen ? Units.fmtLen(val) : isAng ? fmtAngle(val) : fmt(val));
     const isE = typeof value === 'string' && Model.isExpr(value);
     const wrap = h('div', { class: 'field' });
     if (label) wrap.append(h('label', { for: id }, label));
     const box = h('div', { class: 'inp' + (isE ? ' expr' : '') });
     if (axis) box.append(h('span', { class: 'axis ' + axis }, axis.toUpperCase()));
-    const dispVal = typeof value === 'number' ? (isLen ? Units.fmtInput(value) : fmt(value, 3)) : (value ?? '');
+    const dispVal = typeof value === 'number' ? fmtDisp(value) : (value ?? '');
     const inp = h('input', { id, type: 'text', inputmode: 'decimal', value: dispVal, placeholder: placeholder || '', autocomplete: 'off', spellcheck: 'false' });
     box.append(inp);
     let badErr = null;
@@ -17449,8 +17538,8 @@ const UI = (() => {
       if (res.ok) {
         const ev = res.value;
         const uSuf = isLen && Units.key() !== 'mm' ? ' ' + Units.label() : '';
-        const evTxt = isLen ? Units.fmtLen(ev, 2) + uSuf : fmt(ev, 2);
-        const evTip = isLen ? Units.fmtLenU(ev, 3) : fmt(ev, 3);
+        const evTxt = isLen ? Units.fmtLen(ev) + uSuf : isAng ? fmtAngleU(ev) : fmt(ev);
+        const evTip = isLen ? Units.fmtLenU(ev) : isAng ? fmtAngleU(ev) : fmt(ev);
         box.append(h('span', { class: 'fx', title: 'Formel: ' + value + ' = ' + evTip }, '= ' + evTxt));
       } else {
         badErr = res.error;
@@ -17483,7 +17572,7 @@ const UI = (() => {
         if (int) val = Math.round(val);
       }
       box.classList.remove('invalid');
-      orig = typeof val === 'number' ? (isLen ? Units.fmtInput(val) : fmt(val, 3)) : val;
+      orig = typeof val === 'number' ? fmtDisp(val) : val;
       inp.value = orig;
       onCommit(val);
     };
@@ -17498,7 +17587,7 @@ const UI = (() => {
         const s = (step || (u ? (e.shiftKey ? u.shiftStep : u.step) : (e.shiftKey ? 10 : 1))) * (e.key === 'ArrowUp' ? 1 : -1);
         let nv = round(n + s, isLen ? u.inputDec : 4);
         if (min != null) nv = Math.max(isLen ? Units.fromMM(min) : min, nv);
-        inp.value = fmt(nv, isLen ? u.inputDec : 3); commit();
+        inp.value = fmtFixed(nv, isLen ? u.inputDec : 4); commit();
       }
     });
     inp.addEventListener('blur', commit);
@@ -18538,7 +18627,7 @@ const Panels = (() => {
           const fr = h('div', { class: 'finish-row' + (isRef ? ' warn' : ferr ? ' bad' : ''), title: ferr ? ferr.message : '' });
           fr.innerHTML = icon(fin.type === 'chamfer' ? 'chamfer' : fin.type === 'shell' ? 'shell' : 'fillet');
           if (fin.type === 'shell') fr.append(h('span', null, 'Wandstärke ' + Units.fmtLenU(Model.num(fin.r, V, 2), 2)));
-          else if (fin.type === 'draft') fr.append(h('span', null, 'Entformungsschräge ' + fmt(Model.num(fin.r, V, 3), 1) + '°'));
+          else if (fin.type === 'draft') fr.append(h('span', null, 'Entformungsschräge ' + fmtAngleU(Model.num(fin.r, V, 3))));
           else fr.append(h('span', null, (fin.type === 'chamfer' ? 'Fase ' : 'Rundung ') + Units.fmtLenU(Model.num(fin.r, V, 1), 2) + (typeof fin.edges === 'string' ? ' · ' + ({ all: 'alle Kanten', top: 'oben', bottom: 'unten', vertical: 'senkrecht', horizontal: 'waagerecht' }[fin.edges] || '') : ' · ' + (fin.edges || []).length + ' Kante' + ((fin.edges || []).length === 1 ? '' : 'n'))));
           if (isRef) {
             const iss = refIssues.find((x) => x.finishId === fin.id);
@@ -18677,7 +18766,7 @@ const Panels = (() => {
     const slow = App.doc.items.map((it) => ({ it, t: App.timeOf(it.id) })).filter((x) => x.t && x.t.ms >= 1).sort((a, b) => b.t.ms - a.t.ms).slice(0, 5);
     if (slow.length) {
       const sec = h('details', { class: 'section slow-sec', id: 'slow-steps', 'data-help': 'slowSteps' }, h('summary', { class: 'section-h' }, 'Rechenzeit je Schritt'));
-      const fmtMs = (ms) => (ms >= 1000 ? `${fmt(ms / 1000, 1)} s` : `${Math.round(ms)} ms`);
+      const fmtMs = (ms) => (ms >= 1000 ? `${fmtFixed(ms / 1000, 1)} s` : `${Math.round(ms)} ms`);
       for (const x of slow) { const r = h('div', { class: 'mini-row dep-row' }, h('span', { class: 'grow' }, Model.label(x.it)), h('b', { class: 'mono' }, fmtMs(x.t.ms))); r.style.cursor = 'pointer'; r.onclick = () => App.select([x.it.id]); sec.append(r); }
       sec.append(h('div', { class: 'hint-box', html: 'Gemessen beim letzten echten Neurechnen. Was gerade nicht geändert wurde, kommt aus dem Speicher und kostet fast nichts. Langsam sind meist Rundungen an vielen Kanten, Gewinde und Muster mit vielen Kopien.' }));
       if (slow[0].t.ms > 1500) sec.open = true;
@@ -18779,7 +18868,7 @@ const Panels = (() => {
             row.key = nk;
           });
         });
-        const valStr = typeof r.val === 'number' ? fmt(r.val, 6) : (r.val ?? '');
+        const valStr = typeof r.val === 'number' ? fmtFixed(r.val, 6) : (r.val ?? '');
         const vIn = h('input', { id: 'ptv-' + r.id, class: 'ptbl-val mono', value: valStr, placeholder: 'Wert', 'aria-label': 'Wert', spellcheck: 'false' });
         vIn.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') vIn.blur(); if (e.key === 'Escape') { vIn.value = valStr; vIn.classList.remove('invalid'); vIn.blur(); } });
         vIn.addEventListener('change', () => {
@@ -18845,7 +18934,7 @@ const Panels = (() => {
     const q = (s) => (/[;"\n]/.test(String(s)) ? '"' + String(s).replace(/"/g, '""') + '"' : String(s));
     const { v } = Model.vars(App.doc);
     const rows = [['Name', 'Wert', 'Ergebnis']];
-    for (const p of App.doc.params || []) rows.push([p.name, typeof p.expr === 'number' ? fmt(p.expr, 6) : p.expr, fmt(v[p.name], 6)]);
+    for (const p of App.doc.params || []) rows.push([p.name, typeof p.expr === 'number' ? fmtFixed(p.expr, 6) : p.expr, fmtFixed(v[p.name], 6)]);
     return rows.map((r) => r.map(q).join(';')).join('\r\n') + '\r\n';
   }
   // CSV lesen: Name;Wert (auch mit Komma oder Tab getrennt); bekannte Namen werden geändert, neue angelegt
@@ -18878,7 +18967,7 @@ const Panels = (() => {
     const list = h('div', { class: 'formula-list' });
     for (const x of FORMULA_EXAMPLES) {
       let val = '';
-      try { val = fmt(Expr.eval(x.f, FORMULA_DEMO), 2); } catch (_) {}
+      try { val = fmtFixed(Expr.eval(x.f, FORMULA_DEMO), 2); } catch (_) {}
       const cp = h('button', { type: 'button', class: 'btn ghost small', 'data-tip': 'Formel kopieren' }); cp.innerHTML = icon('copy');
       cp.onclick = async () => { try { await navigator.clipboard.writeText(x.f); UI.toast('Kopiert: ' + x.f, { icon: 'check', ms: 1500 }); } catch (_) { UI.toast('Kopieren ging nicht – markier die Formel einfach.', { icon: 'info' }); } };
       list.append(h('div', { class: 'formula-row' }, h('div', { class: 'formula-top' }, h('code', null, x.f), h('b', { class: 'mono' }, '= ' + val), cp), h('p', null, x.e)));
@@ -18982,14 +19071,14 @@ const Panels = (() => {
     }
     const pv = ViewPrefs.get();
     const va = h('div', { class: 'section pro' }, h('div', { class: 'section-h' }, 'Ansicht'));
-    va.append(UI.selectField({ id: 'view-grid', label: 'Rasterweite', value: String(pv.grid), options: [['auto', 'Automatisch (folgt dem Zoom)'], ['0.01', Units.fmtLenU(0.01, 2)], ['0.1', Units.fmtLenU(0.1, 2)], ['1', Units.fmtLenU(1, 2)], ['10', Units.fmtLenU(10, 2)], ['100', Units.fmtLenU(100, 2)]], onChange: (val) => ViewPrefs.set({ grid: val === 'auto' ? 'auto' : parseFloat(val) }) }));
+    va.append(UI.selectField({ id: 'view-grid', label: 'Rasterweite', value: String(pv.grid), options: [['auto', 'Automatisch (folgt dem Zoom)'], ['0.01', Units.fmtLenFixedU(0.01, 2)], ['0.1', Units.fmtLenFixedU(0.1, 2)], ['1', Units.fmtLenFixedU(1, 2)], ['10', Units.fmtLenFixedU(10, 2)], ['100', Units.fmtLenFixedU(100, 2)]], onChange: (val) => ViewPrefs.set({ grid: val === 'auto' ? 'auto' : parseFloat(val) }) }));
     const chk = (k, label) => { const l = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'view-' + k, checked: !!pv[k] }), label); l.querySelector('input').onchange = (e) => ViewPrefs.set({ [k]: e.target.checked }); return l; };
     va.append(UI.selectField({ id: 'view-quality', label: 'Darstellungsqualität', value: pv.quality, options: [['coarse', 'Grob'], ['normal', 'Normal'], ['fine', 'Fein'], ['ultra', 'Sehr fein']], onChange: (val) => ViewPrefs.set({ quality: val }) }));
     va.append(h('div', { style: { display: 'grid', gap: '6px', marginTop: '8px' } }, chk('adaptive', 'Darstellung anpassen (Zoom, Drehen)'), chk('gridOn', 'Raster zeigen'), chk('planes', 'Ursprungsebenen zeigen'), chk('axes', 'Achsen zeigen'), chk('notes', 'Notizen zeigen'), chk('ortho', 'Orthografisch (ohne Perspektive)')));
     w.append(va);
     const gr = h('div', { class: 'section pro' }, h('div', { class: 'section-h' }, 'Fangen beim Verschieben'));
     const f2 = h('div', { class: 'fields' });
-    f2.append(UI.selectField({ id: 'grid', label: 'Schrittweite', value: App.doc.settings.grid, options: [0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10].map((v) => [v, Units.fmtLenU(v, 2)]), onChange: (v) => App.change('Raster geändert', (doc) => { doc.settings.grid = parseFloat(v); }) }));
+    f2.append(UI.selectField({ id: 'grid', label: 'Schrittweite', value: App.doc.settings.grid, options: [0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10].map((v) => [v, Units.fmtLenFixedU(v, 2)]), onChange: (v) => App.change('Raster geändert', (doc) => { doc.settings.grid = parseFloat(v); }) }));
     const snap = h('label', { class: 'check', style: { alignSelf: 'end', paddingBottom: '8px' } }, h('input', { type: 'checkbox', id: 'snap', checked: App.doc.settings.snap !== false }), 'Einrasten');
     snap.querySelector('input').onchange = (e) => App.change('Einrasten geändert', (doc) => { doc.settings.snap = e.target.checked; });
     const mag = h('label', { class: 'check', style: { paddingBottom: '4px' } }, h('input', { type: 'checkbox', id: 'magnet', checked: App.doc.settings.magnet !== false }), 'Magnetisch einrasten (Mitte, Mittellinien, Lochmitten, ganz oben auf Rundungen, bündig zu anderen Teilen) – Strg hält es kurz an');
@@ -19241,7 +19330,7 @@ const Panels = (() => {
         sec.append(fl);
         if (def.lib === 'blindHole') {
           const d = Model.num(it.p.d, V, 5), dep = Model.num(it.p.depth, V, 10), ang = Number(it.p.tipAngle ?? 118), tipH = blindTipHeight(d, ang);
-          const tipTxt = ang >= 179.5 ? `Flacher Boden, Tiefe ${Units.fmtLenU(dep, 2)}.` : `Bohrspitze (${ang}°): +${Units.fmtLenU(tipH, 2)} → Gesamttiefe <b>${Units.fmtLenU(dep + tipH, 2)}</b>.`;
+          const tipTxt = ang >= 179.5 ? `Flacher Boden, Tiefe ${Units.fmtLenU(dep, 2)}.` : `Bohrspitze (${fmtAngleU(ang)}): +${Units.fmtLenU(tipH, 2)} → Gesamttiefe <b>${Units.fmtLenU(dep + tipH, 2)}</b>.`;
           sec.append(h('div', { class: 'hint-box', html: `${tipTxt} Setz es mit <b>Bohrung</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.` }));
         } else if (def.lib === 'fitHole') {
           const d = Model.num(it.p.d, V, 6), info = h7Info(d);
@@ -19360,7 +19449,7 @@ const Panels = (() => {
           const minA = dir === 'two' ? 0 : 0.1;
           fl.append(UI.numField({ id: 'p-angle', label: angLbl, value: it.p.angle, unit: '°', min: minA, onCommit: (v) => setP('angle', typeof v === 'number' ? clamp(v, minA, 360) : v) }));
           if (dir === 'both') {
-            fl.append(h('div', { class: 'mini-row', id: 'p-rev-sym-info' }, h('span', { class: 'grow' }, 'Symmetrisch'), h('b', { class: 'mono' }, `je Seite ${fmt(Model.num(it.p.angle, V, 360) / 2, 1)}°`)));
+            fl.append(h('div', { class: 'mini-row', id: 'p-rev-sym-info' }, h('span', { class: 'grow' }, 'Symmetrisch'), h('b', { class: 'mono' }, `je Seite ${fmtAngleU(Model.num(it.p.angle, V, 360) / 2)}`)));
           }
           if (dir === 'two') {
             fl.append(UI.numField({ id: 'p-angle2', label: 'Winkel Seite 2', value: it.p.angle2 ?? it.p.angle, unit: '°', min: 0, onCommit: (v) => setP('angle2', typeof v === 'number' ? clamp(v, 0, 360) : v) }));
@@ -19369,7 +19458,7 @@ const Panels = (() => {
           const tf = it.p.toFace;
           const fr = tf && !tf.lost ? Model.revolveFrame(it.p, V) : null;
           const hitDeg = fr ? Model.revolveHitAngle(fr, tf.o, tf.fn, !!it.p.toFaceFlip) : null;
-          const infoTxt = !tf ? 'Noch keine Fläche gewählt' : tf.lost ? `Zielfläche „${tf.name || '?'}“ fehlt` : `${tf.kind === 'datum' ? 'Bezugsebene' : 'Fläche'}: „${tf.name || 'Fläche'}“${hitDeg != null ? ` (${fmt(hitDeg, 1)}°)` : ''}`;
+          const infoTxt = !tf ? 'Noch keine Fläche gewählt' : tf.lost ? `Zielfläche „${tf.name || '?'}“ fehlt` : `${tf.kind === 'datum' ? 'Bezugsebene' : 'Fläche'}: „${tf.name || 'Fläche'}“${hitDeg != null ? ` (${fmtAngleU(hitDeg)})` : ''}`;
           fl.append(h('div', { class: 'mini-row', id: 'p-rev-face-info', style: tf && tf.lost ? { color: 'var(--bad)' } : null }, h('span', { class: 'grow' }, infoTxt)));
           const pb = h('button', { type: 'button', class: 'btn', id: 'p-rev-face-pick' }); pb.innerHTML = icon('cursor') + (tf ? 'Andere Fläche wählen' : 'Fläche im Bild wählen');
           pb.onclick = () => Features.pickRevolveFace(it.id);
@@ -19449,7 +19538,7 @@ const Panels = (() => {
       if (healed && healed.before && healed.after) {
         const b = healed.before, a = healed.after;
         const diff = h('div', { id: 'import-heal-diff', class: 'hint-box import-diff' });
-        diff.append(h('b', null, `Heil-Ergebnis (Toleranz ${fmt(healed.tol ?? 0.1, 3)} mm)`));
+        diff.append(h('b', null, `Heil-Ergebnis (Toleranz ${fmtFixed(healed.tol ?? 0.1, 3)} mm)`));
         const rows = h('div', { class: 'import-metrics' },
           h('span', null, 'Offene Kanten'), h('b', null, `${b.openEdges} → ${a.openEdges}`),
           h('span', null, 'Lücken'), h('b', null, `${b.gaps} → ${a.gaps}`),
@@ -19736,7 +19825,7 @@ const Panels = (() => {
           const sp = THREAD_MAP[th.size] || { pitch: 1 };
           const pitch = (th.pitch > 0 ? th.pitch : null) || sp.pitch;
           const box = h('div', { class: 'thread-item', style: { display: 'grid', gap: '6px', padding: '6px 0', borderTop: '1px solid var(--line)' } });
-          box.append(h('div', { class: 'mini-row' }, h('b', null, `${th.size} × ${Units.fmtLenU(th.length, 1)}`), h('span', { class: 'grow muted', style: { marginLeft: '6px', fontSize: '11px' } }, `${th.kind === 'int' ? 'Innengewinde' : 'Außengewinde'} · P ${fmt(pitch, 2)}`)));
+          box.append(h('div', { class: 'mini-row' }, h('b', null, `${th.size} × ${Units.fmtLenU(th.length, 1)}`), h('span', { class: 'grow muted', style: { marginLeft: '6px', fontSize: '11px' } }, `${th.kind === 'int' ? 'Innengewinde' : 'Außengewinde'} · P ${fmtFixed(pitch, 2)}`)));
           const fs = h('div', { class: 'fields' });
           fs.append(UI.selectField({ id: 'th-size-' + th.id, label: 'M-Größe', value: th.size, options: THREAD_SPECS.map((s) => [s.size, s.size]), onChange: (v) => Features.updateThread(it.id, th.id, { size: v }) }));
           fs.append(UI.numField({ id: 'th-pitch-' + th.id, label: 'Steigung', value: pitch, min: 0.25, step: 0.05, unit: 'mm', expr: false, onCommit: (v) => Features.updateThread(it.id, th.id, { pitch: v }) }));
@@ -19780,11 +19869,11 @@ const Panels = (() => {
         const b = p && p.bbox; bR.textContent = b ? `${Units.fmtLen(b[3] - b[0], 2)} × ${Units.fmtLen(b[4] - b[1], 2)} × ${Units.fmtLen(b[5] - b[2], 2)} ${Units.label()}` : '–'; bR.id = 'p-bbox';
         // Trägheit um den Schwerpunkt (PF-13) und Standfestigkeit (PF-14)
         if (p && p.I && !p.fixed) {
-          const gc = (x) => fmt(x / 100, x / 100 < 10 ? 2 : 1);
+          const gc = (x) => fmtFixed(x / 100, x / 100 < 10 ? 2 : 1);
           ms.querySelector('.mini-list').append(h('div', { class: 'mini-row', 'data-help': 'inertia', 'data-tip': 'Trägheitsmomente um den Schwerpunkt, um die X-, Y- und Z-Richtung' }, h('span', { class: 'grow' }, 'Trägheit X · Y · Z'), h('b', { class: 'mono', id: 'p-inertia' }, `${gc(p.I[0])} · ${gc(p.I[1])} · ${gc(p.I[2])} g·cm²`)));
         }
         const st = p && p.com ? Mass.stability(it.id, p.com) : null;
-        if (st) ms.querySelector('.mini-list').append(h('div', { class: 'mini-row', 'data-help': 'stability' }, h('span', { class: 'grow' }, 'Standfest'), h('b', { class: 'mono', id: 'p-stand', style: { color: st.ok ? '' : 'var(--bad)' } }, st.ok ? `ja – kippt ab ${fmt(st.angle, 0)}°` : 'nein – kippt um')));
+        if (st) ms.querySelector('.mini-list').append(h('div', { class: 'mini-row', 'data-help': 'stability' }, h('span', { class: 'grow' }, 'Standfest'), h('b', { class: 'mono', id: 'p-stand', style: { color: st.ok ? '' : 'var(--bad)' } }, st.ok ? `ja – kippt ab ${fmtFixed(st.angle, 0)}°` : 'nein – kippt um')));
       });
       w.append(ms);
     }
@@ -20583,8 +20672,8 @@ const Place = (() => {
       const dPx = Math.max(18, Math.min(44, depth * scale));
       const tPx = ang >= 179.5 ? 0 : Math.max(5, Math.min(18, tipH * scale));
       const y1 = y0 + dPx, y2 = y1 + tPx;
-      const lbl = `<text x="${cx + rPx + 6}" y="${y0 + dPx / 2 + 3}" font-size="10" fill="var(--muted)">t ${fmt(depth, 1)}</text>`
-        + `<text x="28" y="${y0 + 13}" font-size="10" fill="var(--ink)">Ø ${fmt(d, 2)}</text>`
+      const lbl = `<text x="${cx + rPx + 6}" y="${y0 + dPx / 2 + 3}" font-size="10" fill="var(--muted)">t ${fmtFixed(depth, 1)}</text>`
+        + `<text x="28" y="${y0 + 13}" font-size="10" fill="var(--ink)">Ø ${fmtFixed(d, 2)}</text>`
         + (tPx > 0 ? `<text x="${cx + rPx + 6}" y="${y2}" font-size="10" fill="var(--hole)">${ang}°</text>` : '');
       return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - rPx} ${y0} V${y1} L${cx} ${y2} L${cx + rPx} ${y1} V${y0} Z`)}${lbl}</svg>`;
     }
@@ -20593,7 +20682,7 @@ const Place = (() => {
       const rPx = Math.max(12, Math.min(30, d * 2.4));
       const tolLbl = info.um != null ? `${info.esText} / 0` : 'H7';
       return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - rPx} ${y0} V${yB} H${cx + rPx} V${y0} Z`)}`
-        + `<text x="28" y="${y0 + 14}" font-size="10.5" font-weight="600" fill="var(--ink)">Ø ${fmt(d, 2)} H7</text>`
+        + `<text x="28" y="${y0 + 14}" font-size="10.5" font-weight="600" fill="var(--ink)">Ø ${fmtFixed(d, 2)} H7</text>`
         + `<text x="${cx + rPx + 7}" y="${y0 + 30}" font-size="10" fill="var(--hole)">${tolLbl}</text></svg>`;
     }
     if (o.type === 'center') {
@@ -20602,8 +20691,8 @@ const Place = (() => {
       const r1 = Math.max(7, m.d1 / 2 * sc), r2 = Math.max(r1 + 8, Math.min(38, m.d2 / 2 * sc));
       const y1 = y0 + Math.max(12, m.hCone * sc), y2 = y1 + Math.max(14, m.t1 * sc), y3 = y2 + Math.max(5, m.tipH * sc);
       return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - r2} ${y0} L${cx - r1} ${y1} V${y2} L${cx} ${y3} L${cx + r1} ${y2} V${y1} L${cx + r2} ${y0} Z`)}`
-        + `<text x="28" y="${y0 + 13}" font-size="10" fill="var(--ink)">Ø ${fmt(m.d2, 2)}</text>`
-        + `<text x="28" y="${y2}" font-size="10" fill="var(--muted)">Ø ${fmt(m.d1, 2)}</text>`
+        + `<text x="28" y="${y0 + 13}" font-size="10" fill="var(--ink)">Ø ${fmtFixed(m.d2, 2)}</text>`
+        + `<text x="28" y="${y2}" font-size="10" fill="var(--muted)">Ø ${fmtFixed(m.d1, 2)}</text>`
         + `<text x="${cx + r2 + 6}" y="${y1}" font-size="10" fill="var(--hole)">60°</text></svg>`;
     }
     const te = (o.type === 'through' || o.type === 'tap') ? threadEntry(o.size) : null;
@@ -20612,14 +20701,14 @@ const Place = (() => {
       const dCsk = te && te.senkung_senk_d_mm;
       return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - 28} ${y0} L${cx - 14} ${y0 + 16} V${yB} H${cx + 14} V${y0 + 16} L${cx + 28} ${y0} Z`)}`
         + `<text x="28" y="${y0 + 14}" font-size="10" fill="var(--ink)">${esc(o.size)} Senk. (${ang}°)</text>`
-        + (dCsk ? `<text x="${cx + 32}" y="${y0 + 14}" font-size="10" fill="var(--hole)">Ø ${fmt(dCsk, 1)}</text>` : '') + `</svg>`;
+        + (dCsk ? `<text x="${cx + 32}" y="${y0 + 14}" font-size="10" fill="var(--hole)">Ø ${fmtFixed(dCsk, 1)}</text>` : '') + `</svg>`;
     }
     if (o.type === 'through' && o.head === 'counterbore') {
       const dCb = te && te.senkung_zyl_d_mm, tCb = te && te.senkung_zyl_t_mm;
       const headName = te && te.normId === 'pipe_g' ? 'Flach.' : 'Zyl.';
       return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - 26} ${y0} V${y0 + 22} H${cx - 14} V${yB} H${cx + 14} V${y0 + 22} H${cx + 26} V${y0} Z`)}`
         + `<text x="28" y="${y0 + 14}" font-size="10" fill="var(--ink)">${esc(o.size)} ${headName}</text>`
-        + (dCb ? `<text x="${cx + 30}" y="${y0 + 14}" font-size="10" fill="var(--hole)">Ø ${fmt(dCb, 1)}×${fmt(tCb, 1)}</text>` : '') + `</svg>`;
+        + (dCb ? `<text x="${cx + 30}" y="${y0 + 14}" font-size="10" fill="var(--hole)">Ø ${fmtFixed(dCb, 1)}×${fmtFixed(tCb, 1)}</text>` : '') + `</svg>`;
     }
     if (o.type === 'nut') {
       return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - 26} ${y0} V${y0 + 20} H${cx - 13} V${yB} H${cx + 13} V${y0 + 20} H${cx + 26} V${y0} Z`)}`
@@ -20628,7 +20717,7 @@ const Place = (() => {
     const r = o.type === 'insert' ? 18 : 13;
     const endY = o.thru ? yB : yB - 12;
     const dia = te ? threadHoleDia(te, o.type === 'tap' ? 'tap' : o.fit) : null;
-    const lbl = o.type === 'tap' ? `${o.size} Kernloch${dia ? ' Ø ' + fmt(dia, 2) : ''}` : o.type === 'insert' ? `${o.size} Einsatz` : `${o.size} Durchg.${dia ? ' Ø ' + fmt(dia, 2) : ''}`;
+    const lbl = o.type === 'tap' ? `${o.size} Kernloch${dia ? ' Ø ' + fmtFixed(dia, 2) : ''}` : o.type === 'insert' ? `${o.size} Einsatz` : `${o.size} Durchg.${dia ? ' Ø ' + fmtFixed(dia, 2) : ''}`;
     return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${mat(`M${cx - r} ${y0} V${endY} H${cx + r} V${y0} Z`)}`
       + `<text x="28" y="${y0 + 14}" font-size="10" fill="var(--ink)">${esc(lbl)}</text></svg>`;
   }
@@ -20651,7 +20740,7 @@ const Place = (() => {
     if (o.type === 'tap') {
       const te = threadEntry(o.size);
       if (!te) return '';
-      const pitchTxt = te.tpi ? `${te.tpi} Gg/1″ (${fmt(te.steigung_mm, 2)} mm)` : `Steigung ${fmt(te.steigung_mm, 2)} mm`;
+      const pitchTxt = te.tpi ? `${te.tpi} Gg/1″ (${fmtFixed(te.steigung_mm, 2)} mm)` : `Steigung ${fmtFixed(te.steigung_mm, 2)} mm`;
       const drillTxt = te.bohrer ? ` · Bohrer ${esc(te.bohrer)}` : '';
       return `<b>Kernloch ${esc(te.id)}:</b> Ø <b>${Units.fmtLenU(te.kernloch_mm, 2)}</b> (${pitchTxt}${drillTxt}).<br><span style="color:var(--muted)">Norm: ${esc(te.quelle)}</span>`;
     }
@@ -21711,7 +21800,7 @@ const Views = (() => {
     const close = h('button', { type: 'button', class: 'vb-x', 'aria-label': 'Wandstärke ausblenden', 'data-tip': 'Ausblenden' }); close.innerHTML = icon('close'); close.onclick = () => thin(false);
     head.append(close);
     const sel = h('select', { id: 'thin-limit', class: 'vb-sel', 'aria-label': 'Mindest-Wandstärke' });
-    for (const a of [0.4, 0.8, 1.2, 1.6, 2, 3, 5]) sel.append(h('option', { value: a, ...(a === 1.2 ? { selected: true } : {}) }, Units.fmtLenU(a, 1)));
+    for (const a of [0.4, 0.8, 1.2, 1.6, 2, 3, 5]) sel.append(h('option', { value: a, ...(a === 1.2 ? { selected: true } : {}) }, Units.fmtLenFixedU(a, 1)));
     sel.onchange = () => { o.limit = +sel.value; drawThin(); };
     bar.append(head, h('div', { class: 'vb-row' }, h('span', { class: 'vb-l' }, 'Rot unter'), sel, h('span', { class: 'vb-hint' }, '0,4 mm Düse: mindestens 0,8–1,2 mm')), h('div', { class: 'vb-row' }, h('span', { class: 'vb-hint', id: 'thin-area' }, '')));
     bars().append(bar); o.bar = bar;
@@ -21796,17 +21885,17 @@ const Views = (() => {
     const r = topSpeed(g.n * t, m.mass, o.cw, (deg) => Viewer.silhouette(windIds(o.props), windDir(deg)).area, g.tilt || 0);
     o.top = r;
     if (!r) { el.textContent = 'Zu wenig Schub zum Schweben – keine Höchstgeschwindigkeit.'; return; }
-    el.innerHTML = `Höchstens etwa <b>${fmt(r.kmh, 0)} km/h</b> bei ${fmt(r.deg, 0)}° Neigung` + (g.tilt ? ` (Rumpf ${fmt(r.body, 0)}°, Motoren ${fmt(g.tilt, 0)}° geneigt)` : '') + ` – geschätzt aus Schub (${g.n} × ${fmt(t, 0)} g), Gewicht (${Mass.gText(m.mass)}) und Stirnfläche. Propeller verlieren bei hohem Tempo Schub, echt also eher weniger.`;
+    el.innerHTML = `Höchstens etwa <b>${fmtFixed(r.kmh, 0)} km/h</b> bei ${fmtFixed(r.deg, 0)}° Neigung` + (g.tilt ? ` (Rumpf ${fmtFixed(r.body, 0)}°, Motoren ${fmtFixed(g.tilt, 0)}° geneigt)` : '') + ` – geschätzt aus Schub (${g.n} × ${fmtFixed(t, 0)} g), Gewicht (${Mass.gText(m.mass)}) und Stirnfläche. Propeller verlieren bei hohem Tempo Schub, echt also eher weniger.`;
   }
   function drawWind(moveCam) {
     const o = st.wind; if (!o) return;
     const r = Viewer.silhouette(windIds(o.props), windDir(o.angle)); o.area = r.area;
     const t = o.bar.querySelector('#wind-area');
-    if (t) t.innerHTML = r.area > 0 ? `Stirnfläche <b>${fmt(r.area / 100, r.area < 100 ? 2 : 1)} cm²</b>` + (o.props ? ' mit Propellern' : ' ohne Propeller') : 'Nichts zu sehen.';
+    if (t) t.innerHTML = r.area > 0 ? `Stirnfläche <b>${fmtFixed(r.area / 100, r.area < 100 ? 2 : 1)} cm²</b>` + (o.props ? ' mit Propellern' : ' ohne Propeller') : 'Nichts zu sehen.';
     const dEl = o.bar.querySelector('#wind-drag');
     if (dEl) {
       const D = dragN(r.area, o.cw, o.v); o.drag = D;
-      dEl.innerHTML = r.area > 0 && o.v > 0 ? `Bei ${fmt(o.v, 0)} km/h: Luftwiderstand etwa <b>${fmt(D, D < 10 ? 1 : 0)} N</b> – so viel wie ${fmt((D / 9.80665) * 1000, 0)} g Schub; dafür braucht es etwa ${fmt((D * o.v) / 3.6, 0)} W.` : '';
+      dEl.innerHTML = r.area > 0 && o.v > 0 ? `Bei ${fmtFixed(o.v, 0)} km/h: Luftwiderstand etwa <b>${fmtFixed(D, D < 10 ? 1 : 0)} N</b> – so viel wie ${fmtFixed((D / 9.80665) * 1000, 0)} g Schub; dafür braucht es etwa ${fmtFixed((D * o.v) / 3.6, 0)} W.` : '';
     }
     if (moveCam && r.c) Viewer.lookAtPlane(r.c, windDir(o.angle).map((v) => -v), [1, 0, 0], r.R * 1.15);
     Viewer.requestRender();
@@ -23141,9 +23230,11 @@ const Sketch = (() => {
   function askDim(sp, clientX, clientY) {
     hideDimBox(); hideEntry();
     const cur = dimFind(sp);
-    const isLen = sp.k !== 'ang' && sp.k !== 'angLL' && sp.k !== 'n';
-    const rawNum = cur && !cur.ref ? cur.v : round(measureSpec(sp), 4);
-    const val = typeof rawNum === 'number' ? (isLen ? Units.fmtInput(rawNum) : fmt(rawNum, 4)) : rawNum;
+    const isAng = sp.k === 'ang' || sp.k === 'angLL';
+    const isLen = !isAng && sp.k !== 'n';
+    const rawNum = cur && !cur.ref ? cur.v : round(measureSpec(sp), 6);
+    const val = typeof rawNum === 'number' ? (isLen ? Units.fmtInput(rawNum) : sp.k === 'n' ? String(Math.round(rawNum)) : fmtFixed(rawNum, Math.max(4, FMT.angle))) : rawNum;
+    const orig = String(val);
     dimBox = h('div', { class: 'numentry dimask' });
     const inp = h('input', { type: 'text', value: val, 'aria-label': DIMLABEL(sp.k), spellcheck: 'false', autocomplete: 'off', style: { width: '120px' } });
     const lbl = DIMLABEL(sp.k) + (isLen && Units.key() !== 'mm' ? ' (' + Units.label() + ')' : '');
@@ -23151,7 +23242,7 @@ const Sketch = (() => {
     if (sp.k !== 'n' && !(cur && cur.ref)) {
       // Knopf „( )“: nur ablesen statt festlegen
       const rb = h('button', { type: 'button', class: 'dimlock', id: 'dim-ref', 'data-tip': 'Nur ablesen – das Maß zeigt den Wert, legt aber nichts fest', 'aria-label': 'Nur ablesen' }, '( )');
-      rb.onclick = () => { hideDimBox(); if (cur) { pushUndo(); cur.ref = true; cur.v = round(measureSpec(sp), 4); reapply(); render(); Panels.renderRight(); } else setRefDim(sp); };
+      rb.onclick = () => { hideDimBox(); if (cur) { pushUndo(); cur.ref = true; cur.v = round(measureSpec(sp), 6); reapply(); render(); Panels.renderRight(); } else setRefDim(sp); };
       dimBox.append(rb);
     }
     if (cur) {
@@ -23167,11 +23258,12 @@ const Sketch = (() => {
     grab(); setTimeout(grab, 0); setTimeout(grab, 60);
     const commit = () => {
       const raw = inp.value.trim(); if (!raw) { hideDimBox(); return; }
+      if (raw === orig && cur && !cur.ref) { hideDimBox(); Viewer.canvas.focus(); return; }
       // ein neuer Name wie „breite“ wird unter „Maße“ mit dem jetzigen Wert angelegt
       if (/^[A-Za-zÄÖÜäöüß_][A-Za-zÄÖÜäöüß_0-9]*$/.test(raw) && !/^pi$/i.test(raw) && isNaN(Model.num(raw, vars(), NaN))) {
-        const now = round(measureSpec(sp), 4);
+        const now = round(measureSpec(sp), 6);
         App.change(`Maß „${raw}“ angelegt`, (doc) => { doc.params.push({ id: uid('m'), name: raw, expr: now }); });
-        UI.toast(`Neuer Name „${raw}“ = ${isLen ? Units.fmtLenU(now, 2) : fmt(now, 2)} – zu finden links unter „Maße“.`, { icon: 'check' });
+        UI.toast(`Neuer Name „${raw}“ = ${isLen ? Units.fmtLenU(now) : isAng ? fmtAngleU(now) : fmt(now)} – zu finden links unter „Maße“.`, { icon: 'check' });
       }
       let v;
       if (isLen) {
@@ -25194,9 +25286,10 @@ const Sketch = (() => {
         const isF = typeof dm.v === 'string' && Model.isExpr(dm.v);
         const bad = !dm.ref && (isNaN(Model.num(dm.v, vars(), NaN)) || conflicts.has(dm.id));
         const pre = { d: 'Ø ', x: 'X ', y: 'Y ', r: 'R ' }[dm.k] || '';
-        const isLen = dm.k !== 'ang' && dm.k !== 'angLL' && dm.k !== 'n';
-        const unit = dm.k === 'ang' || dm.k === 'angLL' ? '°' : dm.k === 'n' ? ' Ecken' : (Units.key() !== 'mm' ? ' ' + Units.label() : '');
-        const valTxt = isLen ? Units.fmtLen(val, 2) : fmt(val, 2);
+        const isAng = dm.k === 'ang' || dm.k === 'angLL';
+        const isLen = !isAng && dm.k !== 'n';
+        const unit = isAng ? '°' : dm.k === 'n' ? ' Ecken' : (Units.key() !== 'mm' ? ' ' + Units.label() : '');
+        const valTxt = isLen ? Units.fmtLen(val) : isAng ? fmtAngle(val) : String(Math.round(val));
         const el = h('div', { class: 'skdim' + (bad ? ' bad' : '') + (dm.ref ? ' ref' : '') + (confFocusId === dm.id ? ' conf-focus' : ''), 'data-tip': bad ? 'Dieses Maß geht nicht auf – klicken zum Ändern' : dm.ref ? DIMLABEL(dm.k) + ' zum Ablesen – legt nichts fest, klicken zum Festlegen' : DIMLABEL(dm.k) + ' – klicken zum Ändern', dataset: { dim: dm.id } });
         el.innerHTML = dm.ref ? esc('(' + pre + valTxt + unit + ')') : (isF ? `<span class="fx">${esc(dm.v)}&nbsp;=</span>` : '') + esc(pre + valTxt + unit);
         $('#overlay').append(el); labels.push(el);
@@ -25217,9 +25310,10 @@ const Sketch = (() => {
           if (pos.line) lineObj(pos.line, '#e03131', 1.5, { dashed: true, opacity: 0.9, dash: 1.2, gap: 1.2 });
           const val = Model.num(pd.v, vars(), NaN);
           const pre = { d: 'Ø ', x: 'X ', y: 'Y ', r: 'R ' }[pd.k] || '';
-          const isLen = pd.k !== 'ang' && pd.k !== 'angLL' && pd.k !== 'n';
-          const unit = pd.k === 'ang' || pd.k === 'angLL' ? '°' : pd.k === 'n' ? ' Ecken' : (Units.key() !== 'mm' ? ' ' + Units.label() : '');
-          const valTxt = isFinite(val) ? (isLen ? Units.fmtLen(val, 2) : fmt(val, 2)) : String(pd.v);
+          const isAng = pd.k === 'ang' || pd.k === 'angLL';
+          const isLen = !isAng && pd.k !== 'n';
+          const unit = isAng ? '°' : pd.k === 'n' ? ' Ecken' : (Units.key() !== 'mm' ? ' ' + Units.label() : '');
+          const valTxt = isFinite(val) ? (isLen ? Units.fmtLen(val) : isAng ? fmtAngle(val) : String(Math.round(val))) : String(pd.v);
           const el = h('div', { class: 'skdim bad conf-pending' + (confFocusId === '_neu' ? ' conf-focus' : ''), 'data-tip': 'Neues widersprüchliches Maß – klicken zum Hervorheben', dataset: { dim: '_neu' } }, pre + valTxt + unit);
           $('#overlay').append(el); labels.push(el);
           const spx = Viewer.toScreen(toWorld(pos.p[0], pos.p[1]));
@@ -25300,8 +25394,12 @@ const Sketch = (() => {
             if (gd) lineObj(gd, acc, 1.3, { dashed: true, opacity: 0.85, dash: 1.4, gap: 1.2, order: 27 });
             const val = measureSpec(sp);
             const pre = { d: 'Ø ', x: 'X ', y: 'Y ', r: 'R ' }[dm.k] || '';
-            const unit = dm.k === 'ang' || dm.k === 'angLL' ? '°' : dm.k === 'n' ? ' Ecken' : '';
-            const el = h('div', { class: 'skdim prop', 'data-tip': 'Vorschlag: ' + DIMLABEL(dm.k), dataset: { propDim: dm.id } }, pre + fmt(isFinite(val) ? val : dm.v, 2) + unit);
+            const isAng = dm.k === 'ang' || dm.k === 'angLL';
+            const isLen = !isAng && dm.k !== 'n';
+            const unit = isAng ? '°' : dm.k === 'n' ? ' Ecken' : (Units.key() !== 'mm' ? ' ' + Units.label() : '');
+            const dv = isFinite(val) ? val : dm.v;
+            const valTxt = isFinite(dv) ? (isLen ? Units.fmtLen(dv) : isAng ? fmtAngle(dv) : String(Math.round(dv))) : String(dv);
+            const el = h('div', { class: 'skdim prop', 'data-tip': 'Vorschlag: ' + DIMLABEL(dm.k), dataset: { propDim: dm.id } }, pre + valTxt + unit);
             $('#overlay').append(el); labels.push(el);
             const spx = Viewer.toScreen(toWorld(pos.p[0], pos.p[1]));
             const br = el.getBoundingClientRect();
@@ -25390,7 +25488,7 @@ const Sketch = (() => {
           }
           if (focused) {
             const tag = it.kind === 'gap'
-              ? `Lücke ${Units.fmtLenU(it.dist, 3)}`
+              ? `Lücke ${Units.fmtLenFixedU(it.dist, 3)}`
               : it.kind === 'dup'
                 ? (it.partial ? 'Überlappende Linie' : ({ line: 'Doppelte Linie', arc: 'Doppelter Bogen', circle: 'Doppelter Kreis', rect: 'Doppeltes Rechteck' }[it.sub] || 'Doppeltes Element'))
                 : 'Offenes Ende';
@@ -25410,7 +25508,7 @@ const Sketch = (() => {
         const st = draftTan(), g = st ? tanArc(st, cur) : null;
         if (g) { lineObj(SK.arcPoints(st.p, g.m, cur), acc, 2.2); lineObj([g.c, st.p], acc, 1, { dashed: true, opacity: 0.55 }); label(`Bogen · R ${Units.fmtLenU(g.r, 2)}`, cur); }
         else if (st) { lineObj([st.p, cur], acc, 1.4, { dashed: true }); label('Tangentialer Bogen', cur); }
-      } else if (t === 'line') { const a = d.pts[d.pts.length - 1]; lineObj([a, cur], acc, 2.2); const L = SK.d2(a, cur); const ang = (Math.atan2(cur[1] - a[1], cur[0] - a[0]) * 180) / Math.PI; label(`${Units.fmtLenU(L, 2)} · ${fmt(ang, 1)}°`, [(a[0] + cur[0]) / 2, (a[1] + cur[1]) / 2]); }
+      } else if (t === 'line') { const a = d.pts[d.pts.length - 1]; lineObj([a, cur], acc, 2.2); const L = SK.d2(a, cur); const ang = (Math.atan2(cur[1] - a[1], cur[0] - a[0]) * 180) / Math.PI; label(`${Units.fmtLenU(L)} · ${fmtAngleU(ang)}`, [(a[0] + cur[0]) / 2, (a[1] + cur[1]) / 2]); }
       if (t === 'rect' && d.r3) { if (d.r3.length === 1) lineObj([d.r3[0], cur], acc, 2.2); else { const c = rect3Corners(d.r3[0], d.r3[1], cur); if (c) { lineObj([...c, c[0]], acc, 2.2); label(`${Units.fmtLen(SK.d2(c[0], c[1]), 2)} × ${Units.fmtLen(SK.d2(c[1], c[2]), 2)}`, cur); } } }
       else if (t === 'rect') { const q = rectDraft(d, cur), e = { type: 'rect', a: q.a, b: q.b }; for (const p of entPts(e)) lineObj(p, acc, 2.2); if (d.mid) lineObj([d.a, cur], acc, 1, { dashed: true }); label(`${Units.fmtLen(Math.abs(q.b[0] - q.a[0]), 2)} × ${Units.fmtLen(Math.abs(q.b[1] - q.a[1]), 2)}`, [(d.a[0] + cur[0]) / 2, (d.a[1] + cur[1]) / 2]); }
       if (t === 'ellipse') {
@@ -25423,7 +25521,7 @@ const Sketch = (() => {
       if (t === 'poly') { const r = SK.d2(d.c, cur); const e = { type: 'poly', c: d.c, r, n: S.polySides, rot: Math.atan2(cur[1] - d.c[1], cur[0] - d.c[0]) - Math.PI / 2 }; for (const p of entPts(e)) lineObj(p, acc, 2.2); label(`Ø ${Units.fmtLen(2 * r, 2)}`, cur); }
       if (t === 'arc' && d.ctr) {
         if (!d.s) { lineObj([d.ctr, cur], acc, 1.4, { dashed: true }); label(`R ${Units.fmtLen(SK.d2(d.ctr, cur), 2)}`, cur); }
-        else { const g = centerArc(d, cur); lineObj([d.ctr, d.s], acc, 1, { dashed: true }); if (g) { lineObj(SK.arcPoints(g.a, g.m, g.b), acc, 2.2); lineObj([d.ctr, g.b], acc, 1, { dashed: true }); label(`${fmt((g.sw * 180) / Math.PI, 1)}°`, cur); } }
+        else { const g = centerArc(d, cur); lineObj([d.ctr, d.s], acc, 1, { dashed: true }); if (g) { lineObj(SK.arcPoints(g.a, g.m, g.b), acc, 2.2); lineObj([d.ctr, g.b], acc, 1, { dashed: true }); label(fmtAngleU((g.sw * 180) / Math.PI), cur); } }
       }
       if (t === 'arc' && !d.tan && !d.ctr) { if (!d.b) lineObj([d.a, cur], acc, 1.4, { dashed: true }); else if (SK.arcInfo(d.a, cur, d.b)) { lineObj(SK.arcPoints(d.a, cur, d.b), acc, 2.2); const ai = SK.arcInfo(d.a, cur, d.b); label(`R ${Units.fmtLen(ai.r, 2)}`, cur); } }
       if (t === 'slot' && d.arcslot) {
@@ -25462,7 +25560,7 @@ const Sketch = (() => {
           if (plan.ok) {
             for (const cp of plan.copies) for (const it of cp.items) for (const p of entPts(it.ent)) lineObj(p, acc, 2.2, { dashed: true, order: 27 });
             const O = S.off || {};
-            const tags = [fmt(Math.abs(sd), 2) + ' mm'];
+            const tags = [Units.fmtLenU(Math.abs(sd))];
             if ((O.count || 1) > 1) tags.push(Math.round(O.count) + '×');
             if (O.both) tags.push('beidseitig');
             if (O.corners === 'round') tags.push('rund');
@@ -25896,7 +25994,7 @@ const Sketch = (() => {
   function describeDim(d, entsList) {
     const isAng = d.k === 'ang' || d.k === 'angLL';
     const num = Model.num(d.v, vars(), NaN);
-    const valTxt = isFinite(num) ? (isAng ? fmt(num, 2) + '°' : d.k === 'n' ? String(Math.round(num)) : Units.fmtLenU(num, 2)) : String(d.v);
+    const valTxt = isFinite(num) ? (isAng ? fmtAngleU(num) : d.k === 'n' ? String(Math.round(num)) : Units.fmtLenU(num)) : String(d.v);
     const exprPre = typeof d.v === 'string' && Model.isExpr(d.v) ? `${d.v} = ` : '';
     const label = `${DIMLABEL(d.k)} = ${exprPre}${valTxt}`;
     const names = [];
@@ -26113,7 +26211,7 @@ const Sketch = (() => {
       // Jedes eingetippte Maß wird fest (auch als Formel). Das Schloss löst es wieder.
       const dimField = (k, label, unit = 'mm', opts = {}) => {
         const dm = dimOf(sel.id, k);
-        const fld = UI.numField({ id: 'se-' + k, label, value: dm && !dm.ref ? dm.v : round(SK.measure(sel, k), 4), unit, min: opts.min, int: opts.int, onCommit: (v) => setDim(sel.id, k, v) });
+        const fld = UI.numField({ id: 'se-' + k, label, value: dm && !dm.ref ? dm.v : round(SK.measure(sel, k), 6), unit, min: opts.min, int: opts.int, onCommit: (v) => setDim(sel.id, k, v) });
         const box = fld.querySelector('.inp');
         if (dm && dm.ref) {
           const lk = h('button', { type: 'button', class: 'dimlock refmark', 'data-tip': 'Maß zum Ablesen – legt nichts fest. Klicken entfernt es.', 'aria-label': label + ': Maß zum Ablesen entfernen' }, '( )');
@@ -26142,7 +26240,7 @@ const Sketch = (() => {
         lf.onclick = () => pickFont(sel.id);
         f.append(h('div', { class: 'btn-row' }, lf));
         f.append(UI.selectField({ id: 'se-align', label: 'Ausrichtung', value: sel.align || 'l', options: [['l', 'Links'], ['m', 'Mitte'], ['r', 'Rechts']], onChange: (v) => upd((e) => { e.align = v; }) }));
-        if (!sel.on) f.append(UI.numField({ id: 'se-rot', label: 'Drehung', value: round(((sel.rot || 0) * 180) / Math.PI, 3), unit: '°', expr: false, onCommit: (v) => upd((e) => { e.rot = (v * Math.PI) / 180; }) }));
+        if (!sel.on) f.append(UI.numField({ id: 'se-rot', label: 'Drehung', value: round(((sel.rot || 0) * 180) / Math.PI, 6), unit: '°', expr: false, onCommit: (v) => upd((e) => { e.rot = (v * Math.PI) / 180; }) }));
         f.append(UI.numField({ id: 'se-sp', label: 'Zeichenabstand', value: sel.sp || 0, unit: 'mm', expr: false, onCommit: (v) => upd((e) => { e.sp = v; }) }));
         // entlang einer offenen Kurve der Skizze (Linie, Bogen, Spline)
         const curves = S.ents.filter((x) => x.type === 'line' || x.type === 'arc' || (x.type === 'spline' && !x.closed));
@@ -26184,12 +26282,12 @@ const Sketch = (() => {
       }
       else if (sel.type === 'ellipse') {
         f.append(dimField('w', 'Breite (Achse 1)', 'mm', { min: 0.01 }), dimField('h', 'Höhe (Achse 2)', 'mm', { min: 0.01 }));
-        f.append(UI.numField({ id: 'se-rot', label: 'Drehung', value: round(((sel.rot || 0) * 180) / Math.PI, 3), unit: '°', expr: false, onCommit: (v) => upd((e) => { e.rot = (v * Math.PI) / 180; }) }));
+        f.append(UI.numField({ id: 'se-rot', label: 'Drehung', value: round(((sel.rot || 0) * 180) / Math.PI, 6), unit: '°', expr: false, onCommit: (v) => upd((e) => { e.rot = (v * Math.PI) / 180; }) }));
       }
       else if (sel.type === 'poly') {
         f.append(dimField('d', 'Durchmesser', 'mm', { min: 0.01 }), dimField('n', 'Ecken', '', { min: 3, int: true }));
         // Drehung: 0° = eine Ecke zeigt nach oben
-        f.append(UI.numField({ id: 'se-rot', label: 'Drehung', value: round(((sel.rot || 0) * 180) / Math.PI, 3), unit: '°', expr: false, onCommit: (v) => upd((e) => { e.rot = (v * Math.PI) / 180; }) }));
+        f.append(UI.numField({ id: 'se-rot', label: 'Drehung', value: round(((sel.rot || 0) * 180) / Math.PI, 6), unit: '°', expr: false, onCommit: (v) => upd((e) => { e.rot = (v * Math.PI) / 180; }) }));
       }
       else if (sel.type === 'slot') { f.append(dimField('len', 'Länge (Mitte–Mitte)', 'mm', { min: 0.01 }), dimField('w', 'Breite', 'mm', { min: 0.01 })); }
       else if (sel.type === 'arc') {
@@ -26420,8 +26518,8 @@ const Sketch = (() => {
           const A = regs.reduce((s, r) => s + r.area, 0), U = regs.reduce((s, r) => s + per(r.outer.poly) + r.holes.reduce((t, hh) => t + per(hh.poly), 0), 0);
           w.append(h('div', { class: 'mini-row', id: 'sk-area', 'data-help': 'sketchMeasure' }, h('span', { class: 'grow' }, regs.length === 1 ? 'Fläche · Umfang' : `${regs.length} Flächen · Umfang`), h('b', { class: 'mono' }, `${Units.fmtAreaU(A, 2)} · ${Units.fmtLenU(U, 2)}`)));
         }
-        const go = (fac) => { if (!(fac > 0) || fac > 1000 || fac < 0.001) { UI.toast('Diese Größe geht nicht.', { kind: 'bad' }); Panels.renderRight(); return; } if (scaleAll(fac)) UI.toast(`Skizze auf ${fmt(fac * 100, 1)} % gebracht – Längen-Maße sind mitgewachsen.`, { icon: 'check' }); };
-        fz.append(UI.numField({ id: 'sk-scale-w', label: 'Breite ändern (alles wächst mit)', value: round(W, 3), unit: 'mm', expr: false, min: 0.01, onCommit: (v) => go(v / W) }));
+        const go = (fac) => { if (!(fac > 0) || fac > 1000 || fac < 0.001) { UI.toast('Diese Größe geht nicht.', { kind: 'bad' }); Panels.renderRight(); return; } if (scaleAll(fac)) UI.toast(`Skizze auf ${fmtFixed(fac * 100, 1)} % gebracht – Längen-Maße sind mitgewachsen.`, { icon: 'check' }); };
+        fz.append(UI.numField({ id: 'sk-scale-w', label: 'Breite ändern (alles wächst mit)', value: round(W, 6), unit: 'mm', expr: false, min: 0.01, onCommit: (v) => go(v / W) }));
         fz.append(UI.numField({ id: 'sk-scale-f', label: 'oder Faktor', value: 100, unit: '%', expr: false, min: 0.1, onCommit: (v) => go(v / 100) }));
         w.append(fz);
       }
@@ -26475,7 +26573,7 @@ const Sketch = (() => {
             S.check.issues.forEach((it, idx) => {
               const cls = 'chk-row sk-chk-item ' + (it.kind === 'dup' ? 'warn' : 'bad') + (S.checkFocus === idx ? ' active' : '');
               const title = it.kind === 'gap'
-                ? `Winzige Lücke (${Units.fmtLenU(it.dist, 3)})`
+                ? `Winzige Lücke (${Units.fmtLenFixedU(it.dist, 3)})`
                 : it.kind === 'dup'
                   ? (it.partial ? 'Überlappende Linie' : ({ line: 'Doppelte Linie', arc: 'Doppelter Bogen', circle: 'Doppelter Kreis', rect: 'Doppeltes Rechteck' }[it.sub] || 'Doppeltes Element'))
                   : 'Offenes Ende';
@@ -26508,7 +26606,7 @@ const Sketch = (() => {
             const e = d.e ? ent(d.e) : null;
             const nr = e ? S.ents.filter((x) => x.type === e.type).indexOf(e) + 1 : 0;
             const what = (DIMLABEL(d.k) + (e ? ` · ${TN[e.type] || e.type} ${nr}` : '')) + (d.ref ? ' (ablesen)' : '');
-            const f = UI.numField({ id: 'dt-' + i, label: what, value: d.ref ? round(measureSpec(sp), 4) : d.v, unit: unitOf(d.k), onCommit: (v) => { setDimSpec(sp, v); } });
+            const f = UI.numField({ id: 'dt-' + i, label: what, value: d.ref ? round(measureSpec(sp), 6) : d.v, unit: unitOf(d.k), onCommit: (v) => { setDimSpec(sp, v); } });
             f.addEventListener('mouseenter', () => { if (e && S.hoverDim !== e.id) { S.hoverDim = e.id; S.hoverEnt = e.id; render(); } });
             tbl.append(f);
           });
@@ -26704,7 +26802,7 @@ const Sketch = (() => {
         if (aInfo) {
           stepBox.append(h('div', { class: 'mini-row', id: 'st-wrap-info' },
             h('span', { class: 'grow' }, `Umfangswinkel (Ø ${Units.fmtLenU(aInfo.radius * 2, 1)})`),
-            h('b', { class: 'mono' }, `${fmt(aInfo.deg, 1)}°`)));
+            h('b', { class: 'mono' }, fmtAngleU(aInfo.deg))));
         }
       }
     } else if (st.emboss) {
@@ -26826,7 +26924,7 @@ const Sketch = (() => {
         const angLbl = rdir === 'both' ? 'Gesamtwinkel' : rdir === 'two' ? 'Winkel Seite 1' : 'Winkel';
         const minA = rdir === 'two' ? 0 : 0.1;
         stepBox.append(UI.numField({ id: 'st-angle', label: angLbl, value: st.angle, unit: '°', min: minA, onCommit: (v) => { st.angle = clamp(v, minA, 360); renderStep(); updatePreview(); } }));
-        if (rdir === 'both') stepBox.append(h('div', { class: 'mini-row', id: 'st-rev-sym-info' }, h('span', { class: 'grow' }, 'Symmetrisch'), h('b', { class: 'mono' }, `je Seite ${fmt(st.angle / 2, 1)}°`)));
+        if (rdir === 'both') stepBox.append(h('div', { class: 'mini-row', id: 'st-rev-sym-info' }, h('span', { class: 'grow' }, 'Symmetrisch'), h('b', { class: 'mono' }, `je Seite ${fmtAngleU(st.angle / 2)}`)));
         if (rdir === 'two') stepBox.append(UI.numField({ id: 'st-angle2', label: 'Winkel Seite 2', value: st.angle2, unit: '°', min: 0, onCommit: (v) => { st.angle2 = clamp(v, 0, 360); updatePreview(); } }));
       } else {
         stepBox.append(h('div', { class: 'mini-row', id: 'st-rev-face-info' }, h('span', { class: 'grow' }, st.revToFace ? `${st.revToFace.kind === 'datum' ? 'Bezugsebene' : 'Fläche'}: „${st.revToFace.name || 'Fläche'}“` : 'Noch keine Fläche gewählt')));
@@ -27115,7 +27213,7 @@ const Sketch = (() => {
     const newDir = st.dir === 'both' ? 'both' : v < 0 ? 'reverse' : 'normal';
     const changedDir = newDir !== st.dir;
     st.dir = newDir; st.dist = round(Math.abs(v), 4);
-    if (changedDir) renderStep(); else { const inp = $('#st-dist'); if (inp) inp.value = Units.fmtInput(st.dist); }
+    if (changedDir) renderStep(); else { const inp = $('#st-dist'); if (inp) inp.value = Units.fmtLen(st.dist); }
     updatePreview();
     placeArrowSoon();
   }
@@ -27192,7 +27290,7 @@ const Sketch = (() => {
     window.addEventListener('keydown', onModKey);
     window.addEventListener('keyup', onModKey);
   }
-  return { isLinkLost, rebindLink, linkPointsWorld, copySel, pasteClip, setRefDim, setDimSpec, check: runCheck, repair: repairCheck, focusCheckIssue, autoDefine: proposeAutoDefine, applyAutoDefine, cancelAutoDefine, toggleFreeSpots, setFreeMode, wiggleFree, focusConflictItem, removeConflictItem, clearConflict, bandSelect, init, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startEmboss, startPath, startLoftPath, editItem, pushPullFace, renderPanel, onKey, cancel, scaleAll, insertEnts, textToCurves, loadFontFile, setBg, setTool, get angleSnap() { return angleSnapOn; }, setAngleSnap, lengthSnapStep, get active() { return !!S; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
+  return { isLinkLost, rebindLink, linkPointsWorld, copySel, pasteClip, setRefDim, setDimSpec, check: runCheck, repair: repairCheck, focusCheckIssue, autoDefine: proposeAutoDefine, applyAutoDefine, cancelAutoDefine, toggleFreeSpots, setFreeMode, wiggleFree, focusConflictItem, removeConflictItem, clearConflict, bandSelect, init, chooseAndStart, startOnPlane, startOnPlaneObj, startOnFace, startEmboss, startPath, startLoftPath, editItem, pushPullFace, render, renderPanel, onKey, cancel, scaleAll, insertEnts, textToCurves, loadFontFile, setBg, setTool, get angleSnap() { return angleSnapOn; }, setAngleSnap, lengthSnapStep, get active() { return !!S; }, get state() { return S; }, get picking() { return !!planePick; }, startPlanePick };
 })();
 
 // ---- 56-notes.js ----
@@ -27555,7 +27653,7 @@ const Measure = (() => {
       }
       last = { text: ev.text };
       const bbox = hit.node.data.bbox;
-      current = { kind: 'circle', refs: [{ kind: 'circle', id: hit.id, c: r6(ent.edge.c), n: ent.edge.n ? r6(ent.edge.n) : null, r: round(ent.edge.r, 6), frac: fracOf(ent.edge.c, bbox) }], eval: ev };
+      current = { kind: 'circle', refs: [{ kind: 'circle', id: hit.id, c: r6(ent.edge.c), n: ent.edge.n ? r6(ent.edge.n) : null, r: round(ent.edge.r, 6), frac: fracOf(ent.edge.c, bbox) }], ents: [circleEnt], eval: ev };
       updateBar();
       return true;
     }
@@ -27566,7 +27664,7 @@ const Measure = (() => {
       const ev = evalEntities('round', [ent]);
       showLabel(ev.text, ev.p);
       last = { text: ev.text };
-      current = { kind: 'round', refs: [ent.ref], eval: ev };
+      current = { kind: 'round', refs: [ent.ref], ents: [ent], eval: ev };
       updateBar();
       Viewer.requestRender();
       return true;
@@ -27581,7 +27679,7 @@ const Measure = (() => {
       const ev = evalEntities('face', [ent]);
       for (const [a, b] of ev.lines) dash(a, b);
       showLabel(ev.text, ev.p); last = { text: ev.text };
-      current = { kind: 'face', refs: [ent.ref], eval: ev };
+      current = { kind: 'face', refs: [ent.ref], ents: [ent], eval: ev };
       updateBar();
     } else if (pts.length === 1) {
       updateBar();
@@ -27633,7 +27731,7 @@ const Measure = (() => {
         return { lost: false, kind: 'pair', typeLabel: 'Abstand (Flächen)', value: round(d, 6), unit: 'mm', short, text, p: from.clone().lerp(to, 0.5), lines: d < 1e-6 ? [] : [[from, to]], dots: [from, to], faces: [{ id: a.id, faceIdx: a.faceIdx }, { id: b.id, faceIdx: b.faceIdx }], circle: null };
       }
       const ang = (Math.acos(clamp(cs, -1, 1)) * 180) / Math.PI;
-      const short = `${fmt(ang, 2)}°`;
+      const short = fmtAngleU(ang);
       const text = `Winkel ${short}   (zwischen den Flächen)`;
       return { lost: false, kind: 'pair', typeLabel: 'Winkel (Flächen)', value: round(ang, 6), unit: '°', short, text, p: a.hitP.clone().lerp(b.hitP, 0.5), lines: [[a.hitP.clone(), b.hitP.clone()]], dots: [a.hitP.clone(), b.hitP.clone()], faces: [{ id: a.id, faceIdx: a.faceIdx }, { id: b.id, faceIdx: b.faceIdx }], circle: null };
     }
@@ -27650,7 +27748,7 @@ const Measure = (() => {
     for (const [p1, p2] of ev.lines) dash(p1, p2);
     showLabel(ev.text, ev.p);
     last = { text: ev.text };
-    current = { kind: 'pair', refs: [a.ref, b.ref], eval: ev };
+    current = { kind: 'pair', refs: [a.ref, b.ref], ents: [a, b], eval: ev };
     updateBar();
   }
   function pickBest(cands, refC, refFrac, bbox) {
@@ -27996,6 +28094,16 @@ const Measure = (() => {
     return ok;
   }
   function copyValue(text) { const n = firstNumber(text); if (n) return copyText(n, 'Wert'); return false; }
+  function refreshDisplay() {
+    if (list().length) relink();
+    if (on && current && current.ents) {
+      const ev = evalEntities(current.kind, current.ents);
+      current.eval = ev;
+      last = { text: ev.text };
+      if (lastLabel && lastLabel.el) lastLabel.el.textContent = ev.text;
+      updateBar();
+    }
+  }
   function init() {
     App.on('selection', () => {
       if (App.sel.length !== 2) clearDist();
@@ -28004,6 +28112,13 @@ const Measure = (() => {
     App.on('results', relink);
     App.on('remeshed', relink);
     let lastUnit = Units.key();
+    let lastFmt = `${FMT.dec}:${FMT.angle}`;
+    if (typeof ViewPrefs !== 'undefined' && ViewPrefs.on) {
+      ViewPrefs.on('change', () => {
+        const curFmt = `${FMT.dec}:${FMT.angle}`;
+        if (curFmt !== lastFmt) { lastFmt = curFmt; refreshDisplay(); }
+      });
+    }
     App.on('doc', () => {
       if (sel && !find(sel)) sel = null;
       const ids = new Set(list().map((m) => m.id));
@@ -28071,7 +28186,7 @@ const Measure = (() => {
     return r;
   }
   return {
-    showCoords, get coords() { return coordsNow; }, copyText, copyValue, get copied() { return copied; }, minDistance, clearDist, init, toggle, start, stop,
+    showCoords, get coords() { return coordsNow; }, copyText, copyValue, get copied() { return copied; }, minDistance, clearDist, init, toggle, start, stop, refreshDisplay,
     get active() { return on; }, get result() { return last ? last.text : (els[0] ? els[0].textContent : null); },
     list, find, keep, relink, setHidden, rename, remove, select, drawSaved, treeSection, renderPanel, get selected() { return sel; },
   };
@@ -28339,6 +28454,7 @@ const Commands = (() => {
     add('chamfer', 'Kanten abschrägen', 'chamfer', 'fase anfasen schräge', () => { if (App.edges.length) Actions.addFinish('chamfer', 1); else if (App.sel.length) Actions.finishAll(App.sel[0], 'chamfer', 'all', 1); else UI.toast('Wähle zuerst einen Körper oder eine Kante.', { icon: 'info' }); }, { group: 'Bearbeiten' });
     add('fit', 'Alles zeigen', 'fit', 'zoom ansicht einpassen', () => Viewer.fit(), { group: 'Ansicht', kbd: 'F' });
     add('toolbar-customize', 'Werkzeugleiste anpassen', 'sliders', 'werkzeugleiste leiste anpassen favoriten stern sortieren zurücksetzen', () => Toolbar.dialog(), { group: 'Ansicht' });
+    add('settings-precision', 'Genauigkeit & Nachkommastellen einstellen', 'sliders', 'genauigkeit nachkommastellen dezimalstellen winkel rundung anzeige', () => ViewPrefs.dialog('general'), { group: 'Ansicht' });
     for (const [v, l] of [['front', 'Vorne'], ['top', 'Oben'], ['right', 'Rechts'], ['left', 'Links'], ['back', 'Hinten'], ['iso', 'Schräg']]) add('view-' + v, 'Ansicht ' + l, 'eye', 'ansicht kamera blick ' + l, () => Viewer.setView(v), { group: 'Ansicht' });
     add('new', 'Neues Projekt', 'newfile', 'neu leer anfangen', () => Start.newProject(), { group: 'Projekt' });
     add('open', 'Projekt öffnen', 'folder', 'laden datei öffnen', () => Start.openFile(), { group: 'Projekt' });
@@ -29157,7 +29273,7 @@ const Print = (() => {
       const d = mk('dxf', 'Platten als DXF (für die Fräse)', 'Draufsicht in Originalgröße, eine Datei pro Platte – die Dicke steht im Dateinamen');
       d.setAttribute('data-help', 'plateDxf');
       const pl = h('div', { class: 'dxf-plates', style: { display: 'grid', gap: '4px', margin: '-4px 0 0 28px' } });
-      for (const p of plates) { const l = h('label', { class: 'check' }, h('input', { type: 'checkbox', 'data-plate': p.id, checked: true }), `${p.name} · ${fmt(p.t, 2)} mm`); l.querySelector('input').onchange = (e) => { opts.plates = e.target.checked ? [...new Set([...opts.plates, p.id])] : opts.plates.filter((x) => x !== p.id); }; pl.append(l); }
+      for (const p of plates) { const l = h('label', { class: 'check' }, h('input', { type: 'checkbox', 'data-plate': p.id, checked: true }), `${p.name} · ${Units.fmtLenU(p.t)}`); l.querySelector('input').onchange = (e) => { opts.plates = e.target.checked ? [...new Set([...opts.plates, p.id])] : opts.plates.filter((x) => x !== p.id); }; pl.append(l); }
       pl.hidden = !opts.dxf; d.querySelector('input').addEventListener('change', (e) => { pl.hidden = !e.target.checked; });
       body.append(d, pl);
     }
@@ -29446,7 +29562,7 @@ const Zip = (() => {
 const Drawing = (() => {
   const SHEETS = { A4: [297, 210], A3: [420, 297] };
   const SCALES = [10, 5, 2, 1, 0.5, 0.2, 0.1, 0.05, 0.02];
-  const scaleText = (s) => (s >= 1 ? `${fmt(s, 2)}:1` : `1:${fmt(1 / s, 2)}`);
+  const scaleText = (s) => (s >= 1 ? `${fmtFixed(s, 2)}:1` : `1:${fmtFixed(1 / s, 2)}`);
   let proj = null, projRev = -1, loadingProj = false, projId = 0;
   let svg = null, wrap = null, holder = null, zoom = 1, tool = null, toolState = null, selDim = null;
   let layout = null;
@@ -31585,10 +31701,10 @@ const DroneUI = (() => {
           if (fr) Object.assign(o, DroneTpl.fromFrame(fr)); else o.A = null;
           draw();
         }),
-        sel('fa-zoll', 'Propeller', o.zoll, [...new Set([...DroneTpl.ZOLL, o.zoll])].sort((a, b) => a - b).map((z) => [String(z), `${zs(z)} Zoll (${fmt(z * 25.4, 1)} mm)`]), (v) => { free(); o.zoll = +v; const s = DroneTpl.SIZES[o.zoll]; o.stack = s.stack; o.motor = s.motor; o.akku = s.akku; o.A = null; draw(); }),
+        sel('fa-zoll', 'Propeller', o.zoll, [...new Set([...DroneTpl.ZOLL, o.zoll])].sort((a, b) => a - b).map((z) => [String(z), `${zs(z)} Zoll (${fmtFixed(z * 25.4, 1)} mm)`]), (v) => { free(); o.zoll = +v; const s = DroneTpl.SIZES[o.zoll]; o.stack = s.stack; o.motor = s.motor; o.akku = s.akku; o.A = null; draw(); }),
         sel('fa-form', 'Rahmenform', o.form, Object.entries(DroneTpl.FORMS).map(([k, v]) => [k, `${v[0]} (${v[1]}°${v[1] !== v[2] ? ' / ' + v[2] + '°' : ''})`]), (v) => { free(); o.form = v; o.A = null; draw(); }),
         sel('fa-stack', 'Stack', o.stack, DroneLib.stacks().map((s) => [String(s.a), `${s.name} · ${s.screw}`]), (v) => { o.stack = +v; draw(); }),
-        sel('fa-motor', 'Motor', o.motor, motors.map((m) => [m.stator, `${m.stator} · Lochkreis ${fmt(m.circle, 1)} · ${m.g !== '' ? fmt(m.g, 1) + ' g' : 'Gewicht eintragen'}`]), (v) => { o.motor = v; draw(); }),
+        sel('fa-motor', 'Motor', o.motor, motors.map((m) => [m.stator, `${m.stator} · Lochkreis ${fmtFixed(m.circle, 1)} · ${m.g !== '' ? fmtFixed(m.g, 1) + ' g' : 'Gewicht eintragen'}`]), (v) => { o.motor = v; draw(); }),
         sel('fa-video', 'Videosystem', o.video, Object.entries(DroneTpl.VIDEO).map(([k, v]) => [k, v[0]]), (v) => { o.video = v; draw(); }),
         sel('fa-akku', 'Akku', o.akku || '', [['', 'Keiner'], ...akkus.map((a) => [a.name.replace(/^Akku /, ''), `${a.name.replace(/^Akku /, '')} · ca. ${a.g} g`])], (v) => { o.akku = v || null; draw(); }),
         UI.numField({ id: 'fa-a', label: 'Achsabstand', value: A, onCommit: (v) => { const n = parseFloat(String(v).replace(',', '.')); free(); o.A = isFinite(n) && n > 0 ? n : null; draw(); } }),
@@ -31603,19 +31719,19 @@ const DroneUI = (() => {
       const warn = [];
       if (gap < 0) warn.push('Die Propeller überlappen sich – größerer Achsabstand nötig.');
       else if (gap < o.zoll * 25.4 * 0.08) warn.push('Sehr wenig Luft zwischen den Propellern.');
-      if (m && m.props && (o.zoll < m.props[0] - 0.01 || o.zoll > m.props[1] + 0.01)) warn.push(`Motor ${m.stator} passt eher zu ${fmt(m.props[0], 1)}–${fmt(m.props[1], 1)}"-Propellern.`);
-      if (o.form === 'speed') { const mt = DroneTpl.maxTilt(cfg); if (cfg.params.Motorneigung > mt) warn.push(`Bei ${fmt(cfg.params.Motorneigung, 0)}° Motorneigung streifen die hinteren Propeller ihre Arme – höchstens ${mt}° passen.`); }
+      if (m && m.props && (o.zoll < m.props[0] - 0.01 || o.zoll > m.props[1] + 0.01)) warn.push(`Motor ${m.stator} passt eher zu ${fmtFixed(m.props[0], 1)}–${fmtFixed(m.props[1], 1)}"-Propellern.`);
+      if (o.form === 'speed') { const mt = DroneTpl.maxTilt(cfg); if (cfg.params.Motorneigung > mt) warn.push(`Bei ${fmtFixed(cfg.params.Motorneigung, 0)}° Motorneigung streifen die hinteren Propeller ihre Arme – höchstens ${mt}° passen.`); }
       const P = cfg.params, extra = [];
-      if (o.form === 'speed') extra.push(['Rumpf', `Ø ${fmt(P.Rumpfdurchmesser, 0)} mm · ${fmt(P.Rumpflänge + P.Nasenlänge + P.Hecklänge, 0)} mm lang · Akku innen`]);
-      if (o.form === 'cine') extra.push(['Ducts', `innen Ø ${fmt(o.zoll * 25.4 + 2 * P.Ductspalt, 1)} mm · ${fmt(P.Bolzenhöhe - 1, 0)} mm hoch`]);
+      if (o.form === 'speed') extra.push(['Rumpf', `Ø ${fmtFixed(P.Rumpfdurchmesser, 0)} mm · ${fmtFixed(P.Rumpflänge + P.Nasenlänge + P.Hecklänge, 0)} mm lang · Akku innen`]);
+      if (o.form === 'cine') extra.push(['Ducts', `innen Ø ${fmtFixed(o.zoll * 25.4 + 2 * P.Ductspalt, 1)} mm · ${fmtFixed(P.Bolzenhöhe - 1, 0)} mm hoch`]);
       const fr = o.frame, grown = fr && A !== fr.achsabstand_mm;
       out.innerHTML = `<div class="mini-list">
-        <div class="mini-row"><span class="grow">Achsabstand</span><b class="mono">${fmt(A, 0)} mm${o.A ? (fr ? (A === fr.achsabstand_mm ? ' (Hersteller)' : ' (angepasst)') : '') : ' (berechnet)'}</b></div>
-        <div class="mini-row"><span class="grow">Luft zwischen den Propellerspitzen</span><b class="mono" id="fa-gap">${fmt(gap, 1)} mm</b></div>
-        <div class="mini-row"><span class="grow">Motorlochkreis</span><b class="mono">${m ? fmt(m.circle, 1) + ' mm · ' + m.screw : '–'}</b></div>
+        <div class="mini-row"><span class="grow">Achsabstand</span><b class="mono">${fmtFixed(A, 0)} mm${o.A ? (fr ? (A === fr.achsabstand_mm ? ' (Hersteller)' : ' (angepasst)') : '') : ' (berechnet)'}</b></div>
+        <div class="mini-row"><span class="grow">Luft zwischen den Propellerspitzen</span><b class="mono" id="fa-gap">${fmtFixed(gap, 1)} mm</b></div>
+        <div class="mini-row"><span class="grow">Motorlochkreis</span><b class="mono">${m ? fmtFixed(m.circle, 1) + ' mm · ' + m.screw : '–'}</b></div>
         ${extra.map(([a, b]) => `<div class="mini-row"><span class="grow">${a}</span><b class="mono">${b}</b></div>`).join('')}</div>` +
-        (grown ? `<div class="hint-box warn" id="fa-grown">Der Hersteller hat ${fmt(fr.achsabstand_mm, 0)} mm Achsabstand. Tracerys einfacher Rumpf braucht ${fmt(A, 0)} mm, damit Kamera und Bolzen nicht in die Propeller${o.form === 'cine' ? '-Ducts' : 'kreise'} ragen – das Original baut dort enger.</div>` : '') +
-        (fr ? `<div class="hint-box" id="fa-frame"><b>Nachbau nach Herstellermaßen</b> – Achsabstand ${fmt(fr.achsabstand_mm, 0)} mm, Arme ${fmt(fr.armdicke_mm, 1)} mm${fr.stack_mm ? `, Stack ${fmt(fr.stack_mm, 1)} mm` : ''}. Die Umrisse sind vereinfacht. Original-Rahmen: ${fr.gewicht_g ? fmt(fr.gewicht_g, 1) + ' g' : 'Gewicht nicht angegeben'} · <a href="${esc(fr.quelle)}" target="_blank" rel="noopener">Quelle</a>${fr.notiz ? `<br><span class="muted">${esc(fr.notiz)}</span>` : ''}</div>` : '') +
+        (grown ? `<div class="hint-box warn" id="fa-grown">Der Hersteller hat ${fmtFixed(fr.achsabstand_mm, 0)} mm Achsabstand. Tracerys einfacher Rumpf braucht ${fmtFixed(A, 0)} mm, damit Kamera und Bolzen nicht in die Propeller${o.form === 'cine' ? '-Ducts' : 'kreise'} ragen – das Original baut dort enger.</div>` : '') +
+        (fr ? `<div class="hint-box" id="fa-frame"><b>Nachbau nach Herstellermaßen</b> – Achsabstand ${fmtFixed(fr.achsabstand_mm, 0)} mm, Arme ${fmtFixed(fr.armdicke_mm, 1)} mm${fr.stack_mm ? `, Stack ${fmtFixed(fr.stack_mm, 1)} mm` : ''}. Die Umrisse sind vereinfacht. Original-Rahmen: ${fr.gewicht_g ? fmtFixed(fr.gewicht_g, 1) + ' g' : 'Gewicht nicht angegeben'} · <a href="${esc(fr.quelle)}" target="_blank" rel="noopener">Quelle</a>${fr.notiz ? `<br><span class="muted">${esc(fr.notiz)}</span>` : ''}</div>` : '') +
         (warn.length ? `<div class="hint-box warn" id="fa-warn">${warn.join('<br>')}</div>` : grown ? '' : '<div class="hint-box">Alles passt. Nach dem Bauen änderst du jedes Maß links unter „Maße“.</div>');
       body.append(out);
     };
@@ -33289,7 +33405,7 @@ const Start = (() => {
     if (before.invalidCount !== after.invalidCount || !before.brepValid || !after.brepValid) diffs.push(`BRepCheck-Fehler ${before.invalidCount} → ${after.invalidCount}`);
     const bodyTxt = before.solids === 0 && after.solids > 0 ? ' · geschlossener Körper' : '';
     const capTxt = cappedFaces > 0 ? ` (+${cappedFaces} ${cappedFaces === 1 ? 'Fläche' : 'Flächen'})` : '';
-    const tolTxt = fmt(tol, 3);
+    const tolTxt = fmtFixed(tol, 3);
     if (!after.hasIssues) return `Geheilt (Toleranz ${tolTxt} mm): ${diffs.join(' · ')}${bodyTxt}${capTxt}.`;
     return `Heilen abgeschlossen (Toleranz ${tolTxt} mm): ${diffs.join(' · ')}${capTxt} – noch offen: ${issueSummaryText(after)}. Versuch eine größere Toleranz.`;
   }
@@ -33694,14 +33810,14 @@ const DroneCheck = (() => {
     if (!b) { UI.toast('Dafür braucht es einen Akku im Modell (ein Teil namens „Akku“ oder einen Akku aus „Kaufteile“, ganz oben im Verlauf).', { icon: 'info', ms: 4500 }); return false; }
     const L = Math.hypot(b.sx, b.sy);
     if (L < 0.05) { UI.toast('Der Schwerpunkt liegt schon in der Mitte.', { icon: 'check' }); return false; }
-    if (L > b.A * 0.6) { UI.toast(`„${b.name}“ müsste ${fmt(L, 0)} mm wandern – das ist zu weit. Setz schwere Teile wie Kamera oder Sender um.`, { icon: 'info', ms: 5000 }); return false; }
+    if (L > b.A * 0.6) { UI.toast(`„${b.name}“ müsste ${fmtFixed(L, 0)} mm wandern – das ist zu weit. Setz schwere Teile wie Kamera oder Sender um.`, { icon: 'info', ms: 5000 }); return false; }
     App.change('Schwerpunkt ausgeglichen', (doc) => {
       const it = doc.items.find((x) => x.id === b.id); if (!it) return false;
       Model.useVars(Model.vars(doc).v);
       it.t = it.t || Model.T0();
       it.t.x = round(Model.tnum(it, 'x') + b.sx, 2); it.t.y = round(Model.tnum(it, 'y') + b.sy, 2);
     });
-    UI.toast(`„${b.name}“ ${b.sy ? (b.sy < 0 ? 'nach vorne' : 'nach hinten') : 'zur Seite'} geschoben (${fmt(L, 1)} mm) – der Schwerpunkt liegt jetzt in der Mitte.`, { icon: 'check', ms: 4200 });
+    UI.toast(`„${b.name}“ ${b.sy ? (b.sy < 0 ? 'nach vorne' : 'nach hinten') : 'zur Seite'} geschoben (${fmtFixed(L, 1)} mm) – der Schwerpunkt liegt jetzt in der Mitte.`, { icon: 'check', ms: 4200 });
     return true;
   }
   const label = (id) => { const f = Model.find(App.doc, id); return f ? Model.label(f.item) : 'ein Teil'; };
@@ -33710,10 +33826,10 @@ const DroneCheck = (() => {
     const doc = App.doc, g = geometryAny(doc);
     if (!g) return null;
     const rev = App.revision, out = [];
-    if (g.free) out.push({ id: 'free', title: 'Selbst gebauter Rahmen', s: 'info', text: `${g.n} Motoren aus deinen Kaufteilen erkannt` + (g.zoll ? `, Propeller ${fmt(g.zoll, 1)}" (${g.zoll_from === 'props' ? 'aus den Propellern im Modell' : 'eingetragen'}).` : '. Für die Propeller-Prüfungen fehlt noch die Größe – leg Propeller aus „Kaufteile“ auf die Motoren oder trag sie unten ein.') });
+    if (g.free) out.push({ id: 'free', title: 'Selbst gebauter Rahmen', s: 'info', text: `${g.n} Motoren aus deinen Kaufteilen erkannt` + (g.zoll ? `, Propeller ${fmtFixed(g.zoll, 1)}" (${g.zoll_from === 'props' ? 'aus den Propellern im Modell' : 'eingetragen'}).` : '. Für die Propeller-Prüfungen fehlt noch die Größe – leg Propeller aus „Kaufteile“ auf die Motoren oder trag sie unten ein.') });
     // 1. Abstand der Propeller untereinander
     const gap = g.gap;
-    if (gap != null) out.push({ id: 'gap', title: 'Propeller untereinander', s: gap < 0 ? 'bad' : gap < 5 ? 'warn' : 'ok', text: gap < 0 ? `Die Propeller überlappen sich um ${fmt(-gap, 1)} mm – ${g.free ? 'Motoren weiter auseinander setzen' : 'Achsabstand vergrößern'}.` : `${fmt(gap, 1)} mm Luft zwischen den Propellerspitzen.` });
+    if (gap != null) out.push({ id: 'gap', title: 'Propeller untereinander', s: gap < 0 ? 'bad' : gap < 5 ? 'warn' : 'ok', text: gap < 0 ? `Die Propeller überlappen sich um ${fmtFixed(-gap, 1)} mm – ${g.free ? 'Motoren weiter auseinander setzen' : 'Achsabstand vergrößern'}.` : `${fmtFixed(gap, 1)} mm Luft zwischen den Propellerspitzen.` });
     // 2./3. Kollisionen aus dem CAD-Kern
     let cl = null;
     try { cl = await Kernel.call('clashes', { scene: Model.kernelScene(doc), probes: g.probes, skipPairs: g.skipPairs }); } catch (_) {}
@@ -33723,7 +33839,7 @@ const DroneCheck = (() => {
       cl.hits.forEach((hs, i) => { if (hs.length) bad.push(`Propeller ${g.motors[i][0]} trifft ${hs.map((x) => label(x.id)).join(', ')}`); });
       const ids = [...new Set(cl.hits.flat().map((x) => x.id))];
       if (g.probes.length) out.push({ id: 'props', title: 'Propellerkreise frei', s: bad.length ? 'bad' : 'ok', text: bad.length ? bad.join('. ') + '.' : 'Kein Teil ragt in die Propellerkreise (1 mm Sicherheitsabstand).', ids });
-      const pairs = cl.pairs.map((p) => `${label(p.a)} und ${label(p.b)} (${fmt(p.v / 1000, 2)} cm³)`);
+      const pairs = cl.pairs.map((p) => `${label(p.a)} und ${label(p.b)} (${fmtFixed(p.v / 1000, 2)} cm³)`);
       out.push({ id: 'clash', title: 'Teile stecken nicht ineinander', s: pairs.length ? 'warn' : 'ok', text: pairs.length ? 'Ineinander: ' + pairs.join('; ') + '.' : 'Alle Teile haben ihren eigenen Platz.', ids: [...new Set(cl.pairs.flatMap((p) => [p.a, p.b]))] });
     }
     // 4. Gewicht
@@ -33735,7 +33851,7 @@ const DroneCheck = (() => {
       const fr = doc.drone && doc.drone.frame;
       if (fr && fr.g) {
         const own = (m.parts || []).filter((p) => !p.fixed).reduce((s, p) => s + p.mass, 0), d = own - fr.g;
-        out.push({ id: 'frame', title: 'Rahmen gegen Original', s: 'info', text: `Rahmen im Modell ca. ${Mass.gText(own)}, ${fr.hersteller} ${fr.name} laut Hersteller ${Mass.gText(fr.g)} (${d >= 0 ? '+' : '−'}${Mass.gText(Math.abs(d))}). Der Nachbau hat vereinfachte Umrisse – Löcher, Fasen und Aussparungen des Originals fehlen.` + (fr.a && Math.abs(fr.a - g.A) > 0.5 ? ` Achsabstand hier ${fmt(g.A, 0)} mm, beim Original ${fmt(fr.a, 0)} mm.` : '') });
+        out.push({ id: 'frame', title: 'Rahmen gegen Original', s: 'info', text: `Rahmen im Modell ca. ${Mass.gText(own)}, ${fr.hersteller} ${fr.name} laut Hersteller ${Mass.gText(fr.g)} (${d >= 0 ? '+' : '−'}${Mass.gText(Math.abs(d))}). Der Nachbau hat vereinfachte Umrisse – Löcher, Fasen und Aussparungen des Originals fehlen.` + (fr.a && Math.abs(fr.a - g.A) > 0.5 ? ` Achsabstand hier ${fmtFixed(g.A, 0)} mm, beim Original ${fmtFixed(fr.a, 0)} mm.` : '') });
       }
       // 5. Schwerpunkt gegenüber der Mitte zwischen den Motoren
       if (m.com) {
@@ -33744,20 +33860,20 @@ const DroneCheck = (() => {
         const dir = [Math.abs(dy) > 0.5 ? (dy < 0 ? 'nach vorne' : 'nach hinten') : '', Math.abs(dx) > 0.5 ? (dx > 0 ? 'nach rechts' : 'nach links') : ''].filter(Boolean).join(' und ');
         const akku = batteries(doc).length > 0;
         const sc = d <= 0.03 * g.A ? 'ok' : !akku ? 'info' : d <= 0.08 * g.A ? 'warn' : 'bad';
-        out.push({ id: 'cog', title: 'Schwerpunkt', s: sc, ...(akku && d > 0.03 * g.A ? { fix: 'balance' } : {}), text: (d < 0.5 ? 'Genau in der Mitte zwischen den Motoren.' : `${fmt(d, 1)} mm ${dir} verschoben` + (d <= 0.03 * g.A ? ' – passt.' : akku ? ' – Akku oder schwere Teile verschieben.' : '.')) + (akku ? '' : ' Noch ohne Akku – leg einen auf die Oberplatte und prüf noch mal.') });
+        out.push({ id: 'cog', title: 'Schwerpunkt', s: sc, ...(akku && d > 0.03 * g.A ? { fix: 'balance' } : {}), text: (d < 0.5 ? 'Genau in der Mitte zwischen den Motoren.' : `${fmtFixed(d, 1)} mm ${dir} verschoben` + (d <= 0.03 * g.A ? ' – passt.' : akku ? ' – Akku oder schwere Teile verschieben.' : '.')) + (akku ? '' : ' Noch ohne Akku – leg einen auf die Oberplatte und prüf noch mal.') });
       }
       // 6. Schub zu Gewicht
       const t = thrustOf(doc);
       if (t) {
         const tw = (g.n * t) / m.mass;
-        const src = doc.drone && doc.drone.thrustSrc ? ` (Richtwert ${fmt(t, 0)} g pro Motor: ${doc.drone.thrustSrc})` : '';
-        out.push({ id: 'tw', title: 'Schub zu Gewicht', s: tw < 2 ? 'bad' : tw < 4 ? 'warn' : 'ok', text: `${fmt(tw, 1)} : 1 – ` + (tw < 2 ? 'zu schwach, hebt kaum ab.' : tw < 4 ? 'reicht für ruhiges Fliegen und Long Range.' : tw < 8 ? 'gut für Freestyle.' : 'genug für Rennen.') + src });
+        const src = doc.drone && doc.drone.thrustSrc ? ` (Richtwert ${fmtFixed(t, 0)} g pro Motor: ${doc.drone.thrustSrc})` : '';
+        out.push({ id: 'tw', title: 'Schub zu Gewicht', s: tw < 2 ? 'bad' : tw < 4 ? 'warn' : 'ok', text: `${fmtFixed(tw, 1)} : 1 – ` + (tw < 2 ? 'zu schwach, hebt kaum ab.' : tw < 4 ? 'reicht für ruhiges Fliegen und Long Range.' : tw < 8 ? 'gut für Freestyle.' : 'genug für Rennen.') + src });
       } else out.push({ id: 'tw', title: 'Schub zu Gewicht', s: 'info', text: 'Trag unten den Schub pro Motor aus der Schubtabelle ein.' });
       // 6b. Flugzeit im Schweben – Schätzung aus Gewicht, Propellerfläche und Akku
       const ak = batteryEnergy(doc);
       if (g.D && ak.wh > 0) {
         const hv = hoverTime(m.mass, g.n, g.D, ak.wh);
-        out.push({ id: 'flight', title: 'Flugzeit (Schätzung)', s: hv.min < 3 ? 'warn' : 'info', text: `ca. ${fmt(hv.min, hv.min < 10 ? 1 : 0)} min ruhiges Schweben mit ${ak.text} (rund ${fmt(hv.w, 0)} W). Beim schnellen Fliegen ist es meist nur ein Drittel bis die Hälfte davon.` + (hv.min < 3 ? ' Das ist sehr kurz – ein größerer Akku oder weniger Gewicht hilft.' : '') });
+        out.push({ id: 'flight', title: 'Flugzeit (Schätzung)', s: hv.min < 3 ? 'warn' : 'info', text: `ca. ${fmtFixed(hv.min, hv.min < 10 ? 1 : 0)} min ruhiges Schweben mit ${ak.text} (rund ${fmtFixed(hv.w, 0)} W). Beim schnellen Fliegen ist es meist nur ein Drittel bis die Hälfte davon.` + (hv.min < 3 ? ' Das ist sehr kurz – ein größerer Akku oder weniger Gewicht hilft.' : '') });
       } else if (g.D && batteries(doc).length) out.push({ id: 'flight', title: 'Flugzeit (Schätzung)', s: 'info', text: 'Nenn den Akku mit Zellen und Kapazität, zum Beispiel „Akku 6S 1300 mAh“ – dann schätze ich die Flugzeit.' });
     }
     // 7. Speed-Rumpf: Form und Fluglage
@@ -33765,7 +33881,7 @@ const DroneCheck = (() => {
     if (!g.free && typeof V.Rumpfdurchmesser === 'number' && typeof V.Nasenlänge === 'number') {
       const L = V.Nasenlänge + V.Rumpflänge + V.Hecklänge, D = V.Rumpfdurchmesser;
       let fa = null; try { if (typeof Views !== 'undefined' && Viewer.nodes.size) fa = Views.windArea(0); } catch (_) {}
-      out.push({ id: 'aero', title: 'Stromlinie', s: 'info', text: `Rumpf ${fmt(L, 0)} mm lang und ${fmt(D, 0)} mm dick (${fmt(L / D, 1)} : 1), Akku und Elektronik liegen innen.` + (fa ? ` Stirnfläche von vorne ohne Propeller: ${fmt(fa / 100, 1)} cm² (Ansicht „Fahrtwind“).` : '') + (g.tilt ? ` Motoren ${fmt(g.tilt, 0)}° geneigt: Fliegt die Drohne mit ${fmt(g.tilt, 0)}° Schräglage, liegt der Rumpf genau im Fahrtwind.` : ' Mit geneigten Motoren (Maß „Motorneigung“) läge der Rumpf im schnellen Flug flach im Wind.') });
+      out.push({ id: 'aero', title: 'Stromlinie', s: 'info', text: `Rumpf ${fmtFixed(L, 0)} mm lang und ${fmtFixed(D, 0)} mm dick (${fmtFixed(L / D, 1)} : 1), Akku und Elektronik liegen innen.` + (fa ? ` Stirnfläche von vorne ohne Propeller: ${fmtFixed(fa / 100, 1)} cm² (Ansicht „Fahrtwind“).` : '') + (g.tilt ? ` Motoren ${fmtFixed(g.tilt, 0)}° geneigt: Fliegt die Drohne mit ${fmtFixed(g.tilt, 0)}° Schräglage, liegt der Rumpf genau im Fahrtwind.` : ' Mit geneigten Motoren (Maß „Motorneigung“) läge der Rumpf im schnellen Flug flach im Wind.') });
     }
     last = { rev, list: out };
     return out;
@@ -33849,7 +33965,7 @@ const Plates = (() => {
     const v = res.views && res.views.top; if (!v) return null;
     const { bytes, count } = dxf(v.visible);
     const b = Viewer.baseBox(id); const t = b ? b.max.z - b.min.z : 0;
-    return { name: `${Print.safeName(Model.label(it))} – ${fmt(t, 2).replace('.', ',')} mm.dxf`, data: bytes, count, t, edges: v.visible };
+    return { name: `${Print.safeName(Model.label(it))} – ${fmtFixed(t, 2).replace('.', ',')} mm.dxf`, data: bytes, count, t, edges: v.visible };
   }
   return { candidates, file, dxf };
 })();
@@ -33979,8 +34095,8 @@ const Variants = (() => {
         ...c.names.map((n) => h('td', { class: 'mono' }, (r.v.values || {})[n] == null ? '–' : String(r.v.values[n]).replace('.', ','))),
         ...c.steps.map((s) => { const sup = isSuppressedIn(r.v, s.item.id); return h('td', { class: sup ? 'var-cmp-sup' : 'var-cmp-on' }, sup ? 'unterdrückt' : 'aktiv'); }),
         h('td', { class: 'mono' }, r.mass == null ? '–' : Mass.gText(r.mass)),
-        h('td', { class: 'mono' }, r.tw == null ? '–' : fmt(r.tw, 1) + ' : 1'),
-        h('td', { class: 'mono' }, r.gap == null ? '–' : fmt(r.gap, 1) + ' mm')));
+        h('td', { class: 'mono' }, r.tw == null ? '–' : fmtFixed(r.tw, 1) + ' : 1'),
+        h('td', { class: 'mono' }, r.gap == null ? '–' : fmtFixed(r.gap, 1) + ' mm')));
     }
     body.append(tbl);
   }
@@ -34111,13 +34227,13 @@ const Explain = (() => {
       const p = it.p || {}, tf = p.target ? Model.find(doc, p.target) : null;
       const sideTxt = p.side === 'side1' || p.side === 'side2' ? 'einseitig' : 'mittig';
       const dirTxt = p.dir === 'parallel' ? 'in der Skizzenebene' : 'senkrecht zur Skizze';
-      lines.push({ k: 'op', t: `Verstärkt „${tf ? Model.label(tf.item) : 'fehlendes Ziel'}“ als Rippe (${Units.fmtLenU(Model.num(p.thickness, V, 2), 2, doc)} dick, ${sideTxt}, ${dirTxt}${Math.abs(Model.num(p.draft, V, 0)) > 1e-6 ? `, ${fmt(Model.num(p.draft, V, 0), 1)}° Schräge` : ''}).` });
+      lines.push({ k: 'op', t: `Verstärkt „${tf ? Model.label(tf.item) : 'fehlendes Ziel'}“ als Rippe (${Units.fmtLenU(Model.num(p.thickness, V, 2), 2, doc)} dick, ${sideTxt}, ${dirTxt}${Math.abs(Model.num(p.draft, V, 0)) > 1e-6 ? `, ${fmtAngleU(Model.num(p.draft, V, 0))} Schräge` : ''}).` });
     }
     if (it.kind === 'wrap') {
       const p = it.p || {}, tf = p.target ? Model.find(doc, p.target) : null;
       const info = Model.wrapAngleInfo ? Model.wrapAngleInfo(it, V, doc) : null;
       const modeTxt = p.mode === 'deboss' ? `vertieft um ${Units.fmtLenU(Model.num(p.depth, V, 2), 2, doc)}` : p.mode === 'line' ? 'als Linie auf der Oberfläche' : `erhaben um ${Units.fmtLenU(Model.num(p.depth, V, 2), 2, doc)}`;
-      lines.push({ k: 'op', t: `Wickelt eine Skizze ${modeTxt} um „${tf ? Model.label(tf.item) : 'fehlendes Ziel'}“${info ? ` (${fmt(info.deg, 1)}° des Umfangs)` : ''}.` });
+      lines.push({ k: 'op', t: `Wickelt eine Skizze ${modeTxt} um „${tf ? Model.label(tf.item) : 'fehlendes Ziel'}“${info ? ` (${fmtAngleU(info.deg)} des Umfangs)` : ''}.` });
     }
     if (it.kind === 'emboss') {
       const p = it.p || {}, tf = p.target ? Model.find(doc, p.target) : null;
@@ -34139,7 +34255,7 @@ const Explain = (() => {
     for (const fin of it.finishes || []) lines.push({ k: 'fin', t: fin.type === 'shell' ? `Ausgehöhlt mit ${Units.fmtLenU(Model.num(fin.r, V, 2), 2, doc)} Wand.` : `${fin.type === 'chamfer' ? 'Fase' : 'Rundung'} ${Units.fmtLenU(Model.num(fin.r, V, 1), 2, doc)} an den Kanten.` });
     const used = paramsUsed(it, doc);
     if (used.length) lines.push({ k: 'masse', t: `Hängt an ${used.length === 1 ? 'dem Maß' : 'den Maßen'} ${used.slice(0, 6).join(', ')}${used.length > 6 ? ` und ${used.length - 6} weiteren` : ''}. Änderst du ${used.length === 1 ? 'es' : 'eines'} unter „Maße“, rechnet Tracery diesen Schritt neu.` });
-    if (top >= 0 && Mass.fixedOf(it)) lines.push({ k: 'gewicht', t: it.massG === '' ? 'Kaufteil: Das Gewicht fehlt noch – trag es rechts ein.' : `Kaufteil mit festem Gewicht ${fmt(Model.num(it.massG, V, 0), 1)} g.` });
+    if (top >= 0 && Mass.fixedOf(it)) lines.push({ k: 'gewicht', t: it.massG === '' ? 'Kaufteil: Das Gewicht fehlt noch – trag es rechts ein.' : `Kaufteil mit festem Gewicht ${fmtFixed(Model.num(it.massG, V, 0), 1)} g.` });
     else if (top >= 0 && it.role !== 'hole' && it.kind !== 'rib' && it.kind !== 'wrap' && it.kind !== 'emboss' && it.kind !== 'mirrorStep' && !(it.kind === 'transform' && !(it.p && it.p.copy)) && it.kind !== 'scale' && !(it.kind === 'thicken' && !(it.p && it.p.mode === 'new'))) lines.push({ k: 'material', t: `Material: ${Mass.materialFor(it, doc).k}.` });
     if (it.suppressed) lines.push({ k: 'status', t: 'Dieser Schritt ist unterdrückt und zählt gerade nicht mit.' });
     else if (top >= 0 && doc === App.doc && top >= Timeline.markerPos()) lines.push({ k: 'status', t: 'Dieser Schritt liegt hinter dem Marker der Zeitleiste und wird gerade nicht gerechnet.' });
@@ -34242,7 +34358,7 @@ const Weak = (() => {
     const cls = CLASS[Mass.materialFor(it).k] || 'print', printed = cls === 'print' || cls === 'tpu';
     const groups = new Map();
     const add = (kind, s, hole, val, ratio, dn) => {
-      const key = `${kind}|${s}|${fmt(hole.r * 2, 1)}|${fmt(val, 1)}`;
+      const key = `${kind}|${s}|${fmtFixed(hole.r * 2, 1)}|${fmtFixed(val, 1)}`;
       if (!groups.has(key)) groups.set(key, { kind, s, d: hole.r * 2, val, ratio, dn, at: [] });
       const g = groups.get(key); if (!g.at.some((q) => Math.hypot(q[0] - hole.c[0], q[1] - hole.c[1]) < 0.05)) g.at.push([hole.c[0], hole.c[1], z]);
     };
@@ -34269,11 +34385,11 @@ const Weak = (() => {
     return [...groups.values()].map((g) => ({
       id: g.kind === 'pitch' ? 'hole-pitch' : 'hole-edge', s: g.s, title: g.kind === 'pitch' ? `Löcher nah beieinander – ${plate.name}` : `Löcher nah am Rand – ${plate.name}`,
       text: (g.kind === 'pitch'
-        ? `${g.at.length} ${g.at.length === 1 ? 'Loch' : 'Löcher'} (Ø ${fmt(g.d, 1)} mm) mit nur ${fmt(g.val, 1)} mm Steg zum nächsten Loch. Tracery meldet unter ${fmt(RULES.pitch.warn * g.dn, 1)} mm (halber Durchmesser); für belastete Carbon-Verschraubungen empfehlen Hersteller sogar ${fmt(RULES.pitch.rec, 0)} × Durchmesser von Mitte zu Mitte.`
-        : `${g.at.length} ${g.at.length === 1 ? 'Loch' : 'Löcher'} (Ø ${fmt(g.d, 1)} mm) ${g.at.length === 1 ? 'hat' : 'haben'} nur ${fmt(g.val, 1)} mm Material bis zum Rand – da reißt das Material bei Belastung zuerst aus. ` +
+        ? `${g.at.length} ${g.at.length === 1 ? 'Loch' : 'Löcher'} (Ø ${fmtFixed(g.d, 1)} mm) mit nur ${fmtFixed(g.val, 1)} mm Steg zum nächsten Loch. Tracery meldet unter ${fmtFixed(RULES.pitch.warn * g.dn, 1)} mm (halber Durchmesser); für belastete Carbon-Verschraubungen empfehlen Hersteller sogar ${fmtFixed(RULES.pitch.rec, 0)} × Durchmesser von Mitte zu Mitte.`
+        : `${g.at.length} ${g.at.length === 1 ? 'Loch' : 'Löcher'} (Ø ${fmtFixed(g.d, 1)} mm) ${g.at.length === 1 ? 'hat' : 'haben'} nur ${fmtFixed(g.val, 1)} mm Material bis zum Rand – da reißt das Material bei Belastung zuerst aus. ` +
           (g.kind === 'pedge'
-            ? `Bei Druckteilen gehören um ein Schraubenloch mindestens ${fmt(g.d < 2.8 ? RULES.printHole.small : RULES.printHole.big, 1)} mm Material.`
-            : `Tracery meldet, wenn die Lochmitte näher als ${fmt(RULES.edge.warn, 1)} × Durchmesser am Rand liegt (hier ${fmt(RULES.edge.warn * g.d, 1)} mm); für belastete Carbon-Verschraubungen empfehlen Hersteller ${fmt(RULES.edge.rec, 1)} ×.`)),
+            ? `Bei Druckteilen gehören um ein Schraubenloch mindestens ${fmtFixed(g.d < 2.8 ? RULES.printHole.small : RULES.printHole.big, 1)} mm Material.`
+            : `Tracery meldet, wenn die Lochmitte näher als ${fmtFixed(RULES.edge.warn, 1)} × Durchmesser am Rand liegt (hier ${fmtFixed(RULES.edge.warn * g.d, 1)} mm); für belastete Carbon-Verschraubungen empfehlen Hersteller ${fmtFixed(RULES.edge.rec, 1)} ×.`)),
       ids: [plate.id], at: g.at, r: g.d / 2,
     }));
   }
@@ -34287,7 +34403,7 @@ const Weak = (() => {
     const groups = new Map();
     for (const hl of (res && res.holes) || []) {
       const s = hl.wall < hl.need / 2 ? 'bad' : 'warn';
-      const key = `${hl.id}|${s}|${fmt(hl.d, 1)}|${fmt(hl.wall, 1)}`;
+      const key = `${hl.id}|${s}|${fmtFixed(hl.d, 1)}|${fmtFixed(hl.wall, 1)}`;
       if (!groups.has(key)) groups.set(key, { id: hl.id, s, d: hl.d, wall: hl.wall, need: hl.need, at: [] });
       groups.get(key).at.push(hl.c);
     }
@@ -34295,7 +34411,7 @@ const Weak = (() => {
       const it = App.doc.items.find((x) => x.id === g.id), name = it ? Model.label(it) : 'Teil';
       return {
         id: 'hole-wall', s: g.s, title: `Dünne Wand um ein Loch – ${name}`,
-        text: `${g.at.length} ${g.at.length === 1 ? 'Loch' : 'Löcher'} (Ø ${fmt(g.d, 1)} mm) ${g.at.length === 1 ? 'hat' : 'haben'} an einer Stelle nur etwa ${fmt(g.wall, 1)} mm Material drumherum. Bei Druckteilen gehören um ein Schraubenloch mindestens ${fmt(g.need, 1)} mm – sonst reißt die Schraube beim Anziehen oder bei Belastung aus. Loch weiter nach innen setzen oder dort mehr Material anbauen.`,
+        text: `${g.at.length} ${g.at.length === 1 ? 'Loch' : 'Löcher'} (Ø ${fmtFixed(g.d, 1)} mm) ${g.at.length === 1 ? 'hat' : 'haben'} an einer Stelle nur etwa ${fmtFixed(g.wall, 1)} mm Material drumherum. Bei Druckteilen gehören um ein Schraubenloch mindestens ${fmtFixed(g.need, 1)} mm – sonst reißt die Schraube beim Anziehen oder bei Belastung aus. Loch weiter nach innen setzen oder dort mehr Material anbauen.`,
         ids: [g.id], at: g.at, r: g.d / 2 + 1,
       };
     });
@@ -34327,7 +34443,7 @@ const Weak = (() => {
       const th = thinnest(it, V); if (!th) continue;
       const s = th.t < bad ? 'bad' : th.t < warn ? 'warn' : null; if (!s) continue;
       const b = Viewer.baseBox(it.id); const c = b ? b.getCenter(new THREE.Vector3()) : null;
-      out.push({ id: 'wall', s, title: `Dünne Stelle – ${Model.label(it)}`, text: `„${th.name}“ ist nur ${fmt(th.t, 2)} mm ${th.what === 'Durchmesser' ? 'dick' : th.what === 'Wand' ? 'Wand' : 'dick'} (${m.k}). Faustregel für ${({ print: 'tragende Druckteile', tpu: 'TPU', fiber: 'Carbon und GFK', metal: 'Metall', wood: 'Holz' })[cls]}: mindestens ${fmt(warn, 1)} mm.`, ids: [it.id], at: c ? [[c.x, c.y, b.max.z]] : [], r: 6 });
+      out.push({ id: 'wall', s, title: `Dünne Stelle – ${Model.label(it)}`, text: `„${th.name}“ ist nur ${fmtFixed(th.t, 2)} mm ${th.what === 'Durchmesser' ? 'dick' : th.what === 'Wand' ? 'Wand' : 'dick'} (${m.k}). Faustregel für ${({ print: 'tragende Druckteile', tpu: 'TPU', fiber: 'Carbon und GFK', metal: 'Metall', wood: 'Holz' })[cls]}: mindestens ${fmtFixed(warn, 1)} mm.`, ids: [it.id], at: c ? [[c.x, c.y, b.max.z]] : [], r: 6 });
     }
     return out;
   }
@@ -34338,8 +34454,8 @@ const Weak = (() => {
     if (t >= rec) return [];
     const s = t < min - 1 ? 'bad' : t < min ? 'warn' : 'info';
     return [{ id: 'arm', s, title: s === 'info' ? 'Arme für Freestyle eher dünn' : 'Dünne Arme', text: s === 'info'
-      ? `Die Arme sind ${fmt(t, 1)} mm dick – für einen ${z}"-Racer in Ordnung, für Freestyle sind ${fmt(rec, 1)} mm üblich.`
-      : `Die Arme sind ${fmt(t, 1)} mm dick. Für ${z}"-Rahmen nehmen Racer mindestens ${fmt(min, 1)} mm, Freestyle-Rahmen ${fmt(rec, 1)} mm – dünnere Arme brechen beim Crash zuerst.`, ids: App.doc.items.filter((i) => i.name === 'Unterteil').map((i) => i.id), fix: { label: `Armdicke auf ${fmt(rec, 1)} mm`, run: () => App.change('Armdicke erhöht', (doc) => { doc.params.find((p) => p.name === 'Armdicke').expr = rec; }) } }];
+      ? `Die Arme sind ${fmtFixed(t, 1)} mm dick – für einen ${z}"-Racer in Ordnung, für Freestyle sind ${fmtFixed(rec, 1)} mm üblich.`
+      : `Die Arme sind ${fmtFixed(t, 1)} mm dick. Für ${z}"-Rahmen nehmen Racer mindestens ${fmtFixed(min, 1)} mm, Freestyle-Rahmen ${fmtFixed(rec, 1)} mm – dünnere Arme brechen beim Crash zuerst.`, ids: App.doc.items.filter((i) => i.name === 'Unterteil').map((i) => i.id), fix: { label: `Armdicke auf ${fmtFixed(rec, 1)} mm`, run: () => App.change('Armdicke erhöht', (doc) => { doc.params.find((p) => p.name === 'Armdicke').expr = rec; }) } }];
   }
   // Überhänge bei Druckteilen: was steiler als 45° nach unten zeigt und nicht auf dem Druckbett liegt
   function overhangs() {
@@ -34348,7 +34464,7 @@ const Weak = (() => {
       if (it.hidden || it.role === 'hole' || Mass.fixedOf(it) || !Viewer.nodes.has(it.id)) continue;
       const cls = CLASS[Mass.materialFor(it).k] || 'print'; if (cls !== 'print' && cls !== 'tpu') continue;
       const o = Views.overhangOf(it.id, 45); if (!o || o.area < 100 || !o.c) continue;   // kleine Stellen (z. B. waagerechte Schraubenlöcher) überbrückt der Drucker
-      out.push({ id: 'overhang', s: 'info', title: `Überhang beim Drucken – ${Model.label(it)}`, text: `${fmt(o.area, 0)} mm² zeigen steiler als 45° nach unten und hängen beim Drucken in der Luft – der Slicer braucht dort Stützen. Anders hinlegen, eine Fase statt einer waagerechten Kante oder in zwei Teile teilen hilft. Ansichten → „Überhänge (3D-Druck)“ zeigt die Stellen rot.`, ids: [it.id], at: [o.c], r: 6 });
+      out.push({ id: 'overhang', s: 'info', title: `Überhang beim Drucken – ${Model.label(it)}`, text: `${fmtFixed(o.area, 0)} mm² zeigen steiler als 45° nach unten und hängen beim Drucken in der Luft – der Slicer braucht dort Stützen. Anders hinlegen, eine Fase statt einer waagerechten Kante oder in zwei Teile teilen hilft. Ansichten → „Überhänge (3D-Druck)“ zeigt die Stellen rot.`, ids: [it.id], at: [o.c], r: 6 });
     }
     return out;
   }
