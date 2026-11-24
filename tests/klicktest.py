@@ -33,7 +33,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Panels,Joints}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Panels,Joints,I18n,T}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -6781,6 +6781,59 @@ def t_f11240028(p):
     return [ok1, ok2, ok3]
 
 
+def t_a019_uebersetzbare_oberflaeche(p):
+    # 1. Sammlung (data/texte-de.json) & T() inkl. Platzhalter und Fallback
+    texte = p.pg.evaluate("fetch('data/texte-de.json').then(r=>r.json())")
+    ok1 = (
+        isinstance(texte, dict) and len(texte) > 100
+        and p.ev("return T('tool.body')") == 'Körper'
+        and p.ev("return T('ctx.edgesCount', { n: 3 })") == '3 Kanten'
+        and p.ev("return T('unbekannt.schluessel')") == 'unbekannt.schluessel'
+    )
+    orig = p.ev("return { ...I18n.texts }")
+    # 2. Werkzeugleiste & Kopfzeile: Text direkt in der Sammlung überschreiben + über I18n.set
+    p.empty()
+    p.ev("I18n.texts['tool.body'] = 'Formen-Test'; I18n.refresh()")
+    p.ev("I18n.set({'tool.sketch': 'Zeichnen-Test', 'topbar.model': '3D-Test'})")
+    p.wait(200)
+    ok2 = (
+        p.pg.locator('#t-body').text_content() == 'Formen-Test'
+        and p.pg.locator('#t-sketch').text_content() == 'Zeichnen-Test'
+        and p.pg.locator('#tab-model').text_content() == '3D-Test'
+    )
+    # 3. Startseite
+    p.ev("I18n.set({'start.newProject': 'Neu-Test', 'start.emptyTitle': 'Leer-Test'}); Start.show()")
+    p.wait(300)
+    ok3 = (
+        p.pg.locator('.start').get_by_text('Neu-Test').count() > 0
+        and p.pg.locator('.start .card.new b').text_content() == 'Leer-Test'
+    )
+    p.ev("Start.hide()"); p.wait(200)
+    # 4. Menüs (Hauptmenü & Ansicht-Menü)
+    p.ev("I18n.set({'menu.main.settings': 'Optionen-Test', 'menu.view.section': 'Schnitt-Test'})")
+    p.pg.locator('#btn-menu').click(); p.wait(250)
+    ok4a = p.pg.locator('.menu button', has_text='Optionen-Test').count() == 1
+    p.pg.keyboard.press('Escape'); p.wait(200)
+    p.pg.locator('#t-views').click(); p.wait(250)
+    ok4b = p.pg.locator('.menu button', has_text='Schnitt-Test').count() == 1
+    p.pg.keyboard.press('Escape'); p.wait(200)
+    ok4 = ok4a and ok4b
+    # 5. Kontextleiste & Originaltexte wiederherstellen
+    p.ev("Actions.addPrimitive('box')"); warte_rechnen(p, 20)
+    p.ev("I18n.set({'ctx.toHole': 'Loch-Test', 'ctx.rotate': 'Dreh-Test'})")
+    p.wait(300)
+    ok5a = (
+        p.pg.locator('.ctxbar button', has_text='Loch-Test').count() == 1
+        and p.pg.locator('.ctxbar button[aria-label="Dreh-Test"]').count() == 1
+    )
+    p.ev("I18n.set(arg)", orig); p.wait(300)
+    ok5b = (
+        p.pg.locator('#t-body').text_content() == 'Körper'
+        and p.pg.locator('.ctxbar button', has_text='Zum Loch').count() == 1
+    )
+    return [ok1, ok2, ok3, ok4, ok5a and ok5b]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -6899,6 +6952,7 @@ TESTS = [
     ('[A-018] Verschieben/Drehen als Schritt: anlegen / ändern / drehen / unterdrücken / Marker / Kopie / Formel & Rückgängig', t_a018_verschieben_drehen_schritt),
     ('[A-017] Ebene im Winkel und Bezugsachsen: 30° an Quaderkante / Achse durch Zylinder → Kreismuster / Drehen um Bezugsachse / 2 Punkte & senkrecht auf Fläche', t_a017_ebene_winkel_achsen),
     ('[F-11240028] Volltest-Reparatur: Kamera-Animation bei rAF-Stau / Abbruch bei Nutzer-Start / Übergang-Vorschau ohne Debounce-Stau', t_f11240028),
+    ('[A-019] Übersetzbare Oberfläche (Schritt 1): Sammlung & T() / Werkzeugleiste / Startseite / Menüs / Kontextleiste', t_a019_uebersetzbare_oberflaeche),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

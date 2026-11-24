@@ -67,12 +67,12 @@ const Timeline = (() => {
     const box = h('div', { class: 'menu-list', style: { display: 'grid', gap: '2px', minWidth: '200px' } });
     const add = (ic, label, fn) => { const b = h('button', { type: 'button', class: 'btn ghost', style: { justifyContent: 'flex-start' } }); b.innerHTML = icon(ic) + esc(label); b.onclick = () => { UI.closePop(); fn(); }; box.append(b); };
     box.append(h('div', { class: 'section-h' }, `${i + 1}. ${Model.label(it)}`));
-    add('edit', 'Bearbeiten', () => App.select([it.id]));
-    add('help', 'Erklär diesen Schritt', () => Explain.dialog(it.id));
-    add('rollback', 'Marker hinter diesen Schritt', () => setMarker(i + 1));
-    add('rollback', 'Marker vor diesen Schritt', () => setMarker(i));
-    add('suppress', it.suppressed ? 'Wieder aktivieren' : 'Unterdrücken', () => toggleSuppress(it.id));
-    add('trash', 'Löschen', () => Actions.remove([it.id]));
+    add('edit', T('common.edit'), () => App.select([it.id]));
+    add('help', T('common.explainStep'), () => Explain.dialog(it.id));
+    add('rollback', T('menu.tl.markerAfter'), () => setMarker(i + 1));
+    add('rollback', T('menu.tl.markerBefore'), () => setMarker(i));
+    add('suppress', it.suppressed ? T('common.unsuppress') : T('common.suppress'), () => toggleSuppress(it.id));
+    add('trash', T('common.delete'), () => Actions.remove([it.id]));
     UI.pop(anchor, box, { up: true });
   }
   // Marker ziehen: Lücke zwischen den Schritten unter dem Mauszeiger finden

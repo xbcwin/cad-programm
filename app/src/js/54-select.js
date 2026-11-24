@@ -1,12 +1,19 @@
 // ================= Auswahl: Filter und „Ähnliche auswählen“ =================
 const Select = (() => {
   let filter = 'all';   // all · body · face · edge
-  const NAMES = { all: 'Alles', body: 'Nur Körper', face: 'Nur Flächen', edge: 'Nur Kanten' };
+  const FILTER_KEYS = ['all', 'body', 'face', 'edge'];
+  const nameOf = (k) => T('menu.select.' + k);
+  const NAMES = {
+    get all() { return nameOf('all'); },
+    get body() { return nameOf('body'); },
+    get face() { return nameOf('face'); },
+    get edge() { return nameOf('edge'); },
+  };
   const ev = makeEmitter();
   function setFilter(f) {
-    filter = NAMES[f] ? f : 'all';
+    filter = FILTER_KEYS.includes(f) ? f : 'all';
     const b = document.querySelector('.view-btns [data-view="filter"]');
-    if (b) { b.classList.toggle('on', filter !== 'all'); b.dataset.tip = 'Wählen: ' + NAMES[filter]; }
+    if (b) { b.classList.toggle('on', filter !== 'all'); b.dataset.tip = T('menu.select.tip', { name: nameOf(filter) }); }
     if (filter === 'body' && (App.face || App.edges.length)) App.select(App.sel);
     if (filter === 'edge' && App.face) App.select(App.sel);
     if (filter === 'face' && App.edges.length) App.select(App.sel);
@@ -23,7 +30,7 @@ const Select = (() => {
     return hit;
   }
   function menu(anchor) {
-    UI.menu(anchor, Object.keys(NAMES).map((k) => ({ label: (filter === k ? '✓ ' : '') + NAMES[k], icon: { all: 'pointer', body: 'cube', face: 'planeXY', edge: 'line' }[k], run: () => setFilter(k) })));
+    UI.menu(anchor, FILTER_KEYS.map((k) => ({ label: (filter === k ? '✓ ' : '') + nameOf(k), icon: { all: 'pointer', body: 'cube', face: 'planeXY', edge: 'line' }[k], run: () => setFilter(k) })));
   }
 
   // ---------- Ähnliche auswählen ----------

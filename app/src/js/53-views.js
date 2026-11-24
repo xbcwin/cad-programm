@@ -945,26 +945,26 @@ const Views = (() => {
   // ---------- Menü und Zustand ----------
   function menu(anchor) {
     UI.menu(anchor, [
-      { label: (st.cut ? '✓ ' : '') + 'Schnitt', icon: 'section', kbd: 'C', help: 'section', run: () => section() },
-      { label: (st.xray ? '✓ ' : '') + 'Röntgen', icon: 'xray', kbd: 'X', help: 'xray', run: () => xray() },
-      { label: (st.exGoal > 0 ? '✓ ' : '') + 'Explosion', icon: 'explode', kbd: 'U', help: 'explode', run: () => explode() },
-      { label: (st.focus ? '✓ ' : '') + 'Fokus-Vorschau', icon: 'focusView', help: 'focusView', run: () => focus() },
-      { label: (st.ov ? '✓ ' : '') + 'Überhänge (3D-Druck)', icon: 'overhang', help: 'overhang', run: () => overhang() },
-      { label: (st.thin ? '✓ ' : '') + 'Wandstärke (3D-Druck)', icon: 'ruler', help: 'thinWalls', id: 'view-thin', run: () => thin() },
-      { label: 'Vorführen (Vollbild)', icon: 'play', kbd: 'P', help: 'present', id: 'view-present', run: () => present(true) },
-      { label: 'Drehteller-Video …', icon: 'play', help: 'turntable', id: 'view-turntable', run: () => Print.turntableDialog() },
+      { label: (st.cut ? '✓ ' : '') + T('menu.view.section'), icon: 'section', kbd: 'C', help: 'section', run: () => section() },
+      { label: (st.xray ? '✓ ' : '') + T('menu.view.xray'), icon: 'xray', kbd: 'X', help: 'xray', run: () => xray() },
+      { label: (st.exGoal > 0 ? '✓ ' : '') + T('menu.view.explode'), icon: 'explode', kbd: 'U', help: 'explode', run: () => explode() },
+      { label: (st.focus ? '✓ ' : '') + T('menu.view.focus'), icon: 'focusView', help: 'focusView', run: () => focus() },
+      { label: (st.ov ? '✓ ' : '') + T('menu.view.overhang'), icon: 'overhang', help: 'overhang', run: () => overhang() },
+      { label: (st.thin ? '✓ ' : '') + T('menu.view.thin'), icon: 'ruler', help: 'thinWalls', id: 'view-thin', run: () => thin() },
+      { label: T('menu.view.present'), icon: 'play', kbd: 'P', help: 'present', id: 'view-present', run: () => present(true) },
+      { label: T('menu.view.turntable'), icon: 'play', help: 'turntable', id: 'view-turntable', run: () => Print.turntableDialog() },
       '-', ...lookItems(),
     ]);
   }
   // ---------- Aussehen: Studio-Look, einfach, Prüfansicht; Licht-Stimmung; Schatten ----------
-  const LOOKNAMES = { studio: 'Studio-Look (Werkstoff, Licht, Schatten)', plain: 'Einfach (matt, schnell)', clay: 'Prüfen: Ton', chrome: 'Prüfen: Chrom-Streifen' };
-  const MOODNAMES = { studio: 'Studio', hell: 'Hell', werkstatt: 'Werkstatt' };
+  const LOOKKEYS = ['studio', 'plain', 'clay', 'chrome'];
+  const MOODKEYS = ['studio', 'hell', 'werkstatt'];
   function setLook(k) {
     ViewPrefs.set({ look: k });
     const tip = { studio: 'Studio-Look: Teile zeigen ihren Werkstoff – Metall glänzt, Kohlefaser ist dunkel.', plain: 'Einfache Darstellung: matt und am schnellsten.', clay: 'Prüfansicht Ton: Jede Delle und jeder Knick fällt auf.', chrome: 'Prüfansicht Chrom: Laufen die Streifen ohne Knick über eine Kante, gehen die Flächen glatt ineinander über.' }[k];
     UI.toast(tip, { icon: 'info', ms: 3200 });
   }
-  const DISPNAMES = { edges: 'Flächen mit Kanten', shaded: 'Nur Flächen', wire: 'Drahtgitter (nur Kanten)', hidden: 'Verdeckte Kanten zeigen' };
+  const DISPKEYS = ['edges', 'shaded', 'wire', 'hidden'];
   // gespeicherte Ansichten (im Projekt): Blickwinkel, Ausschnitt und Projektion
   async function saveView() {
     const name = await UI.prompt('Ansicht speichern', 'Name der Ansicht', `Ansicht ${(App.doc.views || []).length + 1}`, 'Speichern');
@@ -982,16 +982,16 @@ const Views = (() => {
   function removeView(id) { App.change('Ansicht gelöscht', (doc) => { doc.views = (doc.views || []).filter((x) => x.id !== id); }); }
   function lookItems() {
     const pv = ViewPrefs.get(), out = [];
-    for (const k of Object.keys(DISPNAMES)) out.push({ label: (pv.display === k || (!pv.display && k === 'edges') ? '✓ ' : '') + DISPNAMES[k], icon: k === 'wire' ? 'cube' : 'eye', help: 'display', id: 'disp-' + k, run: () => ViewPrefs.set({ display: k }) });
+    for (const k of DISPKEYS) out.push({ label: (pv.display === k || (!pv.display && k === 'edges') ? '✓ ' : '') + T('menu.view.disp.' + k), icon: k === 'wire' ? 'cube' : 'eye', help: 'display', id: 'disp-' + k, run: () => ViewPrefs.set({ display: k }) });
     out.push('-');
-    for (const k of Object.keys(LOOKNAMES)) out.push({ label: (pv.look === k ? '✓ ' : '') + LOOKNAMES[k], icon: k === 'studio' ? 'spark' : 'eye', help: 'look', id: 'look-' + k, run: () => setLook(k) });
+    for (const k of LOOKKEYS) out.push({ label: (pv.look === k ? '✓ ' : '') + T('menu.view.look.' + k), icon: k === 'studio' ? 'spark' : 'eye', help: 'look', id: 'look-' + k, run: () => setLook(k) });
     if (pv.look === 'studio') {
-      for (const k of Object.keys(MOODNAMES)) out.push({ label: (pv.mood === k ? '✓ ' : '') + 'Licht: ' + MOODNAMES[k], icon: 'sun', help: 'look', id: 'mood-' + k, run: () => ViewPrefs.set({ mood: k }) });
-      out.push({ label: (pv.shadows !== false ? '✓ ' : '') + 'Schatten', icon: 'shadow', help: 'look', id: 'look-shadows', run: () => ViewPrefs.set({ shadows: pv.shadows === false }) });
+      for (const k of MOODKEYS) out.push({ label: (pv.mood === k ? '✓ ' : '') + T('menu.view.lightPrefix', { name: T('menu.view.mood.' + k) }), icon: 'sun', help: 'look', id: 'mood-' + k, run: () => ViewPrefs.set({ mood: k }) });
+      out.push({ label: (pv.shadows !== false ? '✓ ' : '') + T('menu.view.shadows'), icon: 'shadow', help: 'look', id: 'look-shadows', run: () => ViewPrefs.set({ shadows: pv.shadows === false }) });
     }
-    out.push('-', { label: 'Vorige Ansicht', icon: 'undo', kbd: 'Umschalt Z', help: 'viewBack', id: 'view-back', disabled: !Viewer.viewHistory, run: () => Viewer.viewBack() });
-    out.push({ label: 'Ansicht speichern …', icon: 'plus', help: 'savedViews', id: 'view-save', run: () => saveView() });
-    for (const v of App.doc.views || []) out.push({ label: 'Ansicht: ' + v.name, icon: 'viewPersp', help: 'savedViews', id: 'view-go-' + v.id, run: () => goView(v.id) });
+    out.push('-', { label: T('menu.view.viewBack'), icon: 'undo', kbd: 'Umschalt Z', help: 'viewBack', id: 'view-back', disabled: !Viewer.viewHistory, run: () => Viewer.viewBack() });
+    out.push({ label: T('menu.view.saveView'), icon: 'plus', help: 'savedViews', id: 'view-save', run: () => saveView() });
+    for (const v of App.doc.views || []) out.push({ label: T('menu.view.savedViewPrefix', { name: v.name }), icon: 'viewPersp', help: 'savedViews', id: 'view-go-' + v.id, run: () => goView(v.id) });
     return out;
   }
   function sync() {

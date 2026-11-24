@@ -7,7 +7,7 @@ const Templates = (() => {
   const param = (name, expr) => ({ id: uid('m'), name, expr });
   const LIST = [
     {
-      id: 'box', name: 'Box mit Deckel', desc: 'Mit Maßen wie Wandstärke und Spiel – änderst du sie, passt sich alles an.',
+      id: 'box', get name() { return T('start.tpl.box.name'); }, get desc() { return T('start.tpl.box.desc'); },
       build() {
         const d = Model.newDoc('Box mit Deckel');
         d.params = [param('Breite', 60), param('Tiefe', 40), param('Höhe', 30), param('Wand', 2), param('Spiel', 0.2)];
@@ -27,7 +27,7 @@ const Templates = (() => {
       svg: '<path d="M12 22 40 12l28 10-28 10z" class="a1"/><path d="M12 22v18l28 10V32z" class="a2"/><path d="M68 22v18L40 50V32z" class="a3"/><path d="M50 8 74 0l18 6-24 8z" class="b1"/><path d="M50 8v4l18 6v-4z" class="b2"/><path d="M92 6v4l-24 8v-4z" class="b3"/>',
     },
     {
-      id: 'sign', name: 'Schild mit Loch', desc: 'Flache Platte mit runden Ecken und einem Loch zum Aufhängen.',
+      id: 'sign', get name() { return T('start.tpl.sign.name'); }, get desc() { return T('start.tpl.sign.desc'); },
       build() {
         const d = Model.newDoc('Schild');
         d.params = [param('Länge', 80), param('Breite', 30), param('Dicke', 3)];
@@ -40,7 +40,7 @@ const Templates = (() => {
       svg: '<path d="M10 30 70 10l30 12-60 20z" class="a1"/><path d="M10 30v5l30 12v-5z" class="a2"/><path d="M100 22v5L40 47v-5z" class="a3"/><ellipse cx="84" cy="20" rx="4" ry="2.2" class="hole"/>',
     },
     {
-      id: 'phone', name: 'Handyhalter', desc: 'Schräge Lehne, Ablage vorne und ein Schlitz fürs Kabel.',
+      id: 'phone', get name() { return T('start.tpl.phone.name'); }, get desc() { return T('start.tpl.phone.desc'); },
       build() {
         const d = Model.newDoc('Handyhalter');
         d.params = [param('Breite', 75)];
@@ -60,7 +60,7 @@ const Templates = (() => {
       svg: '<path d="M14 40 60 26l30 10-46 14z" class="a1"/><path d="M58 30 64 2l8 3-6 28z" class="a3"/><path d="M20 38l2-8 6 2-2 8z" class="a2"/>',
     },
     {
-      id: 'bracket', name: 'Winkel zum Anschrauben', desc: 'L-Winkel mit Senkkopf-Schraublöchern und Versteifung.',
+      id: 'bracket', get name() { return T('start.tpl.bracket.name'); }, get desc() { return T('start.tpl.bracket.desc'); },
       build() {
         const d = Model.newDoc('Winkel');
         d.params = [param('Länge', 40), param('Breite', 30), param('Dicke', 4)];
@@ -79,7 +79,7 @@ const Templates = (() => {
       svg: '<path d="M14 38 56 24l34 11-42 14z" class="a1"/><path d="M14 38V10l42-14v28z" class="a2"/><ellipse cx="44" cy="37" rx="4" ry="2" class="hole"/><ellipse cx="66" cy="31" rx="4" ry="2" class="hole"/><ellipse cx="30" cy="16" rx="2.4" ry="4" class="hole"/><ellipse cx="46" cy="11" rx="2.4" ry="4" class="hole"/>',
     },
     {
-      id: 'gear', name: 'Zahnradpaar', desc: 'Zwei passende Zahnräder mit Bohrung.',
+      id: 'gear', get name() { return T('start.tpl.gear.name'); }, get desc() { return T('start.tpl.gear.desc'); },
       build() {
         const d = Model.newDoc('Zahnräder');
         d.params = [param('Modul', 1.5)];
@@ -91,7 +91,7 @@ const Templates = (() => {
       svg: '<circle cx="42" cy="28" r="20" class="a2"/><circle cx="42" cy="28" r="4" class="hole"/><circle cx="78" cy="28" r="11" class="b2"/><circle cx="78" cy="28" r="3" class="hole"/>',
     },
     {
-      id: 'hinge', name: 'Scharnier', desc: 'Aus einem Stück, mit Spiel zwischen den Teilen.',
+      id: 'hinge', get name() { return T('start.tpl.hinge.name'); }, get desc() { return T('start.tpl.hinge.desc'); },
       build() {
         const d = Model.newDoc('Scharnier');
         d.items = [part('hinge', { len: 40, w: 15, t: 2.4, gap: 0.4 }, { color: '#3f7fd6' })];
@@ -112,17 +112,17 @@ const Start = (() => {
     hide();
     // erst speichern, damit „Weiterarbeiten“ den aktuellen Stand und Namen zeigt
     try { App.autosave.flush(); } catch (_) {}
-    el = h('div', { class: 'start', role: 'dialog', 'aria-label': 'Startseite' });
+    el = h('div', { class: 'start', role: 'dialog', 'aria-label': T('start.aria') });
     const inner = h('div', { class: 'start-inner' });
     const head = h('div', { class: 'start-head' });
     const brand = h('div', { class: 'start-brand' });
     brand.innerHTML = $('#brand svg').outerHTML;
-    brand.append(h('div', null, h('h1', null, 'Tracery'), h('p', null, 'CAD im Browser – kostenlos, ohne Konto')));
+    brand.append(h('div', null, h('h1', null, 'Tracery'), h('p', null, T('start.subtitle'))));
     const acts = h('div', { class: 'btn-row' });
-    const nb = h('button', { type: 'button', class: 'btn primary' }); nb.innerHTML = icon('newfile') + 'Neues Projekt'; nb.onclick = () => newProject();
-    const ob = h('button', { type: 'button', class: 'btn' }); ob.innerHTML = icon('folder') + 'Datei öffnen'; ob.onclick = () => openFile();
-    const tb = h('button', { type: 'button', class: 'btn' }); tb.innerHTML = icon('play') + 'Einführung (3 Minuten)'; tb.onclick = () => { newProject(true); Tour.start(); };
-    const ts = h('button', { type: 'button', class: 'btn' }); ts.innerHTML = icon('sketch') + 'Erste Skizze (5 Minuten)'; ts.onclick = () => { newProject(true); Tour.start('sketch'); };
+    const nb = h('button', { type: 'button', class: 'btn primary' }); nb.innerHTML = icon('newfile') + esc(T('start.newProject')); nb.onclick = () => newProject();
+    const ob = h('button', { type: 'button', class: 'btn' }); ob.innerHTML = icon('folder') + esc(T('start.openFile')); ob.onclick = () => openFile();
+    const tb = h('button', { type: 'button', class: 'btn' }); tb.innerHTML = icon('play') + esc(T('start.tourBasics')); tb.onclick = () => { newProject(true); Tour.start(); };
+    const ts = h('button', { type: 'button', class: 'btn' }); ts.innerHTML = icon('sketch') + esc(T('start.tourSketch')); ts.onclick = () => { newProject(true); Tour.start('sketch'); };
     acts.append(nb, ob, tb, ts);
     // Oberfläche wählen: beim allerersten Start als zwei Karten, sonst kompakt im Kopf
     if (ViewPrefs.firstStart) {
@@ -130,54 +130,55 @@ const Start = (() => {
       inner.append(head);
       inner.append(h('section', { class: 'level-welcome', id: 'level-welcome', 'data-help': 'levelSwitch' },
         h('div', { class: 'level-welcome-head' },
-          h('h2', null, 'Wie möchtest du mit Tracery arbeiten?'),
-          h('span', null, 'Du kannst jederzeit oben rechts zwischen beiden Stufen wechseln.'),
+          h('h2', null, T('start.welcomeTitle')),
+          h('span', null, T('start.welcomeSub')),
         ),
         ViewPrefs.levelCards({ idPrefix: 'start', active: null }),
       ));
     } else {
-      const seg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Oberfläche' });
+      const seg = h('div', { class: 'seg', role: 'group', 'aria-label': T('start.surfaceAria') });
       const lv = (id, l, label) => { const b = h('button', { type: 'button', id, 'aria-pressed': (ViewPrefs.get().level === l) ? 'true' : 'false' }, label); b.onclick = () => { ViewPrefs.setLevel(l); for (const x of seg.children) x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); }; return b; };
-      seg.append(lv('start-simple', 'simple', 'Einfach – für Einsteiger'), lv('start-pro', 'pro', 'Profi – alle Werkzeuge'));
-      const lvRow = h('div', { class: 'start-level', 'data-help': 'levelSwitch' }, h('span', null, 'Oberfläche:'), seg);
+      seg.append(lv('start-simple', 'simple', T('start.simpleOption')), lv('start-pro', 'pro', T('start.proOption')));
+      const lvRow = h('div', { class: 'start-level', 'data-help': 'levelSwitch' }, h('span', null, T('start.surfaceLabel')), seg);
       head.append(brand, acts, lvRow);
       inner.append(head);
     }
     const recent = App.recentProjects().filter((r) => r.n > 0 || r.id === App.doc.id);
     if (recent.length) {
-      const sec = h('section', null, h('h2', null, 'Weiterarbeiten'));
+      const sec = h('section', null, h('h2', null, T('start.recentHeading')));
       const list = h('div', { class: 'recent' });
       for (const r of recent.slice(0, 8)) {
         const row = h('div', { class: 'recent-row', role: 'button', tabindex: '0' });
         row.innerHTML = icon('box3');
         row.querySelector('svg').style.cssText = 'width:26px;height:26px;color:var(--accent);flex:none';
-        row.append(h('div', { class: 'grow' }, h('b', null, r.name), h('span', null, `${r.n} Objekt${r.n === 1 ? '' : 'e'} · ${new Date(r.modified).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' })}`)));
-        const del = h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Aus dem Browser löschen', 'data-tip': 'Aus diesem Browser löschen' }); del.innerHTML = icon('trash');
-        del.onclick = async (e) => { e.stopPropagation(); if (await UI.confirm('Projekt löschen?', `„${r.name}“ wird aus diesem Browser gelöscht. Gespeicherte Dateien bleiben erhalten.`, 'Löschen', true)) { await App.deleteStored(r.id); show(); } };
+        const dstr = new Date(r.modified).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' });
+        row.append(h('div', { class: 'grow' }, h('b', null, r.name), h('span', null, T(r.n === 1 ? 'start.recentMetaOne' : 'start.recentMetaMany', { n: r.n, date: dstr }))));
+        const del = h('button', { type: 'button', class: 'icon-btn', 'aria-label': T('start.deleteFromBrowserAria'), 'data-tip': T('start.deleteFromBrowserTip') }); del.innerHTML = icon('trash');
+        del.onclick = async (e) => { e.stopPropagation(); if (await UI.confirm(T('start.deleteConfirmTitle'), T('start.deleteConfirmBody', { name: r.name }), T('common.delete'), true)) { await App.deleteStored(r.id); show(); } };
         row.append(del);
-        const openIt = async () => { if (r.id === App.doc.id) { hide(); return; } const d = await App.loadStored(r.id); if (d) { App.setDoc(d); hide(); } else UI.toast('Das Projekt ist nicht mehr da.', { kind: 'bad' }); };
+        const openIt = async () => { if (r.id === App.doc.id) { hide(); return; } const d = await App.loadStored(r.id); if (d) { App.setDoc(d); hide(); } else UI.toast(T('start.projectMissing'), { kind: 'bad' }); };
         row.onclick = openIt; row.onkeydown = (e) => { if (e.key === 'Enter') openIt(); };
         list.append(row);
       }
       sec.append(list); inner.append(sec);
     }
-    const tsec = h('section', null, h('h2', null, 'Vorlagen'));
+    const tsec = h('section', null, h('h2', null, T('start.templatesHeading')));
     const cards = h('div', { class: 'cards' });
     const empty = h('button', { type: 'button', class: 'card new' });
-    const th0 = h('div', { class: 'thumb' }); th0.innerHTML = icon('plus'); empty.append(th0, h('b', null, 'Leeres Projekt'), h('span', null, 'Von null anfangen.'));
+    const th0 = h('div', { class: 'thumb' }); th0.innerHTML = icon('plus'); empty.append(th0, h('b', null, T('start.emptyTitle')), h('span', null, T('start.emptyDesc')));
     empty.onclick = () => newProject();
     cards.append(empty);
     for (const t of Templates.LIST) {
       const c = h('button', { type: 'button', class: 'card' });
       const th = h('div', { class: 'thumb' }); th.innerHTML = tplThumb(t);
       c.append(th, h('b', null, t.name), h('span', null, t.desc));
-      c.onclick = () => { App.setDoc(t.build()); hide(); UI.toast('Vorlage geladen. Klick einen Teil an, um ihn zu ändern.', { icon: 'check' }); };
+      c.onclick = () => { App.setDoc(t.build()); hide(); UI.toast(T('start.templateLoaded'), { icon: 'check' }); };
       cards.append(c);
     }
     tsec.append(cards); inner.append(tsec);
-    inner.append(h('div', { class: 'start-foot', html: 'Projekte werden automatisch in diesem Browser gesichert. Zum sicheren Aufbewahren und Teilen: <b>Projekt als Datei speichern</b>.<br>Tracery rechnet mit OpenCascade (LGPL-2.1) über replicad (MIT) und zeigt 3D mit three.js (MIT).' }));
+    inner.append(h('div', { class: 'start-foot', html: T('start.footHtml') }));
     el.append(inner);
-    const close = h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Schließen', style: { position: 'fixed', top: '12px', right: '12px' } }); close.innerHTML = icon('close'); close.onclick = hide;
+    const close = h('button', { type: 'button', class: 'icon-btn', 'aria-label': T('common.close'), style: { position: 'fixed', top: '12px', right: '12px' } }); close.innerHTML = icon('close'); close.onclick = hide;
     if (App.doc.items.length) el.append(close);
     document.body.append(el);
     const onKey = (e) => { if (e.key === 'Escape' && el && App.doc.items.length) hide(); };
@@ -842,10 +843,10 @@ const Start = (() => {
   function openFolderMenu(anchor) {
     if (!folder) return;
     UI.menu(anchor, [
-      { label: 'Jetzt in Ordner speichern', icon: 'save', id: 'fm-now', run: () => saveToFolderNow() },
-      { label: 'Anderen Ordner wählen …', icon: 'folder', id: 'fm-change', run: () => saveToFolder() },
+      { label: T('menu.folder.saveNow'), icon: 'save', id: 'fm-now', run: () => saveToFolderNow() },
+      { label: T('menu.folder.changeFolder'), icon: 'folder', id: 'fm-change', run: () => saveToFolder() },
       '-',
-      { label: 'Ordner-Verbindung trennen', icon: 'close', id: 'fm-stop', run: () => disconnectFolder() },
+      { label: T('menu.folder.disconnect'), icon: 'close', id: 'fm-stop', run: () => disconnectFolder() },
     ], { alignRight: true });
   }
   function folderInfo() {

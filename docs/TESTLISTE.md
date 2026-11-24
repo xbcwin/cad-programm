@@ -1580,6 +1580,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Übergangs-Vorschau ohne Debounce-Stau**: Wiederholte Mausbewegungen ohne Änderung der Führungskurve setzen den 250-ms-Debounce von `loftPreview` nicht mehr zurück; die bauchige `__preview`-Vorschau wird berechnet.
 - [ ] **Von Hand**: Bei „Blick senkrecht auf die Fläche“ per Rechtsklick und beim Ziehen einer Übergangs-Führungskurve im Browser kurz prüfen, ob die Kamera-Fahrt flüssig wirkt und die Vorschau zügig nachzieht.
 
+## Übersetzbare Oberfläche, Schritt 1 (Auto [A-019])
+
+- [x] **Sammlung & `T()`**: `app/data/texte-de.json` enthält alle Oberflächentexte; `T(key, vars)` liefert deutsche Texte, ersetzt Platzhalter (`{n}`) und fällt bei unbekannten Schlüsseln auf den Schlüssel zurück.
+- [x] **Werkzeugleiste & Kopfzeile**: Überschreiben von `I18n.texts['tool.body']` sowie `I18n.set(...)` ändert die sichtbaren Beschriftungen an Werkzeugleiste und Arbeitsbereich-Reitern sofort.
+- [x] **Startseite, Menüs & Kontextleiste**: Geänderte Texte erscheinen direkt auf Startseite-Knöpfen/Karten, im Haupt- und Ansichtsmenü sowie in der 3D-Kontextleiste; Zurücksetzen stellt alle deutschen Originaltexte wieder her.
+- [ ] **Von Hand**: Einmal Startseite, Werkzeugleiste, alle Menüs (Projekt, Hauptmenü, Ansicht, Rechtsklick, Zeichnung) und Kontextleiste auf fehlende oder abgeschnittene Beschriftungen durchsehen.
+
 ## Fehler melden
 
 ```
