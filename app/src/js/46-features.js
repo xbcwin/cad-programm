@@ -2183,6 +2183,210 @@ const Features = (() => {
     sec.append(h('div', { class: 'hint-box', html: 'Legt die ebene Skizze exakt nach Bogenlänge (ohne Verzerrung) um den Zylinder – erhaben, vertieft oder als Linie für weitere Schritte.' }));
   }
 
+  // ---------- Feder & Spirale (KP-32) ----------
+  function helixSpot(halfR) {
+    let [x, y] = Actions.viewCenter();
+    const boxes = [];
+    for (const n of Viewer.nodes.values()) {
+      if (n.role !== 'hole' && n.obj.visible && n.mesh && n.mesh.geometry && n.mesh.geometry.boundingBox) {
+        boxes.push(n.mesh.geometry.boundingBox.clone().applyMatrix4(n.obj.matrix));
+      }
+    }
+    if (!boxes.length) return [x, y];
+    const hits = (px) => boxes.some((b) => px - halfR < b.max.x + 1 && px + halfR > b.min.x - 1 && y - halfR < b.max.y + 1 && y + halfR > b.min.y - 1);
+    if (!hits(x)) return [x, y];
+    let right = -Infinity;
+    for (const b of boxes) if (y - halfR < b.max.y + 1 && y + halfR > b.min.y - 1) right = Math.max(right, b.max.x);
+    return [Math.ceil((right + 6 + halfR) / 5) * 5, y];
+  }
+  function helix(opts = {}) {
+    const form = opts.form === 'cone' || opts.form === 'spiral' ? opts.form : 'cyl';
+    const base = form === 'cone'
+      ? { form: 'cone', by: 'pitchTurns', d: 20, r1: 10, r2: 5, pitch: 5, turns: 5, height: 25, dir: 'right', startAngle: 0, shape: 'circle', wireD: 2, profW: 2, profH: 2, wall: 0 }
+      : form === 'spiral'
+        ? { form: 'spiral', by: 'pitchTurns', d: 20, r1: 5, r2: 25, pitch: 0, turns: 3, height: 0, dir: 'right', startAngle: 0, shape: 'circle', wireD: 2, profW: 2, profH: 2, wall: 0 }
+        : { form: 'cyl', by: 'pitchTurns', d: 20, r1: 10, r2: 5, pitch: 5, turns: 5, height: 25, dir: 'right', startAngle: 0, shape: 'circle', wireD: 2, profW: 2, profH: 2, wall: 0 };
+    const p = { ...base, ...(opts.p || {}) };
+    const name = opts.name || (form === 'cone' ? T('helix.nameCone') : form === 'spiral' ? T('helix.nameSpiral') : T('helix.nameCyl'));
+    if (!App.doc.items.some((x) => x.role !== 'hole' && !x.hidden)) App.fitAfterBuild();
+    const m = Model.helixMetrics(p, Model.vars(App.doc).v);
+    const halfR = Math.max(m.r1, m.r2) + m.radHalf;
+    const spot = Array.isArray(opts.pos) ? opts.pos : helixSpot(halfR);
+    let created = null;
+    App.change(T('helix.changeAdd'), (doc) => {
+      const it = Model.newItem('helix', p, { name });
+      it.t.x = spot[0] || 0;
+      it.t.y = spot[1] || 0;
+      it.t.z = opts.z || 0;
+      doc.items.push(it);
+      created = it;
+    });
+    if (created) {
+      App.select([created.id]);
+      UI.toast(T(ViewPrefs.simple ? 'helix.toastAddedSimple' : 'helix.toastAdded'), { icon: 'check' });
+    }
+    return created;
+  }
+  function renderHelix(it, sec, setP) {
+    sec.id = 'helix-sec';
+    sec.setAttribute('data-help', 'helix');
+    const V = Model.vars(App.doc).v;
+    const p = it.p || {};
+    const m = Model.helixMetrics(p, V);
+    const simple = ViewPrefs.simple;
+    const uLbl = Units.label();
+    const fl = h('div', { class: 'fields' });
+    const profs = App.doc.items.filter((x) => x.kind === 'extrude' && x.p && x.p.sketch && x.id !== it.id);
+
+    if (simple) {
+      if (m.form === 'cyl') {
+        fl.append(UI.numField({ id: 'hx-d', label: T('helix.dia'), value: p.d ?? 20, min: 0.4, onCommit: (v) => setP('d', v) }));
+      } else {
+        fl.append(
+          UI.numField({ id: 'hx-r1', label: T('helix.r1'), value: p.r1 ?? 10, min: 0.2, onCommit: (v) => setP('r1', v) }),
+          UI.numField({ id: 'hx-r2', label: T('helix.r2'), value: p.r2 ?? 5, min: 0.2, onCommit: (v) => setP('r2', v) }),
+        );
+      }
+      fl.append(
+        UI.numField({ id: 'hx-wire', label: T('helix.wireD'), value: p.wireD ?? 2, min: 0.2, onCommit: (v) => setP('wireD', v) }),
+        UI.numField({ id: 'hx-turns', label: T('helix.turns'), value: p.turns ?? 5, unit: '', min: 0.1, step: 0.5, onCommit: (v) => setP('turns', v) }),
+      );
+      if (m.form !== 'spiral') {
+        if (m.by === 'heightTurns' || m.by === 'heightPitch') {
+          fl.append(UI.numField({ id: 'hx-height', label: T('helix.height'), value: p.height ?? 25, min: 0.2, onCommit: (v) => setP('height', v) }));
+        } else {
+          fl.append(UI.numField({ id: 'hx-pitch', label: T('helix.pitch'), value: p.pitch ?? 5, min: 0.05, onCommit: (v) => setP('pitch', v) }));
+        }
+      }
+      sec.append(fl);
+      sec.append(h('div', { class: 'mini-row', id: 'hx-info' },
+        h('span', { class: 'grow' }, m.form === 'spiral' ? T('helix.infoRadialPitch') : T('helix.infoTotalHeight')),
+        h('b', { class: 'mono' }, m.form === 'spiral' ? Units.fmtLenU(m.radialPitch, 2) : Units.fmtLenU(m.totalHeight, 2))));
+      sec.append(h('div', { class: 'hint-box', html: T('helix.simpleHint') }));
+      return;
+    }
+
+    fl.append(UI.selectField({
+      id: 'hx-form', label: T('helix.form'), value: m.form,
+      options: [['cyl', T('helix.formCyl')], ['cone', T('helix.formCone')], ['spiral', T('helix.formSpiral')]],
+      onChange: (v) => App.change(T('helix.changeForm'), (doc) => {
+        const f = Model.find(doc, it.id); if (!f) return false;
+        const q = f.item.p, cur = Model.helixMetrics(q, Model.vars(doc).v);
+        if (v === 'cyl') {
+          q.d = round(cur.r1 * 2, 3);
+        } else if (v === 'cone') {
+          if (cur.form === 'cyl') { q.r1 = round(cur.d / 2, 3); q.r2 = Math.max(1, round(cur.d / 4, 3)); }
+          else if (Math.abs(cur.r1 - cur.r2) < 0.05) q.r2 = Math.max(1, round(cur.r1 / 2, 3));
+        } else if (v === 'spiral') {
+          if (cur.form === 'cyl') { q.r1 = Math.max(2, round(cur.radHalf * 2 + 2, 2)); q.r2 = round(q.r1 + cur.turns * (cur.radHalf * 2 + 2), 2); }
+          else if (Math.abs(cur.r1 - cur.r2) < 0.1) q.r2 = round(cur.r1 + 15, 2);
+        }
+        q.form = v;
+      }),
+    }));
+
+    if (m.form === 'cyl') {
+      fl.append(UI.numField({ id: 'hx-d', label: T('helix.dia'), value: p.d ?? 20, min: 0.4, onCommit: (v) => setP('d', v) }));
+    } else {
+      fl.append(
+        UI.numField({ id: 'hx-r1', label: T('helix.r1'), value: p.r1 ?? (m.form === 'spiral' ? 5 : 10), min: 0.2, onCommit: (v) => setP('r1', v) }),
+        UI.numField({ id: 'hx-r2', label: T('helix.r2'), value: p.r2 ?? (m.form === 'spiral' ? 25 : 5), min: 0.2, onCommit: (v) => setP('r2', v) }),
+      );
+    }
+
+    if (m.form !== 'spiral') {
+      fl.append(UI.selectField({
+        id: 'hx-by', label: T('helix.by'), value: m.by,
+        options: [['pitchTurns', T('helix.byPitchTurns')], ['heightTurns', T('helix.byHeightTurns')], ['heightPitch', T('helix.byHeightPitch')]],
+        onChange: (v) => App.change(T('helix.changeBy'), (doc) => {
+          const f = Model.find(doc, it.id); if (!f) return false;
+          const q = f.item.p, cur = Model.helixMetrics(q, Model.vars(doc).v);
+          if (typeof q.pitch === 'number') q.pitch = round(cur.pitch, 4);
+          if (typeof q.turns === 'number') q.turns = round(cur.turns, 4);
+          if (typeof q.height === 'number') q.height = round(cur.height, 4);
+          if (q.pitch == null) q.pitch = round(cur.pitch, 4);
+          if (q.turns == null) q.turns = round(cur.turns, 4);
+          if (q.height == null) q.height = round(cur.height, 4);
+          q.by = v;
+        }),
+      }));
+      if (m.by !== 'heightTurns') fl.append(UI.numField({ id: 'hx-pitch', label: T('helix.pitch'), value: p.pitch ?? round(m.pitch, 3), min: 0.05, onCommit: (v) => setP('pitch', v) }));
+      if (m.by !== 'heightPitch') fl.append(UI.numField({ id: 'hx-turns', label: T('helix.turns'), value: p.turns ?? round(m.turns, 3), unit: '', min: 0.1, step: 0.5, onCommit: (v) => setP('turns', v) }));
+      if (m.by !== 'pitchTurns') fl.append(UI.numField({ id: 'hx-height', label: T('helix.height'), value: p.height ?? round(m.height, 3), min: 0.2, onCommit: (v) => setP('height', v) }));
+    } else {
+      fl.append(UI.numField({ id: 'hx-turns', label: T('helix.turns'), value: p.turns ?? 3, unit: '', min: 0.1, step: 0.5, onCommit: (v) => setP('turns', v) }));
+    }
+
+    fl.append(
+      UI.selectField({
+        id: 'hx-dir', label: T('helix.dir'), value: m.dir,
+        options: [['right', T('helix.dirRight')], ['left', T('helix.dirLeft')]],
+        onChange: (v) => App.change(T('helix.changeDir'), (doc) => { Model.find(doc, it.id).item.p.dir = v; }),
+      }),
+      UI.numField({ id: 'hx-start', label: T('helix.startAngle'), value: p.startAngle ?? 0, unit: '°', onCommit: (v) => setP('startAngle', v) }),
+      UI.selectField({
+        id: 'hx-shape', label: T('helix.profile'), value: m.shape,
+        options: [['circle', T('helix.profCircle')], ['rect', T('helix.profRect')], ...(profs.length || m.shape === 'sketch' ? [['sketch', T('panel.sweep.sketch')]] : [])],
+        onChange: (v) => {
+          if (v === 'sketch' && !it.p.prof) {
+            const src = profs[0];
+            if (src) App.change('Querschnitt übernommen', (doc) => {
+              const f = Model.find(doc, it.id).item;
+              f.p.shape = 'sketch'; f.p.prof = deepClone(src.p.sketch); f.p.profName = src.name;
+              const s2 = doc.items.find((x) => x.id === src.id);
+              if (s2) s2.hidden = true;
+            });
+          } else {
+            App.change(T('helix.changeProfile'), (doc) => { Model.find(doc, it.id).item.p.shape = v; });
+          }
+        },
+      }),
+    );
+
+    if (m.shape === 'sketch') {
+      fl.append(UI.selectField({
+        id: 'hx-prof', label: T('panel.sweep.profFrom'), value: '',
+        options: [['', it.p.profName || T('panel.sweep.adopted')], ...profs.map((x) => [x.id, x.name])],
+        onChange: (v) => {
+          const src = profs.find((x) => x.id === v);
+          if (src) App.change('Querschnitt übernommen', (doc) => {
+            const f = Model.find(doc, it.id).item;
+            f.p.prof = deepClone(src.p.sketch); f.p.profName = src.name;
+            const s2 = doc.items.find((x) => x.id === src.id);
+            if (s2) s2.hidden = true;
+          });
+        },
+      }));
+    } else if (m.shape === 'rect') {
+      fl.append(
+        UI.numField({ id: 'hx-pw', label: T('helix.profW'), value: p.profW ?? 2, min: 0.2, onCommit: (v) => setP('profW', v) }),
+        UI.numField({ id: 'hx-ph', label: T('helix.profH'), value: p.profH ?? 2, min: 0.2, onCommit: (v) => setP('profH', v) }),
+      );
+    } else {
+      fl.append(UI.numField({ id: 'hx-wire', label: T('helix.wireD'), value: p.wireD ?? 2, min: 0.2, onCommit: (v) => setP('wireD', v) }));
+    }
+    if (m.shape !== 'sketch') {
+      fl.append(UI.numField({ id: 'hx-wall', label: T('panel.sweep.wallOpt'), value: p.wall ?? 0, min: 0, onCommit: (v) => setP('wall', v) }));
+    }
+    sec.append(fl);
+
+    let infoLabel = '', infoVal = '';
+    if (m.form === 'spiral') {
+      infoLabel = T('helix.infoRadialPitch');
+      infoVal = Units.fmtLenU(m.radialPitch, 2);
+    } else {
+      const calcTxt = m.by === 'heightTurns'
+        ? `${T('helix.pitch')}: ${Units.fmtLenU(m.pitch, 2)}`
+        : m.by === 'heightPitch'
+          ? `${T('helix.turns')}: ${fmt(m.turns, 2)}`
+          : `${T('helix.height')}: ${Units.fmtLenU(m.height, 2)}`;
+      infoLabel = `${calcTxt} · ${T('helix.infoTotalHeight')}`;
+      infoVal = `${Units.fmtLen(m.totalHeight, 2)} ${uLbl}`;
+    }
+    sec.append(h('div', { class: 'mini-row', id: 'hx-info' }, h('span', { class: 'grow' }, infoLabel), h('b', { class: 'mono' }, infoVal)));
+    sec.append(h('div', { class: 'hint-box', html: T('helix.hint') }));
+  }
+
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, startWrap, createWrap, pickWrapFace, sweepFromWrap, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
+  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, startWrap, createWrap, pickWrapFace, sweepFromWrap, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, startEmboss, emboss, renderEmboss, pickEmbossFace, embossPlaneForFace, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, deleteBody, renderDeleteBody, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, applyRealThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES, helix, renderHelix };
 })();

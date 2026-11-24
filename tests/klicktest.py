@@ -20871,6 +20871,163 @@ def t_a100_loeschen_messwert(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a101_feder_spirale(p):
+    import math
+
+    def warte_idle(n=50):
+        for _ in range(n):
+            p.wait(300)
+            if p.ev("return !App.busy"):
+                break
+        p.wait(500)
+
+    def box_size(item_id):
+        return p.ev("""const b = Actions.worldBox(arg);
+          return b ? [b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z, b.min.z, b.max.z] : null;""", item_id)
+
+    def vol_of(item_id):
+        return p.ev("return Mass.measure().then(r => { const q = (r && r.parts || []).find(x => x.id === arg); return q ? q.volume : 0; })", item_id)
+
+    def set_num(sel, val):
+        inp = p.pg.locator(sel)
+        inp.fill(str(val))
+        inp.press('Enter')
+        warte_idle()
+
+    # 1. Zylinder-Feder Ø20, Draht 2, 5 Windungen, Steigung 5 über #t-body -> #add-helix
+    p.empty()
+    p.pg.locator('#t-body').click(); p.wait(300)
+    p.pg.locator('#add-helix').click()
+    warte_idle()
+    hx_id = p.ev("return (App.doc.items.find(x => x.kind === 'helix') || {}).id")
+    err1 = p.ev("return App.errors.filter(e => e.id === arg).length", hx_id)
+    bb1 = box_size(hx_id)
+    v1 = vol_of(hx_id)
+    # Erwartetes Volumen: Querschnitt pi*r^2 * Bogenlänge N * sqrt((pi*D)^2 + P^2)
+    exp_v1 = math.pi * (1.0 ** 2) * 5.0 * math.hypot(math.pi * 20.0, 5.0)
+    ok1 = (
+        bool(hx_id)
+        and err1 == 0
+        and bb1 is not None
+        and abs(bb1[0] - 22.0) < 0.35
+        and abs(bb1[1] - 22.0) < 0.35
+        and abs(bb1[2] - 27.0) < 0.35
+        and v1 > 0
+        and abs(v1 - exp_v1) / exp_v1 < 0.02
+    )
+
+    # 2. Definition über Höhe & Windungen, Höhe & Steigung sowie Formel mit Projektmaß
+    p.pg.locator('#hx-by').select_option('heightTurns'); warte_idle()
+    set_num('#hx-height', '40')
+    bb2a = box_size(hx_id)
+    pitch2a = p.ev("const it = Model.find(App.doc, arg).item; return Model.helixMetrics(it.p, Model.vars(App.doc).v).pitch;", hx_id)
+
+    p.pg.locator('#hx-by').select_option('heightPitch'); warte_idle()
+    set_num('#hx-pitch', '4')
+    turns2b = p.ev("const it = Model.find(App.doc, arg).item; return Model.helixMetrics(it.p, Model.vars(App.doc).v).turns;", hx_id)
+    v2b = vol_of(hx_id)
+    exp_v2b = math.pi * (1.0 ** 2) * 10.0 * math.hypot(math.pi * 20.0, 4.0)
+
+    p.ev("App.change('Maß D_Feder', doc => { doc.params.push({ id: 'par_a101', name: 'D_Feder', expr: 24 }); })"); p.wait(200)
+    set_num('#hx-d', 'D_Feder')
+    bb2c = box_size(hx_id)
+    ok2 = (
+        abs(bb2a[2] - 42.0) < 0.35
+        and abs(pitch2a - 8.0) < 1e-3
+        and abs(turns2b - 10.0) < 1e-3
+        and abs(v2b - exp_v2b) / exp_v2b < 0.02
+        and abs(bb2c[0] - 26.0) < 0.35
+    )
+
+    # 3. Kegel-Feder (Anfangs- und Endradius)
+    p.pg.locator('#hx-form').select_option('cone'); warte_idle()
+    p.pg.locator('#hx-by').select_option('pitchTurns'); warte_idle()
+    set_num('#hx-r1', '12')
+    set_num('#hx-r2', '6')
+    set_num('#hx-turns', '4')
+    set_num('#hx-pitch', '5')
+    set_num('#hx-wire', '2')
+    err3 = p.ev("return App.errors.filter(e => e.id === arg).length", hx_id)
+    bb3 = box_size(hx_id)
+    v3 = vol_of(hx_id)
+    # Numerisches Bogenlängenintegral der Kegel-Helix
+    n_int = 400
+    arc_cone = sum(
+        math.hypot(6.0 - 12.0, 2.0 * math.pi * 4.0 * (12.0 + (6.0 - 12.0) * ((k + 0.5) / n_int)), 20.0) / n_int
+        for k in range(n_int)
+    )
+    exp_v3 = math.pi * (1.0 ** 2) * arc_cone
+    ok3 = (
+        err3 == 0
+        and abs(bb3[0] - 25.25) < 0.35
+        and abs(bb3[2] - 22.0) < 0.5
+        and abs(v3 - exp_v3) / exp_v3 < 0.02
+    )
+
+    # 4. Flache Spirale (r1=5, r2=20, 3 Windungen, Draht 2)
+    p.pg.locator('#hx-form').select_option('spiral'); warte_idle()
+    set_num('#hx-r1', '5')
+    set_num('#hx-r2', '20')
+    set_num('#hx-turns', '3')
+    set_num('#hx-wire', '2')
+    err4 = p.ev("return App.errors.filter(e => e.id === arg).length", hx_id)
+    bb4 = box_size(hx_id)
+    v4 = vol_of(hx_id)
+    arc_sp = sum(
+        math.hypot(20.0 - 5.0, 2.0 * math.pi * 3.0 * (5.0 + (20.0 - 5.0) * ((k + 0.5) / n_int)), 0.0) / n_int
+        for k in range(n_int)
+    )
+    exp_v4 = math.pi * (1.0 ** 2) * arc_sp
+    ok4 = (
+        err4 == 0
+        and abs(bb4[2] - 2.0) < 0.25
+        and abs(v4 - exp_v4) / exp_v4 < 0.02
+    )
+
+    # 5. Rechteck-Querschnitt, linksgängig & Undo
+    p.pg.locator('#hx-shape').select_option('rect'); warte_idle()
+    set_num('#hx-pw', '3')
+    set_num('#hx-ph', '1.5')
+    p.pg.locator('#hx-dir').select_option('left'); warte_idle()
+    err5 = p.ev("return App.errors.filter(e => e.id === arg).length", hx_id)
+    bb5 = box_size(hx_id)
+    v5 = vol_of(hx_id)
+    exp_v5 = 3.0 * 1.5 * arc_sp
+    p.ev("App.undo()"); warte_idle()
+    dir_after_undo = p.ev("return Model.find(App.doc, arg).item.p.dir", hx_id)
+    ok5 = err5 == 0 and abs(bb5[2] - 1.5) < 0.2 and abs(v5 - exp_v5) / exp_v5 < 0.02 and dir_after_undo == 'right'
+
+    # 6. Einfach-Modus: fertige Feder mit Draht-Ø (ohne Profi-Optionen, Grundkörper-Kacheln bleiben 6)
+    p.ev("App.setDoc(Model.newDoc())"); p.wait(400)
+    p.ev("ViewPrefs.setLevel('simple')"); p.wait(300)
+    p.pg.locator('#t-body').click(); p.wait(300)
+    n_tiles = p.pg.evaluate("[...document.querySelectorAll('.flyout .tile')].filter(t => t.offsetParent).length")
+    has_add_helix = sichtbar(p, '#add-helix')
+    p.pg.locator('#add-helix').click()
+    warte_idle()
+    simple_hx_id = p.ev("return (App.doc.items.find(x => x.kind === 'helix') || {}).id")
+    simple_fields_ok = (
+        sichtbar(p, '#hx-d')
+        and sichtbar(p, '#hx-wire')
+        and sichtbar(p, '#hx-turns')
+        and sichtbar(p, '#hx-pitch')
+        and not sichtbar(p, '#hx-form')
+        and not sichtbar(p, '#hx-shape')
+    )
+    set_num('#hx-wire', '3')
+    bb6 = box_size(simple_hx_id)
+    p.ev("ViewPrefs.setLevel('pro')"); p.wait(300)
+    ok6 = n_tiles == 6 and has_add_helix and bool(simple_hx_id) and simple_fields_ok and abs(bb6[2] - 28.0) < 0.35
+
+    # 7. Hilfetexte, DE/EN-Schlüsselgleichheit, Befehlssuche, Erklärtext & keine Seitenfehler
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    i18n_ok = p.pg.evaluate("Promise.all([fetch('data/texte-de.json').then(r=>r.json()), fetch('data/texte-en.json').then(r=>r.json())]).then(([d,e])=>{ const dk=Object.keys(d).sort(), ek=Object.keys(e).sort(); return dk.length===ek.length && dk.every((k,i)=>k===ek[i]); })")
+    cmds_ok = p.ev("return Commands.search('feder').some(c => c.id === 'helix') && Commands.search('spirale').some(c => c.id === 'helix-spiral')")
+    explain_ok = p.ev("const ex = Explain.local(arg); return !!ex && ex.lines.some(l => l.k === 'op' && /Zylinder-Feder/.test(l.t)) && ex.lines.some(l => l.k === 'was' && /Schraubenlinie/.test(l.t))", simple_hx_id)
+    ok7 = 'helix' in hilfen and all(f in hilfen['helix'] for f in ('tip', 'hilfe', 'tipp')) and i18n_ok and cmds_ok and explain_ok and not p.errs
+    return [ok1, ok2, ok3, ok4, ok5, ok6, ok7]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -21080,6 +21237,7 @@ TESTS = [
     ('[A-098] Kurve aus Formel und aus Tabelle (SK-38, SK-39)', t_a098_formel_und_csv_kurve),
     ('[A-099] Schwerpunkt als Bezugspunkt, Ebenen ziehen & einfärben, Ebenen-Schar (BZ-11, BZ-12, BZ-13)', t_a099_bezuege_schwerpunkt_schar),
     ('[A-100] Körper als Schritt löschen & Messwert als Maß (KP-51, KP-53)', t_a100_loeschen_messwert),
+    ('[A-101] Feder und Spirale: Zylinder-Feder / Kegel-Feder / flache Spirale / Einfach-Modus', t_a101_feder_spirale),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

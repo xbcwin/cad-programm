@@ -2055,6 +2055,183 @@ export function createKernel(R, oc) {
     return shape;
   }
 
+  // Feder / Spirale: zylindrische Schraubenlinie, Kegel-Feder oder flache Spirale mit Profil (Draht-Ø, Rechteck oder Skizze)
+  function buildHelix(p) {
+    const form = p.form === 'cone' || p.form === 'spiral' ? p.form : 'cyl';
+    const by = p.by === 'heightTurns' || p.by === 'heightPitch' ? p.by : 'pitchTurns';
+    const left = p.dir === 'left';
+    const s = left ? -1 : 1;
+    const startAngle = num(p.startAngle, 0);
+    let r1, r2;
+    if (form === 'cyl') {
+      r1 = r2 = pos(p.d, 20) / 2;
+    } else {
+      r1 = pos(p.r1, form === 'spiral' ? 5 : 10);
+      r2 = pos(p.r2, form === 'spiral' ? 25 : 5);
+    }
+    let turns, pitch, height;
+    if (form === 'spiral') {
+      turns = pos(p.turns, 3);
+      pitch = 0;
+      height = 0;
+    } else if (by === 'heightTurns') {
+      turns = pos(p.turns, 5);
+      height = pos(p.height, 25);
+      pitch = height / turns;
+    } else if (by === 'heightPitch') {
+      height = pos(p.height, 25);
+      pitch = pos(p.pitch, 5);
+      turns = height / pitch;
+    } else {
+      turns = pos(p.turns, 5);
+      pitch = pos(p.pitch, 5);
+      height = turns * pitch;
+    }
+    const shapeMode = p.shape === 'rect' ? 'rect' : p.shape === 'sketch' && p.prof ? 'sketch' : 'circle';
+    let radHalf = 1, axHalf = 1;
+    if (shapeMode === 'circle') {
+      radHalf = axHalf = pos(p.wireD, 2) / 2;
+    } else if (shapeMode === 'rect') {
+      radHalf = pos(p.profW, 2) / 2;
+      axHalf = pos(p.profH, 2) / 2;
+    } else if (p.prof && p.prof.outer) {
+      const lp = p.prof.outer, c = p.prof.c || [0, 0];
+      let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
+      const addPt = (q) => {
+        if (!q) return;
+        const du = q[0] - c[0], dv = q[1] - c[1];
+        if (du < minU) minU = du; if (du > maxU) maxU = du;
+        if (dv < minV) minV = dv; if (dv > maxV) maxV = dv;
+      };
+      if (lp.circle) { addPt([lp.circle.c[0] - lp.circle.r, lp.circle.c[1] - lp.circle.r]); addPt([lp.circle.c[0] + lp.circle.r, lp.circle.c[1] + lp.circle.r]); }
+      else if (lp.ellipse) { const mr = Math.max(lp.ellipse.rx, lp.ellipse.ry); addPt([lp.ellipse.c[0] - mr, lp.ellipse.c[1] - mr]); addPt([lp.ellipse.c[0] + mr, lp.ellipse.c[1] + mr]); }
+      else if (Array.isArray(lp.segs)) for (const g of lp.segs) { addPt(g.a); addPt(g.m); addPt(g.b); }
+      if (isFinite(minU)) {
+        radHalf = Math.max(0.1, (maxU - minU) / 2);
+        axHalf = Math.max(0.1, (maxV - minV) / 2);
+      }
+    }
+    if (turns < 0.1 || turns > 80) throw new Error('Die Anzahl der Windungen muss zwischen 0,1 und 80 liegen.');
+    if (form !== 'spiral' && pitch < 0.05) throw new Error('Die Steigung ist zu klein (mindestens 0,05 mm).');
+    if (form === 'spiral' && Math.abs(r2 - r1) < 0.1) throw new Error('Bei einer flachen Spirale müssen Anfangs- und Endradius verschieden sein.');
+    if (Math.min(r1, r2) <= radHalf + 0.05) throw new Error('Der Radius ist zu klein für diesen Querschnitt – die Windungen würden sich in der Mitte überlappen.');
+    if (form !== 'spiral' && turns > 1 && Math.abs(r2 - r1) < 1e-4 && pitch <= axHalf * 2 * 0.98) {
+      throw new Error('Die Steigung muss größer als die Drahtdicke sein, sonst durchdringen sich die Windungen.');
+    }
+    if (form === 'spiral' && turns > 1 && Math.abs(r2 - r1) / turns <= radHalf * 2 * 0.98) {
+      throw new Error('Der Abstand zwischen den Windungen der Spirale ist kleiner als die Profilbreite.');
+    }
+
+    const z0 = axHalf;
+    const P0 = [r1, 0, z0];
+    const T0 = norm([r2 - r1, s * 2 * Math.PI * turns * r1, height]);
+    const refUp = Math.abs(T0[2]) < 0.99 ? [0, 0, 1] : [0, 1, 0];
+    const dUp = dot(refUp, T0);
+    const Vax = norm([refUp[0] - T0[0] * dUp, refUp[1] - T0[1] * dUp, refUp[2] - T0[2] * dUp]);
+    let Vrad = norm(cross(T0, Vax));
+    if (Vrad[0] < 0) Vrad = mul(Vrad, -1);
+
+    let spine = null;
+    if (form === 'cyl' || (form === 'cone' && Math.abs(r2 - r1) < 1e-4)) {
+      spine = R.makeHelix(pitch, height, r1, [0, 0, z0], [0, 0, 1], left);
+    } else {
+      const angTotal = s * 2 * Math.PI * turns;
+      const dr = r2 - r1;
+      const ptAt = (u) => {
+        const r = r1 + dr * u, th = angTotal * u;
+        return [r * Math.cos(th), r * Math.sin(th), z0 + height * u];
+      };
+      const derivAt = (u) => {
+        const r = r1 + dr * u, th = angTotal * u, c = Math.cos(th), sn = Math.sin(th);
+        return [dr * c - r * angTotal * sn, dr * sn + r * angTotal * c, height];
+      };
+      const nSeg = Math.max(24, Math.min(1800, Math.round(turns * 32)));
+      const pts = [];
+      for (let i = 0; i <= nSeg; i++) pts.push(ptAt(i / nSeg));
+      try {
+        const edge = R.makeBSplineApproximation(pts, { tolerance: 1e-4, degMin: 3, degMax: 6 });
+        spine = R.assembleWire([edge]);
+        safeDelete(edge);
+      } catch (_) {
+        const segs = Math.max(8, Math.min(640, Math.round(turns * 8)));
+        const edges = [];
+        for (let i = 0; i < segs; i++) {
+          const u0 = i / segs, u1 = (i + 1) / segs, du = (u1 - u0) / 3;
+          const a = ptAt(u0), b = ptAt(u1), da = derivAt(u0), db = derivAt(u1);
+          edges.push(R.makeBezierCurve([a, add(a, mul(da, du)), sub(b, mul(db, du)), b]));
+        }
+        spine = R.assembleWire(edges);
+        for (const e of edges) safeDelete(e);
+      }
+    }
+
+    const makeProf = (inset) => {
+      if (shapeMode === 'sketch' && p.prof) {
+        if (inset > 0) return null;
+        const Y = cross(T0, Vrad);
+        const o = [0, 1, 2].map((k) => P0[k] - Vrad[k] * p.prof.c[0] - Y[k] * p.prof.c[1]);
+        return loopWire(p.prof.outer, planeMap({ o, x: Vrad, n: T0 }), true);
+      }
+      if (shapeMode === 'rect') {
+        const w = radHalf - inset, hh = axHalf - inset;
+        if (w <= 0 || hh <= 0) return null;
+        const q = (a, b) => [0, 1, 2].map((k) => P0[k] + Vrad[k] * a + Vax[k] * b);
+        const c = [q(-w, -hh), q(w, -hh), q(w, hh), q(-w, hh)];
+        const ls = [R.makeLine(c[0], c[1]), R.makeLine(c[1], c[2]), R.makeLine(c[2], c[3]), R.makeLine(c[3], c[0])];
+        const wWire = R.assembleWire(ls);
+        for (const l of ls) safeDelete(l);
+        return wWire;
+      }
+      const r = radHalf - inset;
+      if (r <= 0) return null;
+      const cEdge = R.makeCircle(r, P0, T0);
+      const wWire = R.assembleWire([cEdge]);
+      safeDelete(cEdge);
+      return wWire;
+    };
+
+    const doSweep = (w) => {
+      try {
+        return R.genericSweep(w, spine, { frenet: true, forceProfileSpineOthogonality: true });
+      } catch (_) {
+        return R.genericSweep(w, spine, { frenet: false, transitionMode: 'round', forceProfileSpineOthogonality: true });
+      }
+    };
+
+    let shape = null;
+    try {
+      const outerWire = makeProf(0);
+      try {
+        shape = doSweep(outerWire);
+      } finally {
+        safeDelete(outerWire);
+      }
+      const wall = num(p.wall, 0);
+      if (wall > 0 && shapeMode !== 'sketch') {
+        const innerWire = makeProf(wall);
+        if (!innerWire) throw new Error('Die Wandstärke ist größer als der halbe Draht-Querschnitt.');
+        let cutter = null;
+        try {
+          cutter = doSweep(innerWire);
+          const res = shape.cut(cutter);
+          safeDelete(shape);
+          shape = res;
+        } finally {
+          safeDelete(innerWire);
+          safeDelete(cutter);
+        }
+      }
+      if (Math.abs(startAngle) > 1e-6) {
+        const rot = shape.rotate(startAngle, [0, 0, 0], [0, 0, 1]);
+        safeDelete(shape);
+        shape = rot;
+      }
+      return shape;
+    } finally {
+      safeDelete(spine);
+    }
+  }
+
   let stepReaderCache = null;
   function clearStepReaderCache() {
     if (stepReaderCache && stepReaderCache.reader) {
@@ -3537,6 +3714,8 @@ export function createKernel(R, oc) {
         shape = buildLoft(it.p); topo = ensureTopoComplete(shape, createTopoMap(), '$self'); ownsTopo = true;
       } else if (it.kind === 'sweep') {
         shape = buildSweep(it.p); topo = ensureTopoComplete(shape, createTopoMap(), '$self'); ownsTopo = true;
+      } else if (it.kind === 'helix') {
+        shape = buildHelix(it.p); topo = ensureTopoComplete(shape, createTopoMap(), '$self'); ownsTopo = true;
       } else if (it.kind === 'import') {
         shape = buildImport(it.p); topo = ensureTopoComplete(shape, createTopoMap(), '$self'); ownsTopo = true;
       } else if (it.kind === 'part') {

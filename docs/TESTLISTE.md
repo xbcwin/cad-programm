@@ -2262,6 +2262,15 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Maße-Panel, verlorener Bezug & Lösen**: Tab „Maße“ zeigt `.meas-param-info`; Löschen der Quellkante markiert den Parameter als verloren (`lost`), nach Wiederherstellung erholt er sich und „Lösen“ entfernt die Verknüpfung; Hilfetexte (`deleteBody`, `measureParam`), DE/EN-Schlüsselgleichheit, Befehlssuche und Erklärtext sind vorhanden.
 - [ ] **Von Hand**: Im Browser an einem beliebigen Maßfeld auf das Lineal-Symbol klicken, eine schräge oder runde Kante im 3D-Bild anfahren (Vorschau-Linie prüfen), anklicken und anschließend über „Neu wählen“ eine andere Kante zuweisen.
 
+## Feder und Spirale (Auto [A-101], KP-32)
+
+- [x] **Zylinder-Feder Ø20, Draht 2, 5 Windungen, Steigung 5**: Über `#t-body` → `#add-helix` angelegt → Höhe `≈ 27 mm` (`25 + 2`), Durchmesser `≈ 22 mm` (`20 + 2`), exaktes Volumen innerhalb `±2 %` von `π·1²·5·√((20π)²+5²)` ohne Kernfehler.
+- [x] **Höhe/Windungen, Höhe/Steigung & Formel**: Umschalten zwischen `heightTurns` (Höhe `40` → `≈ 42 mm`), `heightPitch` (Steigung `4` → `10` Windungen) und Projektmaß `D_Feder = 24` als Formel in `#hx-d` zieht Durchmesser (`≈ 26 mm`) und Volumen exakt nach.
+- [x] **Kegel-Feder & flache Spirale**: Kegel-Feder (`r1 = 12`, `r2 = 6`, `4` Windungen, Steigung `5`, Draht `2`) baut mit Höhe `≈ 22 mm` und Volumen innerhalb `±2 %`; flache Spirale (`r1 = 5`, `r2 = 20`, `3` Windungen, Draht `2`) baut flach (`dz ≈ 2 mm`) mit Volumen innerhalb `±2 %`.
+- [x] **Rechteck-Profil, Linksgängig & Einfach-Modus**: Rechteck-Querschnitt (`3 × 1,5 mm`), linksgängige Richtung und `App.undo()` arbeiten fehlerfrei; im Modus „Einfach“ bleibt `#t-body` bei `6` Kacheln, `#add-helix` legt eine fertige Feder mit schlankem Panel an.
+- [x] **Hilfen, Befehle, Erklärtext & DE/EN-Schlüssel**: `HELP.helix`, `werkzeug-hilfen.json`, `Explain.local`, `Commands.search('feder')` und `texte-de.json`/`texte-en.json` sind vollständig ohne JavaScript-Fehler.
+- [ ] **Von Hand**: Im Browser eine Kegel-Feder und eine flache Spirale mit eigener Skizze als Querschnitt ausprobieren sowie im Modus „Einfach“ eine fertige Feder über das Körper-Menü einfügen und per Zahleneingabe anpassen.
+
 ## Fehler melden
 
 ```

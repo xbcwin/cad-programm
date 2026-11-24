@@ -23,6 +23,7 @@ const KINDS = {
   revolve: { get label() { return T('kind.revolve'); }, params: [] },
   loft: { get label() { return T('kind.loft'); }, params: [] },
   sweep: { get label() { return T('kind.sweep'); }, params: [] },
+  helix: { get label() { return T('kind.helix'); }, params: [] },
   import: { get label() { return T('kind.import'); }, params: [] },
   group: { get label() { return T('kind.group'); }, params: [] },
   part: { get label() { return T('kind.part'); }, params: [] },
@@ -466,6 +467,7 @@ const Model = (() => {
       else if (it.kind === 'extrude' || it.kind === 'revolve') o.p = sketchParams(it, ownV);
       else if (it.kind === 'loft') o.p = loftParams(it, ownV);
       else if (it.kind === 'sweep') o.p = sweepParams(it, ownV);
+      else if (it.kind === 'helix') o.p = helixParams(it, ownV);
       else if (it.kind === 'rib') o.p = ribParams(it, ownV);
       else if (it.kind === 'wrap') o.p = wrapParams(it, ownV);
       else if (it.kind === 'emboss') o.p = embossParams(it, ownV);
@@ -1031,6 +1033,58 @@ const Model = (() => {
     }
     return out;
   }
+  // Feder / Spirale: gemeinsame Kennwerte für Kern, Panel, Hüllbox und Schritt-Erklärung
+  function helixMetrics(p = {}, V = {}) {
+    const form = p.form === 'cone' || p.form === 'spiral' ? p.form : 'cyl';
+    const by = p.by === 'heightTurns' || p.by === 'heightPitch' ? p.by : 'pitchTurns';
+    const dir = p.dir === 'left' ? 'left' : 'right';
+    const startAngle = num(p.startAngle, V, 0);
+    const d = Math.max(0.2, num(p.d, V, 20));
+    const r1 = form === 'cyl' ? d / 2 : Math.max(0.1, num(p.r1, V, form === 'spiral' ? 5 : 10));
+    const r2 = form === 'cyl' ? d / 2 : Math.max(0.1, num(p.r2, V, form === 'spiral' ? 25 : 5));
+    let turns, pitch, height;
+    if (form === 'spiral') {
+      turns = Math.max(0.1, num(p.turns, V, 3));
+      pitch = 0;
+      height = 0;
+    } else if (by === 'heightTurns') {
+      turns = Math.max(0.1, num(p.turns, V, 5));
+      height = Math.max(0.1, num(p.height, V, 25));
+      pitch = height / turns;
+    } else if (by === 'heightPitch') {
+      height = Math.max(0.1, num(p.height, V, 25));
+      pitch = Math.max(0.05, num(p.pitch, V, 5));
+      turns = height / pitch;
+    } else {
+      turns = Math.max(0.1, num(p.turns, V, 5));
+      pitch = Math.max(0.05, num(p.pitch, V, 5));
+      height = turns * pitch;
+    }
+    const shape = p.shape === 'rect' ? 'rect' : p.shape === 'sketch' && p.prof ? 'sketch' : 'circle';
+    const wireD = Math.max(0.1, num(p.wireD, V, 2));
+    const profW = Math.max(0.1, num(p.profW, V, 2));
+    const profH = Math.max(0.1, num(p.profH, V, 2));
+    const wall = Math.max(0, num(p.wall, V, 0));
+    let radHalf = wireD / 2, axHalf = wireD / 2;
+    if (shape === 'rect') { radHalf = profW / 2; axHalf = profH / 2; }
+    else if (shape === 'sketch' && p.prof) {
+      const ents = Solver.cached(p.prof, V).ents;
+      const b = typeof SK !== 'undefined' ? SK.bounds(ents) : null;
+      if (b) { radHalf = Math.max(0.1, (b[2] - b[0]) / 2); axHalf = Math.max(0.1, (b[3] - b[1]) / 2); }
+    }
+    const totalHeight = (form === 'spiral' ? 0 : height) + 2 * axHalf;
+    const radialPitch = turns > 0 ? Math.abs(r2 - r1) / turns : 0;
+    return { form, by, dir, startAngle, d, r1, r2, turns, pitch, height, shape, wireD, profW, profH, wall, radHalf, axHalf, totalHeight, radialPitch };
+  }
+  function helixParams(it, V) {
+    const p = it.p || {}, m = helixMetrics(p, V);
+    let prof = null;
+    if (p.shape === 'sketch' && p.prof) {
+      const regs = SK.regions(Solver.cached(p.prof, V).ents).sort((a, b) => b.area - a.area);
+      if (regs.length) { const Lp = regs[0].outer; let cx = 0, cy = 0; for (const q of Lp.poly) { cx += q[0]; cy += q[1]; } cx /= Lp.poly.length; cy /= Lp.poly.length; prof = { outer: Lp.k, holes: regs[0].holes.map((h) => h.k), c: [cx, cy] }; }
+    }
+    return { form: m.form, by: m.by, dir: m.dir, startAngle: m.startAngle, d: m.d, r1: m.r1, r2: m.r2, turns: m.turns, pitch: m.pitch, height: m.height, shape: m.shape === 'sketch' && !prof ? 'circle' : m.shape, wireD: m.wireD, profW: m.profW, profH: m.profH, wall: m.wall, prof };
+  }
   // Zeitleiste: nur Schritte vor dem Marker zählen, unterdrückte Schritte werden übersprungen
   function activeItems(doc) {
     const end = doc.rollback == null ? doc.items.length : clamp(doc.rollback, 0, doc.items.length);
@@ -1123,6 +1177,11 @@ const Model = (() => {
         if (!box.isEmpty()) return [box.min.x, box.min.y, box.min.z, box.max.x, box.max.y, box.max.z];
       }
     }
+    if (it.kind === 'helix') {
+      const m = helixMetrics(it.p || {}, V);
+      const rmax = Math.max(m.r1, m.r2) + m.radHalf;
+      return [-rmax, -rmax, 0, rmax, rmax, m.totalHeight];
+    }
     if (it.kind === 'part') {
       const p = resolveP(it.p || {}, V);
       const r = Math.max(1, Number(p.d) || 6) / 2, dep = Math.max(2, Number(p.depth || p.length || p.h) || 10);
@@ -1176,6 +1235,12 @@ const Model = (() => {
       case 'cone': return `Ø ${f(p.d1)} × ${f(p.h)}${u}`;
       case 'sphere': case 'hemisphere': return `Ø ${f(p.d)}${u}`;
       case 'torus': return `Ø ${f(p.d)}${u}`;
+      case 'helix': {
+        const m = helixMetrics(it.p || {}, V);
+        if (m.form === 'spiral') return `Spirale R ${f(m.r1)}→${f(m.r2)}${u} · ${fmt(m.turns, 1)} Wdg`;
+        if (m.form === 'cone') return `R ${f(m.r1)}→${f(m.r2)}${u} · ${fmt(m.turns, 1)} Wdg · H ${f(m.height)}${u}`;
+        return `Ø ${f(m.d)}${u} · ${fmt(m.turns, 1)} Wdg · P ${f(m.pitch)}${u}`;
+      }
       case 'extrude': {
         if (p.extent === 'toNext' || p.extent === 'toFace') {
           const rd = typeof App !== 'undefined' && App.resolvedDist ? App.resolvedDist(it.id) : null;
@@ -1603,6 +1668,6 @@ const Model = (() => {
     if (aPos != null && aNeg != null) return aNeg < aPos;
     return aPos == null && aNeg != null;
   }
-  return { matchBodies, displayColor, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, railStart, railSections, bez3, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, loftParams, loftPathAngles, pathPatternParams, pathPlaces, wrapAngleInfo, useVars, tnum, tNumeric, newDoc, newAssemblyDoc, docType, isAssembly, isSubAssemblyRef, setDocResolver, resolveDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, scopeVars, itemVars, evalInfo, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  return { matchBodies, displayColor, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, railStart, railSections, bez3, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, helixMetrics, loftParams, loftPathAngles, pathPatternParams, pathPlaces, wrapAngleInfo, useVars, tnum, tNumeric, newDoc, newAssemblyDoc, docType, isAssembly, isSubAssemblyRef, setDocResolver, resolveDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, scopeVars, itemVars, evalInfo, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 

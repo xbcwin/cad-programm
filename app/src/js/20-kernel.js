@@ -477,6 +477,16 @@ const Kernel = (() => {
         box = [-r, -r, -t, r, r, t];
         break;
       }
+      case 'helix': {
+        const form = p.form === 'cone' || p.form === 'spiral' ? p.form : 'cyl';
+        const rMax = form === 'cyl' ? Math.abs(numOr(p.d, 20)) / 2 : Math.max(Math.abs(numOr(p.r1, 10)), Math.abs(numOr(p.r2, 25)));
+        const radHalf = p.shape === 'rect' ? Math.abs(numOr(p.profW, 2)) / 2 : Math.abs(numOr(p.wireD, 2)) / 2;
+        const axHalf = p.shape === 'rect' ? Math.abs(numOr(p.profH, 2)) / 2 : Math.abs(numOr(p.wireD, 2)) / 2;
+        const H = form === 'spiral' ? 0 : (p.by === 'heightTurns' || p.by === 'heightPitch' ? Math.abs(numOr(p.height, 25)) : Math.abs(numOr(p.turns, 5) * numOr(p.pitch, 5)));
+        const r = rMax + radHalf + 1;
+        box = [-r, -r, -axHalf - 1, r, r, H + 2 * axHalf + 1];
+        break;
+      }
       case 'part': {
         const lib = String(p.lib || '');
         const tol = Math.abs(numOr(p.tol, 0)) + 1;

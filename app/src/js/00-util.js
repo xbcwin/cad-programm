@@ -690,6 +690,7 @@ const IC = {
   sleeve: '<ellipse cx="12" cy="6" rx="6.5" ry="2.6" fill="currentColor" opacity=".2"/><path d="M5.5 6v12c0 1.4 2.9 2.6 6.5 2.6s6.5-1.2 6.5-2.6V6"/><ellipse cx="12" cy="6" rx="6.5" ry="2.6"/><ellipse cx="12" cy="6" rx="3.4" ry="1.3"/>',
   replace: '<path d="M16 3l4 4-4 4 M20 7H8a4 4 0 0 0-4 4v1 M8 21l-4-4 4-4 M4 17h12a4 4 0 0 0 4-4v-1"/>',
   deleteBody: '<path d="M12 3 4 7.5v9L12 21l8-4.5v-9z" stroke-dasharray="2.5 2" opacity=".55"/><path d="M9 9l6 6M15 9l-6 6" />',
+  helix: '<path d="M6 6.5c0-1.9 2.7-3 6-3s6 1.1 6 3-2.7 3-6 3-6 1.1-6 3 2.7 3 6 3 6 1.1 6 3-2.7 3-6 3-6-1.1-6-3" /><path d="M6 6.5c0 1.4 1.6 2.3 4 2.8 M18 12.5c0 1.4-1.6 2.3-4 2.8" opacity=".45"/>',
 };
 function icon(name, extra = '') {
   const body = IC[name] || IC.cube;
@@ -2031,6 +2032,11 @@ const HELP = {
   "tip": "Maß direkt aus einer Kantenlänge am Modell übernehmen (wandert mit)",
   "hilfe": "Klicke auf das Lineal-Symbol und wähle danach eine Kante im 3D-Bild. Tracery legt unter „Maße“ einen verknüpften Messwert an und trägt ihn als Formel hier ein. Ändert sich die Kante später, wächst oder schrumpft dieses Maß automatisch mit.",
   "tipp": "Du kannst den angelegten Messwert-Namen im Feld auch weiterrechnen lassen, zum Beispiel als „Messung_1 / 2“ oder „Messung_1 + 2“."
+ },
+ "helix": {
+  "tip": "Feder, Kegel-Feder oder flache Spirale mit Steigung, Windungen und Draht-Ø anlegen",
+  "hilfe": "Legt eine räumliche Schraubenlinie (zylindrisch oder konisch mit Anfangs- und Endradius) oder eine flache Spirale an und zieht einen Kreis (Draht-Ø), ein Rechteck oder einen eigenen Skizzen-Umriss daran entlang. Im Modus „Einfach“ erhältst du sofort eine fertige Feder mit Draht-Ø.",
+  "tipp": "Im Profi-Modus kannst du frei wählen, ob du die Feder über Steigung & Windungen, Höhe & Windungen oder Höhe & Steigung festlegst – in allen Feldern funktionieren Formeln."
  }
 };
 

@@ -264,5 +264,10 @@
     "was": "Entfernt einen oder mehrere Körper ab diesem Schritt aus dem aktuellen Modell, ohne sie dauerhaft zu löschen.",
     "wozu": "Nützlich für Hilfs- und Werkzeugkörper, Zwischenschritte oder Baugruppen-Varianten, die später im Verlauf nicht mehr gebraucht werden.",
     "achtung": "Unterdrückst du diesen Schritt oder schiebst den Zeitleisten-Marker davor, sind die Körper sofort wieder da."
+  },
+  "helix": {
+    "was": "Erzeugt entlang einer Schraubenlinie oder flachen Spirale einen dreidimensionalen Körper aus einem runden Draht, Rechteck oder eigenen Skizzen-Umriss.",
+    "wozu": "Ideal für Druck-, Zug- und Kegelfedern, Spiralfedern, Wendelrohre, Kühlschlangen oder Schnecken.",
+    "achtung": "Bei zylindrischen Federn muss die Steigung größer als die Drahtdicke sein, und der Innenradius muss immer größer als der halbe Drahtdurchmesser bleiben."
   }
 }

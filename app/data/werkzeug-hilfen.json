@@ -1313,5 +1313,10 @@
     "tip": "Maß direkt aus einer Kantenlänge am Modell übernehmen (wandert mit)",
     "hilfe": "Klicke auf das Lineal-Symbol und wähle danach eine Kante im 3D-Bild. Tracery legt unter „Maße“ einen verknüpften Messwert an und trägt ihn als Formel hier ein. Ändert sich die Kante später, wächst oder schrumpft dieses Maß automatisch mit.",
     "tipp": "Du kannst den angelegten Messwert-Namen im Feld auch weiterrechnen lassen, zum Beispiel als „Messung_1 / 2“ oder „Messung_1 + 2“."
+  },
+  "helix": {
+    "tip": "Feder, Kegel-Feder oder flache Spirale mit Steigung, Windungen und Draht-Ø anlegen",
+    "hilfe": "Legt eine räumliche Schraubenlinie (zylindrisch oder konisch mit Anfangs- und Endradius) oder eine flache Spirale an und zieht einen Kreis (Draht-Ø), ein Rechteck oder einen eigenen Skizzen-Umriss daran entlang. Im Modus „Einfach“ erhältst du sofort eine fertige Feder mit Draht-Ø.",
+    "tipp": "Im Profi-Modus kannst du frei wählen, ob du die Feder über Steigung & Windungen, Höhe & Windungen oder Höhe & Steigung festlegst – in allen Feldern funktionieren Formeln."
   }
 }

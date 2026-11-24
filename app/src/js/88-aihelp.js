@@ -82,6 +82,13 @@ const Explain = (() => {
       const p = it.p || {}, tf = p.target ? Model.find(doc, p.target) : null;
       lines.push({ k: 'op', t: `Prägt die Skizze ${p.mode === 'deboss' ? 'vertieft' : 'erhaben'} (${Units.fmtLenU(Model.num(p.height, V, 1), 2, doc)}) auf eine Fläche von „${tf ? Model.label(tf.item) : 'fehlendes Ziel'}“.` });
     }
+    if (it.kind === 'helix') {
+      const m = Model.helixMetrics(it.p || {}, V);
+      const formTxt = m.form === 'cone' ? `Kegel-Feder (Radius ${Units.fmtLenU(m.r1, 2, doc)} bis ${Units.fmtLenU(m.r2, 2, doc)})` : m.form === 'spiral' ? `Flache Spirale (Radius ${Units.fmtLenU(m.r1, 2, doc)} bis ${Units.fmtLenU(m.r2, 2, doc)})` : `Zylinder-Feder (Ø ${Units.fmtLenU(m.d, 2, doc)})`;
+      const profTxt = m.shape === 'rect' ? `Rechteck ${Units.fmtLenU(m.profW, 2, doc)} × ${Units.fmtLenU(m.profH, 2, doc)}` : m.shape === 'sketch' ? 'eigene Skizze' : `Draht-Ø ${Units.fmtLenU(m.wireD, 2, doc)}`;
+      const spanTxt = m.form === 'spiral' ? `${fmt(m.turns, 2)} Windungen` : `${fmt(m.turns, 2)} Windungen, Steigung ${Units.fmtLenU(m.pitch, 2, doc)}, Höhe ${Units.fmtLenU(m.height, 2, doc)}`;
+      lines.push({ k: 'op', t: `${formTxt} mit ${spanTxt} (${m.dir === 'left' ? 'linksgängig' : 'rechtsgängig'}), Querschnitt ${profTxt}.` });
+    }
     if (it.kind === 'mirrorStep') {
       const p = it.p || {};
       const fNames = (Array.isArray(p.features) ? p.features : []).map((fid) => Model.find(doc, fid)).filter(Boolean).map((x) => `„${Model.label(x.item)}“`);

@@ -31,6 +31,7 @@ const Toolbar = (() => {
       { id: 'split', group: T('dlg.tb.grpEdit'), domId: 't-split', icon: 'split', label: T('ctx.split'), tip: T('dlg.tb.splitTip'), cls: 'minor', help: 'split', run: () => Features.split() },
       { id: 'rib', group: T('dlg.tb.grpEdit'), domId: 't-rib', icon: 'rib', label: T('kind.rib'), tip: T('dlg.tb.ribTip'), cls: 'minor', help: 'rib', run: () => Features.startRib() },
       { id: 'route3d', group: T('dlg.tb.grpEdit'), domId: 't-route3d', icon: 'sweep', label: T('tool.fly.route3d'), tip: T('dlg.tb.route3dTip'), cls: 'minor', help: 'route3d', run: () => Features.route3d() },
+      { id: 'helix', group: T('dlg.tb.grpEdit'), domId: 't-helix', icon: 'helix', label: T('kind.helix'), tip: T('dlg.tb.helixTip'), cls: 'minor', help: 'helix', run: () => Features.helix() },
       // Konstruktion
       { id: 'datum', group: T('dlg.tb.grpConstruct'), domId: 't-datum', icon: 'originPlanes', label: T('panel.title.datumPlane'), tip: T('dlg.tb.datumTip'), cls: 'minor', help: 'datum', run: (e) => Datums.dialog(e.currentTarget) },
       { id: 'datumAxis', group: T('dlg.tb.grpConstruct'), domId: 't-datumAxis', icon: 'axes', label: T('dlg.tb.datumAxis'), tip: T('dlg.tb.datumAxisTip'), cls: 'minor', help: 'datumAxis', run: (e) => Datums.axisDialog(e.currentTarget) },
