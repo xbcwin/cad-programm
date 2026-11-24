@@ -226,6 +226,9 @@ const Model = (() => {
       for (const e of (sk && sk.ents) || []) if (e.link && e.link.id) out.push({ from: me, to: top(e.link.id), what: 'Skizze übernimmt Kante von' });
       const b = it.p && it.p.path3d && it.p.path3d.bind;
       for (const x of b || []) if (x && x.id) out.push({ from: me, to: top(x.id), what: 'Rohr hängt an' });
+      if (it.kind === 'revolve' && it.p && it.p.dir === 'toFace' && it.p.toFace && it.p.toFace.targetId) {
+        out.push({ from: me, to: top(it.p.toFace.targetId), what: 'dreht bis Fläche von' });
+      }
     });
     for (const d of doc.datums || []) {
       const b = d.base || {};
@@ -327,7 +330,15 @@ const Model = (() => {
       if (p.thru) { out.dist = sceneSpan; if (out.dir === 'two' || out.dir === 'both') { out.dir = 'two'; out.dist2 = sceneSpan; } }
     }
     else {
+      out.dir = p.dir || 'normal';
       out.angle = num(p.angle, V, 360);
+      if (out.dir === 'two') out.angle2 = num(p.angle2, V, out.angle);
+      if (out.dir === 'toFace') {
+        if (p.toFace && Array.isArray(p.toFace.o) && Array.isArray(p.toFace.fn)) {
+          out.toFace = { o: p.toFace.o.map(Number), fn: p.toFace.fn.map(Number) };
+        }
+        out.toFaceFlip = !!p.toFaceFlip;
+      }
       if (p.axis3d && Array.isArray(p.axis3d.o) && Array.isArray(p.axis3d.d)) out.axis3d = { o: p.axis3d.o.map(Number), d: p.axis3d.d.map(Number) };
       else out.axis = p.axis || { a: [0, 0], b: [0, 1] };
     }
@@ -662,7 +673,14 @@ const Model = (() => {
       case 'sphere': case 'hemisphere': return `Ø ${f(p.d)}${u}`;
       case 'torus': return `Ø ${f(p.d)}${u}`;
       case 'extrude': return p.thin ? `${f(p.dist)}${u} hoch · Wand ${f(p.wall || 2)}${u}` : `${f(p.dist)}${u} hoch`;
-      case 'revolve': return `${fmt(p.angle, 1)}°`;
+      case 'revolve': {
+        const dir = (it.p && it.p.dir) || 'normal';
+        if (dir === 'toFace') return it.p && it.p.toFace && it.p.toFace.name ? `bis „${it.p.toFace.name}“` : 'bis Fläche';
+        if (dir === 'both') return `${fmt(p.angle, 1)}° (2×${fmt((p.angle || 0) / 2, 1)}°)`;
+        if (dir === 'two') return `${fmt(p.angle, 1)}° / ${fmt(p.angle2 ?? p.angle, 1)}°`;
+        if (dir === 'reverse') return `−${fmt(p.angle, 1)}°`;
+        return `${fmt(p.angle, 1)}°`;
+      }
       case 'transform': {
         const parts = [];
         for (const k of ['dx', 'dy', 'dz']) if (Math.abs(p[k] || 0) > 1e-6) parts.push(`${k[1].toUpperCase()} ${p[k] > 0 ? '+' : ''}${fmt(p[k], 1)}`);
@@ -702,6 +720,84 @@ const Model = (() => {
     walk(doc.items, (it) => { it.t = Object.assign(T0(), it.t || {}); it.p = it.p || {}; it.finishes = it.finishes || []; if (!it.role) it.role = 'solid'; if (!it.color) it.color = nextColor(); });
     return doc;
   }
-  return { dependencies, syncLinks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, railStart, railSections, bez3, patternMatrices, instanceMatrices, loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  // Drehkörper-Bezugssystem (Achse, äußerster Radius und Bogen-Mitte in lokalen Koordinaten)
+  function revolveFrame(p, V) {
+    const sk = p && p.sketch;
+    if (!sk) return null;
+    const pl = sk.plane || { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] };
+    const norm3 = (a) => { const l = v3.len(a) || 1; return v3.mul(a, 1 / l); };
+    const o = pl.o || [0, 0, 0], x = norm3(pl.x || [1, 0, 0]), n = norm3(pl.n || [0, 0, 1]), y = v3.cross(n, x);
+    const P = (uv) => [o[0] + x[0] * uv[0] + y[0] * uv[1], o[1] + x[1] * uv[0] + y[1] * uv[1], o[2] + x[2] * uv[0] + y[2] * uv[1]];
+    let c, d;
+    if (p.axis3d && Array.isArray(p.axis3d.o) && Array.isArray(p.axis3d.d)) {
+      c = p.axis3d.o.map(Number); d = norm3(p.axis3d.d.map(Number));
+    } else {
+      const ax = p.axis || { a: [0, 0], b: [0, 1] };
+      c = P(ax.a); d = norm3(v3.sub(P(ax.b), c));
+    }
+    const ents = Solver.cached(sk, V || {}).ents;
+    const regs = SK.regions(ents);
+    let chosen = regs;
+    if (Array.isArray(p.sel) && p.sel.length) { const f = regs.filter((r) => p.sel.includes(r.key)); if (f.length) chosen = f; }
+    const pts = [];
+    for (const r of chosen) for (const q of (r.outer && r.outer.poly) || []) pts.push(P(q));
+    if (!pts.length) { const b = SK.bounds(ents); if (b) for (const q of [[b[0], b[1]], [b[2], b[1]], [b[2], b[3]], [b[0], b[3]]]) pts.push(P(q)); }
+    let rMax = 0, bestU = null, labelPt = null, hSum = 0, hCnt = 0;
+    for (const q of pts) {
+      const v = v3.sub(q, c), h = v3.dot(v, d), u = v3.sub(v, v3.mul(d, h)), rl = v3.len(u);
+      if (rl > 1e-5) { hSum += h; hCnt++; }
+      if (rl > rMax) { rMax = rl; bestU = u; labelPt = q; }
+    }
+    if (rMax < 1e-5 || !bestU) {
+      const ref = Math.abs(d[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
+      const u0 = norm3(v3.cross(ref, d));
+      return { c, d, u0, w0: v3.cross(d, u0), arcC: c.slice(), rMax: 10, labelPt: v3.add(c, v3.mul(u0, 10)), pts: [] };
+    }
+    const u0 = norm3(bestU), w0 = v3.cross(d, u0), hAvg = hCnt ? hSum / hCnt : 0;
+    return { c, d, u0, w0, arcC: v3.add(c, v3.mul(d, hAvg)), rMax, labelPt, pts };
+  }
+  function revolveHitAngle(frame, fo, fn, flip) {
+    if (!frame || !fo || !fn) return null;
+    const norm3 = (a) => { const l = v3.len(a) || 1; return v3.mul(a, 1 / l); };
+    const fnn = norm3(fn), dn = flip ? v3.mul(frame.d, -1) : frame.d;
+    const pts = frame.pts && frame.pts.length ? frame.pts : [frame.labelPt];
+    const sVals = pts.map((P) => v3.dot(v3.sub(P, fo), fnn));
+    const sMin = Math.min(...sVals), sMax = Math.max(...sVals);
+    if (sMax > 1e-3 && sMin < -1e-3) return null;
+    if (Math.max(Math.abs(sMax), Math.abs(sMin)) < 1e-4) return null;
+    const nKeep = sMax + sMin >= 0 ? fnn : v3.mul(fnn, -1);
+    const normPos = (a) => { const T = Math.PI * 2; let x = ((a % T) + T) % T; if (x < 1e-3) x = T; return x; };
+    let maxFirst = 0, any = false;
+    for (const P of pts) {
+      const v = v3.sub(P, frame.c), h = v3.dot(v, dn), u = v3.sub(v, v3.mul(dn, h));
+      if (v3.len(u) < 1e-5) continue;
+      const w = v3.cross(dn, u);
+      const A = v3.dot(u, nKeep), B = v3.dot(w, nKeep), C = v3.dot(v3.sub(v3.add(frame.c, v3.mul(dn, h)), fo), nKeep), Mab = Math.hypot(A, B);
+      if (Mab < 1e-7 || Math.abs(C) > Mab + 1e-4) return null;
+      if (Math.abs(A + C) < 1e-4 && B < -1e-6) return null;
+      const phi = Math.atan2(B, A), alpha = Math.acos(clamp(-C / Mab, -1, 1));
+      const tFirst = Math.min(normPos(phi + alpha), normPos(phi - alpha));
+      if (tFirst > maxFirst) maxFirst = tFirst;
+      any = true;
+    }
+    return any ? (maxFirst * 180) / Math.PI : null;
+  }
+  function revolveAutoFlip(frame, fo, fn, pickPtLocal) {
+    if (!frame) return false;
+    if (pickPtLocal) {
+      const vp = v3.sub(pickPtLocal, frame.c), hp = v3.dot(vp, frame.d), up = v3.sub(vp, v3.mul(frame.d, hp));
+      if (v3.len(up) > 1e-4) {
+        const phi = Math.atan2(v3.dot(up, frame.w0), v3.dot(up, frame.u0));
+        if (Math.abs(phi) > 1e-4) {
+          const wantFlip = phi < 0;
+          if (revolveHitAngle(frame, fo, fn, wantFlip) != null) return wantFlip;
+        }
+      }
+    }
+    const aPos = revolveHitAngle(frame, fo, fn, false), aNeg = revolveHitAngle(frame, fo, fn, true);
+    if (aPos != null && aNeg != null) return aNeg < aPos;
+    return aPos == null && aNeg != null;
+  }
+  return { revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, railStart, railSections, bez3, patternMatrices, instanceMatrices, loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 

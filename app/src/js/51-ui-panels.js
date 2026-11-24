@@ -678,7 +678,7 @@ const Panels = (() => {
         const nm = (id) => { const f = Model.find(App.doc, id); return f ? Model.label(f.item) : '–'; };
         const line = (txt, id) => { const r = h('div', { class: 'mini-row dep-row' }, h('span', { class: 'grow' }, txt)); if (id && Model.find(App.doc, id)) { r.style.cursor = 'pointer'; r.onclick = () => App.select([id]); } return r; };
         for (const x of up) ds.append(line(`${x.what} „${nm(x.to)}“`, x.to));
-        const back = { 'abgezogen von': 'wird hiervon abgezogen', 'vereinigt mit': 'ist hiermit vereinigt', 'Schnittmenge mit': 'bildet hiermit die Schnittmenge', 'verrechnet mit': 'ist hiermit verrechnet', 'versetzt': 'versetzt diesen Körper', 'versetzte Kopie von': 'ist eine versetzte Kopie hiervon', 'verknüpfte Kopie von': 'ist eine verknüpfte Kopie hiervon', 'Skizze übernimmt Kante von': 'übernimmt Kanten hiervon', 'Rohr hängt an': 'hat Rohrpunkte hieran' };
+        const back = { 'abgezogen von': 'wird hiervon abgezogen', 'vereinigt mit': 'ist hiermit vereinigt', 'Schnittmenge mit': 'bildet hiermit die Schnittmenge', 'verrechnet mit': 'ist hiermit verrechnet', 'versetzt': 'versetzt diesen Körper', 'versetzte Kopie von': 'ist eine versetzte Kopie hiervon', 'verknüpfte Kopie von': 'ist eine verknüpfte Kopie hiervon', 'Skizze übernimmt Kante von': 'übernimmt Kanten hiervon', 'Rohr hängt an': 'hat Rohrpunkte hieran', 'dreht bis Fläche von': 'dreht bis zu einer Fläche hiervon' };
         for (const x of down) ds.append(line(x.datum ? `Bezugsebene „${x.datum}“ hängt hieran` : x.axis ? `Bezugsachse „${x.axis}“ hängt hieran` : x.point ? `Bezugspunkt „${x.point}“ hängt hieran` : x.csys ? `Koordinatensystem „${x.csys}“ hängt hieran` : `„${nm(x.from)}“ ${back[x.what] || 'hängt hieran'}`, x.datum || x.axis || x.point || x.csys ? null : x.from));
         if (down.length) ds.open = true;
         w.append(ds);
@@ -741,7 +741,57 @@ const Panels = (() => {
           fl.append(UI.selectField({ id: 'p-wall-side', label: 'Wand-Lage', value: it.p.wallSide || 'center', options: [['center', 'Mittig'], ['in', 'Nach innen'], ['out', 'Nach außen']], onChange: (v) => setP('wallSide', v) }));
         }
       } else {
-        fl.append(UI.numField({ id: 'p-angle', label: 'Winkel', value: it.p.angle, unit: '°', onCommit: (v) => setP('angle', v) }));
+        const dir = it.p.dir || 'normal';
+        const dirSel = UI.selectField({
+          id: 'p-rev-dir', label: 'Richtung', value: dir,
+          options: [['normal', 'Eine Richtung'], ['reverse', 'Umgekehrt'], ['both', 'Symmetrisch (beidseitig gleich)'], ['two', 'Beidseitig verschieden'], ['toFace', 'Bis zu gewählter Fläche']],
+          onChange: (v) => {
+            App.change('Drehrichtung geändert', (doc) => {
+              const T = Model.find(doc, it.id).item;
+              T.p.dir = v;
+              if (v === 'two' && T.p.angle2 == null) {
+                const cur = Model.num(T.p.angle, Model.vars(doc).v, 360);
+                if (cur >= 359) { T.p.angle = 90; T.p.angle2 = 90; }
+                else T.p.angle2 = T.p.angle;
+              }
+            });
+            if (v === 'toFace' && !it.p.toFace) Features.pickRevolveFace(it.id);
+          },
+        });
+        dirSel.setAttribute('data-help', 'revolveOptions');
+        fl.append(dirSel);
+        if (dir !== 'toFace') {
+          const angLbl = dir === 'both' ? 'Gesamtwinkel' : dir === 'two' ? 'Winkel Seite 1' : 'Winkel';
+          const minA = dir === 'two' ? 0 : 0.1;
+          fl.append(UI.numField({ id: 'p-angle', label: angLbl, value: it.p.angle, unit: '°', min: minA, onCommit: (v) => setP('angle', typeof v === 'number' ? clamp(v, minA, 360) : v) }));
+          if (dir === 'both') {
+            fl.append(h('div', { class: 'mini-row', id: 'p-rev-sym-info' }, h('span', { class: 'grow' }, 'Symmetrisch'), h('b', { class: 'mono' }, `je Seite ${fmt(Model.num(it.p.angle, V, 360) / 2, 1)}°`)));
+          }
+          if (dir === 'two') {
+            fl.append(UI.numField({ id: 'p-angle2', label: 'Winkel Seite 2', value: it.p.angle2 ?? it.p.angle, unit: '°', min: 0, onCommit: (v) => setP('angle2', typeof v === 'number' ? clamp(v, 0, 360) : v) }));
+          }
+        } else {
+          const tf = it.p.toFace;
+          const fr = tf && !tf.lost ? Model.revolveFrame(it.p, V) : null;
+          const hitDeg = fr ? Model.revolveHitAngle(fr, tf.o, tf.fn, !!it.p.toFaceFlip) : null;
+          const infoTxt = !tf ? 'Noch keine Fläche gewählt' : tf.lost ? `Zielfläche „${tf.name || '?'}“ fehlt` : `${tf.kind === 'datum' ? 'Bezugsebene' : 'Fläche'}: „${tf.name || 'Fläche'}“${hitDeg != null ? ` (${fmt(hitDeg, 1)}°)` : ''}`;
+          fl.append(h('div', { class: 'mini-row', id: 'p-rev-face-info', style: tf && tf.lost ? { color: 'var(--bad)' } : null }, h('span', { class: 'grow' }, infoTxt)));
+          const pb = h('button', { type: 'button', class: 'btn', id: 'p-rev-face-pick' }); pb.innerHTML = icon('cursor') + (tf ? 'Andere Fläche wählen' : 'Fläche im Bild wählen');
+          pb.onclick = () => Features.pickRevolveFace(it.id);
+          fl.append(pb);
+          const dats = typeof Datums !== 'undefined' ? Datums.list().filter((d) => d.plane) : [];
+          if (dats.length) {
+            fl.append(UI.selectField({
+              id: 'p-rev-face-datum', label: 'Bezugsebene als Ziel',
+              value: tf && tf.kind === 'datum' ? tf.datumId : '',
+              options: [['', 'Bezugsebene wählen …'], ...dats.map((d) => [d.id, d.name])],
+              onChange: (v) => { if (v) Features.setRevolveToFace(it.id, { datumId: v }); },
+            }));
+          }
+          const flp = h('label', { class: 'check' }, h('input', { type: 'checkbox', id: 'p-rev-face-flip', checked: !!it.p.toFaceFlip }), 'Andere Richtung');
+          flp.querySelector('input').onchange = (e) => App.change('Drehrichtung umgekehrt', (doc) => { const T = Model.find(doc, it.id).item; T.p.toFaceFlip = e.target.checked; });
+          fl.append(flp);
+        }
         const axList = typeof Datums !== 'undefined' ? Datums.axes() : [];
         if (axList.length || it.p.axisId) {
           const opts = [['sketch', 'Achse aus der Skizze'], ...axList.filter((a) => a.axis).map((a) => ['da:' + a.id, 'Bezugsachse „' + a.name + '“'])];

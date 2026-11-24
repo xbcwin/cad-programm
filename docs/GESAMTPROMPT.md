@@ -94,11 +94,11 @@ Leitlinien:
 | `20-kernel.js` | Brücke zum Worker |
 | `25-app.js` | Zustand, `App.change(label, fn, {merge, amend})` mit Rückgängig (300 Schritte), Neuberechnung, Ergebnisse |
 | `30-viewer.js` | three.js-Ansicht, Picking (Flächen, Kanten), `edgePositions`, Raster, Kamera (`syncCamAnim`/`scheduleCamEmit`, `camera.updateMatrixWorld`) |
-| `35-handles.js` | Ziehgriffe (Größe, Lage, Rundungsgriff), Maus-Bedienung |
+| `35-handles.js` | Ziehgriffe (Größe, Lage, Rundungsgriff, Drehwinkel-Griff `revAngle`), Maus-Bedienung |
 | `40-library.js` | Bibliotheksteile `LIB`/`LIBMAP` (Drohnen-Bausteine mit `drone: true` ausgeblendet, bleiben für alte Projekte in `LIBMAP`) |
 | `41-dronelib.js` | FPV-Daten, Kaufteile, Herstellerrahmen |
 | `45-actions.js` | Aktionen wie Gruppieren, Ausrichten, Abstand |
-| `46-features.js` | Muster (inkl. „entlang Kurve“), Spiegeln an Fläche, Teilen, Boolesch, Wandstärke, Achse im Bild wählen (`pickAxisThen`) |
+| `46-features.js` | Muster (inkl. „entlang Kurve“), Spiegeln an Fläche, Teilen, Boolesch, Wandstärke, Achse im Bild wählen (`pickAxisThen`), Drehen bis Fläche (`pickRevolveFace`) |
 | `47-mass.js` | Volumen, Gewicht, Schwerpunkt, Material |
 | `48-joints.js` | Dreh- und Schiebegelenke, Ketten, Anschlag übernehmen, Bewegung abspielen, `add` für die KI |
 | `49-*` | Bauteile im Kontext, Zeitleiste, Protokoll, Zahleneingabe beim Ziehen |
@@ -136,7 +136,7 @@ Leitlinien:
   - Werte in `t` und `p` dürfen **Formeln** mit Maßnamen sein.
 - **`kind`:**
   - Grundkörper: `box`, `cylinder`, `sphere`, `cone`, `tube`, `torus`, `wedge`, `prism`, `pyramid`, `hemisphere`
-  - Skizzenbasiert: `extrude` (p.sketch, dist, dir, sel, thin, wall, wallSide), `revolve`, `loft` (p.sketches, ruled, tip), `sweep` (p.sketch-Pfad, shape circle/rect/sketch, d, w, h, wall, prof)
+  - Skizzenbasiert: `extrude` (p.sketch, dist, dir, sel, thin, wall, wallSide), `revolve` (p.sketch, angle, dir, angle2, toFace, toFaceFlip, axis, axisId, axis3d), `loft` (p.sketches, ruled, tip), `sweep` (p.sketch-Pfad, shape circle/rect/sketch, d, w, h, wall, prof)
   - Sonstige: `import` (STEP/STL Base64), `part` (Bibliothek, `p.lib`), `group` (children; mit `p.op` = Rechen-Gruppe), `transform` (Verschieben/Drehen/Kopieren als Schritt auf `p.target` mit `dx/dy/dz`, `rx/ry/rz`, `pivot`, `copy`)
 - **Rechen-Gruppen (`p.op`):**
   - `pattern` mit `pt`:

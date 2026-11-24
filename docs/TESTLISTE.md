@@ -1656,6 +1656,15 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Export ab eigenem Nullpunkt (STEP, STL, 3MF)**: Auswahl im Export-Dialog (`#ex-csys`) liefert STL-, 3MF- und wieder eingelesene STEP-Dateien mit Hüllmaßen ab `(0 | 0 | 0)` bis `(40 | 30 | 10)` bzw. `(30 | 40 | 10)` im gedrehten Koordinatensystem; Hilfetexte (`datumPoint`, `datumCsys`) und Befehle sind vorhanden.
 - [ ] **Von Hand**: Interaktives Setzen von Bezugspunkten und Koordinatensystem im 3D-Bild über die Skizzen-/Bezugsdialoge und Kontextleiste testen sowie die exportierte STEP-/3MF-Datei in einem Slicer oder CAD-Programm öffnen.
 
+## Drehen mit Winkel und bis Fläche (Auto [A-030])
+
+- [x] **90°-Drehung**: Rechteck neben der Y-Achse um 90° gedreht ergibt exakt ein Viertel des vollen 360°-Volumens (±1 %).
+- [x] **Symmetrisch 2×45°**: Modus `both` mit 90° Gesamtwinkel ergibt dasselbe Viertel-Volumen (±1 %) symmetrisch zu beiden Seiten der Skizze.
+- [x] **Beidseitig verschieden & Umgekehrt**: Modus `two` (`45°/45°` und `60°/30°`) sowie `reverse` (`90°`) erzeugen das erwartete Volumen und die erwartete Lage.
+- [x] **Bis zu gewählter Fläche & Nachführen**: Drehen bis zu einer ebenen Körperfläche (radial und versetzt) sowie bis zu einer 60°-Bezugsebene trifft exakt; Richtungsumkehr und automatisches Nachführen beim Verschieben des Zielkörpers funktionieren.
+- [x] **Ziehgriff für den Winkel & Hilfe**: Teil-Umdrehungen zeigen den Ziehgriff `revAngle` (bei 360° ausgeblendet), Ziehen mit der Maus ändert den Winkel (mit Rückgängig), Hilfetext `revolveOptions` ist vorhanden.
+- [ ] **Von Hand**: Im Browser beim Drehen einer Skizze direkt am orangefarbenen Winkel-Pfeil ziehen, Zahleneingabe beim Ziehen testen und das Anklicken einer Fläche im Skizzen-Abschlussdialog ausprobieren.
+
 ## Fehler melden
 
 ```

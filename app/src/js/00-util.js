@@ -1219,6 +1219,11 @@ const HELP = {
   "tip": "Eigenes Koordinatensystem anlegen und als Export-Nullpunkt wählen",
   "hilfe": "Legt ein eigenes rechtshändiges Koordinatensystem mit Ursprung an einem Punkt und Achsen entlang gewählter Kanten an. Beim Exportieren (STEP, STL, 3MF, OBJ, GLB) kannst du dieses System als Nullpunkt wählen.",
   "tipp": "Ideal für den 3D-Druck, CNC oder Baugruppen: Lege das Koordinatensystem an eine Ecke und zwei Kanten – dann beginnen die exportierten Maße genau bei 0."
+ },
+ "revolveOptions": {
+  "tip": "Drehen mit Winkel, symmetrisch, beidseitig oder bis zu einer Fläche",
+  "hilfe": "Bestimmt, wie weit und in welche Richtung sich deine Skizze um die Achse dreht: in eine Richtung, umgekehrt, symmetrisch zu beiden Seiten (z. B. 90° als 2×45°), mit zwei eigenen Winkeln oder bis zu einer gewählten Körperfläche bzw. Bezugsebene. Bei Teil-Umdrehungen erscheint ein Ziehgriff für den Winkel.",
+  "tipp": "Wenn sich das Zielteil später verschiebt, wandert der Drehkörper bei „Bis zu gewählter Fläche“ automatisch mit."
  }
 };
 
