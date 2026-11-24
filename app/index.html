@@ -13686,9 +13686,11 @@ const Joints = (() => {
   function stopPlay() {
     if (!anim) return;
     cancelAnimationFrame(anim.raf);
+    clearTimeout(anim.timer);
     for (const id of anim.ids) { const it = top(id); if (it) Viewer.updateNode(id, { matrix: Model.localMatrix(it) }); }
-    const b = anim.btn; anim = null; Viewer.requestRender();
-    if (b && b.isConnected) b.innerHTML = icon('play') + 'Bewegung abspielen';
+    const b = anim.btn, jid = anim.jid; anim = null; Viewer.requestRender();
+    const el = (b && b.isConnected) ? b : document.querySelector(`.joint-item[data-jid="${jid}"] [id^="jt-play"]`);
+    if (el) el.innerHTML = icon('play') + 'Bewegung abspielen';
   }
   function play(jid, btn) {
     if (anim) { const same = anim.jid === jid; stopPlay(); if (same) return; }
@@ -13702,17 +13704,23 @@ const Joints = (() => {
     const legs = []; let T = 0; for (let i = 1; i < seq.length; i++) { const d = Math.abs(seq[i] - seq[i - 1]) / speed * 1000; legs.push({ a0: seq[i - 1], a1: seq[i], t0: T, t1: T + d }); T += d; }
     if (T < 1) return;
     const t0 = performance.now();
-    anim = { jid, ids: [B.id, ...down.map((d) => d.it.id)], btn, raf: 0, a: j.ang };
+    const applyPose = (a) => {
+      Viewer.updateNode(B.id, { matrix: pose(j, a, home) });
+      const D = stepMatrix(j, a - j.ang); for (const d of down) Viewer.updateNode(d.it.id, { matrix: D.clone().multiply(d.m) });
+    };
+    anim = { jid, ids: [B.id, ...down.map((d) => d.it.id)], btn, raf: 0, timer: 0, a: j.ang, applyPose };
     if (btn) btn.innerHTML = icon('close') + 'Stopp';
     const step = () => {
       if (!anim) return;
+      cancelAnimationFrame(anim.raf);
+      clearTimeout(anim.timer);
       const t = performance.now() - t0;
       if (t >= T) { stopPlay(); return; }
       const L = legs.find((l) => t < l.t1) || legs[legs.length - 1], u = (t - L.t0) / Math.max(1, L.t1 - L.t0), e = u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
       const a = L.a0 + (L.a1 - L.a0) * e; anim.a = a;
-      Viewer.updateNode(B.id, { matrix: pose(j, a, home) });
-      const D = stepMatrix(j, a - j.ang); for (const d of down) Viewer.updateNode(d.it.id, { matrix: D.clone().multiply(d.m) });
+      applyPose(a);
       anim.raf = requestAnimationFrame(step);
+      anim.timer = setTimeout(step, 50);
     };
     step();
   }
@@ -13772,6 +13780,7 @@ const Joints = (() => {
       const ids = new Set(); Model.walk(App.doc.items, (x) => { ids.add(x.id); });
       if (js.some((j) => !ids.has(j.a) || !ids.has(j.b))) App.doc.joints = js.filter((j) => ids.has(j.a) && ids.has(j.b));
     });
+    App.on('results', () => { if (anim && anim.applyPose) anim.applyPose(anim.a); });
   }
   return { init, start, add, setAngle, setKind, setRange, setStops, freeRange, play, stopPlay, remove, check, describe, panel, of, allOf, downstream, pose, get list() { return list(); }, get playing() { return anim ? { jid: anim.jid, a: anim.a } : null; } };
 })();
@@ -15929,6 +15938,7 @@ const Panels = (() => {
     const rerender = debounce(() => { rerenderLeftHint.cancel(); renderLeft(); renderRight(); renderCtx(); UI.renderHint(); }, 16);
     App.on('doc', rerender); App.on('selection', () => { rerender.cancel(); renderRight(); renderCtx(); rerenderLeftHint(); }); App.on('results', rerender); DroneCheck.on('checked', () => { if (!App.sel.length) rerender(); }); Weak.on('analyzed', () => { if (!App.sel.length) rerender(); }); App.on('mode', () => { renderTools(); rerender(); });
     Viewer.on('camera', placeCtx);
+    App.on('ghosts', placeCtx);
     ViewPrefs.on('change', debounce(() => { if (leftTab === 'tree') renderLeft(); }, 30));   // Erste Schritte ein-/ausblenden
   }
   return { paramsCSV, importParamsCSV, faceEdgeList, init, renderLeft, renderRight, renderTools, renderCtx, closeFlyout, toggleFlyout, firstStepDone, firstStepsState, expand: (id) => { expanded.add(id); renderLeft(); }, showParams: () => { leftTab = 'params'; renderLeft(); } };

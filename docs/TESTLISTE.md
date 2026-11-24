@@ -1689,6 +1689,12 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Projektdatei und Export**: Namen, Farben und Sichtbarkeit bleiben in der Projektdatei und nach Neuladen erhalten; ausgeblendete Körper fehlen im Export, und „Jeder Körper als eigene Datei“ übernimmt die Körpernamen und Farben in STL und 3MF (`bodyList`-Hilfe vorhanden).
 - [ ] **Von Hand**: Im Browser bei einem geteilten Körper oder einer mehrteiligen Skizze per Maus über die Körper-Zeilen fahren (Vorschau-Markierung prüfen) und Rechtsklick-Menü („Nur diesen Körper zeigen“, „Alle Körper einblenden“) testen.
 
+## Volltest-Reparatur (Auto [F-11240339])
+
+- [x] **Kontextleiste nach Ghost-Auswertung**: Beim Auswählen eines Loch-Kindes innerhalb einer Gruppe über `App.select` erscheint `.ctxbar` automatisch nach dem `App.on('ghosts')`-Ereignis, sodass der Knopf „Muster“ (→ „Kreismuster“) klickbar ist.
+- [x] **Gelenk-Abspielen bei rAF-Stau**: Auch bei blockiertem `requestAnimationFrame` bewegt `Joints.play()` das bewegliche Teil über den Timer-Fallback und stellt am Ende Ausgangslage, `Joints.playing` und den `#jt-play`-Knopf selbst nach zwischenzeitlichem `Panels.renderRight()` sauber zurück (`App.revision` unverändert).
+- [ ] **Von Hand**: Im Bauteil-Bearbeiten-Modus auf eine Bohrung klicken und direkt „Muster → Kreismuster“ wählen sowie bei einem Gelenk unter Last „Bewegung abspielen“ ansehen.
+
 ## Fehler melden
 
 ```
