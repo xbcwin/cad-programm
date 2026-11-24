@@ -1681,6 +1681,21 @@ const HELP = {
   "tip": "Runde Löcher beim STL/3MF-Export vergrößern (+0,1 bis +0,4 mm)",
   "hilfe": "Beim 3D-Druck schrumpfen runde Bohrungen oft leicht nach innen. Mit dem Loch-Ausgleich (+0,1 bis +0,4 mm Durchmesser) werden alle runden inneren Löcher beim Export als STL oder 3MF entsprechend größer gerechnet.",
   "tipp": "Dein CAD-Modell selbst sowie STEP, IGES und BREP bleiben dabei unverändert exakt."
+ },
+ "printFit": {
+  "tip": "Passungs-Vorgaben für 3D-Druckteile: lose 0,4 / gleitend 0,2 / fest 0,1 / Presssitz 0 mm",
+  "hilfe": "Gedruckte Teile brauchen etwas Spiel, damit Bolzen, Stifte und Schrauben sauber passen. Wähle eine Vorgabe: bei Bohrungen wird das Spiel auf den Durchmesser addiert, bei Bolzen und Stiften abgezogen – als Projekt-Vorgabe oder direkt am Teil.",
+  "tipp": "Für bewegliche Deckel und Gleitsitze nimm „Gleitend“ (0,2 mm), für stramme Verbindungen „Fest“ (0,1 mm)."
+ },
+ "nozzleWall": {
+  "tip": "Prüft alle Wände gegen die gewählte Düse (Warnung unter 2 × Düse)",
+  "hilfe": "Wände dünner als zwei Bahnen der Druckdüse (unter 2 × Düse, z. B. 0,8 mm bei einer 0,4-mm-Düse) druckt der Slicer nicht mehr stabil oder lässt Lücken. Tracery warnt im Projekt-Panel, an der Ampel und bei den Schwachstellen.",
+  "tipp": "Klick auf „Stellen zeigen“, um alle zu dünnen Bereiche rot am Modell hervorzuheben."
+ },
+ "orientPrint": {
+  "tip": "Dreht das Teil automatisch so, dass möglichst wenig Überhang entsteht",
+  "hilfe": "„Für den Druck ausrichten“ prüft alle sinnvollen Liegerichtungen des Teils und dreht es in die Lage mit der kleinsten Überhangfläche und sicherem Stand auf dem Druckbett (Z = 0).",
+  "tipp": "Wähle ein einzelnes Teil aus oder richte das ganze Modell auf einmal aus – ein Klick auf Rückgängig dreht es wieder zurück."
  }
 };
 

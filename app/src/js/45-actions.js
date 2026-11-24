@@ -85,6 +85,9 @@ const Actions = (() => {
   }
   function addPart(def, params, opts = {}) {
     if (sceneEmpty() && !opts.onFace && def.role !== 'hole') App.fitAfterBuild();
+    if (def && Array.isArray(def.params) && def.params.some((q) => q.k === 'printFit') && !opts.explicitPrintFit && !(params && params.printFit) && typeof Print !== 'undefined' && Print.printFit()) {
+      params = { ...(params || {}), printFit: Print.printFit() };
+    }
     const it = Model.newItem('part', { lib: def.lib, ...params }, { name: opts.name || def.label, role: def.role });
     const hole = def.role === 'hole';
     const spot = opts.pos || (hole ? viewCenter() : freeSpot(25, 25));

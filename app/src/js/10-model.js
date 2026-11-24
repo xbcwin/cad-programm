@@ -55,7 +55,7 @@ const THREAD_MAP = Object.fromEntries(THREAD_SPECS.map((t) => [t.size, t]));
 
 const Model = (() => {
   const T0 = () => ({ x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 });
-  const defBed = () => ({ enabled: false, printer: 'custom', x: 220, y: 220, z: 250, nozzle: 0.4, holeComp: 0 });
+  const defBed = () => ({ enabled: false, printer: 'custom', x: 220, y: 220, z: 250, nozzle: 0.4, holeComp: 0, printFit: '' });
   function newDoc(name = 'Neues Projekt') {
     return {
       format: 'masswerk', version: 1, id: uid('p'), name, created: Date.now(), modified: Date.now(),
@@ -388,6 +388,8 @@ const Model = (() => {
     }
     else {
       o.p = resolveP(it.p, V);
+      if (it.p && typeof it.p.printFit === 'string') o.p.printFit = it.p.printFit;
+      if (it.kind === 'cylinder' && o.p.printFit) o.p.printFitSign = it.role === 'hole' ? 1 : -1;
       if (it.kind === 'part') {
         if (it.p && typeof it.p.size === 'string') o.p.size = it.p.size;
         if (o.p.lib === 'screwHole' && typeof threadEntry === 'function') {
@@ -1077,6 +1079,7 @@ const Model = (() => {
       z: Number(rawBed.z) > 0 ? Number(rawBed.z) : 250,
       nozzle: Number(rawBed.nozzle) > 0 ? Number(rawBed.nozzle) : 0.4,
       holeComp: Number.isFinite(Number(rawBed.holeComp)) ? clamp(Math.round(Number(rawBed.holeComp) * 100) / 100, 0, 1) : 0,
+      printFit: ['loose', 'slide', 'snug', 'press'].includes(rawBed.printFit) ? rawBed.printFit : '',
     };
     if (!Units.DEFS[doc.settings.unit]) doc.settings.unit = 'mm';
     if (doc.rollback != null && !(doc.rollback >= 0 && doc.rollback < doc.items.length)) doc.rollback = null;

@@ -916,6 +916,11 @@ const Panels = (() => {
     printerSel.setAttribute('data-help', 'printerSelect');
     printerSel.style.marginTop = '8px';
     bedSec.append(bedOn, printerSel);
+    const nozWrap = h('div', { style: { marginTop: '8px' } }, UI.numField({
+      id: 'proj-bed-nozzle', label: 'Düse Ø', value: Print.nozzle(), unit: 'mm', len: false, min: 0.1, max: 2, step: 0.1, expr: false,
+      onCommit: (v) => Print.setNozzle(v),
+    }));
+    bedSec.append(nozWrap);
     if (pb.enabled) {
       const bedFields = h('div', { class: 'fields three', style: { marginTop: '8px' } });
       for (const [k, lbl] of [['x', 'Breite'], ['y', 'Tiefe'], ['z', 'Höhe']]) {
@@ -923,7 +928,7 @@ const Panels = (() => {
           id: 'proj-bed-' + k, label: lbl, value: pb[k], axis: k, unit: 'mm', min: 10, expr: false,
           onCommit: (v) => App.change('Druckbett geändert', (doc) => {
             doc.settings = doc.settings || {};
-            doc.settings.printBed = Object.assign({ enabled: true, printer: 'custom', x: 220, y: 220, z: 250, nozzle: 0.4, holeComp: 0 }, doc.settings.printBed || {});
+            doc.settings.printBed = Object.assign({ enabled: true, printer: 'custom', x: 220, y: 220, z: 250, nozzle: 0.4, holeComp: 0, printFit: '' }, doc.settings.printBed || {});
             doc.settings.printBed[k] = v;
             const pr = Print.findPrinter(doc.settings.printBed.printer);
             if (!pr || pr[k] !== v) doc.settings.printBed.printer = 'custom';
@@ -932,14 +937,6 @@ const Panels = (() => {
           }),
         }));
       }
-      const nozWrap = h('div', { style: { marginTop: '8px' } }, UI.numField({
-        id: 'proj-bed-nozzle', label: 'Düse Ø', value: pb.nozzle, unit: 'mm', len: false, min: 0.1, step: 0.1, expr: false,
-        onCommit: (v) => App.change('Düse geändert', (doc) => {
-          doc.settings = doc.settings || {};
-          doc.settings.printBed = Object.assign({ enabled: true, printer: 'custom', x: 220, y: 220, z: 250, nozzle: 0.4, holeComp: 0 }, doc.settings.printBed || {});
-          doc.settings.printBed.nozzle = v;
-        }),
-      }));
       const fit = Print.fitCheck(pb, st);
       const bedStatus = h('div', { class: 'hint-box' + (!fit.fits ? ' warn' : ''), id: 'proj-bed-status', style: { marginTop: '8px' } });
       if (!fit.fits) {
@@ -953,7 +950,38 @@ const Panels = (() => {
         const pPrefix = fit.printer ? fit.printer.name + ' · ' : 'Druckbett ';
         bedStatus.textContent = `${pPrefix}${Units.fmtLen(pb.x, 0)} × ${Units.fmtLen(pb.y, 0)} × ${Units.fmtLen(pb.z, 0)} ${Units.label()} · Düse ${fmt(pb.nozzle, 2)} mm`;
       }
-      bedSec.append(bedFields, nozWrap, bedStatus);
+      bedSec.append(bedFields, bedStatus);
+    }
+    const pfVal = Print.printFit();
+    const pfSel = UI.selectField({
+      id: 'proj-print-fit', label: 'Passungs-Vorgabe (Druckteile)', value: pfVal,
+      options: PRINT_FIT_PROJ_OPTIONS,
+      onChange: (v) => Print.setPrintFit(v),
+    });
+    pfSel.setAttribute('data-help', 'printFit');
+    pfSel.style.marginTop = '8px';
+    bedSec.append(pfSel);
+    if (pfVal) {
+      const pfi = printFitInfo(pfVal);
+      if (pfi) bedSec.append(h('small', { id: 'proj-print-fit-hint', style: { display: 'block', color: 'var(--muted)', marginTop: '4px' } }, `${pfi.label}: Bohrungs-Assistent ${pfi.mm > 0 ? `+${fmtFixed(pfi.mm, 1)}` : '0'} mm · Bolzen ${pfi.mm > 0 ? `−${fmtFixed(pfi.mm, 1)}` : '0'} mm (${pfi.desc}).`));
+    }
+    if (st) {
+      const nw = Print.nozzleWallCheck();
+      if (nw.summary) {
+        const nwBox = h('div', { class: 'hint-box' + (nw.warn ? ' warn' : ''), id: 'proj-nozzle-wall', 'data-help': 'nozzleWall', style: { marginTop: '8px' } }, h('div', null, nw.summary));
+        if (nw.warn) {
+          const showBtn = h('button', { type: 'button', class: 'btn', id: 'proj-nozzle-wall-show', style: { marginTop: '6px' } }, 'Stellen zeigen');
+          showBtn.onclick = () => Views.thin(true, { limit: nw.minWall });
+          nwBox.append(showBtn);
+        }
+        bedSec.append(nwBox);
+      }
+      const orientRow = h('div', { class: 'btn-row', style: { marginTop: '8px' } });
+      const orientBtn = h('button', { type: 'button', class: 'btn', id: 'proj-orient-print', 'data-help': 'orientPrint' });
+      orientBtn.innerHTML = icon('overhang') + 'Für den Druck ausrichten';
+      orientBtn.onclick = () => Print.orientForPrint();
+      orientRow.append(orientBtn);
+      bedSec.append(orientRow);
     }
     const hcVal = Print.holeComp();
     const hcChoices = [0, 0.1, 0.2, 0.3, 0.4];
@@ -1199,23 +1227,48 @@ const Panels = (() => {
     if (KINDS[it.kind] && KINDS[it.kind].params.length) {
       const fl = h('div', { class: 'fields' + (KINDS[it.kind].params.length === 3 ? ' three' : '') });
       for (const q of KINDS[it.kind].params) fl.append(UI.numField({ id: 'p-' + q.k, label: q.label, value: it.p[q.k], unit: q.unit, axis: q.axis, min: q.min, int: q.int, onCommit: (val) => setP(q.k, val) }));
-      sec.append(fl); w.append(sec);
+      sec.append(fl);
+      if (it.kind === 'cylinder') {
+        const pfVal = it.p.printFit || '';
+        const pfSel = UI.selectField({
+          id: 'p-printFit', label: 'Druck-Passung', value: pfVal,
+          options: it.role === 'hole' ? PRINT_FIT_HOLE_OPTIONS : PRINT_FIT_BOLT_OPTIONS,
+          onChange: (v) => setP('printFit', v),
+        });
+        pfSel.setAttribute('data-help', 'printFit');
+        pfSel.style.marginTop = '8px';
+        sec.append(pfSel);
+        const pfi = printFitInfo(pfVal);
+        if (pfi) {
+          const dNom = Model.num(it.p.d, V, 20);
+          const dEff = Math.max(0.2, dNom + (it.role === 'hole' ? pfi.mm : -pfi.mm));
+          sec.append(h('div', { id: 'p-cyl-fit-hint', class: 'hint-box', html: `<b>Druck-Passung ${esc(pfi.label)}:</b> ${it.role === 'hole' ? '+' : '−'}${fmtFixed(pfi.mm, 1)} mm → Ø <b>${Units.fmtLenU(dEff, 2)}</b>.` }));
+        }
+      }
+      w.append(sec);
     } else if (it.kind === 'part') {
       const def = LIBMAP[it.p.lib];
       if (def) {
         const fl = h('div', { class: 'fields' });
         for (const q of def.params) {
-          if (q.type === 'select') fl.append(UI.selectField({ id: 'lp-' + q.k, label: q.label, value: it.p[q.k], options: q.options, onChange: (v) => setP(q.k, q.k === 'tipAngle' ? Number(v) : v) }));
-          else fl.append(UI.numField({ id: 'lp-' + q.k, label: q.label, value: it.p[q.k] ?? '', unit: q.unit ?? 'mm', int: q.int, placeholder: q.auto ? 'passend' : '', onCommit: (v) => setP(q.k, v) }));
+          let fld;
+          if (q.type === 'select') fld = UI.selectField({ id: 'lp-' + q.k, label: q.label, value: it.p[q.k] ?? q.def ?? '', options: q.options, onChange: (v) => setP(q.k, q.k === 'tipAngle' ? Number(v) : v) });
+          else fld = UI.numField({ id: 'lp-' + q.k, label: q.label, value: it.p[q.k] ?? '', unit: q.unit ?? 'mm', int: q.int, placeholder: q.auto ? 'passend' : '', onCommit: (v) => setP(q.k, v) });
+          if (q.k === 'printFit') fld.setAttribute('data-help', 'printFit');
+          fl.append(fld);
         }
         sec.append(fl);
+        const pfi = printFitInfo(it.p.printFit);
+        const pf = pfi ? pfi.mm : 0;
+        const pfHoleNote = pfi ? `<br><b>Druck-Passung ${esc(pfi.label)}:</b> ${pf > 0 ? `+${Units.fmtLenU(pf, 2)} mm` : '0 mm'} Spiel.` : '';
         if (def.lib === 'blindHole') {
-          const d = Model.num(it.p.d, V, 5), dep = Model.num(it.p.depth, V, 10), ang = Number(it.p.tipAngle ?? 118), tipH = blindTipHeight(d, ang);
+          const dNom = Model.num(it.p.d, V, 5), d = dNom + pf, dep = Model.num(it.p.depth, V, 10), ang = Number(it.p.tipAngle ?? 118), tipH = blindTipHeight(d, ang);
+          const dTxt = pfi && pf > 0 ? `Ø <b>${Units.fmtLenU(d, 2)}</b> (${Units.fmtLenU(dNom, 2)} + ${fmtFixed(pf, 1)} mm) · ` : '';
           const tipTxt = ang >= 179.5 ? `Flacher Boden, Tiefe ${Units.fmtLenU(dep, 2)}.` : `Bohrspitze (${fmtAngleU(ang)}): +${Units.fmtLenU(tipH, 2)} → Gesamttiefe <b>${Units.fmtLenU(dep + tipH, 2)}</b>.`;
-          sec.append(h('div', { class: 'hint-box', html: `${tipTxt} Setz es mit <b>Bohrung</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.` }));
+          sec.append(h('div', { class: 'hint-box', html: `${dTxt}${tipTxt}${pfHoleNote} Setz es mit <b>Bohrung</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.` }));
         } else if (def.lib === 'fitHole') {
-          const d = Model.num(it.p.d, V, 6), info = h7Info(d);
-          const tolTxt = info.um != null ? `<b>Passung Ø ${Units.fmtLenU(d, 2)} H7 (ISO 286):</b> ${info.esText} / 0 mm (${info.rangeText}). Im 3D-Modell wird genau das Nennmaß gebohrt – beim Fertigen auf Maß reiben.` : `<b>Passung Ø ${Units.fmtLenU(d, 2)} H7:</b> Im 3D-Modell wird genau das Nennmaß gebohrt.`;
+          const dNom = Model.num(it.p.d, V, 6), d = dNom + pf, info = h7Info(dNom);
+          const tolTxt = info.um != null ? `<b>Passung Ø ${Units.fmtLenU(d, 2)} H7 (ISO 286):</b> ${info.esText} / 0 mm (${info.rangeText}). ${pfi && pf > 0 ? `Druck-Passung ${esc(pfi.label)} (+${fmtFixed(pf, 1)} mm).` : 'Im 3D-Modell wird genau das Nennmaß gebohrt – beim Fertigen auf Maß reiben.'}` : `<b>Passung Ø ${Units.fmtLenU(d, 2)} H7:</b> Im 3D-Modell wird ${pfi && pf > 0 ? `inkl. Druck-Passung ${esc(pfi.label)} (+${fmtFixed(pf, 1)} mm) ` : 'genau das Nennmaß '}gebohrt.`;
           sec.append(h('div', { id: 'p-fit-hint', class: 'hint-box', html: tolTxt }));
         } else if (def.lib === 'centerHole') {
           const m = centerHoleMetrics(it.p.size);
@@ -1224,25 +1277,33 @@ const Panels = (() => {
           const te = threadEntry(it.p.size);
           let screwTxt = '';
           if (te) {
-            const dia = threadHoleDia(te, it.p.fit);
+            const dia = threadHoleDia(te, it.p.fit) + pf;
             const art = it.p.fit === 'tap' ? 'Kernloch' : 'Durchgang';
             let headTxt = '';
             if (it.p.fit !== 'tap') {
-              if (it.p.head === 'countersunk' && te.senkung_senk_d_mm) headTxt = ` · Senkkopf Ø ${Units.fmtLenU(te.senkung_senk_d_mm, 2)} (${te.senkung_winkel_grad || 90}°)`;
-              else if (it.p.head === 'counterbore' && te.senkung_zyl_d_mm) headTxt = ` · ${te.normId === 'pipe_g' ? 'Flachsenkung' : 'Zylindersenkung'} Ø ${Units.fmtLenU(te.senkung_zyl_d_mm, 2)} × ${Units.fmtLenU(te.senkung_zyl_t_mm, 2)}`;
+              if (it.p.head === 'countersunk' && te.senkung_senk_d_mm) headTxt = ` · Senkkopf Ø ${Units.fmtLenU(te.senkung_senk_d_mm + pf, 2)} (${te.senkung_winkel_grad || 90}°)`;
+              else if (it.p.head === 'counterbore' && te.senkung_zyl_d_mm) headTxt = ` · ${te.normId === 'pipe_g' ? 'Flachsenkung' : 'Zylindersenkung'} Ø ${Units.fmtLenU(te.senkung_zyl_d_mm + pf, 2)} × ${Units.fmtLenU(te.senkung_zyl_t_mm, 2)}`;
             }
-            screwTxt = `<b>${esc(te.id)}</b> (${esc(te.normName)}): ${art} Ø <b>${Units.fmtLenU(dia, 2)}</b>${headTxt}<br><span style="color:var(--muted)">Norm: ${esc(te.quelle)}</span><br>`;
+            screwTxt = `<b>${esc(te.id)}</b> (${esc(te.normName)}): ${art} Ø <b>${Units.fmtLenU(dia, 2)}</b>${headTxt}${pfHoleNote}<br><span style="color:var(--muted)">Norm: ${esc(te.quelle)}</span><br>`;
           }
           sec.append(h('div', { id: 'p-screw-hint', class: 'hint-box', html: `${screwTxt}Das Loch zeigt mit der flachen Seite nach oben. Setz es mit <b>Loch hier</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.` }));
-        } else if (def.lib === 'insert' || def.lib === 'nutTrap') sec.append(h('div', { class: 'hint-box', html: 'Das Loch zeigt mit der flachen Seite nach oben. Setz es mit <b>Loch hier</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.' }));
-        else if (def.lib === 'stdPin' && typeof pinEntry === 'function') {
+        } else if (def.lib === 'insert' || def.lib === 'nutTrap') {
+          sec.append(h('div', { class: 'hint-box', html: `${pfi ? `<b>Druck-Passung ${esc(pfi.label)}:</b> ${pf > 0 ? `+${Units.fmtLenU(pf, 2)} mm` : '0 mm'} Spiel.<br>` : ''}Das Loch zeigt mit der flachen Seite nach oben. Setz es mit <b>Loch hier</b> direkt auf eine Fläche, dann richtet es sich von selbst aus.` }));
+        } else if (def.lib === 'threadRod' && pfi) {
+          const nom = parseFloat(String(it.p.size || 'M6').slice(1)) || 6;
+          sec.append(h('div', { id: 'p-threadrod-hint', class: 'hint-box', html: `<b>Druck-Passung ${esc(pfi.label)}:</b> Außengewinde um ${pf > 0 ? `−${Units.fmtLenU(pf, 2)}` : '0 mm'} angepasst (effektiv Ø <b>${Units.fmtLenU(Math.max(0.8, nom - pf), 2)}</b>).` }));
+        } else if (def.lib === 'threadHole' && pfi) {
+          const nom = parseFloat(String(it.p.size || 'M6').slice(1)) || 6;
+          sec.append(h('div', { id: 'p-threadhole-hint', class: 'hint-box', html: `<b>Druck-Passung ${esc(pfi.label)}:</b> Innengewinde mit ${pf > 0 ? `+${Units.fmtLenU(pf, 2)}` : '0 mm'} Spiel (effektiv Ø <b>${Units.fmtLenU(nom + pf, 2)}</b>).` }));
+        } else if (def.lib === 'stdPin' && typeof pinEntry === 'function') {
           const pe = pinEntry(it.p.size ?? it.p.d);
           if (pe) {
             const L = Model.num(it.p.length, V, 20), tol = it.p.tol === 'h8' ? 'h8' : 'm6';
             const minD = tol === 'h8' ? pe.h8_min_mm : pe.m6_min_mm, maxD = tol === 'h8' ? pe.h8_max_mm : pe.m6_max_mm;
             const h7 = h7Info(pe.d_mm);
             const fitTxt = h7.um != null ? ` · Empfohlene Bohrung: <b>Ø ${Units.fmtLenU(pe.d_mm, 2)} H7</b> (${h7.rangeText})` : '';
-            sec.append(h('div', { id: 'p-stdpin-hint', class: 'hint-box', html: `<b>ISO 2338 - ${pe.d_mm} ${tol} × ${Units.fmtLenU(L, 1)}</b><br>Toleranzfeld ${tol}: ${fmtFixed(minD, 3)} – ${fmtFixed(maxD, 3)} mm · Fase c ≈ ${Units.fmtLenU(pe.c_mm, 2)}${fitTxt}<br><span style="color:var(--muted)">Norm: ISO 2338:1997</span>` }));
+            const pfPinTxt = pfi ? `<br><b>Druck-Passung ${esc(pfi.label)}:</b> Stift-Ø um ${pf > 0 ? `−${Units.fmtLenU(pf, 2)}` : '0 mm'} angepasst → <b>Ø ${Units.fmtLenU(Math.max(0.4, pe.d_mm - pf), 2)}</b>.` : '';
+            sec.append(h('div', { id: 'p-stdpin-hint', class: 'hint-box', html: `<b>ISO 2338 - ${pe.d_mm} ${tol} × ${Units.fmtLenU(L, 1)}</b><br>Toleranzfeld ${tol}: ${fmtFixed(minD, 3)} – ${fmtFixed(maxD, 3)} mm · Fase c ≈ ${Units.fmtLenU(pe.c_mm, 2)}${fitTxt}${pfPinTxt}<br><span style="color:var(--muted)">Norm: ISO 2338:1997</span>` }));
           }
         } else if (def.lib === 'stdKey' && typeof keyEntry === 'function') {
           const ke = keyEntry(it.p.size);
@@ -1996,7 +2057,7 @@ const Panels = (() => {
       const hole = it.role === 'hole';
       const compact = !!(face || App.edges.length);
       b(hole ? 'solid' : 'hole', hole ? T('ctx.toBody') : T('ctx.toHole'), () => Actions.toggleRole(), '', hole ? T('ctx.toBodyTip') : T('ctx.toHoleTip'), compact);
-      b('rotate', T('ctx.rotate'), (e) => UI.menu(e.currentTarget, [{ label: T('ctx.rotZ'), icon: 'rotate', kbd: 'R', run: () => Actions.rotate90(null, 'z') }, { label: T('ctx.rotX'), icon: 'rotate', run: () => Actions.rotate90(null, 'x') }, { label: T('ctx.rotY'), icon: 'rotate', run: () => Actions.rotate90(null, 'y') }]), '', T('ctx.rotateTip'), true);
+      b('rotate', T('ctx.rotate'), (e) => UI.menu(e.currentTarget, [{ label: T('ctx.rotZ'), icon: 'rotate', kbd: 'R', run: () => Actions.rotate90(null, 'z') }, { label: T('ctx.rotX'), icon: 'rotate', run: () => Actions.rotate90(null, 'x') }, { label: T('ctx.rotY'), icon: 'rotate', run: () => Actions.rotate90(null, 'y') }, '-', { label: 'Für den Druck ausrichten', icon: 'overhang', help: 'orientPrint', run: () => Print.orientForPrint() }]), '', T('ctx.rotateTip'), true);
       b('mirror', T('ctx.mirror'), (e) => UI.menu(e.currentTarget, [{ label: T('ctx.mirrorX'), icon: 'mirror', run: () => Actions.mirror(null, 'x') }, { label: T('ctx.mirrorY'), icon: 'mirror', run: () => Actions.mirror(null, 'y') }, { label: T('ctx.mirrorZ'), icon: 'mirror', run: () => Actions.mirror(null, 'z') }]), '', T('ctx.mirrorTip'), true);
       b('copy', T('common.duplicate'), () => Actions.duplicate(), '', T('ctx.dupTip'), true);
       if (App.doc.items.includes(it)) b('moveStep', T('ctx.moveStep'), () => Features.transform(), '', T('ctx.moveStepTip'), true);

@@ -8,6 +8,29 @@ const Print = (() => {
     const hc = App.doc && App.doc.settings && App.doc.settings.printBed ? Number(App.doc.settings.printBed.holeComp) : 0;
     return Number.isFinite(hc) && hc > 0 ? clamp(Math.round(hc * 100) / 100, 0, 1) : 0;
   }
+  function nozzle() {
+    const nz = App.doc && App.doc.settings && App.doc.settings.printBed ? Number(App.doc.settings.printBed.nozzle) : 0.4;
+    return Number.isFinite(nz) && nz > 0 ? clamp(Math.round(nz * 100) / 100, 0.1, 2.0) : 0.4;
+  }
+  function setNozzle(mm) {
+    const v = Number.isFinite(Number(mm)) ? clamp(Math.round(Number(mm) * 100) / 100, 0.1, 2.0) : 0.4;
+    App.change('Düse geändert', (doc) => {
+      doc.settings = doc.settings || {};
+      doc.settings.printBed = Object.assign({ enabled: false, printer: 'custom', x: 220, y: 220, z: 250, nozzle: 0.4, holeComp: 0, printFit: '' }, doc.settings.printBed || {}, { nozzle: v });
+    });
+  }
+  function printFit() {
+    const pf = App.doc && App.doc.settings && App.doc.settings.printBed ? App.doc.settings.printBed.printFit : '';
+    return ['loose', 'slide', 'snug', 'press'].includes(pf) ? pf : '';
+  }
+  function setPrintFit(id) {
+    const pf = ['loose', 'slide', 'snug', 'press'].includes(id) ? id : '';
+    const info = typeof printFitInfo === 'function' ? printFitInfo(pf) : null;
+    App.change(info ? `Druck-Passung: ${info.label}` : 'Druck-Passung ausgeschaltet', (doc) => {
+      doc.settings = doc.settings || {};
+      doc.settings.printBed = Object.assign({ enabled: false, printer: 'custom', x: 220, y: 220, z: 250, nozzle: 0.4, holeComp: 0, printFit: '' }, doc.settings.printBed || {}, { printFit: pf });
+    });
+  }
   function setPrinter(id) {
     const p = findPrinter(id);
     App.change(p ? `Drucker: ${p.name}` : id === 'custom' ? 'Eigene Druckergröße' : 'Druckbett deaktiviert', (doc) => {
@@ -150,6 +173,266 @@ const Print = (() => {
     UI.toast('Modell für den Drucker gedreht.', { icon: 'check' });
     return true;
   }
+  // ---------- DR-04: Wandstärken-Check gegen die Düse (Wand < 2 × Düse = Warnung) ----------
+  const NON_PRINT_LIBS = new Set(['stdScrew', 'stdNut', 'stdWasher', 'stdBearing', 'stdSleeve', 'stdPin', 'stdKey', 'threadRod']);
+  let wallCache = null;
+  function printableWallNodes(onlyIds = null) {
+    const out = [];
+    for (const n of Viewer.nodes.values()) {
+      if (!n.obj.visible || n.allBodiesHidden || n.role === 'hole' || n.id === '__dragprev' || !n.mesh || !n.data || !n.data.triangles) continue;
+      if (onlyIds && !onlyIds.includes(n.id)) continue;
+      if (!onlyIds) {
+        const f = Model.find(App.doc, n.id);
+        const it = f ? f.item : null;
+        if (it && (typeof Mass !== 'undefined' && Mass.fixedOf(it))) continue;
+        if (it && it.kind === 'part' && it.p && NON_PRINT_LIBS.has(it.p.lib)) continue;
+      }
+      out.push(n);
+    }
+    return out;
+  }
+  function nozzleWallCheck(nozzleVal = nozzle(), onlyIds = null) {
+    const noz = Number(nozzleVal) > 0 ? clamp(Math.round(Number(nozzleVal) * 100) / 100, 0.1, 2.0) : nozzle();
+    const minWall = round(2 * noz, 4);
+    const nodes = printableWallNodes(onlyIds);
+    if (!nodes.length) return { ok: true, warn: false, nozzle: noz, minWall, area: 0, minT: null, summary: '' };
+    const ids = nodes.map((n) => n.id);
+    const geomSig = nodes.map((n) => `${n.id}:${(App.results.get(n.id) && App.results.get(n.id).key) || ''}`).join(',');
+    const cacheKey = `${App.revision}|${noz}|${geomSig}`;
+    if (!App.busy && wallCache && wallCache.key === cacheKey) return wallCache.res;
+    const d = Viewer.thinWalls(Math.max(0.05, minWall - 0.01), ids);
+    const minT = d.minT != null ? round(d.minT + 1e-4, 3) : null;
+    const warn = d.area >= 0.5 && minT != null && minT < minWall - 0.01;
+    const summary = warn
+      ? `Wand zu dünn für ${fmt(noz, 2)}-mm-Düse: dünnste Stelle ${Units.fmtLenU(minT, 2)} (mindestens ${Units.fmtLenU(minWall, 2)} = 2 × Düse, ${Units.fmtAreaU(d.area, d.area < 100 ? 1 : 0)} betroffen).`
+      : `Wandstärke passt zur ${fmt(noz, 2)}-mm-Düse (überall mindestens ${Units.fmtLenU(minWall, 2)} = 2 × Düse).`;
+    const res = { ok: !warn, warn, nozzle: noz, minWall, area: d.area, minT, summary };
+    if (!App.busy) wallCache = { key: cacheKey, res };
+    return res;
+  }
+
+  // ---------- DR-05: Für den Druck ausrichten (minimale Überhangfläche, sichere Auflage auf Z = 0) ----------
+  function orientTargetNodes(ids = null) {
+    const all = [...Viewer.nodes.values()].filter((n) => n.obj.visible && !n.allBodiesHidden && n.role !== 'hole' && n.id !== '__dragprev' && n.mesh && n.data && n.data.triangles);
+    if (Array.isArray(ids) && ids.length) {
+      const want = new Set();
+      for (const id of ids) {
+        const t = Model.topOf(App.doc, id);
+        if (t) want.add(App.mergedInto(t.id) || t.id);
+        want.add(id);
+      }
+      const sub = all.filter((n) => want.has(n.id));
+      if (sub.length) return sub;
+    }
+    if (App.sel && App.sel.length) {
+      const want = new Set();
+      for (const id of App.sel) {
+        const t = Model.topOf(App.doc, id);
+        if (t) want.add(App.mergedInto(t.id) || t.id);
+      }
+      const sub = all.filter((n) => want.has(n.id));
+      if (sub.length) return sub;
+    }
+    return all;
+  }
+  function collectOrientTris(nodes) {
+    const tris = [];
+    const box = new THREE.Box3();
+    const va = new THREE.Vector3(), vb = new THREE.Vector3(), vc = new THREE.Vector3();
+    const ab = new THREE.Vector3(), ac = new THREE.Vector3(), nn = new THREE.Vector3();
+    for (const n of nodes) {
+      n.obj.updateMatrixWorld(true);
+      const P = n.mesh.geometry.getAttribute('position').array;
+      const T = n.data.triangles;
+      const M = n.mesh.matrixWorld;
+      for (let i = 0; i + 2 < T.length; i += 3) {
+        va.fromArray(P, T[i] * 3).applyMatrix4(M);
+        vb.fromArray(P, T[i + 1] * 3).applyMatrix4(M);
+        vc.fromArray(P, T[i + 2] * 3).applyMatrix4(M);
+        box.expandByPoint(va).expandByPoint(vb).expandByPoint(vc);
+        nn.crossVectors(ab.subVectors(vb, va), ac.subVectors(vc, va));
+        const L = nn.length();
+        if (L < 1e-10) continue;
+        tris.push({
+          ax: va.x, ay: va.y, az: va.z,
+          bx: vb.x, by: vb.y, bz: vb.z,
+          cx: vc.x, cy: vc.y, cz: vc.z,
+          nx: nn.x / L, ny: nn.y / L, nz: nn.z / L,
+          area: L / 2,
+        });
+      }
+    }
+    return { tris, box };
+  }
+  function orientCandidates(tris) {
+    const cands = [];
+    const add = (dx, dy, dz, eulerHint = null, isCurrent = false) => {
+      const l = Math.hypot(dx, dy, dz);
+      if (l < 1e-9) return;
+      const x = dx / l, y = dy / l, z = dz / l;
+      if (cands.some((c) => c.x * x + c.y * y + c.z * z > 0.9994)) return;
+      cands.push({ x, y, z, eulerHint, isCurrent });
+    };
+    add(0, 0, -1, [0, 0, 0], true);
+    add(0, 0, 1, [180, 0, 0], false);
+    add(1, 0, 0, [0, 90, 0], false);
+    add(-1, 0, 0, [0, -90, 0], false);
+    add(0, 1, 0, [-90, 0, 0], false);
+    add(0, -1, 0, [90, 0, 0], false);
+    // Häufige Flächen-Normalen aus dem Netz clustern
+    const clusters = [];
+    for (const t of tris) {
+      let cl = null;
+      for (const c of clusters) {
+        if (c.x * t.nx + c.y * t.ny + c.z * t.nz > 0.9985) { cl = c; break; }
+      }
+      if (!cl) clusters.push({ x: t.nx, y: t.ny, z: t.nz, area: t.area });
+      else cl.area += t.area;
+    }
+    clusters.sort((a, b) => b.area - a.area);
+    for (const c of clusters.slice(0, 16)) add(c.x, c.y, c.z);
+    for (const c of clusters.slice(0, 6)) add(-c.x, -c.y, -c.z);
+    // 45°-Diagonalen als Ausweichrichtungen
+    const s = Math.SQRT1_2;
+    for (const [sx, sy] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+      add(sx * s, 0, sy * s);
+      add(0, sx * s, sy * s);
+      add(sx * s, sy * s, 0);
+    }
+    return cands;
+  }
+  function evalOrientCandidate(tris, cand, lim) {
+    const ux = -cand.x, uy = -cand.y, uz = -cand.z;
+    let minH = Infinity, maxH = -Infinity;
+    for (let i = 0; i < tris.length; i++) {
+      const t = tris[i];
+      const ha = t.ax * ux + t.ay * uy + t.az * uz;
+      const hb = t.bx * ux + t.by * uy + t.bz * uz;
+      const hc = t.cx * ux + t.cy * uy + t.cz * uz;
+      if (ha < minH) minH = ha; if (hb < minH) minH = hb; if (hc < minH) minH = hc;
+      if (ha > maxH) maxH = ha; if (hb > maxH) maxH = hb; if (hc > maxH) maxH = hc;
+    }
+    let overhangArea = 0, supportVol = 0, bedArea = 0;
+    for (let i = 0; i < tris.length; i++) {
+      const t = tris[i];
+      const nz = t.nx * ux + t.ny * uy + t.nz * uz;
+      const ha = t.ax * ux + t.ay * uy + t.az * uz - minH;
+      const hb = t.bx * ux + t.by * uy + t.bz * uz - minH;
+      const hc = t.cx * ux + t.cy * uy + t.cz * uz - minH;
+      const topH = Math.max(ha, hb, hc);
+      if (nz <= -0.996 && topH <= 0.15) bedArea += t.area;
+      if (nz <= lim && topH >= 0.05) {
+        overhangArea += t.area;
+        supportVol += t.area * ((ha + hb + hc) / 3);
+      }
+    }
+    return { ...cand, overhangArea, supportVol, bedArea, height: maxH - minH };
+  }
+  function betterOrient(A, B) {
+    const ovTol = Math.max(0.5, 0.01 * Math.min(A.overhangArea, B.overhangArea));
+    if (Math.abs(A.overhangArea - B.overhangArea) > ovTol) return A.overhangArea < B.overhangArea;
+    if (A.overhangArea > 0.5 && B.overhangArea > 0.5) {
+      const svTol = Math.max(5, 0.05 * Math.min(A.supportVol, B.supportVol));
+      if (Math.abs(A.supportVol - B.supportVol) > svTol) return A.supportVol < B.supportVol;
+    }
+    const bedTol = Math.max(1, 0.05 * Math.max(A.bedArea, B.bedArea));
+    if (Math.abs(A.bedArea - B.bedArea) > bedTol) return A.bedArea > B.bedArea;
+    if (Math.abs(A.height - B.height) > 0.5) return A.height < B.height;
+    if (A.isCurrent !== B.isCurrent) return A.isCurrent;
+    return !!A.eulerHint && !B.eulerHint;
+  }
+  function bestPrintOrientation(ids = null, opts = {}) {
+    const nodes = orientTargetNodes(ids);
+    if (!nodes.length) return null;
+    const { tris, box } = collectOrientTris(nodes);
+    if (!tris.length || box.isEmpty()) return null;
+    const angle = Number(opts.angle) > 0 ? Number(opts.angle) : (typeof Views !== 'undefined' && Views.overhangAngle ? Views.overhangAngle : 45);
+    const lim = -Math.cos((angle * Math.PI) / 180);
+    const cands = orientCandidates(tris);
+    let cur = null, best = null;
+    for (const c of cands) {
+      const ev = evalOrientCandidate(tris, c, lim);
+      if (c.isCurrent) cur = ev;
+      if (!best || betterOrient(ev, best)) best = ev;
+    }
+    return { nodes, tris, box, cur, best, angle };
+  }
+  function orientForPrint(ids = null, opts = {}) {
+    const plan = bestPrintOrientation(ids, opts);
+    if (!plan) { UI.toast('Kein sichtbarer Körper zum Ausrichten.', { icon: 'info' }); return { ok: false, changed: false }; }
+    const { nodes, tris, box, cur, best } = plan;
+    if (best.isCurrent && Math.abs(box.min.z) < 0.05) {
+      const msg = best.overhangArea < 0.5
+        ? 'Liegt schon optimal ohne Überhänge auf dem Druckbett.'
+        : `Schon optimal ausgerichtet (${Units.fmtAreaU(best.overhangArea, best.overhangArea < 100 ? 1 : 0)} Überhang).`;
+      UI.toast(msg, { icon: 'check' });
+      return { ok: true, changed: false, before: cur.overhangArea, after: best.overhangArea, bedArea: best.bedArea, beforeBed: cur.bedArea };
+    }
+    const D2R = Math.PI / 180, R2D = 180 / Math.PI;
+    const piv = box.getCenter(new THREE.Vector3());
+    let qAdd;
+    if (best.eulerHint) {
+      qAdd = new THREE.Quaternion().setFromEuler(new THREE.Euler(best.eulerHint[0] * D2R, best.eulerHint[1] * D2R, best.eulerHint[2] * D2R, 'XYZ'));
+    } else {
+      const dVec = new THREE.Vector3(best.x, best.y, best.z).normalize();
+      qAdd = dVec.z > 0.9999
+        ? new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI, 0, 0, 'XYZ'))
+        : new THREE.Quaternion().setFromUnitVectors(dVec, new THREE.Vector3(0, 0, -1));
+    }
+    const mAdd = new THREE.Matrix4().makeTranslation(piv.x, piv.y, piv.z)
+      .multiply(new THREE.Matrix4().makeRotationFromQuaternion(qAdd))
+      .multiply(new THREE.Matrix4().makeTranslation(-piv.x, -piv.y, -piv.z));
+    const bRot = new THREE.Box3(), tmpV = new THREE.Vector3();
+    for (let i = 0; i < tris.length; i++) {
+      const t = tris[i];
+      bRot.expandByPoint(tmpV.set(t.ax, t.ay, t.az).applyMatrix4(mAdd));
+      bRot.expandByPoint(tmpV.set(t.bx, t.by, t.bz).applyMatrix4(mAdd));
+      bRot.expandByPoint(tmpV.set(t.cx, t.cy, t.cz).applyMatrix4(mAdd));
+    }
+    const shift = bRot.isEmpty()
+      ? new THREE.Vector3(0, 0, 0)
+      : new THREE.Vector3(piv.x - (bRot.min.x + bRot.max.x) / 2, piv.y - (bRot.min.y + bRot.max.y) / 2, -bRot.min.z);
+    const nodeIds = new Set(nodes.map((n) => n.id));
+    const fullModel = nodeIds.size >= [...Viewer.nodes.values()].filter((n) => n.obj.visible && !n.allBodiesHidden && n.role !== 'hole' && n.id !== '__dragprev').length;
+    const rnd = (v) => Math.round(v * 1e4) / 1e4;
+    const snapDeg = (d) => {
+      for (const a of [0, 90, -90, 180, -180]) if (Math.abs(d - a) < 1e-3) return a;
+      return rnd(d);
+    };
+    App.change('Für den Druck ausgerichtet', (doc) => {
+      const vars = Model.vars(doc);
+      Model.useVars(vars);
+      for (const it of doc.items) {
+        if (!it || it.hidden) continue;
+        if (!fullModel) {
+          const targetMatch = nodeIds.has(it.id) || nodeIds.has(App.mergedInto(it.id));
+          let holeMatch = false;
+          if (!targetMatch && it.role === 'hole') {
+            const hb = typeof Actions !== 'undefined' && Actions.worldBox ? Actions.worldBox(it.id) : null;
+            if (hb && hb.intersectsBox(box)) holeMatch = true;
+          }
+          if (!targetMatch && !holeMatch) continue;
+        }
+        it.t = it.t || { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 };
+        const tn = Model.tNumeric(it);
+        const pNew = new THREE.Vector3(tn.x, tn.y, tn.z).applyMatrix4(mAdd).add(shift);
+        const qOld = new THREE.Quaternion().setFromEuler(new THREE.Euler(tn.rx * D2R, tn.ry * D2R, tn.rz * D2R, 'XYZ'));
+        const qNew = qAdd.clone().multiply(qOld);
+        const eNew = new THREE.Euler().setFromQuaternion(qNew, 'XYZ');
+        it.t.x = rnd(pNew.x); it.t.y = rnd(pNew.y); it.t.z = rnd(pNew.z);
+        it.t.rx = snapDeg(eNew.x * R2D); it.t.ry = snapDeg(eNew.y * R2D); it.t.rz = snapDeg(eNew.z * R2D);
+      }
+    });
+    const beforeTxt = Units.fmtAreaU(cur.overhangArea, cur.overhangArea < 100 ? 1 : 0);
+    const afterTxt = Units.fmtAreaU(best.overhangArea, best.overhangArea < 100 ? 1 : 0);
+    UI.toast(
+      best.overhangArea < 0.5
+        ? `Für den Druck ausgerichtet – keine Überhänge mehr (vorher ${beforeTxt}).`
+        : `Für den Druck ausgerichtet: Überhang von ${beforeTxt} auf ${afterTxt} verringert.`,
+      { icon: 'check', ms: 4200 },
+    );
+    return { ok: true, changed: true, before: cur.overhangArea, after: best.overhangArea, bedArea: best.bedArea, beforeBed: cur.bedArea };
+  }
   function checks() {
     const out = [];
     const st = stats();
@@ -160,6 +443,12 @@ const Print = (() => {
     const fit = fitCheck(pb, st);
     if (!fit.fits) {
       out.push({ s: 'warn', t: 'Passt nicht auf den Drucker', d: fit.summary, fit });
+    }
+    const wallNodes = printableWallNodes();
+    const totalTris = wallNodes.reduce((s, n) => s + ((n.data && n.data.triangles && n.data.triangles.length) || 0) / 3, 0);
+    if (wallNodes.length && totalTris <= 25000) {
+      const nw = nozzleWallCheck();
+      if (nw.warn) out.push({ s: 'warn', t: 'Wand zu dünn für die Düse', d: nw.summary, nozzleWall: nw });
     }
     const bodies = App.doc.items.filter((x) => x.role !== 'hole' && !x.hidden).length;
     if (!out.length) out.push({ s: 'ok', t: `${Units.fmtLen(st.x, 2)} × ${Units.fmtLen(st.y, 2)} × ${Units.fmtLen(st.z, 2)} ${Units.label()}`, d: `${bodies} ${bodies === 1 ? 'Körper' : 'Körper'}, Ursprung bei (0 | 0 | 0). Abmessungen der Hüllbox.` });
@@ -188,6 +477,11 @@ const Print = (() => {
         const rb = h('button', { type: 'button', class: 'btn', style: { marginTop: '6px' } }, 'So drehen');
         rb.onclick = () => { UI.closePop(); applyRotationSuggestion(c.fit.suggestion); };
         infoCol.append(rb);
+      }
+      if (c.nozzleWall) {
+        const wb = h('button', { type: 'button', class: 'btn', style: { marginTop: '6px' } }, 'Stellen zeigen');
+        wb.onclick = () => { UI.closePop(); Views.thin(true, { limit: c.nozzleWall.minWall }); };
+        infoCol.append(wb);
       }
       row.append(stI, infoCol); list.append(row);
     }
@@ -566,6 +860,11 @@ const Print = (() => {
         rb.onclick = () => { UI.closeModal(); applyRotationSuggestion(cs[0].fit.suggestion); };
         warnBox.append(rb);
       }
+      if (cs[0].nozzleWall) {
+        const wb = h('button', { type: 'button', class: 'btn', id: 'ex-nozzle-show', style: { marginTop: '6px' } }, 'Stellen zeigen');
+        wb.onclick = () => { UI.closeModal(); Views.thin(true, { limit: cs[0].nozzleWall.minWall }); };
+        warnBox.append(wb);
+      }
       body.append(warnBox);
     }
     UI.modal({ title: 'Exportieren', body, actions: [{ label: 'Abbrechen' }, { label: 'Als ZIP speichern', primary: true, run: () => { runExport(opts); } }] });
@@ -790,10 +1089,11 @@ const Print = (() => {
     } catch (e) { tst.remove(); UI.toast('Export hat nicht geklappt: ' + e.message, { kind: 'bad' }); }
   }
   function init() {
-    App.on('results', updateAmpel); App.on('doc', debounce(updateAmpel, 200));
+    App.on('results', () => { wallCache = null; updateAmpel(); });
+    App.on('doc', debounce(() => { wallCache = null; updateAmpel(); }, 200));
     $('#ampel').addEventListener('click', (e) => openAmpel(e.currentTarget));
   }
-  return { PRINTERS, findPrinter, setPrinter, holeComp, setHoleComp, fitCheck, applyRotationSuggestion, get lastHoleComp() { return lastHoleComp; }, turntable, turntableDialog, get lastVideo() { return lastVideo; }, get lastTris() { return lastTris; }, buildSTL, buildSTLText, build3MF, buildOBJ, buildGLB, entsToDXF, entsToSVG, save2D, faceTo2D, get last2D() { return last2D; }, exportSelection, get lastExport() { return lastExport; }, runExport, init, stats, checks, exportDialog, imageDialog, saveImage, imageSize, save, safeName, updateAmpel };
+  return { PRINTERS, findPrinter, setPrinter, nozzle, setNozzle, printFit, setPrintFit, PRINT_FITS: typeof PRINT_FITS !== 'undefined' ? PRINT_FITS : [], printFitMm: typeof printFitMm === 'function' ? printFitMm : () => 0, holeComp, setHoleComp, fitCheck, applyRotationSuggestion, nozzleWallCheck, bestPrintOrientation, orientForPrint, get lastHoleComp() { return lastHoleComp; }, turntable, turntableDialog, get lastVideo() { return lastVideo; }, get lastTris() { return lastTris; }, buildSTL, buildSTLText, build3MF, buildOBJ, buildGLB, entsToDXF, entsToSVG, save2D, faceTo2D, get last2D() { return last2D; }, exportSelection, get lastExport() { return lastExport; }, runExport, init, stats, checks, exportDialog, imageDialog, saveImage, imageSize, save, safeName, updateAmpel };
 })();
 
 // ---------- ZIP (mit Kompression, wenn der Browser sie kann) ----------
