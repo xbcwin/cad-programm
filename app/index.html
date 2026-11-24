@@ -1361,9 +1361,9 @@ const HELP = {
   "tipp": "Ideal für Rippen, Stege und dünne Halter, z. B. einen Kabelhalter: Bogen zeichnen, Wand 2 mm, 8 mm hochziehen. Ändert sich die Linie, wandert die Wand mit."
  },
  "project2d": {
-  "tip": "Kante eines Körpers in die Skizze holen",
-  "hilfe": "Klick in der Skizze auf eine Kante eines Körpers. Tracery schiebt sie senkrecht auf die Zeichenebene und legt sie als Element an: gerade Kanten als Linie, runde als Bogen oder Kreis, alles andere als Spline. Die Kante bleibt mit dem Körper verbunden (Ketten-Symbol): Ändert sich der Körper, wandert sie mit. Klickst du auf eine Fläche statt auf eine Kante, kommt der ganze Schnitt des Körpers mit der Skizzen-Ebene als Kontur in die Skizze – z. B. der Querschnitt eines Gehäuses, um daran weiterzuzeichnen.",
-  "tipp": "So passt ein Deckel genau auf ein Gehäuse: Skizze auf die Oberseite, die Außenkanten übernehmen, „Versatz“ nach innen – fertig ist der Rand. Wird das Gehäuse breiter, wächst der Deckel mit. Soll eine Kante stehen bleiben: anklicken, „Verbindung lösen“."
+  "tip": "Kante oder ganze ebene Fläche in die Skizze holen",
+  "hilfe": "Klick in der Skizze auf eine Kante eines Körpers – sie kommt als Linie, Bogen, Kreis oder Spline in die Skizze und bleibt mit dem Körper verbunden. Mit Umschalt + Klick auf eine ebene Körperfläche übernimmst du alle Randkanten (Außenkontur und Löcher) auf einmal. Im Feld „Versatz“ stellst du bei Bedarf einen Abstand ein (+ nach außen, − nach innen). Ein normaler Klick auf eine Fläche holt den Schnitt des Körpers mit der Skizzen-Ebene.",
+  "tipp": "So passt ein Deckel oder eine Dichtung mit Spiel: Skizze auf die Oberseite, Versatz auf 0,2 mm oder 2 mm stellen und mit Umschalt + Klick die Fläche übernehmen – Außenrand und Löcher entstehen versetzt auf einmal und wachsen mit."
  },
  "mirror2d": {
   "tip": "Elemente an einer Linie spiegeln",
@@ -14455,7 +14455,7 @@ const Sketch = (() => {
     { id: 'splitl', icon: 'splitLine', label: 'Teilen', key: 'Y', tip: 'Linie oder Bogen an einem Punkt in zwei Stücke teilen' },
     { id: 'offset', icon: 'offset2d', label: 'Versatz', key: 'F', tip: 'Parallele Kopie im Abstand – bleibt per Regel verbunden' },
     { id: 'wall', icon: 'wall2d', label: 'Wand', key: 'N', tip: 'Aus einer offenen Linie eine Wand mit Dicke machen – z. B. Rippen und Stege' },
-    { id: 'project', icon: 'projectEdge', label: 'Kante', key: 'Z', tip: 'Kante eines Körpers in die Skizze holen – als feste Linie, Bogen, Kreis oder Spline' },
+    { id: 'project', icon: 'projectEdge', label: 'Kante', key: 'Z', tip: 'Kante oder mit Umschalt + Klick eine ganze ebene Fläche (auch mit Versatz) in die Skizze holen' },
     { id: 'mirror', icon: 'mirror', label: 'Spiegeln', key: 'M', tip: 'An einer Linie spiegeln – legt Symmetrie-Regeln an' },
     { id: 'patrect', icon: 'patternRect', label: 'Rechteckmuster', key: 'Q', tip: 'Elemente in Reihen und Spalten vervielfachen' },
     { id: 'patcirc', icon: 'patternCirc', label: 'Kreismuster', key: 'W', tip: 'Elemente im Kreis vervielfachen' },
@@ -14473,7 +14473,7 @@ const Sketch = (() => {
     bgcal: 'Klick den ersten Punkt auf dem Bild an, dann den zweiten. Danach tippst du den echten Abstand ein.',
     splitl: 'Klick auf eine Linie oder einen Bogen – dort wird das Element in zwei Stücke geteilt, die verbunden bleiben. Fängt an Mitte und Schnittpunkten.',
     extend: 'Klick nahe an das Ende einer Linie – sie wächst bis zur nächsten Linie, zum nächsten Bogen oder Kreis und bleibt dort per Regel hängen.',
-    project: 'Klick auf eine Kante eines Körpers – sie kommt als feste Linie, Bogen, Kreis oder Spline in die Skizze und bleibt mit dem Körper verbunden. Klick auf eine <b>Fläche</b> holt den ganzen Schnitt des Körpers mit der Skizzen-Ebene.',
+    project: 'Klick auf eine <b>Kante</b> holt sie verbunden in die Skizze. <b>Umschalt + Klick</b> auf eine ebene Fläche übernimmt alle Randkanten (außen und Löcher) auf einmal – rechts mit <b>Versatz</b> (+ außen / − innen). Klick ohne Umschalt auf eine Fläche holt den Schnitt.',
     wall: 'Dicke rechts einstellen, dann eine offene Linie, einen Bogen oder eine Spline anklicken – daraus wird eine geschlossene Wand zum Hochziehen. Die Linie bleibt als Hilfslinie in der Mitte.',
     point: 'Klick setzt einen Punkt. Punkte bilden keine Fläche, sind aber Bezug für Maße und Regeln. Auf einer Körperfläche werden reine Punkte beim „Fertig“ zu Bohrungen.',
     tpl: 'Schablone und Maße rechts wählen, dann ins Bild klicken – der Klick ist die Mitte. Fängt an Nullpunkt und Mittelpunkten.',
@@ -14799,7 +14799,7 @@ const Sketch = (() => {
     if (Notes.active) Notes.stop();
     Panels.closeFlyout(); UI.closePop();
     const F = frameWorld(init.plane, init.W);
-    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.mode === 'patpath' ? 'line' : 'rect', draft: null, sels: [], get sel() { return this.sels && this.sels.length === 1 ? this.sels[0] : null; }, set sel(v) { this.sels = v ? [v] : []; }, band: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, off: { count: 1, both: false, corners: 'sharp' }, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, hoverEnt: null, trimHover: null, check: null, checkFocus: null, autoDef: null };
+    S = { ...init, F, tool: skipDraw || init.ctx.mode === 'edit' || ((init.ctx.mode === 'loftpath' || init.ctx.mode === 'loftrail' || init.ctx.mode === 'loftrail2') && init.ents.length) ? 'select' : init.ctx.mode === 'patpath' ? 'line' : 'rect', draft: null, sels: [], get sel() { return this.sels && this.sels.length === 1 ? this.sels[0] : null; }, set sel(v) { this.sels = v ? [v] : []; }, band: null, cam: Viewer.saveCamera(), undo: [], polySides: 6, construction: false, step: null, hover: null, snapSet: defaultSnapSet(), pat: { nx: 3, dx: 10, ny: 1, dy: 10, n: 6, ang: 360 }, xm: { mode: 'move', dx: 10, dy: 0, ang: 90, copy: false }, off: { count: 1, both: false, corners: 'sharp' }, projOff: 0, corner: { mode: 'fillet', r: 2 }, txt: { s: 'Tracery', h: 5, font: 'inter', align: 'l' }, tpl: { type: 'qfp', p: { ...SKO.TEMPLATES.qfp.p } }, wallT: 2, bg: init.bg ? deepClone(init.bg) : null, patSel: [], patCenter: null, patPick: false, mir: null, hoverEnt: null, trimHover: null, check: null, checkFocus: null, autoDef: null };
     S.dims = init.dims || []; S.cons = init.cons || []; S.picks = []; S.dimFirst = null; S.selCon = null;
     S.plane0 = deepClone(init.plane); S.pOff = init.pOff || 0; S.pTilt = 0;
     if (S.pOff) applyPlane(false, true);
@@ -14878,6 +14878,7 @@ const Sketch = (() => {
     const carry = (id === 'xmove' || id === 'patrect' || id === 'patcirc') ? selectedIds() : [];
     S.tool = id; S.draft = null; S.picks = []; S.dimFirst = null; hideEntry(); hideDimBox();
     S.mir = null; S.patSel = carry; S.patPick = false; S.trimHover = null; S.trimming = false; S.hoverEnt = null; S.autoDef = null;
+    Viewer.highlightFace('hover', null, null);
     if (id !== 'select') clearSel();
     for (const el of [bar, cbar]) if (el) $$('.tool[data-tool]', el).forEach((b) => b.classList.toggle('active', b.dataset.tool === id));
     UI.hint(HINTS[id]); Panels.renderRight(); render();
@@ -16474,7 +16475,194 @@ const Sketch = (() => {
     reapply(); render(); Panels.renderRight();
     UI.toast(`Schnitt übernommen: ${n2} ${n2 === 1 ? 'Stück' : 'Stücke'} – die Kontur des Körpers in dieser Ebene.`, { icon: 'check' });
   }
+  function faceEdgeTo2D(g, W, F, fnW) {
+    if (g.t === 'LINE') {
+      const aW = new THREE.Vector3(...g.a).applyMatrix4(W), bW = new THREE.Vector3(...g.b).applyMatrix4(W);
+      const a = uvIn(F, aW), b = uvIn(F, bW);
+      if (SK.d2(a, b) < 1e-4) return null;
+      return { ent: { type: 'line', a, b }, pts3: [aW, bW] };
+    }
+    if (g.t === 'CIRCLE' && g.c && g.r > 1e-6) {
+      const cW = new THREE.Vector3(...g.c).applyMatrix4(W);
+      const aW = new THREE.Vector3(...g.a).applyMatrix4(W);
+      const mW = new THREE.Vector3(...g.m).applyMatrix4(W);
+      const bW = new THREE.Vector3(...g.b).applyMatrix4(W);
+      const cnW = g.n ? new THREE.Vector3(...g.n).transformDirection(W).normalize() : fnW.clone();
+      const closed = aW.distanceTo(bW) < 1e-4;
+      if (Math.abs(cnW.dot(F.n)) > 1 - 1e-4) {
+        return closed
+          ? { ent: { type: 'circle', c: uvIn(F, cW), r: round(g.r, 4) }, pts3: [] }
+          : { ent: { type: 'arc', a: uvIn(F, aW), m: uvIn(F, mW), b: uvIn(F, bW) }, pts3: [] };
+      }
+      const uW = aW.clone().sub(cW).normalize();
+      const vW = new THREE.Vector3().crossVectors(cnW, uW).normalize();
+      const angOf = (p) => { const d = p.clone().sub(cW); return Math.atan2(d.dot(vW), d.dot(uW)); };
+      const normA = (a) => ((a % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+      let span = Math.PI * 2;
+      if (!closed) {
+        const am = normA(angOf(mW)), ab = normA(angOf(bW));
+        span = ab > 1e-6 ? (am <= ab + 1e-4 ? ab : ab - Math.PI * 2) : Math.PI * 2;
+      }
+      const N = 24, pts = [], pts3 = [];
+      for (let i = 0; i <= N; i++) {
+        const th = (i / N) * span;
+        const pW = cW.clone().addScaledVector(uW, Math.cos(th) * g.r).addScaledVector(vW, Math.sin(th) * g.r);
+        pts3.push(pW);
+        const uv = uvIn(F, pW);
+        if (!pts.length || SK.d2(pts[pts.length - 1], uv) > 1e-4) pts.push(uv);
+      }
+      const en = edgeGeom2D(pts, 'CIRCLE');
+      return en ? { ent: en, pts3 } : null;
+    }
+    const src = g.pts && g.pts.length >= 2 ? g.pts : [g.a, g.b];
+    const pts3 = src.map((q) => new THREE.Vector3(...q).applyMatrix4(W));
+    const pts = [];
+    for (const v of pts3) { const uv = uvIn(F, v); if (!pts.length || SK.d2(pts[pts.length - 1], uv) > 1e-4) pts.push(uv); }
+    const en = edgeGeom2D(pts, g.t);
+    return en ? { ent: en, pts3 } : null;
+  }
+  function weldLoop(ents) {
+    const pts = [];
+    const weld = (p) => { for (const q of pts) if (SK.d2(p, q) < 1e-3) return q.slice(); pts.push(p.slice()); return p.slice(); };
+    for (const e of ents) {
+      if (e.type === 'line' || e.type === 'arc') { e.a = weld(e.a); e.b = weld(e.b); }
+    }
+    return ents;
+  }
+  function loopSignedArea2(segs) {
+    const poly = [];
+    for (const s of segs) {
+      const seg = s.e.type === 'line' ? { t: 'line', a: s.a, b: s.b } : { t: 'arc', a: s.a, m: s.e.m, b: s.b };
+      const pts = SK.segPoints(seg);
+      for (let i = 0; i < pts.length - 1; i++) poly.push(pts[i]);
+    }
+    let a2 = 0;
+    for (let i = 0; i < poly.length; i++) {
+      const p = poly[i], q = poly[(i + 1) % poly.length];
+      a2 += p[0] * q[1] - q[0] * p[1];
+    }
+    return a2;
+  }
+  function offsetLoop2D(ents, off, isHole) {
+    if (Math.abs(off) < 1e-6) return { ok: true, items: ents.map((e) => ({ src: e, ent: deepClone(e) })) };
+    const dLoop = isHole ? -off : off;
+    if (ents.length === 1 && ents[0].type === 'circle') {
+      const r = SKO.offsetShape(ents[0], dLoop);
+      return r.ok ? { ok: true, items: [{ src: ents[0], ent: r.ent }] } : r;
+    }
+    if (ents.length === 1 && ents[0].type === 'spline' && ents[0].closed) {
+      const P = ents[0].pts || [];
+      let a2 = 0;
+      for (let i = 0; i < P.length; i++) { const p = P[i], q = P[(i + 1) % P.length]; a2 += p[0] * q[1] - q[0] * p[1]; }
+      const r = SKO.offsetShape(ents[0], a2 >= 0 ? -dLoop : dLoop);
+      return r.ok ? { ok: true, items: [{ src: ents[0], ent: r.ent }] } : r;
+    }
+    if (ents.every((e) => e.type === 'line' || e.type === 'arc')) {
+      const ch = SKO.chainOf(ents, ents[0]);
+      if (!ch.closed || ch.segs.length !== ents.length) return { ok: false, why: 'Der Umriss ist nicht geschlossen – Versatz geht hier nicht.' };
+      const a2 = loopSignedArea2(ch.segs);
+      const sd = a2 >= 0 ? -dLoop : dLoop;
+      return SKO.offsetChain(ch, sd, 'sharp');
+    }
+    return { ok: false, why: 'Für diese gemischte Kontur gibt es keinen Versatz.' };
+  }
+  async function projectFaceAt(hit) {
+    if (!hit || !hit.node || hit.faceIdx == null || hit.faceIdx < 0) return;
+    const r = App.results.get(hit.id); if (!r || !r.key) return;
+    const fi = r.data && r.data.faces && r.data.faces[hit.faceIdx];
+    if (!fi || fi.t !== 'PLANE' || !fi.n) { UI.toast('Umschalt + Klick übernimmt die Randkanten einer ebenen Fläche.', { icon: 'info' }); return; }
+    const W = Model.worldMatrix(App.doc, hit.id);
+    const fnW = new THREE.Vector3(...fi.n).transformDirection(W).normalize();
+    if (Math.abs(fnW.dot(S.F.n)) < 1e-3) { UI.toast('Diese Fläche steht senkrecht auf der Skizzen-Ebene.', { icon: 'info' }); return; }
+    const F = S.F;
+    let loops;
+    try { loops = await Kernel.call('faceLoops', { key: r.key, faceIdx: hit.faceIdx }); } catch (e) { UI.toast('Die Flächenkanten konnte ich nicht lesen: ' + (e.message || e), { kind: 'bad' }); return; }
+    if (!S || S.F !== F) return;
+    if (!loops || !loops.length) { UI.toast('Diese Fläche hat keine Kanten.', { icon: 'info' }); return; }
+    const off = Number(S.projOff) || 0;
+    const own = S.ctx.editId ? Model.topOf(App.doc, S.ctx.editId) : null;
+    const canLink = !!(Model.find(App.doc, hit.id) && !(own && own.id === hit.id));
+    const addedEnts = [];
+    let skippedHoles = 0;
+    for (let li = 0; li < loops.length; li++) {
+      const isHole = li > 0;
+      const loopEnts = [];
+      const baseLinks = new Map();
+      let tmpIdx = 0;
+      for (const g of loops[li] || []) {
+        const res = faceEdgeTo2D(g, W, F, fnW);
+        if (!res) continue;
+        const tmp = { id: '_tmp_' + li + '_' + (tmpIdx++), ...res.ent };
+        if (S.construction) tmp.con = true;
+        loopEnts.push(tmp);
+        if (canLink) baseLinks.set(tmp.id, edgeLink(hit.id, g, res.pts3));
+      }
+      if (!loopEnts.length) continue;
+      weldLoop(loopEnts);
+      let items;
+      if (Math.abs(off) >= 1e-6) {
+        const oRes = offsetLoop2D(loopEnts, off, isHole);
+        if (!oRes.ok) {
+          if (!isHole) { UI.toast(oRes.why, { kind: 'bad' }); return; }
+          skippedHoles++;
+          continue;
+        }
+        items = oRes.items;
+      } else {
+        items = loopEnts.map((e) => ({ src: e, ent: deepClone(e) }));
+      }
+      const loopKey = canLink && Math.abs(off) >= 1e-6 ? uid('fl') : null;
+      for (let idx = 0; idx < items.length; idx++) {
+        const it = items[idx];
+        const ne = { id: uid('e'), ...it.ent };
+        if (S.construction) ne.con = true;
+        if (canLink && it.src && baseLinks.has(it.src.id)) {
+          const bl = baseLinks.get(it.src.id);
+          if (Math.abs(off) >= 1e-6) ne.link = { ...bl, off: round(off, 4), fl: loopKey, fi: idx, fn: items.length, hole: isHole };
+          else ne.link = bl;
+        }
+        addedEnts.push(ne);
+      }
+    }
+    if (!addedEnts.length) { UI.toast('Keine übernehmbaren Kanten auf dieser Fläche gefunden.', { icon: 'info' }); return; }
+    pushUndo();
+    const addedFixes = [];
+    for (const ne of addedEnts) {
+      S.ents.push(ne);
+      const ks = Solver.varsOf(ne);
+      if (ne.type !== 'spline' && ks) {
+        const fx = { id: uid('k'), type: 'fix', refs: [{ e: ne.id }], at: Object.fromEntries(ks.map((k) => [k, Solver.getK(ne, k)])) };
+        S.cons.push(fx); addedFixes.push(fx);
+      }
+    }
+    const res = reapply();
+    if (res && !res.ok) {
+      S.cons = S.cons.filter((c) => !addedFixes.includes(c));
+      reapply();
+    }
+    Viewer.highlightFace('hover', null, null);
+    render(); Panels.renderRight();
+    const cnt = { line: 0, arc: 0, circle: 0, spline: 0 };
+    for (const e of addedEnts) if (cnt[e.type] != null) cnt[e.type]++;
+    const parts = [];
+    if (cnt.line) parts.push(`${cnt.line} ${cnt.line === 1 ? 'Linie' : 'Linien'}`);
+    if (cnt.arc) parts.push(`${cnt.arc} ${cnt.arc === 1 ? 'Bogen' : 'Bögen'}`);
+    if (cnt.circle) parts.push(`${cnt.circle} ${cnt.circle === 1 ? 'Kreis' : 'Kreise'}`);
+    if (cnt.spline) parts.push(`${cnt.spline} ${cnt.spline === 1 ? 'Spline' : 'Splines'}`);
+    let msg = `Fläche übernommen: ${parts.join(', ')}`;
+    if (Math.abs(off) >= 1e-6) msg += ` (Versatz ${off > 0 ? '+' : ''}${Units.fmtLenU(off, 2)})`;
+    msg += canLink ? ' – bleibt mit dem Körper verbunden.' : '.';
+    if (skippedHoles) msg += ` ${skippedHoles} ${skippedHoles === 1 ? 'Loch war' : 'Löcher waren'} für diesen Versatz zu klein.`;
+    UI.toast(msg, { icon: 'check', ms: 3200 });
+  }
   function projectAt(ev) {
+    const inp = $('#proj-off'); if (inp && document.activeElement === inp) inp.blur();
+    if (ev.shiftKey) {
+      const fhit = Viewer.pick(ev.clientX, ev.clientY, { noEdges: true, solidsOnly: true });
+      if (fhit && fhit.faceIdx >= 0 && fhit.node) { projectFaceAt(fhit); return; }
+      UI.toast('Klick mit gedrückter Umschalt-Taste auf eine ebene Körperfläche.', { icon: 'info' });
+      return;
+    }
     const hit = Viewer.pick(ev.clientX, ev.clientY, { edgePx: 9 });
     if (hit && hit.edgeIdx == null && hit.faceIdx >= 0 && hit.node && hit.node.role !== 'hole') { sectionAt(hit); return; }
     if (!hit || hit.edgeIdx == null || !hit.node) { UI.toast('Klick genau auf eine Kante eines Körpers – oder auf eine Fläche, um den ganzen Schnitt zu übernehmen.', { icon: 'info' }); return; }
@@ -16530,10 +16718,34 @@ const Sketch = (() => {
       const sk = it.p && it.p.sketch; if (!sk || !(sk.ents || []).some((e) => e.link)) return;
       if (!Model.isActive(App.doc, it.id)) return;
       const own = Model.topOf(App.doc, it.id), F = frameWorld(sk.plane, Model.worldMatrix(App.doc, it.id));
+      const offGroups = new Map();
       for (const e of sk.ents) {
         if (!e.link || (own && own.id === e.link.id)) continue;
+        if (e.link.off && e.link.fl) {
+          if (!offGroups.has(e.link.fl)) offGroups.set(e.link.fl, []);
+          offGroups.get(e.link.fl).push(e);
+          continue;
+        }
         const g = relinkGeom(e, F); if (!g) continue;
         if (!sameGeom(e, g.ent)) jobs.push({ id: it.id, eid: e.id, g });
+      }
+      for (const grp of offGroups.values()) {
+        const ref0 = grp[0].link;
+        if (ref0.fn && grp.length !== ref0.fn) continue;
+        grp.sort((a, b) => (a.link.fi || 0) - (b.link.fi || 0));
+        const resList = [];
+        let ok = true;
+        for (const e of grp) { const g = relinkGeom(e, F); if (!g) { ok = false; break; } resList.push(g); }
+        if (!ok) continue;
+        const base = resList.map((g, i) => ({ id: '_r' + i, ...g.ent, ...(grp[0].con ? { con: true } : {}) }));
+        weldLoop(base);
+        const oRes = offsetLoop2D(base, ref0.off, !!ref0.hole);
+        if (!oRes.ok || oRes.items.length !== grp.length) continue;
+        for (let i = 0; i < grp.length; i++) {
+          const orig = grp[i], ne = oRes.items[i].ent;
+          const link = { ...resList[i].link, off: ref0.off, fl: ref0.fl, fi: i, fn: grp.length, hole: !!ref0.hole };
+          if (!sameGeom(orig, ne)) jobs.push({ id: it.id, eid: orig.id, g: { ent: ne, link } });
+        }
       }
     });
     if (!jobs.length) { relinkRounds = 0; return; }
@@ -16832,6 +17044,16 @@ const Sketch = (() => {
       const hv = SK.hit(S.ents, uv0, pxSize() * 9); S.hoverEnt = hv ? hv.id : null;
       S.cursor = (S.tool === 'patcirc' || S.tool === 'xmove') && S.patPick ? snap(uv0, { fine: e.shiftKey, off: e.altKey }) : null;
       render(); return;
+    }
+    if (S.tool === 'project') {
+      if (e.shiftKey) {
+        const h2 = Viewer.pick(e.clientX, e.clientY, { noEdges: true, solidsOnly: true });
+        const fi = h2 && h2.node && h2.node.data && h2.node.data.faces && h2.node.data.faces[h2.faceIdx];
+        Viewer.highlightFace('hover', fi && fi.t === 'PLANE' ? h2.id : null, fi && fi.t === 'PLANE' ? h2.faceIdx : null);
+      } else {
+        Viewer.highlightFace('hover', null, null);
+      }
+      S.cursor = null; render(); return;
     }
     if (S.tool === 'dim' || S.tool.startsWith('c:')) { S.hoverPick = pickAt(uv0, { refs: S.tool === 'c:project', points: S.tool !== 'c:project' }); S.cursor = null; render(); return; }
     if (S.tool === 'line' && S.lineMode !== 'tan2' && S.draft && !S.draft.arc) {
@@ -17667,7 +17889,7 @@ const Sketch = (() => {
         const src = Model.find(App.doc, sel.link.id);
         const ub = h('button', { type: 'button', class: 'btn', id: 'link-off' }); ub.innerHTML = icon('ungroup') + 'Verbindung lösen';
         ub.onclick = () => { pushUndo(); delete sel.link; render(); Panels.renderRight(); };
-        w.append(h('div', { class: 'ok-box', id: 'link-info', html: `<b>Verbunden</b> mit einer Kante von „${esc(src ? Model.label(src.item) : 'einem Körper')}“ – wandert mit, wenn sich der Körper ändert.` }), h('div', { class: 'btn-row' }, ub));
+        w.append(h('div', { class: 'ok-box', id: 'link-info', html: `<b>Verbunden</b> mit einer Kante von „${esc(src ? Model.label(src.item) : 'einem Körper')}“${sel.link.off ? ` (Versatz ${sel.link.off > 0 ? '+' : ''}${Units.fmtLenU(sel.link.off, 2)})` : ''} – wandert mit, wenn sich der Körper ändert.` }), h('div', { class: 'btn-row' }, ub));
       }
       const upd = (fn) => { pushUndo(); fn(sel); reapply(); render(); Panels.renderRight(); };
       // Jedes eingetippte Maß wird fest (auch als Formel). Das Schloss löst es wieder.
@@ -17864,6 +18086,11 @@ const Sketch = (() => {
         const fw = h('div', { class: 'fields' });
         fw.append(UI.numField({ id: 'wall-t', label: 'Wandstärke', value: S.wallT, unit: 'mm', expr: false, min: 0.1, onCommit: (v) => { if (v > 0) S.wallT = v; } }));
         w.append(fw);
+      }
+      if (S.tool === 'project') {
+        const fp = h('div', { class: 'fields' });
+        fp.append(UI.numField({ id: 'proj-off', label: 'Versatz (+ außen / − innen)', value: S.projOff || 0, unit: 'mm', expr: false, onCommit: (v) => { S.projOff = isFinite(v) ? v : 0; } }));
+        w.append(fp);
       }
       if (S.tool === 'offset') {
         const O = S.off;
@@ -18363,6 +18590,7 @@ const Sketch = (() => {
     loftPreviewDebounced.cancel(); lpKey = ''; lpPending = '';
     const cam = S.cam, hid = S.hiddenEdit;
     clearGroup(); clearBand(); hideBar(); hideEntry(); hideDimBox();
+    Viewer.highlightFace('hover', null, null);
     if (stepBox) { stepBox.remove(); stepBox = null; }
     S = null; lastMouse = null; placeArrow();
     if (hid) Viewer.updateNode(hid, { visible: true });

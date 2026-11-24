@@ -7131,6 +7131,100 @@ def t_a022_skizze_fertig_bestimmen(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a025_flaeche_uebernehmen(p):
+    # 1. Quader 40×30×10 mit Loch Ø10; Skizze auf der Oberseite starten, Taste Z → #proj-off da
+    p.empty()
+    p.ev("App.change('x', d=>{ const b=Model.newItem('box',{w:40,d:30,h:10}); const h=Model.newItem('cylinder',{d:10,h:14},{role:'hole'}); h.t.z=-2; d.items.push(b,h); })")
+    warte_rechnen(p, 30)
+    p.ev("""
+      const id = App.doc.items[0].id;
+      const r = App.results.get(id);
+      const fi = r.data.faces.findIndex(f => f && f.t === 'PLANE' && f.n && f.n[2] > 0.99);
+      Sketch.startOnFace({ id, idx: fi, info: r.data.faces[fi] });
+    """)
+    p.wait(1500)
+    p.pg.keyboard.press('z'); p.wait(250)
+    ok1 = p.ev("return Sketch.state.tool") == 'project' and p.pg.locator('#proj-off').count() == 1
+
+    # 2. Umschalt + Klick auf Oberseite (Versatz 0): 4 Linien (40×30) + 1 Kreis (Ø10), verbunden & fixiert, 1 Fläche mit 1 Loch
+    s = world_screen(p, 12, 8, 10)
+    p.pg.keyboard.down('Shift'); p.pg.mouse.click(s[0], s[1]); p.pg.keyboard.up('Shift'); p.wait(900)
+    st0 = SS(p, """
+      const L = S.ents.filter(e => e.type === 'line'), C = S.ents.filter(e => e.type === 'circle');
+      const xs = L.flatMap(e => [e.a[0], e.b[0]]), ys = L.flatMap(e => [e.a[1], e.b[1]]);
+      const regs = SK.regions(S.ents);
+      return {
+        n: S.ents.length, nl: L.length, nc: C.length,
+        w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys),
+        r: C[0] ? C[0].r : 0,
+        allFix: S.ents.every(e => S.cons.some(c => c.type === 'fix' && c.refs[0].e === e.id)),
+        allLink: S.ents.every(e => !!e.link),
+        regs: regs.length, holes: regs[0] ? regs[0].holes.length : 0
+      };
+    """)
+    ok2 = (
+        st0['n'] == 5 and st0['nl'] == 4 and st0['nc'] == 1
+        and abs(st0['w'] - 40) < 0.02 and abs(st0['h'] - 30) < 0.02 and abs(st0['r'] - 5) < 0.02
+        and st0['allFix'] and st0['allLink'] and st0['regs'] == 1 and st0['holes'] == 1
+    )
+
+    # 3. Rückgängig nimmt alle auf einmal weg; Versatz +2 mm → Rechteck 44×34, Kreis Ø6
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('Control+z'); p.wait(400)
+    after_undo = SS(p, "return S.ents.length")
+    p.pg.fill('#proj-off', '2'); p.pg.press('#proj-off', 'Enter'); p.wait(200)
+    s = world_screen(p, 12, 8, 10)
+    p.pg.keyboard.down('Shift'); p.pg.mouse.click(s[0], s[1]); p.pg.keyboard.up('Shift'); p.wait(900)
+    st2 = SS(p, """
+      const L = S.ents.filter(e => e.type === 'line'), C = S.ents.filter(e => e.type === 'circle');
+      const xs = L.flatMap(e => [e.a[0], e.b[0]]), ys = L.flatMap(e => [e.a[1], e.b[1]]);
+      const regs = SK.regions(S.ents);
+      return {
+        n: S.ents.length, nl: L.length, nc: C.length,
+        w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys),
+        r: C[0] ? C[0].r : 0,
+        offs: S.ents.every(e => e.link && Math.abs(e.link.off - 2) < 1e-4),
+        regs: regs.length, holes: regs[0] ? regs[0].holes.length : 0
+      };
+    """)
+    ok3 = (
+        after_undo == 0
+        and st2['n'] == 5 and st2['nl'] == 4 and st2['nc'] == 1
+        and abs(st2['w'] - 44) < 0.02 and abs(st2['h'] - 34) < 0.02 and abs(st2['r'] - 3) < 0.02
+        and st2['offs'] and st2['regs'] == 1 and st2['holes'] == 1
+    )
+
+    # 4. Versatz −2 mm (nach innen) → Rechteck 36×26, Kreis Ø14
+    p.pg.locator('canvas').first.focus(); p.pg.keyboard.press('Control+z'); p.wait(400)
+    p.pg.fill('#proj-off', '-2'); p.pg.press('#proj-off', 'Enter'); p.wait(200)
+    s = world_screen(p, 12, 8, 10)
+    p.pg.keyboard.down('Shift'); p.pg.mouse.click(s[0], s[1]); p.pg.keyboard.up('Shift'); p.wait(900)
+    stm = SS(p, """
+      const L = S.ents.filter(e => e.type === 'line'), C = S.ents.filter(e => e.type === 'circle');
+      const xs = L.flatMap(e => [e.a[0], e.b[0]]), ys = L.flatMap(e => [e.a[1], e.b[1]]);
+      return { nl: L.length, nc: C.length, w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys), r: C[0] ? C[0].r : 0 };
+    """)
+    ok4 = stm['nl'] == 4 and stm['nc'] == 1 and abs(stm['w'] - 36) < 0.02 and abs(stm['h'] - 26) < 0.02 and abs(stm['r'] - 7) < 0.02
+
+    # 5. Verbunden mit Versatz +2 mm: Körper wird breiter (40 → 50) → übernommene Kontur wächst auf 54×34, Kreis bleibt Ø6
+    p.ev("Sketch.cancel(true)"); p.wait(300)
+    p.ev("Sketch.startOnPlane('XY', 10)"); p.wait(1500)
+    p.pg.keyboard.press('z'); p.wait(200)
+    p.pg.fill('#proj-off', '2'); p.pg.press('#proj-off', 'Enter'); p.wait(200)
+    s = world_screen(p, 12, 8, 10)
+    p.pg.keyboard.down('Shift'); p.pg.mouse.click(s[0], s[1]); p.pg.keyboard.up('Shift'); p.wait(900)
+    fertig_hoch(p, '3')
+    p.ev("App.change('Breiter', d=>{ d.items[0].p.w = 50; })"); warte_rechnen(p, 30); p.wait(1000); warte_rechnen(p, 30)
+    st5 = p.ev("""
+      const it = App.doc.items[2]; const sk = it && it.p && it.p.sketch;
+      if (!sk) return null;
+      const L = sk.ents.filter(e => e.type === 'line'), C = sk.ents.filter(e => e.type === 'circle');
+      const xs = L.flatMap(e => [e.a[0], e.b[0]]), ys = L.flatMap(e => [e.a[1], e.b[1]]);
+      return { w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys), r: C[0] ? C[0].r : 0, errs: App.errors.length };
+    """)
+    ok5 = bool(st5) and abs(st5['w'] - 54) < 0.02 and abs(st5['h'] - 34) < 0.02 and abs(st5['r'] - 3) < 0.02 and st5['errs'] == 0
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -7253,6 +7347,7 @@ TESTS = [
     ('[A-019] Übersetzbare Oberfläche (Schritt 1): Sammlung & T() / Werkzeugleiste / Startseite / Menüs / Kontextleiste', t_a019_uebersetzbare_oberflaeche),
     ('[A-024] Winkelfang und runde Längen beim Zeichnen: 45° & runde Länge / Linienzug 30° / Umschalt frei / Zoom 0,5 & 0,1 / Menü & gespeichert', t_a024_winkelfang),
     ('[A-022] Skizze fertig bestimmen: Rechteck & Kreis / Regeln <2° & <0,05 mm / gestrichelte Vorschau & Abbrechen / Übernehmen & Rückgängig / Einfach & Profi', t_a022_skizze_fertig_bestimmen),
+    ('[A-025] Ganze Fläche in die Skizze, mit Versatz: 4 Linien + 1 Kreis / verbunden / Versatz +2 mm (44×34, Ø6) / Versatz −2 mm / folgt Körperänderung & Rückgängig', t_a025_flaeche_uebernehmen),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

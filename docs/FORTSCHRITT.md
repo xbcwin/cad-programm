@@ -204,6 +204,7 @@ Fertig.
 - [x] Skizzen-Leiste etwas kompakter, damit sie trotz neuer Werkzeuge bei zwei Zeilen bleibt (Sitzung 32)
 - [x] Verbundene Kanten: übernommene Kanten merken sich Körper und Kante und wandern mit, wenn sich der Körper ändert (Linie, Bogen, Kreis, Spline); die Nachführung gehört zum selben Rückgängig-Schritt; Ketten-Symbol in der Skizze, „Verbindung lösen“ (Sitzung 33)
 - [x] Werkzeug „Kante übernehmen“ (Z): Klick auf eine Körperkante holt sie in die Skizze – gerade als feste Linie, rund als Bogen oder Kreis, sonst als Spline (Sitzung 32)
+- [x] Ganze Fläche in die Skizze, mit Versatz (Auto [A-025], SK-22): im Werkzeug „Kante übernehmen“ übernimmt Umschalt + Klick auf eine ebene Körperfläche alle Randkanten (Außenkontur und Löcher) auf einmal, verbunden und fixiert; im Panel-Feld „Versatz“ (+ außen / − innen) entsteht die Kontur gleich versetzt (`SKO.offsetChain`) und wandert bei Körperänderungen versetzt mit
 - [x] Maß-Schildchen, die übereinander lägen, rücken untereinander (z. B. „X 0“ und „Y 0“ am Ursprung) (Sitzung 31)
 - [x] Winkelfang und runde Längen beim Zeichnen (Auto [A-024], SK-14): Linien und Linienzüge rasten beim Zeichnen mit der Maus in 15°-Schritten ein (Hilfslinie und Winkel-Schild wie „45°“) und runden Längen auf 1 mm (bei starkem Zoom auf 0,5 oder 0,1 mm); Umschalt schaltet beides ab; im Skizzen-Panel über „Winkelfang“ ein-/ausschaltbar und in `localStorage` gespeichert
 
