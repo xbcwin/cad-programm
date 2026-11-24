@@ -264,6 +264,7 @@ body.sketching .viewcube{display:none}
 .tile.hole-part .role{color:var(--hole)}
 .flyout .foot{font-size:12.5px;color:var(--faint)}
 .flyout.drone{width:min(560px,calc(100vw - 24px));max-height:calc(100% - 16px);overflow:auto}
+.flyout.parts{width:min(460px,calc(100vw - 24px));max-height:calc(100% - 16px);overflow:auto}
 .flyout.drone .tiles{grid-template-columns:repeat(auto-fill,minmax(96px,1fr));max-height:320px;overflow:auto;padding-right:2px}
 .flyout.drone .tile svg{width:34px;height:34px}
 .flyout.drone .tile .lbl{font-size:12.5px}

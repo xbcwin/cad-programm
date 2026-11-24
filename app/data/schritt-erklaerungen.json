@@ -219,5 +219,30 @@
     "was": "Projiziert eine geschlossene Skizze (Text, Logo oder Form) auf eine ebene oder gewölbte Körperfläche (z. B. Zylinder oder Kugel) und prägt sie erhaben heraus oder vertieft hinein.",
     "wozu": "Ideal für Beschriftungen, Logos, Typenschilder und griffige Markierungen auf runden Gehäusen, Rohren oder Griffen – bleibt als einzelner Körper im Verlauf änderbar.",
     "achtung": "Prüfe bei Fehlern, ob die Skizze geschlossene Flächen hat (z. B. Text oder Kreis) und vor der gewählten Fläche liegt."
+  },
+  "stdPin": {
+    "was": "Erzeugt einen genormten Zylinderstift nach ISO 2338 mit 15°-Endfasen aus Edelstahl.",
+    "wozu": "Richtet zwei Bauteile spielfrei zueinander aus oder nimmt Querkräfte als Scherstift auf.",
+    "achtung": "Bohre passende Aufnahmelöcher am besten mit „Passbohrung H7“ im selben Nenndurchmesser."
+  },
+  "stdKey": {
+    "was": "Baut eine rundstirnige Passfeder nach DIN 6885 Form A mit genormtem Querschnitt (b × h) und Länge.",
+    "wozu": "Verbindet eine Welle formschlüssig mit einem Zahnrad, einer Riemenscheibe oder einer Kupplung.",
+    "achtung": "Wähle den Querschnitt passend zum Wellendurchmesser – rechts steht der gültige Bereich samt Nuttiefen t₁ und t₂."
+  },
+  "stdKeyway": {
+    "was": "Schneidet eine genormte Passfedernut nach DIN 6885 – wahlweise als rundstirnige Wellennut (Tiefe t₁) oder gerade Nabennut (Tiefe t₂).",
+    "wozu": "Erzeugt die genau passende Tasche in Welle oder Nabe für eine Passfeder derselben Größe.",
+    "achtung": "Achte auf die richtige Einbautiefe zur Wellen- oder Bohrungsfläche, damit die Passfeder sauber trägt."
+  },
+  "stdBearing": {
+    "was": "Erzeugt ein Rillenkugellager nach DIN 625-1 (608, 6000er oder 6200er Reihe) mit exaktem Innen-Ø, Außen-Ø und Breite.",
+    "wozu": "Für drehbare Wellenlagerungen, Führungsrollen und Baugruppen als echtes Normteil mit passendem Bauraum.",
+    "achtung": "Zwischen Gehäuse und Lageraußenring braucht es einen passenden Lagersitz – z. B. mit der Passbohrung H7."
+  },
+  "stdSleeve": {
+    "was": "Erstellt eine zylindrische Gleitlagerbuchse (Form C) oder Bundbuchse (Form F) nach ISO 3547 / DIN 1850 aus Messing.",
+    "wozu": "Führt Wellen und Bolzen platzsparend und reibungsarm ohne Kugellager.",
+    "achtung": "Im Betrieb oder 3D-Druck brauchen Welle und Bohrung ausreichend Spiel bzw. eine H7-Aufnahme."
   }
 }

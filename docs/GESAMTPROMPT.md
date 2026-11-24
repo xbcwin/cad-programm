@@ -92,7 +92,7 @@ Leitlinien:
 | `16-solver.js` | Skizzen-Löser (Maße und Regeln gemeinsam, Freiheitsgrade, Konflikte) |
 | `17-sketchops.js` (`SKO`) | Schnittpunkte, Trimmen, Versatz (`offsetChain`), dünne Wand (`thinRegions`), Spiegeln, Muster (`mapEnt`), Schablonen `TEMPLATES`/`tplEnts`, Skizzen-Prüfer `inspect` |
 | `20-kernel.js` | Brücke zum Worker (`Kernel.ensure`/`state`/`timings`, lädt WASM und Worker erst bei Bedarf) |
-| `25-app.js` | Zustand, `App.change(label, fn, {merge, amend})` mit Rückgängig (300 Schritte), Neuberechnung, Ergebnisse |
+| `25-app.js` | Zustand, `App.change(label, fn, {merge, amend})` mit sparsamem Patch-Rückgängig (`App.Patch`, Speicherlimit 32 MB, `App.historyStats`, `App.setHistoryLimit`), Neuberechnung, Ergebnisse |
 | `30-viewer.js` | three.js-Ansicht, Picking (Flächen, Kanten), `edgePositions`, Raster, `renderNow` (synchrones Einzelbild), Kamera (`syncCamAnim`/`scheduleCamEmit`, `camera.updateMatrixWorld`) |
 | `35-handles.js` | Ziehgriffe (Größe, Lage, Rundungsgriff, Drehwinkel-Griff `revAngle`), Maus-Bedienung |
 | `40-library.js` | Bibliotheksteile `LIB`/`LIBMAP` (Drohnen-Bausteine mit `drone: true` ausgeblendet, bleiben für alte Projekte in `LIBMAP`) |
@@ -125,7 +125,7 @@ Leitlinien:
 | `90-main.js` | Start; stellt `window.__M` für Tests bereit |
 
 **Daten in `app/data/`** (alle von Gemini geliefert und von Claude geprüft):
-- `werkzeug-hilfen.json`, `texte-de.json`, `schritt-erklaerungen.json`, `materialien.json` (18 Stück), `fehlermeldungen.json`, `schrauben.json` (M1.6–M8, Senkungen normgerecht), `gewinde.json` (Regelgewinde M1.6–M12, Feingewinde, Zoll UNC/UNF, Rohrgewinde G1/8–G1 mit Quellen)
+- `werkzeug-hilfen.json`, `texte-de.json`, `schritt-erklaerungen.json`, `materialien.json` (18 Stück), `fehlermeldungen.json`, `schrauben.json` (M1.6–M8, Senkungen normgerecht), `gewinde.json` (Regelgewinde M1.6–M12, Feingewinde, Zoll UNC/UNF, Rohrgewinde G1/8–G1 mit Quellen), `passstifte.json` (ISO 2338), `passfedern.json` (DIN 6885 Form A), `lager.json` (DIN 625-1 Kugellager 608/6000er/6200er & ISO 3547 Gleitlager)
 - `formel-beispiele.json`, `einfuehrung-skizze.json`, `fpv-masse.json` (Stack = Quadrat, Motor = Lochkreis)
 - `bauteile.json` (Kaufteile mit Quelle, `geprueft`), `schub.json` (nur `geprueft: true` als Vorgabe), `faustregeln.json`, `rahmen.json` (13 Herstellerrahmen)
 - `schrift-inter*.json`, erzeugt mit `tools/schrift.py`
@@ -194,7 +194,7 @@ Leitlinien:
 - Anzeige: `ViewPrefs.display` ('edges' | 'shaded' | 'wire' | 'hidden'), `it.opacity` (nur Anzeige), `Viewer.lookAtFace(id, faceIdx)`, `doc.views = [{id, name, p, t, up, ortho}]` mit `Views.saveView`/`goView`
 - Bezugsebenen, -achsen, -punkte & Koordinatensysteme (`46-datums.js`, `Datums`): `doc.datums = [{id, name, base, plane, hidden}]`, `base.type` 'origin' (plane, dist, tilt) | 'face' (id, n, c, dist; `relink` nach jedem Rechnen, `lost`) | 'edgeAngle' (edgeId, faceId, angle) | 'tangent' (id, u0, angle, flip) | 'normalToCurve' (edgeId, edge, posMode, percent, flip) | 'edgePoint' (edgeId, edge, p, pBind, flip) | 'twoEdges' (e1, e2, flip) | 'fixed'; `doc.axes = [{id, name, base, axis:{o,d}, hidden}]` ('twoPoints' | 'roundFace' | 'roundEdge' | 'faceNormal' | 'fixed'); `doc.points = [{id, name, base, point:[x,y,z], hidden}]` ('edgeMid' | 'faceCenter' | 'edgePlaneIntersect' | 'curvePercent' | 'fixed'); `doc.csys = [{id, name, base, csys:{o,x,y,z}, hidden}]` ('pointEdges' | 'fixed', `csysExportMatrix` als Nullpunkt im Export für STEP/STL/3MF/OBJ/GLB via `#ex-csys`); Bild in `Viewer.groups.datums`; `Sketch.startOnPlaneObj(plane)`, `Sketch.startPlanePick(kind, onPlane)`, nutzbar für Kreismuster (`axisId`) und Drehen (`axis3d`)
 - Farbe je Fläche: `it.faceColors = [{n, c, col}]` (Flächen-Lage im Teil), im Bild als Vertex-Farben (`applyFaceColors`, `Viewer.faceIndexOf`). Mehrere Körper in einem Teil (`it.bodies = [{idx, c, name, color, hidden}]`, `Model.matchBodies`, `Actions.setBody`, `Viewer.highlightBody`) erscheinen im Verlauf als „Körper (n)“, lassen sich benennen, färben, ausblenden und einzeln mit Namen exportieren. Text in Kurven: `Sketch.textToCurves(id)`
-- Normteile: Bauteile `stdScrew` (size, head 'zyl'|'senk', length), `stdNut`, `stdWasher` (Kern: `NORM`-Tabelle + `SCREW` in `core.js`); LIB-Einträge mit `mat` setzen den Werkstoff beim Anlegen (`Model.newItem`). KI-Aktion `verrechnen` (ids, modus, ziel)
+- Normteile: Bauteile `stdScrew` (size, head 'zyl'|'senk', length), `stdNut`, `stdWasher`, `stdPin` (ISO 2338: size, length, tol 'm6'|'h8'), `stdKey` (DIN 6885 A: size, length), `stdKeyway` (size, kind 'shaft'|'hub', length), `stdBearing` (DIN 625-1: size 608/6000er/6200er, seal '2rs'|'open'), `stdSleeve` (ISO 3547: size, length, flange 'cyl'|'flange') mit Tabellen in `app/data/`; LIB-Einträge mit `mat` setzen den Werkstoff beim Anlegen (`Model.newItem`). KI-Aktion `verrechnen` (ids, modus, ziel)
 - Längen: Leisten-Schild `#sel-val` (Kantenlänge aus `edges[i].l`, Summe bei mehreren, Ø bei Kreiskante und runder Fläche `faces[i].r`); `Measure.copyText`/`copyValue` kopieren den Wert; Mess-Schilder `.dimlabel.mlabel` sind anklickbar; Messen kennt `kind: 'round'` (CYLINDRE/SPHERE)
 - Messen: Kern `minDistance(scene, ids)` (Worker `distance`, BRepExtrema_DistShapeShape) → `Measure.minDistance`; Teil-Panel zeigt Volumen, Oberfläche, Hüllmaße
 - Dauerhafte Messungen (PF-05): `doc.measures` speichert Bezüge; `Measure.keep`/`relink`/`treeSection`/`renderPanel`, `#measure-keep` in `#measure-bar`, Liste `#measure-tree` im Verlauf, Schilder `.dimlabel.mpin`, `Viewer.groups.measures`, zeigt „verloren“ bei fehlenden Bezügen
@@ -206,7 +206,7 @@ Leitlinien:
   - Ein Schritt hinter dem Marker zeigt nur „Marker dahinter“
   - Überfahren eines Schritts zeigt kurz den Stand nach diesem Schritt (`App.peek`)
   - Verlauf links: Umsortieren per Ziehen mit Abhängigkeitsprüfung (`Model.validateMove`/`validateTopOrder`, rote Markierung `.drop-bad` bei verletzter Reihenfolge), organisatorische Ordner (`doc.folders`, `Model.folderOf`/`cleanFolders`, `Actions.reorder`/`createFolder`/`toggleFolder`/`renameFolder`/`ungroupFolder`/`removeFromFolder`) und direktes Duplizieren je Schritt (`Actions.duplicate`)
-- Protokoll; Rückgängig/Wiederholen (300)
+- Protokoll; sparsames Rückgängig/Wiederholen mit Patches (Speicherlimit 32 MB)
 - Maße-Tabelle mit Formeln, Varianten (`v.values` und `v.suppressed` mit Schritt-Schaltern `#var-steps` und `Variants.setStepSuppressed`) und Versionen (Vergleich mit Gewicht)
 - Bauteile im Kontext bearbeiten; Isolieren
 - Zahleneingabe beim Ziehen; Tastenkürzel-Übersicht (?)

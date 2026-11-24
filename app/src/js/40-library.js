@@ -1,6 +1,9 @@
 // ================= Bauteil-Bibliothek (Definitionen für die Oberfläche) =================
 const SIZES = ['M1.6', 'M2', 'M2.5', 'M3', 'M4', 'M5', 'M6', 'M8'];
 const THREAD_DATA = /*JSON:gewinde.json*/null;
+const PIN_DATA = /*JSON:passstifte.json*/null;
+const KEY_DATA = /*JSON:passfedern.json*/null;
+const BEARING_DATA = /*JSON:lager.json*/null;
 const THREAD_NORMS = (THREAD_DATA && THREAD_DATA.normen) || [];
 const THREAD_NORM_OPTIONS = THREAD_NORMS.map((n) => [n.id, n.name]);
 const THREAD_BY_NORM = new Map(THREAD_NORMS.map((n) => [n.id, n]));
@@ -69,6 +72,45 @@ function centerHoleMetrics(size) {
   const tipH = (c.d1 / 2) / Math.tan((118 * Math.PI) / 360);
   return { ...c, hCone, tipH, totalDepth: hCone + c.t1 + tipH };
 }
+// Normteile: Passstifte (ISO 2338), Passfedern & Nuten (DIN 6885 A), Kugel- & Gleitlager (DIN 625 / ISO 3547)
+const PIN_LIST = (PIN_DATA && PIN_DATA.groessen) || [];
+const PIN_BY_ID = new Map(PIN_LIST.map((x) => [String(x.id), x]));
+const PIN_OPTIONS = PIN_LIST.map((x) => [String(x.id), 'Ø ' + String(x.d_mm).replace('.', ',') + ' mm']);
+function pinEntry(size) {
+  const s = String(size ?? '6').trim().replace(',', '.');
+  if (PIN_BY_ID.has(s)) return PIN_BY_ID.get(s);
+  const n = Number(s);
+  if (isFinite(n)) { const hit = PIN_LIST.find((x) => Math.abs(x.d_mm - n) < 1e-6); if (hit) return hit; }
+  return PIN_BY_ID.get('6') || PIN_LIST[0] || null;
+}
+const KEY_LIST = (KEY_DATA && KEY_DATA.groessen) || [];
+const KEY_BY_ID = new Map(KEY_LIST.map((x) => [String(x.id).toLowerCase(), x]));
+const KEY_OPTIONS = KEY_LIST.map((x) => [x.id, `${x.b_mm} × ${x.h_mm} (Welle Ø ${x.welle_min_mm}–${x.welle_max_mm})`]);
+function keyEntry(size) {
+  const s = String(size || '6x6').trim().toLowerCase().replace(/\s+/g, '').replace('×', 'x');
+  return KEY_BY_ID.get(s) || KEY_BY_ID.get('6x6') || KEY_LIST[0] || null;
+}
+const BEARING_SERIES = (BEARING_DATA && BEARING_DATA.kugellager_reihen) || [];
+const BEARING_BY_ID = new Map();
+for (const s of BEARING_SERIES) {
+  for (const b of s.lager || []) BEARING_BY_ID.set(String(b.id), { ...b, reiheId: s.id, reiheName: s.name, quelle: s.quelle });
+}
+const BEARING_GROUPED_OPTIONS = BEARING_SERIES.map((s) => ({
+  group: s.name,
+  options: (s.lager || []).map((b) => [b.id, `${b.id} (Ø ${b.d_mm} × ${b.D_mm} × ${b.B_mm})`]),
+}));
+function bearingEntry(size) {
+  const s = String(size ?? '608').trim();
+  return BEARING_BY_ID.get(s) || BEARING_BY_ID.get('608') || null;
+}
+const SLEEVE_DATA = (BEARING_DATA && BEARING_DATA.gleitlager) || {};
+const SLEEVE_LIST = SLEEVE_DATA.groessen || [];
+const SLEEVE_BY_ID = new Map(SLEEVE_LIST.map((x) => [String(x.id).toLowerCase(), x]));
+const SLEEVE_OPTIONS = SLEEVE_LIST.map((x) => [x.id, `Ø ${String(x.d_mm).replace('.', ',')} × ${String(x.D_mm).replace('.', ',')} (Wand ${String(x.wand_mm).replace('.', ',')})`]);
+function sleeveEntry(size) {
+  const s = String(size || '8x10').trim().toLowerCase().replace(/\s+/g, '').replace('×', 'x').replace(',', '.');
+  return SLEEVE_BY_ID.get(s) || SLEEVE_BY_ID.get('8x10') || SLEEVE_LIST[0] || null;
+}
 const LIB = [
   { lib: 'screwHole', label: 'Schraubenloch', role: 'hole', icon: 'bolt', desc: 'Durchgangsloch mit Senkung für Schrauben', params: [
     { k: 'size', label: 'Gewinde', type: 'select', options: THREAD_GROUPED_OPTIONS, def: 'M3' },
@@ -108,16 +150,40 @@ const LIB = [
   { lib: 'centerHole', label: 'Zentrierbohrung', role: 'hole', icon: 'holeWizard', desc: 'Zentrierbohrung nach DIN 332 Form A (60°-Kegel + Führungsbohrung)', params: [
     { k: 'size', label: 'Größe (DIN 332 A)', type: 'select', options: CENTER_SIZES, def: 'A2.5' },
   ] },
-  { lib: 'stdScrew', label: 'Schraube (Norm)', role: 'solid', icon: 'bolt', mat: 'V2A Edelstahl', desc: 'Echte Schraube mit Innensechskant: Zylinderkopf ISO 4762 oder Senkkopf ISO 10642 – Gewinde nur angedeutet', params: [
+  { lib: 'stdScrew', label: 'Schraube (Norm)', role: 'solid', icon: 'bolt', mat: 'V2A Edelstahl', std: true, desc: 'Echte Schraube mit Innensechskant: Zylinderkopf ISO 4762 oder Senkkopf ISO 10642 – Gewinde nur angedeutet', params: [
     { k: 'size', label: 'Größe', type: 'select', options: SIZES, def: 'M3' },
     { k: 'head', label: 'Kopf', type: 'select', options: [['zyl', 'Zylinderkopf (ISO 4762)'], ['senk', 'Senkkopf (ISO 10642, ab M3)']], def: 'zyl' },
     { k: 'length', label: 'Länge', type: 'num', def: 10 },
   ] },
-  { lib: 'stdNut', label: 'Mutter (Norm)', role: 'solid', icon: 'hex', mat: 'V2A Edelstahl', desc: 'Sechskantmutter ISO 4032', params: [
+  { lib: 'stdNut', label: 'Mutter (Norm)', role: 'solid', icon: 'hex', mat: 'V2A Edelstahl', std: true, desc: 'Sechskantmutter ISO 4032', params: [
     { k: 'size', label: 'Größe', type: 'select', options: SIZES, def: 'M3' },
   ] },
-  { lib: 'stdWasher', label: 'Scheibe (Norm)', role: 'solid', icon: 'circle', mat: 'V2A Edelstahl', desc: 'Unterlegscheibe ISO 7089', params: [
+  { lib: 'stdWasher', label: 'Scheibe (Norm)', role: 'solid', icon: 'circle', mat: 'V2A Edelstahl', std: true, desc: 'Unterlegscheibe ISO 7089', params: [
     { k: 'size', label: 'Größe', type: 'select', options: SIZES, def: 'M3' },
+  ] },
+  { lib: 'stdPin', label: 'Zylinderstift (ISO 2338)', role: 'solid', icon: 'pin', mat: 'V2A Edelstahl', std: true, desc: 'Zylinderstift nach ISO 2338 mit 15°-Endfasen (m6 oder h8)', params: [
+    { k: 'size', label: 'Durchmesser', type: 'select', options: PIN_OPTIONS, def: '6' },
+    { k: 'length', label: 'Länge', type: 'num', def: 20 },
+    { k: 'tol', label: 'Toleranz', type: 'select', options: [['m6', 'm6 (Form A, Standard)'], ['h8', 'h8 (Form B)']], def: 'm6' },
+  ] },
+  { lib: 'stdKey', label: 'Passfeder (DIN 6885 A)', role: 'solid', icon: 'key', mat: 'Baustahl', std: true, desc: 'Rundstirnige Passfeder nach DIN 6885 Form A', params: [
+    { k: 'size', label: 'Querschnitt (b × h)', type: 'select', options: KEY_OPTIONS, def: '6x6' },
+    { k: 'length', label: 'Länge (l)', type: 'num', def: 20 },
+  ] },
+  { lib: 'stdKeyway', label: 'Passfedernut (DIN 6885)', role: 'hole', icon: 'keyway', std: true, desc: 'Passende Wellen- (t₁) oder Nabennut (t₂) nach DIN 6885 Form A', params: [
+    { k: 'size', label: 'Passfeder (b × h)', type: 'select', options: KEY_OPTIONS, def: '6x6' },
+    { k: 'kind', label: 'Nut-Art', type: 'select', options: [['shaft', 'Wellennut (Tiefe t₁, rundstirnig)'], ['hub', 'Nabennut (Tiefe t₂, gerade)']], def: 'shaft' },
+    { k: 'length', label: 'Länge (l)', type: 'num', def: 20 },
+    { k: 'extra', label: 'Überstand oben', type: 'num', def: 0.5 },
+  ] },
+  { lib: 'stdBearing', label: 'Kugellager (Norm)', role: 'solid', icon: 'bearing', mat: 'V2A Edelstahl', std: true, desc: 'Rillenkugellager nach DIN 625-1 / ISO 15 (608, 6000er und 6200er Reihe)', params: [
+    { k: 'size', label: 'Lager-Typ', type: 'select', options: BEARING_GROUPED_OPTIONS, def: '608' },
+    { k: 'seal', label: 'Ausführung', type: 'select', options: [['2rs', 'Geschlossen (2RS / ZZ)'], ['open', 'Offen (mit Kugeln)']], def: '2rs' },
+  ] },
+  { lib: 'stdSleeve', label: 'Gleitlager (Norm)', role: 'solid', icon: 'sleeve', mat: 'Messing', std: true, desc: 'Gleitlagerbuchse nach ISO 3547 / DIN 1850 (zylindrisch oder mit Bund)', params: [
+    { k: 'size', label: 'Größe (d × D)', type: 'select', options: SLEEVE_OPTIONS, def: '8x10' },
+    { k: 'length', label: 'Länge (B)', type: 'num', def: 10 },
+    { k: 'flange', label: 'Bauform', type: 'select', options: [['cyl', 'Zylindrisch (Form C)'], ['flange', 'Mit Bund (Form F)']], def: 'cyl' },
   ] },
   { lib: 'slotHole', label: 'Langloch', role: 'hole', icon: 'slot', desc: 'Längliches Loch zum Verstellen', params: [
     { k: 'len', label: 'Länge', type: 'num', def: 20 }, { k: 'w', label: 'Breite', type: 'num', def: 4.5 }, { k: 'depth', label: 'Tiefe', type: 'num', def: 10 },

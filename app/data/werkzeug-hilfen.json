@@ -978,5 +978,30 @@
     "tip": "Gemessene Startzeiten für Oberfläche, CAD-Kern und Schriften",
     "hilfe": "Tracery startet die Oberfläche sofort und lädt den OpenCascade-CAD-Kern sowie die eingebauten Schriften erst, wenn ein 3D-Schritt gerechnet oder Text gezeichnet wird. Hier siehst du die genauen Zeiten bis zur Bedienbarkeit und bis zum bereiten Kern.",
     "tipp": "Du kannst nach dem Öffnen direkt eine 2D-Skizze beginnen, ohne auf den CAD-Kern zu warten."
+  },
+  "stdPin": {
+    "tip": "Zylinderstift nach ISO 2338 zum genauen Ausrichten und Fixieren",
+    "hilfe": "Bauteile → Normteile → „Zylinderstift (ISO 2338)“: Genormter Passstift von Ø 1 bis 20 mm mit 15°-Endfasen. Durchmesser, Länge und Toleranzfeld (m6 oder h8) stellst du rechts im Panel ein.",
+    "tipp": "Für das Gegenstück nimm „Passbohrung H7“ mit demselben Nenndurchmesser – rechts steht gleich das passende H7-Abmaß."
+  },
+  "stdKey": {
+    "tip": "Rundstirnige Passfeder nach DIN 6885 Form A",
+    "hilfe": "Bauteile → Normteile → „Passfeder (DIN 6885 A)“: Überträgt Drehmoment zwischen Welle und Nabe. Rechts wählst du den Querschnitt (b × h) und die Länge l – dazu siehst du den passenden Wellendurchmesser und die zugehörigen Nuttiefen t₁ und t₂.",
+    "tipp": "Klick rechts auf „Passende Nut anlegen“, um direkt eine Passfedernut mit derselben Größe und Länge zu erzeugen."
+  },
+  "stdKeyway": {
+    "tip": "Passfedernut für Welle oder Nabe nach DIN 6885",
+    "hilfe": "Bauteile → Normteile → „Passfedernut (DIN 6885)“: Schneidet die zur Passfeder gehörende Nut aus – als rundstirnige Wellennut mit Tiefe t₁ oder als gerade Nabennut mit Tiefe t₂.",
+    "tipp": "Zieh die Nut direkt auf die Welle oder die Bohrungskante, oder richte sie über „Loch hier“ und die Lagewerte exakt aus."
+  },
+  "stdBearing": {
+    "tip": "Rillenkugellager nach DIN 625-1 (608, 6000er und 6200er Reihe)",
+    "hilfe": "Bauteile → Normteile → „Kugellager (Norm)“: Genormtes Kugellager mit exaktem Innen-Ø d, Außen-Ø D, Breite B und Kantenabstand r_min – wahlweise geschlossen (2RS/ZZ) oder offen mit sichtbaren Kugeln.",
+    "tipp": "Das 608-Lager (Ø 8 × 22 × 7 mm) ist als Standard vorgewählt – für Lagersitze passt eine „Passbohrung H7“ mit Durchmesser D."
+  },
+  "stdSleeve": {
+    "tip": "Gleitlagerbuchse nach ISO 3547 / DIN 1850",
+    "hilfe": "Bauteile → Normteile → „Gleitlager (Norm)“: Zylindrische Gleitlagerbuchse (Form C) oder Bundbuchse (Form F) aus Messing mit genormtem Innen-Ø d, Außen-Ø D und Wanddicke s₃.",
+    "tipp": "Eine Bundbuchse stützt sich mit dem Bund seitlich an der Bohrung ab – wähle die Gehäusebohrung passend zu Außen-Ø D in H7."
   }
 }

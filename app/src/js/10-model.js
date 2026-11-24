@@ -393,6 +393,18 @@ const Model = (() => {
         if (o.p.lib === 'screwHole' && typeof threadEntry === 'function') {
           const te = threadEntry(o.p.size);
           if (te) o.p.spec = { fine: te.durchgang_fein_mm, hole: te.durchgang_mittel_mm, coarse: te.durchgang_grob_mm, tap: te.kernloch_mm, csk: te.senkung_senk_d_mm || 0, cskAngle: te.senkung_winkel_grad || 90, cbD: te.senkung_zyl_d_mm || 0, cbH: te.senkung_zyl_t_mm || 0 };
+        } else if (o.p.lib === 'stdPin' && typeof pinEntry === 'function') {
+          const pe = pinEntry(o.p.size ?? o.p.d);
+          if (pe) o.p.spec = { d: pe.d_mm, c: pe.c_mm };
+        } else if ((o.p.lib === 'stdKey' || o.p.lib === 'stdKeyway') && typeof keyEntry === 'function') {
+          const ke = keyEntry(o.p.size);
+          if (ke) o.p.spec = { b: ke.b_mm, h: ke.h_mm, t1: ke.t1_mm, t2: ke.t2_mm };
+        } else if (o.p.lib === 'stdBearing' && typeof bearingEntry === 'function') {
+          const be = bearingEntry(o.p.size);
+          if (be) o.p.spec = { d: be.d_mm, D: be.D_mm, B: be.B_mm, r: be.r_min_mm, balls: be.kugeln_richtwert || 8 };
+        } else if (o.p.lib === 'stdSleeve' && typeof sleeveEntry === 'function') {
+          const se = sleeveEntry(o.p.size);
+          if (se) o.p.spec = { d: se.d_mm, D: se.D_mm, wall: se.wand_mm, fD: se.flansch_d_mm || (se.D_mm + 4 * se.wand_mm) };
         }
       }
     }
@@ -916,6 +928,11 @@ const Model = (() => {
           if (L === 'stdWasher') { const r = D[4] / 2; return [-r, -r, 0, r, r, D[5]]; }
           const r = D[0] / 2, len = n('length', 10); return p.head === 'senk' ? [-r, -r, -len, r, r, 0] : [-r, -r, -len, r, r, D[1]];
         }
+        if (L === 'stdPin') { const pe = typeof pinEntry === 'function' ? pinEntry(p.size ?? p.d) : null; const r = (pe ? pe.d_mm : 6) / 2, len = n('length', 20); return [-r, -r, 0, r, r, len]; }
+        if (L === 'stdKey') { const ke = typeof keyEntry === 'function' ? keyEntry(p.size) : null; const b = ke ? ke.b_mm : 6, h = ke ? ke.h_mm : 6, len = n('length', 20); return [-len / 2, -b / 2, 0, len / 2, b / 2, h]; }
+        if (L === 'stdKeyway') { const ke = typeof keyEntry === 'function' ? keyEntry(p.size) : null; const b = ke ? ke.b_mm : 6, dep = ke ? (p.kind === 'hub' ? ke.t2_mm : ke.t1_mm) : 3.5, len = n('length', 20), up = Math.max(0.2, n('extra', 0.5)); return [-len / 2, -b / 2, -dep, len / 2, b / 2, up]; }
+        if (L === 'stdBearing') { const be = typeof bearingEntry === 'function' ? bearingEntry(p.size) : null; const r = (be ? be.D_mm : 22) / 2, B = be ? be.B_mm : 7; return [-r, -r, 0, r, r, B]; }
+        if (L === 'stdSleeve') { const se = typeof sleeveEntry === 'function' ? sleeveEntry(p.size) : null; const D = se ? (p.flange === 'flange' ? (se.flansch_d_mm || se.D_mm + 4 * se.wand_mm) : se.D_mm) : 10, r = D / 2, len = n('length', 10); return [-r, -r, 0, r, r, len]; }
         if (L === 'buyAntenna') { const r = Math.max(4, p.form === 'stab' ? n('d', 3) : n('kd', 14)) / 2; return [-r, -r, 0, r, r, n('L', 45)]; }
         if (L === 'buyStack') { const s = n('a', 30.5) + 5.5; return [-s / 2, -s / 2, 0, s / 2, s / 2, n('h', 12)]; }
         if (L.startsWith('buy')) { const w = n('w', 20), d = n('d', 20), h = n('h', 10); return [-w / 2, -d / 2, 0, w / 2, d / 2, h]; }
