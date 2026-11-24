@@ -228,10 +228,19 @@ const Model = (() => {
       for (const x of b || []) if (x && x.id) out.push({ from: me, to: top(x.id), what: 'Rohr hängt an' });
     });
     for (const d of doc.datums || []) {
-      if (d.base && d.base.type === 'face' && d.base.id) out.push({ from: 'datum:' + d.id, to: top(d.base.id), what: 'Bezugsebene an', datum: d.name });
-      else if (d.base && d.base.type === 'edgeAngle') {
-        if (d.base.edgeId) out.push({ from: 'datum:' + d.id, to: top(d.base.edgeId), what: 'Bezugsebene an', datum: d.name });
-        if (d.base.faceId) out.push({ from: 'datum:' + d.id, to: top(d.base.faceId), what: 'Bezugsebene an', datum: d.name });
+      const b = d.base || {};
+      if ((b.type === 'face' || b.type === 'tangent') && b.id) out.push({ from: 'datum:' + d.id, to: top(b.id), what: 'Bezugsebene an', datum: d.name });
+      else if (b.type === 'edgeAngle') {
+        if (b.edgeId) out.push({ from: 'datum:' + d.id, to: top(b.edgeId), what: 'Bezugsebene an', datum: d.name });
+        if (b.faceId) out.push({ from: 'datum:' + d.id, to: top(b.faceId), what: 'Bezugsebene an', datum: d.name });
+      } else if (b.type === 'normalToCurve' && b.edgeId) {
+        out.push({ from: 'datum:' + d.id, to: top(b.edgeId), what: 'Bezugsebene an', datum: d.name });
+      } else if (b.type === 'edgePoint') {
+        if (b.edgeId) out.push({ from: 'datum:' + d.id, to: top(b.edgeId), what: 'Bezugsebene an', datum: d.name });
+        if (b.pBind && b.pBind.id) out.push({ from: 'datum:' + d.id, to: top(b.pBind.id), what: 'Bezugsebene an', datum: d.name });
+      } else if (b.type === 'twoEdges') {
+        if (b.e1 && b.e1.id) out.push({ from: 'datum:' + d.id, to: top(b.e1.id), what: 'Bezugsebene an', datum: d.name });
+        if (b.e2 && b.e2.id) out.push({ from: 'datum:' + d.id, to: top(b.e2.id), what: 'Bezugsebene an', datum: d.name });
       }
     }
     for (const ax of doc.axes || []) {

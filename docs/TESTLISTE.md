@@ -1617,6 +1617,22 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Verbundene Nachführung mit Versatz**: Nach dem Hochziehen und Verbreitern des Quaders auf 50 mm wächst die mit +2 mm Versatz übernommene Kontur automatisch auf 54×34 mit (Loch bleibt Ø6).
 - [ ] **Von Hand**: Bei gedrückter Umschalt-Taste die Flächen-Hervorhebung vor dem Klick sowie die Übernahme einer komplexeren ebenen Fläche mit mehreren Bögen und Langlöchern bei positivem und negativem Versatz prüfen.
 
+## Weitere Bezugsebenen (Auto [A-027])
+
+- [x] **Tangential an Zylinder und Kegel (BZ-03)**: Tangentiale Bezugsebene berührt den Zylindermantel (Abstand Achse–Ebene = Radius, Punkt auf Ebene) sowie den Kegelmantel samt Spitze und Neigung; nach Durchmesser-/Lageänderung wandert sie exakt mit und lässt sich über `#datum-angle` um die Achse drehen.
+- [x] **Senkrecht zu Kante oder Kurve (BZ-04)**: Senkrechte Ebene an einer Quaderkante (Mitte, Anfang, Ende, Prozentwert `#datum-pos-mode` / `#datum-percent`) und an einer Kreiskante; Normale liegt entlang der Kante/Tangente, wandert bei Größenänderung mit und erlaubt direktes Skizzieren und Hochziehen.
+- [x] **Durch Kante und Punkt / durch zwei Kanten (BZ-05)**: Ebene durch Kante + Punkt und durch zwei parallele oder sich schneidende Kanten enthält alle Bezüge, folgt Höhenänderungen und weist kollineare Punkte sowie windschiefe Kanten ab.
+- [x] **Dialog, Abhängigkeiten, Fehlerzustand & Hilfetexte**: Alle vier Knöpfe im Bezugsebenen-Dialog (`#dp-tangent`, `#dp-normal-curve`, `#dp-edge-point`, `#dp-two-edges`), `Model.dependencies`, Anzeige „Bezug fehlt“ samt Rückgängig, Befehle und Hilfetexte (`datumTangent`, `datumNormalCurve`, `datumEdgePoint`, `datumTwoEdges`) geprüft.
+- [ ] **Von Hand**: Interaktives Anklicken im 3D-Bild für alle vier Arten (Kontextleiste „Ebene tangential“ / „Ebene senkrecht“ / „Ebene durch 2 Kanten“ sowie Punkt-Einrasten bei „Durch Kante & Punkt“).
+
+## Freie Stellen & Widerspruch erklären (Auto [A-023])
+
+- [x] **Linie nur mit Länge**: Knopf „Freie Stellen“ (`#sk-free`) markiert beide Endpunkte als orange Punkte (`.skfree-pt`), zeigt die Zahl der fehlenden Angaben (`3`) in Knopf und Schild (`.sk-free-badge`) und hebt die Linie pulsierend orange hervor.
+- [x] **Wackeln & Tastenkürzel**: Klick auf einen freien Punkt löst das Wackeln entlang der freien Richtungen aus (`S.lastWiggle`), ohne die Geometrie dauerhaft zu verändern; `Umschalt F` schaltet die Anzeige um, während `F` weiterhin „Versatz“ wählt.
+- [x] **Widersprüchliches drittes Maß & Hervorheben**: Ein drittes Maß am bereits mit Breite + Höhe bestimmten Rechteck zeigt `#sk-conflict` mit allen drei beteiligten Maßen; Klick auf einen Eintrag hebt das Maß und seine Geometrie im Bild rot hervor (`.conf-focus`).
+- [x] **„Entfernen“ löst Widerspruch (Maße, Regeln & Live-Konflikt)**: „Entfernen“ bei der Höhe übernimmt die neue Diagonale und löst die Skizze fehlerfrei; ebenso bei einem Regel-Widerspruch (`Gleich` + zwei Längenmaße) sowie bei einem bereits bestehenden Widerspruch in der Skizze. Hilfetext `sketchFreeSpots` vorhanden.
+- [ ] **Von Hand**: Im Browser bei einer größeren Skizze mit gemischten Regeln das orange Pulsieren, das Wackeln beim Klick auf verschiedene freie Punkte/Radien sowie die Lesbarkeit der Konflikt-Hervorhebung prüfen.
+
 ## Eigene Schrift laden (Auto [A-026])
 
 - [x] **TrueType-Schrift (OFL) laden & 3D-Körper**: Über „Schrift laden …“ (`#tx-load-font`) wird `tests/daten/Balthazar-Regular.ttf` eingelesen, in der Schriftliste (`#tx-font`) und `doc.fonts` (Base64) abgelegt und als Text „Tracery“ ohne Fehler zu einem 3D-Körper mit Fläche > 0 hochgezogen.

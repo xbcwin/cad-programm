@@ -7225,6 +7225,323 @@ def t_a025_flaeche_uebernehmen(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+# ---------- [A-027] Weitere Bezugsebenen (BZ-03, BZ-04, BZ-05) ----------
+def t_a027_weitere_bezugsebenen(p):
+    def pdist(pl, pt):
+        return abs(sum((pt[k] - pl['o'][k]) * pl['n'][k] for k in range(3)))
+
+    # 1. Tangential an Zylinder (BZ-03) + Mitwandern + Winkel ändern
+    p.empty()
+    p.ev("App.change('x', d=>{ const c=Model.newItem('cylinder',{d:20,h:30},{name:'Zylinder'}); c.t.x=15; c.t.y=-5; d.items.push(c); })"); warte_rechnen(p)
+    d_cyl = p.ev("""const id=App.doc.items[0].id, r=App.results.get(id);
+      const fi=r.data.faces.findIndex(f=>f.t==='CYLINDRE');
+      return Datums.addTangent({id,idx:fi,info:r.data.faces[fi]}, [25,-5,15]);""")
+    p.wait(400)
+    pl0 = d_cyl['plane']
+    ok_cyl_0 = (
+        d_cyl and d_cyl['base']['type'] == 'tangent'
+        and abs(pl0['n'][2]) < 1e-4 and pl0['n'][0] > 0.99
+        and abs(pdist(pl0, [15, -5, 0]) - 10.0) < 1e-3
+        and pdist(pl0, [25, -5, 15]) < 1e-3
+        and p.pg.locator('#datum-tree .datum-row').count() == 1
+    )
+    p.ev("App.change('x', d=>{ d.items[0].p.d=36; d.items[0].t.x=25; })"); warte_rechnen(p); p.wait(500)
+    pl_cyl_m = p.ev("return App.doc.datums[0].plane")
+    p.ev("Datums.select(App.doc.datums[0].id)"); p.wait(400)
+    p.pg.fill('#datum-angle', '90'); p.pg.press('#datum-angle', 'Enter'); p.wait(500)
+    pl_cyl_90 = p.ev("return App.doc.datums[0].plane")
+    ok1 = (
+        ok_cyl_0
+        and abs(pdist(pl_cyl_m, [25, -5, 0]) - 18.0) < 1e-3
+        and pl_cyl_m['n'][0] > 0.99
+        and abs(pdist(pl_cyl_90, [25, -5, 0]) - 18.0) < 1e-3
+        and abs(abs(pl_cyl_90['n'][1]) - 1.0) < 1e-3
+        and abs(pl_cyl_90['n'][0]) < 1e-3
+    )
+
+    # 2. Tangential an Kegel (BZ-03) + Mitwandern
+    p.ev("Start.newProject(true)"); p.wait(700)
+    p.ev("App.change('x', d=>{ const k=Model.newItem('cone',{d1:20,d2:0,h:20},{name:'Kegel'}); d.items.push(k); })"); warte_rechnen(p)
+    d_cone = p.ev("""const id=App.doc.items[0].id, r=App.results.get(id);
+      const fi=r.data.faces.findIndex(f=>f.t==='CONE');
+      return Datums.addTangent({id,idx:fi,info:r.data.faces[fi]}, [10,0,0]);""")
+    p.wait(400)
+    plc = d_cone['plane']
+    inv_s5 = 1.0 / math.sqrt(5.0)
+    p.ev("App.change('x', d=>{ d.items[0].p.d1=30; })"); warte_rechnen(p); p.wait(500)
+    plc_m = p.ev("return App.doc.datums[0].plane")
+    ok2 = (
+        d_cone and d_cone['base']['type'] == 'tangent'
+        and pdist(plc, [10, 0, 0]) < 1e-2
+        and pdist(plc, [0, 0, 20]) < 1e-2
+        and abs(plc['n'][0] - 2 * inv_s5) < 1e-2
+        and abs(plc['n'][2] - inv_s5) < 1e-2
+        and pdist(plc_m, [15, 0, 0]) < 1e-2
+        and pdist(plc_m, [0, 0, 20]) < 1e-2
+    )
+
+    # 3. Senkrecht zu Kante oder Kurve (BZ-04): Mitte, Anfang, Ende, Prozent, Mitwandern, Kreiskante, Skizze
+    p.ev("Start.newProject(true)"); p.wait(700)
+    p.ev("App.change('x', d=>{ const b=Model.newItem('box',{w:40,d:30,h:10},{name:'Quader'}); d.items.push(b); })"); warte_rechnen(p)
+    d_nc = p.ev("""const id=App.doc.items[0].id, r=App.results.get(id);
+      const ei=r.data.edges.findIndex(g=>g.t==='LINE'&&Math.abs(g.a[2]-10)<1e-4&&Math.abs(g.b[2]-10)<1e-4&&Math.abs(g.m[1]+15)<1e-4);
+      return Datums.addNormalToCurve({id,edgeIdx:ei}, 'mid');""")
+    p.wait(400)
+    p.ev("Datums.select(App.doc.datums[0].id)"); p.wait(300)
+    p.pg.select_option('#datum-pos-mode', 'start'); p.wait(400)
+    pl_start = p.ev("return App.doc.datums[0].plane")
+    p.pg.select_option('#datum-pos-mode', 'end'); p.wait(400)
+    pl_end = p.ev("return App.doc.datums[0].plane")
+    p.pg.fill('#datum-percent', '25'); p.pg.press('#datum-percent', 'Enter'); p.wait(400)
+    pl_25 = p.ev("return App.doc.datums[0].plane")
+    p.ev("App.change('x', d=>{ d.items[0].p.w=60; d.items[0].p.h=25; })"); warte_rechnen(p); p.wait(500)
+    pl_nc_m = p.ev("return App.doc.datums[0].plane")
+    # Skizze auf dieser Ebene + Hochziehen
+    p.ev("Datums.select(App.doc.datums[0].id)"); p.wait(300)
+    p.pg.locator('#datum-sketch').click(); p.wait(900)
+    p.ev("Sketch.state.ents.push({id:'r1',type:'rect',a:[-3,-3],b:[3,3]})"); p.wait(200)
+    p.pg.locator('.sketchbar .tool.primary').click(); p.wait(900)
+    p.pg.locator('.stepbox .btn.primary').click(); p.wait(1100); warte_rechnen(p)
+    ext_nc = p.ev("const it=App.doc.items[App.doc.items.length-1]; return {kind:it.kind, errs:App.errorsFor(it.id).length}")
+    # Kreiskante an Zylinder
+    p.ev("App.change('x', d=>{ const c=Model.newItem('cylinder',{d:20,h:12},{name:'Rolle'}); c.t.y=30; d.items.push(c); })"); warte_rechnen(p)
+    d_circ = p.ev("""const id=App.doc.items[App.doc.items.length-1].id, r=App.results.get(id);
+      const ei=r.data.edges.findIndex(g=>g.t==='CIRCLE'&&g.c&&Math.abs(g.c[2]-12)<1e-4);
+      return Datums.addNormalToCurve({id,edgeIdx:ei}, 'start');""")
+    p.wait(300)
+    ok_circ = False
+    if d_circ:
+        oc = d_circ['plane']['o']
+        nc = d_circ['plane']['n']
+        rad_v = [oc[0] - 0, oc[1] - 30, oc[2] - 12]
+        rad_len = math.sqrt(sum(v * v for v in rad_v))
+        dot_rn = abs(sum(rad_v[k] * nc[k] for k in range(3)))
+        ok_circ = abs(rad_len - 10.0) < 1e-3 and dot_rn < 1e-3 and abs(nc[2]) < 1e-4
+    ok3 = (
+        d_nc and d_nc['base']['type'] == 'normalToCurve'
+        and abs(d_nc['plane']['o'][0]) < 1e-4 and abs(d_nc['plane']['o'][1] + 15) < 1e-4 and abs(d_nc['plane']['o'][2] - 10) < 1e-4
+        and abs(abs(d_nc['plane']['n'][0]) - 1.0) < 1e-4
+        and abs(abs(pl_start['o'][0]) - 20.0) < 1e-4
+        and abs(abs(pl_end['o'][0]) - 20.0) < 1e-4 and abs(pl_start['o'][0] - pl_end['o'][0]) > 39.0
+        and abs(abs(pl_25['o'][0]) - 10.0) < 1e-4
+        and abs(abs(pl_nc_m['o'][0]) - 15.0) < 1e-3 and abs(pl_nc_m['o'][2] - 25.0) < 1e-3
+        and ext_nc['kind'] == 'extrude' and ext_nc['errs'] == 0
+        and ok_circ
+    )
+
+    # 4. Durch Kante und Punkt (BZ-05) + Mitwandern + kollinear abgelehnt
+    p.ev("Start.newProject(true)"); p.wait(700)
+    p.ev("App.change('x', d=>{ const b=Model.newItem('box',{w:40,d:30,h:10},{name:'Block'}); d.items.push(b); })"); warte_rechnen(p)
+    res_ep = p.ev("""const id=App.doc.items[0].id, r=App.results.get(id);
+      const ei=r.data.edges.findIndex(g=>g.t==='LINE'&&Math.abs(g.a[2])<1e-4&&Math.abs(g.b[2])<1e-4&&Math.abs(g.m[1]+15)<1e-4);
+      const bad=Datums.addEdgePoint({id,edgeIdx:ei}, [0,-15,0]);
+      const good=Datums.addEdgePoint({id,edgeIdx:ei}, [20,15,10]);
+      return {good, bad};""")
+    p.wait(400)
+    d_ep = res_ep['good']
+    p.ev("App.change('x', d=>{ d.items[0].p.h=20; })"); warte_rechnen(p); p.wait(500)
+    pl_ep_m = p.ev("return App.doc.datums[0].plane")
+    ok4 = (
+        res_ep['bad'] is None
+        and d_ep and d_ep['base']['type'] == 'edgePoint'
+        and pdist(d_ep['plane'], [-20, -15, 0]) < 1e-3
+        and pdist(d_ep['plane'], [20, -15, 0]) < 1e-3
+        and pdist(d_ep['plane'], [20, 15, 10]) < 1e-3
+        and pdist(pl_ep_m, [-20, -15, 0]) < 1e-3
+        and pdist(pl_ep_m, [20, 15, 20]) < 1e-3
+        and abs(pl_ep_m['n'][2] - d_ep['plane']['n'][2]) > 0.05
+    )
+
+    # 5. Durch zwei Kanten (BZ-05): parallel, schneidend, Mitwandern, windschief abgelehnt
+    res_2e = p.ev("""const id=App.doc.items[0].id, r=App.results.get(id), eds=r.data.edges;
+      const eBotF=eds.findIndex(g=>g.t==='LINE'&&Math.abs(g.a[2])<1e-4&&Math.abs(g.b[2])<1e-4&&Math.abs(g.m[1]+15)<1e-4);
+      const eTopB=eds.findIndex(g=>g.t==='LINE'&&Math.abs(g.a[2]-20)<1e-4&&Math.abs(g.b[2]-20)<1e-4&&Math.abs(g.m[1]-15)<1e-4);
+      const eBotR=eds.findIndex(g=>g.t==='LINE'&&Math.abs(g.a[2])<1e-4&&Math.abs(g.b[2])<1e-4&&Math.abs(g.m[0]-20)<1e-4);
+      const eVertBR=eds.findIndex(g=>g.t==='LINE'&&Math.abs(g.m[0]-20)<1e-4&&Math.abs(g.m[1]-15)<1e-4);
+      const dPar=Datums.addTwoEdges({id,edgeIdx:eBotF}, {id,edgeIdx:eTopB});
+      const dInt=Datums.addTwoEdges({id,edgeIdx:eBotF}, {id,edgeIdx:eBotR});
+      const dSkew=Datums.addTwoEdges({id,edgeIdx:eBotF}, {id,edgeIdx:eVertBR});
+      return {dPar, dInt, dSkew};""")
+    p.wait(400)
+    d_par = res_2e['dPar']
+    d_int = res_2e['dInt']
+    p.ev("App.change('x', d=>{ d.items[0].p.h=30; })"); warte_rechnen(p); p.wait(500)
+    pl_par_m = p.ev("return App.doc.datums[1].plane")
+    ok5 = (
+        res_2e['dSkew'] is None
+        and d_par and d_par['base']['type'] == 'twoEdges'
+        and pdist(d_par['plane'], [-20, -15, 0]) < 1e-3
+        and pdist(d_par['plane'], [20, 15, 20]) < 1e-3
+        and d_int and d_int['base']['type'] == 'twoEdges'
+        and abs(abs(d_int['plane']['n'][2]) - 1.0) < 1e-3
+        and pdist(pl_par_m, [20, 15, 30]) < 1e-3
+    )
+
+    # 6. Dialog, Abhängigkeiten, Bezug fehlt + Rückgängig, Befehle & Hilfetexte
+    p.ev("Datums.select(null); Datums.dialog();"); p.wait(400)
+    dlg_ok = (
+        p.pg.locator('#dp-tangent').count() == 1
+        and p.pg.locator('#dp-normal-curve').count() == 1
+        and p.pg.locator('#dp-edge-point').count() == 1
+        and p.pg.locator('#dp-two-edges').count() == 1
+    )
+    p.pg.keyboard.press('Escape'); p.wait(200)
+    deps_cnt = p.ev("return Model.dependencies(App.doc).filter(x=>x.datum).length")
+    p.ev("App.change('weg', d=>{ d.items.splice(0,1); })"); warte_rechnen(p); p.wait(400)
+    lost_ok = 'Bezug fehlt' in p.pg.locator('#datum-tree').inner_text()
+    p.ev("App.undo()"); warte_rechnen(p); p.wait(400)
+    restored_ok = 'Bezug fehlt' not in p.pg.locator('#datum-tree').inner_text()
+    cmds = p.ev("return Commands.search('Bezugsebene').map(c=>c.id)")
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    help_keys = ('datumTangent', 'datumNormalCurve', 'datumEdgePoint', 'datumTwoEdges')
+    ok6 = (
+        dlg_ok and deps_cnt >= 3 and lost_ok and restored_ok
+        and all(cid in cmds for cid in ('datum-tangent', 'datum-normal-curve', 'datum-edge-point', 'datum-two-edges'))
+        and all(k in hilfen and all(f in hilfen[k] for f in ('tip', 'hilfe', 'tipp')) for k in help_keys)
+    )
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
+
+
+def t_a023_freie_stellen_widerspruch(p):
+    # 1. Linie nur mit Länge -> beide Endpunkte als frei markiert, Zahl > 0
+    scene(p, [{'id': 'L1', 'type': 'line', 'a': [10, 10], 'b': [55, 10]}])
+    click_uv(p, 30, 10, alt=False); p.wait(300)
+    p.pg.fill('#se-len', '40'); p.pg.press('#se-len', 'Enter'); p.wait(400)
+    p.pg.click('#sk-free'); p.wait(300)
+    st1 = SS(p, """
+      const pts = [...document.querySelectorAll('.skfree-pt')].map(el => ({ eid: el.dataset.eid, pt: el.dataset.pt }));
+      const badge = document.getElementById('sk-free-badge');
+      return {
+        freeMode: S.freeMode,
+        cntText: document.getElementById('sk-free-count')?.textContent,
+        badgeText: badge ? badge.textContent : '',
+        hasInfo: !!document.getElementById('sk-free-info'),
+        dof: S.status && S.status.dof,
+        dims: S.dims.length,
+        freeEnt: S.status && S.status.freeEnts && S.status.freeEnts.has('L1'),
+        pts
+      };
+    """)
+    ok1 = (st1['freeMode'] is True and st1['dims'] == 1 and int(st1['cntText'] or 0) == 3 and '3 fehlende' in st1['badgeText']
+           and st1['hasInfo'] and st1['freeEnt']
+           and len(st1['pts']) == 2
+           and {q['pt'] for q in st1['pts']} == {'a', 'b'}
+           and all(q['eid'] == 'L1' for q in st1['pts']))
+
+    # 2. Klick auf freie Stelle lässt sie kurz wackeln; Umschalt F schaltet aus/an; F bleibt Versatz
+    before_wig = SS(p, "const l=E('L1'); return { a: l.a, b: l.b }")
+    p.pg.click('.skfree-pt[data-pt="b"]'); p.wait(120)
+    wig = SS(p, "return S.lastWiggle ? { eid: S.lastWiggle.eid, p: S.lastWiggle.p, amp: S.lastWiggle.amp, active: !!S.wiggle } : null")
+    p.wait(650)
+    after_wig = SS(p, "const l=E('L1'); return { active: !!S.wiggle, a: l.a, b: l.b }")
+    p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('Shift+f'); p.wait(250)
+    off_mode = SS(p, "return S.freeMode")
+    p.pg.keyboard.press('Shift+f'); p.wait(250)
+    on_mode = SS(p, "return S.freeMode")
+    p.pg.keyboard.press('f'); p.wait(200)
+    f_tool = SS(p, "return S.tool")
+    ok2 = (bool(wig) and wig['eid'] == 'L1' and wig['p'] == 'b' and wig['amp'] > 0
+           and after_wig['active'] is False
+           and near(after_wig['a'], before_wig['a'], 1e-4) and near(after_wig['b'], before_wig['b'], 1e-4)
+           and off_mode is False and on_mode is True and f_tool == 'offset')
+
+    # 3. Widersprüchliches drittes Maß -> Liste aller beteiligten Maße, Klick hebt hervor
+    p.ev("""
+      Sketch.cancel(true);
+      App.change('x', d => {
+        d.items[0].p.sketch.ents = [{ id: 'R1', type: 'rect', a: [0, 0], b: [40, 30] }];
+        d.items[0].p.sketch.dims = [{ id: 'dw', e: 'R1', k: 'w', v: 40 }, { id: 'dh', e: 'R1', k: 'h', v: 30 }];
+        d.items[0].p.sketch.cons = [];
+      });
+      Sketch.editItem(App.doc.items[0].id);
+    """); p.wait(800)
+    p.pg.keyboard.press('d'); p.wait(150)
+    s0 = to_screen(p, 0, 0); s2 = to_screen(p, 40, 30)
+    p.pg.mouse.click(s0[0], s0[1]); p.wait(200)
+    p.pg.mouse.click(s2[0], s2[1]); p.wait(300)
+    p.pg.keyboard.press('ControlOrMeta+a'); p.pg.keyboard.type('60'); p.pg.keyboard.press('Enter'); p.wait(500)
+    cf3 = SS(p, """
+      const box = document.getElementById('sk-conflict');
+      const rows = [...document.querySelectorAll('#sk-conflict .sk-conf-row')].map(r => ({
+        id: r.dataset.confId,
+        kind: r.dataset.confKind,
+        txt: r.textContent,
+        hasDel: !!r.querySelector('.sk-conf-del')
+      }));
+      return { hasBox: !!box, rows };
+    """)
+    p.pg.locator('#sk-conflict .sk-conf-row[data-conf-id="dw"] .sk-conf-pick').click(); p.wait(300)
+    foc = SS(p, "return { fid: S.conflict && S.conflict.focusId, cls: document.querySelectorAll('.skdim.conf-focus').length }")
+    ok3 = (cf3['hasBox'] and len(cf3['rows']) == 3
+           and all(r['hasDel'] for r in cf3['rows'])
+           and {r['id'] for r in cf3['rows']} == {'dw', 'dh', '_neu'}
+           and foc['fid'] == 'dw' and foc['cls'] == 1)
+
+    # 4. „Entfernen“ auf Höhe löst den Widerspruch und setzt das neue Maß um
+    p.pg.locator('#sk-conflict .sk-conf-row[data-conf-id="dh"] .sk-conf-del').click(); p.wait(400)
+    st4 = SS(p, """
+      const r = E('R1');
+      return {
+        hasBox: !!document.getElementById('sk-conflict'),
+        ok: !!(S.status && S.status.ok),
+        w: Math.abs(r.b[0] - r.a[0]),
+        h: Math.abs(r.b[1] - r.a[1]),
+        dimKs: S.dims.map(d => d.k).sort()
+      };
+    """)
+    ok4 = (not st4['hasBox'] and st4['ok'] and abs(st4['w'] - 40) < 1e-2
+           and abs(st4['h'] - math.sqrt(60**2 - 40**2)) < 0.05
+           and st4['dimKs'] == ['dist', 'w'])
+
+    # 5. Regel-Widerspruch + Live-Widerspruch + Hilfetext
+    p.ev("""
+      Sketch.cancel(true);
+      App.change('x', d => {
+        d.items[0].p.sketch.ents = [
+          { id: 'L1', type: 'line', a: [0, 0], b: [30, 0] },
+          { id: 'L2', type: 'line', a: [0, 20], b: [30, 20] }
+        ];
+        d.items[0].p.sketch.dims = [{ id: 'm1', e: 'L1', k: 'len', v: 30 }];
+        d.items[0].p.sketch.cons = [{ id: 'k1', type: 'equal', refs: [{ e: 'L1' }, { e: 'L2' }] }];
+      });
+      Sketch.editItem(App.doc.items[0].id);
+    """); p.wait(800)
+    click_uv(p, 15, 20, alt=False); p.wait(300)
+    p.pg.fill('#se-len', '50'); p.pg.press('#se-len', 'Enter'); p.wait(400)
+    cf5 = SS(p, "return [...document.querySelectorAll('#sk-conflict .sk-conf-row')].map(r=>r.dataset.confId)")
+    p.pg.locator('#sk-conflict .sk-conf-row[data-conf-id="k1"] .sk-conf-del').click(); p.wait(400)
+    st5 = SS(p, """
+      const l1 = E('L1'), l2 = E('L2');
+      return {
+        hasBox: !!document.getElementById('sk-conflict'),
+        ok: !!(S.status && S.status.ok),
+        cons: S.cons.length,
+        d1: Math.hypot(l1.b[0]-l1.a[0], l1.b[1]-l1.a[1]),
+        d2: Math.hypot(l2.b[0]-l2.a[0], l2.b[1]-l2.a[1])
+      };
+    """)
+    # Live-Widerspruch beim Öffnen einer widersprüchlichen Skizze
+    p.ev("""
+      Sketch.cancel(true);
+      App.change('x', d => {
+        d.items[0].p.sketch.ents = [{ id: 'L1', type: 'line', a: [0, 0], b: [30, 0] }];
+        d.items[0].p.sketch.dims = [{ id: 'd1', e: 'L1', k: 'len', v: 30 }, { id: 'd2', e: 'L1', k: 'len', v: 45 }];
+        d.items[0].p.sketch.cons = [];
+      });
+      Sketch.editItem(App.doc.items[0].id);
+    """); p.wait(800)
+    cf_live = SS(p, "return [...document.querySelectorAll('#sk-conflict .sk-conf-row')].map(r=>r.dataset.confId)")
+    p.pg.locator('#sk-conflict .sk-conf-row[data-conf-id="d2"] .sk-conf-del').click(); p.wait(400)
+    st_live = SS(p, "return { hasBox: !!document.getElementById('sk-conflict'), ok: !!(S.status && S.status.ok), dims: S.dims.map(d=>d.id) }")
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    ok5 = (set(cf5) == {'k1', 'm1', '_neu'} and not st5['hasBox'] and st5['ok'] and st5['cons'] == 0
+           and abs(st5['d1'] - 30) < 1e-2 and abs(st5['d2'] - 50) < 1e-2
+           and set(cf_live) == {'d1', 'd2'} and not st_live['hasBox'] and st_live['ok'] and st_live['dims'] == ['d1']
+           and 'sketchFreeSpots' in hilfen and p.pg.locator('#sk-free[data-help="sketchFreeSpots"]').count() == 1)
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 def _make_kern_ttf_bytes(kern_val=-200):
     import struct
 
@@ -7601,6 +7918,8 @@ TESTS = [
     ('[A-024] Winkelfang und runde Längen beim Zeichnen: 45° & runde Länge / Linienzug 30° / Umschalt frei / Zoom 0,5 & 0,1 / Menü & gespeichert', t_a024_winkelfang),
     ('[A-022] Skizze fertig bestimmen: Rechteck & Kreis / Regeln <2° & <0,05 mm / gestrichelte Vorschau & Abbrechen / Übernehmen & Rückgängig / Einfach & Profi', t_a022_skizze_fertig_bestimmen),
     ('[A-025] Ganze Fläche in die Skizze, mit Versatz: 4 Linien + 1 Kreis / verbunden / Versatz +2 mm (44×34, Ø6) / Versatz −2 mm / folgt Körperänderung & Rückgängig', t_a025_flaeche_uebernehmen),
+    ('[A-027] Weitere Bezugsebenen: tangential an Zylinder & Kegel / senkrecht zu Kante & Kurve / durch Kante & Punkt / durch zwei Kanten / folgt Maßen & Hilfe', t_a027_weitere_bezugsebenen),
+    ('[A-023] Freie Stellen & Widerspruch erklären: Linie mit Länge / Wackeln & Umschalt F / 3. Maß Liste & Hervorheben / Entfernen löst / Regel- & Live-Widerspruch', t_a023_freie_stellen_widerspruch),
     ('[A-026] Eigene Schrift laden (TTF): Laden & Körper / Speichern & Neu-Laden / Kerning & Laufweite / CFF-Meldung', t_eigene_schrift),
     ('[F-11240211] Volltest-Reparatur: Schildchen ohne Re-Entranz bei überfälliger Kamera-Animation / Eigenschaften-Panel sofort bei Auswahl', t_f11240211),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),

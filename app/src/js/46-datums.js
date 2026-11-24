@@ -1,10 +1,14 @@
 // ================= Bezugsebenen & Bezugsachsen: eigene Ebenen und Achsen im Projekt =================
 // Bezugsebenen liegen in doc.datums und erscheinen im Verlauf unter „Bezugsebenen“.
 // Arten (base.type):
-//   origin    – Grundebene XY/XZ/YZ mit Abstand und Neigung um ihre x-Achse
-//   face      – ebene Körperfläche mit Abstand; wandert mit, wenn sich der Körper ändert
-//   edgeAngle – durch eine gerade Kante im Winkel zu einer ebenen Fläche; wandert mit
-//   fixed     – feste Lage (mittig zwischen zwei Flächen, durch drei Punkte)
+//   origin        – Grundebene XY/XZ/YZ mit Abstand und Neigung um ihre x-Achse
+//   face          – ebene Körperfläche mit Abstand; wandert mit, wenn sich der Körper ändert
+//   edgeAngle     – durch eine gerade Kante im Winkel zu einer ebenen Fläche; wandert mit
+//   tangent       – tangential an einer runden Fläche (Zylinder/Kegel); wandert mit
+//   normalToCurve – senkrecht zu einer Kante/Kurve an Anfang, Mitte, Ende oder Prozent; wandert mit
+//   edgePoint     – durch eine gerade Kante und einen Punkt; wandert mit
+//   twoEdges      – durch zwei koplanare gerade Kanten; wandert mit
+//   fixed         – feste Lage (mittig zwischen zwei Flächen, durch drei Punkte)
 //
 // Bezugsachsen liegen in doc.axes und erscheinen im Verlauf unter „Bezugsachsen“.
 // Arten (base.type):
@@ -68,6 +72,249 @@ const Datums = (() => {
       }
     }
     return best ? best.w : hit.faceIdx >= 0 ? hit.point.clone() : null;
+  }
+  function planeFrame(o, n, xHint) {
+    const nv = (n instanceof THREE.Vector3 ? n.clone() : V3(n)).normalize();
+    let xv = xHint ? (xHint instanceof THREE.Vector3 ? xHint.clone() : V3(xHint)) : null;
+    if (xv) xv.addScaledVector(nv, -xv.dot(nv));
+    if (!xv || xv.lengthSq() < 1e-8) {
+      const ref = Math.abs(nv.z) < 0.9 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(1, 0, 0);
+      xv = new THREE.Vector3().crossVectors(ref, nv);
+    }
+    xv.normalize();
+    const ov = o instanceof THREE.Vector3 ? o : V3(o);
+    return { o: r6(ov.toArray()), x: r6(xv.toArray()), n: r6(nv.toArray()) };
+  }
+  function localBbox(r) {
+    if (!r || !r.data) return null;
+    let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
+    const v = r.data.vertices;
+    if (v && v.length >= 3) {
+      for (let i = 0; i < v.length; i += 3) {
+        const x = v[i], y = v[i + 1], z = v[i + 2];
+        if (x < x0) x0 = x; if (x > x1) x1 = x;
+        if (y < y0) y0 = y; if (y > y1) y1 = y;
+        if (z < z0) z0 = z; if (z > z1) z1 = z;
+      }
+      return [x0, y0, z0, x1, y1, z1];
+    }
+    for (const g of r.data.edges || []) {
+      for (const q of [g.a, g.b, g.m]) {
+        if (!q) continue;
+        if (q[0] < x0) x0 = q[0]; if (q[0] > x1) x1 = q[0];
+        if (q[1] < y0) y0 = q[1]; if (q[1] > y1) y1 = q[1];
+        if (q[2] < z0) z0 = q[2]; if (q[2] > z1) z1 = q[2];
+      }
+    }
+    return isFinite(x0) ? [x0, y0, z0, x1, y1, z1] : null;
+  }
+  function relInBox(p, bb) {
+    return [0, 1, 2].map((k) => {
+      const span = bb[k + 3] - bb[k];
+      return span > 1e-6 ? (p[k] - bb[k]) / span : 0.5;
+    });
+  }
+  function makeEdgeRef(eRef) {
+    const g = eRef.info, r = App.results.get(eRef.id), bb = localBbox(r);
+    const gm = g.m || [(g.a[0] + g.b[0]) / 2, (g.a[1] + g.b[1]) / 2, (g.a[2] + g.b[2]) / 2];
+    const ref = {
+      id: eRef.id, et: g.t, ea: r6(g.a), eb: r6(g.b), em: r6(gm), el: round(g.l || 0, 6),
+      eIdx: eRef.idx, rel: bb ? r6(relInBox(gm, bb)) : null,
+    };
+    if (g.t === 'LINE' && g.a && g.b) {
+      const d = V3(g.b).sub(V3(g.a));
+      if (d.lengthSq() > 1e-12) ref.ed = r6(d.normalize().toArray());
+    } else if (g.t === 'CIRCLE' && Array.isArray(g.n) && Array.isArray(g.c)) {
+      ref.ec = r6(g.c);
+      ref.en = r6(V3(g.n).normalize().toArray());
+      ref.er = round(g.r || 0, 6);
+    }
+    return ref;
+  }
+  function matchEdge(r, ref) {
+    if (!r || !r.data || !ref) return null;
+    const bb = localBbox(r), cands = [];
+    const eds = r.data.edges || [];
+    for (let idx = 0; idx < eds.length; idx++) {
+      const g = eds[idx];
+      if (!g || g.t !== ref.et || !g.a || !g.b) continue;
+      let dL = null;
+      if (g.t === 'LINE') {
+        dL = V3(g.b).sub(V3(g.a));
+        if (dL.lengthSq() < 1e-12) continue;
+        dL.normalize();
+        if (ref.ed && Math.abs(dL.dot(V3(ref.ed))) < 0.99) continue;
+      } else if (g.t === 'CIRCLE' && ref.en && Array.isArray(g.n)) {
+        const gn = V3(g.n);
+        if (gn.lengthSq() < 1e-12) continue;
+        gn.normalize();
+        if (Math.abs(gn.dot(V3(ref.en))) < 0.99) continue;
+      }
+      const gmArr = g.m || [(g.a[0] + g.b[0]) / 2, (g.a[1] + g.b[1]) / 2, (g.a[2] + g.b[2]) / 2];
+      const gm = V3(gmArr);
+      const dd = ref.em ? gm.distanceTo(V3(ref.em)) : 0;
+      const lenDiff = Math.abs((g.l || 0) - (ref.el || 0));
+      let relDist = 0;
+      if (bb && ref.rel) {
+        const gr = relInBox(gmArr, bb);
+        relDist = Math.hypot(gr[0] - ref.rel[0], gr[1] - ref.rel[1], gr[2] - ref.rel[2]);
+      }
+      cands.push({ g, idx, dL, dd, lenDiff, relDist });
+    }
+    if (!cands.length) return null;
+    cands.sort((a, b) => {
+      const aEx = a.dd < 1e-3 && a.lenDiff < 1e-3 ? 0 : 1;
+      const bEx = b.dd < 1e-3 && b.lenDiff < 1e-3 ? 0 : 1;
+      if (aEx !== bEx) return aEx - bEx;
+      if (bb && ref.rel && Math.abs(a.relDist - b.relDist) > 0.02) return a.relDist - b.relDist;
+      if (Math.abs(a.dd - b.dd) > 1e-3) return a.dd - b.dd;
+      const ai = a.idx === ref.eIdx ? 0 : 1, bi = b.idx === ref.eIdx ? 0 : 1;
+      return ai - bi;
+    });
+    const best = cands[0];
+    let reversed = false;
+    if (best.dL && ref.ed) reversed = best.dL.dot(V3(ref.ed)) < 0;
+    else if (ref.ea && ref.eb) {
+      const ga = V3(best.g.a), gb = V3(best.g.b), ra = V3(ref.ea), rb = V3(ref.eb);
+      reversed = ga.distanceTo(ra) + gb.distanceTo(rb) > ga.distanceTo(rb) + gb.distanceTo(ra) + 1e-4;
+    }
+    return { g: best.g, idx: best.idx, reversed };
+  }
+  function matchRoundFace(r, b) {
+    if (!r || !r.data) return null;
+    const bd = V3(b.ad).normalize(), bo = V3(b.ao);
+    let best = null;
+    for (const f of r.data.faces || []) {
+      if ((f.t !== 'CYLINDRE' && f.t !== 'CONE') || !Array.isArray(f.axis) || f.axis.length < 6) continue;
+      const fd = V3(f.axis.slice(3, 6));
+      if (fd.lengthSq() < 1e-12) continue;
+      fd.normalize();
+      if (Math.abs(fd.dot(bd)) < 0.99) continue;
+      const axO = V3(f.axis.slice(0, 3));
+      const sameType = f.t === b.ft ? 0 : 1;
+      const axD = distPointToLine(axO, bo, bd);
+      const dd = f.c && b.fc ? V3(f.c).distanceTo(V3(b.fc)) : axO.distanceTo(bo);
+      if (!best || sameType < best.sameType || (sameType === best.sameType && (axD < best.axD - 1e-3 || (Math.abs(axD - best.axD) <= 1e-3 && dd < best.dd)))) {
+        best = { f, fd, axO, sameType, axD, dd };
+      }
+    }
+    return best;
+  }
+  function evalEdgeAt(g, tRaw, reversed) {
+    const t = clamp(reversed ? 1 - tRaw : tRaw, 0, 1);
+    if (g.t === 'LINE') {
+      const a = V3(g.a), b = V3(g.b), d = b.clone().sub(a);
+      if (d.lengthSq() < 1e-12) return null;
+      const p = a.clone().lerp(b, t), tan = d.normalize();
+      if (reversed) tan.negate();
+      return { p, tan };
+    }
+    if (g.t === 'CIRCLE' && Array.isArray(g.c) && Array.isArray(g.n)) {
+      const c = V3(g.c), n = V3(g.n).normalize(), a = V3(g.a), b = V3(g.b), m = V3(g.m || g.a);
+      const va = a.clone().sub(c); va.addScaledVector(n, -va.dot(n));
+      const R = va.length() > 1e-6 ? va.length() : (g.r || 1);
+      let u0 = va.length() > 1e-6 ? va.clone().normalize() : new THREE.Vector3(1, 0, 0).cross(n);
+      if (u0.lengthSq() < 1e-8) u0 = new THREE.Vector3(0, 1, 0).cross(n);
+      u0.normalize();
+      const v0 = new THREE.Vector3().crossVectors(n, u0).normalize();
+      const full = a.distanceTo(b) < 1e-4 * Math.max(1, R) && (g.l || 0) > Math.PI * R;
+      let sweep = Math.PI * 2;
+      if (!full) {
+        const ang = (q) => { const d = q.clone().sub(c); let phi = Math.atan2(d.dot(v0), d.dot(u0)); if (phi < 0) phi += Math.PI * 2; return phi; };
+        const am = ang(m), ab = ang(b);
+        sweep = ab < 1e-6 ? Math.PI * 2 : (am > 0 && am < ab ? ab : ab - Math.PI * 2);
+      }
+      const th = t * sweep;
+      const rad = u0.clone().multiplyScalar(Math.cos(th)).addScaledVector(v0, Math.sin(th));
+      const p = c.clone().addScaledVector(rad, R);
+      const tan = u0.clone().multiplyScalar(-Math.sin(th)).addScaledVector(v0, Math.cos(th)).multiplyScalar(sweep >= 0 ? 1 : -1).normalize();
+      if (reversed) tan.negate();
+      return { p, tan, xHint: rad };
+    }
+    const pts = (Array.isArray(g.pts) && g.pts.length >= 2 ? g.pts : [g.a, g.m, g.b].filter(Boolean)).map(V3);
+    if (pts.length < 2) return null;
+    const cum = [0];
+    for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + pts[i].distanceTo(pts[i - 1]));
+    const L = cum[cum.length - 1];
+    if (L < 1e-8) return null;
+    const s = t * L;
+    let seg = 0;
+    while (seg < pts.length - 2 && cum[seg + 1] < s) seg++;
+    const segLen = cum[seg + 1] - cum[seg];
+    const frac = segLen > 1e-9 ? (s - cum[seg]) / segLen : 0;
+    const p = pts[seg].clone().lerp(pts[seg + 1], frac);
+    const tans = pts.map((_, k) => {
+      const a = pts[Math.max(0, k - 1)], b = pts[Math.min(pts.length - 1, k + 1)];
+      const d = b.clone().sub(a);
+      return d.lengthSq() > 1e-12 ? d.normalize() : pts[seg + 1].clone().sub(pts[seg]).normalize();
+    });
+    const tan = tans[seg].clone().lerp(tans[seg + 1], frac);
+    if (tan.lengthSq() < 1e-12) tan.copy(pts[seg + 1]).sub(pts[seg]);
+    tan.normalize();
+    if (reversed) tan.negate();
+    return { p, tan };
+  }
+  function snapBodyPointInfo(hit, cx, cy) {
+    const n = hit && hit.node;
+    if (!n) return null;
+    const r = Viewer.canvas.getBoundingClientRect();
+    let best = null;
+    const eds = (n.data && n.data.edges) || [];
+    for (let idx = 0; idx < eds.length; idx++) {
+      const g = eds[idx];
+      for (const [end, q] of [['a', g.a], ['b', g.b], ['m', g.m]]) {
+        if (!q) continue;
+        const w = V3(q).applyMatrix4(n.obj.matrixWorld), sc = Viewer.toScreen(w), d = Math.hypot(sc.x + r.left - cx, sc.y + r.top - cy);
+        if (d < 12 && (!best || d < best.d)) best = { w, d, idx, g, end, q };
+      }
+    }
+    if (best) {
+      return {
+        w: best.w,
+        bind: { id: hit.id, lp: r6(best.q), edgeRef: makeEdgeRef({ id: hit.id, idx: best.idx, info: best.g }), end: best.end },
+      };
+    }
+    if (hit.faceIdx >= 0) {
+      const WI = Model.worldMatrix(App.doc, hit.id).invert();
+      return { w: hit.point.clone(), bind: { id: hit.id, lp: r6(hit.point.clone().applyMatrix4(WI).toArray()) } };
+    }
+    return null;
+  }
+  function autoBindWorldPoint(pW) {
+    for (const [id, r] of App.results.entries()) {
+      if (!r || !r.data || !Model.find(App.doc, id)) continue;
+      const W = Model.worldMatrix(App.doc, id), eds = r.data.edges || [];
+      for (let idx = 0; idx < eds.length; idx++) {
+        const g = eds[idx];
+        for (const [end, q] of [['a', g.a], ['b', g.b], ['m', g.m]]) {
+          if (!q) continue;
+          const w = V3(q).applyMatrix4(W);
+          if (w.distanceTo(pW) < 1e-3) {
+            return { id, lp: r6(q), edgeRef: makeEdgeRef({ id, idx, info: g }), end };
+          }
+        }
+      }
+    }
+    return null;
+  }
+  function resolveBoundPoint(pWorld, bind) {
+    if (bind && bind.id) {
+      if (!Model.find(App.doc, bind.id)) return null;
+      const W = Model.worldMatrix(App.doc, bind.id), r = App.results.get(bind.id);
+      if (bind.edgeRef && r) {
+        const m = matchEdge(r, bind.edgeRef);
+        if (m) {
+          let key = bind.end || 'a';
+          if (m.reversed) key = key === 'a' ? 'b' : key === 'b' ? 'a' : 'm';
+          const q = m.g[key] || m.g.m || m.g.a;
+          if (q) return V3(q).applyMatrix4(W);
+        }
+        return null;
+      }
+      if (Array.isArray(bind.lp)) return V3(bind.lp).applyMatrix4(W);
+      return null;
+    }
+    return Array.isArray(pWorld) ? V3(pWorld) : null;
   }
 
   // ---------- Bezugsebenen ----------
@@ -145,6 +392,142 @@ const Datums = (() => {
       }
       if (rE || !Model.find(App.doc, b.edgeId) || rF || !Model.find(App.doc, b.faceId)) lost.add(d.id);
     }
+    if (b.type === 'tangent') {
+      const r = App.results.get(b.id), W = Model.find(App.doc, b.id) ? Model.worldMatrix(App.doc, b.id) : null;
+      if (r && W) {
+        const best = matchRoundFace(r, b);
+        if (best) {
+          const dL = best.fd.clone();
+          if (dL.dot(V3(b.ad)) < 0) dL.negate();
+          const L = best.axO;
+          let u0 = V3(b.u0); u0.addScaledVector(dL, -u0.dot(dL));
+          if (u0.lengthSq() < 1e-8) {
+            const ref = Math.abs(dL.x) < 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+            u0 = ref.addScaledVector(dL, -ref.dot(dL));
+          }
+          u0.normalize();
+          const v0 = new THREE.Vector3().crossVectors(dL, u0).normalize();
+          const rad = (Model.num(b.angle, V, 0) * Math.PI) / 180;
+          const u = u0.clone().multiplyScalar(Math.cos(rad)).addScaledVector(v0, Math.sin(rad)).normalize();
+          const cL = best.f.c ? V3(best.f.c) : L;
+          const zMid = cL.clone().sub(L).dot(dL);
+          let semi = 0, rAtZ = best.f.r || 0;
+          if (best.f.t === 'CONE') {
+            if (best.f.semiAngle != null && best.f.coneR != null) {
+              semi = best.f.semiAngle;
+              rAtZ = best.f.coneR + zMid * Math.tan(semi);
+            } else {
+              rAtZ = cL.clone().sub(L).addScaledVector(dL, -zMid).length();
+            }
+          }
+          if (rAtZ > 1e-6) {
+            const pL = L.clone().addScaledVector(dL, zMid).addScaledVector(u, rAtZ);
+            const nL = u.clone().multiplyScalar(Math.cos(semi)).addScaledVector(dL, -Math.sin(semi)).normalize();
+            if (b.flip) nL.negate();
+            const xL = new THREE.Vector3().crossVectors(dL, u).normalize();
+            const oW = pL.applyMatrix4(W);
+            const nW = nL.transformDirection(W).normalize();
+            const xW = xL.transformDirection(W).normalize();
+            lost.delete(d.id);
+            return planeFrame(oW, nW, xW);
+          }
+        }
+      }
+      if (r || !Model.find(App.doc, b.id)) lost.add(d.id);
+      return d.plane;
+    }
+    if (b.type === 'normalToCurve') {
+      const r = App.results.get(b.edgeId), W = Model.find(App.doc, b.edgeId) ? Model.worldMatrix(App.doc, b.edgeId) : null;
+      if (r && W) {
+        const m = matchEdge(r, b.edge);
+        if (m) {
+          let t = 0.5;
+          if (b.posMode === 'start') t = 0;
+          else if (b.posMode === 'end') t = 1;
+          else if (b.posMode === 'percent') t = clamp(Model.num(b.percent, V, 50), 0, 100) / 100;
+          const ev = evalEdgeAt(m.g, t, m.reversed);
+          if (ev) {
+            const oW = ev.p.clone().applyMatrix4(W);
+            const nW = ev.tan.clone().transformDirection(W).normalize();
+            if (b.flip) nW.negate();
+            const xHint = ev.xHint ? ev.xHint.clone().transformDirection(W).normalize() : null;
+            lost.delete(d.id);
+            return planeFrame(oW, nW, xHint);
+          }
+        }
+      }
+      if (r || !Model.find(App.doc, b.edgeId)) lost.add(d.id);
+      return d.plane;
+    }
+    if (b.type === 'edgePoint') {
+      const rE = App.results.get(b.edgeId), WE = Model.find(App.doc, b.edgeId) ? Model.worldMatrix(App.doc, b.edgeId) : null;
+      const P = resolveBoundPoint(b.p, b.pBind);
+      if (rE && WE && P) {
+        const m = matchEdge(rE, b.edge);
+        if (m && m.g.t === 'LINE') {
+          const pA = V3(m.g.a).applyMatrix4(WE), pB = V3(m.g.b).applyMatrix4(WE);
+          const M = pA.clone().add(pB).multiplyScalar(0.5);
+          const e = pB.clone().sub(pA);
+          if (e.lengthSq() >= 1e-12) {
+            e.normalize();
+            if (m.reversed) e.negate();
+            const w = P.clone().sub(pA), v = w.addScaledVector(e, -w.dot(e));
+            if (v.length() > 1e-4) {
+              const n = new THREE.Vector3().crossVectors(e, v).normalize();
+              if (b.flip) n.negate();
+              const o = M.clone().add(P).multiplyScalar(0.5);
+              lost.delete(d.id);
+              return planeFrame(o, n, e);
+            }
+          }
+        }
+      }
+      if (rE || !Model.find(App.doc, b.edgeId) || !P || (b.pBind && !Model.find(App.doc, b.pBind.id))) lost.add(d.id);
+      return d.plane;
+    }
+    if (b.type === 'twoEdges') {
+      const r1 = b.e1 && App.results.get(b.e1.id), W1 = b.e1 && Model.find(App.doc, b.e1.id) ? Model.worldMatrix(App.doc, b.e1.id) : null;
+      const r2 = b.e2 && App.results.get(b.e2.id), W2 = b.e2 && Model.find(App.doc, b.e2.id) ? Model.worldMatrix(App.doc, b.e2.id) : null;
+      if (r1 && W1 && r2 && W2) {
+        const m1 = matchEdge(r1, b.e1), m2 = matchEdge(r2, b.e2);
+        if (m1 && m2 && m1.g.t === 'LINE' && m2.g.t === 'LINE') {
+          const A1 = V3(m1.g.a).applyMatrix4(W1), B1 = V3(m1.g.b).applyMatrix4(W1), M1 = A1.clone().add(B1).multiplyScalar(0.5);
+          const A2 = V3(m2.g.a).applyMatrix4(W2), B2 = V3(m2.g.b).applyMatrix4(W2), M2 = A2.clone().add(B2).multiplyScalar(0.5);
+          const e1 = B1.clone().sub(A1), e2 = B2.clone().sub(A2);
+          if (e1.lengthSq() >= 1e-12 && e2.lengthSq() >= 1e-12) {
+            e1.normalize(); e2.normalize();
+            if (m1.reversed) e1.negate();
+            if (m2.reversed) e2.negate();
+            const c = new THREE.Vector3().crossVectors(e1, e2);
+            let n = null, o = null;
+            if (c.length() < 1e-4) {
+              const w = M2.clone().sub(M1), v = w.addScaledVector(e1, -w.dot(e1));
+              if (v.length() > 1e-4) {
+                n = new THREE.Vector3().crossVectors(e1, v).normalize();
+                o = M1.clone().add(M2).multiplyScalar(0.5);
+              }
+            } else {
+              n = c.clone().normalize();
+              const skew = Math.abs(M2.clone().sub(M1).dot(n));
+              if (skew <= 1e-2) {
+                const dM = M2.clone().sub(M1);
+                dM.addScaledVector(n, -dM.dot(n));
+                o = M1.clone().addScaledVector(dM, 0.5);
+              } else {
+                n = null;
+              }
+            }
+            if (n && o) {
+              if (b.flip) n.negate();
+              lost.delete(d.id);
+              return planeFrame(o, n, e1);
+            }
+          }
+        }
+      }
+      if ((b.e1 && (r1 || !Model.find(App.doc, b.e1.id))) || (b.e2 && (r2 || !Model.find(App.doc, b.e2.id)))) lost.add(d.id);
+      return d.plane;
+    }
     return d.plane;
   }
 
@@ -192,6 +575,116 @@ const Datums = (() => {
     return add(base, name || `Ebene ${angTxt} an „${top ? Model.label(top.item) : 'Kante'}“`);
   }
   function addFixed(plane, name) { return add({ type: 'fixed' }, name, plane); }
+  function addTangent(face, pointOrAngle = 0, name) {
+    const f = resolveFace(face);
+    if (!f || (f.info.t !== 'CYLINDRE' && f.info.t !== 'CONE') || !Array.isArray(f.info.axis) || f.info.axis.length < 6) {
+      UI.toast('Wähl zuerst eine runde Fläche (Zylinder oder Kegel).', { icon: 'info' });
+      return null;
+    }
+    const W = Model.worldMatrix(App.doc, f.id), WI = W.clone().invert();
+    const ao = f.info.axis.slice(0, 3), ad = V3(f.info.axis.slice(3, 6));
+    if (ad.lengthSq() < 1e-12) return null;
+    ad.normalize();
+    const fc = f.info.c ? f.info.c.slice() : ao.slice();
+    let u0 = null, angle = 0;
+    if (pointOrAngle && (pointOrAngle instanceof THREE.Vector3 || (Array.isArray(pointOrAngle) && pointOrAngle.length >= 3))) {
+      const pW = pointOrAngle instanceof THREE.Vector3 ? pointOrAngle.clone() : V3(pointOrAngle);
+      const pL = pW.applyMatrix4(WI).sub(V3(ao));
+      pL.addScaledVector(ad, -pL.dot(ad));
+      if (pL.lengthSq() > 1e-8) u0 = pL.normalize();
+    } else {
+      angle = pointOrAngle ?? 0;
+    }
+    if (!u0) {
+      const ref = Math.abs(ad.x) < 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+      u0 = ref.addScaledVector(ad, -ref.dot(ad)).normalize();
+    }
+    const top = Model.find(App.doc, f.id);
+    return add({
+      type: 'tangent', id: f.id, ft: f.info.t, ao: r6(ao), ad: r6(ad.toArray()), fc: r6(fc),
+      u0: r6(u0.toArray()), angle,
+    }, name || `Tangential an „${top ? Model.label(top.item) : 'Rundung'}“`);
+  }
+  function addNormalToCurve(edge, pos = 'mid', name) {
+    const eRef = resolveEdge(edge);
+    if (!eRef) { UI.toast('Wähl zuerst eine Kante oder Kurve.', { icon: 'info' }); return null; }
+    let posMode = 'mid', percent = 50, flip = false;
+    if (pos && typeof pos === 'object') {
+      posMode = pos.posMode || 'mid';
+      percent = pos.percent ?? (posMode === 'start' ? 0 : posMode === 'end' ? 100 : 50);
+      flip = !!pos.flip;
+    } else if (pos === 'start' || pos === 'mid' || pos === 'end') {
+      posMode = pos;
+      percent = pos === 'start' ? 0 : pos === 'end' ? 100 : 50;
+    } else if (typeof pos === 'number' || typeof pos === 'string') {
+      posMode = 'percent';
+      percent = pos;
+    }
+    const top = Model.find(App.doc, eRef.id);
+    const posTxt = posMode === 'start' ? 'Anfang' : posMode === 'end' ? 'Ende' : posMode === 'mid' ? 'Mitte' : (typeof percent === 'number' ? fmt(percent, 0) + ' %' : String(percent));
+    const base = { type: 'normalToCurve', edgeId: eRef.id, edge: makeEdgeRef(eRef), posMode, percent };
+    if (flip) base.flip = true;
+    return add(base, name || `Senkrecht zu „${top ? Model.label(top.item) : 'Kante'}“ (${posTxt})`);
+  }
+  function addEdgePoint(edge, point, name, opts = {}) {
+    const eRef = resolveEdge(edge);
+    if (!eRef || eRef.info.t !== 'LINE') { UI.toast('Wähl zuerst eine gerade Kante.', { icon: 'info' }); return null; }
+    const WE = Model.worldMatrix(App.doc, eRef.id);
+    const pA = V3(eRef.info.a).applyMatrix4(WE), pB = V3(eRef.info.b).applyMatrix4(WE);
+    const eDir = pB.clone().sub(pA);
+    if (eDir.lengthSq() < 1e-12) return null;
+    eDir.normalize();
+    let pW = null, pBind = opts.bind || null;
+    if (point && point.p) {
+      pW = point.p instanceof THREE.Vector3 ? point.p.clone() : V3(point.p);
+      if (!pBind && point.bind) pBind = point.bind;
+    } else if (point) {
+      pW = point instanceof THREE.Vector3 ? point.clone() : V3(point);
+    }
+    if (!pW) return null;
+    if (distPointToLine(pW, pA, eDir) < 1e-4) {
+      UI.toast('Der Punkt liegt auf der Kante – wähl einen Punkt daneben.', { icon: 'info' });
+      return null;
+    }
+    if (!pBind) pBind = autoBindWorldPoint(pW);
+    const top = Model.find(App.doc, eRef.id);
+    const base = { type: 'edgePoint', edgeId: eRef.id, edge: makeEdgeRef(eRef), p: r6(pW.toArray()) };
+    if (pBind) base.pBind = pBind;
+    return add(base, name || `Durch Kante & Punkt (${top ? Model.label(top.item) : 'Körper'})`);
+  }
+  function addTwoEdges(edge1, edge2, name) {
+    const er1 = resolveEdge(edge1), er2 = resolveEdge(edge2);
+    if (!er1 || er1.info.t !== 'LINE' || !er2 || er2.info.t !== 'LINE') {
+      UI.toast('Wähl zwei gerade Kanten.', { icon: 'info' });
+      return null;
+    }
+    if (er1.id === er2.id && er1.idx === er2.idx) {
+      UI.toast('Wähl zwei verschiedene Kanten.', { icon: 'info' });
+      return null;
+    }
+    const W1 = Model.worldMatrix(App.doc, er1.id), W2 = Model.worldMatrix(App.doc, er2.id);
+    const A1 = V3(er1.info.a).applyMatrix4(W1), B1 = V3(er1.info.b).applyMatrix4(W1), M1 = A1.clone().add(B1).multiplyScalar(0.5);
+    const A2 = V3(er2.info.a).applyMatrix4(W2), B2 = V3(er2.info.b).applyMatrix4(W2), M2 = A2.clone().add(B2).multiplyScalar(0.5);
+    const e1 = B1.clone().sub(A1), e2 = B2.clone().sub(A2);
+    if (e1.lengthSq() < 1e-12 || e2.lengthSq() < 1e-12) return null;
+    e1.normalize(); e2.normalize();
+    const c = new THREE.Vector3().crossVectors(e1, e2);
+    if (c.length() < 1e-4) {
+      const w = M2.clone().sub(M1), v = w.addScaledVector(e1, -w.dot(e1));
+      if (v.length() < 1e-4) {
+        UI.toast('Die beiden Kanten liegen auf derselben Geraden – sie spannen keine Ebene auf.', { icon: 'info' });
+        return null;
+      }
+    } else {
+      const n = c.clone().normalize();
+      if (Math.abs(M2.clone().sub(M1).dot(n)) > 1e-2) {
+        UI.toast('Die beiden Kanten sind windschief – sie liegen nicht in einer Ebene.', { icon: 'info' });
+        return null;
+      }
+    }
+    const top = Model.find(App.doc, er1.id);
+    return add({ type: 'twoEdges', e1: makeEdgeRef(er1), e2: makeEdgeRef(er2) }, name || `Durch 2 Kanten (${top ? Model.label(top.item) : 'Körper'})`);
+  }
   function set(id, patch, label = 'Bezugsebene geändert') {
     App.change(label, (doc) => {
       const d = find(id, doc); if (!d) return false;
@@ -561,6 +1054,121 @@ const Datums = (() => {
     hint();
   }
 
+  function startTangentPick(preFace = null) {
+    stopPick();
+    const pre = preFace ? resolveFace(preFace) : null;
+    if (pre && pre.info.t !== 'CYLINDRE' && pre.info.t !== 'CONE') { UI.toast('Wähl eine runde Fläche (Zylinder oder Kegel).', { icon: 'info' }); return; }
+    if (pre) Viewer.highlightFace('sel', pre.id, pre.idx);
+    const hint = () => UI.hint('<b>Tangentiale Ebene:</b> Klick die Stelle auf der runden Fläche (Zylinder oder Kegel). <b>Esc</b> bricht ab.');
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true, solidsOnly: true });
+      const fr = hit && hit.faceIdx >= 0 ? resolveFace({ id: hit.id, idx: hit.faceIdx }) : null;
+      if (!fr || (fr.info.t !== 'CYLINDRE' && fr.info.t !== 'CONE')) { UI.toast('Klick auf die runde Fläche eines Zylinders oder Kegels.', { icon: 'info' }); return; }
+      const p = hit.point.clone();
+      stopPick();
+      addTangent(fr, p);
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); } };
+    pickState = { down, key, marks: [] };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    window.addEventListener('keydown', key, true);
+    hint();
+  }
+
+  function startNormalCurvePick(posMode = 'mid', percent = 50, preEdge = null) {
+    stopPick();
+    const pre = preEdge ? resolveEdge(preEdge) : null;
+    if (pre) { addNormalToCurve(pre, { posMode, percent }); return; }
+    const hint = () => UI.hint('<b>Ebene senkrecht zu Kante/Kurve:</b> Klick eine Kante oder Kurve eines Körpers. <b>Esc</b> bricht ab.');
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, edgePx: 9 });
+      const er = hit && hit.edgeIdx != null ? resolveEdge({ id: hit.id, edgeIdx: hit.edgeIdx }) : null;
+      if (!er) { UI.toast('Klick eine Kante oder Kurve eines Körpers an.', { icon: 'info' }); return; }
+      stopPick();
+      addNormalToCurve(er, { posMode, percent });
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); } };
+    pickState = { down, key, marks: [] };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    window.addEventListener('keydown', key, true);
+    hint();
+  }
+
+  function startEdgePointPick(preEdge = null) {
+    stopPick();
+    let edgeRef = preEdge ? resolveEdge(preEdge) : null;
+    if (edgeRef && edgeRef.info.t !== 'LINE') { UI.toast('Wähl eine gerade Kante.', { icon: 'info' }); return; }
+    if (edgeRef) Viewer.highlightEdge(edgeRef.id, edgeRef.idx);
+    const hint = () => UI.hint(edgeRef
+      ? '<b>Ebene durch Kante &amp; Punkt:</b> Klick einen Punkt (Ecken und Kantenmitten rasten ein). <b>Esc</b> bricht ab.'
+      : '<b>Ebene durch Kante &amp; Punkt:</b> Klick zuerst eine gerade Kante. <b>Esc</b> bricht ab.');
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      if (!edgeRef) {
+        const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, edgePx: 9 });
+        const er = hit && hit.edgeIdx != null ? resolveEdge({ id: hit.id, edgeIdx: hit.edgeIdx }) : null;
+        if (!er || er.info.t !== 'LINE') { UI.toast('Klick eine gerade Kante eines Körpers an.', { icon: 'info' }); return; }
+        edgeRef = er;
+        Viewer.highlightEdge(er.id, er.idx);
+        hint();
+        return;
+      }
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true });
+      const info = hit ? snapBodyPointInfo(hit, e.clientX, e.clientY) : null;
+      const p = info ? info.w : Viewer.pickPlane(e.clientX, e.clientY, 0);
+      if (!p) return;
+      const er = edgeRef;
+      const bind = info ? info.bind : null;
+      stopPick();
+      addEdgePoint(er, p, null, { bind });
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); } };
+    pickState = { down, key, marks: [] };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    window.addEventListener('keydown', key, true);
+    hint();
+  }
+
+  function startTwoEdgesPick(preEdge = null) {
+    stopPick();
+    let edge1 = preEdge ? resolveEdge(preEdge) : null;
+    if (edge1 && edge1.info.t !== 'LINE') { UI.toast('Wähl eine gerade Kante.', { icon: 'info' }); return; }
+    if (edge1) Viewer.highlightEdge(edge1.id, edge1.idx);
+    const hint = () => UI.hint(edge1
+      ? '<b>Ebene durch zwei Kanten:</b> Klick die zweite gerade Kante (parallel oder schneidend). <b>Esc</b> bricht ab.'
+      : '<b>Ebene durch zwei Kanten:</b> Klick die erste gerade Kante. <b>Esc</b> bricht ab.');
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, edgePx: 9 });
+      const er = hit && hit.edgeIdx != null ? resolveEdge({ id: hit.id, edgeIdx: hit.edgeIdx }) : null;
+      if (!er || er.info.t !== 'LINE') { UI.toast('Klick eine gerade Kante eines Körpers an.', { icon: 'info' }); return; }
+      if (!edge1) {
+        edge1 = er;
+        Viewer.highlightEdge(er.id, er.idx);
+        hint();
+        return;
+      }
+      const e1 = edge1;
+      stopPick();
+      addTwoEdges(e1, er);
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); } };
+    pickState = { down, key, marks: [] };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    window.addEventListener('keydown', key, true);
+    hint();
+  }
+
   function startAxisPick(mode) {
     stopPick();
     const got = [], marks = [];
@@ -630,7 +1238,11 @@ const Datums = (() => {
       const row = h('div', { class: 'tree-row datum-row' + (d.id === sel ? ' sel' : '') + (d.hidden ? ' dim' : ''), 'data-datum': d.id });
       const ic = h('span', { class: 'swatch datum' }); ic.innerHTML = icon('originPlanes');
       const b = d.base || {};
-      const sub = lost.has(d.id) ? (b.type === 'face' ? 'Fläche fehlt' : 'Bezug fehlt') : { origin: 'Grundebene', face: 'an Fläche', edgeAngle: 'an Kante', fixed: 'fest' }[b.type] || '';
+      const sub = lost.has(d.id) ? (b.type === 'face' ? 'Fläche fehlt' : 'Bezug fehlt') : {
+        origin: 'Grundebene', face: 'an Fläche', edgeAngle: 'an Kante',
+        tangent: 'tangential', normalToCurve: 'senkr. Kante', edgePoint: 'Kante + Punkt', twoEdges: '2 Kanten',
+        fixed: 'fest',
+      }[b.type] || '';
       row.append(ic, h('span', { class: 'nm' }, d.name), h('span', { class: 'sub mono' }, sub));
       row.onclick = () => select(d.id === sel ? null : d.id);
       row.ondblclick = () => sketchOn(d.id);
@@ -671,6 +1283,16 @@ const Datums = (() => {
       fl.append(UI.numField({ id: 'datum-dist', label: 'Abstand zur Fläche', value: b.dist, onCommit: (v) => set(d.id, { dist: v }) }));
     } else if (b.type === 'edgeAngle') {
       fl.append(UI.numField({ id: 'datum-angle', label: 'Winkel zur Fläche', value: b.angle ?? 30, unit: '°', onCommit: (v) => set(d.id, { angle: v }) }));
+    } else if (b.type === 'tangent') {
+      fl.append(UI.numField({ id: 'datum-angle', label: 'Winkel um Achse', value: b.angle ?? 0, unit: '°', onCommit: (v) => set(d.id, { angle: v }) }));
+    } else if (b.type === 'normalToCurve') {
+      fl.append(UI.selectField({
+        id: 'datum-pos-mode', label: 'Position auf Kante', value: b.posMode || 'mid',
+        options: [['start', 'Anfang (0 %)'], ['mid', 'Mitte (50 %)'], ['end', 'Ende (100 %)'], ['percent', 'Prozent']],
+        onChange: (v) => set(d.id, { posMode: v, ...(v === 'start' ? { percent: 0 } : v === 'mid' ? { percent: 50 } : v === 'end' ? { percent: 100 } : {}) }),
+      }));
+      const pctVal = b.posMode === 'start' ? 0 : b.posMode === 'end' ? 100 : b.posMode === 'mid' ? 50 : (b.percent ?? 50);
+      fl.append(UI.numField({ id: 'datum-percent', label: 'Lage entlang Kante', value: pctVal, unit: '%', onCommit: (v) => set(d.id, { posMode: 'percent', percent: v }) }));
     }
     w.append(fl);
     if (b.type === 'edgeAngle') {
@@ -678,8 +1300,17 @@ const Datums = (() => {
       fb.onclick = () => { const v = Model.num(b.angle, Model.vars(App.doc).v, 30); set(d.id, { angle: -v }, 'Winkel umgekehrt'); };
       w.append(h('div', { class: 'btn-row' }, fb));
     }
+    if (b.type === 'tangent' || b.type === 'normalToCurve' || b.type === 'edgePoint' || b.type === 'twoEdges') {
+      const fb = h('button', { type: 'button', class: 'btn small', id: 'datum-flip-normal' }, 'Richtung umkehren');
+      fb.onclick = () => set(d.id, { flip: !b.flip }, 'Richtung umgekehrt');
+      w.append(h('div', { class: 'btn-row' }, fb));
+    }
     if (b.type === 'face') w.append(h('div', { class: lost.has(d.id) ? 'err-box' : 'hint-box' }, lost.has(d.id) ? 'Die Fläche, an der die Ebene hing, gibt es nicht mehr – die Ebene bleibt an ihrer letzten Stelle.' : 'Die Ebene hängt an der Fläche: Ändert sich der Körper, wandert sie mit.'));
     if (b.type === 'edgeAngle') w.append(h('div', { class: lost.has(d.id) ? 'err-box' : 'hint-box' }, lost.has(d.id) ? 'Kante oder Bezugsfläche gibt es nicht mehr – die Ebene bleibt an ihrer letzten Stelle.' : 'Die Ebene geht durch die Kante im Winkel zur Fläche – ändert sich der Körper, wandert sie mit.'));
+    if (b.type === 'tangent') w.append(h('div', { class: lost.has(d.id) ? 'err-box' : 'hint-box' }, lost.has(d.id) ? 'Die runde Fläche gibt es nicht mehr – die Ebene bleibt an ihrer letzten Stelle.' : 'Die Ebene liegt tangential an der runden Fläche – ändert sich der Körper, wandert sie mit.'));
+    if (b.type === 'normalToCurve') w.append(h('div', { class: lost.has(d.id) ? 'err-box' : 'hint-box' }, lost.has(d.id) ? 'Die Kante oder Kurve gibt es nicht mehr – die Ebene bleibt an ihrer letzten Stelle.' : 'Die Ebene steht senkrecht auf der Kante – ändert sich der Körper, wandert sie mit.'));
+    if (b.type === 'edgePoint') w.append(h('div', { class: lost.has(d.id) ? 'err-box' : 'hint-box' }, lost.has(d.id) ? 'Kante oder Bezugspunkt gibt es nicht mehr – die Ebene bleibt an ihrer letzten Stelle.' : 'Die Ebene geht durch die Kante und den Punkt – ändert sich der Körper, wandert sie mit.'));
+    if (b.type === 'twoEdges') w.append(h('div', { class: lost.has(d.id) ? 'err-box' : 'hint-box' }, lost.has(d.id) ? 'Eine Kante fehlt oder die Kanten liegen nicht mehr in einer Ebene.' : 'Die Ebene läuft durch beide Kanten – ändert sich der Körper, wandert sie mit.'));
     if (b.type === 'fixed') w.append(h('div', { class: 'hint-box' }, 'Feste Ebene – sie bleibt, wo sie angelegt wurde.'));
     const row = h('div', { class: 'btn-row' });
     const bs = h('button', { type: 'button', class: 'btn primary', id: 'datum-sketch' }); bs.innerHTML = icon('sketch') + 'Skizze hierauf'; bs.onclick = () => sketchOn(d.id);
@@ -744,6 +1375,17 @@ const Datums = (() => {
     bea.dataset.help = 'datumEdgeAngle';
     row2.append(bf, bea, mk('dp-mid', 'Mittig zwischen zwei Flächen', () => Sketch.startPlanePick('mid', (pl) => addFixed(pl, 'Mittelebene'))), mk('dp-3p', 'Durch drei Punkte', () => Sketch.startPlanePick('3p', (pl) => addFixed(pl, 'Ebene durch drei Punkte'))));
     box.append(row2);
+    const row2b = h('div', { class: 'btn-row' });
+    const btan = mk('dp-tangent', 'Tangential an Rundung', () => startTangentPick());
+    btan.dataset.help = 'datumTangent';
+    const bnc = mk('dp-normal-curve', 'Senkrecht zu Kante', () => { if (edge) addNormalToCurve(edge, 'mid'); else startNormalCurvePick('mid', 50); });
+    bnc.dataset.help = 'datumNormalCurve';
+    const bep = mk('dp-edge-point', 'Durch Kante & Punkt', () => startEdgePointPick(edge && edge.info.t === 'LINE' ? edge : null));
+    bep.dataset.help = 'datumEdgePoint';
+    const b2e = mk('dp-two-edges', 'Durch zwei Kanten', () => { if (App.edges && App.edges.length === 2) addTwoEdges(App.edges[0], App.edges[1]); else startTwoEdgesPick(edge && edge.info.t === 'LINE' ? edge : null); });
+    b2e.dataset.help = 'datumTwoEdges';
+    row2b.append(btan, bnc, bep, b2e);
+    box.append(row2b);
     box.append(h('div', { class: 'section-h', style: { marginTop: '4px' } }, 'Bezugsachsen'));
     const row3 = h('div', { class: 'btn-row' });
     const b2p = mk('da-2p', 'Durch 2 Punkte', () => startAxisPick('twoPoints'));
@@ -777,10 +1419,10 @@ const Datums = (() => {
   }
 
   return {
-    init, list, find, add, addOrigin, addFromFace, addEdgeAngle, addFixed, set, remove, select, sketchOn,
+    init, list, find, add, addOrigin, addFromFace, addEdgeAngle, addTangent, addNormalToCurve, addEdgePoint, addTwoEdges, addFixed, set, remove, select, sketchOn,
     axes, findAxis, addAxis, addAxisTwoPoints, addAxisFromFace, addAxisFromCircleEdge, addAxisNormalAtPoint, addAxisFixed,
     setAxis, removeAxis, selectAxis, solveAxis, axisTreeSection, renderAxisPanel, axisDialog, pickAxis, applyAxisToRevolve,
-    startEdgeAnglePick, startAxisPick, stopPick,
+    startEdgeAnglePick, startTangentPick, startNormalCurvePick, startEdgePointPick, startTwoEdgesPick, startAxisPick, stopPick,
     draw, dialog, treeSection, renderPanel, solve,
     get selected() { return sel; }, get lost() { return [...lost]; },
     get selectedAxis() { return selAxis; }, get lostAxes() { return [...lostAxes]; },
