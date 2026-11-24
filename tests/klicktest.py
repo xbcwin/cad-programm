@@ -15262,6 +15262,152 @@ def t_a071_zeichnung_dxf_png(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a075_projekt_tabs(p):
+    p.empty()
+
+    # 1. Zwei Projekte in Tabs öffnen, unterschiedliche Körper anlegen und dazwischen wechseln
+    p.ev("""App.change('Quader in Tab 1', d => {
+      d.name = 'Tab Eins';
+      const b = Model.newItem('box', { w: 30, d: 20, h: 10 });
+      b.name = 'Quader1';
+      d.items.push(b);
+    });""")
+    warte_rechnen(p, 20)
+    id1 = p.ev("return App.doc.items[0].id")
+    p.ev("return App.autosave.flush().then(() => Store.whenIdle());")
+
+    p.pg.click('#proj-tab-add'); p.wait(150)
+    p.pg.click('#tab-add-empty'); p.wait(400)
+    p.ev("""App.change('Zylinder in Tab 2', d => {
+      d.name = 'Tab Zwei';
+      const c = Model.newItem('cylinder', { d: 24, h: 15 });
+      c.name = 'Zylinder2';
+      d.items.push(c);
+    });""")
+    warte_rechnen(p, 20)
+    id2 = p.ev("return App.doc.items[0].id")
+    p.ev("return App.autosave.flush().then(() => Store.whenIdle());")
+
+    tabs_before = p.pg.locator('.proj-tab').count()
+    p.pg.locator('.proj-tab', has_text='Tab Eins').click(); p.wait(400); warte_rechnen(p, 20)
+    st_tab1 = p.ev("""return {
+      name: App.doc.name,
+      len: App.doc.items.length,
+      kind: App.doc.items[0] && App.doc.items[0].kind,
+      itemId: App.doc.items[0] && App.doc.items[0].id,
+      nodes: [...Viewer.nodes.keys()],
+      tree: document.querySelector('#left-body')?.textContent || '',
+    };""")
+    p.pg.locator('.proj-tab', has_text='Tab Zwei').click(); p.wait(400); warte_rechnen(p, 20)
+    st_tab2 = p.ev("""return {
+      name: App.doc.name,
+      len: App.doc.items.length,
+      kind: App.doc.items[0] && App.doc.items[0].kind,
+      itemId: App.doc.items[0] && App.doc.items[0].id,
+      nodes: [...Viewer.nodes.keys()],
+      tree: document.querySelector('#left-body')?.textContent || '',
+    };""")
+    ok1 = (
+        tabs_before == 2
+        and st_tab1['name'] == 'Tab Eins' and st_tab1['len'] == 1 and st_tab1['kind'] == 'box'
+        and st_tab1['nodes'] == [id1] and 'Quader1' in st_tab1['tree'] and 'Zylinder2' not in st_tab1['tree']
+        and st_tab2['name'] == 'Tab Zwei' and st_tab2['len'] == 1 and st_tab2['kind'] == 'cylinder'
+        and st_tab2['nodes'] == [id2] and 'Zylinder2' in st_tab2['tree'] and 'Quader1' not in st_tab2['tree']
+    )
+
+    # 2. Rückgängig in Tab 2 ändert Tab 1 nicht
+    p.ev("""App.change('Kugel in Tab 2', d => {
+      const s = Model.newItem('sphere', { d: 12 });
+      s.name = 'Kugel2';
+      d.items.push(s);
+    });""")
+    warte_rechnen(p, 20)
+    t2_two = p.ev("return App.doc.items.length")
+    p.pg.click('#btn-undo'); p.wait(300); warte_rechnen(p, 20)
+    t2_after_undo = p.ev("return { len: App.doc.items.length, name0: App.doc.items[0] && App.doc.items[0].name, undo: App.undoStack.length, redo: App.redoStack.length }")
+    p.pg.locator('.proj-tab', has_text='Tab Eins').click(); p.wait(400); warte_rechnen(p, 20)
+    t1_check = p.ev("return { len: App.doc.items.length, name0: App.doc.items[0] && App.doc.items[0].name, w: App.doc.items[0] && App.doc.items[0].p.w, undo: App.undoStack.length, redo: App.redoStack.length }")
+    p.pg.locator('.proj-tab', has_text='Tab Zwei').click(); p.wait(400); warte_rechnen(p, 20)
+    t2_back = p.ev("return { len: App.doc.items.length, redo: App.redoStack.length }")
+    ok2 = (
+        t2_two == 2
+        and t2_after_undo == {'len': 1, 'name0': 'Zylinder2', 'undo': 1, 'redo': 1}
+        and t1_check == {'len': 1, 'name0': 'Quader1', 'w': 30, 'undo': 1, 'redo': 0}
+        and t2_back == {'len': 1, 'redo': 1}
+    )
+
+    # 3. Schließen mit Nachfrage bei ungespeicherten Änderungen; sauberer Tab schließt direkt
+    p.pg.locator('.proj-tab', has_text='Tab Zwei').locator('.ptab-close').click(); p.wait(200)
+    has_prompt = p.pg.locator('#tab-close-confirm').count() == 1 and p.pg.locator('#tab-close-cancel').count() == 1
+    p.pg.click('#tab-close-cancel'); p.wait(150)
+    tabs_after_cancel = p.pg.locator('.proj-tab').count()
+    p.pg.locator('.proj-tab', has_text='Tab Zwei').locator('.ptab-close').click(); p.wait(200)
+    p.pg.click('#tab-close-confirm'); p.wait(400); warte_rechnen(p, 20)
+    tabs_after_close = p.pg.locator('.proj-tab').count()
+    active_after_close = p.ev("return App.doc.name")
+
+    p.pg.click('#proj-tab-add'); p.wait(150)
+    p.pg.click('#tab-add-empty'); p.wait(300)
+    tabs_with_empty = p.pg.locator('.proj-tab').count()
+    p.pg.locator('.proj-tab.active .ptab-close').click(); p.wait(250); warte_rechnen(p, 20)
+    ok3 = (
+        has_prompt
+        and tabs_after_cancel == 2
+        and tabs_after_close == 1
+        and active_after_close == 'Tab Eins'
+        and tabs_with_empty == 2
+        and p.pg.locator('#tab-close-confirm').count() == 0
+        and p.pg.locator('.proj-tab').count() == 1
+        and p.ev("return App.doc.name") == 'Tab Eins'
+    )
+
+    # 4. Gespeichertes Projekt über „+“ wieder öffnen und Neuladen stellt beide Tabs wieder her
+    p.pg.click('#proj-tab-add'); p.wait(150)
+    p.pg.locator('.menu button', has_text='Tab Zwei').click(); p.wait(500); warte_rechnen(p, 20)
+    p.ev("return App.autosave.flush().then(() => { App.markClean(); return Store.whenIdle(); });")
+    p.pg.locator('.proj-tab', has_text='Tab Eins').click(); p.wait(300)
+    p.ev("return App.autosave.flush().then(() => { App.markClean(); return Store.whenIdle(); });")
+    p.pg.locator('.proj-tab', has_text='Tab Zwei').click(); p.wait(300)
+    p.ev("return Store.whenIdle();")
+
+    p.pg.reload(); p.wait(3000)
+    try:
+        p.pg.locator('.loading').wait_for(state='detached', timeout=25000)
+    except Exception:
+        pass
+    warte_rechnen(p, 20)
+    reload_tabs = p.ev("return App.tabs.map(t => ({ name: t.name, active: t.active, count: t.itemCount }))")
+    reload_tab2_kind = p.ev("return App.doc.items[0] && App.doc.items[0].kind")
+    p.pg.locator('.proj-tab', has_text='Tab Eins').click(); p.wait(400); warte_rechnen(p, 20)
+    reload_tab1_kind = p.ev("return App.doc.items[0] && App.doc.items[0].kind")
+    ok4 = (
+        len(reload_tabs) == 2
+        and any(t['name'] == 'Tab Eins' for t in reload_tabs)
+        and any(t['name'] == 'Tab Zwei' and t['active'] for t in reload_tabs)
+        and reload_tab2_kind == 'cylinder'
+        and reload_tab1_kind == 'box'
+        and p.pg.locator('#recovery-bar').count() == 0
+    )
+
+    # 5. Einfach & Profi sichtbar + Hilfetext projectTabs
+    p.pg.click('#btn-level'); p.wait(400)
+    simple_vis = p.pg.locator('#proj-tabs').is_visible() and p.pg.locator('#proj-tab-add').is_visible()
+    p.pg.click('#proj-tab-add'); p.wait(150)
+    simple_menu = p.pg.locator('#tab-add-empty').is_visible()
+    p.pg.keyboard.press('Escape'); p.wait(100)
+    p.pg.mouse.click(500, 400); p.wait(100)
+    p.pg.click('#btn-level'); p.wait(300)
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r => r.json())")
+    h_tabs = hilfen.get('projectTabs') or {}
+    help_attr = p.pg.locator('#proj-tab-add').get_attribute('data-help')
+    ok5 = (
+        simple_vis and simple_menu
+        and help_attr == 'projectTabs'
+        and bool(h_tabs.get('tip') and h_tabs.get('hilfe') and h_tabs.get('tipp'))
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -15439,6 +15585,7 @@ TESTS = [
     ('[A-072] Zeichnung merkt Modelländerungen: verlorene Maße rot & in Liste, Längenmaß aktualisiert, neu zuordnen', t_a072_zeichnung_modellaenderung),
     ('[F-11241146] Volltest-Reparatur: Adaptive Auflösung bei rAF-Stau / askDim behält Eingabe bei verzögertem rAF-Fokus', t_f11241146),
     ('[A-071] Zeichnung als DXF (LINE, CIRCLE, ARC, Layer & Schriftfeld) und PNG (wählbare Breite & Transparenz)', t_a071_zeichnung_dxf_png),
+    ('[A-075] Projekt-Tabs: zwei Projekte, unabhängiges Rückgängig, Schließen mit Nachfrage, Einfach & Profi, Neuladen & Hilfe', t_a075_projekt_tabs),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

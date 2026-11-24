@@ -51,7 +51,7 @@ button{cursor:pointer}
 .num,.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
 
 body.sketching .viewcube{display:none}
-#app{height:100%;display:grid;grid-template-rows:var(--topbar-h) 1fr auto;min-height:0}
+#app{height:100%;display:grid;grid-template-rows:auto var(--topbar-h) 1fr auto;min-height:0}
 
 /* ---------- Kopfzeile ---------- */
 .topbar{display:flex;align-items:center;gap:10px;padding:0 12px;background:var(--surface);border-bottom:1px solid var(--line);min-width:0;position:relative;z-index:30}
@@ -666,7 +666,7 @@ body.sketching .timeline{display:none}
   .bottombar{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"cmd cmd" "hint amp";row-gap:6px}
   .cmd{grid-area:cmd}.hintline{grid-area:hint}.ampel-wrap{grid-area:amp}
   /* Kopfzeile zweizeilig: oben Bereich und Aktionen, darunter die ganze Breite für die Werkzeuge */
-  #app{grid-template-rows:auto 1fr auto}
+  #app{grid-template-rows:auto auto 1fr auto}
   .topbar{flex-wrap:wrap;padding:6px 10px 0;gap:6px}
   .tools{order:10;flex:1 0 100%;margin:0 -10px;padding:5px 10px 6px;border-top:1px solid var(--line);gap:4px}
   .right-tools{margin-left:auto}
@@ -888,8 +888,8 @@ body:not(.simple) .simple-only{display:none!important}
 .body-color-pop{padding:10px;display:grid;gap:8px;max-width:210px}
 
 /* Vorführ-Modus */
-body.presenting #app{grid-template-rows:0 1fr 0}
-body.presenting .topbar,body.presenting .bottombar,body.presenting .left,body.presenting .right,body.presenting .view-btns,body.presenting .viewbars,body.presenting .ctxbar,body.presenting .tl,body.presenting .timeline{display:none!important}
+body.presenting #app{grid-template-rows:0 0 1fr 0}
+body.presenting .tabbar,body.presenting .topbar,body.presenting .bottombar,body.presenting .left,body.presenting .right,body.presenting .view-btns,body.presenting .viewbars,body.presenting .ctxbar,body.presenting .tl,body.presenting .timeline{display:none!important}
 body.presenting .workspace{grid-template-columns:0 minmax(0,1fr) 0}
 .present-bar{position:fixed;right:16px;bottom:16px;display:flex;gap:8px;z-index:60;opacity:.35;transition:opacity .2s}
 .present-bar:hover{opacity:1}
@@ -1120,8 +1120,38 @@ body.presenting .pat-dot{display:none!important}
 .ul-param-row{display:grid;grid-template-columns:auto 1fr 110px auto;gap:8px;align-items:center}
 .ul-p-unit{font-size:12px;color:var(--muted);min-width:22px}
 
+/* ---------- Projekt-Tabs oben (BE-13) ---------- */
+.tabbar{display:flex;align-items:flex-end;gap:4px;height:34px;padding:4px 10px 0;background:var(--surface-2);border-bottom:1px solid var(--line);min-width:0;position:relative;z-index:31}
+.tabbar-list{display:flex;align-items:flex-end;gap:3px;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;flex:0 1 auto}
+.tabbar-list::-webkit-scrollbar{display:none}
+.proj-tab{display:inline-flex;align-items:center;gap:7px;height:29px;max-width:220px;min-width:96px;padding:0 6px 0 10px;border:1px solid transparent;border-bottom:0;border-radius:8px 8px 0 0;background:transparent;color:var(--muted);font:500 13px/1 var(--font);cursor:pointer;user-select:none;flex:none;position:relative;transition:background .12s,color .12s,border-color .12s}
+.proj-tab:hover{background:var(--surface-3);color:var(--ink)}
+.proj-tab.active{background:var(--surface);color:var(--ink);font-weight:600;border-color:var(--line);box-shadow:inset 0 2px 0 var(--accent);margin-bottom:-1px;height:30px}
+.proj-tab .ptab-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);flex:none;display:none}
+.proj-tab.dirty .ptab-dot{display:block;background:var(--warn)}
+.proj-tab .ptab-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
+.proj-tab .ptab-close{width:20px;height:20px;border:0;border-radius:5px;background:transparent;color:var(--muted);display:grid;place-items:center;padding:0;flex:none;opacity:.65;cursor:pointer}
+.proj-tab:hover .ptab-close,.proj-tab.active .ptab-close,.proj-tab:focus-within .ptab-close{opacity:1}
+.proj-tab .ptab-close:hover{background:var(--surface-3);color:var(--ink)}
+.proj-tab .ptab-close svg{width:12px;height:12px}
+.tabbar-add{width:28px;height:28px;margin-bottom:1px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--ink-2);display:grid;place-items:center;padding:0;flex:none;cursor:pointer}
+.tabbar-add:hover{background:var(--surface);border-color:var(--line);color:var(--accent)}
+.tabbar-add svg{width:16px;height:16px}
+body.simple .tabbar{height:40px;padding:4px 10px 0}
+body.simple .proj-tab{height:35px;font-size:14.5px;padding:0 8px 0 12px;max-width:250px}
+body.simple .proj-tab.active{height:36px}
+body.simple .proj-tab .ptab-close{width:24px;height:24px}
+body.simple .proj-tab .ptab-close svg{width:14px;height:14px}
+body.simple .tabbar-add{width:34px;height:34px}
+body.simple .tabbar-add svg{width:18px;height:18px}
+
+
 </style>
 <div id="app">
+  <nav class="tabbar" id="proj-tabs" aria-label="Geöffnete Projekte" data-i18n-aria="tabs.barAria">
+    <div class="tabbar-list" id="proj-tabs-list" role="tablist"></div>
+    <button class="tabbar-add" id="proj-tab-add" type="button" aria-label="Neuer Tab" data-tip="Projekt in neuem Tab öffnen" data-help="projectTabs" data-i18n-aria="tabs.addAria" data-i18n-tip="tabs.addTip"></button>
+  </nav>
   <header class="topbar">
     <button class="icon-btn panel-toggle" id="btn-left" type="button" aria-label="Verlauf zeigen" data-tip="Verlauf" data-i18n-aria="topbar.showTree" data-i18n-tip="topbar.tree"></button>
     <a class="brand" href="#" id="brand" aria-label="Tracery – Startseite" data-i18n-aria="topbar.brandAria">
@@ -2972,6 +3002,11 @@ const HELP = {
   "tip": "Zeichnung als PNG-Bild in wählbarer Auflösung speichern",
   "hilfe": "Rendert das aktive Zeichnungsblatt gestochen scharf als PNG-Bild. Wähle eine feste Breite (1600, 2400 oder 3840 Pixel), eine Druckauflösung (150 oder 300 DPI) oder eine eigene Breite in Pixeln – die Höhe passt sich automatisch dem Blattformat an.",
   "tipp": "Aktiviere „Durchsichtiger Hintergrund“, wenn du die Zeichnung direkt in eine Präsentation oder Dokumentation einfügen willst."
+ },
+ "projectTabs": {
+  "tip": "Mehrere Projekte gleichzeitig in Tabs öffnen und wechseln",
+  "hilfe": "In der Tab-Leiste oben arbeitest du an mehreren Projekten parallel. Mit „+“ öffnest du ein neues leeres Projekt, eine Vorlage, eine Datei oder ein bereits gespeichertes Projekt in einem neuen Tab. Ein Klick auf einen Tab wechselt samt eigenem Verlauf und eigenem Rückgängig dorthin; „×“ schließt den Tab und fragt bei ungespeicherten Änderungen nach.",
+  "tipp": "Mit einem Doppelklick auf den Tab-Namen benennst du das Projekt um, und ein Rechtsklick schließt bei Bedarf alle anderen Tabs."
  }
 };
 
@@ -2988,7 +3023,7 @@ const Bus = makeEmitter();
 
 // ---- 01-i18n.js ----
 // ================= Übersetzbare Oberfläche =================
-const TEXTS_DE = {"common.ok":"OK","common.cancel":"Abbrechen","common.close":"Schließen","common.delete":"Löschen","common.rename":"Umbenennen","common.save":"Speichern","common.name":"Name","common.body":"Körper","common.hole":"Loch","common.edit":"Bearbeiten","common.suppress":"Unterdrücken","common.unsuppress":"Wieder aktivieren","common.explainStep":"Erklär diesen Schritt","common.moveStep":"Verschieben/Drehen (Schritt)","common.scaleStep":"Skalieren (Schritt)","common.thicken":"Aufdicken","common.mirrorStep":"Schritt spiegeln","common.duplicate":"Duplizieren","common.hide":"Ausblenden","common.isolate":"Isolieren","topbar.showTree":"Verlauf zeigen","topbar.tree":"Verlauf","topbar.brandAria":"Tracery – Startseite","topbar.workspace":"Arbeitsbereich","topbar.model":"Modell","topbar.drawing":"Zeichnung","topbar.undo":"Rückgängig","topbar.undoLabel":"Rückgängig: {label}","topbar.redo":"Wiederholen","topbar.project":"Projekt","topbar.menu":"Menü","topbar.showProps":"Eigenschaften zeigen","topbar.props":"Eigenschaften","topbar.params":"Maße","topbar.log":"Protokoll","topbar.cmdPlaceholder":"Werkzeug suchen oder beschreiben, was du bauen willst …","topbar.cmdAria":"Werkzeug suchen oder der KI beschreiben","topbar.cmdGo":"Ausführen","level.simple":"Einfach","level.pro":"Profi","level.tipSimple":"Stufe: Einfach – klicken zum Wechseln auf Profi","level.tipPro":"Stufe: Profi – klicken zum Wechseln auf Einfach","level.chooseAria":"Stufe wählen","level.simpleDesc":"wenige, große Knöpfe, alles erklärt","level.proDesc":"alle Werkzeuge, Tastenkürzel, Maus wie in deinem CAD","start.aria":"Startseite","start.subtitle":"CAD im Browser – kostenlos, ohne Konto","start.newProject":"Neues Projekt","start.openFile":"Datei öffnen","start.tourBasics":"Einführung (3 Minuten)","start.tourSketch":"Erste Skizze (5 Minuten)","start.welcomeTitle":"Wie möchtest du mit Tracery arbeiten?","start.welcomeSub":"Du kannst jederzeit oben rechts zwischen beiden Stufen wechseln.","start.surfaceAria":"Oberfläche","start.surfaceLabel":"Oberfläche:","start.simpleOption":"Einfach – für Einsteiger","start.proOption":"Profi – alle Werkzeuge","start.recentHeading":"Weiterarbeiten","start.recentMetaOne":"{n} Objekt · {date}","start.recentMetaMany":"{n} Objekte · {date}","start.deleteFromBrowserAria":"Aus dem Browser löschen","start.deleteFromBrowserTip":"Aus diesem Browser löschen","start.deleteConfirmTitle":"Projekt löschen?","start.deleteConfirmBody":"„{name}“ wird aus diesem Browser gelöscht. Gespeicherte Dateien bleiben erhalten.","start.projectMissing":"Das Projekt ist nicht mehr da.","start.templatesHeading":"Vorlagen","start.emptyTitle":"Leeres Projekt","start.emptyDesc":"Von null anfangen.","start.templateLoaded":"Vorlage geladen. Klick einen Teil an, um ihn zu ändern.","start.footHtml":"Projekte werden automatisch in diesem Browser gesichert. Zum sicheren Aufbewahren und Teilen: <b>Projekt als Datei speichern</b>.<br>Tracery rechnet mit OpenCascade (LGPL-2.1) über replicad (MIT) und zeigt 3D mit three.js (MIT).","start.tpl.box.name":"Box mit Deckel","start.tpl.box.desc":"Mit Maßen wie Wandstärke und Spiel – änderst du sie, passt sich alles an.","start.tpl.sign.name":"Schild mit Loch","start.tpl.sign.desc":"Flache Platte mit runden Ecken und einem Loch zum Aufhängen.","start.tpl.phone.name":"Handyhalter","start.tpl.phone.desc":"Schräge Lehne, Ablage vorne und ein Schlitz fürs Kabel.","start.tpl.bracket.name":"Winkel zum Anschrauben","start.tpl.bracket.desc":"L-Winkel mit Senkkopf-Schraublöchern und Versteifung.","start.tpl.gear.name":"Zahnradpaar","start.tpl.gear.desc":"Zwei passende Zahnräder mit Bohrung.","start.tpl.hinge.name":"Scharnier","start.tpl.hinge.desc":"Aus einem Stück, mit Spiel zwischen den Teilen.","tool.body":"Körper","tool.bodyTip":"Grundkörper hinzufügen – anklicken oder auf die Fläche ziehen","tool.sketch":"Skizze","tool.sketchTip":"Eine 2D-Skizze zeichnen und daraus einen Körper machen","tool.parts":"Bauteile","tool.partsTip":"Schraubenlöcher, Mutternfallen, Scharniere, Zahnräder …","tool.measure":"Messen","tool.measureTip":"Messen: Abstände, Winkel, Flächen und Durchmesser","tool.notes":"Notizen","tool.notesTip":"Notizstift: frei malen und Text hinschreiben – ohne technische Bedeutung","tool.views":"Ansicht","tool.viewsTip":"Ansicht: Schnitt, Röntgen, Explosion und Fokus-Vorschau – ändert nur die Anzeige","tool.check":"Prüfen","tool.checkTip":"Prüfen: Geometrie prüfen, Schwachstellen, Wandstärke und Überhänge","tool.more":"Mehr","tool.moreTip":"Weitere Werkzeuge: Messen, Notizen, Ansicht – oder alle Werkzeuge zeigen","tool.export":"Exportieren","tool.exportShort":"Export","tool.exportTip":"Als STEP, STL, 3MF, OBJ, GLB oder DXF speichern (ZIP)","tool.sheet":"Blatt","tool.sheetTip":"Blattgröße, Maßstab und Ansichten","tool.viewAdd":"Ansicht +","tool.viewAddTip":"Isometrische oder aktuelle 3D-Ansicht hinzufügen","tool.detail":"Detailansicht","tool.detailTip":"Ausschnitt einer Ansicht mit Kreis vergrößern (Detail Z)","tool.dsection":"Schnittansicht","tool.dsectionTip":"Schnittlinie A–A durch eine Ansicht ziehen – erzeugt eine Schnittansicht mit Schraffur","tool.dim":"Maß","tool.dimTip":"Bemaßung hinzufügen: zwei Punkte oder einen Kreis anklicken","tool.dimKinds":"Maß-Arten","tool.dimKindsTip":"Kettenmaß, Bezugsmaß, Winkel, Radius, Durchmesser oder Fase","tool.autodim":"Automatisch bemaßen","tool.autodimShort":"Auto-Maße","tool.autodimTip":"Gesamtmaße und Bohrungen automatisch bemaßen","tool.dnote":"Hinweislinie","tool.dnoteTip":"Notiz mit Hinweislinie (Pfeil oder Punkt an einer Kante oder Fläche)","tool.draw2d":"2D zeichnen","tool.draw2dTip":"Linien, Kreise und Text frei auf das Blatt zeichnen","tool.dexport":"Zeichnung speichern","tool.dexportShort":"Speichern","tool.dexportTip":"Als PDF, SVG, DXF oder PNG speichern","tool.fly.bodiesTitle":"Grundkörper","tool.fly.tileTip":"Klicken fügt ihn ein, Ziehen setzt ihn genau hin","tool.fly.cylHole":"Zylinder als Loch","tool.fly.boxHole":"Quader als Loch","tool.fly.route3d":"Rohr im Raum","tool.fly.bodiesFoot":"Tipp: Jeder Körper kann mit einem Klick zum Loch werden.","tool.fly.partsTitle":"Bauteile","tool.fly.partsFoot":"Löcher auf eine Fläche ziehen – sie richten sich automatisch aus.","menu.proj.rename":"Projekt umbenennen","menu.proj.saveFile":"Als Datei speichern","menu.proj.saveInFolderNow":"Jetzt in „{name}“ speichern","menu.proj.changeFolder":"Anderen Ordner wählen …","menu.proj.disconnectFolder":"Ordner-Verbindung trennen","menu.proj.saveToFolder":"In Ordner speichern …","menu.proj.openImport":"Datei öffnen / STEP, IGES, BREP, STL, 3MF, OBJ importieren …","menu.proj.versions":"Versionen …","menu.proj.newProject":"Neues Projekt","menu.proj.startAndTemplates":"Startseite und Vorlagen","menu.folder.saveNow":"Jetzt in Ordner speichern","menu.folder.changeFolder":"Anderen Ordner wählen …","menu.folder.disconnect":"Ordner-Verbindung trennen","menu.main.tourBasics":"Einführung starten","menu.main.tourSketch":"Einführung: Erste Skizze","menu.main.settings":"Einstellungen","menu.main.shortcuts":"Tastenkürzel","menu.main.export":"Exportieren","menu.main.saveImage":"Bild speichern (PNG)","menu.main.about":"Über Tracery","menu.main.aboutP1":"Tracery ist ein kostenloses, parametrisches CAD im Browser – ohne Konto, mit exaktem Geometrie-Kern und technischen Zeichnungen.","menu.main.aboutP2":"Der Name: „Tracery“ ist das englische Wort für Maßwerk – die filigranen, exakt konstruierten Ornamente in gotischen Kirchenfenstern. Genau so sollen deine Teile werden.","menu.main.aboutP3":"Gerechnet wird mit dem CAD-Kern OpenCascade (LGPL-2.1) über die Bibliothek replicad (MIT). Die 3D-Anzeige nutzt three.js (MIT), die PDF-Ausgabe jsPDF (MIT).","menu.main.aboutP4":"Deine Projekte bleiben in deinem Browser. Der KI-Helfer nutzt dein Claude-Konto.","menu.more.measure":"Messen","menu.more.notes":"Notizstift","menu.more.views":"Ansicht: Schnitt, Röntgen, Explosion …","menu.more.weakSpots":"Schwachstellen suchen","menu.more.showAllPro":"Alle Werkzeuge zeigen (Profi)","menu.view.section":"Schnitt","menu.view.xray":"Röntgen","menu.view.explode":"Explosion","menu.view.focus":"Fokus-Vorschau","menu.view.overhang":"Überhänge (3D-Druck)","menu.view.thin":"Wandstärke (3D-Druck)","menu.view.present":"Vorführen (Vollbild)","menu.view.turntable":"Drehteller-Video …","menu.view.lightPrefix":"Licht: {name}","menu.view.shadows":"Schatten","menu.view.viewBack":"Vorige Ansicht","menu.view.saveView":"Ansicht speichern …","menu.view.savedViewPrefix":"Ansicht: {name}","menu.view.disp.edges":"Flächen mit Kanten","menu.view.disp.shaded":"Nur Flächen","menu.view.disp.wire":"Drahtgitter (nur Kanten)","menu.view.disp.hidden":"Verdeckte Kanten zeigen","menu.view.look.studio":"Studio-Look (Werkstoff, Licht, Schatten)","menu.view.look.plain":"Einfach (matt, schnell)","menu.view.look.clay":"Prüfen: Ton","menu.view.look.chrome":"Prüfen: Chrom-Streifen","menu.view.mood.studio":"Studio","menu.view.mood.hell":"Hell","menu.view.mood.werkstatt":"Werkstatt","menu.check.geom":"Geometrie prüfen","menu.check.weak":"Schwachstellen suchen","menu.check.thin":"Wandstärke (3D-Druck)","menu.check.overhang":"Überhänge (3D-Druck)","menu.select.all":"Alles","menu.select.body":"Nur Körper","menu.select.face":"Nur Flächen","menu.select.edge":"Nur Kanten","menu.select.tip":"Wählen: {name}","menu.edge.convex":"Alle äußeren Kanten","menu.edge.concave":"Alle inneren Kanten","menu.edge.all":"Alle Kanten","menu.edge.faceSelect":"Alle {n} Kanten wählen","menu.edge.faceFillet":"Alle abrunden ({v})","menu.edge.faceChamfer":"Alle abschrägen ({v})","menu.edge.faceNone":"An dieser Fläche habe ich keine Kanten gefunden.","menu.ctx.editSketch":"Skizze bearbeiten","menu.ctx.lookAtFace":"Blick senkrecht auf die Fläche","menu.ctx.faceDxf":"Fläche als DXF speichern","menu.ctx.faceSvg":"Fläche als SVG speichern","menu.ctx.sketchOnFace":"Skizze auf dieser Fläche","menu.ctx.thread":"Gewinde …","menu.ctx.markThread":"Gewinde markieren …","menu.ctx.dupLinked":"Verknüpft duplizieren","menu.ctx.toSolid":"Zum Körper machen","menu.ctx.toHole":"Zum Loch machen","menu.ctx.selectSimilar":"Ähnliche wählen","menu.ctx.zoomFit":"Heranzoomen","menu.ctx.saveSelection":"Auswahl speichern …","menu.ctx.behind":"Dahinter wählen: „{name}“","menu.ctx.showAll":"Alles einblenden","menu.ctx.showAllCount":"Alles einblenden ({n})","menu.ctx.selectAll":"Alles wählen","menu.ctx.fitAll":"Alles zeigen","menu.ctx.selSet":"Auswahl: {name}","menu.ctx.viewBack":"Vorige Ansicht","menu.ctx.newSketch":"Neue Skizze","menu.ctx.saveImage":"Bild speichern (PNG)","menu.ctx.repeat":"Wiederholen: {label}","menu.tl.markerAfter":"Marker hinter diesen Schritt","menu.tl.markerBefore":"Marker vor diesen Schritt","menu.tree.toFolder":"In Ordner","menu.tree.fromFolder":"Aus Ordner nehmen","menu.tree.dissolveFolder":"Ordner auflösen","menu.tree.collapseFolder":"Ordner zuklappen","menu.tree.expandFolder":"Ordner aufklappen","menu.tree.selectFolder":"Alle Schritte wählen","menu.draw.line":"Linie","menu.draw.rect":"Rechteck","menu.draw.circle":"Kreis","menu.draw.text":"Text","menu.draw.clearAll":"Alles Gezeichnete löschen","menu.draw.clearTitle":"Gezeichnetes löschen?","menu.draw.clearBody":"Alle frei gezeichneten Linien und Texte werden entfernt.","menu.draw.sheet":"Blatt","menu.draw.orient":"Ausrichtung","menu.draw.landscape":"Quer","menu.draw.portrait":"Hoch","menu.draw.scale":"Maßstab","menu.draw.scaleAuto":"Automatisch","menu.draw.viewsHeading":"Ansichten","menu.draw.vFront":"Vorderansicht","menu.draw.vTop":"Draufsicht","menu.draw.vLeft":"Seitenansicht von links","menu.draw.vIso":"Isometrie (3D-Bild)","menu.draw.hiddenEdges":"Verdeckte Kanten (gestrichelt)","menu.draw.tangentEdges":"Tangentiale Kanten","menu.draw.shaded":"Schattiert","menu.draw.scaleSheet":"Wie Blatt","menu.draw.addIso":"Isometrische Ansicht","menu.draw.addIsoShaded":"Isometrische Ansicht (schattiert)","menu.draw.addFree":"Aktuelle 3D-Ansicht","menu.draw.addFreeShaded":"Aktuelle 3D-Ansicht (schattiert)","menu.draw.centers":"Mittellinien","menu.draw.exportPdf":"Als PDF speichern","menu.draw.exportSvg":"Als SVG speichern","menu.draw.exportDxf":"Als DXF speichern","menu.draw.exportDxfAll":"Alle Blätter als DXF (ZIP)","menu.draw.exportPng":"Als PNG speichern …","menu.draw.detail":"Detailansicht","menu.draw.detailScale":"Detail-Maßstab","menu.draw.dimLin":"Abstand (Standard)","menu.draw.dimChain":"Kettenmaß","menu.draw.dimBase":"Bezugsmaß (von einer Kante aus)","menu.draw.dimAng":"Winkelmaß","menu.draw.dimRad":"Radius (R)","menu.draw.dimDia":"Durchmesser (Ø)","menu.draw.dimChamfer":"Fase (1×45°)","ctx.toolbarAria":"Aktionen","ctx.suppressed":"Unterdrückt","ctx.behindMarker":"Hinter dem Marker","ctx.enableAgain":"Wieder einschalten","ctx.enableAgainTip":"Diesen Schritt wieder mitrechnen","ctx.markerAfter":"Marker dahinter","ctx.markerAfterTip":"Den Marker hinter diesen Schritt ziehen – dann wird er wieder mitgerechnet","ctx.moveStepLabel":"Verschieben/Drehen","ctx.scaleStepLabel":"Skalieren","ctx.thickenStepLabel":"Aufdicken","ctx.mirrorStepLabel":"Schritt spiegeln","ctx.targetBody":"Zielkörper","ctx.targetBodyTip":"Zum Zielkörper wechseln","ctx.suppressTip":"Diesen Schritt unterdrücken – der Körper springt zurück","ctx.deleteTip":"Löschen (Entf)","ctx.copyValTip":"{tip} – klicken kopiert den Wert","ctx.edgeDia":"Kante Ø","ctx.edgeDiaTip":"Kreis mit Radius {r}, Umfang {total}","ctx.edgeOne":"Kante","ctx.edgesCount":"{n} Kanten","ctx.edgesTotalTip":"Gesamtlänge der gewählten Kanten","ctx.edgeLenTip":"Länge der Kante","ctx.edgeArcTip":"Länge der Kante (Bogen, R {r})","ctx.fillet":"Abrunden","ctx.filletTip":"Kante abrunden (1 mm, danach änderbar)","ctx.chamfer":"Abschrägen","ctx.chamferTip":"Kante abschrägen (1 mm, danach änderbar)","ctx.similar":"Ähnliche","ctx.similarEdgesTip":"Alle gleich langen Kanten dazuwählen (A)","ctx.chain":"Kette","ctx.chainTip":"Alle Kanten dazuwählen, die ohne Knick weiterlaufen (z. B. ein gerundeter Umriss)","ctx.byKind":"Nach Art","ctx.byKindTip":"Alle äußeren oder alle inneren Kanten dieses Teils wählen","ctx.planeAngle":"Ebene im Winkel","ctx.planeAngleTip":"Bezugsebene durch diese Kante im Winkel zu einer Fläche anlegen","ctx.planeNormal":"Ebene senkrecht","ctx.planeNormalTip":"Bezugsebene senkrecht auf diese Kante (in der Mitte, danach änderbar)","ctx.planeTwoEdges":"Ebene durch 2 Kanten","ctx.planeTwoEdgesTip":"Bezugsebene durch beide gewählten geraden Kanten anlegen","ctx.planeTangent":"Ebene tangential","ctx.planeTangentTip":"Bezugsebene tangential an diese runde Fläche anlegen","ctx.pointEdgeMid":"Punkt Kantenmitte","ctx.pointEdgeMidTip":"Bezugspunkt genau in der Mitte dieser Kante anlegen","ctx.pointFaceCenter":"Punkt Flächenmitte","ctx.pointFaceCenterTip":"Bezugspunkt in der Mitte dieser Fläche anlegen","ctx.face":"Fläche","ctx.sketchHere":"Skizze hierauf","ctx.sketchHereTip":"Auf dieser Fläche zeichnen","ctx.hole":"Bohrung","ctx.holeTip":"Bohrungs-Assistent: Durchgang, Kernloch, Sackloch mit Spitze, Passbohrung H7, Zentrierbohrung, Einsatz oder Mutternfalle","ctx.extrude":"Hochziehen","ctx.extrudeTip":"Die Fläche herausziehen oder hineindrücken","ctx.faceEdges":"Ihre Kanten","ctx.faceEdgesTip":"Alle Kanten dieser Fläche wählen, abrunden oder abschrägen","ctx.shell":"Aushöhlen","ctx.shellTip":"Körper aushöhlen – diese Fläche wird die Öffnung","ctx.sectionHere":"Schnitt hier","ctx.sectionHereTip":"Schnitt parallel zu dieser Fläche – den Abstand stellst du in der Schnitt-Leiste ein","ctx.mirrorFace":"An Fläche spiegeln","ctx.mirrorFaceTip":"Gespiegelte Kopie an dieser Fläche – z. B. die zweite Hälfte eines symmetrischen Teils","ctx.sphereDia":"Kugel Ø","ctx.roundFaceDia":"Runde Fläche Ø","ctx.roundFaceDiaTip":"Radius {r}","ctx.roundFace":"Runde Fläche","ctx.holeRoundTip":"Bohrungs-Assistent: Loch senkrecht in die runde Fläche (Schraube, Sackloch, Passbohrung H7, Zentrierung …) – der Magnet rastet ganz oben, an den Seiten und in der Mitte ein","ctx.threadEdit":"Gewinde ändern","ctx.threadMark":"Gewinde markieren","ctx.threadTip":"Kosmetisches Gewinde auf dieser runden Fläche markieren (rechnet schnell)","ctx.axis":"Achse","ctx.axisTip":"Bezugsachse durch die Mitte dieser runden Fläche anlegen","ctx.toBody":"Zum Körper","ctx.toHole":"Zum Loch","ctx.toBodyTip":"Wieder zum festen Körper machen (H)","ctx.toHoleTip":"Zum Loch machen – schneidet dann in andere Körper (H)","ctx.rotate":"Drehen","ctx.rotateTip":"Um 90° drehen oder kippen","ctx.rotZ":"Um 90° drehen (flach)","ctx.rotX":"Nach vorne kippen","ctx.rotY":"Zur Seite kippen","ctx.mirror":"Spiegeln","ctx.mirrorTip":"Spiegeln","ctx.mirrorX":"Links ↔ rechts","ctx.mirrorY":"Vorne ↔ hinten","ctx.mirrorZ":"Oben ↔ unten","ctx.dupTip":"Duplizieren (Strg D)","ctx.moveStep":"Verschieben/Drehen","ctx.moveStepTip":"Als Schritt verschieben, drehen oder kopieren (bleibt im Verlauf änderbar)","ctx.scale":"Skalieren","ctx.scaleTip":"Körper als Schritt im Verlauf vergrößern oder verkleinern (gleichmäßig oder je Achse)","ctx.thicken":"Aufdicken","ctx.thickenTip":"Fläche zu einer Platte mit fester Dicke aufdicken (nach außen, innen oder mittig)","ctx.mirrorStep":"Schritt spiegeln","ctx.mirrorStepTip":"Diesen Formschritt (z. B. eine Tasche oder Rippe) an einer Ebene oder Fläche im selben Körper spiegeln","ctx.pickMirrorPlane":"Ebene / Fläche","ctx.pickMirrorPlaneTip":"Ebene Körperfläche oder Bezugsebene als Spiegelebene wählen","ctx.pattern":"Muster","ctx.patternHoleTip":"Loch als Muster oder gespiegelt vervielfachen","ctx.patternTip":"Muster oder gespiegelte Kopie","ctx.patRect":"Rechteckmuster","ctx.patCirc":"Kreismuster","ctx.patPath":"Muster entlang Kurve","ctx.patMirror":"Gespiegelte Kopie","ctx.split":"Teilen","ctx.splitTip":"Körper an einer Ebene teilen","ctx.toTip":"Zur Spitze","ctx.toTipTip":"Den Umriss zu einer Spitze zusammenlaufen lassen (Übergang mit Spitze)","ctx.similarPartsTip":"Alle gleichen Teile wählen (A)","ctx.selectEdges":"Kanten wählen","ctx.selectEdgesTip":"Alle äußeren, alle inneren oder alle Kanten dieses Teils wählen – dann zusammen abrunden","ctx.ungroup":"Gruppe lösen","ctx.ungroupTip":"Gruppe lösen","ctx.group":"Gruppieren","ctx.groupTip":"Zu einem Körper verbinden (Strg G)","ctx.gap":"Abstand","ctx.gapTip":"Abstand zwischen den beiden Teilen genau setzen (der zuletzt gewählte bewegt sich)","ctx.joint":"Gelenk","ctx.jointTip":"Drehgelenk: das zuletzt gewählte Teil dreht sich um eine Achse, die du im Bild wählst","ctx.loft":"Übergang","ctx.loftTip":"Weicher Übergang durch die Umrisse – in der Reihenfolge, in der du sie gewählt hast","ctx.boolean":"Boolesch","ctx.booleanTip":"Körper vereinigen, abziehen oder schneiden","ctx.boolUnion":"Vereinigen","ctx.boolSub":"Abziehen (der zuerst gewählte bleibt)","ctx.boolInt":"Schnittmenge","ctx.align":"Ausrichten","ctx.alignTip":"Objekte aneinander ausrichten","ctx.alignLeft":"Links bündig","ctx.alignCx":"Mittig (X)","ctx.alignRight":"Rechts bündig","ctx.alignFront":"Vorne bündig","ctx.alignCy":"Mittig (Y)","ctx.alignBack":"Hinten bündig","ctx.alignBottom":"Unten bündig","common.emboss":"Prägen","ctx.emboss":"Prägen","ctx.embossTip":"Skizze (Text oder Logo) erhaben oder vertieft auf diese Fläche projizieren","menu.proj.saveTemplate":"Als Vorlage speichern …","start.projTpl.emptyMm.name":"Leer (mm)","start.projTpl.emptyMm.desc":"Leeres Projekt in Millimetern.","start.projTpl.emptyIn.name":"Leer (Zoll)","start.projTpl.emptyIn.desc":"Leeres Projekt in Zoll (in) für US-Maße.","start.projTpl.print3d.name":"3D-Druck","start.projTpl.print3d.desc":"Druckbett 220 × 220 × 250 mm sichtbar, 0,4-mm-Düse, PLA.","start.projTpl.laser.name":"Laser (Platte 3 mm)","start.projTpl.laser.desc":"3-mm-Sperrholzplatte mit Schnittspalt-Maß für den Laser.","start.projTpl.enclosure.name":"Gehäuse","start.projTpl.enclosure.desc":"Gehäuse 80 × 50 × 30 mm mit Deckel, Wandstärke und Spiel.","tpl.newDialogTitle":"Neues Projekt aus Vorlage","tpl.builtinHeading":"Projekt-Vorlagen","tpl.customHeading":"Eigene Vorlagen","tpl.customEmpty":"Noch keine eigenen Vorlagen. Über das Projektmenü → „Als Vorlage speichern …“ legst du hier eigene Startpunkte ab.","tpl.customNoDesc":"Eigene Vorlage (lokal gespeichert)","tpl.saveCurrent":"Aktuelles Projekt als Vorlage speichern","tpl.saveDialogTitle":"Als Vorlage speichern","tpl.saveNameLabel":"Name der Vorlage","tpl.saveDescLabel":"Kurze Beschreibung (optional)","tpl.saveDescPh":"z. B. Drucker mit 0,6-mm-Düse, Gehäuse-Grundmaß …","tpl.saveNameEmpty":"Bitte gib der Vorlage einen Namen.","tpl.saveFailed":"Die Vorlage konnte nicht lokal gespeichert werden.","tpl.saved":"Vorlage „{name}“ gespeichert.","tpl.deleteAria":"Vorlage „{name}“ löschen","tpl.deleteTip":"Vorlage löschen","tpl.deleteTitle":"Vorlage löschen?","tpl.deleteBody":"„{name}“ wird aus deinen gespeicherten Vorlagen entfernt.","tpl.deleted":"Vorlage „{name}“ gelöscht.","tpl.missing":"Die Vorlage wurde nicht gefunden.","tpl.loadedPrint3d":"Vorlage „3D-Druck“ geladen: Druckbett {x} × {y} × {z} mm, Düse {nozzle} mm.","tpl.loadedEmpty":"Neues leeres Projekt ({unit}) gestartet.","tpl.loadedNamed":"Vorlage „{name}“ geladen.","recovery.title":"Tracery wurde nicht richtig beendet – letzten Stand wiederherstellen?","recovery.metaOne":"Projekt „{name}“ · {time} · 1 Objekt","recovery.metaMany":"Projekt „{name}“ · {time} · {n} Objekte","recovery.restore":"Wiederherstellen","recovery.dismiss":"Verwerfen","recovery.restored":"Letzter Stand von „{name}“ wiederhergestellt.","recovery.discarded":"Wiederherstellungs-Stand verworfen.","recovery.failed":"Der letzte Stand konnte nicht wiederhergestellt werden."};
+const TEXTS_DE = {"common.ok":"OK","common.cancel":"Abbrechen","common.close":"Schließen","common.delete":"Löschen","common.rename":"Umbenennen","common.save":"Speichern","common.name":"Name","common.body":"Körper","common.hole":"Loch","common.edit":"Bearbeiten","common.suppress":"Unterdrücken","common.unsuppress":"Wieder aktivieren","common.explainStep":"Erklär diesen Schritt","common.moveStep":"Verschieben/Drehen (Schritt)","common.scaleStep":"Skalieren (Schritt)","common.thicken":"Aufdicken","common.mirrorStep":"Schritt spiegeln","common.duplicate":"Duplizieren","common.hide":"Ausblenden","common.isolate":"Isolieren","topbar.showTree":"Verlauf zeigen","topbar.tree":"Verlauf","topbar.brandAria":"Tracery – Startseite","topbar.workspace":"Arbeitsbereich","topbar.model":"Modell","topbar.drawing":"Zeichnung","topbar.undo":"Rückgängig","topbar.undoLabel":"Rückgängig: {label}","topbar.redo":"Wiederholen","topbar.project":"Projekt","topbar.menu":"Menü","topbar.showProps":"Eigenschaften zeigen","topbar.props":"Eigenschaften","topbar.params":"Maße","topbar.log":"Protokoll","topbar.cmdPlaceholder":"Werkzeug suchen oder beschreiben, was du bauen willst …","topbar.cmdAria":"Werkzeug suchen oder der KI beschreiben","topbar.cmdGo":"Ausführen","level.simple":"Einfach","level.pro":"Profi","level.tipSimple":"Stufe: Einfach – klicken zum Wechseln auf Profi","level.tipPro":"Stufe: Profi – klicken zum Wechseln auf Einfach","level.chooseAria":"Stufe wählen","level.simpleDesc":"wenige, große Knöpfe, alles erklärt","level.proDesc":"alle Werkzeuge, Tastenkürzel, Maus wie in deinem CAD","start.aria":"Startseite","start.subtitle":"CAD im Browser – kostenlos, ohne Konto","start.newProject":"Neues Projekt","start.openFile":"Datei öffnen","start.tourBasics":"Einführung (3 Minuten)","start.tourSketch":"Erste Skizze (5 Minuten)","start.welcomeTitle":"Wie möchtest du mit Tracery arbeiten?","start.welcomeSub":"Du kannst jederzeit oben rechts zwischen beiden Stufen wechseln.","start.surfaceAria":"Oberfläche","start.surfaceLabel":"Oberfläche:","start.simpleOption":"Einfach – für Einsteiger","start.proOption":"Profi – alle Werkzeuge","start.recentHeading":"Weiterarbeiten","start.recentMetaOne":"{n} Objekt · {date}","start.recentMetaMany":"{n} Objekte · {date}","start.deleteFromBrowserAria":"Aus dem Browser löschen","start.deleteFromBrowserTip":"Aus diesem Browser löschen","start.deleteConfirmTitle":"Projekt löschen?","start.deleteConfirmBody":"„{name}“ wird aus diesem Browser gelöscht. Gespeicherte Dateien bleiben erhalten.","start.projectMissing":"Das Projekt ist nicht mehr da.","start.templatesHeading":"Vorlagen","start.emptyTitle":"Leeres Projekt","start.emptyDesc":"Von null anfangen.","start.templateLoaded":"Vorlage geladen. Klick einen Teil an, um ihn zu ändern.","start.footHtml":"Projekte werden automatisch in diesem Browser gesichert. Zum sicheren Aufbewahren und Teilen: <b>Projekt als Datei speichern</b>.<br>Tracery rechnet mit OpenCascade (LGPL-2.1) über replicad (MIT) und zeigt 3D mit three.js (MIT).","start.tpl.box.name":"Box mit Deckel","start.tpl.box.desc":"Mit Maßen wie Wandstärke und Spiel – änderst du sie, passt sich alles an.","start.tpl.sign.name":"Schild mit Loch","start.tpl.sign.desc":"Flache Platte mit runden Ecken und einem Loch zum Aufhängen.","start.tpl.phone.name":"Handyhalter","start.tpl.phone.desc":"Schräge Lehne, Ablage vorne und ein Schlitz fürs Kabel.","start.tpl.bracket.name":"Winkel zum Anschrauben","start.tpl.bracket.desc":"L-Winkel mit Senkkopf-Schraublöchern und Versteifung.","start.tpl.gear.name":"Zahnradpaar","start.tpl.gear.desc":"Zwei passende Zahnräder mit Bohrung.","start.tpl.hinge.name":"Scharnier","start.tpl.hinge.desc":"Aus einem Stück, mit Spiel zwischen den Teilen.","tool.body":"Körper","tool.bodyTip":"Grundkörper hinzufügen – anklicken oder auf die Fläche ziehen","tool.sketch":"Skizze","tool.sketchTip":"Eine 2D-Skizze zeichnen und daraus einen Körper machen","tool.parts":"Bauteile","tool.partsTip":"Schraubenlöcher, Mutternfallen, Scharniere, Zahnräder …","tool.measure":"Messen","tool.measureTip":"Messen: Abstände, Winkel, Flächen und Durchmesser","tool.notes":"Notizen","tool.notesTip":"Notizstift: frei malen und Text hinschreiben – ohne technische Bedeutung","tool.views":"Ansicht","tool.viewsTip":"Ansicht: Schnitt, Röntgen, Explosion und Fokus-Vorschau – ändert nur die Anzeige","tool.check":"Prüfen","tool.checkTip":"Prüfen: Geometrie prüfen, Schwachstellen, Wandstärke und Überhänge","tool.more":"Mehr","tool.moreTip":"Weitere Werkzeuge: Messen, Notizen, Ansicht – oder alle Werkzeuge zeigen","tool.export":"Exportieren","tool.exportShort":"Export","tool.exportTip":"Als STEP, STL, 3MF, OBJ, GLB oder DXF speichern (ZIP)","tool.sheet":"Blatt","tool.sheetTip":"Blattgröße, Maßstab und Ansichten","tool.viewAdd":"Ansicht +","tool.viewAddTip":"Isometrische oder aktuelle 3D-Ansicht hinzufügen","tool.detail":"Detailansicht","tool.detailTip":"Ausschnitt einer Ansicht mit Kreis vergrößern (Detail Z)","tool.dsection":"Schnittansicht","tool.dsectionTip":"Schnittlinie A–A durch eine Ansicht ziehen – erzeugt eine Schnittansicht mit Schraffur","tool.dim":"Maß","tool.dimTip":"Bemaßung hinzufügen: zwei Punkte oder einen Kreis anklicken","tool.dimKinds":"Maß-Arten","tool.dimKindsTip":"Kettenmaß, Bezugsmaß, Winkel, Radius, Durchmesser oder Fase","tool.autodim":"Automatisch bemaßen","tool.autodimShort":"Auto-Maße","tool.autodimTip":"Gesamtmaße und Bohrungen automatisch bemaßen","tool.dnote":"Hinweislinie","tool.dnoteTip":"Notiz mit Hinweislinie (Pfeil oder Punkt an einer Kante oder Fläche)","tool.draw2d":"2D zeichnen","tool.draw2dTip":"Linien, Kreise und Text frei auf das Blatt zeichnen","tool.dexport":"Zeichnung speichern","tool.dexportShort":"Speichern","tool.dexportTip":"Als PDF, SVG, DXF oder PNG speichern","tool.fly.bodiesTitle":"Grundkörper","tool.fly.tileTip":"Klicken fügt ihn ein, Ziehen setzt ihn genau hin","tool.fly.cylHole":"Zylinder als Loch","tool.fly.boxHole":"Quader als Loch","tool.fly.route3d":"Rohr im Raum","tool.fly.bodiesFoot":"Tipp: Jeder Körper kann mit einem Klick zum Loch werden.","tool.fly.partsTitle":"Bauteile","tool.fly.partsFoot":"Löcher auf eine Fläche ziehen – sie richten sich automatisch aus.","menu.proj.rename":"Projekt umbenennen","menu.proj.saveFile":"Als Datei speichern","menu.proj.saveInFolderNow":"Jetzt in „{name}“ speichern","menu.proj.changeFolder":"Anderen Ordner wählen …","menu.proj.disconnectFolder":"Ordner-Verbindung trennen","menu.proj.saveToFolder":"In Ordner speichern …","menu.proj.openImport":"Datei öffnen / STEP, IGES, BREP, STL, 3MF, OBJ importieren …","menu.proj.versions":"Versionen …","menu.proj.newProject":"Neues Projekt","menu.proj.startAndTemplates":"Startseite und Vorlagen","menu.folder.saveNow":"Jetzt in Ordner speichern","menu.folder.changeFolder":"Anderen Ordner wählen …","menu.folder.disconnect":"Ordner-Verbindung trennen","menu.main.tourBasics":"Einführung starten","menu.main.tourSketch":"Einführung: Erste Skizze","menu.main.settings":"Einstellungen","menu.main.shortcuts":"Tastenkürzel","menu.main.export":"Exportieren","menu.main.saveImage":"Bild speichern (PNG)","menu.main.about":"Über Tracery","menu.main.aboutP1":"Tracery ist ein kostenloses, parametrisches CAD im Browser – ohne Konto, mit exaktem Geometrie-Kern und technischen Zeichnungen.","menu.main.aboutP2":"Der Name: „Tracery“ ist das englische Wort für Maßwerk – die filigranen, exakt konstruierten Ornamente in gotischen Kirchenfenstern. Genau so sollen deine Teile werden.","menu.main.aboutP3":"Gerechnet wird mit dem CAD-Kern OpenCascade (LGPL-2.1) über die Bibliothek replicad (MIT). Die 3D-Anzeige nutzt three.js (MIT), die PDF-Ausgabe jsPDF (MIT).","menu.main.aboutP4":"Deine Projekte bleiben in deinem Browser. Der KI-Helfer nutzt dein Claude-Konto.","menu.more.measure":"Messen","menu.more.notes":"Notizstift","menu.more.views":"Ansicht: Schnitt, Röntgen, Explosion …","menu.more.weakSpots":"Schwachstellen suchen","menu.more.showAllPro":"Alle Werkzeuge zeigen (Profi)","menu.view.section":"Schnitt","menu.view.xray":"Röntgen","menu.view.explode":"Explosion","menu.view.focus":"Fokus-Vorschau","menu.view.overhang":"Überhänge (3D-Druck)","menu.view.thin":"Wandstärke (3D-Druck)","menu.view.present":"Vorführen (Vollbild)","menu.view.turntable":"Drehteller-Video …","menu.view.lightPrefix":"Licht: {name}","menu.view.shadows":"Schatten","menu.view.viewBack":"Vorige Ansicht","menu.view.saveView":"Ansicht speichern …","menu.view.savedViewPrefix":"Ansicht: {name}","menu.view.disp.edges":"Flächen mit Kanten","menu.view.disp.shaded":"Nur Flächen","menu.view.disp.wire":"Drahtgitter (nur Kanten)","menu.view.disp.hidden":"Verdeckte Kanten zeigen","menu.view.look.studio":"Studio-Look (Werkstoff, Licht, Schatten)","menu.view.look.plain":"Einfach (matt, schnell)","menu.view.look.clay":"Prüfen: Ton","menu.view.look.chrome":"Prüfen: Chrom-Streifen","menu.view.mood.studio":"Studio","menu.view.mood.hell":"Hell","menu.view.mood.werkstatt":"Werkstatt","menu.check.geom":"Geometrie prüfen","menu.check.weak":"Schwachstellen suchen","menu.check.thin":"Wandstärke (3D-Druck)","menu.check.overhang":"Überhänge (3D-Druck)","menu.select.all":"Alles","menu.select.body":"Nur Körper","menu.select.face":"Nur Flächen","menu.select.edge":"Nur Kanten","menu.select.tip":"Wählen: {name}","menu.edge.convex":"Alle äußeren Kanten","menu.edge.concave":"Alle inneren Kanten","menu.edge.all":"Alle Kanten","menu.edge.faceSelect":"Alle {n} Kanten wählen","menu.edge.faceFillet":"Alle abrunden ({v})","menu.edge.faceChamfer":"Alle abschrägen ({v})","menu.edge.faceNone":"An dieser Fläche habe ich keine Kanten gefunden.","menu.ctx.editSketch":"Skizze bearbeiten","menu.ctx.lookAtFace":"Blick senkrecht auf die Fläche","menu.ctx.faceDxf":"Fläche als DXF speichern","menu.ctx.faceSvg":"Fläche als SVG speichern","menu.ctx.sketchOnFace":"Skizze auf dieser Fläche","menu.ctx.thread":"Gewinde …","menu.ctx.markThread":"Gewinde markieren …","menu.ctx.dupLinked":"Verknüpft duplizieren","menu.ctx.toSolid":"Zum Körper machen","menu.ctx.toHole":"Zum Loch machen","menu.ctx.selectSimilar":"Ähnliche wählen","menu.ctx.zoomFit":"Heranzoomen","menu.ctx.saveSelection":"Auswahl speichern …","menu.ctx.behind":"Dahinter wählen: „{name}“","menu.ctx.showAll":"Alles einblenden","menu.ctx.showAllCount":"Alles einblenden ({n})","menu.ctx.selectAll":"Alles wählen","menu.ctx.fitAll":"Alles zeigen","menu.ctx.selSet":"Auswahl: {name}","menu.ctx.viewBack":"Vorige Ansicht","menu.ctx.newSketch":"Neue Skizze","menu.ctx.saveImage":"Bild speichern (PNG)","menu.ctx.repeat":"Wiederholen: {label}","menu.tl.markerAfter":"Marker hinter diesen Schritt","menu.tl.markerBefore":"Marker vor diesen Schritt","menu.tree.toFolder":"In Ordner","menu.tree.fromFolder":"Aus Ordner nehmen","menu.tree.dissolveFolder":"Ordner auflösen","menu.tree.collapseFolder":"Ordner zuklappen","menu.tree.expandFolder":"Ordner aufklappen","menu.tree.selectFolder":"Alle Schritte wählen","menu.draw.line":"Linie","menu.draw.rect":"Rechteck","menu.draw.circle":"Kreis","menu.draw.text":"Text","menu.draw.clearAll":"Alles Gezeichnete löschen","menu.draw.clearTitle":"Gezeichnetes löschen?","menu.draw.clearBody":"Alle frei gezeichneten Linien und Texte werden entfernt.","menu.draw.sheet":"Blatt","menu.draw.orient":"Ausrichtung","menu.draw.landscape":"Quer","menu.draw.portrait":"Hoch","menu.draw.scale":"Maßstab","menu.draw.scaleAuto":"Automatisch","menu.draw.viewsHeading":"Ansichten","menu.draw.vFront":"Vorderansicht","menu.draw.vTop":"Draufsicht","menu.draw.vLeft":"Seitenansicht von links","menu.draw.vIso":"Isometrie (3D-Bild)","menu.draw.hiddenEdges":"Verdeckte Kanten (gestrichelt)","menu.draw.tangentEdges":"Tangentiale Kanten","menu.draw.shaded":"Schattiert","menu.draw.scaleSheet":"Wie Blatt","menu.draw.addIso":"Isometrische Ansicht","menu.draw.addIsoShaded":"Isometrische Ansicht (schattiert)","menu.draw.addFree":"Aktuelle 3D-Ansicht","menu.draw.addFreeShaded":"Aktuelle 3D-Ansicht (schattiert)","menu.draw.centers":"Mittellinien","menu.draw.exportPdf":"Als PDF speichern","menu.draw.exportSvg":"Als SVG speichern","menu.draw.exportDxf":"Als DXF speichern","menu.draw.exportDxfAll":"Alle Blätter als DXF (ZIP)","menu.draw.exportPng":"Als PNG speichern …","menu.draw.detail":"Detailansicht","menu.draw.detailScale":"Detail-Maßstab","menu.draw.dimLin":"Abstand (Standard)","menu.draw.dimChain":"Kettenmaß","menu.draw.dimBase":"Bezugsmaß (von einer Kante aus)","menu.draw.dimAng":"Winkelmaß","menu.draw.dimRad":"Radius (R)","menu.draw.dimDia":"Durchmesser (Ø)","menu.draw.dimChamfer":"Fase (1×45°)","ctx.toolbarAria":"Aktionen","ctx.suppressed":"Unterdrückt","ctx.behindMarker":"Hinter dem Marker","ctx.enableAgain":"Wieder einschalten","ctx.enableAgainTip":"Diesen Schritt wieder mitrechnen","ctx.markerAfter":"Marker dahinter","ctx.markerAfterTip":"Den Marker hinter diesen Schritt ziehen – dann wird er wieder mitgerechnet","ctx.moveStepLabel":"Verschieben/Drehen","ctx.scaleStepLabel":"Skalieren","ctx.thickenStepLabel":"Aufdicken","ctx.mirrorStepLabel":"Schritt spiegeln","ctx.targetBody":"Zielkörper","ctx.targetBodyTip":"Zum Zielkörper wechseln","ctx.suppressTip":"Diesen Schritt unterdrücken – der Körper springt zurück","ctx.deleteTip":"Löschen (Entf)","ctx.copyValTip":"{tip} – klicken kopiert den Wert","ctx.edgeDia":"Kante Ø","ctx.edgeDiaTip":"Kreis mit Radius {r}, Umfang {total}","ctx.edgeOne":"Kante","ctx.edgesCount":"{n} Kanten","ctx.edgesTotalTip":"Gesamtlänge der gewählten Kanten","ctx.edgeLenTip":"Länge der Kante","ctx.edgeArcTip":"Länge der Kante (Bogen, R {r})","ctx.fillet":"Abrunden","ctx.filletTip":"Kante abrunden (1 mm, danach änderbar)","ctx.chamfer":"Abschrägen","ctx.chamferTip":"Kante abschrägen (1 mm, danach änderbar)","ctx.similar":"Ähnliche","ctx.similarEdgesTip":"Alle gleich langen Kanten dazuwählen (A)","ctx.chain":"Kette","ctx.chainTip":"Alle Kanten dazuwählen, die ohne Knick weiterlaufen (z. B. ein gerundeter Umriss)","ctx.byKind":"Nach Art","ctx.byKindTip":"Alle äußeren oder alle inneren Kanten dieses Teils wählen","ctx.planeAngle":"Ebene im Winkel","ctx.planeAngleTip":"Bezugsebene durch diese Kante im Winkel zu einer Fläche anlegen","ctx.planeNormal":"Ebene senkrecht","ctx.planeNormalTip":"Bezugsebene senkrecht auf diese Kante (in der Mitte, danach änderbar)","ctx.planeTwoEdges":"Ebene durch 2 Kanten","ctx.planeTwoEdgesTip":"Bezugsebene durch beide gewählten geraden Kanten anlegen","ctx.planeTangent":"Ebene tangential","ctx.planeTangentTip":"Bezugsebene tangential an diese runde Fläche anlegen","ctx.pointEdgeMid":"Punkt Kantenmitte","ctx.pointEdgeMidTip":"Bezugspunkt genau in der Mitte dieser Kante anlegen","ctx.pointFaceCenter":"Punkt Flächenmitte","ctx.pointFaceCenterTip":"Bezugspunkt in der Mitte dieser Fläche anlegen","ctx.face":"Fläche","ctx.sketchHere":"Skizze hierauf","ctx.sketchHereTip":"Auf dieser Fläche zeichnen","ctx.hole":"Bohrung","ctx.holeTip":"Bohrungs-Assistent: Durchgang, Kernloch, Sackloch mit Spitze, Passbohrung H7, Zentrierbohrung, Einsatz oder Mutternfalle","ctx.extrude":"Hochziehen","ctx.extrudeTip":"Die Fläche herausziehen oder hineindrücken","ctx.faceEdges":"Ihre Kanten","ctx.faceEdgesTip":"Alle Kanten dieser Fläche wählen, abrunden oder abschrägen","ctx.shell":"Aushöhlen","ctx.shellTip":"Körper aushöhlen – diese Fläche wird die Öffnung","ctx.sectionHere":"Schnitt hier","ctx.sectionHereTip":"Schnitt parallel zu dieser Fläche – den Abstand stellst du in der Schnitt-Leiste ein","ctx.mirrorFace":"An Fläche spiegeln","ctx.mirrorFaceTip":"Gespiegelte Kopie an dieser Fläche – z. B. die zweite Hälfte eines symmetrischen Teils","ctx.sphereDia":"Kugel Ø","ctx.roundFaceDia":"Runde Fläche Ø","ctx.roundFaceDiaTip":"Radius {r}","ctx.roundFace":"Runde Fläche","ctx.holeRoundTip":"Bohrungs-Assistent: Loch senkrecht in die runde Fläche (Schraube, Sackloch, Passbohrung H7, Zentrierung …) – der Magnet rastet ganz oben, an den Seiten und in der Mitte ein","ctx.threadEdit":"Gewinde ändern","ctx.threadMark":"Gewinde markieren","ctx.threadTip":"Kosmetisches Gewinde auf dieser runden Fläche markieren (rechnet schnell)","ctx.axis":"Achse","ctx.axisTip":"Bezugsachse durch die Mitte dieser runden Fläche anlegen","ctx.toBody":"Zum Körper","ctx.toHole":"Zum Loch","ctx.toBodyTip":"Wieder zum festen Körper machen (H)","ctx.toHoleTip":"Zum Loch machen – schneidet dann in andere Körper (H)","ctx.rotate":"Drehen","ctx.rotateTip":"Um 90° drehen oder kippen","ctx.rotZ":"Um 90° drehen (flach)","ctx.rotX":"Nach vorne kippen","ctx.rotY":"Zur Seite kippen","ctx.mirror":"Spiegeln","ctx.mirrorTip":"Spiegeln","ctx.mirrorX":"Links ↔ rechts","ctx.mirrorY":"Vorne ↔ hinten","ctx.mirrorZ":"Oben ↔ unten","ctx.dupTip":"Duplizieren (Strg D)","ctx.moveStep":"Verschieben/Drehen","ctx.moveStepTip":"Als Schritt verschieben, drehen oder kopieren (bleibt im Verlauf änderbar)","ctx.scale":"Skalieren","ctx.scaleTip":"Körper als Schritt im Verlauf vergrößern oder verkleinern (gleichmäßig oder je Achse)","ctx.thicken":"Aufdicken","ctx.thickenTip":"Fläche zu einer Platte mit fester Dicke aufdicken (nach außen, innen oder mittig)","ctx.mirrorStep":"Schritt spiegeln","ctx.mirrorStepTip":"Diesen Formschritt (z. B. eine Tasche oder Rippe) an einer Ebene oder Fläche im selben Körper spiegeln","ctx.pickMirrorPlane":"Ebene / Fläche","ctx.pickMirrorPlaneTip":"Ebene Körperfläche oder Bezugsebene als Spiegelebene wählen","ctx.pattern":"Muster","ctx.patternHoleTip":"Loch als Muster oder gespiegelt vervielfachen","ctx.patternTip":"Muster oder gespiegelte Kopie","ctx.patRect":"Rechteckmuster","ctx.patCirc":"Kreismuster","ctx.patPath":"Muster entlang Kurve","ctx.patMirror":"Gespiegelte Kopie","ctx.split":"Teilen","ctx.splitTip":"Körper an einer Ebene teilen","ctx.toTip":"Zur Spitze","ctx.toTipTip":"Den Umriss zu einer Spitze zusammenlaufen lassen (Übergang mit Spitze)","ctx.similarPartsTip":"Alle gleichen Teile wählen (A)","ctx.selectEdges":"Kanten wählen","ctx.selectEdgesTip":"Alle äußeren, alle inneren oder alle Kanten dieses Teils wählen – dann zusammen abrunden","ctx.ungroup":"Gruppe lösen","ctx.ungroupTip":"Gruppe lösen","ctx.group":"Gruppieren","ctx.groupTip":"Zu einem Körper verbinden (Strg G)","ctx.gap":"Abstand","ctx.gapTip":"Abstand zwischen den beiden Teilen genau setzen (der zuletzt gewählte bewegt sich)","ctx.joint":"Gelenk","ctx.jointTip":"Drehgelenk: das zuletzt gewählte Teil dreht sich um eine Achse, die du im Bild wählst","ctx.loft":"Übergang","ctx.loftTip":"Weicher Übergang durch die Umrisse – in der Reihenfolge, in der du sie gewählt hast","ctx.boolean":"Boolesch","ctx.booleanTip":"Körper vereinigen, abziehen oder schneiden","ctx.boolUnion":"Vereinigen","ctx.boolSub":"Abziehen (der zuerst gewählte bleibt)","ctx.boolInt":"Schnittmenge","ctx.align":"Ausrichten","ctx.alignTip":"Objekte aneinander ausrichten","ctx.alignLeft":"Links bündig","ctx.alignCx":"Mittig (X)","ctx.alignRight":"Rechts bündig","ctx.alignFront":"Vorne bündig","ctx.alignCy":"Mittig (Y)","ctx.alignBack":"Hinten bündig","ctx.alignBottom":"Unten bündig","common.emboss":"Prägen","ctx.emboss":"Prägen","ctx.embossTip":"Skizze (Text oder Logo) erhaben oder vertieft auf diese Fläche projizieren","menu.proj.saveTemplate":"Als Vorlage speichern …","start.projTpl.emptyMm.name":"Leer (mm)","start.projTpl.emptyMm.desc":"Leeres Projekt in Millimetern.","start.projTpl.emptyIn.name":"Leer (Zoll)","start.projTpl.emptyIn.desc":"Leeres Projekt in Zoll (in) für US-Maße.","start.projTpl.print3d.name":"3D-Druck","start.projTpl.print3d.desc":"Druckbett 220 × 220 × 250 mm sichtbar, 0,4-mm-Düse, PLA.","start.projTpl.laser.name":"Laser (Platte 3 mm)","start.projTpl.laser.desc":"3-mm-Sperrholzplatte mit Schnittspalt-Maß für den Laser.","start.projTpl.enclosure.name":"Gehäuse","start.projTpl.enclosure.desc":"Gehäuse 80 × 50 × 30 mm mit Deckel, Wandstärke und Spiel.","tpl.newDialogTitle":"Neues Projekt aus Vorlage","tpl.builtinHeading":"Projekt-Vorlagen","tpl.customHeading":"Eigene Vorlagen","tpl.customEmpty":"Noch keine eigenen Vorlagen. Über das Projektmenü → „Als Vorlage speichern …“ legst du hier eigene Startpunkte ab.","tpl.customNoDesc":"Eigene Vorlage (lokal gespeichert)","tpl.saveCurrent":"Aktuelles Projekt als Vorlage speichern","tpl.saveDialogTitle":"Als Vorlage speichern","tpl.saveNameLabel":"Name der Vorlage","tpl.saveDescLabel":"Kurze Beschreibung (optional)","tpl.saveDescPh":"z. B. Drucker mit 0,6-mm-Düse, Gehäuse-Grundmaß …","tpl.saveNameEmpty":"Bitte gib der Vorlage einen Namen.","tpl.saveFailed":"Die Vorlage konnte nicht lokal gespeichert werden.","tpl.saved":"Vorlage „{name}“ gespeichert.","tpl.deleteAria":"Vorlage „{name}“ löschen","tpl.deleteTip":"Vorlage löschen","tpl.deleteTitle":"Vorlage löschen?","tpl.deleteBody":"„{name}“ wird aus deinen gespeicherten Vorlagen entfernt.","tpl.deleted":"Vorlage „{name}“ gelöscht.","tpl.missing":"Die Vorlage wurde nicht gefunden.","tpl.loadedPrint3d":"Vorlage „3D-Druck“ geladen: Druckbett {x} × {y} × {z} mm, Düse {nozzle} mm.","tpl.loadedEmpty":"Neues leeres Projekt ({unit}) gestartet.","tpl.loadedNamed":"Vorlage „{name}“ geladen.","recovery.title":"Tracery wurde nicht richtig beendet – letzten Stand wiederherstellen?","recovery.metaOne":"Projekt „{name}“ · {time} · 1 Objekt","recovery.metaMany":"Projekt „{name}“ · {time} · {n} Objekte","recovery.restore":"Wiederherstellen","recovery.dismiss":"Verwerfen","recovery.restored":"Letzter Stand von „{name}“ wiederhergestellt.","recovery.discarded":"Wiederherstellungs-Stand verworfen.","recovery.failed":"Der letzte Stand konnte nicht wiederhergestellt werden.","tabs.barAria":"Geöffnete Projekte","tabs.addAria":"Projekt in neuem Tab öffnen","tabs.addTip":"Neues oder gespeichertes Projekt in neuem Tab öffnen","tabs.newEmpty":"Neues leeres Projekt","tabs.newTemplate":"Neues Projekt aus Vorlage …","tabs.openFile":"Projektdatei öffnen (.json) …","tabs.openInNewTab":"In neuem Tab öffnen","tabs.alreadyOpen":"offen","tabs.closeAria":"Tab „{name}“ schließen","tabs.closeTip":"Tab schließen","tabs.closeDirtyTitle":"Ungespeicherte Änderungen schließen?","tabs.closeDirtyBody":"Im Projekt „{name}“ gibt es noch ungespeicherte Änderungen (nicht als Datei gespeichert). Tab trotzdem schließen?","tabs.closeAnyway":"Trotzdem schließen","tabs.closeOthers":"Andere Tabs schließen","tabs.rename":"Projekt umbenennen","tabs.newOpened":"Neuer Projekt-Tab geöffnet."};
 
 const I18n = (() => {
   let lang = 'de';
@@ -3061,6 +3096,7 @@ const Store = (() => {
   const QUICK_MAX_CHARS = 400000;
   let db = null, dbPromise = null, initPromise = null, ready = false, usingIDB = true;
   let index = [], lastId = null, recoveryCache = null;
+  let openTabs = { ids: [], activeId: null };
   const blobCache = new Map();     // blobId -> Uint8Array
   const pendingBlobs = new Map();  // blobId -> Promise<void>
   const versionsCache = new Map(); // projectId -> Array
@@ -3379,9 +3415,20 @@ const Store = (() => {
       const d = await ensureDB();
       if (d) {
         try {
-          const [idxRec, lastRec] = await Promise.all([txGet(d, 'meta', 'index'), txGet(d, 'meta', 'last')]);
+          const [idxRec, lastRec, tabsRec] = await Promise.all([
+            txGet(d, 'meta', 'index'),
+            txGet(d, 'meta', 'last'),
+            txGet(d, 'meta', 'openTabs'),
+          ]);
           if (idxRec && Array.isArray(idxRec.v)) index = idxRec.v;
           if (lastRec && typeof lastRec.v === 'string') lastId = lastRec.v;
+          if (tabsRec && tabsRec.v && Array.isArray(tabsRec.v.ids)) {
+            const cleanIds = [...new Set(tabsRec.v.ids.filter((x) => typeof x === 'string' && x))];
+            openTabs = {
+              ids: cleanIds.slice(0, 20),
+              activeId: typeof tabsRec.v.activeId === 'string' && cleanIds.includes(tabsRec.v.activeId) ? tabsRec.v.activeId : (cleanIds[0] || null),
+            };
+          }
         } catch (e) { console.warn('Meta lesen:', e); }
       }
       try { await migrateFromLocalStorage(); } catch (e) { console.warn('Migration aus localStorage:', e); }
@@ -3394,8 +3441,21 @@ const Store = (() => {
   function recentProjects() { return index.slice(); }
   function hasProject(id) { return index.some((x) => x.id === id); }
   function getLastId() { return lastId; }
+  function getOpenTabs() { return { ids: openTabs.ids.slice(), activeId: openTabs.activeId }; }
+  function setOpenTabs(ids, activeId) {
+    const clean = [...new Set((Array.isArray(ids) ? ids : []).filter((x) => typeof x === 'string' && x))].slice(0, 20);
+    const act = typeof activeId === 'string' && clean.includes(activeId) ? activeId : (clean[0] || null);
+    openTabs = { ids: clean, activeId: act };
+    const snap = { ids: clean.slice(), activeId: act };
+    return enqueue(async () => {
+      const d = await ensureDB();
+      if (!d) return true;
+      await txPut(d, 'meta', { k: 'openTabs', v: snap });
+      return true;
+    }).catch((e) => { console.warn('Offene Tabs speichern:', e); return false; });
+  }
 
-  function saveProject(doc, itemCount) {
+  function saveProject(doc, itemCount, opts = {}) {
     if (!doc || !doc.id) return Promise.resolve(false);
     extractBlobs(doc);
     const snap = deepClone(doc);
@@ -3403,7 +3463,8 @@ const Store = (() => {
     index = index.filter((x) => x.id !== snap.id);
     index.unshift({ id: snap.id, name: snap.name, modified: snap.modified, n });
     index = index.slice(0, 30);
-    lastId = snap.id;
+    const updateLast = !(opts && opts.keepLast);
+    if (updateLast) lastId = snap.id;
     const idxSnap = index.slice();
     const lastSnap = lastId;
 
@@ -3418,7 +3479,7 @@ const Store = (() => {
       tx.objectStore('projects').put(snap);
       const m = tx.objectStore('meta');
       m.put({ k: 'index', v: idxSnap });
-      m.put({ k: 'last', v: lastSnap });
+      if (updateLast && lastSnap) m.put({ k: 'last', v: lastSnap });
       return txDone(tx);
     }).catch((e) => { console.warn('Projekt speichern:', e); return false; });
   }
@@ -3444,7 +3505,8 @@ const Store = (() => {
     const d = await ensureDB();
     if (!d) return;
     const keep = new Set();
-    if (activeDoc) collectBlobIds(activeDoc, keep);
+    const docs = Array.isArray(activeDoc) ? activeDoc : (activeDoc ? [activeDoc] : []);
+    for (const ad of docs) if (ad) collectBlobIds(ad, keep);
     const [projs, vers, recMeta] = await Promise.all([txGetAll(d, 'projects'), txGetAll(d, 'versions'), txGet(d, 'meta', RECOVERY_KEY).catch(() => null)]);
     for (const p of projs) collectBlobIds(p, keep);
     for (const vr of vers) for (const v of (vr && vr.list) || []) if (v && v.doc) collectBlobIds(v.doc, keep);
@@ -3466,6 +3528,10 @@ const Store = (() => {
   function deleteProject(id, activeDoc = null) {
     index = index.filter((x) => x.id !== id);
     if (lastId === id) lastId = index[0] ? index[0].id : null;
+    if (openTabs.ids.includes(id)) {
+      const nextIds = openTabs.ids.filter((x) => x !== id);
+      openTabs = { ids: nextIds, activeId: openTabs.activeId === id ? (nextIds[0] || null) : openTabs.activeId };
+    }
     versionsCache.delete(id);
     fallbackProjects.delete(id);
     if (recoveryCache && recoveryCache.docId === id) {
@@ -3475,6 +3541,7 @@ const Store = (() => {
     }
     const idxSnap = index.slice();
     const lastSnap = lastId;
+    const openTabsSnap = { ids: openTabs.ids.slice(), activeId: openTabs.activeId };
 
     return enqueue(async () => {
       const d = await ensureDB();
@@ -3486,6 +3553,7 @@ const Store = (() => {
       tx.objectStore('versions').delete(id);
       const m = tx.objectStore('meta');
       m.put({ k: 'index', v: idxSnap });
+      m.put({ k: 'openTabs', v: openTabsSnap });
       if (lastSnap) m.put({ k: 'last', v: lastSnap }); else m.delete('last');
       if (clearRec) {
         m.delete(RECOVERY_KEY);
@@ -3631,7 +3699,7 @@ const Store = (() => {
     bytesToBase64, base64ToBytes,
     registerBlob, putBlob, getBlobSync, getBlob, flushBlobs,
     extractBlobs, collectBlobIds, hydrateDoc, inlineBlobs,
-    recentProjects, hasProject, getLastId, saveProject, loadProject, deleteProject, gcBlobs,
+    recentProjects, hasProject, getLastId, getOpenTabs, setOpenTabs, saveProject, loadProject, deleteProject, gcBlobs,
     loadVersions, getVersionsSync, setVersions,
     saveRecovery, loadRecovery, clearRecovery, getRecoveryFlag,
     get ready() { return ready; },
@@ -8291,32 +8359,273 @@ const App = (() => {
 
   const S = {
     doc: Model.newDoc(), sel: [], face: null, edges: [], mode: 'model', tool: null,
-    results: new Map(), resolved: new Map(), baseBoxes: new Map(), ownBoxes: new Map(), errors: [], undo: [], redo: [], undoBytes: 0, redoBytes: 0, extra: [], hideIds: new Set(), revision: 0, cleanRev: 0, lastSavedRev: -1, fileSavedRev: -1,
+    results: new Map(), resolved: new Map(), baseBoxes: new Map(), ownBoxes: new Map(), errors: [], undo: [], redo: [], undoBytes: 0, redoBytes: 0, extra: [], hideIds: new Set(), revision: 1, cleanRev: 1, lastSavedRev: -1, fileSavedRev: -1,
     ctx: null, iso: null,   // gerade bearbeitetes Bauteil / isoliertes Teil (nur Ansicht, nicht gespeichert)
   };
   const ev = makeEmitter();
+  const times = new Map();
   let dirty = false, busy = false, busyTimer = null;
+  const tabs = [];
+  let activeTabId = null;
 
-  // ---------- Dokument ----------
-  function setDoc(doc, opts = {}) {
-    // noch ausstehendes Speichern des bisherigen Projekts zuerst erledigen
-    if (S.doc && !(opts && opts.fromBoot)) { try { autosave.flush(); } catch (_) {} }
-    S.doc = Model.migrate(doc);
+  function createTabRecord(doc, opts = {}) {
+    const d = Model.migrate(doc || Model.newDoc());
+    const rev = 1;
+    return {
+      tabId: opts.tabId || uid('tab'),
+      doc: d,
+      sel: [],
+      face: null,
+      edges: [],
+      undo: [],
+      redo: [],
+      undoBytes: 0,
+      redoBytes: 0,
+      revision: rev,
+      cleanRev: rev,
+      lastSavedRev: opts.saved ? rev : -1,
+      fileSavedRev: opts.saved ? rev : -1,
+      ctx: null,
+      iso: null,
+      mode: 'model',
+      camera: null,
+      times: new Map(),
+    };
+  }
+  {
+    const initTab = createTabRecord(S.doc);
+    tabs.push(initTab);
+    activeTabId = initTab.tabId;
+  }
+  function currentTab() {
+    return tabs.find((t) => t.tabId === activeTabId) || tabs[0] || null;
+  }
+  function tabInfo(t) {
+    const isAct = t.tabId === activeTabId;
+    const d = isAct ? S.doc : t.doc;
+    const rev = isAct ? S.revision : t.revision;
+    const clean = isAct ? S.cleanRev : t.cleanRev;
+    const undoArr = isAct ? S.undo : t.undo;
+    const redoArr = isAct ? S.redo : t.redo;
+    return {
+      tabId: t.tabId,
+      docId: d && d.id,
+      name: (d && d.name) || 'Neues Projekt',
+      dirty: rev !== clean,
+      active: isAct,
+      itemCount: Model.countItems(d),
+      undoCount: undoArr ? undoArr.length : 0,
+      redoCount: redoArr ? redoArr.length : 0,
+    };
+  }
+  function syncCurrentMeta() {
+    const cur = currentTab();
+    if (!cur) return;
+    cur.doc = S.doc;
+    cur.revision = S.revision;
+    cur.cleanRev = S.cleanRev;
+    cur.lastSavedRev = S.lastSavedRev;
+    cur.fileSavedRev = S.fileSavedRev;
+  }
+  function stashActiveTab() {
+    const cur = currentTab();
+    if (!cur) return;
+    cur.doc = S.doc;
+    cur.sel = S.sel.slice();
+    cur.face = S.face;
+    cur.edges = S.edges.slice();
+    cur.undo = S.undo;
+    cur.redo = S.redo;
+    cur.undoBytes = S.undoBytes;
+    cur.redoBytes = S.redoBytes;
+    cur.revision = S.revision;
+    cur.cleanRev = S.cleanRev;
+    cur.lastSavedRev = S.lastSavedRev;
+    cur.fileSavedRev = S.fileSavedRev;
+    cur.ctx = S.ctx;
+    cur.iso = S.iso;
+    cur.mode = S.mode;
+    cur.times = new Map(times);
+    if (typeof Viewer !== 'undefined' && Viewer.controls && Viewer.camera && Viewer.saveCamera) {
+      try { cur.camera = Viewer.saveCamera(); } catch (_) {}
+    }
+  }
+  function leaveTransientModes() {
+    if (typeof Sketch !== 'undefined' && Sketch.active) Sketch.cancel(true);
+    if (typeof Measure !== 'undefined' && Measure.active) Measure.stop();
+    if (typeof Notes !== 'undefined' && Notes.active) Notes.stop();
+    if (typeof RefFix !== 'undefined' && RefFix.active) RefFix.stop({ keepToast: true });
+    if (typeof Panels !== 'undefined' && Panels.closeFlyout) Panels.closeFlyout();
+    if (typeof UI !== 'undefined') { UI.closeMenu(); UI.closePop(); }
+  }
+  function syncOpenTabsToStore() {
+    if (typeof Store === 'undefined' || !Store.ready || !Store.setOpenTabs) return;
+    const ids = tabs.map((t) => {
+      const d = t.tabId === activeTabId ? S.doc : t.doc;
+      return d && d.id;
+    }).filter(Boolean);
+    const act = S.doc && S.doc.id ? S.doc.id : null;
+    Store.setOpenTabs(ids, act);
+  }
+  function activateTab(tab, opts = {}) {
+    activeTabId = tab.tabId;
+    S.doc = Model.migrate(tab.doc);
+    tab.doc = S.doc;
+    S.sel = (tab.sel || []).slice();
+    S.face = tab.face || null;
+    S.edges = (tab.edges || []).slice();
+    S.undo = tab.undo || [];
+    S.redo = tab.redo || [];
+    S.undoBytes = tab.undoBytes || 0;
+    S.redoBytes = tab.redoBytes || 0;
+    S.revision = tab.revision || 1;
+    S.cleanRev = tab.cleanRev || 1;
+    S.lastSavedRev = tab.lastSavedRev != null ? tab.lastSavedRev : -1;
+    S.fileSavedRev = tab.fileSavedRev != null ? tab.fileSavedRev : -1;
+    S.ctx = tab.ctx || null;
+    S.iso = tab.iso || null;
+    S.extra = [];
+    S.hideIds = new Set();
+    S.peek = null;
+    times.clear();
+    if (tab.times) for (const [k, v] of tab.times) times.set(k, v);
     if (typeof SK !== 'undefined' && SK.syncFonts) SK.syncFonts(S.doc.fonts);
     if (typeof Store !== 'undefined') {
       Store.extractBlobs(S.doc);
       if (S.doc.id) Store.loadVersions(S.doc.id).catch(() => {});
     }
     Model.useVars(Model.vars(S.doc).v);
-    S.sel = []; S.face = null; S.edges = []; S.undo = []; S.redo = []; S.undoBytes = 0; S.redoBytes = 0; S.extra = []; S.ctx = null; S.iso = null;
     for (const id of [...S.results.keys()]) Viewer.removeNode(id);
-    S.results.clear(); S.resolved.clear(); S.baseBoxes.clear(); S.ownBoxes.clear(); S.errors = []; S.revision++;
-    S.cleanRev = S.revision;
-    if (opts && opts.saved) S.fileSavedRev = S.revision;
-    Viewer.clearGhosts(); Views.reset(); Versions.compareOff();
-    ev.emit('doc'); ev.emit('docLoaded', { doc: S.doc, opts }); ev.emit('selection'); ev.emit('history');
-    if (!(opts && opts.noAutosave)) autosave();
-    rebuild().then(() => { if (opts.fit !== false) Viewer.fit(null, false); });
+    S.results.clear(); S.resolved.clear(); S.baseBoxes.clear(); S.ownBoxes.clear(); S.errors = []; S.merged = new Map();
+    Viewer.clearGhosts();
+    if (Viewer.clearProxies) Viewer.clearProxies();
+    Views.reset();
+    Versions.compareOff();
+    ev.emit('doc');
+    ev.emit('docLoaded', { doc: S.doc, opts });
+    ev.emit('selection');
+    ev.emit('history');
+    ev.emit('ctx');
+    ev.emit('tabs');
+    if (typeof Commands !== 'undefined' && Commands.setMode && (tab.mode || 'model') !== S.mode) {
+      Commands.setMode(tab.mode || 'model');
+    }
+    if (!(opts && opts.noAutosave) && !(opts && opts.isSwitch)) autosave();
+    if (!(opts && opts.fromBoot)) syncOpenTabsToStore();
+    rebuild().then(() => {
+      if (activeTabId !== tab.tabId) return;
+      if (opts && opts.isSwitch && tab.camera) Viewer.restoreCamera(tab.camera, false);
+      else if (opts.fit !== false) Viewer.fit(null, false);
+    });
+  }
+
+  // ---------- Dokument ----------
+  function setDoc(doc, opts = {}) {
+    if (opts && opts.newTab) return openTab(doc, opts);
+    if (doc && doc.id && !(opts && (opts.fromBoot || opts.fromRecovery || opts.forceReplace))) {
+      const other = tabs.find((t) => t.tabId !== activeTabId && t.doc && t.doc.id === doc.id);
+      if (other) {
+        switchTab(other.tabId, opts);
+        return other.tabId;
+      }
+    }
+    // noch ausstehendes Speichern des bisherigen Projekts zuerst erledigen
+    if (!(opts && opts.fromBoot)) {
+      leaveTransientModes();
+      if (S.doc) { try { autosave.flush(); } catch (_) {} }
+    }
+    const idx = tabs.findIndex((t) => t.tabId === activeTabId);
+    const nextRec = createTabRecord(doc, { tabId: activeTabId, saved: !!(opts && opts.saved) });
+    if (idx >= 0) tabs[idx] = nextRec;
+    else tabs.push(nextRec);
+    activateTab(nextRec, { ...opts, isSwitch: false });
+    return nextRec.tabId;
+  }
+  function openTab(doc, opts = {}) {
+    const nextDoc = doc || Model.newDoc('Neues Projekt');
+    if (nextDoc && nextDoc.id) {
+      const existing = tabs.find((t) => {
+        const d = t.tabId === activeTabId ? S.doc : t.doc;
+        return d && d.id === nextDoc.id;
+      });
+      if (existing) {
+        if (existing.tabId !== activeTabId) switchTab(existing.tabId, opts);
+        return existing.tabId;
+      }
+    }
+    leaveTransientModes();
+    if (S.doc) { try { autosave.flush(); } catch (_) {} }
+    stashActiveTab();
+    const tab = createTabRecord(nextDoc, opts);
+    tabs.push(tab);
+    activateTab(tab, { ...opts, isSwitch: false });
+    return tab.tabId;
+  }
+  function switchTab(tabId, opts = {}) {
+    const target = tabs.find((t) => t.tabId === tabId);
+    if (!target) return false;
+    if (target.tabId === activeTabId) return true;
+    leaveTransientModes();
+    if (S.doc) { try { autosave.flush(); } catch (_) {} }
+    stashActiveTab();
+    activateTab(target, { ...opts, isSwitch: true });
+    return true;
+  }
+  async function closeTab(tabId = activeTabId, opts = {}) {
+    let idx = tabs.findIndex((t) => t.tabId === tabId);
+    if (idx < 0) return false;
+    const info = tabInfo(tabs[idx]);
+    if (info.dirty && !(opts && opts.force)) {
+      const ok = await new Promise((res) => {
+        UI.modal({
+          title: T('tabs.closeDirtyTitle'),
+          body: T('tabs.closeDirtyBody', { name: info.name }),
+          actions: [
+            { id: 'tab-close-cancel', label: T('common.cancel'), value: false },
+            { id: 'tab-close-confirm', label: T('tabs.closeAnyway'), danger: true, value: true },
+          ],
+          onClose: (v) => res(!!v),
+        });
+      });
+      if (!ok) return false;
+      idx = tabs.findIndex((t) => t.tabId === tabId);
+      if (idx < 0) return false;
+    }
+    if (tabs.length === 1) {
+      try { autosave.flush(); } catch (_) {}
+      setDoc(Model.newDoc('Neues Projekt'), { fit: false, noAutosave: true, forceReplace: true });
+      syncOpenTabsToStore();
+      return true;
+    }
+    const tab = tabs[idx];
+    if (tab.tabId === activeTabId) {
+      leaveTransientModes();
+      try { autosave.flush(); } catch (_) {}
+      tabs.splice(idx, 1);
+      const next = tabs[Math.min(idx, tabs.length - 1)];
+      activateTab(next, { isSwitch: true });
+      return true;
+    }
+    if (tab.revision !== tab.lastSavedRev && (Model.countItems(tab.doc) > 0 || (tab.doc.params && tab.doc.params.length) || (typeof Store !== 'undefined' && Store.hasProject(tab.doc.id)))) {
+      Store.saveProject(tab.doc, Model.countItems(tab.doc), { keepLast: true });
+    }
+    tabs.splice(idx, 1);
+    ev.emit('tabs');
+    syncOpenTabsToStore();
+    return true;
+  }
+  function restoreOpenTabs(docs, wantedActiveDocId) {
+    const list = (Array.isArray(docs) ? docs : []).filter((d) => d && typeof d === 'object');
+    if (!list.length) return false;
+    tabs.length = 0;
+    for (const d of list) {
+      const rec = createTabRecord(d, { saved: true });
+      rec.lastSavedRev = rec.revision;
+      tabs.push(rec);
+    }
+    const target = (wantedActiveDocId && tabs.find((t) => t.doc && t.doc.id === wantedActiveDocId)) || tabs[tabs.length - 1];
+    activateTab(target, { fit: true, fromBoot: true, noAutosave: true });
+    return true;
   }
   function snapshot() { return JSON.stringify(S.doc); }
   function cloneDoc(doc = S.doc) { return Patch.jsonClone(doc); }
@@ -8450,8 +8759,10 @@ const App = (() => {
       if (S.undo.length && !S.redo.length && oldMod !== newMod) syncTopModified(oldMod, newMod);
     }
     S.revision++;
+    syncCurrentMeta();
     ev.emit('doc');
     ev.emit('dirty', { doc: S.doc, revision: S.revision });
+    ev.emit('tabs');
     autosave();
     if (!noRebuild) rebuild();
   }
@@ -8465,12 +8776,15 @@ const App = (() => {
     if (S.face && !valid.has(S.face.id)) S.face = null;
     S.edges = S.edges.filter((e) => valid.has(e.id));
     S.revision++;
-    ev.emit('doc'); ev.emit('dirty', { doc: S.doc, revision: S.revision }); ev.emit('selection'); autosave(); rebuild();
+    syncCurrentMeta();
+    ev.emit('doc'); ev.emit('dirty', { doc: S.doc, revision: S.revision }); ev.emit('tabs'); ev.emit('selection'); autosave(); rebuild();
   }
   function markClean() {
     S.cleanRev = S.revision;
     S.fileSavedRev = S.revision;
+    syncCurrentMeta();
     ev.emit('clean', { doc: S.doc, revision: S.revision });
+    ev.emit('tabs');
   }
   function undo(silent) {
     const step = S.undo.pop(); if (!step) return;
@@ -8558,6 +8872,7 @@ const App = (() => {
     const rev = S.revision;
     return Store.saveProject(d, count).then((ok) => {
       if (ok && S.doc && S.doc.id === d.id && S.lastSavedRev < rev) S.lastSavedRev = rev;
+      if (ok) { syncCurrentMeta(); syncOpenTabsToStore(); }
       return ok;
     });
   }
@@ -8570,7 +8885,10 @@ const App = (() => {
   })();
   const recentProjects = () => Store.recentProjects();
   const loadStored = (id) => Store.loadProject(id);
-  const deleteStored = (id) => Store.deleteProject(id, S.doc && S.doc.id !== id ? S.doc : null);
+  const deleteStored = (id) => {
+    const keepDocs = tabs.map((t) => (t.tabId === activeTabId ? S.doc : t.doc)).filter((d) => d && d.id !== id);
+    return Store.deleteProject(id, keepDocs);
+  };
 
   // ---------- Neuberechnung ----------
   // Zeitleiste: Stand nach Schritt k nur anzeigen (null = wieder alles); ändert das Projekt nicht
@@ -8597,6 +8915,8 @@ const App = (() => {
     let calcEmitted = false;
     while (dirty) {
       dirty = false;
+      const buildTabId = activeTabId;
+      const buildDocId = S.doc && S.doc.id;
       if (!needsKernelFor(S.doc, S.extra, S.peek)) {
         apply({ nodes: [], errors: [], resolved: {}, times: {} });
         ev.emit('rebuilt');
@@ -8609,6 +8929,7 @@ const App = (() => {
       }
       if (typeof SK !== 'undefined' && SK.ensureDocFonts) {
         await SK.ensureDocFonts(S.doc, S.extra).catch((e) => console.warn(e));
+        if (activeTabId !== buildTabId || !S.doc || S.doc.id !== buildDocId) { dirty = true; continue; }
       }
       if (!Kernel.ready) {
         try { await Kernel.ensure(); }
@@ -8618,10 +8939,14 @@ const App = (() => {
           break;
         }
         if (!Kernel.ready) break;
+        if (activeTabId !== buildTabId || !S.doc || S.doc.id !== buildDocId) { dirty = true; continue; }
       }
       if (typeof Store !== 'undefined') {
         const ids = Store.collectBlobIds(S.doc);
-        if ([...ids].some((id) => !Store.getBlobSync(id))) await Store.hydrateDoc(S.doc);
+        if ([...ids].some((id) => !Store.getBlobSync(id))) {
+          await Store.hydrateDoc(S.doc);
+          if (activeTabId !== buildTabId || !S.doc || S.doc.id !== buildDocId) { dirty = true; continue; }
+        }
       }
       const scene = Model.kernelScene(S.doc, S.extra, S.peek);
       scene.quality = ViewPrefs.get().quality || 'normal';
@@ -8630,6 +8955,7 @@ const App = (() => {
       let res;
       try { res = await Kernel.call('evaluate', { scene, known }); }
       catch (e) { console.error(e); UI.toast('Beim Berechnen ist ein Fehler passiert: ' + e.message, { kind: 'bad' }); break; }
+      if (activeTabId !== buildTabId || !S.doc || S.doc.id !== buildDocId) { dirty = true; continue; }
       apply(res);
       ev.emit('rebuilt');
     }
@@ -8645,7 +8971,6 @@ const App = (() => {
   }
   function topItem(id) { return S.doc.items.find((x) => x.id === id) || S.extra.find((x) => x.id === id); }
   // Rechenzeit je Schritt: zuletzt gemessen, als er wirklich neu gerechnet wurde (BE-26)
-  const times = new Map();
   function apply(res) {
     const seen = new Set();
     S.merged = new Map();
@@ -8830,8 +9155,11 @@ const App = (() => {
     get tool() { return S.tool; }, set tool(t) { S.tool = t; ev.emit('tool'); },
     get fileSavedRev() { return S.fileSavedRev; }, set fileSavedRev(v) { S.fileSavedRev = v; },
     get dirty() { return S.revision !== S.cleanRev; },
+    get anyDirty() { return tabs.some((t) => tabInfo(t).dirty); },
+    get tabs() { return tabs.map(tabInfo); },
+    get activeTabId() { return activeTabId; },
     markClean,
-    setDoc, snapshot, change, touched, pushUndo, restore, undo, redo, undoTo, squash, historyStats, setHistoryLimit, Patch, rebuild, requalify, replaceMesh, select, clearSelection, selectedItems, errorsFor, localBox, refreshSelectionVisuals,
+    setDoc, openTab, switchTab, closeTab, restoreOpenTabs, snapshot, change, touched, pushUndo, restore, undo, redo, undoTo, squash, historyStats, setHistoryLimit, Patch, rebuild, requalify, replaceMesh, select, clearSelection, selectedItems, errorsFor, localBox, refreshSelectionVisuals,
     recentProjects, loadStored, deleteStored, autosave, fitAfterBuild, on: ev.on, emit: ev.emit,
   };
 })();
@@ -40048,7 +40376,9 @@ const Start = (() => {
         row.append(h('div', { class: 'grow' }, h('b', null, r.name), h('span', null, T(r.n === 1 ? 'start.recentMetaOne' : 'start.recentMetaMany', { n: r.n, date: dstr }))));
         const del = h('button', { type: 'button', class: 'icon-btn', 'aria-label': T('start.deleteFromBrowserAria'), 'data-tip': T('start.deleteFromBrowserTip') }); del.innerHTML = icon('trash');
         del.onclick = async (e) => { e.stopPropagation(); if (await UI.confirm(T('start.deleteConfirmTitle'), T('start.deleteConfirmBody', { name: r.name }), T('common.delete'), true)) { await App.deleteStored(r.id); show(); } };
-        row.append(del);
+        const newTabBtn = h('button', { type: 'button', class: 'icon-btn', 'aria-label': T('tabs.openInNewTab'), 'data-tip': T('tabs.openInNewTab') }); newTabBtn.innerHTML = icon('plus');
+        newTabBtn.onclick = (e) => { e.stopPropagation(); openStoredInTab(r.id); };
+        row.append(newTabBtn, del);
         const openIt = async () => { if (r.id === App.doc.id) { hide(); return; } const d = await App.loadStored(r.id); if (d) { App.setDoc(d); hide(); } else UI.toast(T('start.projectMissing'), { kind: 'bad' }); };
         row.onclick = openIt; row.onkeydown = (e) => { if (e.key === 'Enter') openIt(); };
         list.append(row);
@@ -40091,10 +40421,28 @@ const Start = (() => {
     App.setDoc(t.build()); hide();
     UI.toast(`${t.name} geladen. Links unter „Maße“ änderst du Achsabstand, Armbreite, Stack und mehr – alles wandert mit.`, { icon: 'check', ms: 6000 });
   }
-  function newProject(silent) {
-    App.setDoc(Model.newDoc('Neues Projekt'));
+  function newProject(silent, opts = {}) {
+    App.setDoc(Model.newDoc('Neues Projekt'), opts && opts.newTab ? { newTab: true } : {});
     hide();
     if (!silent) UI.toast('Neues Projekt. Fang mit einem Körper an – oder beschreib unten, was du bauen willst.', { icon: 'newfile', ms: 4500 });
+  }
+  function openNewTab(doc) {
+    App.openTab(doc || Model.newDoc('Neues Projekt'));
+    hide();
+    UI.toast(T('tabs.newOpened'), { icon: 'newfile', ms: 3500 });
+  }
+  async function openStoredInTab(id) {
+    const open = (App.tabs || []).find((t) => t.docId === id);
+    if (open) {
+      App.switchTab(open.tabId);
+      hide();
+      return true;
+    }
+    const d = await App.loadStored(id);
+    if (!d) { UI.toast(T('start.projectMissing'), { kind: 'bad' }); return false; }
+    App.openTab(d, { saved: true });
+    hide();
+    return true;
   }
   function customTplMeta(ct) {
     const d = ct && ct.doc ? ct.doc : {};
@@ -40106,7 +40454,7 @@ const Start = (() => {
     if (pb && pb.enabled) bits.push(`Druckbett ${Math.round(pb.x)}×${Math.round(pb.y)}`);
     return bits.join(' · ');
   }
-  function customTplCard(ct, { onOpen, onAfterDelete } = {}) {
+  function customTplCard(ct, { onOpen, onAfterDelete, openOpts } = {}) {
     const card = h('div', { class: 'card tpl-card custom', role: 'button', tabindex: '0', dataset: { tplId: ct.id } });
     const del = h('button', {
       type: 'button',
@@ -40130,15 +40478,15 @@ const Start = (() => {
       h('b', null, ct.name),
       h('span', null, ct.desc || T('tpl.customNoDesc')),
     );
-    const open = () => { if (onOpen) onOpen(); openTemplate(ct.id); };
+    const open = () => { if (onOpen) onOpen(); openTemplate(ct.id, openOpts); };
     card.onclick = open;
     card.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
     return card;
   }
-  function openTemplate(id) {
+  function openTemplate(id, opts = {}) {
     const d = Templates.buildProject(id);
     if (!d) { UI.toast(T('tpl.missing'), { kind: 'bad' }); return false; }
-    App.setDoc(d);
+    App.setDoc(d, opts && opts.newTab ? { newTab: true } : {});
     hide();
     if (id === 'print3d') {
       const pb = d.settings && d.settings.printBed;
@@ -40150,7 +40498,7 @@ const Start = (() => {
     }
     return true;
   }
-  function newProjectDialog() {
+  function newProjectDialog(opts = {}) {
     const wrap = h('div', { id: 'new-proj-dialog', class: 'tpl-dialog' });
     const builtSec = h('div', { class: 'tpl-sec' }, h('div', { class: 'section-h' }, T('tpl.builtinHeading')));
     const builtGrid = h('div', { class: 'tpl-grid', id: 'tpl-builtin-grid' });
@@ -40159,7 +40507,7 @@ const Start = (() => {
       const c = h('button', { type: 'button', class: 'card tpl-card', dataset: { tplId: t.id } });
       const th = h('div', { class: 'thumb' }); th.innerHTML = tplThumb(t);
       c.append(th, h('span', { class: 'tpl-badge' }, t.badge), h('b', null, t.name), h('span', null, t.desc));
-      c.onclick = () => { if (modalRef) modalRef.close(); openTemplate(t.id); };
+      c.onclick = () => { if (modalRef) modalRef.close(); openTemplate(t.id, opts); };
       builtGrid.append(c);
     }
     builtSec.append(builtGrid);
@@ -40180,6 +40528,7 @@ const Start = (() => {
       }
       for (const ct of list) {
         custGrid.append(customTplCard(ct, {
+          openOpts: opts,
           onOpen: () => { if (modalRef) modalRef.close(); },
           onAfterDelete: () => { renderCustom(); if (el) show(); },
         }));
@@ -41381,7 +41730,7 @@ const Start = (() => {
     UI.toast(`„${f.name}“ importiert: ${r.ents.length} Elemente, ${fmt(r.w)} × ${fmt(r.h)} mm` + (!svg && r.unit !== 1 ? ' (in Millimeter umgerechnet)' : '') + `. Die Platte ist ${svg ? 1 : 3} mm dick – die Dicke änderst du rechts unter „Höhe“, den Umriss mit „Skizze bearbeiten“.` + (svg ? ' Stimmt die Größe nicht? „Skizze bearbeiten“ → rechts „Breite ändern“.' : '') + (r.texts ? ' Text in der SVG fehlt – wandle ihn im Zeichenprogramm vorher in Pfade um.' : ''), { icon: 'folder', ms: 9000 });
     setTimeout(() => Viewer.fit([it.id]), 1500);
   }
-  async function openBlob(f) {
+  async function openBlob(f, opts = {}) {
     if (/\.(dxf|svg)$/i.test(f.name)) {
       if (Sketch.active) {
         if (Sketch.state && Sketch.state.step) {
@@ -41400,18 +41749,23 @@ const Start = (() => {
       }
       Model.migrate(doc);
       const vers = Array.isArray(doc.versions) ? doc.versions : null; delete doc.versions;
-      if (Store.hasProject(doc.id) && doc.id !== App.doc.id) doc.id = uid('p');
+      const openDocIds = new Set((App.tabs || []).map((t) => t.docId).filter(Boolean));
+      if (opts && opts.newTab) {
+        if (openDocIds.has(doc.id)) doc.id = uid('p');
+      } else if (Store.hasProject(doc.id) && doc.id !== App.doc.id) {
+        doc.id = uid('p');
+      }
       Store.extractBlobs(doc);
       if (vers) await Versions.importList(doc.id, vers);
       ensureModelMode();
-      App.setDoc(doc); hide();
+      App.setDoc(doc, opts && opts.newTab ? { newTab: true } : {}); hide();
       App.markClean();
       UI.toast(`„${doc.name}“ geöffnet.`, { icon: 'folder' });
     } catch (e) { const E = ERRORS.importFailed; UI.toast(`${E.titel}. ${E.erklaerung} ${E.loesung}`, { kind: 'bad', ms: 7000 }); console.warn(e); }
   }
-  function openFile() {
+  function openFile(opts = {}) {
     const inp = h('input', { type: 'file', accept: '.json,application/json,.step,.stp,.igs,.iges,.brep,.stl,.3mf,.obj,.dxf,.svg', style: { display: 'none' } });
-    inp.onchange = () => { const f = inp.files && inp.files[0]; inp.remove(); if (f) openBlob(f); };
+    inp.onchange = () => { const f = inp.files && inp.files[0]; inp.remove(); if (f) openBlob(f, opts); };
     document.body.append(inp); inp.click();
   }
   // Dateien einfach ins Fenster ziehen (Projektdatei, 3D-Import oder 2D-Skizze)
@@ -41506,7 +41860,7 @@ const Start = (() => {
   function updateFolderUI() {
     const btn = $('#btn-folder-status');
     if (!btn) return;
-    if (!folder || !folderSupported()) {
+    if (!folder || !folderSupported() || (App.doc && App.doc.id !== folder.docId)) {
       btn.hidden = true;
       btn.innerHTML = '';
       btn.className = 'folder-badge';
@@ -41852,16 +42206,124 @@ const Start = (() => {
     if (checkBarItemId && !importChecks.has(checkBarItemId)) dismissImportBanner();
   }
 
+  function renderTabs() {
+    const list = $('#proj-tabs-list');
+    if (!list) return;
+    list.innerHTML = '';
+    const allTabs = App.tabs || [];
+    for (const t of allTabs) {
+      const tab = h('div', {
+        class: 'proj-tab' + (t.active ? ' active' : '') + (t.dirty ? ' dirty' : ''),
+        role: 'tab',
+        tabindex: '0',
+        'aria-selected': String(!!t.active),
+        dataset: { tabId: t.tabId, docId: t.docId || '' },
+      });
+      const dot = h('span', { class: 'ptab-dot', 'aria-hidden': 'true' });
+      const tip = t.name + (t.dirty ? ' (ungespeicherte Änderungen)' : '');
+      const nameEl = h('span', { class: 'ptab-name', 'data-tip': tip }, t.name);
+      const closeBtn = h('button', {
+        type: 'button',
+        class: 'ptab-close',
+        'aria-label': T('tabs.closeAria', { name: t.name }),
+        'data-tip': T('tabs.closeTip'),
+      });
+      closeBtn.innerHTML = icon('close');
+      closeBtn.onclick = (e) => { e.stopPropagation(); App.closeTab(t.tabId); };
+      tab.onclick = () => { App.switchTab(t.tabId); };
+      tab.onauxclick = (e) => { if (e.button === 1) { e.preventDefault(); App.closeTab(t.tabId); } };
+      tab.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); App.switchTab(t.tabId); } };
+      nameEl.ondblclick = async (e) => {
+        e.stopPropagation();
+        if (!t.active) App.switchTab(t.tabId);
+        const n = await UI.prompt(T('tabs.rename'), T('common.name'), App.doc.name, T('common.rename'));
+        if (n && n.trim()) App.change('Projekt umbenannt', (doc) => { doc.name = n.trim(); });
+      };
+      tab.oncontextmenu = (e) => {
+        e.preventDefault();
+        const menuItems = [
+          {
+            label: T('tabs.rename'),
+            icon: 'edit',
+            run: async () => {
+              if (!t.active) App.switchTab(t.tabId);
+              const n = await UI.prompt(T('tabs.rename'), T('common.name'), App.doc.name, T('common.rename'));
+              if (n && n.trim()) App.change('Projekt umbenannt', (doc) => { doc.name = n.trim(); });
+            },
+          },
+          { label: T('tabs.closeTip'), icon: 'close', run: () => App.closeTab(t.tabId) },
+        ];
+        if ((App.tabs || []).length > 1) {
+          menuItems.push({
+            label: T('tabs.closeOthers'),
+            icon: 'close',
+            run: async () => {
+              for (const ot of (App.tabs || [])) {
+                if (ot.tabId !== t.tabId) await App.closeTab(ot.tabId);
+              }
+            },
+          });
+        }
+        UI.menu(tab, menuItems);
+      };
+      tab.append(dot, nameEl, closeBtn);
+      list.append(tab);
+    }
+    const act = list.querySelector('.proj-tab.active');
+    if (act && act.scrollIntoView) act.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+  }
+
+  function openTabAddMenu(anchor) {
+    const openIds = new Set((App.tabs || []).map((t) => t.docId).filter(Boolean));
+    const items = [
+      { id: 'tab-add-empty', label: T('tabs.newEmpty'), icon: 'newfile', run: () => openNewTab() },
+      { id: 'tab-add-tpl', label: T('tabs.newTemplate'), icon: 'cube', run: () => newProjectDialog({ newTab: true }) },
+      { id: 'tab-add-file', label: T('tabs.openFile'), icon: 'folder', run: () => openFile({ newTab: true }) },
+    ];
+    const recent = App.recentProjects().filter((r) => r.n > 0).slice(0, 8);
+    if (recent.length) {
+      items.push('-');
+      recent.forEach((r, i) => {
+        const suffix = openIds.has(r.id) ? ` (${T('tabs.alreadyOpen')})` : '';
+        items.push({
+          id: 'tab-add-recent-' + i,
+          label: r.name + suffix,
+          icon: 'box3',
+          run: () => openStoredInTab(r.id),
+        });
+      });
+    }
+    UI.menu(anchor, items);
+  }
+
   function init() {
     if (folderInited) return;
     folderInited = true;
+    const addTabBtn = $('#proj-tab-add');
+    if (addTabBtn) {
+      addTabBtn.innerHTML = icon('plus');
+      addTabBtn.onclick = (e) => openTabAddMenu(e.currentTarget);
+    }
+    App.on('tabs', renderTabs);
+    App.on('doc', renderTabs);
+    App.on('clean', renderTabs);
+    App.on('dirty', renderTabs);
+    renderTabs();
     App.on('docLoaded', ({ doc, opts }) => {
       if (!recTracking || (opts && opts.fromBoot)) return;
       clearTimeout(recTimer); recTimer = null;
+      if (opts && opts.isSwitch) {
+        if (App.dirty) scheduleRecoverySave();
+        else {
+          recBaseDoc = isEmptyDoc(doc) ? null : deepClone(doc);
+          if (!App.anyDirty) Store.clearRecovery();
+        }
+        return;
+      }
       recBaseDoc = isEmptyDoc(doc) ? null : deepClone(doc);
       if (opts && opts.fromRecovery) return;
       if (recPending) { recPending = null; hideRecoveryBanner(); }
-      Store.clearRecovery();
+      if (!App.anyDirty || (opts && opts.forceReplace)) Store.clearRecovery();
     });
     App.on('dirty', () => {
       if (!recTracking) return;
@@ -41873,14 +42335,16 @@ const Start = (() => {
       clearTimeout(recTimer); recTimer = null;
       recBaseDoc = isEmptyDoc(App.doc) ? null : deepClone(App.doc);
       if (recPending) { recPending = null; hideRecoveryBanner(); }
-      Store.clearRecovery();
+      if (!App.anyDirty) Store.clearRecovery();
       try { App.autosave.flush(); } catch (_) {}
     });
     window.addEventListener('pagehide', () => { flushRecovery(); });
     App.on('doc', () => {
       syncImportChecks();
       if (!folder) return;
-      if (App.doc.id !== folder.docId) { disconnectFolder(true); return; }
+      const hasFolderTab = (App.tabs || []).some((t) => t.docId === folder.docId);
+      if (!hasFolderTab) { disconnectFolder(true); return; }
+      if (App.doc.id !== folder.docId) { updateFolderUI(); return; }
       if (App.revision === folder.lastRev) return;
       folder.lastRev = App.revision;
       scheduleFolderSave();
@@ -41925,7 +42389,7 @@ const Start = (() => {
     window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && dropEl && !dropEl.hidden) hideDropOverlay(); });
   }
   return {
-    init, importCAD, parseSTEP, import3MF, parse3MF, importOBJ, parseOBJ, importDXF, parseDXF, parseSVG, show, hide, newProject, newProjectDialog, saveAsTemplate, openTemplate, openFile, openBlob, saveFile,
+    init, importCAD, parseSTEP, import3MF, parse3MF, importOBJ, parseOBJ, importDXF, parseDXF, parseSVG, show, hide, newProject, openNewTab, openStoredInTab, renderTabs, openTabAddMenu, newProjectDialog, saveAsTemplate, openTemplate, openFile, openBlob, saveFile,
     checkImport, healImport, importCheckOf, setImportHealOpts, dismissImportBanner,
     folderSupported, folderInfo, saveToFolder, saveToFolderNow, disconnectFolder,
     checkRecoveryOnBoot, startRecoveryTracking, restoreRecovery, dismissRecovery, flushRecovery,
@@ -43216,7 +43680,7 @@ ${AI.modelText()}`;
   $('#tab-model').onclick = () => Commands.setMode('model');
   $('#tab-drawing').onclick = () => Commands.setMode('drawing');
   $('#brand').onclick = (e) => { e.preventDefault(); Start.show(); };
-  I18n.on('change', () => { I18n.applyDom(); ViewPrefs.syncLevel(); Panels.renderTools(); Panels.renderCtx(); updHist(); if (Start.open) Start.show(); });
+  I18n.on('change', () => { I18n.applyDom(); ViewPrefs.syncLevel(); Panels.renderTools(); Panels.renderCtx(); updHist(); Start.renderTabs(); if (Start.open) Start.show(); });
   const projectItems = () => [
     { label: T('menu.proj.rename'), icon: 'edit', run: async () => { const n = await UI.prompt(T('menu.proj.rename'), T('common.name'), App.doc.name, T('common.rename')); if (n && n.trim()) App.change('Projekt umbenannt', (doc) => { doc.name = n.trim(); }); } },
     { label: T('menu.proj.saveFile'), icon: 'save', kbd: 'Strg S', run: () => Start.saveFile() },
@@ -43285,13 +43749,27 @@ ${AI.modelText()}`;
         updName(); syncBed(); UI.renderHint();
         Start.startRecoveryTracking(baseLoaded ? rec.baseDoc : null);
       } else {
-        const lastId = Store.getLastId();
-        const last = lastId ? await App.loadStored(lastId) : null;
-        if (last) { try { App.setDoc(last, { fit: true, fromBoot: true, noAutosave: true }); } catch (_) { App.setDoc(Model.newDoc(), { fit: false, fromBoot: true, noAutosave: true }); } }
-        else App.setDoc(Model.newDoc(), { fit: false, fromBoot: true, noAutosave: true });
-        updName(); syncBed(); UI.renderHint();
-        Start.startRecoveryTracking(last || null);
-        if (!last) Start.show();
+        const savedTabs = Store.getOpenTabs ? Store.getOpenTabs() : { ids: [], activeId: null };
+        const loadedDocs = [];
+        for (const id of savedTabs.ids || []) {
+          try {
+            const d = await App.loadStored(id);
+            if (d) loadedDocs.push(d);
+          } catch (_) {}
+        }
+        if (loadedDocs.length) {
+          App.restoreOpenTabs(loadedDocs, savedTabs.activeId);
+          updName(); syncBed(); UI.renderHint();
+          Start.startRecoveryTracking(App.doc);
+        } else {
+          const lastId = Store.getLastId();
+          const last = lastId ? await App.loadStored(lastId) : null;
+          if (last) { try { App.setDoc(last, { fit: true, fromBoot: true, noAutosave: true }); } catch (_) { App.setDoc(Model.newDoc(), { fit: false, fromBoot: true, noAutosave: true }); } }
+          else App.setDoc(Model.newDoc(), { fit: false, fromBoot: true, noAutosave: true });
+          updName(); syncBed(); UI.renderHint();
+          Start.startRecoveryTracking(last || null);
+          if (!last) Start.show();
+        }
       }
     } finally {
       Print.updateAmpel();

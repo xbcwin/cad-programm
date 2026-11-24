@@ -1108,5 +1108,10 @@
     "tip": "Zeichnung als PNG-Bild in wählbarer Auflösung speichern",
     "hilfe": "Rendert das aktive Zeichnungsblatt gestochen scharf als PNG-Bild. Wähle eine feste Breite (1600, 2400 oder 3840 Pixel), eine Druckauflösung (150 oder 300 DPI) oder eine eigene Breite in Pixeln – die Höhe passt sich automatisch dem Blattformat an.",
     "tipp": "Aktiviere „Durchsichtiger Hintergrund“, wenn du die Zeichnung direkt in eine Präsentation oder Dokumentation einfügen willst."
+  },
+  "projectTabs": {
+    "tip": "Mehrere Projekte gleichzeitig in Tabs öffnen und wechseln",
+    "hilfe": "In der Tab-Leiste oben arbeitest du an mehreren Projekten parallel. Mit „+“ öffnest du ein neues leeres Projekt, eine Vorlage, eine Datei oder ein bereits gespeichertes Projekt in einem neuen Tab. Ein Klick auf einen Tab wechselt samt eigenem Verlauf und eigenem Rückgängig dorthin; „×“ schließt den Tab und fragt bei ungespeicherten Änderungen nach.",
+    "tipp": "Mit einem Doppelklick auf den Tab-Namen benennst du das Projekt um, und ein Rechtsklick schließt bei Bedarf alle anderen Tabs."
   }
 }

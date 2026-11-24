@@ -7,6 +7,7 @@ const Store = (() => {
   const QUICK_MAX_CHARS = 400000;
   let db = null, dbPromise = null, initPromise = null, ready = false, usingIDB = true;
   let index = [], lastId = null, recoveryCache = null;
+  let openTabs = { ids: [], activeId: null };
   const blobCache = new Map();     // blobId -> Uint8Array
   const pendingBlobs = new Map();  // blobId -> Promise<void>
   const versionsCache = new Map(); // projectId -> Array
@@ -325,9 +326,20 @@ const Store = (() => {
       const d = await ensureDB();
       if (d) {
         try {
-          const [idxRec, lastRec] = await Promise.all([txGet(d, 'meta', 'index'), txGet(d, 'meta', 'last')]);
+          const [idxRec, lastRec, tabsRec] = await Promise.all([
+            txGet(d, 'meta', 'index'),
+            txGet(d, 'meta', 'last'),
+            txGet(d, 'meta', 'openTabs'),
+          ]);
           if (idxRec && Array.isArray(idxRec.v)) index = idxRec.v;
           if (lastRec && typeof lastRec.v === 'string') lastId = lastRec.v;
+          if (tabsRec && tabsRec.v && Array.isArray(tabsRec.v.ids)) {
+            const cleanIds = [...new Set(tabsRec.v.ids.filter((x) => typeof x === 'string' && x))];
+            openTabs = {
+              ids: cleanIds.slice(0, 20),
+              activeId: typeof tabsRec.v.activeId === 'string' && cleanIds.includes(tabsRec.v.activeId) ? tabsRec.v.activeId : (cleanIds[0] || null),
+            };
+          }
         } catch (e) { console.warn('Meta lesen:', e); }
       }
       try { await migrateFromLocalStorage(); } catch (e) { console.warn('Migration aus localStorage:', e); }
@@ -340,8 +352,21 @@ const Store = (() => {
   function recentProjects() { return index.slice(); }
   function hasProject(id) { return index.some((x) => x.id === id); }
   function getLastId() { return lastId; }
+  function getOpenTabs() { return { ids: openTabs.ids.slice(), activeId: openTabs.activeId }; }
+  function setOpenTabs(ids, activeId) {
+    const clean = [...new Set((Array.isArray(ids) ? ids : []).filter((x) => typeof x === 'string' && x))].slice(0, 20);
+    const act = typeof activeId === 'string' && clean.includes(activeId) ? activeId : (clean[0] || null);
+    openTabs = { ids: clean, activeId: act };
+    const snap = { ids: clean.slice(), activeId: act };
+    return enqueue(async () => {
+      const d = await ensureDB();
+      if (!d) return true;
+      await txPut(d, 'meta', { k: 'openTabs', v: snap });
+      return true;
+    }).catch((e) => { console.warn('Offene Tabs speichern:', e); return false; });
+  }
 
-  function saveProject(doc, itemCount) {
+  function saveProject(doc, itemCount, opts = {}) {
     if (!doc || !doc.id) return Promise.resolve(false);
     extractBlobs(doc);
     const snap = deepClone(doc);
@@ -349,7 +374,8 @@ const Store = (() => {
     index = index.filter((x) => x.id !== snap.id);
     index.unshift({ id: snap.id, name: snap.name, modified: snap.modified, n });
     index = index.slice(0, 30);
-    lastId = snap.id;
+    const updateLast = !(opts && opts.keepLast);
+    if (updateLast) lastId = snap.id;
     const idxSnap = index.slice();
     const lastSnap = lastId;
 
@@ -364,7 +390,7 @@ const Store = (() => {
       tx.objectStore('projects').put(snap);
       const m = tx.objectStore('meta');
       m.put({ k: 'index', v: idxSnap });
-      m.put({ k: 'last', v: lastSnap });
+      if (updateLast && lastSnap) m.put({ k: 'last', v: lastSnap });
       return txDone(tx);
     }).catch((e) => { console.warn('Projekt speichern:', e); return false; });
   }
@@ -390,7 +416,8 @@ const Store = (() => {
     const d = await ensureDB();
     if (!d) return;
     const keep = new Set();
-    if (activeDoc) collectBlobIds(activeDoc, keep);
+    const docs = Array.isArray(activeDoc) ? activeDoc : (activeDoc ? [activeDoc] : []);
+    for (const ad of docs) if (ad) collectBlobIds(ad, keep);
     const [projs, vers, recMeta] = await Promise.all([txGetAll(d, 'projects'), txGetAll(d, 'versions'), txGet(d, 'meta', RECOVERY_KEY).catch(() => null)]);
     for (const p of projs) collectBlobIds(p, keep);
     for (const vr of vers) for (const v of (vr && vr.list) || []) if (v && v.doc) collectBlobIds(v.doc, keep);
@@ -412,6 +439,10 @@ const Store = (() => {
   function deleteProject(id, activeDoc = null) {
     index = index.filter((x) => x.id !== id);
     if (lastId === id) lastId = index[0] ? index[0].id : null;
+    if (openTabs.ids.includes(id)) {
+      const nextIds = openTabs.ids.filter((x) => x !== id);
+      openTabs = { ids: nextIds, activeId: openTabs.activeId === id ? (nextIds[0] || null) : openTabs.activeId };
+    }
     versionsCache.delete(id);
     fallbackProjects.delete(id);
     if (recoveryCache && recoveryCache.docId === id) {
@@ -421,6 +452,7 @@ const Store = (() => {
     }
     const idxSnap = index.slice();
     const lastSnap = lastId;
+    const openTabsSnap = { ids: openTabs.ids.slice(), activeId: openTabs.activeId };
 
     return enqueue(async () => {
       const d = await ensureDB();
@@ -432,6 +464,7 @@ const Store = (() => {
       tx.objectStore('versions').delete(id);
       const m = tx.objectStore('meta');
       m.put({ k: 'index', v: idxSnap });
+      m.put({ k: 'openTabs', v: openTabsSnap });
       if (lastSnap) m.put({ k: 'last', v: lastSnap }); else m.delete('last');
       if (clearRec) {
         m.delete(RECOVERY_KEY);
@@ -577,7 +610,7 @@ const Store = (() => {
     bytesToBase64, base64ToBytes,
     registerBlob, putBlob, getBlobSync, getBlob, flushBlobs,
     extractBlobs, collectBlobIds, hydrateDoc, inlineBlobs,
-    recentProjects, hasProject, getLastId, saveProject, loadProject, deleteProject, gcBlobs,
+    recentProjects, hasProject, getLastId, getOpenTabs, setOpenTabs, saveProject, loadProject, deleteProject, gcBlobs,
     loadVersions, getVersionsSync, setVersions,
     saveRecovery, loadRecovery, clearRecovery, getRecoveryFlag,
     get ready() { return ready; },
