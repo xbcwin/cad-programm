@@ -389,6 +389,12 @@ const Sketch = (() => {
     const y = new THREE.Vector3().crossVectors(n, x);
     return { o, x, y, n };
   }
+  function ensureSketchFonts(extraFont = null) {
+    if (!S || !SK.ensureEntsFonts) return;
+    SK.ensureEntsFonts(S.ents, extraFont).then((loaded) => {
+      if (loaded && S) { reapply(); render(); Panels.renderRight(); }
+    }).catch((e) => UI.toast((e && e.message) || 'Schrift konnte nicht geladen werden.', { kind: 'bad' }));
+  }
   function begin(init, skipDraw) {
     Views.collapse();
     if (S) cancel(true);
@@ -399,6 +405,7 @@ const Sketch = (() => {
     S.dims = init.dims || []; S.cons = init.cons || []; S.picks = []; S.dimFirst = null; S.selCon = null;
     S.plane0 = deepClone(init.plane); S.pOff = init.pOff || 0; S.pTilt = 0;
     if (S.pOff) applyPlane(false, true);
+    ensureSketchFonts(S.tool === 'text' ? S.txt.font : null);
     reapply();   // Maße mit den aktuellen Werten aus „Maße“ nachrechnen
     App.clearSelection();
     Viewer.useButtons('sketch');
@@ -478,6 +485,7 @@ const Sketch = (() => {
     Viewer.highlightFace('hover', null, null);
     if (id !== 'select') clearSel();
     for (const el of [bar, cbar]) if (el) $$('.tool[data-tool]', el).forEach((b) => b.classList.toggle('active', b.dataset.tool === id));
+    if (id === 'text') ensureSketchFonts(S.txt.font || 'inter');
     UI.hint(HINTS[id]); Panels.renderRight(); render();
   }
   // ---------- Umrechnung ----------
@@ -4057,7 +4065,7 @@ const Sketch = (() => {
         w.append(UI.textField({ id: 'se-s', label: 'Text', value: sel.s, onCommit: (v) => { if (!v.trim()) { UI.toast('Ein leerer Text geht nicht – lösch das Element stattdessen.', { icon: 'info' }); Panels.renderRight(); return; } upd((e) => { e.s = v; }); } }));
         f.append(dimField('h', 'Höhe (Großbuchstaben)', 'mm', { min: 0.1 }));
         const fontVal = SK.FONTNAMES[sel.font] ? sel.font : 'inter';
-        f.append(UI.selectField({ id: 'se-font', label: 'Schrift', value: fontVal, options: Object.entries(SK.FONTNAMES), onChange: (v) => upd((e) => { e.font = v; }) }));
+        f.append(UI.selectField({ id: 'se-font', label: 'Schrift', value: fontVal, options: Object.entries(SK.FONTNAMES), onChange: (v) => { upd((e) => { e.font = v; }); ensureSketchFonts(v); } }));
         const lf = h('button', { type: 'button', class: 'btn', id: 'se-load-font', 'data-help': 'loadFont' }); lf.innerHTML = icon('folder') + 'Schrift laden …';
         lf.onclick = () => pickFont(sel.id);
         f.append(h('div', { class: 'btn-row' }, lf));
@@ -4266,11 +4274,12 @@ const Sketch = (() => {
         w.append(UI.textField({ id: 'tx-s', label: 'Text', value: T.s, live: true, onCommit: (v) => { T.s = v; } }));
         const f3 = h('div', { class: 'fields' });
         f3.append(UI.numField({ id: 'tx-h', label: 'Höhe (Großbuchstaben)', value: T.h, unit: 'mm', expr: false, min: 0.1, onCommit: (v) => { if (v > 0) T.h = v; } }));
-        f3.append(UI.selectField({ id: 'tx-font', label: 'Schrift', value: T.font, options: Object.entries(SK.FONTNAMES), onChange: (v) => { T.font = v; } }));
+        f3.append(UI.selectField({ id: 'tx-font', label: 'Schrift', value: T.font, options: Object.entries(SK.FONTNAMES), onChange: (v) => { T.font = v; ensureSketchFonts(v); } }));
         f3.append(UI.selectField({ id: 'tx-align', label: 'Ausrichtung', value: T.align, options: [['l', 'Links'], ['m', 'Mitte'], ['r', 'Rechts']], onChange: (v) => { T.align = v; } }));
         const lf = h('button', { type: 'button', class: 'btn', id: 'tx-load-font', 'data-help': 'loadFont' }); lf.innerHTML = icon('folder') + 'Schrift laden …';
         lf.onclick = () => pickFont(null);
         w.append(f3, h('div', { class: 'btn-row' }, lf));
+        if (SK.isFontLoaded && !SK.isFontLoaded(T.font)) w.append(h('div', { class: 'hint-box', id: 'tx-font-loading' }, 'Schrift wird geladen …'));
       }
       if (S.tool === 'slot') w.append(UI.selectField({ id: 'sl-mode', label: 'Langloch', value: S.slotArc ? 'arc' : S.slotTotal ? 'total' : 'line', options: [['line', 'Gerade, von Mitte zu Mitte'], ['total', 'Gerade, über die Gesamtlänge'], ['arc', 'Gebogen (um eine Mitte)']], onChange: (v) => { S.slotArc = v === 'arc'; S.slotTotal = v === 'total'; S.draft = null; render(); UI.hint(S.slotArc ? 'Gebogenes Langloch: Mitte klicken, dann Anfang, dann Ende (gegen den Uhrzeigersinn), zum Schluss die Breite.' : HINTS.slot); } }));
       if (S.tool === 'circle') w.append(UI.selectField({ id: 'ci-mode', label: 'Kreis', value: S.circMode || 'center', options: [['center', 'Mitte und Größe'], ['2p', 'Zwei Punkte (Durchmesser)'], ['3p', 'Drei Punkte']], onChange: (v) => { S.circMode = v; S.draft = null; render(); } }));
@@ -5095,6 +5104,7 @@ const Sketch = (() => {
     UI.hint(null); App.emit('mode'); Panels.renderRight(); Handles.rebuild();
   }
   function init() {
+    if (SK.onFont) SK.onFont('loaded', () => { if (S) { reapply(); render(); Panels.renderRight(); } });
     App.on('results', () => { relinkAll(); if (S && S.step) updateStepExtInfo(); });
     const cv = Viewer.canvas;
     cv.addEventListener('pointerdown', (e) => { if (S) { onDown(e); } }, true);

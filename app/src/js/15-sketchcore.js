@@ -97,14 +97,82 @@ const SK = (() => {
   }
   const revSeg = (s) => (s.t === 'bez' ? { t: 'bez', a: s.b, c1: s.c2, c2: s.c1, b: s.a } : s.t === 'arc' ? { t: 'arc', a: s.b, m: s.m, b: s.a } : { t: 'line', a: s.b, b: s.a });
   // ---------- Text: Umrisse aus eingebauten und geladenen Schriften ----------
-  const BUILTIN_FONTS = { inter: /*JSON:schrift-inter.json*/null, fett: /*JSON:schrift-inter-fett.json*/null };
+  const BUILTIN_FONT_URLS = { inter: 'data/schrift-inter.json', fett: 'data/schrift-inter-fett.json' };
   const BUILTIN_FONTNAMES = { inter: 'Inter', fett: 'Inter Fett' };
-  const FONTS = { ...BUILTIN_FONTS };
+  const FONTS = {};
   const FONTNAMES = { ...BUILTIN_FONTNAMES };
+  const fontLoads = new Map();
+  const fontEv = makeEmitter();
   const parsedFonts = new Map();
   const customIds = new Set();
   const glyphCache = new Map();
   const textCache = new Map();
+  function isFontLoaded(id) {
+    return !!FONTS[id];
+  }
+  async function loadFont(id = 'inter') {
+    const key = BUILTIN_FONT_URLS[id] ? id : (FONTS[id] ? id : 'inter');
+    if (FONTS[key]) return FONTS[key];
+    const url = BUILTIN_FONT_URLS[key];
+    if (!url) return null;
+    if (fontLoads.has(key)) return fontLoads.get(key);
+    const p = (async () => {
+      const t0 = performance.now();
+      const r = await fetch(url);
+      if (!r.ok) throw new Error('Schrift konnte nicht geladen werden (Fehler ' + r.status + ').');
+      const data = await r.json();
+      FONTS[key] = data;
+      textCache.clear();
+      const ms = Math.max(1, Math.round(performance.now() - t0));
+      const atMs = Math.round(performance.now());
+      fontLoads.delete(key);
+      fontEv.emit('loaded', { id: key, name: BUILTIN_FONTNAMES[key] || key, ms, atMs });
+      return data;
+    })().catch((e) => {
+      fontLoads.delete(key);
+      throw e;
+    });
+    fontLoads.set(key, p);
+    return p;
+  }
+  function collectTextFonts(ents, out = new Set()) {
+    for (const e of ents || []) {
+      if (!e || e.type !== 'text') continue;
+      const id = e.font && BUILTIN_FONT_URLS[e.font] ? e.font : (e.font && FONTS[e.font] ? null : 'inter');
+      if (id && !FONTS[id]) out.add(id);
+    }
+    return out;
+  }
+  async function ensureEntsFonts(ents, extraFont = null) {
+    const need = collectTextFonts(ents);
+    if (extraFont && BUILTIN_FONT_URLS[extraFont] && !FONTS[extraFont]) need.add(extraFont);
+    if (!need.size) return false;
+    await Promise.all([...need].map((id) => loadFont(id)));
+    return true;
+  }
+  async function ensureDocFonts(doc, extra = []) {
+    if (doc && doc.fonts && doc.fonts.length) ensureFonts(doc.fonts);
+    const need = new Set();
+    const scanSketch = (sk) => { if (sk && Array.isArray(sk.ents)) collectTextFonts(sk.ents, need); };
+    const walkItems = (list) => {
+      for (const it of list || []) {
+        if (!it) continue;
+        const p = it.p || {};
+        scanSketch(p.sketch);
+        if (Array.isArray(p.sketches)) for (const sk of p.sketches) scanSketch(sk);
+        scanSketch(p.prof);
+        scanSketch(p.path);
+        scanSketch(p.rail);
+        scanSketch(p.rail2);
+        if (Array.isArray(it.children)) walkItems(it.children);
+      }
+    };
+    if (doc && Array.isArray(doc.items)) walkItems(doc.items);
+    if (Array.isArray(extra) && extra.length) walkItems(extra);
+    if (!need.size) return false;
+    await Promise.all([...need].map((id) => loadFont(id)));
+    return true;
+  }
   function parseCustomFont(f) {
     if (!f || !f.data || typeof TTF === 'undefined') return null;
     if (parsedFonts.has(f.data)) return parsedFonts.get(f.data);
@@ -121,7 +189,7 @@ const SK = (() => {
     let changed = false;
     const nextIds = new Set();
     for (const f of Array.isArray(list) ? list : []) {
-      if (!f || !f.id || BUILTIN_FONTS[f.id]) continue;
+      if (!f || !f.id || BUILTIN_FONT_URLS[f.id]) continue;
       const parsed = parseCustomFont(f);
       if (!parsed) continue;
       nextIds.add(f.id);
@@ -144,7 +212,7 @@ const SK = (() => {
   function ensureFonts(list) {
     let changed = false;
     for (const f of Array.isArray(list) ? list : []) {
-      if (!f || !f.id || BUILTIN_FONTS[f.id] || FONTS[f.id]) continue;
+      if (!f || !f.id || BUILTIN_FONT_URLS[f.id] || FONTS[f.id]) continue;
       const parsed = parseCustomFont(f);
       if (!parsed) continue;
       FONTS[f.id] = parsed;
@@ -184,8 +252,12 @@ const SK = (() => {
   }
   // Konturen eines Text-Elements in Skizzen-Koordinaten: [[seg, …], …]
   function textContours(e) {
-    const font = FONTS[e.font] || FONTS.inter;
-    if (!font) return [];
+    const want = e.font && FONTS[e.font] ? e.font : (e.font && BUILTIN_FONT_URLS[e.font] ? e.font : 'inter');
+    const font = FONTS[want] || FONTS.inter;
+    if (!font) {
+      if (BUILTIN_FONT_URLS[want]) loadFont(want).catch(() => {});
+      return [];
+    }
     const PP = Array.isArray(e.onP) && e.onP.length >= 2 ? e.onP : null;
     const key = JSON.stringify([e.s, e.h, e.font, e.align, e.a, e.rot, e.mir, e.sp, e.bend, PP, e.os]);
     if (textCache.has(key)) return textCache.get(key);
@@ -571,6 +643,6 @@ const SK = (() => {
     const r = Solver.solve({ ents: ents || [], dims: dims || [], cons: cons || [] }, V, { inPlace });
     return r.ents;
   }
-  return { textPathPts, chains, ellipsePoints, splineBez, bezPoints, textContours, textBox, FONTS, FONTNAMES, syncFonts, ensureFonts, loops, regions, regionAt, segsOf, segPoints, splinePoints, lineSegsOf, endA, endB, anchorOf, distSeg, arcInfo, arcPoints, circlePoints, rectCorners, polyCorners, hit, distEnt, snapPoints, faceLoopsToEnts, project3, openEnds, bounds, translateEnt, inPoly, d2, applyDims, measure, setMeasure, DIMKEYS, DIMNAME };
+  return { textPathPts, chains, ellipsePoints, splineBez, bezPoints, textContours, textBox, FONTS, FONTNAMES, isFontLoaded, loadFont, ensureEntsFonts, ensureDocFonts, onFont: fontEv.on, syncFonts, ensureFonts, loops, regions, regionAt, segsOf, segPoints, splinePoints, lineSegsOf, endA, endB, anchorOf, distSeg, arcInfo, arcPoints, circlePoints, rectCorners, polyCorners, hit, distEnt, snapPoints, faceLoopsToEnts, project3, openEnds, bounds, translateEnt, inPoly, d2, applyDims, measure, setMeasure, DIMKEYS, DIMNAME };
 })();
 

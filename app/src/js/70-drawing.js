@@ -38,7 +38,12 @@ const Drawing = (() => {
   async function refresh() {
     if (App.mode !== 'drawing') return;
     const need = App.revision !== projRev;
-    if (need && !loadingProj && Kernel.ready) {
+    if (need && !loadingProj) {
+      if (!Model.activeItems(App.doc).length) {
+        proj = null; projRev = App.revision;
+        render();
+        return;
+      }
       loadingProj = true;
       const d = dwg();
       try {

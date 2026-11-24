@@ -162,9 +162,11 @@ const UI = (() => {
     if (text) loadingEl.querySelector('.lt').textContent = text;
   }
   let busyEl = null;
-  function busy(on) {
-    if (on && !busyEl) { busyEl = h('div', { class: 'busy' }, h('div', { class: 'spin' }), 'Rechnet …'); $('#overlay').append(busyEl); }
-    else if (!on && busyEl) { busyEl.remove(); busyEl = null; }
+  function busy(on, text = 'Rechnet …') {
+    if (on) {
+      if (!busyEl) { busyEl = h('div', { class: 'busy' }, h('div', { class: 'spin' }), h('span', { class: 'bt' }, text)); $('#overlay').append(busyEl); }
+      else { const bt = busyEl.querySelector('.bt'); if (bt) bt.textContent = text; }
+    } else if (busyEl) { busyEl.remove(); busyEl = null; }
     if (typeof Measure !== 'undefined' && Measure.setCalcBusy) Measure.setCalcBusy(!!on);
   }
   // ---------- Eingabefelder ----------

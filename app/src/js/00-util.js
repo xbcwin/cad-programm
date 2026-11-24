@@ -1597,6 +1597,11 @@ const HELP = {
   "tip": "Ungesicherten Stand nach einem Absturz oder Neuladen wiederherstellen",
   "hilfe": "Tracery merkt sich laufende Änderungen automatisch in der Browser-Datenbank – auch bei großen Projekten mit importierten 3D-Modellen. Wird die Seite ohne Speichern geschlossen oder neu geladen, erscheint beim nächsten Start dieses Angebot mit Projektname und Uhrzeit.",
   "tipp": "Mit „Wiederherstellen“ holst du alle ungesicherten Änderungen sofort zurück; „Verwerfen“ kehrt zum letzten gespeicherten Stand zurück."
+ },
+ "startupTimes": {
+  "tip": "Gemessene Startzeiten für Oberfläche, CAD-Kern und Schriften",
+  "hilfe": "Tracery startet die Oberfläche sofort und lädt den OpenCascade-CAD-Kern sowie die eingebauten Schriften erst, wenn ein 3D-Schritt gerechnet oder Text gezeichnet wird. Hier siehst du die genauen Zeiten bis zur Bedienbarkeit und bis zum bereiten Kern.",
+  "tipp": "Du kannst nach dem Öffnen direkt eine 2D-Skizze beginnen, ohne auf den CAD-Kern zu warten."
  }
 };
 
