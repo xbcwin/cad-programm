@@ -16633,6 +16633,179 @@ def t_a080_tablet(p):
         ctx.close()
 
 
+# ---------- [A-082] Bauteil und Baugruppe als eigene Dokumente, Schritt 1 (BG-01) ----------
+def t_a082_baugruppe_verweise(p):
+    # 1. Startseite zeigt „Neue Baugruppe“ und migrierte/bestehende Projekte bleiben Bauteile ('part')
+    ok1 = (
+        p.pg.locator('#start-new-asm-btn').count() == 1
+        and p.pg.locator('#start-card-new-asm').count() == 1
+        and p.ev("return Model.docType(Model.migrate({ format: 'masswerk', items: [] }))") == 'part'
+        and p.ev("return Model.docType(App.doc)") == 'part'
+    )
+
+    # 2. Zwei eigene Bauteil-Dokumente anlegen und speichern
+    p.empty()
+    p.ev("""App.change('Quader-Bauteil', d => {
+      d.name = 'Bauteil Eins';
+      const b = Model.newItem('box', { w: 20, d: 20, h: 10 });
+      b.name = 'Basisquader';
+      d.items.push(b);
+    });""")
+    warte_rechnen(p, 25)
+    p.ev("return App.autosave.flush().then(() => { App.markClean(); return Store.whenIdle(); });")
+    part1_id = p.ev("return App.doc.id")
+
+    p.pg.click('#proj-tab-add'); p.wait(150)
+    p.pg.click('#tab-add-empty'); p.wait(350)
+    p.ev("""App.change('Zylinder-Bauteil', d => {
+      d.name = 'Bauteil Zwei';
+      const c = Model.newItem('cylinder', { d: 16, h: 30 });
+      c.name = 'Bolzen';
+      d.items.push(c);
+    });""")
+    warte_rechnen(p, 25)
+    p.ev("return App.autosave.flush().then(() => { App.markClean(); return Store.whenIdle(); });")
+    part2_id = p.ev("return App.doc.id")
+
+    # 3. Neue Baugruppe im Tab anlegen -> Werkzeugleiste zeigt „Bauteil einsetzen“
+    p.pg.click('#proj-tab-add'); p.wait(150)
+    p.pg.click('#tab-add-asm'); p.wait(350)
+    asm_state = p.ev("""return {
+      id: App.doc.id,
+      docType: App.doc.docType,
+      isAsm: Model.isAssembly(App.doc),
+      bodyType: document.body.dataset.docType,
+      hasInsertBtn: !!document.querySelector('#t-insert-part'),
+      hasBodyBtn: !!document.querySelector('#t-body'),
+    };""")
+    asm_id = asm_state['id']
+    ok2 = (
+        asm_state['docType'] == 'assembly'
+        and asm_state['isAsm'] is True
+        and asm_state['bodyType'] == 'assembly'
+        and asm_state['hasInsertBtn'] is True
+        and asm_state['hasBodyBtn'] is False
+    )
+
+    # 4. Beide Bauteile über den Einsetzen-Dialog einfügen
+    p.pg.click('#t-insert-part'); p.wait(250)
+    dlg_ok = (
+        p.pg.locator('#asm-insert-dialog').count() == 1
+        and p.pg.locator(f'#asm-insert-dialog .asm-part-row[data-doc-id="{part1_id}"]').count() == 1
+        and p.pg.locator(f'#asm-insert-dialog .asm-part-row[data-doc-id="{part2_id}"]').count() == 1
+    )
+    p.pg.locator(f'#asm-insert-dialog .asm-part-row[data-doc-id="{part1_id}"]').click()
+    p.wait(350); warte_rechnen(p, 30)
+
+    p.pg.click('#t-insert-part'); p.wait(250)
+    p.pg.locator(f'#asm-insert-dialog .asm-part-row[data-doc-id="{part2_id}"]').click()
+    p.wait(350); warte_rechnen(p, 30)
+
+    ref1_id, ref2_id = p.ev("return App.doc.items.map(x => x.id)")
+    p.ev("""App.change('Lage versetzen', d => {
+      const r2 = d.items.find(x => x.id === arg);
+      if (r2) r2.t.x = 40;
+    });""", ref2_id)
+    warte_rechnen(p, 25)
+    p.ev("return App.autosave.flush().then(() => Store.whenIdle());")
+
+    # 5. Baugruppe speichert NUR Verweise (im App.doc und roh in IndexedDB) und zeigt beide Geometrien
+    stored_raw = p.ev("""return new Promise((resolve) => {
+      const req = indexedDB.open(Store.dbName, 1);
+      req.onsuccess = () => {
+        const db = req.result;
+        const tx = db.transaction('projects', 'readonly');
+        const g = tx.objectStore('projects').get(arg);
+        g.onsuccess = () => resolve(g.result || null);
+        g.onerror = () => resolve(null);
+      };
+      req.onerror = () => resolve(null);
+    });""", asm_id)
+    boxes_before = p.ev("""const b1 = Actions.worldBox(arg[0]), b2 = Actions.worldBox(arg[1]);
+      return {
+        b1: b1 ? [b1.max.x - b1.min.x, b1.max.y - b1.min.y, b1.max.z - b1.min.z] : null,
+        b2: b2 ? [b2.max.x - b2.min.x, b2.max.y - b2.min.y, b2.max.z - b2.min.z] : null,
+        cx2: b2 ? (b2.min.x + b2.max.x) / 2 : null,
+      };""", [ref1_id, ref2_id])
+    raw_items = (stored_raw or {}).get('items') or []
+    ok3 = (
+        dlg_ok
+        and stored_raw is not None
+        and stored_raw.get('docType') == 'assembly'
+        and len(raw_items) == 2
+        and all(it.get('kind') == 'ref' and not it.get('children') for it in raw_items)
+        and [it.get('p', {}).get('docId') for it in raw_items] == [part1_id, part2_id]
+        and 'w' not in raw_items[0].get('p', {})
+        and 'd' not in raw_items[1].get('p', {})
+        and boxes_before['b1'] is not None and abs(boxes_before['b1'][0] - 20) < 0.2 and abs(boxes_before['b1'][2] - 10) < 0.2
+        and boxes_before['b2'] is not None and abs(boxes_before['b2'][0] - 16) < 0.2 and abs(boxes_before['b2'][2] - 30) < 0.2
+        and abs(boxes_before['cx2'] - 40) < 0.2
+    )
+
+    # 6. Bauteil 1 über „Bauteil öffnen“ bearbeiten, Breite auf 60 mm ändern -> Baugruppe zeigt die neue Form
+    p.ev("App.select([arg]);", ref1_id); p.wait(200)
+    p.pg.click('#btn-ref-open'); p.wait(400); warte_rechnen(p, 20)
+    switched_to_part1 = p.ev("return App.doc.id") == part1_id
+    p.ev("""App.change('Breite auf 60', d => {
+      d.items[0].p.w = 60;
+    });""")
+    warte_rechnen(p, 25)
+    p.ev("return App.autosave.flush().then(() => { App.markClean(); return Store.whenIdle(); });")
+
+    p.pg.locator(f'.proj-tab[data-doc-id="{asm_id}"]').click(); p.wait(400); warte_rechnen(p, 30)
+    boxes_after = p.ev("""const b1 = Actions.worldBox(arg[0]), b2 = Actions.worldBox(arg[1]);
+      return {
+        docId: App.doc.id,
+        itemKinds: App.doc.items.map(x => x.kind),
+        noChildren: App.doc.items.every(x => !x.children),
+        b1: b1 ? [b1.max.x - b1.min.x, b1.max.y - b1.min.y, b1.max.z - b1.min.z] : null,
+        b2: b2 ? [b2.max.x - b2.min.x, b2.max.y - b2.min.y, b2.max.z - b2.min.z] : null,
+      };""", [ref1_id, ref2_id])
+    ok4 = (
+        switched_to_part1
+        and boxes_after['docId'] == asm_id
+        and boxes_after['itemKinds'] == ['ref', 'ref']
+        and boxes_after['noChildren'] is True
+        and boxes_after['b1'] is not None and abs(boxes_after['b1'][0] - 60) < 0.2 and abs(boxes_after['b1'][1] - 20) < 0.2
+        and boxes_after['b2'] is not None and abs(boxes_after['b2'][0] - 16) < 0.2
+    )
+
+    # 7. Neuladen aus IndexedDB -> Baugruppe hydriert Verweise und zeigt weiter die 60-mm-Form
+    p.ev("return App.autosave.flush().then(() => { App.markClean(); return Store.whenIdle(); });")
+    p.pg.reload(); p.wait(3000)
+    try:
+        p.pg.locator('.loading').wait_for(state='detached', timeout=25000)
+    except Exception:
+        pass
+    warte_rechnen(p, 40)
+    reloaded = p.ev("""const b1 = Actions.worldBox(arg[0]);
+      return {
+        docId: App.doc.id,
+        docType: App.doc.docType,
+        kinds: App.doc.items.map(x => x.kind),
+        w1: b1 ? (b1.max.x - b1.min.x) : null,
+      };""", [ref1_id])
+    ok5 = (
+        reloaded['docId'] == asm_id
+        and reloaded['docType'] == 'assembly'
+        and reloaded['kinds'] == ['ref', 'ref']
+        and reloaded['w1'] is not None and abs(reloaded['w1'] - 60) < 0.2
+    )
+
+    # 8. Hilfetexte, Startseiten-Liste mit Abzeichen & Rückgängig beim Entfernen eines Verweises
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    help_ok = all(k in hilfen and hilfen[k].get('tip') and hilfen[k].get('hilfe') and hilfen[k].get('tipp') for k in ('assemblyDoc', 'insertPart'))
+    p.ev("return Comp.insertPart(arg);", part1_id); p.wait(350); warte_rechnen(p, 25)
+    len_3 = p.ev("return App.doc.items.length")
+    p.pg.click('#btn-undo'); p.wait(300); warte_rechnen(p, 25)
+    len_2 = p.ev("return App.doc.items.length")
+    p.pg.click('#brand'); p.wait(300)
+    start_badges = p.pg.locator('.start .recent .doc-type-badge').count()
+    ok6 = help_ok and len_3 == 3 and len_2 == 2 and start_badges >= 2
+
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -16818,6 +16991,7 @@ TESTS = [
     ('[A-077] Große Modelle: nur neu rechnen, was sich geändert hat (Fingerabdruck & Kern-Zähler)', t_a077_nur_geandertes_rechnen),
     ('[F-11241334] Volltest-Reparatur: Veraltete mergedInto-Bezüge beim Löschen ohne Seitenfehler in Verlauf & Eigenschaften', t_f11241334),
     ('[A-080] Am Tablet bedienbar: iPad Pro 11 (44 px Knöpfe, einklappbare Panels, Antippen, 2-Finger-Drehen/Zoomen, Einfach & Profi)', t_a080_tablet),
+    ('[A-082] Baugruppe & Bauteil als eigene Dokumente: Verweise speichern & Änderungen übernehmen', t_a082_baugruppe_verweise),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

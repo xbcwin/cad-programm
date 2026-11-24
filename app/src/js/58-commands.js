@@ -247,6 +247,11 @@ const Commands = (() => {
     add('planes', 'Ursprungsebenen ein/aus', 'originPlanes', 'ursprung ebenen xy xz yz origin', () => ViewPrefs.toggle('planes'), { group: 'Ansicht' });
     add('axes', 'Achsen ein/aus', 'axes', 'achsen x y z', () => ViewPrefs.toggle('axes'), { group: 'Ansicht' });
     add('newcomp', 'Neues Bauteil', 'parts', 'bauteil komponente baugruppe component neu', () => Comp.newComponent(), { group: 'Werkzeuge' });
+    add('new-assembly', 'Neue Baugruppe (Dokument)', 'parts', 'baugruppe assembly neu dokument verweis', () => Start.newAssembly(), { group: 'Projekt' });
+    add('insert-part', 'Bauteil in Baugruppe einsetzen', 'parts', 'bauteil einsetzen verweis baugruppe assembly', () => {
+      if (Model.isAssembly(App.doc)) Comp.insertPartDialog();
+      else UI.toast('Wechsle zuerst in eine Baugruppe (oder lege über Start → „Neue Baugruppe“ eine an).', { icon: 'info' });
+    }, { group: 'Baugruppe', when: () => Model.isAssembly(App.doc) });
     add('editcomp', 'Gewählte Gruppe als Bauteil bearbeiten', 'edit', 'bauteil bearbeiten kontext', () => { const t = App.sel.length ? Model.topOf(App.doc, App.sel[0]) : null; if (t && t.kind === 'group') Comp.edit(t.id); else UI.toast('Wähle zuerst eine Gruppe oder ein Bauteil aus.', { icon: 'info' }); }, { group: 'Werkzeuge' });
     add('isolate', 'Gewähltes Teil isolieren', 'focusView', 'isolieren nur dieses zeigen', () => { const t = App.sel.length ? Model.topOf(App.doc, App.sel[0]) : null; if (t) Comp.toggleIso(t.id); }, { group: 'Ansicht' });
     add('drawing', 'Technische Zeichnung öffnen', 'sheet', 'zeichnung ansichten bemaßung pdf dreitafel', () => setMode('drawing'), { group: 'Werkzeuge' });

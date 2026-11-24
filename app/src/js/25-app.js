@@ -279,6 +279,7 @@ const App = (() => {
     return {
       tabId: t.tabId,
       docId: d && d.id,
+      docType: Model.docType(d),
       name: (d && d.name) || 'Neues Projekt',
       dirty: rev !== clean,
       active: isAct,
@@ -286,6 +287,12 @@ const App = (() => {
       undoCount: undoArr ? undoArr.length : 0,
       redoCount: redoArr ? redoArr.length : 0,
     };
+  }
+  function findOpenDoc(docId) {
+    if (!docId) return null;
+    if (S.doc && S.doc.id === docId) return S.doc;
+    const t = tabs.find((x) => x.doc && x.doc.id === docId);
+    return t ? t.doc : null;
   }
   function syncCurrentMeta() {
     const cur = currentTab();
@@ -811,6 +818,10 @@ const App = (() => {
         ev.emit('calc', true);
         clearTimeout(busyTimer); busyTimer = setTimeout(() => ev.emit('busy', true), 300);
       }
+      if (typeof Comp !== 'undefined' && Comp.ensureRefs) {
+        await Comp.ensureRefs(S.doc).catch((e) => console.warn(e));
+        if (activeTabId !== buildTabId || !S.doc || S.doc.id !== buildDocId) { dirty = true; continue; }
+      }
       if (typeof SK !== 'undefined' && SK.ensureDocFonts) {
         await SK.ensureDocFonts(S.doc, S.extra).catch((e) => console.warn(e));
         if (activeTabId !== buildTabId || !S.doc || S.doc.id !== buildDocId) { dirty = true; continue; }
@@ -905,7 +916,7 @@ const App = (() => {
     }
     for (const id of [...S.results.keys()]) if (!seen.has(id)) { Viewer.removeNode(id); S.results.delete(id); }
     const oldErr = new Set(S.errors.map((e) => e.itemId + '|' + e.code + '|' + e.message));
-    S.errors = (res.errors || []).concat(dimErrors());
+    S.errors = (res.errors || []).concat(dimErrors(), refErrors(S.doc));
     for (const e of S.errors) if (!oldErr.has(e.itemId + '|' + e.code + '|' + e.message)) ev.emit('log', { kind: 'error', text: e.message, itemId: e.itemId, code: e.code });
     applyView();
     refreshSelectionVisuals();
@@ -918,6 +929,16 @@ const App = (() => {
     }
     ev.emit('results');
     if (S.fitNext) { S.fitNext = false; Viewer.fit(); }
+  }
+  function refErrors(doc) {
+    const out = [];
+    for (const it of Model.activeItems(doc)) {
+      if (it.kind !== 'ref' || it.suppressed) continue;
+      if (!Model.resolveDoc(it.p && it.p.docId)) {
+        out.push({ itemId: it.id, code: 'refMissing', message: T('asm.refMissingErr', { name: (it.p && it.p.docName) || Model.label(it) }) });
+      }
+    }
+    return out;
   }
   // Skizzen-Maße, die sich nicht ausrechnen lassen, wie Rechenfehler melden
   function dimErrors() {
@@ -1073,7 +1094,7 @@ const App = (() => {
     get anyDirty() { return tabs.some((t) => tabInfo(t).dirty); },
     get tabs() { return tabs.map(tabInfo); },
     get activeTabId() { return activeTabId; },
-    markClean,
+    markClean, findOpenDoc,
     setDoc, openTab, switchTab, closeTab, restoreOpenTabs, snapshot, change, touched, pushUndo, restore, undo, redo, undoTo, squash, historyStats, setHistoryLimit, Patch, rebuild, requalify, replaceMesh, select, clearSelection, selectedItems, errorsFor, localBox, refreshSelectionVisuals,
     recentProjects, loadStored, deleteStored, autosave, fitAfterBuild, on: ev.on, emit: ev.emit,
   };

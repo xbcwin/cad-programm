@@ -11,7 +11,9 @@ const Store = (() => {
   const blobCache = new Map();     // blobId -> Uint8Array
   const pendingBlobs = new Map();  // blobId -> Promise<void>
   const versionsCache = new Map(); // projectId -> Array
+  const projectCache = new Map();  // projectId -> doc
   const fallbackProjects = new Map();
+  const ev = makeEmitter();
   let writeQueue = Promise.resolve();
 
   function walkItems(items, fn) {
@@ -203,11 +205,20 @@ const Store = (() => {
     });
     return set;
   }
-  async function hydrateDoc(doc) {
+  async function hydrateDoc(doc, seen = new Set()) {
     if (!doc || !Array.isArray(doc.items)) return doc;
+    if (doc.id) seen.add(doc.id);
     extractBlobs(doc);
     const missing = [...collectBlobIds(doc)].filter((id) => !blobCache.has(id));
     if (missing.length) await Promise.all(missing.map((id) => getBlob(id)));
+    const refIds = new Set();
+    walkItems(doc.items, (it) => {
+      if (it && it.kind === 'ref' && it.p && it.p.docId && !seen.has(it.p.docId)) refIds.add(it.p.docId);
+    });
+    for (const refId of refIds) {
+      if (seen.has(refId)) continue;
+      if (!projectCache.has(refId)) await loadProjectInternal(refId, seen).catch(() => null);
+    }
     return doc;
   }
   async function inlineBlobs(doc) {
@@ -265,7 +276,7 @@ const Store = (() => {
       }
       storedProjIds.add(id);
       if (!migratedEntries.has(id)) {
-        migratedEntries.set(id, { id, name: doc.name || 'Projekt', modified: doc.modified || Date.now(), n: countItems(doc) });
+        migratedEntries.set(id, { id, name: doc.name || 'Projekt', modified: doc.modified || Date.now(), n: countItems(doc), docType: doc.docType === 'assembly' ? 'assembly' : 'part' });
       }
     }
 
@@ -371,8 +382,10 @@ const Store = (() => {
     extractBlobs(doc);
     const snap = deepClone(doc);
     const n = itemCount != null ? itemCount : countItems(snap);
+    const docType = snap.docType === 'assembly' ? 'assembly' : 'part';
+    projectCache.set(snap.id, deepClone(snap));
     index = index.filter((x) => x.id !== snap.id);
-    index.unshift({ id: snap.id, name: snap.name, modified: snap.modified, n });
+    index.unshift({ id: snap.id, name: snap.name, modified: snap.modified, n, docType });
     index = index.slice(0, 30);
     const updateLast = !(opts && opts.keepLast);
     if (updateLast) lastId = snap.id;
@@ -384,19 +397,24 @@ const Store = (() => {
       const d = await ensureDB();
       if (!d) {
         fallbackProjects.set(snap.id, snap);
-        return storageSet('masswerk.proj.' + snap.id, JSON.stringify(snap));
+        const ok = storageSet('masswerk.proj.' + snap.id, JSON.stringify(snap));
+        if (ok) ev.emit('saved', { id: snap.id, doc: snap });
+        return ok;
       }
       const tx = d.transaction(['projects', 'meta'], 'readwrite');
       tx.objectStore('projects').put(snap);
       const m = tx.objectStore('meta');
       m.put({ k: 'index', v: idxSnap });
       if (updateLast && lastSnap) m.put({ k: 'last', v: lastSnap });
-      return txDone(tx);
+      const ok = await txDone(tx);
+      if (ok) ev.emit('saved', { id: snap.id, doc: snap });
+      return ok;
     }).catch((e) => { console.warn('Projekt speichern:', e); return false; });
   }
 
-  async function loadProject(id) {
-    if (!id) return null;
+  async function loadProjectInternal(id, seen = new Set()) {
+    if (!id || seen.has(id)) return null;
+    seen.add(id);
     await init();
     await writeQueue;
     const d = await ensureDB();
@@ -407,9 +425,26 @@ const Store = (() => {
       doc = fallbackProjects.get(id) || null;
     }
     if (!doc) return null;
-    await hydrateDoc(doc);
+    projectCache.set(doc.id, deepClone(doc));
+    await hydrateDoc(doc, seen);
     await loadVersions(id).catch(() => {});
     return doc;
+  }
+  async function loadProject(id) {
+    return loadProjectInternal(id, new Set());
+  }
+  function getCachedProject(id) {
+    return (id && projectCache.get(id)) || null;
+  }
+  async function ensureDocsLoaded(ids = []) {
+    const out = [];
+    for (const id of ids) {
+      if (!id) continue;
+      if (projectCache.has(id)) { out.push(projectCache.get(id)); continue; }
+      const d = await loadProject(id).catch(() => null);
+      if (d) out.push(d);
+    }
+    return out;
   }
 
   async function gcBlobs(activeDoc = null) {
@@ -444,6 +479,7 @@ const Store = (() => {
       openTabs = { ids: nextIds, activeId: openTabs.activeId === id ? (nextIds[0] || null) : openTabs.activeId };
     }
     versionsCache.delete(id);
+    projectCache.delete(id);
     fallbackProjects.delete(id);
     if (recoveryCache && recoveryCache.docId === id) {
       recoveryCache = null;
@@ -474,6 +510,7 @@ const Store = (() => {
       }
       await txDone(tx);
       await gcBlobs(activeDoc);
+      ev.emit('deleted', { id });
       return true;
     }).catch((e) => { console.warn('Projekt löschen:', e); return false; });
   }
@@ -610,7 +647,8 @@ const Store = (() => {
     bytesToBase64, base64ToBytes,
     registerBlob, putBlob, getBlobSync, getBlob, flushBlobs,
     extractBlobs, collectBlobIds, hydrateDoc, inlineBlobs,
-    recentProjects, hasProject, getLastId, getOpenTabs, setOpenTabs, saveProject, loadProject, deleteProject, gcBlobs,
+    recentProjects, hasProject, getLastId, getOpenTabs, setOpenTabs, saveProject, loadProject, getCachedProject, ensureDocsLoaded, deleteProject, gcBlobs,
+    on: ev.on,
     loadVersions, getVersionsSync, setVersions,
     saveRecovery, loadRecovery, clearRecovery, getRecoveryFlag,
     get ready() { return ready; },

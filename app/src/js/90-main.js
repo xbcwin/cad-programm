@@ -22,7 +22,12 @@
   $('#btn-redo').onclick = () => App.redo();
   const updHist = () => { $('#btn-undo').disabled = !App.undoStack.length; $('#btn-redo').disabled = !App.redoStack.length; const l = App.undoStack[App.undoStack.length - 1]; $('#btn-undo').dataset.tip = l ? T('topbar.undoLabel', { label: l.label }) : T('topbar.undo'); };
   App.on('history', updHist); App.on('doc', updHist); updHist();
-  const updName = () => { const isDef = !App.doc.name || App.doc.name === 'Neues Projekt'; $('#btn-project').textContent = isDef ? T('start.newProject') : App.doc.name; document.title = !isDef ? App.doc.name + ' – Tracery' : 'Tracery'; };
+  const updName = () => {
+    document.body.dataset.docType = Model.docType(App.doc);
+    const isDef = !App.doc.name || App.doc.name === 'Neues Projekt';
+    $('#btn-project').textContent = isDef ? T('start.newProject') : App.doc.name;
+    document.title = !isDef ? App.doc.name + ' – Tracery' : 'Tracery';
+  };
   const syncBed = () => {
     const pb = App.doc && App.doc.settings && App.doc.settings.printBed;
     Viewer.setPrintBed(pb && pb.enabled ? { ...pb, warn: !Print.fitCheck(pb).fits } : pb);
@@ -48,6 +53,7 @@
     { label: T('menu.proj.saveTemplate'), icon: 'save', id: 'pm-save-template', help: 'saveTemplate', run: () => Start.saveAsTemplate() },
     '-',
     { label: T('menu.proj.newProject'), icon: 'newfile', id: 'pm-new-project', help: 'projectTemplates', run: () => Start.newProjectDialog() },
+    { label: T('start.newAssembly'), icon: 'parts', id: 'pm-new-assembly', help: 'assemblyDoc', run: () => Start.newAssembly() },
     { label: T('menu.proj.startAndTemplates'), icon: 'home', run: () => Start.show() },
   ];
   $('#btn-project').onclick = (e) => UI.menu(e.currentTarget, projectItems(), { alignRight: true });

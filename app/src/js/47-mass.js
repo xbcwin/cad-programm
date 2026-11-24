@@ -7,7 +7,14 @@ const Mass = (() => {
   const ev = makeEmitter();
   const matOf = (k) => MATERIALS.find((m) => m.k === k) || null;
   function projectMaterial(doc = App.doc) { return matOf(doc.settings && doc.settings.material) || matOf('CFK') || MATERIALS[0]; }
-  function materialFor(it, doc = App.doc) { return (it && matOf(it.mat)) || projectMaterial(doc); }
+  function materialFor(it, doc = App.doc) {
+    if (it && matOf(it.mat)) return matOf(it.mat);
+    if (it && it.kind === 'ref') {
+      const rd = Model.resolveDoc(it.p && it.p.docId);
+      if (rd && rd.settings && matOf(rd.settings.material)) return matOf(rd.settings.material);
+    }
+    return projectMaterial(doc);
+  }
   function enrich(r, doc) {
     if (!r) return null;
     let mass = 0; const c = [0, 0, 0]; const V = Model.vars(doc).v;

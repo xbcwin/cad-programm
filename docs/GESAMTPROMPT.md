@@ -85,8 +85,8 @@ Leitlinien:
 | --- | --- |
 | `00-util.js` | Hilfen, `Expr`-Rechner (`wenn`, `runden`/`aufrunden`/`abrunden`, `tabelle`, `< > <= >= == !=`, Klartext-Fehler) mit Einheiten (mm, cm, m, in, zoll, ", °), Projekt-Einheiten `Units` (`mm`, `cm`, `m`, `in`), Anzeige-Rundung `FMT`/`fmt`/`fmtFixed`/`fmtAngle`/`fmtAngleU`, Icon-Set `IC`, eingebettete Hilfetexte `HELP` (muss immer gleich `app/data/werkzeug-hilfen.json` sein, per Python neu erzeugen) |
 | `01-i18n.js` | Übersetzbare Oberfläche (`I18n`, `T(key, vars)`, `I18n.setTestMode()`, `data-i18n-html`/`data-i18n-title`, eingebettete `TEXTS_DE` aus `app/data/texte-de.json`) |
-| `05-storage.js` | Browser-Datenbank (`Store`, IndexedDB `tracery-db` mit `projects`, `versions`, `blobs`, `meta`), binäre Import-Blobs, offene Tabs (`getOpenTabs`/`setOpenTabs`), Absturz-Sicherung (`saveRecovery`/`loadRecovery`/`clearRecovery`), Migration aus `localStorage` |
-| `10-model.js` | Projekt-Datenmodell, `KINDS`, `newItem`, `find`/`walk`/`topOf`, Matrizen, `vars` (Maße), `kernelItem`, `sketchParams`/`loftParams`/`sweepParams`/`pathPatternParams`, `migrate` |
+| `05-storage.js` | Browser-Datenbank (`Store`, IndexedDB `tracery-db` mit `projects`, `versions`, `blobs`, `meta`), binäre Import-Blobs, Projekt-Cache & Ereignisse (`getCachedProject`/`ensureDocsLoaded`/`on`), offene Tabs (`getOpenTabs`/`setOpenTabs`), Absturz-Sicherung (`saveRecovery`/`loadRecovery`/`clearRecovery`), Migration aus `localStorage` |
+| `10-model.js` | Projekt-Datenmodell, `KINDS` (inkl. `ref`-Verweis für Baugruppen), `docType`/`isAssembly`/`newAssemblyDoc`/`setDocResolver`/`resolveDoc`, `newItem`, `find`/`walk`/`topOf`, Matrizen, `vars` (Maße), `kernelItem`, `sketchParams`/`loftParams`/`sweepParams`/`pathPatternParams`, `migrate` |
 | `14-ttf.js` (`TTF`) | Kleiner TrueType-Leser im Browser (`parse`: `glyf`-Umrisse mit quadratischen Béziers und zusammengesetzten Glyphen, `cmap`, `hmtx`, `kern`, CFF/OTF-Abweisung) |
 | `15-sketchcore.js` (`SK`) | Skizzen-Geometrie: `segsOf`, `regions`, `chains` (offene Pfade), `bounds`, Splines als exakte Bézier (`splineBez`), Text-Umrisse (Inter OFL bei Bedarf über `loadFont`/`needsEntsFonts`/`ensureEntsFonts`/`ensureDocFonts` + eigene TTFs via `syncFonts`, `kern` + Laufweite), Ellipse, Fangpunkte, Maße |
 | `16-solver.js` | Skizzen-Löser (Maße und Regeln gemeinsam, Freiheitsgrade, Konflikte) |
@@ -104,7 +104,7 @@ Leitlinien:
 | `46-reffix.js` | Kaputte Bezüge (`RefFix`): gelbe Warnung bei verlorener Kante/Fläche an Rundung, Fase, Wandstärke oder Skizze, gestrichelte Alt-Lage (`Viewer.setRefGhost`) und Assistent „Neu wählen“ |
 | `47-mass.js` | Volumen, Gewicht, Schwerpunkt, Material |
 | `48-joints.js` | Dreh- und Schiebegelenke, Ketten, Anschlag übernehmen, Bewegung abspielen (mit Timer-Fallback und `results`-Nachführung), `add` für die KI |
-| `49-*` | Bauteile im Kontext, Zeitleiste (`Timeline.refreshLabels`, mit Speicher-Status je Schritt), Protokoll (`Log.startup` / `#startup-times`), Zahleneingabe beim Ziehen |
+| `49-*` | Bauteile im Kontext & Baugruppen-Verweise (`Comp.insertPart`/`insertPartDialog`/`openRef`/`ensureRefs`/`resolveDoc`), Zeitleiste (`Timeline.refreshLabels`, mit Speicher-Status je Schritt), Protokoll (`Log.startup` / `#startup-times`), Zahleneingabe beim Ziehen |
 | `50-ui-core.js`/`51-ui-panels.js` | Oberfläche, Tablet-Erkennung (`UI.hasTouch`/`UI.isTablet`/`UI.syncTablet`/`UI.initTablet`, Klasse `body.tablet` unter 1100 px mit Touch, mindestens 44 px große Knöpfe, einklappbare Seitenleisten mit `#btn-left-close`/`#btn-right-close`), ViewCube (`Panels.refreshViewCube`), rechtes Panel „Eigenschaften“ (sofort bei Auswahl, `renderRight({ preserveFocus })` schützt fokussierte Eingabefelder bei asynchronen `results`-Updates), Null-Prüfung für `mergedInto` in `renderLeft`/`opSection`, Kontextleiste (aktualisiert auch auf `App.on('ghosts')`) |
 | `51-toolbar.js` (`Toolbar`) | Anpassbare 3D-Werkzeugleiste (`tracery-werkzeugleiste`): Rechtsklick-Menü, Anpassen-Dialog per Ziehen, Favoriten ganz links, Zurücksetzen |
 | `52-snap.js` | magnetisches Einrasten |
@@ -136,7 +136,7 @@ Leitlinien:
 
 ## 4. Datenmodell (Projektdatei `.json`, `format: 'masswerk'`)
 
-- **`doc`:** `{ id, name, params: [{id, name, expr}], tables: [{id, name, rows: [{id, key, val}]}], items: [...], fonts: [{id, name, file, data}], notes, settings{printer, grid, snap, magnet, unit}, drawing, rollback (Marker der Zeitleiste), variants, variant, drone{…}, joints: [...] }`
+- **`doc`:** `{ id, docType: 'part'|'assembly', name, params: [{id, name, expr}], tables: [{id, name, rows: [{id, key, val}]}], items: [...], fonts: [{id, name, file, data}], notes, settings{printer, grid, snap, magnet, unit}, drawing, rollback (Marker der Zeitleiste), variants, variant, drone{…}, joints: [...] }`
 - **Item:** `{ id, kind, name, role: 'solid'|'hole', color, t: {x,y,z,rx,ry,rz}, p: {...}, finishes: [{id,type:'fillet'|'chamfer'|'draft'|'shell', r, edges|faces, vr+r2 (Rundung von … bis), cm 'two'+r2 | 'angle'+a, side (Fase)}], suppressed, hidden, mat, massG, ai }`
   - Werte in `t` und `p` dürfen **Formeln** mit Maßnamen sein.
 - **`kind`:**

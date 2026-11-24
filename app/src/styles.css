@@ -1197,5 +1197,21 @@ body.tablet .tabbar-add{width:38px;height:38px}
 @media (max-width: 640px){
   body.tablet .topbar .tool{min-height:44px;padding:8px 10px;font-size:13.5px}
 }
+.recent-title{display:flex;align-items:center;gap:8px;min-width:0}
+.doc-type-badge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:999px;font-size:11px;font-weight:600;background:var(--surface-3);color:var(--muted);border:1px solid var(--line);flex:none}
+.doc-type-badge.asm{background:var(--accent-soft);color:var(--accent);border-color:var(--accent-line)}
+.doc-type-badge.open{background:var(--surface-2);color:var(--ink)}
+.proj-tab .ptab-type{display:inline-flex;align-items:center;justify-content:center;color:var(--muted);flex:none}
+.proj-tab .ptab-type svg{width:13px;height:13px}
+.proj-tab.asm-tab .ptab-type{color:var(--accent)}
+.asm-tree-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 0 8px;margin-bottom:6px;border-bottom:1px solid var(--line)}
+.asm-insert-dlg{display:grid;gap:12px}
+.asm-insert-intro{margin:0;color:var(--muted);font-size:13.5px;line-height:1.45}
+.asm-part-list{max-height:360px;overflow:auto}
+.asm-part-ic{display:inline-flex;align-items:center;color:var(--accent);flex:none}
+.asm-part-ic svg{width:24px;height:24px}
+.swatch.ref{background:var(--accent-soft)!important;color:var(--accent)}
+.card.new.asm .thumb{background:var(--surface-2);color:var(--accent)}
+
 
 

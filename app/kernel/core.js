@@ -3247,7 +3247,7 @@ export function createKernel(R, oc) {
       if (it.p.stepEntity != null) p.stepEntity = it.p.stepEntity;
       if (Array.isArray(it.p.stepMat) && it.p.stepMat.length === 16) p.stepMat = it.p.stepMat.map((v) => Math.round(v * 1e6) / 1e6);
     }
-    return keyOf({ k: it.kind, p, f: it.finishes || null, mir: it.mir || null, c: it.children ? it.children.filter((c) => !c.hidden).map((c) => [c.id, defKey(c), c.role, c.m]) : null });
+    return keyOf({ k: it.kind, p, f: it.finishes || null, mir: it.mir || null, c: it.children ? it.children.filter((c) => !c.hidden).map((c) => (it.p && it.p.subdoc ? [c.id, defKey(c), c.role, c.m, c.op || null] : [c.id, defKey(c), c.role, c.m])) : null });
   }
   function updatePlaneFromFace(oldPlane, fcL, fnL) {
     const n0 = norm(oldPlane.n || [0, 0, 1]);
@@ -3367,7 +3367,57 @@ export function createKernel(R, oc) {
     const e0 = errors.length;
     let shape = null, topo = null, ownsTopo = false, resolvedInfo = null, baseBox = null;
     try {
-      if (it.kind === 'group') {
+      if (it.kind === 'group' && it.p && it.p.subdoc) {
+        const kids = (it.children || []).filter((c) => !c.hidden);
+        if (!kids.length) {
+          shape = null;
+        } else {
+          const subErrors = [];
+          const { evald: subEvald, consumed: subConsumed, resolved: subResolved } = evalSceneCore({ items: kids }, subErrors, null, null, true);
+          for (const se of subErrors) errors.push({ ...se, itemId: it.id });
+          if (subResolved && ctx && ctx.resolved) {
+            const subRes = {};
+            for (const k of Object.keys(subResolved)) subRes[k] = subResolved[k];
+            if (Object.keys(subRes).length) resolvedInfo = subRes;
+          }
+          const subHoles = subEvald.filter((e) => !subConsumed.has(e.it.id) && e.it.role === 'hole' && e.shape);
+          const solidsOut = [];
+          for (const e of subEvald) {
+            if (subConsumed.has(e.it.id) || e.it.role === 'hole' || !e.shape) continue;
+            let curShape = e.shape, curTopo = e.topo || null, ownsCur = false;
+            const cutters = subHoles.filter((h) => h.it.id !== e.it.id && bboxHit(h.wb, e.wb));
+            if (cutters.length) {
+              const inv = matInvRigid(e.it.m);
+              const rel = cutters.map((h) => matMul(inv, h.it.m));
+              const moved = [];
+              try {
+                for (let ci = 0; ci < cutters.length; ci++) {
+                  const h = cutters[ci];
+                  const tr = applyMatrixWithTopo(h.shape, rel[ci], h.topo || null, h.it.id);
+                  moved.push({ shape: tr.shape, topo: tr.topo, selfId: h.it.id });
+                }
+                const tool = fuseAllWithTopo(moved, true, 'SHC');
+                const br = boolWithTopo('cut', curShape, curTopo, e.it.id, tool.shape, tool.topo, null, 'SHCut');
+                safeDelete(tool.shape); freeTopoMap(tool.topo);
+                curShape = br.shape; curTopo = br.topo; ownsCur = true;
+              } catch (_) {
+                for (const mv of moved) { safeDelete(mv.shape); freeTopoMap(mv.topo); }
+                errors.push({ itemId: it.id, code: 'cut', message: 'Ein Loch konnte nicht abgezogen werden.' });
+              }
+            }
+            const tr = applyMatrixWithTopo(curShape, e.it.m, curTopo, e.it.id);
+            if (ownsCur) { safeDelete(curShape); freeTopoMap(curTopo); }
+            solidsOut.push({ shape: tr.shape, topo: tr.topo, selfId: e.it.id });
+          }
+          if (solidsOut.length === 1) {
+            shape = solidsOut[0].shape; topo = solidsOut[0].topo; ownsTopo = true;
+          } else if (solidsOut.length > 1) {
+            shape = R.makeCompound(solidsOut.map((x) => x.shape));
+            for (const x of solidsOut) freeTopoMap(x.topo);
+            topo = ensureTopoComplete(shape, createTopoMap(), '$self'); ownsTopo = true;
+          }
+        }
+      } else if (it.kind === 'group') {
         const kids = (it.children || []).filter((c) => !c.hidden);
         const solids = [], holes = [];
         const kidById = new Map();
@@ -5541,7 +5591,7 @@ export function createKernel(R, oc) {
     if (!it || it.kind !== 'group') return it;
     return { ...it, children: (it.children || []).filter((c) => !c.hidden && !hasDynamicExtent(c)).map(stripDynamic) };
   }
-  function evalSceneCore(scene, errors, times = null, track = null) {
+  function evalSceneCore(scene, errors, times = null, track = null, keepStepCache = false) {
     const hiddenIds = new Set((scene.items || []).filter((it) => it.hidden).map((it) => it.id));
     const tops = (scene.items || []).filter((it) => !it.hidden);
     const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
@@ -5564,7 +5614,7 @@ export function createKernel(R, oc) {
         for (const e of evald) { const b = bodies.get(e.it.id); if (b) { e.shape = b.shape; e.topo = b.topo || null; e.key = b.key; e.wb = b.wb; } }
         return { evald, consumed, resolved, opsModified: new Set(bodies.keys()) };
       } finally {
-        clearStepReaderCache();
+        if (!keepStepCache) clearStepReaderCache();
       }
     }
 
@@ -5641,7 +5691,7 @@ export function createKernel(R, oc) {
       return { evald, consumed, resolved: ctx.resolved, opsModified: new Set(bodies.keys()) };
     } finally {
       for (const x of pool) safeDelete(x.worldShape);
-      clearStepReaderCache();
+      if (!keepStepCache) clearStepReaderCache();
     }
   }
   function collectGroupBodyHints(it, parentM = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], out = []) {

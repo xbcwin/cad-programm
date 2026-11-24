@@ -332,13 +332,31 @@ const Panels = (() => {
     const fs = items.length <= 8 ? firstSteps() : null;
     if (fs) body.append(fs);
     if (!items.length) {
-      body.append(h('div', { class: 'empty-tree', html: T('left.tree.emptyHtml') }));
+      if (Model.isAssembly(App.doc)) {
+        const emptyAsm = h('div', { class: 'empty-tree empty-asm' });
+        emptyAsm.append(h('div', { html: T('left.tree.emptyAsmHtml') }));
+        const ib = h('button', { type: 'button', class: 'btn primary small', id: 'btn-asm-empty-insert', 'data-help': 'insertPart' });
+        ib.innerHTML = icon('parts') + esc(T('asm.insertBtn'));
+        ib.onclick = () => Comp.insertPartDialog();
+        emptyAsm.append(h('div', { class: 'btn-row', style: { marginTop: '10px', justifyContent: 'center' } }, ib));
+        body.append(emptyAsm);
+      } else {
+        body.append(h('div', { class: 'empty-tree', html: T('left.tree.emptyHtml') }));
+      }
       const ds = Datums.treeSection(); if (ds) body.append(ds);
       const as = Datums.axisTreeSection(); if (as) body.append(as);
       const ps = Datums.pointTreeSection(); if (ps) body.append(ps);
       const cs = Datums.csysTreeSection(); if (cs) body.append(cs);
       const ms = Measure.treeSection(); if (ms) body.append(ms);
       return;
+    }
+    if (Model.isAssembly(App.doc)) {
+      const hdr = h('div', { class: 'asm-tree-head' });
+      const ib = h('button', { type: 'button', class: 'btn small primary', id: 'btn-asm-insert', 'data-help': 'insertPart' });
+      ib.innerHTML = icon('parts') + esc(T('asm.insertBtn'));
+      ib.onclick = () => Comp.insertPartDialog();
+      hdr.append(h('span', { class: 'doc-type-badge asm' }, T('doc.assembly')), ib);
+      body.append(hdr);
     }
     const V = Model.vars(App.doc).v;
     const selSet = new Set(App.sel);
@@ -382,6 +400,7 @@ const Panels = (() => {
       else tw.style.visibility = 'hidden';
       const sw = h('span', { class: 'swatch' + (it.role === 'hole' ? ' hole' : ''), style: { background: it.color } });
       if (it.comp) { sw.innerHTML = icon('parts'); sw.classList.add('comp'); }
+      else if (it.kind === 'ref') { sw.innerHTML = icon('parts'); sw.classList.add('comp', 'ref'); }
       const nm = h('span', { class: 'nm', title: Model.label(it) }, Model.label(it));
       const into = App.mergedInto(it.id), intoF = into ? Model.find(App.doc, into) : null, OPI = { join: '∪', cut: '−', common: '∩' };
       const patTxt = Features.isOp(it) ? Model.sizeText(it, V) : '';
@@ -395,6 +414,7 @@ const Panels = (() => {
       const del = h('button', { type: 'button', 'aria-label': T('common.delete'), 'data-tip': T('common.delete') }); del.innerHTML = icon('trash');
       del.onclick = (e) => { e.stopPropagation(); Actions.remove([it.id]); };
       if (topIdx >= 0 && it.kind === 'group') { const be = h('button', { type: 'button', 'aria-label': T('left.tree.editComp'), 'data-tip': App.ctx === it.id ? T('left.tree.editCompEnd') : T('left.tree.editCompStart') }); be.innerHTML = icon(App.ctx === it.id ? 'check' : 'edit'); be.onclick = (e) => { e.stopPropagation(); App.ctx === it.id ? App.setCtx(null) : Comp.edit(it.id); }; acts.append(be); }
+      if (it.kind === 'ref') { const ro = h('button', { type: 'button', 'aria-label': T('asm.openPart'), 'data-tip': T('asm.openPart') }); ro.innerHTML = icon('edit'); ro.onclick = (e) => { e.stopPropagation(); Comp.openRef(it.id); }; acts.append(ro); }
       if (topIdx >= 0) { const io = h('button', { type: 'button', 'aria-label': T('common.isolate'), 'data-tip': App.iso === it.id ? T('left.tree.isoOff') : T('left.tree.isoOn') }); io.innerHTML = icon('focusView'); io.onclick = (e) => { e.stopPropagation(); Comp.toggleIso(it.id); }; acts.append(io); }
       if (ownIdx >= 0 && (!ctxTop || inCtx)) { const sp = h('button', { type: 'button', 'aria-label': it.suppressed ? T('left.tree.activate') : T('common.suppress'), 'data-tip': it.suppressed ? T('common.unsuppress') : T('left.tree.suppressTip'), 'data-help': 'suppress' }); sp.innerHTML = icon('suppress'); sp.onclick = (e) => { e.stopPropagation(); Timeline.toggleSuppress(it.id); }; acts.append(sp); }
       acts.append(dup, eye, del);
@@ -419,13 +439,14 @@ const Panels = (() => {
         const topSelNow = [...new Set(App.sel.map((id) => (Model.topOf(App.doc, id) || {}).id).filter(Boolean))];
         const inFld = topIdx >= 0 ? Model.folderOf(App.doc, it.id) : null;
         UI.menu(row, [
+          ...(it.kind === 'ref' ? [{ icon: 'edit', label: T('asm.openPart'), id: 'tm-ref-open', help: 'assemblyDoc', run: () => Comp.openRef(it.id) }] : []),
           ...(refIssues.length ? [{ icon: 'warn', label: T('left.tree.refFixMenu'), id: 'tm-reffix', help: 'refFix', run: () => RefFix.start(refIssues[0]) }] : []),
           { icon: 'help', label: T('common.explainStep'), help: 'explainStep', run: () => Explain.dialog(it.id) },
           { icon: 'copy', label: T('common.duplicate'), id: 'tm-dup', kbd: 'Strg D', help: 'treeDuplicate', run: () => Actions.duplicate([it.id]) },
-          ...(UserLib.canSave(it) ? [{ icon: 'save', label: T('left.tree.toMyLib'), id: 'tm-userlib', help: 'userLibrary', run: () => UserLib.saveDialog(it.id) }] : []),
-          ...(Features.canMirrorStep(it, (Model.find(App.doc, it.id) || {}).parent) ? [{ icon: 'mirror', label: T('common.mirrorStep'), id: 'tm-mirrorstep', help: 'mirrorStep', run: () => Features.mirrorStep([it.id]) }] : []),
-          ...(topIdx >= 0 ? [{ icon: 'moveStep', label: T('common.moveStep'), help: 'moveStep', run: () => Features.transform([it.id]) }, { icon: 'scaleBody', label: T('common.scaleStep'), help: 'scaleBody', run: () => Features.scale([it.id]) }] : []),
-          ...(!((it.kind === 'transform' && !(it.p && it.p.copy)) || it.kind === 'scale' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'wrap' || it.kind === 'emboss') ? [{ icon: 'patternRect', label: T('ctx.patRect'), id: 'tm-pat-rect', help: 'patternRect', run: () => Features.pattern('rect', [it.id]) }, { icon: 'patternCirc', label: T('ctx.patCirc'), id: 'tm-pat-circ', help: 'patternCirc', run: () => Features.pattern('circ', [it.id]) }] : []),
+          ...(it.kind !== 'ref' && UserLib.canSave(it) ? [{ icon: 'save', label: T('left.tree.toMyLib'), id: 'tm-userlib', help: 'userLibrary', run: () => UserLib.saveDialog(it.id) }] : []),
+          ...(it.kind !== 'ref' && Features.canMirrorStep(it, (Model.find(App.doc, it.id) || {}).parent) ? [{ icon: 'mirror', label: T('common.mirrorStep'), id: 'tm-mirrorstep', help: 'mirrorStep', run: () => Features.mirrorStep([it.id]) }] : []),
+          ...(it.kind !== 'ref' && topIdx >= 0 ? [{ icon: 'moveStep', label: T('common.moveStep'), help: 'moveStep', run: () => Features.transform([it.id]) }, { icon: 'scaleBody', label: T('common.scaleStep'), help: 'scaleBody', run: () => Features.scale([it.id]) }] : []),
+          ...(it.kind !== 'ref' && !((it.kind === 'transform' && !(it.p && it.p.copy)) || it.kind === 'scale' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'wrap' || it.kind === 'emboss') ? [{ icon: 'patternRect', label: T('ctx.patRect'), id: 'tm-pat-rect', help: 'patternRect', run: () => Features.pattern('rect', [it.id]) }, { icon: 'patternCirc', label: T('ctx.patCirc'), id: 'tm-pat-circ', help: 'patternCirc', run: () => Features.pattern('circ', [it.id]) }] : []),
           ...(topSelNow.length >= 2 && !App.ctx ? [{ icon: 'folder', label: T('menu.tree.toFolder'), id: 'tm-folder', help: 'treeFolder', run: () => Actions.createFolder(topSelNow) }] : []),
           ...(inFld ? [{ icon: 'ungroup', label: T('menu.tree.fromFolder'), id: 'tm-unfolder', run: () => Actions.removeFromFolder([it.id]) }] : []),
           { icon: 'edit', label: T('common.rename'), run: async () => { const n = await UI.prompt(T('common.rename'), T('common.name'), Model.label(it), T('common.rename')); if (n && n.trim()) App.change('Umbenannt', (doc) => { Model.find(doc, it.id).item.name = n.trim(); }); } },
@@ -958,6 +979,17 @@ const Panels = (() => {
     const nameF = h('div', { class: 'field' }, h('label', { for: 'proj-name' }, T('panel.proj.name')), h('div', { class: 'inp' }, h('input', { id: 'proj-name', value: App.doc.name, style: { fontFamily: 'var(--font)' } })));
     nameF.querySelector('input').addEventListener('change', (e) => { const v = e.target.value.trim() || 'Neues Projekt'; App.change('Projekt umbenannt', (doc) => { doc.name = v; }); });
     w.append(nameF);
+    const isAsm = Model.isAssembly(App.doc);
+    const dtRow = h('div', { class: 'mini-row', id: 'proj-doc-type', 'data-help': 'assemblyDoc' },
+      h('span', { class: 'grow' }, T('asm.docKindLabel')),
+      h('span', { class: 'doc-type-badge' + (isAsm ? ' asm' : '') }, isAsm ? T('doc.assembly') : T('doc.part')));
+    w.append(dtRow);
+    if (isAsm) {
+      const ib = h('button', { type: 'button', class: 'btn primary', id: 'proj-insert-part', 'data-help': 'insertPart' });
+      ib.innerHTML = icon('parts') + esc(T('asm.insertBtn'));
+      ib.onclick = () => Comp.insertPartDialog();
+      w.append(h('div', { class: 'btn-row' }, ib));
+    }
     const unitF = UI.selectField({ id: 'proj-unit', label: T('panel.proj.unit'), value: Units.key(), options: Units.OPTIONS, onChange: (v) => Units.set(v) });
     unitF.dataset.help = 'projectUnit';
     w.append(unitF);
@@ -1321,10 +1353,11 @@ const Panels = (() => {
     }
     const copies = []; Model.walk(App.doc.items, (x) => { if (x.link === it.id) copies.push(x); });
     if (copies.length) w.append(h('div', { class: 'hint-box', id: 'link-count' }, copies.length === 1 ? T('panel.item.linkedCountOne') : T('panel.item.linkedCountMany', { n: copies.length })));
+    const isRef = it.kind === 'ref';
     const isMoveOnly = (it.kind === 'transform' && !(it.p && it.p.copy)) || it.kind === 'scale' || (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) || it.kind === 'mirrorStep';
     const isMergedStep = isMoveOnly || it.kind === 'rib' || it.kind === 'wrap' || it.kind === 'emboss';
-    if (!isMergedStep) w.append(roleSwitch(it.role, (r) => Actions.setRole([it.id], r)));
-    const opSec = opSection(it); if (opSec) w.append(opSec);
+    if (!isMergedStep && !isRef) w.append(roleSwitch(it.role, (r) => Actions.setRole([it.id], r)));
+    if (!isRef) { const opSec = opSection(it); if (opSec) w.append(opSec); }
     // Maße aus „Meine Teile“ (lokale Parameter je eingesetztem Teil)
     if (it.userPart && Array.isArray(it.userPart.params) && it.userPart.params.length) {
       const upSec = h('div', { class: 'section', id: 'userpart-sec', 'data-help': 'userLibrary' },
@@ -1353,7 +1386,25 @@ const Panels = (() => {
       upSec.append(upFields);
       w.append(upSec);
     }
-    // Maße
+    // Maße oder Bauteil-Verweis
+    if (isRef) {
+      const refDoc = Model.resolveDoc(it.p && it.p.docId);
+      const refSec = h('div', { class: 'section', id: 'ref-sec', 'data-help': 'assemblyDoc' }, h('div', { class: 'section-h' }, T('asm.refTitle')));
+      if (refDoc) {
+        const refCnt = Model.countItems(refDoc);
+        refSec.append(h('div', { class: 'hint-box' }, T('asm.refActive', { name: refDoc.name || 'Bauteil', n: refCnt, unit: refCnt === 1 ? T('common.object') : T('common.objects') })));
+      } else {
+        refSec.append(h('div', { class: 'err-box' }, T('asm.refMissingErr', { name: (it.p && it.p.docName) || Model.label(it) })));
+      }
+      const br = h('div', { class: 'btn-row' });
+      const ob = h('button', { type: 'button', class: 'btn primary', id: 'btn-ref-open' });
+      ob.innerHTML = icon('edit') + esc(T('asm.openPart'));
+      ob.disabled = !refDoc;
+      ob.onclick = () => Comp.openRef(it.id);
+      br.append(ob);
+      refSec.append(br, h('div', { class: 'hint-box' }, T('asm.refHint')));
+      w.append(refSec);
+    } else {
     const three = !!(KINDS[it.kind] && KINDS[it.kind].params.length === 3);
     const sec = h('div', { class: 'section' }, h('div', { class: 'section-h' }, three ? T('panel.item.dimsWithUnit', { u: Units.label() }) : T('panel.item.dims')));
     const setP = (k, val) => App.change('Maß geändert', (doc) => { Model.find(doc, it.id).item.p[k] = val; }, { merge: 'p:' + it.id + ':' + k });
@@ -1841,6 +1892,7 @@ const Panels = (() => {
       const ub = h('button', { type: 'button', class: 'btn' }); ub.innerHTML = icon('ungroup') + esc(T('panel.group.ungroup')); ub.onclick = () => Actions.ungroup(it.id);
       sec.append(h('div', { class: 'btn-row' }, ub)); w.append(sec);
     }
+    }
     const jsec = Joints.panel(it); if (jsec) w.append(jsec);
     // Lage
     if (!isMergedStep && it.kind !== 'transform') {
@@ -1861,7 +1913,7 @@ const Panels = (() => {
       w.append(pos);
     }
     // Kanten
-    if (it.role !== 'hole' && !isMergedStep) {
+    if (it.role !== 'hole' && !isMergedStep && !isRef) {
       const ks = h('div', { class: 'section' }, h('div', { class: 'section-h' }, T('panel.edges.title')));
       for (const fin of (it.finishes || []).filter((x) => x.type === 'shell')) {
         const err = App.errorsFor(it.id).find((x) => x.finishId === fin.id);
@@ -1936,7 +1988,7 @@ const Panels = (() => {
     if (!isMoveOnly) {
       w.append(colorSection((c) => App.change(c ? 'Farbe geändert' : 'Farbe vom Werkstoff', (doc) => { const tgt = Model.find(doc, it.id).item; if (c) { tgt.color = c; tgt.colorSet = true; } else delete tgt.colorSet; }), it.color, !!it.colorSet, it));
       // Farbe der gewählten Fläche
-      const sf = Actions.selectedFace();
+      const sf = !isRef ? Actions.selectedFace() : null;
       if (sf && sf.id === it.id && it.role !== 'hole') {
         const fsec = h('div', { class: 'section', id: 'face-color', 'data-help': 'faceColor' }, h('div', { class: 'section-h' }, T('panel.faceCol.title')));
         const key = { n: sf.info.n || null, c: sf.info.c };
@@ -1956,8 +2008,8 @@ const Panels = (() => {
         w.append(fsec);
       }
       // Kosmetische Gewinde (KP-20)
-      const isCylFace = !!(sf && sf.id === it.id && sf.info.t === 'CYLINDRE');
-      if (it.role !== 'hole' && (isCylFace || (it.threads && it.threads.length))) {
+      const isCylFace = !!(!isRef && sf && sf.id === it.id && sf.info.t === 'CYLINDRE');
+      if (!isRef && it.role !== 'hole' && (isCylFace || (it.threads && it.threads.length))) {
         const tsec = h('div', { class: 'section', id: 'thread-sec', 'data-help': 'cosmeticThread' }, h('div', { class: 'section-h' }, T('panel.thread.title')));
         if (isCylFace && !Features.threadOnFace(it.id, sf.idx)) {
           const mb = h('button', { type: 'button', class: 'btn small', id: 'btn-mark-thread' });
@@ -2215,6 +2267,19 @@ const Panels = (() => {
       pf.dataset.help = 'datumPoint';
       sep();
     }
+    if (items.length === 1 && items[0].item.kind === 'ref') {
+      const it = items[0].item;
+      bar.append(h('span', { class: 'lbl' }, T('kind.ref')));
+      b('edit', T('asm.openPart'), () => Comp.openRef(it.id), 'accent', T('asm.openPartTip')).dataset.help = 'assemblyDoc';
+      b('rotate', T('ctx.rotate'), (e) => UI.menu(e.currentTarget, [{ label: T('ctx.rotZ'), icon: 'rotate', kbd: 'R', run: () => Actions.rotate90(null, 'z') }, { label: T('ctx.rotX'), icon: 'rotate', run: () => Actions.rotate90(null, 'x') }, { label: T('ctx.rotY'), icon: 'rotate', run: () => Actions.rotate90(null, 'y') }]), '', T('ctx.rotateTip'), true);
+      b('copy', T('common.duplicate'), () => Actions.duplicate(), '', T('ctx.dupTip'), true);
+      b('focusView', T('common.isolate'), () => Comp.toggleIso(it.id), '', T('left.tree.isoOn'), true);
+      b('trash', T('common.delete'), () => Actions.remove(), 'danger', T('ctx.deleteTip'), true);
+      $('#overlay').append(bar); ctx = bar;
+      placeCtx();
+      Features.syncPatternMarkers();
+      return;
+    }
     if (items.length === 1) {
       const it = items[0].item;
       const hole = it.role === 'hole';
@@ -2233,12 +2298,13 @@ const Panels = (() => {
       if (!App.edges.length && !face && !hole && App.results.get(it.id) && App.doc.items.includes(it)) b('fillet', T('ctx.selectEdges'), (e) => edgeRuleMenu(it.id, e.currentTarget), '', T('ctx.selectEdgesTip'), true);
       if (it.kind === 'group') b('ungroup', T('ctx.ungroup'), () => Actions.ungroup(), '', T('ctx.ungroupTip'), true);
     } else {
-      b('group', T('ctx.group'), () => Actions.group(), 'accent', T('ctx.groupTip'));
-      if (items.every((x) => x.list === items[0].list && Features.canMirrorStep(x.item, x.parent))) b('mirror', T('ctx.mirrorStep'), () => Features.mirrorStep(items.map((x) => x.item.id)), 'pro', T('ctx.mirrorStepTip')).dataset.help = 'mirrorStep';
+      const hasRef = items.some((x) => x.item.kind === 'ref');
+      if (!hasRef) b('group', T('ctx.group'), () => Actions.group(), 'accent', T('ctx.groupTip'));
+      if (!hasRef && items.every((x) => x.list === items[0].list && Features.canMirrorStep(x.item, x.parent))) b('mirror', T('ctx.mirrorStep'), () => Features.mirrorStep(items.map((x) => x.item.id)), 'pro', T('ctx.mirrorStepTip')).dataset.help = 'mirrorStep';
       if (items.length === 2) b('dim', T('ctx.gap'), (e) => gapPop(e.currentTarget), '', T('ctx.gapTip'), true);
       if (items.length === 2 && !Model.parentsOf(App.doc, items[0].item.id).some((q) => q.id === items[1].item.id) && !Model.parentsOf(App.doc, items[1].item.id).some((q) => q.id === items[0].item.id)) b('hinge', T('ctx.joint'), () => Joints.start(), '', T('ctx.jointTip'), true);
-      if (items.length >= 2 && items.every((x) => x.item.kind === 'extrude')) b('loft', T('ctx.loft'), () => Actions.loft(), '', T('ctx.loftTip'));
-      b('boolSubtract', T('ctx.boolean'), (e) => UI.menu(e.currentTarget, [{ label: T('ctx.boolUnion'), icon: 'boolUnion', run: () => Features.boolean('union') }, { label: T('ctx.boolSub'), icon: 'boolSubtract', run: () => Features.boolean('subtract') }, { label: T('ctx.boolInt'), icon: 'boolIntersect', run: () => Features.boolean('intersect') }]), '', T('ctx.booleanTip'), true);
+      if (!hasRef && items.length >= 2 && items.every((x) => x.item.kind === 'extrude')) b('loft', T('ctx.loft'), () => Actions.loft(), '', T('ctx.loftTip'));
+      if (!hasRef) b('boolSubtract', T('ctx.boolean'), (e) => UI.menu(e.currentTarget, [{ label: T('ctx.boolUnion'), icon: 'boolUnion', run: () => Features.boolean('union') }, { label: T('ctx.boolSub'), icon: 'boolSubtract', run: () => Features.boolean('subtract') }, { label: T('ctx.boolInt'), icon: 'boolIntersect', run: () => Features.boolean('intersect') }]), '', T('ctx.booleanTip'), true);
       b('layers', T('ctx.align'), (e) => UI.menu(e.currentTarget, [['left', T('ctx.alignLeft')], ['cx', T('ctx.alignCx')], ['right', T('ctx.alignRight')], ['front', T('ctx.alignFront')], ['cy', T('ctx.alignCy')], ['back', T('ctx.alignBack')], ['bottom', T('ctx.alignBottom')]].map(([m, l]) => ({ label: l, run: () => Actions.align(null, m) }))), '', T('ctx.alignTip'));
       b('copy', T('common.duplicate'), () => Actions.duplicate(), '', T('ctx.dupTip'), true);
     }
@@ -2377,7 +2443,13 @@ const Panels = (() => {
       UI.renderHint();
     }, 16);
     const scheduleRerender = (forceRight = true) => { if (forceRight) pendingRightForce = true; rerender(); };
-    App.on('doc', () => scheduleRerender(true));
+    let lastDocType = Model.docType(App.doc);
+    const checkDocType = () => {
+      const next = Model.docType(App.doc);
+      if (next !== lastDocType) { lastDocType = next; renderTools(); }
+    };
+    App.on('doc', () => { checkDocType(); scheduleRerender(true); });
+    App.on('docLoaded', () => { checkDocType(); });
     App.on('selection', () => { rerender.cancel(); pendingRightForce = false; renderRight(); renderCtx(); rerenderLeftHint(); });
     App.on('results', () => scheduleRerender(false));
     DroneCheck.on('checked', () => { if (!App.sel.length) scheduleRerender(false); });

@@ -2041,6 +2041,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Rückgängig, Speichern/Neuladen, PDF, DXF & Hilfen**: Undo/Redo, JSON-Roundtrip, PDF-Export (`%PDF-1.4` mit Spalten und Teilenamen), DXF-Export (Kreise auf `BEMASSUNG`, Tabellentexte auf `RAHMEN`), Befehlssuche und Hilfetexte (`drawingBalloons`, `drawingBom`) funktionieren vollständig.
 - [ ] **Von Hand**: Im Browser eine kleine Baugruppe aus mehreren Teilen und einer Gruppe in der Zeichnung mit Positionsnummern versehen, Kreise und Stückliste auf dem Blatt zurechtschieben und die exportierte PDF- und DXF-Datei prüfen.
 
+## Bauteil und Baugruppe als eigene Dokumente, Schritt 1 (Auto [A-082], BG-01)
+
+- [x] **Startseite, Tabs & Dokument-Art**: „Neue Baugruppe“ (`#start-new-asm-btn`, `#start-card-new-asm`, `#tab-add-asm`) legt ein Baugruppen-Dokument (`docType: 'assembly'`) mit Baugruppen-Leiste (`#t-insert-part`) an; bestehende und migrierte Projekte bleiben Bauteile (`docType: 'part'`).
+- [x] **Bauteile als Verweise speichern**: Zwei gespeicherte Bauteile über `#asm-insert-dialog` in eine Baugruppe eingesetzt; in `App.doc` und roh in IndexedDB liegen ausschließlich `kind: 'ref'`-Verweise mit `p.docId` und Lage `t` ohne kopierte Geometrie.
+- [x] **Live-Aktualisierung & Neuladen**: Änderung an einem Bauteil (über `#btn-ref-open` in seinem Tab) aktualisiert nach Rückwechsel die angezeigte Form und Hüllmaße in der Baugruppe und bleibt nach `reload()` aus IndexedDB erhalten; Hilfetexte (`assemblyDoc`, `insertPart`) und Rückgängig funktionieren.
+- [ ] **Von Hand**: Im Browser eine Baugruppe anlegen, mehrere eigene Bauteile mit verschiedenen Werkstoffen und Farben einsetzen, eins davon im eigenen Tab umbauen und das Mitwandern visuell prüfen.
+
 ## Kopieren zwischen Projekten / Tabs (Auto [A-076], BE-13)
 
 - [x] **Quader mit Bohrung in Tab 1 → Tab 2 (`Strg/Cmd+C` / `Strg/Cmd+V`)**: Eine Gruppe aus Quader (`40 × 30 × 20 mm`) und durchgehender Bohrung (`Ø 10 mm`) mit Farbe `#d6574c` und Werkstoff `PLA` wird in Tab 1 kopiert und in einem zweiten Browser-Tab exakt mit gleichem Volumen, gleicher Farbe, gleichem Werkstoff und allen Schritten eingefügt; Rückgängig/Wiederholen arbeitet als ein Schritt.

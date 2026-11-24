@@ -184,6 +184,16 @@ const Templates = (() => {
       },
       svg: '<path d="M12 22 40 12l28 10-28 10z" class="a1"/><path d="M12 22v18l28 10V32z" class="a2"/><path d="M68 22v18L40 50V32z" class="a3"/><path d="M50 8 74 0l18 6-24 8z" class="b1"/><path d="M50 8v4l18 6v-4z" class="b2"/><path d="M92 6v4l-24 8v-4z" class="b3"/>',
     },
+    {
+      id: 'empty-assembly',
+      get name() { return T('start.newAssembly'); },
+      get desc() { return T('start.newAssemblyDesc'); },
+      get badge() { return T('doc.assembly'); },
+      build() {
+        return Model.newAssemblyDoc(T('asm.defaultName'));
+      },
+      svg: '<path d="M14 26 38 16l24 10-24 10z" class="a1"/><path d="M14 26v14l24 10V36z" class="a2"/><path d="M62 26v14L38 50V36z" class="a3"/><path d="M48 16 72 6l24 10-24 10z" class="b1"/><path d="M48 16v14l24 10V26z" class="b2"/><path d="M96 16v14L72 40V26z" class="b3"/>',
+    },
   ];
 
   const CUSTOM_KEY = 'tracery-vorlagen';
@@ -414,10 +424,11 @@ const Start = (() => {
     brand.append(h('div', null, h('h1', null, 'Tracery'), h('p', null, T('start.subtitle'))));
     const acts = h('div', { class: 'btn-row' });
     const nb = h('button', { type: 'button', id: 'start-new-btn', class: 'btn primary', 'data-help': 'projectTemplates' }); nb.innerHTML = icon('newfile') + esc(T('start.newProject')); nb.onclick = () => newProjectDialog();
+    const na = h('button', { type: 'button', id: 'start-new-asm-btn', class: 'btn', 'data-help': 'assemblyDoc' }); na.innerHTML = icon('parts') + esc(T('start.newAssembly')); na.onclick = () => newAssembly();
     const ob = h('button', { type: 'button', class: 'btn' }); ob.innerHTML = icon('folder') + esc(T('start.openFile')); ob.onclick = () => openFile();
     const tb = h('button', { type: 'button', class: 'btn' }); tb.innerHTML = icon('play') + esc(T('start.tourBasics')); tb.onclick = () => { newProject(true); Tour.start(); };
     const ts = h('button', { type: 'button', class: 'btn' }); ts.innerHTML = icon('sketch') + esc(T('start.tourSketch')); ts.onclick = () => { newProject(true); Tour.start('sketch'); };
-    acts.append(nb, ob, tb, ts);
+    acts.append(nb, na, ob, tb, ts);
     // Oberfläche wählen: beim allerersten Start als zwei Karten, sonst kompakt im Kopf
     if (ViewPrefs.firstStart) {
       head.append(brand, acts);
@@ -442,11 +453,16 @@ const Start = (() => {
       const sec = h('section', null, h('h2', null, T('start.recentHeading')));
       const list = h('div', { class: 'recent' });
       for (const r of recent.slice(0, 8)) {
+        const isAsm = r.docType === 'assembly';
         const row = h('div', { class: 'recent-row', role: 'button', tabindex: '0' });
-        row.innerHTML = icon('box3');
+        row.innerHTML = icon(isAsm ? 'parts' : 'box3');
         row.querySelector('svg').style.cssText = 'width:26px;height:26px;color:var(--accent);flex:none';
         const dstr = new Date(r.modified).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' });
-        row.append(h('div', { class: 'grow' }, h('b', null, r.name), h('span', null, T(r.n === 1 ? 'start.recentMetaOne' : 'start.recentMetaMany', { n: r.n, date: dstr }))));
+        const metaKey = isAsm
+          ? (r.n === 1 ? 'start.recentAsmOne' : 'start.recentAsmMany')
+          : (r.n === 1 ? 'start.recentMetaOne' : 'start.recentMetaMany');
+        const titleLine = h('div', { class: 'recent-title' }, h('b', null, r.name), h('span', { class: 'doc-type-badge' + (isAsm ? ' asm' : '') }, isAsm ? T('doc.assembly') : T('doc.part')));
+        row.append(h('div', { class: 'grow' }, titleLine, h('span', null, T(metaKey, { n: r.n, date: dstr }))));
         const del = h('button', { type: 'button', class: 'icon-btn', 'aria-label': T('start.deleteFromBrowserAria'), 'data-tip': T('start.deleteFromBrowserTip') }); del.innerHTML = icon('trash');
         del.onclick = async (e) => { e.stopPropagation(); if (await UI.confirm(T('start.deleteConfirmTitle'), T('start.deleteConfirmBody', { name: r.name }), T('common.delete'), true)) { await App.deleteStored(r.id); show(); } };
         const newTabBtn = h('button', { type: 'button', class: 'icon-btn', 'aria-label': T('tabs.openInNewTab'), 'data-tip': T('tabs.openInNewTab') }); newTabBtn.innerHTML = icon('plus');
@@ -472,6 +488,10 @@ const Start = (() => {
     const th0 = h('div', { class: 'thumb' }); th0.innerHTML = icon('plus'); empty.append(th0, h('b', null, T('start.emptyTitle')), h('span', null, T('start.emptyDesc')));
     empty.onclick = () => newProject();
     cards.append(empty);
+    const emptyAsm = h('button', { type: 'button', id: 'start-card-new-asm', class: 'card new asm', 'data-help': 'assemblyDoc' });
+    const thAsm = h('div', { class: 'thumb' }); thAsm.innerHTML = icon('parts'); emptyAsm.append(thAsm, h('b', null, T('start.newAssembly')), h('span', null, T('start.newAssemblyDesc')));
+    emptyAsm.onclick = () => newAssembly();
+    cards.append(emptyAsm);
     for (const t of Templates.LIST) {
       const c = h('button', { type: 'button', class: 'card' });
       const th = h('div', { class: 'thumb' }); th.innerHTML = tplThumb(t);
@@ -498,6 +518,11 @@ const Start = (() => {
     App.setDoc(Model.newDoc('Neues Projekt'), opts && opts.newTab ? { newTab: true } : {});
     hide();
     if (!silent) UI.toast(T('start.newProjToast'), { icon: 'newfile', ms: 4500 });
+  }
+  function newAssembly(silent, opts = {}) {
+    App.setDoc(Model.newAssemblyDoc(T('asm.defaultName')), opts && opts.newTab ? { newTab: true } : {});
+    hide();
+    if (!silent) UI.toast(T('asm.newToast'), { icon: 'parts', ms: 4500 });
   }
   function openNewTab(doc) {
     App.openTab(doc || Model.newDoc('Neues Projekt'));
@@ -2286,15 +2311,18 @@ const Start = (() => {
     list.innerHTML = '';
     const allTabs = App.tabs || [];
     for (const t of allTabs) {
+      const isAsm = t.docType === 'assembly';
       const tab = h('div', {
-        class: 'proj-tab' + (t.active ? ' active' : '') + (t.dirty ? ' dirty' : ''),
+        class: 'proj-tab' + (t.active ? ' active' : '') + (t.dirty ? ' dirty' : '') + (isAsm ? ' asm-tab' : ''),
         role: 'tab',
         tabindex: '0',
         'aria-selected': String(!!t.active),
-        dataset: { tabId: t.tabId, docId: t.docId || '' },
+        dataset: { tabId: t.tabId, docId: t.docId || '', docType: t.docType || 'part' },
       });
       const dot = h('span', { class: 'ptab-dot', 'aria-hidden': 'true' });
-      const tip = t.name + (t.dirty ? ' (ungespeicherte Änderungen)' : '');
+      const typeIc = h('span', { class: 'ptab-type', 'aria-hidden': 'true', title: isAsm ? T('doc.assembly') : T('doc.part') });
+      typeIc.innerHTML = icon(isAsm ? 'parts' : 'box3');
+      const tip = (isAsm ? T('doc.assembly') + ': ' : '') + t.name + (t.dirty ? ' (ungespeicherte Änderungen)' : '');
       const nameEl = h('span', { class: 'ptab-name', 'data-tip': tip }, t.name);
       const closeBtn = h('button', {
         type: 'button',
@@ -2340,7 +2368,7 @@ const Start = (() => {
         }
         UI.menu(tab, menuItems);
       };
-      tab.append(dot, nameEl, closeBtn);
+      tab.append(dot, typeIc, nameEl, closeBtn);
       list.append(tab);
     }
     const act = list.querySelector('.proj-tab.active');
@@ -2351,6 +2379,7 @@ const Start = (() => {
     const openIds = new Set((App.tabs || []).map((t) => t.docId).filter(Boolean));
     const items = [
       { id: 'tab-add-empty', label: T('tabs.newEmpty'), icon: 'newfile', run: () => openNewTab() },
+      { id: 'tab-add-asm', label: T('tabs.newAssembly'), icon: 'parts', help: 'assemblyDoc', run: () => openNewTab(Model.newAssemblyDoc(T('asm.defaultName'))) },
       { id: 'tab-add-tpl', label: T('tabs.newTemplate'), icon: 'cube', run: () => newProjectDialog({ newTab: true }) },
       { id: 'tab-add-file', label: T('tabs.openFile'), icon: 'folder', run: () => openFile({ newTab: true }) },
     ];
@@ -2362,7 +2391,7 @@ const Start = (() => {
         items.push({
           id: 'tab-add-recent-' + i,
           label: r.name + suffix,
-          icon: 'box3',
+          icon: r.docType === 'assembly' ? 'parts' : 'box3',
           run: () => openStoredInTab(r.id),
         });
       });
@@ -2463,7 +2492,7 @@ const Start = (() => {
     window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && dropEl && !dropEl.hidden) hideDropOverlay(); });
   }
   return {
-    init, importCAD, parseSTEP, import3MF, parse3MF, importOBJ, parseOBJ, importDXF, parseDXF, parseSVG, show, hide, newProject, openNewTab, openStoredInTab, renderTabs, openTabAddMenu, newProjectDialog, saveAsTemplate, openTemplate, openFile, openBlob, saveFile,
+    init, importCAD, parseSTEP, import3MF, parse3MF, importOBJ, parseOBJ, importDXF, parseDXF, parseSVG, show, hide, newProject, newAssembly, openNewTab, openStoredInTab, renderTabs, openTabAddMenu, newProjectDialog, saveAsTemplate, openTemplate, openFile, openBlob, saveFile,
     checkImport, healImport, importCheckOf, setImportHealOpts, dismissImportBanner,
     folderSupported, folderInfo, saveToFolder, saveToFolderNow, disconnectFolder,
     checkRecoveryOnBoot, startRecoveryTracking, restoreRecovery, dismissRecovery, flushRecovery,

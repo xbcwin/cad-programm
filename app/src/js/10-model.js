@@ -33,6 +33,7 @@ const KINDS = {
   wrap: { get label() { return T('kind.wrap'); }, params: [] },
   emboss: { get label() { return T('kind.emboss'); }, params: [] },
   mirrorStep: { get label() { return T('kind.mirrorStep'); }, params: [] },
+  ref: { get label() { return T('kind.ref'); }, params: [] },
 };
 const PRIMITIVE_ORDER = ['box', 'cylinder', 'sphere', 'cone', 'pyramid', 'wedge', 'tube', 'torus', 'prism', 'hemisphere'];
 
@@ -56,14 +57,21 @@ const THREAD_MAP = Object.fromEntries(THREAD_SPECS.map((t) => [t.size, t]));
 const Model = (() => {
   const T0 = () => ({ x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 });
   const defBed = () => ({ enabled: false, printer: 'custom', x: 220, y: 220, z: 250, nozzle: 0.4, holeComp: 0, printFit: '' });
-  function newDoc(name = 'Neues Projekt') {
+  let docResolver = null;
+  function setDocResolver(fn) { docResolver = typeof fn === 'function' ? fn : null; }
+  function resolveDoc(docId) { return (docId && docResolver) ? (docResolver(docId) || null) : null; }
+  function docType(doc) { return (doc && doc.docType === 'assembly') ? 'assembly' : 'part'; }
+  function isAssembly(doc) { return docType(doc) === 'assembly'; }
+  function newDoc(name = 'Neues Projekt', opts = {}) {
     return {
-      format: 'masswerk', version: 1, id: uid('p'), name, created: Date.now(), modified: Date.now(),
+      format: 'masswerk', version: 1, docType: (opts && opts.docType === 'assembly') ? 'assembly' : 'part',
+      id: uid('p'), name, created: Date.now(), modified: Date.now(),
       params: [], tables: [], items: [], notes: [],
       settings: { printer: 'std', custom: { x: 220, y: 220, z: 250 }, printBed: defBed(), grid: 1, snap: true, unit: 'mm' },
       drawing: null,
     };
   }
+  function newAssemblyDoc(name = 'Neue Baugruppe') { return newDoc(name, { docType: 'assembly' }); }
   function newItem(kind, p = {}, extra = {}) {
     const def = KINDS[kind] || { params: [] };
     const params = {};
@@ -100,6 +108,7 @@ const Model = (() => {
   const D2R = Math.PI / 180;
   let curV = {};
   let curDoc = null;
+  let visitedDocs = null;
   function useVars(v) { curV = v || {}; }
   const tv = (x) => (typeof x === 'number' ? x : x == null || x === '' ? 0 : num(x, curV, 0));
   function tnum(it, k) { return tv((it.t || {})[k]); }
@@ -378,6 +387,36 @@ const Model = (() => {
       const o = { id: it.id, kind: it.kind, role: it.role, hidden: !!it.hidden, name: label(it), color: displayColor(it), m };
       if (it.opacity != null && it.opacity < 1) o.opacity = Math.max(0.05, it.opacity);
       if (it.comp) o.comp = true;
+      if (it.kind === 'ref') {
+        const refId = it.p && it.p.docId;
+        const refDoc = refId && (!visitedDocs || !visitedDocs.has(refId)) ? resolveDoc(refId) : null;
+        if (!refDoc) {
+          const outMissing = { id: it.id, kind: 'group', role: it.role || 'solid', hidden: !!it.hidden, name: label(it), color: displayColor(it), m, comp: true, p: { assembly: true, subdoc: true, refMissing: true, refDocId: refId || null }, children: [] };
+          if (it.opacity != null && it.opacity < 1) outMissing.opacity = Math.max(0.05, it.opacity);
+          return outMissing;
+        }
+        if (refDoc.fonts && refDoc.fonts.length && typeof SK !== 'undefined' && SK.ensureFonts) SK.ensureFonts(refDoc.fonts);
+        const refV = vars(refDoc).v;
+        const refAct = activeItems(refDoc);
+        const prevDoc = curDoc;
+        const prevVisited = visitedDocs;
+        visitedDocs = new Set(prevVisited || []);
+        visitedDocs.add(refDoc.id);
+        curDoc = refDoc;
+        curV = refV;
+        let children = [];
+        try {
+          children = refAct.map((c) => kernelItem(c, refV));
+        } finally {
+          curDoc = prevDoc;
+          visitedDocs = prevVisited;
+        }
+        const refColor = it.colorSet && it.color ? it.color : (refAct.length === 1 ? displayColor(refAct[0]) : displayColor(it));
+        const outRef = { id: it.id, kind: 'group', role: it.role || 'solid', hidden: !!it.hidden, name: label(it), color: refColor, m, comp: true, p: { assembly: true, subdoc: true, refDocId: refDoc.id }, children };
+        if (it.opacity != null && it.opacity < 1) outRef.opacity = Math.max(0.05, it.opacity);
+        if (it.mir) outRef.mir = it.mir;
+        return outRef;
+      }
       if (it.kind === 'group') {
         let kids = it.children || [];
         if (it.rollback != null) kids = kids.slice(0, clamp(it.rollback, 0, kids.length));
@@ -953,12 +992,16 @@ const Model = (() => {
   function kernelScene(doc, extra = [], peek = null) {
     // Lagen mit Formeln (z. B. x = Achsabstand/2) mit den Maßen DIESES Projektstands auflösen – wichtig für Versionen und Varianten
     if (doc && doc.fonts && doc.fonts.length && typeof SK !== 'undefined' && SK.ensureFonts) SK.ensureFonts(doc.fonts);
-    const { v } = vars(doc); const prev = curV, prevDoc = curDoc; curV = v; curDoc = doc;
+    const { v } = vars(doc); const prev = curV, prevDoc = curDoc, prevVisited = visitedDocs;
+    curV = v; curDoc = doc;
+    visitedDocs = new Set(doc && doc.id ? [doc.id] : []);
     // peek = Vorschau der Zeitleiste: nur die ersten k Schritte rechnen, ohne den Marker zu verschieben
     let act = activeItems(doc); if (peek != null) { const keep = new Set(doc.items.slice(0, Math.max(0, peek))); act = act.filter((it) => keep.has(it)); }
-    const out = { items: [...act, ...extra].map((it) => kernelItem(it, v)) };
-    if (doc && Array.isArray(doc.folders) && doc.folders.length) out.folders = doc.folders.map((f) => ({ id: f.id, name: f.name, ids: (f.ids || []).slice() }));
-    try { return out; } finally { curV = prev; curDoc = prevDoc; }
+    try {
+      const out = { items: [...act, ...extra].map((it) => kernelItem(it, v)) };
+      if (doc && Array.isArray(doc.folders) && doc.folders.length) out.folders = doc.folders.map((f) => ({ id: f.id, name: f.name, ids: (f.ids || []).slice() }));
+      return out;
+    } finally { curV = prev; curDoc = prevDoc; visitedDocs = prevVisited; }
   }
 
   // ---------- Größen ----------
@@ -1036,6 +1079,27 @@ const Model = (() => {
       const p = resolveP(it.p || {}, V);
       const r = Math.max(1, Number(p.d) || 6) / 2, dep = Math.max(2, Number(p.depth || p.length || p.h) || 10);
       return [-r, -r, -dep / 2, r, r, dep / 2];
+    }
+    if (it.kind === 'ref') {
+      const refId = it.p && it.p.docId;
+      const refDoc = refId && (!visitedDocs || !visitedDocs.has(refId)) ? resolveDoc(refId) : null;
+      if (!refDoc) return null;
+      const refV = vars(refDoc).v;
+      const prevVisited = visitedDocs;
+      visitedDocs = new Set(prevVisited || []);
+      visitedDocs.add(refDoc.id);
+      const prev = curV; curV = refV;
+      try {
+        const box = new THREE.Box3();
+        for (const c of activeItems(refDoc)) {
+          if (c.hidden || c.role === 'hole') continue;
+          const cb = itemLocalBox(c, refV); if (!cb) continue;
+          const b = new THREE.Box3(new THREE.Vector3(cb[0], cb[1], cb[2]), new THREE.Vector3(cb[3], cb[4], cb[5])).applyMatrix4(localMatrix(c, new THREE.Matrix4()));
+          box.union(b);
+        }
+        if (!box.isEmpty()) return [box.min.x, box.min.y, box.min.z, box.max.x, box.max.y, box.max.z];
+      } finally { curV = prev; visitedDocs = prevVisited; }
+      return null;
     }
     if (it.kind === 'group' && it.children && it.children.length) {
       const prev = curV; curV = V;
@@ -1122,6 +1186,11 @@ const Model = (() => {
         }
         return `${(it.children || []).length} Teile`;
       }
+      case 'ref': {
+        const rd = resolveDoc(it.p && it.p.docId);
+        if (!rd) return T('asm.refMissingShort');
+        return rd.name && rd.name !== label(it) ? '→ ' + rd.name : T('asm.refShort');
+      }
       case 'part': {
         const L = String(p.lib || '');
         if (L === 'buyMotor' || L === 'buyCap') return `Ø ${f(p.d)} × ${f(p.h)}${u}`;
@@ -1143,6 +1212,7 @@ const Model = (() => {
   }
   function migrate(doc) {
     if (!doc || doc.format !== 'masswerk') throw new Error('Das ist keine Tracery-Projektdatei.');
+    if (doc.docType !== 'assembly') doc.docType = 'part';
     doc.params = doc.params || []; doc.items = doc.items || [];
     if (!Array.isArray(doc.tables)) doc.tables = [];
     for (const t of doc.tables) { if (!t || typeof t !== 'object') continue; if (!Array.isArray(t.rows)) t.rows = []; }
@@ -1461,6 +1531,6 @@ const Model = (() => {
     if (aPos != null && aNeg != null) return aNeg < aPos;
     return aPos == null && aNeg != null;
   }
-  return { matchBodies, displayColor, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, railStart, railSections, bez3, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, loftParams, loftPathAngles, pathPatternParams, pathPlaces, wrapAngleInfo, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, scopeVars, itemVars, evalInfo, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  return { matchBodies, displayColor, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, railStart, railSections, bez3, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, loftParams, loftPathAngles, pathPatternParams, pathPlaces, wrapAngleInfo, useVars, tnum, tNumeric, newDoc, newAssemblyDoc, docType, isAssembly, setDocResolver, resolveDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, scopeVars, itemVars, evalInfo, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 

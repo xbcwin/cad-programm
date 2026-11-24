@@ -267,6 +267,29 @@ const Toolbar = (() => {
 
   function renderModelTools(el) {
     el.innerHTML = '';
+    if (typeof Model !== 'undefined' && Model.isAssembly && typeof App !== 'undefined' && App.doc && Model.isAssembly(App.doc)) {
+      const ins = h('button', {
+        type: 'button',
+        class: 'tool primary',
+        id: 't-insert-part',
+        'data-tip': T('asm.insertTip'),
+        'data-help': 'insertPart',
+        'aria-label': T('asm.insertBtn'),
+      });
+      ins.innerHTML = icon('parts') + `<span>${esc(T('asm.insertBtn'))}</span>`;
+      ins.addEventListener('click', () => Comp.insertPartDialog());
+      el.append(ins);
+      const map = catalogMap();
+      for (const id of ['measure', 'notes', 'views', 'check']) {
+        if (map[id]) el.append(buildToolButton(map[id], false));
+      }
+      el.append(makeMoreButton());
+      el.append(h('div', { class: 'sep' }));
+      if (map.export) el.append(buildToolButton(map.export, false));
+      if (typeof Views !== 'undefined' && Views.sync) Views.sync();
+      if (typeof Commands !== 'undefined' && Commands.syncCmdKbds) Commands.syncCmdKbds();
+      return;
+    }
     const map = catalogMap();
     const list = orderedItems().filter((id) => !!map[id]);
     const favCount = favs.filter((id) => list.includes(id)).length;

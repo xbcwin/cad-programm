@@ -1811,6 +1811,16 @@ const HELP = {
   "tip": "Seitenleiste ein- und ausklappen",
   "hilfe": "Auf schmalen Bildschirmen und am Tablet lassen sich Verlauf (links) und Eigenschaften (rechts) ein- und ausklappen, damit mehr Platz für die 3D-Ansicht bleibt. Tippe in die 3D-Ansicht oder auf das Schließen-Symbol, um die Leiste wieder einzuklappen.",
   "tipp": "Am Tablet wählt ein Antippen den Körper, und zwei Finger drehen und zoomen die Ansicht."
+ },
+ "assemblyDoc": {
+  "tip": "Baugruppe aus eigenen Bauteil-Dokumenten als Verweise zusammensetzen",
+  "hilfe": "Eine Baugruppe speichert keine Kopien deiner Bauteile, sondern nur Verweise auf deren Dokumente samt ihrer Lage im Raum. Änderst du ein Bauteil später in seinem eigenen Tab, aktualisiert sich die Baugruppe automatisch.",
+  "tipp": "Klicke im Verlauf, im Eigenschaften-Panel oder per Doppelklick auf ein eingesetztes Teil, um direkt das zugehörige Bauteil zum Bearbeiten zu öffnen."
+ },
+ "insertPart": {
+  "tip": "Ein Bauteil als Verweis mit eigener Lage in die Baugruppe einsetzen",
+  "hilfe": "Öffnet eine Liste aller gespeicherten oder in Tabs geöffneten Bauteile. Das gewählte Bauteil erscheint in der Baugruppe als Verweis und lässt sich dort frei verschieben, drehen, färben oder mehrfach einsetzen.",
+  "tipp": "Über „Bauteil öffnen“ springst du jederzeit in das Original-Bauteil, um Maße oder Skizzen zu ändern."
  }
 };
 
