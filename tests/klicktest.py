@@ -7795,6 +7795,225 @@ def t_f11240211(p):
     return [ok1, ok2]
 
 
+# ---------- [A-028] Bezugspunkte und eigenes Koordinatensystem (BZ-08, BZ-09) ----------
+def t_a028_bezugspunkte_koordinatensystem(p):
+    import zipfile, tempfile, struct, re, io
+
+    def det3(x, y, z):
+        return (
+            x[0] * (y[1] * z[2] - y[2] * z[1])
+            - x[1] * (y[0] * z[2] - y[2] * z[0])
+            + x[2] * (y[0] * z[1] - y[1] * z[0])
+        )
+
+    # 1. Kantenmitte einer 40-mm-Kante liegt bei 20 mm + Mitwandern + Ausblenden/Löschen/Rückgängig
+    p.empty()
+    p.ev("App.change('x', d=>{ const b=Model.newItem('box',{w:40,d:30,h:10},{name:'Platte'}); b.t.x=20; b.t.y=15; d.items.push(b); })")
+    warte_rechnen(p)
+    pt_mid = p.ev("""const id=App.doc.items[0].id, r=App.results.get(id);
+      const ei=r.data.edges.findIndex(g=>g.t==='LINE'&&Math.abs(g.l-40)<1e-3&&Math.abs(g.m[2]-10)<1e-3&&Math.abs(g.m[1]+15)<1e-3);
+      return { pt: Datums.addPointEdgeMid({id, edgeIdx: ei}), e: r.data.edges[ei], W: Array.from(Model.worldMatrix(App.doc, id).elements) };""")
+    p.wait(300)
+    pt0 = pt_mid['pt']['point']
+    # Weltkoordinaten der Enden der 40-mm-Kante: [0,0,10] und [40,0,10]
+    d_start = math.sqrt((pt0[0] - 0) ** 2 + (pt0[1] - 0) ** 2 + (pt0[2] - 10) ** 2)
+    d_end = math.sqrt((pt0[0] - 40) ** 2 + (pt0[1] - 0) ** 2 + (pt0[2] - 10) ** 2)
+    p.ev("App.change('x', d=>{ d.items[0].p.w=60; d.items[0].t.x=30; })"); warte_rechnen(p); p.wait(500)
+    pt_mid_m = p.ev("return App.doc.points[0].point")
+    # Ausblenden, Löschen, Rückgängig
+    p.ev("Datums.selectPoint(App.doc.points[0].id)"); p.wait(300)
+    p.pg.locator('#point-hide').click(); p.wait(300)
+    hid_ok = p.ev("return App.doc.points[0].hidden") is True and p.pg.locator('#point-tree .point-row.dim').count() == 1
+    p.pg.locator('#point-hide').click(); p.wait(300)
+    p.pg.locator('#point-del').click(); p.wait(300)
+    del_ok = p.ev("return App.doc.points.length") == 0
+    p.ev("App.undo()"); p.wait(400)
+    undo_ok = p.ev("return App.doc.points.length") == 1
+    ok1 = (
+        pt_mid['pt'] and pt_mid['pt']['base']['type'] == 'edgeMid'
+        and abs(pt0[0] - 20.0) < 1e-3 and abs(d_start - 20.0) < 1e-3 and abs(d_end - 20.0) < 1e-3
+        and abs(pt_mid_m[0] - 30.0) < 1e-3
+        and p.pg.locator('#point-tree .point-row').count() == 1
+        and hid_ok and del_ok and undo_ok
+    )
+
+    # 2. Flächenmitte & Auf Kurve bei x % (inkl. Änderung im Panel & Kreiskante)
+    p.ev("Start.newProject(true)"); p.wait(700)
+    p.ev("App.change('x', d=>{ const b=Model.newItem('box',{w:40,d:30,h:10},{name:'Block'}); b.t.x=20; b.t.y=15; d.items.push(b); })")
+    warte_rechnen(p)
+    res2 = p.ev("""const id=App.doc.items[0].id, r=App.results.get(id);
+      const fi=r.data.faces.findIndex(f=>f.t==='PLANE'&&f.n&&f.n[2]>0.99);
+      const ei=r.data.edges.findIndex(g=>g.t==='LINE'&&Math.abs(g.l-40)<1e-3&&Math.abs(g.m[2]-10)<1e-3&&Math.abs(g.m[1]+15)<1e-3);
+      return { fc: Datums.addPointFaceCenter({id, idx: fi}), cp: Datums.addPointOnCurve({id, edgeIdx: ei}, 25) };""")
+    p.wait(300)
+    cp25 = res2['cp']['point']
+    d25_a = math.hypot(cp25[0] - 0, cp25[1] - 0, cp25[2] - 10)
+    d25_b = math.hypot(cp25[0] - 40, cp25[1] - 0, cp25[2] - 10)
+    p.ev("Datums.selectPoint(App.doc.points[1].id)"); p.wait(300)
+    p.pg.fill('#point-percent', '75'); p.pg.press('#point-percent', 'Enter'); p.wait(400)
+    cp75 = p.ev("return App.doc.points[1].point")
+    d75_a = math.hypot(cp75[0] - 0, cp75[1] - 0, cp75[2] - 10)
+    d75_b = math.hypot(cp75[0] - 40, cp75[1] - 0, cp75[2] - 10)
+    # Kreiskante an Zylinder bei 50 %
+    p.ev("App.change('x', d=>{ const c=Model.newItem('cylinder',{d:20,h:12},{name:'Rolle'}); c.t.y=60; d.items.push(c); })")
+    warte_rechnen(p)
+    pt_circ = p.ev("""const id=App.doc.items[1].id, r=App.results.get(id);
+      const ei=r.data.edges.findIndex(g=>g.t==='CIRCLE'&&g.c&&Math.abs(g.c[2]-12)<1e-4);
+      return Datums.addPointOnCurve({id, edgeIdx: ei}, 50);""")
+    ok2 = (
+        res2['fc'] and near(res2['fc']['point'], [20, 15, 10], 1e-3)
+        and abs(min(d25_a, d25_b) - 10.0) < 1e-3 and abs(max(d25_a, d25_b) - 30.0) < 1e-3
+        and abs(cp75[0] - (40.0 - cp25[0])) < 1e-3 and abs(d75_a + d75_b - 40.0) < 1e-3
+        and pt_circ and abs(math.hypot(pt_circ['point'][0], pt_circ['point'][1] - 60) - 10.0) < 1e-3
+        and abs(pt_circ['point'][2] - 12.0) < 1e-3
+    )
+
+    # 3. Schnittpunkt Kante / Ebene (+ Mitwandern + parallele Kante abgelehnt)
+    p.ev("Start.newProject(true)"); p.wait(700)
+    p.ev("App.change('x', d=>{ const b=Model.newItem('box',{w:40,d:30,h:20},{name:'Turm'}); b.t.x=20; b.t.y=15; d.items.push(b); })")
+    warte_rechnen(p)
+    res3 = p.ev("""const id=App.doc.items[0].id, r=App.results.get(id);
+      const dPl=Datums.addOrigin('XY', 12, 0);
+      const eVert=r.data.edges.findIndex(g=>g.t==='LINE'&&Math.abs(g.m[0]-20)<1e-3&&Math.abs(g.m[1]-15)<1e-3&&Math.abs(g.l-20)<1e-3);
+      const eHor=r.data.edges.findIndex(g=>g.t==='LINE'&&Math.abs(g.l-40)<1e-3&&Math.abs(g.m[2]-20)<1e-3);
+      const good=Datums.addPointEdgePlane({id, edgeIdx: eVert}, dPl.id);
+      const bad=Datums.addPointEdgePlane({id, edgeIdx: eHor}, dPl.id);
+      return { dId: dPl.id, good, bad };""")
+    p.wait(300)
+    p.ev(f"Datums.set({res3['dId']!r}, {{ dist: 16 }});"); warte_rechnen(p); p.wait(400)
+    pt_int_m = p.ev("return App.doc.points[0].point")
+    # Schnitt Kante mit ebener Fläche eines zweiten Körpers (z=5)
+    p.ev("App.change('x', d=>{ const b2=Model.newItem('box',{w:20,d:20,h:5},{name:'Sockel'}); b2.t.x=-20; d.items.push(b2); })")
+    warte_rechnen(p)
+    pt_face_int = p.ev("""const id1=App.doc.items[0].id, r1=App.results.get(id1);
+      const id2=App.doc.items[1].id, r2=App.results.get(id2);
+      const eVert=r1.data.edges.findIndex(g=>g.t==='LINE'&&Math.abs(g.m[0]-20)<1e-3&&Math.abs(g.m[1]-15)<1e-3&&Math.abs(g.l-20)<1e-3);
+      const fi=r2.data.faces.findIndex(f=>f.t==='PLANE'&&f.n&&f.n[2]>0.99);
+      return Datums.addPointEdgePlane({id:id1, edgeIdx:eVert}, {id:id2, idx:fi});""")
+    ok3 = (
+        res3['bad'] is None
+        and res3['good'] and near(res3['good']['point'], [40, 30, 12], 1e-3)
+        and near(pt_int_m, [40, 30, 16], 1e-3)
+        and pt_face_int and near(pt_face_int['point'], [40, 30, 5], 1e-3)
+    )
+
+    # 4. Eigenes Koordinatensystem (Ursprung an Ecke, Achsen an Kanten) + Mitwandern + Umkehren + Abhängigkeiten
+    p.ev("Start.newProject(true)"); p.wait(700)
+    p.ev("App.change('x', d=>{ const b=Model.newItem('box',{w:40,d:30,h:10},{name:'Teil'}); b.t.x=50; b.t.y=40; b.t.z=15; d.items.push(b); })")
+    warte_rechnen(p)
+    cs_res = p.ev("""const id=App.doc.items[0].id, r=App.results.get(id), eds=r.data.edges;
+      // Lokale Ecke (-20,-15,0) entspricht Welt (30, 25, 15)
+      const ex=eds.findIndex(g=>g.t==='LINE'&&Math.abs(g.l-40)<1e-3&&Math.abs(g.m[1]+15)<1e-3&&Math.abs(g.m[2])<1e-3);
+      const ey=eds.findIndex(g=>g.t==='LINE'&&Math.abs(g.l-30)<1e-3&&Math.abs(g.m[0]+20)<1e-3&&Math.abs(g.m[2])<1e-3);
+      const eyR=eds.findIndex(g=>g.t==='LINE'&&Math.abs(g.l-30)<1e-3&&Math.abs(g.m[0]-20)<1e-3&&Math.abs(g.m[2])<1e-3);
+      const cs=Datums.addCsysFromPointEdges([30, 25, 15], {id, edgeIdx: ex}, {id, edgeIdx: ey}, 'Ecke Nullpunkt');
+      const csRot=Datums.addCsysFromPointEdges([70, 25, 15], {id, edgeIdx: eyR}, {id, edgeIdx: ex}, 'Gedreht');
+      return { cs, csRot };""")
+    p.wait(400)
+    cs0 = cs_res['cs']['csys']
+    cs_rot0 = cs_res['csRot']['csys']
+    # Quader verschieben -> KS wandert mit
+    p.ev("App.change('x', d=>{ d.items[0].t.x=60; })"); warte_rechnen(p); p.wait(500)
+    cs_moved = p.ev("return App.doc.csys[0].csys")
+    p.ev("App.change('x', d=>{ d.items[0].t.x=50; })"); warte_rechnen(p); p.wait(500)
+    # X-Achse im Panel umkehren und zurück -> bleibt rechtshändig
+    p.ev("Datums.selectCsys(App.doc.csys[0].id)"); p.wait(300)
+    p.pg.locator('#csys-flip-x').click(); p.wait(300)
+    cs_fx = p.ev("return App.doc.csys[0].csys")
+    p.pg.locator('#csys-flip-x').click(); p.wait(300)
+    deps = p.ev("return Model.dependencies(App.doc)")
+    ok4 = (
+        cs_res['cs'] and near(cs0['o'], [30, 25, 15], 1e-3)
+        and near(cs0['x'], [1, 0, 0], 1e-4) and near(cs0['y'], [0, 1, 0], 1e-4) and near(cs0['z'], [0, 0, 1], 1e-4)
+        and abs(det3(cs0['x'], cs0['y'], cs0['z']) - 1.0) < 1e-4
+        and near(cs_moved['o'], [40, 25, 15], 1e-3)
+        and near(cs_fx['x'], [-1, 0, 0], 1e-4) and abs(det3(cs_fx['x'], cs_fx['y'], cs_fx['z']) - 1.0) < 1e-4
+        and near(cs_rot0['o'], [70, 25, 15], 1e-3)
+        and near(cs_rot0['x'], [0, 1, 0], 1e-4) and near(cs_rot0['y'], [-1, 0, 0], 1e-4) and near(cs_rot0['z'], [0, 0, 1], 1e-4)
+        and p.pg.locator('#csys-tree .csys-row').count() == 2
+        and any(d.get('csys') == 'Ecke Nullpunkt' for d in deps)
+    )
+
+    # 5. Export (STEP, STL, 3MF) mit eigenem Nullpunkt -> Hüllmaße beginnen bei 0
+    p.pg.get_by_role('button', name='Exportieren').first.click(); p.wait(500)
+    cs_id = cs_res['cs']['id']
+    rot_id = cs_res['csRot']['id']
+    help_attr = p.pg.locator('#ex-csys').locator('xpath=ancestor::div[contains(@class,"field")]').get_attribute('data-help')
+    p.pg.select_option('#ex-csys', cs_id); p.wait(100)
+    p.pg.check('#ex-step'); p.pg.check('#ex-stl'); p.pg.check('#ex-mf'); p.wait(100)
+    with p.pg.expect_download(timeout=90000) as dl:
+        p.pg.get_by_role('button', name='Als ZIP speichern').click()
+    z = os.path.join(tempfile.gettempdir(), 'tracery-a028.zip'); dl.value.save_as(z)
+    zf = zipfile.ZipFile(z)
+    names = zf.namelist()
+    stl_name = next((n for n in names if n.endswith('.stl')), None)
+    mf_name = next((n for n in names if n.endswith('.3mf')), None)
+    step_name = next((n for n in names if n.endswith('.step')), None)
+
+    stl_bb = None
+    if stl_name:
+        sb = zf.read(stl_name)
+        cnt = struct.unpack('<I', sb[80:84])[0]
+        mn = [1e9, 1e9, 1e9]; mx = [-1e9, -1e9, -1e9]
+        off = 84
+        for _ in range(cnt):
+            vals = struct.unpack('<12fH', sb[off:off + 50])
+            for k in range(3):
+                vx, vy, vz = vals[3 + k * 3], vals[4 + k * 3], vals[5 + k * 3]
+                mn[0] = min(mn[0], vx); mn[1] = min(mn[1], vy); mn[2] = min(mn[2], vz)
+                mx[0] = max(mx[0], vx); mx[1] = max(mx[1], vy); mx[2] = max(mx[2], vz)
+            off += 50
+        stl_bb = mn + mx
+
+    mf_bb = None
+    if mf_name:
+        mf_zf = zipfile.ZipFile(io.BytesIO(zf.read(mf_name)))
+        xml_txt = mf_zf.read('3D/3dmodel.model').decode('utf-8')
+        mn = [1e9, 1e9, 1e9]; mx = [-1e9, -1e9, -1e9]
+        for vx, vy, vz in re.findall(r'<vertex\s+x="([^"]+)"\s+y="([^"]+)"\s+z="([^"]+)"', xml_txt):
+            x, y, z0 = float(vx), float(vy), float(vz)
+            mn[0] = min(mn[0], x); mn[1] = min(mn[1], y); mn[2] = min(mn[2], z0)
+            mx[0] = max(mx[0], x); mx[1] = max(mx[1], y); mx[2] = max(mx[2], z0)
+        mf_bb = mn + mx
+
+    # Gedrehtes KS im Kernel-Export prüfen -> [0,0,0 .. 30,40,10]
+    rot_exp = p.pg.evaluate("""async (rid) => {
+      const { Kernel } = window.__masswerk;
+      const { Model, App, Datums } = window.__M;
+      const m = Datums.csysExportMatrix(rid);
+      const rm = await Kernel.call('exportMeshes', { scene: Model.kernelScene(App.doc), fine: true, q: 1, originMat: m });
+      const v = rm.objects[0].vertices;
+      let mn=[1e9,1e9,1e9], mx=[-1e9,-1e9,-1e9];
+      for (let i=0;i<v.length;i+=3){ mn[0]=Math.min(mn[0],v[i]); mn[1]=Math.min(mn[1],v[i+1]); mn[2]=Math.min(mn[2],v[i+2]); mx[0]=Math.max(mx[0],v[i]); mx[1]=Math.max(mx[1],v[i+1]); mx[2]=Math.max(mx[2],v[i+2]); }
+      const rs = await Kernel.call('exportSTEP', { scene: Model.kernelScene(App.doc), originMat: m });
+      return { meshBb: mn.concat(mx), stepLen: rs.data.byteLength };
+    }""", rot_id)
+
+    step_bb = None
+    if step_name:
+        step_bytes = list(zf.read(step_name))
+        p.ev("App.change('x', d=>{ d.items=[]; })"); p.wait(400)
+        p.ev("const f = new File([new Uint8Array(arg)], 'Nullpunkt.step'); return Start.importCAD(f);", step_bytes)
+        warte_rechnen(p, 30)
+        step_bb = p.ev("const r=App.results.get(App.doc.items[0].id); return r && r.data.bbox")
+
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    cmds = p.ev("return Commands.list().map(c=>c.id)")
+    help_ok = (
+        help_attr == 'datumCsys'
+        and all(k in hilfen and all(f in hilfen[k] for f in ('tip', 'hilfe', 'tipp')) for k in ('datumPoint', 'datumCsys'))
+        and 'datum-point' in cmds and 'datum-csys' in cmds
+    )
+    ok5 = (
+        help_ok
+        and stl_bb is not None and near(stl_bb, [0, 0, 0, 40, 30, 10], 0.05)
+        and mf_bb is not None and near(mf_bb, [0, 0, 0, 40, 30, 10], 0.05)
+        and step_bb is not None and near(step_bb, [0, 0, 0, 40, 30, 10], 0.05)
+        and rot_exp['stepLen'] > 1000 and near(rot_exp['meshBb'], [0, 0, 0, 30, 40, 10], 0.05)
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -7922,6 +8141,7 @@ TESTS = [
     ('[A-023] Freie Stellen & Widerspruch erklären: Linie mit Länge / Wackeln & Umschalt F / 3. Maß Liste & Hervorheben / Entfernen löst / Regel- & Live-Widerspruch', t_a023_freie_stellen_widerspruch),
     ('[A-026] Eigene Schrift laden (TTF): Laden & Körper / Speichern & Neu-Laden / Kerning & Laufweite / CFF-Meldung', t_eigene_schrift),
     ('[F-11240211] Volltest-Reparatur: Schildchen ohne Re-Entranz bei überfälliger Kamera-Animation / Eigenschaften-Panel sofort bei Auswahl', t_f11240211),
+    ('[A-028] Bezugspunkte und Koordinatensystem: Kantenmitte 40 mm → 20 mm / Flächenmitte & x % / Schnitt Kante & Ebene / eigenes KS & Mitwandern / Export STEP, STL & 3MF ab Nullpunkt', t_a028_bezugspunkte_koordinatensystem),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

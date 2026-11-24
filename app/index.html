@@ -732,6 +732,10 @@ body:not(.simple) .simple-only{display:none!important}
 .datum-tree .swatch.datum svg{width:16px;height:16px}
 .datum-tree .swatch.axis{display:inline-grid;place-items:center;width:18px;height:18px;color:#0ca678;background:none}
 .datum-tree .swatch.axis svg{width:16px;height:16px}
+.datum-tree .swatch.point{display:inline-grid;place-items:center;width:18px;height:18px;color:#7950f2;background:none}
+.datum-tree .swatch.point svg{width:16px;height:16px}
+.datum-tree .swatch.csys{display:inline-grid;place-items:center;width:18px;height:18px;color:#1971c2;background:none}
+.datum-tree .swatch.csys svg{width:16px;height:16px}
 
 /* Maß nur zum Ablesen (Referenzmaß) */
 .skdim.ref { border-style: dashed; border-color: var(--faint); color: var(--ink-2); font-style: italic; }
@@ -2135,6 +2139,16 @@ const HELP = {
   "tip": "Freie Punkte und fehlende Angaben anzeigen",
   "hilfe": "Markiert alle noch beweglichen Punkte und Elemente pulsierend in Orange und zeigt die Zahl der fehlenden Angaben. Klickst du auf eine freie Stelle, wackelt sie kurz in der Richtung, in der sie noch Spiel hat.",
   "tipp": "Mit Umschalt + F schaltest du die Anzeige direkt in der Skizze ein oder aus – so siehst du sofort, wo noch ein Maß oder eine Regel fehlt."
+ },
+ "datumPoint": {
+  "tip": "Bezugspunkt als eigenen Schritt anlegen",
+  "hilfe": "Setzt einen Bezugspunkt an einer Kantenmitte, Flächenmitte, am Schnittpunkt zwischen Kante und Ebene oder bei einem Prozentwert entlang einer Kurve. Der Punkt wandert automatisch mit, wenn sich der Körper ändert.",
+  "tipp": "Du kannst jeden Bezugspunkt als Ursprung für ein eigenes Koordinatensystem, eine Bezugsebene oder eine Bezugsachse verwenden."
+ },
+ "datumCsys": {
+  "tip": "Eigenes Koordinatensystem anlegen und als Export-Nullpunkt wählen",
+  "hilfe": "Legt ein eigenes rechtshändiges Koordinatensystem mit Ursprung an einem Punkt und Achsen entlang gewählter Kanten an. Beim Exportieren (STEP, STL, 3MF, OBJ, GLB) kannst du dieses System als Nullpunkt wählen.",
+  "tipp": "Ideal für den 3D-Druck, CNC oder Baugruppen: Lege das Koordinatensystem an eine Ecke und zwei Kanten – dann beginnen die exportierten Maße genau bei 0."
  }
 };
 
@@ -2151,7 +2165,7 @@ const Bus = makeEmitter();
 
 // ---- 01-i18n.js ----
 // ================= Übersetzbare Oberfläche =================
-const TEXTS_DE = {"common.ok":"OK","common.cancel":"Abbrechen","common.close":"Schließen","common.delete":"Löschen","common.rename":"Umbenennen","common.save":"Speichern","common.name":"Name","common.body":"Körper","common.hole":"Loch","common.edit":"Bearbeiten","common.suppress":"Unterdrücken","common.unsuppress":"Wieder aktivieren","common.explainStep":"Erklär diesen Schritt","common.moveStep":"Verschieben/Drehen (Schritt)","common.duplicate":"Duplizieren","common.hide":"Ausblenden","common.isolate":"Isolieren","topbar.showTree":"Verlauf zeigen","topbar.tree":"Verlauf","topbar.brandAria":"Tracery – Startseite","topbar.workspace":"Arbeitsbereich","topbar.model":"Modell","topbar.drawing":"Zeichnung","topbar.undo":"Rückgängig","topbar.undoLabel":"Rückgängig: {label}","topbar.redo":"Wiederholen","topbar.project":"Projekt","topbar.menu":"Menü","topbar.showProps":"Eigenschaften zeigen","topbar.props":"Eigenschaften","topbar.params":"Maße","topbar.log":"Protokoll","topbar.cmdPlaceholder":"Werkzeug suchen oder beschreiben, was du bauen willst …","topbar.cmdAria":"Werkzeug suchen oder der KI beschreiben","topbar.cmdGo":"Ausführen","level.simple":"Einfach","level.pro":"Profi","level.tipSimple":"Stufe: Einfach – klicken zum Wechseln auf Profi","level.tipPro":"Stufe: Profi – klicken zum Wechseln auf Einfach","level.chooseAria":"Stufe wählen","level.simpleDesc":"wenige, große Knöpfe, alles erklärt","level.proDesc":"alle Werkzeuge, Tastenkürzel, Maus wie in deinem CAD","start.aria":"Startseite","start.subtitle":"CAD im Browser – kostenlos, ohne Konto","start.newProject":"Neues Projekt","start.openFile":"Datei öffnen","start.tourBasics":"Einführung (3 Minuten)","start.tourSketch":"Erste Skizze (5 Minuten)","start.welcomeTitle":"Wie möchtest du mit Tracery arbeiten?","start.welcomeSub":"Du kannst jederzeit oben rechts zwischen beiden Stufen wechseln.","start.surfaceAria":"Oberfläche","start.surfaceLabel":"Oberfläche:","start.simpleOption":"Einfach – für Einsteiger","start.proOption":"Profi – alle Werkzeuge","start.recentHeading":"Weiterarbeiten","start.recentMetaOne":"{n} Objekt · {date}","start.recentMetaMany":"{n} Objekte · {date}","start.deleteFromBrowserAria":"Aus dem Browser löschen","start.deleteFromBrowserTip":"Aus diesem Browser löschen","start.deleteConfirmTitle":"Projekt löschen?","start.deleteConfirmBody":"„{name}“ wird aus diesem Browser gelöscht. Gespeicherte Dateien bleiben erhalten.","start.projectMissing":"Das Projekt ist nicht mehr da.","start.templatesHeading":"Vorlagen","start.emptyTitle":"Leeres Projekt","start.emptyDesc":"Von null anfangen.","start.templateLoaded":"Vorlage geladen. Klick einen Teil an, um ihn zu ändern.","start.footHtml":"Projekte werden automatisch in diesem Browser gesichert. Zum sicheren Aufbewahren und Teilen: <b>Projekt als Datei speichern</b>.<br>Tracery rechnet mit OpenCascade (LGPL-2.1) über replicad (MIT) und zeigt 3D mit three.js (MIT).","start.tpl.box.name":"Box mit Deckel","start.tpl.box.desc":"Mit Maßen wie Wandstärke und Spiel – änderst du sie, passt sich alles an.","start.tpl.sign.name":"Schild mit Loch","start.tpl.sign.desc":"Flache Platte mit runden Ecken und einem Loch zum Aufhängen.","start.tpl.phone.name":"Handyhalter","start.tpl.phone.desc":"Schräge Lehne, Ablage vorne und ein Schlitz fürs Kabel.","start.tpl.bracket.name":"Winkel zum Anschrauben","start.tpl.bracket.desc":"L-Winkel mit Senkkopf-Schraublöchern und Versteifung.","start.tpl.gear.name":"Zahnradpaar","start.tpl.gear.desc":"Zwei passende Zahnräder mit Bohrung.","start.tpl.hinge.name":"Scharnier","start.tpl.hinge.desc":"Aus einem Stück, mit Spiel zwischen den Teilen.","tool.body":"Körper","tool.bodyTip":"Grundkörper hinzufügen – anklicken oder auf die Fläche ziehen","tool.sketch":"Skizze","tool.sketchTip":"Eine 2D-Skizze zeichnen und daraus einen Körper machen","tool.parts":"Bauteile","tool.partsTip":"Schraubenlöcher, Mutternfallen, Scharniere, Zahnräder …","tool.measure":"Messen","tool.measureTip":"Messen: Abstände, Winkel, Flächen und Durchmesser","tool.notes":"Notizen","tool.notesTip":"Notizstift: frei malen und Text hinschreiben – ohne technische Bedeutung","tool.views":"Ansicht","tool.viewsTip":"Ansicht: Schnitt, Röntgen, Explosion und Fokus-Vorschau – ändert nur die Anzeige","tool.more":"Mehr","tool.moreTip":"Weitere Werkzeuge: Messen, Notizen, Ansicht – oder alle Werkzeuge zeigen","tool.export":"Exportieren","tool.exportShort":"Export","tool.exportTip":"Als STEP, STL, 3MF, OBJ, GLB oder DXF speichern (ZIP)","tool.sheet":"Blatt","tool.sheetTip":"Blattgröße, Maßstab und Ansichten","tool.dim":"Maß","tool.dimTip":"Bemaßung hinzufügen: zwei Punkte oder einen Kreis anklicken","tool.autodim":"Automatisch bemaßen","tool.autodimShort":"Auto-Maße","tool.autodimTip":"Gesamtmaße und Bohrungen automatisch bemaßen","tool.draw2d":"2D zeichnen","tool.draw2dTip":"Linien, Kreise und Text frei auf das Blatt zeichnen","tool.dexport":"Zeichnung speichern","tool.dexportShort":"Speichern","tool.dexportTip":"Als PDF, SVG oder DXF speichern","tool.fly.bodiesTitle":"Grundkörper","tool.fly.tileTip":"Klicken fügt ihn ein, Ziehen setzt ihn genau hin","tool.fly.cylHole":"Zylinder als Loch","tool.fly.boxHole":"Quader als Loch","tool.fly.route3d":"Rohr im Raum","tool.fly.bodiesFoot":"Tipp: Jeder Körper kann mit einem Klick zum Loch werden.","tool.fly.partsTitle":"Bauteile","tool.fly.partsFoot":"Löcher auf eine Fläche ziehen – sie richten sich automatisch aus.","menu.proj.rename":"Projekt umbenennen","menu.proj.saveFile":"Als Datei speichern","menu.proj.saveInFolderNow":"Jetzt in „{name}“ speichern","menu.proj.changeFolder":"Anderen Ordner wählen …","menu.proj.disconnectFolder":"Ordner-Verbindung trennen","menu.proj.saveToFolder":"In Ordner speichern …","menu.proj.openImport":"Datei öffnen / STEP, STL, 3MF importieren …","menu.proj.versions":"Versionen …","menu.proj.newProject":"Neues Projekt","menu.proj.startAndTemplates":"Startseite und Vorlagen","menu.folder.saveNow":"Jetzt in Ordner speichern","menu.folder.changeFolder":"Anderen Ordner wählen …","menu.folder.disconnect":"Ordner-Verbindung trennen","menu.main.tourBasics":"Einführung starten","menu.main.tourSketch":"Einführung: Erste Skizze","menu.main.settings":"Einstellungen","menu.main.shortcuts":"Tastenkürzel","menu.main.export":"Exportieren","menu.main.saveImage":"Bild speichern (PNG)","menu.main.about":"Über Tracery","menu.main.aboutP1":"Tracery ist ein kostenloses, parametrisches CAD im Browser – ohne Konto, mit exaktem Geometrie-Kern und technischen Zeichnungen.","menu.main.aboutP2":"Der Name: „Tracery“ ist das englische Wort für Maßwerk – die filigranen, exakt konstruierten Ornamente in gotischen Kirchenfenstern. Genau so sollen deine Teile werden.","menu.main.aboutP3":"Gerechnet wird mit dem CAD-Kern OpenCascade (LGPL-2.1) über die Bibliothek replicad (MIT). Die 3D-Anzeige nutzt three.js (MIT), die PDF-Ausgabe jsPDF (MIT).","menu.main.aboutP4":"Deine Projekte bleiben in deinem Browser. Der KI-Helfer nutzt dein Claude-Konto.","menu.more.measure":"Messen","menu.more.notes":"Notizstift","menu.more.views":"Ansicht: Schnitt, Röntgen, Explosion …","menu.more.weakSpots":"Schwachstellen suchen","menu.more.showAllPro":"Alle Werkzeuge zeigen (Profi)","menu.view.section":"Schnitt","menu.view.xray":"Röntgen","menu.view.explode":"Explosion","menu.view.focus":"Fokus-Vorschau","menu.view.overhang":"Überhänge (3D-Druck)","menu.view.thin":"Wandstärke (3D-Druck)","menu.view.present":"Vorführen (Vollbild)","menu.view.turntable":"Drehteller-Video …","menu.view.lightPrefix":"Licht: {name}","menu.view.shadows":"Schatten","menu.view.viewBack":"Vorige Ansicht","menu.view.saveView":"Ansicht speichern …","menu.view.savedViewPrefix":"Ansicht: {name}","menu.view.disp.edges":"Flächen mit Kanten","menu.view.disp.shaded":"Nur Flächen","menu.view.disp.wire":"Drahtgitter (nur Kanten)","menu.view.disp.hidden":"Verdeckte Kanten zeigen","menu.view.look.studio":"Studio-Look (Werkstoff, Licht, Schatten)","menu.view.look.plain":"Einfach (matt, schnell)","menu.view.look.clay":"Prüfen: Ton","menu.view.look.chrome":"Prüfen: Chrom-Streifen","menu.view.mood.studio":"Studio","menu.view.mood.hell":"Hell","menu.view.mood.werkstatt":"Werkstatt","menu.select.all":"Alles","menu.select.body":"Nur Körper","menu.select.face":"Nur Flächen","menu.select.edge":"Nur Kanten","menu.select.tip":"Wählen: {name}","menu.edge.convex":"Alle äußeren Kanten","menu.edge.concave":"Alle inneren Kanten","menu.edge.all":"Alle Kanten","menu.edge.faceSelect":"Alle {n} Kanten wählen","menu.edge.faceFillet":"Alle abrunden ({v})","menu.edge.faceChamfer":"Alle abschrägen ({v})","menu.edge.faceNone":"An dieser Fläche habe ich keine Kanten gefunden.","menu.ctx.editSketch":"Skizze bearbeiten","menu.ctx.lookAtFace":"Blick senkrecht auf die Fläche","menu.ctx.faceDxf":"Fläche als DXF speichern","menu.ctx.faceSvg":"Fläche als SVG speichern","menu.ctx.sketchOnFace":"Skizze auf dieser Fläche","menu.ctx.markThread":"Gewinde markieren …","menu.ctx.dupLinked":"Verknüpft duplizieren","menu.ctx.toSolid":"Zum Körper machen","menu.ctx.toHole":"Zum Loch machen","menu.ctx.selectSimilar":"Ähnliche wählen","menu.ctx.zoomFit":"Heranzoomen","menu.ctx.saveSelection":"Auswahl speichern …","menu.ctx.behind":"Dahinter wählen: „{name}“","menu.ctx.showAll":"Alles einblenden","menu.ctx.showAllCount":"Alles einblenden ({n})","menu.ctx.selectAll":"Alles wählen","menu.ctx.fitAll":"Alles zeigen","menu.ctx.selSet":"Auswahl: {name}","menu.ctx.viewBack":"Vorige Ansicht","menu.ctx.newSketch":"Neue Skizze","menu.ctx.saveImage":"Bild speichern (PNG)","menu.ctx.repeat":"Wiederholen: {label}","menu.tl.markerAfter":"Marker hinter diesen Schritt","menu.tl.markerBefore":"Marker vor diesen Schritt","menu.draw.line":"Linie","menu.draw.rect":"Rechteck","menu.draw.circle":"Kreis","menu.draw.text":"Text","menu.draw.clearAll":"Alles Gezeichnete löschen","menu.draw.clearTitle":"Gezeichnetes löschen?","menu.draw.clearBody":"Alle frei gezeichneten Linien und Texte werden entfernt.","menu.draw.sheet":"Blatt","menu.draw.orient":"Ausrichtung","menu.draw.landscape":"Quer","menu.draw.portrait":"Hoch","menu.draw.scale":"Maßstab","menu.draw.scaleAuto":"Automatisch","menu.draw.viewsHeading":"Ansichten","menu.draw.vFront":"Vorderansicht","menu.draw.vTop":"Draufsicht","menu.draw.vLeft":"Seitenansicht von links","menu.draw.vIso":"Isometrie (3D-Bild)","menu.draw.hiddenEdges":"Verdeckte Kanten (gestrichelt)","menu.draw.centers":"Mittellinien","menu.draw.exportPdf":"Als PDF speichern","menu.draw.exportSvg":"Als SVG speichern","menu.draw.exportDxf":"Als DXF speichern (ZIP)","ctx.toolbarAria":"Aktionen","ctx.suppressed":"Unterdrückt","ctx.behindMarker":"Hinter dem Marker","ctx.enableAgain":"Wieder einschalten","ctx.enableAgainTip":"Diesen Schritt wieder mitrechnen","ctx.markerAfter":"Marker dahinter","ctx.markerAfterTip":"Den Marker hinter diesen Schritt ziehen – dann wird er wieder mitgerechnet","ctx.moveStepLabel":"Verschieben/Drehen","ctx.targetBody":"Zielkörper","ctx.targetBodyTip":"Zum Zielkörper wechseln","ctx.suppressTip":"Diesen Schritt unterdrücken – der Körper springt zurück","ctx.deleteTip":"Löschen (Entf)","ctx.copyValTip":"{tip} – klicken kopiert den Wert","ctx.edgeDia":"Kante Ø","ctx.edgeDiaTip":"Kreis mit Radius {r}, Umfang {total}","ctx.edgeOne":"Kante","ctx.edgesCount":"{n} Kanten","ctx.edgesTotalTip":"Gesamtlänge der gewählten Kanten","ctx.edgeLenTip":"Länge der Kante","ctx.edgeArcTip":"Länge der Kante (Bogen, R {r})","ctx.fillet":"Abrunden","ctx.filletTip":"Kante abrunden (1 mm, danach änderbar)","ctx.chamfer":"Abschrägen","ctx.chamferTip":"Kante abschrägen (1 mm, danach änderbar)","ctx.similar":"Ähnliche","ctx.similarEdgesTip":"Alle gleich langen Kanten dazuwählen (A)","ctx.chain":"Kette","ctx.chainTip":"Alle Kanten dazuwählen, die ohne Knick weiterlaufen (z. B. ein gerundeter Umriss)","ctx.byKind":"Nach Art","ctx.byKindTip":"Alle äußeren oder alle inneren Kanten dieses Teils wählen","ctx.planeAngle":"Ebene im Winkel","ctx.planeAngleTip":"Bezugsebene durch diese Kante im Winkel zu einer Fläche anlegen","ctx.planeNormal":"Ebene senkrecht","ctx.planeNormalTip":"Bezugsebene senkrecht auf diese Kante (in der Mitte, danach änderbar)","ctx.planeTwoEdges":"Ebene durch 2 Kanten","ctx.planeTwoEdgesTip":"Bezugsebene durch beide gewählten geraden Kanten anlegen","ctx.planeTangent":"Ebene tangential","ctx.planeTangentTip":"Bezugsebene tangential an diese runde Fläche anlegen","ctx.face":"Fläche","ctx.sketchHere":"Skizze hierauf","ctx.sketchHereTip":"Auf dieser Fläche zeichnen","ctx.hole":"Bohrung","ctx.holeTip":"Bohrungs-Assistent: Durchgang, Kernloch, Sackloch mit Spitze, Passbohrung H7, Zentrierbohrung, Einsatz oder Mutternfalle","ctx.extrude":"Hochziehen","ctx.extrudeTip":"Die Fläche herausziehen oder hineindrücken","ctx.faceEdges":"Ihre Kanten","ctx.faceEdgesTip":"Alle Kanten dieser Fläche wählen, abrunden oder abschrägen","ctx.shell":"Aushöhlen","ctx.shellTip":"Körper aushöhlen – diese Fläche wird die Öffnung","ctx.sectionHere":"Schnitt hier","ctx.sectionHereTip":"Schnitt parallel zu dieser Fläche – den Abstand stellst du in der Schnitt-Leiste ein","ctx.mirrorFace":"An Fläche spiegeln","ctx.mirrorFaceTip":"Gespiegelte Kopie an dieser Fläche – z. B. die zweite Hälfte eines symmetrischen Teils","ctx.sphereDia":"Kugel Ø","ctx.roundFaceDia":"Runde Fläche Ø","ctx.roundFaceDiaTip":"Radius {r}","ctx.roundFace":"Runde Fläche","ctx.holeRoundTip":"Bohrungs-Assistent: Loch senkrecht in die runde Fläche (Schraube, Sackloch, Passbohrung H7, Zentrierung …) – der Magnet rastet ganz oben, an den Seiten und in der Mitte ein","ctx.threadEdit":"Gewinde ändern","ctx.threadMark":"Gewinde markieren","ctx.threadTip":"Kosmetisches Gewinde auf dieser runden Fläche markieren (rechnet schnell)","ctx.axis":"Achse","ctx.axisTip":"Bezugsachse durch die Mitte dieser runden Fläche anlegen","ctx.toBody":"Zum Körper","ctx.toHole":"Zum Loch","ctx.toBodyTip":"Wieder zum festen Körper machen (H)","ctx.toHoleTip":"Zum Loch machen – schneidet dann in andere Körper (H)","ctx.rotate":"Drehen","ctx.rotateTip":"Um 90° drehen oder kippen","ctx.rotZ":"Um 90° drehen (flach)","ctx.rotX":"Nach vorne kippen","ctx.rotY":"Zur Seite kippen","ctx.mirror":"Spiegeln","ctx.mirrorTip":"Spiegeln","ctx.mirrorX":"Links ↔ rechts","ctx.mirrorY":"Vorne ↔ hinten","ctx.mirrorZ":"Oben ↔ unten","ctx.dupTip":"Duplizieren (Strg D)","ctx.moveStep":"Verschieben/Drehen","ctx.moveStepTip":"Als Schritt verschieben, drehen oder kopieren (bleibt im Verlauf änderbar)","ctx.pattern":"Muster","ctx.patternHoleTip":"Loch als Muster oder gespiegelt vervielfachen","ctx.patternTip":"Muster oder gespiegelte Kopie","ctx.patRect":"Rechteckmuster","ctx.patCirc":"Kreismuster","ctx.patPath":"Muster entlang Kurve","ctx.patMirror":"Gespiegelte Kopie","ctx.split":"Teilen","ctx.splitTip":"Körper an einer Ebene teilen","ctx.toTip":"Zur Spitze","ctx.toTipTip":"Den Umriss zu einer Spitze zusammenlaufen lassen (Übergang mit Spitze)","ctx.similarPartsTip":"Alle gleichen Teile wählen (A)","ctx.selectEdges":"Kanten wählen","ctx.selectEdgesTip":"Alle äußeren, alle inneren oder alle Kanten dieses Teils wählen – dann zusammen abrunden","ctx.ungroup":"Gruppe lösen","ctx.ungroupTip":"Gruppe lösen","ctx.group":"Gruppieren","ctx.groupTip":"Zu einem Körper verbinden (Strg G)","ctx.gap":"Abstand","ctx.gapTip":"Abstand zwischen den beiden Teilen genau setzen (der zuletzt gewählte bewegt sich)","ctx.joint":"Gelenk","ctx.jointTip":"Drehgelenk: das zuletzt gewählte Teil dreht sich um eine Achse, die du im Bild wählst","ctx.loft":"Übergang","ctx.loftTip":"Weicher Übergang durch die Umrisse – in der Reihenfolge, in der du sie gewählt hast","ctx.boolean":"Boolesch","ctx.booleanTip":"Körper vereinigen, abziehen oder schneiden","ctx.boolUnion":"Vereinigen","ctx.boolSub":"Abziehen (der zuerst gewählte bleibt)","ctx.boolInt":"Schnittmenge","ctx.align":"Ausrichten","ctx.alignTip":"Objekte aneinander ausrichten","ctx.alignLeft":"Links bündig","ctx.alignCx":"Mittig (X)","ctx.alignRight":"Rechts bündig","ctx.alignFront":"Vorne bündig","ctx.alignCy":"Mittig (Y)","ctx.alignBack":"Hinten bündig","ctx.alignBottom":"Unten bündig"};
+const TEXTS_DE = {"common.ok":"OK","common.cancel":"Abbrechen","common.close":"Schließen","common.delete":"Löschen","common.rename":"Umbenennen","common.save":"Speichern","common.name":"Name","common.body":"Körper","common.hole":"Loch","common.edit":"Bearbeiten","common.suppress":"Unterdrücken","common.unsuppress":"Wieder aktivieren","common.explainStep":"Erklär diesen Schritt","common.moveStep":"Verschieben/Drehen (Schritt)","common.duplicate":"Duplizieren","common.hide":"Ausblenden","common.isolate":"Isolieren","topbar.showTree":"Verlauf zeigen","topbar.tree":"Verlauf","topbar.brandAria":"Tracery – Startseite","topbar.workspace":"Arbeitsbereich","topbar.model":"Modell","topbar.drawing":"Zeichnung","topbar.undo":"Rückgängig","topbar.undoLabel":"Rückgängig: {label}","topbar.redo":"Wiederholen","topbar.project":"Projekt","topbar.menu":"Menü","topbar.showProps":"Eigenschaften zeigen","topbar.props":"Eigenschaften","topbar.params":"Maße","topbar.log":"Protokoll","topbar.cmdPlaceholder":"Werkzeug suchen oder beschreiben, was du bauen willst …","topbar.cmdAria":"Werkzeug suchen oder der KI beschreiben","topbar.cmdGo":"Ausführen","level.simple":"Einfach","level.pro":"Profi","level.tipSimple":"Stufe: Einfach – klicken zum Wechseln auf Profi","level.tipPro":"Stufe: Profi – klicken zum Wechseln auf Einfach","level.chooseAria":"Stufe wählen","level.simpleDesc":"wenige, große Knöpfe, alles erklärt","level.proDesc":"alle Werkzeuge, Tastenkürzel, Maus wie in deinem CAD","start.aria":"Startseite","start.subtitle":"CAD im Browser – kostenlos, ohne Konto","start.newProject":"Neues Projekt","start.openFile":"Datei öffnen","start.tourBasics":"Einführung (3 Minuten)","start.tourSketch":"Erste Skizze (5 Minuten)","start.welcomeTitle":"Wie möchtest du mit Tracery arbeiten?","start.welcomeSub":"Du kannst jederzeit oben rechts zwischen beiden Stufen wechseln.","start.surfaceAria":"Oberfläche","start.surfaceLabel":"Oberfläche:","start.simpleOption":"Einfach – für Einsteiger","start.proOption":"Profi – alle Werkzeuge","start.recentHeading":"Weiterarbeiten","start.recentMetaOne":"{n} Objekt · {date}","start.recentMetaMany":"{n} Objekte · {date}","start.deleteFromBrowserAria":"Aus dem Browser löschen","start.deleteFromBrowserTip":"Aus diesem Browser löschen","start.deleteConfirmTitle":"Projekt löschen?","start.deleteConfirmBody":"„{name}“ wird aus diesem Browser gelöscht. Gespeicherte Dateien bleiben erhalten.","start.projectMissing":"Das Projekt ist nicht mehr da.","start.templatesHeading":"Vorlagen","start.emptyTitle":"Leeres Projekt","start.emptyDesc":"Von null anfangen.","start.templateLoaded":"Vorlage geladen. Klick einen Teil an, um ihn zu ändern.","start.footHtml":"Projekte werden automatisch in diesem Browser gesichert. Zum sicheren Aufbewahren und Teilen: <b>Projekt als Datei speichern</b>.<br>Tracery rechnet mit OpenCascade (LGPL-2.1) über replicad (MIT) und zeigt 3D mit three.js (MIT).","start.tpl.box.name":"Box mit Deckel","start.tpl.box.desc":"Mit Maßen wie Wandstärke und Spiel – änderst du sie, passt sich alles an.","start.tpl.sign.name":"Schild mit Loch","start.tpl.sign.desc":"Flache Platte mit runden Ecken und einem Loch zum Aufhängen.","start.tpl.phone.name":"Handyhalter","start.tpl.phone.desc":"Schräge Lehne, Ablage vorne und ein Schlitz fürs Kabel.","start.tpl.bracket.name":"Winkel zum Anschrauben","start.tpl.bracket.desc":"L-Winkel mit Senkkopf-Schraublöchern und Versteifung.","start.tpl.gear.name":"Zahnradpaar","start.tpl.gear.desc":"Zwei passende Zahnräder mit Bohrung.","start.tpl.hinge.name":"Scharnier","start.tpl.hinge.desc":"Aus einem Stück, mit Spiel zwischen den Teilen.","tool.body":"Körper","tool.bodyTip":"Grundkörper hinzufügen – anklicken oder auf die Fläche ziehen","tool.sketch":"Skizze","tool.sketchTip":"Eine 2D-Skizze zeichnen und daraus einen Körper machen","tool.parts":"Bauteile","tool.partsTip":"Schraubenlöcher, Mutternfallen, Scharniere, Zahnräder …","tool.measure":"Messen","tool.measureTip":"Messen: Abstände, Winkel, Flächen und Durchmesser","tool.notes":"Notizen","tool.notesTip":"Notizstift: frei malen und Text hinschreiben – ohne technische Bedeutung","tool.views":"Ansicht","tool.viewsTip":"Ansicht: Schnitt, Röntgen, Explosion und Fokus-Vorschau – ändert nur die Anzeige","tool.more":"Mehr","tool.moreTip":"Weitere Werkzeuge: Messen, Notizen, Ansicht – oder alle Werkzeuge zeigen","tool.export":"Exportieren","tool.exportShort":"Export","tool.exportTip":"Als STEP, STL, 3MF, OBJ, GLB oder DXF speichern (ZIP)","tool.sheet":"Blatt","tool.sheetTip":"Blattgröße, Maßstab und Ansichten","tool.dim":"Maß","tool.dimTip":"Bemaßung hinzufügen: zwei Punkte oder einen Kreis anklicken","tool.autodim":"Automatisch bemaßen","tool.autodimShort":"Auto-Maße","tool.autodimTip":"Gesamtmaße und Bohrungen automatisch bemaßen","tool.draw2d":"2D zeichnen","tool.draw2dTip":"Linien, Kreise und Text frei auf das Blatt zeichnen","tool.dexport":"Zeichnung speichern","tool.dexportShort":"Speichern","tool.dexportTip":"Als PDF, SVG oder DXF speichern","tool.fly.bodiesTitle":"Grundkörper","tool.fly.tileTip":"Klicken fügt ihn ein, Ziehen setzt ihn genau hin","tool.fly.cylHole":"Zylinder als Loch","tool.fly.boxHole":"Quader als Loch","tool.fly.route3d":"Rohr im Raum","tool.fly.bodiesFoot":"Tipp: Jeder Körper kann mit einem Klick zum Loch werden.","tool.fly.partsTitle":"Bauteile","tool.fly.partsFoot":"Löcher auf eine Fläche ziehen – sie richten sich automatisch aus.","menu.proj.rename":"Projekt umbenennen","menu.proj.saveFile":"Als Datei speichern","menu.proj.saveInFolderNow":"Jetzt in „{name}“ speichern","menu.proj.changeFolder":"Anderen Ordner wählen …","menu.proj.disconnectFolder":"Ordner-Verbindung trennen","menu.proj.saveToFolder":"In Ordner speichern …","menu.proj.openImport":"Datei öffnen / STEP, STL, 3MF importieren …","menu.proj.versions":"Versionen …","menu.proj.newProject":"Neues Projekt","menu.proj.startAndTemplates":"Startseite und Vorlagen","menu.folder.saveNow":"Jetzt in Ordner speichern","menu.folder.changeFolder":"Anderen Ordner wählen …","menu.folder.disconnect":"Ordner-Verbindung trennen","menu.main.tourBasics":"Einführung starten","menu.main.tourSketch":"Einführung: Erste Skizze","menu.main.settings":"Einstellungen","menu.main.shortcuts":"Tastenkürzel","menu.main.export":"Exportieren","menu.main.saveImage":"Bild speichern (PNG)","menu.main.about":"Über Tracery","menu.main.aboutP1":"Tracery ist ein kostenloses, parametrisches CAD im Browser – ohne Konto, mit exaktem Geometrie-Kern und technischen Zeichnungen.","menu.main.aboutP2":"Der Name: „Tracery“ ist das englische Wort für Maßwerk – die filigranen, exakt konstruierten Ornamente in gotischen Kirchenfenstern. Genau so sollen deine Teile werden.","menu.main.aboutP3":"Gerechnet wird mit dem CAD-Kern OpenCascade (LGPL-2.1) über die Bibliothek replicad (MIT). Die 3D-Anzeige nutzt three.js (MIT), die PDF-Ausgabe jsPDF (MIT).","menu.main.aboutP4":"Deine Projekte bleiben in deinem Browser. Der KI-Helfer nutzt dein Claude-Konto.","menu.more.measure":"Messen","menu.more.notes":"Notizstift","menu.more.views":"Ansicht: Schnitt, Röntgen, Explosion …","menu.more.weakSpots":"Schwachstellen suchen","menu.more.showAllPro":"Alle Werkzeuge zeigen (Profi)","menu.view.section":"Schnitt","menu.view.xray":"Röntgen","menu.view.explode":"Explosion","menu.view.focus":"Fokus-Vorschau","menu.view.overhang":"Überhänge (3D-Druck)","menu.view.thin":"Wandstärke (3D-Druck)","menu.view.present":"Vorführen (Vollbild)","menu.view.turntable":"Drehteller-Video …","menu.view.lightPrefix":"Licht: {name}","menu.view.shadows":"Schatten","menu.view.viewBack":"Vorige Ansicht","menu.view.saveView":"Ansicht speichern …","menu.view.savedViewPrefix":"Ansicht: {name}","menu.view.disp.edges":"Flächen mit Kanten","menu.view.disp.shaded":"Nur Flächen","menu.view.disp.wire":"Drahtgitter (nur Kanten)","menu.view.disp.hidden":"Verdeckte Kanten zeigen","menu.view.look.studio":"Studio-Look (Werkstoff, Licht, Schatten)","menu.view.look.plain":"Einfach (matt, schnell)","menu.view.look.clay":"Prüfen: Ton","menu.view.look.chrome":"Prüfen: Chrom-Streifen","menu.view.mood.studio":"Studio","menu.view.mood.hell":"Hell","menu.view.mood.werkstatt":"Werkstatt","menu.select.all":"Alles","menu.select.body":"Nur Körper","menu.select.face":"Nur Flächen","menu.select.edge":"Nur Kanten","menu.select.tip":"Wählen: {name}","menu.edge.convex":"Alle äußeren Kanten","menu.edge.concave":"Alle inneren Kanten","menu.edge.all":"Alle Kanten","menu.edge.faceSelect":"Alle {n} Kanten wählen","menu.edge.faceFillet":"Alle abrunden ({v})","menu.edge.faceChamfer":"Alle abschrägen ({v})","menu.edge.faceNone":"An dieser Fläche habe ich keine Kanten gefunden.","menu.ctx.editSketch":"Skizze bearbeiten","menu.ctx.lookAtFace":"Blick senkrecht auf die Fläche","menu.ctx.faceDxf":"Fläche als DXF speichern","menu.ctx.faceSvg":"Fläche als SVG speichern","menu.ctx.sketchOnFace":"Skizze auf dieser Fläche","menu.ctx.markThread":"Gewinde markieren …","menu.ctx.dupLinked":"Verknüpft duplizieren","menu.ctx.toSolid":"Zum Körper machen","menu.ctx.toHole":"Zum Loch machen","menu.ctx.selectSimilar":"Ähnliche wählen","menu.ctx.zoomFit":"Heranzoomen","menu.ctx.saveSelection":"Auswahl speichern …","menu.ctx.behind":"Dahinter wählen: „{name}“","menu.ctx.showAll":"Alles einblenden","menu.ctx.showAllCount":"Alles einblenden ({n})","menu.ctx.selectAll":"Alles wählen","menu.ctx.fitAll":"Alles zeigen","menu.ctx.selSet":"Auswahl: {name}","menu.ctx.viewBack":"Vorige Ansicht","menu.ctx.newSketch":"Neue Skizze","menu.ctx.saveImage":"Bild speichern (PNG)","menu.ctx.repeat":"Wiederholen: {label}","menu.tl.markerAfter":"Marker hinter diesen Schritt","menu.tl.markerBefore":"Marker vor diesen Schritt","menu.draw.line":"Linie","menu.draw.rect":"Rechteck","menu.draw.circle":"Kreis","menu.draw.text":"Text","menu.draw.clearAll":"Alles Gezeichnete löschen","menu.draw.clearTitle":"Gezeichnetes löschen?","menu.draw.clearBody":"Alle frei gezeichneten Linien und Texte werden entfernt.","menu.draw.sheet":"Blatt","menu.draw.orient":"Ausrichtung","menu.draw.landscape":"Quer","menu.draw.portrait":"Hoch","menu.draw.scale":"Maßstab","menu.draw.scaleAuto":"Automatisch","menu.draw.viewsHeading":"Ansichten","menu.draw.vFront":"Vorderansicht","menu.draw.vTop":"Draufsicht","menu.draw.vLeft":"Seitenansicht von links","menu.draw.vIso":"Isometrie (3D-Bild)","menu.draw.hiddenEdges":"Verdeckte Kanten (gestrichelt)","menu.draw.centers":"Mittellinien","menu.draw.exportPdf":"Als PDF speichern","menu.draw.exportSvg":"Als SVG speichern","menu.draw.exportDxf":"Als DXF speichern (ZIP)","ctx.toolbarAria":"Aktionen","ctx.suppressed":"Unterdrückt","ctx.behindMarker":"Hinter dem Marker","ctx.enableAgain":"Wieder einschalten","ctx.enableAgainTip":"Diesen Schritt wieder mitrechnen","ctx.markerAfter":"Marker dahinter","ctx.markerAfterTip":"Den Marker hinter diesen Schritt ziehen – dann wird er wieder mitgerechnet","ctx.moveStepLabel":"Verschieben/Drehen","ctx.targetBody":"Zielkörper","ctx.targetBodyTip":"Zum Zielkörper wechseln","ctx.suppressTip":"Diesen Schritt unterdrücken – der Körper springt zurück","ctx.deleteTip":"Löschen (Entf)","ctx.copyValTip":"{tip} – klicken kopiert den Wert","ctx.edgeDia":"Kante Ø","ctx.edgeDiaTip":"Kreis mit Radius {r}, Umfang {total}","ctx.edgeOne":"Kante","ctx.edgesCount":"{n} Kanten","ctx.edgesTotalTip":"Gesamtlänge der gewählten Kanten","ctx.edgeLenTip":"Länge der Kante","ctx.edgeArcTip":"Länge der Kante (Bogen, R {r})","ctx.fillet":"Abrunden","ctx.filletTip":"Kante abrunden (1 mm, danach änderbar)","ctx.chamfer":"Abschrägen","ctx.chamferTip":"Kante abschrägen (1 mm, danach änderbar)","ctx.similar":"Ähnliche","ctx.similarEdgesTip":"Alle gleich langen Kanten dazuwählen (A)","ctx.chain":"Kette","ctx.chainTip":"Alle Kanten dazuwählen, die ohne Knick weiterlaufen (z. B. ein gerundeter Umriss)","ctx.byKind":"Nach Art","ctx.byKindTip":"Alle äußeren oder alle inneren Kanten dieses Teils wählen","ctx.planeAngle":"Ebene im Winkel","ctx.planeAngleTip":"Bezugsebene durch diese Kante im Winkel zu einer Fläche anlegen","ctx.planeNormal":"Ebene senkrecht","ctx.planeNormalTip":"Bezugsebene senkrecht auf diese Kante (in der Mitte, danach änderbar)","ctx.planeTwoEdges":"Ebene durch 2 Kanten","ctx.planeTwoEdgesTip":"Bezugsebene durch beide gewählten geraden Kanten anlegen","ctx.planeTangent":"Ebene tangential","ctx.planeTangentTip":"Bezugsebene tangential an diese runde Fläche anlegen","ctx.pointEdgeMid":"Punkt Kantenmitte","ctx.pointEdgeMidTip":"Bezugspunkt genau in der Mitte dieser Kante anlegen","ctx.pointFaceCenter":"Punkt Flächenmitte","ctx.pointFaceCenterTip":"Bezugspunkt in der Mitte dieser Fläche anlegen","ctx.face":"Fläche","ctx.sketchHere":"Skizze hierauf","ctx.sketchHereTip":"Auf dieser Fläche zeichnen","ctx.hole":"Bohrung","ctx.holeTip":"Bohrungs-Assistent: Durchgang, Kernloch, Sackloch mit Spitze, Passbohrung H7, Zentrierbohrung, Einsatz oder Mutternfalle","ctx.extrude":"Hochziehen","ctx.extrudeTip":"Die Fläche herausziehen oder hineindrücken","ctx.faceEdges":"Ihre Kanten","ctx.faceEdgesTip":"Alle Kanten dieser Fläche wählen, abrunden oder abschrägen","ctx.shell":"Aushöhlen","ctx.shellTip":"Körper aushöhlen – diese Fläche wird die Öffnung","ctx.sectionHere":"Schnitt hier","ctx.sectionHereTip":"Schnitt parallel zu dieser Fläche – den Abstand stellst du in der Schnitt-Leiste ein","ctx.mirrorFace":"An Fläche spiegeln","ctx.mirrorFaceTip":"Gespiegelte Kopie an dieser Fläche – z. B. die zweite Hälfte eines symmetrischen Teils","ctx.sphereDia":"Kugel Ø","ctx.roundFaceDia":"Runde Fläche Ø","ctx.roundFaceDiaTip":"Radius {r}","ctx.roundFace":"Runde Fläche","ctx.holeRoundTip":"Bohrungs-Assistent: Loch senkrecht in die runde Fläche (Schraube, Sackloch, Passbohrung H7, Zentrierung …) – der Magnet rastet ganz oben, an den Seiten und in der Mitte ein","ctx.threadEdit":"Gewinde ändern","ctx.threadMark":"Gewinde markieren","ctx.threadTip":"Kosmetisches Gewinde auf dieser runden Fläche markieren (rechnet schnell)","ctx.axis":"Achse","ctx.axisTip":"Bezugsachse durch die Mitte dieser runden Fläche anlegen","ctx.toBody":"Zum Körper","ctx.toHole":"Zum Loch","ctx.toBodyTip":"Wieder zum festen Körper machen (H)","ctx.toHoleTip":"Zum Loch machen – schneidet dann in andere Körper (H)","ctx.rotate":"Drehen","ctx.rotateTip":"Um 90° drehen oder kippen","ctx.rotZ":"Um 90° drehen (flach)","ctx.rotX":"Nach vorne kippen","ctx.rotY":"Zur Seite kippen","ctx.mirror":"Spiegeln","ctx.mirrorTip":"Spiegeln","ctx.mirrorX":"Links ↔ rechts","ctx.mirrorY":"Vorne ↔ hinten","ctx.mirrorZ":"Oben ↔ unten","ctx.dupTip":"Duplizieren (Strg D)","ctx.moveStep":"Verschieben/Drehen","ctx.moveStepTip":"Als Schritt verschieben, drehen oder kopieren (bleibt im Verlauf änderbar)","ctx.pattern":"Muster","ctx.patternHoleTip":"Loch als Muster oder gespiegelt vervielfachen","ctx.patternTip":"Muster oder gespiegelte Kopie","ctx.patRect":"Rechteckmuster","ctx.patCirc":"Kreismuster","ctx.patPath":"Muster entlang Kurve","ctx.patMirror":"Gespiegelte Kopie","ctx.split":"Teilen","ctx.splitTip":"Körper an einer Ebene teilen","ctx.toTip":"Zur Spitze","ctx.toTipTip":"Den Umriss zu einer Spitze zusammenlaufen lassen (Übergang mit Spitze)","ctx.similarPartsTip":"Alle gleichen Teile wählen (A)","ctx.selectEdges":"Kanten wählen","ctx.selectEdgesTip":"Alle äußeren, alle inneren oder alle Kanten dieses Teils wählen – dann zusammen abrunden","ctx.ungroup":"Gruppe lösen","ctx.ungroupTip":"Gruppe lösen","ctx.group":"Gruppieren","ctx.groupTip":"Zu einem Körper verbinden (Strg G)","ctx.gap":"Abstand","ctx.gapTip":"Abstand zwischen den beiden Teilen genau setzen (der zuletzt gewählte bewegt sich)","ctx.joint":"Gelenk","ctx.jointTip":"Drehgelenk: das zuletzt gewählte Teil dreht sich um eine Achse, die du im Bild wählst","ctx.loft":"Übergang","ctx.loftTip":"Weicher Übergang durch die Umrisse – in der Reihenfolge, in der du sie gewählt hast","ctx.boolean":"Boolesch","ctx.booleanTip":"Körper vereinigen, abziehen oder schneiden","ctx.boolUnion":"Vereinigen","ctx.boolSub":"Abziehen (der zuerst gewählte bleibt)","ctx.boolInt":"Schnittmenge","ctx.align":"Ausrichten","ctx.alignTip":"Objekte aneinander ausrichten","ctx.alignLeft":"Links bündig","ctx.alignCx":"Mittig (X)","ctx.alignRight":"Rechts bündig","ctx.alignFront":"Vorne bündig","ctx.alignCy":"Mittig (Y)","ctx.alignBack":"Hinten bündig","ctx.alignBottom":"Unten bündig"};
 
 const I18n = (() => {
   let lang = 'de';
@@ -2947,6 +2961,21 @@ const Model = (() => {
         if (b.bindA && b.bindA.id) out.push({ from: 'axis:' + ax.id, to: top(b.bindA.id), what: 'Bezugsachse an', axis: ax.name });
         if (b.bindB && b.bindB.id) out.push({ from: 'axis:' + ax.id, to: top(b.bindB.id), what: 'Bezugsachse an', axis: ax.name });
       }
+    }
+    for (const pt of doc.points || []) {
+      const b = pt.base || {};
+      if ((b.type === 'edgeMid' || b.type === 'curvePercent') && b.edgeId) out.push({ from: 'point:' + pt.id, to: top(b.edgeId), what: 'Bezugspunkt an', point: pt.name });
+      else if (b.type === 'faceCenter' && b.id) out.push({ from: 'point:' + pt.id, to: top(b.id), what: 'Bezugspunkt an', point: pt.name });
+      else if (b.type === 'edgePlaneIntersect') {
+        if (b.edgeId) out.push({ from: 'point:' + pt.id, to: top(b.edgeId), what: 'Bezugspunkt an', point: pt.name });
+        if (b.planeRef && b.planeRef.kind === 'face' && b.planeRef.id) out.push({ from: 'point:' + pt.id, to: top(b.planeRef.id), what: 'Bezugspunkt an', point: pt.name });
+      }
+    }
+    for (const cs of doc.csys || []) {
+      const b = cs.base || {};
+      if (b.originBind && b.originBind.id) out.push({ from: 'csys:' + cs.id, to: top(b.originBind.id), what: 'Koordinatensystem an', csys: cs.name });
+      if (b.xEdge && b.xEdge.id) out.push({ from: 'csys:' + cs.id, to: top(b.xEdge.id), what: 'Koordinatensystem an', csys: cs.name });
+      if (b.yEdge && b.yEdge.id) out.push({ from: 'csys:' + cs.id, to: top(b.yEdge.id), what: 'Koordinatensystem an', csys: cs.name });
     }
     const seen = new Set();
     return out.filter((x) => { if (x.from === x.to) return false; const k = x.from + '|' + x.to + '|' + x.what; if (seen.has(k)) return false; seen.add(k); return true; });
@@ -9076,7 +9105,7 @@ const Actions = (() => {
     });
     App.select([]);
     if (hit.length) {
-      const names = [...new Set(hit.map((x) => (x.datum ? `Bezugsebene „${x.datum}“` : `„${Model.label((Model.find(App.doc, x.from) || { item: {} }).item)}“`)))];
+      const names = [...new Set(hit.map((x) => (x.datum ? `Bezugsebene „${x.datum}“` : x.axis ? `Bezugsachse „${x.axis}“` : x.point ? `Bezugspunkt „${x.point}“` : x.csys ? `Koordinatensystem „${x.csys}“` : `„${Model.label((Model.find(App.doc, x.from) || { item: {} }).item)}“`)))];
       UI.toast(`Daran hingen ${names.slice(0, 3).join(', ')}${names.length > 3 ? ' …' : ''} – sie behalten ihre letzte Form. Rückgängig holt alles zurück.`, { icon: 'warn', ms: 6000 });
     }
   }
@@ -10098,15 +10127,32 @@ const Features = (() => {
 //   roundEdge  – durch die Mitte einer kreisförmigen Kante
 //   faceNormal – senkrecht auf einer ebenen Fläche an einem Punkt
 //   fixed      – feste Lage
+//
+// Bezugspunkte liegen in doc.points und erscheinen im Verlauf unter „Bezugspunkte“.
+// Arten (base.type):
+//   edgeMid            – Mitte einer Kante
+//   faceCenter         – Mitte einer Fläche
+//   edgePlaneIntersect – Schnittpunkt einer Kante mit einer Ebene/Fläche
+//   curvePercent       – auf einer Kurve/Kante bei x %
+//   fixed              – feste Weltkoordinaten
+//
+// Eigene Koordinatensysteme liegen in doc.csys und erscheinen im Verlauf unter „Koordinatensysteme“.
+// Arten (base.type):
+//   pointEdges – Ursprung an einem Punkt, X/Y-Achsen an Kanten/Achsen ausgerichtet
+//   fixed      – feste Lage und Achsen
 const Datums = (() => {
   const ORIGIN = { XY: { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] }, XZ: { o: [0, 0, 0], x: [1, 0, 0], n: [0, -1, 0] }, YZ: { o: [0, 0, 0], x: [0, 1, 0], n: [1, 0, 0] } };
   const NAMES = { XY: 'Arbeitsfläche', XZ: 'Vorne', YZ: 'Seite' };
   let sel = null;       // gewählte Bezugsebene (Kennung)
   let selAxis = null;   // gewählte Bezugsachse (Kennung)
+  let selPoint = null;  // gewählter Bezugspunkt (Kennung)
+  let selCsys = null;   // gewähltes Koordinatensystem (Kennung)
   let pickState = null; // aktiver interaktiver 3D-Picker
   let relinkRounds = 0; // Schutz gegen Nachführ-Schleifen
-  const lost = new Set();     // Ebenen, deren Bezug fehlt
-  const lostAxes = new Set(); // Achsen, deren Bezug fehlt
+  const lost = new Set();       // Ebenen, deren Bezug fehlt
+  const lostAxes = new Set();   // Achsen, deren Bezug fehlt
+  const lostPoints = new Set(); // Punkte, deren Bezug fehlt
+  const lostCsys = new Set();   // Koordinatensysteme, deren Bezug fehlt
 
   const r6 = (v) => v.map((x) => round(x, 6));
   const V3 = (a) => new THREE.Vector3(...a);
@@ -10115,6 +10161,10 @@ const Datums = (() => {
   const find = (id, doc = App.doc) => list(doc).find((d) => d.id === id) || null;
   const axes = (doc = App.doc) => doc.axes || [];
   const findAxis = (id, doc = App.doc) => axes(doc).find((a) => a.id === id) || null;
+  const points = (doc = App.doc) => doc.points || [];
+  const findPoint = (id, doc = App.doc) => points(doc).find((p) => p.id === id) || null;
+  const csysList = (doc = App.doc) => doc.csys || [];
+  const findCsys = (id, doc = App.doc) => csysList(doc).find((c) => c.id === id) || null;
 
   function resolveFace(face) {
     if (!face || !face.id) return null;
@@ -10335,7 +10385,66 @@ const Datums = (() => {
     if (reversed) tan.negate();
     return { p, tan };
   }
+  function makeFaceRef(fRef) {
+    const f = fRef.info, r = App.results.get(fRef.id), bb = localBbox(r);
+    const c = f.c || [0, 0, 0];
+    const ref = {
+      id: fRef.id, ft: f.t, c: r6(c), fIdx: fRef.idx,
+      rel: bb ? r6(relInBox(c, bb)) : null,
+    };
+    if (f.n) ref.n = r6(V3(f.n).normalize().toArray());
+    if (Array.isArray(f.axis) && f.axis.length >= 6) ref.axis = r6(f.axis);
+    if (f.r != null) ref.r = round(f.r, 6);
+    return ref;
+  }
+  function matchFace(r, ref) {
+    if (!r || !r.data || !ref) return null;
+    const bb = localBbox(r), cands = [];
+    const fs = r.data.faces || [];
+    for (let idx = 0; idx < fs.length; idx++) {
+      const f = fs[idx];
+      if (!f || f.t !== ref.ft) continue;
+      if (f.t === 'PLANE' && ref.n && f.n) {
+        const fn = V3(f.n);
+        if (fn.lengthSq() < 1e-12 || fn.normalize().dot(V3(ref.n)) < 0.999) continue;
+      } else if (Array.isArray(ref.axis) && ref.axis.length >= 6 && Array.isArray(f.axis) && f.axis.length >= 6) {
+        const fd = V3(f.axis.slice(3, 6)), rd = V3(ref.axis.slice(3, 6));
+        if (fd.lengthSq() < 1e-12 || rd.lengthSq() < 1e-12 || Math.abs(fd.normalize().dot(rd.normalize())) < 0.99) continue;
+      }
+      const fc = f.c ? V3(f.c) : new THREE.Vector3();
+      const dd = ref.c ? fc.distanceTo(V3(ref.c)) : 0;
+      let relDist = 0;
+      if (bb && ref.rel && f.c) {
+        const fr = relInBox(f.c, bb);
+        relDist = Math.hypot(fr[0] - ref.rel[0], fr[1] - ref.rel[1], fr[2] - ref.rel[2]);
+      }
+      cands.push({ f, idx, dd, relDist });
+    }
+    if (!cands.length) return null;
+    cands.sort((a, b) => {
+      const aEx = a.dd < 1e-3 ? 0 : 1, bEx = b.dd < 1e-3 ? 0 : 1;
+      if (aEx !== bEx) return aEx - bEx;
+      if (bb && ref.rel && Math.abs(a.relDist - b.relDist) > 0.02) return a.relDist - b.relDist;
+      if (Math.abs(a.dd - b.dd) > 1e-3) return a.dd - b.dd;
+      return (a.idx === ref.fIdx ? 0 : 1) - (b.idx === ref.fIdx ? 0 : 1);
+    });
+    return cands[0];
+  }
+  function pickPoint(cx, cy, maxPx = 12) {
+    const r = Viewer.canvas.getBoundingClientRect(), px = cx - r.left, py = cy - r.top;
+    let best = null;
+    for (const pt of points()) {
+      if (pt.hidden || !Array.isArray(pt.point)) continue;
+      const sc = Viewer.toScreen(V3(pt.point));
+      if (sc.behind) continue;
+      const d = Math.hypot(sc.x - px, sc.y - py);
+      if (d <= maxPx && (!best || d < best.px)) best = { pt, px: d };
+    }
+    return best;
+  }
   function snapBodyPointInfo(hit, cx, cy) {
+    const ptHit = pickPoint(cx, cy, 12);
+    if (ptHit) return { w: V3(ptHit.pt.point), bind: { pointId: ptHit.pt.id } };
     const n = hit && hit.node;
     if (!n) return null;
     const r = Viewer.canvas.getBoundingClientRect();
@@ -10362,6 +10471,10 @@ const Datums = (() => {
     return null;
   }
   function autoBindWorldPoint(pW) {
+    for (const pt of points()) {
+      if (lostPoints.has(pt.id) || !Array.isArray(pt.point)) continue;
+      if (V3(pt.point).distanceTo(pW) < 1e-3) return { pointId: pt.id };
+    }
     for (const [id, r] of App.results.entries()) {
       if (!r || !r.data || !Model.find(App.doc, id)) continue;
       const W = Model.worldMatrix(App.doc, id), eds = r.data.edges || [];
@@ -10378,7 +10491,20 @@ const Datums = (() => {
     }
     return null;
   }
-  function resolveBoundPoint(pWorld, bind) {
+  function resolveBoundPoint(pWorld, bind, ptMap = null) {
+    if (bind && bind.pointId) {
+      let arr = null;
+      if (ptMap && ptMap.has(bind.pointId)) arr = ptMap.get(bind.pointId);
+      else {
+        const pt = findPoint(bind.pointId);
+        if (pt && !lostPoints.has(pt.id)) arr = pt.point;
+      }
+      return Array.isArray(arr) ? V3(arr) : null;
+    }
+    if (bind && bind.csysId) {
+      const cs = findCsys(bind.csysId);
+      return cs && !lostCsys.has(cs.id) && cs.csys && Array.isArray(cs.csys.o) ? V3(cs.csys.o) : null;
+    }
     if (bind && bind.id) {
       if (!Model.find(App.doc, bind.id)) return null;
       const W = Model.worldMatrix(App.doc, bind.id), r = App.results.get(bind.id);
@@ -10777,7 +10903,7 @@ const Datums = (() => {
   function select(id) {
     sel = id || null;
     if (sel) {
-      selAxis = null;
+      selAxis = null; selPoint = null; selCsys = null;
       App.clearSelection();
       if (typeof Measure !== 'undefined' && Measure.selected) Measure.select(null);
     }
@@ -10957,7 +11083,7 @@ const Datums = (() => {
   function selectAxis(id) {
     selAxis = id || null;
     if (selAxis) {
-      sel = null;
+      sel = null; selPoint = null; selCsys = null;
       App.clearSelection();
       if (typeof Measure !== 'undefined' && Measure.selected) Measure.select(null);
     }
@@ -10982,14 +11108,424 @@ const Datums = (() => {
     return true;
   }
 
+  // ---------- Bezugspunkte ----------
+  function resolvePlaneSpec(planeRef, plMap = null) {
+    if (!planeRef) return null;
+    if (planeRef.kind === 'origin') {
+      const P = ORIGIN[planeRef.plane] || ORIGIN.XY;
+      return { o: V3(P.o), n: V3(P.n).normalize() };
+    }
+    if (planeRef.kind === 'datum') {
+      const d = find(planeRef.datumId);
+      if (!d || lost.has(d.id)) return null;
+      const pl = (plMap && plMap.get(d.id)) || d.plane;
+      return pl && pl.o && pl.n ? { o: V3(pl.o), n: V3(pl.n).normalize() } : null;
+    }
+    if (planeRef.kind === 'face') {
+      const r = App.results.get(planeRef.id), W = Model.find(App.doc, planeRef.id) ? Model.worldMatrix(App.doc, planeRef.id) : null;
+      if (!r || !W) return null;
+      const m = matchFace(r, planeRef);
+      if (!m || m.f.t !== 'PLANE' || !m.f.n) return null;
+      return { o: V3(m.f.c).applyMatrix4(W), n: V3(m.f.n).transformDirection(W).normalize() };
+    }
+    if (planeRef.kind === 'fixed' && planeRef.o && planeRef.n) {
+      const n = V3(planeRef.n);
+      if (n.lengthSq() < 1e-12) return null;
+      return { o: V3(planeRef.o), n: n.normalize() };
+    }
+    return null;
+  }
+
+  function intersectEdgeWithPlane(g, W, pO, pN, reversed, hintP = null) {
+    if (!g || !W || !pO || !pN) return null;
+    if (g.t === 'LINE' && g.a && g.b) {
+      const A = V3(g.a).applyMatrix4(W), B = V3(g.b).applyMatrix4(W);
+      const D = B.clone().sub(A);
+      const denom = D.dot(pN);
+      if (Math.abs(denom) < 1e-8) return null;
+      const t = pO.clone().sub(A).dot(pN) / denom;
+      return A.clone().addScaledVector(D, t);
+    }
+    const N = 128;
+    const evalW = (u) => {
+      const ev = evalEdgeAt(g, u, reversed);
+      return ev ? ev.p.clone().applyMatrix4(W) : null;
+    };
+    const sdAt = (p) => p.clone().sub(pO).dot(pN);
+    const cands = [];
+    let u0 = 0, p0 = evalW(0);
+    if (!p0) return null;
+    let s0 = sdAt(p0);
+    if (Math.abs(s0) < 1e-6) cands.push(p0);
+    for (let i = 1; i <= N; i++) {
+      const u1 = i / N, p1 = evalW(u1);
+      if (!p1) continue;
+      const s1 = sdAt(p1);
+      if (Math.abs(s1) < 1e-6) {
+        cands.push(p1);
+      } else if ((s0 < 0 && s1 > 0) || (s0 > 0 && s1 < 0)) {
+        let lo = u0, hi = u1, slo = s0;
+        let pBest = p0.clone().lerp(p1, 0.5);
+        for (let k = 0; k < 30; k++) {
+          const um = 0.5 * (lo + hi), pm = evalW(um);
+          if (!pm) break;
+          const sm = sdAt(pm);
+          pBest = pm;
+          if (Math.abs(sm) < 1e-8) break;
+          if ((slo < 0 && sm < 0) || (slo > 0 && sm > 0)) { lo = um; slo = sm; }
+          else { hi = um; }
+        }
+        cands.push(pBest);
+      }
+      u0 = u1; p0 = p1; s0 = s1;
+    }
+    if (!cands.length) return null;
+    if (cands.length === 1 || !hintP) return cands[0];
+    let best = cands[0], bd = best.distanceTo(hintP);
+    for (let i = 1; i < cands.length; i++) {
+      const d = cands[i].distanceTo(hintP);
+      if (d < bd) { best = cands[i]; bd = d; }
+    }
+    return best;
+  }
+
+  function solvePoint(pt, plMap = null) {
+    const b = pt.base || { type: 'fixed' }, V = Model.vars(App.doc).v;
+    if (b.type === 'fixed') {
+      lostPoints.delete(pt.id);
+      return r6([Model.num(b.x, V, 0), Model.num(b.y, V, 0), Model.num(b.z, V, 0)]);
+    }
+    if (b.type === 'edgeMid' || b.type === 'curvePercent') {
+      const r = App.results.get(b.edgeId), W = Model.find(App.doc, b.edgeId) ? Model.worldMatrix(App.doc, b.edgeId) : null;
+      if (r && W) {
+        const m = matchEdge(r, b.edge);
+        if (m) {
+          let t = b.type === 'edgeMid' ? 0.5 : clamp(Model.num(b.percent, V, 50), 0, 100) / 100;
+          if (b.type === 'curvePercent' && b.flip) t = 1 - t;
+          const ev = evalEdgeAt(m.g, t, m.reversed);
+          if (ev) {
+            lostPoints.delete(pt.id);
+            return r6(ev.p.clone().applyMatrix4(W).toArray());
+          }
+        }
+      }
+      if (r || !Model.find(App.doc, b.edgeId)) lostPoints.add(pt.id);
+      return pt.point;
+    }
+    if (b.type === 'faceCenter') {
+      const r = App.results.get(b.id), W = Model.find(App.doc, b.id) ? Model.worldMatrix(App.doc, b.id) : null;
+      if (r && W) {
+        const m = matchFace(r, b);
+        if (m && Array.isArray(m.f.c)) {
+          lostPoints.delete(pt.id);
+          return r6(V3(m.f.c).applyMatrix4(W).toArray());
+        }
+      }
+      if (r || !Model.find(App.doc, b.id)) lostPoints.add(pt.id);
+      return pt.point;
+    }
+    if (b.type === 'edgePlaneIntersect') {
+      const rE = App.results.get(b.edgeId), WE = Model.find(App.doc, b.edgeId) ? Model.worldMatrix(App.doc, b.edgeId) : null;
+      const pl = resolvePlaneSpec(b.planeRef, plMap);
+      if (rE && WE && pl) {
+        const m = matchEdge(rE, b.edge);
+        if (m) {
+          const hint = Array.isArray(pt.point) ? V3(pt.point) : null;
+          const pW = intersectEdgeWithPlane(m.g, WE, pl.o, pl.n, m.reversed, hint);
+          if (pW) {
+            lostPoints.delete(pt.id);
+            return r6(pW.toArray());
+          }
+        }
+      }
+      if (rE || !Model.find(App.doc, b.edgeId) || !pl) lostPoints.add(pt.id);
+      return pt.point;
+    }
+    return pt.point;
+  }
+
+  function addPoint(base, name, point) {
+    const pt = { id: uid('dpt'), name: name || `Punkt ${points().length + 1}`, base, point: point || null };
+    pt.point = solvePoint({ ...pt, point: point || [0, 0, 0] });
+    App.change(`Bezugspunkt „${pt.name}“`, (doc) => { (doc.points = doc.points || []).push(pt); });
+    selectPoint(pt.id);
+    return pt;
+  }
+  function addPointEdgeMid(edge, name) {
+    const eRef = resolveEdge(edge);
+    if (!eRef) { UI.toast('Wähl zuerst eine Kante.', { icon: 'info' }); return null; }
+    const top = Model.find(App.doc, eRef.id);
+    return addPoint({ type: 'edgeMid', edgeId: eRef.id, edge: makeEdgeRef(eRef) }, name || `Kantenmitte (${top ? Model.label(top.item) : 'Kante'})`);
+  }
+  function addPointFaceCenter(face, name) {
+    const fRef = resolveFace(face);
+    if (!fRef) { UI.toast('Wähl zuerst eine Fläche.', { icon: 'info' }); return null; }
+    const top = Model.find(App.doc, fRef.id);
+    return addPoint({ type: 'faceCenter', ...makeFaceRef(fRef) }, name || `Flächenmitte (${top ? Model.label(top.item) : 'Fläche'})`);
+  }
+  function addPointOnCurve(edge, percent = 50, name) {
+    const eRef = resolveEdge(edge);
+    if (!eRef) { UI.toast('Wähl zuerst eine Kante oder Kurve.', { icon: 'info' }); return null; }
+    let pct = 50, flip = false;
+    if (percent && typeof percent === 'object') { pct = percent.percent ?? 50; flip = !!percent.flip; }
+    else if (percent != null) pct = percent;
+    const top = Model.find(App.doc, eRef.id);
+    const pTxt = typeof pct === 'number' ? fmt(pct, 0) + ' %' : String(pct);
+    const base = { type: 'curvePercent', edgeId: eRef.id, edge: makeEdgeRef(eRef), percent: pct };
+    if (flip) base.flip = true;
+    return addPoint(base, name || `Punkt ${pTxt} (${top ? Model.label(top.item) : 'Kurve'})`);
+  }
+  function addPointEdgePlane(edge, planeSpec, name) {
+    const eRef = resolveEdge(edge);
+    if (!eRef) { UI.toast('Wähl zuerst eine Kante.', { icon: 'info' }); return null; }
+    let planeRef = null;
+    if (typeof planeSpec === 'string') {
+      if (ORIGIN[planeSpec]) planeRef = { kind: 'origin', plane: planeSpec };
+      else if (find(planeSpec)) planeRef = { kind: 'datum', datumId: planeSpec };
+    } else if (planeSpec && typeof planeSpec === 'object') {
+      if (planeSpec.kind) planeRef = planeSpec;
+      else if (planeSpec.datumId) planeRef = { kind: 'datum', datumId: planeSpec.datumId };
+      else if (planeSpec.id) {
+        const fRef = resolveFace(planeSpec);
+        if (!fRef || fRef.info.t !== 'PLANE') { UI.toast('Wähl eine ebene Fläche oder Bezugsebene.', { icon: 'info' }); return null; }
+        planeRef = { kind: 'face', ...makeFaceRef(fRef) };
+      } else if (planeSpec.o && planeSpec.n) {
+        planeRef = { kind: 'fixed', o: r6(V3(planeSpec.o).toArray()), n: r6(V3(planeSpec.n).normalize().toArray()) };
+      }
+    }
+    const pl = resolvePlaneSpec(planeRef);
+    if (!pl) { UI.toast('Wähl eine gültige Ebene oder ebene Fläche.', { icon: 'info' }); return null; }
+    const WE = Model.worldMatrix(App.doc, eRef.id);
+    const pW = intersectEdgeWithPlane(eRef.info, WE, pl.o, pl.n, false, null);
+    if (!pW) { UI.toast('Die Kante läuft parallel zur Ebene oder schneidet sie nicht.', { icon: 'info' }); return null; }
+    const top = Model.find(App.doc, eRef.id);
+    return addPoint({ type: 'edgePlaneIntersect', edgeId: eRef.id, edge: makeEdgeRef(eRef), planeRef }, name || `Schnittpunkt (${top ? Model.label(top.item) : 'Kante'})`, r6(pW.toArray()));
+  }
+  function addPointFixed(p, name) {
+    const a = Array.isArray(p) ? p : p instanceof THREE.Vector3 ? p.toArray() : [0, 0, 0];
+    return addPoint({ type: 'fixed', x: a[0] ?? 0, y: a[1] ?? 0, z: a[2] ?? 0 }, name || `Punkt ${points().length + 1}`, r6(a));
+  }
+  function setPoint(id, patch, label = 'Bezugspunkt geändert') {
+    App.change(label, (doc) => {
+      const pt = findPoint(id, doc); if (!pt) return false;
+      for (const [k, v] of Object.entries(patch)) { if (k === 'name') pt.name = v; else if (k === 'hidden') { if (v) pt.hidden = true; else delete pt.hidden; } else pt.base[k] = v; }
+      pt.point = solvePoint(pt);
+    }, { merge: 'point:' + id + ':' + Object.keys(patch).join() });
+  }
+  function removePoint(id) {
+    App.change('Bezugspunkt gelöscht', (doc) => { doc.points = points(doc).filter((p) => p.id !== id); });
+    if (selPoint === id) selectPoint(null);
+  }
+  function selectPoint(id) {
+    selPoint = id || null;
+    if (selPoint) {
+      sel = null; selAxis = null; selCsys = null;
+      App.clearSelection();
+      if (typeof Measure !== 'undefined' && Measure.selected) Measure.select(null);
+    }
+    draw(); Panels.renderRight(); Panels.renderLeft();
+  }
+
+  // ---------- Eigene Koordinatensysteme ----------
+  function orthonormalFrame(o, xVec, yVec, opts = {}) {
+    const ov = o instanceof THREE.Vector3 ? o.clone() : V3(o);
+    const x = (xVec instanceof THREE.Vector3 ? xVec.clone() : V3(xVec || [1, 0, 0]));
+    if (x.lengthSq() < 1e-12) x.set(1, 0, 0);
+    x.normalize();
+    if (opts.flipX) x.negate();
+    let y = yVec ? (yVec instanceof THREE.Vector3 ? yVec.clone() : V3(yVec)) : null;
+    if (y && opts.flipY) y.negate();
+    if (y) y.addScaledVector(x, -y.dot(x));
+    if (!y || y.lengthSq() < 1e-8) {
+      const ref = Math.abs(x.z) < 0.9 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0);
+      y = new THREE.Vector3().crossVectors(ref, x);
+      if (opts.flipY) y.negate();
+    }
+    y.normalize();
+    const z = new THREE.Vector3().crossVectors(x, y).normalize();
+    if (opts.flipZ) { z.negate(); y.negate(); }
+    return { o: r6(ov.toArray()), x: r6(x.toArray()), y: r6(y.toArray()), z: r6(z.toArray()) };
+  }
+  function edgeWorldDirFromMatch(m, W) {
+    if (!m || !m.g) return null;
+    if (m.g.t === 'LINE') {
+      const A = V3(m.g.a).applyMatrix4(W), B = V3(m.g.b).applyMatrix4(W);
+      const d = B.sub(A);
+      if (d.lengthSq() < 1e-12) return null;
+      d.normalize();
+      if (m.reversed) d.negate();
+      return d;
+    }
+    const ev = evalEdgeAt(m.g, 0, m.reversed);
+    return ev ? ev.tan.clone().transformDirection(W).normalize() : null;
+  }
+  function solveCsys(cs, axMap = null, ptMap = null) {
+    const b = cs.base || { type: 'fixed' }, V = Model.vars(App.doc).v;
+    if (b.type === 'fixed') {
+      lostCsys.delete(cs.id);
+      const o = b.ox != null || b.oy != null || b.oz != null
+        ? [Model.num(b.ox, V, 0), Model.num(b.oy, V, 0), Model.num(b.oz, V, 0)]
+        : (b.origin || [0, 0, 0]);
+      return orthonormalFrame(o, b.xDir || [1, 0, 0], b.yDir || [0, 1, 0], b);
+    }
+    const O = resolveBoundPoint(b.origin, b.originBind, ptMap);
+    if (!O) { lostCsys.add(cs.id); return cs.csys; }
+    let xW = null, yW = null;
+    if (b.xEdge) {
+      const rX = App.results.get(b.xEdge.id), WX = Model.find(App.doc, b.xEdge.id) ? Model.worldMatrix(App.doc, b.xEdge.id) : null;
+      const mX = rX && WX ? matchEdge(rX, b.xEdge) : null;
+      xW = mX ? edgeWorldDirFromMatch(mX, WX) : null;
+      if (!xW) { lostCsys.add(cs.id); return cs.csys; }
+    } else if (b.xAxisId) {
+      const ax = (axMap && axMap.get(b.xAxisId)) || (findAxis(b.xAxisId) && findAxis(b.xAxisId).axis);
+      if (!ax || !Array.isArray(ax.d) || lostAxes.has(b.xAxisId)) { lostCsys.add(cs.id); return cs.csys; }
+      xW = V3(ax.d).normalize();
+    } else {
+      xW = V3(b.xDir || [1, 0, 0]).normalize();
+    }
+    if (b.yEdge) {
+      const rY = App.results.get(b.yEdge.id), WY = Model.find(App.doc, b.yEdge.id) ? Model.worldMatrix(App.doc, b.yEdge.id) : null;
+      const mY = rY && WY ? matchEdge(rY, b.yEdge) : null;
+      yW = mY ? edgeWorldDirFromMatch(mY, WY) : null;
+      if (!yW || Math.abs(xW.dot(yW)) > 0.9999) { lostCsys.add(cs.id); return cs.csys; }
+    } else if (b.yAxisId) {
+      const ay = (axMap && axMap.get(b.yAxisId)) || (findAxis(b.yAxisId) && findAxis(b.yAxisId).axis);
+      if (!ay || !Array.isArray(ay.d) || lostAxes.has(b.yAxisId)) { lostCsys.add(cs.id); return cs.csys; }
+      yW = V3(ay.d).normalize();
+      if (Math.abs(xW.dot(yW)) > 0.9999) { lostCsys.add(cs.id); return cs.csys; }
+    } else if (b.yDir) {
+      yW = V3(b.yDir).normalize();
+    }
+    lostCsys.delete(cs.id);
+    return orthonormalFrame(O, xW, yW, b);
+  }
+
+  function addCsys(base, name, csys) {
+    const cs = { id: uid('dcs'), name: name || `Koordinatensystem ${csysList().length + 1}`, base, csys: csys || null };
+    cs.csys = solveCsys({ ...cs, csys: csys || orthonormalFrame([0, 0, 0], [1, 0, 0], [0, 1, 0]) });
+    App.change(`Koordinatensystem „${cs.name}“`, (doc) => { (doc.csys = doc.csys || []).push(cs); });
+    selectCsys(cs.id);
+    return cs;
+  }
+  function addCsysFromPointEdges(originSpec, xEdge = null, yEdge = null, name = null, opts = {}) {
+    let originW = null, originBind = opts.bind || null;
+    if (typeof originSpec === 'string') {
+      const pt = findPoint(originSpec);
+      if (!pt || !Array.isArray(pt.point)) { UI.toast('Bezugspunkt nicht gefunden.', { icon: 'info' }); return null; }
+      originW = V3(pt.point); originBind = { pointId: pt.id };
+    } else if (originSpec && originSpec.pointId) {
+      const pt = findPoint(originSpec.pointId);
+      if (!pt || !Array.isArray(pt.point)) { UI.toast('Bezugspunkt nicht gefunden.', { icon: 'info' }); return null; }
+      originW = V3(pt.point); originBind = { pointId: pt.id };
+    } else if (originSpec && originSpec.p) {
+      originW = originSpec.p instanceof THREE.Vector3 ? originSpec.p.clone() : V3(originSpec.p);
+      if (!originBind && originSpec.bind) originBind = originSpec.bind;
+    } else if (originSpec) {
+      originW = originSpec instanceof THREE.Vector3 ? originSpec.clone() : V3(originSpec);
+    }
+    if (!originW) return null;
+    if (!originBind) originBind = autoBindWorldPoint(originW);
+    const xr = xEdge ? resolveEdge(xEdge) : null;
+    if (xEdge && !xr) { UI.toast('Die gewählte X-Kante gibt es nicht.', { icon: 'info' }); return null; }
+    const yr = yEdge ? resolveEdge(yEdge) : null;
+    if (yEdge && !yr) { UI.toast('Die gewählte Y-Kante gibt es nicht.', { icon: 'info' }); return null; }
+    const dirFromRef = (er) => {
+      const W = Model.worldMatrix(App.doc, er.id);
+      if (er.info.t === 'LINE') {
+        const A = V3(er.info.a).applyMatrix4(W), B = V3(er.info.b).applyMatrix4(W);
+        const d = B.clone().sub(A);
+        return d.lengthSq() > 1e-12 ? { dir: d.normalize(), A, B } : null;
+      }
+      const ev = evalEdgeAt(er.info, 0, false);
+      return ev ? { dir: ev.tan.clone().transformDirection(W).normalize(), A: null, B: null } : null;
+    };
+    let xDirW = opts.xDir ? V3(opts.xDir).normalize() : new THREE.Vector3(1, 0, 0), flipX = !!opts.flipX;
+    if (xr) {
+      const xd = dirFromRef(xr);
+      if (!xd) return null;
+      xDirW = xd.dir;
+      if (opts.flipX === undefined && xd.A && xd.B && originW.distanceTo(xd.B) + 1e-3 < originW.distanceTo(xd.A)) flipX = true;
+    }
+    let yDirW = opts.yDir ? V3(opts.yDir).normalize() : null, flipY = !!opts.flipY;
+    if (yr) {
+      const yd = dirFromRef(yr);
+      if (!yd) return null;
+      yDirW = yd.dir;
+      if (Math.abs(xDirW.dot(yDirW)) > 0.9999) {
+        UI.toast('X- und Y-Kante laufen parallel – wähle zwei Kanten mit Winkel dazwischen.', { icon: 'info' });
+        return null;
+      }
+      if (opts.flipY === undefined && yd.A && yd.B && originW.distanceTo(yd.B) + 1e-3 < originW.distanceTo(yd.A)) flipY = true;
+    }
+    const base = {
+      type: 'pointEdges',
+      origin: r6(originW.toArray()),
+      ...(originBind ? { originBind } : {}),
+      ...(xr ? { xEdge: makeEdgeRef(xr) } : { xDir: r6(xDirW.toArray()) }),
+      ...(yr ? { yEdge: makeEdgeRef(yr) } : (yDirW ? { yDir: r6(yDirW.toArray()) } : {})),
+      ...(flipX ? { flipX: true } : {}),
+      ...(flipY ? { flipY: true } : {}),
+      ...(opts.flipZ ? { flipZ: true } : {}),
+    };
+    return addCsys(base, name || `Koordinatensystem ${csysList().length + 1}`);
+  }
+  function addCsysFixed(o = [0, 0, 0], x = [1, 0, 0], y = [0, 1, 0], name = null) {
+    const ov = Array.isArray(o) ? o : o instanceof THREE.Vector3 ? o.toArray() : [0, 0, 0];
+    return addCsys({ type: 'fixed', ox: ov[0] ?? 0, oy: ov[1] ?? 0, oz: ov[2] ?? 0, xDir: r6(V3(x).normalize().toArray()), yDir: r6(V3(y).normalize().toArray()) }, name);
+  }
+  function csysExportMatrix(id) {
+    const cs = findCsys(id);
+    if (!cs || !cs.csys) return null;
+    const O = cs.csys.o, X = cs.csys.x, Y = cs.csys.y, Z = cs.csys.z;
+    if (!O || !X || !Y || !Z) return null;
+    const tx = -(X[0] * O[0] + X[1] * O[1] + X[2] * O[2]);
+    const ty = -(Y[0] * O[0] + Y[1] * O[1] + Y[2] * O[2]);
+    const tz = -(Z[0] * O[0] + Z[1] * O[1] + Z[2] * O[2]);
+    return [X[0], Y[0], Z[0], 0, X[1], Y[1], Z[1], 0, X[2], Y[2], Z[2], 0, tx, ty, tz, 1];
+  }
+  function setCsys(id, patch, label = 'Koordinatensystem geändert') {
+    App.change(label, (doc) => {
+      const cs = findCsys(id, doc); if (!cs) return false;
+      for (const [k, v] of Object.entries(patch)) { if (k === 'name') cs.name = v; else if (k === 'hidden') { if (v) cs.hidden = true; else delete cs.hidden; } else cs.base[k] = v; }
+      cs.csys = solveCsys(cs);
+    }, { merge: 'csys:' + id + ':' + Object.keys(patch).join() });
+  }
+  function removeCsys(id) {
+    App.change('Koordinatensystem gelöscht', (doc) => { doc.csys = csysList(doc).filter((c) => c.id !== id); });
+    if (selCsys === id) selectCsys(null);
+  }
+  function selectCsys(id) {
+    selCsys = id || null;
+    if (selCsys) {
+      sel = null; selAxis = null; selPoint = null;
+      App.clearSelection();
+      if (typeof Measure !== 'undefined' && Measure.selected) Measure.select(null);
+    }
+    draw(); Panels.renderRight(); Panels.renderLeft();
+  }
+
   // ---------- Nachführen nach jedem Rechnen ----------
   function relink() {
-    const upd = [], axUpd = [], axMap = new Map();
-    for (const d of list()) { const p = solve(d); if (p && JSON.stringify(p) !== JSON.stringify(d.plane)) upd.push([d.id, p]); }
+    const upd = [], axUpd = [], ptUpd = [], csUpd = [];
+    const plMap = new Map(), axMap = new Map(), ptMap = new Map();
+    for (const d of list()) {
+      const p = solve(d);
+      plMap.set(d.id, p || d.plane);
+      if (p && JSON.stringify(p) !== JSON.stringify(d.plane)) upd.push([d.id, p]);
+    }
     for (const ax of axes()) {
       const a = solveAxis(ax);
       axMap.set(ax.id, a || ax.axis);
       if (a && (!ax.axis || vecDiff(a.o, ax.axis.o) > 1e-5 || vecDiff(a.d, ax.axis.d) > 1e-5)) axUpd.push([ax.id, a]);
+    }
+    for (const pt of points()) {
+      const p = solvePoint(pt, plMap);
+      ptMap.set(pt.id, p || pt.point);
+      if (p && (!pt.point || vecDiff(p, pt.point) > 1e-5)) ptUpd.push([pt.id, p]);
+    }
+    for (const cs of csysList()) {
+      const c = solveCsys(cs, axMap, ptMap);
+      if (c && (!cs.csys || vecDiff(c.o, cs.csys.o) > 1e-5 || vecDiff(c.x, cs.csys.x) > 1e-5 || vecDiff(c.y, cs.csys.y) > 1e-5 || vecDiff(c.z, cs.csys.z) > 1e-5)) csUpd.push([cs.id, c]);
     }
     const itemUpd = [];
     Model.walk(App.doc.items, (it) => {
@@ -11006,11 +11542,13 @@ const Datums = (() => {
         if (!cur || vecDiff(cur.o, lo) > 1e-5 || vecDiff(cur.d, ld) > 1e-5) itemUpd.push({ id: it.id, kind: 'revolve', o: lo, d: ld });
       }
     });
-    if (!upd.length && !axUpd.length && !itemUpd.length) { relinkRounds = 0; draw(); return; }
+    if (!upd.length && !axUpd.length && !ptUpd.length && !csUpd.length && !itemUpd.length) { relinkRounds = 0; draw(); return; }
     if (++relinkRounds > 3) { relinkRounds = 0; draw(); return; }
     App.change('Bezüge nachgeführt', (doc) => {
       for (const [id, p] of upd) { const d = find(id, doc); if (d) d.plane = p; }
       for (const [id, a] of axUpd) { const ax = findAxis(id, doc); if (ax) ax.axis = a; }
+      for (const [id, p] of ptUpd) { const pt = findPoint(id, doc); if (pt) pt.point = p; }
+      for (const [id, c] of csUpd) { const cs = findCsys(id, doc); if (cs) cs.csys = c; }
       for (const u of itemUpd) {
         const f = Model.find(doc, u.id); if (!f) continue;
         if (u.kind === 'circ') { f.item.p.axis = 'pick'; f.item.p.ao = u.o; f.item.p.ad = u.d; }
@@ -11058,6 +11596,45 @@ const Datums = (() => {
       const mid = new THREE.Mesh(new THREE.SphereGeometry(Math.max(0.8, size * 0.02), 10, 8), new THREE.MeshBasicMaterial({ color: col, depthTest: false, transparent: true, opacity: on ? 1 : 0.75 }));
       mid.position.copy(o); mid.renderOrder = 25;
       grp.add(line, mid); g.add(grp);
+    }
+    for (const pt of points()) {
+      if (pt.hidden || !Array.isArray(pt.point)) continue;
+      const on = pt.id === selPoint, col = new THREE.Color(lostPoints.has(pt.id) ? '#e03131' : on ? '#f08c00' : '#7950f2');
+      const o = V3(pt.point), arm = Math.max(2.5, size * 0.06), rad = Math.max(0.9, size * 0.022);
+      const grp = new THREE.Group(); grp.userData.datumPoint = pt.id;
+      const sph = new THREE.Mesh(new THREE.SphereGeometry(rad, 12, 8), new THREE.MeshBasicMaterial({ color: col, depthTest: false, transparent: true, opacity: on ? 1 : 0.9 }));
+      sph.position.copy(o); sph.renderOrder = 26;
+      const segPts = [
+        new THREE.Vector3(o.x - arm, o.y, o.z), new THREE.Vector3(o.x + arm, o.y, o.z),
+        new THREE.Vector3(o.x, o.y - arm, o.z), new THREE.Vector3(o.x, o.y + arm, o.z),
+        new THREE.Vector3(o.x, o.y, o.z - arm), new THREE.Vector3(o.x, o.y, o.z + arm),
+      ];
+      const cross = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(segPts), new THREE.LineBasicMaterial({ color: col, depthTest: false, transparent: true, opacity: on ? 1 : 0.85 }));
+      cross.renderOrder = 26;
+      grp.add(sph, cross); g.add(grp);
+    }
+    for (const cs of csysList()) {
+      if (cs.hidden || !cs.csys || !Array.isArray(cs.csys.o)) continue;
+      const on = cs.id === selCsys, isLost = lostCsys.has(cs.id);
+      const o = V3(cs.csys.o), len = Math.max(16, size * 0.35), headR = Math.max(0.9, len * 0.08), headH = Math.max(2.5, len * 0.22);
+      const grp = new THREE.Group(); grp.userData.datumCsys = cs.id;
+      const oCol = new THREE.Color(isLost ? '#e03131' : on ? '#f08c00' : '#1971c2');
+      const oSph = new THREE.Mesh(new THREE.SphereGeometry(Math.max(1.0, size * 0.024), 12, 8), new THREE.MeshBasicMaterial({ color: oCol, depthTest: false, transparent: true, opacity: on ? 1 : 0.9 }));
+      oSph.position.copy(o); oSph.renderOrder = 26; grp.add(oSph);
+      const axesSpec = [['x', '#e03131'], ['y', '#2f9e44'], ['z', '#1971c2']];
+      for (const [k, hex] of axesSpec) {
+        const dv = V3(cs.csys[k]).normalize();
+        const col = new THREE.Color(isLost ? '#e03131' : on ? '#f08c00' : hex);
+        const end = o.clone().addScaledVector(dv, len);
+        const ln = new THREE.Line(new THREE.BufferGeometry().setFromPoints([o, end]), new THREE.LineBasicMaterial({ color: col, depthTest: false, transparent: true, opacity: on ? 1 : 0.9 }));
+        ln.renderOrder = 26;
+        const cone = new THREE.Mesh(new THREE.ConeGeometry(headR, headH, 10), new THREE.MeshBasicMaterial({ color: col, depthTest: false, transparent: true, opacity: on ? 1 : 0.9 }));
+        cone.position.copy(end);
+        cone.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dv);
+        cone.renderOrder = 26;
+        grp.add(ln, cone);
+      }
+      g.add(grp);
     }
     Viewer.requestRender();
   }
@@ -11311,6 +11888,125 @@ const Datums = (() => {
     hint();
   }
 
+  function startPointPick(mode, opts = {}) {
+    stopPick();
+    let edgeRef = opts.preEdge ? resolveEdge(opts.preEdge) : null;
+    if (edgeRef) Viewer.highlightEdge(edgeRef.id, edgeRef.idx);
+    const hint = () => UI.hint({
+      edgeMid: '<b>Bezugspunkt Kantenmitte:</b> Klick eine Kante eines Körpers. <b>Esc</b> bricht ab.',
+      faceCenter: '<b>Bezugspunkt Flächenmitte:</b> Klick eine Fläche eines Körpers. <b>Esc</b> bricht ab.',
+      curvePercent: `<b>Bezugspunkt auf Kurve (${fmt(Number(opts.percent) || 50, 0)} %):</b> Klick eine Kante oder Kurve eines Körpers. <b>Esc</b> bricht ab.`,
+      edgePlaneIntersect: edgeRef
+        ? '<b>Schnittpunkt Kante / Ebene:</b> Klick eine ebene Fläche als Schnitt-Ebene. <b>Esc</b> bricht ab.'
+        : '<b>Schnittpunkt Kante / Ebene:</b> Klick zuerst eine Kante oder Kurve. <b>Esc</b> bricht ab.',
+    }[mode] || '<b>Bezugspunkt wählen:</b> <b>Esc</b> bricht ab.');
+
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      if (mode === 'edgeMid' || mode === 'curvePercent') {
+        const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, edgePx: 9 });
+        const er = hit && hit.edgeIdx != null ? resolveEdge({ id: hit.id, edgeIdx: hit.edgeIdx }) : null;
+        if (!er) { UI.toast('Klick eine Kante oder Kurve eines Körpers an.', { icon: 'info' }); return; }
+        stopPick();
+        if (mode === 'edgeMid') addPointEdgeMid(er);
+        else addPointOnCurve(er, opts.percent ?? 50);
+        return;
+      }
+      if (mode === 'faceCenter') {
+        const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true, solidsOnly: true });
+        const fr = hit && hit.faceIdx >= 0 ? resolveFace({ id: hit.id, idx: hit.faceIdx }) : null;
+        if (!fr) { UI.toast('Klick eine Fläche eines Körpers an.', { icon: 'info' }); return; }
+        stopPick();
+        addPointFaceCenter(fr);
+        return;
+      }
+      if (mode === 'edgePlaneIntersect') {
+        if (!edgeRef) {
+          const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, edgePx: 9 });
+          const er = hit && hit.edgeIdx != null ? resolveEdge({ id: hit.id, edgeIdx: hit.edgeIdx }) : null;
+          if (!er) { UI.toast('Klick zuerst eine Kante oder Kurve eines Körpers an.', { icon: 'info' }); return; }
+          edgeRef = er;
+          Viewer.highlightEdge(er.id, er.idx);
+          hint();
+          return;
+        }
+        const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true, solidsOnly: true });
+        const fr = hit && hit.faceIdx >= 0 ? resolveFace({ id: hit.id, idx: hit.faceIdx }) : null;
+        if (!fr || fr.info.t !== 'PLANE') { UI.toast('Klick eine ebene Fläche als Schnitt-Ebene an.', { icon: 'info' }); return; }
+        const er = edgeRef;
+        stopPick();
+        addPointEdgePlane(er, fr);
+      }
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); } };
+    pickState = { down, key, marks: [] };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    window.addEventListener('keydown', key, true);
+    hint();
+  }
+
+  function startCsysPick() {
+    stopPick();
+    let origin = null, xEdge = null;
+    const marks = [];
+    const hint = () => UI.hint(!origin
+      ? '<b>Koordinatensystem (1/3):</b> Klick den Ursprungspunkt (Bezugspunkt, Ecke oder Kantenmitte). <b>Esc</b> bricht ab.'
+      : !xEdge
+        ? '<b>Koordinatensystem (2/3):</b> Klick eine Kante für die <b>X-Achse</b> (oder <b>Enter</b> für Standard-Achsen). <b>Esc</b> bricht ab.'
+        : '<b>Koordinatensystem (3/3):</b> Klick eine Kante für die <b>Y-Achse</b> (oder <b>Enter</b> für Standard-Y). <b>Esc</b> bricht ab.');
+
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      if (!origin) {
+        const ptHit = pickPoint(e.clientX, e.clientY, 12);
+        if (ptHit) {
+          origin = { p: V3(ptHit.pt.point), bind: { pointId: ptHit.pt.id } };
+        } else {
+          const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true });
+          const info = hit ? snapBodyPointInfo(hit, e.clientX, e.clientY) : null;
+          if (info) origin = { p: info.w, bind: info.bind };
+          else {
+            const p = Viewer.pickPlane(e.clientX, e.clientY, 0);
+            if (!p) return;
+            origin = { p, bind: null };
+          }
+        }
+        addPickMark(origin.p, marks);
+        hint();
+        return;
+      }
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, edgePx: 9 });
+      const er = hit && hit.edgeIdx != null ? resolveEdge({ id: hit.id, edgeIdx: hit.edgeIdx }) : null;
+      if (!er) { UI.toast('Klick eine Kante für die Achse an (oder drück Enter).', { icon: 'info' }); return; }
+      if (!xEdge) {
+        xEdge = er;
+        Viewer.highlightEdge(er.id, er.idx);
+        hint();
+        return;
+      }
+      const o0 = origin, x0 = xEdge;
+      stopPick();
+      addCsysFromPointEdges(o0, x0, er);
+    };
+    const key = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); }
+      else if (e.key === 'Enter' && origin) {
+        e.preventDefault(); e.stopPropagation();
+        const o0 = origin, x0 = xEdge;
+        stopPick();
+        addCsysFromPointEdges(o0, x0, null);
+      }
+    };
+    pickState = { down, key, marks };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    window.addEventListener('keydown', key, true);
+    hint();
+  }
+
   // ---------- Verlauf und Eigenschaften ----------
   function treeSection() {
     const ds = list(); if (!ds.length) return null;
@@ -11342,6 +12038,36 @@ const Datums = (() => {
       const sub = lostAxes.has(ax.id) ? 'Bezug fehlt' : { twoPoints: '2 Punkte', roundFace: 'Mitte Rundung', roundEdge: 'Mitte Kreis', faceNormal: 'senkr. Fläche', fixed: 'fest' }[b.type] || '';
       row.append(ic, h('span', { class: 'nm' }, ax.name), h('span', { class: 'sub mono' }, sub));
       row.onclick = () => selectAxis(ax.id === selAxis ? null : ax.id);
+      sec.append(row);
+    }
+    return sec;
+  }
+
+  function pointTreeSection() {
+    const ps = points(); if (!ps.length) return null;
+    const sec = h('div', { class: 'datum-tree point-tree', id: 'point-tree' }, h('div', { class: 'section-h' }, 'Bezugspunkte'));
+    for (const pt of ps) {
+      const row = h('div', { class: 'tree-row point-row' + (pt.id === selPoint ? ' sel' : '') + (pt.hidden ? ' dim' : ''), 'data-point': pt.id });
+      const ic = h('span', { class: 'swatch point' }); ic.innerHTML = icon('point');
+      const b = pt.base || {};
+      const sub = lostPoints.has(pt.id) ? 'Bezug fehlt' : { edgeMid: 'Kantenmitte', faceCenter: 'Flächenmitte', edgePlaneIntersect: 'Schnittpunkt', curvePercent: 'auf Kurve', fixed: 'fest' }[b.type] || '';
+      row.append(ic, h('span', { class: 'nm' }, pt.name), h('span', { class: 'sub mono' }, sub));
+      row.onclick = () => selectPoint(pt.id === selPoint ? null : pt.id);
+      sec.append(row);
+    }
+    return sec;
+  }
+
+  function csysTreeSection() {
+    const csAll = csysList(); if (!csAll.length) return null;
+    const sec = h('div', { class: 'datum-tree csys-tree', id: 'csys-tree' }, h('div', { class: 'section-h' }, 'Koordinatensysteme'));
+    for (const cs of csAll) {
+      const row = h('div', { class: 'tree-row csys-row' + (cs.id === selCsys ? ' sel' : '') + (cs.hidden ? ' dim' : ''), 'data-csys': cs.id });
+      const ic = h('span', { class: 'swatch csys' }); ic.innerHTML = icon('axes');
+      const b = cs.base || {};
+      const sub = lostCsys.has(cs.id) ? 'Bezug fehlt' : { pointEdges: 'Punkt + Achsen', fixed: 'fest' }[b.type] || '';
+      row.append(ic, h('span', { class: 'nm' }, cs.name), h('span', { class: 'sub mono' }, sub));
+      row.onclick = () => selectCsys(cs.id === selCsys ? null : cs.id);
       sec.append(row);
     }
     return sec;
@@ -11437,6 +12163,109 @@ const Datums = (() => {
     return true;
   }
 
+  function renderPointPanel(body) {
+    const pt = findPoint(selPoint); if (!pt) return false;
+    const w = h('div', { class: 'props' });
+    const nm = h('input', { id: 'point-name', value: pt.name, 'aria-label': 'Name' });
+    nm.addEventListener('change', () => { const v = nm.value.trim(); if (v) setPoint(pt.id, { name: v }, 'Bezugspunkt umbenannt'); });
+    nm.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') nm.blur(); });
+    w.append(h('div', { class: 'prop-title' }, nm));
+    if (Array.isArray(pt.point)) {
+      const pTxt = pt.point.map((v) => Units.fmtLen(v, 2)).join(' · ') + (Units.key() !== 'mm' ? ' ' + Units.label() : '');
+      w.append(h('div', { class: 'mini-list' }, h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Lage'), h('b', { class: 'mono', id: 'point-coords' }, pTxt))));
+    }
+    const b = pt.base || { type: 'fixed' };
+    const fl = h('div', { class: 'fields' });
+    if (b.type === 'curvePercent') {
+      fl.append(UI.numField({ id: 'point-percent', label: 'Lage entlang Kurve', value: b.percent ?? 50, unit: '%', onCommit: (v) => setPoint(pt.id, { percent: v }) }));
+    } else if (b.type === 'fixed') {
+      fl.append(
+        UI.numField({ id: 'point-x', label: 'X', value: b.x ?? 0, len: true, onCommit: (v) => setPoint(pt.id, { x: v }) }),
+        UI.numField({ id: 'point-y', label: 'Y', value: b.y ?? 0, len: true, onCommit: (v) => setPoint(pt.id, { y: v }) }),
+        UI.numField({ id: 'point-z', label: 'Z', value: b.z ?? 0, len: true, onCommit: (v) => setPoint(pt.id, { z: v }) }),
+      );
+    }
+    if (fl.children.length) w.append(fl);
+    if (b.type === 'curvePercent') {
+      const fb = h('button', { type: 'button', class: 'btn small', id: 'point-flip' }, 'Richtung umkehren');
+      fb.onclick = () => setPoint(pt.id, { flip: !b.flip }, 'Richtung umgekehrt');
+      w.append(h('div', { class: 'btn-row' }, fb));
+    }
+    if (lostPoints.has(pt.id)) {
+      w.append(h('div', { class: 'err-box' }, 'Der Bezug dieses Punktes fehlt – der Punkt bleibt an seiner letzten Stelle.'));
+    } else {
+      const txt = {
+        edgeMid: 'Liegt genau in der Mitte der gewählten Kante – wandert mit, wenn sich der Körper ändert.',
+        faceCenter: 'Liegt in der Mitte der gewählten Fläche – wandert mit dem Teil mit.',
+        edgePlaneIntersect: 'Schnittpunkt von Kante und Ebene – wandert mit, wenn sich eines davon verschiebt.',
+        curvePercent: 'Liegt bei dem eingestellten Prozentwert auf der Kurve – wandert mit der Kante mit.',
+        fixed: 'Fester Bezugspunkt im Raum.',
+      }[b.type] || 'Bezugspunkt im Projekt.';
+      w.append(h('div', { class: 'hint-box' }, txt));
+    }
+    const row = h('div', { class: 'btn-row' });
+    const bcs = h('button', { type: 'button', class: 'btn', id: 'point-to-csys' }); bcs.innerHTML = icon('axes') + 'Koordinatensystem hier';
+    bcs.onclick = () => addCsysFromPointEdges(pt.id, null, null);
+    const bh = h('button', { type: 'button', class: 'btn', id: 'point-hide' }); bh.innerHTML = icon(pt.hidden ? 'eye' : 'eyeOff') + (pt.hidden ? 'Einblenden' : 'Ausblenden');
+    bh.onclick = () => setPoint(pt.id, { hidden: !pt.hidden }, pt.hidden ? 'Bezugspunkt eingeblendet' : 'Bezugspunkt ausgeblendet');
+    const bd = h('button', { type: 'button', class: 'btn ghost', id: 'point-del' }); bd.innerHTML = icon('trash') + 'Löschen';
+    bd.onclick = () => removePoint(pt.id);
+    row.append(bcs, bh, bd); w.append(row);
+    body.append(w);
+    return true;
+  }
+
+  function renderCsysPanel(body) {
+    const cs = findCsys(selCsys); if (!cs) return false;
+    const w = h('div', { class: 'props' });
+    const nm = h('input', { id: 'csys-name', value: cs.name, 'aria-label': 'Name' });
+    nm.addEventListener('change', () => { const v = nm.value.trim(); if (v) setCsys(cs.id, { name: v }, 'Koordinatensystem umbenannt'); });
+    nm.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') nm.blur(); });
+    w.append(h('div', { class: 'prop-title' }, nm));
+    if (cs.csys && Array.isArray(cs.csys.o)) {
+      const oTxt = cs.csys.o.map((v) => Units.fmtLen(v, 2)).join(' · ') + (Units.key() !== 'mm' ? ' ' + Units.label() : '');
+      const fDir = (a) => a.map((v) => fmt(v, 2)).join(' · ');
+      w.append(h('div', { class: 'mini-list' },
+        h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Ursprung'), h('b', { class: 'mono', id: 'csys-origin' }, oTxt)),
+        h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'X-Achse'), h('b', { class: 'mono' }, fDir(cs.csys.x))),
+        h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Y-Achse'), h('b', { class: 'mono' }, fDir(cs.csys.y))),
+        h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Z-Achse'), h('b', { class: 'mono' }, fDir(cs.csys.z)))));
+    }
+    const b = cs.base || { type: 'fixed' };
+    if (b.type === 'fixed') {
+      const fl = h('div', { class: 'fields' },
+        UI.numField({ id: 'csys-ox', label: 'Ursprung X', value: b.ox ?? 0, len: true, onCommit: (v) => setCsys(cs.id, { ox: v }) }),
+        UI.numField({ id: 'csys-oy', label: 'Ursprung Y', value: b.oy ?? 0, len: true, onCommit: (v) => setCsys(cs.id, { oy: v }) }),
+        UI.numField({ id: 'csys-oz', label: 'Ursprung Z', value: b.oz ?? 0, len: true, onCommit: (v) => setCsys(cs.id, { oz: v }) }));
+      w.append(fl);
+    }
+    const flipRow = h('div', { class: 'btn-row' });
+    const fx = h('button', { type: 'button', class: 'btn small', id: 'csys-flip-x' }, 'X umkehren');
+    fx.onclick = () => setCsys(cs.id, { flipX: !b.flipX }, 'X-Achse umgekehrt');
+    const fy = h('button', { type: 'button', class: 'btn small', id: 'csys-flip-y' }, 'Y umkehren');
+    fy.onclick = () => setCsys(cs.id, { flipY: !b.flipY }, 'Y-Achse umgekehrt');
+    const fz = h('button', { type: 'button', class: 'btn small', id: 'csys-flip-z' }, 'Z umkehren');
+    fz.onclick = () => setCsys(cs.id, { flipZ: !b.flipZ }, 'Z-Achse umgekehrt');
+    flipRow.append(fx, fy, fz); w.append(flipRow);
+    if (lostCsys.has(cs.id)) {
+      w.append(h('div', { class: 'err-box' }, 'Ein Bezug dieses Koordinatensystems fehlt oder die Achsen stehen parallel – es bleibt an seiner letzten Stelle.'));
+    } else {
+      w.append(h('div', { class: 'hint-box' }, 'Rechtshändiges Koordinatensystem. Im Export-Fenster (STEP, STL, 3MF, OBJ, GLB) kannst du es als Nullpunkt wählen.'));
+    }
+    const row = h('div', { class: 'btn-row' });
+    const bex = h('button', { type: 'button', class: 'btn primary', id: 'csys-export' }); bex.innerHTML = icon('export') + 'Als Export-Nullpunkt …';
+    bex.onclick = () => Print.exportDialog({ csysId: cs.id });
+    const bsk = h('button', { type: 'button', class: 'btn', id: 'csys-sketch' }); bsk.innerHTML = icon('sketch') + 'Skizze auf XY';
+    bsk.onclick = () => { if (!cs.csys) return; const pl = { o: cs.csys.o, x: cs.csys.x, n: cs.csys.z }; selectCsys(null); Sketch.startOnPlaneObj(deepClone(pl)); UI.toast(`Skizze auf „${cs.name}“.`, { icon: 'check', ms: 1800 }); };
+    const bh = h('button', { type: 'button', class: 'btn', id: 'csys-hide' }); bh.innerHTML = icon(cs.hidden ? 'eye' : 'eyeOff') + (cs.hidden ? 'Einblenden' : 'Ausblenden');
+    bh.onclick = () => setCsys(cs.id, { hidden: !cs.hidden }, cs.hidden ? 'Koordinatensystem eingeblendet' : 'Koordinatensystem ausgeblendet');
+    const bd = h('button', { type: 'button', class: 'btn ghost', id: 'csys-del' }); bd.innerHTML = icon('trash') + 'Löschen';
+    bd.onclick = () => removeCsys(cs.id);
+    row.append(bex, bsk, bh, bd); w.append(row);
+    body.append(w);
+    return true;
+  }
+
   // ---------- Dialoge ----------
   function dialog(anchor) {
     const face = Actions.selectedFace();
@@ -11475,6 +12304,17 @@ const Datums = (() => {
     for (const x of [b2p, brf, bfn]) x.dataset.help = 'datumAxis';
     row3.append(b2p, brf, bfn);
     box.append(row3);
+    box.append(h('div', { class: 'section-h', style: { marginTop: '4px' } }, 'Bezugspunkte & Koordinatensystem'));
+    const row4 = h('div', { class: 'btn-row' });
+    const bpm = mk('dp-pt-mid', 'Kantenmitte', () => { if (edge) addPointEdgeMid(edge); else startPointPick('edgeMid'); });
+    const bpfc = mk('dp-pt-face', 'Flächenmitte', () => { if (face) addPointFaceCenter(face); else startPointPick('faceCenter'); });
+    const bpep = mk('dp-pt-int', 'Schnitt Kante/Ebene', () => startPointPick('edgePlaneIntersect', { preEdge: edge }));
+    const bpp = mk('dp-pt-pct', 'Auf Kurve (%)', () => { if (edge) addPointOnCurve(edge, 50); else startPointPick('curvePercent', { percent: 50 }); });
+    for (const x of [bpm, bpfc, bpep, bpp]) x.dataset.help = 'datumPoint';
+    const bcs = mk('dp-csys', 'Koordinatensystem …', () => startCsysPick());
+    bcs.dataset.help = 'datumCsys';
+    row4.append(bpm, bpfc, bpep, bpp, bcs);
+    box.append(row4);
     UI.pop(anchor || $('#t-sketch'), box);
   }
 
@@ -11493,20 +12333,71 @@ const Datums = (() => {
     UI.pop(anchor || $('#t-sketch'), box);
   }
 
+  function pointDialog(anchor) {
+    const face = Actions.selectedFace();
+    const edge = App.edges && App.edges.length === 1 ? resolveEdge(App.edges[0]) : null;
+    const box = h('div', { style: { display: 'grid', gap: '10px', minWidth: '280px' }, 'data-help': 'datumPoint' });
+    box.append(h('b', null, 'Neuer Bezugspunkt'), h('p', { style: { margin: 0, color: 'var(--muted)', fontSize: '13.5px', lineHeight: 1.45 } }, 'Ein Punkt im Raum an Kante, Fläche oder Schnittpunkt – wandert mit dem Körper mit.'));
+    let pct = 50;
+    box.append(UI.numField({ id: 'dpt-pct', label: 'Position auf Kurve', value: pct, unit: '%', expr: false, onCommit: (v) => { pct = v; } }));
+    const mk = (id, label, fn) => { const b = h('button', { type: 'button', class: 'btn', id }, label); b.onclick = () => { UI.closePop(); fn(); }; return b; };
+    const row = h('div', { class: 'btn-row' });
+    row.append(
+      mk('dpt-edge-mid', 'Kantenmitte', () => { if (edge) addPointEdgeMid(edge); else startPointPick('edgeMid'); }),
+      mk('dpt-face-center', 'Flächenmitte', () => { if (face) addPointFaceCenter(face); else startPointPick('faceCenter'); }),
+      mk('dpt-edge-plane', 'Schnittpunkt Kante/Ebene', () => startPointPick('edgePlaneIntersect', { preEdge: edge })),
+      mk('dpt-curve-pct', 'Auf Kurve bei x %', () => { if (edge) addPointOnCurve(edge, pct); else startPointPick('curvePercent', { percent: pct }); }),
+    );
+    box.append(row);
+    UI.pop(anchor || $('#t-sketch'), box);
+  }
+
+  function csysDialog(anchor) {
+    const pts = points().filter((pt) => Array.isArray(pt.point) && !lostPoints.has(pt.id));
+    const box = h('div', { style: { display: 'grid', gap: '10px', minWidth: '280px' }, 'data-help': 'datumCsys' });
+    box.append(h('b', null, 'Eigenes Koordinatensystem'), h('p', { style: { margin: 0, color: 'var(--muted)', fontSize: '13.5px', lineHeight: 1.45 } }, 'Setzt einen eigenen Nullpunkt samt X/Y-Richtung an Kanten – im Export (STEP, STL, 3MF) als Nullpunkt wählbar.'));
+    const mk = (id, label, fn) => { const b = h('button', { type: 'button', class: 'btn primary', id }, label); b.onclick = () => { UI.closePop(); fn(); }; return b; };
+    box.append(mk('dcs-pick', 'Ursprung & Kanten im Bild wählen', () => startCsysPick()));
+    if (pts.length) {
+      let ptId = pts[0].id;
+      box.append(UI.selectField({ id: 'dcs-origin-pt', label: 'Oder am Bezugspunkt anlegen', value: ptId, options: pts.map((p) => [p.id, p.name]), onChange: (v) => { ptId = v; } }));
+      const bq = h('button', { type: 'button', class: 'btn', id: 'dcs-quick' }, 'An gewähltem Punkt anlegen');
+      bq.onclick = () => { UI.closePop(); addCsysFromPointEdges(ptId, null, null); };
+      box.append(bq);
+    }
+    UI.pop(anchor || $('#t-sketch'), box);
+  }
+
   function init() {
     App.on('results', relink);
-    App.on('doc', () => { if (sel && !find(sel)) sel = null; if (selAxis && !findAxis(selAxis)) selAxis = null; draw(); });
-    App.on('selection', () => { if ((sel || selAxis) && App.sel.length) { sel = null; selAxis = null; draw(); } });
+    App.on('doc', () => {
+      if (sel && !find(sel)) sel = null;
+      if (selAxis && !findAxis(selAxis)) selAxis = null;
+      if (selPoint && !findPoint(selPoint)) selPoint = null;
+      if (selCsys && !findCsys(selCsys)) selCsys = null;
+      draw();
+    });
+    App.on('selection', () => {
+      if ((sel || selAxis || selPoint || selCsys) && App.sel.length) {
+        sel = null; selAxis = null; selPoint = null; selCsys = null; draw();
+      }
+    });
   }
 
   return {
     init, list, find, add, addOrigin, addFromFace, addEdgeAngle, addTangent, addNormalToCurve, addEdgePoint, addTwoEdges, addFixed, set, remove, select, sketchOn,
     axes, findAxis, addAxis, addAxisTwoPoints, addAxisFromFace, addAxisFromCircleEdge, addAxisNormalAtPoint, addAxisFixed,
     setAxis, removeAxis, selectAxis, solveAxis, axisTreeSection, renderAxisPanel, axisDialog, pickAxis, applyAxisToRevolve,
+    points, findPoint, addPoint, addPointEdgeMid, addPointFaceCenter, addPointOnCurve, addPointEdgePlane, addPointFixed,
+    setPoint, removePoint, selectPoint, solvePoint, pointTreeSection, renderPointPanel, pointDialog, pickPoint, startPointPick,
+    csysList, findCsys, addCsys, addCsysFromPointEdges, addCsysFixed, setCsys, removeCsys, selectCsys, solveCsys, csysExportMatrix,
+    csysTreeSection, renderCsysPanel, csysDialog, startCsysPick,
     startEdgeAnglePick, startTangentPick, startNormalCurvePick, startEdgePointPick, startTwoEdgesPick, startAxisPick, stopPick,
-    draw, dialog, treeSection, renderPanel, solve,
+    draw, dialog, treeSection, renderPanel, solve, relink,
     get selected() { return sel; }, get lost() { return [...lost]; },
     get selectedAxis() { return selAxis; }, get lostAxes() { return [...lostAxes]; },
+    get selectedPoint() { return selPoint; }, get lostPoints() { return [...lostPoints]; },
+    get selectedCsys() { return selCsys; }, get lostCsys() { return [...lostCsys]; },
     get picking() { return !!pickState; },
   };
 })();
@@ -12867,6 +13758,8 @@ const Panels = (() => {
       body.append(h('div', { class: 'empty-tree', html: 'Hier erscheint alles, was du baust – <b>Schritt für Schritt</b>.<br><br>Fang mit einem <b>Körper</b> an oder beschreibe unten in der Zeile, was du bauen möchtest.' }));
       const ds = Datums.treeSection(); if (ds) body.append(ds);
       const as = Datums.axisTreeSection(); if (as) body.append(as);
+      const ps = Datums.pointTreeSection(); if (ps) body.append(ps);
+      const cs = Datums.csysTreeSection(); if (cs) body.append(cs);
       const ms = Measure.treeSection(); if (ms) body.append(ms);
       return;
     }
@@ -12962,6 +13855,8 @@ const Panels = (() => {
     body.append(ul);
     const ds = Datums.treeSection(); if (ds) body.append(ds);
     const as = Datums.axisTreeSection(); if (as) body.append(as);
+    const ps = Datums.pointTreeSection(); if (ps) body.append(ps);
+    const cs = Datums.csysTreeSection(); if (cs) body.append(cs);
     const ms = Measure.treeSection(); if (ms) body.append(ms);
   }
   function moveInTree(srcId, dstId, mode) {
@@ -13158,6 +14053,8 @@ const Panels = (() => {
     const items = App.selectedItems();
     if (!items.length && Datums.selected && Datums.find(Datums.selected)) { $('#right-title').textContent = 'Bezugsebene'; Datums.renderPanel(body); return; }
     if (!items.length && Datums.selectedAxis && Datums.findAxis(Datums.selectedAxis)) { $('#right-title').textContent = 'Bezugsachse'; Datums.renderAxisPanel(body); return; }
+    if (!items.length && Datums.selectedPoint && Datums.findPoint(Datums.selectedPoint)) { $('#right-title').textContent = 'Bezugspunkt'; Datums.renderPointPanel(body); return; }
+    if (!items.length && Datums.selectedCsys && Datums.findCsys(Datums.selectedCsys)) { $('#right-title').textContent = 'Koordinatensystem'; Datums.renderCsysPanel(body); return; }
     if (!items.length && Measure.selected && Measure.find(Measure.selected)) { $('#right-title').textContent = 'Messung'; Measure.renderPanel(body); return; }
     if (!items.length) { $('#right-title').textContent = 'Projekt'; renderProject(body); return; }
     if (items.length > 1) { $('#right-title').textContent = 'Auswahl'; renderMulti(body, items); return; }
@@ -13369,7 +14266,7 @@ const Panels = (() => {
         const line = (txt, id) => { const r = h('div', { class: 'mini-row dep-row' }, h('span', { class: 'grow' }, txt)); if (id && Model.find(App.doc, id)) { r.style.cursor = 'pointer'; r.onclick = () => App.select([id]); } return r; };
         for (const x of up) ds.append(line(`${x.what} „${nm(x.to)}“`, x.to));
         const back = { 'abgezogen von': 'wird hiervon abgezogen', 'vereinigt mit': 'ist hiermit vereinigt', 'Schnittmenge mit': 'bildet hiermit die Schnittmenge', 'verrechnet mit': 'ist hiermit verrechnet', 'versetzt': 'versetzt diesen Körper', 'versetzte Kopie von': 'ist eine versetzte Kopie hiervon', 'verknüpfte Kopie von': 'ist eine verknüpfte Kopie hiervon', 'Skizze übernimmt Kante von': 'übernimmt Kanten hiervon', 'Rohr hängt an': 'hat Rohrpunkte hieran' };
-        for (const x of down) ds.append(line(x.datum ? `Bezugsebene „${x.datum}“ hängt hieran` : x.axis ? `Bezugsachse „${x.axis}“ hängt hieran` : `„${nm(x.from)}“ ${back[x.what] || 'hängt hieran'}`, x.datum || x.axis ? null : x.from));
+        for (const x of down) ds.append(line(x.datum ? `Bezugsebene „${x.datum}“ hängt hieran` : x.axis ? `Bezugsachse „${x.axis}“ hängt hieran` : x.point ? `Bezugspunkt „${x.point}“ hängt hieran` : x.csys ? `Koordinatensystem „${x.csys}“ hängt hieran` : `„${nm(x.from)}“ ${back[x.what] || 'hängt hieran'}`, x.datum || x.axis || x.point || x.csys ? null : x.from));
         if (down.length) ds.open = true;
         w.append(ds);
       }
@@ -13823,6 +14720,8 @@ const Panels = (() => {
         }
         const nb = b('originPlanes', T('ctx.planeNormal'), () => Datums.addNormalToCurve(App.edges[0], 'mid'), 'pro', T('ctx.planeNormalTip'));
         nb.dataset.help = 'datumNormalCurve';
+        const pb = b('point', T('ctx.pointEdgeMid'), () => Datums.addPointEdgeMid(App.edges[0]), 'pro', T('ctx.pointEdgeMidTip'));
+        pb.dataset.help = 'datumPoint';
       } else if (App.edges.length === 2 && eds.length === 2 && eds[0].t === 'LINE' && eds[1].t === 'LINE') {
         const tb = b('originPlanes', T('ctx.planeTwoEdges'), () => Datums.addTwoEdges(App.edges[0], App.edges[1]), 'pro', T('ctx.planeTwoEdgesTip'));
         tb.dataset.help = 'datumTwoEdges';
@@ -13837,6 +14736,8 @@ const Panels = (() => {
       if (items[0].item.role !== 'hole' && App.doc.items.some((x) => x.id === face.id)) b('shell', T('ctx.shell'), () => Features.shell(face), '', T('ctx.shellTip'));
       b('section', T('ctx.sectionHere'), () => Views.section(true, { face }), '', T('ctx.sectionHereTip'), true);
       if (items[0].item.role !== 'hole') b('mirror', T('ctx.mirrorFace'), () => Features.mirrorAtFace(face), '', T('ctx.mirrorFaceTip'), true);
+      const pf = b('point', T('ctx.pointFaceCenter'), () => Datums.addPointFaceCenter(face), 'pro', T('ctx.pointFaceCenterTip'));
+      pf.dataset.help = 'datumPoint';
       sep();
     } else if (face && items.length === 1 && face.info.t !== 'PLANE') {
       const fr = face.info.r;
@@ -13856,6 +14757,8 @@ const Panels = (() => {
         tb.dataset.help = 'datumTangent';
       }
       b('fillet', T('ctx.faceEdges'), (e) => faceEdgeMenu(face, e.currentTarget), '', T('ctx.faceEdgesTip'), true);
+      const pf = b('point', T('ctx.pointFaceCenter'), () => Datums.addPointFaceCenter(face), 'pro', T('ctx.pointFaceCenterTip'));
+      pf.dataset.help = 'datumPoint';
       sep();
     }
     if (items.length === 1) {
@@ -16011,7 +16914,9 @@ const Sketch = (() => {
     for (const d of ds) { const b = h('button', { type: 'button', class: 'btn', 'data-datum': d.id }, d.name); b.onclick = () => { UI.closePop(); Datums.sketchOn(d.id); }; row3.append(b); }
     const nb = h('button', { type: 'button', class: 'btn ghost', id: 'sk-datum' }); nb.innerHTML = icon('plus') + 'Neue Bezugsebene …'; nb.onclick = () => { UI.closePop(); Datums.dialog(btn); };
     const na = h('button', { type: 'button', class: 'btn ghost', id: 'sk-axis', 'data-help': 'datumAxis' }); na.innerHTML = icon('axes') + 'Neue Bezugsachse …'; na.onclick = () => { UI.closePop(); Datums.axisDialog(btn); };
-    row3.append(nb, na); box.append(row3);
+    const np = h('button', { type: 'button', class: 'btn ghost', id: 'sk-point', 'data-help': 'datumPoint' }); np.innerHTML = icon('point') + 'Neuer Bezugspunkt …'; np.onclick = () => { UI.closePop(); Datums.pointDialog(btn); };
+    const nc = h('button', { type: 'button', class: 'btn ghost', id: 'sk-csys', 'data-help': 'datumCsys' }); nc.innerHTML = icon('axes') + 'Koordinatensystem …'; nc.onclick = () => { UI.closePop(); Datums.csysDialog(btn); };
+    row3.append(nb, na, np, nc); box.append(row3);
     UI.pop(btn, box);
   }
   const PLANES = { XY: { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] }, XZ: { o: [0, 0, 0], x: [1, 0, 0], n: [0, -1, 0] }, YZ: { o: [0, 0, 0], x: [0, 1, 0], n: [1, 0, 0] } };
@@ -21219,6 +22124,8 @@ const Measure = (() => {
       App.clearSelection();
       if (typeof Datums !== 'undefined' && Datums.selected) Datums.select(null);
       if (typeof Datums !== 'undefined' && Datums.selectedAxis) Datums.selectAxis(null);
+      if (typeof Datums !== 'undefined' && Datums.selectedPoint) Datums.selectPoint(null);
+      if (typeof Datums !== 'undefined' && Datums.selectedCsys) Datums.selectCsys(null);
     }
     drawSaved(); Panels.renderLeft(); Panels.renderRight();
   }
@@ -21628,6 +22535,12 @@ const Commands = (() => {
     add('datum-axis-2p', 'Bezugsachse durch zwei Punkte', 'axes', 'bezugsachse achse zwei punkte linie', () => Datums.startAxisPick('twoPoints'), { group: 'Werkzeuge' });
     add('datum-axis-round', 'Bezugsachse durch Mitte einer Rundung', 'axes', 'bezugsachse achse zylinder rundung loch kreis mitte', () => { const f = Actions.selectedFace(); if (f && Array.isArray(f.info.axis) && f.info.axis.length >= 6) Datums.addAxisFromFace(f); else Datums.startAxisPick('roundFace'); }, { group: 'Werkzeuge' });
     add('datum-axis-normal', 'Bezugsachse senkrecht auf Fläche', 'axes', 'bezugsachse achse senkrecht normale fläche punkt', () => Datums.startAxisPick('faceNormal'), { group: 'Werkzeuge' });
+    add('datum-point', 'Bezugspunkt anlegen', 'point', 'bezugspunkt punkt kantenmitte flächenmitte schnittpunkt kurve prozent', () => Datums.pointDialog(), { group: 'Werkzeuge' });
+    add('datum-point-edge-mid', 'Bezugspunkt: Kantenmitte', 'point', 'bezugspunkt punkt kante mitte kantenmitte', () => { const e = App.edges && App.edges.length === 1 ? App.edges[0] : null; if (e) Datums.addPointEdgeMid(e); else Datums.startPointPick('edgeMid'); }, { group: 'Werkzeuge' });
+    add('datum-point-face-center', 'Bezugspunkt: Flächenmitte', 'point', 'bezugspunkt punkt fläche mitte flächenmitte', () => { const f = Actions.selectedFace(); if (f) Datums.addPointFaceCenter(f); else Datums.startPointPick('faceCenter'); }, { group: 'Werkzeuge' });
+    add('datum-point-edge-plane', 'Bezugspunkt: Schnittpunkt Kante und Ebene', 'point', 'bezugspunkt punkt schnittpunkt kante ebene fläche', () => { const e = App.edges && App.edges.length === 1 ? App.edges[0] : null; Datums.startPointPick('edgePlaneIntersect', { preEdge: e }); }, { group: 'Werkzeuge' });
+    add('datum-point-curve-pct', 'Bezugspunkt: auf Kurve bei x %', 'point', 'bezugspunkt punkt kurve kante prozent anteil entlang', () => { const e = App.edges && App.edges.length === 1 ? App.edges[0] : null; if (e) Datums.addPointOnCurve(e, 50); else Datums.startPointPick('curvePercent', { percent: 50 }); }, { group: 'Werkzeuge' });
+    add('datum-csys', 'Eigenes Koordinatensystem anlegen', 'axes', 'koordinatensystem nullpunkt ursprung achsen export step stl 3mf', () => Datums.csysDialog(), { group: 'Werkzeuge' });
     add('image', 'Bild speichern (PNG)', 'image', 'bild png foto screenshot rendering präsentation hintergrund durchsichtig', () => Print.imageDialog(), { group: 'Werkzeuge' });
     add('export', 'Exportieren (STEP, STL, 3MF, OBJ, GLB, DXF)', 'export', 'step stl 3mf obj mtl glb gltf dxf platten fräse laser exportieren speichern download', () => Print.exportDialog(), { group: 'Werkzeuge', kbd: 'Strg E' });
     add('status', 'Modell-Status', 'info', 'status prüfen größe fehler', () => $('#ampel').click(), { group: 'Werkzeuge' });
@@ -22451,10 +23364,12 @@ const Print = (() => {
       return false;
     }
   }
-  function exportDialog() {
+  function exportDialog(preset = {}) {
     if (!App.doc.items.some((x) => x.role !== 'hole' && !x.hidden)) { UI.toast('Es gibt noch nichts zu exportieren. Füge zuerst einen Körper hinzu.', { icon: 'info' }); return; }
     const plates = Plates.candidates();
-    const opts = { step: true, stl: false, mf: false, obj: false, glb: false, dxf: false, plates: plates.map((p) => p.id) };
+    const csysAll = typeof Datums !== 'undefined' ? Datums.csysList().filter((c) => c.csys) : [];
+    const initCsys = preset.csysId && csysAll.some((c) => c.id === preset.csysId) ? preset.csysId : '';
+    const opts = { step: true, stl: false, mf: false, obj: false, glb: false, dxf: false, plates: plates.map((p) => p.id), csysId: initCsys };
     const body = h('div', { style: { display: 'grid', gap: '12px' } });
     body.append(h('p', null, 'Die Dateien kommen zusammen als ZIP.'));
     const mk = (k, label, sub) => { const l = h('label', { class: 'check', style: { alignItems: 'flex-start' } }, h('input', { type: 'checkbox', id: 'ex-' + k, checked: opts[k] }), h('span', null, h('b', null, label), h('br'), h('small', { style: { color: 'var(--muted)' } }, sub))); l.querySelector('input').onchange = (e) => { opts[k] = e.target.checked; }; return l; };
@@ -22471,6 +23386,11 @@ const Print = (() => {
     const st = UI.selectField({ id: 'ex-stlfmt', label: 'STL-Format', value: 'bin', options: [['bin', 'Binär (klein, Standard)'], ['txt', 'Text (ASCII)']], onChange: (v) => { opts.stlText = v === 'txt'; } });
     st.setAttribute('data-help', 'exportSettings');
     body.append(h('div', { class: 'fields' }, qs, st));
+    if (csysAll.length) {
+      const cf = UI.selectField({ id: 'ex-csys', label: 'Nullpunkt (Koordinatensystem)', value: opts.csysId, options: [['', 'Welt-Ursprung (0 | 0 | 0)'], ...csysAll.map((c) => [c.id, c.name])], onChange: (v) => { opts.csysId = v; } });
+      cf.setAttribute('data-help', 'datumCsys');
+      body.append(cf);
+    }
     { const l = mk('each', 'Jeder Körper als eigene Datei (STL, 3MF, OBJ, GLB)', 'Zusätzlich ein Ordner mit einer Datei pro Körper, benannt nach dem Teil – praktisch für den Slicer'); l.setAttribute('data-help', 'exportSelection'); body.append(l); }
     // flache Teile (Carbon-Platten) als 2D-Kontur für die Fräse oder den Laser
     if (plates.length) {
@@ -22632,10 +23552,12 @@ const Print = (() => {
     try {
       const scene = Model.kernelScene(App.doc);
       const only = opts.onlySel ? exportSelection() : null;
+      const originMat = opts.csysId && typeof Datums !== 'undefined' ? Datums.csysExportMatrix(opts.csysId) : null;
+      const csysObj = opts.csysId && typeof Datums !== 'undefined' ? Datums.findCsys(opts.csysId) : null;
       const name = safeName(App.doc.name);
       const files = [];
       if (opts.stl || opts.mf || opts.obj || opts.glb) {
-        const res = await Kernel.call('exportMeshes', { scene, fine: true, q: opts.q || 1 });
+        const res = await Kernel.call('exportMeshes', { scene, fine: true, q: opts.q || 1, originMat });
         lastTris = res.objects.reduce((s, o) => s + o.triangles.length / 3, 0);
         const STL = opts.stlText ? buildSTLText : buildSTL;
         const objs = (only ? res.objects.filter((o) => only.includes(o.id)) : res.objects).map((o) => {
@@ -22658,9 +23580,9 @@ const Print = (() => {
           }
         }
       }
-      if (opts.step) { const r = await Kernel.call('exportSTEP', { scene, only }); files.push({ name: name + '.step', data: new Uint8Array(r.data) }); }
+      if (opts.step) { const r = await Kernel.call('exportSTEP', { scene, only, originMat }); files.push({ name: name + '.step', data: new Uint8Array(r.data) }); }
       if (opts.dxf) for (const id of opts.plates) { const f = await Plates.file(id); if (f && f.count) files.push({ name: 'DXF/' + f.name, data: f.data }); }
-      files.push({ name: 'LIESMICH.txt', data: new TextEncoder().encode(`${App.doc.name}\nErstellt mit Tracery am ${new Date().toLocaleString('de-DE')}\n\nSTEP: exakte Geometrie für andere CAD-Programme\nSTL / 3MF: Dreiecksnetz (Millimeter)\nOBJ / MTL: Dreiecksnetz mit Farben (Millimeter)\nGLB: glTF 2.0 binär mit Werkstoff-Aussehen und Teilenamen (Meter)\n` + (opts.dxf ? 'DXF: Draufsicht jeder Platte in Originalgröße (Millimeter, Ebene KONTUR) – Dicke steht im Dateinamen\n' : '')) });
+      files.push({ name: 'LIESMICH.txt', data: new TextEncoder().encode(`${App.doc.name}\nErstellt mit Tracery am ${new Date().toLocaleString('de-DE')}\n${csysObj ? `Nullpunkt: ${csysObj.name}\n` : ''}\nSTEP: exakte Geometrie für andere CAD-Programme\nSTL / 3MF: Dreiecksnetz (Millimeter)\nOBJ / MTL: Dreiecksnetz mit Farben (Millimeter)\nGLB: glTF 2.0 binär mit Werkstoff-Aussehen und Teilenamen (Meter)\n` + (opts.dxf ? 'DXF: Draufsicht jeder Platte in Originalgröße (Millimeter, Ebene KONTUR) – Dicke steht im Dateinamen\n' : '')) });
       lastExport = files.map((f) => f.name);
       const zip = await Zip.make(files);
       tst.remove();

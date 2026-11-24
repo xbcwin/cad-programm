@@ -251,6 +251,21 @@ const Model = (() => {
         if (b.bindB && b.bindB.id) out.push({ from: 'axis:' + ax.id, to: top(b.bindB.id), what: 'Bezugsachse an', axis: ax.name });
       }
     }
+    for (const pt of doc.points || []) {
+      const b = pt.base || {};
+      if ((b.type === 'edgeMid' || b.type === 'curvePercent') && b.edgeId) out.push({ from: 'point:' + pt.id, to: top(b.edgeId), what: 'Bezugspunkt an', point: pt.name });
+      else if (b.type === 'faceCenter' && b.id) out.push({ from: 'point:' + pt.id, to: top(b.id), what: 'Bezugspunkt an', point: pt.name });
+      else if (b.type === 'edgePlaneIntersect') {
+        if (b.edgeId) out.push({ from: 'point:' + pt.id, to: top(b.edgeId), what: 'Bezugspunkt an', point: pt.name });
+        if (b.planeRef && b.planeRef.kind === 'face' && b.planeRef.id) out.push({ from: 'point:' + pt.id, to: top(b.planeRef.id), what: 'Bezugspunkt an', point: pt.name });
+      }
+    }
+    for (const cs of doc.csys || []) {
+      const b = cs.base || {};
+      if (b.originBind && b.originBind.id) out.push({ from: 'csys:' + cs.id, to: top(b.originBind.id), what: 'Koordinatensystem an', csys: cs.name });
+      if (b.xEdge && b.xEdge.id) out.push({ from: 'csys:' + cs.id, to: top(b.xEdge.id), what: 'Koordinatensystem an', csys: cs.name });
+      if (b.yEdge && b.yEdge.id) out.push({ from: 'csys:' + cs.id, to: top(b.yEdge.id), what: 'Koordinatensystem an', csys: cs.name });
+    }
     const seen = new Set();
     return out.filter((x) => { if (x.from === x.to) return false; const k = x.from + '|' + x.to + '|' + x.what; if (seen.has(k)) return false; seen.add(k); return true; });
   }

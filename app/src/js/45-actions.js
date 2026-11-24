@@ -130,7 +130,7 @@ const Actions = (() => {
     });
     App.select([]);
     if (hit.length) {
-      const names = [...new Set(hit.map((x) => (x.datum ? `Bezugsebene „${x.datum}“` : `„${Model.label((Model.find(App.doc, x.from) || { item: {} }).item)}“`)))];
+      const names = [...new Set(hit.map((x) => (x.datum ? `Bezugsebene „${x.datum}“` : x.axis ? `Bezugsachse „${x.axis}“` : x.point ? `Bezugspunkt „${x.point}“` : x.csys ? `Koordinatensystem „${x.csys}“` : `„${Model.label((Model.find(App.doc, x.from) || { item: {} }).item)}“`)))];
       UI.toast(`Daran hingen ${names.slice(0, 3).join(', ')}${names.length > 3 ? ' …' : ''} – sie behalten ihre letzte Form. Rückgängig holt alles zurück.`, { icon: 'warn', ms: 6000 });
     }
   }

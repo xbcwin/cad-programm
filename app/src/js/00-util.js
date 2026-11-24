@@ -1209,6 +1209,16 @@ const HELP = {
   "tip": "Freie Punkte und fehlende Angaben anzeigen",
   "hilfe": "Markiert alle noch beweglichen Punkte und Elemente pulsierend in Orange und zeigt die Zahl der fehlenden Angaben. Klickst du auf eine freie Stelle, wackelt sie kurz in der Richtung, in der sie noch Spiel hat.",
   "tipp": "Mit Umschalt + F schaltest du die Anzeige direkt in der Skizze ein oder aus – so siehst du sofort, wo noch ein Maß oder eine Regel fehlt."
+ },
+ "datumPoint": {
+  "tip": "Bezugspunkt als eigenen Schritt anlegen",
+  "hilfe": "Setzt einen Bezugspunkt an einer Kantenmitte, Flächenmitte, am Schnittpunkt zwischen Kante und Ebene oder bei einem Prozentwert entlang einer Kurve. Der Punkt wandert automatisch mit, wenn sich der Körper ändert.",
+  "tipp": "Du kannst jeden Bezugspunkt als Ursprung für ein eigenes Koordinatensystem, eine Bezugsebene oder eine Bezugsachse verwenden."
+ },
+ "datumCsys": {
+  "tip": "Eigenes Koordinatensystem anlegen und als Export-Nullpunkt wählen",
+  "hilfe": "Legt ein eigenes rechtshändiges Koordinatensystem mit Ursprung an einem Punkt und Achsen entlang gewählter Kanten an. Beim Exportieren (STEP, STL, 3MF, OBJ, GLB) kannst du dieses System als Nullpunkt wählen.",
+  "tipp": "Ideal für den 3D-Druck, CNC oder Baugruppen: Lege das Koordinatensystem an eine Ecke und zwei Kanten – dann beginnen die exportierten Maße genau bei 0."
  }
 };
 

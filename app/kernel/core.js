@@ -1720,27 +1720,54 @@ export function createKernel(R, oc) {
   }
 
   // q: Feinheit beim Export – 1 = normal, kleiner = feiner (0.4 = fein, 0.15 = sehr fein), größer = gröber
-  function exportMeshes(scene, fine = true, q = 1) {
+  function exportMeshes(scene, fine = true, q = 1, originMat = null) {
     ingestBlobs(scene);
     const errors = [];
     const solids = evaluateShapes(scene, errors);
     const objs = [];
     const f = Math.max(0.05, Math.min(4, +q || 1));
+    const useTr = Array.isArray(originMat) && originMat.length === 16 && !isIdentity(originMat);
     for (const s of solids) {
       const b = bboxOf(s.shape);
       const tol = (fine ? Math.min(0.05, Math.max(0.005, meshTol(b) * 0.35)) : meshTol(b)) * f;
       const m = s.shape.mesh({ tolerance: tol, angularTolerance: (fine ? 0.1 : 0.2) * Math.min(2, Math.max(0.25, f)) });
-      objs.push({ id: s.id, name: s.name, color: s.color, vertices: new Float32Array(m.vertices), normals: new Float32Array(m.normals), triangles: new Uint32Array(m.triangles) });
+      const verts = new Float32Array(m.vertices), norms = new Float32Array(m.normals);
+      if (useTr) {
+        const m0 = originMat;
+        for (let i = 0; i < verts.length; i += 3) {
+          const x = verts[i], y = verts[i + 1], z = verts[i + 2];
+          verts[i] = m0[0] * x + m0[4] * y + m0[8] * z + m0[12];
+          verts[i + 1] = m0[1] * x + m0[5] * y + m0[9] * z + m0[13];
+          verts[i + 2] = m0[2] * x + m0[6] * y + m0[10] * z + m0[14];
+        }
+        for (let i = 0; i < norms.length; i += 3) {
+          const x = norms[i], y = norms[i + 1], z = norms[i + 2];
+          let nx = m0[0] * x + m0[4] * y + m0[8] * z;
+          let ny = m0[1] * x + m0[5] * y + m0[9] * z;
+          let nz = m0[2] * x + m0[6] * y + m0[10] * z;
+          const l = Math.hypot(nx, ny, nz);
+          if (l > 1e-12) { nx /= l; ny /= l; nz /= l; }
+          norms[i] = nx; norms[i + 1] = ny; norms[i + 2] = nz;
+        }
+      }
+      objs.push({ id: s.id, name: s.name, color: s.color, vertices: verts, normals: norms, triangles: new Uint32Array(m.triangles) });
       s.shape.delete();
     }
     return { objects: objs, errors };
   }
-  function exportSTEP(scene, only) {
+  function exportSTEP(scene, only, originMat = null) {
     ingestBlobs(scene);
     const errors = [];
     let solids = evaluateShapes(scene, errors);
     if (only && only.length) { const keep = new Set(only); for (const s of solids) if (!keep.has(s.id)) s.shape.delete(); solids = solids.filter((s) => keep.has(s.id)); }
     if (!solids.length) throw new Error('Es gibt nichts zu exportieren.');
+    if (Array.isArray(originMat) && originMat.length === 16 && !isIdentity(originMat)) {
+      for (const s of solids) {
+        const tr = applyMatrix(s.shape, originMat);
+        s.shape.delete();
+        s.shape = tr;
+      }
+    }
     const comp = solids.length === 1 ? solids[0].shape : R.makeCompound(solids.map((s) => s.shape));
     return comp.blobSTEP();
   }

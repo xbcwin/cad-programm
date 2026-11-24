@@ -356,10 +356,12 @@ const Print = (() => {
       return false;
     }
   }
-  function exportDialog() {
+  function exportDialog(preset = {}) {
     if (!App.doc.items.some((x) => x.role !== 'hole' && !x.hidden)) { UI.toast('Es gibt noch nichts zu exportieren. Füge zuerst einen Körper hinzu.', { icon: 'info' }); return; }
     const plates = Plates.candidates();
-    const opts = { step: true, stl: false, mf: false, obj: false, glb: false, dxf: false, plates: plates.map((p) => p.id) };
+    const csysAll = typeof Datums !== 'undefined' ? Datums.csysList().filter((c) => c.csys) : [];
+    const initCsys = preset.csysId && csysAll.some((c) => c.id === preset.csysId) ? preset.csysId : '';
+    const opts = { step: true, stl: false, mf: false, obj: false, glb: false, dxf: false, plates: plates.map((p) => p.id), csysId: initCsys };
     const body = h('div', { style: { display: 'grid', gap: '12px' } });
     body.append(h('p', null, 'Die Dateien kommen zusammen als ZIP.'));
     const mk = (k, label, sub) => { const l = h('label', { class: 'check', style: { alignItems: 'flex-start' } }, h('input', { type: 'checkbox', id: 'ex-' + k, checked: opts[k] }), h('span', null, h('b', null, label), h('br'), h('small', { style: { color: 'var(--muted)' } }, sub))); l.querySelector('input').onchange = (e) => { opts[k] = e.target.checked; }; return l; };
@@ -376,6 +378,11 @@ const Print = (() => {
     const st = UI.selectField({ id: 'ex-stlfmt', label: 'STL-Format', value: 'bin', options: [['bin', 'Binär (klein, Standard)'], ['txt', 'Text (ASCII)']], onChange: (v) => { opts.stlText = v === 'txt'; } });
     st.setAttribute('data-help', 'exportSettings');
     body.append(h('div', { class: 'fields' }, qs, st));
+    if (csysAll.length) {
+      const cf = UI.selectField({ id: 'ex-csys', label: 'Nullpunkt (Koordinatensystem)', value: opts.csysId, options: [['', 'Welt-Ursprung (0 | 0 | 0)'], ...csysAll.map((c) => [c.id, c.name])], onChange: (v) => { opts.csysId = v; } });
+      cf.setAttribute('data-help', 'datumCsys');
+      body.append(cf);
+    }
     { const l = mk('each', 'Jeder Körper als eigene Datei (STL, 3MF, OBJ, GLB)', 'Zusätzlich ein Ordner mit einer Datei pro Körper, benannt nach dem Teil – praktisch für den Slicer'); l.setAttribute('data-help', 'exportSelection'); body.append(l); }
     // flache Teile (Carbon-Platten) als 2D-Kontur für die Fräse oder den Laser
     if (plates.length) {
@@ -537,10 +544,12 @@ const Print = (() => {
     try {
       const scene = Model.kernelScene(App.doc);
       const only = opts.onlySel ? exportSelection() : null;
+      const originMat = opts.csysId && typeof Datums !== 'undefined' ? Datums.csysExportMatrix(opts.csysId) : null;
+      const csysObj = opts.csysId && typeof Datums !== 'undefined' ? Datums.findCsys(opts.csysId) : null;
       const name = safeName(App.doc.name);
       const files = [];
       if (opts.stl || opts.mf || opts.obj || opts.glb) {
-        const res = await Kernel.call('exportMeshes', { scene, fine: true, q: opts.q || 1 });
+        const res = await Kernel.call('exportMeshes', { scene, fine: true, q: opts.q || 1, originMat });
         lastTris = res.objects.reduce((s, o) => s + o.triangles.length / 3, 0);
         const STL = opts.stlText ? buildSTLText : buildSTL;
         const objs = (only ? res.objects.filter((o) => only.includes(o.id)) : res.objects).map((o) => {
@@ -563,9 +572,9 @@ const Print = (() => {
           }
         }
       }
-      if (opts.step) { const r = await Kernel.call('exportSTEP', { scene, only }); files.push({ name: name + '.step', data: new Uint8Array(r.data) }); }
+      if (opts.step) { const r = await Kernel.call('exportSTEP', { scene, only, originMat }); files.push({ name: name + '.step', data: new Uint8Array(r.data) }); }
       if (opts.dxf) for (const id of opts.plates) { const f = await Plates.file(id); if (f && f.count) files.push({ name: 'DXF/' + f.name, data: f.data }); }
-      files.push({ name: 'LIESMICH.txt', data: new TextEncoder().encode(`${App.doc.name}\nErstellt mit Tracery am ${new Date().toLocaleString('de-DE')}\n\nSTEP: exakte Geometrie für andere CAD-Programme\nSTL / 3MF: Dreiecksnetz (Millimeter)\nOBJ / MTL: Dreiecksnetz mit Farben (Millimeter)\nGLB: glTF 2.0 binär mit Werkstoff-Aussehen und Teilenamen (Meter)\n` + (opts.dxf ? 'DXF: Draufsicht jeder Platte in Originalgröße (Millimeter, Ebene KONTUR) – Dicke steht im Dateinamen\n' : '')) });
+      files.push({ name: 'LIESMICH.txt', data: new TextEncoder().encode(`${App.doc.name}\nErstellt mit Tracery am ${new Date().toLocaleString('de-DE')}\n${csysObj ? `Nullpunkt: ${csysObj.name}\n` : ''}\nSTEP: exakte Geometrie für andere CAD-Programme\nSTL / 3MF: Dreiecksnetz (Millimeter)\nOBJ / MTL: Dreiecksnetz mit Farben (Millimeter)\nGLB: glTF 2.0 binär mit Werkstoff-Aussehen und Teilenamen (Meter)\n` + (opts.dxf ? 'DXF: Draufsicht jeder Platte in Originalgröße (Millimeter, Ebene KONTUR) – Dicke steht im Dateinamen\n' : '')) });
       lastExport = files.map((f) => f.name);
       const zip = await Zip.make(files);
       tst.remove();
