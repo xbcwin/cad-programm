@@ -1,17 +1,19 @@
-// ================= Gelenke & Verbindungen: fest (starr), Drehen, Schieben, Zylindrisch, Eben =================
+// ================= Gelenke & Verbindungen: fest (starr), Drehen, Schieben, Zylindrisch, Eben, Kugel, Stift im Langloch =================
 // Ein Gelenk / eine Verbindung ist kein Schritt der Zeitleiste: Es setzt die Lage des beweglichen Teils (doc.joints).
 // Mehrere Verbindungen und Gelenke bilden eine Kette: Bewegt sich ein vorderes Teil, wandern alle Teile und Gelenkachsen dahinter mit.
-// home = Lage des beweglichen Teils in der Nullstellung; ao/ad (und au bei eben) in Weltkoordinaten.
+// home = Lage des beweglichen Teils in der Nullstellung; ao/ad (und au bei eben/kugel/langloch) in Weltkoordinaten.
 const Joints = (() => {
   const list = (doc = App.doc) => (doc && doc.joints) || [];
   const allOf = (id, doc = App.doc) => list(doc).filter((j) => j.a === id || j.b === id);
   const of = (id, doc = App.doc) => list(doc).find((j) => j.b === id) || list(doc).find((j) => j.a === id) || null;
   const drivingOf = (id, doc = App.doc) => list(doc).find((j) => j.b === id) || null;
-  const kindOf = (j) => (j && (j.kind === 'fixed' || j.kind === 'slide' || j.kind === 'cyl' || j.kind === 'planar') ? j.kind : 'rot');
+  const kindOf = (j) => (j && (j.kind === 'fixed' || j.kind === 'slide' || j.kind === 'cyl' || j.kind === 'planar' || j.kind === 'ball' || j.kind === 'slot') ? j.kind : 'rot');
   const fixed = (j) => kindOf(j) === 'fixed';
   const slide = (j) => kindOf(j) === 'slide';
   const isCyl = (j) => kindOf(j) === 'cyl';
   const isPlanar = (j) => kindOf(j) === 'planar';
+  const isBall = (j) => kindOf(j) === 'ball';
+  const isSlot = (j) => kindOf(j) === 'slot';
   const isFixedPart = (id, doc = App.doc) => list(doc).some((j) => j.kind === 'fixed' && j.b === id);
   const fixedJointOf = (id, doc = App.doc) => list(doc).find((j) => j.kind === 'fixed' && j.b === id) || null;
   const r6 = (arr) => arr.map((v) => round(v, 6));
@@ -92,7 +94,13 @@ const Joints = (() => {
     return { o, n, u, v };
   }
   function frameOf(j) {
-    if (isPlanar(j)) return planeFrame(j);
+    if (isPlanar(j) || isBall(j)) return planeFrame(j);
+    if (isSlot(j)) {
+      const o = new THREE.Vector3(...(j.ao || [0, 0, 0]));
+      const d = new THREE.Vector3(...(j.ad || [1, 0, 0])).normalize();
+      const n = planeBasis(d, Array.isArray(j.au) ? new THREE.Vector3(...j.au) : null).u;
+      return { o, d, n, minPos: j.minPos ?? -10, maxPos: j.maxPos ?? 10 };
+    }
     return { o: new THREE.Vector3(...(j.ao || [0, 0, 0])), d: new THREE.Vector3(...(j.ad || [0, 0, 1])).normalize() };
   }
   function cylPointOnAxis(fi) {
@@ -185,6 +193,208 @@ const Joints = (() => {
       what: 'ebene Fläche',
     };
   }
+  function ballPointOf(ref, doc = App.doc) {
+    if (!ref) return null;
+    if (typeof ref === 'string') ref = { id: ref };
+    if (!ref.id) return null;
+    const M = Model.worldMatrix(doc, ref.id);
+    if (Array.isArray(ref.p)) {
+      const pv = new THREE.Vector3(...ref.p);
+      return { id: ref.id, p: ref.local ? pv.applyMatrix4(M) : pv, what: ref.what || 'Punkt' };
+    }
+    if (Array.isArray(ref.c)) {
+      const cv = new THREE.Vector3(...ref.c);
+      return { id: ref.id, p: ref.world ? cv : cv.applyMatrix4(M), what: ref.what || 'Punkt' };
+    }
+    const r = App.results.get(ref.id);
+    const data = r && r.data;
+    const faces = (data && data.faces) || [];
+    const edges = (data && data.edges) || [];
+    if (ref.faceIdx != null && ref.faceIdx >= 0 && faces[ref.faceIdx]) {
+      const fi = faces[ref.faceIdx];
+      if (fi.t === 'SPHERE' && Array.isArray(fi.sc)) return { id: ref.id, p: new THREE.Vector3(...fi.sc).applyMatrix4(M), what: 'Kugelmitte' };
+      if (fi.t === 'CYLINDRE' && Array.isArray(fi.axis)) return { id: ref.id, p: cylPointOnAxis(fi).l.applyMatrix4(M), what: 'Achsenpunkt' };
+      if (Array.isArray(fi.c)) return { id: ref.id, p: new THREE.Vector3(...fi.c).applyMatrix4(M), what: 'Flächenmitte' };
+    }
+    if (ref.edgeIdx != null && edges[ref.edgeIdx]) {
+      const g = edges[ref.edgeIdx];
+      if (g.t === 'CIRCLE' && Array.isArray(g.c)) return { id: ref.id, p: new THREE.Vector3(...g.c).applyMatrix4(M), what: 'Kreismitte' };
+      if (Array.isArray(g.m)) return { id: ref.id, p: new THREE.Vector3(...g.m).applyMatrix4(M), what: 'Kantenmitte' };
+    }
+    const sph = faces.find((f) => f && f.t === 'SPHERE' && Array.isArray(f.sc));
+    if (sph) return { id: ref.id, p: new THREE.Vector3(...sph.sc).applyMatrix4(M), what: 'Kugelmitte' };
+    if (data && Array.isArray(data.bbox)) {
+      const b = data.bbox;
+      return { id: ref.id, p: new THREE.Vector3((b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2).applyMatrix4(M), what: 'Mitte' };
+    }
+    return null;
+  }
+  function ballHitOf(hit, cx, cy) {
+    const n = hit && hit.node;
+    if (!n) return null;
+    const M = n.obj.matrixWorld;
+    const faces = (n.data && n.data.faces) || [];
+    const edges = (n.data && n.data.edges) || [];
+    if (hit.faceIdx != null && hit.faceIdx >= 0) {
+      const fi = faces[hit.faceIdx];
+      if (fi && fi.t === 'SPHERE' && Array.isArray(fi.sc)) {
+        return { id: hit.id, faceIdx: hit.faceIdx, p: new THREE.Vector3(...fi.sc).applyMatrix4(M), what: 'Kugelmitte' };
+      }
+    }
+    if (hit.edgeIdx != null && edges[hit.edgeIdx] && cx != null && cy != null) {
+      const g = edges[hit.edgeIdx];
+      const r = Viewer.canvas.getBoundingClientRect();
+      const cand = [['a', g.a, 'Punkt'], ['b', g.b, 'Punkt'], ['m', g.m, 'Kantenmitte'], ['c', g.c, 'Kreismitte']].filter((x) => Array.isArray(x[1]));
+      let best = null, bd = 10;
+      for (const [, pt, lbl] of cand) {
+        const w = new THREE.Vector3(...pt).applyMatrix4(M);
+        const s = Viewer.toScreen(w);
+        const d = Math.hypot(s.x - (cx - r.left), s.y - (cy - r.top));
+        if (d < bd) { bd = d; best = { p: w, what: lbl }; }
+      }
+      if (best) return { id: hit.id, edgeIdx: hit.edgeIdx, p: best.p, what: best.what };
+    }
+    if (hit.faceIdx != null && hit.faceIdx >= 0) {
+      const fi = faces[hit.faceIdx];
+      if (fi && fi.t === 'CYLINDRE' && Array.isArray(fi.axis)) {
+        return { id: hit.id, faceIdx: hit.faceIdx, p: cylPointOnAxis(fi).l.applyMatrix4(M), what: 'Achsenpunkt' };
+      }
+    }
+    return { id: hit.id, faceIdx: hit.faceIdx, p: hit.point.clone(), what: 'Punkt' };
+  }
+  function detectSlotPairs(data) {
+    const faces = (data && data.faces) || [];
+    const cyls = [];
+    for (let i = 0; i < faces.length; i++) {
+      const f = faces[i];
+      if (!f || f.t !== 'CYLINDRE' || !Array.isArray(f.axis) || !(f.r > 0)) continue;
+      const { l, d } = cylPointOnAxis(f);
+      cyls.push({ idx: i, r: f.r, l, d });
+    }
+    const pairs = [];
+    for (let a = 0; a < cyls.length; a++) {
+      for (let b = a + 1; b < cyls.length; b++) {
+        const ca = cyls[a], cb = cyls[b];
+        if (Math.abs(ca.r - cb.r) > 0.05) continue;
+        if (Math.abs(ca.d.dot(cb.d)) < 0.999) continue;
+        const v = cb.l.clone().sub(ca.l);
+        if (Math.abs(v.dot(ca.d)) > 1.0) continue;
+        const vPerp = v.clone().addScaledVector(ca.d, -v.dot(ca.d));
+        const len = vPerp.length();
+        if (len <= 0.1) continue;
+        const u = vPerp.clone().divideScalar(len);
+        const mid = ca.l.clone().add(cb.l).multiplyScalar(0.5);
+        const walls = [];
+        for (let k = 0; k < faces.length; k++) {
+          const fk = faces[k];
+          if (!fk || fk.t !== 'PLANE' || !Array.isArray(fk.n) || !Array.isArray(fk.c)) continue;
+          const nf = new THREE.Vector3(...fk.n).normalize();
+          if (Math.abs(nf.dot(ca.d)) > 0.05 || Math.abs(nf.dot(u)) > 0.05) continue;
+          const fc = new THREE.Vector3(...fk.c).sub(mid);
+          if (Math.abs(Math.abs(fc.dot(nf)) - ca.r) < 0.15 && Math.abs(fc.dot(u)) < len / 2 + 0.25) walls.push(k);
+        }
+        pairs.push({ i: ca.idx, j: cb.idx, p1: ca.l, p2: cb.l, mid, u, n: ca.d.clone(), len, r: ca.r, walls });
+      }
+    }
+    pairs.sort((x, y) => (y.walls.length >= 2) - (x.walls.length >= 2) || y.walls.length - x.walls.length || x.len - y.len);
+    return pairs;
+  }
+  function slotCenterlineOf(ref, doc = App.doc) {
+    if (!ref) return null;
+    if (typeof ref === 'string') ref = { id: ref };
+    if (!ref.id) return null;
+    const M = Model.worldMatrix(doc, ref.id);
+    if (Array.isArray(ref.p0) && Array.isArray(ref.p1)) {
+      const p0 = new THREE.Vector3(...ref.p0), p1 = new THREE.Vector3(...ref.p1);
+      if (ref.local) { p0.applyMatrix4(M); p1.applyMatrix4(M); }
+      const dv = p1.clone().sub(p0), len = dv.length();
+      if (len < 1e-6) return null;
+      const d = dv.divideScalar(len);
+      const o = p0.clone().add(p1).multiplyScalar(0.5);
+      let n = Array.isArray(ref.n) ? new THREE.Vector3(...ref.n) : canonicalX(d.toArray());
+      if (ref.local && Array.isArray(ref.n)) n.transformDirection(M);
+      n = planeBasis(d, n).u;
+      return { id: ref.id, p0, p1, o, d, n, len, r: Number(ref.r) || 0, what: ref.what || 'Langloch' };
+    }
+    if (Array.isArray(ref.o) && Array.isArray(ref.d) && Number.isFinite(+ref.len) && +ref.len > 1e-6) {
+      const len = +ref.len;
+      const o = new THREE.Vector3(...ref.o), d = new THREE.Vector3(...ref.d);
+      if (ref.local) { o.applyMatrix4(M); d.transformDirection(M); }
+      if (d.lengthSq() < 1e-12) return null;
+      d.normalize();
+      let n = Array.isArray(ref.n) ? new THREE.Vector3(...ref.n) : canonicalX(d.toArray());
+      if (ref.local && Array.isArray(ref.n)) n.transformDirection(M);
+      n = planeBasis(d, n).u;
+      return { id: ref.id, p0: o.clone().addScaledVector(d, -len / 2), p1: o.clone().addScaledVector(d, len / 2), o, d, n, len, r: Number(ref.r) || 0, what: ref.what || 'Langloch' };
+    }
+    const r = App.results.get(ref.id);
+    const data = r && r.data;
+    if (!data) return null;
+    const pairs = detectSlotPairs(data);
+    let chosen = null;
+    if (ref.faceIdx != null && ref.faceIdx >= 0) {
+      chosen = pairs.find((p) => p.i === ref.faceIdx || p.j === ref.faceIdx || p.walls.includes(ref.faceIdx)) || null;
+      if (!chosen) return null;
+    } else if (ref.edgeIdx != null) {
+      const g = data.edges && data.edges[ref.edgeIdx];
+      if (!g) return null;
+      if (g.t === 'CIRCLE' && Array.isArray(g.c)) {
+        const gc = new THREE.Vector3(...g.c);
+        chosen = pairs.find((p) => {
+          if (Math.abs(p.r - (g.r || p.r)) > 0.15) return false;
+          const d1 = gc.clone().sub(p.p1), d2 = gc.clone().sub(p.p2);
+          const p1Perp = d1.addScaledVector(p.n, -d1.dot(p.n)).length();
+          const p2Perp = d2.addScaledVector(p.n, -d2.dot(p.n)).length();
+          return Math.min(p1Perp, p2Perp) < 0.25;
+        }) || null;
+      } else if (g.t === 'LINE' && Array.isArray(g.a) && Array.isArray(g.b)) {
+        const ea = new THREE.Vector3(...g.a), eb = new THREE.Vector3(...g.b);
+        const ed = eb.clone().sub(ea), elen = ed.length();
+        if (elen > 0.1) {
+          const eu = ed.clone().divideScalar(elen);
+          const em = ea.clone().add(eb).multiplyScalar(0.5);
+          chosen = pairs.find((p) => {
+            if (Math.abs(p.u.dot(eu)) < 0.999 || Math.abs(p.len - elen) > 0.25) return false;
+            const dm = em.clone().sub(p.mid);
+            const side = new THREE.Vector3().crossVectors(p.n, p.u).normalize();
+            return Math.abs(Math.abs(dm.dot(side)) - p.r) < 0.25 && Math.abs(dm.dot(p.u)) < 0.25;
+          }) || null;
+          if (!chosen) {
+            const p0 = ea.applyMatrix4(M), p1 = eb.applyMatrix4(M);
+            const d = p1.clone().sub(p0).normalize();
+            return { id: ref.id, p0, p1, o: p0.clone().add(p1).multiplyScalar(0.5), d, n: canonicalX(d.toArray()), len: p0.distanceTo(p1), r: 0, what: 'Gerade Kante' };
+          }
+        }
+      }
+      if (!chosen) return null;
+    } else {
+      chosen = pairs[0] || null;
+    }
+    if (!chosen) return null;
+    const p0 = chosen.p1.clone().applyMatrix4(M), p1 = chosen.p2.clone().applyMatrix4(M);
+    const o = chosen.mid.clone().applyMatrix4(M);
+    const d = chosen.u.clone().transformDirection(M).normalize();
+    const n = planeBasis(d, chosen.n.clone().transformDirection(M)).u;
+    return { id: ref.id, p0, p1, o, d, n, len: p0.distanceTo(p1), r: chosen.r, what: 'Langloch' };
+  }
+  function slotHitOf(hit) {
+    if (!hit || !hit.node || (hit.faceIdx == null && hit.edgeIdx == null)) return null;
+    return slotCenterlineOf({ id: hit.id, faceIdx: hit.faceIdx, edgeIdx: hit.edgeIdx });
+  }
+  function slotPinOf(ref, doc = App.doc) {
+    const ax = cylAxisOf(ref, doc);
+    if (ax) return { id: ax.id, p: ax.o, axis: ax.d, what: ax.what };
+    const pt = ballPointOf(ref, doc);
+    if (pt) return { id: pt.id, p: pt.p, axis: null, what: pt.what };
+    return null;
+  }
+  function slotPinHitOf(hit, cx, cy) {
+    const ax = cylHitOf(hit);
+    if (ax) return { id: ax.id, faceIdx: ax.faceIdx, edgeIdx: ax.edgeIdx, p: ax.o, axis: ax.d, what: ax.what };
+    const pt = ballHitOf(hit, cx, cy);
+    if (pt) return { id: pt.id, faceIdx: pt.faceIdx, edgeIdx: pt.edgeIdx, p: pt.p, axis: null, what: pt.what };
+    return null;
+  }
 
   // ---------- Kinematik: Zustand, Matrix, Kette ----------
   const unit = (j) => (slide(j) ? 'mm' : '°');
@@ -194,6 +404,8 @@ const Joints = (() => {
       pos: Number(j && j.pos) || 0,
       u: Number(j && j.u) || 0,
       v: Number(j && j.v) || 0,
+      rx: Number(j && j.rx) || 0,
+      ry: Number(j && j.ry) || 0,
     };
   }
   function rotAbout(o, d, deg) {
@@ -219,6 +431,19 @@ const Joints = (() => {
         u.y * s.u + v.y * s.v,
         u.z * s.u + v.z * s.v
       ).multiply(rotAbout(o, n, s.ang));
+    }
+    if (k === 'ball') {
+      const { o, n, u, v } = planeFrame(j);
+      const F = new THREE.Matrix4().makeBasis(u, v, n);
+      const Rloc = new THREE.Matrix4().makeRotationFromEuler(
+        new THREE.Euler((s.rx * Math.PI) / 180, (s.ry * Math.PI) / 180, (s.ang * Math.PI) / 180, 'XYZ')
+      );
+      const R = F.clone().multiply(Rloc).multiply(F.clone().transpose());
+      return new THREE.Matrix4().makeTranslation(o.x, o.y, o.z).multiply(R).multiply(new THREE.Matrix4().makeTranslation(-o.x, -o.y, -o.z));
+    }
+    if (k === 'slot') {
+      const { o, d, n } = frameOf(j);
+      return new THREE.Matrix4().makeTranslation(d.x * s.pos, d.y * s.pos, d.z * s.pos).multiply(rotAbout(o, n, s.ang));
     }
     const o = new THREE.Vector3(...j.ao), d = new THREE.Vector3(...j.ad).normalize();
     return rotAbout(o, d, s.ang);
@@ -612,6 +837,12 @@ const Joints = (() => {
   // Gelenk ohne Klicken anlegen (für den KI-Kollegen): Achse o/d in Weltkoordinaten; liefert die Kennung oder eine Meldung
   function add(aId, bId, o, d, opts = {}) {
     if (opts && opts.kind === 'fixed') return addFixed(opts.aSpec || { id: aId, kind: 'point', c: o, world: true }, opts.bSpec || { id: bId, kind: 'point', c: o, world: true }, opts);
+    if (opts && opts.kind === 'ball') return addBall(opts.aSpec || { id: aId, p: o }, opts.bSpec || { id: bId, p: o }, opts);
+    if (opts && opts.kind === 'slot') {
+      const slotRef = opts.slotRef || { id: aId, o, d, len: opts.len || Math.abs((opts.maxPos ?? 10) - (opts.minPos ?? -10)) || 20, n: opts.n };
+      const pinRef = opts.pinRef || { id: bId, p: o };
+      return addSlot(slotRef, pinRef, opts);
+    }
     const A = top(aId), B = top(bId);
     if (!A || !B || A.id === B.id) return { ok: false, msg: 'Eine Verbindung braucht zwei verschiedene Teile.' };
     const why = refuse(App.doc, A, B); if (why) return { ok: false, msg: why };
@@ -773,6 +1004,115 @@ const Joints = (() => {
     return jid ? { ok: true, id: jid } : { ok: false, msg: 'Die ebene Verbindung ließ sich nicht anlegen.' };
   }
 
+  function addBall(aRef, bRef, opts = {}) {
+    const ptA = ballPointOf(aRef), ptB = ballPointOf(bRef);
+    if (!ptA || !ptB) return { ok: false, msg: 'Für „Kugel“ werden zwei Punkte oder Kugel-/Zylinderflächen an verschiedenen Teilen benötigt.' };
+    const A = top(ptA.id), B = top(ptB.id);
+    if (!A || !B || A.id === B.id) return { ok: false, msg: 'Wähle zwei verschiedene Teile.' };
+    const why = refuse(App.doc, A, B); if (why) return { ok: false, msg: why };
+    if (connected(App.doc, A.id, B.id)) return { ok: false, msg: 'Das ergäbe einen Kreis – die beiden Teile sind schon über Verbindungen miteinander gekoppelt.' };
+    if (list().some((j) => j.b === B.id)) return { ok: false, msg: `„${Model.label(B)}“ wird schon von einer Verbindung bewegt – jedes Teil darf nur eine bewegende Verbindung haben.` };
+
+    const dp = ptA.p.clone().sub(ptB.p);
+    const M_align = new THREE.Matrix4().makeTranslation(dp.x, dp.y, dp.z);
+    const rxLo = Number.isFinite(+opts.minRx) ? +opts.minRx : -180;
+    const rxHi = Number.isFinite(+opts.maxRx) ? +opts.maxRx : 180;
+    const ryLo = Number.isFinite(+opts.minRy) ? +opts.minRy : -180;
+    const ryHi = Number.isFinite(+opts.maxRy) ? +opts.maxRy : 180;
+    const lo = Number.isFinite(+opts.min) ? +opts.min : -180;
+    const hi = Number.isFinite(+opts.max) ? +opts.max : 180;
+    let jid = null;
+    App.change('Kugel-Verbindung angelegt', (doc) => {
+      const b = top(B.id, doc); if (!b) return false;
+      if (connected(doc, A.id, B.id) || list(doc).some((j) => j.b === B.id)) return false;
+      const newLocal = conj(doc, B.id, M_align).multiply(Model.localMatrix(b));
+      Model.setFromMatrix(b, newLocal);
+      moveChain(doc, B.id, M_align);
+      doc.joints = doc.joints || [];
+      jid = uid('j');
+      doc.joints.push({
+        id: jid, a: A.id, b: B.id, kind: 'ball',
+        ao: r6(ptA.p.toArray()),
+        ad: [0, 0, 1],
+        au: [1, 0, 0],
+        home: r9(Model.localMatrix(b).toArray()),
+        rx: 0, minRx: round(Math.min(rxLo, rxHi), 2), maxRx: round(Math.max(rxLo, rxHi), 2),
+        ry: 0, minRy: round(Math.min(ryLo, ryHi), 2), maxRy: round(Math.max(ryLo, ryHi), 2),
+        ang: 0, min: round(Math.min(lo, hi), 2), max: round(Math.max(lo, hi), 2),
+        ...(opts.stopsLocked ? { stopsLocked: true } : {}),
+      });
+    });
+    if (jid) {
+      const patch = {};
+      if (opts.rx != null && Number.isFinite(+opts.rx)) patch.rx = +opts.rx;
+      if (opts.ry != null && Number.isFinite(+opts.ry)) patch.ry = +opts.ry;
+      const rz = opts.ang != null ? opts.ang : opts.rz;
+      if (rz != null && Number.isFinite(+rz)) patch.ang = +rz;
+      if (Object.keys(patch).length) setState(jid, patch);
+    }
+    return jid ? { ok: true, id: jid } : { ok: false, msg: 'Die Kugel-Verbindung ließ sich nicht anlegen.' };
+  }
+
+  function addSlot(slotRef, pinRef, opts = {}) {
+    const sl = slotCenterlineOf(slotRef), pin = slotPinOf(pinRef);
+    if (!sl) return { ok: false, msg: 'Für „Stift im Langloch“ wird am ersten Teil ein Langloch (Fläche/Rand) oder eine gerade Kante benötigt.' };
+    if (!pin) return { ok: false, msg: 'Für „Stift im Langloch“ wird am zweiten Teil ein Stift (Zylinder, Kreisrand oder Punkt) benötigt.' };
+    const A = top(sl.id), B = top(pin.id);
+    if (!A || !B || A.id === B.id) return { ok: false, msg: 'Wähle zwei verschiedene Teile.' };
+    const why = refuse(App.doc, A, B); if (why) return { ok: false, msg: why };
+    if (connected(App.doc, A.id, B.id)) return { ok: false, msg: 'Das ergäbe einen Kreis – die beiden Teile sind schon über Verbindungen miteinander gekoppelt.' };
+    if (list().some((j) => j.b === B.id)) return { ok: false, msg: `„${Model.label(B)}“ wird schon von einer Verbindung bewegt – jedes Teil darf nur eine bewegende Verbindung haben.` };
+
+    let M_align;
+    if (pin.axis && opts.alignAxis !== false) {
+      const baseN = sl.n.dot(pin.axis) >= 0 ? sl.n.clone() : sl.n.clone().negate();
+      const dTarget = opts.flip ? baseN.clone().negate() : baseN;
+      const Q = rotBetween(pin.axis, dTarget);
+      const R = new THREE.Matrix4().makeRotationFromQuaternion(Q);
+      M_align = new THREE.Matrix4()
+        .makeTranslation(sl.o.x, sl.o.y, sl.o.z)
+        .multiply(R)
+        .multiply(new THREE.Matrix4().makeTranslation(-pin.p.x, -pin.p.y, -pin.p.z));
+    } else {
+      const dp = sl.o.clone().sub(pin.p);
+      M_align = new THREE.Matrix4().makeTranslation(dp.x, dp.y, dp.z);
+    }
+
+    const half = sl.len / 2;
+    const minPos = Number.isFinite(+opts.minPos) ? +opts.minPos : round(-half, 4);
+    const maxPos = Number.isFinite(+opts.maxPos) ? +opts.maxPos : round(half, 4);
+    const lo = Number.isFinite(+opts.min) ? +opts.min : -180;
+    const hi = Number.isFinite(+opts.max) ? +opts.max : 180;
+    let jid = null;
+    App.change('Stift-im-Langloch-Verbindung angelegt', (doc) => {
+      const b = top(B.id, doc); if (!b) return false;
+      if (connected(doc, A.id, B.id) || list(doc).some((j) => j.b === B.id)) return false;
+      const newLocal = conj(doc, B.id, M_align).multiply(Model.localMatrix(b));
+      Model.setFromMatrix(b, newLocal);
+      moveChain(doc, B.id, M_align);
+      doc.joints = doc.joints || [];
+      jid = uid('j');
+      doc.joints.push({
+        id: jid, a: A.id, b: B.id, kind: 'slot',
+        ao: r6(sl.o.toArray()),
+        ad: r9(sl.d.toArray()),
+        au: r9(sl.n.toArray()),
+        home: r9(Model.localMatrix(b).toArray()),
+        pos: 0, minPos: round(Math.min(minPos, maxPos), 4), maxPos: round(Math.max(minPos, maxPos), 4),
+        ang: 0, min: round(Math.min(lo, hi), 2), max: round(Math.max(lo, hi), 2),
+        flip: !!opts.flip,
+        stopsLocked: true,
+      });
+    });
+    if (jid) {
+      const patch = {};
+      if (opts.pos != null && Number.isFinite(+opts.pos)) patch.pos = +opts.pos;
+      if (opts.ang != null && Number.isFinite(+opts.ang)) patch.ang = +opts.ang;
+      if (Object.keys(patch).length) setState(jid, patch);
+    }
+    return jid ? { ok: true, id: jid } : { ok: false, msg: 'Die Stift-im-Langloch-Verbindung ließ sich nicht anlegen.' };
+  }
+
   // ---------- Interaktives Wählen im Bild ----------
   let pickState = null, pickBar = null, pickObjs = [];
   let selJoint = null, visObjs = [];
@@ -794,8 +1134,30 @@ const Joints = (() => {
     const j = list().find((x) => x.id === selJoint);
     if (!j || !Array.isArray(j.ao)) return;
     const p = new THREE.Vector3(...j.ao);
+    if (isSlot(j)) {
+      const fr = frameOf(j);
+      const a = p.clone().addScaledVector(fr.d, fr.minPos), b = p.clone().addScaledVector(fr.d, fr.maxPos);
+      const cur = p.clone().addScaledVector(fr.d, Number(j.pos) || 0);
+      const line = Viewer.makeFat([a.x, a.y, a.z, b.x, b.y, b.z], '#f08c00', 3, { depthTest: false });
+      const d1 = Viewer.makeFat([a.x, a.y, a.z, a.x, a.y, a.z + 0.001], '#f08c00', 8, { depthTest: false });
+      const d2 = Viewer.makeFat([b.x, b.y, b.z, b.x, b.y, b.z + 0.001], '#f08c00', 8, { depthTest: false });
+      const dc = Viewer.makeFat([cur.x, cur.y, cur.z, cur.x, cur.y, cur.z + 0.001], '#0c7a70', 11, { depthTest: false });
+      Viewer.groups.overlay.add(line, d1, d2, dc); visObjs.push(line, d1, d2, dc);
+      Viewer.requestRender();
+      return;
+    }
     const pt = Viewer.makeFat([p.x, p.y, p.z, p.x, p.y, p.z + 0.001], '#f08c00', 11, { depthTest: false });
     Viewer.groups.overlay.add(pt); visObjs.push(pt);
+    if (isBall(j)) {
+      const pf = planeFrame(j);
+      for (const [ax, col] of [[pf.u, '#e03131'], [pf.v, '#2f9e44'], [pf.n, '#1971c2']]) {
+        const q = p.clone().addScaledVector(ax, 7);
+        const ln = Viewer.makeFat([p.x, p.y, p.z, q.x, q.y, q.z], col, 2.5, { depthTest: false });
+        Viewer.groups.overlay.add(ln); visObjs.push(ln);
+      }
+      Viewer.requestRender();
+      return;
+    }
     if (Array.isArray(j.ad)) {
       const d = new THREE.Vector3(...j.ad).normalize();
       const b = p.clone().addScaledVector(d, 10);
@@ -1052,6 +1414,125 @@ const Joints = (() => {
     return true;
   }
 
+  function startBall(firstRef = null) {
+    stopPick();
+    let step1 = firstRef ? ballPointOf(firstRef) : null;
+    const setHint = () => {
+      UI.hint(step1
+        ? `<b>Kugel (2/2):</b> Klick auf den Punkt oder die Kugel am <b>beweglichen Teil</b>. <b>Esc</b> bricht ab.`
+        : `<b>Kugel (1/2):</b> Klick auf einen Punkt, eine Ecke oder eine Kugel am <b>festen Teil</b>. <b>Esc</b> bricht ab.`);
+    };
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { edgePx: 9, solidsOnly: true });
+      const pt = ballHitOf(hit, e.clientX, e.clientY);
+      if (!pt) { UI.toast('Klick auf einen Punkt, eine Kante oder eine Fläche eines Körpers.', { icon: 'info' }); return; }
+      if (!step1) {
+        if (!top(pt.id)) return;
+        step1 = pt;
+        clearPickVis();
+        addPickDot(pt.p, '#f08c00');
+        setHint();
+        return;
+      }
+      if (pt.id === step1.id) { UI.toast('Wähle jetzt einen Punkt am zweiten (beweglichen) Teil.', { icon: 'info' }); return; }
+      const r = addBall(step1, pt);
+      if (!r.ok) { UI.toast(r.msg, { icon: 'info', ms: 4000 }); return; }
+      stopPick();
+      App.select([pt.id]);
+      const A = top(step1.id), B = top(pt.id);
+      UI.toast(`Kugel-Verbindung angelegt: „${Model.label(B)}“ dreht sich frei um den Punkt an „${Model.label(A)}“.`, { icon: 'check', ms: 3600 });
+    };
+    const move = (e) => {
+      const hit = Viewer.pick(e.clientX, e.clientY, { edgePx: 9, solidsOnly: true });
+      const pt = ballHitOf(hit, e.clientX, e.clientY);
+      const ok = !!pt && (!step1 || pt.id !== step1.id);
+      clearPickVis();
+      if (step1) addPickDot(step1.p, '#f08c00');
+      if (ok) addPickDot(pt.p, Viewer.theme.accent);
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    pickState = { down, move, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    Viewer.canvas.addEventListener('pointermove', move);
+    window.addEventListener('keydown', key, true);
+    if (step1) addPickDot(step1.p, '#f08c00');
+    setHint();
+    return true;
+  }
+
+  function startSlot(firstRef = null) {
+    stopPick();
+    let step1 = firstRef ? slotCenterlineOf(firstRef) : null;
+    const drawSlotPreview = (sl, col = '#f08c00') => {
+      if (!sl) return;
+      const ln = Viewer.makeFat([sl.p0.x, sl.p0.y, sl.p0.z, sl.p1.x, sl.p1.y, sl.p1.z], col, 3, { depthTest: false });
+      Viewer.groups.overlay.add(ln); pickObjs.push(ln);
+      addPickDot(sl.p0, col);
+      addPickDot(sl.p1, col);
+    };
+    const setHint = () => {
+      UI.hint(step1
+        ? `<b>Stift im Langloch (2/2):</b> Klick auf den <b>Stift</b> (Zylinder, Kreis oder Punkt) am <b>beweglichen Teil</b>. <b>Esc</b> bricht ab.`
+        : `<b>Stift im Langloch (1/2):</b> Klick auf das <b>Langloch</b> (Innenfläche oder Rand) am <b>festen Teil</b>. <b>Esc</b> bricht ab.`);
+    };
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      if (!step1) {
+        const hit = Viewer.pick(e.clientX, e.clientY, { edgePx: 9, solidsOnly: true });
+        const sl = slotHitOf(hit);
+        if (!sl) { UI.toast('Klick auf ein Langloch (Innenfläche oder Rand) bzw. eine gerade Führungskante.', { icon: 'info' }); return; }
+        if (!top(sl.id)) return;
+        step1 = sl;
+        clearPickVis();
+        drawSlotPreview(sl, '#f08c00');
+        setHint();
+        return;
+      }
+      const hit = Viewer.pick(e.clientX, e.clientY, { edgePx: 9, solidsOnly: true });
+      const pin = slotPinHitOf(hit, e.clientX, e.clientY);
+      if (!pin) { UI.toast('Klick auf einen Stift (Zylinderfläche, Kreisrand oder Punkt) am zweiten Teil.', { icon: 'info' }); return; }
+      if (pin.id === step1.id) { UI.toast('Wähle jetzt den Stift am zweiten (beweglichen) Teil.', { icon: 'info' }); return; }
+      const r = addSlot(step1, pin);
+      if (!r.ok) { UI.toast(r.msg, { icon: 'info', ms: 4000 }); return; }
+      stopPick();
+      App.select([pin.id]);
+      const A = top(step1.id), B = top(pin.id);
+      UI.toast(`Stift im Langloch angelegt: „${Model.label(B)}“ gleitet zwischen den Endanschlägen von „${Model.label(A)}“.`, { icon: 'check', ms: 3600 });
+    };
+    const move = (e) => {
+      clearPickVis();
+      if (step1) drawSlotPreview(step1, '#f08c00');
+      const hit = Viewer.pick(e.clientX, e.clientY, { edgePx: 9, solidsOnly: true });
+      if (!step1) {
+        const sl = slotHitOf(hit);
+        if (sl) {
+          drawSlotPreview(sl, Viewer.theme.accent);
+          if (hit.faceIdx >= 0) Viewer.highlightFace('hover', hit.id, hit.faceIdx);
+          else if (hit.edgeIdx != null) Viewer.highlightEdge(hit.id, hit.edgeIdx);
+        } else {
+          Viewer.highlightFace('hover', null, null);
+          Viewer.highlightEdge(null, null);
+        }
+      } else {
+        const pin = slotPinHitOf(hit, e.clientX, e.clientY);
+        if (pin && pin.id !== step1.id) addPickDot(pin.p, Viewer.theme.accent);
+      }
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    pickState = { down, move, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    Viewer.canvas.addEventListener('pointermove', move);
+    window.addEventListener('keydown', key, true);
+    if (step1) drawSlotPreview(step1, '#f08c00');
+    setHint();
+    return true;
+  }
+
   function startFixed(firstFace = null, replaceJid = null) {
     stopPlay();
     if (typeof Measure !== 'undefined' && Measure.active) Measure.stop();
@@ -1156,19 +1637,26 @@ const Joints = (() => {
     } else if (k === 'planar') {
       next.u = round(clamp(Number(next.u) || 0, j.minU ?? -20, j.maxU ?? 20), 4);
       next.v = round(clamp(Number(next.v) || 0, j.minV ?? -20, j.maxV ?? 20), 4);
+    } else if (k === 'ball') {
+      next.rx = round(clamp(Number(next.rx) || 0, j.minRx ?? -180, j.maxRx ?? 180), 4);
+      next.ry = round(clamp(Number(next.ry) || 0, j.minRy ?? -180, j.maxRy ?? 180), 4);
+    } else if (k === 'slot') {
+      next.pos = round(clamp(Number(next.pos) || 0, j.minPos ?? -10, j.maxPos ?? 10), 4);
     }
     return next;
   }
   function writeState(j, st) {
     const k = kindOf(j);
     j.ang = st.ang;
-    if (k === 'cyl') j.pos = st.pos;
+    if (k === 'cyl' || k === 'slot') j.pos = st.pos;
     else if (k === 'planar') { j.u = st.u; j.v = st.v; }
+    else if (k === 'ball') { j.rx = st.rx; j.ry = st.ry; }
   }
   function stateChanged(a, b, k) {
     if (Math.abs(a.ang - b.ang) > 1e-9) return true;
-    if (k === 'cyl' && Math.abs(a.pos - b.pos) > 1e-9) return true;
+    if ((k === 'cyl' || k === 'slot') && Math.abs(a.pos - b.pos) > 1e-9) return true;
     if (k === 'planar' && (Math.abs(a.u - b.u) > 1e-9 || Math.abs(a.v - b.v) > 1e-9)) return true;
+    if (k === 'ball' && (Math.abs(a.rx - b.rx) > 1e-9 || Math.abs(a.ry - b.ry) > 1e-9)) return true;
     return false;
   }
 
@@ -1176,30 +1664,32 @@ const Joints = (() => {
     const curJ = list().find((x) => x.id === jid);
     const curB = curJ && top(curJ.b);
     if (curB && curB.locked) { UI.toast(T('asm.groundedJointErr', { name: Model.label(curB) }), { icon: 'lock' }); return false; }
-    const label = patch && Object.keys(patch).length === 1 && 'ang' in patch ? 'Gelenk bewegt' : 'Verbindung bewegt';
+    const normPatch = patch && 'rz' in patch && !('ang' in patch) ? { ...patch, ang: patch.rz } : patch;
+    const label = normPatch && Object.keys(normPatch).length === 1 && 'ang' in normPatch ? 'Gelenk bewegt' : 'Verbindung bewegt';
     App.change(label, (doc) => {
       const j = list(doc).find((x) => x.id === jid); if (!j || fixed(j)) return false;
       const b = top(j.b, doc); if (!b || b.locked) return false;
       syncHome(b, j, doc);
       const prev = stateOf(j);
-      const next = clampState(j, patch);
+      const next = clampState(j, normPatch);
       writeState(j, next);
       Model.setFromMatrix(b, pose(j, next, null, doc));
       if (stateChanged(prev, next, kindOf(j))) moveChain(doc, j.b, deltaMatrix(j, prev, next));
     }, { merge: 'joint:' + jid });
+    drawSelectedJoint();
   }
   // Winkel/Weg setzen (Abwärtskompatibilität)
   function setAngle(jid, ang) { return setState(jid, { ang }); }
 
-  // Art wechseln (Drehen / Schieben / Zylindrisch / Eben): das Teil geht zurück in die Ausgangslage
+  // Art wechseln (Drehen / Schieben / Zylindrisch / Eben / Kugel / Langloch): das Teil geht zurück in die Ausgangslage
   function setKind(jid, kind) {
-    const k = kind === 'slide' || kind === 'cyl' || kind === 'planar' ? kind : 'rot';
+    const k = kind === 'slide' || kind === 'cyl' || kind === 'planar' || kind === 'ball' || kind === 'slot' ? kind : 'rot';
     App.change('Verbindungs-Art', (doc) => {
       const j = list(doc).find((x) => x.id === jid); if (!j || fixed(j)) return false;
       const b = top(j.b, doc); if (!b || b.locked) return false;
       syncHome(b, j, doc);
       const prev = stateOf(j);
-      const zero = { ang: 0, pos: 0, u: 0, v: 0 };
+      const zero = { ang: 0, pos: 0, u: 0, v: 0, rx: 0, ry: 0 };
       if (stateChanged(prev, zero, kindOf(j))) moveChain(doc, j.b, deltaMatrix(j, prev, zero));
       if (k === 'rot') delete j.kind; else j.kind = k;
       j.ang = 0;
@@ -1220,22 +1710,59 @@ const Joints = (() => {
         if (!Number.isFinite(j.maxU)) j.maxU = 20;
         if (!Number.isFinite(j.minV)) j.minV = -20;
         if (!Number.isFinite(j.maxV)) j.maxV = 20;
+      } else if (k === 'ball') {
+        j.min = -180; j.max = 180;
+        j.rx = 0; j.ry = 0;
+        if (!Number.isFinite(j.minRx)) j.minRx = -180;
+        if (!Number.isFinite(j.maxRx)) j.maxRx = 180;
+        if (!Number.isFinite(j.minRy)) j.minRy = -180;
+        if (!Number.isFinite(j.maxRy)) j.maxRy = 180;
+        if (!Array.isArray(j.au)) j.au = [1, 0, 0];
+      } else if (k === 'slot') {
+        j.min = -180; j.max = 180;
+        const d = new THREE.Vector3(...(j.ad || [1, 0, 0])).normalize();
+        const basis = planeBasis(d, Array.isArray(j.au) ? new THREE.Vector3(...j.au) : null);
+        j.au = r9(basis.u.toArray());
+        j.pos = 0;
+        if (!Number.isFinite(j.minPos)) j.minPos = -10;
+        if (!Number.isFinite(j.maxPos)) j.maxPos = 10;
+        j.stopsLocked = true;
       } else {
         j.min = -90; j.max = 90;
       }
       Model.setFromMatrix(b, pose(j, zero, null, doc));
     });
+    drawSelectedJoint();
   }
 
   function setRange(jid, k, v) {
-    const pair = { min: ['min', 'max', 360], max: ['min', 'max', 360], minPos: ['minPos', 'maxPos', 10000], maxPos: ['minPos', 'maxPos', 10000], minU: ['minU', 'maxU', 10000], maxU: ['minU', 'maxU', 10000], minV: ['minV', 'maxV', 10000], maxV: ['minV', 'maxV', 10000] }[k];
+    const pair = {
+      min: ['min', 'max', 360], max: ['min', 'max', 360],
+      minRx: ['minRx', 'maxRx', 360], maxRx: ['minRx', 'maxRx', 360],
+      minRy: ['minRy', 'maxRy', 360], maxRy: ['minRy', 'maxRy', 360],
+      minPos: ['minPos', 'maxPos', 10000], maxPos: ['minPos', 'maxPos', 10000],
+      minU: ['minU', 'maxU', 10000], maxU: ['minU', 'maxU', 10000],
+      minV: ['minV', 'maxV', 10000], maxV: ['minV', 'maxV', 10000],
+    }[k];
     if (!pair) return;
     App.change('Verbindungs-Bereich', (doc) => {
       const j = list(doc).find((x) => x.id === jid); if (!j || fixed(j)) return false;
       const lim = pair[2];
-      j[k] = round(clamp(Number(v) || 0, -lim, lim), 2);
+      j[k] = round(clamp(Number(v) || 0, -lim, lim), 4);
       if (j[pair[0]] > j[pair[1]]) [j[pair[0]], j[pair[1]]] = [j[pair[1]], j[pair[0]]];
+      if (isSlot(j) && (k === 'minPos' || k === 'maxPos')) {
+        const prev = stateOf(j);
+        const clampedPos = round(clamp(prev.pos, j.minPos, j.maxPos), 4);
+        if (Math.abs(clampedPos - prev.pos) > 1e-9) {
+          const b = top(j.b, doc);
+          j.pos = clampedPos;
+          const next = stateOf(j);
+          if (b) Model.setFromMatrix(b, pose(j, next, null, doc));
+          moveChain(doc, j.b, deltaMatrix(j, prev, next));
+        }
+      }
     });
+    drawSelectedJoint();
   }
 
   function flip(jid) {
@@ -1243,7 +1770,7 @@ const Joints = (() => {
       const j = list(doc).find((x) => x.id === jid); if (!j) return false;
       const b = top(j.b, doc); if (!b || b.locked) return false;
       const k = kindOf(j);
-      if (k !== 'cyl' && k !== 'planar') return false;
+      if (k !== 'cyl' && k !== 'planar' && k !== 'slot') return false;
       syncHome(b, j, doc);
       const st = stateOf(j);
       let pivot, ax;
@@ -1253,6 +1780,10 @@ const Joints = (() => {
         pivot = o.clone().addScaledVector(d, st.pos);
         const ref = Math.abs(d.x) < 0.8 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
         ax = new THREE.Vector3().crossVectors(d, ref).normalize();
+      } else if (k === 'slot') {
+        const fr = frameOf(j);
+        pivot = fr.o.clone().addScaledVector(fr.d, st.pos);
+        ax = fr.d.clone();
       } else {
         const pf = planeFrame(j);
         pivot = pf.o.clone().addScaledVector(pf.u, st.u).addScaledVector(pf.v, st.v);
@@ -1279,10 +1810,10 @@ const Joints = (() => {
     return deg;
   }
 
-  // Verschieben/Drehen eines verbundenen Teils auf die erlaubten Freiheitsgrade von 'cyl'/'planar' projizieren
+  // Verschieben/Drehen eines verbundenen Teils auf die erlaubten Freiheitsgrade von 'cyl'/'planar'/'ball'/'slot' projizieren
   function constrain(doc, itemId) {
     const j = drivingOf(itemId, doc);
-    if (!j || (j.kind !== 'cyl' && j.kind !== 'planar')) return false;
+    if (!j || (j.kind !== 'cyl' && j.kind !== 'planar' && j.kind !== 'ball' && j.kind !== 'slot')) return false;
     const b = top(j.b, doc);
     if (!b || b.locked) return false;
     const prev = stateOf(j);
@@ -1308,7 +1839,7 @@ const Joints = (() => {
       }
       j.pos = posNew;
       j.ang = angNew;
-    } else {
+    } else if (j.kind === 'planar') {
       const pf = planeFrame(j);
       let uNew = round(dp.dot(pf.u), 4);
       let vNew = round(dp.dot(pf.v), 4);
@@ -1327,6 +1858,33 @@ const Joints = (() => {
       }
       j.u = uNew;
       j.v = vNew;
+      j.ang = angNew;
+    } else if (j.kind === 'ball') {
+      const pf = planeFrame(j);
+      const F = new THREE.Matrix4().makeBasis(pf.u, pf.v, pf.n);
+      const R_world = new THREE.Matrix4().extractRotation(D_want);
+      const R_loc = F.clone().transpose().multiply(R_world).multiply(F);
+      const e = new THREE.Euler().setFromRotationMatrix(R_loc, 'XYZ');
+      const toDeg = (rad) => {
+        let dg = round((rad * 180) / Math.PI, 4);
+        if (dg > 180) dg -= 360;
+        if (dg < -180) dg += 360;
+        return dg;
+      };
+      let rxNew = toDeg(e.x), ryNew = toDeg(e.y), angNew = toDeg(e.z);
+      if (j.stopsLocked) {
+        rxNew = clamp(rxNew, j.minRx ?? -180, j.maxRx ?? 180);
+        ryNew = clamp(ryNew, j.minRy ?? -180, j.maxRy ?? 180);
+        angNew = clamp(angNew, j.min ?? -180, j.max ?? 180);
+      }
+      j.rx = rxNew;
+      j.ry = ryNew;
+      j.ang = angNew;
+    } else if (j.kind === 'slot') {
+      const fr = frameOf(j);
+      const posNew = clamp(round(dp.dot(fr.d), 4), fr.minPos, fr.maxPos);
+      const angNew = clamp(round(twistDegAround(D_want, fr.n), 4), j.min ?? -180, j.max ?? 180);
+      j.pos = posNew;
       j.ang = angNew;
     }
     const next = stateOf(j);
@@ -1350,6 +1908,9 @@ const Joints = (() => {
       }
       j.pos = p;
     }
+    if (k === 'slot' && patch.pos != null) {
+      j.pos = round(clamp(Number(patch.pos) || 0, j.minPos ?? -10, j.maxPos ?? 10), 4);
+    }
     if (k === 'planar') {
       if (patch.u != null) {
         let u = round(Number(patch.u) || 0, 4);
@@ -1370,6 +1931,22 @@ const Joints = (() => {
         j.v = v;
       }
     }
+    if (k === 'ball') {
+      const wrapDeg = (val) => {
+        let dg = round(Number(val) || 0, 4);
+        while (dg > 180) dg -= 360;
+        while (dg < -180) dg += 360;
+        return dg;
+      };
+      if (patch.rx != null) {
+        const rx = wrapDeg(patch.rx);
+        j.rx = j.stopsLocked ? clamp(rx, j.minRx ?? -180, j.maxRx ?? 180) : clamp(rx, j.minRx ?? -180, j.maxRx ?? 180);
+      }
+      if (patch.ry != null) {
+        const ry = wrapDeg(patch.ry);
+        j.ry = j.stopsLocked ? clamp(ry, j.minRy ?? -180, j.maxRy ?? 180) : clamp(ry, j.minRy ?? -180, j.maxRy ?? 180);
+      }
+    }
     if (patch.ang != null) {
       j.ang = round(clamp(Number(patch.ang) || 0, j.min ?? -180, j.max ?? 180), 4);
     }
@@ -1381,6 +1958,7 @@ const Joints = (() => {
       const db = top(d.b, App.doc);
       if (db) Viewer.updateNode(db.id, { matrix: Model.localMatrix(db) });
     }
+    drawSelectedJoint();
     return next;
   }
 
@@ -1418,6 +1996,8 @@ const Joints = (() => {
       if (Math.abs(vhi - vlo) > 1e-6) return { key: 'v', lo: vlo, hi: vhi, len: true };
       return { key: 'ang', lo: j.min ?? -180, hi: j.max ?? 180, len: false };
     }
+    if (k === 'ball') return { key: 'rx', lo: j.minRx ?? -180, hi: j.maxRx ?? 180, len: false };
+    if (k === 'slot') return { key: 'pos', lo: j.minPos ?? -10, hi: j.maxPos ?? 10, len: true };
     return { key: 'ang', lo: j.min, hi: j.max, len: false };
   }
   async function check(jid, step) {
@@ -1486,6 +2066,7 @@ const Joints = (() => {
       if (sw.key === 'pos') { j.minPos = a; j.maxPos = b; j.stopsLocked = true; }
       else if (sw.key === 'u') { j.minU = a; j.maxU = b; j.stopsLocked = true; }
       else if (sw.key === 'v') { j.minV = a; j.maxV = b; j.stopsLocked = true; }
+      else if (sw.key === 'rx') { j.minRx = a; j.maxRx = b; j.stopsLocked = true; }
       else { j.min = a; j.max = b; }
     });
     UI.toast('Anschlag gesetzt – weiter lässt sich die Verbindung nicht bewegen.', { icon: 'check' });
@@ -1542,6 +2123,39 @@ const Joints = (() => {
         const da = Math.abs(pts[i].ang - pts[i - 1].ang) / 240;
         const d = Math.max(350, Math.max(du, dv, da) * 1000);
         legs.push({ s0: pts[i - 1], s1: pts[i], t0: T, t1: T + d });
+        T += d;
+      }
+      return { legs, T };
+    }
+    if (k === 'ball') {
+      const rx0 = s0.rx, ry0 = s0.ry, a0 = s0.ang;
+      const cl = (v, lo, hi) => clamp(v, lo, hi);
+      const pts = [
+        { rx: rx0, ry: ry0, ang: a0 },
+        { rx: cl(35, j.minRx ?? -180, j.maxRx ?? 180), ry: cl(20, j.minRy ?? -180, j.maxRy ?? 180), ang: cl(45, j.min ?? -180, j.max ?? 180) },
+        { rx: cl(-35, j.minRx ?? -180, j.maxRx ?? 180), ry: cl(20, j.minRy ?? -180, j.maxRy ?? 180), ang: cl(-45, j.min ?? -180, j.max ?? 180) },
+        { rx: cl(0, j.minRx ?? -180, j.maxRx ?? 180), ry: cl(-25, j.minRy ?? -180, j.maxRy ?? 180), ang: cl(0, j.min ?? -180, j.max ?? 180) },
+        { rx: rx0, ry: ry0, ang: a0 },
+      ];
+      const legs = []; let T = 0;
+      for (let i = 1; i < pts.length; i++) {
+        const dMax = Math.max(Math.abs(pts[i].rx - pts[i - 1].rx), Math.abs(pts[i].ry - pts[i - 1].ry), Math.abs(pts[i].ang - pts[i - 1].ang));
+        const d = Math.max(380, (dMax / 120) * 1000);
+        legs.push({ s0: pts[i - 1], s1: pts[i], t0: T, t1: T + d });
+        T += d;
+      }
+      return { legs, T };
+    }
+    if (k === 'slot') {
+      const p0 = s0.pos, pHi = j.maxPos ?? 10, pLo = j.minPos ?? -10;
+      const seq = Math.abs(p0 - pHi) < 1e-4 ? [p0, pLo, pHi, p0] : [p0, pHi, pLo, p0];
+      const speed = Math.max(8, (pHi - pLo) / 1.1);
+      const legs = []; let T = 0;
+      for (let i = 1; i < seq.length; i++) {
+        const dist = Math.abs(seq[i] - seq[i - 1]);
+        if (dist < 1e-6) continue;
+        const d = Math.max(350, (dist / speed) * 1000);
+        legs.push({ s0: { pos: seq[i - 1] }, s1: { pos: seq[i] }, t0: T, t1: T + d });
         T += d;
       }
       return { legs, T };
@@ -1677,7 +2291,7 @@ const Joints = (() => {
     const k = kindOf(j);
     const down = downstream(App.doc, j.b).map((d) => top(d.b)).filter(Boolean);
       const moveTxt = down.length ? ` (${down.map((x) => '„' + esc(Model.label(x)) + '“').join(', ')} ${down.length === 1 ? 'bewegt sich' : 'bewegen sich'} mit)` : '';
-      const verb = k === 'slide' ? 'gleitet entlang' : k === 'cyl' ? 'dreht und gleitet in' : k === 'planar' ? 'gleitet und dreht auf' : 'dreht sich gegenüber';
+      const verb = k === 'slide' ? 'gleitet entlang' : k === 'cyl' ? 'dreht und gleitet in' : k === 'planar' ? 'gleitet und dreht auf' : k === 'ball' ? 'dreht sich frei um den Punkt an' : k === 'slot' ? 'gleitet im Langloch von' : 'dreht sich gegenüber';
       box.append(h('div', { class: 'hint-box', html: `<b>${esc(Model.label(B))}</b> ${verb} <b>${esc(Model.label(A))}</b>${moveTxt}.` }));
       box.append(UI.selectField({
         id: 'jt-kind' + sfx,
@@ -1688,6 +2302,8 @@ const Joints = (() => {
           ['slide', 'Schieben entlang der Achse'],
           ['cyl', 'Zylindrisch (Drehen + Schieben)'],
           ['planar', 'Eben (Fläche auf Fläche)'],
+          ['ball', 'Kugel (Drehen frei)'],
+          ['slot', 'Stift im Langloch'],
         ],
         onChange: (v) => setKind(j.id, v),
       }));
@@ -1716,6 +2332,33 @@ const Joints = (() => {
         }));
         box.append(makeDofControl(j, sfx, {
           label: 'Drehen', aria: 'Drehwinkel in der Ebene', val: j.ang, min: j.min, max: j.max, step: 1,
+          unitStr: '°', isLen: false, sliderId: 'jt-range', valId: 'jt-ang', minId: 'jt-min', maxId: 'jt-max',
+          key: 'ang', minKey: 'min', maxKey: 'max',
+        }));
+      } else if (k === 'ball') {
+        box.append(makeDofControl(j, sfx, {
+          label: 'Drehen X', aria: 'Drehwinkel um X', val: j.rx ?? 0, min: j.minRx ?? -180, max: j.maxRx ?? 180, step: 1,
+          unitStr: '°', isLen: false, sliderId: 'jt-rx-range', valId: 'jt-rx', minId: 'jt-min-rx', maxId: 'jt-max-rx',
+          key: 'rx', minKey: 'minRx', maxKey: 'maxRx',
+        }));
+        box.append(makeDofControl(j, sfx, {
+          label: 'Drehen Y', aria: 'Drehwinkel um Y', val: j.ry ?? 0, min: j.minRy ?? -180, max: j.maxRy ?? 180, step: 1,
+          unitStr: '°', isLen: false, sliderId: 'jt-ry-range', valId: 'jt-ry', minId: 'jt-min-ry', maxId: 'jt-max-ry',
+          key: 'ry', minKey: 'minRy', maxKey: 'maxRy',
+        }));
+        box.append(makeDofControl(j, sfx, {
+          label: 'Drehen Z', aria: 'Drehwinkel um Z', val: j.ang, min: j.min, max: j.max, step: 1,
+          unitStr: '°', isLen: false, sliderId: 'jt-range', valId: 'jt-ang', minId: 'jt-min', maxId: 'jt-max',
+          key: 'ang', minKey: 'min', maxKey: 'max',
+        }));
+      } else if (k === 'slot') {
+        box.append(makeDofControl(j, sfx, {
+          label: 'Weg', aria: 'Verschiebung im Langloch', val: j.pos ?? 0, min: j.minPos ?? -10, max: j.maxPos ?? 10, step: 0.5,
+          unitStr: 'mm', isLen: true, sliderId: 'jt-pos-range', valId: 'jt-pos', minId: 'jt-min-pos', maxId: 'jt-max-pos',
+          key: 'pos', minKey: 'minPos', maxKey: 'maxPos',
+        }));
+        box.append(makeDofControl(j, sfx, {
+          label: 'Drehen', aria: 'Drehwinkel um den Stift', val: j.ang, min: j.min, max: j.max, step: 1,
           unitStr: '°', isLen: false, sliderId: 'jt-range', valId: 'jt-ang', minId: 'jt-min', maxId: 'jt-max',
           key: 'ang', minKey: 'min', maxKey: 'max',
         }));
@@ -1748,10 +2391,10 @@ const Joints = (() => {
       };
       const pb = h('button', { type: 'button', class: 'btn', id: 'jt-play' + sfx }); pb.innerHTML = icon(anim && anim.jid === j.id ? 'close' : 'play') + (anim && anim.jid === j.id ? 'Stopp' : 'Bewegung abspielen');
       pb.onclick = () => play(j.id, pb);
-      const del = h('button', { type: 'button', class: 'btn', id: 'jt-del' + sfx }); del.innerHTML = icon('ungroup') + ((k === 'cyl' || k === 'planar') ? 'Verbindung lösen' : 'Gelenk lösen');
+      const del = h('button', { type: 'button', class: 'btn', id: 'jt-del' + sfx }); del.innerHTML = icon('ungroup') + ((k === 'cyl' || k === 'planar' || k === 'ball' || k === 'slot') ? 'Verbindung lösen' : 'Gelenk lösen');
       del.onclick = () => remove(j.id);
       const row1 = h('div', { class: 'btn-row' }, pb);
-      if (k === 'cyl' || k === 'planar') {
+      if (k === 'cyl' || k === 'planar' || k === 'slot') {
         const fb = h('button', { type: 'button', class: 'btn', id: 'jt-flip' + sfx });
         fb.innerHTML = icon('mirror') + (k === 'cyl' ? 'Richtung umkehren' : 'Seite umkehren');
         fb.onclick = () => flip(j.id);
@@ -1768,7 +2411,7 @@ const Joints = (() => {
     for (const j of js) {
       const row = h('div', { class: 'tree-row joint-row' + (j.id === selJoint ? ' sel' : ''), 'data-joint': j.id });
       const ic = h('span', { class: 'swatch joint' }); ic.innerHTML = icon(fixed(j) ? 'lock' : 'hinge');
-      const subTxt = fixed(j) ? (j.flip ? `${T('joint.fixedKind')} · ↺` : T('joint.fixedKind')) : isCyl(j) ? 'Zylindrisch' : isPlanar(j) ? 'Eben' : (slide(j) ? 'Schieben' : 'Drehen');
+      const subTxt = fixed(j) ? (j.flip ? `${T('joint.fixedKind')} · ↺` : T('joint.fixedKind')) : isCyl(j) ? 'Zylindrisch' : isPlanar(j) ? 'Eben' : isBall(j) ? 'Kugel' : isSlot(j) ? 'Langloch' : (slide(j) ? 'Schieben' : 'Drehen');
       const del = h('button', { type: 'button', class: 'j-del', 'aria-label': T('common.delete'), 'data-tip': T('common.delete') });
       del.innerHTML = icon('trash');
       del.onclick = (e) => { e.stopPropagation(); remove(j.id); };
@@ -1818,7 +2461,7 @@ const Joints = (() => {
   function panel(it) {
     const js = allOf(it.id).filter((j) => top(j.a) && top(j.b));
     if (!js.length) return null;
-    const anyConn = js.some((j) => fixed(j) || isCyl(j) || isPlanar(j));
+    const anyConn = js.some((j) => fixed(j) || isCyl(j) || isPlanar(j) || isBall(j) || isSlot(j));
     const title = js.length > 1 ? (anyConn ? `Verbindungen (${js.length})` : `Gelenke (${js.length})`) : (anyConn ? 'Verbindung' : 'Gelenk');
     const sec = h('div', { class: 'section', id: 'joint-sec' }, h('div', { class: 'section-h' }, title));
     js.forEach((j, idx) => {
@@ -1861,6 +2504,8 @@ const Joints = (() => {
     startFixed,
     startCylindrical,
     startPlanar,
+    startBall,
+    startSlot,
     stopPick,
     add,
     addFixed,
@@ -1869,6 +2514,8 @@ const Joints = (() => {
     syncFixed,
     addCylindrical,
     addPlanar,
+    addBall,
+    addSlot,
     setAngle,
     setState,
     setKind,
@@ -1882,6 +2529,9 @@ const Joints = (() => {
     drivingOf,
     cylAxisOf,
     planarFaceOf,
+    ballPointOf,
+    slotCenterlineOf,
+    slotPinOf,
     setStops,
     freeRange,
     play,

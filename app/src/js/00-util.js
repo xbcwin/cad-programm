@@ -1856,6 +1856,16 @@ const HELP = {
   "tip": "Ein Teil fest an seiner Stelle verankern, damit nichts verrutscht",
   "hilfe": "Per Rechtsklick → „Festsetzen“ wird ein Teil wie an einem Schraubstock fixiert. Es lässt sich weder mit der Maus noch über Pfeiltasten, Lage-Felder oder Verbindungen und Gelenke verschieben. Im Verlauf links zeigt ein Schloss-Symbol den festen Stand.",
   "tipp": "Setze in jeder Baugruppe zuerst das Grundteil fest, bevor du andere Teile damit verbindest – mit Rechtsklick → „Festsetzen lösen“ gibst du es jederzeit wieder frei."
+ },
+ "mateBall": {
+  "tip": "Kugelgelenk: zwei Punkte fallen zusammen, Drehen in alle Richtungen frei",
+  "hilfe": "Legt einen gewählten Punkt (oder die Mitte einer Kugel) am zweiten Teil genau auf einen Punkt am ersten Teil. Beide Punkte bleiben zusammen, während sich das zweite Teil frei um X, Y und Z in alle Richtungen drehen lässt.",
+  "tipp": "Auch wenn du das Teil mit der Maus ziehst oder rechts bei der Lage verschiebst, bleibt der Gelenkpunkt fest am Platz."
+ },
+ "mateSlot": {
+  "tip": "Stift im Langloch: gleitet entlang der Mittellinie bis zum Endanschlag",
+  "hilfe": "Setzt einen Stift (Zylinder, Kreisrand oder Punkt) genau auf die Mittellinie eines Langlochs. Der Stift lässt sich entlang des Langlochs schieben und drehen und bleibt am Anfang und Ende des Langlochs automatisch am Anschlag stehen.",
+  "tipp": "Klick zuerst auf die Innenfläche oder den Rand des Langlochs und dann auf den Stift. Rechts kannst du Weg, Drehwinkel und die Anschläge jederzeit anpassen."
  }
 };
 

@@ -2117,6 +2117,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Einstiegspunkte, Suche & Hilfe**: Rechtes Panel (`#partref-sec` / `#btn-open-part-tab`), Rechtsklick-Menü (`#cm-open-part-tab`), Befehlssuche („Bauteil im Tab öffnen“, „Neue Baugruppe anlegen“) und Hilfetext `assemblyPartTab` sind vorhanden.
 - [ ] **Von Hand**: Im Browser über „+“ → „Neue Baugruppe“ eine Baugruppe anlegen, ein gespeichertes Bauteil über „Bauteil in Baugruppe einfügen …“ zweimal platzieren, per Doppelklick im Tab ändern, über das Banner speichern/zurückspringen und die aktualisierte Darstellung prüfen.
 
+## Verbindungen Kugel und Stift im Langloch (Auto [A-087], BG-06)
+
+- [x] **Stift im Langloch (20 mm) mit Endanschlägen**: Ein gekippter Stift wird per `Joints.addSlot` auf die automatisch erkannte 20-mm-Mittellinie eines Langlochs (`slotHole` `26 × 6 mm`) ausgerichtet; beim Ziehen weit über beide Enden hinaus (`+35 mm` / `-45 mm`) sowie beim Ändern der Lage-Felder (`#t-x`/`#t-y`) bleibt der Stift exakt auf der Mittellinie und stoppt am Anschlag (`+10 mm` / `-10 mm`).
+- [x] **Kugel (Drehen frei)**: `Joints.addBall` legt zwei gewählte Punkte deckungsgleich aufeinander (`< 0,01 mm`); freies Drehen um X/Y/Z (`#jt-rx`/`#jt-ry`/`#jt-ang`), 3D-Ziehen mit der Maus und Verschiebe-Eingaben (`#t-x`/`#t-z`) halten den Gelenkpunkt exakt zusammen.
+- [x] **Abspielen, Suche & Hilfetexte**: „Bewegung abspielen“, Rückgängig, Befehlssuche (`mate-ball`, `mate-slot`) und Hilfetexte (`mateBall`, `mateSlot`) arbeiten ohne Fehler.
+- [ ] **Von Hand**: Im Browser zwei Teile über Kontextleiste → „Verbindung“ → „Kugel“ bzw. „Stift im Langloch“ durch Anklicken im 3D-Bild verbinden, über das Langloch-Ende hinausziehen und das Kugelgelenk drehen.
+
 ## Verbindungen zylindrisch und eben (Auto [A-086], BG-06)
 
 - [x] **Zylindrisch (Welle in Bohrung)**: Ein gekippter, versetzter Bolzen wird per `Joints.addCylindrical` auf eine Bohrung ausgerichtet; beide Zylinderachsen fallen deckungsgleich zusammen (`|d1 · d2| > 0,99999`, Achsabstand `< 0,01 mm`). Drehen (`#jt-ang`), Schieben (`#jt-pos`), seitliche Lage-Eingabe (`#t-x` wird auf die Achse zurückgeführt) und „Richtung umkehren“ (`#jt-flip`) erhalten die Achsen-Deckung; „Bewegung abspielen“ bewegt Bolzen im Bild ohne `App.revision` zu ändern.

@@ -257,6 +257,8 @@ const Commands = (() => {
     add('sync-assembly', 'Baugruppe aktualisieren', 'undo', 'baugruppe aktualisieren sync bauteil abgleichen', () => Assembly.syncCurrentAssembly({ announce: true }), { group: 'Werkzeuge' });
     add('mate-cyl', 'Verbindung: Zylindrisch (Welle in Bohrung)', 'axes', 'verbindung gelenk zylindrisch welle bohrung bolzen achse drehen schieben bg-06', () => Joints.startCylindrical(), { group: 'Baugruppe' });
     add('mate-planar', 'Verbindung: Eben (Fläche auf Fläche)', 'planeXY', 'verbindung gelenk eben planar flaeche fläche schieben drehen bg-06', () => Joints.startPlanar(), { group: 'Baugruppe' });
+    add('mate-ball', 'Verbindung: Kugel (Kugelgelenk)', 'circle', 'verbindung gelenk kugel kugelgelenk ball punkt drehen frei bg-06', () => Joints.startBall(), { group: 'Baugruppe' });
+    add('mate-slot', 'Verbindung: Stift im Langloch', 'slot', 'verbindung gelenk stift langloch anschlag endanschlag slot gleiten bg-06', () => Joints.startSlot(), { group: 'Baugruppe' });
     add('fixed-joint', 'Verbinden: fest (zwei Flächen oder Punkte)', 'lock', 'verbinden fest verbindung starr baugruppe bündig fläche punkt mate rigid joint', () => Joints.startFixed(), { group: 'Werkzeuge' });
     add('editcomp', 'Gewählte Gruppe als Bauteil bearbeiten', 'edit', 'bauteil bearbeiten kontext', () => { const t = App.sel.length ? Model.topOf(App.doc, App.sel[0]) : null; if (t && t.kind === 'group') Comp.edit(t.id); else UI.toast('Wähle zuerst eine Gruppe oder ein Bauteil aus.', { icon: 'info' }); }, { group: 'Werkzeuge' });
     add('isolate', 'Gewähltes Teil isolieren', 'focusView', 'isolieren nur dieses zeigen', () => { const t = App.sel.length ? Model.topOf(App.doc, App.sel[0]) : null; if (t) Comp.toggleIso(t.id); }, { group: 'Ansicht' });

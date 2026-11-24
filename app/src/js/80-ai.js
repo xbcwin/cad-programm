@@ -484,10 +484,10 @@ Beispiel – Wunsch „Mach alles als Verbund“ (Runde 1):
       const pt = Array.isArray(ax.punkt) ? ax.punkt.map(Number) : Array.isArray(a.punkt) ? a.punkt.map(Number) : [0, 0, 0];
       if (!fa || !fb || ![...dir, ...pt].every((v) => Number.isFinite(v))) { rep.notes.push('Für ein Gelenk braucht es ein festes und ein bewegliches Teil und eine Achse (Punkt und Richtung).'); return; }
       const artStr = String(a.art || '');
-      const jKind = /zyl|cyl/i.test(artStr) ? 'cyl' : /eben|planar/i.test(artStr) ? 'planar' : /schieb|slide/i.test(artStr) ? 'slide' : 'rot';
-      const r = Joints.add(fa, fb, pt, dir, { kind: jKind, min: a.von, max: a.bis, ang: a.winkel ?? a.weg });
+      const jKind = /zyl|cyl/i.test(artStr) ? 'cyl' : /eben|planar/i.test(artStr) ? 'planar' : /kugel|ball/i.test(artStr) ? 'ball' : /langloch|slot|stift/i.test(artStr) ? 'slot' : /schieb|slide/i.test(artStr) ? 'slide' : 'rot';
+      const r = Joints.add(fa, fb, pt, dir, { kind: jKind, min: a.von, max: a.bis, ang: a.winkel ?? a.weg, pos: a.weg, len: a.laenge });
       if (!r.ok) { rep.notes.push(r.msg); return; }
-      const verb = jKind === 'slide' ? 'gleitet' : jKind === 'cyl' ? 'dreht und gleitet' : jKind === 'planar' ? 'gleitet in der Ebene' : 'dreht sich';
+      const verb = jKind === 'slide' ? 'gleitet' : jKind === 'cyl' ? 'dreht und gleitet' : jKind === 'planar' ? 'gleitet in der Ebene' : jKind === 'ball' ? 'dreht sich frei um den Punkt' : jKind === 'slot' ? 'gleitet im Langloch' : 'dreht sich';
       rep.changed.push(fb); rep.done.push(`gelenk: „${labelOf(fb)}“ ${verb} gegenüber „${labelOf(fa)}“ (Gelenk ${r.id})`);
     } else if (op === 'pruefen') rep.check = true;
     else if (op === 'schwachstellen') rep.weak = true;
