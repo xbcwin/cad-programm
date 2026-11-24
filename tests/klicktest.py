@@ -71,7 +71,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Assembly,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,ClashCheck,Log,Kernel,Drawing}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Clipboard,Model,Timeline,Start,Templates,Comp,Assembly,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,UserLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,ClashCheck,Log,Kernel,Drawing,UI}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -7052,7 +7052,7 @@ def t_a019_uebersetzbare_oberflaeche(p):
     p.wait(300)
     ok3 = (
         p.pg.locator('.start').get_by_text('Neu-Test').count() > 0
-        and p.pg.locator('.start .card.new b').text_content() == 'Leer-Test'
+        and p.pg.locator('.start .card.new:not(.asm) b').text_content() == 'Leer-Test'
     )
     p.ev("Start.hide()"); p.wait(200)
     # 4. Menüs (Hauptmenü & Ansicht-Menü)
@@ -16743,6 +16743,7 @@ def t_a080_tablet(p):
         'has_touch': True,
     })
     dev['accept_downloads'] = True
+    dev['locale'] = 'de-DE'
     ctx = p.ctx.browser.new_context(**dev)
     errs = []
     try:
@@ -18877,6 +18878,75 @@ def t_a092_durchdringungen(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_f11241729(p):
+    # 1. Meldungen (UI.toast) überleben laufende Berechnungen (UI.busy) und laufen erst danach ab
+    p.empty()
+    ok1a = ok1b = False
+    try:
+        p.ev("UI.busy(true); UI.toast('Busy-Toast-A', { ms: 250 })")
+        p.wait(550)
+        still_busy_a = p.pg.locator('.toast', has_text='Busy-Toast-A').count() == 1
+        p.ev("UI.busy(false)")
+        p.wait(100)
+        alive_after_a = p.pg.locator('.toast', has_text='Busy-Toast-A').count() == 1
+        p.wait(450)
+        gone_a = p.pg.locator('.toast', has_text='Busy-Toast-A').count() == 0
+        ok1a = still_busy_a and alive_after_a and gone_a
+
+        p.ev("UI.toast('Busy-Toast-B', { ms: 250 })")
+        p.wait(100)
+        p.ev("UI.busy(true)")
+        p.wait(450)
+        still_busy_b = p.pg.locator('.toast', has_text='Busy-Toast-B').count() == 1
+        p.ev("UI.busy(false)")
+        p.wait(100)
+        alive_after_b = p.pg.locator('.toast', has_text='Busy-Toast-B').count() == 1
+        p.wait(450)
+        gone_b = p.pg.locator('.toast', has_text='Busy-Toast-B').count() == 0
+        ok1b = still_busy_b and alive_after_b and gone_b
+    finally:
+        p.ev("UI.busy(false)")
+    ok1 = ok1a and ok1b
+
+    # 2. Startseiten-Karte für leeres Projekt bleibt neben der Baugruppen-Karte eindeutig & übersetzbar
+    orig_title = p.ev("return I18n.texts['start.emptyTitle']")
+    try:
+        p.ev("I18n.set({'start.emptyTitle': 'Leer-Check'}); Start.show()")
+        p.wait(250)
+        ok2 = (
+            p.pg.locator('.start .card.new').count() == 2
+            and p.pg.locator('#start-card-new-asm').count() == 1
+            and p.pg.locator('.start .card.new:not(.asm) b').count() == 1
+            and p.pg.locator('.start .card.new:not(.asm) b').text_content() == 'Leer-Check'
+        )
+    finally:
+        p.ev("I18n.set({'start.emptyTitle': arg}); Start.hide()", orig_title)
+        p.wait(150)
+
+    # 3. Touch-/Tablet-Kontext mit locale='de-DE' startet im Tablet-Modus auf Deutsch
+    ctx = p.ctx.browser.new_context(
+        viewport={'width': 834, 'height': 1194},
+        device_scale_factor=2,
+        is_mobile=True,
+        has_touch=True,
+        locale='de-DE',
+    )
+    try:
+        pg = ctx.new_page()
+        pg.add_init_script("try{localStorage.clear();}catch(e){}")
+        pg.goto(URL)
+        pg.wait_for_timeout(2500)
+        st = pg.evaluate("""() => ({
+          tablet: document.body.classList.contains('tablet'),
+          lang: window.__M.I18n.lang,
+        })""")
+        ok3 = st['tablet'] is True and st['lang'] == 'de' and pg.get_by_text('Leeres Projekt').first.count() == 1
+    finally:
+        ctx.close()
+
+    return [ok1, ok2, ok3]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -19074,6 +19144,7 @@ TESTS = [
     ('[A-090] Andock-Punkte & Einrasten beim Ziehen: Schraube in Bohrung (Einfach & Profi)', t_a090_andock_punkte),
     ('[A-089] Verbindungen: Winkel (30° & Formel) & mittig in Nut (20 mm)', t_a089_verbindungen_winkel_mittig),
     ('[A-092] Durchdringungen der ganzen Baugruppe als Liste (BG-10)', t_a092_durchdringungen),
+    ('[F-11241729] Volltest-Reparatur: Meldungen überleben Rechenphasen / Startseiten-Karte neben Baugruppe / Tablet-Kontext auf Deutsch', t_f11241729),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

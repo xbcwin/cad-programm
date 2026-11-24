@@ -2175,6 +2175,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Echte Baugruppe mit Verweisen (`ref`), Suche & Hilfe**: In einer Baugruppe (`docType: 'assembly'`) mit 3 eingesetzten `ref`-Instanzen findet `#t-clashes` exakt das überlappende Paar (`≈ 1000 mm³`); Prüfen-Menü, Befehlssuche (`clash-check`) und Hilfetext (`clashCheck`) arbeiten ohne Seitenfehler.
 - [ ] **Von Hand**: Im Browser eine Baugruppe mit mehreren leicht überlappenden und berührenden Teilen öffnen, auf „Durchdringungen suchen“ klicken, einen Listeneintrag anklicken und prüfen, ob die Kamera zur Stelle springt und die Überschneidung rot durchschimmert.
 
+## Volltest-Reparatur (Auto [F-11241729])
+
+- [x] **Meldungen überleben Rechenphasen**: `UI.toast()` wird während aktiver `UI.busy()`/`App.busy`-Berechnungen (sowohl davor als auch währenddessen ausgelöst) nicht vorzeitig ausgeblendet und läuft erst nach `UI.busy(false)` ab (`t_verbund_ohne_ki`, `[F-11241729]`).
+- [x] **Startseiten-Karte neben Baugruppe**: `.start .card.new:not(.asm) b` wählt neben `#start-card-new-asm` eindeutig die Leerprojekt-Karte und reagiert auf `I18n.set` (`t_a019_uebersetzbare_oberflaeche`, `[F-11241729]`).
+- [x] **Tablet-Kontext auf Deutsch**: Ein Touch-Kontext mit `locale='de-DE'` startet im `tablet`-Modus mit `I18n.lang === 'de'` und „Leeres Projekt“ (`t_a080_tablet`, `[F-11241729]`).
+- [ ] **Von Hand**: Bei einem schweren „Mach alles als Verbund“-Auftrag prüfen, ob die Toast-Meldung nach Abschluss der Berechnung noch sichtbar bleibt und sich danach sauber ausblendet.
+
 ## Fehler melden
 
 ```
