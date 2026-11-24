@@ -1897,6 +1897,86 @@ export function createKernel(R, oc) {
     }
     return loops;
   }
+  function sortedSolids(shape, invMat = null) {
+    if (!shape || !shape.wrapped) return [];
+    const TA = oc.TopAbs_ShapeEnum;
+    const ex = new oc.TopExp_Explorer(shape.wrapped, TA.TopAbs_SOLID, TA.TopAbs_SHAPE);
+    const buckets = new Map();
+    const list = [];
+    try {
+      while (ex.More()) {
+        const cur = ex.Current();
+        const hc = oc.ReplicadShapeHasher.HashCode(cur, HMAX);
+        let b = buckets.get(hc);
+        if (!b) { b = []; buckets.set(hc, b); }
+        if (!b.some((x) => x.IsSame(cur))) {
+          b.push(cur);
+          try {
+            const rs = R.cast(cur);
+            const bb = bboxOf(rs);
+            const wc = [(bb[0] + bb[3]) / 2, (bb[1] + bb[4]) / 2, (bb[2] + bb[5]) / 2];
+            const c = invMat ? transformPoint(invMat, wc) : wc;
+            list.push({ shape: rs, bbox: bb, c });
+          } catch (_) {}
+        }
+        ex.Next();
+      }
+    } finally { ex.delete(); }
+    if (list.length > 1) {
+      list.sort((a, b) => {
+        if (Math.abs(a.c[0] - b.c[0]) > 1e-2) return a.c[0] - b.c[0];
+        if (Math.abs(a.c[1] - b.c[1]) > 1e-2) return a.c[1] - b.c[1];
+        if (Math.abs(a.c[2] - b.c[2]) > 1e-2) return a.c[2] - b.c[2];
+        return (a.bbox[3] - a.bbox[0]) - (b.bbox[3] - b.bbox[0]);
+      });
+    }
+    return list;
+  }
+  function matchBodiesLocal(saved, evalBodies) {
+    const n = (evalBodies && evalBodies.length) || 0;
+    const out = new Array(n).fill(null);
+    if (!n || !Array.isArray(saved) || !saved.length) return out;
+    const usedS = new Set(), usedE = new Set();
+    const pairs = [];
+    for (let si = 0; si < saved.length; si++) {
+      const s = saved[si];
+      if (!s || !Array.isArray(s.c) || s.c.length < 3) continue;
+      for (let ei = 0; ei < n; ei++) {
+        const ec = evalBodies[ei].c;
+        const d = Math.hypot(s.c[0] - ec[0], s.c[1] - ec[1], s.c[2] - ec[2]);
+        if (d < 0.5) pairs.push({ d, si, ei });
+      }
+    }
+    pairs.sort((a, b) => a.d - b.d);
+    for (const p of pairs) {
+      if (usedS.has(p.si) || usedE.has(p.ei)) continue;
+      usedS.add(p.si); usedE.add(p.ei); out[p.ei] = saved[p.si];
+    }
+    for (let si = 0; si < saved.length; si++) {
+      if (usedS.has(si)) continue;
+      const s = saved[si];
+      if (s && typeof s.idx === 'number' && s.idx >= 0 && s.idx < n && !usedE.has(s.idx)) {
+        usedS.add(si); usedE.add(s.idx); out[s.idx] = s;
+      }
+    }
+    const rem = [];
+    for (let si = 0; si < saved.length; si++) {
+      if (usedS.has(si)) continue;
+      const s = saved[si];
+      if (!s || !Array.isArray(s.c) || s.c.length < 3) continue;
+      for (let ei = 0; ei < n; ei++) {
+        if (usedE.has(ei)) continue;
+        const ec = evalBodies[ei].c;
+        rem.push({ d: Math.hypot(s.c[0] - ec[0], s.c[1] - ec[1], s.c[2] - ec[2]), si, ei });
+      }
+    }
+    rem.sort((a, b) => a.d - b.d);
+    for (const p of rem) {
+      if (usedS.has(p.si) || usedE.has(p.ei)) continue;
+      usedS.add(p.si); usedE.add(p.ei); out[p.ei] = saved[p.si];
+    }
+    return out;
+  }
   function meshPayload(shape, tolOverride) {
     const b = bboxOf(shape);
     const base = meshTol(b);
@@ -1919,11 +1999,42 @@ export function createKernel(R, oc) {
     }
     const fi = fl.map((f) => faceInfo(f.shape));
     const ei = el.map((f) => edgeGeom(f.shape));
+    const sl = sortedSolids(shape);
+    let bodies = null, faceBody = null, edgeBody = null;
+    if (sl.length > 1) {
+      bodies = sl.map((s) => ({ bbox: s.bbox, c: s.c }));
+      faceBody = new Array(fl.length).fill(-1);
+      edgeBody = new Array(el.length).fill(-1);
+      const TA = oc.TopAbs_ShapeEnum;
+      for (let bi = 0; bi < sl.length; bi++) {
+        const sw = sl[bi].shape.wrapped;
+        const fx = new oc.TopExp_Explorer(sw, TA.TopAbs_FACE, TA.TopAbs_SHAPE);
+        try {
+          while (fx.More()) {
+            const hc = oc.ReplicadShapeHasher.HashCode(fx.Current(), HMAX);
+            const idx = fIndex.get(hc);
+            if (idx !== undefined) faceBody[idx] = bi;
+            fx.Next();
+          }
+        } finally { fx.delete(); }
+        const ex = new oc.TopExp_Explorer(sw, TA.TopAbs_EDGE, TA.TopAbs_SHAPE);
+        try {
+          while (ex.More()) {
+            const hc = oc.ReplicadShapeHasher.HashCode(ex.Current(), HMAX);
+            const idx = eIndex.get(hc);
+            if (idx !== undefined) edgeBody[idx] = bi;
+            ex.Next();
+          }
+        } finally { ex.delete(); }
+      }
+    }
+    for (const s of sl) safeDelete(s.shape);
     for (const f of fl) f.shape.delete(); for (const x of el) x.shape.delete();
     return {
       bbox: b, tol,
       vertices: new Float32Array(m.vertices), normals: new Float32Array(m.normals), triangles: new Uint32Array(m.triangles),
       lines: new Float32Array(lines), faceGroups, edgeGroups, faces: fi, edges: ei,
+      bodies, faceBody, edgeBody,
     };
   }
 
@@ -2498,6 +2609,7 @@ export function createKernel(R, oc) {
     return {
       bbox: p.bbox, tol: p.tol, vertices: p.vertices.slice(), normals: p.normals.slice(), triangles: p.triangles.slice(), lines: p.lines.slice(),
       faceGroups: p.faceGroups, edgeGroups: p.edgeGroups, faces: p.faces, edges: p.edges,
+      bodies: p.bodies || null, faceBody: p.faceBody || null, edgeBody: p.edgeBody || null,
     };
   }
 
@@ -2613,7 +2725,7 @@ export function createKernel(R, oc) {
       if (cutters.length) {
         try { const tool = fuseAll(cutters.map((h) => applyMatrix(h.shape, h.it.m)), true); const cut = world.cut(tool); safeDelete(tool); safeDelete(world); world = cut; } catch (_) {}
       }
-      out.push({ id: e.it.id, name: e.it.name, color: e.it.color, shape: world });
+      out.push({ id: e.it.id, name: e.it.name, color: e.it.color, m: e.it.m, bodies: e.it.bodies || null, shape: world });
     }
     return out;
   }
@@ -2626,10 +2738,10 @@ export function createKernel(R, oc) {
     const objs = [];
     const f = Math.max(0.05, Math.min(4, +q || 1));
     const useTr = Array.isArray(originMat) && originMat.length === 16 && !isIdentity(originMat);
-    for (const s of solids) {
-      const b = bboxOf(s.shape);
+    const meshOne = (shape, metaObj) => {
+      const b = bboxOf(shape);
       const tol = (fine ? Math.min(0.05, Math.max(0.005, meshTol(b) * 0.35)) : meshTol(b)) * f;
-      const m = s.shape.mesh({ tolerance: tol, angularTolerance: (fine ? 0.1 : 0.2) * Math.min(2, Math.max(0.25, f)) });
+      const m = shape.mesh({ tolerance: tol, angularTolerance: (fine ? 0.1 : 0.2) * Math.min(2, Math.max(0.25, f)) });
       const verts = new Float32Array(m.vertices), norms = new Float32Array(m.normals);
       if (useTr) {
         const m0 = originMat;
@@ -2649,7 +2761,24 @@ export function createKernel(R, oc) {
           norms[i] = nx; norms[i + 1] = ny; norms[i + 2] = nz;
         }
       }
-      objs.push({ id: s.id, name: s.name, color: s.color, vertices: verts, normals: norms, triangles: new Uint32Array(m.triangles) });
+      objs.push({ ...metaObj, vertices: verts, normals: norms, triangles: new Uint32Array(m.triangles) });
+    };
+    for (const s of solids) {
+      const parts = sortedSolids(s.shape, matInvRigid(s.m));
+      if (parts.length <= 1) {
+        for (const p of parts) safeDelete(p.shape);
+        meshOne(s.shape, { id: s.id, name: s.name, color: s.color });
+      } else {
+        const meta = matchBodiesLocal(s.bodies, parts);
+        for (let bi = 0; bi < parts.length; bi++) {
+          const mb = meta[bi];
+          if (mb && mb.hidden) continue;
+          const bName = (mb && mb.name) ? mb.name : ((s.name || 'Körper') + ' – Körper ' + (bi + 1));
+          const bColor = (mb && mb.color) ? mb.color : s.color;
+          meshOne(parts[bi].shape, { id: s.id, bodyIdx: bi, name: bName, color: bColor, bodyColor: (mb && mb.color) || null });
+        }
+        for (const p of parts) safeDelete(p.shape);
+      }
       s.shape.delete();
     }
     return { objects: objs, errors };
@@ -2659,6 +2788,27 @@ export function createKernel(R, oc) {
     const errors = [];
     let solids = evaluateShapes(scene, errors);
     if (only && only.length) { const keep = new Set(only); for (const s of solids) if (!keep.has(s.id)) s.shape.delete(); solids = solids.filter((s) => keep.has(s.id)); }
+    const filtered = [];
+    for (const s of solids) {
+      if (s.bodies && s.bodies.some((b) => b && b.hidden)) {
+        const parts = sortedSolids(s.shape, matInvRigid(s.m));
+        if (parts.length > 1) {
+          const meta = matchBodiesLocal(s.bodies, parts);
+          const kept = [];
+          for (let bi = 0; bi < parts.length; bi++) {
+            if (meta[bi] && meta[bi].hidden) safeDelete(parts[bi].shape);
+            else kept.push(parts[bi].shape);
+          }
+          safeDelete(s.shape);
+          if (!kept.length) continue;
+          s.shape = kept.length === 1 ? kept[0] : R.makeCompound(kept);
+        } else {
+          for (const p of parts) safeDelete(p.shape);
+        }
+      }
+      filtered.push(s);
+    }
+    solids = filtered;
     if (!solids.length) throw new Error('Es gibt nichts zu exportieren.');
     if (Array.isArray(originMat) && originMat.length === 16 && !isIdentity(originMat)) {
       for (const s of solids) {

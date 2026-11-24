@@ -197,9 +197,77 @@ const Actions = (() => {
     App.clearSelection(); return true;
   }
   function showAll() {
-    if (!App.doc.items.some((x) => x.hidden)) return false;
-    App.change('Alles eingeblendet', (doc) => { Model.walk(doc.items, (x) => { if (x.hidden) delete x.hidden; }); });
+    let any = false;
+    Model.walk(App.doc.items, (x) => { if (x.hidden || (x.bodies && x.bodies.some((b) => b && b.hidden))) any = true; });
+    if (!any) return false;
+    App.change('Alles eingeblendet', (doc) => {
+      Model.walk(doc.items, (x) => {
+        if (x.hidden) delete x.hidden;
+        if (x.bodies) {
+          for (const b of x.bodies) if (b && b.hidden) delete b.hidden;
+          x.bodies = x.bodies.filter((b) => b && (b.name || b.color || b.hidden));
+          if (!x.bodies.length) delete x.bodies;
+        }
+      });
+    });
     return true;
+  }
+  function setBody(itemId, bodyIdx, patch) {
+    const res = App.results.get(itemId);
+    const evalBodies = res && res.data && res.data.bodies;
+    if (!evalBodies || !evalBodies[bodyIdx]) return false;
+    const label = 'name' in patch ? 'Körper umbenannt' : 'color' in patch ? (patch.color ? 'Körper gefärbt' : 'Körperfarbe zurückgesetzt') : (patch.hidden ? 'Körper ausgeblendet' : 'Körper eingeblendet');
+    return App.change(label, (doc) => {
+      const f = Model.find(doc, itemId);
+      if (!f) return false;
+      const it = f.item;
+      const matched = Model.matchBodies(it.bodies, evalBodies);
+      const next = [];
+      for (let i = 0; i < evalBodies.length; i++) {
+        const cur = matched[i] ? { ...matched[i] } : {};
+        if (i === bodyIdx) Object.assign(cur, patch);
+        cur.idx = i;
+        cur.c = evalBodies[i].c.slice();
+        if (!cur.name) delete cur.name;
+        if (!cur.color) delete cur.color;
+        if (!cur.hidden) delete cur.hidden;
+        if (cur.name || cur.color || cur.hidden) next.push(cur);
+      }
+      if (next.length) it.bodies = next; else delete it.bodies;
+    });
+  }
+  function showOnlyBody(itemId, bodyIdx) {
+    const res = App.results.get(itemId);
+    const evalBodies = res && res.data && res.data.bodies;
+    if (!evalBodies || !evalBodies[bodyIdx]) return false;
+    return App.change('Nur diesen Körper zeigen', (doc) => {
+      const f = Model.find(doc, itemId);
+      if (!f) return false;
+      const it = f.item;
+      const matched = Model.matchBodies(it.bodies, evalBodies);
+      const next = [];
+      for (let i = 0; i < evalBodies.length; i++) {
+        const cur = matched[i] ? { ...matched[i] } : {};
+        cur.idx = i;
+        cur.c = evalBodies[i].c.slice();
+        if (i === bodyIdx) delete cur.hidden; else cur.hidden = true;
+        if (!cur.name) delete cur.name;
+        if (!cur.color) delete cur.color;
+        if (cur.name || cur.color || cur.hidden) next.push(cur);
+      }
+      if (next.length) it.bodies = next; else delete it.bodies;
+    });
+  }
+  function showAllBodies(itemId) {
+    const f0 = Model.find(App.doc, itemId);
+    if (!f0 || !f0.item.bodies || !f0.item.bodies.some((b) => b && b.hidden)) return false;
+    return App.change('Alle Körper einblenden', (doc) => {
+      const f = Model.find(doc, itemId);
+      if (!f || !f.item.bodies) return false;
+      for (const b of f.item.bodies) if (b && b.hidden) delete b.hidden;
+      f.item.bodies = f.item.bodies.filter((b) => b && (b.name || b.color || b.hidden));
+      if (!f.item.bodies.length) delete f.item.bodies;
+    });
   }
   function invertSelection() {
     const cur = new Set(App.sel.map((id) => (Model.topOf(App.doc, id) || {}).id));
@@ -662,6 +730,6 @@ const Actions = (() => {
     });
     return true;
   }
-  return { reorder, createFolder, toggleFolder, renameFolder, ungroupFolder, removeFromFolder, replaneSketch,  duplicateLinked, unlink, hideSelected, showAll, invertSelection, setOp, gapOf, setGap, loft, addPrimitive, addPart, addBuyPart, remove, duplicate, setRole, toggleRole, group, groupAll, ungroup, rotate90, rotate, center, mirror, dropToPlate, align, addFinish, finishAll, setFinish, removeFinish, faceFrame, selectedFace, onFaceTransform, attach, worldBox, selBox, cuttersOf, viewCenter };
+  return { setBody, showOnlyBody, showAllBodies, reorder, createFolder, toggleFolder, renameFolder, ungroupFolder, removeFromFolder, replaneSketch, duplicateLinked, unlink, hideSelected, showAll, invertSelection, setOp, gapOf, setGap, loft, addPrimitive, addPart, addBuyPart, remove, duplicate, setRole, toggleRole, group, groupAll, ungroup, rotate90, rotate, center, mirror, dropToPlate, align, addFinish, finishAll, setFinish, removeFinish, faceFrame, selectedFace, onFaceTransform, attach, worldBox, selBox, cuttersOf, viewCenter };
 })();
 

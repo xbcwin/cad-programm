@@ -309,6 +309,7 @@ const Model = (() => {
     if (it.mir) o.mir = it.mir;
     if (it.op && OPS[it.op.type] && it.op.target) o.op = { type: it.op.type, target: it.op.target };
     if (it.finishes && it.finishes.length) o.finishes = it.finishes.filter((f) => !f.off).map((f) => { const x = { id: f.id, type: f.type, r: num(f.r, V, 1), edges: f.edges, faces: f.faces }; if (f.vr) { x.vr = true; x.r2 = num(f.r2, V, x.r); } if (f.cm) { x.cm = f.cm; if (f.cm === 'two') x.r2 = num(f.r2, V, x.r); else x.a = num(f.a, V, 45); } if (f.side) x.side = 1; return x; });
+    if (it.bodies && it.bodies.length) o.bodies = it.bodies.map((b) => ({ idx: b.idx, c: b.c, name: b.name, color: b.color, hidden: !!b.hidden }));
     return o;
   }
   function sketchParams(it, V) {
@@ -765,7 +766,7 @@ const Model = (() => {
     if (doc.variants != null && !Array.isArray(doc.variants)) doc.variants = [];
     if (doc.fonts != null && !Array.isArray(doc.fonts)) doc.fonts = [];
     if (doc.folders != null && !Array.isArray(doc.folders)) doc.folders = [];
-    walk(doc.items, (it) => { it.t = Object.assign(T0(), it.t || {}); it.p = it.p || {}; it.finishes = it.finishes || []; if (!it.role) it.role = 'solid'; if (!it.color) it.color = nextColor(); });
+    walk(doc.items, (it) => { it.t = Object.assign(T0(), it.t || {}); it.p = it.p || {}; it.finishes = it.finishes || []; if (it.bodies != null && !Array.isArray(it.bodies)) delete it.bodies; if (!it.role) it.role = 'solid'; if (!it.color) it.color = nextColor(); });
     cleanFolders(doc);
     return doc;
   }
@@ -930,6 +931,51 @@ const Model = (() => {
     }
     return { ok: true };
   }
+  function matchBodies(saved, evalBodies) {
+    const n = (evalBodies && evalBodies.length) || 0;
+    const out = new Array(n).fill(null);
+    if (!n || !Array.isArray(saved) || !saved.length) return out;
+    const usedS = new Set(), usedE = new Set();
+    const pairs = [];
+    for (let si = 0; si < saved.length; si++) {
+      const s = saved[si];
+      if (!s || !Array.isArray(s.c) || s.c.length < 3) continue;
+      for (let ei = 0; ei < n; ei++) {
+        const ec = evalBodies[ei].c;
+        const d = Math.hypot(s.c[0] - ec[0], s.c[1] - ec[1], s.c[2] - ec[2]);
+        if (d < 0.5) pairs.push({ d, si, ei });
+      }
+    }
+    pairs.sort((a, b) => a.d - b.d);
+    for (const p of pairs) {
+      if (usedS.has(p.si) || usedE.has(p.ei)) continue;
+      usedS.add(p.si); usedE.add(p.ei); out[p.ei] = saved[p.si];
+    }
+    for (let si = 0; si < saved.length; si++) {
+      if (usedS.has(si)) continue;
+      const s = saved[si];
+      if (s && typeof s.idx === 'number' && s.idx >= 0 && s.idx < n && !usedE.has(s.idx)) {
+        usedS.add(si); usedE.add(s.idx); out[s.idx] = s;
+      }
+    }
+    const rem = [];
+    for (let si = 0; si < saved.length; si++) {
+      if (usedS.has(si)) continue;
+      const s = saved[si];
+      if (!s || !Array.isArray(s.c) || s.c.length < 3) continue;
+      for (let ei = 0; ei < n; ei++) {
+        if (usedE.has(ei)) continue;
+        const ec = evalBodies[ei].c;
+        rem.push({ d: Math.hypot(s.c[0] - ec[0], s.c[1] - ec[1], s.c[2] - ec[2]), si, ei });
+      }
+    }
+    rem.sort((a, b) => a.d - b.d);
+    for (const p of rem) {
+      if (usedS.has(p.si) || usedE.has(p.ei)) continue;
+      usedS.add(p.si); usedE.add(p.ei); out[p.ei] = saved[p.si];
+    }
+    return out;
+  }
   // Drehkörper-Bezugssystem (Achse, äußerster Radius und Bogen-Mitte in lokalen Koordinaten)
   function revolveFrame(p, V) {
     const sk = p && p.sketch;
@@ -1008,6 +1054,6 @@ const Model = (() => {
     if (aPos != null && aNeg != null) return aNeg < aPos;
     return aPos == null && aNeg != null;
   }
-  return { folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, railStart, railSections, bez3, patternMatrices, instanceMatrices, loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  return { matchBodies, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, railStart, railSections, bez3, patternMatrices, instanceMatrices, loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 

@@ -1689,6 +1689,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Duplizieren & Hilfetexte**: „Duplizieren“ im Rechtsklick-Menü des Verlaufs legt eine gleiche Kopie direkt hinter dem Schritt (auch innerhalb eines Ordners) mit Rückgängig an; Hilfetexte (`treeReorder`, `treeFolder`, `treeDuplicate`) sind vorhanden.
 - [ ] **Von Hand**: Im Browser Schritte mit der Maus direkt in einen Ordner hinein- und herausziehen, einen ganzen Ordner verschieben sowie per Doppelklick umbenennen.
 
+## Körper-Liste im Teil (Auto [A-033])
+
+- [x] **Körper (n) im Verlauf**: Ein einfacher Quader zeigt keine Liste; ein Teil mit zwei getrennten Körpern zeigt unter seinem Schritt „Körper (2)“ mit beiden Einträgen.
+- [x] **Umbenennen und Färben**: Beide Körper lassen sich per Stift-Knopf und Doppelklick umbenennen sowie über das Farbfeld einfärben (`vertexColors`, getrennte Farben im 3D-Bild).
+- [x] **Ein- und Ausblenden im 3D-Bild**: Ausblenden entfernt die Dreiecke und Kanten des Körpers aus Ansicht und Picking (`Viewer.pick` trifft nur noch den sichtbaren Körper), mit Rückgängig/Wiederholen.
+- [x] **Projektdatei und Export**: Namen, Farben und Sichtbarkeit bleiben in der Projektdatei und nach Neuladen erhalten; ausgeblendete Körper fehlen im Export, und „Jeder Körper als eigene Datei“ übernimmt die Körpernamen und Farben in STL und 3MF (`bodyList`-Hilfe vorhanden).
+- [ ] **Von Hand**: Im Browser bei einem geteilten Körper oder einer mehrteiligen Skizze per Maus über die Körper-Zeilen fahren (Vorschau-Markierung prüfen) und Rechtsklick-Menü („Nur diesen Körper zeigen“, „Alle Körper einblenden“) testen.
+
 ## Fehler melden
 
 ```

@@ -8554,6 +8554,125 @@ def t_a034_verlauf_ordner(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+# ---------- [A-033] Körper-Liste im Teil (KP-09) ----------
+def t_koerper_liste(p):
+    import zipfile, tempfile
+    p.empty()
+    # 1. Einzelner Quader -> keine Körper-Liste; Teil mit 2 getrennten Körpern -> Liste mit 2 Einträgen
+    p.ev("App.change('x', d=>{ d.items.push(Model.newItem('box',{w:10,d:10,h:10},{name:'Einzel'})); })"); warte_rechnen(p)
+    no_list_for_one = p.pg.locator('.bodies-wrap').count() == 0
+    p.ev("""App.change('x', d=>{
+      d.items = [];
+      const it = Model.newItem('extrude',{},{name:'Doppelteil'});
+      it.p = {
+        sketch: {
+          plane: { o: [0,0,0], x: [1,0,0], n: [0,0,1] },
+          ents: [
+            { id: 'r1', type: 'rect', a: [-25,-10], b: [-5,10] },
+            { id: 'r2', type: 'rect', a: [5,-10], b: [25,10] }
+          ],
+          dims: [], cons: []
+        },
+        dist: 10, dir: 'normal'
+      };
+      d.items.push(it);
+    })"""); warte_rechnen(p)
+    item_id = p.ev("return App.doc.items[0].id")
+    head_txt = (p.pg.locator('.bodies-wrap .bodies-head').first.text_content() or '').strip().lower()
+    row_cnt = p.pg.locator('.bodies-wrap .body-row').count()
+    ok1 = no_list_for_one and 'körper (2)' in head_txt and row_cnt == 2
+
+    # 2. Beide Körper umbenennen (Knopf & Doppelklick)
+    p.pg.locator('.body-row[data-body="0"] .body-rename').click(); p.wait(150)
+    p.pg.fill('#prompt-inp', 'Links'); p.pg.press('#prompt-inp', 'Enter'); p.wait(300)
+    p.pg.locator('.body-row[data-body="1"] .nm').dblclick(); p.wait(150)
+    p.pg.fill('#prompt-inp', 'Rechts'); p.pg.press('#prompt-inp', 'Enter'); p.wait(300)
+    names_ui = [
+        (p.pg.locator('.body-row[data-body="0"] .nm').text_content() or '').strip(),
+        (p.pg.locator('.body-row[data-body="1"] .nm').text_content() or '').strip(),
+    ]
+    bodies_doc = p.ev("return App.doc.items[0].bodies || []")
+    ok2 = names_ui == ['Links', 'Rechts'] and [b.get('name') for b in bodies_doc] == ['Links', 'Rechts']
+
+    # 3. Körper 0 einfärben -> Farbe gespeichert & Vertex-Farben im Bild aktiv
+    p.pg.locator('.body-row[data-body="0"] .body-color-btn').click(); p.wait(150)
+    p.pg.locator('.body-color-pop .colors button').first.click(); p.wait(300)
+    col_info = p.ev("""const n = Viewer.nodes.get(arg); const c = n.mesh.geometry.getAttribute('color');
+      let diff = false;
+      if (c && n.data.faceGroups && n.data.faceBody) {
+        const cols = [null, null];
+        for (const [st, cnt, fi] of n.data.faceGroups) {
+          const bi = fi >= 0 ? n.data.faceBody[fi] : -1;
+          if (bi === 0 || bi === 1) {
+            const vi = n.data.triangles[st];
+            cols[bi] = [c.getX(vi), c.getY(vi), c.getZ(vi)];
+          }
+        }
+        if (cols[0] && cols[1]) diff = Math.hypot(cols[0][0]-cols[1][0], cols[0][1]-cols[1][1], cols[0][2]-cols[1][2]) > 0.05;
+      }
+      return { col: (App.doc.items[0].bodies[0] || {}).color, vc: !!n.mesh.material.vertexColors, diff };""", item_id)
+    ok3 = bool(col_info.get('col')) and col_info.get('vc') and col_info.get('diff')
+
+    # 4. Körper 1 ausblenden -> im 3D-Bild weg, Rückgängig/Wiederholen funktioniert
+    p.ev("Viewer.setView('top', false); Viewer.fit(null, false);"); p.wait(300)
+    tris_before = p.ev("return Viewer.nodes.get(arg).mesh.geometry.index.count", item_id)
+    p.pg.locator('.body-row[data-body="1"] .body-eye').click(); p.wait(300)
+    tris_after = p.ev("return Viewer.nodes.get(arg).mesh.geometry.index.count", item_id)
+    has_hidden_cls = p.pg.locator('.body-row[data-body="1"].hidden-item').count() == 1
+    pt_left = world_screen(p, -15, 0, 10)
+    pt_right = world_screen(p, 15, 0, 10)
+    pick_left = p.ev("const h = Viewer.pick(arg[0], arg[1]); return h ? h.id : null;", pt_left)
+    pick_right = p.ev("const h = Viewer.pick(arg[0], arg[1]); return h ? h.id : null;", pt_right)
+    p.ev("App.undo()"); p.wait(250)
+    tris_undo = p.ev("return Viewer.nodes.get(arg).mesh.geometry.index.count", item_id)
+    p.ev("App.redo()"); p.wait(250)
+    tris_redo = p.ev("return Viewer.nodes.get(arg).mesh.geometry.index.count", item_id)
+    ok4 = (
+        has_hidden_cls and 0 < tris_after < tris_before * 0.75
+        and pick_left == item_id and pick_right is None
+        and tris_undo == tris_before and tris_redo == tris_after
+    )
+
+    # 5. Speichern in Projektdatei & Neuladen + exportMeshes lässt ausgeblendeten Körper weg
+    saved = p.ev("return App.snapshot()")
+    exp_hidden = p.ev("""return (async () => {
+      const { Kernel } = window.__masswerk;
+      const r = await Kernel.call('exportMeshes', { scene: Model.kernelScene(App.doc), fine: true, q: 1 });
+      return r.objects.map(o => o.name);
+    })()""")
+    p.ev("App.setDoc(JSON.parse(arg))", saved); warte_rechnen(p); p.wait(300)
+    reloaded_ok = (
+        p.pg.locator('.bodies-wrap .body-row').count() == 2
+        and (p.pg.locator('.body-row[data-body="0"] .nm').text_content() or '').strip() == 'Links'
+        and (p.pg.locator('.body-row[data-body="1"] .nm').text_content() or '').strip() == 'Rechts'
+        and p.pg.locator('.body-row[data-body="1"].hidden-item').count() == 1
+        and p.ev("return Viewer.nodes.get(arg).mesh.geometry.index.count", item_id) == tris_after
+    )
+    ok5 = ('"Links"' in saved and '"Rechts"' in saved and '"hidden":true' in saved and exp_hidden == ['Links'] and reloaded_ok)
+
+    # 6. Körper 1 wieder einblenden -> Export „jeder Körper einzeln“ übernimmt die Namen, Hilfetext vorhanden
+    p.pg.locator('.body-row[data-body="1"] .body-eye').click(); p.wait(300)
+    p.pg.get_by_role('button', name='Exportieren').first.click(); p.wait(500)
+    p.pg.uncheck('#ex-step'); p.pg.check('#ex-stl'); p.pg.check('#ex-mf'); p.pg.check('#ex-each'); p.wait(100)
+    with p.pg.expect_download(timeout=90000) as dl:
+        p.pg.get_by_role('button', name='Als ZIP speichern').click()
+    z = os.path.join(tempfile.gettempdir(), 'tracery-koerperliste.zip'); dl.value.save_as(z)
+    import io
+    zf = zipfile.ZipFile(z); znames = set(zf.namelist())
+    mf_name = next((n for n in znames if n.endswith('.3mf') and not n.startswith('Einzeln/')), None)
+    mf_xml = zf.read(mf_name) if mf_name else b''
+    mf_txt = zipfile.ZipFile(io.BytesIO(mf_xml)).read('3D/3dmodel.model').decode('utf-8') if mf_xml else ''
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    bl = hilfen.get('bodyList') or {}
+    help_ok = bool(bl.get('tip') and bl.get('hilfe') and bl.get('tipp')) and p.pg.locator('[data-help="bodyList"]').count() >= 1
+    ok6 = (
+        {'Einzeln/Links.stl', 'Einzeln/Rechts.stl', 'Einzeln/Links.3mf', 'Einzeln/Rechts.3mf'}.issubset(znames)
+        and 'name="Links"' in mf_txt and 'name="Rechts"' in mf_txt
+        and help_ok
+    )
+    return [ok1, ok2, ok3, ok4, ok5, ok6]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -8686,6 +8805,7 @@ TESTS = [
     ('[A-031] Rippe (KP-06): offene Schale mit diagonaler Rippe / einseitig & Formel / Schräge / Zeitleiste, Stützrippe & Hilfe', t_a031_rippe),
     ('[A-030] Drehen mit Winkel und bis Fläche: 90° Viertel-Volumen / symmetrisch 2×45° / beidseitig verschieden & umgekehrt / bis Fläche & Nachführen / Winkel-Ziehgriff & Hilfe', t_a030_drehen_winkel_flaeche),
     ('[A-034] Verlauf umsortieren, Ordner, duplizieren: zwei Löcher tauschen / Loch vor Körper rot abgelehnt / Ordner anlegen & zuklappen / Duplizieren & Hilfe', t_a034_verlauf_ordner),
+    ('[A-033] Körper-Liste im Teil: 2 Körper / Umbenennen / Färben / Ausblenden / Projektdatei und Export', t_koerper_liste),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
