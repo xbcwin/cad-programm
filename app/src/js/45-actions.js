@@ -370,8 +370,10 @@ const Actions = (() => {
   }
   function rotate90(ids, axis) { rotate(ids, axis, 90, axis !== 'z'); }
   // um die Mitte der Teile drehen, beliebiger Winkel; drop: danach wieder auf die XY-Ebene legen
+  const isFixedJ = (id) => typeof Joints !== 'undefined' && Joints.isFixedPart(id);
   function rotate(ids, axis, deg = 90, drop = false) {
     ids = ids || App.sel; if (!ids.length) return;
+    if (ids.every(isFixedJ)) { UI.toast(T('joint.fixedCannotMove', { name: Model.label(Model.find(App.doc, ids[0]).item) }), { icon: 'info' }); return; }
     const box = selBox(ids); const c = box.isEmpty() ? new THREE.Vector3() : box.getCenter(new THREE.Vector3());
     const a = (deg * Math.PI) / 180;
     App.change(deg === 90 ? 'Um 90° gedreht' : `Um ${fmtAngleU(deg)} gedreht`, (doc) => {
@@ -379,7 +381,7 @@ const Actions = (() => {
       if (axis === 'x') R.makeRotationX(a); else if (axis === 'y') R.makeRotationY(a); else R.makeRotationZ(a);
       const T1 = new THREE.Matrix4().makeTranslation(c.x, c.y, c.z), T2 = new THREE.Matrix4().makeTranslation(-c.x, -c.y, -c.z);
       for (const id of ids) {
-        const f = Model.find(doc, id); if (!f || f.item.locked) continue;
+        const f = Model.find(doc, id); if (!f || f.item.locked || isFixedJ(id)) continue;
         const W = Model.worldMatrix(doc, id), PW = Model.parentWorld(doc, id);
         const Wn = T1.clone().multiply(R).multiply(T2).multiply(W);
         Model.setFromMatrix(f.item, PW.clone().invert().multiply(Wn));
@@ -389,7 +391,7 @@ const Actions = (() => {
   }
   // Teile gemeinsam so verschieben, dass ihre Mitte über dem Ursprung liegt (Höhe bleibt)
   function center(ids) {
-    ids = (ids || App.sel).filter((id) => App.doc.items.find((x) => x.id === id)); if (!ids.length) return;
+    ids = (ids || App.sel).filter((id) => App.doc.items.find((x) => x.id === id) && !isFixedJ(id)); if (!ids.length) return;
     const box = selBox(ids); if (box.isEmpty()) return;
     const dx = -(box.min.x + box.max.x) / 2, dy = -(box.min.y + box.max.y) / 2;
     if (Math.abs(dx) < 1e-4 && Math.abs(dy) < 1e-4) return;
@@ -397,13 +399,14 @@ const Actions = (() => {
   }
   function mirror(ids, axis) {
     ids = ids || App.sel; if (!ids.length) return;
+    if (ids.every(isFixedJ)) { UI.toast(T('joint.fixedCannotMove', { name: Model.label(Model.find(App.doc, ids[0]).item) }), { icon: 'info' }); return; }
     const box = selBox(ids); const c = box.isEmpty() ? new THREE.Vector3() : box.getCenter(new THREE.Vector3());
     App.change('Gespiegelt', (doc) => {
       const S = new THREE.Matrix4().makeScale(axis === 'x' ? -1 : 1, axis === 'y' ? -1 : 1, axis === 'z' ? -1 : 1);
       const T1 = new THREE.Matrix4().makeTranslation(c.x, c.y, c.z), T2 = new THREE.Matrix4().makeTranslation(-c.x, -c.y, -c.z);
       const Mref = T1.multiply(S).multiply(T2);
       for (const id of ids) {
-        const f = Model.find(doc, id); if (!f) continue;
+        const f = Model.find(doc, id); if (!f || isFixedJ(id)) continue;
         const W = Model.worldMatrix(doc, id), PW = Model.parentWorld(doc, id);
         const D = new THREE.Matrix4().makeScale(-1, 1, 1);
         const Wn = Mref.clone().multiply(W).multiply(D);
@@ -414,8 +417,11 @@ const Actions = (() => {
     });
   }
   function dropToPlate(ids, quiet) {
-    ids = (ids || App.sel).filter((id) => App.doc.items.find((x) => x.id === id));
-    if (!ids.length) ids = App.doc.items.filter((x) => x.role !== 'hole' && !x.hidden).map((x) => x.id);
+    ids = (ids || App.sel).filter((id) => App.doc.items.find((x) => x.id === id) && !isFixedJ(id));
+    if (!ids.length) {
+      if ((App.sel || []).some(isFixedJ)) { if (!quiet) UI.toast(T('joint.fixedCannotMove', { name: Model.label(Model.find(App.doc, App.sel.find(isFixedJ)).item) }), { icon: 'info' }); return; }
+      ids = App.doc.items.filter((x) => x.role !== 'hole' && !x.hidden && !isFixedJ(x.id)).map((x) => x.id);
+    }
     let changed = 0;
     const before = App.snapshot();
     for (const id of ids) {
@@ -432,7 +438,7 @@ const Actions = (() => {
     const all = new THREE.Box3(); boxes.forEach(([, b]) => all.union(b));
     App.change('Ausgerichtet', (doc) => {
       for (const [id, b] of boxes) {
-        const f = Model.find(doc, id); if (!f || f.item.locked) continue;
+        const f = Model.find(doc, id); if (!f || f.item.locked || isFixedJ(id)) continue;
         let d = new THREE.Vector3();
         if (mode === 'left') d.x = all.min.x - b.min.x;
         if (mode === 'cx') d.x = (all.min.x + all.max.x) / 2 - (b.min.x + b.max.x) / 2;
@@ -458,11 +464,13 @@ const Actions = (() => {
     return cb >= ca ? { gap: b.min[k] - a.max[k], dir: 1 } : { gap: a.min[k] - b.max[k], dir: -1 };
   }
   function setGap(ids, ax, value) {
-    ids = ids || App.sel.slice(); const g = gapOf(ids, ax); if (!g) return;
+    ids = ids || App.sel.slice();
+    if (ids.length === 2 && isFixedJ(ids[1])) { UI.toast(T('joint.fixedCannotMove', { name: Model.label(Model.find(App.doc, ids[1]).item) }), { icon: 'info' }); return; }
+    const g = gapOf(ids, ax); if (!g) return;
     const k = ax === 'y' ? 'y' : ax === 'z' ? 'z' : 'x';
     const d = new THREE.Vector3(); d[k] = (value - g.gap) * g.dir;
     App.change('Abstand gesetzt', (doc) => {
-      const f = Model.find(doc, ids[1]); if (!f || f.item.locked) return false;
+      const f = Model.find(doc, ids[1]); if (!f || f.item.locked || isFixedJ(ids[1])) return false;
       const PW = Model.parentWorld(doc, ids[1]); const q = new THREE.Quaternion(); PW.decompose(new THREE.Vector3(), q, new THREE.Vector3());
       d.applyQuaternion(q.invert());
       const tn = Model.tNumeric(f.item); f.item.t.x = round(tn.x + d.x, 4); f.item.t.y = round(tn.y + d.y, 4); f.item.t.z = round(tn.z + d.z, 4);

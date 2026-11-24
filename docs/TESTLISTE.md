@@ -2117,6 +2117,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Einstiegspunkte, Suche & Hilfe**: Rechtes Panel (`#partref-sec` / `#btn-open-part-tab`), Rechtsklick-Menü (`#cm-open-part-tab`), Befehlssuche („Bauteil im Tab öffnen“, „Neue Baugruppe anlegen“) und Hilfetext `assemblyPartTab` sind vorhanden.
 - [ ] **Von Hand**: Im Browser über „+“ → „Neue Baugruppe“ eine Baugruppe anlegen, ein gespeichertes Bauteil über „Bauteil in Baugruppe einfügen …“ zweimal platzieren, per Doppelklick im Tab ändern, über das Banner speichern/zurückspringen und die aktualisierte Darstellung prüfen.
 
+## Verbindung „fest“ (Auto [A-085], BG-05)
+
+- [x] **Zwei Flächen bündig verbinden**: Zwei Quader wählen → „Verbinden: fest“ → obere Fläche von A und untere Fläche von B anklicken legt B mittig und mit Abstand `0 mm` genau auf A.
+- [x] **Gesperrt & Mitwandern**: Das verbundene Teil B lässt sich weder per Maus, Ziehgriffen, Pfeiltasten noch über die Lage-Felder oder `dropToPlate` verschieben; beim Verschieben von A wandert B exakt mit.
+- [x] **Verlauf, Bearbeiten & Umdrehen**: Die Verbindung erscheint unter „Verbindungen“ im Verlauf, öffnet rechts das Bearbeitungs-Panel und dreht Teil B per „Umdrehen“ sauber auf die Gegenseite und zurück.
+- [x] **Punkt-an-Punkt, Löschen & Rückgängig**: Zwei gewählte Punkte fallen deckungsgleich zusammen; Löschen im Verlauf gibt Teil B wieder frei, `Strg+Z` stellt die Verbindung wieder her; Befehlssuche und Hilfetext `fixedJoint` sind vorhanden.
+- [ ] **Von Hand**: Im Browser zwei Teile über „Verbinden: fest“ (Modus Auto / Fläche / Punkt) verbinden, während der Auswahl die Ansicht mit der rechten Maustaste drehen, Drehwinkel/Abstand rechts testen und das Ergebnis mit mehreren verketteten Teilen prüfen.
+
 ## Fehler melden
 
 ```

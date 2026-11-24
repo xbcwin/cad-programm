@@ -1831,6 +1831,11 @@ const HELP = {
   "tip": "Bauteil aus einer Baugruppe im eigenen Tab öffnen und nach dem Speichern aktualisieren",
   "hilfe": "Mach einen Doppelklick auf ein Teil in der Baugruppe (im 3D-Bild oder links im Verlauf), um das zugehörige Bauteil in einem eigenen Tab zu öffnen. Dort siehst du alle seine eigenen Schritte und Maße. Nach dem Speichern oder beim Zurückwechseln aktualisiert sich die Baugruppe mit allen Kopien dieses Bauteils automatisch.",
   "tipp": "Oben im Bauteil-Tab erscheint ein Hinweis-Banner mit „Speichern“ und „Zurück zur Baugruppe“ – so wechselst du mit einem Klick zurück."
+ },
+ "fixedJoint": {
+  "tip": "Zwei Teile an gewählten Flächen oder Punkten fest verbinden",
+  "hilfe": "Legt das zweite gewählte Teil bündig an das erste (Flächen gegeneinander und Mitten übereinander oder Punkt auf Punkt). Das verbundene Teil wandert bei jeder Bewegung oder Größenänderung des ersten Teils mit und lässt sich nicht mehr einzeln verschieben. Unter „Verbindungen“ links im Verlauf kannst du die Verbindung jederzeit umdrehen, drehen, einen Abstand setzen oder lösen.",
+  "tipp": "Halte während der Wahl die rechte Maustaste gedrückt, um das Modell zu drehen und verdeckte Unterseiten bequem anzuklicken."
  }
 };
 

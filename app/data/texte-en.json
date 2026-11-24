@@ -2368,5 +2368,17 @@
   "asm.insertEmpty": "No saved parts found yet.",
   "asm.openBadge": "open tab",
   "asm.selectPartFirst": "Select a part in the assembly first.",
-  "asm.tabKindTip": "Assembly (contains parts)"
+  "asm.tabKindTip": "Assembly (contains parts)",
+  "ctx.fixedJoint": "Mate: rigid",
+  "ctx.fixedJointTip": "Rigidly connect two faces or points",
+  "panel.title.joint": "Connection",
+  "joint.treeHeading": "Connections",
+  "joint.fixedKind": "rigid",
+  "joint.fixedFlip": "Flip",
+  "joint.fixedLockedHint": "Rigidly connected to “{name}” – cannot be moved freely.",
+  "joint.fixedCannotMove": "“{name}” is rigidly connected and cannot be moved.",
+  "joint.pickStep1": "Rigid mate: click 1st face or point on the first part (stays fixed).",
+  "joint.pickStep2": "Rigid mate: click 2nd face or point on the second part (attaches to “{name}”).",
+  "joint.removeBtn": "Remove connection",
+  "joint.repickBtn": "Re-pick faces / points"
 }

@@ -426,6 +426,7 @@ const Measure = (() => {
       if (typeof Datums !== 'undefined' && Datums.selectedAxis) Datums.selectAxis(null);
       if (typeof Datums !== 'undefined' && Datums.selectedPoint) Datums.selectPoint(null);
       if (typeof Datums !== 'undefined' && Datums.selectedCsys) Datums.selectCsys(null);
+      if (typeof Joints !== 'undefined' && Joints.selected) Joints.select(null);
     }
     drawSaved(); Panels.renderLeft(); Panels.renderRight();
     updateStatus();
