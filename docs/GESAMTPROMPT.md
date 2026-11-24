@@ -104,6 +104,7 @@ Leitlinien:
 | `48-joints.js` | Dreh- und Schiebegelenke, Ketten, Anschlag übernehmen, Bewegung abspielen (mit Timer-Fallback und `results`-Nachführung), `add` für die KI |
 | `49-*` | Bauteile im Kontext, Zeitleiste, Protokoll, Zahleneingabe beim Ziehen |
 | `50-ui-core.js`/`51-ui-panels.js` | Oberfläche, rechtes Panel „Eigenschaften“ (sofort bei Auswahl), Kontextleiste (aktualisiert auch auf `App.on('ghosts')`) |
+| `51-toolbar.js` (`Toolbar`) | Anpassbare 3D-Werkzeugleiste (`tracery-werkzeugleiste`): Rechtsklick-Menü, Anpassen-Dialog per Ziehen, Favoriten ganz links, Zurücksetzen |
 | `52-snap.js` | magnetisches Einrasten |
 | `52-place.js` | Platzieren, Bohrungs-Assistent |
 | `53-views.js` | Schnitt, Röntgen, Explosion, Fokus-Vorschau, Überhänge |
@@ -211,6 +212,7 @@ Leitlinien:
 - Einfache Oberfläche für Einsteiger („Einfach/Profi“): Zwei-Karten-Wahl beim ersten Start (`ViewPrefs.firstStart`, `levelCards`) und in den Einstellungen, `ViewPrefs.level` (`'simple'|'pro'`), Schild `#btn-level`; Einführung „Deine erste Skizze“ (`Tour`, ereignisgesteuert über `history`/`doc`/`mode`/`sketch`/`pop`)
 - Projekt in einen Ordner speichern (BE-14): `Start.saveToFolder`/`saveToFolderNow`/`disconnectFolder`/`folderSupported`/`folderInfo` (File System Access API, gebündelt alle 10 s, Anzeige `#btn-folder-status`)
 - Eigene Tastenkürzel (nur „Profi“): `Commands.shortcuts`/`setShortcut`/`resetShortcuts`/`renderShortcutsEditor`, gespeichert in `localStorage` (`tracery-kuerzel`), Duplikat-Prüfung, Einstellungs-Tab `#set-tab-keys`
+- Werkzeugleiste anpassen (BE-04): `Toolbar` in `51-toolbar.js`, Rechtsklick → „Anpassen …“, Werkzeuge per Ziehen hinzufügen/entfernen/sortieren, Favoriten mit Stern ganz links, gespeichert in `localStorage` (`tracery-werkzeugleiste`), „Zurücksetzen“
 - Notizstift; Messen (Abstand, Winkel, Fläche); Material je Teil, Gewicht, Schwerpunkt
 - Kaufteile mit festem Gewicht
 - Auswahlfilter, „Ähnliche“, Kantenkette

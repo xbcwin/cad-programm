@@ -33,7 +33,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Panels,Joints,I18n,T,Units,Expr,Tour}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -10620,6 +10620,83 @@ def t_a047_import_heilen(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a049_werkzeugleiste(p):
+    p.empty()
+    tool_ids = lambda: p.pg.evaluate("Array.from(document.querySelectorAll('#tools .tool[data-tool-id]')).map(b=>b.dataset.toolId)")
+    init_ok = tool_ids() == ['body', 'sketch', 'parts', 'measure', 'notes', 'views', 'export']
+
+    # 1. Rechtsklick auf die Werkzeugleiste → Anpassen …
+    p.pg.locator('#t-notes').click(button='right'); p.wait(200)
+    ok_ctx = p.pg.locator('#cm-tb-customize').is_visible()
+    p.pg.locator('#cm-tb-customize').click(); p.wait(250)
+    ok_dlg = p.pg.locator('#tb-dialog').is_visible() and p.pg.locator('#tb-active').is_visible() and p.pg.locator('#tb-avail').is_visible()
+
+    # 2. Werkzeug entfernen (per Ziehen nach rechts) → nicht mehr in der Leiste
+    p.pg.locator('#tb-active .tb-row[data-tool-id="notes"]').drag_to(p.pg.locator('#tb-avail')); p.wait(200)
+    ok_remove = (
+        'notes' not in tool_ids()
+        and p.pg.locator('#tools #t-notes').count() == 0
+        and p.pg.locator('#tb-avail .tb-row[data-tool-id="notes"]').count() == 1
+    )
+
+    # 3. Werkzeug per Ziehen hinzufügen & umsortieren
+    p.pg.locator('#tb-avail .tb-row[data-tool-id="fillet"]').drag_to(p.pg.locator('#tb-active')); p.wait(200)
+    p.pg.locator('#tb-active .tb-row[data-tool-id="parts"]').drag_to(
+        p.pg.locator('#tb-active .tb-row[data-tool-id="sketch"]'),
+        target_position={'x': 40, 'y': 4},
+    ); p.wait(200)
+    ids_sorted = tool_ids()
+    ok_add_sort = (
+        'fillet' in ids_sorted
+        and p.pg.locator('#tools #t-fillet').count() == 1
+        and 'parts' in ids_sorted and 'sketch' in ids_sorted
+        and ids_sorted.index('parts') < ids_sorted.index('sketch')
+    )
+
+    # 4. Als Favorit markieren → steht ganz links
+    p.pg.locator('#tb-active .tb-row[data-tool-id="views"] .tb-star').click(); p.wait(200)
+    ids_fav = tool_ids()
+    ok_fav = (
+        len(ids_fav) > 0 and ids_fav[0] == 'views'
+        and p.pg.locator('#tools #t-views.fav').count() == 1
+        and p.pg.locator('#tools .tb-fav-sep').count() == 1
+    )
+    p.pg.locator('.modal .btn.primary').click(); p.wait(200)
+
+    # 5. Neu laden → bleibt so
+    p.pg.reload(); p.wait(2500)
+    if p.pg.get_by_text('Leeres Projekt').count() > 0:
+        p.empty()
+    ids_reloaded = tool_ids()
+    ok_reload = (
+        'notes' not in ids_reloaded
+        and 'fillet' in ids_reloaded
+        and len(ids_reloaded) > 0 and ids_reloaded[0] == 'views'
+        and p.pg.locator('#tools #t-views.fav').count() == 1
+        and 'parts' in ids_reloaded and 'sketch' in ids_reloaded
+        and ids_reloaded.index('parts') < ids_reloaded.index('sketch')
+    )
+
+    # 6. Zurücksetzen → wie am Anfang + Hilfetext prüfen
+    p.pg.locator('#t-views').click(button='right'); p.wait(200)
+    p.pg.locator('#cm-tb-customize').click(); p.wait(250)
+    p.pg.locator('#tb-reset').click(); p.wait(250)
+    ids_reset = tool_ids()
+    p.pg.locator('.modal .btn.primary').click(); p.wait(150)
+    help_ok = p.pg.evaluate("""() => fetch('data/werkzeug-hilfen.json').then(r=>r.json()).then(d => {
+      const h = d.toolbarCustomize;
+      return !!(h && h.tip && h.hilfe && h.tipp);
+    })""")
+    ok_reset = (
+        ids_reset == ['body', 'sketch', 'parts', 'measure', 'notes', 'views', 'export']
+        and p.pg.locator('#tools .tool.fav').count() == 0
+        and p.ev("return localStorage.getItem('tracery-werkzeugleiste')") is None
+        and bool(help_ok)
+    )
+
+    return [init_ok and ok_ctx and ok_dlg, ok_remove, ok_add_sort, ok_fav, ok_reload, ok_reset]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -10769,6 +10846,7 @@ TESTS = [
     ('[A-044] IGES und BREP: Export und Import (Quader, Loch, Dialog)', t_a044_iges_brep),
     ('[A-046] Dateien ins Fenster ziehen: Hinweis-Rahmen / STL / Projektdatei / OBJ / DXF & SVG / unbekannte Datei', t_a046_dateien_ziehen),
     ('[A-047] Import prüfen und heilen: offenes STEP / Hinweis / Heilen mit Ergebnis / Lücken & gültiges STEP', t_a047_import_heilen),
+    ('[A-049] Werkzeugleiste anpassen & Favoriten: Rechtsklick / Entfernen / Hinzufügen & Sortieren per Ziehen / Favorit ganz links / Neu laden / Zurücksetzen & Hilfe', t_a049_werkzeugleiste),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

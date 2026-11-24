@@ -19,23 +19,7 @@ const Panels = (() => {
       el.append(b); return b;
     };
     if (App.mode === 'model') {
-      btn('t-body', 'cube', T('tool.body'), T('tool.bodyTip'), 'K', (e) => toggleFlyout('bodies', e.currentTarget));
-      btn('t-sketch', 'sketch', T('tool.sketch'), T('tool.sketchTip'), 'S', () => Sketch.chooseAndStart());
-      btn('t-parts', 'parts', T('tool.parts'), T('tool.partsTip'), 'B', (e) => toggleFlyout('parts', e.currentTarget));
-      btn('t-measure', 'measure', T('tool.measure'), T('tool.measureTip'), 'M', () => Measure.toggle(), 'minor pro');
-      btn('t-notes', 'noteDraw', T('tool.notes'), T('tool.notesTip'), 'N', () => Notes.toggle(), 'minor pro');
-      btn('t-views', 'xray', T('tool.views'), T('tool.viewsTip'), '', (e) => Views.menu(e.currentTarget), 'minor pro');
-      // einfache Oberfläche: die Profi-Werkzeuge stecken hinter „Mehr“
-      btn('t-more', 'menu', T('tool.more'), T('tool.moreTip'), '', (e) => UI.menu(e.currentTarget, [
-        { label: T('menu.more.measure'), icon: 'measure', kbd: 'M', run: () => Measure.toggle() },
-        { label: T('menu.more.notes'), icon: 'noteDraw', kbd: 'N', run: () => Notes.toggle() },
-        { label: T('menu.more.views'), icon: 'xray', run: () => Views.menu($('#t-more')) },
-        { label: T('menu.more.weakSpots'), icon: 'target', run: () => Weak.dialog() },
-        '-', { label: T('menu.more.showAllPro'), icon: 'sliders', help: 'levelSwitch', run: () => ViewPrefs.setLevel('pro') },
-      ]), 'simple-only');
-      el.append(h('div', { class: 'sep' }));
-      Views.sync();
-      btn('t-export', 'export', T('tool.export'), T('tool.exportTip'), 'Strg E', () => Print.exportDialog(), 'primary', T('tool.exportShort'));
+      Toolbar.renderModelTools(el);
     } else {
       btn('t-sheet', 'sheet', T('tool.sheet'), T('tool.sheetTip'), '', (e) => Drawing.sheetMenu(e.currentTarget));
       btn('t-dim', 'dim', T('tool.dim'), T('tool.dimTip'), 'D', () => Drawing.tool('dim'));
@@ -1977,6 +1961,7 @@ const Panels = (() => {
     $('#lt-log').onclick = () => { leftTab = 'log'; renderLeft(); };
     App.on('ctx', () => renderLeft());
     Log.on('change', debounce(() => { if (leftTab === 'log') renderLeft(); }, 80));
+    Toolbar.init();
     renderTools(); initViewCube();
     const rerenderLeftHint = debounce(() => { renderLeft(); UI.renderHint(); }, 16);
     const rerender = debounce(() => { rerenderLeftHint.cancel(); renderLeft(); renderRight(); renderCtx(); UI.renderHint(); }, 16);
