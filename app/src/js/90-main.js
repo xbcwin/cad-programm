@@ -14,7 +14,7 @@
   I18n.applyDom();
   UI.initTablet();
   Viewer.init($('#viewport'));
-  window.__V = Viewer; window.__M = { Store, Interact, Measure, Datums, RefFix, Print, ViewPrefs, App, Actions, Clipboard, Model, Timeline, Start, Templates, Comp, Assembly, Handles, Sketch, SK, TTF, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views, Mass, Select, Versions, DroneTpl, DroneUI, DroneLib, UserLib, DroneCheck, Plates, Variants, Explain, Weak, AI, Snap, Toolbar, Panels, Joints, I18n, T, Units, Expr, Tour, GeomCheck, ClashCheck, Log, Kernel, Drawing }; window.__S = Start; // für automatische Tests
+  window.__V = Viewer; window.__M = { Store, Interact, Measure, Datums, RefFix, Print, ViewPrefs, App, Actions, Clipboard, Model, Timeline, Start, Templates, Comp, Assembly, Handles, Sketch, SK, TTF, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views, Mass, Select, Versions, DroneTpl, DroneUI, DroneLib, UserLib, DroneCheck, Plates, Variants, Explain, Weak, AI, Snap, Toolbar, Panels, Joints, I18n, T, Units, Expr, Tour, GeomCheck, ClashCheck, Log, Kernel, Drawing, UI }; window.__S = Start; // für automatische Tests
   Panels.init(); Datums.init(); RefFix.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Notes.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init(); Refine.init(); Comp.init(); Assembly.init(); Views.init(); GeomCheck.init(); ClashCheck.init(); Mass.init(); Joints.init(); Versions.init(); Start.init();
 
   // Kopfzeile

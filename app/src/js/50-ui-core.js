@@ -4,18 +4,37 @@ const UI = (() => {
   // stumm geschaltet (z. B. während der KI-Kollege arbeitet): Meldungen werden gesammelt statt gezeigt
   let muted = null;
   function mute(on) { if (on) { muted = []; return null; } const m = muted || []; muted = null; return m; }
+  function scheduleToast(el, ms) {
+    clearTimeout(el._timer);
+    el._timer = setTimeout(() => {
+      if (!el.isConnected) return;
+      if (busyEl || (typeof App !== 'undefined' && App.busy)) {
+        el._waitBusy = true;
+        scheduleToast(el, 500);
+        return;
+      }
+      if (el._waitBusy) {
+        el._waitBusy = false;
+        scheduleToast(el, el._ttl || 3200);
+        return;
+      }
+      el.remove();
+    }, ms);
+  }
   function toast(text, opts = {}) {
     if (muted && !opts.force) { muted.push(typeof text === 'string' ? text : (text && text.textContent) || ''); return h('div'); }
     const box = $('#toasts');
     const el = h('div', { class: 'toast' + (opts.kind === 'bad' ? ' bad' : ''), role: 'status' });
     el.innerHTML = icon(opts.icon || (opts.kind === 'bad' ? 'warn' : 'check'));
     el.append(h('div', { class: 'grow' }, text));
-    if (opts.action) el.append(h('button', { type: 'button', onclick: () => { opts.action.run(); el.remove(); } }, opts.action.label));
+    if (opts.action) el.append(h('button', { type: 'button', onclick: () => { clearTimeout(el._timer); opts.action.run(); el.remove(); } }, opts.action.label));
     // dieselbe Meldung nicht doppelt stapeln
-    if (typeof text === 'string') { for (const old of [...box.children]) if (old.dataset.text === text) old.remove(); el.dataset.text = text; }
+    if (typeof text === 'string') { for (const old of [...box.children]) if (old.dataset.text === text) { clearTimeout(old._timer); old.remove(); } el.dataset.text = text; }
     box.append(el);
-    while (box.children.length > 3) box.firstChild.remove();
-    setTimeout(() => el.remove(), opts.ms || (opts.action ? 6000 : 3200));
+    while (box.children.length > 3) { clearTimeout(box.firstChild._timer); box.firstChild.remove(); }
+    el._ttl = opts.ms || (opts.action ? 6000 : 3200);
+    el._waitBusy = !!(busyEl || (typeof App !== 'undefined' && App.busy));
+    scheduleToast(el, el._ttl);
     return el;
   }
   // ---------- Dialog ----------
@@ -201,10 +220,15 @@ const UI = (() => {
   }
   let busyEl = null;
   function busy(on, text = T('status.calcBusy')) {
+    const box = $('#toasts');
     if (on) {
       if (!busyEl) { busyEl = h('div', { class: 'busy' }, h('div', { class: 'spin' }), h('span', { class: 'bt' }, text)); $('#overlay').append(busyEl); }
       else { const bt = busyEl.querySelector('.bt'); if (bt) bt.textContent = text; }
-    } else if (busyEl) { busyEl.remove(); busyEl = null; }
+      if (box) for (const t of box.children) t._waitBusy = true;
+    } else {
+      if (busyEl) { busyEl.remove(); busyEl = null; }
+      if (box) for (const t of box.children) if (t._waitBusy) { t._waitBusy = false; scheduleToast(t, t._ttl || 3200); }
+    }
     if (typeof Measure !== 'undefined' && Measure.setCalcBusy) Measure.setCalcBusy(!!on);
   }
   // ---------- Eingabefelder ----------
