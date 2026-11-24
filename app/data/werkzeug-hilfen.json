@@ -1408,5 +1408,15 @@
     "tip": "Prüft, ob das Modell zu einer gewählten Ebene genau spiegelgleich ist",
     "hilfe": "Spiegelt alle sichtbaren Körper an einer Grundebene (YZ, XZ, XY), einer Bezugsebene oder einer ebenen Fläche und vergleicht sie exakt mit dem Original. Unterschiede erscheinen farbig im Bild: Rot liegt nur auf dieser Seite, Blau fehlt auf der Gegenseite.",
     "tipp": "Liegt dein Teil nicht genau auf dem Nullpunkt, klick auf „Mitte“, um die Prüfebene automatisch in die Bauteilmitte zu schieben."
+  },
+  "patternCurve2d": {
+    "tip": "Elemente der Skizze entlang einer Linie, eines Bogens oder einer Spline vervielfältigen",
+    "hilfe": "Wähle zuerst die Elemente, die wiederholt werden sollen, und klick dann auf „Leitkurve wählen“, um eine Linie, einen Bogen, einen Kreis oder eine Spline anzuklicken. Du kannst eine feste Anzahl über die gesamte Kurve verteilen oder einen genauen Abstand entlang der Kurve vorgeben.",
+    "tipp": "Mit „An Kurve ausrichten“ drehen sich die Kopien mit der Kurve mit – praktisch für Schlitze oder Zähne auf einem Bogen."
+  },
+  "patternFill2d": {
+    "tip": "Eine geschlossene Fläche automatisch mit Löchern füllen (Raster, versetzt oder Waben)",
+    "hilfe": "Klick eine geschlossene Fläche in der Skizze an (bei nur einer Fläche ist sie schon gewählt). Stelle Musterart (Raster, versetzte Kreise oder Sechseck-Waben), Lochgröße, Abstand von Mitte zu Mitte und Randabstand ein – kein Loch schneidet den Rand.",
+    "tipp": "Der Steg zwischen den Löchern ist Abstand minus Lochgröße. Nach „Füllung anlegen“ lässt sich jedes Loch wie gewohnt einzeln bearbeiten oder löschen."
   }
 }

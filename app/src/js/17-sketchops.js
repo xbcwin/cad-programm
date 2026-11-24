@@ -1409,5 +1409,278 @@ const SKO = (() => {
     return false;
   }
 
-  return { TEMPLATES, TPLNAMES, tplEnts, SHAPES, SHAPENAMES, shapeEnts, FORMULA_CURVES, evalFormulaCurve, parsePointsCSV, pointsToCurveEnts, curve, inter, intersections, partsOf, nearestOn, closest, perpFeet, tangentFeet, trimPlan, trimPieces, trimRemoved, explode, chainOf, offsetChain, offsetShape, linkPoints, hasRadius, mirrorEnt, mirrorPoint, isMirrorSelf, moveEnt, rotateEnt, rotPt, stretchSelect, stretchPreview, pr, inspect, thinRegions, autoDefine };
+  // ---------- Muster entlang Kurve (SK-44) ----------
+  const CURVE_TYPES = new Set(['line', 'arc', 'circle', 'spline', 'ellipse', 'ellarc', 'rect', 'poly', 'slot']);
+  function isCurveEnt(e) {
+    return !!(e && CURVE_TYPES.has(e.type));
+  }
+  function wrapPi(a) {
+    let r = a;
+    while (r > Math.PI) r -= TAU;
+    while (r <= -Math.PI) r += TAU;
+    return r;
+  }
+  function curvePath(e) {
+    if (!isCurveEnt(e)) return null;
+    if (e.type === 'line') {
+      const a = e.a, b = e.b, len = d2(a, b);
+      if (len < 1e-6) return null;
+      const dx = b[0] - a[0], dy = b[1] - a[1], ang = Math.atan2(dy, dx);
+      return {
+        closed: false, len,
+        at: (s) => { const t = Math.max(0, Math.min(len, s)) / len; return { p: [a[0] + dx * t, a[1] + dy * t], ang }; },
+        sOf: (pt) => Math.max(0, Math.min(len, ((pt[0] - a[0]) * dx + (pt[1] - a[1]) * dy) / len)),
+      };
+    }
+    if (e.type === 'arc') {
+      const ai = SK.arcInfo(e.a, e.m, e.b);
+      if (!ai) return curvePath({ type: 'line', a: e.a, b: e.b });
+      const span = Math.abs(ai.sweep), len = span * ai.r;
+      if (len < 1e-6) return null;
+      const sgn = ai.sweep >= 0 ? 1 : -1;
+      const at = (s) => {
+        const t = Math.max(0, Math.min(len, s)) / len;
+        const th = ai.a0 + ai.sweep * t;
+        const tx = sgn > 0 ? -Math.sin(th) : Math.sin(th), ty = sgn > 0 ? Math.cos(th) : -Math.cos(th);
+        return { p: [ai.c[0] + Math.cos(th) * ai.r, ai.c[1] + Math.sin(th) * ai.r], ang: Math.atan2(ty, tx) };
+      };
+      return {
+        closed: false, len, at,
+        sOf: (pt) => {
+          const th = Math.atan2(pt[1] - ai.c[1], pt[0] - ai.c[0]);
+          const t = (sgn > 0 ? norm(th - ai.a0) : norm(ai.a0 - th)) / span;
+          if (t > 1) return d2(pt, at(0).p) <= d2(pt, at(len).p) ? 0 : len;
+          return Math.max(0, Math.min(1, t)) * len;
+        },
+      };
+    }
+    if (e.type === 'circle') {
+      if (!(e.r >= 1e-6)) return null;
+      const len = TAU * e.r;
+      return {
+        closed: true, len,
+        at: (s) => {
+          const u = ((s % len) + len) % len, th = u / e.r;
+          return { p: [e.c[0] + Math.cos(th) * e.r, e.c[1] + Math.sin(th) * e.r], ang: th + Math.PI / 2 };
+        },
+        sOf: (pt) => norm(Math.atan2(pt[1] - e.c[1], pt[0] - e.c[0])) * e.r,
+      };
+    }
+    let poly = [], closed = false;
+    if (e.type === 'spline') {
+      if (!e.pts || e.pts.length < 2) return null;
+      closed = !!e.closed;
+      const bz = SK.splineBez(e.pts, closed);
+      if (bz.length) {
+        for (const sg of bz) {
+          const sp = sg.t === 'bez' ? SK.bezPoints(sg, 28) : [sg.a, sg.b];
+          for (const q of sp) if (!poly.length || d2(poly[poly.length - 1], q) > 1e-9) poly.push(q);
+        }
+      } else poly = SK.splinePoints(e.pts, closed);
+      if (closed && poly.length > 1 && d2(poly[0], poly[poly.length - 1]) > 1e-9) poly.push(poly[0].slice());
+    } else if (e.type === 'ellipse') {
+      if (!(e.rx > 1e-6 && e.ry > 1e-6)) return null;
+      closed = true;
+      poly = SK.ellipsePoints(e.c, e.rx, e.ry, e.rot || 0, 128);
+      poly.push(poly[0].slice());
+    } else if (e.type === 'ellarc') {
+      if (!(e.rx > 1e-6 && e.ry > 1e-6)) return null;
+      poly = SK.ellArcPoints(e.c, e.rx, e.ry, e.rot || 0, e.a0, e.a1, e.ccw !== false, 96);
+      closed = Math.abs(SK.ellArcSweep(e.a0, e.a1, e.ccw !== false)) >= TAU - 1e-6;
+    } else {
+      closed = true;
+      for (const sg of SK.segsOf(e)) {
+        for (const q of SK.segPoints(sg)) if (!poly.length || d2(poly[poly.length - 1], q) > 1e-9) poly.push(q);
+      }
+      if (poly.length > 1 && d2(poly[0], poly[poly.length - 1]) > 1e-9) poly.push(poly[0].slice());
+    }
+    if (poly.length < 2) return null;
+    const cum = [0];
+    for (let i = 1; i < poly.length; i++) cum.push(cum[i - 1] + d2(poly[i - 1], poly[i]));
+    const len = cum[cum.length - 1];
+    if (len < 1e-6) return null;
+    return {
+      closed, len,
+      at: (s) => {
+        const u = closed ? ((s % len) + len) % len : Math.max(0, Math.min(len, s));
+        let i = 1;
+        while (i < cum.length - 1 && cum[i] < u) i++;
+        const a = poly[i - 1], b = poly[i], segL = cum[i] - cum[i - 1] || 1;
+        const t = Math.max(0, Math.min(1, (u - cum[i - 1]) / segL));
+        return { p: [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], ang: Math.atan2(b[1] - a[1], b[0] - a[0]) };
+      },
+      sOf: (pt) => {
+        let bestD = Infinity, bestS = 0;
+        for (let i = 1; i < poly.length; i++) {
+          const a = poly[i - 1], b = poly[i], dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy;
+          const f = l2 ? Math.max(0, Math.min(1, ((pt[0] - a[0]) * dx + (pt[1] - a[1]) * dy) / l2)) : 0;
+          const dd = d2(pt, [a[0] + dx * f, a[1] + dy * f]);
+          if (dd < bestD) { bestD = dd; bestS = cum[i - 1] + (cum[i] - cum[i - 1]) * f; }
+        }
+        return bestS;
+      },
+    };
+  }
+  function curvePatternJobs(curveEnt, opts = {}, refPt = null) {
+    const C = curvePath(curveEnt);
+    if (!C) return { ok: false, why: 'Ungültige Leitkurve.', jobs: [] };
+    let sample;
+    if (C.closed) {
+      const s0 = refPt ? C.sOf(refPt) : 0;
+      const dir = opts.flip ? -1 : 1;
+      sample = (u) => { const q = C.at(s0 + dir * u); return dir < 0 ? { p: q.p, ang: q.ang + Math.PI } : q; };
+    } else {
+      const dStart = refPt ? d2(refPt, C.at(0).p) : 0;
+      const dEnd = refPt ? d2(refPt, C.at(C.len).p) : 1;
+      const rev = (refPt ? dEnd < dStart - 1e-6 : false) !== !!opts.flip;
+      sample = (u) => { const q = C.at(rev ? C.len - u : u); return rev ? { p: q.p, ang: q.ang + Math.PI } : q; };
+    }
+    const ss = [];
+    if (opts.mode === 'spacing') {
+      const step = Number(opts.dist);
+      if (!(step > 1e-4)) return { ok: false, why: 'Der Abstand muss größer als 0 mm sein.', jobs: [] };
+      for (let k = 0; k < 200; k++) {
+        const s = k * step;
+        if (k > 0 && (C.closed ? s >= C.len - 1e-4 : s > C.len + 1e-6)) break;
+        ss.push(Math.min(s, C.len));
+      }
+    } else {
+      const N = clamp(Math.round(Number(opts.n) || 2), 2, 200);
+      const step = C.closed ? C.len / N : C.len / (N - 1);
+      for (let k = 0; k < N; k++) ss.push(k * step);
+    }
+    const P0 = sample(ss[0]);
+    const align = opts.align !== false;
+    const jobs = [];
+    for (let k = 1; k < ss.length; k++) {
+      const Pk = sample(ss[k]);
+      const dx = Pk.p[0] - P0.p[0], dy = Pk.p[1] - P0.p[1];
+      const da = align ? wrapPi(Pk.ang - P0.ang) : 0;
+      jobs.push({ dx, dy, da, p: Pk.p, ang: Pk.ang, s: ss[k] });
+    }
+    return { ok: true, len: C.len, closed: C.closed, count: ss.length, spacing: ss.length > 1 ? ss[1] - ss[0] : 0, start: P0.p, jobs };
+  }
+  function transformEnt(e, dx, dy, da, pivot) {
+    const piv = pivot || [0, 0];
+    if (Math.abs(da) < 2e-3 || e.type === 'circle' || e.type === 'point') {
+      const orig = e.type === 'circle' ? e.c : e.type === 'point' ? e.a : piv;
+      const q = rotPt(orig, piv, da);
+      const edx = q[0] + dx - orig[0], edy = q[1] + dy - orig[1];
+      const res = moveEnt(e, edx, edy);
+      return { ...res, xform: { mode: 'move', dx: r6(edx), dy: r6(edy) } };
+    }
+    const th = da;
+    let O;
+    if (Math.abs(Math.cos(th / 2)) < 1e-9) {
+      O = [piv[0] + 0.5 * dx, piv[1] + 0.5 * dy];
+    } else {
+      const tanHalf = Math.tan(th / 2);
+      O = [piv[0] + 0.5 * dx - (0.5 * dy) / tanHalf, piv[1] + 0.5 * dy + (0.5 * dx) / tanHalf];
+    }
+    const res = rotateEnt(e, O, th);
+    return { ...res, xform: { mode: 'rot', center: { at: pr(O) }, ang: r6((th * 180) / Math.PI) } };
+  }
+
+  // ---------- Füllmuster in der Skizze (SK-45): Raster, versetzt, Waben ----------
+  function fillPattern(region, opts = {}) {
+    if (!region || !region.outer || !region.outer.poly || region.outer.poly.length < 3) {
+      return { ok: false, why: 'Keine geschlossene Fläche gewählt.', ents: [] };
+    }
+    const kind = opts.kind === 'staggered' || opts.kind === 'hex' ? opts.kind : 'grid';
+    const size = Number(opts.size);
+    const pitch = Number(opts.pitch);
+    const margin = opts.margin == null ? 3 : Number(opts.margin);
+    const maxHoles = opts.maxHoles || 400;
+    if (!(size > 0.05) || !isFinite(size)) return { ok: false, why: 'Die Lochgröße muss größer als 0 mm sein.', ents: [] };
+    if (!(pitch > size + 1e-4) || !isFinite(pitch)) return { ok: false, why: 'Der Abstand muss größer als die Lochgröße sein, sonst überlappen sich die Löcher.', ents: [] };
+    if (margin < 0 || !isFinite(margin)) return { ok: false, why: 'Der Randabstand darf nicht negativ sein.', ents: [] };
+
+    const isHex = kind === 'hex', isStag = kind === 'staggered' || isHex;
+    const rIn = size / 2, rOut = isHex ? size / Math.sqrt(3) : size / 2;
+    const dx = pitch, dy = isStag ? (pitch * Math.sqrt(3)) / 2 : pitch;
+
+    const outer = region.outer.poly, holes = region.holes || [];
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const q of outer) {
+      x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]);
+      x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]);
+    }
+    const W = x1 - x0, H = y1 - y0, midX = (x0 + x1) / 2, midY = (y0 + y1) / 2;
+    const rings = [outer, ...holes.map((h) => h.poly)];
+    const pointInRegion = (pt) => SK.inPoly(pt, outer) && !holes.some((h) => SK.inPoly(pt, h.poly));
+    const distPointToRings = (pt) => {
+      let dm = Infinity;
+      for (const ring of rings) {
+        for (let i = 0; i < ring.length; i++) dm = Math.min(dm, SK.distSeg(pt, ring[i], ring[(i + 1) % ring.length]));
+      }
+      return dm;
+    };
+    const segSegDist = (a, b, c, d) => (lineLine(a, b, c, d).length ? 0 : Math.min(SK.distSeg(a, c, d), SK.distSeg(b, c, d), SK.distSeg(c, a, b), SK.distSeg(d, a, b)));
+    const fitsCircle = (c) => pointInRegion(c) && distPointToRings(c) >= rOut + margin - 1e-6;
+    const fitsHex = (c) => {
+      if (!pointInRegion(c)) return false;
+      const dC = distPointToRings(c);
+      if (dC < rIn + margin - 1e-6) return false;
+      const verts = SK.polyCorners({ c, r: rOut, n: 6, rot: 0 });
+      if (holes.some((h) => h.poly.length && SK.inPoly(h.poly[0], verts))) return false;
+      if (dC >= rOut + margin - 1e-6) return true;
+      for (const v of verts) if (!pointInRegion(v)) return false;
+      const pad = margin + 1e-4;
+      const hx0 = c[0] - rIn - pad, hx1 = c[0] + rIn + pad, hy0 = c[1] - rOut - pad, hy1 = c[1] + rOut + pad;
+      for (const ring of rings) {
+        for (let i = 0; i < ring.length; i++) {
+          const a = ring[i], b = ring[(i + 1) % ring.length];
+          if (Math.max(a[0], b[0]) < hx0 || Math.min(a[0], b[0]) > hx1 || Math.max(a[1], b[1]) < hy0 || Math.min(a[1], b[1]) > hy1) continue;
+          for (let k = 0; k < 6; k++) {
+            if (segSegDist(verts[k], verts[(k + 1) % 6], a, b) < margin - 1e-6) return false;
+          }
+        }
+      }
+      return true;
+    };
+
+    const availW = W - 2 * margin - 2 * rIn;
+    const availH = H - 2 * margin - 2 * rOut;
+    if (availW < -1e-6 || availH < -1e-6) {
+      return { ok: true, ents: [], count: 0, wall: round(pitch - size, 4), truncated: false, kind, size, pitch, margin };
+    }
+    const ny = Math.floor(availH / dy + 1e-6) + 1;
+    const nxMax = Math.floor(availW / dx + 1e-6) + 1;
+    const ents = [];
+    let truncated = false;
+    if (!isStag) {
+      for (let j = 0; j < ny && !truncated; j++) {
+        const y = midY + (j - (ny - 1) / 2) * dy;
+        for (let i = 0; i < nxMax; i++) {
+          const x = midX + (i - (nxMax - 1) / 2) * dx;
+          if (fitsCircle([x, y])) {
+            ents.push({ id: uid('e'), type: 'circle', c: pr([x, y]), r: pr1(rOut) });
+            if (ents.length >= maxHoles) { truncated = true; break; }
+          }
+        }
+      }
+    } else {
+      const baseShift = nxMax % 2 === 0 ? 0.5 : 0;
+      for (let j = 0; j < ny && !truncated; j++) {
+        const y = midY + (j - (ny - 1) / 2) * dy;
+        const shift = j % 2 === 0 ? baseShift : (baseShift ? 0 : 0.5);
+        const kMin = Math.floor((x0 + margin + rIn - midX) / dx - shift) - 1;
+        const kMax = Math.ceil((x1 - margin - rIn - midX) / dx - shift) + 1;
+        for (let k = kMin; k <= kMax; k++) {
+          const x = midX + (k + shift) * dx;
+          if (x < x0 + margin + rIn - 1e-5 || x > x1 - margin - rIn + 1e-5) continue;
+          const pt = [x, y];
+          if (isHex ? fitsHex(pt) : fitsCircle(pt)) {
+            ents.push(isHex
+              ? { id: uid('e'), type: 'poly', c: pr(pt), r: pr1(rOut), n: 6, rot: 0 }
+              : { id: uid('e'), type: 'circle', c: pr(pt), r: pr1(rOut) });
+            if (ents.length >= maxHoles) { truncated = true; break; }
+          }
+        }
+      }
+    }
+    return { ok: true, ents, count: ents.length, wall: round(pitch - size, 4), truncated, kind, size, pitch, margin };
+  }
+
+  return { TEMPLATES, TPLNAMES, tplEnts, SHAPES, SHAPENAMES, shapeEnts, FORMULA_CURVES, evalFormulaCurve, parsePointsCSV, pointsToCurveEnts, curve, inter, intersections, partsOf, nearestOn, closest, perpFeet, tangentFeet, trimPlan, trimPieces, trimRemoved, explode, chainOf, offsetChain, offsetShape, linkPoints, hasRadius, mirrorEnt, mirrorPoint, isMirrorSelf, moveEnt, rotateEnt, rotPt, isCurveEnt, curvePath, curvePatternJobs, transformEnt, fillPattern, stretchSelect, stretchPreview, pr, inspect, thinRegions, autoDefine };
 })();

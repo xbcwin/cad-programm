@@ -694,6 +694,7 @@ const IC = {
   deleteBody: '<path d="M12 3 4 7.5v9L12 21l8-4.5v-9z" stroke-dasharray="2.5 2" opacity=".55"/><path d="M9 9l6 6M15 9l-6 6" />',
   helix: '<path d="M6 6.5c0-1.9 2.7-3 6-3s6 1.1 6 3-2.7 3-6 3-6 1.1-6 3 2.7 3 6 3 6 1.1 6 3-2.7 3-6 3-6-1.1-6-3" /><path d="M6 6.5c0 1.4 1.6 2.3 4 2.8 M18 12.5c0 1.4-1.6 2.3-4 2.8" opacity=".45"/>',
   stretch: '<path d="M3 7h11v10H3z" opacity=".45"/><path d="M10 4h8v16h-8z" stroke-dasharray="2.5 2"/><path d="M14 12h7M18 9l3 3-3 3"/>',
+  patternFill: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="1.4" fill="currentColor" stroke="none"/><circle cx="14" cy="8" r="1.4" fill="currentColor" stroke="none"/><circle cx="11" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="16.5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="8" cy="16" r="1.4" fill="currentColor" stroke="none"/><circle cx="14" cy="16" r="1.4" fill="currentColor" stroke="none"/>',
 };
 function icon(name, extra = '') {
   const body = IC[name] || IC.cube;
@@ -2130,6 +2131,16 @@ const HELP = {
   "tip": "Prüft, ob das Modell zu einer gewählten Ebene genau spiegelgleich ist",
   "hilfe": "Spiegelt alle sichtbaren Körper an einer Grundebene (YZ, XZ, XY), einer Bezugsebene oder einer ebenen Fläche und vergleicht sie exakt mit dem Original. Unterschiede erscheinen farbig im Bild: Rot liegt nur auf dieser Seite, Blau fehlt auf der Gegenseite.",
   "tipp": "Liegt dein Teil nicht genau auf dem Nullpunkt, klick auf „Mitte“, um die Prüfebene automatisch in die Bauteilmitte zu schieben."
+ },
+ "patternCurve2d": {
+  "tip": "Elemente der Skizze entlang einer Linie, eines Bogens oder einer Spline vervielfältigen",
+  "hilfe": "Wähle zuerst die Elemente, die wiederholt werden sollen, und klick dann auf „Leitkurve wählen“, um eine Linie, einen Bogen, einen Kreis oder eine Spline anzuklicken. Du kannst eine feste Anzahl über die gesamte Kurve verteilen oder einen genauen Abstand entlang der Kurve vorgeben.",
+  "tipp": "Mit „An Kurve ausrichten“ drehen sich die Kopien mit der Kurve mit – praktisch für Schlitze oder Zähne auf einem Bogen."
+ },
+ "patternFill2d": {
+  "tip": "Eine geschlossene Fläche automatisch mit Löchern füllen (Raster, versetzt oder Waben)",
+  "hilfe": "Klick eine geschlossene Fläche in der Skizze an (bei nur einer Fläche ist sie schon gewählt). Stelle Musterart (Raster, versetzte Kreise oder Sechseck-Waben), Lochgröße, Abstand von Mitte zu Mitte und Randabstand ein – kein Loch schneidet den Rand.",
+  "tipp": "Der Steg zwischen den Löchern ist Abstand minus Lochgröße. Nach „Füllung anlegen“ lässt sich jedes Loch wie gewohnt einzeln bearbeiten oder löschen."
  }
 };
 
