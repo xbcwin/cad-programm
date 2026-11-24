@@ -1806,6 +1806,11 @@ const HELP = {
   "tip": "Unabhängige Körper gleichzeitig auf mehreren Rechen-Helfern berechnen",
   "hilfe": "Enthält dein Projekt mehrere unabhängige Körper, verteilt Tracery sie automatisch auf bis zu 4 eigene Rechen-Helfer (je nach Anzahl der Kerne deines Rechners), ohne etwas aus dem Netz nachzuladen. Bei Bedarf kannst du das hier in den Profi-Einstellungen abschalten.",
   "tipp": "Körper, die voneinander abhängen (z. B. durch Vereinigen, Abziehen oder „Bis zur Fläche“), werden automatisch zusammen auf demselben Helfer gerechnet."
+ },
+ "tabletPanels": {
+  "tip": "Seitenleiste ein- und ausklappen",
+  "hilfe": "Auf schmalen Bildschirmen und am Tablet lassen sich Verlauf (links) und Eigenschaften (rechts) ein- und ausklappen, damit mehr Platz für die 3D-Ansicht bleibt. Tippe in die 3D-Ansicht oder auf das Schließen-Symbol, um die Leiste wieder einzuklappen.",
+  "tipp": "Am Tablet wählt ein Antippen den Körper, und zwei Finger drehen und zoomen die Ansicht."
  }
 };
 

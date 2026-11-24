@@ -2300,5 +2300,7 @@
   "draw.panel.balloonTipDot": "Punkt (Fläche)",
   "draw.panel.balloonTipArrow": "Pfeil (Kante)",
   "draw.panel.bomPositions": "Positionen",
-  "draw.panel.bomPosReset": "Lage zurücksetzen"
+  "draw.panel.bomPosReset": "Lage zurücksetzen",
+  "topbar.closePanel": "Leiste einklappen",
+  "hint.defaultIdleTouch": "<b>Antippen</b> wählt einen Körper · <b>Zwei Finger</b> drehen und zoomen die Ansicht · langes Tippen öffnet das Menü."
 }

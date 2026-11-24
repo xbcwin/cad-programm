@@ -2082,6 +2082,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Einstellung (Profi), Abhängigkeiten & Hilfe**: Das Häkchen `#set-multiWorker` ist nur in „Profi“ sichtbar (in „Einfach“ ausgeblendet); abhängige Körper (`op.target`) bleiben auf demselben Helfer und der Hilfetext `multiWorker` ist vorhanden.
 - [ ] **Von Hand**: Im Browser auf einem Mehrkern-Rechner eine große Baugruppe mit mehreren unabhängigen Körpern öffnen, in den Profi-Einstellungen „Mehrere Rechen-Helfer nutzen“ aus- und einschalten und im Task-Manager / Entwicklerwerkzeug die parallele Auslastung der Worker beobachten.
 
+## Am Tablet bedienbar (Auto [A-080], PL-09)
+
+- [x] **44-px-Knöpfe am Tablet (Profi & Einfach)**: Im Playwright-Gerät „iPad Pro 11“ (`834 × 1194`) und bei `1024 × 768` Breite mit Touch sind alle sichtbaren Werkzeugleisten-, Kopfzeilen- und Kontextleisten-Knöpfe in „Profi“ und „Einfach“ mindestens `44 px` hoch.
+- [x] **Panels einklappbar**: Verlauf (`#left`) und Eigenschaften (`#right`) starten bei `< 1100 px` Breite und Touch eingeklappt und lassen sich über `#btn-left` / `#btn-right` öffnen sowie über `#btn-left-close` / `#btn-right-close` oder Antippen der 3D-Ansicht wieder einklappen.
+- [x] **Antippen & Zwei-Finger-Bedienung**: Antippen eines Quaders wählt ihn (Antippen im Leeren hebt die Auswahl auf); eine Zwei-Finger-Geste (Verschieben + Spreizen) dreht und zoomt die 3D-Kamera ohne die Auswahl zu verändern.
+- [ ] **Von Hand**: Auf einem echten iPad in Safari hochkant und quer die Bedienung mit Finger und Stift (Panels klappen, Körper antippen, Ziehgriffe bewegen, zwei Finger drehen/zoomen, Skizze und langes Tippen für das Kontextmenü) testen.
+
 ## Fehler melden
 
 ```

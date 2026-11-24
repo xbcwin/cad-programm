@@ -2387,6 +2387,6 @@ const Panels = (() => {
     App.on('ghosts', placeCtx);
     ViewPrefs.on('change', debounce(() => { if (leftTab === 'tree') renderLeft(); }, 30));   // Erste Schritte ein-/ausblenden
   }
-  return { paramsCSV, importParamsCSV, faceEdgeList, init, renderLeft, renderRight, renderTools, renderCtx, refreshViewCube, closeFlyout, toggleFlyout, firstStepDone, firstStepsState, expand: (id) => { expanded.add(id); renderLeft(); }, showParams: () => { leftTab = 'params'; renderLeft(); } };
+  return { paramsCSV, importParamsCSV, faceEdgeList, init, renderLeft, renderRight, renderTools, renderCtx, refreshViewCube, closeFlyout, toggleFlyout, firstStepDone, firstStepsState, expand: (id) => { expanded.add(id); renderLeft(); }, showParams: () => { leftTab = 'params'; renderLeft(); if (((document.documentElement && document.documentElement.clientWidth) || innerWidth) <= 900 || (UI.isTablet && UI.isTablet())) { const ws = $('#workspace'); if (ws) { ws.classList.add('show-left'); ws.classList.remove('show-right'); } const bl = $('#btn-left'), br = $('#btn-right'); if (bl) bl.setAttribute('aria-expanded', 'true'); if (br) br.setAttribute('aria-expanded', 'false'); } } };
 })();
 

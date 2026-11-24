@@ -302,13 +302,14 @@ const Handles = (() => {
     inp.addEventListener('blur', () => done(true), { once: true });
   }
   function scaleHandles() {
+    const tMul = document.body.classList.contains('tablet') ? 1.35 : 1;
     for (const m of items) {
       if (!m.isMesh) continue;
       const ps = Viewer.pixelSizeAt(m.position);
-      const s = m.userData.kind === 'size' ? 11 * ps : (m.userData.kind === 'lift' || m.userData.kind === 'revAngle') ? 13 * ps : 12 * ps;
+      const s = (m.userData.kind === 'size' ? 11 * ps : (m.userData.kind === 'lift' || m.userData.kind === 'revAngle') ? 13 * ps : 12 * ps) * tMul;
       m.scale.setScalar(s);
-      if (m.userData.kind === 'lift') m.position.copy(m.userData.base).add(new THREE.Vector3(0, 0, 26 * ps));
-      if (m.userData.kind === 'fillet') { m.scale.setScalar(13 * ps); m.position.copy(m.userData.base).addScaledVector(m.userData.wdir, -16 * ps); }
+      if (m.userData.kind === 'lift') m.position.copy(m.userData.base).add(new THREE.Vector3(0, 0, 26 * ps * tMul));
+      if (m.userData.kind === 'fillet') { m.scale.setScalar(13 * ps * tMul); m.position.copy(m.userData.base).addScaledVector(m.userData.wdir, -16 * ps * tMul); }
     }
     Viewer.requestRender();
   }
@@ -570,11 +571,15 @@ const Handles = (() => {
 // ---------- Maus-Bedienung ----------
 const Interact = (() => {
   let down = null, moving = null, hoverTimer = 0, lastHover = null, rdown = null, band = null;
+  const activeTouches = new Map();
+  let touchMulti = false, longPressTimer = 0;
+  const clearLongPress = () => { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = 0; } };
   function init() {
     const cv = Viewer.canvas;
     cv.addEventListener('pointerdown', onDown, true);
     cv.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onCancel);
     cv.addEventListener('pointerleave', () => { if (!down) { Viewer.clearHover(); Handles.hover(null); } });
     cv.addEventListener('dblclick', onDbl);
     cv.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -586,16 +591,28 @@ const Interact = (() => {
   }
   function modelActive() { return App.mode === 'model' && !Sketch.active && !Place.active && !Measure.active && !Notes.active && !Features.picking && !Sketch.picking && !Datums.picking && !RefFix.picking; }
   function onDown(e) {
+    if (e.pointerType === 'touch') {
+      activeTouches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (activeTouches.size >= 2) {
+        touchMulti = true; clearLongPress();
+        if (band) { band.el.remove(); band = null; }
+        if (down && down.handle) Handles.end();
+        down = null; Viewer.controls.enabled = true;
+        return;
+      }
+      if (touchMulti) return;
+    }
     if (!modelActive()) return;
-    if (e.button !== 0) return;
+    const isTouch = e.pointerType === 'touch';
+    if (!isTouch && e.button !== 0) return;
     const hnd = Handles.hitHandle(e.clientX, e.clientY);
     if (hnd) {
       Viewer.controls.enabled = false;
-      if (Handles.start(hnd, e)) { down = { handle: true }; Viewer.canvas.setPointerCapture(e.pointerId); }
+      if (Handles.start(hnd, e)) { down = { handle: true, touch: isTouch, id: e.pointerId }; Viewer.canvas.setPointerCapture(e.pointerId); }
       return;
     }
     // gewähltes Unterobjekt (z. B. ein Loch in einer Gruppe) direkt ziehen
-    if (App.sel.length === 1 && !App.doc.items.find((x) => x.id === App.sel[0])) {
+    if (!isTouch && App.sel.length === 1 && !App.doc.items.find((x) => x.id === App.sel[0])) {
       const gh = Viewer.pickGhost(e.clientX, e.clientY);
       if (gh && gh.id === App.sel[0]) {
         const f = Model.find(App.doc, gh.id);
@@ -613,19 +630,38 @@ const Interact = (() => {
     const hit = Select.adjust(Viewer.pick(e.clientX, e.clientY, Select.pickOpts()));
     // Umschalt + Ziehen im Leeren: Rahmen aufziehen (nach rechts: ganz drin · nach links: berührt);
     // dreht die linke Maustaste nicht (Maus-Steuerung wie Onshape, SolidWorks …), auch ohne Umschalt
-    if (!hit && (e.shiftKey || !Viewer.leftOrbits)) {
+    if (!hit && !isTouch && (e.shiftKey || !Viewer.leftOrbits)) {
       Viewer.controls.enabled = false;
       band = { x: e.clientX, y: e.clientY, el: h('div', { class: 'sel-band' }) }; document.body.append(band.el);
       down = { band: true, x: e.clientX, y: e.clientY }; Viewer.canvas.setPointerCapture(e.pointerId);
       return;
     }
-    down = { x: e.clientX, y: e.clientY, hit, t: performance.now(), shift: e.shiftKey || e.metaKey || e.ctrlKey };
-    if (hit && !(App.ctx && hit.id === App.ctx) && !Views.exploded) {   // im Bauteil-Modus nicht das ganze Bauteil verschieben
+    down = { x: e.clientX, y: e.clientY, hit, t: performance.now(), shift: e.shiftKey || e.metaKey || e.ctrlKey, touch: isTouch, id: e.pointerId, moved: false };
+    if (!isTouch && hit && !(App.ctx && hit.id === App.ctx) && !Views.exploded) {   // im Bauteil-Modus nicht das ganze Bauteil verschieben
       const top = App.doc.items.find((x) => x.id === hit.id);
       if (top && !top.locked) Viewer.controls.enabled = false; // Körper ziehen statt Ansicht drehen
     }
+    if (isTouch) {
+      clearLongPress();
+      const lx = e.clientX, ly = e.clientY, pid = e.pointerId;
+      longPressTimer = setTimeout(() => {
+        longPressTimer = 0;
+        if (!touchMulti && down && down.touch && down.id === pid && !down.moved && modelActive()) {
+          down = null;
+          contextMenu(lx, ly);
+        }
+      }, 550);
+    }
   }
   function onMove(e) {
+    if (e.pointerType === 'touch') {
+      if (activeTouches.has(e.pointerId)) activeTouches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (!modelActive()) return;
+      if (touchMulti || activeTouches.size >= 2) { clearLongPress(); return; }
+      if (down && down.handle) { if (down.id === e.pointerId) Handles.move(e); return; }
+      if (down && down.touch && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 10) { down.moved = true; clearLongPress(); }
+      return;
+    }
     if (!modelActive()) return;
     if (down && down.kbd) return;
     if (down && down.band && band) {
@@ -727,13 +763,25 @@ const Interact = (() => {
   }
   const liveRebuildChild = throttle(() => { App.rebuild(); App.refreshSelectionVisuals(); }, 120);
   function onUp(e) {
+    if (e.pointerType === 'touch') {
+      activeTouches.delete(e.pointerId);
+      clearLongPress();
+      if (touchMulti) {
+        if (activeTouches.size === 0) touchMulti = false;
+        down = null; Viewer.controls.enabled = true;
+        return;
+      }
+    }
     if (down && down.kbd) return;   // Wert wird gerade getippt
     if (down && down.band) {
       const b = band; band = null; down = null; Viewer.controls.enabled = true;
       if (b) { b.el.remove(); if (Math.hypot(e.clientX - b.x, e.clientY - b.y) > 4) bandSelect(b.x, b.y, e.clientX, e.clientY); }
       return;
     }
-    if (down && down.handle) { Handles.end(); down = null; Viewer.controls.enabled = true; return; }
+    if (down && down.handle) {
+      if (down.touch && down.id !== e.pointerId) return;
+      Handles.end(); down = null; Viewer.controls.enabled = true; return;
+    }
     if (moving) {
       const m = moving; moving = null;
       if (moveLabel) { moveLabel.remove(); moveLabel = null; }
@@ -744,10 +792,28 @@ const Interact = (() => {
       down = null; Viewer.controls.enabled = true; return;
     }
     if (down && !down.handle) {
-      const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y) > 4;
+      const tol = down.touch ? 10 : 4;
+      const moved = down.moved || Math.hypot(e.clientX - down.x, e.clientY - down.y) > tol;
       if (!moved && e.target === Viewer.canvas) { if (e.altKey && !down.shift && !App.ctx) selectBehind(e.clientX, e.clientY); else clickSelect(down.hit, down.shift, e.clientX, e.clientY); }
       down = null;
     }
+    Viewer.controls.enabled = true;
+  }
+  function onCancel(e) {
+    if (e.pointerType === 'touch') {
+      activeTouches.delete(e.pointerId);
+      if (activeTouches.size === 0) touchMulti = false;
+    }
+    clearLongPress();
+    if (band) { band.el.remove(); band = null; }
+    if (down && down.handle) Handles.end();
+    if (moving) {
+      moving = null;
+      if (moveLabel) { moveLabel.remove(); moveLabel = null; }
+      Snap.clear();
+      Viewer.canvas.style.cursor = '';
+    }
+    down = null;
     Viewer.controls.enabled = true;
   }
   // Rahmen-Auswahl: von links nach rechts nur Teile ganz im Rahmen, von rechts nach links alles, was er berührt

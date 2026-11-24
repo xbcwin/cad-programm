@@ -250,7 +250,7 @@ const Viewer = (() => {
     controls.rotateSpeed = 0.85; controls.zoomSpeed = 1.1; controls.panSpeed = 0.9;
     controls.minDistance = 0.2; controls.maxDistance = 12000;
     controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
-    controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+    controls.touches = touchesFor('model');
     controls.target.set(0, 0, 10);
     controls.addEventListener('change', () => { needsRender = true; if (!inLoopCam) listeners.emit('camera'); });
     controls.addEventListener('start', () => { orbitActive = true; pushCam(true); cancelCamAnim(); });
@@ -1363,7 +1363,12 @@ const Viewer = (() => {
       default: return ctx === 'model' ? { LEFT: R, MIDDLE: D, RIGHT: P } : ctx === 'sketch' ? { LEFT: null, MIDDLE: D, RIGHT: P } : { LEFT: null, MIDDLE: D, RIGHT: R };
     }
   }
-  function useButtons(ctx = mouseCtx) { mouseCtx = ctx; if (controls) controls.mouseButtons = buttonsFor(mouseStyle, ctx); }
+  function touchesFor(ctx) {
+    if (ctx === 'sketch') return { ONE: null, TWO: THREE.TOUCH.DOLLY_PAN };
+    if (ctx === 'place') return { ONE: null, TWO: THREE.TOUCH.DOLLY_ROTATE };
+    return { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_ROTATE };
+  }
+  function useButtons(ctx = mouseCtx) { mouseCtx = ctx; if (controls) { controls.mouseButtons = buttonsFor(mouseStyle, ctx); controls.touches = touchesFor(ctx); } }
   function setMouseStyle(st) { mouseStyle = st || 'tracery'; useButtons(); }
   function stopDamping() {
     if (!controls) return;
