@@ -33,7 +33,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Panels,Joints,I18n,T,Units,Expr,Tour}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -10267,6 +10267,69 @@ endsolid spitze
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_geometrie_pruefung(p):
+    # 1. Gesunder Quader über Prüfen-Menü -> „Keine Probleme“
+    p.empty()
+    p.ev("Actions.addPrimitive('box', { p: { w: 30, d: 20, h: 15 } })")
+    warte_rechnen(p, 20)
+    p.pg.locator('#t-check').click(); p.wait(250)
+    p.pg.locator('#check-geom').click()
+    p.pg.locator('#geom-check-ok').wait_for(state='visible', timeout=10000)
+    bar_txt1 = p.pg.locator('#geom-check-bar').text_content().lower()
+    st1 = p.ev("return GeomCheck.last ? { n: GeomCheck.last.issues.length, c: GeomCheck.last.checkedCount } : null")
+    ok1 = ('keine probleme' in bar_txt1) and bool(st1 and st1['n'] == 0 and st1['c'] == 1)
+
+    # 2. Gesunde Kugel & Zylinder (keine Fehlalarme durch Pole oder Nahtkanten)
+    p.ev("""App.change('Kugel und Zylinder', d => {
+      const s = Model.newItem('sphere', { d: 20 }, { name: 'Kugel' });
+      const c = Model.newItem('cylinder', { d: 16, h: 24 }, { name: 'Zylinder' });
+      c.t.x = 30;
+      d.items = [s, c];
+    })""")
+    warte_rechnen(p, 20)
+    p.pg.locator('#gc-rerun').click()
+    p.pg.locator('#geom-check-ok').wait_for(state='visible', timeout=10000)
+    st2 = p.ev("return GeomCheck.last ? { n: GeomCheck.last.issues.length, c: GeomCheck.last.checkedCount } : null")
+    ok2 = bool(st2 and st2['n'] == 0 and st2['c'] == 2)
+
+    # 3. Körper mit winziger Kante (< 0,01 mm durch zwei fast gleiche Maße)
+    p.pg.locator('#gc-close').click(); p.wait(200)
+    p.ev("""App.setDoc(Model.newDoc())""")
+    p.ev("""App.change('Winzige Kante', d => {
+      const a = Model.newItem('box', { w: 20, d: 20, h: 10 }, { name: 'Grundkörper' });
+      const b = Model.newItem('box', { w: 20.005, d: 10, h: 10 }, { name: 'Aufsatz' });
+      b.t.z = 5;
+      b.op = { type: 'join', target: a.id };
+      d.items.push(a, b);
+    })""")
+    warte_rechnen(p, 25)
+    p.pg.locator('#t-check').click(); p.wait(250)
+    p.pg.locator('#check-geom').click()
+    p.pg.locator('#geom-check-list button').first.wait_for(state='visible', timeout=10000)
+    first_txt = p.pg.locator('#geom-check-list button').first.text_content().lower()
+    st3 = p.ev("return GeomCheck.last ? GeomCheck.last.issues.map(x => ({ kind: x.kind, len: x.length })) : []")
+    tiny = [x for x in st3 if x['kind'] == 'tinyEdge']
+    ok3 = len(tiny) >= 1 and all(x['len'] < 0.01 for x in tiny) and ('kante' in first_txt) and ('mm' in first_txt)
+
+    # 4. Anklickbare Liste & 3D-Hervorhebung + Schließen
+    p.pg.locator('#geom-check-list button').first.click(); p.wait(400)
+    cls = p.pg.locator('#geom-check-list button').first.get_attribute('class') or ''
+    hi_on = p.ev("return { focused: GeomCheck.focused, has: GeomCheck.hasHighlight, active: GeomCheck.active }")
+    p.pg.locator('#gc-close').click(); p.wait(250)
+    hi_off = p.ev("return { active: GeomCheck.active, has: GeomCheck.hasHighlight, bar: !!document.querySelector('#geom-check-bar') }")
+    ok4 = ('active' in cls and hi_on['focused'] == 0 and hi_on['has'] and hi_on['active']
+           and not hi_off['active'] and not hi_off['has'] and not hi_off['bar'])
+
+    # 5. Befehlssuche & Hilfetext
+    cmd_ok = p.ev("return Commands.search('Geometrie prüfen').some(c => c.id === 'geom-check')")
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    h_gc = hilfen.get('geomCheck') or {}
+    help_ok = bool(h_gc.get('tip') and h_gc.get('hilfe') and h_gc.get('tipp'))
+    ok5 = bool(cmd_ok and help_ok)
+
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -10414,6 +10477,7 @@ TESTS = [
     ('[A-043] Wickeln um Zylinder (KP-34): Rechteck 31,4 mm auf Ø20 → 180° ± 2° / vertieft, Winkel & Ø40 / Linie & Entlang Pfad / Verlauf & Hilfe', t_a043_wickeln_zylinder),
     ('[A-044] IGES und BREP: Export und Import (Quader, Loch, Dialog)', t_a044_iges_brep),
     ('[A-046] Dateien ins Fenster ziehen: Hinweis-Rahmen / STL / Projektdatei / OBJ / DXF & SVG / unbekannte Datei', t_a046_dateien_ziehen),
+    ('[A-048] Geometrie-Prüfung: gesunder Quader / Kugel & Zylinder / winzige Kante / Hervorheben / Suche & Hilfe', t_geometrie_pruefung),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

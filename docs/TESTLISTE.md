@@ -1806,6 +1806,15 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **DXF/SVG per Drop & unbekannte Datei**: Drop einer SVG im Modellmodus legt einen Skizzenkörper an; in einer offenen Skizze zeigt der Rahmen den Skizzen-Hinweis und ein DXF-Drop fügt den Kreis direkt in die Skizze ein; eine unbekannte `.txt`-Datei meldet einen Fehler ohne Änderung am Modell.
 - [ ] **Von Hand**: Im Finder/Explorer echte Projekt-, STEP-, OBJ-, 3MF- und SVG-Dateien direkt über die Startseite, über den 3D-Bereich und über eine offene Skizze ziehen und prüfen, ob der Rahmen flüssig ein- und ausblendet.
 
+## Geometrie-Prüfung (Auto [A-048], PF-08)
+
+- [x] **Gesunder Quader über Prüfen-Menü**: Klick auf „Prüfen“ (`#t-check`) → „Geometrie prüfen“ (`#check-geom`) prüft den Quader im Kern (`checkGeometry`) und zeigt „Keine Probleme“ (`#geom-check-ok`) ohne Fundstellen.
+- [x] **Kugel & Zylinder ohne Fehlalarme**: Entartete Polkanten und Nahtkanten werden übersprungen; gesunde Kugel und Zylinder melden gemeinsam `0` Probleme.
+- [x] **Winzige Kante erkannt**: Vereinigen zweier Quader mit zwei fast gleichen Maßen (`20` mm und `20,005` mm) liefert in der Liste Einträge mit `kind === 'tinyEdge'` (`length < 0,01 mm`), die Kante samt Länge in mm nennen.
+- [x] **Anklickbare Liste & 3D-Hervorhebung**: Klick auf einen Eintrag in `#geom-check-list` setzt `.active`, erzeugt die rote Hervorhebung im 3D-Bild (`GeomCheck.hasHighlight === true`) und schließt sauber über `#gc-close`.
+- [x] **Befehlssuche & Hilfetext**: `Commands.search('Geometrie prüfen')` findet `geom-check`, `HELP.geomCheck` besitzt `tip`, `hilfe` und `tipp`.
+- [ ] **Von Hand**: Im Browser ein importiertes/komplexes Teil über „Prüfen → Geometrie prüfen“ prüfen, verschiedene Einträge anklicken und kontrollieren, ob Kamerafokus und roter Ring/Kante gut sichtbar sind.
+
 ## Fehler melden
 
 ```

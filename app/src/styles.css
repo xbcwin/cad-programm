@@ -958,3 +958,9 @@ body.presenting .pat-dot{display:none!important}
 .drop-card svg{width:36px;height:36px;color:var(--accent)}
 .drop-title{font:600 18px/1.25 var(--font-cond);letter-spacing:.01em;color:var(--ink)}
 .drop-sub{font-size:13.5px;line-height:1.45;color:var(--muted)}
+
+/* Geometrie-Prüfung (PF-08) */
+.geom-check-bar{width:340px;max-width:calc(100vw - 24px)}
+.gc-list{max-height:46vh;overflow-y:auto;padding-right:2px}
+.gc-summary{font-size:12.5px;color:var(--muted)}
+.gc-stale{font-size:12px;color:var(--warn);background:var(--warn-soft);padding:6px 8px;border-radius:7px}

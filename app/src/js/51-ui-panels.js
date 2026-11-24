@@ -25,12 +25,14 @@ const Panels = (() => {
       btn('t-measure', 'measure', T('tool.measure'), T('tool.measureTip'), 'M', () => Measure.toggle(), 'minor pro');
       btn('t-notes', 'noteDraw', T('tool.notes'), T('tool.notesTip'), 'N', () => Notes.toggle(), 'minor pro');
       btn('t-views', 'xray', T('tool.views'), T('tool.viewsTip'), '', (e) => Views.menu(e.currentTarget), 'minor pro');
+      btn('t-check', 'target', T('tool.check'), T('tool.checkTip'), '', (e) => GeomCheck.menu(e.currentTarget), 'minor pro');
       // einfache Oberfläche: die Profi-Werkzeuge stecken hinter „Mehr“
       btn('t-more', 'menu', T('tool.more'), T('tool.moreTip'), '', (e) => UI.menu(e.currentTarget, [
         { label: T('menu.more.measure'), icon: 'measure', kbd: 'M', run: () => Measure.toggle() },
         { label: T('menu.more.notes'), icon: 'noteDraw', kbd: 'N', run: () => Notes.toggle() },
         { label: T('menu.more.views'), icon: 'xray', run: () => Views.menu($('#t-more')) },
         { label: T('menu.more.weakSpots'), icon: 'target', run: () => Weak.dialog() },
+        { label: T('menu.check.geom'), icon: 'target', id: 'more-geom-check', help: 'geomCheck', run: () => GeomCheck.open() },
         '-', { label: T('menu.more.showAllPro'), icon: 'sliders', help: 'levelSwitch', run: () => ViewPrefs.setLevel('pro') },
       ]), 'simple-only');
       el.append(h('div', { class: 'sep' }));
