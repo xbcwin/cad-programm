@@ -113,11 +113,11 @@ Leitlinien:
 | `57-measure.js` | Messen |
 | `58-commands.js` | Eingabezeile, Befehlssuche |
 | `59-versions.js` | Versionen |
-| `60-print.js` | Export (STEP, STL, 3MF, OBJ/MTL, GLB, DXF), `Zip` (Packen/Entpacken) |
+| `60-print.js` | Export (STEP mit XCAF-Farben/Namen/Baugruppen, STL, 3MF, OBJ/MTL, GLB, DXF), `Zip` (Packen/Entpacken) |
 | `70-drawing.js` | technische Zeichnung, PDF |
 | `80-ai.js` | KI-Kollege (`AI.RULES`, `AI.ACTIONS`, `AI.SUGGESTIONS`, `AI.open` – allgemeines CAD ohne Drohnen-Bezug; `drohne`-Aktion technisch erhalten) |
 | `84-drone.js` | Rahmen-Generator, Frame-Assistent, Bausätze |
-| `85-start.js` | Startseite, Öffnen, Import (STEP, STL, 3MF, DXF, SVG) |
+| `85-start.js` | Startseite, Öffnen, Import (STEP mit `parseSTEP` für Namen/Farben/Baugruppen, STL, 3MF, DXF, SVG) |
 | `86-dronecheck.js` | Drohnen-Check |
 | `88-aihelp.js` | „Erklär diesen Schritt“, Schwachstellen-Analyse `Weak` |
 | `90-main.js` | Start; stellt `window.__M` für Tests bereit |

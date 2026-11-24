@@ -1781,6 +1781,15 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Abbruch laufender Übergänge**: `Tour.stop()` und `show()` löschen laufende Weiterschalt-Timer (`advTimer`) sauber ohne Zustandsreste auf den Schritt-Definitionen.
 - [ ] **Von Hand**: Im Browser ein Drehteller-Video über „Ansicht → Drehteller-Video …“ herunterladen und abspielen sowie die Einführung „Erste Skizze (5 Minuten)“ einmal komplett durchklicken.
 
+## STEP mit Farben und Namen (Auto [A-045], IO-04)
+
+- [x] **XCAF-STEP-Export mit Gruppe, Namen & Farben**: Gruppe „Gehäuse“ mit „Deckel“ (rot `#d6574c`) und „Boden“ (blau `#3f7fd6`) exportiert als `PRODUCT`-Hierarchie mit `NEXT_ASSEMBLY_USAGE_OCCURRENCE`, `STYLED_ITEM` und exakten `COLOUR_RGB`-Werten.
+- [x] **Import stellt Struktur, Namen, Farben & Volumen wieder her**: Erneutes Laden über `Start.importCAD` erzeugt die Gruppe „Gehäuse“ samt den Kindern „Deckel“ (rot) und „Boden“ (blau) ohne Fehler und mit exaktem Gesamtvolumen (`6000 mm³`) auch bei sich berührenden Flächen.
+- [x] **3D-Farben & Verlauf**: Der 3D-Viewer färbt die Einzelkörper der Baugruppe per Vertex-Farben rot und blau; der Verlauf links zeigt Gruppe und Kinder aufgeklappt mit ihren Farbkacheln.
+- [x] **Roundtrip, Ordner & Parser-Sonderfälle**: Zweiter Export/Import-Roundtrip sowie Export eines Ordners (`doc.folders`) als Baugruppe erhalten Namen, Farben und Struktur; `Start.parseSTEP` dekodiert zudem `DRAUGHTING_PRE_DEFINED_COLOUR` und `\X2\…\X0\`-Umlaute.
+- [x] **Hilfe & Dialog**: Export-Dialog verweist auf `exportStep`; Eintrag in `werkzeug-hilfen.json` ist vollständig (`tip`, `hilfe`, `tipp`).
+- [ ] **Von Hand**: Eine mehrfarbige Baugruppe aus Tracery als STEP exportieren und in FreeCAD oder Fusion öffnen sowie umgekehrt eine fremde STEP-Baugruppe ins Tracery-Fenster ziehen und Namen, Farben und Lage prüfen.
+
 ## Fehler melden
 
 ```

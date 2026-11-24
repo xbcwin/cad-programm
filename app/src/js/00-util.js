@@ -1538,6 +1538,11 @@ const HELP = {
   "tip": "Text oder Logo erhaben oder vertieft auf eine Fläche prägen (auch Zylinder oder Kugel)",
   "hilfe": "Projiziert geschlossene Flächen aus deiner Skizze – zum Beispiel Text oder ein Logo – senkrecht auf die gewählte ebene oder gewölbte Körperfläche (Zylinder, Kugel, Kegel …) und überträgt sie als Erhöhung (erhaben) oder Gravur (vertieft) mit fester Höhe direkt in den Körper.",
   "tipp": "Klick zuerst die runde oder ebene Zielfläche an und starte „Prägen“ – Tracery legt die Skizzenebene automatisch passend vor die Fläche."
+ },
+ "exportStep": {
+  "tip": "STEP mit Teilenamen, Farben und Baugruppen-Struktur speichern und einlesen",
+  "hilfe": "Schreibt alle sichtbaren Körper als exakte B-Rep-Geometrie nach STEP AP214/AP242 (XCAF). Dabei kommen die Namen, Farben sowie Gruppen und Ordner als echte Baugruppen-Struktur mit – andere CAD-Programme wie Fusion, FreeCAD oder SolidWorks zeigen alles direkt sortiert und gefärbt an. Beim erneuten Öffnen in Tracery entstehen Gruppen, Teile, Namen und Farben wieder genauso.",
+  "tipp": "Wenn Teile eine Gruppe bilden, bleiben beim Export alle darin enthaltenen Einzelteile mit ihren eigenen Namen und Farben erhalten."
  }
 };
 

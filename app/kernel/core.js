@@ -1341,6 +1341,14 @@ export function createKernel(R, oc) {
     return shape;
   }
 
+  let stepReaderCache = null;
+  function clearStepReaderCache() {
+    if (stepReaderCache && stepReaderCache.reader) {
+      try { stepReaderCache.reader.delete(); } catch (_) {}
+    }
+    stepReaderCache = null;
+  }
+
   // Importierte STEP- oder STL-Datei (binär per blobId/bytes oder Base64)
   function buildImport(p) {
     let bytes = p.bytes ? (p.bytes instanceof Uint8Array ? p.bytes : new Uint8Array(p.bytes)) : (p.blobId ? importBlobs.get(p.blobId) : null);
@@ -1348,25 +1356,86 @@ export function createKernel(R, oc) {
       const bin = atob(p.data); bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     }
     if (!bytes || !bytes.byteLength) throw new Error('Die importierte Datei ist leer.');
-    const fn = 'imp_' + Math.random().toString(36).slice(2);
-    oc.FS.writeFile('/' + fn, bytes);
     let shape = null;
-    try {
-      if (p.fmt === 'stl') {
+    if (p.fmt === 'stl') {
+      const fn = 'imp_' + Math.random().toString(36).slice(2);
+      oc.FS.writeFile('/' + fn, bytes);
+      try {
         const reader = new oc.StlAPI_Reader(); const sh = new oc.TopoDS_Shell();
         if (!reader.Read(sh, fn)) throw new Error('Die STL-Datei ließ sich nicht lesen.');
         const up = new oc.ShapeUpgrade_UnifySameDomain(sh, true, true, false); up.Build();
         const ms = new oc.BRepBuilderAPI_MakeSolid();
         try { ms.Add(oc.TopoDS.Shell(up.Shape())); shape = R.cast(ms.Solid()); } catch (_) { shape = R.cast(up.Shape()); }
         reader.delete(); up.delete(); ms.delete();
-      } else {
+      } finally { try { oc.FS.unlink('/' + fn); } catch (_) {} }
+    } else if (p.stepEntity != null) {
+      const bKey = p.blobId || hashBytes(bytes);
+      let entry = stepReaderCache && stepReaderCache.key === bKey ? stepReaderCache : null;
+      let tempReader = false;
+      if (!entry) {
+        clearStepReaderCache();
+        const fn = 'imp_' + Math.random().toString(36).slice(2) + '.step';
+        oc.FS.writeFile('/' + fn, bytes);
         const reader = new oc.STEPControl_Reader();
-        if (!reader.ReadFile(fn)) { reader.delete(); throw new Error('Die STEP-Datei ließ sich nicht lesen.'); }
-        reader.TransferRoots(); shape = R.cast(reader.OneShape()); reader.delete();
+        try {
+          const st = reader.ReadFile(fn);
+          const doneVal = oc.IFSelect_ReturnStatus && oc.IFSelect_ReturnStatus.IFSelect_RetDone ? oc.IFSelect_ReturnStatus.IFSelect_RetDone.value : null;
+          if (!st || (doneVal != null && st.value != null && st.value !== doneVal)) {
+            reader.delete();
+            throw new Error('Die STEP-Datei ließ sich nicht lesen.');
+          }
+        } finally { try { oc.FS.unlink('/' + fn); } catch (_) {} }
+        const idMap = new Map();
+        const mdl = reader.StepModel();
+        if (mdl) {
+          const nEnt = mdl.NbEntities();
+          for (let i = 1; i <= nEnt; i++) {
+            const ent = mdl.Value(i);
+            const sid = mdl.IdentLabel(ent);
+            if (sid > 0) idMap.set(sid, i);
+            safeDelete(ent);
+          }
+          safeDelete(mdl);
+        }
+        entry = { key: bKey, reader, idMap };
+        if (bytes.byteLength <= 8e6) stepReaderCache = entry;
+        else tempReader = true;
       }
-    } finally { try { oc.FS.unlink('/' + fn); } catch (_) {} }
+      try {
+        entry.reader.ClearShapes();
+        const idx = entry.idMap.get(p.stepEntity);
+        if (idx != null && entry.reader.TransferOne(idx) && entry.reader.NbShapes() > 0) {
+          shape = R.cast(entry.reader.OneShape());
+        } else {
+          entry.reader.ClearShapes();
+          entry.reader.TransferRoots();
+          shape = R.cast(entry.reader.OneShape());
+        }
+      } finally {
+        if (tempReader) safeDelete(entry.reader);
+      }
+    } else {
+      const fn = 'imp_' + Math.random().toString(36).slice(2);
+      oc.FS.writeFile('/' + fn, bytes);
+      try {
+        const reader = new oc.STEPControl_Reader();
+        const st = reader.ReadFile(fn);
+        const doneVal = oc.IFSelect_ReturnStatus && oc.IFSelect_ReturnStatus.IFSelect_RetDone ? oc.IFSelect_ReturnStatus.IFSelect_RetDone.value : null;
+        if (!st || (doneVal != null && st.value != null && st.value !== doneVal)) { reader.delete(); throw new Error('Die STEP-Datei ließ sich nicht lesen.'); }
+        reader.TransferRoots(); shape = R.cast(reader.OneShape()); reader.delete();
+      } finally { try { oc.FS.unlink('/' + fn); } catch (_) {} }
+    }
+    if (shape && Array.isArray(p.stepMat) && p.stepMat.length === 16 && !isIdentity(p.stepMat)) {
+      const tr = applyMatrix(shape, p.stepMat);
+      safeDelete(shape);
+      shape = tr;
+    }
     const s = num(p.scale, 1);
-    if (shape && Math.abs(s - 1) > 1e-9) shape = shape.scale(s, [0, 0, 0]);
+    if (shape && Math.abs(s - 1) > 1e-9) {
+      const sc = shape.scale(s, [0, 0, 0]);
+      safeDelete(shape);
+      shape = sc;
+    }
     return shape;
   }
 
@@ -2186,6 +2255,8 @@ export function createKernel(R, oc) {
     let p = it.p;
     if (it.kind === 'import' && p && (p.blobId || p.bytes)) {
       p = { fmt: p.fmt, scale: p.scale, blobId: p.blobId || hashBytes(p.bytes instanceof Uint8Array ? p.bytes : new Uint8Array(p.bytes)) };
+      if (it.p.stepEntity != null) p.stepEntity = it.p.stepEntity;
+      if (Array.isArray(it.p.stepMat) && it.p.stepMat.length === 16) p.stepMat = it.p.stepMat.map((v) => Math.round(v * 1e6) / 1e6);
     }
     return keyOf({ k: it.kind, p, f: it.finishes || null, mir: it.mir || null, c: it.children ? it.children.filter((c) => !c.hidden).map((c) => [defKey(c), c.role, c.m]) : null });
   }
@@ -2263,6 +2334,8 @@ export function createKernel(R, oc) {
             // Schnittmenge: nur, was in allen Körpern liegt
             shape = solids[0];
             for (let i = 1; i < solids.length; i++) { const nx = shape.intersect(solids[i]); safeDelete(shape); safeDelete(solids[i]); shape = nx; }
+          } else if (it.p && it.p.assembly) {
+            shape = solids.length === 1 ? solids[0] : R.makeCompound(solids);
           } else shape = fuseAll(solids, true);
           if (holes.length) { const tool = fuseAll(holes, true); const cut = shape.cut(tool); safeDelete(tool); safeDelete(shape); shape = cut; }
         } else if (holes.length) shape = fuseAll(holes, true);
@@ -3429,19 +3502,23 @@ export function createKernel(R, oc) {
     const addT = (id, t0) => { if (!times) return; const d = now() - t0; if (d > 0.5) times[id] = (times[id] || 0) + d; };
     const anyDyn = tops.some(hasDynamicExtent);
     if (!anyDyn) {
-      const evald = tops.map((it) => {
-        const t0 = now();
-        const r = evalItem(it, errors);
-        let wb = null;
-        if (r.shape) wb = bboxTransform(bboxCached(r.key, r.shape), it.m);
-        addT(it.id, t0);
-        return { it, ...r, wb };
-      });
-      const tOps = now();
-      const { bodies, consumed } = resolveOps(evald, errors, hiddenIds);
-      if (bodies.size && times) { const d = now() - tOps; if (d > 0.5) for (const id of bodies.keys()) times[id] = (times[id] || 0) + d / bodies.size; }
-      for (const e of evald) { const b = bodies.get(e.it.id); if (b) { e.shape = b.shape; e.key = b.key; e.wb = b.wb; } }
-      return { evald, consumed, resolved: {} };
+      try {
+        const evald = tops.map((it) => {
+          const t0 = now();
+          const r = evalItem(it, errors);
+          let wb = null;
+          if (r.shape) wb = bboxTransform(bboxCached(r.key, r.shape), it.m);
+          addT(it.id, t0);
+          return { it, ...r, wb };
+        });
+        const tOps = now();
+        const { bodies, consumed } = resolveOps(evald, errors, hiddenIds);
+        if (bodies.size && times) { const d = now() - tOps; if (d > 0.5) for (const id of bodies.keys()) times[id] = (times[id] || 0) + d / bodies.size; }
+        for (const e of evald) { const b = bodies.get(e.it.id); if (b) { e.shape = b.shape; e.key = b.key; e.wb = b.wb; } }
+        return { evald, consumed, resolved: {}, opsModified: new Set(bodies.keys()) };
+      } finally {
+        clearStepReaderCache();
+      }
     }
 
     // Zwei-Pass-Auswertung: Pass 1 liefert alle festen Körper samt versetzten/verrechneten Zielen,
@@ -3514,10 +3591,50 @@ export function createKernel(R, oc) {
       const { bodies, consumed } = resolveOps(evald, errors, hiddenIds);
       if (bodies.size && times) { const d = now() - tOps; if (d > 0.5) for (const id of bodies.keys()) times[id] = (times[id] || 0) + d / bodies.size; }
       for (const e of evald) { const b = bodies.get(e.it.id); if (b) { e.shape = b.shape; e.key = b.key; e.wb = b.wb; } }
-      return { evald, consumed, resolved: ctx.resolved };
+      return { evald, consumed, resolved: ctx.resolved, opsModified: new Set(bodies.keys()) };
     } finally {
       for (const x of pool) safeDelete(x.worldShape);
+      clearStepReaderCache();
     }
+  }
+  function collectGroupBodyHints(it, parentM = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], out = []) {
+    for (const c of it.children || []) {
+      if (!c || c.hidden || c.role === 'hole' || c.kind === 'mirrorStep') continue;
+      const cm = matMul(parentM, c.m);
+      if (c.kind === 'group' && !(c.p && c.p.op)) {
+        collectGroupBodyHints(c, cm, out);
+        continue;
+      }
+      const sh = cacheGet(defKey(c));
+      if (!sh) continue;
+      const col = c.color || it.color || '#2f9e91';
+      const nm = c.name || 'Teil';
+      const parts = sortedSolids(sh);
+      if (parts.length > 1) {
+        const meta = matchBodiesLocal(c.bodies, parts);
+        for (let bi = 0; bi < parts.length; bi++) {
+          const mb = meta[bi];
+          const wb = bboxTransform(parts[bi].bbox, cm);
+          out.push({ c: [(wb[0] + wb[3]) / 2, (wb[1] + wb[4]) / 2, (wb[2] + wb[5]) / 2], name: (mb && mb.name) || nm, color: (mb && mb.color) || col });
+          safeDelete(parts[bi].shape);
+        }
+      } else {
+        for (const p of parts) safeDelete(p.shape);
+        const wb = bboxTransform(bboxCached(defKey(c), sh), cm);
+        out.push({ c: [(wb[0] + wb[3]) / 2, (wb[1] + wb[4]) / 2, (wb[2] + wb[5]) / 2], name: nm, color: col });
+      }
+    }
+    return out;
+  }
+  function applyGroupBodyHints(it, bodies) {
+    if (!it || it.kind !== 'group' || (it.p && it.p.op) || (it.finishes && it.finishes.length) || !Array.isArray(bodies) || bodies.length < 2) return bodies;
+    const hints = collectGroupBodyHints(it);
+    if (hints.length < 2) return bodies;
+    const hasDiffColors = new Set(hints.map((h) => String(h.color || '').toLowerCase())).size > 1;
+    const isAsm = !!(it.p && it.p.assembly);
+    if (!isAsm && !hasDiffColors) return bodies;
+    const matched = matchBodiesLocal(hints, bodies);
+    return bodies.map((b, bi) => (matched[bi] ? { ...b, name: matched[bi].name, color: matched[bi].color } : b));
   }
   function evaluate(scene, known = {}) {
     gen++;
@@ -3558,15 +3675,26 @@ export function createKernel(R, oc) {
           }
         }
       }
-      if (known[it.id] === resultKey) { nodes.push({ id: it.id, key: resultKey, same: true, ...(e.baseBox ? { baseBox: e.baseBox } : {}) }); continue; }
       const mk = resultKey + '|' + Q.level;
+      if (known[it.id] === resultKey) {
+        const cachedPayload = meshCache.get(mk);
+        const sameNode = { id: it.id, key: resultKey, same: true, ...(e.baseBox ? { baseBox: e.baseBox } : {}) };
+        if (it.kind === 'group' && cachedPayload && cachedPayload.bodies && cachedPayload.bodies.length >= 2) {
+          const hinted = applyGroupBodyHints(it, cachedPayload.bodies);
+          if (hinted !== cachedPayload.bodies) sameNode.bodies = hinted;
+        }
+        nodes.push(sameNode);
+        continue;
+      }
       let payload = meshCache.get(mk);
       if (!payload) {
         const tm = now();
         try { payload = meshPayload(result); meshCache.set(mk, payload); addT(it.id, tm); }
         catch (err) { errors.push({ itemId: it.id, code: 'mesh', message: 'Die Form konnte nicht angezeigt werden.' }); nodes.push({ id: it.id, key: null, empty: true }); continue; }
       }
-      nodes.push({ id: it.id, key: resultKey, ...(e.baseBox ? { baseBox: e.baseBox } : {}), ...clonePayload(payload) });
+      const out = clonePayload(payload);
+      if (out.bodies && out.bodies.length >= 2) out.bodies = applyGroupBodyHints(it, out.bodies);
+      nodes.push({ id: it.id, key: resultKey, ...(e.baseBox ? { baseBox: e.baseBox } : {}), ...out });
     }
     gc();
     return { nodes, errors, times, resolved };
@@ -3756,42 +3884,254 @@ export function createKernel(R, oc) {
     }
     return { objects: objs, errors };
   }
+  function srgbToLinear(c) {
+    return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  }
+  function hexToLinearRGBA(hex, alpha = 1) {
+    let s = String(hex || '#2f9e91').trim();
+    if (s.startsWith('#')) s = s.slice(1);
+    if (s.length === 3) s = s.replace(/([0-9a-f])/gi, '$1$1');
+    let r = 0x2f, g = 0x9e, b = 0x91;
+    if (/^[0-9a-f]{6}$/i.test(s)) {
+      r = parseInt(s.slice(0, 2), 16);
+      g = parseInt(s.slice(2, 4), 16);
+      b = parseInt(s.slice(4, 6), 16);
+    }
+    const a = Math.max(0.05, Math.min(1, Number.isFinite(alpha) ? alpha : 1));
+    return new oc.Quantity_ColorRGBA(srgbToLinear(r / 255), srgbToLinear(g / 255), srgbToLinear(b / 255), a);
+  }
   function exportSTEP(scene, only, originMat = null) {
     ingestBlobs(scene);
     const errors = [];
-    let solids = evaluateShapes(scene, errors);
-    if (only && only.length) { const keep = new Set(only); for (const s of solids) if (!keep.has(s.id)) s.shape.delete(); solids = solids.filter((s) => keep.has(s.id)); }
-    const filtered = [];
-    for (const s of solids) {
-      if (s.bodies && s.bodies.some((b) => b && b.hidden)) {
-        const parts = sortedSolids(s.shape, matInvRigid(s.m));
-        if (parts.length > 1) {
-          const meta = matchBodiesLocal(s.bodies, parts);
-          const kept = [];
-          for (let bi = 0; bi < parts.length; bi++) {
-            if (meta[bi] && meta[bi].hidden) safeDelete(parts[bi].shape);
-            else kept.push(parts[bi].shape);
+    const { evald, consumed, opsModified } = evalSceneCore(scene, errors);
+    const keep = only && only.length ? new Set(only) : null;
+    const useOrigin = Array.isArray(originMat) && originMat.length === 16 && !isIdentity(originMat);
+    const applyOrigin = (shape) => {
+      if (!useOrigin || !shape) return shape;
+      const tr = applyMatrix(shape, originMat);
+      safeDelete(shape);
+      return tr;
+    };
+    const topHoles = evald
+      .filter((e) => e.it.role === 'hole' && e.shape)
+      .map((h) => ({ shape: applyMatrix(h.shape, h.it.m), wb: h.wb }));
+    const ownedShapes = [];
+    for (const h of topHoles) ownedShapes.push(h.shape);
+
+    const cutHoles = (worldShape, holeList) => {
+      if (!worldShape || !holeList || !holeList.length) return worldShape;
+      const wb = bboxOf(worldShape);
+      const cutters = holeList.filter((h) => h.shape && h.wb && bboxHit(h.wb, wb));
+      if (!cutters.length) return worldShape;
+      try {
+        const tool = fuseAll(cutters.map((h) => h.shape.clone()), true);
+        const cut = worldShape.cut(tool);
+        safeDelete(tool);
+        safeDelete(worldShape);
+        return cut;
+      } catch (_) {
+        return worldShape;
+      }
+    };
+    const canDecomposeGroup = (it, isTop) => {
+      if (!it || it.kind !== 'group') return false;
+      if (isTop && opsModified && opsModified.has(it.id)) return false;
+      if (it.p && it.p.op) return false;
+      if (it.finishes && it.finishes.length) return false;
+      if (it.mir && it.mir.some((s) => s < 0)) return false;
+      if (it.bodies && it.bodies.some((b) => b && b.hidden)) return false;
+      const kids = (it.children || []).filter((c) => !c.hidden);
+      const solidKids = kids.filter((c) => c.role !== 'hole' && c.kind !== 'mirrorStep');
+      if (!solidKids.length) return false;
+      return solidKids.length >= 2 || solidKids.some((c) => c.kind === 'group') || !!(it.p && it.p.assembly) || !!it.comp;
+    };
+    const buildGroupExport = (it, parentM, inheritedHoles) => {
+      const worldM = parentM ? matMul(parentM, it.m) : it.m;
+      const kids = (it.children || []).filter((c) => !c.hidden);
+      const solidKids = kids.filter((c) => c.role !== 'hole' && c.kind !== 'mirrorStep');
+      const holeKids = kids.filter((c) => c.role === 'hole');
+      const localHoles = [];
+      for (const h of holeKids) {
+        const r = evalItem(h, errors);
+        if (!r.shape) continue;
+        const hm = matMul(worldM, h.m);
+        const hs = applyMatrix(r.shape, hm);
+        ownedShapes.push(hs);
+        localHoles.push({ shape: hs, wb: bboxOf(hs) });
+      }
+      const allHoles = localHoles.length ? inheritedHoles.concat(localHoles) : inheritedHoles;
+      const children = [];
+      for (const c of solidKids) {
+        if (canDecomposeGroup(c, false)) {
+          const sub = buildGroupExport(c, worldM, allHoles);
+          if (sub && sub.children.length) children.push(sub);
+          continue;
+        }
+        const r = evalItem(c, errors);
+        if (!r.shape) continue;
+        const cm = matMul(worldM, c.m);
+        let sh = applyMatrix(r.shape, cm);
+        sh = cutHoles(sh, allHoles);
+        sh = applyOrigin(sh);
+        ownedShapes.push(sh);
+        children.push({
+          type: 'part',
+          name: c.name || 'Teil',
+          color: c.color || it.color || '#2f9e91',
+          alpha: c.opacity != null ? c.opacity : 1,
+          shape: sh,
+        });
+      }
+      return { type: 'assembly', itemId: it.id, name: it.name || 'Gruppe', children };
+    };
+
+    const roots = [];
+    const byItemId = new Map();
+    for (const e of evald) {
+      const it = e.it;
+      if (it.role === 'hole' || consumed.has(it.id) || !e.shape) continue;
+      if (keep && !keep.has(it.id)) continue;
+      let node = null;
+      if (canDecomposeGroup(it, true)) {
+        const grp = buildGroupExport(it, null, topHoles);
+        if (grp.children.length) node = grp;
+      }
+      if (!node) {
+        let world = applyMatrix(e.shape, it.m);
+        world = cutHoles(world, topHoles);
+        const hasBodyMeta = Array.isArray(it.bodies) && it.bodies.some((b) => b && (b.hidden || b.name || b.color));
+        if (hasBodyMeta) {
+          const parts = sortedSolids(world, matInvRigid(it.m));
+          if (parts.length > 1) {
+            const meta = matchBodiesLocal(it.bodies, parts);
+            const subParts = [];
+            for (let bi = 0; bi < parts.length; bi++) {
+              const mb = meta[bi];
+              if (mb && mb.hidden) { safeDelete(parts[bi].shape); continue; }
+              let ps = applyOrigin(parts[bi].shape);
+              ownedShapes.push(ps);
+              subParts.push({
+                type: 'part',
+                name: (mb && mb.name) ? mb.name : ((it.name || 'Körper') + ' – Körper ' + (bi + 1)),
+                color: (mb && mb.color) ? mb.color : (it.color || '#2f9e91'),
+                alpha: it.opacity != null ? it.opacity : 1,
+                shape: ps,
+              });
+            }
+            safeDelete(world);
+            if (!subParts.length) continue;
+            if (it.bodies.some((b) => b && (b.name || b.color))) {
+              node = { type: 'assembly', itemId: it.id, name: it.name || 'Teil', children: subParts };
+            } else {
+              const combined = subParts.length === 1 ? subParts[0].shape : R.makeCompound(subParts.map((sp) => sp.shape));
+              if (subParts.length > 1) ownedShapes.push(combined);
+              node = { type: 'part', itemId: it.id, name: it.name || 'Teil', color: it.color || '#2f9e91', alpha: it.opacity != null ? it.opacity : 1, shape: combined };
+            }
+          } else {
+            for (const p of parts) safeDelete(p.shape);
           }
-          safeDelete(s.shape);
-          if (!kept.length) continue;
-          s.shape = kept.length === 1 ? kept[0] : R.makeCompound(kept);
-        } else {
-          for (const p of parts) safeDelete(p.shape);
+        }
+        if (!node) {
+          world = applyOrigin(world);
+          ownedShapes.push(world);
+          node = { type: 'part', itemId: it.id, name: it.name || 'Teil', color: it.color || '#2f9e91', alpha: it.opacity != null ? it.opacity : 1, shape: world };
         }
       }
-      filtered.push(s);
+      roots.push(node);
+      if (node.itemId) byItemId.set(node.itemId, node);
     }
-    solids = filtered;
-    if (!solids.length) throw new Error('Es gibt nichts zu exportieren.');
-    if (Array.isArray(originMat) && originMat.length === 16 && !isIdentity(originMat)) {
-      for (const s of solids) {
-        const tr = applyMatrix(s.shape, originMat);
-        s.shape.delete();
-        s.shape = tr;
+    if (!roots.length) {
+      for (const s of ownedShapes) safeDelete(s);
+      throw new Error('Es gibt nichts zu exportieren.');
+    }
+
+    // Ordner auf oberster Ebene als Baugruppen zusammenfassen
+    let finalRoots = roots;
+    if (Array.isArray(scene.folders) && scene.folders.length) {
+      const folderOfNode = new Map();
+      for (const fld of scene.folders) {
+        const mems = (fld.ids || []).map((id) => byItemId.get(id)).filter(Boolean);
+        if (!mems.length) continue;
+        for (const m of mems) folderOfNode.set(m, fld);
+      }
+      const emittedFolders = new Set();
+      finalRoots = [];
+      for (const node of roots) {
+        const fld = folderOfNode.get(node);
+        if (!fld) { finalRoots.push(node); continue; }
+        if (emittedFolders.has(fld.id)) continue;
+        emittedFolders.add(fld.id);
+        const children = (fld.ids || []).map((id) => byItemId.get(id)).filter(Boolean);
+        finalRoots.push({ type: 'assembly', name: fld.name || 'Ordner', children });
       }
     }
-    const comp = solids.length === 1 ? solids[0].shape : R.makeCompound(solids.map((s) => s.shape));
-    return comp.blobSTEP();
+
+    const wrapStr = (s) => new oc.TCollection_ExtendedString(String(s || ''), true);
+    const toRelease = [];
+    const track = (x) => { if (x) toRelease.push(x); return x; };
+    const fn = 'export_' + Math.random().toString(36).slice(2) + '.step';
+    try {
+      const docStr = track(wrapStr('XmlOcaf'));
+      const doc = track(new oc.TDocStd_Document(docStr));
+      oc.XCAFDoc_ShapeTool.SetAutoNaming(false);
+      const mainLabel = track(doc.Main());
+      const st = track(oc.XCAFDoc_DocumentTool.ShapeTool(mainLabel));
+      const ct = track(oc.XCAFDoc_DocumentTool.ColorTool(mainLabel));
+      const idLoc = track(new oc.TopLoc_Location());
+      const surfType = oc.XCAFDoc_ColorType.XCAFDoc_ColorSurf;
+
+      const addNode = (node, parentLabel) => {
+        if (node.type === 'assembly') {
+          const asmL = track(st.NewShape());
+          const nStr = track(wrapStr(node.name || 'Gruppe'));
+          oc.TDataStd_Name.Set(asmL, nStr);
+          for (const ch of node.children || []) addNode(ch, asmL);
+          if (parentLabel) {
+            const compL = track(st.AddComponent(parentLabel, asmL, idLoc));
+            const cnStr = track(wrapStr(node.name || 'Gruppe'));
+            oc.TDataStd_Name.Set(compL, cnStr);
+          }
+          return asmL;
+        }
+        const lbl = track(st.NewShape());
+        st.SetShape(lbl, node.shape.wrapped);
+        const nStr = track(wrapStr(node.name || 'Teil'));
+        oc.TDataStd_Name.Set(lbl, nStr);
+        const rgba = track(hexToLinearRGBA(node.color, node.alpha));
+        ct.SetColor(lbl, rgba, surfType);
+        if (parentLabel) {
+          const compL = track(st.AddComponent(parentLabel, lbl, idLoc));
+          const cnStr = track(wrapStr(node.name || 'Teil'));
+          oc.TDataStd_Name.Set(compL, cnStr);
+        }
+        return lbl;
+      };
+
+      for (const r of finalRoots) addNode(r, null);
+      st.UpdateAssemblies();
+
+      const dummy = track(new oc.STEPCAFControl_Writer());
+      oc.Interface_Static.SetCVal('xstep.cascade.unit', 'MM');
+      oc.Interface_Static.SetCVal('write.step.unit', 'MM');
+      const session = track(new oc.XSControl_WorkSession());
+      const writer = track(new oc.STEPCAFControl_Writer(session, false));
+      writer.SetColorMode(true);
+      writer.SetLayerMode(true);
+      writer.SetNameMode(true);
+      oc.Interface_Static.SetIVal('write.surfacecurve.mode', 1);
+      oc.Interface_Static.SetIVal('write.precision.mode', 0);
+      oc.Interface_Static.SetIVal('write.step.assembly', 2);
+      oc.Interface_Static.SetIVal('write.step.schema', 5);
+      const progress = track(new oc.Message_ProgressRange());
+      const ok = writer.Perform(doc, fn, progress);
+      if (!ok) throw new Error('Die STEP-Datei konnte nicht geschrieben werden.');
+      const file = oc.FS.readFile('/' + fn);
+      return new Blob([file], { type: 'application/STEP' });
+    } finally {
+      try { oc.FS.unlink('/' + fn); } catch (_) {}
+      for (let i = toRelease.length - 1; i >= 0; i--) safeDelete(toRelease[i]);
+      for (const s of ownedShapes) safeDelete(s);
+    }
   }
   // Volumen, Oberfläche und Schwerpunkt – je Teil der obersten Ebene und gesamt
   function measure(scene) {

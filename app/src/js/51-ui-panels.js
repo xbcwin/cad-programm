@@ -200,7 +200,7 @@ const Panels = (() => {
     if (n !== null) Actions.setBody(itemId, bodyIdx, { name: n.trim() || null });
   }
   function renderBodiesList(it) {
-    if (!App.doc.items.includes(it) || it.role === 'hole' || App.mergedInto(it.id)) return null;
+    if (!App.doc.items.includes(it) || it.role === 'hole' || App.mergedInto(it.id) || (it.p && it.p.assembly)) return null;
     const res = App.results.get(it.id);
     const evalBodies = res && res.data && res.data.bodies;
     if (!evalBodies || evalBodies.length < 2) return null;
@@ -217,8 +217,8 @@ const Panels = (() => {
     const anyHidden = meta.some((m) => m && m.hidden);
     for (let bi = 0; bi < evalBodies.length; bi++) {
       const mb = meta[bi];
-      const bName = (mb && mb.name) || `Körper ${bi + 1}`;
-      const ownCol = (mb && mb.color) || null;
+      const bName = (mb && mb.name) || (evalBodies[bi] && evalBodies[bi].name) || `Körper ${bi + 1}`;
+      const ownCol = (mb && mb.color) || (evalBodies[bi] && evalBodies[bi].color) || null;
       const bCol = ownCol || it.color || '#2f9e91';
       const hidden = !!(mb && mb.hidden);
       const row = h('div', { class: 'body-row' + (hidden ? ' hidden-item' : ''), dataset: { item: it.id, body: String(bi) } });

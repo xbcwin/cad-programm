@@ -2679,15 +2679,17 @@ def t_import_step(p):
     p.ev("App.change('x', d=>{ d.items=[]; })"); p.wait(500)
     p.pg.evaluate("() => window.__masswerk.Start.importCAD(window.__stepFile)")
     warte_rechnen(p, 30)
-    it = p.ev("const it=App.doc.items[0]; return it && [it.kind, it.name, it.p.fmt]")
-    ok1 = n > 1000 and it == ['import', 'Halter', 'step']
-    bb = p.ev("const r=App.results.get(App.doc.items[0].id); return r && r.data.bbox")
-    ok2 = bb is not None and abs((bb[3] - bb[0]) - 60) < 0.01 and p.ev("return App.errors.length") == 0
+    its = p.ev("return App.doc.items.map(it=>[it.kind, it.name, it.p.fmt])")
+    ok1 = n > 1000 and len(its) == 2 and all(x == ['import', 'Quader', 'step'] for x in its)
+    bbs = p.ev("return App.doc.items.map(it=>{ const r=App.results.get(it.id); return r && r.data.bbox; })")
+    ok2 = (all(b is not None for b in bbs)
+           and abs((max(b[3] for b in bbs) - min(b[0] for b in bbs)) - 60) < 0.01
+           and p.ev("return App.errors.length") == 0)
     # Einheit Zoll: 25,4-fach
     p.ev("App.select([App.doc.items[0].id])"); p.wait(500)
     p.pg.select_option('#p-scale', '25.4'); warte_rechnen(p, 30)
     bb2 = p.ev("const r=App.results.get(App.doc.items[0].id); return r && r.data.bbox")
-    ok3 = bb2 is not None and abs((bb2[3] - bb2[0]) - 60 * 25.4) < 0.5
+    ok3 = bb2 is not None and abs((bb2[3] - bb2[0]) - 20 * 25.4) < 0.5
     # STL: Tetraeder als Text
     p.ev("App.change('x', d=>{ d.items=[]; })"); p.wait(500)
     p.pg.evaluate("""() => { const V=[[0,0,0],[10,0,0],[0,10,0],[0,0,10]], F=[[0,2,1],[0,1,3],[0,3,2],[1,2,3]];
@@ -9830,6 +9832,178 @@ def t_f11240521(p):
     return [ok1, ok2, ok3]
 
 
+def t_a045_step_farben_namen(p):
+    # 1. Zwei Teile „Deckel“ (rot) und „Boden“ (blau) in einer Gruppe „Gehäuse“ anlegen und als STEP exportieren
+    p.empty()
+    p.ev("""
+      App.change('x', d => {
+        const boden = Model.newItem('box', { w: 20, d: 20, h: 10 }, { name: 'Boden', color: '#3f7fd6', more: { colorSet: true } });
+        const deckel = Model.newItem('box', { w: 20, d: 20, h: 5 }, { name: 'Deckel', color: '#d6574c', more: { colorSet: true } });
+        deckel.t.z = 10;
+        d.items.push(deckel, boden);
+      });
+    """); warte_rechnen(p)
+    p.ev("Actions.group(App.doc.items.map(x => x.id), { name: 'Gehäuse', quiet: true })"); warte_rechnen(p)
+    exp = p.pg.evaluate("""async () => {
+      const { Kernel, Model, App } = window.__masswerk;
+      const r = await Kernel.call('exportSTEP', { scene: Model.kernelScene(App.doc) });
+      const u8 = new Uint8Array(r.data);
+      window.__stepA045 = new File([u8], 'Gehaeuse.step');
+      return new TextDecoder('utf-8').decode(u8);
+    }""")
+    ok1 = (
+        "PRODUCT('Gehäuse'" in exp
+        and "PRODUCT('Deckel'" in exp
+        and "PRODUCT('Boden'" in exp
+        and 'NEXT_ASSEMBLY_USAGE_OCCURRENCE' in exp
+        and 'STYLED_ITEM' in exp
+        and 'COLOUR_RGB' in exp
+    )
+
+    # 2. Exportierte STEP-Datei in ein leeres Projekt importieren -> Gruppe, Namen, Farben und Volumen sind wieder da
+    p.ev("App.change('clear', d => { d.items = []; })"); p.wait(400)
+    p.pg.evaluate("() => window.__masswerk.Start.importCAD(window.__stepA045)")
+    warte_rechnen(p, 30)
+    imp = p.ev("""
+      const g = App.doc.items[0];
+      return {
+        n: App.doc.items.length,
+        errs: App.errors.length,
+        kind: g && g.kind,
+        name: g && g.name,
+        kids: g && g.children ? g.children.map(c => ({ kind: c.kind, name: c.name, color: c.color, fmt: c.p && c.p.fmt })) : []
+      };
+    """)
+    vol = volumen(p)
+    kids_by_name = {k['name']: k for k in imp.get('kids', [])}
+    ok2 = (
+        imp['n'] == 1 and imp['errs'] == 0
+        and imp['kind'] == 'group' and imp['name'] == 'Gehäuse'
+        and len(imp['kids']) == 2
+        and kids_by_name.get('Deckel', {}).get('color') == '#d6574c'
+        and kids_by_name.get('Boden', {}).get('color') == '#3f7fd6'
+        and kids_by_name.get('Deckel', {}).get('fmt') == 'step'
+        and kids_by_name.get('Boden', {}).get('fmt') == 'step'
+        and vol is not None and abs(vol - 6000) < 5
+    )
+
+    # 3. 3D-Viewer zeigt zwei Körperfarben (rot und blau) & Verlauf links zeigt Gruppe, Deckel und Boden mit Farbkacheln
+    p.wait(300)
+    vis = p.ev("""
+      const g = App.doc.items[0];
+      const n = Viewer.nodes.get(g.id);
+      const c = n && n.mesh && n.mesh.geometry && n.mesh.geometry.getAttribute('color');
+      const cols = [];
+      if (c && n.data.faceGroups && n.data.faceBody) {
+        const seen = new Map();
+        for (const [st, cnt, fi] of n.data.faceGroups) {
+          const bi = fi >= 0 ? n.data.faceBody[fi] : -1;
+          if (bi >= 0 && !seen.has(bi)) {
+            const vi = n.data.triangles[st];
+            seen.set(bi, [c.getX(vi), c.getY(vi), c.getZ(vi)]);
+          }
+        }
+        for (const v of seen.values()) cols.push(v);
+      }
+      const rows = [...document.querySelectorAll('#left-body .tree .node')].map(el => ({
+        name: (el.querySelector('.nm') && el.querySelector('.nm').textContent || '').trim(),
+        bg: el.querySelector('.swatch') ? el.querySelector('.swatch').style.background : ''
+      }));
+      return { vc: !!(n && n.mesh && n.mesh.material && n.mesh.material.vertexColors), cols, rows, bodyRows: document.querySelectorAll('.bodies-wrap').length };
+    """)
+    cols = vis.get('cols', [])
+    color_diff = len(cols) == 2 and (sum((a - b) ** 2 for a, b in zip(cols[0], cols[1])) ** 0.5) > 0.2
+    row_names = [r['name'] for r in vis.get('rows', [])]
+    ok3 = (
+        vis['vc'] and color_diff and vis['bodyRows'] == 0
+        and 'Gehäuse' in row_names and 'Deckel' in row_names and 'Boden' in row_names
+    )
+
+    # 4. Erneuter Roundtrip + Ordner-Export + parseSTEP mit benannter Farbe & STEP-Umlaut (\X2\00E4\X0\)
+    exp2 = p.pg.evaluate("""async () => {
+      const { Kernel, Model, App } = window.__masswerk;
+      const r = await Kernel.call('exportSTEP', { scene: Model.kernelScene(App.doc) });
+      window.__stepA045_2 = new File([new Uint8Array(r.data)], 'Roundtrip2.step');
+      return new TextDecoder('utf-8').decode(new Uint8Array(r.data));
+    }""")
+    p.ev("App.change('clear', d => { d.items = []; })"); p.wait(300)
+    p.pg.evaluate("() => window.__masswerk.Start.importCAD(window.__stepA045_2)")
+    warte_rechnen(p, 30)
+    rt2 = p.ev("""
+      const g = App.doc.items[0];
+      return g && g.kind === 'group' && g.name === 'Gehäuse'
+        ? g.children.map(c => [c.name, c.color])
+        : [];
+    """)
+    # Ordner-Export wird zur Baugruppe
+    p.ev("""
+      App.change('folder', d => {
+        d.items = [];
+        const a = Model.newItem('box', { w: 10, d: 10, h: 10 }, { name: 'Stift', color: '#5b9f55', more: { colorSet: true } });
+        const b = Model.newItem('box', { w: 10, d: 10, h: 10 }, { name: 'Kappe', color: '#e2b53a', more: { colorSet: true } });
+        b.t.x = 25;
+        d.items.push(a, b);
+        d.folders = [{ id: 'f1', name: 'Bausatz', ids: [a.id, b.id], collapsed: false }];
+      });
+    """); warte_rechnen(p)
+    exp_fld = p.pg.evaluate("""async () => {
+      const { Kernel, Model, App } = window.__masswerk;
+      const r = await Kernel.call('exportSTEP', { scene: Model.kernelScene(App.doc) });
+      window.__stepA045_fld = new File([new Uint8Array(r.data)], 'Bausatz.step');
+      return r.data.byteLength;
+    }""")
+    p.ev("App.change('clear', d => { d.items = []; d.folders = []; })"); p.wait(300)
+    p.pg.evaluate("() => window.__masswerk.Start.importCAD(window.__stepA045_fld)")
+    warte_rechnen(p, 30)
+    fld_imp = p.ev("const g=App.doc.items[0]; return g && [g.kind, g.name, (g.children||[]).map(c=>[c.name, c.color])]")
+    # parseSTEP-Einheitstest für DRAUGHTING_PRE_DEFINED_COLOUR & \X2\00E4\X0\
+    synth_step = r"""ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION((''),'2;1');
+FILE_NAME('','2026-01-01T00:00:00',(''),(''),'','','');
+FILE_SCHEMA(('AUTOMOTIVE_DESIGN'));
+ENDSEC;
+DATA;
+#1 = APPLICATION_CONTEXT('automotive_design');
+#2 = PRODUCT('Tr\X2\00E4\X0\ger','Tr\X2\00E4\X0\ger','',(#1));
+#3 = PRODUCT_DEFINITION_FORMATION('','',#2);
+#4 = PRODUCT_DEFINITION('design','',#3,#1);
+#5 = PRODUCT_DEFINITION_SHAPE('','',#4);
+#6 = ADVANCED_BREP_SHAPE_REPRESENTATION('',(#7),#8);
+#7 = MANIFOLD_SOLID_BREP('',#9);
+#10 = SHAPE_DEFINITION_REPRESENTATION(#5,#6);
+#11 = STYLED_ITEM('color',(#12),#7);
+#12 = PRESENTATION_STYLE_ASSIGNMENT((#13));
+#13 = SURFACE_STYLE_USAGE(.BOTH.,#14);
+#14 = SURFACE_SIDE_STYLE('',(#15));
+#15 = SURFACE_STYLE_FILL_AREA(#16);
+#16 = FILL_AREA_STYLE('',(#17));
+#17 = FILL_AREA_STYLE_COLOUR('',#18);
+#18 = DRAUGHTING_PRE_DEFINED_COLOUR('red');
+ENDSEC;
+END-ISO-10303-21;"""
+    synth = p.ev("return Start.parseSTEP(new TextEncoder().encode(arg));", synth_step)
+    ok4 = (
+        "PRODUCT('Gehäuse'" in exp2
+        and sorted(rt2) == [['Boden', '#3f7fd6'], ['Deckel', '#d6574c']]
+        and exp_fld > 1000
+        and fld_imp is not None and fld_imp[0] == 'group' and fld_imp[1] == 'Bausatz'
+        and sorted(fld_imp[2]) == [['Kappe', '#e2b53a'], ['Stift', '#5b9f55']]
+        and synth and synth['partCount'] == 1
+        and synth['roots'][0]['name'] == 'Träger'
+        and synth['roots'][0]['color'] == '#ff0000'
+    )
+
+    # 5. Export-Dialog zeigt Hilfe-Attribut exportStep und werkzeug-hilfen.json ist vollständig
+    p.pg.get_by_role('button', name='Exportieren').first.click(); p.wait(400)
+    has_help_attr = p.pg.locator('[data-help="exportStep"]').count() == 1
+    p.pg.keyboard.press('Escape'); p.wait(200)
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    h_es = hilfen.get('exportStep') or {}
+    ok5 = has_help_attr and bool(h_es.get('tip') and h_es.get('hilfe') and h_es.get('tipp'))
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -9974,6 +10148,7 @@ TESTS = [
     ('[A-041] Formeln: wenn, runden, aufrunden, abrunden, Tabelle & Klartext-Fehler', t_a041_formeln),
     ('[A-042] Prägen auf gewölbter Fläche: Text auf Zylindermantel vertieft / erhaben ein Stück / Höhe, Unterdrücken & Marker / Kugel & Hilfe', t_a042_praegen),
     ('[F-11240521] Volltest-Reparatur: Drehteller-Video bei rAF-Stau / Einführung reagiert sofort auf Skizze', t_f11240521),
+    ('[A-045] STEP mit Farben und Namen: Gruppe mit Deckel (rot) & Boden (blau) exportieren / Import stellt Gruppe, Namen & Farben wieder her / 3D-Farben & Verlauf / Roundtrip & Ordner / Hilfe', t_a045_step_farben_namen),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
