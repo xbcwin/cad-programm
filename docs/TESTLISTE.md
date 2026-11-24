@@ -1831,6 +1831,13 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Zurücksetzen & Hilfe**: „Zurücksetzen“ stellt die Ausgangs-Leiste samt Reihenfolge ohne Favoriten und ohne gespeicherte Anpassung wieder her; Hilfetext `toolbarCustomize` liegt in `werkzeug-hilfen.json`.
 - [ ] **Von Hand**: Werkzeugleiste in beiden Stufen („Einfach“ und „Profi“), bei schmalem Fenster sowie mit Suchfilter im Anpassen-Dialog testen und alle hinzugefügten Werkzeuge einmal anklicken.
 
+## Volltest-Reparatur (Auto [F-11240651])
+
+- [x] **Übergang-Vorschau im Auswahl-Werkzeug**: `Sketch.onMove` löst `loftPreview()` auch bei `S.tool === 'select'` aus (`loftpath`, `loftrail`, `loftrail2`), ohne das `render()`-Aussetzen für normale Auswahl-Mausbewegungen aufzugeben; die Vorschau biegt und wölbt sich sofort.
+- [x] **Explosion in Gruppen bei rAF-Stau**: `Views.animateTo()` nutzt neben `requestAnimationFrame` einen `setTimeout`-Fallback (`st.exTimer`), sodass Auseinanderrücken, `#ex-groups` und Zusammensetzen samt `setGroups(false)` auch bei blockiertem `requestAnimationFrame` innerhalb der Animationszeit abschließen.
+- [x] **Sauberer Abbruch über Regler & `Views.reset()`**: `stopExAnim()` bricht sowohl `st.exAnim` als auch `st.exTimer` ab, sodass manuelles Ziehen an `#ex-range` den Zustand exakt beibehält.
+- [ ] **Von Hand**: Im Browser bei einem Übergang eine Führungs- oder Mittellinie ziehen und prüfen, dass die Vorschau mitgeht, sowie bei einer Baugruppe „Explosion“ mit „Gruppen auch zerlegen“ öffnen, am Regler schieben und wieder zusammensetzen.
+
 ## Fehler melden
 
 ```

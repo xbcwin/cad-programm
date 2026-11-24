@@ -2,7 +2,7 @@
 // Alles hier ändert nur, wie das Modell gezeigt wird – nie das Modell selbst. Nichts davon landet
 // in der Zeitleiste oder in der Projektdatei.
 const Views = (() => {
-  const st = { cut: null, xray: false, ex: 0, exGoal: 0, exAnim: null, focus: null, ov: null, exGroups: false };
+  const st = { cut: null, xray: false, ex: 0, exGoal: 0, exAnim: null, exTimer: null, exWaitOff: null, focus: null, ov: null, exGroups: false };
   let wrap = null;   // Leisten links oben
   function bars() {
     if (!wrap || !wrap.isConnected) { wrap = h('div', { class: 'viewbars' }); $('#overlay').append(wrap); }
@@ -645,13 +645,20 @@ const Views = (() => {
     }
     return map;
   }
+  function stopExAnim() {
+    if (st.exAnim) { cancelAnimationFrame(st.exAnim); st.exAnim = null; }
+    if (st.exTimer) { clearTimeout(st.exTimer); st.exTimer = null; }
+  }
   function explodeCount() { return [...Viewer.nodes.keys()].filter(shown).length; }
   function explode(on = st.exGoal === 0, amount = 0.6) {
+    if (st.exWaitOff) { st.exWaitOff(); st.exWaitOff = null; }
     if (on && explodeCount() < 2) {
       // Nur ein Teil ganz oben, aber eine Gruppe mit mehreren Teilen: dann die Gruppen gleich mit zerlegen
       if (!groupsSplittable()) { UI.toast('Zum Auseinanderziehen braucht es mindestens zwei Teile.', { icon: 'info', ms: 4200 }); return; }
+      st.exGoal = amount;
       setGroups(true);
-      const off = App.on('results', () => { off(); animateTo(amount); });
+      const off = App.on('results', () => { off(); if (st.exWaitOff === off) st.exWaitOff = null; if (st.exGoal > 0) animateTo(amount); });
+      st.exWaitOff = off;
       exBar(); App.select(App.sel); return;
     }
     animateTo(on ? amount : 0);
@@ -659,18 +666,27 @@ const Views = (() => {
   }
   function animateTo(goal, ms = 450) {
     st.exGoal = goal; const from = st.ex, t0 = performance.now();
-    cancelAnimationFrame(st.exAnim);
+    stopExAnim();
     const step = () => {
-      const t = Math.min(1, (performance.now() - t0) / ms); const e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-      setEx(from + (goal - from) * e);
-      if (t < 1) st.exAnim = requestAnimationFrame(step);
-      else { st.exAnim = null; if (goal === 0) { Viewer.setOffsets(null); if (st.exBar) { st.exBar.remove(); st.exBar = null; } if (st.exGroups) setGroups(false); Handles.rebuild(); Panels.renderCtx(); } if (st.cut) drawCutCaps(); sync(); }
+      stopExAnim();
+      const elapsed = performance.now() - t0;
+      const t = ms > 0 ? Math.min(1, elapsed / ms) : 1;
+      const e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+      setEx(from + (goal - from) * e, true);
+      if (t < 1) {
+        st.exAnim = requestAnimationFrame(step);
+        st.exTimer = setTimeout(step, Math.max(16, Math.min(50, ms - elapsed + 16)));
+      } else {
+        if (goal === 0) { Viewer.setOffsets(null); if (st.exBar) { st.exBar.remove(); st.exBar = null; } if (st.exGroups) setGroups(false); Handles.rebuild(); Panels.renderCtx(); }
+        if (st.cut) drawCutCaps();
+        sync();
+      }
     };
     step();
   }
-  function setEx(f) {
+  function setEx(f, animating = false) {
     st.ex = f; Viewer.setOffsets(f > 1e-4 ? offsets(f) : null);
-    if (st.cut && !st.exAnim) drawCutCaps();
+    if (st.cut && !animating && !st.exAnim && !st.exTimer) drawCutCaps();
     if (st.exBar) { const r = st.exBar.querySelector('#ex-range'); if (r && document.activeElement !== r) r.value = Math.round(f * 100); }
   }
   function exBar() {
@@ -680,7 +696,7 @@ const Views = (() => {
     const close = h('button', { type: 'button', class: 'vb-x', 'aria-label': 'Wieder zusammensetzen', 'data-tip': 'Wieder zusammensetzen' }); close.innerHTML = icon('close'); close.onclick = () => explode(false);
     head.append(close);
     const range = h('input', { type: 'range', id: 'ex-range', min: 0, max: 100, step: 1, value: Math.round(st.exGoal * 100), 'aria-label': 'Wie weit auseinander' });
-    range.oninput = () => { cancelAnimationFrame(st.exAnim); st.exAnim = null; st.exGoal = +range.value / 100; setEx(st.exGoal); sync(); };
+    range.oninput = () => { stopExAnim(); st.exGoal = +range.value / 100; setEx(st.exGoal); sync(); };
     const back = h('button', { type: 'button', class: 'btn small', id: 'ex-back' }); back.innerHTML = icon('group') + 'Zusammensetzen';
     back.onclick = () => explode(false);
     const gcb = h('input', { type: 'checkbox', id: 'ex-groups' }); gcb.checked = st.exGroups;
@@ -1031,7 +1047,7 @@ const Views = (() => {
       }
     });
   }
-  function reset() { section(false); if (st.xray) xray(false); if (st.exGoal > 0 || st.ex > 0) { cancelAnimationFrame(st.exAnim); st.exAnim = null; st.ex = st.exGoal = 0; Viewer.setOffsets(null); if (st.exBar) { st.exBar.remove(); st.exBar = null; } } focus(false); overhang(false); thin(false); wind(false); present(false); if (st.exGroups) setGroups(false); }
+  function reset() { section(false); if (st.xray) xray(false); if (st.exWaitOff) { st.exWaitOff(); st.exWaitOff = null; } stopExAnim(); if (st.exGoal > 0 || st.ex > 0) { st.ex = st.exGoal = 0; Viewer.setOffsets(null); if (st.exBar) { st.exBar.remove(); st.exBar = null; } } focus(false); overhang(false); thin(false); wind(false); present(false); if (st.exGroups) setGroups(false); }
   return { saveView, goView, removeView,     init, section, xray, explode, collapse, focus, overhang, menu, onKey, reset, sync, bars,
     present, get presenting() { return !!st.present; }, thin, get thinInfo() { return st.thin ? { area: st.thin.area, minT: st.thin.minT } : null; },
     get overhangArea() { return st.ov ? st.ov.area : null; },
