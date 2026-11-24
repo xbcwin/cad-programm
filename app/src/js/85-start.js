@@ -2503,6 +2503,10 @@ const Start = (() => {
     if (/\.(step|stp|igs|iges|brep|stl|3mf|obj|amf|ply)$/i.test(f.name)) return importCAD(f);
     try {
       const txt = await f.text(); const doc = JSON.parse(txt);
+      if (doc && typeof doc === 'object' && !Array.isArray(doc) && doc.format === 'tracery-settings' && typeof ViewPrefs !== 'undefined' && ViewPrefs.importData) {
+        ViewPrefs.importData(doc);
+        return;
+      }
       if (!doc || typeof doc !== 'object' || Array.isArray(doc) || (!Array.isArray(doc.items) && doc.format !== 'masswerk')) {
         throw new Error('Keine Tracery-Projektdatei');
       }

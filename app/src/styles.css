@@ -1295,6 +1295,96 @@ body.tablet .inp .meas-btn svg{width:17px;height:17px}
 #draft-pick-face.active{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 #draft-flip{padding:4px 6px;flex:none}
 
+/* Einstellungen sichern & Oberflächen-Größe (BE-30, BE-31) */
+.uiscale-row{display:flex;align-items:center;gap:10px}
+.uiscale-row input[type=range]{flex:1;min-width:0;accent-color:var(--accent)}
+.uiscale-val{min-width:56px;text-align:right;font-weight:600;color:var(--ink);font-size:13.5px}
+.uiscale-presets{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.uiscale-presets .btn.on,.uiscale-presets .btn[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.set-io-box{display:grid;gap:8px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}
 
-
+/* Oberflächen-Größe (BE-31) */
+:root{--ui-scale:1;--topbar-h:calc(52px * var(--ui-scale,1))}
+body{font-size:calc(15px * var(--ui-scale,1))}
+.tabbar{height:calc(34px * var(--ui-scale,1))}
+.proj-tab{height:calc(29px * var(--ui-scale,1));font-size:calc(13px * var(--ui-scale,1))}
+.proj-tab.active{height:calc(30px * var(--ui-scale,1))}
+.tabbar-add{width:calc(28px * var(--ui-scale,1));height:calc(28px * var(--ui-scale,1))}
+.brand b{font-size:calc(19px * var(--ui-scale,1))}
+.brand svg{width:calc(26px * var(--ui-scale,1));height:calc(26px * var(--ui-scale,1))}
+.seg button{font-size:calc(14px * var(--ui-scale,1));padding:calc(6px * var(--ui-scale,1)) calc(12px * var(--ui-scale,1))}
+.tool{font-size:calc(14px * var(--ui-scale,1));padding:calc(7px * var(--ui-scale,1)) calc(10px * var(--ui-scale,1));gap:calc(7px * var(--ui-scale,1))}
+.tool svg{width:calc(20px * var(--ui-scale,1));height:calc(20px * var(--ui-scale,1))}
+.icon-btn{width:calc(34px * var(--ui-scale,1));height:calc(34px * var(--ui-scale,1))}
+.icon-btn svg{width:calc(19px * var(--ui-scale,1));height:calc(19px * var(--ui-scale,1))}
+.proj-name{font-size:calc(14px * var(--ui-scale,1));padding:calc(6px * var(--ui-scale,1)) calc(8px * var(--ui-scale,1))}
+.level-btn{font-size:calc(12.5px * var(--ui-scale,1));padding:calc(5px * var(--ui-scale,1)) calc(11px * var(--ui-scale,1))}
+.folder-badge{font-size:calc(12.5px * var(--ui-scale,1));padding:calc(4px * var(--ui-scale,1)) calc(10px * var(--ui-scale,1))}
+.panel-title{font-size:calc(13px * var(--ui-scale,1))}
+.tabs button{font-size:calc(13px * var(--ui-scale,1));padding:calc(6px * var(--ui-scale,1)) calc(9px * var(--ui-scale,1))}
+.node .nm{font-size:calc(14px * var(--ui-scale,1))}
+.node .sub{font-size:calc(12px * var(--ui-scale,1))}
+.finish-row{font-size:calc(13px * var(--ui-scale,1))}
+.empty-tree{font-size:calc(14px * var(--ui-scale,1))}
+.prop-title input{font-size:calc(17px * var(--ui-scale,1))}
+.kind-badge{font-size:calc(12px * var(--ui-scale,1))}
+.section-h{font-size:calc(12px * var(--ui-scale,1))}
+.field label{font-size:calc(12.5px * var(--ui-scale,1))}
+.inp{height:calc(34px * var(--ui-scale,1))}
+.inp input,.inp select{font-size:calc(14px * var(--ui-scale,1))}
+.inp .unit,.inp .axis{font-size:calc(12px * var(--ui-scale,1))}
+.role-switch button{font-size:calc(14px * var(--ui-scale,1));padding:calc(8px * var(--ui-scale,1)) calc(6px * var(--ui-scale,1))}
+.btn{font-size:calc(14px * var(--ui-scale,1));padding:calc(8px * var(--ui-scale,1)) calc(12px * var(--ui-scale,1))}
+.btn.small{font-size:calc(13px * var(--ui-scale,1));padding:calc(6px * var(--ui-scale,1)) calc(9px * var(--ui-scale,1))}
+.more{font-size:calc(13px * var(--ui-scale,1))}
+.check{font-size:calc(14px * var(--ui-scale,1))}
+.hint-box,.err-box,.warn-box,.mini-row{font-size:calc(13.5px * var(--ui-scale,1))}
+.kbd{font-size:calc(11.5px * var(--ui-scale,1))}
+.hintline{font-size:calc(13px * var(--ui-scale,1))}
+.cmd-box{height:calc(40px * var(--ui-scale,1))}
+.cmd-box input{font-size:calc(15px * var(--ui-scale,1))}
+.cmd-item{font-size:calc(14.5px * var(--ui-scale,1))}
+.ampel{font-size:calc(14px * var(--ui-scale,1))}
+.coords,.st-chip{font-size:calc(11.5px * var(--ui-scale,1))}
+.st-chip{height:calc(26px * var(--ui-scale,1))}
+.modal{width:min(calc(520px * var(--ui-scale,1)),100%)}
+.modal.wide{width:min(calc(860px * var(--ui-scale,1)),100%)}
+.modal h2{font-size:calc(21px * var(--ui-scale,1))}
+.menu button{font-size:calc(14px * var(--ui-scale,1));padding:calc(8px * var(--ui-scale,1)) calc(10px * var(--ui-scale,1))}
+.menu button .k{font-size:calc(12px * var(--ui-scale,1))}
+.flyout h3{font-size:calc(13px * var(--ui-scale,1))}
+.tile{font-size:calc(13.5px * var(--ui-scale,1))}
+.ctxbar button{font-size:calc(13.5px * var(--ui-scale,1));padding:calc(7px * var(--ui-scale,1)) calc(9px * var(--ui-scale,1))}
+.dimlabel{font-size:calc(12.5px * var(--ui-scale,1))}
+.skdim{font-size:calc(12px * var(--ui-scale,1))}
+.toast{font-size:calc(14px * var(--ui-scale,1))}
+.tooltip{font-size:calc(13px * var(--ui-scale,1))}
+.timeline{height:calc(46px * var(--ui-scale,1))}
+.tl-chip{width:calc(32px * var(--ui-scale,1));height:calc(32px * var(--ui-scale,1))}
+.tl-info{font-size:calc(12px * var(--ui-scale,1))}
+.viewbar .title,.vb-l,.vb-u,.vb-hint{font-size:calc(12px * var(--ui-scale,1))}
+.kbd-row{font-size:calc(13.5px * var(--ui-scale,1))}
+.kbd-toolbar input{font-size:calc(13.5px * var(--ui-scale,1))}
+.kbd-btn{font-size:calc(12.5px * var(--ui-scale,1))}
+.level-card-head{font-size:calc(15px * var(--ui-scale,1))}
+.level-card-desc{font-size:calc(13px * var(--ui-scale,1))}
+.start-brand h1{font-size:calc(34px * var(--ui-scale,1))}
+.card b{font-size:calc(16px * var(--ui-scale,1))}
+.card span{font-size:calc(13px * var(--ui-scale,1))}
+@media (min-width:1101px){
+  .workspace{grid-template-columns:clamp(210px,calc(252px * var(--ui-scale,1)),360px) minmax(0,1fr) clamp(240px,calc(292px * var(--ui-scale,1)),410px)}
+  .workspace.drawing-mode{grid-template-columns:0 minmax(0,1fr) clamp(240px,calc(292px * var(--ui-scale,1)),410px)}
+}
+body.simple:not(.tablet){--topbar-h:calc(60px * var(--ui-scale,1))}
+body.simple:not(.tablet) .topbar .tool{padding:calc(11px * var(--ui-scale,1)) calc(13px * var(--ui-scale,1));font-size:calc(15.5px * var(--ui-scale,1));gap:calc(8px * var(--ui-scale,1))}
+body.simple:not(.tablet) .topbar .tool svg{width:calc(23px * var(--ui-scale,1));height:calc(23px * var(--ui-scale,1))}
+body.simple:not(.tablet) .ctxbar button{padding:calc(10px * var(--ui-scale,1)) calc(12px * var(--ui-scale,1));font-size:calc(15px * var(--ui-scale,1));gap:calc(7px * var(--ui-scale,1))}
+body.simple:not(.tablet) .btn{padding:calc(10px * var(--ui-scale,1)) calc(14px * var(--ui-scale,1));font-size:calc(15px * var(--ui-scale,1))}
+body.simple:not(.tablet) .btn.small{padding:calc(8px * var(--ui-scale,1)) calc(11px * var(--ui-scale,1));font-size:calc(14px * var(--ui-scale,1))}
+body.simple:not(.tablet) .node{font-size:calc(15px * var(--ui-scale,1))}
+body.simple:not(.tablet) .panel-body{font-size:calc(14.5px * var(--ui-scale,1))}
+@media (max-width:640px){
+  .tool{font-size:calc(12px * var(--ui-scale,1));padding:calc(6px * var(--ui-scale,1)) calc(4px * var(--ui-scale,1)) calc(5px * var(--ui-scale,1));gap:calc(3px * var(--ui-scale,1))}
+  .seg button{font-size:calc(13.5px * var(--ui-scale,1));padding:calc(6px * var(--ui-scale,1)) calc(8px * var(--ui-scale,1))}
+}
 

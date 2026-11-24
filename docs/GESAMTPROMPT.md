@@ -220,6 +220,7 @@ Leitlinien:
 - Wiederherstellen nach Absturz (BE-15): `Store.saveRecovery`/`loadRecovery`/`clearRecovery` (IndexedDB `meta.recovery` + kompakte Schnellkopie in `localStorage`), `App.dirty`/`markClean`, Banner `#recovery-bar` mit Projektname, Zeit, „Wiederherstellen“ und „Verwerfen“
 - Eigene Tastenkürzel (nur „Profi“): `Commands.shortcuts`/`setShortcut`/`resetShortcuts`/`renderShortcutsEditor`, gespeichert in `localStorage` (`tracery-kuerzel`), Duplikat-Prüfung, Einstellungs-Tab `#set-tab-keys`
 - Werkzeugleiste anpassen (BE-04): `Toolbar` in `51-toolbar.js`, Rechtsklick → „Anpassen …“, Werkzeuge per Ziehen hinzufügen/entfernen/sortieren, Favoriten mit Stern ganz links, gespeichert in `localStorage` (`tracery-werkzeugleiste`), „Zurücksetzen“
+- Einstellungen sichern & Oberflächen-Größe (BE-30, BE-31): `ViewPrefs` in `48-viewprefs.js` (`exportData`/`importData`/`saveToFile`/`loadFromFile`/`openFilePicker`/`resetAll`, `uiScale`/`setUiScale` 80–150 % über `--ui-scale`), `Commands.exportShortcuts`/`importShortcuts`, `Toolbar.setState` sowie Erkennung von `format: 'tracery-settings'` in `Start.openBlob`
 - Notizstift; Messen (Abstand, Winkel, Fläche); Material je Teil, Gewicht, Schwerpunkt
 - Kaufteile mit festem Gewicht
 - Auswahlfilter, „Ähnliche“, Kantenkette

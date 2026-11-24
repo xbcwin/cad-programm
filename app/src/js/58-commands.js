@@ -156,6 +156,44 @@ const Commands = (() => {
     storageDel(KBD_KEY);
     syncCmdKbds();
   }
+  function exportShortcuts() {
+    return { ...customKeys };
+  }
+  function importShortcuts(obj) {
+    customKeys = {};
+    let applied = 0, skipped = 0;
+    if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+      const candidate = {};
+      for (const s of SHORTCUTS) {
+        const val = obj[s.id];
+        if (typeof val === 'string' && val.trim()) {
+          candidate[s.id] = val.trim().toLowerCase();
+        }
+      }
+      const used = new Map();
+      for (const s of SHORTCUTS) {
+        const c = candidate[s.id] || s.def;
+        if (!used.has(c)) used.set(c, []);
+        used.get(c).push(s.id);
+      }
+      for (const s of SHORTCUTS) {
+        if (!candidate[s.id]) continue;
+        const c = candidate[s.id];
+        const owners = used.get(c) || [];
+        if (owners.length > 1) {
+          skipped++;
+          continue;
+        }
+        if (c !== s.def) {
+          customKeys[s.id] = c;
+          applied++;
+        }
+      }
+    }
+    saveShortcuts();
+    syncCmdKbds();
+    return { applied, skipped };
+  }
   function build() {
     C.length = 0;
     for (const k of PRIMITIVE_ORDER) add('add-' + k, KINDS[k].label + ' hinzufügen', 'cube', 'körper form grundkörper ' + ({ box: 'würfel kasten block platte', cylinder: 'rund stab säule scheibe', sphere: 'ball', cone: 'spitze', pyramid: 'spitze', wedge: 'rampe dach schräge', tube: 'röhre ring hohl', torus: 'donut kringel', prism: 'sechseck achteck polygon', hemisphere: 'kuppel halbkugel' }[k] || ''), () => Actions.addPrimitive(k), { group: 'Körper' });
@@ -329,6 +367,9 @@ const Commands = (() => {
     add('toolbar-customize', 'Werkzeugleiste anpassen', 'sliders', 'werkzeugleiste leiste anpassen favoriten stern sortieren zurücksetzen', () => Toolbar.dialog(), { group: 'Ansicht' });
     add('settings-precision', 'Genauigkeit & Nachkommastellen einstellen', 'sliders', 'genauigkeit nachkommastellen dezimalstellen winkel rundung anzeige', () => ViewPrefs.dialog('general'), { group: 'Ansicht' });
     add('settings-language', 'Sprache ändern (Deutsch / English)', 'sliders', 'sprache language english deutsch uebersetzung translation einstellungen', () => ViewPrefs.dialog('general', { focus: 'set-lang' }), { group: 'Ansicht' });
+    add('settings-export', 'Einstellungen als Datei speichern', 'save', 'einstellungen sichern exportieren datei json backup tastenkuerzel favoriten maus genauigkeit', () => ViewPrefs.saveToFile(), { group: 'Ansicht' });
+    add('settings-import', 'Einstellungen aus Datei laden', 'folder', 'einstellungen laden importieren datei json wiederherstellen tastenkuerzel favoriten maus genauigkeit', () => ViewPrefs.openFilePicker(), { group: 'Ansicht' });
+    add('settings-scale', 'Oberflächen-Größe einstellen (80–150 %)', 'sliders', 'oberflaeche groesse skalierung zoom schrift groesser kleiner prozent 80 125 150 einstellungen', () => ViewPrefs.dialog('general', { focus: 'set-uiscale' }), { group: 'Ansicht' });
     for (const [v, l] of [['front', 'Vorne'], ['top', 'Oben'], ['right', 'Rechts'], ['left', 'Links'], ['back', 'Hinten'], ['iso', 'Schräg']]) add('view-' + v, 'Ansicht ' + l, 'eye', 'ansicht kamera blick ' + l, () => Viewer.setView(v), { group: 'Ansicht' });
     add('new', 'Neues Projekt', 'newfile', 'neu leer vorlage vorlagen zoll 3d-druck laser gehäuse anfangen', () => Start.newProjectDialog(), { group: 'Projekt' });
     add('save-template', 'Als Vorlage speichern', 'save', 'vorlage speichern eigene vorlage template', () => Start.saveAsTemplate(), { group: 'Projekt' });
@@ -637,6 +678,6 @@ const Commands = (() => {
     UI.renderHint();
   }
   function init() { loadShortcuts(); build(); syncCmdKbds(); initBar(); document.addEventListener('keydown', onKey); }
-  return { init, search, setMode, showKeys, list: () => C, exec, repeat, shortcuts, setShortcut, resetShortcuts, keyLabel, eventToCombo, formatCombo, renderShortcutsEditor, syncCmdKbds, get last() { return last; }, get recent() { return recent.slice(); } };
+  return { init, search, setMode, showKeys, list: () => C, exec, repeat, shortcuts, setShortcut, resetShortcuts, exportShortcuts, importShortcuts, keyLabel, eventToCombo, formatCombo, renderShortcutsEditor, syncCmdKbds, get last() { return last; }, get recent() { return recent.slice(); } };
 })();
 

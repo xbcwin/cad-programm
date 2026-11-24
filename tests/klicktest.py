@@ -21485,6 +21485,248 @@ def t_a105_schraege_hinterschnitt(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+def t_a108_einstellungen_groesse(p):
+    def close_modals():
+        p.ev("document.querySelectorAll('.modal-back').forEach(b => b.remove());")
+        p.wait(100)
+
+    def open_settings(tab='general'):
+        close_modals()
+        p.pg.click('#btn-menu'); p.wait(200)
+        p.pg.get_by_text('Einstellungen', exact=True).click(); p.wait(250)
+        if tab == 'keys':
+            p.pg.locator('#set-tab-keys').click(); p.wait(200)
+
+    def tool_font_px():
+        return p.ev("const el = document.querySelector('#tools .tool'); return el ? parseFloat(getComputedStyle(el).fontSize) : 0;")
+
+    saved_path = os.path.join(tempfile.gettempdir(), 'tracery-a108-settings.json')
+    try:
+        p.empty()
+        p.ev("ViewPrefs.setLevel('pro');")
+        p.wait(250)
+
+        # 1. Kürzel, Favorit, Maus, Genauigkeit, Oberflächen-Größe ändern & als Datei speichern
+        open_settings('keys')
+        p.pg.locator('.kbd-btn[data-cmd="ortho"]').click(); p.wait(150)
+        p.pg.keyboard.press('j'); p.wait(200)
+
+        p.ev("Toolbar.add('fillet'); Toolbar.toggleFav('fillet');")
+        p.wait(150)
+
+        p.pg.locator('#set-tab-general').click(); p.wait(200)
+        p.pg.select_option('#set-mouse', 'fusion'); p.wait(150)
+        p.pg.select_option('#set-dec', '3'); p.wait(150)
+        p.pg.select_option('#set-angle-dec', '2'); p.wait(150)
+        p.pg.locator('#set-uiscale-125').click(); p.wait(200)
+
+        with p.pg.expect_download(timeout=30000) as dl:
+            p.pg.locator('#set-save-btn').click()
+        d = dl.value
+        d.save_as(saved_path)
+        saved_data = json.load(open(saved_path, encoding='utf-8'))
+
+        ok1 = (
+            saved_data.get('format') == 'tracery-settings'
+            and saved_data.get('shortcuts', {}).get('ortho') == 'j'
+            and 'fillet' in saved_data.get('toolbar', {}).get('favs', [])
+            and saved_data.get('view', {}).get('mouse') == 'fusion'
+            and saved_data.get('view', {}).get('decimals') == 3
+            and saved_data.get('view', {}).get('angleDecimals') == 2
+            and saved_data.get('view', {}).get('uiScale') == 125
+        )
+
+        # 2. Alles zurücksetzen, Datei wieder laden → Kürzel, Favoriten, Maus, Genauigkeit & Größe wieder da
+        p.pg.locator('#set-reset-all').click(); p.wait(300)
+        after_reset = p.ev("""return {
+          ortho: Commands.shortcuts().find(s => s.id === 'ortho')?.combo,
+          favs: Toolbar.getState().favs,
+          mouse: ViewPrefs.get().mouse,
+          dec: ViewPrefs.get().decimals,
+          angDec: ViewPrefs.get().angleDecimals,
+          uiScale: ViewPrefs.uiScale
+        };""")
+        reset_ok = (
+            after_reset['ortho'] == 'o'
+            and after_reset['favs'] == []
+            and after_reset['mouse'] == 'tracery'
+            and after_reset['dec'] == 2
+            and after_reset['angDec'] == 1
+            and after_reset['uiScale'] == 100
+        )
+
+        p.pg.locator('#set-import-input').set_input_files(saved_path); p.wait(400)
+        after_load = p.ev("""return {
+          ortho: Commands.shortcuts().find(s => s.id === 'ortho')?.combo,
+          favs: Toolbar.getState().favs,
+          mouse: ViewPrefs.get().mouse,
+          dec: ViewPrefs.get().decimals,
+          angDec: ViewPrefs.get().angleDecimals,
+          uiScale: ViewPrefs.uiScale,
+          scaleLabel: document.querySelector('#set-uiscale-val')?.textContent?.trim()
+        };""")
+        close_modals()
+
+        # Prüfen, ob geändertes Kürzel 'j' statt 'o' wirkt
+        o0 = p.ev("return Viewer.ortho")
+        p.pg.locator('canvas').first.focus()
+        p.pg.keyboard.press('o'); p.wait(200)
+        o_old = p.ev("return Viewer.ortho")
+        p.pg.keyboard.press('j'); p.wait(200)
+        o_new = p.ev("return Viewer.ortho")
+        p.pg.keyboard.press('j'); p.wait(200)
+
+        # Ungültige Datei wird abgelehnt, ohne vorhandene Einstellungen zu überschreiben
+        bad_res = p.ev("return ViewPrefs.importData({ format: 'masswerk', items: [] })")
+        still_ortho = p.ev("return Commands.shortcuts().find(s => s.id === 'ortho')?.combo")
+
+        ok2 = (
+            reset_ok
+            and after_load['ortho'] == 'j'
+            and 'fillet' in after_load['favs']
+            and after_load['mouse'] == 'fusion'
+            and after_load['dec'] == 3
+            and after_load['angDec'] == 2
+            and after_load['uiScale'] == 125
+            and after_load['scaleLabel'] == '125 %'
+            and not o0 and not o_old and o_new
+            and bad_res and bad_res.get('ok') is False and bad_res.get('error') == 'invalid_format'
+            and still_ortho == 'j'
+        )
+
+        # 3. Oberflächen-Größe 80–150 %: Schrift der Werkzeugleiste skaliert exakt + bleibt nach Neuladen
+        p.ev("ViewPrefs.setUiScale(100);"); p.wait(200)
+        fs100 = tool_font_px()
+
+        open_settings('general')
+        p.pg.locator('#set-uiscale-125').click(); p.wait(200)
+        close_modals()
+        fs125 = tool_font_px()
+
+        p.ev("ViewPrefs.setUiScale(80);"); p.wait(150)
+        fs80 = tool_font_px()
+        p.ev("ViewPrefs.setUiScale(150);"); p.wait(150)
+        fs150 = tool_font_px()
+        p.ev("ViewPrefs.setUiScale(50);"); p.wait(100)
+        clamp_low = p.ev("return ViewPrefs.uiScale")
+        p.ev("ViewPrefs.setUiScale(220);"); p.wait(100)
+        clamp_high = p.ev("return ViewPrefs.uiScale")
+
+        p.ev("ViewPrefs.setUiScale(125);"); p.wait(200)
+        p.pg.reload()
+        p.wait(3000)
+        try:
+            p.pg.locator('.loading').wait_for(state='detached', timeout=15000)
+        except Exception:
+            pass
+        p.ev("Start.hide();"); p.wait(200)
+        scale_reloaded = p.ev("return ViewPrefs.uiScale")
+        fs125_reloaded = tool_font_px()
+
+        ok3 = (
+            fs100 > 0
+            and abs(fs125 / fs100 - 1.25) < 0.02
+            and abs(fs80 / fs100 - 0.80) < 0.02
+            and abs(fs150 / fs100 - 1.50) < 0.02
+            and clamp_low == 80 and clamp_high == 150
+            and scale_reloaded == 125
+            and abs(fs125_reloaded - fs125) < 0.2
+        )
+
+        # 4. Einfach-Modus skaliert ebenfalls & Öffnen über Start.openBlob lädt Einstellungsdatei
+        p.ev("ViewPrefs.setLevel('simple'); ViewPrefs.setUiScale(100);"); p.wait(200)
+        fs_simple_100 = tool_font_px()
+        p.ev("ViewPrefs.setUiScale(125);"); p.wait(200)
+        fs_simple_125 = tool_font_px()
+
+        p.ev("ViewPrefs.setLevel('pro'); ViewPrefs.resetAll({ silent: true });"); p.wait(200)
+        raw_txt = open(saved_path, encoding='utf-8').read()
+        p.pg.evaluate("(txt) => window.__masswerk.Start.openBlob(new File([txt], 'einstellungen.json', { type: 'application/json' }))", raw_txt)
+        p.wait(350)
+        via_open = p.ev("""return {
+          ortho: Commands.shortcuts().find(s => s.id === 'ortho')?.combo,
+          favs: Toolbar.getState().favs,
+          mouse: ViewPrefs.get().mouse,
+          uiScale: ViewPrefs.uiScale
+        };""")
+        ok4 = (
+            fs_simple_100 > 0
+            and abs(fs_simple_125 / fs_simple_100 - 1.25) < 0.02
+            and via_open['ortho'] == 'j'
+            and 'fillet' in via_open['favs']
+            and via_open['mouse'] == 'fusion'
+            and via_open['uiScale'] == 125
+        )
+
+        # 5. Hilfetexte, DE/EN-Schlüssel, Befehlssuche & i18n-Testmodus ohne Seitenfehler
+        hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+        de_en_equal = p.pg.evaluate("""Promise.all([fetch('data/texte-de.json').then(r=>r.json()), fetch('data/texte-en.json').then(r=>r.json())])
+          .then(([de, en]) => {
+            const kd = Object.keys(de).sort(), ke = Object.keys(en).sort();
+            return kd.length === ke.length && kd.every((k, i) => k === ke[i]);
+          })""")
+        help_json_ok = all(k in hilfen and all(f in hilfen[k] for f in ('tip', 'hilfe', 'tipp')) for k in ('settingsFile', 'uiScale'))
+        open_settings('general')
+        p.pg.locator('[data-help="uiScale"] label').hover(); p.wait(550)
+        tip_scale = p.pg.locator('.tooltip').text_content() if p.pg.locator('.tooltip').count() else ''
+        p.pg.locator('[data-help="settingsFile"] .section-h').hover(); p.wait(550)
+        tip_file = p.pg.locator('.tooltip').text_content() if p.pg.locator('.tooltip').count() else ''
+        close_modals()
+        help_ok = (
+            help_json_ok
+            and hilfen['uiScale']['tip'] in tip_scale
+            and hilfen['settingsFile']['tip'] in tip_file
+        )
+        cmds_ok = p.ev("""return (
+          Commands.search('einstellungen speichern').some(c => c.id === 'settings-export')
+          && Commands.search('einstellungen laden').some(c => c.id === 'settings-import')
+          && Commands.search('oberflaeche').some(c => c.id === 'settings-scale')
+        );""")
+
+        p.ev("I18n.setTestMode(true); ViewPrefs.dialog();"); p.wait(300)
+        untrans = p.ev("""
+          const dlg = document.querySelector('.modal');
+          if (!dlg) return ['NO_MODAL'];
+          const techRe = /^(?:Tracery|Onshape|SolidWorks|Fusion|Blender|mm|cm|m|in|px|%|80|100|125|150)$/i;
+          const bad = [];
+          const w = document.createTreeWalker(dlg, NodeFilter.SHOW_TEXT);
+          let node;
+          while ((node = w.nextNode())) {
+            const el = node.parentElement;
+            if (!el || el.closest('svg')) continue;
+            const cs = getComputedStyle(el);
+            if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+            const raw = (node.textContent || '').trim();
+            if (!raw) continue;
+            const stripped = raw.replace(/⟦[\\s\\S]*?⟧/g, ' ').trim();
+            if (!stripped) continue;
+            const words = stripped.match(/[A-Za-zÄÖÜäöüß]{2,}/g) || [];
+            const rest = words.filter(wd => !techRe.test(wd));
+            if (rest.length) bad.push(stripped);
+          }
+          return bad;
+        """)
+        p.ev("I18n.setTestMode(false);"); p.wait(150)
+        close_modals()
+
+        ok5 = (
+            de_en_equal
+            and help_ok
+            and cmds_ok
+            and len(untrans) <= 5
+            and len(p.errs) == 0
+        )
+    finally:
+        try:
+            if os.path.exists(saved_path):
+                os.remove(saved_path)
+        except Exception:
+            pass
+        p.ev("try { I18n.setTestMode(false); ViewPrefs.resetAll({ silent: true }); document.querySelectorAll('.modal-back').forEach(b => b.remove()); } catch(_){}")
+
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -21698,6 +21940,7 @@ TESTS = [
     ('[A-102] Entlang Pfad mit Verdrehung und als Schnitt (KP-28, KP-29)', t_a102_pfad_verdrehung_schnitt),
     ('[A-106] AMF, PLY und Punkte-Dateien (IO-12, IO-14)', t_a106_amf_ply_punkte),
     ('[A-105] Schräge- und Hinterschnitt-Analyse (PF-09, PF-10)', t_a105_schraege_hinterschnitt),
+    ('[A-108] Einstellungen speichern/laden & Oberflächen-Größe (BE-30, BE-31)', t_a108_einstellungen_groesse),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),
