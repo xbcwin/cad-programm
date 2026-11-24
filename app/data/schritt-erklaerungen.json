@@ -209,5 +209,10 @@
     "was": "Spiegelt einzelne Formschritte (wie eine Tasche, Erhöhung, Rippe oder ein Loch) an einer Ebene oder Körperfläche direkt im selben Körper.",
     "wozu": "So übernimmst du symmetrische Taschen, Stege oder Bohrungen auf die andere Seite, ohne sie ein zweites Mal zu zeichnen – änderst du das Original, zieht das Spiegelbild mit.",
     "achtung": "Für ganze eigene Körper nutzt du „Gespiegelte Kopie“; „Schritt spiegeln“ wirkt direkt im Zielkörper."
+  },
+  "wrap": {
+    "was": "Wickelt eine ebene Skizze ohne Verzerrung um eine runde Zylinderfläche – als erhabene oder vertiefte Prägung oder als Linie auf der Fläche.",
+    "wozu": "Ideal für umlaufende Beschriftungen, Rillen, Nuten, Spiralkanäle oder Griffmuster auf runden Teilen.",
+    "achtung": "Im Modus „Prägung“ darf der Umriss nicht breiter als der ganze Umfang (360°) sein; eine Linie kann sich auch mehrfach herumwickeln."
   }
 }

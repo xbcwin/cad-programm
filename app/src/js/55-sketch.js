@@ -197,7 +197,7 @@ const Sketch = (() => {
   // Skizze auf einer beliebigen Ebene (z. B. einer Bezugsebene)
   function startOnPlaneObj(plane, opts = {}) {
     const planeRef = opts.datumId ? { kind: 'datum', datumId: opts.datumId, name: opts.datumName || '' } : null;
-    begin({ plane: deepClone(plane), W: new THREE.Matrix4(), ents: [], refs: [], planeRef, ctx: { mode: 'new', targetId: null, ribMode: !!opts.ribMode } });
+    begin({ plane: deepClone(plane), W: new THREE.Matrix4(), ents: [], refs: [], planeRef, ctx: { mode: 'new', targetId: null, ribMode: !!opts.ribMode, wrapCtx: opts.wrapCtx || null } });
   }
   function startOnPlane(name, off = 0, opts = {}) {
     const pl = PLANES[name];
@@ -253,7 +253,7 @@ const Sketch = (() => {
     const W = Model.worldMatrix(App.doc, id);
     const planeRef = f.item.p.sketch.planeRef ? deepClone(f.item.p.sketch.planeRef) : null;
     begin({ plane: deepClone(f.item.p.sketch.plane), W, ents: deepClone(f.item.p.sketch.ents), dims: deepClone(f.item.p.sketch.dims || []), cons: deepClone(f.item.p.sketch.cons || []), bg: f.item.p.sketch.bg, planeRef, refs: [], ctx: { mode: 'edit', editId: id } });
-    if (f.item.kind === 'group' || f.item.kind === 'rib') return;   // Muster entlang Kurve & Rippe: Zielkörper bleibt sichtbar
+    if (f.item.kind === 'group' || f.item.kind === 'rib' || f.item.kind === 'wrap') return;   // Muster entlang Kurve, Rippe & Wickeln: Zielkörper bleibt sichtbar
     // Körper während des Bearbeitens ausblenden
     S.hiddenEdit = id;
     const top = Model.topOf(App.doc, id);
@@ -4464,8 +4464,13 @@ const Sketch = (() => {
       if (!pathMode) {
         if (editKind === 'sweep' && !SK.chains(S.ents).length) { UI.toast('Der Pfad braucht mindestens eine offene Linie, einen Bogen oder eine Spline.', { kind: 'bad' }); return; }
         if (editKind === 'rib' && !SK.chains(S.ents).length) { UI.toast('Die Rippe braucht mindestens eine offene Linie, einen Bogen oder eine Kurve.', { kind: 'bad' }); return; }
+        if (editKind === 'wrap') {
+          const wMode = editIt && editIt.p && editIt.p.mode;
+          if (wMode === 'line' && !regs.length && !SK.chains(S.ents).length) { UI.toast('Für Wickeln als Linie braucht die Skizze eine Linie oder einen Umriss.', { kind: 'bad' }); return; }
+          if (wMode !== 'line' && !regs.length) { UI.toast('Wickeln als Prägung braucht mindestens eine geschlossene Fläche.', { kind: 'bad' }); return; }
+        }
         if (isThinEdit && !regs.length && !SK.chains(S.ents).length) { UI.toast('Für eine dünne Wand braucht die Skizze mindestens eine Linie oder einen Umriss.', { kind: 'bad' }); return; }
-        if (editKind !== 'sweep' && editKind !== 'rib' && !isThinEdit && !regs.length) { UI.toast('Die Skizze braucht mindestens eine geschlossene Fläche.', { kind: 'bad' }); return; }
+        if (editKind !== 'sweep' && editKind !== 'rib' && editKind !== 'wrap' && !isThinEdit && !regs.length) { UI.toast('Die Skizze braucht mindestens eine geschlossene Fläche.', { kind: 'bad' }); return; }
       }
       const id = S.ctx.editId, ents = S.ents, dims = S.dims, cons = S.cons, plane = deepClone(S.plane), bg = S.bg ? deepClone(S.bg) : null;
       App.change('Skizze bearbeitet', (doc) => { const f = Model.find(doc, id); f.item.p.sketch.ents = ents; f.item.p.sketch.dims = dims; f.item.p.sketch.cons = cons; f.item.p.sketch.plane = plane; if (bg) f.item.p.sketch.bg = bg; else delete f.item.p.sketch.bg; const keys = regs.map((r) => r.key); if (f.item.p.sel) f.item.p.sel = f.item.p.sel.filter((k) => keys.includes(k)); });
@@ -4478,9 +4483,9 @@ const Sketch = (() => {
       const id = S.ctx.targetId, n = S.F.n.clone(), wp = pts.map((e) => toWorld(e.a[0], e.a[1]));
       finishSession(); Place.holesAtPoints(id, wp, n); return;
     }
-    if (!regs.length && SK.chains(S.ents).length) { extrudeStep({ dist: S.ctx.targetId ? 5 : 10, dir: 'normal', openOnly: true, thin: !S.ctx.ribMode, rib: !!S.ctx.ribMode }); return; }
+    if (!regs.length && SK.chains(S.ents).length) { extrudeStep({ dist: S.ctx.targetId ? 5 : 10, dir: 'normal', openOnly: true, thin: !S.ctx.ribMode && !S.ctx.wrapCtx, rib: !!S.ctx.ribMode, wrap: !!S.ctx.wrapCtx, wrapMode: 'line' }); return; }
     if (!regs.length) { UI.toast(S.ents.length ? 'Noch keine geschlossene Fläche. Schließe den Umriss oder zeichne ein Rechteck oder einen Kreis.' : 'Zeichne zuerst etwas, zum Beispiel ein Rechteck.', { kind: 'bad', icon: 'info' }); return; }
-    extrudeStep({ dist: S.ctx.targetId ? 5 : 10, dir: 'normal' });
+    extrudeStep({ dist: S.ctx.targetId ? 5 : 10, dir: 'normal', wrap: !!S.ctx.wrapCtx, wrapMode: 'emboss' });
   }
   let stepBox = null, arrow = null;
   function tiltView() {
@@ -4509,7 +4514,17 @@ const Sketch = (() => {
     const ctxTop = S.ctx.targetId ? Model.topOf(App.doc, S.ctx.targetId) : null;
     const ribTarget = (ctxTop && ribTargets.some((x) => x.id === ctxTop.id) ? ctxTop.id : (ribTargets[ribTargets.length - 1] || {}).id) || null;
     const useRib = !!opts.rib && !!ribTarget;
-    S.step = { dist: opts.dist, dir: opts.dir, extent: opts.extent || 'dist', toFace: opts.toFace || null, revToFace: null, revDir: 'normal', angle2: 90, toFaceFlip: false, pickingFace: false, sel: regs.map((r) => r.key), revolve: false, sweep: false, rib: useRib, ribTarget, ribThickness: 2, ribSide: 'center', ribDir: 'normal', ribFlip: false, ribDepth: 0, ribDraft: 0, openOnly, thin: openOnly ? !useRib : !!opts.thin, wall: opts.wall || 2, wallSide: opts.wallSide || 'center', axis: 'y', angle: 360, fromPushPull: !!opts.fromPushPull, color: tgt ? tgt.item.color : nextColor() };
+    const cylTargets = typeof Features !== 'undefined' && Features.cylTargets ? Features.cylTargets() : [];
+    const wrapCtx = S.ctx.wrapCtx || null;
+    const wrapTarget = wrapCtx ? wrapCtx.target : (ctxTop && cylTargets.some((x) => x.id === ctxTop.id) ? ctxTop.id : (cylTargets[cylTargets.length - 1] || {}).id) || null;
+    let wrapFace = wrapCtx ? deepClone(wrapCtx.face) : null;
+    if (!wrapFace && wrapTarget && typeof Features !== 'undefined' && Features.findCylFaceOnItem) {
+      const cf = Features.findCylFaceOnItem(wrapTarget);
+      if (cf) wrapFace = Features.wrapTangentPlane(wrapTarget, cf.info, null).faceSpec;
+    }
+    const useWrap = !!opts.wrap && !!wrapTarget;
+    const wrapMode = openOnly ? 'line' : (opts.wrapMode || 'emboss');
+    S.step = { dist: opts.dist, dir: opts.dir, extent: opts.extent || 'dist', toFace: opts.toFace || null, revToFace: null, revDir: 'normal', angle2: 90, toFaceFlip: false, pickingFace: false, sel: regs.map((r) => r.key), revolve: false, sweep: false, rib: useRib, ribTarget, ribThickness: 2, ribSide: 'center', ribDir: 'normal', ribFlip: false, ribDepth: 0, ribDraft: 0, wrap: useWrap, wrapTarget, wrapFace, wrapMode, wrapDepth: 2, wrapAngle: 0, wrapShiftY: 0, wrapRot: 0, wrapFlip: false, openOnly, thin: openOnly ? (!useRib && !useWrap) : !!opts.thin, wall: opts.wall || 2, wallSide: opts.wallSide || 'center', axis: 'y', angle: 360, fromPushPull: !!opts.fromPushPull, color: tgt ? tgt.item.color : nextColor() };
     stepBox = h('div', { class: 'stepbox' });
     renderStep();
     $('#overlay').append(stepBox);
@@ -4532,20 +4547,66 @@ const Sketch = (() => {
   function renderStep() {
     const st = S.step; stepBox.innerHTML = '';
     const ribTargets = typeof Features !== 'undefined' && Features.ribTargets ? Features.ribTargets() : [];
-    UI.hint(st.pickingFace ? '<b>Zielfläche wählen:</b> Klick auf die gewünschte Fläche oder Bezugsebene im Bild. <b>Esc</b> bricht ab.' : st.rib ? 'Verlängert deine offene Linie mit <b>Dicke</b> bis zu den Wänden und vereinigt sie mit dem Körper.' : st.sweep ? 'Zieht ein <b>Rohr (Ø 6 mm)</b> entlang deiner offenen Kurve. Form, Größe und Wand stellst du danach rechts ein.' : st.revolve ? 'Wähl die <b>Achse</b> und den <b>Winkel</b> – 360° ergibt einen ganzen Drehkörper, zum Beispiel eine Schale oder einen Knopf.' : st.thin ? 'Zieh am <b>Pfeil</b> oder tipp Höhe, <b>Wandstärke</b> und <b>Wand-Lage</b> ein.' : 'Zieh am <b>Pfeil</b> oder tipp die Höhe ein. Nach innen wird es ein <b>Loch</b>.');
-    stepBox.append(h('h3', null, st.rib ? 'Rippe' : st.sweep ? 'Entlang Pfad' : st.revolve ? 'Drehen' : st.dir === 'reverse' ? 'Hineindrücken (Loch)' : st.thin ? 'Dünne Wand' : 'Hochziehen'));
+    const cylTargets = typeof Features !== 'undefined' && Features.cylTargets ? Features.cylTargets() : [];
+    UI.hint(st.pickingFace ? '<b>Zielfläche wählen:</b> Klick auf die gewünschte Fläche oder Bezugsebene im Bild. <b>Esc</b> bricht ab.' : st.wrap ? 'Wickelt die Skizze ohne Verzerrung um den gewählten <b>Zylinder</b> – erhaben, vertieft oder als Linie.' : st.rib ? 'Verlängert deine offene Linie mit <b>Dicke</b> bis zu den Wänden und vereinigt sie mit dem Körper.' : st.sweep ? 'Zieht ein <b>Rohr (Ø 6 mm)</b> entlang deiner offenen Kurve. Form, Größe und Wand stellst du danach rechts ein.' : st.revolve ? 'Wähl die <b>Achse</b> und den <b>Winkel</b> – 360° ergibt einen ganzen Drehkörper, zum Beispiel eine Schale oder einen Knopf.' : st.thin ? 'Zieh am <b>Pfeil</b> oder tipp Höhe, <b>Wandstärke</b> und <b>Wand-Lage</b> ein.' : 'Zieh am <b>Pfeil</b> oder tipp die Höhe ein. Nach innen wird es ein <b>Loch</b>.');
+    stepBox.append(h('h3', null, st.wrap ? 'Wickeln um Zylinder' : st.rib ? 'Rippe' : st.sweep ? 'Entlang Pfad' : st.revolve ? 'Drehen' : st.dir === 'reverse' ? 'Hineindrücken (Loch)' : st.thin ? 'Dünne Wand' : 'Hochziehen'));
     const seg = h('div', { class: 'role-switch' });
     if (st.openOnly) {
-      const a = h('button', { type: 'button', id: 'st-mode-thin', 'aria-pressed': !st.sweep && !st.rib ? 'true' : 'false' }); a.innerHTML = icon('wall2d') + 'Dünne Wand'; a.onclick = () => { st.sweep = false; st.rib = false; st.thin = true; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
-      const b = h('button', { type: 'button', id: 'st-mode-sweep', 'aria-pressed': st.sweep && !st.rib ? 'true' : 'false' }); b.innerHTML = icon('sweep') + 'Entlang Pfad'; b.onclick = () => { st.sweep = true; st.rib = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
-      const c = h('button', { type: 'button', id: 'st-mode-rib', 'data-help': 'rib', 'aria-pressed': st.rib ? 'true' : 'false' }); c.innerHTML = icon('rib') + 'Rippe'; c.onclick = () => { st.rib = true; st.sweep = false; st.thin = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
-      seg.append(a, b, c); stepBox.append(seg);
+      const a = h('button', { type: 'button', id: 'st-mode-thin', 'aria-pressed': !st.sweep && !st.rib && !st.wrap ? 'true' : 'false' }); a.innerHTML = icon('wall2d') + 'Dünne Wand'; a.onclick = () => { st.sweep = false; st.rib = false; st.wrap = false; st.thin = true; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
+      const b = h('button', { type: 'button', id: 'st-mode-sweep', 'aria-pressed': st.sweep && !st.rib && !st.wrap ? 'true' : 'false' }); b.innerHTML = icon('sweep') + 'Entlang Pfad'; b.onclick = () => { st.sweep = true; st.rib = false; st.wrap = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
+      const c = h('button', { type: 'button', id: 'st-mode-rib', 'data-help': 'rib', 'aria-pressed': st.rib ? 'true' : 'false' }); c.innerHTML = icon('rib') + 'Rippe'; c.onclick = () => { st.rib = true; st.sweep = false; st.wrap = false; st.thin = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
+      seg.append(a, b, c);
+      if (cylTargets.length) {
+        const wBtn = h('button', { type: 'button', id: 'st-mode-wrap', 'data-help': 'wrapCyl', 'aria-pressed': st.wrap ? 'true' : 'false' }); wBtn.innerHTML = icon('wrap') + 'Wickeln'; wBtn.onclick = () => { st.wrap = true; st.wrapMode = 'line'; st.rib = false; st.sweep = false; st.thin = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
+        seg.append(wBtn);
+      }
+      stepBox.append(seg);
     } else if (!st.fromPushPull) {
-      const a = h('button', { type: 'button', 'aria-pressed': !st.revolve ? 'true' : 'false' }); a.innerHTML = icon('lift') + 'Hochziehen'; a.onclick = () => { st.revolve = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
-      const b = h('button', { type: 'button', 'aria-pressed': st.revolve ? 'true' : 'false' }); b.innerHTML = icon('rotate') + 'Drehen'; b.onclick = () => { st.revolve = true; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
-      seg.append(a, b); stepBox.append(seg);
+      const a = h('button', { type: 'button', 'aria-pressed': !st.revolve && !st.wrap ? 'true' : 'false' }); a.innerHTML = icon('lift') + 'Hochziehen'; a.onclick = () => { st.revolve = false; st.wrap = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
+      const b = h('button', { type: 'button', 'aria-pressed': st.revolve && !st.wrap ? 'true' : 'false' }); b.innerHTML = icon('rotate') + 'Drehen'; b.onclick = () => { st.revolve = true; st.wrap = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
+      seg.append(a, b);
+      if (cylTargets.length) {
+        const wBtn = h('button', { type: 'button', id: 'st-mode-wrap', 'data-help': 'wrapCyl', 'aria-pressed': st.wrap ? 'true' : 'false' }); wBtn.innerHTML = icon('wrap') + 'Wickeln'; wBtn.onclick = () => { st.wrap = true; st.revolve = false; st.pickingFace = false; Viewer.canvas.style.cursor = ''; Viewer.highlightFace('hover', null, null); renderStep(); updatePreview(); };
+        seg.append(wBtn);
+      }
+      stepBox.append(seg);
     }
-    if (st.rib) {
+    if (st.wrap) {
+      if (!cylTargets.length) {
+        stepBox.append(h('div', { class: 'hint-box' }, 'Für „Wickeln“ braucht es zuerst einen Körper mit einer Zylinderfläche.'));
+      } else {
+        if (!st.wrapTarget || !cylTargets.some((x) => x.id === st.wrapTarget)) {
+          st.wrapTarget = cylTargets[cylTargets.length - 1].id;
+          const cf = Features.findCylFaceOnItem(st.wrapTarget);
+          st.wrapFace = cf ? Features.wrapTangentPlane(st.wrapTarget, cf.info, null).faceSpec : null;
+        }
+        stepBox.append(UI.selectField({
+          id: 'st-wrap-target', label: 'Zylinder-Körper', value: st.wrapTarget,
+          options: cylTargets.map((x) => [x.id, Model.label(x)]),
+          onChange: (v) => {
+            st.wrapTarget = v;
+            const cf = Features.findCylFaceOnItem(v);
+            st.wrapFace = cf ? Features.wrapTangentPlane(v, cf.info, null).faceSpec : null;
+            renderStep(); updatePreview();
+          },
+        }));
+        const modeOpts = st.openOnly ? [['line', 'Linie für weitere Schritte']] : [['emboss', 'Prägung erhaben (+)'], ['deboss', 'Prägung vertieft (−)'], ['line', 'Linie für weitere Schritte']];
+        if (st.openOnly) st.wrapMode = 'line';
+        stepBox.append(UI.selectField({ id: 'st-wrap-mode', label: 'Art', value: st.wrapMode || 'emboss', options: modeOpts, onChange: (v) => { st.wrapMode = v; renderStep(); updatePreview(); } }));
+        if (st.wrapMode !== 'line') {
+          stepBox.append(UI.numField({ id: 'st-wrap-depth', label: st.wrapMode === 'deboss' ? 'Tiefe' : 'Höhe', value: st.wrapDepth ?? 2, min: 0.05, onCommit: (v) => { st.wrapDepth = v; updatePreview(); } }));
+        }
+        stepBox.append(UI.numField({ id: 'st-wrap-angle', label: 'Startwinkel', value: st.wrapAngle ?? 0, unit: '°', onCommit: (v) => { st.wrapAngle = v; updatePreview(); } }));
+        stepBox.append(UI.numField({ id: 'st-wrap-shift', label: 'Axial verschieben', value: st.wrapShiftY ?? 0, onCommit: (v) => { st.wrapShiftY = v; updatePreview(); } }));
+        const tmpW = stepItem();
+        const aInfo = Model.wrapAngleInfo ? Model.wrapAngleInfo(tmpW, Model.vars(App.doc).v) : null;
+        if (aInfo) {
+          stepBox.append(h('div', { class: 'mini-row', id: 'st-wrap-info' },
+            h('span', { class: 'grow' }, `Umfangswinkel (Ø ${Units.fmtLenU(aInfo.radius * 2, 1)})`),
+            h('b', { class: 'mono' }, `${fmt(aInfo.deg, 1)}°`)));
+        }
+      }
+    } else if (st.rib) {
       if (!ribTargets.length) {
         stepBox.append(h('div', { class: 'hint-box' }, 'Für eine Rippe braucht es zuerst einen Körper im Projekt.'));
       } else {
@@ -4679,18 +4740,31 @@ const Sketch = (() => {
         if (st.pickingFace) UI.hint('<b>Zielfläche wählen:</b> Klick auf eine ebene Fläche eines Körpers oder eine Bezugsebene.');
       }
     }
-    if (!st.sweep && !st.rib) {
+    if (!st.sweep && !st.rib && !st.wrap) {
       const hole = !st.revolve && st.dir === 'reverse' && S.ctx.targetId;
       stepBox.append(h('p', null, hole ? 'Wird als Loch aus dem Körper geschnitten.' : S.ctx.targetId ? 'Wird Teil des Körpers, auf dem du gezeichnet hast.' : 'Wird ein neuer Körper.'));
     }
     const row = h('div', { class: 'btn-row', style: { justifyContent: 'flex-end' } });
     const back = h('button', { type: 'button', class: 'btn ghost' }); back.innerHTML = st.fromPushPull ? 'Abbrechen' : icon('undo') + 'Skizze'; back.dataset.tip = st.fromPushPull ? '' : 'Zurück zur Skizze'; back.onclick = () => stepBack();
-    const ok = h('button', { type: 'button', class: 'btn primary', disabled: st.rib && !ribTargets.length }); ok.innerHTML = icon('check') + 'Fertig'; ok.onclick = () => stepOK();
+    const ok = h('button', { type: 'button', class: 'btn primary', disabled: (st.rib && !ribTargets.length) || (st.wrap && !cylTargets.length) }); ok.innerHTML = icon('check') + 'Fertig'; ok.onclick = () => stepOK();
     row.append(back, ok); stepBox.append(row);
   }
   function stepItem() {
     const st = S.step;
     const pr = S.planeRef ? { planeRef: deepClone(S.planeRef) } : {};
+    if (st.wrap) {
+      return Model.newItem('wrap', {
+        sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons), ...pr },
+        target: st.wrapTarget,
+        face: st.wrapFace ? deepClone(st.wrapFace) : null,
+        mode: st.openOnly ? 'line' : (st.wrapMode || 'emboss'),
+        depth: st.wrapDepth ?? 2,
+        angle: st.wrapAngle ?? 0,
+        shiftY: st.wrapShiftY ?? 0,
+        rot: st.wrapRot ?? 0,
+        flip: !!st.wrapFlip,
+      }, { name: 'Wickeln', color: st.color });
+    }
     if (st.rib) {
       return Model.newItem('rib', {
         sketch: { plane: deepClone(S.plane), ents: deepClone(S.ents), dims: deepClone(S.dims), cons: deepClone(S.cons), ...pr },
@@ -4751,7 +4825,7 @@ const Sketch = (() => {
   }
   const previewUpd = debounce(() => {
     if (!S || !S.step) return;
-    if (S.step.rib && !S.step.ribTarget) { App.extra = []; App.rebuild(); placeArrow(); return; }
+    if ((S.step.rib && !S.step.ribTarget) || (S.step.wrap && !S.step.wrapTarget)) { App.extra = []; App.rebuild(); placeArrow(); return; }
     const it = stepItem();
     // Vorschau als Objekt in Weltlage
     Model.setFromMatrix(it, S.W);
@@ -4781,7 +4855,7 @@ const Sketch = (() => {
   function placeArrow() {
     if (arrow) { arrow.remove(); arrow = null; }
     for (const l of labels.filter((x) => x.classList.contains('steplabel'))) l.remove();
-    if (!S || !S.step || S.step.revolve || S.step.sweep || S.step.rib || S.step.extent === 'toNext' || S.step.extent === 'toFace') { Viewer.requestRender(); return; }
+    if (!S || !S.step || S.step.revolve || S.step.sweep || S.step.rib || S.step.wrap || S.step.extent === 'toNext' || S.step.extent === 'toFace') { Viewer.requestRender(); return; }
     const p = arrowPos();
     const dir = S.F.n.clone().multiplyScalar(S.step.dir === 'reverse' ? -1 : 1);
     const ps = Viewer.pixelSizeAt(p);
@@ -4904,13 +4978,14 @@ const Sketch = (() => {
   }
   function stepOK() {
     if (S.step && S.step.rib && !S.step.ribTarget) { UI.toast('Für eine Rippe braucht es zuerst einen Zielkörper.', { kind: 'bad' }); return; }
-    if (S.step.extent === 'toFace' && !S.step.toFace && !S.step.revolve && !S.step.sweep && !S.step.rib) { UI.toast('Klick zuerst eine Zielfläche im Bild an.', { icon: 'info' }); return; }
+    if (S.step && S.step.wrap && !S.step.wrapTarget) { UI.toast('Für „Wickeln“ braucht es zuerst einen Zylinder-Körper.', { kind: 'bad' }); return; }
+    if (S.step.extent === 'toFace' && !S.step.toFace && !S.step.revolve && !S.step.sweep && !S.step.rib && !S.step.wrap) { UI.toast('Klick zuerst eine Zielfläche im Bild an.', { icon: 'info' }); return; }
     const it = stepItem();
     const ctx = S.ctx;
     App.extra = [];
-    const lbl = it.kind === 'rib' ? 'Rippe erstellt' : it.kind === 'sweep' ? 'Entlang Pfad gezogen' : it.role === 'hole' ? 'Aussparung erstellt' : it.kind === 'revolve' ? 'Drehkörper erstellt' : (it.p && it.p.thin ? 'Dünne Wand hochgezogen' : 'Hochgezogen');
+    const lbl = it.kind === 'wrap' ? 'Um Zylinder gewickelt' : it.kind === 'rib' ? 'Rippe erstellt' : it.kind === 'sweep' ? 'Entlang Pfad gezogen' : it.role === 'hole' ? 'Aussparung erstellt' : it.kind === 'revolve' ? 'Drehkörper erstellt' : (it.p && it.p.thin ? 'Dünne Wand hochgezogen' : 'Hochgezogen');
     App.change(lbl, (doc) => {
-      if (it.kind !== 'rib' && ctx.targetId && Model.find(doc, ctx.targetId)) Actions.attach(doc, ctx.targetId, it);
+      if (it.kind !== 'rib' && it.kind !== 'wrap' && ctx.targetId && Model.find(doc, ctx.targetId)) Actions.attach(doc, ctx.targetId, it);
       else { Model.setFromMatrix(it, S.W); doc.items.push(it); }
     });
     finishSession();
@@ -4918,7 +4993,7 @@ const Sketch = (() => {
     App.select([top ? top.id : it.id]);
     // neues Teil gut sichtbar machen, wenn es nach dem Zurückspringen zu klein wäre
     setTimeout(() => { const b = Actions.worldBox(top ? top.id : it.id); if (b && (Viewer.screenFraction(b) < 0.22 || !Viewer.inView(b))) Viewer.fit(App.doc.items.map((x) => x.id)); }, 480);
-    UI.toast(it.kind === 'rib' ? 'Rippe erstellt und mit dem Körper vereinigt. Dicke, Lage und Schräge kannst du rechts jederzeit ändern.' : it.kind === 'sweep' ? 'Als Rohr Ø 6 mm entlang gezogen. Form, Größe und Wand stellst du rechts ein.' : it.role === 'hole' ? 'Aussparung erstellt. Im Verlauf kannst du die Tiefe jederzeit ändern.' : 'Fertig! Die Maße kannst du rechts jederzeit ändern.', { icon: 'check' });
+    UI.toast(it.kind === 'wrap' ? 'Skizze um den Zylinder gewickelt. Art, Tiefe und Winkel kannst du rechts jederzeit ändern.' : it.kind === 'rib' ? 'Rippe erstellt und mit dem Körper vereinigt. Dicke, Lage und Schräge kannst du rechts jederzeit ändern.' : it.kind === 'sweep' ? 'Als Rohr Ø 6 mm entlang gezogen. Form, Größe und Wand stellst du rechts ein.' : it.role === 'hole' ? 'Aussparung erstellt. Im Verlauf kannst du die Tiefe jederzeit ändern.' : 'Fertig! Die Maße kannst du rechts jederzeit ändern.', { icon: 'check' });
   }
   // ---------- Beenden ----------
   function cancel(silent) {

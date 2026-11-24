@@ -66,6 +66,12 @@ const Explain = (() => {
       const dirTxt = p.dir === 'parallel' ? 'in der Skizzenebene' : 'senkrecht zur Skizze';
       lines.push({ k: 'op', t: `Verstärkt „${tf ? Model.label(tf.item) : 'fehlendes Ziel'}“ als Rippe (${Units.fmtLenU(Model.num(p.thickness, V, 2), 2, doc)} dick, ${sideTxt}, ${dirTxt}${Math.abs(Model.num(p.draft, V, 0)) > 1e-6 ? `, ${fmt(Model.num(p.draft, V, 0), 1)}° Schräge` : ''}).` });
     }
+    if (it.kind === 'wrap') {
+      const p = it.p || {}, tf = p.target ? Model.find(doc, p.target) : null;
+      const info = Model.wrapAngleInfo ? Model.wrapAngleInfo(it, V, doc) : null;
+      const modeTxt = p.mode === 'deboss' ? `vertieft um ${Units.fmtLenU(Model.num(p.depth, V, 2), 2, doc)}` : p.mode === 'line' ? 'als Linie auf der Oberfläche' : `erhaben um ${Units.fmtLenU(Model.num(p.depth, V, 2), 2, doc)}`;
+      lines.push({ k: 'op', t: `Wickelt eine Skizze ${modeTxt} um „${tf ? Model.label(tf.item) : 'fehlendes Ziel'}“${info ? ` (${fmt(info.deg, 1)}° des Umfangs)` : ''}.` });
+    }
     if (it.kind === 'mirrorStep') {
       const p = it.p || {};
       const fNames = (Array.isArray(p.features) ? p.features : []).map((fid) => Model.find(doc, fid)).filter(Boolean).map((x) => `„${Model.label(x.item)}“`);
@@ -83,7 +89,7 @@ const Explain = (() => {
     const used = paramsUsed(it, doc);
     if (used.length) lines.push({ k: 'masse', t: `Hängt an ${used.length === 1 ? 'dem Maß' : 'den Maßen'} ${used.slice(0, 6).join(', ')}${used.length > 6 ? ` und ${used.length - 6} weiteren` : ''}. Änderst du ${used.length === 1 ? 'es' : 'eines'} unter „Maße“, rechnet Tracery diesen Schritt neu.` });
     if (top >= 0 && Mass.fixedOf(it)) lines.push({ k: 'gewicht', t: it.massG === '' ? 'Kaufteil: Das Gewicht fehlt noch – trag es rechts ein.' : `Kaufteil mit festem Gewicht ${fmt(Model.num(it.massG, V, 0), 1)} g.` });
-    else if (top >= 0 && it.role !== 'hole' && it.kind !== 'rib' && it.kind !== 'mirrorStep' && !(it.kind === 'transform' && !(it.p && it.p.copy)) && it.kind !== 'scale' && !(it.kind === 'thicken' && !(it.p && it.p.mode === 'new'))) lines.push({ k: 'material', t: `Material: ${Mass.materialFor(it, doc).k}.` });
+    else if (top >= 0 && it.role !== 'hole' && it.kind !== 'rib' && it.kind !== 'wrap' && it.kind !== 'mirrorStep' && !(it.kind === 'transform' && !(it.p && it.p.copy)) && it.kind !== 'scale' && !(it.kind === 'thicken' && !(it.p && it.p.mode === 'new'))) lines.push({ k: 'material', t: `Material: ${Mass.materialFor(it, doc).k}.` });
     if (it.suppressed) lines.push({ k: 'status', t: 'Dieser Schritt ist unterdrückt und zählt gerade nicht mit.' });
     else if (top >= 0 && doc === App.doc && top >= Timeline.markerPos()) lines.push({ k: 'status', t: 'Dieser Schritt liegt hinter dem Marker der Zeitleiste und wird gerade nicht gerechnet.' });
     if (it.ai) lines.push({ k: 'ki', t: (it.ai.edit ? 'Zuletzt von der KI geändert' : 'Von der KI gebaut') + ` – auf die Bitte „${it.ai.q}“.` });

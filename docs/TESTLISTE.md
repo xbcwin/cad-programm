@@ -1765,6 +1765,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Abbruch laufender Übergänge**: `Tour.stop()` und `show()` löschen laufende Weiterschalt-Timer (`advTimer`) sauber ohne Zustandsreste auf den Schritt-Definitionen.
 - [ ] **Von Hand**: Im Browser ein Drehteller-Video über „Ansicht → Drehteller-Video …“ herunterladen und abspielen sowie die Einführung „Erste Skizze (5 Minuten)“ einmal komplett durchklicken.
 
+## Wickeln um Zylinder (Auto [A-043], KP-34)
+
+- [x] **Verzerrungsfreies Wickeln (180° ± 2°)**: Rechteck `31,4 × 8 mm` auf einem Zylinder Ø20 (`emboss`, `+2 mm`) umschließt exakt `179,9°` (`180° ± 2°`) mit Volumen `6835,8 mm³` und `0` Fehlern.
+- [x] **Vertieft, Startwinkel & Ø40**: Umschalten auf `deboss` (`−2 mm`) schneidet den 180°-Bogen (`5831,0 mm³`), Startwinkel `90°` dreht die Prägung um `90°`, und Vergrößern auf Ø40 halbiert den Umfangswinkel derselben 31,4-mm-Skizze auf `90° ± 2°`.
+- [x] **Linie & Entlang Pfad**: Modus `line` prägt den Umriss bzw. eine offene Helix auf die Zylinderoberfläche (`BRepAlgoAPI_Splitter`, Kantenlänge `31,4 mm`); „Entlang Pfad ziehen“ (`#wrap-to-sweep`) erzeugt einen `sweep`-Körper entlang der gewickelten 3D-Kurve.
+- [x] **Verlauf, Zeitleiste & Hilfe**: Unterdrücken, Marker zurückrollen, `Sketch.editItem`, `Model.dependencies`, `Explain.local`, `Commands.search('Wickeln')` und Hilfetext `wrapCyl` funktionieren fehlerfrei.
+- [ ] **Von Hand**: Im Browser eine Zylinderfläche anklicken, auf „Wickeln“ klicken, ein Rechteck und eine geschwungene Linie zeichnen und zwischen erhaben, vertieft und Linie mit „Entlang Pfad“ umschalten.
+
 ## Fehler melden
 
 ```

@@ -26,7 +26,7 @@ const Commands = (() => {
     { id: 'hideSel', group: 'Modell', label: 'Ausblenden / Alles einblenden', def: 'shift+h', run: () => { if (App.sel.length) Actions.hideSelected(); else Actions.showAll(); } },
     { id: 'invertSel', group: 'Modell', label: 'Auswahl umkehren', def: 'ctrl+shift+i', run: () => Actions.invertSelection() },
     { id: 'dupLinked', group: 'Modell', label: 'Verknüpft duplizieren', def: 'ctrl+shift+d', run: () => Actions.duplicateLinked() },
-    { id: 'editItem', group: 'Modell', label: 'Skizze bzw. Bauteil bearbeiten', def: 'e', run: () => { if (App.sel.length !== 1) return false; const f = Model.find(App.doc, App.sel[0]); if (!f) return false; if ((f.item.kind === 'extrude' || f.item.kind === 'revolve' || f.item.kind === 'sweep' || f.item.kind === 'rib') && f.item.p.sketch) Sketch.editItem(f.item.id); else if (f.item.kind === 'group' && App.doc.items.includes(f.item)) Comp.edit(f.item.id); } },
+    { id: 'editItem', group: 'Modell', label: 'Skizze bzw. Bauteil bearbeiten', def: 'e', run: () => { if (App.sel.length !== 1) return false; const f = Model.find(App.doc, App.sel[0]); if (!f) return false; if ((f.item.kind === 'extrude' || f.item.kind === 'revolve' || f.item.kind === 'sweep' || f.item.kind === 'rib' || f.item.kind === 'wrap') && f.item.p.sketch) Sketch.editItem(f.item.id); else if (f.item.kind === 'group' && App.doc.items.includes(f.item)) Comp.edit(f.item.id); } },
     { id: 'delete', group: 'Modell', label: 'Auswahl löschen', def: 'delete', run: () => { if (App.sel.length) Actions.remove(); else return false; } },
     { id: 'hole', group: 'Modell', label: 'Zwischen Körper und Loch wechseln', def: 'h', run: () => { if (App.sel.length) Actions.toggleRole(); else return false; } },
     { id: 'similar', group: 'Modell', label: 'Ähnliche auswählen', def: 'a', run: () => { if (App.sel.length || App.edges.length) Select.similar(); else return false; } },
@@ -177,6 +177,7 @@ const Commands = (() => {
     add('bool-int', 'Schnittmenge (Boolesch)', 'boolIntersect', 'boolesch schnittmenge', () => Features.boolean('intersect'), { group: 'Bearbeiten' });
     add('shell', 'Aushöhlen / Wandstärke', 'shell', 'wandstärke aushöhlen schale hohl gehäuse', () => { const f = Actions.selectedFace(); if (f) Features.shell(f); else UI.toast('Klick zuerst die Fläche an, die offen sein soll.', { icon: 'info' }); }, { group: 'Bearbeiten' });
     add('rib', 'Rippe anlegen (Versteifung aus Linie)', 'rib', 'rippe steg versteifung schräge gehäuse schale wand', () => Features.startRib(), { group: 'Bearbeiten' });
+    add('wrap-cyl', 'Um Zylinder wickeln (Prägung oder Linie)', 'wrap', 'wickeln zylinder prägen prägung erhaben vertieft gravieren linie kurve mantel abwickeln', () => Features.startWrap(), { group: 'Bearbeiten' });
     add('reffix', 'Kaputten Bezug neu wählen', 'warn', 'kaputt bezug neu wählen kante fläche warnung gelb rundung fase skizze', () => {
       const selIssue = App.sel.length ? RefFix.issuesOf(App.sel[0])[0] : null;
       const iss = selIssue || RefFix.allIssues()[0];

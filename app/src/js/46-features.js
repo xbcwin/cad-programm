@@ -18,8 +18,8 @@ const Features = (() => {
   }
   // Objekte in eine Feature-Gruppe im Ursprung ihrer Ebene packen
   function sharedFeatureOp(items) {
-    if (items.some((x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')))) {
-      UI.toast('Verschieben-, Skalieren- und Aufdicken-Schritte lassen sich nicht als Muster anlegen.', { icon: 'info' });
+    if (items.some((x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'wrap')) {
+      UI.toast('Verschieben-, Skalieren-, Aufdicken- und Wickel-Schritte lassen sich nicht als Muster anlegen.', { icon: 'info' });
       return { ok: false };
     }
     if (items.some((x) => x.kind === 'rib')) {
@@ -1021,7 +1021,7 @@ const Features = (() => {
     UI.pop(anchor || $('#center'), box);
   }
   // ---------- Verschieben / Drehen / Kopieren als Schritt (KP-08) ----------
-  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'mirrorStep';
+  const isModifierStep = (x) => (x.kind === 'transform' && !(x.p && x.p.copy)) || x.kind === 'scale' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new')) || x.kind === 'rib' || x.kind === 'wrap' || x.kind === 'mirrorStep';
   function insertAtMarker(doc, step) {
     const at = doc.rollback != null ? clamp(doc.rollback, 0, doc.items.length) : doc.items.length;
     doc.items.splice(at, 0, step);
@@ -1295,6 +1295,7 @@ const Features = (() => {
     if (!it) return false;
     if (it.op && it.op.target) return true;
     if (it.kind === 'rib') return true;
+    if (it.kind === 'wrap' && (!it.p || it.p.mode !== 'line')) return true;
     if (it.kind === 'thicken' && !(it.p && it.p.mode === 'new')) return true;
     if (it.kind === 'mirrorStep') return true;
     if (it.role === 'hole') return true;
@@ -1340,7 +1341,7 @@ const Features = (() => {
       const bid = found[0].item.id;
       const cand = App.doc.items.filter((x) => !x.suppressed && (
         (x.op && x.op.target === bid) ||
-        ((x.kind === 'rib' || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new'))) && x.p && x.p.target === bid)
+        ((x.kind === 'rib' || (x.kind === 'wrap' && (!x.p || x.p.mode !== 'line')) || (x.kind === 'thicken' && !(x.p && x.p.mode === 'new'))) && x.p && x.p.target === bid)
       ));
       if (cand.length) picked = [{ item: cand[cand.length - 1], parent: null, list: App.doc.items }];
     }
@@ -1598,6 +1599,276 @@ const Features = (() => {
     if (row.children.length) sec.append(row);
     sec.append(h('div', { class: 'hint-box', html: 'Spiegelt nur die gewählten Formschritte (z. B. eine Tasche, Erhöhung oder Rippe) direkt im selben Körper. Änderst du das Original, wandert das Spiegelbild automatisch mit.' }));
   }
+  // ---------- Wickeln um Zylinder (KP-34) ----------
+  function findCylFaceOnItem(id, faceIdx = null) {
+    const rId = App.mergedInto(id) || id;
+    const faces = App.results.get(rId)?.data?.faces || [];
+    if (faceIdx != null && faceIdx >= 0 && faces[faceIdx] && faces[faceIdx].t === 'CYLINDRE') {
+      return { rId, faceIdx, info: faces[faceIdx] };
+    }
+    const idx = faces.findIndex((f) => f && f.t === 'CYLINDRE' && Array.isArray(f.axis) && f.axis.length >= 6);
+    if (idx >= 0) return { rId, faceIdx: idx, info: faces[idx] };
+    return null;
+  }
+  function cylTargets(idx = Infinity) {
+    return App.doc.items.slice(0, idx).filter((x) => {
+      if (x.role === 'hole' || x.suppressed || isModifierStep(x) || (x.op && x.op.target)) return false;
+      return !!findCylFaceOnItem(x.id);
+    });
+  }
+  function wrapTangentPlane(targetId, faceInfo, pickPointWorld = null) {
+    const rId = App.mergedInto(targetId) || targetId;
+    const W = Model.worldMatrix(App.doc, rId);
+    const WInv = W.clone().invert();
+    const ax = Array.isArray(faceInfo.axis) && faceInfo.axis.length >= 6 ? faceInfo.axis : [0, 0, 0, 0, 0, 1];
+    const OLoc = new THREE.Vector3(ax[0], ax[1], ax[2]);
+    const ALoc = new THREE.Vector3(ax[3], ax[4], ax[5]).normalize();
+    if (Math.abs(ALoc.z) > 0.001 ? ALoc.z < 0 : Math.abs(ALoc.y) > 0.001 ? ALoc.y < 0 : ALoc.x < 0) ALoc.negate();
+    let refLoc = null;
+    if (pickPointWorld) {
+      const pw = Array.isArray(pickPointWorld) ? new THREE.Vector3(...pickPointWorld) : new THREE.Vector3(pickPointWorld.x, pickPointWorld.y, pickPointWorld.z);
+      const pLoc = pw.applyMatrix4(WInv).sub(OLoc);
+      pLoc.addScaledVector(ALoc, -pLoc.dot(ALoc));
+      if (pLoc.length() > 1e-4) refLoc = pLoc.normalize();
+    }
+    if (!refLoc) {
+      const cand = Math.abs(ALoc.z) > 0.9 ? new THREE.Vector3(0, -1, 0) : new THREE.Vector3(0, 0, 1);
+      cand.addScaledVector(ALoc, -cand.dot(ALoc));
+      if (cand.length() < 1e-4) cand.set(Math.abs(ALoc.y) < 0.9 ? 0 : 1, Math.abs(ALoc.y) < 0.9 ? -1 : 0, 0).addScaledVector(ALoc, -ALoc.dot(cand));
+      refLoc = cand.normalize();
+    }
+    const T0Loc = new THREE.Vector3().crossVectors(ALoc, refLoc).normalize();
+    const cLoc = Array.isArray(faceInfo.c) ? new THREE.Vector3(...faceInfo.c) : OLoc.clone();
+    const vMid = cLoc.clone().sub(OLoc).dot(ALoc);
+    const r = typeof faceInfo.r === 'number' && faceInfo.r > 0 ? faceInfo.r : 10;
+    const pSurfLoc = OLoc.clone().addScaledVector(ALoc, vMid).addScaledVector(refLoc, r);
+    const oW = pSurfLoc.applyMatrix4(W);
+    const xW = T0Loc.clone().transformDirection(W).normalize();
+    const nW = refLoc.clone().transformDirection(W).normalize();
+    const r6 = (a) => a.map((v) => round(v, 6));
+    const faceSpec = {
+      t: 'CYLINDRE',
+      r: round(r, 6),
+      c: r6(faceInfo.c || cLoc.toArray()),
+      axis: ax.map((v) => round(v, 6)),
+      refDir: r6(refLoc.toArray()),
+    };
+    const plane = { o: r6(oW.toArray()), x: r6(xW.toArray()), n: r6(nW.toArray()) };
+    return { plane, faceSpec };
+  }
+  function startWrap(face = null) {
+    if (App.ctx) { UI.toast('Wickeln gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return false; }
+    const f = face && face.info && face.info.t === 'CYLINDRE' ? face : Actions.selectedFace();
+    if (f && f.info && f.info.t === 'CYLINDRE') {
+      const tgt = resolveTopTarget(f.id);
+      if (!tgt || tgt.role === 'hole') { UI.toast('Klick eine äußere oder innere Zylinderfläche eines Körpers an.', { icon: 'info' }); return false; }
+      const { plane, faceSpec } = wrapTangentPlane(tgt.id, f.info, f.point || null);
+      Sketch.startOnPlaneObj(plane, { wrapCtx: { target: tgt.id, face: faceSpec, r: f.info.r } });
+      UI.toast('Zeichne die Form zum Wickeln um den Zylinder und klick „Fertig“.', { icon: 'info', ms: 4200 });
+      return true;
+    }
+    const selTgt = App.sel.length === 1 ? resolveTopTarget(App.sel[0]) : null;
+    const cyls = cylTargets();
+    if (!cyls.length) { UI.toast('Für „Wickeln“ braucht es zuerst einen Körper mit einer Zylinderfläche.', { icon: 'info' }); return false; }
+    if (selTgt && selTgt.role !== 'hole') {
+      const cf = findCylFaceOnItem(selTgt.id);
+      if (cf) {
+        const { plane, faceSpec } = wrapTangentPlane(selTgt.id, cf.info, null);
+        Sketch.startOnPlaneObj(plane, { wrapCtx: { target: selTgt.id, face: faceSpec, r: cf.info.r } });
+        UI.toast('Zeichne die Form zum Wickeln um den Zylinder und klick „Fertig“.', { icon: 'info', ms: 4200 });
+        return true;
+      }
+    }
+    stopPick();
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      const fi = hit && hit.faceIdx >= 0 ? App.results.get(hit.id)?.data?.faces?.[hit.faceIdx] : null;
+      const tgt = hit ? resolveTopTarget(hit.id) : null;
+      if (fi && fi.t === 'CYLINDRE' && tgt && tgt.role !== 'hole') {
+        stopPick();
+        const { plane, faceSpec } = wrapTangentPlane(tgt.id, fi, hit.point || null);
+        Sketch.startOnPlaneObj(plane, { wrapCtx: { target: tgt.id, face: faceSpec, r: fi.r } });
+        UI.toast('Zeichne die Form zum Wickeln um den Zylinder und klick „Fertig“.', { icon: 'info', ms: 4200 });
+        return;
+      }
+      UI.toast('Bitte klick auf eine runde Zylinderfläche.', { icon: 'info' });
+    };
+    const move = (e) => {
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      const fi = hit && hit.faceIdx >= 0 ? App.results.get(hit.id)?.data?.faces?.[hit.faceIdx] : null;
+      Viewer.highlightFace('hover', fi && fi.t === 'CYLINDRE' ? hit.id : null, fi && fi.t === 'CYLINDRE' ? hit.faceIdx : null);
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, move, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    Viewer.canvas.addEventListener('pointermove', move);
+    window.addEventListener('keydown', key, true);
+    UI.hint('<b>Zylinderfläche wählen:</b> Klick auf die runde Fläche, um die gewickelt werden soll. <b>Esc</b> bricht ab.');
+    return true;
+  }
+  function createWrap(opts = {}) {
+    if (App.ctx) { UI.toast('Wickeln gibt es auf der Hauptebene – beende zuerst die Bauteil-Bearbeitung.', { icon: 'info' }); return null; }
+    const tgt = opts.target ? resolveTopTarget(opts.target) : (resolveTopTarget(App.sel[0]) || cylTargets()[0] || null);
+    if (!tgt || tgt.role === 'hole') { UI.toast('Kein Zielkörper mit Zylinderfläche gefunden.', { icon: 'info' }); return null; }
+    let faceSpec = opts.face || null;
+    if (!faceSpec) {
+      const cf = findCylFaceOnItem(tgt.id);
+      if (!cf) { UI.toast('Der gewählte Körper hat keine Zylinderfläche.', { icon: 'info' }); return null; }
+      faceSpec = wrapTangentPlane(tgt.id, cf.info, null).faceSpec;
+    }
+    const p = {
+      target: tgt.id,
+      face: faceSpec,
+      sketch: opts.sketch,
+      mode: opts.mode === 'deboss' || opts.mode === 'line' ? opts.mode : 'emboss',
+      depth: opts.depth ?? 2,
+      angle: opts.angle ?? 0,
+      shiftY: opts.shiftY ?? 0,
+      rot: opts.rot ?? 0,
+      flip: !!opts.flip,
+    };
+    let step;
+    App.change('Wickeln angelegt', (doc) => {
+      step = Model.newItem('wrap', p, { name: opts.name || 'Wickeln', color: tgt.color, role: 'solid', mat: tgt.mat });
+      insertAtMarker(doc, step);
+    });
+    if (step) App.select([step.id]);
+    return step || null;
+  }
+  function pickWrapFace(stepId) {
+    stopPick();
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      if (hit && hit.id !== stepId && hit.faceIdx >= 0) {
+        const tgt = resolveTopTarget(hit.id);
+        const fi = App.results.get(hit.id)?.data?.faces?.[hit.faceIdx];
+        if (tgt && tgt.role !== 'hole' && fi && fi.t === 'CYLINDRE') {
+          stopPick();
+          const { faceSpec } = wrapTangentPlane(tgt.id, fi, hit.point || null);
+          App.change('Zylinderfläche für Wickeln gewählt', (doc) => {
+            const f = Model.find(doc, stepId); if (!f) return false;
+            f.item.p.target = tgt.id;
+            f.item.p.face = faceSpec;
+          });
+          UI.toast('Zylinderfläche aktualisiert.', { icon: 'check' });
+          return;
+        }
+      }
+      UI.toast('Bitte klick auf eine Zylinderfläche eines Körpers.', { icon: 'info' });
+    };
+    const move = (e) => {
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, noEdges: true });
+      const fi = hit && hit.faceIdx >= 0 ? App.results.get(hit.id)?.data?.faces?.[hit.faceIdx] : null;
+      Viewer.highlightFace('hover', fi && fi.t === 'CYLINDRE' ? hit.id : null, fi && fi.t === 'CYLINDRE' ? hit.faceIdx : null);
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); Panels.renderRight(); } };
+    picking = { down, move, key };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    Viewer.canvas.addEventListener('pointermove', move);
+    window.addEventListener('keydown', key, true);
+    UI.hint('<b>Zylinderfläche wählen:</b> Klick auf die gewünschte Zylinderfläche. <b>Esc</b> bricht ab.');
+  }
+  function sweepFromWrap(wrapId, opts = {}) {
+    const wf = Model.find(App.doc, wrapId);
+    if (!wf || wf.item.kind !== 'wrap') { UI.toast('Wähle zuerst einen Wickel-Schritt im Modus „Linie“.', { icon: 'info' }); return null; }
+    if (!wf.item.p || wf.item.p.mode !== 'line') { UI.toast('Für „Entlang Pfad“ muss der Wickel-Schritt im Modus „Linie für weitere Schritte“ stehen.', { icon: 'info' }); return null; }
+    let step;
+    App.change('Entlang gewickelter Linie gezogen', (doc) => {
+      const idx = doc.items.findIndex((x) => x.id === wrapId);
+      const tgt = Model.find(doc, wf.item.p.target);
+      const p = {
+        wrapId,
+        shape: opts.shape || 'circle',
+        d: opts.d ?? 2,
+        w: opts.w ?? 3,
+        h: opts.h ?? 2,
+        wall: opts.wall ?? 0,
+      };
+      step = Model.newItem('sweep', p, { name: opts.name || 'Entlang Pfad (Wickeln)', color: tgt ? tgt.item.color : wf.item.color });
+      if (opts.op) step.op = { ...opts.op };
+      const at = idx >= 0 ? idx + 1 : doc.items.length;
+      doc.items.splice(at, 0, step);
+      if (doc.rollback != null && at <= doc.rollback) doc.rollback++;
+    });
+    if (step) {
+      App.select([step.id]);
+      UI.toast('Querschnitt entlang der gewickelten Linie gezogen. Form und Größe stellst du rechts ein.', { icon: 'check' });
+    }
+    return step || null;
+  }
+  function renderWrap(it, sec, setP) {
+    const p = it.p || {};
+    const V = Model.vars(App.doc).v;
+    const idx = App.doc.items.indexOf(it);
+    const targets = cylTargets(idx >= 0 ? idx : App.doc.items.length);
+    const opts = targets.map((x) => [x.id, Model.label(x)]);
+    if (p.target && !targets.some((x) => x.id === p.target)) {
+      const f = Model.find(App.doc, p.target);
+      opts.unshift([p.target, f ? Model.label(f.item) + ' (inaktiv)' : 'Fehlender Körper']);
+    }
+    const mode = p.mode === 'deboss' || p.mode === 'line' ? p.mode : 'emboss';
+    const fl = h('div', { class: 'fields' });
+    if (opts.length) {
+      fl.append(UI.selectField({
+        id: 'wrap-target', label: 'Zielkörper', value: p.target || '', options: opts,
+        onChange: (v) => App.change('Zielkörper gewählt', (doc) => {
+          const item = Model.find(doc, it.id).item;
+          item.p.target = v;
+          const cf = findCylFaceOnItem(v);
+          if (cf) item.p.face = wrapTangentPlane(v, cf.info, null).faceSpec;
+        }),
+      }));
+    }
+    fl.append(UI.selectField({
+      id: 'wrap-mode', label: 'Art', value: mode,
+      options: [['emboss', 'Prägung erhaben (+)'], ['deboss', 'Prägung vertieft (−)'], ['line', 'Linie für weitere Schritte']],
+      onChange: (v) => App.change('Wickel-Art geändert', (doc) => { Model.find(doc, it.id).item.p.mode = v; }),
+    }));
+    if (mode !== 'line') {
+      fl.append(UI.numField({ id: 'wrap-depth', label: mode === 'deboss' ? 'Tiefe' : 'Höhe', value: p.depth ?? 2, min: 0.05, unit: 'mm', onCommit: (v) => setP('depth', v) }));
+    }
+    fl.append(UI.numField({ id: 'wrap-angle', label: 'Startwinkel', value: p.angle ?? 0, unit: '°', onCommit: (v) => setP('angle', v) }));
+    fl.append(UI.numField({ id: 'wrap-shift', label: 'Axial verschieben', value: p.shiftY ?? 0, unit: 'mm', onCommit: (v) => setP('shiftY', v) }));
+    fl.append(UI.numField({ id: 'wrap-rot', label: 'Skizze drehen', value: p.rot ?? 0, unit: '°', onCommit: (v) => setP('rot', v) }));
+    sec.append(fl);
+    const flp = h('label', { class: 'check', style: { marginTop: '6px' } }, h('input', { type: 'checkbox', id: 'wrap-flip', checked: !!p.flip }), 'Spiegeln');
+    flp.querySelector('input').onchange = (e) => App.change('Wickeln gespiegelt', (doc) => { Model.find(doc, it.id).item.p.flip = e.target.checked; });
+    sec.append(flp);
+
+    const aInfo = Model.wrapAngleInfo ? Model.wrapAngleInfo(it, V) : null;
+    if (aInfo) {
+      sec.append(h('div', { class: 'mini-row', id: 'wrap-angle-info' },
+        h('span', { class: 'grow' }, `Umfangswinkel (Ø ${Units.fmtLenU(aInfo.radius * 2, 1)})`),
+        h('b', { class: 'mono' }, `${fmt(aInfo.deg, 1)}° (${fmt(aInfo.pct, 1)} %)`)));
+    }
+
+    const row = h('div', { class: 'btn-row', style: { marginTop: '8px' } });
+    const eb = h('button', { type: 'button', class: 'btn', id: 'wrap-edit-sketch' }); eb.innerHTML = icon('edit') + 'Skizze bearbeiten';
+    eb.onclick = () => Sketch.editItem(it.id);
+    row.append(eb);
+    const pb = h('button', { type: 'button', class: 'btn small', id: 'wrap-pick-face' }); pb.innerHTML = icon('cursor') + 'Andere Zylinderfläche';
+    pb.onclick = () => pickWrapFace(it.id);
+    row.append(pb);
+    if (mode === 'line') {
+      const sb = h('button', { type: 'button', class: 'btn small primary', id: 'wrap-to-sweep' }); sb.innerHTML = icon('sweep') + 'Entlang Pfad ziehen';
+      sb.onclick = () => sweepFromWrap(it.id);
+      row.append(sb);
+    }
+    if (p.target && Model.find(App.doc, p.target)) {
+      const gb = h('button', { type: 'button', class: 'btn small', id: 'wrap-goto' }); gb.innerHTML = icon('pointer') + 'Zielkörper wählen';
+      gb.onclick = () => App.select([p.target]);
+      row.append(gb);
+    }
+    sec.append(row);
+    sec.append(h('div', { class: 'hint-box', html: 'Legt die ebene Skizze exakt nach Bogenlänge (ohne Verzerrung) um den Zylinder – erhaben, vertieft oder als Linie für weitere Schritte.' }));
+  }
+
   const isOp = (it) => !!(it && it.kind === 'group' && it.p && it.p.op);
-  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
+  return { togglePatternSkip, resetPatternSkip, syncPatternMarkers, placePatternMarkers, startRib, renderRib, ribTargets, startWrap, createWrap, pickWrapFace, sweepFromWrap, renderWrap, cylTargets, findCylFaceOnItem, wrapTangentPlane, mirrorStep, setMirrorStepPlane, pickMirrorStepPlane, renderMirrorStep, canMirrorStep, pickDatumPlaneAt, setRevolveToFace, pickRevolveFace, transform, renderTransform, scale, renderScale, thicken, renderThicken, pickThickenFace, guessThreadSize, threadOnFace, markThread, updateThread, removeThread, makeThreadReal, threadPop, route3d, routeAppend, stopRoute, finishRoute, get routing() { return route ? { pts: route.pts.map((q) => q.slice()), d: route.d } : null; }, setPatternAxis, pickAxis, pickAxisThen, makeFaceRef, pickTargetFaceAt, pickFaceThen, pickExtrudeFace, setExtrudeToFace, autoFlipDirForFace, get picking() { return !!picking || !!route; }, mirrorAtFace, patternPath, pathFromSketch, pattern, split, boolean, shell, renderOp, sizeText, isOp, NAMES };
 })();

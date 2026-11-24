@@ -30,6 +30,7 @@ const KINDS = {
   scale: { label: 'Skalieren', params: [] },
   thicken: { label: 'Aufdicken', params: [] },
   rib: { label: 'Rippe', params: [] },
+  wrap: { label: 'Wickeln', params: [] },
   mirrorStep: { label: 'Schritt spiegeln', params: [] },
 };
 const PRIMITIVE_ORDER = ['box', 'cylinder', 'sphere', 'cone', 'pyramid', 'wedge', 'tube', 'torus', 'prism', 'hemisphere'];
@@ -253,6 +254,8 @@ const Model = (() => {
       if (it.kind === 'scale' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'skaliert' });
       if (it.kind === 'thicken' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: it.p.mode === 'new' ? 'Platte von Fläche aus' : 'dickt Fläche auf von' });
       if (it.kind === 'rib' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'Rippe an' });
+      if (it.kind === 'wrap' && it.p && it.p.target) out.push({ from: me, to: top(it.p.target), what: 'wickelt um' });
+      if (it.kind === 'sweep' && it.p && it.p.wrapId) out.push({ from: me, to: top(it.p.wrapId), what: 'folgt gewickelter Linie von' });
       if (it.kind === 'mirrorStep' && it.p) {
         for (const fid of Array.isArray(it.p.features) ? it.p.features : []) if (fid) out.push({ from: me, to: top(fid), what: 'spiegelt Schritt' });
         if (it.p.plane === 'FACE' && it.p.faceRef && it.p.faceRef.id) out.push({ from: me, to: top(it.p.faceRef.id), what: 'spiegelt an Fläche von' });
@@ -322,6 +325,7 @@ const Model = (() => {
     else if (it.kind === 'loft') o.p = loftParams(it, V);
     else if (it.kind === 'sweep') o.p = sweepParams(it, V);
     else if (it.kind === 'rib') o.p = ribParams(it, V);
+    else if (it.kind === 'wrap') o.p = wrapParams(it, V);
     else if (it.kind === 'import') {
       o.p = { fmt: it.p.fmt, scale: num(it.p.scale, V, 1) };
       if (it.p.blobId) o.p.blobId = it.p.blobId;
@@ -439,6 +443,85 @@ const Model = (() => {
       depth: Math.max(0, num(p.depth, V, 0)),
       draft: num(p.draft, V, 0),
     };
+  }
+  function wrapParams(it, V) {
+    const p = it.p || {};
+    const ents = p.sketch ? Solver.cached(p.sketch, V).ents : [];
+    const regs = SK.regions(ents);
+    const regions = regs.map((r) => ({ outer: r.outer.k, holes: r.holes.map((h) => h.k) }));
+    const chains = SK.chains(ents).map((ch) => ({ segs: ch.segs }));
+    return {
+      target: p.target || null,
+      face: p.face || null,
+      regions,
+      chains,
+      mode: p.mode === 'deboss' || p.mode === 'line' ? p.mode : 'emboss',
+      depth: num(p.depth, V, 2),
+      angle: num(p.angle, V, 0),
+      shiftY: num(p.shiftY, V, 0),
+      rot: num(p.rot, V, 0),
+      flip: !!p.flip,
+    };
+  }
+  function wrapAngleInfo(itOrP, V = {}, doc = null) {
+    const p = (itOrP && itOrP.p) ? itOrP.p : (itOrP || {});
+    const sk = p.sketch;
+    if (!sk) return null;
+    const ents = typeof Solver !== 'undefined' ? Solver.cached(sk, V).ents : (sk.ents || []);
+    const rotRad = (num(p.rot, V, 0) * Math.PI) / 180;
+    const flip = !!p.flip;
+    let minX = Infinity, maxX = -Infinity;
+    const addPt = (q) => {
+      if (!q) return;
+      let x = flip ? -q[0] : q[0], y = q[1];
+      if (Math.abs(rotRad) > 1e-9) x = x * Math.cos(rotRad) - y * Math.sin(rotRad);
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+    };
+    const regs = typeof SK !== 'undefined' ? SK.regions(ents) : [];
+    for (const r of regs) {
+      if (r.outer && r.outer.poly) for (const q of r.outer.poly) addPt(q);
+    }
+    if (!isFinite(minX)) {
+      const chains = typeof SK !== 'undefined' ? SK.chains(ents) : [];
+      for (const ch of chains) for (const s of ch.segs || []) for (const q of SK.segPoints(s)) addPt(q);
+    }
+    if (!isFinite(minX)) {
+      const b = typeof SK !== 'undefined' ? SK.bounds(ents) : null;
+      if (b) { addPt([b[0], b[1]]); addPt([b[2], b[3]]); addPt([b[0], b[3]]); addPt([b[2], b[1]]); }
+    }
+    if (!isFinite(minX)) return null;
+    const width = Math.max(0, maxX - minX);
+    let R = null;
+    const rr = itOrP && itOrP.id && typeof App !== 'undefined' && App.resolvedOf ? App.resolvedOf(itOrP.id) : null;
+    if (rr && rr.radius > 1e-6) R = rr.radius;
+    const d = doc || (typeof App !== 'undefined' ? App.doc : null);
+    if (R == null && p.target && typeof App !== 'undefined' && App.results) {
+      let tid = p.target;
+      while (tid && App.mergedInto && App.mergedInto(tid)) tid = App.mergedInto(tid);
+      const res = App.results.get(tid) || App.results.get(p.target);
+      const cyls = (res && res.data && res.data.faces || []).filter((f) => f.t === 'CYLINDRE' && typeof f.r === 'number');
+      if (cyls.length === 1) R = cyls[0].r;
+      else if (cyls.length > 1 && p.face && typeof p.face.r === 'number') {
+        let best = cyls[0], bd = Infinity;
+        for (const fc of cyls) {
+          const dd = Math.abs(fc.r - p.face.r) * 10 + (p.face.c && fc.c ? Math.hypot(fc.c[0] - p.face.c[0], fc.c[1] - p.face.c[1], fc.c[2] - p.face.c[2]) : 0);
+          if (dd < bd) { bd = dd; best = fc; }
+        }
+        R = best.r;
+      } else if (cyls.length) {
+        R = cyls[0].r;
+      }
+      if (R == null && d) {
+        const tf = find(d, p.target);
+        if (tf && (tf.item.kind === 'cylinder' || tf.item.kind === 'tube') && tf.item.p) R = num(tf.item.p.d, V, 20) / 2;
+      }
+    }
+    if (R == null && p.face && typeof p.face.r === 'number') R = p.face.r;
+    if (!(R > 1e-6)) return null;
+    const deg = (width / R) * (180 / Math.PI);
+    const pct = (width / (2 * Math.PI * R)) * 100;
+    return { width, radius: R, deg, pct };
   }
   function mirrorStepParams(it, V) {
     const p = it.p || {};
@@ -717,6 +800,14 @@ const Model = (() => {
   // Entlang Pfad (Sweep): längster offener Zug der Skizze, Querschnitt Kreis oder Rechteck, optional hohl
   function sweepParams(it, V) {
     const p = it.p || {};
+    if (p.wrapId) {
+      let prof = null;
+      if (p.shape === 'sketch' && p.prof) {
+        const regs = SK.regions(Solver.cached(p.prof, V).ents).sort((a, b) => b.area - a.area);
+        if (regs.length) { const Lp = regs[0].outer; let cx = 0, cy = 0; for (const q of Lp.poly) { cx += q[0]; cy += q[1]; } cx /= Lp.poly.length; cy /= Lp.poly.length; prof = { outer: Lp.k, holes: regs[0].holes.map((h) => h.k), c: [cx, cy] }; }
+      }
+      return { wrapId: p.wrapId, prof, shape: p.shape === 'rect' ? 'rect' : p.shape === 'sketch' && prof ? 'sketch' : 'circle', d: num(p.d, V, 2), w: num(p.w, V, 3), h: num(p.h, V, 2), wall: num(p.wall, V, 0) };
+    }
     if (p.path3d && Array.isArray(p.path3d.pts)) {
       // Pfad im Raum statt Skizze
       const pts = path3dPoints(p.path3d, V);
@@ -793,7 +884,7 @@ const Model = (() => {
     if (!it) return null;
     const pb = primitiveBox(it.kind, resolveP(it.p, V));
     if (pb) return pb;
-    if ((it.kind === 'extrude' || it.kind === 'rib' || it.kind === 'revolve') && it.p && it.p.sketch) {
+    if ((it.kind === 'extrude' || it.kind === 'rib' || it.kind === 'wrap' || it.kind === 'revolve') && it.p && it.p.sketch) {
       const ents = typeof Solver !== 'undefined' ? Solver.cached(it.p.sketch, V).ents : it.p.sketch.ents || [];
       const b = typeof SK !== 'undefined' ? SK.bounds(ents) : null;
       if (b) {
@@ -868,6 +959,13 @@ const Model = (() => {
         const t = f(p.thickness ?? 2);
         const dr = Math.abs(p.draft || 0) > 1e-6 ? ' · ' + fmt(p.draft, 1) + '°' : '';
         return `${t}${u} dick${dr}`;
+      }
+      case 'wrap': {
+        const info = wrapAngleInfo(it, V);
+        const angTxt = info ? ` · ${fmt(info.deg, 1)}°` : '';
+        if (p.mode === 'line') return `Linie${angTxt}`;
+        const d = f(p.depth ?? 2);
+        return `${p.mode === 'deboss' ? '−' : '+'}${d}${u}${angTxt}`;
       }
       case 'scale': return it.p && it.p.uniform === false ? `×${fmt(p.sx ?? 1, 2)} / ${fmt(p.sy ?? 1, 2)} / ${fmt(p.sz ?? 1, 2)}` : `×${fmt(p.s ?? 1, 2)}`;
       case 'thicken': return `${f(p.t ?? 2)}${u} · ${{ out: 'außen', in: 'innen', mid: 'mittig' }[(it.p && it.p.dir) || 'out'] || 'außen'}`;
@@ -1007,7 +1105,7 @@ const Model = (() => {
     if (mode === 'into') {
       if (dst.item.kind !== 'group' || srcs.length !== 1) return { ok: false, reason: '' };
       const s = srcs[0];
-      if ((s.item.op && s.item.op.target) || s.item.kind === 'transform' || s.item.kind === 'rib' || (!s.parent && s.item.kind === 'mirrorStep')) {
+      if ((s.item.op && s.item.op.target) || s.item.kind === 'transform' || s.item.kind === 'rib' || s.item.kind === 'wrap' || (!s.parent && s.item.kind === 'mirrorStep')) {
         return { ok: false, reason: 'Dieser Schritt muss auf oberster Ebene bleiben.' };
       }
       if (!s.parent && !dst.parent) {
@@ -1211,6 +1309,6 @@ const Model = (() => {
     if (aPos != null && aNeg != null) return aNeg < aPos;
     return aPos == null && aNeg != null;
   }
-  return { matchBodies, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, railStart, railSections, bez3, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, loftParams, loftPathAngles, pathPatternParams, pathPlaces, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, evalInfo, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
+  return { matchBodies, folderOf, cleanFolders, validateMove, validateTopOrder, revolveFrame, revolveHitAngle, revolveAutoFlip, dependencies, syncLinks, setSceneSpan, get sceneSpan() { return sceneSpan; }, OPS, path3dPoints, path3dBake, path3dSetRule, railStart, railSections, bez3, patternInstances, patternMatrices, instanceMatrices, itemLocalBox, loftParams, loftPathAngles, pathPatternParams, pathPlaces, wrapAngleInfo, useVars, tnum, tNumeric, newDoc, newItem, walk, find, topOf, parentsOf, localMatrix, worldMatrix, parentWorld, setFromMatrix, vars, evalInfo, num, isExpr, resolveP, kernelScene, kernelItem, activeItems, isActive, primitiveBox, label, sizeText, countItems, reId, migrate, matArr, T0 };
 })();
 

@@ -888,5 +888,10 @@
     "tip": "Nachschlagetabelle für Formeln anlegen",
     "hilfe": "Legt unter „Maße“ eine kleine Tabelle mit Schlüssel und Wert an – zum Beispiel „Schraube“ mit den Zeilen M3 = 3,4 und M5 = 5,5. In jeder Formel holst du den Wert mit tabelle(Schraube; M5). Außerdem verstehen Formeln wenn(Bedingung; dann; sonst) mit < > <= >= == != sowie runden(x; Stellen), aufrunden und abrunden.",
     "tipp": "Mehrere Angaben in Funktionen trennst du mit Semikolon ; – zum Beispiel runden(2,345; 1) oder wenn(b > 50; 3; 2)."
+  },
+  "wrapCyl": {
+    "tip": "Ebene Skizze ohne Verzerrung um einen Zylinder wickeln",
+    "hilfe": "Legt deine 2D-Skizze exakt nach Bogenlänge um eine gewählte Zylinderfläche – wahlweise als erhabene oder vertiefte Prägung oder als Linie auf der Oberfläche (auch für „Entlang Pfad“). Eine Breite von genau π × Ø umschließt den ganzen Umfang (360°), die halbe Breite genau 180°.",
+    "tipp": "Wähle im Modus „Linie“ danach „Entlang Pfad ziehen“, um zum Beispiel eine schräge Nut oder eine Spirale um den Zylinder zu führen."
   }
 }
