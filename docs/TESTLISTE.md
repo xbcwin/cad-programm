@@ -2191,6 +2191,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Tablet-Kontext auf Deutsch**: Ein Touch-Kontext mit `locale='de-DE'` startet im `tablet`-Modus mit `I18n.lang === 'de'` und „Leeres Projekt“ (`t_a080_tablet`, `[F-11241729]`).
 - [ ] **Von Hand**: Bei einem schweren „Mach alles als Verbund“-Auftrag prüfen, ob die Toast-Meldung nach Abschluss der Berechnung noch sichtbar bleibt und sich danach sauber ausblendet.
 
+## Teile mit der Maus bewegen, Verbindungen rechnen mit (Auto [A-091], BG-09)
+
+- [x] **Drehgelenk beim Ziehen mit der Maus**: Zwei Arme über ein Drehgelenk verbunden (`Arm A` festgesetzt, `Arm B` frei); Ziehen am freien Ende von `Arm B` dreht den Arm um die Gelenkachse, der Gelenkpunkt bleibt exakt an seiner Stelle (`< 0,01 mm`), der festgesetzte Arm bewegt sich nicht.
+- [x] **Anschlag, Lage-Felder & Rückgängig**: Ziehen über den Anschlag (`+120°`) stoppt exakt am Anschlag; Änderungen über `#t-x` projizieren zurück auf das Gelenk, und `Strg+Z` stellt die vorige Stellung wieder her.
+- [x] **3er-Kette & Schiebegelenk**: Ziehen am mittleren Arm nimmt den dritten Arm samt zweiter Gelenkachse exakt mit; Ziehen am dritten Arm lässt den mittleren Arm stehen. Ein Teil am Schiebegelenk gleitet beim schrägen Ziehen nur entlang der Führungsachse, während Ziehen der ungesperrten Schiene das verbundene Teil mitnimmt.
+- [x] **Festgesetztes Kind (umgekehrtes Ziehen)**: Ist das Kind-Teil (`Arm B`) festgesetzt und wird das Elternteil (`Arm A`) gezogen, bleibt `Arm B` exakt stehen, während `Arm A` um das Gelenk dreht.
+- [ ] **Von Hand**: Im Browser zwei oder drei Teile über Dreh-, Schiebe- und Kugelgelenke verketten, am freien Ende mit der Maus ziehen (inkl. sichtbarem Gelenk-Overlay während des Ziehens) und prüfen, dass sich alles flüssig ohne Ruckeln mitbewegt.
+
 ## Fehler melden
 
 ```

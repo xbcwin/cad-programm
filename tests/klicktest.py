@@ -18748,6 +18748,258 @@ def t_a089_verbindungen_winkel_mittig(p):
     return [ok1, ok2, ok3, ok4, ok5]
 
 
+# ---------- A-091: Teile mit der Maus bewegen, Verbindungen rechnen mit (BG-09) ----------
+def t_a091_ziehen_mit_verbindungen(p):
+    # 1. Zwei Arme mit Drehgelenk, Arm A festgesetzt, freies Ende von Arm B ziehen -> Arm B dreht um Gelenk, Gelenkpunkt bleibt stehen
+    p.empty()
+    ids = p.ev("""
+      App.change('Zwei Arme mit Drehgelenk', (d) => {
+        const a = Model.newItem('box', { w: 40, d: 10, h: 6 }, { name: 'Arm A' });
+        a.locked = true;
+        const b = Model.newItem('box', { w: 40, d: 10, h: 6 }, { name: 'Arm B' });
+        b.t.x = 40;
+        d.items.push(a, b);
+      });
+      const r = Joints.add(App.doc.items[0].id, App.doc.items[1].id, [20, 0, 3], [0, 0, 1], { min: -120, max: 120 });
+      App.clearSelection();
+      return { ids: [App.doc.items[0].id, App.doc.items[1].id], ok: r && r.ok };
+    """)
+    warte_rechnen(p, 25)
+    p.ev("const c=Viewer.controls.target; Viewer.moveCamera(c.clone().set(35, -45, 130), c.clone().set(35, 0, 3), null, false); Viewer.renderNow();")
+    p.wait(250)
+
+    def drag_world(p0, p1, steps=10):
+        s0 = world_screen(p, p0[0], p0[1], p0[2])
+        s1 = world_screen(p, p1[0], p1[1], p1[2])
+        p.pg.mouse.move(s0[0], s0[1])
+        p.pg.mouse.down()
+        p.pg.mouse.move(s1[0], s1[1], steps=steps)
+        p.pg.mouse.up()
+        warte_rechnen(p, 20)
+
+    def arm_metrics(bid, local_joint, local_tip, world_joint):
+        return p.ev("""
+          const V3 = window.__masswerk.THREE.Vector3;
+          const W = Model.worldMatrix(App.doc, arg.bid);
+          const jp = new V3(...arg.lj).applyMatrix4(W);
+          const tp = new V3(...arg.lt).applyMatrix4(W);
+          const wj = new V3(...arg.wj);
+          return {
+            jointErr: jp.distanceTo(wj),
+            radius: tp.distanceTo(wj),
+            tip: tp.toArray(),
+            ang: (App.doc.joints || [])[0]?.ang ?? null,
+          };
+        """, {'bid': bid, 'lj': local_joint, 'lt': local_tip, 'wj': world_joint})
+
+    tip0 = arm_metrics(ids['ids'][1], [-20, 0, 3], [20, 0, 3], [20, 0, 3])['tip']
+    # Festgesetzter Arm A darf sich beim Ziehen nicht bewegen
+    t_a0 = p.ev("return { ...App.doc.items[0].t };")
+    drag_world([0, 0, 6], [25, 25, 6], steps=8)
+    t_a1 = p.ev("return { ...App.doc.items[0].t };")
+
+    # Freies Ende von Arm B (bei x=56, y=0, z=6) Richtung +65° ziehen
+    p.ev("App.clearSelection();")
+    p.wait(100)
+    drag_world([56, 0, 6], [35, 33, 6], steps=12)
+    m1 = arm_metrics(ids['ids'][1], [-20, 0, 3], [20, 0, 3], [20, 0, 3])
+    t_a2 = p.ev("return { ...App.doc.items[0].t };")
+    tip_move1 = math.sqrt(sum((m1['tip'][k] - tip0[k]) ** 2 for k in range(3)))
+    ok1 = (
+        ids['ok'] is True
+        and m1['ang'] is not None and 25.0 < m1['ang'] < 100.0
+        and m1['jointErr'] < 0.01
+        and abs(m1['radius'] - 40.0) < 0.05
+        and tip_move1 > 15.0
+        and near([t_a1['x'], t_a1['y'], t_a1['z'], t_a1['rz']], [t_a0['x'], t_a0['y'], t_a0['z'], t_a0['rz']], 1e-6)
+        and near([t_a2['x'], t_a2['y'], t_a2['z'], t_a2['rz']], [t_a0['x'], t_a0['y'], t_a0['z'], t_a0['rz']], 1e-6)
+    )
+
+    # 2. Über Anschlag (+120°) hinaus ziehen -> stoppt bei 120°; Lage-Feld hält Gelenkpunkt; Rückgängig geht zurück
+    ang_before_stop = m1['ang']
+    p.ev("App.clearSelection();")
+    p.wait(100)
+    # Aktuelle Oberseitenmitte nahe freiem Ende von Arm B (local [16, 0, 6]) nach (-20, 36, 6) (>150°) ziehen
+    grab1 = p.ev("""
+      const V3 = window.__masswerk.THREE.Vector3;
+      const W = Model.worldMatrix(App.doc, arg);
+      return new V3(16, 0, 6).applyMatrix4(W).toArray();
+    """, ids['ids'][1])
+    drag_world(grab1, [-20, 20, 6], steps=14)
+    m_stop = arm_metrics(ids['ids'][1], [-20, 0, 3], [20, 0, 3], [20, 0, 3])
+
+    p.pg.locator('canvas').first.focus()
+    p.pg.keyboard.press('Control+z')
+    warte_rechnen(p, 20)
+    m_undo = arm_metrics(ids['ids'][1], [-20, 0, 3], [20, 0, 3], [20, 0, 3])
+
+    p.ev("App.select([arg])", ids['ids'][1])
+    p.wait(300)
+    cur_tx = p.ev("return Model.find(App.doc, arg).item.t.x", ids['ids'][1])
+    field(p, '#t-x', round(cur_tx + 25, 2))
+    warte_rechnen(p, 20)
+    m_field = arm_metrics(ids['ids'][1], [-20, 0, 3], [20, 0, 3], [20, 0, 3])
+    ok2 = (
+        abs(m_stop['ang'] - 120.0) < 0.05
+        and m_stop['jointErr'] < 0.01
+        and abs(m_undo['ang'] - ang_before_stop) < 0.1
+        and m_undo['jointErr'] < 0.01
+        and m_field['jointErr'] < 0.01
+    )
+
+    # 3. 3er-Kette: Arm C hängt per Drehgelenk an Arm B -> Arm B ziehen nimmt Arm C mit; Arm C ziehen lässt Arm B stehen
+    p.ev("Start.openNewTab(Model.newDoc('Kette-Test'))")
+    p.wait(350)
+    cids = p.ev("""
+      App.change('3er-Kette', (d) => {
+        const a = Model.newItem('box', { w: 40, d: 10, h: 6 }, { name: 'Arm A' });
+        a.locked = true;
+        const b = Model.newItem('box', { w: 40, d: 10, h: 6 }, { name: 'Arm B' });
+        b.t.x = 40;
+        const c = Model.newItem('box', { w: 30, d: 10, h: 6 }, { name: 'Arm C' });
+        c.t.x = 75;
+        d.items.push(a, b, c);
+      });
+      Joints.add(App.doc.items[0].id, App.doc.items[1].id, [20, 0, 3], [0, 0, 1], { min: -120, max: 120 });
+      Joints.add(App.doc.items[1].id, App.doc.items[2].id, [60, 0, 3], [0, 0, 1], { min: -120, max: 120 });
+      App.clearSelection();
+      return App.doc.items.map(x => x.id);
+    """)
+    warte_rechnen(p, 25)
+    p.ev("const c=Viewer.controls.target; Viewer.moveCamera(c.clone().set(40, -60, 210), c.clone().set(40, 25, 3), null, false); Viewer.renderNow();")
+    p.wait(250)
+
+    # Arm B bei (50, 0, 6) ziehen -> Arm C und j2.ao wandern exakt mit
+    drag_world([50, 0, 6], [38, 25, 6], steps=10)
+    chain_b = p.ev("""
+      const V3 = window.__masswerk.THREE.Vector3;
+      const Wb = Model.worldMatrix(App.doc, arg[1]), Wc = Model.worldMatrix(App.doc, arg[2]);
+      const tipB = new V3(20, 0, 3).applyMatrix4(Wb);
+      const baseC = new V3(-15, 0, 3).applyMatrix4(Wc);
+      const j2ao = new V3(...App.doc.joints[1].ao);
+      return {
+        ang1: App.doc.joints[0].ang,
+        ang2: App.doc.joints[1].ang,
+        errB2: tipB.distanceTo(j2ao),
+        errC2: baseC.distanceTo(j2ao),
+        wbMat: Wb.elements.slice(),
+        j2ao: j2ao.toArray(),
+      };
+    """, cids)
+
+    # Jetzt freies Ende von Arm C (local [12, 0, 6]) ziehen -> Arm C dreht um j2.ao, Arm B bleibt stehen
+    p.ev("App.clearSelection();")
+    p.wait(100)
+    grab_c = p.ev("""
+      const V3 = window.__masswerk.THREE.Vector3;
+      return new V3(12, 0, 6).applyMatrix4(Model.worldMatrix(App.doc, arg)).toArray();
+    """, cids[2])
+    drag_world(grab_c, [grab_c[0] - 18, grab_c[1] + 22, grab_c[2]], steps=10)
+    chain_c = p.ev("""
+      const V3 = window.__masswerk.THREE.Vector3;
+      const Wb = Model.worldMatrix(App.doc, arg.ids[1]), Wc = Model.worldMatrix(App.doc, arg.ids[2]);
+      const baseC = new V3(-15, 0, 3).applyMatrix4(Wc);
+      const j2ao = new V3(...App.doc.joints[1].ao);
+      const maxDiffB = Math.max(...Wb.elements.map((v, i) => Math.abs(v - arg.wbMat[i])));
+      return {
+        ang2: App.doc.joints[1].ang,
+        errC2: baseC.distanceTo(j2ao),
+        j2Shift: j2ao.distanceTo(new V3(...arg.j2ao)),
+        maxDiffB,
+      };
+    """, {'ids': cids, 'wbMat': chain_b['wbMat'], 'j2ao': chain_b['j2ao']})
+    ok3 = (
+        abs(chain_b['ang1']) > 15.0
+        and chain_b['errB2'] < 0.01
+        and chain_b['errC2'] < 0.01
+        and abs(chain_c['ang2']) > 15.0
+        and chain_c['errC2'] < 0.01
+        and chain_c['j2Shift'] < 0.01
+        and chain_c['maxDiffB'] < 1e-5
+    )
+
+    # 4. Schiebegelenk + ungesperrtes Elternteil (Schiene + Schlitten)
+    p.ev("Start.openNewTab(Model.newDoc('Schiebe-Test'))")
+    p.wait(350)
+    sids = p.ev("""
+      App.change('Schiene und Schlitten', (d) => {
+        const rail = Model.newItem('box', { w: 60, d: 12, h: 6 }, { name: 'Schiene' });
+        const car = Model.newItem('box', { w: 16, d: 12, h: 6 }, { name: 'Schlitten' });
+        car.t.z = 6;
+        d.items.push(rail, car);
+      });
+      Joints.add(App.doc.items[0].id, App.doc.items[1].id, [0, 0, 6], [1, 0, 0], { kind: 'slide', min: -20, max: 20 });
+      App.clearSelection();
+      return App.doc.items.map(x => x.id);
+    """)
+    warte_rechnen(p, 25)
+    p.ev("const c=Viewer.controls.target; Viewer.moveCamera(c.clone().set(0, -45, 110), c.clone().set(0, 0, 6), null, false); Viewer.renderNow();")
+    p.wait(250)
+
+    # Schlitten schräg (X und Y) ziehen -> gleitet nur entlang X
+    drag_world([0, 0, 12], [14, 20, 12], steps=10)
+    sl_after_car = p.ev("""
+      const r = App.doc.items[0].t, c = App.doc.items[1].t;
+      return { rx: r.x, ry: r.y, cx: c.x, cy: c.y, cz: c.z, ao: [...App.doc.joints[0].ao] };
+    """)
+    # Jetzt die freie Schiene in XY ziehen -> Schlitten und Gelenkachse wandern mit
+    p.ev("App.clearSelection();")
+    p.wait(100)
+    drag_world([-20, 0, 6], [-8, 12, 6], steps=10)
+    sl_after_rail = p.ev("""
+      const r = App.doc.items[0].t, c = App.doc.items[1].t;
+      return { rx: r.x, ry: r.y, cx: c.x, cy: c.y, cz: c.z, ao: [...App.doc.joints[0].ao] };
+    """)
+    drx = sl_after_rail['rx'] - sl_after_car['rx']
+    dry = sl_after_rail['ry'] - sl_after_car['ry']
+    ok4 = (
+        abs(sl_after_car['cx']) > 5.0
+        and abs(sl_after_car['cy']) < 0.01
+        and abs(sl_after_car['cz'] - 6.0) < 0.01
+        and math.hypot(drx, dry) > 5.0
+        and abs((sl_after_rail['cx'] - sl_after_car['cx']) - drx) < 0.05
+        and abs((sl_after_rail['cy'] - sl_after_car['cy']) - dry) < 0.05
+        and abs((sl_after_rail['ao'][0] - sl_after_car['ao'][0]) - drx) < 0.05
+        and abs((sl_after_rail['ao'][1] - sl_after_car['ao'][1]) - dry) < 0.05
+    )
+
+    # 5. Umgekehrtes Ziehen: Kind (Arm B) ist festgesetzt, Elternteil (Arm A) wird gezogen -> Arm B bleibt stehen, Arm A dreht ums Gelenk
+    p.ev("Start.openNewTab(Model.newDoc('Umgekehrt-Test'))")
+    p.wait(350)
+    rids = p.ev("""
+      App.change('Umgekehrte Kette', (d) => {
+        const a = Model.newItem('box', { w: 40, d: 10, h: 6 }, { name: 'Arm A' });
+        const b = Model.newItem('box', { w: 40, d: 10, h: 6 }, { name: 'Arm B' });
+        b.t.x = 40;
+        d.items.push(a, b);
+      });
+      const jr = Joints.add(App.doc.items[0].id, App.doc.items[1].id, [20, 0, 3], [0, 0, 1], { min: -120, max: 120 });
+      Actions.setGrounded([App.doc.items[1].id], true);
+      App.clearSelection();
+      return { ids: App.doc.items.map(x => x.id), ok: !!(jr && jr.ok) };
+    """)
+    warte_rechnen(p, 25)
+    p.ev("const c=Viewer.controls.target; Viewer.moveCamera(c.clone().set(10, -45, 130), c.clone().set(10, 0, 3), null, false); Viewer.renderNow();")
+    p.wait(250)
+
+    b_before = p.ev("return { ...App.doc.items[1].t };")
+    a_tip0 = arm_metrics(rids['ids'][0], [20, 0, 3], [-20, 0, 3], [20, 0, 3])['tip']
+    drag_world([-16, 0, 6], [5, 32, 6], steps=12)
+    b_after = p.ev("return { ...App.doc.items[1].t };")
+    rev_m = arm_metrics(rids['ids'][0], [20, 0, 3], [-20, 0, 3], [20, 0, 3])
+    a_tip_move = math.sqrt(sum((rev_m['tip'][k] - a_tip0[k]) ** 2 for k in range(3)))
+    errs = p.ev("return App.errors.length")
+    ok5 = (
+        rids['ok']
+        and near([b_after['x'], b_after['y'], b_after['z'], b_after['rz']], [b_before['x'], b_before['y'], b_before['z'], b_before['rz']], 1e-6)
+        and rev_m['jointErr'] < 0.01
+        and abs(rev_m['radius'] - 40.0) < 0.05
+        and a_tip_move > 10.0
+        and errs == 0
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
 def t_a092_durchdringungen(p):
     # [A-092] Durchdringungen der ganzen Baugruppe als Liste (BG-10)
     p.empty()
@@ -19476,6 +19728,7 @@ TESTS = [
     ('[A-088] Verbindungen: parallel, tangential & Abstand (mit Formeln und kombinierbar)', t_a088_verbindungen_locker),
     ('[A-090] Andock-Punkte & Einrasten beim Ziehen: Schraube in Bohrung (Einfach & Profi)', t_a090_andock_punkte),
     ('[A-089] Verbindungen: Winkel (30° & Formel) & mittig in Nut (20 mm)', t_a089_verbindungen_winkel_mittig),
+    ('[A-091] Teile mit der Maus bewegen, Verbindungen rechnen mit: Drehgelenk / Anschlag & Rückgängig / Kette folgt / Schiebegelenk & Elternteil / festgesetztes Kind', t_a091_ziehen_mit_verbindungen),
     ('[A-092] Durchdringungen der ganzen Baugruppe als Liste (BG-10)', t_a092_durchdringungen),
     ('[F-11241729] Volltest-Reparatur: Meldungen überleben Rechenphasen / Startseiten-Karte neben Baugruppe / Tablet-Kontext auf Deutsch', t_f11241729),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
