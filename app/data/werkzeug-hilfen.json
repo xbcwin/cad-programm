@@ -1378,5 +1378,15 @@
     "tip": "Liste aller mitgelieferten fremden Bausteine mit Lizenz und Lizenztext anzeigen",
     "hilfe": "Zeigt alle fremden Bibliotheken und Schriften an, die Tracery mitliefert – zum Beispiel three.js für die 3D-Ansicht, die Schrift Inter sowie OpenCascade und replicad – jeweils mit Urheber, Lizenzart und dem zugehörigen Lizenztext.",
     "tipp": "Klick bei einem Baustein auf „Lizenztext anzeigen“, um die vollständigen Bedingungen einzublenden."
+  },
+  "curvatureComb": {
+    "tip": "Krümmungskamm an Splines, Bögen und Ellipsen ein- oder ausblenden (Profi)",
+    "hilfe": "Zeigt entlang von Splines, Kreisbögen, Ellipsen und Teil-Ellipsen feine Striche nach außen, deren Länge genau der Krümmung an jeder Stelle entspricht. Je länger die Zähne, desto stärker die Biegung – Sprünge oder Wellen in einer Kurve werden sofort sichtbar.",
+    "tipp": "Ideal zum Prüfen weicher Übergänge (z. B. nach „Krümmungsglatt (G2)“): Stoßen zwei Kurven glatt aneinander, treffen auch ihre Krümmungskämme genau auf gleicher Höhe zusammen."
+  },
+  "cCurvature": {
+    "tip": "Krümmungsglatt (G2): Spline geht nicht nur glatt, sondern auch mit gleicher Krümmung in die Nachbarkurve über (Profi)",
+    "hilfe": "Verbindet ein Ende einer offenen Spline (mit mindestens 3 Punkten) mit einem Bogen, einer Linie, einer anderen Spline oder einem Kreis, sodass am Übergang Punkt, Richtung (Tangente) und Krümmungsradius nahtlos übereinstimmen.",
+    "tipp": "Schalte „Krümmung zeigen“ ein, um den nahtlosen Übergang direkt als gleich hohen Krümmungskamm zu prüfen."
   }
 }

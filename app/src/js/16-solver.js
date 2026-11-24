@@ -55,6 +55,143 @@ const Solver = (() => {
     return sweep * r;
   }
 
+  // ---------- Krümmung & G2-Endzustände (gemeinsam für Löser & Krümmungskamm) ----------
+  function bezDeriv(a, c1, c2, b, t) {
+    const u = 1 - t, u2 = u * u, t2 = t * t;
+    const A = u2 * u, B = 3 * u2 * t, C = 3 * u * t2, D = t2 * t;
+    const p = [A * a[0] + B * c1[0] + C * c2[0] + D * b[0], A * a[1] + B * c1[1] + C * c2[1] + D * b[1]];
+    const dx = 3 * u2 * (c1[0] - a[0]) + 6 * u * t * (c2[0] - c1[0]) + 3 * t2 * (b[0] - c2[0]);
+    const dy = 3 * u2 * (c1[1] - a[1]) + 6 * u * t * (c2[1] - c1[1]) + 3 * t2 * (b[1] - c2[1]);
+    const ddx = 6 * u * (c2[0] - 2 * c1[0] + a[0]) + 6 * t * (b[0] - 2 * c2[0] + c1[0]);
+    const ddy = 6 * u * (c2[1] - 2 * c1[1] + a[1]) + 6 * t * (b[1] - 2 * c2[1] + c1[1]);
+    const s2 = dx * dx + dy * dy;
+    if (s2 < 1e-12) return { p, tan: [1, 0], K: [0, 0], k: 0 };
+    const sp = Math.sqrt(s2), cross = dx * ddy - dy * ddx, f = cross / (s2 * s2);
+    return { p, tan: [dx / sp, dy / sp], K: [-dy * f, dx * f], k: cross / (s2 * sp) };
+  }
+  function crSeg(p0, p1, p2, p3) {
+    const dist = (u, v) => hyp(v[0] - u[0], v[1] - u[1]);
+    const d01 = Math.sqrt(Math.max(dist(p0, p1), 1e-9));
+    const d12 = Math.sqrt(Math.max(dist(p1, p2), 1e-9));
+    const d23 = Math.sqrt(Math.max(dist(p2, p3), 1e-9));
+    const t1 = d01, t2 = t1 + d12, t3 = t2 + d23, dt = t2 - t1;
+    const m1 = [0, 1].map((k) => ((p1[k] - p0[k]) / t1 - (p2[k] - p0[k]) / t2 + (p2[k] - p1[k]) / dt) * dt);
+    const m2 = [0, 1].map((k) => ((p2[k] - p1[k]) / dt - (p3[k] - p1[k]) / (t3 - t1) + (p3[k] - p2[k]) / (t3 - t2)) * dt);
+    return { a: p1, c1: [p1[0] + m1[0] / 3, p1[1] + m1[1] / 3], c2: [p2[0] - m2[0] / 3, p2[1] - m2[1] / 3], b: p2 };
+  }
+  function lineEndStateFromPts(a, b, end) {
+    const p = end === 'a' ? a : b, q = end === 'a' ? b : a;
+    const L = hyp(q[0] - p[0], q[1] - p[1]) || 1;
+    return { p: p.slice(), t: [(q[0] - p[0]) / L, (q[1] - p[1]) / L], K: [0, 0], k: 0 };
+  }
+  function splineEndStateFromPts(pts, end) {
+    const n = pts ? pts.length : 0;
+    if (n < 2) return null;
+    if (n === 2) return lineEndStateFromPts(pts[0], pts[1], end);
+    if (end === 'a') {
+      const q0 = [2 * pts[0][0] - pts[1][0], 2 * pts[0][1] - pts[1][1]];
+      const s = crSeg(q0, pts[0], pts[1], pts[2]);
+      const d = bezDeriv(s.a, s.c1, s.c2, s.b, 0);
+      return { p: d.p, t: d.tan, K: d.K, k: d.k };
+    }
+    const q3 = [2 * pts[n - 1][0] - pts[n - 2][0], 2 * pts[n - 1][1] - pts[n - 2][1]];
+    const s = crSeg(pts[n - 3], pts[n - 2], pts[n - 1], q3);
+    const d = bezDeriv(s.a, s.c1, s.c2, s.b, 1);
+    return { p: d.p, t: [-d.tan[0], -d.tan[1]], K: d.K, k: d.k };
+  }
+  function arcEndStateFromPts(a, m, b, end) {
+    const [cx, cy, r] = circum(a[0], a[1], b[0], b[1], m[0], m[1]);
+    if (!isFinite(r) || r > 1e5 || r < 1e-9) return lineEndStateFromPts(a, b, end);
+    const norm = (t) => ((t % TAU) + TAU) % TAU;
+    const a0 = Math.atan2(a[1] - cy, a[0] - cx), am = Math.atan2(m[1] - cy, m[0] - cx), a1 = Math.atan2(b[1] - cy, b[0] - cx);
+    const ccw = norm(am - a0) < norm(a1 - a0);
+    const p = end === 'a' ? a : b;
+    const ux = (p[0] - cx) / r, uy = (p[1] - cy) / r;
+    const goCCW = end === 'a' ? ccw : !ccw;
+    const t = goCCW ? [-uy, ux] : [uy, -ux];
+    const K = [-ux / r, -uy / r];
+    return { p: p.slice(), t, K, k: (goCCW ? 1 : -1) / r, r, c: [cx, cy], ccw };
+  }
+  function ellArcEndStateFromVals(c, rx, ry, rot, a0, a1, ccw, end) {
+    const th = end === 'a' ? a0 : a1;
+    const sgn = (end === 'a' ? 1 : -1) * (ccw === false ? -1 : 1);
+    const cs = Math.cos(rot), sn = Math.sin(rot), ct = Math.cos(th), st = Math.sin(th);
+    const lx = rx * ct, ly = ry * st, ldx = -rx * st, ldy = ry * ct, lddx = -rx * ct, lddy = -ry * st;
+    const p = [c[0] + cs * lx - sn * ly, c[1] + sn * lx + cs * ly];
+    const dx = cs * ldx - sn * ldy, dy = sn * ldx + cs * ldy;
+    const ddx = cs * lddx - sn * lddy, ddy = sn * lddx + cs * lddy;
+    const s2 = dx * dx + dy * dy;
+    if (s2 < 1e-12) return { p, t: [sgn, 0], K: [0, 0], k: 0 };
+    const sp = Math.sqrt(s2), cross = dx * ddy - dy * ddx, f = cross / (s2 * s2);
+    return { p, t: [(sgn * dx) / sp, (sgn * dy) / sp], K: [-dy * f, dx * f], k: cross / (s2 * sp) };
+  }
+  function curveEndState(e, end = 'a') {
+    if (!e) return null;
+    if (e.type === 'spline' && !e.closed) return splineEndStateFromPts(e.pts, end);
+    if (e.type === 'arc') return arcEndStateFromPts(e.a, e.m, e.b, end);
+    if (e.type === 'line') return lineEndStateFromPts(e.a, e.b, end);
+    if (e.type === 'ellarc') return ellArcEndStateFromVals(e.c, e.rx, e.ry, e.rot || 0, e.a0, e.a1, e.ccw !== false, end);
+    return null;
+  }
+  function curvatureSamples(e) {
+    if (!e) return null;
+    if (e.type === 'spline') {
+      if (!e.pts || e.pts.length < 2) return null;
+      const segs = SK.splineBez(e.pts, !!e.closed);
+      const samples = [];
+      for (const s of segs) {
+        if (s.t === 'line') {
+          samples.push({ p: s.a.slice(), K: [0, 0], kAbs: 0 }, { p: s.b.slice(), K: [0, 0], kAbs: 0 });
+        } else if (s.t === 'bez') {
+          const len = hyp(s.c1[0] - s.a[0], s.c1[1] - s.a[1]) + hyp(s.c2[0] - s.c1[0], s.c2[1] - s.c1[1]) + hyp(s.b[0] - s.c2[0], s.b[1] - s.c2[1]);
+          const N = clamp(Math.ceil(len / 1.5), 10, 28);
+          for (let i = 0; i <= N; i++) {
+            const d = bezDeriv(s.a, s.c1, s.c2, s.b, i / N);
+            samples.push({ p: d.p, K: d.K, kAbs: Math.abs(d.k) });
+          }
+        }
+      }
+      return samples.length ? { closed: !!e.closed, samples } : null;
+    }
+    if (e.type === 'arc') {
+      const ai = SK.arcInfo(e.a, e.m, e.b);
+      if (!ai || !isFinite(ai.r) || ai.r > 1e5 || ai.r < 1e-9) return null;
+      const N = clamp(Math.ceil((Math.abs(ai.sweep) * ai.r) / 2), 10, 48);
+      const samples = [];
+      for (let i = 0; i <= N; i++) {
+        const th = ai.a0 + (ai.sweep * i) / N, cs = Math.cos(th), sn = Math.sin(th);
+        samples.push({ p: [ai.c[0] + cs * ai.r, ai.c[1] + sn * ai.r], K: [-cs / ai.r, -sn / ai.r], kAbs: 1 / ai.r });
+      }
+      return { closed: false, samples };
+    }
+    if (e.type === 'ellipse' || e.type === 'ellarc') {
+      if (!(e.rx > 1e-6 && e.ry > 1e-6)) return null;
+      const closed = e.type === 'ellipse' || Math.abs(SK.ellArcSweep(e.a0, e.a1, e.ccw !== false)) >= TAU - 1e-6;
+      const sw = e.type === 'ellipse' ? TAU : SK.ellArcSweep(e.a0, e.a1, e.ccw !== false);
+      const a0 = e.type === 'ellipse' ? 0 : e.a0;
+      const N = clamp(Math.ceil((Math.abs(sw) / TAU) * 48), 10, 48);
+      const cs = Math.cos(e.rot || 0), sn = Math.sin(e.rot || 0);
+      const samples = [];
+      const count = closed ? N - 1 : N;
+      for (let i = 0; i <= count; i++) {
+        const th = a0 + (sw * i) / N, ct = Math.cos(th), st = Math.sin(th);
+        const lx = e.rx * ct, ly = e.ry * st, ldx = -e.rx * st, ldy = e.ry * ct, lddx = -e.rx * ct, lddy = -e.ry * st;
+        const p = [e.c[0] + cs * lx - sn * ly, e.c[1] + sn * lx + cs * ly];
+        const dx = cs * ldx - sn * ldy, dy = sn * ldx + cs * ldy;
+        const ddx = cs * lddx - sn * lddy, ddy = sn * lddx + cs * lddy;
+        const s2 = dx * dx + dy * dy;
+        const sp = Math.sqrt(s2);
+        if (s2 < 1e-12) samples.push({ p, K: [0, 0], kAbs: 0 });
+        else {
+          const cross = dx * ddy - dy * ddx, f = cross / (s2 * s2);
+          samples.push({ p, K: [-dy * f, dx * f], kAbs: Math.abs(cross / (s2 * sp)) });
+        }
+      }
+      return { closed, samples };
+    }
+    return null;
+  }
+
   // ---------- Aufbau des Gleichungssystems ----------
   function build(ents, V, opts = {}) {
     const x = [], idx = new Map(), owner = [];
@@ -133,6 +270,52 @@ const Solver = (() => {
         return { deps: ks, c: (X) => { const c = cc(X); return [c[0], c[1]]; }, r: (X) => cc(X)[2] };
       }
       if (e.type === 'poly' || e.type === 'slot') { const c = point({ e: e.id, p: e.type === 'poly' ? 'c' : 'a' }), r = I(e.id, 'r'); return { deps: [...c.deps, r], c: c.get, r: (X) => X[r] }; }
+      return null;
+    }
+    // Kurven-Endzustand (Punkt, Tangente in die Kurve, Krümmungsvektor K) für G2-Regeln
+    function curveEnd(ref) {
+      if (!ref) return null;
+      const e = byId.get(ref.e); if (!e) return null;
+      const end = ref.p === 'b' ? 'b' : 'a';
+      if (e.type === 'spline' && !e.closed) {
+        const n = (e.pts || []).length;
+        if (n < 2) return null;
+        if (n === 2) {
+          const ks = ['p0_0', 'p0_1', 'p1_0', 'p1_1'].map((k) => I(e.id, k));
+          return { deps: ks, get: (X) => lineEndStateFromPts([X[ks[0]], X[ks[1]]], [X[ks[2]], X[ks[3]]], end) };
+        }
+        const idxs = end === 'a' ? [0, 1, 2] : [n - 3, n - 2, n - 1];
+        const ks = idxs.flatMap((i) => [I(e.id, 'p' + i + '_0'), I(e.id, 'p' + i + '_1')]);
+        return {
+          deps: ks,
+          get: (X) => {
+            const pA = [X[ks[0]], X[ks[1]]], pB = [X[ks[2]], X[ks[3]]], pC = [X[ks[4]], X[ks[5]]];
+            if (end === 'a') {
+              const q0 = [2 * pA[0] - pB[0], 2 * pA[1] - pB[1]];
+              const s = crSeg(q0, pA, pB, pC);
+              const d = bezDeriv(s.a, s.c1, s.c2, s.b, 0);
+              return { p: d.p, t: d.tan, K: d.K };
+            }
+            const q3 = [2 * pC[0] - pB[0], 2 * pC[1] - pB[1]];
+            const s = crSeg(pA, pB, pC, q3);
+            const d = bezDeriv(s.a, s.c1, s.c2, s.b, 1);
+            return { p: d.p, t: [-d.tan[0], -d.tan[1]], K: d.K };
+          },
+        };
+      }
+      if (e.type === 'arc') {
+        const ks = ['a0', 'a1', 'b0', 'b1', 'm0', 'm1'].map((k) => I(e.id, k));
+        return { deps: ks, get: (X) => arcEndStateFromPts([X[ks[0]], X[ks[1]]], [X[ks[4]], X[ks[5]]], [X[ks[2]], X[ks[3]]], end) };
+      }
+      if (e.type === 'line' || (e.type === 'rect' && ref.edge != null)) {
+        const Ln = line(ref); if (!Ln) return null;
+        return { deps: [...Ln[0].deps, ...Ln[1].deps], get: (X) => lineEndStateFromPts(Ln[0].get(X), Ln[1].get(X), end) };
+      }
+      if (e.type === 'ellarc') {
+        const ks = ['c0', 'c1', 'rx', 'ry', 'a0', 'a1'].map((k) => I(e.id, k));
+        const rot = e.rot || 0, ccw = e.ccw !== false;
+        return { deps: ks, get: (X) => ellArcEndStateFromVals([X[ks[0]], X[ks[1]]], X[ks[2]], X[ks[3]], rot, X[ks[4]], X[ks[5]], ccw, end) };
+      }
       return null;
     }
     const eqs = [];
@@ -269,6 +452,53 @@ const Solver = (() => {
           const A = circle(R[0]), B = circle(R[1]); if (!A || !B) continue;
           const inner = c.mode === 'int';
           add([...A.deps, ...B.deps], (X) => { const a = A.c(X), b = B.c(X); const d = hyp(b[0] - a[0], b[1] - a[1]); return inner ? d - Math.abs(A.r(X) - B.r(X)) : d - (A.r(X) + B.r(X)); }, tag);
+        }
+      } else if (t === 'curvature') {
+        const r0 = R[0], r1 = R[1];
+        const e0 = r0 && byId.get(r0.e), e1 = r1 && byId.get(r1.e);
+        if (!e0 || !e1) continue;
+        if (e0.type === 'circle' || e1.type === 'circle') {
+          const rC = e0.type === 'circle' ? r0 : r1, rS = e0.type === 'circle' ? r1 : r0;
+          const C = circle(rC);
+          if (!C) continue;
+          let endS = rS.p === 'a' || rS.p === 'b' ? rS.p : null;
+          if (!endS) {
+            const c0 = C.c(x), cr = C.r(x);
+            const sa = curveEnd({ ...rS, p: 'a' }), sb = curveEnd({ ...rS, p: 'b' });
+            if (!sa || !sb) continue;
+            const pa = sa.get(x).p, pb = sb.get(x).p;
+            endS = Math.abs(hyp(pa[0] - c0[0], pa[1] - c0[1]) - cr) <= Math.abs(hyp(pb[0] - c0[0], pb[1] - c0[1]) - cr) ? 'a' : 'b';
+          }
+          const Se = curveEnd({ ...rS, p: endS });
+          if (!Se) continue;
+          const deps = [...Se.deps, ...C.deps];
+          add(deps, (X) => { const s = Se.get(X), cc = C.c(X); return hyp(s.p[0] - cc[0], s.p[1] - cc[1]) - C.r(X); }, tag);
+          add(deps, (X) => { const s = Se.get(X), cc = C.c(X), d = hyp(s.p[0] - cc[0], s.p[1] - cc[1]) || 1; const ux = (s.p[0] - cc[0]) / d, uy = (s.p[1] - cc[1]) / d; return (s.t[0] * ux + s.t[1] * uy) * 10; }, tag);
+          add(deps, (X) => { const s = Se.get(X), cc = C.c(X), d = hyp(s.p[0] - cc[0], s.p[1] - cc[1]) || 1; const ux = (s.p[0] - cc[0]) / d, uy = (s.p[1] - cc[1]) / d; const r = Math.max(C.r(X), 1e-6); return ((s.K[0] * -ux + s.K[1] * -uy) - 1 / r) * 50; }, tag);
+        } else {
+          let end0 = r0.p === 'a' || r0.p === 'b' ? r0.p : null;
+          let end1 = r1.p === 'a' || r1.p === 'b' ? r1.p : null;
+          if (!end0 || !end1) {
+            let best = null, bd = Infinity;
+            for (const p0 of end0 ? [end0] : ['a', 'b']) {
+              const s0 = curveEnd({ ...r0, p: p0 }); if (!s0) continue;
+              const q0 = s0.get(x).p;
+              for (const p1 of end1 ? [end1] : ['a', 'b']) {
+                const s1 = curveEnd({ ...r1, p: p1 }); if (!s1) continue;
+                const q1 = s1.get(x).p, dd = hyp(q1[0] - q0[0], q1[1] - q0[1]);
+                if (dd < bd) { bd = dd; best = [p0, p1]; }
+              }
+            }
+            if (!best) continue;
+            [end0, end1] = best;
+          }
+          const A = curveEnd({ ...r0, p: end0 }), B = curveEnd({ ...r1, p: end1 });
+          if (!A || !B) continue;
+          const deps = [...A.deps, ...B.deps];
+          add(deps, (X) => B.get(X).p[0] - A.get(X).p[0], tag);
+          add(deps, (X) => B.get(X).p[1] - A.get(X).p[1], tag);
+          add(deps, (X) => { const a = A.get(X), b = B.get(X); const dx = -a.t[0], dy = -a.t[1]; return Math.atan2(dx * b.t[1] - dy * b.t[0], dx * b.t[0] + dy * b.t[1]) * 10; }, tag);
+          add(deps, (X) => { const a = A.get(X), b = B.get(X); const nx = a.t[1], ny = -a.t[0]; return ((b.K[0] - a.K[0]) * nx + (b.K[1] - a.K[1]) * ny) * 50; }, tag);
         }
       } else if (t === 'coincident') {
         const A = point(R[0]);
@@ -621,5 +851,5 @@ const Solver = (() => {
     memo.set(key, r); if (memo.size > 60) memo.delete(memo.keys().next().value);
     return r;
   }
-  return { solve, trial, cached, explainConflict, VARS, varsOf, getK, setK };
+  return { solve, trial, cached, explainConflict, curveEndState, curvatureSamples, VARS, varsOf, getK, setK };
 })();
