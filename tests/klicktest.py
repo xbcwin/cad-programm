@@ -33,7 +33,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Templates,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Templates,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Toolbar,Panels,Joints,I18n,T,Units,Expr,Tour,GeomCheck,Log,Kernel}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -11002,7 +11002,7 @@ def t_a053_projekt_vorlagen(p):
 
     # Nach Neuladen steht sie noch in der Liste und öffnet sich als neues Projekt mit allen Daten
     p.pg.reload()
-    p.pg.wait_for_function("() => !!(window.__masswerk && window.__masswerk.Kernel && window.__masswerk.Kernel.ready)", timeout=30000)
+    p.pg.wait_for_function("() => !!(window.__M && window.__M.Templates && window.__M.Start && window.__M.Log && window.__M.Log.startup.uiReadyMs !== null)", timeout=30000)
     try:
         p.pg.locator('.loading').wait_for(state='detached', timeout=15000)
     except Exception:
@@ -11226,6 +11226,159 @@ def t_a051_absturz_wiederherstellen(p):
     ok5 = (
         help_attr == 'crashRecovery'
         and bool(h_rec.get('tip') and h_rec.get('hilfe') and h_rec.get('tipp'))
+    )
+    return [ok1, ok2, ok3, ok4, ok5]
+
+
+def t_a054_schneller_start(p):
+    # 1. Sofortiger Start ohne Kern und eingebaute Schriften
+    boot_st = p.ev("""return {
+      hasStart: document.querySelectorAll('.start').length === 1,
+      hasLoading: document.querySelectorAll('.loading').length > 0,
+      kReady: Kernel.ready,
+      kState: Kernel.state,
+      interLoaded: SK.isFontLoaded('inter'),
+      fettLoaded: SK.isFontLoaded('fett'),
+      uiMs: Log.startup.uiReadyMs,
+      kernMs: Log.startup.kernelReadyMs,
+    };""")
+
+    reqs = []
+    p.pg.on('request', lambda req: reqs.append(req.url))
+    p.pg.reload()
+    p.wait(1200)
+    p.pg.get_by_text('Leeres Projekt').first.click()
+    p.wait(400)
+    empty_st = p.ev("""return {
+      hasLoading: document.querySelectorAll('.loading').length > 0,
+      kReady: Kernel.ready,
+      kState: Kernel.state,
+      interLoaded: SK.isFontLoaded('inter'),
+      fettLoaded: SK.isFontLoaded('fett'),
+      uiMs: Log.startup.uiReadyMs,
+      kernMs: Log.startup.kernelReadyMs,
+      calcState: document.querySelector('#status-calc') && document.querySelector('#status-calc').dataset.state,
+    };""")
+    no_eager_reqs = not any(('occ-kernel.wasm' in u or 'schrift-inter' in u) for u in reqs)
+    ok1 = (
+        boot_st['hasStart'] and not boot_st['hasLoading']
+        and not boot_st['kReady'] and boot_st['kState'] == 'idle'
+        and not boot_st['interLoaded'] and not boot_st['fettLoaded']
+        and (boot_st['uiMs'] or 0) > 0 and boot_st['kernMs'] is None
+        and not empty_st['hasLoading']
+        and not empty_st['kReady'] and empty_st['kState'] == 'idle'
+        and not empty_st['interLoaded'] and not empty_st['fettLoaded']
+        and (empty_st['uiMs'] or 0) > 0 and empty_st['kernMs'] is None
+        and empty_st['calcState'] == 'idle'
+        and no_eager_reqs
+    )
+
+    # 2. Skizzieren geht sofort ohne Kern
+    p.ev("Sketch.startOnPlane('XY')"); p.wait(400)
+    cx, cy = p.canvas_center()
+    p.pg.mouse.click(cx - 80, cy - 50)
+    p.pg.mouse.move(cx + 60, cy + 40)
+    p.wait(100)
+    p.pg.keyboard.type('30'); p.pg.keyboard.press('Tab'); p.pg.keyboard.type('20'); p.pg.keyboard.press('Enter')
+    p.wait(400)
+    sk_st = p.ev("""return {
+      active: Sketch.active,
+      ents: Sketch.state ? Sketch.state.ents.length : 0,
+      regs: Sketch.state ? SK.regions(Sketch.state.ents).length : 0,
+      kReady: Kernel.ready,
+      kState: Kernel.state,
+    };""")
+    ok2 = (
+        sk_st['active'] and sk_st['ents'] == 1 and sk_st['regs'] == 1
+        and not sk_st['kReady'] and sk_st['kState'] == 'idle'
+        and not any('occ-kernel.wasm' in u for u in reqs)
+    )
+
+    # 3. Text-Werkzeug lädt die eingebaute Schrift erst beim ersten Gebrauch
+    before_text = p.ev("return { inter: SK.isFontLoaded('inter'), fett: SK.isFontLoaded('fett') };")
+    p.pg.keyboard.press('b')
+    for _ in range(25):
+        p.wait(200)
+        if p.ev("return SK.isFontLoaded('inter')"):
+            break
+    after_b = p.ev("return { inter: SK.isFontLoaded('inter'), fett: SK.isFontLoaded('fett'), kState: Kernel.state };")
+    p.pg.fill('#tx-s', 'Start')
+    o = to_screen(p, -10, -5)
+    p.pg.mouse.click(o[0], o[1]); p.wait(300)
+    box1 = SS(p, "const t=S.ents.find(e=>e.type==='text'); return t ? SK.textBox(t) : null;")
+    p.pg.select_option('#se-font', 'fett')
+    for _ in range(25):
+        p.wait(200)
+        if p.ev("return SK.isFontLoaded('fett')"):
+            break
+    after_fett = p.ev("return { fett: SK.isFontLoaded('fett'), kState: Kernel.state };")
+    ok3 = (
+        not before_text['inter'] and not before_text['fett']
+        and after_b['inter'] and not after_b['fett'] and after_b['kState'] == 'idle'
+        and any('schrift-inter.json' in u for u in reqs)
+        and bool(box1 and box1['w'] > 0 and box1['h'] > 0)
+        and after_fett['fett'] and after_fett['kState'] == 'idle'
+        and any('schrift-inter-fett.json' in u for u in reqs)
+    )
+
+    # 4. Erster 3D-Schritt lädt den Kern; Oberfläche bereit < Kern bereit
+    fertig_hoch(p, '4')
+    k_st = p.ev("""return {
+      kReady: Kernel.ready,
+      kState: Kernel.state,
+      res: App.results.size,
+      errs: App.errors.length,
+      uiMs: Log.startup.uiReadyMs,
+      kernMs: Log.startup.kernelReadyMs,
+      loadMs: Log.startup.kernelLoadMs,
+    };""")
+    ok4 = (
+        k_st['kReady'] and k_st['kState'] == 'ready'
+        and k_st['res'] >= 1 and k_st['errs'] == 0
+        and any('occ-kernel.wasm' in u for u in reqs)
+        and (k_st['uiMs'] or 0) > 0 and (k_st['kernMs'] or 0) > 0
+        and k_st['uiMs'] < k_st['kernMs']
+    )
+
+    # 5. Protokoll zeigt Startzeiten; Reload mit 3D-Modell misst uiReadyMs < kernelReadyMs; Hilfetext
+    p.pg.click('#lt-log'); p.wait(400)
+    log_info = p.ev("""
+      const box = document.querySelector('#startup-times');
+      const rows = [...document.querySelectorAll('.log-row.info')].map(r => r.textContent);
+      return {
+        hasBox: !!box,
+        help: box ? box.dataset.help : null,
+        txt: box ? box.textContent : '',
+        hasUiRow: rows.some(t => t.includes('Oberfläche bereit')),
+        hasKernRow: rows.some(t => t.includes('CAD-Kern bereit')),
+        hasFontRow: rows.some(t => t.includes('Schrift geladen')),
+      };
+    """)
+    p.ev("return App.autosave.flush().then(() => { App.markClean(); return Store.whenIdle(); });")
+    p.pg.reload()
+    p.pg.wait_for_function("() => !!(window.__M && window.__M.Log.startup.uiReadyMs !== null)", timeout=15000)
+    ui_before_kern = p.ev("return { uiMs: Log.startup.uiReadyMs, kReady: Kernel.ready, hasLoading: document.querySelectorAll('.loading').length > 0 };")
+    warte_rechnen(p, 40)
+    reload_st = p.ev("""return {
+      kReady: Kernel.ready,
+      res: App.results.size,
+      errs: App.errors.length,
+      uiMs: Log.startup.uiReadyMs,
+      kernMs: Log.startup.kernelReadyMs,
+    };""")
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    h_st = hilfen.get('startupTimes') or {}
+    ok5 = (
+        log_info['hasBox'] and log_info['help'] == 'startupTimes'
+        and 'Oberfläche bereit' in log_info['txt']
+        and 'CAD-Kern bereit' in log_info['txt']
+        and 'Inter' in log_info['txt']
+        and log_info['hasUiRow'] and log_info['hasKernRow'] and log_info['hasFontRow']
+        and (ui_before_kern['uiMs'] or 0) > 0 and not ui_before_kern['hasLoading']
+        and reload_st['kReady'] and reload_st['res'] >= 1 and reload_st['errs'] == 0
+        and (reload_st['uiMs'] or 0) > 0 and (reload_st['kernMs'] or 0) > 0
+        and reload_st['uiMs'] < reload_st['kernMs']
+        and bool(h_st.get('tip') and h_st.get('hilfe') and h_st.get('tipp'))
     )
     return [ok1, ok2, ok3, ok4, ok5]
 
@@ -12103,6 +12256,7 @@ TESTS = [
     ('[A-052] Statusleiste vollständig: 2 Kanten Summe / Fläche Flächeninhalt / Einheit-Klick öffnet Einstellung / Rechenzustand & Hilfe', t_a052_statusleiste),
     ('[A-053] Projekt-Vorlagen: 3D-Druck Druckbett / Zoll, Laser, Gehäuse / Eigene Vorlage speichern & wieder öffnen / Löschen', t_a053_projekt_vorlagen),
     ('[A-051] Wiederherstellen nach Absturz: Meldung mit Zeit & Projektname / Wiederherstellen / Verwerfen / großes Projekt aus IndexedDB / sauber gespeichert ohne Meldung', t_a051_absturz_wiederherstellen),
+    ('[A-054] Schneller Start: Oberfläche sofort / Skizzieren ohne Kern / Kern & Schrift bei Bedarf / Protokoll', t_a054_schneller_start),
     ('[A-055] Sparsames Rückgängig: 200 Änderungen als Patches / Speicher viel kleiner / 200× Rückgängig exakt / Redo & Speicherlimit', t_a055_sparsames_rueckgaengig),
     ('[A-056] Normteile: Passstifte, Passfedern mit Nut, Kugel- und Gleitlager', t_a056_normteile_stifte_lager),
     ('[A-057] Schrauben M10–M24 & Werkstoffe: Sechskantschraube M16×60 SW 24 / M10–M24 Normteile / Werkstoff Messing Dichte 8,4–8,7 / neue Werkstoffe mit Aussehen & Quelle / Suche & Hilfe', t_a057_schrauben_werkstoffe),

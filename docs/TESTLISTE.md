@@ -1879,6 +1879,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Große Projekte aus IndexedDB & Hilfetext**: Projekte > 400 KB samt 15-MB-STEP-Import (`blobId`) werden rein über IndexedDB (`meta.recovery` + `blobs`) wiederhergestellt; Hilfetext `crashRecovery` ist vollständig.
 - [ ] **Von Hand**: Im Browser ein Projekt bearbeiten, den Tab hart schließen oder aktualisieren und die Meldung auf Startseite und 3D-Ansicht prüfen.
 
+## Schneller Start (Auto [A-054], PL-03)
+
+- [x] **Sofortiger Start ohne Kern & Schriften**: Beim Öffnen und in einem leeren Projekt ist die Oberfläche ohne Ladebildschirm sofort bedienbar (`Kernel.state === 'idle'`, weder `occ-kernel.wasm` noch `schrift-inter*.json` werden vorab geladen).
+- [x] **Skizzieren ohne Kern**: 2D-Skizze starten und ein bemaßtes Rechteck zeichnen funktioniert vollständig ohne den CAD-Kern zu laden.
+- [x] **Schrift beim ersten Gebrauch laden**: Erst das Text-Werkzeug (`B`) lädt `schrift-inter.json` nach; Wechsel auf `Inter Fett` lädt `schrift-inter-fett.json`.
+- [x] **Kern bei erstem 3D-Schritt & Startzeiten im Protokoll**: Beim Hochziehen (und beim Neuladen eines Projekts mit 3D-Körpern) startet der Kern automatisch, `Log.startup.uiReadyMs < Log.startup.kernelReadyMs`, das Protokoll zeigt `#startup-times` samt Hilfetext `startupTimes`.
+- [ ] **Von Hand**: Im Browser mit gedrosseltem Netzwerk (DevTools „Fast 3G“) laden und prüfen, dass Startseite und Skizzieren sofort reagieren, während der Kern erst beim ersten 3D-Körper im Hintergrund lädt.
+
 ## Sparsames Rückgängig (Auto [A-055], PL-07)
 
 - [x] **200 Änderungen als Patches & Speichervergleich**: Bei einem großen Projekt (> 200 KB) legen 200 gemischte Änderungen (Maße, Verschieben, Skizzenelemente, Schlüssel löschen/hinzufügen, ID-Listen einfügen/löschen/umsortieren, `pushUndo`, `merge`, `amend`, `squash`) ausschließlich kompakte `ops`-Patches ab und verbrauchen deutlich unter 5 % des Speichers von 200 Vollkopien.

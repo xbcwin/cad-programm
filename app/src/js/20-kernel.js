@@ -1,11 +1,13 @@
 // ================= Verbindung zum CAD-Kern (Web Worker) =================
 const Kernel = (() => {
   let worker = null, seq = 1, ready = false;
+  let state = 'idle', progress = 0, loadError = null, startPromise = null;
+  let loadStartMs = null, readyMs = null, loadDurMs = null, initMs = null;
   const pending = new Map();
   const sentBlobs = new Set();
-  let readyResolve, readyReject;
-  const readyPromise = new Promise((res, rej) => { readyResolve = res; readyReject = rej; });
-  readyPromise.catch(() => {}); // Fehler zeigt der Startbildschirm
+  const ev = makeEmitter();
+  let readyResolve;
+  const readyPromise = new Promise((res) => { readyResolve = res; });
 
   async function fetchWasm(onProgress) {
     const resp = await fetch('occ-kernel.wasm');
@@ -39,33 +41,6 @@ const Kernel = (() => {
       w.onerror = (e) => { clearTimeout(t); try { w.terminate(); } catch (_) {} reject(new Error((e && e.message) || 'Der CAD-Kern startet nicht.')); };
     });
   }
-  async function start(onProgress) {
-    try {
-      const wasmP = fetchWasm(onProgress);
-      wasmP.catch(() => {});
-      let w;
-      try { w = await spawn('direct'); } catch (e1) { console.warn('Kern-Worker direkt nicht gestartet:', e1); w = await spawn('blob'); }
-      worker = w;
-      sentBlobs.clear();
-      worker.onmessage = (ev) => {
-        const { id, ok, result, error } = ev.data || {};
-        if (id === 0) return; // geladen
-        const p = pending.get(id); if (!p) return;
-        pending.delete(id);
-        ok ? p.resolve(result) : p.reject(new Error(error));
-      };
-      worker.onerror = (e) => {
-        const err = new Error('Der CAD-Kern ist abgestürzt: ' + ((e && e.message) || 'unbekannter Fehler'));
-        for (const p of pending.values()) p.reject(err); pending.clear();
-        if (!ready) readyReject(err);
-      };
-      const wasm = await wasmP;
-      const info = await call('init', { wasm: wasm.buffer }, [wasm.buffer]);
-      ready = true; onProgress && onProgress(1);
-      readyResolve(info);
-      return info;
-    } catch (e) { readyReject(e); throw e; }
-  }
   function attachBlobs(scene) {
     if (!scene || !Array.isArray(scene.items) || typeof Store === 'undefined') return;
     const walk = (items) => {
@@ -80,7 +55,7 @@ const Kernel = (() => {
     };
     walk(scene.items);
   }
-  function call(cmd, args = {}, transfer = []) {
+  function postCall(cmd, args = {}, transfer = []) {
     if (args && args.scene && args.scene.items) attachBlobs(args.scene);
     if (args && args.p && args.p.blobId && !args.p.bytes && !sentBlobs.has(args.p.blobId) && typeof Store !== 'undefined') {
       const b = Store.getBlobSync(args.p.blobId);
@@ -92,6 +67,85 @@ const Kernel = (() => {
       worker.postMessage({ id, cmd, args }, transfer);
     });
   }
-  return { start, call, get ready() { return ready; }, whenReady: () => readyPromise };
+  function ensure(onProgress) {
+    if (ready) {
+      onProgress && onProgress(1);
+      return readyPromise;
+    }
+    if (startPromise) {
+      if (onProgress) {
+        onProgress(progress);
+        const off = ev.on('state', (s) => {
+          onProgress(s.progress);
+          if (s.state === 'ready' || s.state === 'error') off();
+        });
+      }
+      return startPromise;
+    }
+    state = 'loading'; progress = 0.02; loadError = null; loadStartMs = performance.now();
+    onProgress && onProgress(progress);
+    ev.emit('state', { state, progress });
+    startPromise = (async () => {
+      try {
+        const wasmP = fetchWasm((p) => {
+          progress = p;
+          onProgress && onProgress(p);
+          ev.emit('state', { state, progress });
+        });
+        wasmP.catch(() => {});
+        let w;
+        try { w = await spawn('direct'); } catch (e1) { console.warn('Kern-Worker direkt nicht gestartet:', e1); w = await spawn('blob'); }
+        worker = w;
+        sentBlobs.clear();
+        worker.onmessage = (m) => {
+          const { id, ok, result, error } = m.data || {};
+          if (id === 0) return; // geladen
+          const p = pending.get(id); if (!p) return;
+          pending.delete(id);
+          ok ? p.resolve(result) : p.reject(new Error(error));
+        };
+        worker.onerror = (e) => {
+          const err = new Error('Der CAD-Kern ist abgestürzt: ' + ((e && e.message) || 'unbekannter Fehler'));
+          for (const p of pending.values()) p.reject(err); pending.clear();
+          if (!ready) {
+            state = 'error'; loadError = err; startPromise = null;
+            ev.emit('state', { state, progress, error: err });
+            ev.emit('error', err);
+          }
+        };
+        const wasm = await wasmP;
+        const info = await postCall('init', { wasm: wasm.buffer }, [wasm.buffer]);
+        ready = true; state = 'ready'; progress = 1;
+        readyMs = performance.now();
+        loadDurMs = Math.max(1, Math.round(readyMs - loadStartMs));
+        initMs = info && info.ms != null ? info.ms : null;
+        onProgress && onProgress(1);
+        ev.emit('state', { state, progress });
+        ev.emit('ready', { loadStartMs, readyMs, loadDurMs, initMs });
+        readyResolve(info);
+        return info;
+      } catch (e) {
+        state = 'error'; loadError = e; startPromise = null;
+        ev.emit('state', { state, progress, error: e });
+        ev.emit('error', e);
+        throw e;
+      }
+    })();
+    return startPromise;
+  }
+  const start = ensure;
+  async function call(cmd, args = {}, transfer = []) {
+    if (!ready) await ensure();
+    return postCall(cmd, args, transfer);
+  }
+  return {
+    start, ensure, call, on: ev.on,
+    get ready() { return ready; },
+    get state() { return state; },
+    get progress() { return progress; },
+    get error() { return loadError; },
+    get timings() { return { loadStartMs, readyMs, loadDurMs, initMs }; },
+    whenReady: () => readyPromise,
+  };
 })();
 

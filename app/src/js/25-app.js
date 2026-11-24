@@ -512,18 +512,44 @@ const App = (() => {
     if (k === (S.peek == null ? null : S.peek)) return;
     S.peek = k; ev.emit('peek'); rebuild();
   }
+  function needsKernelFor(doc, extra, peek) {
+    if (Array.isArray(extra) && extra.length) return true;
+    let act = Model.activeItems(doc);
+    if (peek != null) { const keep = new Set(doc.items.slice(0, Math.max(0, peek))); act = act.filter((it) => keep.has(it)); }
+    return act.length > 0;
+  }
   function rebuild() {
     dirty = true;
     if (!busy) return runRebuild();
     return new Promise((res) => { const off = ev.on('rebuilt', () => { if (!dirty) { off(); res(); } }); });
   }
   async function runRebuild() {
-    if (!Kernel.ready) { await Kernel.whenReady().catch(() => {}); if (!Kernel.ready) return; }
     busy = true;
-    ev.emit('calc', true);
-    clearTimeout(busyTimer); busyTimer = setTimeout(() => ev.emit('busy', true), 300);
+    let calcEmitted = false;
     while (dirty) {
       dirty = false;
+      if (!needsKernelFor(S.doc, S.extra, S.peek)) {
+        apply({ nodes: [], errors: [], resolved: {}, times: {} });
+        ev.emit('rebuilt');
+        continue;
+      }
+      if (!calcEmitted) {
+        calcEmitted = true;
+        ev.emit('calc', true);
+        clearTimeout(busyTimer); busyTimer = setTimeout(() => ev.emit('busy', true), 300);
+      }
+      if (typeof SK !== 'undefined' && SK.ensureDocFonts) {
+        await SK.ensureDocFonts(S.doc, S.extra).catch((e) => console.warn(e));
+      }
+      if (!Kernel.ready) {
+        try { await Kernel.ensure(); }
+        catch (e) {
+          console.error(e);
+          UI.toast('Der CAD-Kern konnte nicht gestartet werden: ' + (e.message || e), { kind: 'bad', ms: 6000 });
+          break;
+        }
+        if (!Kernel.ready) break;
+      }
       if (typeof Store !== 'undefined') {
         const ids = Store.collectBlobIds(S.doc);
         if ([...ids].some((id) => !Store.getBlobSync(id))) await Store.hydrateDoc(S.doc);
@@ -538,7 +564,8 @@ const App = (() => {
       apply(res);
       ev.emit('rebuilt');
     }
-    busy = false; clearTimeout(busyTimer); ev.emit('busy', false); ev.emit('calc', false);
+    busy = false; clearTimeout(busyTimer);
+    if (calcEmitted) { ev.emit('busy', false); ev.emit('calc', false); }
     ev.emit('rebuilt');
   }
   // Aussehen am Werkstoff: eigener Werkstoff des Teils, sonst der ausdrücklich gewählte Projekt-Werkstoff

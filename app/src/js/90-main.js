@@ -12,7 +12,7 @@
   UI.initTips();
   I18n.applyDom();
   Viewer.init($('#viewport'));
-  window.__V = Viewer; window.__M = { Store, Interact, Measure, Datums, RefFix, Print, ViewPrefs, App, Actions, Model, Timeline, Start, Templates, Comp, Handles, Sketch, SK, TTF, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views, Mass, Select, Versions, DroneTpl, DroneUI, DroneLib, DroneCheck, Plates, Variants, Explain, Weak, AI, Snap, Toolbar, Panels, Joints, I18n, T, Units, Expr, Tour, GeomCheck }; window.__S = Start; // für automatische Tests
+  window.__V = Viewer; window.__M = { Store, Interact, Measure, Datums, RefFix, Print, ViewPrefs, App, Actions, Model, Timeline, Start, Templates, Comp, Handles, Sketch, SK, TTF, Viewer, Commands, Solver, Notes, SKO, Features, Place, Views, Mass, Select, Versions, DroneTpl, DroneUI, DroneLib, DroneCheck, Plates, Variants, Explain, Weak, AI, Snap, Toolbar, Panels, Joints, I18n, T, Units, Expr, Tour, GeomCheck, Log, Kernel }; window.__S = Start; // für automatische Tests
   Panels.init(); Datums.init(); RefFix.init(); Handles.init(); Interact.init(); Sketch.init(); Measure.init(); Notes.init(); Commands.init(); Print.init(); ViewPrefs.apply(); Log.init(); Timeline.init(); Refine.init(); Comp.init(); Views.init(); GeomCheck.init(); Mass.init(); Joints.init(); Versions.init(); Start.init();
 
   // Kopfzeile
@@ -71,46 +71,44 @@
 
   // Letztes Projekt aus der Browser-Datenbank laden (ggf. aus localStorage übernehmen) oder Startseite zeigen
   updName(); UI.renderHint();
-  UI.loading(true, 0.02);
-  const storageReady = (async () => {
-    await Store.init();
-    const rec = Start.checkRecoveryOnBoot ? await Start.checkRecoveryOnBoot() : null;
-    if (rec) {
-      let baseLoaded = false;
-      if (rec.baseDoc) {
-        try {
-          await Store.hydrateDoc(rec.baseDoc);
-          App.setDoc(rec.baseDoc, { fit: true, fromBoot: true, noAutosave: true });
-          baseLoaded = true;
-        } catch (_) { baseLoaded = false; }
+  Kernel.on('state', ({ state, progress }) => {
+    if (state === 'loading') UI.busy(true, progress > 0.84 ? 'CAD-Kern startet …' : 'CAD-Kern wird geladen …');
+    else if (state === 'ready') { if (App.busy) UI.busy(true, 'Rechnet …'); else UI.busy(false); }
+    else if (state === 'error') UI.busy(false);
+  });
+  Kernel.on('ready', (t) => { Log.markKernelReady(t); Print.updateAmpel(); });
+  SK.onFont('loaded', (info) => { Log.markFontLoaded(info); });
+
+  (async () => {
+    try {
+      await Store.init();
+      const rec = Start.checkRecoveryOnBoot ? await Start.checkRecoveryOnBoot() : null;
+      if (rec) {
+        let baseLoaded = false;
+        if (rec.baseDoc) {
+          try {
+            await Store.hydrateDoc(rec.baseDoc);
+            App.setDoc(rec.baseDoc, { fit: true, fromBoot: true, noAutosave: true });
+            baseLoaded = true;
+          } catch (_) { baseLoaded = false; }
+        }
+        if (!baseLoaded) App.setDoc(Model.newDoc(), { fit: false, fromBoot: true, noAutosave: true });
+        updName(); syncBed(); UI.renderHint();
+        Start.startRecoveryTracking(baseLoaded ? rec.baseDoc : null);
+      } else {
+        const lastId = Store.getLastId();
+        const last = lastId ? await App.loadStored(lastId) : null;
+        if (last) { try { App.setDoc(last, { fit: true, fromBoot: true, noAutosave: true }); } catch (_) { App.setDoc(Model.newDoc(), { fit: false, fromBoot: true, noAutosave: true }); } }
+        else App.setDoc(Model.newDoc(), { fit: false, fromBoot: true, noAutosave: true });
+        updName(); syncBed(); UI.renderHint();
+        Start.startRecoveryTracking(last || null);
+        if (!last) Start.show();
       }
-      if (!baseLoaded) App.setDoc(Model.newDoc(), { fit: false, fromBoot: true, noAutosave: true });
-      updName(); syncBed(); UI.renderHint();
-      Start.startRecoveryTracking(baseLoaded ? rec.baseDoc : null);
-    } else {
-      const lastId = Store.getLastId();
-      const last = lastId ? await App.loadStored(lastId) : null;
-      if (last) { try { App.setDoc(last, { fit: true, fromBoot: true, noAutosave: true }); } catch (_) { App.setDoc(Model.newDoc(), { fit: false, fromBoot: true, noAutosave: true }); } }
-      else App.setDoc(Model.newDoc(), { fit: false, fromBoot: true, noAutosave: true });
-      updName(); syncBed(); UI.renderHint();
-      Start.startRecoveryTracking(last || null);
-      if (!last) Start.show();
+    } finally {
+      Print.updateAmpel();
+      Measure.updateStatus();
+      Log.markUiReady(performance.now());
     }
   })();
-
-  Kernel.start((p) => UI.loading(true, p, p > 0.84 ? 'CAD-Kern startet …' : 'Der CAD-Kern wird geladen …'))
-    .then(async () => {
-      await storageReady;
-      UI.loading(false);
-      await App.rebuild();
-      Viewer.fit(null, false);
-      Print.updateAmpel();
-    })
-    .catch((e) => {
-      console.error(e);
-      UI.loading(true, 0, '');
-      const lb = $('.loading .box');
-      if (lb) { lb.innerHTML = ''; lb.append(h('b', null, 'Der CAD-Kern konnte nicht starten'), h('span', null, String(e.message || e)), h('span', null, 'Lade die Seite neu. Wenn es wieder passiert, nutze einen aktuellen Browser wie Chrome, Edge, Firefox oder Safari.')); }
-    });
 })();
 

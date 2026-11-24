@@ -562,6 +562,27 @@ const Panels = (() => {
     for (const [k, l] of [['all', 'Alle'], ['change', 'Änderungen'], ['error', 'Fehler']]) { const b = h('button', { type: 'button', 'aria-pressed': logFilter === k }, l); b.onclick = () => { logFilter = k; renderLeft(); }; seg.append(b); }
     const clr = h('button', { type: 'button', class: 'btn small ghost', style: { marginLeft: 'auto' } }, 'Leeren'); clr.onclick = () => Log.clear();
     tools.append(seg, clr); body.append(tools);
+    // Startzeiten: Oberfläche bereit, CAD-Kern bereit, geladene Schriften (PL-03)
+    const st = Log.startup;
+    if (st && st.uiReadyMs != null) {
+      const fmtMs = (ms) => (ms >= 1000 ? `${fmt(ms / 1000, 2)} s` : `${Math.round(ms)} ms`);
+      const sec = h('details', { class: 'section slow-sec', id: 'startup-times', open: true, 'data-help': 'startupTimes' }, h('summary', { class: 'section-h' }, 'Startzeit'));
+      sec.append(h('div', { class: 'mini-row', id: 'st-ui-ready' }, h('span', { class: 'grow' }, 'Oberfläche bereit'), h('b', { class: 'mono' }, fmtMs(st.uiReadyMs))));
+      const kState = typeof Kernel !== 'undefined' ? Kernel.state : 'idle';
+      const kTxt = st.kernelReadyMs != null
+        ? `${fmtMs(st.kernelReadyMs)}${st.kernelLoadMs != null ? ` (Ladezeit ${fmtMs(st.kernelLoadMs)})` : ''}`
+        : (kState === 'loading' ? 'Lädt …' : kState === 'error' ? 'Fehler' : 'Lädt bei Bedarf');
+      sec.append(h('div', { class: 'mini-row', id: 'st-kernel-ready' }, h('span', { class: 'grow' }, 'CAD-Kern bereit'), h('b', { class: 'mono' }, kTxt)));
+      const loadedFonts = Object.values(st.fonts || {});
+      if (loadedFonts.length) {
+        for (const lf of loadedFonts) {
+          sec.append(h('div', { class: 'mini-row', id: 'st-font-' + lf.id }, h('span', { class: 'grow' }, `Schrift ${lf.name}`), h('b', { class: 'mono' }, fmtMs(lf.ms))));
+        }
+      } else {
+        sec.append(h('div', { class: 'mini-row', id: 'st-fonts-state' }, h('span', { class: 'grow' }, 'Schriften'), h('b', { class: 'mono' }, 'Laden bei Bedarf')));
+      }
+      body.append(sec);
+    }
     // Welche Schritte brauchen beim Rechnen am längsten? (BE-26)
     const slow = App.doc.items.map((it) => ({ it, t: App.timeOf(it.id) })).filter((x) => x.t && x.t.ms >= 1).sort((a, b) => b.t.ms - a.t.ms).slice(0, 5);
     if (slow.length) {
@@ -2101,6 +2122,7 @@ const Panels = (() => {
     $('#lt-log').onclick = () => { leftTab = 'log'; renderLeft(); };
     App.on('ctx', () => renderLeft());
     Log.on('change', debounce(() => { if (leftTab === 'log') renderLeft(); }, 80));
+    if (typeof Kernel !== 'undefined' && Kernel.on) Kernel.on('state', debounce(() => { if (leftTab === 'log') renderLeft(); }, 80));
     Toolbar.init();
     renderTools(); initViewCube();
     const rerenderLeftHint = debounce(() => { renderLeft(); UI.renderHint(); }, 16);
