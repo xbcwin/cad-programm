@@ -155,6 +155,56 @@ const Viewer = (() => {
     }
     for (const o of groups.origin.children) if (o.userData.originDot) o.scale.setScalar(Math.max(0.02, dist * 0.004));
   }
+  let lastPrintBed = null;
+  function setPrintBed(bed) {
+    if (!groups.printBed) return;
+    while (groups.printBed.children.length) {
+      const ch = groups.printBed.children[0];
+      groups.printBed.remove(ch);
+      if (ch.geometry) ch.geometry.dispose();
+      if (ch.material) ch.material.dispose();
+    }
+    lastPrintBed = bed && bed.enabled ? { ...bed } : null;
+    if (!bed || !bed.enabled || !(bed.x > 0) || !(bed.y > 0)) { needsRender = true; return; }
+    const bx = Number(bed.x), by = Number(bed.y), bz = Number(bed.z) > 0 ? Number(bed.z) : 250;
+    const hx = bx / 2, hy = by / 2;
+    const plate = new THREE.Mesh(
+      new THREE.PlaneGeometry(bx, by),
+      new THREE.MeshBasicMaterial({ color: theme.accent, transparent: true, opacity: 0.05, side: THREE.DoubleSide, depthWrite: false }),
+    );
+    plate.position.z = -0.02;
+    plate.renderOrder = -2;
+    plate.userData.noPick = true;
+    const basePts = [
+      -hx, -hy, 0, hx, -hy, 0,
+      hx, -hy, 0, hx, hy, 0,
+      hx, hy, 0, -hx, hy, 0,
+      -hx, hy, 0, -hx, -hy, 0,
+    ];
+    const baseGeo = new THREE.BufferGeometry();
+    baseGeo.setAttribute('position', new THREE.Float32BufferAttribute(basePts, 3));
+    const baseFrame = new THREE.LineSegments(baseGeo, new THREE.LineBasicMaterial({ color: theme.accent, transparent: true, opacity: 0.75, depthWrite: false }));
+    baseFrame.renderOrder = -1;
+    baseFrame.userData.noPick = true;
+    const volPts = [
+      -hx, -hy, 0, -hx, -hy, bz,
+      hx, -hy, 0, hx, -hy, bz,
+      hx, hy, 0, hx, hy, bz,
+      -hx, hy, 0, -hx, hy, bz,
+      -hx, -hy, bz, hx, -hy, bz,
+      hx, -hy, bz, hx, hy, bz,
+      hx, hy, bz, -hx, hy, bz,
+      -hx, hy, bz, -hx, -hy, bz,
+    ];
+    const volGeo = new THREE.BufferGeometry();
+    volGeo.setAttribute('position', new THREE.Float32BufferAttribute(volPts, 3));
+    const volFrame = new THREE.LineSegments(volGeo, new THREE.LineBasicMaterial({ color: theme.accent, transparent: true, opacity: 0.22, depthWrite: false }));
+    volFrame.renderOrder = -1;
+    volFrame.userData.noPick = true;
+    groups.printBed.add(plate, baseFrame, volFrame);
+    needsRender = true;
+  }
+
   function setViewOptions(opts) {
     Object.assign(view, opts);
     if (view.grid !== 'auto') { const st = +view.grid; if (st !== gridStep) buildGrid(st); }
@@ -179,7 +229,7 @@ const Viewer = (() => {
     camera = new THREE.PerspectiveCamera(32, 1, 0.5, 30000);
     camera.up.set(0, 0, 1);
     camera.position.set(170, -250, 190);
-    for (const k of ['ground', 'origin', 'datums', 'nodes', 'compare', 'ghosts', 'overlay', 'measures', 'handles', 'sketch', 'reffix']) { groups[k] = new THREE.Group(); scene.add(groups[k]); }
+    for (const k of ['ground', 'printBed', 'origin', 'datums', 'nodes', 'compare', 'ghosts', 'overlay', 'measures', 'handles', 'sketch', 'reffix']) { groups[k] = new THREE.Group(); scene.add(groups[k]); }
     orthoCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 60000);
     lights.hemi = new THREE.HemisphereLight(0xffffff, 0x6f6252, 1.55); scene.add(lights.hemi);
     const key = new THREE.DirectionalLight(0xffffff, 2.1); key.position.set(0.55, -0.8, 1.25); scene.add(key); scene.add(key.target); lights.key = key;
@@ -208,7 +258,7 @@ const Viewer = (() => {
     const ro = new ResizeObserver(resize); ro.observe(el);
     resize();
     const mq = matchMedia('(prefers-color-scheme: dark)');
-    const onTheme = () => { readTheme(); buildGrid(gridStep); for (const [id, n] of nodes) styleNode(n); needsRender = true; listeners.emit('theme'); };
+    const onTheme = () => { readTheme(); buildGrid(gridStep); if (lastPrintBed) setPrintBed(lastPrintBed); for (const [id, n] of nodes) styleNode(n); needsRender = true; listeners.emit('theme'); };
     mq.addEventListener ? mq.addEventListener('change', onTheme) : mq.addListener(onTheme);
     new MutationObserver(onTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
     loop();
@@ -1465,7 +1515,7 @@ const Viewer = (() => {
   return {
     viewBack, get viewHistory() { return camHist.length; }, useButtons, setMouseStyle, get mouseStyle() { return mouseStyle; }, get leftOrbits() { return !!(controls && controls.mouseButtons.LEFT === THREE.MOUSE.ROTATE); }, setLook, lookOf, get look() { return { ...LOOK }; }, fitShadow, renderImage, lookAtFace, faceIndexOf: (id, fc) => { const n = nodes.get(id); return n ? faceIndexOf(n, fc) : -1; }, cylinderFaceInfo, threadFaceIndex: (id, th) => { const n = nodes.get(id); return n ? threadFaceIndex(n, th) : -1; }, get renderer() { return renderer; },
     init, requestRender, renderNow, setClip, setXray, setOffsets, baseBox, renderInset, silhouette, setAdaptive, setCompare, setNode, updateNode, removeNode, setGhost, removeGhost, clearGhosts, highlightFace, highlightEdge, highlightBody, setSelectedEdges, clearHover, setRefGhost, clearRefGhost, hasRefGhost,
-    edgePositions, pick, pickAll, pickGhost, pickProxy, setProxies, clearProxies, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, boxVisible, sceneBox, snapshot, makeFat, disposeFat, faceOverlay, faceArea, faceEdges, edgeKinds, wallAt, thinWalls,
+    edgePositions, pick, pickAll, pickGhost, pickProxy, setProxies, clearProxies, pickPlane, rayPlane, inView, screenFraction, setRay, toScreen, pixelSizeAt, fit, setView, lookAtPlane, saveCamera, restoreCamera, moveCamera, setOrtho, setViewOptions, setPrintBed, boxVisible, sceneBox, snapshot, makeFat, disposeFat, faceOverlay, faceArea, faceEdges, edgeKinds, wallAt, thinWalls,
     get camera() { syncCamAnim(); return camera; }, get activeCamera() { syncCamAnim(); return cam(); }, get ortho() { return ortho; }, get gridStep() { return gridStep; }, get controls() { return controls; }, get scene() { return scene; }, get groups() { return groups; }, get nodes() { return nodes; }, get canvas() { return renderer.domElement; }, get theme() { return theme; }, get container() { return container; },
     get clip() { return vis.clip; }, get clips() { return vis.clips.slice(); }, get xray() { return vis.xray; }, get lowRes() { return lowRes; },  get pixelRatio() { return renderer.getPixelRatio(); },
     on: listeners.on,

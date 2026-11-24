@@ -100,7 +100,146 @@ const Templates = (() => {
       svg: '<path d="M12 30 44 18l20 8-32 12z" class="a1"/><path d="M60 26 92 14l12 5-32 12z" class="b1"/><path d="M40 22l24 8" class="line"/>',
     },
   ];
-  return { LIST };
+
+  // Vorlagen für „Neues Projekt“ (BE-18)
+  const PROJECT_LIST = [
+    {
+      id: 'empty-mm',
+      get name() { return T('start.projTpl.emptyMm.name'); },
+      get desc() { return T('start.projTpl.emptyMm.desc'); },
+      get badge() { return 'mm'; },
+      build() {
+        const d = Model.newDoc('Neues Projekt');
+        d.settings.unit = 'mm';
+        d.settings.printBed = { enabled: false, x: 220, y: 220, z: 250, nozzle: 0.4 };
+        return d;
+      },
+      svg: '<rect x="18" y="10" width="74" height="36" rx="4" class="a1"/><path d="M26 38h58M32 33v5M44 35v3M56 33v5M68 35v3M80 33v5" class="line"/>',
+    },
+    {
+      id: 'empty-in',
+      get name() { return T('start.projTpl.emptyIn.name'); },
+      get desc() { return T('start.projTpl.emptyIn.desc'); },
+      get badge() { return 'Zoll (in)'; },
+      build() {
+        const d = Model.newDoc('Neues Projekt');
+        d.settings.unit = 'in';
+        d.settings.printBed = { enabled: false, x: 220, y: 220, z: 250, nozzle: 0.4 };
+        return d;
+      },
+      svg: '<rect x="18" y="10" width="74" height="36" rx="4" class="b1"/><path d="M26 38h58M32 32v6M46 35v3M60 32v6M74 35v3" class="line"/>',
+    },
+    {
+      id: 'print3d',
+      get name() { return T('start.projTpl.print3d.name'); },
+      get desc() { return T('start.projTpl.print3d.desc'); },
+      get badge() { return '220×220 · 0,4 mm'; },
+      build() {
+        const d = Model.newDoc('3D-Druck');
+        d.settings.unit = 'mm';
+        d.settings.material = 'PLA';
+        d.settings.custom = { x: 220, y: 220, z: 250 };
+        d.settings.printBed = { enabled: true, x: 220, y: 220, z: 250, nozzle: 0.4 };
+        d.params = [param('Duese', 0.4), param('Wand', 1.6), param('Spiel', 0.2)];
+        return d;
+      },
+      svg: '<path d="M16 40 55 28l39 12-39 12z" class="a1"/><path d="M28 40 55 31l27 9-27 9z" class="a2"/><path d="M55 8v16M49 24h12l-6 7z" class="b3"/>',
+    },
+    {
+      id: 'laser',
+      get name() { return T('start.projTpl.laser.name'); },
+      get desc() { return T('start.projTpl.laser.desc'); },
+      get badge() { return '3 mm · Holz'; },
+      build() {
+        const d = Model.newDoc('Laserplatte');
+        d.settings.unit = 'mm';
+        d.settings.material = 'Pappel-Sperrholz';
+        d.params = [param('Breite', 120), param('Tiefe', 80), param('Dicke', 3), param('Schnittspalt', 0.15)];
+        d.items = [it('box', { w: 'Breite', d: 'Tiefe', h: 'Dicke' }, { name: 'Platte', color: '#e6d2b5' })];
+        return d;
+      },
+      svg: '<path d="M12 31 66 13l32 12-54 18z" class="b1"/><path d="M12 31v6l32 12v-6z" class="b2"/><path d="M98 25v6L44 49v-6z" class="b3"/><path d="M55 4v18" class="line"/>',
+    },
+    {
+      id: 'enclosure',
+      get name() { return T('start.projTpl.enclosure.name'); },
+      get desc() { return T('start.projTpl.enclosure.desc'); },
+      get badge() { return '80×50×30 mm'; },
+      build() {
+        const d = Model.newDoc('Gehäuse');
+        d.settings.unit = 'mm';
+        d.settings.material = 'PLA';
+        d.params = [param('Breite', 80), param('Tiefe', 50), param('Höhe', 30), param('Wand', 2), param('Spiel', 0.2)];
+        const box = grp('Gehäuse', [
+          it('box', { w: 'Breite', d: 'Tiefe', h: 'Höhe' }, { name: 'Außen', color: '#2f9e91', fin: [{ type: 'fillet', r: 3, edges: 'vertical' }] }),
+          it('box', { w: 'Breite - 2*Wand', d: 'Tiefe - 2*Wand', h: 'Höhe' }, { name: 'Innenraum', role: 'hole', t: { z: 'Wand' } }),
+        ], { color: '#2f9e91', t: { x: '-(Breite/2 + 8)' } });
+        const lid = grp('Deckel', [
+          it('box', { w: 'Breite', d: 'Tiefe', h: 'Wand' }, { name: 'Platte', color: '#e8833a', fin: [{ type: 'fillet', r: 3, edges: 'vertical' }] }),
+          it('box', { w: 'Breite - 2*Wand - 2*Spiel', d: 'Tiefe - 2*Wand - 2*Spiel', h: 3 }, { name: 'Steg', t: { z: 'Wand' }, color: '#e8833a' }),
+          it('box', { w: 'Breite - 4*Wand - 2*Spiel', d: 'Tiefe - 4*Wand - 2*Spiel', h: 3.5 }, { name: 'Steg innen', role: 'hole', t: { z: 'Wand' } }),
+        ], { color: '#e8833a', t: { x: 'Breite/2 + 8' } });
+        d.items = [box, lid];
+        return d;
+      },
+      svg: '<path d="M12 22 40 12l28 10-28 10z" class="a1"/><path d="M12 22v18l28 10V32z" class="a2"/><path d="M68 22v18L40 50V32z" class="a3"/><path d="M50 8 74 0l18 6-24 8z" class="b1"/><path d="M50 8v4l18 6v-4z" class="b2"/><path d="M92 6v4l-24 8v-4z" class="b3"/>',
+    },
+  ];
+
+  const CUSTOM_KEY = 'tracery-vorlagen';
+  function customList() {
+    try {
+      const raw = storageGet(CUSTOM_KEY);
+      if (!raw) return [];
+      const arr = JSON.parse(raw);
+      if (!Array.isArray(arr)) return [];
+      return arr.filter((x) => x && typeof x === 'object' && x.id && x.name && x.doc && x.doc.format === 'masswerk');
+    } catch (_) {
+      return [];
+    }
+  }
+  function writeCustom(arr) {
+    return storageSet(CUSTOM_KEY, JSON.stringify(arr));
+  }
+  function saveCustom(name, desc, doc) {
+    const cleanName = String(name || '').trim();
+    if (!cleanName || !doc) return null;
+    const snap = deepClone(doc);
+    delete snap.id;
+    snap.name = cleanName;
+    const entry = {
+      id: uid('tpl'),
+      name: cleanName,
+      desc: String(desc || '').trim(),
+      created: Date.now(),
+      doc: snap,
+    };
+    const rest = customList().filter((x) => String(x.name || '').trim().toLowerCase() !== cleanName.toLowerCase());
+    rest.unshift(entry);
+    if (!writeCustom(rest)) return null;
+    return entry;
+  }
+  function deleteCustom(id) {
+    const next = customList().filter((x) => x.id !== id);
+    writeCustom(next);
+    return next;
+  }
+  function getCustom(id) {
+    return customList().find((x) => x.id === id) || null;
+  }
+  function buildProject(id) {
+    const bi = PROJECT_LIST.find((t) => t.id === id);
+    if (bi) return bi.build();
+    const cu = getCustom(id);
+    if (!cu || !cu.doc) return null;
+    const d = deepClone(cu.doc);
+    d.id = uid('p');
+    d.name = cu.name || d.name || 'Neues Projekt';
+    d.created = Date.now();
+    d.modified = Date.now();
+    return Model.migrate(d);
+  }
+  return { LIST, PROJECT_LIST, CUSTOM_KEY, customList, saveCustom, deleteCustom, getCustom, buildProject };
 })();
 
 const Start = (() => {
@@ -119,7 +258,7 @@ const Start = (() => {
     brand.innerHTML = $('#brand svg').outerHTML;
     brand.append(h('div', null, h('h1', null, 'Tracery'), h('p', null, T('start.subtitle'))));
     const acts = h('div', { class: 'btn-row' });
-    const nb = h('button', { type: 'button', class: 'btn primary' }); nb.innerHTML = icon('newfile') + esc(T('start.newProject')); nb.onclick = () => newProject();
+    const nb = h('button', { type: 'button', id: 'start-new-btn', class: 'btn primary', 'data-help': 'projectTemplates' }); nb.innerHTML = icon('newfile') + esc(T('start.newProject')); nb.onclick = () => newProjectDialog();
     const ob = h('button', { type: 'button', class: 'btn' }); ob.innerHTML = icon('folder') + esc(T('start.openFile')); ob.onclick = () => openFile();
     const tb = h('button', { type: 'button', class: 'btn' }); tb.innerHTML = icon('play') + esc(T('start.tourBasics')); tb.onclick = () => { newProject(true); Tour.start(); };
     const ts = h('button', { type: 'button', class: 'btn' }); ts.innerHTML = icon('sketch') + esc(T('start.tourSketch')); ts.onclick = () => { newProject(true); Tour.start('sketch'); };
@@ -162,6 +301,14 @@ const Start = (() => {
       }
       sec.append(list); inner.append(sec);
     }
+    const customTpls = Templates.customList();
+    if (customTpls.length) {
+      const csec = h('section', { id: 'start-custom-tpls' }, h('h2', null, T('tpl.customHeading')));
+      const ccards = h('div', { class: 'cards' });
+      for (const ct of customTpls) ccards.append(customTplCard(ct, { onAfterDelete: () => show() }));
+      csec.append(ccards);
+      inner.append(csec);
+    }
     const tsec = h('section', null, h('h2', null, T('start.templatesHeading')));
     const cards = h('div', { class: 'cards' });
     const empty = h('button', { type: 'button', class: 'card new' });
@@ -193,6 +340,160 @@ const Start = (() => {
     App.setDoc(Model.newDoc('Neues Projekt'));
     hide();
     if (!silent) UI.toast('Neues Projekt. Fang mit einem Körper an – oder beschreib unten, was du bauen willst.', { icon: 'newfile', ms: 4500 });
+  }
+  function customTplMeta(ct) {
+    const d = ct && ct.doc ? ct.doc : {};
+    const u = d.settings && d.settings.unit ? d.settings.unit : 'mm';
+    const n = Model.countItems(d);
+    const bits = [u === 'in' ? 'Zoll' : u];
+    if (n > 0) bits.push(`${n} ${n === 1 ? 'Teil' : 'Teile'}`);
+    const pb = d.settings && d.settings.printBed;
+    if (pb && pb.enabled) bits.push(`Druckbett ${Math.round(pb.x)}×${Math.round(pb.y)}`);
+    return bits.join(' · ');
+  }
+  function customTplCard(ct, { onOpen, onAfterDelete } = {}) {
+    const card = h('div', { class: 'card tpl-card custom', role: 'button', tabindex: '0', dataset: { tplId: ct.id } });
+    const del = h('button', {
+      type: 'button',
+      class: 'icon-btn tpl-del',
+      'aria-label': T('tpl.deleteAria', { name: ct.name }),
+      'data-tip': T('tpl.deleteTip'),
+    });
+    del.innerHTML = icon('trash');
+    del.onclick = async (e) => {
+      e.stopPropagation();
+      if (await UI.confirm(T('tpl.deleteTitle'), T('tpl.deleteBody', { name: ct.name }), T('common.delete'), true)) {
+        Templates.deleteCustom(ct.id);
+        UI.toast(T('tpl.deleted', { name: ct.name }), { icon: 'trash' });
+        if (onAfterDelete) onAfterDelete();
+      }
+    };
+    const meta = customTplMeta(ct);
+    card.append(
+      del,
+      h('span', { class: 'tpl-badge' }, meta),
+      h('b', null, ct.name),
+      h('span', null, ct.desc || T('tpl.customNoDesc')),
+    );
+    const open = () => { if (onOpen) onOpen(); openTemplate(ct.id); };
+    card.onclick = open;
+    card.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } };
+    return card;
+  }
+  function openTemplate(id) {
+    const d = Templates.buildProject(id);
+    if (!d) { UI.toast(T('tpl.missing'), { kind: 'bad' }); return false; }
+    App.setDoc(d);
+    hide();
+    if (id === 'print3d') {
+      const pb = d.settings && d.settings.printBed;
+      UI.toast(T('tpl.loadedPrint3d', { x: pb.x, y: pb.y, z: pb.z, nozzle: fmt(pb.nozzle, 1) }), { icon: 'check', ms: 5000 });
+    } else if (id === 'empty-mm' || id === 'empty-in') {
+      UI.toast(T('tpl.loadedEmpty', { unit: d.settings.unit === 'in' ? 'Zoll' : 'mm' }), { icon: 'newfile', ms: 4000 });
+    } else {
+      UI.toast(T('tpl.loadedNamed', { name: d.name }), { icon: 'check', ms: 4500 });
+    }
+    return true;
+  }
+  function newProjectDialog() {
+    const wrap = h('div', { id: 'new-proj-dialog', class: 'tpl-dialog' });
+    const builtSec = h('div', { class: 'tpl-sec' }, h('div', { class: 'section-h' }, T('tpl.builtinHeading')));
+    const builtGrid = h('div', { class: 'tpl-grid', id: 'tpl-builtin-grid' });
+    let modalRef = null;
+    for (const t of Templates.PROJECT_LIST) {
+      const c = h('button', { type: 'button', class: 'card tpl-card', dataset: { tplId: t.id } });
+      const th = h('div', { class: 'thumb' }); th.innerHTML = tplThumb(t);
+      c.append(th, h('span', { class: 'tpl-badge' }, t.badge), h('b', null, t.name), h('span', null, t.desc));
+      c.onclick = () => { if (modalRef) modalRef.close(); openTemplate(t.id); };
+      builtGrid.append(c);
+    }
+    builtSec.append(builtGrid);
+
+    const custSec = h('div', { class: 'tpl-sec', id: 'tpl-custom-sec' });
+    const custHead = h('div', { class: 'tpl-sec-head' }, h('div', { class: 'section-h' }, T('tpl.customHeading')));
+    const saveBtn = h('button', { type: 'button', class: 'btn small', id: 'tpl-save-current', 'data-help': 'saveTemplate' });
+    saveBtn.innerHTML = icon('save') + esc(T('tpl.saveCurrent'));
+    saveBtn.onclick = () => { if (modalRef) modalRef.close(); saveAsTemplate({ reopen: true }); };
+    custHead.append(saveBtn);
+    const custGrid = h('div', { class: 'tpl-grid', id: 'tpl-custom-grid' });
+    const renderCustom = () => {
+      custGrid.innerHTML = '';
+      const list = Templates.customList();
+      if (!list.length) {
+        custGrid.append(h('div', { class: 'hint-box', style: { gridColumn: '1 / -1' } }, T('tpl.customEmpty')));
+        return;
+      }
+      for (const ct of list) {
+        custGrid.append(customTplCard(ct, {
+          onOpen: () => { if (modalRef) modalRef.close(); },
+          onAfterDelete: () => { renderCustom(); if (el) show(); },
+        }));
+      }
+    };
+    renderCustom();
+    custSec.append(custHead, custGrid);
+
+    wrap.append(builtSec, custSec);
+    modalRef = UI.modal({
+      title: T('tpl.newDialogTitle'),
+      body: wrap,
+      wide: true,
+      actions: [{ label: T('common.close') }],
+    });
+    return modalRef;
+  }
+  function saveAsTemplate(opts = {}) {
+    const defName = (App.doc && App.doc.name && App.doc.name !== 'Neues Projekt') ? App.doc.name : 'Meine Vorlage';
+    const nameF = h('div', { class: 'field' },
+      h('label', { for: 'tpl-save-name' }, T('tpl.saveNameLabel')),
+      h('div', { class: 'inp' }, h('input', { id: 'tpl-save-name', type: 'text', value: defName, autocomplete: 'off' })));
+    const descF = h('div', { class: 'field' },
+      h('label', { for: 'tpl-save-desc' }, T('tpl.saveDescLabel')),
+      h('div', { class: 'inp' }, h('input', { id: 'tpl-save-desc', type: 'text', placeholder: T('tpl.saveDescPh'), autocomplete: 'off' })));
+    const pb = App.doc && App.doc.settings && App.doc.settings.printBed;
+    const summaryBits = [
+      `Einheit: ${Units.key() === 'in' ? 'Zoll' : Units.label()}`,
+      `${Model.countItems(App.doc)} ${Model.countItems(App.doc) === 1 ? 'Objekt' : 'Objekte'}`,
+    ];
+    if (App.doc && App.doc.settings && App.doc.settings.material) summaryBits.push(`Material: ${App.doc.settings.material}`);
+    if (pb && pb.enabled) summaryBits.push(`Druckbett ${pb.x}×${pb.y}×${pb.z} mm · Düse ${fmt(pb.nozzle, 2)} mm`);
+    const body = h('div', { id: 'save-tpl-dialog', style: { display: 'grid', gap: '12px' } },
+      nameF, descF, h('div', { class: 'hint-box' }, summaryBits.join(' · ')));
+
+    let modalRef = null;
+    const doSave = () => {
+      const nInp = nameF.querySelector('input');
+      const dInp = descF.querySelector('input');
+      const nm = (nInp.value || '').trim();
+      if (!nm) {
+        UI.toast(T('tpl.saveNameEmpty'), { kind: 'bad' });
+        nInp.focus();
+        return false;
+      }
+      const saved = Templates.saveCustom(nm, dInp.value, App.doc);
+      if (!saved) {
+        UI.toast(T('tpl.saveFailed'), { kind: 'bad' });
+        return false;
+      }
+      UI.toast(T('tpl.saved', { name: saved.name }), { icon: 'check' });
+      if (el) show();
+      if (opts.reopen) setTimeout(() => newProjectDialog(), 30);
+      return true;
+    };
+    modalRef = UI.modal({
+      title: T('tpl.saveDialogTitle'),
+      body,
+      actions: [
+        { label: T('common.cancel'), value: false },
+        { label: T('common.save'), id: 'tpl-save-ok', primary: true, value: true, run: () => doSave() },
+      ],
+    });
+    const nInp = nameF.querySelector('input');
+    const onEnter = (e) => { if (e.key === 'Enter') { e.preventDefault(); if (doSave() !== false) modalRef.close(true); } };
+    nInp.addEventListener('keydown', onEnter);
+    descF.querySelector('input').addEventListener('keydown', onEnter);
+    setTimeout(() => { nInp.focus(); nInp.select(); }, 40);
+    return modalRef;
   }
   // ---------- STEP lesen: Produkt-Namen, Baugruppen-Struktur, Placements und Farben (Part 21) ----------
   function parseSTEP(buf) {
@@ -1846,7 +2147,7 @@ const Start = (() => {
     window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && dropEl && !dropEl.hidden) hideDropOverlay(); });
   }
   return {
-    init, importCAD, parseSTEP, import3MF, parse3MF, importOBJ, parseOBJ, importDXF, parseDXF, parseSVG, show, hide, newProject, openFile, openBlob, saveFile,
+    init, importCAD, parseSTEP, import3MF, parse3MF, importOBJ, parseOBJ, importDXF, parseDXF, parseSVG, show, hide, newProject, newProjectDialog, saveAsTemplate, openTemplate, openFile, openBlob, saveFile,
     checkImport, healImport, importCheckOf, setImportHealOpts, dismissImportBanner,
     folderSupported, folderInfo, saveToFolder, saveToFolderNow, disconnectFolder,
     get folderDelay() { return folderDelay; }, set folderDelay(ms) { folderDelay = Math.max(0, Number(ms) || 10000); },

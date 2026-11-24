@@ -1029,3 +1029,16 @@ body.presenting .pat-dot{display:none!important}
 .tb-fav-div{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600;color:var(--muted);padding:4px 2px 2px}
 .tb-fav-div::after{content:"";flex:1;height:1px;background:var(--line)}
 .tb-empty{padding:24px 12px;text-align:center;font-size:13px;color:var(--muted);line-height:1.45}
+
+/* Vorlagen-Dialog (BE-18) */
+.modal:has(#new-proj-dialog){width:min(780px,92vw)}
+.tpl-dialog{display:grid;gap:18px}
+.tpl-sec{display:grid;gap:10px}
+.tpl-sec-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.tpl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(195px,1fr));gap:10px}
+.tpl-card{position:relative}
+.tpl-card.custom{padding-right:36px}
+.tpl-badge{display:inline-block;align-self:start;font-size:11.5px;font-weight:600;color:var(--accent);background:var(--accent-soft);border-radius:999px;padding:2px 8px;line-height:1.4}
+.tpl-del{position:absolute;top:8px;right:8px;width:26px;height:26px;padding:0;display:grid;place-items:center;border-radius:6px;color:var(--muted)}
+.tpl-del:hover{background:var(--bad-soft);color:var(--bad)}
+.tpl-del svg{width:14px;height:14px}

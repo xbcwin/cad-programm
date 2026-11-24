@@ -55,11 +55,12 @@ const THREAD_MAP = Object.fromEntries(THREAD_SPECS.map((t) => [t.size, t]));
 
 const Model = (() => {
   const T0 = () => ({ x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 });
+  const defBed = () => ({ enabled: false, x: 220, y: 220, z: 250, nozzle: 0.4 });
   function newDoc(name = 'Neues Projekt') {
     return {
       format: 'masswerk', version: 1, id: uid('p'), name, created: Date.now(), modified: Date.now(),
       params: [], tables: [], items: [], notes: [],
-      settings: { printer: 'std', custom: { x: 220, y: 220, z: 250 }, grid: 1, snap: true, unit: 'mm' },
+      settings: { printer: 'std', custom: { x: 220, y: 220, z: 250 }, printBed: defBed(), grid: 1, snap: true, unit: 'mm' },
       drawing: null,
     };
   }
@@ -1050,6 +1051,14 @@ const Model = (() => {
     if (!Array.isArray(doc.tables)) doc.tables = [];
     for (const t of doc.tables) { if (!t || typeof t !== 'object') continue; if (!Array.isArray(t.rows)) t.rows = []; }
     doc.settings = Object.assign({ printer: 'std', custom: { x: 220, y: 220, z: 250 }, grid: 1, snap: true, unit: 'mm' }, doc.settings || {});
+    const rawBed = doc.settings.printBed && typeof doc.settings.printBed === 'object' ? doc.settings.printBed : {};
+    doc.settings.printBed = {
+      enabled: !!rawBed.enabled,
+      x: Number(rawBed.x) > 0 ? Number(rawBed.x) : 220,
+      y: Number(rawBed.y) > 0 ? Number(rawBed.y) : 220,
+      z: Number(rawBed.z) > 0 ? Number(rawBed.z) : 250,
+      nozzle: Number(rawBed.nozzle) > 0 ? Number(rawBed.nozzle) : 0.4,
+    };
     if (!Units.DEFS[doc.settings.unit]) doc.settings.unit = 'mm';
     if (doc.rollback != null && !(doc.rollback >= 0 && doc.rollback < doc.items.length)) doc.rollback = null;
     if (!Array.isArray(doc.notes)) doc.notes = [];
