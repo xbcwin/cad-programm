@@ -17,15 +17,32 @@
 //   roundEdge  – durch die Mitte einer kreisförmigen Kante
 //   faceNormal – senkrecht auf einer ebenen Fläche an einem Punkt
 //   fixed      – feste Lage
+//
+// Bezugspunkte liegen in doc.points und erscheinen im Verlauf unter „Bezugspunkte“.
+// Arten (base.type):
+//   edgeMid            – Mitte einer Kante
+//   faceCenter         – Mitte einer Fläche
+//   edgePlaneIntersect – Schnittpunkt einer Kante mit einer Ebene/Fläche
+//   curvePercent       – auf einer Kurve/Kante bei x %
+//   fixed              – feste Weltkoordinaten
+//
+// Eigene Koordinatensysteme liegen in doc.csys und erscheinen im Verlauf unter „Koordinatensysteme“.
+// Arten (base.type):
+//   pointEdges – Ursprung an einem Punkt, X/Y-Achsen an Kanten/Achsen ausgerichtet
+//   fixed      – feste Lage und Achsen
 const Datums = (() => {
   const ORIGIN = { XY: { o: [0, 0, 0], x: [1, 0, 0], n: [0, 0, 1] }, XZ: { o: [0, 0, 0], x: [1, 0, 0], n: [0, -1, 0] }, YZ: { o: [0, 0, 0], x: [0, 1, 0], n: [1, 0, 0] } };
   const NAMES = { XY: 'Arbeitsfläche', XZ: 'Vorne', YZ: 'Seite' };
   let sel = null;       // gewählte Bezugsebene (Kennung)
   let selAxis = null;   // gewählte Bezugsachse (Kennung)
+  let selPoint = null;  // gewählter Bezugspunkt (Kennung)
+  let selCsys = null;   // gewähltes Koordinatensystem (Kennung)
   let pickState = null; // aktiver interaktiver 3D-Picker
   let relinkRounds = 0; // Schutz gegen Nachführ-Schleifen
-  const lost = new Set();     // Ebenen, deren Bezug fehlt
-  const lostAxes = new Set(); // Achsen, deren Bezug fehlt
+  const lost = new Set();       // Ebenen, deren Bezug fehlt
+  const lostAxes = new Set();   // Achsen, deren Bezug fehlt
+  const lostPoints = new Set(); // Punkte, deren Bezug fehlt
+  const lostCsys = new Set();   // Koordinatensysteme, deren Bezug fehlt
 
   const r6 = (v) => v.map((x) => round(x, 6));
   const V3 = (a) => new THREE.Vector3(...a);
@@ -34,6 +51,10 @@ const Datums = (() => {
   const find = (id, doc = App.doc) => list(doc).find((d) => d.id === id) || null;
   const axes = (doc = App.doc) => doc.axes || [];
   const findAxis = (id, doc = App.doc) => axes(doc).find((a) => a.id === id) || null;
+  const points = (doc = App.doc) => doc.points || [];
+  const findPoint = (id, doc = App.doc) => points(doc).find((p) => p.id === id) || null;
+  const csysList = (doc = App.doc) => doc.csys || [];
+  const findCsys = (id, doc = App.doc) => csysList(doc).find((c) => c.id === id) || null;
 
   function resolveFace(face) {
     if (!face || !face.id) return null;
@@ -254,7 +275,66 @@ const Datums = (() => {
     if (reversed) tan.negate();
     return { p, tan };
   }
+  function makeFaceRef(fRef) {
+    const f = fRef.info, r = App.results.get(fRef.id), bb = localBbox(r);
+    const c = f.c || [0, 0, 0];
+    const ref = {
+      id: fRef.id, ft: f.t, c: r6(c), fIdx: fRef.idx,
+      rel: bb ? r6(relInBox(c, bb)) : null,
+    };
+    if (f.n) ref.n = r6(V3(f.n).normalize().toArray());
+    if (Array.isArray(f.axis) && f.axis.length >= 6) ref.axis = r6(f.axis);
+    if (f.r != null) ref.r = round(f.r, 6);
+    return ref;
+  }
+  function matchFace(r, ref) {
+    if (!r || !r.data || !ref) return null;
+    const bb = localBbox(r), cands = [];
+    const fs = r.data.faces || [];
+    for (let idx = 0; idx < fs.length; idx++) {
+      const f = fs[idx];
+      if (!f || f.t !== ref.ft) continue;
+      if (f.t === 'PLANE' && ref.n && f.n) {
+        const fn = V3(f.n);
+        if (fn.lengthSq() < 1e-12 || fn.normalize().dot(V3(ref.n)) < 0.999) continue;
+      } else if (Array.isArray(ref.axis) && ref.axis.length >= 6 && Array.isArray(f.axis) && f.axis.length >= 6) {
+        const fd = V3(f.axis.slice(3, 6)), rd = V3(ref.axis.slice(3, 6));
+        if (fd.lengthSq() < 1e-12 || rd.lengthSq() < 1e-12 || Math.abs(fd.normalize().dot(rd.normalize())) < 0.99) continue;
+      }
+      const fc = f.c ? V3(f.c) : new THREE.Vector3();
+      const dd = ref.c ? fc.distanceTo(V3(ref.c)) : 0;
+      let relDist = 0;
+      if (bb && ref.rel && f.c) {
+        const fr = relInBox(f.c, bb);
+        relDist = Math.hypot(fr[0] - ref.rel[0], fr[1] - ref.rel[1], fr[2] - ref.rel[2]);
+      }
+      cands.push({ f, idx, dd, relDist });
+    }
+    if (!cands.length) return null;
+    cands.sort((a, b) => {
+      const aEx = a.dd < 1e-3 ? 0 : 1, bEx = b.dd < 1e-3 ? 0 : 1;
+      if (aEx !== bEx) return aEx - bEx;
+      if (bb && ref.rel && Math.abs(a.relDist - b.relDist) > 0.02) return a.relDist - b.relDist;
+      if (Math.abs(a.dd - b.dd) > 1e-3) return a.dd - b.dd;
+      return (a.idx === ref.fIdx ? 0 : 1) - (b.idx === ref.fIdx ? 0 : 1);
+    });
+    return cands[0];
+  }
+  function pickPoint(cx, cy, maxPx = 12) {
+    const r = Viewer.canvas.getBoundingClientRect(), px = cx - r.left, py = cy - r.top;
+    let best = null;
+    for (const pt of points()) {
+      if (pt.hidden || !Array.isArray(pt.point)) continue;
+      const sc = Viewer.toScreen(V3(pt.point));
+      if (sc.behind) continue;
+      const d = Math.hypot(sc.x - px, sc.y - py);
+      if (d <= maxPx && (!best || d < best.px)) best = { pt, px: d };
+    }
+    return best;
+  }
   function snapBodyPointInfo(hit, cx, cy) {
+    const ptHit = pickPoint(cx, cy, 12);
+    if (ptHit) return { w: V3(ptHit.pt.point), bind: { pointId: ptHit.pt.id } };
     const n = hit && hit.node;
     if (!n) return null;
     const r = Viewer.canvas.getBoundingClientRect();
@@ -281,6 +361,10 @@ const Datums = (() => {
     return null;
   }
   function autoBindWorldPoint(pW) {
+    for (const pt of points()) {
+      if (lostPoints.has(pt.id) || !Array.isArray(pt.point)) continue;
+      if (V3(pt.point).distanceTo(pW) < 1e-3) return { pointId: pt.id };
+    }
     for (const [id, r] of App.results.entries()) {
       if (!r || !r.data || !Model.find(App.doc, id)) continue;
       const W = Model.worldMatrix(App.doc, id), eds = r.data.edges || [];
@@ -297,7 +381,20 @@ const Datums = (() => {
     }
     return null;
   }
-  function resolveBoundPoint(pWorld, bind) {
+  function resolveBoundPoint(pWorld, bind, ptMap = null) {
+    if (bind && bind.pointId) {
+      let arr = null;
+      if (ptMap && ptMap.has(bind.pointId)) arr = ptMap.get(bind.pointId);
+      else {
+        const pt = findPoint(bind.pointId);
+        if (pt && !lostPoints.has(pt.id)) arr = pt.point;
+      }
+      return Array.isArray(arr) ? V3(arr) : null;
+    }
+    if (bind && bind.csysId) {
+      const cs = findCsys(bind.csysId);
+      return cs && !lostCsys.has(cs.id) && cs.csys && Array.isArray(cs.csys.o) ? V3(cs.csys.o) : null;
+    }
     if (bind && bind.id) {
       if (!Model.find(App.doc, bind.id)) return null;
       const W = Model.worldMatrix(App.doc, bind.id), r = App.results.get(bind.id);
@@ -696,7 +793,7 @@ const Datums = (() => {
   function select(id) {
     sel = id || null;
     if (sel) {
-      selAxis = null;
+      selAxis = null; selPoint = null; selCsys = null;
       App.clearSelection();
       if (typeof Measure !== 'undefined' && Measure.selected) Measure.select(null);
     }
@@ -876,7 +973,7 @@ const Datums = (() => {
   function selectAxis(id) {
     selAxis = id || null;
     if (selAxis) {
-      sel = null;
+      sel = null; selPoint = null; selCsys = null;
       App.clearSelection();
       if (typeof Measure !== 'undefined' && Measure.selected) Measure.select(null);
     }
@@ -901,14 +998,424 @@ const Datums = (() => {
     return true;
   }
 
+  // ---------- Bezugspunkte ----------
+  function resolvePlaneSpec(planeRef, plMap = null) {
+    if (!planeRef) return null;
+    if (planeRef.kind === 'origin') {
+      const P = ORIGIN[planeRef.plane] || ORIGIN.XY;
+      return { o: V3(P.o), n: V3(P.n).normalize() };
+    }
+    if (planeRef.kind === 'datum') {
+      const d = find(planeRef.datumId);
+      if (!d || lost.has(d.id)) return null;
+      const pl = (plMap && plMap.get(d.id)) || d.plane;
+      return pl && pl.o && pl.n ? { o: V3(pl.o), n: V3(pl.n).normalize() } : null;
+    }
+    if (planeRef.kind === 'face') {
+      const r = App.results.get(planeRef.id), W = Model.find(App.doc, planeRef.id) ? Model.worldMatrix(App.doc, planeRef.id) : null;
+      if (!r || !W) return null;
+      const m = matchFace(r, planeRef);
+      if (!m || m.f.t !== 'PLANE' || !m.f.n) return null;
+      return { o: V3(m.f.c).applyMatrix4(W), n: V3(m.f.n).transformDirection(W).normalize() };
+    }
+    if (planeRef.kind === 'fixed' && planeRef.o && planeRef.n) {
+      const n = V3(planeRef.n);
+      if (n.lengthSq() < 1e-12) return null;
+      return { o: V3(planeRef.o), n: n.normalize() };
+    }
+    return null;
+  }
+
+  function intersectEdgeWithPlane(g, W, pO, pN, reversed, hintP = null) {
+    if (!g || !W || !pO || !pN) return null;
+    if (g.t === 'LINE' && g.a && g.b) {
+      const A = V3(g.a).applyMatrix4(W), B = V3(g.b).applyMatrix4(W);
+      const D = B.clone().sub(A);
+      const denom = D.dot(pN);
+      if (Math.abs(denom) < 1e-8) return null;
+      const t = pO.clone().sub(A).dot(pN) / denom;
+      return A.clone().addScaledVector(D, t);
+    }
+    const N = 128;
+    const evalW = (u) => {
+      const ev = evalEdgeAt(g, u, reversed);
+      return ev ? ev.p.clone().applyMatrix4(W) : null;
+    };
+    const sdAt = (p) => p.clone().sub(pO).dot(pN);
+    const cands = [];
+    let u0 = 0, p0 = evalW(0);
+    if (!p0) return null;
+    let s0 = sdAt(p0);
+    if (Math.abs(s0) < 1e-6) cands.push(p0);
+    for (let i = 1; i <= N; i++) {
+      const u1 = i / N, p1 = evalW(u1);
+      if (!p1) continue;
+      const s1 = sdAt(p1);
+      if (Math.abs(s1) < 1e-6) {
+        cands.push(p1);
+      } else if ((s0 < 0 && s1 > 0) || (s0 > 0 && s1 < 0)) {
+        let lo = u0, hi = u1, slo = s0;
+        let pBest = p0.clone().lerp(p1, 0.5);
+        for (let k = 0; k < 30; k++) {
+          const um = 0.5 * (lo + hi), pm = evalW(um);
+          if (!pm) break;
+          const sm = sdAt(pm);
+          pBest = pm;
+          if (Math.abs(sm) < 1e-8) break;
+          if ((slo < 0 && sm < 0) || (slo > 0 && sm > 0)) { lo = um; slo = sm; }
+          else { hi = um; }
+        }
+        cands.push(pBest);
+      }
+      u0 = u1; p0 = p1; s0 = s1;
+    }
+    if (!cands.length) return null;
+    if (cands.length === 1 || !hintP) return cands[0];
+    let best = cands[0], bd = best.distanceTo(hintP);
+    for (let i = 1; i < cands.length; i++) {
+      const d = cands[i].distanceTo(hintP);
+      if (d < bd) { best = cands[i]; bd = d; }
+    }
+    return best;
+  }
+
+  function solvePoint(pt, plMap = null) {
+    const b = pt.base || { type: 'fixed' }, V = Model.vars(App.doc).v;
+    if (b.type === 'fixed') {
+      lostPoints.delete(pt.id);
+      return r6([Model.num(b.x, V, 0), Model.num(b.y, V, 0), Model.num(b.z, V, 0)]);
+    }
+    if (b.type === 'edgeMid' || b.type === 'curvePercent') {
+      const r = App.results.get(b.edgeId), W = Model.find(App.doc, b.edgeId) ? Model.worldMatrix(App.doc, b.edgeId) : null;
+      if (r && W) {
+        const m = matchEdge(r, b.edge);
+        if (m) {
+          let t = b.type === 'edgeMid' ? 0.5 : clamp(Model.num(b.percent, V, 50), 0, 100) / 100;
+          if (b.type === 'curvePercent' && b.flip) t = 1 - t;
+          const ev = evalEdgeAt(m.g, t, m.reversed);
+          if (ev) {
+            lostPoints.delete(pt.id);
+            return r6(ev.p.clone().applyMatrix4(W).toArray());
+          }
+        }
+      }
+      if (r || !Model.find(App.doc, b.edgeId)) lostPoints.add(pt.id);
+      return pt.point;
+    }
+    if (b.type === 'faceCenter') {
+      const r = App.results.get(b.id), W = Model.find(App.doc, b.id) ? Model.worldMatrix(App.doc, b.id) : null;
+      if (r && W) {
+        const m = matchFace(r, b);
+        if (m && Array.isArray(m.f.c)) {
+          lostPoints.delete(pt.id);
+          return r6(V3(m.f.c).applyMatrix4(W).toArray());
+        }
+      }
+      if (r || !Model.find(App.doc, b.id)) lostPoints.add(pt.id);
+      return pt.point;
+    }
+    if (b.type === 'edgePlaneIntersect') {
+      const rE = App.results.get(b.edgeId), WE = Model.find(App.doc, b.edgeId) ? Model.worldMatrix(App.doc, b.edgeId) : null;
+      const pl = resolvePlaneSpec(b.planeRef, plMap);
+      if (rE && WE && pl) {
+        const m = matchEdge(rE, b.edge);
+        if (m) {
+          const hint = Array.isArray(pt.point) ? V3(pt.point) : null;
+          const pW = intersectEdgeWithPlane(m.g, WE, pl.o, pl.n, m.reversed, hint);
+          if (pW) {
+            lostPoints.delete(pt.id);
+            return r6(pW.toArray());
+          }
+        }
+      }
+      if (rE || !Model.find(App.doc, b.edgeId) || !pl) lostPoints.add(pt.id);
+      return pt.point;
+    }
+    return pt.point;
+  }
+
+  function addPoint(base, name, point) {
+    const pt = { id: uid('dpt'), name: name || `Punkt ${points().length + 1}`, base, point: point || null };
+    pt.point = solvePoint({ ...pt, point: point || [0, 0, 0] });
+    App.change(`Bezugspunkt „${pt.name}“`, (doc) => { (doc.points = doc.points || []).push(pt); });
+    selectPoint(pt.id);
+    return pt;
+  }
+  function addPointEdgeMid(edge, name) {
+    const eRef = resolveEdge(edge);
+    if (!eRef) { UI.toast('Wähl zuerst eine Kante.', { icon: 'info' }); return null; }
+    const top = Model.find(App.doc, eRef.id);
+    return addPoint({ type: 'edgeMid', edgeId: eRef.id, edge: makeEdgeRef(eRef) }, name || `Kantenmitte (${top ? Model.label(top.item) : 'Kante'})`);
+  }
+  function addPointFaceCenter(face, name) {
+    const fRef = resolveFace(face);
+    if (!fRef) { UI.toast('Wähl zuerst eine Fläche.', { icon: 'info' }); return null; }
+    const top = Model.find(App.doc, fRef.id);
+    return addPoint({ type: 'faceCenter', ...makeFaceRef(fRef) }, name || `Flächenmitte (${top ? Model.label(top.item) : 'Fläche'})`);
+  }
+  function addPointOnCurve(edge, percent = 50, name) {
+    const eRef = resolveEdge(edge);
+    if (!eRef) { UI.toast('Wähl zuerst eine Kante oder Kurve.', { icon: 'info' }); return null; }
+    let pct = 50, flip = false;
+    if (percent && typeof percent === 'object') { pct = percent.percent ?? 50; flip = !!percent.flip; }
+    else if (percent != null) pct = percent;
+    const top = Model.find(App.doc, eRef.id);
+    const pTxt = typeof pct === 'number' ? fmt(pct, 0) + ' %' : String(pct);
+    const base = { type: 'curvePercent', edgeId: eRef.id, edge: makeEdgeRef(eRef), percent: pct };
+    if (flip) base.flip = true;
+    return addPoint(base, name || `Punkt ${pTxt} (${top ? Model.label(top.item) : 'Kurve'})`);
+  }
+  function addPointEdgePlane(edge, planeSpec, name) {
+    const eRef = resolveEdge(edge);
+    if (!eRef) { UI.toast('Wähl zuerst eine Kante.', { icon: 'info' }); return null; }
+    let planeRef = null;
+    if (typeof planeSpec === 'string') {
+      if (ORIGIN[planeSpec]) planeRef = { kind: 'origin', plane: planeSpec };
+      else if (find(planeSpec)) planeRef = { kind: 'datum', datumId: planeSpec };
+    } else if (planeSpec && typeof planeSpec === 'object') {
+      if (planeSpec.kind) planeRef = planeSpec;
+      else if (planeSpec.datumId) planeRef = { kind: 'datum', datumId: planeSpec.datumId };
+      else if (planeSpec.id) {
+        const fRef = resolveFace(planeSpec);
+        if (!fRef || fRef.info.t !== 'PLANE') { UI.toast('Wähl eine ebene Fläche oder Bezugsebene.', { icon: 'info' }); return null; }
+        planeRef = { kind: 'face', ...makeFaceRef(fRef) };
+      } else if (planeSpec.o && planeSpec.n) {
+        planeRef = { kind: 'fixed', o: r6(V3(planeSpec.o).toArray()), n: r6(V3(planeSpec.n).normalize().toArray()) };
+      }
+    }
+    const pl = resolvePlaneSpec(planeRef);
+    if (!pl) { UI.toast('Wähl eine gültige Ebene oder ebene Fläche.', { icon: 'info' }); return null; }
+    const WE = Model.worldMatrix(App.doc, eRef.id);
+    const pW = intersectEdgeWithPlane(eRef.info, WE, pl.o, pl.n, false, null);
+    if (!pW) { UI.toast('Die Kante läuft parallel zur Ebene oder schneidet sie nicht.', { icon: 'info' }); return null; }
+    const top = Model.find(App.doc, eRef.id);
+    return addPoint({ type: 'edgePlaneIntersect', edgeId: eRef.id, edge: makeEdgeRef(eRef), planeRef }, name || `Schnittpunkt (${top ? Model.label(top.item) : 'Kante'})`, r6(pW.toArray()));
+  }
+  function addPointFixed(p, name) {
+    const a = Array.isArray(p) ? p : p instanceof THREE.Vector3 ? p.toArray() : [0, 0, 0];
+    return addPoint({ type: 'fixed', x: a[0] ?? 0, y: a[1] ?? 0, z: a[2] ?? 0 }, name || `Punkt ${points().length + 1}`, r6(a));
+  }
+  function setPoint(id, patch, label = 'Bezugspunkt geändert') {
+    App.change(label, (doc) => {
+      const pt = findPoint(id, doc); if (!pt) return false;
+      for (const [k, v] of Object.entries(patch)) { if (k === 'name') pt.name = v; else if (k === 'hidden') { if (v) pt.hidden = true; else delete pt.hidden; } else pt.base[k] = v; }
+      pt.point = solvePoint(pt);
+    }, { merge: 'point:' + id + ':' + Object.keys(patch).join() });
+  }
+  function removePoint(id) {
+    App.change('Bezugspunkt gelöscht', (doc) => { doc.points = points(doc).filter((p) => p.id !== id); });
+    if (selPoint === id) selectPoint(null);
+  }
+  function selectPoint(id) {
+    selPoint = id || null;
+    if (selPoint) {
+      sel = null; selAxis = null; selCsys = null;
+      App.clearSelection();
+      if (typeof Measure !== 'undefined' && Measure.selected) Measure.select(null);
+    }
+    draw(); Panels.renderRight(); Panels.renderLeft();
+  }
+
+  // ---------- Eigene Koordinatensysteme ----------
+  function orthonormalFrame(o, xVec, yVec, opts = {}) {
+    const ov = o instanceof THREE.Vector3 ? o.clone() : V3(o);
+    const x = (xVec instanceof THREE.Vector3 ? xVec.clone() : V3(xVec || [1, 0, 0]));
+    if (x.lengthSq() < 1e-12) x.set(1, 0, 0);
+    x.normalize();
+    if (opts.flipX) x.negate();
+    let y = yVec ? (yVec instanceof THREE.Vector3 ? yVec.clone() : V3(yVec)) : null;
+    if (y && opts.flipY) y.negate();
+    if (y) y.addScaledVector(x, -y.dot(x));
+    if (!y || y.lengthSq() < 1e-8) {
+      const ref = Math.abs(x.z) < 0.9 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0);
+      y = new THREE.Vector3().crossVectors(ref, x);
+      if (opts.flipY) y.negate();
+    }
+    y.normalize();
+    const z = new THREE.Vector3().crossVectors(x, y).normalize();
+    if (opts.flipZ) { z.negate(); y.negate(); }
+    return { o: r6(ov.toArray()), x: r6(x.toArray()), y: r6(y.toArray()), z: r6(z.toArray()) };
+  }
+  function edgeWorldDirFromMatch(m, W) {
+    if (!m || !m.g) return null;
+    if (m.g.t === 'LINE') {
+      const A = V3(m.g.a).applyMatrix4(W), B = V3(m.g.b).applyMatrix4(W);
+      const d = B.sub(A);
+      if (d.lengthSq() < 1e-12) return null;
+      d.normalize();
+      if (m.reversed) d.negate();
+      return d;
+    }
+    const ev = evalEdgeAt(m.g, 0, m.reversed);
+    return ev ? ev.tan.clone().transformDirection(W).normalize() : null;
+  }
+  function solveCsys(cs, axMap = null, ptMap = null) {
+    const b = cs.base || { type: 'fixed' }, V = Model.vars(App.doc).v;
+    if (b.type === 'fixed') {
+      lostCsys.delete(cs.id);
+      const o = b.ox != null || b.oy != null || b.oz != null
+        ? [Model.num(b.ox, V, 0), Model.num(b.oy, V, 0), Model.num(b.oz, V, 0)]
+        : (b.origin || [0, 0, 0]);
+      return orthonormalFrame(o, b.xDir || [1, 0, 0], b.yDir || [0, 1, 0], b);
+    }
+    const O = resolveBoundPoint(b.origin, b.originBind, ptMap);
+    if (!O) { lostCsys.add(cs.id); return cs.csys; }
+    let xW = null, yW = null;
+    if (b.xEdge) {
+      const rX = App.results.get(b.xEdge.id), WX = Model.find(App.doc, b.xEdge.id) ? Model.worldMatrix(App.doc, b.xEdge.id) : null;
+      const mX = rX && WX ? matchEdge(rX, b.xEdge) : null;
+      xW = mX ? edgeWorldDirFromMatch(mX, WX) : null;
+      if (!xW) { lostCsys.add(cs.id); return cs.csys; }
+    } else if (b.xAxisId) {
+      const ax = (axMap && axMap.get(b.xAxisId)) || (findAxis(b.xAxisId) && findAxis(b.xAxisId).axis);
+      if (!ax || !Array.isArray(ax.d) || lostAxes.has(b.xAxisId)) { lostCsys.add(cs.id); return cs.csys; }
+      xW = V3(ax.d).normalize();
+    } else {
+      xW = V3(b.xDir || [1, 0, 0]).normalize();
+    }
+    if (b.yEdge) {
+      const rY = App.results.get(b.yEdge.id), WY = Model.find(App.doc, b.yEdge.id) ? Model.worldMatrix(App.doc, b.yEdge.id) : null;
+      const mY = rY && WY ? matchEdge(rY, b.yEdge) : null;
+      yW = mY ? edgeWorldDirFromMatch(mY, WY) : null;
+      if (!yW || Math.abs(xW.dot(yW)) > 0.9999) { lostCsys.add(cs.id); return cs.csys; }
+    } else if (b.yAxisId) {
+      const ay = (axMap && axMap.get(b.yAxisId)) || (findAxis(b.yAxisId) && findAxis(b.yAxisId).axis);
+      if (!ay || !Array.isArray(ay.d) || lostAxes.has(b.yAxisId)) { lostCsys.add(cs.id); return cs.csys; }
+      yW = V3(ay.d).normalize();
+      if (Math.abs(xW.dot(yW)) > 0.9999) { lostCsys.add(cs.id); return cs.csys; }
+    } else if (b.yDir) {
+      yW = V3(b.yDir).normalize();
+    }
+    lostCsys.delete(cs.id);
+    return orthonormalFrame(O, xW, yW, b);
+  }
+
+  function addCsys(base, name, csys) {
+    const cs = { id: uid('dcs'), name: name || `Koordinatensystem ${csysList().length + 1}`, base, csys: csys || null };
+    cs.csys = solveCsys({ ...cs, csys: csys || orthonormalFrame([0, 0, 0], [1, 0, 0], [0, 1, 0]) });
+    App.change(`Koordinatensystem „${cs.name}“`, (doc) => { (doc.csys = doc.csys || []).push(cs); });
+    selectCsys(cs.id);
+    return cs;
+  }
+  function addCsysFromPointEdges(originSpec, xEdge = null, yEdge = null, name = null, opts = {}) {
+    let originW = null, originBind = opts.bind || null;
+    if (typeof originSpec === 'string') {
+      const pt = findPoint(originSpec);
+      if (!pt || !Array.isArray(pt.point)) { UI.toast('Bezugspunkt nicht gefunden.', { icon: 'info' }); return null; }
+      originW = V3(pt.point); originBind = { pointId: pt.id };
+    } else if (originSpec && originSpec.pointId) {
+      const pt = findPoint(originSpec.pointId);
+      if (!pt || !Array.isArray(pt.point)) { UI.toast('Bezugspunkt nicht gefunden.', { icon: 'info' }); return null; }
+      originW = V3(pt.point); originBind = { pointId: pt.id };
+    } else if (originSpec && originSpec.p) {
+      originW = originSpec.p instanceof THREE.Vector3 ? originSpec.p.clone() : V3(originSpec.p);
+      if (!originBind && originSpec.bind) originBind = originSpec.bind;
+    } else if (originSpec) {
+      originW = originSpec instanceof THREE.Vector3 ? originSpec.clone() : V3(originSpec);
+    }
+    if (!originW) return null;
+    if (!originBind) originBind = autoBindWorldPoint(originW);
+    const xr = xEdge ? resolveEdge(xEdge) : null;
+    if (xEdge && !xr) { UI.toast('Die gewählte X-Kante gibt es nicht.', { icon: 'info' }); return null; }
+    const yr = yEdge ? resolveEdge(yEdge) : null;
+    if (yEdge && !yr) { UI.toast('Die gewählte Y-Kante gibt es nicht.', { icon: 'info' }); return null; }
+    const dirFromRef = (er) => {
+      const W = Model.worldMatrix(App.doc, er.id);
+      if (er.info.t === 'LINE') {
+        const A = V3(er.info.a).applyMatrix4(W), B = V3(er.info.b).applyMatrix4(W);
+        const d = B.clone().sub(A);
+        return d.lengthSq() > 1e-12 ? { dir: d.normalize(), A, B } : null;
+      }
+      const ev = evalEdgeAt(er.info, 0, false);
+      return ev ? { dir: ev.tan.clone().transformDirection(W).normalize(), A: null, B: null } : null;
+    };
+    let xDirW = opts.xDir ? V3(opts.xDir).normalize() : new THREE.Vector3(1, 0, 0), flipX = !!opts.flipX;
+    if (xr) {
+      const xd = dirFromRef(xr);
+      if (!xd) return null;
+      xDirW = xd.dir;
+      if (opts.flipX === undefined && xd.A && xd.B && originW.distanceTo(xd.B) + 1e-3 < originW.distanceTo(xd.A)) flipX = true;
+    }
+    let yDirW = opts.yDir ? V3(opts.yDir).normalize() : null, flipY = !!opts.flipY;
+    if (yr) {
+      const yd = dirFromRef(yr);
+      if (!yd) return null;
+      yDirW = yd.dir;
+      if (Math.abs(xDirW.dot(yDirW)) > 0.9999) {
+        UI.toast('X- und Y-Kante laufen parallel – wähle zwei Kanten mit Winkel dazwischen.', { icon: 'info' });
+        return null;
+      }
+      if (opts.flipY === undefined && yd.A && yd.B && originW.distanceTo(yd.B) + 1e-3 < originW.distanceTo(yd.A)) flipY = true;
+    }
+    const base = {
+      type: 'pointEdges',
+      origin: r6(originW.toArray()),
+      ...(originBind ? { originBind } : {}),
+      ...(xr ? { xEdge: makeEdgeRef(xr) } : { xDir: r6(xDirW.toArray()) }),
+      ...(yr ? { yEdge: makeEdgeRef(yr) } : (yDirW ? { yDir: r6(yDirW.toArray()) } : {})),
+      ...(flipX ? { flipX: true } : {}),
+      ...(flipY ? { flipY: true } : {}),
+      ...(opts.flipZ ? { flipZ: true } : {}),
+    };
+    return addCsys(base, name || `Koordinatensystem ${csysList().length + 1}`);
+  }
+  function addCsysFixed(o = [0, 0, 0], x = [1, 0, 0], y = [0, 1, 0], name = null) {
+    const ov = Array.isArray(o) ? o : o instanceof THREE.Vector3 ? o.toArray() : [0, 0, 0];
+    return addCsys({ type: 'fixed', ox: ov[0] ?? 0, oy: ov[1] ?? 0, oz: ov[2] ?? 0, xDir: r6(V3(x).normalize().toArray()), yDir: r6(V3(y).normalize().toArray()) }, name);
+  }
+  function csysExportMatrix(id) {
+    const cs = findCsys(id);
+    if (!cs || !cs.csys) return null;
+    const O = cs.csys.o, X = cs.csys.x, Y = cs.csys.y, Z = cs.csys.z;
+    if (!O || !X || !Y || !Z) return null;
+    const tx = -(X[0] * O[0] + X[1] * O[1] + X[2] * O[2]);
+    const ty = -(Y[0] * O[0] + Y[1] * O[1] + Y[2] * O[2]);
+    const tz = -(Z[0] * O[0] + Z[1] * O[1] + Z[2] * O[2]);
+    return [X[0], Y[0], Z[0], 0, X[1], Y[1], Z[1], 0, X[2], Y[2], Z[2], 0, tx, ty, tz, 1];
+  }
+  function setCsys(id, patch, label = 'Koordinatensystem geändert') {
+    App.change(label, (doc) => {
+      const cs = findCsys(id, doc); if (!cs) return false;
+      for (const [k, v] of Object.entries(patch)) { if (k === 'name') cs.name = v; else if (k === 'hidden') { if (v) cs.hidden = true; else delete cs.hidden; } else cs.base[k] = v; }
+      cs.csys = solveCsys(cs);
+    }, { merge: 'csys:' + id + ':' + Object.keys(patch).join() });
+  }
+  function removeCsys(id) {
+    App.change('Koordinatensystem gelöscht', (doc) => { doc.csys = csysList(doc).filter((c) => c.id !== id); });
+    if (selCsys === id) selectCsys(null);
+  }
+  function selectCsys(id) {
+    selCsys = id || null;
+    if (selCsys) {
+      sel = null; selAxis = null; selPoint = null;
+      App.clearSelection();
+      if (typeof Measure !== 'undefined' && Measure.selected) Measure.select(null);
+    }
+    draw(); Panels.renderRight(); Panels.renderLeft();
+  }
+
   // ---------- Nachführen nach jedem Rechnen ----------
   function relink() {
-    const upd = [], axUpd = [], axMap = new Map();
-    for (const d of list()) { const p = solve(d); if (p && JSON.stringify(p) !== JSON.stringify(d.plane)) upd.push([d.id, p]); }
+    const upd = [], axUpd = [], ptUpd = [], csUpd = [];
+    const plMap = new Map(), axMap = new Map(), ptMap = new Map();
+    for (const d of list()) {
+      const p = solve(d);
+      plMap.set(d.id, p || d.plane);
+      if (p && JSON.stringify(p) !== JSON.stringify(d.plane)) upd.push([d.id, p]);
+    }
     for (const ax of axes()) {
       const a = solveAxis(ax);
       axMap.set(ax.id, a || ax.axis);
       if (a && (!ax.axis || vecDiff(a.o, ax.axis.o) > 1e-5 || vecDiff(a.d, ax.axis.d) > 1e-5)) axUpd.push([ax.id, a]);
+    }
+    for (const pt of points()) {
+      const p = solvePoint(pt, plMap);
+      ptMap.set(pt.id, p || pt.point);
+      if (p && (!pt.point || vecDiff(p, pt.point) > 1e-5)) ptUpd.push([pt.id, p]);
+    }
+    for (const cs of csysList()) {
+      const c = solveCsys(cs, axMap, ptMap);
+      if (c && (!cs.csys || vecDiff(c.o, cs.csys.o) > 1e-5 || vecDiff(c.x, cs.csys.x) > 1e-5 || vecDiff(c.y, cs.csys.y) > 1e-5 || vecDiff(c.z, cs.csys.z) > 1e-5)) csUpd.push([cs.id, c]);
     }
     const itemUpd = [];
     Model.walk(App.doc.items, (it) => {
@@ -925,11 +1432,13 @@ const Datums = (() => {
         if (!cur || vecDiff(cur.o, lo) > 1e-5 || vecDiff(cur.d, ld) > 1e-5) itemUpd.push({ id: it.id, kind: 'revolve', o: lo, d: ld });
       }
     });
-    if (!upd.length && !axUpd.length && !itemUpd.length) { relinkRounds = 0; draw(); return; }
+    if (!upd.length && !axUpd.length && !ptUpd.length && !csUpd.length && !itemUpd.length) { relinkRounds = 0; draw(); return; }
     if (++relinkRounds > 3) { relinkRounds = 0; draw(); return; }
     App.change('Bezüge nachgeführt', (doc) => {
       for (const [id, p] of upd) { const d = find(id, doc); if (d) d.plane = p; }
       for (const [id, a] of axUpd) { const ax = findAxis(id, doc); if (ax) ax.axis = a; }
+      for (const [id, p] of ptUpd) { const pt = findPoint(id, doc); if (pt) pt.point = p; }
+      for (const [id, c] of csUpd) { const cs = findCsys(id, doc); if (cs) cs.csys = c; }
       for (const u of itemUpd) {
         const f = Model.find(doc, u.id); if (!f) continue;
         if (u.kind === 'circ') { f.item.p.axis = 'pick'; f.item.p.ao = u.o; f.item.p.ad = u.d; }
@@ -977,6 +1486,45 @@ const Datums = (() => {
       const mid = new THREE.Mesh(new THREE.SphereGeometry(Math.max(0.8, size * 0.02), 10, 8), new THREE.MeshBasicMaterial({ color: col, depthTest: false, transparent: true, opacity: on ? 1 : 0.75 }));
       mid.position.copy(o); mid.renderOrder = 25;
       grp.add(line, mid); g.add(grp);
+    }
+    for (const pt of points()) {
+      if (pt.hidden || !Array.isArray(pt.point)) continue;
+      const on = pt.id === selPoint, col = new THREE.Color(lostPoints.has(pt.id) ? '#e03131' : on ? '#f08c00' : '#7950f2');
+      const o = V3(pt.point), arm = Math.max(2.5, size * 0.06), rad = Math.max(0.9, size * 0.022);
+      const grp = new THREE.Group(); grp.userData.datumPoint = pt.id;
+      const sph = new THREE.Mesh(new THREE.SphereGeometry(rad, 12, 8), new THREE.MeshBasicMaterial({ color: col, depthTest: false, transparent: true, opacity: on ? 1 : 0.9 }));
+      sph.position.copy(o); sph.renderOrder = 26;
+      const segPts = [
+        new THREE.Vector3(o.x - arm, o.y, o.z), new THREE.Vector3(o.x + arm, o.y, o.z),
+        new THREE.Vector3(o.x, o.y - arm, o.z), new THREE.Vector3(o.x, o.y + arm, o.z),
+        new THREE.Vector3(o.x, o.y, o.z - arm), new THREE.Vector3(o.x, o.y, o.z + arm),
+      ];
+      const cross = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(segPts), new THREE.LineBasicMaterial({ color: col, depthTest: false, transparent: true, opacity: on ? 1 : 0.85 }));
+      cross.renderOrder = 26;
+      grp.add(sph, cross); g.add(grp);
+    }
+    for (const cs of csysList()) {
+      if (cs.hidden || !cs.csys || !Array.isArray(cs.csys.o)) continue;
+      const on = cs.id === selCsys, isLost = lostCsys.has(cs.id);
+      const o = V3(cs.csys.o), len = Math.max(16, size * 0.35), headR = Math.max(0.9, len * 0.08), headH = Math.max(2.5, len * 0.22);
+      const grp = new THREE.Group(); grp.userData.datumCsys = cs.id;
+      const oCol = new THREE.Color(isLost ? '#e03131' : on ? '#f08c00' : '#1971c2');
+      const oSph = new THREE.Mesh(new THREE.SphereGeometry(Math.max(1.0, size * 0.024), 12, 8), new THREE.MeshBasicMaterial({ color: oCol, depthTest: false, transparent: true, opacity: on ? 1 : 0.9 }));
+      oSph.position.copy(o); oSph.renderOrder = 26; grp.add(oSph);
+      const axesSpec = [['x', '#e03131'], ['y', '#2f9e44'], ['z', '#1971c2']];
+      for (const [k, hex] of axesSpec) {
+        const dv = V3(cs.csys[k]).normalize();
+        const col = new THREE.Color(isLost ? '#e03131' : on ? '#f08c00' : hex);
+        const end = o.clone().addScaledVector(dv, len);
+        const ln = new THREE.Line(new THREE.BufferGeometry().setFromPoints([o, end]), new THREE.LineBasicMaterial({ color: col, depthTest: false, transparent: true, opacity: on ? 1 : 0.9 }));
+        ln.renderOrder = 26;
+        const cone = new THREE.Mesh(new THREE.ConeGeometry(headR, headH, 10), new THREE.MeshBasicMaterial({ color: col, depthTest: false, transparent: true, opacity: on ? 1 : 0.9 }));
+        cone.position.copy(end);
+        cone.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dv);
+        cone.renderOrder = 26;
+        grp.add(ln, cone);
+      }
+      g.add(grp);
     }
     Viewer.requestRender();
   }
@@ -1230,6 +1778,125 @@ const Datums = (() => {
     hint();
   }
 
+  function startPointPick(mode, opts = {}) {
+    stopPick();
+    let edgeRef = opts.preEdge ? resolveEdge(opts.preEdge) : null;
+    if (edgeRef) Viewer.highlightEdge(edgeRef.id, edgeRef.idx);
+    const hint = () => UI.hint({
+      edgeMid: '<b>Bezugspunkt Kantenmitte:</b> Klick eine Kante eines Körpers. <b>Esc</b> bricht ab.',
+      faceCenter: '<b>Bezugspunkt Flächenmitte:</b> Klick eine Fläche eines Körpers. <b>Esc</b> bricht ab.',
+      curvePercent: `<b>Bezugspunkt auf Kurve (${fmt(Number(opts.percent) || 50, 0)} %):</b> Klick eine Kante oder Kurve eines Körpers. <b>Esc</b> bricht ab.`,
+      edgePlaneIntersect: edgeRef
+        ? '<b>Schnittpunkt Kante / Ebene:</b> Klick eine ebene Fläche als Schnitt-Ebene. <b>Esc</b> bricht ab.'
+        : '<b>Schnittpunkt Kante / Ebene:</b> Klick zuerst eine Kante oder Kurve. <b>Esc</b> bricht ab.',
+    }[mode] || '<b>Bezugspunkt wählen:</b> <b>Esc</b> bricht ab.');
+
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      if (mode === 'edgeMid' || mode === 'curvePercent') {
+        const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, edgePx: 9 });
+        const er = hit && hit.edgeIdx != null ? resolveEdge({ id: hit.id, edgeIdx: hit.edgeIdx }) : null;
+        if (!er) { UI.toast('Klick eine Kante oder Kurve eines Körpers an.', { icon: 'info' }); return; }
+        stopPick();
+        if (mode === 'edgeMid') addPointEdgeMid(er);
+        else addPointOnCurve(er, opts.percent ?? 50);
+        return;
+      }
+      if (mode === 'faceCenter') {
+        const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true, solidsOnly: true });
+        const fr = hit && hit.faceIdx >= 0 ? resolveFace({ id: hit.id, idx: hit.faceIdx }) : null;
+        if (!fr) { UI.toast('Klick eine Fläche eines Körpers an.', { icon: 'info' }); return; }
+        stopPick();
+        addPointFaceCenter(fr);
+        return;
+      }
+      if (mode === 'edgePlaneIntersect') {
+        if (!edgeRef) {
+          const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, edgePx: 9 });
+          const er = hit && hit.edgeIdx != null ? resolveEdge({ id: hit.id, edgeIdx: hit.edgeIdx }) : null;
+          if (!er) { UI.toast('Klick zuerst eine Kante oder Kurve eines Körpers an.', { icon: 'info' }); return; }
+          edgeRef = er;
+          Viewer.highlightEdge(er.id, er.idx);
+          hint();
+          return;
+        }
+        const hit = Viewer.pick(e.clientX, e.clientY, { noEdges: true, solidsOnly: true });
+        const fr = hit && hit.faceIdx >= 0 ? resolveFace({ id: hit.id, idx: hit.faceIdx }) : null;
+        if (!fr || fr.info.t !== 'PLANE') { UI.toast('Klick eine ebene Fläche als Schnitt-Ebene an.', { icon: 'info' }); return; }
+        const er = edgeRef;
+        stopPick();
+        addPointEdgePlane(er, fr);
+      }
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); } };
+    pickState = { down, key, marks: [] };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    window.addEventListener('keydown', key, true);
+    hint();
+  }
+
+  function startCsysPick() {
+    stopPick();
+    let origin = null, xEdge = null;
+    const marks = [];
+    const hint = () => UI.hint(!origin
+      ? '<b>Koordinatensystem (1/3):</b> Klick den Ursprungspunkt (Bezugspunkt, Ecke oder Kantenmitte). <b>Esc</b> bricht ab.'
+      : !xEdge
+        ? '<b>Koordinatensystem (2/3):</b> Klick eine Kante für die <b>X-Achse</b> (oder <b>Enter</b> für Standard-Achsen). <b>Esc</b> bricht ab.'
+        : '<b>Koordinatensystem (3/3):</b> Klick eine Kante für die <b>Y-Achse</b> (oder <b>Enter</b> für Standard-Y). <b>Esc</b> bricht ab.');
+
+    const down = (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      if (!origin) {
+        const ptHit = pickPoint(e.clientX, e.clientY, 12);
+        if (ptHit) {
+          origin = { p: V3(ptHit.pt.point), bind: { pointId: ptHit.pt.id } };
+        } else {
+          const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true });
+          const info = hit ? snapBodyPointInfo(hit, e.clientX, e.clientY) : null;
+          if (info) origin = { p: info.w, bind: info.bind };
+          else {
+            const p = Viewer.pickPlane(e.clientX, e.clientY, 0);
+            if (!p) return;
+            origin = { p, bind: null };
+          }
+        }
+        addPickMark(origin.p, marks);
+        hint();
+        return;
+      }
+      const hit = Viewer.pick(e.clientX, e.clientY, { solidsOnly: true, edgePx: 9 });
+      const er = hit && hit.edgeIdx != null ? resolveEdge({ id: hit.id, edgeIdx: hit.edgeIdx }) : null;
+      if (!er) { UI.toast('Klick eine Kante für die Achse an (oder drück Enter).', { icon: 'info' }); return; }
+      if (!xEdge) {
+        xEdge = er;
+        Viewer.highlightEdge(er.id, er.idx);
+        hint();
+        return;
+      }
+      const o0 = origin, x0 = xEdge;
+      stopPick();
+      addCsysFromPointEdges(o0, x0, er);
+    };
+    const key = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopPick(); }
+      else if (e.key === 'Enter' && origin) {
+        e.preventDefault(); e.stopPropagation();
+        const o0 = origin, x0 = xEdge;
+        stopPick();
+        addCsysFromPointEdges(o0, x0, null);
+      }
+    };
+    pickState = { down, key, marks };
+    Viewer.canvas.style.cursor = 'crosshair';
+    Viewer.canvas.addEventListener('pointerdown', down, true);
+    window.addEventListener('keydown', key, true);
+    hint();
+  }
+
   // ---------- Verlauf und Eigenschaften ----------
   function treeSection() {
     const ds = list(); if (!ds.length) return null;
@@ -1261,6 +1928,36 @@ const Datums = (() => {
       const sub = lostAxes.has(ax.id) ? 'Bezug fehlt' : { twoPoints: '2 Punkte', roundFace: 'Mitte Rundung', roundEdge: 'Mitte Kreis', faceNormal: 'senkr. Fläche', fixed: 'fest' }[b.type] || '';
       row.append(ic, h('span', { class: 'nm' }, ax.name), h('span', { class: 'sub mono' }, sub));
       row.onclick = () => selectAxis(ax.id === selAxis ? null : ax.id);
+      sec.append(row);
+    }
+    return sec;
+  }
+
+  function pointTreeSection() {
+    const ps = points(); if (!ps.length) return null;
+    const sec = h('div', { class: 'datum-tree point-tree', id: 'point-tree' }, h('div', { class: 'section-h' }, 'Bezugspunkte'));
+    for (const pt of ps) {
+      const row = h('div', { class: 'tree-row point-row' + (pt.id === selPoint ? ' sel' : '') + (pt.hidden ? ' dim' : ''), 'data-point': pt.id });
+      const ic = h('span', { class: 'swatch point' }); ic.innerHTML = icon('point');
+      const b = pt.base || {};
+      const sub = lostPoints.has(pt.id) ? 'Bezug fehlt' : { edgeMid: 'Kantenmitte', faceCenter: 'Flächenmitte', edgePlaneIntersect: 'Schnittpunkt', curvePercent: 'auf Kurve', fixed: 'fest' }[b.type] || '';
+      row.append(ic, h('span', { class: 'nm' }, pt.name), h('span', { class: 'sub mono' }, sub));
+      row.onclick = () => selectPoint(pt.id === selPoint ? null : pt.id);
+      sec.append(row);
+    }
+    return sec;
+  }
+
+  function csysTreeSection() {
+    const csAll = csysList(); if (!csAll.length) return null;
+    const sec = h('div', { class: 'datum-tree csys-tree', id: 'csys-tree' }, h('div', { class: 'section-h' }, 'Koordinatensysteme'));
+    for (const cs of csAll) {
+      const row = h('div', { class: 'tree-row csys-row' + (cs.id === selCsys ? ' sel' : '') + (cs.hidden ? ' dim' : ''), 'data-csys': cs.id });
+      const ic = h('span', { class: 'swatch csys' }); ic.innerHTML = icon('axes');
+      const b = cs.base || {};
+      const sub = lostCsys.has(cs.id) ? 'Bezug fehlt' : { pointEdges: 'Punkt + Achsen', fixed: 'fest' }[b.type] || '';
+      row.append(ic, h('span', { class: 'nm' }, cs.name), h('span', { class: 'sub mono' }, sub));
+      row.onclick = () => selectCsys(cs.id === selCsys ? null : cs.id);
       sec.append(row);
     }
     return sec;
@@ -1356,6 +2053,109 @@ const Datums = (() => {
     return true;
   }
 
+  function renderPointPanel(body) {
+    const pt = findPoint(selPoint); if (!pt) return false;
+    const w = h('div', { class: 'props' });
+    const nm = h('input', { id: 'point-name', value: pt.name, 'aria-label': 'Name' });
+    nm.addEventListener('change', () => { const v = nm.value.trim(); if (v) setPoint(pt.id, { name: v }, 'Bezugspunkt umbenannt'); });
+    nm.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') nm.blur(); });
+    w.append(h('div', { class: 'prop-title' }, nm));
+    if (Array.isArray(pt.point)) {
+      const pTxt = pt.point.map((v) => Units.fmtLen(v, 2)).join(' · ') + (Units.key() !== 'mm' ? ' ' + Units.label() : '');
+      w.append(h('div', { class: 'mini-list' }, h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Lage'), h('b', { class: 'mono', id: 'point-coords' }, pTxt))));
+    }
+    const b = pt.base || { type: 'fixed' };
+    const fl = h('div', { class: 'fields' });
+    if (b.type === 'curvePercent') {
+      fl.append(UI.numField({ id: 'point-percent', label: 'Lage entlang Kurve', value: b.percent ?? 50, unit: '%', onCommit: (v) => setPoint(pt.id, { percent: v }) }));
+    } else if (b.type === 'fixed') {
+      fl.append(
+        UI.numField({ id: 'point-x', label: 'X', value: b.x ?? 0, len: true, onCommit: (v) => setPoint(pt.id, { x: v }) }),
+        UI.numField({ id: 'point-y', label: 'Y', value: b.y ?? 0, len: true, onCommit: (v) => setPoint(pt.id, { y: v }) }),
+        UI.numField({ id: 'point-z', label: 'Z', value: b.z ?? 0, len: true, onCommit: (v) => setPoint(pt.id, { z: v }) }),
+      );
+    }
+    if (fl.children.length) w.append(fl);
+    if (b.type === 'curvePercent') {
+      const fb = h('button', { type: 'button', class: 'btn small', id: 'point-flip' }, 'Richtung umkehren');
+      fb.onclick = () => setPoint(pt.id, { flip: !b.flip }, 'Richtung umgekehrt');
+      w.append(h('div', { class: 'btn-row' }, fb));
+    }
+    if (lostPoints.has(pt.id)) {
+      w.append(h('div', { class: 'err-box' }, 'Der Bezug dieses Punktes fehlt – der Punkt bleibt an seiner letzten Stelle.'));
+    } else {
+      const txt = {
+        edgeMid: 'Liegt genau in der Mitte der gewählten Kante – wandert mit, wenn sich der Körper ändert.',
+        faceCenter: 'Liegt in der Mitte der gewählten Fläche – wandert mit dem Teil mit.',
+        edgePlaneIntersect: 'Schnittpunkt von Kante und Ebene – wandert mit, wenn sich eines davon verschiebt.',
+        curvePercent: 'Liegt bei dem eingestellten Prozentwert auf der Kurve – wandert mit der Kante mit.',
+        fixed: 'Fester Bezugspunkt im Raum.',
+      }[b.type] || 'Bezugspunkt im Projekt.';
+      w.append(h('div', { class: 'hint-box' }, txt));
+    }
+    const row = h('div', { class: 'btn-row' });
+    const bcs = h('button', { type: 'button', class: 'btn', id: 'point-to-csys' }); bcs.innerHTML = icon('axes') + 'Koordinatensystem hier';
+    bcs.onclick = () => addCsysFromPointEdges(pt.id, null, null);
+    const bh = h('button', { type: 'button', class: 'btn', id: 'point-hide' }); bh.innerHTML = icon(pt.hidden ? 'eye' : 'eyeOff') + (pt.hidden ? 'Einblenden' : 'Ausblenden');
+    bh.onclick = () => setPoint(pt.id, { hidden: !pt.hidden }, pt.hidden ? 'Bezugspunkt eingeblendet' : 'Bezugspunkt ausgeblendet');
+    const bd = h('button', { type: 'button', class: 'btn ghost', id: 'point-del' }); bd.innerHTML = icon('trash') + 'Löschen';
+    bd.onclick = () => removePoint(pt.id);
+    row.append(bcs, bh, bd); w.append(row);
+    body.append(w);
+    return true;
+  }
+
+  function renderCsysPanel(body) {
+    const cs = findCsys(selCsys); if (!cs) return false;
+    const w = h('div', { class: 'props' });
+    const nm = h('input', { id: 'csys-name', value: cs.name, 'aria-label': 'Name' });
+    nm.addEventListener('change', () => { const v = nm.value.trim(); if (v) setCsys(cs.id, { name: v }, 'Koordinatensystem umbenannt'); });
+    nm.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') nm.blur(); });
+    w.append(h('div', { class: 'prop-title' }, nm));
+    if (cs.csys && Array.isArray(cs.csys.o)) {
+      const oTxt = cs.csys.o.map((v) => Units.fmtLen(v, 2)).join(' · ') + (Units.key() !== 'mm' ? ' ' + Units.label() : '');
+      const fDir = (a) => a.map((v) => fmt(v, 2)).join(' · ');
+      w.append(h('div', { class: 'mini-list' },
+        h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Ursprung'), h('b', { class: 'mono', id: 'csys-origin' }, oTxt)),
+        h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'X-Achse'), h('b', { class: 'mono' }, fDir(cs.csys.x))),
+        h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Y-Achse'), h('b', { class: 'mono' }, fDir(cs.csys.y))),
+        h('div', { class: 'mini-row' }, h('span', { class: 'grow' }, 'Z-Achse'), h('b', { class: 'mono' }, fDir(cs.csys.z)))));
+    }
+    const b = cs.base || { type: 'fixed' };
+    if (b.type === 'fixed') {
+      const fl = h('div', { class: 'fields' },
+        UI.numField({ id: 'csys-ox', label: 'Ursprung X', value: b.ox ?? 0, len: true, onCommit: (v) => setCsys(cs.id, { ox: v }) }),
+        UI.numField({ id: 'csys-oy', label: 'Ursprung Y', value: b.oy ?? 0, len: true, onCommit: (v) => setCsys(cs.id, { oy: v }) }),
+        UI.numField({ id: 'csys-oz', label: 'Ursprung Z', value: b.oz ?? 0, len: true, onCommit: (v) => setCsys(cs.id, { oz: v }) }));
+      w.append(fl);
+    }
+    const flipRow = h('div', { class: 'btn-row' });
+    const fx = h('button', { type: 'button', class: 'btn small', id: 'csys-flip-x' }, 'X umkehren');
+    fx.onclick = () => setCsys(cs.id, { flipX: !b.flipX }, 'X-Achse umgekehrt');
+    const fy = h('button', { type: 'button', class: 'btn small', id: 'csys-flip-y' }, 'Y umkehren');
+    fy.onclick = () => setCsys(cs.id, { flipY: !b.flipY }, 'Y-Achse umgekehrt');
+    const fz = h('button', { type: 'button', class: 'btn small', id: 'csys-flip-z' }, 'Z umkehren');
+    fz.onclick = () => setCsys(cs.id, { flipZ: !b.flipZ }, 'Z-Achse umgekehrt');
+    flipRow.append(fx, fy, fz); w.append(flipRow);
+    if (lostCsys.has(cs.id)) {
+      w.append(h('div', { class: 'err-box' }, 'Ein Bezug dieses Koordinatensystems fehlt oder die Achsen stehen parallel – es bleibt an seiner letzten Stelle.'));
+    } else {
+      w.append(h('div', { class: 'hint-box' }, 'Rechtshändiges Koordinatensystem. Im Export-Fenster (STEP, STL, 3MF, OBJ, GLB) kannst du es als Nullpunkt wählen.'));
+    }
+    const row = h('div', { class: 'btn-row' });
+    const bex = h('button', { type: 'button', class: 'btn primary', id: 'csys-export' }); bex.innerHTML = icon('export') + 'Als Export-Nullpunkt …';
+    bex.onclick = () => Print.exportDialog({ csysId: cs.id });
+    const bsk = h('button', { type: 'button', class: 'btn', id: 'csys-sketch' }); bsk.innerHTML = icon('sketch') + 'Skizze auf XY';
+    bsk.onclick = () => { if (!cs.csys) return; const pl = { o: cs.csys.o, x: cs.csys.x, n: cs.csys.z }; selectCsys(null); Sketch.startOnPlaneObj(deepClone(pl)); UI.toast(`Skizze auf „${cs.name}“.`, { icon: 'check', ms: 1800 }); };
+    const bh = h('button', { type: 'button', class: 'btn', id: 'csys-hide' }); bh.innerHTML = icon(cs.hidden ? 'eye' : 'eyeOff') + (cs.hidden ? 'Einblenden' : 'Ausblenden');
+    bh.onclick = () => setCsys(cs.id, { hidden: !cs.hidden }, cs.hidden ? 'Koordinatensystem eingeblendet' : 'Koordinatensystem ausgeblendet');
+    const bd = h('button', { type: 'button', class: 'btn ghost', id: 'csys-del' }); bd.innerHTML = icon('trash') + 'Löschen';
+    bd.onclick = () => removeCsys(cs.id);
+    row.append(bex, bsk, bh, bd); w.append(row);
+    body.append(w);
+    return true;
+  }
+
   // ---------- Dialoge ----------
   function dialog(anchor) {
     const face = Actions.selectedFace();
@@ -1394,6 +2194,17 @@ const Datums = (() => {
     for (const x of [b2p, brf, bfn]) x.dataset.help = 'datumAxis';
     row3.append(b2p, brf, bfn);
     box.append(row3);
+    box.append(h('div', { class: 'section-h', style: { marginTop: '4px' } }, 'Bezugspunkte & Koordinatensystem'));
+    const row4 = h('div', { class: 'btn-row' });
+    const bpm = mk('dp-pt-mid', 'Kantenmitte', () => { if (edge) addPointEdgeMid(edge); else startPointPick('edgeMid'); });
+    const bpfc = mk('dp-pt-face', 'Flächenmitte', () => { if (face) addPointFaceCenter(face); else startPointPick('faceCenter'); });
+    const bpep = mk('dp-pt-int', 'Schnitt Kante/Ebene', () => startPointPick('edgePlaneIntersect', { preEdge: edge }));
+    const bpp = mk('dp-pt-pct', 'Auf Kurve (%)', () => { if (edge) addPointOnCurve(edge, 50); else startPointPick('curvePercent', { percent: 50 }); });
+    for (const x of [bpm, bpfc, bpep, bpp]) x.dataset.help = 'datumPoint';
+    const bcs = mk('dp-csys', 'Koordinatensystem …', () => startCsysPick());
+    bcs.dataset.help = 'datumCsys';
+    row4.append(bpm, bpfc, bpep, bpp, bcs);
+    box.append(row4);
     UI.pop(anchor || $('#t-sketch'), box);
   }
 
@@ -1412,20 +2223,71 @@ const Datums = (() => {
     UI.pop(anchor || $('#t-sketch'), box);
   }
 
+  function pointDialog(anchor) {
+    const face = Actions.selectedFace();
+    const edge = App.edges && App.edges.length === 1 ? resolveEdge(App.edges[0]) : null;
+    const box = h('div', { style: { display: 'grid', gap: '10px', minWidth: '280px' }, 'data-help': 'datumPoint' });
+    box.append(h('b', null, 'Neuer Bezugspunkt'), h('p', { style: { margin: 0, color: 'var(--muted)', fontSize: '13.5px', lineHeight: 1.45 } }, 'Ein Punkt im Raum an Kante, Fläche oder Schnittpunkt – wandert mit dem Körper mit.'));
+    let pct = 50;
+    box.append(UI.numField({ id: 'dpt-pct', label: 'Position auf Kurve', value: pct, unit: '%', expr: false, onCommit: (v) => { pct = v; } }));
+    const mk = (id, label, fn) => { const b = h('button', { type: 'button', class: 'btn', id }, label); b.onclick = () => { UI.closePop(); fn(); }; return b; };
+    const row = h('div', { class: 'btn-row' });
+    row.append(
+      mk('dpt-edge-mid', 'Kantenmitte', () => { if (edge) addPointEdgeMid(edge); else startPointPick('edgeMid'); }),
+      mk('dpt-face-center', 'Flächenmitte', () => { if (face) addPointFaceCenter(face); else startPointPick('faceCenter'); }),
+      mk('dpt-edge-plane', 'Schnittpunkt Kante/Ebene', () => startPointPick('edgePlaneIntersect', { preEdge: edge })),
+      mk('dpt-curve-pct', 'Auf Kurve bei x %', () => { if (edge) addPointOnCurve(edge, pct); else startPointPick('curvePercent', { percent: pct }); }),
+    );
+    box.append(row);
+    UI.pop(anchor || $('#t-sketch'), box);
+  }
+
+  function csysDialog(anchor) {
+    const pts = points().filter((pt) => Array.isArray(pt.point) && !lostPoints.has(pt.id));
+    const box = h('div', { style: { display: 'grid', gap: '10px', minWidth: '280px' }, 'data-help': 'datumCsys' });
+    box.append(h('b', null, 'Eigenes Koordinatensystem'), h('p', { style: { margin: 0, color: 'var(--muted)', fontSize: '13.5px', lineHeight: 1.45 } }, 'Setzt einen eigenen Nullpunkt samt X/Y-Richtung an Kanten – im Export (STEP, STL, 3MF) als Nullpunkt wählbar.'));
+    const mk = (id, label, fn) => { const b = h('button', { type: 'button', class: 'btn primary', id }, label); b.onclick = () => { UI.closePop(); fn(); }; return b; };
+    box.append(mk('dcs-pick', 'Ursprung & Kanten im Bild wählen', () => startCsysPick()));
+    if (pts.length) {
+      let ptId = pts[0].id;
+      box.append(UI.selectField({ id: 'dcs-origin-pt', label: 'Oder am Bezugspunkt anlegen', value: ptId, options: pts.map((p) => [p.id, p.name]), onChange: (v) => { ptId = v; } }));
+      const bq = h('button', { type: 'button', class: 'btn', id: 'dcs-quick' }, 'An gewähltem Punkt anlegen');
+      bq.onclick = () => { UI.closePop(); addCsysFromPointEdges(ptId, null, null); };
+      box.append(bq);
+    }
+    UI.pop(anchor || $('#t-sketch'), box);
+  }
+
   function init() {
     App.on('results', relink);
-    App.on('doc', () => { if (sel && !find(sel)) sel = null; if (selAxis && !findAxis(selAxis)) selAxis = null; draw(); });
-    App.on('selection', () => { if ((sel || selAxis) && App.sel.length) { sel = null; selAxis = null; draw(); } });
+    App.on('doc', () => {
+      if (sel && !find(sel)) sel = null;
+      if (selAxis && !findAxis(selAxis)) selAxis = null;
+      if (selPoint && !findPoint(selPoint)) selPoint = null;
+      if (selCsys && !findCsys(selCsys)) selCsys = null;
+      draw();
+    });
+    App.on('selection', () => {
+      if ((sel || selAxis || selPoint || selCsys) && App.sel.length) {
+        sel = null; selAxis = null; selPoint = null; selCsys = null; draw();
+      }
+    });
   }
 
   return {
     init, list, find, add, addOrigin, addFromFace, addEdgeAngle, addTangent, addNormalToCurve, addEdgePoint, addTwoEdges, addFixed, set, remove, select, sketchOn,
     axes, findAxis, addAxis, addAxisTwoPoints, addAxisFromFace, addAxisFromCircleEdge, addAxisNormalAtPoint, addAxisFixed,
     setAxis, removeAxis, selectAxis, solveAxis, axisTreeSection, renderAxisPanel, axisDialog, pickAxis, applyAxisToRevolve,
+    points, findPoint, addPoint, addPointEdgeMid, addPointFaceCenter, addPointOnCurve, addPointEdgePlane, addPointFixed,
+    setPoint, removePoint, selectPoint, solvePoint, pointTreeSection, renderPointPanel, pointDialog, pickPoint, startPointPick,
+    csysList, findCsys, addCsys, addCsysFromPointEdges, addCsysFixed, setCsys, removeCsys, selectCsys, solveCsys, csysExportMatrix,
+    csysTreeSection, renderCsysPanel, csysDialog, startCsysPick,
     startEdgeAnglePick, startTangentPick, startNormalCurvePick, startEdgePointPick, startTwoEdgesPick, startAxisPick, stopPick,
-    draw, dialog, treeSection, renderPanel, solve,
+    draw, dialog, treeSection, renderPanel, solve, relink,
     get selected() { return sel; }, get lost() { return [...lost]; },
     get selectedAxis() { return selAxis; }, get lostAxes() { return [...lostAxes]; },
+    get selectedPoint() { return selPoint; }, get lostPoints() { return [...lostPoints]; },
+    get selectedCsys() { return selCsys; }, get lostCsys() { return [...lostCsys]; },
     get picking() { return !!pickState; },
   };
 })();
