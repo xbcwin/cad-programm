@@ -1743,6 +1743,14 @@ Die KI-Punkte gehen nur, wenn Tracery in Claude geöffnet ist. Der automatische 
 - [x] **Unterdrücken, Marker, Gruppe & Hilfe**: Unterdrücken und Zurückrollen des `mirrorStep` entfernen die gespiegelte Tasche sauber, Spiegeln eines Loch-Schritts innerhalb einer Gruppe funktioniert ohne Fehler und `werkzeug-hilfen.json` enthält `mirrorStep`.
 - [ ] **Von Hand**: Im Browser bei „Schritt spiegeln“ auf „Ebene oder Fläche im Bild wählen“ klicken und nacheinander eine schräge Körperfläche und eine Bezugsebene direkt in der 3D-Ansicht anklicken.
 
+## Formeln: wenn, runden, Tabelle (Auto [A-041], KP-22)
+
+- [x] **wenn(Bedingung; dann; sonst) & Vergleiche**: `wenn(b > 50; 3; 2)` liefert bei `b = 60` den Wert `3` und bei `b = 40` den Wert `2`; `<`, `<=`, `>=`, `==`, `!=`, verschachteltes `wenn` und verzögerte Zweig-Auswertung (`wenn(b == 0; 0; 100 / b)`) arbeiten exakt.
+- [x] **runden, aufrunden & abrunden**: `runden(2,345; 1)` → `2,3`, `runden(2,35; 1)` → `2,4`, `runden(2,6)` → `3`, `aufrunden(2,31; 1)` → `2,4`, `abrunden(2,39; 1)` → `2,3` und `abrunden(2,9)` → `2`.
+- [x] **Nachschlagetabellen unter „Maße“**: Zweispaltige Tabelle `Schraube` mit `M3` / `M5` / `M6` im UI anlegen, umbenennen und ändern; `tabelle(Schraube; M5)` steuert Maße und 3D-Quader-Abmessungen live nach (samt Undo/Redo und Speichern/Laden).
+- [x] **Fehlermeldungen in Klartext**: Fehlende Tabellen, fehlende Schlüssel, falsche Argumentanzahl, `=` statt `==`, Division durch 0 und ungültige Nachkommastellen werden in Klartext im Feld, unter „Maße“ und als Meldung angezeigt; Hilfetext `formulaTable` vorhanden.
+- [ ] **Von Hand**: Im Browser unter „Maße“ eine neue Tabelle anlegen, in „Formel-Beispiele“ den Hinweistext lesen und in einer offenen Skizze ein Maß direkt mit `tabelle(…)` und `wenn(…)` bemaßen.
+
 ## Fehler melden
 
 ```

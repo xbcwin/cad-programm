@@ -33,7 +33,7 @@ class Page:
         self.pg.wait_for_timeout(2500)
 
     def ev(self, js, arg=None):
-        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Panels,Joints,I18n,T,Units}=window.__M; " + js + "}", arg)
+        return self.pg.evaluate("(arg)=>{const {Store,Interact,Measure,Datums,RefFix,Print,ViewPrefs,App,Actions,Model,Timeline,Start,Comp,Handles,Sketch,SK,TTF,Viewer,Commands,Solver,Notes,SKO,Features,Place,Views,Mass,Select,Versions,DroneTpl,DroneUI,DroneLib,DroneCheck,Plates,Variants,Explain,Weak,AI,Snap,Panels,Joints,I18n,T,Units,Expr}=window.__M; " + js + "}", arg)
 
     def empty(self):
         self.pg.get_by_text('Leeres Projekt').first.click()
@@ -9361,6 +9361,128 @@ def t_a037_schritt_spiegeln(p):
     return [ok1, ok2, ok3, ok4]
 
 
+def t_a041_formeln(p):
+    p.empty()
+    # 1. wenn(Bedingung; dann; sonst) mit < > <= >= == != und verzögerter Zweig-Auswertung
+    r_wenn = p.ev("""
+      return [
+        Expr.eval('wenn(b > 50; 3; 2)', { b: 60 }),
+        Expr.eval('wenn(b > 50; 3; 2)', { b: 40 }),
+        Expr.eval('wenn(b < 50; 1; 0)', { b: 40 }),
+        Expr.eval('wenn(b <= 50; 1; 0)', { b: 50 }),
+        Expr.eval('wenn(b >= 50; 1; 0)', { b: 50 }),
+        Expr.eval('wenn(b == 50; 7; 8)', { b: 50 }),
+        Expr.eval('wenn(b != 50; 9; 8)', { b: 50 }),
+        Expr.eval('wenn(b > 100; 10; wenn(b > 50; 5; 2))', { b: 60 }),
+        Expr.eval('wenn(b == 0; 0; 100 / b)', { b: 0 }),
+      ];
+    """)
+    ok1 = r_wenn == [3, 2, 1, 1, 1, 7, 8, 5, 0]
+
+    # 2. runden(x; Stellen), aufrunden, abrunden
+    r_round = p.ev("""
+      return [
+        Expr.eval('runden(2,345; 1)', {}),
+        Expr.eval('runden(2,35; 1)', {}),
+        Expr.eval('runden(2,6)', {}),
+        Expr.eval('aufrunden(2,31; 1)', {}),
+        Expr.eval('aufrunden(2,3; 1)', {}),
+        Expr.eval('abrunden(2,39; 1)', {}),
+        Expr.eval('abrunden(2,9)', {}),
+      ];
+    """)
+    ok2 = r_round == [2.3, 2.4, 3, 2.4, 2.3, 2.3, 2]
+
+    # 3. Nachschlagetabelle unter „Maße“ anlegen, umbenennen, Werte ändern & 3D-Quader steuern
+    p.pg.click('#lt-params'); p.wait(300)
+    p.pg.click('#par-table-add'); p.wait(300)
+    tid = p.ev("return App.doc.tables[0].id")
+    p.pg.fill(f'#ptn-{tid}', 'Schraube'); p.pg.press(f'#ptn-{tid}', 'Enter'); p.wait(300)
+    r0, r1 = p.ev("return App.doc.tables[0].rows.map(r=>r.id)")
+    p.pg.fill(f'#ptk-{r0}', 'M3'); p.pg.press(f'#ptk-{r0}', 'Enter'); p.wait(200)
+    p.pg.fill(f'#ptv-{r0}', '3,4'); p.pg.press(f'#ptv-{r0}', 'Enter'); p.wait(200)
+    p.pg.fill(f'#ptk-{r1}', 'M5'); p.pg.press(f'#ptk-{r1}', 'Enter'); p.wait(200)
+    p.pg.fill(f'#ptv-{r1}', '5,5'); p.pg.press(f'#ptv-{r1}', 'Enter'); p.wait(200)
+    p.pg.click(f'#ptadd-{tid}'); p.wait(300)
+    r2 = p.ev("return App.doc.tables[0].rows[2].id")
+    p.pg.fill(f'#ptk-{r2}', 'M6'); p.pg.press(f'#ptk-{r2}', 'Enter'); p.wait(200)
+    p.pg.fill(f'#ptv-{r2}', '6,6'); p.pg.press(f'#ptv-{r2}', 'Enter'); p.wait(300)
+
+    p.ev("""
+      App.change('Maße für Formeltest', d => {
+        d.params.push({ id: 'pm_b', name: 'b', expr: 60 });
+        d.params.push({ id: 'pm_s', name: 'loch', expr: 'tabelle(Schraube; M5)' });
+        const box = Model.newItem('box', { w: 'tabelle(Schraube; M5)', d: 'runden(2,345; 1) * 10', h: 'wenn(b > 50; 3; 2)' });
+        d.items.push(box);
+      });
+    """)
+    warte_rechnen(p)
+    bb1 = bbox(p, 0)
+    val_loch = p.ev("return Model.vars(App.doc).v.loch")
+    left_txt1 = p.pg.locator('#left-body').text_content()
+
+    p.pg.fill(f'#ptv-{r1}', '6,2'); p.pg.press(f'#ptv-{r1}', 'Enter'); p.wait(300)
+    p.ev("App.change('b ändern', d => { d.params.find(x=>x.name==='b').expr = 40; })")
+    warte_rechnen(p)
+    bb2 = bbox(p, 0)
+
+    p.ev("App.undo()"); warte_rechnen(p)
+    bb_undo = bbox(p, 0)
+    p.ev("App.redo()"); warte_rechnen(p)
+    bb_redo = bbox(p, 0)
+    mig_len = p.ev("const d = Model.migrate(JSON.parse(App.snapshot())); return d.tables && d.tables.length === 1 && d.tables[0].rows.length === 3;")
+
+    ok3 = (
+        abs(val_loch - 5.5) < 1e-6 and '= 5,5' in left_txt1
+        and bb1 is not None and abs((bb1[3] - bb1[0]) - 5.5) < 0.05 and abs((bb1[4] - bb1[1]) - 23.0) < 0.05 and abs((bb1[5] - bb1[2]) - 3.0) < 0.05
+        and bb2 is not None and abs((bb2[3] - bb2[0]) - 6.2) < 0.05 and abs((bb2[5] - bb2[2]) - 2.0) < 0.05
+        and bb_undo is not None and abs((bb_undo[5] - bb_undo[2]) - 3.0) < 0.05
+        and bb_redo is not None and abs((bb_redo[5] - bb_redo[2]) - 2.0) < 0.05
+        and mig_len is True
+    )
+
+    # 4. Fehlermeldungen in Klartext (Expr, Maße-Panel, Zahlenfeld) & Hilfe
+    errs = p.ev("""
+      return [
+        Expr.tryEval('tabelle(Fehlt; M5)', {}),
+        Expr.tryEval('tabelle(Schraube; M9)', {}, App.doc.tables),
+        Expr.tryEval('wenn(b > 50; 3)', { b: 60 }),
+        Expr.tryEval('wenn(b = 50; 3; 2)', { b: 60 }),
+        Expr.tryEval('10 / 0', {}),
+        Expr.tryEval('runden(2,3; 0,5)', {}),
+      ];
+    """)
+    p.pg.locator(f'.ptbl-row[data-row-id="{r1}"] .ptbl-rdel').click(); p.wait(400)
+    left_err = p.pg.locator('#left-body').text_content()
+    var_errs = p.ev("return Object.values(Model.vars(App.doc).errors)")
+
+    p.ev("App.select([App.doc.items[0].id])"); p.wait(400)
+    fid = p.pg.evaluate("[...document.querySelectorAll('#right-body input')].map(i=>i.id).find(i=>/w$/.test(i))")
+    p.pg.fill('#' + fid, 'wenn(b = 50; 3; 2)'); p.pg.press('#' + fid, 'Enter'); p.wait(400)
+    toast_txt = ' '.join(p.pg.locator('.toast').all_inner_texts())
+    hilfen = p.pg.evaluate("fetch('data/werkzeug-hilfen.json').then(r=>r.json())")
+    has_help = (
+        'formulaTable' in hilfen
+        and all(k in hilfen['formulaTable'] for k in ('tip', 'hilfe', 'tipp'))
+        and p.pg.locator('#par-table-add[data-help="formulaTable"]').count() == 1
+    )
+
+    ok4 = (
+        all(not e['ok'] for e in errs)
+        and 'nicht gefunden' in errs[0]['error']
+        and 'M9' in errs[1]['error'] and 'Schraube' in errs[1]['error']
+        and '3 Angaben' in errs[2]['error']
+        and '==' in errs[3]['error']
+        and 'Division durch 0' in errs[4]['error']
+        and 'ganze Zahl' in errs[5]['error']
+        and any('Schlüssel „M5“' in m and 'Schraube' in m for m in var_errs)
+        and 'Schlüssel „M5“' in left_err
+        and 'Das kann ich nicht ausrechnen' in toast_txt and '==' in toast_txt
+        and has_help is True
+    )
+    return [ok1, ok2, ok3, ok4]
+
+
 TESTS = [
     ('Startet ohne Fehler', t_start), ('Vorlage öffnen', t_vorlage), ('Ansichten per Taste', t_ansichten),
     ('Orthografisch', t_ortho), ('Raster', t_raster), ('Raster automatisch', t_raster_auto),
@@ -9500,6 +9622,7 @@ TESTS = [
     ('[A-036] Muster von Schritten: Tasche 6× im Kreis / Kopie per Klick auslassen / wieder aktiv & Undo / Rechteckmuster & Auflösen / Hilfe & Speichern', t_muster_schritte),
     ('[A-035] Kaputter Bezug: neu wählen (Rundung, Fase, Skizze)', t_kaputter_bezug),
     ('[A-038] Bohrungs-Assistent mehr Gewinde: Feingewinde M10×1,25 (8,8 mm) / 1/4"-20 UNC (5,1 mm) / Rohrgewinde G1/4 / Tabelle & Hilfe', t_a038_mehr_gewinde),
+    ('[A-041] Formeln: wenn, runden, aufrunden, abrunden, Tabelle & Klartext-Fehler', t_a041_formeln),
     ('KI verrechnet Körper: Modus gesetzt / ein Körper mit Loch', t_ki_verrechnen),
     ('Hochziehen: feste Tiefe / durch alles / wächst mit / beidseitig verschieden', t_durch_alles),
     ('Bedienung: Rahmen ganz drin / Rahmen berührt / Auswahl umkehren / Rechtsklick-Menü / Ausblenden / Rechtsklick ins Leere / alles einblenden / Befehl wiederholen', t_bedienung),

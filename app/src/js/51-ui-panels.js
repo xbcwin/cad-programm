@@ -618,6 +618,103 @@ const Panels = (() => {
     const csvIn = h('button', { type: 'button', class: 'btn ghost', id: 'par-csv-in', 'data-help': 'paramsCsv' }); csvIn.innerHTML = icon('folder') + 'CSV laden';
     csvIn.onclick = () => { const inp = h('input', { type: 'file', accept: '.csv,text/csv,text/plain', style: { display: 'none' } }); inp.onchange = async () => { const f = inp.files && inp.files[0]; inp.remove(); if (f) importParamsCSV(await f.text()); }; document.body.append(inp); inp.click(); };
     wrap.append(h('div', { class: 'btn-row' }, csvOut, csvIn));
+    // Kleine Nachschlagetabellen (KP-22): zwei Spalten Schlüssel & Wert für tabelle(Name; Schlüssel)
+    const tblSec = h('div', { class: 'section param-tables', id: 'param-tables-sec' }, h('div', { class: 'section-h' }, 'Tabellen'));
+    const tbls = App.doc.tables || [];
+    if (!tbls.length) {
+      tblSec.append(h('div', { class: 'hint-box', html: 'Kleine Nachschlagetabellen mit zwei Spalten (Schlüssel und Wert) – nutzbar in Formeln wie <b>tabelle(Schraube; M5)</b>.' }));
+    }
+    for (const tb of tbls) {
+      const card = h('div', { class: 'ptbl', dataset: { tableId: tb.id, tableName: tb.name } });
+      const head = h('div', { class: 'ptbl-head' });
+      const tNameIn = h('input', { id: 'ptn-' + tb.id, class: 'ptbl-name', value: tb.name, 'aria-label': 'Tabellenname', spellcheck: 'false' });
+      tNameIn.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') tNameIn.blur(); if (e.key === 'Escape') { tNameIn.value = tb.name; tNameIn.blur(); } });
+      tNameIn.addEventListener('change', (e) => {
+        const nv = e.target.value.trim().replace(/\s+/g, '_');
+        if (!/^[A-Za-zÄÖÜäöüß_][A-Za-zÄÖÜäöüß_0-9]*$/.test(nv)) { UI.toast('Tabellennamen dürfen nur Buchstaben, Ziffern und _ enthalten und nicht mit einer Ziffer beginnen.', { kind: 'bad' }); e.target.value = tb.name; return; }
+        renameTable(tb.id, nv);
+      });
+      const tDel = h('button', { type: 'button', class: 'btn ghost small danger ptbl-del', 'data-tip': 'Tabelle entfernen', 'aria-label': 'Tabelle entfernen' });
+      tDel.innerHTML = icon('trash');
+      tDel.onclick = () => removeTable(tb.id);
+      head.append(tNameIn, tDel);
+      card.append(head);
+      const grid = h('div', { class: 'ptbl-grid' }, h('div', { class: 'ptbl-cols' }, h('span', null, 'Schlüssel'), h('span', null, 'Wert'), h('span', null)));
+      for (const r of tb.rows || []) {
+        const rowEl = h('div', { class: 'ptbl-row', dataset: { rowId: r.id } });
+        const kIn = h('input', { id: 'ptk-' + r.id, class: 'ptbl-key', value: r.key ?? '', placeholder: 'z. B. M5', 'aria-label': 'Schlüssel', spellcheck: 'false' });
+        kIn.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') kIn.blur(); if (e.key === 'Escape') { kIn.value = r.key ?? ''; kIn.blur(); } });
+        kIn.addEventListener('change', () => {
+          const nk = kIn.value.trim();
+          if (!nk) { UI.toast('Bitte einen Schlüssel für die Zeile angeben.', { kind: 'bad' }); kIn.value = r.key ?? ''; return; }
+          if (nk === r.key) return;
+          App.change('Tabellenschlüssel geändert', (doc) => {
+            const t = (doc.tables || []).find((x) => x.id === tb.id);
+            const row = t && (t.rows || []).find((x) => x.id === r.id);
+            if (!row) return false;
+            row.key = nk;
+          });
+        });
+        const valStr = typeof r.val === 'number' ? fmt(r.val, 6) : (r.val ?? '');
+        const vIn = h('input', { id: 'ptv-' + r.id, class: 'ptbl-val mono', value: valStr, placeholder: 'Wert', 'aria-label': 'Wert', spellcheck: 'false' });
+        vIn.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') vIn.blur(); if (e.key === 'Escape') { vIn.value = valStr; vIn.classList.remove('invalid'); vIn.blur(); } });
+        vIn.addEventListener('change', () => {
+          const raw = vIn.value.trim();
+          if (!raw) { vIn.classList.add('invalid'); UI.toast('Bitte eine Zahl oder Formel eingeben.', { kind: 'bad' }); return; }
+          const n = parseNum(raw);
+          let nextVal = raw;
+          if (!isNaN(n)) nextVal = n;
+          else {
+            const res = Expr.tryEval(raw, Model.vars(App.doc).v, App.doc.tables || []);
+            if (!res.ok) { vIn.classList.add('invalid'); UI.toast('Das kann ich nicht ausrechnen: ' + res.error, { kind: 'bad' }); return; }
+          }
+          vIn.classList.remove('invalid');
+          if (String(nextVal) === String(r.val)) return;
+          App.change('Tabellenwert geändert', (doc) => {
+            const t = (doc.tables || []).find((x) => x.id === tb.id);
+            const row = t && (t.rows || []).find((x) => x.id === r.id);
+            if (!row) return false;
+            row.val = nextVal;
+          }, { merge: 'tbl:' + r.id });
+        });
+        const rDel = h('button', { type: 'button', class: 'ptbl-rdel', 'data-tip': 'Zeile entfernen', 'aria-label': 'Zeile entfernen' }, '×');
+        rDel.onclick = () => App.change('Tabellenzeile entfernt', (doc) => {
+          const t = (doc.tables || []).find((x) => x.id === tb.id);
+          if (!t) return false;
+          t.rows = (t.rows || []).filter((x) => x.id !== r.id);
+        });
+        rowEl.append(kIn, vIn, rDel);
+        grid.append(rowEl);
+      }
+      card.append(grid);
+      const foot = h('div', { class: 'ptbl-foot' });
+      const addRow = h('button', { type: 'button', class: 'btn ghost small ptbl-addrow', id: 'ptadd-' + tb.id });
+      addRow.innerHTML = icon('plus') + 'Zeile';
+      addRow.onclick = () => App.change('Tabellenzeile hinzugefügt', (doc) => {
+        const t = (doc.tables || []).find((x) => x.id === tb.id);
+        if (!t) return false;
+        t.rows = t.rows || [];
+        let k = 'Neu', idx = 1;
+        while (t.rows.some((x) => String(x.key).toLowerCase() === k.toLowerCase())) { idx++; k = 'Neu' + idx; }
+        t.rows.push({ id: uid('tr'), key: k, val: 10 });
+      });
+      const sampleKey = (tb.rows && tb.rows[0] && tb.rows[0].key) ? tb.rows[0].key : 'Schlüssel';
+      foot.append(addRow, h('span', { class: 'ptbl-hint mono', title: `Formel: tabelle(${tb.name}; ${sampleKey})` }, `tabelle(${tb.name}; ${sampleKey})`));
+      card.append(foot);
+      tblSec.append(card);
+    }
+    const addTbl = h('button', { type: 'button', class: 'btn small', id: 'par-table-add', 'data-help': 'formulaTable' });
+    addTbl.innerHTML = icon('plus') + 'Tabelle hinzufügen';
+    addTbl.onclick = () => {
+      let n = 1;
+      while ((App.doc.tables || []).some((x) => x.name.toLowerCase() === ('tabelle' + n))) n++;
+      App.change('Tabelle hinzugefügt', (doc) => {
+        doc.tables = doc.tables || [];
+        doc.tables.push({ id: uid('tb'), name: 'Tabelle' + n, rows: [{ id: uid('tr'), key: 'A', val: 10 }, { id: uid('tr'), key: 'B', val: 20 }] });
+      });
+    };
+    tblSec.append(h('div', { class: 'btn-row' }, addTbl));
+    wrap.append(tblSec);
     body.append(wrap);
   }
   function paramsCSV() {
@@ -651,7 +748,7 @@ const Panels = (() => {
   // Fenster mit Schreibweise und 12 Beispielen zum Ausprobieren
   function formulaHelp() {
     const box = h('div', { style: { display: 'grid', gap: '12px' } });
-    box.append(h('div', { class: 'hint-box', html: 'Erlaubt sind <b>+ − * / ^</b>, Klammern, <b>pi</b> und die Funktionen <b>min, max, abs, wurzel, runden, floor, ceil, sin, cos, tan</b> (Winkel in Grad). Mehrere Werte in einer Funktion trennst du mit <b>;</b> – zum Beispiel <b>max(a; b)</b>. Dezimalzahlen gehen mit Komma oder Punkt.' }));
+    box.append(h('div', { class: 'hint-box', html: 'Erlaubt sind <b>+ − * / ^</b>, Vergleiche <b>&lt; &gt; &lt;= &gt;= == !=</b>, Klammern, <b>pi</b> und die Funktionen <b>wenn(Bedingung; dann; sonst)</b>, <b>runden(x; Stellen)</b>, <b>aufrunden</b>, <b>abrunden</b>, <b>tabelle(Name; Schlüssel)</b>, <b>min, max, abs, wurzel, sin, cos, tan</b> (Winkel in Grad). Mehrere Werte in einer Funktion trennst du mit <b>;</b> – zum Beispiel <b>max(a; b)</b>. Dezimalzahlen gehen mit Komma oder Punkt.' }));
     const demo = Object.entries(FORMULA_DEMO).map(([k, x]) => `${k} = ${x}`).join(', ');
     box.append(h('p', { style: { margin: 0, color: 'var(--muted)', fontSize: '13.5px' } }, 'Die Ergebnisse gelten für ' + demo + '.'));
     const list = h('div', { class: 'formula-list' });
@@ -668,14 +765,32 @@ const Panels = (() => {
     if (missing.length) actions.unshift({ label: 'Beispiel-Maße anlegen', run: () => { App.change('Beispiel-Maße angelegt', (doc) => { for (const k of missing) doc.params.push({ id: uid('m'), name: k, expr: FORMULA_DEMO[k] }); }); UI.toast(missing.length + ' Maße angelegt – jetzt kannst du die Formeln überall eintippen.', { icon: 'check' }); } });
     UI.modal({ title: 'Formel-Beispiele', body: box, actions });
   }
-  // ersetzt einen Maßnamen überall (Maße, Größen, Lage, Rundungen) – gibt zurück, ob er vorkam
+  // ersetzt einen Maßnamen überall (Maße, Tabellen, Größen, Lage, Rundungen) – gibt zurück, ob er vorkam
   function replaceName(doc, old, repl) {
     const re = new RegExp('(^|[^A-Za-zÄÖÜäöüß_0-9])' + old.replace(/[$^.*+?()[\]{}|\\]/g, '\\$&') + '(?![A-Za-zÄÖÜäöüß_0-9])', 'gi');
     let hit = false;
     const fix = (s) => { if (typeof s !== 'string') return s; const r = s.replace(re, (m, pre) => { hit = true; return pre + repl; }); return /^-?\d+(\.\d+)?$/.test(r.trim()) ? +r : r; };
     for (const q of doc.params) q.expr = fix(q.expr);
+    for (const tb of doc.tables || []) for (const r of tb.rows || []) r.val = fix(r.val);
     Model.walk(doc.items, (it) => { for (const k in it.p || {}) { if ((it.kind === 'transform' && (k === 'target' || k === 'pivot')) || (it.kind === 'scale' && (k === 'target' || k === 'pivot' || k === 'uniform')) || (it.kind === 'thicken' && (k === 'target' || k === 'face' || k === 'dir' || k === 'mode')) || (it.kind === 'rib' && (k === 'target' || k === 'side' || k === 'dir')) || (it.kind === 'extrude' && (k === 'extent' || k === 'dir' || k === 'wallSide'))) continue; it.p[k] = fix(it.p[k]); } for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) f.r = fix(f.r); if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); });
     return hit;
+  }
+  function replaceTableName(doc, old, repl) {
+    const re = new RegExp('(tabelle\\s*\\(\\s*["\']?)' + old.replace(/[$^.*+?()[\]{}|\\]/g, '\\$&') + '(["\']?\\s*;)', 'gi');
+    const fix = (s) => typeof s === 'string' ? s.replace(re, (_, a, b) => a + repl + b) : s;
+    for (const q of doc.params || []) q.expr = fix(q.expr);
+    for (const tb of doc.tables || []) for (const r of tb.rows || []) r.val = fix(r.val);
+    Model.walk(doc.items, (it) => { for (const k in it.p || {}) it.p[k] = fix(it.p[k]); for (const k in it.t) it.t[k] = fix(it.t[k]); for (const f of it.finishes || []) f.r = fix(f.r); if (it.p && it.p.sketch) for (const d of it.p.sketch.dims || []) d.v = fix(d.v); });
+  }
+  function renameTable(id, nv) {
+    const tb = (App.doc.tables || []).find((x) => x.id === id); if (!tb || tb.name === nv) return;
+    if ((App.doc.tables || []).some((x) => x.id !== id && x.name.toLowerCase() === nv.toLowerCase())) { UI.toast('Eine Tabelle mit diesem Namen gibt es schon.', { kind: 'bad' }); renderLeft(); return; }
+    const old = tb.name;
+    App.change('Tabelle umbenannt', (doc) => { const t = (doc.tables || []).find((x) => x.id === id); if (!t) return false; t.name = nv; replaceTableName(doc, old, nv); });
+  }
+  function removeTable(id) {
+    const tb = (App.doc.tables || []).find((x) => x.id === id); if (!tb) return;
+    App.change('Tabelle entfernt', (doc) => { doc.tables = (doc.tables || []).filter((x) => x.id !== id); });
   }
   function renameParam(id, nv) {
     const p = App.doc.params.find((x) => x.id === id); if (!p || p.name === nv) return;
